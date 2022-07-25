@@ -23,10 +23,12 @@ jobs:
         run: go build -v ./...
 
       - name: Test
-        run: go test -v ./...
+        run: go test -v -coverprofile=coverage.txt ./...
 
       - name: actions-goveralls
-        uses: shogo82148/actions-goveralls@v1.6.0
+        uses: shogo82148/actions-goveralls@v1
+        with:
+          path-to-profile: coverage.txt
 
       - name: Go report card
         uses: creekorful/goreportcard-action@v1.0
