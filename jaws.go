@@ -80,12 +80,23 @@ func (jw *Jaws) Done() <-chan struct{} {
 // Has no effect if the err is nil or the Logger is nil.
 // Returns err.
 func (jw *Jaws) Log(err error) error {
-	if err != nil && jw != nil {
-		if l := jw.Logger; l != nil {
-			l.Println(err.Error())
-		}
+	if err != nil && jw != nil && jw.Logger != nil {
+		jw.Logger.Println(err.Error())
 	}
 	return err
+}
+
+// MustLog sends an error to the Logger set in the Jaws or
+// panics with the given error if no Logger is set.
+// Has no effect if the err is nil.
+func (jw *Jaws) MustLog(err error) {
+	if err != nil {
+		if jw != nil && jw.Logger != nil {
+			jw.Logger.Println(err.Error())
+		} else {
+			panic(err)
+		}
+	}
 }
 
 // MakeID returns a string in the form 'jaws.X' where X is a string unique within the Jaws lifetime.

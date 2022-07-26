@@ -53,6 +53,28 @@ func TestJaws_Logger(t *testing.T) {
 	is.Equal(b.String(), "[foo] bar\n")
 }
 
+func TestJaws_MustLog(t *testing.T) {
+	is := is.New(t)
+	jw := New()
+	defer jw.Close()
+
+	barErr := errors.New("bar")
+
+	defer func() {
+		is.Equal(recover(), barErr)
+	}()
+
+	var b bytes.Buffer
+	w := bufio.NewWriter(&b)
+	jw.Logger = log.New(w, "[foo] ", 0)
+	go jw.Serve()
+	jw.MustLog(barErr)
+	w.Flush()
+	is.Equal(b.String(), "[foo] bar\n")
+	jw.Logger = nil
+	jw.MustLog(barErr)
+}
+
 func TestJaws_BroadcastDoesntBlockWhenClosed(t *testing.T) {
 	jw := New()
 	go jw.Serve()
