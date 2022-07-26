@@ -26,7 +26,7 @@ start up the WebSocket and begin processing Javascript events and DOM updates.
 JaWS doesn't enforce any particular router, but it does require several
 endpoints to be registered in whichever router you choose to use. We do
 provide a helper function for [Echo](https://echo.labstack.com/) with
-`jawsecho.AddHandlers()`.
+`jawsecho.Setup()`.
 
 * `/jaws/jaws.*.js`
 
