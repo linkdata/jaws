@@ -252,11 +252,12 @@ func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 	is.Equal(int(atomic.LoadInt32(&callCount)), 1)
 }
 
-func TestRequest_OutboundOverflowPanics(t *testing.T) {
+func TestRequest_OutboundOverflowPanicsWithNoLogger(t *testing.T) {
 	// can not run in parallel
 	is := is.New(t)
 	rq := newTestRequest(is)
 	rq.expectPanic = true
+	rq.jw.Logger = nil
 	defer rq.Close()
 	rq.Register("foo")
 	fillCh(rq.outCh)
@@ -372,7 +373,7 @@ func TestRequest_EventFnQueue(t *testing.T) {
 	is.Equal(atomic.LoadInt32(&callCount), int32(cap(rq.outCh)))
 }
 
-func TestRequest_EventFnQueueOverflowPanics(t *testing.T) {
+func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 	is := is.New(t)
 	rq := newTestRequest(is)
 	defer rq.Close()
@@ -383,6 +384,7 @@ func TestRequest_EventFnQueueOverflowPanics(t *testing.T) {
 	})
 
 	rq.expectPanic = true
+	rq.jw.Logger = nil
 	tmr := time.NewTimer(testTimeout)
 	for {
 		select {
@@ -429,10 +431,9 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	is.Equal(cap(rq.outCh), len(rq.outCh))
 	is.True(waited < 1000)
 
-	// sending a message will now panic the rq since the
+	// sending a message will now fail the rq since the
 	// outbound channel is full, but with the
 	// event fn holding it won't be able to end
-	rq.expectPanic = true
 	select {
 	case rq.sendCh <- &Message{Elem: "foo"}:
 	case <-time.NewTimer(testTimeout).C:
@@ -467,7 +468,6 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	select {
 	case <-rq.doneCh:
 		is.True(atomic.LoadInt32(&callCount) > 1)
-		is.True(rq.panicked)
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	}

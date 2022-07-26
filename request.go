@@ -354,7 +354,8 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 					select {
 					case eventCallCh <- eventFnCall{fn: fn, msg: msg}:
 					default:
-						panic(rq.Jaws.Log(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, msg)))
+						rq.Jaws.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, msg))
+						return
 					}
 				}
 				continue
@@ -374,7 +375,8 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 				case <-ctxDoneCh:
 				case outboundMsgCh <- msg:
 				default:
-					panic(rq.Jaws.Log(fmt.Errorf("jaws: %v: outboundMsgCh is full sending %v", rq, msg)))
+					rq.Jaws.MustLog(fmt.Errorf("jaws: %v: outboundMsgCh is full sending %v", rq, msg))
+					return
 				}
 			}
 		}
