@@ -46,7 +46,7 @@ func (kg *Keygen) Reseed() (n int) {
 	if n, _ = crand.Reader.Read(buf); n > 0 {
 		seed := kg.Int63()
 		for i := 0; i < n; i++ {
-			seed = (seed << 8) | int64(buf[i])
+			seed = (seed << 8) ^ int64(buf[i])
 		}
 		if seed < 0 {
 			seed = -seed
