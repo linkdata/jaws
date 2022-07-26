@@ -29,9 +29,8 @@ type Request struct {
 	JawsKey   int64              // a random number used in the WebSocket URI to identify this Request
 	ConnectFn ConnectFn          // a ConnectFn to call before starting message processing for the Request
 	Started   time.Time          // when the Request was started, used for automatic cleanup
-	queueSize int                // the message queue size in use
 	ctx       context.Context    // context passed to NewRequest
-	remoteIP  net.IP             // parsed remote IP
+	remoteIP  net.IP             // parsed remote IP (or nil)
 	sendCh    chan *Message      // direct send message channel
 	mu        sync.RWMutex       // protects following
 	elems     map[string]EventFn // map of registered HTML id's
@@ -82,7 +81,6 @@ func (rq *Request) recycle() {
 	rq.Jaws = nil
 	rq.JawsKey = -1
 	rq.ConnectFn = nil
-	rq.queueSize = 0
 	rq.ctx = nil
 	rq.remoteIP = nil
 	// this gets optimized to calling the 'runtime.mapclear' function
