@@ -19,7 +19,7 @@ func TestJawsEcho_GetJavascript(t *testing.T) {
 	defer jw.Close()
 
 	e := echo.New()
-	jawsecho.AddHandlers(e, jw)
+	jawsecho.Setup(e, jw)
 
 	req := httptest.NewRequest("", jaws.JavascriptPath(), nil)
 	w := httptest.NewRecorder()
@@ -42,7 +42,7 @@ func TestJawsEcho_GetPing(t *testing.T) {
 	defer jw.Close()
 
 	e := echo.New()
-	jawsecho.AddHandlers(e, jw)
+	jawsecho.Setup(e, jw)
 
 	req := httptest.NewRequest("", "/jaws/ping", nil)
 	w := httptest.NewRecorder()
@@ -64,7 +64,7 @@ func TestJawsEcho_GetKey(t *testing.T) {
 	defer jw.Close()
 
 	e := echo.New()
-	jawsecho.AddHandlers(e, jw)
+	jawsecho.Setup(e, jw)
 
 	req := httptest.NewRequest("", "/jaws/notaproperkey", nil)
 	w := httptest.NewRecorder()

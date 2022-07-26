@@ -9,9 +9,12 @@ import (
 	"github.com/linkdata/jaws"
 )
 
-// AddHandlers adds JaWS handlers to a given Echo v4 router.
-// Specifically, it adds '/jaws/jaws.*.js', '/jaws/ping' and '/jaws/:key'.
-func AddHandlers(router *echo.Echo, jw *jaws.Jaws) {
+// Setup adds JaWS handlers to a given Echo v4 router and if jw.Logger is nil
+// it is set to router.StdLogger.
+func Setup(router *echo.Echo, jw *jaws.Jaws) {
+	if jw.Logger == nil {
+		jw.Logger = router.StdLogger
+	}
 	router.GET(jaws.JavascriptPath(), func(c echo.Context) error {
 		hdr := c.Response().Header()
 		hdr.Set(echo.HeaderCacheControl, "public, max-age=31536000, s-maxage=31536000, immutable")
