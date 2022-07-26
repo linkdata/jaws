@@ -239,8 +239,8 @@ func (rq *Request) Redirect(url string) {
 
 // RegisterEventFn records the given HTML element ID as a valid target for dynamic updates
 // using the given event function (which may be nil).
-// If the id argument is the empty or blank, a unique ID will be generated.
-// If fn is nil, the existing event handler function handler won't be overwritten.
+// If the id argument is an empty string, a unique ID will be generated.
+// If fn is nil, any pre-existing event handler function handler won't be overwritten.
 // Returns the (possibly generated) id.
 func (rq *Request) RegisterEventFn(id string, fn EventFn) string {
 	if id == "" {
