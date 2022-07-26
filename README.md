@@ -1,6 +1,6 @@
-![build](https://github.com/linkdata/jaws/actions/workflows/go.yml/badge.svg)
-[![Coverage Status](https://coveralls.io/repos/github/linkdata/jaws/badge.svg?branch=main)](https://coveralls.io/github/linkdata/jaws?branch=main)
-[![Go Report Card](https://goreportcard.com/badge/github.com/linkdata/jaws)](https://goreportcard.com/report/github.com/linkdata/jaws)
+[![build](https://github.com/linkdata/jaws/actions/workflows/go.yml/badge.svg)](https://github.com/linkdata/jaws/actions/workflows/go.yml)
+[![coverage](https://coveralls.io/repos/github/linkdata/jaws/badge.svg?branch=main)](https://coveralls.io/github/linkdata/jaws?branch=main)
+[![goreport](https://goreportcard.com/badge/github.com/linkdata/jaws)](https://goreportcard.com/report/github.com/linkdata/jaws)
 
 # JaWS
 
