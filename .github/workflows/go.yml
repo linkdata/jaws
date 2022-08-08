@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      GO111MODULE: on
     steps:
       - uses: actions/checkout@v3
         with:
@@ -25,6 +27,11 @@ jobs:
       - name: Test
         run: go test -v -coverprofile=coverage.txt ./...
 
+      - name: Run Gosec Security Scanner
+        uses: securego/gosec@master
+        with:
+          args: ./...
+          
       - name: actions-goveralls
         uses: shogo82148/actions-goveralls@v1
         with:
@@ -32,3 +39,4 @@ jobs:
 
       - name: Go report card
         uses: creekorful/goreportcard-action@v1.0
+        
