@@ -129,6 +129,7 @@ func (jw *Jaws) NewRequest(ctx context.Context, remoteAddr string) (rq *Request)
 			}
 		}
 	}
+	maybePanic(err)
 	return
 }
 
