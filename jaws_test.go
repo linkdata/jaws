@@ -193,7 +193,10 @@ func TestJaws_UseRequest(t *testing.T) {
 	defer jw.Close()
 
 	rq1 := jw.NewRequest(context.Background(), "")
+	is.True(rq1.JawsKey != 0)
 	rq2 := jw.NewRequest(context.Background(), "127.0.0.2:1010")
+	is.True(rq2.JawsKey != 0)
+	is.True(rq1.JawsKey != rq2.JawsKey)
 	is.Equal(jw.Pending(), 2)
 
 	rqfail := jw.UseRequest(0, "")
