@@ -40,6 +40,16 @@ func TestJaws_MakeID(t *testing.T) {
 	is.True(id1 != id2)
 }
 
+func TestJaws_maybePanic(t *testing.T) {
+	is := is.New(t)
+	defer func() {
+		if recover() == nil {
+			is.Fail()
+		}
+	}()
+	maybePanic(errors.New("let's panic!"))
+}
+
 func TestJaws_Logger(t *testing.T) {
 	is := is.New(t)
 	jw := New()

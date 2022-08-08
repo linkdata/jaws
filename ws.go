@@ -21,12 +21,11 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh)     // unsubscribes broadcastMsgCh, closes outboundMsgCh
 		} else {
 			defer ws.Close(websocket.StatusNormalClosure, "")
-			rq.Jaws.Log(err)
-			msg := makeAlertDangerMessage(err)
-			ws.Write(rq.Context(), websocket.MessageText, []byte(msg.Format()))
+			msg := makeAlertDangerMessage(rq.Jaws.Log(err))
+			_ = ws.Write(rq.Context(), websocket.MessageText, []byte(msg.Format()))
 		}
 	} else {
-		rq.Jaws.Log(err)
+		_ = rq.Jaws.Log(err)
 	}
 	rq.recycle()
 }

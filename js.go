@@ -26,8 +26,9 @@ func JavascriptGZip() []byte {
 	if javascriptGZip == nil {
 		b := bytes.Buffer{}
 		gw := gzip.NewWriter(&b)
-		gw.Write(JavascriptText())
-		gw.Close()
+		_, err := gw.Write(JavascriptText())
+		maybePanic(err)
+		maybePanic(gw.Close())
 		javascriptGZip = b.Bytes()
 	}
 	return javascriptGZip
@@ -37,7 +38,8 @@ func JavascriptGZip() []byte {
 func JavascriptPath() string {
 	if javascriptPath == "" {
 		h := fnv.New64a()
-		h.Write(JavascriptText())
+		_, err := h.Write(JavascriptText())
+		maybePanic(err)
 		javascriptPath = "/jaws/jaws." + strconv.FormatUint(h.Sum64(), 36) + ".js"
 	}
 	return javascriptPath
@@ -66,7 +68,7 @@ func HeadHTML(jawsKey uint64, extraScripts []string) template.HTML {
 	s = append(s, `"]`+forEachPart+`</script><link rel="stylesheet" href="`...)
 	s = append(s, bootstrapCSS...)
 	s = append(s, `"><script>0</script>`...)
-	return template.HTML(s)
+	return template.HTML(s) // #nosec G203
 }
 
 func JawsKeyString(jawsKey uint64) string {

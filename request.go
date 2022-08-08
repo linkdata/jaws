@@ -224,8 +224,7 @@ func (rq *Request) Alert(lvl, msg string) {
 // AlertError calls Alert if the given error is not nil.
 func (rq *Request) AlertError(err error) {
 	if err != nil {
-		rq.Jaws.Log(err)
-		rq.Send(makeAlertDangerMessage(err))
+		rq.Send(makeAlertDangerMessage(rq.Jaws.Log(err)))
 	}
 }
 
@@ -390,7 +389,7 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 			select {
 			case outboundMsgCh <- makeAlertDangerMessage(err):
 			default:
-				rq.Jaws.Log(fmt.Errorf("jaws: outboundMsgCh full sending event error '%s'", err.Error()))
+				_ = rq.Jaws.Log(fmt.Errorf("jaws: outboundMsgCh full sending event error '%s'", err.Error()))
 			}
 		}
 	}

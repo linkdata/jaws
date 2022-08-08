@@ -32,7 +32,7 @@ func (rq *Request) inputHTML(id, typ, val, attrs string) template.HTML {
 		b = append(b, attrs...)
 	}
 	b = append(b, '>')
-	return template.HTML(b)
+	return template.HTML(b) // #nosec G203
 }
 
 func (rq *Request) innerHTML(id, tag, typ, inner, attrs string) template.HTML {
@@ -56,7 +56,7 @@ func (rq *Request) innerHTML(id, tag, typ, inner, attrs string) template.HTML {
 	b = append(b, "</"...)
 	b = append(b, tag...)
 	b = append(b, '>')
-	return template.HTML(b)
+	return template.HTML(b) // #nosec G203
 }
 
 func (rq *Request) maybeClick(id string, fn ClickFn) string {
@@ -231,5 +231,5 @@ func (rq *Request) Select(id string, val *NamedBoolArray, fn InputTextFn, attrs 
 		b = append(b, "</option>\n"...)
 	}
 	b = append(b, "</select>\n"...)
-	return template.HTML(b)
+	return template.HTML(b) // #nosec G203
 }

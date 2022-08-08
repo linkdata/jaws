@@ -148,7 +148,7 @@ func (jw *Jaws) UseRequest(jawsKey uint64, remoteAddr string) (rq *Request) {
 		if (remoteIP == nil && rq.remoteIP == nil) || remoteIP.Equal(rq.remoteIP) {
 			delete(jw.reqs, jawsKey)
 		} else {
-			jw.Log(fmt.Errorf("%v: expected IP %v, got %v", rq, rq.remoteIP, remoteIP))
+			_ = jw.Log(fmt.Errorf("%v: expected IP %v, got %v", rq, rq.remoteIP, remoteIP))
 			rq = nil
 		}
 	}
@@ -342,7 +342,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 						// random failures in processing logic.
 						close(msgCh)
 						delete(subs, msgCh)
-						jw.Log(fmt.Errorf("jaws: broadcast channel full sending %v", msg))
+						_ = jw.Log(fmt.Errorf("jaws: broadcast channel full sending %v", msg))
 					}
 				}
 			}
@@ -398,4 +398,10 @@ func parseIP(remoteAddr string) (ip net.IP) {
 		}
 	}
 	return
+}
+
+func maybePanic(err error) {
+	if err != nil {
+		panic(err)
+	}
 }
