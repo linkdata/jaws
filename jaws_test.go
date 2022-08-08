@@ -40,6 +40,16 @@ func TestJaws_MakeID(t *testing.T) {
 	is.True(id1 != id2)
 }
 
+func TestJaws_maybePanic(t *testing.T) {
+	is := is.New(t)
+	defer func() {
+		if recover() == nil {
+			is.Fail()
+		}
+	}()
+	maybePanic(errors.New("let's panic!"))
+}
+
 func TestJaws_Logger(t *testing.T) {
 	is := is.New(t)
 	jw := New()
@@ -183,10 +193,13 @@ func TestJaws_UseRequest(t *testing.T) {
 	defer jw.Close()
 
 	rq1 := jw.NewRequest(context.Background(), "")
+	is.True(rq1.JawsKey != 0)
 	rq2 := jw.NewRequest(context.Background(), "127.0.0.2:1010")
+	is.True(rq2.JawsKey != 0)
+	is.True(rq1.JawsKey != rq2.JawsKey)
 	is.Equal(jw.Pending(), 2)
 
-	rqfail := jw.UseRequest(-2, "")
+	rqfail := jw.UseRequest(0, "")
 	is.Equal(rqfail, nil)
 	is.Equal(jw.Pending(), 2)
 

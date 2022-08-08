@@ -26,8 +26,9 @@ func JavascriptGZip() []byte {
 	if javascriptGZip == nil {
 		b := bytes.Buffer{}
 		gw := gzip.NewWriter(&b)
-		gw.Write(JavascriptText())
-		gw.Close()
+		_, err := gw.Write(JavascriptText())
+		maybePanic(err)
+		maybePanic(gw.Close())
 		javascriptGZip = b.Bytes()
 	}
 	return javascriptGZip
@@ -37,7 +38,8 @@ func JavascriptGZip() []byte {
 func JavascriptPath() string {
 	if javascriptPath == "" {
 		h := fnv.New64a()
-		h.Write(JavascriptText())
+		_, err := h.Write(JavascriptText())
+		maybePanic(err)
 		javascriptPath = "/jaws/jaws." + strconv.FormatUint(h.Sum64(), 36) + ".js"
 	}
 	return javascriptPath
@@ -46,7 +48,7 @@ func JavascriptPath() string {
 // HeadHTML returns the HTML code to load the required CSS and Javascript
 // libraries along with any Javascript URL's given in extraScripts.
 // Place the returned HTML code in the HEAD section of the document.
-func HeadHTML(jawsKey int64, extraScripts []string) template.HTML {
+func HeadHTML(jawsKey uint64, extraScripts []string) template.HTML {
 	const bootstrapCDN = "https://cdn.jsdelivr.net/npm/bootstrap"
 	const bootstrapCSS = bootstrapCDN + "@" + bootstrapVersion + "/dist/css/bootstrap.min.css"
 	const bootstrapJS = bootstrapCDN + "@" + bootstrapVersion + "/dist/js/bootstrap.bundle.min.js"
@@ -66,12 +68,12 @@ func HeadHTML(jawsKey int64, extraScripts []string) template.HTML {
 	s = append(s, `"]`+forEachPart+`</script><link rel="stylesheet" href="`...)
 	s = append(s, bootstrapCSS...)
 	s = append(s, `"><script>0</script>`...)
-	return template.HTML(s)
+	return template.HTML(s) // #nosec G203
 }
 
-func JawsKeyString(jawsKey int64) string {
-	if jawsKey < 0 {
+func JawsKeyString(jawsKey uint64) string {
+	if jawsKey == 0 {
 		return ""
 	}
-	return strconv.FormatInt(jawsKey, 16)
+	return strconv.FormatUint(jawsKey, 16)
 }

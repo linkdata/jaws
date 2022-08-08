@@ -11,8 +11,12 @@
 package jaws
 
 import (
+	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"strconv"
@@ -27,11 +31,11 @@ type Jaws struct {
 	bcastCh chan *Message
 	subCh   chan chan *Message
 	unsubCh chan chan *Message
-	kg      *Keygen
 	nextId  uint64
+	kg      *bufio.Reader
 	mu      sync.Mutex // protects following
 	closeCh chan struct{}
-	reqs    map[int64]*Request
+	reqs    map[uint64]*Request
 }
 
 // NewWithDone returns a new JaWS object using the given completion channel.
@@ -43,8 +47,8 @@ func NewWithDone(doneCh <-chan struct{}) *Jaws {
 		bcastCh: make(chan *Message, 1),
 		subCh:   make(chan chan *Message, 1),
 		unsubCh: make(chan chan *Message, 1),
-		kg:      NewKeygen(),
-		reqs:    make(map[int64]*Request),
+		kg:      bufio.NewReader(rand.Reader),
+		reqs:    make(map[uint64]*Request),
 	}
 }
 
@@ -111,15 +115,21 @@ func (jw *Jaws) MakeID() string {
 //
 // Don't use the http.Request's Context, as that will expire before the WebSocket call comes in.
 func (jw *Jaws) NewRequest(ctx context.Context, remoteAddr string) (rq *Request) {
-	for rq == nil {
-		jawsKey := jw.kg.Int63()
-		jw.mu.Lock()
-		if _, ok := jw.reqs[jawsKey]; !ok {
-			rq = newRequest(ctx, jw, jawsKey, remoteAddr)
-			jw.reqs[jawsKey] = rq
+	var err error
+	random := make([]byte, 8)
+	for rq == nil && err == nil {
+		if _, err = io.ReadFull(jw.kg, random); err == nil {
+			if jawsKey := binary.LittleEndian.Uint64(random); jawsKey != 0 {
+				jw.mu.Lock()
+				if _, ok := jw.reqs[jawsKey]; !ok {
+					rq = newRequest(ctx, jw, jawsKey, remoteAddr)
+					jw.reqs[jawsKey] = rq
+				}
+				jw.mu.Unlock()
+			}
 		}
-		jw.mu.Unlock()
 	}
+	maybePanic(err)
 	return
 }
 
@@ -131,7 +141,7 @@ func (jw *Jaws) NewRequest(ctx context.Context, remoteAddr string) (rq *Request)
 // WebSocket messages.
 //
 // Returns nil if the key was not found, in which case you should return a HTTP 404 Not Found code.
-func (jw *Jaws) UseRequest(jawsKey int64, remoteAddr string) (rq *Request) {
+func (jw *Jaws) UseRequest(jawsKey uint64, remoteAddr string) (rq *Request) {
 	var ok bool
 	jw.mu.Lock()
 	if rq, ok = jw.reqs[jawsKey]; ok {
@@ -139,7 +149,7 @@ func (jw *Jaws) UseRequest(jawsKey int64, remoteAddr string) (rq *Request) {
 		if (remoteIP == nil && rq.remoteIP == nil) || remoteIP.Equal(rq.remoteIP) {
 			delete(jw.reqs, jawsKey)
 		} else {
-			jw.Log(fmt.Errorf("%v: expected IP %v, got %v", rq, rq.remoteIP, remoteIP))
+			_ = jw.Log(fmt.Errorf("%v: expected IP %v, got %v", rq, rq.remoteIP, remoteIP))
 			rq = nil
 		}
 	}
@@ -308,9 +318,6 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		case <-jw.Done():
 			return
 		case <-t.C:
-			if jw.kg.IsUsed() {
-				jw.kg.Reseed()
-			}
 			jw.maintenance(requestTimeout)
 		case msgCh := <-jw.subCh:
 			if msgCh != nil {
@@ -336,7 +343,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 						// random failures in processing logic.
 						close(msgCh)
 						delete(subs, msgCh)
-						jw.Log(fmt.Errorf("jaws: broadcast channel full sending %v", msg))
+						_ = jw.Log(fmt.Errorf("jaws: broadcast channel full sending %v", msg))
 					}
 				}
 			}
@@ -392,4 +399,10 @@ func parseIP(remoteAddr string) (ip net.IP) {
 		}
 	}
 	return
+}
+
+func maybePanic(err error) {
+	if err != nil {
+		panic(err)
+	}
 }
