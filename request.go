@@ -26,7 +26,7 @@ type EventFn func(rq *Request, id, evt, val string) error
 // between the Request being created and it being used once the WebSocket is created.
 type Request struct {
 	Jaws      *Jaws              // the JaWS instance the Request belongs to
-	JawsKey   int64              // a random number used in the WebSocket URI to identify this Request
+	JawsKey   uint64             // a random number used in the WebSocket URI to identify this Request
 	ConnectFn ConnectFn          // a ConnectFn to call before starting message processing for the Request
 	Started   time.Time          // when the Request was started, used for automatic cleanup
 	ctx       context.Context    // context passed to NewRequest
@@ -54,7 +54,7 @@ var requestPool = sync.Pool{New: func() interface{} {
 	}
 }}
 
-func newRequest(ctx context.Context, j *Jaws, key int64, remoteAddr string) (rq *Request) {
+func newRequest(ctx context.Context, j *Jaws, key uint64, remoteAddr string) (rq *Request) {
 	rq = requestPool.Get().(*Request)
 	rq.Jaws = j
 	rq.JawsKey = key
@@ -65,7 +65,7 @@ func newRequest(ctx context.Context, j *Jaws, key int64, remoteAddr string) (rq 
 }
 
 func (rq *Request) JawsKeyString() string {
-	jawsKey := int64(-1)
+	jawsKey := uint64(0)
 	if rq != nil {
 		jawsKey = rq.JawsKey
 	}
@@ -79,7 +79,7 @@ func (rq *Request) String() string {
 func (rq *Request) recycle() {
 	rq.mu.Lock()
 	rq.Jaws = nil
-	rq.JawsKey = -1
+	rq.JawsKey = 0
 	rq.ConnectFn = nil
 	rq.ctx = nil
 	rq.remoteIP = nil
@@ -260,7 +260,8 @@ func (rq *Request) RegisterEventFn(id string, fn EventFn) string {
 
 // Register calls RegisterEventFn(id, nil).
 // Useful in template constructs like:
-//   <div id="{{$.Register `foo`}}">
+//
+//	<div id="{{$.Register `foo`}}">
 func (rq *Request) Register(id string) string {
 	return rq.RegisterEventFn(id, nil)
 }

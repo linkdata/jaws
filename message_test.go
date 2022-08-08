@@ -27,7 +27,5 @@ func Test_Message_String(t *testing.T) {
 	msg.from = &Request{JawsKey: 0xcafe}
 	is.Equal(msg.String(), "{\"Elem\", \"What\", \"Data\\nText\", Request<cafe>}")
 	msg.from = &Request{JawsKey: 0}
-	is.Equal(msg.String(), "{\"Elem\", \"What\", \"Data\\nText\", Request<0>}")
-	msg.from = &Request{JawsKey: -1}
 	is.Equal(msg.String(), "{\"Elem\", \"What\", \"Data\\nText\", Request<>}")
 }

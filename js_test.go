@@ -25,7 +25,7 @@ func Test_Javascript(t *testing.T) {
 func Test_HeadHTML(t *testing.T) {
 	const extraScript = "someExtraScript.js"
 	is := is.New(t)
-	jawsKey := int64(0xcafebabe)
+	jawsKey := uint64(0xcafebabe)
 	txt := HeadHTML(jawsKey, []string{extraScript})
 	is.Equal(strings.Contains(string(txt), JawsKeyString(jawsKey)), true)
 	is.Equal(strings.Contains(string(txt), JavascriptPath()), true)

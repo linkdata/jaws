@@ -36,7 +36,7 @@ func Setup(router *echo.Echo, jw *jaws.Jaws) {
 		}
 	})
 	router.GET("/jaws/:key", func(c echo.Context) error {
-		if jawsKey, err := strconv.ParseInt(c.Param("key"), 16, 64); err == nil {
+		if jawsKey, err := strconv.ParseUint(c.Param("key"), 16, 64); err == nil {
 			if rq := jw.UseRequest(jawsKey, c.Request().RemoteAddr); rq != nil {
 				rq.ServeHTTP(c.Response().Writer, c.Request())
 				return nil

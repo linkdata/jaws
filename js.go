@@ -46,7 +46,7 @@ func JavascriptPath() string {
 // HeadHTML returns the HTML code to load the required CSS and Javascript
 // libraries along with any Javascript URL's given in extraScripts.
 // Place the returned HTML code in the HEAD section of the document.
-func HeadHTML(jawsKey int64, extraScripts []string) template.HTML {
+func HeadHTML(jawsKey uint64, extraScripts []string) template.HTML {
 	const bootstrapCDN = "https://cdn.jsdelivr.net/npm/bootstrap"
 	const bootstrapCSS = bootstrapCDN + "@" + bootstrapVersion + "/dist/css/bootstrap.min.css"
 	const bootstrapJS = bootstrapCDN + "@" + bootstrapVersion + "/dist/js/bootstrap.bundle.min.js"
@@ -69,9 +69,9 @@ func HeadHTML(jawsKey int64, extraScripts []string) template.HTML {
 	return template.HTML(s)
 }
 
-func JawsKeyString(jawsKey int64) string {
-	if jawsKey < 0 {
+func JawsKeyString(jawsKey uint64) string {
+	if jawsKey == 0 {
 		return ""
 	}
-	return strconv.FormatInt(jawsKey, 16)
+	return strconv.FormatUint(jawsKey, 16)
 }

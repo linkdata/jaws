@@ -186,7 +186,7 @@ func TestJaws_UseRequest(t *testing.T) {
 	rq2 := jw.NewRequest(context.Background(), "127.0.0.2:1010")
 	is.Equal(jw.Pending(), 2)
 
-	rqfail := jw.UseRequest(-2, "")
+	rqfail := jw.UseRequest(0, "")
 	is.Equal(rqfail, nil)
 	is.Equal(jw.Pending(), 2)
 
