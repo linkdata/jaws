@@ -652,6 +652,29 @@ func TestRequest_Text(t *testing.T) {
 	}
 }
 
+func TestRequest_Password(t *testing.T) {
+	const elemId = "elem-id"
+	const elemVal = "elem-val"
+	is := is.New(t)
+	rq := newTestRequest(is)
+	defer rq.Close()
+
+	gotCall := make(chan struct{})
+	h := rq.Password(elemId, elemVal, func(rq *Request, val string) error {
+		defer close(gotCall)
+		is.Equal(val, "other-stuff")
+		return nil
+	}, "autocomplete=\"off\"")
+	is.True(strings.Contains(string(h), "id=\""+elemId+"\""))
+	is.True(!strings.Contains(string(h), elemVal))
+	rq.inCh <- &Message{Elem: elemId, What: "input", Data: "other-stuff"}
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-gotCall:
+	}
+}
+
 func TestRequest_Range(t *testing.T) {
 	const elemId = "elem-id"
 	const elemVal = float64(3.14)

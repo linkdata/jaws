@@ -176,7 +176,7 @@ func (rq *Request) Text(id, val string, fn InputTextFn, attrs string) template.H
 }
 
 func (rq *Request) Password(id, val string, fn InputTextFn, attrs string) template.HTML {
-	return rq.inputHTML(rq.maybeInputText(id, fn), "password", val, attrs)
+	return rq.inputHTML(rq.maybeInputText(id, fn), "password", "", attrs)
 }
 
 func (rq *Request) Range(id string, val float64, fn InputFloatFn, attrs string) template.HTML {
