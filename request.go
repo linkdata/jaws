@@ -28,7 +28,8 @@ type Request struct {
 	Jaws      *Jaws              // the JaWS instance the Request belongs to
 	JawsKey   uint64             // a random number used in the WebSocket URI to identify this Request
 	ConnectFn ConnectFn          // a ConnectFn to call before starting message processing for the Request
-	Started   time.Time          // when the Request was started, used for automatic cleanup
+	Created   time.Time          // when the Request was created, used for automatic cleanup
+	Started   bool               // set to true after UseRequest() has been called
 	ctx       context.Context    // context passed to NewRequest
 	remoteIP  net.IP             // parsed remote IP (or nil)
 	sendCh    chan *Message      // direct send message channel
@@ -58,7 +59,7 @@ func newRequest(ctx context.Context, j *Jaws, key uint64, remoteAddr string) (rq
 	rq = requestPool.Get().(*Request)
 	rq.Jaws = j
 	rq.JawsKey = key
-	rq.Started = time.Now()
+	rq.Created = time.Now()
 	rq.ctx = ctx
 	rq.remoteIP = parseIP(remoteAddr)
 	return rq
@@ -76,11 +77,24 @@ func (rq *Request) String() string {
 	return "Request<" + rq.JawsKeyString() + ">"
 }
 
+func (rq *Request) start(remoteAddr string) (err error) {
+	remoteIP := parseIP(remoteAddr)
+	rq.mu.Lock()
+	if (remoteIP == nil && rq.remoteIP == nil) || remoteIP.Equal(rq.remoteIP) {
+		rq.Started = true
+	} else {
+		err = fmt.Errorf("/jaws/%s: expected IP %s, got %q", JawsKeyString(rq.JawsKey), rq.remoteIP.String(), remoteAddr)
+	}
+	rq.mu.Unlock()
+	return
+}
+
 func (rq *Request) recycle() {
 	rq.mu.Lock()
 	rq.Jaws = nil
 	rq.JawsKey = 0
 	rq.ConnectFn = nil
+	rq.Started = false
 	rq.ctx = nil
 	rq.remoteIP = nil
 	// this gets optimized to calling the 'runtime.mapclear' function
@@ -236,27 +250,33 @@ func (rq *Request) Redirect(url string) {
 	})
 }
 
-// RegisterEventFn records the given HTML element ID as a valid target for dynamic updates
-// using the given event function (which may be nil). All ID's in a HTML DOM tree must
-// be unique.
+// RegisterEventFn records the given HTML element ID as a valid target
+// for dynamic updates using the given event function (which may be nil).
 //
 // If the id argument is an empty string, a unique ID will be generated.
 //
 // If fn argument is nil, a pre-existing event function won't be overwritten.
 //
+// All ID's in a HTML DOM tree must be unique, and submitting a duplicate
+// id with a non-nil fn before UseRequest() have been called will cause
+// a panic. Once UseRequest has been called, you are allowed to call this
+// function with already registered ID's since otherwise updating
+// inner HTML using the element functions (e.g. Request.Text) would fail.
+//
 // Returns the (possibly generated) id.
 func (rq *Request) RegisterEventFn(id string, fn EventFn) string {
-	// note that we can't check for duplicate ID's here, because
-	// we might be called while *replacing* inner HTML with
-	// new content (like in a div).
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	if id != "" {
-		if fn != nil {
-			rq.elems[id] = fn
-		} else if _, ok := rq.elems[id]; !ok {
-			rq.elems[id] = nil
+		if _, ok := rq.elems[id]; ok {
+			if fn == nil {
+				return id
+			}
+			if !rq.Started {
+				panic("id already registered: " + id)
+			}
 		}
+		rq.elems[id] = fn
 	} else {
 		for {
 			id = rq.Jaws.MakeID()

@@ -129,6 +129,33 @@ func TestRequest_Registrations(t *testing.T) {
 	is.True(id != id2)
 }
 
+func registerFooShouldPanic(is *is.I, rq *Request) {
+	defer func() {
+		if v := recover(); v == nil {
+			is.Fail()
+		} else {
+			is.True(strings.Contains(v.(string), "foo"))
+		}
+	}()
+	rq.RegisterEventFn("foo", func(rq *Request, id, evt, val string) error { return nil })
+	is.Fail()
+}
+
+func TestRequest_DuplicateRegistration(t *testing.T) {
+	is := is.New(t)
+	jw := New()
+	defer jw.Close()
+	rq := jw.NewRequest(context.Background(), "")
+	var ef EventFn = func(rq *Request, id, evt, val string) error { return nil }
+	is.Equal(rq.RegisterEventFn("foo", ef), "foo")  // first reg succeeds
+	is.Equal(rq.RegisterEventFn("foo", nil), "foo") // nil fn always succeeds
+	registerFooShouldPanic(is, rq)
+	rq2 := jw.UseRequest(rq.JawsKey, "")
+	is.Equal(rq, rq2)
+	is.Equal(rq.RegisterEventFn("foo", ef), "foo")  // succeeds now that UseRequest() has been called
+	is.Equal(rq.RegisterEventFn("foo", nil), "foo") // nil fn always succeeds
+}
+
 func TestRequest_SendFailsWhenJawsClosed(t *testing.T) {
 	is := is.New(t)
 	jw := New()

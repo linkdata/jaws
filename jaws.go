@@ -140,17 +140,16 @@ func (jw *Jaws) NewRequest(ctx context.Context, remoteAddr string) (rq *Request)
 // associated Request, and then call it's ServeHTTP method to process the
 // WebSocket messages.
 //
-// Returns nil if the key was not found, in which case you should return a HTTP 404 Not Found code.
+// Returns nil if the key was not found, in which case you should return a
+// HTTP "404 Not Found" status.
 func (jw *Jaws) UseRequest(jawsKey uint64, remoteAddr string) (rq *Request) {
-	var ok bool
 	jw.mu.Lock()
-	if rq, ok = jw.reqs[jawsKey]; ok {
-		remoteIP := parseIP(remoteAddr)
-		if (remoteIP == nil && rq.remoteIP == nil) || remoteIP.Equal(rq.remoteIP) {
+	if waitingRq, ok := jw.reqs[jawsKey]; ok {
+		if err := waitingRq.start(remoteAddr); err == nil {
 			delete(jw.reqs, jawsKey)
+			rq = waitingRq
 		} else {
-			_ = jw.Log(fmt.Errorf("%v: expected IP %v, got %v", rq, rq.remoteIP, remoteIP))
-			rq = nil
+			_ = jw.Log(err)
 		}
 	}
 	jw.mu.Unlock()
@@ -379,7 +378,7 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	deadline := time.Now().Add(-requestTimeout)
 	jw.mu.Lock()
 	for k, rq := range jw.reqs {
-		if rq.Started.Before(deadline) {
+		if rq.Created.Before(deadline) {
 			delete(jw.reqs, k)
 			toCycle = append(toCycle, rq)
 		}
