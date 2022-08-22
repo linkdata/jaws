@@ -237,23 +237,25 @@ func (rq *Request) Redirect(url string) {
 }
 
 // RegisterEventFn records the given HTML element ID as a valid target for dynamic updates
-// using the given event function (which may be nil). All id's on in a HTML DOM tree must
+// using the given event function (which may be nil). All ID's in a HTML DOM tree must
 // be unique.
 //
 // If the id argument is an empty string, a unique ID will be generated.
 //
-// If the id is already registered, either the provided fn must be nil or the registered
-// event function must be nil. If neither are nil, we panic.
+// If fn argument is nil, a pre-existing event function won't be overwritten.
 //
 // Returns the (possibly generated) id.
 func (rq *Request) RegisterEventFn(id string, fn EventFn) string {
+	// note that we can't check for duplicate ID's here, because
+	// we might be called while *replacing* inner HTML with
+	// new content (like in a div).
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	if id != "" {
-		if oldFn, ok := rq.elems[id]; !ok || oldFn == nil {
+		if fn != nil {
 			rq.elems[id] = fn
-		} else if fn != nil && oldFn != nil {
-			panic("id already registered: " + id)
+		} else if _, ok := rq.elems[id]; !ok {
+			rq.elems[id] = nil
 		}
 	} else {
 		for {
