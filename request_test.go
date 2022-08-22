@@ -129,6 +129,27 @@ func TestRequest_Registrations(t *testing.T) {
 	is.True(id != id2)
 }
 
+func TestRequest_DuplicateRegistrationPanics(t *testing.T) {
+	is := is.New(t)
+	rq := newTestRequest(is)
+	defer rq.Close()
+
+	var ef EventFn = func(rq *Request, id, evt, val string) error { return nil }
+	id1 := rq.RegisterEventFn("", ef)
+	is.True(id1 != "")
+
+	defer func() {
+		if v := recover(); v == nil {
+			is.Fail()
+		} else {
+			is.True(strings.Contains(v.(string), id1))
+		}
+	}()
+
+	rq.RegisterEventFn(id1, ef) // should panic
+	is.Fail()
+}
+
 func TestRequest_SendFailsWhenJawsClosed(t *testing.T) {
 	is := is.New(t)
 	jw := New()
