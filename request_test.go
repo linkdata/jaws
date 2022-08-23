@@ -627,6 +627,10 @@ func TestRequest_Elements(t *testing.T) {
 	h = rq.Button(elemId, elemVal, nil, "disabled")
 	is.True(strings.Contains(string(h), elemId))
 	is.True(strings.Contains(string(h), elemVal))
+
+	h = rq.Submit(elemId, nil, "")
+	is.True(strings.Contains(string(h), "submit"))
+	is.True(strings.Contains(string(h), elemId))
 }
 
 func TestRequest_Text(t *testing.T) {
