@@ -627,6 +627,10 @@ func TestRequest_Elements(t *testing.T) {
 	h = rq.Button(elemId, elemVal, nil, "disabled")
 	is.True(strings.Contains(string(h), elemId))
 	is.True(strings.Contains(string(h), elemVal))
+
+	h = rq.Submit(elemId, nil, "")
+	is.True(strings.Contains(string(h), "submit"))
+	is.True(strings.Contains(string(h), elemId))
 }
 
 func TestRequest_Text(t *testing.T) {
@@ -667,6 +671,29 @@ func TestRequest_Password(t *testing.T) {
 	is.True(strings.Contains(string(h), "id=\""+elemId+"\""))
 	is.True(!strings.Contains(string(h), "value"))
 	rq.inCh <- &Message{Elem: elemId, What: "input", Data: "other-stuff"}
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-gotCall:
+	}
+}
+
+func TestRequest_Int(t *testing.T) {
+	const elemId = "elem-id"
+	const elemVal = 21
+	is := is.New(t)
+	rq := newTestRequest(is)
+	defer rq.Close()
+
+	gotCall := make(chan struct{})
+	h := rq.Int(elemId, elemVal, func(rq *Request, val int) error {
+		defer close(gotCall)
+		is.Equal(val, 42)
+		return nil
+	}, "disabled")
+	is.True(strings.Contains(string(h), "id=\""+elemId+"\""))
+	is.True(strings.Contains(string(h), "21"))
+	rq.inCh <- &Message{Elem: elemId, What: "input", Data: "42"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
