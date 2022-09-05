@@ -106,7 +106,7 @@ func (rq *Request) maybeInputInt(id string, fn InputIntFn) string {
 	var wf EventFn
 	if fn != nil {
 		wf = func(rq *Request, id, evt, val string) (err error) {
-			if evt == "input" {
+			if evt == "input" && val != "" {
 				var v int
 				if v, err = strconv.Atoi(val); err == nil {
 					err = fn(rq, v)
