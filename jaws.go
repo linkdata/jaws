@@ -32,8 +32,8 @@ type Jaws struct {
 	subCh   chan chan *Message
 	unsubCh chan chan *Message
 	nextId  uint64
-	kg      *bufio.Reader
 	mu      sync.Mutex // protects following
+	kg      *bufio.Reader
 	closeCh chan struct{}
 	reqs    map[uint64]*Request
 }
@@ -118,14 +118,14 @@ func (jw *Jaws) NewRequest(ctx context.Context, remoteAddr string) (rq *Request)
 	var err error
 	random := make([]byte, 8)
 	for rq == nil && err == nil {
+		jw.mu.Lock()
+		defer jw.mu.Unlock()
 		if _, err = io.ReadFull(jw.kg, random); err == nil {
 			if jawsKey := binary.LittleEndian.Uint64(random); jawsKey != 0 {
-				jw.mu.Lock()
 				if _, ok := jw.reqs[jawsKey]; !ok {
 					rq = newRequest(ctx, jw, jawsKey, remoteAddr)
 					jw.reqs[jawsKey] = rq
 				}
-				jw.mu.Unlock()
 			}
 		}
 	}
