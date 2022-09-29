@@ -219,6 +219,20 @@ func TestJaws_UseRequest(t *testing.T) {
 	is.Equal(jw.Pending(), 0)
 }
 
+func TestJaws_BlockingRandomPanics(t *testing.T) {
+	is := is.New(t)
+	defer func() {
+		if recover() == nil {
+			is.Fail()
+		}
+	}()
+	jw := New()
+	defer jw.Close()
+	jw.kg = bufio.NewReader(&bytes.Buffer{})
+	jw.NewRequest(context.Background(), "")
+	is.Fail()
+}
+
 func TestJaws_CleansUpUnconnected(t *testing.T) {
 	const numReqs = 1000
 	is := is.New(t)

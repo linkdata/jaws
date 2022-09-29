@@ -115,21 +115,20 @@ func (jw *Jaws) MakeID() string {
 //
 // Don't use the http.Request's Context, as that will expire before the WebSocket call comes in.
 func (jw *Jaws) NewRequest(ctx context.Context, remoteAddr string) (rq *Request) {
-	var err error
 	random := make([]byte, 8)
-	for rq == nil && err == nil {
-		jw.mu.Lock()
-		defer jw.mu.Unlock()
-		if _, err = io.ReadFull(jw.kg, random); err == nil {
-			if jawsKey := binary.LittleEndian.Uint64(random); jawsKey != 0 {
-				if _, ok := jw.reqs[jawsKey]; !ok {
-					rq = newRequest(ctx, jw, jawsKey, remoteAddr)
-					jw.reqs[jawsKey] = rq
-				}
+	jw.mu.Lock()
+	defer jw.mu.Unlock()
+	for rq == nil {
+		if _, err := io.ReadFull(jw.kg, random); err != nil {
+			panic(err)
+		}
+		if jawsKey := binary.LittleEndian.Uint64(random); jawsKey != 0 {
+			if _, ok := jw.reqs[jawsKey]; !ok {
+				rq = newRequest(ctx, jw, jawsKey, remoteAddr)
+				jw.reqs[jawsKey] = rq
 			}
 		}
 	}
-	maybePanic(err)
 	return
 }
 
