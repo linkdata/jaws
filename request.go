@@ -453,7 +453,7 @@ func makeAlertDangerMessage(err error) (msg *Message) {
 // defaultChSize returns a reasonable buffer size for our data channels
 func (rq *Request) defaultChSize() (n int) {
 	rq.mu.RLock()
-	n = 8 + len(rq.elems)*2
+	n = 8 + len(rq.elems)*4
 	rq.mu.RUnlock()
 	return
 }
