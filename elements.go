@@ -188,6 +188,10 @@ func (rq *Request) Button(id, txt string, fn ClickFn, attrs string) template.HTM
 	return rq.innerHTML(rq.maybeClick(id, fn), "button", "button", txt, attrs)
 }
 
+func (rq *Request) Submit(id string, fn ClickFn, attrs string) template.HTML {
+	return rq.innerHTML(rq.maybeClick(id, fn), "input", "submit", "", attrs)
+}
+
 func (rq *Request) Text(id, val string, fn InputTextFn, attrs string) template.HTML {
 	return rq.inputHTML(rq.maybeInputText(id, fn), "text", val, attrs)
 }
