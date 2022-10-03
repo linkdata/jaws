@@ -225,6 +225,7 @@ func (rq *Request) RemoveAttr(id, attr string) {
 }
 
 // Alert attempts to show an alert message on the current request webpage if it has an HTML element with the id 'jaws-alert'.
+// The lvl argument should be one of Bootstraps alert levels: primary, secondary, success, danger, warning, info, light or dark.
 //
 // The default JaWS javascript only supports Bootstrap.js dismissable alerts.
 func (rq *Request) Alert(lvl, msg string) {
