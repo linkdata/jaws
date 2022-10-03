@@ -102,22 +102,6 @@ func (rq *Request) maybeInputFloat(id string, fn InputFloatFn) string {
 	return rq.RegisterEventFn(id, wf)
 }
 
-func (rq *Request) maybeInputInt(id string, fn InputIntFn) string {
-	var wf EventFn
-	if fn != nil {
-		wf = func(rq *Request, id, evt, val string) (err error) {
-			if evt == "input" {
-				var v int
-				if v, err = strconv.Atoi(val); err == nil {
-					err = fn(rq, v)
-				}
-			}
-			return
-		}
-	}
-	return rq.RegisterEventFn(id, wf)
-}
-
 func (rq *Request) maybeInputBool(id string, fn InputBoolFn) string {
 	var wf EventFn
 	if fn != nil {
@@ -200,8 +184,8 @@ func (rq *Request) Password(id string, fn InputTextFn, attrs string) template.HT
 	return rq.inputHTML(rq.maybeInputText(id, fn), "password", "", attrs)
 }
 
-func (rq *Request) Int(id string, val int, fn InputIntFn, attrs string) template.HTML {
-	return rq.inputHTML(rq.maybeInputInt(id, fn), "number", strconv.Itoa(val), attrs)
+func (rq *Request) Number(id string, val float64, fn InputFloatFn, attrs string) template.HTML {
+	return rq.inputHTML(rq.maybeInputFloat(id, fn), "number", strconv.FormatFloat(val, 'f', -1, 64), attrs)
 }
 
 func (rq *Request) Range(id string, val float64, fn InputFloatFn, attrs string) template.HTML {
