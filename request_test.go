@@ -627,6 +627,7 @@ func TestRequest_Elements(t *testing.T) {
 	h = rq.Button(elemId, elemVal, nil, "disabled")
 	is.True(strings.Contains(string(h), elemId))
 	is.True(strings.Contains(string(h), elemVal))
+
 }
 
 func TestRequest_Text(t *testing.T) {
@@ -667,6 +668,29 @@ func TestRequest_Password(t *testing.T) {
 	is.True(strings.Contains(string(h), "id=\""+elemId+"\""))
 	is.True(!strings.Contains(string(h), "value"))
 	rq.inCh <- &Message{Elem: elemId, What: "input", Data: "other-stuff"}
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-gotCall:
+	}
+}
+
+func TestRequest_Number(t *testing.T) {
+	const elemId = "elem-id"
+	const elemVal = 21.5
+	is := is.New(t)
+	rq := newTestRequest(is)
+	defer rq.Close()
+
+	gotCall := make(chan struct{})
+	h := rq.Number(elemId, elemVal, func(rq *Request, val float64) error {
+		defer close(gotCall)
+		is.Equal(val, 4.3)
+		return nil
+	}, "disabled")
+	is.True(strings.Contains(string(h), "id=\""+elemId+"\""))
+	is.True(strings.Contains(string(h), "21.5"))
+	rq.inCh <- &Message{Elem: elemId, What: "input", Data: "4.3"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
