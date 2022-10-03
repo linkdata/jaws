@@ -10,7 +10,6 @@ import (
 type ClickFn func(rq *Request) error
 type InputTextFn func(rq *Request, val string) error
 type InputFloatFn func(rq *Request, val float64) error
-type InputIntFn func(rq *Request, val int) error
 type InputBoolFn func(rq *Request, val bool) error
 type InputDateFn func(rq *Request, val time.Time) error
 
