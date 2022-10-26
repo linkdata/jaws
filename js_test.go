@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -24,13 +25,20 @@ func Test_Javascript(t *testing.T) {
 
 func Test_HeadHTML(t *testing.T) {
 	const extraScript = "someExtraScript.js"
+	const extraStyle = "someExtraStyle.css"
 	is := is.New(t)
 	jawsKey := uint64(0xcafebabe)
 	txt := HeadHTML(jawsKey)
 	is.Equal(strings.Contains(string(txt), JawsKeyString(jawsKey)), true)
 	is.Equal(strings.Contains(string(txt), JavascriptPath()), true)
-	txt = HeadHTML(jawsKey, extraScript)
+	is.Equal(strings.Contains(string(txt), bootstrapJS), true)
+	is.Equal(strings.Contains(string(txt), bootstrapCSS), true)
+	txt = HeadHTML(jawsKey, extraScript, extraStyle)
 	is.Equal(strings.Contains(string(txt), JawsKeyString(jawsKey)), true)
 	is.Equal(strings.Contains(string(txt), JavascriptPath()), true)
+	is.Equal(strings.Contains(string(txt), bootstrapJS), true)
+	is.Equal(strings.Contains(string(txt), bootstrapCSS), true)
 	is.Equal(strings.Contains(string(txt), extraScript), true)
+	is.Equal(strings.Contains(string(txt), extraStyle), true)
+	fmt.Println(string(txt))
 }
