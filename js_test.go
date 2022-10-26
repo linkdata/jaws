@@ -27,17 +27,24 @@ func Test_HeadHTML(t *testing.T) {
 	const extraScript = "someExtraScript.js"
 	const extraStyle = "someExtraStyle.css"
 	is := is.New(t)
+
+	UseBootstrap(nil)
+	is.True(bootstrapConfig.bootstrapJS != "")
+	is.True(bootstrapConfig.bootstrapCSS != "")
+	fmt.Println(bootstrapConfig.bootstrapJS)
+	fmt.Println(bootstrapConfig.bootstrapCSS)
+
 	jawsKey := uint64(0xcafebabe)
 	txt := HeadHTML(jawsKey)
 	is.Equal(strings.Contains(string(txt), JawsKeyString(jawsKey)), true)
 	is.Equal(strings.Contains(string(txt), JavascriptPath()), true)
-	is.Equal(strings.Contains(string(txt), bootstrapJS), true)
-	is.Equal(strings.Contains(string(txt), bootstrapCSS), true)
+	is.Equal(strings.Contains(string(txt), bootstrapConfig.bootstrapJS), true)
+	is.Equal(strings.Contains(string(txt), bootstrapConfig.bootstrapCSS), true)
 	txt = HeadHTML(jawsKey, extraScript, extraStyle)
 	is.Equal(strings.Contains(string(txt), JawsKeyString(jawsKey)), true)
 	is.Equal(strings.Contains(string(txt), JavascriptPath()), true)
-	is.Equal(strings.Contains(string(txt), bootstrapJS), true)
-	is.Equal(strings.Contains(string(txt), bootstrapCSS), true)
+	is.Equal(strings.Contains(string(txt), bootstrapConfig.bootstrapJS), true)
+	is.Equal(strings.Contains(string(txt), bootstrapConfig.bootstrapCSS), true)
 	is.Equal(strings.Contains(string(txt), extraScript), true)
 	is.Equal(strings.Contains(string(txt), extraStyle), true)
 	fmt.Println(string(txt))

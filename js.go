@@ -10,8 +10,6 @@ import (
 	"strings"
 )
 
-const bootstrapVersion = "5.1.3"
-
 //go:embed jaws.js
 var javascriptText []byte
 var javascriptGZip []byte
@@ -53,10 +51,6 @@ func appendLinkStyleSheet(s []byte, css string) []byte {
 	return s
 }
 
-const bootstrapCDN = "https://cdn.jsdelivr.net/npm/bootstrap"
-const bootstrapCSS = bootstrapCDN + "@" + bootstrapVersion + "/dist/css/bootstrap.min.css"
-const bootstrapJS = bootstrapCDN + "@" + bootstrapVersion + "/dist/js/bootstrap.bundle.min.js"
-
 // HeadHTML returns the HTML code to load the required CSS and Javascript
 // libraries along with any `*.js“ and `*.css` URL's given in `extra`.
 // Place the returned HTML code in the HEAD section of the document.
@@ -67,7 +61,7 @@ func HeadHTML(jawsKey uint64, extra ...string) template.HTML {
 	s = append(s, `<script>var jawsKey="`...)
 	s = append(s, JawsKeyString(jawsKey)...)
 	s = append(s, `";["`...)
-	s = append(s, bootstrapJS...)
+	s = append(s, bootstrapConfig.bootstrapJS...)
 	s = append(s, `","`...)
 	s = append(s, JavascriptPath()...)
 	for _, script := range extra {
@@ -77,7 +71,7 @@ func HeadHTML(jawsKey uint64, extra ...string) template.HTML {
 		}
 	}
 	s = append(s, `"]`+forEachPart+`</script>`...)
-	s = appendLinkStyleSheet(s, bootstrapCSS)
+	s = appendLinkStyleSheet(s, bootstrapConfig.bootstrapCSS)
 	for _, script := range extra {
 		if strings.HasSuffix(script, ".css") {
 			s = appendLinkStyleSheet(s, script)

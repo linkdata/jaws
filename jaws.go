@@ -42,6 +42,9 @@ type Jaws struct {
 // This is expected to be created once per HTTP server and handles
 // publishing HTML changes across all connections.
 func NewWithDone(doneCh <-chan struct{}) *Jaws {
+	if bootstrapConfig == nil {
+		UseBootstrap(nil)
+	}
 	return &Jaws{
 		doneCh:  doneCh,
 		bcastCh: make(chan *Message, 1),
