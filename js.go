@@ -56,25 +56,37 @@ func appendLinkStyleSheet(s []byte, css string) []byte {
 // Place the returned HTML code in the HEAD section of the document.
 func HeadHTML(jawsKey uint64, extra ...string) template.HTML {
 	const forEachPart = `.forEach(function(c){var e=document.createElement("script");e.src=c;e.async=!1;document.head.appendChild(e);});`
+	keyStr := JawsKeyString(jawsKey)
+	bsJS := bootstrapConfig.bootstrapJS
+	bsCSS := bootstrapConfig.bootstrapCSS
+	jawsJS := JavascriptPath()
 
-	s := make([]byte, 0, 512)
+	need := 21 + len(keyStr) + 4 + len(bsJS) + 3 + len(jawsJS) + 2 + len(forEachPart) + 9 + len(bsCSS) + 31 + 18
+	for _, e := range extra {
+		need += 3 + len(e)
+		if strings.HasSuffix(e, ".css") {
+			need += 31 - 3
+		}
+	}
+
+	s := make([]byte, 0, need)
 	s = append(s, `<script>var jawsKey="`...)
-	s = append(s, JawsKeyString(jawsKey)...)
+	s = append(s, keyStr...)
 	s = append(s, `";["`...)
-	s = append(s, bootstrapConfig.bootstrapJS...)
+	s = append(s, bsJS...)
 	s = append(s, `","`...)
-	s = append(s, JavascriptPath()...)
-	for _, script := range extra {
-		if strings.HasSuffix(script, ".js") {
+	s = append(s, jawsJS...)
+	for _, e := range extra {
+		if strings.HasSuffix(e, ".js") {
 			s = append(s, `","`...)
-			s = append(s, script...)
+			s = append(s, e...)
 		}
 	}
 	s = append(s, `"]`+forEachPart+`</script>`...)
-	s = appendLinkStyleSheet(s, bootstrapConfig.bootstrapCSS)
-	for _, script := range extra {
-		if strings.HasSuffix(script, ".css") {
-			s = appendLinkStyleSheet(s, script)
+	s = appendLinkStyleSheet(s, bsCSS)
+	for _, e := range extra {
+		if strings.HasSuffix(e, ".css") {
+			s = appendLinkStyleSheet(s, e)
 		}
 	}
 	s = append(s, `<script>0</script>`...) // forces FireFox to evaluate now

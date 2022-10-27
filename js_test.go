@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -31,8 +30,6 @@ func Test_HeadHTML(t *testing.T) {
 	UseBootstrap(nil)
 	is.True(bootstrapConfig.bootstrapJS != "")
 	is.True(bootstrapConfig.bootstrapCSS != "")
-	fmt.Println(bootstrapConfig.bootstrapJS)
-	fmt.Println(bootstrapConfig.bootstrapCSS)
 
 	jawsKey := uint64(0xcafebabe)
 	txt := HeadHTML(jawsKey)
@@ -47,5 +44,4 @@ func Test_HeadHTML(t *testing.T) {
 	is.Equal(strings.Contains(string(txt), bootstrapConfig.bootstrapCSS), true)
 	is.Equal(strings.Contains(string(txt), extraScript), true)
 	is.Equal(strings.Contains(string(txt), extraStyle), true)
-	fmt.Println(string(txt))
 }
