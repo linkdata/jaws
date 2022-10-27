@@ -1,0 +1,55 @@
+package jaws
+
+import (
+	"fmt"
+	"html/template"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/matryer/is"
+)
+
+type testUi struct {
+	id      string
+	val     string
+	gotCall chan struct{}
+}
+
+func (tu testUi) UiID() string { return tu.id }
+
+func (tu testUi) UiHTML(id string, attrs ...string) template.HTML {
+	return template.HTML(fmt.Sprintf(`<test id="%s" %s>%s</test>`, id, strings.Join(attrs, " "), tu.val))
+}
+
+func (tu testUi) UiEvent(rq *Request, id, evt, val string) (err error) {
+	close(tu.gotCall)
+	return
+}
+
+func Test_Ui(t *testing.T) {
+	const elemId = "elem-id"
+	const elemVal = "elem-val"
+	attrs := []string{"whut=0", "bah"}
+	is := is.New(t)
+	gotCall := make(chan struct{})
+	rq := newTestRequest(is)
+	defer rq.Close()
+	tu := &testUi{id: elemId, val: elemVal, gotCall: gotCall}
+
+	h := rq.Ui(tu)
+	is.True(strings.Contains(string(h), elemId))
+	is.True(strings.Contains(string(h), elemVal))
+
+	h = rq.Ui(tu, attrs...)
+	is.True(strings.Contains(string(h), elemId))
+	is.True(strings.Contains(string(h), elemVal))
+	is.True(strings.Contains(string(h), strings.Join(attrs, " ")))
+
+	rq.inCh <- &Message{Elem: elemId, What: "input", Data: elemVal}
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-gotCall:
+	}
+}

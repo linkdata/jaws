@@ -175,3 +175,7 @@ func (rq *Request) Radio(id string, val bool, fn InputBoolFn, attrs string) temp
 func (rq *Request) Select(id string, val *NamedBoolArray, fn InputTextFn, attrs string) template.HTML {
 	return HtmlSelect(rq.maybeInputText(id, fn), val, attrs)
 }
+
+func (rq *Request) Ui(elem Ui, attrs ...string) template.HTML {
+	return elem.UiHTML(rq.RegisterEventFn(elem.UiID(), elem.UiEvent), attrs...)
+}
