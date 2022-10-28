@@ -16,13 +16,11 @@ type testUi struct {
 	gotCall chan struct{}
 }
 
-func (tu testUi) UiID() string { return tu.id }
-
-func (tu testUi) UiHTML(id string, attrs ...string) template.HTML {
-	return template.HTML(fmt.Sprintf(`<test id="%s" %s>%s</test>`, id, strings.Join(attrs, " "), tu.val))
+func (tu testUi) JawsUi(rq *Request, attrs ...string) template.HTML {
+	return template.HTML(fmt.Sprintf(`<test id="%s" %s>%s</test>`, rq.RegisterEventFn(tu.id, tu.JawsEvent), strings.Join(attrs, " "), tu.val))
 }
 
-func (tu testUi) UiEvent(rq *Request, id, evt, val string) (err error) {
+func (tu testUi) JawsEvent(rq *Request, id, evt, val string) (err error) {
 	close(tu.gotCall)
 	return
 }

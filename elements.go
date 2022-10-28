@@ -177,5 +177,5 @@ func (rq *Request) Select(id string, val *NamedBoolArray, fn InputTextFn, attrs 
 }
 
 func (rq *Request) Ui(elem Ui, attrs ...string) template.HTML {
-	return elem.UiHTML(rq.RegisterEventFn(elem.UiID(), elem.UiEvent), attrs...)
+	return elem.JawsUi(rq, attrs...)
 }
