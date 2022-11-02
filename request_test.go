@@ -200,7 +200,7 @@ func TestRequest_HeadHTML(t *testing.T) {
 
 	txt := rq.HeadHTML()
 	is.Equal(strings.Contains(string(txt), rq.JawsKeyString()), true)
-	is.Equal(strings.Contains(string(txt), JavascriptPath()), true)
+	is.Equal(strings.Contains(string(txt), JavascriptPath), true)
 }
 
 func TestRequest_BroadcastsCallable(t *testing.T) {
