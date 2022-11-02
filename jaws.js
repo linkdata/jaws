@@ -59,13 +59,15 @@ function jawsAttach(topElem) {
 }
 
 function jawsAlert(type, message) {
-	var alertSuffix = '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>';
-	var alertsElem = document.getElementById('jaws-alerts');
-	if (alertsElem) {
-		var wrapper = document.createElement('div');
-		wrapper.innerHTML = '<div class="alert alert-' + type + ' alert-dismissible" role="alert">' + message + alertSuffix;
-		alertsElem.append(wrapper);
-		return;
+	if (typeof bootstrap !== 'undefined') {
+		var alertsElem = document.getElementById('jaws-alerts');
+		if (alertsElem) {
+			var wrapper = document.createElement('div');
+			wrapper.innerHTML = '<div class="alert alert-' + type + ' alert-dismissible" role="alert">' + message +
+				'<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>';
+			alertsElem.append(wrapper);
+			return;
+		}
 	}
 	console.log("jaws: " + type + ": " + message);
 }
