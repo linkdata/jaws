@@ -43,14 +43,11 @@ func JawsKeyString(jawsKey uint64) string {
 	return strconv.FormatUint(jawsKey, 16)
 }
 
-// HeadHTML returns HTML code to load the JaWS javascript along with other scripts and CSS files given.
-// Normally you would use Request.HeadHTML or Jaws.HeadHTML instead of calling this function directly.
-// Place the returned HTML code in the HEAD section of the document.
-func HeadHTML(jawsKey uint64, js []string, css []string) template.HTML {
+// HeadHTML returns HTML code to load the given scripts and CSS files efficiently.
+func HeadHTML(js []string, css []string) template.HTML {
 	const forEachPart = `.forEach(function(c){var e=document.createElement("script");e.src=c;e.async=!1;document.head.appendChild(e);});`
-	keyStr := JawsKeyString(jawsKey)
 
-	need := 21 + len(keyStr) + 4 + 3 + len(JavascriptPath) + 2 + len(forEachPart) + 9 + 18
+	need := 21 + 4 + 3 + len(JavascriptPath) + 2 + len(forEachPart) + 9 + 18
 	for _, e := range js {
 		need += 3 + len(e)
 	}
@@ -59,9 +56,7 @@ func HeadHTML(jawsKey uint64, js []string, css []string) template.HTML {
 	}
 
 	s := make([]byte, 0, need)
-	s = append(s, `<script>var jawsKey="`...)
-	s = append(s, keyStr...)
-	s = append(s, `";["`...)
+	s = append(s, `<script>["`...)
 	s = append(s, JavascriptPath...)
 	for _, e := range js {
 		s = append(s, `","`...)

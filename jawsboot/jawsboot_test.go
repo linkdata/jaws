@@ -1,6 +1,7 @@
 package jawsboot_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -12,13 +13,12 @@ import (
 func TestJawsBoot_Setup(t *testing.T) {
 	is := is.New(t)
 	jw := jaws.New()
-	jawsboot.Setup(jw)
-	go jw.Serve()
 	defer jw.Close()
+	jawsboot.Setup(jw)
 
-	jawsKey := uint64(0xcafebabe)
-	txt := jw.HeadHTML(jawsKey)
-	is.Equal(strings.Contains(string(txt), jaws.JawsKeyString(jawsKey)), true)
+	rq := jw.NewRequest(context.Background(), "")
+	txt := rq.HeadHTML()
+	is.Equal(strings.Contains(string(txt), rq.JawsKeyString()), true)
 	is.Equal(strings.Contains(string(txt), jaws.JavascriptPath), true)
 	is.Equal(strings.Contains(string(txt), jawsboot.DefaultBootstrapVersion), true)
 	is.Equal(strings.Contains(string(txt), jawsboot.DefaultBootstrapCDN), true)

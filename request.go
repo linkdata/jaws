@@ -108,7 +108,7 @@ func (rq *Request) recycle() {
 
 // HeadHTML returns the HTML code needed to write in the HTML page's HEAD section.
 func (rq *Request) HeadHTML() template.HTML {
-	return rq.Jaws.HeadHTML(rq.JawsKey)
+	return template.HTML(`<script>var jawsKey="`+JawsKeyString(rq.JawsKey)+`"</script>`) + rq.Jaws.headHTML
 }
 
 // Context returns the context passed to NewRequest()
