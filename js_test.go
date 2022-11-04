@@ -38,8 +38,8 @@ func Test_HeadHTML(t *testing.T) {
 	const extraStyle = "someExtraStyle.css"
 	is := is.New(t)
 	txt := HeadHTML(nil, nil)
-	is.Equal(strings.Contains(string(txt), JavascriptPath), true)
-	txt = HeadHTML([]string{extraScript}, []string{extraStyle})
+	is.Equal(strings.Contains(string(txt), JavascriptPath), false)
+	txt = HeadHTML([]string{JavascriptPath, extraScript}, []string{extraStyle})
 	is.Equal(strings.Contains(string(txt), JavascriptPath), true)
 	is.Equal(strings.Contains(string(txt), extraScript), true)
 	is.Equal(strings.Contains(string(txt), extraStyle), true)

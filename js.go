@@ -45,31 +45,35 @@ func JawsKeyString(jawsKey uint64) string {
 
 // HeadHTML returns HTML code to load the given scripts and CSS files efficiently.
 func HeadHTML(js []string, css []string) template.HTML {
-	const forEachPart = `.forEach(function(c){var e=document.createElement("script");e.src=c;e.async=!1;document.head.appendChild(e);});`
-
-	need := 21 + 4 + 3 + len(JavascriptPath) + 2 + len(forEachPart) + 9 + 18
-	for _, e := range js {
-		need += 3 + len(e)
-	}
-	for _, e := range css {
-		need += 29 + len(e) + 2
-	}
-
-	s := make([]byte, 0, need)
-	s = append(s, `<script>["`...)
-	s = append(s, JavascriptPath...)
-	for _, e := range js {
-		s = append(s, `","`...)
-		s = append(s, e...)
-	}
-	s = append(s, `"]`+forEachPart+`</script>`...)
+	var s []byte
 
 	for _, e := range css {
-		s = append(s, `<link rel="stylesheet" href="`...)
+		s = append(s, "<link rel=\"preload\" href=\""...)
 		s = append(s, e...)
-		s = append(s, `">`...)
+		s = append(s, "\" as=\"style\">\n"...)
+	}
+	for _, e := range js {
+		s = append(s, "<link rel=\"preload\" href=\""...)
+		s = append(s, e...)
+		s = append(s, "\" as=\"script\">\n"...)
 	}
 
-	s = append(s, `<script>0</script>`...) // forces FireFox to evaluate now
-	return template.HTML(s)                // #nosec G203
+	s = append(s, "<script>["...)
+	for i, e := range js {
+		if i > 0 {
+			s = append(s, ',')
+		}
+		s = append(s, '"')
+		s = append(s, e...)
+		s = append(s, '"')
+	}
+	s = append(s, "].forEach(function(c){var e=document.createElement(\"script\");e.src=c;e.async=!1;document.head.appendChild(e);});</script>\n"...)
+
+	for _, e := range css {
+		s = append(s, "<link rel=\"stylesheet\" href=\""...)
+		s = append(s, e...)
+		s = append(s, "\">\n"...)
+	}
+
+	return template.HTML(s) // #nosec G203
 }
