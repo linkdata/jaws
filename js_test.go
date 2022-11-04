@@ -38,21 +38,13 @@ func Test_HeadHTML(t *testing.T) {
 	const extraStyle = "someExtraStyle.css"
 	is := is.New(t)
 
-	UseBootstrap(nil)
-	is.True(bootstrapConfig.bootstrapJS != "")
-	is.True(bootstrapConfig.bootstrapCSS != "")
-
 	jawsKey := uint64(0xcafebabe)
-	txt := HeadHTML(jawsKey)
+	txt := HeadHTML(jawsKey, nil, nil)
 	is.Equal(strings.Contains(string(txt), JawsKeyString(jawsKey)), true)
 	is.Equal(strings.Contains(string(txt), JavascriptPath), true)
-	is.Equal(strings.Contains(string(txt), bootstrapConfig.bootstrapJS), true)
-	is.Equal(strings.Contains(string(txt), bootstrapConfig.bootstrapCSS), true)
-	txt = HeadHTML(jawsKey, extraScript, extraStyle)
+	txt = HeadHTML(jawsKey, []string{extraScript}, []string{extraStyle})
 	is.Equal(strings.Contains(string(txt), JawsKeyString(jawsKey)), true)
 	is.Equal(strings.Contains(string(txt), JavascriptPath), true)
-	is.Equal(strings.Contains(string(txt), bootstrapConfig.bootstrapJS), true)
-	is.Equal(strings.Contains(string(txt), bootstrapConfig.bootstrapCSS), true)
 	is.Equal(strings.Contains(string(txt), extraScript), true)
 	is.Equal(strings.Contains(string(txt), extraStyle), true)
 }

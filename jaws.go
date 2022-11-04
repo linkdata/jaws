@@ -16,6 +16,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"net"
@@ -26,25 +27,24 @@ import (
 )
 
 type Jaws struct {
-	Logger  *log.Logger // If not nil, send debug info and errors here
-	doneCh  <-chan struct{}
-	bcastCh chan *Message
-	subCh   chan chan *Message
-	unsubCh chan chan *Message
-	nextId  uint64
-	mu      sync.Mutex // protects following
-	kg      *bufio.Reader
-	closeCh chan struct{}
-	reqs    map[uint64]*Request
+	Logger   *log.Logger // If not nil, send debug info and errors here
+	ExtraJS  []string    // Extra Javascripts to be loaded
+	ExtraCSS []string    // Extra CSS files to be loaded
+	doneCh   <-chan struct{}
+	bcastCh  chan *Message
+	subCh    chan chan *Message
+	unsubCh  chan chan *Message
+	nextId   uint64     // atomic
+	mu       sync.Mutex // protects following
+	kg       *bufio.Reader
+	closeCh  chan struct{}
+	reqs     map[uint64]*Request
 }
 
 // NewWithDone returns a new JaWS object using the given completion channel.
 // This is expected to be created once per HTTP server and handles
 // publishing HTML changes across all connections.
 func NewWithDone(doneCh <-chan struct{}) *Jaws {
-	if bootstrapConfig == nil {
-		UseBootstrap(nil)
-	}
 	return &Jaws{
 		doneCh:  doneCh,
 		bcastCh: make(chan *Message, 1),
@@ -156,6 +156,11 @@ func (jw *Jaws) UseRequest(jawsKey uint64, remoteAddr string) (rq *Request) {
 	}
 	jw.mu.Unlock()
 	return
+}
+
+// HeadHTML returns the HTML code needed to write in the HTML page's HEAD section.
+func (jw *Jaws) HeadHTML(jawsKey uint64) template.HTML {
+	return HeadHTML(jawsKey, jw.ExtraJS, jw.ExtraCSS)
 }
 
 // Broadcast sends a message to all Requests.
