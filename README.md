@@ -30,9 +30,9 @@ provide a helper function for [Echo](https://echo.labstack.com/) with
 
 * `/jaws/jaws.*.js`
 
-  The exact URL is the return value of `jaws.JavascriptPath()`. It must return
+  The exact URL is the value of `jaws.JavascriptPath`. It must return
   the client-side Javascript, the uncompressed contents of which can be had with
-  `jaws.JavascriptText()`, or a gzipped version with `jaws.JavascriptGZip()`.
+  `jaws.JavascriptText`, or a gzipped version with `jaws.JavascriptGZip`.
 
   The response should be cached indefinitely.
 
@@ -80,7 +80,7 @@ requested during the Javascript WebSocket HTTP request.
 
 ## Security of the WebSocket callback
 
-Each JaWS request gets a unique 63-bit random value assigned to it when you 
+Each JaWS request gets a unique 64-bit random value assigned to it when you 
 create the Request object. This value is written to the HTML output so it
 can be read by the Javascript, and used to construct the WebSocket callback
 URL.
@@ -95,12 +95,12 @@ cleaned up at regular intervals. By default an unclaimed Request is
 removed after 10 seconds.
 
 In order to guess (and thus hijack) a WebSocket you'd have to make on the
-order of 2^62 requests before the genuine request comes in, or 10 seconds
+order of 2^63 requests before the genuine request comes in, or 10 seconds
 pass assuming you can reliably prevent the genuine WebSocket request.
 
 ## Dependencies
 
 We try to minimize dependencies outside of the standard library.
 
-Depends on https://github.com/nhooyr/websocket for WebSocket functionality.
-Depends on https://github.com/matryer/is for tests.
+* Depends on https://github.com/nhooyr/websocket for WebSocket functionality.
+* Depends on https://github.com/matryer/is for tests.
