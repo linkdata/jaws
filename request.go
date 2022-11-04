@@ -458,3 +458,86 @@ func (rq *Request) defaultChSize() (n int) {
 	rq.mu.RUnlock()
 	return
 }
+
+func (rq *Request) maybeClick(id string, fn ClickFn) string {
+	var wf EventFn
+	if fn != nil {
+		wf = func(rq *Request, id, evt, val string) (err error) {
+			if evt == "click" {
+				err = fn(rq)
+			}
+			return
+		}
+	}
+	return rq.RegisterEventFn(id, wf)
+}
+
+func (rq *Request) maybeInputText(id string, fn InputTextFn) string {
+	var wf EventFn
+	if fn != nil {
+		wf = func(rq *Request, id, evt, val string) (err error) {
+			if evt == "input" {
+				err = fn(rq, val)
+			}
+			return
+		}
+	}
+	return rq.RegisterEventFn(id, wf)
+}
+
+func (rq *Request) maybeInputFloat(id string, fn InputFloatFn) string {
+	var wf EventFn
+	if fn != nil {
+		wf = func(rq *Request, id, evt, val string) (err error) {
+			if evt == "input" {
+				var v float64
+				if val != "" {
+					if v, err = strconv.ParseFloat(val, 64); err != nil {
+						return
+					}
+				}
+				err = fn(rq, v)
+			}
+			return
+		}
+	}
+	return rq.RegisterEventFn(id, wf)
+}
+
+func (rq *Request) maybeInputBool(id string, fn InputBoolFn) string {
+	var wf EventFn
+	if fn != nil {
+		wf = func(rq *Request, id, evt, val string) (err error) {
+			if evt == "input" {
+				var v bool
+				if val != "" {
+					if v, err = strconv.ParseBool(val); err != nil {
+						return
+					}
+				}
+				err = fn(rq, v)
+			}
+			return
+		}
+	}
+	return rq.RegisterEventFn(id, wf)
+}
+
+func (rq *Request) maybeInputDate(id string, fn InputDateFn) string {
+	var wf EventFn
+	if fn != nil {
+		wf = func(rq *Request, id, evt, val string) (err error) {
+			if evt == "input" {
+				var v time.Time
+				if val != "" {
+					if v, err = time.Parse(ISO8601, val); err != nil {
+						return
+					}
+				}
+				err = fn(rq, v)
+			}
+			return
+		}
+	}
+	return rq.RegisterEventFn(id, wf)
+}

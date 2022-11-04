@@ -683,9 +683,17 @@ func TestRequest_Number(t *testing.T) {
 	defer rq.Close()
 
 	gotCall := make(chan struct{})
+	defer close(gotCall)
 	h := rq.Number(elemId, elemVal, func(rq *Request, val float64) error {
-		defer close(gotCall)
-		is.Equal(val, 4.3)
+		switch val {
+		case 4.3:
+			// ok
+		case 0:
+			// ok
+		default:
+			is.Fail()
+		}
+		gotCall <- struct{}{}
 		return nil
 	}, "disabled")
 	is.True(strings.Contains(string(h), "id=\""+elemId+"\""))
@@ -695,6 +703,21 @@ func TestRequest_Number(t *testing.T) {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
+	}
+	rq.inCh <- &Message{Elem: elemId, What: "input", Data: ""} // should call with zero
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-gotCall:
+	}
+	rq.inCh <- &Message{Elem: elemId, What: "input", Data: "meh"} // should fail with alert
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-gotCall:
+		is.Fail()
+	case msg := <-rq.outCh:
+		is.Equal(msg.Elem, " alert")
 	}
 }
 
@@ -729,9 +752,10 @@ func TestRequest_Checkbox(t *testing.T) {
 	defer rq.Close()
 
 	gotCall := make(chan struct{})
+	defer close(gotCall)
 	h := rq.Checkbox(elemId, elemVal, func(rq *Request, val bool) error {
-		defer close(gotCall)
 		is.Equal(val, false)
+		gotCall <- struct{}{}
 		return nil
 	}, "")
 	is.True(strings.Contains(string(h), "id=\""+elemId+"\""))
@@ -741,6 +765,21 @@ func TestRequest_Checkbox(t *testing.T) {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
+	}
+	rq.inCh <- &Message{Elem: elemId, What: "input", Data: ""}
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-gotCall:
+	}
+	rq.inCh <- &Message{Elem: elemId, What: "input", Data: "wut"}
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-gotCall:
+		is.Fail()
+	case msg := <-rq.outCh:
+		is.Equal(msg.Elem, " alert")
 	}
 }
 
@@ -752,11 +791,14 @@ func TestRequest_Date(t *testing.T) {
 	defer rq.Close()
 
 	gotCall := make(chan struct{})
+	defer close(gotCall)
 	h := rq.Date(elemId, elemVal, func(rq *Request, val time.Time) error {
-		defer close(gotCall)
-		is.Equal(val.Year(), 1970)
-		is.Equal(val.Month(), time.January)
-		is.Equal(val.Day(), 2)
+		if !val.IsZero() {
+			is.Equal(val.Year(), 1970)
+			is.Equal(val.Month(), time.January)
+			is.Equal(val.Day(), 2)
+		}
+		gotCall <- struct{}{}
 		return nil
 	}, "")
 	is.True(strings.Contains(string(h), "id=\""+elemId+"\""))
@@ -766,6 +808,21 @@ func TestRequest_Date(t *testing.T) {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
+	}
+	rq.inCh <- &Message{Elem: elemId, What: "input", Data: ""}
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-gotCall:
+	}
+	rq.inCh <- &Message{Elem: elemId, What: "input", Data: "foobar!"}
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-gotCall:
+		is.Fail()
+	case msg := <-rq.outCh:
+		is.Equal(msg.Elem, " alert")
 	}
 }
 
