@@ -16,42 +16,44 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"net"
+	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
 type Jaws struct {
-	Logger  *log.Logger // If not nil, send debug info and errors here
-	doneCh  <-chan struct{}
-	bcastCh chan *Message
-	subCh   chan chan *Message
-	unsubCh chan chan *Message
-	nextId  uint64
-	mu      sync.Mutex // protects following
-	kg      *bufio.Reader
-	closeCh chan struct{}
-	reqs    map[uint64]*Request
+	Logger   *log.Logger // If not nil, send debug info and errors here
+	doneCh   <-chan struct{}
+	bcastCh  chan *Message
+	subCh    chan chan *Message
+	unsubCh  chan chan *Message
+	headHTML template.HTML
+	nextId   uint64     // atomic
+	mu       sync.Mutex // protects following
+	kg       *bufio.Reader
+	closeCh  chan struct{}
+	reqs     map[uint64]*Request
 }
 
 // NewWithDone returns a new JaWS object using the given completion channel.
 // This is expected to be created once per HTTP server and handles
 // publishing HTML changes across all connections.
 func NewWithDone(doneCh <-chan struct{}) *Jaws {
-	if bootstrapConfig == nil {
-		UseBootstrap(nil)
-	}
 	return &Jaws{
-		doneCh:  doneCh,
-		bcastCh: make(chan *Message, 1),
-		subCh:   make(chan chan *Message, 1),
-		unsubCh: make(chan chan *Message, 1),
-		kg:      bufio.NewReader(rand.Reader),
-		reqs:    make(map[uint64]*Request),
+		doneCh:   doneCh,
+		bcastCh:  make(chan *Message, 1),
+		subCh:    make(chan chan *Message, 1),
+		unsubCh:  make(chan chan *Message, 1),
+		headHTML: HeadHTML([]string{JavascriptPath}, nil),
+		kg:       bufio.NewReader(rand.Reader),
+		reqs:     make(map[uint64]*Request),
 	}
 }
 
@@ -156,6 +158,34 @@ func (jw *Jaws) UseRequest(jawsKey uint64, remoteAddr string) (rq *Request) {
 	}
 	jw.mu.Unlock()
 	return
+}
+
+// GenerateHeadHTML (re-)generates the HTML code that goes in the HEAD section, ensuring
+// that the provided scripts and stylesheets in `extra` are loaded.
+//
+// You only need to call this if you want to add your own scripts and stylesheets.
+func (jw *Jaws) GenerateHeadHTML(extra ...string) error {
+	var js, css []string
+	addedJaws := false
+	for _, e := range extra {
+		if u, err := url.Parse(e); err == nil {
+			if strings.HasSuffix(u.Path, ".js") {
+				js = append(js, e)
+				addedJaws = addedJaws || strings.HasSuffix(u.Path, JavascriptPath)
+			} else if strings.HasSuffix(e, ".css") {
+				css = append(css, e)
+			} else {
+				return fmt.Errorf("%q: not .js or .css", u.Path)
+			}
+		} else {
+			return err
+		}
+	}
+	if !addedJaws {
+		js = append(js, JavascriptPath)
+	}
+	jw.headHTML = HeadHTML(js, css)
+	return nil
 }
 
 // Broadcast sends a message to all Requests.

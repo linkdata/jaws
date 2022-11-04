@@ -15,13 +15,13 @@ func Setup(router *echo.Echo, jw *jaws.Jaws) {
 	if jw.Logger == nil {
 		jw.Logger = router.StdLogger
 	}
-	router.GET(jaws.JavascriptPath(), func(c echo.Context) error {
+	router.GET(jaws.JavascriptPath, func(c echo.Context) error {
 		hdr := c.Response().Header()
 		hdr.Set(echo.HeaderCacheControl, "public, max-age=31536000, s-maxage=31536000, immutable")
 		hdr.Set(echo.HeaderVary, echo.HeaderAcceptEncoding)
-		js := jaws.JavascriptText()
+		js := jaws.JavascriptText
 		if strings.Contains(c.Request().Header.Get(echo.HeaderAcceptEncoding), "gzip") {
-			js = jaws.JavascriptGZip()
+			js = jaws.JavascriptGZip
 			hdr.Set(echo.HeaderContentEncoding, "gzip")
 		}
 		return c.Blob(http.StatusOK, "application/javascript; charset=utf-8", js)

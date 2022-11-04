@@ -21,18 +21,18 @@ func TestJawsEcho_GetJavascript(t *testing.T) {
 	e := echo.New()
 	jawsecho.Setup(e, jw)
 
-	req := httptest.NewRequest("", jaws.JavascriptPath(), nil)
+	req := httptest.NewRequest("", jaws.JavascriptPath, nil)
 	w := httptest.NewRecorder()
 	e.Server.Handler.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusOK)
-	is.Equal(w.Body.Len(), len(jaws.JavascriptText()))
+	is.Equal(w.Body.Len(), len(jaws.JavascriptText))
 
-	req = httptest.NewRequest("", jaws.JavascriptPath(), nil)
+	req = httptest.NewRequest("", jaws.JavascriptPath, nil)
 	req.Header.Add(echo.HeaderAcceptEncoding, "gzip")
 	w = httptest.NewRecorder()
 	e.Server.Handler.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusOK)
-	is.Equal(w.Body.Len(), len(jaws.JavascriptGZip()))
+	is.Equal(w.Body.Len(), len(jaws.JavascriptGZip))
 }
 
 func TestJawsEcho_GetPing(t *testing.T) {
