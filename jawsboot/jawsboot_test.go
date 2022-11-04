@@ -14,7 +14,7 @@ func TestJawsBoot_Setup(t *testing.T) {
 	is := is.New(t)
 	jw := jaws.New()
 	defer jw.Close()
-	jawsboot.Setup(jw)
+	is.NoErr(jawsboot.Setup(jw))
 
 	rq := jw.NewRequest(context.Background(), "")
 	txt := rq.HeadHTML()
