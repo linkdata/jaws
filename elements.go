@@ -29,58 +29,65 @@ func (rq *Request) OnClick(id string, fn ClickFn) error {
 	return nil
 }
 
-func (rq *Request) Div(id, inner string, fn ClickFn, attrs string) template.HTML {
-	return HtmlInner(rq.maybeClick(id, fn), "div", "", inner, attrs)
+// OnTrigger registers a HTML id and a function to be called when Trigger is called for it.
+// Returns a nil error so it can be used inside templates.
+func (rq *Request) OnTrigger(id string, fn ClickFn) error {
+	rq.maybeEvent(id, "trigger", fn)
+	return nil
 }
 
-func (rq *Request) Span(id, inner string, fn ClickFn, attrs string) template.HTML {
-	return HtmlInner(rq.maybeClick(id, fn), "span", "", inner, attrs)
+func (rq *Request) Div(id, inner string, fn ClickFn, attrs ...string) template.HTML {
+	return HtmlInner(rq.maybeClick(id, fn), "div", "", inner, attrs...)
 }
 
-func (rq *Request) Li(id, inner string, fn ClickFn, attrs string) template.HTML {
-	return HtmlInner(rq.maybeClick(id, fn), "li", "", inner, attrs)
+func (rq *Request) Span(id, inner string, fn ClickFn, attrs ...string) template.HTML {
+	return HtmlInner(rq.maybeClick(id, fn), "span", "", inner, attrs...)
 }
 
-func (rq *Request) Td(id, inner string, fn ClickFn, attrs string) template.HTML {
-	return HtmlInner(rq.maybeClick(id, fn), "td", "", inner, attrs)
+func (rq *Request) Li(id, inner string, fn ClickFn, attrs ...string) template.HTML {
+	return HtmlInner(rq.maybeClick(id, fn), "li", "", inner, attrs...)
 }
 
-func (rq *Request) A(id, inner string, fn ClickFn, attrs string) template.HTML {
-	return HtmlInner(rq.maybeClick(id, fn), "a", "", inner, attrs)
+func (rq *Request) Td(id, inner string, fn ClickFn, attrs ...string) template.HTML {
+	return HtmlInner(rq.maybeClick(id, fn), "td", "", inner, attrs...)
 }
 
-func (rq *Request) Button(id, txt string, fn ClickFn, attrs string) template.HTML {
-	return HtmlInner(rq.maybeClick(id, fn), "button", "button", txt, attrs)
+func (rq *Request) A(id, inner string, fn ClickFn, attrs ...string) template.HTML {
+	return HtmlInner(rq.maybeClick(id, fn), "a", "", inner, attrs...)
 }
 
-func (rq *Request) Text(id, val string, fn InputTextFn, attrs string) template.HTML {
-	return HtmlInput(rq.maybeInputText(id, fn), "text", val, attrs)
+func (rq *Request) Button(id, txt string, fn ClickFn, attrs ...string) template.HTML {
+	return HtmlInner(rq.maybeClick(id, fn), "button", "button", txt, attrs...)
 }
 
-func (rq *Request) Password(id string, fn InputTextFn, attrs string) template.HTML {
-	return HtmlInput(rq.maybeInputText(id, fn), "password", "", attrs)
+func (rq *Request) Text(id, val string, fn InputTextFn, attrs ...string) template.HTML {
+	return HtmlInput(rq.maybeInputText(id, fn), "text", val, attrs...)
 }
 
-func (rq *Request) Number(id string, val float64, fn InputFloatFn, attrs string) template.HTML {
-	return HtmlInput(rq.maybeInputFloat(id, fn), "number", strconv.FormatFloat(val, 'f', -1, 64), attrs)
+func (rq *Request) Password(id string, fn InputTextFn, attrs ...string) template.HTML {
+	return HtmlInput(rq.maybeInputText(id, fn), "password", "", attrs...)
 }
 
-func (rq *Request) Range(id string, val float64, fn InputFloatFn, attrs string) template.HTML {
-	return HtmlInput(rq.maybeInputFloat(id, fn), "range", strconv.FormatFloat(val, 'f', -1, 64), attrs)
+func (rq *Request) Number(id string, val float64, fn InputFloatFn, attrs ...string) template.HTML {
+	return HtmlInput(rq.maybeInputFloat(id, fn), "number", strconv.FormatFloat(val, 'f', -1, 64), attrs...)
 }
 
-func (rq *Request) Checkbox(id string, val bool, fn InputBoolFn, attrs string) template.HTML {
+func (rq *Request) Range(id string, val float64, fn InputFloatFn, attrs ...string) template.HTML {
+	return HtmlInput(rq.maybeInputFloat(id, fn), "range", strconv.FormatFloat(val, 'f', -1, 64), attrs...)
+}
+
+func (rq *Request) Checkbox(id string, val bool, fn InputBoolFn, attrs ...string) template.HTML {
 	if val {
-		attrs += " checked"
+		attrs = append(attrs, "checked")
 	}
-	return HtmlInput(rq.maybeInputBool(id, fn), "checkbox", "", attrs)
+	return HtmlInput(rq.maybeInputBool(id, fn), "checkbox", "", attrs...)
 }
 
-func (rq *Request) Date(id string, val time.Time, fn InputDateFn, attrs string) template.HTML {
+func (rq *Request) Date(id string, val time.Time, fn InputDateFn, attrs ...string) template.HTML {
 	if val.IsZero() {
 		val = time.Now()
 	}
-	return HtmlInput(rq.maybeInputDate(id, fn), "date", val.Format(ISO8601), attrs)
+	return HtmlInput(rq.maybeInputDate(id, fn), "date", val.Format(ISO8601), attrs...)
 }
 
 func radioGroup(id string) string {
@@ -90,16 +97,16 @@ func radioGroup(id string) string {
 	panic("radio button ID's must be in the form 'buttonid/groupid'")
 }
 
-func (rq *Request) Radio(id string, val bool, fn InputBoolFn, attrs string) template.HTML {
-	attrs += " name=\"" + radioGroup(id) + "\""
+func (rq *Request) Radio(id string, val bool, fn InputBoolFn, attrs ...string) template.HTML {
+	attrs = append(attrs, "name=\""+radioGroup(id)+"\"")
 	if val {
-		attrs += " checked"
+		attrs = append(attrs, "checked")
 	}
-	return HtmlInput(rq.maybeInputBool(id, fn), "radio", "", attrs)
+	return HtmlInput(rq.maybeInputBool(id, fn), "radio", "", attrs...)
 }
 
-func (rq *Request) Select(id string, val *NamedBoolArray, fn InputTextFn, attrs string) template.HTML {
-	return HtmlSelect(rq.maybeInputText(id, fn), val, attrs)
+func (rq *Request) Select(id string, val *NamedBoolArray, fn InputTextFn, attrs ...string) template.HTML {
+	return HtmlSelect(rq.maybeInputText(id, fn), val, attrs...)
 }
 
 func (rq *Request) Ui(elem Ui, attrs ...string) template.HTML {

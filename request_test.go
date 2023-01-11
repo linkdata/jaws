@@ -597,6 +597,25 @@ func TestRequest_OnClick(t *testing.T) {
 	}
 }
 
+func TestRequest_OnTrigger(t *testing.T) {
+	const elemId = "elem-id"
+	const elemVal = "elem-val"
+	is := is.New(t)
+	gotCall := make(chan struct{})
+	rq := newTestRequest(is)
+	defer rq.Close()
+	is.NoErr(rq.OnTrigger(elemId, func(rq *Request) error {
+		defer close(gotCall)
+		return nil
+	}))
+	rq.inCh <- &Message{Elem: elemId, What: "trigger", Data: elemVal}
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-gotCall:
+	}
+}
+
 func TestRequest_Elements(t *testing.T) {
 	const elemId = "elem-id"
 	const elemVal = "elem-val"
