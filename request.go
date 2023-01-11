@@ -459,17 +459,21 @@ func (rq *Request) defaultChSize() (n int) {
 	return
 }
 
-func (rq *Request) maybeClick(id string, fn ClickFn) string {
+func (rq *Request) maybeEvent(id, event string, fn ClickFn) string {
 	var wf EventFn
 	if fn != nil {
 		wf = func(rq *Request, id, evt, val string) (err error) {
-			if evt == "click" {
+			if evt == event {
 				err = fn(rq)
 			}
 			return
 		}
 	}
 	return rq.RegisterEventFn(id, wf)
+}
+
+func (rq *Request) maybeClick(id string, fn ClickFn) string {
+	return rq.maybeEvent(id, "click", fn)
 }
 
 func (rq *Request) maybeInputText(id string, fn InputTextFn) string {
