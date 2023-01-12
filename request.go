@@ -32,8 +32,8 @@ type Request struct {
 	remoteIP  net.IP             // (read-only) parsed remote IP (or nil)
 	sendCh    chan *Message      // (read-only) direct send message channel
 	mu        sync.RWMutex       // protects following
-	ConnectFn ConnectFn          // a ConnectFn to call before starting message processing for the Request
-	Started   bool               // set to true after UseRequest() has been called
+	connectFn ConnectFn          // a ConnectFn to call before starting message processing for the Request
+	started   bool               // set to true after UseRequest() has been called
 	elems     map[string]EventFn // map of registered HTML id's
 }
 
@@ -81,7 +81,7 @@ func (rq *Request) start(remoteAddr string) (err error) {
 	remoteIP := parseIP(remoteAddr)
 	rq.mu.Lock()
 	if (remoteIP == nil && rq.remoteIP == nil) || remoteIP.Equal(rq.remoteIP) {
-		rq.Started = true
+		rq.started = true
 	} else {
 		err = fmt.Errorf("/jaws/%s: expected IP %s, got %q", JawsKeyString(rq.JawsKey), rq.remoteIP.String(), remoteAddr)
 	}
@@ -93,8 +93,8 @@ func (rq *Request) recycle() {
 	rq.mu.Lock()
 	rq.Jaws = nil
 	rq.JawsKey = 0
-	rq.ConnectFn = nil
-	rq.Started = false
+	rq.connectFn = nil
+	rq.started = false
 	rq.ctx = nil
 	rq.remoteIP = nil
 	// this gets optimized to calling the 'runtime.mapclear' function
@@ -115,6 +115,29 @@ func (rq *Request) HeadHTML() template.HTML {
 func (rq *Request) Context() (ctx context.Context) {
 	rq.mu.RLock()
 	ctx = rq.ctx
+	rq.mu.RUnlock()
+	return
+}
+
+// GetConnectFn returns the currently set ConnectFn. That function will be called before starting the WebSocket tunnel if not nil.
+func (rq *Request) GetConnectFn() (fn ConnectFn) {
+	rq.mu.RLock()
+	fn = rq.connectFn
+	rq.mu.RUnlock()
+	return
+}
+
+// SetConnectFn sets ConnectFn. That function will be called before starting the WebSocket tunnel if not nil.
+func (rq *Request) SetConnectFn(fn ConnectFn) {
+	rq.mu.Lock()
+	rq.connectFn = fn
+	rq.mu.Unlock()
+}
+
+// Started returns true if the Request has received the WebSocket call and started processing.
+func (rq *Request) Started() (yes bool) {
+	rq.mu.RLock()
+	yes = rq.started
 	rq.mu.RUnlock()
 	return
 }
@@ -276,7 +299,7 @@ func (rq *Request) RegisterEventFn(id string, fn EventFn) string {
 			if fn == nil {
 				return id
 			}
-			if !rq.Started {
+			if !rq.started {
 				panic("id already registered: " + id)
 			}
 		}
@@ -435,7 +458,7 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 // Returns nil if ConnectFn is nil.
 func (rq *Request) onConnect() (err error) {
 	rq.mu.RLock()
-	connectFn := rq.ConnectFn
+	connectFn := rq.connectFn
 	rq.mu.RUnlock()
 	if connectFn != nil {
 		err = connectFn(rq)
