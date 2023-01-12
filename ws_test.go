@@ -71,7 +71,7 @@ func TestWS_ConnectFnFails(t *testing.T) {
 	is := is.New(t)
 	ts := newTestServer(is)
 	defer ts.Close()
-	ts.rq.ConnectFn = func(_ *Request) error { return errors.New(nope) }
+	ts.rq.SetConnectFn(func(_ *Request) error { return errors.New(nope) })
 
 	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), nil)
 	is.NoErr(err)

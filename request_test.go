@@ -150,7 +150,9 @@ func TestRequest_DuplicateRegistration(t *testing.T) {
 	is.Equal(rq.RegisterEventFn("foo", ef), "foo")  // first reg succeeds
 	is.Equal(rq.RegisterEventFn("foo", nil), "foo") // nil fn always succeeds
 	registerFooShouldPanic(is, rq)
+	is.Equal(rq.Started(), false)
 	rq2 := jw.UseRequest(rq.JawsKey, "")
+	is.Equal(rq.Started(), true)
 	is.Equal(rq, rq2)
 	is.Equal(rq.RegisterEventFn("foo", ef), "foo")  // succeeds now that UseRequest() has been called
 	is.Equal(rq.RegisterEventFn("foo", nil), "foo") // nil fn always succeeds
@@ -909,12 +911,13 @@ func TestRequest_ConnectFn(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
+	is.Equal(rq.GetConnectFn(), nil)
 	is.NoErr(rq.onConnect())
 
 	wantErr := errors.New("getouttahere")
-	rq.ConnectFn = func(rq *Request) error {
+	fn := func(rq *Request) error {
 		return wantErr
 	}
-
+	rq.SetConnectFn(fn)
 	is.Equal(rq.onConnect(), wantErr)
 }
