@@ -168,9 +168,11 @@ func TestRequest_SendPanicsAfterRecycle(t *testing.T) {
 	// can not run in parallel
 	is := is.New(t)
 	defer func() {
-		if recover() == nil {
+		e := recover()
+		if e == nil {
 			is.Fail()
 		}
+		t.Log(e)
 	}()
 	jw := New()
 	defer jw.Close()
