@@ -25,15 +25,15 @@ type EventFn func(rq *Request, id, evt, val string) error
 // Note that we have to store the context inside the struct because there is no call chain
 // between the Request being created and it being used once the WebSocket is created.
 type Request struct {
-	Jaws      *Jaws              // the JaWS instance the Request belongs to
-	JawsKey   uint64             // a random number used in the WebSocket URI to identify this Request
-	ConnectFn ConnectFn          // a ConnectFn to call before starting message processing for the Request
-	Created   time.Time          // when the Request was created, used for automatic cleanup
-	Started   bool               // set to true after UseRequest() has been called
-	ctx       context.Context    // context passed to NewRequest
-	remoteIP  net.IP             // parsed remote IP (or nil)
-	sendCh    chan *Message      // direct send message channel
+	Jaws      *Jaws              // (read-only) the JaWS instance the Request belongs to
+	JawsKey   uint64             // (read-only) a random number used in the WebSocket URI to identify this Request
+	Created   time.Time          // (read-only) when the Request was created, used for automatic cleanup
+	ctx       context.Context    // (read-only) context passed to NewRequest
+	remoteIP  net.IP             // (read-only) parsed remote IP (or nil)
+	sendCh    chan *Message      // (read-only) direct send message channel
 	mu        sync.RWMutex       // protects following
+	ConnectFn ConnectFn          // a ConnectFn to call before starting message processing for the Request
+	Started   bool               // set to true after UseRequest() has been called
 	elems     map[string]EventFn // map of registered HTML id's
 }
 
@@ -192,6 +192,9 @@ func (rq *Request) SetDateValue(id string, val time.Time) {
 // Send queues up a message for sending to the current Request only.
 // Returns true if the message was successfully queued for sending.
 func (rq *Request) Send(msg *Message) bool {
+	if rq.Jaws == nil {
+		panic(fmt.Sprintf("Request.Send(%v): request is dead", msg))
+	}
 	select {
 	case <-rq.Jaws.Done():
 	case <-rq.Context().Done():
