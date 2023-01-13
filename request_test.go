@@ -41,8 +41,8 @@ func newTestRequest(is *is.I) (tr *testRequest) {
 	}
 	tr.jw.Logger = log.New(&tr.log, "", 0)
 	tr.ctx, tr.cancel = context.WithTimeout(context.Background(), time.Hour)
-	tr.Request = tr.jw.NewRequest(tr.ctx, "")
-	tr.jw.UseRequest(tr.JawsKey, "")
+	tr.Request = tr.jw.NewRequest(tr.ctx, nil)
+	tr.jw.UseRequest(tr.JawsKey, nil)
 
 	go tr.jw.Serve()
 
@@ -145,13 +145,13 @@ func TestRequest_DuplicateRegistration(t *testing.T) {
 	is := is.New(t)
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(context.Background(), "")
+	rq := jw.NewRequest(context.Background(), nil)
 	var ef EventFn = func(rq *Request, id, evt, val string) error { return nil }
 	is.Equal(rq.RegisterEventFn("foo", ef), "foo")  // first reg succeeds
 	is.Equal(rq.RegisterEventFn("foo", nil), "foo") // nil fn always succeeds
 	registerFooShouldPanic(is, rq)
 	is.Equal(rq.Started(), false)
-	rq2 := jw.UseRequest(rq.JawsKey, "")
+	rq2 := jw.UseRequest(rq.JawsKey, nil)
 	is.Equal(rq.Started(), true)
 	is.Equal(rq, rq2)
 	is.Equal(rq.RegisterEventFn("foo", ef), "foo")  // succeeds now that UseRequest() has been called
@@ -161,8 +161,8 @@ func TestRequest_DuplicateRegistration(t *testing.T) {
 func TestRequest_SendFailsWhenJawsClosed(t *testing.T) {
 	is := is.New(t)
 	jw := New()
-	rq := jw.NewRequest(context.Background(), "")
-	jw.UseRequest(rq.JawsKey, "")
+	rq := jw.NewRequest(context.Background(), nil)
+	jw.UseRequest(rq.JawsKey, nil)
 	jw.Close()
 	is.Equal(rq.Send(&Message{}), false)
 }
@@ -179,7 +179,7 @@ func TestRequest_SendPanicsAfterRecycle(t *testing.T) {
 	}()
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(context.Background(), "")
+	rq := jw.NewRequest(context.Background(), nil)
 	rq.recycle()
 	rq.Send(&Message{})
 }
@@ -189,8 +189,8 @@ func TestRequest_SendFailsWhenContextDone(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(ctx, "")
-	jw.UseRequest(rq.JawsKey, "")
+	rq := jw.NewRequest(ctx, nil)
+	jw.UseRequest(rq.JawsKey, nil)
 	defer rq.recycle()
 	fillCh(rq.sendCh)
 	cancel()
@@ -208,7 +208,7 @@ func TestRequest_SendPanicsIfUseRequestNotCalled(t *testing.T) {
 	}()
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(context.Background(), "")
+	rq := jw.NewRequest(context.Background(), nil)
 	defer rq.recycle()
 	rq.Send(&Message{})
 }
@@ -217,7 +217,7 @@ func TestRequest_HeadHTML(t *testing.T) {
 	is := is.New(t)
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(context.Background(), "")
+	rq := jw.NewRequest(context.Background(), nil)
 	defer rq.recycle()
 
 	txt := rq.HeadHTML()
@@ -229,7 +229,7 @@ func TestRequest_BroadcastsCallable(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 	go jw.Serve()
-	rq := jw.NewRequest(context.Background(), "")
+	rq := jw.NewRequest(context.Background(), nil)
 	defer rq.recycle()
 
 	rq.SetInner("foo", "bar")
@@ -900,7 +900,7 @@ func TestRequest_RadioPanicOnInvalidID(t *testing.T) {
 	}()
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(context.Background(), "")
+	rq := jw.NewRequest(context.Background(), nil)
 	rq.Radio("missinggroup", true, nil, "")
 }
 

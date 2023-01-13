@@ -28,7 +28,7 @@ type testServer struct {
 func newTestServer(is *is.I) *testServer {
 	jw := New()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
-	rq := jw.NewRequest(ctx, "")
+	rq := jw.NewRequest(ctx, nil)
 	srv := httptest.NewServer(rq)
 	return &testServer{
 		is:     is,
@@ -58,7 +58,7 @@ func TestWS_UpgradeRequired(t *testing.T) {
 	is := is.New(t)
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(context.Background(), "")
+	rq := jw.NewRequest(context.Background(), nil)
 
 	req := httptest.NewRequest("", "/jaws/"+rq.JawsKeyString(), nil)
 	w := httptest.NewRecorder()

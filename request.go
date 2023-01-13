@@ -6,6 +6,7 @@ import (
 	"html"
 	"html/template"
 	"net"
+	"net/http"
 	"strconv"
 	"sync"
 	"time"
@@ -28,8 +29,8 @@ type Request struct {
 	Jaws      *Jaws              // (read-only) the JaWS instance the Request belongs to
 	JawsKey   uint64             // (read-only) a random number used in the WebSocket URI to identify this Request
 	Created   time.Time          // (read-only) when the Request was created, used for automatic cleanup
-	ctx       context.Context    // (read-only) context passed to NewRequest
-	remoteIP  net.IP             // (read-only) parsed remote IP (or nil)
+	Initial   *http.Request      // (read-only) initial HTTP request passed to Jaws.NewRequest
+	Context   context.Context    // (read-only) context passed to Jaws.NewRequest
 	sendCh    chan *Message      // (read-only) direct send message channel
 	mu        sync.RWMutex       // protects following
 	connectFn ConnectFn          // a ConnectFn to call before starting message processing for the Request
@@ -55,13 +56,13 @@ var requestPool = sync.Pool{New: func() interface{} {
 	}
 }}
 
-func newRequest(ctx context.Context, j *Jaws, key uint64, remoteAddr string) (rq *Request) {
+func newRequest(ctx context.Context, j *Jaws, key uint64, hr *http.Request) (rq *Request) {
 	rq = requestPool.Get().(*Request)
 	rq.Jaws = j
 	rq.JawsKey = key
 	rq.Created = time.Now()
-	rq.ctx = ctx
-	rq.remoteIP = parseIP(remoteAddr)
+	rq.Initial = hr
+	rq.Context = ctx
 	return rq
 }
 
@@ -77,15 +78,21 @@ func (rq *Request) String() string {
 	return "Request<" + rq.JawsKeyString() + ">"
 }
 
-func (rq *Request) start(remoteAddr string) (err error) {
-	remoteIP := parseIP(remoteAddr)
+func (rq *Request) start(hr *http.Request) (err error) {
+	var expectIP, actualIP net.IP
 	rq.mu.Lock()
-	if (remoteIP == nil && rq.remoteIP == nil) || remoteIP.Equal(rq.remoteIP) {
+	defer rq.mu.Unlock()
+	if rq.Initial != nil {
+		expectIP = parseIP(rq.Initial.RemoteAddr)
+	}
+	if hr != nil {
+		actualIP = parseIP(hr.RemoteAddr)
+	}
+	if expectIP.Equal(actualIP) {
 		rq.started = true
 	} else {
-		err = fmt.Errorf("/jaws/%s: expected IP %s, got %q", JawsKeyString(rq.JawsKey), rq.remoteIP.String(), remoteAddr)
+		err = fmt.Errorf("/jaws/%s: expected IP %q, got %q", JawsKeyString(rq.JawsKey), expectIP.String(), actualIP.String())
 	}
-	rq.mu.Unlock()
 	return
 }
 
@@ -95,8 +102,8 @@ func (rq *Request) recycle() {
 	rq.JawsKey = 0
 	rq.connectFn = nil
 	rq.started = false
-	rq.ctx = nil
-	rq.remoteIP = nil
+	rq.Initial = nil
+	rq.Context = nil
 	// this gets optimized to calling the 'runtime.mapclear' function
 	// we don't expect this to improve speed, but it will lower GC load
 	for k := range rq.elems {
@@ -109,14 +116,6 @@ func (rq *Request) recycle() {
 // HeadHTML returns the HTML code needed to write in the HTML page's HEAD section.
 func (rq *Request) HeadHTML() template.HTML {
 	return rq.Jaws.headHTML + template.HTML(`<script>var jawsKey="`+JawsKeyString(rq.JawsKey)+`"</script>`) // #nosec G203
-}
-
-// Context returns the context passed to NewRequest()
-func (rq *Request) Context() (ctx context.Context) {
-	rq.mu.RLock()
-	ctx = rq.ctx
-	rq.mu.RUnlock()
-	return
 }
 
 // GetConnectFn returns the currently set ConnectFn. That function will be called before starting the WebSocket tunnel if not nil.
@@ -221,7 +220,7 @@ func (rq *Request) getDoneCh(msg *Message) (<-chan struct{}, <-chan struct{}) {
 	if !rq.started {
 		panic(fmt.Sprintf("Request.Send(%v): UseRequest() not yet called", msg))
 	}
-	return rq.Jaws.Done(), rq.Context().Done()
+	return rq.Jaws.Done(), rq.Context.Done()
 }
 
 // Send a message to the current Request only.
@@ -366,7 +365,7 @@ func (rq *Request) OnEvent(id string, fn EventFn) error {
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
 func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *Message, outboundMsgCh chan<- *Message) {
 	jawsDoneCh := rq.Jaws.Done()
-	ctxDoneCh := rq.Context().Done()
+	ctxDoneCh := rq.Context.Done()
 	eventDoneCh := make(chan struct{})
 	eventCallCh := make(chan eventFnCall, cap(outboundMsgCh))
 	go rq.eventCaller(eventCallCh, outboundMsgCh, eventDoneCh)

@@ -20,6 +20,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -119,7 +120,7 @@ func (jw *Jaws) MakeID() string {
 // it's Key attribute when sending the Javascript portion of the reply with GetBodyFooter.
 //
 // Don't use the http.Request's Context, as that will expire before the WebSocket call comes in.
-func (jw *Jaws) NewRequest(ctx context.Context, remoteAddr string) (rq *Request) {
+func (jw *Jaws) NewRequest(ctx context.Context, hr *http.Request) (rq *Request) {
 	random := make([]byte, 8)
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
@@ -129,7 +130,7 @@ func (jw *Jaws) NewRequest(ctx context.Context, remoteAddr string) (rq *Request)
 		}
 		if jawsKey := binary.LittleEndian.Uint64(random); jawsKey != 0 {
 			if _, ok := jw.reqs[jawsKey]; !ok {
-				rq = newRequest(ctx, jw, jawsKey, remoteAddr)
+				rq = newRequest(ctx, jw, jawsKey, hr)
 				jw.reqs[jawsKey] = rq
 			}
 		}
@@ -146,10 +147,10 @@ func (jw *Jaws) NewRequest(ctx context.Context, remoteAddr string) (rq *Request)
 //
 // Returns nil if the key was not found, in which case you should return a
 // HTTP "404 Not Found" status.
-func (jw *Jaws) UseRequest(jawsKey uint64, remoteAddr string) (rq *Request) {
+func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) {
 	jw.mu.Lock()
 	if waitingRq, ok := jw.reqs[jawsKey]; ok {
-		if err := waitingRq.start(remoteAddr); err == nil {
+		if err := waitingRq.start(hr); err == nil {
 			delete(jw.reqs, jawsKey)
 			rq = waitingRq
 		} else {

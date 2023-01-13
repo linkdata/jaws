@@ -16,7 +16,7 @@ func TestJawsBoot_Setup(t *testing.T) {
 	defer jw.Close()
 	is.NoErr(jawsboot.Setup(jw))
 
-	rq := jw.NewRequest(context.Background(), "")
+	rq := jw.NewRequest(context.Background(), nil)
 	txt := rq.HeadHTML()
 	is.Equal(strings.Contains(string(txt), rq.JawsKeyString()), true)
 	is.Equal(strings.Contains(string(txt), jaws.JavascriptPath), true)
