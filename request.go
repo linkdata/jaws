@@ -212,17 +212,21 @@ func (rq *Request) SetDateValue(id string, val time.Time) {
 	})
 }
 
-// Send queues up a message for sending to the current Request only.
-// Returns true if the message was successfully queued for sending.
+// Send a message to the current Request only.
+// Returns true if the message was successfully sent.
+//
+// If WebSocket processing has not yet started, sending always fails.
 func (rq *Request) Send(msg *Message) bool {
 	if rq.Jaws == nil {
 		panic(fmt.Sprintf("Request.Send(%v): request is dead", msg))
 	}
-	select {
-	case <-rq.Jaws.Done():
-	case <-rq.Context().Done():
-	case rq.sendCh <- msg:
-		return true
+	if rq.Started() {
+		select {
+		case <-rq.Jaws.Done():
+		case <-rq.Context().Done():
+		case rq.sendCh <- msg:
+			return true
+		}
 	}
 	return false
 }
