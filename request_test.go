@@ -162,6 +162,7 @@ func TestRequest_SendFailsWhenJawsClosed(t *testing.T) {
 	is := is.New(t)
 	jw := New()
 	rq := jw.NewRequest(context.Background(), "")
+	jw.UseRequest(rq.JawsKey, "")
 	jw.Close()
 	is.Equal(rq.Send(&Message{}), false)
 }
@@ -189,10 +190,27 @@ func TestRequest_SendFailsWhenContextDone(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 	rq := jw.NewRequest(ctx, "")
+	jw.UseRequest(rq.JawsKey, "")
 	defer rq.recycle()
 	fillCh(rq.sendCh)
 	cancel()
 	is.Equal(rq.Send(&Message{}), false)
+}
+
+func TestRequest_SendPanicsIfUseRequestNotCalled(t *testing.T) {
+	is := is.New(t)
+	defer func() {
+		e := recover()
+		if e == nil {
+			is.Fail()
+		}
+		t.Log(e)
+	}()
+	jw := New()
+	defer jw.Close()
+	rq := jw.NewRequest(context.Background(), "")
+	defer rq.recycle()
+	rq.Send(&Message{})
 }
 
 func TestRequest_HeadHTML(t *testing.T) {
