@@ -76,7 +76,7 @@ func TestJawsEcho_GetKey(t *testing.T) {
 	e.Server.Handler.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusNotFound)
 
-	rq := jw.NewRequest(context.Background(), req.RemoteAddr)
+	rq := jw.NewRequest(context.Background(), req)
 	req = httptest.NewRequest("", "/jaws/"+rq.JawsKeyString(), nil)
 	w = httptest.NewRecorder()
 	e.Server.Handler.ServeHTTP(w, req)

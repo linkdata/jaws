@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log"
 	"net"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -192,29 +193,31 @@ func TestJaws_UseRequest(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 
-	rq1 := jw.NewRequest(context.Background(), "")
+	rq1 := jw.NewRequest(context.Background(), nil)
 	is.True(rq1.JawsKey != 0)
-	rq2 := jw.NewRequest(context.Background(), "127.0.0.2:1010")
+
+	rq2 := jw.NewRequest(context.Background(), &http.Request{RemoteAddr: "127.0.0.2:1010"})
 	is.True(rq2.JawsKey != 0)
 	is.True(rq1.JawsKey != rq2.JawsKey)
 	is.Equal(jw.Pending(), 2)
 
-	rqfail := jw.UseRequest(0, "")
+	rqfail := jw.UseRequest(0, nil) // wrong JawsKey
 	is.Equal(rqfail, nil)
 	is.Equal(jw.Pending(), 2)
 
-	rqfail = jw.UseRequest(rq1.JawsKey, "127.0.0.1") // wrong IP, expect blank
+	rqfail = jw.UseRequest(rq1.JawsKey, &http.Request{RemoteAddr: "127.0.0.1:1010"}) // wrong IP, expect blank
 	is.Equal(rqfail, nil)
 	is.Equal(jw.Pending(), 2)
 
-	rqfail = jw.UseRequest(rq2.JawsKey, "127.0.0.1") // wrong IP, expect .2
+	rqfail = jw.UseRequest(rq2.JawsKey, &http.Request{RemoteAddr: "127.0.0.1:1010"}) // wrong IP, expect .2
 	is.Equal(rqfail, nil)
 	is.Equal(jw.Pending(), 2)
 
-	rq2ret := jw.UseRequest(rq2.JawsKey, "127.0.0.2:1212") // different port is OK
+	rq2ret := jw.UseRequest(rq2.JawsKey, &http.Request{RemoteAddr: "127.0.0.2:1212"}) // different port is OK
 	is.Equal(rq2, rq2ret)
 	is.Equal(jw.Pending(), 1)
-	rq1ret := jw.UseRequest(rq1.JawsKey, "")
+
+	rq1ret := jw.UseRequest(rq1.JawsKey, nil)
 	is.Equal(rq1, rq1ret)
 	is.Equal(jw.Pending(), 0)
 }
@@ -229,7 +232,7 @@ func TestJaws_BlockingRandomPanics(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 	jw.kg = bufio.NewReader(&bytes.Buffer{})
-	jw.NewRequest(context.Background(), "")
+	jw.NewRequest(context.Background(), nil)
 	is.Fail()
 }
 
@@ -241,7 +244,7 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 
 	is.Equal(jw.Pending(), 0)
 	for i := 0; i < numReqs; i++ {
-		jw.NewRequest(context.Background(), "")
+		jw.NewRequest(context.Background(), nil)
 	}
 	is.Equal(jw.Pending(), numReqs)
 
