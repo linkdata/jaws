@@ -212,21 +212,27 @@ func (rq *Request) SetDateValue(id string, val time.Time) {
 	})
 }
 
-// Send a message to the current Request only.
-// Returns true if the message was successfully sent.
-//
-// If WebSocket processing has not yet started, sending always fails.
-func (rq *Request) Send(msg *Message) bool {
+func (rq *Request) getDoneCh(msg *Message) (<-chan struct{}, <-chan struct{}) {
+	rq.mu.RLock()
+	defer rq.mu.RUnlock()
 	if rq.Jaws == nil {
 		panic(fmt.Sprintf("Request.Send(%v): request is dead", msg))
 	}
-	if rq.Started() {
-		select {
-		case <-rq.Jaws.Done():
-		case <-rq.Context().Done():
-		case rq.sendCh <- msg:
-			return true
-		}
+	if !rq.started {
+		panic(fmt.Sprintf("Request.Send(%v): UseRequest() not yet called", msg))
+	}
+	return rq.Jaws.Done(), rq.Context().Done()
+}
+
+// Send a message to the current Request only.
+// Returns true if the message was successfully sent.
+func (rq *Request) Send(msg *Message) bool {
+	jawsDoneCh, ctxDoneCh := rq.getDoneCh(msg)
+	select {
+	case <-jawsDoneCh:
+	case <-ctxDoneCh:
+	case rq.sendCh <- msg:
+		return true
 	}
 	return false
 }
