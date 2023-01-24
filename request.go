@@ -133,7 +133,7 @@ func (rq *Request) SetConnectFn(fn ConnectFn) {
 	rq.mu.Unlock()
 }
 
-// Started returns true if the Request has received the WebSocket call and started processing.
+// Started returns true if UseRequest has been called for the Request.
 func (rq *Request) Started() (yes bool) {
 	rq.mu.RLock()
 	yes = rq.started

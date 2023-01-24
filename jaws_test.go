@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -241,10 +243,13 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 	is := is.New(t)
 	jw := New()
 	defer jw.Close()
-
+	var b bytes.Buffer
+	w := bufio.NewWriter(&b)
+	jw.Logger = log.New(w, "", 0)
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
 	is.Equal(jw.Pending(), 0)
 	for i := 0; i < numReqs; i++ {
-		jw.NewRequest(context.Background(), nil)
+		jw.NewRequest(context.Background(), hr)
 	}
 	is.Equal(jw.Pending(), numReqs)
 
@@ -260,6 +265,15 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 	}
 
 	is.Equal(jw.Pending(), 0)
+	jw.Close()
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-jw.Done():
+	}
+	w.Flush()
+	msg := fmt.Sprintf("jaws: request timed out: %q\n", "/")
+	is.Equal(b.Len(), len(msg)*numReqs)
 }
 
 func TestJaws_BroadcastsCallable(t *testing.T) {
