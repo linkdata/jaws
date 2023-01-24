@@ -407,19 +407,16 @@ func (jw *Jaws) unsubscribe(msgCh chan *Message) {
 }
 
 func (jw *Jaws) maintenance(requestTimeout time.Duration) {
-	var toReport []*Request
 	deadline := time.Now().Add(-requestTimeout)
 	jw.mu.Lock()
+	defer jw.mu.Unlock()
+	logger := jw.Logger
 	for k, rq := range jw.reqs {
 		if rq.Created.Before(deadline) {
 			delete(jw.reqs, k)
-			toReport = append(toReport, rq)
-		}
-	}
-	jw.mu.Unlock()
-	for _, rq := range toReport {
-		if rq.Initial != nil {
-			jw.Log(fmt.Errorf("jaws: request timed out: %q", rq.Initial.RequestURI))
+			if logger != nil && rq.Initial != nil {
+				logger.Println(fmt.Errorf("jaws: request timed out: %q", rq.Initial.RequestURI))
+			}
 		}
 	}
 }
