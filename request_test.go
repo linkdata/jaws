@@ -146,16 +146,26 @@ func TestRequest_DuplicateRegistration(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 	rq := jw.NewRequest(context.Background(), nil)
-	var ef EventFn = func(rq *Request, id, evt, val string) error { return nil }
-	is.Equal(rq.RegisterEventFn("foo", ef), "foo")  // first reg succeeds
-	is.Equal(rq.RegisterEventFn("foo", nil), "foo") // nil fn always succeeds
+	var ef1 EventFn = func(rq *Request, id, evt, val string) error { return nil }
+	var ef2 EventFn = func(rq *Request, id, evt, val string) error { return errors.New("fails") }
+	is.Equal(rq.RegisterEventFn("foo", ef1), "foo") // first reg succeeds
 	registerFooShouldPanic(is, rq)
 	is.Equal(rq.Started(), false)
 	rq2 := jw.UseRequest(rq.JawsKey, nil)
 	is.Equal(rq.Started(), true)
 	is.Equal(rq, rq2)
-	is.Equal(rq.RegisterEventFn("foo", ef), "foo")  // succeeds now that UseRequest() has been called
-	is.Equal(rq.RegisterEventFn("foo", nil), "foo") // nil fn always succeeds
+	// succeeds now that UseRequest() has been called:
+	is.Equal(rq.RegisterEventFn("foo", ef1), "foo")
+	// should succeed and not overwrite event fn
+	is.Equal(rq.RegisterEventFn("foo", nil), "foo")
+	ef, ok := rq.GetEventFn("foo")
+	is.True(ok)
+	is.Equal(ef, ef1)
+	// replace the event fn
+	is.Equal(rq.RegisterEventFn("foo", ef2), "foo")
+	ef, ok = rq.GetEventFn("foo")
+	is.True(ok)
+	is.Equal(ef, ef2)
 }
 
 func TestRequest_SendFailsWhenJawsClosed(t *testing.T) {
