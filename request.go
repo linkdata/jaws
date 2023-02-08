@@ -294,8 +294,9 @@ func (rq *Request) Redirect(url string) {
 // If fn argument is nil, a pre-existing event function won't be overwritten.
 //
 // All ID's in a HTML DOM tree must be unique, and submitting a duplicate
-// id with a non-nil fn before UseRequest() have been called will cause
-// a panic. Once UseRequest has been called, you are allowed to call this
+// id before UseRequest() have been called will cause a panic.
+//
+// Once UseRequest has been called, you are allowed to call this
 // function with already registered ID's since otherwise updating
 // inner HTML using the element functions (e.g. Request.Text) would fail.
 //
@@ -305,11 +306,11 @@ func (rq *Request) RegisterEventFn(id string, fn EventFn) string {
 	defer rq.mu.Unlock()
 	if id != "" {
 		if _, ok := rq.elems[id]; ok {
-			if fn == nil {
-				return id
-			}
 			if !rq.started {
 				panic("id already registered: " + id)
+			}
+			if fn == nil {
+				return id
 			}
 		}
 		rq.elems[id] = fn
