@@ -156,56 +156,56 @@ func (rq *Request) Trigger(id, val string) {
 	})
 }
 
-// SetInner sends an HTML id and new inner HTML to all Requests except this one.
+// SetInner sends a jid and new inner HTML to all Requests except this one.
 //
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (rq *Request) SetInner(id string, innerHtml string) {
+// Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
+func (rq *Request) SetInner(jid string, innerHtml string) {
 	rq.Broadcast(&Message{
-		Elem: id,
+		Elem: jid,
 		What: "inner",
 		Data: innerHtml,
 	})
 }
 
-// SetTextValue sends an HTML id and new input value to all Requests except this one.
+// SetTextValue sends a jid and new input value to all Requests except this one.
 //
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (rq *Request) SetTextValue(id, val string) {
+// Only the requests that have registered the jid (either with Register or OnEvent) will be sent the message.
+func (rq *Request) SetTextValue(jid, val string) {
 	rq.Broadcast(&Message{
-		Elem: id,
+		Elem: jid,
 		What: "value",
 		Data: val,
 	})
 }
 
-// SetFloatValue sends an HTML id and new input value to all Requests except this one.
+// SetFloatValue sends a jid and new input value to all Requests except this one.
 //
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (rq *Request) SetFloatValue(id string, val float64) {
+// Only the requests that have registered the jid (either with Register or OnEvent) will be sent the message.
+func (rq *Request) SetFloatValue(jid string, val float64) {
 	rq.Broadcast(&Message{
-		Elem: id,
+		Elem: jid,
 		What: "value",
 		Data: strconv.FormatFloat(val, 'f', -1, 64),
 	})
 }
 
-// SetBoolValue sends an HTML id and new input value to all Requests except this one.
+// SetBoolValue sends a jid and new input value to all Requests except this one.
 //
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (rq *Request) SetBoolValue(id string, val bool) {
+// Only the requests that have registered the jid (either with Register or OnEvent) will be sent the message.
+func (rq *Request) SetBoolValue(jid string, val bool) {
 	rq.Broadcast(&Message{
-		Elem: id,
+		Elem: jid,
 		What: "value",
 		Data: strconv.FormatBool(val),
 	})
 }
 
-// SetDateValue sends an HTML id and new input value to all Requests except this one.
+// SetDateValue sends a jid and new input value to all Requests except this one.
 //
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (rq *Request) SetDateValue(id string, val time.Time) {
+// Only the requests that have registered the jid (either with Register or OnEvent) will be sent the message.
+func (rq *Request) SetDateValue(jid string, val time.Time) {
 	rq.Broadcast(&Message{
-		Elem: id,
+		Elem: jid,
 		What: "value",
 		Data: val.Format(ISO8601),
 	})
@@ -236,24 +236,24 @@ func (rq *Request) Send(msg *Message) bool {
 	return false
 }
 
-// SetAttr sets an attribute on the HTML element on the current Request only.
+// SetAttr sets an attribute on the HTML element(s) on the current Request only.
 // If the value is an empty string, a value-less attribute will be added (such as "disabled").
 //
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (rq *Request) SetAttr(id, attr, val string) {
+// Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
+func (rq *Request) SetAttr(jid, attr, val string) {
 	rq.Send(&Message{
-		Elem: id,
+		Elem: jid,
 		What: "sattr",
 		Data: attr + "\n" + val,
 	})
 }
 
-// RemoveAttr removes a given attribute from the HTML id for the current Request only.
+// RemoveAttr removes a given attribute from the HTML element(s) for the current Request only.
 //
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (rq *Request) RemoveAttr(id, attr string) {
+// Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
+func (rq *Request) RemoveAttr(jid, attr string) {
 	rq.Send(&Message{
-		Elem: id,
+		Elem: jid,
 		What: "rattr",
 		Data: attr,
 	})
@@ -286,80 +286,70 @@ func (rq *Request) Redirect(url string) {
 	})
 }
 
-// RegisterEventFn records the given HTML element ID as a valid target
+// RegisterEventFn records the given HTML 'jid' attribute as a valid target
 // for dynamic updates using the given event function (which may be nil).
 //
-// If the id argument is an empty string, a unique ID will be generated.
+// If the jid argument is an empty string, a unique jid will be generated.
 //
 // If fn argument is nil, a pre-existing event function won't be overwritten.
 //
-// All ID's in a HTML DOM tree must be unique, and submitting a duplicate
-// id before UseRequest() have been called will cause a panic.
-//
-// Once UseRequest has been called, you are allowed to call this
-// function with already registered ID's since otherwise updating
-// inner HTML using the element functions (e.g. Request.Text) would fail.
-//
-// Returns the (possibly generated) id.
-func (rq *Request) RegisterEventFn(id string, fn EventFn) string {
+// Returns the (possibly generated) jid.
+func (rq *Request) RegisterEventFn(jid string, fn EventFn) string {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	if id != "" {
-		if _, ok := rq.elems[id]; ok {
-			if !rq.started {
-				panic("id already registered: " + id)
-			}
+	if jid != "" {
+		if _, ok := rq.elems[jid]; ok {
 			if fn == nil {
-				return id
+				return jid
 			}
 		}
-		rq.elems[id] = fn
+		rq.elems[jid] = fn
 	} else {
 		for {
-			id = rq.Jaws.MakeID()
-			if _, ok := rq.elems[id]; !ok {
-				rq.elems[id] = fn
+			jid = rq.Jaws.MakeID()
+			if _, ok := rq.elems[jid]; !ok {
+				rq.elems[jid] = fn
 				break
 			}
 		}
 	}
-	return id
+	return jid
 }
 
 // Register calls RegisterEventFn(id, nil).
 // Useful in template constructs like:
 //
-//	<div id="{{$.Register `foo`}}">
-func (rq *Request) Register(id string) string {
-	return rq.RegisterEventFn(id, nil)
+//	<div jid="{{$.Register `foo`}}">
+func (rq *Request) Register(jid string) string {
+	return rq.RegisterEventFn(jid, nil)
 }
 
 // GetEventFn checks if a given HTML element is registered and returns
 // the it's event function (or nil) along with a boolean indicating
-// if it's a registered HTML id.
-func (rq *Request) GetEventFn(id string) (fn EventFn, ok bool) {
+// if it's a registered ID.
+func (rq *Request) GetEventFn(jid string) (fn EventFn, ok bool) {
 	rq.mu.RLock()
-	if fn, ok = rq.elems[id]; !ok {
-		_, ok = metaIds[id]
+	if fn, ok = rq.elems[jid]; !ok {
+		_, ok = metaIds[jid]
 	}
 	rq.mu.RUnlock()
 	return
 }
 
-// SetEventFn sets the event function for the given HTML ID to be the given function.
+// SetEventFn sets the event function for the given jid to be the given function.
 // Passing nil for the function is legal, and has the effect of ensuring the
-// ID can be the target of DOM updates but not to send Javascript events.
-// Note that you can only have one event function per ID.
-func (rq *Request) SetEventFn(id string, fn EventFn) {
+// jid can be the target of DOM updates but not to send Javascript events.
+// Note that you can only have one event function per jid.
+func (rq *Request) SetEventFn(jid string, fn EventFn) {
 	rq.mu.Lock()
-	rq.elems[id] = fn
+	rq.elems[jid] = fn
 	rq.mu.Unlock()
 }
 
 // OnEvent calls SetEventFn.
 // Returns a nil error so it can be used inside templates.
-func (rq *Request) OnEvent(id string, fn EventFn) error {
-	rq.SetEventFn(id, fn)
+func (rq *Request) OnEvent(jid string, fn EventFn) error {
+	rq.SetEventFn(jid, fn)
 	return nil
 }
 
@@ -508,11 +498,11 @@ func (rq *Request) maybeEvent(id, event string, fn ClickFn) string {
 	return rq.RegisterEventFn(id, wf)
 }
 
-func (rq *Request) maybeClick(id string, fn ClickFn) string {
-	return rq.maybeEvent(id, "click", fn)
+func (rq *Request) maybeClick(jid string, fn ClickFn) string {
+	return rq.maybeEvent(jid, "click", fn)
 }
 
-func (rq *Request) maybeInputText(id string, fn InputTextFn) string {
+func (rq *Request) maybeInputText(jid string, fn InputTextFn) string {
 	var wf EventFn
 	if fn != nil {
 		wf = func(rq *Request, id, evt, val string) (err error) {
@@ -522,10 +512,10 @@ func (rq *Request) maybeInputText(id string, fn InputTextFn) string {
 			return
 		}
 	}
-	return rq.RegisterEventFn(id, wf)
+	return rq.RegisterEventFn(jid, wf)
 }
 
-func (rq *Request) maybeInputFloat(id string, fn InputFloatFn) string {
+func (rq *Request) maybeInputFloat(jid string, fn InputFloatFn) string {
 	var wf EventFn
 	if fn != nil {
 		wf = func(rq *Request, id, evt, val string) (err error) {
@@ -541,10 +531,10 @@ func (rq *Request) maybeInputFloat(id string, fn InputFloatFn) string {
 			return
 		}
 	}
-	return rq.RegisterEventFn(id, wf)
+	return rq.RegisterEventFn(jid, wf)
 }
 
-func (rq *Request) maybeInputBool(id string, fn InputBoolFn) string {
+func (rq *Request) maybeInputBool(jid string, fn InputBoolFn) string {
 	var wf EventFn
 	if fn != nil {
 		wf = func(rq *Request, id, evt, val string) (err error) {
@@ -560,10 +550,10 @@ func (rq *Request) maybeInputBool(id string, fn InputBoolFn) string {
 			return
 		}
 	}
-	return rq.RegisterEventFn(id, wf)
+	return rq.RegisterEventFn(jid, wf)
 }
 
-func (rq *Request) maybeInputDate(id string, fn InputDateFn) string {
+func (rq *Request) maybeInputDate(jid string, fn InputDateFn) string {
 	var wf EventFn
 	if fn != nil {
 		wf = func(rq *Request, id, evt, val string) (err error) {
@@ -579,5 +569,5 @@ func (rq *Request) maybeInputDate(id string, fn InputDateFn) string {
 			return
 		}
 	}
-	return rq.RegisterEventFn(id, wf)
+	return rq.RegisterEventFn(jid, wf)
 }

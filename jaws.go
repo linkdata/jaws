@@ -116,7 +116,7 @@ func (jw *Jaws) MakeID() string {
 
 // NewRequest returns a new JaWS request.
 // Call this as soon as you start processing a HTML request, and store the returned Request pointer so it can be used
-// while constructing the HTML response in order to register the HTML entity id's you use in the response, and use
+// while constructing the HTML response in order to register the JaWS id's you use in the response, and use
 // it's Key attribute when sending the Javascript portion of the reply with GetBodyFooter.
 //
 // Don't use the http.Request's Context, as that will expire before the WebSocket call comes in.
@@ -197,23 +197,23 @@ func (jw *Jaws) Broadcast(msg *Message) {
 	}
 }
 
-// SetInner sends an HTML id and new inner HTML to all Requests.
+// SetInner sends a jid and new inner HTML to all Requests.
 //
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (jw *Jaws) SetInner(id string, innerHtml string) {
+// Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
+func (jw *Jaws) SetInner(jid string, innerHtml string) {
 	jw.Broadcast(&Message{
-		Elem: id,
+		Elem: jid,
 		What: "inner",
 		Data: innerHtml,
 	})
 }
 
-// Remove removes the HTML element with the given ID on all Requests.
+// Remove removes the HTML element(s) with the given 'jid' on all Requests.
 //
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (jw *Jaws) Remove(id string) {
+// Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
+func (jw *Jaws) Remove(jid string) {
 	jw.Broadcast(&Message{
-		Elem: id,
+		Elem: jid,
 		What: "remove",
 	})
 }

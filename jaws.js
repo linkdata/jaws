@@ -25,22 +25,26 @@ function jawsIsTrue(v) {
 function jawsHandler(e) {
 	if (jaws instanceof WebSocket && e instanceof Event) {
 		var elem = e.currentTarget;
-		var val = elem.value;
-		var elemtype = elem.getAttribute('type');
-		if (jawsIsCheckable(elemtype)) {
-			val = elem.checked;
-		} else if (elem.tagName.toLowerCase() === 'option') {
-			val = elem.selected;
+		var jid = elem.getAttribute('jid');
+		if (jid) {
+			var val = elem.value;
+			var elemtype = elem.getAttribute('type');
+			if (jawsIsCheckable(elemtype)) {
+				val = elem.checked;
+			} else if (elem.tagName.toLowerCase() === 'option') {
+				val = elem.selected;
+			}
+			jaws.send(jid + "\n" + e.type + "\n" + val);
 		}
-		jaws.send(elem.id + "\n" + e.type + "\n" + val);
 	}
 }
 
 function jawsAttach(topElem) {
-	var elements = topElem.querySelectorAll('[id]:not([id=""])');
+	var elements = topElem.querySelectorAll('[jid]');
 	for (var i = 0; i < elements.length; i++) {
 		var elem = elements[i];
-		if (elem.id.indexOf('jaws-') !== 0) {
+		var jid = elem.getAttribute('jid');
+		if (jid.indexOf('jaws-') !== 0) {
 			var ddattr = elem.getAttribute('jaws');
 			if (ddattr) {
 				var evtypes = ddattr.split(',');
@@ -121,7 +125,7 @@ function jawsLost() {
 			text += '<p>Contact lost ' + elapsed + units + ' ago.</p>';
 		}
 	}
-	document.documentElement.innerHTML = text;
+	document.documentElement.innerHTML = text + '<p>Trying to reconnect.</p>';
 	setTimeout(jawsReconnect, delay * 1000);
 }
 
@@ -166,7 +170,7 @@ function jawsElement(html) {
 function jawsWhere(elem, pos) {
 	var where = null;
 	if (pos && pos !== 'null') {
-		where = document.getElementById(pos);
+		where = elem.querySelector('[jid="' + pos + '"]');
 		if (where == null) {
 			where = elem.children[parseInt(pos)];
 		}
@@ -176,49 +180,8 @@ function jawsWhere(elem, pos) {
 
 function jawsMessage(e) {
 	var lines = e.data.split('\n');
-	var cmd_or_element = lines.shift();
-	var elem = document.getElementById(cmd_or_element);
-	if (elem != null) {
-		var what = lines.shift();
-		var where = null;
-		switch (what) {
-			case 'inner':
-				elem.innerHTML = lines.join('\n');
-				jawsAttach(elem);
-				return;
-			case 'value':
-				jawsSetValue(elem, lines.join('\n'));
-				return;
-			case 'remove':
-				elem.remove();
-				return;
-			case 'insert':
-				where = jawsWhere(elem, lines.shift());
-				elem.insertBefore(jawsAttach(jawsElement(lines.join('\n'))), where);
-				return;
-			case 'append':
-				elem.appendChild(jawsAttach(jawsElement(lines.join('\n'))));
-				return;
-			case 'replace':
-				var replacePos = lines.shift();
-				where = jawsWhere(elem, replacePos);
-				if (where instanceof Node) {
-					elem.replaceChild(jawsAttach(jawsElement(lines.join('\n'))), where);
-				} else {
-					console.log("jaws: element " + elem.id + " has no position " + replacePos);
-				}
-				return;
-			case 'sattr':
-				elem.setAttribute(lines.shift(), lines.join('\n'));
-				return;
-			case 'rattr':
-				elem.removeAttribute(lines.shift());
-				return;
-		}
-		console.log("jaws: unknown operation: " + what);
-		return;
-	}
-	switch (cmd_or_element) {
+	var cmd_or_jid = lines.shift();
+	switch (cmd_or_jid) {
 		case ' reload':
 			window.location.reload();
 			return;
@@ -229,23 +192,88 @@ function jawsMessage(e) {
 			jawsAlert(lines.shift(), lines.join('\n'));
 			return;
 	}
-	console.log("jaws: unknown command or element: " + cmd_or_element);
+	var what = lines.shift();
+	var where = null;
+	var data = null;
+	switch (what) {
+		case 'inner':
+		case 'value':
+		case 'append':
+			data = lines.join('\n');
+			break;
+		case 'remove':
+			break;
+		case 'insert':
+		case 'replace':
+		case 'sattr':
+			where = lines.shift();
+			data = lines.join('\n');
+			break;
+		case 'rattr':
+			where = lines.shift();
+			break;
+		default:
+			console.log("jaws: unknown operation: " + what);
+			return;
+	}
+	var elements = document.querySelectorAll('[jid="' + cmd_or_jid + '"]');
+	if (elements.length === 0) {
+		console.log("jaws: jid not found: " + cmd_or_jid);
+		return;
+	}
+	for (var i = 0; i < elements.length; i++) {
+		var elem = elements[i];
+		switch (what) {
+			case 'inner':
+				elem.innerHTML = data;
+				jawsAttach(elem);
+				break;
+			case 'value':
+				jawsSetValue(elem, data);
+				break;
+			case 'remove':
+				elem.remove();
+				break;
+			case 'append':
+				elem.appendChild(jawsAttach(jawsElement(data)));
+				break;
+			case 'insert':
+			case 'replace':
+				var target = jawsWhere(elem, where);
+				if (target instanceof Node) {
+					if (what === 'replace') {
+						elem.replaceChild(jawsAttach(jawsElement(data)), target);
+					} else {
+						elem.insertBefore(jawsAttach(jawsElement(data)), target);
+					}
+				} else {
+					console.log("jaws: jid " + cmd_or_jid + " has no position " + where);
+				}
+				break;
+			case 'sattr':
+				elem.setAttribute(where, data);
+				break;
+			case 'rattr':
+				elem.removeAttribute(where);
+				break;
+		}
+	}
 }
 
 function jawsConnect() {
-	var wsScheme = "ws://";
+	var wsScheme = 'ws://';
 	if (window.location.protocol === 'https:') {
-		wsScheme = "wss://";
+		wsScheme = 'wss://';
 	}
 	window.addEventListener('beforeunload', jawsUnloading);
-	jaws = new WebSocket(wsScheme + window.location.host + "/jaws/" + encodeURIComponent(jawsKey));
+	jaws = new WebSocket(wsScheme + window.location.host + '/jaws/' + encodeURIComponent(jawsKey));
 	jaws.addEventListener('open', function () { jawsAttach(document); });
 	jaws.addEventListener('message', jawsMessage);
 	jaws.addEventListener('close', jawsFailed);
 	jaws.addEventListener('error', jawsFailed);
 }
 
-if (document.readyState === "complete" || document.readyState === "interactive") {
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
 	jawsConnect();
 } else {
 	window.addEventListener('DOMContentLoaded', jawsConnect);

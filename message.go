@@ -7,7 +7,7 @@ import (
 
 // Message contains the elements of a message to be sent to Requests.
 type Message struct {
-	Elem string   // HTML element id or command (e.g. ' alert' or 'myButtonId')
+	Elem string   // HTML 'jid' attribute or command (e.g. ' alert' or 'myButtonId')
 	What string   // what to change or do, (e.g. 'inner')
 	Data string   // data (e.g. inner HTML content)
 	from *Request // source of the message (may be nil)

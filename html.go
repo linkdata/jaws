@@ -26,7 +26,7 @@ func appendAttrs(b []byte, attrs []string) []byte {
 func HtmlInput(id, typ, val string, attrs ...string) template.HTML {
 	need := 11 + len(id) + 8 + len(typ) + 9 + len(val) + 1 + 1 + getAttrsLen(attrs) + 1
 	b := make([]byte, 0, need)
-	b = append(b, `<input id="`...)
+	b = append(b, `<input jid="`...)
 	b = append(b, id...)
 	b = append(b, `" type="`...)
 	b = append(b, typ...)
@@ -45,7 +45,7 @@ func HtmlInner(id, tag, typ, inner string, attrs ...string) template.HTML {
 	b := make([]byte, 0, need)
 	b = append(b, '<')
 	b = append(b, tag...)
-	b = append(b, ` id="`...)
+	b = append(b, ` jid="`...)
 	b = append(b, id...)
 	if typ != "" {
 		b = append(b, `" type="`...)
@@ -61,8 +61,8 @@ func HtmlInner(id, tag, typ, inner string, attrs ...string) template.HTML {
 	return template.HTML(b) // #nosec G203
 }
 
-func HtmlSelect(id string, val *NamedBoolArray, attrs ...string) template.HTML {
-	need := 12 + len(id) + 2 + getAttrsLen(attrs) + 2 + 10
+func HtmlSelect(jid string, val *NamedBoolArray, attrs ...string) template.HTML {
+	need := 12 + len(jid) + 2 + getAttrsLen(attrs) + 2 + 10
 	if val != nil {
 		for _, nb := range *val {
 			need += 15 + len(nb.Value) + 2 + len(nb.Text) + 10
@@ -72,8 +72,8 @@ func HtmlSelect(id string, val *NamedBoolArray, attrs ...string) template.HTML {
 		}
 	}
 	b := make([]byte, 0, need)
-	b = append(b, `<select id="`...)
-	b = append(b, id...)
+	b = append(b, `<select jid="`...)
+	b = append(b, jid...)
 	b = append(b, '"')
 	b = appendAttrs(b, attrs)
 	b = append(b, ">\n"...)
