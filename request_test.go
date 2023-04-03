@@ -129,18 +129,6 @@ func TestRequest_Registrations(t *testing.T) {
 	is.True(id != id2)
 }
 
-func registerFooShouldPanic(is *is.I, rq *Request) {
-	defer func() {
-		if v := recover(); v == nil {
-			is.Fail()
-		} else {
-			is.True(strings.Contains(v.(string), "foo"))
-		}
-	}()
-	rq.RegisterEventFn("foo", func(rq *Request, id, evt, val string) error { return nil })
-	is.Fail()
-}
-
 func TestRequest_DuplicateRegistration(t *testing.T) {
 	is := is.New(t)
 	jw := New()
@@ -149,12 +137,11 @@ func TestRequest_DuplicateRegistration(t *testing.T) {
 	var ef1 EventFn = func(rq *Request, id, evt, val string) error { return nil }
 	var ef2 EventFn = func(rq *Request, id, evt, val string) error { return errors.New("fails") }
 	is.Equal(rq.RegisterEventFn("foo", ef1), "foo") // first reg succeeds
-	registerFooShouldPanic(is, rq)
+	is.Equal(rq.RegisterEventFn("foo", ef1), "foo") // second reg succeeds
 	is.Equal(rq.Started(), false)
 	rq2 := jw.UseRequest(rq.JawsKey, nil)
 	is.Equal(rq.Started(), true)
 	is.Equal(rq, rq2)
-	// succeeds now that UseRequest() has been called:
 	is.Equal(rq.RegisterEventFn("foo", ef1), "foo")
 	// should succeed and not overwrite event fn
 	is.Equal(rq.RegisterEventFn("foo", nil), "foo")
@@ -694,7 +681,7 @@ func TestRequest_Text(t *testing.T) {
 		is.Equal(val, "other-stuff")
 		return nil
 	}, "disabled")
-	is.True(strings.Contains(string(h), "id=\""+elemId+"\""))
+	is.True(strings.Contains(string(h), "jid=\""+elemId+"\""))
 	is.True(strings.Contains(string(h), elemVal))
 	rq.inCh <- &Message{Elem: elemId, What: "input", Data: "other-stuff"}
 	select {
@@ -716,7 +703,7 @@ func TestRequest_Password(t *testing.T) {
 		is.Equal(val, "other-stuff")
 		return nil
 	}, "autocomplete=\"off\"")
-	is.True(strings.Contains(string(h), "id=\""+elemId+"\""))
+	is.True(strings.Contains(string(h), "jid=\""+elemId+"\""))
 	is.True(!strings.Contains(string(h), "value"))
 	rq.inCh <- &Message{Elem: elemId, What: "input", Data: "other-stuff"}
 	select {
@@ -747,7 +734,7 @@ func TestRequest_Number(t *testing.T) {
 		gotCall <- struct{}{}
 		return nil
 	}, "disabled")
-	is.True(strings.Contains(string(h), "id=\""+elemId+"\""))
+	is.True(strings.Contains(string(h), "jid=\""+elemId+"\""))
 	is.True(strings.Contains(string(h), "21.5"))
 	rq.inCh <- &Message{Elem: elemId, What: "input", Data: "4.3"}
 	select {
@@ -785,7 +772,7 @@ func TestRequest_Range(t *testing.T) {
 		is.Equal(val, 3.15)
 		return nil
 	}, "disabled")
-	is.True(strings.Contains(string(h), "id=\""+elemId+"\""))
+	is.True(strings.Contains(string(h), "jid=\""+elemId+"\""))
 	is.True(strings.Contains(string(h), "3.14"))
 	rq.inCh <- &Message{Elem: elemId, What: "input", Data: "3.15"}
 	select {
@@ -809,7 +796,7 @@ func TestRequest_Checkbox(t *testing.T) {
 		gotCall <- struct{}{}
 		return nil
 	}, "")
-	is.True(strings.Contains(string(h), "id=\""+elemId+"\""))
+	is.True(strings.Contains(string(h), "jid=\""+elemId+"\""))
 	is.True(strings.Contains(string(h), "checked"))
 	rq.inCh <- &Message{Elem: elemId, What: "input", Data: "false"}
 	select {
@@ -852,7 +839,7 @@ func TestRequest_Date(t *testing.T) {
 		gotCall <- struct{}{}
 		return nil
 	}, "")
-	is.True(strings.Contains(string(h), "id=\""+elemId+"\""))
+	is.True(strings.Contains(string(h), "jid=\""+elemId+"\""))
 	is.True(strings.Contains(string(h), time.Now().Format(ISO8601)))
 	rq.inCh <- &Message{Elem: elemId, What: "input", Data: "1970-01-02"}
 	select {
@@ -890,7 +877,7 @@ func TestRequest_Radio(t *testing.T) {
 		is.Equal(val, false)
 		return nil
 	}, "")
-	is.True(strings.Contains(string(h), "id=\""+elemId+"\""))
+	is.True(strings.Contains(string(h), "jid=\""+elemId+"\""))
 	is.True(strings.Contains(string(h), "name=\"groupid\""))
 	is.True(strings.Contains(string(h), "checked"))
 	rq.inCh <- &Message{Elem: elemId, What: "input", Data: "false"}
@@ -925,12 +912,12 @@ func TestRequest_Select(t *testing.T) {
 	a.Add("2", "two")
 
 	h := rq.Select(elemId, a, nil, "disabled")
-	is.True(strings.Contains(string(h), "id=\""+elemId+"\""))
+	is.True(strings.Contains(string(h), "jid=\""+elemId+"\""))
 	is.Equal(strings.Contains(string(h), "selected"), false)
 
 	a.Check("1")
 	h = rq.Select(elemId, a, nil, "")
-	is.True(strings.Contains(string(h), "id=\""+elemId+"\""))
+	is.True(strings.Contains(string(h), "jid=\""+elemId+"\""))
 	is.Equal(strings.Contains(string(h), "selected"), true)
 }
 
