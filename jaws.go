@@ -157,9 +157,7 @@ func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) {
 		}
 	}
 	jw.mu.Unlock()
-	if err != nil {
-		_ = jw.Log(err)
-	}
+	_ = jw.Log(err)
 	return
 }
 
