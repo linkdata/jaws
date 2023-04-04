@@ -148,16 +148,18 @@ func (jw *Jaws) NewRequest(ctx context.Context, hr *http.Request) (rq *Request) 
 // Returns nil if the key was not found, in which case you should return a
 // HTTP "404 Not Found" status.
 func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) {
+	var err error
 	jw.mu.Lock()
 	if waitingRq, ok := jw.reqs[jawsKey]; ok {
-		if err := waitingRq.start(hr); err == nil {
+		if err = waitingRq.start(hr); err == nil {
 			delete(jw.reqs, jawsKey)
 			rq = waitingRq
-		} else {
-			_ = jw.Log(err)
 		}
 	}
 	jw.mu.Unlock()
+	if err != nil {
+		_ = jw.Log(err)
+	}
 	return
 }
 

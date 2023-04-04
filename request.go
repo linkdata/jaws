@@ -77,20 +77,22 @@ func (rq *Request) String() string {
 	return "Request<" + rq.JawsKeyString() + ">"
 }
 
-func (rq *Request) start(hr *http.Request) (err error) {
-	var expectIP, actualIP net.IP
-	rq.mu.Lock()
-	defer rq.mu.Unlock()
+func (rq *Request) start(hr *http.Request) error {
+	var expectAddr string
+	rq.mu.RLock()
 	if rq.Initial != nil {
-		expectIP = parseIP(rq.Initial.RemoteAddr)
+		expectAddr = rq.Initial.RemoteAddr
 	}
+	rq.mu.RUnlock()
+	expectIP := parseIP(expectAddr)
+	var actualIP net.IP
 	if hr != nil {
 		actualIP = parseIP(hr.RemoteAddr)
 	}
-	if !expectIP.Equal(actualIP) {
-		err = fmt.Errorf("/jaws/%s: expected IP %q, got %q", JawsKeyString(rq.JawsKey), expectIP.String(), actualIP.String())
+	if expectIP.Equal(actualIP) {
+		return nil
 	}
-	return
+	return fmt.Errorf("/jaws/%s: expected IP %q, got %q", JawsKeyString(rq.JawsKey), expectIP.String(), actualIP.String())
 }
 
 func (rq *Request) recycle() {
