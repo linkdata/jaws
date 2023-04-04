@@ -59,15 +59,20 @@ provide a helper function for [Echo](https://echo.labstack.com/) with
 
 ## Registering HTML entities and Javascript events
 
-The application registers the HTML entity id's it wants to interact with
+The application registers the HTML entities it wants to interact with
 *per request*, usually while rendering the HTML template. If a HTML entity
-id is not registered in a Request, JaWS will not forward events from it,
-nor perform DOM manipulations for it. 
+is not registered in a Request, JaWS will not forward events from it,
+nor perform DOM manipulations for it.
 
-Dynamic updates of a HTML entity is done using the different methods on
+Dynamic updates of HTML entities is done using the different methods on
 the JaWS object and Request object. If the JaWS object is used to update
-a HTML entity, all Requests will receive the update request. If the Request 
+HTML entities, all Requests will receive the update request. If the Request 
 object's methods are used, the update is forwarded to to all *other* Requests.
+
+Each HTML entity registered with JaWS will have the `jid` attribute set in
+the generated HTML code with the same value as it's JaWS id when it was
+registered. Unlike HTML ID's you can have multiple HTML entities with
+the same `jid`, and all will be affected by DOM updates.
 
 ## A note on the Context
 
@@ -104,3 +109,4 @@ We try to minimize dependencies outside of the standard library.
 
 * Depends on https://github.com/nhooyr/websocket for WebSocket functionality.
 * Depends on https://github.com/matryer/is for tests.
+* Depends on https://github.com/linkdata/deadlock if race detection is enabled.
