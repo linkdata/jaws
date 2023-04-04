@@ -31,17 +31,19 @@ import (
 )
 
 type Jaws struct {
-	Logger   *log.Logger // If not nil, send debug info and errors here
-	doneCh   <-chan struct{}
-	bcastCh  chan *Message
-	subCh    chan chan *Message
-	unsubCh  chan chan *Message
-	headHTML template.HTML
-	nextId   uint64         // atomic
-	mu       deadlock.Mutex // protects following
-	kg       *bufio.Reader
-	closeCh  chan struct{}
-	reqs     map[uint64]*Request
+	Logger     *log.Logger // If not nil, send debug info and errors here
+	cookieName string
+	doneCh     <-chan struct{}
+	bcastCh    chan *Message
+	subCh      chan chan *Message
+	unsubCh    chan chan *Message
+	headHTML   template.HTML
+	nextId     uint64           // atomic
+	mu         deadlock.RWMutex // protects following
+	kg         *bufio.Reader
+	closeCh    chan struct{}
+	reqs       map[uint64]*Request
+	sessions   map[uint64]*session
 }
 
 // NewWithDone returns a new JaWS object using the given completion channel.
@@ -49,13 +51,15 @@ type Jaws struct {
 // publishing HTML changes across all connections.
 func NewWithDone(doneCh <-chan struct{}) *Jaws {
 	return &Jaws{
-		doneCh:   doneCh,
-		bcastCh:  make(chan *Message, 1),
-		subCh:    make(chan chan *Message, 1),
-		unsubCh:  make(chan chan *Message, 1),
-		headHTML: HeadHTML([]string{JavascriptPath}, nil),
-		kg:       bufio.NewReader(rand.Reader),
-		reqs:     make(map[uint64]*Request),
+		cookieName: fmt.Sprintf("jaws-%d", time.Now().Unix()),
+		doneCh:     doneCh,
+		bcastCh:    make(chan *Message, 1),
+		subCh:      make(chan chan *Message, 1),
+		unsubCh:    make(chan chan *Message, 1),
+		headHTML:   HeadHTML([]string{JavascriptPath}, nil),
+		kg:         bufio.NewReader(rand.Reader),
+		reqs:       make(map[uint64]*Request),
+		sessions:   make(map[uint64]*session),
 	}
 }
 
@@ -116,25 +120,52 @@ func (jw *Jaws) MakeID() string {
 }
 
 // NewRequest returns a new JaWS request.
-// Call this as soon as you start processing a HTML request, and store the returned Request pointer so it can be used
-// while constructing the HTML response in order to register the JaWS id's you use in the response, and use
-// it's Key attribute when sending the Javascript portion of the reply with GetBodyFooter.
+//
+// Call this as soon as you start processing a HTML request, and store the
+// returned Request pointer so it can be used while constructing the HTML
+// response in order to register the JaWS id's you use in the response, and
+// use it's Key attribute when sending the Javascript portion of the reply
+// with GetBodyFooter.
 //
 // Don't use the http.Request's Context, as that will expire before the WebSocket call comes in.
 func (jw *Jaws) NewRequest(ctx context.Context, hr *http.Request) (rq *Request) {
-	random := make([]byte, 8)
+	var cookieVal uint64
+	if hr != nil {
+		if cookie, err := hr.Cookie(jw.cookieName); err == nil {
+			if cookie.Value != "" {
+				if cookie.Expires.IsZero() || cookie.Expires.After(time.Now()) {
+					if err = cookie.Valid(); err == nil {
+						cookieVal = JawsKeyValue(cookie.Value)
+					}
+				}
+			}
+		}
+	}
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	for rq == nil {
+		jawsKey := jw.nonZeroRandomLocked()
+		if _, ok := jw.reqs[jawsKey]; !ok {
+			var sess *session
+			if cookieVal == 0 {
+				cookieVal = jw.nonZeroRandomLocked()
+			} else {
+				sess = jw.sessions[cookieVal]
+			}
+			rq = newRequest(ctx, jw, jawsKey, hr, sess, cookieVal)
+			jw.reqs[jawsKey] = rq
+		}
+	}
+	return
+}
+
+func (jw *Jaws) nonZeroRandomLocked() (val uint64) {
+	random := make([]byte, 8)
+	for val == 0 {
 		if _, err := io.ReadFull(jw.kg, random); err != nil {
 			panic(err)
 		}
-		if jawsKey := binary.LittleEndian.Uint64(random); jawsKey != 0 {
-			if _, ok := jw.reqs[jawsKey]; !ok {
-				rq = newRequest(ctx, jw, jawsKey, hr)
-				jw.reqs[jawsKey] = rq
-			}
-		}
+		val = binary.LittleEndian.Uint64(random)
 	}
 	return
 }
@@ -159,6 +190,26 @@ func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) {
 	}
 	jw.mu.Unlock()
 	_ = jw.Log(err)
+	return
+}
+
+// getSession returns the session associated with the given id, creating a new one if needed.
+func (jw *Jaws) getSession(remoteIP net.IP, sessionId uint64) (sess *session) {
+	jw.mu.RLock()
+	if sess = jw.sessions[sessionId]; sess != nil {
+		if sess.isRemoteOk(remoteIP) {
+			jw.mu.RUnlock()
+			return
+		}
+		sess = nil
+	}
+	jw.mu.RUnlock()
+	jw.mu.Lock()
+	if sess = jw.sessions[sessionId]; !sess.isRemoteOk(remoteIP) {
+		sess = newSession(remoteIP)
+		jw.sessions[sessionId] = sess
+	}
+	jw.mu.Unlock()
 	return
 }
 

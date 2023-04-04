@@ -36,11 +36,20 @@ func makeJavascriptPath() string {
 	return "/jaws/jaws." + strconv.FormatUint(h.Sum64(), 36) + ".js"
 }
 
+// JawsKeyString returns the string to be used for the given JaWS key.
 func JawsKeyString(jawsKey uint64) string {
 	if jawsKey == 0 {
 		return ""
 	}
-	return strconv.FormatUint(jawsKey, 16)
+	return strconv.FormatUint(jawsKey, 32)
+}
+
+// JawsKeyValue parses a key string (as returned JawsKeyString) into a uint64.
+func JawsKeyValue(jawsKey string) uint64 {
+	if val, err := strconv.ParseUint(jawsKey, 32, 64); err == nil {
+		return val
+	}
+	return 0
 }
 
 // HeadHTML returns HTML code to load the given scripts and CSS files efficiently.

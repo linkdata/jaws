@@ -2,7 +2,6 @@ package jawsecho
 
 import (
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -36,7 +35,7 @@ func Setup(router *echo.Echo, jw *jaws.Jaws) {
 		}
 	})
 	router.GET("/jaws/:key", func(c echo.Context) error {
-		if jawsKey, err := strconv.ParseUint(c.Param("key"), 16, 64); err == nil {
+		if jawsKey := jaws.JawsKeyValue(c.Param("key")); jawsKey != 0 {
 			if rq := jw.UseRequest(jawsKey, c.Request()); rq != nil {
 				rq.ServeHTTP(c.Response().Writer, c.Request())
 				return nil

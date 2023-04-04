@@ -33,8 +33,11 @@ type Request struct {
 	Created   time.Time          // (read-only) when the Request was created, used for automatic cleanup
 	Initial   *http.Request      // (read-only) initial HTTP request passed to Jaws.NewRequest
 	Context   context.Context    // (read-only) context passed to Jaws.NewRequest
+	remoteIP  net.IP             // (read-only) remote IP, or nil
+	sessionID uint64             // (read-only) session ID, or zero
 	sendCh    chan *Message      // (read-only) direct send message channel
 	mu        deadlock.RWMutex   // protects following
+	session   *session           // session, if established
 	connectFn ConnectFn          // a ConnectFn to call before starting message processing for the Request
 	elems     map[string]EventFn // map of registered HTML id's
 }
@@ -57,13 +60,22 @@ var requestPool = sync.Pool{New: func() interface{} {
 	}
 }}
 
-func newRequest(ctx context.Context, j *Jaws, key uint64, hr *http.Request) (rq *Request) {
+func newRequest(ctx context.Context, j *Jaws, key uint64, hr *http.Request, sess *session, sessionId uint64) (rq *Request) {
 	rq = requestPool.Get().(*Request)
 	rq.Jaws = j
 	rq.JawsKey = key
 	rq.Created = time.Now()
 	rq.Initial = hr
 	rq.Context = ctx
+	if hr != nil {
+		rq.remoteIP = parseIP(hr.RemoteAddr)
+	} else {
+		rq.remoteIP = nil
+	}
+	rq.sessionID = sessionId
+	if sess != nil && sess.isRemoteOk(rq.remoteIP) {
+		rq.session = sess
+	}
 	return rq
 }
 
@@ -80,13 +92,9 @@ func (rq *Request) String() string {
 }
 
 func (rq *Request) start(hr *http.Request) error {
-	var expectAddr string
 	rq.mu.RLock()
-	if rq.Initial != nil {
-		expectAddr = rq.Initial.RemoteAddr
-	}
+	expectIP := rq.remoteIP
 	rq.mu.RUnlock()
-	expectIP := parseIP(expectAddr)
 	var actualIP net.IP
 	if hr != nil {
 		actualIP = parseIP(hr.RemoteAddr)
@@ -94,7 +102,7 @@ func (rq *Request) start(hr *http.Request) error {
 	if expectIP.Equal(actualIP) {
 		return nil
 	}
-	return fmt.Errorf("/jaws/%s: expected IP %q, got %q", JawsKeyString(rq.JawsKey), expectIP.String(), actualIP.String())
+	return fmt.Errorf("/jaws/%s: expected IP %q, got %q", rq.JawsKeyString(), expectIP.String(), actualIP.String())
 }
 
 func (rq *Request) recycle() {
@@ -104,6 +112,9 @@ func (rq *Request) recycle() {
 	rq.connectFn = nil
 	rq.Initial = nil
 	rq.Context = nil
+	rq.remoteIP = nil
+	rq.sessionID = 0
+	rq.session = nil
 	// this gets optimized to calling the 'runtime.mapclear' function
 	// we don't expect this to improve speed, but it will lower GC load
 	for k := range rq.elems {
@@ -115,7 +126,7 @@ func (rq *Request) recycle() {
 
 // HeadHTML returns the HTML code needed to write in the HTML page's HEAD section.
 func (rq *Request) HeadHTML() template.HTML {
-	return rq.Jaws.headHTML + template.HTML(`<script>var jawsKey="`+JawsKeyString(rq.JawsKey)+`"</script>`) // #nosec G203
+	return rq.Jaws.headHTML + template.HTML(`<script>var jawsKey="`+rq.JawsKeyString()+`"</script>`) // #nosec G203
 }
 
 // GetConnectFn returns the currently set ConnectFn. That function will be called before starting the WebSocket tunnel if not nil.
@@ -131,6 +142,44 @@ func (rq *Request) SetConnectFn(fn ConnectFn) {
 	rq.mu.Lock()
 	rq.connectFn = fn
 	rq.mu.Unlock()
+}
+
+func (rq *Request) getSession(ensure bool) (sess *session) {
+	rq.mu.RLock()
+	sess = rq.session
+	rq.mu.RUnlock()
+	if sess == nil && ensure {
+		sess = rq.Jaws.getSession(rq.remoteIP, rq.sessionID)
+		rq.mu.Lock()
+		rq.session = sess
+		rq.mu.Unlock()
+	}
+	return
+}
+
+// SessionCookie returns a http.Cookie for the Request's session.
+// If you want to use the built-in session handling, you must set this cookie in the initial HTTP response.
+func (rq *Request) SessionCookie() *http.Cookie {
+	return &http.Cookie{
+		Name:     rq.Jaws.cookieName,
+		Value:    JawsKeyString(rq.sessionID),
+		Secure:   rq.Initial != nil && rq.Initial.TLS != nil,
+		HttpOnly: true,
+		SameSite: http.SameSiteDefaultMode,
+	}
+}
+
+// Get returns the session value associated with the key, or nil if
+// no session is established or the key does not exist.
+func (rq *Request) Get(key string) interface{} {
+	return rq.getSession(false).get(key)
+}
+
+// Set sets the session value associated with the key.
+// The session is created if needed, but you must also set the SessionCookie() in the HTTP response.
+// If value is nil, the key is removed from the session.
+func (rq *Request) Set(key string, val interface{}) {
+	rq.getSession(val != nil).set(key, val)
 }
 
 // Broadcast sends a broadcast to all Requests except the current one.
