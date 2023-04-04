@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/linkdata/deadlock"
 )
 
 // ConnectFn can be used to interact with a Request before message processing starts.
@@ -32,7 +34,7 @@ type Request struct {
 	Initial   *http.Request      // (read-only) initial HTTP request passed to Jaws.NewRequest
 	Context   context.Context    // (read-only) context passed to Jaws.NewRequest
 	sendCh    chan *Message      // (read-only) direct send message channel
-	mu        sync.RWMutex       // protects following
+	mu        deadlock.RWMutex   // protects following
 	connectFn ConnectFn          // a ConnectFn to call before starting message processing for the Request
 	elems     map[string]EventFn // map of registered HTML id's
 }

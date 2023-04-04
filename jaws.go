@@ -24,9 +24,10 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/linkdata/deadlock"
 )
 
 type Jaws struct {
@@ -36,8 +37,8 @@ type Jaws struct {
 	subCh    chan chan *Message
 	unsubCh  chan chan *Message
 	headHTML template.HTML
-	nextId   uint64     // atomic
-	mu       sync.Mutex // protects following
+	nextId   uint64         // atomic
+	mu       deadlock.Mutex // protects following
 	kg       *bufio.Reader
 	closeCh  chan struct{}
 	reqs     map[uint64]*Request
