@@ -138,9 +138,7 @@ func TestRequest_DuplicateRegistration(t *testing.T) {
 	var ef2 EventFn = func(rq *Request, id, evt, val string) error { return errors.New("fails") }
 	is.Equal(rq.RegisterEventFn("foo", ef1), "foo") // first reg succeeds
 	is.Equal(rq.RegisterEventFn("foo", ef1), "foo") // second reg succeeds
-	is.Equal(rq.Started(), false)
 	rq2 := jw.UseRequest(rq.JawsKey, nil)
-	is.Equal(rq.Started(), true)
 	is.Equal(rq, rq2)
 	is.Equal(rq.RegisterEventFn("foo", ef1), "foo")
 	// should succeed and not overwrite event fn
@@ -192,22 +190,6 @@ func TestRequest_SendFailsWhenContextDone(t *testing.T) {
 	fillCh(rq.sendCh)
 	cancel()
 	is.Equal(rq.Send(&Message{}), false)
-}
-
-func TestRequest_SendPanicsIfUseRequestNotCalled(t *testing.T) {
-	is := is.New(t)
-	defer func() {
-		e := recover()
-		if e == nil {
-			is.Fail()
-		}
-		t.Log(e)
-	}()
-	jw := New()
-	defer jw.Close()
-	rq := jw.NewRequest(context.Background(), nil)
-	defer rq.recycle()
-	rq.Send(&Message{})
 }
 
 func TestRequest_HeadHTML(t *testing.T) {

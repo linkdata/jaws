@@ -34,7 +34,6 @@ type Request struct {
 	sendCh    chan *Message      // (read-only) direct send message channel
 	mu        sync.RWMutex       // protects following
 	connectFn ConnectFn          // a ConnectFn to call before starting message processing for the Request
-	started   bool               // set to true after UseRequest() has been called
 	elems     map[string]EventFn // map of registered HTML id's
 }
 
@@ -88,9 +87,7 @@ func (rq *Request) start(hr *http.Request) (err error) {
 	if hr != nil {
 		actualIP = parseIP(hr.RemoteAddr)
 	}
-	if expectIP.Equal(actualIP) {
-		rq.started = true
-	} else {
+	if !expectIP.Equal(actualIP) {
 		err = fmt.Errorf("/jaws/%s: expected IP %q, got %q", JawsKeyString(rq.JawsKey), expectIP.String(), actualIP.String())
 	}
 	return
@@ -101,7 +98,6 @@ func (rq *Request) recycle() {
 	rq.Jaws = nil
 	rq.JawsKey = 0
 	rq.connectFn = nil
-	rq.started = false
 	rq.Initial = nil
 	rq.Context = nil
 	// this gets optimized to calling the 'runtime.mapclear' function
@@ -131,14 +127,6 @@ func (rq *Request) SetConnectFn(fn ConnectFn) {
 	rq.mu.Lock()
 	rq.connectFn = fn
 	rq.mu.Unlock()
-}
-
-// Started returns true if UseRequest has been called for the Request.
-func (rq *Request) Started() (yes bool) {
-	rq.mu.RLock()
-	yes = rq.started
-	rq.mu.RUnlock()
-	return
 }
 
 // Broadcast sends a broadcast to all Requests except the current one.
@@ -216,9 +204,6 @@ func (rq *Request) getDoneCh(msg *Message) (<-chan struct{}, <-chan struct{}) {
 	defer rq.mu.RUnlock()
 	if rq.Jaws == nil {
 		panic(fmt.Sprintf("Request.Send(%v): request is dead", msg))
-	}
-	if !rq.started {
-		panic(fmt.Sprintf("Request.Send(%v): UseRequest() not yet called", msg))
 	}
 	return rq.Jaws.Done(), rq.Context.Done()
 }
