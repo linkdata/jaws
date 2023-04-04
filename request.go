@@ -164,6 +164,8 @@ func (rq *Request) SessionCookie() *http.Cookie {
 		Name:     rq.Jaws.cookieName,
 		Value:    JawsKeyString(rq.sessionID),
 		Secure:   rq.Initial != nil && rq.Initial.TLS != nil,
+		MaxAge:   60 * 60,
+		Expires:  time.Now().Add(time.Hour),
 		HttpOnly: true,
 		SameSite: http.SameSiteDefaultMode,
 	}

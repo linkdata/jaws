@@ -134,9 +134,7 @@ func (jw *Jaws) NewRequest(ctx context.Context, hr *http.Request) (rq *Request) 
 		if cookie, err := hr.Cookie(jw.cookieName); err == nil {
 			if cookie.Value != "" {
 				if cookie.Expires.IsZero() || cookie.Expires.After(time.Now()) {
-					if err = cookie.Valid(); err == nil {
-						cookieVal = JawsKeyValue(cookie.Value)
-					}
+					cookieVal = JawsKeyValue(cookie.Value)
 				}
 			}
 		}
