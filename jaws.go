@@ -45,7 +45,7 @@ type Jaws struct {
 	kg         *bufio.Reader
 	closeCh    chan struct{}
 	reqs       map[uint64]*Request
-	sessions   map[uint64]*session
+	sessions   map[uint64]*Session
 }
 
 // NewWithDone returns a new JaWS object using the given completion channel.
@@ -61,7 +61,7 @@ func NewWithDone(doneCh <-chan struct{}) *Jaws {
 		headHTML:   HeadHTML([]string{JavascriptPath}, nil),
 		kg:         bufio.NewReader(rand.Reader),
 		reqs:       make(map[uint64]*Request),
-		sessions:   make(map[uint64]*session),
+		sessions:   make(map[uint64]*Session),
 	}
 }
 
@@ -146,7 +146,7 @@ func (jw *Jaws) NewRequest(ctx context.Context, hr *http.Request) (rq *Request) 
 	for rq == nil {
 		jawsKey := jw.nonZeroRandomLocked()
 		if _, ok := jw.reqs[jawsKey]; !ok {
-			var sess *session
+			var sess *Session
 			if sessionId != 0 {
 				sess = jw.sessions[sessionId]
 				if !sess.isRemoteOk(remoteIP) {
@@ -194,16 +194,48 @@ func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) {
 	return
 }
 
-func (jw *Jaws) createSession(remoteIP net.IP) (sess *session) {
+func (jw *Jaws) ensureSession(sess *Session) {
+	jw.mu.RLock()
+	_, ok := jw.sessions[sess.sessionID]
+	jw.mu.RUnlock()
+	if !ok {
+		jw.mu.Lock()
+		jw.sessions[sess.sessionID] = sess
+		jw.mu.Unlock()
+	}
+}
+
+func (jw *Jaws) createSession(remoteIP net.IP, expires time.Time) (sess *Session) {
 	jw.mu.Lock()
 	for sess == nil {
 		sessionID := jw.nonZeroRandomLocked()
 		if _, ok := jw.sessions[sessionID]; !ok {
-			sess = newSession(sessionID, remoteIP)
+			sess = newSession(sessionID, remoteIP, expires)
 			jw.sessions[sessionID] = sess
 		}
 	}
 	jw.mu.Unlock()
+	return
+}
+
+// SessionCount returns the number of active sessions.
+func (jw *Jaws) SessionCount() (n int) {
+	jw.mu.RLock()
+	n = len(jw.sessions)
+	jw.mu.RUnlock()
+	return
+}
+
+// Sessions returns a list of all active sessions, which may be nil.
+func (jw *Jaws) Sessions() (sl []*Session) {
+	jw.mu.RLock()
+	if n := len(jw.sessions); n > 0 {
+		sl = make([]*Session, 0, n)
+		for _, sess := range jw.sessions {
+			sl = append(sl, sess)
+		}
+	}
+	jw.mu.RUnlock()
 	return
 }
 
@@ -453,7 +485,8 @@ func (jw *Jaws) unsubscribe(msgCh chan *Message) {
 }
 
 func (jw *Jaws) maintenance(requestTimeout time.Duration) {
-	deadline := time.Now().Add(-requestTimeout)
+	now := time.Now()
+	deadline := now.Add(-requestTimeout)
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	logger := jw.Logger
@@ -463,6 +496,11 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 			if logger != nil && rq.Initial != nil {
 				logger.Println(fmt.Errorf("jaws: request timed out: %q", rq.Initial.RequestURI))
 			}
+		}
+	}
+	for k, sess := range jw.sessions {
+		if sess.GetExpires().Before(now) {
+			delete(jw.sessions, k)
 		}
 	}
 }

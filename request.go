@@ -36,7 +36,7 @@ type Request struct {
 	remoteIP  net.IP             // (read-only) remote IP, or nil
 	sendCh    chan *Message      // (read-only) direct send message channel
 	mu        deadlock.RWMutex   // protects following
-	session   *session           // session, if established
+	session   *Session           // session, if established
 	connectFn ConnectFn          // a ConnectFn to call before starting message processing for the Request
 	elems     map[string]EventFn // map of registered HTML id's
 }
@@ -59,7 +59,7 @@ var requestPool = sync.Pool{New: func() interface{} {
 	}
 }}
 
-func newRequest(ctx context.Context, j *Jaws, jawsKey uint64, hr *http.Request, remoteIP net.IP, sess *session) (rq *Request) {
+func newRequest(ctx context.Context, j *Jaws, jawsKey uint64, hr *http.Request, remoteIP net.IP, sess *Session) (rq *Request) {
 	rq = requestPool.Get().(*Request)
 	rq.Jaws = j
 	rq.JawsKey = jawsKey
@@ -135,59 +135,60 @@ func (rq *Request) SetConnectFn(fn ConnectFn) {
 	rq.mu.Unlock()
 }
 
-func (rq *Request) getSession() (sess *session) {
+func (rq *Request) getSession() (sess *Session) {
 	rq.mu.RLock()
 	sess = rq.session
 	rq.mu.RUnlock()
 	return
 }
 
-func (rq *Request) ensureSession() (sess *session, created bool) {
+func (rq *Request) ensureSession(minAge, maxAge int) (sess *Session, modified bool) {
 	rq.mu.RLock()
 	sess = rq.session
 	rq.mu.RUnlock()
-	if sess == nil {
-		created = true
-		sess = rq.Jaws.createSession(rq.remoteIP)
+	if sess != nil {
+		if time.Since(sess.GetExpires().Add(time.Second*time.Duration(minAge))) < 0 {
+			return
+		}
+		sess.SetExpires(time.Now().Add(time.Second * time.Duration(maxAge)))
+		rq.Jaws.ensureSession(sess)
+	} else {
+		sess = rq.Jaws.createSession(rq.remoteIP, time.Now().Add(time.Second*time.Duration(maxAge)))
 		rq.mu.Lock()
 		rq.session = sess
 		rq.mu.Unlock()
 	}
+	modified = true
 	return
 }
 
-// EnableSession ensures a session exists. Returns true if a new session was created.
-// You must also set the cookie returned from SessionCookie() in the initial HTTP response,
-// Either this or SessionCookie() must be called before using Set() or Get().
-func (rq *Request) EnableSession() (created bool) {
-	_, created = rq.ensureSession()
-	return
-}
-
-// SessionCookie returns a cookie to be set in the initial HTTP response for
-// session tracking, creating a session first if needed.
-// You should probably set the cookie's MaxAge and Expires fields before sending it.
-func (rq *Request) SessionCookie() *http.Cookie {
-	sess, _ := rq.ensureSession()
-	return &http.Cookie{
-		Name:     rq.Jaws.CookieName,
-		Value:    JawsKeyString(sess.sessionID),
-		Secure:   true,
-		HttpOnly: true,
-		SameSite: http.SameSiteDefaultMode,
+// EnsureSession ensures a session exists with an expiry least `minAge` seconds in the future.
+// Returns a session cookie to be set if a new session was created or if it's expiry time was updated.
+// Returns nil if the session already existed and is within the expiry time.
+// Must be called before using Set() or Get().
+func (rq *Request) EnsureSession(minAge, maxAge int) *http.Cookie {
+	if sess, created := rq.ensureSession(minAge, maxAge); created {
+		return sess.Cookie(rq.Jaws.CookieName)
 	}
+	return nil
+}
+
+// SessionCookie returns the cookie to be set in the initial HTTP response for
+// session tracking. Returns nil if no session is active.
+func (rq *Request) SessionCookie() *http.Cookie {
+	return rq.getSession().Cookie(rq.Jaws.CookieName)
 }
 
 // Get returns the session value associated with the key, or nil if
 // no session is established or the key does not exist.
 func (rq *Request) Get(key string) interface{} {
-	return rq.getSession().get(key)
+	return rq.getSession().Get(key)
 }
 
 // Set sets the session value associated with the key.
 // If value is nil, the key is removed from the session.
 func (rq *Request) Set(key string, val interface{}) {
-	rq.getSession().set(key, val)
+	rq.getSession().Set(key, val)
 }
 
 // Broadcast sends a broadcast to all Requests except the current one.

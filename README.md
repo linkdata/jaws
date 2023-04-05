@@ -74,6 +74,20 @@ the generated HTML code with the same value as it's JaWS id when it was
 registered. Unlike HTML ID's you can have multiple HTML entities with
 the same `jid`, and all will be affected by DOM updates.
 
+## Session handling
+
+JaWS has non-persistent session handling integrated. Sessions won't 
+be persisted across restarts and must have an expiry time.
+
+Sessions are bound o the client IP. Attempting to access an existing 
+session from a new IP will fail as if the session does not exist.
+
+No data is stored in the client browser except the randomly generated 
+session cookie. You can set the cookie name in `Jaws.CookieName`.
+
+Session key-value pairs can be accessed using `Request.Set()` and
+`Request.Get()`.
+
 ## A note on the Context
 
 The Request object embeds a context.Context inside it's struct,

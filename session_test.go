@@ -12,14 +12,24 @@ import (
 
 func TestSession_Object(t *testing.T) {
 	is := is.New(t)
-	var sess *session
-	sess.set("foo", "bar") // no effect, sess is nil
-	is.Equal(nil, sess.get("foo"))
-	sess = newSession(0, nil)
-	sess.set("foo", "bar")
-	is.Equal("bar", sess.get("foo"))
-	sess.set("foo", nil)
-	is.Equal(nil, sess.get("foo"))
+	sessionId := uint64(0x12345)
+	var sess *Session
+	sess.Set("foo", "bar") // no effect, sess is nil
+	is.Equal(nil, sess.Get("foo"))
+	sess = newSession(sessionId, nil, time.Now())
+	sess.Set("foo", "bar")
+	is.Equal("bar", sess.Get("foo"))
+	sess.Set("foo", nil)
+	is.Equal(nil, sess.Get("foo"))
+	cookie := sess.Cookie("testing")
+	is.Equal("testing", cookie.Name)
+	is.Equal(JawsKeyString(sessionId), cookie.Value)
+	when := sess.GetExpires()
+	is.True(!when.IsZero())
+	sess.SetExpires(when.Add(time.Second))
+	is.True(sess.GetExpires().After(when))
+	is.Equal(sessionId, sess.ID())
+	is.Equal(nil, sess.IP())
 }
 
 func TestSession_Use(t *testing.T) {
@@ -27,23 +37,28 @@ func TestSession_Use(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 	go jw.ServeWithTimeout(time.Second)
-	var sess *session
+	var sess *Session
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/3" {
 			r.RemoteAddr = ""
 		}
 		rq := jw.NewRequest(context.Background(), r)
-		rq.EnableSession()
+		if cookie := rq.EnsureSession(1, 60*60*12); cookie != nil {
+			http.SetCookie(w, cookie)
+		}
 		switch r.URL.Path {
 		case "/":
-			http.SetCookie(w, rq.SessionCookie())
-			rq.Set("foo", "bar")
 			sess = rq.session
+			rq.Set("foo", "bar")
 		case "/2":
 			is.Equal(rq.Get("foo"), "bar")
 			rq.Set("foo", "baz")
+			sess.SetExpires(time.Now().Add(time.Hour * -12))
 		case "/3":
 			is.Equal(rq.Get("foo"), nil)
+			cookie := rq.SessionCookie()
+			is.True(cookie != nil)
+			is.True(cookie.Value != JawsKeyString(sess.sessionID))
 		case "/4":
 			is.Equal(rq.Get("foo"), "baz")
 			rq.Set("foo", nil)
@@ -65,7 +80,7 @@ func TestSession_Use(t *testing.T) {
 	is.Equal(cookies[0].Name, jw.CookieName)
 	is.Equal(cookies[0].Value, JawsKeyString(sess.sessionID))
 	is.True(sess != nil)
-	is.Equal(sess.get("foo"), "bar")
+	is.Equal(sess.Get("foo"), "bar")
 
 	r2, err := http.NewRequest("GET", srv.URL+"/2", nil)
 	if err != nil {
@@ -76,7 +91,7 @@ func TestSession_Use(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	is.Equal(sess.get("foo"), "baz")
+	is.Equal(sess.Get("foo"), "baz")
 	is.True(resp != nil)
 
 	r3, err := http.NewRequest("GET", srv.URL+"/3", nil)
@@ -88,7 +103,7 @@ func TestSession_Use(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	is.Equal(sess.get("foo"), "baz")
+	is.Equal(sess.Get("foo"), "baz")
 	is.True(resp != nil)
 
 	r4, err := http.NewRequest("GET", srv.URL+"/4", nil)
@@ -100,7 +115,30 @@ func TestSession_Use(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	is.Equal(sess.get("foo"), nil)
-	is.Equal(sess.get("bar"), "quux")
+	is.Equal(sess.Get("foo"), nil)
+	is.Equal(sess.Get("bar"), "quux")
 	is.True(resp != nil)
+}
+
+func TestSession_Cleanup(t *testing.T) {
+	is := is.New(t)
+	jw := New()
+	defer jw.Close()
+	sess := jw.createSession(nil, time.Now().Add(time.Millisecond))
+	is.True(sess != nil)
+	is.Equal(jw.SessionCount(), 1)
+	sl := jw.Sessions()
+	is.Equal(1, len(sl))
+	is.Equal(sess, sl[0])
+
+	go jw.ServeWithTimeout(time.Millisecond)
+	waited := 0
+	for waited < 100 && jw.SessionCount() > 0 {
+		waited++
+		time.Sleep(time.Millisecond)
+	}
+	is.Equal(jw.SessionCount(), 0)
+	// revive the session
+	jw.ensureSession(sess)
+	is.Equal(jw.SessionCount(), 1)
 }
