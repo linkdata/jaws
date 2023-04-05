@@ -7,15 +7,17 @@ import (
 )
 
 type session struct {
-	remoteIP net.IP
-	mu       deadlock.RWMutex // protects following
-	data     map[string]interface{}
+	sessionID uint64
+	remoteIP  net.IP
+	mu        deadlock.RWMutex // protects following
+	data      map[string]interface{}
 }
 
-func newSession(remoteIP net.IP) *session {
+func newSession(sessionID uint64, remoteIP net.IP) *session {
 	return &session{
-		remoteIP: remoteIP,
-		data:     make(map[string]interface{}),
+		sessionID: sessionID,
+		remoteIP:  remoteIP,
+		data:      make(map[string]interface{}),
 	}
 }
 

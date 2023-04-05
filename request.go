@@ -34,7 +34,6 @@ type Request struct {
 	Initial   *http.Request      // (read-only) initial HTTP request passed to Jaws.NewRequest
 	Context   context.Context    // (read-only) context passed to Jaws.NewRequest
 	remoteIP  net.IP             // (read-only) remote IP, or nil
-	sessionID uint64             // (read-only) session ID, or zero
 	sendCh    chan *Message      // (read-only) direct send message channel
 	mu        deadlock.RWMutex   // protects following
 	session   *session           // session, if established
@@ -60,22 +59,15 @@ var requestPool = sync.Pool{New: func() interface{} {
 	}
 }}
 
-func newRequest(ctx context.Context, j *Jaws, key uint64, hr *http.Request, sess *session, sessionId uint64) (rq *Request) {
+func newRequest(ctx context.Context, j *Jaws, jawsKey uint64, hr *http.Request, remoteIP net.IP, sess *session) (rq *Request) {
 	rq = requestPool.Get().(*Request)
 	rq.Jaws = j
-	rq.JawsKey = key
+	rq.JawsKey = jawsKey
 	rq.Created = time.Now()
 	rq.Initial = hr
 	rq.Context = ctx
-	if hr != nil {
-		rq.remoteIP = parseIP(hr.RemoteAddr)
-	} else {
-		rq.remoteIP = nil
-	}
-	rq.sessionID = sessionId
-	if sess != nil && sess.isRemoteOk(rq.remoteIP) {
-		rq.session = sess
-	}
+	rq.remoteIP = remoteIP
+	rq.session = sess
 	return rq
 }
 
@@ -113,7 +105,6 @@ func (rq *Request) recycle() {
 	rq.Initial = nil
 	rq.Context = nil
 	rq.remoteIP = nil
-	rq.sessionID = 0
 	rq.session = nil
 	// this gets optimized to calling the 'runtime.mapclear' function
 	// we don't expect this to improve speed, but it will lower GC load
@@ -144,12 +135,20 @@ func (rq *Request) SetConnectFn(fn ConnectFn) {
 	rq.mu.Unlock()
 }
 
-func (rq *Request) getSession(ensure bool) (sess *session) {
+func (rq *Request) getSession() (sess *session) {
 	rq.mu.RLock()
 	sess = rq.session
 	rq.mu.RUnlock()
-	if sess == nil && ensure {
-		sess = rq.Jaws.getSession(rq.remoteIP, rq.sessionID)
+	return
+}
+
+func (rq *Request) ensureSession() (sess *session, created bool) {
+	rq.mu.RLock()
+	sess = rq.session
+	rq.mu.RUnlock()
+	if sess == nil {
+		created = true
+		sess = rq.Jaws.createSession(rq.remoteIP)
 		rq.mu.Lock()
 		rq.session = sess
 		rq.mu.Unlock()
@@ -157,15 +156,23 @@ func (rq *Request) getSession(ensure bool) (sess *session) {
 	return
 }
 
-// SessionCookie returns a http.Cookie for the Request's session.
-// If you want to use the built-in session handling, you must set this cookie in the initial HTTP response.
+// EnableSession ensures a session exists. Returns true if a new session was created.
+// You must also set the cookie returned from SessionCookie() in the initial HTTP response,
+// Either this or SessionCookie() must be called before using Set() or Get().
+func (rq *Request) EnableSession() (created bool) {
+	_, created = rq.ensureSession()
+	return
+}
+
+// SessionCookie returns a cookie to be set in the initial HTTP response for
+// session tracking, creating a session first if needed.
+// You should probably set the cookie's MaxAge and Expires fields before sending it.
 func (rq *Request) SessionCookie() *http.Cookie {
+	sess, _ := rq.ensureSession()
 	return &http.Cookie{
-		Name:     rq.Jaws.cookieName,
-		Value:    JawsKeyString(rq.sessionID),
-		Secure:   rq.Initial != nil && rq.Initial.TLS != nil,
-		MaxAge:   60 * 60,
-		Expires:  time.Now().Add(time.Hour),
+		Name:     rq.Jaws.CookieName,
+		Value:    JawsKeyString(sess.sessionID),
+		Secure:   true,
 		HttpOnly: true,
 		SameSite: http.SameSiteDefaultMode,
 	}
@@ -174,14 +181,13 @@ func (rq *Request) SessionCookie() *http.Cookie {
 // Get returns the session value associated with the key, or nil if
 // no session is established or the key does not exist.
 func (rq *Request) Get(key string) interface{} {
-	return rq.getSession(false).get(key)
+	return rq.getSession().get(key)
 }
 
 // Set sets the session value associated with the key.
-// The session is created if needed, but you must also set the SessionCookie() in the HTTP response.
 // If value is nil, the key is removed from the session.
 func (rq *Request) Set(key string, val interface{}) {
-	rq.getSession(val != nil).set(key, val)
+	rq.getSession().set(key, val)
 }
 
 // Broadcast sends a broadcast to all Requests except the current one.

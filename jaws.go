@@ -30,9 +30,11 @@ import (
 	"github.com/linkdata/deadlock"
 )
 
+const CookieNameDefault = "jaws"
+
 type Jaws struct {
+	CookieName string      // Name for session cookies, defaults to "jaws"
 	Logger     *log.Logger // If not nil, send debug info and errors here
-	cookieName string
 	doneCh     <-chan struct{}
 	bcastCh    chan *Message
 	subCh      chan chan *Message
@@ -51,7 +53,7 @@ type Jaws struct {
 // publishing HTML changes across all connections.
 func NewWithDone(doneCh <-chan struct{}) *Jaws {
 	return &Jaws{
-		cookieName: fmt.Sprintf("jaws-%d", time.Now().Unix()),
+		CookieName: CookieNameDefault,
 		doneCh:     doneCh,
 		bcastCh:    make(chan *Message, 1),
 		subCh:      make(chan chan *Message, 1),
@@ -129,13 +131,13 @@ func (jw *Jaws) MakeID() string {
 //
 // Don't use the http.Request's Context, as that will expire before the WebSocket call comes in.
 func (jw *Jaws) NewRequest(ctx context.Context, hr *http.Request) (rq *Request) {
-	var cookieVal uint64
+	var sessionId uint64
+	var remoteIP net.IP
 	if hr != nil {
-		if cookie, err := hr.Cookie(jw.cookieName); err == nil {
-			if cookie.Value != "" {
-				if cookie.Expires.IsZero() || cookie.Expires.After(time.Now()) {
-					cookieVal = JawsKeyValue(cookie.Value)
-				}
+		remoteIP = parseIP(hr.RemoteAddr)
+		if cookie, err := hr.Cookie(jw.CookieName); err == nil {
+			if cookie.Expires.IsZero() || cookie.Expires.After(time.Now()) {
+				sessionId = JawsKeyValue(cookie.Value)
 			}
 		}
 	}
@@ -145,12 +147,13 @@ func (jw *Jaws) NewRequest(ctx context.Context, hr *http.Request) (rq *Request) 
 		jawsKey := jw.nonZeroRandomLocked()
 		if _, ok := jw.reqs[jawsKey]; !ok {
 			var sess *session
-			if cookieVal == 0 {
-				cookieVal = jw.nonZeroRandomLocked()
-			} else {
-				sess = jw.sessions[cookieVal]
+			if sessionId != 0 {
+				sess = jw.sessions[sessionId]
+				if !sess.isRemoteOk(remoteIP) {
+					sess = nil
+				}
 			}
-			rq = newRequest(ctx, jw, jawsKey, hr, sess, cookieVal)
+			rq = newRequest(ctx, jw, jawsKey, hr, remoteIP, sess)
 			jw.reqs[jawsKey] = rq
 		}
 	}
@@ -191,21 +194,14 @@ func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) {
 	return
 }
 
-// getSession returns the session associated with the given id, creating a new one if needed.
-func (jw *Jaws) getSession(remoteIP net.IP, sessionId uint64) (sess *session) {
-	jw.mu.RLock()
-	if sess = jw.sessions[sessionId]; sess != nil {
-		if sess.isRemoteOk(remoteIP) {
-			jw.mu.RUnlock()
-			return
-		}
-		sess = nil
-	}
-	jw.mu.RUnlock()
+func (jw *Jaws) createSession(remoteIP net.IP) (sess *session) {
 	jw.mu.Lock()
-	if sess = jw.sessions[sessionId]; !sess.isRemoteOk(remoteIP) {
-		sess = newSession(remoteIP)
-		jw.sessions[sessionId] = sess
+	for sess == nil {
+		sessionID := jw.nonZeroRandomLocked()
+		if _, ok := jw.sessions[sessionID]; !ok {
+			sess = newSession(sessionID, remoteIP)
+			jw.sessions[sessionID] = sess
+		}
 	}
 	jw.mu.Unlock()
 	return
