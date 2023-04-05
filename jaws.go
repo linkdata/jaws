@@ -239,6 +239,16 @@ func (jw *Jaws) Sessions() (sl []*Session) {
 	return
 }
 
+// GetSession retrieves the session associated with the given cookie value, or nil.
+func (jw *Jaws) GetSession(cookieValue string) (sess *Session) {
+	if sessionId := JawsKeyValue(cookieValue); sessionId != 0 {
+		jw.mu.RLock()
+		sess = jw.sessions[sessionId]
+		jw.mu.RUnlock()
+	}
+	return
+}
+
 // GenerateHeadHTML (re-)generates the HTML code that goes in the HEAD section, ensuring
 // that the provided scripts and stylesheets in `extra` are loaded.
 //

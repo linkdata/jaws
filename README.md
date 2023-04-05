@@ -79,14 +79,15 @@ the same `jid`, and all will be affected by DOM updates.
 JaWS has non-persistent session handling integrated. Sessions won't 
 be persisted across restarts and must have an expiry time.
 
-Sessions are bound o the client IP. Attempting to access an existing 
+Sessions are bound to the client IP. Attempting to access an existing 
 session from a new IP will fail as if the session does not exist.
 
 No data is stored in the client browser except the randomly generated 
-session cookie. You can set the cookie name in `Jaws.CookieName`.
+session cookie. You can set the cookie name in `Jaws.CookieName`, the
+default is `jaws`.
 
 Session key-value pairs can be accessed using `Request.Set()` and
-`Request.Get()`.
+`Request.Get()`, or directly using a `Session` object.
 
 ## A note on the Context
 

@@ -81,6 +81,7 @@ func TestSession_Use(t *testing.T) {
 	is.Equal(cookies[0].Value, JawsKeyString(sess.sessionID))
 	is.True(sess != nil)
 	is.Equal(sess.Get("foo"), "bar")
+	is.Equal(jw.GetSession(cookies[0].Value), sess)
 
 	r2, err := http.NewRequest("GET", srv.URL+"/2", nil)
 	if err != nil {
