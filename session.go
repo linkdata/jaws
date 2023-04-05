@@ -94,14 +94,23 @@ func (sess *Session) IP() (ip net.IP) {
 	return
 }
 
+// CookieValue returns the cookie value for the Session.
+// It is safe to call on a nil Session, in which case it returns an empty string.
+func (sess *Session) CookieValue() (val string) {
+	if sess != nil {
+		val = JawsKeyString(sess.sessionID)
+	}
+	return
+}
+
 // Cookie returns the cookie for the Session with the given name.
 // It is safe to call on a nil Session, in which case it returns nil.
 func (sess *Session) Cookie(name string) (cookie *http.Cookie) {
 	if sess != nil {
 		cookie = &http.Cookie{
 			Name:     name,
-			Value:    JawsKeyString(sess.sessionID),
-			Expires:  sess.expires,
+			Value:    sess.CookieValue(),
+			Expires:  sess.GetExpires(),
 			Secure:   true,
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
