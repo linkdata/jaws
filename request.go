@@ -147,7 +147,7 @@ func (rq *Request) ensureSession(minAge, maxAge int) (sess *Session, modified bo
 	sess = rq.session
 	rq.mu.RUnlock()
 	if sess != nil {
-		if time.Since(sess.GetExpires().Add(time.Second*time.Duration(minAge))) < 0 {
+		if time.Since(sess.GetExpires().Add(time.Second*time.Duration(-minAge))) < 0 {
 			return
 		}
 		sess.SetExpires(time.Now().Add(time.Second * time.Duration(maxAge)))

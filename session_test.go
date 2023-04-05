@@ -43,7 +43,7 @@ func TestSession_Use(t *testing.T) {
 			r.RemoteAddr = ""
 		}
 		rq := jw.NewRequest(context.Background(), r)
-		if cookie := rq.EnsureSession(1, 60*60*12); cookie != nil {
+		if cookie := rq.EnsureSession(9, 20); cookie != nil {
 			http.SetCookie(w, cookie)
 		}
 		switch r.URL.Path {
@@ -53,7 +53,7 @@ func TestSession_Use(t *testing.T) {
 		case "/2":
 			is.Equal(rq.Get("foo"), "bar")
 			rq.Set("foo", "baz")
-			sess.SetExpires(time.Now().Add(time.Hour * -12))
+			sess.SetExpires(time.Now().Add(time.Second))
 		case "/3":
 			is.Equal(rq.Get("foo"), nil)
 			cookie := rq.SessionCookie()
