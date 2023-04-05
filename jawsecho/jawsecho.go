@@ -25,7 +25,7 @@ func Setup(router *echo.Echo, jw *jaws.Jaws) {
 		}
 		return c.Blob(http.StatusOK, "application/javascript; charset=utf-8", js)
 	})
-	router.GET("/jaws/ping", func(c echo.Context) error {
+	router.GET("/jaws/.ping", func(c echo.Context) error {
 		c.Response().Header().Set(echo.HeaderCacheControl, "no-cache")
 		select {
 		case <-jw.Done():

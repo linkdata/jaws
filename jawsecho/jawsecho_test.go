@@ -44,14 +44,14 @@ func TestJawsEcho_GetPing(t *testing.T) {
 	e := echo.New()
 	jawsecho.Setup(e, jw)
 
-	req := httptest.NewRequest("", "/jaws/ping", nil)
+	req := httptest.NewRequest("", "/jaws/.ping", nil)
 	w := httptest.NewRecorder()
 	e.Server.Handler.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusOK)
 
 	jw.Close()
 
-	req = httptest.NewRequest("", "/jaws/ping", nil)
+	req = httptest.NewRequest("", "/jaws/.ping", nil)
 	w = httptest.NewRecorder()
 	e.Server.Handler.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusServiceUnavailable)

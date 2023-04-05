@@ -36,16 +36,17 @@ provide a helper function for [Echo](https://echo.labstack.com/) with
 
   The response should be cached indefinitely.
 
-* `/jaws/[0-9a-fA-F]+`
+* `/jaws/[0-9a-z]+`
 
-  The WebSocket endpoint. The trailing hex string must be decoded and then the
-  matching JaWS Request retrieved using the JaWS object's `UseRequest()` method.
+  The WebSocket endpoint. The trailing string must be decoded using 
+  `jaws.JawsKeyValue()` and then the matching JaWS Request retrieved
+  using the JaWS object's `UseRequest()` method.
 
-  If the Request is not found, return a **404 Not Found**, otherwise call the
-  Request `ServeHTTP()` method to start the WebSocket and begin processing
-  events and updates.
+  If the Request is not found, return a **404 Not Found**, otherwise 
+  call the Request `ServeHTTP()` method to start the WebSocket and begin 
+  processing events and updates.
 
-* `/jaws/ping`
+* `/jaws/.ping`
 
   This endpoint is called by the Javascript while waiting for the server to
   come online. This is done in order to not spam the WebSocket endpoint with

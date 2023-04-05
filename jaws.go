@@ -171,26 +171,28 @@ func (jw *Jaws) nonZeroRandomLocked() (val uint64) {
 	return
 }
 
-// UseRequest removes the JaWS request with the given key from the request
-// map if it exists and the remoteAddr matches, and if so returns the Request.
+// UseRequest extracts the JaWS request with the given key from the request
+// map if it exists and the HTTP request remote IP matches.
 //
 // Call it when receiving the WebSocket connection on '/jaws/:key' to get the
 // associated Request, and then call it's ServeHTTP method to process the
 // WebSocket messages.
 //
-// Returns nil if the key was not found, in which case you should return a
-// HTTP "404 Not Found" status.
+// Returns nil if the key was not found or the IP doesn't match, in which
+// case you should return a HTTP "404 Not Found" status.
 func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) {
-	var err error
-	jw.mu.Lock()
-	if waitingRq, ok := jw.reqs[jawsKey]; ok {
-		if err = waitingRq.start(hr); err == nil {
-			delete(jw.reqs, jawsKey)
-			rq = waitingRq
+	if jawsKey != 0 {
+		var err error
+		jw.mu.Lock()
+		if waitingRq, ok := jw.reqs[jawsKey]; ok {
+			if err = waitingRq.start(hr); err == nil {
+				delete(jw.reqs, jawsKey)
+				rq = waitingRq
+			}
 		}
+		jw.mu.Unlock()
+		_ = jw.Log(err)
 	}
-	jw.mu.Unlock()
-	_ = jw.Log(err)
 	return
 }
 

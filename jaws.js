@@ -142,7 +142,7 @@ function jawsPingHandler(e) {
 function jawsReconnect(since) {
 	var req = new XMLHttpRequest();
 	req.addEventListener('readystatechange', jawsPingHandler);
-	req.open("GET", window.location.protocol + "//" + window.location.host + "/jaws/ping", true);
+	req.open("GET", window.location.protocol + "//" + window.location.host + "/jaws/.ping", true);
 	req.send(null);
 }
 
