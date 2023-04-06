@@ -38,6 +38,7 @@ func TestSession_Use(t *testing.T) {
 	defer jw.Close()
 	go jw.ServeWithTimeout(time.Second)
 	var sess *Session
+	var remoteAddr string
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/3" {
 			r.RemoteAddr = ""
@@ -49,6 +50,7 @@ func TestSession_Use(t *testing.T) {
 		switch r.URL.Path {
 		case "/":
 			sess = rq.session
+			remoteAddr = r.RemoteAddr
 			rq.Set("foo", "bar")
 		case "/2":
 			is.Equal(rq.Get("foo"), "bar")
@@ -81,7 +83,8 @@ func TestSession_Use(t *testing.T) {
 	is.Equal(cookies[0].Value, JawsKeyString(sess.sessionID))
 	is.True(sess != nil)
 	is.Equal(sess.Get("foo"), "bar")
-	is.Equal(jw.GetSession(cookies[0].Value), sess)
+	is.Equal(jw.GetSession(cookies[0].Value, remoteAddr), sess)
+	is.Equal(jw.GetSession(cookies[0].Value, "127.2.3.4:5"), nil)
 
 	r2, err := http.NewRequest("GET", srv.URL+"/2", nil)
 	if err != nil {

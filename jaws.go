@@ -241,12 +241,15 @@ func (jw *Jaws) Sessions() (sl []*Session) {
 	return
 }
 
-// GetSession retrieves the session associated with the given cookie value, or nil.
-func (jw *Jaws) GetSession(cookieValue string) (sess *Session) {
+// GetSession retrieves the session associated with the given cookie value and remote address, or nil.
+func (jw *Jaws) GetSession(cookieValue, remoteAddr string) (sess *Session) {
 	if sessionId := JawsKeyValue(cookieValue); sessionId != 0 {
 		jw.mu.RLock()
 		sess = jw.sessions[sessionId]
 		jw.mu.RUnlock()
+		if !sess.isRemoteOk(parseIP(remoteAddr)) {
+			sess = nil
+		}
 	}
 	return
 }
