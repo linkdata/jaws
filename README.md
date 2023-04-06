@@ -1,6 +1,7 @@
 [![build](https://github.com/linkdata/jaws/actions/workflows/go.yml/badge.svg)](https://github.com/linkdata/jaws/actions/workflows/go.yml)
 [![coverage](https://coveralls.io/repos/github/linkdata/jaws/badge.svg?branch=main)](https://coveralls.io/github/linkdata/jaws?branch=main)
 [![goreport](https://goreportcard.com/badge/github.com/linkdata/jaws)](https://goreportcard.com/report/github.com/linkdata/jaws)
+[![Docs](https://godoc.org/github.com/linkdata/jaws?status.svg)](https://godoc.org/github.com/linkdata/jaws)
 
 # JaWS
 
@@ -14,7 +15,7 @@ method to get the HTML code needed in the HEAD section of the HTML page.
 
 When the client has finished loading the document and parsed the scripts,
 the JaWS Javascript will request a WebSocket connection on `/jaws/*`, 
-with the `*` being the hexadecimal string of the Request.JawsKey value.
+with the `*` being the encoded Request.JawsKey value.
 
 On receiving the WebSocket HTTP request, decode the key parameter from 
 the URL and call the JaWS object's `UseRequest()` method to retrieve the
