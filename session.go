@@ -109,6 +109,7 @@ func (sess *Session) Cookie(name string) (cookie *http.Cookie) {
 	if sess != nil {
 		cookie = &http.Cookie{
 			Name:     name,
+			Path:     "/",
 			Value:    sess.CookieValue(),
 			Expires:  sess.GetExpires(),
 			Secure:   true,
