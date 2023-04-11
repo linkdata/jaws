@@ -9,6 +9,7 @@ import (
 )
 
 type Session struct {
+	name      string
 	sessionID uint64
 	remoteIP  net.IP
 	mu        deadlock.RWMutex // protects following
@@ -16,17 +17,14 @@ type Session struct {
 	data      map[string]interface{}
 }
 
-func newSession(sessionID uint64, remoteIP net.IP, expires time.Time) *Session {
+func newSession(name string, sessionID uint64, remoteIP net.IP, expires time.Time) *Session {
 	return &Session{
+		name:      name,
 		sessionID: sessionID,
 		remoteIP:  remoteIP,
 		expires:   expires,
 		data:      make(map[string]interface{}),
 	}
-}
-
-func (sess *Session) isRemoteOk(remoteIP net.IP) bool {
-	return sess != nil && sess.remoteIP.Equal(remoteIP)
 }
 
 // Get returns the value associated with the key, or nil.
@@ -103,18 +101,31 @@ func (sess *Session) CookieValue() (val string) {
 	return
 }
 
-// Cookie returns the cookie for the Session with the given name.
+// Cookie returns the cookie for the Session.
 // It is safe to call on a nil Session, in which case it returns nil.
-func (sess *Session) Cookie(name string) (cookie *http.Cookie) {
+func (sess *Session) Cookie() (cookie *http.Cookie) {
 	if sess != nil {
 		cookie = &http.Cookie{
-			Name:     name,
+			Name:     sess.name,
 			Path:     "/",
 			Value:    sess.CookieValue(),
 			Expires:  sess.GetExpires(),
 			Secure:   true,
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
+		}
+	}
+	return
+}
+
+// Refresh ensures the cookie expiry is at least `minAge` seconds in the future.
+// Returns a session cookie to be set if it's expiry time was updated, or nil.
+// It is safe to call on a nil Session, in which case it returns nil.
+func (sess *Session) Refresh(minAge, maxAge int) (cookie *http.Cookie) {
+	if sess != nil {
+		if time.Since(sess.GetExpires().Add(time.Second*time.Duration(-minAge))) >= 0 {
+			sess.SetExpires(time.Now().Add(time.Second * time.Duration(maxAge)))
+			cookie = sess.Cookie()
 		}
 	}
 	return

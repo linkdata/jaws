@@ -131,29 +131,12 @@ func (jw *Jaws) MakeID() string {
 //
 // Don't use the http.Request's Context, as that will expire before the WebSocket call comes in.
 func (jw *Jaws) NewRequest(ctx context.Context, hr *http.Request) (rq *Request) {
-	var sessionId uint64
-	var remoteIP net.IP
-	if hr != nil {
-		remoteIP = parseIP(hr.RemoteAddr)
-		if cookie, err := hr.Cookie(jw.CookieName); err == nil {
-			if cookie.Expires.IsZero() || cookie.Expires.After(time.Now()) {
-				sessionId = JawsKeyValue(cookie.Value)
-			}
-		}
-	}
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	for rq == nil {
 		jawsKey := jw.nonZeroRandomLocked()
 		if _, ok := jw.reqs[jawsKey]; !ok {
-			var sess *Session
-			if sessionId != 0 {
-				sess = jw.sessions[sessionId]
-				if !sess.isRemoteOk(remoteIP) {
-					sess = nil
-				}
-			}
-			rq = newRequest(ctx, jw, jawsKey, hr, remoteIP, sess)
+			rq = newRequest(ctx, jw, jawsKey, hr)
 			jw.reqs[jawsKey] = rq
 		}
 	}
@@ -215,7 +198,7 @@ func (jw *Jaws) createSession(remoteIP net.IP, expires time.Time) (sess *Session
 	for sess == nil {
 		sessionID := jw.nonZeroRandomLocked()
 		if _, ok := jw.sessions[sessionID]; !ok {
-			sess = newSession(sessionID, remoteIP, expires)
+			sess = newSession(jw.CookieName, sessionID, remoteIP, expires)
 			jw.sessions[sessionID] = sess
 		}
 	}
@@ -244,44 +227,60 @@ func (jw *Jaws) Sessions() (sl []*Session) {
 	return
 }
 
+func (jw *Jaws) getSessionLocked(hr *http.Request, remoteIP net.IP) *Session {
+	for _, cookie := range hr.Cookies() {
+		if cookie.Name == jw.CookieName {
+			if sessionId := JawsKeyValue(cookie.Value); sessionId != 0 {
+				if sess, ok := jw.sessions[sessionId]; ok && remoteIP.Equal(sess.remoteIP) {
+					return sess
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // GetSession retrieves the session associated with the given cookie value and remote address, or nil.
-func (jw *Jaws) GetSession(cookieValue, remoteAddr string) (sess *Session) {
-	if sessionId := JawsKeyValue(cookieValue); sessionId != 0 {
-		jw.mu.RLock()
-		sess = jw.sessions[sessionId]
-		jw.mu.RUnlock()
-		if !sess.isRemoteOk(parseIP(remoteAddr)) {
-			sess = nil
+func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
+	remoteIP := parseIP(hr.RemoteAddr)
+	jw.mu.RLock()
+	defer jw.mu.RUnlock()
+	return jw.getSessionLocked(hr, remoteIP)
+}
+
+// EnsureSession ensures a session exists with an expiry least `minAge` seconds in the future.
+// Returns a session cookie to be set if a new session was created or if it's expiry time was updated.
+// Returns nil if the session already existed and is within the expiry time.
+//
+// Subsequent Requests created with `NewRequest()` that have the cookie set and
+// originates from the same IP will be able to access the Session.
+//
+// If a new session was created, the session cookie is added to `hr` so you can call
+// `NewRequest()` with `hr` immediately. You still need to set the cookie in the response.
+func (jw *Jaws) EnsureSession(hr *http.Request, minAge, maxAge int) (cookie *http.Cookie) {
+	if hr != nil && maxAge > 0 {
+		if sess := jw.GetSession(hr); sess != nil {
+			cookie = sess.Refresh(minAge, maxAge)
+		} else {
+			expires := time.Now().Add(time.Second * time.Duration(maxAge))
+			cookie = jw.createSession(parseIP(hr.RemoteAddr), expires).Cookie()
+			hr.AddCookie(cookie)
 		}
 	}
 	return
 }
 
-// NewSession creates a new Session for a client with the given remote address and max age.
-// Remember to set the client browser cookie returned from Session.Cookie().
-func (jw *Jaws) NewSession(remoteAddr string, maxAge int) (sess *Session) {
-	if maxAge > 0 {
-		sess = jw.createSession(parseIP(remoteAddr), time.Now().Add(time.Second*time.Duration(maxAge)))
-	}
-	return
-}
-
-// DeleteSession removes the session associated with the given cookie value and returns a cookie
-// to be sent to the client browser that will delete the browser cookie.
+// DeleteSession sessions associated with the http.Request, if any.
+// Returns a cookie to be sent to the client browser that will delete the browser cookie.
 // Returns nil if the session was not found.
-func (jw *Jaws) DeleteSession(cookieValue, remoteAddr string) (cookie *http.Cookie) {
-	if sessionId := JawsKeyValue(cookieValue); sessionId != 0 {
-		remoteIP := parseIP(remoteAddr)
+func (jw *Jaws) DeleteSession(hr *http.Request) (cookie *http.Cookie) {
+	if sess := jw.GetSession(hr); sess != nil {
 		jw.mu.Lock()
-		defer jw.mu.Unlock()
-		if sess := jw.sessions[sessionId]; sess != nil {
-			if sess.isRemoteOk(remoteIP) {
-				delete(jw.sessions, sessionId)
-				if cookie = sess.Cookie(jw.CookieName); cookie != nil {
-					cookie.MaxAge = -1
-					cookie.Expires = time.Time{}
-				}
-			}
+		delete(jw.sessions, sess.sessionID)
+		jw.mu.Unlock()
+		if cookie = sess.Cookie(); cookie != nil {
+			cookie.MaxAge = -1
+			cookie.Expires = time.Time{}
 		}
 	}
 	return
