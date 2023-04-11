@@ -257,6 +257,15 @@ func (jw *Jaws) GetSession(cookieValue, remoteAddr string) (sess *Session) {
 	return
 }
 
+// NewSession creates a new Session for a client with the given remote address and max age.
+// Remember to set the client browser cookie returned from Session.Cookie().
+func (jw *Jaws) NewSession(remoteAddr string, maxAge int) (sess *Session) {
+	if maxAge > 0 {
+		sess = jw.createSession(parseIP(remoteAddr), time.Now().Add(time.Second*time.Duration(maxAge)))
+	}
+	return
+}
+
 // DeleteSession removes the session associated with the given cookie value and returns a cookie
 // to be sent to the client browser that will delete the browser cookie.
 // Returns nil if the session was not found.
