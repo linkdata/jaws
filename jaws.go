@@ -179,20 +179,6 @@ func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) {
 	return
 }
 
-// a session can expire while there are still live Requests referencing it,
-// in which case new Requests won't find it, but those that still live can
-// resurrect it.
-func (jw *Jaws) ensureSession(sess *Session) {
-	jw.mu.RLock()
-	_, ok := jw.sessions[sess.sessionID]
-	jw.mu.RUnlock()
-	if !ok {
-		jw.mu.Lock()
-		jw.sessions[sess.sessionID] = sess
-		jw.mu.Unlock()
-	}
-}
-
 func (jw *Jaws) createSession(remoteIP net.IP, expires time.Time) (sess *Session) {
 	jw.mu.Lock()
 	for sess == nil {
@@ -271,18 +257,22 @@ func (jw *Jaws) EnsureSession(hr *http.Request, minAge, maxAge int) (sess *Sessi
 	return
 }
 
-// DeleteSession sessions associated with the http.Request, if any.
-// Returns a cookie to be sent to the client browser that will delete the browser cookie.
-// Returns nil if the session was not found.
-func (jw *Jaws) DeleteSession(hr *http.Request) (cookie *http.Cookie) {
-	if sess := jw.GetSession(hr); sess != nil {
+// DeleteSession invalidates and expires the session associated with the http.Request
+// so that future Requests won't be able to associate with it, and requests to get it's
+// cookie will fail.
+//
+// Existing Requests already associated with the Session are unaffected.
+// Key/value pairs in the Session are left unmodified, you can use `Session.Clear()` to remove all of them.
+//
+// Returns the session and a cookie to be sent to the client browser that will delete the browser cookie.
+// Returns nil for both if the session was not found.
+func (jw *Jaws) DeleteSession(hr *http.Request) (sess *Session, cookie *http.Cookie) {
+	if sess = jw.GetSession(hr); sess != nil {
 		jw.mu.Lock()
 		delete(jw.sessions, sess.sessionID)
 		jw.mu.Unlock()
-		if cookie = sess.Cookie(); cookie != nil {
-			cookie.MaxAge = -1
-			cookie.Expires = time.Time{}
-		}
+		sess.SetExpires(time.Time{})
+		cookie = sess.Cookie()
 	}
 	return
 }

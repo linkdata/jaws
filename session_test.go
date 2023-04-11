@@ -18,7 +18,7 @@ func TestSession_Object(t *testing.T) {
 	sess.Set("foo", "bar") // no effect, sess is nil
 	is.Equal(nil, sess.Get("foo"))
 
-	sess = newSession("blergh", sessionId, nil, time.Now())
+	sess = newSession("blergh", sessionId, nil, time.Now().Add(time.Minute))
 	sess.Set("foo", "bar")
 	is.Equal("bar", sess.Get("foo"))
 	sess.Set("foo", nil)
@@ -123,9 +123,12 @@ func TestSession_Use(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	is.True(resp != nil)
+
 	is.Equal(wantSess.Get("foo"), nil)
 	is.Equal(wantSess.Get("bar"), "quux")
-	is.True(resp != nil)
+	wantSess.Clear()
+	is.Equal(wantSess.Get("bar"), nil)
 }
 
 func TestSession_Delete(t *testing.T) {
@@ -155,10 +158,12 @@ func TestSession_Delete(t *testing.T) {
 	is.Equal(cookie1.Name, jw.CookieName)
 	is.True(cookie1.MaxAge >= 0)
 	is.True(cookie1.Expires.After(time.Now()))
-	cookiefail := jw.DeleteSession(hr2)
+	sessfail, cookiefail := jw.DeleteSession(hr2)
+	is.Equal(sessfail, nil)
 	is.Equal(cookiefail, nil)
 	hr.RemoteAddr += "0"
-	cookie2 := jw.DeleteSession(hr)
+	sess2, cookie2 := jw.DeleteSession(hr)
+	is.True(sess2 != nil)
 	is.True(cookie2 != nil)
 	is.True(cookie2.MaxAge < 0)
 	is.True(cookie2.Expires.IsZero())
@@ -189,7 +194,4 @@ func TestSession_Cleanup(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	is.Equal(jw.SessionCount(), 0)
-	// revive the session
-	jw.ensureSession(sess)
-	is.Equal(jw.SessionCount(), 1)
 }

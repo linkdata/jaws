@@ -101,18 +101,23 @@ func (sess *Session) CookieValue() (val string) {
 	return
 }
 
-// Cookie returns the cookie for the Session.
+// Cookie returns the cookie for the Session. Returns a delete cookie if the Session is expired.
 // It is safe to call on a nil Session, in which case it returns nil.
 func (sess *Session) Cookie() (cookie *http.Cookie) {
 	if sess != nil {
+		expires := sess.GetExpires()
 		cookie = &http.Cookie{
 			Name:     sess.name,
 			Path:     "/",
 			Value:    sess.CookieValue(),
-			Expires:  sess.GetExpires(),
+			Expires:  expires,
 			Secure:   true,
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
+		}
+		if isExpired(expires, 0) {
+			cookie.MaxAge = -1
+			cookie.Expires = time.Time{}
 		}
 	}
 	return
@@ -122,11 +127,30 @@ func (sess *Session) Cookie() (cookie *http.Cookie) {
 // Returns a session cookie to be set if it's expiry time was updated, or nil.
 // It is safe to call on a nil Session, in which case it returns nil.
 func (sess *Session) Refresh(minAge, maxAge int) (cookie *http.Cookie) {
-	if sess != nil {
-		if time.Since(sess.GetExpires().Add(time.Second*time.Duration(-minAge))) >= 0 {
-			sess.SetExpires(time.Now().Add(time.Second * time.Duration(maxAge)))
-			cookie = sess.Cookie()
-		}
+	if sess != nil && sess.IsExpired(minAge) {
+		sess.SetExpires(time.Now().Add(time.Second * time.Duration(maxAge)))
+		cookie = sess.Cookie()
 	}
 	return
+}
+
+// IsExpired returns true if the session expiry is less than `minAge` seconds away.
+func (sess *Session) IsExpired(minAge int) bool {
+	return isExpired(sess.GetExpires(), minAge)
+}
+
+// Clear removes all key/value pairs from the session.
+// It is safe to call on a nil Session.
+func (sess *Session) Clear() {
+	if sess != nil {
+		sess.mu.Lock()
+		for k := range sess.data {
+			delete(sess.data, k)
+		}
+		sess.mu.Unlock()
+	}
+}
+
+func isExpired(t time.Time, minAge int) bool {
+	return t.IsZero() || time.Since(t.Add(time.Second*time.Duration(-minAge))) >= 0
 }
