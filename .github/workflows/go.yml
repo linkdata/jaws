@@ -19,7 +19,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v3
         with:
-          go-version: 1.16
+          go-version: 1.18
 
       - name: Build
         run: go build -v ./...
@@ -31,7 +31,7 @@ jobs:
         uses: securego/gosec@master
         with:
           args: ./...
-          
+
       - name: actions-goveralls
         uses: shogo82148/actions-goveralls@v1
         with:
@@ -39,4 +39,3 @@ jobs:
 
       - name: Go report card
         uses: creekorful/goreportcard-action@v1.0
-        
