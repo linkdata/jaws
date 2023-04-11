@@ -249,21 +249,22 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
 }
 
 // EnsureSession ensures a session exists with an expiry least `minAge` seconds in the future.
-// Returns a session cookie to be set if a new session was created or if it's expiry time was updated.
-// Returns nil if the session already existed and is within the expiry time.
+// Returns the session and optionally a session cookie to be set
+// if a new session was created or if it's expiry time was updated.
 //
 // Subsequent Requests created with `NewRequest()` that have the cookie set and
 // originates from the same IP will be able to access the Session.
 //
 // If a new session was created, the session cookie is added to `hr` so you can call
 // `NewRequest()` with `hr` immediately. You still need to set the cookie in the response.
-func (jw *Jaws) EnsureSession(hr *http.Request, minAge, maxAge int) (cookie *http.Cookie) {
+func (jw *Jaws) EnsureSession(hr *http.Request, minAge, maxAge int) (sess *Session, cookie *http.Cookie) {
 	if hr != nil && maxAge > 0 {
-		if sess := jw.GetSession(hr); sess != nil {
+		if sess = jw.GetSession(hr); sess != nil {
 			cookie = sess.Refresh(minAge, maxAge)
 		} else {
 			expires := time.Now().Add(time.Second * time.Duration(maxAge))
-			cookie = jw.createSession(parseIP(hr.RemoteAddr), expires).Cookie()
+			sess = jw.createSession(parseIP(hr.RemoteAddr), expires)
+			cookie = sess.Cookie()
 			hr.AddCookie(cookie)
 		}
 	}
