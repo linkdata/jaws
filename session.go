@@ -127,16 +127,14 @@ func (sess *Session) Cookie() (cookie *http.Cookie) {
 // Returns a session cookie to be set if it's expiry time was updated, or nil.
 // It is safe to call on a nil Session, in which case it returns nil.
 func (sess *Session) Refresh(minAge, maxAge int) (cookie *http.Cookie) {
-	if sess != nil && sess.IsExpired(minAge) {
-		sess.SetExpires(time.Now().Add(time.Second * time.Duration(maxAge)))
-		cookie = sess.Cookie()
+	if sess != nil {
+		expires := sess.GetExpires()
+		if !expires.IsZero() && isExpired(expires, minAge) {
+			sess.SetExpires(time.Now().Add(time.Second * time.Duration(maxAge)))
+			cookie = sess.Cookie()
+		}
 	}
 	return
-}
-
-// IsExpired returns true if the session expiry is less than `minAge` seconds away.
-func (sess *Session) IsExpired(minAge int) bool {
-	return isExpired(sess.GetExpires(), minAge)
 }
 
 // Clear removes all key/value pairs from the session.
