@@ -196,6 +196,9 @@ func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) {
 	return
 }
 
+// a session can expire while there are still live Requests referencing it,
+// in which case new Requests won't find it, but those that still live can
+// resurrect it.
 func (jw *Jaws) ensureSession(sess *Session) {
 	jw.mu.RLock()
 	_, ok := jw.sessions[sess.sessionID]
@@ -249,6 +252,27 @@ func (jw *Jaws) GetSession(cookieValue, remoteAddr string) (sess *Session) {
 		jw.mu.RUnlock()
 		if !sess.isRemoteOk(parseIP(remoteAddr)) {
 			sess = nil
+		}
+	}
+	return
+}
+
+// DeleteSession removes the session associated with the given cookie value and returns a cookie
+// to be sent to the client browser that will delete the browser cookie.
+// Returns nil if the session was not found.
+func (jw *Jaws) DeleteSession(cookieValue, remoteAddr string) (cookie *http.Cookie) {
+	if sessionId := JawsKeyValue(cookieValue); sessionId != 0 {
+		remoteIP := parseIP(remoteAddr)
+		jw.mu.Lock()
+		defer jw.mu.Unlock()
+		if sess := jw.sessions[sessionId]; sess != nil {
+			if sess.isRemoteOk(remoteIP) {
+				delete(jw.sessions, sessionId)
+				if cookie = sess.Cookie(jw.CookieName); cookie != nil {
+					cookie.MaxAge = -1
+					cookie.Expires = time.Time{}
+				}
+			}
 		}
 	}
 	return
@@ -416,9 +440,9 @@ func (jw *Jaws) Alert(lvl, msg string) {
 
 // Count returns the number of requests waiting for their WebSocket callbacks.
 func (jw *Jaws) Pending() (n int) {
-	jw.mu.Lock()
+	jw.mu.RLock()
 	n = len(jw.reqs)
-	jw.mu.Unlock()
+	jw.mu.RUnlock()
 	return
 }
 
@@ -500,14 +524,16 @@ func (jw *Jaws) unsubscribe(msgCh chan *Message) {
 }
 
 func (jw *Jaws) maintenance(requestTimeout time.Duration) {
+	var killReqs []uint64
+	var killSess []uint64
+
+	jw.mu.RLock()
 	now := time.Now()
 	deadline := now.Add(-requestTimeout)
-	jw.mu.Lock()
-	defer jw.mu.Unlock()
 	logger := jw.Logger
 	for k, rq := range jw.reqs {
 		if rq.Created.Before(deadline) {
-			delete(jw.reqs, k)
+			killReqs = append(killReqs, k)
 			if logger != nil && rq.Initial != nil {
 				logger.Println(fmt.Errorf("jaws: request timed out: %q", rq.Initial.RequestURI))
 			}
@@ -515,8 +541,20 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	}
 	for k, sess := range jw.sessions {
 		if sess.GetExpires().Before(now) {
+			killSess = append(killSess, k)
+		}
+	}
+	jw.mu.RUnlock()
+
+	if len(killReqs)+len(killSess) > 0 {
+		jw.mu.Lock()
+		for _, k := range killReqs {
+			delete(jw.reqs, k)
+		}
+		for _, k := range killSess {
 			delete(jw.sessions, k)
 		}
+		jw.mu.Unlock()
 	}
 }
 

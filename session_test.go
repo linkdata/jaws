@@ -124,6 +124,33 @@ func TestSession_Use(t *testing.T) {
 	is.True(resp != nil)
 }
 
+func TestSession_Delete(t *testing.T) {
+	const remoteAddr = "127.1.3.5:79"
+	is := is.New(t)
+	jw := New()
+	defer jw.Close()
+	remoteIP := parseIP(remoteAddr)
+	sess := jw.createSession(remoteIP, time.Now().Add(time.Minute))
+	is.True(sess != nil)
+	is.Equal(jw.SessionCount(), 1)
+	sl := jw.Sessions()
+	is.Equal(1, len(sl))
+	is.Equal(sess, sl[0])
+	cookie1 := sess.Cookie(jw.CookieName)
+	is.True(cookie1 != nil)
+	is.Equal(cookie1.Name, jw.CookieName)
+	is.True(cookie1.MaxAge >= 0)
+	is.True(cookie1.Expires.After(time.Now()))
+	cookiefail := jw.DeleteSession(cookie1.Value, "")
+	is.Equal(cookiefail, nil)
+	cookie2 := jw.DeleteSession(cookie1.Value, remoteAddr+"0")
+	is.True(cookie2 != nil)
+	is.True(cookie2.MaxAge < 0)
+	is.True(cookie2.Expires.IsZero())
+	is.Equal(cookie1.Name, cookie2.Name)
+	is.Equal(cookie1.Value, cookie2.Value)
+}
+
 func TestSession_Cleanup(t *testing.T) {
 	is := is.New(t)
 	jw := New()
