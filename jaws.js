@@ -196,6 +196,9 @@ function jawsMessage(e) {
 	var where = null;
 	var data = null;
 	switch (what) {
+		case 'reload':
+			window.location.reload();
+			return;
 		case 'inner':
 		case 'value':
 		case 'append':

@@ -8,24 +8,28 @@ import (
 	"time"
 
 	"github.com/matryer/is"
+	"nhooyr.io/websocket"
 )
 
 func TestSession_Object(t *testing.T) {
 	is := is.New(t)
+	jw := New()
+	defer jw.Close()
 
 	sessionId := uint64(0x12345)
 	var sess *Session
 	sess.Set("foo", "bar") // no effect, sess is nil
 	is.Equal(nil, sess.Get("foo"))
 
-	sess = newSession("blergh", sessionId, nil, time.Now().Add(time.Minute))
+	sess = newSession(jw, sessionId, nil, time.Now().Add(time.Minute))
 	sess.Set("foo", "bar")
 	is.Equal("bar", sess.Get("foo"))
 	sess.Set("foo", nil)
 	is.Equal(nil, sess.Get("foo"))
 	cookie := sess.Cookie()
-	is.Equal("blergh", cookie.Name)
+	is.Equal(jw.CookieName, cookie.Name)
 	is.Equal(JawsKeyString(sessionId), cookie.Value)
+	is.Equal(cookie.Value, sess.CookieValue())
 	when := sess.GetExpires()
 	is.True(!when.IsZero())
 	sess.SetExpires(when.Add(time.Second))
@@ -132,43 +136,64 @@ func TestSession_Use(t *testing.T) {
 
 func TestSession_Delete(t *testing.T) {
 	is := is.New(t)
-	jw := New()
-	defer jw.Close()
+	ts := newTestServer(is)
+	defer ts.Close()
+	go ts.jw.ServeWithTimeout(time.Second)
 
-	hr := httptest.NewRequest("GET", "/", nil)
-	sess, cookie := jw.EnsureSession(hr, 10, 60)
-	hr.AddCookie(cookie)
-	is.Equal(jw.GetSession(hr), sess)
-	is.True(sess != nil)
-	is.Equal(sess.Cookie().Value, cookie.Value)
-	is.Equal(jw.SessionCount(), 1)
-	sl := jw.Sessions()
+	is.True(ts.sess != nil)
+	is.Equal(ts.jw.SessionCount(), 1)
+	sl := ts.jw.Sessions()
 	is.Equal(1, len(sl))
-	is.Equal(sess, sl[0])
+	is.Equal(ts.sess, sl[0])
 
-	hr2 := httptest.NewRequest("GET", "/", nil)
-	hr2.AddCookie(cookie)
-	hr2.RemoteAddr = ""
-	sess2 := jw.GetSession(hr2)
-	is.Equal(sess2, nil)
-
-	cookie1 := sess.Cookie()
+	// session cookie seems ok
+	cookie1 := ts.sess.Cookie()
 	is.True(cookie1 != nil)
-	is.Equal(cookie1.Name, jw.CookieName)
+	is.Equal(cookie1.Name, ts.jw.CookieName)
 	is.True(cookie1.MaxAge >= 0)
 	is.True(cookie1.Expires.After(time.Now()))
-	sessfail, cookiefail := jw.DeleteSession(hr2)
-	is.Equal(sessfail, nil)
-	is.Equal(cookiefail, nil)
-	hr.RemoteAddr += "0"
-	sess2, cookie2 := jw.DeleteSession(hr)
-	is.True(sess2 != nil)
-	is.True(cookie2 != nil)
-	is.True(cookie2.MaxAge < 0)
-	is.True(cookie2.Expires.IsZero())
-	is.Equal(cookie1.Name, cookie2.Name)
-	is.Equal(cookie1.Value, cookie2.Value)
 
+	// trying to get the session from another IP fails
+	hr2 := httptest.NewRequest("GET", "/", nil)
+	hr2.AddCookie(ts.sess.Cookie())
+	hr2.RemoteAddr = "127.5.6.7:89"
+	sess := ts.jw.GetSession(hr2)
+	is.Equal(sess, nil)
+
+	// accessing from same IP but other port works
+	hr2.RemoteAddr = ts.hr.RemoteAddr + "0"
+	sess = ts.jw.GetSession(hr2)
+	is.Equal(ts.sess, sess)
+
+	ts.rq.RegisterEventFn("byebye", func(rq *Request, id, evt, val string) error {
+		sess2 := ts.jw.GetSession(rq.Initial)
+		is.Equal(ts.sess, sess2)
+		cookie2 := sess2.Close()
+		is.True(cookie2 != nil)
+		is.True(cookie2.MaxAge < 0)
+		is.True(cookie2.Expires.IsZero())
+		is.Equal(cookie1.Name, cookie2.Name)
+		is.Equal(cookie1.Value, cookie2.Value)
+		return nil
+	})
+
+	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), nil)
+	is.NoErr(err)
+	is.Equal(resp.StatusCode, http.StatusSwitchingProtocols)
+	defer conn.Close(websocket.StatusNormalClosure, "")
+
+	ts.rq.Send(&Message{
+		Elem: "byebye",
+		What: "trigger",
+	})
+
+	ctx, cancel := context.WithTimeout(ts.ctx, time.Second)
+	defer cancel()
+
+	mt, b, err := conn.Read(ctx)
+	is.NoErr(err)
+	is.Equal(mt, websocket.MessageText)
+	is.Equal(string(b), sess.jid()+"\nreload\n")
 }
 
 func TestSession_Cleanup(t *testing.T) {

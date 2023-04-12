@@ -17,27 +17,54 @@ import (
 )
 
 type testServer struct {
-	is     *is.I
-	jw     *Jaws
-	ctx    context.Context
-	cancel context.CancelFunc
-	rq     *Request
-	srv    *httptest.Server
+	is          *is.I
+	jw          *Jaws
+	ctx         context.Context
+	cancel      context.CancelFunc
+	hr          *http.Request
+	rq          *Request
+	sess        *Session
+	srv         *httptest.Server
+	connectedCh chan struct{}
 }
 
-func newTestServer(is *is.I) *testServer {
+func newTestServer(is *is.I) (ts *testServer) {
 	jw := New()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
-	rq := jw.NewRequest(ctx, nil)
-	srv := httptest.NewServer(rq)
-	return &testServer{
-		is:     is,
-		jw:     jw,
-		ctx:    ctx,
-		cancel: cancel,
-		rq:     rq,
-		srv:    srv,
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	sess, _ := jw.EnsureSession(hr, 10, 20)
+	rq := jw.NewRequest(ctx, hr)
+	ts = &testServer{
+		is:          is,
+		jw:          jw,
+		ctx:         ctx,
+		cancel:      cancel,
+		hr:          hr,
+		rq:          rq,
+		sess:        sess,
+		connectedCh: make(chan struct{}),
 	}
+	rq.SetConnectFn(ts.connected)
+	ts.srv = httptest.NewServer(ts)
+	return
+}
+
+func (ts *testServer) connected(rq *Request) error {
+	if rq == ts.rq {
+		close(ts.connectedCh)
+	}
+	return nil
+}
+
+func (ts *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/jaws/") {
+		jawsKey := JawsKeyValue(strings.TrimPrefix(r.URL.Path, "/jaws/"))
+		if rq := ts.jw.UseRequest(jawsKey, r); rq != nil {
+			rq.ServeHTTP(w, r)
+			return
+		}
+	}
+	ts.rq.ServeHTTP(w, r)
 }
 
 func (ts *testServer) Path() string {

@@ -406,14 +406,17 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
+	var wait int32
+
 	rq.RegisterEventFn("bomb", func(_ *Request, id, evt, val string) error {
-		time.Sleep(time.Millisecond)
+		time.Sleep(time.Millisecond * time.Duration(atomic.AddInt32(&wait, 1)))
 		return nil
 	})
 
 	rq.expectPanic = true
 	rq.jw.Logger = nil
 	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
 	for {
 		select {
 		case rq.sendCh <- &Message{Elem: "bomb", What: "trigger"}:

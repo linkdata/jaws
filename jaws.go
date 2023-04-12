@@ -184,7 +184,7 @@ func (jw *Jaws) createSession(remoteIP net.IP, expires time.Time) (sess *Session
 	for sess == nil {
 		sessionID := jw.nonZeroRandomLocked()
 		if _, ok := jw.sessions[sessionID]; !ok {
-			sess = newSession(jw.CookieName, sessionID, remoteIP, expires)
+			sess = newSession(jw, sessionID, remoteIP, expires)
 			jw.sessions[sessionID] = sess
 		}
 	}
@@ -257,24 +257,10 @@ func (jw *Jaws) EnsureSession(hr *http.Request, minAge, maxAge int) (sess *Sessi
 	return
 }
 
-// DeleteSession invalidates and expires the session associated with the http.Request
-// so that future Requests won't be able to associate with it, and requests to get it's
-// cookie will fail.
-//
-// Existing Requests already associated with the Session are unaffected.
-// Key/value pairs in the Session are left unmodified, you can use `Session.Clear()` to remove all of them.
-//
-// Returns the session and a cookie to be sent to the client browser that will delete the browser cookie.
-// Returns nil for both if the session was not found.
-func (jw *Jaws) DeleteSession(hr *http.Request) (sess *Session, cookie *http.Cookie) {
-	if sess = jw.GetSession(hr); sess != nil {
-		jw.mu.Lock()
-		delete(jw.sessions, sess.sessionID)
-		jw.mu.Unlock()
-		sess.SetExpires(time.Time{})
-		cookie = sess.Cookie()
-	}
-	return
+func (jw *Jaws) deleteSession(sessionID uint64) {
+	jw.mu.Lock()
+	delete(jw.sessions, sessionID)
+	jw.mu.Unlock()
 }
 
 // GenerateHeadHTML (re-)generates the HTML code that goes in the HEAD section, ensuring
