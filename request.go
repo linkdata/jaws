@@ -96,7 +96,7 @@ func (rq *Request) start(hr *http.Request) error {
 	if hr != nil {
 		actualIP = parseIP(hr.RemoteAddr)
 	}
-	if expectIP.Equal(actualIP) {
+	if equalIP(expectIP, actualIP) {
 		return nil
 	}
 	return fmt.Errorf("/jaws/%s: expected IP %q, got %q", rq.JawsKeyString(), expectIP.String(), actualIP.String())

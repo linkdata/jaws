@@ -20,8 +20,11 @@ import (
 func TestJaws_parseIP(t *testing.T) {
 	is := is.New(t)
 	is.Equal(parseIP(""), nil)
-	is.Equal(parseIP("127.0.0.1"), net.IPv4(127, 0, 0, 1))
-	is.Equal(parseIP("127.0.0.2:1234"), net.IPv4(127, 0, 0, 2))
+	is.True(parseIP("192.168.0.1").Equal(net.IPv4(192, 168, 0, 1)))
+	is.True(parseIP("192.168.0.2:1234").Equal(net.IPv4(192, 168, 0, 2)))
+	is.True(parseIP("127.0.0.1").Equal(net.IPv4(127, 0, 0, 1)))
+	is.True(parseIP("::1").Equal(net.IPv6loopback))
+	is.True(equalIP(parseIP("127.0.0.1"), parseIP("::1")))
 }
 
 func TestJaws_MultipleCloseCalls(t *testing.T) {
@@ -198,7 +201,7 @@ func TestJaws_UseRequest(t *testing.T) {
 	rq1 := jw.NewRequest(context.Background(), nil)
 	is.True(rq1.JawsKey != 0)
 
-	rq2 := jw.NewRequest(context.Background(), &http.Request{RemoteAddr: "127.0.0.2:1010"})
+	rq2 := jw.NewRequest(context.Background(), &http.Request{RemoteAddr: "10.0.0.2:1010"})
 	is.True(rq2.JawsKey != 0)
 	is.True(rq1.JawsKey != rq2.JawsKey)
 	is.Equal(jw.Pending(), 2)
@@ -207,15 +210,15 @@ func TestJaws_UseRequest(t *testing.T) {
 	is.Equal(rqfail, nil)
 	is.Equal(jw.Pending(), 2)
 
-	rqfail = jw.UseRequest(rq1.JawsKey, &http.Request{RemoteAddr: "127.0.0.1:1010"}) // wrong IP, expect blank
+	rqfail = jw.UseRequest(rq1.JawsKey, &http.Request{RemoteAddr: "10.0.0.1:1010"}) // wrong IP, expect blank
 	is.Equal(rqfail, nil)
 	is.Equal(jw.Pending(), 2)
 
-	rqfail = jw.UseRequest(rq2.JawsKey, &http.Request{RemoteAddr: "127.0.0.1:1010"}) // wrong IP, expect .2
+	rqfail = jw.UseRequest(rq2.JawsKey, &http.Request{RemoteAddr: "10.0.0.1:1010"}) // wrong IP, expect .2
 	is.Equal(rqfail, nil)
 	is.Equal(jw.Pending(), 2)
 
-	rq2ret := jw.UseRequest(rq2.JawsKey, &http.Request{RemoteAddr: "127.0.0.2:1212"}) // different port is OK
+	rq2ret := jw.UseRequest(rq2.JawsKey, &http.Request{RemoteAddr: "10.0.0.2:1212"}) // different port is OK
 	is.Equal(rq2, rq2ret)
 	is.Equal(jw.Pending(), 1)
 

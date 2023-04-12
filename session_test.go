@@ -47,7 +47,7 @@ func TestSession_Use(t *testing.T) {
 	var wantSess *Session
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/3" {
-			r.RemoteAddr = "127.4.5.6:78"
+			r.RemoteAddr = "10.4.5.6:78"
 		}
 		sess, cookie := jw.EnsureSession(r, minAge, minAge*2)
 		if cookie != nil {
@@ -156,7 +156,7 @@ func TestSession_Delete(t *testing.T) {
 	// trying to get the session from another IP fails
 	hr2 := httptest.NewRequest("GET", "/", nil)
 	hr2.AddCookie(ts.sess.Cookie())
-	hr2.RemoteAddr = "127.5.6.7:89"
+	hr2.RemoteAddr = "10.5.6.7:89"
 	sess := ts.jw.GetSession(hr2)
 	is.Equal(sess, nil)
 

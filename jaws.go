@@ -217,7 +217,7 @@ func (jw *Jaws) getSessionLocked(hr *http.Request, remoteIP net.IP) *Session {
 	for _, cookie := range hr.Cookies() {
 		if cookie.Name == jw.CookieName {
 			if sessionId := JawsKeyValue(cookie.Value); sessionId != 0 {
-				if sess, ok := jw.sessions[sessionId]; ok && remoteIP.Equal(sess.remoteIP) {
+				if sess, ok := jw.sessions[sessionId]; ok && equalIP(remoteIP, sess.remoteIP) {
 					return sess
 				}
 			}
@@ -541,6 +541,10 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 		}
 		jw.mu.Unlock()
 	}
+}
+
+func equalIP(a, b net.IP) bool {
+	return a.Equal(b) || (a.IsLoopback() && b.IsLoopback())
 }
 
 func parseIP(remoteAddr string) (ip net.IP) {
