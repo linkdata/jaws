@@ -35,6 +35,7 @@ func TestSession_Object(t *testing.T) {
 }
 
 func TestSession_Use(t *testing.T) {
+	const minAge = 60 * 5
 	is := is.New(t)
 	jw := New()
 	defer jw.Close()
@@ -42,9 +43,9 @@ func TestSession_Use(t *testing.T) {
 	var wantSess *Session
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/3" {
-			r.RemoteAddr = ""
+			r.RemoteAddr = "127.4.5.6:78"
 		}
-		sess, cookie := jw.EnsureSession(r, 60*5, 60*60)
+		sess, cookie := jw.EnsureSession(r, minAge, minAge*2)
 		if cookie != nil {
 			http.SetCookie(w, cookie)
 		}
@@ -57,10 +58,8 @@ func TestSession_Use(t *testing.T) {
 		case "/2":
 			is.Equal(rq.Get("foo"), "bar")
 			rq.Set("foo", "baz")
-			wantSess.SetExpires(time.Now().Add(time.Second))
+			wantSess.SetExpires(time.Now().Add(time.Second * minAge / 2))
 		case "/3":
-			is.Equal(r.RemoteAddr, "")
-			is.Equal(rq.Session().IP(), nil)
 			is.True(rq.Session() != wantSess)
 			is.Equal(rq.Get("foo"), nil)
 			cookie := rq.Session().Cookie()
