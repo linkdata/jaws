@@ -25,9 +25,7 @@ start up the WebSocket and begin processing Javascript events and DOM updates.
 ## Routing
 
 JaWS doesn't enforce any particular router, but it does require several
-endpoints to be registered in whichever router you choose to use. We do
-provide a package for [Echo](https://echo.labstack.com/) with
-[jawsecho](https://github.com/linkdata/jawsecho/).
+endpoints to be registered in whichever router you choose to use. 
 
 * `/jaws/jaws.*.js`
 
@@ -58,6 +56,19 @@ provide a package for [Echo](https://echo.labstack.com/) with
   requests, return **200 OK**.
   
   The response should not be cached.
+
+You can use `Jaws.ServeHTTP()` to handle them if using a `http.HandlerFunc`
+is an option. For example, with [Echo](https://echo.labstack.com/):
+
+```go
+jw := jaws.New()
+defer jw.Close()
+router := echo.New()
+router.GET("/jaws/*", func(c echo.Context) error {
+  jw.ServeHTTP(c.Response().Writer, c.Request())
+  return nil
+})
+```
 
 ## Registering HTML entities and Javascript events
 
