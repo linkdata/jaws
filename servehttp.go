@@ -29,7 +29,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					break
 				}
 			}
-			w.Write(js)
+			_, _ = w.Write(js) // #nosec G104
 			return
 		case "/jaws/.ping":
 			select {
