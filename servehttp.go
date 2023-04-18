@@ -13,7 +13,7 @@ var headerContentGZip = []string{"gzip"}
 
 // ServeHTTP can handle the required JaWS endpoints, which all start with "/jaws/".
 func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if strings.HasPrefix(r.RequestURI, "/jaws/") {
+	if r.Method == http.MethodGet && strings.HasPrefix(r.RequestURI, "/jaws/") {
 		hdr := w.Header()
 		hdr["Cache-Control"] = headerCacheNoCache
 		switch r.RequestURI {
