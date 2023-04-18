@@ -9,23 +9,25 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      GO111MODULE: on
+    strategy:
+      fail-fast: false
+      matrix:
+        go:
+          - "1.16"
+          - "1.20"
     steps:
       - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v4
         with:
-          go-version: 1.18
+          go-version: ${{ matrix.go }}
 
       - name: Build
         run: go build -v ./...
 
       - name: Test
-        run: go test -v -coverprofile=coverage.txt ./...
+        run: go test -bench=. -coverprofile=coverage.txt ./...
 
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master
