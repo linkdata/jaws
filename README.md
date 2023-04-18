@@ -57,7 +57,7 @@ endpoints to be registered in whichever router you choose to use.
   
   The response should not be cached.
 
-You can use `Jaws.ServeHTTP()` to handle them if using a `http.HandlerFunc`
+You can use `Jaws.ServeHTTP()` to handle them if using `http.Handler`
 is an option. For example, with [Echo](https://echo.labstack.com/):
 
 ```go
