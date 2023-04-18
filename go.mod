@@ -9,7 +9,7 @@ require (
 )
 
 require (
-	github.com/klauspost/compress v1.16.5 // indirect
+	github.com/klauspost/compress v1.15.5 // indirect
 	github.com/mattn/go-isatty v0.0.18 // indirect
 	golang.org/x/sys v0.7.0 // indirect
 )
