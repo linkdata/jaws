@@ -25,7 +25,9 @@ start up the WebSocket and begin processing Javascript events and DOM updates.
 ## Routing
 
 JaWS doesn't enforce any particular router, but it does require several
-endpoints to be registered in whichever router you choose to use. 
+endpoints to be registered in whichever router you choose to use. All of
+the endpoints start with "/jaws/", and `Jaws.ServeHTTP()` will handle all
+of them.
 
 * `/jaws/jaws.*.js`
 
@@ -57,8 +59,15 @@ endpoints to be registered in whichever router you choose to use.
   
   The response should not be cached.
 
-You can use `Jaws.ServeHTTP()` to handle them if using `http.Handler`
-is an option. For example, with [Echo](https://echo.labstack.com/):
+Handling the routes with the standard library's `http.DefaultServeMux`:
+
+```go
+jw := jaws.New()
+defer jw.Close()
+http.DefaultServeMux.Handle("/jaws/", jw)
+```
+
+Handling the routes with [Echo](https://echo.labstack.com/):
 
 ```go
 jw := jaws.New()
