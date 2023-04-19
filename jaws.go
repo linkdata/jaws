@@ -4,10 +4,6 @@
 // It integrates well with Go's html/template package,
 // but can be used without it. It can be used with any
 // router that supports the standard ServeHTTP interface.
-//
-// It comes with a small package 'jawsecho' that
-// integrates with Echo and also doubles as an example
-// for integration with other routers.
 package jaws
 
 import (
