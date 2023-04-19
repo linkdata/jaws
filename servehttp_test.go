@@ -15,19 +15,24 @@ func TestServeHTTP_GetJavascript(t *testing.T) {
 	go jw.Serve()
 	defer jw.Close()
 
+	mux := http.NewServeMux()
+	mux.Handle("/jaws/", jw)
+
 	req := httptest.NewRequest("", JavascriptPath, nil)
 	w := httptest.NewRecorder()
 
-	jw.ServeHTTP(w, req)
+	mux.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusOK)
 	is.Equal(w.Body.Len(), len(JavascriptText))
 	is.Equal(w.Header()["Cache-Control"], headerCacheStatic)
 	is.Equal(w.Header()["Content-Type"], headerContentType)
+	is.Equal(w.Header()["Content-Encoding"], nil)
 
 	req = httptest.NewRequest("", JavascriptPath, nil)
 	req.Header.Add("Accept-Encoding", "gzip")
 	w = httptest.NewRecorder()
-	jw.ServeHTTP(w, req)
+
+	mux.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusOK)
 	is.Equal(w.Body.Len(), len(JavascriptGZip))
 	is.Equal(w.Header()["Cache-Control"], headerCacheStatic)
@@ -50,14 +55,14 @@ func TestServeHTTP_GetPing(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/jaws/.ping", nil)
 	w = httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
-	is.Equal(w.Code, http.StatusNotFound)
+	is.Equal(w.Code, http.StatusMethodNotAllowed)
 	is.Equal(w.Header()["Cache-Control"], nil)
 
 	req = httptest.NewRequest("", "/jaws/.pong", nil)
 	w = httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusNotFound)
-	is.Equal(w.Header()["Cache-Control"], headerCacheNoCache)
+	is.Equal(w.Header()["Cache-Control"], nil)
 
 	req = httptest.NewRequest("", "/something_else", nil)
 	w = httptest.NewRecorder()
@@ -80,22 +85,22 @@ func TestServeHTTP_GetKey(t *testing.T) {
 	go jw.Serve()
 	defer jw.Close()
 
-	req := httptest.NewRequest("", "/jaws/not-a-proper-key", nil)
+	req := httptest.NewRequest("", "/jaws/", nil)
 	w := httptest.NewRecorder()
-
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusNotFound)
-	is.Equal(w.Header()["Cache-Control"], headerCacheNoCache)
+	is.Equal(w.Header()["Cache-Control"], nil)
 
 	req = httptest.NewRequest("", "/jaws/12345678", nil)
 	w = httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusNotFound)
-	is.Equal(w.Header()["Cache-Control"], headerCacheNoCache)
+	is.Equal(w.Header()["Cache-Control"], nil)
 
 	rq := jw.NewRequest(context.Background(), req)
 	req = httptest.NewRequest("", "/jaws/"+rq.JawsKeyString(), nil)
 	w = httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusUpgradeRequired)
+	is.Equal(w.Header()["Cache-Control"], nil)
 }
