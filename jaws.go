@@ -17,6 +17,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"strconv"
 	"strings"
@@ -209,25 +210,56 @@ func (jw *Jaws) Sessions() (sl []*Session) {
 	return
 }
 
-func (jw *Jaws) getSessionLocked(hr *http.Request, remoteIP net.IP) *Session {
-	for _, cookie := range hr.Cookies() {
-		if cookie.Name == jw.CookieName {
-			if sessionId := JawsKeyValue(cookie.Value); sessionId != 0 {
-				if sess, ok := jw.sessions[sessionId]; ok && equalIP(remoteIP, sess.remoteIP) {
-					return sess
-				}
-			}
+func (jw *Jaws) getSessionLocked(sessIds []uint64, remoteIP net.IP) *Session {
+	for _, sessId := range sessIds {
+		if sess, ok := jw.sessions[sessId]; ok && equalIP(remoteIP, sess.remoteIP) {
+			return sess
 		}
 	}
 	return nil
 }
 
+func cutString(s string, sep byte) (before, after string) {
+	if i := strings.IndexByte(s, sep); i >= 0 {
+		return s[:i], s[i+1:]
+	}
+	return s, ""
+}
+
+func getCookieSessionsIds(h http.Header, wanted string) (cookies []uint64) {
+	for _, line := range h["Cookie"] {
+		if strings.Contains(line, wanted) {
+			var part string
+			line = textproto.TrimString(line)
+			for len(line) > 0 {
+				part, line = cutString(line, ';')
+				if part = textproto.TrimString(part); part != "" {
+					name, val := cutString(part, '=')
+					name = textproto.TrimString(name)
+					if name == wanted {
+						if len(val) > 1 && val[0] == '"' && val[len(val)-1] == '"' {
+							val = val[1 : len(val)-1]
+						}
+						if sessId := JawsKeyValue(val); sessId != 0 {
+							cookies = append(cookies, sessId)
+						}
+					}
+				}
+			}
+		}
+	}
+	return
+}
+
 // GetSession retrieves the session associated with the given cookie value and remote address, or nil.
 func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
-	remoteIP := parseIP(hr.RemoteAddr)
-	jw.mu.RLock()
-	defer jw.mu.RUnlock()
-	return jw.getSessionLocked(hr, remoteIP)
+	if sessIds := getCookieSessionsIds(hr.Header, jw.CookieName); len(sessIds) > 0 {
+		remoteIP := parseIP(hr.RemoteAddr)
+		jw.mu.RLock()
+		sess = jw.getSessionLocked(sessIds, remoteIP)
+		jw.mu.RUnlock()
+	}
+	return
 }
 
 // EnsureSession ensures a session exists with an expiry least `minAge` seconds in the future.

@@ -27,6 +27,18 @@ func TestJaws_parseIP(t *testing.T) {
 	is.True(equalIP(parseIP("127.0.0.1"), parseIP("::1")))
 }
 
+func TestJaws_getCookieSessionsIds(t *testing.T) {
+	const sessId = 1234
+	sessCookie := JawsKeyString(sessId)
+	is := is.New(t)
+	is.Equal(getCookieSessionsIds(nil, "meh"), nil)
+	is.Equal(getCookieSessionsIds(http.Header{}, "meh"), nil)
+	is.Equal(getCookieSessionsIds(http.Header{"Cookie": []string{}}, "meh"), nil)
+	is.Equal(getCookieSessionsIds(http.Header{"Cookie": []string{"foo=123"}}, "meh"), nil)
+	is.Equal(getCookieSessionsIds(http.Header{"Cookie": []string{"meh=" + sessCookie}}, "meh"), []uint64{sessId})
+	is.Equal(getCookieSessionsIds(http.Header{"Cookie": []string{"meh=\"" + sessCookie + "\""}}, "meh"), []uint64{sessId})
+}
+
 func TestJaws_MultipleCloseCalls(t *testing.T) {
 	jw := New()
 	go jw.Serve()
