@@ -60,7 +60,7 @@ func (rq *Request) Button(jid, txt string, fn ClickFn, attrs ...string) template
 	return HtmlInner(rq.maybeClick(jid, fn), "button", "button", txt, attrs...)
 }
 
-func (rq *Request) Image(jid, src string, attrs ...string) template.HTML {
+func (rq *Request) Img(jid, src string, attrs ...string) template.HTML {
 	b := make([]byte, 0, len(src))
 	b = append(b, '<')
 	b = append(b, `img`...)

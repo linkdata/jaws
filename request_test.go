@@ -651,7 +651,7 @@ func TestRequest_Elements(t *testing.T) {
 	is.True(strings.Contains(string(h), elemId))
 	is.True(strings.Contains(string(h), elemVal))
 
-	h = rq.Image(elemId, "randomimg.png")
+	h = rq.Img(elemId, "randomimg.png")
 	is.True(strings.Contains(string(h), "img src=\"randomimg.png\""))
 }
 
