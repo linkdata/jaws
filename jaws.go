@@ -219,15 +219,22 @@ func (jw *Jaws) getSessionLocked(sessIds []uint64, remoteIP net.IP) *Session {
 	return nil
 }
 
+func cutString(s string, sep byte) (before, after string) {
+	if i := strings.IndexByte(s, sep); i >= 0 {
+		return s[:i], s[i+1:]
+	}
+	return s, ""
+}
+
 func getCookieSessionsIds(h http.Header, wanted string) (cookies []uint64) {
 	for _, line := range h["Cookie"] {
 		if strings.Contains(line, wanted) {
 			var part string
 			line = textproto.TrimString(line)
 			for len(line) > 0 {
-				part, line, _ = strings.Cut(line, ";")
+				part, line = cutString(line, ';')
 				if part = textproto.TrimString(part); part != "" {
-					name, val, _ := strings.Cut(part, "=")
+					name, val := cutString(part, '=')
 					name = textproto.TrimString(name)
 					if name == wanted {
 						if len(val) > 1 && val[0] == '"' && val[len(val)-1] == '"' {
