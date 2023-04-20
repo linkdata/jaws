@@ -651,6 +651,10 @@ func TestRequest_Elements(t *testing.T) {
 	is.True(strings.Contains(string(h), elemId))
 	is.True(strings.Contains(string(h), elemVal))
 
+	h = rq.Image(elemId, "png", "randombase64=")
+	is.True(strings.Contains(string(h), "data:image/png"))
+	is.True(strings.Contains(string(h), "base64,randombase64="))
+
 }
 
 func TestRequest_Text(t *testing.T) {

@@ -60,6 +60,28 @@ func (rq *Request) Button(jid, txt string, fn ClickFn, attrs ...string) template
 	return HtmlInner(rq.maybeClick(jid, fn), "button", "button", txt, attrs...)
 }
 
+// TODO check on img_type that it's actually a correct type?
+func (rq *Request) Image(jid, img_type, src string, attrs ...string) template.HTML {
+	b := make([]byte, 0, len(src))
+	b = append(b, '<')
+	b = append(b, `img`...)
+	if src != "" {
+		b = append(b, ` src="`...)
+		if img_type != "" {
+			b = append(b, `data:image/`...)
+			b = append(b, img_type...)
+			b = append(b, `;base64,`...)
+		} else {
+			b = append(b, `data:image/jpeg;base64,`...)
+		}
+		b = append(b, src...)
+	}
+	b = append(b, '"')
+	b = appendAttrs(b, attrs)
+	b = append(b, "/>"...)
+	return template.HTML(b) // #nosec G203
+}
+
 func (rq *Request) Text(jid, val string, fn InputTextFn, attrs ...string) template.HTML {
 	return HtmlInput(rq.maybeInputText(jid, fn), "text", val, attrs...)
 }
