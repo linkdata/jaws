@@ -61,17 +61,13 @@ func (rq *Request) Button(jid, txt string, fn ClickFn, attrs ...string) template
 }
 
 func (rq *Request) Img(jid, src string, attrs ...string) template.HTML {
-	b := make([]byte, 0, len(src))
-	b = append(b, '<')
-	b = append(b, `img`...)
-	if src != "" {
-		b = append(b, ` src="`...)
-		b = append(b, src...)
+	if src != "" && src[0] == '"' {
+		src = `src=` + src
+	} else {
+		src = `src="` + src + `"`
 	}
-	b = append(b, '"')
-	b = appendAttrs(b, attrs)
-	b = append(b, "/>"...)
-	return template.HTML(b) // #nosec G203
+	attrs = append(attrs, src)
+	return HtmlInner(jid, "img", "", "", attrs...)
 }
 
 func (rq *Request) Text(jid, val string, fn InputTextFn, attrs ...string) template.HTML {
