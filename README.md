@@ -7,6 +7,9 @@
 
 Javascript and WebSockets used to create responsive webpages.
 
+There is a [demo application](https://github.com/linkdata/jawsdemo)
+with plenty of comments to use as a tutorial.
+
 ## HTTP request flow and associating the WebSocket
 
 When a new HTTP request is received, create a JaWS Request using the JaWS
