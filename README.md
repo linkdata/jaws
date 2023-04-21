@@ -7,6 +7,9 @@
 
 Javascript and WebSockets used to create responsive webpages.
 
+There is a [demo application](https://github.com/linkdata/jawsdemo)
+with plenty of comments to use as a tutorial.
+
 ## HTTP request flow and associating the WebSocket
 
 When a new HTTP request is received, create a JaWS Request using the JaWS
@@ -64,6 +67,7 @@ Handling the routes with the standard library's `http.DefaultServeMux`:
 ```go
 jw := jaws.New()
 defer jw.Close()
+go jw.Serve()
 http.DefaultServeMux.Handle("/jaws/", jw)
 ```
 
@@ -72,6 +76,7 @@ Handling the routes with [Echo](https://echo.labstack.com/):
 ```go
 jw := jaws.New()
 defer jw.Close()
+go jw.Serve()
 router := echo.New()
 router.GET("/jaws/*", func(c echo.Context) error {
   jw.ServeHTTP(c.Response().Writer, c.Request())
