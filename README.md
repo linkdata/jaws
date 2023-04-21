@@ -67,6 +67,7 @@ Handling the routes with the standard library's `http.DefaultServeMux`:
 ```go
 jw := jaws.New()
 defer jw.Close()
+go jw.Serve()
 http.DefaultServeMux.Handle("/jaws/", jw)
 ```
 
@@ -75,6 +76,7 @@ Handling the routes with [Echo](https://echo.labstack.com/):
 ```go
 jw := jaws.New()
 defer jw.Close()
+go jw.Serve()
 router := echo.New()
 router.GET("/jaws/*", func(c echo.Context) error {
   jw.ServeHTTP(c.Response().Writer, c.Request())
