@@ -24,11 +24,13 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		hdr["Content-Type"] = headerContentType
 		hdr["Vary"] = headerAcceptEncoding
 		js := JavascriptText
-		for _, v := range r.Header["Accept-Encoding"] {
-			if v == "gzip" {
-				js = JavascriptGZip
-				hdr["Content-Encoding"] = headerContentGZip
-				break
+		for _, s := range r.Header["Accept-Encoding"] {
+			for _, v := range strings.Split(s, ",") {
+				if strings.TrimSpace(v) == "gzip" {
+					js = JavascriptGZip
+					hdr["Content-Encoding"] = headerContentGZip
+					break
+				}
 			}
 		}
 		_, _ = w.Write(js) // #nosec G104

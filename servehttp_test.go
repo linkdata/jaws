@@ -19,6 +19,7 @@ func TestServeHTTP_GetJavascript(t *testing.T) {
 	mux.Handle("/jaws/", jw)
 
 	req := httptest.NewRequest("", JavascriptPath, nil)
+	req.Header.Add("Accept-Encoding", "blepp")
 	w := httptest.NewRecorder()
 
 	mux.ServeHTTP(w, req)
@@ -30,6 +31,17 @@ func TestServeHTTP_GetJavascript(t *testing.T) {
 
 	req = httptest.NewRequest("", JavascriptPath, nil)
 	req.Header.Add("Accept-Encoding", "gzip")
+	w = httptest.NewRecorder()
+
+	mux.ServeHTTP(w, req)
+	is.Equal(w.Code, http.StatusOK)
+	is.Equal(w.Body.Len(), len(JavascriptGZip))
+	is.Equal(w.Header()["Cache-Control"], headerCacheStatic)
+	is.Equal(w.Header()["Content-Type"], headerContentType)
+	is.Equal(w.Header()["Content-Encoding"], headerContentGZip)
+
+	req = httptest.NewRequest("", JavascriptPath, nil)
+	req.Header.Add("Accept-Encoding", "gzip, deflate, br")
 	w = httptest.NewRecorder()
 
 	mux.ServeHTTP(w, req)
