@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -33,6 +34,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+		hdr["Content-Length"] = []string{strconv.Itoa(len(js))}
 		_, _ = w.Write(js) // #nosec G104
 		return
 	case "/jaws/.ping":
