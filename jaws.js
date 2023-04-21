@@ -27,11 +27,13 @@ function jawsHandler(e) {
 		var elem = e.currentTarget;
 		var jid = elem.getAttribute('jid');
 		if (jid) {
-			var val = elem.value;
 			var elemtype = elem.getAttribute('type');
 			if (jawsIsCheckable(elemtype)) {
-				val = elem.checked;
-			} else if (elem.tagName.toLowerCase() === 'option') {
+				jawsChangeCheckable(elem, true);
+				return;
+			}
+			var val = elem.value;
+			if (elem.tagName.toLowerCase() === 'option') {
 				val = elem.selected;
 			}
 			jaws.send(jid + "\n" + e.type + "\n" + val);
@@ -76,10 +78,28 @@ function jawsAlert(type, message) {
 	console.log("jaws: " + type + ": " + message);
 }
 
+function jawsChangeCheckable(elem, isinput) {
+	if (isinput) {
+		jaws.send(elem.getAttribute('jid') + "\ninput\n" + elem.checked);
+	}
+	var elemname = elem.getAttribute('name');
+	if (elemname) {
+		var selector = elem.tagName + '[type="' + elem.type + '"][name="' + elemname + '"]';
+		var others = document.querySelectorAll(selector);
+		for (var i = 0; i < others.length; i++) {
+			var other = others[i];
+			if (isinput && other !== elem) {
+				jaws.send(other.getAttribute('jid') + "\ninput\n" + other.checked);
+			}
+		}
+	}
+}
+
 function jawsSetValue(elem, str) {
 	var elemtype = elem.getAttribute('type');
 	if (jawsIsCheckable(elemtype)) {
 		elem.checked = jawsIsTrue(str);
+		jawsChangeCheckable(elem, false);
 		return;
 	}
 	if (jawsHasSelection(elemtype)) {
