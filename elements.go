@@ -60,6 +60,16 @@ func (rq *Request) Button(jid, txt string, fn ClickFn, attrs ...string) template
 	return HtmlInner(rq.maybeClick(jid, fn), "button", "button", txt, attrs...)
 }
 
+func (rq *Request) Img(jid, src string, fn ClickFn, attrs ...string) template.HTML {
+	if src != "" && src[0] == '"' {
+		src = `src=` + src
+	} else {
+		src = `src="` + src + `"`
+	}
+	attrs = append(attrs, src)
+	return HtmlInner(rq.maybeClick(jid, fn), "img", "", "", attrs...)
+}
+
 func (rq *Request) Text(jid, val string, fn InputTextFn, attrs ...string) template.HTML {
 	return HtmlInput(rq.maybeInputText(jid, fn), "text", val, attrs...)
 }
