@@ -91,6 +91,16 @@ func TestHtmlInner(t *testing.T) {
 			want: `<tag1 jid="id1" type="typ1">inner_text</tag1>`,
 		},
 		{
+			name: "HtmlInner singleton tag",
+			args: args{
+				jid:   "id1",
+				tag:   "img",
+				typ:   "",
+				inner: "",
+			},
+			want: `<img jid="id1">`,
+		},
+		{
 			name: "HtmlInner two filled attrs, one empty",
 			args: args{
 				jid:   "id1",
