@@ -655,6 +655,10 @@ func TestRequest_Elements(t *testing.T) {
 	h = rq.Img(elemId, "randomimg.png")
 	fmt.Println(h)
 	is.True(strings.Contains(string(h), "src=\"randomimg.png\""))
+
+	h = rq.Img(elemId, "\"randomimg.png\"")
+	fmt.Println(h)
+	is.True(strings.Contains(string(h), "src=\"randomimg.png\""))
 }
 
 func TestRequest_Text(t *testing.T) {
