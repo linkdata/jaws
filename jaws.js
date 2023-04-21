@@ -29,7 +29,7 @@ function jawsHandler(e) {
 		if (jid) {
 			var elemtype = elem.getAttribute('type');
 			if (jawsIsCheckable(elemtype)) {
-				jawsChangeCheckable(elem);
+				jawsChangeCheckable(elem, true);
 				return;
 			}
 			var val = elem.value;
@@ -78,15 +78,17 @@ function jawsAlert(type, message) {
 	console.log("jaws: " + type + ": " + message);
 }
 
-function jawsChangeCheckable(elem) {
-	jaws.send(elem.getAttribute('jid') + "\ninput\n" + elem.checked);
+function jawsChangeCheckable(elem, isinput) {
+	if (isinput) {
+		jaws.send(elem.getAttribute('jid') + "\ninput\n" + elem.checked);
+	}
 	var elemname = elem.getAttribute('name');
 	if (elemname) {
 		var selector = elem.tagName + '[type="' + elem.type + '"][name="' + elemname + '"]';
 		var others = document.querySelectorAll(selector);
 		for (var i = 0; i < others.length; i++) {
 			var other = others[i];
-			if (other !== elem) {
+			if (isinput && other !== elem) {
 				jaws.send(other.getAttribute('jid') + "\ninput\n" + other.checked);
 			}
 		}
@@ -96,7 +98,8 @@ function jawsChangeCheckable(elem) {
 function jawsSetValue(elem, str) {
 	var elemtype = elem.getAttribute('type');
 	if (jawsIsCheckable(elemtype)) {
-		jawsChangeCheckable(elem);
+		elem.checked = jawsIsTrue(str);
+		jawsChangeCheckable(elem, false);
 		return;
 	}
 	if (jawsHasSelection(elemtype)) {
