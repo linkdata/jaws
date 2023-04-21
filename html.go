@@ -40,6 +40,25 @@ func HtmlInput(id, typ, val string, attrs ...string) template.HTML {
 	return template.HTML(b) // #nosec G203
 }
 
+var singletonTags = map[string]struct{}{
+	"area":    {},
+	"base":    {},
+	"br":      {},
+	"col":     {},
+	"command": {},
+	"embed":   {},
+	"hr":      {},
+	"img":     {},
+	"input":   {},
+	"keygen":  {},
+	"link":    {},
+	"meta":    {},
+	"param":   {},
+	"source":  {},
+	"track":   {},
+	"wbr":     {},
+}
+
 func HtmlInner(id, tag, typ, inner string, attrs ...string) template.HTML {
 	need := 1 + len(tag)*2 + 5 + len(id) + 8 + len(typ) + 1 + 1 + getAttrsLen(attrs) + 1 + len(inner) + 2 + 1
 	b := make([]byte, 0, need)
@@ -54,10 +73,16 @@ func HtmlInner(id, tag, typ, inner string, attrs ...string) template.HTML {
 	b = append(b, '"')
 	b = appendAttrs(b, attrs)
 	b = append(b, '>')
-	b = append(b, inner...)
-	b = append(b, "</"...)
-	b = append(b, tag...)
-	b = append(b, '>')
+	var singleton bool
+	if inner == "" {
+		_, singleton = singletonTags[tag]
+	}
+	if !singleton {
+		b = append(b, inner...)
+		b = append(b, "</"...)
+		b = append(b, tag...)
+		b = append(b, '>')
+	}
 	return template.HTML(b) // #nosec G203
 }
 
