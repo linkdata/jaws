@@ -79,9 +79,13 @@ func (nba *NamedBoolArray) SetRadio(name string) {
 	nba.mu.Unlock()
 }
 
-// GetRadio returns the name of first checked NamedBool in the set.
+// Selected returns the name of first checked NamedBool in the set.
 // Returns an empty string if none are checked.
-func (nba *NamedBoolArray) GetRadio() (name string) {
+//
+// In case you can have more than one selected or you need to
+// distinguish between a blank name and the fact that none are
+// checked, use ReadLocked() to inspect the array directly.
+func (nba *NamedBoolArray) Selected() (name string) {
 	nba.mu.RLock()
 	for _, nb := range nba.data {
 		if nb.Checked {
