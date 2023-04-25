@@ -59,6 +59,11 @@ var singletonTags = map[string]struct{}{
 	"wbr":     {},
 }
 
+func needClosingTag(tag string) bool {
+	_, ok := singletonTags[tag]
+	return !ok
+}
+
 func HtmlInner(id, tag, typ, inner string, attrs ...string) template.HTML {
 	need := 1 + len(tag)*2 + 5 + len(id) + 8 + len(typ) + 1 + 1 + getAttrsLen(attrs) + 1 + len(inner) + 2 + 1
 	b := make([]byte, 0, need)
@@ -73,11 +78,7 @@ func HtmlInner(id, tag, typ, inner string, attrs ...string) template.HTML {
 	b = append(b, '"')
 	b = appendAttrs(b, attrs)
 	b = append(b, '>')
-	var singleton bool
-	if inner == "" {
-		_, singleton = singletonTags[tag]
-	}
-	if !singleton {
+	if inner != "" || needClosingTag(tag) {
 		b = append(b, inner...)
 		b = append(b, "</"...)
 		b = append(b, tag...)
