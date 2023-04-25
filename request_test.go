@@ -858,29 +858,27 @@ func TestRequest_Date(t *testing.T) {
 }
 
 func TestRequest_RadioGroup(t *testing.T) {
-	const groupId = "groupid"
-	const elemId = "buttonid"
 	const elemVal = true
 	is := is.New(t)
 	rq := newTestRequest(is)
 	defer rq.Close()
 
 	gotCall := make(chan struct{})
-	nba := NewNamedBoolArray(groupId)
-	nba.Add(elemId, "")
-	nba.Set(elemId, elemVal)
+	nba := NewNamedBoolArray("quux")
+	nba.Add("alpha", "")
+	nba.Set("alpha", elemVal)
 
 	rq.RadioGroup(nba, func(rq *Request, val string) error {
 		defer close(gotCall)
-		is.Equal(val, elemId)
+		is.Equal(val, "alpha")
 		return nil
 	})
 
-	h := rq.Radio(nba, elemId, "")
-	is.True(strings.Contains(string(h), "jid=\""+elemId+"\""))
-	is.True(strings.Contains(string(h), "name=\""+groupId+"\""))
-	is.True(strings.Contains(string(h), "checked"))
-	rq.inCh <- &Message{Elem: groupId, What: "input", Data: elemId}
+	h := rq.Radio(nba, "alpha", "")
+	const expected = `<input jid="quux/alpha" type="radio" name="quux" id="quux/alpha" checked>`
+	is.Equal(expected, string(h))
+
+	rq.inCh <- &Message{Elem: "quux", What: "input", Data: "alpha"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -897,11 +895,12 @@ func TestRequest_LabeledRadioGroup(t *testing.T) {
 	nba := NewNamedBoolArray("quux")
 	nba.Add("alpha", "This is alpha")
 	nba.Add("bravo", "This is bravo")
-	nba.SetRadio("bravo")
+	nba.SetOnly("bravo")
+	is.Equal(nba.Get(), "bravo")
 
-	const expected = `<input jid="alpha" type="radio" class="foo" name="quux" id="quux/alpha">` +
+	const expected = `<input jid="quux/alpha" type="radio" class="foo" name="quux" id="quux/alpha">` +
 		`<label for="quux/alpha" class="bar">This is alpha</label>` +
-		`<input jid="bravo" type="radio" class="foo" name="quux" id="quux/bravo" checked>` +
+		`<input jid="quux/bravo" type="radio" class="foo" name="quux" id="quux/bravo" checked>` +
 		`<label for="quux/bravo" class="bar">This is bravo</label>`
 
 	h := rq.LabeledRadioGroup(nba, func(rq *Request, val string) error {

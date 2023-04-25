@@ -21,7 +21,7 @@ func Test_NamedBoolArray(t *testing.T) {
 	is.Equal(a.IsChecked("1"), false)
 	is.Equal(a.IsChecked("2"), false)
 
-	a.SetRadio("1")
+	a.SetOnly("1")
 	is.Equal((a.data)[0].Name, "1")
 	is.Equal((a.data)[0].Text, "one")
 	is.Equal((a.data)[0].Checked, true)
@@ -65,7 +65,7 @@ func Test_NamedBoolArray(t *testing.T) {
 	is.Equal((a.data)[2].Checked, true)
 	is.Equal(a.Get(), "2")
 
-	a.SetRadio("1")
+	a.SetOnly("1")
 	is.Equal((a.data)[0].Checked, false)
 	is.Equal((a.data)[1].Checked, false)
 	is.Equal((a.data)[2].Checked, true)

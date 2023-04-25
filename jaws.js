@@ -22,18 +22,41 @@ function jawsIsTrue(v) {
 	return jawsContains(['true', 't', 'on', '1', 'yes', 'y', 'selected'], v);
 }
 
+function trimPrefix(str, prefix) {
+	if (str.startsWith(prefix)) {
+		return str.slice(prefix.length)
+	} else {
+		return str
+	}
+}
+
 function jawsHandler(e) {
 	if (jaws instanceof WebSocket && e instanceof Event) {
 		var elem = e.currentTarget;
 		var jid = elem.getAttribute('jid');
 		if (jid) {
-			var elemtype = elem.getAttribute('type');
-			if (jawsIsCheckable(elemtype)) {
-				jawsChangeCheckable(elem, true);
-				return;
-			}
 			var val = elem.value;
-			if (elem.tagName.toLowerCase() === 'option') {
+			var elemtype = elem.getAttribute('type');
+			if (elemtype) {
+				switch (String(elemtype).trim().toLowerCase()) {
+					case 'checkbox':
+						val = elem.checked;
+						break;
+					case 'radio':
+						val = elem.checked
+						if (val) {
+							var elemname = String(elem.getAttribute('name')).trim();
+							if (elemname) {
+								if (jid.startsWith(elemname + "/")) {
+									jid = jid.slice(elemname.length + 1);
+								}
+								val = jid;
+								jid = elemname;
+							}
+						}
+						break;
+				}
+			} else if (elem.tagName.toLowerCase() === 'option') {
 				val = elem.selected;
 			}
 			jaws.send(jid + "\n" + e.type + "\n" + val);
@@ -78,28 +101,10 @@ function jawsAlert(type, message) {
 	console.log("jaws: " + type + ": " + message);
 }
 
-function jawsChangeCheckable(elem, isinput) {
-	if (isinput) {
-		jaws.send(elem.getAttribute('jid') + "\ninput\n" + elem.checked);
-	}
-	var elemname = elem.getAttribute('name');
-	if (elemname) {
-		var selector = elem.tagName + '[type="' + elem.type + '"][name="' + elemname + '"]';
-		var others = document.querySelectorAll(selector);
-		for (var i = 0; i < others.length; i++) {
-			var other = others[i];
-			if (isinput && other !== elem) {
-				jaws.send(other.getAttribute('jid') + "\ninput\n" + other.checked);
-			}
-		}
-	}
-}
-
 function jawsSetValue(elem, str) {
 	var elemtype = elem.getAttribute('type');
 	if (jawsIsCheckable(elemtype)) {
 		elem.checked = jawsIsTrue(str);
-		jawsChangeCheckable(elem, false);
 		return;
 	}
 	if (jawsHasSelection(elemtype)) {

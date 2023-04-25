@@ -111,21 +111,20 @@ func (rq *Request) RadioGroup(nba *NamedBoolArray, fn InputTextFn) {
 	rq.maybeInputText(nba.Jid, fn)
 }
 
-func (rq *Request) radioLocked(nba *NamedBoolArray, id, jid string, attrs []string) template.HTML {
+func (rq *Request) radioLocked(nba *NamedBoolArray, boolName string, attrs []string) template.HTML {
+	jid := rq.Register(nba.JidOf(boolName))
 	attrs = append(attrs, "name=\""+nba.Jid+"\"")
-	if id != "" {
-		attrs = append(attrs, "id=\""+id+"\"")
-	}
-	if nba.isCheckedLocked(jid) {
+	attrs = append(attrs, "id=\""+jid+"\"")
+	if nba.isCheckedLocked(boolName) {
 		attrs = append(attrs, "checked")
 	}
 	return HtmlInput(jid, "radio", "", attrs...)
 }
 
-func (rq *Request) Radio(nba *NamedBoolArray, jid string, attrs ...string) template.HTML {
+func (rq *Request) Radio(nba *NamedBoolArray, boolName string, attrs ...string) template.HTML {
 	nba.mu.RLock()
 	defer nba.mu.RUnlock()
-	return rq.radioLocked(nba, "", jid, attrs)
+	return rq.radioLocked(nba, boolName, attrs)
 }
 
 func (rq *Request) LabeledRadioGroup(nba *NamedBoolArray, fn InputTextFn, radioAttrs, labelAttrs []string) template.HTML {
@@ -133,10 +132,9 @@ func (rq *Request) LabeledRadioGroup(nba *NamedBoolArray, fn InputTextFn, radioA
 	rq.RadioGroup(nba, fn)
 	nba.ReadLocked(func(nbl []*NamedBool) {
 		for _, nb := range nbl {
-			htmlId := nba.Jid + "/" + nb.Name
-			b = append(b, rq.radioLocked(nba, htmlId, nb.Name, radioAttrs)...)
+			b = append(b, rq.radioLocked(nba, nb.Name, radioAttrs)...)
 			b = append(b, `<label for="`...)
-			b = append(b, []byte(htmlId)...)
+			b = append(b, []byte(nba.JidOf(nb.Name))...)
 			b = append(b, '"')
 			for _, attr := range labelAttrs {
 				b = append(b, ' ')
