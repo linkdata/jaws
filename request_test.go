@@ -900,7 +900,7 @@ func TestRequest_Select(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	a := NewNamedBoolArray()
+	a := NewNamedBools("")
 	a.Add("1", "one")
 	a.Add("2", "two")
 
@@ -908,7 +908,7 @@ func TestRequest_Select(t *testing.T) {
 	is.True(strings.Contains(string(h), "jid=\""+elemId+"\""))
 	is.Equal(strings.Contains(string(h), "selected"), false)
 
-	a.Check("1")
+	a.SetRadio("1")
 	h = rq.Select(elemId, a, nil, "")
 	is.True(strings.Contains(string(h), "jid=\""+elemId+"\""))
 	is.Equal(strings.Contains(string(h), "selected"), true)

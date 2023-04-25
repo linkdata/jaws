@@ -87,26 +87,26 @@ func HtmlInner(id, tag, typ, inner string, attrs ...string) template.HTML {
 	return template.HTML(b) // #nosec G203
 }
 
-func HtmlSelect(jid string, val *NamedBoolArray, attrs ...string) template.HTML {
+func HtmlSelect(jid string, val *NamedBools, attrs ...string) template.HTML {
 	need := 12 + len(jid) + 2 + getAttrsLen(attrs) + 2 + 10
-	if val != nil {
-		for _, nb := range *val {
-			need += 15 + len(nb.Value) + 2 + len(nb.Text) + 10
+	val.ReadLocked(func(nba []*NamedBool) {
+		for _, nb := range nba {
+			need += 15 + len(nb.Name) + 2 + len(nb.Text) + 10
 			if nb.Checked {
 				need += 9
 			}
 		}
-	}
+	})
 	b := make([]byte, 0, need)
 	b = append(b, `<select jid="`...)
 	b = append(b, jid...)
 	b = append(b, '"')
 	b = appendAttrs(b, attrs)
 	b = append(b, ">\n"...)
-	if val != nil {
-		for _, nb := range *val {
+	val.ReadLocked(func(nba []*NamedBool) {
+		for _, nb := range nba {
 			b = append(b, `<option value="`...)
-			b = append(b, nb.Value...)
+			b = append(b, nb.Name...)
 			if nb.Checked {
 				b = append(b, `" selected>`...)
 			} else {
@@ -115,7 +115,7 @@ func HtmlSelect(jid string, val *NamedBoolArray, attrs ...string) template.HTML 
 			b = append(b, nb.Text...)
 			b = append(b, "</option>\n"...)
 		}
-	}
+	})
 	b = append(b, "</select>\n"...)
 	return template.HTML(b) // #nosec G203
 }
