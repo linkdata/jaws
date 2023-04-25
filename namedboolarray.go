@@ -7,6 +7,9 @@ import (
 	"github.com/linkdata/deadlock"
 )
 
+// NamedBool stores a named boolen value with it's HTML textual representation.
+// It's not safe to store pointers to these or access them outside of
+// NamedBoolArray.(Read|Write)Locked() calls.
 type NamedBool struct {
 	Name    string // name within the named bool set
 	Text    string // HTML text of the boolean
@@ -40,7 +43,7 @@ func NewNamedBoolArray(jid string) *NamedBoolArray {
 }
 
 // ReadLocked calls the given function with the NamedBoolArray locked for reading.
-func (nba *NamedBoolArray) ReadLocked(fn func(nba []*NamedBool)) {
+func (nba *NamedBoolArray) ReadLocked(fn func(nbl []*NamedBool)) {
 	nba.mu.RLock()
 	defer nba.mu.RUnlock()
 	fn(nba.data)
@@ -48,7 +51,7 @@ func (nba *NamedBoolArray) ReadLocked(fn func(nba []*NamedBool)) {
 
 // WriteLocked calls the given function with the NamedBoolArray locked for writing and
 // replaces the internal []*NamedBool slice with the return value.
-func (nba *NamedBoolArray) WriteLocked(fn func(nba []*NamedBool) []*NamedBool) {
+func (nba *NamedBoolArray) WriteLocked(fn func(nbl []*NamedBool) []*NamedBool) {
 	nba.mu.Lock()
 	defer nba.mu.Unlock()
 	nba.data = fn(nba.data)
@@ -85,12 +88,13 @@ func (nba *NamedBoolArray) SetRadio(name string) {
 	nba.mu.Unlock()
 }
 
-// Selected returns the name of first checked NamedBool in the set.
-// Returns an empty string if none are checked.
+// Selected returns the name of first NamedBool in the group that
+// has it's Checked value set to true. Returns an empty string
+// if none are true.
 //
 // In case you can have more than one selected or you need to
 // distinguish between a blank name and the fact that none are
-// checked, use ReadLocked() to inspect the data directly.
+// set to true, use ReadLocked() to inspect the data directly.
 func (nba *NamedBoolArray) Selected() (name string) {
 	nba.mu.RLock()
 	for _, nb := range nba.data {
@@ -99,6 +103,24 @@ func (nba *NamedBoolArray) Selected() (name string) {
 			break
 		}
 	}
+	nba.mu.RUnlock()
+	return
+}
+
+func (nba *NamedBoolArray) isCheckedLocked(name string) bool {
+	for _, nb := range nba.data {
+		if nb.Checked && nb.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// IsChecked returns true if any of the NamedBool in the set that have the
+// given name are Checked. Returns false if the name is not found.
+func (nba *NamedBoolArray) IsChecked(name string) (state bool) {
+	nba.mu.RLock()
+	state = nba.isCheckedLocked(name)
 	nba.mu.RUnlock()
 	return
 }

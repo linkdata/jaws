@@ -23,11 +23,11 @@ func appendAttrs(b []byte, attrs []string) []byte {
 	return b
 }
 
-func HtmlInput(id, typ, val string, attrs ...string) template.HTML {
-	need := 11 + len(id) + 8 + len(typ) + 9 + len(val) + 1 + 1 + getAttrsLen(attrs) + 1
+func HtmlInput(jid, typ, val string, attrs ...string) template.HTML {
+	need := 11 + len(jid) + 8 + len(typ) + 9 + len(val) + 1 + 1 + getAttrsLen(attrs) + 1
 	b := make([]byte, 0, need)
 	b = append(b, `<input jid="`...)
-	b = append(b, id...)
+	b = append(b, jid...)
 	b = append(b, `" type="`...)
 	b = append(b, typ...)
 	if val != "" {
@@ -64,13 +64,13 @@ func needClosingTag(tag string) bool {
 	return !ok
 }
 
-func HtmlInner(id, tag, typ, inner string, attrs ...string) template.HTML {
-	need := 1 + len(tag)*2 + 5 + len(id) + 8 + len(typ) + 1 + 1 + getAttrsLen(attrs) + 1 + len(inner) + 2 + 1
+func HtmlInner(jid, tag, typ, inner string, attrs ...string) template.HTML {
+	need := 1 + len(tag)*2 + 5 + len(jid) + 8 + len(typ) + 1 + 1 + getAttrsLen(attrs) + 1 + len(inner) + 2 + 1
 	b := make([]byte, 0, need)
 	b = append(b, '<')
 	b = append(b, tag...)
 	b = append(b, ` jid="`...)
-	b = append(b, id...)
+	b = append(b, jid...)
 	if typ != "" {
 		b = append(b, `" type="`...)
 		b = append(b, typ...)

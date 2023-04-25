@@ -18,12 +18,17 @@ func Test_NamedBoolArray(t *testing.T) {
 	is.Equal((a.data)[0].Checked, false)
 	is.Equal(a.String(), `&NamedBoolArray{&{"1","one",false}}`)
 	is.Equal(a.Selected(), "")
+	is.Equal(a.IsChecked("1"), false)
+	is.Equal(a.IsChecked("2"), false)
 
 	a.SetRadio("1")
 	is.Equal((a.data)[0].Name, "1")
 	is.Equal((a.data)[0].Text, "one")
 	is.Equal((a.data)[0].Checked, true)
 	is.Equal(a.Selected(), "1")
+	is.Equal(a.IsChecked("1"), true)
+	is.Equal(a.IsChecked("2"), false)
+
 	a.Add("2", "two")
 	a.Add("2", "also two")
 	is.Equal(len(a.data), 3)
@@ -65,4 +70,8 @@ func Test_NamedBoolArray(t *testing.T) {
 	is.Equal((a.data)[1].Checked, false)
 	is.Equal((a.data)[2].Checked, true)
 	is.Equal(a.Selected(), "1")
+
+	is.Equal(a.IsChecked("2"), false)
+	(a.data)[1].Checked = true
+	is.Equal(a.IsChecked("2"), true)
 }
