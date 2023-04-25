@@ -85,7 +85,7 @@ func (nba *NamedBoolArray) SetRadio(name string) {
 //
 // In case you can have more than one selected or you need to
 // distinguish between a blank name and the fact that none are
-// checked, use ReadLocked() to inspect the array directly.
+// checked, use ReadLocked() to inspect the data directly.
 func (nba *NamedBoolArray) Selected() (name string) {
 	nba.mu.RLock()
 	for _, nb := range nba.data {
