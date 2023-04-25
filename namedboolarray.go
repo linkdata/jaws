@@ -67,8 +67,8 @@ func (nba *NamedBoolArray) Add(name, text string) {
 	nba.mu.Unlock()
 }
 
-// SetSelect sets the Checked state for the NamedBool(s) with the given name.
-func (nba *NamedBoolArray) SetSelect(name string, state bool) {
+// Set sets the Checked state for the NamedBool(s) with the given name.
+func (nba *NamedBoolArray) Set(name string, state bool) {
 	nba.mu.Lock()
 	for _, nb := range nba.data {
 		if nb.Name == name {
@@ -76,6 +76,25 @@ func (nba *NamedBoolArray) SetSelect(name string, state bool) {
 		}
 	}
 	nba.mu.Unlock()
+}
+
+// Get returns the name of first NamedBool in the group that
+// has it's Checked value set to true. Returns an empty string
+// if none are true.
+//
+// In case you can have more than one selected or you need to
+// distinguish between a blank name and the fact that none are
+// set to true, use ReadLocked() to inspect the data directly.
+func (nba *NamedBoolArray) Get() (name string) {
+	nba.mu.RLock()
+	for _, nb := range nba.data {
+		if nb.Checked {
+			name = nb.Name
+			break
+		}
+	}
+	nba.mu.RUnlock()
+	return
 }
 
 // SetRadio sets the Checked state for the NamedBool(s) with the
@@ -86,25 +105,6 @@ func (nba *NamedBoolArray) SetRadio(name string) {
 		nb.Checked = (nb.Name == name)
 	}
 	nba.mu.Unlock()
-}
-
-// Selected returns the name of first NamedBool in the group that
-// has it's Checked value set to true. Returns an empty string
-// if none are true.
-//
-// In case you can have more than one selected or you need to
-// distinguish between a blank name and the fact that none are
-// set to true, use ReadLocked() to inspect the data directly.
-func (nba *NamedBoolArray) Selected() (name string) {
-	nba.mu.RLock()
-	for _, nb := range nba.data {
-		if nb.Checked {
-			name = nb.Name
-			break
-		}
-	}
-	nba.mu.RUnlock()
-	return
 }
 
 func (nba *NamedBoolArray) isCheckedLocked(name string) bool {

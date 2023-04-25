@@ -868,7 +868,7 @@ func TestRequest_RadioGroup(t *testing.T) {
 	gotCall := make(chan struct{})
 	nba := NewNamedBoolArray(groupId)
 	nba.Add(elemId, "")
-	nba.SetSelect(elemId, elemVal)
+	nba.Set(elemId, elemVal)
 
 	rq.RadioGroup(nba, func(rq *Request, val string) error {
 		defer close(gotCall)
@@ -932,7 +932,7 @@ func TestRequest_Select(t *testing.T) {
 	is.True(strings.Contains(string(h), "jid=\""+elemId+"\""))
 	is.Equal(strings.Contains(string(h), "selected"), false)
 
-	a.SetSelect("1", true)
+	a.Set("1", true)
 	h = rq.Select(a, nil, "")
 	is.True(strings.Contains(string(h), "jid=\""+elemId+"\""))
 	is.Equal(strings.Contains(string(h), "selected"), true)

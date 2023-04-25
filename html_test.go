@@ -150,7 +150,7 @@ func TestHtmlSelect(t *testing.T) {
 					nba.Add("one", "1")
 					nba.Add("two", "2")
 					nba.Add("three", "2")
-					nba.SetSelect("two", true)
+					nba.Set("two", true)
 					return
 				}(),
 				attrs: []string{"", "attr2"},
