@@ -124,7 +124,7 @@ func TestHtmlInner(t *testing.T) {
 func TestHtmlSelect(t *testing.T) {
 	type args struct {
 		jid   string
-		val   *NamedBools
+		val   *NamedBoolArray
 		attrs []string
 	}
 	tests := []struct {
@@ -136,7 +136,7 @@ func TestHtmlSelect(t *testing.T) {
 			name: "HtmlSelect empty NamedBoolArray and one attr",
 			args: args{
 				jid:   "sel2",
-				val:   NewNamedBools(""),
+				val:   NewNamedBoolArray(""),
 				attrs: []string{"attr1"},
 			},
 			want: "<select jid=\"sel2\" attr1>\n</select>\n",
@@ -145,8 +145,8 @@ func TestHtmlSelect(t *testing.T) {
 			name: "HtmlSelect NamedBoolArray with data",
 			args: args{
 				jid: "sel3",
-				val: func() (nba *NamedBools) {
-					nba = NewNamedBools("")
+				val: func() (nba *NamedBoolArray) {
+					nba = NewNamedBoolArray("")
 					nba.Add("one", "1")
 					nba.Add("two", "2")
 					nba.Add("three", "2")

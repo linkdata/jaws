@@ -87,7 +87,7 @@ func HtmlInner(id, tag, typ, inner string, attrs ...string) template.HTML {
 	return template.HTML(b) // #nosec G203
 }
 
-func HtmlSelect(jid string, val *NamedBools, attrs ...string) template.HTML {
+func HtmlSelect(jid string, val *NamedBoolArray, attrs ...string) template.HTML {
 	need := 12 + len(jid) + 2 + getAttrsLen(attrs) + 2 + 10
 	val.ReadLocked(func(nba []*NamedBool) {
 		for _, nb := range nba {

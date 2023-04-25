@@ -900,7 +900,7 @@ func TestRequest_Select(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	a := NewNamedBools("")
+	a := NewNamedBoolArray("")
 	a.Add("1", "one")
 	a.Add("2", "two")
 
