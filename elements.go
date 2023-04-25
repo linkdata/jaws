@@ -115,8 +115,8 @@ func (rq *Request) Radio(jid string, val bool, fn InputBoolFn, attrs ...string) 
 	return HtmlInput(rq.maybeInputBool(jid, fn), "radio", "", attrs...)
 }
 
-func (rq *Request) Select(jid string, val *NamedBoolArray, fn InputTextFn, attrs ...string) template.HTML {
-	return HtmlSelect(rq.maybeInputText(jid, fn), val, attrs...)
+func (rq *Request) Select(nba *NamedBoolArray, fn InputTextFn, attrs ...string) template.HTML {
+	return HtmlSelect(rq.maybeInputText(nba.ID, fn), nba, attrs...)
 }
 
 func (rq *Request) Ui(elem Ui, attrs ...string) template.HTML {

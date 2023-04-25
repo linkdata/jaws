@@ -87,9 +87,9 @@ func HtmlInner(id, tag, typ, inner string, attrs ...string) template.HTML {
 	return template.HTML(b) // #nosec G203
 }
 
-func HtmlSelect(jid string, val *NamedBoolArray, attrs ...string) template.HTML {
+func HtmlSelect(jid string, nba *NamedBoolArray, attrs ...string) template.HTML {
 	need := 12 + len(jid) + 2 + getAttrsLen(attrs) + 2 + 10
-	val.ReadLocked(func(nba []*NamedBool) {
+	nba.ReadLocked(func(nba []*NamedBool) {
 		for _, nb := range nba {
 			need += 15 + len(nb.Name) + 2 + len(nb.Text) + 10
 			if nb.Checked {
@@ -103,7 +103,7 @@ func HtmlSelect(jid string, val *NamedBoolArray, attrs ...string) template.HTML 
 	b = append(b, '"')
 	b = appendAttrs(b, attrs)
 	b = append(b, ">\n"...)
-	val.ReadLocked(func(nba []*NamedBool) {
+	nba.ReadLocked(func(nba []*NamedBool) {
 		for _, nb := range nba {
 			b = append(b, `<option value="`...)
 			b = append(b, nb.Name...)
