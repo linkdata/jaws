@@ -22,16 +22,21 @@ func (nb *NamedBool) String() string {
 // and sets of HTML radio buttons. It it safe to use from multiple goroutines
 // concurrently.
 type NamedBoolArray struct {
-	ID   string           // (read-only) JaWS ID of the array
+	Jid  string           // (read-only) JaWS ID of the array
 	mu   deadlock.RWMutex // protects following
 	data []*NamedBool
 }
 
 // NewNamedBoolArray creates a new object to track a related set of named booleans.
+//
 // The JaWS ID string 'jid' is used as the ID for <select> elements and the
-// value for the 'name' attribute for radio buttons.
+// value for the 'name' attribute for radio buttons. If left empty, MakeID() will
+// be used to assign a unique ID.
 func NewNamedBoolArray(jid string) *NamedBoolArray {
-	return &NamedBoolArray{ID: jid}
+	if jid == "" {
+		jid = MakeID()
+	}
+	return &NamedBoolArray{Jid: jid}
 }
 
 // ReadLocked calls the given function with the NamedBoolArray locked for reading.

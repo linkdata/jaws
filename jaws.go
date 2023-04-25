@@ -37,7 +37,6 @@ type Jaws struct {
 	subCh      chan chan *Message
 	unsubCh    chan chan *Message
 	headHTML   template.HTML
-	nextId     uint64           // atomic
 	mu         deadlock.RWMutex // protects following
 	kg         *bufio.Reader
 	closeCh    chan struct{}
@@ -113,9 +112,11 @@ func (jw *Jaws) MustLog(err error) {
 	}
 }
 
-// MakeID returns a string in the form 'jaws.X' where X is a string unique within the Jaws lifetime.
-func (jw *Jaws) MakeID() string {
-	return "jaws." + strconv.FormatUint(atomic.AddUint64(&jw.nextId, 1), 32)
+var nextId uint64 // atomic
+
+// MakeID returns a string in the form 'jaws.X' where X is a unique string within lifetime of the program.
+func MakeID() string {
+	return "jaws." + strconv.FormatUint(atomic.AddUint64(&nextId, 1), 32)
 }
 
 // NewRequest returns a new JaWS request.
