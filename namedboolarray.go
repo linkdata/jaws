@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/linkdata/deadlock"
 )
@@ -99,16 +100,16 @@ func (nba *NamedBoolArray) Selected() (name string) {
 
 // String returns a string representation of the NamedBoolArray suitable for debugging.
 func (nba *NamedBoolArray) String() string {
+	var sb strings.Builder
+	sb.WriteString("&NamedBoolArray{")
 	nba.mu.RLock()
-	b := make([]byte, 0, 17+len(nba.data)*16)
-	b = append(b, "&NamedBoolArray{"...)
-	for i, v := range nba.data {
+	for i, nb := range nba.data {
 		if i > 0 {
-			b = append(b, ',')
+			sb.WriteByte(',')
 		}
-		b = append(b, []byte(fmt.Sprint(v))...)
+		sb.WriteString(nb.String())
 	}
-	b = append(b, '}')
 	nba.mu.RUnlock()
-	return string(b)
+	sb.WriteByte('}')
+	return sb.String()
 }
