@@ -1,26 +1,11 @@
 package jaws
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/linkdata/deadlock"
 )
-
-// NamedBool stores a named boolen value with it's HTML textual representation.
-// It's not safe to store pointers to these or access them outside of
-// NamedBoolArray.(Read|Write)Locked() calls.
-type NamedBool struct {
-	Jid     string // JaWS ID of this named bool (nba.Jid+"/"+Name)
-	Name    string // name within the named bool set
-	Text    string // HTML text of the boolean
-	Checked bool   // it's state
-}
-
-// String returns a string representation of the NamedBool suitable for debugging.
-func (nb *NamedBool) String() string {
-	return fmt.Sprintf("&{%q,%q,%v}", nb.Jid, nb.Text, nb.Checked)
-}
 
 // NamedBoolArray stores the data required to support HTML 'select' elements
 // and sets of HTML radio buttons. It it safe to use from multiple goroutines
@@ -64,8 +49,9 @@ func (nba *NamedBoolArray) WriteLocked(fn func(nbl []*NamedBool) []*NamedBool) {
 // Note that while it's legal to have multiple NamedBool with the same name
 // since it's allowed in HTML, it's probably not a good idea.
 func (nba *NamedBoolArray) Add(name, text string) {
+	nb := &NamedBool{Name: name, Html: text}
 	nba.mu.Lock()
-	nba.data = append(nba.data, &NamedBool{Jid: nba.JidOf(name), Name: name, Text: text})
+	nba.data = append(nba.data, nb)
 	nba.mu.Unlock()
 }
 
@@ -148,4 +134,38 @@ func (nba *NamedBoolArray) String() string {
 	nba.mu.RUnlock()
 	sb.WriteByte('}')
 	return sb.String()
+}
+
+func (nba *NamedBoolArray) radioList(rq *Request, fn InputTextFn) (rl []Radio) {
+	nba.mu.RLock()
+	rl = make([]Radio, len(nba.data))
+	for i, nb := range nba.data {
+		rl[i] = Radio{
+			nba:       nba,
+			rq:        rq,
+			fn:        fn,
+			NamedBool: *nb,
+		}
+	}
+	nba.mu.RUnlock()
+	return
+}
+
+func (nba *NamedBoolArray) radioEventFn(rq *Request, jid, evt, val string, fn InputTextFn) (err error) {
+	if evt == "input" && val != "" && strings.HasPrefix(jid, nba.prefix) {
+		var v bool
+		if v, err = strconv.ParseBool(val); err == nil {
+			name := strings.TrimPrefix(jid, nba.prefix)
+			nba.mu.Lock()
+			for _, nb := range nba.data {
+				nb.Checked = v && (nb.Name == name)
+			}
+			nba.mu.Unlock()
+			rq.SetBoolValue(jid, v)
+			if fn != nil {
+				err = fn(rq, name)
+			}
+		}
+	}
+	return
 }

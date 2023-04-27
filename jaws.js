@@ -36,26 +36,8 @@ function jawsHandler(e) {
 		var jid = elem.getAttribute('jid');
 		if (jid) {
 			var val = elem.value;
-			var elemtype = elem.getAttribute('type');
-			if (elemtype) {
-				switch (String(elemtype).trim().toLowerCase()) {
-					case 'checkbox':
-						val = elem.checked;
-						break;
-					case 'radio':
-						val = elem.checked
-						if (val) {
-							var elemname = String(elem.getAttribute('name')).trim();
-							if (elemname) {
-								if (jid.startsWith(elemname + "/")) {
-									jid = jid.slice(elemname.length + 1);
-								}
-								val = jid;
-								jid = elemname;
-							}
-						}
-						break;
-				}
+			if (jawsIsCheckable(elem.getAttribute('type'))) {
+				val = elem.checked;
 			} else if (elem.tagName.toLowerCase() === 'option') {
 				val = elem.selected;
 			}

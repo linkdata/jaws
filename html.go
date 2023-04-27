@@ -91,7 +91,7 @@ func HtmlSelect(jid string, nba *NamedBoolArray, attrs ...string) template.HTML 
 	need := 12 + len(jid) + 2 + getAttrsLen(attrs) + 2 + 10
 	nba.ReadLocked(func(nba []*NamedBool) {
 		for _, nb := range nba {
-			need += 15 + len(nb.Name) + 2 + len(nb.Text) + 10
+			need += 15 + len(nb.Name) + 2 + len(nb.Html) + 10
 			if nb.Checked {
 				need += 9
 			}
@@ -112,7 +112,7 @@ func HtmlSelect(jid string, nba *NamedBoolArray, attrs ...string) template.HTML 
 			} else {
 				b = append(b, `">`...)
 			}
-			b = append(b, nb.Text...)
+			b = append(b, nb.Html...)
 			b = append(b, "</option>\n"...)
 		}
 	})
