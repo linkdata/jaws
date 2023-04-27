@@ -858,22 +858,21 @@ func TestRequest_Date(t *testing.T) {
 }
 
 func TestRequest_Radio(t *testing.T) {
-	const elemId = "buttonid/groupid"
-	const elemVal = true
 	is := is.New(t)
 	rq := newTestRequest(is)
 	defer rq.Close()
 
 	gotCall := make(chan struct{})
-	h := rq.Radio(elemId, elemVal, func(rq *Request, val bool) error {
+	h := rq.Radio("quux", true, func(rq *Request, val bool) error {
 		defer close(gotCall)
 		is.Equal(val, false)
 		return nil
-	}, "")
-	is.True(strings.Contains(string(h), "jid=\""+elemId+"\""))
-	is.True(strings.Contains(string(h), "name=\"groupid\""))
-	is.True(strings.Contains(string(h), "checked"))
-	rq.inCh <- &Message{Elem: elemId, What: "input", Data: "false"}
+	})
+
+	const expected = `<input jid="quux" type="radio" checked>`
+	is.Equal(expected, string(h))
+
+	rq.inCh <- &Message{Elem: "quux", What: "input", Data: "false"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -881,17 +880,55 @@ func TestRequest_Radio(t *testing.T) {
 	}
 }
 
-func TestRequest_RadioPanicOnInvalidID(t *testing.T) {
+type radioGrouper struct {
+	fn InputTextFn
+	*NamedBoolArray
+}
+
+func (rg *radioGrouper) JawsRadioGroupData() *NamedBoolArray {
+	return rg.NamedBoolArray
+}
+
+func (rg *radioGrouper) JawsRadioGroupHandler(rq *Request, val string) error {
+	return rg.fn(rq, val)
+}
+
+func TestRequest_LabeledRadioGroup(t *testing.T) {
 	is := is.New(t)
-	defer func() {
-		if recover() == nil {
-			is.Fail()
-		}
-	}()
-	jw := New()
-	defer jw.Close()
-	rq := jw.NewRequest(context.Background(), nil)
-	rq.Radio("missinggroup", true, nil, "")
+	rq := newTestRequest(is)
+	defer rq.Close()
+
+	gotCall := make(chan struct{})
+	nba := NewNamedBoolArray("quux")
+	nba.Add("alpha", "This is alpha")
+	nba.Add("bravo", "This is bravo")
+	nba.SetOnly("alpha")
+	is.Equal(nba.Get(), "alpha")
+
+	rg := &radioGrouper{NamedBoolArray: nba, fn: func(rq *Request, val string) error {
+		defer close(gotCall)
+		is.Equal(val, "bravo")
+		return nil
+	}}
+
+	const expected = `<input jid="quux/alpha" type="radio" class="foo" name="quux" id="quux/alpha" checked>` +
+		`<label class="bar" for="quux/alpha">This is alpha</label>` +
+		`<input jid="quux/bravo" type="radio" class="foo" name="quux" id="quux/bravo">` +
+		`<label class="bar" for="quux/bravo">This is bravo</label>`
+
+	var sb strings.Builder
+	for _, radio := range rq.RadioGroup(rg) {
+		sb.WriteString(string(radio.Radio(`class="foo"`)))
+		sb.WriteString(string(radio.Label(`class="bar"`)))
+	}
+	is.Equal(expected, sb.String())
+	rq.inCh <- &Message{Elem: "quux/bravo", What: "input", Data: "true"}
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-gotCall:
+	}
+	is.Equal(nba.Get(), "bravo")
 }
 
 func TestRequest_Select(t *testing.T) {
@@ -900,16 +937,16 @@ func TestRequest_Select(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	a := NewNamedBoolArray()
+	a := NewNamedBoolArray(elemId)
 	a.Add("1", "one")
 	a.Add("2", "two")
 
-	h := rq.Select(elemId, a, nil, "disabled")
+	h := rq.Select(a, nil, "disabled")
 	is.True(strings.Contains(string(h), "jid=\""+elemId+"\""))
 	is.Equal(strings.Contains(string(h), "selected"), false)
 
-	a.Check("1")
-	h = rq.Select(elemId, a, nil, "")
+	a.Set("1", true)
+	h = rq.Select(a, nil, "")
 	is.True(strings.Contains(string(h), "jid=\""+elemId+"\""))
 	is.Equal(strings.Contains(string(h), "selected"), true)
 }

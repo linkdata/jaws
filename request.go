@@ -320,7 +320,7 @@ func (rq *Request) RegisterEventFn(jid string, fn EventFn) string {
 		rq.elems[jid] = fn
 	} else {
 		for {
-			jid = rq.Jaws.MakeID()
+			jid = MakeID()
 			if _, ok := rq.elems[jid]; !ok {
 				rq.elems[jid] = fn
 				break

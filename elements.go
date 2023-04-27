@@ -3,7 +3,6 @@ package jaws
 import (
 	"html/template"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -100,25 +99,13 @@ func (rq *Request) Date(jid string, val time.Time, fn InputDateFn, attrs ...stri
 	return HtmlInput(rq.maybeInputDate(jid, fn), "date", val.Format(ISO8601), attrs...)
 }
 
-func radioGroup(jid string) string {
-	if slash := strings.IndexByte(jid, '/'); slash != -1 {
-		return jid[slash+1:]
-	}
-	panic("radio button ID's must be in the form 'buttonid/groupid'")
-}
-
 func (rq *Request) Radio(jid string, val bool, fn InputBoolFn, attrs ...string) template.HTML {
-	attrs = append(attrs, "name=\""+radioGroup(jid)+"\"")
 	if val {
 		attrs = append(attrs, "checked")
 	}
 	return HtmlInput(rq.maybeInputBool(jid, fn), "radio", "", attrs...)
 }
 
-func (rq *Request) Select(jid string, val *NamedBoolArray, fn InputTextFn, attrs ...string) template.HTML {
-	return HtmlSelect(rq.maybeInputText(jid, fn), val, attrs...)
-}
-
-func (rq *Request) Ui(elem Ui, attrs ...string) template.HTML {
-	return elem.JawsUi(rq, attrs...)
+func (rq *Request) Select(nba *NamedBoolArray, fn InputTextFn, attrs ...string) template.HTML {
+	return HtmlSelect(rq.maybeInputText(nba.Jid, fn), nba, attrs...)
 }

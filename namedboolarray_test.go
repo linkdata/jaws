@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/matryer/is"
@@ -8,39 +9,72 @@ import (
 
 func Test_NamedBoolArray(t *testing.T) {
 	is := is.New(t)
-	a := NewNamedBoolArray()
-	is.Equal(len(*a), 0)
-	a.Add("1", "one")
-	is.Equal(len(*a), 1)
-	is.Equal((*a)[0].Value, "1")
-	is.Equal((*a)[0].Text, "one")
-	is.Equal((*a)[0].Checked, false)
-	is.Equal(a.String(), `&NamedBoolArray{&{"1","one",false}}`)
+	a := NewNamedBoolArray("foo")
+	is.Equal(len(a.data), 0)
+	is.Equal(a, a.JawsRadioGroupData())
+	is.Equal(nil, a.JawsRadioGroupHandler(nil, ""))
 
-	a.Check("1")
-	is.Equal((*a)[0].Value, "1")
-	is.Equal((*a)[0].Text, "one")
-	is.Equal((*a)[0].Checked, true)
+	a.Add("1", "one")
+	is.Equal(len(a.data), 1)
+	is.Equal((a.data)[0].Name, "1")
+	is.Equal((a.data)[0].Html, "one")
+	is.Equal((a.data)[0].Checked, false)
+	is.Equal(a.String(), `&NamedBoolArray{"foo",[&{"1","one",false}]}`)
+	is.Equal(a.Get(), "")
+	is.Equal(a.IsChecked("1"), false)
+	is.Equal(a.IsChecked("2"), false)
+
+	a.SetOnly("1")
+	is.Equal((a.data)[0].Name, "1")
+	is.Equal((a.data)[0].Html, "one")
+	is.Equal((a.data)[0].Checked, true)
+	is.Equal(a.Get(), "1")
+	is.Equal(a.IsChecked("1"), true)
+	is.Equal(a.IsChecked("2"), false)
+
 	a.Add("2", "two")
 	a.Add("2", "also two")
-	is.Equal(len(*a), 3)
-	is.Equal((*a)[0].Value, "1")
-	is.Equal((*a)[0].Text, "one")
-	is.Equal((*a)[0].Checked, true)
-	is.Equal((*a)[1].Value, "2")
-	is.Equal((*a)[1].Text, "two")
-	is.Equal((*a)[1].Checked, false)
-	is.Equal((*a)[2].Value, "2")
-	is.Equal((*a)[2].Text, "also two")
-	is.Equal((*a)[2].Checked, false)
-	is.Equal(a.String(), `&NamedBoolArray{&{"1","one",true},&{"2","two",false},&{"2","also two",false}}`)
+	is.Equal(len(a.data), 3)
+	is.Equal((a.data)[0].Name, "1")
+	is.Equal((a.data)[0].Html, "one")
+	is.Equal((a.data)[0].Checked, true)
+	is.Equal((a.data)[1].Name, "2")
+	is.Equal((a.data)[1].Html, "two")
+	is.Equal((a.data)[1].Checked, false)
+	is.Equal((a.data)[2].Name, "2")
+	is.Equal((a.data)[2].Html, "also two")
+	is.Equal((a.data)[2].Checked, false)
+	is.Equal(a.String(), `&NamedBoolArray{"foo",[&{"1","one",true},&{"2","two",false},&{"2","also two",false}]}`)
 
-	a.Check("2")
-	is.Equal((*a)[0].Checked, true)
-	is.Equal((*a)[1].Checked, true)
-	is.Equal((*a)[2].Checked, true)
-	a.Set("2", false)
-	is.Equal((*a)[0].Checked, true)
-	is.Equal((*a)[1].Checked, false)
-	is.Equal((*a)[2].Checked, false)
+	a.WriteLocked(func(nba []*NamedBool) []*NamedBool {
+		sort.Slice(nba, func(i, j int) bool {
+			return nba[i].Name > nba[j].Name
+		})
+		return nba
+	})
+
+	a.ReadLocked(func(nba []*NamedBool) {
+		is.Equal(nba[0].Name, "2")
+		is.Equal(nba[1].Name, "2")
+		is.Equal(nba[2].Name, "1")
+	})
+
+	is.Equal((a.data)[0].Checked, false)
+	is.Equal((a.data)[1].Checked, false)
+	is.Equal((a.data)[2].Checked, true)
+	a.Set("2", true)
+	is.Equal((a.data)[0].Checked, true)
+	is.Equal((a.data)[1].Checked, true)
+	is.Equal((a.data)[2].Checked, true)
+	is.Equal(a.Get(), "2")
+
+	a.SetOnly("1")
+	is.Equal((a.data)[0].Checked, false)
+	is.Equal((a.data)[1].Checked, false)
+	is.Equal((a.data)[2].Checked, true)
+	is.Equal(a.Get(), "1")
+
+	is.Equal(a.IsChecked("2"), false)
+	(a.data)[1].Checked = true
+	is.Equal(a.IsChecked("2"), true)
 }
