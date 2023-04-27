@@ -11,6 +11,9 @@ func Test_NamedBoolArray(t *testing.T) {
 	is := is.New(t)
 	a := NewNamedBoolArray("foo")
 	is.Equal(len(a.data), 0)
+	is.Equal(a, a.JawsRadioGroupData())
+	is.Equal(nil, a.JawsRadioGroupHandler(nil, ""))
+
 	a.Add("1", "one")
 	is.Equal(len(a.data), 1)
 	is.Equal((a.data)[0].Name, "1")

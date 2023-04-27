@@ -31,16 +31,6 @@ func (r *Radio) Radio(attrs ...string) template.HTML {
 // Label renders a HTML label element.
 func (r *Radio) Label(attrs ...string) template.HTML {
 	jid := r.nba.JidOf(r.Name)
-	b := make([]byte, 0)
-	b = append(b, `<label for="`...)
-	b = append(b, []byte(jid)...)
-	b = append(b, '"')
-	for _, attr := range attrs {
-		b = append(b, ' ')
-		b = append(b, attr...)
-	}
-	b = append(b, '>')
-	b = append(b, []byte(r.Html)...)
-	b = append(b, `</label>`...)
-	return template.HTML(b)
+	attrs = append(attrs, `for="`+jid+`"`)
+	return HtmlInner("", "label", "", r.Html, attrs...)
 }

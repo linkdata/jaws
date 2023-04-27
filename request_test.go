@@ -912,9 +912,9 @@ func TestRequest_LabeledRadioGroup(t *testing.T) {
 	}}
 
 	const expected = `<input jid="quux/alpha" type="radio" class="foo" name="quux" id="quux/alpha" checked>` +
-		`<label for="quux/alpha" class="bar">This is alpha</label>` +
+		`<label class="bar" for="quux/alpha">This is alpha</label>` +
 		`<input jid="quux/bravo" type="radio" class="foo" name="quux" id="quux/bravo">` +
-		`<label for="quux/bravo" class="bar">This is bravo</label>`
+		`<label class="bar" for="quux/bravo">This is bravo</label>`
 
 	var sb strings.Builder
 	for _, radio := range rq.RadioGroup(rg) {

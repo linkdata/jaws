@@ -69,13 +69,16 @@ func HtmlInner(jid, tag, typ, inner string, attrs ...string) template.HTML {
 	b := make([]byte, 0, need)
 	b = append(b, '<')
 	b = append(b, tag...)
-	b = append(b, ` jid="`...)
-	b = append(b, jid...)
-	if typ != "" {
-		b = append(b, `" type="`...)
-		b = append(b, typ...)
+	if jid != "" {
+		b = append(b, ` jid="`...)
+		b = append(b, jid...)
+		b = append(b, '"')
 	}
-	b = append(b, '"')
+	if typ != "" {
+		b = append(b, ` type="`...)
+		b = append(b, typ...)
+		b = append(b, '"')
+	}
 	b = appendAttrs(b, attrs)
 	b = append(b, '>')
 	if inner != "" || needClosingTag(tag) {
