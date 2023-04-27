@@ -16,7 +16,7 @@ func Test_NamedBoolArray(t *testing.T) {
 	is.Equal((a.data)[0].Name, "1")
 	is.Equal((a.data)[0].Html, "one")
 	is.Equal((a.data)[0].Checked, false)
-	is.Equal(a.String(), `&NamedBoolArray{&{"1","one",false}}`)
+	is.Equal(a.String(), `&NamedBoolArray{"foo",[&{"1","one",false}]}`)
 	is.Equal(a.Get(), "")
 	is.Equal(a.IsChecked("1"), false)
 	is.Equal(a.IsChecked("2"), false)
@@ -41,7 +41,7 @@ func Test_NamedBoolArray(t *testing.T) {
 	is.Equal((a.data)[2].Name, "2")
 	is.Equal((a.data)[2].Html, "also two")
 	is.Equal((a.data)[2].Checked, false)
-	is.Equal(a.String(), `&NamedBoolArray{&{"1","one",true},&{"2","two",false},&{"2","also two",false}}`)
+	is.Equal(a.String(), `&NamedBoolArray{"foo",[&{"1","one",true},&{"2","two",false},&{"2","also two",false}]}`)
 
 	a.WriteLocked(func(nba []*NamedBool) []*NamedBool {
 		sort.Slice(nba, func(i, j int) bool {
