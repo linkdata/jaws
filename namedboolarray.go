@@ -45,14 +45,16 @@ func (nba *NamedBoolArray) WriteLocked(fn func(nbl []*NamedBool) []*NamedBool) {
 }
 
 // Add adds a NamedBool with the given name and the given text.
+// Returns itself.
 //
 // Note that while it's legal to have multiple NamedBool with the same name
 // since it's allowed in HTML, it's probably not a good idea.
-func (nba *NamedBoolArray) Add(name, text string) {
+func (nba *NamedBoolArray) Add(name, text string) *NamedBoolArray {
 	nb := &NamedBool{Name: name, Html: text}
 	nba.mu.Lock()
 	nba.data = append(nba.data, nb)
 	nba.mu.Unlock()
+	return nba
 }
 
 // Set sets the Checked state for the NamedBool(s) with the given name or Jid.
@@ -124,6 +126,8 @@ func (nba *NamedBoolArray) IsChecked(name string) (state bool) {
 func (nba *NamedBoolArray) String() string {
 	var sb strings.Builder
 	sb.WriteString("&NamedBoolArray{")
+	sb.WriteString(strconv.Quote(nba.Jid))
+	sb.WriteString(",[")
 	nba.mu.RLock()
 	for i, nb := range nba.data {
 		if i > 0 {
@@ -132,7 +136,7 @@ func (nba *NamedBoolArray) String() string {
 		sb.WriteString(nb.String())
 	}
 	nba.mu.RUnlock()
-	sb.WriteByte('}')
+	sb.WriteString("]}")
 	return sb.String()
 }
 
