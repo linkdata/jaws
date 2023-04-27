@@ -173,3 +173,13 @@ func (nba *NamedBoolArray) radioEventFn(rq *Request, jid, evt, val string, fn In
 	}
 	return
 }
+
+// JawsRadioGroupData implements part of RadioGrouper. It returns itself.
+func (nba *NamedBoolArray) JawsRadioGroupData() *NamedBoolArray {
+	return nba
+}
+
+// JawsRadioGroupHandler implements part of RadioGrouper. It does nothing and returns nil.
+func (nba *NamedBoolArray) JawsRadioGroupHandler(rq *Request, boolName string) error {
+	return nil
+}
