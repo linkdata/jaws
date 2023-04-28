@@ -242,6 +242,7 @@ func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
 	var callCount int32
 	rq.RegisterEventFn("foo", func(rq *Request, id, evt, val string) error {
 		atomic.AddInt32(&callCount, 1)
+		is.Equal(1, jw.RequestCount())
 		jw.Close()
 		return errors.New(val)
 	})

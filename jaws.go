@@ -39,6 +39,7 @@ type Jaws struct {
 	headHTML   template.HTML
 	mu         deadlock.RWMutex // protects following
 	kg         *bufio.Reader
+	actives    int32 // atomic
 	closeCh    chan struct{}
 	reqs       map[uint64]*Request
 	sessions   map[uint64]*Session
@@ -87,6 +88,11 @@ func (jw *Jaws) Close() {
 // Done returns the completion channel.
 func (jw *Jaws) Done() <-chan struct{} {
 	return jw.doneCh
+}
+
+// RequestCount returns the number of active Requests.
+func (jw *Jaws) RequestCount() int {
+	return int(atomic.LoadInt32(&jw.actives))
 }
 
 // Log sends an error to the Logger set in the Jaws.
@@ -485,9 +491,11 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		case msgCh := <-jw.subCh:
 			if msgCh != nil {
 				subs[msgCh] = struct{}{}
+				atomic.AddInt32(&jw.actives, 1)
 			}
 		case msgCh := <-jw.unsubCh:
 			if _, ok := subs[msgCh]; ok {
+				atomic.AddInt32(&jw.actives, -1)
 				delete(subs, msgCh)
 				close(msgCh)
 			}
@@ -504,6 +512,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 						// would be to drop some messages, but that
 						// could mean nonreproducible and seemingly
 						// random failures in processing logic.
+						atomic.AddInt32(&jw.actives, -1)
 						close(msgCh)
 						delete(subs, msgCh)
 						_ = jw.Log(fmt.Errorf("jaws: broadcast channel full sending %v", msg))

@@ -210,6 +210,8 @@ func TestJaws_UseRequest(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 
+	is.Equal(0, jw.RequestCount())
+
 	rq1 := jw.NewRequest(context.Background(), nil)
 	is.True(rq1.JawsKey != 0)
 
