@@ -488,16 +488,17 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			return
 		case <-t.C:
 			jw.maintenance(requestTimeout)
+			atomic.StoreInt32(&jw.actives, int32(len(subs)))
 		case msgCh := <-jw.subCh:
 			if msgCh != nil {
 				subs[msgCh] = struct{}{}
-				atomic.AddInt32(&jw.actives, 1)
+				atomic.StoreInt32(&jw.actives, int32(len(subs)))
 			}
 		case msgCh := <-jw.unsubCh:
 			if _, ok := subs[msgCh]; ok {
-				atomic.AddInt32(&jw.actives, -1)
 				delete(subs, msgCh)
 				close(msgCh)
+				atomic.StoreInt32(&jw.actives, int32(len(subs)))
 			}
 		case msg := <-jw.bcastCh:
 			if msg != nil {
@@ -512,9 +513,9 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 						// would be to drop some messages, but that
 						// could mean nonreproducible and seemingly
 						// random failures in processing logic.
-						atomic.AddInt32(&jw.actives, -1)
 						close(msgCh)
 						delete(subs, msgCh)
+						atomic.StoreInt32(&jw.actives, int32(len(subs)))
 						_ = jw.Log(fmt.Errorf("jaws: broadcast channel full sending %v", msg))
 					}
 				}
