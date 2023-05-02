@@ -164,6 +164,8 @@ function jawsUnloading() {
 	if (jaws instanceof WebSocket) {
 		jaws.removeEventListener('close', jawsFailed);
 		jaws.removeEventListener('error', jawsFailed);
+		jaws.close()
+		jaws = null
 	}
 }
 
