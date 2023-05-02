@@ -90,9 +90,18 @@ func (jw *Jaws) Done() <-chan struct{} {
 	return jw.doneCh
 }
 
-// RequestCount returns the number of active Requests.
-func (jw *Jaws) RequestCount() int {
-	return int(atomic.LoadInt32(&jw.actives))
+// RequestCount returns the number of active and pending Requests.
+//
+// "Active" Requests are those for which there is a WebSocket connection
+// and messages are being routed for. "Pending" are those for which the
+// initial HTTP request has been made but we have not yet received the
+// WebSocket callback and started processing.
+func (jw *Jaws) RequestCount() (n int) {
+	jw.mu.RLock()
+	n = len(jw.reqs)
+	jw.mu.RUnlock()
+	n += int(atomic.LoadInt32(&jw.actives))
+	return
 }
 
 // Log sends an error to the Logger set in the Jaws.
