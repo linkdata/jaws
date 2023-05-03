@@ -21,7 +21,7 @@ func TestSession_Object(t *testing.T) {
 	sess.Set("foo", "bar") // no effect, sess is nil
 	is.Equal(nil, sess.Get("foo"))
 
-	sess = newSession(jw, sessionId, nil, time.Now().Add(time.Minute))
+	sess = newSession(jw, sessionId, nil, time.Now().Add(time.Second*sessionRefreshSeconds))
 	sess.Set("foo", "bar")
 	is.Equal("bar", sess.Get("foo"))
 	sess.Set("foo", nil)
@@ -49,7 +49,7 @@ func TestSession_Use(t *testing.T) {
 		if r.URL.Path == "/3" {
 			r.RemoteAddr = "10.4.5.6:78"
 		}
-		sess, cookie := jw.EnsureSession(r, minAge, minAge*2)
+		sess, cookie := jw.EnsureSession(r)
 		if cookie != nil {
 			http.SetCookie(w, cookie)
 		}
@@ -202,7 +202,7 @@ func TestSession_Cleanup(t *testing.T) {
 	defer jw.Close()
 
 	hr := httptest.NewRequest("GET", "/", nil)
-	sess, _ := jw.EnsureSession(hr, 1, 2)
+	sess, _ := jw.EnsureSession(hr)
 	is.Equal(jw.GetSession(hr), sess)
 	is.True(sess != nil)
 	sess.SetExpires(time.Now().Add(time.Millisecond))

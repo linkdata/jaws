@@ -43,7 +43,10 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case <-jw.Done():
 			w.WriteHeader(http.StatusServiceUnavailable)
 		default:
-			w.WriteHeader(http.StatusOK)
+			if cookie := jw.GetSession(r).Refresh(); cookie != nil {
+				http.SetCookie(w, cookie)
+			}
+			w.WriteHeader(http.StatusNoContent)
 		}
 		return
 	}

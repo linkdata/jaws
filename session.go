@@ -8,6 +8,9 @@ import (
 	"github.com/linkdata/deadlock"
 )
 
+const sessionRefreshSeconds = 60
+const sessionHeadSuffix = `";var jawsSession=60;</script>`
+
 type Session struct {
 	jw        *Jaws
 	sessionID uint64
@@ -136,17 +139,17 @@ func (sess *Session) Cookie() (cookie *http.Cookie) {
 	return
 }
 
-// Refresh ensures the cookie expiry is at least `minAge` seconds in the future.
+// Refresh ensures the cookie expiry for the session isn't too short.
+//
 // Returns a session cookie to be set if it's expiry time was updated, or nil.
 // It is safe to call on a nil Session, in which case it returns nil.
-func (sess *Session) Refresh(minAge, maxAge int) (cookie *http.Cookie) {
+func (sess *Session) Refresh() (cookie *http.Cookie) {
 	if sess != nil {
 		expires := sess.GetExpires()
 		if !expires.IsZero() { // don't refresh sessions being deleted
-			if isExpired(expires, minAge) {
-				when := time.Now().Add(time.Second * time.Duration(maxAge))
+			if isExpired(expires, time.Second*sessionRefreshSeconds*2) {
 				sess.mu.Lock()
-				sess.expires = when
+				sess.expires = expires.Add(time.Second * sessionRefreshSeconds * 3)
 				cookie = sess.cookieLocked()
 				sess.mu.Unlock()
 			}
@@ -205,6 +208,6 @@ func (sess *Session) Reload() {
 	}
 }
 
-func isExpired(t time.Time, minAge int) bool {
-	return time.Since(t.Add(time.Second*time.Duration(-minAge))) >= 0
+func isExpired(t time.Time, d time.Duration) bool {
+	return time.Since(t.Add(-d)) >= 0
 }

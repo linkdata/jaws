@@ -61,8 +61,10 @@ func TestServeHTTP_GetPing(t *testing.T) {
 	req := httptest.NewRequest("", "/jaws/.ping", nil)
 	w := httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
-	is.Equal(w.Code, http.StatusOK)
 	is.Equal(w.Header()["Cache-Control"], headerCacheNoCache)
+	is.Equal(len(w.Body.Bytes()), 0)
+	is.Equal(w.Header()["Content-Length"], nil)
+	is.Equal(w.Code, http.StatusNoContent)
 
 	req = httptest.NewRequest(http.MethodPost, "/jaws/.ping", nil)
 	w = httptest.NewRecorder()

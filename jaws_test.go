@@ -334,11 +334,11 @@ func TestJaws_GenerateHeadHTML(t *testing.T) {
 	jw.Close()
 
 	jw.GenerateHeadHTML()
-	is.True(strings.Contains(string(jw.headHTML), JavascriptPath))
+	is.True(strings.Contains(string(jw.headPrefix), JavascriptPath))
 	jw.GenerateHeadHTML(extraScript, extraStyle)
-	is.True(strings.Contains(string(jw.headHTML), JavascriptPath))
-	is.True(strings.Contains(string(jw.headHTML), extraScript))
-	is.True(strings.Contains(string(jw.headHTML), extraStyle))
+	is.True(strings.Contains(string(jw.headPrefix), JavascriptPath))
+	is.True(strings.Contains(string(jw.headPrefix), extraScript))
+	is.True(strings.Contains(string(jw.headPrefix), extraStyle))
 
 	is.True(jw.GenerateHeadHTML("random.crap") != nil)
 	is.True(jw.GenerateHeadHTML("\n") != nil)

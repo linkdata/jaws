@@ -48,6 +48,7 @@ type eventFnCall struct {
 
 var metaIds = map[string]struct{}{
 	" reload":   {},
+	" ping":     {},
 	" redirect": {},
 	" alert":    {},
 }
@@ -122,7 +123,13 @@ func (rq *Request) recycle() {
 
 // HeadHTML returns the HTML code needed to write in the HTML page's HEAD section.
 func (rq *Request) HeadHTML() template.HTML {
-	return rq.Jaws.headHTML + template.HTML(`<script>var jawsKey="`+rq.JawsKeyString()+`"</script>`) // #nosec G203
+	s := rq.Jaws.headPrefix + rq.JawsKeyString()
+	if rq.session == nil {
+		s += `";</script>`
+	} else {
+		s += sessionHeadSuffix
+	}
+	return template.HTML(s) // #nosec G203
 }
 
 // GetConnectFn returns the currently set ConnectFn. That function will be called before starting the WebSocket tunnel if not nil.

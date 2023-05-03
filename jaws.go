@@ -12,7 +12,6 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
-	"html/template"
 	"io"
 	"log"
 	"net"
@@ -30,19 +29,21 @@ import (
 const CookieNameDefault = "jaws"
 
 type Jaws struct {
-	CookieName string      // Name for session cookies, defaults to "jaws"
-	Logger     *log.Logger // If not nil, send debug info and errors here
-	doneCh     <-chan struct{}
-	bcastCh    chan *Message
-	subCh      chan chan *Message
-	unsubCh    chan chan *Message
-	headHTML   template.HTML
-	mu         deadlock.RWMutex // protects following
-	kg         *bufio.Reader
-	actives    int32 // atomic
-	closeCh    chan struct{}
-	reqs       map[uint64]*Request
-	sessions   map[uint64]*Session
+	CookieName  string      // Name for session cookies, defaults to "jaws"
+	Logger      *log.Logger // If not nil, send debug info and errors here
+	doneCh      <-chan struct{}
+	bcastCh     chan *Message
+	subCh       chan chan *Message
+	unsubCh     chan chan *Message
+	headPrefix  string
+	headSuffix  string
+	headSession string
+	mu          deadlock.RWMutex // protects following
+	kg          *bufio.Reader
+	actives     int32 // atomic
+	closeCh     chan struct{}
+	reqs        map[uint64]*Request
+	sessions    map[uint64]*Session
 }
 
 // NewWithDone returns a new JaWS object using the given completion channel.
@@ -55,7 +56,7 @@ func NewWithDone(doneCh <-chan struct{}) *Jaws {
 		bcastCh:    make(chan *Message, 1),
 		subCh:      make(chan chan *Message, 1),
 		unsubCh:    make(chan chan *Message, 1),
-		headHTML:   HeadHTML([]string{JavascriptPath}, nil),
+		headPrefix: HeadHTML([]string{JavascriptPath}, nil),
 		kg:         bufio.NewReader(rand.Reader),
 		reqs:       make(map[uint64]*Request),
 		sessions:   make(map[uint64]*Session),
@@ -278,25 +279,25 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
 	return
 }
 
-// EnsureSession ensures a session exists with an expiry least `minAge` seconds in the future.
-// Returns the session and optionally a session cookie to be set
-// if a new session was created or if it's expiry time was updated.
+// EnsureSession ensures a session exists.
+//
+// Returns the session and optionally a session cookie to be set, if needed.
 //
 // Subsequent Requests created with `NewRequest()` that have the cookie set and
 // originates from the same IP will be able to access the Session.
 //
 // If a new session was created, the session cookie is added to `hr` so you can call
 // `NewRequest()` with `hr` immediately. You still need to set the cookie in the response.
-func (jw *Jaws) EnsureSession(hr *http.Request, minAge, maxAge int) (sess *Session, cookie *http.Cookie) {
-	if hr != nil && maxAge > 0 {
-		if sess = jw.GetSession(hr); sess != nil {
-			cookie = sess.Refresh(minAge, maxAge)
-		} else {
-			expires := time.Now().Add(time.Second * time.Duration(maxAge))
-			sess = jw.createSession(parseIP(hr.RemoteAddr), expires)
-			cookie = sess.Cookie()
-			hr.AddCookie(cookie)
-		}
+//
+// Session cookies are automatically refreshed while there are active Requests using the Session.
+// Once all Requests using a Session are closed, the Session will timeout and be cleaned up.
+func (jw *Jaws) EnsureSession(hr *http.Request) (sess *Session, cookie *http.Cookie) {
+	if sess = jw.GetSession(hr); sess != nil {
+		cookie = sess.Refresh()
+	} else {
+		sess = jw.createSession(parseIP(hr.RemoteAddr), time.Now().Add(time.Second*sessionRefreshSeconds*3))
+		cookie = sess.Cookie()
+		hr.AddCookie(cookie)
 	}
 	return
 }
@@ -331,7 +332,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) error {
 	if !addedJaws {
 		js = append(js, JavascriptPath)
 	}
-	jw.headHTML = HeadHTML(js, css)
+	jw.headPrefix = HeadHTML(js, css) + `<script>var jawsKey="`
 	return nil
 }
 
