@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,7 +22,7 @@ func TestSession_Object(t *testing.T) {
 	sess.Set("foo", "bar") // no effect, sess is nil
 	is.Equal(nil, sess.Get("foo"))
 
-	sess = newSession(jw, sessionId, nil, time.Now().Add(time.Second*sessionRefreshSeconds))
+	sess = newSession(jw, sessionId, nil, time.Now().Add(time.Second))
 	sess.Set("foo", "bar")
 	is.Equal("bar", sess.Get("foo"))
 	sess.Set("foo", nil)
@@ -39,7 +40,6 @@ func TestSession_Object(t *testing.T) {
 }
 
 func TestSession_Use(t *testing.T) {
-	const minAge = 60 * 5
 	is := is.New(t)
 	jw := New()
 	defer jw.Close()
@@ -49,12 +49,22 @@ func TestSession_Use(t *testing.T) {
 		if r.URL.Path == "/3" {
 			r.RemoteAddr = "10.4.5.6:78"
 		}
+
+		if strings.HasPrefix(r.URL.Path, "/jaws/") {
+			jw.ServeHTTP(w, r)
+			return
+		}
+
 		sess, cookie := jw.EnsureSession(r)
 		if cookie != nil {
 			http.SetCookie(w, cookie)
 		}
 		rq := jw.NewRequest(context.Background(), r)
 		is.Equal(sess, rq.Session())
+
+		head := rq.HeadHTML()
+		is.True(strings.Contains(string(head), "jawsSession="))
+
 		switch r.URL.Path {
 		case "/":
 			wantSess = sess
@@ -62,7 +72,7 @@ func TestSession_Use(t *testing.T) {
 		case "/2":
 			is.Equal(rq.Get("foo"), "bar")
 			rq.Set("foo", "baz")
-			wantSess.SetExpires(time.Now().Add(time.Second * minAge / 2))
+			wantSess.SetExpires(time.Now().Add(time.Second * sessionRefreshSeconds / 2))
 		case "/3":
 			is.True(rq.Session() != wantSess)
 			is.Equal(rq.Get("foo"), nil)
@@ -103,6 +113,17 @@ func TestSession_Use(t *testing.T) {
 		t.Fatal(err)
 	}
 	is.Equal(wantSess.Get("foo"), "baz")
+	is.True(resp != nil)
+
+	rp, err := http.NewRequest("GET", srv.URL+"/jaws/.ping", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rp.AddCookie(cookies[0])
+	resp, err = srv.Client().Do(rp)
+	if err != nil {
+		t.Fatal(err)
+	}
 	is.True(resp != nil)
 
 	r3, err := http.NewRequest("GET", srv.URL+"/3", nil)
