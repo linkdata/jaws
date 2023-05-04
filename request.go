@@ -72,7 +72,6 @@ func newRequest(ctx context.Context, jw *Jaws, jawsKey uint64, hr *http.Request)
 		if sess := jw.getSessionLocked(getCookieSessionsIds(hr.Header, jw.CookieName), rq.remoteIP); sess != nil {
 			sess.addRequest(rq)
 			rq.session = sess
-			rq.elems[sess.jid()] = nil
 		}
 	}
 	return rq

@@ -31,7 +31,6 @@ func TestSession_Object(t *testing.T) {
 	cookie := sess.Cookie()
 	is.Equal(jw.CookieName, cookie.Name)
 	is.Equal(JawsKeyString(sessionId), cookie.Value)
-	is.Equal(cookie.Value, sess.CookieValue())
 	is.Equal(sessionId, sess.ID())
 	is.Equal(nil, sess.IP())
 }
@@ -202,7 +201,7 @@ func TestSession_Delete(t *testing.T) {
 	mt, b, err := conn.Read(ctx)
 	is.NoErr(err)
 	is.Equal(mt, websocket.MessageText)
-	is.Equal(string(b), sess.jid()+"\nreload\n")
+	is.Equal(string(b), " reload\n\n")
 }
 
 func TestSession_Cleanup(t *testing.T) {

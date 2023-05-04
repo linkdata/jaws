@@ -112,37 +112,17 @@ func (sess *Session) IP() (ip net.IP) {
 	return
 }
 
-// CookieValue returns the cookie value for the Session.
-// It is safe to call on a nil Session, in which case it returns an empty string.
-func (sess *Session) CookieValue() (val string) {
-	if sess != nil {
-		val = JawsKeyString(sess.sessionID)
-	}
-	return
-}
-
-func (sess *Session) jid() string {
-	return "  " + JawsKeyString(sess.sessionID)
-}
-
-func (sess *Session) cookieLocked() *http.Cookie {
-	return &http.Cookie{
-		Name:     sess.jw.CookieName,
-		Path:     "/",
-		Value:    JawsKeyString(sess.sessionID),
-		Secure:   true,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	}
-}
-
 // Cookie returns the cookie for the Session. Returns a delete cookie if the Session is expired.
 // It is safe to call on a nil Session, in which case it returns nil.
 func (sess *Session) Cookie() (cookie *http.Cookie) {
 	if sess != nil {
+		cookie = &http.Cookie{}
 		sess.mu.RLock()
-		cookie = sess.cookieLocked()
+		*cookie = sess.cookie
 		sess.mu.RUnlock()
+		if sess.isDead() {
+			cookie.MaxAge = -1
+		}
 	}
 	return
 }
@@ -185,13 +165,25 @@ func (sess *Session) Clear() {
 	}
 }
 
+// Broadcast sends a message to all Requests using this session.
+// It is safe to call on a nil Session.
+func (sess *Session) Broadcast(msg *Message) {
+	if sess != nil {
+		sess.mu.RLock()
+		defer sess.mu.RUnlock()
+		for _, rq := range sess.requests {
+			select {
+			case rq.sendCh <- msg:
+			default:
+			}
+		}
+	}
+}
+
 // Reload sends a message to all Requests using this session to reload their webpage.
 // It is safe to call on a nil Session.
 func (sess *Session) Reload() {
 	if sess != nil {
-		sess.jw.Broadcast(&Message{
-			Elem: sess.jid(),
-			What: "reload",
-		})
+		sess.Broadcast(&Message{Elem: " reload"})
 	}
 }
