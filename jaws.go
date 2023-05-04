@@ -29,21 +29,19 @@ import (
 const CookieNameDefault = "jaws"
 
 type Jaws struct {
-	CookieName  string      // Name for session cookies, defaults to "jaws"
-	Logger      *log.Logger // If not nil, send debug info and errors here
-	doneCh      <-chan struct{}
-	bcastCh     chan *Message
-	subCh       chan chan *Message
-	unsubCh     chan chan *Message
-	headPrefix  string
-	headSuffix  string
-	headSession string
-	mu          deadlock.RWMutex // protects following
-	kg          *bufio.Reader
-	actives     int32 // atomic
-	closeCh     chan struct{}
-	reqs        map[uint64]*Request
-	sessions    map[uint64]*Session
+	CookieName string      // Name for session cookies, defaults to "jaws"
+	Logger     *log.Logger // If not nil, send debug info and errors here
+	doneCh     <-chan struct{}
+	bcastCh    chan *Message
+	subCh      chan chan *Message
+	unsubCh    chan chan *Message
+	headPrefix string
+	mu         deadlock.RWMutex // protects following
+	kg         *bufio.Reader
+	actives    int32 // atomic
+	closeCh    chan struct{}
+	reqs       map[uint64]*Request
+	sessions   map[uint64]*Session
 }
 
 // NewWithDone returns a new JaWS object using the given completion channel.
@@ -193,19 +191,6 @@ func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) {
 	return
 }
 
-func (jw *Jaws) createSession(remoteIP net.IP, expires time.Time) (sess *Session) {
-	jw.mu.Lock()
-	for sess == nil {
-		sessionID := jw.nonZeroRandomLocked()
-		if _, ok := jw.sessions[sessionID]; !ok {
-			sess = newSession(jw, sessionID, remoteIP, expires)
-			jw.sessions[sessionID] = sess
-		}
-	}
-	jw.mu.Unlock()
-	return
-}
-
 // SessionCount returns the number of active sessions.
 func (jw *Jaws) SessionCount() (n int) {
 	jw.mu.RLock()
@@ -268,7 +253,7 @@ func getCookieSessionsIds(h http.Header, wanted string) (cookies []uint64) {
 	return
 }
 
-// GetSession retrieves the session associated with the given cookie value and remote address, or nil.
+// GetSession returns the Session associated with the given *http.Request, or nil.
 func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
 	if sessIds := getCookieSessionsIds(hr.Header, jw.CookieName); len(sessIds) > 0 {
 		remoteIP := parseIP(hr.RemoteAddr)
@@ -279,25 +264,33 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
 	return
 }
 
-// EnsureSession ensures a session exists.
+// NewSession creates a new Session.
 //
-// Returns the session and optionally a session cookie to be set, if needed.
+// Any pre-existing Session will be closed and cleared, and Requests using it will reload their pages.
 //
 // Subsequent Requests created with `NewRequest()` that have the cookie set and
 // originates from the same IP will be able to access the Session.
-//
-// If a new session was created, the session cookie is added to `hr` so you can call
-// `NewRequest()` with `hr` immediately. You still need to set the cookie in the response.
-//
-// Session cookies are automatically refreshed while there are active Requests using the Session.
-// Once all Requests using a Session are closed, the Session will timeout and be cleaned up.
-func (jw *Jaws) EnsureSession(hr *http.Request) (sess *Session, cookie *http.Cookie) {
-	if sess = jw.GetSession(hr); sess != nil {
-		cookie = sess.Refresh()
-	} else {
-		sess = jw.createSession(parseIP(hr.RemoteAddr), time.Now().Add(time.Second*sessionRefreshSeconds*3))
-		cookie = sess.Cookie()
-		hr.AddCookie(cookie)
+func (jw *Jaws) NewSession(w http.ResponseWriter, hr *http.Request) (sess *Session) {
+	remoteIP := parseIP(hr.RemoteAddr)
+	sessIds := getCookieSessionsIds(hr.Header, jw.CookieName)
+
+	jw.mu.Lock()
+	defer jw.mu.Unlock()
+	if oldSess := jw.getSessionLocked(sessIds, remoteIP); oldSess != nil {
+		delete(jw.sessions, oldSess.sessionID)
+		oldSess.Clear()
+		oldSess.Reload()
+	}
+	for sess == nil {
+		sessionID := jw.nonZeroRandomLocked()
+		if _, ok := jw.sessions[sessionID]; !ok {
+			sess = newSession(jw, sessionID, remoteIP)
+			jw.sessions[sessionID] = sess
+			if w != nil {
+				http.SetCookie(w, &sess.cookie)
+			}
+			hr.AddCookie(&sess.cookie)
+		}
 	}
 	return
 }
@@ -574,7 +567,7 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 		}
 	}
 	for k, sess := range jw.sessions {
-		if sess.GetExpires().Before(now) {
+		if sess.isDead() {
 			killSess = append(killSess, k)
 		}
 	}

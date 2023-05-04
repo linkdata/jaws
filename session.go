@@ -8,26 +8,64 @@ import (
 	"github.com/linkdata/deadlock"
 )
 
-const sessionRefreshSeconds = 60
-const sessionHeadSuffix = `";var jawsSession=60;</script>`
-
 type Session struct {
 	jw        *Jaws
 	sessionID uint64
 	remoteIP  net.IP
 	mu        deadlock.RWMutex // protects following
-	expires   time.Time
+	requests  []*Request
+	deadline  time.Time
+	cookie    http.Cookie
 	data      map[string]interface{}
 }
 
-func newSession(jw *Jaws, sessionID uint64, remoteIP net.IP, expires time.Time) *Session {
+func newSession(jw *Jaws, sessionID uint64, remoteIP net.IP) *Session {
 	return &Session{
 		jw:        jw,
 		sessionID: sessionID,
 		remoteIP:  remoteIP,
-		expires:   expires,
-		data:      make(map[string]interface{}),
+		deadline:  time.Now().Add(time.Minute),
+		cookie: http.Cookie{
+			Name:     jw.CookieName,
+			Path:     "/",
+			Value:    JawsKeyString(sessionID),
+			Secure:   true,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		},
+		data: make(map[string]interface{}),
 	}
+}
+
+func (sess *Session) isDead() (yes bool) {
+	sess.mu.RLock()
+	yes = len(sess.requests) == 0 && time.Since(sess.deadline) < 0
+	sess.mu.RUnlock()
+	return
+}
+
+func (sess *Session) addRequest(rq *Request) {
+	sess.mu.Lock()
+	sess.requests = append(sess.requests, rq)
+	sess.mu.Unlock()
+}
+
+func (sess *Session) delRequest(rq *Request) {
+	sess.mu.Lock()
+	for i := range sess.requests {
+		if sess.requests[i] == rq {
+			l := len(sess.requests)
+			if l > 1 {
+				sess.requests[i] = sess.requests[l-1]
+			}
+			sess.requests = sess.requests[:l-1]
+			break
+		}
+	}
+	if len(sess.requests) == 0 {
+		sess.deadline = time.Now().Add(time.Minute)
+	}
+	sess.mu.Unlock()
 }
 
 // Get returns the value associated with the key, or nil.
@@ -52,28 +90,6 @@ func (sess *Session) Set(key string, val interface{}) {
 		} else {
 			sess.data[key] = val
 		}
-		sess.mu.Unlock()
-	}
-}
-
-// GetExpires gets the Session expiry time.
-// It is safe to call on a nil or closed Session, in which case it returns a zero time.
-func (sess *Session) GetExpires() (when time.Time) {
-	if sess != nil {
-		sess.mu.RLock()
-		when = sess.expires
-		sess.mu.RUnlock()
-	}
-	return
-}
-
-// SetExpires sets the Session expiry time.
-// Attempts to set a zero time will be ignored; use Close() to close the session.
-// It is safe to call on a nil Session.
-func (sess *Session) SetExpires(when time.Time) {
-	if sess != nil && !when.IsZero() {
-		sess.mu.Lock()
-		sess.expires = when
 		sess.mu.Unlock()
 	}
 }
@@ -110,18 +126,10 @@ func (sess *Session) jid() string {
 }
 
 func (sess *Session) cookieLocked() *http.Cookie {
-	var maxAge int
-	expires := sess.expires
-	if expires.IsZero() || isExpired(expires, 0) {
-		maxAge = -1
-		expires = time.Time{}
-	}
 	return &http.Cookie{
 		Name:     sess.jw.CookieName,
 		Path:     "/",
 		Value:    JawsKeyString(sess.sessionID),
-		MaxAge:   maxAge,
-		Expires:  expires,
 		Secure:   true,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
@@ -139,25 +147,6 @@ func (sess *Session) Cookie() (cookie *http.Cookie) {
 	return
 }
 
-// Refresh ensures the cookie expiry for the session isn't too short.
-//
-// Returns a session cookie to be set if it's expiry time was updated, or nil.
-// It is safe to call on a nil Session, in which case it returns nil.
-func (sess *Session) Refresh() (cookie *http.Cookie) {
-	if sess != nil {
-		expires := sess.GetExpires()
-		if !expires.IsZero() { // don't refresh sessions being deleted
-			if isExpired(expires, time.Second*sessionRefreshSeconds*2) {
-				sess.mu.Lock()
-				sess.expires = expires.Add(time.Second * sessionRefreshSeconds * 3)
-				cookie = sess.cookieLocked()
-				sess.mu.Unlock()
-			}
-		}
-	}
-	return
-}
-
 // Close invalidates and expires the Session.
 // Future Requests won't be able to associate with it, and Cookie() will return a deletion cookie.
 //
@@ -170,12 +159,11 @@ func (sess *Session) Refresh() (cookie *http.Cookie) {
 func (sess *Session) Close() (cookie *http.Cookie) {
 	if sess != nil {
 		var deleteID uint64
+		cookie = &http.Cookie{}
 		sess.mu.Lock()
-		if !sess.expires.IsZero() {
-			deleteID = sess.sessionID
-			sess.expires = time.Time{}
-			cookie = sess.cookieLocked()
-		}
+		*cookie = sess.cookie
+		cookie.MaxAge = -1
+		deleteID = sess.sessionID
 		sess.mu.Unlock()
 		if deleteID != 0 {
 			sess.jw.deleteSession(deleteID)
@@ -206,8 +194,4 @@ func (sess *Session) Reload() {
 			What: "reload",
 		})
 	}
-}
-
-func isExpired(t time.Time, d time.Duration) bool {
-	return time.Since(t.Add(-d)) >= 0
 }

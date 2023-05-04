@@ -32,7 +32,7 @@ func newTestServer(is *is.I) (ts *testServer) {
 	jw := New()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	sess, _ := jw.EnsureSession(hr)
+	sess := jw.NewSession(nil, hr)
 	rq := jw.NewRequest(ctx, hr)
 	ts = &testServer{
 		is:          is,
