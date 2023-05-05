@@ -37,9 +37,13 @@ func newSession(jw *Jaws, sessionID uint64, remoteIP net.IP) *Session {
 	}
 }
 
+func (sess *Session) isDeadLocked() bool {
+	return sess.cookie.MaxAge < 0 || (len(sess.requests) == 0 && time.Since(sess.deadline) > 0)
+}
+
 func (sess *Session) isDead() (yes bool) {
 	sess.mu.RLock()
-	yes = len(sess.requests) == 0 && time.Since(sess.deadline) < 0
+	yes = sess.isDeadLocked()
 	sess.mu.RUnlock()
 	return
 }
@@ -52,6 +56,7 @@ func (sess *Session) addRequest(rq *Request) {
 
 func (sess *Session) delRequest(rq *Request) {
 	sess.mu.Lock()
+	defer sess.mu.Unlock()
 	for i := range sess.requests {
 		if sess.requests[i] == rq {
 			l := len(sess.requests)
@@ -65,7 +70,6 @@ func (sess *Session) delRequest(rq *Request) {
 	if len(sess.requests) == 0 {
 		sess.deadline = time.Now().Add(time.Minute)
 	}
-	sess.mu.Unlock()
 }
 
 // Get returns the value associated with the key, or nil.
@@ -112,17 +116,17 @@ func (sess *Session) IP() (ip net.IP) {
 	return
 }
 
-// Cookie returns the cookie for the Session. Returns a delete cookie if the Session is expired.
+// Cookie returns a cookie for the Session. Returns a delete cookie if the Session is expired.
 // It is safe to call on a nil Session, in which case it returns nil.
 func (sess *Session) Cookie() (cookie *http.Cookie) {
 	if sess != nil {
 		cookie = &http.Cookie{}
 		sess.mu.RLock()
 		*cookie = sess.cookie
-		sess.mu.RUnlock()
-		if sess.isDead() {
+		if sess.isDeadLocked() {
 			cookie.MaxAge = -1
 		}
+		sess.mu.RUnlock()
 	}
 	return
 }
@@ -133,24 +137,19 @@ func (sess *Session) Cookie() (cookie *http.Cookie) {
 // Existing Requests already associated with the Session will ask the browser to reload the pages.
 // Key/value pairs in the Session are left unmodified, you can use `Session.Clear()` to remove all of them.
 //
-// Returns the a cookie to be sent to the client browser that will delete the browser cookie.
+// Returns a cookie to be sent to the client browser that will delete the browser cookie.
 // Returns nil if the session was not found or is already closed.
 // It is safe to call on a nil Session.
 func (sess *Session) Close() (cookie *http.Cookie) {
 	if sess != nil {
-		var deleteID uint64
-		cookie = &http.Cookie{}
+		sess.jw.deleteSession(sess.sessionID)
 		sess.mu.Lock()
-		*cookie = sess.cookie
-		cookie.MaxAge = -1
-		deleteID = sess.sessionID
+		sess.cookie.MaxAge = -1
+		sess.broadcastLocked(&Message{Elem: " reload"})
+		sess.requests = sess.requests[:0]
 		sess.mu.Unlock()
-		if deleteID != 0 {
-			sess.jw.deleteSession(deleteID)
-			sess.Reload()
-		}
 	}
-	return
+	return &sess.cookie
 }
 
 // Clear removes all key/value pairs from the session.
@@ -165,25 +164,21 @@ func (sess *Session) Clear() {
 	}
 }
 
-// Broadcast sends a message to all Requests using this session.
+func (sess *Session) broadcastLocked(msg *Message) {
+	for _, rq := range sess.requests {
+		select {
+		case rq.sendCh <- msg:
+		default:
+		}
+	}
+}
+
+// Broadcast attempts to send a message to all Requests using this session.
 // It is safe to call on a nil Session.
 func (sess *Session) Broadcast(msg *Message) {
 	if sess != nil {
 		sess.mu.RLock()
 		defer sess.mu.RUnlock()
-		for _, rq := range sess.requests {
-			select {
-			case rq.sendCh <- msg:
-			default:
-			}
-		}
-	}
-}
-
-// Reload sends a message to all Requests using this session to reload their webpage.
-// It is safe to call on a nil Session.
-func (sess *Session) Reload() {
-	if sess != nil {
-		sess.Broadcast(&Message{Elem: " reload"})
+		sess.broadcastLocked(msg)
 	}
 }

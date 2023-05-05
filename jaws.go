@@ -266,25 +266,22 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
 
 // NewSession creates a new Session.
 //
-// Any pre-existing Session will be closed and cleared, and Requests using it will reload their pages.
+// Any pre-existing Session will be cleared and closed.
 //
 // Subsequent Requests created with `NewRequest()` that have the cookie set and
 // originates from the same IP will be able to access the Session.
 func (jw *Jaws) NewSession(w http.ResponseWriter, hr *http.Request) (sess *Session) {
-	remoteIP := parseIP(hr.RemoteAddr)
-	sessIds := getCookieSessionsIds(hr.Header, jw.CookieName)
+	if oldSess := jw.GetSession(hr); oldSess != nil {
+		oldSess.Clear()
+		oldSess.Close()
+	}
 
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
-	if oldSess := jw.getSessionLocked(sessIds, remoteIP); oldSess != nil {
-		delete(jw.sessions, oldSess.sessionID)
-		oldSess.Clear()
-		oldSess.Reload()
-	}
 	for sess == nil {
 		sessionID := jw.nonZeroRandomLocked()
 		if _, ok := jw.sessions[sessionID]; !ok {
-			sess = newSession(jw, sessionID, remoteIP)
+			sess = newSession(jw, sessionID, parseIP(hr.RemoteAddr))
 			jw.sessions[sessionID] = sess
 			if w != nil {
 				http.SetCookie(w, &sess.cookie)
