@@ -48,6 +48,7 @@ type eventFnCall struct {
 
 var metaIds = map[string]struct{}{
 	" reload":   {},
+	" ping":     {},
 	" redirect": {},
 	" alert":    {},
 }
@@ -59,18 +60,18 @@ var requestPool = sync.Pool{New: func() interface{} {
 	}
 }}
 
-func newRequest(ctx context.Context, j *Jaws, jawsKey uint64, hr *http.Request) (rq *Request) {
+func newRequest(ctx context.Context, jw *Jaws, jawsKey uint64, hr *http.Request) (rq *Request) {
 	rq = requestPool.Get().(*Request)
-	rq.Jaws = j
+	rq.Jaws = jw
 	rq.JawsKey = jawsKey
 	rq.Created = time.Now()
 	rq.Initial = hr
 	rq.Context = ctx
 	if hr != nil {
 		rq.remoteIP = parseIP(hr.RemoteAddr)
-		if sess := j.getSessionLocked(getCookieSessionsIds(hr.Header, j.CookieName), rq.remoteIP); sess != nil {
+		if sess := jw.getSessionLocked(getCookieSessionsIds(hr.Header, jw.CookieName), rq.remoteIP); sess != nil {
+			sess.addRequest(rq)
 			rq.session = sess
-			rq.elems[sess.jid()] = nil
 		}
 	}
 	return rq
@@ -110,7 +111,10 @@ func (rq *Request) recycle() {
 	rq.Initial = nil
 	rq.Context = nil
 	rq.remoteIP = nil
-	rq.session = nil
+	if sess := rq.session; sess != nil {
+		rq.session = nil
+		sess.delRequest(rq)
+	}
 	// this gets optimized to calling the 'runtime.mapclear' function
 	// we don't expect this to improve speed, but it will lower GC load
 	for k := range rq.elems {
@@ -122,7 +126,8 @@ func (rq *Request) recycle() {
 
 // HeadHTML returns the HTML code needed to write in the HTML page's HEAD section.
 func (rq *Request) HeadHTML() template.HTML {
-	return rq.Jaws.headHTML + template.HTML(`<script>var jawsKey="`+rq.JawsKeyString()+`"</script>`) // #nosec G203
+	s := rq.Jaws.headPrefix + rq.JawsKeyString() + `";</script>`
+	return template.HTML(s) // #nosec G203
 }
 
 // GetConnectFn returns the currently set ConnectFn. That function will be called before starting the WebSocket tunnel if not nil.

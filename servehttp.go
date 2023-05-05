@@ -43,7 +43,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case <-jw.Done():
 			w.WriteHeader(http.StatusServiceUnavailable)
 		default:
-			w.WriteHeader(http.StatusOK)
+			w.WriteHeader(http.StatusNoContent)
 		}
 		return
 	}

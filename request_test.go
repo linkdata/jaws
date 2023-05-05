@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -654,11 +653,9 @@ func TestRequest_Elements(t *testing.T) {
 	is.True(strings.Contains(string(h), elemVal))
 
 	h = rq.Img(elemId, "randomimg.png", nil)
-	fmt.Println(h)
 	is.True(strings.Contains(string(h), "src=\"randomimg.png\""))
 
 	h = rq.Img(elemId, "\"randomimg.png\"", nil)
-	fmt.Println(h)
 	is.True(strings.Contains(string(h), "src=\"randomimg.png\""))
 }
 

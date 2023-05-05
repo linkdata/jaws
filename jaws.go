@@ -12,7 +12,6 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
-	"html/template"
 	"io"
 	"log"
 	"net"
@@ -36,7 +35,7 @@ type Jaws struct {
 	bcastCh    chan *Message
 	subCh      chan chan *Message
 	unsubCh    chan chan *Message
-	headHTML   template.HTML
+	headPrefix string
 	mu         deadlock.RWMutex // protects following
 	kg         *bufio.Reader
 	actives    int32 // atomic
@@ -55,7 +54,7 @@ func NewWithDone(doneCh <-chan struct{}) *Jaws {
 		bcastCh:    make(chan *Message, 1),
 		subCh:      make(chan chan *Message, 1),
 		unsubCh:    make(chan chan *Message, 1),
-		headHTML:   HeadHTML([]string{JavascriptPath}, nil),
+		headPrefix: HeadHTML([]string{JavascriptPath}, nil),
 		kg:         bufio.NewReader(rand.Reader),
 		reqs:       make(map[uint64]*Request),
 		sessions:   make(map[uint64]*Session),
@@ -192,19 +191,6 @@ func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) {
 	return
 }
 
-func (jw *Jaws) createSession(remoteIP net.IP, expires time.Time) (sess *Session) {
-	jw.mu.Lock()
-	for sess == nil {
-		sessionID := jw.nonZeroRandomLocked()
-		if _, ok := jw.sessions[sessionID]; !ok {
-			sess = newSession(jw, sessionID, remoteIP, expires)
-			jw.sessions[sessionID] = sess
-		}
-	}
-	jw.mu.Unlock()
-	return
-}
-
 // SessionCount returns the number of active sessions.
 func (jw *Jaws) SessionCount() (n int) {
 	jw.mu.RLock()
@@ -267,7 +253,7 @@ func getCookieSessionsIds(h http.Header, wanted string) (cookies []uint64) {
 	return
 }
 
-// GetSession retrieves the session associated with the given cookie value and remote address, or nil.
+// GetSession returns the Session associated with the given *http.Request, or nil.
 func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
 	if sessIds := getCookieSessionsIds(hr.Header, jw.CookieName); len(sessIds) > 0 {
 		remoteIP := parseIP(hr.RemoteAddr)
@@ -278,24 +264,29 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
 	return
 }
 
-// EnsureSession ensures a session exists with an expiry least `minAge` seconds in the future.
-// Returns the session and optionally a session cookie to be set
-// if a new session was created or if it's expiry time was updated.
+// NewSession creates a new Session.
+//
+// Any pre-existing Session will be cleared and closed.
 //
 // Subsequent Requests created with `NewRequest()` that have the cookie set and
 // originates from the same IP will be able to access the Session.
-//
-// If a new session was created, the session cookie is added to `hr` so you can call
-// `NewRequest()` with `hr` immediately. You still need to set the cookie in the response.
-func (jw *Jaws) EnsureSession(hr *http.Request, minAge, maxAge int) (sess *Session, cookie *http.Cookie) {
-	if hr != nil && maxAge > 0 {
-		if sess = jw.GetSession(hr); sess != nil {
-			cookie = sess.Refresh(minAge, maxAge)
-		} else {
-			expires := time.Now().Add(time.Second * time.Duration(maxAge))
-			sess = jw.createSession(parseIP(hr.RemoteAddr), expires)
-			cookie = sess.Cookie()
-			hr.AddCookie(cookie)
+func (jw *Jaws) NewSession(w http.ResponseWriter, hr *http.Request) (sess *Session) {
+	if oldSess := jw.GetSession(hr); oldSess != nil {
+		oldSess.Clear()
+		oldSess.Close()
+	}
+
+	jw.mu.Lock()
+	defer jw.mu.Unlock()
+	for sess == nil {
+		sessionID := jw.nonZeroRandomLocked()
+		if _, ok := jw.sessions[sessionID]; !ok {
+			sess = newSession(jw, sessionID, parseIP(hr.RemoteAddr))
+			jw.sessions[sessionID] = sess
+			if w != nil {
+				http.SetCookie(w, &sess.cookie)
+			}
+			hr.AddCookie(&sess.cookie)
 		}
 	}
 	return
@@ -331,7 +322,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) error {
 	if !addedJaws {
 		js = append(js, JavascriptPath)
 	}
-	jw.headHTML = HeadHTML(js, css)
+	jw.headPrefix = HeadHTML(js, css) + `<script>var jawsKey="`
 	return nil
 }
 
@@ -573,7 +564,7 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 		}
 	}
 	for k, sess := range jw.sessions {
-		if sess.GetExpires().Before(now) {
+		if sess.isDead() {
 			killSess = append(killSess, k)
 		}
 	}

@@ -58,7 +58,7 @@ of them.
 
   If you don't have a JaWS object, or if it's completion channel is closed (see
   `Jaws.Done()`), return **503 Service Unavailable**. If you're ready to serve
-  requests, return **200 OK**.
+  requests, return **204 No Content**.
   
   The response should not be cached.
 

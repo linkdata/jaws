@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	_ "embed"
 	"hash/fnv"
-	"html/template"
 	"strconv"
 )
 
@@ -52,19 +51,21 @@ func JawsKeyValue(jawsKey string) uint64 {
 	return 0
 }
 
-// HeadHTML returns HTML code to load the given scripts and CSS files efficiently.
-func HeadHTML(js []string, css []string) template.HTML {
+const jsLoader = `.forEach(function(c){var e=document.createElement("script");e.src=c;e.async=!1;document.head.appendChild(e);});`
+
+// HeadHTML returns HTML code to load the given scripts and CSS files efficiently,
+func HeadHTML(js []string, css []string) string {
 	var s []byte
 
 	for _, e := range css {
-		s = append(s, "<link rel=\"preload\" href=\""...)
-		s = append(s, e...)
-		s = append(s, "\" as=\"style\">\n"...)
+		s = append(s, "<link rel=\"preload\" href="...)
+		s = strconv.AppendQuote(s, e)
+		s = append(s, " as=\"style\">\n"...)
 	}
 	for _, e := range js {
-		s = append(s, "<link rel=\"preload\" href=\""...)
-		s = append(s, e...)
-		s = append(s, "\" as=\"script\">\n"...)
+		s = append(s, "<link rel=\"preload\" href="...)
+		s = strconv.AppendQuote(s, e)
+		s = append(s, " as=\"script\">\n"...)
 	}
 
 	s = append(s, "<script>["...)
@@ -72,17 +73,15 @@ func HeadHTML(js []string, css []string) template.HTML {
 		if i > 0 {
 			s = append(s, ',')
 		}
-		s = append(s, '"')
-		s = append(s, e...)
-		s = append(s, '"')
+		s = strconv.AppendQuote(s, e)
 	}
-	s = append(s, "].forEach(function(c){var e=document.createElement(\"script\");e.src=c;e.async=!1;document.head.appendChild(e);});</script>\n"...)
+	s = append(s, "]"+jsLoader+"</script>\n"...)
 
 	for _, e := range css {
-		s = append(s, "<link rel=\"stylesheet\" href=\""...)
-		s = append(s, e...)
-		s = append(s, "\">\n"...)
+		s = append(s, "<link rel=\"stylesheet\" href="...)
+		s = strconv.AppendQuote(s, e)
+		s = append(s, ">\n"...)
 	}
 
-	return template.HTML(s) // #nosec G203
+	return string(s)
 }

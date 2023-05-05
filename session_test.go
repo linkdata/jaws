@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,10 +19,11 @@ func TestSession_Object(t *testing.T) {
 
 	sessionId := uint64(0x12345)
 	var sess *Session
-	sess.Set("foo", "bar") // no effect, sess is nil
+	// Set/Get on nil Session is ignored
+	sess.Set("foo", "bar")
 	is.Equal(nil, sess.Get("foo"))
 
-	sess = newSession(jw, sessionId, nil, time.Now().Add(time.Minute))
+	sess = newSession(jw, sessionId, nil)
 	sess.Set("foo", "bar")
 	is.Equal("bar", sess.Get("foo"))
 	sess.Set("foo", nil)
@@ -29,17 +31,13 @@ func TestSession_Object(t *testing.T) {
 	cookie := sess.Cookie()
 	is.Equal(jw.CookieName, cookie.Name)
 	is.Equal(JawsKeyString(sessionId), cookie.Value)
-	is.Equal(cookie.Value, sess.CookieValue())
-	when := sess.GetExpires()
-	is.True(!when.IsZero())
-	sess.SetExpires(when.Add(time.Second))
-	is.True(sess.GetExpires().After(when))
 	is.Equal(sessionId, sess.ID())
 	is.Equal(nil, sess.IP())
+
+	sess.Broadcast(&Message{})
 }
 
 func TestSession_Use(t *testing.T) {
-	const minAge = 60 * 5
 	is := is.New(t)
 	jw := New()
 	defer jw.Close()
@@ -49,26 +47,26 @@ func TestSession_Use(t *testing.T) {
 		if r.URL.Path == "/3" {
 			r.RemoteAddr = "10.4.5.6:78"
 		}
-		sess, cookie := jw.EnsureSession(r, minAge, minAge*2)
-		if cookie != nil {
-			http.SetCookie(w, cookie)
+
+		if strings.HasPrefix(r.URL.Path, "/jaws/") {
+			jw.ServeHTTP(w, r)
+			return
 		}
+
+		sess := jw.GetSession(r)
 		rq := jw.NewRequest(context.Background(), r)
 		is.Equal(sess, rq.Session())
+
 		switch r.URL.Path {
 		case "/":
-			wantSess = sess
-			rq.Set("foo", "bar")
+			wantSess = jw.NewSession(w, r)
+			wantSess.Set("foo", "bar")
 		case "/2":
 			is.Equal(rq.Get("foo"), "bar")
 			rq.Set("foo", "baz")
-			wantSess.SetExpires(time.Now().Add(time.Second * minAge / 2))
 		case "/3":
 			is.True(rq.Session() != wantSess)
 			is.Equal(rq.Get("foo"), nil)
-			cookie := rq.Session().Cookie()
-			is.True(cookie != nil)
-			is.True(cookie.Value != JawsKeyString(wantSess.sessionID))
 		case "/4":
 			is.Equal(rq.Get("foo"), "baz")
 			rq.Set("foo", nil)
@@ -89,7 +87,7 @@ func TestSession_Use(t *testing.T) {
 	is.Equal(len(cookies), 1)
 	is.Equal(cookies[0].Name, jw.CookieName)
 	is.True(wantSess != nil)
-	is.Equal(cookies[0].Value, JawsKeyString(wantSess.sessionID))
+	is.Equal(cookies[0].Value, wantSess.CookieValue())
 	is.True(wantSess != nil)
 	is.Equal(wantSess.Get("foo"), "bar")
 
@@ -103,6 +101,17 @@ func TestSession_Use(t *testing.T) {
 		t.Fatal(err)
 	}
 	is.Equal(wantSess.Get("foo"), "baz")
+	is.True(resp != nil)
+
+	rp, err := http.NewRequest("GET", srv.URL+"/jaws/.ping", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rp.AddCookie(cookies[0])
+	resp, err = srv.Client().Do(rp)
+	if err != nil {
+		t.Fatal(err)
+	}
 	is.True(resp != nil)
 
 	r3, err := http.NewRequest("GET", srv.URL+"/3", nil)
@@ -147,15 +156,13 @@ func TestSession_Delete(t *testing.T) {
 	is.Equal(ts.sess, sl[0])
 
 	// session cookie seems ok
-	cookie1 := ts.sess.Cookie()
+	cookie1 := &ts.sess.cookie
 	is.True(cookie1 != nil)
 	is.Equal(cookie1.Name, ts.jw.CookieName)
-	is.True(cookie1.MaxAge >= 0)
-	is.True(cookie1.Expires.After(time.Now()))
 
 	// trying to get the session from another IP fails
 	hr2 := httptest.NewRequest("GET", "/", nil)
-	hr2.AddCookie(ts.sess.Cookie())
+	hr2.AddCookie(&ts.sess.cookie)
 	hr2.RemoteAddr = "10.5.6.7:89"
 	sess := ts.jw.GetSession(hr2)
 	is.Equal(sess, nil)
@@ -164,6 +171,9 @@ func TestSession_Delete(t *testing.T) {
 	hr2.RemoteAddr = ts.hr.RemoteAddr + "0"
 	sess = ts.jw.GetSession(hr2)
 	is.Equal(ts.sess, sess)
+
+	rq2 := ts.jw.NewRequest(context.Background(), hr2)
+	is.Equal(ts.sess, rq2.Session())
 
 	ts.rq.RegisterEventFn("byebye", func(rq *Request, id, evt, val string) error {
 		sess2 := ts.jw.GetSession(rq.Initial)
@@ -193,7 +203,7 @@ func TestSession_Delete(t *testing.T) {
 	mt, b, err := conn.Read(ctx)
 	is.NoErr(err)
 	is.Equal(mt, websocket.MessageText)
-	is.Equal(string(b), sess.jid()+"\nreload\n")
+	is.Equal(string(b), " reload\n\n")
 }
 
 func TestSession_Cleanup(t *testing.T) {
@@ -201,15 +211,23 @@ func TestSession_Cleanup(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 
+	rr := httptest.NewRecorder()
 	hr := httptest.NewRequest("GET", "/", nil)
-	sess, _ := jw.EnsureSession(hr, 1, 2)
+	sess := jw.NewSession(rr, hr)
 	is.Equal(jw.GetSession(hr), sess)
 	is.True(sess != nil)
-	sess.SetExpires(time.Now().Add(time.Millisecond))
+	is.Equal(len(rr.Result().Cookies()), 1)
+
+	r1 := jw.NewRequest(context.Background(), hr)
+	is.True(r1 != nil)
+	is.Equal(r1.Session(), sess)
+	is.Equal(len(sess.requests), 1)
+	is.Equal(sess.requests[0], r1)
+
+	r1.recycle()
+	r1 = nil
+	sess.deadline = time.Now()
 	is.Equal(jw.SessionCount(), 1)
-	sl := jw.Sessions()
-	is.Equal(1, len(sl))
-	is.Equal(sess, sl[0])
 
 	go jw.ServeWithTimeout(time.Millisecond)
 	waited := 0
@@ -218,4 +236,87 @@ func TestSession_Cleanup(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	is.Equal(jw.SessionCount(), 0)
+}
+
+func TestSession_ReplacesOld(t *testing.T) {
+	is := is.New(t)
+	jw := New()
+	defer jw.Close()
+	go jw.ServeWithTimeout(time.Second)
+
+	is.Equal(jw.SessionCount(), 0)
+
+	w1 := httptest.NewRecorder()
+	h1 := httptest.NewRequest("GET", "/", nil)
+	s1 := jw.NewSession(w1, h1)
+	is.True(s1 != nil)
+	is.Equal(jw.GetSession(h1), s1)
+	is.Equal(len(w1.Result().Cookies()), 1)
+	r1 := jw.NewRequest(context.Background(), h1)
+	is.Equal(r1.Session(), s1)
+	c1 := w1.Result().Cookies()[0]
+	is.Equal(c1.MaxAge, 0)
+	is.Equal(c1.Name, s1.cookie.Name)
+	is.Equal(c1.Value, s1.CookieValue())
+	is.True(!s1.isDead())
+	s1.Set("foo", "bar")
+	is.Equal(s1.Get("foo"), "bar")
+	c1copy := *c1
+
+	is.Equal(jw.SessionCount(), 1)
+
+	w2 := httptest.NewRecorder()
+	h2 := httptest.NewRequest("GET", "/", nil)
+	s2 := jw.NewSession(w2, h2)
+	is.True(s2 != nil)
+	is.Equal(jw.GetSession(h2), s2)
+	is.Equal(len(w2.Result().Cookies()), 1)
+	r2 := jw.NewRequest(context.Background(), h2)
+	is.Equal(r2.Session(), s2)
+	c2 := w2.Result().Cookies()[0]
+	is.Equal(c2.MaxAge, 0)
+	is.Equal(c2.Name, s2.cookie.Name)
+	is.Equal(c2.Value, s2.CookieValue())
+	is.True(!s2.isDead())
+
+	is.Equal(jw.SessionCount(), 2)
+	is.True(s1 != s2)
+	is.True(c1.Value != c2.Value)
+
+	w4 := httptest.NewRecorder()
+	h4 := httptest.NewRequest("GET", "/", nil)
+	h4.AddCookie(&c1copy)
+	r4 := jw.NewRequest(context.Background(), h4)
+	is.Equal(r4.Session(), s1)
+	is.Equal(jw.GetSession(h4), s1)
+	is.Equal(len(w4.Result().Cookies()), 0)
+
+	r4.recycle()
+
+	w3 := httptest.NewRecorder()
+	h3 := httptest.NewRequest("GET", "/", nil)
+	h3.AddCookie(&c1copy)
+	s3 := jw.NewSession(w3, h3)
+	is.True(s3 != nil)
+	is.Equal(jw.GetSession(h3), s3)
+	is.Equal(len(w3.Result().Cookies()), 1)
+	c3 := w3.Result().Cookies()[0]
+	is.Equal(c3.MaxAge, 0)
+	is.Equal(c3.Name, s3.cookie.Name)
+	is.Equal(c3.Value, s3.cookie.Value)
+	is.True(!s3.isDead())
+
+	is.Equal(jw.SessionCount(), 2)
+	is.True(s1 != s3)
+	is.True(c1.Value != c3.Value)
+
+	is.True(s1.isDead())
+	is.True(!s2.isDead())
+	is.True(!s3.isDead())
+	is.Equal(s1.Get("foo"), nil)
+	is.Equal(s1.Cookie().MaxAge, -1)
+
+	h5 := httptest.NewRequest("GET", "/", nil)
+	h5.AddCookie(&c1copy)
+	is.Equal(jw.GetSession(h5), nil)
 }

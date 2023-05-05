@@ -22,14 +22,6 @@ function jawsIsTrue(v) {
 	return jawsContains(['true', 't', 'on', '1', 'yes', 'y', 'selected'], v);
 }
 
-function trimPrefix(str, prefix) {
-	if (str.startsWith(prefix)) {
-		return str.slice(prefix.length)
-	} else {
-		return str
-	}
-}
-
 function jawsHandler(e) {
 	if (jaws instanceof WebSocket && e instanceof Event) {
 		var elem = e.currentTarget;
@@ -136,9 +128,9 @@ function jawsLost() {
 	setTimeout(jawsReconnect, delay * 1000);
 }
 
-function jawsPingHandler(e) {
+function jawsHandleReconnect(e) {
 	if (e.currentTarget.readyState == 4) {
-		if (e.currentTarget.status == 200) {
+		if (e.currentTarget.status == 204) {
 			window.location.reload();
 		} else {
 			jawsLost();
@@ -146,10 +138,10 @@ function jawsPingHandler(e) {
 	}
 }
 
-function jawsReconnect(since) {
+function jawsReconnect() {
 	var req = new XMLHttpRequest();
-	req.addEventListener('readystatechange', jawsPingHandler);
 	req.open("GET", window.location.protocol + "//" + window.location.host + "/jaws/.ping", true);
+	req.addEventListener('readystatechange', jawsHandleReconnect);
 	req.send(null);
 }
 
