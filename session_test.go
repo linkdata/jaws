@@ -320,7 +320,3 @@ func TestSession_ReplacesOld(t *testing.T) {
 	h5.AddCookie(&c1copy)
 	is.Equal(jw.GetSession(h5), nil)
 }
-
-func x() {
-
-}
