@@ -130,7 +130,7 @@ function jawsLost() {
 
 function jawsHandleReconnect(e) {
 	if (e.currentTarget.readyState == 4) {
-		if (e.currentTarget.status == 204) {
+		if (e.currentTarget.status < 300) {
 			window.location.reload();
 		} else {
 			jawsLost();
@@ -138,18 +138,9 @@ function jawsHandleReconnect(e) {
 	}
 }
 
-function jawsPingReq() {
+function jawsReconnect() {
 	var req = new XMLHttpRequest();
 	req.open("GET", window.location.protocol + "//" + window.location.host + "/jaws/.ping", true);
-	return req;
-}
-
-function jawsSendPing() {
-	jawsPingReq().send(null);
-}
-
-function jawsReconnect() {
-	var req = jawsPingReq();
 	req.addEventListener('readystatechange', jawsHandleReconnect);
 	req.send(null);
 }
@@ -283,9 +274,6 @@ function jawsConnect() {
 	jaws.addEventListener('message', jawsMessage);
 	jaws.addEventListener('close', jawsFailed);
 	jaws.addEventListener('error', jawsFailed);
-	if (typeof (jawsSession) === 'number') {
-		setInterval(jawsSendPing, 1000 * jawsSession);
-	}
 }
 
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
