@@ -87,7 +87,7 @@ func TestSession_Use(t *testing.T) {
 	is.Equal(len(cookies), 1)
 	is.Equal(cookies[0].Name, jw.CookieName)
 	is.True(wantSess != nil)
-	is.Equal(cookies[0].Value, JawsKeyString(wantSess.sessionID))
+	is.Equal(cookies[0].Value, wantSess.CookieValue())
 	is.True(wantSess != nil)
 	is.Equal(wantSess.Get("foo"), "bar")
 
@@ -257,7 +257,7 @@ func TestSession_ReplacesOld(t *testing.T) {
 	c1 := w1.Result().Cookies()[0]
 	is.Equal(c1.MaxAge, 0)
 	is.Equal(c1.Name, s1.cookie.Name)
-	is.Equal(c1.Value, s1.cookie.Value)
+	is.Equal(c1.Value, s1.CookieValue())
 	is.True(!s1.isDead())
 	s1.Set("foo", "bar")
 	is.Equal(s1.Get("foo"), "bar")
@@ -276,7 +276,7 @@ func TestSession_ReplacesOld(t *testing.T) {
 	c2 := w2.Result().Cookies()[0]
 	is.Equal(c2.MaxAge, 0)
 	is.Equal(c2.Name, s2.cookie.Name)
-	is.Equal(c2.Value, s2.cookie.Value)
+	is.Equal(c2.Value, s2.CookieValue())
 	is.True(!s2.isDead())
 
 	is.Equal(jw.SessionCount(), 2)

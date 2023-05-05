@@ -107,6 +107,15 @@ func (sess *Session) ID() (id uint64) {
 	return
 }
 
+// CookieValue returns the session cookie value.
+// It is safe to call on a nil Session, in which case it returns an empty string.
+func (sess *Session) CookieValue() (s string) {
+	if sess != nil {
+		s = sess.cookie.Value
+	}
+	return
+}
+
 // IP returns the remote IP the session is bound to (which may be nil).
 // It is safe to call on a nil Session, in which case it returns nil.
 func (sess *Session) IP() (ip net.IP) {
