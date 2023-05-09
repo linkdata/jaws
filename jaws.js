@@ -263,12 +263,19 @@ function jawsMessage(e) {
 	}
 }
 
+function jawsPageshow(e) {
+	if (e.persisted) {
+		window.location.reload();
+	}
+}
+
 function jawsConnect() {
 	var wsScheme = 'ws://';
 	if (window.location.protocol === 'https:') {
 		wsScheme = 'wss://';
 	}
 	window.addEventListener('beforeunload', jawsUnloading);
+	window.addEventListener('pageshow', jawsPageshow);
 	jaws = new WebSocket(wsScheme + window.location.host + '/jaws/' + encodeURIComponent(jawsKey));
 	jaws.addEventListener('open', function () { jawsAttach(document); });
 	jaws.addEventListener('message', jawsMessage);
