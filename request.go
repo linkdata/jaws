@@ -103,6 +103,19 @@ func (rq *Request) start(hr *http.Request) error {
 	return fmt.Errorf("/jaws/%s: expected IP %q, got %q", rq.JawsKeyString(), expectIP.String(), actualIP.String())
 }
 
+func (rq *Request) killSessionLocked() {
+	if rq.session != nil {
+		rq.session.delRequest(rq)
+		rq.session = nil
+	}
+}
+
+func (rq *Request) killSession() {
+	rq.mu.Lock()
+	rq.killSessionLocked()
+	rq.mu.Unlock()
+}
+
 func (rq *Request) recycle() {
 	rq.mu.Lock()
 	rq.Jaws = nil
@@ -111,10 +124,7 @@ func (rq *Request) recycle() {
 	rq.Initial = nil
 	rq.Context = nil
 	rq.remoteIP = nil
-	if sess := rq.session; sess != nil {
-		rq.session = nil
-		sess.delRequest(rq)
-	}
+	rq.killSessionLocked()
 	// this gets optimized to calling the 'runtime.mapclear' function
 	// we don't expect this to improve speed, but it will lower GC load
 	for k := range rq.elems {
@@ -381,6 +391,7 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 	go rq.eventCaller(eventCallCh, outboundMsgCh, eventDoneCh)
 
 	defer func() {
+		rq.killSession()
 		rq.Jaws.unsubscribe(broadcastMsgCh)
 		close(eventCallCh)
 		for {
