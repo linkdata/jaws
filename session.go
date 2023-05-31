@@ -161,6 +161,11 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 	return &sess.cookie
 }
 
+// Reload calls Broadcast with a message asking browsers to reload the page.
+func (sess *Session) Reload() {
+	sess.Broadcast(&Message{Elem: " reload"})
+}
+
 // Clear removes all key/value pairs from the session.
 // It is safe to call on a nil Session.
 func (sess *Session) Clear() {

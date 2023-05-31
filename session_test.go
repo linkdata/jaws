@@ -34,7 +34,7 @@ func TestSession_Object(t *testing.T) {
 	is.Equal(sessionId, sess.ID())
 	is.Equal(nil, sess.IP())
 
-	sess.Broadcast(&Message{})
+	sess.Reload()
 }
 
 func TestSession_Use(t *testing.T) {
