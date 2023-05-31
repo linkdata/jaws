@@ -2,7 +2,6 @@ package jaws
 
 import (
 	"html/template"
-	"reflect"
 	"testing"
 )
 
@@ -60,7 +59,7 @@ func TestHtmlInput(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := HtmlInput(tt.args.jid, tt.args.typ, tt.args.val, tt.args.attrs...); !reflect.DeepEqual(got, tt.want) {
+			if got := HtmlInput(tt.args.jid, tt.args.typ, tt.args.val, tt.args.attrs...); got != tt.want {
 				t.Errorf("HtmlInput() = %v, want %v", got, tt.want)
 			}
 		})
@@ -114,7 +113,7 @@ func TestHtmlInner(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := HtmlInner(tt.args.jid, tt.args.tag, tt.args.typ, tt.args.inner, tt.args.attrs...); !reflect.DeepEqual(got, tt.want) {
+			if got := HtmlInner(tt.args.jid, tt.args.tag, tt.args.typ, tt.args.inner, tt.args.attrs...); got != tt.want {
 				t.Errorf("HtmlInner() = %v, want %v", got, tt.want)
 			}
 		})
@@ -165,7 +164,7 @@ func TestHtmlSelect(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := HtmlSelect(tt.args.jid, tt.args.val, tt.args.attrs...); !reflect.DeepEqual(got, tt.want) {
+			if got := HtmlSelect(tt.args.jid, tt.args.val, tt.args.attrs...); got != tt.want {
 				t.Errorf("HtmlSelect() = %v, want %v", got, tt.want)
 			}
 		})

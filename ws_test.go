@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -353,9 +352,8 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			is := is.New(t)
-			if got := wsParse([]byte(tt.txt)); !reflect.DeepEqual(got, tt.want) {
-				is.Equal(tt.want, got)
-			}
+			got := wsParse([]byte(tt.txt))
+			is.Equal(tt.want, got)
 		})
 	}
 }
