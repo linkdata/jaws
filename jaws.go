@@ -33,7 +33,7 @@ type Jaws struct {
 	Logger     *log.Logger // If not nil, send debug info and errors here
 	doneCh     <-chan struct{}
 	bcastCh    chan *Message
-	subCh      chan chan *Message
+	subCh      chan subscription
 	unsubCh    chan chan *Message
 	headPrefix string
 	mu         deadlock.RWMutex // protects following
@@ -52,7 +52,7 @@ func NewWithDone(doneCh <-chan struct{}) *Jaws {
 		CookieName: CookieNameDefault,
 		doneCh:     doneCh,
 		bcastCh:    make(chan *Message, 1),
-		subCh:      make(chan chan *Message, 1),
+		subCh:      make(chan subscription, 1),
 		unsubCh:    make(chan chan *Message, 1),
 		headPrefix: HeadHTML([]string{JavascriptPath}, nil),
 		kg:         bufio.NewReader(rand.Reader),
@@ -481,7 +481,16 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	}
 	t := time.NewTicker(maintenanceInterval)
 	defer t.Stop()
-	subs := map[chan *Message]struct{}{}
+	subs := map[chan *Message]*Request{}
+
+	killSub := func(msgCh chan *Message) {
+		if _, ok := subs[msgCh]; ok {
+			delete(subs, msgCh)
+			close(msgCh)
+			atomic.StoreInt32(&jw.actives, int32(len(subs)))
+		}
+	}
+
 	for {
 		select {
 		case <-jw.Done():
@@ -489,34 +498,31 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		case <-t.C:
 			jw.maintenance(requestTimeout)
 			atomic.StoreInt32(&jw.actives, int32(len(subs)))
-		case msgCh := <-jw.subCh:
-			if msgCh != nil {
-				subs[msgCh] = struct{}{}
+		case sub := <-jw.subCh:
+			if sub.msgCh != nil {
+				subs[sub.msgCh] = sub.rq
 				atomic.StoreInt32(&jw.actives, int32(len(subs)))
 			}
 		case msgCh := <-jw.unsubCh:
-			if _, ok := subs[msgCh]; ok {
-				delete(subs, msgCh)
-				close(msgCh)
-				atomic.StoreInt32(&jw.actives, int32(len(subs)))
-			}
+			killSub(msgCh)
 		case msg := <-jw.bcastCh:
+			// it's critical that we keep the broadcast
+			// distribution loop running, so any Request
+			// that fails to process it's messages quickly
+			// enough must be terminated. the alternative
+			// would be to drop some messages, but that
+			// could mean nonreproducible and seemingly
+			// random failures in processing logic.
 			if msg != nil {
-				for msgCh := range subs {
-					select {
-					case msgCh <- msg:
-					default:
-						// it's critical that we keep the broadcast
-						// distribution loop running, so any Request
-						// that fails to process it's messages quickly
-						// enough must be terminated. the alternative
-						// would be to drop some messages, but that
-						// could mean nonreproducible and seemingly
-						// random failures in processing logic.
-						close(msgCh)
-						delete(subs, msgCh)
-						atomic.StoreInt32(&jw.actives, int32(len(subs)))
-						_ = jw.Log(fmt.Errorf("jaws: broadcast channel full sending %v", msg))
+				_, isMeta := metaIds[msg.Elem]
+				for msgCh, rq := range subs {
+					if isMeta || rq.hasJid(msg.Elem) {
+						select {
+						case msgCh <- msg:
+						default:
+							killSub(msgCh)
+							_ = jw.Log(fmt.Errorf("jaws: broadcast channel full sending %v", msg))
+						}
 					}
 				}
 			}
@@ -529,13 +535,19 @@ func (jw *Jaws) Serve() {
 	jw.ServeWithTimeout(time.Second * 10)
 }
 
-func (jw *Jaws) subscribe(size int) chan *Message {
+func (jw *Jaws) subscribe(rq *Request, minSize int) chan *Message {
+	size := minSize
+	if rq != nil {
+		if size = 4 + len(rq.elems)*4; size < minSize {
+			size = minSize
+		}
+	}
 	msgCh := make(chan *Message, size)
 	select {
 	case <-jw.Done():
 		close(msgCh)
 		return nil
-	case jw.subCh <- msgCh:
+	case jw.subCh <- subscription{msgCh: msgCh, rq: rq}:
 	}
 	return msgCh
 }

@@ -38,7 +38,7 @@ type Request struct {
 	sendCh    chan *Message      // (read-only) direct send message channel
 	mu        deadlock.RWMutex   // protects following
 	connectFn ConnectFn          // a ConnectFn to call before starting message processing for the Request
-	elems     map[string]EventFn // map of registered HTML id's
+	elems     map[string]EventFn // map of registered HTML id's, read-only after UseRequest() called
 }
 
 type eventFnCall struct {
@@ -365,6 +365,15 @@ func (rq *Request) GetEventFn(jid string) (fn EventFn, ok bool) {
 	return
 }
 
+func (rq *Request) hasJid(jid string) (ok bool) {
+	if rq != nil {
+		rq.mu.RLock()
+		_, ok = rq.elems[jid]
+		rq.mu.RUnlock()
+	}
+	return
+}
+
 // SetEventFn sets the event function for the given jid to be the given function.
 // Passing nil for the function is legal, and has the effect of ensuring the
 // jid can be the target of DOM updates but not to send Javascript events.
@@ -504,14 +513,6 @@ func makeAlertDangerMessage(err error) (msg *Message) {
 			Data: html.EscapeString(err.Error()),
 		}
 	}
-	return
-}
-
-// defaultChSize returns a reasonable buffer size for our data channels
-func (rq *Request) defaultChSize() (n int) {
-	rq.mu.RLock()
-	n = 8 + len(rq.elems)*4
-	rq.mu.RUnlock()
 	return
 }
 

@@ -42,18 +42,18 @@ func newTestRequest(is *is.I) (tr *testRequest) {
 	tr.jw.Logger = log.New(&tr.log, "", 0)
 	tr.ctx, tr.cancel = context.WithTimeout(context.Background(), time.Hour)
 	tr.Request = tr.jw.NewRequest(tr.ctx, nil)
+
 	tr.jw.UseRequest(tr.JawsKey, nil)
 
 	go tr.jw.Serve()
 
-	queueSize := 16 + tr.defaultChSize() // plus 16 since we add elements after creating request
 	tr.inCh = make(chan *Message)
-	tr.outCh = make(chan *Message, queueSize)
-	tr.bcastCh = tr.Jaws.subscribe(queueSize)
+	tr.bcastCh = tr.Jaws.subscribe(tr.Request, 64)
+	tr.outCh = make(chan *Message, cap(tr.bcastCh))
 
 	// ensure subscription is processed
 	for i := 0; i <= cap(tr.Jaws.subCh); i++ {
-		tr.Jaws.subCh <- nil
+		tr.Jaws.subCh <- subscription{}
 	}
 
 	go func() {
