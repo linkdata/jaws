@@ -42,12 +42,13 @@ func newTestRequest(is *is.I) (tr *testRequest) {
 	tr.jw.Logger = log.New(&tr.log, "", 0)
 	tr.ctx, tr.cancel = context.WithTimeout(context.Background(), time.Hour)
 	tr.Request = tr.jw.NewRequest(tr.ctx, nil)
+
 	tr.jw.UseRequest(tr.JawsKey, nil)
 
 	go tr.jw.Serve()
 
 	tr.inCh = make(chan *Message)
-	tr.bcastCh = tr.Jaws.subscribe(tr.Request.elems, 64)
+	tr.bcastCh = tr.Jaws.subscribe(tr.Request, 64)
 	tr.outCh = make(chan *Message, cap(tr.bcastCh))
 
 	// ensure subscription is processed

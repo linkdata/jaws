@@ -13,7 +13,7 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if ws, err := websocket.Accept(w, r, nil); err == nil {
 		if err = rq.onConnect(); err == nil {
 			incomingMsgCh := make(chan *Message)
-			broadcastMsgCh := rq.Jaws.subscribe(rq.elems, 1)
+			broadcastMsgCh := rq.Jaws.subscribe(rq, 1)
 			outboundMsgCh := make(chan *Message, cap(broadcastMsgCh))
 			go wsReader(rq.Context, rq.Jaws.Done(), incomingMsgCh, ws) // closes incomingMsgCh
 			go wsWriter(rq.Context, rq.Jaws.Done(), outboundMsgCh, ws) // calls ws.Close()

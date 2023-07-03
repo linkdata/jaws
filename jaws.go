@@ -481,7 +481,16 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	}
 	t := time.NewTicker(maintenanceInterval)
 	defer t.Stop()
-	subs := map[chan *Message]map[string]EventFn{}
+	subs := map[chan *Message]*Request{}
+
+	killSub := func(msgCh chan *Message) {
+		if _, ok := subs[msgCh]; ok {
+			delete(subs, msgCh)
+			close(msgCh)
+			atomic.StoreInt32(&jw.actives, int32(len(subs)))
+		}
+	}
+
 	for {
 		select {
 		case <-jw.Done():
@@ -491,36 +500,27 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			atomic.StoreInt32(&jw.actives, int32(len(subs)))
 		case sub := <-jw.subCh:
 			if sub.msgCh != nil {
-				subs[sub.msgCh] = sub.elems
+				subs[sub.msgCh] = sub.rq
 				atomic.StoreInt32(&jw.actives, int32(len(subs)))
 			}
 		case msgCh := <-jw.unsubCh:
-			if _, ok := subs[msgCh]; ok {
-				delete(subs, msgCh)
-				close(msgCh)
-				atomic.StoreInt32(&jw.actives, int32(len(subs)))
-			}
+			killSub(msgCh)
 		case msg := <-jw.bcastCh:
+			// it's critical that we keep the broadcast
+			// distribution loop running, so any Request
+			// that fails to process it's messages quickly
+			// enough must be terminated. the alternative
+			// would be to drop some messages, but that
+			// could mean nonreproducible and seemingly
+			// random failures in processing logic.
 			if msg != nil {
-				for msgCh, wantElems := range subs {
-					_, ok := wantElems[msg.Elem]
-					if !ok {
-						_, ok = metaIds[msg.Elem]
-					}
-					if ok {
+				_, isMeta := metaIds[msg.Elem]
+				for msgCh, rq := range subs {
+					if isMeta || rq.hasJid(msg.Elem) {
 						select {
 						case msgCh <- msg:
 						default:
-							// it's critical that we keep the broadcast
-							// distribution loop running, so any Request
-							// that fails to process it's messages quickly
-							// enough must be terminated. the alternative
-							// would be to drop some messages, but that
-							// could mean nonreproducible and seemingly
-							// random failures in processing logic.
-							close(msgCh)
-							delete(subs, msgCh)
-							atomic.StoreInt32(&jw.actives, int32(len(subs)))
+							killSub(msgCh)
 							_ = jw.Log(fmt.Errorf("jaws: broadcast channel full sending %v", msg))
 						}
 					}
@@ -535,10 +535,10 @@ func (jw *Jaws) Serve() {
 	jw.ServeWithTimeout(time.Second * 10)
 }
 
-func (jw *Jaws) subscribe(elems map[string]EventFn, minSize int) chan *Message {
+func (jw *Jaws) subscribe(rq *Request, minSize int) chan *Message {
 	size := minSize
-	if elems != nil {
-		if size = 4 + len(elems)*4; size < minSize {
+	if rq != nil {
+		if size = 4 + len(rq.elems)*4; size < minSize {
 			size = minSize
 		}
 	}
@@ -547,7 +547,7 @@ func (jw *Jaws) subscribe(elems map[string]EventFn, minSize int) chan *Message {
 	case <-jw.Done():
 		close(msgCh)
 		return nil
-	case jw.subCh <- subscription{msgCh: msgCh, elems: elems}:
+	case jw.subCh <- subscription{msgCh: msgCh, rq: rq}:
 	}
 	return msgCh
 }

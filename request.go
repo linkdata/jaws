@@ -365,6 +365,15 @@ func (rq *Request) GetEventFn(jid string) (fn EventFn, ok bool) {
 	return
 }
 
+func (rq *Request) hasJid(jid string) (ok bool) {
+	if rq != nil {
+		rq.mu.RLock()
+		_, ok = rq.elems[jid]
+		rq.mu.RUnlock()
+	}
+	return
+}
+
 // SetEventFn sets the event function for the given jid to be the given function.
 // Passing nil for the function is legal, and has the effect of ensuring the
 // jid can be the target of DOM updates but not to send Javascript events.
