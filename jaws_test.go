@@ -118,23 +118,23 @@ func TestJaws_BroadcastWaitsWhenFull(t *testing.T) {
 	jw := New()
 	go jw.ServeWithTimeout(testTimeout)
 
-	subCh := jw.subscribe(0)
+	subCh := jw.subscribe(nil, 0)
 	defer jw.unsubscribe(subCh)
 
 	// ensure our sub has been processed
-	jw.subCh <- nil
-	jw.subCh <- nil
+	jw.subCh <- subscription{}
+	jw.subCh <- subscription{}
 
 	// send two broadcasts
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case jw.bcastCh <- &Message{}:
+	case jw.bcastCh <- &Message{Elem: " reload"}:
 	}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case jw.bcastCh <- &Message{}:
+	case jw.bcastCh <- &Message{Elem: " reload"}:
 	}
 
 	// read one of the broadcasts, the other is
@@ -164,12 +164,12 @@ func TestJaws_BroadcastFullClosesChannel(t *testing.T) {
 	doneCh := make(chan struct{})
 	failCh := make(chan struct{})
 
-	subCh1 := jw.subscribe(0)
+	subCh1 := jw.subscribe(nil, 0)
 	defer jw.unsubscribe(subCh1)
-	subCh2 := jw.subscribe(0)
+	subCh2 := jw.subscribe(nil, 0)
 	defer jw.unsubscribe(subCh2)
-	jw.subCh <- nil
-	jw.subCh <- nil
+	jw.subCh <- subscription{}
+	jw.subCh <- subscription{}
 
 	go func() {
 		select {
@@ -183,7 +183,7 @@ func TestJaws_BroadcastFullClosesChannel(t *testing.T) {
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case jw.bcastCh <- &Message{}:
+	case jw.bcastCh <- &Message{Elem: " reload"}:
 	}
 
 	select {
@@ -319,11 +319,12 @@ func TestJaws_subscribeOnClosedReturnsNil(t *testing.T) {
 	<-jw.doneCh
 	for len(jw.subCh) < cap(jw.subCh) {
 		select {
-		case jw.subCh <- nil:
+		case jw.subCh <- subscription{}:
 		default:
 		}
 	}
-	is.Equal(jw.subscribe(1), nil)
+
+	is.Equal(jw.subscribe(nil, 1), nil)
 }
 
 func TestJaws_GenerateHeadHTML(t *testing.T) {

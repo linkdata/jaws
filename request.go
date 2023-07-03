@@ -38,7 +38,7 @@ type Request struct {
 	sendCh    chan *Message      // (read-only) direct send message channel
 	mu        deadlock.RWMutex   // protects following
 	connectFn ConnectFn          // a ConnectFn to call before starting message processing for the Request
-	elems     map[string]EventFn // map of registered HTML id's
+	elems     map[string]EventFn // map of registered HTML id's, read-only after UseRequest() called
 }
 
 type eventFnCall struct {
@@ -504,14 +504,6 @@ func makeAlertDangerMessage(err error) (msg *Message) {
 			Data: html.EscapeString(err.Error()),
 		}
 	}
-	return
-}
-
-// defaultChSize returns a reasonable buffer size for our data channels
-func (rq *Request) defaultChSize() (n int) {
-	rq.mu.RLock()
-	n = 8 + len(rq.elems)*4
-	rq.mu.RUnlock()
 	return
 }
 

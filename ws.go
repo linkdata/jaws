@@ -12,15 +12,14 @@ import (
 func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if ws, err := websocket.Accept(w, r, nil); err == nil {
 		if err = rq.onConnect(); err == nil {
-			queueSize := rq.defaultChSize()
 			incomingMsgCh := make(chan *Message)
-			outboundMsgCh := make(chan *Message, queueSize)
-			broadcastMsgCh := rq.Jaws.subscribe(queueSize)
+			broadcastMsgCh := rq.Jaws.subscribe(rq.elems, 1)
+			outboundMsgCh := make(chan *Message, cap(broadcastMsgCh))
 			go wsReader(rq.Context, rq.Jaws.Done(), incomingMsgCh, ws) // closes incomingMsgCh
 			go wsWriter(rq.Context, rq.Jaws.Done(), outboundMsgCh, ws) // calls ws.Close()
 			rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh)   // unsubscribes broadcastMsgCh, closes outboundMsgCh
 		} else {
-			defer ws.Close(websocket.StatusNormalClosure, "")
+			defer ws.Close(websocket.StatusNormalClosure, err.Error())
 			msg := makeAlertDangerMessage(rq.Jaws.Log(err))
 			_ = ws.Write(rq.Context, websocket.MessageText, []byte(msg.Format()))
 		}
