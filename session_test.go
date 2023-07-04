@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/linkdata/jaws/what"
 	"github.com/matryer/is"
 	"nhooyr.io/websocket"
 )
@@ -194,7 +195,7 @@ func TestSession_Delete(t *testing.T) {
 
 	ts.rq.Send(&Message{
 		Elem: "byebye",
-		What: "trigger",
+		What: what.Trigger,
 	})
 
 	ctx, cancel := context.WithTimeout(ts.ctx, time.Second)

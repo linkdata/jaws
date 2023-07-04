@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/linkdata/jaws/what"
 	"nhooyr.io/websocket"
 )
 
@@ -60,7 +61,7 @@ func wsParse(txt []byte) *Message {
 			nl2 += nl1 + 1
 			return &Message{
 				Elem: string(txt[0:nl1]),
-				What: string(txt[nl1+1 : nl2]),
+				What: what.Parse(string(txt[nl1+1 : nl2])),
 				Data: string(txt[nl2+1:]),
 			}
 		}

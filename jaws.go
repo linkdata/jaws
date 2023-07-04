@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/what"
 )
 
 const CookieNameDefault = "jaws"
@@ -340,7 +341,7 @@ func (jw *Jaws) Broadcast(msg *Message) {
 func (jw *Jaws) SetInner(jid string, innerHtml string) {
 	jw.Broadcast(&Message{
 		Elem: jid,
-		What: "inner",
+		What: what.Inner,
 		Data: innerHtml,
 	})
 }
@@ -351,7 +352,7 @@ func (jw *Jaws) SetInner(jid string, innerHtml string) {
 func (jw *Jaws) Remove(jid string) {
 	jw.Broadcast(&Message{
 		Elem: jid,
-		What: "remove",
+		What: what.Remove,
 	})
 }
 
@@ -362,7 +363,7 @@ func (jw *Jaws) Remove(jid string) {
 func (jw *Jaws) Insert(parentId, where, html string) {
 	jw.Broadcast(&Message{
 		Elem: parentId,
-		What: "insert",
+		What: what.Insert,
 		Data: where + "\n" + html,
 	})
 }
@@ -373,7 +374,7 @@ func (jw *Jaws) Insert(parentId, where, html string) {
 func (jw *Jaws) Append(parentId, html string) {
 	jw.Broadcast(&Message{
 		Elem: parentId,
-		What: "append",
+		What: what.Append,
 		Data: html,
 	})
 }
@@ -385,7 +386,7 @@ func (jw *Jaws) Append(parentId, html string) {
 func (jw *Jaws) Replace(id, where, html string) {
 	jw.Broadcast(&Message{
 		Elem: id,
-		What: "replace",
+		What: what.Replace,
 		Data: where + "\n" + html,
 	})
 }
@@ -397,7 +398,7 @@ func (jw *Jaws) Replace(id, where, html string) {
 func (jw *Jaws) SetAttr(id, attr, val string) {
 	jw.Broadcast(&Message{
 		Elem: id,
-		What: "sattr",
+		What: what.SAttr,
 		Data: attr + "\n" + val,
 	})
 }
@@ -408,7 +409,7 @@ func (jw *Jaws) SetAttr(id, attr, val string) {
 func (jw *Jaws) RemoveAttr(id, attr string) {
 	jw.Broadcast(&Message{
 		Elem: id,
-		What: "rattr",
+		What: what.RAttr,
 		Data: attr,
 	})
 }
@@ -419,7 +420,7 @@ func (jw *Jaws) RemoveAttr(id, attr string) {
 func (jw *Jaws) SetValue(id, val string) {
 	jw.Broadcast(&Message{
 		Elem: id,
-		What: "value",
+		What: what.Value,
 		Data: val,
 	})
 }
@@ -435,7 +436,7 @@ func (jw *Jaws) Reload() {
 func (jw *Jaws) Redirect(url string) {
 	jw.Broadcast(&Message{
 		Elem: " redirect",
-		What: url,
+		Data: url,
 	})
 }
 
@@ -443,7 +444,7 @@ func (jw *Jaws) Redirect(url string) {
 func (jw *Jaws) Trigger(id, val string) {
 	jw.Broadcast(&Message{
 		Elem: id,
-		What: "trigger",
+		What: what.Trigger,
 		Data: val,
 	})
 }
@@ -453,8 +454,7 @@ func (jw *Jaws) Trigger(id, val string) {
 func (jw *Jaws) Alert(lvl, msg string) {
 	jw.Broadcast(&Message{
 		Elem: " alert",
-		What: lvl,
-		Data: msg,
+		Data: lvl + "\n" + msg,
 	})
 }
 

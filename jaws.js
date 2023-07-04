@@ -181,6 +181,7 @@ function jawsWhere(elem, pos) {
 function jawsMessage(e) {
 	var lines = e.data.split('\n');
 	var cmd_or_jid = lines.shift();
+	var what = lines.shift();
 	switch (cmd_or_jid) {
 		case ' reload':
 			window.location.reload();
@@ -192,27 +193,26 @@ function jawsMessage(e) {
 			jawsAlert(lines.shift(), lines.join('\n'));
 			return;
 	}
-	var what = lines.shift();
 	var where = null;
 	var data = null;
 	switch (what) {
-		case 'reload':
+		case 'Reload':
 			window.location.reload();
 			return;
-		case 'inner':
-		case 'value':
-		case 'append':
+		case 'Inner':
+		case 'Value':
+		case 'Append':
 			data = lines.join('\n');
 			break;
-		case 'remove':
+		case 'Remove':
 			break;
-		case 'insert':
-		case 'replace':
-		case 'sattr':
+		case 'Insert':
+		case 'Replace':
+		case 'SAttr':
 			where = lines.shift();
 			data = lines.join('\n');
 			break;
-		case 'rattr':
+		case 'RAttr':
 			where = lines.shift();
 			break;
 		default:
@@ -227,24 +227,24 @@ function jawsMessage(e) {
 	for (var i = 0; i < elements.length; i++) {
 		var elem = elements[i];
 		switch (what) {
-			case 'inner':
+			case 'Inner':
 				elem.innerHTML = data;
 				jawsAttach(elem);
 				break;
-			case 'value':
+			case 'Value':
 				jawsSetValue(elem, data);
 				break;
-			case 'remove':
+			case 'Remove':
 				elem.remove();
 				break;
-			case 'append':
+			case 'Append':
 				elem.appendChild(jawsAttach(jawsElement(data)));
 				break;
-			case 'insert':
-			case 'replace':
+			case 'Insert':
+			case 'Replace':
 				var target = jawsWhere(elem, where);
 				if (target instanceof Node) {
-					if (what === 'replace') {
+					if (what === 'Replace') {
 						elem.replaceChild(jawsAttach(jawsElement(data)), target);
 					} else {
 						elem.insertBefore(jawsAttach(jawsElement(data)), target);
@@ -253,10 +253,10 @@ function jawsMessage(e) {
 					console.log("jaws: jid " + cmd_or_jid + " has no position " + where);
 				}
 				break;
-			case 'sattr':
+			case 'SAttr':
 				elem.setAttribute(where, data);
 				break;
-			case 'rattr':
+			case 'RAttr':
 				elem.removeAttribute(where);
 				break;
 		}
