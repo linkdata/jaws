@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/linkdata/jaws/what"
 	"github.com/matryer/is"
 	"nhooyr.io/websocket"
 )
@@ -346,8 +347,8 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 		want *Message
 	}{
 		{"shortest", " \n\n", &Message{Elem: " "}},
-		{"normal", "a\nb\nc", &Message{Elem: "a", What: "b", Data: "c"}},
-		{"newline", "a\nb\nc\nd", &Message{Elem: "a", What: "b", Data: "c\nd"}},
+		{"normal", "a\nInput\nc", &Message{Elem: "a", What: what.Input, Data: "c"}},
+		{"newline", "a\nClick\nc\nd", &Message{Elem: "a", What: what.Click, Data: "c\nd"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

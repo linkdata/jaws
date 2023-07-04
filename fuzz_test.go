@@ -10,7 +10,7 @@ import (
 
 func Fuzz_wsParse(f *testing.F) {
 	f.Add([]byte(" \n\n"))
-	f.Add([]byte("elem\nwhat\ndata\nline"))
+	f.Add([]byte("elem\nInner\ndata\nline"))
 	f.Fuzz(func(t *testing.T, a []byte) {
 		if msg := wsParse(a); msg != nil {
 			txt := msg.Format()

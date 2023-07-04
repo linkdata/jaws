@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/what"
 )
 
 // ConnectFn can be used to interact with a Request before message processing starts.
@@ -183,7 +184,7 @@ func (rq *Request) Broadcast(msg *Message) {
 func (rq *Request) Trigger(id, val string) {
 	rq.Broadcast(&Message{
 		Elem: id,
-		What: "trigger",
+		What: what.Trigger,
 		Data: val,
 	})
 }
@@ -194,7 +195,7 @@ func (rq *Request) Trigger(id, val string) {
 func (rq *Request) SetInner(jid string, innerHtml string) {
 	rq.Broadcast(&Message{
 		Elem: jid,
-		What: "inner",
+		What: what.Inner,
 		Data: innerHtml,
 	})
 }
@@ -205,7 +206,7 @@ func (rq *Request) SetInner(jid string, innerHtml string) {
 func (rq *Request) SetTextValue(jid, val string) {
 	rq.Broadcast(&Message{
 		Elem: jid,
-		What: "value",
+		What: what.Value,
 		Data: val,
 	})
 }
@@ -216,7 +217,7 @@ func (rq *Request) SetTextValue(jid, val string) {
 func (rq *Request) SetFloatValue(jid string, val float64) {
 	rq.Broadcast(&Message{
 		Elem: jid,
-		What: "value",
+		What: what.Value,
 		Data: strconv.FormatFloat(val, 'f', -1, 64),
 	})
 }
@@ -227,7 +228,7 @@ func (rq *Request) SetFloatValue(jid string, val float64) {
 func (rq *Request) SetBoolValue(jid string, val bool) {
 	rq.Broadcast(&Message{
 		Elem: jid,
-		What: "value",
+		What: what.Value,
 		Data: strconv.FormatBool(val),
 	})
 }
@@ -238,7 +239,7 @@ func (rq *Request) SetBoolValue(jid string, val bool) {
 func (rq *Request) SetDateValue(jid string, val time.Time) {
 	rq.Broadcast(&Message{
 		Elem: jid,
-		What: "value",
+		What: what.Value,
 		Data: val.Format(ISO8601),
 	})
 }
@@ -272,7 +273,7 @@ func (rq *Request) Send(msg *Message) bool {
 func (rq *Request) SetAttr(jid, attr, val string) {
 	rq.Send(&Message{
 		Elem: jid,
-		What: "sattr",
+		What: what.SAttr,
 		Data: attr + "\n" + val,
 	})
 }
@@ -283,7 +284,7 @@ func (rq *Request) SetAttr(jid, attr, val string) {
 func (rq *Request) RemoveAttr(jid, attr string) {
 	rq.Send(&Message{
 		Elem: jid,
-		What: "rattr",
+		What: what.RAttr,
 		Data: attr,
 	})
 }
@@ -295,8 +296,7 @@ func (rq *Request) RemoveAttr(jid, attr string) {
 func (rq *Request) Alert(lvl, msg string) {
 	rq.Send(&Message{
 		Elem: " alert",
-		What: lvl,
-		Data: msg,
+		Data: lvl + "\n" + msg,
 	})
 }
 
@@ -311,7 +311,7 @@ func (rq *Request) AlertError(err error) {
 func (rq *Request) Redirect(url string) {
 	rq.Send(&Message{
 		Elem: " redirect",
-		What: url,
+		Data: url,
 	})
 }
 
@@ -438,7 +438,7 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 			// messages incoming from WebSocket or trigger messages
 			// won't be sent out on the WebSocket, but will queue up a
 			// call to the event function (if any)
-			if incoming || msg.What == "trigger" {
+			if incoming || msg.What == what.Trigger {
 				if fn != nil {
 					select {
 					case eventCallCh <- eventFnCall{fn: fn, msg: msg}:
@@ -454,8 +454,8 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 			// the function must not send any messages itself, but may return
 			// an error to be sent out as an alert message.
 			// primary usecase is tests.
-			if msg.What == "hook" {
-				msg = makeAlertDangerMessage(fn(rq, msg.Elem, msg.What, msg.Data))
+			if msg.What == what.Hook {
+				msg = makeAlertDangerMessage(fn(rq, msg.Elem, msg.What.String(), msg.Data))
 			}
 
 			if msg != nil {
@@ -476,7 +476,7 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh chan<- *Message, eventDoneCh chan<- struct{}) {
 	defer close(eventDoneCh)
 	for call := range eventCallCh {
-		if err := call.fn(rq, call.msg.Elem, call.msg.What, call.msg.Data); err != nil {
+		if err := call.fn(rq, call.msg.Elem, call.msg.What.String(), call.msg.Data); err != nil {
 			select {
 			case outboundMsgCh <- makeAlertDangerMessage(err):
 			default:
@@ -502,8 +502,7 @@ func makeAlertDangerMessage(err error) (msg *Message) {
 	if err != nil {
 		msg = &Message{
 			Elem: " alert",
-			What: "danger",
-			Data: html.EscapeString(err.Error()),
+			Data: "danger\n" + html.EscapeString(err.Error()),
 		}
 	}
 	return
@@ -523,14 +522,14 @@ func (rq *Request) maybeEvent(id, event string, fn ClickFn) string {
 }
 
 func (rq *Request) maybeClick(jid string, fn ClickFn) string {
-	return rq.maybeEvent(jid, "click", fn)
+	return rq.maybeEvent(jid, what.Click.String(), fn)
 }
 
 func (rq *Request) maybeInputText(jid string, fn InputTextFn) string {
 	var wf EventFn
 	if fn != nil {
 		wf = func(rq *Request, id, evt, val string) (err error) {
-			if evt == "input" {
+			if evt == what.Input.String() {
 				err = fn(rq, val)
 			}
 			return
@@ -543,7 +542,7 @@ func (rq *Request) maybeInputFloat(jid string, fn InputFloatFn) string {
 	var wf EventFn
 	if fn != nil {
 		wf = func(rq *Request, id, evt, val string) (err error) {
-			if evt == "input" {
+			if evt == what.Input.String() {
 				var v float64
 				if val != "" {
 					if v, err = strconv.ParseFloat(val, 64); err != nil {
@@ -562,7 +561,7 @@ func (rq *Request) maybeInputBool(jid string, fn InputBoolFn) string {
 	var wf EventFn
 	if fn != nil {
 		wf = func(rq *Request, id, evt, val string) (err error) {
-			if evt == "input" {
+			if evt == what.Input.String() {
 				var v bool
 				if val != "" {
 					if v, err = strconv.ParseBool(val); err != nil {
@@ -581,7 +580,7 @@ func (rq *Request) maybeInputDate(jid string, fn InputDateFn) string {
 	var wf EventFn
 	if fn != nil {
 		wf = func(rq *Request, id, evt, val string) (err error) {
-			if evt == "input" {
+			if evt == what.Input.String() {
 				var v time.Time
 				if val != "" {
 					if v, err = time.Parse(ISO8601, val); err != nil {

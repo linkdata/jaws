@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/what"
 )
 
 // NamedBoolArray stores the data required to support HTML 'select' elements
@@ -156,7 +157,7 @@ func (nba *NamedBoolArray) radioList(rq *Request, fn InputTextFn) (rl []Radio) {
 }
 
 func (nba *NamedBoolArray) radioEventFn(rq *Request, jid, evt, val string, fn InputTextFn) (err error) {
-	if evt == "input" && val != "" && strings.HasPrefix(jid, nba.prefix) {
+	if evt == what.Input.String() && val != "" && strings.HasPrefix(jid, nba.prefix) {
 		var v bool
 		if v, err = strconv.ParseBool(val); err == nil {
 			name := strings.TrimPrefix(jid, nba.prefix)
