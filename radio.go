@@ -1,6 +1,10 @@
 package jaws
 
-import "html/template"
+import (
+	"html/template"
+
+	"github.com/linkdata/jaws/what"
+)
 
 type Radio struct {
 	nba *NamedBoolArray
@@ -22,8 +26,8 @@ func (r *Radio) Radio(attrs ...string) template.HTML {
 	if r.Checked {
 		attrs = append(attrs, `checked`)
 	}
-	r.rq.RegisterEventFn(jid, func(rq *Request, id, evt, val string) error {
-		return r.nba.radioEventFn(rq, id, evt, val, r.fn)
+	r.rq.RegisterEventFn(jid, func(rq *Request, wht what.What, id, val string) error {
+		return r.nba.radioEventFn(rq, wht, id, val, r.fn)
 	})
 	return HtmlInput(jid, "radio", "", attrs...)
 }
