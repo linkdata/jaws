@@ -21,7 +21,7 @@ func (tu testUi) JawsUi(rq *Request, attrs ...string) template.HTML {
 	return template.HTML(fmt.Sprintf(`<test jid="%s" %s>%s</test>`, rq.RegisterEventFn(tu.id, tu.JawsEvent), strings.Join(attrs, " "), tu.val))
 }
 
-func (tu testUi) JawsEvent(rq *Request, id, evt, val string) (err error) {
+func (tu testUi) JawsEvent(rq *Request, evt what.What, id, val string) (err error) {
 	close(tu.gotCall)
 	return
 }

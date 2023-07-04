@@ -33,7 +33,7 @@ func (rq *Request) OnClick(jid string, fn ClickFn) error {
 // OnTrigger registers a jid and a function to be called when Trigger is called for it.
 // Returns a nil error so it can be used inside templates.
 func (rq *Request) OnTrigger(jid string, fn ClickFn) error {
-	rq.maybeEvent(jid, what.Trigger.String(), fn)
+	rq.maybeEvent(what.Trigger, jid, fn)
 	return nil
 }
 

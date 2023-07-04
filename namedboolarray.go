@@ -156,8 +156,8 @@ func (nba *NamedBoolArray) radioList(rq *Request, fn InputTextFn) (rl []Radio) {
 	return
 }
 
-func (nba *NamedBoolArray) radioEventFn(rq *Request, jid, evt, val string, fn InputTextFn) (err error) {
-	if evt == what.Input.String() && val != "" && strings.HasPrefix(jid, nba.prefix) {
+func (nba *NamedBoolArray) radioEventFn(rq *Request, evt what.What, jid, val string, fn InputTextFn) (err error) {
+	if evt == what.Input && val != "" && strings.HasPrefix(jid, nba.prefix) {
 		var v bool
 		if v, err = strconv.ParseBool(val); err == nil {
 			name := strings.TrimPrefix(jid, nba.prefix)

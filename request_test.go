@@ -102,7 +102,7 @@ func TestRequest_Registrations(t *testing.T) {
 	is.Equal(ok, true)
 	is.Equal(fn, nil)
 
-	var ef EventFn = func(rq *Request, id, evt, val string) error {
+	var ef EventFn = func(rq *Request, evt what.What, id, val string) error {
 		return nil
 	}
 	id2 := rq.RegisterEventFn(id, ef)
@@ -135,8 +135,8 @@ func TestRequest_DuplicateRegistration(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 	rq := jw.NewRequest(context.Background(), nil)
-	var ef1 EventFn = func(rq *Request, id, evt, val string) error { return nil }
-	var ef2 EventFn = func(rq *Request, id, evt, val string) error { return errors.New("fails") }
+	var ef1 EventFn = func(rq *Request, evt what.What, id, val string) error { return nil }
+	var ef2 EventFn = func(rq *Request, evt what.What, id, val string) error { return errors.New("fails") }
 	is.Equal(rq.RegisterEventFn("foo", ef1), "foo") // first reg succeeds
 	is.Equal(rq.RegisterEventFn("foo", ef1), "foo") // second reg succeeds
 	rq2 := jw.UseRequest(rq.JawsKey, nil)
@@ -240,7 +240,7 @@ func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
 	defer rq.Close()
 	jw := rq.jw
 	var callCount int32
-	rq.RegisterEventFn("foo", func(rq *Request, id, evt, val string) error {
+	rq.RegisterEventFn("foo", func(rq *Request, evt what.What, id, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		is.Equal(1, jw.RequestCount())
 		jw.Close()
@@ -262,7 +262,7 @@ func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 	var callCount int32
-	rq.RegisterEventFn("foo", func(_ *Request, id, evt, val string) error {
+	rq.RegisterEventFn("foo", func(_ *Request, evt what.What, id, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		rq.cancel()
 		return errors.New(val)
@@ -307,14 +307,14 @@ func TestRequest_Trigger(t *testing.T) {
 	defer rq.Close()
 	gotFooCall := make(chan struct{})
 	gotEndCall := make(chan struct{})
-	rq.RegisterEventFn("foo", func(rq *Request, id, evt, val string) error {
+	rq.RegisterEventFn("foo", func(rq *Request, evt what.What, id, val string) error {
 		defer close(gotFooCall)
 		return nil
 	})
-	rq.RegisterEventFn("err", func(rq *Request, id, evt, val string) error {
+	rq.RegisterEventFn("err", func(rq *Request, evt what.What, id, val string) error {
 		return errors.New(val)
 	})
-	rq.RegisterEventFn("end", func(rq *Request, id, evt, val string) error {
+	rq.RegisterEventFn("end", func(rq *Request, evt what.What, id, val string) error {
 		defer close(gotEndCall)
 		return nil
 	})
@@ -364,7 +364,7 @@ func TestRequest_EventFnQueue(t *testing.T) {
 	firstDoneCh := make(chan struct{})
 	var sleepDone int32
 	var callCount int32
-	rq.RegisterEventFn("sleep", func(rq *Request, id, evt, val string) error {
+	rq.RegisterEventFn("sleep", func(rq *Request, evt what.What, id, val string) error {
 		count := int(atomic.AddInt32(&callCount, 1))
 		is.Equal(val, strconv.Itoa(count))
 		if count == 1 {
@@ -410,7 +410,7 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 
 	var wait int32
 
-	rq.RegisterEventFn("bomb", func(_ *Request, id, evt, val string) error {
+	rq.RegisterEventFn("bomb", func(_ *Request, evt what.What, id, val string) error {
 		time.Sleep(time.Millisecond * time.Duration(atomic.AddInt32(&wait, 1)))
 		return nil
 	})
@@ -438,7 +438,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 
 	var spewState int32
 	var callCount int32
-	rq.RegisterEventFn("spew", func(_ *Request, id, evt, val string) error {
+	rq.RegisterEventFn("spew", func(_ *Request, evt what.What, id, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		if len(rq.outCh) < cap(rq.outCh) {
 			rq.jw.Trigger("spew", "")

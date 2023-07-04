@@ -21,7 +21,7 @@ type ConnectFn func(rq *Request) error
 
 // EventFn is the signature of a event handling function to be called when JaWS receives
 // an event message from the Javascript via the WebSocket connection.
-type EventFn func(rq *Request, id, evt, val string) error
+type EventFn func(rq *Request, wht what.What, id, val string) error
 
 // Request maintains the state for a JaWS WebSocket connection, and handles processing
 // of events and broadcasts.
@@ -455,7 +455,7 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 			// an error to be sent out as an alert message.
 			// primary usecase is tests.
 			if msg.What == what.Hook {
-				msg = makeAlertDangerMessage(fn(rq, msg.Elem, msg.What.String(), msg.Data))
+				msg = makeAlertDangerMessage(fn(rq, msg.What, msg.Elem, msg.Data))
 			}
 
 			if msg != nil {
@@ -476,7 +476,7 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh chan<- *Message, eventDoneCh chan<- struct{}) {
 	defer close(eventDoneCh)
 	for call := range eventCallCh {
-		if err := call.fn(rq, call.msg.Elem, call.msg.What.String(), call.msg.Data); err != nil {
+		if err := call.fn(rq, call.msg.What, call.msg.Elem, call.msg.Data); err != nil {
 			select {
 			case outboundMsgCh <- makeAlertDangerMessage(err):
 			default:
@@ -508,10 +508,10 @@ func makeAlertDangerMessage(err error) (msg *Message) {
 	return
 }
 
-func (rq *Request) maybeEvent(id, event string, fn ClickFn) string {
+func (rq *Request) maybeEvent(event what.What, id string, fn ClickFn) string {
 	var wf EventFn
 	if fn != nil {
-		wf = func(rq *Request, id, evt, val string) (err error) {
+		wf = func(rq *Request, evt what.What, id, val string) (err error) {
 			if evt == event {
 				err = fn(rq)
 			}
@@ -522,14 +522,14 @@ func (rq *Request) maybeEvent(id, event string, fn ClickFn) string {
 }
 
 func (rq *Request) maybeClick(jid string, fn ClickFn) string {
-	return rq.maybeEvent(jid, what.Click.String(), fn)
+	return rq.maybeEvent(what.Click, jid, fn)
 }
 
 func (rq *Request) maybeInputText(jid string, fn InputTextFn) string {
 	var wf EventFn
 	if fn != nil {
-		wf = func(rq *Request, id, evt, val string) (err error) {
-			if evt == what.Input.String() {
+		wf = func(rq *Request, evt what.What, id, val string) (err error) {
+			if evt == what.Input {
 				err = fn(rq, val)
 			}
 			return
@@ -541,8 +541,8 @@ func (rq *Request) maybeInputText(jid string, fn InputTextFn) string {
 func (rq *Request) maybeInputFloat(jid string, fn InputFloatFn) string {
 	var wf EventFn
 	if fn != nil {
-		wf = func(rq *Request, id, evt, val string) (err error) {
-			if evt == what.Input.String() {
+		wf = func(rq *Request, evt what.What, id, val string) (err error) {
+			if evt == what.Input {
 				var v float64
 				if val != "" {
 					if v, err = strconv.ParseFloat(val, 64); err != nil {
@@ -560,8 +560,8 @@ func (rq *Request) maybeInputFloat(jid string, fn InputFloatFn) string {
 func (rq *Request) maybeInputBool(jid string, fn InputBoolFn) string {
 	var wf EventFn
 	if fn != nil {
-		wf = func(rq *Request, id, evt, val string) (err error) {
-			if evt == what.Input.String() {
+		wf = func(rq *Request, evt what.What, id, val string) (err error) {
+			if evt == what.Input {
 				var v bool
 				if val != "" {
 					if v, err = strconv.ParseBool(val); err != nil {
@@ -579,8 +579,8 @@ func (rq *Request) maybeInputBool(jid string, fn InputBoolFn) string {
 func (rq *Request) maybeInputDate(jid string, fn InputDateFn) string {
 	var wf EventFn
 	if fn != nil {
-		wf = func(rq *Request, id, evt, val string) (err error) {
-			if evt == what.Input.String() {
+		wf = func(rq *Request, evt what.What, id, val string) (err error) {
+			if evt == what.Input {
 				var v time.Time
 				if val != "" {
 					if v, err = time.Parse(ISO8601, val); err != nil {
