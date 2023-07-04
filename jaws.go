@@ -516,7 +516,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			if msg != nil {
 				_, isMeta := metaIds[msg.Elem]
 				for msgCh, rq := range subs {
-					if isMeta || rq.hasJid(msg.Elem) {
+					if isMeta || (rq != nil && rq != msg.from && rq.hasJid(msg.Elem)) {
 						select {
 						case msgCh <- msg:
 						default:

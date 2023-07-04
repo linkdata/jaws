@@ -366,11 +366,9 @@ func (rq *Request) GetEventFn(jid string) (fn EventFn, ok bool) {
 }
 
 func (rq *Request) hasJid(jid string) (ok bool) {
-	if rq != nil {
-		rq.mu.RLock()
-		_, ok = rq.elems[jid]
-		rq.mu.RUnlock()
-	}
+	rq.mu.RLock()
+	_, ok = rq.elems[jid]
+	rq.mu.RUnlock()
 	return
 }
 
@@ -433,11 +431,6 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 		if msg == nil {
 			// one of the channels are closed, so we're done
 			return
-		}
-
-		if msg.from == rq {
-			// don't process broadcasts that originate from ourselves
-			continue
 		}
 
 		// only ever process messages for registered elements
