@@ -8,11 +8,11 @@ import (
 	"github.com/linkdata/jaws/what"
 )
 
-type ClickFn func(rq *Request) error
-type InputTextFn func(rq *Request, val string) error
-type InputFloatFn func(rq *Request, val float64) error
-type InputBoolFn func(rq *Request, val bool) error
-type InputDateFn func(rq *Request, val time.Time) error
+type ClickFn func(rq *Request, jid string) error
+type InputTextFn func(rq *Request, jid string, val string) error
+type InputFloatFn func(rq *Request, jid string, val float64) error
+type InputBoolFn func(rq *Request, jid string, val bool) error
+type InputDateFn func(rq *Request, jid string, val time.Time) error
 
 const ISO8601 = "2006-01-02"
 

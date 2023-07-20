@@ -2,7 +2,7 @@ package jaws
 
 type RadioGrouper interface {
 	JawsRadioGroupData() *NamedBoolArray
-	JawsRadioGroupHandler(rq *Request, boolName string) error
+	JawsRadioGroupHandler(rq *Request, jid, boolName string) error
 }
 
 func (rq *Request) RadioGroup(grouper RadioGrouper) (rl []Radio) {

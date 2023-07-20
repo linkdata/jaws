@@ -571,8 +571,9 @@ func TestRequest_OnInput(t *testing.T) {
 	gotCall := make(chan struct{})
 	rq := newTestRequest(is)
 	defer rq.Close()
-	is.NoErr(rq.OnInput(elemId, func(rq *Request, val string) error {
+	is.NoErr(rq.OnInput(elemId, func(rq *Request, jid, val string) error {
 		defer close(gotCall)
+		is.Equal(jid, elemId)
 		is.Equal(val, elemVal)
 		return nil
 	}))
@@ -591,8 +592,9 @@ func TestRequest_OnClick(t *testing.T) {
 	gotCall := make(chan struct{})
 	rq := newTestRequest(is)
 	defer rq.Close()
-	is.NoErr(rq.OnClick(elemId, func(rq *Request) error {
+	is.NoErr(rq.OnClick(elemId, func(rq *Request, jid string) error {
 		defer close(gotCall)
+		is.Equal(jid, elemId)
 		return nil
 	}))
 	rq.inCh <- &Message{Elem: elemId, What: what.Click, Data: elemVal}
@@ -610,8 +612,9 @@ func TestRequest_OnTrigger(t *testing.T) {
 	gotCall := make(chan struct{})
 	rq := newTestRequest(is)
 	defer rq.Close()
-	is.NoErr(rq.OnTrigger(elemId, func(rq *Request) error {
+	is.NoErr(rq.OnTrigger(elemId, func(rq *Request, jid string) error {
 		defer close(gotCall)
+		is.Equal(jid, elemId)
 		return nil
 	}))
 	rq.inCh <- &Message{Elem: elemId, What: what.Trigger, Data: elemVal}
@@ -668,8 +671,9 @@ func TestRequest_Text(t *testing.T) {
 	defer rq.Close()
 
 	gotCall := make(chan struct{})
-	h := rq.Text(elemId, elemVal, func(rq *Request, val string) error {
+	h := rq.Text(elemId, elemVal, func(rq *Request, jid, val string) error {
 		defer close(gotCall)
+		is.Equal(jid, elemId)
 		is.Equal(val, "other-stuff")
 		return nil
 	}, "disabled")
@@ -690,8 +694,9 @@ func TestRequest_Password(t *testing.T) {
 	defer rq.Close()
 
 	gotCall := make(chan struct{})
-	h := rq.Password(elemId, func(rq *Request, val string) error {
+	h := rq.Password(elemId, func(rq *Request, jid, val string) error {
 		defer close(gotCall)
+		is.Equal(jid, elemId)
 		is.Equal(val, "other-stuff")
 		return nil
 	}, "autocomplete=\"off\"")
@@ -714,7 +719,8 @@ func TestRequest_Number(t *testing.T) {
 
 	gotCall := make(chan struct{})
 	defer close(gotCall)
-	h := rq.Number(elemId, elemVal, func(rq *Request, val float64) error {
+	h := rq.Number(elemId, elemVal, func(rq *Request, jid string, val float64) error {
+		is.Equal(jid, elemId)
 		switch val {
 		case 4.3:
 			// ok
@@ -759,8 +765,9 @@ func TestRequest_Range(t *testing.T) {
 	defer rq.Close()
 
 	gotCall := make(chan struct{})
-	h := rq.Range(elemId, elemVal, func(rq *Request, val float64) error {
+	h := rq.Range(elemId, elemVal, func(rq *Request, jid string, val float64) error {
 		defer close(gotCall)
+		is.Equal(jid, elemId)
 		is.Equal(val, 3.15)
 		return nil
 	}, "disabled")
@@ -783,7 +790,8 @@ func TestRequest_Checkbox(t *testing.T) {
 
 	gotCall := make(chan struct{})
 	defer close(gotCall)
-	h := rq.Checkbox(elemId, elemVal, func(rq *Request, val bool) error {
+	h := rq.Checkbox(elemId, elemVal, func(rq *Request, jid string, val bool) error {
+		is.Equal(jid, elemId)
 		is.Equal(val, false)
 		gotCall <- struct{}{}
 		return nil
@@ -822,7 +830,8 @@ func TestRequest_Date(t *testing.T) {
 
 	gotCall := make(chan struct{})
 	defer close(gotCall)
-	h := rq.Date(elemId, elemVal, func(rq *Request, val time.Time) error {
+	h := rq.Date(elemId, elemVal, func(rq *Request, jid string, val time.Time) error {
+		is.Equal(jid, elemId)
 		if !val.IsZero() {
 			is.Equal(val.Year(), 1970)
 			is.Equal(val.Month(), time.January)
@@ -862,8 +871,9 @@ func TestRequest_Radio(t *testing.T) {
 	defer rq.Close()
 
 	gotCall := make(chan struct{})
-	h := rq.Radio("quux", true, func(rq *Request, val bool) error {
+	h := rq.Radio("quux", true, func(rq *Request, jid string, val bool) error {
 		defer close(gotCall)
+		is.Equal(jid, "quux")
 		is.Equal(val, false)
 		return nil
 	})
@@ -888,8 +898,8 @@ func (rg *radioGrouper) JawsRadioGroupData() *NamedBoolArray {
 	return rg.NamedBoolArray
 }
 
-func (rg *radioGrouper) JawsRadioGroupHandler(rq *Request, val string) error {
-	return rg.fn(rq, val)
+func (rg *radioGrouper) JawsRadioGroupHandler(rq *Request, jid, val string) error {
+	return rg.fn(rq, jid, val)
 }
 
 func TestRequest_LabeledRadioGroup(t *testing.T) {
@@ -904,8 +914,9 @@ func TestRequest_LabeledRadioGroup(t *testing.T) {
 	nba.SetOnly("alpha")
 	is.Equal(nba.Get(), "alpha")
 
-	rg := &radioGrouper{NamedBoolArray: nba, fn: func(rq *Request, val string) error {
+	rg := &radioGrouper{NamedBoolArray: nba, fn: func(rq *Request, jid, val string) error {
 		defer close(gotCall)
+		is.Equal(jid, "quux/bravo")
 		is.Equal(val, "bravo")
 		return nil
 	}}

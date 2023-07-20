@@ -508,17 +508,17 @@ func makeAlertDangerMessage(err error) (msg *Message) {
 	return
 }
 
-func (rq *Request) maybeEvent(event what.What, id string, fn ClickFn) string {
+func (rq *Request) maybeEvent(event what.What, jid string, fn ClickFn) string {
 	var wf EventFn
 	if fn != nil {
-		wf = func(rq *Request, evt what.What, id, val string) (err error) {
+		wf = func(rq *Request, evt what.What, jid, val string) (err error) {
 			if evt == event {
-				err = fn(rq)
+				err = fn(rq, jid)
 			}
 			return
 		}
 	}
-	return rq.RegisterEventFn(id, wf)
+	return rq.RegisterEventFn(jid, wf)
 }
 
 func (rq *Request) maybeClick(jid string, fn ClickFn) string {
@@ -528,9 +528,9 @@ func (rq *Request) maybeClick(jid string, fn ClickFn) string {
 func (rq *Request) maybeInputText(jid string, fn InputTextFn) string {
 	var wf EventFn
 	if fn != nil {
-		wf = func(rq *Request, evt what.What, id, val string) (err error) {
+		wf = func(rq *Request, evt what.What, jid, val string) (err error) {
 			if evt == what.Input {
-				err = fn(rq, val)
+				err = fn(rq, jid, val)
 			}
 			return
 		}
@@ -541,7 +541,7 @@ func (rq *Request) maybeInputText(jid string, fn InputTextFn) string {
 func (rq *Request) maybeInputFloat(jid string, fn InputFloatFn) string {
 	var wf EventFn
 	if fn != nil {
-		wf = func(rq *Request, evt what.What, id, val string) (err error) {
+		wf = func(rq *Request, evt what.What, jid, val string) (err error) {
 			if evt == what.Input {
 				var v float64
 				if val != "" {
@@ -549,7 +549,7 @@ func (rq *Request) maybeInputFloat(jid string, fn InputFloatFn) string {
 						return
 					}
 				}
-				err = fn(rq, v)
+				err = fn(rq, jid, v)
 			}
 			return
 		}
@@ -560,7 +560,7 @@ func (rq *Request) maybeInputFloat(jid string, fn InputFloatFn) string {
 func (rq *Request) maybeInputBool(jid string, fn InputBoolFn) string {
 	var wf EventFn
 	if fn != nil {
-		wf = func(rq *Request, evt what.What, id, val string) (err error) {
+		wf = func(rq *Request, evt what.What, jid, val string) (err error) {
 			if evt == what.Input {
 				var v bool
 				if val != "" {
@@ -568,7 +568,7 @@ func (rq *Request) maybeInputBool(jid string, fn InputBoolFn) string {
 						return
 					}
 				}
-				err = fn(rq, v)
+				err = fn(rq, jid, v)
 			}
 			return
 		}
@@ -579,7 +579,7 @@ func (rq *Request) maybeInputBool(jid string, fn InputBoolFn) string {
 func (rq *Request) maybeInputDate(jid string, fn InputDateFn) string {
 	var wf EventFn
 	if fn != nil {
-		wf = func(rq *Request, evt what.What, id, val string) (err error) {
+		wf = func(rq *Request, evt what.What, jid, val string) (err error) {
 			if evt == what.Input {
 				var v time.Time
 				if val != "" {
@@ -587,7 +587,7 @@ func (rq *Request) maybeInputDate(jid string, fn InputDateFn) string {
 						return
 					}
 				}
-				err = fn(rq, v)
+				err = fn(rq, jid, v)
 			}
 			return
 		}
