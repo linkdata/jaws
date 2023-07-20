@@ -15,7 +15,7 @@ func TestParse(t *testing.T) {
 		{"blank is None", "", None},
 		{"Inner", "Inner", Inner},
 		{"inner", "inner", Inner},
-		{"inners", "inners", None},
+		{"innerr", "innerr", None},
 		{"last", lastWhat.String(), lastWhat},
 	}
 	for _, tt := range tests {
