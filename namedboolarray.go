@@ -168,7 +168,7 @@ func (nba *NamedBoolArray) radioEventFn(rq *Request, evt what.What, jid, val str
 			nba.mu.Unlock()
 			rq.SetBoolValue(jid, v)
 			if fn != nil {
-				err = fn(rq, name)
+				err = fn(rq, jid, name)
 			}
 		}
 	}
