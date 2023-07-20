@@ -6,6 +6,7 @@ import (
 )
 
 func TestParse(t *testing.T) {
+	lastWhat := What(len(_What_index) - 2)
 	tests := []struct {
 		name string
 		arg  string
@@ -15,6 +16,7 @@ func TestParse(t *testing.T) {
 		{"Inner", "Inner", Inner},
 		{"inner", "inner", Inner},
 		{"inners", "inners", None},
+		{"last", lastWhat.String(), lastWhat},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -33,7 +35,7 @@ func TestString(t *testing.T) {
 	}{
 		{"None", None, "None"},
 		{"Inner", Inner, "Inner"},
-		{"unknown", What(len(_What_index)), fmt.Sprintf("What(%d)", len(_What_index))},
+		{"unknown", What(len(_What_index) + 44), fmt.Sprintf("What(%d)", len(_What_index)+44)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
