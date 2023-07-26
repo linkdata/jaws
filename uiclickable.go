@@ -11,7 +11,7 @@ type UiClickable struct {
 	HtmlTag  string
 	HtmlType string
 	Text     string
-	EventFn  ClickFn
+	ClickFn  ClickFn
 }
 
 func (ui *UiClickable) JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) error {
@@ -25,8 +25,8 @@ func (ui *UiClickable) JawsRender(rq *Request, w io.Writer, jid string, data ...
 }
 
 func (ui *UiClickable) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
-	if wht == what.Click && ui.EventFn != nil {
-		err = ui.EventFn(rq, jid)
+	if wht == what.Click && ui.ClickFn != nil {
+		err = ui.ClickFn(rq, jid)
 	}
 	return
 }

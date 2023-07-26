@@ -21,7 +21,7 @@ func (r *Radio) Jid() string {
 // Radio renders a HTML input element of type 'radio'.
 func (r *Radio) Radio(attrs ...string) template.HTML {
 	jid := r.Jid()
-	attrs = append(attrs, `name="`+r.nba.Jid+`"`)
+	attrs = append(attrs, `name="`+r.nba.Tagstring+`"`)
 	attrs = append(attrs, `id="`+jid+`"`)
 	if r.Checked {
 		attrs = append(attrs, `checked`)

@@ -10,7 +10,7 @@ import (
 )
 
 type UI interface {
-	JawsTags(rq *Request) (tl []interface{})
+	JawsTags(rq *Request) (tags []interface{})
 	JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) (err error)
 	JawsEvent(rq *Request, wht what.What, jid, val string) (err error)
 }

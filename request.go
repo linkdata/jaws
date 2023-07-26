@@ -127,11 +127,11 @@ func (rq *Request) recycle() {
 	rq.Initial = nil
 	rq.Context = nil
 	rq.remoteIP = nil
+	rq.elems = rq.elems[:0]
 	rq.killSessionLocked()
 	// this gets optimized to calling the 'runtime.mapclear' function
 	// we don't expect this to improve speed, but it will lower GC load
-	rq.elems = rq.elems[:0]
-	for k := range rq.elems {
+	for k := range rq.tagMap {
 		delete(rq.tagMap, k)
 	}
 	rq.mu.Unlock()
@@ -526,80 +526,6 @@ func (rq *Request) maybeEvent(event what.What, jid string, fn ClickFn) string {
 		wf = func(rq *Request, evt what.What, jid, val string) (err error) {
 			if evt == event {
 				err = fn(rq, jid)
-			}
-			return
-		}
-	}
-	return rq.RegisterEventFn(jid, wf)
-}
-
-func (rq *Request) maybeClick(jid string, fn ClickFn) string {
-	return rq.maybeEvent(what.Click, jid, fn)
-}
-
-func (rq *Request) maybeInputText(jid string, fn InputTextFn) string {
-	var wf EventFn
-	if fn != nil {
-		wf = func(rq *Request, evt what.What, jid, val string) (err error) {
-			if evt == what.Input {
-				err = fn(rq, jid, val)
-			}
-			return
-		}
-	}
-	return rq.RegisterEventFn(jid, wf)
-}
-
-func (rq *Request) maybeInputFloat(jid string, fn InputFloatFn) string {
-	var wf EventFn
-	if fn != nil {
-		wf = func(rq *Request, evt what.What, jid, val string) (err error) {
-			if evt == what.Input {
-				var v float64
-				if val != "" {
-					if v, err = strconv.ParseFloat(val, 64); err != nil {
-						return
-					}
-				}
-				err = fn(rq, jid, v)
-			}
-			return
-		}
-	}
-	return rq.RegisterEventFn(jid, wf)
-}
-
-func (rq *Request) maybeInputBool(jid string, fn InputBoolFn) string {
-	var wf EventFn
-	if fn != nil {
-		wf = func(rq *Request, evt what.What, jid, val string) (err error) {
-			if evt == what.Input {
-				var v bool
-				if val != "" {
-					if v, err = strconv.ParseBool(val); err != nil {
-						return
-					}
-				}
-				err = fn(rq, jid, v)
-			}
-			return
-		}
-	}
-	return rq.RegisterEventFn(jid, wf)
-}
-
-func (rq *Request) maybeInputDate(jid string, fn InputDateFn) string {
-	var wf EventFn
-	if fn != nil {
-		wf = func(rq *Request, evt what.What, jid, val string) (err error) {
-			if evt == what.Input {
-				var v time.Time
-				if val != "" {
-					if v, err = time.Parse(ISO8601, val); err != nil {
-						return
-					}
-				}
-				err = fn(rq, jid, v)
 			}
 			return
 		}
