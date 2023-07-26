@@ -3,6 +3,7 @@ package jaws
 import (
 	"html/template"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/linkdata/jaws/what"
@@ -37,38 +38,78 @@ func (rq *Request) OnTrigger(jid string, fn ClickFn) error {
 	return nil
 }
 
-func (rq *Request) Div(jid, inner string, fn ClickFn, attrs ...string) template.HTML {
-	return HtmlInner(rq.maybeClick(jid, fn), "div", "", inner, attrs...)
-}
-
-func (rq *Request) Span(jid, inner string, fn ClickFn, attrs ...string) template.HTML {
-	return HtmlInner(rq.maybeClick(jid, fn), "span", "", inner, attrs...)
-}
-
-func (rq *Request) Li(jid, inner string, fn ClickFn, attrs ...string) template.HTML {
-	return HtmlInner(rq.maybeClick(jid, fn), "li", "", inner, attrs...)
-}
-
-func (rq *Request) Td(jid, inner string, fn ClickFn, attrs ...string) template.HTML {
-	return HtmlInner(rq.maybeClick(jid, fn), "td", "", inner, attrs...)
-}
-
-func (rq *Request) A(jid, inner string, fn ClickFn, attrs ...string) template.HTML {
-	return HtmlInner(rq.maybeClick(jid, fn), "a", "", inner, attrs...)
-}
-
-func (rq *Request) Button(jid, txt string, fn ClickFn, attrs ...string) template.HTML {
-	return HtmlInner(rq.maybeClick(jid, fn), "button", "button", txt, attrs...)
-}
-
-func (rq *Request) Img(jid, src string, fn ClickFn, attrs ...string) template.HTML {
-	if src != "" && src[0] == '"' {
-		src = `src=` + src
-	} else {
-		src = `src="` + src + `"`
+func (rq *Request) Div(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
+	ui := &UiClickable{
+		UiBase:  UiBase{Tags: tagstring},
+		HtmlTag: "div",
+		Text:    inner,
+		EventFn: fn,
 	}
-	attrs = append(attrs, src)
-	return HtmlInner(rq.maybeClick(jid, fn), "img", "", "", attrs...)
+	return rq.UI(ui, attrs...)
+}
+
+func (rq *Request) Span(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
+	ui := &UiClickable{
+		UiBase:  UiBase{Tags: tagstring},
+		HtmlTag: "span",
+		Text:    inner,
+		EventFn: fn,
+	}
+	return rq.UI(ui, attrs...)
+}
+
+func (rq *Request) Li(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
+	ui := &UiClickable{
+		UiBase:  UiBase{Tags: tagstring},
+		HtmlTag: "li",
+		Text:    inner,
+		EventFn: fn,
+	}
+	return rq.UI(ui, attrs...)
+}
+
+func (rq *Request) Td(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
+	ui := &UiClickable{
+		UiBase:  UiBase{Tags: tagstring},
+		HtmlTag: "td",
+		Text:    inner,
+		EventFn: fn,
+	}
+	return rq.UI(ui, attrs...)
+}
+
+func (rq *Request) A(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
+	ui := &UiClickable{
+		UiBase:  UiBase{Tags: tagstring},
+		HtmlTag: "a",
+		Text:    inner,
+		EventFn: fn,
+	}
+	return rq.UI(ui, attrs...)
+}
+
+func (rq *Request) Button(tagstring, txt string, fn ClickFn, attrs ...interface{}) template.HTML {
+	ui := &UiClickable{
+		UiBase:   UiBase{Tags: tagstring},
+		HtmlTag:  "button",
+		HtmlType: "button",
+		Text:     txt,
+		EventFn:  fn,
+	}
+	return rq.UI(ui, attrs...)
+}
+
+func (rq *Request) Img(tagstring, src string, fn ClickFn, attrs ...interface{}) template.HTML {
+	if !strings.HasPrefix(src, "\"") {
+		src = strconv.Quote(src)
+	}
+	attrs = append(attrs, "src="+src)
+	ui := &UiClickable{
+		UiBase:  UiBase{Tags: tagstring},
+		HtmlTag: "img",
+		EventFn: fn,
+	}
+	return rq.UI(ui, attrs...)
 }
 
 func (rq *Request) Text(jid, val string, fn InputTextFn, attrs ...string) template.HTML {

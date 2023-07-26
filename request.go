@@ -29,17 +29,19 @@ type EventFn func(rq *Request, wht what.What, id, val string) error
 // Note that we have to store the context inside the struct because there is no call chain
 // between the Request being created and it being used once the WebSocket is created.
 type Request struct {
-	Jaws      *Jaws              // (read-only) the JaWS instance the Request belongs to
-	JawsKey   uint64             // (read-only) a random number used in the WebSocket URI to identify this Request
-	Created   time.Time          // (read-only) when the Request was created, used for automatic cleanup
-	Initial   *http.Request      // (read-only) initial HTTP request passed to Jaws.NewRequest
-	Context   context.Context    // (read-only) context passed to Jaws.NewRequest
-	remoteIP  net.IP             // (read-only) remote IP, or nil
-	session   *Session           // (read-only) session, if established
-	sendCh    chan *Message      // (read-only) direct send message channel
-	mu        deadlock.RWMutex   // protects following
-	connectFn ConnectFn          // a ConnectFn to call before starting message processing for the Request
-	elems     map[string]EventFn // map of registered HTML id's, read-only after UseRequest() called
+	Jaws      *Jaws            // (read-only) the JaWS instance the Request belongs to
+	JawsKey   uint64           // (read-only) a random number used in the WebSocket URI to identify this Request
+	Created   time.Time        // (read-only) when the Request was created, used for automatic cleanup
+	Initial   *http.Request    // (read-only) initial HTTP request passed to Jaws.NewRequest
+	Context   context.Context  // (read-only) context passed to Jaws.NewRequest
+	remoteIP  net.IP           // (read-only) remote IP, or nil
+	session   *Session         // (read-only) session, if established
+	sendCh    chan *Message    // (read-only) direct send message channel
+	mu        deadlock.RWMutex // protects following
+	connectFn ConnectFn        // a ConnectFn to call before starting message processing for the Request
+	nextJid   int
+	elems     []*Element
+	tagMap    map[interface{}][]*Element
 }
 
 type eventFnCall struct {
@@ -56,7 +58,7 @@ var metaIds = map[string]struct{}{
 
 var requestPool = sync.Pool{New: func() interface{} {
 	return &Request{
-		elems:  make(map[string]EventFn),
+		tagMap: make(map[interface{}][]*Element),
 		sendCh: make(chan *Message),
 	}
 }}
@@ -128,8 +130,9 @@ func (rq *Request) recycle() {
 	rq.killSessionLocked()
 	// this gets optimized to calling the 'runtime.mapclear' function
 	// we don't expect this to improve speed, but it will lower GC load
+	rq.elems = rq.elems[:0]
 	for k := range rq.elems {
-		delete(rq.elems, k)
+		delete(rq.tagMap, k)
 	}
 	rq.mu.Unlock()
 	requestPool.Put(rq)
@@ -315,78 +318,81 @@ func (rq *Request) Redirect(url string) {
 	})
 }
 
-// RegisterEventFn records the given HTML 'jid' attribute as a valid target
+// RegisterEventFn records the given tags as a valid targets
 // for dynamic updates using the given event function (which may be nil).
 //
-// If the jid argument is an empty string, a unique jid will be generated.
+// If the tags argument is an empty string, a unique tag will be generated.
 //
 // If fn argument is nil, a pre-existing event function won't be overwritten.
 //
-// Returns the (possibly generated) jid.
-func (rq *Request) RegisterEventFn(jid string, fn EventFn) string {
+// Returns the (possibly generated) tagstring.
+func (rq *Request) RegisterEventFn(tagstring string, fn EventFn) string {
+	if tagstring == "" {
+		tagstring = MakeID()
+	}
+	tags := StringTags(tagstring)
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	if jid != "" {
-		if _, ok := rq.elems[jid]; ok {
-			if fn == nil {
-				return jid
+
+	var missing []interface{}
+	for _, tag := range tags {
+		if elems, ok := rq.tagMap[tag]; ok {
+			if fn != nil {
+				for _, elem := range elems {
+					if uib, ok := elem.Ui.(*UiBase); ok {
+						uib.EventFn = fn
+					}
+				}
 			}
+		} else {
+			missing = append(missing, tag)
 		}
-		rq.elems[jid] = fn
-	} else {
-		for {
-			jid = MakeID()
-			if _, ok := rq.elems[jid]; !ok {
-				rq.elems[jid] = fn
+	}
+	rq.newElementLocked(missing, &UiBase{Tags: tagstring, EventFn: fn})
+
+	return tagstring
+}
+
+// Register calls RegisterEventFn(tagstring, nil).
+// Useful in template constructs like:
+//
+//	<div jid="{{$.Register `foo`}}">
+func (rq *Request) Register(tagstring string) string {
+	return rq.RegisterEventFn(tagstring, nil)
+}
+
+func (rq *Request) GetEventFn(jid string) (fn EventFn, ok bool) {
+	rq.mu.RLock()
+	defer rq.mu.RUnlock()
+	var elems []*Element
+	if elems, ok = rq.tagMap[jid]; ok && len(elems) > 0 {
+		fn = elems[0].Ui.JawsEvent
+		for _, elem := range elems {
+			if uib, haveuib := elem.Ui.(*UiBase); haveuib {
+				fn = uib.EventFn
 				break
 			}
 		}
 	}
-	return jid
+	return
 }
 
-// Register calls RegisterEventFn(id, nil).
-// Useful in template constructs like:
-//
-//	<div jid="{{$.Register `foo`}}">
-func (rq *Request) Register(jid string) string {
-	return rq.RegisterEventFn(jid, nil)
-}
-
-// GetEventFn checks if a given HTML element is registered and returns
-// the it's event function (or nil) along with a boolean indicating
-// if it's a registered ID.
-func (rq *Request) GetEventFn(jid string) (fn EventFn, ok bool) {
+// HasTag returns true if the Request has one or more UI elements that have the given tag.
+func (rq *Request) HasTag(tag interface{}) (ok bool) {
 	rq.mu.RLock()
-	if fn, ok = rq.elems[jid]; !ok {
-		_, ok = metaIds[jid]
+	_, ok = rq.tagMap[tag]
+	rq.mu.RUnlock()
+	return
+}
+
+// GetElements returns a list of the UI elements in the Request that have the given tag.
+func (rq *Request) GetElements(tag interface{}) (elems []*Element) {
+	rq.mu.RLock()
+	if el, ok := rq.tagMap[tag]; ok {
+		elems = append(elems, el...)
 	}
 	rq.mu.RUnlock()
 	return
-}
-
-func (rq *Request) hasJid(jid string) (ok bool) {
-	rq.mu.RLock()
-	_, ok = rq.elems[jid]
-	rq.mu.RUnlock()
-	return
-}
-
-// SetEventFn sets the event function for the given jid to be the given function.
-// Passing nil for the function is legal, and has the effect of ensuring the
-// jid can be the target of DOM updates but not to send Javascript events.
-// Note that you can only have one event function per jid.
-func (rq *Request) SetEventFn(jid string, fn EventFn) {
-	rq.mu.Lock()
-	rq.elems[jid] = fn
-	rq.mu.Unlock()
-}
-
-// OnEvent calls SetEventFn.
-// Returns a nil error so it can be used inside templates.
-func (rq *Request) OnEvent(jid string, fn EventFn) error {
-	rq.SetEventFn(jid, fn)
-	return nil
 }
 
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
@@ -433,15 +439,21 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 			return
 		}
 
-		// only ever process messages for registered elements
-		if fn, ok := rq.GetEventFn(msg.Elem); ok {
+		var todo []*Element
+		todo = append(todo, rq.tagMap[msg.Elem]...)
+		if _, ok := metaIds[msg.Elem]; ok {
+			todo = append(todo, nil)
+		}
+
+		// find all elements listening to one of the tags in the message
+		for _, elem := range todo {
 			// messages incoming from WebSocket or trigger messages
 			// won't be sent out on the WebSocket, but will queue up a
 			// call to the event function (if any)
 			if incoming || msg.What == what.Trigger {
-				if fn != nil {
+				if elem != nil {
 					select {
-					case eventCallCh <- eventFnCall{fn: fn, msg: msg}:
+					case eventCallCh <- eventFnCall{fn: elem.Ui.JawsEvent, msg: msg}:
 					default:
 						rq.Jaws.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, msg))
 						return
@@ -454,8 +466,8 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 			// the function must not send any messages itself, but may return
 			// an error to be sent out as an alert message.
 			// primary usecase is tests.
-			if msg.What == what.Hook {
-				msg = makeAlertDangerMessage(fn(rq, msg.What, msg.Elem, msg.Data))
+			if msg.What == what.Hook && elem != nil {
+				msg = makeAlertDangerMessage(elem.Ui.JawsEvent(rq, msg.What, msg.Elem, msg.Data))
 			}
 
 			if msg != nil {

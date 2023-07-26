@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"html/template"
 	"log"
 	"strconv"
 	"strings"
@@ -92,42 +93,40 @@ func TestRequest_Registrations(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	fn, ok := rq.GetEventFn("bar")
-	is.Equal(ok, false)
-	is.Equal(fn, nil)
+	is.Equal(rq.HasTag("bar"), false)
 
-	id := rq.Register("")
-	is.True(strings.HasPrefix(id, "jaws."))
-	fn, ok = rq.GetEventFn(id)
+	jid := rq.Register("") // will create a unique tag
+	is.True(jid != "")
+	fn, ok := rq.GetEventFn(jid)
 	is.Equal(ok, true)
 	is.Equal(fn, nil)
 
 	var ef EventFn = func(rq *Request, evt what.What, id, val string) error {
 		return nil
 	}
-	id2 := rq.RegisterEventFn(id, ef)
-	is.Equal(id, id2)
-	fn, ok = rq.GetEventFn(id)
+	jid2 := rq.RegisterEventFn(jid, ef)
+	is.Equal(jid, jid2)
+	fn, ok = rq.GetEventFn(jid)
 	is.Equal(ok, true)
 	is.Equal(ef, fn)
 
-	id2 = rq.Register(id)
-	is.Equal(id, id2)
-	fn, ok = rq.GetEventFn(id)
+	jid2 = rq.Register(jid)
+	is.Equal(jid, jid2)
+	fn, ok = rq.GetEventFn(jid)
 	is.Equal(ok, true)
 	is.Equal(fn, ef)
 
-	rq.SetEventFn(id, nil)
+	/*rq.SetEventFn(id, nil)
 	fn, ok = rq.GetEventFn(id)
 	is.Equal(ok, true)
 	is.Equal(fn, nil)
-	is.Equal(rq.OnEvent(id, ef), nil)
+	is.Equal(rq.OnEvent(id, ef), nil)*/
 
-	id = rq.Register("foo")
-	is.Equal(id, "foo")
-	id2 = rq.Register("")
-	is.True(strings.HasPrefix(id2, "jaws."))
-	is.True(id != id2)
+	jid = rq.Register("foo")
+	is.Equal(jid, "foo")
+	jid2 = rq.Register("")
+	is.True(jid2 != "")
+	is.True(jid != jid2)
 }
 
 func TestRequest_DuplicateRegistration(t *testing.T) {
@@ -525,7 +524,11 @@ func TestRequest_Sends(t *testing.T) {
 
 	is.True(cap(rq.outCh)-len(rq.outCh) > 7)
 
-	<-rq.readyCh
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-rq.readyCh:
+	}
 
 	rq.SetAttr("SetAttr", "bar", "baz")
 	rq.SetAttr("NotRegistered", "bar", "baz")
@@ -534,28 +537,36 @@ func TestRequest_Sends(t *testing.T) {
 	rq.AlertError(errors.New("<html>\nshould-be-escaped"))
 	rq.Redirect("some-url")
 
-	for msg := range rq.outCh {
-		switch msg.Elem {
-		case "SetAttr":
-			gotSetAttr = msg.Format()
-		case "RemoveAttr":
-			gotRemoveAttr = msg.Format()
-		case "NotRegistered":
+	notDone := true
+	for notDone {
+		select {
+		case <-time.NewTimer(testTimeout).C:
 			is.Fail()
-		case " alert":
-			if strings.HasPrefix(msg.Data, "info\n") {
-				gotInfoAlert = msg.Format()
+		case msg := <-rq.outCh:
+			if msg != nil {
+				switch msg.Elem {
+				case "SetAttr":
+					gotSetAttr = msg.Format()
+				case "RemoveAttr":
+					gotRemoveAttr = msg.Format()
+				case "NotRegistered":
+					is.Fail()
+				case " alert":
+					if strings.HasPrefix(msg.Data, "info\n") {
+						gotInfoAlert = msg.Format()
+					}
+					if strings.HasPrefix(msg.Data, "danger\n") {
+						gotDangerAlert = msg.Format()
+					}
+				case " redirect":
+					gotRedirect = msg.Format()
+					rq.cancel()
+				}
 			}
-			if strings.HasPrefix(msg.Data, "danger\n") {
-				gotDangerAlert = msg.Format()
-			}
-		case " redirect":
-			gotRedirect = msg.Format()
-			rq.cancel()
+		case <-rq.doneCh:
+			notDone = false
 		}
 	}
-
-	<-rq.doneCh
 
 	is.Equal(gotSetAttr, "SetAttr\nSAttr\nbar\nbaz")
 	is.Equal(gotRemoveAttr, "RemoveAttr\nRAttr\nbar")
@@ -626,41 +637,28 @@ func TestRequest_OnTrigger(t *testing.T) {
 }
 
 func TestRequest_Elements(t *testing.T) {
-	const elemId = "elem-id"
-	const elemVal = "elem-val"
 	is := is.New(t)
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	h := rq.Div(elemId, elemVal, nil, "")
-	is.True(strings.Contains(string(h), elemId))
-	is.True(strings.Contains(string(h), elemVal))
+	chk := func(h template.HTML, tag, txt string) {
+		elems := rq.GetElements(tag)
+		is.Equal(len(elems), 1)
+		hs := string(h)
+		if !strings.Contains(hs, elems[0].Jid) || !strings.Contains(hs, txt) {
+			t.Log(tag, txt, strconv.Quote(hs))
+			is.Fail()
+		}
+	}
 
-	h = rq.Span(elemId, elemVal, nil, "")
-	is.True(strings.Contains(string(h), elemId))
-	is.True(strings.Contains(string(h), elemVal))
-
-	h = rq.Li(elemId, elemVal, nil, "")
-	is.True(strings.Contains(string(h), elemId))
-	is.True(strings.Contains(string(h), elemVal))
-
-	h = rq.Td(elemId, elemVal, nil, "")
-	is.True(strings.Contains(string(h), elemId))
-	is.True(strings.Contains(string(h), elemVal))
-
-	h = rq.A(elemId, elemVal, nil, "")
-	is.True(strings.Contains(string(h), elemId))
-	is.True(strings.Contains(string(h), elemVal))
-
-	h = rq.Button(elemId, elemVal, nil, "disabled")
-	is.True(strings.Contains(string(h), elemId))
-	is.True(strings.Contains(string(h), elemVal))
-
-	h = rq.Img(elemId, "randomimg.png", nil)
-	is.True(strings.Contains(string(h), "src=\"randomimg.png\""))
-
-	h = rq.Img(elemId, "\"randomimg.png\"", nil)
-	is.True(strings.Contains(string(h), "src=\"randomimg.png\""))
+	chk(rq.Div("t1", "s1", nil), "t1", "s1")
+	chk(rq.Span("t2", "s2", nil), "t2", "s2")
+	chk(rq.Li("t3", "s3", nil), "t3", "s3")
+	chk(rq.Td("t4", "s4", nil), "t4", "s4")
+	chk(rq.A("t5", "s5", nil), "t5", "s5")
+	chk(rq.Button("t6", "s6", nil), "t6", "s6")
+	chk(rq.Img("t7", "randomimg.png", nil), "t7", "src=\"randomimg.png\"")
+	chk(rq.Img("t8", "\"randomimg.png\"", nil), "t8", "src=\"randomimg.png\"")
 }
 
 func TestRequest_Text(t *testing.T) {
