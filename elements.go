@@ -26,7 +26,7 @@ func (rq *Request) OnTrigger(jid string, fn ClickFn) error {
 
 func (rq *Request) Div(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
 	ui := &UiClickable{
-		UiBase:  UiBase{Tags: tagstring},
+		UiBase:  UiBase{Tags: StringTags(tagstring)},
 		HtmlTag: "div",
 		Text:    inner,
 		ClickFn: fn,
@@ -36,7 +36,7 @@ func (rq *Request) Div(tagstring, inner string, fn ClickFn, attrs ...interface{}
 
 func (rq *Request) Span(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
 	ui := &UiClickable{
-		UiBase:  UiBase{Tags: tagstring},
+		UiBase:  UiBase{Tags: StringTags(tagstring)},
 		HtmlTag: "span",
 		Text:    inner,
 		ClickFn: fn,
@@ -46,7 +46,7 @@ func (rq *Request) Span(tagstring, inner string, fn ClickFn, attrs ...interface{
 
 func (rq *Request) Li(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
 	ui := &UiClickable{
-		UiBase:  UiBase{Tags: tagstring},
+		UiBase:  UiBase{Tags: StringTags(tagstring)},
 		HtmlTag: "li",
 		Text:    inner,
 		ClickFn: fn,
@@ -56,7 +56,7 @@ func (rq *Request) Li(tagstring, inner string, fn ClickFn, attrs ...interface{})
 
 func (rq *Request) Td(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
 	ui := &UiClickable{
-		UiBase:  UiBase{Tags: tagstring},
+		UiBase:  UiBase{Tags: StringTags(tagstring)},
 		HtmlTag: "td",
 		Text:    inner,
 		ClickFn: fn,
@@ -66,7 +66,7 @@ func (rq *Request) Td(tagstring, inner string, fn ClickFn, attrs ...interface{})
 
 func (rq *Request) A(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
 	ui := &UiClickable{
-		UiBase:  UiBase{Tags: tagstring},
+		UiBase:  UiBase{Tags: StringTags(tagstring)},
 		HtmlTag: "a",
 		Text:    inner,
 		ClickFn: fn,
@@ -76,7 +76,7 @@ func (rq *Request) A(tagstring, inner string, fn ClickFn, attrs ...interface{}) 
 
 func (rq *Request) Button(tagstring, txt string, fn ClickFn, attrs ...interface{}) template.HTML {
 	ui := &UiClickable{
-		UiBase:   UiBase{Tags: tagstring},
+		UiBase:   UiBase{Tags: StringTags(tagstring)},
 		HtmlTag:  "button",
 		HtmlType: "button",
 		Text:     txt,
@@ -91,7 +91,7 @@ func (rq *Request) Img(tagstring, src string, fn ClickFn, attrs ...interface{}) 
 	}
 	attrs = append(attrs, "src="+src)
 	ui := &UiClickable{
-		UiBase:  UiBase{Tags: tagstring},
+		UiBase:  UiBase{Tags: StringTags(tagstring)},
 		HtmlTag: "img",
 		ClickFn: fn,
 	}
@@ -100,7 +100,7 @@ func (rq *Request) Img(tagstring, src string, fn ClickFn, attrs ...interface{}) 
 
 func (rq *Request) Text(tagstring, val string, fn InputTextFn, attrs ...interface{}) template.HTML {
 	ui := &UiInputText{
-		UiBase:      UiBase{Tags: tagstring},
+		UiBase:      UiBase{Tags: StringTags(tagstring)},
 		HtmlType:    "text",
 		Value:       val,
 		InputTextFn: fn,
@@ -110,7 +110,7 @@ func (rq *Request) Text(tagstring, val string, fn InputTextFn, attrs ...interfac
 
 func (rq *Request) Password(tagstring string, fn InputTextFn, attrs ...interface{}) template.HTML {
 	ui := &UiInputText{
-		UiBase:      UiBase{Tags: tagstring},
+		UiBase:      UiBase{Tags: StringTags(tagstring)},
 		HtmlType:    "password",
 		InputTextFn: fn,
 	}
@@ -119,7 +119,7 @@ func (rq *Request) Password(tagstring string, fn InputTextFn, attrs ...interface
 
 func (rq *Request) Select(nba *NamedBoolArray, fn InputTextFn, attrs ...interface{}) template.HTML {
 	ui := &UiInputSelect{
-		UiBase:         UiBase{Tags: nba.Tagstring},
+		UiBase:         UiBase{Tags: StringTags(nba.Tagstring)},
 		NamedBoolArray: nba,
 		InputTextFn:    fn,
 	}
@@ -128,7 +128,7 @@ func (rq *Request) Select(nba *NamedBoolArray, fn InputTextFn, attrs ...interfac
 
 func (rq *Request) Number(tagstring string, val float64, fn InputFloatFn, attrs ...interface{}) template.HTML {
 	ui := &UiInputFloat{
-		UiBase:       UiBase{Tags: tagstring},
+		UiBase:       UiBase{Tags: StringTags(tagstring)},
 		HtmlType:     "number",
 		Value:        val,
 		InputFloatFn: fn,
@@ -138,7 +138,7 @@ func (rq *Request) Number(tagstring string, val float64, fn InputFloatFn, attrs 
 
 func (rq *Request) Range(tagstring string, val float64, fn InputFloatFn, attrs ...interface{}) template.HTML {
 	ui := &UiInputFloat{
-		UiBase:       UiBase{Tags: tagstring},
+		UiBase:       UiBase{Tags: StringTags(tagstring)},
 		HtmlType:     "range",
 		Value:        val,
 		InputFloatFn: fn,
@@ -148,7 +148,7 @@ func (rq *Request) Range(tagstring string, val float64, fn InputFloatFn, attrs .
 
 func (rq *Request) Checkbox(tagstring string, val bool, fn InputBoolFn, attrs ...interface{}) template.HTML {
 	ui := &UiInputBool{
-		UiBase:      UiBase{Tags: tagstring},
+		UiBase:      UiBase{Tags: StringTags(tagstring)},
 		HtmlType:    "checkbox",
 		Value:       val,
 		InputBoolFn: fn,
@@ -158,7 +158,7 @@ func (rq *Request) Checkbox(tagstring string, val bool, fn InputBoolFn, attrs ..
 
 func (rq *Request) Radio(tagstring string, val bool, fn InputBoolFn, attrs ...interface{}) template.HTML {
 	ui := &UiInputBool{
-		UiBase:      UiBase{Tags: tagstring},
+		UiBase:      UiBase{Tags: StringTags(tagstring)},
 		HtmlType:    "radio",
 		Value:       val,
 		InputBoolFn: fn,
@@ -171,7 +171,7 @@ func (rq *Request) Date(tagstring string, val time.Time, fn InputDateFn, attrs .
 		val = time.Now()
 	}
 	ui := &UiInputDate{
-		UiBase:      UiBase{Tags: tagstring},
+		UiBase:      UiBase{Tags: StringTags(tagstring)},
 		Value:       val,
 		InputDateFn: fn,
 	}

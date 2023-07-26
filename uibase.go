@@ -8,7 +8,7 @@ import (
 )
 
 type UiBase struct {
-	Tags    string
+	Tags    []interface{}
 	EventFn EventFn
 }
 
@@ -22,7 +22,7 @@ func StringTags(text string) (tags []interface{}) {
 }
 
 func (uib *UiBase) JawsTags(rq *Request) (tags []interface{}) {
-	return StringTags(uib.Tags)
+	return uib.Tags
 }
 
 func (uib *UiBase) JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) (err error) {

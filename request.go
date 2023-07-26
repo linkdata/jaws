@@ -348,7 +348,7 @@ func (rq *Request) RegisterEventFn(tagstring string, fn EventFn) string {
 			missing = append(missing, tag)
 		}
 	}
-	rq.newElementLocked(missing, &UiBase{Tags: tagstring, EventFn: fn})
+	rq.newElementLocked(missing, &UiBase{Tags: StringTags(tagstring), EventFn: fn})
 
 	return tagstring
 }
