@@ -520,7 +520,7 @@ func makeAlertDangerMessage(err error) (msg *Message) {
 	return
 }
 
-func (rq *Request) maybeEvent(event what.What, jid string, fn ClickFn) string {
+func (rq *Request) maybeEvent(event what.What, jid string, fn func(rq *Request, jid string) error) string {
 	var wf EventFn
 	if fn != nil {
 		wf = func(rq *Request, evt what.What, jid, val string) (err error) {

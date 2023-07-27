@@ -13,12 +13,11 @@ func (ui *UiRadio) JawsRender(rq *Request, w io.Writer, jid string, data ...inte
 	return ui.UiInputBool.WriteHtmlInput(rq, w, "radio", jid, data...)
 }
 
-func (rq *Request) Radio(tagstring string, val bool, fn InputBoolFn, attrs ...interface{}) template.HTML {
+func (rq *Request) Radio(tagstring string, val bool, attrs ...interface{}) template.HTML {
 	ui := &UiRadio{
 		UiInputBool: UiInputBool{
-			UiHtml:      UiHtml{Tags: StringTags(tagstring)},
-			Value:       val,
-			InputBoolFn: fn,
+			UiHtml: UiHtml{Tags: StringTags(tagstring)},
+			Value:  val,
 		},
 	}
 	return rq.UI(ui, attrs...)

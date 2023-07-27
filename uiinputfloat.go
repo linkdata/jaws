@@ -9,8 +9,7 @@ import (
 
 type UiInputFloat struct {
 	UiHtml
-	Value        float64
-	InputFloatFn InputFloatFn
+	Value float64
 }
 
 func (ui *UiInputFloat) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid string, data ...interface{}) error {
@@ -18,6 +17,9 @@ func (ui *UiInputFloat) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid s
 }
 
 func (ui *UiInputFloat) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
+	if ui.EventFn != nil {
+		return ui.EventFn(rq, wht, jid, val)
+	}
 	if wht == what.Input {
 		var v float64
 		if val != "" {
@@ -25,13 +27,7 @@ func (ui *UiInputFloat) JawsEvent(rq *Request, wht what.What, jid, val string) (
 				return
 			}
 		}
-		old := ui.Value
 		ui.Value = v
-		if ui.InputFloatFn != nil {
-			if err = ui.InputFloatFn(rq, jid, ui.Value); err != nil {
-				ui.Value = old
-			}
-		}
 	}
 	return
 }

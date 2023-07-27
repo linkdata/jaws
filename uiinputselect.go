@@ -9,7 +9,6 @@ import (
 type UiInputSelect struct {
 	UiHtml
 	*NamedBoolArray
-	InputTextFn InputTextFn
 }
 
 func (ui *UiInputSelect) JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) error {
@@ -17,14 +16,11 @@ func (ui *UiInputSelect) JawsRender(rq *Request, w io.Writer, jid string, data .
 }
 
 func (ui *UiInputSelect) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
+	if ui.EventFn != nil {
+		return ui.EventFn(rq, wht, jid, val)
+	}
 	if wht == what.Input {
-		old := ui.Get()
 		ui.SetOnly(val)
-		if ui.InputTextFn != nil {
-			if err = ui.InputTextFn(rq, jid, val); err != nil {
-				ui.SetOnly(old)
-			}
-		}
 	}
 	return
 }

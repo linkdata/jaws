@@ -9,8 +9,7 @@ import (
 
 type UiInputBool struct {
 	UiHtml
-	Value       bool
-	InputBoolFn InputBoolFn
+	Value bool
 }
 
 func (ui *UiInputBool) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid string, data ...interface{}) error {
@@ -21,6 +20,9 @@ func (ui *UiInputBool) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid st
 }
 
 func (ui *UiInputBool) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
+	if ui.EventFn != nil {
+		return ui.EventFn(rq, wht, jid, val)
+	}
 	if wht == what.Input {
 		var v bool
 		if val != "" {
@@ -28,13 +30,7 @@ func (ui *UiInputBool) JawsEvent(rq *Request, wht what.What, jid, val string) (e
 				return
 			}
 		}
-		old := ui.Value
 		ui.Value = v
-		if ui.InputBoolFn != nil {
-			if err = ui.InputBoolFn(rq, jid, ui.Value); err != nil {
-				ui.Value = old
-			}
-		}
 	}
 	return
 }

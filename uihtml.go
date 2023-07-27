@@ -2,17 +2,14 @@ package jaws
 
 import (
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/linkdata/jaws/what"
 )
 
-type ClickFn func(rq *Request, jid string) error
-type InputTextFn func(rq *Request, jid string, val string) error
-type InputFloatFn func(rq *Request, jid string, val float64) error
-type InputBoolFn func(rq *Request, jid string, val bool) error
-type InputDateFn func(rq *Request, jid string, val time.Time) error
+type InputTextFn = func(rq *Request, jid string, val string) error
 
 type UiHtml struct {
 	Tags    []interface{}
@@ -28,28 +25,78 @@ func StringTags(text string) (tags []interface{}) {
 	return
 }
 
-func (ui *UiHtml) ProcessData(data []interface{}) (attrs []string) {
-	for _, v := range data {
-		switch v := v.(type) {
+func (ui *UiHtml) ProcessData(dataslice []interface{}) (attrs []string) {
+	for _, dataitem := range dataslice {
+		switch data := dataitem.(type) {
 		case string:
-			attrs = append(attrs, v)
+			attrs = append(attrs, data)
 		case EventFn:
-			if v != nil {
-				ui.EventFn = v
+			if data != nil {
+				ui.EventFn = data
 			}
-		case ClickFn:
-			if v != nil {
+		case func(*Request, string) error: // ClickFn
+			if data != nil {
 				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
 					if wht == what.Click {
-						err = v(rq, jid)
+						err = data(rq, jid)
 					}
 					return
 				}
 			}
-		case InputBoolFn:
-		case InputTextFn:
-		case InputFloatFn:
-		case InputDateFn:
+		case func(*Request, string, string) error: // InputTextFn
+			if data != nil {
+				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+					if wht == what.Input {
+						err = data(rq, jid, val)
+					}
+					return
+				}
+			}
+		case func(*Request, string, bool) error: // InputBoolFn
+			if data != nil {
+				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+					if wht == what.Input {
+						var v bool
+						if val != "" {
+							if v, err = strconv.ParseBool(val); err != nil {
+								return
+							}
+						}
+						err = data(rq, jid, v)
+					}
+					return
+				}
+			}
+		case func(*Request, string, float64) error: // InputFloatFn
+			if data != nil {
+				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+					if wht == what.Input {
+						var v float64
+						if val != "" {
+							if v, err = strconv.ParseFloat(val, 64); err != nil {
+								return
+							}
+						}
+						err = data(rq, jid, v)
+					}
+					return
+				}
+			}
+		case func(*Request, string, time.Time) error: // InputDateFn
+			if data != nil {
+				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+					if wht == what.Input {
+						var v time.Time
+						if val != "" {
+							if v, err = time.Parse(ISO8601, val); err != nil {
+								return
+							}
+						}
+						err = data(rq, jid, v)
+					}
+					return
+				}
+			}
 		}
 	}
 	return

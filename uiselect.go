@@ -8,12 +8,11 @@ type UiSelect struct {
 	UiInputSelect
 }
 
-func (rq *Request) Select(nba *NamedBoolArray, fn InputTextFn, attrs ...interface{}) template.HTML {
+func (rq *Request) Select(nba *NamedBoolArray, attrs ...interface{}) template.HTML {
 	ui := &UiSelect{
 		UiInputSelect{
 			UiHtml:         UiHtml{Tags: StringTags(nba.Tagstring)},
 			NamedBoolArray: nba,
-			InputTextFn:    fn,
 		},
 	}
 	return rq.UI(ui, attrs...)

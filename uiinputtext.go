@@ -8,8 +8,7 @@ import (
 
 type UiInputText struct {
 	UiHtml
-	Value       string
-	InputTextFn InputTextFn
+	Value string
 }
 
 func (ui *UiInputText) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid string, data ...interface{}) error {
@@ -17,14 +16,11 @@ func (ui *UiInputText) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid st
 }
 
 func (ui *UiInputText) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
+	if ui.EventFn != nil {
+		return ui.EventFn(rq, wht, jid, val)
+	}
 	if wht == what.Input {
-		old := ui.Value
 		ui.Value = val
-		if ui.InputTextFn != nil {
-			if err = ui.InputTextFn(rq, jid, ui.Value); err != nil {
-				ui.Value = old
-			}
-		}
 	}
 	return
 }
