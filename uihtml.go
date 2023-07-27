@@ -9,8 +9,6 @@ import (
 	"github.com/linkdata/jaws/what"
 )
 
-type InputTextFn = func(rq *Request, jid string, val string) error
-
 type UiHtml struct {
 	Tags    []interface{}
 	EventFn EventFn
