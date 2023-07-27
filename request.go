@@ -17,11 +17,11 @@ import (
 
 // ConnectFn can be used to interact with a Request before message processing starts.
 // Returning an error causes the Request to abort, and the WebSocket connection to close.
-type ConnectFn func(rq *Request) error
+type ConnectFn = func(rq *Request) error
 
 // EventFn is the signature of a event handling function to be called when JaWS receives
 // an event message from the Javascript via the WebSocket connection.
-type EventFn func(rq *Request, wht what.What, id, val string) error
+type EventFn = func(rq *Request, wht what.What, id, val string) error
 
 // Request maintains the state for a JaWS WebSocket connection, and handles processing
 // of events and broadcasts.
