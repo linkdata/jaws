@@ -6,16 +6,16 @@ import (
 )
 
 type UiA struct {
-	UiClickable
+	UiHtmlInner
 }
 
 func (ui *UiA) JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) error {
-	return ui.UiClickable.WriteHtmlInner(rq, w, "a", "", jid, data...)
+	return ui.UiHtmlInner.WriteHtmlInner(rq, w, "a", "", jid, data...)
 }
 
 func (rq *Request) A(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
 	ui := &UiA{
-		UiClickable{
+		UiHtmlInner{
 			UiBase:    UiBase{Tags: StringTags(tagstring)},
 			HtmlInner: inner,
 			ClickFn:   fn,

@@ -8,11 +8,11 @@ import (
 )
 
 type UiImg struct {
-	UiClickable
+	UiHtmlInner
 }
 
 func (ui *UiImg) JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) error {
-	return ui.UiClickable.WriteHtmlInner(rq, w, "img", "", jid, data...)
+	return ui.UiHtmlInner.WriteHtmlInner(rq, w, "img", "", jid, data...)
 }
 
 func (rq *Request) Img(tagstring, src string, fn ClickFn, attrs ...interface{}) template.HTML {
@@ -21,7 +21,7 @@ func (rq *Request) Img(tagstring, src string, fn ClickFn, attrs ...interface{}) 
 	}
 	attrs = append(attrs, "src="+src)
 	ui := &UiImg{
-		UiClickable{
+		UiHtmlInner{
 			UiBase:  UiBase{Tags: StringTags(tagstring)},
 			ClickFn: fn,
 		},
