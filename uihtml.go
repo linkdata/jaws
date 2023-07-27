@@ -110,6 +110,10 @@ func (ui *UiHtml) WriteHtmlSelect(rq *Request, w io.Writer, nba *NamedBoolArray,
 	return WriteHtmlSelect(w, jid, nba, ui.ProcessData(data)...)
 }
 
+func (ui *UiHtml) WriteHtmlInput(rq *Request, w io.Writer, htmltype, htmlval, jid string, data ...interface{}) error {
+	return WriteHtmlInput(w, jid, htmltype, htmlval, ui.ProcessData(data)...)
+}
+
 func (uib *UiHtml) JawsTags(rq *Request) (tags []interface{}) {
 	return uib.Tags
 }
