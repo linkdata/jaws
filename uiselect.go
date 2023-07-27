@@ -11,7 +11,9 @@ type UiSelect struct {
 func (rq *Request) Select(nba *NamedBoolArray, attrs ...interface{}) template.HTML {
 	ui := &UiSelect{
 		UiInputSelect{
-			UiHtml:         UiHtml{Tags: StringTags(nba.Tagstring)},
+			UiInput: UiInput{
+				UiHtml: UiHtml{Tags: StringTags(nba.Tagstring)},
+			},
 			NamedBoolArray: nba,
 		},
 	}

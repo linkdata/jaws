@@ -7,7 +7,7 @@ import (
 )
 
 type UiInputText struct {
-	UiHtml
+	UiInput
 	Value string
 }
 

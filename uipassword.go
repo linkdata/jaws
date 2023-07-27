@@ -16,7 +16,9 @@ func (ui *UiPassword) JawsRender(rq *Request, w io.Writer, jid string, data ...i
 func (rq *Request) Password(tagstring string, attrs ...interface{}) template.HTML {
 	ui := &UiPassword{
 		UiInputText: UiInputText{
-			UiHtml: UiHtml{Tags: StringTags(tagstring)},
+			UiInput: UiInput{
+				UiHtml: UiHtml{Tags: StringTags(tagstring)},
+			},
 		},
 	}
 	return rq.UI(ui, attrs...)

@@ -8,7 +8,7 @@ import (
 )
 
 type UiInputBool struct {
-	UiHtml
+	UiInput
 	Value bool
 }
 

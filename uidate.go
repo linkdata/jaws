@@ -22,8 +22,10 @@ func (rq *Request) Date(tagstring string, val time.Time, attrs ...interface{}) t
 	}
 	ui := &UiDate{
 		UiInputDate: UiInputDate{
-			UiHtml: UiHtml{Tags: StringTags(tagstring)},
-			Value:  val,
+			UiInput: UiInput{
+				UiHtml: UiHtml{Tags: StringTags(tagstring)},
+			},
+			Value: val,
 		},
 	}
 	return rq.UI(ui, attrs...)

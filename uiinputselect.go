@@ -7,7 +7,7 @@ import (
 )
 
 type UiInputSelect struct {
-	UiHtml
+	UiInput
 	*NamedBoolArray
 }
 
