@@ -8,11 +8,13 @@ import (
 
 type UiInputText struct {
 	UiInput
-	Value string
 }
 
 func (ui *UiInputText) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid string, data ...interface{}) error {
-	return ui.UiHtml.WriteHtmlInput(rq, w, htmltype, ui.Value, jid, data...)
+	if val, ok := ui.Get().(string); ok {
+		return ui.UiInput.WriteHtmlInput(rq, w, htmltype, val, jid, data...)
+	}
+	panic("jaws: UiInputText: not string")
 }
 
 func (ui *UiInputText) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
@@ -20,7 +22,7 @@ func (ui *UiInputText) JawsEvent(rq *Request, wht what.What, jid, val string) (e
 		return ui.EventFn(rq, wht, jid, val)
 	}
 	if wht == what.Input {
-		ui.Value = val
+		ui.Set(val)
 	}
 	return
 }

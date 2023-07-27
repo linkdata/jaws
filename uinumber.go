@@ -13,14 +13,14 @@ func (ui *UiNumber) JawsRender(rq *Request, w io.Writer, jid string, data ...int
 	return ui.UiInputFloat.WriteHtmlInput(rq, w, "number", jid, data...)
 }
 
-func (rq *Request) Number(tagstring string, val float64, attrs ...interface{}) template.HTML {
+func (rq *Request) Number(tagstring string, val interface{}, attrs ...interface{}) template.HTML {
 	ui := &UiNumber{
 		UiInputFloat: UiInputFloat{
 			UiInput: UiInput{
 				UiHtml: UiHtml{Tags: StringTags(tagstring)},
 			},
-			Value: val,
 		},
 	}
+	ui.ProcessValue(val)
 	return rq.UI(ui, attrs...)
 }

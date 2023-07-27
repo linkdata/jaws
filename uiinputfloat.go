@@ -9,11 +9,13 @@ import (
 
 type UiInputFloat struct {
 	UiInput
-	Value float64
 }
 
 func (ui *UiInputFloat) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid string, data ...interface{}) error {
-	return ui.UiHtml.WriteHtmlInput(rq, w, htmltype, strconv.FormatFloat(ui.Value, 'f', -1, 64), jid, data...)
+	if val, ok := ui.Get().(float64); ok {
+		return ui.UiInput.WriteHtmlInput(rq, w, htmltype, strconv.FormatFloat(val, 'f', -1, 64), jid, data...)
+	}
+	panic("jaws: UiInputFloat: not float64")
 }
 
 func (ui *UiInputFloat) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
@@ -27,7 +29,7 @@ func (ui *UiInputFloat) JawsEvent(rq *Request, wht what.What, jid, val string) (
 				return
 			}
 		}
-		ui.Value = v
+		ui.Set(v)
 	}
 	return
 }

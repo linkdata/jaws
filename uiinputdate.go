@@ -9,11 +9,13 @@ import (
 
 type UiInputDate struct {
 	UiInput
-	Value time.Time
 }
 
 func (ui *UiInputDate) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid string, data ...interface{}) error {
-	return ui.UiHtml.WriteHtmlInput(rq, w, htmltype, ui.Value.Format(ISO8601), jid, data...)
+	if val, ok := ui.Get().(time.Time); ok {
+		return ui.UiInput.WriteHtmlInput(rq, w, htmltype, val.Format(ISO8601), jid, data...)
+	}
+	panic("jaws: UiInputDate: not time.Time")
 }
 
 func (ui *UiInputDate) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
@@ -27,7 +29,7 @@ func (ui *UiInputDate) JawsEvent(rq *Request, wht what.What, jid, val string) (e
 				return
 			}
 		}
-		ui.Value = v
+		ui.Set(v)
 	}
 	return
 }

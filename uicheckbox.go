@@ -13,14 +13,14 @@ func (ui *UiCheckbox) JawsRender(rq *Request, w io.Writer, jid string, data ...i
 	return ui.UiInputBool.WriteHtmlInput(rq, w, "checkbox", jid, data...)
 }
 
-func (rq *Request) Checkbox(tagstring string, val bool, attrs ...interface{}) template.HTML {
+func (rq *Request) Checkbox(tagstring string, val interface{}, attrs ...interface{}) template.HTML {
 	ui := &UiCheckbox{
 		UiInputBool: UiInputBool{
 			UiInput: UiInput{
 				UiHtml: UiHtml{Tags: StringTags(tagstring)},
 			},
-			Value: val,
 		},
 	}
+	ui.ProcessValue(val)
 	return rq.UI(ui, attrs...)
 }

@@ -106,10 +106,6 @@ func (ui *UiHtml) WriteHtmlInner(rq *Request, w io.Writer, htmltag, htmltype, ht
 	return WriteHtmlInner(w, jid, htmltag, htmltype, htmlinner, ui.ProcessData(data)...)
 }
 
-func (ui *UiHtml) WriteHtmlInput(rq *Request, w io.Writer, htmltype, htmlval, jid string, data ...interface{}) error {
-	return WriteHtmlInput(w, jid, htmltype, htmlval, ui.ProcessData(data)...)
-}
-
 func (ui *UiHtml) WriteHtmlSelect(rq *Request, w io.Writer, nba *NamedBoolArray, jid string, data ...interface{}) error {
 	return WriteHtmlSelect(w, jid, nba, ui.ProcessData(data)...)
 }

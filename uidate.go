@@ -16,17 +16,17 @@ func (ui *UiDate) JawsRender(rq *Request, w io.Writer, jid string, data ...inter
 	return ui.UiInputDate.WriteHtmlInput(rq, w, "date", jid, data...)
 }
 
-func (rq *Request) Date(tagstring string, val time.Time, attrs ...interface{}) template.HTML {
-	if val.IsZero() {
-		val = time.Now()
-	}
+func (rq *Request) Date(tagstring string, val interface{}, attrs ...interface{}) template.HTML {
 	ui := &UiDate{
 		UiInputDate: UiInputDate{
 			UiInput: UiInput{
 				UiHtml: UiHtml{Tags: StringTags(tagstring)},
 			},
-			Value: val,
 		},
 	}
+	if t, ok := val.(time.Time); ok && t.IsZero() {
+		val = time.Now()
+	}
+	ui.ProcessValue(val)
 	return rq.UI(ui, attrs...)
 }

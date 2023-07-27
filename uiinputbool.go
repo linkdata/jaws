@@ -9,14 +9,13 @@ import (
 
 type UiInputBool struct {
 	UiInput
-	Value bool
 }
 
 func (ui *UiInputBool) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid string, data ...interface{}) error {
-	if ui.Value {
+	if val, ok := ui.Get().(bool); ok && val {
 		data = append(data, "checked")
 	}
-	return ui.UiHtml.WriteHtmlInput(rq, w, htmltype, "", jid, data...)
+	return ui.UiInput.WriteHtmlInput(rq, w, htmltype, "", jid, data...)
 }
 
 func (ui *UiInputBool) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
@@ -30,7 +29,7 @@ func (ui *UiInputBool) JawsEvent(rq *Request, wht what.What, jid, val string) (e
 				return
 			}
 		}
-		ui.Value = v
+		err = ui.Set(v)
 	}
 	return
 }

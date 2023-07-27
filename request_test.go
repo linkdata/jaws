@@ -709,7 +709,7 @@ func TestRequest_Password(t *testing.T) {
 	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
-	h := rq.Password(elemId, func(rq *Request, jid, val string) error {
+	h := rq.Password(elemId, "", func(rq *Request, jid, val string) error {
 		defer close(gotCall)
 		is.Equal(jid, elemId)
 		is.Equal(val, "other-stuff")
