@@ -16,7 +16,7 @@ func (ui *UiSpan) JawsRender(rq *Request, w io.Writer, jid string, data ...inter
 func (rq *Request) Span(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
 	ui := &UiSpan{
 		UiHtmlInner{
-			UiBase:    UiBase{Tags: StringTags(tagstring)},
+			UiHtml:    UiHtml{Tags: StringTags(tagstring)},
 			HtmlInner: inner,
 			ClickFn:   fn,
 		},

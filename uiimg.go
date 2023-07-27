@@ -22,7 +22,7 @@ func (rq *Request) Img(tagstring, src string, fn ClickFn, attrs ...interface{}) 
 	attrs = append(attrs, "src="+src)
 	ui := &UiImg{
 		UiHtmlInner{
-			UiBase:  UiBase{Tags: StringTags(tagstring)},
+			UiHtml:  UiHtml{Tags: StringTags(tagstring)},
 			ClickFn: fn,
 		},
 	}

@@ -339,7 +339,7 @@ func (rq *Request) RegisterEventFn(tagstring string, fn EventFn) string {
 		if elems, ok := rq.tagMap[tag]; ok {
 			if fn != nil {
 				for _, elem := range elems {
-					if uib, ok := elem.Ui.(*UiBase); ok {
+					if uib, ok := elem.Ui.(*UiHtml); ok {
 						uib.EventFn = fn
 					}
 				}
@@ -348,7 +348,7 @@ func (rq *Request) RegisterEventFn(tagstring string, fn EventFn) string {
 			missing = append(missing, tag)
 		}
 	}
-	rq.newElementLocked(missing, &UiBase{Tags: StringTags(tagstring), EventFn: fn})
+	rq.newElementLocked(missing, &UiHtml{Tags: StringTags(tagstring), EventFn: fn})
 
 	return tagstring
 }
@@ -368,7 +368,7 @@ func (rq *Request) GetEventFn(jid string) (fn EventFn, ok bool) {
 	if elems, ok = rq.tagMap[jid]; ok && len(elems) > 0 {
 		fn = elems[0].Ui.JawsEvent
 		for _, elem := range elems {
-			if uib, haveuib := elem.Ui.(*UiBase); haveuib {
+			if uib, haveuib := elem.Ui.(*UiHtml); haveuib {
 				fn = uib.EventFn
 				break
 			}

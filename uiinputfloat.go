@@ -8,7 +8,7 @@ import (
 )
 
 type UiInputFloat struct {
-	UiBase
+	UiHtml
 	HtmlType     string
 	Value        float64
 	InputFloatFn InputFloatFn

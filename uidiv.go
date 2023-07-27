@@ -16,7 +16,7 @@ func (ui *UiDiv) JawsRender(rq *Request, w io.Writer, jid string, data ...interf
 func (rq *Request) Div(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
 	ui := &UiDiv{
 		UiHtmlInner{
-			UiBase:    UiBase{Tags: StringTags(tagstring)},
+			UiHtml:    UiHtml{Tags: StringTags(tagstring)},
 			HtmlInner: inner,
 			ClickFn:   fn,
 		},

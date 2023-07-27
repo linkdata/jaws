@@ -8,7 +8,7 @@ import (
 )
 
 type UiInputBool struct {
-	UiBase
+	UiHtml
 	HtmlType    string
 	Value       bool
 	InputBoolFn InputBoolFn

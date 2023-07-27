@@ -16,7 +16,7 @@ func (ui *UiButton) JawsRender(rq *Request, w io.Writer, jid string, data ...int
 func (rq *Request) Button(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
 	ui := &UiButton{
 		UiHtmlInner{
-			UiBase:    UiBase{Tags: StringTags(tagstring)},
+			UiHtml:    UiHtml{Tags: StringTags(tagstring)},
 			HtmlInner: inner,
 			ClickFn:   fn,
 		},

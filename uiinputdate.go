@@ -8,7 +8,7 @@ import (
 )
 
 type UiInputDate struct {
-	UiBase
+	UiHtml
 	Value       time.Time
 	InputDateFn InputDateFn
 }
