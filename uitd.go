@@ -13,12 +13,11 @@ func (ui *UiTd) JawsRender(rq *Request, w io.Writer, jid string, data ...interfa
 	return ui.UiHtmlInner.WriteHtmlInner(rq, w, "td", "", jid, data...)
 }
 
-func (rq *Request) Td(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
+func (rq *Request) Td(tagstring, inner string, attrs ...interface{}) template.HTML {
 	ui := &UiTd{
 		UiHtmlInner{
 			UiHtml:    UiHtml{Tags: StringTags(tagstring)},
 			HtmlInner: inner,
-			ClickFn:   fn,
 		},
 	}
 	return rq.UI(ui, attrs...)

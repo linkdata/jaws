@@ -24,8 +24,26 @@ func StringTags(text string) (tags []interface{}) {
 func (ui *UiHtml) WriteHtmlInner(rq *Request, w io.Writer, htmltag, htmltype, htmlinner, jid string, data ...interface{}) error {
 	var attrs []string
 	for _, v := range data {
-		if s, ok := v.(string); ok {
-			attrs = append(attrs, s)
+		switch v := v.(type) {
+		case string:
+			attrs = append(attrs, v)
+		case EventFn:
+			if v != nil {
+				ui.EventFn = v
+			}
+		case ClickFn:
+			if v != nil {
+				ui.EventFn = func(rq *Request, wht what.What, id, val string) (err error) {
+					if wht == what.Click {
+						err = v(rq, jid)
+					}
+					return
+				}
+			}
+		case InputBoolFn:
+		case InputTextFn:
+		case InputFloatFn:
+		case InputDateFn:
 		}
 	}
 	return WriteHtmlInner(w, jid, htmltag, htmltype, htmlinner, attrs...)
