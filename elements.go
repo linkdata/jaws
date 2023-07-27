@@ -2,8 +2,6 @@ package jaws
 
 import (
 	"html/template"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/linkdata/jaws/what"
@@ -22,80 +20,6 @@ const ISO8601 = "2006-01-02"
 func (rq *Request) OnTrigger(jid string, fn ClickFn) error {
 	rq.maybeEvent(what.Trigger, jid, fn)
 	return nil
-}
-
-func (rq *Request) Div(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
-	ui := &UiClickable{
-		UiBase:  UiBase{Tags: StringTags(tagstring)},
-		HtmlTag: "div",
-		Text:    inner,
-		ClickFn: fn,
-	}
-	return rq.UI(ui, attrs...)
-}
-
-func (rq *Request) Span(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
-	ui := &UiClickable{
-		UiBase:  UiBase{Tags: StringTags(tagstring)},
-		HtmlTag: "span",
-		Text:    inner,
-		ClickFn: fn,
-	}
-	return rq.UI(ui, attrs...)
-}
-
-func (rq *Request) Li(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
-	ui := &UiClickable{
-		UiBase:  UiBase{Tags: StringTags(tagstring)},
-		HtmlTag: "li",
-		Text:    inner,
-		ClickFn: fn,
-	}
-	return rq.UI(ui, attrs...)
-}
-
-func (rq *Request) Td(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
-	ui := &UiClickable{
-		UiBase:  UiBase{Tags: StringTags(tagstring)},
-		HtmlTag: "td",
-		Text:    inner,
-		ClickFn: fn,
-	}
-	return rq.UI(ui, attrs...)
-}
-
-func (rq *Request) A(tagstring, inner string, fn ClickFn, attrs ...interface{}) template.HTML {
-	ui := &UiClickable{
-		UiBase:  UiBase{Tags: StringTags(tagstring)},
-		HtmlTag: "a",
-		Text:    inner,
-		ClickFn: fn,
-	}
-	return rq.UI(ui, attrs...)
-}
-
-func (rq *Request) Button(tagstring, txt string, fn ClickFn, attrs ...interface{}) template.HTML {
-	ui := &UiClickable{
-		UiBase:   UiBase{Tags: StringTags(tagstring)},
-		HtmlTag:  "button",
-		HtmlType: "button",
-		Text:     txt,
-		ClickFn:  fn,
-	}
-	return rq.UI(ui, attrs...)
-}
-
-func (rq *Request) Img(tagstring, src string, fn ClickFn, attrs ...interface{}) template.HTML {
-	if !strings.HasPrefix(src, "\"") {
-		src = strconv.Quote(src)
-	}
-	attrs = append(attrs, "src="+src)
-	ui := &UiClickable{
-		UiBase:  UiBase{Tags: StringTags(tagstring)},
-		HtmlTag: "img",
-		ClickFn: fn,
-	}
-	return rq.UI(ui, attrs...)
 }
 
 func (rq *Request) Text(tagstring, val string, fn InputTextFn, attrs ...interface{}) template.HTML {

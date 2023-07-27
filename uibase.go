@@ -21,6 +21,16 @@ func StringTags(text string) (tags []interface{}) {
 	return
 }
 
+func (ui *UiBase) WriteHtmlInner(rq *Request, w io.Writer, htmltag, htmltype, htmlinner, jid string, data ...interface{}) error {
+	var attrs []string
+	for _, v := range data {
+		if s, ok := v.(string); ok {
+			attrs = append(attrs, s)
+		}
+	}
+	return WriteHtmlInner(w, jid, htmltag, htmltype, htmlinner, attrs...)
+}
+
 func (uib *UiBase) JawsTags(rq *Request) (tags []interface{}) {
 	return uib.Tags
 }
