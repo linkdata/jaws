@@ -14,14 +14,8 @@ type UiInputFloat struct {
 	InputFloatFn InputFloatFn
 }
 
-func (ui *UiInputFloat) JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) error {
-	var attrs []string
-	for _, v := range data {
-		if s, ok := v.(string); ok {
-			attrs = append(attrs, s)
-		}
-	}
-	return WriteHtmlInput(w, jid, ui.HtmlType, strconv.FormatFloat(ui.Value, 'f', -1, 64), attrs...)
+func (ui *UiInputFloat) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid string, data ...interface{}) error {
+	return ui.UiHtml.WriteHtmlInput(rq, w, htmltype, strconv.FormatFloat(ui.Value, 'f', -1, 64), jid, data...)
 }
 
 func (ui *UiInputFloat) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {

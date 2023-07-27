@@ -13,14 +13,8 @@ type UiInputText struct {
 	InputTextFn InputTextFn
 }
 
-func (ui *UiInputText) JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) error {
-	var attrs []string
-	for _, v := range data {
-		if s, ok := v.(string); ok {
-			attrs = append(attrs, s)
-		}
-	}
-	return WriteHtmlInput(w, jid, ui.HtmlType, ui.Value, attrs...)
+func (ui *UiInputText) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid string, data ...interface{}) error {
+	return ui.UiHtml.WriteHtmlInput(rq, w, htmltype, ui.Value, jid, data...)
 }
 
 func (ui *UiInputText) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {

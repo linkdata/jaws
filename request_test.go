@@ -640,17 +640,20 @@ func TestRequest_OnTrigger(t *testing.T) {
 }
 
 func checkHtml(is *is.I, rq *testRequest, h template.HTML, tag, txt string) {
+	is.Helper()
 	hs := string(h)
-	elems := rq.GetElements(tag)
-	is.True(len(elems) > 0)
 	found := false
+	elems := rq.GetElements(tag)
 	for _, elem := range elems {
 		if strings.Contains(hs, elem.Jid) && strings.Contains(hs, txt) {
 			found = true
 		}
 	}
 	if !found {
-		fmt.Println(tag, txt, strconv.Quote(hs))
+		fmt.Printf("checkHtml(%q, %q, %q) did not match any of %d elements:\n", hs, tag, txt, len(elems))
+		for i, elem := range elems {
+			fmt.Printf("  %d: (%T) jid=%q tags=%v data=%v\n", i, elem.Ui, elem.Jid, elem.Ui.JawsTags(rq.Request), elem.Data)
+		}
 		is.Fail()
 	}
 }
@@ -660,7 +663,7 @@ func TestRequest_Elements(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	chk := func(h template.HTML, tag, txt string) { checkHtml(is, rq, h, tag, txt) }
+	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	chk(rq.Div("t1", "s1", nil), "t1", "s1")
 	chk(rq.Span("t2", "s2", nil), "t2", "s2")
@@ -679,7 +682,7 @@ func TestRequest_Text(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	chk := func(h template.HTML, tag, txt string) { checkHtml(is, rq, h, tag, txt) }
+	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
 	h := rq.Text(elemId, elemVal, func(rq *Request, jid, val string) error {
@@ -703,7 +706,7 @@ func TestRequest_Password(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	chk := func(h template.HTML, tag, txt string) { checkHtml(is, rq, h, tag, txt) }
+	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
 	h := rq.Password(elemId, func(rq *Request, jid, val string) error {
@@ -729,7 +732,7 @@ func TestRequest_Number(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	chk := func(h template.HTML, tag, txt string) { checkHtml(is, rq, h, tag, txt) }
+	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
 	defer close(gotCall)
@@ -777,7 +780,7 @@ func TestRequest_Range(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	chk := func(h template.HTML, tag, txt string) { checkHtml(is, rq, h, tag, txt) }
+	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
 	h := rq.Range(elemId, elemVal, func(rq *Request, jid string, val float64) error {
@@ -802,7 +805,7 @@ func TestRequest_Checkbox(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	chk := func(h template.HTML, tag, txt string) { checkHtml(is, rq, h, tag, txt) }
+	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
 	defer close(gotCall)
@@ -843,7 +846,7 @@ func TestRequest_Date(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	chk := func(h template.HTML, tag, txt string) { checkHtml(is, rq, h, tag, txt) }
+	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
 	defer close(gotCall)
@@ -886,7 +889,7 @@ func TestRequest_Radio(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	chk := func(h template.HTML, tag, txt string) { checkHtml(is, rq, h, tag, txt) }
+	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
 	h := rq.Radio("quux", true, func(rq *Request, jid string, val bool) error {
@@ -964,7 +967,7 @@ func TestRequest_Select(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	chk := func(h template.HTML, tag, txt string) { checkHtml(is, rq, h, tag, txt) }
+	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	a := NewNamedBoolArray(elemId)
 	a.Add("1", "one")

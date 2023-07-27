@@ -3,9 +3,16 @@ package jaws
 import (
 	"io"
 	"strings"
+	"time"
 
 	"github.com/linkdata/jaws/what"
 )
+
+type ClickFn func(rq *Request, jid string) error
+type InputTextFn func(rq *Request, jid string, val string) error
+type InputFloatFn func(rq *Request, jid string, val float64) error
+type InputBoolFn func(rq *Request, jid string, val bool) error
+type InputDateFn func(rq *Request, jid string, val time.Time) error
 
 type UiHtml struct {
 	Tags    []interface{}
@@ -21,8 +28,7 @@ func StringTags(text string) (tags []interface{}) {
 	return
 }
 
-func (ui *UiHtml) WriteHtmlInner(rq *Request, w io.Writer, htmltag, htmltype, htmlinner, jid string, data ...interface{}) error {
-	var attrs []string
+func (ui *UiHtml) ProcessData(data []interface{}) (attrs []string) {
 	for _, v := range data {
 		switch v := v.(type) {
 		case string:
@@ -33,7 +39,7 @@ func (ui *UiHtml) WriteHtmlInner(rq *Request, w io.Writer, htmltag, htmltype, ht
 			}
 		case ClickFn:
 			if v != nil {
-				ui.EventFn = func(rq *Request, wht what.What, id, val string) (err error) {
+				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
 					if wht == what.Click {
 						err = v(rq, jid)
 					}
@@ -46,7 +52,19 @@ func (ui *UiHtml) WriteHtmlInner(rq *Request, w io.Writer, htmltag, htmltype, ht
 		case InputDateFn:
 		}
 	}
-	return WriteHtmlInner(w, jid, htmltag, htmltype, htmlinner, attrs...)
+	return
+}
+
+func (ui *UiHtml) WriteHtmlInner(rq *Request, w io.Writer, htmltag, htmltype, htmlinner, jid string, data ...interface{}) error {
+	return WriteHtmlInner(w, jid, htmltag, htmltype, htmlinner, ui.ProcessData(data)...)
+}
+
+func (ui *UiHtml) WriteHtmlInput(rq *Request, w io.Writer, htmltype, htmlval, jid string, data ...interface{}) error {
+	return WriteHtmlInput(w, jid, htmltype, htmlval, ui.ProcessData(data)...)
+}
+
+func (ui *UiHtml) WriteHtmlSelect(rq *Request, w io.Writer, nba *NamedBoolArray, jid string, data ...interface{}) error {
+	return WriteHtmlSelect(w, jid, nba, ui.ProcessData(data)...)
 }
 
 func (uib *UiHtml) JawsTags(rq *Request) (tags []interface{}) {

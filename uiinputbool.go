@@ -14,17 +14,11 @@ type UiInputBool struct {
 	InputBoolFn InputBoolFn
 }
 
-func (ui *UiInputBool) JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) error {
-	var attrs []string
-	for _, v := range data {
-		if s, ok := v.(string); ok {
-			attrs = append(attrs, s)
-		}
-	}
+func (ui *UiInputBool) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid string, data ...interface{}) error {
 	if ui.Value {
-		attrs = append(attrs, "checked")
+		data = append(data, "checked")
 	}
-	return WriteHtmlInput(w, jid, ui.HtmlType, "", attrs...)
+	return ui.UiHtml.WriteHtmlInput(rq, w, htmltype, "", jid, data...)
 }
 
 func (ui *UiInputBool) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
