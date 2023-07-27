@@ -20,17 +20,17 @@ func (ui *UiInput) ProcessValue(value interface{}) {
 	case ValueSetter:
 		ui.ValueSetter = data
 	case string:
-		ui.ValueGetter = &defaultValueHandler{Value: data}
+		ui.ValueGetter = &defaultValueHandler{v: data}
 	case bool:
-		ui.ValueGetter = &defaultValueHandler{Value: data}
+		ui.ValueGetter = &defaultValueHandler{v: data}
 	case time.Time:
-		ui.ValueGetter = &defaultValueHandler{Value: data}
+		ui.ValueGetter = &defaultValueHandler{v: data}
 	case int:
-		ui.ValueGetter = &defaultValueHandler{Value: float64(data)}
+		ui.ValueGetter = &defaultValueHandler{v: float64(data)}
 	case float32:
-		ui.ValueGetter = &defaultValueHandler{Value: float64(data)}
+		ui.ValueGetter = &defaultValueHandler{v: float64(data)}
 	case float64:
-		ui.ValueGetter = &defaultValueHandler{Value: data}
+		ui.ValueGetter = &defaultValueHandler{v: data}
 	}
 }
 

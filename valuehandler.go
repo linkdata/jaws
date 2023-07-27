@@ -13,8 +13,8 @@ type ValueHandler interface {
 	ValueSetter
 }
 
-type defaultValueHandler struct{ Value interface{} }
+type defaultValueHandler struct{ v interface{} }
 
 func (dvh *defaultValueHandler) JawsGet() interface{} {
-	return dvh.Value
+	return dvh.v
 }
