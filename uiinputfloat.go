@@ -9,7 +9,6 @@ import (
 
 type UiInputFloat struct {
 	UiHtml
-	HtmlType     string
 	Value        float64
 	InputFloatFn InputFloatFn
 }
@@ -26,12 +25,13 @@ func (ui *UiInputFloat) JawsEvent(rq *Request, wht what.What, jid, val string) (
 				return
 			}
 		}
+		old := ui.Value
+		ui.Value = v
 		if ui.InputFloatFn != nil {
-			if err = ui.InputFloatFn(rq, jid, v); err != nil {
-				return
+			if err = ui.InputFloatFn(rq, jid, ui.Value); err != nil {
+				ui.Value = old
 			}
 		}
-		ui.Value = v
 	}
 	return
 }

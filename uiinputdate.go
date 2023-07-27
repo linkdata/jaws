@@ -25,9 +25,11 @@ func (ui *UiInputDate) JawsEvent(rq *Request, wht what.What, jid, val string) (e
 				return
 			}
 		}
+		old := ui.Value
+		ui.Value = v
 		if ui.InputDateFn != nil {
-			if err = ui.InputDateFn(rq, jid, v); err != nil {
-				return
+			if err = ui.InputDateFn(rq, jid, ui.Value); err != nil {
+				ui.Value = old
 			}
 		}
 	}

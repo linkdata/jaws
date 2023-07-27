@@ -9,7 +9,6 @@ import (
 
 type UiInputBool struct {
 	UiHtml
-	HtmlType    string
 	Value       bool
 	InputBoolFn InputBoolFn
 }
@@ -29,12 +28,13 @@ func (ui *UiInputBool) JawsEvent(rq *Request, wht what.What, jid, val string) (e
 				return
 			}
 		}
+		old := ui.Value
+		ui.Value = v
 		if ui.InputBoolFn != nil {
-			if err = ui.InputBoolFn(rq, jid, v); err != nil {
-				return
+			if err = ui.InputBoolFn(rq, jid, ui.Value); err != nil {
+				ui.Value = old
 			}
 		}
-		ui.Value = v
 	}
 	return
 }

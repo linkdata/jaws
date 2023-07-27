@@ -18,9 +18,11 @@ func (ui *UiInputSelect) JawsRender(rq *Request, w io.Writer, jid string, data .
 
 func (ui *UiInputSelect) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
 	if wht == what.Input {
+		old := ui.Get()
+		ui.SetOnly(val)
 		if ui.InputTextFn != nil {
 			if err = ui.InputTextFn(rq, jid, val); err != nil {
-				return
+				ui.SetOnly(old)
 			}
 		}
 	}
