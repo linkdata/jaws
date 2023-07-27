@@ -18,14 +18,18 @@ func (ui *UiInputDate) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid st
 }
 
 func (ui *UiInputDate) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
-	if wht == what.Input && ui.InputDateFn != nil {
+	if wht == what.Input {
 		var v time.Time
 		if val != "" {
 			if v, err = time.Parse(ISO8601, val); err != nil {
 				return
 			}
 		}
-		err = ui.InputDateFn(rq, jid, v)
+		if ui.InputDateFn != nil {
+			if err = ui.InputDateFn(rq, jid, v); err != nil {
+				return
+			}
+		}
 	}
 	return
 }

@@ -22,14 +22,19 @@ func (ui *UiInputBool) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid st
 }
 
 func (ui *UiInputBool) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
-	if wht == what.Input && ui.InputBoolFn != nil {
+	if wht == what.Input {
 		var v bool
 		if val != "" {
 			if v, err = strconv.ParseBool(val); err != nil {
 				return
 			}
 		}
-		err = ui.InputBoolFn(rq, jid, v)
+		if ui.InputBoolFn != nil {
+			if err = ui.InputBoolFn(rq, jid, v); err != nil {
+				return
+			}
+		}
+		ui.Value = v
 	}
 	return
 }

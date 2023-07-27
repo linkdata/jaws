@@ -19,14 +19,19 @@ func (ui *UiInputFloat) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid s
 }
 
 func (ui *UiInputFloat) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
-	if wht == what.Input && ui.InputFloatFn != nil {
+	if wht == what.Input {
 		var v float64
 		if val != "" {
 			if v, err = strconv.ParseFloat(val, 64); err != nil {
 				return
 			}
 		}
-		err = ui.InputFloatFn(rq, jid, v)
+		if ui.InputFloatFn != nil {
+			if err = ui.InputFloatFn(rq, jid, v); err != nil {
+				return
+			}
+		}
+		ui.Value = v
 	}
 	return
 }

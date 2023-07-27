@@ -18,8 +18,13 @@ func (ui *UiInputText) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid st
 }
 
 func (ui *UiInputText) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
-	if wht == what.Input && ui.InputTextFn != nil {
-		err = ui.InputTextFn(rq, jid, val)
+	if wht == what.Input {
+		if ui.InputTextFn != nil {
+			if err = ui.InputTextFn(rq, jid, val); err != nil {
+				return
+			}
+		}
+		ui.Value = val
 	}
 	return
 }
