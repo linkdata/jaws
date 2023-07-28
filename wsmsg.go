@@ -14,15 +14,7 @@ type wsMsg struct {
 }
 
 func (m *wsMsg) Jid() string {
-	if m.jid <= 0 {
-		for k, v := range metaIds {
-			if v == m.jid {
-				return k.(string)
-			}
-		}
-		return ""
-	}
-	return strconv.Itoa(m.jid)
+	return jidToString(m.jid)
 }
 
 func (m *wsMsg) IsValid() bool {

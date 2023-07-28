@@ -10,17 +10,21 @@ type Element struct {
 	Data []interface{} // the optional data provided to the Request.UI() call
 }
 
-// Jid returns the 'jid' HTML attribute, unique within the Request
-func (e *Element) Jid() string {
-	if e.jid <= 0 {
+func jidToString(jid int) string {
+	if jid <= 0 {
 		for k, v := range metaIds {
-			if v == e.jid {
+			if v == jid {
 				return k.(string)
 			}
 		}
 		return ""
 	}
-	return strconv.Itoa(e.jid)
+	return strconv.Itoa(jid)
+}
+
+// Jid returns the 'jid' HTML attribute, unique within the Request
+func (e *Element) Jid() string {
+	return jidToString(e.jid)
 }
 
 // UI returns the UI object.
