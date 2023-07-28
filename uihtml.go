@@ -142,7 +142,7 @@ func (uib *UiHtml) JawsRender(e *Element, w io.Writer) (err error) {
 
 func (uib *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if uib.EventFn != nil {
-		err = uib.EventFn(e.Request, wht, e.Jid(), val)
+		err = uib.EventFn(e.Request(), wht, e.Jid(), val)
 	}
 	return
 }

@@ -19,7 +19,7 @@ func (rq *Request) newElementLocked(tags []interface{}, ui UI, data []interface{
 	if len(tags) > 0 {
 		rq.nextJid++
 		jid := " " + strconv.Itoa(rq.nextJid)
-		elem = &Element{jid: jid, Ui: ui, Data: data, Request: rq}
+		elem = &Element{jid: jid, ui: ui, Data: data, rq: rq}
 		rq.elems = append(rq.elems, elem)
 		rq.tagMap[jid] = append(rq.tagMap[jid], elem)
 		for _, tag := range tags {
@@ -62,7 +62,7 @@ func (rq *Request) Render(tags []interface{}) {
 	rq.mu.RUnlock()
 	var b bytes.Buffer
 	for _, elem := range todo {
-		if err := elem.Ui.JawsRender(elem, &b); err != nil {
+		if err := elem.UI().JawsRender(elem, &b); err != nil {
 			rq.Jaws.MustLog(err)
 		}
 		b.Reset()

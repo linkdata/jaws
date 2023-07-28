@@ -559,7 +559,7 @@ func TestRequest_Sends(t *testing.T) {
 		case msg, ok := <-rq.outCh:
 			if ok {
 				if elem := rq.GetElement(msg.Jid); elem != nil {
-					for _, tag := range elem.Ui.JawsTags(rq.Request) {
+					for _, tag := range elem.UI().JawsTags(rq.Request) {
 						switch tag {
 						case "SetAttr":
 							gotSetAttr = msg.Format()
@@ -678,7 +678,7 @@ func checkHtml(is *is.I, rq *testRequest, h template.HTML, tag, txt string) {
 	if !found {
 		fmt.Printf("checkHtml(%q, %q, %q) did not match any of %d elements:\n", hs, tag, txt, len(elems))
 		for i, elem := range elems {
-			fmt.Printf("  %d: (%T) jid=%q tags=%v data=%v\n", i, elem.Ui, elem.Jid(), elem.Ui.JawsTags(rq.Request), elem.Data)
+			fmt.Printf("  %d: (%T) jid=%q tags=%v data=%v\n", i, elem.UI(), elem.Jid(), elem.UI().JawsTags(rq.Request), elem.Data)
 		}
 		is.Fail()
 	}

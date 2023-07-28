@@ -345,7 +345,7 @@ func (rq *Request) RegisterEventFn(tagstring string, fn EventFn) string {
 		if elems, ok := rq.tagMap[tag]; ok {
 			if fn != nil {
 				for _, elem := range elems {
-					if uib, ok := elem.Ui.(*UiHtml); ok {
+					if uib, ok := elem.UI().(*UiHtml); ok {
 						uib.EventFn = fn
 					}
 				}
@@ -444,9 +444,9 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 		todo = append(todo, rq.tagMap[tagmsg.Tag]...)
 		if _, ok := metaIds[tagmsg.Tag]; ok {
 			todo = append(todo, &Element{
-				Ui:      nil,
-				jid:     tagmsg.Tag.(string),
-				Request: rq,
+				jid: tagmsg.Tag.(string),
+				ui:  nil,
+				rq:  rq,
 			})
 		}
 
@@ -470,7 +470,7 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 			// an error to be sent out as an alert message.
 			// primary usecase is tests.
 			if tagmsg.What == what.Hook {
-				tagmsg = makeAlertDangerMessage(elem.Ui.JawsEvent(elem, tagmsg.What, tagmsg.Data))
+				tagmsg = makeAlertDangerMessage(elem.UI().JawsEvent(elem, tagmsg.What, tagmsg.Data))
 			}
 
 			if tagmsg != nil {
@@ -495,7 +495,7 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh chan<- wsMsg, eventDoneCh chan<- struct{}) {
 	defer close(eventDoneCh)
 	for call := range eventCallCh {
-		if err := call.e.Ui.JawsEvent(call.e, call.wht, call.data); err != nil {
+		if err := call.e.UI().JawsEvent(call.e, call.wht, call.data); err != nil {
 			select {
 			case outboundMsgCh <- wsMsg{
 				Jid:  " alert",
