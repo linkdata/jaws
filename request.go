@@ -423,7 +423,7 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 				return
 			}
 			// incoming event message from the websocket
-			if elem := rq.GetElement(wsmsg.Jid); elem != nil {
+			if elem := rq.GetElement(wsmsg.Jid()); elem != nil {
 				select {
 				case eventCallCh <- eventFnCall{e: elem, wht: wsmsg.What, data: wsmsg.Data}:
 				default:
@@ -477,7 +477,7 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 				case <-jawsDoneCh:
 				case <-ctxDoneCh:
 				case outboundMsgCh <- wsMsg{
-					Jid:  elem.Jid(),
+					jid:  elem.jid,
 					What: tagmsg.What,
 					Data: tagmsg.Data,
 				}:
@@ -495,11 +495,10 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 	defer close(eventDoneCh)
 	for call := range eventCallCh {
 		if err := call.e.UI().JawsEvent(call.e, call.wht, call.data); err != nil {
+			var m wsMsg
+			m.FillAlert(err)
 			select {
-			case outboundMsgCh <- wsMsg{
-				Jid:  " alert",
-				Data: "danger\n" + html.EscapeString(err.Error()),
-			}:
+			case outboundMsgCh <- m:
 			default:
 				_ = rq.Jaws.Log(fmt.Errorf("jaws: outboundMsgCh full sending event error '%s'", err.Error()))
 			}

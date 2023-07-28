@@ -2,14 +2,27 @@ package jaws
 
 import (
 	"html"
+	"strconv"
 
 	"github.com/linkdata/jaws/what"
 )
 
 type wsMsg struct {
-	Jid  string
+	jid  int
 	What what.What
 	Data string
+}
+
+func (m *wsMsg) Jid() string {
+	if m.jid <= 0 {
+		for k, v := range metaIds {
+			if v == m.jid {
+				return k.(string)
+			}
+		}
+		return ""
+	}
+	return strconv.Itoa(m.jid)
 }
 
 func (m *wsMsg) IsValid() bool {
@@ -17,7 +30,7 @@ func (m *wsMsg) IsValid() bool {
 }
 
 func (m *wsMsg) Append(b []byte) []byte {
-	b = append(b, []byte(m.Jid)...)
+	b = strconv.AppendInt(b, int64(m.jid), 16)
 	b = append(b, '\n')
 	if m.What != 0 {
 		b = append(b, []byte(m.What.String())...)
@@ -32,7 +45,7 @@ func (m *wsMsg) Format() string {
 }
 
 func (m *wsMsg) FillAlert(err error) {
-	m.Jid = " alert"
+	m.jid = metaIds[" alert"]
 	m.What = what.None
 	m.Data = "danger\n" + html.EscapeString(err.Error())
 }
