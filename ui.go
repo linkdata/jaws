@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"html/template"
 	"io"
-	"strconv"
 
 	"github.com/linkdata/jaws/what"
 )
@@ -17,10 +16,9 @@ type UI interface {
 
 func (rq *Request) newElementLocked(tags []interface{}, ui UI, data []interface{}) (elem *Element) {
 	if len(tags) > 0 {
-		rq.nextJid++
-		jid := " " + strconv.Itoa(rq.nextJid)
-		elem = &Element{jid: jid, ui: ui, Data: data, rq: rq}
+		elem = &Element{jid: len(rq.elems) + 1, ui: ui, Data: data, rq: rq}
 		rq.elems = append(rq.elems, elem)
+		jid := elem.Jid()
 		rq.tagMap[jid] = append(rq.tagMap[jid], elem)
 		for _, tag := range tags {
 			rq.tagMap[tag] = append(rq.tagMap[tag], elem)

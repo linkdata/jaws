@@ -1,8 +1,10 @@
 package jaws
 
+import "strconv"
+
 // An Element is an instance of an UI object and it's user data in a Request.
 type Element struct {
-	jid  string        // jid
+	jid  int           // jid
 	ui   UI            // the UI object
 	rq   *Request      // the Request the Element belongs to
 	Data []interface{} // the optional data provided to the Request.UI() call
@@ -10,7 +12,15 @@ type Element struct {
 
 // Jid returns the 'jid' HTML attribute, unique within the Request
 func (e *Element) Jid() string {
-	return e.jid
+	if e.jid <= 0 {
+		for k, v := range metaIds {
+			if v == e.jid {
+				return k.(string)
+			}
+		}
+		return ""
+	}
+	return strconv.Itoa(e.jid)
 }
 
 // UI returns the UI object.

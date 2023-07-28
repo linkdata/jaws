@@ -40,7 +40,6 @@ type Request struct {
 	sendCh    chan *Message    // (read-only) direct send message channel
 	mu        deadlock.RWMutex // protects following
 	connectFn ConnectFn        // a ConnectFn to call before starting message processing for the Request
-	nextJid   int
 	elems     []*Element
 	tagMap    map[interface{}][]*Element
 }
@@ -51,11 +50,11 @@ type eventFnCall struct {
 	data string
 }
 
-var metaIds = map[interface{}]struct{}{
-	" reload":   {},
-	" ping":     {},
-	" redirect": {},
-	" alert":    {},
+var metaIds = map[interface{}]int{
+	" reload":   -1,
+	" ping":     -2,
+	" redirect": -3,
+	" alert":    -4,
 }
 
 var requestPool = sync.Pool{New: func() interface{} {
@@ -442,9 +441,9 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 
 		var todo []*Element
 		todo = append(todo, rq.tagMap[tagmsg.Tag]...)
-		if _, ok := metaIds[tagmsg.Tag]; ok {
+		if n, ok := metaIds[tagmsg.Tag]; ok {
 			todo = append(todo, &Element{
-				jid: tagmsg.Tag.(string),
+				jid: n,
 				ui:  nil,
 				rq:  rq,
 			})
