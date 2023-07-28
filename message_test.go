@@ -7,16 +7,6 @@ import (
 	"github.com/matryer/is"
 )
 
-func Test_Message_Format(t *testing.T) {
-	is := is.New(t)
-	msg := &Message{
-		Tag:  "Elem",
-		What: what.None,
-		Data: "Data\nText",
-	}
-	is.Equal(msg.Format(), "Elem\n\nData\nText")
-}
-
 func Test_Message_String(t *testing.T) {
 	is := is.New(t)
 	msg := &Message{

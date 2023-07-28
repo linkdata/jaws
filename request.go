@@ -46,8 +46,9 @@ type Request struct {
 }
 
 type eventFnCall struct {
-	e   *Element
-	msg *Message
+	e    *Element
+	wht  what.What
+	data string
 }
 
 var metaIds = map[interface{}]struct{}{
@@ -385,7 +386,7 @@ func (rq *Request) GetElements(tag interface{}) (elems []*Element) {
 }
 
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
-func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *Message, outboundMsgCh chan<- *Message) {
+func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan wsMsg, outboundMsgCh chan<- wsMsg) {
 	jawsDoneCh := rq.Jaws.Done()
 	ctxDoneCh := rq.Context.Done()
 	eventDoneCh := make(chan struct{})
@@ -409,29 +410,44 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 	}()
 
 	for {
-		var msg *Message
-		incoming := false
+		var tagmsg *Message
 
 		select {
 		case <-jawsDoneCh:
+			return
 		case <-ctxDoneCh:
-		case msg = <-rq.sendCh:
-		case msg = <-broadcastMsgCh:
-		case msg = <-incomingMsgCh:
-			// messages incoming from the WebSocket are not to be resent out on
-			// the WebSocket again, so note that this is an incoming message
-			incoming = true
+			return
+		case tagmsg = <-rq.sendCh:
+		case tagmsg = <-broadcastMsgCh:
+		case wsmsg, ok := <-incomingMsgCh:
+			if !ok {
+				return
+			}
+			// incoming event message from the websocket
+			if elem := rq.GetElement(wsmsg.Jid); elem != nil {
+				select {
+				case eventCallCh <- eventFnCall{e: elem, wht: wsmsg.What, data: wsmsg.Data}:
+				default:
+					rq.Jaws.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, tagmsg))
+					return
+				}
+			}
+			continue
 		}
 
-		if msg == nil {
+		if tagmsg == nil {
 			// one of the channels are closed, so we're done
 			return
 		}
 
 		var todo []*Element
-		todo = append(todo, rq.tagMap[msg.Tag]...)
-		if _, ok := metaIds[msg.Tag]; ok {
-			todo = append(todo, nil)
+		todo = append(todo, rq.tagMap[tagmsg.Tag]...)
+		if _, ok := metaIds[tagmsg.Tag]; ok {
+			todo = append(todo, &Element{
+				Ui:      nil,
+				Jid:     tagmsg.Tag.(string),
+				Request: rq,
+			})
 		}
 
 		// find all elements listening to one of the tags in the message
@@ -439,14 +455,12 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 			// messages incoming from WebSocket or trigger messages
 			// won't be sent out on the WebSocket, but will queue up a
 			// call to the event function (if any)
-			if incoming || msg.What == what.Trigger {
-				if elem != nil {
-					select {
-					case eventCallCh <- eventFnCall{e: elem, msg: msg}:
-					default:
-						rq.Jaws.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, msg))
-						return
-					}
+			if tagmsg.What == what.Trigger {
+				select {
+				case eventCallCh <- eventFnCall{e: elem, wht: tagmsg.What, data: tagmsg.Data}:
+				default:
+					rq.Jaws.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, tagmsg))
+					return
 				}
 				continue
 			}
@@ -455,17 +469,21 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 			// the function must not send any messages itself, but may return
 			// an error to be sent out as an alert message.
 			// primary usecase is tests.
-			if msg.What == what.Hook && elem != nil {
-				msg = makeAlertDangerMessage(elem.Ui.JawsEvent(elem, msg.What, msg.Data))
+			if tagmsg.What == what.Hook {
+				tagmsg = makeAlertDangerMessage(elem.Ui.JawsEvent(elem, tagmsg.What, tagmsg.Data))
 			}
 
-			if msg != nil {
+			if tagmsg != nil {
 				select {
 				case <-jawsDoneCh:
 				case <-ctxDoneCh:
-				case outboundMsgCh <- msg:
+				case outboundMsgCh <- wsMsg{
+					Jid:  elem.Jid,
+					What: tagmsg.What,
+					Data: tagmsg.Data,
+				}:
 				default:
-					rq.Jaws.MustLog(fmt.Errorf("jaws: %v: outboundMsgCh is full sending %v", rq, msg))
+					rq.Jaws.MustLog(fmt.Errorf("jaws: %v: outboundMsgCh is full sending %v", rq, tagmsg))
 					return
 				}
 			}
@@ -474,12 +492,15 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 }
 
 // eventCaller calls event functions
-func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh chan<- *Message, eventDoneCh chan<- struct{}) {
+func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh chan<- wsMsg, eventDoneCh chan<- struct{}) {
 	defer close(eventDoneCh)
 	for call := range eventCallCh {
-		if err := call.e.Ui.JawsEvent(call.e, call.msg.What, call.msg.Data); err != nil {
+		if err := call.e.Ui.JawsEvent(call.e, call.wht, call.data); err != nil {
 			select {
-			case outboundMsgCh <- makeAlertDangerMessage(err):
+			case outboundMsgCh <- wsMsg{
+				Jid:  " alert",
+				Data: "danger\n" + html.EscapeString(err.Error()),
+			}:
 			default:
 				_ = rq.Jaws.Log(fmt.Errorf("jaws: outboundMsgCh full sending event error '%s'", err.Error()))
 			}

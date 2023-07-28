@@ -129,11 +129,11 @@ func TestWS_NormalExchange(t *testing.T) {
 	is.Equal(resp.StatusCode, http.StatusSwitchingProtocols)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	msg := &Message{Tag: "foo"}
+	msg := wsMsg{Jid: jidForTag(ts.rq, "foo")}
 	ctx, cancel := context.WithTimeout(ts.ctx, time.Second*3)
 	defer cancel()
 
-	err = conn.Write(ctx, websocket.MessageText, []byte(msg.Format()))
+	err = conn.Write(ctx, websocket.MessageText, msg.Append(nil))
 	is.NoErr(err)
 	select {
 	case <-time.NewTimer(testTimeout).C:
@@ -144,7 +144,9 @@ func TestWS_NormalExchange(t *testing.T) {
 	mt, b, err := conn.Read(ctx)
 	is.NoErr(err)
 	is.Equal(mt, websocket.MessageText)
-	is.Equal(string(b), makeAlertDangerMessage(fooError).Format())
+	var m2 wsMsg
+	m2.FillAlert(fooError)
+	is.Equal(b, m2.Append(nil))
 }
 
 func TestReader_RespectsContextDone(t *testing.T) {
@@ -152,9 +154,9 @@ func TestReader_RespectsContextDone(t *testing.T) {
 	ts := newTestServer(is)
 	defer ts.Close()
 
-	msg := &Message{Tag: "foo"}
+	msg := wsMsg{Jid: "foo"}
 	doneCh := make(chan struct{})
-	inCh := make(chan *Message)
+	inCh := make(chan wsMsg)
 	client, server := Pipe()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
@@ -189,7 +191,7 @@ func TestReader_RespectsJawsDone(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	inCh := make(chan *Message)
+	inCh := make(chan wsMsg)
 	client, server := Pipe()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
@@ -201,7 +203,7 @@ func TestReader_RespectsJawsDone(t *testing.T) {
 	}()
 
 	ts.jw.Close()
-	msg := &Message{Tag: "foo"}
+	msg := wsMsg{Jid: "foo"}
 	err := client.Write(ctx, websocket.MessageText, []byte(msg.Format()))
 	is.NoErr(err)
 
@@ -217,10 +219,10 @@ func TestWriter_SendsThePayload(t *testing.T) {
 	ts := newTestServer(is)
 	defer ts.Close()
 
-	outCh := make(chan *Message)
+	outCh := make(chan wsMsg)
 	defer close(outCh)
 	client, server := Pipe()
-	msg := &Message{Tag: "foo"}
+	msg := wsMsg{Jid: "foo"}
 
 	go wsWriter(ts.ctx, ts.jw.Done(), outCh, server)
 
@@ -263,7 +265,7 @@ func TestWriter_RespectsContext(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	outCh := make(chan *Message)
+	outCh := make(chan wsMsg)
 	defer close(outCh)
 	client, server := Pipe()
 	client.CloseRead(context.Background())
@@ -289,7 +291,7 @@ func TestWriter_RespectsJawsDone(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	outCh := make(chan *Message)
+	outCh := make(chan wsMsg)
 	defer close(outCh)
 	client, server := Pipe()
 	client.CloseRead(ts.ctx)
@@ -314,7 +316,7 @@ func TestWriter_RespectsOutboundClosed(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	outCh := make(chan *Message)
+	outCh := make(chan wsMsg)
 	client, server := Pipe()
 	client.CloseRead(ts.ctx)
 
@@ -335,25 +337,34 @@ func TestWriter_RespectsOutboundClosed(t *testing.T) {
 func Test_wsParse_IncompleteFails(t *testing.T) {
 	is := is.New(t)
 
-	is.Equal(wsParse(nil), nil)            // duh
-	is.Equal(wsParse([]byte("\n")), nil)   // missing Elem
-	is.Equal(wsParse([]byte("id\n")), nil) // missing What
+	got, ok := wsParse(nil)
+	is.True(!ok)
+	is.Equal(got, wsMsg{})
+
+	got, ok = wsParse([]byte("\n"))
+	is.True(!ok)
+	is.Equal(got, wsMsg{}) // missing Elem
+
+	got, ok = wsParse([]byte("id\n"))
+	is.True(!ok)
+	is.Equal(got, wsMsg{}) // missing What
 }
 
 func Test_wsParse_CompletePasses(t *testing.T) {
 	tests := []struct {
 		name string
 		txt  string
-		want *Message
+		want wsMsg
 	}{
-		{"shortest", " \n\n", &Message{Tag: " "}},
-		{"normal", "a\nInput\nc", &Message{Tag: "a", What: what.Input, Data: "c"}},
-		{"newline", "a\nClick\nc\nd", &Message{Tag: "a", What: what.Click, Data: "c\nd"}},
+		{"shortest", " \n\n", wsMsg{Jid: " "}},
+		{"normal", "a\nInput\nc", wsMsg{Jid: "a", What: what.Input, Data: "c"}},
+		{"newline", "a\nClick\nc\nd", wsMsg{Jid: "a", What: what.Click, Data: "c\nd"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			is := is.New(t)
-			got := wsParse([]byte(tt.txt))
+			got, ok := wsParse([]byte(tt.txt))
+			is.True(ok)
 			is.Equal(tt.want, got)
 		})
 	}
