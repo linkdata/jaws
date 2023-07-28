@@ -9,8 +9,8 @@ import (
 
 type wsMsg struct {
 	jid  int
-	What what.What
 	Data string
+	What what.What
 }
 
 func (m *wsMsg) Jid() string {
