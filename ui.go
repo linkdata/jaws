@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"html/template"
 	"io"
+	"strconv"
 
 	"github.com/linkdata/jaws/what"
 )
@@ -28,14 +29,13 @@ func (rq *Request) newElementLocked(tags []interface{}, ui UI, data []interface{
 }
 
 func (rq *Request) GetElement(jid string) (e *Element) {
-	rq.mu.RLock()
-	for _, elem := range rq.elems {
-		if elem.Jid() == jid {
-			e = elem
-			break
+	if n, err := strconv.Atoi(jid); err == nil && n > 0 {
+		rq.mu.RLock()
+		if n <= len(rq.elems) {
+			e = rq.elems[n-1]
 		}
+		rq.mu.RUnlock()
 	}
-	rq.mu.RUnlock()
 	return
 }
 
