@@ -1,20 +1,17 @@
 package jaws
 
-type ValueSetter interface {
+type ValueProxy interface {
 	JawsSet(val interface{}) (err error)
-}
-
-type ValueGetter interface {
 	JawsGet() (val interface{})
 }
 
-type ValueHandler interface {
-	ValueGetter
-	ValueSetter
+type defaultValueProxy struct{ v interface{} }
+
+func (dvh *defaultValueProxy) JawsGet() interface{} {
+	return dvh.v
 }
 
-type defaultValueHandler struct{ v interface{} }
-
-func (dvh *defaultValueHandler) JawsGet() interface{} {
-	return dvh.v
+func (dvh *defaultValueProxy) JawsSet(val interface{}) error {
+	dvh.v = val
+	return nil
 }

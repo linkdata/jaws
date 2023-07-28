@@ -14,11 +14,30 @@ type UiHtml struct {
 	EventFn EventFn
 }
 
-func StringTags(text string) (tags []interface{}) {
+func stringTags(tags []interface{}, text string) []interface{} {
 	for _, s := range strings.Split(text, " ") {
 		if s != "" {
 			tags = append(tags, s)
 		}
+	}
+	return tags
+}
+
+func ProcessTags(tagsitem interface{}) (tags []interface{}) {
+	switch data := tagsitem.(type) {
+	case string:
+		tags = stringTags(tags, data)
+	case []string:
+		for _, s := range data {
+			tags = stringTags(tags, s)
+		}
+	case []interface{}:
+		tags = append(tags, data...)
+	default:
+		tags = append(tags, data)
+	}
+	if len(tags) == 0 {
+		tags = append(tags, MakeID())
 	}
 	return
 }

@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -318,19 +319,23 @@ func (rq *Request) Redirect(url string) {
 	})
 }
 
-// RegisterEventFn records the given tags as a valid targets
+// RegisterEventFn records the given tag string as a valid target
 // for dynamic updates using the given event function (which may be nil).
 //
-// If the tags argument is an empty string, a unique tag will be generated.
+// If the tagstring argument is empty, a unique tag will be generated.
+// The tagstring may not contains spaces.
 //
 // If fn argument is nil, a pre-existing event function won't be overwritten.
 //
 // Returns the (possibly generated) tagstring.
 func (rq *Request) RegisterEventFn(tagstring string, fn EventFn) string {
+	if strings.ContainsRune(tagstring, ' ') {
+		panic("jaws: RegisterEventFn: tagstring contains spaces")
+	}
 	if tagstring == "" {
 		tagstring = MakeID()
 	}
-	tags := StringTags(tagstring)
+	tags := []interface{}{tagstring}
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 
@@ -348,7 +353,7 @@ func (rq *Request) RegisterEventFn(tagstring string, fn EventFn) string {
 			missing = append(missing, tag)
 		}
 	}
-	rq.newElementLocked(missing, &UiHtml{Tags: StringTags(tagstring), EventFn: fn})
+	rq.newElementLocked(missing, &UiHtml{Tags: tags, EventFn: fn})
 
 	return tagstring
 }

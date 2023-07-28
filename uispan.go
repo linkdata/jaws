@@ -13,12 +13,15 @@ func (ui *UiSpan) JawsRender(rq *Request, w io.Writer, jid string, data ...inter
 	return ui.UiHtmlInner.WriteHtmlInner(rq, w, "span", "", jid, data...)
 }
 
-func (rq *Request) Span(tagstring, inner string, attrs ...interface{}) template.HTML {
-	ui := &UiSpan{
+func NewUiSpan(tags []interface{}, inner string) *UiSpan {
+	return &UiSpan{
 		UiHtmlInner{
-			UiHtml:    UiHtml{Tags: StringTags(tagstring)},
+			UiHtml:    UiHtml{Tags: tags},
 			HtmlInner: inner,
 		},
 	}
-	return rq.UI(ui, attrs...)
+}
+
+func (rq *Request) Span(tagitem interface{}, inner string, attrs ...interface{}) template.HTML {
+	return rq.UI(NewUiSpan(ProcessTags(tagitem), inner), attrs...)
 }

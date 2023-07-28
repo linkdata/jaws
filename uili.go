@@ -13,12 +13,15 @@ func (ui *UiLi) JawsRender(rq *Request, w io.Writer, jid string, data ...interfa
 	return ui.UiHtmlInner.WriteHtmlInner(rq, w, "li", "", jid, data...)
 }
 
-func (rq *Request) Li(tagstring, inner string, attrs ...interface{}) template.HTML {
-	ui := &UiLi{
+func NewUiLi(tags []interface{}, inner string) *UiLi {
+	return &UiLi{
 		UiHtmlInner{
-			UiHtml:    UiHtml{Tags: StringTags(tagstring)},
+			UiHtml:    UiHtml{Tags: tags},
 			HtmlInner: inner,
 		},
 	}
-	return rq.UI(ui, attrs...)
+}
+
+func (rq *Request) Li(tagitem interface{}, inner string, attrs ...interface{}) template.HTML {
+	return rq.UI(NewUiLi(ProcessTags(tagitem), inner), attrs...)
 }

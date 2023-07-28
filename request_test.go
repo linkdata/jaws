@@ -973,12 +973,12 @@ func TestRequest_Select(t *testing.T) {
 	a.Add("1", "one")
 	a.Add("2", "two")
 
-	h := rq.Select(a, nil, "disabled")
+	h := rq.Select(elemId, a, nil, "disabled")
 	chk(h, elemId, "disabled")
 	is.Equal(strings.Contains(string(h), "selected"), false)
 
 	a.Set("1", true)
-	h = rq.Select(a, nil, "")
+	h = rq.Select(elemId, a, nil, "")
 	chk(h, elemId, "selected")
 }
 

@@ -13,12 +13,15 @@ func (ui *UiButton) JawsRender(rq *Request, w io.Writer, jid string, data ...int
 	return ui.UiHtmlInner.WriteHtmlInner(rq, w, "button", "button", jid, data...)
 }
 
-func (rq *Request) Button(tagstring, inner string, attrs ...interface{}) template.HTML {
-	ui := &UiButton{
+func NewUiButton(tags []interface{}, inner string) *UiButton {
+	return &UiButton{
 		UiHtmlInner{
-			UiHtml:    UiHtml{Tags: StringTags(tagstring)},
+			UiHtml:    UiHtml{Tags: tags},
 			HtmlInner: inner,
 		},
 	}
-	return rq.UI(ui, attrs...)
+}
+
+func (rq *Request) Button(tagitem interface{}, inner string, attrs ...interface{}) template.HTML {
+	return rq.UI(NewUiButton(ProcessTags(tagitem), inner), attrs...)
 }
