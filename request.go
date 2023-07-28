@@ -445,7 +445,7 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 		if _, ok := metaIds[tagmsg.Tag]; ok {
 			todo = append(todo, &Element{
 				Ui:      nil,
-				Jid:     tagmsg.Tag.(string),
+				jid:     tagmsg.Tag.(string),
 				Request: rq,
 			})
 		}
@@ -478,7 +478,7 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 				case <-jawsDoneCh:
 				case <-ctxDoneCh:
 				case outboundMsgCh <- wsMsg{
-					Jid:  elem.Jid,
+					Jid:  elem.Jid(),
 					What: tagmsg.What,
 					Data: tagmsg.Data,
 				}:

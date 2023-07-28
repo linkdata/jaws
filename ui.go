@@ -19,7 +19,7 @@ func (rq *Request) newElementLocked(tags []interface{}, ui UI, data []interface{
 	if len(tags) > 0 {
 		rq.nextJid++
 		jid := " " + strconv.Itoa(rq.nextJid)
-		elem = &Element{Jid: jid, Ui: ui, Data: data, Request: rq}
+		elem = &Element{jid: jid, Ui: ui, Data: data, Request: rq}
 		rq.elems = append(rq.elems, elem)
 		rq.tagMap[jid] = append(rq.tagMap[jid], elem)
 		for _, tag := range tags {
@@ -32,7 +32,7 @@ func (rq *Request) newElementLocked(tags []interface{}, ui UI, data []interface{
 func (rq *Request) GetElement(jid string) (e *Element) {
 	rq.mu.RLock()
 	for _, elem := range rq.elems {
-		if elem.Jid == jid {
+		if elem.Jid() == jid {
 			e = elem
 			break
 		}

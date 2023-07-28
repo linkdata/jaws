@@ -243,7 +243,7 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 	case msg := <-rq.outCh:
 		elem := rq.GetElement(msg.Jid)
 		is.True(elem != nil)
-		is.Equal(msg, wsMsg{Jid: elem.Jid})
+		is.Equal(msg, wsMsg{Jid: elem.Jid()})
 	}
 }
 
@@ -671,14 +671,14 @@ func checkHtml(is *is.I, rq *testRequest, h template.HTML, tag, txt string) {
 	found := false
 	elems := rq.GetElements(tag)
 	for _, elem := range elems {
-		if strings.Contains(hs, elem.Jid) && strings.Contains(hs, txt) {
+		if strings.Contains(hs, elem.Jid()) && strings.Contains(hs, txt) {
 			found = true
 		}
 	}
 	if !found {
 		fmt.Printf("checkHtml(%q, %q, %q) did not match any of %d elements:\n", hs, tag, txt, len(elems))
 		for i, elem := range elems {
-			fmt.Printf("  %d: (%T) jid=%q tags=%v data=%v\n", i, elem.Ui, elem.Jid, elem.Ui.JawsTags(rq.Request), elem.Data)
+			fmt.Printf("  %d: (%T) jid=%q tags=%v data=%v\n", i, elem.Ui, elem.Jid(), elem.Ui.JawsTags(rq.Request), elem.Data)
 		}
 		is.Fail()
 	}
@@ -729,7 +729,7 @@ func TestRequest_Text(t *testing.T) {
 
 func jidForTag(rq *Request, tag interface{}) string {
 	if elems := rq.GetElements(tag); len(elems) > 0 {
-		return elems[0].Jid
+		return elems[0].Jid()
 	}
 	return ""
 }
