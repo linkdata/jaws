@@ -64,7 +64,7 @@ func wsParse(txt []byte) (wsMsg, bool) {
 			nl2 += nl1 + 1
 			if jid, err := strconv.Atoi(string(txt[0:nl1])); err == nil {
 				return wsMsg{
-					jid:  int(jid),
+					jid:  jid,
 					What: what.Parse(string(txt[nl1+1 : nl2])),
 					Data: string(txt[nl2+1:]),
 				}, true
