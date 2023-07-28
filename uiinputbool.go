@@ -11,19 +11,20 @@ type UiInputBool struct {
 	UiInput
 }
 
-func (ui *UiInputBool) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid string, data ...interface{}) error {
-	if val, ok := ui.Get().(bool); ok {
+func (ui *UiInputBool) WriteHtmlInput(e *Element, w io.Writer, htmltype string) error {
+	if val, ok := ui.Get(e).(bool); ok {
+		data := e.Data
 		if val {
 			data = append(data, "checked")
 		}
-		return ui.UiInput.WriteHtmlInput(rq, w, htmltype, "", jid, data...)
+		return ui.UiInput.WriteHtmlInput(w, htmltype, "", e.Jid, data...)
 	}
 	panic("jaws: UiInputBool: not bool")
 }
 
-func (ui *UiInputBool) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
+func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if ui.EventFn != nil {
-		return ui.EventFn(rq, wht, jid, val)
+		return ui.EventFn(e.Request, wht, e.Jid, val)
 	}
 	if wht == what.Input {
 		var v bool
@@ -32,7 +33,7 @@ func (ui *UiInputBool) JawsEvent(rq *Request, wht what.What, jid, val string) (e
 				return
 			}
 		}
-		err = ui.Set(v)
+		err = ui.Set(e, v)
 	}
 	return
 }

@@ -9,8 +9,8 @@ type UiNumber struct {
 	UiInputFloat
 }
 
-func (ui *UiNumber) JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) error {
-	return ui.UiInputFloat.WriteHtmlInput(rq, w, "number", jid, data...)
+func (ui *UiNumber) JawsRender(e *Element, w io.Writer) error {
+	return ui.UiInputFloat.WriteHtmlInput(e, w, "number")
 }
 
 func NewUiNumber(tags []interface{}, val interface{}) (ui *UiNumber) {

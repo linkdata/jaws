@@ -9,8 +9,8 @@ type UiPassword struct {
 	UiInputText
 }
 
-func (ui *UiPassword) JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) error {
-	return ui.UiInputText.WriteHtmlInput(rq, w, "password", jid, data...)
+func (ui *UiPassword) JawsRender(e *Element, w io.Writer) error {
+	return ui.UiInputText.WriteHtmlInput(e, w, "password")
 }
 
 func NewUiPassword(tags []interface{}, val interface{}) (ui *UiPassword) {

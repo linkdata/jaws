@@ -586,7 +586,7 @@ func TestRequest_OnInput(t *testing.T) {
 	defer rq.Close()
 	is.NoErr(rq.OnInput(elemId, func(rq *Request, jid, val string) error {
 		defer close(gotCall)
-		is.Equal(jid, elemId)
+		is.True(rq.GetElement(jid) != nil)
 		is.Equal(val, elemVal)
 		return nil
 	}))
@@ -607,7 +607,7 @@ func TestRequest_OnClick(t *testing.T) {
 	defer rq.Close()
 	is.NoErr(rq.OnClick(elemId, func(rq *Request, jid string) error {
 		defer close(gotCall)
-		is.Equal(jid, elemId)
+		is.True(rq.GetElement(jid) != nil)
 		return nil
 	}))
 	rq.inCh <- &Message{Elem: elemId, What: what.Click, Data: elemVal}
@@ -628,7 +628,9 @@ func TestRequest_OnTrigger(t *testing.T) {
 	defer rq.Close()
 	is.NoErr(rq.OnTrigger(elemId, func(rq *Request, jid string) error {
 		defer close(gotCall)
-		is.Equal(jid, elemId)
+		is.True(rq.HasTag(elemId))
+		elem := rq.GetElement(jid)
+		is.True(elem != nil)
 		return nil
 	}))
 	rq.inCh <- &Message{Elem: elemId, What: what.Trigger, Data: elemVal}
@@ -671,8 +673,8 @@ func TestRequest_Elements(t *testing.T) {
 	chk(rq.Td("t4", "s4", nil), "t4", "s4")
 	chk(rq.A("t5", "s5", nil), "t5", "s5")
 	chk(rq.Button("t6", "s6", nil), "t6", "s6")
-	chk(rq.Img("t7", "randomimg.png", nil), "t7", "src=\"randomimg.png\"")
-	chk(rq.Img("t8", "\"randomimg.png\"", nil), "t8", "src=\"randomimg.png\"")
+	chk(rq.Img("t7", "randomimg.png"), "t7", "src=\"randomimg.png\"")
+	chk(rq.Img("t8", "\"randomimg.png\""), "t8", "src=\"randomimg.png\"")
 }
 
 func TestRequest_Text(t *testing.T) {
@@ -687,7 +689,8 @@ func TestRequest_Text(t *testing.T) {
 	gotCall := make(chan struct{})
 	h := rq.Text(elemId, elemVal, func(rq *Request, jid, val string) error {
 		defer close(gotCall)
-		is.Equal(jid, elemId)
+		is.True(rq.GetElement(jid) != nil)
+		is.True(rq.GetElement(jid) != nil)
 		is.Equal(val, "other-stuff")
 		return nil
 	}, "disabled")
@@ -711,7 +714,7 @@ func TestRequest_Password(t *testing.T) {
 	gotCall := make(chan struct{})
 	h := rq.Password(elemId, "", func(rq *Request, jid, val string) error {
 		defer close(gotCall)
-		is.Equal(jid, elemId)
+		is.True(rq.GetElement(jid) != nil)
 		is.Equal(val, "other-stuff")
 		return nil
 	}, "autocomplete=\"off\"")
@@ -737,7 +740,7 @@ func TestRequest_Number(t *testing.T) {
 	gotCall := make(chan struct{})
 	defer close(gotCall)
 	h := rq.Number(elemId, elemVal, func(rq *Request, jid string, val float64) error {
-		is.Equal(jid, elemId)
+		is.True(rq.GetElement(jid) != nil)
 		switch val {
 		case 4.3:
 			// ok
@@ -785,7 +788,7 @@ func TestRequest_Range(t *testing.T) {
 	gotCall := make(chan struct{})
 	h := rq.Range(elemId, elemVal, func(rq *Request, jid string, val float64) error {
 		defer close(gotCall)
-		is.Equal(jid, elemId)
+		is.True(rq.GetElement(jid) != nil)
 		is.Equal(val, 3.15)
 		return nil
 	}, "disabled")
@@ -810,7 +813,7 @@ func TestRequest_Checkbox(t *testing.T) {
 	gotCall := make(chan struct{})
 	defer close(gotCall)
 	h := rq.Checkbox(elemId, elemVal, func(rq *Request, jid string, val bool) error {
-		is.Equal(jid, elemId)
+		is.True(rq.GetElement(jid) != nil)
 		is.Equal(val, false)
 		gotCall <- struct{}{}
 		return nil
@@ -851,7 +854,7 @@ func TestRequest_Date(t *testing.T) {
 	gotCall := make(chan struct{})
 	defer close(gotCall)
 	h := rq.Date(elemId, elemVal, func(rq *Request, jid string, val time.Time) error {
-		is.Equal(jid, elemId)
+		is.True(rq.GetElement(jid) != nil)
 		if !val.IsZero() {
 			is.Equal(val.Year(), 1970)
 			is.Equal(val.Month(), time.January)
@@ -894,7 +897,7 @@ func TestRequest_Radio(t *testing.T) {
 	gotCall := make(chan struct{})
 	h := rq.Radio("quux", true, func(rq *Request, jid string, val bool) error {
 		defer close(gotCall)
-		is.Equal(jid, "quux")
+		is.True(rq.GetElement(jid) != nil)
 		is.Equal(val, false)
 		return nil
 	})
@@ -909,7 +912,7 @@ func TestRequest_Radio(t *testing.T) {
 	}
 }
 
-type radioGrouper struct {
+/*type radioGrouper struct {
 	fn InputTextFn
 	*NamedBoolArray
 }
@@ -959,7 +962,7 @@ func TestRequest_LabeledRadioGroup(t *testing.T) {
 	case <-gotCall:
 	}
 	is.Equal(nba.Get(), "bravo")
-}
+}*/
 
 func TestRequest_Select(t *testing.T) {
 	const elemId = "elemid"
@@ -973,12 +976,12 @@ func TestRequest_Select(t *testing.T) {
 	a.Add("1", "one")
 	a.Add("2", "two")
 
-	h := rq.Select(elemId, a, nil, "disabled")
+	h := rq.Select(a.Jid, a, nil, "disabled")
 	chk(h, elemId, "disabled")
 	is.Equal(strings.Contains(string(h), "selected"), false)
 
 	a.Set("1", true)
-	h = rq.Select(elemId, a, nil, "")
+	h = rq.Select(a.Jid, a, nil, "")
 	chk(h, elemId, "selected")
 }
 

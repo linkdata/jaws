@@ -9,6 +9,6 @@ type UiHtmlInner struct {
 	HtmlInner string
 }
 
-func (ui *UiHtmlInner) WriteHtmlInner(rq *Request, w io.Writer, htmltag, htmltype, jid string, data ...interface{}) error {
-	return ui.UiHtml.WriteHtmlInner(rq, w, htmltag, htmltype, ui.HtmlInner, jid, data...)
+func (ui *UiHtmlInner) WriteHtmlInner(e *Element, w io.Writer, htmltag, htmltype string) error {
+	return ui.UiHtml.WriteHtmlInner(w, htmltag, htmltype, ui.HtmlInner, e.Jid, e.Data...)
 }

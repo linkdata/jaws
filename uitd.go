@@ -9,8 +9,8 @@ type UiTd struct {
 	UiHtmlInner
 }
 
-func (ui *UiTd) JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) error {
-	return ui.UiHtmlInner.WriteHtmlInner(rq, w, "td", "", jid, data...)
+func (ui *UiTd) JawsRender(e *Element, w io.Writer) error {
+	return ui.UiHtmlInner.WriteHtmlInner(e, w, "td", "")
 }
 
 func NewUiTd(tags []interface{}, inner string) *UiTd {

@@ -11,16 +11,16 @@ type UiInputFloat struct {
 	UiInput
 }
 
-func (ui *UiInputFloat) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid string, data ...interface{}) error {
-	if val, ok := ui.Get().(float64); ok {
-		return ui.UiInput.WriteHtmlInput(rq, w, htmltype, strconv.FormatFloat(val, 'f', -1, 64), jid, data...)
+func (ui *UiInputFloat) WriteHtmlInput(e *Element, w io.Writer, htmltype string) error {
+	if val, ok := ui.Get(e).(float64); ok {
+		return ui.UiInput.WriteHtmlInput(w, htmltype, strconv.FormatFloat(val, 'f', -1, 64), e.Jid, e.Data...)
 	}
 	panic("jaws: UiInputFloat: not float64")
 }
 
-func (ui *UiInputFloat) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
+func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if ui.EventFn != nil {
-		return ui.EventFn(rq, wht, jid, val)
+		return ui.EventFn(e.Request, wht, e.Jid, val)
 	}
 	if wht == what.Input {
 		var v float64
@@ -29,7 +29,7 @@ func (ui *UiInputFloat) JawsEvent(rq *Request, wht what.What, jid, val string) (
 				return
 			}
 		}
-		err = ui.Set(v)
+		err = ui.Set(e, v)
 	}
 	return
 }

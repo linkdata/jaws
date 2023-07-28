@@ -9,8 +9,8 @@ type UiCheckbox struct {
 	UiInputBool
 }
 
-func (ui *UiCheckbox) JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) error {
-	return ui.UiInputBool.WriteHtmlInput(rq, w, "checkbox", jid, data...)
+func (ui *UiCheckbox) JawsRender(e *Element, w io.Writer) error {
+	return ui.UiInputBool.WriteHtmlInput(e, w, "checkbox")
 }
 
 func NewUiCheckbox(tags []interface{}, val interface{}) (ui *UiCheckbox) {

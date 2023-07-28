@@ -10,19 +10,19 @@ type UiInputText struct {
 	UiInput
 }
 
-func (ui *UiInputText) WriteHtmlInput(rq *Request, w io.Writer, htmltype, jid string, data ...interface{}) error {
-	if val, ok := ui.Get().(string); ok {
-		return ui.UiInput.WriteHtmlInput(rq, w, htmltype, val, jid, data...)
+func (ui *UiInputText) WriteHtmlInput(e *Element, w io.Writer, htmltype string) error {
+	if val, ok := ui.Get(e).(string); ok {
+		return ui.UiInput.WriteHtmlInput(w, htmltype, val, e.Jid, e.Data...)
 	}
 	panic("jaws: UiInputText: not string")
 }
 
-func (ui *UiInputText) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
+func (ui *UiInputText) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if ui.EventFn != nil {
-		return ui.EventFn(rq, wht, jid, val)
+		return ui.EventFn(e.Request, wht, e.Jid, val)
 	}
 	if wht == what.Input {
-		err = ui.Set(val)
+		err = ui.Set(e, val)
 	}
 	return
 }

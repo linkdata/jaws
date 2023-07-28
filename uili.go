@@ -9,8 +9,8 @@ type UiLi struct {
 	UiHtmlInner
 }
 
-func (ui *UiLi) JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) error {
-	return ui.UiHtmlInner.WriteHtmlInner(rq, w, "li", "", jid, data...)
+func (ui *UiLi) JawsRender(e *Element, w io.Writer) error {
+	return ui.UiHtmlInner.WriteHtmlInner(e, w, "li", "")
 }
 
 func NewUiLi(tags []interface{}, inner string) *UiLi {

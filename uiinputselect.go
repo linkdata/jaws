@@ -11,13 +11,13 @@ type UiInputSelect struct {
 	*NamedBoolArray
 }
 
-func (ui *UiInputSelect) JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) error {
-	return ui.UiHtml.WriteHtmlSelect(rq, w, ui.NamedBoolArray, jid, data...)
+func (ui *UiInputSelect) JawsRender(e *Element, w io.Writer) error {
+	return ui.UiHtml.WriteHtmlSelect(w, ui.NamedBoolArray, e.Jid, e.Data...)
 }
 
-func (ui *UiInputSelect) JawsEvent(rq *Request, wht what.What, jid, val string) (err error) {
+func (ui *UiInputSelect) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if ui.EventFn != nil {
-		return ui.EventFn(rq, wht, jid, val)
+		return ui.EventFn(e.Request, wht, e.Jid, val)
 	}
 	if wht == what.Input {
 		ui.SetOnly(val)

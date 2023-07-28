@@ -9,8 +9,8 @@ type UiRadio struct {
 	UiInputBool
 }
 
-func (ui *UiRadio) JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) error {
-	return ui.UiInputBool.WriteHtmlInput(rq, w, "radio", jid, data...)
+func (ui *UiRadio) JawsRender(e *Element, w io.Writer) error {
+	return ui.UiInputBool.WriteHtmlInput(e, w, "radio")
 }
 
 func NewUiRadio(tags []interface{}, val interface{}) (ui *UiRadio) {

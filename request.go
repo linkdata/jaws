@@ -46,7 +46,7 @@ type Request struct {
 }
 
 type eventFnCall struct {
-	fn  EventFn
+	e   *Element
 	msg *Message
 }
 
@@ -353,7 +353,7 @@ func (rq *Request) RegisterEventFn(tagstring string, fn EventFn) string {
 			missing = append(missing, tag)
 		}
 	}
-	rq.newElementLocked(missing, &UiHtml{Tags: tags, EventFn: fn})
+	rq.newElementLocked(missing, &UiHtml{Tags: tags, EventFn: fn}, nil)
 
 	return tagstring
 }
@@ -364,22 +364,6 @@ func (rq *Request) RegisterEventFn(tagstring string, fn EventFn) string {
 //	<div jid="{{$.Register `foo`}}">
 func (rq *Request) Register(tagstring string) string {
 	return rq.RegisterEventFn(tagstring, nil)
-}
-
-func (rq *Request) GetEventFn(jid string) (fn EventFn, ok bool) {
-	rq.mu.RLock()
-	defer rq.mu.RUnlock()
-	var elems []*Element
-	if elems, ok = rq.tagMap[jid]; ok && len(elems) > 0 {
-		fn = elems[0].Ui.JawsEvent
-		for _, elem := range elems {
-			if uib, haveuib := elem.Ui.(*UiHtml); haveuib {
-				fn = uib.EventFn
-				break
-			}
-		}
-	}
-	return
 }
 
 // HasTag returns true if the Request has one or more UI elements that have the given tag.
@@ -458,7 +442,7 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 			if incoming || msg.What == what.Trigger {
 				if elem != nil {
 					select {
-					case eventCallCh <- eventFnCall{fn: elem.Ui.JawsEvent, msg: msg}:
+					case eventCallCh <- eventFnCall{e: elem, msg: msg}:
 					default:
 						rq.Jaws.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, msg))
 						return
@@ -472,7 +456,7 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 			// an error to be sent out as an alert message.
 			// primary usecase is tests.
 			if msg.What == what.Hook && elem != nil {
-				msg = makeAlertDangerMessage(elem.Ui.JawsEvent(rq, msg.What, msg.Elem, msg.Data))
+				msg = makeAlertDangerMessage(elem.Ui.JawsEvent(elem, msg.What, msg.Data))
 			}
 
 			if msg != nil {
@@ -493,7 +477,7 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh chan<- *Message, eventDoneCh chan<- struct{}) {
 	defer close(eventDoneCh)
 	for call := range eventCallCh {
-		if err := call.fn(rq, call.msg.What, call.msg.Elem, call.msg.Data); err != nil {
+		if err := call.e.Ui.JawsEvent(call.e, call.msg.What, call.msg.Data); err != nil {
 			select {
 			case outboundMsgCh <- makeAlertDangerMessage(err):
 			default:

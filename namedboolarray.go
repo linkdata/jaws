@@ -12,10 +12,10 @@ import (
 // and sets of HTML radio buttons. It it safe to use from multiple goroutines
 // concurrently.
 type NamedBoolArray struct {
-	Tagstring string           // (read-only) JaWS ID of the array
-	prefix    string           // Jid+"/"
-	mu        deadlock.RWMutex // protects following
-	data      []*NamedBool
+	Jid    string           // (read-only) JaWS ID of the array
+	prefix string           // Jid+"/"
+	mu     deadlock.RWMutex // protects following
+	data   []*NamedBool
 }
 
 // NewNamedBoolArray creates a new object to track a related set of named booleans.
@@ -27,7 +27,7 @@ func NewNamedBoolArray(jid string) *NamedBoolArray {
 	if jid == "" {
 		jid = MakeID()
 	}
-	return &NamedBoolArray{Tagstring: jid, prefix: jid + "/"}
+	return &NamedBoolArray{Jid: jid, prefix: jid + "/"}
 }
 
 // ReadLocked calls the given function with the NamedBoolArray locked for reading.
@@ -127,7 +127,7 @@ func (nba *NamedBoolArray) IsChecked(name string) (state bool) {
 func (nba *NamedBoolArray) String() string {
 	var sb strings.Builder
 	sb.WriteString("&NamedBoolArray{")
-	sb.WriteString(strconv.Quote(nba.Tagstring))
+	sb.WriteString(strconv.Quote(nba.Jid))
 	sb.WriteString(",[")
 	nba.mu.RLock()
 	for i, nb := range nba.data {

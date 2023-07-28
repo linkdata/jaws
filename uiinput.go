@@ -34,10 +34,10 @@ func (ui *UiInput) ProcessValue(value interface{}) {
 	}
 }
 
-func (ui *UiInput) Get() interface{} {
-	return ui.ValueProxy.JawsGet()
+func (ui *UiInput) Get(e *Element) interface{} {
+	return ui.ValueProxy.JawsGet(e)
 }
 
-func (ui *UiInput) Set(value interface{}) error {
-	return ui.ValueProxy.JawsSet(value)
+func (ui *UiInput) Set(e *Element, value interface{}) (err error) {
+	return ui.ValueProxy.JawsSet(e, value)
 }

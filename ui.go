@@ -11,15 +11,15 @@ import (
 
 type UI interface {
 	JawsTags(rq *Request) (tags []interface{})
-	JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) (err error)
-	JawsEvent(rq *Request, wht what.What, jid, val string) (err error)
+	JawsRender(e *Element, w io.Writer) (err error)
+	JawsEvent(e *Element, wht what.What, val string) (err error)
 }
 
-func (rq *Request) newElementLocked(tags []interface{}, ui UI, data ...interface{}) (elem *Element) {
+func (rq *Request) newElementLocked(tags []interface{}, ui UI, data []interface{}) (elem *Element) {
 	if len(tags) > 0 {
 		rq.nextJid++
 		jid := " " + strconv.Itoa(rq.nextJid)
-		elem = &Element{Jid: jid, Ui: ui, Data: data}
+		elem = &Element{Jid: jid, Ui: ui, Data: data, Request: rq}
 		rq.elems = append(rq.elems, elem)
 		rq.tagMap[jid] = append(rq.tagMap[jid], elem)
 		for _, tag := range tags {
@@ -29,13 +29,25 @@ func (rq *Request) newElementLocked(tags []interface{}, ui UI, data ...interface
 	return
 }
 
+func (rq *Request) GetElement(jid string) (e *Element) {
+	rq.mu.RLock()
+	for _, elem := range rq.elems {
+		if elem.Jid == jid {
+			e = elem
+			break
+		}
+	}
+	rq.mu.RUnlock()
+	return
+}
+
 func (rq *Request) UI(ui UI, data ...interface{}) template.HTML {
 	tags := ui.JawsTags(rq)
 	rq.mu.Lock()
 	elem := rq.newElementLocked(tags, ui, data)
 	rq.mu.Unlock()
 	var b bytes.Buffer
-	if err := ui.JawsRender(rq, &b, elem.Jid, data...); err != nil {
+	if err := ui.JawsRender(elem, &b); err != nil {
 		rq.Jaws.MustLog(err)
 	}
 	return template.HTML(b.String())
@@ -49,8 +61,8 @@ func (rq *Request) Render(tags []interface{}) {
 	}
 	rq.mu.RUnlock()
 	var b bytes.Buffer
-	for _, ui := range todo {
-		if err := ui.Ui.JawsRender(rq, &b, ui.Jid, ui.Data...); err != nil {
+	for _, elem := range todo {
+		if err := elem.Ui.JawsRender(elem, &b); err != nil {
 			rq.Jaws.MustLog(err)
 		}
 		b.Reset()

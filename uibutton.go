@@ -9,8 +9,8 @@ type UiButton struct {
 	UiHtmlInner
 }
 
-func (ui *UiButton) JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) error {
-	return ui.UiHtmlInner.WriteHtmlInner(rq, w, "button", "button", jid, data...)
+func (ui *UiButton) JawsRender(e *Element, w io.Writer) error {
+	return ui.UiHtmlInner.WriteHtmlInner(e, w, "button", "button")
 }
 
 func NewUiButton(tags []interface{}, inner string) *UiButton {

@@ -11,8 +11,8 @@ type UiImg struct {
 	UiHtmlInner
 }
 
-func (ui *UiImg) JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) error {
-	return ui.UiHtmlInner.WriteHtmlInner(rq, w, "img", "", jid, data...)
+func (ui *UiImg) JawsRender(e *Element, w io.Writer) error {
+	return ui.UiHtmlInner.WriteHtmlInner(e, w, "img", "")
 }
 
 func NewUiImg(tags []interface{}) *UiImg {

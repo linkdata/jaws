@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -119,15 +120,15 @@ func (ui *UiHtml) ProcessData(dataslice []interface{}) (attrs []string) {
 	return
 }
 
-func (ui *UiHtml) WriteHtmlInner(rq *Request, w io.Writer, htmltag, htmltype, htmlinner, jid string, data ...interface{}) error {
+func (ui *UiHtml) WriteHtmlInner(w io.Writer, htmltag, htmltype, htmlinner, jid string, data ...interface{}) error {
 	return WriteHtmlInner(w, jid, htmltag, htmltype, htmlinner, ui.ProcessData(data)...)
 }
 
-func (ui *UiHtml) WriteHtmlSelect(rq *Request, w io.Writer, nba *NamedBoolArray, jid string, data ...interface{}) error {
+func (ui *UiHtml) WriteHtmlSelect(w io.Writer, nba *NamedBoolArray, jid string, data ...interface{}) error {
 	return WriteHtmlSelect(w, jid, nba, ui.ProcessData(data)...)
 }
 
-func (ui *UiHtml) WriteHtmlInput(rq *Request, w io.Writer, htmltype, htmlval, jid string, data ...interface{}) error {
+func (ui *UiHtml) WriteHtmlInput(w io.Writer, htmltype, htmlval, jid string, data ...interface{}) error {
 	return WriteHtmlInput(w, jid, htmltype, htmlval, ui.ProcessData(data)...)
 }
 
@@ -135,13 +136,13 @@ func (uib *UiHtml) JawsTags(rq *Request) (tags []interface{}) {
 	return uib.Tags
 }
 
-func (uib *UiHtml) JawsRender(rq *Request, w io.Writer, jid string, data ...interface{}) (err error) {
-	return
+func (uib *UiHtml) JawsRender(e *Element, w io.Writer) (err error) {
+	panic(fmt.Sprintf("jaws: UiHtml.JawsRender(%v, %v) called", e, w))
 }
 
-func (uib *UiHtml) JawsEvent(rq *Request, wht what.What, jid string, val string) (err error) {
+func (uib *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if uib.EventFn != nil {
-		err = uib.EventFn(rq, wht, jid, val)
+		err = uib.EventFn(e.Request, wht, e.Jid, val)
 	}
 	return
 }
