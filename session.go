@@ -154,7 +154,7 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 		sess.jw.deleteSession(sess.sessionID)
 		sess.mu.Lock()
 		sess.cookie.MaxAge = -1
-		sess.broadcastLocked(&Message{Elem: " reload"})
+		sess.broadcastLocked(&Message{Tag: " reload"})
 		sess.requests = sess.requests[:0]
 		sess.mu.Unlock()
 	}
@@ -163,7 +163,7 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 
 // Reload calls Broadcast with a message asking browsers to reload the page.
 func (sess *Session) Reload() {
-	sess.Broadcast(&Message{Elem: " reload"})
+	sess.Broadcast(&Message{Tag: " reload"})
 }
 
 // Clear removes all key/value pairs from the session.

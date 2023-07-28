@@ -50,7 +50,7 @@ type eventFnCall struct {
 	msg *Message
 }
 
-var metaIds = map[string]struct{}{
+var metaIds = map[interface{}]struct{}{
 	" reload":   {},
 	" ping":     {},
 	" redirect": {},
@@ -187,7 +187,7 @@ func (rq *Request) Broadcast(msg *Message) {
 // Trigger invokes the event handler for the given ID with a 'trigger' event on all Requests except this one.
 func (rq *Request) Trigger(id, val string) {
 	rq.Broadcast(&Message{
-		Elem: id,
+		Tag:  id,
 		What: what.Trigger,
 		Data: val,
 	})
@@ -198,7 +198,7 @@ func (rq *Request) Trigger(id, val string) {
 // Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
 func (rq *Request) SetInner(jid string, innerHtml string) {
 	rq.Broadcast(&Message{
-		Elem: jid,
+		Tag:  jid,
 		What: what.Inner,
 		Data: innerHtml,
 	})
@@ -209,7 +209,7 @@ func (rq *Request) SetInner(jid string, innerHtml string) {
 // Only the requests that have registered the jid (either with Register or OnEvent) will be sent the message.
 func (rq *Request) SetTextValue(jid, val string) {
 	rq.Broadcast(&Message{
-		Elem: jid,
+		Tag:  jid,
 		What: what.Value,
 		Data: val,
 	})
@@ -220,7 +220,7 @@ func (rq *Request) SetTextValue(jid, val string) {
 // Only the requests that have registered the jid (either with Register or OnEvent) will be sent the message.
 func (rq *Request) SetFloatValue(jid string, val float64) {
 	rq.Broadcast(&Message{
-		Elem: jid,
+		Tag:  jid,
 		What: what.Value,
 		Data: strconv.FormatFloat(val, 'f', -1, 64),
 	})
@@ -231,7 +231,7 @@ func (rq *Request) SetFloatValue(jid string, val float64) {
 // Only the requests that have registered the jid (either with Register or OnEvent) will be sent the message.
 func (rq *Request) SetBoolValue(jid string, val bool) {
 	rq.Broadcast(&Message{
-		Elem: jid,
+		Tag:  jid,
 		What: what.Value,
 		Data: strconv.FormatBool(val),
 	})
@@ -242,7 +242,7 @@ func (rq *Request) SetBoolValue(jid string, val bool) {
 // Only the requests that have registered the jid (either with Register or OnEvent) will be sent the message.
 func (rq *Request) SetDateValue(jid string, val time.Time) {
 	rq.Broadcast(&Message{
-		Elem: jid,
+		Tag:  jid,
 		What: what.Value,
 		Data: val.Format(ISO8601),
 	})
@@ -276,7 +276,7 @@ func (rq *Request) Send(msg *Message) bool {
 // Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
 func (rq *Request) SetAttr(jid, attr, val string) {
 	rq.Send(&Message{
-		Elem: jid,
+		Tag:  jid,
 		What: what.SAttr,
 		Data: attr + "\n" + val,
 	})
@@ -287,7 +287,7 @@ func (rq *Request) SetAttr(jid, attr, val string) {
 // Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
 func (rq *Request) RemoveAttr(jid, attr string) {
 	rq.Send(&Message{
-		Elem: jid,
+		Tag:  jid,
 		What: what.RAttr,
 		Data: attr,
 	})
@@ -299,7 +299,7 @@ func (rq *Request) RemoveAttr(jid, attr string) {
 // The default JaWS javascript only supports Bootstrap.js dismissable alerts.
 func (rq *Request) Alert(lvl, msg string) {
 	rq.Send(&Message{
-		Elem: " alert",
+		Tag:  " alert",
 		Data: lvl + "\n" + msg,
 	})
 }
@@ -314,7 +314,7 @@ func (rq *Request) AlertError(err error) {
 // Redirect requests the current Request to navigate to the given URL.
 func (rq *Request) Redirect(url string) {
 	rq.Send(&Message{
-		Elem: " redirect",
+		Tag:  " redirect",
 		Data: url,
 	})
 }
@@ -429,8 +429,8 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan *M
 		}
 
 		var todo []*Element
-		todo = append(todo, rq.tagMap[msg.Elem]...)
-		if _, ok := metaIds[msg.Elem]; ok {
+		todo = append(todo, rq.tagMap[msg.Tag]...)
+		if _, ok := metaIds[msg.Tag]; ok {
 			todo = append(todo, nil)
 		}
 
@@ -502,7 +502,7 @@ func (rq *Request) onConnect() (err error) {
 func makeAlertDangerMessage(err error) (msg *Message) {
 	if err != nil {
 		msg = &Message{
-			Elem: " alert",
+			Tag:  " alert",
 			Data: "danger\n" + html.EscapeString(err.Error()),
 		}
 	}

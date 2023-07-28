@@ -45,7 +45,7 @@ func Test_Ui(t *testing.T) {
 	is.True(strings.Contains(string(h), elemVal))
 	is.True(strings.Contains(string(h), strings.Join(attrs, " ")))
 
-	rq.inCh <- &Message{Elem: elemId, What: what.Input, Data: elemVal}
+	rq.inCh <- &Message{Tag: elemId, What: what.Input, Data: elemVal}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()

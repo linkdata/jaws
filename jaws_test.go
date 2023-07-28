@@ -129,12 +129,12 @@ func TestJaws_BroadcastWaitsWhenFull(t *testing.T) {
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case jw.bcastCh <- &Message{Elem: " reload"}:
+	case jw.bcastCh <- &Message{Tag: " reload"}:
 	}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case jw.bcastCh <- &Message{Elem: " reload"}:
+	case jw.bcastCh <- &Message{Tag: " reload"}:
 	}
 
 	// read one of the broadcasts, the other is
@@ -183,7 +183,7 @@ func TestJaws_BroadcastFullClosesChannel(t *testing.T) {
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case jw.bcastCh <- &Message{Elem: " reload"}:
+	case jw.bcastCh <- &Message{Tag: " reload"}:
 	}
 
 	select {

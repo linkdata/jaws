@@ -61,7 +61,7 @@ func wsParse(txt []byte) *Message {
 		if nl2 := bytes.IndexByte(txt[nl1+1:], '\n'); nl2 >= 0 {
 			nl2 += nl1 + 1
 			return &Message{
-				Elem: string(txt[0:nl1]),
+				Tag:  string(txt[0:nl1]),
 				What: what.Parse(string(txt[nl1+1 : nl2])),
 				Data: string(txt[nl2+1:]),
 			}

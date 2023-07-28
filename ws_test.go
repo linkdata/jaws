@@ -129,7 +129,7 @@ func TestWS_NormalExchange(t *testing.T) {
 	is.Equal(resp.StatusCode, http.StatusSwitchingProtocols)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	msg := &Message{Elem: "foo"}
+	msg := &Message{Tag: "foo"}
 	ctx, cancel := context.WithTimeout(ts.ctx, time.Second*3)
 	defer cancel()
 
@@ -152,7 +152,7 @@ func TestReader_RespectsContextDone(t *testing.T) {
 	ts := newTestServer(is)
 	defer ts.Close()
 
-	msg := &Message{Elem: "foo"}
+	msg := &Message{Tag: "foo"}
 	doneCh := make(chan struct{})
 	inCh := make(chan *Message)
 	client, server := Pipe()
@@ -201,7 +201,7 @@ func TestReader_RespectsJawsDone(t *testing.T) {
 	}()
 
 	ts.jw.Close()
-	msg := &Message{Elem: "foo"}
+	msg := &Message{Tag: "foo"}
 	err := client.Write(ctx, websocket.MessageText, []byte(msg.Format()))
 	is.NoErr(err)
 
@@ -220,7 +220,7 @@ func TestWriter_SendsThePayload(t *testing.T) {
 	outCh := make(chan *Message)
 	defer close(outCh)
 	client, server := Pipe()
-	msg := &Message{Elem: "foo"}
+	msg := &Message{Tag: "foo"}
 
 	go wsWriter(ts.ctx, ts.jw.Done(), outCh, server)
 
@@ -346,9 +346,9 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 		txt  string
 		want *Message
 	}{
-		{"shortest", " \n\n", &Message{Elem: " "}},
-		{"normal", "a\nInput\nc", &Message{Elem: "a", What: what.Input, Data: "c"}},
-		{"newline", "a\nClick\nc\nd", &Message{Elem: "a", What: what.Click, Data: "c\nd"}},
+		{"shortest", " \n\n", &Message{Tag: " "}},
+		{"normal", "a\nInput\nc", &Message{Tag: "a", What: what.Input, Data: "c"}},
+		{"newline", "a\nClick\nc\nd", &Message{Tag: "a", What: what.Click, Data: "c\nd"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -224,7 +224,7 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 	rq.Register("foo")
-	theMsg := &Message{Elem: "foo"}
+	theMsg := &Message{Tag: "foo"}
 	is.Equal(rq.Send(theMsg), true)
 	select {
 	case <-time.NewTimer(testTimeout).C:
@@ -247,7 +247,7 @@ func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
 		return errors.New(val)
 	})
 	fillCh(rq.outCh)
-	jw.Broadcast(&Message{Elem: "foo", What: what.Hook, Data: "bar"})
+	jw.Broadcast(&Message{Tag: "foo", What: what.Hook, Data: "bar"})
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Equal(int(atomic.LoadInt32(&callCount)), 0)
@@ -268,7 +268,7 @@ func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 		return errors.New(val)
 	})
 	fillCh(rq.outCh)
-	rq.jw.Broadcast(&Message{Elem: "foo", What: what.Hook, Data: "bar"})
+	rq.jw.Broadcast(&Message{Tag: "foo", What: what.Hook, Data: "bar"})
 
 	select {
 	case <-time.NewTimer(testTimeout).C:
@@ -291,7 +291,7 @@ func TestRequest_OutboundOverflowPanicsWithNoLogger(t *testing.T) {
 	defer rq.Close()
 	rq.Register("foo")
 	fillCh(rq.outCh)
-	rq.sendCh <- &Message{Elem: "foo", What: what.None, Data: "bar"}
+	rq.sendCh <- &Message{Tag: "foo", What: what.None, Data: "bar"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -349,7 +349,7 @@ func TestRequest_Trigger(t *testing.T) {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case msg := <-rq.outCh:
-		is.Equal(msg.Elem, " alert")
+		is.Equal(msg.Tag, " alert")
 		is.Equal(msg.What, what.None)
 		is.Equal(msg.Data, "danger\nomg")
 	}
@@ -421,7 +421,7 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 	defer tmr.Stop()
 	for {
 		select {
-		case rq.sendCh <- &Message{Elem: "bomb", What: what.Trigger}:
+		case rq.sendCh <- &Message{Tag: "bomb", What: what.Trigger}:
 		case <-rq.doneCh:
 			is.True(rq.panicked)
 			return
@@ -468,7 +468,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	// outbound channel is full, but with the
 	// event fn holding it won't be able to end
 	select {
-	case rq.sendCh <- &Message{Elem: "foo"}:
+	case rq.sendCh <- &Message{Tag: "foo"}:
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-rq.doneCh:
@@ -545,7 +545,7 @@ func TestRequest_Sends(t *testing.T) {
 			is.Fail()
 		case msg := <-rq.outCh:
 			if msg != nil {
-				switch msg.Elem {
+				switch msg.Tag {
 				case "SetAttr":
 					gotSetAttr = msg.Format()
 				case "RemoveAttr":
@@ -633,7 +633,7 @@ func TestRequest_OnTrigger(t *testing.T) {
 		is.True(elem != nil)
 		return nil
 	}))
-	rq.inCh <- &Message{Elem: elemId, What: what.Trigger, Data: elemVal}
+	rq.inCh <- &Message{Tag: elemId, What: what.Trigger, Data: elemVal}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -695,7 +695,7 @@ func TestRequest_Text(t *testing.T) {
 		return nil
 	}, "disabled")
 	chk(h, elemId, elemVal)
-	rq.inCh <- &Message{Elem: elemId, What: what.Input, Data: "other-stuff"}
+	rq.inCh <- &Message{Tag: elemId, What: what.Input, Data: "other-stuff"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -720,7 +720,7 @@ func TestRequest_Password(t *testing.T) {
 	}, "autocomplete=\"off\"")
 	chk(h, elemId, "autocomplete")
 	is.True(!strings.Contains(string(h), "value"))
-	rq.inCh <- &Message{Elem: elemId, What: what.Input, Data: "other-stuff"}
+	rq.inCh <- &Message{Tag: elemId, What: what.Input, Data: "other-stuff"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -753,26 +753,26 @@ func TestRequest_Number(t *testing.T) {
 		return nil
 	}, "disabled")
 	chk(h, elemId, "21.5")
-	rq.inCh <- &Message{Elem: elemId, What: what.Input, Data: "4.3"}
+	rq.inCh <- &Message{Tag: elemId, What: what.Input, Data: "4.3"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
 	}
-	rq.inCh <- &Message{Elem: elemId, What: what.Input, Data: ""} // should call with zero
+	rq.inCh <- &Message{Tag: elemId, What: what.Input, Data: ""} // should call with zero
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
 	}
-	rq.inCh <- &Message{Elem: elemId, What: what.Input, Data: "meh"} // should fail with alert
+	rq.inCh <- &Message{Tag: elemId, What: what.Input, Data: "meh"} // should fail with alert
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
 		is.Fail()
 	case msg := <-rq.outCh:
-		is.Equal(msg.Elem, " alert")
+		is.Equal(msg.Tag, " alert")
 	}
 }
 
@@ -793,7 +793,7 @@ func TestRequest_Range(t *testing.T) {
 		return nil
 	}, "disabled")
 	chk(h, elemId, "3.14")
-	rq.inCh <- &Message{Elem: elemId, What: what.Input, Data: "3.15"}
+	rq.inCh <- &Message{Tag: elemId, What: what.Input, Data: "3.15"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -819,26 +819,26 @@ func TestRequest_Checkbox(t *testing.T) {
 		return nil
 	}, "")
 	chk(h, elemId, "checked")
-	rq.inCh <- &Message{Elem: elemId, What: what.Input, Data: "false"}
+	rq.inCh <- &Message{Tag: elemId, What: what.Input, Data: "false"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
 	}
-	rq.inCh <- &Message{Elem: elemId, What: what.Input, Data: ""}
+	rq.inCh <- &Message{Tag: elemId, What: what.Input, Data: ""}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
 	}
-	rq.inCh <- &Message{Elem: elemId, What: what.Input, Data: "wut"}
+	rq.inCh <- &Message{Tag: elemId, What: what.Input, Data: "wut"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
 		is.Fail()
 	case msg := <-rq.outCh:
-		is.Equal(msg.Elem, " alert")
+		is.Equal(msg.Tag, " alert")
 	}
 }
 
@@ -864,26 +864,26 @@ func TestRequest_Date(t *testing.T) {
 		return nil
 	}, "")
 	chk(h, elemId, time.Now().Format(ISO8601))
-	rq.inCh <- &Message{Elem: elemId, What: what.Input, Data: "1970-01-02"}
+	rq.inCh <- &Message{Tag: elemId, What: what.Input, Data: "1970-01-02"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
 	}
-	rq.inCh <- &Message{Elem: elemId, What: what.Input, Data: ""}
+	rq.inCh <- &Message{Tag: elemId, What: what.Input, Data: ""}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
 	}
-	rq.inCh <- &Message{Elem: elemId, What: what.Input, Data: "foobar!"}
+	rq.inCh <- &Message{Tag: elemId, What: what.Input, Data: "foobar!"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
 		is.Fail()
 	case msg := <-rq.outCh:
-		is.Equal(msg.Elem, " alert")
+		is.Equal(msg.Tag, " alert")
 	}
 }
 
@@ -904,7 +904,7 @@ func TestRequest_Radio(t *testing.T) {
 
 	chk(h, "quux", "checked")
 
-	rq.inCh <- &Message{Elem: "quux", What: what.Input, Data: "false"}
+	rq.inCh <- &Message{Tag: "quux", What: what.Input, Data: "false"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()

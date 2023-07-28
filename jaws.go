@@ -327,6 +327,10 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) error {
 	return nil
 }
 
+func (jw *Jaws) Refresh(tags []interface{}) {
+
+}
+
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg *Message) {
 	select {
@@ -340,7 +344,7 @@ func (jw *Jaws) Broadcast(msg *Message) {
 // Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
 func (jw *Jaws) SetInner(jid string, innerHtml string) {
 	jw.Broadcast(&Message{
-		Elem: jid,
+		Tag:  jid,
 		What: what.Inner,
 		Data: innerHtml,
 	})
@@ -351,7 +355,7 @@ func (jw *Jaws) SetInner(jid string, innerHtml string) {
 // Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
 func (jw *Jaws) Remove(jid string) {
 	jw.Broadcast(&Message{
-		Elem: jid,
+		Tag:  jid,
 		What: what.Remove,
 	})
 }
@@ -362,7 +366,7 @@ func (jw *Jaws) Remove(jid string) {
 // Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
 func (jw *Jaws) Insert(parentId, where, html string) {
 	jw.Broadcast(&Message{
-		Elem: parentId,
+		Tag:  parentId,
 		What: what.Insert,
 		Data: where + "\n" + html,
 	})
@@ -373,7 +377,7 @@ func (jw *Jaws) Insert(parentId, where, html string) {
 // Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
 func (jw *Jaws) Append(parentId, html string) {
 	jw.Broadcast(&Message{
-		Elem: parentId,
+		Tag:  parentId,
 		What: what.Append,
 		Data: html,
 	})
@@ -385,7 +389,7 @@ func (jw *Jaws) Append(parentId, html string) {
 // Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
 func (jw *Jaws) Replace(id, where, html string) {
 	jw.Broadcast(&Message{
-		Elem: id,
+		Tag:  id,
 		What: what.Replace,
 		Data: where + "\n" + html,
 	})
@@ -397,7 +401,7 @@ func (jw *Jaws) Replace(id, where, html string) {
 // Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
 func (jw *Jaws) SetAttr(id, attr, val string) {
 	jw.Broadcast(&Message{
-		Elem: id,
+		Tag:  id,
 		What: what.SAttr,
 		Data: attr + "\n" + val,
 	})
@@ -408,7 +412,7 @@ func (jw *Jaws) SetAttr(id, attr, val string) {
 // Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
 func (jw *Jaws) RemoveAttr(id, attr string) {
 	jw.Broadcast(&Message{
-		Elem: id,
+		Tag:  id,
 		What: what.RAttr,
 		Data: attr,
 	})
@@ -419,7 +423,7 @@ func (jw *Jaws) RemoveAttr(id, attr string) {
 // Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
 func (jw *Jaws) SetValue(id, val string) {
 	jw.Broadcast(&Message{
-		Elem: id,
+		Tag:  id,
 		What: what.Value,
 		Data: val,
 	})
@@ -428,14 +432,14 @@ func (jw *Jaws) SetValue(id, val string) {
 // Reload requests all Requests to reload their current page.
 func (jw *Jaws) Reload() {
 	jw.Broadcast(&Message{
-		Elem: " reload",
+		Tag: " reload",
 	})
 }
 
 // Redirect requests all Requests to navigate to the given URL.
 func (jw *Jaws) Redirect(url string) {
 	jw.Broadcast(&Message{
-		Elem: " redirect",
+		Tag:  " redirect",
 		Data: url,
 	})
 }
@@ -443,7 +447,7 @@ func (jw *Jaws) Redirect(url string) {
 // Trigger invokes the event handler for the given ID with a 'trigger' event on all Requests.
 func (jw *Jaws) Trigger(id, val string) {
 	jw.Broadcast(&Message{
-		Elem: id,
+		Tag:  id,
 		What: what.Trigger,
 		Data: val,
 	})
@@ -453,7 +457,7 @@ func (jw *Jaws) Trigger(id, val string) {
 // primary, secondary, success, danger, warning, info, light or dark.
 func (jw *Jaws) Alert(lvl, msg string) {
 	jw.Broadcast(&Message{
-		Elem: " alert",
+		Tag:  " alert",
 		Data: lvl + "\n" + msg,
 	})
 }
@@ -514,9 +518,9 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			// could mean nonreproducible and seemingly
 			// random failures in processing logic.
 			if msg != nil {
-				_, isMeta := metaIds[msg.Elem]
+				_, isMeta := metaIds[msg.Tag]
 				for msgCh, rq := range subs {
-					if isMeta || (rq != nil && rq != msg.from && rq.HasTag(msg.Elem)) {
+					if isMeta || (rq != nil && rq != msg.from && rq.HasTag(msg.Tag)) {
 						select {
 						case msgCh <- msg:
 						default:
