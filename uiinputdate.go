@@ -29,7 +29,7 @@ func (ui *UiInputDate) JawsEvent(rq *Request, wht what.What, jid, val string) (e
 				return
 			}
 		}
-		ui.Set(v)
+		err = ui.Set(v)
 	}
 	return
 }

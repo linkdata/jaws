@@ -22,7 +22,7 @@ func (ui *UiInputText) JawsEvent(rq *Request, wht what.What, jid, val string) (e
 		return ui.EventFn(rq, wht, jid, val)
 	}
 	if wht == what.Input {
-		ui.Set(val)
+		err = ui.Set(val)
 	}
 	return
 }
