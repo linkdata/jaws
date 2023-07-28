@@ -16,15 +16,15 @@ func (ui *UiDate) JawsRender(e *Element, w io.Writer) error {
 	return ui.UiInputDate.WriteHtmlInput(e, w, "date", e.Jid, e.Data...)
 }
 
-func NewUiDate(tags []interface{}, val interface{}) (ui *UiDate) {
+func NewUiDate(tags []interface{}, vp ValueProxy) (ui *UiDate) {
 	ui = &UiDate{
 		UiInputDate: UiInputDate{
 			UiInput: UiInput{
-				UiHtml: UiHtml{Tags: tags},
+				UiHtml:     UiHtml{Tags: tags},
+				ValueProxy: vp,
 			},
 		},
 	}
-	ui.ProcessValue(val)
 	return
 }
 
@@ -32,5 +32,5 @@ func (rq *Request) Date(tagitem interface{}, val interface{}, attrs ...interface
 	if t, ok := val.(time.Time); ok && t.IsZero() {
 		val = time.Now()
 	}
-	return rq.UI(NewUiDate(ProcessTags(tagitem), val), attrs...)
+	return rq.UI(NewUiDate(ProcessTags(tagitem), MakeValueProxy(val)), attrs...)
 }

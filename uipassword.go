@@ -13,18 +13,18 @@ func (ui *UiPassword) JawsRender(e *Element, w io.Writer) error {
 	return ui.UiInputText.WriteHtmlInput(e, w, "password")
 }
 
-func NewUiPassword(tags []interface{}, val interface{}) (ui *UiPassword) {
+func NewUiPassword(tags []interface{}, vp ValueProxy) (ui *UiPassword) {
 	ui = &UiPassword{
 		UiInputText: UiInputText{
 			UiInput: UiInput{
-				UiHtml: UiHtml{Tags: tags},
+				UiHtml:     UiHtml{Tags: tags},
+				ValueProxy: vp,
 			},
 		},
 	}
-	ui.ProcessValue(val)
 	return
 }
 
 func (rq *Request) Password(tagitem interface{}, val interface{}, attrs ...interface{}) template.HTML {
-	return rq.UI(NewUiPassword(ProcessTags(tagitem), val), attrs...)
+	return rq.UI(NewUiPassword(ProcessTags(tagitem), MakeValueProxy(val)), attrs...)
 }

@@ -13,18 +13,18 @@ func (ui *UiRadio) JawsRender(e *Element, w io.Writer) error {
 	return ui.UiInputBool.WriteHtmlInput(e, w, "radio")
 }
 
-func NewUiRadio(tags []interface{}, val interface{}) (ui *UiRadio) {
+func NewUiRadio(tags []interface{}, vp ValueProxy) (ui *UiRadio) {
 	ui = &UiRadio{
 		UiInputBool: UiInputBool{
 			UiInput: UiInput{
-				UiHtml: UiHtml{Tags: tags},
+				UiHtml:     UiHtml{Tags: tags},
+				ValueProxy: vp,
 			},
 		},
 	}
-	ui.ProcessValue(val)
 	return
 }
 
 func (rq *Request) Radio(tagitem interface{}, val interface{}, data ...interface{}) template.HTML {
-	return rq.UI(NewUiRadio(ProcessTags(tagitem), val), data...)
+	return rq.UI(NewUiRadio(ProcessTags(tagitem), MakeValueProxy(val)), data...)
 }

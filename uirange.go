@@ -13,18 +13,18 @@ func (ui *UiRange) JawsRender(e *Element, w io.Writer) error {
 	return ui.UiInputFloat.WriteHtmlInput(e, w, "range")
 }
 
-func NewUiRange(tags []interface{}, val interface{}) (ui *UiRange) {
+func NewUiRange(tags []interface{}, vp ValueProxy) (ui *UiRange) {
 	ui = &UiRange{
 		UiInputFloat: UiInputFloat{
 			UiInput: UiInput{
-				UiHtml: UiHtml{Tags: tags},
+				UiHtml:     UiHtml{Tags: tags},
+				ValueProxy: vp,
 			},
 		},
 	}
-	ui.ProcessValue(val)
 	return
 }
 
 func (rq *Request) Range(tagitem interface{}, val interface{}, attrs ...interface{}) template.HTML {
-	return rq.UI(NewUiRange(ProcessTags(tagitem), val), attrs...)
+	return rq.UI(NewUiRange(ProcessTags(tagitem), MakeValueProxy(val)), attrs...)
 }

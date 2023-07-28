@@ -13,18 +13,18 @@ func (ui *UiCheckbox) JawsRender(e *Element, w io.Writer) error {
 	return ui.UiInputBool.WriteHtmlInput(e, w, "checkbox")
 }
 
-func NewUiCheckbox(tags []interface{}, val interface{}) (ui *UiCheckbox) {
+func NewUiCheckbox(tags []interface{}, vp ValueProxy) (ui *UiCheckbox) {
 	ui = &UiCheckbox{
 		UiInputBool: UiInputBool{
 			UiInput: UiInput{
-				UiHtml: UiHtml{Tags: tags},
+				UiHtml:     UiHtml{Tags: tags},
+				ValueProxy: vp,
 			},
 		},
 	}
-	ui.ProcessValue(val)
 	return
 }
 
 func (rq *Request) Checkbox(tagitem interface{}, val interface{}, attrs ...interface{}) template.HTML {
-	return rq.UI(NewUiCheckbox(ProcessTags(tagitem), val), attrs...)
+	return rq.UI(NewUiCheckbox(ProcessTags(tagitem), MakeValueProxy(val)), attrs...)
 }
