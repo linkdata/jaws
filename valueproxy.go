@@ -1,9 +1,6 @@
 package jaws
 
 import (
-	"html/template"
-	"time"
-
 	"github.com/linkdata/deadlock"
 )
 
@@ -32,26 +29,10 @@ func (dvh *defaultValueProxy) JawsSet(e *Element, val interface{}) (err error) {
 }
 
 func MakeValueProxy(value interface{}) (vp ValueProxy) {
-	switch data := value.(type) {
-	case ValueProxy:
-		vp = data
-	case template.HTML:
-		vp = &defaultValueProxy{v: data}
-	case string:
-		vp = &defaultValueProxy{v: data}
-	case bool:
-		vp = &defaultValueProxy{v: data}
-	case time.Time:
-		vp = &defaultValueProxy{v: data}
-	case int:
-		vp = &defaultValueProxy{v: float64(data)}
-	case float32:
-		vp = &defaultValueProxy{v: float64(data)}
-	case float64:
-		vp = &defaultValueProxy{v: data}
-	}
-	if vp == nil {
-		panic("jaws: failed make a ValueProxy")
+	if v, ok := value.(ValueProxy); ok {
+		vp = v
+	} else {
+		vp = &defaultValueProxy{v: v}
 	}
 	return
 }
