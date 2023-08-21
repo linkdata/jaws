@@ -32,7 +32,7 @@ func MakeValueProxy(value interface{}) (vp ValueProxy) {
 	if v, ok := value.(ValueProxy); ok {
 		vp = v
 	} else {
-		vp = &defaultValueProxy{v: v}
+		vp = &defaultValueProxy{v: value}
 	}
 	return
 }

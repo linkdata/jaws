@@ -667,6 +667,10 @@ func TestRequest_OnTrigger(t *testing.T) {
 
 func checkHtml(is *is.I, rq *testRequest, h template.HTML, tag, txt string) {
 	is.Helper()
+	if rq.log.Len() > 0 {
+		fmt.Println(rq.log.String())
+		is.Fail()
+	}
 	hs := string(h)
 	found := false
 	elems := rq.GetElements(tag)

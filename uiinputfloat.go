@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"fmt"
 	"io"
 	"strconv"
 
@@ -12,10 +13,11 @@ type UiInputFloat struct {
 }
 
 func (ui *UiInputFloat) WriteHtmlInput(e *Element, w io.Writer, htmltype string) error {
-	if val, ok := ui.Get(e).(float64); ok {
-		return ui.UiInput.WriteHtmlInput(w, htmltype, strconv.FormatFloat(val, 'f', -1, 64), e.Jid(), e.Data...)
+	val := ui.Get(e)
+	if n, ok := val.(float64); ok {
+		return ui.UiInput.WriteHtmlInput(w, htmltype, strconv.FormatFloat(n, 'f', -1, 64), e.Jid(), e.Data...)
 	}
-	panic("jaws: UiInputFloat: not float64")
+	return fmt.Errorf("jaws: UiInputFloat: expected float64, got %T", val)
 }
 
 func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err error) {

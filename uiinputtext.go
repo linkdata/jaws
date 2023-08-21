@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/linkdata/jaws/what"
@@ -11,10 +12,11 @@ type UiInputText struct {
 }
 
 func (ui *UiInputText) WriteHtmlInput(e *Element, w io.Writer, htmltype string) error {
-	if val, ok := ui.Get(e).(string); ok {
-		return ui.UiInput.WriteHtmlInput(w, htmltype, val, e.Jid(), e.Data...)
+	val := ui.Get(e)
+	if s, ok := val.(string); ok {
+		return ui.UiInput.WriteHtmlInput(w, htmltype, s, e.Jid(), e.Data...)
 	}
-	panic("jaws: UiInputText: not string")
+	return fmt.Errorf("jaws: UiInputText: expected string, got %T", val)
 }
 
 func (ui *UiInputText) JawsEvent(e *Element, wht what.What, val string) (err error) {

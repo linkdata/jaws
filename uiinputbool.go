@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"fmt"
 	"io"
 	"strconv"
 
@@ -12,14 +13,15 @@ type UiInputBool struct {
 }
 
 func (ui *UiInputBool) WriteHtmlInput(e *Element, w io.Writer, htmltype string) error {
-	if val, ok := ui.Get(e).(bool); ok {
+	val := ui.Get(e)
+	if b, ok := val.(bool); ok {
 		data := e.Data
-		if val {
+		if b {
 			data = append(data, "checked")
 		}
 		return ui.UiInput.WriteHtmlInput(w, htmltype, "", e.Jid(), data...)
 	}
-	panic("jaws: UiInputBool: not bool")
+	return fmt.Errorf("jaws: UiInputBool: expected bool, got %T", val)
 }
 
 func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (err error) {

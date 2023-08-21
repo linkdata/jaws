@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"fmt"
 	"io"
 	"time"
 
@@ -12,10 +13,11 @@ type UiInputDate struct {
 }
 
 func (ui *UiInputDate) WriteHtmlInput(e *Element, w io.Writer, htmltype, jid string, data ...interface{}) error {
-	if val, ok := ui.Get(e).(time.Time); ok {
-		return ui.UiInput.WriteHtmlInput(w, htmltype, val.Format(ISO8601), jid, data...)
+	val := ui.Get(e)
+	if t, ok := val.(time.Time); ok {
+		return ui.UiInput.WriteHtmlInput(w, htmltype, t.Format(ISO8601), jid, data...)
 	}
-	panic("jaws: UiInputDate: not time.Time")
+	return fmt.Errorf("jaws: UiInputDate: expected time.Time, got %T", val)
 }
 
 func (ui *UiInputDate) JawsEvent(e *Element, wht what.What, val string) (err error) {
