@@ -132,17 +132,21 @@ func (ui *UiHtml) WriteHtmlInput(w io.Writer, htmltype, htmlval, jid string, dat
 	return WriteHtmlInput(w, jid, htmltype, htmlval, ui.ProcessData(data)...)
 }
 
-func (uib *UiHtml) JawsTags(rq *Request) (tags []interface{}) {
-	return uib.Tags
+func (ui *UiHtml) JawsTags(rq *Request) (tags []interface{}) {
+	return ui.Tags
 }
 
-func (uib *UiHtml) JawsRender(e *Element, w io.Writer) (err error) {
+func (ui *UiHtml) JawsRender(e *Element, w io.Writer) (err error) {
 	panic(fmt.Sprintf("jaws: UiHtml.JawsRender(%v, %v) called", e, w))
 }
 
-func (uib *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
-	if uib.EventFn != nil {
-		err = uib.EventFn(e.Request(), wht, e.Jid(), val)
+func (ui *UiHtml) JawsUpdate(e *Element) (err error) {
+	panic(fmt.Sprintf("jaws: UiHtml.JawsUpdate(%v) called", e))
+}
+
+func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
+	if ui.EventFn != nil {
+		err = ui.EventFn(e.Request(), wht, e.Jid(), val)
 	}
 	return
 }

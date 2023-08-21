@@ -12,6 +12,7 @@ import (
 type UI interface {
 	JawsTags(rq *Request) (tags []interface{})
 	JawsRender(e *Element, w io.Writer) (err error)
+	JawsUpdate(e *Element) (err error)
 	JawsEvent(e *Element, wht what.What, val string) (err error)
 }
 
@@ -51,7 +52,7 @@ func (rq *Request) UI(ui UI, data ...interface{}) template.HTML {
 	return template.HTML(b.String())
 }
 
-func (rq *Request) Render(tags []interface{}) {
+func (rq *Request) Update(tags []interface{}) {
 	var todo []*Element
 	rq.mu.RLock()
 	for _, tag := range tags {

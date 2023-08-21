@@ -36,3 +36,8 @@ func (e *Element) UI() UI {
 func (e *Element) Request() *Request {
 	return e.rq
 }
+
+// Update calls JawsUpdate for UI objects that have tags in common with this Element.
+func (e *Element) Update() {
+	e.rq.Update(e.ui.JawsTags(e.rq))
+}

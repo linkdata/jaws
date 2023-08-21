@@ -327,7 +327,8 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) error {
 	return nil
 }
 
-func (jw *Jaws) Refresh(tags []interface{}) {
+// Update calls JawsUpdate for all UI objects that have one or more of the given tags.
+func (jw *Jaws) Update(tags []interface{}) {
 
 }
 

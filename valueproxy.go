@@ -22,9 +22,16 @@ func (dvh *defaultValueProxy) JawsGet(e *Element) (val interface{}) {
 }
 
 func (dvh *defaultValueProxy) JawsSet(e *Element, val interface{}) (err error) {
+	var changed bool
 	dvh.mu.Lock()
-	dvh.v = val
+	if dvh.v != val {
+		dvh.v = val
+		changed = true
+	}
 	dvh.mu.Unlock()
+	if changed {
+		e.Update()
+	}
 	return
 }
 
