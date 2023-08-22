@@ -39,7 +39,7 @@ type Request struct {
 	session   *Session         // (read-only) session, if established
 	sendCh    chan *Message    // (read-only) direct send message channel
 	mu        deadlock.RWMutex // protects following
-	refresh   time.Duration    // refresh interval
+	ticker    *time.Ticker     // refresh interval ticker
 	connectFn ConnectFn        // a ConnectFn to call before starting message processing for the Request
 	elems     []*Element
 	tagMap    map[interface{}][]*Element
@@ -51,10 +51,12 @@ type eventFnCall struct {
 	data string
 }
 
+var DefaultRequestRefreshInterval = time.Millisecond * 100
+
 var requestPool = sync.Pool{New: func() interface{} {
 	return &Request{
-		tagMap: make(map[interface{}][]*Element),
 		sendCh: make(chan *Message),
+		tagMap: make(map[interface{}][]*Element),
 	}
 }}
 
@@ -65,7 +67,7 @@ func newRequest(ctx context.Context, jw *Jaws, jawsKey uint64, hr *http.Request)
 	rq.Created = time.Now()
 	rq.Initial = hr
 	rq.Context = ctx
-	rq.refresh = time.Millisecond * 100
+	rq.ticker = time.NewTicker(DefaultRequestRefreshInterval)
 	if hr != nil {
 		rq.remoteIP = parseIP(hr.RemoteAddr)
 		if sess := jw.getSessionLocked(getCookieSessionsIds(hr.Header, jw.CookieName), rq.remoteIP); sess != nil {
@@ -123,6 +125,10 @@ func (rq *Request) recycle() {
 	rq.Initial = nil
 	rq.Context = nil
 	rq.remoteIP = nil
+	if rq.ticker != nil {
+		rq.ticker.Stop()
+		rq.ticker = nil
+	}
 	rq.elems = rq.elems[:0]
 	rq.killSessionLocked()
 	// this gets optimized to calling the 'runtime.mapclear' function
@@ -369,8 +375,11 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 		}
 	}()
 
-	ticker := time.NewTicker(rq.refresh)
-	defer ticker.Stop()
+	rq.mu.Lock()
+	if rq.ticker == nil {
+		rq.ticker = time.NewTicker(DefaultRequestRefreshInterval)
+	}
+	rq.mu.Unlock()
 
 	for {
 		var tagmsg *Message
@@ -382,7 +391,7 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 			return
 		case <-ctxDoneCh:
 			return
-		case <-ticker.C:
+		case <-rq.ticker.C:
 		case tagmsg, ok = <-rq.sendCh:
 			if !ok {
 				return
@@ -407,9 +416,11 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 			continue
 		}
 
+		rq.mu.RLock()
 		for _, elem := range rq.elems {
 			outmsgs = elem.appendTodo(outmsgs)
 		}
+		rq.mu.RUnlock()
 
 		if tagmsg != nil {
 			if tagmsg.What.IsCommand() {
