@@ -36,6 +36,7 @@ type Jaws struct {
 	bcastCh    chan *Message
 	subCh      chan subscription
 	unsubCh    chan chan *Message
+	ticker     *time.Ticker // 100ms default ticker
 	headPrefix string
 	mu         deadlock.RWMutex // protects following
 	kg         *bufio.Reader
@@ -55,6 +56,7 @@ func NewWithDone(doneCh <-chan struct{}) *Jaws {
 		bcastCh:    make(chan *Message, 1),
 		subCh:      make(chan subscription, 1),
 		unsubCh:    make(chan chan *Message, 1),
+		ticker:     time.NewTicker(time.Millisecond * 100),
 		headPrefix: HeadHTML([]string{JavascriptPath}, nil),
 		kg:         bufio.NewReader(rand.Reader),
 		reqs:       make(map[uint64]*Request),
@@ -82,6 +84,7 @@ func (jw *Jaws) Close() {
 		close(jw.closeCh)
 		jw.closeCh = nil
 	}
+	jw.ticker.Stop()
 	jw.mu.Unlock()
 }
 

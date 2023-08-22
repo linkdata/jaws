@@ -39,7 +39,7 @@ type Request struct {
 	session   *Session         // (read-only) session, if established
 	sendCh    chan *Message    // (read-only) direct send message channel
 	mu        deadlock.RWMutex // protects following
-	ticker    *time.Ticker     // refresh interval ticker
+	tickerCh  <-chan time.Time // refresh interval channel (from time.NewTimer)
 	connectFn ConnectFn        // a ConnectFn to call before starting message processing for the Request
 	elems     []*Element
 	tagMap    map[interface{}][]*Element
@@ -67,7 +67,6 @@ func newRequest(ctx context.Context, jw *Jaws, jawsKey uint64, hr *http.Request)
 	rq.Created = time.Now()
 	rq.Initial = hr
 	rq.Context = ctx
-	rq.ticker = time.NewTicker(DefaultRequestRefreshInterval)
 	if hr != nil {
 		rq.remoteIP = parseIP(hr.RemoteAddr)
 		if sess := jw.getSessionLocked(getCookieSessionsIds(hr.Header, jw.CookieName), rq.remoteIP); sess != nil {
@@ -125,10 +124,7 @@ func (rq *Request) recycle() {
 	rq.Initial = nil
 	rq.Context = nil
 	rq.remoteIP = nil
-	if rq.ticker != nil {
-		rq.ticker.Stop()
-		rq.ticker = nil
-	}
+	rq.tickerCh = nil
 	rq.elems = rq.elems[:0]
 	rq.killSessionLocked()
 	// this gets optimized to calling the 'runtime.mapclear' function
@@ -375,23 +371,24 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 		}
 	}()
 
-	rq.mu.Lock()
-	if rq.ticker == nil {
-		rq.ticker = time.NewTicker(DefaultRequestRefreshInterval)
-	}
-	rq.mu.Unlock()
-
 	for {
 		var tagmsg *Message
 		var outmsgs []wsMsg
 		var ok bool
+
+		rq.mu.RLock()
+		refreshCh := rq.tickerCh
+		rq.mu.RUnlock()
+		if refreshCh == nil {
+			refreshCh = rq.Jaws.ticker.C
+		}
 
 		select {
 		case <-jawsDoneCh:
 			return
 		case <-ctxDoneCh:
 			return
-		case <-rq.ticker.C:
+		case <-refreshCh:
 		case tagmsg, ok = <-rq.sendCh:
 			if !ok {
 				return
