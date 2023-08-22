@@ -9,24 +9,26 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[None-0]
-	_ = x[Inner-1]
-	_ = x[Remove-2]
-	_ = x[Insert-3]
-	_ = x[Append-4]
-	_ = x[Replace-5]
-	_ = x[Reload-6]
-	_ = x[SAttr-7]
-	_ = x[RAttr-8]
-	_ = x[Value-9]
-	_ = x[Trigger-10]
-	_ = x[Hook-11]
-	_ = x[Input-12]
-	_ = x[Click-13]
+	_ = x[Reload-1]
+	_ = x[Redirect-2]
+	_ = x[Alert-3]
+	_ = x[Inner-4]
+	_ = x[Remove-5]
+	_ = x[Insert-6]
+	_ = x[Append-7]
+	_ = x[Replace-8]
+	_ = x[SAttr-9]
+	_ = x[RAttr-10]
+	_ = x[Value-11]
+	_ = x[Trigger-12]
+	_ = x[Hook-13]
+	_ = x[Input-14]
+	_ = x[Click-15]
 }
 
-const _What_name = "NoneInnerRemoveInsertAppendReplaceReloadSAttrRAttrValueTriggerHookInputClick"
+const _What_name = "NoneReloadRedirectAlertInnerRemoveInsertAppendReplaceSAttrRAttrValueTriggerHookInputClick"
 
-var _What_index = [...]uint8{0, 4, 9, 15, 21, 27, 34, 40, 45, 50, 55, 62, 66, 71, 76}
+var _What_index = [...]uint8{0, 4, 10, 18, 23, 28, 34, 40, 46, 53, 58, 63, 68, 75, 79, 84, 89}
 
 func (i What) String() string {
 	if i >= What(len(_What_index)-1) {

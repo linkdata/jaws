@@ -327,7 +327,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) error {
 	return nil
 }
 
-// Update calls JawsUpdate for all UI objects that have one or more of the given tags.
+// Update calls JawsUpdate for all Elements that have one or more of the given tags.
 func (jw *Jaws) Update(tags []interface{}) {
 
 }
@@ -338,17 +338,6 @@ func (jw *Jaws) Broadcast(msg *Message) {
 	case <-jw.Done():
 	case jw.bcastCh <- msg:
 	}
-}
-
-// SetInner sends a jid and new inner HTML to all Requests.
-//
-// Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
-func (jw *Jaws) SetInner(jid string, innerHtml string) {
-	jw.Broadcast(&Message{
-		Tag:  jid,
-		What: what.Inner,
-		Data: innerHtml,
-	})
 }
 
 // Remove removes the HTML element(s) with the given 'jid' on all Requests.
@@ -396,51 +385,17 @@ func (jw *Jaws) Replace(id, where, html string) {
 	})
 }
 
-// SetAttr sends an HTML id and new attribute value to all Requests.
-// If the value is an empty string, a value-less attribute will be added (such as "disabled")
-//
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (jw *Jaws) SetAttr(id, attr, val string) {
-	jw.Broadcast(&Message{
-		Tag:  id,
-		What: what.SAttr,
-		Data: attr + "\n" + val,
-	})
-}
-
-// RemoveAttr removes a given attribute from the HTML id for all Requests.
-//
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (jw *Jaws) RemoveAttr(id, attr string) {
-	jw.Broadcast(&Message{
-		Tag:  id,
-		What: what.RAttr,
-		Data: attr,
-	})
-}
-
-// SetValue sends an HTML id and new input value to all Requests.
-//
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (jw *Jaws) SetValue(id, val string) {
-	jw.Broadcast(&Message{
-		Tag:  id,
-		What: what.Value,
-		Data: val,
-	})
-}
-
 // Reload requests all Requests to reload their current page.
 func (jw *Jaws) Reload() {
 	jw.Broadcast(&Message{
-		Tag: " reload",
+		What: what.Reload,
 	})
 }
 
 // Redirect requests all Requests to navigate to the given URL.
 func (jw *Jaws) Redirect(url string) {
 	jw.Broadcast(&Message{
-		Tag:  " redirect",
+		What: what.Redirect,
 		Data: url,
 	})
 }
@@ -458,7 +413,7 @@ func (jw *Jaws) Trigger(id, val string) {
 // primary, secondary, success, danger, warning, info, light or dark.
 func (jw *Jaws) Alert(lvl, msg string) {
 	jw.Broadcast(&Message{
-		Tag:  " alert",
+		What: what.Alert,
 		Data: lvl + "\n" + msg,
 	})
 }
@@ -519,9 +474,9 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			// could mean nonreproducible and seemingly
 			// random failures in processing logic.
 			if msg != nil {
-				_, isMeta := metaIds[msg.Tag]
+				isCmd := msg.What.IsCommand()
 				for msgCh, rq := range subs {
-					if isMeta || (rq != nil && rq != msg.from && rq.HasTag(msg.Tag)) {
+					if isCmd || (rq != nil && rq != msg.from && rq.HasTag(msg.Tag)) {
 						select {
 						case msgCh <- msg:
 						default:

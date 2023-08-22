@@ -39,6 +39,7 @@ type Request struct {
 	session   *Session         // (read-only) session, if established
 	sendCh    chan *Message    // (read-only) direct send message channel
 	mu        deadlock.RWMutex // protects following
+	refresh   time.Duration    // refresh interval
 	connectFn ConnectFn        // a ConnectFn to call before starting message processing for the Request
 	elems     []*Element
 	tagMap    map[interface{}][]*Element
@@ -48,13 +49,6 @@ type eventFnCall struct {
 	e    *Element
 	wht  what.What
 	data string
-}
-
-var metaIds = map[interface{}]int{
-	" reload":   -1,
-	" ping":     -2,
-	" redirect": -3,
-	" alert":    -4,
 }
 
 var requestPool = sync.Pool{New: func() interface{} {
@@ -71,6 +65,7 @@ func newRequest(ctx context.Context, jw *Jaws, jawsKey uint64, hr *http.Request)
 	rq.Created = time.Now()
 	rq.Initial = hr
 	rq.Context = ctx
+	rq.refresh = time.Millisecond * 100
 	if hr != nil {
 		rq.remoteIP = parseIP(hr.RemoteAddr)
 		if sess := jw.getSessionLocked(getCookieSessionsIds(hr.Header, jw.CookieName), rq.remoteIP); sess != nil {
@@ -193,17 +188,6 @@ func (rq *Request) Trigger(id, val string) {
 	})
 }
 
-// SetInner sends a jid and new inner HTML to all Requests except this one.
-//
-// Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
-func (rq *Request) SetInner(jid string, innerHtml string) {
-	rq.Broadcast(&Message{
-		Tag:  jid,
-		What: what.Inner,
-		Data: innerHtml,
-	})
-}
-
 // SetTextValue sends a jid and new input value to all Requests except this one.
 //
 // Only the requests that have registered the jid (either with Register or OnEvent) will be sent the message.
@@ -270,37 +254,14 @@ func (rq *Request) Send(msg *Message) bool {
 	return false
 }
 
-// SetAttr sets an attribute on the HTML element(s) on the current Request only.
-// If the value is an empty string, a value-less attribute will be added (such as "disabled").
-//
-// Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
-func (rq *Request) SetAttr(jid, attr, val string) {
-	rq.Send(&Message{
-		Tag:  jid,
-		What: what.SAttr,
-		Data: attr + "\n" + val,
-	})
-}
-
-// RemoveAttr removes a given attribute from the HTML element(s) for the current Request only.
-//
-// Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
-func (rq *Request) RemoveAttr(jid, attr string) {
-	rq.Send(&Message{
-		Tag:  jid,
-		What: what.RAttr,
-		Data: attr,
-	})
-}
-
 // Alert attempts to show an alert message on the current request webpage if it has an HTML element with the id 'jaws-alert'.
 // The lvl argument should be one of Bootstraps alert levels: primary, secondary, success, danger, warning, info, light or dark.
 //
 // The default JaWS javascript only supports Bootstrap.js dismissable alerts.
 func (rq *Request) Alert(lvl, msg string) {
 	rq.Send(&Message{
-		Tag:  " alert",
 		Data: lvl + "\n" + msg,
+		What: what.Alert,
 	})
 }
 
@@ -314,8 +275,8 @@ func (rq *Request) AlertError(err error) {
 // Redirect requests the current Request to navigate to the given URL.
 func (rq *Request) Redirect(url string) {
 	rq.Send(&Message{
-		Tag:  " redirect",
 		Data: url,
+		What: what.Redirect,
 	})
 }
 
@@ -408,22 +369,34 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 		}
 	}()
 
+	ticker := time.NewTicker(rq.refresh)
+	defer ticker.Stop()
+
 	for {
 		var tagmsg *Message
+		var outmsgs []wsMsg
+		var ok bool
 
 		select {
 		case <-jawsDoneCh:
 			return
 		case <-ctxDoneCh:
 			return
-		case tagmsg = <-rq.sendCh:
-		case tagmsg = <-broadcastMsgCh:
+		case <-ticker.C:
+		case tagmsg, ok = <-rq.sendCh:
+			if !ok {
+				return
+			}
+		case tagmsg, ok = <-broadcastMsgCh:
+			if !ok {
+				return
+			}
 		case wsmsg, ok := <-incomingMsgCh:
 			if !ok {
 				return
 			}
 			// incoming event message from the websocket
-			if elem := rq.GetElement(wsmsg.Jid()); elem != nil {
+			if elem := rq.GetElement(wsmsg.Jid); elem != nil {
 				select {
 				case eventCallCh <- eventFnCall{e: elem, wht: wsmsg.What, data: wsmsg.Data}:
 				default:
@@ -434,57 +407,65 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 			continue
 		}
 
-		if tagmsg == nil {
-			// one of the channels are closed, so we're done
-			return
+		for _, elem := range rq.elems {
+			outmsgs = elem.appendTodo(outmsgs)
 		}
 
-		var todo []*Element
-		todo = append(todo, rq.tagMap[tagmsg.Tag]...)
-		if n, ok := metaIds[tagmsg.Tag]; ok {
-			todo = append(todo, &Element{
-				jid: n,
-				ui:  nil,
-				rq:  rq,
-			})
-		}
-
-		// find all elements listening to one of the tags in the message
-		for _, elem := range todo {
-			// messages incoming from WebSocket or trigger messages
-			// won't be sent out on the WebSocket, but will queue up a
-			// call to the event function (if any)
-			if tagmsg.What == what.Trigger {
-				select {
-				case eventCallCh <- eventFnCall{e: elem, wht: tagmsg.What, data: tagmsg.Data}:
-				default:
-					rq.Jaws.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, tagmsg))
-					return
-				}
-				continue
-			}
-
-			// "hook" messages are used to synchronously call an event function.
-			// the function must not send any messages itself, but may return
-			// an error to be sent out as an alert message.
-			// primary usecase is tests.
-			if tagmsg.What == what.Hook {
-				tagmsg = makeAlertDangerMessage(elem.UI().JawsEvent(elem, tagmsg.What, tagmsg.Data))
-			}
-
-			if tagmsg != nil {
-				select {
-				case <-jawsDoneCh:
-				case <-ctxDoneCh:
-				case outboundMsgCh <- wsMsg{
-					jid:  elem.jid,
-					What: tagmsg.What,
+		if tagmsg != nil {
+			if tagmsg.What.IsCommand() {
+				outmsgs = append(outmsgs, wsMsg{
+					Jid:  0,
 					Data: tagmsg.Data,
-				}:
-				default:
-					rq.Jaws.MustLog(fmt.Errorf("jaws: %v: outboundMsgCh is full sending %v", rq, tagmsg))
-					return
+					What: tagmsg.What,
+				})
+			} else {
+				// find all elements listening to one of the tags in the message
+				todo := map[*Element]struct{}{}
+				rq.mu.RLock()
+				for _, elem := range rq.tagMap[tagmsg.Tag] {
+					todo[elem] = struct{}{}
 				}
+				rq.mu.RUnlock()
+
+				for elem := range todo {
+					// messages incoming from WebSocket or trigger messages
+					// won't be sent out on the WebSocket, but will queue up a
+					// call to the event function (if any)
+					if tagmsg.What == what.Trigger {
+						select {
+						case eventCallCh <- eventFnCall{e: elem, wht: tagmsg.What, data: tagmsg.Data}:
+						default:
+							rq.Jaws.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, tagmsg))
+							return
+						}
+						continue
+					}
+
+					// "hook" messages are used to synchronously call an event function.
+					// the function must not send any messages itself, but may return
+					// an error to be sent out as an alert message.
+					// primary usecase is tests.
+					if tagmsg.What == what.Hook {
+						tagmsg = makeAlertDangerMessage(elem.UI().JawsEvent(elem, tagmsg.What, tagmsg.Data))
+					}
+
+					outmsgs = append(outmsgs, wsMsg{
+						Jid:  elem.jid,
+						What: tagmsg.What,
+						Data: tagmsg.Data,
+					})
+				}
+			}
+		}
+
+		for _, msg := range outmsgs {
+			select {
+			case <-jawsDoneCh:
+			case <-ctxDoneCh:
+			case outboundMsgCh <- msg:
+			default:
+				rq.Jaws.MustLog(fmt.Errorf("jaws: %v: outboundMsgCh is full sending %v", rq, tagmsg))
+				return
 			}
 		}
 	}
@@ -521,8 +502,8 @@ func (rq *Request) onConnect() (err error) {
 func makeAlertDangerMessage(err error) (msg *Message) {
 	if err != nil {
 		msg = &Message{
-			Tag:  " alert",
 			Data: "danger\n" + html.EscapeString(err.Error()),
+			What: what.Alert,
 		}
 	}
 	return

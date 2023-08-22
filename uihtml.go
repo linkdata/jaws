@@ -146,7 +146,7 @@ func (ui *UiHtml) JawsUpdate(e *Element) (err error) {
 
 func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if ui.EventFn != nil {
-		err = ui.EventFn(e.Request(), wht, e.Jid(), val)
+		err = ui.EventFn(e.Request(), wht, e.Jid().String(), val)
 	}
 	return
 }

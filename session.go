@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/what"
 )
 
 type Session struct {
@@ -154,7 +155,7 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 		sess.jw.deleteSession(sess.sessionID)
 		sess.mu.Lock()
 		sess.cookie.MaxAge = -1
-		sess.broadcastLocked(&Message{Tag: " reload"})
+		sess.broadcastLocked(&Message{What: what.Reload})
 		sess.requests = sess.requests[:0]
 		sess.mu.Unlock()
 	}
@@ -163,7 +164,7 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 
 // Reload calls Broadcast with a message asking browsers to reload the page.
 func (sess *Session) Reload() {
-	sess.Broadcast(&Message{Tag: " reload"})
+	sess.Broadcast(&Message{What: what.Reload})
 }
 
 // Clear removes all key/value pairs from the session.

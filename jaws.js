@@ -182,22 +182,17 @@ function jawsMessage(e) {
 	var lines = e.data.split('\n');
 	var cmd_or_jid = lines.shift();
 	var what = lines.shift();
-	switch (cmd_or_jid) {
-		case ' reload':
-			window.location.reload();
-			return;
-		case ' redirect':
-			window.location.assign(lines.shift());
-			return;
-		case ' alert':
-			jawsAlert(lines.shift(), lines.join('\n'));
-			return;
-	}
 	var where = null;
 	var data = null;
 	switch (what) {
 		case 'Reload':
 			window.location.reload();
+			return;
+		case 'Redirect':
+			window.location.assign(lines.shift());
+			return;
+		case 'Alert':
+			jawsAlert(lines.shift(), lines.join('\n'));
 			return;
 		case 'Inner':
 		case 'Value':

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/linkdata/jaws/what"
 	"github.com/matryer/is"
 )
 
@@ -129,12 +130,12 @@ func TestJaws_BroadcastWaitsWhenFull(t *testing.T) {
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case jw.bcastCh <- &Message{Tag: " reload"}:
+	case jw.bcastCh <- &Message{What: what.Reload}:
 	}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case jw.bcastCh <- &Message{Tag: " reload"}:
+	case jw.bcastCh <- &Message{What: what.Reload}:
 	}
 
 	// read one of the broadcasts, the other is
@@ -183,7 +184,7 @@ func TestJaws_BroadcastFullClosesChannel(t *testing.T) {
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case jw.bcastCh <- &Message{Tag: " reload"}:
+	case jw.bcastCh <- &Message{What: what.Reload}:
 	}
 
 	select {
@@ -298,14 +299,10 @@ func TestJaws_BroadcastsCallable(t *testing.T) {
 	defer jw.Close()
 	go jw.Serve()
 
-	jw.SetInner("foo", "bar")
 	jw.Remove("foo")
 	jw.Insert("foo", "bar", "baz")
 	jw.Append("foo", "bar")
 	jw.Replace("foo", "bar", "baz")
-	jw.SetAttr("foo", "bar", "baz")
-	jw.RemoveAttr("foo", "bar")
-	jw.SetValue("foo", "bar")
 	jw.Reload()
 	jw.Redirect("foo")
 	jw.Trigger("foo", "bar")

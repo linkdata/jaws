@@ -7,12 +7,16 @@ type What uint8
 
 const (
 	None What = iota
+	// Commands not associated with an Element
+	Reload
+	Redirect
+	Alert
+	// Element manipulation
 	Inner
 	Remove
 	Insert
 	Append
 	Replace
-	Reload
 	SAttr
 	RAttr
 	Value
@@ -21,6 +25,10 @@ const (
 	Input
 	Click
 )
+
+func (w What) IsCommand() bool {
+	return w >= Reload && w <= Alert
+}
 
 func Parse(s string) What {
 	if s != "" {

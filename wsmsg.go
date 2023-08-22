@@ -8,13 +8,9 @@ import (
 )
 
 type wsMsg struct {
-	jid  int
+	Jid  Jid
 	Data string
 	What what.What
-}
-
-func (m *wsMsg) Jid() string {
-	return jidToString(m.jid)
 }
 
 func (m *wsMsg) IsValid() bool {
@@ -22,7 +18,7 @@ func (m *wsMsg) IsValid() bool {
 }
 
 func (m *wsMsg) Append(b []byte) []byte {
-	b = strconv.AppendInt(b, int64(m.jid), 10)
+	b = strconv.AppendInt(b, int64(m.Jid), 10)
 	b = append(b, '\n')
 	if m.What != 0 {
 		b = append(b, m.What.String()...)
@@ -37,7 +33,7 @@ func (m *wsMsg) Format() string {
 }
 
 func (m *wsMsg) FillAlert(err error) {
-	m.jid = metaIds[" alert"]
-	m.What = what.None
+	m.Jid = 0
+	m.What = what.Alert
 	m.Data = "danger\n" + html.EscapeString(err.Error())
 }

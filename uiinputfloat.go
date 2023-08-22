@@ -15,14 +15,14 @@ type UiInputFloat struct {
 func (ui *UiInputFloat) WriteHtmlInput(e *Element, w io.Writer, htmltype string) error {
 	val := ui.Get(e)
 	if n, ok := val.(float64); ok {
-		return ui.UiInput.WriteHtmlInput(w, htmltype, strconv.FormatFloat(n, 'f', -1, 64), e.Jid(), e.Data...)
+		return ui.UiInput.WriteHtmlInput(w, htmltype, strconv.FormatFloat(n, 'f', -1, 64), e.Jid().String(), e.data...)
 	}
 	return fmt.Errorf("jaws: UiInputFloat: expected float64, got %T", val)
 }
 
 func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if ui.EventFn != nil {
-		return ui.EventFn(e.Request(), wht, e.Jid(), val)
+		return ui.EventFn(e.Request(), wht, e.Jid().String(), val)
 	}
 	if wht == what.Input {
 		var v float64

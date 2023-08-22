@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"html/template"
 	"io"
-	"strconv"
 
 	"github.com/linkdata/jaws/what"
 )
@@ -18,7 +17,7 @@ type UI interface {
 
 func (rq *Request) newElementLocked(tags []interface{}, ui UI, data []interface{}) (elem *Element) {
 	if len(tags) > 0 {
-		elem = &Element{jid: len(rq.elems) + 1, ui: ui, Data: data, rq: rq}
+		elem = &Element{jid: Jid(len(rq.elems) + 1), ui: ui, data: data, rq: rq, todo: make(map[string]*string)}
 		rq.elems = append(rq.elems, elem)
 		jid := elem.Jid()
 		rq.tagMap[jid] = append(rq.tagMap[jid], elem)
@@ -29,11 +28,11 @@ func (rq *Request) newElementLocked(tags []interface{}, ui UI, data []interface{
 	return
 }
 
-func (rq *Request) GetElement(jid string) (e *Element) {
-	if n, err := strconv.Atoi(jid); err == nil && n > 0 {
+func (rq *Request) GetElement(jid Jid) (e *Element) {
+	if jid > 0 {
 		rq.mu.RLock()
-		if n <= len(rq.elems) {
-			e = rq.elems[n-1]
+		if int(jid) <= len(rq.elems) {
+			e = rq.elems[jid-1]
 		}
 		rq.mu.RUnlock()
 	}
