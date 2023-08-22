@@ -414,7 +414,6 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 		if tagmsg != nil {
 			if tagmsg.What.IsCommand() {
 				outmsgs = append(outmsgs, wsMsg{
-					Jid:  0,
 					Data: tagmsg.Data,
 					What: tagmsg.What,
 				})
