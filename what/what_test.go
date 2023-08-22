@@ -27,6 +27,24 @@ func TestParse(t *testing.T) {
 	}
 }
 
+func TestIsCommand(t *testing.T) {
+	if None.IsCommand() {
+		t.Fail()
+	}
+	if What(255).IsCommand() {
+		t.Fail()
+	}
+	if !Alert.IsCommand() {
+		t.Fail()
+	}
+	if !Reload.IsCommand() {
+		t.Fail()
+	}
+	if !Redirect.IsCommand() {
+		t.Fail()
+	}
+}
+
 func TestString(t *testing.T) {
 	tests := []struct {
 		name string
