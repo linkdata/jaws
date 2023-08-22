@@ -371,6 +371,8 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 		}
 	}()
 
+	var defaultRefreshCh <-chan time.Time
+
 	for {
 		var tagmsg *Message
 		var outmsgs []wsMsg
@@ -378,10 +380,15 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 
 		rq.mu.RLock()
 		refreshCh := rq.tickerCh
-		rq.mu.RUnlock()
 		if refreshCh == nil {
-			refreshCh = rq.Jaws.ticker.C
+			if defaultRefreshCh == nil {
+				ticker := time.NewTicker(DefaultRequestRefreshInterval)
+				defer ticker.Stop()
+				defaultRefreshCh = ticker.C
+			}
+			refreshCh = defaultRefreshCh
 		}
+		rq.mu.RUnlock()
 
 		select {
 		case <-jawsDoneCh:
