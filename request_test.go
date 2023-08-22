@@ -45,7 +45,7 @@ func newTestRequest(is *is.I) (tr *testRequest) {
 	tr.jw.Logger = log.New(&tr.log, "", 0)
 	tr.ctx, tr.cancel = context.WithTimeout(context.Background(), time.Hour)
 	tr.Request = tr.jw.NewRequest(tr.ctx, nil)
-	tr.Request.refresh = time.Millisecond * 10
+	tr.Request.refresh = time.Millisecond
 
 	tr.jw.UseRequest(tr.JawsKey, nil)
 
