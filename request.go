@@ -427,32 +427,35 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 				rq.mu.RUnlock()
 
 				for elem := range todo {
-					// messages incoming from WebSocket or trigger messages
-					// won't be sent out on the WebSocket, but will queue up a
-					// call to the event function (if any)
-					if tagmsg.What == what.Trigger {
+					switch tagmsg.What {
+					case what.Trigger:
+						// trigger messages won't be sent out on the WebSocket, but will queue up a
+						// call to the event function (if any)
 						select {
 						case eventCallCh <- eventFnCall{e: elem, wht: tagmsg.What, data: tagmsg.Data}:
 						default:
 							rq.Jaws.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, tagmsg))
 							return
 						}
-						continue
+					case what.Hook:
+						// "hook" messages are used to synchronously call an event function.
+						// the function must not send any messages itself, but may return
+						// an error to be sent out as an alert message.
+						// primary usecase is tests.
+						if errmsg := makeAlertDangerMessage(elem.UI().JawsEvent(elem, tagmsg.What, tagmsg.Data)); errmsg != nil {
+							outmsgs = append(outmsgs, wsMsg{
+								Jid:  elem.jid,
+								What: errmsg.What,
+								Data: errmsg.Data,
+							})
+						}
+					default:
+						outmsgs = append(outmsgs, wsMsg{
+							Jid:  elem.jid,
+							What: tagmsg.What,
+							Data: tagmsg.Data,
+						})
 					}
-
-					// "hook" messages are used to synchronously call an event function.
-					// the function must not send any messages itself, but may return
-					// an error to be sent out as an alert message.
-					// primary usecase is tests.
-					if tagmsg.What == what.Hook {
-						tagmsg = makeAlertDangerMessage(elem.UI().JawsEvent(elem, tagmsg.What, tagmsg.Data))
-					}
-
-					outmsgs = append(outmsgs, wsMsg{
-						Jid:  elem.jid,
-						What: tagmsg.What,
-						Data: tagmsg.Data,
-					})
 				}
 			}
 		}
