@@ -8,7 +8,6 @@ import (
 
 type testValueProxy struct {
 	v         interface{}
-	makeErr   error
 	getCalled bool
 	setCalled bool
 }
@@ -18,10 +17,11 @@ func (vp *testValueProxy) JawsGet(e *Element) interface{} {
 	return vp.v
 }
 
-func (vp *testValueProxy) JawsSet(e *Element, val interface{}) (err error) {
+func (vp *testValueProxy) JawsSet(e *Element, val interface{}) (changed bool) {
+	changed = vp.v != val
 	vp.v = val
 	vp.setCalled = true
-	return vp.makeErr
+	return
 }
 
 func TestMakeValueProxy(t *testing.T) {

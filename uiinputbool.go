@@ -35,7 +35,7 @@ func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (err err
 				return
 			}
 		}
-		err = ui.Set(e, v)
+		ui.Set(e, v)
 	}
 	return
 }

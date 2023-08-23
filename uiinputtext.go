@@ -24,7 +24,7 @@ func (ui *UiInputText) JawsEvent(e *Element, wht what.What, val string) (err err
 		return ui.EventFn(e.Request(), wht, e.Jid().String(), val)
 	}
 	if wht == what.Input {
-		err = ui.Set(e, val)
+		ui.Set(e, val)
 	}
 	return
 }

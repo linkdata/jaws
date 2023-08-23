@@ -8,7 +8,7 @@ import (
 
 type ValueProxy interface {
 	JawsGet(e *Element) (val interface{})
-	JawsSet(e *Element, val interface{}) (err error)
+	JawsSet(e *Element, val interface{}) (changed bool)
 }
 
 type defaultValueProxy struct {
@@ -23,14 +23,11 @@ func (vp *defaultValueProxy) JawsGet(e *Element) (val interface{}) {
 	return
 }
 
-func (vp *defaultValueProxy) JawsSet(e *Element, val interface{}) (err error) {
+func (vp *defaultValueProxy) JawsSet(e *Element, val interface{}) (changed bool) {
 	vp.mu.Lock()
-	changed := vp.v != val
+	changed = vp.v != val
 	vp.v = val
 	vp.mu.Unlock()
-	if changed {
-		e.UpdateOthers([]interface{}{vp})
-	}
 	return
 }
 
@@ -40,11 +37,9 @@ func (vp atomicValueProxy) JawsGet(e *Element) interface{} {
 	return vp.Load()
 }
 
-func (vp atomicValueProxy) JawsSet(e *Element, val interface{}) (err error) {
-	if vp.Swap(val) != val {
-		e.UpdateOthers([]interface{}{vp})
-	}
-	return nil
+func (vp atomicValueProxy) JawsSet(e *Element, val interface{}) (changed bool) {
+	changed = vp.Swap(val) != val
+	return
 }
 
 func MakeValueProxy(value interface{}) (vp ValueProxy) {
