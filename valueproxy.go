@@ -1,6 +1,8 @@
 package jaws
 
 import (
+	"sync/atomic"
+
 	"github.com/linkdata/deadlock"
 )
 
@@ -28,10 +30,28 @@ func (dvh *defaultValueProxy) JawsSet(e *Element, val interface{}) (err error) {
 	return
 }
 
+type atomicValueProxy struct {
+	*atomic.Value
+}
+
+func (vp *atomicValueProxy) JawsGet(e *Element) interface{} {
+	return vp.Value.Load()
+}
+
+func (vp *atomicValueProxy) JawsSet(e *Element, val interface{}) (err error) {
+	vp.Store(val)
+	return nil
+}
+
 func MakeValueProxy(value interface{}) (vp ValueProxy) {
-	if v, ok := value.(ValueProxy); ok {
+	switch v := value.(type) {
+	case ValueProxy:
 		vp = v
-	} else {
+	case *atomic.Value:
+		vp = &atomicValueProxy{Value: v}
+	case atomic.Value:
+		panic("jaws: MakeValueProxy: must pass atomic.Value by reference")
+	default:
 		vp = &defaultValueProxy{v: value}
 	}
 	return

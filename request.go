@@ -7,7 +7,6 @@ import (
 	"html/template"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -181,59 +180,6 @@ func (rq *Request) Broadcast(msg *Message) {
 	rq.Jaws.Broadcast(msg)
 }
 
-// Trigger invokes the event handler for the given ID with a 'trigger' event on all Requests except this one.
-func (rq *Request) Trigger(id, val string) {
-	rq.Broadcast(&Message{
-		Tag:  id,
-		What: what.Trigger,
-		Data: val,
-	})
-}
-
-// SetTextValue sends a jid and new input value to all Requests except this one.
-//
-// Only the requests that have registered the jid (either with Register or OnEvent) will be sent the message.
-func (rq *Request) SetTextValue(jid, val string) {
-	rq.Broadcast(&Message{
-		Tag:  jid,
-		What: what.Value,
-		Data: val,
-	})
-}
-
-// SetFloatValue sends a jid and new input value to all Requests except this one.
-//
-// Only the requests that have registered the jid (either with Register or OnEvent) will be sent the message.
-func (rq *Request) SetFloatValue(jid string, val float64) {
-	rq.Broadcast(&Message{
-		Tag:  jid,
-		What: what.Value,
-		Data: strconv.FormatFloat(val, 'f', -1, 64),
-	})
-}
-
-// SetBoolValue sends a jid and new input value to all Requests except this one.
-//
-// Only the requests that have registered the jid (either with Register or OnEvent) will be sent the message.
-func (rq *Request) SetBoolValue(jid string, val bool) {
-	rq.Broadcast(&Message{
-		Tag:  jid,
-		What: what.Value,
-		Data: strconv.FormatBool(val),
-	})
-}
-
-// SetDateValue sends a jid and new input value to all Requests except this one.
-//
-// Only the requests that have registered the jid (either with Register or OnEvent) will be sent the message.
-func (rq *Request) SetDateValue(jid string, val time.Time) {
-	rq.Broadcast(&Message{
-		Tag:  jid,
-		What: what.Value,
-		Data: val.Format(ISO8601),
-	})
-}
-
 func (rq *Request) getDoneCh(msg *Message) (<-chan struct{}, <-chan struct{}) {
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
@@ -329,10 +275,14 @@ func (rq *Request) Register(tagstring string) string {
 	return rq.RegisterEventFn(tagstring, nil)
 }
 
-// HasTag returns true if the Request has one or more UI elements that have the given tag.
-func (rq *Request) HasTag(tag interface{}) (ok bool) {
+// HasAnyTag returns true if the Request has one or more UI elements tagged with any of the given tags.
+func (rq *Request) HasAnyTag(tags []interface{}) (ok bool) {
 	rq.mu.RLock()
-	_, ok = rq.tagMap[tag]
+	for _, tag := range tags {
+		if _, ok = rq.tagMap[tag]; ok {
+			break
+		}
+	}
 	rq.mu.RUnlock()
 	return
 }
@@ -380,6 +330,8 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 
 		rq.mu.RLock()
 		refreshCh := rq.tickerCh
+		rq.mu.RUnlock()
+
 		if refreshCh == nil {
 			if defaultRefreshCh == nil {
 				ticker := time.NewTicker(DefaultRequestRefreshInterval)
@@ -388,7 +340,6 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 			}
 			refreshCh = defaultRefreshCh
 		}
-		rq.mu.RUnlock()
 
 		select {
 		case <-jawsDoneCh:
@@ -436,8 +387,10 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 				// find all elements listening to one of the tags in the message
 				todo := map[*Element]struct{}{}
 				rq.mu.RLock()
-				for _, elem := range rq.tagMap[tagmsg.Tag] {
-					todo[elem] = struct{}{}
+				for _, tag := range tagmsg.Tags {
+					for _, elem := range rq.tagMap[tag] {
+						todo[elem] = struct{}{}
+					}
 				}
 				rq.mu.RUnlock()
 

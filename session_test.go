@@ -194,7 +194,7 @@ func TestSession_Delete(t *testing.T) {
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
 	ts.rq.Send(&Message{
-		Tag:  "byebye",
+		Tags: ProcessTags("byebye"),
 		What: what.Trigger,
 	})
 
