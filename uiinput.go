@@ -23,6 +23,6 @@ func (ui *UiInput) Get(e *Element) interface{} {
 
 func (ui *UiInput) Set(e *Element, value interface{}) {
 	if ui.ValueProxy.JawsSet(e, value) {
-		e.UpdateOthers([]interface{}{ui.ValueProxy})
+		e.UpdateOthers(ui.Tags)
 	}
 }
