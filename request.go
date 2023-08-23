@@ -275,15 +275,17 @@ func (rq *Request) Register(tagstring string) string {
 	return rq.RegisterEventFn(tagstring, nil)
 }
 
-// HasAnyTag returns true if the Request has one or more UI elements tagged with any of the given tags.
-func (rq *Request) HasAnyTag(tags []interface{}) (ok bool) {
-	rq.mu.RLock()
-	for _, tag := range tags {
-		if _, ok = rq.tagMap[tag]; ok {
-			break
+// wantMessage returns true if the Request want the message.
+func (rq *Request) wantMessage(msg *Message) (yes bool) {
+	if rq != nil && msg.from != rq {
+		rq.mu.RLock()
+		for _, tag := range msg.Tags {
+			if _, yes = rq.tagMap[tag]; yes {
+				break
+			}
 		}
+		rq.mu.RUnlock()
 	}
-	rq.mu.RUnlock()
 	return
 }
 
@@ -389,7 +391,9 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 				rq.mu.RLock()
 				for _, tag := range tagmsg.Tags {
 					for _, elem := range rq.tagMap[tag] {
-						todo[elem] = struct{}{}
+						if elem != tagmsg.from {
+							todo[elem] = struct{}{}
+						}
 					}
 				}
 				rq.mu.RUnlock()
@@ -417,6 +421,8 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 								Data: errmsg.Data,
 							})
 						}
+					case what.Update:
+						rq.Jaws.MustLog(elem.Update())
 					default:
 						outmsgs = append(outmsgs, wsMsg{
 							Jid:  elem.jid,

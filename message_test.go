@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/linkdata/jaws/what"
@@ -14,14 +15,14 @@ func Test_Message_String(t *testing.T) {
 		What: what.None,
 		Data: "Data\nText",
 	}
-	is.Equal(msg.String(), "{[\"Elem\"], None, \"Data\\nText\", Request<>}")
+	is.Equal(msg.String(), "{[\"Elem\"], None, \"Data\\nText\", <nil>}")
 	const jawsKey = uint64(0xcafebabe)
 	msg.from = &Request{JawsKey: jawsKey}
 	keyStr := JawsKeyString(jawsKey)
 	keyVal := JawsKeyValue(keyStr)
 	is.Equal(keyVal, jawsKey)
 	is.Equal(uint64(0), JawsKeyValue(""))
-	is.Equal(msg.String(), "{[\"Elem\"], None, \"Data\\nText\", Request<"+keyStr+">}")
+	is.Equal(msg.String(), fmt.Sprintf("{[\"Elem\"], None, \"Data\\nText\", Request<%s>}", keyStr))
 	msg.from = &Request{JawsKey: 0}
 	is.Equal(msg.String(), "{[\"Elem\"], None, \"Data\\nText\", Request<>}")
 }

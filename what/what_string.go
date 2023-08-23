@@ -12,23 +12,24 @@ func _() {
 	_ = x[Reload-1]
 	_ = x[Redirect-2]
 	_ = x[Alert-3]
-	_ = x[Inner-4]
-	_ = x[Remove-5]
-	_ = x[Insert-6]
-	_ = x[Append-7]
-	_ = x[Replace-8]
-	_ = x[SAttr-9]
-	_ = x[RAttr-10]
-	_ = x[Value-11]
-	_ = x[Trigger-12]
-	_ = x[Hook-13]
-	_ = x[Input-14]
-	_ = x[Click-15]
+	_ = x[Update-4]
+	_ = x[Inner-5]
+	_ = x[Remove-6]
+	_ = x[Insert-7]
+	_ = x[Append-8]
+	_ = x[Replace-9]
+	_ = x[SAttr-10]
+	_ = x[RAttr-11]
+	_ = x[Value-12]
+	_ = x[Trigger-13]
+	_ = x[Hook-14]
+	_ = x[Input-15]
+	_ = x[Click-16]
 }
 
-const _What_name = "NoneReloadRedirectAlertInnerRemoveInsertAppendReplaceSAttrRAttrValueTriggerHookInputClick"
+const _What_name = "NoneReloadRedirectAlertUpdateInnerRemoveInsertAppendReplaceSAttrRAttrValueTriggerHookInputClick"
 
-var _What_index = [...]uint8{0, 4, 10, 18, 23, 28, 34, 40, 46, 53, 58, 63, 68, 75, 79, 84, 89}
+var _What_index = [...]uint8{0, 4, 10, 18, 23, 29, 34, 40, 46, 52, 59, 64, 69, 74, 81, 85, 90, 95}
 
 func (i What) String() string {
 	if i >= What(len(_What_index)-1) {

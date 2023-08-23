@@ -81,6 +81,13 @@ function jawsSetValue(elem, str) {
 		elem.checked = jawsIsTrue(str);
 		return;
 	}
+	if (elem.tagName.toLowerCase() === 'option') {
+		elem.selected = jawsIsTrue(str);
+		return;
+	}
+	if (elem.value == str) {
+		return
+	}
 	if (jawsHasSelection(elemtype)) {
 		var ss = elem.selectionStart;
 		var se = elem.selectionEnd;
@@ -94,10 +101,6 @@ function jawsSetValue(elem, str) {
 		}
 		elem.selectionStart = ss + delta;
 		elem.selectionEnd = se + delta;
-		return;
-	}
-	if (elem.tagName.toLowerCase() === 'option') {
-		elem.selected = jawsIsTrue(str);
 		return;
 	}
 	elem.value = str;

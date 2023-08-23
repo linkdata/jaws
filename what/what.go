@@ -11,6 +11,8 @@ const (
 	Reload
 	Redirect
 	Alert
+	// Element update
+	Update
 	// Element manipulation
 	Inner
 	Remove

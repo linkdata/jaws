@@ -16,10 +16,7 @@ func (ui *UiRadio) JawsRender(e *Element, w io.Writer) error {
 func NewUiRadio(tags []interface{}, vp ValueProxy) (ui *UiRadio) {
 	ui = &UiRadio{
 		UiInputBool: UiInputBool{
-			UiInput: UiInput{
-				UiHtml:     UiHtml{Tags: tags},
-				ValueProxy: vp,
-			},
+			UiInput: NewUiInput(tags, vp),
 		},
 	}
 	return

@@ -327,17 +327,20 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) error {
 	return nil
 }
 
-// Update calls JawsUpdate for all Elements that have one or more of the given tags.
-func (jw *Jaws) Update(tags []interface{}) {
-
-}
-
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg *Message) {
 	select {
 	case <-jw.Done():
 	case jw.bcastCh <- msg:
 	}
+}
+
+// Update calls JawsUpdate for all Elements that have one or more of the given tags.
+func (jw *Jaws) Update(tags []interface{}) {
+	jw.Broadcast(&Message{
+		Tags: tags,
+		What: what.Update,
+	})
 }
 
 // Reload requests all Requests to reload their current page.
@@ -422,7 +425,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			if msg != nil {
 				isCmd := msg.What.IsCommand()
 				for msgCh, rq := range subs {
-					if isCmd || (rq != nil && rq != msg.from && rq.HasAnyTag(msg.Tags)) {
+					if isCmd || rq.wantMessage(msg) {
 						select {
 						case msgCh <- msg:
 						default:

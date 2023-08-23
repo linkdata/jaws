@@ -16,10 +16,7 @@ func (ui *UiCheckbox) JawsRender(e *Element, w io.Writer) error {
 func NewUiCheckbox(tags []interface{}, vp ValueProxy) (ui *UiCheckbox) {
 	ui = &UiCheckbox{
 		UiInputBool: UiInputBool{
-			UiInput: UiInput{
-				UiHtml:     UiHtml{Tags: tags},
-				ValueProxy: vp,
-			},
+			UiInput: NewUiInput(tags, vp),
 		},
 	}
 	return

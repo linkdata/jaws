@@ -5,14 +5,23 @@ import (
 	"github.com/linkdata/jaws/what"
 )
 
+type elemItem struct {
+	name  string
+	value *string
+	dirty bool
+}
+
+const elemInnerMagic = ">I"
+const elemValueMagic = ">V"
+
 // An Element is an instance of an UI object and it's user data in a Request.
 type Element struct {
-	jid  Jid                // (read-only) JaWS ID, unique to this Element within it's Request
-	ui   UI                 // (read-only) the UI object
-	rq   *Request           // (read-only) the Request the Element belongs to
-	mu   deadlock.RWMutex   // protects following
-	data []interface{}      // the optional data provided to the Request.UI() call
-	todo map[string]*string // pending actions for attributes, inner HTML or input value
+	jid   Jid              // (read-only) JaWS ID, unique to this Element within it's Request
+	ui    UI               // (read-only) the UI object
+	rq    *Request         // (read-only) the Request the Element belongs to
+	mu    deadlock.RWMutex // protects following
+	data  []interface{}    // the optional data provided to the Request.UI() call
+	items []elemItem       // currently known items
 }
 
 // Jid returns the JaWS ID for this element, unique within it's Request.
@@ -30,9 +39,18 @@ func (e *Element) Request() *Request {
 	return e.rq
 }
 
-// Update calls JawsUpdate for UI objects that have tags in common with this Element.
+// Update calls JawsUpdate for this Element's UI object.
 func (e *Element) Update() error {
 	return e.ui.JawsUpdate(e)
+}
+
+// Update calls JawsUpdate for all Elements except this one that have one or more of the given tags.
+func (e *Element) UpdateOthers(tags []interface{}) {
+	e.rq.Jaws.Broadcast(&Message{
+		Tags: tags,
+		What: what.Update,
+		from: e,
+	})
 }
 
 // ReadData calls the given function with the data provided to the Request.UI() call locked for reading.
@@ -52,67 +70,89 @@ func (e *Element) WriteData(fn func(data []interface{})) {
 func (e *Element) appendTodo(msgs []wsMsg) []wsMsg {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	for k, v := range e.todo {
-		delete(e.todo, k)
-		if v == nil {
-			// delete attribute
-			msgs = append(msgs, wsMsg{
-				Jid:  e.jid,
-				Data: k,
-				What: what.RAttr,
-			})
-			continue
-		}
-		switch k {
-		case " inner":
-			msgs = append(msgs, wsMsg{
-				Jid:  e.jid,
-				Data: *v,
-				What: what.Inner,
-			})
-		case " value":
-			msgs = append(msgs, wsMsg{
-				Jid:  e.jid,
-				Data: *v,
-				What: what.Value,
-			})
-		default:
-			msgs = append(msgs, wsMsg{
-				Jid:  e.jid,
-				Data: k + "\n" + *v,
-				What: what.SAttr,
-			})
+	for i := range e.items {
+		if e.items[i].dirty {
+			e.items[i].dirty = false
+			if e.items[i].value == nil {
+				// delete attribute
+				msgs = append(msgs, wsMsg{
+					Jid:  e.jid,
+					Data: e.items[i].name,
+					What: what.RAttr,
+				})
+				continue
+			}
+			switch e.items[i].name {
+			case elemInnerMagic:
+				msgs = append(msgs, wsMsg{
+					Jid:  e.jid,
+					Data: *(e.items[i].value),
+					What: what.Inner,
+				})
+			case elemValueMagic:
+				msgs = append(msgs, wsMsg{
+					Jid:  e.jid,
+					Data: *(e.items[i].value),
+					What: what.Value,
+				})
+			default:
+				msgs = append(msgs, wsMsg{
+					Jid:  e.jid,
+					Data: (e.items[i].name) + "\n" + *(e.items[i].value),
+					What: what.SAttr,
+				})
+			}
 		}
 	}
 	return msgs
 }
 
+func (e *Element) ensureItemLocked(name string) *elemItem {
+	for i := range e.items {
+		if e.items[i].name == name {
+			return &(e.items[i])
+		}
+	}
+	e.items = append(e.items, elemItem{name: name})
+	return &(e.items[len(e.items)-1])
+}
+
 // SetAttr queues sending a new attribute value
 // to the browser for the Element with the given JaWS ID in this Request.
-func (e *Element) SetAttr(attr, val string) {
+func (e *Element) SetAttr(attr, val string) (changed bool) {
 	e.mu.Lock()
-	e.todo[attr] = &val
+	ei := e.ensureItemLocked(attr)
+	if ei.value == nil || *ei.value != val {
+		ei.value = &val
+		ei.dirty = true
+		changed = true
+	}
 	e.mu.Unlock()
+	return
 }
 
 // RemoveAttr queues sending a request to remove an attribute
 // to the browser for the Element with the given JaWS ID in this Request.
-func (e *Element) RemoveAttr(attr string) {
+func (e *Element) RemoveAttr(attr string) (changed bool) {
 	e.mu.Lock()
-	e.todo[attr] = nil
+	ei := e.ensureItemLocked(attr)
+	changed = !ei.dirty
+	ei.value = nil
+	ei.dirty = true
 	e.mu.Unlock()
+	return
 }
 
 // SetInner queues sending a new inner HTML content
 // to the browser for the Element.
-func (e *Element) SetInner(innerHtml string) {
-	e.SetAttr(" inner", innerHtml)
+func (e *Element) SetInner(innerHtml string) (changed bool) {
+	return e.SetAttr(elemInnerMagic, innerHtml)
 }
 
 // SetValue queues sending a new current input value in textual form
 // to the browser for the Element with the given JaWS ID in this Request.
-func (e *Element) SetValue(val string) {
-	e.SetAttr(" value", val)
+func (e *Element) SetValue(val string) (changed bool) {
+	return e.SetAttr(elemValueMagic, val)
 }
 
 // Remove immediately invalidates the given JaWS ID in this Request and sends a removal request

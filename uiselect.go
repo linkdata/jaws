@@ -12,7 +12,7 @@ func NewUiSelect(tags []interface{}, nba *NamedBoolArray) (ui *UiSelect) {
 	ui = &UiSelect{
 		UiInputSelect{
 			UiInput: UiInput{
-				UiHtml: UiHtml{Tags: tags},
+				UiHtml: UiHtml{Tags: append(tags, nba)},
 			},
 			NamedBoolArray: nba,
 		},

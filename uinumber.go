@@ -16,10 +16,7 @@ func (ui *UiNumber) JawsRender(e *Element, w io.Writer) error {
 func NewUiNumber(tags []interface{}, vp ValueProxy) (ui *UiNumber) {
 	ui = &UiNumber{
 		UiInputFloat: UiInputFloat{
-			UiInput: UiInput{
-				UiHtml:     UiHtml{Tags: tags},
-				ValueProxy: vp,
-			},
+			UiInput: NewUiInput(tags, vp),
 		},
 	}
 	return

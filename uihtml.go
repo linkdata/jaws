@@ -37,9 +37,6 @@ func ProcessTags(tagsitem interface{}) (tags []interface{}) {
 	default:
 		tags = append(tags, data)
 	}
-	if len(tags) == 0 {
-		tags = append(tags, MakeID())
-	}
 	return
 }
 
@@ -116,6 +113,32 @@ func (ui *UiHtml) ProcessData(dataslice []interface{}) (attrs []string) {
 				}
 			}
 		}
+	}
+	return
+}
+
+func htmlValueString(val interface{}) (s string) {
+	switch v := val.(type) {
+	case nil:
+		s = "null"
+	case string:
+		s = v
+	case int:
+		s = strconv.Itoa(v)
+	case bool:
+		if v {
+			s = "true"
+		} else {
+			s = "false"
+		}
+	case time.Time:
+		s = v.Format(ISO8601)
+	case float64:
+		s = strconv.FormatFloat(v, 'f', -1, 64)
+	case float32:
+		s = strconv.FormatFloat(float64(v), 'f', -1, 32)
+	default:
+		panic(fmt.Errorf("jaws: don't know how to convert %T into HTML value", val))
 	}
 	return
 }

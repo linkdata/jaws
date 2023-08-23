@@ -16,30 +16,34 @@ type defaultValueProxy struct {
 	v  interface{}
 }
 
-func (dvh *defaultValueProxy) JawsGet(e *Element) (val interface{}) {
-	dvh.mu.RLock()
-	val = dvh.v
-	dvh.mu.RUnlock()
+func (vp *defaultValueProxy) JawsGet(e *Element) (val interface{}) {
+	vp.mu.RLock()
+	val = vp.v
+	vp.mu.RUnlock()
 	return
 }
 
-func (dvh *defaultValueProxy) JawsSet(e *Element, val interface{}) (err error) {
-	dvh.mu.Lock()
-	dvh.v = val
-	dvh.mu.Unlock()
+func (vp *defaultValueProxy) JawsSet(e *Element, val interface{}) (err error) {
+	vp.mu.Lock()
+	changed := vp.v != val
+	vp.v = val
+	vp.mu.Unlock()
+	if changed {
+		e.UpdateOthers([]interface{}{vp})
+	}
 	return
 }
 
-type atomicValueProxy struct {
-	*atomic.Value
+type atomicValueProxy struct{ *atomic.Value }
+
+func (vp atomicValueProxy) JawsGet(e *Element) interface{} {
+	return vp.Load()
 }
 
-func (vp *atomicValueProxy) JawsGet(e *Element) interface{} {
-	return vp.Value.Load()
-}
-
-func (vp *atomicValueProxy) JawsSet(e *Element, val interface{}) (err error) {
-	vp.Store(val)
+func (vp atomicValueProxy) JawsSet(e *Element, val interface{}) (err error) {
+	if vp.Swap(val) != val {
+		e.UpdateOthers([]interface{}{vp})
+	}
 	return nil
 }
 
@@ -48,7 +52,7 @@ func MakeValueProxy(value interface{}) (vp ValueProxy) {
 	case ValueProxy:
 		vp = v
 	case *atomic.Value:
-		vp = &atomicValueProxy{Value: v}
+		vp = atomicValueProxy{Value: v}
 	case atomic.Value:
 		panic("jaws: MakeValueProxy: must pass atomic.Value by reference")
 	default:

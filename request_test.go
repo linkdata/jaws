@@ -105,7 +105,7 @@ func TestRequest_Registrations(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	is.Equal(rq.HasAnyTag(ProcessTags("bar")), false)
+	is.Equal(rq.wantMessage(&Message{Tags: ProcessTags("bar")}), false)
 
 	jid := rq.Register("") // will create a unique tag
 	is.True(jid != "")
@@ -649,7 +649,7 @@ func TestRequest_OnTrigger(t *testing.T) {
 	defer rq.Close()
 	is.NoErr(rq.OnTrigger(elemId, func(rq *Request, jid string) error {
 		defer close(gotCall)
-		is.True(rq.HasAnyTag(ProcessTags(elemId)))
+		is.True(rq.wantMessage(&Message{Tags: ProcessTags(elemId)}))
 		n, err := strconv.Atoi(jid)
 		is.NoErr(err)
 		elem := rq.GetElement(Jid(n))

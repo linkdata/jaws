@@ -19,10 +19,7 @@ func (ui *UiDate) JawsRender(e *Element, w io.Writer) error {
 func NewUiDate(tags []interface{}, vp ValueProxy) (ui *UiDate) {
 	ui = &UiDate{
 		UiInputDate: UiInputDate{
-			UiInput: UiInput{
-				UiHtml:     UiHtml{Tags: tags},
-				ValueProxy: vp,
-			},
+			UiInput: NewUiInput(tags, vp),
 		},
 	}
 	return

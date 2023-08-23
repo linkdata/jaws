@@ -16,10 +16,7 @@ func (ui *UiPassword) JawsRender(e *Element, w io.Writer) error {
 func NewUiPassword(tags []interface{}, vp ValueProxy) (ui *UiPassword) {
 	ui = &UiPassword{
 		UiInputText: UiInputText{
-			UiInput: UiInput{
-				UiHtml:     UiHtml{Tags: tags},
-				ValueProxy: vp,
-			},
+			UiInput: NewUiInput(tags, vp),
 		},
 	}
 	return
