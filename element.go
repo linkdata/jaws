@@ -16,6 +16,7 @@ const elemValueMagic = ">V"
 
 // An Element is an instance of an UI object and it's user data in a Request.
 type Element struct {
+	tags  []interface{}    // (read-only) tags
 	jid   Jid              // (read-only) JaWS ID, unique to this Element within it's Request
 	ui    UI               // (read-only) the UI object
 	rq    *Request         // (read-only) the Request the Element belongs to

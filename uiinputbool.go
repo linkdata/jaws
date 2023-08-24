@@ -19,6 +19,7 @@ func (ui *UiInputBool) WriteHtmlInput(e *Element, w io.Writer, htmltype string) 
 		if b {
 			data = append(data, "checked")
 		}
+		writeUiDebug(e, w)
 		return ui.UiInput.WriteHtmlInput(w, htmltype, "", e.Jid().String(), data...)
 	}
 	return fmt.Errorf("jaws: UiInputBool: expected bool, got %T", val)

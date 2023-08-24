@@ -19,6 +19,7 @@ func (ui *UiInputDate) WriteHtmlInput(e *Element, w io.Writer, htmltype, jid str
 			t = time.Now()
 			ui.Set(e, t)
 		}
+		writeUiDebug(e, w)
 		return ui.UiInput.WriteHtmlInput(w, htmltype, t.Format(ISO8601), jid, data...)
 	}
 	return fmt.Errorf("jaws: UiInputDate: expected time.Time, got %T", val)

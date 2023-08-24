@@ -286,7 +286,7 @@ func (rq *Request) wantMessage(msg *Message) (yes bool) {
 }
 
 func (rq *Request) newElementLocked(tags []interface{}, ui UI, data []interface{}) (elem *Element) {
-	elem = &Element{jid: Jid(len(rq.elems) + 1), ui: ui, Data: data, rq: rq}
+	elem = &Element{tags: tags, jid: Jid(len(rq.elems) + 1), ui: ui, Data: data, rq: rq}
 	rq.elems = append(rq.elems, elem)
 	for _, tag := range tags {
 		rq.tagMap[tag] = append(rq.tagMap[tag], elem)

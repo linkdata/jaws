@@ -14,6 +14,7 @@ type UiInputText struct {
 func (ui *UiInputText) WriteHtmlInput(e *Element, w io.Writer, htmltype string) error {
 	val := ui.Get(e)
 	if s, ok := val.(string); ok {
+		writeUiDebug(e, w)
 		return ui.UiInput.WriteHtmlInput(w, htmltype, s, e.Jid().String(), e.Data...)
 	}
 	return fmt.Errorf("jaws: UiInputText: expected string, got %T", val)

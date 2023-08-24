@@ -153,30 +153,21 @@ func (ui *UiHtml) ProcessData(dataslice []interface{}) []string {
 	return attrs
 }
 
-func (ui *UiHtml) writeDebug(w io.Writer, jid string) {
+func writeUiDebug(e *Element, w io.Writer) {
 	if deadlock.Debug {
-		w.Write([]byte(strings.ReplaceAll(fmt.Sprintf("<!-- jid=%s tags: %v", jid, ui.Tags), "-->", "") + " -->"))
+		w.Write([]byte(strings.ReplaceAll(fmt.Sprintf("<!-- jid=%s %T tags: %v", e.jid, e.ui, e.tags), "-->", "") + " -->"))
 	}
 }
 
 func (ui *UiHtml) WriteHtmlInner(w io.Writer, htmltag, htmltype, htmlinner, jid string, data []interface{}) error {
-	if deadlock.Debug {
-		ui.writeDebug(w, jid)
-	}
 	return WriteHtmlInner(w, jid, htmltag, htmltype, htmlinner, ui.ProcessData(data)...)
 }
 
 func (ui *UiHtml) WriteHtmlSelect(w io.Writer, nba *NamedBoolArray, jid string, data ...interface{}) error {
-	if deadlock.Debug {
-		ui.writeDebug(w, jid)
-	}
 	return WriteHtmlSelect(w, jid, nba, ui.ProcessData(data)...)
 }
 
 func (ui *UiHtml) WriteHtmlInput(w io.Writer, htmltype, htmlval, jid string, data ...interface{}) error {
-	if deadlock.Debug {
-		ui.writeDebug(w, jid)
-	}
 	return WriteHtmlInput(w, jid, htmltype, htmlval, ui.ProcessData(data)...)
 }
 
