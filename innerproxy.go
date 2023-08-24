@@ -18,7 +18,7 @@ func innerProxyStringToHtml(val interface{}) template.HTML {
 	case *atomic.Value:
 		return innerProxyStringToHtml(v.Load())
 	}
-	panic("jaws.InnerProxy: not a stringable object")
+	return template.HTML(html.EscapeString(fmt.Sprintf("%v", val)))
 }
 
 type InnerProxy interface {
