@@ -2,11 +2,13 @@ package jaws
 
 import (
 	"fmt"
+	"html"
 	"io"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -151,15 +153,30 @@ func (ui *UiHtml) ProcessData(dataslice []interface{}) []string {
 	return attrs
 }
 
+func (ui *UiHtml) writeDebug(w io.Writer, jid string) {
+	if deadlock.Debug {
+		w.Write([]byte("<!-- " + html.EscapeString(fmt.Sprintf("jid=%q tags: %v", jid, ui.Tags)) + " -->"))
+	}
+}
+
 func (ui *UiHtml) WriteHtmlInner(w io.Writer, htmltag, htmltype, htmlinner, jid string, data []interface{}) error {
+	if deadlock.Debug {
+		ui.writeDebug(w, jid)
+	}
 	return WriteHtmlInner(w, jid, htmltag, htmltype, htmlinner, ui.ProcessData(data)...)
 }
 
 func (ui *UiHtml) WriteHtmlSelect(w io.Writer, nba *NamedBoolArray, jid string, data ...interface{}) error {
+	if deadlock.Debug {
+		ui.writeDebug(w, jid)
+	}
 	return WriteHtmlSelect(w, jid, nba, ui.ProcessData(data)...)
 }
 
 func (ui *UiHtml) WriteHtmlInput(w io.Writer, htmltype, htmlval, jid string, data ...interface{}) error {
+	if deadlock.Debug {
+		ui.writeDebug(w, jid)
+	}
 	return WriteHtmlInput(w, jid, htmltype, htmlval, ui.ProcessData(data)...)
 }
 
