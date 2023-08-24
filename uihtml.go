@@ -155,7 +155,7 @@ func (ui *UiHtml) ProcessData(dataslice []interface{}) []string {
 
 func (ui *UiHtml) writeDebug(w io.Writer, jid string) {
 	if deadlock.Debug {
-		w.Write([]byte("<!-- " + html.EscapeString(fmt.Sprintf("jid=%q tags: %v", jid, ui.Tags)) + " -->"))
+		w.Write([]byte("<!-- " + html.EscapeString(fmt.Sprintf("jid=%s tags: %v", jid, ui.Tags)) + " -->"))
 	}
 }
 
