@@ -10,18 +10,15 @@ type UiDiv struct {
 }
 
 func (ui *UiDiv) JawsRender(e *Element, w io.Writer) error {
-	return ui.UiHtmlInner.WriteHtmlInner(e, w, "div", "")
+	return ui.UiHtmlInner.WriteHtmlInner(e, w, "div", "", e.Data)
 }
 
-func NewUiDiv(tags []interface{}, inner string) *UiDiv {
+func NewUiDiv(tags []interface{}, inner InnerProxy) *UiDiv {
 	return &UiDiv{
-		UiHtmlInner{
-			UiHtml:    UiHtml{Tags: tags},
-			HtmlInner: inner,
-		},
+		NewUiHtmlInner(tags, inner),
 	}
 }
 
-func (rq *Request) Div(tagitem interface{}, inner string, attrs ...interface{}) template.HTML {
-	return rq.UI(NewUiDiv(ProcessTags(tagitem), inner), attrs...)
+func (rq *Request) Div(tagitem interface{}, inner interface{}, attrs ...interface{}) template.HTML {
+	return rq.UI(NewUiDiv(ProcessTags(tagitem), MakeInnerProxy(inner)), attrs...)
 }

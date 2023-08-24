@@ -10,18 +10,15 @@ type UiTd struct {
 }
 
 func (ui *UiTd) JawsRender(e *Element, w io.Writer) error {
-	return ui.UiHtmlInner.WriteHtmlInner(e, w, "td", "")
+	return ui.UiHtmlInner.WriteHtmlInner(e, w, "td", "", e.Data)
 }
 
-func NewUiTd(tags []interface{}, inner string) *UiTd {
+func NewUiTd(tags []interface{}, inner InnerProxy) *UiTd {
 	return &UiTd{
-		UiHtmlInner{
-			UiHtml:    UiHtml{Tags: tags},
-			HtmlInner: inner,
-		},
+		NewUiHtmlInner(tags, inner),
 	}
 }
 
-func (rq *Request) Td(tagitem interface{}, inner string, attrs ...interface{}) template.HTML {
-	return rq.UI(NewUiTd(ProcessTags(tagitem), inner), attrs...)
+func (rq *Request) Td(tagitem interface{}, inner interface{}, attrs ...interface{}) template.HTML {
+	return rq.UI(NewUiTd(ProcessTags(tagitem), MakeInnerProxy(inner)), attrs...)
 }

@@ -2,47 +2,29 @@ package jaws
 
 import (
 	"bytes"
+	"fmt"
+	"html"
 	"html/template"
 	"io"
 )
 
 type UI interface {
-	JawsTags(rq *Request) (tags []interface{})
+	JawsCreate(rq *Request, data []interface{}) (elem *Element, err error)
 	JawsRender(e *Element, w io.Writer) (err error)
 	JawsUpdate(e *Element) (err error)
 	EventHandler
 }
 
-func (rq *Request) newElementLocked(tags []interface{}, ui UI, data []interface{}) (elem *Element) {
-	elem = &Element{jid: Jid(len(rq.elems) + 1), ui: ui, Data: data, rq: rq}
-	rq.elems = append(rq.elems, elem)
-	jid := elem.Jid()
-	rq.tagMap[jid] = append(rq.tagMap[jid], elem)
-	for _, tag := range tags {
-		rq.tagMap[tag] = append(rq.tagMap[tag], elem)
-	}
-	return
-}
-
-func (rq *Request) GetElement(jid Jid) (e *Element) {
-	if jid > 0 {
-		rq.mu.RLock()
-		if int(jid) <= len(rq.elems) {
-			e = rq.elems[jid-1]
-		}
-		rq.mu.RUnlock()
-	}
-	return
-}
-
 func (rq *Request) UI(ui UI, data ...interface{}) template.HTML {
-	tags := ui.JawsTags(rq)
-	rq.mu.Lock()
-	elem := rq.newElementLocked(tags, ui, data)
-	rq.mu.Unlock()
+	elem, err := ui.JawsCreate(rq, data)
+	if err != nil {
+		rq.Jaws.MustLog(err)
+		return template.HTML(fmt.Sprintf("<!-- jaws.UI(%T).JawsCreate(): %s -->", ui, html.EscapeString(err.Error())))
+	}
 	var b bytes.Buffer
 	if err := ui.JawsRender(elem, &b); err != nil {
 		rq.Jaws.MustLog(err)
+		b.WriteString(fmt.Sprintf("<!-- jaws.UI(%T).JawsRender(): %s -->", ui, html.EscapeString(err.Error())))
 	}
 	return template.HTML(b.String())
 }

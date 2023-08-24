@@ -151,7 +151,7 @@ func (ui *UiHtml) ProcessData(dataslice []interface{}) []string {
 	return attrs
 }
 
-func (ui *UiHtml) WriteHtmlInner(w io.Writer, htmltag, htmltype, htmlinner, jid string, data ...interface{}) error {
+func (ui *UiHtml) WriteHtmlInner(w io.Writer, htmltag, htmltype, htmlinner, jid string, data []interface{}) error {
 	return WriteHtmlInner(w, jid, htmltag, htmltype, htmlinner, ui.ProcessData(data)...)
 }
 
@@ -163,8 +163,8 @@ func (ui *UiHtml) WriteHtmlInput(w io.Writer, htmltype, htmlval, jid string, dat
 	return WriteHtmlInput(w, jid, htmltype, htmlval, ui.ProcessData(data)...)
 }
 
-func (ui *UiHtml) JawsTags(rq *Request) (tags []interface{}) {
-	return ui.Tags
+func (ui *UiHtml) JawsCreate(rq *Request, data []interface{}) (elem *Element, err error) {
+	return rq.NewElement(ui.Tags, ui, data), nil
 }
 
 func (ui *UiHtml) JawsRender(e *Element, w io.Writer) (err error) {

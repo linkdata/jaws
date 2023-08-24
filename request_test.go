@@ -681,7 +681,7 @@ func checkHtml(is *is.I, rq *testRequest, h template.HTML, tag, txt string) {
 	if !found {
 		fmt.Printf("checkHtml(%q, %q, %q) did not match any of %d elements:\n", hs, tag, txt, len(elems))
 		for i, elem := range elems {
-			fmt.Printf("  %d: (%T) jid=%q tags=%v data=%v\n", i, elem.UI(), elem.Jid(), elem.UI().JawsTags(rq.Request), elem.Data)
+			fmt.Printf("  %d: (%T) jid=%q data=%v\n", i, elem.UI(), elem.Jid(), elem.Data)
 		}
 		is.Fail()
 	}

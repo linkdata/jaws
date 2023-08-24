@@ -10,18 +10,15 @@ type UiA struct {
 }
 
 func (ui *UiA) JawsRender(e *Element, w io.Writer) error {
-	return ui.UiHtmlInner.WriteHtmlInner(e, w, "a", "")
+	return ui.UiHtmlInner.WriteHtmlInner(e, w, "a", "", e.Data)
 }
 
-func NewUiA(tags []interface{}, inner string) *UiA {
+func NewUiA(tags []interface{}, inner InnerProxy) *UiA {
 	return &UiA{
-		UiHtmlInner{
-			UiHtml:    UiHtml{Tags: tags},
-			HtmlInner: inner,
-		},
+		NewUiHtmlInner(tags, inner),
 	}
 }
 
-func (rq *Request) A(tagitem interface{}, inner string, attrs ...interface{}) template.HTML {
-	return rq.UI(NewUiA(ProcessTags(tagitem), inner), attrs...)
+func (rq *Request) A(tagitem interface{}, inner interface{}, attrs ...interface{}) template.HTML {
+	return rq.UI(NewUiA(ProcessTags(tagitem), MakeInnerProxy(inner)), attrs...)
 }

@@ -12,21 +12,31 @@ type UiImg struct {
 }
 
 func (ui *UiImg) JawsRender(e *Element, w io.Writer) error {
-	return ui.UiHtmlInner.WriteHtmlInner(e, w, "img", "")
-}
-
-func NewUiImg(tags []interface{}) *UiImg {
-	return &UiImg{
-		UiHtmlInner{
-			UiHtml: UiHtml{Tags: tags},
-		},
-	}
-}
-
-func (rq *Request) Img(tagitem interface{}, src string, data ...interface{}) template.HTML {
+	src := string(ui.InnerProxy.JawsInner(e))
 	if !strings.HasPrefix(src, "\"") {
 		src = strconv.Quote(src)
 	}
-	data = append(data, "src="+src)
-	return rq.UI(NewUiImg(ProcessTags(tagitem)), data...)
+	data := append(e.Data, "src="+src)
+	return ui.UiHtmlInner.WriteHtmlInner(e, w, "img", "", data)
+}
+
+func (ui *UiImg) JawsUpdate(e *Element) (err error) {
+	src := string(ui.InnerProxy.JawsInner(e))
+	if !strings.HasPrefix(src, "\"") {
+		src = strconv.Quote(src)
+	}
+	if e.SetAttr("src", src) {
+		e.UpdateOthers(ui.Tags)
+	}
+	return nil
+}
+
+func NewUiImg(tags []interface{}, inner InnerProxy) *UiImg {
+	return &UiImg{
+		NewUiHtmlInner(tags, inner),
+	}
+}
+
+func (rq *Request) Img(tagitem interface{}, src interface{}, data ...interface{}) template.HTML {
+	return rq.UI(NewUiImg(ProcessTags(tagitem), MakeInnerProxy(src)), data...)
 }
