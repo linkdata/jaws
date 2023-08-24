@@ -2,7 +2,6 @@ package jaws
 
 import (
 	"fmt"
-	"html"
 	"io"
 	"strconv"
 	"strings"
@@ -155,7 +154,7 @@ func (ui *UiHtml) ProcessData(dataslice []interface{}) []string {
 
 func (ui *UiHtml) writeDebug(w io.Writer, jid string) {
 	if deadlock.Debug {
-		w.Write([]byte("<!-- " + html.EscapeString(fmt.Sprintf("jid=%s tags: %v", jid, ui.Tags)) + " -->"))
+		w.Write([]byte(strings.ReplaceAll(fmt.Sprintf("<!-- jid=%s tags: %v", jid, ui.Tags), "-->", "") + " -->"))
 	}
 }
 
