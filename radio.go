@@ -26,7 +26,7 @@ func (r *Radio) Radio(attrs ...string) template.HTML {
 	if r.Checked {
 		attrs = append(attrs, `checked`)
 	}
-	r.rq.RegisterEventFn(jid, func(rq *Request, wht what.What, id, val string) error {
+	r.rq.Register(jid, func(rq *Request, wht what.What, id, val string) error {
 		return r.nba.radioEventFn(rq, wht, id, val, r.fn)
 	})
 	return HtmlInput(jid, "radio", "", attrs...)

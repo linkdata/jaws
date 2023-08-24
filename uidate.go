@@ -3,7 +3,6 @@ package jaws
 import (
 	"html/template"
 	"io"
-	"time"
 )
 
 const ISO8601 = "2006-01-02"
@@ -26,8 +25,5 @@ func NewUiDate(tags []interface{}, vp ValueProxy) (ui *UiDate) {
 }
 
 func (rq *Request) Date(tagitem interface{}, val interface{}, attrs ...interface{}) template.HTML {
-	if t, ok := val.(time.Time); ok && t.IsZero() {
-		val = time.Now()
-	}
 	return rq.UI(NewUiDate(ProcessTags(tagitem), MakeValueProxy(val)), attrs...)
 }

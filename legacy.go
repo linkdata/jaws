@@ -23,15 +23,28 @@ type InputFloatFn = func(*Request, string, float64) error
 type InputDateFn = func(*Request, string, time.Time) error
 
 // Deprecated: Will be removed in future
-func (rq *Request) GetEventFn(tagstring string) (fn EventFn, ok bool) {
+func (rq *Request) GetEventFn(tagitem interface{}) (fn EventFn, ok bool) {
+	tags := ProcessTags(tagitem)
+	for _, tag := range tags {
+		if jid, ok := tag.(Jid); ok {
+			if elem := rq.GetElement(jid); elem != nil {
+				if uih, isuih := elem.UI().(*UiHtml); isuih {
+					return uih.EventFn, true
+				}
+			}
+			return nil, false
+		}
+	}
+
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
 	var elems []*Element
-	if elems, ok = rq.tagMap[tagstring]; ok && len(elems) > 0 {
-		for _, elem := range elems {
-			if uih, isuih := elem.UI().(*UiHtml); isuih {
-				return uih.EventFn, true
-			}
+	for _, tag := range tags {
+		elems = append(elems, rq.tagMap[tag]...)
+	}
+	for _, elem := range elems {
+		if uih, isuih := elem.UI().(*UiHtml); isuih {
+			return uih.EventFn, true
 		}
 	}
 	return nil, false
@@ -51,16 +64,8 @@ func (rq *Request) SetEventFn(tagstring string, fn EventFn) {
 }
 
 // Deprecated: Will be removed in future
-// OnInput registers a jid and a function to be called when it's input event fires.
-// Returns a nil error so it can be used inside templates.
-func (rq *Request) OnInput(tagstring string, fn func(*Request, string, string) error) error {
-	rq.RegisterEventFn(tagstring, func(rq *Request, evt what.What, jid, val string) (err error) {
-		if evt == what.Input {
-			err = fn(rq, jid, val)
-		}
-		return
-	})
-	return nil
+func (rq *Request) RegisterEventFn(tagitem interface{}, attrs ...interface{}) Jid {
+	return rq.Register(tagitem, attrs...)
 }
 
 // Deprecated: Will be removed in future

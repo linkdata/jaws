@@ -7,7 +7,6 @@ import (
 	"html/template"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -228,33 +227,39 @@ func (rq *Request) Redirect(url string) {
 	})
 }
 
-// RegisterEventFn records the given tag string as a valid target
-// for dynamic updates using the given event function (which may be nil).
+// Register creates a new Element with the given tag as a valid target
+// for dynamic updates.
 //
-// If the tagstring argument is empty, a unique tag will be generated.
-// The tagstring may not contains spaces.
+// Returns the JaWS ID, suitable for including as a HTML attribute:
 //
-// If fn argument is nil, a pre-existing event function won't be overwritten.
-//
-// Returns the (possibly generated) tagstring.
-func (rq *Request) RegisterEventFn(tagstring string, fn EventFn) string {
-	if strings.ContainsRune(tagstring, ' ') {
-		panic("jaws: RegisterEventFn: tagstring contains spaces")
+//	<div jid="{{$.Register `footag`}}">
+func (rq *Request) Register(tagitem interface{}, params ...interface{}) Jid {
+	tags := ProcessTags(tagitem)
+	_, eventFn := ProcessData(params)
+
+	for _, tag := range tags {
+		if jid, ok := tag.(Jid); ok {
+			if elem := rq.GetElement(jid); elem != nil {
+				if eventFn != nil {
+					if uib, ok := elem.UI().(*UiHtml); ok {
+						uib.EventFn = eventFn
+					}
+				}
+				return jid
+			}
+		}
 	}
-	if tagstring == "" {
-		tagstring = MakeID()
-	}
-	tags := []interface{}{tagstring}
+
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 
 	var missing []interface{}
 	for _, tag := range tags {
 		if elems, ok := rq.tagMap[tag]; ok {
-			if fn != nil {
+			if eventFn != nil {
 				for _, elem := range elems {
 					if uib, ok := elem.UI().(*UiHtml); ok {
-						uib.EventFn = fn
+						uib.EventFn = eventFn
 					}
 				}
 			}
@@ -262,17 +267,8 @@ func (rq *Request) RegisterEventFn(tagstring string, fn EventFn) string {
 			missing = append(missing, tag)
 		}
 	}
-	rq.newElementLocked(missing, &UiHtml{Tags: tags, EventFn: fn}, nil)
-
-	return tagstring
-}
-
-// Register calls RegisterEventFn(tagstring, nil).
-// Useful in template constructs like:
-//
-//	<div jid="{{$.Register `foo`}}">
-func (rq *Request) Register(tagstring string) string {
-	return rq.RegisterEventFn(tagstring, nil)
+	elem := rq.newElementLocked(missing, &UiHtml{Tags: tags, EventFn: eventFn}, params)
+	return elem.jid
 }
 
 // wantMessage returns true if the Request want the message.
@@ -485,15 +481,18 @@ func makeAlertDangerMessage(err error) (msg *Message) {
 	return
 }
 
-func (rq *Request) maybeEvent(event what.What, jid string, fn func(rq *Request, jid string) error) string {
+// OnTrigger registers a jid and a function to be called when Trigger is called for it.
+// Returns a nil error so it can be used inside templates.
+func (rq *Request) OnTrigger(jid string, fn func(rq *Request, jid string) error) error {
 	var wf EventFn
 	if fn != nil {
 		wf = func(rq *Request, evt what.What, jid, val string) (err error) {
-			if evt == event {
+			if evt == what.Trigger {
 				err = fn(rq, jid)
 			}
 			return
 		}
 	}
-	return rq.RegisterEventFn(jid, wf)
+	rq.Register(jid, wf)
+	return nil
 }

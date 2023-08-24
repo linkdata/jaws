@@ -107,8 +107,8 @@ func TestRequest_Registrations(t *testing.T) {
 
 	is.Equal(rq.wantMessage(&Message{Tags: ProcessTags("bar")}), false)
 
-	jid := rq.Register("") // will create a unique tag
-	is.True(jid != "")
+	jid := rq.Register("sometag")
+	is.True(jid != 0)
 	fn, ok := rq.GetEventFn(jid)
 	is.Equal(ok, true)
 	is.Equal(fn, nil)
@@ -116,7 +116,7 @@ func TestRequest_Registrations(t *testing.T) {
 	var ef EventFn = func(rq *Request, evt what.What, id, val string) error {
 		return nil
 	}
-	jid2 := rq.RegisterEventFn(jid, ef)
+	jid2 := rq.Register(jid, ef)
 	is.Equal(jid, jid2)
 	fn, ok = rq.GetEventFn(jid)
 	is.Equal(ok, true)
@@ -135,9 +135,9 @@ func TestRequest_Registrations(t *testing.T) {
 	is.Equal(rq.OnEvent(id, ef), nil)*/
 
 	jid = rq.Register("foo")
-	is.Equal(jid, "foo")
+	is.True(jid != 0)
 	jid2 = rq.Register("")
-	is.True(jid2 != "")
+	is.True(jid2 != 0)
 	is.True(jid != jid2)
 }
 
@@ -148,19 +148,19 @@ func TestRequest_DuplicateRegistration(t *testing.T) {
 	rq := jw.NewRequest(context.Background(), nil)
 	var ef1 EventFn = func(rq *Request, evt what.What, id, val string) error { return nil }
 	var ef2 EventFn = func(rq *Request, evt what.What, id, val string) error { return errors.New("fails") }
-	is.Equal(rq.RegisterEventFn("foo", ef1), "foo") // first reg succeeds
-	is.Equal(rq.RegisterEventFn("foo", ef1), "foo") // second reg succeeds
+	is.Equal(rq.Register("foo", ef1), Jid(1))  // first reg succeeds
+	is.Equal(rq.Register(Jid(1), ef1), Jid(1)) // second reg succeeds
 	rq2 := jw.UseRequest(rq.JawsKey, nil)
 	is.Equal(rq, rq2)
-	is.Equal(rq.RegisterEventFn("foo", ef1), "foo")
+	is.Equal(rq.Register(Jid(1), ef1), Jid(1))
 	// should succeed and not overwrite event fn
-	is.Equal(rq.RegisterEventFn("foo", nil), "foo")
-	ef, ok := rq.GetEventFn("foo")
+	is.Equal(rq.Register(Jid(1), nil), Jid(1))
+	ef, ok := rq.GetEventFn(Jid(1))
 	is.True(ok)
 	is.Equal(ef, ef1)
 	// replace the event fn
-	is.Equal(rq.RegisterEventFn("foo", ef2), "foo")
-	ef, ok = rq.GetEventFn("foo")
+	is.Equal(rq.Register(Jid(1), ef2), Jid(1))
+	ef, ok = rq.GetEventFn(Jid(1))
 	is.True(ok)
 	is.Equal(ef, ef2)
 }
@@ -711,10 +711,13 @@ func TestRequest_Text(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
+	var av atomic.Value
+	av.Store(elemVal)
+
 	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
-	h := rq.Text(elemId, elemVal, func(rq *Request, jidstr, val string) error {
+	h := rq.Text(elemId, &av, func(rq *Request, jidstr, val string) error {
 		defer close(gotCall)
 		is.True(rq.GetElement(ParseJid(jidstr)) != nil)
 		is.True(rq.GetElement(ParseJid(jidstr)) != nil)
@@ -743,10 +746,13 @@ func TestRequest_Password(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
+	var av atomic.Value
+	av.Store("")
+
 	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
-	h := rq.Password(elemId, "", func(rq *Request, jid, val string) error {
+	h := rq.Password(elemId, &av, func(rq *Request, jid, val string) error {
 		defer close(gotCall)
 		is.True(rq.GetElement(ParseJid(jid)) != nil)
 		is.Equal(val, "other-stuff")
@@ -769,11 +775,14 @@ func TestRequest_Number(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
+	var av atomic.Value
+	av.Store(elemVal)
+
 	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
 	defer close(gotCall)
-	h := rq.Number(elemId, elemVal, func(rq *Request, jid string, val float64) error {
+	h := rq.Number(elemId, &av, func(rq *Request, jid string, val float64) error {
 		is.True(rq.GetElement(ParseJid(jid)) != nil)
 		switch val {
 		case 4.3:
@@ -817,10 +826,13 @@ func TestRequest_Range(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
+	var av atomic.Value
+	av.Store(elemVal)
+
 	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
-	h := rq.Range(elemId, elemVal, func(rq *Request, jid string, val float64) error {
+	h := rq.Range(elemId, &av, func(rq *Request, jid string, val float64) error {
 		defer close(gotCall)
 		is.True(rq.GetElement(ParseJid(jid)) != nil)
 		is.Equal(val, 3.15)
@@ -842,11 +854,14 @@ func TestRequest_Checkbox(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
+	var av atomic.Value
+	av.Store(elemVal)
+
 	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
 	defer close(gotCall)
-	h := rq.Checkbox(elemId, elemVal, func(rq *Request, jid string, val bool) error {
+	h := rq.Checkbox(elemId, &av, func(rq *Request, jid string, val bool) error {
 		is.True(rq.GetElement(ParseJid(jid)) != nil)
 		is.Equal(val, false)
 		gotCall <- struct{}{}
@@ -883,11 +898,14 @@ func TestRequest_Date(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
+	var av atomic.Value
+	av.Store(elemVal)
+
 	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
 	defer close(gotCall)
-	h := rq.Date(elemId, elemVal, func(rq *Request, jid string, val time.Time) error {
+	h := rq.Date(elemId, &av, func(rq *Request, jid string, val time.Time) error {
 		is.True(rq.GetElement(ParseJid(jid)) != nil)
 		if !val.IsZero() {
 			is.Equal(val.Year(), 1970)
@@ -897,7 +915,9 @@ func TestRequest_Date(t *testing.T) {
 		gotCall <- struct{}{}
 		return nil
 	}, "")
+
 	chk(h, elemId, time.Now().Format(ISO8601))
+	is.Equal(av.Load().(time.Time).Round(time.Second), time.Now().Round(time.Second))
 	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "1970-01-02"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
@@ -928,10 +948,13 @@ func TestRequest_Radio(t *testing.T) {
 
 	const elemId = "quux"
 
+	var av atomic.Value
+	av.Store(true)
+
 	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
-	h := rq.Radio(elemId, true, func(rq *Request, jid string, val bool) error {
+	h := rq.Radio(elemId, &av, func(rq *Request, jid string, val bool) error {
 		defer close(gotCall)
 		is.True(rq.GetElement(ParseJid(jid)) != nil)
 		is.Equal(val, false)

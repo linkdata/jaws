@@ -16,14 +16,12 @@ type UI interface {
 }
 
 func (rq *Request) newElementLocked(tags []interface{}, ui UI, data []interface{}) (elem *Element) {
-	if len(tags) > 0 {
-		elem = &Element{jid: Jid(len(rq.elems) + 1), ui: ui, data: data, rq: rq}
-		rq.elems = append(rq.elems, elem)
-		jid := elem.Jid()
-		rq.tagMap[jid] = append(rq.tagMap[jid], elem)
-		for _, tag := range tags {
-			rq.tagMap[tag] = append(rq.tagMap[tag], elem)
-		}
+	elem = &Element{jid: Jid(len(rq.elems) + 1), ui: ui, data: data, rq: rq}
+	rq.elems = append(rq.elems, elem)
+	jid := elem.Jid()
+	rq.tagMap[jid] = append(rq.tagMap[jid], elem)
+	for _, tag := range tags {
+		rq.tagMap[tag] = append(rq.tagMap[tag], elem)
 	}
 	return
 }

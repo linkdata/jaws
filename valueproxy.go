@@ -31,13 +31,13 @@ func (vp *defaultValueProxy) JawsSet(e *Element, val interface{}) (changed bool)
 	return
 }
 
-type atomicValueProxy struct{ *atomic.Value }
+type AtomicValueProxy struct{ *atomic.Value }
 
-func (vp atomicValueProxy) JawsGet(e *Element) interface{} {
+func (vp AtomicValueProxy) JawsGet(e *Element) interface{} {
 	return vp.Load()
 }
 
-func (vp atomicValueProxy) JawsSet(e *Element, val interface{}) (changed bool) {
+func (vp AtomicValueProxy) JawsSet(e *Element, val interface{}) (changed bool) {
 	changed = vp.Swap(val) != val
 	return
 }
@@ -47,11 +47,11 @@ func MakeValueProxy(value interface{}) (vp ValueProxy) {
 	case ValueProxy:
 		vp = v
 	case *atomic.Value:
-		vp = atomicValueProxy{Value: v}
+		vp = AtomicValueProxy{Value: v}
 	case atomic.Value:
 		panic("jaws: MakeValueProxy: must pass atomic.Value by reference")
 	default:
-		vp = &defaultValueProxy{v: value}
+		panic("jaws: MakeValueProxy: expected ValueProxy or *atomic.Value")
 	}
 	return
 }

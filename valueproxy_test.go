@@ -38,16 +38,6 @@ func TestMakeValueProxy(t *testing.T) {
 		wantVp ValueProxy
 	}{
 		{
-			name:   "untyped nil",
-			args:   args{nil},
-			wantVp: &defaultValueProxy{},
-		},
-		{
-			name:   "string",
-			args:   args{"meh"},
-			wantVp: &defaultValueProxy{v: "meh"},
-		},
-		{
 			name:   "testValueProxy",
 			args:   args{&testValueProxy{v: 1234}},
 			wantVp: &testValueProxy{v: 1234},
@@ -55,7 +45,7 @@ func TestMakeValueProxy(t *testing.T) {
 		{
 			name:   "*atomic.Value",
 			args:   args{&av},
-			wantVp: atomicValueProxy{&av},
+			wantVp: AtomicValueProxy{&av},
 		},
 	}
 
@@ -66,4 +56,24 @@ func TestMakeValueProxy(t *testing.T) {
 			}
 		})
 	}
+
+}
+
+func TestMakeValueProxy_PanicsOnValue(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fail()
+		}
+	}()
+	MakeValueProxy(1)
+}
+
+func TestMakeValueProxy_PanicsOnAtomic(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fail()
+		}
+	}()
+	var av atomic.Value
+	MakeValueProxy(av)
 }

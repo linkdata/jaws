@@ -40,18 +40,18 @@ func ProcessTags(tagsitem interface{}) (tags []interface{}) {
 	return
 }
 
-func (ui *UiHtml) ProcessData(dataslice []interface{}) (attrs []string) {
+func ProcessData(dataslice []interface{}) (attrs []string, eventFn EventFn) {
 	for _, dataitem := range dataslice {
 		switch data := dataitem.(type) {
 		case string:
 			attrs = append(attrs, data)
 		case EventFn:
 			if data != nil {
-				ui.EventFn = data
+				eventFn = data
 			}
 		case func(*Request, string) error: // ClickFn
 			if data != nil {
-				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+				eventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
 					if wht == what.Click {
 						err = data(rq, jid)
 					}
@@ -60,7 +60,7 @@ func (ui *UiHtml) ProcessData(dataslice []interface{}) (attrs []string) {
 			}
 		case func(*Request, string, string) error: // InputTextFn
 			if data != nil {
-				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+				eventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
 					if wht == what.Input {
 						err = data(rq, jid, val)
 					}
@@ -69,7 +69,7 @@ func (ui *UiHtml) ProcessData(dataslice []interface{}) (attrs []string) {
 			}
 		case func(*Request, string, bool) error: // InputBoolFn
 			if data != nil {
-				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+				eventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
 					if wht == what.Input {
 						var v bool
 						if val != "" {
@@ -84,7 +84,7 @@ func (ui *UiHtml) ProcessData(dataslice []interface{}) (attrs []string) {
 			}
 		case func(*Request, string, float64) error: // InputFloatFn
 			if data != nil {
-				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+				eventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
 					if wht == what.Input {
 						var v float64
 						if val != "" {
@@ -99,7 +99,7 @@ func (ui *UiHtml) ProcessData(dataslice []interface{}) (attrs []string) {
 			}
 		case func(*Request, string, time.Time) error: // InputDateFn
 			if data != nil {
-				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+				eventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
 					if wht == what.Input {
 						var v time.Time
 						if val != "" {
@@ -141,6 +141,14 @@ func htmlValueString(val interface{}) (s string) {
 		panic(fmt.Errorf("jaws: don't know how to convert %T into HTML value", val))
 	}
 	return
+}
+
+func (ui *UiHtml) ProcessData(dataslice []interface{}) []string {
+	attrs, eventFn := ProcessData(dataslice)
+	if eventFn != nil {
+		ui.EventFn = eventFn
+	}
+	return attrs
 }
 
 func (ui *UiHtml) WriteHtmlInner(w io.Writer, htmltag, htmltype, htmlinner, jid string, data ...interface{}) error {
