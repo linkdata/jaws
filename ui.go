@@ -9,14 +9,14 @@ import (
 )
 
 type UI interface {
-	JawsCreate(rq *Request, data []interface{}) (elem *Element, err error)
+	JawsCreate(self UI, rq *Request, data []interface{}) (elem *Element, err error)
 	JawsRender(e *Element, w io.Writer) (err error)
 	JawsUpdate(e *Element) (err error)
 	EventHandler
 }
 
 func (rq *Request) UI(ui UI, data ...interface{}) template.HTML {
-	elem, err := ui.JawsCreate(rq, data)
+	elem, err := ui.JawsCreate(ui, rq, data)
 	if err != nil {
 		rq.Jaws.MustLog(err)
 		return template.HTML(fmt.Sprintf("<!-- jaws.UI(%T).JawsCreate(): %s -->", ui, html.EscapeString(err.Error())))

@@ -171,8 +171,8 @@ func (ui *UiHtml) WriteHtmlInput(w io.Writer, htmltype, htmlval, jid string, dat
 	return WriteHtmlInput(w, jid, htmltype, htmlval, ui.ProcessData(data)...)
 }
 
-func (ui *UiHtml) JawsCreate(rq *Request, data []interface{}) (elem *Element, err error) {
-	return rq.NewElement(ui.Tags, ui, data), nil
+func (ui *UiHtml) JawsCreate(self UI, rq *Request, data []interface{}) (elem *Element, err error) {
+	return rq.NewElement(ui.Tags, self, data), nil
 }
 
 func (ui *UiHtml) JawsRender(e *Element, w io.Writer) (err error) {
@@ -186,8 +186,7 @@ func (ui *UiHtml) JawsUpdate(e *Element) (err error) {
 func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if ui.EventFn != nil {
 		err = ui.EventFn(e.Request(), wht, e.Jid().String(), val)
-	}
-	if deadlock.Debug {
+	} else if deadlock.Debug {
 		log.Println("UiHtml.JawsEvent() ignored", e.Jid(), wht, val)
 	}
 	return
