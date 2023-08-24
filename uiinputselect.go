@@ -12,7 +12,7 @@ type UiInputSelect struct {
 }
 
 func (ui *UiInputSelect) JawsRender(e *Element, w io.Writer) error {
-	return ui.UiHtml.WriteHtmlSelect(w, ui.NamedBoolArray, e.Jid().String(), e.data...)
+	return ui.UiHtml.WriteHtmlSelect(w, ui.NamedBoolArray, e.Jid().String(), e.Data...)
 }
 
 func (ui *UiInputSelect) JawsEvent(e *Element, wht what.What, val string) (err error) {

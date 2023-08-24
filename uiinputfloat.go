@@ -15,7 +15,7 @@ type UiInputFloat struct {
 func (ui *UiInputFloat) WriteHtmlInput(e *Element, w io.Writer, htmltype string) error {
 	val := ui.Get(e)
 	if n, ok := val.(float64); ok {
-		return ui.UiInput.WriteHtmlInput(w, htmltype, strconv.FormatFloat(n, 'f', -1, 64), e.Jid().String(), e.data...)
+		return ui.UiInput.WriteHtmlInput(w, htmltype, strconv.FormatFloat(n, 'f', -1, 64), e.Jid().String(), e.Data...)
 	}
 	return fmt.Errorf("jaws: UiInputFloat: expected float64, got %T", val)
 }

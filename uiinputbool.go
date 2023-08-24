@@ -15,7 +15,7 @@ type UiInputBool struct {
 func (ui *UiInputBool) WriteHtmlInput(e *Element, w io.Writer, htmltype string) error {
 	val := ui.Get(e)
 	if b, ok := val.(bool); ok {
-		data := e.data
+		data := e.Data
 		if b {
 			data = append(data, "checked")
 		}

@@ -12,7 +12,7 @@ type UiDate struct {
 }
 
 func (ui *UiDate) JawsRender(e *Element, w io.Writer) error {
-	return ui.UiInputDate.WriteHtmlInput(e, w, "date", e.Jid().String(), e.data...)
+	return ui.UiInputDate.WriteHtmlInput(e, w, "date", e.Jid().String(), e.Data...)
 }
 
 func NewUiDate(tags []interface{}, vp ValueProxy) (ui *UiDate) {

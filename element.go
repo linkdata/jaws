@@ -19,8 +19,8 @@ type Element struct {
 	jid   Jid              // (read-only) JaWS ID, unique to this Element within it's Request
 	ui    UI               // (read-only) the UI object
 	rq    *Request         // (read-only) the Request the Element belongs to
+	Data  []interface{}    // the optional data provided to the Request.UI() call
 	mu    deadlock.RWMutex // protects following
-	data  []interface{}    // the optional data provided to the Request.UI() call
 	items []elemItem       // currently known items
 }
 
@@ -51,20 +51,6 @@ func (e *Element) UpdateOthers(tags []interface{}) {
 		What: what.Update,
 		from: e,
 	})
-}
-
-// ReadData calls the given function with the data provided to the Request.UI() call locked for reading.
-func (e *Element) ReadData(fn func(data []interface{})) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	fn(e.data)
-}
-
-// WriteData calls the given function with the data provided to the Request.UI() call locked for writing.
-func (e *Element) WriteData(fn func(data []interface{})) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	fn(e.data)
 }
 
 func (e *Element) appendTodo(msgs []wsMsg) []wsMsg {
