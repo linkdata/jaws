@@ -45,7 +45,7 @@ func TestMakeValueProxy(t *testing.T) {
 		{
 			name:   "*atomic.Value",
 			args:   args{&av},
-			wantVp: AtomicValueProxy{&av},
+			wantVp: AtomicProxy{&av},
 		},
 	}
 

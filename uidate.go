@@ -15,15 +15,15 @@ func (ui *UiDate) JawsRender(e *Element, w io.Writer) error {
 	return ui.UiInputDate.WriteHtmlInput(e, w, "date", e.Jid().String(), e.Data...)
 }
 
-func NewUiDate(tags []interface{}, vp ValueProxy) (ui *UiDate) {
+func NewUiDate(up Params) (ui *UiDate) {
 	ui = &UiDate{
 		UiInputDate: UiInputDate{
-			UiInput: NewUiInput(tags, vp),
+			UiInput: NewUiInput(up),
 		},
 	}
 	return
 }
 
-func (rq *Request) Date(tagitem interface{}, val interface{}, attrs ...interface{}) template.HTML {
-	return rq.UI(NewUiDate(ProcessTags(tagitem), MakeValueProxy(val)), attrs...)
+func (rq *Request) Date(params ...interface{}) template.HTML {
+	return rq.UI(NewUiDate(NewParams(params)), params...)
 }

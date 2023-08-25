@@ -5,10 +5,10 @@ type UiInput struct {
 	ValueProxy
 }
 
-func NewUiInput(tags []interface{}, vp ValueProxy) UiInput {
+func NewUiInput(up Params) UiInput {
 	return UiInput{
-		UiHtml:     UiHtml{Tags: append(tags, vp)},
-		ValueProxy: vp,
+		UiHtml:     UiHtml{Tags: up.Tags()},
+		ValueProxy: up.ValueProxy(),
 	}
 }
 

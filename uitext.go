@@ -13,15 +13,15 @@ func (ui *UiText) JawsRender(e *Element, w io.Writer) error {
 	return ui.UiInputText.WriteHtmlInput(e, w, "text")
 }
 
-func NewUiText(tags []interface{}, vp ValueProxy) (ui *UiText) {
+func NewUiText(up Params) (ui *UiText) {
 	ui = &UiText{
 		UiInputText: UiInputText{
-			UiInput: NewUiInput(tags, vp),
+			UiInput: NewUiInput(up),
 		},
 	}
 	return
 }
 
-func (rq *Request) Text(tagitem interface{}, val interface{}, attrs ...interface{}) template.HTML {
-	return rq.UI(NewUiText(ProcessTags(tagitem), MakeValueProxy(val)), attrs...)
+func (rq *Request) Text(params ...interface{}) template.HTML {
+	return rq.UI(NewUiText(NewParams(params)), params...)
 }

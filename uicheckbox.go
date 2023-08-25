@@ -13,15 +13,15 @@ func (ui *UiCheckbox) JawsRender(e *Element, w io.Writer) error {
 	return ui.UiInputBool.WriteHtmlInput(e, w, "checkbox")
 }
 
-func NewUiCheckbox(tags []interface{}, vp ValueProxy) (ui *UiCheckbox) {
+func NewUiCheckbox(up Params) (ui *UiCheckbox) {
 	ui = &UiCheckbox{
 		UiInputBool: UiInputBool{
-			UiInput: NewUiInput(tags, vp),
+			UiInput: NewUiInput(up),
 		},
 	}
 	return
 }
 
-func (rq *Request) Checkbox(tagitem interface{}, val interface{}, attrs ...interface{}) template.HTML {
-	return rq.UI(NewUiCheckbox(ProcessTags(tagitem), MakeValueProxy(val)), attrs...)
+func (rq *Request) Checkbox(params ...interface{}) template.HTML {
+	return rq.UI(NewUiCheckbox(NewParams(params)), params...)
 }

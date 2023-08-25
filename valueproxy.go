@@ -1,35 +1,78 @@
 package jaws
 
 import (
+	"fmt"
+	"html"
+	"html/template"
 	"sync/atomic"
 )
 
-type ValueProxy interface {
+type ValueReader interface {
 	JawsGet(e *Element) (val interface{})
+}
+
+type ValueProxy interface {
+	ValueReader
 	JawsSet(e *Element, val interface{}) (changed bool)
 }
 
-type AtomicValueProxy struct{ *atomic.Value }
+type DummyReader struct{ Value interface{} }
 
-func (vp AtomicValueProxy) JawsGet(e *Element) interface{} {
+func (vp DummyReader) JawsGet(e *Element) interface{} {
+	return vp.Value
+}
+
+type AtomicReader struct{ *atomic.Value }
+
+func (vp AtomicReader) JawsGet(e *Element) interface{} {
 	return vp.Load()
 }
 
-func (vp AtomicValueProxy) JawsSet(e *Element, val interface{}) (changed bool) {
+type AtomicProxy struct{ *atomic.Value }
+
+func (vp AtomicProxy) JawsGet(e *Element) interface{} {
+	return vp.Load()
+}
+
+func (vp AtomicProxy) JawsSet(e *Element, val interface{}) (changed bool) {
 	changed = vp.Swap(val) != val
 	return
 }
 
-func MakeValueProxy(value interface{}) (vp ValueProxy) {
+func MakeValueProxy(value interface{}) ValueProxy {
 	switch v := value.(type) {
 	case ValueProxy:
-		vp = v
+		return v
 	case *atomic.Value:
-		vp = AtomicValueProxy{Value: v}
+		return AtomicProxy{Value: v}
 	case atomic.Value:
 		panic("jaws: MakeValueProxy: must pass atomic.Value by reference")
-	default:
-		panic("jaws: MakeValueProxy: expected ValueProxy or *atomic.Value")
 	}
-	return
+	panic("jaws: MakeValueProxy: expected ValueProxy or *atomic.Value")
+}
+
+func MakeValueReader(value interface{}) ValueReader {
+	switch v := value.(type) {
+	case ValueReader:
+		return v
+	case *atomic.Value:
+		return AtomicReader{Value: v}
+	case atomic.Value:
+		panic("jaws: MakeValueReader: must pass atomic.Value by reference")
+	}
+	panic("jaws: MakeValueReader: expected ValueReader or *atomic.Value")
+}
+
+func anyToHtml(val interface{}) string {
+	switch v := val.(type) {
+	case template.HTML:
+		return string(v)
+	case string:
+		return v
+	case fmt.Stringer:
+		return html.EscapeString(v.String())
+	case *atomic.Value:
+		return anyToHtml(v.Load())
+	}
+	return html.EscapeString(fmt.Sprintf("%v", val))
 }

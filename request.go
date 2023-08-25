@@ -294,12 +294,6 @@ func (rq *Request) newElementLocked(tags []interface{}, ui UI, data []interface{
 	return
 }
 
-func (rq *Request) NewElement(tags []interface{}, ui UI, data []interface{}) (elem *Element) {
-	rq.mu.Lock()
-	defer rq.mu.Unlock()
-	return rq.newElementLocked(tags, ui, data)
-}
-
 func (rq *Request) GetElement(jid Jid) (e *Element) {
 	if jid > 0 {
 		rq.mu.RLock()

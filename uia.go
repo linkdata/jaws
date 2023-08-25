@@ -13,12 +13,12 @@ func (ui *UiA) JawsRender(e *Element, w io.Writer) error {
 	return ui.UiHtmlInner.WriteHtmlInner(e, w, "a", "", e.Data)
 }
 
-func NewUiA(tags []interface{}, inner InnerProxy) *UiA {
+func NewUiA(up Params) *UiA {
 	return &UiA{
-		NewUiHtmlInner(tags, inner),
+		NewUiHtmlInner(up),
 	}
 }
 
-func (rq *Request) A(tagitem interface{}, inner interface{}, attrs ...interface{}) template.HTML {
-	return rq.UI(NewUiA(ProcessTags(tagitem), MakeInnerProxy(inner)), attrs...)
+func (rq *Request) A(params ...interface{}) template.HTML {
+	return rq.UI(NewUiA(NewParams(params)), params...)
 }

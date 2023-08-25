@@ -13,12 +13,12 @@ func (ui *UiButton) JawsRender(e *Element, w io.Writer) error {
 	return ui.UiHtmlInner.WriteHtmlInner(e, w, "button", "button", e.Data)
 }
 
-func NewUiButton(tags []interface{}, inner InnerProxy) *UiButton {
+func NewUiButton(up Params) *UiButton {
 	return &UiButton{
-		NewUiHtmlInner(tags, inner),
+		NewUiHtmlInner(up),
 	}
 }
 
-func (rq *Request) Button(tagitem interface{}, inner interface{}, attrs ...interface{}) template.HTML {
-	return rq.UI(NewUiButton(ProcessTags(tagitem), MakeInnerProxy(inner)), attrs...)
+func (rq *Request) Button(params ...interface{}) template.HTML {
+	return rq.UI(NewUiButton(NewParams(params)), params...)
 }

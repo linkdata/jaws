@@ -13,15 +13,15 @@ func (ui *UiNumber) JawsRender(e *Element, w io.Writer) error {
 	return ui.UiInputFloat.WriteHtmlInput(e, w, "number")
 }
 
-func NewUiNumber(tags []interface{}, vp ValueProxy) (ui *UiNumber) {
+func NewUiNumber(up Params) (ui *UiNumber) {
 	ui = &UiNumber{
 		UiInputFloat: UiInputFloat{
-			UiInput: NewUiInput(tags, vp),
+			UiInput: NewUiInput(up),
 		},
 	}
 	return
 }
 
-func (rq *Request) Number(tagitem interface{}, val interface{}, attrs ...interface{}) template.HTML {
-	return rq.UI(NewUiNumber(ProcessTags(tagitem), MakeValueProxy(val)), attrs...)
+func (rq *Request) Number(params ...interface{}) template.HTML {
+	return rq.UI(NewUiNumber(NewParams(params)), params...)
 }

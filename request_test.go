@@ -694,12 +694,12 @@ func TestRequest_Elements(t *testing.T) {
 
 	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
-	chk(rq.Div("t1", "s1", nil), "t1", "s1")
-	chk(rq.Span("t2", "s2", nil), "t2", "s2")
-	chk(rq.Li("t3", "s3", nil), "t3", "s3")
-	chk(rq.Td("t4", "s4", nil), "t4", "s4")
-	chk(rq.A("t5", "s5", nil), "t5", "s5")
-	chk(rq.Button("t6", "s6", nil), "t6", "s6")
+	chk(rq.Div("t1", "s1"), "t1", "s1")
+	chk(rq.Span("t2", "s2"), "t2", "s2")
+	chk(rq.Li("t3", "s3"), "t3", "s3")
+	chk(rq.Td("t4", "s4"), "t4", "s4")
+	chk(rq.A("t5", "s5"), "t5", "s5")
+	chk(rq.Button("t6", "s6"), "t6", "s6")
 	chk(rq.Img("t7", "randomimg.png"), "t7", "src=\"randomimg.png\"")
 	chk(rq.Img("t8", "\"randomimg.png\""), "t8", "src=\"randomimg.png\"")
 }

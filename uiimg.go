@@ -12,7 +12,7 @@ type UiImg struct {
 }
 
 func (ui *UiImg) JawsRender(e *Element, w io.Writer) error {
-	src := string(ui.InnerProxy.JawsInner(e))
+	src := anyToHtml(ui.ValueReader.JawsGet(e))
 	if !strings.HasPrefix(src, "\"") {
 		src = strconv.Quote(src)
 	}
@@ -21,7 +21,7 @@ func (ui *UiImg) JawsRender(e *Element, w io.Writer) error {
 }
 
 func (ui *UiImg) JawsUpdate(e *Element) (err error) {
-	src := string(ui.InnerProxy.JawsInner(e))
+	src := anyToHtml(ui.ValueReader.JawsGet(e))
 	if !strings.HasPrefix(src, "\"") {
 		src = strconv.Quote(src)
 	}
@@ -31,12 +31,12 @@ func (ui *UiImg) JawsUpdate(e *Element) (err error) {
 	return nil
 }
 
-func NewUiImg(tags []interface{}, inner InnerProxy) *UiImg {
+func NewUiImg(up Params) *UiImg {
 	return &UiImg{
-		NewUiHtmlInner(tags, inner),
+		NewUiHtmlInner(up),
 	}
 }
 
-func (rq *Request) Img(tagitem interface{}, src interface{}, data ...interface{}) template.HTML {
-	return rq.UI(NewUiImg(ProcessTags(tagitem), MakeInnerProxy(src)), data...)
+func (rq *Request) Img(params ...interface{}) template.HTML {
+	return rq.UI(NewUiImg(NewParams(params)), params...)
 }

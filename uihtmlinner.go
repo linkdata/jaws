@@ -6,23 +6,23 @@ import (
 
 type UiHtmlInner struct {
 	UiHtml
-	InnerProxy
+	ValueReader
 }
 
 func (ui *UiHtmlInner) WriteHtmlInner(e *Element, w io.Writer, htmltag, htmltype string, data []interface{}) error {
 	writeUiDebug(e, w)
-	return ui.UiHtml.WriteHtmlInner(w, htmltag, htmltype, string(ui.InnerProxy.JawsInner(e)), e.Jid().String(), data)
+	return ui.UiHtml.WriteHtmlInner(w, htmltag, htmltype, anyToHtml(ui.ValueReader.JawsGet(e)), e.Jid().String(), data)
 }
 
-func NewUiHtmlInner(tags []interface{}, p InnerProxy) UiHtmlInner {
+func NewUiHtmlInner(up Params) UiHtmlInner {
 	return UiHtmlInner{
-		UiHtml:     UiHtml{Tags: append(tags, p)},
-		InnerProxy: p,
+		UiHtml:      UiHtml{Tags: up.Tags()},
+		ValueReader: up.ValueReader(),
 	}
 }
 
 func (ui *UiHtmlInner) JawsUpdate(e *Element) (err error) {
-	if e.SetInner(string(ui.InnerProxy.JawsInner(e))) {
+	if e.SetInner(anyToHtml(ui.ValueReader.JawsGet(e))) {
 		e.UpdateOthers(ui.Tags)
 	}
 	return nil
