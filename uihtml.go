@@ -171,8 +171,8 @@ func (ui *UiHtml) WriteHtmlInput(w io.Writer, htmltype, htmlval, jid string, dat
 	return WriteHtmlInput(w, jid, htmltype, htmlval, ui.ProcessData(data)...)
 }
 
-func (ui *UiHtml) JawsCreate(self UI, rq *Request, data []interface{}) (elem *Element, err error) {
-	return rq.NewElement(ui.Tags, self, data), nil
+func (ui *UiHtml) JawsTags(rq *Request) (tags []interface{}) {
+	return ui.Tags
 }
 
 func (ui *UiHtml) JawsRender(e *Element, w io.Writer) (err error) {
