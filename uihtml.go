@@ -35,7 +35,13 @@ func ProcessTags(tagsitem interface{}) (tags []interface{}) {
 			tags = stringTags(tags, s)
 		}
 	case []interface{}:
-		tags = append(tags, data...)
+		for _, t := range data {
+			if t != nil {
+				tags = append(tags, t)
+			}
+		}
+	case nil:
+		// do nothing
 	default:
 		tags = append(tags, data)
 	}
