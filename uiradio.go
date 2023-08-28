@@ -10,13 +10,14 @@ type UiRadio struct {
 }
 
 func (ui *UiRadio) JawsRender(e *Element, w io.Writer) error {
-	return ui.UiInputBool.WriteHtmlInput(e, w, "radio")
+	return ui.UiInputBool.WriteHtmlInput(e, w, "radio", append(e.Data, `id="jid.`+e.Jid().String()+`"`))
 }
 
 func NewUiRadio(up Params) (ui *UiRadio) {
 	ui = &UiRadio{
 		UiInputBool: UiInputBool{
-			UiInput: NewUiInput(up),
+			UiInput:   NewUiInput(up),
+			NamedBool: up.nb,
 		},
 	}
 	return

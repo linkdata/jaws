@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"strconv"
@@ -165,15 +166,15 @@ func writeUiDebug(e *Element, w io.Writer) {
 	}
 }
 
-func (ui *UiHtml) WriteHtmlInner(w io.Writer, htmltag, htmltype, htmlinner, jid string, data []interface{}) error {
+func (ui *UiHtml) WriteHtmlInner(w io.Writer, jid Jid, htmltag, htmltype string, htmlinner template.HTML, data []interface{}) error {
 	return WriteHtmlInner(w, jid, htmltag, htmltype, htmlinner, ui.ProcessData(data)...)
 }
 
-func (ui *UiHtml) WriteHtmlSelect(w io.Writer, nba *NamedBoolArray, jid string, data ...interface{}) error {
+func (ui *UiHtml) WriteHtmlSelect(w io.Writer, jid Jid, nba *NamedBoolArray, data ...interface{}) error {
 	return WriteHtmlSelect(w, jid, nba, ui.ProcessData(data)...)
 }
 
-func (ui *UiHtml) WriteHtmlInput(w io.Writer, htmltype, htmlval, jid string, data ...interface{}) error {
+func (ui *UiHtml) WriteHtmlInput(w io.Writer, jid Jid, htmltype, htmlval string, data ...interface{}) error {
 	return WriteHtmlInput(w, jid, htmltype, htmlval, ui.ProcessData(data)...)
 }
 

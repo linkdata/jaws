@@ -63,16 +63,19 @@ func MakeValueReader(value interface{}) ValueReader {
 	panic("jaws: MakeValueReader: expected ValueReader or *atomic.Value")
 }
 
-func anyToHtml(val interface{}) string {
+func anyToHtml(val interface{}) template.HTML {
+	var s string
 	switch v := val.(type) {
 	case template.HTML:
-		return string(v)
-	case string:
 		return v
-	case fmt.Stringer:
-		return html.EscapeString(v.String())
 	case *atomic.Value:
 		return anyToHtml(v.Load())
+	case string:
+		s = v
+	case fmt.Stringer:
+		s = v.String()
+	default:
+		panic(fmt.Sprintf("jaws: unable to make HTML from %T", v))
 	}
-	return html.EscapeString(fmt.Sprintf("%v", val))
+	return template.HTML(html.EscapeString(s))
 }

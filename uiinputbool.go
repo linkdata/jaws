@@ -10,17 +10,17 @@ import (
 
 type UiInputBool struct {
 	UiInput
+	*NamedBool
 }
 
-func (ui *UiInputBool) WriteHtmlInput(e *Element, w io.Writer, htmltype string) error {
+func (ui *UiInputBool) WriteHtmlInput(e *Element, w io.Writer, htmltype string, data []interface{}) error {
 	val := ui.Get(e)
 	if b, ok := val.(bool); ok {
-		data := e.Data
 		if b {
 			data = append(data, "checked")
 		}
 		writeUiDebug(e, w)
-		return ui.UiInput.WriteHtmlInput(w, htmltype, "", e.Jid().String(), data...)
+		return ui.UiInput.WriteHtmlInput(w, e.Jid(), htmltype, "", data...)
 	}
 	return fmt.Errorf("jaws: UiInputBool: expected bool, got %T", val)
 }
@@ -36,7 +36,7 @@ func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (err err
 				return
 			}
 		}
-		ui.Set(e, v)
+		ui.UiInput.Set(e, v)
 	}
 	return
 }

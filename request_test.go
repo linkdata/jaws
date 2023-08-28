@@ -664,7 +664,7 @@ func TestRequest_OnTrigger(t *testing.T) {
 	}
 }
 
-func checkHtml(is *is.I, rq *testRequest, h template.HTML, tag, txt string) {
+func checkHtml(is *is.I, rq *testRequest, h template.HTML, tag interface{}, txt string) {
 	is.Helper()
 	if rq.log.Len() > 0 {
 		fmt.Println(rq.log.String())
@@ -1024,24 +1024,23 @@ func TestRequest_LabeledRadioGroup(t *testing.T) {
 }*/
 
 func TestRequest_Select(t *testing.T) {
-	const elemId = "elemid"
 	is := is.New(t)
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
+	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
-	a := NewNamedBoolArray(elemId)
+	a := NewNamedBoolArray()
 	a.Add("1", "one")
 	a.Add("2", "two")
 
-	h := rq.Select(a.Jid, a, nil, "disabled")
-	chk(h, elemId, "disabled")
+	h := rq.Select(a, "disabled")
+	chk(h, a, "disabled")
 	is.Equal(strings.Contains(string(h), "selected"), false)
 
 	a.Set("1", true)
-	h = rq.Select(a.Jid, a, nil, "")
-	chk(h, elemId, "selected")
+	h = rq.Select(a)
+	chk(h, a, "selected")
 }
 
 func TestRequest_ConnectFn(t *testing.T) {

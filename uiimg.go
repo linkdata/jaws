@@ -11,21 +11,28 @@ type UiImg struct {
 	UiHtmlInner
 }
 
-func (ui *UiImg) JawsRender(e *Element, w io.Writer) error {
-	src := anyToHtml(ui.ValueReader.JawsGet(e))
-	if !strings.HasPrefix(src, "\"") {
-		src = strconv.Quote(src)
+func (ui *UiImg) SrcAttr(e *Element) string {
+	var src string
+	switch v := ui.ValueReader.JawsGet(e).(type) {
+	case string:
+		src = v
+	case template.HTML:
+		src = string(v)
+	default:
+		panic("jaws: UiImg: src not a string")
 	}
-	data := append(e.Data, "src="+src)
-	return ui.UiHtmlInner.WriteHtmlInner(e, w, "img", "", data)
+	if strings.HasPrefix(src, "\"") {
+		return src
+	}
+	return strconv.Quote(src)
+}
+
+func (ui *UiImg) JawsRender(e *Element, w io.Writer) error {
+	return ui.UiHtmlInner.WriteHtmlInner(e, w, "img", "", append(e.Data, "src="+ui.SrcAttr(e)))
 }
 
 func (ui *UiImg) JawsUpdate(e *Element) (err error) {
-	src := anyToHtml(ui.ValueReader.JawsGet(e))
-	if !strings.HasPrefix(src, "\"") {
-		src = strconv.Quote(src)
-	}
-	if e.SetAttr("src", src) {
+	if e.SetAttr("src", ui.SrcAttr(e)) {
 		e.UpdateOthers(ui.Tags)
 	}
 	return nil

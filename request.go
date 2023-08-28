@@ -289,9 +289,17 @@ func (rq *Request) newElementLocked(tags []interface{}, ui UI, data []interface{
 	elem = &Element{tags: tags, jid: Jid(len(rq.elems) + 1), ui: ui, Data: data, rq: rq}
 	rq.elems = append(rq.elems, elem)
 	for _, tag := range tags {
-		rq.tagMap[tag] = append(rq.tagMap[tag], elem)
+		if tag != nil {
+			rq.tagMap[tag] = append(rq.tagMap[tag], elem)
+		}
 	}
 	return
+}
+
+func (rq *Request) NewElement(tags []interface{}, ui UI, data []interface{}) (elem *Element) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	return rq.newElementLocked(tags, ui, data)
 }
 
 func (rq *Request) GetElement(jid Jid) (e *Element) {

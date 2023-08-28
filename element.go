@@ -1,6 +1,8 @@
 package jaws
 
 import (
+	"html/template"
+
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/what"
 )
@@ -132,8 +134,8 @@ func (e *Element) RemoveAttr(attr string) (changed bool) {
 
 // SetInner queues sending a new inner HTML content
 // to the browser for the Element.
-func (e *Element) SetInner(innerHtml string) (changed bool) {
-	return e.SetAttr(elemInnerMagic, innerHtml)
+func (e *Element) SetInner(innerHtml template.HTML) (changed bool) {
+	return e.SetAttr(elemInnerMagic, string(innerHtml))
 }
 
 // SetValue queues sending a new current input value in textual form

@@ -21,8 +21,9 @@ func (ui *UiInput) Get(e *Element) interface{} {
 	return ui.ValueProxy.JawsGet(e)
 }
 
-func (ui *UiInput) Set(e *Element, value interface{}) {
-	if ui.ValueProxy.JawsSet(e, value) {
+func (ui *UiInput) Set(e *Element, value interface{}) (changed bool) {
+	if changed = ui.ValueProxy.JawsSet(e, value); changed {
 		e.UpdateOthers(ui.Tags)
 	}
+	return
 }
