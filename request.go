@@ -233,16 +233,15 @@ func (rq *Request) Redirect(url string) {
 // Returns the JaWS ID, suitable for including as a HTML attribute:
 //
 //	<div jid="{{$.Register `footag`}}">
-func (rq *Request) Register(tagitem interface{}, params ...interface{}) Jid {
-	tags := ProcessTags(tagitem)
-	_, eventFn := ProcessData(params)
-
+func (rq *Request) Register(params ...interface{}) Jid {
+	up := NewParams(params)
+	tags := up.Tags()
 	for _, tag := range tags {
 		if jid, ok := tag.(Jid); ok {
 			if elem := rq.GetElement(jid); elem != nil {
-				if eventFn != nil {
+				if up.ef != nil {
 					if uib, ok := elem.UI().(*UiHtml); ok {
-						uib.EventFn = eventFn
+						uib.EventFn = up.ef
 					}
 				}
 				return jid
@@ -256,10 +255,10 @@ func (rq *Request) Register(tagitem interface{}, params ...interface{}) Jid {
 	var missing []interface{}
 	for _, tag := range tags {
 		if elems, ok := rq.tagMap[tag]; ok {
-			if eventFn != nil {
+			if up.ef != nil {
 				for _, elem := range elems {
 					if uib, ok := elem.UI().(*UiHtml); ok {
-						uib.EventFn = eventFn
+						uib.EventFn = up.ef
 					}
 				}
 			}
@@ -267,7 +266,7 @@ func (rq *Request) Register(tagitem interface{}, params ...interface{}) Jid {
 			missing = append(missing, tag)
 		}
 	}
-	elem := rq.newElementLocked(missing, &UiHtml{Tags: tags, EventFn: eventFn}, params)
+	elem := rq.newElementLocked(missing, &UiHtml{Tags: tags, EventFn: up.ef}, params)
 	return elem.jid
 }
 

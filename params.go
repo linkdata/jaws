@@ -100,6 +100,14 @@ func (up *Params) process(params []interface{}) {
 		}
 
 		switch data := p.(type) {
+		case Tag:
+			up.tags = append(up.tags, data.Value)
+		case []Tag:
+			for _, tag := range data {
+				if tag.Value != nil {
+					up.tags = append(up.tags, tag.Value)
+				}
+			}
 		case *atomic.Value:
 			up.setVp(AtomicProxy{Value: data})
 		case *NamedBoolArray:

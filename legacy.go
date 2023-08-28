@@ -64,8 +64,8 @@ func (rq *Request) SetEventFn(tagstring string, fn EventFn) {
 }
 
 // Deprecated: Will be removed in future
-func (rq *Request) RegisterEventFn(tagitem interface{}, attrs ...interface{}) Jid {
-	return rq.Register(tagitem, attrs...)
+func (rq *Request) RegisterEventFn(params ...interface{}) Jid {
+	return rq.Register(params...)
 }
 
 // Deprecated: Will be removed in future

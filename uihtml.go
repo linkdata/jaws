@@ -29,6 +29,14 @@ func stringTags(tags []interface{}, text string) []interface{} {
 
 func ProcessTags(tagsitem interface{}) (tags []interface{}) {
 	switch data := tagsitem.(type) {
+	case Tag:
+		tags = append(tags, data)
+	case []Tag:
+		for _, t := range data {
+			if t.Value != nil {
+				tags = append(tags, t.Value)
+			}
+		}
 	case string:
 		tags = stringTags(tags, data)
 	case []string:
