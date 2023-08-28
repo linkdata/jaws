@@ -50,10 +50,14 @@ func (nb *NamedBool) Checked() (checked bool) {
 	return
 }
 
-func (nb *NamedBool) Set(checked bool) {
+func (nb *NamedBool) Set(checked bool) (changed bool) {
 	nb.mu.Lock()
-	nb.checked = checked
+	if nb.checked != checked {
+		nb.checked = checked
+		changed = true
+	}
 	nb.mu.Unlock()
+	return
 }
 
 // String returns a string representation of the NamedBool suitable for debugging.
@@ -76,6 +80,12 @@ func (nb *NamedBool) JawsSet(e *Element, value interface{}) (changed bool) {
 			changed = true
 		}
 		nb.mu.Unlock()
+		if changed {
+			e.Update()
+			if checked && nb.nba != nil {
+				nb.nba.Set(nb.name, true)
+			}
+		}
 		return
 	}
 	panic("jaws: NamedBool.JawsSet(): not bool")

@@ -15,7 +15,6 @@ type Params struct {
 	vp    ValueProxy
 	ef    EventFn
 	nba   *NamedBoolArray
-	nb    *NamedBool
 }
 
 func (up *Params) addString(s string) {
@@ -40,9 +39,6 @@ func NewParams(params []interface{}) (up Params) {
 				up.tags = append(up.tags, nb)
 			}
 		})
-	}
-	if up.nb != nil {
-		up.tags = append(up.tags, up.nb)
 	}
 	return
 }
@@ -108,8 +104,14 @@ func (up *Params) process(params []interface{}) {
 			up.setVp(AtomicProxy{Value: data})
 		case *NamedBoolArray:
 			up.nba = data
+			up.setVp(data)
+			up.tags = append(up.tags, data)
 		case *NamedBool:
-			up.nb = data
+			up.setVp(data)
+			up.tags = append(up.tags, data)
+			if data.nba != nil {
+				up.tags = append(up.tags, data.nba)
+			}
 		case []string:
 			for _, s := range data {
 				up.addString(s)

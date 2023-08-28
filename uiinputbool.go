@@ -10,7 +10,6 @@ import (
 
 type UiInputBool struct {
 	UiInput
-	*NamedBool
 }
 
 func (ui *UiInputBool) WriteHtmlInput(e *Element, w io.Writer, htmltype string, data []interface{}) error {
@@ -22,7 +21,7 @@ func (ui *UiInputBool) WriteHtmlInput(e *Element, w io.Writer, htmltype string, 
 		writeUiDebug(e, w)
 		return ui.UiInput.WriteHtmlInput(w, e.Jid(), htmltype, "", data...)
 	}
-	return fmt.Errorf("jaws: UiInputBool: expected bool, got %T", val)
+	panic(fmt.Errorf("jaws: UiInputBool: expected bool, got %T from %T", val, ui.ValueProxy))
 }
 
 func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (err error) {

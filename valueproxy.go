@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"html/template"
+	"strconv"
 	"sync/atomic"
 )
 
@@ -74,8 +75,14 @@ func anyToHtml(val interface{}) template.HTML {
 		s = v
 	case fmt.Stringer:
 		s = v.String()
+	case float64:
+		s = strconv.FormatFloat(v, 'f', -1, 64)
+	case float32:
+		s = strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case int:
+		s = strconv.Itoa(v)
 	default:
-		panic(fmt.Sprintf("jaws: unable to make HTML from %T", v))
+		panic(fmt.Sprintf("jaws: don't know how to render %T as template.HTML", v))
 	}
 	return template.HTML(html.EscapeString(s))
 }

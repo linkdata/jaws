@@ -15,7 +15,7 @@ func (rq *Request) RadioGroup(params ...interface{}) (rl []RadioElement) {
 	up.attrs = append(up.attrs, `name="`+MakeID()+`"`)
 	up.nba.ReadLocked(func(nbl []*NamedBool) {
 		for _, nb := range nbl {
-			up.nb = nb
+			up.vp = nb
 			rl = append(rl, RadioElement{e: rq.NewElement(tags, NewUiRadio(up), params)})
 		}
 	})
@@ -33,5 +33,9 @@ func (r RadioElement) Radio(attrs ...string) template.HTML {
 
 // Label renders a HTML label element.
 func (r *RadioElement) Label(attrs ...string) template.HTML {
-	return HtmlInner(0, "label", "", r.e.ui.(*UiRadio).Html(), append(attrs, `for="jid.`+r.e.Jid().String()+`"`)...)
+	if nb, ok := r.e.ui.(*UiRadio).ValueProxy.(*NamedBool); ok {
+		return HtmlInner(0, "label", "", nb.Html(), append(attrs, `for="jid.`+r.e.Jid().String()+`"`)...)
+	}
+	return ""
+
 }

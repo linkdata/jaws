@@ -16,8 +16,7 @@ func (ui *UiRadio) JawsRender(e *Element, w io.Writer) error {
 func NewUiRadio(up Params) (ui *UiRadio) {
 	ui = &UiRadio{
 		UiInputBool: UiInputBool{
-			UiInput:   NewUiInput(up),
-			NamedBool: up.nb,
+			UiInput: NewUiInput(up),
 		},
 	}
 	return

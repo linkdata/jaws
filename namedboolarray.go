@@ -11,8 +11,9 @@ import (
 // and sets of HTML radio buttons. It it safe to use from multiple goroutines
 // concurrently.
 type NamedBoolArray struct {
-	mu   deadlock.RWMutex // protects following
-	data []*NamedBool
+	Multi bool             // allow multiple NamedBools to be true
+	mu    deadlock.RWMutex // protects following
+	data  []*NamedBool
 }
 
 // NewNamedBoolArray creates a new object to track a related set of named booleans.
@@ -52,14 +53,17 @@ func (nba *NamedBoolArray) Add(name string, text template.HTML) *NamedBoolArray 
 }
 
 // Set sets the Checked state for the NamedBool(s) with the given name.
-func (nba *NamedBoolArray) Set(name string, state bool) {
-	nba.mu.Lock()
+func (nba *NamedBoolArray) Set(name string, state bool) (changed bool) {
+	nba.mu.RLock()
+	defer nba.mu.RUnlock()
 	for _, nb := range nba.data {
 		if nb.Name() == name {
-			nb.Set(state)
+			changed = nb.Set(state) || changed
+		} else if state && !nba.Multi {
+			changed = nb.Set(false) || changed
 		}
 	}
-	nba.mu.Unlock()
+	return
 }
 
 // Get returns the name of first NamedBool in the group that
@@ -79,16 +83,6 @@ func (nba *NamedBoolArray) Get() (name string) {
 	}
 	nba.mu.RUnlock()
 	return
-}
-
-// SetOnly sets the Checked state for the NamedBool(s) with the
-// given name to true and all others to false.
-func (nba *NamedBoolArray) SetOnly(name string) {
-	nba.mu.RLock()
-	for _, nb := range nba.data {
-		nb.Set((nb.Name() == name))
-	}
-	nba.mu.RUnlock()
 }
 
 func (nba *NamedBoolArray) isCheckedLocked(name string) bool {
@@ -131,8 +125,7 @@ func (nba *NamedBoolArray) JawsGet(e *Element) interface{} {
 
 func (nba *NamedBoolArray) JawsSet(e *Element, value interface{}) (changed bool) {
 	if name, ok := value.(string); ok {
-		nba.SetOnly(name)
-		return
+		return nba.Set(name, true)
 	}
 	panic("jaws: NamedBoolArray.JawsSet(): not string")
 }
