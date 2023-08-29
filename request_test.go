@@ -679,9 +679,12 @@ func checkHtml(is *is.I, rq *testRequest, h template.HTML, tag interface{}, txt 
 		}
 	}
 	if !found {
-		fmt.Printf("checkHtml(%q, %q, %q) did not match any of %d elements:\n", hs, tag, txt, len(elems))
+		if len(elems) == 0 {
+			elems = rq.elems
+		}
+		fmt.Printf("checkHtml(%q, %v@%p, %q) did not match any of %d elements:\n", hs, tag, tag, txt, len(elems))
 		for i, elem := range elems {
-			fmt.Printf("  %d: (%T) jid=%q data=%v\n", i, elem.UI(), elem.Jid(), elem.Data)
+			fmt.Printf("  %d: (%T) jid=%q tags=%v data=%v\n", i, elem.UI(), elem.Jid(), elem.tags, elem.Data)
 		}
 		is.Fail()
 	}
@@ -692,16 +695,25 @@ func TestRequest_Elements(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
+	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
-	chk(rq.Div("t1", "s1"), "t1", "s1")
-	chk(rq.Span("t2", "s2"), "t2", "s2")
-	chk(rq.Li("t3", "s3"), "t3", "s3")
-	chk(rq.Td("t4", "s4"), "t4", "s4")
-	chk(rq.A("t5", "s5"), "t5", "s5")
-	chk(rq.Button("t6", "s6"), "t6", "s6")
-	chk(rq.Img("t7", "randomimg.png"), "t7", "src=\"randomimg.png\"")
-	chk(rq.Img("t8", "\"randomimg.png\""), "t8", "src=\"randomimg.png\"")
+	var avs []*atomic.Value
+	for i := 0; i < 16; i++ {
+		av := &atomic.Value{}
+		av.Store(fmt.Sprintf("t%d", i))
+		avs = append(avs, av)
+	}
+
+	chk(rq.Div(avs[1], "s1"), avs[1], "s1")
+	chk(rq.Span(avs[2], "s2"), avs[2], "s2")
+	chk(rq.Li(avs[3], "s3"), avs[3], "s3")
+	chk(rq.Td(avs[4], "s4"), avs[4], "s4")
+	chk(rq.A(avs[5], "s5"), avs[5], "s5")
+	chk(rq.Button(avs[6], "s6"), avs[6], "s6")
+	avs[7].Store("randomimg.png")
+	chk(rq.Img(avs[7]), avs[7], "src=\"randomimg.png\"")
+	avs[8].Store("\"randomimg.png\"")
+	chk(rq.Img(avs[8]), avs[8], "src=\"randomimg.png\"")
 }
 
 func TestRequest_Text(t *testing.T) {

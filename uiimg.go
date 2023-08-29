@@ -13,7 +13,7 @@ type UiImg struct {
 
 func (ui *UiImg) SrcAttr(e *Element) string {
 	var src string
-	switch v := ui.ValueReader.JawsGet(e).(type) {
+	switch v := ui.ValueProxy.JawsGet(e).(type) {
 	case string:
 		src = v
 	case template.HTML:

@@ -8,60 +8,26 @@ import (
 	"sync/atomic"
 )
 
-type ValueReader interface {
-	JawsGet(e *Element) (val interface{})
-}
-
 type ValueProxy interface {
-	ValueReader
+	JawsGet(e *Element) (val interface{})
 	JawsSet(e *Element, val interface{}) (changed bool)
 }
 
-type DummyReader struct{ Value interface{} }
+type atomicProxy struct{ *atomic.Value }
 
-func (vp DummyReader) JawsGet(e *Element) interface{} {
-	return vp.Value
-}
-
-type AtomicReader struct{ *atomic.Value }
-
-func (vp AtomicReader) JawsGet(e *Element) interface{} {
-	return vp.Load()
-}
-
-type AtomicProxy struct{ *atomic.Value }
-
-func (vp AtomicProxy) JawsGet(e *Element) interface{} {
-	return vp.Load()
-}
-
-func (vp AtomicProxy) JawsSet(e *Element, val interface{}) (changed bool) {
-	changed = vp.Swap(val) != val
-	return
-}
+func (vp atomicProxy) JawsGet(e *Element) interface{}           { return vp.Load() }
+func (vp atomicProxy) JawsSet(e *Element, val interface{}) bool { return vp.Swap(val) != val }
 
 func MakeValueProxy(value interface{}) ValueProxy {
 	switch v := value.(type) {
 	case ValueProxy:
 		return v
 	case *atomic.Value:
-		return AtomicProxy{Value: v}
+		return atomicProxy{Value: v}
 	case atomic.Value:
 		panic("jaws: MakeValueProxy: must pass atomic.Value by reference")
 	}
 	panic("jaws: MakeValueProxy: expected ValueProxy or *atomic.Value")
-}
-
-func MakeValueReader(value interface{}) ValueReader {
-	switch v := value.(type) {
-	case ValueReader:
-		return v
-	case *atomic.Value:
-		return AtomicReader{Value: v}
-	case atomic.Value:
-		panic("jaws: MakeValueReader: must pass atomic.Value by reference")
-	}
-	panic("jaws: MakeValueReader: expected ValueReader or *atomic.Value")
 }
 
 func anyToHtml(val interface{}) template.HTML {

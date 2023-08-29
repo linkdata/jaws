@@ -11,7 +11,6 @@ import (
 type Params struct {
 	tags  []interface{}
 	attrs []string
-	vr    ValueReader
 	vp    ValueProxy
 	ef    EventFn
 	nba   *NamedBoolArray
@@ -27,45 +26,11 @@ func (up *Params) addString(s string) {
 
 func NewParams(params []interface{}) (up Params) {
 	up.process(params)
-	if up.vp != nil {
-		up.tags = append(up.tags, up.vp)
-	} else if up.vr != nil {
-		up.tags = append(up.tags, up.vr)
-	}
-	if up.nba != nil {
-		up.tags = append(up.tags, up.nba)
-		up.nba.ReadLocked(func(nbl []*NamedBool) {
-			for _, nb := range nbl {
-				up.tags = append(up.tags, nb)
-			}
-		})
-	}
 	return
 }
 
 func (up *Params) Tags() []interface{} {
-	if len(up.tags) == 0 {
-		if len(up.attrs) > 0 {
-			up.tags = append(up.tags, up.attrs[0])
-			up.attrs = up.attrs[1:]
-		}
-	}
 	return up.tags
-}
-
-func (up *Params) ValueReader() (vr ValueReader) {
-	if vr = up.vr; vr == nil {
-		if vr = up.vp; vr == nil {
-			if len(up.attrs) > 0 {
-				vr = DummyReader{Value: up.attrs[0]}
-				up.attrs = up.attrs[1:]
-				up.vr = vr
-				return
-			}
-			panic("no ValueReader")
-		}
-	}
-	return
 }
 
 func (up *Params) ValueProxy() ValueProxy {
@@ -88,17 +53,6 @@ func (up *Params) setVp(vp ValueProxy) {
 
 func (up *Params) process(params []interface{}) {
 	for _, p := range params {
-		if data, ok := p.(ValueProxy); ok {
-			up.setVp(data)
-		}
-
-		if data, ok := p.(ValueReader); ok {
-			if up.vr != nil && up.vr != data {
-				panic("jaws: more than one ValueReader")
-			}
-			up.vr = data
-		}
-
 		switch data := p.(type) {
 		case Tag:
 			up.tags = append(up.tags, data.Value)
@@ -109,7 +63,8 @@ func (up *Params) process(params []interface{}) {
 				}
 			}
 		case *atomic.Value:
-			up.setVp(AtomicProxy{Value: data})
+			up.setVp(atomicProxy{Value: data})
+			up.tags = append(up.tags, data)
 		case *NamedBoolArray:
 			up.nba = data
 			up.setVp(data)
@@ -120,6 +75,9 @@ func (up *Params) process(params []interface{}) {
 			if data.nba != nil {
 				up.tags = append(up.tags, data.nba)
 			}
+		case ValueProxy:
+			up.setVp(data)
+			up.tags = append(up.tags, data)
 		case []string:
 			for _, s := range data {
 				up.addString(s)
