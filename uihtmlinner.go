@@ -11,12 +11,12 @@ type UiHtmlInner struct {
 
 func (ui *UiHtmlInner) WriteHtmlInner(e *Element, w io.Writer, htmltag, htmltype string, data []interface{}) error {
 	writeUiDebug(e, w)
-	return ui.UiHtml.WriteHtmlInner(w, e.Jid(), htmltag, htmltype, anyToHtml(ui.ValueProxy.JawsGet(e)), data)
+	return ui.UiHtml.WriteHtmlInner(w, e, htmltag, htmltype, anyToHtml(ui.ValueProxy.JawsGet(e)), data)
 }
 
 func NewUiHtmlInner(up Params) UiHtmlInner {
 	return UiHtmlInner{
-		UiHtml:     UiHtml{Tags: up.Tags()},
+		UiHtml:     NewUiHtml(up),
 		ValueProxy: up.ValueProxy(),
 	}
 }

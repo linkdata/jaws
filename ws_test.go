@@ -119,7 +119,7 @@ func TestWS_NormalExchange(t *testing.T) {
 
 	gotCallCh := make(chan struct{})
 
-	ts.rq.RegisterEventFn("foo", func(rq *Request, evt what.What, id, val string) error {
+	ts.rq.RegisterEventFn(Tag{"foo"}, func(rq *Request, evt what.What, id, val string) error {
 		close(gotCallCh)
 		return fooError
 	})

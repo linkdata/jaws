@@ -7,7 +7,7 @@ type UiInput struct {
 
 func NewUiInput(up Params) UiInput {
 	return UiInput{
-		UiHtml:     UiHtml{Tags: up.Tags()},
+		UiHtml:     NewUiHtml(up),
 		ValueProxy: up.ValueProxy(),
 	}
 }

@@ -520,6 +520,6 @@ func (rq *Request) OnTrigger(jid string, fn func(rq *Request, jid string) error)
 			return
 		}
 	}
-	rq.Register(jid, wf)
+	rq.Register(Tag{jid}, wf)
 	return nil
 }

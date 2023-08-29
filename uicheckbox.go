@@ -10,7 +10,7 @@ type UiCheckbox struct {
 }
 
 func (ui *UiCheckbox) JawsRender(e *Element, w io.Writer) error {
-	return ui.UiInputBool.WriteHtmlInput(e, w, "checkbox", e.Data)
+	return ui.UiInputBool.WriteHtmlInput(e, w, "checkbox", e.Attrs())
 }
 
 func NewUiCheckbox(up Params) (ui *UiCheckbox) {

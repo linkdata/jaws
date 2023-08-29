@@ -16,14 +16,6 @@ type Params struct {
 	nba   *NamedBoolArray
 }
 
-func (up *Params) addString(s string) {
-	if len(up.tags) == 0 {
-		up.tags = append(up.tags, s)
-	} else {
-		up.attrs = append(up.attrs, s)
-	}
-}
-
 func NewParams(params []interface{}) (up Params) {
 	up.process(params)
 	return
@@ -35,7 +27,7 @@ func (up *Params) Tags() []interface{} {
 
 func (up *Params) ValueProxy() ValueProxy {
 	if up.vp == nil {
-		panic("no ValueProxy")
+		panic("jaws: missing parameter: jaws.ValueProxy or *atomic.Value")
 	}
 	return up.vp
 }
@@ -79,11 +71,9 @@ func (up *Params) process(params []interface{}) {
 			up.setVp(data)
 			up.tags = append(up.tags, data)
 		case []string:
-			for _, s := range data {
-				up.addString(s)
-			}
+			up.attrs = append(up.attrs, data...)
 		case string:
-			up.addString(data)
+			up.attrs = append(up.attrs, data)
 		case nil:
 			// does nothing
 		case EventFn:

@@ -19,7 +19,7 @@ type testUi struct {
 }
 
 func (tu *testUi) JawsUi(rq *Request, attrs ...string) template.HTML {
-	tu.jid = rq.RegisterEventFn(tu.tag, tu.JawsEvent)
+	tu.jid = rq.RegisterEventFn(Tag{tu.tag}, tu.JawsEvent)
 	return template.HTML(fmt.Sprintf(`<test jid="%s" %s>%s</test>`, tu.jid, strings.Join(attrs, " "), tu.val))
 }
 

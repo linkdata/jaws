@@ -18,18 +18,6 @@ type atomicProxy struct{ *atomic.Value }
 func (vp atomicProxy) JawsGet(e *Element) interface{}           { return vp.Load() }
 func (vp atomicProxy) JawsSet(e *Element, val interface{}) bool { return vp.Swap(val) != val }
 
-func MakeValueProxy(value interface{}) ValueProxy {
-	switch v := value.(type) {
-	case ValueProxy:
-		return v
-	case *atomic.Value:
-		return atomicProxy{Value: v}
-	case atomic.Value:
-		panic("jaws: MakeValueProxy: must pass atomic.Value by reference")
-	}
-	panic("jaws: MakeValueProxy: expected ValueProxy or *atomic.Value")
-}
-
 func anyToHtml(val interface{}) template.HTML {
 	var s string
 	switch v := val.(type) {

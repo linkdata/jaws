@@ -32,6 +32,16 @@ func (e *Element) Jid() Jid {
 	return e.jid
 }
 
+// Attrs returns the strings present in Data for this element.
+func (e *Element) Attrs() (attrs []string) {
+	for _, v := range e.Data {
+		if s, ok := v.(string); ok {
+			attrs = append(attrs, s)
+		}
+	}
+	return
+}
+
 // UI returns the UI object.
 func (e *Element) UI() UI {
 	return e.ui

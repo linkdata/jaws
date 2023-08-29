@@ -105,7 +105,7 @@ func TestRequest_Registrations(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	is.Equal(rq.wantMessage(&Message{Tags: ProcessTags("bar")}), false)
+	is.Equal(rq.wantMessage(&Message{Tags: []interface{}{"bar"}}), false)
 
 	jid := rq.Register("sometag")
 	is.True(jid != 0)
@@ -230,8 +230,8 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 	is := is.New(t)
 	rq := newTestRequest(is)
 	defer rq.Close()
-	rq.Register("foo")
-	theMsg := &Message{Tags: ProcessTags("foo")}
+	rq.Register(Tag{"foo"})
+	theMsg := &Message{Tags: []interface{}{"foo"}}
 
 	is.Equal(rq.Send(theMsg), true)
 	select {
@@ -250,14 +250,16 @@ func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
 	defer rq.Close()
 	jw := rq.jw
 	var callCount int32
-	rq.RegisterEventFn("foo", func(rq *Request, evt what.What, id, val string) error {
+	tag := Tag{"foo"}
+	tags := []interface{}{"foo"}
+	rq.RegisterEventFn(tag, func(rq *Request, evt what.What, id, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		is.Equal(1, jw.RequestCount())
 		jw.Close()
 		return errors.New(val)
 	})
 	fillWsCh(rq.outCh)
-	jw.Broadcast(&Message{Tags: ProcessTags("foo"), What: what.Hook, Data: "bar"})
+	jw.Broadcast(&Message{Tags: tags, What: what.Hook, Data: "bar"})
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Equal(int(atomic.LoadInt32(&callCount)), 0)
@@ -272,13 +274,15 @@ func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 	var callCount int32
-	rq.RegisterEventFn("foo", func(_ *Request, evt what.What, id, val string) error {
+	tag := Tag{"foo"}
+	tags := []interface{}{"foo"}
+	rq.RegisterEventFn(tag, func(_ *Request, evt what.What, id, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		rq.cancel()
 		return errors.New(val)
 	})
 	fillWsCh(rq.outCh)
-	rq.jw.Broadcast(&Message{Tags: ProcessTags("foo"), What: what.Hook, Data: "bar"})
+	rq.jw.Broadcast(&Message{Tags: tags, What: what.Hook, Data: "bar"})
 
 	select {
 	case <-time.NewTimer(testTimeout).C:
@@ -299,9 +303,9 @@ func TestRequest_OutboundOverflowPanicsWithNoLogger(t *testing.T) {
 	rq.expectPanic = true
 	rq.jw.Logger = nil
 	defer rq.Close()
-	rq.Register("foo")
+	rq.Register(Tag{"foo"})
 	fillWsCh(rq.outCh)
-	rq.sendCh <- &Message{Tags: ProcessTags("foo"), What: what.None, Data: "bar"}
+	rq.sendCh <- &Message{Tags: []interface{}{"foo"}, What: what.None, Data: "bar"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -317,14 +321,14 @@ func TestRequest_Trigger(t *testing.T) {
 	defer rq.Close()
 	gotFooCall := make(chan struct{})
 	gotEndCall := make(chan struct{})
-	rq.RegisterEventFn("foo", func(rq *Request, evt what.What, id, val string) error {
+	rq.RegisterEventFn(Tag{"foo"}, func(rq *Request, evt what.What, id, val string) error {
 		defer close(gotFooCall)
 		return nil
 	})
-	rq.RegisterEventFn("err", func(rq *Request, evt what.What, id, val string) error {
+	rq.RegisterEventFn(Tag{"err"}, func(rq *Request, evt what.What, id, val string) error {
 		return errors.New(val)
 	})
-	rq.RegisterEventFn("end", func(rq *Request, evt what.What, id, val string) error {
+	rq.RegisterEventFn(Tag{"end"}, func(rq *Request, evt what.What, id, val string) error {
 		defer close(gotEndCall)
 		return nil
 	})
@@ -374,7 +378,7 @@ func TestRequest_EventFnQueue(t *testing.T) {
 	firstDoneCh := make(chan struct{})
 	var sleepDone int32
 	var callCount int32
-	rq.RegisterEventFn("sleep", func(rq *Request, evt what.What, id, val string) error {
+	rq.RegisterEventFn(Tag{"sleep"}, func(rq *Request, evt what.What, id, val string) error {
 		count := int(atomic.AddInt32(&callCount, 1))
 		is.Equal(val, strconv.Itoa(count))
 		if count == 1 {
@@ -420,7 +424,7 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 
 	var wait int32
 
-	rq.RegisterEventFn("bomb", func(_ *Request, evt what.What, id, val string) error {
+	rq.RegisterEventFn(Tag{"bomb"}, func(_ *Request, evt what.What, id, val string) error {
 		time.Sleep(time.Millisecond * time.Duration(atomic.AddInt32(&wait, 1)))
 		return nil
 	})
@@ -431,7 +435,7 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 	defer tmr.Stop()
 	for {
 		select {
-		case rq.sendCh <- &Message{Tags: ProcessTags("bomb"), What: what.Trigger}:
+		case rq.sendCh <- &Message{Tags: []interface{}{"bomb"}, What: what.Trigger}:
 		case <-rq.doneCh:
 			is.True(rq.panicked)
 			return
@@ -448,7 +452,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 
 	var spewState int32
 	var callCount int32
-	rq.RegisterEventFn("spew", func(_ *Request, evt what.What, id, val string) error {
+	rq.RegisterEventFn(Tag{"spew"}, func(_ *Request, evt what.What, id, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		if len(rq.outCh) < cap(rq.outCh) {
 			rq.jw.Trigger("spew", "")
@@ -460,7 +464,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 		}
 		return errors.New("chunks")
 	})
-	rq.Register("foo")
+	rq.Register(Tag{"foo"})
 
 	rq.jw.Trigger("spew", "")
 
@@ -478,7 +482,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	// outbound channel is full, but with the
 	// event fn holding it won't be able to end
 	select {
-	case rq.sendCh <- &Message{Tags: ProcessTags("foo")}:
+	case rq.sendCh <- &Message{Tags: []interface{}{"foo"}}:
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-rq.doneCh:
@@ -524,10 +528,10 @@ func TestRequest_Sends(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	rq.Register("SetAttr")
+	rq.Register(Tag{"SetAttr"})
 	setAttrElement := rq.GetElements("SetAttr")[0]
 
-	rq.Register("RemoveAttr")
+	rq.Register(Tag{"RemoveAttr"})
 	removeAttrElement := rq.GetElements("RemoveAttr")[0]
 
 	gotSetAttr := ""
@@ -649,7 +653,7 @@ func TestRequest_OnTrigger(t *testing.T) {
 	defer rq.Close()
 	is.NoErr(rq.OnTrigger(elemId, func(rq *Request, jid string) error {
 		defer close(gotCall)
-		is.True(rq.wantMessage(&Message{Tags: ProcessTags(elemId)}))
+		is.True(rq.wantMessage(&Message{Tags: []interface{}{elemId}}))
 		n, err := strconv.Atoi(jid)
 		is.NoErr(err)
 		elem := rq.GetElement(Jid(n))
@@ -717,7 +721,6 @@ func TestRequest_Elements(t *testing.T) {
 }
 
 func TestRequest_Text(t *testing.T) {
-	const elemId = "elem-id"
 	const elemVal = "elem-val"
 	is := is.New(t)
 	rq := newTestRequest(is)
@@ -726,20 +729,22 @@ func TestRequest_Text(t *testing.T) {
 	var av atomic.Value
 	av.Store(elemVal)
 
-	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
+	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
-	h := rq.Text(elemId, &av, func(rq *Request, jidstr, val string) error {
+	h := rq.Text(&av, func(rq *Request, jidstr, val string) error {
 		defer close(gotCall)
 		is.True(rq.GetElement(ParseJid(jidstr)) != nil)
 		is.True(rq.GetElement(ParseJid(jidstr)) != nil)
 		is.Equal(val, "other-stuff")
 		return nil
 	}, "disabled")
-	chk(h, elemId, elemVal)
-	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "other-stuff"}
+	chk(h, &av, elemVal)
+	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, &av), What: what.Input, Data: "other-stuff"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
+		t.Log(h)
+		t.Log(jidForTag(rq.Request, &av))
 		is.Fail()
 	case <-gotCall:
 	}
@@ -753,7 +758,6 @@ func jidForTag(rq *Request, tag interface{}) Jid {
 }
 
 func TestRequest_Password(t *testing.T) {
-	const elemId = "elem-id"
 	is := is.New(t)
 	rq := newTestRequest(is)
 	defer rq.Close()
@@ -761,18 +765,18 @@ func TestRequest_Password(t *testing.T) {
 	var av atomic.Value
 	av.Store("")
 
-	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
+	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
-	h := rq.Password(elemId, &av, func(rq *Request, jid, val string) error {
+	h := rq.Password(&av, func(rq *Request, jid, val string) error {
 		defer close(gotCall)
 		is.True(rq.GetElement(ParseJid(jid)) != nil)
 		is.Equal(val, "other-stuff")
 		return nil
 	}, "autocomplete=\"off\"")
-	chk(h, elemId, "autocomplete")
+	chk(h, &av, "autocomplete")
 	is.True(!strings.Contains(string(h), "value"))
-	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "other-stuff"}
+	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, &av), What: what.Input, Data: "other-stuff"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -781,7 +785,6 @@ func TestRequest_Password(t *testing.T) {
 }
 
 func TestRequest_Number(t *testing.T) {
-	const elemId = "elem-id"
 	const elemVal = 21.5
 	is := is.New(t)
 	rq := newTestRequest(is)
@@ -789,8 +792,9 @@ func TestRequest_Number(t *testing.T) {
 
 	var av atomic.Value
 	av.Store(elemVal)
+	elemId := &av
 
-	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
+	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
 	defer close(gotCall)
@@ -832,7 +836,6 @@ func TestRequest_Number(t *testing.T) {
 }
 
 func TestRequest_Range(t *testing.T) {
-	const elemId = "elem-id"
 	const elemVal = float64(3.14)
 	is := is.New(t)
 	rq := newTestRequest(is)
@@ -840,8 +843,9 @@ func TestRequest_Range(t *testing.T) {
 
 	var av atomic.Value
 	av.Store(elemVal)
+	elemId := &av
 
-	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
+	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
 	h := rq.Range(elemId, &av, func(rq *Request, jid string, val float64) error {
@@ -860,7 +864,6 @@ func TestRequest_Range(t *testing.T) {
 }
 
 func TestRequest_Checkbox(t *testing.T) {
-	const elemId = "elem-id"
 	const elemVal = true
 	is := is.New(t)
 	rq := newTestRequest(is)
@@ -868,18 +871,19 @@ func TestRequest_Checkbox(t *testing.T) {
 
 	var av atomic.Value
 	av.Store(elemVal)
+	elemId := &av
 
-	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
+	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
 	defer close(gotCall)
-	h := rq.Checkbox(elemId, &av, func(rq *Request, jid string, val bool) error {
+	h := rq.Checkbox(&av, func(rq *Request, jid string, val bool) error {
 		is.True(rq.GetElement(ParseJid(jid)) != nil)
 		is.Equal(val, false)
 		gotCall <- struct{}{}
 		return nil
-	}, "")
-	chk(h, elemId, "checked")
+	})
+	chk(h, &av, "checked")
 	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "false"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
@@ -904,7 +908,6 @@ func TestRequest_Checkbox(t *testing.T) {
 }
 
 func TestRequest_Date(t *testing.T) {
-	const elemId = "elem-id"
 	var elemVal time.Time
 	is := is.New(t)
 	rq := newTestRequest(is)
@@ -912,8 +915,9 @@ func TestRequest_Date(t *testing.T) {
 
 	var av atomic.Value
 	av.Store(elemVal)
+	elemId := &av
 
-	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
+	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
 	defer close(gotCall)
@@ -958,12 +962,11 @@ func TestRequest_Radio(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	const elemId = "quux"
-
 	var av atomic.Value
 	av.Store(true)
+	elemId := &av
 
-	chk := func(h template.HTML, tag, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
+	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
 	h := rq.Radio(elemId, &av, func(rq *Request, jid string, val bool) error {

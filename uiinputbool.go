@@ -12,14 +12,14 @@ type UiInputBool struct {
 	UiInput
 }
 
-func (ui *UiInputBool) WriteHtmlInput(e *Element, w io.Writer, htmltype string, data []interface{}) error {
+func (ui *UiInputBool) WriteHtmlInput(e *Element, w io.Writer, htmltype string, attrs []string) error {
 	val := ui.Get(e)
 	if b, ok := val.(bool); ok {
 		if b {
-			data = append(data, "checked")
+			attrs = append(attrs, "checked")
 		}
 		writeUiDebug(e, w)
-		return ui.UiInput.WriteHtmlInput(w, e.Jid(), htmltype, "", data...)
+		return WriteHtmlInput(w, e.Jid(), htmltype, "", attrs...)
 	}
 	panic(fmt.Errorf("jaws: UiInputBool: expected bool, got %T from %T", val, ui.ValueProxy))
 }

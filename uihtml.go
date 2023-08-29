@@ -18,120 +18,11 @@ type UiHtml struct {
 	EventFn EventFn
 }
 
-func stringTags(tags []interface{}, text string) []interface{} {
-	for _, s := range strings.Split(text, " ") {
-		if s != "" {
-			tags = append(tags, s)
-		}
+func NewUiHtml(up Params) UiHtml {
+	return UiHtml{
+		Tags:    up.Tags(),
+		EventFn: up.ef,
 	}
-	return tags
-}
-
-func ProcessTags(tagsitem interface{}) (tags []interface{}) {
-	switch data := tagsitem.(type) {
-	case Tag:
-		tags = append(tags, data)
-	case []Tag:
-		for _, t := range data {
-			if t.Value != nil {
-				tags = append(tags, t.Value)
-			}
-		}
-	case string:
-		tags = stringTags(tags, data)
-	case []string:
-		for _, s := range data {
-			tags = stringTags(tags, s)
-		}
-	case []interface{}:
-		for _, t := range data {
-			if t != nil {
-				tags = append(tags, t)
-			}
-		}
-	case nil:
-		// do nothing
-	default:
-		tags = append(tags, data)
-	}
-	return
-}
-
-func ProcessData(dataslice []interface{}) (attrs []string, eventFn EventFn) {
-	for _, dataitem := range dataslice {
-		switch data := dataitem.(type) {
-		case string:
-			attrs = append(attrs, data)
-		case EventFn:
-			if data != nil {
-				eventFn = data
-			}
-		case func(*Request, string) error: // ClickFn
-			if data != nil {
-				eventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
-					if wht == what.Click {
-						err = data(rq, jid)
-					}
-					return
-				}
-			}
-		case func(*Request, string, string) error: // InputTextFn
-			if data != nil {
-				eventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
-					if wht == what.Input {
-						err = data(rq, jid, val)
-					}
-					return
-				}
-			}
-		case func(*Request, string, bool) error: // InputBoolFn
-			if data != nil {
-				eventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
-					if wht == what.Input {
-						var v bool
-						if val != "" {
-							if v, err = strconv.ParseBool(val); err != nil {
-								return
-							}
-						}
-						err = data(rq, jid, v)
-					}
-					return
-				}
-			}
-		case func(*Request, string, float64) error: // InputFloatFn
-			if data != nil {
-				eventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
-					if wht == what.Input {
-						var v float64
-						if val != "" {
-							if v, err = strconv.ParseFloat(val, 64); err != nil {
-								return
-							}
-						}
-						err = data(rq, jid, v)
-					}
-					return
-				}
-			}
-		case func(*Request, string, time.Time) error: // InputDateFn
-			if data != nil {
-				eventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
-					if wht == what.Input {
-						var v time.Time
-						if val != "" {
-							if v, err = time.Parse(ISO8601, val); err != nil {
-								return
-							}
-						}
-						err = data(rq, jid, v)
-					}
-					return
-				}
-			}
-		}
-	}
-	return
 }
 
 func htmlValueString(val interface{}) (s string) {
@@ -160,30 +51,22 @@ func htmlValueString(val interface{}) (s string) {
 	return
 }
 
-func (ui *UiHtml) ProcessData(dataslice []interface{}) []string {
-	attrs, eventFn := ProcessData(dataslice)
-	if eventFn != nil {
-		ui.EventFn = eventFn
-	}
-	return attrs
-}
-
 func writeUiDebug(e *Element, w io.Writer) {
 	if deadlock.Debug {
 		w.Write([]byte(strings.ReplaceAll(fmt.Sprintf("<!-- jid=%s %T tags: %v", e.jid, e.ui, e.tags), "-->", "") + " -->"))
 	}
 }
 
-func (ui *UiHtml) WriteHtmlInner(w io.Writer, jid Jid, htmltag, htmltype string, htmlinner template.HTML, data []interface{}) error {
-	return WriteHtmlInner(w, jid, htmltag, htmltype, htmlinner, ui.ProcessData(data)...)
+func (ui *UiHtml) WriteHtmlInner(w io.Writer, e *Element, htmltag, htmltype string, htmlinner template.HTML, data []interface{}) error {
+	return WriteHtmlInner(w, e.Jid(), htmltag, htmltype, htmlinner, e.Attrs()...)
 }
 
-func (ui *UiHtml) WriteHtmlSelect(w io.Writer, jid Jid, nba *NamedBoolArray, data ...interface{}) error {
-	return WriteHtmlSelect(w, jid, nba, ui.ProcessData(data)...)
+func (ui *UiHtml) WriteHtmlSelect(w io.Writer, e *Element, nba *NamedBoolArray, data ...interface{}) error {
+	return WriteHtmlSelect(w, e.Jid(), nba, e.Attrs()...)
 }
 
-func (ui *UiHtml) WriteHtmlInput(w io.Writer, jid Jid, htmltype, htmlval string, data ...interface{}) error {
-	return WriteHtmlInput(w, jid, htmltype, htmlval, ui.ProcessData(data)...)
+func (ui *UiHtml) WriteHtmlInput(w io.Writer, e *Element, htmltype, htmlval string, data ...interface{}) error {
+	return WriteHtmlInput(w, e.Jid(), htmltype, htmlval, e.Attrs()...)
 }
 
 func (ui *UiHtml) JawsTags(rq *Request) (tags []interface{}) {

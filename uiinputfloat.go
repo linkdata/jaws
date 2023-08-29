@@ -16,7 +16,7 @@ func (ui *UiInputFloat) WriteHtmlInput(e *Element, w io.Writer, htmltype string)
 	val := ui.Get(e)
 	if n, ok := val.(float64); ok {
 		writeUiDebug(e, w)
-		return ui.UiInput.WriteHtmlInput(w, e.Jid(), htmltype, strconv.FormatFloat(n, 'f', -1, 64), e.Data...)
+		return ui.UiInput.WriteHtmlInput(w, e, htmltype, strconv.FormatFloat(n, 'f', -1, 64), e.Data...)
 	}
 	return fmt.Errorf("jaws: UiInputFloat: expected float64, got %T", val)
 }

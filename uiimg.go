@@ -8,7 +8,8 @@ import (
 )
 
 type UiImg struct {
-	UiHtmlInner
+	UiHtml
+	ValueProxy
 }
 
 func (ui *UiImg) SrcAttr(e *Element) string {
@@ -28,7 +29,7 @@ func (ui *UiImg) SrcAttr(e *Element) string {
 }
 
 func (ui *UiImg) JawsRender(e *Element, w io.Writer) error {
-	return ui.UiHtmlInner.WriteHtmlInner(e, w, "img", "", append(e.Data, "src="+ui.SrcAttr(e)))
+	return WriteHtmlInner(w, e.Jid(), "img", "", "", append(e.Attrs(), "src="+ui.SrcAttr(e))...)
 }
 
 func (ui *UiImg) JawsUpdate(e *Element) (err error) {
@@ -40,7 +41,8 @@ func (ui *UiImg) JawsUpdate(e *Element) (err error) {
 
 func NewUiImg(up Params) *UiImg {
 	return &UiImg{
-		NewUiHtmlInner(up),
+		UiHtml:     NewUiHtml(up),
+		ValueProxy: up.ValueProxy(),
 	}
 }
 

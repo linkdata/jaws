@@ -15,7 +15,7 @@ func (ui *UiInputText) WriteHtmlInput(e *Element, w io.Writer, htmltype string) 
 	val := ui.Get(e)
 	if s, ok := val.(string); ok {
 		writeUiDebug(e, w)
-		return ui.UiInput.WriteHtmlInput(w, e.Jid(), htmltype, s, e.Data...)
+		return ui.UiInput.WriteHtmlInput(w, e, htmltype, s, e.Data...)
 	}
 	return fmt.Errorf("jaws: UiInputText: expected string, got %T", val)
 }
