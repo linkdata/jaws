@@ -53,7 +53,7 @@ func htmlValueString(val interface{}) (s string) {
 
 func writeUiDebug(e *Element, w io.Writer) {
 	if deadlock.Debug {
-		w.Write([]byte(strings.ReplaceAll(fmt.Sprintf("<!-- jid=%s %T tags: %v", e.jid, e.ui, e.tags), "-->", "") + " -->"))
+		w.Write([]byte(strings.ReplaceAll(fmt.Sprintf("<!-- jid=%s %T tags: %v", e.jid, e.ui, e.Tags()), "-->", "") + " -->"))
 	}
 }
 
@@ -85,7 +85,7 @@ func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if ui.EventFn != nil {
 		err = ui.EventFn(e.Request(), wht, e.Jid().String(), val)
 	} else if deadlock.Debug {
-		log.Println("UiHtml.JawsEvent() ignored", e.Jid(), wht, val)
+		log.Println("UiHtml.JawsEvent() ignored: ", e, wht, val)
 	}
 	return
 }

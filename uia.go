@@ -19,6 +19,6 @@ func NewUiA(up Params) *UiA {
 	}
 }
 
-func (rq *Request) A(params ...interface{}) template.HTML {
-	return rq.UI(NewUiA(NewParams(params)), params...)
+func (rq *Request) A(innerHtml interface{}, params ...interface{}) template.HTML {
+	return rq.UI(NewUiA(NewParams(innerHtml, params)), params...)
 }

@@ -23,27 +23,8 @@ type InputFloatFn = func(*Request, string, float64) error
 type InputDateFn = func(*Request, string, time.Time) error
 
 // Deprecated: Will be removed in future
-func (rq *Request) GetEventFn(tagitem interface{}) (fn EventFn, ok bool) {
-	up := NewParams([]interface{}{tagitem})
-	tags := up.Tags()
-	for _, tag := range tags {
-		if jid, ok := tag.(Jid); ok {
-			if elem := rq.GetElement(jid); elem != nil {
-				if uih, isuih := elem.UI().(*UiHtml); isuih {
-					return uih.EventFn, true
-				}
-			}
-			return nil, false
-		}
-	}
-
-	rq.mu.RLock()
-	defer rq.mu.RUnlock()
-	var elems []*Element
-	for _, tag := range tags {
-		elems = append(elems, rq.tagMap[tag]...)
-	}
-	for _, elem := range elems {
+func (rq *Request) GetEventFn(jid Jid) (fn EventFn, ok bool) {
+	if elem := rq.GetElement(jid); elem != nil {
 		if uih, isuih := elem.UI().(*UiHtml); isuih {
 			return uih.EventFn, true
 		}
@@ -65,8 +46,8 @@ func (rq *Request) SetEventFn(tagstring string, fn EventFn) {
 }
 
 // Deprecated: Will be removed in future
-func (rq *Request) RegisterEventFn(params ...interface{}) Jid {
-	return rq.Register(params...)
+func (rq *Request) RegisterEventFn(tagitem interface{}, params ...interface{}) Jid {
+	return rq.Register(tagitem, params...)
 }
 
 // Deprecated: Will be removed in future

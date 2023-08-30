@@ -18,6 +18,6 @@ func NewUiSelect(up Params) (ui *UiSelect) {
 	return
 }
 
-func (rq *Request) Select(params ...interface{}) template.HTML {
-	return rq.UI(NewUiSelect(NewParams(params)), params...)
+func (rq *Request) Select(namedBoolArray interface{}, params ...interface{}) template.HTML {
+	return rq.UI(NewUiSelect(NewParams(namedBoolArray, params)), params...)
 }

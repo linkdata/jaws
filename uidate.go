@@ -24,6 +24,6 @@ func NewUiDate(up Params) (ui *UiDate) {
 	return
 }
 
-func (rq *Request) Date(params ...interface{}) template.HTML {
-	return rq.UI(NewUiDate(NewParams(params)), params...)
+func (rq *Request) Date(value interface{}, params ...interface{}) template.HTML {
+	return rq.UI(NewUiDate(NewParams(value, params)), params...)
 }

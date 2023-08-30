@@ -227,26 +227,46 @@ func (rq *Request) Redirect(url string) {
 	})
 }
 
+func (rq *Request) TagsOf(elem *Element) (tags []interface{}) {
+	if elem != nil {
+		rq.mu.RLock()
+		defer rq.mu.RUnlock()
+		for tag, elems := range rq.tagMap {
+			for _, e := range elems {
+				if e == elem {
+					tags = append(tags, tag)
+					break
+				}
+			}
+		}
+	}
+	return
+}
+
 // Register creates a new Element with the given tag as a valid target
 // for dynamic updates.
 //
 // Returns the JaWS ID, suitable for including as a HTML attribute:
 //
 //	<div jid="{{$.Register `footag`}}">
-func (rq *Request) Register(params ...interface{}) Jid {
-	up := NewParams(params)
-	tags := up.Tags()
-	for _, tag := range tags {
-		if jid, ok := tag.(Jid); ok {
-			if elem := rq.GetElement(jid); elem != nil {
-				if up.ef != nil {
-					if uib, ok := elem.UI().(*UiHtml); ok {
-						uib.EventFn = up.ef
-					}
+func (rq *Request) Register(tagitem interface{}, params ...interface{}) Jid {
+	if jid, ok := tagitem.(Jid); ok {
+		if elem := rq.GetElement(jid); elem != nil {
+			up := NewParams(nil, params)
+			if up.ef != nil {
+				if uib, ok := elem.UI().(*UiHtml); ok {
+					uib.EventFn = up.ef
 				}
-				return jid
 			}
+			return jid
 		}
+		return 0
+	}
+
+	up := NewParams(tagitem, params)
+	tags := up.Tags()
+	if len(tags) == 0 {
+		tags = append(tags, tagitem)
 	}
 
 	rq.mu.Lock()
@@ -285,12 +305,15 @@ func (rq *Request) wantMessage(msg *Message) (yes bool) {
 }
 
 func (rq *Request) newElementLocked(tags []interface{}, ui UI, data []interface{}) (elem *Element) {
-	elem = &Element{tags: tags, jid: Jid(len(rq.elems) + 1), ui: ui, Data: data, rq: rq}
+	elem = &Element{
+		jid:  Jid(len(rq.elems) + 1),
+		ui:   ui,
+		rq:   rq,
+		Data: data,
+	}
 	rq.elems = append(rq.elems, elem)
 	for _, tag := range tags {
-		if tag != nil {
-			rq.tagMap[tag] = append(rq.tagMap[tag], elem)
-		}
+		rq.tagMap[tag] = append(rq.tagMap[tag], elem)
 	}
 	return
 }

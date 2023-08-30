@@ -19,6 +19,6 @@ func NewUiButton(up Params) *UiButton {
 	}
 }
 
-func (rq *Request) Button(params ...interface{}) template.HTML {
-	return rq.UI(NewUiButton(NewParams(params)), params...)
+func (rq *Request) Button(innerHtml interface{}, params ...interface{}) template.HTML {
+	return rq.UI(NewUiButton(NewParams(innerHtml, params)), params...)
 }

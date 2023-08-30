@@ -19,6 +19,6 @@ func NewUiSpan(up Params) *UiSpan {
 	}
 }
 
-func (rq *Request) Span(params ...interface{}) template.HTML {
-	return rq.UI(NewUiSpan(NewParams(params)), params...)
+func (rq *Request) Span(innerHtml interface{}, params ...interface{}) template.HTML {
+	return rq.UI(NewUiSpan(NewParams(innerHtml, params)), params...)
 }

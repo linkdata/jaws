@@ -19,6 +19,6 @@ func NewUiTd(up Params) *UiTd {
 	}
 }
 
-func (rq *Request) Td(params ...interface{}) template.HTML {
-	return rq.UI(NewUiTd(NewParams(params)), params...)
+func (rq *Request) Td(innerHtml interface{}, params ...interface{}) template.HTML {
+	return rq.UI(NewUiTd(NewParams(innerHtml, params)), params...)
 }

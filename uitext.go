@@ -22,6 +22,6 @@ func NewUiText(up Params) (ui *UiText) {
 	return
 }
 
-func (rq *Request) Text(params ...interface{}) template.HTML {
-	return rq.UI(NewUiText(NewParams(params)), params...)
+func (rq *Request) Text(value interface{}, params ...interface{}) template.HTML {
+	return rq.UI(NewUiText(NewParams(value, params)))
 }

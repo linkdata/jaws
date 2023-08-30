@@ -9,8 +9,8 @@ type RadioElement struct {
 	e *Element
 }
 
-func (rq *Request) RadioGroup(params ...interface{}) (rl []RadioElement) {
-	up := NewParams(params)
+func (rq *Request) RadioGroup(namedBoolArray interface{}, params ...interface{}) (rl []RadioElement) {
+	up := NewParams(namedBoolArray, params)
 	tags := up.Tags()
 	up.attrs = append(up.attrs, `name="`+MakeID()+`"`)
 	up.nba.ReadLocked(func(nbl []*NamedBool) {

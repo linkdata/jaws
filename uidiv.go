@@ -19,6 +19,6 @@ func NewUiDiv(up Params) *UiDiv {
 	}
 }
 
-func (rq *Request) Div(params ...interface{}) template.HTML {
-	return rq.UI(NewUiDiv(NewParams(params)), params...)
+func (rq *Request) Div(innerHtml interface{}, params ...interface{}) template.HTML {
+	return rq.UI(NewUiDiv(NewParams(innerHtml, params)), params...)
 }

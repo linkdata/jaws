@@ -22,6 +22,6 @@ func NewUiRadio(up Params) (ui *UiRadio) {
 	return
 }
 
-func (rq *Request) Radio(params ...interface{}) template.HTML {
-	return rq.UI(NewUiRadio(NewParams(params)), params...)
+func (rq *Request) Radio(value interface{}, params ...interface{}) template.HTML {
+	return rq.UI(NewUiRadio(NewParams(value, params)), params...)
 }

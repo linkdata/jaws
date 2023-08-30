@@ -22,6 +22,6 @@ func NewUiNumber(up Params) (ui *UiNumber) {
 	return
 }
 
-func (rq *Request) Number(params ...interface{}) template.HTML {
-	return rq.UI(NewUiNumber(NewParams(params)), params...)
+func (rq *Request) Number(value interface{}, params ...interface{}) template.HTML {
+	return rq.UI(NewUiNumber(NewParams(value, params)), params...)
 }

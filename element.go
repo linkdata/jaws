@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"fmt"
 	"html/template"
 
 	"github.com/linkdata/deadlock"
@@ -18,13 +19,20 @@ const elemValueMagic = ">V"
 
 // An Element is an instance of an UI object and it's user data in a Request.
 type Element struct {
-	tags  []interface{}    // (read-only) tags
 	jid   Jid              // (read-only) JaWS ID, unique to this Element within it's Request
 	ui    UI               // (read-only) the UI object
 	rq    *Request         // (read-only) the Request the Element belongs to
 	Data  []interface{}    // the optional data provided to the Request.UI() call
 	mu    deadlock.RWMutex // protects following
 	items []elemItem       // currently known items
+}
+
+func (e *Element) String() string {
+	return fmt.Sprintf("Element[%p]{%T, Jid: %v, Tags: %v}", e, e.ui, e.jid, e.Tags())
+}
+
+func (e *Element) Tags() []interface{} {
+	return e.rq.TagsOf(e)
 }
 
 // Jid returns the JaWS ID for this element, unique within it's Request.

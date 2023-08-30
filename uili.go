@@ -19,6 +19,6 @@ func NewUiLi(up Params) *UiLi {
 	}
 }
 
-func (rq *Request) Li(params ...interface{}) template.HTML {
-	return rq.UI(NewUiLi(NewParams(params)), params...)
+func (rq *Request) Li(innerHtml interface{}, params ...interface{}) template.HTML {
+	return rq.UI(NewUiLi(NewParams(innerHtml, params)), params...)
 }

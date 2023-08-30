@@ -46,6 +46,6 @@ func NewUiImg(up Params) *UiImg {
 	}
 }
 
-func (rq *Request) Img(params ...interface{}) template.HTML {
-	return rq.UI(NewUiImg(NewParams(params)), params...)
+func (rq *Request) Img(imageSrc interface{}, params ...interface{}) template.HTML {
+	return rq.UI(NewUiImg(NewParams(imageSrc, params)), params...)
 }

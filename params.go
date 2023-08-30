@@ -1,6 +1,8 @@
 package jaws
 
 import (
+	"fmt"
+	"html/template"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -16,70 +18,87 @@ type Params struct {
 	nba   *NamedBoolArray
 }
 
-func NewParams(params []interface{}) (up Params) {
-	up.process(params)
+func addTags(tags map[interface{}]struct{}, tag interface{}) {
+	const maxAllowedTags = 256
+	if len(tags) >= maxAllowedTags {
+		panic("jaws: too many tags")
+	}
+	switch data := tag.(type) {
+	case nil:
+		// does nothing
+	case Tag:
+		addTags(tags, data.Value)
+	case []Tag:
+		for _, v := range data {
+			addTags(tags, v.Value)
+		}
+	case []interface{}:
+		for _, v := range data {
+			addTags(tags, v)
+		}
+	case []string:
+		for _, v := range data {
+			tags[v] = struct{}{}
+		}
+	case []template.HTML:
+		for _, v := range data {
+			tags[string(v)] = struct{}{}
+		}
+	case template.HTML:
+		tags[string(data)] = struct{}{}
+	case interface{}:
+		tags[data] = struct{}{}
+	default:
+		panic(fmt.Sprintf("jaws: cant use %T as a tag", data))
+	}
+}
+
+func unpackValtag(tags map[interface{}]struct{}, valtag interface{}) (vp ValueProxy) {
+	switch data := valtag.(type) {
+	case nil:
+		// does nothing
+	case *atomic.Value:
+		vp = atomicProxy{Value: data}
+		tags[data] = struct{}{}
+	case *NamedBoolArray:
+		vp = data
+		tags[data] = struct{}{}
+	case *NamedBool:
+		vp = data
+		tags[data] = struct{}{}
+	case ValueProxy:
+		vp = data
+		tags[data] = struct{}{}
+	case string:
+		vp = readonlyProxy{Value: template.HTML(data)}
+	case template.HTML:
+		vp = readonlyProxy{Value: data}
+	default:
+		vp = readonlyProxy{Value: data}
+		addTags(tags, data)
+	}
 	return
 }
 
-func (up *Params) Tags() []interface{} {
-	return up.tags
-}
-
-func (up *Params) ValueProxy() ValueProxy {
-	if up.vp == nil {
-		panic("jaws: missing parameter: jaws.ValueProxy or *atomic.Value")
+func NewParams(valtag interface{}, params []interface{}) (up Params) {
+	tags := map[interface{}]struct{}{}
+	up.vp = unpackValtag(tags, valtag)
+	if nba, ok := valtag.(*NamedBoolArray); ok {
+		up.nba = nba
 	}
-	return up.vp
-}
-
-func (up *Params) Attrs() []string {
-	return up.attrs
-}
-
-func (up *Params) setVp(vp ValueProxy) {
-	if up.vp != nil && up.vp != vp {
-		panic("jaws: more than one ValueProxy")
+	up.process(tags, params)
+	up.tags = make([]interface{}, 0, len(tags))
+	for tag := range tags {
+		up.tags = append(up.tags, tag)
 	}
-	up.vp = vp
+	return
 }
 
-func (up *Params) process(params []interface{}) {
+func (up *Params) process(tags map[interface{}]struct{}, params []interface{}) {
 	for _, p := range params {
 		switch data := p.(type) {
-		case Tag:
-			up.tags = append(up.tags, data.Value)
-		case []Tag:
-			for _, tag := range data {
-				if tag.Value != nil {
-					up.tags = append(up.tags, tag.Value)
-				}
-			}
-		case *atomic.Value:
-			up.setVp(atomicProxy{Value: data})
-			up.tags = append(up.tags, data)
-		case *NamedBoolArray:
-			up.nba = data
-			up.setVp(data)
-			up.tags = append(up.tags, data)
-		case *NamedBool:
-			up.setVp(data)
-			up.tags = append(up.tags, data)
-			if data.nba != nil {
-				up.tags = append(up.tags, data.nba)
-			}
-		case ValueProxy:
-			up.setVp(data)
-			up.tags = append(up.tags, data)
-		case []string:
-			up.attrs = append(up.attrs, data...)
-		case string:
-			up.attrs = append(up.attrs, data)
-		case nil:
-			// does nothing
 		case EventFn:
-			if data != nil {
-				up.ef = data
-			}
+			up.ef = data
 		case func(*Request, string) error: // ClickFn
 			if data != nil {
 				up.ef = func(rq *Request, wht what.What, jid, val string) (err error) {
@@ -144,9 +163,24 @@ func (up *Params) process(params []interface{}) {
 				}
 			}
 		case []interface{}:
-			up.process(data)
+			up.process(tags, data)
 		default:
-			up.tags = append(up.tags, data)
+			addTags(tags, data)
 		}
 	}
+}
+
+func (up *Params) Tags() []interface{} {
+	return up.tags
+}
+
+func (up *Params) ValueProxy() ValueProxy {
+	if up.vp == nil {
+		panic("jaws: missing jaws.ValueProxy or *atomic.Value")
+	}
+	return up.vp
+}
+
+func (up *Params) Attrs() []string {
+	return up.attrs
 }

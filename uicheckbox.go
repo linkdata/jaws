@@ -22,6 +22,6 @@ func NewUiCheckbox(up Params) (ui *UiCheckbox) {
 	return
 }
 
-func (rq *Request) Checkbox(params ...interface{}) template.HTML {
-	return rq.UI(NewUiCheckbox(NewParams(params)), params...)
+func (rq *Request) Checkbox(value interface{}, params ...interface{}) template.HTML {
+	return rq.UI(NewUiCheckbox(NewParams(value, params)), params...)
 }

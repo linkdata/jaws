@@ -22,6 +22,6 @@ func NewUiPassword(up Params) (ui *UiPassword) {
 	return
 }
 
-func (rq *Request) Password(params ...interface{}) template.HTML {
-	return rq.UI(NewUiPassword(NewParams(params)), params...)
+func (rq *Request) Password(value interface{}, params ...interface{}) template.HTML {
+	return rq.UI(NewUiPassword(NewParams(value, params)), params...)
 }

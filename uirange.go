@@ -22,6 +22,6 @@ func NewUiRange(up Params) (ui *UiRange) {
 	return
 }
 
-func (rq *Request) Range(params ...interface{}) template.HTML {
-	return rq.UI(NewUiRange(NewParams(params)), params...)
+func (rq *Request) Range(value interface{}, params ...interface{}) template.HTML {
+	return rq.UI(NewUiRange(NewParams(value, params)), params...)
 }
