@@ -43,7 +43,8 @@ func ParseJid(s string) Jid {
 
 func (jid Jid) String() string {
 	if jid > 0 {
-		return string(jid.Append(nil))
+		buf := make([]byte, 0, len(JidPrefix)+10)
+		return string(jid.Append(buf))
 	}
 	return ""
 }
