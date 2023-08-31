@@ -11,7 +11,7 @@ import (
 
 func Fuzz_wsParse(f *testing.F) {
 	f.Add([]byte("0\n\n"))
-	f.Add([]byte("-1\nInner\ndata\nline"))
+	f.Add([]byte("1\nInner\ndata\nline"))
 	f.Fuzz(func(t *testing.T, a []byte) {
 		if msg, ok := wsParse(a); ok {
 			b := msg.Append(nil)

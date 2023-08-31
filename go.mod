@@ -9,6 +9,7 @@ require (
 )
 
 require (
+	github.com/boumenot/gocover-cobertura v1.2.0 // indirect
 	github.com/klauspost/compress v1.15.5 // indirect
 	github.com/mattn/go-isatty v0.0.18 // indirect
 	golang.org/x/sys v0.7.0 // indirect
