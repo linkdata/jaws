@@ -367,6 +367,17 @@ func (jw *Jaws) Alert(lvl, msg string) {
 	})
 }
 
+// Order re-orders HTML elements matching the given tags in the order the tags are listed.
+//
+// Note: The HTML elements will not be moved to another parent node in the DOM tree,
+// so it's probably not meaningful to sort elements belonging to different parent nodes.
+func (jw *Jaws) Order(tags ...interface{}) {
+	jw.Broadcast(&Message{
+		Tags: tags,
+		What: what.Order,
+	})
+}
+
 // Count returns the number of requests waiting for their WebSocket callbacks.
 func (jw *Jaws) Pending() (n int) {
 	jw.mu.RLock()

@@ -11,9 +11,13 @@ type Jid int32
 
 const JidPrefix = "Jid." // String prefixing HTML ID's based on Jid's.
 
+func (jid Jid) AppendInt(dst []byte) []byte {
+	return strconv.AppendInt(dst, int64(jid), 10)
+}
+
 func (jid Jid) Append(dst []byte) []byte {
 	dst = append(dst, []byte(JidPrefix)...)
-	dst = strconv.AppendInt(dst, int64(jid), 10)
+	dst = jid.AppendInt(dst)
 	return dst
 }
 

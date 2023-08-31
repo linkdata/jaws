@@ -207,8 +207,8 @@ func (rq *Request) Send(msg *Message) bool {
 // The default JaWS javascript only supports Bootstrap.js dismissable alerts.
 func (rq *Request) Alert(lvl, msg string) {
 	rq.Send(&Message{
-		Data: lvl + "\n" + msg,
 		What: what.Alert,
+		Data: lvl + "\n" + msg,
 	})
 }
 
@@ -219,11 +219,40 @@ func (rq *Request) AlertError(err error) {
 	}
 }
 
+func (rq *Request) makeOrder(tags []interface{}) (b []byte) {
+	rq.mu.RLock()
+	defer rq.mu.RUnlock()
+	seen := make(map[*Element]struct{})
+	for _, tag := range tags {
+		for _, elem := range rq.getElementsLocked(tag) {
+			if _, ok := seen[elem]; !ok {
+				seen[elem] = struct{}{}
+				if len(b) > 0 {
+					b = append(b, ' ')
+				}
+				b = elem.jid.AppendInt(b)
+			}
+		}
+	}
+	return
+}
+
+// Order re-orders HTML elements matching the given tags in the order the tags are listed.
+//
+// Note: The HTML elements will not be moved to another parent node in the DOM tree,
+// so it's probably not meaningful to sort elements belonging to different parent nodes.
+func (rq *Request) Order(tags ...interface{}) {
+	rq.Send(&Message{
+		Tags: tags,
+		What: what.Order,
+	})
+}
+
 // Redirect requests the current Request to navigate to the given URL.
 func (rq *Request) Redirect(url string) {
 	rq.Send(&Message{
-		Data: url,
 		What: what.Redirect,
+		Data: url,
 	})
 }
 
@@ -336,11 +365,17 @@ func (rq *Request) GetElement(jid Jid) (e *Element) {
 }
 
 // GetElements returns a list of the UI elements in the Request that have the given tag.
-func (rq *Request) GetElements(tag interface{}) (elems []*Element) {
-	rq.mu.RLock()
+func (rq *Request) getElementsLocked(tag interface{}) (elems []*Element) {
 	if el, ok := rq.tagMap[tag]; ok {
 		elems = append(elems, el...)
 	}
+	return
+}
+
+// GetElements returns a list of the UI elements in the Request that have the given tag.
+func (rq *Request) GetElements(tag interface{}) (elems []*Element) {
+	rq.mu.RLock()
+	elems = rq.getElementsLocked(tag)
 	rq.mu.RUnlock()
 	return
 }
@@ -426,12 +461,24 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 		rq.mu.RUnlock()
 
 		if tagmsg != nil {
-			if tagmsg.What.IsCommand() {
+			switch tagmsg.What {
+			case what.Reload:
+				fallthrough
+			case what.Redirect:
+				fallthrough
+			case what.Alert:
 				outmsgs = append(outmsgs, wsMsg{
 					Data: tagmsg.Data,
 					What: tagmsg.What,
 				})
-			} else {
+			case what.Order:
+				if b := rq.makeOrder(tagmsg.Tags); len(b) > 0 {
+					outmsgs = append(outmsgs, wsMsg{
+						Data: string(b),
+						What: tagmsg.What,
+					})
+				}
+			default:
 				// find all elements listening to one of the tags in the message
 				todo := map[*Element]struct{}{}
 				rq.mu.RLock()

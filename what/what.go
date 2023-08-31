@@ -30,7 +30,7 @@ const (
 )
 
 func (w What) IsCommand() bool {
-	return w >= Reload && w <= Alert
+	return w > None && w < Update
 }
 
 func Parse(s string) What {

@@ -231,7 +231,7 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 	rq.Register(Tag{"foo"})
-	theMsg := &Message{Tags: []interface{}{"foo"}}
+	theMsg := &Message{Tags: []interface{}{"foo"}, What: what.Inner}
 
 	is.Equal(rq.Send(theMsg), true)
 	select {
@@ -240,7 +240,7 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 	case msg := <-rq.outCh:
 		elem := rq.GetElement(msg.Jid)
 		is.True(elem != nil)
-		is.Equal(msg, wsMsg{Jid: elem.jid})
+		is.Equal(msg, wsMsg{Jid: elem.jid, What: what.Inner})
 	}
 }
 
