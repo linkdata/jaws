@@ -25,7 +25,7 @@ function jawsIsTrue(v) {
 function jawsHandler(e) {
 	if (jaws instanceof WebSocket && e instanceof Event) {
 		var elem = e.currentTarget;
-		var jid = elem.id.substring(4)
+		var jid = elem.id.substring(4);
 		if (jid) {
 			var val = elem.value;
 			if (jawsIsCheckable(elem.getAttribute('type'))) {
@@ -76,7 +76,7 @@ function jawsSetValue(elem, str) {
 		return;
 	}
 	if (elem.value == str) {
-		return
+		return;
 	}
 	if (jawsHasSelection(elemtype)) {
 		var ss = elem.selectionStart;
@@ -163,7 +163,7 @@ function jawsElement(html) {
 function jawsWhere(elem, pos) {
 	var where = null;
 	if (pos && pos !== 'null') {
-		where = document.getElementById('Jid.' + pos)
+		where = document.getElementById('Jid.' + pos);
 		if (where == null) {
 			where = elem.children[parseInt(pos)];
 		}
@@ -207,7 +207,7 @@ function jawsMessage(e) {
 			console.log("jaws: unknown operation: " + what);
 			return;
 	}
-	jid = 'Jid.' + jid
+	jid = 'Jid.' + jid;
 	var elem = document.getElementById(jid);
 	if (elem === null) {
 		console.log("jaws: id not found: " + jid);
