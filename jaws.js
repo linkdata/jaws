@@ -25,7 +25,7 @@ function jawsIsTrue(v) {
 function jawsHandler(e) {
 	if (jaws instanceof WebSocket && e instanceof Event) {
 		var elem = e.currentTarget;
-		var jid = elem.getAttribute('jid');
+		var jid = elem.id.substring(4)
 		if (jid) {
 			var val = elem.value;
 			if (jawsIsCheckable(elem.getAttribute('type'))) {
@@ -39,23 +39,13 @@ function jawsHandler(e) {
 }
 
 function jawsAttach(topElem) {
-	var elements = topElem.querySelectorAll('[jid]');
+	var elements = topElem.querySelectorAll('[id^="Jid."]');
 	for (var i = 0; i < elements.length; i++) {
 		var elem = elements[i];
-		var jid = elem.getAttribute('jid');
-		if (jid.indexOf('jaws-') !== 0) {
-			var ddattr = elem.getAttribute('jaws');
-			if (ddattr) {
-				var evtypes = ddattr.split(',');
-				for (var j = 0; j < evtypes.length; j++) {
-					var evtype = evtypes[j].trim();
-					if (evtype) elem.addEventListener(evtype, jawsHandler, false);
-				}
-			} else if (jawsIsInputTag(elem.tagName)) {
-				elem.addEventListener('input', jawsHandler, false);
-			} else {
-				elem.addEventListener('click', jawsHandler, false);
-			}
+		if (jawsIsInputTag(elem.tagName)) {
+			elem.addEventListener('input', jawsHandler, false);
+		} else {
+			elem.addEventListener('click', jawsHandler, false);
 		}
 	}
 	return topElem;
@@ -173,7 +163,7 @@ function jawsElement(html) {
 function jawsWhere(elem, pos) {
 	var where = null;
 	if (pos && pos !== 'null') {
-		where = elem.querySelector('[id="' + pos + '"]');
+		where = document.getElementById('Jid.' + pos)
 		if (where == null) {
 			where = elem.children[parseInt(pos)];
 		}
@@ -183,7 +173,7 @@ function jawsWhere(elem, pos) {
 
 function jawsMessage(e) {
 	var lines = e.data.split('\n');
-	var cmd_or_jid = lines.shift();
+	var jid = lines.shift();
 	var what = lines.shift();
 	var where = null;
 	var data = null;
@@ -217,47 +207,45 @@ function jawsMessage(e) {
 			console.log("jaws: unknown operation: " + what);
 			return;
 	}
-	var elements = document.getElementById(cmd_or_jid);
-	if (elements.length === 0) {
-		console.log("jaws: jid not found: " + cmd_or_jid);
+	jid = 'Jid.' + jid
+	var elem = document.getElementById(jid);
+	if (elem === null) {
+		console.log("jaws: id not found: " + jid);
 		return;
 	}
-	for (var i = 0; i < elements.length; i++) {
-		var elem = elements[i];
-		switch (what) {
-			case 'Inner':
-				elem.innerHTML = data;
-				jawsAttach(elem);
-				break;
-			case 'Value':
-				jawsSetValue(elem, data);
-				break;
-			case 'Remove':
-				elem.remove();
-				break;
-			case 'Append':
-				elem.appendChild(jawsAttach(jawsElement(data)));
-				break;
-			case 'Insert':
-			case 'Replace':
-				var target = jawsWhere(elem, where);
-				if (target instanceof Node) {
-					if (what === 'Replace') {
-						elem.replaceChild(jawsAttach(jawsElement(data)), target);
-					} else {
-						elem.insertBefore(jawsAttach(jawsElement(data)), target);
-					}
+	switch (what) {
+		case 'Inner':
+			elem.innerHTML = data;
+			jawsAttach(elem);
+			break;
+		case 'Value':
+			jawsSetValue(elem, data);
+			break;
+		case 'Remove':
+			elem.remove();
+			break;
+		case 'Append':
+			elem.appendChild(jawsAttach(jawsElement(data)));
+			break;
+		case 'Insert':
+		case 'Replace':
+			var target = jawsWhere(elem, where);
+			if (target instanceof Node) {
+				if (what === 'Replace') {
+					elem.replaceChild(jawsAttach(jawsElement(data)), target);
 				} else {
-					console.log("jaws: jid " + cmd_or_jid + " has no position " + where);
+					elem.insertBefore(jawsAttach(jawsElement(data)), target);
 				}
-				break;
-			case 'SAttr':
-				elem.setAttribute(where, data);
-				break;
-			case 'RAttr':
-				elem.removeAttribute(where);
-				break;
-		}
+			} else {
+				console.log("jaws: id " + jid + " has no position " + where);
+			}
+			break;
+		case 'SAttr':
+			elem.setAttribute(where, data);
+			break;
+		case 'RAttr':
+			elem.removeAttribute(where);
+			break;
 	}
 }
 

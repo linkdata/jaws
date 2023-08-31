@@ -97,6 +97,8 @@ func NewParams(valtag interface{}, params []interface{}) (up Params) {
 func (up *Params) process(tags map[interface{}]struct{}, params []interface{}) {
 	for _, p := range params {
 		switch data := p.(type) {
+		case nil:
+			// do nothing
 		case EventFn:
 			up.ef = data
 		case func(*Request, string) error: // ClickFn
@@ -164,8 +166,24 @@ func (up *Params) process(tags map[interface{}]struct{}, params []interface{}) {
 			}
 		case []interface{}:
 			up.process(tags, data)
-		default:
+		case Tag:
 			addTags(tags, data)
+		case []Tag:
+			addTags(tags, data)
+		case string:
+			up.attrs = append(up.attrs, data)
+		case []string:
+			up.attrs = append(up.attrs, data...)
+		case template.HTML:
+			up.attrs = append(up.attrs, string(data))
+		case []template.HTML:
+			for _, s := range data {
+				up.attrs = append(up.attrs, string(s))
+			}
+		case interface{}:
+			addTags(tags, data)
+		default:
+			panic(fmt.Sprintf("jaws: unhandled parameter type %T", data))
 		}
 	}
 }

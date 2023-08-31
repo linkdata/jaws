@@ -28,7 +28,7 @@ type Element struct {
 }
 
 func (e *Element) String() string {
-	return fmt.Sprintf("Element[%p]{%T, Jid: %v, Tags: %v}", e, e.ui, e.jid, e.Tags())
+	return fmt.Sprintf("Element[%p]{%q, %T, Tags: %v}", e, e.jid, e.ui, e.Tags())
 }
 
 func (e *Element) Tags() []interface{} {
