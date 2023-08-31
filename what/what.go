@@ -11,6 +11,7 @@ const (
 	Reload
 	Redirect
 	Alert
+	Order
 	// Element update
 	Update
 	// Element manipulation

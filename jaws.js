@@ -65,6 +65,25 @@ function jawsAlert(type, message) {
 	console.log("jaws: " + type + ": " + message);
 }
 
+function jawsOrder(jidlist) {
+	var jidstrings = jidlist.split(' ');
+	var elements = [];
+	for (var i = 0; i < jidstrings.length; i++) {
+		var elem = document.getElementById('Jid.' + jidstrings[i]);
+		if (elem) {
+			elem.dataset.jidsort = i;
+			elements.push(elem);
+		}
+	}
+	elements.sort(function (a, b) {
+		return +a.dataset.jidsort - +b.dataset.jidsort;
+	});
+	for (var i = 0; i < elements.length; i++) {
+		delete elem.dataset.jidsort;
+		elem.parentNode.appendChild(elem);
+	}
+}
+
 function jawsSetValue(elem, str) {
 	var elemtype = elem.getAttribute('type');
 	if (jawsIsCheckable(elemtype)) {
@@ -186,6 +205,9 @@ function jawsMessage(e) {
 			return;
 		case 'Alert':
 			jawsAlert(lines.shift(), lines.join('\n'));
+			return;
+		case 'Order':
+			jawsOrder(lines.join('\n'))
 			return;
 		case 'Inner':
 		case 'Value':
