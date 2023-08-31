@@ -13,10 +13,10 @@ func TestParseJid(t *testing.T) {
 	}{
 		{"zero", JidPrefix + "0", 0},
 		{"one", JidPrefix + "1", 1},
+		{"negative", JidPrefix + "-1", 0},
 		{"empty string", "", 0},
 		{"random text", "hello, world!", 0},
 		{"missing number", JidPrefix, 0},
-		{"negative number", JidPrefix + "-1", 0},
 		{"overflow", JidPrefix + "42949672950", 0},
 		{"spaces", JidPrefix + " 1", 0},
 	}
@@ -37,6 +37,7 @@ func TestJid_String(t *testing.T) {
 	}{
 		{"zero", 0, ""},
 		{"one", 1, JidPrefix + "1"},
+		{"negative", -1, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -55,6 +56,7 @@ func TestJid_AppendAttr(t *testing.T) {
 	}{
 		{"zero", 0, ""},
 		{"one", 1, ` id="` + JidPrefix + `1"`},
+		{"negative", -1, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
