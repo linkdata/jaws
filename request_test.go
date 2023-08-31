@@ -651,12 +651,12 @@ func TestRequest_OnTrigger(t *testing.T) {
 	gotCall := make(chan struct{})
 	rq := newTestRequest(is)
 	defer rq.Close()
-	is.NoErr(rq.OnTrigger(elemId, func(rq *Request, jid string) error {
+	is.NoErr(rq.OnTrigger(elemId, func(rq *Request, jidstr string) error {
 		defer close(gotCall)
 		is.True(rq.wantMessage(&Message{Tags: []interface{}{elemId}}))
-		n, err := strconv.Atoi(jid)
-		is.NoErr(err)
-		elem := rq.GetElement(Jid(n))
+		jid := ParseJid(jidstr)
+		is.True(jid != 0)
+		elem := rq.GetElement(jid)
 		is.True(elem != nil)
 		return nil
 	}))
@@ -688,7 +688,7 @@ func checkHtml(is *is.I, rq *testRequest, h template.HTML, tag interface{}, txt 
 		}
 		fmt.Printf("checkHtml(%q, %v@%p, %q) did not match any of %d elements:\n", hs, tag, tag, txt, len(elems))
 		for i, elem := range elems {
-			fmt.Printf("  %d: (%T) jid=%q tags=%v data=%v\n", i, elem.UI(), elem.Jid(), elem.Tags(), elem.Data)
+			fmt.Printf("  %d: (%T) id=%q tags=%v data=%v\n", i, elem.UI(), elem.Jid(), elem.Tags(), elem.Data)
 		}
 		is.Fail()
 	}
@@ -985,58 +985,6 @@ func TestRequest_Radio(t *testing.T) {
 	case <-gotCall:
 	}
 }
-
-/*type radioGrouper struct {
-	fn InputTextFn
-	*NamedBoolArray
-}
-
-func (rg *radioGrouper) JawsRadioGroupData() *NamedBoolArray {
-	return rg.NamedBoolArray
-}
-
-func (rg *radioGrouper) JawsRadioGroupHandler(rq *Request, jid, val string) error {
-	return rg.fn(rq, jid, val)
-}
-
-func TestRequest_LabeledRadioGroup(t *testing.T) {
-	is := is.New(t)
-	rq := newTestRequest(is)
-	defer rq.Close()
-
-	gotCall := make(chan struct{})
-	nba := NewNamedBoolArray("quux")
-	nba.Add("alpha", "This is alpha")
-	nba.Add("bravo", "This is bravo")
-	nba.SetOnly("alpha")
-	is.Equal(nba.Get(), "alpha")
-
-	rg := &radioGrouper{NamedBoolArray: nba, fn: func(rq *Request, jid, val string) error {
-		defer close(gotCall)
-		is.Equal(jid, "quux/bravo")
-		is.Equal(val, "bravo")
-		return nil
-	}}
-
-	const expected = `<input jid="quux/alpha" type="radio" class="foo" name="quux" id="quux/alpha" checked>` +
-		`<label class="bar" for="quux/alpha">This is alpha</label>` +
-		`<input jid="quux/bravo" type="radio" class="foo" name="quux" id="quux/bravo">` +
-		`<label class="bar" for="quux/bravo">This is bravo</label>`
-
-	var sb strings.Builder
-	for _, radio := range rq.RadioGroup(rg) {
-		sb.WriteString(string(radio.Radio(`class="foo"`)))
-		sb.WriteString(string(radio.Label(`class="bar"`)))
-	}
-	is.Equal(expected, sb.String())
-	rq.inCh <- &Message{Elem: "quux/bravo", What: what.Input, Data: "true"}
-	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
-	case <-gotCall:
-	}
-	is.Equal(nba.Get(), "bravo")
-}*/
 
 func TestRequest_Select(t *testing.T) {
 	is := is.New(t)

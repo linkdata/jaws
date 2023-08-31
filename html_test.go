@@ -24,7 +24,7 @@ func TestHtmlInput(t *testing.T) {
 				typ: "input_type",
 				val: "initial_val",
 			},
-			want: `<input jid="1" type="input_type" value="initial_val">`,
+			want: `<input id="Jid.1" type="input_type" value="initial_val">`,
 		},
 		{
 			name: "HtmlInput one empty attr",
@@ -34,7 +34,7 @@ func TestHtmlInput(t *testing.T) {
 				val:   "initial_val2",
 				attrs: []string{""},
 			},
-			want: `<input jid="2" type="input_type2" value="initial_val2">`,
+			want: `<input id="Jid.2" type="input_type2" value="initial_val2">`,
 		},
 		{
 			name: "HtmlInput one filled attr",
@@ -44,7 +44,7 @@ func TestHtmlInput(t *testing.T) {
 				val:   "initial_val2",
 				attrs: []string{"some_attr"},
 			},
-			want: `<input jid="3" type="input_type2" value="initial_val2" some_attr>`,
+			want: `<input id="Jid.3" type="input_type2" value="initial_val2" some_attr>`,
 		},
 		{
 			name: "HtmlInput two filled attr, one empty",
@@ -54,7 +54,7 @@ func TestHtmlInput(t *testing.T) {
 				val:   "initial_val2",
 				attrs: []string{"some_attr1", "", "some_attr2"},
 			},
-			want: `<input jid="4" type="input_type2" value="initial_val2" some_attr1 some_attr2>`,
+			want: `<input id="Jid.4" type="input_type2" value="initial_val2" some_attr1 some_attr2>`,
 		},
 	}
 	for _, tt := range tests {
@@ -87,7 +87,7 @@ func TestHtmlInner(t *testing.T) {
 				typ:   "typ1",
 				inner: "inner_text",
 			},
-			want: `<tag1 jid="1" type="typ1">inner_text</tag1>`,
+			want: `<tag1 id="Jid.1" type="typ1">inner_text</tag1>`,
 		},
 		{
 			name: "HtmlInner singleton tag",
@@ -97,7 +97,7 @@ func TestHtmlInner(t *testing.T) {
 				typ:   "",
 				inner: "",
 			},
-			want: `<img jid="2">`,
+			want: `<img id="Jid.2">`,
 		},
 		{
 			name: "HtmlInner two filled attrs, one empty",
@@ -108,7 +108,7 @@ func TestHtmlInner(t *testing.T) {
 				inner: "inner_text",
 				attrs: []string{"some_attr1", "some_attr2", ""},
 			},
-			want: `<tag1 jid="3" type="typ1" some_attr1 some_attr2>inner_text</tag1>`,
+			want: `<tag1 id="Jid.3" type="typ1" some_attr1 some_attr2>inner_text</tag1>`,
 		},
 	}
 	for _, tt := range tests {
@@ -138,7 +138,7 @@ func TestHtmlSelect(t *testing.T) {
 				val:   NewNamedBoolArray(),
 				attrs: []string{"attr1"},
 			},
-			want: "<select jid=\"2\" attr1>\n</select>\n",
+			want: "<select id=\"Jid.2\" attr1>\n</select>\n",
 		},
 		{
 			name: "HtmlSelect NamedBoolArray with data",
@@ -154,7 +154,7 @@ func TestHtmlSelect(t *testing.T) {
 				}(),
 				attrs: []string{"", "attr2"},
 			},
-			want: `<select jid="3" attr2>
+			want: `<select id="Jid.3" attr2>
 <option value="one">1</option>
 <option value="two" selected>2</option>
 <option value="three">2</option>

@@ -173,7 +173,7 @@ function jawsElement(html) {
 function jawsWhere(elem, pos) {
 	var where = null;
 	if (pos && pos !== 'null') {
-		where = elem.querySelector('[jid="' + pos + '"]');
+		where = elem.querySelector('[id="' + pos + '"]');
 		if (where == null) {
 			where = elem.children[parseInt(pos)];
 		}
@@ -217,7 +217,7 @@ function jawsMessage(e) {
 			console.log("jaws: unknown operation: " + what);
 			return;
 	}
-	var elements = document.querySelectorAll('[jid="' + cmd_or_jid + '"]');
+	var elements = document.getElementById(cmd_or_jid);
 	if (elements.length === 0) {
 		console.log("jaws: jid not found: " + cmd_or_jid);
 		return;

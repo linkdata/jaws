@@ -20,7 +20,7 @@ type testUi struct {
 
 func (tu *testUi) JawsUi(rq *Request, attrs ...string) template.HTML {
 	tu.jid = rq.RegisterEventFn(Tag{tu.tag}, tu.JawsEvent)
-	return template.HTML(fmt.Sprintf(`<test jid="%s" %s>%s</test>`, tu.jid, strings.Join(attrs, " "), tu.val))
+	return template.HTML(fmt.Sprintf(`<test id="%s" %s>%s</test>`, tu.jid.String(), strings.Join(attrs, " "), tu.val))
 }
 
 func (tu *testUi) JawsEvent(rq *Request, evt what.What, id, val string) (err error) {
@@ -41,11 +41,11 @@ func Test_Ui(t *testing.T) {
 	h := rq.Ui(tu)
 	is.True(tu.jid != 0)
 
-	is.True(strings.Contains(string(h), fmt.Sprintf(`jid="%s"`, tu.jid)))
+	is.True(strings.Contains(string(h), fmt.Sprintf(`id="%s"`, tu.jid.String())))
 	is.True(strings.Contains(string(h), elemVal))
 
 	h = rq.Ui(tu, attrs...)
-	is.True(strings.Contains(string(h), fmt.Sprintf(`jid="%s"`, tu.jid)))
+	is.True(strings.Contains(string(h), fmt.Sprintf(`id="%s"`, tu.jid.String())))
 	is.True(strings.Contains(string(h), elemVal))
 	is.True(strings.Contains(string(h), strings.Join(attrs, " ")))
 

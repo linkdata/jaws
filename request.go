@@ -248,7 +248,7 @@ func (rq *Request) TagsOf(elem *Element) (tags []interface{}) {
 //
 // Returns the JaWS ID, suitable for including as a HTML attribute:
 //
-//	<div jid="{{$.Register `footag`}}">
+//	<div id="{{$.Register `footag`}}">
 func (rq *Request) Register(tagitem interface{}, params ...interface{}) Jid {
 	if jid, ok := tagitem.(Jid); ok {
 		if elem := rq.GetElement(jid); elem != nil {
