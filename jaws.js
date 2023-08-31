@@ -68,7 +68,8 @@ function jawsAlert(type, message) {
 function jawsOrder(jidlist) {
 	var jidstrings = jidlist.split(' ');
 	var elements = [];
-	for (var i = 0; i < jidstrings.length; i++) {
+	var i;
+	for (i = 0; i < jidstrings.length; i++) {
 		var elem = document.getElementById('Jid.' + jidstrings[i]);
 		if (elem) {
 			elem.dataset.jidsort = i;
@@ -78,9 +79,9 @@ function jawsOrder(jidlist) {
 	elements.sort(function (a, b) {
 		return +a.dataset.jidsort - +b.dataset.jidsort;
 	});
-	for (var i = 0; i < elements.length; i++) {
-		delete elem.dataset.jidsort;
-		elem.parentNode.appendChild(elem);
+	for (i = 0; i < elements.length; i++) {
+		delete elements[i].dataset.jidsort;
+		elements[i].parentNode.appendChild(elements[i]);
 	}
 }
 
@@ -207,7 +208,7 @@ function jawsMessage(e) {
 			jawsAlert(lines.shift(), lines.join('\n'));
 			return;
 		case 'Order':
-			jawsOrder(lines.join('\n'))
+			jawsOrder(lines.join('\n'));
 			return;
 		case 'Inner':
 		case 'Value':
