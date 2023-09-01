@@ -98,7 +98,7 @@ func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) error {
 			return eh.JawsEvent(e, wht, val)
 		}
 	}
-	if deadlock.Debug {
+	if deadlock.Debug && wht != what.Click {
 		log.Printf("jaws: unhandled JawsEvent(%v, %q, %q)\n", e, wht, val)
 	}
 	return nil

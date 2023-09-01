@@ -31,7 +31,11 @@ function jawsHandler(e) {
 			if (e.type == 'click') {
 				val = e.target.getAttribute('name');
 				if (val == null) {
-					val = e.target.id;
+					if (e.target.tagName.toLowerCase() === 'button') {
+						val = e.target.innerHTML;
+					} else {
+						val = e.target.id;
+					}
 				}
 			} else {
 				if (jawsIsCheckable(elem.getAttribute('type'))) {
