@@ -35,7 +35,7 @@ type Request struct {
 	Context   context.Context  // (read-only) context passed to Jaws.NewRequest
 	remoteIP  net.IP           // (read-only) remote IP, or nil
 	session   *Session         // (read-only) session, if established
-	sendCh    chan *Message    // (read-only) direct send message channel
+	sendCh    chan Message     // (read-only) direct send message channel
 	mu        deadlock.RWMutex // protects following
 	tickerCh  <-chan time.Time // refresh interval channel (from time.NewTimer)
 	connectFn ConnectFn        // a ConnectFn to call before starting message processing for the Request
@@ -53,7 +53,7 @@ var DefaultRequestRefreshInterval = time.Millisecond * 100
 
 var requestPool = sync.Pool{New: func() interface{} {
 	return &Request{
-		sendCh: make(chan *Message),
+		sendCh: make(chan Message),
 		tagMap: make(map[interface{}][]*Element),
 	}
 }}
@@ -174,24 +174,24 @@ func (rq *Request) Set(key string, val interface{}) {
 }
 
 // Broadcast sends a broadcast to all Requests except the current one.
-func (rq *Request) Broadcast(msg *Message) {
+func (rq *Request) Broadcast(msg Message) {
 	msg.from = rq
 	rq.Jaws.Broadcast(msg)
 }
 
-func (rq *Request) getDoneCh(msg *Message) (<-chan struct{}, <-chan struct{}) {
+func (rq *Request) getDoneCh() (<-chan struct{}, <-chan struct{}) {
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
 	if rq.Jaws == nil {
-		panic(fmt.Sprintf("Request.Send(%v): request is dead", msg))
+		panic("Request.Send(): request is dead")
 	}
 	return rq.Jaws.Done(), rq.Context.Done()
 }
 
 // Send a message to the current Request only.
 // Returns true if the message was successfully sent.
-func (rq *Request) Send(msg *Message) bool {
-	jawsDoneCh, ctxDoneCh := rq.getDoneCh(msg)
+func (rq *Request) Send(msg Message) bool {
+	jawsDoneCh, ctxDoneCh := rq.getDoneCh()
 	select {
 	case <-jawsDoneCh:
 	case <-ctxDoneCh:
@@ -206,7 +206,7 @@ func (rq *Request) Send(msg *Message) bool {
 //
 // The default JaWS javascript only supports Bootstrap.js dismissable alerts.
 func (rq *Request) Alert(lvl, msg string) {
-	rq.Send(&Message{
+	rq.Send(Message{
 		What: what.Alert,
 		Data: lvl + "\n" + msg,
 	})
@@ -219,9 +219,10 @@ func (rq *Request) AlertError(err error) {
 	}
 }
 
-func (rq *Request) makeOrder(tags []interface{}) (b []byte) {
+func (rq *Request) makeOrder(tags []interface{}) string {
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
+	var b []byte
 	seen := make(map[*Element]struct{})
 	for _, tag := range tags {
 		for _, elem := range rq.getElementsLocked(tag) {
@@ -234,23 +235,12 @@ func (rq *Request) makeOrder(tags []interface{}) (b []byte) {
 			}
 		}
 	}
-	return
-}
-
-// Order re-orders HTML elements matching the given tags in the order the tags are listed.
-//
-// Note: The HTML elements will not be moved to another parent node in the DOM tree,
-// so it's probably not meaningful to sort elements belonging to different parent nodes.
-func (rq *Request) Order(tags ...interface{}) {
-	rq.Send(&Message{
-		Tags: tags,
-		What: what.Order,
-	})
+	return string(b)
 }
 
 // Redirect requests the current Request to navigate to the given URL.
 func (rq *Request) Redirect(url string) {
-	rq.Send(&Message{
+	rq.Send(Message{
 		What: what.Redirect,
 		Data: url,
 	})
@@ -381,7 +371,7 @@ func (rq *Request) GetElements(tag interface{}) (elems []*Element) {
 }
 
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
-func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan wsMsg, outboundMsgCh chan<- wsMsg) {
+func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsMsg, outboundMsgCh chan<- wsMsg) {
 	jawsDoneCh := rq.Jaws.Done()
 	ctxDoneCh := rq.Context.Done()
 	eventDoneCh := make(chan struct{})
@@ -407,7 +397,7 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 	var defaultRefreshCh <-chan time.Time
 
 	for {
-		var tagmsg *Message
+		var tagmsg Message
 		var outmsgs []wsMsg
 		var ok bool
 
@@ -460,69 +450,66 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 		}
 		rq.mu.RUnlock()
 
-		if tagmsg != nil {
-			switch tagmsg.What {
-			case what.Reload:
-				fallthrough
-			case what.Redirect:
-				fallthrough
-			case what.Alert:
-				outmsgs = append(outmsgs, wsMsg{
-					Data: tagmsg.Data,
-					What: tagmsg.What,
-				})
-			case what.Order:
-				if b := rq.makeOrder(tagmsg.Tags); len(b) > 0 {
-					outmsgs = append(outmsgs, wsMsg{
-						Data: string(b),
-						What: tagmsg.What,
-					})
-				}
-			default:
-				// find all elements listening to one of the tags in the message
-				todo := map[*Element]struct{}{}
-				rq.mu.RLock()
-				for _, tag := range tagmsg.Tags {
-					for _, elem := range rq.tagMap[tag] {
-						if elem != tagmsg.from {
-							todo[elem] = struct{}{}
-						}
+		switch tagmsg.What {
+		case what.None:
+			// do nothing
+		case what.Reload:
+			fallthrough
+		case what.Redirect:
+			fallthrough
+		case what.Alert:
+			outmsgs = append(outmsgs, wsMsg{
+				Data: tagmsg.Data,
+				What: tagmsg.What,
+			})
+		case what.Order:
+			tagmsg.Data = rq.makeOrder(tagmsg.Tags[1:])
+			tagmsg.Tags = tagmsg.Tags[:1]
+			fallthrough
+		default:
+			// find all elements listening to one of the tags in the message
+			todo := map[*Element]struct{}{}
+			rq.mu.RLock()
+			for _, tag := range tagmsg.Tags {
+				for _, elem := range rq.tagMap[tag] {
+					if elem != tagmsg.from {
+						todo[elem] = struct{}{}
 					}
 				}
-				rq.mu.RUnlock()
+			}
+			rq.mu.RUnlock()
 
-				for elem := range todo {
-					switch tagmsg.What {
-					case what.Trigger:
-						// trigger messages won't be sent out on the WebSocket, but will queue up a
-						// call to the event function (if any)
-						select {
-						case eventCallCh <- eventFnCall{e: elem, wht: tagmsg.What, data: tagmsg.Data}:
-						default:
-							rq.Jaws.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, tagmsg))
-							return
-						}
-					case what.Hook:
-						// "hook" messages are used to synchronously call an event function.
-						// the function must not send any messages itself, but may return
-						// an error to be sent out as an alert message.
-						// primary usecase is tests.
-						if errmsg := makeAlertDangerMessage(elem.UI().JawsEvent(elem, tagmsg.What, tagmsg.Data)); errmsg != nil {
-							outmsgs = append(outmsgs, wsMsg{
-								Jid:  elem.jid,
-								What: errmsg.What,
-								Data: errmsg.Data,
-							})
-						}
-					case what.Update:
-						rq.Jaws.MustLog(elem.Update())
+			for elem := range todo {
+				switch tagmsg.What {
+				case what.Trigger:
+					// trigger messages won't be sent out on the WebSocket, but will queue up a
+					// call to the event function (if any)
+					select {
+					case eventCallCh <- eventFnCall{e: elem, wht: tagmsg.What, data: tagmsg.Data}:
 					default:
+						rq.Jaws.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, tagmsg))
+						return
+					}
+				case what.Hook:
+					// "hook" messages are used to synchronously call an event function.
+					// the function must not send any messages itself, but may return
+					// an error to be sent out as an alert message.
+					// primary usecase is tests.
+					if errmsg := makeAlertDangerMessage(elem.UI().JawsEvent(elem, tagmsg.What, tagmsg.Data)); errmsg.What != what.None {
 						outmsgs = append(outmsgs, wsMsg{
 							Jid:  elem.jid,
-							What: tagmsg.What,
-							Data: tagmsg.Data,
+							What: errmsg.What,
+							Data: errmsg.Data,
 						})
 					}
+				case what.Update:
+					rq.Jaws.MustLog(elem.Update())
+				default:
+					outmsgs = append(outmsgs, wsMsg{
+						Jid:  elem.jid,
+						What: tagmsg.What,
+						Data: tagmsg.Data,
+					})
 				}
 			}
 		}
@@ -544,7 +531,22 @@ func (rq *Request) process(broadcastMsgCh chan *Message, incomingMsgCh <-chan ws
 func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh chan<- wsMsg, eventDoneCh chan<- struct{}) {
 	defer close(eventDoneCh)
 	for call := range eventCallCh {
-		if err := call.e.UI().JawsEvent(call.e, call.wht, call.data); err != nil {
+		var err error
+		switch call.wht {
+		case what.Click:
+			if ch, ok := call.e.UI().(ClickHandler); ok {
+				err = ch.JawsClick(call.e, call.data)
+				break
+			}
+			fallthrough
+		case what.Input, what.Trigger:
+			err = call.e.UI().JawsEvent(call.e, call.wht, call.data)
+		default:
+			if deadlock.Debug {
+				err = fmt.Errorf("jaws: eventCaller unhandled: %v", call)
+			}
+		}
+		if err != nil {
 			var m wsMsg
 			m.FillAlert(err)
 			select {
@@ -568,9 +570,9 @@ func (rq *Request) onConnect() (err error) {
 	return
 }
 
-func makeAlertDangerMessage(err error) (msg *Message) {
+func makeAlertDangerMessage(err error) (msg Message) {
 	if err != nil {
-		msg = &Message{
+		msg = Message{
 			Data: "danger\n" + html.EscapeString(err.Error()),
 			What: what.Alert,
 		}

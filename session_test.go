@@ -193,7 +193,7 @@ func TestSession_Delete(t *testing.T) {
 	is.Equal(resp.StatusCode, http.StatusSwitchingProtocols)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	ts.rq.Send(&Message{
+	ts.rq.Send(Message{
 		Tags: []interface{}{"byebye"},
 		What: what.Trigger,
 	})

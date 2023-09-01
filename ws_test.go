@@ -129,7 +129,7 @@ func TestWS_NormalExchange(t *testing.T) {
 	is.Equal(resp.StatusCode, http.StatusSwitchingProtocols)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	msg := wsMsg{Jid: jidForTag(ts.rq, "foo")}
+	msg := wsMsg{Jid: jidForTag(ts.rq, "foo"), What: what.Trigger}
 	ctx, cancel := context.WithTimeout(ts.ctx, time.Second*3)
 	defer cancel()
 
@@ -154,7 +154,7 @@ func TestReader_RespectsContextDone(t *testing.T) {
 	ts := newTestServer(is)
 	defer ts.Close()
 
-	msg := wsMsg{Jid: 1234}
+	msg := wsMsg{Jid: 1234, What: what.Trigger}
 	doneCh := make(chan struct{})
 	inCh := make(chan wsMsg)
 	client, server := Pipe()
@@ -203,7 +203,7 @@ func TestReader_RespectsJawsDone(t *testing.T) {
 	}()
 
 	ts.jw.Close()
-	msg := wsMsg{Jid: 1234}
+	msg := wsMsg{Jid: 1234, What: what.Trigger}
 	err := client.Write(ctx, websocket.MessageText, []byte(msg.Format()))
 	is.NoErr(err)
 

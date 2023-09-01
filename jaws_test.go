@@ -109,7 +109,7 @@ func TestJaws_BroadcastDoesntBlockWhenClosed(t *testing.T) {
 	go jw.Serve()
 	jw.Close()
 	for i := 0; i < cap(jw.bcastCh)+1; i++ {
-		jw.Broadcast(&Message{})
+		jw.Broadcast(Message{})
 	}
 }
 
@@ -130,12 +130,12 @@ func TestJaws_BroadcastWaitsWhenFull(t *testing.T) {
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case jw.bcastCh <- &Message{What: what.Reload}:
+	case jw.bcastCh <- Message{What: what.Reload}:
 	}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case jw.bcastCh <- &Message{What: what.Reload}:
+	case jw.bcastCh <- Message{What: what.Reload}:
 	}
 
 	// read one of the broadcasts, the other is
@@ -184,7 +184,7 @@ func TestJaws_BroadcastFullClosesChannel(t *testing.T) {
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case jw.bcastCh <- &Message{What: what.Reload}:
+	case jw.bcastCh <- Message{What: what.Reload}:
 	}
 
 	select {
@@ -200,8 +200,9 @@ func TestJaws_BroadcastFullClosesChannel(t *testing.T) {
 	time.Sleep(time.Millisecond * 5)
 
 	select {
-	case msg := <-subCh1:
-		is.Equal(msg, nil)
+	case msg, ok := <-subCh1:
+		is.True(!ok)
+		is.Equal(msg, Message{})
 	default:
 	}
 }

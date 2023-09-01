@@ -33,9 +33,9 @@ type Jaws struct {
 	CookieName string      // Name for session cookies, defaults to "jaws"
 	Logger     *log.Logger // If not nil, send debug info and errors here
 	doneCh     <-chan struct{}
-	bcastCh    chan *Message
+	bcastCh    chan Message
 	subCh      chan subscription
-	unsubCh    chan chan *Message
+	unsubCh    chan chan Message
 	headPrefix string
 	mu         deadlock.RWMutex // protects following
 	kg         *bufio.Reader
@@ -52,9 +52,9 @@ func NewWithDone(doneCh <-chan struct{}) *Jaws {
 	return &Jaws{
 		CookieName: CookieNameDefault,
 		doneCh:     doneCh,
-		bcastCh:    make(chan *Message, 1),
+		bcastCh:    make(chan Message, 1),
 		subCh:      make(chan subscription, 1),
-		unsubCh:    make(chan chan *Message, 1),
+		unsubCh:    make(chan chan Message, 1),
 		headPrefix: HeadHTML([]string{JavascriptPath}, nil),
 		kg:         bufio.NewReader(rand.Reader),
 		reqs:       make(map[uint64]*Request),
@@ -328,7 +328,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) error {
 }
 
 // Broadcast sends a message to all Requests.
-func (jw *Jaws) Broadcast(msg *Message) {
+func (jw *Jaws) Broadcast(msg Message) {
 	select {
 	case <-jw.Done():
 	case jw.bcastCh <- msg:
@@ -337,7 +337,7 @@ func (jw *Jaws) Broadcast(msg *Message) {
 
 // Update calls JawsUpdate for all Elements that have one or more of the given tags.
 func (jw *Jaws) Update(tags []interface{}) {
-	jw.Broadcast(&Message{
+	jw.Broadcast(Message{
 		Tags: tags,
 		What: what.Update,
 	})
@@ -345,14 +345,14 @@ func (jw *Jaws) Update(tags []interface{}) {
 
 // Reload requests all Requests to reload their current page.
 func (jw *Jaws) Reload() {
-	jw.Broadcast(&Message{
+	jw.Broadcast(Message{
 		What: what.Reload,
 	})
 }
 
 // Redirect requests all Requests to navigate to the given URL.
 func (jw *Jaws) Redirect(url string) {
-	jw.Broadcast(&Message{
+	jw.Broadcast(Message{
 		What: what.Redirect,
 		Data: url,
 	})
@@ -361,21 +361,24 @@ func (jw *Jaws) Redirect(url string) {
 // Alert sends an alert to all Requests. The lvl argument should be one of Bootstraps alert levels:
 // primary, secondary, success, danger, warning, info, light or dark.
 func (jw *Jaws) Alert(lvl, msg string) {
-	jw.Broadcast(&Message{
+	jw.Broadcast(Message{
 		What: what.Alert,
 		Data: lvl + "\n" + msg,
 	})
 }
 
-// Order re-orders HTML elements matching the given tags in the order the tags are listed.
+// Order re-orders HTML elements.
 //
-// Note: The HTML elements will not be moved to another parent node in the DOM tree,
-// so it's probably not meaningful to sort elements belonging to different parent nodes.
+// The first tag given selects the parent HTML elements, and the subsequent tags selects immediate
+// child HTML elements of those parents and then calls Javascript's appendChild for them in the same
+// order that the tags are.
 func (jw *Jaws) Order(tags ...interface{}) {
-	jw.Broadcast(&Message{
-		Tags: tags,
-		What: what.Order,
-	})
+	if len(tags) > 2 {
+		jw.Broadcast(Message{
+			Tags: tags,
+			What: what.Order,
+		})
+	}
 }
 
 // Count returns the number of requests waiting for their WebSocket callbacks.
@@ -401,9 +404,9 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	}
 	t := time.NewTicker(maintenanceInterval)
 	defer t.Stop()
-	subs := map[chan *Message]*Request{}
+	subs := map[chan Message]*Request{}
 
-	killSub := func(msgCh chan *Message) {
+	killSub := func(msgCh chan Message) {
 		if _, ok := subs[msgCh]; ok {
 			delete(subs, msgCh)
 			close(msgCh)
@@ -425,7 +428,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			}
 		case msgCh := <-jw.unsubCh:
 			killSub(msgCh)
-		case msg := <-jw.bcastCh:
+		case msg, ok := <-jw.bcastCh:
 			// it's critical that we keep the broadcast
 			// distribution loop running, so any Request
 			// that fails to process it's messages quickly
@@ -433,10 +436,10 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			// would be to drop some messages, but that
 			// could mean nonreproducible and seemingly
 			// random failures in processing logic.
-			if msg != nil {
+			if ok {
 				isCmd := msg.What.IsCommand()
 				for msgCh, rq := range subs {
-					if isCmd || rq.wantMessage(msg) {
+					if isCmd || rq.wantMessage(&msg) {
 						select {
 						case msgCh <- msg:
 						default:
@@ -455,14 +458,14 @@ func (jw *Jaws) Serve() {
 	jw.ServeWithTimeout(time.Second * 10)
 }
 
-func (jw *Jaws) subscribe(rq *Request, minSize int) chan *Message {
+func (jw *Jaws) subscribe(rq *Request, minSize int) chan Message {
 	size := minSize
 	if rq != nil {
 		if size = 4 + len(rq.elems)*4; size < minSize {
 			size = minSize
 		}
 	}
-	msgCh := make(chan *Message, size)
+	msgCh := make(chan Message, size)
 	select {
 	case <-jw.Done():
 		close(msgCh)
@@ -472,7 +475,7 @@ func (jw *Jaws) subscribe(rq *Request, minSize int) chan *Message {
 	return msgCh
 }
 
-func (jw *Jaws) unsubscribe(msgCh chan *Message) {
+func (jw *Jaws) unsubscribe(msgCh chan Message) {
 	select {
 	case <-jw.Done():
 	case jw.unsubCh <- msgCh:

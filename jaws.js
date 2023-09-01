@@ -27,11 +27,21 @@ function jawsHandler(e) {
 		var elem = e.currentTarget;
 		var jid = elem.id.substring(4);
 		if (jid) {
-			var val = elem.value;
-			if (jawsIsCheckable(elem.getAttribute('type'))) {
-				val = elem.checked;
-			} else if (elem.tagName.toLowerCase() === 'option') {
-				val = elem.selected;
+			var val;
+			if (e.type == 'click') {
+				val = e.target.getAttribute('name');
+				if (val == null) {
+					val = e.target.id;
+				}
+			} else {
+				if (jawsIsCheckable(elem.getAttribute('type'))) {
+					val = elem.checked;
+				} else if (elem.tagName.toLowerCase() === 'option') {
+					val = elem.selected;
+				} else {
+					val = elem.value;
+				}
+				e.stopPropagation();
 			}
 			jaws.send(jid + "\n" + e.type + "\n" + val);
 		}
@@ -65,13 +75,13 @@ function jawsAlert(type, message) {
 	console.log("jaws: " + type + ": " + message);
 }
 
-function jawsOrder(jidlist) {
+function jawsOrder(where, jidlist) {
 	var jidstrings = jidlist.split(' ');
 	var elements = [];
 	var i;
 	for (i = 0; i < jidstrings.length; i++) {
 		var elem = document.getElementById('Jid.' + jidstrings[i]);
-		if (elem) {
+		if (elem && elem.parentElement == where) {
 			elem.dataset.jidsort = i;
 			elements.push(elem);
 		}
@@ -81,7 +91,7 @@ function jawsOrder(jidlist) {
 	});
 	for (i = 0; i < elements.length; i++) {
 		delete elements[i].dataset.jidsort;
-		elements[i].parentNode.appendChild(elements[i]);
+		where.appendChild(elements[i]);
 	}
 }
 
@@ -208,8 +218,6 @@ function jawsMessage(e) {
 			jawsAlert(lines.shift(), lines.join('\n'));
 			return;
 		case 'Order':
-			jawsOrder(lines.join('\n'));
-			return;
 		case 'Inner':
 		case 'Value':
 		case 'Append':
@@ -237,6 +245,9 @@ function jawsMessage(e) {
 		return;
 	}
 	switch (what) {
+		case 'Order':
+			jawsOrder(elem, data);
+			break;
 		case 'Inner':
 			elem.innerHTML = data;
 			jawsAttach(elem);

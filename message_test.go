@@ -10,7 +10,7 @@ import (
 
 func Test_Message_String(t *testing.T) {
 	is := is.New(t)
-	msg := &Message{
+	msg := Message{
 		Tags: []interface{}{"Elem"},
 		What: what.None,
 		Data: "Data\nText",

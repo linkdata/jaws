@@ -155,7 +155,7 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 		sess.jw.deleteSession(sess.sessionID)
 		sess.mu.Lock()
 		sess.cookie.MaxAge = -1
-		sess.broadcastLocked(&Message{What: what.Reload})
+		sess.broadcastLocked(Message{What: what.Reload})
 		sess.requests = sess.requests[:0]
 		sess.mu.Unlock()
 	}
@@ -164,7 +164,7 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 
 // Reload calls Broadcast with a message asking browsers to reload the page.
 func (sess *Session) Reload() {
-	sess.Broadcast(&Message{What: what.Reload})
+	sess.Broadcast(Message{What: what.Reload})
 }
 
 // Clear removes all key/value pairs from the session.
@@ -179,7 +179,7 @@ func (sess *Session) Clear() {
 	}
 }
 
-func (sess *Session) broadcastLocked(msg *Message) {
+func (sess *Session) broadcastLocked(msg Message) {
 	for _, rq := range sess.requests {
 		select {
 		case rq.sendCh <- msg:
@@ -190,7 +190,7 @@ func (sess *Session) broadcastLocked(msg *Message) {
 
 // Broadcast attempts to send a message to all Requests using this session.
 // It is safe to call on a nil Session.
-func (sess *Session) Broadcast(msg *Message) {
+func (sess *Session) Broadcast(msg Message) {
 	if sess != nil {
 		sess.mu.RLock()
 		defer sess.mu.RUnlock()

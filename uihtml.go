@@ -81,11 +81,25 @@ func (ui *UiHtml) JawsUpdate(e *Element) (err error) {
 	panic(fmt.Sprintf("jaws: UiHtml.JawsUpdate(%v) called", e))
 }
 
-func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
-	if ui.EventFn != nil {
-		err = ui.EventFn(e.Request(), wht, e.Jid().String(), val)
-	} else if deadlock.Debug {
+func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) error {
+	if ui.EventFn != nil { // LEGACY
+		return ui.EventFn(e.Request(), wht, e.Jid().String(), val)
+	}
+	// see if one of our tags is a handler
+	if wht == what.Click {
+		for _, tag := range ui.Tags {
+			if ch, ok := tag.(ClickHandler); ok {
+				return ch.JawsClick(e, val)
+			}
+		}
+	}
+	for _, tag := range ui.Tags {
+		if eh, ok := tag.(EventHandler); ok {
+			return eh.JawsEvent(e, wht, val)
+		}
+	}
+	if deadlock.Debug {
 		log.Printf("jaws: unhandled JawsEvent(%v, %q, %q)\n", e, wht, val)
 	}
-	return
+	return nil
 }
