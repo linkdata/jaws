@@ -269,17 +269,22 @@ func (rq *Request) TagsOf(elem *Element) (tags []interface{}) {
 //
 //	<div id="{{$.Register `footag`}}">
 func (rq *Request) Register(tagitem interface{}, params ...interface{}) Jid {
-	if jid, ok := tagitem.(Jid); ok {
-		if elem := rq.GetElement(jid); elem != nil {
+	switch data := tagitem.(type) {
+	case Jid:
+		if elem := rq.GetElement(data); elem != nil {
 			up := NewParams(nil, params)
 			if up.ef != nil {
 				if uib, ok := elem.UI().(*UiHtml); ok {
 					uib.EventFn = up.ef
 				}
 			}
-			return jid
+			return data
 		}
 		return 0
+	case string:
+		tagitem = Tag{data}
+	case template.HTML:
+		tagitem = Tag{string(data)}
 	}
 
 	up := NewParams(tagitem, params)

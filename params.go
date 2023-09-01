@@ -69,6 +69,10 @@ func unpackValtag(tags map[interface{}]struct{}, valtag interface{}) (vp ValuePr
 	case ValueProxy:
 		vp = data
 		tags[data] = struct{}{}
+	case Tag:
+		addTags(tags, data)
+	case []Tag:
+		addTags(tags, data)
 	case string:
 		vp = readonlyProxy{Value: template.HTML(data)}
 	case template.HTML:
