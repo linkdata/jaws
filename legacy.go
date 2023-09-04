@@ -63,7 +63,7 @@ func (rq *Request) OnEvent(tagstring string, fn EventFn) error {
 // to the browser for the Element with the given JaWS ID in this Request.
 func (rq *Request) SetAttr(tagitem interface{}, attr, val string) {
 	rq.Broadcast(Message{
-		Tags: []interface{}{tagitem},
+		Tag:  tagitem,
 		What: what.SAttr,
 		Data: attr + "\n" + val,
 	})
@@ -74,7 +74,7 @@ func (rq *Request) SetAttr(tagitem interface{}, attr, val string) {
 // to the browser for the Element with the given JaWS ID in this Request.
 func (rq *Request) RemoveAttr(tagitem interface{}, attr string) {
 	rq.Broadcast(Message{
-		Tags: []interface{}{tagitem},
+		Tag:  tagitem,
 		What: what.RAttr,
 		Data: attr,
 	})
@@ -86,7 +86,7 @@ func (rq *Request) RemoveAttr(tagitem interface{}, attr string) {
 // Only the requests that have registered the jid (either with Register or OnEvent) will be sent the message.
 func (rq *Request) SetTextValue(tagitem interface{}, val string) {
 	rq.Broadcast(Message{
-		Tags: []interface{}{tagitem},
+		Tag:  tagitem,
 		What: what.Value,
 		Data: val,
 	})
@@ -98,7 +98,7 @@ func (rq *Request) SetTextValue(tagitem interface{}, val string) {
 // Only the requests that have registered the jid (either with Register or OnEvent) will be sent the message.
 func (rq *Request) SetFloatValue(tagitem interface{}, val float64) {
 	rq.Broadcast(Message{
-		Tags: []interface{}{tagitem},
+		Tag:  tagitem,
 		What: what.Value,
 		Data: strconv.FormatFloat(val, 'f', -1, 64),
 	})
@@ -110,7 +110,7 @@ func (rq *Request) SetFloatValue(tagitem interface{}, val float64) {
 // Only the requests that have registered the jid (either with Register or OnEvent) will be sent the message.
 func (rq *Request) SetBoolValue(tagitem interface{}, val bool) {
 	rq.Broadcast(Message{
-		Tags: []interface{}{tagitem},
+		Tag:  tagitem,
 		What: what.Value,
 		Data: strconv.FormatBool(val),
 	})
@@ -122,7 +122,7 @@ func (rq *Request) SetBoolValue(tagitem interface{}, val bool) {
 // Only the requests that have registered the jid (either with Register or OnEvent) will be sent the message.
 func (rq *Request) SetDateValue(tagitem interface{}, val time.Time) {
 	rq.Broadcast(Message{
-		Tags: []interface{}{tagitem},
+		Tag:  tagitem,
 		What: what.Value,
 		Data: val.Format(ISO8601),
 	})
@@ -134,7 +134,7 @@ func (rq *Request) SetDateValue(tagitem interface{}, val time.Time) {
 // Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
 func (jw *Jaws) SetInner(tagitem interface{}, innerHtml string) {
 	jw.Broadcast(Message{
-		Tags: []interface{}{tagitem},
+		Tag:  tagitem,
 		What: what.Inner,
 		Data: innerHtml,
 	})
@@ -147,7 +147,7 @@ func (jw *Jaws) SetInner(tagitem interface{}, innerHtml string) {
 // Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
 func (jw *Jaws) SetAttr(tagitem interface{}, attr, val string) {
 	jw.Broadcast(Message{
-		Tags: []interface{}{tagitem},
+		Tag:  tagitem,
 		What: what.SAttr,
 		Data: attr + "\n" + val,
 	})
@@ -159,7 +159,7 @@ func (jw *Jaws) SetAttr(tagitem interface{}, attr, val string) {
 // Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
 func (jw *Jaws) RemoveAttr(tagitem interface{}, attr string) {
 	jw.Broadcast(Message{
-		Tags: []interface{}{tagitem},
+		Tag:  tagitem,
 		What: what.RAttr,
 		Data: attr,
 	})
@@ -171,7 +171,7 @@ func (jw *Jaws) RemoveAttr(tagitem interface{}, attr string) {
 // Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
 func (jw *Jaws) SetValue(tagitem interface{}, val string) {
 	jw.Broadcast(Message{
-		Tags: []interface{}{tagitem},
+		Tag:  tagitem,
 		What: what.Value,
 		Data: val,
 	})
@@ -183,7 +183,7 @@ func (jw *Jaws) SetValue(tagitem interface{}, val string) {
 // Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
 func (jw *Jaws) Remove(tagitem interface{}) {
 	jw.Broadcast(Message{
-		Tags: []interface{}{tagitem},
+		Tag:  tagitem,
 		What: what.Remove,
 	})
 }
@@ -195,7 +195,7 @@ func (jw *Jaws) Remove(tagitem interface{}) {
 // Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
 func (jw *Jaws) Insert(tagitem interface{}, where, html string) {
 	jw.Broadcast(Message{
-		Tags: []interface{}{tagitem},
+		Tag:  tagitem,
 		What: what.Insert,
 		Data: where + "\n" + html,
 	})
@@ -207,7 +207,7 @@ func (jw *Jaws) Insert(tagitem interface{}, where, html string) {
 // Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
 func (jw *Jaws) Append(tagitem interface{}, html string) {
 	jw.Broadcast(Message{
-		Tags: []interface{}{tagitem},
+		Tag:  tagitem,
 		What: what.Append,
 		Data: html,
 	})
@@ -220,7 +220,7 @@ func (jw *Jaws) Append(tagitem interface{}, html string) {
 // Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
 func (jw *Jaws) Replace(tagitem interface{}, where, html string) {
 	jw.Broadcast(Message{
-		Tags: []interface{}{tagitem},
+		Tag:  tagitem,
 		What: what.Replace,
 		Data: where + "\n" + html,
 	})
@@ -230,7 +230,7 @@ func (jw *Jaws) Replace(tagitem interface{}, where, html string) {
 // Trigger invokes the event handler for the given ID with a 'trigger' event on all Requests except this one.
 func (rq *Request) Trigger(tagitem interface{}, val string) {
 	rq.Broadcast(Message{
-		Tags: []interface{}{tagitem},
+		Tag:  tagitem,
 		What: what.Trigger,
 		Data: val,
 	})
@@ -240,7 +240,7 @@ func (rq *Request) Trigger(tagitem interface{}, val string) {
 // Trigger invokes the event handler for the given ID with a 'trigger' event on all Requests.
 func (jw *Jaws) Trigger(tagitem interface{}, val string) {
 	jw.Broadcast(Message{
-		Tags: []interface{}{tagitem},
+		Tag:  tagitem,
 		What: what.Trigger,
 		Data: val,
 	})

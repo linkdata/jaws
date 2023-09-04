@@ -34,7 +34,7 @@ func (ui *UiImg) JawsRender(e *Element, w io.Writer) error {
 
 func (ui *UiImg) JawsUpdate(e *Element) (err error) {
 	if e.SetAttr("src", ui.SrcAttr(e)) {
-		e.UpdateOthers(ui.Tags)
+		e.UpdateOthers(ui.Tags...)
 	}
 	return nil
 }

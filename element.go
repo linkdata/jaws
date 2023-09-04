@@ -66,12 +66,14 @@ func (e *Element) Update() error {
 }
 
 // Update calls JawsUpdate for all Elements except this one that have one or more of the given tags.
-func (e *Element) UpdateOthers(tags []interface{}) {
-	e.rq.Jaws.Broadcast(Message{
-		Tags: tags,
-		What: what.Update,
-		from: e,
-	})
+func (e *Element) UpdateOthers(tags ...interface{}) {
+	for _, tag := range tags {
+		e.rq.Jaws.Broadcast(Message{
+			Tag:  tag,
+			What: what.Update,
+			from: e,
+		})
+	}
 }
 
 func (e *Element) appendTodo(msgs []wsMsg) []wsMsg {

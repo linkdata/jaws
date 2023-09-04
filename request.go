@@ -318,11 +318,7 @@ func (rq *Request) Register(tagitem interface{}, params ...interface{}) Jid {
 func (rq *Request) wantMessage(msg *Message) (yes bool) {
 	if rq != nil && msg.from != rq {
 		rq.mu.RLock()
-		for _, tag := range msg.Tags {
-			if _, yes = rq.tagMap[tag]; yes {
-				break
-			}
-		}
+		_, yes = rq.tagMap[msg.Tag]
 		rq.mu.RUnlock()
 	}
 	return
@@ -455,6 +451,16 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		}
 		rq.mu.RUnlock()
 
+		var wsdata string
+		switch data := tagmsg.Data.(type) {
+		case nil:
+			// do nothing
+		case string:
+			wsdata = data
+		case template.HTML:
+			wsdata = string(data)
+		}
+
 		switch tagmsg.What {
 		case what.None:
 			// do nothing
@@ -464,22 +470,19 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			fallthrough
 		case what.Alert:
 			outmsgs = append(outmsgs, wsMsg{
-				Data: tagmsg.Data,
+				Data: wsdata,
 				What: tagmsg.What,
 			})
 		case what.Order:
-			tagmsg.Data = rq.makeOrder(tagmsg.Tags[1:])
-			tagmsg.Tags = tagmsg.Tags[:1]
+			tagmsg.Data = rq.makeOrder(tagmsg.Data.([]interface{}))
 			fallthrough
 		default:
 			// find all elements listening to one of the tags in the message
 			todo := map[*Element]struct{}{}
 			rq.mu.RLock()
-			for _, tag := range tagmsg.Tags {
-				for _, elem := range rq.tagMap[tag] {
-					if elem != tagmsg.from {
-						todo[elem] = struct{}{}
-					}
+			for _, elem := range rq.tagMap[tagmsg.Tag] {
+				if elem != tagmsg.from {
+					todo[elem] = struct{}{}
 				}
 			}
 			rq.mu.RUnlock()
@@ -490,7 +493,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					// trigger messages won't be sent out on the WebSocket, but will queue up a
 					// call to the event function (if any)
 					select {
-					case eventCallCh <- eventFnCall{e: elem, wht: tagmsg.What, data: tagmsg.Data}:
+					case eventCallCh <- eventFnCall{e: elem, wht: tagmsg.What, data: wsdata}:
 					default:
 						rq.Jaws.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, tagmsg))
 						return
@@ -500,11 +503,11 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					// the function must not send any messages itself, but may return
 					// an error to be sent out as an alert message.
 					// primary usecase is tests.
-					if errmsg := makeAlertDangerMessage(elem.UI().JawsEvent(elem, tagmsg.What, tagmsg.Data)); errmsg.What != what.None {
+					if errmsg := makeAlertDangerMessage(elem.UI().JawsEvent(elem, tagmsg.What, wsdata)); errmsg.What != what.None {
 						outmsgs = append(outmsgs, wsMsg{
 							Jid:  elem.jid,
 							What: errmsg.What,
-							Data: errmsg.Data,
+							Data: wsdata,
 						})
 					}
 				case what.Update:
@@ -513,7 +516,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					outmsgs = append(outmsgs, wsMsg{
 						Jid:  elem.jid,
 						What: tagmsg.What,
-						Data: tagmsg.Data,
+						Data: wsdata,
 					})
 				}
 			}

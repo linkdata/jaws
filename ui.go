@@ -28,12 +28,10 @@ func (rq *Request) UI(ui UI, params ...interface{}) template.HTML {
 	return template.HTML(b.String())
 }
 
-func (rq *Request) Update(tags []interface{}) {
+func (rq *Request) Update(tag interface{}) {
 	var todo []*Element
 	rq.mu.RLock()
-	for _, tag := range tags {
-		todo = append(todo, rq.tagMap[tag]...)
-	}
+	todo = append(todo, rq.tagMap[tag]...)
 	rq.mu.RUnlock()
 	var b bytes.Buffer
 	for _, elem := range todo {

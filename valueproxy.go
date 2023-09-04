@@ -28,12 +28,12 @@ func (vp readonlyProxy) JawsSet(e *Element, val interface{}) bool {
 func anyToHtml(val interface{}) template.HTML {
 	var s string
 	switch v := val.(type) {
+	case string:
+		s = v
 	case template.HTML:
 		return v
 	case *atomic.Value:
 		return anyToHtml(v.Load())
-	case string:
-		s = v
 	case fmt.Stringer:
 		s = v.String()
 	case float64:

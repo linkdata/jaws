@@ -105,7 +105,7 @@ func TestRequest_Registrations(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	is.Equal(rq.wantMessage(&Message{Tags: []interface{}{"bar"}}), false)
+	is.Equal(rq.wantMessage(&Message{Tag: "bar"}), false)
 
 	jid := rq.Register("sometag")
 	is.True(jid != 0)
@@ -231,7 +231,7 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 	rq := newTestRequest(is)
 	defer rq.Close()
 	rq.Register(Tag{"foo"})
-	theMsg := Message{Tags: []interface{}{"foo"}, What: what.Inner}
+	theMsg := Message{Tag: "foo", What: what.Inner, Data: "bar"}
 
 	is.Equal(rq.Send(theMsg), true)
 	select {
@@ -240,7 +240,7 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 	case msg := <-rq.outCh:
 		elem := rq.GetElement(msg.Jid)
 		is.True(elem != nil)
-		is.Equal(msg, wsMsg{Jid: elem.jid, What: what.Inner})
+		is.Equal(msg, wsMsg{Jid: elem.jid, Data: "bar", What: what.Inner})
 	}
 }
 
@@ -251,7 +251,6 @@ func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
 	jw := rq.jw
 	var callCount int32
 	tag := Tag{"foo"}
-	tags := []interface{}{"foo"}
 	rq.RegisterEventFn(tag, func(rq *Request, evt what.What, id, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		is.Equal(1, jw.RequestCount())
@@ -259,7 +258,7 @@ func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
 		return errors.New(val)
 	})
 	fillWsCh(rq.outCh)
-	jw.Broadcast(Message{Tags: tags, What: what.Hook, Data: "bar"})
+	jw.Broadcast(Message{Tag: "foo", What: what.Hook, Data: "bar"})
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Equal(int(atomic.LoadInt32(&callCount)), 0)
@@ -275,14 +274,13 @@ func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 	defer rq.Close()
 	var callCount int32
 	tag := Tag{"foo"}
-	tags := []interface{}{"foo"}
 	rq.RegisterEventFn(tag, func(_ *Request, evt what.What, id, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		rq.cancel()
 		return errors.New(val)
 	})
 	fillWsCh(rq.outCh)
-	rq.jw.Broadcast(Message{Tags: tags, What: what.Hook, Data: "bar"})
+	rq.jw.Broadcast(Message{Tag: "foo", What: what.Hook, Data: "bar"})
 
 	select {
 	case <-time.NewTimer(testTimeout).C:
@@ -305,7 +303,7 @@ func TestRequest_OutboundOverflowPanicsWithNoLogger(t *testing.T) {
 	defer rq.Close()
 	rq.Register(Tag{"foo"})
 	fillWsCh(rq.outCh)
-	rq.sendCh <- Message{Tags: []interface{}{"foo"}, What: what.Inner, Data: "bar"}
+	rq.sendCh <- Message{Tag: "foo", What: what.Inner, Data: "bar"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -435,7 +433,7 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 	defer tmr.Stop()
 	for {
 		select {
-		case rq.sendCh <- Message{Tags: []interface{}{"bomb"}, What: what.Trigger}:
+		case rq.sendCh <- Message{Tag: "bomb", What: what.Trigger}:
 		case <-rq.doneCh:
 			is.True(rq.panicked)
 			return
@@ -482,7 +480,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	// outbound channel is full, but with the
 	// event fn holding it won't be able to end
 	select {
-	case rq.sendCh <- Message{Tags: []interface{}{"foo"}, What: what.Inner}:
+	case rq.sendCh <- Message{Tag: "foo", What: what.Inner, Data: ""}:
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-rq.doneCh:
@@ -654,7 +652,7 @@ func TestRequest_OnTrigger(t *testing.T) {
 	defer rq.Close()
 	is.NoErr(rq.OnTrigger(elemId, func(rq *Request, jidstr string) error {
 		defer close(gotCall)
-		is.True(rq.wantMessage(&Message{Tags: []interface{}{elemId}}))
+		is.True(rq.wantMessage(&Message{Tag: elemId}))
 		jid := ParseJid(jidstr)
 		is.True(jid != 0)
 		elem := rq.GetElement(jid)

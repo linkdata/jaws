@@ -329,6 +329,9 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) error {
 
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) {
+	if _, ok := msg.Tag.([]interface{}); ok {
+		panic("meh")
+	}
 	select {
 	case <-jw.Done():
 	case jw.bcastCh <- msg:
@@ -336,11 +339,13 @@ func (jw *Jaws) Broadcast(msg Message) {
 }
 
 // Update calls JawsUpdate for all Elements that have one or more of the given tags.
-func (jw *Jaws) Update(tags []interface{}) {
-	jw.Broadcast(Message{
-		Tags: tags,
-		What: what.Update,
-	})
+func (jw *Jaws) Update(tags ...interface{}) {
+	for _, tag := range tags {
+		jw.Broadcast(Message{
+			Tag:  tag,
+			What: what.Update,
+		})
+	}
 }
 
 // Reload requests all Requests to reload their current page.
@@ -375,7 +380,7 @@ func (jw *Jaws) Alert(lvl, msg string) {
 func (jw *Jaws) Order(tags ...interface{}) {
 	if len(tags) > 2 {
 		jw.Broadcast(Message{
-			Tags: tags,
+			Tag:  tags,
 			What: what.Order,
 		})
 	}
