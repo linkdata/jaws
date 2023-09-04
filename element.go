@@ -60,6 +60,11 @@ func (e *Element) Request() *Request {
 	return e.rq
 }
 
+// Jaws returns the *Jaws that the Element belongs to.
+func (e *Element) Jaws() *Jaws {
+	return e.rq.Jaws
+}
+
 // Update calls JawsUpdate for this Element's UI object.
 func (e *Element) Update() error {
 	return e.ui.JawsUpdate(e)
@@ -162,23 +167,4 @@ func (e *Element) SetInner(innerHtml template.HTML) (changed bool) {
 // to the browser for the Element with the given JaWS ID in this Request.
 func (e *Element) SetValue(val string) (changed bool) {
 	return e.SetAttr(elemValueMagic, val)
-}
-
-// Remove immediately invalidates the given JaWS ID in this Request and sends a removal request
-// to the browser to remove the HTML element completely from the DOM.
-func (e *Element) Remove() {
-}
-
-// Insert calls the Javascript 'insertBefore()' method on the given element.
-// The position parameter 'where' may be either a JaWS ID, a child index or the text 'null'.
-func (e *Element) Insert(where, html string) {
-}
-
-// Append calls the Javascript 'appendChild()' method on the given element.
-func (e *Element) Append(html string) {
-}
-
-// Replace calls the Javascript 'replaceChild()' method on the given element.
-// The position parameter 'where' may be either a JaWS ID or an index.
-func (e *Element) Replace(where, html string) {
 }

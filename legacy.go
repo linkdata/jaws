@@ -178,17 +178,6 @@ func (jw *Jaws) SetValue(tagitem interface{}, val string) {
 }
 
 // Deprecated: Will be removed in future
-// Remove removes the HTML element(s) with the given 'jid' on all Requests.
-//
-// Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
-func (jw *Jaws) Remove(tagitem interface{}) {
-	jw.Broadcast(Message{
-		Tag:  tagitem,
-		What: what.Remove,
-	})
-}
-
-// Deprecated: Will be removed in future
 // Insert calls the Javascript 'insertBefore()' method on the given element on all Requests.
 // The position parameter 'where' may be either a HTML ID, an child index or the text 'null'.
 //

@@ -383,6 +383,14 @@ func (jw *Jaws) Order(parentTag interface{}, childTags []interface{}) {
 	})
 }
 
+// Remove removes the HTML element(s) with the given tag on all Requests.
+func (jw *Jaws) Remove(tag interface{}) {
+	jw.Broadcast(Message{
+		Tag:  tag,
+		What: what.Remove,
+	})
+}
+
 // Count returns the number of requests waiting for their WebSocket callbacks.
 func (jw *Jaws) Pending() (n int) {
 	jw.mu.RLock()
