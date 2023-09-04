@@ -446,6 +446,8 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		}
 
 		var todo []*Element
+		var wsdata string
+
 		rq.mu.RLock()
 		todo = append(todo, rq.tagMap[tagmsg.Tag]...)
 		for _, elem := range rq.elems {
@@ -453,7 +455,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		}
 		rq.mu.RUnlock()
 
-		var wsdata string
 		switch data := tagmsg.Data.(type) {
 		case nil:
 			// do nothing
