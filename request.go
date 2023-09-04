@@ -445,7 +445,9 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			continue
 		}
 
+		var todo []*Element
 		rq.mu.RLock()
+		todo = append(todo, rq.tagMap[tagmsg.Tag]...)
 		for _, elem := range rq.elems {
 			outmsgs = elem.appendTodo(outmsgs)
 		}
@@ -477,16 +479,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			})
 		default:
 			// find all elements listening to one of the tags in the message
-			todo := map[*Element]struct{}{}
-			rq.mu.RLock()
-			for _, elem := range rq.tagMap[tagmsg.Tag] {
-				if elem != tagmsg.from {
-					todo[elem] = struct{}{}
-				}
-			}
-			rq.mu.RUnlock()
-
-			for elem := range todo {
+			for _, elem := range todo {
 				switch tagmsg.What {
 				case what.Trigger:
 					// trigger messages won't be sent out on the WebSocket, but will queue up a
