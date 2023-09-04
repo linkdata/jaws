@@ -375,10 +375,6 @@ func (jw *Jaws) Alert(lvl, msg string) {
 }
 
 // Order re-orders HTML elements.
-//
-// The first tag given selects the parent HTML elements, and the subsequent tags selects immediate
-// child HTML elements of those parents and then calls Javascript's appendChild for them in the same
-// order that the tags are.
 func (jw *Jaws) Order(parentTag interface{}, childTags []interface{}) {
 	jw.Broadcast(Message{
 		Tag:  parentTag,

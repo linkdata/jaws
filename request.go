@@ -460,7 +460,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		case template.HTML:
 			wsdata = string(data)
 		case []interface{}: // list of tags
-			wsdata = rq.makeOrder(tagmsg.Data.([]interface{}))
+			wsdata = rq.makeOrder(data)
 		}
 
 		switch tagmsg.What {
