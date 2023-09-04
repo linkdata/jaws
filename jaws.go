@@ -329,8 +329,10 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) error {
 
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) {
-	if _, ok := msg.Tag.([]interface{}); ok {
-		panic("meh")
+	if deadlock.Debug {
+		if _, ok := msg.Tag.([]interface{}); ok {
+			panic("jaws: can't use []interface{} as a tag")
+		}
 	}
 	select {
 	case <-jw.Done():
@@ -377,13 +379,12 @@ func (jw *Jaws) Alert(lvl, msg string) {
 // The first tag given selects the parent HTML elements, and the subsequent tags selects immediate
 // child HTML elements of those parents and then calls Javascript's appendChild for them in the same
 // order that the tags are.
-func (jw *Jaws) Order(tags ...interface{}) {
-	if len(tags) > 2 {
-		jw.Broadcast(Message{
-			Tag:  tags,
-			What: what.Order,
-		})
-	}
+func (jw *Jaws) Order(parentTag interface{}, childTags []interface{}) {
+	jw.Broadcast(Message{
+		Tag:  parentTag,
+		What: what.Order,
+		Data: childTags,
+	})
 }
 
 // Count returns the number of requests waiting for their WebSocket callbacks.

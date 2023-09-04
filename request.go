@@ -459,6 +459,8 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			wsdata = data
 		case template.HTML:
 			wsdata = string(data)
+		case []interface{}: // list of tags
+			wsdata = rq.makeOrder(tagmsg.Data.([]interface{}))
 		}
 
 		switch tagmsg.What {
@@ -473,9 +475,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 				Data: wsdata,
 				What: tagmsg.What,
 			})
-		case what.Order:
-			tagmsg.Data = rq.makeOrder(tagmsg.Data.([]interface{}))
-			fallthrough
 		default:
 			// find all elements listening to one of the tags in the message
 			todo := map[*Element]struct{}{}
