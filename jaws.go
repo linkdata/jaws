@@ -375,9 +375,8 @@ func (jw *Jaws) Alert(lvl, msg string) {
 }
 
 // Order re-orders HTML elements.
-func (jw *Jaws) Order(parentTag interface{}, childTags []interface{}) {
+func (jw *Jaws) Order(childTags []interface{}) {
 	jw.Broadcast(Message{
-		Tag:  parentTag,
 		What: what.Order,
 		Data: childTags,
 	})

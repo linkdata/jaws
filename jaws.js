@@ -79,13 +79,13 @@ function jawsAlert(type, message) {
 	console.log("jaws: " + type + ": " + message);
 }
 
-function jawsOrder(where, jidlist) {
+function jawsOrder(jidlist) {
 	var jidstrings = jidlist.split(' ');
 	var elements = [];
 	var i;
 	for (i = 0; i < jidstrings.length; i++) {
 		var elem = document.getElementById('Jid.' + jidstrings[i]);
-		if (elem && elem.parentElement == where) {
+		if (elem) {
 			elem.dataset.jidsort = i;
 			elements.push(elem);
 		}
@@ -95,7 +95,7 @@ function jawsOrder(where, jidlist) {
 	});
 	for (i = 0; i < elements.length; i++) {
 		delete elements[i].dataset.jidsort;
-		where.appendChild(elements[i]);
+		elements[i].parentElement.appendChild(elements[i]);
 	}
 }
 
@@ -222,6 +222,8 @@ function jawsMessage(e) {
 			jawsAlert(lines.shift(), lines.join('\n'));
 			return;
 		case 'Order':
+			jawsOrder(lines.join('\n'));
+			return;
 		case 'Inner':
 		case 'Value':
 		case 'Append':
@@ -250,7 +252,6 @@ function jawsMessage(e) {
 	}
 	switch (what) {
 		case 'Order':
-			jawsOrder(elem, data);
 			break;
 		case 'Inner':
 			elem.innerHTML = data;

@@ -473,6 +473,8 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			fallthrough
 		case what.Redirect:
 			fallthrough
+		case what.Order:
+			fallthrough
 		case what.Alert:
 			outmsgs = append(outmsgs, wsMsg{
 				Data: wsdata,
