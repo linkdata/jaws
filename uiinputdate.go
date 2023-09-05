@@ -27,7 +27,7 @@ func (ui *UiInputDate) WriteHtmlInput(e *Element, w io.Writer, jid Jid, htmltype
 
 func (ui *UiInputDate) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if ui.EventFn != nil {
-		return ui.EventFn(e.Request(), wht, e.Jid().String(), val)
+		return ui.EventFn(e.Request, wht, e.Jid().String(), val)
 	}
 	if wht == what.Input {
 		var v time.Time

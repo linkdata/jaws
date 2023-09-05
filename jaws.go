@@ -12,6 +12,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"net"
@@ -30,8 +31,9 @@ import (
 const CookieNameDefault = "jaws"
 
 type Jaws struct {
-	CookieName string      // Name for session cookies, defaults to "jaws"
-	Logger     *log.Logger // If not nil, send debug info and errors here
+	CookieName string             // Name for session cookies, defaults to "jaws"
+	Logger     *log.Logger        // If not nil, send debug info and errors here
+	Template   *template.Template // User templates in use, may be nil
 	doneCh     <-chan struct{}
 	bcastCh    chan Message
 	subCh      chan subscription

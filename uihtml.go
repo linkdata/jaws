@@ -83,7 +83,7 @@ func (ui *UiHtml) JawsUpdate(e *Element) (err error) {
 
 func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) error {
 	if ui.EventFn != nil { // LEGACY
-		return ui.EventFn(e.Request(), wht, e.Jid().String(), val)
+		return ui.EventFn(e.Request, wht, e.Jid().String(), val)
 	}
 	// see if one of our tags is a handler
 	if wht == what.Click {

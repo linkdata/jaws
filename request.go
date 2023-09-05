@@ -326,10 +326,10 @@ func (rq *Request) wantMessage(msg *Message) (yes bool) {
 
 func (rq *Request) newElementLocked(tags []interface{}, ui UI, data []interface{}) (elem *Element) {
 	elem = &Element{
-		jid:  Jid(len(rq.elems) + 1),
-		ui:   ui,
-		rq:   rq,
-		Data: data,
+		jid:     Jid(len(rq.elems) + 1),
+		ui:      ui,
+		Request: rq,
+		Data:    data,
 	}
 	rq.elems = append(rq.elems, elem)
 	for _, tag := range tags {
@@ -498,12 +498,14 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					// the function must not send any messages itself, but may return
 					// an error to be sent out as an alert message.
 					// primary usecase is tests.
-					if errmsg := makeAlertDangerMessage(elem.UI().JawsEvent(elem, tagmsg.What, wsdata)); errmsg.What != what.None {
-						outmsgs = append(outmsgs, wsMsg{
-							Jid:  elem.jid,
-							What: errmsg.What,
-							Data: wsdata,
-						})
+					if h, ok := elem.UI().(EventHandler); ok {
+						if errmsg := makeAlertDangerMessage(h.JawsEvent(elem, tagmsg.What, wsdata)); errmsg.What != what.None {
+							outmsgs = append(outmsgs, wsMsg{
+								Jid:  elem.jid,
+								What: errmsg.What,
+								Data: wsdata,
+							})
+						}
 					}
 				case what.Update:
 					rq.Jaws.MustLog(elem.Update())
@@ -537,13 +539,17 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 		var err error
 		switch call.wht {
 		case what.Click:
-			if ch, ok := call.e.UI().(ClickHandler); ok {
-				err = ch.JawsClick(call.e, call.data)
+			if h, ok := call.e.UI().(ClickHandler); ok {
+				err = h.JawsClick(call.e, call.data)
 				break
 			}
 			fallthrough
 		case what.Input, what.Trigger:
-			err = call.e.UI().JawsEvent(call.e, call.wht, call.data)
+			if h, ok := call.e.UI().(EventHandler); ok {
+				err = h.JawsEvent(call.e, call.wht, call.data)
+				break
+			}
+			fallthrough
 		default:
 			if deadlock.Debug {
 				err = fmt.Errorf("jaws: eventCaller unhandled: %v", call)

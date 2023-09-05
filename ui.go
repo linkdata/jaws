@@ -8,11 +8,11 @@ import (
 	"io"
 )
 
+// Optionally you may also implement ClickHandler and EventHandler
 type UI interface {
 	JawsTags(rq *Request) (tags []interface{})
 	JawsRender(e *Element, w io.Writer) (err error)
 	JawsUpdate(e *Element) (err error)
-	EventHandler
 }
 
 func (rq *Request) UI(ui UI, params ...interface{}) template.HTML {
@@ -40,12 +40,4 @@ func (rq *Request) Update(tag interface{}) {
 		}
 		b.Reset()
 	}
-}
-
-type Ui interface {
-	JawsUi(rq *Request, attrs ...string) template.HTML
-}
-
-func (rq *Request) Ui(elem Ui, attrs ...string) template.HTML {
-	return elem.JawsUi(rq, attrs...)
 }

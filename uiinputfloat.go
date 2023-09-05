@@ -23,7 +23,7 @@ func (ui *UiInputFloat) WriteHtmlInput(e *Element, w io.Writer, htmltype string)
 
 func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if ui.EventFn != nil {
-		return ui.EventFn(e.Request(), wht, e.Jid().String(), val)
+		return ui.EventFn(e.Request, wht, e.Jid().String(), val)
 	}
 	if wht == what.Input {
 		var v float64

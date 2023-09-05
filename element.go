@@ -19,12 +19,12 @@ const elemValueMagic = ">V"
 
 // An Element is an instance of an UI object and it's user data in a Request.
 type Element struct {
-	jid   Jid              // (read-only) JaWS ID, unique to this Element within it's Request
-	ui    UI               // (read-only) the UI object
-	rq    *Request         // (read-only) the Request the Element belongs to
-	Data  []interface{}    // the optional data provided to the Request.UI() call
-	mu    deadlock.RWMutex // protects following
-	items []elemItem       // currently known items
+	jid      Jid              // (read-only) JaWS ID, unique to this Element within it's Request
+	ui       UI               // (read-only) the UI object
+	*Request                  // (read-only) the Request the Element belongs to
+	Data     []interface{}    // the optional data provided to the Request.UI() call
+	mu       deadlock.RWMutex // protects following
+	items    []elemItem       // currently known items
 }
 
 func (e *Element) String() string {
@@ -32,7 +32,7 @@ func (e *Element) String() string {
 }
 
 func (e *Element) Tags() []interface{} {
-	return e.rq.TagsOf(e)
+	return e.TagsOf(e)
 }
 
 // Jid returns the JaWS ID for this element, unique within it's Request.
@@ -55,16 +55,6 @@ func (e *Element) UI() UI {
 	return e.ui
 }
 
-// Request returns the Request that the Element belongs to.
-func (e *Element) Request() *Request {
-	return e.rq
-}
-
-// Jaws returns the *Jaws that the Element belongs to.
-func (e *Element) Jaws() *Jaws {
-	return e.rq.Jaws
-}
-
 // Update calls JawsUpdate for this Element's UI object.
 func (e *Element) Update() error {
 	return e.ui.JawsUpdate(e)
@@ -73,7 +63,7 @@ func (e *Element) Update() error {
 // Update calls JawsUpdate for all Elements except this one that have one or more of the given tags.
 func (e *Element) UpdateOthers(tags ...interface{}) {
 	for _, tag := range tags {
-		e.rq.Jaws.Broadcast(Message{
+		e.Jaws.Broadcast(Message{
 			Tag:  tag,
 			What: what.Update,
 			from: e,
