@@ -34,7 +34,11 @@ func (r RadioElement) Radio(attrs ...string) template.HTML {
 // Label renders a HTML label element.
 func (r *RadioElement) Label(attrs ...string) template.HTML {
 	if nb, ok := r.e.ui.(*UiRadio).ValueProxy.(*NamedBool); ok {
-		return HtmlInner(0, "label", "", nb.Html(), append(attrs, `for="jid.`+r.e.Jid().String()+`"`)...)
+		var b []byte
+		b = append(b, `for="`...)
+		b = r.e.jid.Append(b)
+		b = append(b, '"')
+		return HtmlInner(0, "label", "", nb.Html(), append(attrs, string(b))...)
 	}
 	return ""
 
