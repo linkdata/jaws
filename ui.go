@@ -3,9 +3,9 @@ package jaws
 import (
 	"bytes"
 	"fmt"
-	"html"
 	"html/template"
 	"io"
+	"strings"
 )
 
 // Optionally you may also implement ClickHandler and EventHandler
@@ -21,9 +21,8 @@ func (rq *Request) UI(ui UI, params ...interface{}) template.HTML {
 	elem := rq.newElementLocked(tags, ui, params)
 	rq.mu.Unlock()
 	var b bytes.Buffer
-	if err := ui.JawsRender(elem, &b); err != nil {
-		rq.Jaws.MustLog(err)
-		b.WriteString(fmt.Sprintf("<!-- jaws.UI(%T).JawsRender(): %s -->", ui, html.EscapeString(err.Error())))
+	if err := rq.Jaws.Log(ui.JawsRender(elem, &b)); err != nil {
+		b.WriteString(fmt.Sprintf("<!-- jaws.UI(%T).JawsRender(): %s -->", ui, strings.ReplaceAll(err.Error(), "--", "==")))
 	}
 	return template.HTML(b.String())
 }
