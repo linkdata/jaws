@@ -2,7 +2,10 @@ package jaws
 
 import (
 	"fmt"
+	"html"
 	"html/template"
+	"strconv"
+	"sync/atomic"
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/what"
@@ -157,4 +160,27 @@ func (e *Element) SetInner(innerHtml template.HTML) (changed bool) {
 // to the browser for the Element with the given JaWS ID in this Request.
 func (e *Element) SetValue(val string) (changed bool) {
 	return e.SetAttr(elemValueMagic, val)
+}
+
+func (e *Element) ToHtml(val interface{}) template.HTML {
+	var s string
+	switch v := val.(type) {
+	case string:
+		s = v
+	case template.HTML:
+		return v
+	case *atomic.Value:
+		return e.ToHtml(v.Load())
+	case fmt.Stringer:
+		s = v.String()
+	case float64:
+		s = strconv.FormatFloat(v, 'f', -1, 64)
+	case float32:
+		s = strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case int:
+		s = strconv.Itoa(v)
+	default:
+		panic(fmt.Sprintf("jaws: don't know how to render %T as template.HTML", v))
+	}
+	return template.HTML(html.EscapeString(s))
 }

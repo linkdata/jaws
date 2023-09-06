@@ -363,6 +363,13 @@ func (rq *Request) getElementsLocked(tag interface{}) (elems []*Element) {
 	return
 }
 
+func (rq *Request) Template(name string, dot interface{}) Template {
+	return Template{
+		Dot:      dot,
+		Template: rq.Jaws.Template.Lookup(name),
+	}
+}
+
 // GetElements returns a list of the UI elements in the Request that have the given tag.
 func (rq *Request) GetElements(tag interface{}) (elems []*Element) {
 	rq.mu.RLock()

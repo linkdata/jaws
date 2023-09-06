@@ -66,6 +66,10 @@ func unpackValtag(tags map[interface{}]struct{}, valtag interface{}) (vp ValuePr
 	case *NamedBool:
 		vp = data
 		tags[data] = struct{}{}
+	case Template:
+		vp = data
+		addTags(tags, data.Dot)
+		addTags(tags, data.Template)
 	case ValueProxy:
 		vp = data
 		tags[data] = struct{}{}
