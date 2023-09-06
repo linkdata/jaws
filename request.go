@@ -363,7 +363,11 @@ func (rq *Request) getElementsLocked(tag interface{}) (elems []*Element) {
 	return
 }
 
-func (rq *Request) Template(name string, dot interface{}) Template {
+// Template returns a ValueProxy that renders the named template using Request.With(dot).
+//
+// Using it with an UI element will add both the resolved *template.Template
+// and the given dot value as JaWS tags.
+func (rq *Request) Template(name string, dot interface{}) ValueProxy {
 	return Template{
 		Dot:      dot,
 		Template: rq.Jaws.Template.Lookup(name),

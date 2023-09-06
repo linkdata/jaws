@@ -178,6 +178,9 @@ func (up *Params) process(tags map[interface{}]struct{}, params []interface{}) {
 			addTags(tags, data)
 		case []Tag:
 			addTags(tags, data)
+		case Template:
+			addTags(tags, data.Dot)
+			addTags(tags, data.Template)
 		case string:
 			up.attrs = append(up.attrs, data)
 		case []string:
