@@ -363,7 +363,7 @@ func (rq *Request) getElementsLocked(tag interface{}) (elems []*Element) {
 	return
 }
 
-// Template returns a ValueProxy that renders the given template using Request.With(dot).
+// Template returns a ValueProxy that renders the given template using dot as data.
 //
 // The templ argument can either be a string, in which case Jaws.Template.Lookup() will
 // be used to resolve it. Or it can be a *template.Template directly.
@@ -378,8 +378,8 @@ func (rq *Request) Template(templ interface{}, dot interface{}) ValueProxy {
 		tp = templ.(*template.Template)
 	}
 	return Template{
-		Dot:      dot,
 		Template: tp,
+		Dot:      dot,
 	}
 }
 

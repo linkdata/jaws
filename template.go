@@ -3,17 +3,27 @@ package jaws
 import (
 	"bytes"
 	"fmt"
+	"html"
 	"html/template"
+	"strings"
 )
 
 type Template struct {
-	Dot interface{}
 	*template.Template
+	Dot interface{}
+}
+
+func (t *Template) String() string {
+	return fmt.Sprintf("Template{%q, %v}", t.Template.Name(), t.Dot)
 }
 
 func (t Template) JawsGet(e *Element) interface{} {
 	var b bytes.Buffer
-	e.Jaws.MustLog(t.Execute(&b, e.With(t.Dot)))
+	if err := e.Jaws.Log(t.Execute(&b, t.Dot)); err != nil {
+		msg := fmt.Sprintf("<!-- %v: %s: %v", e, t.String(), err)
+		b.Write([]byte(strings.ReplaceAll(html.EscapeString(msg), "-->", "")))
+		b.Write([]byte(" -->"))
+	}
 	return template.HTML(b.String())
 }
 

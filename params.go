@@ -19,9 +19,8 @@ type Params struct {
 }
 
 func addTags(tags map[interface{}]struct{}, tag interface{}) {
-	const maxAllowedTags = 256
-	if len(tags) >= maxAllowedTags {
-		panic("jaws: too many tags")
+	if _, ok := tags[tag]; ok {
+		return
 	}
 	switch data := tag.(type) {
 	case nil:
@@ -32,6 +31,11 @@ func addTags(tags map[interface{}]struct{}, tag interface{}) {
 		for _, v := range data {
 			addTags(tags, v.Value)
 		}
+	case Template:
+		addTags(tags, data.Template)
+		addTags(tags, data.Dot)
+	case With:
+		addTags(tags, data.Dot)
 	case []interface{}:
 		for _, v := range data {
 			addTags(tags, v)
@@ -66,13 +70,9 @@ func unpackValtag(tags map[interface{}]struct{}, valtag interface{}) (vp ValuePr
 	case *NamedBool:
 		vp = data
 		tags[data] = struct{}{}
-	case Template:
-		vp = data
-		addTags(tags, data.Dot)
-		addTags(tags, data.Template)
 	case ValueProxy:
 		vp = data
-		tags[data] = struct{}{}
+		addTags(tags, data)
 	case Tag:
 		addTags(tags, data)
 	case []Tag:
@@ -174,13 +174,6 @@ func (up *Params) process(tags map[interface{}]struct{}, params []interface{}) {
 			}
 		case []interface{}:
 			up.process(tags, data)
-		case Tag:
-			addTags(tags, data)
-		case []Tag:
-			addTags(tags, data)
-		case Template:
-			addTags(tags, data.Dot)
-			addTags(tags, data.Template)
 		case string:
 			up.attrs = append(up.attrs, data)
 		case []string:
