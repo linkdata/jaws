@@ -43,6 +43,17 @@ func (e *Element) Jid() Jid {
 	return e.jid
 }
 
+// AppendAttrs appends strings present in Data for this element, prepended by spaces.
+func (e *Element) AppendAttrs(b []byte) []byte {
+	for _, v := range e.Data {
+		if s, ok := v.(string); ok {
+			b = append(b, ' ')
+			b = append(b, s...)
+		}
+	}
+	return b
+}
+
 // Attrs returns the strings present in Data for this element.
 func (e *Element) Attrs() (attrs []string) {
 	for _, v := range e.Data {

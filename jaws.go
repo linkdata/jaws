@@ -376,7 +376,7 @@ func (jw *Jaws) Alert(lvl, msg string) {
 	})
 }
 
-// Order re-orders HTML elements.
+// Order re-orders HTML elements matching the given tags in all Requests.
 func (jw *Jaws) Order(childTags []interface{}) {
 	jw.Broadcast(Message{
 		What: what.Order,
@@ -384,11 +384,20 @@ func (jw *Jaws) Order(childTags []interface{}) {
 	})
 }
 
-// Remove removes the HTML element(s) with the given tag on all Requests.
+// Remove removes the HTML element(s) with the given tag.
 func (jw *Jaws) Remove(tag interface{}) {
 	jw.Broadcast(Message{
 		Tag:  tag,
 		What: what.Remove,
+	})
+}
+
+// Append calls the Javascript 'appendChild()' method on all HTML elements with the given tag.
+func (jw *Jaws) Append(tag interface{}, html template.HTML) {
+	jw.Broadcast(Message{
+		Tag:  tag,
+		What: what.Append,
+		Data: html,
 	})
 }
 

@@ -69,8 +69,8 @@ func (ui *UiHtml) WriteHtmlInput(w io.Writer, e *Element, htmltype, htmlval stri
 	return WriteHtmlInput(w, e.Jid(), htmltype, htmlval, e.Attrs()...)
 }
 
-func (ui *UiHtml) JawsTags(rq *Request) (tags []interface{}) {
-	return ui.Tags
+func (ui *UiHtml) JawsTags(rq *Request, inTags []interface{}) []interface{} {
+	return append(inTags, ui.Tags...)
 }
 
 func (ui *UiHtml) JawsRender(e *Element, w io.Writer) (err error) {

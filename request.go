@@ -295,8 +295,6 @@ func (rq *Request) Register(tagitem interface{}, params ...interface{}) Jid {
 
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-
-	var missing []interface{}
 	for _, tag := range tags {
 		if elems, ok := rq.tagMap[tag]; ok {
 			if up.ef != nil {
@@ -306,11 +304,9 @@ func (rq *Request) Register(tagitem interface{}, params ...interface{}) Jid {
 					}
 				}
 			}
-		} else {
-			missing = append(missing, tag)
 		}
 	}
-	elem := rq.newElementLocked(missing, &UiHtml{Tags: tags, EventFn: up.ef}, params)
+	elem := rq.newElementLocked(&UiHtml{Tags: tags, EventFn: up.ef}, params)
 	return elem.jid
 }
 
@@ -324,7 +320,7 @@ func (rq *Request) wantMessage(msg *Message) (yes bool) {
 	return
 }
 
-func (rq *Request) newElementLocked(tags []interface{}, ui UI, data []interface{}) (elem *Element) {
+func (rq *Request) newElementLocked(ui UI, data []interface{}) (elem *Element) {
 	elem = &Element{
 		jid:     Jid(len(rq.elems) + 1),
 		ui:      ui,
@@ -332,16 +328,18 @@ func (rq *Request) newElementLocked(tags []interface{}, ui UI, data []interface{
 		Data:    data,
 	}
 	rq.elems = append(rq.elems, elem)
-	for _, tag := range tags {
-		rq.tagMap[tag] = append(rq.tagMap[tag], elem)
+	if tagger, ok := ui.(Tagger); ok {
+		for _, tag := range tagger.JawsTags(rq, nil) {
+			rq.tagMap[tag] = append(rq.tagMap[tag], elem)
+		}
 	}
 	return
 }
 
-func (rq *Request) NewElement(tags []interface{}, ui UI, data []interface{}) (elem *Element) {
+func (rq *Request) NewElement(ui UI, data []interface{}) (elem *Element) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	return rq.newElementLocked(tags, ui, data)
+	return rq.newElementLocked(ui, data)
 }
 
 func (rq *Request) GetElement(jid Jid) (e *Element) {
@@ -465,16 +463,31 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			continue
 		}
 
+		// collect all elements marked with the tag in the message
 		var todo []*Element
-		var wsdata string
-
-		rq.mu.RLock()
-		todo = append(todo, rq.tagMap[tagmsg.Tag]...)
-		for _, elem := range rq.elems {
-			outmsgs = elem.appendTodo(outmsgs)
+		if tagmsg.What == what.Remove {
+			rq.mu.Lock()
+		} else {
+			rq.mu.RLock()
 		}
-		rq.mu.RUnlock()
+		todo = append(todo, rq.tagMap[tagmsg.Tag]...)
+		for i, elem := range rq.elems {
+			if elem != nil {
+				outmsgs = elem.appendTodo(outmsgs)
+				if tagmsg.What == what.Remove {
+					rq.elems[i] = nil
+				}
+			}
+		}
+		if tagmsg.What == what.Remove {
+			delete(rq.tagMap, tagmsg.Tag)
+			rq.mu.Unlock()
+		} else {
+			rq.mu.RUnlock()
+		}
 
+		// prepare the data to send in the WS message
+		var wsdata string
 		switch data := tagmsg.Data.(type) {
 		case nil:
 			// do nothing
@@ -501,7 +514,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 				What: tagmsg.What,
 			})
 		default:
-			// find all elements listening to one of the tags in the message
 			for _, elem := range todo {
 				switch tagmsg.What {
 				case what.Trigger:

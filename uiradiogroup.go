@@ -11,12 +11,11 @@ type RadioElement struct {
 
 func (rq *Request) RadioGroup(namedBoolArray interface{}, params ...interface{}) (rl []RadioElement) {
 	up := NewParams(namedBoolArray, params)
-	tags := up.Tags()
 	up.attrs = append(up.attrs, `name="`+MakeID()+`"`)
 	up.nba.ReadLocked(func(nbl []*NamedBool) {
 		for _, nb := range nbl {
 			up.vp = nb
-			rl = append(rl, RadioElement{e: rq.NewElement(tags, NewUiRadio(up), params)})
+			rl = append(rl, RadioElement{e: rq.NewElement(NewUiRadio(up), params)})
 		}
 	})
 	return

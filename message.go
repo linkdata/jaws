@@ -10,7 +10,7 @@ import (
 type Message struct {
 	Tag  interface{} // tag to affect
 	What what.What   // what to change or do
-	Data interface{} // data (e.g. inner HTML content)
+	Data interface{} // data (e.g. inner HTML content or slice of tags)
 	from interface{} // don't send to this
 }
 

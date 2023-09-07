@@ -8,18 +8,14 @@ import (
 	"strings"
 )
 
-// Optionally you may also implement ClickHandler and EventHandler
+// Optionally you may also implement Tagger, ClickHandler and/or EventHandler
 type UI interface {
-	JawsTags(rq *Request) (tags []interface{})
 	JawsRender(e *Element, w io.Writer) (err error)
 	JawsUpdate(e *Element) (err error)
 }
 
 func (rq *Request) UI(ui UI, params ...interface{}) template.HTML {
-	tags := ui.JawsTags(rq)
-	rq.mu.Lock()
-	elem := rq.newElementLocked(tags, ui, params)
-	rq.mu.Unlock()
+	elem := rq.NewElement(ui, params)
 	var b bytes.Buffer
 	if err := rq.Jaws.Log(ui.JawsRender(elem, &b)); err != nil {
 		b.WriteString(fmt.Sprintf("<!-- jaws.UI(%T).JawsRender(): %s -->", ui, strings.ReplaceAll(err.Error(), "--", "==")))

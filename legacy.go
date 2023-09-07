@@ -191,18 +191,6 @@ func (jw *Jaws) Insert(tagitem interface{}, where, html string) {
 }
 
 // Deprecated: Will be removed in future
-// Append calls the Javascript 'appendChild()' method on the given element on all Requests.
-//
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (jw *Jaws) Append(tagitem interface{}, html string) {
-	jw.Broadcast(Message{
-		Tag:  tagitem,
-		What: what.Append,
-		Data: html,
-	})
-}
-
-// Deprecated: Will be removed in future
 // Replace calls the Javascript 'replaceChild()' method on the given element on all Requests.
 // The position parameter 'where' may be either a HTML ID or an index.
 //
