@@ -7,6 +7,7 @@ import (
 )
 
 type UiTbody struct {
+	UiHtml
 	Tagger      Tagger
 	RowTemplate *template.Template
 	state       []interface{}
@@ -69,6 +70,7 @@ func (ui *UiTbody) JawsUpdate(e *Element) (err error) {
 
 func NewUiTbody(tagger Tagger, rowTemplate *template.Template, up Params) *UiTbody {
 	return &UiTbody{
+		UiHtml:      NewUiHtml(up),
 		Tagger:      tagger,
 		RowTemplate: rowTemplate,
 	}

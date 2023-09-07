@@ -86,14 +86,15 @@ func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) error {
 		return ui.EventFn(e.Request, wht, e.Jid().String(), val)
 	}
 	// see if one of our tags is a handler
+	tags := append(e.Tags(), ui.Tags...)
 	if wht == what.Click {
-		for _, tag := range ui.Tags {
+		for _, tag := range tags {
 			if ch, ok := tag.(ClickHandler); ok {
 				return ch.JawsClick(e, val)
 			}
 		}
 	}
-	for _, tag := range ui.Tags {
+	for _, tag := range tags {
 		if eh, ok := tag.(EventHandler); ok {
 			return eh.JawsEvent(e, wht, val)
 		}

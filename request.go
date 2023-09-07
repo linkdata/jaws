@@ -49,6 +49,10 @@ type eventFnCall struct {
 	data string
 }
 
+func (call *eventFnCall) String() string {
+	return fmt.Sprintf("eventFnCall{%v, %s, %q}", call.e, call.wht, call.data)
+}
+
 var DefaultRequestRefreshInterval = time.Millisecond * 100
 
 var requestPool = sync.Pool{New: func() interface{} {
@@ -361,7 +365,7 @@ func (rq *Request) getElementsLocked(tag interface{}) (elems []*Element) {
 	return
 }
 
-// Template returns a ValueProxy that renders the given template using dot as data.
+// Template returns a ValueProxy that renders the given template using Request.With(dot) as data.
 //
 // The templ argument can either be a string, in which case Jaws.Template.Lookup() will
 // be used to resolve it. Or it can be a *template.Template directly.
@@ -377,7 +381,7 @@ func (rq *Request) Template(templ interface{}, dot interface{}) ValueProxy {
 	}
 	return Template{
 		Template: tp,
-		Dot:      dot,
+		Dot:      rq.With(dot),
 	}
 }
 
@@ -387,6 +391,15 @@ func (rq *Request) GetElements(tag interface{}) (elems []*Element) {
 	elems = rq.getElementsLocked(tag)
 	rq.mu.RUnlock()
 	return
+}
+
+func (rq *Request) appendTodoLocked(outmsgs []wsMsg) []wsMsg {
+	for _, elem := range rq.elems {
+		if elem != nil {
+			outmsgs = elem.appendTodo(outmsgs)
+		}
+	}
+	return outmsgs
 }
 
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
@@ -467,22 +480,19 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		var todo []*Element
 		if tagmsg.What == what.Remove {
 			rq.mu.Lock()
-		} else {
-			rq.mu.RLock()
-		}
-		todo = append(todo, rq.tagMap[tagmsg.Tag]...)
-		for i, elem := range rq.elems {
-			if elem != nil {
-				outmsgs = elem.appendTodo(outmsgs)
-				if tagmsg.What == what.Remove {
-					rq.elems[i] = nil
+			todo = append(todo, rq.tagMap[tagmsg.Tag]...)
+			for _, elem := range todo {
+				if elem != nil {
+					rq.elems[elem.jid-1] = nil
 				}
 			}
-		}
-		if tagmsg.What == what.Remove {
 			delete(rq.tagMap, tagmsg.Tag)
+			outmsgs = rq.appendTodoLocked(outmsgs)
 			rq.mu.Unlock()
 		} else {
+			rq.mu.RLock()
+			todo = append(todo, rq.tagMap[tagmsg.Tag]...)
+			outmsgs = rq.appendTodoLocked(outmsgs)
 			rq.mu.RUnlock()
 		}
 
@@ -584,7 +594,7 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 			fallthrough
 		default:
 			if deadlock.Debug {
-				err = fmt.Errorf("jaws: eventCaller unhandled: %v", call)
+				err = rq.Jaws.Log(fmt.Errorf("jaws: eventCaller unhandled: %s", call.String()))
 			}
 		}
 		if err != nil {
