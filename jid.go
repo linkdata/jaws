@@ -28,7 +28,10 @@ func (jid Jid) AppendQuote(dst []byte) []byte {
 	return dst
 }
 
-func (jid Jid) AppendAttr(dst []byte) []byte {
+// AppendAttr appends `<startTag` followed by the quoted Jid as a HTML id attribute.
+func (jid Jid) AppendStartTagAttr(dst []byte, startTag string) []byte {
+	dst = append(dst, '<')
+	dst = append(dst, startTag...)
 	if jid > 0 {
 		dst = append(dst, ` id=`...)
 		dst = jid.AppendQuote(dst)

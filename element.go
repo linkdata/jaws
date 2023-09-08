@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"bytes"
 	"fmt"
 	"html"
 	"html/template"
@@ -12,18 +13,20 @@ import (
 )
 
 type elemItem struct {
-	name  string
-	value *string
-	dirty bool
+	name   string
+	value  string
+	remove bool
+	dirty  bool
 }
 
+const elemReplaceMagic = ">R"
 const elemInnerMagic = ">I"
 const elemValueMagic = ">V"
 
 // An Element is an instance of an UI object and it's user data in a Request.
 type Element struct {
-	jid      Jid              // (read-only) JaWS ID, unique to this Element within it's Request
 	ui       UI               // (read-only) the UI object
+	jid      Jid              // (read-only) JaWS ID, unique to this Element within it's Request
 	*Request                  // (read-only) the Request the Element belongs to
 	Data     []interface{}    // the optional data provided to the Request.UI() call
 	mu       deadlock.RWMutex // protects following
@@ -31,7 +34,7 @@ type Element struct {
 }
 
 func (e *Element) String() string {
-	return fmt.Sprintf("Element[%p]{%q, %T, Tags: %v}", e, e.jid, e.ui, e.Tags())
+	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", e.ui, e.jid, e.Tags())
 }
 
 func (e *Element) Tags() []interface{} {
@@ -91,8 +94,8 @@ func (e *Element) appendTodo(msgs []wsMsg) []wsMsg {
 	for i := range e.items {
 		if e.items[i].dirty {
 			e.items[i].dirty = false
-			if e.items[i].value == nil {
-				// delete attribute
+			if e.items[i].remove {
+				e.items[i].remove = false
 				msgs = append(msgs, wsMsg{
 					Jid:  e.jid,
 					Data: e.items[i].name,
@@ -101,22 +104,28 @@ func (e *Element) appendTodo(msgs []wsMsg) []wsMsg {
 				continue
 			}
 			switch e.items[i].name {
+			case elemReplaceMagic:
+				msgs = append(msgs, wsMsg{
+					Jid:  e.jid,
+					Data: e.items[i].value,
+					What: what.Replace,
+				})
 			case elemInnerMagic:
 				msgs = append(msgs, wsMsg{
 					Jid:  e.jid,
-					Data: *(e.items[i].value),
+					Data: e.items[i].value,
 					What: what.Inner,
 				})
 			case elemValueMagic:
 				msgs = append(msgs, wsMsg{
 					Jid:  e.jid,
-					Data: *(e.items[i].value),
+					Data: e.items[i].value,
 					What: what.Value,
 				})
 			default:
 				msgs = append(msgs, wsMsg{
 					Jid:  e.jid,
-					Data: (e.items[i].name) + "\n" + *(e.items[i].value),
+					Data: e.items[i].name + "\n" + e.items[i].value,
 					What: what.SAttr,
 				})
 			}
@@ -126,6 +135,12 @@ func (e *Element) appendTodo(msgs []wsMsg) []wsMsg {
 }
 
 func (e *Element) ensureItemLocked(name string) *elemItem {
+	if name == elemReplaceMagic && len(e.items) > 0 {
+		if e.items[0].name == elemReplaceMagic {
+			return &(e.items[0])
+		}
+		e.items = e.items[:0]
+	}
 	for i := range e.items {
 		if e.items[i].name == name {
 			return &(e.items[i])
@@ -139,13 +154,14 @@ func (e *Element) ensureItemLocked(name string) *elemItem {
 // to the browser for the Element with the given JaWS ID in this Request.
 func (e *Element) SetAttr(attr, val string) (changed bool) {
 	e.mu.Lock()
+	defer e.mu.Unlock()
 	ei := e.ensureItemLocked(attr)
-	if ei.value == nil || *ei.value != val {
-		ei.value = &val
+	if ei.remove || ei.value != val {
+		ei.value = val
+		ei.remove = false
 		ei.dirty = true
 		changed = true
 	}
-	e.mu.Unlock()
 	return
 }
 
@@ -155,7 +171,7 @@ func (e *Element) RemoveAttr(attr string) (changed bool) {
 	e.mu.Lock()
 	ei := e.ensureItemLocked(attr)
 	changed = !ei.dirty
-	ei.value = nil
+	ei.remove = true
 	ei.dirty = true
 	e.mu.Unlock()
 	return
@@ -171,6 +187,18 @@ func (e *Element) SetInner(innerHtml template.HTML) (changed bool) {
 // to the browser for the Element with the given JaWS ID in this Request.
 func (e *Element) SetValue(val string) (changed bool) {
 	return e.SetAttr(elemValueMagic, val)
+}
+
+// Replace replaces the elements entire HTML DOM node with new HTML code.
+// If the HTML code doesn't seem to contain correct HTML ID, it panics.
+func (e *Element) Replace(htmlCode template.HTML) (changed bool) {
+	var b []byte
+	b = append(b, "id="...)
+	b = e.jid.AppendQuote(b)
+	if bytes.Contains([]byte(htmlCode), b) {
+		return e.SetAttr(elemReplaceMagic, string(htmlCode))
+	}
+	panic("jaws: Element.Replace(): expected HTML " + string(b))
 }
 
 func (e *Element) ToHtml(val interface{}) template.HTML {

@@ -48,20 +48,20 @@ func TestJid_String(t *testing.T) {
 	}
 }
 
-func TestJid_AppendAttr(t *testing.T) {
+func TestJid_AppendStartTagAttr(t *testing.T) {
 	tests := []struct {
 		name string
 		jid  Jid
 		want string
 	}{
-		{"zero", 0, ""},
-		{"one", 1, ` id="` + JidPrefix + `1"`},
-		{"negative", -1, ""},
+		{"zero", 0, "<zero"},
+		{"one", 1, `<one id="` + JidPrefix + `1"`},
+		{"negative", -1, "<negative"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := string(tt.jid.AppendAttr(nil)); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Jid.AppendAttr() = %q, want %q", got, tt.want)
+			if got := string(tt.jid.AppendStartTagAttr(nil, tt.name)); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Jid.AppendStartTagAttr() = %q, want %q", got, tt.want)
 			}
 		})
 	}

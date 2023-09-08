@@ -18,15 +18,15 @@ func (ui *UiTbody) JawsTags(rq *Request, tags []interface{}) []interface{} {
 }
 
 func (ui *UiTbody) JawsRender(e *Element, w io.Writer) (err error) {
+	writeUiDebug(e, w)
 	var b []byte
-	b = append(b, "<tbody"...)
-	b = e.jid.AppendAttr(b)
+	b = e.jid.AppendStartTagAttr(b, "tbody")
 	b = e.AppendAttrs(b)
 	b = append(b, '>')
 	if _, err = w.Write(b); err == nil {
 		ui.state = ui.Tagger.JawsTags(e.Request, nil)
 		for _, tag := range ui.state {
-			trui := NewUiTr(NewParams(e.Request.Template(ui.RowTemplate, tag), nil))
+			trui := NewUiTemplate(ui.RowTemplate, tag)
 			elem := e.Request.NewElement(trui, []interface{}{tag})
 			if err = e.Jaws.Log(trui.JawsRender(elem, w)); err != nil {
 				break

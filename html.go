@@ -55,8 +55,7 @@ func appendAttrs(b []byte, attrs []string) []byte {
 func WriteHtmlInput(w io.Writer, jid Jid, typ, val string, attrs ...string) (err error) {
 	need := 11 + jidPrealloc + 8 + len(typ) + 9 + len(val) + 1 + 1 + getAttrsLen(attrs) + 1
 	b := make([]byte, 0, need)
-	b = append(b, `<input`...)
-	b = jid.AppendAttr(b)
+	b = jid.AppendStartTagAttr(b, "input")
 	b = append(b, ` type=`...)
 	b = strconv.AppendQuote(b, typ)
 	if val != "" {
@@ -78,9 +77,7 @@ func HtmlInput(jid Jid, typ, val string, attrs ...string) template.HTML {
 func WriteHtmlInner(w io.Writer, jid Jid, tag, typ string, inner template.HTML, attrs ...string) (err error) {
 	need := 1 + len(tag)*2 + jidPrealloc + 8 + len(typ) + 1 + 1 + getAttrsLen(attrs) + 1 + len(inner) + 2 + 1
 	b := make([]byte, 0, need)
-	b = append(b, '<')
-	b = append(b, tag...)
-	b = jid.AppendAttr(b)
+	b = jid.AppendStartTagAttr(b, tag)
 	if typ != "" {
 		b = append(b, ` type=`...)
 		b = strconv.AppendQuote(b, typ)
@@ -114,8 +111,7 @@ func WriteHtmlSelect(w io.Writer, jid Jid, nba *NamedBoolArray, attrs ...string)
 		}
 	})
 	b := make([]byte, 0, need)
-	b = append(b, `<select`...)
-	b = jid.AppendAttr(b)
+	b = jid.AppendStartTagAttr(b, "select")
 	b = appendAttrs(b, attrs)
 	b = append(b, ">\n"...)
 	nba.ReadLocked(func(nba []*NamedBool) {
