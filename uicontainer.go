@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"bytes"
 	"html/template"
 	"io"
 )
@@ -17,14 +18,17 @@ func (ui *UiContainer) JawsTags(rq *Request, tags []interface{}) []interface{} {
 }
 
 func (ui *UiContainer) JawsRender(e *Element, w io.Writer) (err error) {
-	var b []byte
-	b = e.jid.AppendStartTagAttr(b, ui.OuterHTMLTag)
+	writeUiDebug(e, w)
+	b := e.jid.AppendStartTagAttr(nil, ui.OuterHTMLTag)
 	b = e.AppendAttrs(b)
 	b = append(b, '>')
 	if _, err = w.Write(b); err == nil {
 		ui.state = ui.Templater.JawsTemplates(e.Request, nil)
-		for _, item := range ui.state {
-			_ = item
+		for _, t := range ui.state {
+			elem := e.Request.NewElement(t, nil)
+			if err = e.Jaws.Log(t.JawsRender(elem, w)); err != nil {
+				break
+			}
 		}
 		b = b[:0]
 		b = append(b, "</"...)
@@ -32,8 +36,39 @@ func (ui *UiContainer) JawsRender(e *Element, w io.Writer) (err error) {
 		b = append(b, '>')
 		_, _ = w.Write(b)
 	}
+	return
+}
 
-	return nil
+func (ui *UiContainer) JawsUpdate(e *Element) (err error) {
+	newState := ui.Templater.JawsTemplates(e.Request, nil)
+	newMap := make(map[interface{}]struct{})
+	for _, t := range newState {
+		newMap[t] = struct{}{}
+	}
+
+	oldMap := make(map[interface{}]struct{})
+	for _, t := range ui.state {
+		oldMap[t] = struct{}{}
+		if _, ok := newMap[t]; !ok {
+			e.Jaws.Remove(t)
+		}
+	}
+
+	var orderTags []interface{}
+	for _, t := range newState {
+		orderTags = append(orderTags, t.Dot)
+		if _, ok := oldMap[t]; !ok {
+			var b bytes.Buffer
+			elem := e.Request.NewElement(t, nil)
+			if err = e.Jaws.Log(t.JawsRender(elem, &b)); err == nil {
+				e.Jaws.Append(ui.Templater, template.HTML(b.String()))
+			}
+		}
+	}
+
+	e.Jaws.Order(orderTags)
+	ui.state = newState
+	return
 }
 
 func NewUiContainer(outerTag string, templater Templater, up Params) *UiContainer {

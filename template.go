@@ -15,6 +15,16 @@ type Template struct {
 	Dot interface{}
 }
 
+func (rq *Request) NewTemplate(templ, dot interface{}) Template {
+	var tp *template.Template
+	if name, ok := templ.(string); ok {
+		tp = rq.Jaws.Template.Lookup(name)
+	} else {
+		tp = templ.(*template.Template)
+	}
+	return Template{Template: tp, Dot: dot}
+}
+
 func (t *Template) String() string {
 	return fmt.Sprintf("Template{%q, %v}", t.Template.Name(), t.Dot)
 }
@@ -37,7 +47,7 @@ func (t Template) JawsTags(rq *Request, inTags []interface{}) []interface{} {
 
 func (t Template) JawsRender(e *Element, w io.Writer) error {
 	writeUiDebug(e, w)
-	return e.Jaws.Log(t.Execute(w, With{Element: e, Dot: t.Dot}))
+	return t.Execute(w, With{Element: e, Dot: t.Dot})
 }
 
 func (t Template) JawsUpdate(e *Element) error {
