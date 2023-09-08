@@ -5,19 +5,18 @@ import (
 	"io"
 )
 
-type UiRepeat struct {
+type UiContainer struct {
 	OuterHTMLTag string
-	InnerHTMLTag string
 	Templater
 	UiHtml
 	state []Template
 }
 
-func (ui *UiRepeat) JawsTags(rq *Request, tags []interface{}) []interface{} {
+func (ui *UiContainer) JawsTags(rq *Request, tags []interface{}) []interface{} {
 	return append(tags, ui.Templater)
 }
 
-func (ui *UiRepeat) JawsRender(e *Element, w io.Writer) (err error) {
+func (ui *UiContainer) JawsRender(e *Element, w io.Writer) (err error) {
 	var b []byte
 	b = e.jid.AppendStartTagAttr(b, ui.OuterHTMLTag)
 	b = e.AppendAttrs(b)
@@ -37,15 +36,14 @@ func (ui *UiRepeat) JawsRender(e *Element, w io.Writer) (err error) {
 	return nil
 }
 
-func NewUiRepeat(outerTag, innerTag string, templater Templater, up Params) *UiRepeat {
-	return &UiRepeat{
+func NewUiContainer(outerTag string, templater Templater, up Params) *UiContainer {
+	return &UiContainer{
 		OuterHTMLTag: outerTag,
-		InnerHTMLTag: innerTag,
 		Templater:    templater,
 		UiHtml:       NewUiHtml(up),
 	}
 }
 
-func (rq *Request) Repeat(outerTag, innerTag string, templater Templater, params ...interface{}) template.HTML {
-	return rq.UI(NewUiRepeat(outerTag, innerTag, templater, NewParams(nil, params)), params...)
+func (rq *Request) Container(outerTag string, templater Templater, params ...interface{}) template.HTML {
+	return rq.UI(NewUiContainer(outerTag, templater, NewParams(nil, params)), params...)
 }
