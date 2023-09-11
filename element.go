@@ -78,6 +78,13 @@ func (e *Element) Dirty() {
 	atomic.StoreUint64(&e.dirty, atomic.AddUint64(&e.Request.dirty, 1))
 }
 
+func (e *Element) clearDirt() (dirt uint64) {
+	if e != nil {
+		dirt = atomic.SwapUint64(&e.dirty, 0)
+	}
+	return
+}
+
 // DirtyOthers marks all Elements except this one that have one or more of the given tags as dirty.
 func (e *Element) DirtyOthers(tags ...interface{}) {
 	for _, tag := range tags {

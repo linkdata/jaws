@@ -571,9 +571,8 @@ func (rq *Request) callUpdate() {
 	var todo []ordering
 	rq.mu.RLock()
 	for _, elem := range rq.elems {
-		if order := atomic.SwapUint64(&elem.dirty, 0); order > 0 {
+		if order := elem.clearDirt(); order > 0 {
 			todo = append(todo, ordering{order, elem})
-
 		}
 	}
 	rq.mu.RUnlock()
