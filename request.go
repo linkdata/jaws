@@ -533,7 +533,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 							})
 						}
 					}
-				case what.Update:
+				case what.Dirty:
 					elem.Dirty()
 				default:
 					outmsgs = append(outmsgs, wsMsg{

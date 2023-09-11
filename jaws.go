@@ -347,7 +347,7 @@ func (jw *Jaws) Dirty(tags ...interface{}) {
 	for _, tag := range tags {
 		jw.Broadcast(Message{
 			Tag:  tag,
-			What: what.Update,
+			What: what.Dirty,
 		})
 	}
 }

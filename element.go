@@ -83,7 +83,7 @@ func (e *Element) DirtyOthers(tags ...interface{}) {
 	for _, tag := range tags {
 		e.Jaws.Broadcast(Message{
 			Tag:  tag,
-			What: what.Update,
+			What: what.Dirty,
 			from: e,
 		})
 	}

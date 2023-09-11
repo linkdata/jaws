@@ -12,8 +12,8 @@ const (
 	Redirect
 	Alert
 	Order
-	// Element update
-	Update
+	// Mark element as dirty
+	Dirty
 	// Element manipulation
 	Inner
 	Remove
@@ -30,7 +30,7 @@ const (
 )
 
 func (w What) IsCommand() bool {
-	return w > None && w < Update
+	return w > None && w < Dirty
 }
 
 func Parse(s string) What {

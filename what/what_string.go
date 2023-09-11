@@ -13,7 +13,7 @@ func _() {
 	_ = x[Redirect-2]
 	_ = x[Alert-3]
 	_ = x[Order-4]
-	_ = x[Update-5]
+	_ = x[Dirty-5]
 	_ = x[Inner-6]
 	_ = x[Remove-7]
 	_ = x[Insert-8]
