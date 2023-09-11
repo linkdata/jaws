@@ -342,8 +342,8 @@ func (jw *Jaws) Broadcast(msg Message) {
 	}
 }
 
-// Update calls JawsUpdate for all Elements that have one or more of the given tags.
-func (jw *Jaws) Update(tags ...interface{}) {
+// Dirty marks all Elements that have one or more of the given tags as dirty.
+func (jw *Jaws) Dirty(tags ...interface{}) {
 	for _, tag := range tags {
 		jw.Broadcast(Message{
 			Tag:  tag,

@@ -78,8 +78,8 @@ func (e *Element) Dirty() {
 	atomic.StoreUint64(&e.dirty, atomic.AddUint64(&e.Request.dirty, 1))
 }
 
-// Update calls JawsUpdate for all Elements except this one that have one or more of the given tags.
-func (e *Element) UpdateOthers(tags ...interface{}) {
+// DirtyOthers marks all Elements except this one that have one or more of the given tags as dirty.
+func (e *Element) DirtyOthers(tags ...interface{}) {
 	for _, tag := range tags {
 		e.Jaws.Broadcast(Message{
 			Tag:  tag,

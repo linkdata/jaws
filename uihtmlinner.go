@@ -23,7 +23,7 @@ func NewUiHtmlInner(up Params) UiHtmlInner {
 
 func (ui *UiHtmlInner) JawsUpdate(e *Element) (err error) {
 	if e.SetInner(e.ToHtml(ui.ValueProxy.JawsGet(e))) {
-		e.UpdateOthers(ui.Tags...)
+		e.DirtyOthers(ui.Tags...)
 	}
 	return nil
 }
