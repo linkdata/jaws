@@ -2,7 +2,7 @@ package what
 
 import "strings"
 
-//go:generate stringer -type=What
+//go:generate go run golang.org/x/tools/cmd/stringer@latest -type=What
 type What uint8
 
 const (
