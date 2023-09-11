@@ -81,7 +81,7 @@ func (nb *NamedBool) JawsSet(e *Element, value interface{}) (changed bool) {
 		}
 		nb.mu.Unlock()
 		if changed {
-			e.Update()
+			e.Dirty()
 			if checked && nb.nba != nil {
 				nb.nba.Set(nb.name, true)
 			}

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/linkdata/deadlock"
@@ -37,6 +38,7 @@ type Request struct {
 	remoteIP  net.IP           // (read-only) remote IP, or nil
 	session   *Session         // (read-only) session, if established
 	sendCh    chan Message     // (read-only) direct send message channel
+	dirty     uint64           // dirty counter
 	mu        deadlock.RWMutex // protects following
 	tickerCh  <-chan time.Time // refresh interval channel (from time.NewTimer)
 	connectFn ConnectFn        // a ConnectFn to call before starting message processing for the Request
@@ -408,7 +410,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 	}()
 
 	var defaultRefreshCh <-chan time.Time
-	var dirtyCount int
+	var lastDirty uint64
 
 	for {
 		var tagmsg Message
@@ -532,8 +534,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 						}
 					}
 				case what.Update:
-					dirtyCount++
-					elem.dirty = dirtyCount
+					elem.Dirty()
 				default:
 					outmsgs = append(outmsgs, wsMsg{
 						Jid:  elem.jid,
@@ -544,8 +545,8 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			}
 		}
 
-		if dirtyCount > 0 {
-			dirtyCount = 0
+		if newDirty := atomic.LoadUint64(&rq.dirty); newDirty > lastDirty {
+			lastDirty = newDirty
 			rq.callUpdate()
 		}
 
@@ -563,22 +564,24 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 }
 
 func (rq *Request) callUpdate() {
-	var todo []*Element
+	type ordering struct {
+		order uint64
+		elem  *Element
+	}
+	var todo []ordering
 	rq.mu.RLock()
 	for _, elem := range rq.elems {
-		if elem.dirty != 0 {
-			todo = append(todo, elem)
+		if order := atomic.SwapUint64(&elem.dirty, 0); order > 0 {
+			todo = append(todo, ordering{order, elem})
+
 		}
 	}
-	sort.Slice(todo, func(i, j int) bool {
-		return todo[i].dirty < todo[j].dirty
-	})
-	for i := range todo {
-		todo[i].dirty = 0
-	}
 	rq.mu.RUnlock()
-	for _, elem := range todo {
-		_ = rq.Jaws.Log(elem.Update())
+	sort.Slice(todo, func(i, j int) bool {
+		return todo[i].order < todo[j].order
+	})
+	for _, o := range todo {
+		_ = rq.Jaws.Log(o.elem.UI().JawsUpdate(o.elem))
 	}
 }
 

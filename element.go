@@ -28,7 +28,7 @@ type Element struct {
 	ui       UI               // (read-only) the UI object
 	jid      Jid              // (read-only) JaWS ID, unique to this Element within it's Request
 	*Request                  // (read-only) the Request the Element belongs to
-	dirty    int              // if not zero, needs Update() to be called
+	dirty    uint64           // if not zero, needs Update() to be called
 	Data     []interface{}    // the optional data provided to the Request.UI() call
 	mu       deadlock.RWMutex // protects following
 	items    []elemItem       // currently known items
@@ -73,9 +73,9 @@ func (e *Element) UI() UI {
 	return e.ui
 }
 
-// Update calls JawsUpdate for this Element's UI object.
-func (e *Element) Update() error {
-	return e.ui.JawsUpdate(e)
+// Dirty marks the Element as needing UI().JawsUpdate() to be called.
+func (e *Element) Dirty() {
+	atomic.StoreUint64(&e.dirty, atomic.AddUint64(&e.Request.dirty, 1))
 }
 
 // Update calls JawsUpdate for all Elements except this one that have one or more of the given tags.
