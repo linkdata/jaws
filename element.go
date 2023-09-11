@@ -28,6 +28,7 @@ type Element struct {
 	ui       UI               // (read-only) the UI object
 	jid      Jid              // (read-only) JaWS ID, unique to this Element within it's Request
 	*Request                  // (read-only) the Request the Element belongs to
+	dirty    int              // if not zero, needs Update() to be called
 	Data     []interface{}    // the optional data provided to the Request.UI() call
 	mu       deadlock.RWMutex // protects following
 	items    []elemItem       // currently known items

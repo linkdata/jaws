@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"net"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 
@@ -407,6 +408,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 	}()
 
 	var defaultRefreshCh <-chan time.Time
+	var dirtyCount int
 
 	for {
 		var tagmsg Message
@@ -530,7 +532,8 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 						}
 					}
 				case what.Update:
-					rq.Jaws.MustLog(elem.Update())
+					dirtyCount++
+					elem.dirty = dirtyCount
 				default:
 					outmsgs = append(outmsgs, wsMsg{
 						Jid:  elem.jid,
@@ -539,6 +542,11 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					})
 				}
 			}
+		}
+
+		if dirtyCount > 0 {
+			dirtyCount = 0
+			rq.callUpdate()
 		}
 
 		for _, msg := range outmsgs {
@@ -551,6 +559,26 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 				return
 			}
 		}
+	}
+}
+
+func (rq *Request) callUpdate() {
+	var todo []*Element
+	rq.mu.RLock()
+	for _, elem := range rq.elems {
+		if elem.dirty != 0 {
+			todo = append(todo, elem)
+		}
+	}
+	sort.Slice(todo, func(i, j int) bool {
+		return todo[i].dirty < todo[j].dirty
+	})
+	for i := range todo {
+		todo[i].dirty = 0
+	}
+	rq.mu.RUnlock()
+	for _, elem := range todo {
+		_ = rq.Jaws.Log(elem.Update())
 	}
 }
 
