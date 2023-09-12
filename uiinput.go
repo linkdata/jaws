@@ -12,8 +12,8 @@ func NewUiInput(up Params) UiInput {
 	}
 }
 
-func (ui *UiInput) JawsUpdate(e *Element) (err error) {
-	e.SetValue(htmlValueString(ui.JawsGet(e)))
+func (ui *UiInput) JawsUpdate(e *Element, u Updater) (err error) {
+	u.SetValue(htmlValueString(ui.JawsGet(e)))
 	return nil
 }
 

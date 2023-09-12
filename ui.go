@@ -11,7 +11,7 @@ import (
 // Optionally you may also implement Tagger, ClickHandler and/or EventHandler
 type UI interface {
 	JawsRender(e *Element, w io.Writer) (err error)
-	JawsUpdate(e *Element) (err error)
+	JawsUpdate(e *Element, u Updater) (err error)
 }
 
 func (rq *Request) UI(ui UI, params ...interface{}) template.HTML {

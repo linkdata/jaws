@@ -545,9 +545,21 @@ func TestRequest_Sends(t *testing.T) {
 	case <-rq.readyCh:
 	}
 
-	setAttrElement.SetAttr("bar", "baz")
-	setAttrElement.SetAttr("bar", "baz")
-	removeAttrElement.RemoveAttr("bar")
+	rq.Send(Message{
+		Tag:  "SetAttr",
+		What: what.SAttr,
+		Data: "bar\nbaz",
+	})
+	rq.Send(Message{
+		Tag:  "SetAttr",
+		What: what.SAttr,
+		Data: "bar\nbaz",
+	})
+	rq.Send(Message{
+		Tag:  "RemoveAttr",
+		What: what.RAttr,
+		Data: "bar",
+	})
 
 	rq.Alert("info", "<html>\nnot-escaped")
 	rq.AlertError(errors.New("<html>\nshould-be-escaped"))
@@ -563,20 +575,20 @@ func TestRequest_Sends(t *testing.T) {
 			if ok {
 				switch rq.GetElement(msg.Jid) {
 				case setAttrElement:
-					gotSetAttr = msg.Format()
+					gotSetAttr = msg.String()
 				case removeAttrElement:
-					gotRemoveAttr = msg.Format()
+					gotRemoveAttr = msg.String()
 				default:
 					switch msg.What {
 					case what.Alert:
 						if strings.HasPrefix(msg.Data, "info\n") {
-							gotInfoAlert = msg.Format()
+							gotInfoAlert = msg.String()
 						}
 						if strings.HasPrefix(msg.Data, "danger\n") {
-							gotDangerAlert = msg.Format()
+							gotDangerAlert = msg.String()
 						}
 					case what.Redirect:
-						gotRedirect = msg.Format()
+						gotRedirect = msg.String()
 						rq.cancel()
 					default:
 						t.Log(msg)
@@ -593,7 +605,10 @@ func TestRequest_Sends(t *testing.T) {
 		t.Log(strconv.Quote(gotSetAttr))
 		is.Fail()
 	}
-	is.True(strings.HasSuffix(gotRemoveAttr, "\nRAttr\nbar"))
+	if !strings.HasSuffix(gotRemoveAttr, "\nRAttr\nbar") {
+		t.Log(strconv.Quote(gotRemoveAttr))
+		is.Fail()
+	}
 	is.Equal(gotRedirect, "0\nRedirect\nsome-url")
 	is.Equal(gotInfoAlert, "0\nAlert\ninfo\n<html>\nnot-escaped")
 	is.Equal(gotDangerAlert, "0\nAlert\ndanger\n&lt;html&gt;\nshould-be-escaped")
@@ -930,7 +945,20 @@ func TestRequest_Date(t *testing.T) {
 		return nil
 	}, "")
 
-	chk(h, elemId, time.Now().Format(ISO8601))
+	nowTxt := time.Now().Format(ISO8601)
+
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case msg := <-rq.outCh:
+		is.Equal(msg, wsMsg{
+			Jid:  1,
+			What: what.Value,
+			Data: nowTxt,
+		})
+	}
+
+	chk(h, elemId, nowTxt)
 	is.Equal(av.Load().(time.Time).Round(time.Second), time.Now().Round(time.Second))
 	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "1970-01-02"}
 	select {
@@ -938,12 +966,14 @@ func TestRequest_Date(t *testing.T) {
 		is.Fail()
 	case <-gotCall:
 	}
+
 	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: ""}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
 	}
+
 	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "foobar!"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
@@ -951,6 +981,9 @@ func TestRequest_Date(t *testing.T) {
 	case <-gotCall:
 		is.Fail()
 	case msg := <-rq.outCh:
+		if msg.What != what.Alert {
+			log.Println(len(rq.outCh), msg)
+		}
 		is.Equal(msg.What, what.Alert)
 	}
 }

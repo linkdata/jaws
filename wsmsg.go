@@ -7,14 +7,15 @@ import (
 	"github.com/linkdata/jaws/what"
 )
 
+// wsMsg is a message sent to or from a WebSocket.
 type wsMsg struct {
 	Jid  Jid
-	Data string
 	What what.What
+	Data string
 }
 
 func (m *wsMsg) IsValid() bool {
-	return m.What != 0
+	return m.What != what.None
 }
 
 func (m *wsMsg) Append(b []byte) []byte {
@@ -28,7 +29,7 @@ func (m *wsMsg) Append(b []byte) []byte {
 	return b
 }
 
-func (m *wsMsg) Format() string {
+func (m *wsMsg) String() string {
 	return string(m.Append(nil))
 }
 

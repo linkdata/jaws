@@ -21,9 +21,7 @@ func NewUiHtmlInner(up Params) UiHtmlInner {
 	}
 }
 
-func (ui *UiHtmlInner) JawsUpdate(e *Element) (err error) {
-	if e.SetInner(e.ToHtml(ui.ValueProxy.JawsGet(e))) {
-		e.DirtyOthers(ui.Tags...)
-	}
+func (ui *UiHtmlInner) JawsUpdate(e *Element, u Updater) (err error) {
+	u.SetInner(e.ToHtml(ui.ValueProxy.JawsGet(e)))
 	return nil
 }

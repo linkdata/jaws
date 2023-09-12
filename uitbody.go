@@ -37,7 +37,7 @@ func (ui *UiTbody) JawsRender(e *Element, w io.Writer) (err error) {
 	return
 }
 
-func (ui *UiTbody) JawsUpdate(e *Element) (err error) {
+func (ui *UiTbody) JawsUpdate(e *Element, u Updater) (err error) {
 	newState := ui.Tagger.JawsTags(e.Request, nil)
 	newMap := make(map[interface{}]struct{})
 	for _, tag := range newState {

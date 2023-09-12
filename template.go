@@ -50,10 +50,10 @@ func (t Template) JawsRender(e *Element, w io.Writer) error {
 	return t.Execute(w, With{Element: e, Dot: t.Dot})
 }
 
-func (t Template) JawsUpdate(e *Element) error {
+func (t Template) JawsUpdate(e *Element, u Updater) error {
 	h, err := t.ToHTML(e)
 	if err == nil {
-		e.Replace(h)
+		u.Replace(h)
 	}
 	return err
 }

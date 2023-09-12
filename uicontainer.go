@@ -39,7 +39,7 @@ func (ui *UiContainer) JawsRender(e *Element, w io.Writer) (err error) {
 	return
 }
 
-func (ui *UiContainer) JawsUpdate(e *Element) (err error) {
+func (ui *UiContainer) JawsUpdate(e *Element, u Updater) (err error) {
 	newState := ui.Templater.JawsTemplates(e.Request, nil)
 	newMap := make(map[interface{}]struct{})
 	for _, t := range newState {

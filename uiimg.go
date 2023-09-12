@@ -32,10 +32,8 @@ func (ui *UiImg) JawsRender(e *Element, w io.Writer) error {
 	return WriteHtmlInner(w, e.Jid(), "img", "", "", append(e.Attrs(), "src="+ui.SrcAttr(e))...)
 }
 
-func (ui *UiImg) JawsUpdate(e *Element) (err error) {
-	if e.SetAttr("src", ui.SrcAttr(e)) {
-		e.DirtyOthers(ui.Tags...)
-	}
+func (ui *UiImg) JawsUpdate(e *Element, u Updater) (err error) {
+	u.SetAttr("src", ui.SrcAttr(e))
 	return nil
 }
 

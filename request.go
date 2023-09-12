@@ -372,7 +372,7 @@ func (rq *Request) GetElements(tag interface{}) (elems []*Element) {
 	return
 }
 
-func (rq *Request) appendTodoLocked(outmsgs []wsMsg) []wsMsg {
+/*func (rq *Request) appendTodoLocked(outmsgs []wsMsg) []wsMsg {
 	for _, elem := range rq.elems {
 		if elem != nil {
 			outmsgs = elem.appendTodo(outmsgs)
@@ -380,6 +380,17 @@ func (rq *Request) appendTodoLocked(outmsgs []wsMsg) []wsMsg {
 	}
 	return outmsgs
 }
+
+func (rq *Request) sendWsMsg(msg wsMsg) {
+	select {
+	case <-rq.Jaws.Done():
+	case <-rq.Context.Done():
+	case outboundMsgCh <- msg:
+	default:
+		rq.Jaws.MustLog(fmt.Errorf("jaws: %v: outboundMsgCh is full sending %v", rq, tagmsg))
+		return
+	}
+}*/
 
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
 func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsMsg, outboundMsgCh chan<- wsMsg) {
@@ -410,35 +421,32 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 	for {
 		var tagmsg Message
 		var outmsgs []wsMsg
+		var wsmsg wsMsg
 		var ok bool
 
 		select {
 		case <-jawsDoneCh:
-			return
 		case <-ctxDoneCh:
-			return
 		case tagmsg, ok = <-rq.sendCh:
-			if !ok {
-				return
-			}
 		case tagmsg, ok = <-broadcastMsgCh:
-			if !ok {
-				return
-			}
-		case wsmsg, ok := <-incomingMsgCh:
-			if !ok {
-				return
-			}
-			// incoming event message from the websocket
-			if elem := rq.GetElement(wsmsg.Jid); elem != nil {
-				select {
-				case eventCallCh <- eventFnCall{e: elem, wht: wsmsg.What, data: wsmsg.Data}:
-				default:
-					rq.Jaws.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, tagmsg))
-					return
+		case wsmsg, ok = <-incomingMsgCh:
+			if ok {
+				// incoming event message from the websocket
+				if elem := rq.GetElement(wsmsg.Jid); elem != nil {
+					select {
+					case eventCallCh <- eventFnCall{e: elem, wht: wsmsg.What, data: wsmsg.Data}:
+					default:
+						rq.Jaws.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, tagmsg))
+						return
+					}
 				}
+				continue
 			}
-			continue
+		}
+
+		if !ok {
+			// one of the channels are closed, so we're done
+			return
 		}
 
 		// collect all elements marked with the tag in the message
@@ -452,12 +460,12 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 				}
 			}
 			delete(rq.tagMap, tagmsg.Tag)
-			outmsgs = rq.appendTodoLocked(outmsgs)
+			// outmsgs = rq.appendTodoLocked(outmsgs)
 			rq.mu.Unlock()
 		} else {
 			rq.mu.RLock()
 			todo = append(todo, rq.tagMap[tagmsg.Tag]...)
-			outmsgs = rq.appendTodoLocked(outmsgs)
+			// outmsgs = rq.appendTodoLocked(outmsgs)
 			rq.mu.RUnlock()
 		}
 
@@ -530,7 +538,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 
 		if newDirty := atomic.LoadUint64(&rq.dirty); newDirty > lastDirty {
 			lastDirty = newDirty
-			rq.callUpdate()
+			rq.callUpdate(outboundMsgCh)
 		}
 
 		for _, msg := range outmsgs {
@@ -546,7 +554,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 	}
 }
 
-func (rq *Request) callUpdate() {
+func (rq *Request) callUpdate(outboundMsgCh chan<- wsMsg) {
 	type ordering struct {
 		order uint64
 		elem  *Element
@@ -563,7 +571,7 @@ func (rq *Request) callUpdate() {
 		return todo[i].order < todo[j].order
 	})
 	for _, o := range todo {
-		_ = rq.Jaws.Log(o.elem.UI().JawsUpdate(o.elem))
+		_ = rq.Jaws.Log(o.elem.UI().JawsUpdate(o.elem, Updater{jid: o.elem.jid, ch: outboundMsgCh}))
 	}
 }
 

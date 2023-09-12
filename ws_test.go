@@ -167,7 +167,7 @@ func TestReader_RespectsContextDone(t *testing.T) {
 		wsReader(ts.ctx, ts.jw.Done(), inCh, server)
 	}()
 
-	client.Write(ctx, websocket.MessageText, []byte(msg.Format()))
+	client.Write(ctx, websocket.MessageText, []byte(msg.String()))
 
 	// wsReader should now be blocked trying to send the decoded message
 	select {
@@ -204,7 +204,7 @@ func TestReader_RespectsJawsDone(t *testing.T) {
 
 	ts.jw.Close()
 	msg := wsMsg{Jid: 1234, What: what.Trigger}
-	err := client.Write(ctx, websocket.MessageText, []byte(msg.Format()))
+	err := client.Write(ctx, websocket.MessageText, []byte(msg.String()))
 	is.NoErr(err)
 
 	select {
@@ -250,7 +250,7 @@ func TestWriter_SendsThePayload(t *testing.T) {
 
 	is.NoErr(err)
 	is.Equal(mt, websocket.MessageText)
-	is.Equal(string(b), msg.Format())
+	is.Equal(string(b), msg.String())
 
 	select {
 	case <-time.NewTimer(testTimeout).C:

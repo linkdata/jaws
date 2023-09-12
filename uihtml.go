@@ -77,7 +77,7 @@ func (ui *UiHtml) JawsRender(e *Element, w io.Writer) (err error) {
 	panic(fmt.Sprintf("jaws: UiHtml.JawsRender(%v, %v) called", e, w))
 }
 
-func (ui *UiHtml) JawsUpdate(e *Element) (err error) {
+func (ui *UiHtml) JawsUpdate(e *Element, u Updater) (err error) {
 	panic(fmt.Sprintf("jaws: UiHtml.JawsUpdate(%v) called", e))
 }
 
