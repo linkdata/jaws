@@ -2,23 +2,23 @@ package jaws
 
 import "html/template"
 
-type Templater interface {
-	JawsTemplates(rq *Request, tl []Template) []Template
+type Container interface {
+	JawsContains(rq *Request) (tl []Template)
 }
 
-type defaultTemplater struct {
+type defaultContainer struct {
 	templ  *template.Template
 	tagger Tagger
 }
 
-func (dt *defaultTemplater) JawsTemplates(rq *Request, tl []Template) []Template {
+func (dt *defaultContainer) JawsContains(rq *Request) (tl []Template) {
 	for _, dot := range dt.tagger.JawsTags(rq, nil) {
 		tl = append(tl, Template{Template: dt.templ, Dot: dot})
 	}
 	return tl
 }
 
-func (rq *Request) Templater(templ interface{}, tagger Tagger) Templater {
+func (rq *Request) MakeContainer(templ interface{}, tagger Tagger) Container {
 	var tp *template.Template
 	switch v := templ.(type) {
 	case string:
@@ -26,9 +26,9 @@ func (rq *Request) Templater(templ interface{}, tagger Tagger) Templater {
 	case *template.Template:
 		tp = v
 	default:
-		panic("Request.Templater(): template must be string or *template.Template")
+		panic("Request.MakeContainer(): template must be string or *template.Template")
 	}
-	return &defaultTemplater{
+	return &defaultContainer{
 		templ:  tp,
 		tagger: tagger,
 	}

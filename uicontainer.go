@@ -10,14 +10,14 @@ import (
 
 type UiContainer struct {
 	OuterHTMLTag string
-	Templater
+	Container
 	UiHtml
 	mu    deadlock.Mutex
 	state []Template
 }
 
 func (ui *UiContainer) JawsTags(rq *Request, tags []interface{}) []interface{} {
-	return append(tags, ui.Templater)
+	return append(tags, ui.Container)
 }
 
 func (ui *UiContainer) JawsRender(e *Element, w io.Writer) {
@@ -27,7 +27,7 @@ func (ui *UiContainer) JawsRender(e *Element, w io.Writer) {
 	b = append(b, '>')
 	_, err := w.Write(b)
 	if err == nil {
-		ui.state = ui.Templater.JawsTemplates(e.Request, nil)
+		ui.state = ui.Container.JawsContains(e.Request)
 		for _, t := range ui.state {
 			elem := e.Request.NewElement(t, nil)
 			t.JawsRender(elem, w)
@@ -45,7 +45,7 @@ func (ui *UiContainer) JawsUpdate(u Updater) {
 	var toRemove, toAppend []Template
 	var orderTags []interface{}
 
-	newState := ui.Templater.JawsTemplates(u.Request, nil)
+	newState := ui.Container.JawsContains(u.Request)
 	newMap := make(map[Template]struct{})
 	for _, t := range newState {
 		newMap[t] = struct{}{}
@@ -76,20 +76,20 @@ func (ui *UiContainer) JawsUpdate(u Updater) {
 		var b bytes.Buffer
 		elem := u.Request.NewElement(t, nil)
 		t.JawsRender(elem, &b)
-		u.Jaws.Append(ui.Templater, template.HTML(b.String()))
+		u.Jaws.Append(ui.Container, template.HTML(b.String()))
 	}
 
 	u.Jaws.Order(orderTags)
 }
 
-func NewUiContainer(outerTag string, templater Templater, up Params) *UiContainer {
+func NewUiContainer(outerTag string, cont Container, up Params) *UiContainer {
 	return &UiContainer{
 		OuterHTMLTag: outerTag,
-		Templater:    templater,
+		Container:    cont,
 		UiHtml:       NewUiHtml(up),
 	}
 }
 
-func (rq *Request) Container(outerTag string, templater Templater, params ...interface{}) template.HTML {
-	return rq.UI(NewUiContainer(outerTag, templater, NewParams(nil, params)), params...)
+func (rq *Request) Container(outerTag string, cont Container, params ...interface{}) template.HTML {
+	return rq.UI(NewUiContainer(outerTag, cont, NewParams(nil, params)), params...)
 }
