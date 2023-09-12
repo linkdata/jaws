@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"html/template"
 	"io"
+
+	"github.com/linkdata/deadlock"
 )
 
 type UiContainer struct {
 	OuterHTMLTag string
 	Templater
 	UiHtml
+	mu    deadlock.Mutex
 	state []Template
 }
 
@@ -39,33 +42,44 @@ func (ui *UiContainer) JawsRender(e *Element, w io.Writer) {
 }
 
 func (ui *UiContainer) JawsUpdate(u Updater) {
+	var toRemove, orderTags []interface{}
+	var toAppend []Template
+
 	newState := ui.Templater.JawsTemplates(u.Request, nil)
 	newMap := make(map[interface{}]struct{})
 	for _, t := range newState {
 		newMap[t] = struct{}{}
 	}
-
 	oldMap := make(map[interface{}]struct{})
+
+	ui.mu.Lock()
 	for _, t := range ui.state {
 		oldMap[t] = struct{}{}
 		if _, ok := newMap[t]; !ok {
-			u.Jaws.Remove(t)
+			toRemove = append(toRemove, t)
 		}
 	}
-
-	var orderTags []interface{}
 	for _, t := range newState {
 		orderTags = append(orderTags, t.Dot)
 		if _, ok := oldMap[t]; !ok {
-			var b bytes.Buffer
-			elem := u.Request.NewElement(t, nil)
-			t.JawsRender(elem, &b)
-			u.Jaws.Append(ui.Templater, template.HTML(b.String()))
+			toAppend = append(toAppend, t)
 		}
+	}
+	ui.state = newState
+	ui.mu.Unlock()
+
+	for _, t := range toRemove {
+		u.Jaws.Remove(t)
+	}
+
+	for _, t := range toAppend {
+		var b bytes.Buffer
+		elem := u.Request.NewElement(t, nil)
+		t.JawsRender(elem, &b)
+		u.Jaws.Append(ui.Templater, template.HTML(b.String()))
 	}
 
 	u.Jaws.Order(orderTags)
-	ui.state = newState
 }
 
 func NewUiContainer(outerTag string, templater Templater, up Params) *UiContainer {
