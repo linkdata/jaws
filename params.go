@@ -53,7 +53,7 @@ func addTags(tags map[interface{}]struct{}, tag interface{}) {
 	case interface{}:
 		tags[data] = struct{}{}
 	default:
-		panic(fmt.Sprintf("jaws: cant use %T as a tag", data))
+		panic(fmt.Errorf("jaws: cant use %T as a tag", data))
 	}
 }
 
@@ -187,7 +187,7 @@ func (up *Params) process(tags map[interface{}]struct{}, params []interface{}) {
 		case interface{}:
 			addTags(tags, data)
 		default:
-			panic(fmt.Sprintf("jaws: unhandled parameter type %T", data))
+			panic(fmt.Errorf("jaws: unhandled parameter type %T", data))
 		}
 	}
 }

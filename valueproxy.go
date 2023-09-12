@@ -19,5 +19,5 @@ type readonlyProxy struct{ Value interface{} }
 
 func (vp readonlyProxy) JawsGet(e *Element) interface{} { return vp.Value }
 func (vp readonlyProxy) JawsSet(e *Element, val interface{}) bool {
-	panic(fmt.Sprintf("jaws: Element %v: ValueProxy for %T is read-only", e, val))
+	panic(fmt.Errorf("jaws: Element %v: ValueProxy for %T is read-only", e, val))
 }

@@ -99,7 +99,7 @@ func (e *Element) ToHtml(val interface{}) template.HTML {
 	case int:
 		s = strconv.Itoa(v)
 	default:
-		panic(fmt.Sprintf("jaws: don't know how to render %T as template.HTML", v))
+		panic(fmt.Errorf("jaws: don't know how to render %T as template.HTML", v))
 	}
 	return template.HTML(html.EscapeString(s))
 }
