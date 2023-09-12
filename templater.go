@@ -26,7 +26,7 @@ func (rq *Request) Templater(templ interface{}, tagger Tagger) Templater {
 	case *template.Template:
 		tp = v
 	default:
-		panic("jaws: Request.Templater(): template must be string or *template.Template")
+		panic("Request.Templater(): template must be string or *template.Template")
 	}
 	return &defaultTemplater{
 		templ:  tp,

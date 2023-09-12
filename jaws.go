@@ -339,7 +339,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) error {
 func (jw *Jaws) Broadcast(msg Message) {
 	if deadlock.Debug {
 		if _, ok := msg.Tag.([]interface{}); ok {
-			panic("jaws: can't use []interface{} as a tag")
+			panic("can't use []interface{} as a tag")
 		}
 	}
 	select {

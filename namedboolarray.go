@@ -127,7 +127,7 @@ func (nba *NamedBoolArray) JawsSet(e *Element, value interface{}) (changed bool)
 	if name, ok := value.(string); ok {
 		return nba.Set(name, true)
 	}
-	panic("jaws: NamedBoolArray.JawsSet(): not string")
+	panic("NamedBoolArray.JawsSet(): not string")
 }
 
 /*

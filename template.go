@@ -64,5 +64,5 @@ func (t Template) JawsGet(e *Element) interface{} {
 }
 
 func (t Template) JawsSet(e *Element, val interface{}) bool {
-	panic("jaws: Template.JawsSet(): read-only")
+	panic("Template.JawsSet(): read-only")
 }

@@ -198,7 +198,7 @@ func (up *Params) Tags() []interface{} {
 
 func (up *Params) ValueProxy() ValueProxy {
 	if up.vp == nil {
-		panic("jaws: missing jaws.ValueProxy or *atomic.Value")
+		panic("missing jaws.ValueProxy or *atomic.Value")
 	}
 	return up.vp
 }

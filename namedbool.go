@@ -88,5 +88,5 @@ func (nb *NamedBool) JawsSet(e *Element, value interface{}) (changed bool) {
 		}
 		return
 	}
-	panic("jaws: NamedBool.JawsSet(): not bool")
+	panic("NamedBool.JawsSet(): not bool")
 }

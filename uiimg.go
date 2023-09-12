@@ -20,7 +20,7 @@ func (ui *UiImg) SrcAttr(e *Element) string {
 	case template.HTML:
 		src = string(v)
 	default:
-		panic("jaws: UiImg: src not a string")
+		panic("UiImg: src not a string")
 	}
 	if strings.HasPrefix(src, "\"") {
 		return src

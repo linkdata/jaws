@@ -1,6 +1,9 @@
 package jaws
 
-import "html/template"
+import (
+	"fmt"
+	"html/template"
+)
 
 type Inner struct{ Value template.HTML }
 
@@ -13,5 +16,5 @@ func (in *Inner) JawsGet(e *Element) interface{} {
 }
 
 func (in *Inner) JawsSet(e *Element, val interface{}) bool {
-	panic("jaws: requires ValueProxy or *atomic.Value instead of Inner")
+	panic(fmt.Errorf("jaws: %v: requires ValueProxy or *atomic.Value instead of Inner", e))
 }
