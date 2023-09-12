@@ -42,15 +42,15 @@ func (ui *UiContainer) JawsRender(e *Element, w io.Writer) {
 }
 
 func (ui *UiContainer) JawsUpdate(u Updater) {
-	var toRemove, orderTags []interface{}
-	var toAppend []Template
+	var toRemove, toAppend []Template
+	var orderTags []interface{}
 
 	newState := ui.Templater.JawsTemplates(u.Request, nil)
-	newMap := make(map[interface{}]struct{})
+	newMap := make(map[Template]struct{})
 	for _, t := range newState {
 		newMap[t] = struct{}{}
 	}
-	oldMap := make(map[interface{}]struct{})
+	oldMap := make(map[Template]struct{})
 
 	ui.mu.Lock()
 	for _, t := range ui.state {
