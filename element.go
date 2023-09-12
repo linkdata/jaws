@@ -7,30 +7,16 @@ import (
 	"strconv"
 	"sync/atomic"
 
-	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/what"
 )
 
-type elemItem struct {
-	name   string
-	value  string
-	remove bool
-	dirty  bool
-}
-
-const elemReplaceMagic = ">R"
-const elemInnerMagic = ">I"
-const elemValueMagic = ">V"
-
 // An Element is an instance of an UI object and it's user data in a Request.
 type Element struct {
-	ui       UI               // (read-only) the UI object
-	jid      Jid              // (read-only) JaWS ID, unique to this Element within it's Request
-	*Request                  // (read-only) the Request the Element belongs to
-	dirty    uint64           // if not zero, needs Update() to be called
-	Data     []interface{}    // the optional data provided to the Request.UI() call
-	mu       deadlock.RWMutex // protects following
-	items    []elemItem       // currently known items
+	ui       UI            // (read-only) the UI object
+	jid      Jid           // (read-only) JaWS ID, unique to this Element within it's Request
+	*Request               // (read-only) the Request the Element belongs to
+	dirty    uint64        // (atomic) if not zero, needs Update() to be called
+	Data     []interface{} // the optional data provided to the Request.UI() call
 }
 
 func (e *Element) String() string {
