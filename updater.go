@@ -15,7 +15,7 @@ type Updater struct {
 }
 
 func (u *Updater) send(wht what.What, data string) {
-	u.Element.send(u.outCh, wsMsg{
+	u.Request.send(u.outCh, wsMsg{
 		Jid:  u.jid,
 		What: wht,
 		Data: data,
