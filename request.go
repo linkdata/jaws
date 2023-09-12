@@ -40,7 +40,6 @@ type Request struct {
 	sendCh    chan Message     // (read-only) direct send message channel
 	dirty     uint64           // dirty counter
 	mu        deadlock.RWMutex // protects following
-	tickerCh  <-chan time.Time // refresh interval channel (from time.NewTimer)
 	connectFn ConnectFn        // a ConnectFn to call before starting message processing for the Request
 	elems     []*Element
 	tagMap    map[interface{}][]*Element
@@ -55,8 +54,6 @@ type eventFnCall struct {
 func (call *eventFnCall) String() string {
 	return fmt.Sprintf("eventFnCall{%v, %s, %q}", call.e, call.wht, call.data)
 }
-
-var DefaultRequestRefreshInterval = time.Millisecond * 100
 
 var requestPool = sync.Pool{New: func() interface{} {
 	return &Request{
@@ -129,7 +126,6 @@ func (rq *Request) recycle() {
 	rq.Initial = nil
 	rq.Context = nil
 	rq.remoteIP = nil
-	rq.tickerCh = nil
 	rq.elems = rq.elems[:0]
 	rq.killSessionLocked()
 	// this gets optimized to calling the 'runtime.mapclear' function
@@ -409,7 +405,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		}
 	}()
 
-	var defaultRefreshCh <-chan time.Time
 	var lastDirty uint64
 
 	for {
@@ -417,25 +412,11 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		var outmsgs []wsMsg
 		var ok bool
 
-		rq.mu.RLock()
-		refreshCh := rq.tickerCh
-		rq.mu.RUnlock()
-
-		if refreshCh == nil {
-			if defaultRefreshCh == nil {
-				ticker := time.NewTicker(DefaultRequestRefreshInterval)
-				defer ticker.Stop()
-				defaultRefreshCh = ticker.C
-			}
-			refreshCh = defaultRefreshCh
-		}
-
 		select {
 		case <-jawsDoneCh:
 			return
 		case <-ctxDoneCh:
 			return
-		case <-refreshCh:
 		case tagmsg, ok = <-rq.sendCh:
 			if !ok {
 				return
@@ -495,6 +476,8 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 
 		switch tagmsg.What {
 		case what.None:
+			// do nothing
+		case what.Update:
 			// do nothing
 		case what.Reload:
 			fallthrough

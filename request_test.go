@@ -45,7 +45,6 @@ func newTestRequest(is *is.I) (tr *testRequest) {
 	tr.jw.Logger = log.New(&tr.log, "", 0)
 	tr.ctx, tr.cancel = context.WithTimeout(context.Background(), time.Hour)
 	tr.Request = tr.jw.NewRequest(tr.ctx, nil)
-	tr.Request.tickerCh = time.NewTicker(time.Millisecond).C
 
 	tr.jw.UseRequest(tr.JawsKey, nil)
 

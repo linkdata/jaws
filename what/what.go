@@ -12,8 +12,9 @@ const (
 	Redirect
 	Alert
 	Order
-	// Mark element as dirty
+	// Element updating
 	Dirty
+	Update
 	// Element manipulation
 	Inner
 	Remove

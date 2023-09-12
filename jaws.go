@@ -28,23 +28,27 @@ import (
 	"github.com/linkdata/jaws/what"
 )
 
-const CookieNameDefault = "jaws"
+const (
+	DefaultCookieName     = "jaws"                 // Default browser cookie name
+	DefaultUpdateInterval = time.Millisecond * 100 // Default browser update interval
+)
 
 type Jaws struct {
-	CookieName string             // Name for session cookies, defaults to "jaws"
-	Logger     *log.Logger        // If not nil, send debug info and errors here
-	Template   *template.Template // User templates in use, may be nil
-	doneCh     <-chan struct{}
-	bcastCh    chan Message
-	subCh      chan subscription
-	unsubCh    chan chan Message
-	headPrefix string
-	mu         deadlock.RWMutex // protects following
-	kg         *bufio.Reader
-	actives    int32 // atomic
-	closeCh    chan struct{}
-	reqs       map[uint64]*Request
-	sessions   map[uint64]*Session
+	CookieName   string             // Name for session cookies, defaults to "jaws"
+	Logger       *log.Logger        // If not nil, send debug info and errors here
+	Template     *template.Template // User templates in use, may be nil
+	doneCh       <-chan struct{}
+	bcastCh      chan Message
+	subCh        chan subscription
+	unsubCh      chan chan Message
+	updateTicker *time.Ticker
+	headPrefix   string
+	mu           deadlock.RWMutex // protects following
+	kg           *bufio.Reader
+	actives      int32 // atomic
+	closeCh      chan struct{}
+	reqs         map[uint64]*Request
+	sessions     map[uint64]*Session
 }
 
 // NewWithDone returns a new JaWS object using the given completion channel.
@@ -52,15 +56,16 @@ type Jaws struct {
 // publishing HTML changes across all connections.
 func NewWithDone(doneCh <-chan struct{}) *Jaws {
 	return &Jaws{
-		CookieName: CookieNameDefault,
-		doneCh:     doneCh,
-		bcastCh:    make(chan Message, 1),
-		subCh:      make(chan subscription, 1),
-		unsubCh:    make(chan chan Message, 1),
-		headPrefix: HeadHTML([]string{JavascriptPath}, nil),
-		kg:         bufio.NewReader(rand.Reader),
-		reqs:       make(map[uint64]*Request),
-		sessions:   make(map[uint64]*Session),
+		CookieName:   DefaultCookieName,
+		doneCh:       doneCh,
+		bcastCh:      make(chan Message, 1),
+		subCh:        make(chan subscription, 1),
+		unsubCh:      make(chan chan Message, 1),
+		updateTicker: time.NewTicker(DefaultUpdateInterval),
+		headPrefix:   HeadHTML([]string{JavascriptPath}, nil),
+		kg:           bufio.NewReader(rand.Reader),
+		reqs:         make(map[uint64]*Request),
+		sessions:     make(map[uint64]*Session),
 	}
 }
 
@@ -84,6 +89,7 @@ func (jw *Jaws) Close() {
 		close(jw.closeCh)
 		jw.closeCh = nil
 	}
+	jw.updateTicker.Stop()
 	jw.mu.Unlock()
 }
 
@@ -438,6 +444,13 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		select {
 		case <-jw.Done():
 			return
+		case <-jw.updateTicker.C:
+			for msgCh := range subs {
+				select {
+				case msgCh <- Message{What: what.Update}:
+				default:
+				}
+			}
 		case <-t.C:
 			jw.maintenance(requestTimeout)
 			atomic.StoreInt32(&jw.actives, int32(len(subs)))
