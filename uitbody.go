@@ -36,8 +36,8 @@ func (ui *UiTbody) JawsRender(e *Element, w io.Writer) {
 	maybePanic(err)
 }
 
-func (ui *UiTbody) JawsUpdate(e *Element, u Updater) {
-	newState := ui.Tagger.JawsTags(e.Request, nil)
+func (ui *UiTbody) JawsUpdate(u Updater) {
+	newState := ui.Tagger.JawsTags(u.Request, nil)
 	newMap := make(map[interface{}]struct{})
 	for _, tag := range newState {
 		newMap[tag] = struct{}{}
@@ -47,21 +47,21 @@ func (ui *UiTbody) JawsUpdate(e *Element, u Updater) {
 	for _, tag := range ui.state {
 		oldMap[tag] = struct{}{}
 		if _, ok := newMap[tag]; !ok {
-			e.Jaws.Remove(tag)
+			u.Jaws.Remove(tag)
 		}
 	}
 
 	for _, tag := range newState {
 		if _, ok := oldMap[tag]; !ok {
-			trui := NewUiTr(NewParams(e.Request.Template(ui.RowTemplate, tag), nil))
-			elem := e.Request.NewElement(trui, []interface{}{tag})
+			trui := NewUiTr(NewParams(u.Request.Template(ui.RowTemplate, tag), nil))
+			elem := u.Request.NewElement(trui, []interface{}{tag})
 			var b bytes.Buffer
 			trui.JawsRender(elem, &b)
-			e.Jaws.Append(ui.Tagger, template.HTML(b.String()))
+			u.Jaws.Append(ui.Tagger, template.HTML(b.String()))
 		}
 	}
 
-	e.Jaws.Order(newState)
+	u.Jaws.Order(newState)
 	ui.state = newState
 }
 

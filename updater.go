@@ -10,12 +10,13 @@ import (
 
 type Updater struct {
 	outCh chan<- wsMsg
-	elem  *Element
+	order uint64
+	*Element
 }
 
 func (u *Updater) send(wht what.What, data string) {
-	u.elem.send(u.outCh, wsMsg{
-		Jid:  u.elem.jid,
+	u.Element.send(u.outCh, wsMsg{
+		Jid:  u.jid,
 		What: wht,
 		Data: data,
 	})
@@ -50,7 +51,7 @@ func (u *Updater) SetValue(val string) {
 func (u *Updater) Replace(htmlCode template.HTML) {
 	var b []byte
 	b = append(b, "id="...)
-	b = u.elem.jid.AppendQuote(b)
+	b = u.Jid().AppendQuote(b)
 	if !bytes.Contains([]byte(htmlCode), b) {
 		panic(fmt.Errorf("jaws: Updater.Replace(): expected HTML " + string(b)))
 	}

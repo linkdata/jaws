@@ -32,8 +32,8 @@ func (ui *UiImg) JawsRender(e *Element, w io.Writer) {
 	maybePanic(WriteHtmlInner(w, e.Jid(), "img", "", "", append(e.Attrs(), "src="+ui.SrcAttr(e))...))
 }
 
-func (ui *UiImg) JawsUpdate(e *Element, u Updater) {
-	u.SetAttr("src", ui.SrcAttr(e))
+func (ui *UiImg) JawsUpdate(u Updater) {
+	u.SetAttr("src", ui.SrcAttr(u.Element))
 }
 
 func NewUiImg(up Params) *UiImg {

@@ -539,23 +539,19 @@ func (rq *Request) send(outboundMsgCh chan<- wsMsg, msg wsMsg) {
 }
 
 func (rq *Request) callUpdate(outboundMsgCh chan<- wsMsg) {
-	type ordering struct {
-		order uint64
-		elem  *Element
-	}
-	var todo []ordering
+	var todo []Updater
 	rq.mu.RLock()
 	for _, elem := range rq.elems {
 		if order := elem.clearDirt(); order > 0 {
-			todo = append(todo, ordering{order, elem})
+			todo = append(todo, Updater{outCh: outboundMsgCh, order: order, Element: elem})
 		}
 	}
 	rq.mu.RUnlock()
 	sort.Slice(todo, func(i, j int) bool {
 		return todo[i].order < todo[j].order
 	})
-	for _, o := range todo {
-		o.elem.UI().JawsUpdate(o.elem, Updater{outCh: outboundMsgCh, elem: o.elem})
+	for _, u := range todo {
+		u.UI().JawsUpdate(u)
 	}
 }
 

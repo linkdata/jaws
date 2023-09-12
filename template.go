@@ -43,8 +43,8 @@ func (t Template) JawsRender(e *Element, w io.Writer) {
 	maybePanic(t.Execute(w, With{Element: e, Dot: t.Dot}))
 }
 
-func (t Template) JawsUpdate(e *Element, u Updater) {
-	u.Replace(t.ToHTML(e))
+func (t Template) JawsUpdate(u Updater) {
+	u.Replace(t.ToHTML(u.Element))
 }
 
 func (t Template) JawsEvent(e *Element, wht what.What, val string) error {

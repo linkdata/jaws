@@ -77,8 +77,8 @@ func (ui *UiHtml) JawsRender(e *Element, w io.Writer) {
 	panic(fmt.Sprintf("jaws: UiHtml.JawsRender(%v, %v) called", e, w))
 }
 
-func (ui *UiHtml) JawsUpdate(e *Element, u Updater) {
-	panic(fmt.Sprintf("jaws: UiHtml.JawsUpdate(%v) called", e))
+func (ui *UiHtml) JawsUpdate(u Updater) {
+	panic(fmt.Sprintf("jaws: UiHtml.JawsUpdate(%v) called", u.Element))
 }
 
 func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) error {

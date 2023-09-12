@@ -21,6 +21,6 @@ func NewUiHtmlInner(up Params) UiHtmlInner {
 	}
 }
 
-func (ui *UiHtmlInner) JawsUpdate(e *Element, u Updater) {
-	u.SetInner(e.ToHtml(ui.ValueProxy.JawsGet(e)))
+func (ui *UiHtmlInner) JawsUpdate(u Updater) {
+	u.SetInner(u.ToHtml(ui.ValueProxy.JawsGet(u.Element)))
 }

@@ -10,7 +10,7 @@ import (
 // If any of these panics, the Request will be closed and the panic logged.
 type UI interface {
 	JawsRender(e *Element, w io.Writer)
-	JawsUpdate(e *Element, u Updater)
+	JawsUpdate(u Updater)
 }
 
 func (rq *Request) UI(ui UI, params ...interface{}) template.HTML {
