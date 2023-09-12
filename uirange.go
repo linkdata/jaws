@@ -9,8 +9,8 @@ type UiRange struct {
 	UiInputFloat
 }
 
-func (ui *UiRange) JawsRender(e *Element, w io.Writer) error {
-	return ui.UiInputFloat.WriteHtmlInput(e, w, "range")
+func (ui *UiRange) JawsRender(e *Element, w io.Writer) {
+	ui.UiInputFloat.WriteHtmlInput(e, w, "range")
 }
 
 func NewUiRange(up Params) (ui *UiRange) {

@@ -9,8 +9,8 @@ type UiSpan struct {
 	UiHtmlInner
 }
 
-func (ui *UiSpan) JawsRender(e *Element, w io.Writer) error {
-	return ui.UiHtmlInner.WriteHtmlInner(e, w, "span", "", e.Data)
+func (ui *UiSpan) JawsRender(e *Element, w io.Writer) {
+	ui.UiHtmlInner.WriteHtmlInner(e, w, "span", "", e.Data)
 }
 
 func NewUiSpan(up Params) *UiSpan {

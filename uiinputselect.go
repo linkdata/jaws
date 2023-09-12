@@ -11,9 +11,9 @@ type UiInputSelect struct {
 	*NamedBoolArray
 }
 
-func (ui *UiInputSelect) JawsRender(e *Element, w io.Writer) error {
+func (ui *UiInputSelect) JawsRender(e *Element, w io.Writer) {
 	writeUiDebug(e, w)
-	return ui.UiHtml.WriteHtmlSelect(w, e, ui.NamedBoolArray, e.Data...)
+	ui.UiHtml.WriteHtmlSelect(w, e, ui.NamedBoolArray, e.Data...)
 }
 
 func (ui *UiInputSelect) JawsEvent(e *Element, wht what.What, val string) (err error) {

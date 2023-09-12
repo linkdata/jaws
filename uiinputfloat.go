@@ -12,13 +12,14 @@ type UiInputFloat struct {
 	UiInput
 }
 
-func (ui *UiInputFloat) WriteHtmlInput(e *Element, w io.Writer, htmltype string) error {
+func (ui *UiInputFloat) WriteHtmlInput(e *Element, w io.Writer, htmltype string) {
 	val := ui.Get(e)
 	if n, ok := val.(float64); ok {
 		writeUiDebug(e, w)
-		return ui.UiInput.WriteHtmlInput(w, e, htmltype, strconv.FormatFloat(n, 'f', -1, 64), e.Data...)
+		ui.UiInput.WriteHtmlInput(w, e, htmltype, strconv.FormatFloat(n, 'f', -1, 64), e.Data...)
+		return
 	}
-	return fmt.Errorf("jaws: UiInputFloat: expected float64, got %T", val)
+	panic(fmt.Errorf("jaws: UiInputFloat: expected float64, got %T", val))
 }
 
 func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err error) {

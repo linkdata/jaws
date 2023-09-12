@@ -372,26 +372,6 @@ func (rq *Request) GetElements(tag interface{}) (elems []*Element) {
 	return
 }
 
-/*func (rq *Request) appendTodoLocked(outmsgs []wsMsg) []wsMsg {
-	for _, elem := range rq.elems {
-		if elem != nil {
-			outmsgs = elem.appendTodo(outmsgs)
-		}
-	}
-	return outmsgs
-}
-
-func (rq *Request) sendWsMsg(msg wsMsg) {
-	select {
-	case <-rq.Jaws.Done():
-	case <-rq.Context.Done():
-	case outboundMsgCh <- msg:
-	default:
-		rq.Jaws.MustLog(fmt.Errorf("jaws: %v: outboundMsgCh is full sending %v", rq, tagmsg))
-		return
-	}
-}*/
-
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
 func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsMsg, outboundMsgCh chan<- wsMsg) {
 	jawsDoneCh := rq.Jaws.Done()
@@ -411,6 +391,14 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			case <-incomingMsgCh:
 			case <-eventDoneCh:
 				close(outboundMsgCh)
+				if x := recover(); x != nil {
+					var err error
+					var ok bool
+					if err, ok = x.(error); !ok {
+						err = fmt.Errorf("jaws: %v panic: %v", rq, x)
+					}
+					rq.Jaws.MustLog(err)
+				}
 				return
 			}
 		}
@@ -420,7 +408,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 
 	for {
 		var tagmsg Message
-		var outmsgs []wsMsg
 		var wsmsg wsMsg
 		var ok bool
 
@@ -460,12 +447,10 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 				}
 			}
 			delete(rq.tagMap, tagmsg.Tag)
-			// outmsgs = rq.appendTodoLocked(outmsgs)
 			rq.mu.Unlock()
 		} else {
 			rq.mu.RLock()
 			todo = append(todo, rq.tagMap[tagmsg.Tag]...)
-			// outmsgs = rq.appendTodoLocked(outmsgs)
 			rq.mu.RUnlock()
 		}
 
@@ -494,7 +479,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		case what.Order:
 			fallthrough
 		case what.Alert:
-			outmsgs = append(outmsgs, wsMsg{
+			rq.send(outboundMsgCh, wsMsg{
 				Data: wsdata,
 				What: tagmsg.What,
 			})
@@ -517,7 +502,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					// primary usecase is tests.
 					if h, ok := elem.UI().(EventHandler); ok {
 						if errmsg := makeAlertDangerMessage(h.JawsEvent(elem, tagmsg.What, wsdata)); errmsg.What != what.None {
-							outmsgs = append(outmsgs, wsMsg{
+							rq.send(outboundMsgCh, wsMsg{
 								Jid:  elem.jid,
 								What: errmsg.What,
 								Data: wsdata,
@@ -527,7 +512,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 				case what.Dirty:
 					elem.Dirty()
 				default:
-					outmsgs = append(outmsgs, wsMsg{
+					rq.send(outboundMsgCh, wsMsg{
 						Jid:  elem.jid,
 						What: tagmsg.What,
 						Data: wsdata,
@@ -540,17 +525,16 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			lastDirty = newDirty
 			rq.callUpdate(outboundMsgCh)
 		}
+	}
+}
 
-		for _, msg := range outmsgs {
-			select {
-			case <-jawsDoneCh:
-			case <-ctxDoneCh:
-			case outboundMsgCh <- msg:
-			default:
-				rq.Jaws.MustLog(fmt.Errorf("jaws: %v: outboundMsgCh is full sending %v", rq, tagmsg))
-				return
-			}
-		}
+func (rq *Request) send(outboundMsgCh chan<- wsMsg, msg wsMsg) {
+	select {
+	case <-rq.Jaws.Done():
+	case <-rq.Context.Done():
+	case outboundMsgCh <- msg:
+	default:
+		panic(fmt.Errorf("jaws: %v: outbound message channel is full sending %s", rq, msg))
 	}
 }
 
@@ -571,7 +555,7 @@ func (rq *Request) callUpdate(outboundMsgCh chan<- wsMsg) {
 		return todo[i].order < todo[j].order
 	})
 	for _, o := range todo {
-		_ = rq.Jaws.Log(o.elem.UI().JawsUpdate(o.elem, Updater{jid: o.elem.jid, ch: outboundMsgCh}))
+		o.elem.UI().JawsUpdate(o.elem, Updater{outCh: outboundMsgCh, elem: o.elem})
 	}
 }
 

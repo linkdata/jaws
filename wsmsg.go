@@ -1,8 +1,8 @@
 package jaws
 
 import (
+	"fmt"
 	"html"
-	"strconv"
 
 	"github.com/linkdata/jaws/what"
 )
@@ -19,7 +19,7 @@ func (m *wsMsg) IsValid() bool {
 }
 
 func (m *wsMsg) Append(b []byte) []byte {
-	b = strconv.AppendInt(b, int64(m.Jid), 10)
+	b = m.Jid.AppendInt(b)
 	b = append(b, '\n')
 	if m.What != 0 {
 		b = append(b, m.What.String()...)
@@ -29,8 +29,12 @@ func (m *wsMsg) Append(b []byte) []byte {
 	return b
 }
 
-func (m *wsMsg) String() string {
+func (m *wsMsg) Format() string {
 	return string(m.Append(nil))
+}
+
+func (m *wsMsg) String() string {
+	return fmt.Sprintf("wsMsg{%d, %s, %q}", m.Jid, m.What, m.Data)
 }
 
 func (m *wsMsg) FillAlert(err error) {

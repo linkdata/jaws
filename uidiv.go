@@ -9,8 +9,8 @@ type UiDiv struct {
 	UiHtmlInner
 }
 
-func (ui *UiDiv) JawsRender(e *Element, w io.Writer) error {
-	return ui.UiHtmlInner.WriteHtmlInner(e, w, "div", "", e.Data)
+func (ui *UiDiv) JawsRender(e *Element, w io.Writer) {
+	ui.UiHtmlInner.WriteHtmlInner(e, w, "div", "", e.Data)
 }
 
 func NewUiDiv(up Params) *UiDiv {

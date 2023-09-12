@@ -9,8 +9,8 @@ type UiText struct {
 	UiInputText
 }
 
-func (ui *UiText) JawsRender(e *Element, w io.Writer) error {
-	return ui.UiInputText.WriteHtmlInput(e, w, "text")
+func (ui *UiText) JawsRender(e *Element, w io.Writer) {
+	ui.UiInputText.WriteHtmlInput(e, w, "text")
 }
 
 func NewUiText(up Params) (ui *UiText) {

@@ -9,9 +9,9 @@ type UiHtmlInner struct {
 	ValueProxy
 }
 
-func (ui *UiHtmlInner) WriteHtmlInner(e *Element, w io.Writer, htmltag, htmltype string, data []interface{}) error {
+func (ui *UiHtmlInner) WriteHtmlInner(e *Element, w io.Writer, htmltag, htmltype string, data []interface{}) {
 	writeUiDebug(e, w)
-	return ui.UiHtml.WriteHtmlInner(w, e, htmltag, htmltype, e.ToHtml(ui.ValueProxy.JawsGet(e)), data)
+	ui.UiHtml.WriteHtmlInner(w, e, htmltag, htmltype, e.ToHtml(ui.ValueProxy.JawsGet(e)), data)
 }
 
 func NewUiHtmlInner(up Params) UiHtmlInner {
@@ -21,7 +21,6 @@ func NewUiHtmlInner(up Params) UiHtmlInner {
 	}
 }
 
-func (ui *UiHtmlInner) JawsUpdate(e *Element, u Updater) (err error) {
+func (ui *UiHtmlInner) JawsUpdate(e *Element, u Updater) {
 	u.SetInner(e.ToHtml(ui.ValueProxy.JawsGet(e)))
-	return nil
 }

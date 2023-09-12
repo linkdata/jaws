@@ -17,29 +17,28 @@ func (ui *UiContainer) JawsTags(rq *Request, tags []interface{}) []interface{} {
 	return append(tags, ui.Templater)
 }
 
-func (ui *UiContainer) JawsRender(e *Element, w io.Writer) (err error) {
+func (ui *UiContainer) JawsRender(e *Element, w io.Writer) {
 	writeUiDebug(e, w)
 	b := e.jid.AppendStartTagAttr(nil, ui.OuterHTMLTag)
 	b = e.AppendAttrs(b)
 	b = append(b, '>')
-	if _, err = w.Write(b); err == nil {
+	_, err := w.Write(b)
+	if err == nil {
 		ui.state = ui.Templater.JawsTemplates(e.Request, nil)
 		for _, t := range ui.state {
 			elem := e.Request.NewElement(t, nil)
-			if err = e.Jaws.Log(t.JawsRender(elem, w)); err != nil {
-				break
-			}
+			t.JawsRender(elem, w)
 		}
 		b = b[:0]
 		b = append(b, "</"...)
 		b = append(b, []byte(ui.OuterHTMLTag)...)
 		b = append(b, '>')
-		_, _ = w.Write(b)
+		_, err = w.Write(b)
 	}
-	return
+	maybePanic(err)
 }
 
-func (ui *UiContainer) JawsUpdate(e *Element, u Updater) (err error) {
+func (ui *UiContainer) JawsUpdate(e *Element, u Updater) {
 	newState := ui.Templater.JawsTemplates(e.Request, nil)
 	newMap := make(map[interface{}]struct{})
 	for _, t := range newState {
@@ -60,15 +59,13 @@ func (ui *UiContainer) JawsUpdate(e *Element, u Updater) (err error) {
 		if _, ok := oldMap[t]; !ok {
 			var b bytes.Buffer
 			elem := e.Request.NewElement(t, nil)
-			if err = e.Jaws.Log(t.JawsRender(elem, &b)); err == nil {
-				e.Jaws.Append(ui.Templater, template.HTML(b.String()))
-			}
+			t.JawsRender(elem, &b)
+			e.Jaws.Append(ui.Templater, template.HTML(b.String()))
 		}
 	}
 
 	e.Jaws.Order(orderTags)
 	ui.state = newState
-	return
 }
 
 func NewUiContainer(outerTag string, templater Templater, up Params) *UiContainer {

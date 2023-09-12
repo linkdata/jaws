@@ -9,8 +9,8 @@ type UiTr struct {
 	UiHtmlInner
 }
 
-func (ui *UiTr) JawsRender(e *Element, w io.Writer) error {
-	return ui.UiHtmlInner.WriteHtmlInner(e, w, "tr", "", e.Data)
+func (ui *UiTr) JawsRender(e *Element, w io.Writer) {
+	ui.UiHtmlInner.WriteHtmlInner(e, w, "tr", "", e.Data)
 }
 
 func NewUiTr(up Params) *UiTr {

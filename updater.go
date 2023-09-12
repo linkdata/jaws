@@ -2,68 +2,57 @@ package jaws
 
 import (
 	"bytes"
+	"fmt"
 	"html/template"
 
 	"github.com/linkdata/jaws/what"
 )
 
 type Updater struct {
-	ch  chan<- wsMsg
-	jid Jid
+	outCh chan<- wsMsg
+	elem  *Element
+}
+
+func (u *Updater) send(wht what.What, data string) {
+	u.elem.send(u.outCh, wsMsg{
+		Jid:  u.elem.jid,
+		What: wht,
+		Data: data,
+	})
 }
 
 // SetAttr queues sending a new attribute value
 // to the browser for the Element with the given JaWS ID in this Request.
-func (u Updater) SetAttr(attr, val string) {
-	u.ch <- wsMsg{
-		Jid:  u.jid,
-		Data: attr + "\n" + val,
-		What: what.SAttr,
-	}
+func (u *Updater) SetAttr(attr, val string) {
+	u.send(what.SAttr, attr+"\n"+val)
 }
 
 // RemoveAttr queues sending a request to remove an attribute
 // to the browser for the Element with the given JaWS ID in this Request.
-func (u Updater) RemoveAttr(attr string) {
-	u.ch <- wsMsg{
-		Jid:  u.jid,
-		Data: attr,
-		What: what.RAttr,
-	}
+func (u *Updater) RemoveAttr(attr string) {
+	u.send(what.RAttr, attr)
 }
 
 // SetInner queues sending a new inner HTML content
 // to the browser for the Element.
-func (u Updater) SetInner(innerHtml template.HTML) {
-	u.ch <- wsMsg{
-		Jid:  u.jid,
-		Data: string(innerHtml),
-		What: what.Inner,
-	}
+func (u *Updater) SetInner(innerHtml template.HTML) {
+	u.send(what.Inner, string(innerHtml))
 }
 
 // SetValue queues sending a new current input value in textual form
 // to the browser for the Element with the given JaWS ID in this Request.
-func (u Updater) SetValue(val string) {
-	u.ch <- wsMsg{
-		Jid:  u.jid,
-		Data: val,
-		What: what.Value,
-	}
+func (u *Updater) SetValue(val string) {
+	u.send(what.Value, val)
 }
 
 // Replace replaces the elements entire HTML DOM node with new HTML code.
 // If the HTML code doesn't seem to contain correct HTML ID, it panics.
-func (u Updater) Replace(htmlCode template.HTML) {
+func (u *Updater) Replace(htmlCode template.HTML) {
 	var b []byte
 	b = append(b, "id="...)
-	b = u.jid.AppendQuote(b)
+	b = u.elem.jid.AppendQuote(b)
 	if !bytes.Contains([]byte(htmlCode), b) {
-		panic("jaws: Updater.Replace(): expected HTML " + string(b))
+		panic(fmt.Errorf("jaws: Updater.Replace(): expected HTML " + string(b)))
 	}
-	u.ch <- wsMsg{
-		Jid:  u.jid,
-		Data: string(htmlCode),
-		What: what.Replace,
-	}
+	u.send(what.Replace, string(htmlCode))
 }

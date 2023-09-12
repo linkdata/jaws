@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"strings"
 
 	"github.com/linkdata/jaws/what"
 )
@@ -29,33 +28,23 @@ func (t *Template) String() string {
 	return fmt.Sprintf("Template{%q, %v}", t.Template.Name(), t.Dot)
 }
 
-func (t *Template) ToHTML(e *Element) (template.HTML, error) {
+func (t *Template) ToHTML(e *Element) template.HTML {
 	var b bytes.Buffer
-	err := t.JawsRender(e, &b)
-	if err != nil {
-		b.Reset()
-		msg := fmt.Sprintf("<!-- %v: %s: %v", e, t.String(), err)
-		b.Write([]byte(strings.ReplaceAll(msg, "--", "==")))
-		b.Write([]byte(" -->"))
-	}
-	return template.HTML(b.String()), err
+	t.JawsRender(e, &b)
+	return template.HTML(b.String())
 }
 
 func (t Template) JawsTags(rq *Request, inTags []interface{}) []interface{} {
 	return append(inTags, t.Dot, t.Template)
 }
 
-func (t Template) JawsRender(e *Element, w io.Writer) error {
+func (t Template) JawsRender(e *Element, w io.Writer) {
 	writeUiDebug(e, w)
-	return t.Execute(w, With{Element: e, Dot: t.Dot})
+	maybePanic(t.Execute(w, With{Element: e, Dot: t.Dot}))
 }
 
-func (t Template) JawsUpdate(e *Element, u Updater) error {
-	h, err := t.ToHTML(e)
-	if err == nil {
-		u.Replace(h)
-	}
-	return err
+func (t Template) JawsUpdate(e *Element, u Updater) {
+	u.Replace(t.ToHTML(e))
 }
 
 func (t Template) JawsEvent(e *Element, wht what.What, val string) error {
@@ -71,10 +60,7 @@ func (t Template) JawsEvent(e *Element, wht what.What, val string) error {
 }
 
 func (t Template) JawsGet(e *Element) interface{} {
-	if h, err := t.ToHTML(e); err == nil {
-		return h
-	}
-	return ""
+	return t.ToHTML(e)
 }
 
 func (t Template) JawsSet(e *Element, val interface{}) bool {

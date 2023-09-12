@@ -12,7 +12,7 @@ type UiInputDate struct {
 	UiInput
 }
 
-func (ui *UiInputDate) WriteHtmlInput(e *Element, w io.Writer, jid Jid, htmltype string, data ...interface{}) error {
+func (ui *UiInputDate) WriteHtmlInput(e *Element, w io.Writer, jid Jid, htmltype string, data ...interface{}) {
 	val := ui.Get(e)
 	if t, ok := val.(time.Time); ok {
 		if t.IsZero() {
@@ -20,9 +20,10 @@ func (ui *UiInputDate) WriteHtmlInput(e *Element, w io.Writer, jid Jid, htmltype
 			ui.Set(e, t)
 		}
 		writeUiDebug(e, w)
-		return ui.UiInput.WriteHtmlInput(w, e, htmltype, t.Format(ISO8601), data...)
+		ui.UiInput.WriteHtmlInput(w, e, htmltype, t.Format(ISO8601), data...)
+		return
 	}
-	return fmt.Errorf("jaws: UiInputDate: expected time.Time, got %T", val)
+	panic(fmt.Errorf("jaws: UiInputDate: expected time.Time, got %T", val))
 }
 
 func (ui *UiInputDate) JawsEvent(e *Element, wht what.What, val string) (err error) {

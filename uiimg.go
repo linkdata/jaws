@@ -28,13 +28,12 @@ func (ui *UiImg) SrcAttr(e *Element) string {
 	return strconv.Quote(src)
 }
 
-func (ui *UiImg) JawsRender(e *Element, w io.Writer) error {
-	return WriteHtmlInner(w, e.Jid(), "img", "", "", append(e.Attrs(), "src="+ui.SrcAttr(e))...)
+func (ui *UiImg) JawsRender(e *Element, w io.Writer) {
+	maybePanic(WriteHtmlInner(w, e.Jid(), "img", "", "", append(e.Attrs(), "src="+ui.SrcAttr(e))...))
 }
 
-func (ui *UiImg) JawsUpdate(e *Element, u Updater) (err error) {
+func (ui *UiImg) JawsUpdate(e *Element, u Updater) {
 	u.SetAttr("src", ui.SrcAttr(e))
-	return nil
 }
 
 func NewUiImg(up Params) *UiImg {

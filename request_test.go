@@ -575,20 +575,20 @@ func TestRequest_Sends(t *testing.T) {
 			if ok {
 				switch rq.GetElement(msg.Jid) {
 				case setAttrElement:
-					gotSetAttr = msg.String()
+					gotSetAttr = msg.Format()
 				case removeAttrElement:
-					gotRemoveAttr = msg.String()
+					gotRemoveAttr = msg.Format()
 				default:
 					switch msg.What {
 					case what.Alert:
 						if strings.HasPrefix(msg.Data, "info\n") {
-							gotInfoAlert = msg.String()
+							gotInfoAlert = msg.Format()
 						}
 						if strings.HasPrefix(msg.Data, "danger\n") {
-							gotDangerAlert = msg.String()
+							gotDangerAlert = msg.Format()
 						}
 					case what.Redirect:
-						gotRedirect = msg.String()
+						gotRedirect = msg.Format()
 						rq.cancel()
 					default:
 						t.Log(msg)

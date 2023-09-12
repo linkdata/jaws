@@ -11,8 +11,8 @@ type UiDate struct {
 	UiInputDate
 }
 
-func (ui *UiDate) JawsRender(e *Element, w io.Writer) error {
-	return ui.UiInputDate.WriteHtmlInput(e, w, e.Jid(), "date", e.Data...)
+func (ui *UiDate) JawsRender(e *Element, w io.Writer) {
+	ui.UiInputDate.WriteHtmlInput(e, w, e.Jid(), "date", e.Data...)
 }
 
 func NewUiDate(up Params) (ui *UiDate) {

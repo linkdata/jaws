@@ -53,31 +53,31 @@ func htmlValueString(val interface{}) (s string) {
 
 func writeUiDebug(e *Element, w io.Writer) {
 	if deadlock.Debug {
-		w.Write([]byte(strings.ReplaceAll(fmt.Sprintf("<!-- id=%q %T tags: %v", e.jid, e.ui, e.Tags()), "-->", "") + " -->"))
+		_, _ = w.Write([]byte(strings.ReplaceAll(fmt.Sprintf("<!-- id=%q %T tags: %v", e.jid, e.ui, e.Tags()), "-->", "") + " -->"))
 	}
 }
 
-func (ui *UiHtml) WriteHtmlInner(w io.Writer, e *Element, htmltag, htmltype string, htmlinner template.HTML, data []interface{}) error {
-	return WriteHtmlInner(w, e.Jid(), htmltag, htmltype, htmlinner, e.Attrs()...)
+func (ui *UiHtml) WriteHtmlInner(w io.Writer, e *Element, htmltag, htmltype string, htmlinner template.HTML, data []interface{}) {
+	maybePanic(WriteHtmlInner(w, e.Jid(), htmltag, htmltype, htmlinner, e.Attrs()...))
 }
 
-func (ui *UiHtml) WriteHtmlSelect(w io.Writer, e *Element, nba *NamedBoolArray, data ...interface{}) error {
-	return WriteHtmlSelect(w, e.Jid(), nba, e.Attrs()...)
+func (ui *UiHtml) WriteHtmlSelect(w io.Writer, e *Element, nba *NamedBoolArray, data ...interface{}) {
+	maybePanic(WriteHtmlSelect(w, e.Jid(), nba, e.Attrs()...))
 }
 
-func (ui *UiHtml) WriteHtmlInput(w io.Writer, e *Element, htmltype, htmlval string, data ...interface{}) error {
-	return WriteHtmlInput(w, e.Jid(), htmltype, htmlval, e.Attrs()...)
+func (ui *UiHtml) WriteHtmlInput(w io.Writer, e *Element, htmltype, htmlval string, data ...interface{}) {
+	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, htmlval, e.Attrs()...))
 }
 
 func (ui *UiHtml) JawsTags(rq *Request, inTags []interface{}) []interface{} {
 	return append(inTags, ui.Tags...)
 }
 
-func (ui *UiHtml) JawsRender(e *Element, w io.Writer) (err error) {
+func (ui *UiHtml) JawsRender(e *Element, w io.Writer) {
 	panic(fmt.Sprintf("jaws: UiHtml.JawsRender(%v, %v) called", e, w))
 }
 
-func (ui *UiHtml) JawsUpdate(e *Element, u Updater) (err error) {
+func (ui *UiHtml) JawsUpdate(e *Element, u Updater) {
 	panic(fmt.Sprintf("jaws: UiHtml.JawsUpdate(%v) called", e))
 }
 
