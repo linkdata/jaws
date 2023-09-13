@@ -20,6 +20,14 @@ func (ui *UiContainer) JawsTags(rq *Request, tags []interface{}) []interface{} {
 	return append(tags, ui.Container)
 }
 
+func (ui *UiContainer) fillState(rq *Request, state []Template) []Template {
+	state = append(state, ui.Container.JawsContains(rq)...)
+	for i := range state {
+		state[i].Container = ui.Container
+	}
+	return state
+}
+
 func (ui *UiContainer) JawsRender(e *Element, w io.Writer) {
 	writeUiDebug(e, w)
 	b := e.jid.AppendStartTagAttr(nil, ui.OuterHTMLTag)
@@ -27,10 +35,10 @@ func (ui *UiContainer) JawsRender(e *Element, w io.Writer) {
 	b = append(b, '>')
 	_, err := w.Write(b)
 	if err == nil {
-		ui.state = ui.Container.JawsContains(e.Request)
-		for _, t := range ui.state {
-			elem := e.Request.NewElement(t, nil)
-			t.JawsRender(elem, w)
+		ui.state = ui.fillState(e.Request, nil)
+		for i := range ui.state {
+			elem := e.Request.NewElement(ui.state[i], nil)
+			ui.state[i].JawsRender(elem, w)
 		}
 		b = b[:0]
 		b = append(b, "</"...)
@@ -45,7 +53,7 @@ func (ui *UiContainer) JawsUpdate(u Updater) {
 	var toAppend []Template
 	var toRemove, orderTags []interface{}
 
-	newState := ui.Container.JawsContains(u.Request)
+	newState := ui.fillState(u.Request, nil)
 	newMap := make(map[Template]struct{})
 	for _, t := range newState {
 		newMap[t] = struct{}{}
@@ -56,11 +64,11 @@ func (ui *UiContainer) JawsUpdate(u Updater) {
 	for _, t := range ui.state {
 		oldMap[t] = struct{}{}
 		if _, ok := newMap[t]; !ok {
-			toRemove = append(toRemove, t.Dot)
+			toRemove = append(toRemove, t)
 		}
 	}
 	for _, t := range newState {
-		orderTags = append(orderTags, t.Dot)
+		orderTags = append(orderTags, t)
 		if _, ok := oldMap[t]; !ok {
 			toAppend = append(toAppend, t)
 		}

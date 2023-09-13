@@ -53,7 +53,16 @@ func htmlValueString(val interface{}) (s string) {
 
 func writeUiDebug(e *Element, w io.Writer) {
 	if deadlock.Debug {
-		_, _ = w.Write([]byte(strings.ReplaceAll(fmt.Sprintf("<!-- id=%q %T tags: %v", e.jid, e.ui, e.Tags()), "-->", "") + " -->"))
+		var sb strings.Builder
+		_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", e.jid, e.ui)
+		for i, tag := range e.Tags() {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(TagString(tag))
+		}
+		sb.WriteByte(']')
+		_, _ = w.Write([]byte(strings.ReplaceAll(sb.String(), "-->", "==>") + " -->"))
 	}
 }
 

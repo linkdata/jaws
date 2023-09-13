@@ -10,8 +10,9 @@ import (
 )
 
 type Template struct {
-	*template.Template
+	Container
 	Dot interface{}
+	*template.Template
 }
 
 func (rq *Request) NewTemplate(templ, dot interface{}) Template {
@@ -24,18 +25,21 @@ func (rq *Request) NewTemplate(templ, dot interface{}) Template {
 	return Template{Template: tp, Dot: dot}
 }
 
-func (t *Template) String() string {
-	return fmt.Sprintf("Template{%q, %v}", t.Template.Name(), t.Dot)
+func (t Template) String() string {
+	return fmt.Sprintf("{%s, %q, %s}", TagString(t.Container), t.Template.Name(), TagString(t.Dot))
 }
 
-func (t *Template) ToHTML(e *Element) template.HTML {
+func (t Template) ToHTML(e *Element) template.HTML {
 	var b bytes.Buffer
 	t.JawsRender(e, &b)
 	return template.HTML(b.String())
 }
 
 func (t Template) JawsTags(rq *Request, inTags []interface{}) []interface{} {
-	return append(inTags, t.Dot, t.Template)
+	if tagger, ok := t.Dot.(Tagger); ok {
+		return tagger.JawsTags(rq, inTags)
+	}
+	return append(inTags, t)
 }
 
 func (t Template) JawsRender(e *Element, w io.Writer) {

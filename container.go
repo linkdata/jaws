@@ -3,7 +3,7 @@ package jaws
 import "html/template"
 
 type Container interface {
-	JawsContains(rq *Request) (tl []Template)
+	JawsContains(rq *Request) (l []Template)
 }
 
 type defaultContainer struct {
@@ -11,11 +11,11 @@ type defaultContainer struct {
 	tagger Tagger
 }
 
-func (dt *defaultContainer) JawsContains(rq *Request) (tl []Template) {
+func (dt *defaultContainer) JawsContains(rq *Request) (l []Template) {
 	for _, dot := range dt.tagger.JawsTags(rq, nil) {
-		tl = append(tl, Template{Template: dt.templ, Dot: dot})
+		l = append(l, Template{Template: dt.templ, Dot: dot})
 	}
-	return tl
+	return l
 }
 
 func (rq *Request) MakeContainer(templ interface{}, tagger Tagger) Container {
