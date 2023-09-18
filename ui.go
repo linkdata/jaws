@@ -6,11 +6,12 @@ import (
 	"io"
 )
 
-// Optionally you may also implement Tagger, ClickHandler and/or EventHandler.
+// Optionally you may also implement ClickHandler and/or EventHandler.
 // If any of these panics, the Request will be closed and the panic logged.
 type UI interface {
 	JawsRender(e *Element, w io.Writer)
 	JawsUpdate(u Updater)
+	Tagger
 }
 
 func (rq *Request) UI(ui UI, params ...interface{}) template.HTML {

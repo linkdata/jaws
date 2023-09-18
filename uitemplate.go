@@ -18,5 +18,5 @@ func NewUiTemplate(t Template) *UiTemplate {
 // The templ argument can either be a string, in which case Jaws.Template.Lookup() will
 // be used to resolve it. Or it can be a *template.Template directly.
 func (rq *Request) Template(templ, dot interface{}) template.HTML {
-	return rq.UI(NewUiTemplate(rq.NewTemplate(templ, dot)))
+	return rq.UI(NewUiTemplate(rq.MakeTemplate(templ, dot)))
 }

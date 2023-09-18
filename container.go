@@ -3,33 +3,25 @@ package jaws
 import "html/template"
 
 type Container interface {
-	JawsContains(rq *Request) (l []Template)
+	// JawsContains must return a slice of UI objects. The slice contents must not be modified after returning it.
+	JawsContains(rq *Request) (contents []UI)
 }
 
-type defaultContainer struct {
+type templateContainer struct {
 	templ  *template.Template
 	tagger Tagger
 }
 
-func (dt *defaultContainer) JawsContains(rq *Request) (l []Template) {
+func (dt *templateContainer) JawsContains(rq *Request) (contents []UI) {
 	for _, dot := range dt.tagger.JawsTags(rq, nil) {
-		l = append(l, Template{Template: dt.templ, Dot: dot})
+		contents = append(contents, Template{Template: dt.templ, Dot: dot})
 	}
-	return l
+	return contents
 }
 
 func (rq *Request) MakeContainer(templ interface{}, tagger Tagger) Container {
-	var tp *template.Template
-	switch v := templ.(type) {
-	case string:
-		tp = rq.Jaws.Template.Lookup(v)
-	case *template.Template:
-		tp = v
-	default:
-		panic("Request.MakeContainer(): template must be string or *template.Template")
-	}
-	return &defaultContainer{
-		templ:  tp,
+	return &templateContainer{
+		templ:  rq.MustTemplate(templ),
 		tagger: tagger,
 	}
 }

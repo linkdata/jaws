@@ -6,26 +6,19 @@ import (
 	"io"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/what"
 )
 
 type UiContainer struct {
 	OuterHTMLTag string
 	Container
 	UiHtml
-	mu    deadlock.Mutex
-	state []Template
+	mu       deadlock.Mutex
+	contents []*Element
 }
 
 func (ui *UiContainer) JawsTags(rq *Request, tags []interface{}) []interface{} {
 	return append(tags, ui.Container)
-}
-
-func (ui *UiContainer) fillState(rq *Request, state []Template) []Template {
-	state = append(state, ui.Container.JawsContains(rq)...)
-	for i := range state {
-		state[i].Container = ui.Container
-	}
-	return state
 }
 
 func (ui *UiContainer) JawsRender(e *Element, w io.Writer) {
@@ -35,10 +28,11 @@ func (ui *UiContainer) JawsRender(e *Element, w io.Writer) {
 	b = append(b, '>')
 	_, err := w.Write(b)
 	if err == nil {
-		ui.state = ui.fillState(e.Request, nil)
-		for i := range ui.state {
-			elem := e.Request.NewElement(ui.state[i], nil)
-			ui.state[i].JawsRender(elem, w)
+		for _, cui := range ui.Container.JawsContains(e.Request) {
+			if elem := e.Request.NewElement(cui, nil); elem != nil {
+				ui.contents = append(ui.contents, elem)
+				cui.JawsRender(elem, w)
+			}
 		}
 		b = b[:0]
 		b = append(b, "</"...)
@@ -50,44 +44,63 @@ func (ui *UiContainer) JawsRender(e *Element, w io.Writer) {
 }
 
 func (ui *UiContainer) JawsUpdate(u Updater) {
-	var toAppend []Template
-	var toRemove, orderTags []interface{}
+	var toRemove, toAppend []*Element
+	var orderData []byte
 
-	newState := ui.fillState(u.Request, nil)
-	newMap := make(map[Template]struct{})
-	for _, t := range newState {
+	oldMap := make(map[UI]*Element)
+	newMap := make(map[UI]struct{})
+	newContents := ui.Container.JawsContains(u.Request)
+	for _, t := range newContents {
 		newMap[t] = struct{}{}
 	}
-	oldMap := make(map[Template]struct{})
 
 	ui.mu.Lock()
-	for _, t := range ui.state {
-		oldMap[t] = struct{}{}
-		if _, ok := newMap[t]; !ok {
-			toRemove = append(toRemove, t)
+	for _, elem := range ui.contents {
+		oldMap[elem.ui] = elem
+		if _, ok := newMap[elem.ui]; !ok {
+			toRemove = append(toRemove, elem)
 		}
 	}
-	for _, t := range newState {
-		orderTags = append(orderTags, t)
-		if _, ok := oldMap[t]; !ok {
-			toAppend = append(toAppend, t)
+	ui.contents = ui.contents[:0]
+	for i, cui := range newContents {
+		var elem *Element
+		if elem = oldMap[cui]; elem == nil {
+			if elem = u.Request.NewElement(cui, nil); elem == nil {
+				continue
+			}
+			toAppend = append(toAppend, elem)
 		}
+		ui.contents = append(ui.contents, elem)
+		if i > 0 {
+			orderData = append(orderData, ' ')
+		}
+		orderData = elem.jid.AppendInt(orderData)
 	}
-	ui.state = newState
 	ui.mu.Unlock()
 
-	for _, t := range toRemove {
-		u.Jaws.Remove(t)
+	for _, elem := range toRemove {
+		u.Request.send(u.outCh, wsMsg{
+			Jid:  elem.jid,
+			What: what.Remove,
+		})
 	}
 
-	for _, t := range toAppend {
-		var b bytes.Buffer
-		elem := u.Request.NewElement(t, nil)
-		t.JawsRender(elem, &b)
-		u.Jaws.Append(ui.Container, template.HTML(b.String()))
+	var b bytes.Buffer
+	for _, elem := range toAppend {
+		b.Reset()
+		elem.ui.JawsRender(elem, &b)
+		u.Request.send(u.outCh, wsMsg{
+			Jid:  u.Jid(),
+			What: what.Append,
+			Data: b.String(),
+		})
 	}
 
-	u.Jaws.Order(orderTags)
+	u.Request.send(u.outCh, wsMsg{
+		Jid:  u.Jid(),
+		What: what.Order,
+		Data: string(orderData),
+	})
 }
 
 func NewUiContainer(outerTag string, cont Container, up Params) *UiContainer {
