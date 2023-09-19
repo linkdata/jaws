@@ -31,9 +31,9 @@ type testServer struct {
 func newTestServer(is *is.I) (ts *testServer) {
 	jw := New()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
-	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	hr := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
 	sess := jw.NewSession(nil, hr)
-	rq := jw.NewRequest(ctx, hr)
+	rq := jw.NewRequest(hr)
 	ts = &testServer{
 		is:          is,
 		jw:          jw,
@@ -85,7 +85,7 @@ func TestWS_UpgradeRequired(t *testing.T) {
 	is := is.New(t)
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(context.Background(), nil)
+	rq := jw.NewRequest(nil)
 
 	req := httptest.NewRequest("", "/jaws/"+rq.JawsKeyString(), nil)
 	w := httptest.NewRecorder()
@@ -137,6 +137,8 @@ func TestWS_NormalExchange(t *testing.T) {
 	is.NoErr(err)
 	select {
 	case <-time.NewTimer(testTimeout).C:
+		is.NoErr(ts.ctx.Err())
+		is.NoErr(ctx.Err())
 		is.Fail()
 	case <-gotCallCh:
 	}

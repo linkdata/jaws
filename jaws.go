@@ -8,7 +8,6 @@ package jaws
 
 import (
 	"bufio"
-	"context"
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
@@ -147,17 +146,14 @@ func MakeID() string {
 // Call this as soon as you start processing a HTML request, and store the
 // returned Request pointer so it can be used while constructing the HTML
 // response in order to register the JaWS id's you use in the response, and
-// use it's Key attribute when sending the Javascript portion of the reply
-// with GetBodyFooter.
-//
-// Don't use the http.Request's Context, as that will expire before the WebSocket call comes in.
-func (jw *Jaws) NewRequest(ctx context.Context, hr *http.Request) (rq *Request) {
+// use it's Key attribute when sending the Javascript portion of the reply.
+func (jw *Jaws) NewRequest(hr *http.Request) (rq *Request) {
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	for rq == nil {
 		jawsKey := jw.nonZeroRandomLocked()
 		if _, ok := jw.reqs[jawsKey]; !ok {
-			rq = newRequest(ctx, jw, jawsKey, hr)
+			rq = newRequest(jw, jawsKey, hr)
 			jw.reqs[jawsKey] = rq
 		}
 	}

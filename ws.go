@@ -17,14 +17,14 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			incomingMsgCh := make(chan wsMsg)
 			broadcastMsgCh := rq.Jaws.subscribe(rq, 1)
 			outboundMsgCh := make(chan wsMsg, cap(broadcastMsgCh))
-			go wsReader(rq.Context, rq.Jaws.Done(), incomingMsgCh, ws) // closes incomingMsgCh
-			go wsWriter(rq.Context, rq.Jaws.Done(), outboundMsgCh, ws) // calls ws.Close()
-			rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh)   // unsubscribes broadcastMsgCh, closes outboundMsgCh
+			go wsReader(r.Context(), rq.Jaws.Done(), incomingMsgCh, ws) // closes incomingMsgCh
+			go wsWriter(r.Context(), rq.Jaws.Done(), outboundMsgCh, ws) // calls ws.Close()
+			rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh)    // unsubscribes broadcastMsgCh, closes outboundMsgCh
 		} else {
 			defer ws.Close(websocket.StatusNormalClosure, err.Error())
 			var msg wsMsg
 			msg.FillAlert(rq.Jaws.Log(err))
-			_ = ws.Write(rq.Context, websocket.MessageText, msg.Append(nil))
+			_ = ws.Write(r.Context(), websocket.MessageText, msg.Append(nil))
 		}
 	} else {
 		_ = rq.Jaws.Log(err)

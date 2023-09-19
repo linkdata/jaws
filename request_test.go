@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -44,9 +46,10 @@ func newTestRequest(is *is.I) (tr *testRequest) {
 	}
 	tr.jw.Logger = log.New(&tr.log, "", 0)
 	tr.ctx, tr.cancel = context.WithTimeout(context.Background(), time.Hour)
-	tr.Request = tr.jw.NewRequest(tr.ctx, nil)
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	tr.Request = tr.jw.NewRequest(hr)
 
-	tr.jw.UseRequest(tr.JawsKey, nil)
+	tr.jw.UseRequest(tr.JawsKey, hr.WithContext(tr.ctx))
 
 	go tr.jw.Serve()
 
@@ -144,7 +147,7 @@ func TestRequest_DuplicateRegistration(t *testing.T) {
 	is := is.New(t)
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(context.Background(), nil)
+	rq := jw.NewRequest(nil)
 	var ef1 EventFn = func(rq *Request, evt what.What, id, val string) error { return nil }
 	var ef2 EventFn = func(rq *Request, evt what.What, id, val string) error { return errors.New("fails") }
 	is.Equal(rq.Register("foo", ef1), Jid(1))  // first reg succeeds
@@ -167,7 +170,7 @@ func TestRequest_DuplicateRegistration(t *testing.T) {
 func TestRequest_SendFailsWhenJawsClosed(t *testing.T) {
 	is := is.New(t)
 	jw := New()
-	rq := jw.NewRequest(context.Background(), nil)
+	rq := jw.NewRequest(nil)
 	jw.UseRequest(rq.JawsKey, nil)
 	jw.Close()
 	is.Equal(rq.Send(Message{}), false)
@@ -185,19 +188,21 @@ func TestRequest_SendPanicsAfterRecycle(t *testing.T) {
 	}()
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(context.Background(), nil)
+	rq := jw.NewRequest(nil)
 	rq.recycle()
 	rq.Send(Message{})
 }
 
 func TestRequest_SendFailsWhenContextDone(t *testing.T) {
 	is := is.New(t)
-	ctx, cancel := context.WithCancel(context.Background())
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(ctx, nil)
-	jw.UseRequest(rq.JawsKey, nil)
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	rq := jw.NewRequest(hr)
+	ctx, cancel := context.WithCancel(context.Background())
+	jw.UseRequest(rq.JawsKey, hr.WithContext(ctx))
 	defer rq.recycle()
+	is.Equal(ctx, rq.Active.Context())
 	fillTagCh(rq.sendCh)
 	cancel()
 	is.Equal(rq.Send(Message{}), false)
@@ -207,7 +212,7 @@ func TestRequest_HeadHTML(t *testing.T) {
 	is := is.New(t)
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(context.Background(), nil)
+	rq := jw.NewRequest(nil)
 	defer rq.recycle()
 
 	txt := rq.HeadHTML()
@@ -219,7 +224,7 @@ func TestRequest_BroadcastsCallable(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 	go jw.Serve()
-	rq := jw.NewRequest(context.Background(), nil)
+	rq := jw.NewRequest(nil)
 	defer rq.recycle()
 
 	// TODO
@@ -565,12 +570,13 @@ func TestRequest_Sends(t *testing.T) {
 	rq.AlertError(errors.New("<html>\nshould-be-escaped"))
 	rq.Redirect("some-url")
 
-	notDone := true
-	for notDone {
+	done := false
+	for !done {
 		select {
 		case <-time.NewTimer(testTimeout).C:
 			t.Log("timeout")
-			notDone = false
+			t.FailNow()
+			done = true
 		case msg, ok := <-rq.outCh:
 			if ok {
 				switch rq.GetElement(msg.Jid) {
@@ -597,7 +603,7 @@ func TestRequest_Sends(t *testing.T) {
 				}
 			}
 		case <-rq.doneCh:
-			notDone = false
+			done = true
 		}
 	}
 

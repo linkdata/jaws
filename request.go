@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"context"
 	"fmt"
 	"html"
 	"html/template"
@@ -34,7 +33,7 @@ type Request struct {
 	JawsKey   uint64           // (read-only) a random number used in the WebSocket URI to identify this Request
 	Created   time.Time        // (read-only) when the Request was created, used for automatic cleanup
 	Initial   *http.Request    // (read-only) initial HTTP request passed to Jaws.NewRequest
-	Context   context.Context  // (read-only) context passed to Jaws.NewRequest
+	Active    *http.Request    // (read-only) WebSocket HTTP request passed to Jaws.UseRequest
 	remoteIP  net.IP           // (read-only) remote IP, or nil
 	session   *Session         // (read-only) session, if established
 	sendCh    chan Message     // (read-only) direct send message channel
@@ -62,13 +61,12 @@ var requestPool = sync.Pool{New: func() interface{} {
 	}
 }}
 
-func newRequest(ctx context.Context, jw *Jaws, jawsKey uint64, hr *http.Request) (rq *Request) {
+func newRequest(jw *Jaws, jawsKey uint64, hr *http.Request) (rq *Request) {
 	rq = requestPool.Get().(*Request)
 	rq.Jaws = jw
 	rq.JawsKey = jawsKey
 	rq.Created = time.Now()
 	rq.Initial = hr
-	rq.Context = ctx
 	if hr != nil {
 		rq.remoteIP = parseIP(hr.RemoteAddr)
 		if sess := jw.getSessionLocked(getCookieSessionsIds(hr.Header, jw.CookieName), rq.remoteIP); sess != nil {
@@ -91,18 +89,19 @@ func (rq *Request) String() string {
 	return "Request<" + rq.JawsKeyString() + ">"
 }
 
-func (rq *Request) start(hr *http.Request) error {
-	rq.mu.RLock()
-	expectIP := rq.remoteIP
-	rq.mu.RUnlock()
+func (rq *Request) start(hr *http.Request) (err error) {
 	var actualIP net.IP
 	if hr != nil {
 		actualIP = parseIP(hr.RemoteAddr)
 	}
-	if equalIP(expectIP, actualIP) {
-		return nil
+	rq.mu.Lock()
+	if equalIP(rq.remoteIP, actualIP) {
+		rq.Active = hr
+	} else {
+		err = fmt.Errorf("/jaws/%s: expected IP %q, got %q", rq.JawsKeyString(), rq.remoteIP.String(), actualIP.String())
 	}
-	return fmt.Errorf("/jaws/%s: expected IP %q, got %q", rq.JawsKeyString(), expectIP.String(), actualIP.String())
+	rq.mu.Unlock()
+	return
 }
 
 func (rq *Request) killSessionLocked() {
@@ -124,7 +123,7 @@ func (rq *Request) recycle() {
 	rq.JawsKey = 0
 	rq.connectFn = nil
 	rq.Initial = nil
-	rq.Context = nil
+	rq.Active = nil
 	rq.remoteIP = nil
 	rq.elems = rq.elems[:0]
 	rq.killSessionLocked()
@@ -182,13 +181,17 @@ func (rq *Request) Broadcast(msg Message) {
 	rq.Jaws.Broadcast(msg)
 }
 
-func (rq *Request) getDoneCh() (<-chan struct{}, <-chan struct{}) {
+func (rq *Request) getDoneCh() (jawsDoneCh, ctxDoneCh <-chan struct{}) {
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
 	if rq.Jaws == nil {
 		panic("Request.Send(): request is dead")
 	}
-	return rq.Jaws.Done(), rq.Context.Done()
+	jawsDoneCh = rq.Jaws.Done()
+	if rq.Active != nil {
+		ctxDoneCh = rq.Active.Context().Done()
+	}
+	return
 }
 
 // Send a message to the current Request only.
@@ -372,10 +375,20 @@ func (rq *Request) GetElements(tag interface{}) (elems []*Element) {
 	return
 }
 
+// Done returns the Request completion channel.
+func (rq *Request) Done() (ch <-chan struct{}) {
+	rq.mu.RLock()
+	if rq.Active != nil {
+		ch = rq.Active.Context().Done()
+	}
+	rq.mu.RUnlock()
+	return
+}
+
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
 func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsMsg, outboundMsgCh chan<- wsMsg) {
 	jawsDoneCh := rq.Jaws.Done()
-	ctxDoneCh := rq.Context.Done()
+	ctxDoneCh := rq.Done()
 	eventDoneCh := make(chan struct{})
 	eventCallCh := make(chan eventFnCall, cap(outboundMsgCh))
 	go rq.eventCaller(eventCallCh, outboundMsgCh, eventDoneCh)
@@ -531,7 +544,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 func (rq *Request) send(outboundMsgCh chan<- wsMsg, msg wsMsg) {
 	select {
 	case <-rq.Jaws.Done():
-	case <-rq.Context.Done():
+	case <-rq.Done():
 	case outboundMsgCh <- msg:
 	default:
 		panic(fmt.Errorf("jaws: %v: outbound message channel is full sending %s", rq, msg))

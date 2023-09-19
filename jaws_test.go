@@ -3,7 +3,6 @@ package jaws
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -214,10 +213,10 @@ func TestJaws_UseRequest(t *testing.T) {
 
 	is.Equal(0, jw.RequestCount())
 
-	rq1 := jw.NewRequest(context.Background(), nil)
+	rq1 := jw.NewRequest(nil)
 	is.True(rq1.JawsKey != 0)
 
-	rq2 := jw.NewRequest(context.Background(), &http.Request{RemoteAddr: "10.0.0.2:1010"})
+	rq2 := jw.NewRequest(&http.Request{RemoteAddr: "10.0.0.2:1010"})
 	is.True(rq2.JawsKey != 0)
 	is.True(rq1.JawsKey != rq2.JawsKey)
 	is.Equal(jw.Pending(), 2)
@@ -253,7 +252,7 @@ func TestJaws_BlockingRandomPanics(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 	jw.kg = bufio.NewReader(&bytes.Buffer{})
-	jw.NewRequest(context.Background(), nil)
+	jw.NewRequest(nil)
 	is.Fail()
 }
 
@@ -268,7 +267,7 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
 	is.Equal(jw.Pending(), 0)
 	for i := 0; i < numReqs; i++ {
-		jw.NewRequest(context.Background(), hr)
+		jw.NewRequest(hr)
 	}
 	is.Equal(jw.Pending(), numReqs)
 
