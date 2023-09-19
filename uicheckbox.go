@@ -9,19 +9,19 @@ type UiCheckbox struct {
 	UiInputBool
 }
 
-func (ui *UiCheckbox) JawsRender(e *Element, w io.Writer) {
-	ui.UiInputBool.WriteHtmlInput(e, w, "checkbox", e.Attrs())
+func (ui *UiCheckbox) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+	ui.UiInputBool.WriteHtmlInput(e, w, "checkbox", params...)
 }
 
-func NewUiCheckbox(up Params) (ui *UiCheckbox) {
+func NewUiCheckbox(vp ValueProxy) (ui *UiCheckbox) {
 	ui = &UiCheckbox{
 		UiInputBool: UiInputBool{
-			UiInput: NewUiInput(up),
+			UiInput: NewUiInput(vp),
 		},
 	}
 	return
 }
 
 func (rq *Request) Checkbox(value interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiCheckbox(NewParams(value, params)), params...)
+	return rq.UI(NewUiCheckbox(MakeValueProxy(value)), params...)
 }

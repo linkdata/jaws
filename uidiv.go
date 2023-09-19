@@ -9,16 +9,16 @@ type UiDiv struct {
 	UiHtmlInner
 }
 
-func (ui *UiDiv) JawsRender(e *Element, w io.Writer) {
-	ui.UiHtmlInner.WriteHtmlInner(e, w, "div", "", e.Data)
+func (ui *UiDiv) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+	ui.UiHtmlInner.WriteHtmlInner(e, w, "div", "", params...)
 }
 
-func NewUiDiv(up Params) *UiDiv {
+func NewUiDiv(vp ValueProxy) *UiDiv {
 	return &UiDiv{
-		NewUiHtmlInner(up),
+		NewUiHtmlInner(vp),
 	}
 }
 
 func (rq *Request) Div(innerHtml interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiDiv(NewParams(innerHtml, params)), params...)
+	return rq.UI(NewUiDiv(MakeValueProxy(innerHtml)), params...)
 }

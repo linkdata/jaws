@@ -9,16 +9,16 @@ type UiSpan struct {
 	UiHtmlInner
 }
 
-func (ui *UiSpan) JawsRender(e *Element, w io.Writer) {
-	ui.UiHtmlInner.WriteHtmlInner(e, w, "span", "", e.Data)
+func (ui *UiSpan) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+	ui.UiHtmlInner.WriteHtmlInner(e, w, "span", "", params...)
 }
 
-func NewUiSpan(up Params) *UiSpan {
+func NewUiSpan(vp ValueProxy) *UiSpan {
 	return &UiSpan{
-		NewUiHtmlInner(up),
+		NewUiHtmlInner(vp),
 	}
 }
 
 func (rq *Request) Span(innerHtml interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiSpan(NewParams(innerHtml, params)), params...)
+	return rq.UI(NewUiSpan(MakeValueProxy(innerHtml)), params...)
 }

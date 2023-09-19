@@ -9,19 +9,19 @@ type UiPassword struct {
 	UiInputText
 }
 
-func (ui *UiPassword) JawsRender(e *Element, w io.Writer) {
-	ui.UiInputText.WriteHtmlInput(e, w, "password")
+func (ui *UiPassword) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+	ui.UiInputText.WriteHtmlInput(e, w, "password", params...)
 }
 
-func NewUiPassword(up Params) (ui *UiPassword) {
+func NewUiPassword(vp ValueProxy) (ui *UiPassword) {
 	ui = &UiPassword{
 		UiInputText: UiInputText{
-			UiInput: NewUiInput(up),
+			UiInput: NewUiInput(vp),
 		},
 	}
 	return
 }
 
 func (rq *Request) Password(value interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiPassword(NewParams(value, params)), params...)
+	return rq.UI(NewUiPassword(MakeValueProxy(value)), params...)
 }

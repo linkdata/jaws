@@ -9,16 +9,16 @@ type UiLi struct {
 	UiHtmlInner
 }
 
-func (ui *UiLi) JawsRender(e *Element, w io.Writer) {
-	ui.UiHtmlInner.WriteHtmlInner(e, w, "li", "", e.Data)
+func (ui *UiLi) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+	ui.UiHtmlInner.WriteHtmlInner(e, w, "li", "", params...)
 }
 
-func NewUiLi(up Params) *UiLi {
+func NewUiLi(vp ValueProxy) *UiLi {
 	return &UiLi{
-		NewUiHtmlInner(up),
+		NewUiHtmlInner(vp),
 	}
 }
 
 func (rq *Request) Li(innerHtml interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiLi(NewParams(innerHtml, params)), params...)
+	return rq.UI(NewUiLi(MakeValueProxy(innerHtml)), params...)
 }

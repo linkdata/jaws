@@ -130,6 +130,10 @@ func (nba *NamedBoolArray) JawsSet(e *Element, value interface{}) (changed bool)
 	panic("NamedBoolArray.JawsSet(): not string")
 }
 
+func (nba *NamedBoolArray) JawsTags(rq *Request, inTags []interface{}) (outTags []interface{}) {
+	return append(inTags, nba)
+}
+
 /*
 func (nba *NamedBoolArray) radioEventFn(rq *Request, evt what.What, jid, val string, fn InputTextFn) (err error) {
 	if evt == what.Input && val != "" && strings.HasPrefix(jid, nba.prefix) {

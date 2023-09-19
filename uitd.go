@@ -9,16 +9,16 @@ type UiTd struct {
 	UiHtmlInner
 }
 
-func (ui *UiTd) JawsRender(e *Element, w io.Writer) {
-	ui.UiHtmlInner.WriteHtmlInner(e, w, "td", "", e.Data)
+func (ui *UiTd) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+	ui.UiHtmlInner.WriteHtmlInner(e, w, "td", "", params...)
 }
 
-func NewUiTd(up Params) *UiTd {
+func NewUiTd(vp ValueProxy) *UiTd {
 	return &UiTd{
-		NewUiHtmlInner(up),
+		NewUiHtmlInner(vp),
 	}
 }
 
 func (rq *Request) Td(innerHtml interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiTd(NewParams(innerHtml, params)), params...)
+	return rq.UI(NewUiTd(MakeValueProxy(innerHtml)), params...)
 }

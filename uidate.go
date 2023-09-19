@@ -11,19 +11,19 @@ type UiDate struct {
 	UiInputDate
 }
 
-func (ui *UiDate) JawsRender(e *Element, w io.Writer) {
-	ui.UiInputDate.WriteHtmlInput(e, w, e.Jid(), "date", e.Data...)
+func (ui *UiDate) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+	ui.UiInputDate.WriteHtmlInput(e, w, e.Jid(), "date", params...)
 }
 
-func NewUiDate(up Params) (ui *UiDate) {
+func NewUiDate(vp ValueProxy) (ui *UiDate) {
 	ui = &UiDate{
 		UiInputDate: UiInputDate{
-			UiInput: NewUiInput(up),
+			UiInput: NewUiInput(vp),
 		},
 	}
 	return
 }
 
 func (rq *Request) Date(value interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiDate(NewParams(value, params)), params...)
+	return rq.UI(NewUiDate(MakeValueProxy(value)), params...)
 }

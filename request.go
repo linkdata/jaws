@@ -312,7 +312,7 @@ func (rq *Request) Register(tagitem interface{}, params ...interface{}) Jid {
 			}
 		}
 	}
-	elem := rq.newElementLocked(&UiHtml{Tags: tags, EventFn: up.ef}, params)
+	elem := rq.newElementLocked(&UiHtml{Tags: tags, EventFn: up.ef})
 	return elem.jid
 }
 
@@ -326,12 +326,11 @@ func (rq *Request) wantMessage(msg *Message) (yes bool) {
 	return
 }
 
-func (rq *Request) newElementLocked(ui UI, data []interface{}) (elem *Element) {
+func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 	elem = &Element{
 		jid:     Jid(len(rq.elems) + 1),
 		ui:      ui,
 		Request: rq,
-		Data:    data,
 	}
 	rq.elems = append(rq.elems, elem)
 	if tagger, ok := ui.(Tagger); ok {
@@ -342,10 +341,10 @@ func (rq *Request) newElementLocked(ui UI, data []interface{}) (elem *Element) {
 	return
 }
 
-func (rq *Request) NewElement(ui UI, data []interface{}) (elem *Element) {
+func (rq *Request) NewElement(ui UI) *Element {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	return rq.newElementLocked(ui, data)
+	return rq.newElementLocked(ui)
 }
 
 func (rq *Request) GetElement(jid Jid) (e *Element) {

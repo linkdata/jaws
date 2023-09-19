@@ -9,19 +9,19 @@ type UiRadio struct {
 	UiInputBool
 }
 
-func (ui *UiRadio) JawsRender(e *Element, w io.Writer) {
-	ui.UiInputBool.WriteHtmlInput(e, w, "radio", append(e.Attrs(), `id="jid.`+e.Jid().String()+`"`))
+func (ui *UiRadio) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+	ui.UiInputBool.WriteHtmlInput(e, w, "radio", params...)
 }
 
-func NewUiRadio(up Params) (ui *UiRadio) {
+func NewUiRadio(vp ValueProxy) (ui *UiRadio) {
 	ui = &UiRadio{
 		UiInputBool: UiInputBool{
-			UiInput: NewUiInput(up),
+			UiInput: NewUiInput(vp),
 		},
 	}
 	return
 }
 
 func (rq *Request) Radio(value interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiRadio(NewParams(value, params)), params...)
+	return rq.UI(NewUiRadio(MakeValueProxy(value)), params...)
 }

@@ -11,11 +11,11 @@ type UiInputText struct {
 	UiInput
 }
 
-func (ui *UiInputText) WriteHtmlInput(e *Element, w io.Writer, htmltype string) {
+func (ui *UiInputText) WriteHtmlInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
+	ui.ExtractParams(e.Request, ui.ValueProxy, params)
 	val := ui.Get(e)
 	if s, ok := val.(string); ok {
-		writeUiDebug(e, w)
-		ui.UiInput.WriteHtmlInput(w, e, htmltype, s, e.Data...)
+		ui.UiInput.WriteHtmlInput(w, e, htmltype, s, params...)
 		return
 	}
 	panic(fmt.Errorf("jaws: UiInputText: expected string, got %T", val))

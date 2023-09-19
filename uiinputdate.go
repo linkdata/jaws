@@ -12,15 +12,16 @@ type UiInputDate struct {
 	UiInput
 }
 
-func (ui *UiInputDate) WriteHtmlInput(e *Element, w io.Writer, jid Jid, htmltype string, data ...interface{}) {
+func (ui *UiInputDate) WriteHtmlInput(e *Element, w io.Writer, jid Jid, htmltype string, params ...interface{}) {
+	ui.ExtractParams(e.Request, ui.ValueProxy, params)
 	val := ui.Get(e)
 	if t, ok := val.(time.Time); ok {
 		if t.IsZero() {
 			t = time.Now()
 			ui.Set(e, t)
+			e.Dirty()
 		}
-		writeUiDebug(e, w)
-		ui.UiInput.WriteHtmlInput(w, e, htmltype, t.Format(ISO8601), data...)
+		ui.UiInput.WriteHtmlInput(w, e, htmltype, t.Format(ISO8601), params...)
 		return
 	}
 	panic(fmt.Errorf("jaws: UiInputDate: expected time.Time, got %T", val))

@@ -8,16 +8,16 @@ type UiSelect struct {
 	UiInputSelect
 }
 
-func NewUiSelect(up Params) (ui *UiSelect) {
+func NewUiSelect(nba *NamedBoolArray) (ui *UiSelect) {
 	ui = &UiSelect{
 		UiInputSelect{
-			UiInput:        NewUiInput(up),
-			NamedBoolArray: up.nba,
+			UiInput:        NewUiInput(nba),
+			NamedBoolArray: nba,
 		},
 	}
 	return
 }
 
-func (rq *Request) Select(namedBoolArray interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiSelect(NewParams(namedBoolArray, params)), params...)
+func (rq *Request) Select(nba *NamedBoolArray, params ...interface{}) template.HTML {
+	return rq.UI(NewUiSelect(nba), params...)
 }

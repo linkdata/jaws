@@ -9,15 +9,14 @@ type UiHtmlInner struct {
 	ValueProxy
 }
 
-func (ui *UiHtmlInner) WriteHtmlInner(e *Element, w io.Writer, htmltag, htmltype string, data []interface{}) {
-	writeUiDebug(e, w)
-	ui.UiHtml.WriteHtmlInner(w, e, htmltag, htmltype, e.ToHtml(ui.ValueProxy.JawsGet(e)), data)
+func (ui *UiHtmlInner) WriteHtmlInner(e *Element, w io.Writer, htmltag, htmltype string, params ...interface{}) {
+	ui.ExtractParams(e.Request, ui.ValueProxy, params)
+	ui.UiHtml.WriteHtmlInner(w, e, htmltag, htmltype, e.ToHtml(ui.ValueProxy.JawsGet(e)), params...)
 }
 
-func NewUiHtmlInner(up Params) UiHtmlInner {
+func NewUiHtmlInner(vp ValueProxy) UiHtmlInner {
 	return UiHtmlInner{
-		UiHtml:     NewUiHtml(up),
-		ValueProxy: up.ValueProxy(),
+		ValueProxy: vp,
 	}
 }
 

@@ -6,16 +6,15 @@ import (
 )
 
 type RadioElement struct {
-	e *Element
+	e        *Element
+	nameAttr string
 }
 
-func (rq *Request) RadioGroup(namedBoolArray interface{}, params ...interface{}) (rl []RadioElement) {
-	up := NewParams(namedBoolArray, params)
-	up.attrs = append(up.attrs, `name="`+MakeID()+`"`)
-	up.nba.ReadLocked(func(nbl []*NamedBool) {
+func (rq *Request) RadioGroup(nba *NamedBoolArray, params ...interface{}) (rl []RadioElement) {
+	nameAttr := `name="` + MakeID() + `"`
+	nba.ReadLocked(func(nbl []*NamedBool) {
 		for _, nb := range nbl {
-			up.vp = nb
-			rl = append(rl, RadioElement{e: rq.NewElement(NewUiRadio(up), params)})
+			rl = append(rl, RadioElement{e: rq.NewElement(NewUiRadio(nb)), nameAttr: nameAttr})
 		}
 	})
 	return
@@ -24,7 +23,7 @@ func (rq *Request) RadioGroup(namedBoolArray interface{}, params ...interface{})
 // Radio renders a HTML input element of type 'radio'.
 func (r RadioElement) Radio(attrs ...string) template.HTML {
 	var sb strings.Builder
-	r.e.ui.(*UiRadio).JawsRender(r.e, &sb)
+	r.e.ui.(*UiRadio).JawsRender(r.e, &sb, append(attrs, r.nameAttr))
 	return template.HTML(sb.String())
 }
 

@@ -9,16 +9,16 @@ type UiA struct {
 	UiHtmlInner
 }
 
-func (ui *UiA) JawsRender(e *Element, w io.Writer) {
-	ui.UiHtmlInner.WriteHtmlInner(e, w, "a", "", e.Data)
+func (ui *UiA) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+	ui.UiHtmlInner.WriteHtmlInner(e, w, "a", "", params...)
 }
 
-func NewUiA(up Params) *UiA {
+func NewUiA(innerHtml ValueProxy) *UiA {
 	return &UiA{
-		NewUiHtmlInner(up),
+		NewUiHtmlInner(innerHtml),
 	}
 }
 
 func (rq *Request) A(innerHtml interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiA(NewParams(innerHtml, params)), params...)
+	return rq.UI(NewUiA(MakeValueProxy(innerHtml)), params...)
 }

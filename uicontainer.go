@@ -21,15 +21,19 @@ func (ui *UiContainer) JawsTags(rq *Request, tags []interface{}) []interface{} {
 	return append(tags, ui.Container)
 }
 
-func (ui *UiContainer) JawsRender(e *Element, w io.Writer) {
+func (ui *UiContainer) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+	ui.ExtractParams(e.Request, nil, params)
 	writeUiDebug(e, w)
 	b := e.jid.AppendStartTagAttr(nil, ui.OuterHTMLTag)
-	b = e.AppendAttrs(b)
+	for _, attr := range ui.Attrs {
+		b = append(b, ' ')
+		b = append(b, attr...)
+	}
 	b = append(b, '>')
 	_, err := w.Write(b)
 	if err == nil {
 		for _, cui := range ui.Container.JawsContains(e.Request) {
-			if elem := e.Request.NewElement(cui, nil); elem != nil {
+			if elem := e.Request.NewElement(cui); elem != nil {
 				ui.contents = append(ui.contents, elem)
 				cui.JawsRender(elem, w)
 			}
@@ -65,7 +69,7 @@ func (ui *UiContainer) JawsUpdate(u Updater) {
 	for i, cui := range newContents {
 		var elem *Element
 		if elem = oldMap[cui]; elem == nil {
-			if elem = u.Request.NewElement(cui, nil); elem == nil {
+			if elem = u.Request.NewElement(cui); elem == nil {
 				continue
 			}
 			toAppend = append(toAppend, elem)
@@ -103,14 +107,14 @@ func (ui *UiContainer) JawsUpdate(u Updater) {
 	})
 }
 
-func NewUiContainer(outerTag string, cont Container, up Params) *UiContainer {
+func NewUiContainer(outerTag string, cont Container) *UiContainer {
 	return &UiContainer{
 		OuterHTMLTag: outerTag,
 		Container:    cont,
-		UiHtml:       NewUiHtml(up),
+		UiHtml:       NewUiHtml(),
 	}
 }
 
 func (rq *Request) Container(outerTag string, cont Container, params ...interface{}) template.HTML {
-	return rq.UI(NewUiContainer(outerTag, cont, NewParams(nil, params)), params...)
+	return rq.UI(NewUiContainer(outerTag, cont), params...)
 }

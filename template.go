@@ -54,10 +54,10 @@ func (t Template) JawsTags(rq *Request, inTags []interface{}) []interface{} {
 	return append(inTags, t)
 }
 
-// inteface UI
+// interface UI
 var _ UI = (*Template)(nil) // ensure
 
-func (t Template) JawsRender(e *Element, w io.Writer) {
+func (t Template) JawsRender(e *Element, w io.Writer, params ...interface{}) {
 	writeUiDebug(e, w)
 	maybePanic(t.Execute(w, With{Element: e, Dot: t.Dot}))
 }

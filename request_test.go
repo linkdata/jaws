@@ -707,7 +707,11 @@ func checkHtml(is *is.I, rq *testRequest, h template.HTML, tag interface{}, txt 
 		}
 		fmt.Printf("checkHtml(%q, %v@%p, %q) did not match any of %d elements:\n", hs, tag, tag, txt, len(elems))
 		for i, elem := range elems {
-			fmt.Printf("  %d: (%T) id=%q tags=%v data=%v\n", i, elem.UI(), elem.Jid(), elem.Tags(), elem.Data)
+			fmt.Printf("  %d: (%T) id=%q tags=%v\n", i, elem.UI(), elem.Jid(), elem.Tags())
+		}
+		fmt.Printf("tagMap:\n")
+		for tag, elems := range rq.tagMap {
+			fmt.Printf(" [%v@%p]: %v\n", tag, tag, elems)
 		}
 		is.Fail()
 	}
@@ -941,13 +945,15 @@ func TestRequest_Date(t *testing.T) {
 	gotCall := make(chan struct{})
 	defer close(gotCall)
 	h := rq.Date(elemId, &av, func(rq *Request, jid string, val time.Time) error {
+		defer func() {
+			gotCall <- struct{}{}
+		}()
 		is.True(rq.GetElement(ParseJid(jid)) != nil)
 		if !val.IsZero() {
 			is.Equal(val.Year(), 1970)
 			is.Equal(val.Month(), time.January)
 			is.Equal(val.Day(), 2)
 		}
-		gotCall <- struct{}{}
 		return nil
 	}, "")
 
@@ -965,7 +971,7 @@ func TestRequest_Date(t *testing.T) {
 	}
 
 	chk(h, elemId, nowTxt)
-	is.Equal(av.Load().(time.Time).Round(time.Second), time.Now().Round(time.Second))
+	is.Equal(av.Load().(time.Time).Round(testTimeout), time.Now().Round(testTimeout))
 	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "1970-01-02"}
 	select {
 	case <-time.NewTimer(testTimeout).C:

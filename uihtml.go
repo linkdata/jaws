@@ -16,13 +16,11 @@ import (
 type UiHtml struct {
 	Tags    []interface{}
 	EventFn EventFn
+	Attrs   []string
 }
 
-func NewUiHtml(up Params) UiHtml {
-	return UiHtml{
-		Tags:    up.Tags(),
-		EventFn: up.ef,
-	}
+func NewUiHtml() UiHtml {
+	return UiHtml{}
 }
 
 func htmlValueString(val interface{}) (s string) {
@@ -66,24 +64,120 @@ func writeUiDebug(e *Element, w io.Writer) {
 	}
 }
 
-func (ui *UiHtml) WriteHtmlInner(w io.Writer, e *Element, htmltag, htmltype string, htmlinner template.HTML, data []interface{}) {
-	maybePanic(WriteHtmlInner(w, e.Jid(), htmltag, htmltype, htmlinner, e.Attrs()...))
+func (ui *UiHtml) WriteHtmlInner(w io.Writer, e *Element, htmltag, htmltype string, htmlinner template.HTML, params ...interface{}) {
+	writeUiDebug(e, w)
+	maybePanic(WriteHtmlInner(w, e.Jid(), htmltag, htmltype, htmlinner, ui.Attrs...))
 }
 
-func (ui *UiHtml) WriteHtmlSelect(w io.Writer, e *Element, nba *NamedBoolArray, data ...interface{}) {
-	maybePanic(WriteHtmlSelect(w, e.Jid(), nba, e.Attrs()...))
+func (ui *UiHtml) WriteHtmlSelect(w io.Writer, e *Element, nba *NamedBoolArray, params ...interface{}) {
+	writeUiDebug(e, w)
+	maybePanic(WriteHtmlSelect(w, e.Jid(), nba, ui.Attrs...))
 }
 
-func (ui *UiHtml) WriteHtmlInput(w io.Writer, e *Element, htmltype, htmlval string, data ...interface{}) {
-	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, htmlval, e.Attrs()...))
+func (ui *UiHtml) WriteHtmlInput(w io.Writer, e *Element, htmltype, htmlval string, params ...interface{}) {
+	writeUiDebug(e, w)
+	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, htmlval, ui.Attrs...))
 }
 
 func (ui *UiHtml) JawsTags(rq *Request, inTags []interface{}) []interface{} {
 	return append(inTags, ui.Tags...)
 }
 
-func (ui *UiHtml) JawsRender(e *Element, w io.Writer) {
-	panic(fmt.Errorf("jaws: UiHtml.JawsRender(%v, %v) called", e, w))
+func (ui *UiHtml) ExtractParams(rq *Request, vp ValueProxy, params []interface{}) []interface{} {
+	if tagger, ok := vp.(Tagger); ok {
+		ui.Tags = tagger.JawsTags(rq, ui.Tags)
+	}
+	var remains int
+	for i := range params {
+		switch data := params[i].(type) {
+		case Tag:
+			ui.Tags = append(ui.Tags, data.Value)
+		case template.HTML:
+			ui.Attrs = append(ui.Attrs, string(data))
+		case string:
+			ui.Attrs = append(ui.Attrs, data)
+		case EventFn:
+			ui.EventFn = data
+		case []string:
+			ui.Attrs = append(ui.Attrs, data...)
+		case []template.HTML:
+			for _, s := range data {
+				ui.Attrs = append(ui.Attrs, string(s))
+			}
+		case func(*Request, string) error: // ClickFn
+			if data != nil {
+				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+					if wht == what.Click {
+						err = data(rq, jid)
+					}
+					return
+				}
+			}
+		case func(*Request, string, string) error: // InputTextFn
+			if data != nil {
+				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+					if wht == what.Input {
+						err = data(rq, jid, val)
+					}
+					return
+				}
+			}
+		case func(*Request, string, bool) error: // InputBoolFn
+			if data != nil {
+				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+					if wht == what.Input {
+						var v bool
+						if val != "" {
+							if v, err = strconv.ParseBool(val); err != nil {
+								return
+							}
+						}
+						err = data(rq, jid, v)
+					}
+					return
+				}
+			}
+		case func(*Request, string, float64) error: // InputFloatFn
+			if data != nil {
+				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+					if wht == what.Input {
+						var v float64
+						if val != "" {
+							if v, err = strconv.ParseFloat(val, 64); err != nil {
+								return
+							}
+						}
+						err = data(rq, jid, v)
+					}
+					return
+				}
+			}
+		case func(*Request, string, time.Time) error: // InputDateFn
+			if data != nil {
+				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+					if wht == what.Input {
+						var v time.Time
+						if val != "" {
+							if v, err = time.Parse(ISO8601, val); err != nil {
+								return
+							}
+						}
+						err = data(rq, jid, v)
+					}
+					return
+				}
+			}
+
+		default:
+			params[remains] = params[i]
+			remains++
+		}
+	}
+	return params[:remains]
+}
+
+func (ui *UiHtml) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+	panic(fmt.Errorf("jaws: UiHtml.JawsRender(%v) called", e))
 }
 
 func (ui *UiHtml) JawsUpdate(u Updater) {

@@ -9,19 +9,19 @@ type UiText struct {
 	UiInputText
 }
 
-func (ui *UiText) JawsRender(e *Element, w io.Writer) {
-	ui.UiInputText.WriteHtmlInput(e, w, "text")
+func (ui *UiText) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+	ui.UiInputText.WriteHtmlInput(e, w, "text", params...)
 }
 
-func NewUiText(up Params) (ui *UiText) {
+func NewUiText(vp ValueProxy) (ui *UiText) {
 	ui = &UiText{
 		UiInputText: UiInputText{
-			UiInput: NewUiInput(up),
+			UiInput: NewUiInput(vp),
 		},
 	}
 	return
 }
 
 func (rq *Request) Text(value interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiText(NewParams(value, params)))
+	return rq.UI(NewUiText(MakeValueProxy(value)), params...)
 }

@@ -5,10 +5,9 @@ type UiInput struct {
 	ValueProxy
 }
 
-func NewUiInput(up Params) UiInput {
+func NewUiInput(vp ValueProxy) UiInput {
 	return UiInput{
-		UiHtml:     NewUiHtml(up),
-		ValueProxy: up.ValueProxy(),
+		ValueProxy: vp,
 	}
 }
 

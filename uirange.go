@@ -9,19 +9,19 @@ type UiRange struct {
 	UiInputFloat
 }
 
-func (ui *UiRange) JawsRender(e *Element, w io.Writer) {
-	ui.UiInputFloat.WriteHtmlInput(e, w, "range")
+func (ui *UiRange) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+	ui.UiInputFloat.WriteHtmlInput(e, w, "range", params...)
 }
 
-func NewUiRange(up Params) (ui *UiRange) {
+func NewUiRange(vp ValueProxy) (ui *UiRange) {
 	ui = &UiRange{
 		UiInputFloat: UiInputFloat{
-			UiInput: NewUiInput(up),
+			UiInput: NewUiInput(vp),
 		},
 	}
 	return
 }
 
 func (rq *Request) Range(value interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiRange(NewParams(value, params)), params...)
+	return rq.UI(NewUiRange(MakeValueProxy(value)), params...)
 }
