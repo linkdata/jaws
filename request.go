@@ -33,12 +33,12 @@ type Request struct {
 	JawsKey   uint64           // (read-only) a random number used in the WebSocket URI to identify this Request
 	Created   time.Time        // (read-only) when the Request was created, used for automatic cleanup
 	Initial   *http.Request    // (read-only) initial HTTP request passed to Jaws.NewRequest
-	Active    *http.Request    // (read-only) WebSocket HTTP request passed to Jaws.UseRequest
 	remoteIP  net.IP           // (read-only) remote IP, or nil
 	session   *Session         // (read-only) session, if established
 	sendCh    chan Message     // (read-only) direct send message channel
 	dirty     uint64           // dirty counter
 	mu        deadlock.RWMutex // protects following
+	wsreq     *http.Request    // (read-only) WebSocket HTTP request passed to Jaws.UseRequest
 	connectFn ConnectFn        // a ConnectFn to call before starting message processing for the Request
 	elems     []*Element
 	tagMap    map[interface{}][]*Element
@@ -96,7 +96,7 @@ func (rq *Request) start(hr *http.Request) (err error) {
 	}
 	rq.mu.Lock()
 	if equalIP(rq.remoteIP, actualIP) {
-		rq.Active = hr
+		rq.wsreq = hr
 	} else {
 		err = fmt.Errorf("/jaws/%s: expected IP %q, got %q", rq.JawsKeyString(), rq.remoteIP.String(), actualIP.String())
 	}
@@ -123,7 +123,8 @@ func (rq *Request) recycle() {
 	rq.JawsKey = 0
 	rq.connectFn = nil
 	rq.Initial = nil
-	rq.Active = nil
+	rq.wsreq = nil
+	rq.dirty = 0
 	rq.remoteIP = nil
 	rq.elems = rq.elems[:0]
 	rq.killSessionLocked()
@@ -188,8 +189,8 @@ func (rq *Request) getDoneCh() (jawsDoneCh, ctxDoneCh <-chan struct{}) {
 		panic("Request.Send(): request is dead")
 	}
 	jawsDoneCh = rq.Jaws.Done()
-	if rq.Active != nil {
-		ctxDoneCh = rq.Active.Context().Done()
+	if rq.wsreq != nil {
+		ctxDoneCh = rq.wsreq.Context().Done()
 	}
 	return
 }
@@ -369,6 +370,17 @@ func (rq *Request) HasTag(elem *Element, tag interface{}) (yes bool) {
 	return
 }
 
+// Dirty marks all Elements with the given tags as dirty.
+func (rq *Request) Dirty(tags ...interface{}) {
+	rq.mu.Lock()
+	for _, tag := range tags {
+		for _, e := range rq.tagMap[tag] {
+			e.Dirty()
+		}
+	}
+	rq.mu.Unlock()
+}
+
 // Tag adds the given tags to the given Element.
 func (rq *Request) Tag(elem *Element, tags ...interface{}) {
 	if elem != nil {
@@ -399,8 +411,8 @@ func (rq *Request) GetElements(tag interface{}) (elems []*Element) {
 // Done returns the Request completion channel.
 func (rq *Request) Done() (ch <-chan struct{}) {
 	rq.mu.RLock()
-	if rq.Active != nil {
-		ch = rq.Active.Context().Done()
+	if rq.wsreq != nil {
+		ch = rq.wsreq.Context().Done()
 	}
 	rq.mu.RUnlock()
 	return

@@ -346,6 +346,12 @@ func (jw *Jaws) Broadcast(msg Message) {
 
 // Dirty marks all Elements that have one or more of the given tags as dirty.
 func (jw *Jaws) Dirty(tags ...interface{}) {
+	// mark pending request elements as dirty
+	jw.mu.RLock()
+	for _, rq := range jw.reqs {
+		rq.Dirty(tags...)
+	}
+	jw.mu.RUnlock()
 	for _, tag := range tags {
 		jw.Broadcast(Message{
 			Tag:  tag,
