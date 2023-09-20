@@ -4,12 +4,10 @@ import (
 	"html/template"
 	"io"
 	"strconv"
-	"strings"
 )
 
 type UiImg struct {
-	UiHtml
-	ValueProxy
+	UiValueProxy
 }
 
 func (ui *UiImg) SrcAttr(e *Element) string {
@@ -22,15 +20,15 @@ func (ui *UiImg) SrcAttr(e *Element) string {
 	default:
 		panic("UiImg: src not a string")
 	}
-	if strings.HasPrefix(src, "\"") {
-		return src
+	if len(src) < 1 || src[0] != '"' {
+		return strconv.Quote(src)
 	}
-	return strconv.Quote(src)
+	return src
 }
 
 func (ui *UiImg) JawsRender(e *Element, w io.Writer, params ...interface{}) {
-	ui.ExtractParams(e.Request, ui.ValueProxy, params)
-	maybePanic(WriteHtmlInner(w, e.Jid(), "img", "", "", append(ui.Attrs, "src="+ui.SrcAttr(e))...))
+	attrs := append(ui.parseParams(e, params), "src="+ui.SrcAttr(e))
+	maybePanic(WriteHtmlInner(w, e.Jid(), "img", "", "", attrs...))
 }
 
 func (ui *UiImg) JawsUpdate(u Updater) {
@@ -39,8 +37,9 @@ func (ui *UiImg) JawsUpdate(u Updater) {
 
 func NewUiImg(vp ValueProxy) *UiImg {
 	return &UiImg{
-		UiHtml:     NewUiHtml(),
-		ValueProxy: vp,
+		UiValueProxy{
+			ValueProxy: vp,
+		},
 	}
 }
 

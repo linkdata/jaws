@@ -14,13 +14,7 @@ import (
 )
 
 type UiHtml struct {
-	Tags    []interface{}
 	EventFn EventFn
-	Attrs   []string
-}
-
-func NewUiHtml() UiHtml {
-	return UiHtml{}
 }
 
 func htmlValueString(val interface{}) (s string) {
@@ -64,46 +58,36 @@ func writeUiDebug(e *Element, w io.Writer) {
 	}
 }
 
-func (ui *UiHtml) WriteHtmlInner(w io.Writer, e *Element, htmltag, htmltype string, htmlinner template.HTML, params ...interface{}) {
+func (ui *UiHtml) WriteHtmlInner(w io.Writer, e *Element, htmltag, htmltype string, htmlinner template.HTML, attrs ...string) {
 	writeUiDebug(e, w)
-	maybePanic(WriteHtmlInner(w, e.Jid(), htmltag, htmltype, htmlinner, ui.Attrs...))
+	maybePanic(WriteHtmlInner(w, e.Jid(), htmltag, htmltype, htmlinner, attrs...))
 }
 
-func (ui *UiHtml) WriteHtmlSelect(w io.Writer, e *Element, nba *NamedBoolArray, params ...interface{}) {
+func (ui *UiHtml) WriteHtmlSelect(w io.Writer, e *Element, nba *NamedBoolArray, attrs ...string) {
 	writeUiDebug(e, w)
-	maybePanic(WriteHtmlSelect(w, e.Jid(), nba, ui.Attrs...))
+	maybePanic(WriteHtmlSelect(w, e.Jid(), nba, attrs...))
 }
 
-func (ui *UiHtml) WriteHtmlInput(w io.Writer, e *Element, htmltype, htmlval string, params ...interface{}) {
+func (ui *UiHtml) WriteHtmlInput(w io.Writer, e *Element, htmltype, htmlval string, attrs ...string) {
 	writeUiDebug(e, w)
-	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, htmlval, ui.Attrs...))
+	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, htmlval, attrs...))
 }
 
-func (ui *UiHtml) JawsTags(rq *Request, inTags []interface{}) []interface{} {
-	return append(inTags, ui.Tags...)
-}
-
-func (ui *UiHtml) ExtractParams(rq *Request, vp ValueProxy, params []interface{}) []interface{} {
-	if tagger, ok := vp.(Tagger); ok {
-		ui.Tags = tagger.JawsTags(rq, ui.Tags)
-	}
-	var remains int
+func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []string) {
 	for i := range params {
 		switch data := params[i].(type) {
-		case Tag:
-			ui.Tags = append(ui.Tags, data.Value)
 		case template.HTML:
-			ui.Attrs = append(ui.Attrs, string(data))
-		case string:
-			ui.Attrs = append(ui.Attrs, data)
-		case EventFn:
-			ui.EventFn = data
-		case []string:
-			ui.Attrs = append(ui.Attrs, data...)
+			attrs = append(attrs, string(data))
 		case []template.HTML:
 			for _, s := range data {
-				ui.Attrs = append(ui.Attrs, string(s))
+				attrs = append(attrs, string(s))
 			}
+		case string:
+			attrs = append(attrs, data)
+		case []string:
+			attrs = append(attrs, data...)
+		case EventFn:
+			ui.EventFn = data
 		case func(*Request, string) error: // ClickFn
 			if data != nil {
 				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
@@ -167,13 +151,11 @@ func (ui *UiHtml) ExtractParams(rq *Request, vp ValueProxy, params []interface{}
 					return
 				}
 			}
-
 		default:
-			params[remains] = params[i]
-			remains++
+			elem.Tag(data)
 		}
 	}
-	return params[:remains]
+	return
 }
 
 func (ui *UiHtml) JawsRender(e *Element, w io.Writer, params ...interface{}) {
@@ -189,7 +171,7 @@ func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) error {
 		return ui.EventFn(e.Request, wht, e.Jid().String(), val)
 	}
 	// see if one of our tags is a handler
-	tags := append(e.Tags(), ui.Tags...)
+	tags := e.Tags()
 	if wht == what.Click {
 		for _, tag := range tags {
 			if ch, ok := tag.(ClickHandler); ok {

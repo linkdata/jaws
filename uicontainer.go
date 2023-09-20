@@ -22,10 +22,10 @@ func (ui *UiContainer) JawsTags(rq *Request, tags []interface{}) []interface{} {
 }
 
 func (ui *UiContainer) JawsRender(e *Element, w io.Writer, params ...interface{}) {
-	ui.ExtractParams(e.Request, nil, params)
+	attrs := ui.parseParams(e, params)
 	writeUiDebug(e, w)
 	b := e.jid.AppendStartTagAttr(nil, ui.OuterHTMLTag)
-	for _, attr := range ui.Attrs {
+	for _, attr := range attrs {
 		b = append(b, ' ')
 		b = append(b, attr...)
 	}
@@ -111,7 +111,6 @@ func NewUiContainer(outerTag string, cont Container) *UiContainer {
 	return &UiContainer{
 		OuterHTMLTag: outerTag,
 		Container:    cont,
-		UiHtml:       NewUiHtml(),
 	}
 }
 

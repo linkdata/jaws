@@ -12,10 +12,10 @@ type UiInputText struct {
 }
 
 func (ui *UiInputText) WriteHtmlInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
-	ui.ExtractParams(e.Request, ui.ValueProxy, params)
+	attrs := ui.parseParams(e, params)
 	val := ui.Get(e)
 	if s, ok := val.(string); ok {
-		ui.UiInput.WriteHtmlInput(w, e, htmltype, s, params...)
+		ui.UiInput.WriteHtmlInput(w, e, htmltype, s, attrs...)
 		return
 	}
 	panic(fmt.Errorf("jaws: UiInputText: expected string, got %T", val))

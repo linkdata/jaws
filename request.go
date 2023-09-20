@@ -278,11 +278,8 @@ func (rq *Request) Register(tagitem interface{}, params ...interface{}) Jid {
 	switch data := tagitem.(type) {
 	case Jid:
 		if elem := rq.GetElement(data); elem != nil {
-			up := NewParams(nil, params)
-			if up.ef != nil {
-				if uib, ok := elem.UI().(*UiHtml); ok {
-					uib.EventFn = up.ef
-				}
+			if uib, ok := elem.UI().(*UiHtml); ok {
+				uib.parseParams(elem, params)
 			}
 			return data
 		}
@@ -293,26 +290,16 @@ func (rq *Request) Register(tagitem interface{}, params ...interface{}) Jid {
 		tagitem = Tag{string(data)}
 	}
 
-	up := NewParams(tagitem, params)
-	tags := up.Tags()
-	if len(tags) == 0 {
-		tags = append(tags, tagitem)
-	}
-
-	rq.mu.Lock()
-	defer rq.mu.Unlock()
-	for _, tag := range tags {
-		if elems, ok := rq.tagMap[tag]; ok {
-			if up.ef != nil {
-				for _, elem := range elems {
-					if uib, ok := elem.UI().(*UiHtml); ok {
-						uib.EventFn = up.ef
-					}
-				}
-			}
+	for _, elem := range rq.GetElements(tagitem) {
+		if uib, ok := elem.UI().(*UiHtml); ok {
+			uib.parseParams(elem, params)
 		}
 	}
-	elem := rq.newElementLocked(&UiHtml{Tags: tags, EventFn: up.ef})
+
+	uib := &UiHtml{}
+	elem := rq.NewElement(uib)
+	elem.Tag(tagitem)
+	uib.parseParams(elem, params)
 	return elem.jid
 }
 
@@ -364,6 +351,41 @@ func (rq *Request) getElementsLocked(tag interface{}) (elems []*Element) {
 		elems = append(elems, el...)
 	}
 	return
+}
+
+func (rq *Request) hasTagLocked(elem *Element, tag interface{}) bool {
+	for _, e := range rq.tagMap[tag] {
+		if elem == e {
+			return true
+		}
+	}
+	return false
+}
+
+func (rq *Request) HasTag(elem *Element, tag interface{}) (yes bool) {
+	rq.mu.RLock()
+	yes = rq.hasTagLocked(elem, tag)
+	rq.mu.RUnlock()
+	return
+}
+
+// Tag adds the given tags to the given Element.
+func (rq *Request) Tag(elem *Element, tags ...interface{}) {
+	if elem != nil {
+		var expandedtags []interface{}
+		expandedtags = TagExpand(tags, expandedtags)
+		rq.mu.Lock()
+		defer rq.mu.Unlock()
+		for _, e := range rq.elems {
+			if e == elem {
+				for _, tag := range expandedtags {
+					if !rq.hasTagLocked(elem, tag) {
+						rq.tagMap[tag] = append(rq.tagMap[tag], elem)
+					}
+				}
+			}
+		}
+	}
 }
 
 // GetElements returns a list of the UI elements in the Request that have the given tag.

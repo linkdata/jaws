@@ -9,8 +9,7 @@ type UiHtmlInner struct {
 }
 
 func (ui *UiHtmlInner) WriteHtmlInner(e *Element, w io.Writer, htmltag, htmltype string, params ...interface{}) {
-	ui.ExtractParams(e.Request, ui.ValueProxy, params)
-	ui.UiHtml.WriteHtmlInner(w, e, htmltag, htmltype, e.ToHtml(ui.ValueProxy.JawsGet(e)), params...)
+	ui.UiHtml.WriteHtmlInner(w, e, htmltag, htmltype, e.ToHtml(ui.ValueProxy.JawsGet(e)), ui.parseParams(e, params)...)
 }
 
 func (ui *UiHtmlInner) JawsUpdate(u Updater) {

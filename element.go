@@ -22,6 +22,16 @@ func (e *Element) String() string {
 	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", e.ui, e.jid, e.Tags())
 }
 
+// Tag adds the given tags to the Element.
+func (e *Element) Tag(tags ...interface{}) {
+	e.Request.Tag(e, tags...)
+}
+
+// HasTag returns true if this Element has the given tag.
+func (e *Element) HasTag(tag interface{}) bool {
+	return e.Request.HasTag(e, tag)
+}
+
 func (e *Element) Tags() (tags []interface{}) {
 	if tagger, ok := e.ui.(Tagger); ok {
 		tags = tagger.JawsTags(e.Request, tags)

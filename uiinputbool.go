@@ -13,10 +13,9 @@ type UiInputBool struct {
 }
 
 func (ui *UiInputBool) WriteHtmlInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
-	ui.ExtractParams(e.Request, ui.ValueProxy, params)
+	attrs := ui.parseParams(e, params)
 	val := ui.Get(e)
 	if b, ok := val.(bool); ok {
-		attrs := ui.Attrs
 		if b {
 			attrs = append(attrs, "checked")
 		}

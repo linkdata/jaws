@@ -12,8 +12,8 @@ type UiInputSelect struct {
 }
 
 func (ui *UiInputSelect) JawsRender(e *Element, w io.Writer, params ...interface{}) {
-	ui.ExtractParams(e.Request, ui.NamedBoolArray, params)
-	ui.UiHtml.WriteHtmlSelect(w, e, ui.NamedBoolArray, params...)
+	attrs := ui.parseParams(e, params)
+	ui.UiHtml.WriteHtmlSelect(w, e, ui.NamedBoolArray, attrs...)
 }
 
 func (ui *UiInputSelect) JawsEvent(e *Element, wht what.What, val string) (err error) {
