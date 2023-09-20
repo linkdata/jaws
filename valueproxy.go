@@ -15,9 +15,6 @@ type atomicProxy struct{ *atomic.Value }
 
 func (vp atomicProxy) JawsGet(e *Element) interface{}           { return vp.Load() }
 func (vp atomicProxy) JawsSet(e *Element, val interface{}) bool { return vp.Swap(val) != val }
-func (vp atomicProxy) JawsTags(rq *Request, inTags []interface{}) (outTags []interface{}) {
-	return append(inTags, vp.Value)
-}
 
 type readonlyProxy struct{ Value interface{} }
 

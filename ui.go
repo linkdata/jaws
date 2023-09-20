@@ -17,13 +17,5 @@ func (rq *Request) UI(ui UI, params ...interface{}) template.HTML {
 	elem := rq.NewElement(ui)
 	var b bytes.Buffer
 	ui.JawsRender(elem, &b, params...)
-	if tagger, ok := ui.(Tagger); ok {
-		tags := tagger.JawsTags(rq, nil)
-		rq.mu.Lock()
-		for _, tag := range tags {
-			rq.tagMap[tag] = append(rq.tagMap[tag], elem)
-		}
-		rq.mu.Unlock()
-	}
 	return template.HTML(b.String())
 }

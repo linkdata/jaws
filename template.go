@@ -44,16 +44,6 @@ func (t Template) ToHTML(e *Element) template.HTML {
 	return template.HTML(b.String())
 }
 
-// interface Tagger
-var _ Tagger = (*Template)(nil) // ensure
-
-func (t Template) JawsTags(rq *Request, inTags []interface{}) []interface{} {
-	if tagger, ok := t.Dot.(Tagger); ok {
-		return tagger.JawsTags(rq, inTags)
-	}
-	return append(inTags, t)
-}
-
 // interface UI
 var _ UI = (*Template)(nil) // ensure
 

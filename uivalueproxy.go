@@ -1,7 +1,5 @@
 package jaws
 
-import "github.com/linkdata/deadlock"
-
 type UiValueProxy struct {
 	UiHtml
 	ValueProxy
@@ -10,12 +8,9 @@ type UiValueProxy struct {
 
 func (ui *UiValueProxy) parseParams(elem *Element, params []interface{}) (attrs []string) {
 	if tags := TagExpand(ui.ValueProxy, nil); len(tags) > 0 {
-		elem.Tag(tags...)
 		ui.ValueProxyTag = tags[0]
-	} else if deadlock.Debug {
-		panic("ValueProxy yields no tags")
 	}
-	return ui.UiHtml.parseParams(elem, params)
+	return ui.UiHtml.parseParams(elem, append(params, ui.ValueProxy))
 }
 
 func (ui *UiValueProxy) JawsUpdate(u Updater) {

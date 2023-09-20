@@ -8,13 +8,6 @@ import (
 
 type Tag struct{ Value interface{} }
 
-func (rq *Request) Tags(params ...interface{}) (tags []Tag) {
-	for _, p := range params {
-		tags = append(tags, Tag{Value: p})
-	}
-	return
-}
-
 func TagString(tag interface{}) string {
 	if rv := reflect.ValueOf(tag); rv.IsValid() {
 		if rv.Kind() == reflect.Pointer {

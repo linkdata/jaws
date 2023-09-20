@@ -321,11 +321,6 @@ func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 		Request: rq,
 	}
 	rq.elems = append(rq.elems, elem)
-	if tagger, ok := ui.(Tagger); ok {
-		for _, tag := range tagger.JawsTags(rq, nil) {
-			rq.tagMap[tag] = append(rq.tagMap[tag], elem)
-		}
-	}
 	return
 }
 

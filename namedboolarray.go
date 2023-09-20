@@ -129,38 +129,3 @@ func (nba *NamedBoolArray) JawsSet(e *Element, value interface{}) (changed bool)
 	}
 	panic("NamedBoolArray.JawsSet(): not string")
 }
-
-func (nba *NamedBoolArray) JawsTags(rq *Request, inTags []interface{}) (outTags []interface{}) {
-	return append(inTags, nba)
-}
-
-/*
-func (nba *NamedBoolArray) radioEventFn(rq *Request, evt what.What, jid, val string, fn InputTextFn) (err error) {
-	if evt == what.Input && val != "" && strings.HasPrefix(jid, nba.prefix) {
-		var v bool
-		if v, err = strconv.ParseBool(val); err == nil {
-			name := strings.TrimPrefix(jid, nba.prefix)
-			nba.mu.Lock()
-			for _, nb := range nba.data {
-				nb.Checked = v && (nb.Name == name)
-			}
-			nba.mu.Unlock()
-			rq.SetBoolValue(jid, v)
-			if fn != nil {
-				err = fn(rq, jid, name)
-			}
-		}
-	}
-	return
-}
-
-// JawsRadioGroupData implements part of RadioGrouper. It returns itself.
-func (nba *NamedBoolArray) JawsRadioGroupData() *NamedBoolArray {
-	return nba
-}
-
-// JawsRadioGroupHandler implements part of RadioGrouper. It does nothing and returns nil.
-func (nba *NamedBoolArray) JawsRadioGroupHandler(rq *Request, boolName string) error {
-	return nil
-}
-*/

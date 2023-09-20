@@ -17,13 +17,8 @@ type UiContainer struct {
 	contents []*Element
 }
 
-func (ui *UiContainer) JawsTags(rq *Request, tags []interface{}) []interface{} {
-	return append(tags, ui.Container)
-}
-
 func (ui *UiContainer) JawsRender(e *Element, w io.Writer, params ...interface{}) {
-	e.Tag(ui.Container)
-	attrs := ui.parseParams(e, params)
+	attrs := ui.parseParams(e, append(params, ui.Container))
 	writeUiDebug(e, w)
 	b := e.jid.AppendStartTagAttr(nil, ui.OuterHTMLTag)
 	for _, attr := range attrs {

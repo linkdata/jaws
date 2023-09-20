@@ -14,7 +14,9 @@ import (
 )
 
 type UiHtml struct {
-	EventFn EventFn
+	ClickHandler ClickHandler
+	EventHandler EventHandler
+	EventFn      EventFn // legacy
 }
 
 func htmlValueString(val interface{}) (s string) {
@@ -47,7 +49,7 @@ func writeUiDebug(e *Element, w io.Writer) {
 	if deadlock.Debug {
 		var sb strings.Builder
 		_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", e.jid, e.ui)
-		for i, tag := range e.Tags() {
+		for i, tag := range e.Request.TagsOf(e) {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
@@ -86,6 +88,12 @@ func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []stri
 			attrs = append(attrs, data)
 		case []string:
 			attrs = append(attrs, data...)
+		case ClickHandler:
+			ui.ClickHandler = data
+			elem.Tag(data)
+		case EventHandler:
+			ui.EventHandler = data
+			elem.Tag(data)
 		case EventFn:
 			ui.EventFn = data
 		case func(*Request, string) error: // ClickFn
@@ -170,19 +178,11 @@ func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) error {
 	if ui.EventFn != nil { // LEGACY
 		return ui.EventFn(e.Request, wht, e.Jid().String(), val)
 	}
-	// see if one of our tags is a handler
-	tags := e.Tags()
-	if wht == what.Click {
-		for _, tag := range tags {
-			if ch, ok := tag.(ClickHandler); ok {
-				return ch.JawsClick(e, val)
-			}
-		}
+	if wht == what.Click && ui.ClickHandler != nil {
+		return ui.ClickHandler.JawsClick(e, val)
 	}
-	for _, tag := range tags {
-		if eh, ok := tag.(EventHandler); ok {
-			return eh.JawsEvent(e, wht, val)
-		}
+	if ui.EventHandler != nil {
+		return ui.EventHandler.JawsEvent(e, wht, val)
 	}
 	if deadlock.Debug && wht != what.Click {
 		log.Printf("jaws: unhandled JawsEvent(%v, %q, %q)\n", e, wht, val)
