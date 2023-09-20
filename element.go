@@ -49,7 +49,7 @@ func (e *Element) UI() UI {
 	return e.ui
 }
 
-// Dirty marks the Element as needing UI().JawsUpdate() to be called.
+// Dirty marks this Element (only) as needing UI().JawsUpdate() to be called.
 func (e *Element) Dirty() {
 	atomic.StoreUint64(&e.dirty, atomic.AddUint64(&e.Request.dirty, 1))
 }
