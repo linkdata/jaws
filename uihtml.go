@@ -88,12 +88,6 @@ func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []stri
 			attrs = append(attrs, data)
 		case []string:
 			attrs = append(attrs, data...)
-		case ClickHandler:
-			ui.ClickHandler = data
-			elem.Tag(data)
-		case EventHandler:
-			ui.EventHandler = data
-			elem.Tag(data)
 		case EventFn:
 			ui.EventFn = data
 		case func(*Request, string) error: // ClickFn
@@ -160,6 +154,12 @@ func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []stri
 				}
 			}
 		default:
+			if h, ok := data.(ClickHandler); ok {
+				ui.ClickHandler = h
+			}
+			if h, ok := data.(EventHandler); ok {
+				ui.EventHandler = h
+			}
 			elem.Tag(data)
 		}
 	}
