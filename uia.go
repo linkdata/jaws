@@ -15,7 +15,11 @@ func (ui *UiA) JawsRender(e *Element, w io.Writer, params ...interface{}) {
 
 func NewUiA(innerHtml ValueProxy) *UiA {
 	return &UiA{
-		NewUiHtmlInner(innerHtml),
+		UiHtmlInner{
+			UiValueProxy{
+				ValueProxy: innerHtml,
+			},
+		},
 	}
 }
 

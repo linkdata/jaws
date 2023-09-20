@@ -15,8 +15,12 @@ func (ui *UiCheckbox) JawsRender(e *Element, w io.Writer, params ...interface{})
 
 func NewUiCheckbox(vp ValueProxy) (ui *UiCheckbox) {
 	ui = &UiCheckbox{
-		UiInputBool: UiInputBool{
-			UiInput: NewUiInput(vp),
+		UiInputBool{
+			UiInput{
+				UiValueProxy{
+					ValueProxy: vp,
+				},
+			},
 		},
 	}
 	return

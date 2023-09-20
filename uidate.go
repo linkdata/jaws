@@ -17,8 +17,12 @@ func (ui *UiDate) JawsRender(e *Element, w io.Writer, params ...interface{}) {
 
 func NewUiDate(vp ValueProxy) (ui *UiDate) {
 	ui = &UiDate{
-		UiInputDate: UiInputDate{
-			UiInput: NewUiInput(vp),
+		UiInputDate{
+			UiInput{
+				UiValueProxy{
+					ValueProxy: vp,
+				},
+			},
 		},
 	}
 	return

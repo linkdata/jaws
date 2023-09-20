@@ -15,8 +15,12 @@ func (ui *UiRadio) JawsRender(e *Element, w io.Writer, params ...interface{}) {
 
 func NewUiRadio(vp ValueProxy) (ui *UiRadio) {
 	ui = &UiRadio{
-		UiInputBool: UiInputBool{
-			UiInput: NewUiInput(vp),
+		UiInputBool{
+			UiInput{
+				UiValueProxy{
+					ValueProxy: vp,
+				},
+			},
 		},
 	}
 	return

@@ -11,7 +11,11 @@ type UiSelect struct {
 func NewUiSelect(nba *NamedBoolArray) (ui *UiSelect) {
 	ui = &UiSelect{
 		UiInputSelect{
-			UiInput:        NewUiInput(nba),
+			UiInput: UiInput{
+				UiValueProxy{
+					ValueProxy: nba,
+				},
+			},
 			NamedBoolArray: nba,
 		},
 	}

@@ -13,9 +13,13 @@ func (ui *UiTd) JawsRender(e *Element, w io.Writer, params ...interface{}) {
 	ui.UiHtmlInner.WriteHtmlInner(e, w, "td", "", params...)
 }
 
-func NewUiTd(vp ValueProxy) *UiTd {
+func NewUiTd(innerHtml ValueProxy) *UiTd {
 	return &UiTd{
-		NewUiHtmlInner(vp),
+		UiHtmlInner{
+			UiValueProxy{
+				ValueProxy: innerHtml,
+			},
+		},
 	}
 }
 

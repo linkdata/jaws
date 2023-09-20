@@ -971,7 +971,10 @@ func TestRequest_Date(t *testing.T) {
 	}
 
 	chk(h, elemId, nowTxt)
-	is.Equal(av.Load().(time.Time).Round(testTimeout), time.Now().Round(testTimeout))
+
+	if timeDiff := time.Since(av.Load().(time.Time)); timeDiff > testTimeout {
+		is.Fail()
+	}
 	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "1970-01-02"}
 	select {
 	case <-time.NewTimer(testTimeout).C:

@@ -1,22 +1,7 @@
 package jaws
 
 type UiInput struct {
-	UiHtml
-	ValueProxy
-}
-
-func NewUiInput(vp ValueProxy) UiInput {
-	return UiInput{
-		ValueProxy: vp,
-	}
-}
-
-func (ui *UiInput) JawsUpdate(u Updater) {
-	u.SetValue(htmlValueString(ui.JawsGet(u.Element)))
-}
-
-func (ui *UiInput) Get(e *Element) interface{} {
-	return ui.ValueProxy.JawsGet(e)
+	UiValueProxy
 }
 
 func (ui *UiInput) Set(e *Element, value interface{}) (changed bool) {

@@ -15,8 +15,12 @@ func (ui *UiNumber) JawsRender(e *Element, w io.Writer, params ...interface{}) {
 
 func NewUiNumber(vp ValueProxy) (ui *UiNumber) {
 	ui = &UiNumber{
-		UiInputFloat: UiInputFloat{
-			UiInput: NewUiInput(vp),
+		UiInputFloat{
+			UiInput{
+				UiValueProxy{
+					ValueProxy: vp,
+				},
+			},
 		},
 	}
 	return

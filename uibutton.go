@@ -15,7 +15,11 @@ func (ui *UiButton) JawsRender(e *Element, w io.Writer, params ...interface{}) {
 
 func NewUiButton(innerHtml ValueProxy) *UiButton {
 	return &UiButton{
-		NewUiHtmlInner(innerHtml),
+		UiHtmlInner{
+			UiValueProxy{
+				ValueProxy: innerHtml,
+			},
+		},
 	}
 }
 
