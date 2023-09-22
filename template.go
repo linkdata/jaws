@@ -40,14 +40,14 @@ func (t Template) String() string {
 
 func (t Template) ToHTML(e *Element) template.HTML {
 	var b bytes.Buffer
-	t.JawsRender(e, &b)
+	t.JawsRender(e, &b, nil)
 	return template.HTML(b.String())
 }
 
 // interface UI
 var _ UI = (*Template)(nil) // ensure
 
-func (t Template) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+func (t Template) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	writeUiDebug(e, w)
 	maybePanic(t.Execute(w, With{Element: e, Dot: t.Dot}))
 }

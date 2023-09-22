@@ -9,7 +9,7 @@ type UiNumber struct {
 	UiInputFloat
 }
 
-func (ui *UiNumber) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+func (ui *UiNumber) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.UiInputFloat.WriteHtmlInput(e, w, "number", params...)
 }
 

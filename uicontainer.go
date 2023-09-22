@@ -17,7 +17,7 @@ type UiContainer struct {
 	contents []*Element
 }
 
-func (ui *UiContainer) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+func (ui *UiContainer) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	attrs := ui.parseParams(e, append(params, ui.Container))
 	writeUiDebug(e, w)
 	b := e.jid.AppendStartTagAttr(nil, ui.OuterHTMLTag)
@@ -31,7 +31,7 @@ func (ui *UiContainer) JawsRender(e *Element, w io.Writer, params ...interface{}
 		for _, cui := range ui.Container.JawsContains(e.Request) {
 			if elem := e.Request.NewElement(cui); elem != nil {
 				ui.contents = append(ui.contents, elem)
-				cui.JawsRender(elem, w)
+				cui.JawsRender(elem, w, nil)
 			}
 		}
 		b = b[:0]
@@ -88,7 +88,7 @@ func (ui *UiContainer) JawsUpdate(u Updater) {
 	var b bytes.Buffer
 	for _, elem := range toAppend {
 		b.Reset()
-		elem.ui.JawsRender(elem, &b)
+		elem.ui.JawsRender(elem, &b, nil)
 		u.Request.send(u.outCh, wsMsg{
 			Jid:  u.Jid(),
 			What: what.Append,

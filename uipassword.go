@@ -9,7 +9,7 @@ type UiPassword struct {
 	UiInputText
 }
 
-func (ui *UiPassword) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+func (ui *UiPassword) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.UiInputText.WriteHtmlInput(e, w, "password", params...)
 }
 

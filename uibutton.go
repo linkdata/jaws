@@ -9,7 +9,7 @@ type UiButton struct {
 	UiHtmlInner
 }
 
-func (ui *UiButton) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+func (ui *UiButton) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.UiHtmlInner.WriteHtmlInner(e, w, "button", "button", params...)
 }
 

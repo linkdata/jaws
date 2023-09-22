@@ -9,7 +9,7 @@ type UiCheckbox struct {
 	UiInputBool
 }
 
-func (ui *UiCheckbox) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+func (ui *UiCheckbox) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.UiInputBool.WriteHtmlInput(e, w, "checkbox", params...)
 }
 

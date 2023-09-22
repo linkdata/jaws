@@ -9,7 +9,7 @@ type UiRange struct {
 	UiInputFloat
 }
 
-func (ui *UiRange) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+func (ui *UiRange) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.UiInputFloat.WriteHtmlInput(e, w, "range", params...)
 }
 

@@ -9,7 +9,7 @@ type UiDiv struct {
 	UiHtmlInner
 }
 
-func (ui *UiDiv) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+func (ui *UiDiv) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.UiHtmlInner.WriteHtmlInner(e, w, "div", "", params...)
 }
 

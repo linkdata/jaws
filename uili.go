@@ -9,7 +9,7 @@ type UiLi struct {
 	UiHtmlInner
 }
 
-func (ui *UiLi) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+func (ui *UiLi) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.UiHtmlInner.WriteHtmlInner(e, w, "li", "", params...)
 }
 

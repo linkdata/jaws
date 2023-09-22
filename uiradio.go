@@ -9,7 +9,7 @@ type UiRadio struct {
 	UiInputBool
 }
 
-func (ui *UiRadio) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+func (ui *UiRadio) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.UiInputBool.WriteHtmlInput(e, w, "radio", params...)
 }
 

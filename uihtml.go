@@ -166,7 +166,7 @@ func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []stri
 	return
 }
 
-func (ui *UiHtml) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+func (ui *UiHtml) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	panic(fmt.Errorf("jaws: UiHtml.JawsRender(%v) called", e))
 }
 

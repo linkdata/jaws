@@ -11,7 +11,7 @@ type UiDate struct {
 	UiInputDate
 }
 
-func (ui *UiDate) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+func (ui *UiDate) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.UiInputDate.WriteHtmlInput(e, w, e.Jid(), "date", params...)
 }
 

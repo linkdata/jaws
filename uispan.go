@@ -9,7 +9,7 @@ type UiSpan struct {
 	UiHtmlInner
 }
 
-func (ui *UiSpan) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+func (ui *UiSpan) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.UiHtmlInner.WriteHtmlInner(e, w, "span", "", params...)
 }
 

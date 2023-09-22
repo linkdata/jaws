@@ -21,9 +21,9 @@ func (rq *Request) RadioGroup(nba *NamedBoolArray, params ...interface{}) (rl []
 }
 
 // Radio renders a HTML input element of type 'radio'.
-func (r RadioElement) Radio(attrs ...string) template.HTML {
+func (r RadioElement) Radio(params ...interface{}) template.HTML {
 	var sb strings.Builder
-	r.e.ui.(*UiRadio).JawsRender(r.e, &sb, append(attrs, r.nameAttr))
+	r.e.ui.(*UiRadio).JawsRender(r.e, &sb, append(params, r.nameAttr))
 	return template.HTML(sb.String())
 }
 

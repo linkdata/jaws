@@ -9,7 +9,7 @@ type UiA struct {
 	UiHtmlInner
 }
 
-func (ui *UiA) JawsRender(e *Element, w io.Writer, params ...interface{}) {
+func (ui *UiA) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.UiHtmlInner.WriteHtmlInner(e, w, "a", "", params...)
 }
 
