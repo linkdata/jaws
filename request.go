@@ -37,7 +37,7 @@ type Request struct {
 	remoteIP  net.IP           // (read-only) remote IP, or nil
 	session   *Session         // (read-only) session, if established
 	sendCh    chan Message     // (read-only) direct send message channel
-	dirty     uint64           // dirty counter
+	dirty     uint64           // (atomic) dirty counter
 	mu        deadlock.RWMutex // protects following
 	wsreq     *http.Request    // (read-only) WebSocket HTTP request passed to Jaws.UseRequest
 	connectFn ConnectFn        // a ConnectFn to call before starting message processing for the Request
