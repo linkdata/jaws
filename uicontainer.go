@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/what"
 )
 
 type UiContainer struct {
@@ -45,7 +44,7 @@ func (ui *UiContainer) JawsRender(e *Element, w io.Writer, params []interface{})
 
 func (ui *UiContainer) JawsUpdate(u Updater) {
 	var toRemove, toAppend []*Element
-	var orderData []byte
+	var orderData []Jid
 
 	oldMap := make(map[UI]*Element)
 	newMap := make(map[UI]struct{})
@@ -62,7 +61,7 @@ func (ui *UiContainer) JawsUpdate(u Updater) {
 		}
 	}
 	ui.contents = ui.contents[:0]
-	for i, cui := range newContents {
+	for _, cui := range newContents {
 		var elem *Element
 		if elem = oldMap[cui]; elem == nil {
 			if elem = u.Request.NewElement(cui); elem == nil {
@@ -71,35 +70,21 @@ func (ui *UiContainer) JawsUpdate(u Updater) {
 			toAppend = append(toAppend, elem)
 		}
 		ui.contents = append(ui.contents, elem)
-		if i > 0 {
-			orderData = append(orderData, ' ')
-		}
-		orderData = elem.jid.AppendInt(orderData)
+		orderData = append(orderData, elem.jid)
 	}
 	ui.mu.Unlock()
 
 	for _, elem := range toRemove {
-		u.Request.send(u.outCh, wsMsg{
-			Jid:  elem.jid,
-			What: what.Remove,
-		})
+		u.Remove(elem.jid)
 	}
 
 	for _, elem := range toAppend {
 		var sb strings.Builder
 		elem.ui.JawsRender(elem, &sb, nil)
-		u.Request.send(u.outCh, wsMsg{
-			Jid:  u.Jid(),
-			What: what.Append,
-			Data: sb.String(),
-		})
+		u.Append(template.HTML(sb.String()))
 	}
 
-	u.Request.send(u.outCh, wsMsg{
-		Jid:  u.Jid(),
-		What: what.Order,
-		Data: string(orderData),
-	})
+	u.Order(orderData)
 }
 
 func NewUiContainer(outerTag string, cont Container) *UiContainer {

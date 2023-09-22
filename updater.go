@@ -57,3 +57,30 @@ func (u *Updater) Replace(htmlCode template.HTML) {
 	}
 	u.send(what.Replace, string(htmlCode))
 }
+
+// Append appends a new HTML element as a child to the current one.
+func (u *Updater) Append(htmlCode template.HTML) {
+	u.send(what.Append, string(htmlCode))
+}
+
+// Order reorders the HTML child elements of the current Element.
+func (u *Updater) Order(jidList []Jid) {
+	if len(jidList) > 0 {
+		var b []byte
+		for i, jid := range jidList {
+			if i > 0 {
+				b = append(b, ' ')
+			}
+			b = jid.AppendInt(b)
+		}
+		u.send(what.Order, string(b))
+	}
+}
+
+// Remove removes the HTML element with the given Jid.
+func (u *Updater) Remove(jid Jid) {
+	u.Request.send(u.outCh, wsMsg{
+		Jid:  jid,
+		What: what.Remove,
+	})
+}
