@@ -375,18 +375,14 @@ func (rq *Request) Dirty(tags ...interface{}) {
 
 // Tag adds the given tags to the given Element.
 func (rq *Request) Tag(elem *Element, tags ...interface{}) {
-	if elem != nil {
+	if elem != nil && elem.Request == rq {
 		var expandedtags []interface{}
 		expandedtags = TagExpand(tags, expandedtags)
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
-		for _, e := range rq.elems {
-			if e == elem {
-				for _, tag := range expandedtags {
-					if !rq.hasTagLocked(elem, tag) {
-						rq.tagMap[tag] = append(rq.tagMap[tag], elem)
-					}
-				}
+		for _, tag := range expandedtags {
+			if !rq.hasTagLocked(elem, tag) {
+				rq.tagMap[tag] = append(rq.tagMap[tag], elem)
 			}
 		}
 	}
