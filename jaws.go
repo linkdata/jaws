@@ -454,10 +454,9 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	subs := map[chan Message]*Request{}
 
 	killSub := func(msgCh chan Message) {
-		if rq, ok := subs[msgCh]; ok {
+		if _, ok := subs[msgCh]; ok {
 			delete(subs, msgCh)
 			close(msgCh)
-			jw.deactivate(rq)
 		}
 	}
 

@@ -440,6 +440,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 
 	defer func() {
 		rq.killSession()
+		rq.Jaws.deactivate(rq)
 		rq.Jaws.unsubscribe(broadcastMsgCh)
 		close(eventCallCh)
 		for {
