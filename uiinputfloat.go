@@ -14,7 +14,7 @@ type UiInputFloat struct {
 
 func (ui *UiInputFloat) WriteHtmlInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
 	attrs := ui.parseParams(e, params)
-	val := ui.Get(e)
+	val := ui.JawsGet(e)
 	if n, ok := val.(float64); ok {
 		ui.UiInput.WriteHtmlInput(w, e, htmltype, strconv.FormatFloat(n, 'f', -1, 64), attrs...)
 		return
@@ -33,7 +33,7 @@ func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err er
 				return
 			}
 		}
-		ui.Set(e, v)
+		ui.JawsSet(e, v)
 	}
 	return
 }

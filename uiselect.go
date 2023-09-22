@@ -12,9 +12,7 @@ func NewUiSelect(nba *NamedBoolArray) (ui *UiSelect) {
 	ui = &UiSelect{
 		UiInputSelect{
 			UiInput: UiInput{
-				UiValueProxy{
-					ValueProxy: nba,
-				},
+				ValueProxy: nba,
 			},
 			NamedBoolArray: nba,
 		},

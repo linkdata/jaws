@@ -17,9 +17,7 @@ func NewUiPassword(vp ValueProxy) (ui *UiPassword) {
 	ui = &UiPassword{
 		UiInputText{
 			UiInput{
-				UiValueProxy{
-					ValueProxy: vp,
-				},
+				ValueProxy: vp,
 			},
 		},
 	}

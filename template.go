@@ -20,9 +20,7 @@ func (rq *Request) MustTemplate(v interface{}) (tp *template.Template) {
 	case *template.Template:
 		tp = v
 	case string:
-		if tp = rq.Jaws.Template.Lookup(v); tp == nil {
-			panic("template not found: " + v)
-		}
+		tp = rq.Jaws.Template.Lookup(v)
 	}
 	if tp == nil {
 		panic(fmt.Errorf("expected template, not %v", v))
@@ -71,13 +69,9 @@ func (t Template) JawsEvent(e *Element, wht what.What, val string) error {
 	return nil
 }
 
-// interface ValueProxy
-var _ ValueProxy = (*Template)(nil) // ensure
+// interface Getter
+var _ Getter = (*Template)(nil) // ensure
 
 func (t Template) JawsGet(e *Element) interface{} {
 	return t.ToHTML(e)
-}
-
-func (t Template) JawsSet(e *Element, val interface{}) bool {
-	panic("Template.JawsSet(): read-only")
 }

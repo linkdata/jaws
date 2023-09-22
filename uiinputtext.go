@@ -13,7 +13,7 @@ type UiInputText struct {
 
 func (ui *UiInputText) WriteHtmlInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
 	attrs := ui.parseParams(e, params)
-	val := ui.Get(e)
+	val := ui.JawsGet(e)
 	if s, ok := val.(string); ok {
 		ui.UiInput.WriteHtmlInput(w, e, htmltype, s, attrs...)
 		return
@@ -26,7 +26,7 @@ func (ui *UiInputText) JawsEvent(e *Element, wht what.What, val string) (err err
 		return ui.EventFn(e.Request, wht, e.Jid().String(), val)
 	}
 	if wht == what.Input {
-		ui.Set(e, val)
+		ui.JawsSet(e, val)
 	}
 	return
 }

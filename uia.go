@@ -13,11 +13,11 @@ func (ui *UiA) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.UiHtmlInner.WriteHtmlInner(e, w, "a", "", params...)
 }
 
-func NewUiA(innerHtml ValueProxy) *UiA {
+func NewUiA(innerHtml Getter) *UiA {
 	return &UiA{
 		UiHtmlInner{
-			UiValueProxy{
-				ValueProxy: innerHtml,
+			UiGetter{
+				Getter: innerHtml,
 			},
 		},
 	}

@@ -21,7 +21,7 @@ func (ui *UiInputSelect) JawsEvent(e *Element, wht what.What, val string) (err e
 		return ui.EventFn(e.Request, wht, e.Jid().String(), val)
 	}
 	if wht == what.Input {
-		ui.UiInput.Set(e, val)
+		ui.UiInput.JawsSet(e, val)
 	}
 	return
 }

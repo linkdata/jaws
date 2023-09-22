@@ -17,9 +17,7 @@ func NewUiCheckbox(vp ValueProxy) (ui *UiCheckbox) {
 	ui = &UiCheckbox{
 		UiInputBool{
 			UiInput{
-				UiValueProxy{
-					ValueProxy: vp,
-				},
+				ValueProxy: vp,
 			},
 		},
 	}

@@ -13,11 +13,11 @@ func (ui *UiSpan) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.UiHtmlInner.WriteHtmlInner(e, w, "span", "", params...)
 }
 
-func NewUiSpan(innerHtml ValueProxy) *UiSpan {
+func NewUiSpan(innerHtml Getter) *UiSpan {
 	return &UiSpan{
 		UiHtmlInner{
-			UiValueProxy{
-				ValueProxy: innerHtml,
+			UiGetter{
+				Getter: innerHtml,
 			},
 		},
 	}

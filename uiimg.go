@@ -7,12 +7,12 @@ import (
 )
 
 type UiImg struct {
-	UiValueProxy
+	UiGetter
 }
 
 func (ui *UiImg) SrcAttr(e *Element) string {
 	var src string
-	switch v := ui.ValueProxy.JawsGet(e).(type) {
+	switch v := ui.JawsGet(e).(type) {
 	case string:
 		src = v
 	case template.HTML:
@@ -35,10 +35,10 @@ func (ui *UiImg) JawsUpdate(u Updater) {
 	u.SetAttr("src", ui.SrcAttr(u.Element))
 }
 
-func NewUiImg(vp ValueProxy) *UiImg {
+func NewUiImg(vp Getter) *UiImg {
 	return &UiImg{
-		UiValueProxy{
-			ValueProxy: vp,
+		UiGetter{
+			Getter: vp,
 		},
 	}
 }

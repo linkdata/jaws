@@ -17,9 +17,7 @@ func NewUiNumber(vp ValueProxy) (ui *UiNumber) {
 	ui = &UiNumber{
 		UiInputFloat{
 			UiInput{
-				UiValueProxy{
-					ValueProxy: vp,
-				},
+				ValueProxy: vp,
 			},
 		},
 	}

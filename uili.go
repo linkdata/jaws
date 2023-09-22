@@ -16,8 +16,8 @@ func (ui *UiLi) JawsRender(e *Element, w io.Writer, params []interface{}) {
 func NewUiLi(innerHtml ValueProxy) *UiLi {
 	return &UiLi{
 		UiHtmlInner{
-			UiValueProxy{
-				ValueProxy: innerHtml,
+			UiGetter{
+				Getter: innerHtml,
 			},
 		},
 	}

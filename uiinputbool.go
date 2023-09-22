@@ -14,7 +14,7 @@ type UiInputBool struct {
 
 func (ui *UiInputBool) WriteHtmlInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
 	attrs := ui.parseParams(e, params)
-	val := ui.Get(e)
+	val := ui.JawsGet(e)
 	if b, ok := val.(bool); ok {
 		if b {
 			attrs = append(attrs, "checked")
@@ -37,7 +37,7 @@ func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (err err
 				return
 			}
 		}
-		ui.UiInput.Set(e, v)
+		ui.JawsSet(e, v)
 	}
 	return
 }

@@ -17,9 +17,7 @@ func NewUiRange(vp ValueProxy) (ui *UiRange) {
 	ui = &UiRange{
 		UiInputFloat{
 			UiInput{
-				UiValueProxy{
-					ValueProxy: vp,
-				},
+				ValueProxy: vp,
 			},
 		},
 	}

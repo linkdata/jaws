@@ -17,9 +17,7 @@ func NewUiText(vp ValueProxy) (ui *UiText) {
 	ui = &UiText{
 		UiInputText{
 			UiInput{
-				UiValueProxy{
-					ValueProxy: vp,
-				},
+				ValueProxy: vp,
 			},
 		},
 	}

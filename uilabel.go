@@ -13,11 +13,11 @@ func (ui *UiLabel) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.UiHtmlInner.WriteHtmlInner(e, w, "label", "", params...)
 }
 
-func NewUiLabel(vp ValueProxy) (ui *UiLabel) {
+func NewUiLabel(vp Getter) (ui *UiLabel) {
 	ui = &UiLabel{
 		UiHtmlInner{
-			UiValueProxy{
-				ValueProxy: vp,
+			UiGetter{
+				Getter: vp,
 			},
 		},
 	}

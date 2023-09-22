@@ -19,9 +19,7 @@ func NewUiDate(vp ValueProxy) (ui *UiDate) {
 	ui = &UiDate{
 		UiInputDate{
 			UiInput{
-				UiValueProxy{
-					ValueProxy: vp,
-				},
+				ValueProxy: vp,
 			},
 		},
 	}

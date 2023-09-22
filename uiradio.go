@@ -17,9 +17,7 @@ func NewUiRadio(vp ValueProxy) (ui *UiRadio) {
 	ui = &UiRadio{
 		UiInputBool{
 			UiInput{
-				UiValueProxy{
-					ValueProxy: vp,
-				},
+				ValueProxy: vp,
 			},
 		},
 	}
