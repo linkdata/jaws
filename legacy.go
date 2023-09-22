@@ -1,11 +1,17 @@
 package jaws
 
 import (
+	"html/template"
 	"strconv"
 	"time"
 
 	"github.com/linkdata/jaws/what"
 )
+
+// Deprecated: Will be removed in future
+type Ui interface {
+	JawsUi(rq *Request, attrs ...string) template.HTML
+}
 
 // Deprecated: Will be removed in future
 type ClickFn = func(*Request, string) error

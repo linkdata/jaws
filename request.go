@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"context"
 	"fmt"
 	"html"
 	"html/template"
@@ -181,6 +182,18 @@ func (rq *Request) Set(key string, val interface{}) {
 func (rq *Request) Broadcast(msg Message) {
 	msg.from = rq
 	rq.Jaws.Broadcast(msg)
+}
+
+// Context returns the current HTTP request context.
+func (rq *Request) Context() (ctx context.Context) {
+	rq.mu.RLock()
+	if rq.wsreq != nil {
+		ctx = rq.wsreq.Context()
+	} else {
+		ctx = context.Background()
+	}
+	rq.mu.RUnlock()
+	return
 }
 
 func (rq *Request) getDoneCh() (jawsDoneCh, ctxDoneCh <-chan struct{}) {
