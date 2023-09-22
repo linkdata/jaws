@@ -1,9 +1,9 @@
 package jaws
 
 import (
-	"bytes"
 	"html/template"
 	"io"
+	"strings"
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/what"
@@ -85,14 +85,13 @@ func (ui *UiContainer) JawsUpdate(u Updater) {
 		})
 	}
 
-	var b bytes.Buffer
 	for _, elem := range toAppend {
-		b.Reset()
-		elem.ui.JawsRender(elem, &b, nil)
+		var sb strings.Builder
+		elem.ui.JawsRender(elem, &sb, nil)
 		u.Request.send(u.outCh, wsMsg{
 			Jid:  u.Jid(),
 			What: what.Append,
-			Data: b.String(),
+			Data: sb.String(),
 		})
 	}
 
