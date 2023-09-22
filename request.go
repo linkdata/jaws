@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"html/template"
+	"log"
 	"net"
 	"net/http"
 	"sort"
@@ -425,10 +426,11 @@ func (rq *Request) Done() (ch <-chan struct{}) {
 func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsMsg, outboundMsgCh chan<- wsMsg) {
 	if deadlock.Debug {
 		rq.Jaws.mu.RLock()
-		if _, ok := rq.Jaws.active[rq]; !ok {
-			panic("Request is not in active map")
-		}
+		_, ok := rq.Jaws.active[rq]
 		rq.Jaws.mu.RUnlock()
+		if !ok {
+			log.Panicf("Request %v is not in active map\n", rq)
+		}
 	}
 	jawsDoneCh := rq.Jaws.Done()
 	ctxDoneCh := rq.Done()

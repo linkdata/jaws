@@ -34,6 +34,7 @@ func newTestServer(is *is.I) (ts *testServer) {
 	hr := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
 	sess := jw.NewSession(nil, hr)
 	rq := jw.NewRequest(hr)
+	is.Equal(rq, jw.UseRequest(rq.JawsKey, hr))
 	ts = &testServer{
 		is:          is,
 		jw:          jw,
