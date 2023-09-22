@@ -6,8 +6,6 @@ import (
 	"html/template"
 	"strconv"
 	"sync/atomic"
-
-	"github.com/linkdata/jaws/what"
 )
 
 // An Element is an instance of a *Request, an UI object and a Jid.
@@ -44,7 +42,9 @@ func (e *Element) UI() UI {
 
 // Dirty marks this Element (only) as needing UI().JawsUpdate() to be called.
 func (e *Element) Dirty() {
-	atomic.StoreUint64(&e.dirty, atomic.AddUint64(&e.Request.dirty, 1))
+	if e != nil {
+		atomic.StoreUint64(&e.dirty, atomic.AddUint64(&e.Request.dirty, 1))
+	}
 }
 
 func (e *Element) clearDirt() (dirt uint64) {
@@ -56,13 +56,7 @@ func (e *Element) clearDirt() (dirt uint64) {
 
 // DirtyOthers marks all Elements except this one that have one or more of the given tags as dirty.
 func (e *Element) DirtyOthers(tags ...interface{}) {
-	for _, tag := range tags {
-		e.Jaws.Broadcast(Message{
-			Tag:  tag,
-			What: what.Dirty,
-			from: e,
-		})
-	}
+	e.Jaws.DirtyExcept(e, tags...)
 }
 
 func (e *Element) ToHtml(val interface{}) template.HTML {

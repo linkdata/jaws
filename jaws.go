@@ -44,9 +44,9 @@ type Jaws struct {
 	headPrefix   string
 	mu           deadlock.RWMutex // protects following
 	kg           *bufio.Reader
-	actives      int32 // atomic
 	closeCh      chan struct{}
-	reqs         map[uint64]*Request
+	pending      map[uint64]*Request
+	active       map[*Request]struct{}
 	sessions     map[uint64]*Session
 }
 
@@ -63,7 +63,8 @@ func NewWithDone(doneCh <-chan struct{}) *Jaws {
 		updateTicker: time.NewTicker(DefaultUpdateInterval),
 		headPrefix:   HeadHTML([]string{JavascriptPath}, nil),
 		kg:           bufio.NewReader(rand.Reader),
-		reqs:         make(map[uint64]*Request),
+		pending:      make(map[uint64]*Request),
+		active:       make(map[*Request]struct{}),
 		sessions:     make(map[uint64]*Session),
 	}
 }
@@ -105,9 +106,8 @@ func (jw *Jaws) Done() <-chan struct{} {
 // WebSocket callback and started processing.
 func (jw *Jaws) RequestCount() (n int) {
 	jw.mu.RLock()
-	n = len(jw.reqs)
+	n = len(jw.pending) + len(jw.active)
 	jw.mu.RUnlock()
-	n += int(atomic.LoadInt32(&jw.actives))
 	return
 }
 
@@ -162,9 +162,9 @@ func (jw *Jaws) NewRequest(hr *http.Request) (rq *Request) {
 	defer jw.mu.Unlock()
 	for rq == nil {
 		jawsKey := jw.nonZeroRandomLocked()
-		if _, ok := jw.reqs[jawsKey]; !ok {
+		if _, ok := jw.pending[jawsKey]; !ok {
 			rq = newRequest(jw, jawsKey, hr)
-			jw.reqs[jawsKey] = rq
+			jw.pending[jawsKey] = rq
 		}
 	}
 	return
@@ -194,10 +194,11 @@ func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) {
 	if jawsKey != 0 {
 		var err error
 		jw.mu.Lock()
-		if waitingRq, ok := jw.reqs[jawsKey]; ok {
+		if waitingRq, ok := jw.pending[jawsKey]; ok {
 			if err = waitingRq.start(hr); err == nil {
-				delete(jw.reqs, jawsKey)
+				delete(jw.pending, jawsKey)
 				rq = waitingRq
+				jw.active[rq] = struct{}{}
 			}
 		}
 		jw.mu.Unlock()
@@ -354,20 +355,22 @@ func (jw *Jaws) Broadcast(msg Message) {
 	}
 }
 
-// Dirty marks all Elements that have one or more of the given tags as dirty.
-func (jw *Jaws) Dirty(tags ...interface{}) {
+// DirtyExcept marks all Elements that have one or more of the given tags as dirty, except the one given.
+func (jw *Jaws) DirtyExcept(except *Element, tags ...interface{}) {
 	// mark pending request elements as dirty
 	jw.mu.RLock()
-	for _, rq := range jw.reqs {
-		rq.Dirty(tags...)
+	for _, rq := range jw.pending {
+		rq.DirtyExcept(except, tags...)
+	}
+	for rq := range jw.active {
+		rq.DirtyExcept(except, tags...)
 	}
 	jw.mu.RUnlock()
-	for _, tag := range tags {
-		jw.Broadcast(Message{
-			Tag:  tag,
-			What: what.Dirty,
-		})
-	}
+}
+
+// Dirty marks all Elements that have one or more of the given tags as dirty.
+func (jw *Jaws) Dirty(tags ...interface{}) {
+	jw.DirtyExcept(nil, tags...)
 }
 
 // Reload requests all Requests to reload their current page.
@@ -422,9 +425,15 @@ func (jw *Jaws) Append(tag interface{}, html template.HTML) {
 // Count returns the number of requests waiting for their WebSocket callbacks.
 func (jw *Jaws) Pending() (n int) {
 	jw.mu.RLock()
-	n = len(jw.reqs)
+	n = len(jw.pending)
 	jw.mu.RUnlock()
 	return
+}
+
+func (jw *Jaws) deactivate(rq *Request) {
+	jw.mu.Lock()
+	delete(jw.active, rq)
+	jw.mu.Unlock()
 }
 
 // ServeWithTimeout begins processing requests with the given timeout.
@@ -445,10 +454,10 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	subs := map[chan Message]*Request{}
 
 	killSub := func(msgCh chan Message) {
-		if _, ok := subs[msgCh]; ok {
+		if rq, ok := subs[msgCh]; ok {
 			delete(subs, msgCh)
 			close(msgCh)
-			atomic.StoreInt32(&jw.actives, int32(len(subs)))
+			jw.deactivate(rq)
 		}
 	}
 
@@ -465,11 +474,9 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			}
 		case <-t.C:
 			jw.maintenance(requestTimeout)
-			atomic.StoreInt32(&jw.actives, int32(len(subs)))
 		case sub := <-jw.subCh:
 			if sub.msgCh != nil {
 				subs[sub.msgCh] = sub.rq
-				atomic.StoreInt32(&jw.actives, int32(len(subs)))
 			}
 		case msgCh := <-jw.unsubCh:
 			killSub(msgCh)
@@ -535,7 +542,7 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	now := time.Now()
 	deadline := now.Add(-requestTimeout)
 	logger := jw.Logger
-	for k, rq := range jw.reqs {
+	for k, rq := range jw.pending {
 		if rq.Created.Before(deadline) {
 			killReqs = append(killReqs, k)
 			if logger != nil && rq.Initial != nil {
@@ -553,7 +560,7 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	if len(killReqs)+len(killSess) > 0 {
 		jw.mu.Lock()
 		for _, k := range killReqs {
-			delete(jw.reqs, k)
+			delete(jw.pending, k)
 		}
 		for _, k := range killSess {
 			delete(jw.sessions, k)

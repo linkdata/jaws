@@ -118,6 +118,7 @@ func (rq *Request) killSession() {
 }
 
 func (rq *Request) recycle() {
+	rq.Jaws.deactivate(rq)
 	rq.mu.Lock()
 	rq.Jaws = nil
 	rq.JawsKey = 0
@@ -366,14 +367,21 @@ func (rq *Request) HasTag(elem *Element, tag interface{}) (yes bool) {
 }
 
 // Dirty marks all Elements with the given tags as dirty.
-func (rq *Request) Dirty(tags ...interface{}) {
-	rq.mu.Lock()
+func (rq *Request) DirtyExcept(except *Element, tags ...interface{}) {
+	rq.mu.RLock()
 	for _, tag := range tags {
 		for _, e := range rq.tagMap[tag] {
-			e.Dirty()
+			if e != except {
+				e.Dirty()
+			}
 		}
 	}
-	rq.mu.Unlock()
+	rq.mu.RUnlock()
+}
+
+// Dirty marks all Elements with the given tags as dirty.
+func (rq *Request) Dirty(tags ...interface{}) {
+	rq.DirtyExcept(nil, tags...)
 }
 
 // Tag adds the given tags to the given Element.
@@ -415,6 +423,13 @@ func (rq *Request) Done() (ch <-chan struct{}) {
 
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
 func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsMsg, outboundMsgCh chan<- wsMsg) {
+	if deadlock.Debug {
+		rq.Jaws.mu.RLock()
+		if _, ok := rq.Jaws.active[rq]; !ok {
+			panic("Request is not in active map")
+		}
+		rq.Jaws.mu.RUnlock()
+	}
 	jawsDoneCh := rq.Jaws.Done()
 	ctxDoneCh := rq.Done()
 	eventDoneCh := make(chan struct{})
@@ -550,8 +565,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 							})
 						}
 					}
-				case what.Dirty:
-					elem.Dirty()
 				default:
 					rq.send(outboundMsgCh, wsMsg{
 						Jid:  elem.jid,
