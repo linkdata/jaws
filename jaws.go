@@ -355,22 +355,16 @@ func (jw *Jaws) Broadcast(msg Message) {
 	}
 }
 
-// DirtyExcept marks all Elements that have one or more of the given tags as dirty, except the one given.
-func (jw *Jaws) DirtyExcept(except *Element, tags ...interface{}) {
-	// mark pending request elements as dirty
-	jw.mu.RLock()
-	for _, rq := range jw.pending {
-		rq.DirtyExcept(except, tags...)
-	}
-	for rq := range jw.active {
-		rq.DirtyExcept(except, tags...)
-	}
-	jw.mu.RUnlock()
-}
-
 // Dirty marks all Elements that have one or more of the given tags as dirty.
 func (jw *Jaws) Dirty(tags ...interface{}) {
-	jw.DirtyExcept(nil, tags...)
+	jw.mu.RLock()
+	for _, rq := range jw.pending {
+		rq.Dirty(tags...)
+	}
+	for rq := range jw.active {
+		rq.Dirty(tags...)
+	}
+	jw.mu.RUnlock()
 }
 
 // Reload requests all Requests to reload their current page.

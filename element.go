@@ -10,10 +10,9 @@ import (
 
 // An Element is an instance of a *Request, an UI object and a Jid.
 type Element struct {
-	ui       UI     // (read-only) the UI object
-	jid      Jid    // (read-only) JaWS ID, unique to this Element within it's Request
-	*Request        // (read-only) the Request the Element belongs to
-	dirty    uint64 // (atomic) if not zero, needs Update() to be called
+	ui       UI  // (read-only) the UI object
+	jid      Jid // (read-only) JaWS ID, unique to this Element within it's Request
+	*Request     // (read-only) the Request the Element belongs to
 }
 
 func (e *Element) String() string {
@@ -43,20 +42,8 @@ func (e *Element) UI() UI {
 // Dirty marks this Element (only) as needing UI().JawsUpdate() to be called.
 func (e *Element) Dirty() {
 	if e != nil {
-		atomic.StoreUint64(&e.dirty, atomic.AddUint64(&e.Request.dirty, 1))
+		e.Request.Dirty(e)
 	}
-}
-
-func (e *Element) clearDirt() (dirt uint64) {
-	if e != nil {
-		dirt = atomic.SwapUint64(&e.dirty, 0)
-	}
-	return
-}
-
-// DirtyOthers marks all Elements except this one that have one or more of the given tags as dirty.
-func (e *Element) DirtyOthers(tags ...interface{}) {
-	e.Jaws.DirtyExcept(e, tags...)
 }
 
 func (e *Element) ToHtml(val interface{}) template.HTML {

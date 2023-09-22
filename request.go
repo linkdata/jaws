@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"sort"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/linkdata/deadlock"
@@ -37,8 +36,8 @@ type Request struct {
 	remoteIP  net.IP           // (read-only) remote IP, or nil
 	session   *Session         // (read-only) session, if established
 	sendCh    chan Message     // (read-only) direct send message channel
-	dirty     uint64           // (atomic) dirty counter
 	mu        deadlock.RWMutex // protects following
+	dirty     []interface{}    // dirty tags
 	wsreq     *http.Request    // (read-only) WebSocket HTTP request passed to Jaws.UseRequest
 	connectFn ConnectFn        // a ConnectFn to call before starting message processing for the Request
 	elems     []*Element
@@ -126,7 +125,7 @@ func (rq *Request) recycle() {
 	rq.connectFn = nil
 	rq.Initial = nil
 	rq.wsreq = nil
-	rq.dirty = 0
+	rq.dirty = rq.dirty[:0]
 	rq.remoteIP = nil
 	rq.elems = rq.elems[:0]
 	rq.killSessionLocked()
@@ -368,21 +367,10 @@ func (rq *Request) HasTag(elem *Element, tag interface{}) (yes bool) {
 }
 
 // Dirty marks all Elements with the given tags as dirty.
-func (rq *Request) DirtyExcept(except *Element, tags ...interface{}) {
-	rq.mu.RLock()
-	for _, tag := range tags {
-		for _, e := range rq.tagMap[tag] {
-			if e != except {
-				e.Dirty()
-			}
-		}
-	}
-	rq.mu.RUnlock()
-}
-
-// Dirty marks all Elements with the given tags as dirty.
 func (rq *Request) Dirty(tags ...interface{}) {
-	rq.DirtyExcept(nil, tags...)
+	rq.mu.Lock()
+	rq.dirty = append(rq.dirty, tags...)
+	rq.mu.Unlock()
 }
 
 // Tag adds the given tags to the given Element.
@@ -463,7 +451,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		}
 	}()
 
-	var lastDirty uint64
+	var dirtyTags []interface{}
 
 	for {
 		var tagmsg Message
@@ -578,9 +566,13 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			}
 		}
 
-		if newDirty := atomic.LoadUint64(&rq.dirty); newDirty > lastDirty {
-			lastDirty = newDirty
-			rq.callUpdate(outboundMsgCh)
+		rq.mu.Lock()
+		dirtyTags, rq.dirty = rq.dirty, dirtyTags
+		rq.dirty = rq.dirty[:0]
+		rq.mu.Unlock()
+
+		if len(dirtyTags) > 0 {
+			rq.callUpdate(outboundMsgCh, dirtyTags)
 		}
 	}
 }
@@ -595,15 +587,28 @@ func (rq *Request) send(outboundMsgCh chan<- wsMsg, msg wsMsg) {
 	}
 }
 
-func (rq *Request) callUpdate(outboundMsgCh chan<- wsMsg) {
-	var todo []Updater
+func (rq *Request) callUpdate(outboundMsgCh chan<- wsMsg, dirtyTags []interface{}) {
+	order := 0
+	m := make(map[*Element]int, len(rq.elems))
 	rq.mu.RLock()
-	for _, elem := range rq.elems {
-		if order := elem.clearDirt(); order > 0 {
-			todo = append(todo, Updater{outCh: outboundMsgCh, order: order, Element: elem})
+	for _, tag := range dirtyTags {
+		order++
+		if elem, ok := tag.(*Element); ok {
+			m[elem] = order
+		} else {
+			for _, elem := range rq.tagMap[tag] {
+				m[elem] = order
+			}
 		}
 	}
 	rq.mu.RUnlock()
+
+	var todo []Updater
+	for elem, order := range m {
+		if elem != nil {
+			todo = append(todo, Updater{outCh: outboundMsgCh, order: order, Element: elem})
+		}
+	}
 	sort.Slice(todo, func(i, j int) bool {
 		return todo[i].order < todo[j].order
 	})

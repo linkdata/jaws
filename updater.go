@@ -10,7 +10,7 @@ import (
 
 type Updater struct {
 	outCh chan<- wsMsg
-	order uint64
+	order int
 	*Element
 }
 

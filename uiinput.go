@@ -6,7 +6,7 @@ type UiInput struct {
 
 func (ui *UiInput) Set(e *Element, value interface{}) (changed bool) {
 	if changed = ui.ValueProxy.JawsSet(e, value); changed {
-		e.DirtyOthers(ui.ValueProxyTag)
+		e.Jaws.Dirty(ui.ValueProxyTag)
 	}
 	return
 }
