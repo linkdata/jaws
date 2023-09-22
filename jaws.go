@@ -136,9 +136,19 @@ func (jw *Jaws) MustLog(err error) {
 
 var nextId uint64 // atomic
 
+// NextID returns a uint64 unique within lifetime of the program.
+func NextID() uint64 {
+	return atomic.AddUint64(&nextId, 1)
+}
+
+// AppendID appends the result of NextID() in text form to the given slice.
+func AppendID(b []byte) []byte {
+	return strconv.AppendUint(b, NextID(), 32)
+}
+
 // MakeID returns a string in the form 'jaws.X' where X is a unique string within lifetime of the program.
 func MakeID() string {
-	return "jaws." + strconv.FormatUint(atomic.AddUint64(&nextId, 1), 32)
+	return string(AppendID([]byte("jaws.")))
 }
 
 // NewRequest returns a new JaWS request.

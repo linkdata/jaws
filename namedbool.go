@@ -65,6 +65,36 @@ func (nb *NamedBool) String() string {
 	return fmt.Sprintf("&{%q,%q,%v}", nb.Name(), nb.Html(), nb.Checked())
 }
 
+var _ ValueProxy = (*NamedBool)(nil)
+var _ ValueProxy = namedBoolHtmlValueProxy{}
+
+type namedBoolHtmlValueProxy struct {
+	nb *NamedBool
+}
+
+func (hvp namedBoolHtmlValueProxy) JawsGet(e *Element) interface{} {
+	hvp.nb.mu.RLock()
+	html := hvp.nb.html
+	hvp.nb.mu.RUnlock()
+	return html
+}
+
+func (hvp namedBoolHtmlValueProxy) JawsSet(e *Element, value interface{}) (changed bool) {
+	if html, ok := value.(template.HTML); ok {
+		hvp.nb.mu.Lock()
+		if hvp.nb.html != html {
+			hvp.nb.html = html
+			changed = true
+		}
+		hvp.nb.mu.Unlock()
+	}
+	return
+}
+
+func (nb *NamedBool) HtmlValueProxy() ValueProxy {
+	return namedBoolHtmlValueProxy{nb}
+}
+
 func (nb *NamedBool) JawsGet(e *Element) interface{} {
 	nb.mu.RLock()
 	checked := nb.checked

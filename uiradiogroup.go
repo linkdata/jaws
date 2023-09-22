@@ -6,15 +6,21 @@ import (
 )
 
 type RadioElement struct {
-	e        *Element
+	radio    *Element
+	label    *Element
 	nameAttr string
 }
 
-func (rq *Request) RadioGroup(nba *NamedBoolArray, params ...interface{}) (rl []RadioElement) {
+func (rq *Request) RadioGroup(nba *NamedBoolArray) (rl []RadioElement) {
 	nameAttr := `name="` + MakeID() + `"`
 	nba.ReadLocked(func(nbl []*NamedBool) {
 		for _, nb := range nbl {
-			rl = append(rl, RadioElement{e: rq.NewElement(NewUiRadio(nb)), nameAttr: nameAttr})
+			rl = append(rl, RadioElement{
+				radio:    rq.NewElement(NewUiRadio(nb)),
+				label:    rq.NewElement(NewUiLabel(nb.HtmlValueProxy())),
+				nameAttr: nameAttr,
+			},
+			)
 		}
 	})
 	return
@@ -23,19 +29,14 @@ func (rq *Request) RadioGroup(nba *NamedBoolArray, params ...interface{}) (rl []
 // Radio renders a HTML input element of type 'radio'.
 func (r RadioElement) Radio(params ...interface{}) template.HTML {
 	var sb strings.Builder
-	r.e.ui.(*UiRadio).JawsRender(r.e, &sb, append(params, r.nameAttr))
+	r.radio.ui.JawsRender(r.radio, &sb, append(params, r.nameAttr))
 	return template.HTML(sb.String())
 }
 
 // Label renders a HTML label element.
-func (r *RadioElement) Label(attrs ...string) template.HTML {
-	if nb, ok := r.e.ui.(*UiRadio).ValueProxy.(*NamedBool); ok {
-		var b []byte
-		b = append(b, `for="`...)
-		b = r.e.jid.Append(b)
-		b = append(b, '"')
-		return HtmlInner(0, "label", "", nb.Html(), append(attrs, string(b))...)
-	}
-	return ""
-
+func (r *RadioElement) Label(params ...interface{}) template.HTML {
+	var sb strings.Builder
+	forAttr := string(r.radio.jid.AppendQuote([]byte("for=")))
+	r.label.ui.JawsRender(r.label, &sb, append(params, forAttr))
+	return template.HTML(sb.String())
 }

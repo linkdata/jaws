@@ -11,16 +11,19 @@ type Jid int32
 
 const JidPrefix = "Jid." // String prefixing HTML ID's based on Jid's.
 
+// AppendInt appends just the text format of the Jid's numerical value.
 func (jid Jid) AppendInt(dst []byte) []byte {
 	return strconv.AppendInt(dst, int64(jid), 10)
 }
 
+// Append appends the unquoted string format of the Jid.
 func (jid Jid) Append(dst []byte) []byte {
 	dst = append(dst, []byte(JidPrefix)...)
 	dst = jid.AppendInt(dst)
 	return dst
 }
 
+// AppendQuote appends the string format of the Jid surrounded by double quotes.
 func (jid Jid) AppendQuote(dst []byte) []byte {
 	dst = append(dst, '"')
 	dst = jid.Append(dst)
@@ -39,6 +42,9 @@ func (jid Jid) AppendStartTagAttr(dst []byte, startTag string) []byte {
 	return dst
 }
 
+// ParseJid parses an unquoted Jid string (e.g. `Jid.2`) and returns the Jid value (e.g. Jid(2)).
+//
+// Returns zero if it's not a valid Jid string.
 func ParseJid(s string) Jid {
 	if strings.HasPrefix(s, JidPrefix) {
 		if n, err := strconv.ParseInt(s[len(JidPrefix):], 10, 32); err == nil && n > 0 {
@@ -48,10 +54,10 @@ func ParseJid(s string) Jid {
 	return 0
 }
 
+// String returns the unquoted string representation of the Jid.
 func (jid Jid) String() string {
 	if jid > 0 {
-		buf := make([]byte, 0, len(JidPrefix)+10)
-		return string(jid.Append(buf))
+		return string(jid.Append(nil))
 	}
 	return ""
 }
