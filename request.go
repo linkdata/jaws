@@ -633,8 +633,10 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 			}
 			fallthrough
 		default:
-			if deadlock.Debug && call.wht != what.Click {
-				err = rq.Jaws.Log(fmt.Errorf("jaws: eventCaller unhandled: %s", call.String()))
+			if deadlock.Debug {
+				if call.wht != what.Click {
+					err = rq.Jaws.Log(fmt.Errorf("jaws: eventCaller unhandled: %s", call.String()))
+				}
 			}
 		}
 		if err != nil {
