@@ -42,6 +42,18 @@ func (ui *UiContainer) JawsRender(e *Element, w io.Writer, params []interface{})
 	maybePanic(err)
 }
 
+func sameOrder(a, b []Jid) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func (ui *UiContainer) JawsUpdate(u Updater) {
 	var toRemove, toAppend []*Element
 	var orderData []Jid
@@ -54,7 +66,9 @@ func (ui *UiContainer) JawsUpdate(u Updater) {
 	}
 
 	ui.mu.Lock()
+	oldOrder := make([]Jid, 0, len(ui.contents))
 	for _, elem := range ui.contents {
+		oldOrder = append(oldOrder, elem.jid)
 		oldMap[elem.ui] = elem
 		if _, ok := newMap[elem.ui]; !ok {
 			toRemove = append(toRemove, elem)
@@ -84,7 +98,9 @@ func (ui *UiContainer) JawsUpdate(u Updater) {
 		u.Append(template.HTML(sb.String()))
 	}
 
-	u.Order(orderData)
+	if !sameOrder(oldOrder, orderData) {
+		u.Order(orderData)
+	}
 }
 
 func NewUiContainer(outerTag string, cont Container) *UiContainer {

@@ -292,7 +292,7 @@ func (rq *Request) Register(tagitem interface{}, params ...interface{}) Jid {
 	switch data := tagitem.(type) {
 	case Jid:
 		if elem := rq.GetElement(data); elem != nil {
-			if uib, ok := elem.UI().(*UiHtml); ok {
+			if uib, ok := elem.Ui().(*UiHtml); ok {
 				uib.parseParams(elem, params)
 			}
 			return data
@@ -305,7 +305,7 @@ func (rq *Request) Register(tagitem interface{}, params ...interface{}) Jid {
 	}
 
 	for _, elem := range rq.GetElements(tagitem) {
-		if uib, ok := elem.UI().(*UiHtml); ok {
+		if uib, ok := elem.Ui().(*UiHtml); ok {
 			uib.parseParams(elem, params)
 		}
 	}
@@ -552,7 +552,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					// the function must not send any messages itself, but may return
 					// an error to be sent out as an alert message.
 					// primary usecase is tests.
-					if h, ok := elem.UI().(EventHandler); ok {
+					if h, ok := elem.Ui().(EventHandler); ok {
 						if errmsg := makeAlertDangerMessage(h.JawsEvent(elem, tagmsg.What, wsdata)); errmsg.What != what.None {
 							rq.send(outboundMsgCh, wsMsg{
 								Jid:  elem.jid,
@@ -610,7 +610,7 @@ func (rq *Request) callUpdate(outboundMsgCh chan<- wsMsg) {
 	rq.mu.Unlock()
 
 	for _, elem := range todo {
-		elem.UI().JawsUpdate(Updater{outCh: outboundMsgCh, Element: elem})
+		elem.Ui().JawsUpdate(Updater{outCh: outboundMsgCh, Element: elem})
 	}
 }
 
@@ -621,13 +621,13 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 		var err error
 		switch call.wht {
 		case what.Click:
-			if h, ok := call.e.UI().(ClickHandler); ok {
+			if h, ok := call.e.Ui().(ClickHandler); ok {
 				err = h.JawsClick(call.e, call.data)
 				break
 			}
 			fallthrough
 		case what.Input, what.Trigger:
-			if h, ok := call.e.UI().(EventHandler); ok {
+			if h, ok := call.e.Ui().(EventHandler); ok {
 				err = h.JawsEvent(call.e, call.wht, call.data)
 				break
 			}

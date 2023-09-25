@@ -36,8 +36,8 @@ func (e *Element) Jid() Jid {
 	return e.jid
 }
 
-// UI returns the UI object.
-func (e *Element) UI() UI {
+// Ui returns the UI object.
+func (e *Element) Ui() UI {
 	return e.ui
 }
 

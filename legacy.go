@@ -31,7 +31,7 @@ type InputDateFn = func(*Request, string, time.Time) error
 // Deprecated: Will be removed in future
 func (rq *Request) GetEventFn(jid Jid) (fn EventFn, ok bool) {
 	if elem := rq.GetElement(jid); elem != nil {
-		if uih, isuih := elem.UI().(*UiHtml); isuih {
+		if uih, isuih := elem.Ui().(*UiHtml); isuih {
 			return uih.EventFn, true
 		}
 	}
@@ -44,7 +44,7 @@ func (rq *Request) SetEventFn(tagstring string, fn EventFn) {
 	defer rq.mu.Unlock()
 	if elems, ok := rq.tagMap[tagstring]; ok && len(elems) > 0 {
 		for _, elem := range elems {
-			if uih, isuih := elem.UI().(*UiHtml); isuih {
+			if uih, isuih := elem.Ui().(*UiHtml); isuih {
 				uih.EventFn = fn
 			}
 		}
