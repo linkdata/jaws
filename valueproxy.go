@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"fmt"
 	"sync/atomic"
 )
 
@@ -26,6 +27,8 @@ func MakeValueProxy(valtag interface{}) (vp ValueProxy) {
 		vp = data
 	case ValueProxy:
 		vp = data
+	default:
+		panic(fmt.Errorf("jaws.MakeValueProxy(%v): impossible", valtag))
 	}
 	return
 }

@@ -24,5 +24,5 @@ func NewUiSpan(innerHtml Getter) *UiSpan {
 }
 
 func (rq *Request) Span(innerHtml interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiSpan(MakeValueProxy(innerHtml)), params...)
+	return rq.UI(NewUiSpan(MakeGetter(innerHtml)), params...)
 }

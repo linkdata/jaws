@@ -44,5 +44,5 @@ func NewUiImg(vp Getter) *UiImg {
 }
 
 func (rq *Request) Img(imageSrc interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiImg(MakeValueProxy(imageSrc)), params...)
+	return rq.UI(NewUiImg(MakeGetter(imageSrc)), params...)
 }

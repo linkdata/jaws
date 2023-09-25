@@ -24,5 +24,5 @@ func NewUiTd(innerHtml Getter) *UiTd {
 }
 
 func (rq *Request) Td(innerHtml interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiTd(MakeValueProxy(innerHtml)), params...)
+	return rq.UI(NewUiTd(MakeGetter(innerHtml)), params...)
 }

@@ -24,5 +24,5 @@ func NewUiDiv(innerHtml Getter) *UiDiv {
 }
 
 func (rq *Request) Div(innerHtml interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiDiv(MakeValueProxy(innerHtml)), params...)
+	return rq.UI(NewUiDiv(MakeGetter(innerHtml)), params...)
 }

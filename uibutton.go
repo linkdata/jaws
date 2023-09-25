@@ -24,5 +24,5 @@ func NewUiButton(innerHtml Getter) *UiButton {
 }
 
 func (rq *Request) Button(innerHtml interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiButton(MakeValueProxy(innerHtml)), params...)
+	return rq.UI(NewUiButton(MakeGetter(innerHtml)), params...)
 }

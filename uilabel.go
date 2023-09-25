@@ -25,5 +25,5 @@ func NewUiLabel(vp Getter) (ui *UiLabel) {
 }
 
 func (rq *Request) Label(innerHtml interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiLabel(MakeValueProxy(innerHtml)), params...)
+	return rq.UI(NewUiLabel(MakeGetter(innerHtml)), params...)
 }

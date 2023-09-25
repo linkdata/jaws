@@ -8,7 +8,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"sort"
 	"sync"
 	"time"
 
@@ -379,8 +378,7 @@ func (rq *Request) HasTag(elem *Element, tag interface{}) (yes bool) {
 	return
 }
 
-// Dirty marks all Elements with the given tags as dirty.
-func (rq *Request) Dirty(tags ...interface{}) {
+func (rq *Request) appendDirtyTags(tags ...interface{}) {
 	rq.mu.Lock()
 	rq.dirty = append(rq.dirty, tags...)
 	rq.mu.Unlock()
@@ -459,8 +457,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			}
 		}
 	}()
-
-	var dirtyTags []interface{}
 
 	for {
 		var tagmsg Message
@@ -575,14 +571,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			}
 		}
 
-		rq.mu.Lock()
-		dirtyTags, rq.dirty = rq.dirty, dirtyTags
-		rq.dirty = rq.dirty[:0]
-		rq.mu.Unlock()
-
-		if len(dirtyTags) > 0 {
-			rq.callUpdate(outboundMsgCh, dirtyTags)
-		}
+		rq.callUpdate(outboundMsgCh)
 	}
 }
 
@@ -596,33 +585,33 @@ func (rq *Request) send(outboundMsgCh chan<- wsMsg, msg wsMsg) {
 	}
 }
 
-func (rq *Request) callUpdate(outboundMsgCh chan<- wsMsg, dirtyTags []interface{}) {
-	order := 0
-	m := make(map[*Element]int, len(rq.elems))
-	rq.mu.RLock()
-	for _, tag := range dirtyTags {
-		order++
+func (rq *Request) callUpdate(outboundMsgCh chan<- wsMsg) {
+	var todo []*Element
+
+	rq.mu.Lock()
+	for _, tag := range rq.dirty {
 		if elem, ok := tag.(*Element); ok {
-			m[elem] = order
+			if !elem.updating {
+				elem.updating = true
+				todo = append(todo, elem)
+			}
 		} else {
 			for _, elem := range rq.tagMap[tag] {
-				m[elem] = order
+				if !elem.updating {
+					elem.updating = true
+					todo = append(todo, elem)
+				}
 			}
 		}
 	}
-	rq.mu.RUnlock()
-
-	var todo []Updater
-	for elem, order := range m {
-		if elem != nil {
-			todo = append(todo, Updater{outCh: outboundMsgCh, order: order, Element: elem})
-		}
+	rq.dirty = rq.dirty[:0]
+	for _, elem := range todo {
+		elem.updating = false
 	}
-	sort.Slice(todo, func(i, j int) bool {
-		return todo[i].order < todo[j].order
-	})
-	for _, u := range todo {
-		u.UI().JawsUpdate(u)
+	rq.mu.Unlock()
+
+	for _, elem := range todo {
+		elem.UI().JawsUpdate(Updater{outCh: outboundMsgCh, Element: elem})
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -48,6 +49,8 @@ type Jaws struct {
 	pending      map[uint64]*Request
 	active       map[*Request]struct{}
 	sessions     map[uint64]*Session
+	dirty        map[interface{}]int
+	dirtOrder    int
 }
 
 // NewWithDone returns a new JaWS object using the given completion channel.
@@ -66,6 +69,7 @@ func NewWithDone(doneCh <-chan struct{}) *Jaws {
 		pending:      make(map[uint64]*Request),
 		active:       make(map[*Request]struct{}),
 		sessions:     make(map[uint64]*Session),
+		dirty:        make(map[interface{}]int),
 	}
 }
 
@@ -357,14 +361,54 @@ func (jw *Jaws) Broadcast(msg Message) {
 
 // Dirty marks all Elements that have one or more of the given tags as dirty.
 func (jw *Jaws) Dirty(tags ...interface{}) {
+	jw.mu.Lock()
+	for _, tag := range tags {
+		if tag != nil {
+			jw.dirtOrder++
+			jw.dirty[tag] = jw.dirtOrder
+		}
+	}
+	jw.mu.Unlock()
 	jw.mu.RLock()
 	for _, rq := range jw.pending {
-		rq.Dirty(tags...)
+		rq.appendDirtyTags(tags...)
 	}
 	for rq := range jw.active {
-		rq.Dirty(tags...)
+		rq.appendDirtyTags(tags...)
 	}
 	jw.mu.RUnlock()
+}
+
+func (jw *Jaws) distributeDirt() {
+	type orderedDirt struct {
+		tag   interface{}
+		order int
+	}
+
+	jw.mu.Lock()
+	dirt := make([]orderedDirt, 0, len(jw.dirty))
+	tags := make([]interface{}, 0, len(jw.dirty))
+	reqs := make([]*Request, 0, len(jw.pending)+len(jw.active))
+	for k, v := range jw.dirty {
+		dirt = append(dirt, orderedDirt{tag: k, order: v})
+		delete(jw.dirty, k)
+	}
+	jw.dirtOrder = 0
+	for _, rq := range jw.pending {
+		reqs = append(reqs, rq)
+	}
+	for rq := range jw.active {
+		reqs = append(reqs, rq)
+	}
+	jw.mu.Unlock()
+
+	sort.Slice(dirt, func(i, j int) bool { return dirt[i].order < dirt[j].order })
+	for _, v := range dirt {
+		tags = append(tags, v.tag)
+	}
+	for _, rq := range reqs {
+		rq.appendDirtyTags(tags...)
+	}
 }
 
 // Reload requests all Requests to reload their current page.
@@ -459,6 +503,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		case <-jw.Done():
 			return
 		case <-jw.updateTicker.C:
+			jw.distributeDirt()
 			for msgCh := range subs {
 				select {
 				case msgCh <- Message{What: what.Update}:
