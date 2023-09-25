@@ -369,14 +369,6 @@ func (jw *Jaws) Dirty(tags ...interface{}) {
 		}
 	}
 	jw.mu.Unlock()
-	jw.mu.RLock()
-	for _, rq := range jw.pending {
-		rq.appendDirtyTags(tags...)
-	}
-	for rq := range jw.active {
-		rq.appendDirtyTags(tags...)
-	}
-	jw.mu.RUnlock()
 }
 
 func (jw *Jaws) distributeDirt() {

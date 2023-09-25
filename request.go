@@ -591,7 +591,7 @@ func (rq *Request) callUpdate(outboundMsgCh chan<- wsMsg) {
 	rq.mu.Lock()
 	for _, tag := range rq.dirty {
 		if elem, ok := tag.(*Element); ok {
-			if !elem.updating {
+			if elem.Request == rq && !elem.updating {
 				elem.updating = true
 				todo = append(todo, elem)
 			}
