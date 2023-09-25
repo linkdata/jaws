@@ -238,6 +238,8 @@ function jawsMessage(e) {
 			data = lines.join('\n');
 			break;
 		case 'RAttr':
+		case 'SClass':
+		case 'RClass':
 			where = lines.shift();
 			break;
 		default:
@@ -284,6 +286,12 @@ function jawsMessage(e) {
 			break;
 		case 'RAttr':
 			elem.removeAttribute(where);
+			break;
+		case 'SClass':
+			elem.classList.add(where);
+			break;
+		case 'RClass':
+			elem.classList.remove(where);
 			break;
 	}
 }

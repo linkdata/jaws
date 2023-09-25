@@ -33,6 +33,18 @@ func (u *Updater) RemoveAttr(attr string) {
 	u.send(what.RAttr, attr)
 }
 
+// SetClass a queues sending a class
+// to the browser for the Element with the given JaWS ID in this Request.
+func (u *Updater) SetClass(cls string) {
+	u.send(what.SClass, cls)
+}
+
+// RemoveClass queues sending a request to remove a class
+// to the browser for the Element with the given JaWS ID in this Request.
+func (u *Updater) RemoveClass(cls string) {
+	u.send(what.RClass, cls)
+}
+
 // SetInner queues sending a new inner HTML content
 // to the browser for the Element.
 func (u *Updater) SetInner(innerHtml template.HTML) {

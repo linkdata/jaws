@@ -23,6 +23,8 @@ const (
 	Replace
 	SAttr
 	RAttr
+	SClass
+	RClass
 	Value
 	Trigger
 	Hook
