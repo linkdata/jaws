@@ -586,27 +586,26 @@ func (rq *Request) send(outboundMsgCh chan<- wsMsg, msg wsMsg) {
 }
 
 func (rq *Request) callUpdate(outboundMsgCh chan<- wsMsg) {
-	var todo []*Element
-
 	rq.mu.Lock()
 	for _, tag := range rq.dirty {
 		if elem, ok := tag.(*Element); ok {
-			if elem.Request == rq && !elem.updating {
+			if elem.Request == rq {
 				elem.updating = true
-				todo = append(todo, elem)
 			}
 		} else {
 			for _, elem := range rq.tagMap[tag] {
-				if !elem.updating {
-					elem.updating = true
-					todo = append(todo, elem)
-				}
+				elem.updating = true
 			}
 		}
 	}
 	rq.dirty = rq.dirty[:0]
-	for _, elem := range todo {
-		elem.updating = false
+
+	todo := make([]*Element, 0, len(rq.elems))
+	for _, elem := range rq.elems {
+		if elem.updating {
+			elem.updating = false
+			todo = append(todo, elem)
+		}
 	}
 	rq.mu.Unlock()
 
