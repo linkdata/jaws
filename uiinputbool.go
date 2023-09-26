@@ -8,16 +8,12 @@ import (
 )
 
 type UiInputBool struct {
-	UiHtml
+	UiTagged
 	BoolGetter
 }
 
 func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
-	if tagger, ok := ui.BoolGetter.(TagGetter); ok {
-		e.Tag(tagger.JawsGetTag(e))
-	} else {
-		e.Tag(ui.BoolGetter)
-	}
+	ui.parseTag(e, ui.BoolGetter)
 	attrs := ui.parseParams(e, params)
 	b := ui.JawsGetBool(e)
 	if b {
@@ -47,7 +43,7 @@ func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (err err
 			}
 		}
 		err = ui.BoolGetter.(BoolSetter).JawsSetBool(e, v)
-		e.Jaws.Dirty(ui.BoolGetter)
+		e.Jaws.Dirty(ui.Tag)
 	}
 	return
 }

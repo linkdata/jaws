@@ -1,6 +1,8 @@
 package jaws
 
 import (
+	"fmt"
+	"html"
 	"html/template"
 	"sync/atomic"
 	"time"
@@ -50,8 +52,9 @@ func (g atomicGetter) JawsGetHtml(e *Element) template.HTML {
 		return v
 	case string:
 		return template.HTML(v)
+	default:
+		return template.HTML(html.EscapeString(string(fmt.Append(nil, v))))
 	}
-	panic("atomicGetter.JawsGetHtml: unsupported type")
 }
 
 func (g atomicGetter) JawsGetTag(e *Element) interface{} {

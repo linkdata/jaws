@@ -7,17 +7,14 @@ import (
 )
 
 type UiInputText struct {
-	UiHtml
+	UiTagged
 	StringGetter
 }
 
 func (ui *UiInputText) renderStringInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
-	if tagger, ok := ui.StringGetter.(TagGetter); ok {
-		e.Tag(tagger.JawsGetTag(e))
-	} else {
-		e.Tag(ui.StringGetter)
-	}
+	ui.parseTag(e, ui.StringGetter)
 	attrs := ui.parseParams(e, params)
+	writeUiDebug(e, w)
 	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.JawsGetString(e), attrs...))
 }
 
@@ -31,7 +28,7 @@ func (ui *UiInputText) JawsEvent(e *Element, wht what.What, val string) (err err
 	}
 	if wht == what.Input {
 		err = ui.StringGetter.(StringSetter).JawsSetString(e, val)
-		e.Jaws.Dirty(ui.StringGetter)
+		e.Jaws.Dirty(ui.Tag)
 	}
 	return
 }

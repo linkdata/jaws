@@ -8,7 +8,7 @@ import (
 )
 
 type UiInputDate struct {
-	UiHtml
+	UiTagged
 	TimeGetter
 }
 
@@ -17,12 +17,9 @@ func (ui *UiInputDate) value(e *Element) string {
 }
 
 func (ui *UiInputDate) renderDateInput(e *Element, w io.Writer, jid Jid, htmltype string, params ...interface{}) {
-	if tagger, ok := ui.TimeGetter.(TagGetter); ok {
-		e.Tag(tagger.JawsGetTag(e))
-	} else {
-		e.Tag(ui.TimeGetter)
-	}
+	ui.parseTag(e, ui.TimeGetter)
 	attrs := ui.parseParams(e, params)
+	writeUiDebug(e, w)
 	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.value(e), attrs...))
 }
 
@@ -42,7 +39,7 @@ func (ui *UiInputDate) JawsEvent(e *Element, wht what.What, val string) (err err
 			}
 		}
 		err = ui.TimeGetter.(TimeSetter).JawsSetTime(e, v)
-		e.Jaws.Dirty(ui.TimeGetter)
+		e.Jaws.Dirty(ui.Tag)
 	}
 	return
 }
