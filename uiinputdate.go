@@ -8,7 +8,7 @@ import (
 )
 
 type UiInputDate struct {
-	UiTagged
+	UiHtml
 	TimeGetter
 }
 
@@ -17,7 +17,7 @@ func (ui *UiInputDate) value(e *Element) string {
 }
 
 func (ui *UiInputDate) renderDateInput(e *Element, w io.Writer, jid Jid, htmltype string, params ...interface{}) {
-	ui.parseTag(e, ui.TimeGetter)
+	ui.parseGetter(e, ui.TimeGetter)
 	attrs := ui.parseParams(e, params)
 	writeUiDebug(e, w)
 	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.value(e), attrs...))

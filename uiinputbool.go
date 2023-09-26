@@ -8,12 +8,12 @@ import (
 )
 
 type UiInputBool struct {
-	UiTagged
+	UiHtml
 	BoolGetter
 }
 
 func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
-	ui.parseTag(e, ui.BoolGetter)
+	ui.parseGetter(e, ui.BoolGetter)
 	attrs := ui.parseParams(e, params)
 	b := ui.JawsGetBool(e)
 	if b {

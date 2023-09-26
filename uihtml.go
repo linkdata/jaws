@@ -17,6 +17,7 @@ type UiHtml struct {
 	ClickHandler ClickHandler
 	EventHandler EventHandler
 	EventFn      EventFn // legacy
+	Tag          interface{}
 }
 
 func writeUiDebug(e *Element, w io.Writer) {
@@ -31,6 +32,23 @@ func writeUiDebug(e *Element, w io.Writer) {
 		}
 		sb.WriteByte(']')
 		_, _ = w.Write([]byte(strings.ReplaceAll(sb.String(), "-->", "==>") + " -->"))
+	}
+}
+
+func (ui *UiHtml) parseGetter(e *Element, getter interface{}) {
+	if getter != nil {
+		if tagger, ok := getter.(TagGetter); ok {
+			ui.Tag = tagger.JawsGetTag(e)
+		} else {
+			ui.Tag = getter
+		}
+		e.Tag(ui.Tag)
+		if ch, ok := getter.(ClickHandler); ok {
+			ui.ClickHandler = ch
+		}
+		if eh, ok := getter.(EventHandler); ok {
+			ui.EventHandler = eh
+		}
 	}
 }
 

@@ -42,8 +42,7 @@ func (t Template) ToHTML(e *Element) template.HTML {
 	return template.HTML(b.String())
 }
 
-// interface UI
-var _ UI = (*Template)(nil) // ensure
+var _ UI = (*Template)(nil) // statically ensure interface is defined
 
 func (t Template) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	writeUiDebug(e, w)
@@ -54,8 +53,7 @@ func (t Template) JawsUpdate(u Updater) {
 	u.Replace(t.ToHTML(u.Element))
 }
 
-// interface EventHandler
-var _ EventHandler = (*Template)(nil) // ensure
+var _ EventHandler = (*Template)(nil) // statically ensure interface is defined
 
 func (t Template) JawsEvent(e *Element, wht what.What, val string) error {
 	if wht == what.Click {

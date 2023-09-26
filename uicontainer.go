@@ -10,14 +10,15 @@ import (
 
 type UiContainer struct {
 	OuterHTMLTag string
-	Container
 	UiHtml
+	Container
 	mu       deadlock.Mutex
 	contents []*Element
 }
 
 func (ui *UiContainer) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	attrs := ui.parseParams(e, append(params, ui.Container))
+	ui.parseGetter(e, ui.Container)
+	attrs := ui.parseParams(e, params)
 	writeUiDebug(e, w)
 	b := e.jid.AppendStartTagAttr(nil, ui.OuterHTMLTag)
 	for _, attr := range attrs {

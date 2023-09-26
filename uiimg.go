@@ -20,10 +20,9 @@ func (ui *UiImg) SrcAttr(e *Element) string {
 }
 
 func (ui *UiImg) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	if tagger, ok := ui.StringGetter.(TagGetter); ok {
-		e.Tag(tagger.JawsGetTag(e))
-	}
+	ui.parseGetter(e, ui.StringGetter)
 	attrs := append(ui.parseParams(e, params), "src="+ui.SrcAttr(e))
+	writeUiDebug(e, w)
 	maybePanic(WriteHtmlInner(w, e.Jid(), "img", "", "", attrs...))
 }
 

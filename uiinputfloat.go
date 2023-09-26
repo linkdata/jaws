@@ -8,7 +8,7 @@ import (
 )
 
 type UiInputFloat struct {
-	UiTagged
+	UiHtml
 	FloatGetter
 }
 
@@ -17,7 +17,7 @@ func (ui *UiInputFloat) value(e *Element) string {
 }
 
 func (ui *UiInputFloat) renderFloatInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
-	ui.parseTag(e, ui.FloatGetter)
+	ui.parseGetter(e, ui.FloatGetter)
 	attrs := ui.parseParams(e, params)
 	writeUiDebug(e, w)
 	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.value(e), attrs...))

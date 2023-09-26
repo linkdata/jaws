@@ -7,12 +7,12 @@ import (
 )
 
 type UiInputText struct {
-	UiTagged
+	UiHtml
 	StringGetter
 }
 
 func (ui *UiInputText) renderStringInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
-	ui.parseTag(e, ui.StringGetter)
+	ui.parseGetter(e, ui.StringGetter)
 	attrs := ui.parseParams(e, params)
 	writeUiDebug(e, w)
 	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.JawsGetString(e), attrs...))
