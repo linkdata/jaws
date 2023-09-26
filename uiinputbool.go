@@ -15,6 +15,8 @@ type UiInputBool struct {
 func (ui *UiInputBool) WriteHtmlInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
 	if tagger, ok := ui.BoolGetter.(TagGetter); ok {
 		e.Tag(tagger.JawsGetTag(e))
+	} else {
+		e.Tag(ui.BoolGetter)
 	}
 	attrs := ui.parseParams(e, params)
 	b := ui.JawsGetBool(e)

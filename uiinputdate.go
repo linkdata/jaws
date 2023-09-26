@@ -19,6 +19,8 @@ func (ui *UiInputDate) value(e *Element) string {
 func (ui *UiInputDate) WriteHtmlInput(e *Element, w io.Writer, jid Jid, htmltype string, params ...interface{}) {
 	if tagger, ok := ui.TimeGetter.(TagGetter); ok {
 		e.Tag(tagger.JawsGetTag(e))
+	} else {
+		e.Tag(ui.TimeGetter)
 	}
 	attrs := ui.parseParams(e, params)
 	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.value(e), attrs...))

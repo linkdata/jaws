@@ -20,6 +20,10 @@ func (g stringGetter) JawsGetString(e *Element) string {
 	return g.v
 }
 
+func (g stringGetter) JawsGetTag(e *Element) interface{} {
+	return nil
+}
+
 func makeStringGetter(v interface{}) StringGetter {
 	switch v := v.(type) {
 	case StringGetter:

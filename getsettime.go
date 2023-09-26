@@ -20,6 +20,10 @@ func (g timeGetter) JawsGetTime(e *Element) time.Time {
 	return g.v
 }
 
+func (g timeGetter) JawsGetTag(e *Element) interface{} {
+	return nil
+}
+
 func makeTimeGetter(v interface{}) TimeGetter {
 	switch v := v.(type) {
 	case TimeGetter:

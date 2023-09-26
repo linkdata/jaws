@@ -14,6 +14,8 @@ type UiInputText struct {
 func (ui *UiInputText) WriteHtmlInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
 	if tagger, ok := ui.StringGetter.(TagGetter); ok {
 		e.Tag(tagger.JawsGetTag(e))
+	} else {
+		e.Tag(ui.StringGetter)
 	}
 	attrs := ui.parseParams(e, params)
 	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.JawsGetString(e), attrs...))

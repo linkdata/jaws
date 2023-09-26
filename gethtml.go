@@ -15,6 +15,10 @@ func (g htmlGetter) JawsGetHtml(e *Element) template.HTML {
 	return g.v
 }
 
+func (g htmlGetter) JawsGetTag(e *Element) interface{} {
+	return nil
+}
+
 func makeHtmlGetter(v interface{}) HtmlGetter {
 	switch v := v.(type) {
 	case HtmlGetter:
