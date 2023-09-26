@@ -282,14 +282,15 @@ func (rq *Request) TagsOf(elem *Element) (tags []interface{}) {
 	return
 }
 
-// Register creates a new Element with the given tag as a valid target
+// Register creates a new Element with the given item as a valid target
 // for dynamic updates.
 //
 // Returns the JaWS ID, suitable for including as a HTML attribute:
 //
 //	<div id="{{$.Register `footag`}}">
-func (rq *Request) Register(tagitem interface{}, params ...interface{}) Jid {
-	switch data := tagitem.(type) {
+func (rq *Request) Register(item interface{}, params ...interface{}) Jid {
+	var tag interface{}
+	switch data := item.(type) {
 	case Jid:
 		if elem := rq.GetElement(data); elem != nil {
 			if uib, ok := elem.Ui().(*UiHtml); ok {
@@ -298,22 +299,26 @@ func (rq *Request) Register(tagitem interface{}, params ...interface{}) Jid {
 			return data
 		}
 		return 0
+	case TagGetter:
+		tag = data.JawsGetTag(rq)
 	case string:
-		tagitem = Tag{data}
+		tag = Tag{data}
 	case template.HTML:
-		tagitem = Tag{string(data)}
+		tag = Tag{string(data)}
 	}
 
-	for _, elem := range rq.GetElements(tagitem) {
+	for _, elem := range rq.GetElements(tag) {
 		if uib, ok := elem.Ui().(*UiHtml); ok {
+			uib.parseGetter(elem, item)
 			uib.parseParams(elem, params)
 		}
 	}
 
 	uib := &UiHtml{}
 	elem := rq.NewElement(uib)
-	elem.Tag(tagitem)
+	uib.parseGetter(elem, item)
 	uib.parseParams(elem, params)
+	rq.Jaws.Dirty(uib.Tag)
 	return elem.jid
 }
 

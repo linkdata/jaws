@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -38,7 +37,7 @@ func writeUiDebug(e *Element, w io.Writer) {
 func (ui *UiHtml) parseGetter(e *Element, getter interface{}) {
 	if getter != nil {
 		if tagger, ok := getter.(TagGetter); ok {
-			ui.Tag = tagger.JawsGetTag(e)
+			ui.Tag = tagger.JawsGetTag(e.Request)
 		} else {
 			ui.Tag = getter
 		}
@@ -148,10 +147,31 @@ func (ui *UiHtml) JawsRender(e *Element, w io.Writer, params []interface{}) {
 }
 
 func (ui *UiHtml) JawsUpdate(u Updater) {
-	panic(fmt.Errorf("jaws: UiHtml.JawsUpdate(%v) called", u.Element))
+	switch v := ui.Tag.(type) {
+	case *NamedBoolArray:
+		u.SetValue(v.Get())
+	case StringGetter:
+		u.SetValue(v.JawsGetString(u.Element))
+	case FloatGetter:
+		u.SetValue(string(fmt.Append(nil, v.JawsGetFloat(u.Element))))
+	case BoolGetter:
+		if v.JawsGetBool(u.Element) {
+			u.SetAttr("checked", "")
+		} else {
+			u.RemoveAttr("checked")
+		}
+	case TimeGetter:
+		u.SetValue(v.JawsGetTime(u.Element).Format(ISO8601))
+	case HtmlGetter:
+		u.SetInner(v.JawsGetHtml(u.Element))
+	case UI:
+		v.JawsUpdate(u)
+	default:
+		panic(fmt.Errorf("jaws: UiHtml.JawsUpdate(%v): unhandled type: %T", u.Element, v))
+	}
 }
 
-func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) error {
+func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if ui.EventFn != nil { // LEGACY
 		return ui.EventFn(e.Request, wht, e.Jid().String(), val)
 	}
@@ -161,8 +181,42 @@ func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) error {
 	if ui.EventHandler != nil {
 		return ui.EventHandler.JawsEvent(e, wht, val)
 	}
-	if deadlock.Debug && wht != what.Click {
-		log.Printf("jaws: unhandled JawsEvent(%v, %q, %q)\n", e, wht, val)
+	if wht == what.Input {
+		switch data := ui.Tag.(type) {
+		case *NamedBoolArray:
+			data.Set(val, true)
+		case StringSetter:
+			err = data.JawsSetString(e, val)
+		case FloatSetter:
+			var v float64
+			if val != "" {
+				if v, err = strconv.ParseFloat(val, 64); err != nil {
+					return
+				}
+			}
+			err = data.JawsSetFloat(e, v)
+		case BoolSetter:
+			var v bool
+			if val != "" {
+				if v, err = strconv.ParseBool(val); err != nil {
+					return
+				}
+			}
+			err = data.JawsSetBool(e, v)
+		case TimeSetter:
+			var v time.Time
+			if val != "" {
+				if v, err = time.Parse(ISO8601, val); err != nil {
+					return
+				}
+			}
+			err = data.JawsSetTime(e, v)
+		default:
+			if deadlock.Debug {
+				_ = e.Jaws.Log(fmt.Errorf("jaws: UiHtml.JawsEvent(%v, %s, %q): unhandled type: %T", e, wht, val, data))
+			}
+		}
+		e.Jaws.Dirty(ui.Tag)
 	}
-	return nil
+	return
 }

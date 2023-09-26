@@ -17,7 +17,7 @@ func (g floatGetter) JawsGetFloat(e *Element) float64 {
 	return g.v
 }
 
-func (g floatGetter) JawsGetTag(e *Element) interface{} {
+func (g floatGetter) JawsGetTag(rq *Request) interface{} {
 	return nil
 }
 

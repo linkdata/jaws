@@ -20,7 +20,7 @@ func (g timeGetter) JawsGetTime(e *Element) time.Time {
 	return g.v
 }
 
-func (g timeGetter) JawsGetTag(e *Element) interface{} {
+func (g timeGetter) JawsGetTag(rq *Request) interface{} {
 	return nil
 }
 

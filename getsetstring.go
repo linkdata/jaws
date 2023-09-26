@@ -20,7 +20,7 @@ func (g stringGetter) JawsGetString(e *Element) string {
 	return g.v
 }
 
-func (g stringGetter) JawsGetTag(e *Element) interface{} {
+func (g stringGetter) JawsGetTag(rq *Request) interface{} {
 	return nil
 }
 

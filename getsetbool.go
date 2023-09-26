@@ -17,7 +17,7 @@ func (g boolGetter) JawsGetBool(e *Element) bool {
 	return g.v
 }
 
-func (g boolGetter) JawsGetTag(e *Element) interface{} {
+func (g boolGetter) JawsGetTag(rq *Request) interface{} {
 	return nil
 }
 

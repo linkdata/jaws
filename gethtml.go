@@ -15,7 +15,7 @@ func (g htmlGetter) JawsGetHtml(e *Element) template.HTML {
 	return g.v
 }
 
-func (g htmlGetter) JawsGetTag(e *Element) interface{} {
+func (g htmlGetter) JawsGetTag(rq *Request) interface{} {
 	return nil
 }
 

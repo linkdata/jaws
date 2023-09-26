@@ -57,6 +57,6 @@ func (g atomicGetter) JawsGetHtml(e *Element) template.HTML {
 	}
 }
 
-func (g atomicGetter) JawsGetTag(e *Element) interface{} {
+func (g atomicGetter) JawsGetTag(rq *Request) interface{} {
 	return g.v
 }
