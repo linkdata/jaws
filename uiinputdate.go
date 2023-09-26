@@ -16,7 +16,7 @@ func (ui *UiInputDate) value(e *Element) string {
 	return ui.JawsGetTime(e).Format(ISO8601)
 }
 
-func (ui *UiInputDate) WriteHtmlInput(e *Element, w io.Writer, jid Jid, htmltype string, params ...interface{}) {
+func (ui *UiInputDate) renderDateInput(e *Element, w io.Writer, jid Jid, htmltype string, params ...interface{}) {
 	if tagger, ok := ui.TimeGetter.(TagGetter); ok {
 		e.Tag(tagger.JawsGetTag(e))
 	} else {

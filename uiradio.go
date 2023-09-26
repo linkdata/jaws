@@ -10,7 +10,7 @@ type UiRadio struct {
 }
 
 func (ui *UiRadio) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.UiInputBool.WriteHtmlInput(e, w, "radio", params...)
+	ui.renderBoolInput(e, w, "radio", params...)
 }
 
 func MakeUiRadio(vp BoolGetter) UiRadio {

@@ -10,7 +10,7 @@ type UiNumber struct {
 }
 
 func (ui *UiNumber) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.UiInputFloat.WriteHtmlInput(e, w, "number", params...)
+	ui.renderFloatInput(e, w, "number", params...)
 }
 
 func MakeUiNumber(g FloatGetter) UiNumber {

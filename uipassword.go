@@ -10,7 +10,7 @@ type UiPassword struct {
 }
 
 func (ui *UiPassword) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.UiInputText.WriteHtmlInput(e, w, "password", params...)
+	ui.renderStringInput(e, w, "password", params...)
 }
 
 func MakeUiPassword(g StringGetter) UiPassword {

@@ -13,8 +13,8 @@ func (ui *UiDiv) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.renderInner(e, w, "div", "", params)
 }
 
-func NewUiDiv(innerHtml HtmlGetter) *UiDiv {
-	return &UiDiv{
+func MakeUiDiv(innerHtml HtmlGetter) UiDiv {
+	return UiDiv{
 		UiHtmlInner{
 			HtmlGetter: innerHtml,
 		},
@@ -22,5 +22,6 @@ func NewUiDiv(innerHtml HtmlGetter) *UiDiv {
 }
 
 func (rq *Request) Div(innerHtml interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiDiv(makeHtmlGetter(innerHtml)), params...)
+	ui := MakeUiDiv(makeHtmlGetter(innerHtml))
+	return rq.UI(&ui, params...)
 }

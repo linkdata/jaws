@@ -10,7 +10,7 @@ type UiRange struct {
 }
 
 func (ui *UiRange) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.UiInputFloat.WriteHtmlInput(e, w, "range", params...)
+	ui.renderFloatInput(e, w, "range", params...)
 }
 
 func MakeUiRange(g FloatGetter) UiRange {

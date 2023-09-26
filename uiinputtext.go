@@ -11,7 +11,7 @@ type UiInputText struct {
 	StringGetter
 }
 
-func (ui *UiInputText) WriteHtmlInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
+func (ui *UiInputText) renderStringInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
 	if tagger, ok := ui.StringGetter.(TagGetter); ok {
 		e.Tag(tagger.JawsGetTag(e))
 	} else {

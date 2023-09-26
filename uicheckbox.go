@@ -10,7 +10,7 @@ type UiCheckbox struct {
 }
 
 func (ui *UiCheckbox) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.UiInputBool.WriteHtmlInput(e, w, "checkbox", params...)
+	ui.renderBoolInput(e, w, "checkbox", params...)
 }
 
 func MakeUiCheckbox(g BoolGetter) UiCheckbox {

@@ -16,7 +16,7 @@ func (ui *UiInputFloat) value(e *Element) string {
 	return strconv.FormatFloat(ui.JawsGetFloat(e), 'f', -1, 64)
 }
 
-func (ui *UiInputFloat) WriteHtmlInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
+func (ui *UiInputFloat) renderFloatInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
 	if tagger, ok := ui.FloatGetter.(TagGetter); ok {
 		e.Tag(tagger.JawsGetTag(e))
 	} else {

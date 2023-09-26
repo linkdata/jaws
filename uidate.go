@@ -12,7 +12,7 @@ type UiDate struct {
 }
 
 func (ui *UiDate) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.UiInputDate.WriteHtmlInput(e, w, e.Jid(), "date", params...)
+	ui.renderDateInput(e, w, e.Jid(), "date", params...)
 }
 
 func MakeUiDate(g TimeGetter) UiDate {
