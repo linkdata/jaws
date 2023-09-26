@@ -15,17 +15,15 @@ func (ui *UiDate) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.UiInputDate.WriteHtmlInput(e, w, e.Jid(), "date", params...)
 }
 
-func NewUiDate(vp ValueProxy) (ui *UiDate) {
-	ui = &UiDate{
+func MakeUiDate(g TimeGetter) UiDate {
+	return UiDate{
 		UiInputDate{
-			UiInput{
-				ValueProxy: vp,
-			},
+			TimeGetter: g,
 		},
 	}
-	return
 }
 
 func (rq *Request) Date(value interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiDate(MakeValueProxy(value)), params...)
+	ui := MakeUiDate(makeTimeGetter(value))
+	return rq.UI(&ui, params...)
 }

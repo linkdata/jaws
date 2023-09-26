@@ -10,19 +10,18 @@ type UiSpan struct {
 }
 
 func (ui *UiSpan) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.UiHtmlInner.WriteHtmlInner(e, w, "span", "", params...)
+	ui.renderInner(e, w, "span", "", params)
 }
 
-func NewUiSpan(innerHtml Getter) *UiSpan {
-	return &UiSpan{
+func MakeUiSpan(innerHtml HtmlGetter) UiSpan {
+	return UiSpan{
 		UiHtmlInner{
-			UiGetter{
-				Getter: innerHtml,
-			},
+			HtmlGetter: innerHtml,
 		},
 	}
 }
 
 func (rq *Request) Span(innerHtml interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiSpan(MakeGetter(innerHtml)), params...)
+	ui := MakeUiSpan(makeHtmlGetter(innerHtml))
+	return rq.UI(&ui, params...)
 }

@@ -7,19 +7,12 @@ import (
 )
 
 type UiImg struct {
-	UiGetter
+	UiHtml
+	StringGetter
 }
 
 func (ui *UiImg) SrcAttr(e *Element) string {
-	var src string
-	switch v := ui.JawsGet(e).(type) {
-	case string:
-		src = v
-	case template.HTML:
-		src = string(v)
-	default:
-		panic("UiImg: src not a string")
-	}
+	src := ui.JawsGetString(e)
 	if len(src) < 1 || src[0] != '"' {
 		return strconv.Quote(src)
 	}
@@ -27,6 +20,9 @@ func (ui *UiImg) SrcAttr(e *Element) string {
 }
 
 func (ui *UiImg) JawsRender(e *Element, w io.Writer, params []interface{}) {
+	if tagger, ok := ui.StringGetter.(TagGetter); ok {
+		e.Tag(tagger.JawsGetTag(e))
+	}
 	attrs := append(ui.parseParams(e, params), "src="+ui.SrcAttr(e))
 	maybePanic(WriteHtmlInner(w, e.Jid(), "img", "", "", attrs...))
 }
@@ -35,14 +31,13 @@ func (ui *UiImg) JawsUpdate(u Updater) {
 	u.SetAttr("src", ui.SrcAttr(u.Element))
 }
 
-func NewUiImg(vp Getter) *UiImg {
-	return &UiImg{
-		UiGetter{
-			Getter: vp,
-		},
+func MakeUiImg(g StringGetter) UiImg {
+	return UiImg{
+		StringGetter: g,
 	}
 }
 
 func (rq *Request) Img(imageSrc interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiImg(MakeGetter(imageSrc)), params...)
+	ui := MakeUiImg(makeStringGetter(imageSrc))
+	return rq.UI(&ui, params...)
 }

@@ -386,7 +386,7 @@ func (rq *Request) appendDirtyTags(tags ...interface{}) {
 
 // Tag adds the given tags to the given Element.
 func (rq *Request) Tag(elem *Element, tags ...interface{}) {
-	if elem != nil && elem.Request == rq {
+	if elem != nil && len(tags) > 0 && elem.Request == rq {
 		var expandedtags []interface{}
 		expandedtags = TagExpand(tags, expandedtags)
 		rq.mu.Lock()

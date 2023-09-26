@@ -957,24 +957,8 @@ func TestRequest_Date(t *testing.T) {
 		return nil
 	}, "")
 
-	nowTxt := time.Now().Format(ISO8601)
+	chk(h, elemId, elemVal.Format(ISO8601))
 
-	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
-	case msg := <-rq.outCh:
-		is.Equal(msg, wsMsg{
-			Jid:  1,
-			What: what.Value,
-			Data: nowTxt,
-		})
-	}
-
-	chk(h, elemId, nowTxt)
-
-	if timeDiff := time.Since(av.Load().(time.Time)); timeDiff > testTimeout {
-		is.Fail()
-	}
 	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "1970-01-02"}
 	select {
 	case <-time.NewTimer(testTimeout).C:

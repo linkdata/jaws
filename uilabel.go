@@ -10,20 +10,18 @@ type UiLabel struct {
 }
 
 func (ui *UiLabel) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.UiHtmlInner.WriteHtmlInner(e, w, "label", "", params...)
+	ui.renderInner(e, w, "label", "", params)
 }
 
-func NewUiLabel(vp Getter) (ui *UiLabel) {
-	ui = &UiLabel{
+func MakeUiLabel(innerHtml HtmlGetter) UiLabel {
+	return UiLabel{
 		UiHtmlInner{
-			UiGetter{
-				Getter: vp,
-			},
+			HtmlGetter: innerHtml,
 		},
 	}
-	return
 }
 
 func (rq *Request) Label(innerHtml interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiLabel(MakeGetter(innerHtml)), params...)
+	ui := MakeUiLabel(makeHtmlGetter(innerHtml))
+	return rq.UI(&ui, params...)
 }

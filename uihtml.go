@@ -19,32 +19,6 @@ type UiHtml struct {
 	EventFn      EventFn // legacy
 }
 
-func htmlValueString(val interface{}) (s string) {
-	switch v := val.(type) {
-	case nil:
-		s = "null"
-	case string:
-		s = v
-	case int:
-		s = strconv.Itoa(v)
-	case bool:
-		if v {
-			s = "true"
-		} else {
-			s = "false"
-		}
-	case time.Time:
-		s = v.Format(ISO8601)
-	case float64:
-		s = strconv.FormatFloat(v, 'f', -1, 64)
-	case float32:
-		s = strconv.FormatFloat(float64(v), 'f', -1, 32)
-	default:
-		panic(fmt.Errorf("jaws: don't know how to convert %T into HTML value", val))
-	}
-	return
-}
-
 func writeUiDebug(e *Element, w io.Writer) {
 	if deadlock.Debug {
 		var sb strings.Builder
@@ -58,21 +32,6 @@ func writeUiDebug(e *Element, w io.Writer) {
 		sb.WriteByte(']')
 		_, _ = w.Write([]byte(strings.ReplaceAll(sb.String(), "-->", "==>") + " -->"))
 	}
-}
-
-func (ui *UiHtml) WriteHtmlInner(w io.Writer, e *Element, htmltag, htmltype string, htmlinner template.HTML, attrs ...string) {
-	writeUiDebug(e, w)
-	maybePanic(WriteHtmlInner(w, e.Jid(), htmltag, htmltype, htmlinner, attrs...))
-}
-
-func (ui *UiHtml) WriteHtmlSelect(w io.Writer, e *Element, nba *NamedBoolArray, attrs ...string) {
-	writeUiDebug(e, w)
-	maybePanic(WriteHtmlSelect(w, e.Jid(), nba, attrs...))
-}
-
-func (ui *UiHtml) WriteHtmlInput(w io.Writer, e *Element, htmltype, htmlval string, attrs ...string) {
-	writeUiDebug(e, w)
-	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, htmlval, attrs...))
 }
 
 func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []string) {

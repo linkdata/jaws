@@ -15,9 +15,11 @@ func (rq *Request) RadioGroup(nba *NamedBoolArray) (rl []RadioElement) {
 	nameAttr := `name="` + MakeID() + `"`
 	nba.ReadLocked(func(nbl []*NamedBool) {
 		for _, nb := range nbl {
+			radio := MakeUiRadio(nb)
+			label := MakeUiLabel(nb)
 			rl = append(rl, RadioElement{
-				radio:    rq.NewElement(NewUiRadio(nb)),
-				label:    rq.NewElement(NewUiLabel(nb.HtmlValueProxy())),
+				radio:    rq.NewElement(&radio),
+				label:    rq.NewElement(&label),
 				nameAttr: nameAttr,
 			},
 			)

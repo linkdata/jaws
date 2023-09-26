@@ -13,17 +13,15 @@ func (ui *UiPassword) JawsRender(e *Element, w io.Writer, params []interface{}) 
 	ui.UiInputText.WriteHtmlInput(e, w, "password", params...)
 }
 
-func NewUiPassword(vp ValueProxy) (ui *UiPassword) {
-	ui = &UiPassword{
+func MakeUiPassword(g StringGetter) UiPassword {
+	return UiPassword{
 		UiInputText{
-			UiInput{
-				ValueProxy: vp,
-			},
+			StringGetter: g,
 		},
 	}
-	return
 }
 
 func (rq *Request) Password(value interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiPassword(MakeValueProxy(value)), params...)
+	ui := MakeUiPassword(makeStringGetter(value))
+	return rq.UI(&ui, params...)
 }

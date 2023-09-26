@@ -10,19 +10,18 @@ type UiButton struct {
 }
 
 func (ui *UiButton) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.UiHtmlInner.WriteHtmlInner(e, w, "button", "button", params...)
+	ui.renderInner(e, w, "button", "button", params)
 }
 
-func NewUiButton(innerHtml Getter) *UiButton {
-	return &UiButton{
+func MakeUiButton(innerHtml HtmlGetter) UiButton {
+	return UiButton{
 		UiHtmlInner{
-			UiGetter{
-				Getter: innerHtml,
-			},
+			HtmlGetter: innerHtml,
 		},
 	}
 }
 
 func (rq *Request) Button(innerHtml interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiButton(MakeGetter(innerHtml)), params...)
+	ui := MakeUiButton(makeHtmlGetter(innerHtml))
+	return rq.UI(&ui, params...)
 }

@@ -13,17 +13,15 @@ func (ui *UiNumber) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.UiInputFloat.WriteHtmlInput(e, w, "number", params...)
 }
 
-func NewUiNumber(vp ValueProxy) (ui *UiNumber) {
-	ui = &UiNumber{
+func MakeUiNumber(g FloatGetter) UiNumber {
+	return UiNumber{
 		UiInputFloat{
-			UiInput{
-				ValueProxy: vp,
-			},
+			FloatGetter: g,
 		},
 	}
-	return
 }
 
 func (rq *Request) Number(value interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiNumber(MakeValueProxy(value)), params...)
+	ui := MakeUiNumber(makeFloatGetter(value))
+	return rq.UI(&ui, params...)
 }

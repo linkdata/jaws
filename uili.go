@@ -10,19 +10,18 @@ type UiLi struct {
 }
 
 func (ui *UiLi) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.UiHtmlInner.WriteHtmlInner(e, w, "li", "", params...)
+	ui.renderInner(e, w, "li", "", params)
 }
 
-func NewUiLi(innerHtml Getter) *UiLi {
-	return &UiLi{
+func MakeUiLi(innerHtml HtmlGetter) UiLi {
+	return UiLi{
 		UiHtmlInner{
-			UiGetter{
-				Getter: innerHtml,
-			},
+			HtmlGetter: innerHtml,
 		},
 	}
 }
 
 func (rq *Request) Li(innerHtml interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiLi(MakeGetter(innerHtml)), params...)
+	ui := MakeUiLi(makeHtmlGetter(innerHtml))
+	return rq.UI(&ui, params...)
 }

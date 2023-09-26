@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"fmt"
 	"io"
 	"strconv"
 
@@ -9,21 +8,29 @@ import (
 )
 
 type UiInputBool struct {
-	UiInput
+	UiHtml
+	BoolGetter
 }
 
 func (ui *UiInputBool) WriteHtmlInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
-	attrs := ui.parseParams(e, params)
-	val := ui.JawsGet(e)
-	if b, ok := val.(bool); ok {
-		if b {
-			attrs = append(attrs, "checked")
-		}
-		writeUiDebug(e, w)
-		maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, "", attrs...))
-		return
+	if tagger, ok := ui.BoolGetter.(TagGetter); ok {
+		e.Tag(tagger.JawsGetTag(e))
 	}
-	panic(fmt.Errorf("jaws: UiInputBool: expected bool, got %T from %T", val, ui.ValueProxy))
+	attrs := ui.parseParams(e, params)
+	b := ui.JawsGetBool(e)
+	if b {
+		attrs = append(attrs, "checked")
+	}
+	writeUiDebug(e, w)
+	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, "", attrs...))
+}
+
+func (ui *UiInputBool) JawsUpdate(u Updater) {
+	if ui.JawsGetBool(u.Element) {
+		u.SetAttr("checked", "")
+	} else {
+		u.RemoveAttr("checked")
+	}
 }
 
 func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (err error) {
@@ -37,7 +44,8 @@ func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (err err
 				return
 			}
 		}
-		ui.JawsSet(e, v)
+		err = ui.BoolGetter.(BoolSetter).JawsSetBool(e, v)
+		e.Jaws.Dirty(ui.BoolGetter)
 	}
 	return
 }

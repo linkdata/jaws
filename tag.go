@@ -20,16 +20,20 @@ func TagString(tag interface{}) string {
 }
 
 func TagExpand(tag interface{}, result []interface{}) []interface{} {
+	if len(result) > 1000 {
+		panic("too many tags")
+	}
 	switch data := tag.(type) {
 	case nil:
+		// skipped
 	case Tag:
 		result = append(result, data.Value)
-	case readonlyProxy:
-		result = append(result, data.Value)
-	case atomicProxy:
-		result = append(result, data.Value)
+	case atomicGetter:
+		result = append(result, data.v)
 	case template.HTML:
 		result = append(result, string(data))
+	case TagGetter:
+		result = TagExpand(data, result)
 	case []Tag:
 		for _, v := range data {
 			result = append(result, v.Value)

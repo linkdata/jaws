@@ -13,17 +13,15 @@ func (ui *UiRange) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.UiInputFloat.WriteHtmlInput(e, w, "range", params...)
 }
 
-func NewUiRange(vp ValueProxy) (ui *UiRange) {
-	ui = &UiRange{
+func MakeUiRange(g FloatGetter) UiRange {
+	return UiRange{
 		UiInputFloat{
-			UiInput{
-				ValueProxy: vp,
-			},
+			FloatGetter: g,
 		},
 	}
-	return
 }
 
 func (rq *Request) Range(value interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiRange(MakeValueProxy(value)), params...)
+	ui := MakeUiRange(makeFloatGetter(value))
+	return rq.UI(&ui, params...)
 }

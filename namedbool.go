@@ -36,6 +36,36 @@ func (nb *NamedBool) Name() (s string) {
 	return
 }
 
+func (nb *NamedBool) JawsGetHtml(*Element) (h template.HTML) {
+	nb.mu.RLock()
+	h = nb.html
+	nb.mu.RUnlock()
+	return
+}
+
+func (nb *NamedBool) JawsGetBool(*Element) (v bool) {
+	nb.mu.RLock()
+	v = nb.checked
+	nb.mu.RUnlock()
+	return
+}
+
+func (nb *NamedBool) JawsSetBool(e *Element, checked bool) (err error) {
+	nb.mu.Lock()
+	var nba *NamedBoolArray
+	if nb.checked != checked {
+		nb.checked = checked
+		nba = nb.nba
+	}
+	nb.mu.Unlock()
+	e.Jaws.Dirty(nb)
+	if nba != nil {
+		e.Jaws.Dirty(nba)
+		nb.nba.Set(nb.name, checked)
+	}
+	return
+}
+
 func (nb *NamedBool) Html() (h template.HTML) {
 	nb.mu.RLock()
 	h = nb.html
@@ -63,60 +93,4 @@ func (nb *NamedBool) Set(checked bool) (changed bool) {
 // String returns a string representation of the NamedBool suitable for debugging.
 func (nb *NamedBool) String() string {
 	return fmt.Sprintf("&{%q,%q,%v}", nb.Name(), nb.Html(), nb.Checked())
-}
-
-var _ ValueProxy = (*NamedBool)(nil)
-var _ ValueProxy = namedBoolHtmlValueProxy{}
-
-type namedBoolHtmlValueProxy struct {
-	nb *NamedBool
-}
-
-func (hvp namedBoolHtmlValueProxy) JawsGet(e *Element) interface{} {
-	hvp.nb.mu.RLock()
-	html := hvp.nb.html
-	hvp.nb.mu.RUnlock()
-	return html
-}
-
-func (hvp namedBoolHtmlValueProxy) JawsSet(e *Element, value interface{}) (changed bool) {
-	if html, ok := value.(template.HTML); ok {
-		hvp.nb.mu.Lock()
-		if hvp.nb.html != html {
-			hvp.nb.html = html
-			changed = true
-		}
-		hvp.nb.mu.Unlock()
-	}
-	return
-}
-
-func (nb *NamedBool) HtmlValueProxy() ValueProxy {
-	return namedBoolHtmlValueProxy{nb}
-}
-
-func (nb *NamedBool) JawsGet(e *Element) interface{} {
-	nb.mu.RLock()
-	checked := nb.checked
-	nb.mu.RUnlock()
-	return checked
-}
-
-func (nb *NamedBool) JawsSet(e *Element, value interface{}) (changed bool) {
-	if checked, ok := value.(bool); ok {
-		nb.mu.Lock()
-		if nb.checked != checked {
-			nb.checked = checked
-			changed = true
-		}
-		nb.mu.Unlock()
-		if changed {
-			e.Dirty()
-			if checked && nb.nba != nil {
-				nb.nba.Set(nb.name, true)
-			}
-		}
-		return
-	}
-	panic("NamedBool.JawsSet(): not bool")
 }

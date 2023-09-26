@@ -13,17 +13,15 @@ func (ui *UiRadio) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.UiInputBool.WriteHtmlInput(e, w, "radio", params...)
 }
 
-func NewUiRadio(vp ValueProxy) (ui *UiRadio) {
-	ui = &UiRadio{
+func MakeUiRadio(vp BoolGetter) UiRadio {
+	return UiRadio{
 		UiInputBool{
-			UiInput{
-				ValueProxy: vp,
-			},
+			BoolGetter: vp,
 		},
 	}
-	return
 }
 
 func (rq *Request) Radio(value interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiRadio(MakeValueProxy(value)), params...)
+	ui := MakeUiRadio(makeBoolGetter(value))
+	return rq.UI(&ui, params...)
 }

@@ -10,19 +10,18 @@ type UiA struct {
 }
 
 func (ui *UiA) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.UiHtmlInner.WriteHtmlInner(e, w, "a", "", params...)
+	ui.renderInner(e, w, "a", "", params)
 }
 
-func NewUiA(innerHtml Getter) *UiA {
-	return &UiA{
+func MakeUiA(innerHtml HtmlGetter) UiA {
+	return UiA{
 		UiHtmlInner{
-			UiGetter{
-				Getter: innerHtml,
-			},
+			HtmlGetter: innerHtml,
 		},
 	}
 }
 
 func (rq *Request) A(innerHtml interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiA(MakeGetter(innerHtml)), params...)
+	ui := MakeUiA(makeHtmlGetter(innerHtml))
+	return rq.UI(&ui, params...)
 }

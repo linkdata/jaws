@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"fmt"
 	"io"
 	"time"
 
@@ -9,22 +8,24 @@ import (
 )
 
 type UiInputDate struct {
-	UiInput
+	UiHtml
+	TimeGetter
+}
+
+func (ui *UiInputDate) value(e *Element) string {
+	return ui.JawsGetTime(e).Format(ISO8601)
 }
 
 func (ui *UiInputDate) WriteHtmlInput(e *Element, w io.Writer, jid Jid, htmltype string, params ...interface{}) {
-	attrs := ui.parseParams(e, params)
-	val := ui.JawsGet(e)
-	if t, ok := val.(time.Time); ok {
-		if t.IsZero() {
-			t = time.Now()
-			ui.JawsSet(e, t)
-			e.Dirty()
-		}
-		ui.UiInput.WriteHtmlInput(w, e, htmltype, t.Format(ISO8601), attrs...)
-		return
+	if tagger, ok := ui.TimeGetter.(TagGetter); ok {
+		e.Tag(tagger.JawsGetTag(e))
 	}
-	panic(fmt.Errorf("jaws: UiInputDate: expected time.Time, got %T", val))
+	attrs := ui.parseParams(e, params)
+	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.value(e), attrs...))
+}
+
+func (ui *UiInputDate) JawsUpdate(u Updater) {
+	u.SetValue(ui.value(u.Element))
 }
 
 func (ui *UiInputDate) JawsEvent(e *Element, wht what.What, val string) (err error) {
@@ -38,7 +39,8 @@ func (ui *UiInputDate) JawsEvent(e *Element, wht what.What, val string) (err err
 				return
 			}
 		}
-		ui.JawsSet(e, v)
+		err = ui.TimeGetter.(TimeSetter).JawsSetTime(e, v)
+		e.Jaws.Dirty(ui.TimeGetter)
 	}
 	return
 }

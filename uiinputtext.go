@@ -1,24 +1,26 @@
 package jaws
 
 import (
-	"fmt"
 	"io"
 
 	"github.com/linkdata/jaws/what"
 )
 
 type UiInputText struct {
-	UiInput
+	UiHtml
+	StringGetter
 }
 
 func (ui *UiInputText) WriteHtmlInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
-	attrs := ui.parseParams(e, params)
-	val := ui.JawsGet(e)
-	if s, ok := val.(string); ok {
-		ui.UiInput.WriteHtmlInput(w, e, htmltype, s, attrs...)
-		return
+	if tagger, ok := ui.StringGetter.(TagGetter); ok {
+		e.Tag(tagger.JawsGetTag(e))
 	}
-	panic(fmt.Errorf("jaws: UiInputText: expected string, got %T", val))
+	attrs := ui.parseParams(e, params)
+	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.JawsGetString(e), attrs...))
+}
+
+func (ui *UiInputText) JawsUpdate(u Updater) {
+	u.SetValue(ui.JawsGetString(u.Element))
 }
 
 func (ui *UiInputText) JawsEvent(e *Element, wht what.What, val string) (err error) {
@@ -26,7 +28,8 @@ func (ui *UiInputText) JawsEvent(e *Element, wht what.What, val string) (err err
 		return ui.EventFn(e.Request, wht, e.Jid().String(), val)
 	}
 	if wht == what.Input {
-		ui.JawsSet(e, val)
+		err = ui.StringGetter.(StringSetter).JawsSetString(e, val)
+		e.Jaws.Dirty(ui.StringGetter)
 	}
 	return
 }

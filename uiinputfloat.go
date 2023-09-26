@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"fmt"
 	"io"
 	"strconv"
 
@@ -9,17 +8,24 @@ import (
 )
 
 type UiInputFloat struct {
-	UiInput
+	UiHtml
+	FloatGetter
+}
+
+func (ui *UiInputFloat) value(e *Element) string {
+	return strconv.FormatFloat(ui.JawsGetFloat(e), 'f', -1, 64)
 }
 
 func (ui *UiInputFloat) WriteHtmlInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
-	attrs := ui.parseParams(e, params)
-	val := ui.JawsGet(e)
-	if n, ok := val.(float64); ok {
-		ui.UiInput.WriteHtmlInput(w, e, htmltype, strconv.FormatFloat(n, 'f', -1, 64), attrs...)
-		return
+	if tagger, ok := ui.FloatGetter.(TagGetter); ok {
+		e.Tag(tagger.JawsGetTag(e))
 	}
-	panic(fmt.Errorf("jaws: UiInputFloat: expected float64, got %T", val))
+	attrs := ui.parseParams(e, params)
+	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.value(e), attrs...))
+}
+
+func (ui *UiInputFloat) JawsUpdate(u Updater) {
+	u.SetValue(ui.value(u.Element))
 }
 
 func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err error) {
@@ -33,7 +39,8 @@ func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err er
 				return
 			}
 		}
-		ui.JawsSet(e, v)
+		err = ui.FloatGetter.(FloatSetter).JawsSetFloat(e, v)
+		e.Jaws.Dirty(ui.FloatGetter)
 	}
 	return
 }

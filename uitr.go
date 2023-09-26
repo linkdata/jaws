@@ -10,19 +10,18 @@ type UiTr struct {
 }
 
 func (ui *UiTr) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.UiHtmlInner.WriteHtmlInner(e, w, "tr", "", params...)
+	ui.renderInner(e, w, "tr", "", params)
 }
 
-func NewUiTr(innerHtml Getter) *UiTr {
-	return &UiTr{
+func MakeUiTr(innerHtml HtmlGetter) UiTr {
+	return UiTr{
 		UiHtmlInner{
-			UiGetter{
-				Getter: innerHtml,
-			},
+			HtmlGetter: innerHtml,
 		},
 	}
 }
 
 func (rq *Request) Tr(innerHtml interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiTr(MakeGetter(innerHtml)), params...)
+	ui := MakeUiTr(makeHtmlGetter(innerHtml))
+	return rq.UI(&ui, params...)
 }
