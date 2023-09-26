@@ -13,8 +13,8 @@ func (ui *UiButton) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.renderInner(e, w, "button", "button", params)
 }
 
-func MakeUiButton(innerHtml HtmlGetter) UiButton {
-	return UiButton{
+func NewUiButton(innerHtml HtmlGetter) *UiButton {
+	return &UiButton{
 		UiHtmlInner{
 			HtmlGetter: innerHtml,
 		},
@@ -22,6 +22,5 @@ func MakeUiButton(innerHtml HtmlGetter) UiButton {
 }
 
 func (rq *Request) Button(innerHtml interface{}, params ...interface{}) template.HTML {
-	ui := MakeUiButton(makeHtmlGetter(innerHtml))
-	return rq.UI(&ui, params...)
+	return rq.UI(NewUiButton(makeHtmlGetter(innerHtml)), params...)
 }

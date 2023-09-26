@@ -15,8 +15,8 @@ func (ui *UiDate) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.renderDateInput(e, w, e.Jid(), "date", params...)
 }
 
-func MakeUiDate(g TimeGetter) UiDate {
-	return UiDate{
+func NewUiDate(g TimeGetter) *UiDate {
+	return &UiDate{
 		UiInputDate{
 			TimeGetter: g,
 		},
@@ -24,6 +24,5 @@ func MakeUiDate(g TimeGetter) UiDate {
 }
 
 func (rq *Request) Date(value interface{}, params ...interface{}) template.HTML {
-	ui := MakeUiDate(makeTimeGetter(value))
-	return rq.UI(&ui, params...)
+	return rq.UI(NewUiDate(makeTimeGetter(value)), params...)
 }

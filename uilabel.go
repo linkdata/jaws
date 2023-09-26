@@ -13,8 +13,8 @@ func (ui *UiLabel) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.renderInner(e, w, "label", "", params)
 }
 
-func MakeUiLabel(innerHtml HtmlGetter) UiLabel {
-	return UiLabel{
+func NewUiLabel(innerHtml HtmlGetter) *UiLabel {
+	return &UiLabel{
 		UiHtmlInner{
 			HtmlGetter: innerHtml,
 		},
@@ -22,6 +22,5 @@ func MakeUiLabel(innerHtml HtmlGetter) UiLabel {
 }
 
 func (rq *Request) Label(innerHtml interface{}, params ...interface{}) template.HTML {
-	ui := MakeUiLabel(makeHtmlGetter(innerHtml))
-	return rq.UI(&ui, params...)
+	return rq.UI(NewUiLabel(makeHtmlGetter(innerHtml)), params...)
 }

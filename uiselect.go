@@ -8,8 +8,8 @@ type UiSelect struct {
 	UiInputSelect
 }
 
-func MakeUiSelect(nba *NamedBoolArray) UiSelect {
-	return UiSelect{
+func NewUiSelect(nba *NamedBoolArray) *UiSelect {
+	return &UiSelect{
 		UiInputSelect{
 			NamedBoolArray: nba,
 		},
@@ -17,6 +17,5 @@ func MakeUiSelect(nba *NamedBoolArray) UiSelect {
 }
 
 func (rq *Request) Select(nba *NamedBoolArray, params ...interface{}) template.HTML {
-	ui := MakeUiSelect(nba)
-	return rq.UI(&ui, params...)
+	return rq.UI(NewUiSelect(nba), params...)
 }

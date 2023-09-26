@@ -13,8 +13,8 @@ func (ui *UiSpan) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.renderInner(e, w, "span", "", params)
 }
 
-func MakeUiSpan(innerHtml HtmlGetter) UiSpan {
-	return UiSpan{
+func NewUiSpan(innerHtml HtmlGetter) *UiSpan {
+	return &UiSpan{
 		UiHtmlInner{
 			HtmlGetter: innerHtml,
 		},
@@ -22,6 +22,5 @@ func MakeUiSpan(innerHtml HtmlGetter) UiSpan {
 }
 
 func (rq *Request) Span(innerHtml interface{}, params ...interface{}) template.HTML {
-	ui := MakeUiSpan(makeHtmlGetter(innerHtml))
-	return rq.UI(&ui, params...)
+	return rq.UI(NewUiSpan(makeHtmlGetter(innerHtml)), params...)
 }

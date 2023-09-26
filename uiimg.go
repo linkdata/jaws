@@ -30,13 +30,12 @@ func (ui *UiImg) JawsUpdate(u Updater) {
 	u.SetAttr("src", ui.SrcAttr(u.Element))
 }
 
-func MakeUiImg(g StringGetter) UiImg {
-	return UiImg{
+func NewUiImg(g StringGetter) *UiImg {
+	return &UiImg{
 		StringGetter: g,
 	}
 }
 
 func (rq *Request) Img(imageSrc interface{}, params ...interface{}) template.HTML {
-	ui := MakeUiImg(makeStringGetter(imageSrc))
-	return rq.UI(&ui, params...)
+	return rq.UI(NewUiImg(makeStringGetter(imageSrc)), params...)
 }

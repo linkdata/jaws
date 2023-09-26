@@ -13,8 +13,8 @@ func (ui *UiTr) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.renderInner(e, w, "tr", "", params)
 }
 
-func MakeUiTr(innerHtml HtmlGetter) UiTr {
-	return UiTr{
+func NewUiTr(innerHtml HtmlGetter) *UiTr {
+	return &UiTr{
 		UiHtmlInner{
 			HtmlGetter: innerHtml,
 		},
@@ -22,6 +22,5 @@ func MakeUiTr(innerHtml HtmlGetter) UiTr {
 }
 
 func (rq *Request) Tr(innerHtml interface{}, params ...interface{}) template.HTML {
-	ui := MakeUiTr(makeHtmlGetter(innerHtml))
-	return rq.UI(&ui, params...)
+	return rq.UI(NewUiTr(makeHtmlGetter(innerHtml)), params...)
 }

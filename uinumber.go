@@ -13,8 +13,8 @@ func (ui *UiNumber) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.renderFloatInput(e, w, "number", params...)
 }
 
-func MakeUiNumber(g FloatGetter) UiNumber {
-	return UiNumber{
+func NewUiNumber(g FloatGetter) *UiNumber {
+	return &UiNumber{
 		UiInputFloat{
 			FloatGetter: g,
 		},
@@ -22,6 +22,5 @@ func MakeUiNumber(g FloatGetter) UiNumber {
 }
 
 func (rq *Request) Number(value interface{}, params ...interface{}) template.HTML {
-	ui := MakeUiNumber(makeFloatGetter(value))
-	return rq.UI(&ui, params...)
+	return rq.UI(NewUiNumber(makeFloatGetter(value)), params...)
 }

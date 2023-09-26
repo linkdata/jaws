@@ -13,8 +13,8 @@ func (ui *UiLi) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.renderInner(e, w, "li", "", params)
 }
 
-func MakeUiLi(innerHtml HtmlGetter) UiLi {
-	return UiLi{
+func NewUiLi(innerHtml HtmlGetter) *UiLi {
+	return &UiLi{
 		UiHtmlInner{
 			HtmlGetter: innerHtml,
 		},
@@ -22,6 +22,5 @@ func MakeUiLi(innerHtml HtmlGetter) UiLi {
 }
 
 func (rq *Request) Li(innerHtml interface{}, params ...interface{}) template.HTML {
-	ui := MakeUiLi(makeHtmlGetter(innerHtml))
-	return rq.UI(&ui, params...)
+	return rq.UI(NewUiLi(makeHtmlGetter(innerHtml)), params...)
 }

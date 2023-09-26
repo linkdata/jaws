@@ -13,8 +13,8 @@ func (ui *UiCheckbox) JawsRender(e *Element, w io.Writer, params []interface{}) 
 	ui.renderBoolInput(e, w, "checkbox", params...)
 }
 
-func MakeUiCheckbox(g BoolGetter) UiCheckbox {
-	return UiCheckbox{
+func NewUiCheckbox(g BoolGetter) *UiCheckbox {
+	return &UiCheckbox{
 		UiInputBool{
 			BoolGetter: g,
 		},
@@ -22,6 +22,5 @@ func MakeUiCheckbox(g BoolGetter) UiCheckbox {
 }
 
 func (rq *Request) Checkbox(value interface{}, params ...interface{}) template.HTML {
-	ui := MakeUiCheckbox(makeBoolGetter(value))
-	return rq.UI(&ui, params...)
+	return rq.UI(NewUiCheckbox(makeBoolGetter(value)), params...)
 }
