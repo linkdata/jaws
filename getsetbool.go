@@ -17,10 +17,6 @@ func (g boolGetter) JawsGetBool(e *Element) bool {
 	return g.v
 }
 
-func (g boolGetter) JawsGetTag(e *Element) interface{} {
-	return nil
-}
-
 func makeBoolGetter(v interface{}) BoolGetter {
 	switch v := v.(type) {
 	case BoolGetter:

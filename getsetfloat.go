@@ -17,10 +17,6 @@ func (g floatGetter) JawsGetFloat(e *Element) float64 {
 	return g.v
 }
 
-func (g floatGetter) JawsGetTag(e *Element) interface{} {
-	return nil
-}
-
 func makeFloatGetter(v interface{}) FloatGetter {
 	switch v := v.(type) {
 	case FloatGetter:
