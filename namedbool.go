@@ -36,21 +36,21 @@ func (nb *NamedBool) Name() (s string) {
 	return
 }
 
-func (nb *NamedBool) JawsGetHtml(*Element) (h template.HTML) {
+func (nb *NamedBool) JawsGetHtml(*Request) (h template.HTML) {
 	nb.mu.RLock()
 	h = nb.html
 	nb.mu.RUnlock()
 	return
 }
 
-func (nb *NamedBool) JawsGetBool(*Element) (v bool) {
+func (nb *NamedBool) JawsGetBool(*Request) (v bool) {
 	nb.mu.RLock()
 	v = nb.checked
 	nb.mu.RUnlock()
 	return
 }
 
-func (nb *NamedBool) JawsSetBool(e *Element, checked bool) (err error) {
+func (nb *NamedBool) JawsSetBool(r *Request, checked bool) (err error) {
 	nb.mu.Lock()
 	var nba *NamedBoolArray
 	if nb.checked != checked {
@@ -58,9 +58,9 @@ func (nb *NamedBool) JawsSetBool(e *Element, checked bool) (err error) {
 		nba = nb.nba
 	}
 	nb.mu.Unlock()
-	e.Jaws.Dirty(nb)
+	r.Jaws.Dirty(nb)
 	if nba != nil {
-		e.Jaws.Dirty(nba)
+		r.Jaws.Dirty(nba)
 		nb.nba.Set(nb.name, checked)
 	}
 	return

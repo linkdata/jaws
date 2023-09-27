@@ -616,7 +616,7 @@ func (rq *Request) send(msg wsMsg) {
 	case <-rq.Done():
 	case rq.outboundMsgCh <- msg:
 	default:
-		panic(fmt.Errorf("jaws: %v: outbound message channel is full sending %s", rq, msg))
+		panic(fmt.Errorf("jaws: %v: outbound message channel is full (%d) sending %s", rq, len(rq.outboundMsgCh), msg))
 	}
 }
 

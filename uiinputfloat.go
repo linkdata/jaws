@@ -13,7 +13,7 @@ type UiInputFloat struct {
 }
 
 func (ui *UiInputFloat) value(e *Element) string {
-	return strconv.FormatFloat(ui.JawsGetFloat(e), 'f', -1, 64)
+	return strconv.FormatFloat(ui.JawsGetFloat(e.Request), 'f', -1, 64)
 }
 
 func (ui *UiInputFloat) renderFloatInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
@@ -38,7 +38,7 @@ func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err er
 				return
 			}
 		}
-		err = ui.FloatGetter.(FloatSetter).JawsSetFloat(e, v)
+		err = ui.FloatGetter.(FloatSetter).JawsSetFloat(e.Request, v)
 		e.Jaws.Dirty(ui.Tag)
 	}
 	return

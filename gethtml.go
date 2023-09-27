@@ -6,12 +6,12 @@ import (
 )
 
 type HtmlGetter interface {
-	JawsGetHtml(e *Element) template.HTML
+	JawsGetHtml(rq *Request) template.HTML
 }
 
 type htmlGetter struct{ v template.HTML }
 
-func (g htmlGetter) JawsGetHtml(e *Element) template.HTML {
+func (g htmlGetter) JawsGetHtml(rq *Request) template.HTML {
 	return g.v
 }
 

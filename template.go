@@ -66,9 +66,3 @@ func (t Template) JawsEvent(e *Element, wht what.What, val string) error {
 	}
 	return nil
 }
-
-var _ HtmlGetter = (*Template)(nil) // statically ensure interface is defined
-
-func (t Template) JawsGetHtml(e *Element) template.HTML {
-	return t.ToHTML(e)
-}

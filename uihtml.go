@@ -146,28 +146,28 @@ func (ui *UiHtml) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	panic(fmt.Errorf("jaws: UiHtml.JawsRender(%v) called", e))
 }
 
-func (ui *UiHtml) JawsUpdate(u *Element) {
+func (ui *UiHtml) JawsUpdate(e *Element) {
 	switch v := ui.Tag.(type) {
 	case *NamedBoolArray:
-		u.SetValue(v.Get())
+		e.SetValue(v.Get())
 	case StringGetter:
-		u.SetValue(v.JawsGetString(u))
+		e.SetValue(v.JawsGetString(e.Request))
 	case FloatGetter:
-		u.SetValue(string(fmt.Append(nil, v.JawsGetFloat(u))))
+		e.SetValue(string(fmt.Append(nil, v.JawsGetFloat(e.Request))))
 	case BoolGetter:
-		if v.JawsGetBool(u) {
-			u.SetAttr("checked", "")
+		if v.JawsGetBool(e.Request) {
+			e.SetAttr("checked", "")
 		} else {
-			u.RemoveAttr("checked")
+			e.RemoveAttr("checked")
 		}
 	case TimeGetter:
-		u.SetValue(v.JawsGetTime(u).Format(ISO8601))
+		e.SetValue(v.JawsGetTime(e.Request).Format(ISO8601))
 	case HtmlGetter:
-		u.SetInner(v.JawsGetHtml(u))
+		e.SetInner(v.JawsGetHtml(e.Request))
 	case UI:
-		v.JawsUpdate(u)
+		v.JawsUpdate(e)
 	default:
-		panic(fmt.Errorf("jaws: UiHtml.JawsUpdate(%v): unhandled type: %T", u, v))
+		panic(fmt.Errorf("jaws: UiHtml.JawsUpdate(%v): unhandled type: %T", e, v))
 	}
 }
 
@@ -186,7 +186,7 @@ func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
 		case *NamedBoolArray:
 			data.Set(val, true)
 		case StringSetter:
-			err = data.JawsSetString(e, val)
+			err = data.JawsSetString(e.Request, val)
 		case FloatSetter:
 			var v float64
 			if val != "" {
@@ -194,7 +194,7 @@ func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
 					return
 				}
 			}
-			err = data.JawsSetFloat(e, v)
+			err = data.JawsSetFloat(e.Request, v)
 		case BoolSetter:
 			var v bool
 			if val != "" {
@@ -202,7 +202,7 @@ func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
 					return
 				}
 			}
-			err = data.JawsSetBool(e, v)
+			err = data.JawsSetBool(e.Request, v)
 		case TimeSetter:
 			var v time.Time
 			if val != "" {
@@ -210,7 +210,7 @@ func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
 					return
 				}
 			}
-			err = data.JawsSetTime(e, v)
+			err = data.JawsSetTime(e.Request, v)
 		default:
 			if deadlock.Debug {
 				_ = e.Jaws.Log(fmt.Errorf("jaws: UiHtml.JawsEvent(%v, %s, %q): unhandled type: %T", e, wht, val, data))
