@@ -55,21 +55,21 @@ func sameOrder(a, b []Jid) bool {
 	return true
 }
 
-func (ui *UiContainer) JawsUpdate(u *Element) {
+func (ui *UiContainer) JawsUpdate(e *Element) {
 	var toRemove, toAppend []*Element
 	var orderData []Jid
 
 	oldMap := make(map[UI]*Element)
 	newMap := make(map[UI]struct{})
-	newContents := ui.Container.JawsContains(u.Request)
+	newContents := ui.Container.JawsContains(e.Request)
 	for _, t := range newContents {
 		newMap[t] = struct{}{}
 	}
 
 	ui.mu.Lock()
-	oldOrder := make([]Jid, 0, len(ui.contents))
-	for _, elem := range ui.contents {
-		oldOrder = append(oldOrder, elem.jid)
+	oldOrder := make([]Jid, len(ui.contents))
+	for i, elem := range ui.contents {
+		oldOrder[i] = elem.jid
 		oldMap[elem.ui] = elem
 		if _, ok := newMap[elem.ui]; !ok {
 			toRemove = append(toRemove, elem)
@@ -79,7 +79,7 @@ func (ui *UiContainer) JawsUpdate(u *Element) {
 	for _, cui := range newContents {
 		var elem *Element
 		if elem = oldMap[cui]; elem == nil {
-			if elem = u.Request.NewElement(cui); elem == nil {
+			if elem = e.Request.NewElement(cui); elem == nil {
 				continue
 			}
 			toAppend = append(toAppend, elem)
@@ -90,17 +90,17 @@ func (ui *UiContainer) JawsUpdate(u *Element) {
 	ui.mu.Unlock()
 
 	for _, elem := range toRemove {
-		u.Remove(elem.jid)
+		elem.Remove()
 	}
 
 	for _, elem := range toAppend {
 		var sb strings.Builder
 		elem.ui.JawsRender(elem, &sb, nil)
-		u.Append(template.HTML(sb.String()))
+		e.Append(template.HTML(sb.String()))
 	}
 
 	if !sameOrder(oldOrder, orderData) {
-		u.Order(orderData)
+		e.Order(orderData)
 	}
 }
 

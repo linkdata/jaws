@@ -619,3 +619,67 @@ func maybePanic(err error) {
 		panic(err)
 	}
 }
+
+// SetInner sends a request to replace the inner HTML of
+// all HTML elements with the given HTML ID in all Requests.
+func (jw *Jaws) SetInner(htmlId string, innerHtml template.HTML) {
+	jw.Broadcast(Message{
+		Tag:  htmlId,
+		What: what.Inner,
+		Data: innerHtml,
+	})
+}
+
+// SetAttr sends a request to replace the given attribute value in
+// all HTML elements with the given HTML ID in all Requests.
+func (jw *Jaws) SetAttr(htmlId string, attr, val string) {
+	jw.Broadcast(Message{
+		Tag:  htmlId,
+		What: what.SAttr,
+		Data: attr + "\n" + val,
+	})
+}
+
+// RemoveAttr sends a request to remove the given attribute from
+// all HTML elements with the given HTML ID in all Requests.
+func (jw *Jaws) RemoveAttr(htmlId string, attr string) {
+	jw.Broadcast(Message{
+		Tag:  htmlId,
+		What: what.RAttr,
+		Data: attr,
+	})
+}
+
+// SetValue sends a request to set the HTML "value" attribute of
+// all HTML elements with the given HTML ID in all Requests.
+func (jw *Jaws) SetValue(htmlId, val string) {
+	jw.Broadcast(Message{
+		Tag:  htmlId,
+		What: what.Value,
+		Data: val,
+	})
+}
+
+// Insert calls the Javascript 'insertBefore()' method on
+// all HTML elements with the given HTML ID in all Requests.
+//
+// The position parameter 'where' may be either a HTML ID, an child index or the text 'null'.
+func (jw *Jaws) Insert(htmlId, where, html string) {
+	jw.Broadcast(Message{
+		Tag:  htmlId,
+		What: what.Insert,
+		Data: where + "\n" + html,
+	})
+}
+
+// Replace calls the Javascript 'replaceChild()' method on
+// all HTML elements with the given HTML ID in all Requests.
+//
+// The position parameter 'where' may be either a HTML ID or an index.
+func (jw *Jaws) Replace(htmlId, where, html string) {
+	jw.Broadcast(Message{
+		Tag:  htmlId,
+		What: what.Replace,
+		Data: where + "\n" + html,
+	})
+}

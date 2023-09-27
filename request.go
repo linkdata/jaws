@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/linkdata/deadlock"
@@ -333,9 +334,11 @@ func (rq *Request) wantMessage(msg *Message) (yes bool) {
 	return
 }
 
+var nextJid Jid
+
 func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 	elem = &Element{
-		jid:     Jid(len(rq.elems) + 1),
+		jid:     Jid(atomic.AddInt64((*int64)(&nextJid), 1)),
 		ui:      ui,
 		Request: rq,
 	}
@@ -352,8 +355,11 @@ func (rq *Request) NewElement(ui UI) *Element {
 func (rq *Request) GetElement(jid Jid) (e *Element) {
 	if jid > 0 {
 		rq.mu.RLock()
-		if int(jid) <= len(rq.elems) {
-			e = rq.elems[jid-1]
+		for _, elem := range rq.elems {
+			if elem.jid == jid {
+				e = elem
+				break
+			}
 		}
 		rq.mu.RUnlock()
 	}
@@ -487,23 +493,15 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			return
 		}
 
+		if tagmsg.What == what.Remove {
+			rq.remove(tagmsg.Tag.(*Element))
+		}
+
 		// collect all elements marked with the tag in the message
 		var todo []*Element
-		if tagmsg.What == what.Remove {
-			rq.mu.Lock()
-			todo = append(todo, rq.tagMap[tagmsg.Tag]...)
-			for _, elem := range todo {
-				if elem != nil {
-					rq.elems[elem.jid-1] = nil
-				}
-			}
-			delete(rq.tagMap, tagmsg.Tag)
-			rq.mu.Unlock()
-		} else {
-			rq.mu.RLock()
-			todo = append(todo, rq.tagMap[tagmsg.Tag]...)
-			rq.mu.RUnlock()
-		}
+		rq.mu.RLock()
+		todo = append(todo, rq.tagMap[tagmsg.Tag]...)
+		rq.mu.RUnlock()
 
 		// prepare the data to send in the WS message
 		var wsdata string
@@ -574,6 +572,33 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 	}
 }
 
+func removeElement(elems []*Element, e *Element) []*Element {
+	remains := 0
+	for i := range elems {
+		if elems[i] != e {
+			elems[remains] = elems[i]
+			remains++
+		}
+	}
+	return elems[:remains]
+}
+
+func (rq *Request) remove(e *Element) {
+	if e != nil && e.Request == rq {
+		rq.mu.Lock()
+		// e.Request = nil
+		rq.elems = removeElement(rq.elems, e)
+		for k := range rq.tagMap {
+			rq.tagMap[k] = removeElement(rq.tagMap[k], e)
+		}
+		rq.mu.Unlock()
+		rq.send(wsMsg{
+			Jid:  e.jid,
+			What: what.Remove,
+		})
+	}
+}
+
 func (rq *Request) send(msg wsMsg) {
 	select {
 	case <-rq.Jaws.Done():
@@ -591,10 +616,10 @@ func (rq *Request) callUpdate() {
 			if elem.Request == rq {
 				elem.updating = true
 			}
-		} else {
-			for _, elem := range rq.tagMap[tag] {
-				elem.updating = true
-			}
+			continue
+		}
+		for _, elem := range rq.tagMap[tag] {
+			elem.updating = true
 		}
 	}
 	rq.dirty = rq.dirty[:0]

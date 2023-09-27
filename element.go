@@ -130,7 +130,7 @@ func (e *Element) Replace(htmlCode template.HTML) {
 	b = append(b, "id="...)
 	b = e.Jid().AppendQuote(b)
 	if !bytes.Contains([]byte(htmlCode), b) {
-		panic(fmt.Errorf("jaws: Updater.Replace(): expected HTML " + string(b)))
+		panic(fmt.Errorf("jaws: Element.Replace(): expected HTML " + string(b)))
 	}
 	e.send(what.Replace, string(htmlCode))
 }
@@ -154,10 +154,7 @@ func (e *Element) Order(jidList []Jid) {
 	}
 }
 
-// Remove removes the HTML element with the given Jid.
-func (e *Element) Remove(jid Jid) {
-	e.Request.send(wsMsg{
-		Jid:  jid,
-		What: what.Remove,
-	})
+// Remove requests that this Element is removed from the Request and it's HTML element from the browser.
+func (e *Element) Remove() {
+	e.Request.remove(e)
 }

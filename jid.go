@@ -7,7 +7,7 @@ import (
 
 // Jid is the basis for the HTML `id` attribute for an UI Element within an active Request.
 // It is per-Request, meaning Jid(1) in one Request is not the same as Jid(1) in another.
-type Jid int32
+type Jid int64
 
 const JidPrefix = "Jid." // String prefixing HTML ID's based on Jid's.
 

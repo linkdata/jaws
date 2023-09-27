@@ -150,19 +150,22 @@ func TestRequest_DuplicateRegistration(t *testing.T) {
 	rq := jw.NewRequest(nil)
 	var ef1 EventFn = func(rq *Request, evt what.What, id, val string) error { return nil }
 	var ef2 EventFn = func(rq *Request, evt what.What, id, val string) error { return errors.New("fails") }
-	is.Equal(rq.Register("foo", ef1), Jid(1))  // first reg succeeds
-	is.Equal(rq.Register(Jid(1), ef1), Jid(1)) // second reg succeeds
+	jid1 := rq.Register("foo", ef1)
+	if jid1 < 1 {
+		is.Fail()
+	}
+	is.Equal(rq.Register(jid1, ef1), jid1) // second reg succeeds
 	rq2 := jw.UseRequest(rq.JawsKey, nil)
 	is.Equal(rq, rq2)
-	is.Equal(rq.Register(Jid(1), ef1), Jid(1))
+	is.Equal(rq.Register(jid1, ef1), jid1)
 	// should succeed and not overwrite event fn
-	is.Equal(rq.Register(Jid(1), nil), Jid(1))
-	ef, ok := rq.GetEventFn(Jid(1))
+	is.Equal(rq.Register(jid1, nil), jid1)
+	ef, ok := rq.GetEventFn(jid1)
 	is.True(ok)
 	is.Equal(ef, ef1)
 	// replace the event fn
-	is.Equal(rq.Register(Jid(1), ef2), Jid(1))
-	ef, ok = rq.GetEventFn(Jid(1))
+	is.Equal(rq.Register(jid1, ef2), jid1)
+	ef, ok = rq.GetEventFn(jid1)
 	is.True(ok)
 	is.Equal(ef, ef2)
 }
