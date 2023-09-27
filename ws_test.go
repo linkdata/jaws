@@ -359,9 +359,9 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 		txt  string
 		want wsMsg
 	}{
-		{"shortest", "0\n\n", wsMsg{Jid: 0}},
-		{"normal", "1\nInput\nc", wsMsg{Jid: 1, What: what.Input, Data: "c"}},
-		{"newline", "2\nClick\nc\nd", wsMsg{Jid: 2, What: what.Click, Data: "c\nd"}},
+		{"shortest", "Jid.1\n\n", wsMsg{Jid: 1}},
+		{"normal", "Jid.2\nInput\nc", wsMsg{Jid: 2, What: what.Input, Data: "c"}},
+		{"newline", "Jid.3\nClick\nc\nd", wsMsg{Jid: 3, What: what.Click, Data: "c\nd"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

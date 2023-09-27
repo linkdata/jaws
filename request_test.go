@@ -618,9 +618,9 @@ func TestRequest_Sends(t *testing.T) {
 		t.Log(strconv.Quote(gotRemoveAttr))
 		is.Fail()
 	}
-	is.Equal(gotRedirect, "0\nRedirect\nsome-url")
-	is.Equal(gotInfoAlert, "0\nAlert\ninfo\n<html>\nnot-escaped")
-	is.Equal(gotDangerAlert, "0\nAlert\ndanger\n&lt;html&gt;\nshould-be-escaped")
+	is.Equal(gotRedirect, "Jid.0\nRedirect\nsome-url")
+	is.Equal(gotInfoAlert, "Jid.0\nAlert\ninfo\n<html>\nnot-escaped")
+	is.Equal(gotDangerAlert, "Jid.0\nAlert\ndanger\n&lt;html&gt;\nshould-be-escaped")
 }
 
 /*

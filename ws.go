@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"net/http"
-	"strconv"
 
 	"github.com/linkdata/jaws/what"
 	"nhooyr.io/websocket"
@@ -62,7 +61,7 @@ func wsParse(txt []byte) (wsMsg, bool) {
 	if nl1 := bytes.IndexByte(txt, '\n'); nl1 > 0 {
 		if nl2 := bytes.IndexByte(txt[nl1+1:], '\n'); nl2 >= 0 {
 			nl2 += nl1 + 1
-			if jid, err := strconv.Atoi(string(txt[0:nl1])); err == nil {
+			if jid := ParseJid(string(txt[0:nl1])); jid > 0 {
 				return wsMsg{
 					Jid:  Jid(jid),
 					What: what.Parse(string(txt[nl1+1 : nl2])),

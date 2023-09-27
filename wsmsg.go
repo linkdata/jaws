@@ -19,7 +19,7 @@ func (m *wsMsg) IsValid() bool {
 }
 
 func (m *wsMsg) Append(b []byte) []byte {
-	b = m.Jid.AppendInt(b)
+	b = m.Jid.Append(b)
 	b = append(b, '\n')
 	if m.What != 0 {
 		b = append(b, m.What.String()...)

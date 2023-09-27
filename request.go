@@ -586,7 +586,7 @@ func removeElement(elems []*Element, e *Element) []*Element {
 func (rq *Request) remove(e *Element) {
 	if e != nil && e.Request == rq {
 		rq.mu.Lock()
-		// e.Request = nil
+		e.Request = nil
 		rq.elems = removeElement(rq.elems, e)
 		for k := range rq.tagMap {
 			rq.tagMap[k] = removeElement(rq.tagMap[k], e)

@@ -25,30 +25,27 @@ function jawsIsTrue(v) {
 function jawsHandler(e) {
 	if (jaws instanceof WebSocket && e instanceof Event) {
 		var elem = e.currentTarget;
-		var jid = elem.id.substring(4);
-		if (jid) {
-			var val;
-			if (e.type == 'click') {
-				val = e.target.getAttribute('name');
-				if (val == null) {
-					if (e.target.tagName.toLowerCase() === 'button') {
-						val = e.target.innerHTML;
-					} else {
-						val = e.target.id;
-					}
-				}
-			} else {
-				if (jawsIsCheckable(elem.getAttribute('type'))) {
-					val = elem.checked;
-				} else if (elem.tagName.toLowerCase() === 'option') {
-					val = elem.selected;
+		var val;
+		if (e.type == 'click') {
+			val = e.target.getAttribute('name');
+			if (val == null) {
+				if (e.target.tagName.toLowerCase() === 'button') {
+					val = e.target.innerHTML;
 				} else {
-					val = elem.value;
+					val = e.target.id;
 				}
-				e.stopPropagation();
 			}
-			jaws.send(jid + "\n" + e.type + "\n" + val);
+		} else {
+			if (jawsIsCheckable(elem.getAttribute('type'))) {
+				val = elem.checked;
+			} else if (elem.tagName.toLowerCase() === 'option') {
+				val = elem.selected;
+			} else {
+				val = elem.value;
+			}
+			e.stopPropagation();
 		}
+		jaws.send(elem.id + "\n" + e.type + "\n" + val);
 	}
 }
 
@@ -207,7 +204,7 @@ function jawsWhere(elem, pos) {
 
 function jawsMessage(e) {
 	var lines = e.data.split('\n');
-	var jid = lines.shift();
+	var id = lines.shift();
 	var what = lines.shift();
 	var where = null;
 	var data = null;
@@ -246,10 +243,9 @@ function jawsMessage(e) {
 			console.log("jaws: unknown operation: " + what);
 			return;
 	}
-	jid = 'Jid.' + jid;
-	var elem = document.getElementById(jid);
+	var elem = document.getElementById(id);
 	if (elem === null) {
-		console.log("jaws: id not found: " + jid);
+		console.log("jaws: id not found: " + id);
 		return;
 	}
 	switch (what) {
@@ -278,7 +274,7 @@ function jawsMessage(e) {
 					elem.insertBefore(jawsAttach(jawsElement(data)), target);
 				}
 			} else {
-				console.log("jaws: id " + jid + " has no position " + where);
+				console.log("jaws: id " + id + " has no position " + where);
 			}
 			break;
 		case 'SAttr':
