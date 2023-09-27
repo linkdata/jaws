@@ -348,11 +348,6 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) error {
 
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) {
-	if deadlock.Debug {
-		if _, ok := msg.Tag.([]interface{}); ok {
-			panic("can't use []interface{} as a tag")
-		}
-	}
 	select {
 	case <-jw.Done():
 	case jw.bcastCh <- msg:
