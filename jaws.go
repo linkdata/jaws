@@ -645,6 +645,26 @@ func (jw *Jaws) RemoveAttr(htmlId string, attr string) {
 	})
 }
 
+// SetClass sends a request to set the given class in
+// all HTML elements with the given HTML ID in all Requests.
+func (jw *Jaws) SetClass(htmlId string, cls string) {
+	jw.Broadcast(Message{
+		Tag:  template.HTML(htmlId),
+		What: what.SClass,
+		Data: cls,
+	})
+}
+
+// RemoveClass sends a request to remove the given class from
+// all HTML elements with the given HTML ID in all Requests.
+func (jw *Jaws) RemoveClass(htmlId string, cls string) {
+	jw.Broadcast(Message{
+		Tag:  template.HTML(htmlId),
+		What: what.RClass,
+		Data: cls,
+	})
+}
+
 // SetValue sends a request to set the HTML "value" attribute of
 // all HTML elements with the given HTML ID in all Requests.
 func (jw *Jaws) SetValue(htmlId, val string) {
