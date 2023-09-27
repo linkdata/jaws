@@ -23,8 +23,8 @@ func (ui *UiInputFloat) renderFloatInput(e *Element, w io.Writer, htmltype strin
 	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.value(e), attrs...))
 }
 
-func (ui *UiInputFloat) JawsUpdate(u Updater) {
-	u.SetValue(ui.value(u.Element))
+func (ui *UiInputFloat) JawsUpdate(u *Element) {
+	u.SetValue(ui.value(u))
 }
 
 func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err error) {

@@ -55,7 +55,7 @@ func sameOrder(a, b []Jid) bool {
 	return true
 }
 
-func (ui *UiContainer) JawsUpdate(u Updater) {
+func (ui *UiContainer) JawsUpdate(u *Element) {
 	var toRemove, toAppend []*Element
 	var orderData []Jid
 

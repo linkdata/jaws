@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"html"
 	"html/template"
-	"log"
 	"net"
 	"net/http"
 	"sync"
@@ -29,19 +28,20 @@ type EventFn = func(rq *Request, wht what.What, id, val string) error
 // Note that we have to store the context inside the struct because there is no call chain
 // between the Request being created and it being used once the WebSocket is created.
 type Request struct {
-	Jaws      *Jaws            // (read-only) the JaWS instance the Request belongs to
-	JawsKey   uint64           // (read-only) a random number used in the WebSocket URI to identify this Request
-	Created   time.Time        // (read-only) when the Request was created, used for automatic cleanup
-	Initial   *http.Request    // (read-only) initial HTTP request passed to Jaws.NewRequest
-	remoteIP  net.IP           // (read-only) remote IP, or nil
-	session   *Session         // (read-only) session, if established
-	sendCh    chan Message     // (read-only) direct send message channel
-	mu        deadlock.RWMutex // protects following
-	dirty     []interface{}    // dirty tags
-	wsreq     *http.Request    // (read-only) WebSocket HTTP request passed to Jaws.UseRequest
-	connectFn ConnectFn        // a ConnectFn to call before starting message processing for the Request
-	elems     []*Element
-	tagMap    map[interface{}][]*Element
+	Jaws          *Jaws            // (read-only) the JaWS instance the Request belongs to
+	JawsKey       uint64           // (read-only) a random number used in the WebSocket URI to identify this Request
+	Created       time.Time        // (read-only) when the Request was created, used for automatic cleanup
+	Initial       *http.Request    // (read-only) initial HTTP request passed to Jaws.NewRequest
+	remoteIP      net.IP           // (read-only) remote IP, or nil
+	session       *Session         // (read-only) session, if established
+	sendCh        chan Message     // (read-only) direct send message channel
+	mu            deadlock.RWMutex // protects following
+	dirty         []interface{}    // dirty tags
+	wsreq         *http.Request    // (read-only) WebSocket HTTP request passed to Jaws.UseRequest
+	connectFn     ConnectFn        // a ConnectFn to call before starting message processing for the Request
+	elems         []*Element
+	tagMap        map[interface{}][]*Element
+	outboundMsgCh chan<- wsMsg
 }
 
 type eventFnCall struct {
@@ -128,6 +128,7 @@ func (rq *Request) recycle() {
 	rq.dirty = rq.dirty[:0]
 	rq.remoteIP = nil
 	rq.elems = rq.elems[:0]
+	rq.outboundMsgCh = nil
 	rq.killSessionLocked()
 	// this gets optimized to calling the 'runtime.mapclear' function
 	// we don't expect this to improve speed, but it will lower GC load
@@ -424,14 +425,7 @@ func (rq *Request) Done() (ch <-chan struct{}) {
 
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
 func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsMsg, outboundMsgCh chan<- wsMsg) {
-	if deadlock.Debug {
-		rq.Jaws.mu.RLock()
-		_, ok := rq.Jaws.active[rq]
-		rq.Jaws.mu.RUnlock()
-		if !ok {
-			log.Panicf("Request %v is not in active map\n", rq)
-		}
-	}
+	rq.outboundMsgCh = outboundMsgCh
 	jawsDoneCh := rq.Jaws.Done()
 	ctxDoneCh := rq.Done()
 	eventDoneCh := make(chan struct{})
@@ -536,7 +530,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		case what.Order:
 			fallthrough
 		case what.Alert:
-			rq.send(outboundMsgCh, wsMsg{
+			rq.send(wsMsg{
 				Data: wsdata,
 				What: tagmsg.What,
 			})
@@ -559,7 +553,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					// primary usecase is tests.
 					if h, ok := elem.Ui().(EventHandler); ok {
 						if errmsg := makeAlertDangerMessage(h.JawsEvent(elem, tagmsg.What, wsdata)); errmsg.What != what.None {
-							rq.send(outboundMsgCh, wsMsg{
+							rq.send(wsMsg{
 								Jid:  elem.jid,
 								What: errmsg.What,
 								Data: wsdata,
@@ -567,7 +561,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 						}
 					}
 				default:
-					rq.send(outboundMsgCh, wsMsg{
+					rq.send(wsMsg{
 						Jid:  elem.jid,
 						What: tagmsg.What,
 						Data: wsdata,
@@ -576,21 +570,21 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			}
 		}
 
-		rq.callUpdate(outboundMsgCh)
+		rq.callUpdate()
 	}
 }
 
-func (rq *Request) send(outboundMsgCh chan<- wsMsg, msg wsMsg) {
+func (rq *Request) send(msg wsMsg) {
 	select {
 	case <-rq.Jaws.Done():
 	case <-rq.Done():
-	case outboundMsgCh <- msg:
+	case rq.outboundMsgCh <- msg:
 	default:
 		panic(fmt.Errorf("jaws: %v: outbound message channel is full sending %s", rq, msg))
 	}
 }
 
-func (rq *Request) callUpdate(outboundMsgCh chan<- wsMsg) {
+func (rq *Request) callUpdate() {
 	rq.mu.Lock()
 	for _, tag := range rq.dirty {
 		if elem, ok := tag.(*Element); ok {
@@ -615,7 +609,7 @@ func (rq *Request) callUpdate(outboundMsgCh chan<- wsMsg) {
 	rq.mu.Unlock()
 
 	for _, elem := range todo {
-		elem.Ui().JawsUpdate(Updater{outCh: outboundMsgCh, Element: elem})
+		elem.Ui().JawsUpdate(elem)
 	}
 }
 

@@ -16,6 +16,6 @@ func (ui *UiHtmlInner) renderInner(e *Element, w io.Writer, htmltag, htmltype st
 	maybePanic(WriteHtmlInner(w, e.Jid(), htmltag, htmltype, ui.JawsGetHtml(e), attrs...))
 }
 
-func (ui *UiHtmlInner) JawsUpdate(u Updater) {
-	u.SetInner(ui.JawsGetHtml(u.Element))
+func (ui *UiHtmlInner) JawsUpdate(u *Element) {
+	u.SetInner(ui.JawsGetHtml(u))
 }

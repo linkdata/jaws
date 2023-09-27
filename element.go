@@ -1,12 +1,15 @@
 package jaws
 
 import (
+	"bytes"
 	"fmt"
 	"html"
 	"html/template"
 	"io"
 	"strconv"
 	"sync/atomic"
+
+	"github.com/linkdata/jaws/what"
 )
 
 // An Element is an instance of a *Request, an UI object and a Jid.
@@ -74,4 +77,87 @@ func (e *Element) ToHtml(val interface{}) template.HTML {
 		panic(fmt.Errorf("jaws: don't know how to render %T as template.HTML", v))
 	}
 	return template.HTML(html.EscapeString(s))
+}
+
+func (e *Element) send(wht what.What, data string) {
+	e.Request.send(wsMsg{
+		Jid:  e.jid,
+		What: wht,
+		Data: data,
+	})
+}
+
+// SetAttr queues sending a new attribute value
+// to the browser for the Element with the given JaWS ID in this Request.
+func (e *Element) SetAttr(attr, val string) {
+	e.send(what.SAttr, attr+"\n"+val)
+}
+
+// RemoveAttr queues sending a request to remove an attribute
+// to the browser for the Element with the given JaWS ID in this Request.
+func (e *Element) RemoveAttr(attr string) {
+	e.send(what.RAttr, attr)
+}
+
+// SetClass a queues sending a class
+// to the browser for the Element with the given JaWS ID in this Request.
+func (e *Element) SetClass(cls string) {
+	e.send(what.SClass, cls)
+}
+
+// RemoveClass queues sending a request to remove a class
+// to the browser for the Element with the given JaWS ID in this Request.
+func (e *Element) RemoveClass(cls string) {
+	e.send(what.RClass, cls)
+}
+
+// SetInner queues sending a new inner HTML content
+// to the browser for the Element.
+func (e *Element) SetInner(innerHtml template.HTML) {
+	e.send(what.Inner, string(innerHtml))
+}
+
+// SetValue queues sending a new current input value in textual form
+// to the browser for the Element with the given JaWS ID in this Request.
+func (e *Element) SetValue(val string) {
+	e.send(what.Value, val)
+}
+
+// Replace replaces the elements entire HTML DOM node with new HTML code.
+// If the HTML code doesn't seem to contain correct HTML ID, it panics.
+func (e *Element) Replace(htmlCode template.HTML) {
+	var b []byte
+	b = append(b, "id="...)
+	b = e.Jid().AppendQuote(b)
+	if !bytes.Contains([]byte(htmlCode), b) {
+		panic(fmt.Errorf("jaws: Updater.Replace(): expected HTML " + string(b)))
+	}
+	e.send(what.Replace, string(htmlCode))
+}
+
+// Append appends a new HTML element as a child to the current one.
+func (e *Element) Append(htmlCode template.HTML) {
+	e.send(what.Append, string(htmlCode))
+}
+
+// Order reorders the HTML child elements of the current Element.
+func (e *Element) Order(jidList []Jid) {
+	if len(jidList) > 0 {
+		var b []byte
+		for i, jid := range jidList {
+			if i > 0 {
+				b = append(b, ' ')
+			}
+			b = jid.AppendInt(b)
+		}
+		e.send(what.Order, string(b))
+	}
+}
+
+// Remove removes the HTML element with the given Jid.
+func (e *Element) Remove(jid Jid) {
+	e.Request.send(wsMsg{
+		Jid:  jid,
+		What: what.Remove,
+	})
 }

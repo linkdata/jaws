@@ -18,7 +18,7 @@ func (ui *UiInputSelect) JawsRender(e *Element, w io.Writer, params []interface{
 	maybePanic(WriteHtmlSelect(w, e.Jid(), ui.NamedBoolArray, attrs...))
 }
 
-func (ui *UiInputSelect) JawsUpdate(u Updater) {
+func (ui *UiInputSelect) JawsUpdate(u *Element) {
 	u.SetValue(ui.NamedBoolArray.Get())
 }
 

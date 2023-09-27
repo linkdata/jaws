@@ -18,8 +18,8 @@ func (ui *UiInputText) renderStringInput(e *Element, w io.Writer, htmltype strin
 	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.JawsGetString(e), attrs...))
 }
 
-func (ui *UiInputText) JawsUpdate(u Updater) {
-	u.SetValue(ui.JawsGetString(u.Element))
+func (ui *UiInputText) JawsUpdate(u *Element) {
+	u.SetValue(ui.JawsGetString(u))
 }
 
 func (ui *UiInputText) JawsEvent(e *Element, wht what.What, val string) (err error) {

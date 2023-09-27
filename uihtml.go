@@ -146,28 +146,28 @@ func (ui *UiHtml) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	panic(fmt.Errorf("jaws: UiHtml.JawsRender(%v) called", e))
 }
 
-func (ui *UiHtml) JawsUpdate(u Updater) {
+func (ui *UiHtml) JawsUpdate(u *Element) {
 	switch v := ui.Tag.(type) {
 	case *NamedBoolArray:
 		u.SetValue(v.Get())
 	case StringGetter:
-		u.SetValue(v.JawsGetString(u.Element))
+		u.SetValue(v.JawsGetString(u))
 	case FloatGetter:
-		u.SetValue(string(fmt.Append(nil, v.JawsGetFloat(u.Element))))
+		u.SetValue(string(fmt.Append(nil, v.JawsGetFloat(u))))
 	case BoolGetter:
-		if v.JawsGetBool(u.Element) {
+		if v.JawsGetBool(u) {
 			u.SetAttr("checked", "")
 		} else {
 			u.RemoveAttr("checked")
 		}
 	case TimeGetter:
-		u.SetValue(v.JawsGetTime(u.Element).Format(ISO8601))
+		u.SetValue(v.JawsGetTime(u).Format(ISO8601))
 	case HtmlGetter:
-		u.SetInner(v.JawsGetHtml(u.Element))
+		u.SetInner(v.JawsGetHtml(u))
 	case UI:
 		v.JawsUpdate(u)
 	default:
-		panic(fmt.Errorf("jaws: UiHtml.JawsUpdate(%v): unhandled type: %T", u.Element, v))
+		panic(fmt.Errorf("jaws: UiHtml.JawsUpdate(%v): unhandled type: %T", u, v))
 	}
 }
 

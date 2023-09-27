@@ -23,8 +23,8 @@ func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string,
 	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, "", attrs...))
 }
 
-func (ui *UiInputBool) JawsUpdate(u Updater) {
-	if ui.JawsGetBool(u.Element) {
+func (ui *UiInputBool) JawsUpdate(u *Element) {
+	if ui.JawsGetBool(u) {
 		u.SetAttr("checked", "")
 	} else {
 		u.RemoveAttr("checked")

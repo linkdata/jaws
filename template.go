@@ -49,8 +49,8 @@ func (t Template) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	maybePanic(t.Execute(w, With{Element: e, Dot: t.Dot}))
 }
 
-func (t Template) JawsUpdate(u Updater) {
-	u.Replace(t.ToHTML(u.Element))
+func (t Template) JawsUpdate(u *Element) {
+	u.Replace(t.ToHTML(u))
 }
 
 var _ EventHandler = (*Template)(nil) // statically ensure interface is defined

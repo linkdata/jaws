@@ -23,8 +23,8 @@ func (ui *UiInputDate) renderDateInput(e *Element, w io.Writer, jid Jid, htmltyp
 	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.value(e), attrs...))
 }
 
-func (ui *UiInputDate) JawsUpdate(u Updater) {
-	u.SetValue(ui.value(u.Element))
+func (ui *UiInputDate) JawsUpdate(u *Element) {
+	u.SetValue(ui.value(u))
 }
 
 func (ui *UiInputDate) JawsEvent(e *Element, wht what.What, val string) (err error) {
