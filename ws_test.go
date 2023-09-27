@@ -130,7 +130,7 @@ func TestWS_NormalExchange(t *testing.T) {
 	is.Equal(resp.StatusCode, http.StatusSwitchingProtocols)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	msg := wsMsg{Jid: jidForTag(ts.rq, "foo"), What: what.Trigger}
+	msg := wsMsg{Id: jidForTag(ts.rq, "foo").String(), What: what.Trigger}
 	ctx, cancel := context.WithTimeout(ts.ctx, time.Second*3)
 	defer cancel()
 
@@ -157,7 +157,7 @@ func TestReader_RespectsContextDone(t *testing.T) {
 	ts := newTestServer(is)
 	defer ts.Close()
 
-	msg := wsMsg{Jid: 1234, What: what.Trigger}
+	msg := wsMsg{Id: "Jid.1234", What: what.Trigger}
 	doneCh := make(chan struct{})
 	inCh := make(chan wsMsg)
 	client, server := Pipe()
@@ -206,7 +206,7 @@ func TestReader_RespectsJawsDone(t *testing.T) {
 	}()
 
 	ts.jw.Close()
-	msg := wsMsg{Jid: 1234, What: what.Trigger}
+	msg := wsMsg{Id: "Jid.1234", What: what.Trigger}
 	err := client.Write(ctx, websocket.MessageText, []byte(msg.Format()))
 	is.NoErr(err)
 
@@ -225,7 +225,7 @@ func TestWriter_SendsThePayload(t *testing.T) {
 	outCh := make(chan wsMsg)
 	defer close(outCh)
 	client, server := Pipe()
-	msg := wsMsg{Jid: 1234}
+	msg := wsMsg{Id: "Jid.1234"}
 
 	go wsWriter(ts.ctx, ts.jw.Done(), outCh, server)
 
@@ -359,9 +359,9 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 		txt  string
 		want wsMsg
 	}{
-		{"shortest", "Jid.1\n\n", wsMsg{Jid: 1}},
-		{"normal", "Jid.2\nInput\nc", wsMsg{Jid: 2, What: what.Input, Data: "c"}},
-		{"newline", "Jid.3\nClick\nc\nd", wsMsg{Jid: 3, What: what.Click, Data: "c\nd"}},
+		{"shortest", "Jid.1\n\n", wsMsg{Id: Jid(1).String()}},
+		{"normal", "fooid\nInput\nc", wsMsg{Id: "fooid", What: what.Input, Data: "c"}},
+		{"newline", "Jid.3\nClick\nc\nd", wsMsg{Id: Jid(3).String(), What: what.Click, Data: "c\nd"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

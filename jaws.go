@@ -624,7 +624,7 @@ func maybePanic(err error) {
 // all HTML elements with the given HTML ID in all Requests.
 func (jw *Jaws) SetInner(htmlId string, innerHtml template.HTML) {
 	jw.Broadcast(Message{
-		Tag:  htmlId,
+		Tag:  template.HTML(htmlId),
 		What: what.Inner,
 		Data: innerHtml,
 	})
@@ -634,7 +634,7 @@ func (jw *Jaws) SetInner(htmlId string, innerHtml template.HTML) {
 // all HTML elements with the given HTML ID in all Requests.
 func (jw *Jaws) SetAttr(htmlId string, attr, val string) {
 	jw.Broadcast(Message{
-		Tag:  htmlId,
+		Tag:  template.HTML(htmlId),
 		What: what.SAttr,
 		Data: attr + "\n" + val,
 	})
@@ -644,7 +644,7 @@ func (jw *Jaws) SetAttr(htmlId string, attr, val string) {
 // all HTML elements with the given HTML ID in all Requests.
 func (jw *Jaws) RemoveAttr(htmlId string, attr string) {
 	jw.Broadcast(Message{
-		Tag:  htmlId,
+		Tag:  template.HTML(htmlId),
 		What: what.RAttr,
 		Data: attr,
 	})
@@ -654,7 +654,7 @@ func (jw *Jaws) RemoveAttr(htmlId string, attr string) {
 // all HTML elements with the given HTML ID in all Requests.
 func (jw *Jaws) SetValue(htmlId, val string) {
 	jw.Broadcast(Message{
-		Tag:  htmlId,
+		Tag:  template.HTML(htmlId),
 		What: what.Value,
 		Data: val,
 	})
@@ -666,7 +666,7 @@ func (jw *Jaws) SetValue(htmlId, val string) {
 // The position parameter 'where' may be either a HTML ID, an child index or the text 'null'.
 func (jw *Jaws) Insert(htmlId, where, html string) {
 	jw.Broadcast(Message{
-		Tag:  htmlId,
+		Tag:  template.HTML(htmlId),
 		What: what.Insert,
 		Data: where + "\n" + html,
 	})
@@ -678,7 +678,7 @@ func (jw *Jaws) Insert(htmlId, where, html string) {
 // The position parameter 'where' may be either a HTML ID or an index.
 func (jw *Jaws) Replace(htmlId, where, html string) {
 	jw.Broadcast(Message{
-		Tag:  htmlId,
+		Tag:  template.HTML(htmlId),
 		What: what.Replace,
 		Data: where + "\n" + html,
 	})

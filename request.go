@@ -476,7 +476,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		case wsmsg, ok = <-incomingMsgCh:
 			if ok {
 				// incoming event message from the websocket
-				if elem := rq.GetElement(wsmsg.Jid); elem != nil {
+				if elem := rq.GetElement(ParseJid(wsmsg.Id)); elem != nil {
 					select {
 					case eventCallCh <- eventFnCall{e: elem, wht: wsmsg.What, data: wsmsg.Data}:
 					default:
@@ -497,12 +497,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			rq.remove(tagmsg.Tag.(*Element))
 		}
 
-		// collect all elements marked with the tag in the message
-		var todo []*Element
-		rq.mu.RLock()
-		todo = append(todo, rq.tagMap[tagmsg.Tag]...)
-		rq.mu.RUnlock()
-
 		// prepare the data to send in the WS message
 		var wsdata string
 		switch data := tagmsg.Data.(type) {
@@ -515,6 +509,21 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		case []interface{}: // list of tags
 			wsdata = rq.makeOrder(data)
 		}
+
+		if htmlId, ok := tagmsg.Tag.(template.HTML); ok {
+			rq.send(wsMsg{
+				Id:   string(htmlId),
+				Data: wsdata,
+				What: tagmsg.What,
+			})
+			continue
+		}
+
+		// collect all elements marked with the tag in the message
+		var todo []*Element
+		rq.mu.RLock()
+		todo = append(todo, rq.tagMap[tagmsg.Tag]...)
+		rq.mu.RUnlock()
 
 		switch tagmsg.What {
 		case what.None:
@@ -552,7 +561,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					if h, ok := elem.Ui().(EventHandler); ok {
 						if errmsg := makeAlertDangerMessage(h.JawsEvent(elem, tagmsg.What, wsdata)); errmsg.What != what.None {
 							rq.send(wsMsg{
-								Jid:  elem.jid,
+								Id:   elem.jid.String(),
 								What: errmsg.What,
 								Data: wsdata,
 							})
@@ -560,7 +569,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					}
 				default:
 					rq.send(wsMsg{
-						Jid:  elem.jid,
+						Id:   elem.jid.String(),
 						What: tagmsg.What,
 						Data: wsdata,
 					})
@@ -593,7 +602,7 @@ func (rq *Request) remove(e *Element) {
 		}
 		rq.mu.Unlock()
 		rq.send(wsMsg{
-			Jid:  e.jid,
+			Id:   e.jid.String(),
 			What: what.Remove,
 		})
 	}
