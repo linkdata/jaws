@@ -335,6 +335,8 @@ func (rq *Request) wantMessage(msg *Message) (yes bool) {
 			yes = dest == rq
 		case *Element:
 			yes = dest.Request == rq
+		case Jid:
+			yes = rq.GetElement(dest) != nil
 		default:
 			rq.mu.RLock()
 			_, yes = rq.tagMap[msg.Dest]
