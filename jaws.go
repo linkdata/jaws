@@ -503,9 +503,10 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			// could mean nonreproducible and seemingly
 			// random failures in processing logic.
 			if ok {
-				isCmd := msg.What.IsCommand()
+				_, always := msg.Dest.(string) // destination is HTML id
+				always = always || msg.What.IsCommand()
 				for msgCh, rq := range subs {
-					if isCmd || rq.wantMessage(&msg) {
+					if always || rq.wantMessage(&msg) {
 						select {
 						case msgCh <- msg:
 						default:
