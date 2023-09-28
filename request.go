@@ -328,7 +328,7 @@ func (rq *Request) Register(item interface{}, params ...interface{}) Jid {
 // wantMessage returns true if the Request want the message.
 func (rq *Request) wantMessage(msg *Message) (yes bool) {
 	if rq != nil && msg.from != rq {
-		if _, yes = msg.Dest.(template.HTML); !yes {
+		if _, yes = msg.Dest.(string); !yes {
 			rq.mu.RLock()
 			_, yes = rq.tagMap[msg.Dest]
 			rq.mu.RUnlock()
