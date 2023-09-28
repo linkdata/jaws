@@ -247,7 +247,7 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 	case msg := <-rq.outCh:
 		elem := rq.GetElement(jid)
 		is.True(elem != nil)
-		is.Equal(msg, wsMsg{Id: elem.jid.String(), Data: "bar", What: what.Inner})
+		is.Equal(msg, wsMsg{Jid: elem.jid, Data: "bar", What: what.Inner})
 	}
 }
 
@@ -368,7 +368,7 @@ func TestRequest_Trigger(t *testing.T) {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case msg := <-rq.outCh:
-		is.Equal(msg.Id, "")
+		is.Equal(msg.Jid, Jid(0))
 		is.Equal(msg.What, what.Alert)
 		is.Equal(msg.Data, "danger\nomg")
 	}
@@ -582,7 +582,7 @@ func TestRequest_Sends(t *testing.T) {
 			done = true
 		case msg, ok := <-rq.outCh:
 			if ok {
-				switch rq.GetElement(ParseJid(msg.Id)) {
+				switch rq.GetElement(msg.Jid) {
 				case setAttrElement:
 					gotSetAttr = msg.Format()
 				case removeAttrElement:
@@ -614,13 +614,14 @@ func TestRequest_Sends(t *testing.T) {
 		t.Log(strconv.Quote(gotSetAttr))
 		is.Fail()
 	}
-	if !strings.HasSuffix(gotRemoveAttr, "\nRAttr\nbar") {
+	if !(strings.HasPrefix(gotRemoveAttr, "RAttr\n") && strings.HasSuffix(gotRemoveAttr, "\nbar")) {
 		t.Log(strconv.Quote(gotRemoveAttr))
 		is.Fail()
 	}
-	is.Equal(gotRedirect, "\nRedirect\nsome-url")
-	is.Equal(gotInfoAlert, "\nAlert\ninfo\n<html>\nnot-escaped")
-	is.Equal(gotDangerAlert, "\nAlert\ndanger\n&lt;html&gt;\nshould-be-escaped")
+	jid0str := Jid(0).String()
+	is.Equal(gotRedirect, "Redirect\n"+jid0str+"\nsome-url")
+	is.Equal(gotInfoAlert, "Alert\n"+jid0str+"\ninfo\n<html>\nnot-escaped")
+	is.Equal(gotDangerAlert, "Alert\n"+jid0str+"\ndanger\n&lt;html&gt;\nshould-be-escaped")
 }
 
 /*
@@ -676,13 +677,13 @@ func TestRequest_OnTrigger(t *testing.T) {
 	is.NoErr(rq.OnTrigger(elemId, func(rq *Request, jidstr string) error {
 		defer close(gotCall)
 		is.True(rq.wantMessage(&Message{Tag: elemId}))
-		jid := ParseJid(jidstr)
+		jid := JidParseString(jidstr)
 		is.True(jid != 0)
 		elem := rq.GetElement(jid)
 		is.True(elem != nil)
 		return nil
 	}))
-	rq.inCh <- wsMsg{Id: jidForTag(rq.Request, elemId).String(), What: what.Trigger, Data: elemVal}
+	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Trigger, Data: elemVal}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -760,13 +761,13 @@ func TestRequest_Text(t *testing.T) {
 	gotCall := make(chan struct{})
 	h := rq.Text(&av, func(rq *Request, jidstr, val string) error {
 		defer close(gotCall)
-		is.True(rq.GetElement(ParseJid(jidstr)) != nil)
-		is.True(rq.GetElement(ParseJid(jidstr)) != nil)
+		is.True(rq.GetElement(JidParseString(jidstr)) != nil)
+		is.True(rq.GetElement(JidParseString(jidstr)) != nil)
 		is.Equal(val, "other-stuff")
 		return nil
 	}, "disabled")
 	chk(h, &av, elemVal)
-	rq.inCh <- wsMsg{Id: jidForTag(rq.Request, &av).String(), What: what.Input, Data: "other-stuff"}
+	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, &av), What: what.Input, Data: "other-stuff"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		t.Log(h)
@@ -796,13 +797,13 @@ func TestRequest_Password(t *testing.T) {
 	gotCall := make(chan struct{})
 	h := rq.Password(&av, func(rq *Request, jid, val string) error {
 		defer close(gotCall)
-		is.True(rq.GetElement(ParseJid(jid)) != nil)
+		is.True(rq.GetElement(JidParseString(jid)) != nil)
 		is.Equal(val, "other-stuff")
 		return nil
 	}, "autocomplete=\"off\"")
 	chk(h, &av, "autocomplete")
 	is.True(!strings.Contains(string(h), "value"))
-	rq.inCh <- wsMsg{Id: jidForTag(rq.Request, &av).String(), What: what.Input, Data: "other-stuff"}
+	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, &av), What: what.Input, Data: "other-stuff"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -825,7 +826,7 @@ func TestRequest_Number(t *testing.T) {
 	gotCall := make(chan struct{})
 	defer close(gotCall)
 	h := rq.Number(elemId, &av, func(rq *Request, jid string, val float64) error {
-		is.True(rq.GetElement(ParseJid(jid)) != nil)
+		is.True(rq.GetElement(JidParseString(jid)) != nil)
 		switch val {
 		case 4.3:
 			// ok
@@ -838,19 +839,19 @@ func TestRequest_Number(t *testing.T) {
 		return nil
 	}, "disabled")
 	chk(h, elemId, "21.5")
-	rq.inCh <- wsMsg{Id: jidForTag(rq.Request, elemId).String(), What: what.Input, Data: "4.3"}
+	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "4.3"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
 	}
-	rq.inCh <- wsMsg{Id: jidForTag(rq.Request, elemId).String(), What: what.Input, Data: ""} // should call with zero
+	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: ""} // should call with zero
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
 	}
-	rq.inCh <- wsMsg{Id: jidForTag(rq.Request, elemId).String(), What: what.Input, Data: "meh"} // should fail with alert
+	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "meh"} // should fail with alert
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -876,12 +877,12 @@ func TestRequest_Range(t *testing.T) {
 	gotCall := make(chan struct{})
 	h := rq.Range(elemId, &av, func(rq *Request, jid string, val float64) error {
 		defer close(gotCall)
-		is.True(rq.GetElement(ParseJid(jid)) != nil)
+		is.True(rq.GetElement(JidParseString(jid)) != nil)
 		is.Equal(val, 3.15)
 		return nil
 	}, "disabled")
 	chk(h, elemId, "3.14")
-	rq.inCh <- wsMsg{Id: jidForTag(rq.Request, elemId).String(), What: what.Input, Data: "3.15"}
+	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "3.15"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -904,25 +905,25 @@ func TestRequest_Checkbox(t *testing.T) {
 	gotCall := make(chan struct{})
 	defer close(gotCall)
 	h := rq.Checkbox(&av, func(rq *Request, jid string, val bool) error {
-		is.True(rq.GetElement(ParseJid(jid)) != nil)
+		is.True(rq.GetElement(JidParseString(jid)) != nil)
 		is.Equal(val, false)
 		gotCall <- struct{}{}
 		return nil
 	})
 	chk(h, &av, "checked")
-	rq.inCh <- wsMsg{Id: jidForTag(rq.Request, elemId).String(), What: what.Input, Data: "false"}
+	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "false"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
 	}
-	rq.inCh <- wsMsg{Id: jidForTag(rq.Request, elemId).String(), What: what.Input, Data: ""}
+	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: ""}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
 	}
-	rq.inCh <- wsMsg{Id: jidForTag(rq.Request, elemId).String(), What: what.Input, Data: "wut"}
+	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "wut"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -951,7 +952,7 @@ func TestRequest_Date(t *testing.T) {
 		defer func() {
 			gotCall <- struct{}{}
 		}()
-		is.True(rq.GetElement(ParseJid(jid)) != nil)
+		is.True(rq.GetElement(JidParseString(jid)) != nil)
 		if !val.IsZero() {
 			is.Equal(val.Year(), 1970)
 			is.Equal(val.Month(), time.January)
@@ -962,21 +963,21 @@ func TestRequest_Date(t *testing.T) {
 
 	chk(h, elemId, elemVal.Format(ISO8601))
 
-	rq.inCh <- wsMsg{Id: jidForTag(rq.Request, elemId).String(), What: what.Input, Data: "1970-01-02"}
+	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "1970-01-02"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
 	}
 
-	rq.inCh <- wsMsg{Id: jidForTag(rq.Request, elemId).String(), What: what.Input, Data: ""}
+	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: ""}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
 	}
 
-	rq.inCh <- wsMsg{Id: jidForTag(rq.Request, elemId).String(), What: what.Input, Data: "foobar!"}
+	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "foobar!"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -1004,14 +1005,14 @@ func TestRequest_Radio(t *testing.T) {
 	gotCall := make(chan struct{})
 	h := rq.Radio(elemId, &av, func(rq *Request, jid string, val bool) error {
 		defer close(gotCall)
-		is.True(rq.GetElement(ParseJid(jid)) != nil)
+		is.True(rq.GetElement(JidParseString(jid)) != nil)
 		is.Equal(val, false)
 		return nil
 	})
 
 	chk(h, elemId, "checked")
 
-	rq.inCh <- wsMsg{Id: jidForTag(rq.Request, elemId).String(), What: what.Input, Data: "false"}
+	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "false"}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()

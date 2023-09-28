@@ -57,15 +57,18 @@ func wsReader(ctx context.Context, jawsDoneCh <-chan struct{}, incomingMsgCh cha
 // wsParse parses an incoming text buffer into a message.
 func wsParse(txt []byte) (wsMsg, bool) {
 	txt = bytes.ToValidUTF8(txt, nil) // we don't trust client browsers
-	// first newline must not be first charater, that would leave no room for id
 	if nl1 := bytes.IndexByte(txt, '\n'); nl1 > 0 {
 		if nl2 := bytes.IndexByte(txt[nl1+1:], '\n'); nl2 >= 0 {
 			nl2 += nl1 + 1
-			return wsMsg{
-				Id:   string(txt[0:nl1]),
-				What: what.Parse(string(txt[nl1+1 : nl2])),
-				Data: string(txt[nl2+1:]),
-			}, true
+			// What       ... Jid              ... Data
+			// txt[0:nl1] ... txt[nl1+1 : nl2] ... txt[nl2+1:]
+			if jid := JidParseString(string(txt[nl1+1 : nl2])); jid >= 0 {
+				return wsMsg{
+					Data: string(txt[nl2+1:]),
+					Jid:  jid,
+					What: what.Parse(string(txt[0:nl1])),
+				}, true
+			}
 		}
 	}
 	return wsMsg{}, false

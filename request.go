@@ -478,7 +478,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		case wsmsg, ok = <-incomingMsgCh:
 			if ok {
 				// incoming event message from the websocket
-				if elem := rq.GetElement(ParseJid(wsmsg.Id)); elem != nil {
+				if elem := rq.GetElement(wsmsg.Jid); elem != nil {
 					select {
 					case eventCallCh <- eventFnCall{e: elem, wht: wsmsg.What, data: wsmsg.Data}:
 					default:
@@ -514,9 +514,9 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 
 		if htmlId, ok := tagmsg.Tag.(template.HTML); ok {
 			rq.send(wsMsg{
-				Id:   string(htmlId),
-				Data: wsdata,
+				Data: string(htmlId) + "\n" + wsdata,
 				What: tagmsg.What,
+				Jid:  -1,
 			})
 			continue
 		}
@@ -563,17 +563,17 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					if h, ok := elem.Ui().(EventHandler); ok {
 						if errmsg := makeAlertDangerMessage(h.JawsEvent(elem, tagmsg.What, wsdata)); errmsg.What != what.None {
 							rq.send(wsMsg{
-								Id:   elem.jid.String(),
-								What: errmsg.What,
 								Data: wsdata,
+								Jid:  elem.jid,
+								What: errmsg.What,
 							})
 						}
 					}
 				default:
 					rq.send(wsMsg{
-						Id:   elem.jid.String(),
-						What: tagmsg.What,
 						Data: wsdata,
+						Jid:  elem.jid,
+						What: tagmsg.What,
 					})
 				}
 			}
@@ -604,7 +604,7 @@ func (rq *Request) remove(e *Element) {
 		}
 		rq.mu.Unlock()
 		rq.send(wsMsg{
-			Id:   e.jid.String(),
+			Jid:  e.jid,
 			What: what.Remove,
 		})
 	}

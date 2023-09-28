@@ -22,7 +22,7 @@ func TestParseJid(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := ParseJid(tt.arg); got != tt.want {
+			if got := JidParseString(tt.arg); got != tt.want {
 				t.Errorf("ParseJid() = %v, want %v", got, tt.want)
 			}
 		})
@@ -35,9 +35,9 @@ func TestJid_String(t *testing.T) {
 		jid  Jid
 		want string
 	}{
-		{"zero", 0, ""},
-		{"one", 1, JidPrefix + "1"},
 		{"negative", -1, ""},
+		{"zero", 0, JidPrefix + "0"},
+		{"one", 1, JidPrefix + "1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

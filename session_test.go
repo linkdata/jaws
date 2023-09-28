@@ -211,7 +211,7 @@ func TestSession_Delete(t *testing.T) {
 	is.NoErr(ctx.Err())
 	is.NoErr(err)
 	is.Equal(mt, websocket.MessageText)
-	is.Equal(string(b), "\nReload\n")
+	is.Equal(string(b), "Reload\n"+JidPrefix+"0\n")
 }
 
 func TestSession_Cleanup(t *testing.T) {

@@ -42,21 +42,29 @@ func (jid Jid) AppendStartTagAttr(dst []byte, startTag string) []byte {
 	return dst
 }
 
-// ParseJid parses an unquoted Jid string (e.g. `Jid.2`) and returns the Jid value (e.g. Jid(2)).
+// JidParseInt parses a Jid integer and returns it as a Jid.
+//
+// Returns zero if it's not a valid Jid or an error occurs.
+func JidParseInt(s string) Jid {
+	if n, err := strconv.ParseInt(s, 10, 32); err == nil && n >= 0 {
+		return Jid(n)
+	}
+	return 0
+}
+
+// JidParseString parses an unquoted Jid string (e.g. `Jid.2`) and returns the Jid value (e.g. Jid(2)).
 //
 // Returns zero if it's not a valid Jid string.
-func ParseJid(s string) Jid {
+func JidParseString(s string) Jid {
 	if strings.HasPrefix(s, JidPrefix) {
-		if n, err := strconv.ParseInt(s[len(JidPrefix):], 10, 32); err == nil && n > 0 {
-			return Jid(n)
-		}
+		return JidParseInt(s[len(JidPrefix):])
 	}
 	return 0
 }
 
 // String returns the unquoted string representation of the Jid.
 func (jid Jid) String() string {
-	if jid > 0 {
+	if jid >= 0 {
 		return string(jid.Append(nil))
 	}
 	return ""

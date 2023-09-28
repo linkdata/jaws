@@ -45,7 +45,7 @@ function jawsHandler(e) {
 			}
 			e.stopPropagation();
 		}
-		jaws.send(elem.id + "\n" + e.type + "\n" + val);
+		jaws.send(e.type + "\n" + elem.id + "\n" + val);
 	}
 }
 
@@ -204,8 +204,8 @@ function jawsWhere(elem, pos) {
 
 function jawsMessage(e) {
 	var lines = e.data.split('\n');
-	var id = lines.shift();
 	var what = lines.shift();
+	var id = lines.shift();
 	var where = null;
 	var data = null;
 	switch (what) {

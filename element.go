@@ -81,9 +81,9 @@ func (e *Element) ToHtml(val interface{}) template.HTML {
 
 func (e *Element) send(wht what.What, data string) {
 	e.Request.send(wsMsg{
-		Id:   e.jid.String(),
-		What: wht,
 		Data: data,
+		Jid:  e.jid,
+		What: wht,
 	})
 }
 
