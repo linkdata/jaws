@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"html"
 	"html/template"
-	"log"
 	"net"
 	"net/http"
 	"sync"
@@ -468,6 +467,19 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 	var wsQueue []wsMsg
 
 	for {
+		for {
+			for _, msg := range wsQueue {
+				rq.send(outboundMsgCh, msg)
+			}
+			wsQueue = wsQueue[:0]
+			rq.mu.Lock()
+			wsQueue, rq.wsQueue = rq.wsQueue, wsQueue
+			rq.mu.Unlock()
+			if len(wsQueue) == 0 {
+				break
+			}
+		}
+
 		var tagmsg Message
 		var wsmsg wsMsg
 		var ok bool
@@ -515,7 +527,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		}
 
 		if htmlId, ok := tagmsg.Tag.(template.HTML); ok {
-			rq.send(wsMsg{
+			wsQueue = append(wsQueue, wsMsg{
 				Data: string(htmlId) + "\n" + wsdata,
 				What: tagmsg.What,
 				Jid:  -1,
@@ -541,7 +553,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		case what.Order:
 			fallthrough
 		case what.Alert:
-			rq.send(wsMsg{
+			wsQueue = append(wsQueue, wsMsg{
 				Data: wsdata,
 				What: tagmsg.What,
 			})
@@ -564,7 +576,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					// primary usecase is tests.
 					if h, ok := elem.Ui().(EventHandler); ok {
 						if errmsg := makeAlertDangerMessage(h.JawsEvent(elem, tagmsg.What, wsdata)); errmsg.What != what.None {
-							rq.send(wsMsg{
+							wsQueue = append(wsQueue, wsMsg{
 								Data: wsdata,
 								Jid:  elem.jid,
 								What: errmsg.What,
@@ -572,7 +584,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 						}
 					}
 				default:
-					rq.send(wsMsg{
+					wsQueue = append(wsQueue, wsMsg{
 						Data: wsdata,
 						Jid:  elem.jid,
 						What: tagmsg.What,
@@ -582,32 +594,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		}
 
 		rq.callUpdate()
-
-		rq.mu.Lock()
-		wsQueue, rq.wsQueue = rq.wsQueue, wsQueue
-		rq.mu.Unlock()
-
-		if len(wsQueue) > 0 {
-			rq.sendWsQueue(outboundMsgCh, wsQueue)
-			wsQueue = wsQueue[:0]
-		}
-	}
-}
-
-func (rq *Request) sendWsQueue(outboundMsgCh chan<- wsMsg, wsQueue []wsMsg) {
-	if deadlock.Debug {
-		if len(wsQueue) > 10 {
-			log.Println("jaws: sendWsQueue:", rq, "length", len(wsQueue))
-		}
-	}
-	for _, msg := range wsQueue {
-		select {
-		case <-rq.Jaws.Done():
-		case <-rq.Done():
-		case outboundMsgCh <- msg:
-		default:
-			panic(fmt.Errorf("jaws: %v: outbound message channel is full (%d) sending %s", rq, len(outboundMsgCh), msg))
-		}
 	}
 }
 
@@ -649,19 +635,32 @@ func (rq *Request) remove(e *Element) {
 		for k := range rq.tagMap {
 			rq.tagMap[k] = removeElement(rq.tagMap[k], e)
 		}
-		rq.mu.Unlock()
-		rq.send(wsMsg{
+		rq.queueLocked(wsMsg{
 			Jid:  e.jid,
 			What: what.Remove,
 		})
+		rq.mu.Unlock()
 	}
 }
 
-func (rq *Request) send(msg wsMsg) {
-	rq.mu.Lock()
-	rq.wsQueue = append(rq.wsQueue, msg)
-	rq.mu.Unlock()
+func (rq *Request) send(outboundMsgCh chan<- wsMsg, msg wsMsg) {
+	select {
+	case <-rq.Jaws.Done():
+	case <-rq.Done():
+	case outboundMsgCh <- msg:
+	default:
+		panic(fmt.Errorf("jaws: %v: outbound message channel is full (%d) sending %s", rq, len(outboundMsgCh), msg))
+	}
+}
 
+func (rq *Request) queueLocked(msg wsMsg) {
+	rq.wsQueue = append(rq.wsQueue, msg)
+}
+
+func (rq *Request) queue(msg wsMsg) {
+	rq.mu.Lock()
+	rq.queueLocked(msg)
+	rq.mu.Unlock()
 }
 
 func (rq *Request) callUpdate() {

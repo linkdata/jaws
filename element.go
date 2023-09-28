@@ -80,7 +80,7 @@ func (e *Element) ToHtml(val interface{}) template.HTML {
 }
 
 func (e *Element) send(wht what.What, data string) {
-	e.Request.send(wsMsg{
+	e.Request.queue(wsMsg{
 		Data: data,
 		Jid:  e.jid,
 		What: wht,
