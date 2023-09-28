@@ -67,7 +67,7 @@ func (rq *Request) OnEvent(tagstring string, fn EventFn) error {
 // Trigger invokes the event handler for the given ID with a 'trigger' event on all Requests except this one.
 func (rq *Request) Trigger(tagitem interface{}, val string) {
 	rq.Broadcast(Message{
-		Tag:  tagitem,
+		Dest: tagitem,
 		What: what.Trigger,
 		Data: val,
 	})
@@ -77,7 +77,7 @@ func (rq *Request) Trigger(tagitem interface{}, val string) {
 // Trigger invokes the event handler for the given ID with a 'trigger' event on all Requests.
 func (jw *Jaws) Trigger(tagitem interface{}, val string) {
 	jw.Broadcast(Message{
-		Tag:  tagitem,
+		Dest: tagitem,
 		What: what.Trigger,
 		Data: val,
 	})

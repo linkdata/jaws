@@ -328,9 +328,9 @@ func (rq *Request) Register(item interface{}, params ...interface{}) Jid {
 // wantMessage returns true if the Request want the message.
 func (rq *Request) wantMessage(msg *Message) (yes bool) {
 	if rq != nil && msg.from != rq {
-		if _, yes = msg.Tag.(template.HTML); !yes {
+		if _, yes = msg.Dest.(template.HTML); !yes {
 			rq.mu.RLock()
-			_, yes = rq.tagMap[msg.Tag]
+			_, yes = rq.tagMap[msg.Dest]
 			rq.mu.RUnlock()
 		}
 	}
@@ -531,13 +531,13 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 
 		// collect all elements marked with the tag in the message
 		var todo []*Element
-		switch v := tagmsg.Tag.(type) {
+		switch v := tagmsg.Dest.(type) {
 		case nil:
 			// matches no elements
 		case *Element:
 			todo = append(todo, v)
-		case template.HTML:
-			// tag is a regular HTML ID
+		case string:
+			// target is a regular HTML ID
 			wsQueue = append(wsQueue, wsMsg{
 				Data: string(v) + "\n" + wsdata,
 				What: tagmsg.What,
@@ -545,7 +545,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			})
 		default:
 			rq.mu.RLock()
-			todo = append(todo, rq.tagMap[tagmsg.Tag]...)
+			todo = append(todo, rq.tagMap[tagmsg.Dest]...)
 			rq.mu.RUnlock()
 		}
 
@@ -772,88 +772,4 @@ func (rq *Request) OnTrigger(jid string, fn func(rq *Request, jid string) error)
 	}
 	rq.Register(Tag{jid}, wf)
 	return nil
-}
-
-// SetInner sends a request to replace the inner HTML of
-// all HTML elements with the given HTML ID in this Request.
-func (rq *Request) SetInner(htmlId string, innerHtml template.HTML) {
-	rq.Send(Message{
-		Tag:  template.HTML(htmlId),
-		What: what.Inner,
-		Data: innerHtml,
-	})
-}
-
-// SetAttr sends a request to replace the given attribute value in
-// all HTML elements with the given HTML ID in this Request.
-func (rq *Request) SetAttr(htmlId string, attr, val string) {
-	rq.Send(Message{
-		Tag:  template.HTML(htmlId),
-		What: what.SAttr,
-		Data: attr + "\n" + val,
-	})
-}
-
-// RemoveAttr sends a request to remove the given attribute from
-// all HTML elements with the given HTML ID in this Request.
-func (rq *Request) RemoveAttr(htmlId string, attr string) {
-	rq.Send(Message{
-		Tag:  template.HTML(htmlId),
-		What: what.RAttr,
-		Data: attr,
-	})
-}
-
-// SetClass sends a request to set the given class in
-// all HTML elements with the given HTML ID in this Request.
-func (rq *Request) SetClass(htmlId string, cls string) {
-	rq.Send(Message{
-		Tag:  template.HTML(htmlId),
-		What: what.SClass,
-		Data: cls,
-	})
-}
-
-// RemoveClass sends a request to remove the given class from
-// all HTML elements with the given HTML ID in this Request.
-func (rq *Request) RemoveClass(htmlId string, cls string) {
-	rq.Send(Message{
-		Tag:  template.HTML(htmlId),
-		What: what.RClass,
-		Data: cls,
-	})
-}
-
-// SetValue sends a request to set the HTML "value" attribute of
-// all HTML elements with the given HTML ID in this Request.
-func (rq *Request) SetValue(htmlId, val string) {
-	rq.Send(Message{
-		Tag:  template.HTML(htmlId),
-		What: what.Value,
-		Data: val,
-	})
-}
-
-// Insert calls the Javascript 'insertBefore()' method on
-// all HTML elements with the given HTML ID in this Request.
-//
-// The position parameter 'where' may be either a HTML ID, an child index or the text 'null'.
-func (rq *Request) Insert(htmlId, where, html string) {
-	rq.Send(Message{
-		Tag:  template.HTML(htmlId),
-		What: what.Insert,
-		Data: where + "\n" + html,
-	})
-}
-
-// Replace calls the Javascript 'replaceChild()' method on
-// all HTML elements with the given HTML ID in this Request.
-//
-// The position parameter 'where' may be either a HTML ID or an index.
-func (rq *Request) Replace(htmlId, where, html string) {
-	rq.Send(Message{
-		Tag:  template.HTML(htmlId),
-		What: what.Replace,
-		Data: where + "\n" + html,
-	})
 }

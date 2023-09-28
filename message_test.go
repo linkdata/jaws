@@ -11,7 +11,7 @@ import (
 func Test_Message_String(t *testing.T) {
 	is := is.New(t)
 	msg := Message{
-		Tag:  "Elem",
+		Dest: "Elem",
 		What: what.None,
 		Data: "Data\nText",
 	}

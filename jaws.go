@@ -436,23 +436,6 @@ func (jw *Jaws) Order(childTags []interface{}) {
 	})
 }
 
-// Remove removes the HTML element(s) with the given tag.
-func (jw *Jaws) Remove(tag interface{}) {
-	jw.Broadcast(Message{
-		Tag:  tag,
-		What: what.Remove,
-	})
-}
-
-// Append calls the Javascript 'appendChild()' method on all HTML elements with the given tag.
-func (jw *Jaws) Append(tag interface{}, html template.HTML) {
-	jw.Broadcast(Message{
-		Tag:  tag,
-		What: what.Append,
-		Data: html,
-	})
-}
-
 // Count returns the number of requests waiting for their WebSocket callbacks.
 func (jw *Jaws) Pending() (n int) {
 	jw.mu.RLock()
@@ -622,85 +605,102 @@ func maybePanic(err error) {
 }
 
 // SetInner sends a request to replace the inner HTML of
-// all HTML elements with the given HTML ID in all Requests.
-func (jw *Jaws) SetInner(htmlId string, innerHtml template.HTML) {
+// all HTML elements matching target.
+func (jw *Jaws) SetInner(target interface{}, innerHtml template.HTML) {
 	jw.Broadcast(Message{
-		Tag:  template.HTML(htmlId),
+		Dest: target,
 		What: what.Inner,
 		Data: innerHtml,
 	})
 }
 
 // SetAttr sends a request to replace the given attribute value in
-// all HTML elements with the given HTML ID in all Requests.
-func (jw *Jaws) SetAttr(htmlId string, attr, val string) {
+// all HTML elements matching target.
+func (jw *Jaws) SetAttr(target interface{}, attr, val string) {
 	jw.Broadcast(Message{
-		Tag:  template.HTML(htmlId),
+		Dest: target,
 		What: what.SAttr,
 		Data: attr + "\n" + val,
 	})
 }
 
 // RemoveAttr sends a request to remove the given attribute from
-// all HTML elements with the given HTML ID in all Requests.
-func (jw *Jaws) RemoveAttr(htmlId string, attr string) {
+// all HTML elements matching target.
+func (jw *Jaws) RemoveAttr(target interface{}, attr string) {
 	jw.Broadcast(Message{
-		Tag:  template.HTML(htmlId),
+		Dest: target,
 		What: what.RAttr,
 		Data: attr,
 	})
 }
 
 // SetClass sends a request to set the given class in
-// all HTML elements with the given HTML ID in all Requests.
-func (jw *Jaws) SetClass(htmlId string, cls string) {
+// all HTML elements matching target.
+func (jw *Jaws) SetClass(target interface{}, cls string) {
 	jw.Broadcast(Message{
-		Tag:  template.HTML(htmlId),
+		Dest: target,
 		What: what.SClass,
 		Data: cls,
 	})
 }
 
 // RemoveClass sends a request to remove the given class from
-// all HTML elements with the given HTML ID in all Requests.
-func (jw *Jaws) RemoveClass(htmlId string, cls string) {
+// all HTML elements matching target.
+func (jw *Jaws) RemoveClass(target interface{}, cls string) {
 	jw.Broadcast(Message{
-		Tag:  template.HTML(htmlId),
+		Dest: target,
 		What: what.RClass,
 		Data: cls,
 	})
 }
 
 // SetValue sends a request to set the HTML "value" attribute of
-// all HTML elements with the given HTML ID in all Requests.
-func (jw *Jaws) SetValue(htmlId, val string) {
+// all HTML elements matching target.
+func (jw *Jaws) SetValue(target interface{}, val string) {
 	jw.Broadcast(Message{
-		Tag:  template.HTML(htmlId),
+		Dest: target,
 		What: what.Value,
 		Data: val,
 	})
 }
 
 // Insert calls the Javascript 'insertBefore()' method on
-// all HTML elements with the given HTML ID in all Requests.
+// all HTML elements matching target.
 //
 // The position parameter 'where' may be either a HTML ID, an child index or the text 'null'.
-func (jw *Jaws) Insert(htmlId, where, html string) {
+func (jw *Jaws) Insert(target interface{}, where, html string) {
 	jw.Broadcast(Message{
-		Tag:  template.HTML(htmlId),
+		Dest: target,
 		What: what.Insert,
 		Data: where + "\n" + html,
 	})
 }
 
-// Replace calls the Javascript 'replaceChild()' method on
-// all HTML elements with the given HTML ID in all Requests.
+// Replace replaces the HTML content on
+// all HTML elements matching target.
 //
 // The position parameter 'where' may be either a HTML ID or an index.
-func (jw *Jaws) Replace(htmlId, where, html string) {
+func (jw *Jaws) Replace(target interface{}, where, html string) {
 	jw.Broadcast(Message{
-		Tag:  template.HTML(htmlId),
+		Dest: target,
 		What: what.Replace,
 		Data: where + "\n" + html,
+	})
+}
+
+// Remove removes the HTML element(s) matching target.
+func (jw *Jaws) Remove(target interface{}) {
+	jw.Broadcast(Message{
+		Dest: target,
+		What: what.Remove,
+	})
+}
+
+// Append calls the Javascript 'appendChild()' method on all HTML elements matching target.
+func (jw *Jaws) Append(target interface{}, html template.HTML) {
+	jw.Broadcast(Message{
+		Dest: target,
+		What: what.Append,
+		Data: html,
 	})
 }
