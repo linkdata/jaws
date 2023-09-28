@@ -392,7 +392,7 @@ func (rq *Request) HasTag(elem *Element, tag interface{}) (yes bool) {
 	return
 }
 
-func (rq *Request) appendDirtyTags(tags ...interface{}) {
+func (rq *Request) appendDirtyTags(tags []interface{}) {
 	rq.mu.Lock()
 	rq.dirty = append(rq.dirty, tags...)
 	rq.mu.Unlock()

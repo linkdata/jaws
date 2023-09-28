@@ -21,7 +21,7 @@ func TagString(tag interface{}) string {
 
 func TagExpand(tag interface{}, result []interface{}) []interface{} {
 	if len(result) > 1000 {
-		panic("too many tags")
+		panic("jaws: too many tags")
 	}
 	switch data := tag.(type) {
 	case nil:

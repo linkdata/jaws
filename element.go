@@ -44,13 +44,6 @@ func (e *Element) Ui() UI {
 	return e.ui
 }
 
-// Dirty marks this Element (only) as needing UI().JawsUpdate() to be called.
-func (e *Element) Dirty() {
-	if e != nil {
-		e.Request.appendDirtyTags(e)
-	}
-}
-
 // Render calls UI().JawsRender() for this Element.
 func (e *Element) Render(w io.Writer, params []interface{}) {
 	e.ui.JawsRender(e, w, params)

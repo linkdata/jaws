@@ -374,27 +374,33 @@ func (jw *Jaws) distributeDirt() {
 
 	jw.mu.Lock()
 	dirt := make([]orderedDirt, 0, len(jw.dirty))
-	tags := make([]interface{}, 0, len(jw.dirty))
-	reqs := make([]*Request, 0, len(jw.pending)+len(jw.active))
 	for k, v := range jw.dirty {
 		dirt = append(dirt, orderedDirt{tag: k, order: v})
 		delete(jw.dirty, k)
 	}
 	jw.dirtOrder = 0
-	for _, rq := range jw.pending {
-		reqs = append(reqs, rq)
-	}
-	for rq := range jw.active {
-		reqs = append(reqs, rq)
+
+	var reqs []*Request
+	if len(dirt) > 0 {
+		reqs = make([]*Request, 0, len(jw.pending)+len(jw.active))
+		for _, rq := range jw.pending {
+			reqs = append(reqs, rq)
+		}
+		for rq := range jw.active {
+			reqs = append(reqs, rq)
+		}
 	}
 	jw.mu.Unlock()
 
-	sort.Slice(dirt, func(i, j int) bool { return dirt[i].order < dirt[j].order })
-	for _, v := range dirt {
-		tags = append(tags, v.tag)
-	}
-	for _, rq := range reqs {
-		rq.appendDirtyTags(tags...)
+	if len(dirt) > 0 {
+		sort.Slice(dirt, func(i, j int) bool { return dirt[i].order < dirt[j].order })
+		tags := make([]interface{}, len(dirt))
+		for i := range dirt {
+			tags[i] = dirt[i].tag
+		}
+		for _, rq := range reqs {
+			rq.appendDirtyTags(tags)
+		}
 	}
 }
 
