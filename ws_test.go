@@ -130,7 +130,7 @@ func TestWS_NormalExchange(t *testing.T) {
 	is.Equal(resp.StatusCode, http.StatusSwitchingProtocols)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	msg := wsMsg{Jid: jidForTag(ts.rq, "foo"), What: what.Trigger}
+	msg := wsMsg{Jid: jidForTag(ts.rq, Tag{"foo"}), What: what.Trigger}
 	ctx, cancel := context.WithTimeout(ts.ctx, time.Second*3)
 	defer cancel()
 

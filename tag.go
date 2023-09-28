@@ -24,34 +24,41 @@ func TagExpand(tag interface{}, result []interface{}) []interface{} {
 		panic("jaws: too many tags")
 	}
 	switch data := tag.(type) {
-	case nil:
-		// skipped
-	case Tag:
-		result = append(result, data.Value)
-	case atomicGetter:
-		result = append(result, data.v)
+	case string:
 	case template.HTML:
-		result = append(result, string(data))
-	case TagGetter:
-		result = TagExpand(data, result)
-	case []Tag:
-		for _, v := range data {
-			result = append(result, v.Value)
-		}
+	case int:
+	case int8:
+	case int16:
+	case int32:
+	case int64:
+	case uint:
+	case uint8:
+	case uint16:
+	case uint32:
+	case uint64:
+	case float32:
+	case float64:
+	case bool:
+	case error:
 	case []string:
+	case []template.HTML:
+
+	case nil:
+		return result
+	case atomicGetter:
+		return append(result, data.v)
+	case []Tag:
 		for _, v := range data {
 			result = append(result, v)
 		}
-	case []template.HTML:
-		for _, v := range data {
-			result = append(result, string(v))
-		}
+		return result
 	case []interface{}:
 		for _, v := range data {
 			result = TagExpand(v, result)
 		}
+		return result
 	default:
-		result = append(result, data)
+		return append(result, data)
 	}
-	return result
+	panic("jaws: not allowed as a tag: " + TagString(tag))
 }

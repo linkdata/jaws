@@ -303,10 +303,11 @@ func (rq *Request) Register(item interface{}, params ...interface{}) Jid {
 		return 0
 	case TagGetter:
 		tag = data.JawsGetTag(rq)
+	case Tag:
+		tag = item
 	case string:
-		tag = Tag{data}
-	case template.HTML:
-		tag = Tag{string(data)}
+		item = Tag{data}
+		tag = item
 	}
 
 	for _, elem := range rq.GetElements(tag) {
