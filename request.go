@@ -331,8 +331,6 @@ func (rq *Request) wantMessage(msg *Message) (yes bool) {
 		switch dest := msg.Dest.(type) {
 		case string: // HTML id
 			yes = true
-		case *Request:
-			yes = dest == rq
 		case *Element:
 			yes = dest.Request == rq
 		case Jid:
@@ -545,6 +543,10 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			// matches no elements
 		case *Element:
 			todo = append(todo, v)
+		case Jid:
+			if elem := rq.GetElement(v); elem != nil {
+				todo = append(todo, elem)
+			}
 		case string:
 			// target is a regular HTML ID
 			wsQueue = append(wsQueue, wsMsg{
