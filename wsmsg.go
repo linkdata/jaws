@@ -10,7 +10,7 @@ import (
 // wsMsg is a message sent to or from a WebSocket.
 type wsMsg struct {
 	Data string    // data to send
-	Jid  Jid       // Jid, or zero
+	Jid  Jid       // Jid to send, or negative to not send
 	What what.What // command
 }
 
