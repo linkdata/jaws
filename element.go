@@ -79,7 +79,7 @@ func (e *Element) ToHtml(val interface{}) template.HTML {
 	return template.HTML(html.EscapeString(s))
 }
 
-func (e *Element) send(wht what.What, data string) {
+func (e *Element) queue(wht what.What, data string) {
 	e.Request.queue(wsMsg{
 		Data: data,
 		Jid:  e.jid,
@@ -90,37 +90,37 @@ func (e *Element) send(wht what.What, data string) {
 // SetAttr queues sending a new attribute value
 // to the browser for the Element with the given JaWS ID in this Request.
 func (e *Element) SetAttr(attr, val string) {
-	e.send(what.SAttr, attr+"\n"+val)
+	e.queue(what.SAttr, attr+"\n"+val)
 }
 
 // RemoveAttr queues sending a request to remove an attribute
 // to the browser for the Element with the given JaWS ID in this Request.
 func (e *Element) RemoveAttr(attr string) {
-	e.send(what.RAttr, attr)
+	e.queue(what.RAttr, attr)
 }
 
 // SetClass a queues sending a class
 // to the browser for the Element with the given JaWS ID in this Request.
 func (e *Element) SetClass(cls string) {
-	e.send(what.SClass, cls)
+	e.queue(what.SClass, cls)
 }
 
 // RemoveClass queues sending a request to remove a class
 // to the browser for the Element with the given JaWS ID in this Request.
 func (e *Element) RemoveClass(cls string) {
-	e.send(what.RClass, cls)
+	e.queue(what.RClass, cls)
 }
 
 // SetInner queues sending a new inner HTML content
 // to the browser for the Element.
 func (e *Element) SetInner(innerHtml template.HTML) {
-	e.send(what.Inner, string(innerHtml))
+	e.queue(what.Inner, string(innerHtml))
 }
 
 // SetValue queues sending a new current input value in textual form
 // to the browser for the Element with the given JaWS ID in this Request.
 func (e *Element) SetValue(val string) {
-	e.send(what.Value, val)
+	e.queue(what.Value, val)
 }
 
 // Replace replaces the elements entire HTML DOM node with new HTML code.
@@ -132,12 +132,12 @@ func (e *Element) Replace(htmlCode template.HTML) {
 	if !bytes.Contains([]byte(htmlCode), b) {
 		panic(fmt.Errorf("jaws: Element.Replace(): expected HTML " + string(b)))
 	}
-	e.send(what.Replace, string(htmlCode))
+	e.queue(what.Replace, string(htmlCode))
 }
 
 // Append appends a new HTML element as a child to the current one.
 func (e *Element) Append(htmlCode template.HTML) {
-	e.send(what.Append, string(htmlCode))
+	e.queue(what.Append, string(htmlCode))
 }
 
 // Order reorders the HTML child elements of the current Element.
@@ -150,7 +150,7 @@ func (e *Element) Order(jidList []Jid) {
 			}
 			b = jid.AppendInt(b)
 		}
-		e.send(what.Order, string(b))
+		e.queue(what.Order, string(b))
 	}
 }
 
