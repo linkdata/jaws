@@ -201,7 +201,7 @@ func TestSession_Delete(t *testing.T) {
 
 	is.NoErr(ts.ctx.Err())
 
-	ctx, cancel := context.WithTimeout(ts.ctx, time.Second)
+	ctx, cancel := context.WithTimeout(ts.ctx, testTimeout)
 	defer cancel()
 
 	is.NoErr(ctx.Err())

@@ -467,22 +467,24 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 	var wsQueue []wsMsg
 
 	for {
-		for {
-			for _, msg := range wsQueue {
-				rq.send(outboundMsgCh, msg)
-			}
-			wsQueue = wsQueue[:0]
-			rq.mu.Lock()
-			wsQueue, rq.wsQueue = rq.wsQueue, wsQueue
-			rq.mu.Unlock()
-			if len(wsQueue) == 0 {
-				break
-			}
-		}
-
 		var tagmsg Message
 		var wsmsg wsMsg
 		var ok bool
+
+		// empty the dirty tags list and call JawsUpdate()
+		// for identified elements. this queues up wsMsg
+		// in rq.wsQueue.
+		for _, elem := range rq.makeUpdateList() {
+			elem.Ui().JawsUpdate(elem)
+		}
+
+		rq.mu.Lock()
+		wsQueue, rq.wsQueue = rq.wsQueue, wsQueue
+		rq.mu.Unlock()
+
+		if len(wsQueue) > 0 {
+			wsQueue = rq.sendQueue(outboundMsgCh, wsQueue)
+		}
 
 		select {
 		case <-jawsDoneCh:
@@ -500,17 +502,12 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 						return
 					}
 				}
-				continue
 			}
 		}
 
 		if !ok {
 			// one of the channels are closed, so we're done
 			return
-		}
-
-		if tagmsg.What == what.Remove {
-			rq.remove(tagmsg.Tag.(*Element))
 		}
 
 		// prepare the data to send in the WS message
@@ -526,20 +523,25 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			wsdata = rq.makeOrder(data)
 		}
 
-		if htmlId, ok := tagmsg.Tag.(template.HTML); ok {
+		// collect all elements marked with the tag in the message
+		var todo []*Element
+		switch v := tagmsg.Tag.(type) {
+		case nil:
+			// matches no elements
+		case *Element:
+			todo = append(todo, v)
+		case template.HTML:
+			// tag is a regular HTML ID
 			wsQueue = append(wsQueue, wsMsg{
-				Data: string(htmlId) + "\n" + wsdata,
+				Data: string(v) + "\n" + wsdata,
 				What: tagmsg.What,
 				Jid:  -1,
 			})
-			continue
+		default:
+			rq.mu.RLock()
+			todo = append(todo, rq.tagMap[tagmsg.Tag]...)
+			rq.mu.RUnlock()
 		}
-
-		// collect all elements marked with the tag in the message
-		var todo []*Element
-		rq.mu.RLock()
-		todo = append(todo, rq.tagMap[tagmsg.Tag]...)
-		rq.mu.RUnlock()
 
 		switch tagmsg.What {
 		case what.None:
@@ -560,6 +562,8 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		default:
 			for _, elem := range todo {
 				switch tagmsg.What {
+				case what.Remove:
+					rq.remove(elem)
 				case what.Trigger:
 					// trigger messages won't be sent out on the WebSocket, but will queue up a
 					// call to the event function (if any)
@@ -593,8 +597,23 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			}
 		}
 
-		rq.callUpdate()
+		if len(wsQueue) > 0 {
+			wsQueue = rq.sendQueue(outboundMsgCh, wsQueue)
+		}
 	}
+}
+
+func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg, wsQueue []wsMsg) []wsMsg {
+	for i := range wsQueue {
+		select {
+		case <-rq.Jaws.Done():
+		case <-rq.Done():
+		case outboundMsgCh <- wsQueue[i]:
+		default:
+			panic(fmt.Errorf("jaws: %v: outbound message channel is full (%d) sending %s", rq, len(outboundMsgCh), wsQueue[i]))
+		}
+	}
+	return wsQueue[:0]
 }
 
 func removeElement(elems []*Element, e *Element) []*Element {
@@ -643,16 +662,6 @@ func (rq *Request) remove(e *Element) {
 	}
 }
 
-func (rq *Request) send(outboundMsgCh chan<- wsMsg, msg wsMsg) {
-	select {
-	case <-rq.Jaws.Done():
-	case <-rq.Done():
-	case outboundMsgCh <- msg:
-	default:
-		panic(fmt.Errorf("jaws: %v: outbound message channel is full (%d) sending %s", rq, len(outboundMsgCh), msg))
-	}
-}
-
 func (rq *Request) queueLocked(msg wsMsg) {
 	rq.wsQueue = append(rq.wsQueue, msg)
 }
@@ -663,33 +672,29 @@ func (rq *Request) queue(msg wsMsg) {
 	rq.mu.Unlock()
 }
 
-func (rq *Request) callUpdate() {
+func (rq *Request) makeUpdateList() (todo []*Element) {
 	rq.mu.Lock()
+	defer rq.mu.Unlock()
 	for _, tag := range rq.dirty {
 		if elem, ok := tag.(*Element); ok {
-			if elem.Request == rq {
+			if !elem.updating {
 				elem.updating = true
+				todo = append(todo, elem)
 			}
 			continue
 		}
 		for _, elem := range rq.tagMap[tag] {
-			elem.updating = true
+			if !elem.updating {
+				elem.updating = true
+				todo = append(todo, elem)
+			}
 		}
+	}
+	for _, elem := range todo {
+		elem.updating = false
 	}
 	rq.dirty = rq.dirty[:0]
-
-	todo := make([]*Element, 0, len(rq.elems))
-	for _, elem := range rq.elems {
-		if elem.updating {
-			elem.updating = false
-			todo = append(todo, elem)
-		}
-	}
-	rq.mu.Unlock()
-
-	for _, elem := range todo {
-		elem.Ui().JawsUpdate(elem)
-	}
+	return
 }
 
 // eventCaller calls event functions
