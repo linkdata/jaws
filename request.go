@@ -542,7 +542,9 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		case nil:
 			// matches no elements
 		case *Element:
-			todo = append(todo, v)
+			if v.Request == rq {
+				todo = append(todo, v)
+			}
 		case Jid:
 			if elem := rq.GetElement(v); elem != nil {
 				todo = append(todo, elem)
