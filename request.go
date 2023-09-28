@@ -471,6 +471,10 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		var wsmsg wsMsg
 		var ok bool
 
+		if len(wsQueue) > 0 {
+			wsQueue = rq.sendQueue(outboundMsgCh, wsQueue)
+		}
+
 		// empty the dirty tags list and call JawsUpdate()
 		// for identified elements. this queues up wsMsg
 		// in rq.wsQueue.
@@ -502,6 +506,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 						return
 					}
 				}
+				continue
 			}
 		}
 
@@ -595,10 +600,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					})
 				}
 			}
-		}
-
-		if len(wsQueue) > 0 {
-			wsQueue = rq.sendQueue(outboundMsgCh, wsQueue)
 		}
 	}
 }
