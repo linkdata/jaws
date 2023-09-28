@@ -15,11 +15,11 @@ func (ui *UiInputText) renderStringInput(e *Element, w io.Writer, htmltype strin
 	ui.parseGetter(e, ui.StringGetter)
 	attrs := ui.parseParams(e, params)
 	writeUiDebug(e, w)
-	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.JawsGetString(e.Request), attrs...))
+	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.JawsGetString(e), attrs...))
 }
 
 func (ui *UiInputText) JawsUpdate(e *Element) {
-	e.SetValue(ui.JawsGetString(e.Request))
+	e.SetValue(ui.JawsGetString(e))
 }
 
 func (ui *UiInputText) JawsEvent(e *Element, wht what.What, val string) (err error) {
@@ -27,7 +27,7 @@ func (ui *UiInputText) JawsEvent(e *Element, wht what.What, val string) (err err
 		return ui.EventFn(e.Request, wht, e.Jid().String(), val)
 	}
 	if wht == what.Input {
-		err = ui.StringGetter.(StringSetter).JawsSetString(e.Request, val)
+		err = ui.StringGetter.(StringSetter).JawsSetString(e, val)
 		e.Jaws.Dirty(ui.Tag)
 	}
 	return

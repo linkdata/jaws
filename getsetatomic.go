@@ -10,43 +10,43 @@ import (
 
 type atomicGetter struct{ v *atomic.Value }
 
-func (g atomicGetter) JawsGetBool(rq *Request) bool {
+func (g atomicGetter) JawsGetBool(e *Element) bool {
 	return g.v.Load().(bool)
 }
 
-func (g atomicGetter) JawsSetBool(rq *Request, v bool) (err error) {
+func (g atomicGetter) JawsSetBool(e *Element, v bool) (err error) {
 	g.v.Store(v)
 	return
 }
 
-func (g atomicGetter) JawsGetFloat(rq *Request) float64 {
+func (g atomicGetter) JawsGetFloat(e *Element) float64 {
 	return g.v.Load().(float64)
 }
 
-func (g atomicGetter) JawsSetFloat(rq *Request, v float64) (err error) {
+func (g atomicGetter) JawsSetFloat(e *Element, v float64) (err error) {
 	g.v.Store(v)
 	return
 }
 
-func (g atomicGetter) JawsGetString(rq *Request) string {
+func (g atomicGetter) JawsGetString(e *Element) string {
 	return g.v.Load().(string)
 }
 
-func (g atomicGetter) JawsSetString(rq *Request, v string) (err error) {
+func (g atomicGetter) JawsSetString(e *Element, v string) (err error) {
 	g.v.Store(v)
 	return
 }
 
-func (g atomicGetter) JawsGetTime(rq *Request) time.Time {
+func (g atomicGetter) JawsGetTime(e *Element) time.Time {
 	return g.v.Load().(time.Time)
 }
 
-func (g atomicGetter) JawsSetTime(rq *Request, v time.Time) (err error) {
+func (g atomicGetter) JawsSetTime(e *Request, v time.Time) (err error) {
 	g.v.Store(v)
 	return
 }
 
-func (g atomicGetter) JawsGetHtml(rq *Request) template.HTML {
+func (g atomicGetter) JawsGetHtml(e *Element) template.HTML {
 	switch v := g.v.Load().(type) {
 	case template.HTML:
 		return v

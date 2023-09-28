@@ -3,17 +3,17 @@ package jaws
 import "sync/atomic"
 
 type BoolGetter interface {
-	JawsGetBool(rq *Request) bool
+	JawsGetBool(rq *Element) bool
 }
 
 type BoolSetter interface {
 	BoolGetter
-	JawsSetBool(rq *Request, v bool) (err error)
+	JawsSetBool(rq *Element, v bool) (err error)
 }
 
 type boolGetter struct{ v bool }
 
-func (g boolGetter) JawsGetBool(rq *Request) bool {
+func (g boolGetter) JawsGetBool(rq *Element) bool {
 	return g.v
 }
 

@@ -3,17 +3,17 @@ package jaws
 import "sync/atomic"
 
 type FloatGetter interface {
-	JawsGetFloat(rq *Request) float64
+	JawsGetFloat(e *Element) float64
 }
 
 type FloatSetter interface {
 	FloatGetter
-	JawsSetFloat(rq *Request, v float64) (err error)
+	JawsSetFloat(e *Element, v float64) (err error)
 }
 
 type floatGetter struct{ v float64 }
 
-func (g floatGetter) JawsGetFloat(rq *Request) float64 {
+func (g floatGetter) JawsGetFloat(e *Element) float64 {
 	return g.v
 }
 

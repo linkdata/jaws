@@ -151,19 +151,19 @@ func (ui *UiHtml) JawsUpdate(e *Element) {
 	case *NamedBoolArray:
 		e.SetValue(v.Get())
 	case StringGetter:
-		e.SetValue(v.JawsGetString(e.Request))
+		e.SetValue(v.JawsGetString(e))
 	case FloatGetter:
-		e.SetValue(string(fmt.Append(nil, v.JawsGetFloat(e.Request))))
+		e.SetValue(string(fmt.Append(nil, v.JawsGetFloat(e))))
 	case BoolGetter:
-		if v.JawsGetBool(e.Request) {
+		if v.JawsGetBool(e) {
 			e.SetAttr("checked", "")
 		} else {
 			e.RemoveAttr("checked")
 		}
 	case TimeGetter:
-		e.SetValue(v.JawsGetTime(e.Request).Format(ISO8601))
+		e.SetValue(v.JawsGetTime(e).Format(ISO8601))
 	case HtmlGetter:
-		e.SetInner(v.JawsGetHtml(e.Request))
+		e.SetInner(v.JawsGetHtml(e))
 	case UI:
 		v.JawsUpdate(e)
 	default:
@@ -186,7 +186,7 @@ func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
 		case *NamedBoolArray:
 			data.Set(val, true)
 		case StringSetter:
-			err = data.JawsSetString(e.Request, val)
+			err = data.JawsSetString(e, val)
 		case FloatSetter:
 			var v float64
 			if val != "" {
@@ -194,7 +194,7 @@ func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
 					return
 				}
 			}
-			err = data.JawsSetFloat(e.Request, v)
+			err = data.JawsSetFloat(e, v)
 		case BoolSetter:
 			var v bool
 			if val != "" {
@@ -202,7 +202,7 @@ func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
 					return
 				}
 			}
-			err = data.JawsSetBool(e.Request, v)
+			err = data.JawsSetBool(e, v)
 		case TimeSetter:
 			var v time.Time
 			if val != "" {
@@ -210,7 +210,7 @@ func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
 					return
 				}
 			}
-			err = data.JawsSetTime(e.Request, v)
+			err = data.JawsSetTime(e, v)
 		default:
 			if deadlock.Debug {
 				_ = e.Jaws.Log(fmt.Errorf("jaws: UiHtml.JawsEvent(%v, %s, %q): unhandled type: %T", e, wht, val, data))

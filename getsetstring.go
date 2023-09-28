@@ -6,17 +6,17 @@ import (
 )
 
 type StringGetter interface {
-	JawsGetString(rq *Request) string
+	JawsGetString(e *Element) string
 }
 
 type StringSetter interface {
 	StringGetter
-	JawsSetString(rq *Request, v string) (err error)
+	JawsSetString(e *Element, v string) (err error)
 }
 
 type stringGetter struct{ v string }
 
-func (g stringGetter) JawsGetString(rq *Request) string {
+func (g stringGetter) JawsGetString(e *Element) string {
 	return g.v
 }
 

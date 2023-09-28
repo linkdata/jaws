@@ -15,7 +15,7 @@ type UiInputBool struct {
 func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
 	ui.parseGetter(e, ui.BoolGetter)
 	attrs := ui.parseParams(e, params)
-	b := ui.JawsGetBool(e.Request)
+	b := ui.JawsGetBool(e)
 	if b {
 		attrs = append(attrs, "checked")
 	}
@@ -24,7 +24,7 @@ func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string,
 }
 
 func (ui *UiInputBool) JawsUpdate(e *Element) {
-	if ui.JawsGetBool(e.Request) {
+	if ui.JawsGetBool(e) {
 		e.SetAttr("checked", "")
 	} else {
 		e.RemoveAttr("checked")
@@ -42,7 +42,7 @@ func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (err err
 				return
 			}
 		}
-		err = ui.BoolGetter.(BoolSetter).JawsSetBool(e.Request, v)
+		err = ui.BoolGetter.(BoolSetter).JawsSetBool(e, v)
 		e.Jaws.Dirty(ui.Tag)
 	}
 	return

@@ -6,17 +6,17 @@ import (
 )
 
 type TimeGetter interface {
-	JawsGetTime(rq *Request) time.Time
+	JawsGetTime(e *Element) time.Time
 }
 
 type TimeSetter interface {
 	TimeGetter
-	JawsSetTime(rq *Request, v time.Time) (err error)
+	JawsSetTime(e *Element, v time.Time) (err error)
 }
 
 type timeGetter struct{ v time.Time }
 
-func (g timeGetter) JawsGetTime(rq *Request) time.Time {
+func (g timeGetter) JawsGetTime(e *Element) time.Time {
 	return g.v
 }
 

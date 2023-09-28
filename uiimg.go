@@ -12,7 +12,7 @@ type UiImg struct {
 }
 
 func (ui *UiImg) SrcAttr(e *Element) string {
-	src := ui.JawsGetString(e.Request)
+	src := ui.JawsGetString(e)
 	if len(src) < 1 || src[0] != '"' {
 		return strconv.Quote(src)
 	}
