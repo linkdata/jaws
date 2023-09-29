@@ -265,21 +265,23 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 	jw.Logger = log.New(w, "", 0)
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
 	is.Equal(jw.Pending(), 0)
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(testTimeout)
 	var expectLen int
 	for i := 0; i < numReqs; i++ {
 		rq := jw.NewRequest(hr)
-		err := errPendingCancelled(rq, deadline)
-		if err == nil {
-			t.FailNow()
+		if (i % (numReqs / 10)) == 0 {
+			elem := rq.NewElement(NewUiDiv(makeHtmlGetter("meh")))
+			for j := 0; j < maxWsQueueLength+1; j++ {
+				elem.SetInner("foo")
+			}
 		}
+		err := errPendingCancelled(rq, deadline)
 		expectLen += len(err.Error() + "\n")
 	}
 	is.Equal(jw.Pending(), numReqs)
 
 	go jw.ServeWithTimeout(time.Millisecond)
 
-	deadline = time.Now().Add(time.Second)
 	lastPending := jw.Pending()
 	for jw.Pending() > 0 && time.Now().Before(deadline) {
 		if jw.Pending() < lastPending {
@@ -296,7 +298,10 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 	case <-jw.Done():
 	}
 	w.Flush()
-	is.Equal(b.Len(), expectLen)
+	if b.Len() != expectLen {
+		t.Log(b.String())
+		is.Equal(b.Len(), expectLen)
+	}
 }
 
 func TestJaws_BroadcastsCallable(t *testing.T) {

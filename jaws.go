@@ -8,6 +8,7 @@ package jaws
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
@@ -552,7 +553,7 @@ func (jw *Jaws) unsubscribe(msgCh chan Message) {
 var ErrNoWebSocketRequest = errors.New("no WebSocket request received")
 
 func errPendingCancelled(rq *Request, deadline time.Time) error {
-	err := rq.ctx.Err()
+	err := context.Cause(rq.ctx)
 	if err == nil {
 		if rq.Created.After(deadline) {
 			return nil

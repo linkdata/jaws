@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html"
 	"html/template"
@@ -29,18 +30,18 @@ type EventFn = func(rq *Request, wht what.What, id, val string) error
 // Note that we have to store the context inside the struct because there is no call chain
 // between the Request being created and it being used once the WebSocket is created.
 type Request struct {
-	Jaws      *Jaws              // (read-only) the JaWS instance the Request belongs to
-	JawsKey   uint64             // (read-only) a random number used in the WebSocket URI to identify this Request
-	Created   time.Time          // (read-only) when the Request was created, used for automatic cleanup
-	Initial   *http.Request      // (read-only) initial HTTP request passed to Jaws.NewRequest
-	remoteIP  net.IP             // (read-only) remote IP, or nil
-	session   *Session           // (read-only) session, if established
-	sendCh    chan Message       // (read-only) direct send message channel
-	mu        deadlock.RWMutex   // protects following
-	dirty     []interface{}      // dirty tags
-	ctx       context.Context    // current context, derived from either Jaws or WS HTTP req
-	cancelFn  context.CancelFunc // cancel function
-	connectFn ConnectFn          // a ConnectFn to call before starting message processing for the Request
+	Jaws      *Jaws                   // (read-only) the JaWS instance the Request belongs to
+	JawsKey   uint64                  // (read-only) a random number used in the WebSocket URI to identify this Request
+	Created   time.Time               // (read-only) when the Request was created, used for automatic cleanup
+	Initial   *http.Request           // (read-only) initial HTTP request passed to Jaws.NewRequest
+	remoteIP  net.IP                  // (read-only) remote IP, or nil
+	session   *Session                // (read-only) session, if established
+	sendCh    chan Message            // (read-only) direct send message channel
+	mu        deadlock.RWMutex        // protects following
+	dirty     []interface{}           // dirty tags
+	ctx       context.Context         // current context, derived from either Jaws or WS HTTP req
+	cancelFn  context.CancelCauseFunc // cancel function
+	connectFn ConnectFn               // a ConnectFn to call before starting message processing for the Request
 	elems     []*Element
 	tagMap    map[interface{}][]*Element
 	wsQueue   []wsMsg
@@ -56,6 +57,9 @@ func (call *eventFnCall) String() string {
 	return fmt.Sprintf("eventFnCall{%v, %s, %q}", call.e, call.wht, call.data)
 }
 
+const maxWsQueueLength = 1000
+
+var ErrWebsocketQueueOverflow = errors.New("websocket queue overflow")
 var requestPool = sync.Pool{New: newRequest}
 
 func newRequest() interface{} {
@@ -63,7 +67,6 @@ func newRequest() interface{} {
 		sendCh: make(chan Message),
 		tagMap: make(map[interface{}][]*Element),
 	}
-	rq.ctx, rq.cancelFn = context.WithCancel(context.Background())
 	return rq
 }
 
@@ -73,6 +76,7 @@ func getRequest(jw *Jaws, jawsKey uint64, hr *http.Request) (rq *Request) {
 	rq.JawsKey = jawsKey
 	rq.Initial = hr
 	rq.Created = time.Now()
+	rq.ctx, rq.cancelFn = context.WithCancelCause(context.Background())
 	if hr != nil {
 		rq.remoteIP = parseIP(hr.RemoteAddr)
 		if sess := jw.getSessionLocked(getCookieSessionsIds(hr.Header, jw.CookieName), rq.remoteIP); sess != nil {
@@ -104,7 +108,7 @@ func (rq *Request) start(hr *http.Request) (err error) {
 	}
 	rq.mu.Lock()
 	if equalIP(rq.remoteIP, actualIP) {
-		rq.ctx, rq.cancelFn = context.WithCancel(ctx)
+		rq.ctx, rq.cancelFn = context.WithCancelCause(ctx)
 	} else {
 		err = fmt.Errorf("/jaws/%s: expected IP %q, got %q", rq.JawsKeyString(), rq.remoteIP.String(), actualIP.String())
 	}
@@ -133,7 +137,8 @@ func (rq *Request) recycle() {
 	rq.connectFn = nil
 	rq.Initial = nil
 	rq.Created = time.Time{}
-	rq.ctx, rq.cancelFn = context.WithCancel(context.Background())
+	rq.ctx = context.Background()
+	rq.cancelFn = nil
 	rq.dirty = rq.dirty[:0]
 	rq.remoteIP = nil
 	rq.elems = rq.elems[:0]
@@ -202,11 +207,11 @@ func (rq *Request) Context() (ctx context.Context) {
 	return
 }
 
-func (rq *Request) cancel() {
+func (rq *Request) cancel(err error) {
 	rq.mu.RLock()
 	cancelFn := rq.cancelFn
 	rq.mu.RUnlock()
-	cancelFn()
+	cancelFn(err)
 }
 
 func (rq *Request) getDoneCh() (jawsDoneCh, ctxDoneCh <-chan struct{}) {
@@ -692,13 +697,12 @@ func (rq *Request) queueLocked(msg wsMsg) {
 func (rq *Request) queue(msg wsMsg) {
 	rq.mu.Lock()
 	l := len(rq.wsQueue)
-	if l < 1000 {
+	if l < maxWsQueueLength {
 		rq.queueLocked(msg)
 	}
 	rq.mu.Unlock()
-	if l > 1000 {
-		rq.Jaws.MustLog(fmt.Errorf("websocket queue overflow: %v", rq))
-		rq.cancel()
+	if l >= maxWsQueueLength {
+		rq.cancel(ErrWebsocketQueueOverflow)
 	}
 }
 

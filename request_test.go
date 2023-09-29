@@ -1015,3 +1015,23 @@ func TestRequest_ConnectFn(t *testing.T) {
 	rq.SetConnectFn(fn)
 	is.Equal(rq.onConnect(), wantErr)
 }
+
+func TestRequest_WsQueueOverflowCancels(t *testing.T) {
+	is := is.New(t)
+	jw := New()
+	defer jw.Close()
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	rq := jw.NewRequest(hr)
+	elem := rq.NewElement(NewUiDiv(makeHtmlGetter("foo")))
+	go func() {
+		for i := 0; i < maxWsQueueLength+1; i++ {
+			elem.SetInner(template.HTML(strconv.Itoa(i)))
+		}
+	}()
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-rq.Done():
+	}
+	is.Equal(context.Cause(rq.Context()), ErrWebsocketQueueOverflow)
+}

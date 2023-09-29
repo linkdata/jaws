@@ -167,7 +167,7 @@ func TestReader_RespectsContextDone(t *testing.T) {
 
 	go func() {
 		defer close(doneCh)
-		wsReader(ts.ctx, ts.jw.Done(), inCh, server)
+		wsReader(ts.ctx, nil, ts.jw.Done(), inCh, server)
 	}()
 
 	client.Write(ctx, websocket.MessageText, []byte(msg.Format()))
@@ -202,7 +202,7 @@ func TestReader_RespectsJawsDone(t *testing.T) {
 
 	go func() {
 		defer close(doneCh)
-		wsReader(ts.ctx, ts.jw.Done(), inCh, server)
+		wsReader(ts.ctx, nil, ts.jw.Done(), inCh, server)
 	}()
 
 	ts.jw.Close()
@@ -227,7 +227,7 @@ func TestWriter_SendsThePayload(t *testing.T) {
 	client, server := Pipe()
 	msg := wsMsg{Jid: Jid(1234)}
 
-	go wsWriter(ts.ctx, ts.jw.Done(), outCh, server)
+	go wsWriter(ts.ctx, nil, ts.jw.Done(), outCh, server)
 
 	var mt websocket.MessageType
 	var b []byte
@@ -275,7 +275,7 @@ func TestWriter_RespectsContext(t *testing.T) {
 
 	go func() {
 		defer close(doneCh)
-		wsWriter(ts.ctx, ts.jw.Done(), outCh, server)
+		wsWriter(ts.ctx, nil, ts.jw.Done(), outCh, server)
 	}()
 
 	ts.cancel()
@@ -301,7 +301,7 @@ func TestWriter_RespectsJawsDone(t *testing.T) {
 
 	go func() {
 		defer close(doneCh)
-		wsWriter(ts.ctx, ts.jw.Done(), outCh, server)
+		wsWriter(ts.ctx, nil, ts.jw.Done(), outCh, server)
 	}()
 
 	ts.jw.Close()
@@ -325,7 +325,7 @@ func TestWriter_RespectsOutboundClosed(t *testing.T) {
 
 	go func() {
 		defer close(doneCh)
-		wsWriter(ts.ctx, ts.jw.Done(), outCh, server)
+		wsWriter(ts.ctx, nil, ts.jw.Done(), outCh, server)
 	}()
 
 	close(outCh)
