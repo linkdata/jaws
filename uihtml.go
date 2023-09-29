@@ -166,6 +166,8 @@ func (ui *UiHtml) JawsUpdate(e *Element) {
 		e.SetInner(v.JawsGetHtml(e))
 	case UI:
 		v.JawsUpdate(e)
+	case Tag:
+		// do nothing
 	default:
 		panic(fmt.Errorf("jaws: UiHtml.JawsUpdate(%v): unhandled type: %T", e, v))
 	}

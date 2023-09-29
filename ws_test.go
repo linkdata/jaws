@@ -225,7 +225,6 @@ func TestWriter_SendsThePayload(t *testing.T) {
 	outCh := make(chan wsMsg)
 	defer close(outCh)
 	client, server := Pipe()
-	msg := wsMsg{Jid: Jid(1234)}
 
 	go wsWriter(ts.ctx, nil, ts.jw.Done(), outCh, server)
 
@@ -239,6 +238,7 @@ func TestWriter_SendsThePayload(t *testing.T) {
 		ts.cancel()
 	}()
 
+	msg := wsMsg{Jid: Jid(1234)}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -335,6 +335,73 @@ func TestWriter_RespectsOutboundClosed(t *testing.T) {
 		is.Fail()
 	case <-doneCh:
 	}
+
+	is.NoErr(ts.rq.Context().Err())
+}
+
+func TestWriter_ReportsError(t *testing.T) {
+	is := is.New(t)
+	ts := newTestServer(is)
+	defer ts.Close()
+
+	doneCh := make(chan struct{})
+	outCh := make(chan wsMsg)
+	client, server := Pipe()
+	client.CloseRead(ts.ctx)
+	server.Close(websocket.StatusNormalClosure, "")
+
+	go func() {
+		defer close(doneCh)
+		wsWriter(ts.rq.ctx, ts.rq.cancelFn, ts.jw.Done(), outCh, server)
+	}()
+
+	msg := wsMsg{Jid: Jid(1234)}
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case outCh <- msg:
+	}
+
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-doneCh:
+	}
+
+	err := context.Cause(ts.rq.Context())
+	is.True(strings.Contains(err.Error(), "WebSocket closed"))
+}
+
+func TestReader_ReportsError(t *testing.T) {
+	is := is.New(t)
+	ts := newTestServer(is)
+	defer ts.Close()
+
+	doneCh := make(chan struct{})
+	inCh := make(chan wsMsg)
+	client, server := Pipe()
+	client.CloseRead(ts.ctx)
+	server.Close(websocket.StatusNormalClosure, "")
+
+	go func() {
+		defer close(doneCh)
+		wsReader(ts.rq.ctx, ts.rq.cancelFn, ts.jw.Done(), inCh, server)
+	}()
+
+	msg := wsMsg{Jid: Jid(1234), What: what.Trigger}
+	err := client.Write(ts.ctx, websocket.MessageText, []byte(msg.Format()))
+	if err == nil {
+		t.FailNow()
+	}
+
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-doneCh:
+	}
+
+	err = context.Cause(ts.rq.Context())
+	is.True(strings.Contains(err.Error(), "WebSocket closed"))
 }
 
 func Test_wsParse_IncompleteFails(t *testing.T) {
