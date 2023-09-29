@@ -205,7 +205,9 @@ func TestRequest_SendFailsWhenContextDone(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	jw.UseRequest(rq.JawsKey, hr.WithContext(ctx))
 	defer rq.recycle()
-	is.Equal(ctx, rq.wsreq.Context())
+	if rq.cancelFn == nil {
+		is.Fail()
+	}
 	fillTagCh(rq.sendCh)
 	cancel()
 	is.Equal(rq.Send(Message{}), false)

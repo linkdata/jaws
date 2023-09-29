@@ -10,6 +10,7 @@ import (
 	"bufio"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -155,7 +156,7 @@ func MakeID() string {
 	return string(AppendID([]byte("jaws.")))
 }
 
-// NewRequest returns a new JaWS request.
+// NewRequest returns a new pending JaWS request that times out after 10 seconds.
 //
 // Call this as soon as you start processing a HTML request, and store the
 // returned Request pointer so it can be used while constructing the HTML
@@ -167,7 +168,7 @@ func (jw *Jaws) NewRequest(hr *http.Request) (rq *Request) {
 	for rq == nil {
 		jawsKey := jw.nonZeroRandomLocked()
 		if _, ok := jw.pending[jawsKey]; !ok {
-			rq = newRequest(jw, jawsKey, hr)
+			rq = getRequest(jw, jawsKey, hr)
 			jw.pending[jawsKey] = rq
 		}
 	}
@@ -548,6 +549,23 @@ func (jw *Jaws) unsubscribe(msgCh chan Message) {
 	}
 }
 
+var ErrNoWebSocketRequest = errors.New("no WebSocket request received")
+
+func errPendingCancelled(rq *Request, deadline time.Time) error {
+	err := rq.ctx.Err()
+	if err == nil {
+		if rq.Created.After(deadline) {
+			return nil
+		}
+		err = ErrNoWebSocketRequest
+	}
+	var uri string
+	if rq.Initial != nil {
+		uri = fmt.Sprintf("%s %q: ", rq.Initial.Method, rq.Initial.RequestURI)
+	}
+	return fmt.Errorf("cancelled pending %v: %s%v", rq, uri, err)
+}
+
 func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	var killReqs []uint64
 	var killSess []uint64
@@ -557,10 +575,10 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	deadline := now.Add(-requestTimeout)
 	logger := jw.Logger
 	for k, rq := range jw.pending {
-		if rq.Created.Before(deadline) {
+		if err := errPendingCancelled(rq, deadline); err != nil {
 			killReqs = append(killReqs, k)
-			if logger != nil && rq.Initial != nil {
-				logger.Println(fmt.Errorf("jaws: request timed out: %q", rq.Initial.RequestURI))
+			if logger != nil {
+				logger.Println(err)
 			}
 		}
 	}
