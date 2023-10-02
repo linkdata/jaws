@@ -10,11 +10,11 @@ type UiSelect struct {
 	UiContainer
 }
 
-func NewUiSelect(nba Container) *UiSelect {
+func NewUiSelect(sh SelectHandler) *UiSelect {
 	return &UiSelect{
 		UiContainer{
 			OuterHTMLTag: "select",
-			Container:    nba,
+			Container:    sh,
 		},
 	}
 }
@@ -32,6 +32,6 @@ func (ui *UiSelect) JawsEvent(e *Element, wht what.What, val string) (err error)
 	return
 }
 
-func (rq *Request) Select(nba Container, params ...interface{}) template.HTML {
-	return rq.UI(NewUiSelect(nba), params...)
+func (rq *Request) Select(sh SelectHandler, params ...interface{}) template.HTML {
+	return rq.UI(NewUiSelect(sh), params...)
 }
