@@ -40,7 +40,7 @@ func makeHtmlGetter(v interface{}) HtmlGetter {
 	case template.HTML:
 		return htmlGetter{v}
 	case string:
-		return htmlGetter{template.HTML(html.EscapeString(v))}
+		return htmlGetter{template.HTML(v)}
 	case *atomic.Value:
 		return atomicGetter{v}
 	}
