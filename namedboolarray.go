@@ -16,6 +16,8 @@ type NamedBoolArray struct {
 	data  []*NamedBool
 }
 
+var _ Container = (*NamedBoolArray)(nil)
+
 // NewNamedBoolArray creates a new object to track a related set of named booleans.
 //
 // The JaWS ID string 'jid' is used as the ID for <select> elements and the
@@ -38,6 +40,15 @@ func (nba *NamedBoolArray) WriteLocked(fn func(nbl []*NamedBool) []*NamedBool) {
 	nba.mu.Lock()
 	defer nba.mu.Unlock()
 	nba.data = fn(nba.data)
+}
+
+func (nba *NamedBoolArray) JawsContains(rq *Request) (contents []UI) {
+	nba.mu.RLock()
+	for _, nb := range nba.data {
+		contents = append(contents, UiOption{nb})
+	}
+	nba.mu.RUnlock()
+	return
 }
 
 // Add adds a NamedBool with the given name and the given text.

@@ -51,7 +51,7 @@ func (ui *UiHtml) parseGetter(e *Element, getter interface{}) {
 	}
 }
 
-func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []string) {
+func parseParams(elem *Element, params []interface{}) (attrs []string, ch ClickHandler, eh EventHandler, ef EventFn) {
 	for i := range params {
 		switch data := params[i].(type) {
 		case template.HTML:
@@ -65,10 +65,10 @@ func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []stri
 		case []string:
 			attrs = append(attrs, data...)
 		case EventFn:
-			ui.EventFn = data
+			ef = data
 		case func(*Request, string) error: // ClickFn
 			if data != nil {
-				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+				ef = func(rq *Request, wht what.What, jid, val string) (err error) {
 					if wht == what.Click {
 						err = data(rq, jid)
 					}
@@ -77,7 +77,7 @@ func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []stri
 			}
 		case func(*Request, string, string) error: // InputTextFn
 			if data != nil {
-				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+				ef = func(rq *Request, wht what.What, jid, val string) (err error) {
 					if wht == what.Input {
 						err = data(rq, jid, val)
 					}
@@ -86,7 +86,7 @@ func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []stri
 			}
 		case func(*Request, string, bool) error: // InputBoolFn
 			if data != nil {
-				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+				ef = func(rq *Request, wht what.What, jid, val string) (err error) {
 					if wht == what.Input {
 						var v bool
 						if val != "" {
@@ -101,7 +101,7 @@ func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []stri
 			}
 		case func(*Request, string, float64) error: // InputFloatFn
 			if data != nil {
-				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+				ef = func(rq *Request, wht what.What, jid, val string) (err error) {
 					if wht == what.Input {
 						var v float64
 						if val != "" {
@@ -116,7 +116,7 @@ func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []stri
 			}
 		case func(*Request, string, time.Time) error: // InputDateFn
 			if data != nil {
-				ui.EventFn = func(rq *Request, wht what.What, jid, val string) (err error) {
+				ef = func(rq *Request, wht what.What, jid, val string) (err error) {
 					if wht == what.Input {
 						var v time.Time
 						if val != "" {
@@ -131,14 +131,19 @@ func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []stri
 			}
 		default:
 			if h, ok := data.(ClickHandler); ok {
-				ui.ClickHandler = h
+				ch = h
 			}
 			if h, ok := data.(EventHandler); ok {
-				ui.EventHandler = h
+				eh = h
 			}
 			elem.Tag(data)
 		}
 	}
+	return
+}
+
+func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []string) {
+	attrs, ui.ClickHandler, ui.EventHandler, ui.EventFn = parseParams(elem, params)
 	return
 }
 

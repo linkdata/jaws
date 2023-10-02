@@ -36,11 +36,19 @@ func (nb *NamedBool) Name() (s string) {
 	return
 }
 
-func (nb *NamedBool) JawsGetHtml(*Element) (h template.HTML) {
+func (nb *NamedBool) Html() (h template.HTML) {
 	nb.mu.RLock()
 	h = nb.html
 	nb.mu.RUnlock()
 	return
+}
+
+func (nb *NamedBool) JawsGetString(*Element) (name string) {
+	return nb.Name()
+}
+
+func (nb *NamedBool) JawsGetHtml(*Element) (h template.HTML) {
+	return nb.Html()
 }
 
 func (nb *NamedBool) JawsGetBool(*Element) (v bool) {
@@ -63,13 +71,6 @@ func (nb *NamedBool) JawsSetBool(e *Element, checked bool) (err error) {
 		e.Jaws.Dirty(nba)
 		nb.nba.Set(nb.name, checked)
 	}
-	return
-}
-
-func (nb *NamedBool) Html() (h template.HTML) {
-	nb.mu.RLock()
-	h = nb.html
-	nb.mu.RUnlock()
 	return
 }
 
