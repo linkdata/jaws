@@ -649,26 +649,23 @@ func removeElement(elems []*Element, e *Element) []*Element {
 		if elems[i] == e {
 			if i < len(elems)-1 {
 				elems[i] = elems[len(elems)-1]
-				elems = elems[:len(elems)-1]
-				break
 			}
+			elems = elems[:len(elems)-1]
+			break
 		}
 	}
 	if deadlock.Debug {
 		m := make(map[*Element]int)
 		for _, elem := range elems {
 			m[elem]++
-			if elem == e {
-				panic("meh")
-			}
 		}
 		for k, v := range m {
 			if v > 1 {
-				panic(fmt.Errorf("element %v has %d entries", k, v))
+				panic(fmt.Errorf("element %#v has %d entries", k, v))
 			}
 		}
 		if m[e] > 0 {
-			panic("element not removed")
+			panic(fmt.Errorf("element %#v appeared multiple times", e))
 		}
 	}
 	return elems
@@ -677,6 +674,7 @@ func removeElement(elems []*Element, e *Element) []*Element {
 func (rq *Request) remove(e *Element) {
 	if e != nil && e.Request == rq {
 		rq.mu.Lock()
+		defer rq.mu.Unlock()
 		e.Request = nil
 		rq.elems = removeElement(rq.elems, e)
 		for k := range rq.tagMap {
@@ -686,7 +684,6 @@ func (rq *Request) remove(e *Element) {
 			Jid:  e.jid,
 			What: what.Remove,
 		})
-		rq.mu.Unlock()
 	}
 }
 
