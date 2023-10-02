@@ -16,7 +16,7 @@ type NamedBoolArray struct {
 	data  []*NamedBool
 }
 
-var _ Container = (*NamedBoolArray)(nil)
+var _ SelectHandler = (*NamedBoolArray)(nil)
 
 // NewNamedBoolArray creates a new object to track a related set of named booleans.
 //
@@ -136,5 +136,6 @@ func (nba *NamedBoolArray) JawsGetString(e *Element) string {
 
 func (nba *NamedBoolArray) JawsSetString(e *Element, name string) (err error) {
 	nba.Set(name, true)
+	e.Jaws.Dirty(nba)
 	return
 }
