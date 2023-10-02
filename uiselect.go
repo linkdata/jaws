@@ -19,16 +19,14 @@ func NewUiSelect(nba Container) *UiSelect {
 	}
 }
 
-func (ui *UiSelect) JawsUpdate(u *Element) {
-	nba := ui.UiContainer.Container.(*NamedBoolArray)
-	u.SetValue(nba.Get())
-	ui.UiContainer.JawsUpdate(u)
+func (ui *UiSelect) JawsUpdate(e *Element) {
+	e.SetValue(ui.UiContainer.Container.(StringGetter).JawsGetString(e))
+	ui.UiContainer.JawsUpdate(e)
 }
 
 func (ui *UiSelect) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if wht == what.Input {
-		nba := ui.UiContainer.Container.(*NamedBoolArray)
-		nba.Set(val, true)
+		ui.UiContainer.Container.(StringSetter).JawsSetString(e, val)
 		e.Jaws.Dirty(ui.UiContainer.Container)
 	}
 	return
