@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"fmt"
 	"sync/atomic"
 	"time"
 )
@@ -33,5 +34,5 @@ func makeTimeGetter(v interface{}) TimeGetter {
 	case *atomic.Value:
 		return atomicGetter{v}
 	}
-	panic("makeTimeGetter: invalid type")
+	panic(fmt.Sprintf("expected jaws.TimeGetter or time.Time, not %T", v))
 }

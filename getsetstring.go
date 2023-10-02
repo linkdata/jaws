@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"fmt"
 	"html/template"
 	"sync/atomic"
 )
@@ -35,5 +36,5 @@ func makeStringGetter(v interface{}) StringGetter {
 	case *atomic.Value:
 		return atomicGetter{v}
 	}
-	panic("makeStringGetter: invalid type")
+	panic(fmt.Sprintf("expected jaws.StringGetter or string, not %T", v))
 }

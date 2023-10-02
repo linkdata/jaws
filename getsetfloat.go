@@ -1,6 +1,9 @@
 package jaws
 
-import "sync/atomic"
+import (
+	"fmt"
+	"sync/atomic"
+)
 
 type FloatGetter interface {
 	JawsGetFloat(e *Element) float64
@@ -34,5 +37,5 @@ func makeFloatGetter(v interface{}) FloatGetter {
 	case *atomic.Value:
 		return atomicGetter{v}
 	}
-	panic("makeFloatGetter: invalid type")
+	panic(fmt.Sprintf("expected jaws.FloatGetter, float or int, not %T", v))
 }

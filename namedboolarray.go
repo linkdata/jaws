@@ -119,13 +119,11 @@ func (nba *NamedBoolArray) String() string {
 	return sb.String()
 }
 
-func (nba *NamedBoolArray) JawsGet(e *Element) interface{} {
+func (nba *NamedBoolArray) JawsGetString(e *Element) string {
 	return nba.Get()
 }
 
-func (nba *NamedBoolArray) JawsSet(e *Element, value interface{}) (changed bool) {
-	if name, ok := value.(string); ok {
-		return nba.Set(name, true)
-	}
-	panic("NamedBoolArray.JawsSet(): not string")
+func (nba *NamedBoolArray) JawsSetString(e *Element, name string) (err error) {
+	nba.Set(name, true)
+	return
 }

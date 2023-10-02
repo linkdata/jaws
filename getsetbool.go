@@ -1,6 +1,9 @@
 package jaws
 
-import "sync/atomic"
+import (
+	"fmt"
+	"sync/atomic"
+)
 
 type BoolGetter interface {
 	JawsGetBool(rq *Element) bool
@@ -30,5 +33,5 @@ func makeBoolGetter(v interface{}) BoolGetter {
 	case *atomic.Value:
 		return atomicGetter{v}
 	}
-	panic("makeBoolGetter: invalid type")
+	panic(fmt.Sprintf("expected jaws.BoolGetter or bool, not %T", v))
 }
