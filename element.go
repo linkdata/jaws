@@ -14,10 +14,11 @@ import (
 
 // An Element is an instance of a *Request, an UI object and a Jid.
 type Element struct {
-	ui       UI   // (read-only) the UI object
-	jid      Jid  // (read-only) JaWS ID, unique to this Element within it's Request
-	updating bool // about to have Update() called
-	*Request      // (read-only) the Request the Element belongs to
+	ui       UI      // (read-only) the UI object
+	jid      Jid     // (read-only) JaWS ID, unique to this Element within it's Request
+	updating bool    // about to have Update() called
+	wsQueue  []wsMsg // changes queued
+	*Request         // (read-only) the Request the Element belongs to
 }
 
 func (e *Element) String() string {
@@ -73,11 +74,15 @@ func (e *Element) ToHtml(val interface{}) template.HTML {
 }
 
 func (e *Element) queue(wht what.What, data string) {
-	e.Request.queue(wsMsg{
-		Data: data,
-		Jid:  e.jid,
-		What: wht,
-	})
+	if len(e.wsQueue) < maxWsQueueLengthPerElement {
+		e.wsQueue = append(e.wsQueue, wsMsg{
+			Data: data,
+			Jid:  e.jid,
+			What: wht,
+		})
+	} else {
+		e.Request.cancelFn(ErrWebsocketQueueOverflow)
+	}
 }
 
 // SetAttr queues sending a new attribute value

@@ -21,5 +21,4 @@ func (rq *Request) UI(ui UI, params ...interface{}) template.HTML {
 
 func (rq *Request) JawsRender(elem *Element, w io.Writer, params []interface{}) {
 	elem.ui.JawsRender(elem, w, params)
-	rq.queueMoveToEnd(elem.jid)
 }

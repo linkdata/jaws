@@ -1,11 +1,11 @@
 package jaws
 
 import (
-	"html/template"
 	"io"
 	"strings"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/what"
 )
 
 type uiWrapContainer struct {
@@ -95,8 +95,11 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 	for _, elem := range toAppend {
 		var sb strings.Builder
 		elem.ui.JawsRender(elem, &sb, []any{"hidden"})
-		e.Append(template.HTML(sb.String()))
-		e.Request.queueMoveToEnd(elem.jid)
+		e.Request.queue(wsMsg{
+			Data: sb.String(),
+			Jid:  e.jid,
+			What: what.Append,
+		})
 	}
 
 	if !sameOrder(oldOrder, orderData) {

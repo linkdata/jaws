@@ -508,9 +508,13 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			elem.Ui().JawsUpdate(elem)
 		}
 
-		rq.mu.Lock()
+		rq.mu.RLock()
 		wsQueue, rq.wsQueue = rq.wsQueue, wsQueue
-		rq.mu.Unlock()
+		for _, elem := range rq.elems {
+			wsQueue = append(wsQueue, elem.wsQueue...)
+			elem.wsQueue = elem.wsQueue[:0]
+		}
+		rq.mu.RUnlock()
 
 		if len(wsQueue) > 0 {
 			wsQueue = rq.sendQueue(outboundMsgCh, wsQueue)
@@ -704,22 +708,6 @@ func (rq *Request) queue(msg wsMsg) {
 		rq.cancelFn(ErrWebsocketQueueOverflow)
 	}
 	rq.mu.Unlock()
-}
-
-func (rq *Request) queueMoveToEnd(jid Jid) {
-	rq.mu.Lock()
-	defer rq.mu.Unlock()
-	newQueue := make([]wsMsg, 0, len(rq.wsQueue))
-	var addToEnd []wsMsg
-	for _, msg := range rq.wsQueue {
-		if msg.Jid == jid {
-			addToEnd = append(addToEnd, msg)
-		} else {
-			newQueue = append(newQueue, msg)
-		}
-	}
-	newQueue = append(newQueue, addToEnd...)
-	copy(rq.wsQueue, newQueue)
 }
 
 func (rq *Request) makeUpdateList() (todo []*Element) {
