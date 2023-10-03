@@ -706,6 +706,22 @@ func (rq *Request) queue(msg wsMsg) {
 	rq.mu.Unlock()
 }
 
+func (rq *Request) queueMoveToEnd(jid Jid) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	newQueue := make([]wsMsg, 0, len(rq.wsQueue))
+	var addToEnd []wsMsg
+	for _, msg := range rq.wsQueue {
+		if msg.Jid == jid {
+			addToEnd = append(addToEnd, msg)
+		} else {
+			newQueue = append(newQueue, msg)
+		}
+	}
+	newQueue = append(newQueue, addToEnd...)
+	copy(rq.wsQueue, newQueue)
+}
+
 func (rq *Request) makeUpdateList() (todo []*Element) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()

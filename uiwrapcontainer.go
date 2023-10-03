@@ -96,6 +96,7 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 		var sb strings.Builder
 		elem.ui.JawsRender(elem, &sb, []any{"hidden"})
 		e.Append(template.HTML(sb.String()))
+		e.Request.queueMoveToEnd(elem.jid)
 	}
 
 	if !sameOrder(oldOrder, orderData) {
