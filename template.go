@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"strings"
 
 	"github.com/linkdata/jaws/what"
 )
@@ -45,8 +46,9 @@ func (t Template) ToHTML(e *Element) template.HTML {
 var _ UI = (*Template)(nil) // statically ensure interface is defined
 
 func (t Template) JawsRender(e *Element, w io.Writer, params []interface{}) {
+	attrs := parseParams(e, params, nil, nil, nil)
 	writeUiDebug(e, w)
-	maybePanic(t.Execute(w, With{Element: e, Dot: t.Dot}))
+	maybePanic(t.Execute(w, With{Element: e, Dot: t.Dot, Attrs: strings.Join(attrs, " ")}))
 }
 
 func (t Template) JawsUpdate(u *Element) {

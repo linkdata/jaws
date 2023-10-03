@@ -2,5 +2,6 @@ package jaws
 
 type With struct {
 	*Element
-	Dot interface{}
+	Dot   interface{}
+	Attrs string
 }
