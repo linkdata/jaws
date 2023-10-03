@@ -271,7 +271,7 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 		rq := jw.NewRequest(hr)
 		if (i % (numReqs / 10)) == 0 {
 			elem := rq.NewElement(NewUiDiv(makeHtmlGetter("meh")))
-			for j := 0; j < maxWsQueueLength+1; j++ {
+			for j := 0; j < maxWsQueueLengthPerElement*10; j++ {
 				elem.SetInner("foo")
 			}
 		}

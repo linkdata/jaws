@@ -57,7 +57,7 @@ func (call *eventFnCall) String() string {
 	return fmt.Sprintf("eventFnCall{%v, %s, %q}", call.e, call.wht, call.data)
 }
 
-const maxWsQueueLength = 1000
+const maxWsQueueLengthPerElement = 20
 
 var ErrWebsocketQueueOverflow = errors.New("websocket queue overflow")
 var requestPool = sync.Pool{New: newRequest}
@@ -693,14 +693,12 @@ func (rq *Request) queueLocked(msg wsMsg) {
 
 func (rq *Request) queue(msg wsMsg) {
 	rq.mu.Lock()
-	l := len(rq.wsQueue)
-	if l < maxWsQueueLength {
+	if len(rq.wsQueue) < (maxWsQueueLengthPerElement * len(rq.elems)) {
 		rq.queueLocked(msg)
+	} else {
+		rq.cancelFn(ErrWebsocketQueueOverflow)
 	}
 	rq.mu.Unlock()
-	if l >= maxWsQueueLength {
-		rq.cancel(ErrWebsocketQueueOverflow)
-	}
 }
 
 func (rq *Request) makeUpdateList() (todo []*Element) {

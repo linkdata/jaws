@@ -1024,7 +1024,7 @@ func TestRequest_WsQueueOverflowCancels(t *testing.T) {
 	rq := jw.NewRequest(hr)
 	elem := rq.NewElement(NewUiDiv(makeHtmlGetter("foo")))
 	go func() {
-		for i := 0; i < maxWsQueueLength+1; i++ {
+		for i := 0; i < maxWsQueueLengthPerElement*10; i++ {
 			elem.SetInner(template.HTML(strconv.Itoa(i)))
 		}
 	}()
