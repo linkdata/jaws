@@ -7,23 +7,23 @@ import (
 	"github.com/linkdata/jaws/what"
 )
 
-type UiTextArea struct {
+type UiTextarea struct {
 	UiHtml
 	StringGetter
 }
 
-func (ui *UiTextArea) JawsRender(e *Element, w io.Writer, params []interface{}) {
+func (ui *UiTextarea) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.parseGetter(e, ui.StringGetter)
 	attrs := ui.parseParams(e, params)
 	writeUiDebug(e, w)
 	maybePanic(WriteHtmlInner(w, e.Jid(), "textarea", "", template.HTML(ui.JawsGetString(e)), attrs...))
 }
 
-func (ui *UiTextArea) JawsUpdate(e *Element) {
+func (ui *UiTextarea) JawsUpdate(e *Element) {
 	e.SetInner(template.HTML(ui.JawsGetString(e)))
 }
 
-func (ui *UiTextArea) JawsEvent(e *Element, wht what.What, val string) (err error) {
+func (ui *UiTextarea) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if ui.EventFn != nil {
 		return ui.EventFn(e.Request, wht, e.Jid().String(), val)
 	}
@@ -34,12 +34,12 @@ func (ui *UiTextArea) JawsEvent(e *Element, wht what.What, val string) (err erro
 	return
 }
 
-func NewUiTextArea(g StringGetter) (ui *UiTextArea) {
-	return &UiTextArea{
+func NewUiTextarea(g StringGetter) (ui *UiTextarea) {
+	return &UiTextarea{
 		StringGetter: g,
 	}
 }
 
-func (rq *Request) TextArea(value interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiTextArea(makeStringGetter(value)), params...)
+func (rq *Request) Textarea(value interface{}, params ...interface{}) template.HTML {
+	return rq.UI(NewUiTextarea(makeStringGetter(value)), params...)
 }
