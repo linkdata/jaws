@@ -30,7 +30,7 @@ func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag
 		for _, cui := range ui.Container.JawsContains(e.Request) {
 			if elem := e.Request.NewElement(cui); elem != nil {
 				ui.contents = append(ui.contents, elem)
-				cui.JawsRender(elem, w, nil)
+				elem.Render(w, nil)
 			}
 		}
 		b = b[:0]

@@ -44,9 +44,9 @@ func (e *Element) Ui() UI {
 	return e.ui
 }
 
-// Render calls UI().JawsRender() for this Element.
+// Render calls Request.JawsRender() for this Element.
 func (e *Element) Render(w io.Writer, params []interface{}) {
-	e.ui.JawsRender(e, w, params)
+	e.Request.JawsRender(e, w, params)
 }
 
 func (e *Element) ToHtml(val interface{}) template.HTML {

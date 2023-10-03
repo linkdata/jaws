@@ -14,8 +14,12 @@ type UI interface {
 }
 
 func (rq *Request) UI(ui UI, params ...interface{}) template.HTML {
-	elem := rq.NewElement(ui)
 	var sb strings.Builder
-	ui.JawsRender(elem, &sb, params)
+	rq.JawsRender(rq.NewElement(ui), &sb, params)
 	return template.HTML(sb.String())
+}
+
+func (rq *Request) JawsRender(elem *Element, w io.Writer, params []interface{}) {
+	elem.ui.JawsRender(elem, w, params)
+	rq.queueMoveToEnd(elem.jid)
 }
