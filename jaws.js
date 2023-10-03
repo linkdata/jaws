@@ -224,12 +224,12 @@ function jawsMessage(e) {
 		case 'Inner':
 		case 'Value':
 		case 'Append':
+		case 'Replace':
 			data = lines.join('\n');
 			break;
 		case 'Remove':
 			break;
 		case 'Insert':
-		case 'Replace':
 		case 'SAttr':
 			where = lines.shift();
 			data = lines.join('\n');
@@ -264,15 +264,13 @@ function jawsMessage(e) {
 		case 'Append':
 			elem.appendChild(jawsAttach(jawsElement(data)));
 			break;
-		case 'Insert':
 		case 'Replace':
+			elem.replaceWith(jawsAttach(jawsElement(data)));
+			break;
+		case 'Insert':
 			var target = jawsWhere(elem, where);
 			if (target instanceof Node) {
-				if (what === 'Replace') {
-					elem.replaceChild(jawsAttach(jawsElement(data)), target);
-				} else {
-					elem.insertBefore(jawsAttach(jawsElement(data)), target);
-				}
+				elem.insertBefore(jawsAttach(jawsElement(data)), target);
 			} else {
 				console.log("jaws: id " + id + " has no position " + where);
 			}

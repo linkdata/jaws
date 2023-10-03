@@ -92,13 +92,21 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 		elem.Remove()
 	}
 
+	b := make([]byte, 0, 64)
 	for _, elem := range toAppend {
-		var sb strings.Builder
-		elem.ui.JawsRender(elem, &sb, nil)
-		e.Append(template.HTML(sb.String()))
+		b = b[:0]
+		b = elem.jid.AppendStartTagAttr(b, "div")
+		b = append(b, ` hidden></div>`...)
+		e.Append(template.HTML(b))
 	}
 
 	if !sameOrder(oldOrder, orderData) {
 		e.Order(orderData)
+	}
+
+	for _, elem := range toAppend {
+		var sb strings.Builder
+		elem.ui.JawsRender(elem, &sb, nil)
+		elem.Replace(template.HTML(sb.String()))
 	}
 }
