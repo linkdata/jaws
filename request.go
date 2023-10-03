@@ -340,6 +340,11 @@ func (rq *Request) Register(item interface{}, params ...interface{}) Jid {
 	return elem.jid
 }
 
+// Dirty calls rq.Jaws.Dirty().
+func (rq *Request) Dirty(tags ...interface{}) {
+	rq.Jaws.Dirty(tags...)
+}
+
 // wantMessage returns true if the Request want the message.
 func (rq *Request) wantMessage(msg *Message) (yes bool) {
 	if rq != nil && msg.from != rq {

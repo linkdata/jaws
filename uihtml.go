@@ -16,7 +16,7 @@ type UiHtml struct {
 	ClickHandler ClickHandler
 	EventHandler EventHandler
 	EventFn      EventFn // legacy
-	Tag          interface{}
+	Tag          any
 }
 
 func writeUiDebug(e *Element, w io.Writer) {

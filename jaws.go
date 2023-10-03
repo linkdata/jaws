@@ -356,16 +356,24 @@ func (jw *Jaws) Broadcast(msg Message) {
 	}
 }
 
-// Dirty marks all Elements that have one or more of the given tags as dirty.
-func (jw *Jaws) Dirty(tags ...interface{}) {
-	jw.mu.Lock()
+func (jw *Jaws) dirtyLocked(tags []any) {
 	for _, tag := range tags {
-		if tag != nil {
+		switch tag := tag.(type) {
+		case nil: //do nothing
+		case []any:
+			jw.dirtyLocked(tag)
+		default:
 			jw.dirtOrder++
 			jw.dirty[tag] = jw.dirtOrder
 		}
 	}
-	jw.mu.Unlock()
+}
+
+// Dirty marks all Elements that have one or more of the given tags as dirty.
+func (jw *Jaws) Dirty(tags ...interface{}) {
+	jw.mu.Lock()
+	defer jw.mu.Unlock()
+	jw.dirtyLocked(tags)
 }
 
 func (jw *Jaws) distributeDirt() {
