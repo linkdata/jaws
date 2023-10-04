@@ -104,6 +104,6 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 	}
 
 	for _, elem := range toAppend {
-		elem.RemoveAttr("hidden")
+		elem.Show()
 	}
 }

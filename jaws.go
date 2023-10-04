@@ -440,7 +440,7 @@ func (jw *Jaws) Alert(lvl, msg string) {
 func (jw *Jaws) Order(childTags []interface{}) {
 	jw.Broadcast(Message{
 		What: what.Order,
-		Data: childTags,
+		Data: TagExpand(nil, childTags, nil),
 	})
 }
 
@@ -490,7 +490,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			jw.distributeDirt()
 			for msgCh := range subs {
 				select {
-				case msgCh <- Message{What: what.Update}:
+				case msgCh <- Message{What: what.None}:
 				default:
 				}
 			}

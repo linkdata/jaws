@@ -586,17 +586,10 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 
 		switch tagmsg.What {
 		case what.None:
-			// do nothing
-		case what.Update:
-			// do nothing
-		case what.Reload:
-			fallthrough
-		case what.Redirect:
-			fallthrough
-		case what.Order:
-			fallthrough
-		case what.Alert:
+			// do nothing, but used for triggering updates
+		case what.Reload, what.Redirect, what.Show, what.Hide, what.Order, what.Alert:
 			wsQueue = append(wsQueue, wsMsg{
+				Jid:  -1,
 				Data: wsdata,
 				What: tagmsg.What,
 			})
@@ -640,16 +633,62 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 	}
 }
 
-func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg, wsQueue []wsMsg) []wsMsg {
-	for i := range wsQueue {
+func (rq *Request) send(outboundMsgCh chan<- wsMsg, msg wsMsg) {
+	if msg.What != what.Disregard {
 		select {
 		case <-rq.Jaws.Done():
 		case <-rq.Done():
-		case outboundMsgCh <- wsQueue[i]:
+		case outboundMsgCh <- msg:
 		default:
-			panic(fmt.Errorf("jaws: %v: outbound message channel is full (%d) sending %s", rq, len(outboundMsgCh), wsQueue[i]))
+			panic(fmt.Errorf("jaws: %v: outbound message channel is full (%d) sending %s", rq, len(outboundMsgCh), msg))
 		}
 	}
+}
+
+func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg, wsQueue []wsMsg) []wsMsg {
+	// compress element Show and Hide commands
+	var toHide, toShow []byte
+	hideShow := make(map[Jid]what.What)
+	for i, msg := range wsQueue {
+		if msg.Data == "" && msg.Jid > 0 {
+			switch msg.What {
+			case what.Hide, what.Show:
+				hideShow[msg.Jid] = msg.What
+				wsQueue[i].What = what.Disregard
+			}
+		}
+	}
+	for k, v := range hideShow {
+		switch v {
+		case what.Hide:
+			toHide = append(toHide, ' ')
+			toHide = k.Append(toHide)
+		case what.Show:
+			toShow = append(toShow, ' ')
+			toShow = k.Append(toShow)
+		}
+	}
+
+	if len(toHide) > 0 {
+		rq.send(outboundMsgCh, wsMsg{
+			Data: string(toHide),
+			Jid:  -1,
+			What: what.Hide,
+		})
+	}
+
+	for _, msg := range wsQueue {
+		rq.send(outboundMsgCh, msg)
+	}
+
+	if len(toShow) > 0 {
+		rq.send(outboundMsgCh, wsMsg{
+			Data: string(toShow),
+			Jid:  -1,
+			What: what.Show,
+		})
+	}
+
 	return wsQueue[:0]
 }
 

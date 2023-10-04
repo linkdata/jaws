@@ -40,7 +40,7 @@ func (m *wsMsg) String() string {
 }
 
 func (m *wsMsg) FillAlert(err error) {
-	m.Jid = 0
+	m.Jid = -1
 	m.What = what.Alert
 	m.Data = "danger\n" + html.EscapeString(err.Error())
 }

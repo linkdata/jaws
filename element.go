@@ -138,7 +138,7 @@ func (e *Element) Append(htmlCode template.HTML) {
 	e.queue(what.Append, string(htmlCode))
 }
 
-// Order reorders the HTML child elements of the current Element.
+// Order reorders the HTML elements.
 func (e *Element) Order(jidList []Jid) {
 	if len(jidList) > 0 {
 		var b []byte
@@ -146,7 +146,7 @@ func (e *Element) Order(jidList []Jid) {
 			if i > 0 {
 				b = append(b, ' ')
 			}
-			b = jid.AppendInt(b)
+			b = jid.Append(b)
 		}
 		e.queue(what.Order, string(b))
 	}
@@ -161,4 +161,12 @@ func (e *Element) Delete() {
 // is removed from the Request and it's HTML element from the browser.
 func (e *Element) Remove(htmlId string) {
 	e.queue(what.Remove, htmlId)
+}
+
+func (e *Element) Hide() {
+	e.queue(what.Hide, "")
+}
+
+func (e *Element) Show() {
+	e.queue(what.Show, "")
 }

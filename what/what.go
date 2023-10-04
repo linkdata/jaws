@@ -11,10 +11,9 @@ const (
 	Reload
 	Redirect
 	Alert
-	Order
-	// Element updating
-	Dirty
-	Update
+	Hide  // Set the "hidden" attribute on a set of elements
+	Show  // Remove the "hidden" attribute from a set of elements
+	Order // Re-order a set of elements
 	// Element manipulation
 	Inner   // Set the elements inner HTML
 	Delete  // Delete the element
@@ -27,14 +26,17 @@ const (
 	SClass
 	RClass
 	Value
-	Trigger
-	Hook
+	// Element events
 	Input
 	Click
+	// Meta events
+	Trigger
+	Hook
+	Disregard
 )
 
 func (w What) IsCommand() bool {
-	return w > None && w < Dirty
+	return w <= Order
 }
 
 func Parse(s string) What {

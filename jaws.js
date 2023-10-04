@@ -76,12 +76,12 @@ function jawsAlert(type, message) {
 	console.log("jaws: " + type + ": " + message);
 }
 
-function jawsOrder(jidlist) {
-	var jidstrings = jidlist.split(' ');
-	var elements = [];
+function jawsList(idlist) {
 	var i;
-	for (i = 0; i < jidstrings.length; i++) {
-		var elem = document.getElementById('Jid.' + jidstrings[i]);
+	var elements = [];
+	var idstrings = idlist.split(' ');
+	for (i = 0; i < idstrings.length; i++) {
+		var elem = document.getElementById(idstrings[i]);
 		if (elem) {
 			elem.dataset.jidsort = i;
 			elements.push(elem);
@@ -92,6 +92,30 @@ function jawsOrder(jidlist) {
 	});
 	for (i = 0; i < elements.length; i++) {
 		delete elements[i].dataset.jidsort;
+	}
+	return elements;
+}
+
+function jawsHide(idlist) {
+	var i;
+	var elements = jawsList(idlist);
+	for (i = 0; i < elements.length; i++) {
+		elements[i].hidden = true;
+	}
+}
+
+function jawsShow(idlist) {
+	var i;
+	var elements = jawsList(idlist);
+	for (i = 0; i < elements.length; i++) {
+		elements[i].hidden = false;
+	}
+}
+
+function jawsOrder(idlist) {
+	var i;
+	var elements = jawsList(idlist);
+	for (i = 0; i < elements.length; i++) {
 		elements[i].parentElement.appendChild(elements[i]);
 	}
 }
@@ -208,10 +232,6 @@ function jawsWhere(elem, pos) {
 function jawsMessage(e) {
 	var lines = e.data.split('\n');
 	var what = lines.shift();
-	var id = lines.shift();
-	var where = null;
-	var data = null;
-	var elem = document.getElementById(id);
 	switch (what) {
 		case 'Reload':
 			window.location.reload();
@@ -222,80 +242,67 @@ function jawsMessage(e) {
 		case 'Alert':
 			jawsAlert(lines.shift(), lines.join('\n'));
 			return;
+		case 'Hide':
+			jawsHide(lines.join('\n'));
+			return;
+		case 'Show':
+			jawsShow(lines.join('\n'));
+			return;
 		case 'Order':
 			jawsOrder(lines.join('\n'));
 			return;
-		case 'Inner':
-		case 'Value':
-		case 'Append':
-		case 'Replace':
-			data = lines.join('\n');
-			break;
-		case 'Delete':
-			break;
-		case 'Insert':
-		case 'Remove':
-			where = jawsWhere(elem, lines.shift());
-			data = lines.join('\n');
-			break;
-		case 'SAttr':
-			where = lines.shift();
-			data = lines.join('\n');
-			break;
-		case 'RAttr':
-		case 'SClass':
-		case 'RClass':
-			where = lines.shift();
-			break;
-		default:
-			console.log("jaws: unknown operation: " + what);
-			return;
 	}
+	var id = lines.shift();
+	var elem = document.getElementById(id);
 	if (elem === null) {
 		console.log("jaws: id not found: " + id);
 		return;
 	}
+	var where = null;
 	switch (what) {
-		case 'Order':
-			break;
 		case 'Inner':
-			elem.innerHTML = data;
+			elem.innerHTML = lines.join('\n');
 			jawsAttach(elem);
 			break;
 		case 'Value':
-			jawsSetValue(elem, data);
+			jawsSetValue(elem, lines.join('\n'));
+			break;
+		case 'Append':
+			elem.appendChild(jawsAttach(jawsElement(lines.join('\n'))));
+			break;
+		case 'Replace':
+			elem.replaceWith(jawsAttach(jawsElement(lines.join('\n'))));
 			break;
 		case 'Delete':
 			elem.remove();
 			break;
-		case 'Append':
-			elem.appendChild(jawsAttach(jawsElement(data)));
-			break;
-		case 'Replace':
-			elem.replaceWith(jawsAttach(jawsElement(data)));
-			break;
 		case 'Remove':
+			where = jawsWhere(elem, lines.shift());
 			if (where instanceof Node) {
 				elem.removeChild(where);
 			}
 			break;
 		case 'Insert':
+			where = jawsWhere(elem, lines.shift());
 			if (where instanceof Node) {
-				elem.insertBefore(jawsAttach(jawsElement(data)), where);
+				elem.insertBefore(jawsAttach(jawsElement(lines.join('\n'))), where);
 			}
 			break;
 		case 'SAttr':
-			elem.setAttribute(where, data);
+			elem.setAttribute(lines.shift(), lines.join('\n'));
 			break;
 		case 'RAttr':
-			elem.removeAttribute(where);
+			elem.removeAttribute(lines.shift());
 			break;
 		case 'SClass':
-			elem.classList.add(where);
+			elem.classList.add(lines.shift());
 			break;
 		case 'RClass':
-			elem.classList.remove(where);
+			elem.classList.remove(lines.shift());
 			break;
+		default:
+			console.log("jaws: unknown operation: " + what);
+			return;
 	}
 }
 

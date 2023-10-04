@@ -370,7 +370,7 @@ func TestRequest_Trigger(t *testing.T) {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case msg := <-rq.outCh:
-		is.Equal(msg.Jid, Jid(0))
+		is.Equal(msg.Jid, Jid(-1))
 		is.Equal(msg.What, what.Alert)
 		is.Equal(msg.Data, "danger\nomg")
 	}
@@ -620,10 +620,9 @@ func TestRequest_Sends(t *testing.T) {
 		t.Log(strconv.Quote(gotRemoveAttr))
 		is.Fail()
 	}
-	jid0str := Jid(0).String()
-	is.Equal(gotRedirect, "Redirect\n"+jid0str+"\nsome-url")
-	is.Equal(gotInfoAlert, "Alert\n"+jid0str+"\ninfo\n<html>\nnot-escaped")
-	is.Equal(gotDangerAlert, "Alert\n"+jid0str+"\ndanger\n&lt;html&gt;\nshould-be-escaped")
+	is.Equal(gotRedirect, "Redirect\nsome-url")
+	is.Equal(gotInfoAlert, "Alert\ninfo\n<html>\nnot-escaped")
+	is.Equal(gotDangerAlert, "Alert\ndanger\n&lt;html&gt;\nshould-be-escaped")
 }
 
 func TestRequest_OnTrigger(t *testing.T) {
