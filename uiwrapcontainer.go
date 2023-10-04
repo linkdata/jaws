@@ -89,7 +89,8 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 	ui.mu.Unlock()
 
 	for _, elem := range toRemove {
-		elem.Remove()
+		e.Remove(elem.jid.String())
+		e.deleteElement(elem)
 	}
 
 	for _, elem := range toAppend {

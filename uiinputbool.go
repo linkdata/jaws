@@ -43,7 +43,7 @@ func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (err err
 			}
 		}
 		err = ui.BoolGetter.(BoolSetter).JawsSetBool(e, v)
-		e.Jaws.Dirty(ui.Tag)
+		e.Dirty(ui.Tag)
 	}
 	return
 }

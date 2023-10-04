@@ -194,10 +194,13 @@ function jawsElement(html) {
 function jawsWhere(elem, pos) {
 	var where = null;
 	if (pos && pos !== 'null') {
-		where = document.getElementById('Jid.' + pos);
+		where = document.getElementById(pos);
 		if (where == null) {
 			where = elem.children[parseInt(pos)];
 		}
+	}
+	if (!(where instanceof Node)) {
+		console.log("jaws: id " + elem.id + " has no position " + pos);
 	}
 	return where;
 }
@@ -208,6 +211,7 @@ function jawsMessage(e) {
 	var id = lines.shift();
 	var where = null;
 	var data = null;
+	var elem = document.getElementById(id);
 	switch (what) {
 		case 'Reload':
 			window.location.reload();
@@ -227,9 +231,13 @@ function jawsMessage(e) {
 		case 'Replace':
 			data = lines.join('\n');
 			break;
-		case 'Remove':
+		case 'Delete':
 			break;
 		case 'Insert':
+		case 'Remove':
+			where = jawsWhere(elem, lines.shift());
+			data = lines.join('\n');
+			break;
 		case 'SAttr':
 			where = lines.shift();
 			data = lines.join('\n');
@@ -243,7 +251,6 @@ function jawsMessage(e) {
 			console.log("jaws: unknown operation: " + what);
 			return;
 	}
-	var elem = document.getElementById(id);
 	if (elem === null) {
 		console.log("jaws: id not found: " + id);
 		return;
@@ -258,7 +265,7 @@ function jawsMessage(e) {
 		case 'Value':
 			jawsSetValue(elem, data);
 			break;
-		case 'Remove':
+		case 'Delete':
 			elem.remove();
 			break;
 		case 'Append':
@@ -267,12 +274,14 @@ function jawsMessage(e) {
 		case 'Replace':
 			elem.replaceWith(jawsAttach(jawsElement(data)));
 			break;
+		case 'Remove':
+			if (where instanceof Node) {
+				elem.removeChild(where);
+			}
+			break;
 		case 'Insert':
-			var target = jawsWhere(elem, where);
-			if (target instanceof Node) {
-				elem.insertBefore(jawsAttach(jawsElement(data)), target);
-			} else {
-				console.log("jaws: id " + id + " has no position " + where);
+			if (where instanceof Node) {
+				elem.insertBefore(jawsAttach(jawsElement(data)), where);
 			}
 			break;
 		case 'SAttr':

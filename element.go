@@ -152,7 +152,13 @@ func (e *Element) Order(jidList []Jid) {
 	}
 }
 
-// Remove requests that this Element is removed from the Request and it's HTML element from the browser.
-func (e *Element) Remove() {
-	e.queue(what.Remove, "")
+// Delete requests that this Element is removed from the Request and it's HTML element from the browser.
+func (e *Element) Delete() {
+	e.queue(what.Delete, "")
+}
+
+// Remove requests that the HTML child with the given HTML ID of this Element
+// is removed from the Request and it's HTML element from the browser.
+func (e *Element) Remove(htmlId string) {
+	e.queue(what.Remove, htmlId)
 }

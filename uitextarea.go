@@ -29,7 +29,7 @@ func (ui *UiTextarea) JawsEvent(e *Element, wht what.What, val string) (err erro
 	}
 	if wht == what.Input {
 		err = ui.StringGetter.(StringSetter).JawsSetString(e, val)
-		e.Jaws.Dirty(ui.Tag)
+		e.Dirty(ui.Tag)
 	}
 	return
 }

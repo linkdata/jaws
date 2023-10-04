@@ -229,7 +229,7 @@ func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
 				_ = e.Jaws.Log(fmt.Errorf("jaws: UiHtml.JawsEvent(%v, %s, %q): unhandled type: %T", e, wht, val, data))
 			}
 		}
-		e.Jaws.Dirty(ui.Tag)
+		e.Dirty(ui.Tag)
 	}
 	return
 }

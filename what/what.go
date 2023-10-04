@@ -16,11 +16,12 @@ const (
 	Dirty
 	Update
 	// Element manipulation
-	Inner
-	Remove
-	Insert
-	Append
-	Replace
+	Inner   // Set the elements inner HTML
+	Delete  // Delete the element
+	Replace // Replace the element with new HTML
+	Remove  // Remove child element
+	Insert  // Insert child element
+	Append  // Append child element
 	SAttr
 	RAttr
 	SClass

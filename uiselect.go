@@ -31,7 +31,7 @@ func (ui *UiSelect) JawsUpdate(e *Element) {
 func (ui *UiSelect) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if wht == what.Input {
 		ui.uiWrapContainer.Container.(StringSetter).JawsSetString(e, val)
-		e.Jaws.Dirty(ui.Tag)
+		e.Dirty(ui.Tag)
 	}
 	return
 }

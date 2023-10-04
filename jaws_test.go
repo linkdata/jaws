@@ -309,7 +309,7 @@ func TestJaws_BroadcastsCallable(t *testing.T) {
 	defer jw.Close()
 	go jw.Serve()
 
-	jw.Remove("foo")
+	jw.Delete("foo")
 	jw.Insert("foo", "bar", "baz")
 	jw.Append("foo", "bar")
 	jw.Replace("foo", "bar", "baz")

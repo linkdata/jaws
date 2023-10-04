@@ -356,24 +356,22 @@ func (jw *Jaws) Broadcast(msg Message) {
 	}
 }
 
-func (jw *Jaws) dirtyLocked(tags []any) {
+// setDirty marks all Elements that have one or more of the given tags as dirty.
+func (jw *Jaws) setDirty(tags []any) {
+	jw.mu.Lock()
+	defer jw.mu.Unlock()
 	for _, tag := range tags {
-		switch tag := tag.(type) {
-		case nil: //do nothing
-		case []any:
-			jw.dirtyLocked(tag)
-		default:
-			jw.dirtOrder++
-			jw.dirty[tag] = jw.dirtOrder
-		}
+		jw.dirtOrder++
+		jw.dirty[tag] = jw.dirtOrder
 	}
 }
 
 // Dirty marks all Elements that have one or more of the given tags as dirty.
+//
+// Note that if any of the tags are a TagGetter, it will be called with a nil Request.
+// Prefer using Request.Dirty() which avoids this.
 func (jw *Jaws) Dirty(tags ...interface{}) {
-	jw.mu.Lock()
-	defer jw.mu.Unlock()
-	jw.dirtyLocked(tags)
+	jw.setDirty(TagExpand(nil, tags, nil))
 }
 
 func (jw *Jaws) distributeDirt() {
@@ -715,11 +713,11 @@ func (jw *Jaws) Replace(target interface{}, where, html string) {
 	})
 }
 
-// Remove removes the HTML element(s) matching target.
-func (jw *Jaws) Remove(target interface{}) {
+// Delete removes the HTML element(s) matching target.
+func (jw *Jaws) Delete(target interface{}) {
 	jw.Broadcast(Message{
 		Dest: target,
-		What: what.Remove,
+		What: what.Delete,
 	})
 }
 

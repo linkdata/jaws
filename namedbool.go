@@ -66,9 +66,9 @@ func (nb *NamedBool) JawsSetBool(e *Element, checked bool) (err error) {
 		nba = nb.nba
 	}
 	nb.mu.Unlock()
-	e.Jaws.Dirty(nb)
+	e.Dirty(nb)
 	if nba != nil {
-		e.Jaws.Dirty(nba)
+		e.Dirty(nba)
 		nb.nba.Set(nb.name, checked)
 	}
 	return

@@ -39,7 +39,7 @@ func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err er
 			}
 		}
 		err = ui.FloatGetter.(FloatSetter).JawsSetFloat(e, v)
-		e.Jaws.Dirty(ui.Tag)
+		e.Dirty(ui.Tag)
 	}
 	return
 }

@@ -335,13 +335,13 @@ func (rq *Request) Register(item interface{}, params ...interface{}) Jid {
 	elem := rq.NewElement(uib)
 	uib.parseGetter(elem, item)
 	uib.parseParams(elem, params)
-	rq.Jaws.Dirty(uib.Tag)
+	rq.Dirty(uib.Tag)
 	return elem.jid
 }
 
-// Dirty calls rq.Jaws.Dirty().
+// Dirty marks all Elements that have one or more of the given tags as dirty.
 func (rq *Request) Dirty(tags ...interface{}) {
-	rq.Jaws.Dirty(tags...)
+	rq.Jaws.setDirty(TagExpand(rq, tags, nil))
 }
 
 // wantMessage returns true if the Request want the message.
@@ -429,7 +429,7 @@ func (rq *Request) appendDirtyTags(tags []interface{}) {
 func (rq *Request) Tag(elem *Element, tags ...interface{}) {
 	if elem != nil && len(tags) > 0 && elem.Request == rq {
 		var expandedtags []interface{}
-		expandedtags = TagExpand(tags, expandedtags)
+		expandedtags = TagExpand(elem.Request, tags, expandedtags)
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
 		for _, tag := range expandedtags {
@@ -603,8 +603,8 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		default:
 			for _, elem := range todo {
 				switch tagmsg.What {
-				case what.Remove:
-					rq.remove(elem)
+				case what.Delete:
+					rq.deleteElement(elem)
 				case what.Trigger:
 					// trigger messages won't be sent out on the WebSocket, but will queue up a
 					// call to the event function (if any)
@@ -653,7 +653,7 @@ func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg, wsQueue []wsMsg) []wsMs
 	return wsQueue[:0]
 }
 
-func (rq *Request) remove(e *Element) {
+func (rq *Request) deleteElement(e *Element) {
 	if e != nil && e.Request == rq {
 		rq.mu.Lock()
 		defer rq.mu.Unlock()

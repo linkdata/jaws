@@ -39,7 +39,7 @@ func (ui *UiInputDate) JawsEvent(e *Element, wht what.What, val string) (err err
 			}
 		}
 		err = ui.TimeGetter.(TimeSetter).JawsSetTime(e, v)
-		e.Jaws.Dirty(ui.Tag)
+		e.Dirty(ui.Tag)
 	}
 	return
 }

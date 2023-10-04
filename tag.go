@@ -19,7 +19,7 @@ func TagString(tag interface{}) string {
 	return fmt.Sprintf("%#v", tag)
 }
 
-func TagExpand(tag interface{}, result []interface{}) []interface{} {
+func TagExpand(rq *Request, tag interface{}, result []interface{}) []interface{} {
 	if len(result) > 1000 {
 		panic("jaws: too many tags")
 	}
@@ -54,9 +54,11 @@ func TagExpand(tag interface{}, result []interface{}) []interface{} {
 		return result
 	case []interface{}:
 		for _, v := range data {
-			result = TagExpand(v, result)
+			result = TagExpand(rq, v, result)
 		}
 		return result
+	case TagGetter:
+		return TagExpand(rq, data.JawsGetTag(rq), result)
 	default:
 		return append(result, data)
 	}
