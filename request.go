@@ -255,7 +255,7 @@ func (rq *Request) AlertError(err error) {
 	}
 }
 
-func (rq *Request) makeOrder(tags []interface{}) string {
+func (rq *Request) makeIdList(tags []interface{}) string {
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
 	var b []byte
@@ -267,7 +267,7 @@ func (rq *Request) makeOrder(tags []interface{}) string {
 				if len(b) > 0 {
 					b = append(b, ' ')
 				}
-				b = elem.jid.AppendInt(b)
+				b = elem.jid.Append(b)
 			}
 		}
 	}
@@ -555,7 +555,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		case template.HTML:
 			wsdata = string(data)
 		case []interface{}: // list of tags
-			wsdata = rq.makeOrder(data)
+			wsdata = rq.makeIdList(data)
 		}
 
 		// collect all elements marked with the tag in the message

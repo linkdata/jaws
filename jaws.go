@@ -437,10 +437,26 @@ func (jw *Jaws) Alert(lvl, msg string) {
 }
 
 // Order re-orders HTML elements matching the given tags in all Requests.
-func (jw *Jaws) Order(childTags []interface{}) {
+func (jw *Jaws) Order(tags []interface{}) {
 	jw.Broadcast(Message{
 		What: what.Order,
-		Data: TagExpand(nil, childTags, nil),
+		Data: TagExpand(nil, tags, nil),
+	})
+}
+
+// Hide sets the HTML "hidden" attribute on HTML elements matching the given tags in all Requests.
+func (jw *Jaws) Hide(tags ...interface{}) {
+	jw.Broadcast(Message{
+		What: what.Hide,
+		Data: TagExpand(nil, tags, nil),
+	})
+}
+
+// Show removes the HTML "hidden" attribute from HTML elements matching the given tags in all Requests.
+func (jw *Jaws) Show(tags ...interface{}) {
+	jw.Broadcast(Message{
+		What: what.Show,
+		Data: TagExpand(nil, tags, nil),
 	})
 }
 
