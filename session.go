@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"time"
@@ -36,6 +37,10 @@ func newSession(jw *Jaws, sessionID uint64, remoteIP net.IP) *Session {
 		},
 		data: make(map[string]interface{}),
 	}
+}
+
+func (sess *Session) String() string {
+	return fmt.Sprintf("%p{%s}", sess, JawsKeyString(sess.sessionID))
 }
 
 func (sess *Session) isDeadLocked() bool {
