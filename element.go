@@ -154,5 +154,5 @@ func (e *Element) Order(jidList []Jid) {
 
 // Remove requests that this Element is removed from the Request and it's HTML element from the browser.
 func (e *Element) Remove() {
-	e.Request.remove(e)
+	e.queue(what.Remove, "")
 }

@@ -1,6 +1,6 @@
 module github.com/linkdata/jaws
 
-go 1.20
+go 1.21
 
 require (
 	github.com/linkdata/deadlock v0.4.0

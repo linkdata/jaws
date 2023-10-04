@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"net"
 	"net/http"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -44,7 +45,6 @@ type Request struct {
 	connectFn ConnectFn               // a ConnectFn to call before starting message processing for the Request
 	elems     []*Element
 	tagMap    map[interface{}][]*Element
-	wsQueue   []wsMsg
 }
 
 type eventFnCall struct {
@@ -142,7 +142,6 @@ func (rq *Request) recycle() {
 	rq.dirty = rq.dirty[:0]
 	rq.remoteIP = nil
 	rq.elems = rq.elems[:0]
-	rq.wsQueue = rq.wsQueue[:0]
 	rq.killSessionLocked()
 	// this gets optimized to calling the 'runtime.mapclear' function
 	// we don't expect this to improve speed, but it will lower GC load
@@ -509,7 +508,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		}
 
 		rq.mu.RLock()
-		wsQueue, rq.wsQueue = rq.wsQueue, wsQueue
 		for _, elem := range rq.elems {
 			wsQueue = append(wsQueue, elem.wsQueue...)
 			elem.wsQueue = elem.wsQueue[:0]
@@ -653,61 +651,16 @@ func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg, wsQueue []wsMsg) []wsMs
 	return wsQueue[:0]
 }
 
-func removeElement(elems []*Element, e *Element) []*Element {
-	for i := range elems {
-		if elems[i] == e {
-			if i < len(elems)-1 {
-				elems[i] = elems[len(elems)-1]
-			}
-			elems = elems[:len(elems)-1]
-			break
-		}
-	}
-	if deadlock.Debug {
-		m := make(map[*Element]int)
-		for _, elem := range elems {
-			m[elem]++
-		}
-		for k, v := range m {
-			if v > 1 {
-				panic(fmt.Errorf("element %#v has %d entries", k, v))
-			}
-		}
-		if m[e] > 0 {
-			panic(fmt.Errorf("element %#v appeared multiple times", e))
-		}
-	}
-	return elems
-}
-
 func (rq *Request) remove(e *Element) {
 	if e != nil && e.Request == rq {
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
 		e.Request = nil
-		rq.elems = removeElement(rq.elems, e)
+		rq.elems = slices.DeleteFunc(rq.elems, func(elem *Element) bool { return elem == e })
 		for k := range rq.tagMap {
-			rq.tagMap[k] = removeElement(rq.tagMap[k], e)
+			rq.tagMap[k] = slices.DeleteFunc(rq.tagMap[k], func(elem *Element) bool { return elem == e })
 		}
-		rq.queueLocked(wsMsg{
-			Jid:  e.jid,
-			What: what.Remove,
-		})
 	}
-}
-
-func (rq *Request) queueLocked(msg wsMsg) {
-	rq.wsQueue = append(rq.wsQueue, msg)
-}
-
-func (rq *Request) queue(msg wsMsg) {
-	rq.mu.Lock()
-	if len(rq.wsQueue) < (maxWsQueueLengthPerElement * len(rq.elems)) {
-		rq.queueLocked(msg)
-	} else {
-		rq.cancelFn(ErrWebsocketQueueOverflow)
-	}
-	rq.mu.Unlock()
 }
 
 func (rq *Request) makeUpdateList() (todo []*Element) {
