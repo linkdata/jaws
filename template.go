@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"bytes"
 	"fmt"
 	"html/template"
 	"io"
@@ -40,17 +39,14 @@ func (t Template) String() string {
 var _ UI = (*Template)(nil) // statically ensure interface is defined
 
 func (t Template) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	e.Tag(t)
+	e.Tag(t.Dot)
 	attrs := parseParams(e, params, nil, nil, nil)
 	writeUiDebug(e, w)
 	maybePanic(t.Execute(w, With{Element: e, Dot: t.Dot, Attrs: strings.Join(attrs, " ")}))
 }
 
-// You probably don't want to re-render the entire Template. Consider your options.
 func (t Template) JawsUpdate(e *Element) {
-	var b bytes.Buffer
-	e.Render(&b, nil)
-	e.Replace(template.HTML(b.String()))
+	// does nothing
 }
 
 var _ EventHandler = (*Template)(nil) // statically ensure interface is defined
