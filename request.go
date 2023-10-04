@@ -507,6 +507,8 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			elem.Ui().JawsUpdate(elem)
 		}
 
+		// append pending WS messages to the queue
+		// in the order of Element creation
 		rq.mu.RLock()
 		for _, elem := range rq.elems {
 			wsQueue = append(wsQueue, elem.wsQueue...)
