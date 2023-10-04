@@ -654,14 +654,12 @@ func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg, wsQueue []wsMsg) []wsMs
 }
 
 func (rq *Request) deleteElement(e *Element) {
-	if e != nil && e.Request == rq {
-		rq.mu.Lock()
-		defer rq.mu.Unlock()
-		e.Request = nil
-		rq.elems = slices.DeleteFunc(rq.elems, func(elem *Element) bool { return elem == e })
-		for k := range rq.tagMap {
-			rq.tagMap[k] = slices.DeleteFunc(rq.tagMap[k], func(elem *Element) bool { return elem == e })
-		}
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	e.Request = nil
+	rq.elems = slices.DeleteFunc(rq.elems, func(elem *Element) bool { return elem == e })
+	for k := range rq.tagMap {
+		rq.tagMap[k] = slices.DeleteFunc(rq.tagMap[k], func(elem *Element) bool { return elem == e })
 	}
 }
 
