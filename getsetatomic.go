@@ -11,7 +11,9 @@ import (
 type atomicGetter struct{ v *atomic.Value }
 
 func (g atomicGetter) JawsGetBool(e *Element) (v bool) {
-	v, _ = g.v.Load().(bool)
+	if x := g.v.Load(); x != nil {
+		v = x.(bool)
+	}
 	return
 }
 
@@ -21,7 +23,9 @@ func (g atomicGetter) JawsSetBool(e *Element, v bool) (err error) {
 }
 
 func (g atomicGetter) JawsGetFloat(e *Element) (v float64) {
-	v, _ = g.v.Load().(float64)
+	if x := g.v.Load(); x != nil {
+		v = x.(float64)
+	}
 	return
 }
 
@@ -31,7 +35,9 @@ func (g atomicGetter) JawsSetFloat(e *Element, v float64) (err error) {
 }
 
 func (g atomicGetter) JawsGetString(e *Element) (v string) {
-	v, _ = g.v.Load().(string)
+	if x := g.v.Load(); x != nil {
+		v = x.(string)
+	}
 	return
 }
 
@@ -41,7 +47,9 @@ func (g atomicGetter) JawsSetString(e *Element, v string) (err error) {
 }
 
 func (g atomicGetter) JawsGetTime(e *Element) (v time.Time) {
-	v, _ = g.v.Load().(time.Time)
+	if x := g.v.Load(); x != nil {
+		v = x.(time.Time)
+	}
 	return
 }
 
@@ -52,10 +60,12 @@ func (g atomicGetter) JawsSetTime(e *Request, v time.Time) (err error) {
 
 func (g atomicGetter) JawsGetHtml(e *Element) template.HTML {
 	switch v := g.v.Load().(type) {
+	case nil:
+		return ""
 	case template.HTML:
 		return v
 	default:
-		return template.HTML(html.EscapeString(string(fmt.Append(nil, v))))
+		return template.HTML(html.EscapeString(fmt.Sprint(v)))
 	}
 }
 
