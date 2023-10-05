@@ -33,7 +33,7 @@ const (
 )
 
 func (w What) IsCommand() bool {
-	return w <= Order
+	return w <= Order && w.IsValid()
 }
 
 func (w What) IsValid() bool {

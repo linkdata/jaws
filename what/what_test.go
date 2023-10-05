@@ -12,8 +12,8 @@ func TestParse(t *testing.T) {
 		arg  string
 		want What
 	}{
-		{"blank is None", "", Update},
-		{"None", "None", Update},
+		{"blank is Update", "", Update},
+		{"Update", "Update", Update},
 		{"Inner", "Inner", Inner},
 		{"inner", "inner", Inner},
 		{"innerr", "innerr", invalid},
@@ -59,9 +59,9 @@ func TestString(t *testing.T) {
 		arg  What
 		want string
 	}{
-		{"None", Update, "None"},
+		{"invalid", invalid, "invalid"},
 		{"Inner", Inner, "Inner"},
-		{"unknown", What(len(_What_index) + 44), fmt.Sprintf("What(%d)", len(_What_index)+44)},
+		{"unknown", ^What(0), fmt.Sprintf("What(%d)", ^What(0))},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
