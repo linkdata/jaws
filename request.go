@@ -575,7 +575,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		case string:
 			// target is a regular HTML ID
 			wsQueue = append(wsQueue, wsMsg{
-				Data: string(v) + "\n" + wsdata,
+				Data: v + "\t" + wsdata,
 				What: tagmsg.What,
 				Jid:  -1,
 			})
