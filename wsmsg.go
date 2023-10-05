@@ -6,7 +6,6 @@ import (
 	"html"
 	"strconv"
 
-	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -18,13 +17,11 @@ type wsMsg struct {
 }
 
 func (m *wsMsg) IsValid() bool {
-	return m.What != what.None
+	return m.What.IsValid()
 }
 
 func (m *wsMsg) Append(b []byte) []byte {
-	if m.What != what.None {
-		b = append(b, m.What.String()...)
-	}
+	b = append(b, m.What.String()...)
 	b = append(b, '\t')
 	if m.Jid >= 0 {
 		if m.Jid > 0 {
@@ -32,7 +29,9 @@ func (m *wsMsg) Append(b []byte) []byte {
 		}
 		b = append(b, '\t')
 	}
-	b = strconv.AppendQuote(b, m.Data)
+	if len(m.Data) > 0 {
+		b = strconv.AppendQuote(b, m.Data)
+	}
 	b = append(b, '\n')
 	return b
 }
@@ -53,10 +52,9 @@ func wsParse(txt []byte) (wsMsg, bool) {
 				if wht := what.Parse(string(txt[0:nl1])); wht.IsValid() {
 					data := string(txt[nl2+1 : len(txt)-1])
 					if txt[nl2+1] == '"' {
-						if s, err := strconv.Unquote(data); err == nil {
-							data = s
-						} else if deadlock.Debug {
-							panic(fmt.Errorf("%v: <%s>", err, data))
+						var err error
+						if data, err = strconv.Unquote(data); err != nil {
+							return wsMsg{}, false
 						}
 					}
 					return wsMsg{

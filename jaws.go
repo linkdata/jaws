@@ -490,7 +490,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			jw.distributeDirt()
 			for msgCh := range subs {
 				select {
-				case msgCh <- Message{What: what.None}:
+				case msgCh <- Message{What: what.Update}:
 				default:
 				}
 			}

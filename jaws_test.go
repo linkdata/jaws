@@ -315,7 +315,6 @@ func TestJaws_BroadcastsCallable(t *testing.T) {
 	jw.Replace("foo", "bar", "baz")
 	jw.Reload()
 	jw.Redirect("foo")
-	jw.Trigger("foo", "bar")
 	jw.Alert("info", "bar")
 }
 

@@ -130,7 +130,7 @@ func TestWS_NormalExchange(t *testing.T) {
 	is.Equal(resp.StatusCode, http.StatusSwitchingProtocols)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	msg := wsMsg{Jid: jidForTag(ts.rq, Tag{"foo"}), What: what.Trigger}
+	msg := wsMsg{Jid: jidForTag(ts.rq, Tag{"foo"}), What: what.Input}
 	ctx, cancel := context.WithTimeout(ts.ctx, time.Second*3)
 	defer cancel()
 
@@ -157,7 +157,7 @@ func TestReader_RespectsContextDone(t *testing.T) {
 	ts := newTestServer(is)
 	defer ts.Close()
 
-	msg := wsMsg{Jid: Jid(1234), What: what.Trigger}
+	msg := wsMsg{Jid: Jid(1234), What: what.Input}
 	doneCh := make(chan struct{})
 	inCh := make(chan wsMsg)
 	client, server := Pipe()
@@ -206,7 +206,7 @@ func TestReader_RespectsJawsDone(t *testing.T) {
 	}()
 
 	ts.jw.Close()
-	msg := wsMsg{Jid: Jid(1234), What: what.Trigger}
+	msg := wsMsg{Jid: Jid(1234), What: what.Input}
 	err := client.Write(ctx, websocket.MessageText, []byte(msg.Format()))
 	is.NoErr(err)
 
@@ -388,7 +388,7 @@ func TestReader_ReportsError(t *testing.T) {
 		wsReader(ts.rq.ctx, ts.rq.cancelFn, ts.jw.Done(), inCh, server)
 	}()
 
-	msg := wsMsg{Jid: Jid(1234), What: what.Trigger}
+	msg := wsMsg{Jid: Jid(1234), What: what.Input}
 	err := client.Write(ts.ctx, websocket.MessageText, []byte(msg.Format()))
 	if err == nil {
 		t.FailNow()
@@ -411,15 +411,23 @@ func Test_wsParse_IncompleteFails(t *testing.T) {
 	is.True(!ok)
 	is.Equal(got, wsMsg{})
 
-	got, ok = wsParse([]byte("\t\t")) // missing ending linefeed
+	got, ok = wsParse([]byte("invalid\t\t\n")) // invalid What
 	is.True(!ok)
 	is.Equal(got, wsMsg{})
 
-	got, ok = wsParse([]byte("\t\n")) // just one tab
+	got, ok = wsParse([]byte("Click\t\t")) // missing ending linefeed
+	is.True(!ok)
+	is.Equal(got, wsMsg{})
+
+	got, ok = wsParse([]byte("Click\t\n")) // just one tab
 	is.True(!ok)
 	is.Equal(got, wsMsg{})
 
 	got, ok = wsParse([]byte("\n\t\t\n")) // newline instead of What
+	is.True(!ok)
+	is.Equal(got, wsMsg{})
+
+	got, ok = wsParse([]byte("Click\t\t\"\n\"\n")) // incorrectly quoted data
 	is.True(!ok)
 	is.Equal(got, wsMsg{})
 }
@@ -430,7 +438,7 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 		txt  string
 		want wsMsg
 	}{
-		{"shortest", "\t\t\n", wsMsg{}},
+		{"shortest", "Update\t\t\n", wsMsg{What: what.Update}},
 		{"unquoted", "Input\tJid.1\ttrue\n", wsMsg{Jid: Jid(1), What: what.Input, Data: "true"}},
 		{"normal", "Input\tfooid\t\"c\"\n", wsMsg{Jid: Jid(0), What: what.Input, Data: "c"}},
 		{"newline", "Click\tJid.3\t\"c\\nd\"\n", wsMsg{Jid: Jid(3), What: what.Click, Data: "c\nd"}},

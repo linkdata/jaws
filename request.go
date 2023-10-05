@@ -586,7 +586,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		}
 
 		switch tagmsg.What {
-		case what.None:
+		case what.Update:
 			// do nothing, but used for triggering updates
 		case what.Reload, what.Redirect, what.Order, what.Alert:
 			wsQueue = append(wsQueue, wsMsg{
@@ -599,9 +599,11 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 				switch tagmsg.What {
 				case what.Delete:
 					rq.deleteElement(elem)
-				case what.Trigger:
-					// trigger messages won't be sent out on the WebSocket, but will queue up a
-					// call to the event function (if any)
+				case what.Input, what.Click:
+					// Input or Click messages recieved here are from Request.Send() or broadcasts.
+					// they won't be sent out on the WebSocket, but will queue up a
+					// call to the event function (if any).
+					// primary usecase is tests.
 					select {
 					case eventCallCh <- eventFnCall{e: elem, wht: tagmsg.What, data: wsdata}:
 					default:
@@ -614,7 +616,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					// an error to be sent out as an alert message.
 					// primary usecase is tests.
 					if h, ok := elem.Ui().(EventHandler); ok {
-						if errmsg := makeAlertDangerMessage(h.JawsEvent(elem, tagmsg.What, wsdata)); errmsg.What != what.None {
+						if errmsg := makeAlertDangerMessage(h.JawsEvent(elem, tagmsg.What, wsdata)); errmsg.What != what.Update {
 							wsQueue = append(wsQueue, wsMsg{
 								Data: wsdata,
 								Jid:  elem.jid,
@@ -701,7 +703,7 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundCh chan<-
 				break
 			}
 			fallthrough
-		case what.Input, what.Trigger:
+		case what.Input:
 			if h, ok := call.e.Ui().(EventHandler); ok {
 				err = h.JawsEvent(call.e, call.wht, call.data)
 				break
@@ -746,20 +748,4 @@ func makeAlertDangerMessage(err error) (msg Message) {
 		}
 	}
 	return
-}
-
-// OnTrigger registers a jid and a function to be called when Trigger is called for it.
-// Returns a nil error so it can be used inside templates.
-func (rq *Request) OnTrigger(jid string, fn func(rq *Request, jid string) error) error {
-	var wf EventFn
-	if fn != nil {
-		wf = func(rq *Request, evt what.What, jid, val string) (err error) {
-			if evt == what.Trigger {
-				err = fn(rq, jid)
-			}
-			return
-		}
-	}
-	rq.Register(Tag{jid}, wf)
-	return nil
 }

@@ -68,9 +68,27 @@ func (rq *Request) OnEvent(tagstring string, fn EventFn) error {
 func (rq *Request) Trigger(tagitem interface{}, val string) {
 	rq.Broadcast(Message{
 		Dest: tagitem,
-		What: what.Trigger,
+		What: what.Input,
 		Data: val,
 	})
+}
+
+// Deprecated: Will be removed in future
+// OnTrigger registers a jid and a function to be called when Trigger is called for it.
+// Returns a nil error so it can be used inside templates.
+func (rq *Request) OnTrigger(tagitem interface{}, fn func(rq *Request, jid string) error) error {
+	var wf EventFn
+	if fn != nil {
+		wf = func(rq *Request, evt what.What, jid, val string) (err error) {
+			switch evt {
+			case what.Input, what.Click:
+				err = fn(rq, jid)
+			}
+			return
+		}
+	}
+	rq.Register(tagitem, wf)
+	return nil
 }
 
 // Deprecated: Will be removed in future
@@ -78,7 +96,7 @@ func (rq *Request) Trigger(tagitem interface{}, val string) {
 func (jw *Jaws) Trigger(tagitem interface{}, val string) {
 	jw.Broadcast(Message{
 		Dest: tagitem,
-		What: what.Trigger,
+		What: what.Input,
 		Data: val,
 	})
 }

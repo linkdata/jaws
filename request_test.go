@@ -130,12 +130,6 @@ func TestRequest_Registrations(t *testing.T) {
 	is.Equal(ok, true)
 	is.Equal(fn, ef)
 
-	/*rq.SetEventFn(id, nil)
-	fn, ok = rq.GetEventFn(id)
-	is.Equal(ok, true)
-	is.Equal(fn, nil)
-	is.Equal(rq.OnEvent(id, ef), nil)*/
-
 	jid = rq.Register("foo")
 	is.True(jid != 0)
 	jid2 = rq.Register("")
@@ -343,9 +337,9 @@ func TestRequest_Trigger(t *testing.T) {
 	})
 
 	// broadcasts from ourselves should not invoke fn
-	rq.Trigger(Tag{"foo"}, "bar")
-	rq.Trigger(Tag{"err"}, "baz")
-	rq.jw.Trigger(Tag{"end"}, "") // to know when to stop
+	rq.Broadcast(Message{Dest: Tag{"foo"}, What: what.Input, Data: "bar"})
+	rq.Broadcast(Message{Dest: Tag{"err"}, What: what.Input, Data: "baz"})
+	rq.jw.Broadcast(Message{Dest: Tag{"end"}, What: what.Input, Data: ""}) // to know when to stop
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -357,7 +351,7 @@ func TestRequest_Trigger(t *testing.T) {
 	}
 
 	// global broadcast should invoke fn
-	rq.jw.Trigger(Tag{"foo"}, "bar")
+	rq.jw.Broadcast(Message{Dest: Tag{"foo"}, What: what.Input, Data: "bar"})
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -367,7 +361,7 @@ func TestRequest_Trigger(t *testing.T) {
 	}
 
 	// fn returning error should send an danger alert message
-	rq.jw.Trigger(Tag{"err"}, "omg")
+	rq.jw.Broadcast(Message{Dest: Tag{"err"}, What: what.Input, Data: "omg"})
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -402,7 +396,7 @@ func TestRequest_EventFnQueue(t *testing.T) {
 	})
 
 	for i := 0; i < cap(rq.outCh); i++ {
-		rq.jw.Trigger(Tag{"sleep"}, strconv.Itoa(i+1))
+		rq.jw.Broadcast(Message{Dest: Tag{"sleep"}, What: what.Input, Data: strconv.Itoa(i + 1)})
 	}
 
 	select {
@@ -446,7 +440,7 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 	defer tmr.Stop()
 	for {
 		select {
-		case rq.sendCh <- Message{Dest: Tag{"bomb"}, What: what.Trigger}:
+		case rq.sendCh <- Message{Dest: Tag{"bomb"}, What: what.Input}:
 		case <-rq.doneCh:
 			is.True(rq.panicked)
 			return
@@ -466,7 +460,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	rq.RegisterEventFn(Tag{"spew"}, func(_ *Request, evt what.What, id, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		if len(rq.outCh) < cap(rq.outCh) {
-			rq.jw.Trigger(Tag{"spew"}, "")
+			rq.jw.Broadcast(Message{Dest: Tag{"spew"}, What: what.Input})
 		} else {
 			atomic.StoreInt32(&spewState, 1)
 			for atomic.LoadInt32(&spewState) == 1 {
@@ -477,7 +471,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	})
 	rq.Register(Tag{"foo"})
 
-	rq.jw.Trigger(Tag{"spew"}, "")
+	rq.jw.Broadcast(Message{Dest: Tag{"spew"}, What: what.Input})
 
 	// wait for the event fn to be in hold state
 	waited := 0
@@ -642,7 +636,7 @@ func TestRequest_OnTrigger(t *testing.T) {
 	rq := newTestRequest(is)
 	tag := Tag{elemId}
 	defer rq.Close()
-	is.NoErr(rq.OnTrigger(elemId, func(rq *Request, jidstr string) error {
+	is.NoErr(rq.OnTrigger(tag, func(rq *Request, jidstr string) error {
 		defer close(gotCall)
 		is.True(rq.wantMessage(&Message{Dest: tag}))
 		jid := JidParseString(jidstr)
@@ -651,7 +645,7 @@ func TestRequest_OnTrigger(t *testing.T) {
 		is.True(elem != nil)
 		return nil
 	}))
-	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, tag), What: what.Trigger, Data: elemVal}
+	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, tag), What: what.Input, Data: elemVal}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()

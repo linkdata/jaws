@@ -6,12 +6,12 @@ import "strings"
 type What uint8
 
 const (
-	None What = iota
+	invalid What = iota
 	// Commands not associated with an Element
-	Reload
-	Redirect
-	Alert
-	Order // Re-order a set of elements
+	Reload   // Tells browser to reload the current URL
+	Redirect // Tells browser to load another URL
+	Alert    // Display (if using Bootstrap) an alert message
+	Order    // Re-order a set of elements
 	// Element manipulation
 	Inner   // Set the elements inner HTML
 	Delete  // Delete the element
@@ -19,18 +19,17 @@ const (
 	Remove  // Remove child element
 	Insert  // Insert child element
 	Append  // Append child element
-	SAttr
-	RAttr
-	SClass
-	RClass
-	Value
-	// Element events
+	SAttr   // Set element attribute
+	RAttr   // Remove element attribute
+	SClass  // Set element class
+	RClass  // Remove element class
+	Value   // Set element value
+	// Element input events
 	Input
 	Click
-	// Meta events
-	Trigger
-	Hook
-	_Invalid
+	// Meta
+	Update // Used for update scheduling
+	Hook   // Calls event handler synchronously, used for tests
 )
 
 func (w What) IsCommand() bool {
@@ -38,12 +37,12 @@ func (w What) IsCommand() bool {
 }
 
 func (w What) IsValid() bool {
-	return w != _Invalid
+	return w != invalid
 }
 
 func Parse(s string) What {
 	if s == "" {
-		return None
+		return Update
 	}
 	for i := 0; i < len(_What_index)-1; i++ {
 		if s == _What_name[_What_index[i]:_What_index[i+1]] {
@@ -55,5 +54,5 @@ func Parse(s string) What {
 			return What(i)
 		}
 	}
-	return _Invalid
+	return invalid
 }

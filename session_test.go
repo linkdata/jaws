@@ -195,7 +195,7 @@ func TestSession_Delete(t *testing.T) {
 
 	ts.rq.Send(Message{
 		Dest: Tag{"byebye"},
-		What: what.Trigger,
+		What: what.Input,
 		Data: "",
 	})
 
@@ -211,7 +211,7 @@ func TestSession_Delete(t *testing.T) {
 	is.NoErr(ctx.Err())
 	is.NoErr(err)
 	is.Equal(mt, websocket.MessageText)
-	is.Equal(string(b), "Reload\t\t\"\"\n")
+	is.Equal(string(b), "Reload\t\t\n")
 }
 
 func TestSession_Cleanup(t *testing.T) {
