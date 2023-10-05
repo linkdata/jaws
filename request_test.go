@@ -29,7 +29,7 @@ type testRequest struct {
 	readyCh     chan struct{}
 	doneCh      chan struct{}
 	inCh        chan wsMsg
-	outCh       chan wsMsg
+	outCh       chan string
 	bcastCh     chan Message
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -55,7 +55,7 @@ func newTestRequest(is *is.I) (tr *testRequest) {
 
 	tr.inCh = make(chan wsMsg)
 	tr.bcastCh = tr.Jaws.subscribe(tr.Request, 64)
-	tr.outCh = make(chan wsMsg, cap(tr.bcastCh))
+	tr.outCh = make(chan string, cap(tr.bcastCh))
 
 	// ensure subscription is processed
 	for i := 0; i <= cap(tr.Jaws.subCh); i++ {
@@ -82,10 +82,10 @@ func (tr *testRequest) Close() {
 	tr.jw.Close()
 }
 
-func fillWsCh(ch chan wsMsg) {
+func fillWsCh(ch chan string) {
 	for {
 		select {
-		case ch <- wsMsg{}:
+		case ch <- "":
 		default:
 			return
 		}
@@ -246,7 +246,9 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case msg := <-rq.outCh:
+	case msgstr := <-rq.outCh:
+		msg, ok := wsParse([]byte(msgstr))
+		is.True(ok)
 		elem := rq.GetElement(jid)
 		is.True(elem != nil)
 		is.Equal(msg, wsMsg{Jid: elem.jid, Data: "bar", What: what.Inner})
@@ -370,9 +372,11 @@ func TestRequest_Trigger(t *testing.T) {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case msg := <-rq.outCh:
-		is.Equal(msg.Jid, Jid(-1))
-		is.Equal(msg.What, what.Alert)
-		is.Equal(msg.Data, "danger\nomg")
+		is.Equal(msg, (&wsMsg{
+			Data: "danger\nomg",
+			Jid:  Jid(0),
+			What: what.Alert,
+		}).Format())
 	}
 }
 
@@ -571,7 +575,7 @@ func TestRequest_Sends(t *testing.T) {
 		Data: "bar",
 	})
 
-	rq.Alert("info", "<html>\nnot-escaped")
+	rq.Alert("info", "<html>\nnot\tescaped")
 	rq.AlertError(errors.New("<html>\nshould-be-escaped"))
 	rq.Redirect("some-url")
 
@@ -582,8 +586,13 @@ func TestRequest_Sends(t *testing.T) {
 			t.Log("timeout")
 			t.FailNow()
 			done = true
-		case msg, ok := <-rq.outCh:
+		case msgstr, ok := <-rq.outCh:
 			if ok {
+				msg, parseok := wsParse([]byte(msgstr))
+				if !parseok {
+					t.Log(strconv.Quote(msgstr), msg)
+					is.Fail()
+				}
 				switch rq.GetElement(msg.Jid) {
 				case setAttrElement:
 					gotSetAttr = msg.Format()
@@ -612,17 +621,17 @@ func TestRequest_Sends(t *testing.T) {
 		}
 	}
 
-	if !strings.HasSuffix(gotSetAttr, "\nbar\nbaz") {
+	if !strings.HasSuffix(gotSetAttr, "\t\"bar\\nbaz\"\n") {
 		t.Log(strconv.Quote(gotSetAttr))
 		is.Fail()
 	}
-	if !(strings.HasPrefix(gotRemoveAttr, "RAttr\n") && strings.HasSuffix(gotRemoveAttr, "\nbar")) {
+	if !(strings.HasPrefix(gotRemoveAttr, "RAttr\t") && strings.HasSuffix(gotRemoveAttr, "\t\"bar\"\n")) {
 		t.Log(strconv.Quote(gotRemoveAttr))
 		is.Fail()
 	}
-	is.Equal(gotRedirect, "Redirect\nsome-url")
-	is.Equal(gotInfoAlert, "Alert\ninfo\n<html>\nnot-escaped")
-	is.Equal(gotDangerAlert, "Alert\ndanger\n&lt;html&gt;\nshould-be-escaped")
+	is.Equal(gotRedirect, "Redirect\t\t\"some-url\"\n")
+	is.Equal(gotInfoAlert, "Alert\t\t\"info\\n<html>\\nnot\\tescaped\"\n")
+	is.Equal(gotDangerAlert, "Alert\t\t\"danger\\n&lt;html&gt;\\nshould-be-escaped\"\n")
 }
 
 func TestRequest_OnTrigger(t *testing.T) {
@@ -816,7 +825,12 @@ func TestRequest_Number(t *testing.T) {
 		is.Fail()
 	case <-gotCall:
 		is.Fail()
-	case msg := <-rq.outCh:
+	case msgstr := <-rq.outCh:
+		msg, ok := wsParse([]byte(msgstr))
+		if !ok {
+			t.Log(strconv.Quote(msgstr))
+		}
+		is.True(ok)
 		is.Equal(msg.What, what.Alert)
 	}
 }
@@ -888,7 +902,9 @@ func TestRequest_Checkbox(t *testing.T) {
 		is.Fail()
 	case <-gotCall:
 		is.Fail()
-	case msg := <-rq.outCh:
+	case msgstr := <-rq.outCh:
+		msg, ok := wsParse([]byte(msgstr))
+		is.True(ok)
 		is.Equal(msg.What, what.Alert)
 	}
 }
@@ -942,7 +958,9 @@ func TestRequest_Date(t *testing.T) {
 		is.Fail()
 	case <-gotCall:
 		is.Fail()
-	case msg := <-rq.outCh:
+	case msgstr := <-rq.outCh:
+		msg, ok := wsParse([]byte(msgstr))
+		is.True(ok)
 		if msg.What != what.Alert {
 			log.Println(len(rq.outCh), msg)
 		}

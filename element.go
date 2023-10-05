@@ -164,9 +164,9 @@ func (e *Element) Remove(htmlId string) {
 }
 
 func (e *Element) Hide() {
-	e.queue(what.Hide, "")
+	e.SetAttr("hidden", "")
 }
 
 func (e *Element) Show() {
-	e.queue(what.Show, "")
+	e.RemoveAttr("hidden")
 }

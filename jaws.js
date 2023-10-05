@@ -45,7 +45,7 @@ function jawsHandler(e) {
 			}
 			e.stopPropagation();
 		}
-		jaws.send(e.type + "\n" + elem.id + "\n" + val);
+		jaws.send(e.type + "\t" + elem.id + "\t" + JSON.stringify(val) + "\n");
 	}
 }
 
@@ -62,7 +62,10 @@ function jawsAttach(topElem) {
 	return topElem;
 }
 
-function jawsAlert(type, message) {
+function jawsAlert(data) {
+	var lines = data.split('\n');
+	var type = lines.shift();
+	var message = lines.join('\n');
 	if (typeof bootstrap !== 'undefined') {
 		var alertsElem = document.getElementById('jaws-alerts');
 		if (alertsElem) {
@@ -94,22 +97,6 @@ function jawsList(idlist) {
 		delete elements[i].dataset.jidsort;
 	}
 	return elements;
-}
-
-function jawsHide(idlist) {
-	var i;
-	var elements = jawsList(idlist);
-	for (i = 0; i < elements.length; i++) {
-		elements[i].hidden = true;
-	}
-}
-
-function jawsShow(idlist) {
-	var i;
-	var elements = jawsList(idlist);
-	for (i = 0; i < elements.length; i++) {
-		elements[i].hidden = false;
-	}
 }
 
 function jawsOrder(idlist) {
@@ -229,30 +216,46 @@ function jawsWhere(elem, pos) {
 	return where;
 }
 
+function jawsInsert(elem, data) {
+	var lines = data.split('\n');
+	var where = jawsWhere(elem, lines.shift());
+	if (where instanceof Node) {
+		elem.insertBefore(jawsAttach(jawsElement(lines.join('\n'))), where);
+	}
+}
+
+function jawsSetAttr(elem, data) {
+	var lines = data.split('\n');
+	elem.setAttribute(lines.shift(), lines.join('\n'));
+}
+
 function jawsMessage(e) {
-	var lines = e.data.split('\n');
-	var what = lines.shift();
+	var orders = e.data.split('\n');
+	var i;
+	for (i = 0; i < orders.length; i++) {
+		if (orders[i]) {
+			var parts = orders[i].split('\t');
+			jawsPerform(parts.shift(), parts.shift(), parts.shift());
+		}
+	}
+}
+
+function jawsPerform(what, id, data) {
+	data = JSON.parse(data);
 	switch (what) {
 		case 'Reload':
 			window.location.reload();
 			return;
 		case 'Redirect':
-			window.location.assign(lines.shift());
+			window.location.assign(data);
 			return;
 		case 'Alert':
-			jawsAlert(lines.shift(), lines.join('\n'));
-			return;
-		case 'Hide':
-			jawsHide(lines.join('\n'));
-			return;
-		case 'Show':
-			jawsShow(lines.join('\n'));
+			jawsAlert(data);
 			return;
 		case 'Order':
-			jawsOrder(lines.join('\n'));
+			jawsOrder(data);
 			return;
 	}
-	var id = lines.shift();
 	var elem = document.getElementById(id);
 	if (elem === null) {
 		console.log("jaws: id not found: " + id);
@@ -261,44 +264,41 @@ function jawsMessage(e) {
 	var where = null;
 	switch (what) {
 		case 'Inner':
-			elem.innerHTML = lines.join('\n');
+			elem.innerHTML = data;
 			jawsAttach(elem);
 			break;
 		case 'Value':
-			jawsSetValue(elem, lines.join('\n'));
+			jawsSetValue(elem, data);
 			break;
 		case 'Append':
-			elem.appendChild(jawsAttach(jawsElement(lines.join('\n'))));
+			elem.appendChild(jawsAttach(jawsElement(data)));
 			break;
 		case 'Replace':
-			elem.replaceWith(jawsAttach(jawsElement(lines.join('\n'))));
+			elem.replaceWith(jawsAttach(jawsElement(data)));
 			break;
 		case 'Delete':
 			elem.remove();
 			break;
 		case 'Remove':
-			where = jawsWhere(elem, lines.shift());
+			where = jawsWhere(elem, data);
 			if (where instanceof Node) {
 				elem.removeChild(where);
 			}
 			break;
 		case 'Insert':
-			where = jawsWhere(elem, lines.shift());
-			if (where instanceof Node) {
-				elem.insertBefore(jawsAttach(jawsElement(lines.join('\n'))), where);
-			}
+			jawsInsert(elem, data);
 			break;
 		case 'SAttr':
-			elem.setAttribute(lines.shift(), lines.join('\n'));
+			jawsSetAttr(elem, data);
 			break;
 		case 'RAttr':
-			elem.removeAttribute(lines.shift());
+			elem.removeAttribute(data);
 			break;
 		case 'SClass':
-			elem.classList.add(lines.shift());
+			elem.classList.add(data);
 			break;
 		case 'RClass':
-			elem.classList.remove(lines.shift());
+			elem.classList.remove(data);
 			break;
 		default:
 			console.log("jaws: unknown operation: " + what);

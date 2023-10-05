@@ -10,8 +10,8 @@ import (
 )
 
 func Fuzz_wsParse(f *testing.F) {
-	f.Add([]byte("\n\n"))
-	f.Add([]byte("Inner\nJid.0\ndata\nline"))
+	f.Add([]byte("\t\t\"\"\n"))
+	f.Add([]byte("Inner\tJid.1\t\"data\\nline\"\n"))
 	f.Fuzz(func(t *testing.T, a []byte) {
 		if msg, ok := wsParse(a); ok {
 			b := msg.Append(nil)

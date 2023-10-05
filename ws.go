@@ -1,11 +1,9 @@
 package jaws
 
 import (
-	"bytes"
 	"context"
 	"net/http"
 
-	"github.com/linkdata/jaws/what"
 	"nhooyr.io/websocket"
 )
 
@@ -18,10 +16,10 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err = rq.onConnect(); err == nil {
 			incomingMsgCh := make(chan wsMsg)
 			broadcastMsgCh := rq.Jaws.subscribe(rq, 1)
-			outboundMsgCh := make(chan wsMsg, cap(broadcastMsgCh))
+			outboundCh := make(chan string, cap(broadcastMsgCh))
 			go wsReader(rq.ctx, rq.cancelFn, rq.Jaws.Done(), incomingMsgCh, ws) // closes incomingMsgCh
-			go wsWriter(rq.ctx, rq.cancelFn, rq.Jaws.Done(), outboundMsgCh, ws) // calls ws.Close()
-			rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh)            // unsubscribes broadcastMsgCh, closes outboundMsgCh
+			go wsWriter(rq.ctx, rq.cancelFn, rq.Jaws.Done(), outboundCh, ws)    // calls ws.Close()
+			rq.process(broadcastMsgCh, incomingMsgCh, outboundCh)               // unsubscribes broadcastMsgCh, closes outboundMsgCh
 		} else {
 			defer ws.Close(websocket.StatusNormalClosure, err.Error())
 			var msg wsMsg
@@ -62,30 +60,10 @@ func wsReader(ctx context.Context, ccf context.CancelCauseFunc, jawsDoneCh <-cha
 	}
 }
 
-// wsParse parses an incoming text buffer into a message.
-func wsParse(txt []byte) (wsMsg, bool) {
-	txt = bytes.ToValidUTF8(txt, nil) // we don't trust client browsers
-	if nl1 := bytes.IndexByte(txt, '\n'); nl1 > 0 {
-		if nl2 := bytes.IndexByte(txt[nl1+1:], '\n'); nl2 >= 0 {
-			nl2 += nl1 + 1
-			// What       ... Jid              ... Data
-			// txt[0:nl1] ... txt[nl1+1 : nl2] ... txt[nl2+1:]
-			if jid := JidParseString(string(txt[nl1+1 : nl2])); jid >= 0 {
-				return wsMsg{
-					Data: string(txt[nl2+1:]),
-					Jid:  jid,
-					What: what.Parse(string(txt[0:nl1])),
-				}, true
-			}
-		}
-	}
-	return wsMsg{}, false
-}
-
 // wsWriter reads JaWS messages from outboundMsgCh, formats them and writes them to the websocket.
 //
 // Closes the websocket on exit.
-func wsWriter(ctx context.Context, ccf context.CancelCauseFunc, jawsDoneCh <-chan struct{}, outboundMsgCh <-chan wsMsg, ws *websocket.Conn) {
+func wsWriter(ctx context.Context, ccf context.CancelCauseFunc, jawsDoneCh <-chan struct{}, outboundCh <-chan string, ws *websocket.Conn) {
 	defer ws.Close(websocket.StatusNormalClosure, "")
 	var err error
 	for err == nil {
@@ -94,11 +72,11 @@ func wsWriter(ctx context.Context, ccf context.CancelCauseFunc, jawsDoneCh <-cha
 			return
 		case <-jawsDoneCh:
 			return
-		case msg, ok := <-outboundMsgCh:
+		case msg, ok := <-outboundCh:
 			if !ok {
 				return
 			}
-			err = ws.Write(ctx, websocket.MessageText, msg.Append(nil))
+			err = ws.Write(ctx, websocket.MessageText, []byte(msg))
 		}
 	}
 	if ccf != nil {

@@ -11,8 +11,6 @@ const (
 	Reload
 	Redirect
 	Alert
-	Hide  // Set the "hidden" attribute on a set of elements
-	Show  // Remove the "hidden" attribute from a set of elements
 	Order // Re-order a set of elements
 	// Element manipulation
 	Inner   // Set the elements inner HTML

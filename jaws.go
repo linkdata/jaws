@@ -444,22 +444,6 @@ func (jw *Jaws) Order(tags []interface{}) {
 	})
 }
 
-// Hide sets the HTML "hidden" attribute on HTML elements matching the given tags in all Requests.
-func (jw *Jaws) Hide(tags ...interface{}) {
-	jw.Broadcast(Message{
-		What: what.Hide,
-		Data: TagExpand(nil, tags, nil),
-	})
-}
-
-// Show removes the HTML "hidden" attribute from HTML elements matching the given tags in all Requests.
-func (jw *Jaws) Show(tags ...interface{}) {
-	jw.Broadcast(Message{
-		What: what.Show,
-		Data: TagExpand(nil, tags, nil),
-	})
-}
-
 // Count returns the number of requests waiting for their WebSocket callbacks.
 func (jw *Jaws) Pending() (n int) {
 	jw.mu.RLock()

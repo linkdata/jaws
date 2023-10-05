@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -457,12 +458,12 @@ func (rq *Request) Done() (ch <-chan struct{}) {
 }
 
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
-func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsMsg, outboundMsgCh chan<- wsMsg) {
+func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsMsg, outboundCh chan<- string) {
 	jawsDoneCh := rq.Jaws.Done()
 	ctxDoneCh := rq.Done()
 	eventDoneCh := make(chan struct{})
-	eventCallCh := make(chan eventFnCall, cap(outboundMsgCh))
-	go rq.eventCaller(eventCallCh, outboundMsgCh, eventDoneCh)
+	eventCallCh := make(chan eventFnCall, cap(outboundCh))
+	go rq.eventCaller(eventCallCh, outboundCh, eventDoneCh)
 
 	defer func() {
 		rq.killSession()
@@ -475,7 +476,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			case <-rq.sendCh:
 			case <-incomingMsgCh:
 			case <-eventDoneCh:
-				close(outboundMsgCh)
+				close(outboundCh)
 				if x := recover(); x != nil {
 					var err error
 					var ok bool
@@ -497,7 +498,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		var ok bool
 
 		if len(wsQueue) > 0 {
-			wsQueue = rq.sendQueue(outboundMsgCh, wsQueue)
+			wsQueue = rq.sendQueue(outboundCh, wsQueue)
 		}
 
 		// empty the dirty tags list and call JawsUpdate()
@@ -517,7 +518,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		rq.mu.RUnlock()
 
 		if len(wsQueue) > 0 {
-			wsQueue = rq.sendQueue(outboundMsgCh, wsQueue)
+			wsQueue = rq.sendQueue(outboundCh, wsQueue)
 		}
 
 		select {
@@ -587,9 +588,9 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		switch tagmsg.What {
 		case what.None:
 			// do nothing, but used for triggering updates
-		case what.Reload, what.Redirect, what.Show, what.Hide, what.Order, what.Alert:
+		case what.Reload, what.Redirect, what.Order, what.Alert:
 			wsQueue = append(wsQueue, wsMsg{
-				Jid:  -1,
+				Jid:  0,
 				Data: wsdata,
 				What: tagmsg.What,
 			})
@@ -633,61 +634,22 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 	}
 }
 
-func (rq *Request) send(outboundMsgCh chan<- wsMsg, msg wsMsg) {
-	if msg.What != what.Disregard {
-		select {
-		case <-rq.Jaws.Done():
-		case <-rq.Done():
-		case outboundMsgCh <- msg:
-		default:
-			panic(fmt.Errorf("jaws: %v: outbound message channel is full (%d) sending %s", rq, len(outboundMsgCh), msg))
-		}
+func (rq *Request) send(outboundCh chan<- string, s string) {
+	select {
+	case <-rq.Jaws.Done():
+	case <-rq.Done():
+	case outboundCh <- s:
+	default:
+		panic(fmt.Errorf("jaws: %v: outbound message channel is full (%d) sending %s", rq, len(outboundCh), s))
 	}
 }
 
-func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg, wsQueue []wsMsg) []wsMsg {
-	// compress element Show and Hide commands
-	var toHide, toShow []byte
-	hideShow := make(map[Jid]what.What)
-	for i, msg := range wsQueue {
-		if msg.Data == "" && msg.Jid > 0 {
-			switch msg.What {
-			case what.Hide, what.Show:
-				hideShow[msg.Jid] = msg.What
-				wsQueue[i].What = what.Disregard
-			}
-		}
-	}
-	for k, v := range hideShow {
-		switch v {
-		case what.Hide:
-			toHide = append(toHide, ' ')
-			toHide = k.Append(toHide)
-		case what.Show:
-			toShow = append(toShow, ' ')
-			toShow = k.Append(toShow)
-		}
-	}
-
-	if len(toHide) > 0 {
-		rq.send(outboundMsgCh, wsMsg{
-			Data: string(toHide),
-			Jid:  -1,
-			What: what.Hide,
-		})
-	}
-
+func (rq *Request) sendQueue(outboundCh chan<- string, wsQueue []wsMsg) []wsMsg {
+	var sb strings.Builder
 	for _, msg := range wsQueue {
-		rq.send(outboundMsgCh, msg)
+		sb.WriteString(msg.Format())
 	}
-
-	if len(toShow) > 0 {
-		rq.send(outboundMsgCh, wsMsg{
-			Data: string(toShow),
-			Jid:  -1,
-			What: what.Show,
-		})
-	}
+	rq.send(outboundCh, sb.String())
 
 	return wsQueue[:0]
 }
@@ -728,7 +690,7 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 }
 
 // eventCaller calls event functions
-func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh chan<- wsMsg, eventDoneCh chan<- struct{}) {
+func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundCh chan<- string, eventDoneCh chan<- struct{}) {
 	defer close(eventDoneCh)
 	for call := range eventCallCh {
 		var err error
@@ -756,7 +718,7 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 			var m wsMsg
 			m.FillAlert(err)
 			select {
-			case outboundMsgCh <- m:
+			case outboundCh <- m.Format():
 			default:
 				_ = rq.Jaws.Log(fmt.Errorf("jaws: outboundMsgCh full sending event error '%s'", err.Error()))
 			}

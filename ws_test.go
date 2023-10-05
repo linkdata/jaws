@@ -222,7 +222,7 @@ func TestWriter_SendsThePayload(t *testing.T) {
 	ts := newTestServer(is)
 	defer ts.Close()
 
-	outCh := make(chan wsMsg)
+	outCh := make(chan string)
 	defer close(outCh)
 	client, server := Pipe()
 
@@ -242,7 +242,7 @@ func TestWriter_SendsThePayload(t *testing.T) {
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case outCh <- msg:
+	case outCh <- msg.Format():
 	}
 
 	select {
@@ -268,7 +268,7 @@ func TestWriter_RespectsContext(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	outCh := make(chan wsMsg)
+	outCh := make(chan string)
 	defer close(outCh)
 	client, server := Pipe()
 	client.CloseRead(context.Background())
@@ -294,7 +294,7 @@ func TestWriter_RespectsJawsDone(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	outCh := make(chan wsMsg)
+	outCh := make(chan string)
 	defer close(outCh)
 	client, server := Pipe()
 	client.CloseRead(ts.ctx)
@@ -319,7 +319,7 @@ func TestWriter_RespectsOutboundClosed(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	outCh := make(chan wsMsg)
+	outCh := make(chan string)
 	client, server := Pipe()
 	client.CloseRead(ts.ctx)
 
@@ -345,7 +345,7 @@ func TestWriter_ReportsError(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	outCh := make(chan wsMsg)
+	outCh := make(chan string)
 	client, server := Pipe()
 	client.CloseRead(ts.ctx)
 	server.Close(websocket.StatusNormalClosure, "")
@@ -359,7 +359,7 @@ func TestWriter_ReportsError(t *testing.T) {
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case outCh <- msg:
+	case outCh <- msg.Format():
 	}
 
 	select {
@@ -426,9 +426,9 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 		txt  string
 		want wsMsg
 	}{
-		{"shortest", "None\nJid.0\n", wsMsg{Jid: Jid(0)}},
-		{"normal", "Input\nfooid\nc", wsMsg{Jid: Jid(0), What: what.Input, Data: "c"}},
-		{"newline", "Click\nJid.3\nc\nd", wsMsg{Jid: Jid(3), What: what.Click, Data: "c\nd"}},
+		{"shortest", "\t\t\"\"\n", wsMsg{}},
+		{"normal", "Input\tfooid\t\"c\"\n", wsMsg{Jid: Jid(0), What: what.Input, Data: "c"}},
+		{"newline", "Click\tJid.3\t\"c\\nd\"\n", wsMsg{Jid: Jid(3), What: what.Click, Data: "c\nd"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -95,15 +95,11 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 
 	for _, elem := range toAppend {
 		var sb strings.Builder
-		elem.ui.JawsRender(elem, &sb, []any{"hidden"})
+		elem.ui.JawsRender(elem, &sb, nil)
 		e.Append(template.HTML(sb.String()))
 	}
 
 	if !sameOrder(oldOrder, orderData) {
 		e.Order(orderData)
-	}
-
-	for _, elem := range toAppend {
-		elem.Show()
 	}
 }
