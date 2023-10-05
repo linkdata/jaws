@@ -29,9 +29,7 @@ func (m *wsMsg) Append(b []byte) []byte {
 		}
 		b = append(b, '\t')
 	}
-	if len(m.Data) > 0 {
-		b = strconv.AppendQuote(b, m.Data)
-	}
+	b = strconv.AppendQuote(b, m.Data)
 	b = append(b, '\n')
 	return b
 }
