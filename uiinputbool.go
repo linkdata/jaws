@@ -25,9 +25,9 @@ func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string,
 
 func (ui *UiInputBool) JawsUpdate(e *Element) {
 	if ui.JawsGetBool(e) {
-		e.SetAttr("checked", "")
+		e.SetValue("true")
 	} else {
-		e.RemoveAttr("checked")
+		e.SetValue("false")
 	}
 }
 
