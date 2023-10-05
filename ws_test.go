@@ -411,13 +411,17 @@ func Test_wsParse_IncompleteFails(t *testing.T) {
 	is.True(!ok)
 	is.Equal(got, wsMsg{})
 
-	got, ok = wsParse([]byte("\n"))
+	got, ok = wsParse([]byte("\t\t")) // missing ending linefeed
 	is.True(!ok)
-	is.Equal(got, wsMsg{}) // missing Elem
+	is.Equal(got, wsMsg{})
 
-	got, ok = wsParse([]byte("id\n"))
+	got, ok = wsParse([]byte("\t\n")) // just one tab
 	is.True(!ok)
-	is.Equal(got, wsMsg{}) // missing What
+	is.Equal(got, wsMsg{})
+
+	got, ok = wsParse([]byte("\n\t\t\n")) // newline instead of What
+	is.True(!ok)
+	is.Equal(got, wsMsg{})
 }
 
 func Test_wsParse_CompletePasses(t *testing.T) {
@@ -426,7 +430,8 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 		txt  string
 		want wsMsg
 	}{
-		{"shortest", "\t\t\"\"\n", wsMsg{}},
+		{"shortest", "\t\t\n", wsMsg{}},
+		{"unquoted", "Input\tJid.1\ttrue\n", wsMsg{Jid: Jid(1), What: what.Input, Data: "true"}},
 		{"normal", "Input\tfooid\t\"c\"\n", wsMsg{Jid: Jid(0), What: what.Input, Data: "c"}},
 		{"newline", "Click\tJid.3\t\"c\\nd\"\n", wsMsg{Jid: Jid(3), What: what.Click, Data: "c\nd"}},
 	}

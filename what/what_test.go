@@ -13,10 +13,12 @@ func TestParse(t *testing.T) {
 		want What
 	}{
 		{"blank is None", "", None},
+		{"None", "None", None},
 		{"Inner", "Inner", Inner},
 		{"inner", "inner", Inner},
-		{"innerr", "innerr", None},
+		{"innerr", "innerr", _Invalid},
 		{"last", lastWhat.String(), lastWhat},
+		{"newline", "\n", _Invalid},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -27,8 +29,14 @@ func TestParse(t *testing.T) {
 	}
 }
 
-func TestIsCommand(t *testing.T) {
-	if None.IsCommand() {
+func TestIsCommandAndValid(t *testing.T) {
+	if _Invalid.IsValid() {
+		t.Fail()
+	}
+	if !None.IsValid() {
+		t.Fail()
+	}
+	if _Invalid.IsCommand() {
 		t.Fail()
 	}
 	if What(255).IsCommand() {

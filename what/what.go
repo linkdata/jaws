@@ -30,25 +30,30 @@ const (
 	// Meta events
 	Trigger
 	Hook
-	Disregard
+	_Invalid
 )
 
 func (w What) IsCommand() bool {
 	return w <= Order
 }
 
+func (w What) IsValid() bool {
+	return w != _Invalid
+}
+
 func Parse(s string) What {
-	if s != "" {
-		for i := 0; i < len(_What_index)-1; i++ {
-			if s == _What_name[_What_index[i]:_What_index[i+1]] {
-				return What(i)
-			}
-		}
-		for i := 0; i < len(_What_index)-1; i++ {
-			if strings.EqualFold(s, _What_name[_What_index[i]:_What_index[i+1]]) {
-				return What(i)
-			}
+	if s == "" {
+		return None
+	}
+	for i := 0; i < len(_What_index)-1; i++ {
+		if s == _What_name[_What_index[i]:_What_index[i+1]] {
+			return What(i)
 		}
 	}
-	return None
+	for i := 0; i < len(_What_index)-1; i++ {
+		if strings.EqualFold(s, _What_name[_What_index[i]:_What_index[i+1]]) {
+			return What(i)
+		}
+	}
+	return _Invalid
 }

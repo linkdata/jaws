@@ -6,6 +6,7 @@ import (
 	"html"
 	"strconv"
 
+	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -43,21 +44,27 @@ func (m *wsMsg) Format() string {
 // wsParse parses an incoming text buffer into a message.
 func wsParse(txt []byte) (wsMsg, bool) {
 	txt = bytes.ToValidUTF8(txt, nil) // we don't trust client browsers
-	if nl1 := bytes.IndexByte(txt, '\t'); nl1 >= 0 {
-		if nl2 := bytes.IndexByte(txt[nl1+1:], '\t'); nl2 >= 0 {
-			nl2 += nl1 + 1
-			// What       ... Jid              ... Data
-			// txt[0:nl1] ... txt[nl1+1 : nl2] ... txt[nl2+1:len(txt)-1] ... \n
-			if data, err := strconv.Unquote(string(txt[nl2+1 : len(txt)-1])); err == nil {
-				if jid := JidParseString(string(txt[nl1+1 : nl2])); jid >= 0 {
+	if len(txt) > 0 && txt[len(txt)-1] == '\n' {
+		if nl1 := bytes.IndexByte(txt, '\t'); nl1 >= 0 {
+			if nl2 := bytes.IndexByte(txt[nl1+1:], '\t'); nl2 >= 0 {
+				nl2 += nl1 + 1
+				// What       ... Jid              ... Data                  ... EOL
+				// txt[0:nl1] ... txt[nl1+1 : nl2] ... txt[nl2+1:len(txt)-1] ... \n
+				if wht := what.Parse(string(txt[0:nl1])); wht.IsValid() {
+					data := string(txt[nl2+1 : len(txt)-1])
+					if txt[nl2+1] == '"' {
+						if s, err := strconv.Unquote(data); err == nil {
+							data = s
+						} else if deadlock.Debug {
+							panic(fmt.Errorf("%v: <%s>", err, data))
+						}
+					}
 					return wsMsg{
 						Data: data,
-						Jid:  jid,
-						What: what.Parse(string(txt[0:nl1])),
+						Jid:  JidParseString(string(txt[nl1+1 : nl2])),
+						What: wht,
 					}, true
 				}
-			} else {
-				panic(fmt.Errorf("%v: <%s>", err, string(txt[nl2+1:len(txt)-1])))
 			}
 		}
 	}
