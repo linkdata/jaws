@@ -10,16 +10,26 @@ import (
 type Jid int64
 
 const JidPrefix = "Jid." // String prefixing HTML ID's based on Jid's.
+const JidInvalid = Jid(-1)
+
+func (jid Jid) IsValid() bool {
+	return jid >= 0
+}
 
 // AppendInt appends just the text format of the Jid's numerical value.
 func (jid Jid) AppendInt(dst []byte) []byte {
-	return strconv.AppendInt(dst, int64(jid), 10)
+	if jid > 0 {
+		dst = strconv.AppendInt(dst, int64(jid), 10)
+	}
+	return dst
 }
 
 // Append appends the unquoted string format of the Jid.
 func (jid Jid) Append(dst []byte) []byte {
-	dst = append(dst, []byte(JidPrefix)...)
-	dst = jid.AppendInt(dst)
+	if jid > 0 {
+		dst = append(dst, []byte(JidPrefix)...)
+		dst = jid.AppendInt(dst)
+	}
 	return dst
 }
 
@@ -44,27 +54,30 @@ func (jid Jid) AppendStartTagAttr(dst []byte, startTag string) []byte {
 
 // JidParseInt parses a Jid integer and returns it as a Jid.
 //
-// Returns zero if it's not a valid Jid or an error occurs.
+// Returns JidInvalid if it's not a valid Jid or an error occurs.
 func JidParseInt(s string) Jid {
 	if n, err := strconv.ParseInt(s, 10, 32); err == nil && n >= 0 {
 		return Jid(n)
 	}
-	return 0
+	return JidInvalid
 }
 
 // JidParseString parses an unquoted Jid string (e.g. `Jid.2`) and returns the Jid value (e.g. Jid(2)).
 //
-// Returns zero if it's not a valid Jid string.
+// Returns JidInvalid if it's not a valid Jid string.
 func JidParseString(s string) Jid {
+	if s == "" {
+		return 0
+	}
 	if strings.HasPrefix(s, JidPrefix) {
 		return JidParseInt(s[len(JidPrefix):])
 	}
-	return 0
+	return JidInvalid
 }
 
 // String returns the unquoted string representation of the Jid.
 func (jid Jid) String() string {
-	if jid >= 0 {
+	if jid > 0 {
 		return string(jid.Append(nil))
 	}
 	return ""

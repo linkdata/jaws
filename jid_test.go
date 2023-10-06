@@ -13,12 +13,12 @@ func TestParseJid(t *testing.T) {
 	}{
 		{"zero", JidPrefix + "0", 0},
 		{"one", JidPrefix + "1", 1},
-		{"negative", JidPrefix + "-1", 0},
+		{"negative", JidPrefix + "-1", JidInvalid},
 		{"empty string", "", 0},
-		{"random text", "hello, world!", 0},
-		{"missing number", JidPrefix, 0},
-		{"overflow", JidPrefix + "42949672950", 0},
-		{"spaces", JidPrefix + " 1", 0},
+		{"random text", "hello, world!", JidInvalid},
+		{"missing number", JidPrefix, JidInvalid},
+		{"overflow", JidPrefix + "42949672950", JidInvalid},
+		{"spaces", JidPrefix + " 1", JidInvalid},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -36,7 +36,7 @@ func TestJid_String(t *testing.T) {
 		want string
 	}{
 		{"negative", -1, ""},
-		{"zero", 0, JidPrefix + "0"},
+		{"zero", 0, ""},
 		{"one", 1, JidPrefix + "1"},
 	}
 	for _, tt := range tests {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"strconv"
+	"strings"
 
 	"github.com/linkdata/jaws/what"
 )
@@ -40,26 +41,27 @@ func (m *wsMsg) Format() string {
 
 // wsParse parses an incoming text buffer into a message.
 func wsParse(txt []byte) (wsMsg, bool) {
-	txt = bytes.ToValidUTF8(txt, nil) // we don't trust client browsers
-	if len(txt) > 0 && txt[len(txt)-1] == '\n' {
+	if len(txt) > 2 && txt[len(txt)-1] == '\n' {
 		if nl1 := bytes.IndexByte(txt, '\t'); nl1 >= 0 {
 			if nl2 := bytes.IndexByte(txt[nl1+1:], '\t'); nl2 >= 0 {
 				nl2 += nl1 + 1
 				// What       ... Jid              ... Data                  ... EOL
 				// txt[0:nl1] ... txt[nl1+1 : nl2] ... txt[nl2+1:len(txt)-1] ... \n
 				if wht := what.Parse(string(txt[0:nl1])); wht.IsValid() {
-					data := string(txt[nl2+1 : len(txt)-1])
-					if txt[nl2+1] == '"' {
-						var err error
-						if data, err = strconv.Unquote(data); err != nil {
-							return wsMsg{}, false
+					if jid := JidParseString(string(txt[nl1+1 : nl2])); jid.IsValid() {
+						data := string(txt[nl2+1 : len(txt)-1])
+						if txt[nl2+1] == '"' {
+							var err error
+							if data, err = strconv.Unquote(data); err != nil {
+								return wsMsg{}, false
+							}
 						}
+						return wsMsg{
+							Data: strings.ToValidUTF8(data, ""),
+							Jid:  jid,
+							What: wht,
+						}, true
 					}
-					return wsMsg{
-						Data: data,
-						Jid:  JidParseString(string(txt[nl1+1 : nl2])),
-						What: wht,
-					}, true
 				}
 			}
 		}
