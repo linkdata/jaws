@@ -2,7 +2,6 @@ package jaws
 
 import (
 	"bytes"
-	"fmt"
 	"html"
 	"strconv"
 	"strings"
@@ -16,10 +15,6 @@ type wsMsg struct {
 	Data string    // data to send
 	Jid  Jid       // Jid to send, or negative to not send
 	What what.What // command
-}
-
-func (m *wsMsg) IsValid() bool {
-	return m.What.IsValid()
 }
 
 func (m *wsMsg) Append(b []byte) []byte {
@@ -68,10 +63,6 @@ func wsParse(txt []byte) (wsMsg, bool) {
 		}
 	}
 	return wsMsg{}, false
-}
-
-func (m *wsMsg) String() string {
-	return fmt.Sprintf("wsMsg{%s, %d, %q}", m.What, m.Jid, m.Data)
 }
 
 func (m *wsMsg) FillAlert(err error) {
