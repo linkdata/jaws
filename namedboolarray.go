@@ -72,10 +72,10 @@ func (nba *NamedBoolArray) Set(name string, state bool) (changed bool) {
 			changed = nb.Set(state) || changed
 		}
 	}
-	if state && changed && !nba.Multi {
+	if state && !nba.Multi {
 		for _, nb := range nba.data {
 			if nb.Name() != name {
-				nb.Set(false)
+				changed = nb.Set(false) || changed
 			}
 		}
 	}
