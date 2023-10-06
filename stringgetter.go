@@ -36,5 +36,5 @@ func makeStringGetter(v interface{}) StringGetter {
 	case *atomic.Value:
 		return atomicGetter{v}
 	}
-	panic(fmt.Sprintf("expected jaws.StringGetter or string, not %T", v))
+	panic(fmt.Errorf("expected jaws.StringGetter or string, not %T", v))
 }

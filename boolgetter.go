@@ -33,5 +33,5 @@ func makeBoolGetter(v interface{}) BoolGetter {
 	case *atomic.Value:
 		return atomicGetter{v}
 	}
-	panic(fmt.Sprintf("expected jaws.BoolGetter or bool, not %T", v))
+	panic(fmt.Errorf("expected jaws.BoolGetter or bool, not %T", v))
 }

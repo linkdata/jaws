@@ -37,5 +37,5 @@ func makeFloatGetter(v interface{}) FloatGetter {
 	case *atomic.Value:
 		return atomicGetter{v}
 	}
-	panic(fmt.Sprintf("expected jaws.FloatGetter, float or int, not %T", v))
+	panic(fmt.Errorf("expected jaws.FloatGetter, float or int, not %T", v))
 }

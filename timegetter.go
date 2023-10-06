@@ -34,5 +34,5 @@ func makeTimeGetter(v interface{}) TimeGetter {
 	case *atomic.Value:
 		return atomicGetter{v}
 	}
-	panic(fmt.Sprintf("expected jaws.TimeGetter or time.Time, not %T", v))
+	panic(fmt.Errorf("expected jaws.TimeGetter or time.Time, not %T", v))
 }
