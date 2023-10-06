@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -305,10 +306,10 @@ func (rq *Request) TagsOf(elem *Element) (tags []interface{}) {
 // Returns the JaWS ID, suitable for including as a HTML attribute:
 //
 //	<div id="{{$.Register `footag`}}">
-func (rq *Request) Register(item interface{}, params ...interface{}) Jid {
+func (rq *Request) Register(item interface{}, params ...interface{}) jid.Jid {
 	var tag interface{}
 	switch data := item.(type) {
-	case Jid:
+	case jid.Jid:
 		if elem := rq.GetElement(data); elem != nil {
 			if uib, ok := elem.Ui().(*UiHtml); ok {
 				uib.parseParams(elem, params)
@@ -353,7 +354,7 @@ func (rq *Request) wantMessage(msg *Message) (yes bool) {
 			yes = true
 		case *Element:
 			yes = dest.Request == rq
-		case Jid:
+		case jid.Jid:
 			yes = rq.GetElement(dest) != nil
 		default:
 			rq.mu.RLock()

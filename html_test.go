@@ -3,11 +3,13 @@ package jaws
 import (
 	"html/template"
 	"testing"
+
+	"github.com/linkdata/jaws/jid"
 )
 
 func TestHtmlInput(t *testing.T) {
 	type args struct {
-		jid   Jid
+		jid   jid.Jid
 		typ   string
 		val   string
 		attrs []string
@@ -68,7 +70,7 @@ func TestHtmlInput(t *testing.T) {
 
 func TestHtmlInner(t *testing.T) {
 	type args struct {
-		jid   Jid
+		jid   jid.Jid
 		tag   string
 		typ   string
 		inner template.HTML
@@ -122,7 +124,7 @@ func TestHtmlInner(t *testing.T) {
 
 func TestHtmlSelect(t *testing.T) {
 	type args struct {
-		jid   Jid
+		jid   jid.Jid
 		val   *NamedBoolArray
 		attrs []string
 	}

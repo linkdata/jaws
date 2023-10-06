@@ -9,13 +9,14 @@ import (
 	"strconv"
 	"sync/atomic"
 
+	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
 )
 
 // An Element is an instance of a *Request, an UI object and a Jid.
 type Element struct {
 	ui       UI      // (read-only) the UI object
-	jid      Jid     // (read-only) JaWS ID, unique to this Element within it's Request
+	jid      jid.Jid // (read-only) JaWS ID, unique to this Element within it's Request
 	updating bool    // about to have Update() called
 	wsQueue  []wsMsg // changes queued
 	*Request         // (read-only) the Request the Element belongs to
@@ -36,7 +37,7 @@ func (e *Element) HasTag(tag interface{}) bool {
 }
 
 // Jid returns the JaWS ID for this Element, unique within it's Request.
-func (e *Element) Jid() Jid {
+func (e *Element) Jid() jid.Jid {
 	return e.jid
 }
 
@@ -139,7 +140,7 @@ func (e *Element) Append(htmlCode template.HTML) {
 }
 
 // Order reorders the HTML elements.
-func (e *Element) Order(jidList []Jid) {
+func (e *Element) Order(jidList []jid.Jid) {
 	if len(jidList) > 0 {
 		var b []byte
 		for i, jid := range jidList {

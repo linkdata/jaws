@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -34,6 +35,8 @@ const (
 	DefaultCookieName     = "jaws"                 // Default browser cookie name
 	DefaultUpdateInterval = time.Millisecond * 100 // Default browser update interval
 )
+
+type Jid = jid.Jid // convenience alias
 
 type Jaws struct {
 	CookieName   string             // Name for session cookies, defaults to "jaws"

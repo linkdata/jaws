@@ -1,4 +1,4 @@
-package jaws
+package jid
 
 import (
 	"reflect"
@@ -11,19 +11,26 @@ func TestParseJid(t *testing.T) {
 		arg  string
 		want Jid
 	}{
-		{"zero", JidPrefix + "0", 0},
-		{"one", JidPrefix + "1", 1},
-		{"negative", JidPrefix + "-1", JidInvalid},
+		{"zero", Prefix + "0", 0},
+		{"one", Prefix + "1", 1},
+		{"negative", Prefix + "-1", Invalid},
 		{"empty string", "", 0},
-		{"random text", "hello, world!", JidInvalid},
-		{"missing number", JidPrefix, JidInvalid},
-		{"overflow", JidPrefix + "42949672950", JidInvalid},
-		{"spaces", JidPrefix + " 1", JidInvalid},
+		{"random text", "hello, world!", Invalid},
+		{"missing number", Prefix, Invalid},
+		{"overflow", Prefix + "42949672950", Invalid},
+		{"spaces", Prefix + " 1", Invalid},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := JidParseString(tt.arg); got != tt.want {
+			got := ParseString(tt.arg)
+			if got != tt.want {
 				t.Errorf("ParseJid() = %v, want %v", got, tt.want)
+			}
+			if got.IsValid() && got == Invalid {
+				t.Fail()
+			}
+			if !got.IsValid() && got != Invalid {
+				t.Fail()
 			}
 		})
 	}
@@ -37,7 +44,7 @@ func TestJid_String(t *testing.T) {
 	}{
 		{"negative", -1, ""},
 		{"zero", 0, ""},
-		{"one", 1, JidPrefix + "1"},
+		{"one", 1, Prefix + "1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -55,7 +62,7 @@ func TestJid_AppendStartTagAttr(t *testing.T) {
 		want string
 	}{
 		{"zero", 0, "<zero"},
-		{"one", 1, `<one id="` + JidPrefix + `1"`},
+		{"one", 1, `<one id="` + Prefix + `1"`},
 		{"negative", -1, "<negative"},
 	}
 	for _, tt := range tests {

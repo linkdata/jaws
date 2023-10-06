@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"time"
 
+	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -28,7 +29,7 @@ type InputFloatFn = func(*Request, string, float64) error
 type InputDateFn = func(*Request, string, time.Time) error
 
 // Deprecated: Will be removed in future
-func (rq *Request) GetEventFn(jid Jid) (fn EventFn, ok bool) {
+func (rq *Request) GetEventFn(jid jid.Jid) (fn EventFn, ok bool) {
 	if elem := rq.GetElement(jid); elem != nil {
 		if uih, isuih := elem.Ui().(*UiHtml); isuih {
 			return uih.EventFn, true
@@ -51,7 +52,7 @@ func (rq *Request) SetEventFn(tagstring string, fn EventFn) {
 }
 
 // Deprecated: Will be removed in future
-func (rq *Request) RegisterEventFn(tagitem interface{}, params ...interface{}) Jid {
+func (rq *Request) RegisterEventFn(tagitem interface{}, params ...interface{}) jid.Jid {
 	return rq.Register(tagitem, params...)
 }
 

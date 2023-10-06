@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
 	"github.com/matryer/is"
 )
@@ -368,7 +369,7 @@ func TestRequest_Trigger(t *testing.T) {
 	case msg := <-rq.outCh:
 		is.Equal(msg, (&wsMsg{
 			Data: "danger\nomg",
-			Jid:  Jid(0),
+			Jid:  jid.Jid(0),
 			What: what.Alert,
 		}).Format())
 	}
@@ -639,7 +640,7 @@ func TestRequest_OnTrigger(t *testing.T) {
 	is.NoErr(rq.OnTrigger(tag, func(rq *Request, jidstr string) error {
 		defer close(gotCall)
 		is.True(rq.wantMessage(&Message{Dest: tag}))
-		jid := JidParseString(jidstr)
+		jid := jid.ParseString(jidstr)
 		is.True(jid != 0)
 		elem := rq.GetElement(jid)
 		is.True(elem != nil)
@@ -723,8 +724,8 @@ func TestRequest_Text(t *testing.T) {
 	gotCall := make(chan struct{})
 	h := rq.Text(&av, func(rq *Request, jidstr, val string) error {
 		defer close(gotCall)
-		is.True(rq.GetElement(JidParseString(jidstr)) != nil)
-		is.True(rq.GetElement(JidParseString(jidstr)) != nil)
+		is.True(rq.GetElement(jid.ParseString(jidstr)) != nil)
+		is.True(rq.GetElement(jid.ParseString(jidstr)) != nil)
 		is.Equal(val, "other-stuff")
 		return nil
 	}, "disabled")
@@ -739,7 +740,7 @@ func TestRequest_Text(t *testing.T) {
 	}
 }
 
-func jidForTag(rq *Request, tag interface{}) Jid {
+func jidForTag(rq *Request, tag interface{}) jid.Jid {
 	if elems := rq.GetElements(tag); len(elems) > 0 {
 		return elems[0].jid
 	}
@@ -757,9 +758,9 @@ func TestRequest_Password(t *testing.T) {
 	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
-	h := rq.Password(&av, func(rq *Request, jid, val string) error {
+	h := rq.Password(&av, func(rq *Request, jidstr, val string) error {
 		defer close(gotCall)
-		is.True(rq.GetElement(JidParseString(jid)) != nil)
+		is.True(rq.GetElement(jid.ParseString(jidstr)) != nil)
 		is.Equal(val, "other-stuff")
 		return nil
 	}, "autocomplete=\"off\"")
@@ -787,8 +788,8 @@ func TestRequest_Number(t *testing.T) {
 
 	gotCall := make(chan struct{})
 	defer close(gotCall)
-	h := rq.Number(elemId, &av, func(rq *Request, jid string, val float64) error {
-		is.True(rq.GetElement(JidParseString(jid)) != nil)
+	h := rq.Number(elemId, &av, func(rq *Request, jidstr string, val float64) error {
+		is.True(rq.GetElement(jid.ParseString(jidstr)) != nil)
 		switch val {
 		case 4.3:
 			// ok
@@ -842,9 +843,9 @@ func TestRequest_Range(t *testing.T) {
 	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
-	h := rq.Range(elemId, &av, func(rq *Request, jid string, val float64) error {
+	h := rq.Range(elemId, &av, func(rq *Request, id string, val float64) error {
 		defer close(gotCall)
-		is.True(rq.GetElement(JidParseString(jid)) != nil)
+		is.True(rq.GetElement(jid.ParseString(id)) != nil)
 		is.Equal(val, 3.15)
 		return nil
 	}, "disabled")
@@ -871,8 +872,8 @@ func TestRequest_Checkbox(t *testing.T) {
 
 	gotCall := make(chan struct{})
 	defer close(gotCall)
-	h := rq.Checkbox(&av, func(rq *Request, jid string, val bool) error {
-		is.True(rq.GetElement(JidParseString(jid)) != nil)
+	h := rq.Checkbox(&av, func(rq *Request, id string, val bool) error {
+		is.True(rq.GetElement(jid.ParseString(id)) != nil)
 		is.Equal(val, false)
 		gotCall <- struct{}{}
 		return nil
@@ -917,11 +918,11 @@ func TestRequest_Date(t *testing.T) {
 
 	gotCall := make(chan struct{})
 	defer close(gotCall)
-	h := rq.Date(elemId, &av, func(rq *Request, jid string, val time.Time) error {
+	h := rq.Date(elemId, &av, func(rq *Request, id string, val time.Time) error {
 		defer func() {
 			gotCall <- struct{}{}
 		}()
-		is.True(rq.GetElement(JidParseString(jid)) != nil)
+		is.True(rq.GetElement(jid.ParseString(id)) != nil)
 		if !val.IsZero() {
 			is.Equal(val.Year(), 1970)
 			is.Equal(val.Month(), time.January)
@@ -974,9 +975,9 @@ func TestRequest_Radio(t *testing.T) {
 	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
 
 	gotCall := make(chan struct{})
-	h := rq.Radio(elemId, &av, func(rq *Request, jid string, val bool) error {
+	h := rq.Radio(elemId, &av, func(rq *Request, id string, val bool) error {
 		defer close(gotCall)
-		is.True(rq.GetElement(JidParseString(jid)) != nil)
+		is.True(rq.GetElement(jid.ParseString(id)) != nil)
 		is.Equal(val, false)
 		return nil
 	})

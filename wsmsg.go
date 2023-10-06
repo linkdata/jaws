@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -48,7 +49,7 @@ func wsParse(txt []byte) (wsMsg, bool) {
 				// What       ... Jid              ... Data                  ... EOL
 				// txt[0:nl1] ... txt[nl1+1 : nl2] ... txt[nl2+1:len(txt)-1] ... \n
 				if wht := what.Parse(string(txt[0:nl1])); wht.IsValid() {
-					if jid := JidParseString(string(txt[nl1+1 : nl2])); jid.IsValid() {
+					if id := jid.ParseString(string(txt[nl1+1 : nl2])); id.IsValid() {
 						data := string(txt[nl2+1 : len(txt)-1])
 						if txt[nl2+1] == '"' {
 							var err error
@@ -58,7 +59,7 @@ func wsParse(txt []byte) (wsMsg, bool) {
 						}
 						return wsMsg{
 							Data: strings.ToValidUTF8(data, ""),
-							Jid:  jid,
+							Jid:  id,
 							What: wht,
 						}, true
 					}
