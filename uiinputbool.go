@@ -8,15 +8,16 @@ import (
 )
 
 type UiInputBool struct {
-	UiHtml
+	UiInput
 	BoolGetter
 }
 
 func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
 	ui.parseGetter(e, ui.BoolGetter)
 	attrs := ui.parseParams(e, params)
-	b := ui.JawsGetBool(e)
-	if b {
+	v := ui.JawsGetBool(e)
+	ui.Last.Store(v)
+	if v {
 		attrs = append(attrs, "checked")
 	}
 	writeUiDebug(e, w)
@@ -24,10 +25,13 @@ func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string,
 }
 
 func (ui *UiInputBool) JawsUpdate(e *Element) {
-	if ui.JawsGetBool(e) {
-		e.SetValue("true")
-	} else {
-		e.SetValue("false")
+	v := ui.JawsGetBool(e)
+	if ui.Last.Swap(v) != v {
+		if v {
+			e.SetValue("true")
+		} else {
+			e.SetValue("false")
+		}
 	}
 }
 
@@ -42,7 +46,8 @@ func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (err err
 				return
 			}
 		}
-		err = ui.BoolGetter.(BoolSetter).JawsSetBool(e, v)
+		ui.Last.Store(v)
+		ui.BoolGetter.(BoolSetter).JawsSetBool(e, v)
 		e.Dirty(ui.Tag)
 	}
 	return

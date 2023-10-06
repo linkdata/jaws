@@ -8,23 +8,26 @@ import (
 )
 
 type UiInputDate struct {
-	UiHtml
+	UiInput
 	TimeGetter
 }
 
-func (ui *UiInputDate) value(e *Element) string {
-	return ui.JawsGetTime(e).Format(ISO8601)
+func (ui *UiInputDate) str() string {
+	return ui.Last.Load().(time.Time).Format(ISO8601)
 }
 
 func (ui *UiInputDate) renderDateInput(e *Element, w io.Writer, jid Jid, htmltype string, params ...interface{}) {
 	ui.parseGetter(e, ui.TimeGetter)
 	attrs := ui.parseParams(e, params)
+	ui.Last.Store(ui.JawsGetTime(e))
 	writeUiDebug(e, w)
-	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.value(e), attrs...))
+	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.str(), attrs...))
 }
 
 func (ui *UiInputDate) JawsUpdate(e *Element) {
-	e.SetValue(ui.value(e))
+	if t := ui.JawsGetTime(e); ui.Last.Swap(t) != t {
+		e.SetValue(ui.str())
+	}
 }
 
 func (ui *UiInputDate) JawsEvent(e *Element, wht what.What, val string) (err error) {
@@ -38,6 +41,7 @@ func (ui *UiInputDate) JawsEvent(e *Element, wht what.What, val string) (err err
 				return
 			}
 		}
+		ui.Last.Store(v)
 		err = ui.TimeGetter.(TimeSetter).JawsSetTime(e, v)
 		e.Dirty(ui.Tag)
 	}

@@ -8,23 +8,26 @@ import (
 )
 
 type UiInputFloat struct {
-	UiHtml
+	UiInput
 	FloatGetter
 }
 
-func (ui *UiInputFloat) value(e *Element) string {
-	return strconv.FormatFloat(ui.JawsGetFloat(e), 'f', -1, 64)
+func (ui *UiInputFloat) str() string {
+	return strconv.FormatFloat(ui.Last.Load().(float64), 'f', -1, 64)
 }
 
 func (ui *UiInputFloat) renderFloatInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
 	ui.parseGetter(e, ui.FloatGetter)
 	attrs := ui.parseParams(e, params)
+	ui.Last.Store(ui.JawsGetFloat(e))
 	writeUiDebug(e, w)
-	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.value(e), attrs...))
+	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.str(), attrs...))
 }
 
-func (ui *UiInputFloat) JawsUpdate(u *Element) {
-	u.SetValue(ui.value(u))
+func (ui *UiInputFloat) JawsUpdate(e *Element) {
+	if f := ui.JawsGetFloat(e); ui.Last.Swap(f) != f {
+		e.SetValue(ui.str())
+	}
 }
 
 func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err error) {
@@ -38,6 +41,7 @@ func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err er
 				return
 			}
 		}
+		ui.Last.Store(v)
 		err = ui.FloatGetter.(FloatSetter).JawsSetFloat(e, v)
 		e.Dirty(ui.Tag)
 	}
