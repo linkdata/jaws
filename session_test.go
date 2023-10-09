@@ -176,8 +176,8 @@ func TestSession_Delete(t *testing.T) {
 	rq2 := ts.jw.NewRequest(hr2)
 	is.Equal(ts.sess, rq2.Session())
 
-	ts.rq.RegisterEventFn(Tag("byebye"), func(rq *Request, evt what.What, id, val string) error {
-		sess2 := ts.jw.GetSession(rq.Initial)
+	ts.rq.Register("byebye", func(e *Element, evt what.What, val string) error {
+		sess2 := ts.jw.GetSession(e.Request.Initial)
 		is.Equal(ts.sess, sess2)
 		cookie2 := sess2.Close()
 		is.True(cookie2 != nil)

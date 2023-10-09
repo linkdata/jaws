@@ -10,7 +10,7 @@ type UiOption struct{ *NamedBool }
 func (ui UiOption) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	e.Tag(ui.NamedBool)
 	writeUiDebug(e, w)
-	attrs := parseParams(e, params, nil, nil, nil)
+	attrs := parseParams(e, params)
 	attrs = append(attrs, `value="`+html.EscapeString(ui.JawsGetString(e))+`"`)
 	if ui.Checked() {
 		attrs = append(attrs, "selected")

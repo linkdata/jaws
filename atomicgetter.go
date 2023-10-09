@@ -53,7 +53,7 @@ func (g atomicGetter) JawsGetTime(e *Element) (v time.Time) {
 	return
 }
 
-func (g atomicGetter) JawsSetTime(e *Request, v time.Time) (err error) {
+func (g atomicGetter) JawsSetTime(e *Element, v time.Time) (err error) {
 	g.v.Store(v)
 	return
 }

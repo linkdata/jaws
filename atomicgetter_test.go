@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+var _ BoolSetter = (atomicGetter{})
+var _ FloatSetter = (atomicGetter{})
+var _ StringSetter = (atomicGetter{})
+var _ TimeSetter = (atomicGetter{})
+var _ HtmlGetter = (atomicGetter{})
+
 func Test_atomicGetter_UninitializedDefaults(t *testing.T) {
 	var av atomic.Value
 	g := atomicGetter{v: &av}

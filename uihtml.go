@@ -13,10 +13,7 @@ import (
 )
 
 type UiHtml struct {
-	ClickHandler ClickHandler
-	EventHandler EventHandler
-	EventFn      EventFn // legacy
-	Tag          any
+	Tag any
 }
 
 func writeUiDebug(e *Element, w io.Writer) {
@@ -43,15 +40,15 @@ func (ui *UiHtml) parseGetter(e *Element, getter interface{}) {
 		}
 		e.Tag(ui.Tag)
 		if ch, ok := getter.(ClickHandler); ok {
-			ui.ClickHandler = ch
+			e.handlers = append(e.handlers, clickHandlerWapper{ch})
 		}
 		if eh, ok := getter.(EventHandler); ok {
-			ui.EventHandler = eh
+			e.handlers = append(e.handlers, eh)
 		}
 	}
 }
 
-func parseParams(elem *Element, params []interface{}, ch *ClickHandler, eh *EventHandler, ef *EventFn) (attrs []string) {
+func parseParams(elem *Element, params []interface{}) (attrs []string) {
 	for i := range params {
 		switch data := params[i].(type) {
 		case template.HTML:
@@ -65,30 +62,31 @@ func parseParams(elem *Element, params []interface{}, ch *ClickHandler, eh *Even
 		case []string:
 			attrs = append(attrs, data...)
 		case EventFn:
-			if ef != nil {
-				*ef = data
+			if data != nil {
+				elem.handlers = append(elem.handlers, eventFnWrapper{data})
 			}
-		case func(*Request, string) error: // ClickFn
-			if data != nil && ef != nil {
-				*ef = func(rq *Request, wht what.What, jid, val string) (err error) {
-					if wht == what.Click {
-						err = data(rq, jid)
-					}
-					return
-				}
+		case func(*Request, string) error: // Deprecated: ClickFn
+			if data != nil {
+				elem.handlers = append(elem.handlers, eventFnWrapper{
+					func(e *Element, wht what.What, val string) (err error) {
+						if wht == what.Click {
+							err = data(e.Request, e.jid.String())
+						}
+						return
+					}})
 			}
-		case func(*Request, string, string) error: // InputTextFn
-			if data != nil && ef != nil {
-				*ef = func(rq *Request, wht what.What, jid, val string) (err error) {
+		case func(*Request, string, string) error: // Deprecated: InputTextFn
+			if data != nil {
+				elem.handlers = append(elem.handlers, eventFnWrapper{func(e *Element, wht what.What, val string) (err error) {
 					if wht == what.Input {
-						err = data(rq, jid, val)
+						err = data(e.Request, e.jid.String(), val)
 					}
 					return
-				}
+				}})
 			}
-		case func(*Request, string, bool) error: // InputBoolFn
-			if data != nil && ef != nil {
-				*ef = func(rq *Request, wht what.What, jid, val string) (err error) {
+		case func(*Request, string, bool) error: // Deprecated: InputBoolFn
+			if data != nil {
+				elem.handlers = append(elem.handlers, eventFnWrapper{func(e *Element, wht what.What, val string) (err error) {
 					if wht == what.Input {
 						var v bool
 						if val != "" {
@@ -96,14 +94,14 @@ func parseParams(elem *Element, params []interface{}, ch *ClickHandler, eh *Even
 								return
 							}
 						}
-						err = data(rq, jid, v)
+						err = data(e.Request, e.jid.String(), v)
 					}
 					return
-				}
+				}})
 			}
-		case func(*Request, string, float64) error: // InputFloatFn
-			if data != nil && ef != nil {
-				*ef = func(rq *Request, wht what.What, jid, val string) (err error) {
+		case func(*Request, string, float64) error: // Deprecated: InputFloatFn
+			if data != nil {
+				elem.handlers = append(elem.handlers, eventFnWrapper{func(e *Element, wht what.What, val string) (err error) {
 					if wht == what.Input {
 						var v float64
 						if val != "" {
@@ -111,14 +109,14 @@ func parseParams(elem *Element, params []interface{}, ch *ClickHandler, eh *Even
 								return
 							}
 						}
-						err = data(rq, jid, v)
+						err = data(e.Request, e.jid.String(), v)
 					}
 					return
-				}
+				}})
 			}
-		case func(*Request, string, time.Time) error: // InputDateFn
-			if data != nil && ef != nil {
-				*ef = func(rq *Request, wht what.What, jid, val string) (err error) {
+		case func(*Request, string, time.Time) error: // Deprecated: InputDateFn
+			if data != nil {
+				elem.handlers = append(elem.handlers, eventFnWrapper{func(e *Element, wht what.What, val string) (err error) {
 					if wht == what.Input {
 						var v time.Time
 						if val != "" {
@@ -126,21 +124,17 @@ func parseParams(elem *Element, params []interface{}, ch *ClickHandler, eh *Even
 								return
 							}
 						}
-						err = data(rq, jid, v)
+						err = data(e.Request, e.jid.String(), v)
 					}
 					return
-				}
+				}})
 			}
 		default:
-			if ch != nil {
-				if h, ok := data.(ClickHandler); ok {
-					*ch = h
-				}
+			if h, ok := data.(ClickHandler); ok {
+				elem.handlers = append(elem.handlers, clickHandlerWapper{h})
 			}
-			if eh != nil {
-				if h, ok := data.(EventHandler); ok {
-					*eh = h
-				}
+			if h, ok := data.(EventHandler); ok {
+				elem.handlers = append(elem.handlers, h)
 			}
 			elem.Tag(data)
 		}
@@ -149,87 +143,31 @@ func parseParams(elem *Element, params []interface{}, ch *ClickHandler, eh *Even
 }
 
 func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []string) {
-	attrs = parseParams(elem, params, &ui.ClickHandler, &ui.EventHandler, &ui.EventFn)
+	attrs = parseParams(elem, params)
 	return
 }
 
 func (ui *UiHtml) JawsRender(e *Element, w io.Writer, params []interface{}) {
+	if h, ok := ui.Tag.(UI); ok {
+		h.JawsRender(e, w, params)
+		return
+	}
 	panic(fmt.Errorf("jaws: UiHtml.JawsRender(%v) called", e))
 }
 
 func (ui *UiHtml) JawsUpdate(e *Element) {
-	switch v := ui.Tag.(type) {
-	case *NamedBoolArray:
-		e.SetValue(v.Get())
-	case StringGetter:
-		e.SetValue(v.JawsGetString(e))
-	case FloatGetter:
-		e.SetValue(string(fmt.Append(nil, v.JawsGetFloat(e))))
-	case BoolGetter:
-		if v.JawsGetBool(e) {
-			e.SetAttr("checked", "")
-		} else {
-			e.RemoveAttr("checked")
-		}
-	case TimeGetter:
-		e.SetValue(v.JawsGetTime(e).Format(ISO8601))
-	case HtmlGetter:
-		e.SetInner(v.JawsGetHtml(e))
-	case UI:
-		v.JawsUpdate(e)
-	case Tag:
-		// do nothing
-	default:
-		panic(fmt.Errorf("jaws: UiHtml.JawsUpdate(%v): unhandled type: %T", e, v))
+	if h, ok := ui.Tag.(UI); ok {
+		h.JawsUpdate(e)
+		return
 	}
+	panic(fmt.Errorf("jaws: UiHtml.JawsUpdate(%v) called", e))
 }
 
 func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
-	if ui.EventFn != nil { // LEGACY
-		return ui.EventFn(e.Request, wht, e.Jid().String(), val)
-	}
-	if wht == what.Click && ui.ClickHandler != nil {
-		return ui.ClickHandler.JawsClick(e, val)
-	}
-	if ui.EventHandler != nil {
-		return ui.EventHandler.JawsEvent(e, wht, val)
-	}
-	if wht == what.Input {
-		switch data := ui.Tag.(type) {
-		case *NamedBoolArray:
-			data.Set(val, true)
-		case StringSetter:
-			err = data.JawsSetString(e, val)
-		case FloatSetter:
-			var v float64
-			if val != "" {
-				if v, err = strconv.ParseFloat(val, 64); err != nil {
-					return
-				}
-			}
-			err = data.JawsSetFloat(e, v)
-		case BoolSetter:
-			var v bool
-			if val != "" {
-				if v, err = strconv.ParseBool(val); err != nil {
-					return
-				}
-			}
-			err = data.JawsSetBool(e, v)
-		case TimeSetter:
-			var v time.Time
-			if val != "" {
-				if v, err = time.Parse(ISO8601, val); err != nil {
-					return
-				}
-			}
-			err = data.JawsSetTime(e, v)
-		default:
-			if deadlock.Debug {
-				_ = e.Jaws.Log(fmt.Errorf("jaws: UiHtml.JawsEvent(%v, %s, %q): unhandled type: %T", e, wht, val, data))
-			}
+	for _, h := range e.handlers {
+		if err = h.JawsEvent(e, wht, val); err != nil {
+			return
 		}
-		e.Dirty(ui.Tag)
 	}
 	return
 }

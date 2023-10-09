@@ -24,9 +24,6 @@ func (ui *UiTextarea) JawsUpdate(e *Element) {
 }
 
 func (ui *UiTextarea) JawsEvent(e *Element, wht what.What, val string) (err error) {
-	if ui.EventFn != nil {
-		return ui.EventFn(e.Request, wht, e.Jid().String(), val)
-	}
 	if wht == what.Input {
 		err = ui.StringGetter.(StringSetter).JawsSetString(e, val)
 		e.Dirty(ui.Tag)

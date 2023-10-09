@@ -14,9 +14,11 @@ import (
 type Element struct {
 	ui       UI      // (read-only) the UI object
 	jid      jid.Jid // (read-only) JaWS ID, unique to this Element within it's Request
-	updating bool    // about to have Update() called
-	wsQueue  []wsMsg // changes queued
 	*Request         // (read-only) the Request the Element belongs to
+	// internals
+	updating bool           // about to have Update() called
+	wsQueue  []wsMsg        // changes queued
+	handlers []EventHandler // custom event handlers registered, if any
 }
 
 func (e *Element) String() string {
