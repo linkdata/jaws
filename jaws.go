@@ -377,7 +377,7 @@ func (jw *Jaws) Dirty(tags ...interface{}) {
 	jw.setDirty(TagExpand(nil, tags, nil))
 }
 
-func (jw *Jaws) distributeDirt() {
+func (jw *Jaws) distributeDirt() int {
 	type orderedDirt struct {
 		tag   interface{}
 		order int
@@ -413,6 +413,7 @@ func (jw *Jaws) distributeDirt() {
 			rq.appendDirtyTags(tags)
 		}
 	}
+	return len(dirt)
 }
 
 // Reload requests all Requests to reload their current page.
@@ -490,11 +491,12 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		case <-jw.Done():
 			return
 		case <-jw.updateTicker.C:
-			jw.distributeDirt()
-			for msgCh := range subs {
-				select {
-				case msgCh <- Message{What: what.Update}:
-				default:
+			if jw.distributeDirt() > 0 {
+				for msgCh := range subs {
+					select {
+					case msgCh <- Message{What: what.Update}:
+					default:
+					}
 				}
 			}
 		case <-t.C:

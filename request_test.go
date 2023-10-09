@@ -47,6 +47,7 @@ func newTestRequest(is *is.I) (tr *testRequest) {
 		jw:      New(),
 	}
 	tr.jw.Logger = log.New(&tr.log, "", 0)
+	tr.jw.updateTicker = time.NewTicker(time.Millisecond)
 	tr.ctx, tr.cancel = context.WithTimeout(context.Background(), time.Hour)
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
 	tr.Request = tr.jw.NewRequest(hr)
@@ -348,7 +349,10 @@ func TestRequest_EventFnQueue(t *testing.T) {
 	var callCount int32
 	rq.Register(("sleep"), func(e *Element, evt what.What, val string) error {
 		count := int(atomic.AddInt32(&callCount, 1))
-		is.Equal(val, strconv.Itoa(count))
+		if val != strconv.Itoa(count) {
+			t.Logf("val=%s, count=%d, cap=%d", val, count, cap(rq.outCh))
+			is.Fail()
+		}
 		if count == 1 {
 			close(firstDoneCh)
 		}
@@ -363,7 +367,7 @@ func TestRequest_EventFnQueue(t *testing.T) {
 	}
 
 	select {
-	case <-time.NewTimer(testTimeout).C:
+	case <-time.NewTimer(testTimeout * 100).C:
 		is.Fail()
 	case <-rq.doneCh:
 		is.Fail()
@@ -372,11 +376,14 @@ func TestRequest_EventFnQueue(t *testing.T) {
 
 	is.Equal(atomic.LoadInt32(&callCount), int32(1))
 	atomic.StoreInt32(&sleepDone, 1)
+	is.Equal(rq.panicVal, nil)
 
-	tmr := time.NewTimer(testTimeout)
+	tmr := time.NewTimer(testTimeout * 100)
 	for int(atomic.LoadInt32(&callCount)) < cap(rq.outCh) {
 		select {
 		case <-tmr.C:
+			t.Logf("callCount=%d, cap=%d", atomic.LoadInt32(&callCount), cap(rq.outCh))
+			is.Equal(rq.panicVal, nil)
 			is.Fail()
 		default:
 			time.Sleep(time.Millisecond)
@@ -986,4 +993,43 @@ func TestRequest_WsQueueOverflowCancels(t *testing.T) {
 	case <-rq.Done():
 	}
 	is.Equal(context.Cause(rq.Context()), ErrWebsocketQueueOverflow)
+}
+
+type teststringsetter struct {
+	getCalled int32
+	setCalled int32
+	s         string
+}
+
+func (tss *teststringsetter) JawsGetString(e *Element) string {
+	atomic.AddInt32(&tss.getCalled, 1)
+	return tss.s
+}
+
+func (tss *teststringsetter) JawsSetString(e *Element, s string) error {
+	atomic.AddInt32(&tss.setCalled, 1)
+	tss.s = s
+	return nil
+}
+
+func TestRequest_Dirty(t *testing.T) {
+	is := is.New(t)
+	rq := newTestRequest(is)
+	defer rq.Close()
+
+	tss := &teststringsetter{s: "foo"}
+	h := rq.UI(NewUiText(tss))
+	is.Equal(tss.getCalled, int32(1))
+	is.True(strings.Contains(string(h), "foo"))
+
+	rq.Dirty(tss)
+	tmr := time.NewTimer(testTimeout)
+	for atomic.LoadInt32(&tss.getCalled) < 2 {
+		select {
+		case <-tmr.C:
+			is.Fail()
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
 }

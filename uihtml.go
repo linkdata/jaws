@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"fmt"
 	"html/template"
 	"io"
 	"strconv"
@@ -133,17 +132,13 @@ func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []stri
 func (ui *UiHtml) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	if h, ok := ui.Tag.(UI); ok {
 		h.JawsRender(e, w, params)
-		return
 	}
-	panic(fmt.Errorf("jaws: UiHtml.JawsRender(%v) called", e))
 }
 
 func (ui *UiHtml) JawsUpdate(e *Element) {
 	if h, ok := ui.Tag.(UI); ok {
 		h.JawsUpdate(e)
-		return
 	}
-	panic(fmt.Errorf("jaws: UiHtml.JawsUpdate(%v) called", e))
 }
 
 func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
