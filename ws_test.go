@@ -120,7 +120,7 @@ func TestWS_NormalExchange(t *testing.T) {
 
 	gotCallCh := make(chan struct{})
 
-	ts.rq.RegisterEventFn(Tag{"foo"}, func(rq *Request, evt what.What, id, val string) error {
+	ts.rq.RegisterEventFn(Tag("foo"), func(rq *Request, evt what.What, id, val string) error {
 		close(gotCallCh)
 		return fooError
 	})
@@ -130,7 +130,7 @@ func TestWS_NormalExchange(t *testing.T) {
 	is.Equal(resp.StatusCode, http.StatusSwitchingProtocols)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	msg := wsMsg{Jid: jidForTag(ts.rq, Tag{"foo"}), What: what.Input}
+	msg := wsMsg{Jid: jidForTag(ts.rq, Tag("foo")), What: what.Input}
 	ctx, cancel := context.WithTimeout(ts.ctx, time.Second*3)
 	defer cancel()
 

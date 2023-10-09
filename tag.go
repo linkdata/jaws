@@ -6,7 +6,7 @@ import (
 	"reflect"
 )
 
-type Tag struct{ Value interface{} }
+type Tag string
 
 func TagString(tag interface{}) string {
 	if rv := reflect.ValueOf(tag); rv.IsValid() {

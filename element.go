@@ -3,11 +3,8 @@ package jaws
 import (
 	"bytes"
 	"fmt"
-	"html"
 	"html/template"
 	"io"
-	"strconv"
-	"sync/atomic"
 
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
@@ -49,29 +46,6 @@ func (e *Element) Ui() UI {
 // Render calls Request.JawsRender() for this Element.
 func (e *Element) Render(w io.Writer, params []interface{}) {
 	e.Request.JawsRender(e, w, params)
-}
-
-func (e *Element) ToHtml(val interface{}) template.HTML {
-	var s string
-	switch v := val.(type) {
-	case string:
-		s = v
-	case template.HTML:
-		return v
-	case *atomic.Value:
-		return e.ToHtml(v.Load())
-	case fmt.Stringer:
-		s = v.String()
-	case float64:
-		s = strconv.FormatFloat(v, 'f', -1, 64)
-	case float32:
-		s = strconv.FormatFloat(float64(v), 'f', -1, 32)
-	case int:
-		s = strconv.Itoa(v)
-	default:
-		panic(fmt.Errorf("jaws: don't know how to render %T as template.HTML", v))
-	}
-	return template.HTML(html.EscapeString(s))
 }
 
 func (e *Element) queue(wht what.What, data string) {
@@ -162,12 +136,4 @@ func (e *Element) Delete() {
 // is removed from the Request and it's HTML element from the browser.
 func (e *Element) Remove(htmlId string) {
 	e.queue(what.Remove, htmlId)
-}
-
-func (e *Element) Hide() {
-	e.SetAttr("hidden", "")
-}
-
-func (e *Element) Show() {
-	e.RemoveAttr("hidden")
 }

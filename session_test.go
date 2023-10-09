@@ -176,7 +176,7 @@ func TestSession_Delete(t *testing.T) {
 	rq2 := ts.jw.NewRequest(hr2)
 	is.Equal(ts.sess, rq2.Session())
 
-	ts.rq.RegisterEventFn(Tag{"byebye"}, func(rq *Request, evt what.What, id, val string) error {
+	ts.rq.RegisterEventFn(Tag("byebye"), func(rq *Request, evt what.What, id, val string) error {
 		sess2 := ts.jw.GetSession(rq.Initial)
 		is.Equal(ts.sess, sess2)
 		cookie2 := sess2.Close()
@@ -194,7 +194,7 @@ func TestSession_Delete(t *testing.T) {
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
 	ts.rq.Send(Message{
-		Dest: Tag{"byebye"},
+		Dest: Tag("byebye"),
 		What: what.Input,
 		Data: "",
 	})
