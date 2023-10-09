@@ -31,9 +31,10 @@ type testServer struct {
 func newTestServer(is *is.I) (ts *testServer) {
 	jw := New()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
-	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	hr := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
 	sess := jw.NewSession(nil, hr)
-	rq := jw.NewRequest(ctx, hr)
+	rq := jw.NewRequest(hr)
+	is.Equal(rq, jw.UseRequest(rq.JawsKey, hr))
 	ts = &testServer{
 		is:          is,
 		jw:          jw,
@@ -85,7 +86,7 @@ func TestWS_UpgradeRequired(t *testing.T) {
 	is := is.New(t)
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(context.Background(), nil)
+	rq := jw.NewRequest(nil)
 
 	req := httptest.NewRequest("", "/jaws/"+rq.JawsKeyString(), nil)
 	w := httptest.NewRecorder()
@@ -119,7 +120,7 @@ func TestWS_NormalExchange(t *testing.T) {
 
 	gotCallCh := make(chan struct{})
 
-	ts.rq.RegisterEventFn("foo", func(rq *Request, evt what.What, id, val string) error {
+	ts.rq.Register(("foo"), func(e *Element, evt what.What, val string) error {
 		close(gotCallCh)
 		return fooError
 	})
@@ -129,14 +130,16 @@ func TestWS_NormalExchange(t *testing.T) {
 	is.Equal(resp.StatusCode, http.StatusSwitchingProtocols)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	msg := &Message{Elem: "foo"}
+	msg := wsMsg{Jid: jidForTag(ts.rq, Tag("foo")), What: what.Input}
 	ctx, cancel := context.WithTimeout(ts.ctx, time.Second*3)
 	defer cancel()
 
-	err = conn.Write(ctx, websocket.MessageText, []byte(msg.Format()))
+	err = conn.Write(ctx, websocket.MessageText, msg.Append(nil))
 	is.NoErr(err)
 	select {
 	case <-time.NewTimer(testTimeout).C:
+		is.NoErr(ts.ctx.Err())
+		is.NoErr(ctx.Err())
 		is.Fail()
 	case <-gotCallCh:
 	}
@@ -144,7 +147,9 @@ func TestWS_NormalExchange(t *testing.T) {
 	mt, b, err := conn.Read(ctx)
 	is.NoErr(err)
 	is.Equal(mt, websocket.MessageText)
-	is.Equal(string(b), makeAlertDangerMessage(fooError).Format())
+	var m2 wsMsg
+	m2.FillAlert(fooError)
+	is.Equal(b, m2.Append(nil))
 }
 
 func TestReader_RespectsContextDone(t *testing.T) {
@@ -152,9 +157,9 @@ func TestReader_RespectsContextDone(t *testing.T) {
 	ts := newTestServer(is)
 	defer ts.Close()
 
-	msg := &Message{Elem: "foo"}
+	msg := wsMsg{Jid: Jid(1234), What: what.Input}
 	doneCh := make(chan struct{})
-	inCh := make(chan *Message)
+	inCh := make(chan wsMsg)
 	client, server := Pipe()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
@@ -162,7 +167,7 @@ func TestReader_RespectsContextDone(t *testing.T) {
 
 	go func() {
 		defer close(doneCh)
-		wsReader(ts.ctx, ts.jw.Done(), inCh, server)
+		wsReader(ts.ctx, nil, ts.jw.Done(), inCh, server)
 	}()
 
 	client.Write(ctx, websocket.MessageText, []byte(msg.Format()))
@@ -189,7 +194,7 @@ func TestReader_RespectsJawsDone(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	inCh := make(chan *Message)
+	inCh := make(chan wsMsg)
 	client, server := Pipe()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
@@ -197,11 +202,11 @@ func TestReader_RespectsJawsDone(t *testing.T) {
 
 	go func() {
 		defer close(doneCh)
-		wsReader(ts.ctx, ts.jw.Done(), inCh, server)
+		wsReader(ts.ctx, nil, ts.jw.Done(), inCh, server)
 	}()
 
 	ts.jw.Close()
-	msg := &Message{Elem: "foo"}
+	msg := wsMsg{Jid: Jid(1234), What: what.Input}
 	err := client.Write(ctx, websocket.MessageText, []byte(msg.Format()))
 	is.NoErr(err)
 
@@ -217,12 +222,11 @@ func TestWriter_SendsThePayload(t *testing.T) {
 	ts := newTestServer(is)
 	defer ts.Close()
 
-	outCh := make(chan *Message)
+	outCh := make(chan string)
 	defer close(outCh)
 	client, server := Pipe()
-	msg := &Message{Elem: "foo"}
 
-	go wsWriter(ts.ctx, ts.jw.Done(), outCh, server)
+	go wsWriter(ts.ctx, nil, ts.jw.Done(), outCh, server)
 
 	var mt websocket.MessageType
 	var b []byte
@@ -234,10 +238,11 @@ func TestWriter_SendsThePayload(t *testing.T) {
 		ts.cancel()
 	}()
 
+	msg := wsMsg{Jid: Jid(1234)}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case outCh <- msg:
+	case outCh <- msg.Format():
 	}
 
 	select {
@@ -263,14 +268,14 @@ func TestWriter_RespectsContext(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	outCh := make(chan *Message)
+	outCh := make(chan string)
 	defer close(outCh)
 	client, server := Pipe()
 	client.CloseRead(context.Background())
 
 	go func() {
 		defer close(doneCh)
-		wsWriter(ts.ctx, ts.jw.Done(), outCh, server)
+		wsWriter(ts.ctx, nil, ts.jw.Done(), outCh, server)
 	}()
 
 	ts.cancel()
@@ -289,14 +294,14 @@ func TestWriter_RespectsJawsDone(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	outCh := make(chan *Message)
+	outCh := make(chan string)
 	defer close(outCh)
 	client, server := Pipe()
 	client.CloseRead(ts.ctx)
 
 	go func() {
 		defer close(doneCh)
-		wsWriter(ts.ctx, ts.jw.Done(), outCh, server)
+		wsWriter(ts.ctx, nil, ts.jw.Done(), outCh, server)
 	}()
 
 	ts.jw.Close()
@@ -314,13 +319,13 @@ func TestWriter_RespectsOutboundClosed(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	outCh := make(chan *Message)
+	outCh := make(chan string)
 	client, server := Pipe()
 	client.CloseRead(ts.ctx)
 
 	go func() {
 		defer close(doneCh)
-		wsWriter(ts.ctx, ts.jw.Done(), outCh, server)
+		wsWriter(ts.ctx, nil, ts.jw.Done(), outCh, server)
 	}()
 
 	close(outCh)
@@ -330,30 +335,122 @@ func TestWriter_RespectsOutboundClosed(t *testing.T) {
 		is.Fail()
 	case <-doneCh:
 	}
+
+	is.NoErr(ts.rq.Context().Err())
+}
+
+func TestWriter_ReportsError(t *testing.T) {
+	is := is.New(t)
+	ts := newTestServer(is)
+	defer ts.Close()
+
+	doneCh := make(chan struct{})
+	outCh := make(chan string)
+	client, server := Pipe()
+	client.CloseRead(ts.ctx)
+	server.Close(websocket.StatusNormalClosure, "")
+
+	go func() {
+		defer close(doneCh)
+		wsWriter(ts.rq.ctx, ts.rq.cancelFn, ts.jw.Done(), outCh, server)
+	}()
+
+	msg := wsMsg{Jid: Jid(1234)}
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case outCh <- msg.Format():
+	}
+
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-doneCh:
+	}
+
+	err := context.Cause(ts.rq.Context())
+	is.True(strings.Contains(err.Error(), "WebSocket closed"))
+}
+
+func TestReader_ReportsError(t *testing.T) {
+	is := is.New(t)
+	ts := newTestServer(is)
+	defer ts.Close()
+
+	doneCh := make(chan struct{})
+	inCh := make(chan wsMsg)
+	client, server := Pipe()
+	client.CloseRead(ts.ctx)
+	server.Close(websocket.StatusNormalClosure, "")
+
+	go func() {
+		defer close(doneCh)
+		wsReader(ts.rq.ctx, ts.rq.cancelFn, ts.jw.Done(), inCh, server)
+	}()
+
+	msg := wsMsg{Jid: Jid(1234), What: what.Input}
+	err := client.Write(ts.ctx, websocket.MessageText, []byte(msg.Format()))
+	if err == nil {
+		t.FailNow()
+	}
+
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-doneCh:
+	}
+
+	err = context.Cause(ts.rq.Context())
+	is.True(strings.Contains(err.Error(), "WebSocket closed"))
 }
 
 func Test_wsParse_IncompleteFails(t *testing.T) {
 	is := is.New(t)
 
-	is.Equal(wsParse(nil), nil)            // duh
-	is.Equal(wsParse([]byte("\n")), nil)   // missing Elem
-	is.Equal(wsParse([]byte("id\n")), nil) // missing What
+	got, ok := wsParse(nil)
+	is.True(!ok)
+	is.Equal(got, wsMsg{})
+
+	got, ok = wsParse([]byte("invalid\t\t\n")) // invalid What
+	is.True(!ok)
+	is.Equal(got, wsMsg{})
+
+	got, ok = wsParse([]byte("Click\t\t")) // missing ending linefeed
+	is.True(!ok)
+	is.Equal(got, wsMsg{})
+
+	got, ok = wsParse([]byte("Click\t\n")) // just one tab
+	is.True(!ok)
+	is.Equal(got, wsMsg{})
+
+	got, ok = wsParse([]byte("\n\t\t\n")) // newline instead of What
+	is.True(!ok)
+	is.Equal(got, wsMsg{})
+
+	got, ok = wsParse([]byte("Click\t\t\"\n\"\n")) // incorrectly quoted data
+	is.True(!ok)
+	is.Equal(got, wsMsg{})
 }
 
 func Test_wsParse_CompletePasses(t *testing.T) {
 	tests := []struct {
 		name string
 		txt  string
-		want *Message
+		want wsMsg
 	}{
-		{"shortest", " \n\n", &Message{Elem: " "}},
-		{"normal", "a\nInput\nc", &Message{Elem: "a", What: what.Input, Data: "c"}},
-		{"newline", "a\nClick\nc\nd", &Message{Elem: "a", What: what.Click, Data: "c\nd"}},
+		{"shortest", "Update\t\t\n", wsMsg{What: what.Update}},
+		{"unquoted", "Input\tJid.1\ttrue\n", wsMsg{Jid: Jid(1), What: what.Input, Data: "true"}},
+		{"normal", "Input\tJid.2\t\"c\"\n", wsMsg{Jid: Jid(2), What: what.Input, Data: "c"}},
+		{"newline", "Click\tJid.3\t\"c\\nd\"\n", wsMsg{Jid: Jid(3), What: what.Click, Data: "c\nd"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			is := is.New(t)
-			got := wsParse([]byte(tt.txt))
+			got, ok := wsParse([]byte(tt.txt))
+			if !ok {
+				t.Log(got, tt.want)
+			}
+			is.True(ok)
 			is.Equal(tt.want, got)
 		})
 	}

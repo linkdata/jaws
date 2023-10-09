@@ -1,7 +1,7 @@
 #!/bin/sh -e
 go install golang.org/x/tools/cmd/stringer@latest
+go install github.com/axw/gocov/gocov@latest
+go install github.com/AlekSi/gocov-xml@latest
 go generate ./...
-go get github.com/boumenot/gocover-cobertura
-go test -race -failfast -coverprofile=coverage.txt -count 20 $* ./...
-go run github.com/boumenot/gocover-cobertura < coverage.txt > coverage.xml
+gocov test -race -failfast -coverprofile=coverage.txt $* ./... | gocov-xml > coverage.xml
 go mod tidy

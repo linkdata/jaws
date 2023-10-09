@@ -12,11 +12,13 @@ func TestParse(t *testing.T) {
 		arg  string
 		want What
 	}{
-		{"blank is None", "", None},
+		{"blank is Update", "", Update},
+		{"Update", "Update", Update},
 		{"Inner", "Inner", Inner},
 		{"inner", "inner", Inner},
-		{"innerr", "innerr", None},
+		{"innerr", "innerr", invalid},
 		{"last", lastWhat.String(), lastWhat},
+		{"newline", "\n", invalid},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -27,15 +29,39 @@ func TestParse(t *testing.T) {
 	}
 }
 
+func TestIsCommandAndValid(t *testing.T) {
+	if invalid.IsValid() {
+		t.Fail()
+	}
+	if !Update.IsValid() {
+		t.Fail()
+	}
+	if invalid.IsCommand() {
+		t.Fail()
+	}
+	if What(255).IsCommand() {
+		t.Fail()
+	}
+	if !Alert.IsCommand() {
+		t.Fail()
+	}
+	if !Reload.IsCommand() {
+		t.Fail()
+	}
+	if !Redirect.IsCommand() {
+		t.Fail()
+	}
+}
+
 func TestString(t *testing.T) {
 	tests := []struct {
 		name string
 		arg  What
 		want string
 	}{
-		{"None", None, "None"},
+		{"invalid", invalid, "invalid"},
 		{"Inner", Inner, "Inner"},
-		{"unknown", What(len(_What_index) + 44), fmt.Sprintf("What(%d)", len(_What_index)+44)},
+		{"unknown", ^What(0), fmt.Sprintf("What(%d)", ^What(0))},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

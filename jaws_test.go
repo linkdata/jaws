@@ -3,9 +3,7 @@ package jaws
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"errors"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -14,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/linkdata/jaws/what"
 	"github.com/matryer/is"
 )
 
@@ -108,7 +107,7 @@ func TestJaws_BroadcastDoesntBlockWhenClosed(t *testing.T) {
 	go jw.Serve()
 	jw.Close()
 	for i := 0; i < cap(jw.bcastCh)+1; i++ {
-		jw.Broadcast(&Message{})
+		jw.Broadcast(Message{})
 	}
 }
 
@@ -129,12 +128,12 @@ func TestJaws_BroadcastWaitsWhenFull(t *testing.T) {
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case jw.bcastCh <- &Message{Elem: " reload"}:
+	case jw.bcastCh <- Message{What: what.Reload}:
 	}
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case jw.bcastCh <- &Message{Elem: " reload"}:
+	case jw.bcastCh <- Message{What: what.Reload}:
 	}
 
 	// read one of the broadcasts, the other is
@@ -183,7 +182,7 @@ func TestJaws_BroadcastFullClosesChannel(t *testing.T) {
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case jw.bcastCh <- &Message{Elem: " reload"}:
+	case jw.bcastCh <- Message{What: what.Reload}:
 	}
 
 	select {
@@ -199,8 +198,9 @@ func TestJaws_BroadcastFullClosesChannel(t *testing.T) {
 	time.Sleep(time.Millisecond * 5)
 
 	select {
-	case msg := <-subCh1:
-		is.Equal(msg, nil)
+	case msg, ok := <-subCh1:
+		is.True(!ok)
+		is.Equal(msg, Message{})
 	default:
 	}
 }
@@ -212,10 +212,10 @@ func TestJaws_UseRequest(t *testing.T) {
 
 	is.Equal(0, jw.RequestCount())
 
-	rq1 := jw.NewRequest(context.Background(), nil)
+	rq1 := jw.NewRequest(nil)
 	is.True(rq1.JawsKey != 0)
 
-	rq2 := jw.NewRequest(context.Background(), &http.Request{RemoteAddr: "10.0.0.2:1010"})
+	rq2 := jw.NewRequest(&http.Request{RemoteAddr: "10.0.0.2:1010"})
 	is.True(rq2.JawsKey != 0)
 	is.True(rq1.JawsKey != rq2.JawsKey)
 	is.Equal(jw.Pending(), 2)
@@ -251,7 +251,7 @@ func TestJaws_BlockingRandomPanics(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 	jw.kg = bufio.NewReader(&bytes.Buffer{})
-	jw.NewRequest(context.Background(), nil)
+	jw.NewRequest(nil)
 	is.Fail()
 }
 
@@ -265,14 +265,23 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 	jw.Logger = log.New(w, "", 0)
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
 	is.Equal(jw.Pending(), 0)
+	deadline := time.Now().Add(testTimeout)
+	var expectLen int
 	for i := 0; i < numReqs; i++ {
-		jw.NewRequest(context.Background(), hr)
+		rq := jw.NewRequest(hr)
+		if (i % (numReqs / 10)) == 0 {
+			elem := rq.NewElement(NewUiDiv(makeHtmlGetter("meh")))
+			for j := 0; j < maxWsQueueLengthPerElement*10; j++ {
+				elem.SetInner("foo")
+			}
+		}
+		err := errPendingCancelled(rq, deadline)
+		expectLen += len(err.Error() + "\n")
 	}
 	is.Equal(jw.Pending(), numReqs)
 
 	go jw.ServeWithTimeout(time.Millisecond)
 
-	deadline := time.Now().Add(time.Second)
 	lastPending := jw.Pending()
 	for jw.Pending() > 0 && time.Now().Before(deadline) {
 		if jw.Pending() < lastPending {
@@ -289,8 +298,10 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 	case <-jw.Done():
 	}
 	w.Flush()
-	msg := fmt.Sprintf("jaws: request timed out: %q\n", "/")
-	is.Equal(b.Len(), len(msg)*numReqs)
+	if b.Len() != expectLen {
+		t.Log(b.String())
+		is.Equal(b.Len(), expectLen)
+	}
 }
 
 func TestJaws_BroadcastsCallable(t *testing.T) {
@@ -298,17 +309,12 @@ func TestJaws_BroadcastsCallable(t *testing.T) {
 	defer jw.Close()
 	go jw.Serve()
 
-	jw.SetInner("foo", "bar")
-	jw.Remove("foo")
+	jw.Delete("foo")
 	jw.Insert("foo", "bar", "baz")
 	jw.Append("foo", "bar")
 	jw.Replace("foo", "bar", "baz")
-	jw.SetAttr("foo", "bar", "baz")
-	jw.RemoveAttr("foo", "bar")
-	jw.SetValue("foo", "bar")
 	jw.Reload()
 	jw.Redirect("foo")
-	jw.Trigger("foo", "bar")
 	jw.Alert("info", "bar")
 }
 

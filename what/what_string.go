@@ -8,25 +8,31 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
-	_ = x[None-0]
-	_ = x[Inner-1]
-	_ = x[Remove-2]
-	_ = x[Insert-3]
-	_ = x[Append-4]
-	_ = x[Replace-5]
-	_ = x[Reload-6]
-	_ = x[SAttr-7]
-	_ = x[RAttr-8]
-	_ = x[Value-9]
-	_ = x[Trigger-10]
-	_ = x[Hook-11]
-	_ = x[Input-12]
-	_ = x[Click-13]
+	_ = x[invalid-0]
+	_ = x[Reload-1]
+	_ = x[Redirect-2]
+	_ = x[Alert-3]
+	_ = x[Order-4]
+	_ = x[Inner-5]
+	_ = x[Delete-6]
+	_ = x[Replace-7]
+	_ = x[Remove-8]
+	_ = x[Insert-9]
+	_ = x[Append-10]
+	_ = x[SAttr-11]
+	_ = x[RAttr-12]
+	_ = x[SClass-13]
+	_ = x[RClass-14]
+	_ = x[Value-15]
+	_ = x[Input-16]
+	_ = x[Click-17]
+	_ = x[Update-18]
+	_ = x[Hook-19]
 }
 
-const _What_name = "NoneInnerRemoveInsertAppendReplaceReloadSAttrRAttrValueTriggerHookInputClick"
+const _What_name = "invalidReloadRedirectAlertOrderInnerDeleteReplaceRemoveInsertAppendSAttrRAttrSClassRClassValueInputClickUpdateHook"
 
-var _What_index = [...]uint8{0, 4, 9, 15, 21, 27, 34, 40, 45, 50, 55, 62, 66, 71, 76}
+var _What_index = [...]uint8{0, 7, 13, 21, 26, 31, 36, 42, 49, 55, 61, 67, 72, 77, 83, 89, 94, 99, 104, 110, 114}
 
 func (i What) String() string {
 	if i >= What(len(_What_index)-1) {

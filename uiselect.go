@@ -1,0 +1,41 @@
+package jaws
+
+import (
+	"html/template"
+	"io"
+
+	"github.com/linkdata/jaws/what"
+)
+
+type UiSelect struct {
+	uiWrapContainer
+}
+
+func NewUiSelect(sh SelectHandler) *UiSelect {
+	return &UiSelect{
+		uiWrapContainer{
+			Container: sh,
+		},
+	}
+}
+
+func (ui *UiSelect) JawsRender(e *Element, w io.Writer, params []interface{}) {
+	ui.renderContainer(e, w, "select", params)
+}
+
+func (ui *UiSelect) JawsUpdate(e *Element) {
+	e.SetValue(ui.uiWrapContainer.Container.(StringGetter).JawsGetString(e))
+	ui.uiWrapContainer.JawsUpdate(e)
+}
+
+func (ui *UiSelect) JawsEvent(e *Element, wht what.What, val string) (err error) {
+	if wht == what.Input {
+		err = ui.uiWrapContainer.Container.(StringSetter).JawsSetString(e, val)
+		e.Dirty(ui.Tag)
+	}
+	return
+}
+
+func (rq *Request) Select(sh SelectHandler, params ...interface{}) template.HTML {
+	return rq.UI(NewUiSelect(sh), params...)
+}

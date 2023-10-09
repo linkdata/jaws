@@ -4,18 +4,20 @@
 package jaws
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
 
 func Fuzz_wsParse(f *testing.F) {
-	f.Add([]byte(" \n\n"))
-	f.Add([]byte("elem\nInner\ndata\nline"))
+	f.Add([]byte("Update\t\t\"\"\n"))
+	f.Add([]byte("Click\t\t\" \\n\"\n"))
+	f.Add([]byte("Inner\tJid.1\t\"data\\nline\"\n"))
 	f.Fuzz(func(t *testing.T, a []byte) {
-		if msg := wsParse(a); msg != nil {
-			txt := msg.Format()
-			if string(a) != txt {
-				t.Errorf("%q != %q", string(a), txt)
+		if msg, ok := wsParse(a); ok {
+			b := msg.Append(nil)
+			if !bytes.Equal(a, b) {
+				t.Errorf("%q != %q", string(a), string(b))
 			}
 		} else {
 			if len(a) > 0 && a[0] != '\n' && strings.Count(string(a), "\n") > 1 {

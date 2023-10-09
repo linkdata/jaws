@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -111,7 +110,7 @@ func TestServeHTTP_GetKey(t *testing.T) {
 	is.Equal(w.Code, http.StatusNotFound)
 	is.Equal(w.Header()["Cache-Control"], nil)
 
-	rq := jw.NewRequest(context.Background(), req)
+	rq := jw.NewRequest(req)
 	req = httptest.NewRequest("", "/jaws/"+rq.JawsKeyString(), nil)
 	w = httptest.NewRecorder()
 	jw.ServeHTTP(w, req)

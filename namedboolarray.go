@@ -1,33 +1,30 @@
 package jaws
 
 import (
-	"strconv"
+	"html/template"
 	"strings"
 
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/what"
 )
 
 // NamedBoolArray stores the data required to support HTML 'select' elements
 // and sets of HTML radio buttons. It it safe to use from multiple goroutines
 // concurrently.
 type NamedBoolArray struct {
-	Jid    string           // (read-only) JaWS ID of the array
-	prefix string           // Jid+"/"
-	mu     deadlock.RWMutex // protects following
-	data   []*NamedBool
+	Multi bool             // allow multiple NamedBools to be true
+	mu    deadlock.RWMutex // protects following
+	data  []*NamedBool
 }
+
+var _ SelectHandler = (*NamedBoolArray)(nil)
 
 // NewNamedBoolArray creates a new object to track a related set of named booleans.
 //
 // The JaWS ID string 'jid' is used as the ID for <select> elements and the
 // value for the 'name' attribute for radio buttons. If left empty, MakeID() will
 // be used to assign a unique ID.
-func NewNamedBoolArray(jid string) *NamedBoolArray {
-	if jid == "" {
-		jid = MakeID()
-	}
-	return &NamedBoolArray{Jid: jid, prefix: jid + "/"}
+func NewNamedBoolArray() *NamedBoolArray {
+	return &NamedBoolArray{}
 }
 
 // ReadLocked calls the given function with the NamedBoolArray locked for reading.
@@ -45,29 +42,44 @@ func (nba *NamedBoolArray) WriteLocked(fn func(nbl []*NamedBool) []*NamedBool) {
 	nba.data = fn(nba.data)
 }
 
+func (nba *NamedBoolArray) JawsContains(rq *Request) (contents []UI) {
+	nba.mu.RLock()
+	for _, nb := range nba.data {
+		contents = append(contents, UiOption{nb})
+	}
+	nba.mu.RUnlock()
+	return
+}
+
 // Add adds a NamedBool with the given name and the given text.
 // Returns itself.
 //
 // Note that while it's legal to have multiple NamedBool with the same name
 // since it's allowed in HTML, it's probably not a good idea.
-func (nba *NamedBoolArray) Add(name, text string) *NamedBoolArray {
-	nb := &NamedBool{Name: name, Html: text}
+func (nba *NamedBoolArray) Add(name string, text template.HTML) *NamedBoolArray {
 	nba.mu.Lock()
-	nba.data = append(nba.data, nb)
+	nba.data = append(nba.data, NewNamedBool(nba, name, text, false))
 	nba.mu.Unlock()
 	return nba
 }
 
-// Set sets the Checked state for the NamedBool(s) with the given name or Jid.
-func (nba *NamedBoolArray) Set(name string, state bool) {
-	name = strings.TrimPrefix(name, nba.prefix)
-	nba.mu.Lock()
+// Set sets the Checked state for the NamedBool(s) with the given name.
+func (nba *NamedBoolArray) Set(name string, state bool) (changed bool) {
+	nba.mu.RLock()
+	defer nba.mu.RUnlock()
 	for _, nb := range nba.data {
-		if nb.Name == name {
-			nb.Checked = state
+		if nb.Name() == name {
+			changed = nb.Set(state) || changed
 		}
 	}
-	nba.mu.Unlock()
+	if state && !nba.Multi {
+		for _, nb := range nba.data {
+			if nb.Name() != name {
+				changed = nb.Set(false) || changed
+			}
+		}
+	}
+	return
 }
 
 // Get returns the name of first NamedBool in the group that
@@ -80,8 +92,8 @@ func (nba *NamedBoolArray) Set(name string, state bool) {
 func (nba *NamedBoolArray) Get() (name string) {
 	nba.mu.RLock()
 	for _, nb := range nba.data {
-		if nb.Checked {
-			name = nb.Name
+		if nb.Checked() {
+			name = nb.Name()
 			break
 		}
 	}
@@ -89,25 +101,9 @@ func (nba *NamedBoolArray) Get() (name string) {
 	return
 }
 
-func (nba *NamedBoolArray) JidOf(name string) string {
-	return nba.prefix + name
-}
-
-// SetOnly sets the Checked state for the NamedBool(s) with the
-// given name to true and all others to false.
-func (nba *NamedBoolArray) SetOnly(name string) {
-	name = strings.TrimPrefix(name, nba.prefix)
-	nba.mu.Lock()
-	for _, nb := range nba.data {
-		nb.Checked = (nb.Name == name)
-	}
-	nba.mu.Unlock()
-}
-
 func (nba *NamedBoolArray) isCheckedLocked(name string) bool {
-	name = strings.TrimPrefix(name, nba.prefix)
 	for _, nb := range nba.data {
-		if nb.Checked && nb.Name == name {
+		if nb.Checked() && nb.Name() == name {
 			return true
 		}
 	}
@@ -126,9 +122,7 @@ func (nba *NamedBoolArray) IsChecked(name string) (state bool) {
 // String returns a string representation of the NamedBoolArray suitable for debugging.
 func (nba *NamedBoolArray) String() string {
 	var sb strings.Builder
-	sb.WriteString("&NamedBoolArray{")
-	sb.WriteString(strconv.Quote(nba.Jid))
-	sb.WriteString(",[")
+	sb.WriteString("&NamedBoolArray{[")
 	nba.mu.RLock()
 	for i, nb := range nba.data {
 		if i > 0 {
@@ -141,46 +135,12 @@ func (nba *NamedBoolArray) String() string {
 	return sb.String()
 }
 
-func (nba *NamedBoolArray) radioList(rq *Request, fn InputTextFn) (rl []Radio) {
-	nba.mu.RLock()
-	rl = make([]Radio, len(nba.data))
-	for i, nb := range nba.data {
-		rl[i] = Radio{
-			nba:       nba,
-			rq:        rq,
-			fn:        fn,
-			NamedBool: *nb,
-		}
-	}
-	nba.mu.RUnlock()
+func (nba *NamedBoolArray) JawsGetString(e *Element) string {
+	return nba.Get()
+}
+
+func (nba *NamedBoolArray) JawsSetString(e *Element, name string) (err error) {
+	nba.Set(name, true)
+	e.Dirty(nba)
 	return
-}
-
-func (nba *NamedBoolArray) radioEventFn(rq *Request, evt what.What, jid, val string, fn InputTextFn) (err error) {
-	if evt == what.Input && val != "" && strings.HasPrefix(jid, nba.prefix) {
-		var v bool
-		if v, err = strconv.ParseBool(val); err == nil {
-			name := strings.TrimPrefix(jid, nba.prefix)
-			nba.mu.Lock()
-			for _, nb := range nba.data {
-				nb.Checked = v && (nb.Name == name)
-			}
-			nba.mu.Unlock()
-			rq.SetBoolValue(jid, v)
-			if fn != nil {
-				err = fn(rq, jid, name)
-			}
-		}
-	}
-	return
-}
-
-// JawsRadioGroupData implements part of RadioGrouper. It returns itself.
-func (nba *NamedBoolArray) JawsRadioGroupData() *NamedBoolArray {
-	return nba
-}
-
-// JawsRadioGroupHandler implements part of RadioGrouper. It does nothing and returns nil.
-func (nba *NamedBoolArray) JawsRadioGroupHandler(rq *Request, boolName string) error {
-	return nil
 }

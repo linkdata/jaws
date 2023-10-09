@@ -11,38 +11,51 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
 )
 
-const CookieNameDefault = "jaws"
+const (
+	DefaultCookieName     = "jaws"                 // Default browser cookie name
+	DefaultUpdateInterval = time.Millisecond * 100 // Default browser update interval
+)
+
+type Jid = jid.Jid // convenience alias
 
 type Jaws struct {
-	CookieName string      // Name for session cookies, defaults to "jaws"
-	Logger     *log.Logger // If not nil, send debug info and errors here
-	doneCh     <-chan struct{}
-	bcastCh    chan *Message
-	subCh      chan subscription
-	unsubCh    chan chan *Message
-	headPrefix string
-	mu         deadlock.RWMutex // protects following
-	kg         *bufio.Reader
-	actives    int32 // atomic
-	closeCh    chan struct{}
-	reqs       map[uint64]*Request
-	sessions   map[uint64]*Session
+	CookieName   string             // Name for session cookies, defaults to "jaws"
+	Logger       *log.Logger        // If not nil, send debug info and errors here
+	Template     *template.Template // User templates in use, may be nil
+	doneCh       <-chan struct{}
+	bcastCh      chan Message
+	subCh        chan subscription
+	unsubCh      chan chan Message
+	updateTicker *time.Ticker
+	headPrefix   string
+	mu           deadlock.RWMutex // protects following
+	kg           *bufio.Reader
+	closeCh      chan struct{}
+	pending      map[uint64]*Request
+	active       map[*Request]struct{}
+	sessions     map[uint64]*Session
+	dirty        map[interface{}]int
+	dirtOrder    int
 }
 
 // NewWithDone returns a new JaWS object using the given completion channel.
@@ -50,15 +63,18 @@ type Jaws struct {
 // publishing HTML changes across all connections.
 func NewWithDone(doneCh <-chan struct{}) *Jaws {
 	return &Jaws{
-		CookieName: CookieNameDefault,
-		doneCh:     doneCh,
-		bcastCh:    make(chan *Message, 1),
-		subCh:      make(chan subscription, 1),
-		unsubCh:    make(chan chan *Message, 1),
-		headPrefix: HeadHTML([]string{JavascriptPath}, nil),
-		kg:         bufio.NewReader(rand.Reader),
-		reqs:       make(map[uint64]*Request),
-		sessions:   make(map[uint64]*Session),
+		CookieName:   DefaultCookieName,
+		doneCh:       doneCh,
+		bcastCh:      make(chan Message, 1),
+		subCh:        make(chan subscription, 1),
+		unsubCh:      make(chan chan Message, 1),
+		updateTicker: time.NewTicker(DefaultUpdateInterval),
+		headPrefix:   HeadHTML([]string{JavascriptPath}, nil),
+		kg:           bufio.NewReader(rand.Reader),
+		pending:      make(map[uint64]*Request),
+		active:       make(map[*Request]struct{}),
+		sessions:     make(map[uint64]*Session),
+		dirty:        make(map[interface{}]int),
 	}
 }
 
@@ -82,6 +98,7 @@ func (jw *Jaws) Close() {
 		close(jw.closeCh)
 		jw.closeCh = nil
 	}
+	jw.updateTicker.Stop()
 	jw.mu.Unlock()
 }
 
@@ -98,9 +115,8 @@ func (jw *Jaws) Done() <-chan struct{} {
 // WebSocket callback and started processing.
 func (jw *Jaws) RequestCount() (n int) {
 	jw.mu.RLock()
-	n = len(jw.reqs)
+	n = len(jw.pending) + len(jw.active)
 	jw.mu.RUnlock()
-	n += int(atomic.LoadInt32(&jw.actives))
 	return
 }
 
@@ -129,28 +145,35 @@ func (jw *Jaws) MustLog(err error) {
 
 var nextId uint64 // atomic
 
-// MakeID returns a string in the form 'jaws.X' where X is a unique string within lifetime of the program.
-func MakeID() string {
-	return "jaws." + strconv.FormatUint(atomic.AddUint64(&nextId, 1), 32)
+// NextID returns a uint64 unique within lifetime of the program.
+func NextID() uint64 {
+	return atomic.AddUint64(&nextId, 1)
 }
 
-// NewRequest returns a new JaWS request.
+// AppendID appends the result of NextID() in text form to the given slice.
+func AppendID(b []byte) []byte {
+	return strconv.AppendUint(b, NextID(), 32)
+}
+
+// MakeID returns a string in the form 'jaws.X' where X is a unique string within lifetime of the program.
+func MakeID() string {
+	return string(AppendID([]byte("jaws.")))
+}
+
+// NewRequest returns a new pending JaWS request that times out after 10 seconds.
 //
 // Call this as soon as you start processing a HTML request, and store the
 // returned Request pointer so it can be used while constructing the HTML
 // response in order to register the JaWS id's you use in the response, and
-// use it's Key attribute when sending the Javascript portion of the reply
-// with GetBodyFooter.
-//
-// Don't use the http.Request's Context, as that will expire before the WebSocket call comes in.
-func (jw *Jaws) NewRequest(ctx context.Context, hr *http.Request) (rq *Request) {
+// use it's Key attribute when sending the Javascript portion of the reply.
+func (jw *Jaws) NewRequest(hr *http.Request) (rq *Request) {
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	for rq == nil {
 		jawsKey := jw.nonZeroRandomLocked()
-		if _, ok := jw.reqs[jawsKey]; !ok {
-			rq = newRequest(ctx, jw, jawsKey, hr)
-			jw.reqs[jawsKey] = rq
+		if _, ok := jw.pending[jawsKey]; !ok {
+			rq = getRequest(jw, jawsKey, hr)
+			jw.pending[jawsKey] = rq
 		}
 	}
 	return
@@ -180,10 +203,11 @@ func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) {
 	if jawsKey != 0 {
 		var err error
 		jw.mu.Lock()
-		if waitingRq, ok := jw.reqs[jawsKey]; ok {
+		if waitingRq, ok := jw.pending[jawsKey]; ok {
 			if err = waitingRq.start(hr); err == nil {
-				delete(jw.reqs, jawsKey)
+				delete(jw.pending, jawsKey)
 				rq = waitingRq
+				jw.active[rq] = struct{}{}
 			}
 		}
 		jw.mu.Unlock()
@@ -328,142 +352,114 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) error {
 }
 
 // Broadcast sends a message to all Requests.
-func (jw *Jaws) Broadcast(msg *Message) {
+func (jw *Jaws) Broadcast(msg Message) {
 	select {
 	case <-jw.Done():
 	case jw.bcastCh <- msg:
 	}
 }
 
-// SetInner sends a jid and new inner HTML to all Requests.
-//
-// Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
-func (jw *Jaws) SetInner(jid string, innerHtml string) {
-	jw.Broadcast(&Message{
-		Elem: jid,
-		What: what.Inner,
-		Data: innerHtml,
-	})
+// setDirty marks all Elements that have one or more of the given tags as dirty.
+func (jw *Jaws) setDirty(tags []any) {
+	jw.mu.Lock()
+	defer jw.mu.Unlock()
+	for _, tag := range tags {
+		jw.dirtOrder++
+		jw.dirty[tag] = jw.dirtOrder
+	}
 }
 
-// Remove removes the HTML element(s) with the given 'jid' on all Requests.
+// Dirty marks all Elements that have one or more of the given tags as dirty.
 //
-// Only the requests that have registered the 'jid' (either with Register or OnEvent) will be sent the message.
-func (jw *Jaws) Remove(jid string) {
-	jw.Broadcast(&Message{
-		Elem: jid,
-		What: what.Remove,
-	})
+// Note that if any of the tags are a TagGetter, it will be called with a nil Request.
+// Prefer using Request.Dirty() which avoids this.
+func (jw *Jaws) Dirty(tags ...interface{}) {
+	jw.setDirty(TagExpand(nil, tags, nil))
 }
 
-// Insert calls the Javascript 'insertBefore()' method on the given element on all Requests.
-// The position parameter 'where' may be either a HTML ID, an child index or the text 'null'.
-//
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (jw *Jaws) Insert(parentId, where, html string) {
-	jw.Broadcast(&Message{
-		Elem: parentId,
-		What: what.Insert,
-		Data: where + "\n" + html,
-	})
-}
+func (jw *Jaws) distributeDirt() int {
+	type orderedDirt struct {
+		tag   interface{}
+		order int
+	}
 
-// Append calls the Javascript 'appendChild()' method on the given element on all Requests.
-//
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (jw *Jaws) Append(parentId, html string) {
-	jw.Broadcast(&Message{
-		Elem: parentId,
-		What: what.Append,
-		Data: html,
-	})
-}
+	jw.mu.Lock()
+	dirt := make([]orderedDirt, 0, len(jw.dirty))
+	for k, v := range jw.dirty {
+		dirt = append(dirt, orderedDirt{tag: k, order: v})
+		delete(jw.dirty, k)
+	}
+	jw.dirtOrder = 0
 
-// Replace calls the Javascript 'replaceChild()' method on the given element on all Requests.
-// The position parameter 'where' may be either a HTML ID or an index.
-//
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (jw *Jaws) Replace(id, where, html string) {
-	jw.Broadcast(&Message{
-		Elem: id,
-		What: what.Replace,
-		Data: where + "\n" + html,
-	})
-}
+	var reqs []*Request
+	if len(dirt) > 0 {
+		reqs = make([]*Request, 0, len(jw.pending)+len(jw.active))
+		for _, rq := range jw.pending {
+			reqs = append(reqs, rq)
+		}
+		for rq := range jw.active {
+			reqs = append(reqs, rq)
+		}
+	}
+	jw.mu.Unlock()
 
-// SetAttr sends an HTML id and new attribute value to all Requests.
-// If the value is an empty string, a value-less attribute will be added (such as "disabled")
-//
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (jw *Jaws) SetAttr(id, attr, val string) {
-	jw.Broadcast(&Message{
-		Elem: id,
-		What: what.SAttr,
-		Data: attr + "\n" + val,
-	})
-}
-
-// RemoveAttr removes a given attribute from the HTML id for all Requests.
-//
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (jw *Jaws) RemoveAttr(id, attr string) {
-	jw.Broadcast(&Message{
-		Elem: id,
-		What: what.RAttr,
-		Data: attr,
-	})
-}
-
-// SetValue sends an HTML id and new input value to all Requests.
-//
-// Only the requests that have registered the ID (either with Register or OnEvent) will be sent the message.
-func (jw *Jaws) SetValue(id, val string) {
-	jw.Broadcast(&Message{
-		Elem: id,
-		What: what.Value,
-		Data: val,
-	})
+	if len(dirt) > 0 {
+		sort.Slice(dirt, func(i, j int) bool { return dirt[i].order < dirt[j].order })
+		tags := make([]interface{}, len(dirt))
+		for i := range dirt {
+			tags[i] = dirt[i].tag
+		}
+		for _, rq := range reqs {
+			rq.appendDirtyTags(tags)
+		}
+	}
+	return len(dirt)
 }
 
 // Reload requests all Requests to reload their current page.
 func (jw *Jaws) Reload() {
-	jw.Broadcast(&Message{
-		Elem: " reload",
+	jw.Broadcast(Message{
+		What: what.Reload,
 	})
 }
 
 // Redirect requests all Requests to navigate to the given URL.
 func (jw *Jaws) Redirect(url string) {
-	jw.Broadcast(&Message{
-		Elem: " redirect",
+	jw.Broadcast(Message{
+		What: what.Redirect,
 		Data: url,
-	})
-}
-
-// Trigger invokes the event handler for the given ID with a 'trigger' event on all Requests.
-func (jw *Jaws) Trigger(id, val string) {
-	jw.Broadcast(&Message{
-		Elem: id,
-		What: what.Trigger,
-		Data: val,
 	})
 }
 
 // Alert sends an alert to all Requests. The lvl argument should be one of Bootstraps alert levels:
 // primary, secondary, success, danger, warning, info, light or dark.
 func (jw *Jaws) Alert(lvl, msg string) {
-	jw.Broadcast(&Message{
-		Elem: " alert",
+	jw.Broadcast(Message{
+		What: what.Alert,
 		Data: lvl + "\n" + msg,
+	})
+}
+
+// Order re-orders HTML elements matching the given tags in all Requests.
+func (jw *Jaws) Order(tags []interface{}) {
+	jw.Broadcast(Message{
+		What: what.Order,
+		Data: TagExpand(nil, tags, nil),
 	})
 }
 
 // Count returns the number of requests waiting for their WebSocket callbacks.
 func (jw *Jaws) Pending() (n int) {
 	jw.mu.RLock()
-	n = len(jw.reqs)
+	n = len(jw.pending)
 	jw.mu.RUnlock()
 	return
+}
+
+func (jw *Jaws) deactivate(rq *Request) {
+	jw.mu.Lock()
+	delete(jw.active, rq)
+	jw.mu.Unlock()
 }
 
 // ServeWithTimeout begins processing requests with the given timeout.
@@ -481,13 +477,12 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	}
 	t := time.NewTicker(maintenanceInterval)
 	defer t.Stop()
-	subs := map[chan *Message]*Request{}
+	subs := map[chan Message]*Request{}
 
-	killSub := func(msgCh chan *Message) {
+	killSub := func(msgCh chan Message) {
 		if _, ok := subs[msgCh]; ok {
 			delete(subs, msgCh)
 			close(msgCh)
-			atomic.StoreInt32(&jw.actives, int32(len(subs)))
 		}
 	}
 
@@ -495,17 +490,24 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		select {
 		case <-jw.Done():
 			return
+		case <-jw.updateTicker.C:
+			if jw.distributeDirt() > 0 {
+				for msgCh := range subs {
+					select {
+					case msgCh <- Message{What: what.Update}:
+					default:
+					}
+				}
+			}
 		case <-t.C:
 			jw.maintenance(requestTimeout)
-			atomic.StoreInt32(&jw.actives, int32(len(subs)))
 		case sub := <-jw.subCh:
 			if sub.msgCh != nil {
 				subs[sub.msgCh] = sub.rq
-				atomic.StoreInt32(&jw.actives, int32(len(subs)))
 			}
 		case msgCh := <-jw.unsubCh:
 			killSub(msgCh)
-		case msg := <-jw.bcastCh:
+		case msg, ok := <-jw.bcastCh:
 			// it's critical that we keep the broadcast
 			// distribution loop running, so any Request
 			// that fails to process it's messages quickly
@@ -513,10 +515,10 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			// would be to drop some messages, but that
 			// could mean nonreproducible and seemingly
 			// random failures in processing logic.
-			if msg != nil {
-				_, isMeta := metaIds[msg.Elem]
+			if ok {
+				isCmd := msg.What.IsCommand()
 				for msgCh, rq := range subs {
-					if isMeta || (rq != nil && rq != msg.from && rq.hasJid(msg.Elem)) {
+					if isCmd || rq.wantMessage(&msg) {
 						select {
 						case msgCh <- msg:
 						default:
@@ -535,14 +537,14 @@ func (jw *Jaws) Serve() {
 	jw.ServeWithTimeout(time.Second * 10)
 }
 
-func (jw *Jaws) subscribe(rq *Request, minSize int) chan *Message {
+func (jw *Jaws) subscribe(rq *Request, minSize int) chan Message {
 	size := minSize
 	if rq != nil {
 		if size = 4 + len(rq.elems)*4; size < minSize {
 			size = minSize
 		}
 	}
-	msgCh := make(chan *Message, size)
+	msgCh := make(chan Message, size)
 	select {
 	case <-jw.Done():
 		close(msgCh)
@@ -552,11 +554,28 @@ func (jw *Jaws) subscribe(rq *Request, minSize int) chan *Message {
 	return msgCh
 }
 
-func (jw *Jaws) unsubscribe(msgCh chan *Message) {
+func (jw *Jaws) unsubscribe(msgCh chan Message) {
 	select {
 	case <-jw.Done():
 	case jw.unsubCh <- msgCh:
 	}
+}
+
+var ErrNoWebSocketRequest = errors.New("no WebSocket request received")
+
+func errPendingCancelled(rq *Request, deadline time.Time) error {
+	err := context.Cause(rq.ctx)
+	if err == nil {
+		if rq.Created.After(deadline) {
+			return nil
+		}
+		err = ErrNoWebSocketRequest
+	}
+	var uri string
+	if rq.Initial != nil {
+		uri = fmt.Sprintf("%s %q: ", rq.Initial.Method, rq.Initial.RequestURI)
+	}
+	return fmt.Errorf("cancelled pending %v: %s%v", rq, uri, err)
 }
 
 func (jw *Jaws) maintenance(requestTimeout time.Duration) {
@@ -567,11 +586,11 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	now := time.Now()
 	deadline := now.Add(-requestTimeout)
 	logger := jw.Logger
-	for k, rq := range jw.reqs {
-		if rq.Created.Before(deadline) {
+	for k, rq := range jw.pending {
+		if err := errPendingCancelled(rq, deadline); err != nil {
 			killReqs = append(killReqs, k)
-			if logger != nil && rq.Initial != nil {
-				logger.Println(fmt.Errorf("jaws: request timed out: %q", rq.Initial.RequestURI))
+			if logger != nil {
+				logger.Println(err)
 			}
 		}
 	}
@@ -585,7 +604,7 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	if len(killReqs)+len(killSess) > 0 {
 		jw.mu.Lock()
 		for _, k := range killReqs {
-			delete(jw.reqs, k)
+			delete(jw.pending, k)
 		}
 		for _, k := range killSess {
 			delete(jw.sessions, k)
@@ -613,4 +632,105 @@ func maybePanic(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+// SetInner sends a request to replace the inner HTML of
+// all HTML elements matching target.
+func (jw *Jaws) SetInner(target interface{}, innerHtml template.HTML) {
+	jw.Broadcast(Message{
+		Dest: target,
+		What: what.Inner,
+		Data: innerHtml,
+	})
+}
+
+// SetAttr sends a request to replace the given attribute value in
+// all HTML elements matching target.
+func (jw *Jaws) SetAttr(target interface{}, attr, val string) {
+	jw.Broadcast(Message{
+		Dest: target,
+		What: what.SAttr,
+		Data: attr + "\n" + val,
+	})
+}
+
+// RemoveAttr sends a request to remove the given attribute from
+// all HTML elements matching target.
+func (jw *Jaws) RemoveAttr(target interface{}, attr string) {
+	jw.Broadcast(Message{
+		Dest: target,
+		What: what.RAttr,
+		Data: attr,
+	})
+}
+
+// SetClass sends a request to set the given class in
+// all HTML elements matching target.
+func (jw *Jaws) SetClass(target interface{}, cls string) {
+	jw.Broadcast(Message{
+		Dest: target,
+		What: what.SClass,
+		Data: cls,
+	})
+}
+
+// RemoveClass sends a request to remove the given class from
+// all HTML elements matching target.
+func (jw *Jaws) RemoveClass(target interface{}, cls string) {
+	jw.Broadcast(Message{
+		Dest: target,
+		What: what.RClass,
+		Data: cls,
+	})
+}
+
+// SetValue sends a request to set the HTML "value" attribute of
+// all HTML elements matching target.
+func (jw *Jaws) SetValue(target interface{}, val string) {
+	jw.Broadcast(Message{
+		Dest: target,
+		What: what.Value,
+		Data: val,
+	})
+}
+
+// Insert calls the Javascript 'insertBefore()' method on
+// all HTML elements matching target.
+//
+// The position parameter 'where' may be either a HTML ID, an child index or the text 'null'.
+func (jw *Jaws) Insert(target interface{}, where, html string) {
+	jw.Broadcast(Message{
+		Dest: target,
+		What: what.Insert,
+		Data: where + "\n" + html,
+	})
+}
+
+// Replace replaces the HTML content on
+// all HTML elements matching target.
+//
+// The position parameter 'where' may be either a HTML ID or an index.
+func (jw *Jaws) Replace(target interface{}, where, html string) {
+	jw.Broadcast(Message{
+		Dest: target,
+		What: what.Replace,
+		Data: where + "\n" + html,
+	})
+}
+
+// Delete removes the HTML element(s) matching target.
+func (jw *Jaws) Delete(target interface{}) {
+	jw.Broadcast(Message{
+		Dest: target,
+		What: what.Delete,
+	})
+}
+
+// Append calls the Javascript 'appendChild()' method on all HTML elements matching target.
+func (jw *Jaws) Append(target interface{}, html template.HTML) {
+	jw.Broadcast(Message{
+		Dest: target,
+		What: what.Append,
+		Data: html,
+	})
 }

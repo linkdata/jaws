@@ -25,43 +25,47 @@ function jawsIsTrue(v) {
 function jawsHandler(e) {
 	if (jaws instanceof WebSocket && e instanceof Event) {
 		var elem = e.currentTarget;
-		var jid = elem.getAttribute('jid');
-		if (jid) {
-			var val = elem.value;
+		var val;
+		if (e.type == 'click') {
+			val = e.target.getAttribute('name');
+			if (val == null) {
+				if (e.target.tagName.toLowerCase() === 'button') {
+					val = e.target.innerHTML;
+				} else {
+					val = e.target.id;
+				}
+			}
+		} else {
 			if (jawsIsCheckable(elem.getAttribute('type'))) {
 				val = elem.checked;
 			} else if (elem.tagName.toLowerCase() === 'option') {
 				val = elem.selected;
+			} else {
+				val = elem.value;
 			}
-			jaws.send(jid + "\n" + e.type + "\n" + val);
+			e.stopPropagation();
 		}
+		jaws.send(e.type + "\t" + elem.id + "\t" + JSON.stringify(val) + "\n");
 	}
 }
 
 function jawsAttach(topElem) {
-	var elements = topElem.querySelectorAll('[jid]');
+	var elements = topElem.querySelectorAll('[id^="Jid."]');
 	for (var i = 0; i < elements.length; i++) {
 		var elem = elements[i];
-		var jid = elem.getAttribute('jid');
-		if (jid.indexOf('jaws-') !== 0) {
-			var ddattr = elem.getAttribute('jaws');
-			if (ddattr) {
-				var evtypes = ddattr.split(',');
-				for (var j = 0; j < evtypes.length; j++) {
-					var evtype = evtypes[j].trim();
-					if (evtype) elem.addEventListener(evtype, jawsHandler, false);
-				}
-			} else if (jawsIsInputTag(elem.tagName)) {
-				elem.addEventListener('input', jawsHandler, false);
-			} else {
-				elem.addEventListener('click', jawsHandler, false);
-			}
+		if (jawsIsInputTag(elem.tagName)) {
+			elem.addEventListener('input', jawsHandler, false);
+		} else {
+			elem.addEventListener('click', jawsHandler, false);
 		}
 	}
 	return topElem;
 }
 
-function jawsAlert(type, message) {
+function jawsAlert(data) {
+	var lines = data.split('\n');
+	var type = lines.shift();
+	var message = lines.join('\n');
 	if (typeof bootstrap !== 'undefined') {
 		var alertsElem = document.getElementById('jaws-alerts');
 		if (alertsElem) {
@@ -75,10 +79,45 @@ function jawsAlert(type, message) {
 	console.log("jaws: " + type + ": " + message);
 }
 
+function jawsList(idlist) {
+	var i;
+	var elements = [];
+	var idstrings = idlist.split(' ');
+	for (i = 0; i < idstrings.length; i++) {
+		var elem = document.getElementById(idstrings[i]);
+		if (elem) {
+			elem.dataset.jidsort = i;
+			elements.push(elem);
+		}
+	}
+	elements.sort(function (a, b) {
+		return +a.dataset.jidsort - +b.dataset.jidsort;
+	});
+	for (i = 0; i < elements.length; i++) {
+		delete elements[i].dataset.jidsort;
+	}
+	return elements;
+}
+
+function jawsOrder(idlist) {
+	var i;
+	var elements = jawsList(idlist);
+	for (i = 0; i < elements.length; i++) {
+		elements[i].parentElement.appendChild(elements[i]);
+	}
+}
+
 function jawsSetValue(elem, str) {
 	var elemtype = elem.getAttribute('type');
 	if (jawsIsCheckable(elemtype)) {
 		elem.checked = jawsIsTrue(str);
+		return;
+	}
+	if (elem.tagName.toLowerCase() === 'option') {
+		elem.selected = jawsIsTrue(str);
+		return;
+	}
+	if (elem.value == str) {
 		return;
 	}
 	if (jawsHasSelection(elemtype)) {
@@ -94,10 +133,6 @@ function jawsSetValue(elem, str) {
 		}
 		elem.selectionStart = ss + delta;
 		elem.selectionEnd = se + delta;
-		return;
-	}
-	if (elem.tagName.toLowerCase() === 'option') {
-		elem.selected = jawsIsTrue(str);
 		return;
 	}
 	elem.value = str;
@@ -164,102 +199,110 @@ function jawsUnloading() {
 function jawsElement(html) {
 	var template = document.createElement('template');
 	template.innerHTML = html;
-	return template.content.firstChild;
+	return template.content;
 }
 
 function jawsWhere(elem, pos) {
 	var where = null;
 	if (pos && pos !== 'null') {
-		where = elem.querySelector('[jid="' + pos + '"]');
+		where = document.getElementById(pos);
 		if (where == null) {
 			where = elem.children[parseInt(pos)];
 		}
 	}
+	if (!(where instanceof Node)) {
+		console.log("jaws: id " + elem.id + " has no position " + pos);
+	}
 	return where;
 }
 
-function jawsMessage(e) {
-	var lines = e.data.split('\n');
-	var cmd_or_jid = lines.shift();
-	var what = lines.shift();
-	switch (cmd_or_jid) {
-		case ' reload':
-			window.location.reload();
-			return;
-		case ' redirect':
-			window.location.assign(lines.shift());
-			return;
-		case ' alert':
-			jawsAlert(lines.shift(), lines.join('\n'));
-			return;
+function jawsInsert(elem, data) {
+	var lines = data.split('\n');
+	var where = jawsWhere(elem, lines.shift());
+	if (where instanceof Node) {
+		elem.insertBefore(jawsAttach(jawsElement(lines.join('\n'))), where);
 	}
-	var where = null;
-	var data = null;
+}
+
+function jawsSetAttr(elem, data) {
+	var lines = data.split('\n');
+	elem.setAttribute(lines.shift(), lines.join('\n'));
+}
+
+function jawsMessage(e) {
+	var orders = e.data.split('\n');
+	var i;
+	for (i = 0; i < orders.length; i++) {
+		if (orders[i]) {
+			var parts = orders[i].split('\t');
+			jawsPerform(parts.shift(), parts.shift(), parts.shift());
+		}
+	}
+}
+
+function jawsPerform(what, id, data) {
+	data = JSON.parse(data);
 	switch (what) {
 		case 'Reload':
 			window.location.reload();
 			return;
+		case 'Redirect':
+			window.location.assign(data);
+			return;
+		case 'Alert':
+			jawsAlert(data);
+			return;
+		case 'Order':
+			jawsOrder(data);
+			return;
+	}
+	var elem = document.getElementById(id);
+	if (elem === null) {
+		console.log("jaws: id not found: " + id);
+		return;
+	}
+	var where = null;
+	switch (what) {
 		case 'Inner':
+			elem.innerHTML = data;
+			jawsAttach(elem);
+			break;
 		case 'Value':
+			jawsSetValue(elem, data);
+			break;
 		case 'Append':
-			data = lines.join('\n');
+			elem.appendChild(jawsAttach(jawsElement(data)));
+			break;
+		case 'Replace':
+			elem.replaceWith(jawsAttach(jawsElement(data)));
+			break;
+		case 'Delete':
+			elem.remove();
 			break;
 		case 'Remove':
+			where = jawsWhere(elem, data);
+			if (where instanceof Node) {
+				elem.removeChild(where);
+			}
 			break;
 		case 'Insert':
-		case 'Replace':
+			jawsInsert(elem, data);
+			break;
 		case 'SAttr':
-			where = lines.shift();
-			data = lines.join('\n');
+			jawsSetAttr(elem, data);
 			break;
 		case 'RAttr':
-			where = lines.shift();
+			elem.removeAttribute(data);
+			break;
+		case 'SClass':
+			elem.classList.add(data);
+			break;
+		case 'RClass':
+			elem.classList.remove(data);
 			break;
 		default:
 			console.log("jaws: unknown operation: " + what);
 			return;
-	}
-	var elements = document.querySelectorAll('[jid="' + cmd_or_jid + '"]');
-	if (elements.length === 0) {
-		console.log("jaws: jid not found: " + cmd_or_jid);
-		return;
-	}
-	for (var i = 0; i < elements.length; i++) {
-		var elem = elements[i];
-		switch (what) {
-			case 'Inner':
-				elem.innerHTML = data;
-				jawsAttach(elem);
-				break;
-			case 'Value':
-				jawsSetValue(elem, data);
-				break;
-			case 'Remove':
-				elem.remove();
-				break;
-			case 'Append':
-				elem.appendChild(jawsAttach(jawsElement(data)));
-				break;
-			case 'Insert':
-			case 'Replace':
-				var target = jawsWhere(elem, where);
-				if (target instanceof Node) {
-					if (what === 'Replace') {
-						elem.replaceChild(jawsAttach(jawsElement(data)), target);
-					} else {
-						elem.insertBefore(jawsAttach(jawsElement(data)), target);
-					}
-				} else {
-					console.log("jaws: jid " + cmd_or_jid + " has no position " + where);
-				}
-				break;
-			case 'SAttr':
-				elem.setAttribute(where, data);
-				break;
-			case 'RAttr':
-				elem.removeAttribute(where);
-				break;
-		}
 	}
 }
 
