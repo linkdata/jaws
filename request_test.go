@@ -36,6 +36,7 @@ type testRequest struct {
 	cancel      context.CancelFunc
 	expectPanic bool
 	panicked    bool
+	panicVal    any
 }
 
 func newTestRequest(is *is.I) (tr *testRequest) {
@@ -66,7 +67,9 @@ func newTestRequest(is *is.I) (tr *testRequest) {
 	go func() {
 		defer func() {
 			if tr.expectPanic {
-				tr.panicked = (recover() != nil)
+				if tr.panicVal = recover(); tr.panicVal != nil {
+					tr.panicked = true
+				}
 			}
 			close(tr.doneCh)
 		}()
@@ -403,6 +406,7 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 		case rq.sendCh <- Message{Dest: Tag("bomb"), What: what.Input}:
 		case <-rq.doneCh:
 			is.True(rq.panicked)
+			is.True(strings.Contains(rq.panicVal.(error).Error(), "eventCallCh is full sending"))
 			return
 		case <-tmr.C:
 			is.Fail()

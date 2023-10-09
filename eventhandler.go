@@ -16,13 +16,4 @@ func (ehf eventFnWrapper) JawsEvent(e *Element, w what.What, v string) error {
 	return ehf.EventFn(e, w, v)
 }
 
-type clickHandlerWapper struct{ ClickHandler }
-
-func (chw clickHandlerWapper) JawsEvent(e *Element, w what.What, v string) (err error) {
-	if w == what.Click {
-		err = chw.JawsClick(e, v)
-	}
-	return
-}
-
 var _ EventFn = eventFnWrapper{}.JawsEvent // statically ensure JawsEvent and EventFn are compatible

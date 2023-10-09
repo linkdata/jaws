@@ -516,12 +516,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			if ok {
 				// incoming event message from the websocket
 				if elem := rq.GetElement(wsmsg.Jid); elem != nil {
-					select {
-					case eventCallCh <- eventFnCall{e: elem, wht: wsmsg.What, data: wsmsg.Data}:
-					default:
-						rq.Jaws.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, tagmsg))
-						return
-					}
+					rq.queueEvent(eventCallCh, eventFnCall{e: elem, wht: wsmsg.What, data: wsmsg.Data})
 				}
 				continue
 			}
@@ -590,12 +585,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					// they won't be sent out on the WebSocket, but will queue up a
 					// call to the event function (if any).
 					// primary usecase is tests.
-					select {
-					case eventCallCh <- eventFnCall{e: elem, wht: tagmsg.What, data: wsdata}:
-					default:
-						rq.Jaws.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, tagmsg))
-						return
-					}
+					rq.queueEvent(eventCallCh, eventFnCall{e: elem, wht: tagmsg.What, data: wsdata})
 				case what.Hook:
 					// "hook" messages are used to synchronously call an event function.
 					// the function must not send any messages itself, but may return
@@ -619,6 +609,15 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 				}
 			}
 		}
+	}
+}
+
+func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
+	select {
+	case eventCallCh <- call:
+	default:
+		rq.Jaws.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, call))
+		return
 	}
 }
 
@@ -682,25 +681,8 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundCh chan<-
 	defer close(eventDoneCh)
 	for call := range eventCallCh {
 		var err error
-		switch call.wht {
-		case what.Click:
-			if h, ok := call.e.Ui().(ClickHandler); ok {
-				err = h.JawsClick(call.e, call.data)
-				break
-			}
-			fallthrough
-		case what.Input:
-			if h, ok := call.e.Ui().(EventHandler); ok {
-				err = h.JawsEvent(call.e, call.wht, call.data)
-				break
-			}
-			fallthrough
-		default:
-			if deadlock.Debug {
-				if call.wht != what.Click {
-					err = rq.Jaws.Log(fmt.Errorf("jaws: eventCaller unhandled: %s", call.String()))
-				}
-			}
+		if h, ok := call.e.Ui().(EventHandler); ok {
+			err = h.JawsEvent(call.e, call.wht, call.data)
 		}
 		if err != nil {
 			var m wsMsg
