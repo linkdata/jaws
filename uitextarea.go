@@ -15,7 +15,6 @@ type UiTextarea struct {
 func (ui *UiTextarea) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.parseGetter(e, ui.StringGetter)
 	attrs := ui.parseParams(e, params)
-	writeUiDebug(e, w)
 	maybePanic(WriteHtmlInner(w, e.Jid(), "textarea", "", template.HTML(ui.JawsGetString(e)), attrs...))
 }
 

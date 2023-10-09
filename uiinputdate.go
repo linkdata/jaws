@@ -20,7 +20,6 @@ func (ui *UiInputDate) renderDateInput(e *Element, w io.Writer, jid Jid, htmltyp
 	ui.parseGetter(e, ui.TimeGetter)
 	attrs := ui.parseParams(e, params)
 	ui.Last.Store(ui.JawsGetTime(e))
-	writeUiDebug(e, w)
 	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.str(), attrs...))
 }
 

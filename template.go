@@ -41,7 +41,6 @@ var _ UI = (*Template)(nil) // statically ensure interface is defined
 func (t Template) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	e.Tag(t.Dot)
 	attrs := parseParams(e, params)
-	writeUiDebug(e, w)
 	maybePanic(t.Execute(w, With{Element: e, Dot: t.Dot, Attrs: strings.Join(attrs, " ")}))
 }
 

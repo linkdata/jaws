@@ -16,7 +16,6 @@ func (ui *UiInputText) renderStringInput(e *Element, w io.Writer, htmltype strin
 	attrs := ui.parseParams(e, params)
 	v := ui.JawsGetString(e)
 	ui.Last.Store(v)
-	writeUiDebug(e, w)
 	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, v, attrs...))
 }
 

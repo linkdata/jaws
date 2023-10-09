@@ -20,7 +20,6 @@ func (ui *UiInputFloat) renderFloatInput(e *Element, w io.Writer, htmltype strin
 	ui.parseGetter(e, ui.FloatGetter)
 	attrs := ui.parseParams(e, params)
 	ui.Last.Store(ui.JawsGetFloat(e))
-	writeUiDebug(e, w)
 	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.str(), attrs...))
 }
 

@@ -5,30 +5,13 @@ import (
 	"html/template"
 	"io"
 	"strconv"
-	"strings"
 	"time"
 
-	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/what"
 )
 
 type UiHtml struct {
 	Tag any
-}
-
-func writeUiDebug(e *Element, w io.Writer) {
-	if deadlock.Debug {
-		var sb strings.Builder
-		_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", e.jid, e.ui)
-		for i, tag := range e.Request.TagsOf(e) {
-			if i > 0 {
-				sb.WriteString(", ")
-			}
-			sb.WriteString(TagString(tag))
-		}
-		sb.WriteByte(']')
-		_, _ = w.Write([]byte(strings.ReplaceAll(sb.String(), "-->", "==>") + " -->"))
-	}
 }
 
 func (ui *UiHtml) parseGetter(e *Element, getter interface{}) {

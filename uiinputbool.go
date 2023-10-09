@@ -20,7 +20,6 @@ func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string,
 	if v {
 		attrs = append(attrs, "checked")
 	}
-	writeUiDebug(e, w)
 	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, "", attrs...))
 }
 

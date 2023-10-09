@@ -12,7 +12,6 @@ type UiHtmlInner struct {
 func (ui *UiHtmlInner) renderInner(e *Element, w io.Writer, htmltag, htmltype string, params []interface{}) {
 	ui.parseGetter(e, ui.HtmlGetter)
 	attrs := ui.parseParams(e, params)
-	writeUiDebug(e, w)
 	maybePanic(WriteHtmlInner(w, e.Jid(), htmltag, htmltype, ui.JawsGetHtml(e), attrs...))
 }
 
