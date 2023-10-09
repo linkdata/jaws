@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"html"
 	"html/template"
-	"log"
 	"net"
 	"net/http"
 	"slices"
@@ -694,7 +693,6 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundCh chan<-
 			}
 		}
 	}
-	log.Println("meh")
 }
 
 // onConnect calls the Request's ConnectFn if it's not nil, and returns the error from it.
