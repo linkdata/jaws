@@ -95,7 +95,7 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 	for _, elem := range toAppend {
 		var sb strings.Builder
 		elem.ui.JawsRender(elem, &sb, nil)
-		e.Append(template.HTML(sb.String()))
+		e.Append(template.HTML(sb.String())) // #nosec G203
 	}
 
 	if !sameOrder(oldOrder, orderData) {

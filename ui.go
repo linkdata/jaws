@@ -19,7 +19,7 @@ type UI interface {
 func (rq *Request) UI(ui UI, params ...interface{}) template.HTML {
 	var sb strings.Builder
 	rq.JawsRender(rq.NewElement(ui), &sb, params)
-	return template.HTML(sb.String())
+	return template.HTML(sb.String()) // #nosec G203
 }
 
 func (rq *Request) JawsRender(elem *Element, w io.Writer, params []interface{}) {

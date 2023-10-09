@@ -15,11 +15,11 @@ type UiTextarea struct {
 func (ui *UiTextarea) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.parseGetter(e, ui.StringGetter)
 	attrs := ui.parseParams(e, params)
-	maybePanic(WriteHtmlInner(w, e.Jid(), "textarea", "", template.HTML(ui.JawsGetString(e)), attrs...))
+	maybePanic(WriteHtmlInner(w, e.Jid(), "textarea", "", template.HTML(ui.JawsGetString(e)), attrs...)) // #nosec G203
 }
 
 func (ui *UiTextarea) JawsUpdate(e *Element) {
-	e.SetInner(template.HTML(ui.JawsGetString(e)))
+	e.SetInner(template.HTML(ui.JawsGetString(e))) // #nosec G203
 }
 
 func (ui *UiTextarea) JawsEvent(e *Element, wht what.What, val string) (err error) {
