@@ -151,6 +151,7 @@ func TestElement_Queued(t *testing.T) {
 			time.Sleep(time.Millisecond)
 		}
 	}
+	is.Equal(tss.renderCalled, int32(1))
 }
 
 func TestElement_ReplacePanicsOnMissingId(t *testing.T) {
