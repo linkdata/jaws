@@ -8,6 +8,7 @@ type What uint8
 const (
 	invalid What = iota
 	// Commands not associated with an Element
+	Update   // Used for update scheduling
 	Reload   // Tells browser to reload the current URL
 	Redirect // Tells browser to load another URL
 	Alert    // Display (if using Bootstrap) an alert message
@@ -27,9 +28,8 @@ const (
 	// Element input events
 	Input
 	Click
-	// Meta
-	Update // Used for update scheduling
-	Hook   // Calls event handler synchronously, used for tests
+	// Testing
+	Hook // Calls event handler synchronously
 )
 
 func (w What) IsCommand() bool {

@@ -486,18 +486,34 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		}
 	}
 
+	// it's critical that we keep the broadcast
+	// distribution loop running, so any Request
+	// that fails to process it's messages quickly
+	// enough must be terminated. the alternative
+	// would be to drop some messages, but that
+	// could mean nonreproducible and seemingly
+	// random failures in processing logic.
+	mustBroadcast := func(msg Message) {
+		isCmd := msg.What.IsCommand()
+		for msgCh, rq := range subs {
+			if isCmd || rq.wantMessage(&msg) {
+				select {
+				case msgCh <- msg:
+				default:
+					killSub(msgCh)
+					rq.cancel(fmt.Errorf("%v: broadcast channel full sending %s", rq, msg.String()))
+				}
+			}
+		}
+	}
+
 	for {
 		select {
 		case <-jw.Done():
 			return
 		case <-jw.updateTicker.C:
 			if jw.distributeDirt() > 0 {
-				for msgCh := range subs {
-					select {
-					case msgCh <- Message{What: what.Update}:
-					default:
-					}
-				}
+				mustBroadcast(Message{What: what.Update})
 			}
 		case <-t.C:
 			jw.maintenance(requestTimeout)
@@ -508,25 +524,8 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		case msgCh := <-jw.unsubCh:
 			killSub(msgCh)
 		case msg, ok := <-jw.bcastCh:
-			// it's critical that we keep the broadcast
-			// distribution loop running, so any Request
-			// that fails to process it's messages quickly
-			// enough must be terminated. the alternative
-			// would be to drop some messages, but that
-			// could mean nonreproducible and seemingly
-			// random failures in processing logic.
 			if ok {
-				isCmd := msg.What.IsCommand()
-				for msgCh, rq := range subs {
-					if isCmd || rq.wantMessage(&msg) {
-						select {
-						case msgCh <- msg:
-						default:
-							killSub(msgCh)
-							_ = jw.Log(fmt.Errorf("jaws: broadcast channel full sending %v", msg))
-						}
-					}
-				}
+				mustBroadcast(msg)
 			}
 		}
 	}

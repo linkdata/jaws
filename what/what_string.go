@@ -9,30 +9,30 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[invalid-0]
-	_ = x[Reload-1]
-	_ = x[Redirect-2]
-	_ = x[Alert-3]
-	_ = x[Order-4]
-	_ = x[Inner-5]
-	_ = x[Delete-6]
-	_ = x[Replace-7]
-	_ = x[Remove-8]
-	_ = x[Insert-9]
-	_ = x[Append-10]
-	_ = x[SAttr-11]
-	_ = x[RAttr-12]
-	_ = x[SClass-13]
-	_ = x[RClass-14]
-	_ = x[Value-15]
-	_ = x[Input-16]
-	_ = x[Click-17]
-	_ = x[Update-18]
+	_ = x[Update-1]
+	_ = x[Reload-2]
+	_ = x[Redirect-3]
+	_ = x[Alert-4]
+	_ = x[Order-5]
+	_ = x[Inner-6]
+	_ = x[Delete-7]
+	_ = x[Replace-8]
+	_ = x[Remove-9]
+	_ = x[Insert-10]
+	_ = x[Append-11]
+	_ = x[SAttr-12]
+	_ = x[RAttr-13]
+	_ = x[SClass-14]
+	_ = x[RClass-15]
+	_ = x[Value-16]
+	_ = x[Input-17]
+	_ = x[Click-18]
 	_ = x[Hook-19]
 }
 
-const _What_name = "invalidReloadRedirectAlertOrderInnerDeleteReplaceRemoveInsertAppendSAttrRAttrSClassRClassValueInputClickUpdateHook"
+const _What_name = "invalidUpdateReloadRedirectAlertOrderInnerDeleteReplaceRemoveInsertAppendSAttrRAttrSClassRClassValueInputClickHook"
 
-var _What_index = [...]uint8{0, 7, 13, 21, 26, 31, 36, 42, 49, 55, 61, 67, 72, 77, 83, 89, 94, 99, 104, 110, 114}
+var _What_index = [...]uint8{0, 7, 13, 19, 27, 32, 37, 42, 48, 55, 61, 67, 73, 78, 83, 89, 95, 100, 105, 110, 114}
 
 func (i What) String() string {
 	if i >= What(len(_What_index)-1) {

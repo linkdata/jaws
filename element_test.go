@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -140,7 +142,12 @@ func TestElement_Queued(t *testing.T) {
 			})
 		},
 	}
+
+	pendingRq := rq.Jaws.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	pendingRq.UI(tss)
+
 	rq.UI(tss)
+	rq.Jaws.Dirty(tss)
 	rq.Dirty(tss)
 	tmr := time.NewTimer(testTimeout)
 	for atomic.LoadInt32(&tss.updateCalled) < 1 {
@@ -151,7 +158,8 @@ func TestElement_Queued(t *testing.T) {
 			time.Sleep(time.Millisecond)
 		}
 	}
-	is.Equal(tss.renderCalled, int32(1))
+	is.Equal(tss.updateCalled, int32(1))
+	is.Equal(tss.renderCalled, int32(2))
 }
 
 func TestElement_ReplacePanicsOnMissingId(t *testing.T) {

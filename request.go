@@ -205,10 +205,12 @@ func (rq *Request) Context() (ctx context.Context) {
 }
 
 func (rq *Request) cancel(err error) {
-	rq.mu.RLock()
-	cancelFn := rq.cancelFn
-	rq.mu.RUnlock()
-	cancelFn(err)
+	if rq != nil {
+		rq.mu.RLock()
+		cancelFn := rq.cancelFn
+		rq.mu.RUnlock()
+		cancelFn(err)
+	}
 }
 
 func (rq *Request) getDoneCh() (jawsDoneCh, ctxDoneCh <-chan struct{}) {

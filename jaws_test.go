@@ -3,7 +3,9 @@ package jaws
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
+	"html/template"
 	"log"
 	"net"
 	"net/http"
@@ -291,6 +293,7 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 	}
 
 	is.Equal(jw.Pending(), 0)
+
 	jw.Close()
 	select {
 	case <-time.NewTimer(testTimeout).C:
@@ -302,6 +305,45 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 		t.Log(b.String())
 		is.Equal(b.Len(), expectLen)
 	}
+}
+
+func TestJaws_UnconnectedLivesUntilDeadline(t *testing.T) {
+	is := is.New(t)
+	jw := New()
+	defer jw.Close()
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	rq1ctx := jw.NewRequest(hr).Context()
+	rq2 := jw.NewRequest(hr)
+	rq2.Created = time.Now().Add(-time.Second * 10)
+	rq2ctx := rq2.Context()
+
+	is.Equal(jw.Pending(), 2)
+
+	go jw.ServeWithTimeout(time.Second)
+
+	tmr := time.NewTimer(testTimeout)
+	for jw.Pending() > 1 {
+		select {
+		case <-tmr.C:
+			is.Fail()
+		case <-jw.Done():
+			is.Fail()
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+
+	is.Equal(jw.Pending(), 1)
+
+	jw.Close()
+	select {
+	case <-tmr.C:
+		is.Fail()
+	case <-jw.Done():
+	}
+
+	is.NoErr(context.Cause(rq1ctx))
+	is.NoErr(context.Cause(rq2ctx))
 }
 
 func TestJaws_BroadcastsCallable(t *testing.T) {
@@ -316,6 +358,14 @@ func TestJaws_BroadcastsCallable(t *testing.T) {
 	jw.Reload()
 	jw.Redirect("foo")
 	jw.Alert("info", "bar")
+	someTags := []any{Tag("tag1"), Tag("tag2")}
+	jw.Order(someTags)
+	jw.SetInner("regularHtmlId", template.HTML(""))
+	jw.SetValue("regularHtmlId", "value")
+	jw.SetAttr(someTags, "attribute", "value")
+	jw.RemoveAttr(someTags, "attribute")
+	jw.SetClass(someTags, "classname")
+	jw.RemoveClass(someTags, "classname")
 }
 
 func TestJaws_subscribeOnClosedReturnsNil(t *testing.T) {
