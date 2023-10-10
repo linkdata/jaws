@@ -51,10 +51,6 @@ type eventFnCall struct {
 	data string
 }
 
-func (call *eventFnCall) String() string {
-	return fmt.Sprintf("eventFnCall{%v, %s, %q}", call.e, call.wht, call.data)
-}
-
 const maxWsQueueLengthPerElement = 20
 
 var ErrWebsocketQueueOverflow = errors.New("websocket queue overflow")
