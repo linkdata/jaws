@@ -42,6 +42,7 @@ type Jaws struct {
 	CookieName   string             // Name for session cookies, defaults to "jaws"
 	Logger       *log.Logger        // If not nil, send debug info and errors here
 	Template     *template.Template // User templates in use, may be nil
+	Debug        bool               // set to true to enable debugging output
 	doneCh       <-chan struct{}
 	bcastCh      chan Message
 	subCh        chan subscription

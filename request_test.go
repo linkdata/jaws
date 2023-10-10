@@ -183,16 +183,6 @@ func TestRequest_HeadHTML(t *testing.T) {
 	is.Equal(strings.Contains(string(txt), JavascriptPath), true)
 }
 
-func TestRequest_BroadcastsCallable(t *testing.T) {
-	jw := New()
-	defer jw.Close()
-	go jw.Serve()
-	rq := jw.NewRequest(nil)
-	defer rq.recycle()
-
-	// TODO
-}
-
 func TestRequest_SendArrivesOk(t *testing.T) {
 	is := is.New(t)
 	rq := newTestRequest(is)

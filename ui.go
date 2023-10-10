@@ -5,8 +5,6 @@ import (
 	"html/template"
 	"io"
 	"strings"
-
-	"github.com/linkdata/deadlock"
 )
 
 // If any of these functions panic, the Request will be closed and the panic logged.
@@ -24,7 +22,7 @@ func (rq *Request) UI(ui UI, params ...interface{}) template.HTML {
 
 func (rq *Request) JawsRender(elem *Element, w io.Writer, params []interface{}) {
 	elem.ui.JawsRender(elem, w, params)
-	if deadlock.Debug {
+	if rq.Jaws.Debug {
 		var sb strings.Builder
 		_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", elem.jid, elem.ui)
 		for i, tag := range elem.Request.TagsOf(elem) {
