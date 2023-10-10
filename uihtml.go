@@ -17,16 +17,16 @@ func (ui *UiHtml) parseGetter(e *Element, getter interface{}) {
 	if getter != nil {
 		if tagger, ok := getter.(TagGetter); ok {
 			ui.Tag = tagger.JawsGetTag(e.Request)
+			if ch, ok := getter.(ClickHandler); ok {
+				e.handlers = append(e.handlers, clickHandlerWapper{ch})
+			}
+			if eh, ok := getter.(EventHandler); ok {
+				e.handlers = append(e.handlers, eh)
+			}
 		} else {
 			ui.Tag = getter
 		}
 		e.Tag(ui.Tag)
-		if ch, ok := getter.(ClickHandler); ok {
-			e.handlers = append(e.handlers, clickHandlerWapper{ch})
-		}
-		if eh, ok := getter.(EventHandler); ok {
-			e.handlers = append(e.handlers, eh)
-		}
 	}
 }
 
@@ -141,11 +141,6 @@ func (ui *UiHtml) JawsUpdate(e *Element) {
 	}
 }
 
-func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (err error) {
-	for _, h := range e.handlers {
-		if err = h.JawsEvent(e, wht, val); err != nil {
-			return
-		}
-	}
-	return
+func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) error {
+	return callEventHandler(ui.Tag, e, wht, val)
 }

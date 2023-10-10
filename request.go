@@ -589,14 +589,12 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					// the function must not send any messages itself, but may return
 					// an error to be sent out as an alert message.
 					// primary usecase is tests.
-					if h, ok := elem.Ui().(EventHandler); ok {
-						if errmsg := makeAlertDangerMessage(h.JawsEvent(elem, tagmsg.What, wsdata)); errmsg.What != what.Update {
-							wsQueue = append(wsQueue, wsMsg{
-								Data: wsdata,
-								Jid:  elem.jid,
-								What: errmsg.What,
-							})
-						}
+					if errmsg := makeAlertDangerMessage(callAllEventHandlers(elem, tagmsg.What, wsdata)); errmsg.What != what.Update {
+						wsQueue = append(wsQueue, wsMsg{
+							Data: wsdata,
+							Jid:  elem.jid,
+							What: errmsg.What,
+						})
 					}
 				default:
 					wsQueue = append(wsQueue, wsMsg{
@@ -677,11 +675,7 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundCh chan<- string, eventDoneCh chan<- struct{}) {
 	defer close(eventDoneCh)
 	for call := range eventCallCh {
-		var err error
-		if h, ok := call.e.Ui().(EventHandler); ok {
-			err = h.JawsEvent(call.e, call.wht, call.data)
-		}
-		if err != nil {
+		if err := callAllEventHandlers(call.e, call.wht, call.data); err != nil {
 			var m wsMsg
 			m.FillAlert(err)
 			select {

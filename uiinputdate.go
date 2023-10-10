@@ -30,7 +30,6 @@ func (ui *UiInputDate) JawsUpdate(e *Element) {
 }
 
 func (ui *UiInputDate) JawsEvent(e *Element, wht what.What, val string) (err error) {
-	err = ui.UiHtml.JawsEvent(e, wht, val)
 	if wht == what.Input {
 		var v time.Time
 		if val != "" {
@@ -39,10 +38,11 @@ func (ui *UiInputDate) JawsEvent(e *Element, wht what.What, val string) (err err
 			}
 		}
 		ui.Last.Store(v)
-		if err == nil {
-			err = ui.TimeGetter.(TimeSetter).JawsSetTime(e, v)
-		}
+		err = ui.TimeGetter.(TimeSetter).JawsSetTime(e, v)
 		e.Dirty(ui.Tag)
+	}
+	if err == nil {
+		err = ui.UiHtml.JawsEvent(e, wht, val)
 	}
 	return
 }

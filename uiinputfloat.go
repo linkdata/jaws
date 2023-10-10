@@ -30,7 +30,6 @@ func (ui *UiInputFloat) JawsUpdate(e *Element) {
 }
 
 func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err error) {
-	err = ui.UiHtml.JawsEvent(e, wht, val)
 	if wht == what.Input {
 		var v float64
 		if val != "" {
@@ -39,10 +38,11 @@ func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err er
 			}
 		}
 		ui.Last.Store(v)
-		if err == nil {
-			err = ui.FloatGetter.(FloatSetter).JawsSetFloat(e, v)
-		}
+		err = ui.FloatGetter.(FloatSetter).JawsSetFloat(e, v)
 		e.Dirty(ui.Tag)
+	}
+	if err == nil {
+		err = ui.UiHtml.JawsEvent(e, wht, val)
 	}
 	return
 }
