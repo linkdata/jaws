@@ -995,29 +995,12 @@ func TestRequest_WsQueueOverflowCancels(t *testing.T) {
 	is.Equal(context.Cause(rq.Context()), ErrWebsocketQueueOverflow)
 }
 
-type teststringsetter struct {
-	getCalled int32
-	setCalled int32
-	s         string
-}
-
-func (tss *teststringsetter) JawsGetString(e *Element) string {
-	atomic.AddInt32(&tss.getCalled, 1)
-	return tss.s
-}
-
-func (tss *teststringsetter) JawsSetString(e *Element, s string) error {
-	atomic.AddInt32(&tss.setCalled, 1)
-	tss.s = s
-	return nil
-}
-
 func TestRequest_Dirty(t *testing.T) {
 	is := is.New(t)
 	rq := newTestRequest(is)
 	defer rq.Close()
 
-	tss := &teststringsetter{s: "foo"}
+	tss := &testUi{s: "foo"}
 	h := rq.UI(NewUiText(tss))
 	is.Equal(tss.getCalled, int32(1))
 	is.True(strings.Contains(string(h), "foo"))

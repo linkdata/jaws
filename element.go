@@ -64,42 +64,56 @@ func (e *Element) queue(wht what.What, data string) {
 
 // SetAttr queues sending a new attribute value
 // to the browser for the Element with the given JaWS ID in this Request.
+//
+// Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) SetAttr(attr, val string) {
 	e.queue(what.SAttr, attr+"\n"+val)
 }
 
 // RemoveAttr queues sending a request to remove an attribute
 // to the browser for the Element with the given JaWS ID in this Request.
+//
+// Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) RemoveAttr(attr string) {
 	e.queue(what.RAttr, attr)
 }
 
 // SetClass a queues sending a class
 // to the browser for the Element with the given JaWS ID in this Request.
+//
+// Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) SetClass(cls string) {
 	e.queue(what.SClass, cls)
 }
 
 // RemoveClass queues sending a request to remove a class
 // to the browser for the Element with the given JaWS ID in this Request.
+//
+// Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) RemoveClass(cls string) {
 	e.queue(what.RClass, cls)
 }
 
 // SetInner queues sending a new inner HTML content
 // to the browser for the Element.
+//
+// Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) SetInner(innerHtml template.HTML) {
 	e.queue(what.Inner, string(innerHtml))
 }
 
 // SetValue queues sending a new current input value in textual form
 // to the browser for the Element with the given JaWS ID in this Request.
+//
+// Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) SetValue(val string) {
 	e.queue(what.Value, val)
 }
 
 // Replace replaces the elements entire HTML DOM node with new HTML code.
 // If the HTML code doesn't seem to contain correct HTML ID, it panics.
+//
+// Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) Replace(htmlCode template.HTML) {
 	var b []byte
 	b = append(b, "id="...)
@@ -111,11 +125,15 @@ func (e *Element) Replace(htmlCode template.HTML) {
 }
 
 // Append appends a new HTML element as a child to the current one.
+//
+// Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) Append(htmlCode template.HTML) {
 	e.queue(what.Append, string(htmlCode))
 }
 
 // Order reorders the HTML elements.
+//
+// Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) Order(jidList []jid.Jid) {
 	if len(jidList) > 0 {
 		var b []byte
@@ -130,12 +148,16 @@ func (e *Element) Order(jidList []jid.Jid) {
 }
 
 // Delete requests that this Element is removed from the Request and it's HTML element from the browser.
+//
+// Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) Delete() {
 	e.queue(what.Delete, "")
 }
 
 // Remove requests that the HTML child with the given HTML ID of this Element
 // is removed from the Request and it's HTML element from the browser.
+//
+// Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) Remove(htmlId string) {
 	e.queue(what.Remove, htmlId)
 }
