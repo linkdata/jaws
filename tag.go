@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"errors"
 	"fmt"
 	"html/template"
 	"reflect"
@@ -19,9 +20,11 @@ func TagString(tag interface{}) string {
 	return fmt.Sprintf("%#v", tag)
 }
 
-func TagExpand(rq *Request, tag interface{}, result []interface{}) []interface{} {
-	if len(result) > 1000 {
-		panic("jaws: too many tags")
+var ErrTooManyTags = errors.New("too many tags")
+
+func tagExpand(l int, rq *Request, tag interface{}, result []interface{}) []interface{} {
+	if l > 10 || len(result) > 100 {
+		panic(ErrTooManyTags)
 	}
 	switch data := tag.(type) {
 	case string:
@@ -45,22 +48,24 @@ func TagExpand(rq *Request, tag interface{}, result []interface{}) []interface{}
 
 	case nil:
 		return result
-	case atomicGetter:
-		return append(result, data.v)
 	case []Tag:
 		for _, v := range data {
 			result = append(result, v)
 		}
 		return result
+	case TagGetter:
+		return tagExpand(l+1, rq, data.JawsGetTag(rq), result)
 	case []interface{}:
 		for _, v := range data {
-			result = TagExpand(rq, v, result)
+			result = tagExpand(l+1, rq, v, result)
 		}
 		return result
-	case TagGetter:
-		return TagExpand(rq, data.JawsGetTag(rq), result)
 	default:
 		return append(result, data)
 	}
 	panic("jaws: not allowed as a tag: " + TagString(tag))
+}
+
+func TagExpand(rq *Request, tag interface{}, result []interface{}) []interface{} {
+	return tagExpand(0, rq, tag, result)
 }
