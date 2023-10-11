@@ -1,6 +1,3 @@
-//go:build go1.18
-// +build go1.18
-
 package jaws
 
 func ListMove[T comparable](l []T, elem T, steps int) (changed bool) {
