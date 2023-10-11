@@ -25,7 +25,7 @@ func (ui *UiInputText) JawsUpdate(e *Element) {
 	}
 }
 
-func (ui *UiInputText) JawsEvent(e *Element, wht what.What, val string) (stop bool, err error) {
+func (ui *UiInputText) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if wht == what.Input {
 		ui.Last.Store(val)
 		err = ui.StringGetter.(StringSetter).JawsSetString(e, val)

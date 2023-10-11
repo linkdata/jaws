@@ -28,7 +28,7 @@ func (ui *UiSelect) JawsUpdate(e *Element) {
 	ui.uiWrapContainer.JawsUpdate(e)
 }
 
-func (ui *UiSelect) JawsEvent(e *Element, wht what.What, val string) (stop bool, err error) {
+func (ui *UiSelect) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if wht == what.Input {
 		err = ui.uiWrapContainer.Container.(StringSetter).JawsSetString(e, val)
 		e.Dirty(ui.Tag)

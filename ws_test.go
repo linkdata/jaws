@@ -120,9 +120,9 @@ func TestWS_NormalExchange(t *testing.T) {
 
 	gotCallCh := make(chan struct{})
 
-	ts.rq.Register(("foo"), func(e *Element, evt what.What, val string) (bool, error) {
+	ts.rq.Register(("foo"), func(e *Element, evt what.What, val string) error {
 		close(gotCallCh)
-		return false, fooError
+		return fooError
 	})
 
 	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), nil)

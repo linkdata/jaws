@@ -29,7 +29,7 @@ func (ui *UiInputDate) JawsUpdate(e *Element) {
 	}
 }
 
-func (ui *UiInputDate) JawsEvent(e *Element, wht what.What, val string) (stop bool, err error) {
+func (ui *UiInputDate) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if wht == what.Input {
 		var v time.Time
 		if val != "" {

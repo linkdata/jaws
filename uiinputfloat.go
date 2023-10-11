@@ -29,7 +29,7 @@ func (ui *UiInputFloat) JawsUpdate(e *Element) {
 	}
 }
 
-func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (stop bool, err error) {
+func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	if wht == what.Input {
 		var v float64
 		if val != "" {

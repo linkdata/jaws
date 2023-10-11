@@ -614,7 +614,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 
 func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err error) {
 	var elems []*Element
-	var stop bool
 	rq.mu.RLock()
 	if id == 0 {
 		if wht == what.Click {
@@ -639,14 +638,17 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err 
 	rq.mu.RUnlock()
 
 	for _, e := range elems {
-		if stop, err = callEventHandler(e.ui, e, wht, val); stop || err != nil {
+		if err = callEventHandler(e.ui, e, wht, val); err != ErrEventUnhandled {
 			return
 		}
 		for _, h := range e.handlers {
-			if stop, err = h.JawsEvent(e, wht, val); stop || err != nil {
+			if err = h.JawsEvent(e, wht, val); err != ErrEventUnhandled {
 				return
 			}
 		}
+	}
+	if err == ErrEventUnhandled {
+		return nil
 	}
 	return
 }
