@@ -210,11 +210,11 @@ func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
 	jw := rq.jw
 	var callCount int32
 	tag := Tag("foo")
-	rq.Register(tag, func(e *Element, evt what.What, val string) error {
+	rq.Register(tag, func(e *Element, evt what.What, val string) (bool, error) {
 		atomic.AddInt32(&callCount, 1)
 		is.Equal(1, jw.RequestCount())
 		jw.Close()
-		return errors.New(val)
+		return false, errors.New(val)
 	})
 	fillWsCh(rq.outCh)
 	jw.Broadcast(Message{Dest: Tag("foo"), What: what.Hook, Data: "bar"})
@@ -233,10 +233,10 @@ func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 	defer rq.Close()
 	var callCount int32
 	tag := Tag("foo")
-	rq.Register(tag, func(e *Element, evt what.What, val string) error {
+	rq.Register(tag, func(e *Element, evt what.What, val string) (bool, error) {
 		atomic.AddInt32(&callCount, 1)
 		rq.cancel()
-		return errors.New(val)
+		return false, errors.New(val)
 	})
 	fillWsCh(rq.outCh)
 	rq.jw.Broadcast(Message{Dest: Tag("foo"), What: what.Hook, Data: "bar"})
@@ -278,16 +278,16 @@ func TestRequest_Trigger(t *testing.T) {
 	defer rq.Close()
 	gotFooCall := make(chan struct{})
 	gotEndCall := make(chan struct{})
-	rq.Register("foo", func(e *Element, evt what.What, val string) error {
+	rq.Register("foo", func(e *Element, evt what.What, val string) (bool, error) {
 		defer close(gotFooCall)
-		return nil
+		return false, nil
 	})
-	rq.Register(("err"), func(e *Element, evt what.What, val string) error {
-		return errors.New(val)
+	rq.Register(("err"), func(e *Element, evt what.What, val string) (bool, error) {
+		return false, errors.New(val)
 	})
-	rq.Register(("end"), func(e *Element, evt what.What, val string) error {
+	rq.Register(("end"), func(e *Element, evt what.What, val string) (bool, error) {
 		defer close(gotEndCall)
-		return nil
+		return false, nil
 	})
 
 	// broadcasts from ourselves should not invoke fn
@@ -337,7 +337,7 @@ func TestRequest_EventFnQueue(t *testing.T) {
 	firstDoneCh := make(chan struct{})
 	var sleepDone int32
 	var callCount int32
-	rq.Register(("sleep"), func(e *Element, evt what.What, val string) error {
+	rq.Register(("sleep"), func(e *Element, evt what.What, val string) (bool, error) {
 		count := int(atomic.AddInt32(&callCount, 1))
 		if val != strconv.Itoa(count) {
 			t.Logf("val=%s, count=%d, cap=%d", val, count, cap(rq.outCh))
@@ -349,7 +349,7 @@ func TestRequest_EventFnQueue(t *testing.T) {
 		for atomic.LoadInt32(&sleepDone) == 0 {
 			time.Sleep(time.Millisecond)
 		}
-		return nil
+		return false, nil
 	})
 
 	for i := 0; i < cap(rq.outCh); i++ {
@@ -389,9 +389,9 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 
 	var wait int32
 
-	rq.Register(("bomb"), func(e *Element, evt what.What, val string) error {
+	rq.Register(("bomb"), func(e *Element, evt what.What, val string) (bool, error) {
 		time.Sleep(time.Millisecond * time.Duration(atomic.AddInt32(&wait, 1)))
-		return nil
+		return false, nil
 	})
 
 	rq.expectPanic = true
@@ -418,7 +418,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 
 	var spewState int32
 	var callCount int32
-	rq.Register(("spew"), func(e *Element, evt what.What, val string) error {
+	rq.Register(("spew"), func(e *Element, evt what.What, val string) (bool, error) {
 		atomic.AddInt32(&callCount, 1)
 		if len(rq.outCh) < cap(rq.outCh) {
 			rq.jw.Broadcast(Message{Dest: Tag("spew"), What: what.Input})
@@ -428,7 +428,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 				time.Sleep(time.Millisecond)
 			}
 		}
-		return errors.New("chunks")
+		return false, errors.New("chunks")
 	})
 	rq.Register(Tag("foo"))
 

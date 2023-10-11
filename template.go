@@ -50,6 +50,6 @@ func (t Template) JawsUpdate(e *Element) {
 
 var _ EventHandler = (*Template)(nil) // statically ensure interface is defined
 
-func (t Template) JawsEvent(e *Element, wht what.What, val string) error {
+func (t Template) JawsEvent(e *Element, wht what.What, val string) (bool, error) {
 	return callEventHandler(t.Dot, e, wht, val)
 }

@@ -34,7 +34,7 @@ func (ui *UiInputBool) JawsUpdate(e *Element) {
 	}
 }
 
-func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (err error) {
+func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (stop bool, err error) {
 	if wht == what.Input {
 		var v bool
 		if val != "" {
@@ -45,9 +45,9 @@ func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (err err
 		ui.Last.Store(v)
 		err = ui.BoolGetter.(BoolSetter).JawsSetBool(e, v)
 		e.Dirty(ui.Tag)
+		if err != nil {
+			return
+		}
 	}
-	if err == nil {
-		err = ui.UiHtml.JawsEvent(e, wht, val)
-	}
-	return
+	return ui.UiHtml.JawsEvent(e, wht, val)
 }

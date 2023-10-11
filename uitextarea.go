@@ -22,12 +22,15 @@ func (ui *UiTextarea) JawsUpdate(e *Element) {
 	e.SetInner(template.HTML(ui.JawsGetString(e))) // #nosec G203
 }
 
-func (ui *UiTextarea) JawsEvent(e *Element, wht what.What, val string) (err error) {
+func (ui *UiTextarea) JawsEvent(e *Element, wht what.What, val string) (stop bool, err error) {
 	if wht == what.Input {
 		err = ui.StringGetter.(StringSetter).JawsSetString(e, val)
 		e.Dirty(ui.Tag)
+		if err != nil {
+			return
+		}
 	}
-	return
+	return ui.UiHtml.JawsEvent(e, wht, val)
 }
 
 func NewUiTextarea(g StringGetter) (ui *UiTextarea) {

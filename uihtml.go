@@ -50,7 +50,7 @@ func parseParams(elem *Element, params []interface{}) (attrs []string) {
 		case func(*Request, string) error: // Deprecated: ClickFn
 			if data != nil {
 				elem.handlers = append(elem.handlers, eventFnWrapper{
-					func(e *Element, wht what.What, val string) (err error) {
+					func(e *Element, wht what.What, val string) (stop bool, err error) {
 						if wht == what.Click {
 							err = data(e.Request, e.jid.String())
 						}
@@ -59,7 +59,7 @@ func parseParams(elem *Element, params []interface{}) (attrs []string) {
 			}
 		case func(*Request, string, string) error: // Deprecated: InputTextFn
 			if data != nil {
-				elem.handlers = append(elem.handlers, eventFnWrapper{func(e *Element, wht what.What, val string) (err error) {
+				elem.handlers = append(elem.handlers, eventFnWrapper{func(e *Element, wht what.What, val string) (stop bool, err error) {
 					if wht == what.Input {
 						err = data(e.Request, e.jid.String(), val)
 					}
@@ -68,7 +68,7 @@ func parseParams(elem *Element, params []interface{}) (attrs []string) {
 			}
 		case func(*Request, string, bool) error: // Deprecated: InputBoolFn
 			if data != nil {
-				elem.handlers = append(elem.handlers, eventFnWrapper{func(e *Element, wht what.What, val string) (err error) {
+				elem.handlers = append(elem.handlers, eventFnWrapper{func(e *Element, wht what.What, val string) (stop bool, err error) {
 					if wht == what.Input {
 						var v bool
 						if val != "" {
@@ -83,7 +83,7 @@ func parseParams(elem *Element, params []interface{}) (attrs []string) {
 			}
 		case func(*Request, string, float64) error: // Deprecated: InputFloatFn
 			if data != nil {
-				elem.handlers = append(elem.handlers, eventFnWrapper{func(e *Element, wht what.What, val string) (err error) {
+				elem.handlers = append(elem.handlers, eventFnWrapper{func(e *Element, wht what.What, val string) (stop bool, err error) {
 					if wht == what.Input {
 						var v float64
 						if val != "" {
@@ -98,7 +98,7 @@ func parseParams(elem *Element, params []interface{}) (attrs []string) {
 			}
 		case func(*Request, string, time.Time) error: // Deprecated: InputDateFn
 			if data != nil {
-				elem.handlers = append(elem.handlers, eventFnWrapper{func(e *Element, wht what.What, val string) (err error) {
+				elem.handlers = append(elem.handlers, eventFnWrapper{func(e *Element, wht what.What, val string) (stop bool, err error) {
 					if wht == what.Input {
 						var v time.Time
 						if val != "" {
@@ -141,6 +141,6 @@ func (ui *UiHtml) JawsUpdate(e *Element) {
 	}
 }
 
-func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) error {
+func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) (bool, error) {
 	return callEventHandler(ui.Tag, e, wht, val)
 }

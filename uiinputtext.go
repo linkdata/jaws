@@ -25,14 +25,14 @@ func (ui *UiInputText) JawsUpdate(e *Element) {
 	}
 }
 
-func (ui *UiInputText) JawsEvent(e *Element, wht what.What, val string) (err error) {
+func (ui *UiInputText) JawsEvent(e *Element, wht what.What, val string) (stop bool, err error) {
 	if wht == what.Input {
 		ui.Last.Store(val)
 		err = ui.StringGetter.(StringSetter).JawsSetString(e, val)
 		e.Dirty(ui.Tag)
+		if err != nil {
+			return
+		}
 	}
-	if err == nil {
-		err = ui.UiHtml.JawsEvent(e, wht, val)
-	}
-	return
+	return ui.UiHtml.JawsEvent(e, wht, val)
 }

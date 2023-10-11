@@ -176,7 +176,7 @@ func TestSession_Delete(t *testing.T) {
 	rq2 := ts.jw.NewRequest(hr2)
 	is.Equal(ts.sess, rq2.Session())
 
-	ts.rq.Register("byebye", func(e *Element, evt what.What, val string) error {
+	ts.rq.Register("byebye", func(e *Element, evt what.What, val string) (bool, error) {
 		sess2 := ts.jw.GetSession(e.Request.Initial)
 		is.Equal(ts.sess, sess2)
 		cookie2 := sess2.Close()
@@ -185,7 +185,7 @@ func TestSession_Delete(t *testing.T) {
 		is.True(cookie2.Expires.IsZero())
 		is.Equal(cookie1.Name, cookie2.Name)
 		is.Equal(cookie1.Value, cookie2.Value)
-		return nil
+		return false, nil
 	})
 
 	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), nil)
