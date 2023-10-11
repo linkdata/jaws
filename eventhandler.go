@@ -31,15 +31,3 @@ func callEventHandler(obj any, e *Element, wht what.What, val string) (stop bool
 	}
 	return
 }
-
-func callAllEventHandlers(e *Element, wht what.What, val string) error {
-	if stop, err := callEventHandler(e.ui, e, wht, val); stop || err != nil {
-		return err
-	}
-	for _, h := range e.handlers {
-		if stop, err := h.JawsEvent(e, wht, val); stop || err != nil {
-			return err
-		}
-	}
-	return nil
-}

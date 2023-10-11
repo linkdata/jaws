@@ -22,30 +22,43 @@ function jawsIsTrue(v) {
 	return jawsContains(['true', 't', 'on', '1', 'yes', 'y', 'selected'], v);
 }
 
-function jawsHandler(e) {
+function jawsClickHandler(e) {
 	if (jaws instanceof WebSocket && e instanceof Event) {
-		var elem = e.currentTarget;
-		var val;
-		if (e.type == 'click') {
-			val = e.target.getAttribute('name');
-			if (val == null) {
-				if (e.target.tagName.toLowerCase() === 'button') {
-					val = e.target.innerHTML;
-				} else {
-					val = e.target.id;
-				}
-			}
-		} else {
-			if (jawsIsCheckable(elem.getAttribute('type'))) {
-				val = elem.checked;
-			} else if (elem.tagName.toLowerCase() === 'option') {
-				val = elem.selected;
+		e.stopPropagation();
+		var elem = e.target;
+		var val = elem.getAttribute('name');
+		if (val == null) {
+			if (elem.tagName.toLowerCase() === 'button') {
+				val = elem.innerHTML;
 			} else {
-				val = elem.value;
+				val = elem.id;
 			}
-			e.stopPropagation();
 		}
-		jaws.send(e.type + "\t" + elem.id + "\t" + JSON.stringify(val) + "\n");
+		val.replaceAll('\t', ' ');
+
+		while (elem != null) {
+			if (elem.id.startsWith('Jid.') && !jawsIsInputTag(elem.tagName)) {
+				val += "\t" + elem.id;
+			}
+			elem = elem.parentElement;
+		}
+		jaws.send("Click\t\t" + JSON.stringify(val) + "\n");
+	}
+}
+
+function jawsInputHandler(e) {
+	if (jaws instanceof WebSocket && e instanceof Event) {
+		e.stopPropagation();
+		var val;
+		var elem = e.currentTarget;
+		if (jawsIsCheckable(elem.getAttribute('type'))) {
+			val = elem.checked;
+		} else if (elem.tagName.toLowerCase() === 'option') {
+			val = elem.selected;
+		} else {
+			val = elem.value;
+		}
+		jaws.send("Input\t" + elem.id + "\t" + JSON.stringify(val) + "\n");
 	}
 }
 
@@ -54,9 +67,9 @@ function jawsAttach(topElem) {
 	for (var i = 0; i < elements.length; i++) {
 		var elem = elements[i];
 		if (jawsIsInputTag(elem.tagName)) {
-			elem.addEventListener('input', jawsHandler, false);
+			elem.addEventListener('input', jawsInputHandler, false);
 		} else {
-			elem.addEventListener('click', jawsHandler, false);
+			elem.addEventListener('click', jawsClickHandler, false);
 		}
 	}
 	return topElem;

@@ -46,7 +46,7 @@ type Request struct {
 }
 
 type eventFnCall struct {
-	e    *Element
+	jid  Jid
 	wht  what.What
 	data string
 }
@@ -366,17 +366,21 @@ func (rq *Request) NewElement(ui UI) *Element {
 	return rq.newElementLocked(ui)
 }
 
-func (rq *Request) GetElement(jid Jid) (e *Element) {
+func (rq *Request) getElementLocked(jid Jid) *Element {
 	if jid > 0 {
-		rq.mu.RLock()
 		for _, elem := range rq.elems {
 			if elem.jid == jid {
-				e = elem
-				break
+				return elem
 			}
 		}
-		rq.mu.RUnlock()
 	}
+	return nil
+}
+
+func (rq *Request) GetElement(jid Jid) (e *Element) {
+	rq.mu.RLock()
+	e = rq.getElementLocked(jid)
+	rq.mu.RUnlock()
 	return
 }
 
@@ -513,8 +517,8 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		case wsmsg, ok = <-incomingMsgCh:
 			if ok {
 				// incoming event message from the websocket
-				if elem := rq.GetElement(wsmsg.Jid); elem != nil {
-					rq.queueEvent(eventCallCh, eventFnCall{e: elem, wht: wsmsg.What, data: wsmsg.Data})
+				if wsmsg.Jid.IsValid() {
+					rq.queueEvent(eventCallCh, eventFnCall{jid: wsmsg.Jid, wht: wsmsg.What, data: wsmsg.Data})
 				}
 				continue
 			}
@@ -583,13 +587,13 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					// they won't be sent out on the WebSocket, but will queue up a
 					// call to the event function (if any).
 					// primary usecase is tests.
-					rq.queueEvent(eventCallCh, eventFnCall{e: elem, wht: tagmsg.What, data: wsdata})
+					rq.queueEvent(eventCallCh, eventFnCall{jid: elem.jid, wht: tagmsg.What, data: wsdata})
 				case what.Hook:
 					// "hook" messages are used to synchronously call an event function.
 					// the function must not send any messages itself, but may return
 					// an error to be sent out as an alert message.
 					// primary usecase is tests.
-					if errmsg := makeAlertDangerMessage(callAllEventHandlers(elem, tagmsg.What, wsdata)); errmsg.What != what.Update {
+					if errmsg := makeAlertDangerMessage(rq.callAllEventHandlers(elem.jid, tagmsg.What, wsdata)); errmsg.What != what.Update {
 						wsQueue = append(wsQueue, wsMsg{
 							Data: wsdata,
 							Jid:  elem.jid,
@@ -606,6 +610,45 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			}
 		}
 	}
+}
+
+func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err error) {
+	var elems []*Element
+	var stop bool
+	rq.mu.RLock()
+	if id == 0 {
+		if wht == what.Click {
+			var after string
+			var found bool
+			val, after, found = strings.Cut(val, "\t")
+			for found {
+				var jidStr string
+				jidStr, after, found = strings.Cut(after, "\t")
+				if id = jid.ParseString(jidStr); id > 0 {
+					if e := rq.getElementLocked(id); e != nil {
+						elems = append(elems, e)
+					}
+				}
+			}
+		}
+	} else {
+		if e := rq.getElementLocked(id); e != nil {
+			elems = append(elems, e)
+		}
+	}
+	rq.mu.RUnlock()
+
+	for _, e := range elems {
+		if stop, err = callEventHandler(e.ui, e, wht, val); stop || err != nil {
+			return
+		}
+		for _, h := range e.handlers {
+			if stop, err = h.JawsEvent(e, wht, val); stop || err != nil {
+				return
+			}
+		}
+	}
+	return
 }
 
 func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
@@ -675,7 +718,7 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundCh chan<- string, eventDoneCh chan<- struct{}) {
 	defer close(eventDoneCh)
 	for call := range eventCallCh {
-		if err := callAllEventHandlers(call.e, call.wht, call.data); err != nil {
+		if err := rq.callAllEventHandlers(call.jid, call.wht, call.data); err != nil {
 			var m wsMsg
 			m.FillAlert(err)
 			select {

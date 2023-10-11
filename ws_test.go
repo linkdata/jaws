@@ -441,7 +441,7 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 		{"shortest", "Update\t\t\n", wsMsg{What: what.Update}},
 		{"unquoted", "Input\tJid.1\ttrue\n", wsMsg{Jid: Jid(1), What: what.Input, Data: "true"}},
 		{"normal", "Input\tJid.2\t\"c\"\n", wsMsg{Jid: Jid(2), What: what.Input, Data: "c"}},
-		{"newline", "Click\tJid.3\t\"c\\nd\"\n", wsMsg{Jid: Jid(3), What: what.Click, Data: "c\nd"}},
+		{"newline", "Input\tJid.3\t\"c\\nd\"\n", wsMsg{Jid: Jid(3), What: what.Input, Data: "c\nd"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
