@@ -153,7 +153,7 @@ function jawsSetValue(elem, str) {
 
 function jawsLost() {
 	var delay = 1;
-	var text = '<h2>Connection Lost</h2>';
+	var innerHTML = 'Server connection lost';
 	if (jaws instanceof Date) {
 		var elapsed = Math.floor((new Date() - jaws) / 1000);
 		if (elapsed > 0) {
@@ -169,10 +169,17 @@ function jawsLost() {
 				}
 			}
 			if (elapsed > 1) units += 's';
-			text += '<p>Contact lost ' + elapsed + units + ' ago.</p>';
+			innerHTML += ' ' + elapsed + units + ' ago';
 		}
 	}
-	document.documentElement.innerHTML = text + '<p>Trying to reconnect.</p>';
+	innerHTML += '. Trying to reconnect.';
+	var elem = document.getElementById('jaws-lost');
+	if (elem == null) {
+		elem = jawsElement('<div id="jaws-lost" style="height: 3em; display: flex; justify-content: center; align-items: center; background-color: red; color: white"></div>');
+		document.body.prepend(elem);
+		document.body.scrollTop = document.documentElement.scrollTop = 0;
+	}
+	elem.innerHTML = innerHTML;
 	setTimeout(jawsReconnect, delay * 1000);
 }
 
