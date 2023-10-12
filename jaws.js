@@ -175,11 +175,13 @@ function jawsLost() {
 	innerHTML += '. Trying to reconnect.';
 	var elem = document.getElementById('jaws-lost');
 	if (elem == null) {
-		elem = jawsElement('<div id="jaws-lost" style="height: 3em; display: flex; justify-content: center; align-items: center; background-color: red; color: white"></div>');
+		elem = jawsElement('<div id="jaws-lost" style="height: 3em; display: flex; justify-content: center; align-items: center; background-color: red; color: white">' +
+			innerHTML + '</div>');
 		document.body.prepend(elem);
 		document.body.scrollTop = document.documentElement.scrollTop = 0;
+	} else {
+		elem.innerHTML = innerHTML;
 	}
-	elem.innerHTML = innerHTML;
 	setTimeout(jawsReconnect, delay * 1000);
 }
 
