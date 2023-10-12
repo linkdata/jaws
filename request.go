@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -558,7 +559,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		case string:
 			// target is a regular HTML ID
 			wsQueue = append(wsQueue, wsMsg{
-				Data: v + "\t" + wsdata,
+				Data: v + "\t" + strconv.Quote(wsdata),
 				What: tagmsg.What,
 				Jid:  -1,
 			})
