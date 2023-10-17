@@ -375,7 +375,7 @@ func (jw *Jaws) setDirty(tags []any) {
 // Note that if any of the tags are a TagGetter, it will be called with a nil Request.
 // Prefer using Request.Dirty() which avoids this.
 func (jw *Jaws) Dirty(tags ...interface{}) {
-	jw.setDirty(TagExpand(nil, tags, nil))
+	jw.setDirty(MustTagExpand(nil, tags))
 }
 
 func (jw *Jaws) distributeDirt() int {
@@ -445,7 +445,7 @@ func (jw *Jaws) Alert(lvl, msg string) {
 func (jw *Jaws) Order(tags []interface{}) {
 	jw.Broadcast(Message{
 		What: what.Order,
-		Data: TagExpand(nil, tags, nil),
+		Data: MustTagExpand(nil, tags),
 	})
 }
 

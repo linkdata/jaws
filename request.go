@@ -327,7 +327,7 @@ func (rq *Request) Register(tagitem interface{}, params ...interface{}) jid.Jid 
 
 // Dirty marks all Elements that have one or more of the given tags as dirty.
 func (rq *Request) Dirty(tags ...interface{}) {
-	rq.Jaws.setDirty(TagExpand(rq, tags, nil))
+	rq.Jaws.setDirty(MustTagExpand(rq, tags))
 }
 
 // wantMessage returns true if the Request want the message.
@@ -416,17 +416,20 @@ func (rq *Request) appendDirtyTags(tags []interface{}) {
 }
 
 // Tag adds the given tags to the given Element.
+func (rq *Request) tagExpanded(elem *Element, expandedtags []interface{}) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	for _, tag := range expandedtags {
+		if !rq.hasTagLocked(elem, tag) {
+			rq.tagMap[tag] = append(rq.tagMap[tag], elem)
+		}
+	}
+}
+
+// Tag adds the given tags to the given Element.
 func (rq *Request) Tag(elem *Element, tags ...interface{}) {
 	if elem != nil && len(tags) > 0 && elem.Request == rq {
-		var expandedtags []interface{}
-		expandedtags = TagExpand(elem.Request, tags, expandedtags)
-		rq.mu.Lock()
-		defer rq.mu.Unlock()
-		for _, tag := range expandedtags {
-			if !rq.hasTagLocked(elem, tag) {
-				rq.tagMap[tag] = append(rq.tagMap[tag], elem)
-			}
-		}
+		rq.tagExpanded(elem, MustTagExpand(elem.Request, tags))
 	}
 }
 
@@ -570,8 +573,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		}
 
 		switch tagmsg.What {
-		case what.Update:
-			// do nothing, but used for triggering updates
 		case what.Reload, what.Redirect, what.Order, what.Alert:
 			wsQueue = append(wsQueue, wsMsg{
 				Jid:  0,
@@ -601,6 +602,8 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 							What: errmsg.What,
 						})
 					}
+				case what.Update:
+					elem.Ui().JawsUpdate(elem)
 				default:
 					wsQueue = append(wsQueue, wsMsg{
 						Data: wsdata,

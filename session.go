@@ -157,9 +157,10 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 		sess.cookie.MaxAge = -1
 		sess.broadcastLocked(Message{What: what.Reload})
 		sess.requests = sess.requests[:0]
+		cookie = &sess.cookie
 		sess.mu.Unlock()
 	}
-	return &sess.cookie
+	return
 }
 
 // Reload calls Broadcast with a message asking browsers to reload the page.
@@ -180,11 +181,17 @@ func (sess *Session) Clear() {
 }
 
 func (sess *Session) broadcastLocked(msg Message) {
+	var retry []*Request
 	for _, rq := range sess.requests {
 		select {
 		case rq.sendCh <- msg:
 		default:
+			retry = append(retry, rq)
 		}
+	}
+	for _, rq := range retry {
+		msg.Dest = rq
+		sess.jw.Broadcast(msg)
 	}
 }
 

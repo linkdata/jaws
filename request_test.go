@@ -47,6 +47,7 @@ func newTestRequest(is *is.I) (tr *testRequest) {
 		jw:      New(),
 	}
 	tr.jw.Logger = log.New(&tr.log, "", 0)
+	tr.jw.Template = template.Must(template.New("testtemplate").Parse(`{{with $.Dot}}<div id="{{$.Jid}}"{{$.Attrs}}>{{.}}</div>{{end}}`))
 	tr.jw.updateTicker = time.NewTicker(time.Millisecond)
 	tr.ctx, tr.cancel = context.WithTimeout(context.Background(), time.Hour)
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)

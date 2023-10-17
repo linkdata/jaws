@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -169,7 +170,13 @@ func TestSession_Delete(t *testing.T) {
 	is.Equal(sess, nil)
 
 	// accessing from same IP but other port works
-	hr2.RemoteAddr = ts.hr.RemoteAddr + "0"
+	host, port, _ := net.SplitHostPort(ts.hr.RemoteAddr)
+	if port == "1" {
+		port = "2"
+	} else {
+		port = "1"
+	}
+	hr2.RemoteAddr = net.JoinHostPort(host, port)
 	sess = ts.jw.GetSession(hr2)
 	is.Equal(ts.sess, sess)
 
@@ -179,6 +186,8 @@ func TestSession_Delete(t *testing.T) {
 	ts.rq.Register("byebye", func(e *Element, evt what.What, val string) error {
 		sess2 := ts.jw.GetSession(e.Request.Initial)
 		is.Equal(ts.sess, sess2)
+		is.True(sess2.cookie.MaxAge >= 0)
+
 		cookie2 := sess2.Close()
 		is.True(cookie2 != nil)
 		is.True(cookie2.MaxAge < 0)
@@ -193,25 +202,49 @@ func TestSession_Delete(t *testing.T) {
 	is.Equal(resp.StatusCode, http.StatusSwitchingProtocols)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	ts.rq.Send(Message{
-		Dest: Tag("byebye"),
-		What: what.Input,
-		Data: "",
-	})
-
-	is.NoErr(ts.ctx.Err())
-
-	ctx, cancel := context.WithTimeout(ts.ctx, testTimeout)
+	msg := wsMsg{Jid: jidForTag(ts.rq, Tag("byebye")), What: what.Input}
+	ctx, cancel := context.WithCancel(ts.ctx)
 	defer cancel()
 
-	is.NoErr(ctx.Err())
-
-	mt, b, err := conn.Read(ctx)
-	is.NoErr(ts.ctx.Err())
-	is.NoErr(ctx.Err())
+	err = conn.Write(ctx, websocket.MessageText, msg.Append(nil))
 	is.NoErr(err)
-	is.Equal(mt, websocket.MessageText)
-	is.Equal(string(b), "Reload\t\t\"\"\n")
+
+	is.NoErr(ctx.Err())
+	is.NoErr(ts.ctx.Err())
+
+	type readResult struct {
+		mt  websocket.MessageType
+		b   []byte
+		err error
+	}
+
+	resultChan := make(chan readResult)
+
+	go func() {
+		var rr readResult
+		defer close(resultChan)
+		rr.mt, rr.b, rr.err = conn.Read(ctx)
+		resultChan <- rr
+	}()
+
+	is.NoErr(ts.ctx.Err())
+
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case rr, ok := <-resultChan:
+		is.True(ok)
+		if ok {
+			is.Equal(sess.cookie.MaxAge, -1)
+
+			is.NoErr(rr.err)
+			is.NoErr(ctx.Err())
+			is.NoErr(ts.ctx.Err())
+
+			is.Equal(rr.mt, websocket.MessageText)
+			is.Equal(string(rr.b), "Reload\t\t\"\"\n")
+		}
+	}
 }
 
 func TestSession_Cleanup(t *testing.T) {

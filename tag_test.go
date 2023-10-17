@@ -44,7 +44,7 @@ func TestTagExpand(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := TagExpand(nil, tt.tag, nil); !reflect.DeepEqual(got, tt.want) {
+			if got := MustTagExpand(nil, tt.tag); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("TagExpand() = %v, want %v", got, tt.want)
 			}
 		})
@@ -79,7 +79,7 @@ func TestTagExpand_IllegalTypesPanic(t *testing.T) {
 					t.FailNow()
 				}
 			}()
-			TagExpand(nil, tag, nil)
+			MustTagExpand(nil, tag)
 			t.FailNow()
 		})
 	}
@@ -98,6 +98,6 @@ func TestTagExpand_TooManyTagsPanic(t *testing.T) {
 			t.Fail()
 		}
 	}()
-	TagExpand(nil, tags, nil)
+	MustTagExpand(nil, tags)
 	t.FailNow()
 }

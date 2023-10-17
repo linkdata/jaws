@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"errors"
 	"fmt"
 	"html/template"
 	"reflect"
@@ -20,11 +19,25 @@ func TagString(tag interface{}) string {
 	return fmt.Sprintf("%#v", tag)
 }
 
-var ErrTooManyTags = errors.New("too many tags")
+type errTooManyTags struct{}
 
-func tagExpand(l int, rq *Request, tag interface{}, result []interface{}) []interface{} {
+func (errTooManyTags) Error() string {
+	return "too many tags"
+}
+
+var ErrTooManyTags = errTooManyTags{}
+
+type errIllegalTagType struct{}
+
+func (errIllegalTagType) Error() string {
+	return "illegal tag type"
+}
+
+var ErrIllegalTagType = errIllegalTagType{}
+
+func tagExpand(l int, rq *Request, tag interface{}, result []interface{}) ([]interface{}, error) {
 	if l > 10 || len(result) > 100 {
-		panic(ErrTooManyTags)
+		return result, ErrTooManyTags
 	}
 	switch data := tag.(type) {
 	case string:
@@ -47,25 +60,36 @@ func tagExpand(l int, rq *Request, tag interface{}, result []interface{}) []inte
 	case []template.HTML:
 
 	case nil:
-		return result
+		return result, nil
 	case []Tag:
 		for _, v := range data {
 			result = append(result, v)
 		}
-		return result
+		return result, nil
 	case TagGetter:
 		return tagExpand(l+1, rq, data.JawsGetTag(rq), result)
 	case []interface{}:
+		var err error
 		for _, v := range data {
-			result = tagExpand(l+1, rq, v, result)
+			if result, err = tagExpand(l+1, rq, v, result); err != nil {
+				break
+			}
 		}
-		return result
+		return result, err
 	default:
-		return append(result, data)
+		return append(result, data), nil
 	}
-	panic("jaws: not allowed as a tag: " + TagString(tag))
+	return result, ErrIllegalTagType
 }
 
-func TagExpand(rq *Request, tag interface{}, result []interface{}) []interface{} {
-	return tagExpand(0, rq, tag, result)
+func TagExpand(rq *Request, tag interface{}) ([]interface{}, error) {
+	return tagExpand(0, rq, tag, nil)
+}
+
+func MustTagExpand(rq *Request, tag interface{}) []interface{} {
+	result, err := TagExpand(rq, tag)
+	if err != nil {
+		panic(err)
+	}
+	return result
 }
