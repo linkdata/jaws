@@ -334,6 +334,8 @@ func (rq *Request) Dirty(tags ...interface{}) {
 func (rq *Request) wantMessage(msg *Message) (yes bool) {
 	if rq != nil && msg.from != rq {
 		switch dest := msg.Dest.(type) {
+		case *Request:
+			yes = dest == rq
 		case string: // HTML id
 			yes = true
 		case *Element:

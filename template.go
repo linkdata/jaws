@@ -48,7 +48,7 @@ func (t Template) JawsRender(e *Element, w io.Writer, params []interface{}) {
 		sb.WriteByte(' ')
 		sb.WriteString(s)
 	}
-	maybePanic(t.Execute(w, With{Element: e, Dot: t.Dot, Attrs: template.HTMLAttr(sb.String())}))
+	maybePanic(t.Execute(w, With{Element: e, Dot: t.Dot, Attrs: template.HTMLAttr(sb.String())})) // #nosec G203
 }
 
 func (t Template) JawsUpdate(e *Element) {
