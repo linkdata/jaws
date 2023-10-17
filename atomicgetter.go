@@ -65,7 +65,8 @@ func (g atomicGetter) JawsGetHtml(e *Element) template.HTML {
 	case template.HTML:
 		return v
 	default:
-		return template.HTML(html.EscapeString(fmt.Sprint(v))) // #nosec G203
+		h := template.HTML(html.EscapeString(fmt.Sprint(v))) // #nosec G203
+		return h
 	}
 }
 
