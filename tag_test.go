@@ -75,8 +75,13 @@ func TestTagExpand_IllegalTypesPanic(t *testing.T) {
 	for _, tag := range tags {
 		t.Run(fmt.Sprintf("%T", tag), func(t *testing.T) {
 			defer func() {
-				if recover() == nil {
-					t.FailNow()
+				x := recover()
+				e, ok := x.(error)
+				if !ok {
+					t.Fail()
+				}
+				if e.Error() != ErrIllegalTagType.Error() {
+					t.Fail()
 				}
 			}()
 			MustTagExpand(nil, tag)
@@ -94,7 +99,7 @@ func TestTagExpand_TooManyTagsPanic(t *testing.T) {
 		if !ok {
 			t.Fail()
 		}
-		if e != ErrTooManyTags {
+		if e.Error() != ErrTooManyTags.Error() {
 			t.Fail()
 		}
 	}()
