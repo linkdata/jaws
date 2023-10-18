@@ -394,6 +394,8 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 	rq.jw.Logger = nil
 	tmr := time.NewTimer(testTimeout)
 
+	jid := jidForTag(rq.Request, Tag("bomb"))
+
 	defer tmr.Stop()
 	for {
 		select {
@@ -403,8 +405,7 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 			return
 		case <-tmr.C:
 			is.Fail()
-		default:
-			rq.Jaws.Broadcast(Message{Dest: Tag("bomb"), What: what.Input})
+		case rq.inCh <- wsMsg{Jid: jid, What: what.Input}:
 		}
 	}
 }
