@@ -13,14 +13,14 @@ func (ui *UiPassword) JawsRender(e *Element, w io.Writer, params []interface{}) 
 	ui.renderStringInput(e, w, "password", params...)
 }
 
-func NewUiPassword(g StringGetter) *UiPassword {
+func NewUiPassword(g StringSetter) *UiPassword {
 	return &UiPassword{
 		UiInputText{
-			StringGetter: g,
+			StringSetter: g,
 		},
 	}
 }
 
 func (rq *Request) Password(value interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiPassword(makeStringGetter(value)), params...)
+	return rq.UI(NewUiPassword(makeStringSetter(value)), params...)
 }

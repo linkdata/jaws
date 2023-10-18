@@ -13,14 +13,14 @@ func (ui *UiText) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.renderStringInput(e, w, "text", params...)
 }
 
-func NewUiText(vp StringGetter) (ui *UiText) {
+func NewUiText(vp StringSetter) (ui *UiText) {
 	return &UiText{
 		UiInputText{
-			StringGetter: vp,
+			StringSetter: vp,
 		},
 	}
 }
 
 func (rq *Request) Text(value interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiText(makeStringGetter(value)), params...)
+	return rq.UI(NewUiText(makeStringSetter(value)), params...)
 }

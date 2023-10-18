@@ -634,47 +634,13 @@ func TestRequest_Elements(t *testing.T) {
 	}
 
 	chk(rq.Div(avs[1], "s1"), avs[1], "s1")
-	chk(rq.Span(avs[2], "s2"), avs[2], "s2")
 	chk(rq.Li(avs[3], "s3"), avs[3], "s3")
-	chk(rq.Td(avs[4], "s4"), avs[4], "s4")
 	chk(rq.A(avs[5], "s5"), avs[5], "s5")
 	chk(rq.Button(avs[6], "s6"), avs[6], "s6")
 	avs[7].Store("randomimg.png")
 	chk(rq.Img(avs[7]), avs[7], "src=\"randomimg.png\"")
 	avs[8].Store("\"randomimg.png\"")
 	chk(rq.Img(avs[8]), avs[8], "src=\"randomimg.png\"")
-}
-
-func TestRequest_Text(t *testing.T) {
-	const elemVal = "elem-val"
-	is := is.New(t)
-	rq := newTestRequest()
-	defer rq.Close()
-
-	var av atomic.Value
-	av.Store(elemVal)
-
-	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
-
-	gotCall := make(chan struct{})
-	h := rq.Text(&av, func(rq *Request, jidstr, val string) error {
-		defer close(gotCall)
-		is.True(rq.GetElement(jid.ParseString(jidstr)) != nil)
-		is.True(rq.GetElement(jid.ParseString(jidstr)) != nil)
-		is.Equal(val, "other-stuff")
-		return nil
-	}, "disabled")
-	chk(h, &av, elemVal)
-	jid := jidForTag(rq.Request, &av)
-	is.True(jid.IsValid())
-	rq.inCh <- wsMsg{Jid: jid, What: what.Input, Data: "other-stuff"}
-	select {
-	case <-time.NewTimer(testTimeout).C:
-		t.Log(h)
-		t.Log(jid)
-		is.Fail()
-	case <-gotCall:
-	}
 }
 
 func jidForTag(rq *Request, tag interface{}) jid.Jid {

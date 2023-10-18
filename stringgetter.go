@@ -38,3 +38,13 @@ func makeStringGetter(v interface{}) StringGetter {
 	}
 	panic(fmt.Errorf("expected jaws.StringGetter or string, not %T", v))
 }
+
+func makeStringSetter(v interface{}) StringSetter {
+	switch v := v.(type) {
+	case StringSetter:
+		return v
+	case *atomic.Value:
+		return atomicGetter{v}
+	}
+	panic(fmt.Errorf("expected jaws.StringSetter, not %T", v))
+}
