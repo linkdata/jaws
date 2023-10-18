@@ -3,6 +3,7 @@ package jaws
 import (
 	"html/template"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/linkdata/deadlock"
@@ -27,10 +28,9 @@ func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag
 	_, err := w.Write(b)
 	if err == nil {
 		for _, cui := range ui.Container.JawsContains(e.Request) {
-			if elem := e.Request.NewElement(cui); elem != nil {
-				ui.contents = append(ui.contents, elem)
-				elem.Render(w, nil)
-			}
+			elem := e.Request.NewElement(cui)
+			ui.contents = append(ui.contents, elem)
+			elem.Render(w, nil)
 		}
 		b = b[:0]
 		b = append(b, "</"...)
@@ -39,18 +39,6 @@ func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag
 		_, err = w.Write(b)
 	}
 	maybePanic(err)
-}
-
-func sameOrder(a, b []Jid) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func (ui *uiWrapContainer) JawsUpdate(e *Element) {
@@ -77,9 +65,7 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 	for _, cui := range newContents {
 		var elem *Element
 		if elem = oldMap[cui]; elem == nil {
-			if elem = e.Request.NewElement(cui); elem == nil {
-				continue
-			}
+			elem = e.Request.NewElement(cui)
 			toAppend = append(toAppend, elem)
 		}
 		ui.contents = append(ui.contents, elem)
@@ -98,7 +84,7 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 		e.Append(template.HTML(sb.String())) // #nosec G203
 	}
 
-	if !sameOrder(oldOrder, orderData) {
+	if !slices.Equal(oldOrder, orderData) {
 		e.Order(orderData)
 	}
 }

@@ -2,8 +2,14 @@ package jaws
 
 import (
 	"html/template"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
+
+	"github.com/linkdata/jaws/what"
 )
 
 type testContainer struct{ contents []UI }
@@ -56,6 +62,120 @@ func TestRequest_Container(t *testing.T) {
 			defer rq.Close()
 			if got := rq.Container("div", tt.args.c, tt.args.params...); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Request.Container() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRequest_Container_Alteration(t *testing.T) {
+	span1 := NewUiSpan(makeHtmlGetter("span1"))
+	span2 := NewUiSpan(makeHtmlGetter("span2"))
+	span3 := NewUiSpan(makeHtmlGetter("span3"))
+	tests := []struct {
+		name string
+		c    *testContainer
+		l    []UI
+		want []wsMsg
+	}{
+		{
+			name: "no change",
+			c:    &testContainer{contents: []UI{span1, span2, span3}},
+			l:    []UI{span1, span2, span3},
+			want: []wsMsg{},
+		},
+		{
+			name: "add one to empty",
+			c:    &testContainer{},
+			l:    []UI{span1},
+			want: []wsMsg{
+				{
+					Data: `<span id="Jid.2">span1</span>`,
+					Jid:  1,
+					What: what.Append,
+				},
+				{
+					Data: `Jid.2`,
+					Jid:  1,
+					What: what.Order,
+				},
+			},
+		},
+		{
+			name: "append two",
+			c:    &testContainer{contents: []UI{span1}},
+			l:    []UI{span1, span2, span3},
+			want: []wsMsg{
+				{
+					Data: `<span id="Jid.3">span2</span>`,
+					Jid:  1,
+					What: what.Append,
+				},
+				{
+					Data: `<span id="Jid.4">span3</span>`,
+					Jid:  1,
+					What: what.Append,
+				},
+				{
+					Data: `Jid.2 Jid.3 Jid.4`,
+					Jid:  1,
+					What: what.Order,
+				},
+			},
+		},
+		{
+			name: "remove first",
+			c:    &testContainer{contents: []UI{span1, span2, span3}},
+			l:    []UI{span2, span3},
+			want: []wsMsg{
+				{
+					Data: `Jid.2`,
+					Jid:  1,
+					What: what.Remove,
+				},
+				{
+					Data: `Jid.3 Jid.4`,
+					Jid:  1,
+					What: what.Order,
+				},
+			},
+		},
+		{
+			name: "reorder and replace",
+			c:    &testContainer{contents: []UI{span1, span2}},
+			l:    []UI{span3, span1},
+			want: []wsMsg{
+				{
+					Data: `Jid.3`,
+					Jid:  1,
+					What: what.Remove,
+				},
+				{
+					Data: `<span id="Jid.4">span3</span>`,
+					Jid:  1,
+					What: what.Append,
+				},
+				{
+					Data: `Jid.4 Jid.2`,
+					Jid:  1,
+					What: what.Order,
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jw := New()
+			defer jw.Close()
+			nextJid = 0
+			rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+			ui := NewUiContainer("div", tt.c)
+			elem := rq.NewElement(ui)
+			var sb strings.Builder
+			ui.JawsRender(elem, &sb, nil)
+			tt.c.contents = tt.l
+			ui.JawsUpdate(elem)
+			if !slices.Equal(elem.wsQueue, tt.want) {
+				t.Errorf("got %v, want %v", elem.wsQueue, tt.want)
 			}
 		})
 	}

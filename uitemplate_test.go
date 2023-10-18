@@ -102,15 +102,15 @@ func TestRequest_Template_Event(t *testing.T) {
 	defer rq.Close()
 	dot := &templateDot{clickedCh: make(chan struct{})}
 	_ = rq.Template("testtemplate", dot)
-	is.True(rq.Send(Message{
+	rq.jw.Broadcast(Message{
 		Dest: dot,
 		What: what.Update,
-	}))
-	is.True(rq.Send(Message{
+	})
+	rq.jw.Broadcast(Message{
 		Dest: dot,
 		What: what.Click,
 		Data: "foo",
-	}))
+	})
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
