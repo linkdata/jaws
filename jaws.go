@@ -91,7 +91,7 @@ func New() (jw *Jaws) {
 
 // Close frees resources associated with the JaWS object, and
 // closes the completion channel if the JaWS was created with New().
-// Once the completion channel is closed, broadcasts and sends are discarded.
+// Once the completion channel is closed, broadcasts and sends may be discarded.
 // Subsequent calls to Close() have no effect.
 func (jw *Jaws) Close() {
 	jw.mu.Lock()

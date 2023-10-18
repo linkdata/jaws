@@ -36,7 +36,6 @@ type Request struct {
 	Initial   *http.Request           // (read-only) initial HTTP request passed to Jaws.NewRequest
 	remoteIP  net.IP                  // (read-only) remote IP, or nil
 	session   *Session                // (read-only) session, if established
-	sendCh    chan Message            // (read-only) direct send message channel
 	mu        deadlock.RWMutex        // protects following
 	dirty     []interface{}           // dirty tags
 	ctx       context.Context         // current context, derived from either Jaws or WS HTTP req
@@ -59,7 +58,6 @@ var requestPool = sync.Pool{New: newRequest}
 
 func newRequest() interface{} {
 	rq := &Request{
-		sendCh: make(chan Message),
 		tagMap: make(map[interface{}][]*Element),
 	}
 	return rq
@@ -186,12 +184,6 @@ func (rq *Request) Set(key string, val interface{}) {
 	rq.Session().Set(key, val)
 }
 
-// Broadcast sends a broadcast to all Requests except the current one.
-func (rq *Request) Broadcast(msg Message) {
-	msg.from = rq
-	rq.Jaws.Broadcast(msg)
-}
-
 // Context returns the Request's Context, which is derived from the
 // WebSocket's HTTP requests Context.
 func (rq *Request) Context() (ctx context.Context) {
@@ -210,36 +202,13 @@ func (rq *Request) cancel(err error) {
 	}
 }
 
-func (rq *Request) getDoneCh() (jawsDoneCh, ctxDoneCh <-chan struct{}) {
-	rq.mu.RLock()
-	defer rq.mu.RUnlock()
-	if rq.Jaws == nil {
-		panic("Request.Send(): request is dead")
-	}
-	jawsDoneCh = rq.Jaws.Done()
-	ctxDoneCh = rq.ctx.Done()
-	return
-}
-
-// Send a message to the current Request only.
-// Returns true if the message was successfully sent.
-func (rq *Request) Send(msg Message) bool {
-	jawsDoneCh, ctxDoneCh := rq.getDoneCh()
-	select {
-	case <-jawsDoneCh:
-	case <-ctxDoneCh:
-	case rq.sendCh <- msg:
-		return true
-	}
-	return false
-}
-
 // Alert attempts to show an alert message on the current request webpage if it has an HTML element with the id 'jaws-alert'.
 // The lvl argument should be one of Bootstraps alert levels: primary, secondary, success, danger, warning, info, light or dark.
 //
 // The default JaWS javascript only supports Bootstrap.js dismissable alerts.
 func (rq *Request) Alert(lvl, msg string) {
-	rq.Send(Message{
+	rq.Jaws.Broadcast(Message{
+		Dest: rq,
 		What: what.Alert,
 		Data: lvl + "\n" + msg,
 	})
@@ -247,8 +216,8 @@ func (rq *Request) Alert(lvl, msg string) {
 
 // AlertError calls Alert if the given error is not nil.
 func (rq *Request) AlertError(err error) {
-	if err != nil {
-		rq.Send(makeAlertDangerMessage(rq.Jaws.Log(err)))
+	if rq.Jaws.Log(err) != nil {
+		rq.Alert("danger", html.EscapeString(err.Error()))
 	}
 }
 
@@ -273,7 +242,8 @@ func (rq *Request) makeIdList(tags []interface{}) string {
 
 // Redirect requests the current Request to navigate to the given URL.
 func (rq *Request) Redirect(url string) {
-	rq.Send(Message{
+	rq.Jaws.Broadcast(Message{
+		Dest: rq,
 		What: what.Redirect,
 		Data: url,
 	})
@@ -332,7 +302,7 @@ func (rq *Request) Dirty(tags ...interface{}) {
 
 // wantMessage returns true if the Request want the message.
 func (rq *Request) wantMessage(msg *Message) (yes bool) {
-	if rq != nil && msg.from != rq {
+	if rq != nil {
 		switch dest := msg.Dest.(type) {
 		case *Request:
 			yes = dest == rq
@@ -467,7 +437,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		for {
 			select {
 			case <-eventCallCh:
-			case <-rq.sendCh:
 			case <-incomingMsgCh:
 			case <-eventDoneCh:
 				close(outboundCh)
@@ -518,7 +487,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		select {
 		case <-jawsDoneCh:
 		case <-ctxDoneCh:
-		case tagmsg, ok = <-rq.sendCh:
 		case tagmsg, ok = <-broadcastMsgCh:
 		case wsmsg, ok = <-incomingMsgCh:
 			if ok {
@@ -602,11 +570,11 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					// the function must not send any messages itself, but may return
 					// an error to be sent out as an alert message.
 					// primary usecase is tests.
-					if errmsg := makeAlertDangerMessage(rq.callAllEventHandlers(elem.jid, tagmsg.What, wsdata)); errmsg.What != what.Update {
+					if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.jid, tagmsg.What, wsdata)); err != nil {
 						wsQueue = append(wsQueue, wsMsg{
 							Data: wsdata,
 							Jid:  elem.jid,
-							What: errmsg.What,
+							What: what.Alert,
 						})
 					}
 				case what.Update:
@@ -627,10 +595,8 @@ func (rq *Request) handleRemove(data string) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	for _, jidstr := range strings.Split(data, "\t") {
-		if jid := jid.ParseString(jidstr); jid.IsValid() {
-			if e := rq.getElementLocked(jid); e != nil {
-				rq.deleteElementLocked(e)
-			}
+		if e := rq.getElementLocked(jid.ParseString(jidstr)); e != nil {
+			rq.deleteElementLocked(e)
 		}
 	}
 }
@@ -685,7 +651,7 @@ func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
 	}
 }
 
-func (rq *Request) send(outboundCh chan<- string, s string) {
+func (rq *Request) wsSend(outboundCh chan<- string, s string) {
 	select {
 	case <-rq.Jaws.Done():
 	case <-rq.Done():
@@ -700,7 +666,7 @@ func (rq *Request) sendQueue(outboundCh chan<- string, wsQueue []wsMsg) []wsMsg 
 	for _, msg := range wsQueue {
 		sb.WriteString(msg.Format())
 	}
-	rq.send(outboundCh, sb.String())
+	rq.wsSend(outboundCh, sb.String())
 	return wsQueue[:0]
 }
 
@@ -767,16 +733,6 @@ func (rq *Request) onConnect() (err error) {
 	rq.mu.RUnlock()
 	if connectFn != nil {
 		err = connectFn(rq)
-	}
-	return
-}
-
-func makeAlertDangerMessage(err error) (msg Message) {
-	if err != nil {
-		msg = Message{
-			Data: "danger\n" + html.EscapeString(err.Error()),
-			What: what.Alert,
-		}
 	}
 	return
 }

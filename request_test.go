@@ -96,7 +96,7 @@ func fillWsCh(ch chan string) {
 	}
 }
 
-func fillTagCh(ch chan Message) {
+/*func fillTagCh(ch chan Message) {
 	for {
 		select {
 		case ch <- Message{}:
@@ -104,7 +104,7 @@ func fillTagCh(ch chan Message) {
 			return
 		}
 	}
-}
+}*/
 
 func TestRequest_Registrations(t *testing.T) {
 	is := is.New(t)
@@ -127,14 +127,14 @@ func TestRequest_Registrations(t *testing.T) {
 	is.True(jid != jid2)
 }
 
-func TestRequest_SendFailsWhenJawsClosed(t *testing.T) {
+/*func TestRequest_SendFailsWhenJawsClosed(t *testing.T) {
 	is := is.New(t)
 	jw := New()
 	rq := jw.NewRequest(nil)
 	jw.UseRequest(rq.JawsKey, nil)
 	jw.Close()
-	is.Equal(rq.Send(Message{}), false)
-}
+	is.Equal(rq.send(Message{}), false)
+}*/
 
 func TestRequest_SendPanicsAfterRecycle(t *testing.T) {
 	// can not run in parallel
@@ -150,10 +150,10 @@ func TestRequest_SendPanicsAfterRecycle(t *testing.T) {
 	defer jw.Close()
 	rq := jw.NewRequest(nil)
 	rq.recycle()
-	rq.Send(Message{})
+	rq.Jaws.Broadcast(Message{})
 }
 
-func TestRequest_SendFailsWhenContextDone(t *testing.T) {
+/*func TestRequest_SendFailsWhenContextDone(t *testing.T) {
 	is := is.New(t)
 	jw := New()
 	defer jw.Close()
@@ -165,10 +165,9 @@ func TestRequest_SendFailsWhenContextDone(t *testing.T) {
 	if rq.cancelFn == nil {
 		is.Fail()
 	}
-	fillTagCh(rq.sendCh)
 	cancel()
-	is.Equal(rq.Send(Message{}), false)
-}
+	is.Equal(rq.send(Message{}), false)
+}*/
 
 func TestRequest_HeadHTML(t *testing.T) {
 	is := is.New(t)
@@ -187,9 +186,7 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 	jid := rq.Register("foo")
-	theMsg := Message{Dest: Tag("foo"), What: what.Inner, Data: "bar"}
-
-	is.Equal(rq.Send(theMsg), true)
+	rq.jw.Broadcast(Message{Dest: Tag("foo"), What: what.Inner, Data: "bar"})
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -261,7 +258,7 @@ func TestRequest_OutboundOverflowPanicsWithNoLogger(t *testing.T) {
 	defer rq.Close()
 	rq.Register(Tag("foo"))
 	fillWsCh(rq.outCh)
-	rq.sendCh <- Message{Dest: Tag("foo"), What: what.Inner, Data: "bar"}
+	rq.Jaws.Broadcast(Message{Dest: Tag("foo"), What: what.Inner, Data: "bar"})
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
@@ -290,8 +287,8 @@ func TestRequest_Trigger(t *testing.T) {
 	})
 
 	// broadcasts from ourselves should not invoke fn
-	rq.Broadcast(Message{Dest: Tag("foo"), What: what.Input, Data: "bar"})
-	rq.Broadcast(Message{Dest: Tag("err"), What: what.Input, Data: "baz"})
+	// rq.Broadcast(Message{Dest: Tag("foo"), What: what.Input, Data: "bar"})
+	// rq.Broadcast(Message{Dest: Tag("err"), What: what.Input, Data: "baz"})
 	rq.jw.Broadcast(Message{Dest: Tag("end"), What: what.Input, Data: ""}) // to know when to stop
 	select {
 	case <-time.NewTimer(testTimeout).C:
@@ -396,16 +393,18 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 	rq.expectPanic = true
 	rq.jw.Logger = nil
 	tmr := time.NewTimer(testTimeout)
+
 	defer tmr.Stop()
 	for {
 		select {
-		case rq.sendCh <- Message{Dest: Tag("bomb"), What: what.Input}:
 		case <-rq.doneCh:
 			is.True(rq.panicked)
 			is.True(strings.Contains(rq.panicVal.(error).Error(), "eventCallCh is full sending"))
 			return
 		case <-tmr.C:
 			is.Fail()
+		default:
+			rq.Jaws.Broadcast(Message{Dest: Tag("bomb"), What: what.Input})
 		}
 	}
 }
@@ -447,7 +446,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	// outbound channel is full, but with the
 	// event fn holding it won't be able to end
 	select {
-	case rq.sendCh <- Message{Dest: Tag("foo"), What: what.Inner, Data: ""}:
+	case rq.bcastCh <- Message{Dest: Tag("foo"), What: what.Inner, Data: ""}:
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-rq.doneCh:
@@ -459,11 +458,12 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	tmr := time.NewTimer(testTimeout)
 	for i := 0; i < cap(rq.outCh)*2; i++ {
 		select {
-		case rq.sendCh <- Message{}:
 		case <-rq.doneCh:
 			is.Fail()
 		case <-tmr.C:
 			is.Fail()
+		default:
+			rq.Jaws.Broadcast(Message{Dest: rq})
 		}
 		select {
 		case rq.inCh <- wsMsg{}:
@@ -513,17 +513,17 @@ func TestRequest_Sends(t *testing.T) {
 	case <-rq.readyCh:
 	}
 
-	rq.Send(Message{
+	rq.jw.Broadcast(Message{
 		Dest: Tag("SetAttr"),
 		What: what.SAttr,
 		Data: "bar\nbaz",
 	})
-	rq.Send(Message{
+	rq.jw.Broadcast(Message{
 		Dest: Tag("SetAttr"),
 		What: what.SAttr,
 		Data: "bar\nbaz",
 	})
-	rq.Send(Message{
+	rq.jw.Broadcast(Message{
 		Dest: Tag("RemoveAttr"),
 		What: what.RAttr,
 		Data: "bar",

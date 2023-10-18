@@ -181,15 +181,7 @@ func (sess *Session) Clear() {
 }
 
 func (sess *Session) broadcastLocked(msg Message) {
-	var retry []*Request
 	for _, rq := range sess.requests {
-		select {
-		case rq.sendCh <- msg:
-		default:
-			retry = append(retry, rq)
-		}
-	}
-	for _, rq := range retry {
 		msg.Dest = rq
 		sess.jw.Broadcast(msg)
 	}
