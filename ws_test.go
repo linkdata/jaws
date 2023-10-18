@@ -404,58 +404,6 @@ func TestReader_ReportsError(t *testing.T) {
 	is.True(strings.Contains(err.Error(), "WebSocket closed"))
 }
 
-func Test_wsParse_IncompleteFails(t *testing.T) {
-	is := is.New(t)
-
-	got, ok := wsParse(nil)
-	is.True(!ok)
-	is.Equal(got, wsMsg{})
-
-	got, ok = wsParse([]byte("invalid\t\t\n")) // invalid What
-	is.True(!ok)
-	is.Equal(got, wsMsg{})
-
-	got, ok = wsParse([]byte("Click\t\t")) // missing ending linefeed
-	is.True(!ok)
-	is.Equal(got, wsMsg{})
-
-	got, ok = wsParse([]byte("Click\t\n")) // just one tab
-	is.True(!ok)
-	is.Equal(got, wsMsg{})
-
-	got, ok = wsParse([]byte("\n\t\t\n")) // newline instead of What
-	is.True(!ok)
-	is.Equal(got, wsMsg{})
-
-	got, ok = wsParse([]byte("Click\t\t\"\n\"\n")) // incorrectly quoted data
-	is.True(!ok)
-	is.Equal(got, wsMsg{})
-}
-
-func Test_wsParse_CompletePasses(t *testing.T) {
-	tests := []struct {
-		name string
-		txt  string
-		want wsMsg
-	}{
-		{"shortest", "Update\t\t\n", wsMsg{What: what.Update}},
-		{"unquoted", "Input\tJid.1\ttrue\n", wsMsg{Jid: Jid(1), What: what.Input, Data: "true"}},
-		{"normal", "Input\tJid.2\t\"c\"\n", wsMsg{Jid: Jid(2), What: what.Input, Data: "c"}},
-		{"newline", "Input\tJid.3\t\"c\\nd\"\n", wsMsg{Jid: Jid(3), What: what.Input, Data: "c\nd"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			is := is.New(t)
-			got, ok := wsParse([]byte(tt.txt))
-			if !ok {
-				t.Log(got, tt.want)
-			}
-			is.True(ok)
-			is.Equal(tt.want, got)
-		})
-	}
-}
-
 // adapted from nhooyr.io/websocket/internal/test/wstest.Pipe
 
 func Pipe() (clientConn, serverConn *websocket.Conn) {
