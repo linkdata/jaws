@@ -4,8 +4,6 @@ import (
 	"html/template"
 	"reflect"
 	"testing"
-
-	"github.com/matryer/is"
 )
 
 type testContainer struct{ contents []UI }
@@ -17,7 +15,6 @@ func (tc *testContainer) JawsContains(rq *Request) (contents []UI) {
 var _ Container = &testContainer{}
 
 func TestRequest_Container(t *testing.T) {
-	is := is.New(t)
 	type args struct {
 		c      Container
 		params []interface{}
@@ -55,7 +52,7 @@ func TestRequest_Container(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			nextJid = 0
-			rq := newTestRequest(is)
+			rq := newTestRequest()
 			defer rq.Close()
 			if got := rq.Container("div", tt.args.c, tt.args.params...); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Request.Container() = %v, want %v", got, tt.want)

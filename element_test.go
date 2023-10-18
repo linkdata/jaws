@@ -54,7 +54,7 @@ func (tss *testUi) JawsUpdate(e *Element) {
 
 func TestElement_Tag(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	tss := &testUi{}
@@ -67,7 +67,7 @@ func TestElement_Tag(t *testing.T) {
 
 func TestElement_Queued(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	tss := &testUi{
@@ -164,7 +164,7 @@ func TestElement_Queued(t *testing.T) {
 
 func TestElement_ReplacePanicsOnMissingId(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 	defer func() {
 		if x := recover(); x == nil {

@@ -52,7 +52,7 @@ func TestRequest_Template(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			nextJid = 0
-			rq := newTestRequest(is)
+			rq := newTestRequest()
 			defer rq.Close()
 			if tt.errtxt != "" {
 				defer func() {
@@ -98,7 +98,7 @@ var _ ClickHandler = &templateDot{}
 
 func TestRequest_Template_Event(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 	dot := &templateDot{clickedCh: make(chan struct{})}
 	_ = rq.Template("testtemplate", dot)

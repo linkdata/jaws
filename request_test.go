@@ -23,7 +23,6 @@ import (
 const testTimeout = time.Second * 3
 
 type testRequest struct {
-	is *is.I
 	jw *Jaws
 	*Request
 	log         bytes.Buffer
@@ -39,9 +38,8 @@ type testRequest struct {
 	panicVal    any
 }
 
-func newTestRequest(is *is.I) (tr *testRequest) {
+func newTestRequest() (tr *testRequest) {
 	tr = &testRequest{
-		is:      is,
 		readyCh: make(chan struct{}),
 		doneCh:  make(chan struct{}),
 		jw:      New(),
@@ -110,7 +108,7 @@ func fillTagCh(ch chan Message) {
 
 func TestRequest_Registrations(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	is.Equal(rq.wantMessage(&Message{Dest: Tag("sometag")}), false)
@@ -186,7 +184,7 @@ func TestRequest_HeadHTML(t *testing.T) {
 
 func TestRequest_SendArrivesOk(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 	jid := rq.Register("foo")
 	theMsg := Message{Dest: Tag("foo"), What: what.Inner, Data: "bar"}
@@ -206,7 +204,7 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 
 func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 	jw := rq.jw
 	var callCount int32
@@ -230,7 +228,7 @@ func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
 
 func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 	var callCount int32
 	tag := Tag("foo")
@@ -257,7 +255,7 @@ func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 func TestRequest_OutboundOverflowPanicsWithNoLogger(t *testing.T) {
 	// can not run in parallel
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	rq.expectPanic = true
 	rq.jw.Logger = nil
 	defer rq.Close()
@@ -275,7 +273,7 @@ func TestRequest_OutboundOverflowPanicsWithNoLogger(t *testing.T) {
 
 func TestRequest_Trigger(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 	gotFooCall := make(chan struct{})
 	gotEndCall := make(chan struct{})
@@ -331,7 +329,7 @@ func TestRequest_Trigger(t *testing.T) {
 
 func TestRequest_EventFnQueue(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	// calls to slow event functions queue up and are executed in order
@@ -385,7 +383,7 @@ func TestRequest_EventFnQueue(t *testing.T) {
 
 func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	var wait int32
@@ -414,7 +412,7 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 
 func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	var spewState int32
@@ -492,7 +490,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 
 func TestRequest_Sends(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	rq.Register("SetAttr")
@@ -622,7 +620,7 @@ func checkHtml(is *is.I, rq *testRequest, h template.HTML, tag interface{}, txt 
 
 func TestRequest_Elements(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
@@ -649,7 +647,7 @@ func TestRequest_Elements(t *testing.T) {
 func TestRequest_Text(t *testing.T) {
 	const elemVal = "elem-val"
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	var av atomic.Value
@@ -687,7 +685,7 @@ func jidForTag(rq *Request, tag interface{}) jid.Jid {
 
 func TestRequest_Password(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	var av atomic.Value
@@ -715,7 +713,7 @@ func TestRequest_Password(t *testing.T) {
 func TestRequest_Number(t *testing.T) {
 	const elemVal = 21.5
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	var av atomic.Value
@@ -771,7 +769,7 @@ func TestRequest_Number(t *testing.T) {
 func TestRequest_Range(t *testing.T) {
 	const elemVal = float64(3.14)
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	var av atomic.Value
@@ -799,7 +797,7 @@ func TestRequest_Range(t *testing.T) {
 func TestRequest_Checkbox(t *testing.T) {
 	const elemVal = true
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	var av atomic.Value
@@ -845,7 +843,7 @@ func TestRequest_Checkbox(t *testing.T) {
 func TestRequest_Date(t *testing.T) {
 	var elemVal time.Time
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	var av atomic.Value
@@ -903,7 +901,7 @@ func TestRequest_Date(t *testing.T) {
 
 func TestRequest_Radio(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	var av atomic.Value
@@ -932,7 +930,7 @@ func TestRequest_Radio(t *testing.T) {
 
 func TestRequest_Select(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
@@ -952,7 +950,7 @@ func TestRequest_Select(t *testing.T) {
 
 func TestRequest_ConnectFn(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	is.Equal(rq.GetConnectFn(), nil)
@@ -988,7 +986,7 @@ func TestRequest_WsQueueOverflowCancels(t *testing.T) {
 
 func TestRequest_Dirty(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	tss := &testUi{s: "foo"}

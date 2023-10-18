@@ -10,7 +10,7 @@ import (
 
 func TestTemplate_String(t *testing.T) {
 	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	dot := 123
@@ -20,8 +20,7 @@ func TestTemplate_String(t *testing.T) {
 }
 
 func TestRequest_MustTemplate(t *testing.T) {
-	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	tests := []struct {
@@ -42,8 +41,7 @@ func TestRequest_MustTemplate(t *testing.T) {
 }
 
 func TestRequest_MustTemplate_Panics(t *testing.T) {
-	is := is.New(t)
-	rq := newTestRequest(is)
+	rq := newTestRequest()
 	defer rq.Close()
 
 	tests := []struct {

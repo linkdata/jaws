@@ -4,8 +4,6 @@ import (
 	"html/template"
 	"reflect"
 	"testing"
-
-	"github.com/matryer/is"
 )
 
 type testHtmlGetter string
@@ -17,7 +15,6 @@ func (g testHtmlGetter) JawsGetHtml(e *Element) template.HTML {
 var _ HtmlGetter = testHtmlGetter("foo")
 
 func TestRequest_A(t *testing.T) {
-	is := is.New(t)
 	type args struct {
 		innerHtml interface{}
 		params    []interface{}
@@ -55,7 +52,7 @@ func TestRequest_A(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			nextJid = 0
-			rq := newTestRequest(is)
+			rq := newTestRequest()
 			defer rq.Close()
 			if got := rq.A(tt.args.innerHtml, tt.args.params...); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Request.A() = %v, want %v", got, tt.want)
