@@ -524,7 +524,12 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			if ok {
 				// incoming event message from the websocket
 				if wsmsg.Jid.IsValid() {
-					rq.queueEvent(eventCallCh, eventFnCall{jid: wsmsg.Jid, wht: wsmsg.What, data: wsmsg.Data})
+					switch wsmsg.What {
+					case what.Input, what.Click:
+						rq.queueEvent(eventCallCh, eventFnCall{jid: wsmsg.Jid, wht: wsmsg.What, data: wsmsg.Data})
+					case what.Remove:
+						rq.handleRemove(wsmsg.Data)
+					}
 				}
 				continue
 			}
@@ -618,6 +623,18 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 	}
 }
 
+func (rq *Request) handleRemove(data string) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	for _, jidstr := range strings.Split(data, "\t") {
+		if jid := jid.ParseString(jidstr); jid.IsValid() {
+			if e := rq.getElementLocked(jid); e != nil {
+				rq.deleteElementLocked(e)
+			}
+		}
+	}
+}
+
 func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err error) {
 	var elems []*Element
 	rq.mu.RLock()
@@ -687,14 +704,18 @@ func (rq *Request) sendQueue(outboundCh chan<- string, wsQueue []wsMsg) []wsMsg 
 	return wsQueue[:0]
 }
 
-func (rq *Request) deleteElement(e *Element) {
-	rq.mu.Lock()
-	defer rq.mu.Unlock()
+func (rq *Request) deleteElementLocked(e *Element) {
 	e.Request = nil
 	rq.elems = slices.DeleteFunc(rq.elems, func(elem *Element) bool { return elem == e })
 	for k := range rq.tagMap {
 		rq.tagMap[k] = slices.DeleteFunc(rq.tagMap[k], func(elem *Element) bool { return elem == e })
 	}
+}
+
+func (rq *Request) deleteElement(e *Element) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	rq.deleteElementLocked(e)
 }
 
 func (rq *Request) makeUpdateList() (todo []*Element) {

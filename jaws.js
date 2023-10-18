@@ -62,6 +62,19 @@ function jawsInputHandler(e) {
 	}
 }
 
+function jawsRemoving(topElem) {
+	var elements = topElem.querySelectorAll('[id^="Jid."]');
+	if (elements.length == 0) return;
+	var val = '';
+	for (var i = 0; i < elements.length; i++) {
+		if (i > 0) {
+			val += '\t';
+		}
+		val += elements[i].id;
+	}
+	jaws.send("Remove\t" + topElem.id + "\t" + JSON.stringify(val) + "\n");
+}
+
 function jawsAttach(topElem) {
 	var elements = topElem.querySelectorAll('[id^="Jid."]');
 	for (var i = 0; i < elements.length; i++) {
@@ -286,6 +299,7 @@ function jawsPerform(what, id, data) {
 	var where = null;
 	switch (what) {
 		case 'Inner':
+			jawsRemoving(elem);
 			elem.innerHTML = data;
 			jawsAttach(elem);
 			break;
@@ -296,14 +310,17 @@ function jawsPerform(what, id, data) {
 			elem.appendChild(jawsAttach(jawsElement(data)));
 			break;
 		case 'Replace':
+			jawsRemoving(elem);
 			elem.replaceWith(jawsAttach(jawsElement(data)));
 			break;
 		case 'Delete':
+			jawsRemoving(elem);
 			elem.remove();
 			break;
 		case 'Remove':
 			where = jawsWhere(elem, data);
 			if (where instanceof Node) {
+				jawsRemoving(where);
 				elem.removeChild(where);
 			}
 			break;
