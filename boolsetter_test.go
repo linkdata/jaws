@@ -5,12 +5,11 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 )
 
-var _ TimeSetter = (*testSetter[time.Time])(nil)
+var _ BoolSetter = (*testSetter[bool])(nil)
 
-func Test_makeTimeSetter_panic(t *testing.T) {
+func Test_makeBoolSetter_panic(t *testing.T) {
 	defer func() {
 		if x := recover(); x != nil {
 			if err, ok := x.(error); ok {
@@ -21,32 +20,32 @@ func Test_makeTimeSetter_panic(t *testing.T) {
 		}
 		t.Fail()
 	}()
-	makeTimeSetter(uint32(42))
+	makeBoolSetter(uint32(1))
 }
 
-func Test_makeTimeSetter(t *testing.T) {
-	val := time.Now()
+func Test_makeBoolSetter(t *testing.T) {
+	val := true
 	var av atomic.Value
 	av.Store(val)
 
 	tests := []struct {
 		name string
 		v    interface{}
-		want TimeGetter
-		out  time.Time
+		want BoolSetter
+		out  bool
 		tag  interface{}
 	}{
 		{
-			name: "time.Time",
-			v:    val,
-			want: timeGetter{val},
+			name: "BoolSetter",
+			v:    boolGetter{val},
+			want: boolGetter{val},
 			out:  val,
 			tag:  nil,
 		},
 		{
-			name: "timeGetter",
-			v:    timeGetter{val},
-			want: timeGetter{val},
+			name: "bool",
+			v:    val,
+			want: boolGetter{val},
 			out:  val,
 			tag:  nil,
 		},
@@ -60,15 +59,15 @@ func Test_makeTimeSetter(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := makeTimeSetter(tt.v)
+			got := makeBoolSetter(tt.v)
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("makeTimeSetter() = %v, want %v", got, tt.want)
+				t.Errorf("makeBoolGetter() = %v, want %v", got, tt.want)
 			}
-			if out := got.JawsGetTime(nil); out != tt.out {
-				t.Errorf("makeTimeSetter().JawsGetTime() = %v, want %v", out, tt.out)
+			if out := got.JawsGetBool(nil); out != tt.out {
+				t.Errorf("makeBoolGetter().JawsGetBool() = %v, want %v", out, tt.out)
 			}
 			if tag := got.(TagGetter).JawsGetTag(nil); tag != tt.tag {
-				t.Errorf("makeTimeSetter().JawsGetTag() = %v, want %v", tag, tt.tag)
+				t.Errorf("makeBoolGetter().JawsGetTag() = %v, want %v", tag, tt.tag)
 			}
 		})
 	}

@@ -9,11 +9,11 @@ import (
 
 type UiInputBool struct {
 	UiInput
-	BoolGetter
+	BoolSetter
 }
 
 func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
-	ui.parseGetter(e, ui.BoolGetter)
+	ui.parseGetter(e, ui.BoolSetter)
 	attrs := ui.parseParams(e, params)
 	v := ui.JawsGetBool(e)
 	ui.Last.Store(v)
@@ -43,7 +43,7 @@ func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (err err
 			}
 		}
 		ui.Last.Store(v)
-		err = ui.BoolGetter.(BoolSetter).JawsSetBool(e, v)
+		err = ui.BoolSetter.JawsSetBool(e, v)
 		e.Dirty(ui.Tag)
 		if err != nil {
 			return

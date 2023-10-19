@@ -21,7 +21,7 @@ func (g htmlGetter) JawsGetTag(rq *Request) interface{} {
 	return nil
 }
 
-type htmlStringGetter struct{ v StringGetter }
+type htmlStringGetter struct{ v StringSetter }
 
 func (g htmlStringGetter) JawsGetHtml(e *Element) template.HTML {
 	return template.HTML(html.EscapeString(g.v.JawsGetString(e))) // #nosec G203
@@ -35,7 +35,7 @@ func makeHtmlGetter(v interface{}) HtmlGetter {
 	switch v := v.(type) {
 	case HtmlGetter:
 		return v
-	case StringGetter:
+	case StringSetter:
 		return htmlStringGetter{v}
 	case template.HTML:
 		return htmlGetter{v}

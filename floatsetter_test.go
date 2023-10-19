@@ -9,7 +9,7 @@ import (
 
 var _ FloatSetter = (*testSetter[float64])(nil)
 
-func Test_makeFloatGetter_panic(t *testing.T) {
+func Test_makeFloatSetter_panic(t *testing.T) {
 	defer func() {
 		if x := recover(); x != nil {
 			if err, ok := x.(error); ok {
@@ -20,10 +20,10 @@ func Test_makeFloatGetter_panic(t *testing.T) {
 		}
 		t.Fail()
 	}()
-	makeFloatGetter("meh")
+	makeFloatSetter("meh")
 }
 
-func Test_makeFloatGetter(t *testing.T) {
+func Test_makeFloatSetter(t *testing.T) {
 	val := float64(12.34)
 	var av atomic.Value
 	av.Store(val)
@@ -31,12 +31,12 @@ func Test_makeFloatGetter(t *testing.T) {
 	tests := []struct {
 		name string
 		v    interface{}
-		want FloatGetter
+		want FloatSetter
 		out  float64
 		tag  interface{}
 	}{
 		{
-			name: "FloatGetter",
+			name: "FloatSetter",
 			v:    floatGetter{val},
 			want: floatGetter{val},
 			out:  val,
@@ -73,15 +73,15 @@ func Test_makeFloatGetter(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := makeFloatGetter(tt.v)
+			got := makeFloatSetter(tt.v)
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("makeFloatGetter() = %v, want %v", got, tt.want)
+				t.Errorf("makeFloatSetter() = %v, want %v", got, tt.want)
 			}
 			if out := got.JawsGetFloat(nil); out != tt.out {
-				t.Errorf("makeFloatGetter().JawsGetFloat() = %v, want %v", out, tt.out)
+				t.Errorf("makeFloatSetter().JawsGetFloat() = %v, want %v", out, tt.out)
 			}
 			if tag := got.(TagGetter).JawsGetTag(nil); tag != tt.tag {
-				t.Errorf("makeFloatGetter().JawsGetTag() = %v, want %v", tag, tt.tag)
+				t.Errorf("makeFloatSetter().JawsGetTag() = %v, want %v", tag, tt.tag)
 			}
 		})
 	}

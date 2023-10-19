@@ -9,7 +9,7 @@ import (
 
 type UiInputFloat struct {
 	UiInput
-	FloatGetter
+	FloatSetter
 }
 
 func (ui *UiInputFloat) str() string {
@@ -17,7 +17,7 @@ func (ui *UiInputFloat) str() string {
 }
 
 func (ui *UiInputFloat) renderFloatInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
-	ui.parseGetter(e, ui.FloatGetter)
+	ui.parseGetter(e, ui.FloatSetter)
 	attrs := ui.parseParams(e, params)
 	ui.Last.Store(ui.JawsGetFloat(e))
 	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.str(), attrs...))
@@ -38,7 +38,7 @@ func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err er
 			}
 		}
 		ui.Last.Store(v)
-		err = ui.FloatGetter.(FloatSetter).JawsSetFloat(e, v)
+		err = ui.FloatSetter.JawsSetFloat(e, v)
 		e.Dirty(ui.Tag)
 		if err != nil {
 			return

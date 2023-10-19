@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -589,125 +588,11 @@ func TestRequest_Sends(t *testing.T) {
 	is.Equal(gotDangerAlert, "Alert\t\t\"danger\\n&lt;html&gt;\\nshould-be-escaped\"\n")
 }
 
-func checkHtml(is *is.I, rq *testRequest, h template.HTML, tag interface{}, txt string) {
-	is.Helper()
-	if rq.log.Len() > 0 {
-		fmt.Println(rq.log.String())
-		is.Fail()
-	}
-	hs := string(h)
-	found := false
-	elems := rq.GetElements(tag)
-	for _, elem := range elems {
-		if strings.Contains(hs, elem.Jid().String()) && strings.Contains(hs, txt) {
-			found = true
-		}
-	}
-	if !found {
-		if len(elems) == 0 {
-			elems = rq.elems
-		}
-		fmt.Printf("checkHtml(%q, %v@%p, %q) did not match any of %d elements:\n", hs, tag, tag, txt, len(elems))
-		for i, elem := range elems {
-			fmt.Printf("  %d: (%T) id=%q tags=%v\n", i, elem.Ui(), elem.Jid(), elem.Request.TagsOf(elem))
-		}
-		fmt.Printf("tagMap:\n")
-		for tag, elems := range rq.tagMap {
-			fmt.Printf(" [%v@%p]: %v\n", tag, tag, elems)
-		}
-		is.Fail()
-	}
-}
-
 func jidForTag(rq *Request, tag interface{}) jid.Jid {
 	if elems := rq.GetElements(tag); len(elems) > 0 {
 		return elems[0].jid
 	}
 	return 0
-}
-
-func TestRequest_Password(t *testing.T) {
-	is := is.New(t)
-	rq := newTestRequest()
-	defer rq.Close()
-
-	var av atomic.Value
-	av.Store("")
-
-	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
-
-	gotCall := make(chan struct{})
-	h := rq.Password(&av, func(rq *Request, jidstr, val string) error {
-		defer close(gotCall)
-		is.True(rq.GetElement(jid.ParseString(jidstr)) != nil)
-		is.Equal(val, "other-stuff")
-		return nil
-	}, "autocomplete=\"off\"")
-	chk(h, &av, "autocomplete")
-	is.True(!strings.Contains(string(h), "value"))
-	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, &av), What: what.Input, Data: "other-stuff"}
-	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
-	case <-gotCall:
-	}
-}
-
-func TestRequest_Range(t *testing.T) {
-	const elemVal = float64(3.14)
-	is := is.New(t)
-	rq := newTestRequest()
-	defer rq.Close()
-
-	var av atomic.Value
-	av.Store(elemVal)
-	elemId := &av
-
-	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
-
-	gotCall := make(chan struct{})
-	h := rq.Range(elemId, &av, func(rq *Request, id string, val float64) error {
-		defer close(gotCall)
-		is.True(rq.GetElement(jid.ParseString(id)) != nil)
-		is.Equal(val, 3.15)
-		return nil
-	}, "disabled")
-	chk(h, elemId, "3.14")
-	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "3.15"}
-	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
-	case <-gotCall:
-	}
-}
-
-func TestRequest_Radio(t *testing.T) {
-	is := is.New(t)
-	rq := newTestRequest()
-	defer rq.Close()
-
-	var av atomic.Value
-	av.Store(true)
-	elemId := &av
-
-	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
-
-	gotCall := make(chan struct{})
-	h := rq.Radio(elemId, &av, func(rq *Request, id string, val bool) error {
-		defer close(gotCall)
-		is.True(rq.GetElement(jid.ParseString(id)) != nil)
-		is.Equal(val, false)
-		return nil
-	})
-
-	chk(h, elemId, "checked")
-
-	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "false"}
-	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
-	case <-gotCall:
-	}
 }
 
 func TestRequest_ConnectFn(t *testing.T) {

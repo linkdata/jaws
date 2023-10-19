@@ -6,12 +6,8 @@ import (
 	"time"
 )
 
-type TimeGetter interface {
-	JawsGetTime(e *Element) time.Time
-}
-
 type TimeSetter interface {
-	TimeGetter
+	JawsGetTime(e *Element) time.Time
 	JawsSetTime(e *Element, v time.Time) (err error)
 }
 
@@ -21,8 +17,8 @@ func (g timeGetter) JawsGetTime(e *Element) time.Time {
 	return g.v
 }
 
-func (g timeGetter) JawsSetTime(e *Element, val time.Time) error {
-	return nil
+func (g timeGetter) JawsSetTime(*Element, time.Time) error {
+	return ErrValueNotSettable
 }
 
 func (g timeGetter) JawsGetTag(rq *Request) interface{} {

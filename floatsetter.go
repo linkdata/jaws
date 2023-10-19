@@ -5,12 +5,8 @@ import (
 	"sync/atomic"
 )
 
-type FloatGetter interface {
-	JawsGetFloat(e *Element) float64
-}
-
 type FloatSetter interface {
-	FloatGetter
+	JawsGetFloat(e *Element) float64
 	JawsSetFloat(e *Element, v float64) (err error)
 }
 
@@ -20,13 +16,17 @@ func (g floatGetter) JawsGetFloat(e *Element) float64 {
 	return g.v
 }
 
+func (g floatGetter) JawsSetFloat(*Element, float64) error {
+	return ErrValueNotSettable
+}
+
 func (g floatGetter) JawsGetTag(rq *Request) interface{} {
 	return nil
 }
 
-func makeFloatGetter(v interface{}) FloatGetter {
+func makeFloatSetter(v interface{}) FloatSetter {
 	switch v := v.(type) {
-	case FloatGetter:
+	case FloatSetter:
 		return v
 	case float64:
 		return floatGetter{v}
@@ -37,5 +37,5 @@ func makeFloatGetter(v interface{}) FloatGetter {
 	case *atomic.Value:
 		return atomicGetter{v}
 	}
-	panic(fmt.Errorf("expected jaws.FloatGetter, float or int, not %T", v))
+	panic(fmt.Errorf("expected jaws.FloatSetter, float or int, not %T", v))
 }

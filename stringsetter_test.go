@@ -10,7 +10,7 @@ import (
 
 var _ StringSetter = (*testSetter[string])(nil)
 
-func Test_makeStringGetter_panic(t *testing.T) {
+func Test_makeStringSetter_panic(t *testing.T) {
 	defer func() {
 		if x := recover(); x != nil {
 			if err, ok := x.(error); ok {
@@ -21,10 +21,10 @@ func Test_makeStringGetter_panic(t *testing.T) {
 		}
 		t.Fail()
 	}()
-	makeStringGetter(uint32(42))
+	makeStringSetter(uint32(42))
 }
 
-func Test_makeStringGetter(t *testing.T) {
+func Test_makeStringSetter(t *testing.T) {
 	val := "<span>"
 	var av atomic.Value
 	av.Store(val)
@@ -32,12 +32,12 @@ func Test_makeStringGetter(t *testing.T) {
 	tests := []struct {
 		name string
 		v    interface{}
-		want StringGetter
+		want StringSetter
 		out  string
 		tag  interface{}
 	}{
 		{
-			name: "StringGetter",
+			name: "StringSetter",
 			v:    stringGetter{val},
 			want: stringGetter{val},
 			out:  val,
@@ -67,15 +67,15 @@ func Test_makeStringGetter(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := makeStringGetter(tt.v)
+			got := makeStringSetter(tt.v)
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("makeStringGetter() = %v, want %v", got, tt.want)
+				t.Errorf("makeStringSetter() = %v, want %v", got, tt.want)
 			}
 			if txt := got.JawsGetString(nil); txt != tt.out {
-				t.Errorf("makeStringGetter().JawsGetString() = %v, want %v", txt, tt.out)
+				t.Errorf("makeStringSetter().JawsGetString() = %v, want %v", txt, tt.out)
 			}
 			if tag := got.(TagGetter).JawsGetTag(nil); tag != tt.tag {
-				t.Errorf("makeStringGetter().JawsGetTag() = %v, want %v", tag, tt.tag)
+				t.Errorf("makeStringSetter().JawsGetTag() = %v, want %v", tag, tt.tag)
 			}
 		})
 	}

@@ -13,14 +13,14 @@ func (ui *UiRange) JawsRender(e *Element, w io.Writer, params []interface{}) {
 	ui.renderFloatInput(e, w, "range", params...)
 }
 
-func NewUiRange(g FloatGetter) *UiRange {
+func NewUiRange(g FloatSetter) *UiRange {
 	return &UiRange{
 		UiInputFloat{
-			FloatGetter: g,
+			FloatSetter: g,
 		},
 	}
 }
 
 func (rq *Request) Range(value interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiRange(makeFloatGetter(value)), params...)
+	return rq.UI(NewUiRange(makeFloatSetter(value)), params...)
 }

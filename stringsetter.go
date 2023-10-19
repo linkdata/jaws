@@ -6,12 +6,8 @@ import (
 	"sync/atomic"
 )
 
-type StringGetter interface {
-	JawsGetString(e *Element) string
-}
-
 type StringSetter interface {
-	StringGetter
+	JawsGetString(e *Element) string
 	JawsSetString(e *Element, v string) (err error)
 }
 
@@ -21,13 +17,17 @@ func (g stringGetter) JawsGetString(e *Element) string {
 	return g.v
 }
 
+func (g stringGetter) JawsSetString(*Element, string) error {
+	return ErrValueNotSettable
+}
+
 func (g stringGetter) JawsGetTag(rq *Request) interface{} {
 	return nil
 }
 
-func makeStringGetter(v interface{}) StringGetter {
+func makeStringSetter(v interface{}) StringSetter {
 	switch v := v.(type) {
-	case StringGetter:
+	case StringSetter:
 		return v
 	case string:
 		return stringGetter{v}
@@ -36,15 +36,5 @@ func makeStringGetter(v interface{}) StringGetter {
 	case *atomic.Value:
 		return atomicGetter{v}
 	}
-	panic(fmt.Errorf("expected jaws.StringGetter or string, not %T", v))
-}
-
-func makeStringSetter(v interface{}) StringSetter {
-	switch v := v.(type) {
-	case StringSetter:
-		return v
-	case *atomic.Value:
-		return atomicGetter{v}
-	}
-	panic(fmt.Errorf("expected jaws.StringSetter, not %T", v))
+	panic(fmt.Errorf("expected jaws.StringSetter or string, not %T", v))
 }

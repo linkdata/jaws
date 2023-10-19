@@ -8,7 +8,7 @@ import (
 
 type UiImg struct {
 	UiHtml
-	StringGetter
+	StringSetter
 }
 
 func (ui *UiImg) SrcAttr(e *Element) string {
@@ -20,7 +20,7 @@ func (ui *UiImg) SrcAttr(e *Element) string {
 }
 
 func (ui *UiImg) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.parseGetter(e, ui.StringGetter)
+	ui.parseGetter(e, ui.StringSetter)
 	attrs := append(ui.parseParams(e, params), "src="+ui.SrcAttr(e))
 	maybePanic(WriteHtmlInner(w, e.Jid(), "img", "", "", attrs...))
 }
@@ -29,12 +29,12 @@ func (ui *UiImg) JawsUpdate(u *Element) {
 	u.SetAttr("src", ui.SrcAttr(u))
 }
 
-func NewUiImg(g StringGetter) *UiImg {
+func NewUiImg(g StringSetter) *UiImg {
 	return &UiImg{
-		StringGetter: g,
+		StringSetter: g,
 	}
 }
 
 func (rq *Request) Img(imageSrc interface{}, params ...interface{}) template.HTML {
-	return rq.UI(NewUiImg(makeStringGetter(imageSrc)), params...)
+	return rq.UI(NewUiImg(makeStringSetter(imageSrc)), params...)
 }

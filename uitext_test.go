@@ -23,11 +23,11 @@ func TestRequest_Text(t *testing.T) {
 	defer tmr.Stop()
 	select {
 	case <-tmr.C:
-		t.Fail()
+		t.Error("timeout")
 	case <-ss.setCalled:
 	}
 	if ss.Get() != "bar" {
-		t.Fail()
+		t.Error(ss.Get())
 	}
 	select {
 	case s := <-rq.outCh:

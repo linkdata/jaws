@@ -24,7 +24,7 @@ func (ui *UiSelect) JawsRender(e *Element, w io.Writer, params []interface{}) {
 }
 
 func (ui *UiSelect) JawsUpdate(e *Element) {
-	e.SetValue(ui.uiWrapContainer.Container.(StringGetter).JawsGetString(e))
+	e.SetValue(ui.uiWrapContainer.Container.(StringSetter).JawsGetString(e))
 	ui.uiWrapContainer.JawsUpdate(e)
 }
 
