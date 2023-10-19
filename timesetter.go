@@ -32,7 +32,7 @@ func makeTimeSetter(v interface{}) TimeSetter {
 	case time.Time:
 		return timeGetter{v}
 	case *atomic.Value:
-		return atomicGetter{v}
+		return atomicSetter{v}
 	}
 	panic(fmt.Errorf("expected jaws.TimeGetter or time.Time, not %T", v))
 }

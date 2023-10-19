@@ -43,7 +43,7 @@ func makeHtmlGetter(v interface{}) HtmlGetter {
 		h := template.HTML(v) // #nosec G203
 		return htmlGetter{h}
 	case *atomic.Value:
-		return atomicGetter{v}
+		return atomicSetter{v}
 	}
 	panic(fmt.Errorf("expected jaws.HtmlGetter or string, not %T", v))
 }

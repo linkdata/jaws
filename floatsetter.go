@@ -35,7 +35,7 @@ func makeFloatSetter(v interface{}) FloatSetter {
 	case int:
 		return floatGetter{float64(v)}
 	case *atomic.Value:
-		return atomicGetter{v}
+		return atomicSetter{v}
 	}
 	panic(fmt.Errorf("expected jaws.FloatSetter, float or int, not %T", v))
 }

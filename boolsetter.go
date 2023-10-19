@@ -34,7 +34,7 @@ func makeBoolSetter(v interface{}) BoolSetter {
 	case bool:
 		return boolGetter{v}
 	case *atomic.Value:
-		return atomicGetter{v}
+		return atomicSetter{v}
 	}
 	panic(fmt.Errorf("expected jaws.BoolGetter or bool, not %T", v))
 }

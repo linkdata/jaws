@@ -52,7 +52,7 @@ func Test_makeBoolSetter(t *testing.T) {
 		{
 			name: "*atomic.Value",
 			v:    &av,
-			want: atomicGetter{&av},
+			want: atomicSetter{&av},
 			out:  val,
 			tag:  &av,
 		},

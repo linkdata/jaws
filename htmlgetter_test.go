@@ -71,14 +71,14 @@ func Test_makeHtmlGetter(t *testing.T) {
 		{
 			name: "*atomic.Value(string)",
 			v:    &avUntyped,
-			want: atomicGetter{&avUntyped},
+			want: atomicSetter{&avUntyped},
 			out:  escapedTypedText,
 			tag:  &avUntyped,
 		},
 		{
 			name: "*atomic.Value(template.HTML)",
 			v:    &avTyped,
-			want: atomicGetter{&avTyped},
+			want: atomicSetter{&avTyped},
 			out:  typedText,
 			tag:  &avTyped,
 		},

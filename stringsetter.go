@@ -34,7 +34,7 @@ func makeStringSetter(v interface{}) StringSetter {
 	case template.HTML:
 		return stringGetter{string(v)}
 	case *atomic.Value:
-		return atomicGetter{v}
+		return atomicSetter{v}
 	}
 	panic(fmt.Errorf("expected jaws.StringSetter or string, not %T", v))
 }

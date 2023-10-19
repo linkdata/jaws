@@ -29,25 +29,29 @@ func Test_makeStringSetter(t *testing.T) {
 	var av atomic.Value
 	av.Store(val)
 
+	ts := newTestSetter(val)
+
 	tests := []struct {
 		name string
 		v    interface{}
 		want StringSetter
 		out  string
+		err  error
 		tag  interface{}
 	}{
 		{
 			name: "StringSetter",
-			v:    stringGetter{val},
-			want: stringGetter{val},
+			v:    ts,
+			want: ts,
 			out:  val,
-			tag:  nil,
+			tag:  ts,
 		},
 		{
 			name: "string",
 			v:    val,
 			want: stringGetter{val},
 			out:  val,
+			err:  ErrValueNotSettable,
 			tag:  nil,
 		},
 		{
@@ -55,12 +59,13 @@ func Test_makeStringSetter(t *testing.T) {
 			v:    template.HTML(val),
 			want: stringGetter{val},
 			out:  val,
+			err:  ErrValueNotSettable,
 			tag:  nil,
 		},
 		{
 			name: "*atomic.Value",
 			v:    &av,
-			want: atomicGetter{&av},
+			want: atomicSetter{&av},
 			out:  val,
 			tag:  &av,
 		},
@@ -74,8 +79,17 @@ func Test_makeStringSetter(t *testing.T) {
 			if txt := got.JawsGetString(nil); txt != tt.out {
 				t.Errorf("makeStringSetter().JawsGetString() = %v, want %v", txt, tt.out)
 			}
-			if tag := got.(TagGetter).JawsGetTag(nil); tag != tt.tag {
-				t.Errorf("makeStringSetter().JawsGetTag() = %v, want %v", tag, tt.tag)
+			if err := got.JawsSetString(nil, "str"); err != tt.err {
+				t.Errorf("makeStringSetter().JawsSetString() = %v, want %v", err, tt.err)
+			}
+			var gotTag any
+			if tg, ok := got.(TagGetter); ok {
+				gotTag = tg.JawsGetTag(nil)
+			} else {
+				gotTag = got
+			}
+			if gotTag != tt.tag {
+				t.Errorf("makeStringSetter().JawsGetTag() = %v, want %v", gotTag, tt.tag)
 			}
 		})
 	}

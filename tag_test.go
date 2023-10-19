@@ -28,7 +28,7 @@ func TestTagExpand(t *testing.T) {
 		},
 		{
 			name: "TagGetter",
-			tag:  atomicGetter{&av},
+			tag:  atomicSetter{&av},
 			want: []interface{}{&av},
 		},
 		{

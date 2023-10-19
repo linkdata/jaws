@@ -9,15 +9,15 @@ import (
 	"time"
 )
 
-var _ BoolSetter = (atomicGetter{})
-var _ FloatSetter = (atomicGetter{})
-var _ StringSetter = (atomicGetter{})
-var _ TimeSetter = (atomicGetter{})
-var _ HtmlGetter = (atomicGetter{})
+var _ BoolSetter = (atomicSetter{})
+var _ FloatSetter = (atomicSetter{})
+var _ StringSetter = (atomicSetter{})
+var _ TimeSetter = (atomicSetter{})
+var _ HtmlGetter = (atomicSetter{})
 
-func Test_atomicGetter_UninitializedDefaults(t *testing.T) {
+func Test_atomicSetter_UninitializedDefaults(t *testing.T) {
 	var av atomic.Value
-	g := atomicGetter{v: &av}
+	g := atomicSetter{v: &av}
 
 	if g.JawsGetBool(nil) != false {
 		t.Fail()
@@ -36,9 +36,9 @@ func Test_atomicGetter_UninitializedDefaults(t *testing.T) {
 	}
 }
 
-func Test_atomicGetter_bool(t *testing.T) {
+func Test_atomicSetter_bool(t *testing.T) {
 	var av atomic.Value
-	g := atomicGetter{v: &av}
+	g := atomicSetter{v: &av}
 	val := true
 	g.JawsSetBool(nil, val)
 	if g.JawsGetBool(nil) != val {
@@ -46,9 +46,9 @@ func Test_atomicGetter_bool(t *testing.T) {
 	}
 }
 
-func Test_atomicGetter_float64(t *testing.T) {
+func Test_atomicSetter_float64(t *testing.T) {
 	var av atomic.Value
-	g := atomicGetter{v: &av}
+	g := atomicSetter{v: &av}
 	val := float64(1.2)
 	g.JawsSetFloat(nil, val)
 	if g.JawsGetFloat(nil) != val {
@@ -56,9 +56,9 @@ func Test_atomicGetter_float64(t *testing.T) {
 	}
 }
 
-func Test_atomicGetter_string(t *testing.T) {
+func Test_atomicSetter_string(t *testing.T) {
 	var av atomic.Value
-	g := atomicGetter{v: &av}
+	g := atomicSetter{v: &av}
 	val := "str"
 	g.JawsSetString(nil, val)
 	if g.JawsGetString(nil) != val {
@@ -66,9 +66,9 @@ func Test_atomicGetter_string(t *testing.T) {
 	}
 }
 
-func Test_atomicGetter_time(t *testing.T) {
+func Test_atomicSetter_time(t *testing.T) {
 	var av atomic.Value
-	g := atomicGetter{v: &av}
+	g := atomicSetter{v: &av}
 	val := time.Now()
 	g.JawsSetTime(nil, val)
 	if g.JawsGetTime(nil) != val {
@@ -76,7 +76,7 @@ func Test_atomicGetter_time(t *testing.T) {
 	}
 }
 
-func Test_atomicGetter_JawsGetHtml(t *testing.T) {
+func Test_atomicSetter_JawsGetHtml(t *testing.T) {
 	tests := []struct {
 		name string
 		av   atomic.Value
@@ -112,7 +112,7 @@ func Test_atomicGetter_JawsGetHtml(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.av.Store(tt.v)
-			g := atomicGetter{v: &tt.av}
+			g := atomicSetter{v: &tt.av}
 			if got := g.JawsGetHtml(nil); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("atomicGetter.JawsGetHtml() for %#v = %v, want %v", tt.v, got, tt.want)
 			}
