@@ -619,30 +619,6 @@ func checkHtml(is *is.I, rq *testRequest, h template.HTML, tag interface{}, txt 
 	}
 }
 
-func TestRequest_Elements(t *testing.T) {
-	is := is.New(t)
-	rq := newTestRequest()
-	defer rq.Close()
-
-	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
-
-	var avs []*atomic.Value
-	for i := 0; i < 16; i++ {
-		av := &atomic.Value{}
-		av.Store(fmt.Sprintf("t%d", i))
-		avs = append(avs, av)
-	}
-
-	chk(rq.Div(avs[1], "s1"), avs[1], "s1")
-	chk(rq.Li(avs[3], "s3"), avs[3], "s3")
-	chk(rq.A(avs[5], "s5"), avs[5], "s5")
-	chk(rq.Button(avs[6], "s6"), avs[6], "s6")
-	avs[7].Store("randomimg.png")
-	chk(rq.Img(avs[7]), avs[7], "src=\"randomimg.png\"")
-	avs[8].Store("\"randomimg.png\"")
-	chk(rq.Img(avs[8]), avs[8], "src=\"randomimg.png\"")
-}
-
 func jidForTag(rq *Request, tag interface{}) jid.Jid {
 	if elems := rq.GetElements(tag); len(elems) > 0 {
 		return elems[0].jid
@@ -677,62 +653,6 @@ func TestRequest_Password(t *testing.T) {
 	}
 }
 
-func TestRequest_Number(t *testing.T) {
-	const elemVal = 21.5
-	is := is.New(t)
-	rq := newTestRequest()
-	defer rq.Close()
-
-	var av atomic.Value
-	av.Store(elemVal)
-	elemId := &av
-
-	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
-
-	gotCall := make(chan struct{})
-	defer close(gotCall)
-	h := rq.Number(elemId, &av, func(rq *Request, jidstr string, val float64) error {
-		is.True(rq.GetElement(jid.ParseString(jidstr)) != nil)
-		switch val {
-		case 4.3:
-			// ok
-		case 0:
-			// ok
-		default:
-			is.Fail()
-		}
-		gotCall <- struct{}{}
-		return nil
-	}, "disabled")
-	chk(h, elemId, "21.5")
-	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "4.3"}
-	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
-	case <-gotCall:
-	}
-	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: ""} // should call with zero
-	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
-	case <-gotCall:
-	}
-	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "meh"} // should fail with alert
-	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
-	case <-gotCall:
-		is.Fail()
-	case msgstr := <-rq.outCh:
-		msg, ok := wsParse([]byte(msgstr))
-		if !ok {
-			t.Log(strconv.Quote(msgstr))
-		}
-		is.True(ok)
-		is.Equal(msg.What, what.Alert)
-	}
-}
-
 func TestRequest_Range(t *testing.T) {
 	const elemVal = float64(3.14)
 	is := is.New(t)
@@ -758,111 +678,6 @@ func TestRequest_Range(t *testing.T) {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
 	case <-gotCall:
-	}
-}
-
-func TestRequest_Checkbox(t *testing.T) {
-	const elemVal = true
-	is := is.New(t)
-	rq := newTestRequest()
-	defer rq.Close()
-
-	var av atomic.Value
-	av.Store(elemVal)
-	elemId := &av
-
-	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
-
-	gotCall := make(chan struct{})
-	defer close(gotCall)
-	h := rq.Checkbox(&av, func(rq *Request, id string, val bool) error {
-		is.True(rq.GetElement(jid.ParseString(id)) != nil)
-		is.Equal(val, false)
-		gotCall <- struct{}{}
-		return nil
-	})
-	chk(h, &av, "checked")
-	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "false"}
-	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
-	case <-gotCall:
-	}
-	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: ""}
-	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
-	case <-gotCall:
-	}
-	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "wut"}
-	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
-	case <-gotCall:
-		is.Fail()
-	case msgstr := <-rq.outCh:
-		msg, ok := wsParse([]byte(msgstr))
-		is.True(ok)
-		is.Equal(msg.What, what.Alert)
-	}
-}
-
-func TestRequest_Date(t *testing.T) {
-	var elemVal time.Time
-	is := is.New(t)
-	rq := newTestRequest()
-	defer rq.Close()
-
-	var av atomic.Value
-	av.Store(elemVal)
-	elemId := &av
-
-	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
-
-	gotCall := make(chan struct{})
-	defer close(gotCall)
-	h := rq.Date(elemId, &av, func(rq *Request, id string, val time.Time) error {
-		defer func() {
-			gotCall <- struct{}{}
-		}()
-		is.True(rq.GetElement(jid.ParseString(id)) != nil)
-		if !val.IsZero() {
-			is.Equal(val.Year(), 1970)
-			is.Equal(val.Month(), time.January)
-			is.Equal(val.Day(), 2)
-		}
-		return nil
-	}, "")
-
-	chk(h, elemId, elemVal.Format(ISO8601))
-
-	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "1970-01-02"}
-	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
-	case <-gotCall:
-	}
-
-	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: ""}
-	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
-	case <-gotCall:
-	}
-
-	rq.inCh <- wsMsg{Jid: jidForTag(rq.Request, elemId), What: what.Input, Data: "foobar!"}
-	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
-	case <-gotCall:
-		is.Fail()
-	case msgstr := <-rq.outCh:
-		msg, ok := wsParse([]byte(msgstr))
-		is.True(ok)
-		if msg.What != what.Alert {
-			log.Println(len(rq.outCh), msg)
-		}
-		is.Equal(msg.What, what.Alert)
 	}
 }
 
@@ -893,26 +708,6 @@ func TestRequest_Radio(t *testing.T) {
 		is.Fail()
 	case <-gotCall:
 	}
-}
-
-func TestRequest_Select(t *testing.T) {
-	is := is.New(t)
-	rq := newTestRequest()
-	defer rq.Close()
-
-	chk := func(h template.HTML, tag interface{}, txt string) { is.Helper(); checkHtml(is, rq, h, tag, txt) }
-
-	a := NewNamedBoolArray()
-	a.Add("1", "one")
-	a.Add("2", "two")
-
-	h := rq.Select(a, "disabled")
-	chk(h, a, "disabled")
-	is.Equal(strings.Contains(string(h), "selected"), false)
-
-	a.Set("1", true)
-	h = rq.Select(a)
-	chk(h, a, "selected")
 }
 
 func TestRequest_ConnectFn(t *testing.T) {

@@ -6,80 +6,9 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-
-	"github.com/linkdata/deadlock"
 )
 
-type testStringSetter struct {
-	mu        deadlock.Mutex
-	s         string
-	err       error
-	setCount  int
-	setCalled chan struct{}
-	getCount  int
-	getCalled chan struct{}
-}
-
-func newTestStringSetter(s string) *testStringSetter {
-	return &testStringSetter{
-		s:         s,
-		setCalled: make(chan struct{}),
-		getCalled: make(chan struct{}),
-	}
-}
-
-func (ss *testStringSetter) Get() (s string) {
-	ss.mu.Lock()
-	s = ss.s
-	ss.mu.Unlock()
-	return
-}
-
-func (ss *testStringSetter) Set(s string) {
-	ss.mu.Lock()
-	ss.s = s
-	ss.mu.Unlock()
-}
-
-func (ss *testStringSetter) SetCount() (n int) {
-	ss.mu.Lock()
-	n = ss.setCount
-	ss.mu.Unlock()
-	return
-}
-
-func (ss *testStringSetter) GetCount() (n int) {
-	ss.mu.Lock()
-	n = ss.getCount
-	ss.mu.Unlock()
-	return
-}
-
-func (ss *testStringSetter) JawsGetString(e *Element) (s string) {
-	ss.mu.Lock()
-	ss.getCount++
-	if ss.getCount == 1 {
-		close(ss.getCalled)
-	}
-	s = ss.s
-	ss.mu.Unlock()
-	return
-}
-
-func (ss *testStringSetter) JawsSetString(e *Element, s string) (err error) {
-	ss.mu.Lock()
-	ss.setCount++
-	if ss.setCount == 1 {
-		close(ss.setCalled)
-	}
-	if err = ss.err; err == nil {
-		ss.s = s
-	}
-	ss.mu.Unlock()
-	return
-}
-
-var _ StringSetter = (*testStringSetter)(nil)
+var _ StringSetter = (*testSetter[string])(nil)
 
 func Test_makeStringGetter_panic(t *testing.T) {
 	defer func() {

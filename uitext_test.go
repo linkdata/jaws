@@ -13,13 +13,13 @@ func TestRequest_Text(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 
-	ss := newTestStringSetter("foo")
+	ss := newTestSetter("foo")
 	want := `<input id="Jid.1" type="text" value="foo">`
 	if got := string(rq.Text(ss)); got != want {
 		t.Errorf("Request.Text() = %q, want %q", got, want)
 	}
-	rq.inCh <- wsMsg{Data: "bar", Jid: 1, What: what.Input}
 	tmr := time.NewTimer(testTimeout)
+	rq.inCh <- wsMsg{Data: "bar", Jid: 1, What: what.Input}
 	defer tmr.Stop()
 	select {
 	case <-tmr.C:
@@ -50,6 +50,7 @@ func TestRequest_Text(t *testing.T) {
 	if ss.SetCount() != 1 {
 		t.Error("SetCount", ss.SetCount())
 	}
+
 	ss.err = errors.New("meh")
 	rq.inCh <- wsMsg{Data: "omg", Jid: 1, What: what.Input}
 	select {
@@ -59,5 +60,9 @@ func TestRequest_Text(t *testing.T) {
 		if s != "Alert\t\t\"danger\\nmeh\"\n" {
 			t.Errorf("wrong Alert: %q", s)
 		}
+	}
+
+	if ss.Get() != "quux" {
+		t.Error("unexpected change", ss.Get())
 	}
 }

@@ -9,6 +9,8 @@ import (
 	"testing"
 )
 
+var _ HtmlGetter = (*testSetter[template.HTML])(nil)
+
 func Test_makeHtmlGetter_panic(t *testing.T) {
 	defer func() {
 		if x := recover(); x != nil {

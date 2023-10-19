@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+var _ FloatSetter = (*testSetter[float64])(nil)
+
 func Test_makeFloatGetter_panic(t *testing.T) {
 	defer func() {
 		if x := recover(); x != nil {

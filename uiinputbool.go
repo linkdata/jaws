@@ -26,11 +26,11 @@ func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string,
 func (ui *UiInputBool) JawsUpdate(e *Element) {
 	v := ui.JawsGetBool(e)
 	if ui.Last.Swap(v) != v {
+		txt := "false"
 		if v {
-			e.SetValue("true")
-		} else {
-			e.SetValue("false")
+			txt = "true"
 		}
+		e.SetValue(txt)
 	}
 }
 

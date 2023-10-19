@@ -12,7 +12,7 @@ func TestRequest_Textarea(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 
-	ss := newTestStringSetter("foo")
+	ss := newTestSetter("foo")
 	want := `<textarea id="Jid.1">foo</textarea>`
 	if got := string(rq.Textarea(ss)); got != want {
 		t.Errorf("Request.Textarea() = %q, want %q", got, want)

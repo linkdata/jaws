@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+var _ BoolSetter = (*testSetter[bool])(nil)
+
 func Test_makeBoolGetter_panic(t *testing.T) {
 	defer func() {
 		if x := recover(); x != nil {

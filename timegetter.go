@@ -21,13 +21,17 @@ func (g timeGetter) JawsGetTime(e *Element) time.Time {
 	return g.v
 }
 
+func (g timeGetter) JawsSetTime(e *Element, val time.Time) error {
+	return nil
+}
+
 func (g timeGetter) JawsGetTag(rq *Request) interface{} {
 	return nil
 }
 
-func makeTimeGetter(v interface{}) TimeGetter {
+func makeTimeSetter(v interface{}) TimeSetter {
 	switch v := v.(type) {
-	case TimeGetter:
+	case TimeSetter:
 		return v
 	case time.Time:
 		return timeGetter{v}

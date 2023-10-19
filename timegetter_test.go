@@ -8,7 +8,9 @@ import (
 	"time"
 )
 
-func Test_makeTimeGetter_panic(t *testing.T) {
+var _ TimeSetter = (*testSetter[time.Time])(nil)
+
+func Test_makeTimeSetter_panic(t *testing.T) {
 	defer func() {
 		if x := recover(); x != nil {
 			if err, ok := x.(error); ok {
@@ -19,10 +21,10 @@ func Test_makeTimeGetter_panic(t *testing.T) {
 		}
 		t.Fail()
 	}()
-	makeTimeGetter(uint32(42))
+	makeTimeSetter(uint32(42))
 }
 
-func Test_makeTimeGetter(t *testing.T) {
+func Test_makeTimeSetter(t *testing.T) {
 	val := time.Now()
 	var av atomic.Value
 	av.Store(val)
@@ -58,15 +60,15 @@ func Test_makeTimeGetter(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := makeTimeGetter(tt.v)
+			got := makeTimeSetter(tt.v)
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("makeTimeGetter() = %v, want %v", got, tt.want)
+				t.Errorf("makeTimeSetter() = %v, want %v", got, tt.want)
 			}
 			if out := got.JawsGetTime(nil); out != tt.out {
-				t.Errorf("makeTimeGetter().JawsGetTime() = %v, want %v", out, tt.out)
+				t.Errorf("makeTimeSetter().JawsGetTime() = %v, want %v", out, tt.out)
 			}
 			if tag := got.(TagGetter).JawsGetTag(nil); tag != tt.tag {
-				t.Errorf("makeTimeGetter().JawsGetTag() = %v, want %v", tag, tt.tag)
+				t.Errorf("makeTimeSetter().JawsGetTag() = %v, want %v", tag, tt.tag)
 			}
 		})
 	}
