@@ -12,6 +12,7 @@ type testSetter[T comparable] struct {
 	setCalled chan struct{}
 	getCount  int
 	getCalled chan struct{}
+	clickCh   chan string
 }
 
 func newTestSetter[T comparable](val T) *testSetter[T] {
@@ -19,6 +20,7 @@ func newTestSetter[T comparable](val T) *testSetter[T] {
 		val:       val,
 		setCalled: make(chan struct{}),
 		getCalled: make(chan struct{}),
+		clickCh:   make(chan string),
 	}
 }
 
@@ -153,5 +155,12 @@ func (ts *testSetter[T]) JawsGetHtml(e *Element) (val T) {
 		close(ts.getCalled)
 	}
 	val = ts.val
+	return
+}
+
+func (ts *testSetter[T]) JawsClick(e *Element, name string) (err error) {
+	if err = ts.err; err == nil {
+		ts.clickCh <- name
+	}
 	return
 }
