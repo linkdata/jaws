@@ -28,26 +28,29 @@ func Test_makeTimeSetter(t *testing.T) {
 	val := time.Now()
 	var av atomic.Value
 	av.Store(val)
+	ts := newTestSetter(val)
 
 	tests := []struct {
 		name string
 		v    interface{}
 		want TimeSetter
 		out  time.Time
+		err  error
 		tag  interface{}
 	}{
+		{
+			name: "TimeSetter",
+			v:    ts,
+			want: ts,
+			out:  val,
+			tag:  ts,
+		},
 		{
 			name: "time.Time",
 			v:    val,
 			want: timeGetter{val},
 			out:  val,
-			tag:  nil,
-		},
-		{
-			name: "timeGetter",
-			v:    timeGetter{val},
-			want: timeGetter{val},
-			out:  val,
+			err:  ErrValueNotSettable,
 			tag:  nil,
 		},
 		{
@@ -67,8 +70,15 @@ func Test_makeTimeSetter(t *testing.T) {
 			if out := got.JawsGetTime(nil); out != tt.out {
 				t.Errorf("makeTimeSetter().JawsGetTime() = %v, want %v", out, tt.out)
 			}
-			if tag := got.(TagGetter).JawsGetTag(nil); tag != tt.tag {
-				t.Errorf("makeTimeSetter().JawsGetTag() = %v, want %v", tag, tt.tag)
+			if err := got.JawsSetTime(nil, val.Add(time.Minute)); err != tt.err {
+				t.Errorf("makeTimeSetter().JawsSetTime() = %v, want %v", err, tt.err)
+			}
+			gotTag := any(got)
+			if tg, ok := got.(TagGetter); ok {
+				gotTag = tg.JawsGetTag(nil)
+			}
+			if gotTag != tt.tag {
+				t.Errorf("makeTimeSetter().tag = %v, want %v", gotTag, tt.tag)
 			}
 		})
 	}

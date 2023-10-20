@@ -27,26 +27,29 @@ func Test_makeBoolSetter(t *testing.T) {
 	val := true
 	var av atomic.Value
 	av.Store(val)
+	ts := newTestSetter(val)
 
 	tests := []struct {
 		name string
 		v    interface{}
 		want BoolSetter
 		out  bool
+		err  error
 		tag  interface{}
 	}{
 		{
 			name: "BoolSetter",
-			v:    boolGetter{val},
-			want: boolGetter{val},
+			v:    ts,
+			want: ts,
 			out:  val,
-			tag:  nil,
+			tag:  ts,
 		},
 		{
 			name: "bool",
 			v:    val,
 			want: boolGetter{val},
 			out:  val,
+			err:  ErrValueNotSettable,
 			tag:  nil,
 		},
 		{
@@ -61,13 +64,20 @@ func Test_makeBoolSetter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := makeBoolSetter(tt.v)
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("makeBoolGetter() = %v, want %v", got, tt.want)
+				t.Errorf("makeBoolSetter() = %v, want %v", got, tt.want)
 			}
 			if out := got.JawsGetBool(nil); out != tt.out {
-				t.Errorf("makeBoolGetter().JawsGetBool() = %v, want %v", out, tt.out)
+				t.Errorf("makeBoolSetter().JawsGetBool() = %v, want %v", out, tt.out)
 			}
-			if tag := got.(TagGetter).JawsGetTag(nil); tag != tt.tag {
-				t.Errorf("makeBoolGetter().JawsGetTag() = %v, want %v", tag, tt.tag)
+			if err := got.JawsSetBool(nil, !val); err != tt.err {
+				t.Errorf("makeBoolSetter().JawsSetBool() = %v, want %v", err, tt.err)
+			}
+			gotTag := any(got)
+			if tg, ok := got.(TagGetter); ok {
+				gotTag = tg.JawsGetTag(nil)
+			}
+			if gotTag != tt.tag {
+				t.Errorf("makeBoolSetter().tag = %v, want %v", gotTag, tt.tag)
 			}
 		})
 	}

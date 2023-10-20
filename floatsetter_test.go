@@ -27,26 +27,29 @@ func Test_makeFloatSetter(t *testing.T) {
 	val := float64(12.34)
 	var av atomic.Value
 	av.Store(val)
+	ts := newTestSetter(val)
 
 	tests := []struct {
 		name string
 		v    interface{}
 		want FloatSetter
 		out  float64
+		err  error
 		tag  interface{}
 	}{
 		{
 			name: "FloatSetter",
-			v:    floatGetter{val},
-			want: floatGetter{val},
+			v:    ts,
+			want: ts,
 			out:  val,
-			tag:  nil,
+			tag:  ts,
 		},
 		{
 			name: "float64",
 			v:    val,
 			want: floatGetter{val},
 			out:  val,
+			err:  ErrValueNotSettable,
 			tag:  nil,
 		},
 		{
@@ -54,6 +57,7 @@ func Test_makeFloatSetter(t *testing.T) {
 			v:    float32(val),
 			want: floatGetter{float64(float32(val))},
 			out:  float64(float32(val)),
+			err:  ErrValueNotSettable,
 			tag:  nil,
 		},
 		{
@@ -61,6 +65,7 @@ func Test_makeFloatSetter(t *testing.T) {
 			v:    int(val),
 			want: floatGetter{float64(int(val))},
 			out:  float64(int(val)),
+			err:  ErrValueNotSettable,
 			tag:  nil,
 		},
 		{
@@ -80,9 +85,17 @@ func Test_makeFloatSetter(t *testing.T) {
 			if out := got.JawsGetFloat(nil); out != tt.out {
 				t.Errorf("makeFloatSetter().JawsGetFloat() = %v, want %v", out, tt.out)
 			}
-			if tag := got.(TagGetter).JawsGetTag(nil); tag != tt.tag {
-				t.Errorf("makeFloatSetter().JawsGetTag() = %v, want %v", tag, tt.tag)
+			if err := got.JawsSetFloat(nil, -val); err != tt.err {
+				t.Errorf("makeFloatSetter().JawsSetFloat() = %v, want %v", err, tt.err)
 			}
+			gotTag := any(got)
+			if tg, ok := got.(TagGetter); ok {
+				gotTag = tg.JawsGetTag(nil)
+			}
+			if gotTag != tt.tag {
+				t.Errorf("makeFloatSetter().tag = %v, want %v", gotTag, tt.tag)
+			}
+
 		})
 	}
 }

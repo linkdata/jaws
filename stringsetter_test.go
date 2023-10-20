@@ -28,7 +28,6 @@ func Test_makeStringSetter(t *testing.T) {
 	val := "<span>"
 	var av atomic.Value
 	av.Store(val)
-
 	ts := newTestSetter(val)
 
 	tests := []struct {
@@ -76,20 +75,18 @@ func Test_makeStringSetter(t *testing.T) {
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("makeStringSetter() = %v, want %v", got, tt.want)
 			}
-			if txt := got.JawsGetString(nil); txt != tt.out {
-				t.Errorf("makeStringSetter().JawsGetString() = %v, want %v", txt, tt.out)
+			if out := got.JawsGetString(nil); out != tt.out {
+				t.Errorf("makeStringSetter().JawsGetString() = %v, want %v", out, tt.out)
 			}
 			if err := got.JawsSetString(nil, "str"); err != tt.err {
 				t.Errorf("makeStringSetter().JawsSetString() = %v, want %v", err, tt.err)
 			}
-			var gotTag any
+			gotTag := any(got)
 			if tg, ok := got.(TagGetter); ok {
 				gotTag = tg.JawsGetTag(nil)
-			} else {
-				gotTag = got
 			}
 			if gotTag != tt.tag {
-				t.Errorf("makeStringSetter().JawsGetTag() = %v, want %v", gotTag, tt.tag)
+				t.Errorf("makeStringSetter().tag = %v, want %v", gotTag, tt.tag)
 			}
 		})
 	}

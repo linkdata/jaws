@@ -1,19 +1,33 @@
 package jaws
 
 import (
+	"strconv"
 	"testing"
+	"time"
 )
 
 func TestRequest_Img(t *testing.T) {
 	nextJid = 0
 	rq := newTestRequest()
 	defer rq.Close()
-	want := `<img id="Jid.1" src="inner">`
-	if got := string(rq.Img("inner")); got != want {
-		t.Errorf("Request.Img() = %q, want %q", got, want)
+
+	ts := newTestSetter("\"quoted.png\"")
+
+	wantHtml := "<img id=\"Jid.1\" hidden src=\"quoted.png\">"
+	if gotHtml := string(rq.Img(ts, "hidden")); gotHtml != wantHtml {
+		t.Errorf("Request.Img() = %q, want %q", gotHtml, wantHtml)
 	}
-	want = `<img id="Jid.2" src="inner">`
-	if got := string(rq.Img("\"inner\"")); got != want {
-		t.Errorf("Request.Img() = %q, want %q", got, want)
+
+	tmr := time.NewTimer(testTimeout)
+	ts.Set("unquoted.jpg")
+	rq.Dirty(ts)
+
+	select {
+	case <-tmr.C:
+		t.Error("timeout")
+	case s := <-rq.outCh:
+		if s != "SAttr\tJid.1\t\"src\\n\\\"unquoted.jpg\\\"\"\n" {
+			t.Error(strconv.Quote(s))
+		}
 	}
 }
