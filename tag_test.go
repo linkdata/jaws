@@ -45,7 +45,7 @@ func TestTagExpand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := MustTagExpand(nil, tt.tag); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("TagExpand() = %v, want %v", got, tt.want)
+				t.Errorf("MustTagExpand(%#v):\n got %#v\nwant %#v", tt.tag, got, tt.want)
 			}
 		})
 	}

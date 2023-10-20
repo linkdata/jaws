@@ -3,6 +3,7 @@ package jaws
 import (
 	"fmt"
 	"html/template"
+	"io"
 	"testing"
 	"time"
 
@@ -10,26 +11,36 @@ import (
 )
 
 type testJawsEvent struct {
-	eventCalled chan string
+	msgCh chan string
+	tag   any
 }
 
 func (tje *testJawsEvent) JawsClick(e *Element, name string) (err error) {
-	tje.eventCalled <- fmt.Sprintf("JawsClick: %q", name)
+	tje.msgCh <- fmt.Sprintf("JawsClick: %q", name)
 	return
 }
 
 func (tje *testJawsEvent) JawsEvent(e *Element, wht what.What, val string) (err error) {
-	tje.eventCalled <- fmt.Sprintf("JawsEvent: %s %q", wht, val)
+	tje.msgCh <- fmt.Sprintf("JawsEvent: %s %q", wht, val)
 	return
 }
 
 func (tje *testJawsEvent) JawsGetTag(*Request) (tag any) {
-	return
+	return tje.tag
+}
+
+func (tje *testJawsEvent) JawsRender(e *Element, w io.Writer, params []any) {
+	tje.msgCh <- "JawsRender"
+}
+
+func (tje *testJawsEvent) JawsUpdate(e *Element) {
+	tje.msgCh <- "JawsUpdate"
 }
 
 var _ ClickHandler = (*testJawsEvent)(nil)
 var _ EventHandler = (*testJawsEvent)(nil)
 var _ TagGetter = (*testJawsEvent)(nil)
+var _ UI = (*testJawsEvent)(nil)
 
 func TestUiHtml_JawsEvent(t *testing.T) {
 	tmr := time.NewTimer(testTimeout)
@@ -38,17 +49,17 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 
-	eventCalled := make(chan string)
-	defer close(eventCalled)
-	tje := &testJawsEvent{eventCalled: eventCalled}
+	msgCh := make(chan string)
+	defer close(msgCh)
+	tje := &testJawsEvent{msgCh: msgCh}
 
-	id := rq.Register(Tag("zomg"), tje, "attr1", []string{"attr2"}, template.HTML("attr3"), []template.HTML{"attr4"})
+	id := rq.Register(tje, "attr1", []string{"attr2"}, template.HTML("attr3"), []template.HTML{"attr4"})
 
 	rq.inCh <- wsMsg{Data: "text", Jid: id, What: what.Input}
 	select {
 	case <-tmr.C:
 		t.Error("timeout")
-	case s := <-tje.eventCalled:
+	case s := <-tje.msgCh:
 		if s != "JawsEvent: Input \"text\"" {
 			t.Error(s)
 		}
@@ -58,30 +69,43 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 	select {
 	case <-tmr.C:
 		t.Error("timeout")
-	case s := <-eventCalled:
+	case s := <-msgCh:
 		if s != "JawsClick: \"name\"" {
 			t.Error(s)
 		}
 	}
 
+	tje.tag = tje
 	id2 := rq.Register(tje)
-	rq.inCh <- wsMsg{Data: "text", Jid: id2, What: what.Input}
+
+	rq.inCh <- wsMsg{Data: "text2", Jid: id2, What: what.Input}
 	select {
 	case <-tmr.C:
 		t.Error("timeout")
-	case s := <-tje.eventCalled:
-		if s != "JawsEvent: Input \"text\"" {
+	case s := <-tje.msgCh:
+		if s != "JawsEvent: Input \"text2\"" {
 			t.Error(s)
 		}
 	}
 
-	rq.inCh <- wsMsg{Data: "name", Jid: id2, What: what.Click}
+	rq.inCh <- wsMsg{Data: "name2", Jid: id2, What: what.Click}
 	select {
 	case <-tmr.C:
 		t.Error("timeout")
-	case s := <-eventCalled:
-		if s != "JawsClick: \"name\"" {
+	case s := <-msgCh:
+		if s != "JawsClick: \"name2\"" {
 			t.Error(s)
 		}
 	}
+
+	rq.Dirty(tje)
+	select {
+	case <-tmr.C:
+		t.Error("timeout")
+	case s := <-msgCh:
+		if s != "JawsUpdate" {
+			t.Error(s)
+		}
+	}
+
 }
