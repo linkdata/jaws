@@ -15,7 +15,6 @@ import (
 )
 
 func TestSession_Object(t *testing.T) {
-	is := is.New(t)
 	jw := New()
 	defer jw.Close()
 
@@ -23,24 +22,39 @@ func TestSession_Object(t *testing.T) {
 	var sess *Session
 	// Set/Get on nil Session is ignored
 	sess.Set("foo", "bar")
-	is.Equal(nil, sess.Get("foo"))
+	if x := sess.Get("foo"); x != nil {
+		t.Error(x)
+	}
 
 	sess = newSession(jw, sessionId, nil)
 	sess.Set("foo", "bar")
-	is.Equal("bar", sess.Get("foo"))
-	sess.Set("foo", nil)
-	is.Equal(nil, sess.Get("foo"))
-	cookie := sess.Cookie()
-	is.Equal(jw.CookieName, cookie.Name)
-	is.Equal(JawsKeyString(sessionId), cookie.Value)
-	is.Equal(sessionId, sess.ID())
-	is.Equal(nil, sess.IP())
+	if x := sess.Get("foo"); x != "bar" {
+		t.Error(x)
+	}
 
+	sess.Set("foo", nil)
+	if x := sess.Get("foo"); x != nil {
+		t.Error(x)
+	}
+
+	cookie := sess.Cookie()
+
+	if jw.CookieName != cookie.Name {
+		t.Error(cookie.Name)
+	}
+	if JawsKeyString(sessionId) != cookie.Value {
+		t.Error(cookie.Value)
+	}
+	if sessionId != sess.ID() {
+		t.Error(sess.ID())
+	}
+	if sess.IP() != nil {
+		t.Error(sess.IP())
+	}
 	sess.Reload()
 }
 
 func TestSession_Use(t *testing.T) {
-	is := is.New(t)
 	jw := New()
 	defer jw.Close()
 	go jw.ServeWithTimeout(time.Second)
@@ -57,20 +71,30 @@ func TestSession_Use(t *testing.T) {
 
 		sess := jw.GetSession(r)
 		rq := jw.NewRequest(r)
-		is.Equal(sess, rq.Session())
+		if sess != rq.Session() {
+			t.Error(sess)
+		}
 
 		switch r.URL.Path {
 		case "/":
 			wantSess = jw.NewSession(w, r)
 			wantSess.Set("foo", "bar")
 		case "/2":
-			is.Equal(rq.Get("foo"), "bar")
+			if x := rq.Get("foo"); x != "bar" {
+				t.Error(x)
+			}
 			rq.Set("foo", "baz")
 		case "/3":
-			is.True(rq.Session() != wantSess)
-			is.Equal(rq.Get("foo"), nil)
+			if x := rq.Session(); x == wantSess {
+				t.Error(x)
+			}
+			if x := rq.Get("foo"); x != nil {
+				t.Error(x)
+			}
 		case "/4":
-			is.Equal(rq.Get("foo"), "baz")
+			if x := rq.Get("foo"); x != "baz" {
+				t.Error(x)
+			}
 			rq.Set("foo", nil)
 			rq.Set("bar", "quux")
 		}
@@ -86,12 +110,24 @@ func TestSession_Use(t *testing.T) {
 		t.Fatal(err)
 	}
 	cookies := resp.Cookies()
-	is.Equal(len(cookies), 1)
-	is.Equal(cookies[0].Name, jw.CookieName)
-	is.True(wantSess != nil)
-	is.Equal(cookies[0].Value, wantSess.CookieValue())
-	is.True(wantSess != nil)
-	is.Equal(wantSess.Get("foo"), "bar")
+	if len(cookies) != 1 {
+		t.Error(len(cookies))
+	}
+	if cookies[0].Name != jw.CookieName {
+		t.Error(cookies[0].Name)
+	}
+	if wantSess == nil {
+		t.Error(wantSess)
+	}
+	if cookies[0].Value != wantSess.CookieValue() {
+		t.Error(cookies[0].Value)
+	}
+	if wantSess == nil {
+		t.Error(wantSess)
+	}
+	if x := wantSess.Get("foo"); x != "bar" {
+		t.Error(x)
+	}
 
 	r2, err := http.NewRequest("GET", srv.URL+"/2", nil)
 	if err != nil {
@@ -102,8 +138,12 @@ func TestSession_Use(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	is.Equal(wantSess.Get("foo"), "baz")
-	is.True(resp != nil)
+	if x := wantSess.Get("foo"); x != "baz" {
+		t.Error(x)
+	}
+	if resp == nil {
+		t.Fatal("nil")
+	}
 
 	rp, err := http.NewRequest("GET", srv.URL+"/jaws/.ping", nil)
 	if err != nil {
@@ -114,7 +154,9 @@ func TestSession_Use(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	is.True(resp != nil)
+	if resp == nil {
+		t.Fatal("nil")
+	}
 
 	r3, err := http.NewRequest("GET", srv.URL+"/3", nil)
 	if err != nil {
@@ -125,8 +167,12 @@ func TestSession_Use(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	is.Equal(wantSess.Get("foo"), "baz")
-	is.True(resp != nil)
+	if x := wantSess.Get("foo"); x != "baz" {
+		t.Error(x)
+	}
+	if resp == nil {
+		t.Fatal("nil")
+	}
 
 	r4, err := http.NewRequest("GET", srv.URL+"/4", nil)
 	if err != nil {
@@ -137,37 +183,56 @@ func TestSession_Use(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	is.True(resp != nil)
+	if resp == nil {
+		t.Fatal("nil")
+	}
 
-	is.Equal(wantSess.Get("foo"), nil)
-	is.Equal(wantSess.Get("bar"), "quux")
+	if x := wantSess.Get("foo"); x != nil {
+		t.Error(x)
+	}
+	if x := wantSess.Get("bar"); x != "quux" {
+		t.Error(x)
+	}
 	wantSess.Clear()
-	is.Equal(wantSess.Get("bar"), nil)
+	if x := wantSess.Get("bar"); x != nil {
+		t.Error(x)
+	}
 }
 
 func TestSession_Delete(t *testing.T) {
-	is := is.New(t)
-	ts := newTestServer(is)
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
+	ts := newTestServer()
 	defer ts.Close()
 	go ts.jw.ServeWithTimeout(time.Second)
 
-	is.True(ts.sess != nil)
-	is.Equal(ts.jw.SessionCount(), 1)
+	// the test session is there
 	sl := ts.jw.Sessions()
-	is.Equal(1, len(sl))
-	is.Equal(ts.sess, sl[0])
+	if x := len(sl); x != 1 {
+		t.Fatal(x)
+	}
+	if x := sl[0]; x != ts.sess {
+		t.Fatal(x)
+	}
 
 	// session cookie seems ok
 	cookie1 := &ts.sess.cookie
-	is.True(cookie1 != nil)
-	is.Equal(cookie1.Name, ts.jw.CookieName)
+	if cookie1 != nil {
+		if x := cookie1.Name; x != ts.jw.CookieName {
+			t.Error(x)
+		}
+	} else {
+		t.Fatal(cookie1)
+	}
 
 	// trying to get the session from another IP fails
 	hr2 := httptest.NewRequest("GET", "/", nil)
 	hr2.AddCookie(&ts.sess.cookie)
 	hr2.RemoteAddr = "10.5.6.7:89"
 	sess := ts.jw.GetSession(hr2)
-	is.Equal(sess, nil)
+	if x := sess; x != nil {
+		t.Error(x)
+	}
 
 	// accessing from same IP but other port works
 	host, port, _ := net.SplitHostPort(ts.hr.RemoteAddr)
@@ -178,28 +243,50 @@ func TestSession_Delete(t *testing.T) {
 	}
 	hr2.RemoteAddr = net.JoinHostPort(host, port)
 	sess = ts.jw.GetSession(hr2)
-	is.Equal(ts.sess, sess)
+	if x := sess; x != ts.sess {
+		t.Error(x)
+	}
 
 	rq2 := ts.jw.NewRequest(hr2)
-	is.Equal(ts.sess, rq2.Session())
+	if x := rq2.Session(); x != ts.sess {
+		t.Error(x)
+	}
 
 	ts.rq.Register("byebye", func(e *Element, evt what.What, val string) error {
 		sess2 := ts.jw.GetSession(e.Request.Initial)
-		is.Equal(ts.sess, sess2)
-		is.True(sess2.cookie.MaxAge >= 0)
+		if x := sess2; x != ts.sess {
+			t.Error(x)
+		}
+		if x := sess2.cookie.MaxAge; x < 0 {
+			t.Error(x)
+		}
 
 		cookie2 := sess2.Close()
-		is.True(cookie2 != nil)
-		is.True(cookie2.MaxAge < 0)
-		is.True(cookie2.Expires.IsZero())
-		is.Equal(cookie1.Name, cookie2.Name)
-		is.Equal(cookie1.Value, cookie2.Value)
+		if x := cookie2; x == nil {
+			t.Fatal(x)
+		}
+		if x := cookie2.MaxAge; x != -1 {
+			t.Error(x)
+		}
+		if x := cookie2.Expires.IsZero(); !x {
+			t.Error(x)
+		}
+		if x := cookie2.Name; x != cookie1.Name {
+			t.Error(x)
+		}
+		if x := cookie2.Value; x != cookie1.Value {
+			t.Error(x)
+		}
 		return nil
 	})
 
 	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), nil)
-	is.NoErr(err)
-	is.Equal(resp.StatusCode, http.StatusSwitchingProtocols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if x := resp.StatusCode; x != http.StatusSwitchingProtocols {
+		t.Error(x)
+	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
 	msg := wsMsg{Jid: jidForTag(ts.rq, Tag("byebye")), What: what.Input}
@@ -207,10 +294,15 @@ func TestSession_Delete(t *testing.T) {
 	defer cancel()
 
 	err = conn.Write(ctx, websocket.MessageText, msg.Append(nil))
-	is.NoErr(err)
-
-	is.NoErr(ctx.Err())
-	is.NoErr(ts.ctx.Err())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if x := ctx.Err(); x != nil {
+		t.Fatal(x)
+	}
+	if x := ts.ctx.Err(); x != nil {
+		t.Fatal(x)
+	}
 
 	type readResult struct {
 		mt  websocket.MessageType
@@ -227,22 +319,35 @@ func TestSession_Delete(t *testing.T) {
 		resultChan <- rr
 	}()
 
-	is.NoErr(ts.ctx.Err())
+	if x := ts.ctx.Err(); x != nil {
+		t.Fatal(x)
+	}
 
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-tmr.C:
+		t.Fatal("timeout")
 	case rr, ok := <-resultChan:
-		is.True(ok)
 		if ok {
-			is.Equal(sess.cookie.MaxAge, -1)
-
-			is.NoErr(rr.err)
-			is.NoErr(ctx.Err())
-			is.NoErr(ts.ctx.Err())
-
-			is.Equal(rr.mt, websocket.MessageText)
-			is.Equal(string(rr.b), "Reload\t\t\"\"\n")
+			if x := rr.err; x != nil {
+				t.Fatal(x)
+			}
+			if x := ctx.Err(); x != nil {
+				t.Fatal(x)
+			}
+			if x := ts.ctx.Err(); x != nil {
+				t.Fatal(x)
+			}
+			if x := sess.cookie.MaxAge; x != -1 {
+				t.Error(x)
+			}
+			if x := rr.mt; x != websocket.MessageText {
+				t.Error(x)
+			}
+			if x := string(rr.b); x != "Reload\t\t\"\"\n" {
+				t.Error(x)
+			}
+		} else {
+			t.Error("resultChan closed")
 		}
 	}
 }

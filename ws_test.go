@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"net"
@@ -12,12 +13,10 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws/what"
-	"github.com/matryer/is"
 	"nhooyr.io/websocket"
 )
 
 type testServer struct {
-	is          *is.I
 	jw          *Jaws
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -28,15 +27,16 @@ type testServer struct {
 	connectedCh chan struct{}
 }
 
-func newTestServer(is *is.I) (ts *testServer) {
+func newTestServer() (ts *testServer) {
 	jw := New()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	hr := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
 	sess := jw.NewSession(nil, hr)
 	rq := jw.NewRequest(hr)
-	is.Equal(rq, jw.UseRequest(rq.JawsKey, hr))
+	if rq != jw.UseRequest(rq.JawsKey, hr) {
+		panic("UseRequest failed")
+	}
 	ts = &testServer{
-		is:          is,
 		jw:          jw,
 		ctx:         ctx,
 		cancel:      cancel,
@@ -83,7 +83,6 @@ func (ts *testServer) Close() {
 }
 
 func TestWS_UpgradeRequired(t *testing.T) {
-	is := is.New(t)
 	jw := New()
 	defer jw.Close()
 	rq := jw.NewRequest(nil)
@@ -91,29 +90,43 @@ func TestWS_UpgradeRequired(t *testing.T) {
 	req := httptest.NewRequest("", "/jaws/"+rq.JawsKeyString(), nil)
 	w := httptest.NewRecorder()
 	rq.ServeHTTP(w, req)
-	is.Equal(w.Code, http.StatusUpgradeRequired)
+	if w.Code != http.StatusUpgradeRequired {
+		t.Error(w.Code)
+	}
 }
 
 func TestWS_ConnectFnFails(t *testing.T) {
 	const nope = "nope"
-	is := is.New(t)
-	ts := newTestServer(is)
+	ts := newTestServer()
 	defer ts.Close()
 	ts.rq.SetConnectFn(func(_ *Request) error { return errors.New(nope) })
 
 	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), nil)
-	is.NoErr(err)
-	is.Equal(resp.StatusCode, http.StatusSwitchingProtocols)
-	defer conn.Close(websocket.StatusNormalClosure, "")
+	if conn != nil {
+		defer conn.Close(websocket.StatusNormalClosure, "")
+	}
+	if err != nil {
+		t.Error(err)
+	}
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Error(resp.StatusCode)
+	}
 	mt, b, err := conn.Read(ts.ctx)
-	is.NoErr(err)
-	is.Equal(mt, websocket.MessageText)
-	is.True(strings.Contains(string(b), nope))
+	if err != nil {
+		t.Error(err)
+	}
+	if mt != websocket.MessageText {
+		t.Error(mt)
+	}
+	if !strings.Contains(string(b), nope) {
+		t.Error(string(b))
+	}
 }
 
 func TestWS_NormalExchange(t *testing.T) {
-	is := is.New(t)
-	ts := newTestServer(is)
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
+	ts := newTestServer()
 	defer ts.Close()
 
 	fooError := errors.New("this foo failed")
@@ -126,35 +139,46 @@ func TestWS_NormalExchange(t *testing.T) {
 	})
 
 	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), nil)
-	is.NoErr(err)
-	is.Equal(resp.StatusCode, http.StatusSwitchingProtocols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Error(resp.StatusCode)
+	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
 	msg := wsMsg{Jid: jidForTag(ts.rq, Tag("foo")), What: what.Input}
-	ctx, cancel := context.WithTimeout(ts.ctx, time.Second*3)
+	ctx, cancel := context.WithTimeout(ts.ctx, testTimeout)
 	defer cancel()
 
 	err = conn.Write(ctx, websocket.MessageText, msg.Append(nil))
-	is.NoErr(err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.NoErr(ts.ctx.Err())
-		is.NoErr(ctx.Err())
-		is.Fail()
+	case <-tmr.C:
+		t.Fatal("timeout")
 	case <-gotCallCh:
 	}
 
 	mt, b, err := conn.Read(ctx)
-	is.NoErr(err)
-	is.Equal(mt, websocket.MessageText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mt != websocket.MessageText {
+		t.Error(mt)
+	}
 	var m2 wsMsg
 	m2.FillAlert(fooError)
-	is.Equal(b, m2.Append(nil))
+	if !bytes.Equal(b, m2.Append(nil)) {
+		t.Error(b)
+	}
 }
 
 func TestReader_RespectsContextDone(t *testing.T) {
-	is := is.New(t)
-	ts := newTestServer(is)
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
+	ts := newTestServer()
 	defer ts.Close()
 
 	msg := wsMsg{Jid: Jid(1234), What: what.Input}
@@ -174,30 +198,31 @@ func TestReader_RespectsContextDone(t *testing.T) {
 
 	// wsReader should now be blocked trying to send the decoded message
 	select {
-	case <-time.NewTimer(time.Millisecond).C:
 	case <-doneCh:
-		is.Fail()
+		t.Error("did not block")
+	case <-time.NewTimer(time.Millisecond).C:
 	}
 
 	ts.cancel()
 
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-tmr.C:
+		t.Error("did not unblock")
 	case <-doneCh:
 	}
 }
 
 func TestReader_RespectsJawsDone(t *testing.T) {
-	is := is.New(t)
-	ts := newTestServer(is)
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
+	ts := newTestServer()
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
 	inCh := make(chan wsMsg)
 	client, server := Pipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
 	go func() {
@@ -208,18 +233,21 @@ func TestReader_RespectsJawsDone(t *testing.T) {
 	ts.jw.Close()
 	msg := wsMsg{Jid: Jid(1234), What: what.Input}
 	err := client.Write(ctx, websocket.MessageText, []byte(msg.Format()))
-	is.NoErr(err)
+	if err != nil {
+		t.Error(err)
+	}
 
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-tmr.C:
+		t.Error("timeout")
 	case <-doneCh:
 	}
 }
 
 func TestWriter_SendsThePayload(t *testing.T) {
-	is := is.New(t)
-	ts := newTestServer(is)
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
+	ts := newTestServer()
 	defer ts.Close()
 
 	outCh := make(chan string)
@@ -240,31 +268,38 @@ func TestWriter_SendsThePayload(t *testing.T) {
 
 	msg := wsMsg{Jid: Jid(1234)}
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-tmr.C:
+		t.Error("timeout")
 	case outCh <- msg.Format():
 	}
 
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-tmr.C:
+		t.Error("timeout")
 	case <-doneCh:
 	}
 
-	is.NoErr(err)
-	is.Equal(mt, websocket.MessageText)
-	is.Equal(string(b), msg.Format())
+	if err != nil {
+		t.Error(err)
+	}
+	if mt != websocket.MessageText {
+		t.Error(mt)
+	}
+	if string(b) != msg.Format() {
+		t.Error(string(b))
+	}
 
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-tmr.C:
+		t.Error("timeout")
 	case <-client.CloseRead(ts.ctx).Done():
 	}
 }
 
 func TestWriter_RespectsContext(t *testing.T) {
-	is := is.New(t)
-	ts := newTestServer(is)
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
+	ts := newTestServer()
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
@@ -281,16 +316,17 @@ func TestWriter_RespectsContext(t *testing.T) {
 	ts.cancel()
 
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-tmr.C:
+		t.Error("timeout")
 	case <-doneCh:
 		return
 	}
 }
 
 func TestWriter_RespectsJawsDone(t *testing.T) {
-	is := is.New(t)
-	ts := newTestServer(is)
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
+	ts := newTestServer()
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
@@ -307,15 +343,16 @@ func TestWriter_RespectsJawsDone(t *testing.T) {
 	ts.jw.Close()
 
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-tmr.C:
+		t.Error("timeout")
 	case <-doneCh:
 	}
 }
 
 func TestWriter_RespectsOutboundClosed(t *testing.T) {
-	is := is.New(t)
-	ts := newTestServer(is)
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
+	ts := newTestServer()
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
@@ -331,17 +368,20 @@ func TestWriter_RespectsOutboundClosed(t *testing.T) {
 	close(outCh)
 
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-tmr.C:
+		t.Error("timeout")
 	case <-doneCh:
 	}
 
-	is.NoErr(ts.rq.Context().Err())
+	if err := ts.rq.Context().Err(); err != nil {
+		t.Error(err)
+	}
 }
 
 func TestWriter_ReportsError(t *testing.T) {
-	is := is.New(t)
-	ts := newTestServer(is)
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
+	ts := newTestServer()
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
@@ -357,24 +397,27 @@ func TestWriter_ReportsError(t *testing.T) {
 
 	msg := wsMsg{Jid: Jid(1234)}
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-tmr.C:
+		t.Error("timeout")
 	case outCh <- msg.Format():
 	}
 
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-tmr.C:
+		t.Error("timeout")
 	case <-doneCh:
 	}
 
 	err := context.Cause(ts.rq.Context())
-	is.True(strings.Contains(err.Error(), "WebSocket closed"))
+	if !strings.Contains(err.Error(), "WebSocket closed") {
+		t.Error(err)
+	}
 }
 
 func TestReader_ReportsError(t *testing.T) {
-	is := is.New(t)
-	ts := newTestServer(is)
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
+	ts := newTestServer()
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
@@ -391,17 +434,19 @@ func TestReader_ReportsError(t *testing.T) {
 	msg := wsMsg{Jid: Jid(1234), What: what.Input}
 	err := client.Write(ts.ctx, websocket.MessageText, []byte(msg.Format()))
 	if err == nil {
-		t.FailNow()
+		t.Fatal("expected error")
 	}
 
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-tmr.C:
+		t.Fatal("timeout")
 	case <-doneCh:
 	}
 
 	err = context.Cause(ts.rq.Context())
-	is.True(strings.Contains(err.Error(), "WebSocket closed"))
+	if !strings.Contains(err.Error(), "WebSocket closed") {
+		t.Error(err)
+	}
 }
 
 // adapted from nhooyr.io/websocket/internal/test/wstest.Pipe
