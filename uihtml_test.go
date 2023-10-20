@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -53,7 +54,7 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 	defer close(msgCh)
 	tje := &testJawsEvent{msgCh: msgCh}
 
-	id := rq.Register(tje, "attr1", []string{"attr2"}, template.HTML("attr3"), []template.HTML{"attr4"})
+	id := rq.Register(Tag("zomg"), tje, "attr1", []string{"attr2"}, template.HTML("attr3"), []template.HTML{"attr4"})
 
 	rq.inCh <- wsMsg{Data: "text", Jid: id, What: what.Input}
 	select {
@@ -107,5 +108,17 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 			t.Error(s)
 		}
 	}
+}
 
+func TestUiHtml_JawsRender_panics(t *testing.T) {
+	defer func() {
+		x := recover()
+		if x == nil {
+			t.Error("expected panic")
+		}
+		if !strings.Contains(x.(string), "called") {
+			t.Error("wrong panic")
+		}
+	}()
+	(&UiHtml{}).JawsRender(nil, nil, nil)
 }
