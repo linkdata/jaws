@@ -10,9 +10,9 @@ import (
 // NamedBool stores a named boolen value with a HTML representation.
 type NamedBool struct {
 	nba     *NamedBoolArray  // (read-only) NamedBoolArray that this is part of (may be nil)
+	name    string           // (read-only) name within the named bool set
+	html    template.HTML    // (read-only) HTML code used in select lists or labels
 	mu      deadlock.RWMutex // protects following
-	name    string           // name within the named bool set
-	html    template.HTML    // HTML code used in select lists or labels
 	checked bool             // it's state
 }
 
@@ -30,16 +30,12 @@ func (nb *NamedBool) Array() *NamedBoolArray {
 }
 
 func (nb *NamedBool) Name() (s string) {
-	nb.mu.RLock()
 	s = nb.name
-	nb.mu.RUnlock()
 	return
 }
 
 func (nb *NamedBool) Html() (h template.HTML) {
-	nb.mu.RLock()
 	h = nb.html
-	nb.mu.RUnlock()
 	return
 }
 

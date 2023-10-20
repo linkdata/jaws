@@ -18,6 +18,9 @@ func (ui UiOption) JawsRender(e *Element, w io.Writer, params []interface{}) {
 }
 
 func (ui UiOption) JawsUpdate(e *Element) {
-	e.SetValue(ui.NamedBool.JawsGetString(e))
-	e.SetInner(ui.NamedBool.JawsGetHtml(e))
+	if ui.Checked() {
+		e.SetAttr("selected", "")
+	} else {
+		e.RemoveAttr("selected")
+	}
 }

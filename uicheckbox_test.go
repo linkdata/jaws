@@ -9,6 +9,8 @@ import (
 )
 
 func TestRequest_Checkbox(t *testing.T) {
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
 	nextJid = 0
 	rq := newTestRequest()
 	defer rq.Close()
@@ -21,8 +23,6 @@ func TestRequest_Checkbox(t *testing.T) {
 
 	val := false
 	rq.inCh <- wsMsg{Data: "false", Jid: 1, What: what.Input}
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
 	select {
 	case <-tmr.C:
 		t.Error("timeout")
@@ -42,10 +42,10 @@ func TestRequest_Checkbox(t *testing.T) {
 	rq.Dirty(ts)
 	select {
 	case <-tmr.C:
-		t.Error("timeout waiting for Value")
+		t.Error("timeout")
 	case s := <-rq.outCh:
 		if s != "Value\tJid.1\t\"true\"\n" {
-			t.Error("wrong Value")
+			t.Errorf("%q", s)
 		}
 	}
 	if ts.Get() != val {
