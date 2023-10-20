@@ -31,6 +31,7 @@ func (tje *testJawsEvent) JawsGetTag(*Request) (tag any) {
 }
 
 func (tje *testJawsEvent) JawsRender(e *Element, w io.Writer, params []any) {
+	w.Write([]byte(fmt.Sprint(params)))
 	tje.msgCh <- "JawsRender"
 }
 
@@ -50,7 +51,7 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 
-	msgCh := make(chan string)
+	msgCh := make(chan string, 1)
 	defer close(msgCh)
 	tje := &testJawsEvent{msgCh: msgCh}
 
@@ -108,17 +109,19 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 			t.Error(s)
 		}
 	}
-}
 
-func TestUiHtml_JawsRender_panics(t *testing.T) {
-	defer func() {
-		x := recover()
-		if x == nil {
-			t.Error("expected panic")
+	elem := rq.GetElement(id2)
+	var sb strings.Builder
+	elem.ui.JawsRender(elem, &sb, []any{"attr"})
+	select {
+	case <-tmr.C:
+		t.Error("timeout")
+	case s := <-msgCh:
+		if s != "JawsRender" {
+			t.Error(s)
 		}
-		if !strings.Contains(x.(string), "called") {
-			t.Error("wrong panic")
-		}
-	}()
-	(&UiHtml{}).JawsRender(nil, nil, nil)
+	}
+	if x := sb.String(); x != "[attr]" {
+		t.Error(x)
+	}
 }

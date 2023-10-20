@@ -64,7 +64,9 @@ func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []stri
 }
 
 func (ui *UiHtml) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	panic("UiHtml.JawsRender called")
+	if h, ok := ui.Tag.(UI); ok {
+		h.JawsRender(e, w, params)
+	}
 }
 
 func (ui *UiHtml) JawsUpdate(e *Element) {
