@@ -10,6 +10,8 @@ import (
 )
 
 func TestRequest_Number(t *testing.T) {
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
 	nextJid = 0
 	rq := newTestRequest()
 	defer rq.Close()
@@ -22,8 +24,6 @@ func TestRequest_Number(t *testing.T) {
 
 	val := float64(2.3)
 	rq.inCh <- wsMsg{Data: fmt.Sprint(val), Jid: 1, What: what.Input}
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
 	select {
 	case <-tmr.C:
 		t.Error("timeout")
