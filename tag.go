@@ -67,7 +67,10 @@ func tagExpand(l int, rq *Request, tag interface{}, result []interface{}) ([]int
 		}
 		return result, nil
 	case TagGetter:
-		return tagExpand(l+1, rq, data.JawsGetTag(rq), result)
+		if newTag := data.JawsGetTag(rq); tag != newTag {
+			return tagExpand(l+1, rq, newTag, result)
+		}
+		return append(result, tag), nil
 	case []interface{}:
 		var err error
 		for _, v := range data {
