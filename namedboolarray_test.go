@@ -4,12 +4,10 @@ import (
 	"html/template"
 	"sort"
 	"testing"
-
-	"github.com/matryer/is"
 )
 
 func Test_NamedBoolArray(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	nba := NewNamedBoolArray()
 	is.Equal(len(nba.data), 0)
 

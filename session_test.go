@@ -5,7 +5,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -401,60 +400,46 @@ func TestSession_ReplacesOld(t *testing.T) {
 	defer jw.Close()
 	go jw.ServeWithTimeout(time.Second)
 
-	isEqual := func(a, b any) {
-		t.Helper()
-		if a != b {
-			if !reflect.DeepEqual(a, b) {
-				t.Errorf("%#v != %#v", a, b)
-			}
-		}
-	}
+	is := testHelper{t}
 
-	isTrue := func(a bool) {
-		t.Helper()
-		if !a {
-			t.Errorf("not true")
-		}
-	}
-
-	isEqual(jw.SessionCount(), 0)
+	is.Equal(jw.SessionCount(), 0)
 
 	w1 := httptest.NewRecorder()
 	h1 := httptest.NewRequest("GET", "/", nil)
 	s1 := jw.NewSession(w1, h1)
-	isEqual(jw.GetSession(h1), s1)
-	isEqual(len(w1.Result().Cookies()), 1)
+	is.Equal(jw.GetSession(h1), s1)
+	is.Equal(len(w1.Result().Cookies()), 1)
 	r1 := jw.NewRequest(h1)
-	isEqual(r1.Session(), s1)
+	is.Equal(r1.Session(), s1)
 	c1 := w1.Result().Cookies()[0]
-	isEqual(c1.MaxAge, 0)
-	isEqual(c1.Name, s1.cookie.Name)
-	isEqual(c1.Value, s1.CookieValue())
+	is.Equal(c1.MaxAge, 0)
+	is.Equal(c1.Name, s1.cookie.Name)
+	is.Equal(c1.Value, s1.CookieValue())
 	if s1.isDead() {
 		t.Fatal("dead")
 	}
 	s1.Set("foo", "bar")
-	isEqual(s1.Get("foo"), "bar")
+	is.Equal(s1.Get("foo"), "bar")
 	c1copy := *c1
 
-	isEqual(jw.SessionCount(), 1)
+	is.Equal(jw.SessionCount(), 1)
 
 	w2 := httptest.NewRecorder()
 	h2 := httptest.NewRequest("GET", "/", nil)
 	s2 := jw.NewSession(w2, h2)
-	isEqual(jw.GetSession(h2), s2)
-	isEqual(len(w2.Result().Cookies()), 1)
+	is.Equal(jw.GetSession(h2), s2)
+	is.Equal(len(w2.Result().Cookies()), 1)
 	r2 := jw.NewRequest(h2)
-	isEqual(r2.Session(), s2)
+	is.Equal(r2.Session(), s2)
 	c2 := w2.Result().Cookies()[0]
-	isEqual(c2.MaxAge, 0)
-	isEqual(c2.Name, s2.cookie.Name)
-	isEqual(c2.Value, s2.CookieValue())
+	is.Equal(c2.MaxAge, 0)
+	is.Equal(c2.Name, s2.cookie.Name)
+	is.Equal(c2.Value, s2.CookieValue())
 	if s2.isDead() {
 		t.Fatal("dead")
 	}
 
-	isEqual(jw.SessionCount(), 2)
+	is.Equal(jw.SessionCount(), 2)
 	if s1 == s2 {
 		t.Fatal("identical")
 	}
@@ -466,9 +451,9 @@ func TestSession_ReplacesOld(t *testing.T) {
 	h4 := httptest.NewRequest("GET", "/", nil)
 	h4.AddCookie(&c1copy)
 	r4 := jw.NewRequest(h4)
-	isEqual(r4.Session(), s1)
-	isEqual(jw.GetSession(h4), s1)
-	isEqual(len(w4.Result().Cookies()), 0)
+	is.Equal(r4.Session(), s1)
+	is.Equal(jw.GetSession(h4), s1)
+	is.Equal(len(w4.Result().Cookies()), 0)
 
 	r4.recycle()
 
@@ -476,24 +461,24 @@ func TestSession_ReplacesOld(t *testing.T) {
 	h3 := httptest.NewRequest("GET", "/", nil)
 	h3.AddCookie(&c1copy)
 	s3 := jw.NewSession(w3, h3)
-	isTrue(s3 != nil)
-	isEqual(jw.GetSession(h3), s3)
-	isEqual(len(w3.Result().Cookies()), 1)
+	is.True(s3 != nil)
+	is.Equal(jw.GetSession(h3), s3)
+	is.Equal(len(w3.Result().Cookies()), 1)
 	c3 := w3.Result().Cookies()[0]
-	isEqual(c3.MaxAge, 0)
-	isEqual(c3.Name, s3.cookie.Name)
-	isEqual(c3.Value, s3.cookie.Value)
-	isTrue(!s3.isDead())
+	is.Equal(c3.MaxAge, 0)
+	is.Equal(c3.Name, s3.cookie.Name)
+	is.Equal(c3.Value, s3.cookie.Value)
+	is.True(!s3.isDead())
 
-	isEqual(jw.SessionCount(), 2)
-	isTrue(s1 != s3)
-	isTrue(c1.Value != c3.Value)
+	is.Equal(jw.SessionCount(), 2)
+	is.True(s1 != s3)
+	is.True(c1.Value != c3.Value)
 
-	isTrue(s1.isDead())
-	isTrue(!s2.isDead())
-	isTrue(!s3.isDead())
-	isEqual(s1.Get("foo"), nil)
-	isEqual(s1.Cookie().MaxAge, -1)
+	is.True(s1.isDead())
+	is.True(!s2.isDead())
+	is.True(!s3.isDead())
+	is.Equal(s1.Get("foo"), nil)
+	is.Equal(s1.Cookie().MaxAge, -1)
 
 	h5 := httptest.NewRequest("GET", "/", nil)
 	h5.AddCookie(&c1copy)

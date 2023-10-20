@@ -3,12 +3,10 @@ package jaws
 import (
 	"html/template"
 	"testing"
-
-	"github.com/matryer/is"
 )
 
 func TestNamedBool(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 
 	nba := NewNamedBoolArray()
 	nba.Add("1", "one")

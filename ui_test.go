@@ -4,8 +4,6 @@ import (
 	"io"
 	"strings"
 	"testing"
-
-	"github.com/matryer/is"
 )
 
 type testStringer struct{}
@@ -16,7 +14,7 @@ func (s testStringer) String() string {
 
 func TestRequest_JawsRender_DebugOutput(t *testing.T) {
 
-	is := is.New(t)
+	is := testHelper{t}
 	rq := newTestRequest()
 	defer rq.Close()
 	rq.Jaws.Debug = true

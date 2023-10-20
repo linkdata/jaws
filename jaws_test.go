@@ -15,11 +15,10 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws/what"
-	"github.com/matryer/is"
 )
 
 func TestJaws_parseIP(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	is.Equal(parseIP(""), nil)
 	is.True(parseIP("192.168.0.1").Equal(net.IPv4(192, 168, 0, 1)))
 	is.True(parseIP("192.168.0.2:1234").Equal(net.IPv4(192, 168, 0, 2)))
@@ -31,7 +30,7 @@ func TestJaws_parseIP(t *testing.T) {
 func TestJaws_getCookieSessionsIds(t *testing.T) {
 	const sessId = 1234
 	sessCookie := JawsKeyString(sessId)
-	is := is.New(t)
+	is := testHelper{t}
 	is.Equal(getCookieSessionsIds(nil, "meh"), nil)
 	is.Equal(getCookieSessionsIds(http.Header{}, "meh"), nil)
 	is.Equal(getCookieSessionsIds(http.Header{"Cookie": []string{}}, "meh"), nil)
@@ -48,7 +47,7 @@ func TestJaws_MultipleCloseCalls(t *testing.T) {
 }
 
 func TestJaws_MakeID(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	jw := New()
 	defer jw.Close()
 	go jw.Serve()
@@ -60,7 +59,7 @@ func TestJaws_MakeID(t *testing.T) {
 }
 
 func TestJaws_maybePanic(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	defer func() {
 		if recover() == nil {
 			is.Fail()
@@ -70,7 +69,7 @@ func TestJaws_maybePanic(t *testing.T) {
 }
 
 func TestJaws_Logger(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	jw := New()
 	defer jw.Close()
 	var b bytes.Buffer
@@ -83,7 +82,7 @@ func TestJaws_Logger(t *testing.T) {
 }
 
 func TestJaws_MustLog(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	jw := New()
 	defer jw.Close()
 
@@ -114,7 +113,7 @@ func TestJaws_BroadcastDoesntBlockWhenClosed(t *testing.T) {
 }
 
 func TestJaws_BroadcastWaitsWhenFull(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 
 	jw := New()
 	go jw.ServeWithTimeout(testTimeout)
@@ -158,7 +157,7 @@ func TestJaws_BroadcastWaitsWhenFull(t *testing.T) {
 }
 
 func TestJaws_BroadcastFullClosesChannel(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	jw := New()
 	go jw.ServeWithTimeout(time.Millisecond)
 
@@ -208,7 +207,7 @@ func TestJaws_BroadcastFullClosesChannel(t *testing.T) {
 }
 
 func TestJaws_UseRequest(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	jw := New()
 	defer jw.Close()
 
@@ -244,7 +243,7 @@ func TestJaws_UseRequest(t *testing.T) {
 }
 
 func TestJaws_BlockingRandomPanics(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	defer func() {
 		if recover() == nil {
 			is.Fail()
@@ -259,7 +258,7 @@ func TestJaws_BlockingRandomPanics(t *testing.T) {
 
 func TestJaws_CleansUpUnconnected(t *testing.T) {
 	const numReqs = 1000
-	is := is.New(t)
+	is := testHelper{t}
 	jw := New()
 	defer jw.Close()
 	var b bytes.Buffer
@@ -308,7 +307,7 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 }
 
 func TestJaws_UnconnectedLivesUntilDeadline(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	jw := New()
 	defer jw.Close()
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -369,7 +368,7 @@ func TestJaws_BroadcastsCallable(t *testing.T) {
 }
 
 func TestJaws_subscribeOnClosedReturnsNil(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	jw := New()
 	jw.Close()
 	<-jw.doneCh
@@ -386,7 +385,7 @@ func TestJaws_subscribeOnClosedReturnsNil(t *testing.T) {
 func TestJaws_GenerateHeadHTML(t *testing.T) {
 	const extraScript = "someExtraScript.js?disregard"
 	const extraStyle = "http://other.server/someExtraStyle.css"
-	is := is.New(t)
+	is := testHelper{t}
 	jw := New()
 	jw.Close()
 

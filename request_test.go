@@ -16,7 +16,6 @@ import (
 
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
-	"github.com/matryer/is"
 )
 
 const testTimeout = time.Second * 3
@@ -106,7 +105,7 @@ func fillWsCh(ch chan string) {
 }*/
 
 func TestRequest_Registrations(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	rq := newTestRequest()
 	defer rq.Close()
 
@@ -127,7 +126,7 @@ func TestRequest_Registrations(t *testing.T) {
 }
 
 /*func TestRequest_SendFailsWhenJawsClosed(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	jw := New()
 	rq := jw.NewRequest(nil)
 	jw.UseRequest(rq.JawsKey, nil)
@@ -137,7 +136,7 @@ func TestRequest_Registrations(t *testing.T) {
 
 func TestRequest_SendPanicsAfterRecycle(t *testing.T) {
 	// can not run in parallel
-	is := is.New(t)
+	is := testHelper{t}
 	defer func() {
 		e := recover()
 		if e == nil {
@@ -153,7 +152,7 @@ func TestRequest_SendPanicsAfterRecycle(t *testing.T) {
 }
 
 /*func TestRequest_SendFailsWhenContextDone(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	jw := New()
 	defer jw.Close()
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -169,7 +168,7 @@ func TestRequest_SendPanicsAfterRecycle(t *testing.T) {
 }*/
 
 func TestRequest_HeadHTML(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	jw := New()
 	defer jw.Close()
 	rq := jw.NewRequest(nil)
@@ -181,7 +180,7 @@ func TestRequest_HeadHTML(t *testing.T) {
 }
 
 func TestRequest_SendArrivesOk(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	rq := newTestRequest()
 	defer rq.Close()
 	jid := rq.Register("foo")
@@ -199,7 +198,7 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 }
 
 func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	rq := newTestRequest()
 	defer rq.Close()
 	jw := rq.jw
@@ -223,7 +222,7 @@ func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
 }
 
 func TestRequest_OutboundRespectsContextDone(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	rq := newTestRequest()
 	defer rq.Close()
 	var callCount int32
@@ -250,7 +249,7 @@ func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 
 func TestRequest_OutboundOverflowPanicsWithNoLogger(t *testing.T) {
 	// can not run in parallel
-	is := is.New(t)
+	is := testHelper{t}
 	rq := newTestRequest()
 	rq.expectPanic = true
 	rq.jw.Logger = nil
@@ -268,7 +267,7 @@ func TestRequest_OutboundOverflowPanicsWithNoLogger(t *testing.T) {
 }
 
 func TestRequest_Trigger(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	rq := newTestRequest()
 	defer rq.Close()
 	gotFooCall := make(chan struct{})
@@ -324,7 +323,7 @@ func TestRequest_Trigger(t *testing.T) {
 }
 
 func TestRequest_EventFnQueue(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	rq := newTestRequest()
 	defer rq.Close()
 
@@ -378,7 +377,7 @@ func TestRequest_EventFnQueue(t *testing.T) {
 }
 
 func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	rq := newTestRequest()
 	defer rq.Close()
 
@@ -410,7 +409,7 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 }
 
 func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	rq := newTestRequest()
 	defer rq.Close()
 
@@ -489,7 +488,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 }
 
 func TestRequest_Sends(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	rq := newTestRequest()
 	defer rq.Close()
 
@@ -596,7 +595,7 @@ func jidForTag(rq *Request, tag interface{}) jid.Jid {
 }
 
 func TestRequest_ConnectFn(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	rq := newTestRequest()
 	defer rq.Close()
 
@@ -612,7 +611,7 @@ func TestRequest_ConnectFn(t *testing.T) {
 }
 
 func TestRequest_WsQueueOverflowCancels(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	jw := New()
 	defer jw.Close()
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -632,7 +631,7 @@ func TestRequest_WsQueueOverflowCancels(t *testing.T) {
 }
 
 func TestRequest_Dirty(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	rq := newTestRequest()
 	defer rq.Close()
 

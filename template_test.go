@@ -4,12 +4,10 @@ import (
 	"html/template"
 	"strings"
 	"testing"
-
-	"github.com/matryer/is"
 )
 
 func TestTemplate_String(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	rq := newTestRequest()
 	defer rq.Close()
 

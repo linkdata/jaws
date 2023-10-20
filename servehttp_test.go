@@ -4,15 +4,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/matryer/is"
 )
 
 func TestServeHTTP_GetJavascript(t *testing.T) {
-	is := is.New(t)
 	jw := New()
 	go jw.Serve()
 	defer jw.Close()
+
+	is := testHelper{t}
 
 	mux := http.NewServeMux()
 	mux.Handle("/jaws/", jw)
@@ -52,7 +51,7 @@ func TestServeHTTP_GetJavascript(t *testing.T) {
 }
 
 func TestServeHTTP_GetPing(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	jw := New()
 	go jw.Serve()
 	defer jw.Close()
@@ -93,7 +92,7 @@ func TestServeHTTP_GetPing(t *testing.T) {
 }
 
 func TestServeHTTP_GetKey(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	jw := New()
 	go jw.Serve()
 	defer jw.Close()

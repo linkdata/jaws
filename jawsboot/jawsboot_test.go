@@ -6,19 +6,27 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawsboot"
-	"github.com/matryer/is"
 )
 
 func TestJawsBoot_Setup(t *testing.T) {
-	is := is.New(t)
 	jw := jaws.New()
 	defer jw.Close()
-	is.NoErr(jawsboot.Setup(jw))
+	if err := jawsboot.Setup(jw); err != nil {
+		t.Fatal(err)
+	}
 
 	rq := jw.NewRequest(nil)
-	txt := rq.HeadHTML()
-	is.Equal(strings.Contains(string(txt), rq.JawsKeyString()), true)
-	is.Equal(strings.Contains(string(txt), jaws.JavascriptPath), true)
-	is.Equal(strings.Contains(string(txt), jawsboot.DefaultBootstrapVersion), true)
-	is.Equal(strings.Contains(string(txt), jawsboot.DefaultBootstrapCDN), true)
+	txt := string(rq.HeadHTML())
+	if !strings.Contains(txt, rq.JawsKeyString()) {
+		t.Error(txt)
+	}
+	if !strings.Contains(txt, jaws.JavascriptPath) {
+		t.Error(txt)
+	}
+	if !strings.Contains(txt, jawsboot.DefaultBootstrapVersion) {
+		t.Error(txt)
+	}
+	if !strings.Contains(txt, jawsboot.DefaultBootstrapCDN) {
+		t.Error(txt)
+	}
 }

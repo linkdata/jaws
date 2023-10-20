@@ -4,7 +4,6 @@ go 1.21
 
 require (
 	github.com/linkdata/deadlock v0.4.0
-	github.com/matryer/is v1.4.1
 	nhooyr.io/websocket v1.8.7
 )
 

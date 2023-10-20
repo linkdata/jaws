@@ -8,11 +8,10 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws/what"
-	"github.com/matryer/is"
 )
 
 func TestRequest_Template(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	type args struct {
 		templ  interface{}
 		dot    interface{}
@@ -97,7 +96,7 @@ func (td *templateDot) JawsClick(e *Element, name string) error {
 var _ ClickHandler = &templateDot{}
 
 func TestRequest_Template_Event(t *testing.T) {
-	is := is.New(t)
+	is := testHelper{t}
 	rq := newTestRequest()
 	defer rq.Close()
 	dot := &templateDot{clickedCh: make(chan struct{})}
