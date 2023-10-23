@@ -37,7 +37,7 @@ type Request struct {
 	remoteIP  net.IP                  // (read-only) remote IP, or nil
 	session   *Session                // (read-only) session, if established
 	mu        deadlock.RWMutex        // protects following
-	dirty     []interface{}           // dirty tags
+	todoDirt  []interface{}           // dirty tags
 	ctx       context.Context         // current context, derived from either Jaws or WS HTTP req
 	cancelFn  context.CancelCauseFunc // cancel function
 	connectFn ConnectFn               // a ConnectFn to call before starting message processing for the Request
@@ -132,7 +132,7 @@ func (rq *Request) recycle() {
 	rq.Created = time.Time{}
 	rq.ctx = context.Background()
 	rq.cancelFn = nil
-	rq.dirty = rq.dirty[:0]
+	rq.todoDirt = rq.todoDirt[:0]
 	rq.remoteIP = nil
 	rq.elems = rq.elems[:0]
 	rq.killSessionLocked()
@@ -351,7 +351,7 @@ func (rq *Request) HasTag(elem *Element, tag interface{}) (yes bool) {
 
 func (rq *Request) appendDirtyTags(tags []interface{}) {
 	rq.mu.Lock()
-	rq.dirty = append(rq.dirty, tags...)
+	rq.todoDirt = append(rq.todoDirt, tags...)
 	rq.mu.Unlock()
 }
 
@@ -657,7 +657,7 @@ func (rq *Request) deleteElement(e *Element) {
 func (rq *Request) makeUpdateList() (todo []*Element) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	for _, tag := range rq.dirty {
+	for _, tag := range rq.todoDirt {
 		for _, elem := range rq.tagMap[tag] {
 			if !elem.updating {
 				elem.updating = true
@@ -668,7 +668,7 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 	for _, elem := range todo {
 		elem.updating = false
 	}
-	rq.dirty = rq.dirty[:0]
+	rq.todoDirt = rq.todoDirt[:0]
 	return
 }
 
