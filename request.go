@@ -302,21 +302,15 @@ func (rq *Request) Dirty(tags ...interface{}) {
 
 // wantMessage returns true if the Request want the message.
 func (rq *Request) wantMessage(msg *Message) (yes bool) {
-	if rq != nil {
-		switch dest := msg.Dest.(type) {
-		case *Request:
-			yes = dest == rq
-		case string: // HTML id
-			yes = true
-		case *Element:
-			yes = dest.Request == rq
-		case jid.Jid:
-			yes = rq.GetElement(dest) != nil
-		default:
-			rq.mu.RLock()
-			_, yes = rq.tagMap[msg.Dest]
-			rq.mu.RUnlock()
-		}
+	switch dest := msg.Dest.(type) {
+	case *Request:
+		yes = dest == rq
+	case string: // HTML id
+		yes = true
+	default:
+		rq.mu.RLock()
+		_, yes = rq.tagMap[msg.Dest]
+		rq.mu.RUnlock()
 	}
 	return
 }
@@ -339,15 +333,14 @@ func (rq *Request) NewElement(ui UI) *Element {
 	return rq.newElementLocked(ui)
 }
 
-func (rq *Request) getElementLocked(jid Jid) *Element {
-	if jid > 0 {
-		for _, elem := range rq.elems {
-			if elem.jid == jid {
-				return elem
-			}
+func (rq *Request) getElementLocked(jid Jid) (elem *Element) {
+	for _, e := range rq.elems {
+		if e.jid == jid {
+			elem = e
+			break
 		}
 	}
-	return nil
+	return
 }
 
 func (rq *Request) GetElement(jid Jid) (e *Element) {
@@ -511,14 +504,12 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		// prepare the data to send in the WS message
 		var wsdata string
 		switch data := tagmsg.Data.(type) {
-		case nil:
-			// do nothing
 		case string:
 			wsdata = data
-		case template.HTML:
-			wsdata = string(data)
 		case []interface{}: // list of tags
 			wsdata = rq.makeIdList(data)
+		default:
+			// do nothing
 		}
 
 		// collect all elements marked with the tag in the message
@@ -526,14 +517,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		switch v := tagmsg.Dest.(type) {
 		case nil:
 			// matches no elements
-		case *Element:
-			if v.Request == rq {
-				todo = append(todo, v)
-			}
-		case Jid:
-			if elem := rq.GetElement(v); elem != nil {
-				todo = append(todo, elem)
-			}
 		case string:
 			// target is a regular HTML ID
 			wsQueue = append(wsQueue, wsMsg{

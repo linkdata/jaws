@@ -1,11 +1,9 @@
 package jaws
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"html/template"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -20,70 +18,6 @@ import (
 
 const testTimeout = time.Second * 3
 
-type testRequest struct {
-	jw *Jaws
-	*Request
-	log         bytes.Buffer
-	readyCh     chan struct{}
-	doneCh      chan struct{}
-	inCh        chan wsMsg
-	outCh       chan string
-	bcastCh     chan Message
-	ctx         context.Context
-	cancel      context.CancelFunc
-	expectPanic bool
-	panicked    bool
-	panicVal    any
-}
-
-func newTestRequest() (tr *testRequest) {
-	tr = &testRequest{
-		readyCh: make(chan struct{}),
-		doneCh:  make(chan struct{}),
-		jw:      New(),
-	}
-	tr.jw.Logger = log.New(&tr.log, "", 0)
-	tr.jw.Template = template.Must(template.New("testtemplate").Parse(`{{with $.Dot}}<div id="{{$.Jid}}"{{$.Attrs}}>{{.}}</div>{{end}}`))
-	tr.jw.updateTicker = time.NewTicker(time.Millisecond)
-	tr.ctx, tr.cancel = context.WithTimeout(context.Background(), time.Hour)
-	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	tr.Request = tr.jw.NewRequest(hr)
-
-	tr.jw.UseRequest(tr.JawsKey, hr.WithContext(tr.ctx))
-
-	go tr.jw.Serve()
-
-	tr.inCh = make(chan wsMsg)
-	tr.bcastCh = tr.Jaws.subscribe(tr.Request, 64)
-	tr.outCh = make(chan string, cap(tr.bcastCh))
-
-	// ensure subscription is processed
-	for i := 0; i <= cap(tr.Jaws.subCh); i++ {
-		tr.Jaws.subCh <- subscription{}
-	}
-
-	go func() {
-		defer func() {
-			if tr.expectPanic {
-				if tr.panicVal = recover(); tr.panicVal != nil {
-					tr.panicked = true
-				}
-			}
-			close(tr.doneCh)
-		}()
-		close(tr.readyCh)
-		tr.process(tr.bcastCh, tr.inCh, tr.outCh) // usubs from bcase, closes outCh
-		tr.recycle()
-	}()
-
-	return
-}
-
-func (tr *testRequest) Close() {
-	tr.cancel()
-	tr.jw.Close()
-}
-
 func fillWsCh(ch chan string) {
 	for {
 		select {
@@ -93,16 +27,6 @@ func fillWsCh(ch chan string) {
 		}
 	}
 }
-
-/*func fillTagCh(ch chan Message) {
-	for {
-		select {
-		case ch <- Message{}:
-		default:
-			return
-		}
-	}
-}*/
 
 func TestRequest_Registrations(t *testing.T) {
 	is := testHelper{t}
@@ -125,17 +49,7 @@ func TestRequest_Registrations(t *testing.T) {
 	is.True(jid != jid2)
 }
 
-/*func TestRequest_SendFailsWhenJawsClosed(t *testing.T) {
-	is := testHelper{t}
-	jw := New()
-	rq := jw.NewRequest(nil)
-	jw.UseRequest(rq.JawsKey, nil)
-	jw.Close()
-	is.Equal(rq.send(Message{}), false)
-}*/
-
 func TestRequest_SendPanicsAfterRecycle(t *testing.T) {
-	// can not run in parallel
 	is := testHelper{t}
 	defer func() {
 		e := recover()
@@ -150,22 +64,6 @@ func TestRequest_SendPanicsAfterRecycle(t *testing.T) {
 	rq.recycle()
 	rq.Jaws.Broadcast(Message{})
 }
-
-/*func TestRequest_SendFailsWhenContextDone(t *testing.T) {
-	is := testHelper{t}
-	jw := New()
-	defer jw.Close()
-	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	rq := jw.NewRequest(hr)
-	ctx, cancel := context.WithCancel(context.Background())
-	jw.UseRequest(rq.JawsKey, hr.WithContext(ctx))
-	defer rq.recycle()
-	if rq.cancelFn == nil {
-		is.Fail()
-	}
-	cancel()
-	is.Equal(rq.send(Message{}), false)
-}*/
 
 func TestRequest_HeadHTML(t *testing.T) {
 	is := testHelper{t}
@@ -248,7 +146,6 @@ func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 }
 
 func TestRequest_OutboundOverflowPanicsWithNoLogger(t *testing.T) {
-	// can not run in parallel
 	is := testHelper{t}
 	rq := newTestRequest()
 	rq.expectPanic = true
@@ -484,107 +381,132 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	}
 
 	// log data should contain message that we were unable to deliver error
-	is.True(strings.Contains(rq.log.String(), "outboundMsgCh full sending event"))
+	is.True(strings.Contains(rq.jw.log.String(), "outboundMsgCh full sending event"))
 }
 
-func TestRequest_Sends(t *testing.T) {
-	is := testHelper{t}
-	rq := newTestRequest()
-	defer rq.Close()
+func TestRequest_Alert(t *testing.T) {
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
+	tj := newTestJaws()
+	defer tj.Close()
+	rq1 := tj.newRequest(nil)
+	rq2 := tj.newRequest(nil)
 
-	rq.Register("SetAttr")
-	setAttrElement := rq.GetElements(Tag("SetAttr"))[0]
-
-	rq.Register("RemoveAttr")
-	removeAttrElement := rq.GetElements(Tag("RemoveAttr"))[0]
-
-	gotSetAttr := ""
-	gotRemoveAttr := ""
-	gotInfoAlert := ""
-	gotDangerAlert := ""
-	gotRedirect := ""
-
-	is.True(cap(rq.outCh)-len(rq.outCh) > 7)
-
+	rq1.Alert("info", "<html>\nnot\tescaped")
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
-	case <-rq.readyCh:
-	}
-
-	rq.jw.Broadcast(Message{
-		Dest: Tag("SetAttr"),
-		What: what.SAttr,
-		Data: "bar\nbaz",
-	})
-	rq.jw.Broadcast(Message{
-		Dest: Tag("SetAttr"),
-		What: what.SAttr,
-		Data: "bar\nbaz",
-	})
-	rq.jw.Broadcast(Message{
-		Dest: Tag("RemoveAttr"),
-		What: what.RAttr,
-		Data: "bar",
-	})
-
-	rq.Alert("info", "<html>\nnot\tescaped")
-	rq.AlertError(errors.New("<html>\nshould-be-escaped"))
-	rq.Redirect("some-url")
-
-	done := false
-	for !done {
-		select {
-		case <-time.NewTimer(testTimeout).C:
-			t.Log("timeout")
-			t.FailNow()
-			done = true
-		case msgstr, ok := <-rq.outCh:
-			if ok {
-				msg, parseok := wsParse([]byte(msgstr))
-				if !parseok {
-					t.Log(strconv.Quote(msgstr), msg)
-					is.Fail()
-				}
-				switch rq.GetElement(msg.Jid) {
-				case setAttrElement:
-					gotSetAttr = msg.Format()
-				case removeAttrElement:
-					gotRemoveAttr = msg.Format()
-				default:
-					switch msg.What {
-					case what.Alert:
-						if strings.HasPrefix(msg.Data, "info\n") {
-							gotInfoAlert = msg.Format()
-						}
-						if strings.HasPrefix(msg.Data, "danger\n") {
-							gotDangerAlert = msg.Format()
-						}
-					case what.Redirect:
-						gotRedirect = msg.Format()
-						rq.cancel()
-					default:
-						t.Log(msg)
-						t.FailNow()
-					}
-				}
-			}
-		case <-rq.doneCh:
-			done = true
+	case <-tmr.C:
+		t.Fatal("timeout")
+	case s := <-rq1.outCh:
+		if s != "Alert\t\t\"info\\n<html>\\nnot\\tescaped\"\n" {
+			t.Errorf("%q", s)
 		}
 	}
+	select {
+	case s := <-rq2.outCh:
+		t.Errorf("%q", s)
+	default:
+	}
+}
 
-	if !strings.HasSuffix(gotSetAttr, "\t\"bar\\nbaz\"\n") {
-		t.Log(strconv.Quote(gotSetAttr))
-		is.Fail()
+func TestRequest_Redirect(t *testing.T) {
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
+	tj := newTestJaws()
+	defer tj.Close()
+	rq1 := tj.newRequest(nil)
+	rq2 := tj.newRequest(nil)
+
+	rq1.Redirect("some-url")
+	select {
+	case <-tmr.C:
+		t.Fatal("timeout")
+	case s := <-rq1.outCh:
+		if s != "Redirect\t\t\"some-url\"\n" {
+			t.Errorf("%q", s)
+		}
 	}
-	if !(strings.HasPrefix(gotRemoveAttr, "RAttr\t") && strings.HasSuffix(gotRemoveAttr, "\t\"bar\"\n")) {
-		t.Log(strconv.Quote(gotRemoveAttr))
-		is.Fail()
+	select {
+	case s := <-rq2.outCh:
+		t.Errorf("%q", s)
+	default:
 	}
-	is.Equal(gotRedirect, "Redirect\t\t\"some-url\"\n")
-	is.Equal(gotInfoAlert, "Alert\t\t\"info\\n<html>\\nnot\\tescaped\"\n")
-	is.Equal(gotDangerAlert, "Alert\t\t\"danger\\n&lt;html&gt;\\nshould-be-escaped\"\n")
+}
+
+func TestRequest_AlertError(t *testing.T) {
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
+	tj := newTestJaws()
+	defer tj.Close()
+	rq := tj.newRequest(nil)
+	rq.AlertError(errors.New("<html>\nshould-be-escaped"))
+	select {
+	case <-tmr.C:
+		t.Fatal("timeout")
+	case s := <-rq.outCh:
+		if s != "Alert\t\t\"danger\\n&lt;html&gt;\\nshould-be-escaped\"\n" {
+			t.Errorf("%q", s)
+		}
+	}
+}
+
+func TestRequest_TagBroadcast(t *testing.T) {
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
+	tj := newTestJaws()
+	defer tj.Close()
+	rq1 := tj.newRequest(nil)
+	rq1.Register("fooTag")
+	rq2 := tj.newRequest(nil)
+
+	tj.Broadcast(Message{
+		Dest: Tag("fooTag"),
+		What: what.Inner,
+		Data: "inner",
+	})
+	select {
+	case <-tmr.C:
+		t.Fatal("timeout")
+	case s := <-rq1.outCh:
+		if s != "Inner\tJid.32\t\"inner\"\n" {
+			t.Errorf("%q", s)
+		}
+	}
+	select {
+	case s := <-rq2.outCh:
+		t.Errorf("%q", s)
+	default:
+	}
+}
+
+func TestRequest_HtmlIdBroadcast(t *testing.T) {
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
+	tj := newTestJaws()
+	defer tj.Close()
+	rq1 := tj.newRequest(nil)
+	rq2 := tj.newRequest(nil)
+
+	tj.Broadcast(Message{
+		Dest: "fooId",
+		What: what.Inner,
+		Data: "inner",
+	})
+	select {
+	case <-tmr.C:
+		t.Fatal("timeout")
+	case s := <-rq1.outCh:
+		if s != "Inner\tfooId\t\"inner\"\n" {
+			t.Errorf("%q", s)
+		}
+	}
+	select {
+	case <-tmr.C:
+		t.Fatal("timeout")
+	case s := <-rq2.outCh:
+		if s != "Inner\tfooId\t\"inner\"\n" {
+			t.Errorf("%q", s)
+		}
+	}
 }
 
 func jidForTag(rq *Request, tag interface{}) jid.Jid {

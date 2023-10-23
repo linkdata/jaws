@@ -495,9 +495,8 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	// could mean nonreproducible and seemingly
 	// random failures in processing logic.
 	mustBroadcast := func(msg Message) {
-		isCmd := msg.What.IsCommand()
 		for msgCh, rq := range subs {
-			if isCmd || rq.wantMessage(&msg) {
+			if msg.Dest == nil || rq.wantMessage(&msg) {
 				select {
 				case msgCh <- msg:
 				default:
