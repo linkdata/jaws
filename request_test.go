@@ -667,3 +667,44 @@ func TestRequest_IncomingRemove(t *testing.T) {
 		}
 	}
 }
+
+func TestRequest_IncomingClick(t *testing.T) {
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
+	nextJid = 0
+	rq := newTestRequest()
+	defer rq.Close()
+
+	tjc1 := &testJawsClick{
+		clickCh:    make(chan string, 2),
+		testSetter: newTestSetter(""),
+	}
+	tjc1.err = ErrEventUnhandled
+	tjc2 := &testJawsClick{
+		clickCh:    make(chan string, 2),
+		testSetter: newTestSetter(""),
+	}
+
+	rq.Div("1", tjc1)
+	rq.Div("2", tjc2)
+
+	select {
+	case <-tmr.C:
+		t.Fatal("timeout")
+	case rq.inCh <- wsMsg{What: what.Click, Data: "name\tJid.1\tJid.2"}:
+	}
+
+	select {
+	case <-tmr.C:
+		t.Fatal("timeout")
+	case s := <-tjc2.clickCh:
+		if s != "name" {
+			t.Error(s)
+		}
+	}
+	select {
+	case s := <-tjc1.clickCh:
+		t.Errorf("should have been ignored, got %q", s)
+	default:
+	}
+}
