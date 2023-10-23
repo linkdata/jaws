@@ -115,6 +115,8 @@ func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
 	case <-time.NewTimer(testTimeout).C:
 		is.Equal(int(atomic.LoadInt32(&callCount)), 0)
 		is.Fail()
+	case <-rq.Done():
+		is.Error("request ctx cancelled too soon")
 	case <-jw.Done():
 	}
 	is.Equal(int(atomic.LoadInt32(&callCount)), 1)

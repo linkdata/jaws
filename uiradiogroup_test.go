@@ -13,13 +13,13 @@ func TestRequest_RadioGroup(t *testing.T) {
 	nba.Add("1", "one")
 	rel := rq.RadioGroup(nba)
 
-	wantHtml := "<input id=\"Jid.1\" type=\"radio\" radioattr name=\"jaws.3\">"
+	wantHtml := "<input id=\"Jid.2\" type=\"radio\" radioattr name=\"jaws.1\">"
 	gotHtml := string(rel[0].Radio("radioattr"))
 	if gotHtml != wantHtml {
 		t.Errorf("got %q, want %q", gotHtml, wantHtml)
 	}
 
-	wantHtml = "<label id=\"Jid.2\" labelattr for=\"Jid.1\">one</label>"
+	wantHtml = "<label id=\"Jid.3\" labelattr for=\"Jid.2\">one</label>"
 	gotHtml = string(rel[0].Label("labelattr"))
 	if gotHtml != wantHtml {
 		t.Errorf("got %q, want %q", gotHtml, wantHtml)
