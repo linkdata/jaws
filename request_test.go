@@ -102,6 +102,7 @@ func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
 	jw := rq.jw
 	var callCount int32
 	tag := Tag("foo")
+	rq.ctx = context.Background()
 	rq.Register(tag, func(e *Element, evt what.What, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		is.Equal(1, jw.RequestCount())
