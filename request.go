@@ -136,11 +136,7 @@ func (rq *Request) recycle() {
 	rq.remoteIP = nil
 	rq.elems = rq.elems[:0]
 	rq.killSessionLocked()
-	// this gets optimized to calling the 'runtime.mapclear' function
-	// we don't expect this to improve speed, but it will lower GC load
-	for k := range rq.tagMap {
-		delete(rq.tagMap, k)
-	}
+	clear(rq.tagMap)
 	rq.mu.Unlock()
 	requestPool.Put(rq)
 }
