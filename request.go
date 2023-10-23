@@ -619,7 +619,6 @@ func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
 
 func (rq *Request) wsSend(outboundCh chan<- string, s string) {
 	select {
-	case <-rq.Jaws.Done():
 	case <-rq.Done():
 	case outboundCh <- s:
 	default:

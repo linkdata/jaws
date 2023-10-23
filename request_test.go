@@ -96,6 +96,8 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 }
 
 func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
 	is := testHelper{t}
 	rq := newTestRequest()
 	defer rq.Close()
@@ -107,12 +109,12 @@ func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
 		atomic.AddInt32(&callCount, 1)
 		is.Equal(1, jw.RequestCount())
 		jw.Close()
-		return errors.New(val)
+		return nil
 	})
 	fillWsCh(rq.outCh)
 	jw.Broadcast(Message{Dest: Tag("foo"), What: what.Hook, Data: "bar"})
 	select {
-	case <-time.NewTimer(testTimeout).C:
+	case <-tmr.C:
 		is.Equal(int(atomic.LoadInt32(&callCount)), 0)
 		is.Fail()
 	case <-rq.Done():
@@ -120,9 +122,19 @@ func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
 	case <-jw.Done():
 	}
 	is.Equal(int(atomic.LoadInt32(&callCount)), 1)
+	select {
+	case <-rq.Done():
+		is.Error("request ctx cancelled too soon")
+	default:
+	}
+	if jw.log.Len() != 0 {
+		t.Errorf("%q", jw.log.String())
+	}
 }
 
 func TestRequest_OutboundRespectsContextDone(t *testing.T) {
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
 	is := testHelper{t}
 	rq := newTestRequest()
 	defer rq.Close()
@@ -137,15 +149,21 @@ func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 	rq.jw.Broadcast(Message{Dest: Tag("foo"), What: what.Hook, Data: "bar"})
 
 	select {
-	case <-time.NewTimer(testTimeout).C:
+	case <-tmr.C:
 		is.Equal(int(atomic.LoadInt32(&callCount)), 0)
-		is.Fail()
+		is.Fatal(int(atomic.LoadInt32(&callCount)))
 	case <-rq.jw.Done():
-		is.Fail()
+		is.Fatal("jaws done too soon")
 	case <-rq.ctx.Done():
 	}
 
 	is.Equal(int(atomic.LoadInt32(&callCount)), 1)
+
+	select {
+	case <-rq.jw.Done():
+		is.Fatal("jaws done too soon")
+	default:
+	}
 }
 
 func TestRequest_OutboundOverflowPanicsWithNoLogger(t *testing.T) {
@@ -619,5 +637,33 @@ func TestRequest_UpdatePanicLogs(t *testing.T) {
 	}
 	if s := rq.jw.log.String(); !strings.Contains(s, "wildpanic") {
 		t.Error(s)
+	}
+}
+
+func TestRequest_IncomingRemove(t *testing.T) {
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
+	nextJid = 0
+	rq := newTestRequest()
+	defer rq.Close()
+
+	tss := newTestSetter("")
+	rq.UI(NewUiText(tss))
+
+	select {
+	case <-tmr.C:
+		t.Fatal("timeout")
+	case rq.inCh <- wsMsg{What: what.Remove, Data: "Jid.1"}:
+	}
+
+	elem := rq.getElementByJid(1)
+	for elem != nil {
+		select {
+		case <-tmr.C:
+			t.Fatal("timeout")
+		default:
+			time.Sleep(time.Millisecond)
+			elem = rq.getElementByJid(1)
+		}
 	}
 }
