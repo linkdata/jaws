@@ -110,7 +110,7 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 		}
 	}
 
-	elem := rq.GetElement(id2)
+	elem := rq.getElementByJid(id2)
 	var sb strings.Builder
 	elem.ui.JawsRender(elem, &sb, []any{"attr"})
 	select {

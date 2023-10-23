@@ -31,7 +31,7 @@ func testEqual(a, b any) bool {
 func (th testHelper) Equal(a, b any) {
 	if !testEqual(a, b) {
 		th.Helper()
-		th.Errorf("%#v != %#v", a, b)
+		th.Errorf("%T(%v) != %T(%v)", a, a, b, b)
 	}
 }
 

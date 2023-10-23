@@ -221,25 +221,6 @@ func (rq *Request) AlertError(err error) {
 	}
 }
 
-func (rq *Request) makeIdList(tags []interface{}) string {
-	rq.mu.RLock()
-	defer rq.mu.RUnlock()
-	var b []byte
-	seen := make(map[*Element]struct{})
-	for _, tag := range tags {
-		for _, elem := range rq.getElementsLocked(tag) {
-			if _, ok := seen[elem]; !ok {
-				seen[elem] = struct{}{}
-				if len(b) > 0 {
-					b = append(b, ' ')
-				}
-				b = elem.jid.Append(b)
-			}
-		}
-	}
-	return string(b)
-}
-
 // Redirect requests the current Request to navigate to the given URL.
 func (rq *Request) Redirect(url string) {
 	rq.Jaws.Broadcast(Message{
@@ -277,7 +258,7 @@ func (rq *Request) TagsOf(elem *Element) (tags []interface{}) {
 func (rq *Request) Register(tagitem interface{}, params ...interface{}) jid.Jid {
 	switch data := tagitem.(type) {
 	case jid.Jid:
-		if elem := rq.GetElement(data); elem != nil {
+		if elem := rq.getElementByJid(data); elem != nil {
 			if uib, ok := elem.Ui().(*UiHtml); ok {
 				uib.parseParams(elem, params)
 			}
@@ -307,6 +288,8 @@ func (rq *Request) wantMessage(msg *Message) (yes bool) {
 		yes = dest == rq
 	case string: // HTML id
 		yes = true
+	case []any: // more than one tag
+		yes = true
 	default:
 		rq.mu.RLock()
 		_, yes = rq.tagMap[msg.Dest]
@@ -333,7 +316,7 @@ func (rq *Request) NewElement(ui UI) *Element {
 	return rq.newElementLocked(ui)
 }
 
-func (rq *Request) getElementLocked(jid Jid) (elem *Element) {
+func (rq *Request) getElementByJidLocked(jid Jid) (elem *Element) {
 	for _, e := range rq.elems {
 		if e.jid == jid {
 			elem = e
@@ -343,18 +326,10 @@ func (rq *Request) getElementLocked(jid Jid) (elem *Element) {
 	return
 }
 
-func (rq *Request) GetElement(jid Jid) (e *Element) {
+func (rq *Request) getElementByJid(jid Jid) (e *Element) {
 	rq.mu.RLock()
-	e = rq.getElementLocked(jid)
+	e = rq.getElementByJidLocked(jid)
 	rq.mu.RUnlock()
-	return
-}
-
-// GetElements returns a list of the UI elements in the Request that have the given tag.
-func (rq *Request) getElementsLocked(tag interface{}) (elems []*Element) {
-	if el, ok := rq.tagMap[tag]; ok {
-		elems = append(elems, el...)
-	}
 	return
 }
 
@@ -398,11 +373,22 @@ func (rq *Request) Tag(elem *Element, tags ...interface{}) {
 	}
 }
 
-// GetElements returns a list of the UI elements in the Request that have the given tag.
-func (rq *Request) GetElements(tag interface{}) (elems []*Element) {
+// GetElements returns a list of the UI elements in the Request that have the given tag(s).
+func (rq *Request) GetElements(tagitem interface{}) (elems []*Element) {
+	tags := MustTagExpand(rq, tagitem)
+	seen := map[*Element]struct{}{}
 	rq.mu.RLock()
-	elems = rq.getElementsLocked(tag)
-	rq.mu.RUnlock()
+	defer rq.mu.RUnlock()
+	for _, tag := range tags {
+		if el, ok := rq.tagMap[tag]; ok {
+			for _, e := range el {
+				if _, ok = seen[e]; !ok {
+					seen[e] = struct{}{}
+					elems = append(elems, el...)
+				}
+			}
+		}
+	}
 	return
 }
 
@@ -506,8 +492,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		switch data := tagmsg.Data.(type) {
 		case string:
 			wsdata = data
-		case []interface{}: // list of tags
-			wsdata = rq.makeIdList(data)
 		default:
 			// do nothing
 		}
@@ -517,6 +501,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		switch v := tagmsg.Dest.(type) {
 		case nil:
 			// matches no elements
+		case *Request:
 		case string:
 			// target is a regular HTML ID
 			wsQueue = append(wsQueue, wsMsg{
@@ -525,9 +510,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 				Jid:  -1,
 			})
 		default:
-			rq.mu.RLock()
-			todo = append(todo, rq.tagMap[tagmsg.Dest]...)
-			rq.mu.RUnlock()
+			todo = rq.GetElements(v)
 		}
 
 		switch tagmsg.What {
@@ -541,6 +524,10 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			for _, elem := range todo {
 				switch tagmsg.What {
 				case what.Delete:
+					wsQueue = append(wsQueue, wsMsg{
+						Jid:  elem.jid,
+						What: what.Delete,
+					})
 					rq.deleteElement(elem)
 				case what.Input, what.Click:
 					// Input or Click messages recieved here are from Request.Send() or broadcasts.
@@ -578,7 +565,7 @@ func (rq *Request) handleRemove(data string) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	for _, jidstr := range strings.Split(data, "\t") {
-		if e := rq.getElementLocked(jid.ParseString(jidstr)); e != nil {
+		if e := rq.getElementByJidLocked(jid.ParseString(jidstr)); e != nil {
 			rq.deleteElementLocked(e)
 		}
 	}
@@ -596,14 +583,14 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err 
 				var jidStr string
 				jidStr, after, found = strings.Cut(after, "\t")
 				if id = jid.ParseString(jidStr); id > 0 {
-					if e := rq.getElementLocked(id); e != nil {
+					if e := rq.getElementByJidLocked(id); e != nil {
 						elems = append(elems, e)
 					}
 				}
 			}
 		}
 	} else {
-		if e := rq.getElementLocked(id); e != nil {
+		if e := rq.getElementByJidLocked(id); e != nil {
 			elems = append(elems, e)
 		}
 	}
@@ -620,7 +607,7 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err 
 		}
 	}
 	if err == ErrEventUnhandled {
-		return nil
+		err = nil
 	}
 	return
 }
@@ -671,13 +658,6 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	for _, tag := range rq.dirty {
-		if elem, ok := tag.(*Element); ok {
-			if !elem.updating {
-				elem.updating = true
-				todo = append(todo, elem)
-			}
-			continue
-		}
 		for _, elem := range rq.tagMap[tag] {
 			if !elem.updating {
 				elem.updating = true

@@ -358,7 +358,6 @@ func TestJaws_BroadcastsCallable(t *testing.T) {
 	jw.Redirect("foo")
 	jw.Alert("info", "bar")
 	someTags := []any{Tag("tag1"), Tag("tag2")}
-	jw.Order(someTags)
 	jw.SetInner("regularHtmlId", template.HTML(""))
 	jw.SetValue("regularHtmlId", "value")
 	jw.SetAttr(someTags, "attribute", "value")

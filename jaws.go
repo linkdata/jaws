@@ -441,14 +441,6 @@ func (jw *Jaws) Alert(lvl, msg string) {
 	})
 }
 
-// Order re-orders HTML elements matching the given tags in all Requests.
-func (jw *Jaws) Order(tags []interface{}) {
-	jw.Broadcast(Message{
-		What: what.Order,
-		Data: MustTagExpand(nil, tags),
-	})
-}
-
 // Count returns the number of requests waiting for their WebSocket callbacks.
 func (jw *Jaws) Pending() (n int) {
 	jw.mu.RLock()

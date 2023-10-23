@@ -147,13 +147,6 @@ func (e *Element) Order(jidList []jid.Jid) {
 	}
 }
 
-// Delete requests that this Element is removed from the Request and it's HTML element from the browser.
-//
-// Call this only during JawsRender() or JawsUpdate() processing.
-func (e *Element) Delete() {
-	e.queue(what.Delete, "")
-}
-
 // Remove requests that the HTML child with the given HTML ID of this Element
 // is removed from the Request and it's HTML element from the browser.
 //

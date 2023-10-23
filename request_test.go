@@ -89,7 +89,7 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 	case msgstr := <-rq.outCh:
 		msg, ok := wsParse([]byte(msgstr))
 		is.True(ok)
-		elem := rq.GetElement(jid)
+		elem := rq.getElementByJid(jid)
 		is.True(elem != nil)
 		is.Equal(msg, wsMsg{Jid: elem.jid, Data: "bar", What: what.Inner})
 	}
@@ -449,32 +449,54 @@ func TestRequest_AlertError(t *testing.T) {
 	}
 }
 
-func TestRequest_TagBroadcast(t *testing.T) {
+func TestRequest_DeleteByTag(t *testing.T) {
+	is := testHelper{t}
 	tmr := time.NewTimer(testTimeout)
 	defer tmr.Stop()
 	tj := newTestJaws()
 	defer tj.Close()
+	nextJid = 0
 	rq1 := tj.newRequest(nil)
-	rq1.Register("fooTag")
-	rq2 := tj.newRequest(nil)
+	ui1 := &testUi{}
+	e11 := rq1.NewElement(ui1)
+	is.Equal(e11.jid, Jid(1))
+	e11.Tag(Tag("e11"), Tag("foo"))
+	e12 := rq1.NewElement(ui1)
+	is.Equal(e12.jid, Jid(2))
+	e12.Tag(Tag("e12"))
+	e13 := rq1.NewElement(ui1)
+	is.Equal(e13.jid, Jid(3))
+	e13.Tag(Tag("e13"), Tag("bar"))
 
-	tj.Broadcast(Message{
-		Dest: Tag("fooTag"),
-		What: what.Inner,
-		Data: "inner",
-	})
+	rq2 := tj.newRequest(nil)
+	ui2 := &testUi{}
+	e21 := rq2.NewElement(ui2)
+	is.Equal(e21.jid, Jid(4))
+	e21.Tag(Tag("e21"), Tag("foo"))
+	e22 := rq2.NewElement(ui2)
+	is.Equal(e22.jid, Jid(5))
+	e22.Tag(Tag("e22"))
+	e23 := rq2.NewElement(ui2)
+	is.Equal(e23.jid, Jid(6))
+	e23.Tag(Tag("e23"))
+
+	tj.Delete([]any{Tag("foo"), Tag("bar"), Tag("nothere"), Tag("e23")})
+
 	select {
 	case <-tmr.C:
 		t.Fatal("timeout")
 	case s := <-rq1.outCh:
-		if s != "Inner\tJid.32\t\"inner\"\n" {
+		if s != "Delete\tJid.1\t\"\"\nDelete\tJid.3\t\"\"\n" {
 			t.Errorf("%q", s)
 		}
 	}
 	select {
+	case <-tmr.C:
+		t.Fatal("timeout")
 	case s := <-rq2.outCh:
-		t.Errorf("%q", s)
-	default:
+		if s != "Delete\tJid.4\t\"\"\nDelete\tJid.6\t\"\"\n" {
+			t.Errorf("%q", s)
+		}
 	}
 }
 
