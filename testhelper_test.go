@@ -7,7 +7,16 @@ import (
 
 type testHelper struct{ *testing.T }
 
-func (th testHelper) equal(a, b any) bool {
+func testNil(object any) (bool, reflect.Type) {
+	if object == nil {
+		return true, nil
+	}
+	value := reflect.ValueOf(object)
+	kind := value.Kind()
+	return kind >= reflect.Chan && kind <= reflect.Slice && value.IsNil(), value.Type()
+}
+
+func testEqual(a, b any) bool {
 	if reflect.DeepEqual(a, b) {
 		return true
 	}
@@ -20,48 +29,37 @@ func (th testHelper) equal(a, b any) bool {
 }
 
 func (th testHelper) Equal(a, b any) {
-	th.Helper()
-	if !th.equal(a, b) {
+	if !testEqual(a, b) {
+		th.Helper()
 		th.Errorf("%#v != %#v", a, b)
 	}
 }
 
 func (th testHelper) True(a bool) {
-	th.Helper()
 	if !a {
+		th.Helper()
 		th.Error("not true")
 	}
 }
 
 func (th testHelper) NoErr(err error) {
-	th.Helper()
 	if err != nil {
+		th.Helper()
 		th.Error(err)
 	}
 }
 
-func testNil(object any) (bool, reflect.Type) {
-	if object == nil {
-		return true, nil
-	}
-	value := reflect.ValueOf(object)
-	kind := value.Kind()
-	return kind >= reflect.Chan && kind <= reflect.Slice && value.IsNil(), value.Type()
-}
-
 func Test_testHelper(t *testing.T) {
-	is := testHelper{t}
-
 	mustEqual := func(a, b any) {
-		t.Helper()
-		if !is.equal(a, b) {
+		if !testEqual(a, b) {
+			t.Helper()
 			t.Errorf("%#v != %#v", a, b)
 		}
 	}
 
 	mustNotEqual := func(a, b any) {
-		t.Helper()
-		if is.equal(a, b) {
+		if testEqual(a, b) {
+			t.Helper()
 			t.Errorf("%#v == %#v", a, b)
 		}
 	}
