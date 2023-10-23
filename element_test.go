@@ -25,6 +25,9 @@ type testUi struct {
 	updateFn     func(e *Element)
 }
 
+var _ UI = (*testUi)(nil)
+var _ StringSetter = (*testUi)(nil)
+
 func (tss *testUi) JawsGetString(e *Element) string {
 	atomic.AddInt32(&tss.getCalled, 1)
 	return tss.s

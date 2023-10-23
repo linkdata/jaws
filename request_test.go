@@ -595,3 +595,26 @@ func TestRequest_Dirty(t *testing.T) {
 		}
 	}
 }
+
+func TestRequest_UpdatePanicLogs(t *testing.T) {
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
+	nextJid = 0
+	rq := newTestRequest()
+	defer rq.Close()
+
+	tss := &testUi{
+		updateFn: func(e *Element) {
+			panic("wildpanic")
+		}}
+	rq.UI(tss)
+	rq.Dirty(tss)
+	select {
+	case <-tmr.C:
+		t.Fatal("timeout")
+	case <-rq.doneCh:
+	}
+	if s := rq.jw.log.String(); !strings.Contains(s, "wildpanic") {
+		t.Error(s)
+	}
+}
