@@ -560,26 +560,26 @@ func errPendingCancelled(rq *Request, deadline time.Time) error {
 		}
 		err = ErrNoWebSocketRequest
 	}
-	var uri string
-	if rq.Initial != nil {
-		uri = fmt.Sprintf("%s %q: ", rq.Initial.Method, rq.Initial.RequestURI)
-	}
-	return fmt.Errorf("cancelled pending %v: %s%v", rq, uri, err)
+	return err
 }
 
 func (jw *Jaws) maintenance(requestTimeout time.Duration) {
-	var killReqs []uint64
+	var killReqs []*Request
 	var killSess []uint64
 
 	jw.mu.RLock()
 	now := time.Now()
 	deadline := now.Add(-requestTimeout)
 	logger := jw.Logger
-	for k, rq := range jw.pending {
+	for _, rq := range jw.pending {
 		if err := errPendingCancelled(rq, deadline); err != nil {
-			killReqs = append(killReqs, k)
+			killReqs = append(killReqs, rq)
 			if logger != nil {
-				logger.Println(err)
+				var uri string
+				if rq.Initial != nil {
+					uri = fmt.Sprintf("%s %q: ", rq.Initial.Method, rq.Initial.RequestURI)
+				}
+				logger.Printf("cancelled pending %v: %s%v", rq, uri, err)
 			}
 		}
 	}
@@ -592,13 +592,16 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 
 	if len(killReqs)+len(killSess) > 0 {
 		jw.mu.Lock()
-		for _, k := range killReqs {
-			delete(jw.pending, k)
+		for _, rq := range killReqs {
+			delete(jw.pending, rq.JawsKey)
 		}
 		for _, k := range killSess {
 			delete(jw.sessions, k)
 		}
 		jw.mu.Unlock()
+		for _, rq := range killReqs {
+			rq.recycle()
+		}
 	}
 }
 

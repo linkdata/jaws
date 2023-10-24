@@ -123,22 +123,27 @@ func (rq *Request) killSession() {
 }
 
 func (rq *Request) recycle() {
-	rq.Jaws.deactivate(rq)
 	rq.mu.Lock()
-	rq.Jaws = nil
-	rq.JawsKey = 0
-	rq.connectFn = nil
-	rq.Initial = nil
-	rq.Created = time.Time{}
-	rq.ctx = context.Background()
-	rq.cancelFn = nil
-	rq.todoDirt = rq.todoDirt[:0]
-	rq.remoteIP = nil
-	rq.elems = rq.elems[:0]
-	rq.killSessionLocked()
-	clear(rq.tagMap)
+	jw := rq.Jaws
+	if jw != nil {
+		rq.Jaws = nil
+		rq.JawsKey = 0
+		rq.connectFn = nil
+		rq.Initial = nil
+		rq.Created = time.Time{}
+		rq.ctx = context.Background()
+		rq.cancelFn = nil
+		rq.todoDirt = rq.todoDirt[:0]
+		rq.remoteIP = nil
+		rq.elems = rq.elems[:0]
+		rq.killSessionLocked()
+		clear(rq.tagMap)
+	}
 	rq.mu.Unlock()
-	requestPool.Put(rq)
+	if jw != nil {
+		jw.deactivate(rq)
+		requestPool.Put(rq)
+	}
 }
 
 // HeadHTML returns the HTML code needed to write in the HTML page's HEAD section.
