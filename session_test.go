@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -198,6 +199,17 @@ func TestSession_Use(t *testing.T) {
 	}
 }
 
+func TestSession_Requests(t *testing.T) {
+	jw := New()
+	defer jw.Close()
+
+	sessionId := uint64(0x12345)
+	sess := newSession(jw, sessionId, nil)
+	if x := sess.Requests(); x != nil {
+		t.Error(x)
+	}
+}
+
 func TestSession_Delete(t *testing.T) {
 	tmr := time.NewTimer(testTimeout)
 	defer tmr.Stop()
@@ -249,6 +261,18 @@ func TestSession_Delete(t *testing.T) {
 	rq2 := ts.jw.NewRequest(hr2)
 	if x := rq2.Session(); x != ts.sess {
 		t.Error(x)
+	}
+
+	// session should now have both requests listed
+	rl := sess.Requests()
+	if len(rl) != 2 {
+		t.Error(len(rl))
+	}
+	if !slices.Contains(rl, ts.rq) {
+		t.Errorf("%v missing from %v", ts.rq, rl)
+	}
+	if !slices.Contains(rl, rq2) {
+		t.Errorf("%v missing from %v", rq2, rl)
 	}
 
 	ts.rq.Register("byebye", func(e *Element, evt what.What, val string) error {

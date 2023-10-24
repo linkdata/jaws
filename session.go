@@ -180,6 +180,17 @@ func (sess *Session) Clear() {
 	}
 }
 
+// Requests returns a list of the Requests using this Session.
+// It is safe to call on a nil Session.
+func (sess *Session) Requests() (rl []*Request) {
+	if sess != nil {
+		sess.mu.RLock()
+		rl = append(rl, sess.requests...)
+		sess.mu.RUnlock()
+	}
+	return
+}
+
 func (sess *Session) broadcastLocked(msg Message) {
 	for _, rq := range sess.requests {
 		msg.Dest = rq
