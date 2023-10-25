@@ -281,7 +281,11 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 				elem.SetInner("foo")
 			}
 		}
-		expectLen++
+		err := maybeErrPendingCancelled(rq, deadline)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		expectLen += len(err.Error() + "\n")
 	}
 	is.Equal(jw.Pending(), numReqs)
 
@@ -304,8 +308,8 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 	case <-jw.Done():
 	}
 	w.Flush()
-	s := b.String()
-	if x := strings.Count(s, "\n"); x != expectLen {
+	if x := b.Len(); x != expectLen {
+		t.Log(b.String())
 		is.Equal(b.Len(), expectLen)
 	}
 }

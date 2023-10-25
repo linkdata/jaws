@@ -708,3 +708,18 @@ func TestRequest_IncomingClick(t *testing.T) {
 	default:
 	}
 }
+
+func TestRequest_CustomErrors(t *testing.T) {
+	is := testHelper{t}
+	rq := newTestRequest()
+	defer rq.Close()
+	cause := newErrNoWebSocketRequest(rq.Request)
+	err := newErrPendingCancelled(rq.Request, cause)
+	is.True(errors.Is(err, ErrPendingCancelled{}))
+	is.True(errors.Is(err, ErrNoWebSocketRequest{}))
+	is.Equal(errors.Is(cause, ErrPendingCancelled{}), false)
+	var target1 ErrNoWebSocketRequest
+	is.True(errors.As(err, &target1))
+	var target2 ErrPendingCancelled
+	is.Equal(errors.As(cause, &target2), false)
+}

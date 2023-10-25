@@ -549,15 +549,14 @@ func (jw *Jaws) unsubscribe(msgCh chan Message) {
 	}
 }
 
-func errPendingCancelled(rq *Request, deadline time.Time) error {
-	err := context.Cause(rq.ctx)
-	if err == nil {
-		if rq.Created.After(deadline) {
-			return nil
-		}
+func maybeErrPendingCancelled(rq *Request, deadline time.Time) (err error) {
+	if err = context.Cause(rq.ctx); err == nil && rq.Created.Before(deadline) {
 		err = newErrNoWebSocketRequest(rq)
 	}
-	return err
+	if err != nil {
+		err = newErrPendingCancelled(rq, err)
+	}
+	return
 }
 
 func (jw *Jaws) maintenance(requestTimeout time.Duration) {
@@ -567,17 +566,9 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	jw.mu.RLock()
 	now := time.Now()
 	deadline := now.Add(-requestTimeout)
-	logger := jw.Logger
 	for _, rq := range jw.pending {
-		if err := errPendingCancelled(rq, deadline); err != nil {
+		if err := jw.Log(maybeErrPendingCancelled(rq, deadline)); err != nil {
 			killReqs = append(killReqs, rq)
-			if logger != nil {
-				var uri string
-				if rq.Initial != nil {
-					uri = fmt.Sprintf("%s %q: ", rq.Initial.Method, rq.Initial.RequestURI)
-				}
-				logger.Printf("cancelled pending %v: %s%v", rq, uri, err)
-			}
 		}
 	}
 	for k, sess := range jw.sessions {
