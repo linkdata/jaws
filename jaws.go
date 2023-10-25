@@ -606,9 +606,9 @@ func equalIP(a, b netip.Addr) bool {
 func parseIP(remoteAddr string) (ip netip.Addr) {
 	if remoteAddr != "" {
 		if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
-			ip, err = netip.ParseAddr(host)
+			ip, _ = netip.ParseAddr(host)
 		} else {
-			ip, err = netip.ParseAddr(remoteAddr)
+			ip, _ = netip.ParseAddr(remoteAddr)
 		}
 	}
 	return
