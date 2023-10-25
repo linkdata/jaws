@@ -316,10 +316,14 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 
 func TestJaws_UnconnectedLivesUntilDeadline(t *testing.T) {
 	is := testHelper{t}
+	tmr := time.NewTimer(testTimeout)
+	defer tmr.Stop()
 	jw := New()
 	defer jw.Close()
+
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	rq1ctx := jw.NewRequest(hr).Context()
+	rq1 := jw.NewRequest(hr)
+	rq1ctx := rq1.Context()
 	rq2 := jw.NewRequest(hr)
 	rq2.Created = time.Now().Add(-time.Second * 10)
 	rq2ctx := rq2.Context()
@@ -328,13 +332,12 @@ func TestJaws_UnconnectedLivesUntilDeadline(t *testing.T) {
 
 	go jw.ServeWithTimeout(time.Second)
 
-	tmr := time.NewTimer(testTimeout)
 	for jw.Pending() > 1 {
 		select {
 		case <-tmr.C:
-			is.Fail()
+			is.Fatal("timeout")
 		case <-jw.Done():
-			is.Fail()
+			is.Error("unexpected close")
 		default:
 			time.Sleep(time.Millisecond)
 		}
@@ -345,12 +348,16 @@ func TestJaws_UnconnectedLivesUntilDeadline(t *testing.T) {
 	jw.Close()
 	select {
 	case <-tmr.C:
-		is.Fail()
+		is.Fatal("timeout")
 	case <-jw.Done():
 	}
 
 	is.NoErr(context.Cause(rq1ctx))
-	is.NoErr(context.Cause(rq2ctx))
+	is.True(errors.Is(context.Cause(rq2ctx), ErrNoWebSocketRequest{}))
+
+	// neither should have been recycled
+	is.Equal(rq1.Jaws, jw)
+	is.Equal(rq2.Jaws, jw)
 }
 
 func TestJaws_BroadcastsCallable(t *testing.T) {

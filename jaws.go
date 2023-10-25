@@ -568,6 +568,7 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	deadline := now.Add(-requestTimeout)
 	for _, rq := range jw.pending {
 		if err := jw.Log(maybeErrPendingCancelled(rq, deadline)); err != nil {
+			rq.cancel(err)
 			killReqs = append(killReqs, rq)
 		}
 	}

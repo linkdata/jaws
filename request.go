@@ -199,7 +199,9 @@ func (rq *Request) cancel(err error) {
 		rq.mu.RLock()
 		cancelFn := rq.cancelFn
 		rq.mu.RUnlock()
-		cancelFn(err)
+		if cancelFn != nil {
+			cancelFn(err)
+		}
 	}
 }
 
