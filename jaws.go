@@ -598,9 +598,6 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 			delete(jw.sessions, k)
 		}
 		jw.mu.Unlock()
-		for _, rq := range killReqs {
-			rq.recycle()
-		}
 	}
 }
 
