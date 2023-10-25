@@ -7,9 +7,9 @@ import (
 	"errors"
 	"html/template"
 	"log"
-	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
@@ -19,11 +19,11 @@ import (
 
 func TestJaws_parseIP(t *testing.T) {
 	is := testHelper{t}
-	is.Equal(parseIP(""), nil)
-	is.True(parseIP("192.168.0.1").Equal(net.IPv4(192, 168, 0, 1)))
-	is.True(parseIP("192.168.0.2:1234").Equal(net.IPv4(192, 168, 0, 2)))
-	is.True(parseIP("127.0.0.1").Equal(net.IPv4(127, 0, 0, 1)))
-	is.True(parseIP("::1").Equal(net.IPv6loopback))
+	is.True(!parseIP("").IsValid())
+	is.True(parseIP("192.168.0.1").Compare(netip.MustParseAddr("192.168.0.1")) == 0)
+	is.True(parseIP("192.168.0.2:1234").Compare(netip.MustParseAddr("192.168.0.2")) == 0)
+	is.True(parseIP("127.0.0.1").Compare(netip.MustParseAddr("127.0.0.1")) == 0)
+	is.True(parseIP("::1").Compare(netip.IPv6Loopback()) == 0)
 	is.True(equalIP(parseIP("127.0.0.1"), parseIP("::1")))
 }
 

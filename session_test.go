@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -26,7 +27,7 @@ func TestSession_Object(t *testing.T) {
 		t.Error(x)
 	}
 
-	sess = newSession(jw, sessionId, nil)
+	sess = newSession(jw, sessionId, netip.Addr{})
 	sess.Set("foo", "bar")
 	if x := sess.Get("foo"); x != "bar" {
 		t.Error(x)
@@ -48,7 +49,7 @@ func TestSession_Object(t *testing.T) {
 	if sessionId != sess.ID() {
 		t.Error(sess.ID())
 	}
-	if sess.IP() != nil {
+	if sess.IP().IsValid() {
 		t.Error(sess.IP())
 	}
 	sess.Reload()
@@ -204,7 +205,7 @@ func TestSession_Requests(t *testing.T) {
 	defer jw.Close()
 
 	sessionId := uint64(0x12345)
-	sess := newSession(jw, sessionId, nil)
+	sess := newSession(jw, sessionId, netip.Addr{})
 	if x := sess.Requests(); x != nil {
 		t.Error(x)
 	}

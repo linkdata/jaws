@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"html"
 	"html/template"
-	"net"
 	"net/http"
+	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
@@ -34,7 +34,7 @@ type Request struct {
 	JawsKey   uint64                  // (read-only) a random number used in the WebSocket URI to identify this Request
 	Created   time.Time               // (read-only) when the Request was created, used for automatic cleanup
 	Initial   *http.Request           // (read-only) initial HTTP request passed to Jaws.NewRequest
-	remoteIP  net.IP                  // (read-only) remote IP, or nil
+	remoteIP  netip.Addr              // (read-only) remote IP, or nil
 	session   *Session                // (read-only) session, if established
 	mu        deadlock.RWMutex        // protects following
 	todoDirt  []interface{}           // dirty tags
@@ -93,7 +93,7 @@ func (rq *Request) String() string {
 }
 
 func (rq *Request) start(hr *http.Request) (err error) {
-	var actualIP net.IP
+	var actualIP netip.Addr
 	ctx := context.Background()
 	if hr != nil {
 		actualIP = parseIP(hr.RemoteAddr)
@@ -134,7 +134,7 @@ func (rq *Request) recycle() {
 		rq.ctx = context.Background()
 		rq.cancelFn = nil
 		rq.todoDirt = rq.todoDirt[:0]
-		rq.remoteIP = nil
+		rq.remoteIP = netip.Addr{}
 		rq.elems = rq.elems[:0]
 		rq.killSessionLocked()
 		clear(rq.tagMap)

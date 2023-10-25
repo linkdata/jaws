@@ -11,13 +11,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"html/template"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/textproto"
 	"net/url"
 	"sort"
@@ -235,7 +235,7 @@ func (jw *Jaws) Sessions() (sl []*Session) {
 	return
 }
 
-func (jw *Jaws) getSessionLocked(sessIds []uint64, remoteIP net.IP) *Session {
+func (jw *Jaws) getSessionLocked(sessIds []uint64, remoteIP netip.Addr) *Session {
 	for _, sessId := range sessIds {
 		if sess, ok := jw.sessions[sessId]; ok && equalIP(remoteIP, sess.remoteIP) {
 			return sess
@@ -549,15 +549,13 @@ func (jw *Jaws) unsubscribe(msgCh chan Message) {
 	}
 }
 
-var ErrNoWebSocketRequest = errors.New("no WebSocket request received")
-
 func errPendingCancelled(rq *Request, deadline time.Time) error {
 	err := context.Cause(rq.ctx)
 	if err == nil {
 		if rq.Created.After(deadline) {
 			return nil
 		}
-		err = ErrNoWebSocketRequest
+		err = newErrNoWebSocketRequest(rq)
 	}
 	return err
 }
@@ -601,16 +599,16 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	}
 }
 
-func equalIP(a, b net.IP) bool {
-	return a.Equal(b) || (a.IsLoopback() && b.IsLoopback())
+func equalIP(a, b netip.Addr) bool {
+	return a.Compare(b) == 0 || (a.IsLoopback() && b.IsLoopback())
 }
 
-func parseIP(remoteAddr string) (ip net.IP) {
+func parseIP(remoteAddr string) (ip netip.Addr) {
 	if remoteAddr != "" {
 		if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
-			ip = net.ParseIP(host)
+			ip, err = netip.ParseAddr(host)
 		} else {
-			ip = net.ParseIP(remoteAddr)
+			ip, err = netip.ParseAddr(remoteAddr)
 		}
 	}
 	return

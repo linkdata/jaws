@@ -1,8 +1,8 @@
 package jaws
 
 import (
-	"net"
 	"net/http"
+	"net/netip"
 	"time"
 
 	"github.com/linkdata/deadlock"
@@ -12,7 +12,7 @@ import (
 type Session struct {
 	jw        *Jaws
 	sessionID uint64
-	remoteIP  net.IP
+	remoteIP  netip.Addr
 	mu        deadlock.RWMutex // protects following
 	requests  []*Request
 	deadline  time.Time
@@ -20,7 +20,7 @@ type Session struct {
 	data      map[string]interface{}
 }
 
-func newSession(jw *Jaws, sessionID uint64, remoteIP net.IP) *Session {
+func newSession(jw *Jaws, sessionID uint64, remoteIP netip.Addr) *Session {
 	return &Session{
 		jw:        jw,
 		sessionID: sessionID,
@@ -119,7 +119,7 @@ func (sess *Session) CookieValue() (s string) {
 
 // IP returns the remote IP the session is bound to (which may be nil).
 // It is safe to call on a nil Session, in which case it returns nil.
-func (sess *Session) IP() (ip net.IP) {
+func (sess *Session) IP() (ip netip.Addr) {
 	if sess != nil {
 		ip = sess.remoteIP
 	}
