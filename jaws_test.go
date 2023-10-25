@@ -25,6 +25,11 @@ func TestJaws_parseIP(t *testing.T) {
 	is.True(parseIP("127.0.0.1").Compare(netip.MustParseAddr("127.0.0.1")) == 0)
 	is.True(parseIP("::1").Compare(netip.IPv6Loopback()) == 0)
 	is.True(equalIP(parseIP("127.0.0.1"), parseIP("::1")))
+	is.Equal(equalIP(parseIP("127.0.0.1"), netip.Addr{}), false)
+	is.Equal(equalIP(netip.IPv4Unspecified(), netip.Addr{}), false)
+	is.Equal(equalIP(netip.IPv6Unspecified(), netip.Addr{}), false)
+	is.Equal(equalIP(netip.IPv6Loopback(), netip.Addr{}), false)
+	is.Equal(equalIP(netip.Addr{}, netip.Addr{}), true)
 }
 
 func TestJaws_getCookieSessionsIds(t *testing.T) {
