@@ -32,7 +32,6 @@ import (
 )
 
 const (
-	DefaultCookieName     = "jaws"                 // Default browser cookie name
 	DefaultUpdateInterval = time.Millisecond * 100 // Default browser update interval
 )
 
