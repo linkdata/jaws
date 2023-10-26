@@ -8,8 +8,8 @@ type UiNumber struct {
 	UiInputFloat
 }
 
-func (ui *UiNumber) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.renderFloatInput(e, w, "number", params...)
+func (ui *UiNumber) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+	return ui.renderFloatInput(e, w, "number", params...)
 }
 
 func NewUiNumber(g FloatSetter) *UiNumber {

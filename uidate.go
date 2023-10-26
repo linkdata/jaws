@@ -10,8 +10,8 @@ type UiDate struct {
 	UiInputDate
 }
 
-func (ui *UiDate) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.renderDateInput(e, w, e.Jid(), "date", params...)
+func (ui *UiDate) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+	return ui.renderDateInput(e, w, e.Jid(), "date", params...)
 }
 
 func NewUiDate(g TimeSetter) *UiDate {

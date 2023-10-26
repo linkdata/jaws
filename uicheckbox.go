@@ -8,8 +8,8 @@ type UiCheckbox struct {
 	UiInputBool
 }
 
-func (ui *UiCheckbox) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.renderBoolInput(e, w, "checkbox", params...)
+func (ui *UiCheckbox) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+	return ui.renderBoolInput(e, w, "checkbox", params...)
 }
 
 func NewUiCheckbox(g BoolSetter) *UiCheckbox {

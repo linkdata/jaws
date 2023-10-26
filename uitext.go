@@ -8,8 +8,8 @@ type UiText struct {
 	UiInputText
 }
 
-func (ui *UiText) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.renderStringInput(e, w, "text", params...)
+func (ui *UiText) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+	return ui.renderStringInput(e, w, "text", params...)
 }
 
 func NewUiText(vp StringSetter) (ui *UiText) {

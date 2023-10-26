@@ -18,10 +18,10 @@ func (ui *UiImg) SrcAttr(e *Element) string {
 	return src
 }
 
-func (ui *UiImg) JawsRender(e *Element, w io.Writer, params []interface{}) {
+func (ui *UiImg) JawsRender(e *Element, w io.Writer, params []interface{}) error {
 	ui.parseGetter(e, ui.StringSetter)
 	attrs := append(ui.parseParams(e, params), "src="+ui.SrcAttr(e))
-	maybePanic(WriteHtmlInner(w, e.Jid(), "img", "", "", attrs...))
+	return WriteHtmlInner(w, e.Jid(), "img", "", "", attrs...)
 }
 
 func (ui *UiImg) JawsUpdate(u *Element) {

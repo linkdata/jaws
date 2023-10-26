@@ -39,12 +39,13 @@ func (tss *testUi) JawsSetString(e *Element, s string) error {
 	return nil
 }
 
-func (tss *testUi) JawsRender(e *Element, w io.Writer, params []any) {
+func (tss *testUi) JawsRender(e *Element, w io.Writer, params []any) error {
 	e.Tag(tss)
 	atomic.AddInt32(&tss.renderCalled, 1)
 	if tss.renderFn != nil {
 		tss.renderFn(e, w, params)
 	}
+	return nil
 }
 
 func (tss *testUi) JawsUpdate(e *Element) {

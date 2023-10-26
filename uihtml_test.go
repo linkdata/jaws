@@ -30,9 +30,10 @@ func (tje *testJawsEvent) JawsGetTag(*Request) (tag any) {
 	return tje.tag
 }
 
-func (tje *testJawsEvent) JawsRender(e *Element, w io.Writer, params []any) {
+func (tje *testJawsEvent) JawsRender(e *Element, w io.Writer, params []any) error {
 	w.Write([]byte(fmt.Sprint(params)))
 	tje.msgCh <- "JawsRender"
+	return nil
 }
 
 func (tje *testJawsEvent) JawsUpdate(e *Element) {

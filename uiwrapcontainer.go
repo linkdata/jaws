@@ -16,7 +16,7 @@ type uiWrapContainer struct {
 	contents []*Element
 }
 
-func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag string, params []interface{}) {
+func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag string, params []interface{}) error {
 	ui.parseGetter(e, ui.Container)
 	attrs := ui.parseParams(e, params)
 	b := e.jid.AppendStartTagAttr(nil, outerhtmltag)
@@ -38,7 +38,7 @@ func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag
 		b = append(b, '>')
 		_, err = w.Write(b)
 	}
-	maybePanic(err)
+	return err
 }
 
 func (ui *uiWrapContainer) JawsUpdate(e *Element) {

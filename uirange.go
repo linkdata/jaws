@@ -8,8 +8,8 @@ type UiRange struct {
 	UiInputFloat
 }
 
-func (ui *UiRange) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.renderFloatInput(e, w, "range", params...)
+func (ui *UiRange) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+	return ui.renderFloatInput(e, w, "range", params...)
 }
 
 func NewUiRange(g FloatSetter) *UiRange {

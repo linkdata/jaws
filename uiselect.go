@@ -18,8 +18,8 @@ func NewUiSelect(sh SelectHandler) *UiSelect {
 	}
 }
 
-func (ui *UiSelect) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.renderContainer(e, w, "select", params)
+func (ui *UiSelect) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+	return ui.renderContainer(e, w, "select", params)
 }
 
 func (ui *UiSelect) JawsUpdate(e *Element) {

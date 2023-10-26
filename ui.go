@@ -9,7 +9,7 @@ import (
 // If any of these functions panic, the Request will be closed and the panic logged.
 // Optionally you may also implement ClickHandler and/or EventHandler.
 type UI interface {
-	JawsRender(e *Element, w io.Writer, params []interface{})
+	JawsRender(e *Element, w io.Writer, params []interface{}) error
 	JawsUpdate(e *Element)
 }
 

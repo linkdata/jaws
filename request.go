@@ -710,7 +710,3 @@ var _ io.Writer = (*Request)(nil)
 func (rq *Request) Write(p []byte) (int, error) {
 	return rq.wr.Write(p)
 }
-
-func (rq *Request) Meh() error {
-	return nil
-}

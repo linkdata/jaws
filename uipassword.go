@@ -8,8 +8,8 @@ type UiPassword struct {
 	UiInputText
 }
 
-func (ui *UiPassword) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.renderStringInput(e, w, "password", params...)
+func (ui *UiPassword) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+	return ui.renderStringInput(e, w, "password", params...)
 }
 
 func NewUiPassword(g StringSetter) *UiPassword {

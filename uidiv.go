@@ -8,8 +8,8 @@ type UiDiv struct {
 	UiHtmlInner
 }
 
-func (ui *UiDiv) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.renderInner(e, w, "div", "", params)
+func (ui *UiDiv) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+	return ui.renderInner(e, w, "div", "", params)
 }
 
 func NewUiDiv(innerHtml HtmlGetter) *UiDiv {
