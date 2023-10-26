@@ -28,15 +28,19 @@ func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag
 	_, err := w.Write(b)
 	if err == nil {
 		for _, cui := range ui.Container.JawsContains(e.Request()) {
-			elem := e.Request().NewElement(cui)
-			ui.contents = append(ui.contents, elem)
-			elem.Render(w, nil)
+			if err == nil {
+				elem := e.Request().NewElement(cui)
+				ui.contents = append(ui.contents, elem)
+				err = elem.Render(w, nil)
+			}
 		}
 		b = b[:0]
 		b = append(b, "</"...)
 		b = append(b, outerhtmltag...)
 		b = append(b, '>')
-		_, err = w.Write(b)
+		if err == nil {
+			_, err = w.Write(b)
+		}
 	}
 	return err
 }

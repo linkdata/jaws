@@ -48,11 +48,12 @@ func (t Template) JawsRender(e *Element, w io.Writer, params []interface{}) erro
 		sb.WriteByte(' ')
 		sb.WriteString(s)
 	}
+	attrs := template.HTMLAttr(sb.String()) // #nosec G203
 	return t.Execute(w, With{
 		Element:       e,
 		RequestWriter: e.Request().Writer(w),
 		Dot:           t.Dot,
-		Attrs:         template.HTMLAttr(sb.String()), // #nosec G203
+		Attrs:         attrs,
 	})
 }
 
