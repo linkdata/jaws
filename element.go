@@ -25,6 +25,12 @@ func (e *Element) String() string {
 	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", e.ui, e.jid, e.rq.TagsOf(e))
 }
 
+// Jaws returns the Jaws the Element belongs to.
+func (e *Element) Jaws() *Jaws {
+	return e.rq.Jaws
+}
+
+// Request returns the Request the Element belongs to.
 func (e *Element) Request() *Request {
 	return e.rq
 }

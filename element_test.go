@@ -55,6 +55,17 @@ func (tss *testUi) JawsUpdate(e *Element) {
 	}
 }
 
+func TestElement_Jaws_Request(t *testing.T) {
+	is := testHelper{t}
+	rq := newTestRequest()
+	defer rq.Close()
+
+	tss := &testUi{}
+	e := rq.NewElement(tss)
+	is.Equal(e.Jaws(), rq.jw.Jaws)
+	is.Equal(e.Request(), rq.Request)
+}
+
 func TestElement_Tag(t *testing.T) {
 	is := testHelper{t}
 	rq := newTestRequest()
