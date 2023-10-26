@@ -14,7 +14,8 @@ func TestRequest_Textarea(t *testing.T) {
 
 	ss := newTestSetter("foo")
 	want := `<textarea id="Jid.1">foo</textarea>`
-	if got := string(rq.Textarea(ss)); got != want {
+	rq.Textarea(ss)
+	if got := rq.BodyString(); got != want {
 		t.Errorf("Request.Textarea() = %q, want %q", got, want)
 	}
 	rq.inCh <- wsMsg{Data: "bar", Jid: 1, What: what.Input}

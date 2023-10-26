@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"html/template"
 	"io"
 )
 
@@ -21,6 +20,6 @@ func NewUiLabel(innerHtml HtmlGetter) *UiLabel {
 	}
 }
 
-func (rq *Request) Label(innerHtml interface{}, params ...interface{}) template.HTML {
+func (rq *Request) Label(innerHtml interface{}, params ...interface{}) error {
 	return rq.UI(NewUiLabel(makeHtmlGetter(innerHtml)), params...)
 }

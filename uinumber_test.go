@@ -18,7 +18,8 @@ func TestRequest_Number(t *testing.T) {
 
 	ts := newTestSetter(float64(1.2))
 	want := fmt.Sprintf(`<input id="Jid.1" type="number" value="%v">`, ts.Get())
-	if got := string(rq.Number(ts)); got != want {
+	rq.Number(ts)
+	if got := rq.BodyString(); got != want {
 		t.Errorf("Request.Number() = %q, want %q", got, want)
 	}
 

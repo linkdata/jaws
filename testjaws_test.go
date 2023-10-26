@@ -28,6 +28,7 @@ func newTestJaws() (tj *testJaws) {
 
 type testRequest struct {
 	hr          *http.Request
+	rr          *httptest.ResponseRecorder
 	jw          *testJaws
 	readyCh     chan struct{}
 	doneCh      chan struct{}
@@ -48,7 +49,9 @@ func (tj *testJaws) newRequest(hr *http.Request) (tr *testRequest) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	hr = hr.WithContext(ctx)
-	rq := tj.NewRequest(hr)
+	rr := httptest.NewRecorder()
+	rr.Body = &bytes.Buffer{}
+	rq := tj.NewRequest(rr, hr)
 	if rq == nil || tj.UseRequest(rq.JawsKey, hr) != rq {
 		panic("failed to create or use jaws.Request")
 	}
@@ -59,6 +62,7 @@ func (tj *testJaws) newRequest(hr *http.Request) (tr *testRequest) {
 
 	tr = &testRequest{
 		hr:      hr,
+		rr:      rr,
 		jw:      tj,
 		readyCh: make(chan struct{}),
 		doneCh:  make(chan struct{}),
@@ -85,6 +89,14 @@ func (tj *testJaws) newRequest(hr *http.Request) (tr *testRequest) {
 	}()
 
 	return
+}
+
+func (tr *testRequest) BodyString() string {
+	return tr.rr.Body.String()
+}
+
+func (tr *testRequest) BodyHtml() template.HTML {
+	return template.HTML(tr.BodyString())
 }
 
 func (tr *testRequest) Close() {

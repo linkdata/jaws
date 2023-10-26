@@ -15,7 +15,8 @@ func TestRequest_Range(t *testing.T) {
 
 	ts := newTestSetter(float64(1))
 	want := `<input id="Jid.1" type="range" value="1">`
-	if got := string(rq.Range(ts)); got != want {
+	rq.Range(ts)
+	if got := rq.BodyString(); got != want {
 		t.Errorf("Request.Range() = %q, want %q", got, want)
 	}
 	tmr := time.NewTimer(testTimeout)

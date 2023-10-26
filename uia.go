@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"html/template"
 	"io"
 )
 
@@ -21,6 +20,6 @@ func NewUiA(innerHtml HtmlGetter) *UiA {
 	}
 }
 
-func (rq *Request) A(innerHtml interface{}, params ...interface{}) template.HTML {
+func (rq *Request) A(innerHtml interface{}, params ...interface{}) error {
 	return rq.UI(NewUiA(makeHtmlGetter(innerHtml)), params...)
 }

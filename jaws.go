@@ -164,13 +164,13 @@ func MakeID() string {
 // returned Request pointer so it can be used while constructing the HTML
 // response in order to register the JaWS id's you use in the response, and
 // use it's Key attribute when sending the Javascript portion of the reply.
-func (jw *Jaws) NewRequest(hr *http.Request) (rq *Request) {
+func (jw *Jaws) NewRequest(wr io.Writer, hr *http.Request) (rq *Request) {
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	for rq == nil {
 		jawsKey := jw.nonZeroRandomLocked()
 		if _, ok := jw.pending[jawsKey]; !ok {
-			rq = getRequest(jw, jawsKey, hr)
+			rq = getRequest(jw, jawsKey, hr, wr)
 			jw.pending[jawsKey] = rq
 		}
 	}

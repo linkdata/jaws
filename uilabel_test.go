@@ -9,7 +9,8 @@ func TestRequest_Label(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 	want := `<label id="Jid.1">inner</label>`
-	if got := string(rq.Label("inner")); got != want {
+	rq.Label("inner")
+	if got := rq.BodyString(); got != want {
 		t.Errorf("Request.Label() = %q, want %q", got, want)
 	}
 }

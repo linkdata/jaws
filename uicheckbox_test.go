@@ -17,7 +17,8 @@ func TestRequest_Checkbox(t *testing.T) {
 
 	ts := newTestSetter(true)
 	want := `<input id="Jid.1" type="checkbox" checked>`
-	if got := string(rq.Checkbox(ts)); got != want {
+	rq.Checkbox(ts)
+	if got := rq.BodyString(); got != want {
 		t.Errorf("Request.Checkbox() = %q, want %q", got, want)
 	}
 

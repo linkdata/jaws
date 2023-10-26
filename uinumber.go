@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"html/template"
 	"io"
 )
 
@@ -21,6 +20,6 @@ func NewUiNumber(g FloatSetter) *UiNumber {
 	}
 }
 
-func (rq *Request) Number(value interface{}, params ...interface{}) template.HTML {
+func (rq *Request) Number(value interface{}, params ...interface{}) error {
 	return rq.UI(NewUiNumber(makeFloatSetter(value)), params...)
 }

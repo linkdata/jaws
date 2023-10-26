@@ -1,6 +1,7 @@
 package jawsboot_test
 
 import (
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -15,7 +16,7 @@ func TestJawsBoot_Setup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rq := jw.NewRequest(nil)
+	rq := jw.NewRequest(httptest.NewRecorder(), nil)
 	txt := string(rq.HeadHTML())
 	if !strings.Contains(txt, rq.JawsKeyString()) {
 		t.Error(txt)

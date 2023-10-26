@@ -15,7 +15,8 @@ func TestRequest_Text(t *testing.T) {
 
 	ss := newTestSetter("foo")
 	want := `<input id="Jid.1" type="text" value="foo">`
-	if got := string(rq.Text(ss)); got != want {
+	rq.Text(ss)
+	if got := rq.BodyString(); got != want {
 		t.Errorf("Request.Text() = %q, want %q", got, want)
 	}
 	tmr := time.NewTimer(testTimeout)

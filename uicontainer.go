@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"html/template"
 	"io"
 )
 
@@ -23,6 +22,6 @@ func (ui *UiContainer) JawsRender(e *Element, w io.Writer, params []interface{})
 	ui.renderContainer(e, w, ui.OuterHtmlTag, params)
 }
 
-func (rq *Request) Container(outerHtmlTag string, c Container, params ...interface{}) template.HTML {
+func (rq *Request) Container(outerHtmlTag string, c Container, params ...interface{}) error {
 	return rq.UI(NewUiContainer(outerHtmlTag, c), params...)
 }

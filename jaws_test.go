@@ -218,10 +218,10 @@ func TestJaws_UseRequest(t *testing.T) {
 
 	is.Equal(0, jw.RequestCount())
 
-	rq1 := jw.NewRequest(nil)
+	rq1 := jw.NewRequest(httptest.NewRecorder(), nil)
 	is.True(rq1.JawsKey != 0)
 
-	rq2 := jw.NewRequest(&http.Request{RemoteAddr: "10.0.0.2:1010"})
+	rq2 := jw.NewRequest(httptest.NewRecorder(), &http.Request{RemoteAddr: "10.0.0.2:1010"})
 	is.True(rq2.JawsKey != 0)
 	is.True(rq1.JawsKey != rq2.JawsKey)
 	is.Equal(jw.Pending(), 2)
@@ -257,7 +257,7 @@ func TestJaws_BlockingRandomPanics(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 	jw.kg = bufio.NewReader(&bytes.Buffer{})
-	jw.NewRequest(nil)
+	jw.NewRequest(httptest.NewRecorder(), nil)
 	is.Fail()
 }
 
@@ -274,7 +274,7 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 	deadline := time.Now().Add(testTimeout)
 	var expectLen int
 	for i := 0; i < numReqs; i++ {
-		rq := jw.NewRequest(hr)
+		rq := jw.NewRequest(httptest.NewRecorder(), hr)
 		if (i % (numReqs / 10)) == 0 {
 			elem := rq.NewElement(NewUiDiv(makeHtmlGetter("meh")))
 			for j := 0; j < maxWsQueueLengthPerElement*10; j++ {
@@ -322,9 +322,9 @@ func TestJaws_UnconnectedLivesUntilDeadline(t *testing.T) {
 	defer jw.Close()
 
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	rq1 := jw.NewRequest(hr)
+	rq1 := jw.NewRequest(httptest.NewRecorder(), hr)
 	rq1ctx := rq1.Context()
-	rq2 := jw.NewRequest(hr)
+	rq2 := jw.NewRequest(httptest.NewRecorder(), hr)
 	rq2.Created = time.Now().Add(-time.Second * 10)
 	rq2ctx := rq2.Context()
 

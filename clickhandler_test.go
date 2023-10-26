@@ -34,7 +34,8 @@ func Test_clickHandlerWapper_JawsEvent(t *testing.T) {
 	}
 
 	want := `<div id="Jid.1">inner</div>`
-	if got := string(rq.Div("inner", tjc)); got != want {
+	rq.Div("inner", tjc)
+	if got := rq.BodyString(); got != want {
 		t.Errorf("Request.Div() = %q, want %q", got, want)
 	}
 

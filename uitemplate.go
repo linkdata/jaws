@@ -1,9 +1,5 @@
 package jaws
 
-import (
-	"html/template"
-)
-
 type UiTemplate struct {
 	Template
 }
@@ -17,6 +13,6 @@ func NewUiTemplate(t Template) UiTemplate {
 //
 // The templ argument can either be a string, in which case Jaws.Template.Lookup() will
 // be used to resolve it. Or it can be a *template.Template directly.
-func (rq *Request) Template(templ, dot interface{}, params ...interface{}) template.HTML {
+func (rq *Request) Template(templ, dot interface{}, params ...interface{}) error {
 	return rq.UI(NewUiTemplate(rq.MakeTemplate(templ, dot)), params...)
 }

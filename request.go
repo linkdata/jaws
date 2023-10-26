@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html"
 	"html/template"
+	"io"
 	"net/http"
 	"net/netip"
 	"slices"
@@ -34,6 +35,7 @@ type Request struct {
 	JawsKey   uint64                  // (read-only) a random number used in the WebSocket URI to identify this Request
 	Created   time.Time               // (read-only) when the Request was created, used for automatic cleanup
 	Initial   *http.Request           // (read-only) initial HTTP request passed to Jaws.NewRequest
+	wr        io.Writer               // (read-only) initial io.Writer passed to Jaws.NewRequest
 	remoteIP  netip.Addr              // (read-only) remote IP, or nil
 	session   *Session                // (read-only) session, if established
 	mu        deadlock.RWMutex        // protects following
@@ -63,12 +65,13 @@ func newRequest() interface{} {
 	return rq
 }
 
-func getRequest(jw *Jaws, jawsKey uint64, hr *http.Request) (rq *Request) {
+func getRequest(jw *Jaws, jawsKey uint64, hr *http.Request, wr io.Writer) (rq *Request) {
 	rq = requestPool.Get().(*Request)
 	rq.Jaws = jw
 	rq.JawsKey = jawsKey
-	rq.Initial = hr
 	rq.Created = time.Now()
+	rq.Initial = hr
+	rq.wr = wr
 	rq.ctx, rq.cancelFn = context.WithCancelCause(context.Background())
 	if hr != nil {
 		rq.remoteIP = parseIP(hr.RemoteAddr)
@@ -700,4 +703,14 @@ func (rq *Request) onConnect() (err error) {
 		err = connectFn(rq)
 	}
 	return
+}
+
+var _ io.Writer = (*Request)(nil)
+
+func (rq *Request) Write(p []byte) (int, error) {
+	return rq.wr.Write(p)
+}
+
+func (rq *Request) Meh() error {
+	return nil
 }

@@ -64,7 +64,8 @@ func TestRequest_Template(t *testing.T) {
 					t.Fail()
 				}()
 			}
-			got := rq.Template(tt.args.templ, tt.args.dot, tt.args.params...)
+			rq.Template(tt.args.templ, tt.args.dot, tt.args.params...)
+			got := rq.BodyHtml()
 			is.Equal(len(rq.elems), 1)
 			elem := rq.elems[0]
 			if tt.errtxt != "" {
@@ -100,7 +101,7 @@ func TestRequest_Template_Event(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 	dot := &templateDot{clickedCh: make(chan struct{})}
-	_ = rq.Template("testtemplate", dot)
+	rq.Template("testtemplate", dot)
 	rq.jw.Broadcast(Message{
 		Dest: dot,
 		What: what.Update,

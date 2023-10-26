@@ -21,6 +21,7 @@ type testServer struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	hr          *http.Request
+	rr          *httptest.ResponseRecorder
 	rq          *Request
 	sess        *Session
 	srv         *httptest.Server
@@ -30,9 +31,10 @@ type testServer struct {
 func newTestServer() (ts *testServer) {
 	jw := New()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+	rr := httptest.NewRecorder()
 	hr := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
-	sess := jw.NewSession(nil, hr)
-	rq := jw.NewRequest(hr)
+	sess := jw.NewSession(rr, hr)
+	rq := jw.NewRequest(rr, hr)
 	if rq != jw.UseRequest(rq.JawsKey, hr) {
 		panic("UseRequest failed")
 	}
@@ -41,6 +43,7 @@ func newTestServer() (ts *testServer) {
 		ctx:         ctx,
 		cancel:      cancel,
 		hr:          hr,
+		rr:          rr,
 		rq:          rq,
 		sess:        sess,
 		connectedCh: make(chan struct{}),
@@ -85,10 +88,9 @@ func (ts *testServer) Close() {
 func TestWS_UpgradeRequired(t *testing.T) {
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(nil)
-
-	req := httptest.NewRequest("", "/jaws/"+rq.JawsKeyString(), nil)
 	w := httptest.NewRecorder()
+	rq := jw.NewRequest(w, nil)
+	req := httptest.NewRequest("", "/jaws/"+rq.JawsKeyString(), nil)
 	rq.ServeHTTP(w, req)
 	if w.Code != http.StatusUpgradeRequired {
 		t.Error(w.Code)

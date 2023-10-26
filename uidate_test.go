@@ -16,7 +16,8 @@ func TestRequest_Date(t *testing.T) {
 
 	ts := newTestSetter(time.Now())
 	want := fmt.Sprintf(`<input id="Jid.1" type="date" value="%s">`, ts.Get().Format(ISO8601))
-	if got := string(rq.Date(ts)); got != want {
+	rq.Date(ts)
+	if got := rq.BodyString(); got != want {
 		t.Errorf("Request.Date() = %q, want %q", got, want)
 	}
 

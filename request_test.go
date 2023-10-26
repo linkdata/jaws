@@ -60,7 +60,7 @@ func TestRequest_SendPanicsAfterRecycle(t *testing.T) {
 	}()
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(nil)
+	rq := jw.NewRequest(httptest.NewRecorder(), nil)
 	rq.recycle()
 	rq.Jaws.Broadcast(Message{})
 }
@@ -69,7 +69,7 @@ func TestRequest_HeadHTML(t *testing.T) {
 	is := testHelper{t}
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(nil)
+	rq := jw.NewRequest(httptest.NewRecorder(), nil)
 	defer rq.recycle()
 
 	txt := rq.HeadHTML()
@@ -580,7 +580,7 @@ func TestRequest_WsQueueOverflowCancels(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	rq := jw.NewRequest(hr)
+	rq := jw.NewRequest(httptest.NewRecorder(), hr)
 	elem := rq.NewElement(NewUiDiv(makeHtmlGetter("foo")))
 	go func() {
 		for i := 0; i < maxWsQueueLengthPerElement*10; i++ {
@@ -601,9 +601,9 @@ func TestRequest_Dirty(t *testing.T) {
 	defer rq.Close()
 
 	tss := &testUi{s: "foo"}
-	h := rq.UI(NewUiText(tss))
+	rq.UI(NewUiText(tss))
 	is.Equal(tss.getCalled, int32(1))
-	is.True(strings.Contains(string(h), "foo"))
+	is.True(strings.Contains(string(rq.BodyString()), "foo"))
 
 	rq.Dirty(tss)
 	tmr := time.NewTimer(testTimeout)

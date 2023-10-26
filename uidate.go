@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"html/template"
 	"io"
 )
 
@@ -23,6 +22,6 @@ func NewUiDate(g TimeSetter) *UiDate {
 	}
 }
 
-func (rq *Request) Date(value interface{}, params ...interface{}) template.HTML {
+func (rq *Request) Date(value interface{}, params ...interface{}) error {
 	return rq.UI(NewUiDate(makeTimeSetter(value)), params...)
 }

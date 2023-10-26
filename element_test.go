@@ -140,7 +140,7 @@ func TestElement_Queued(t *testing.T) {
 		},
 	}
 
-	pendingRq := rq.Jaws.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	pendingRq := rq.Jaws.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 	pendingRq.UI(tss)
 
 	rq.UI(tss)

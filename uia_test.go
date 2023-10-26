@@ -54,7 +54,8 @@ func TestRequest_A(t *testing.T) {
 			nextJid = 0
 			rq := newTestRequest()
 			defer rq.Close()
-			if got := rq.A(tt.args.innerHtml, tt.args.params...); !reflect.DeepEqual(got, tt.want) {
+			rq.A(tt.args.innerHtml, tt.args.params...)
+			if got := rq.BodyHtml(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Request.A() = %v, want %v", got, tt.want)
 			}
 		})

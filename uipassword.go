@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"html/template"
 	"io"
 )
 
@@ -21,6 +20,6 @@ func NewUiPassword(g StringSetter) *UiPassword {
 	}
 }
 
-func (rq *Request) Password(value interface{}, params ...interface{}) template.HTML {
+func (rq *Request) Password(value interface{}, params ...interface{}) error {
 	return rq.UI(NewUiPassword(makeStringSetter(value)), params...)
 }

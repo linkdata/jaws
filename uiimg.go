@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"html/template"
 	"io"
 	"strconv"
 )
@@ -35,6 +34,6 @@ func NewUiImg(g StringSetter) *UiImg {
 	}
 }
 
-func (rq *Request) Img(imageSrc interface{}, params ...interface{}) template.HTML {
+func (rq *Request) Img(imageSrc interface{}, params ...interface{}) error {
 	return rq.UI(NewUiImg(makeStringSetter(imageSrc)), params...)
 }
