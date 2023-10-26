@@ -110,7 +110,7 @@ func TestServeHTTP_GetKey(t *testing.T) {
 	is.Equal(w.Header()["Cache-Control"], nil)
 
 	w = httptest.NewRecorder()
-	rq := jw.NewRequest(w, req)
+	rq := jw.NewRequest(req)
 	req = httptest.NewRequest("", "/jaws/"+rq.JawsKeyString(), nil)
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusUpgradeRequired)

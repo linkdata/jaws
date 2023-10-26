@@ -20,6 +20,6 @@ func NewUiCheckbox(g BoolSetter) *UiCheckbox {
 	}
 }
 
-func (rq *Request) Checkbox(value interface{}, params ...interface{}) error {
+func (rq RequestWriter) Checkbox(value interface{}, params ...interface{}) error {
 	return rq.UI(NewUiCheckbox(makeBoolSetter(value)), params...)
 }

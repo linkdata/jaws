@@ -27,8 +27,8 @@ func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag
 	b = append(b, '>')
 	_, err := w.Write(b)
 	if err == nil {
-		for _, cui := range ui.Container.JawsContains(e.Request) {
-			elem := e.Request.NewElement(cui)
+		for _, cui := range ui.Container.JawsContains(e.Request()) {
+			elem := e.Request().NewElement(cui)
 			ui.contents = append(ui.contents, elem)
 			elem.Render(w, nil)
 		}
@@ -47,7 +47,7 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 
 	oldMap := make(map[UI]*Element)
 	newMap := make(map[UI]struct{})
-	newContents := ui.Container.JawsContains(e.Request)
+	newContents := ui.Container.JawsContains(e.Request())
 	for _, t := range newContents {
 		newMap[t] = struct{}{}
 	}
@@ -65,7 +65,7 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 	for _, cui := range newContents {
 		var elem *Element
 		if elem = oldMap[cui]; elem == nil {
-			elem = e.Request.NewElement(cui)
+			elem = e.Request().NewElement(cui)
 			toAppend = append(toAppend, elem)
 		}
 		ui.contents = append(ui.contents, elem)
@@ -75,7 +75,7 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 
 	for _, elem := range toRemove {
 		e.Remove(elem.jid.String())
-		e.deleteElement(elem)
+		e.Request().deleteElement(elem)
 	}
 
 	for _, elem := range toAppend {

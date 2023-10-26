@@ -71,7 +71,7 @@ func TestSession_Use(t *testing.T) {
 		}
 
 		sess := jw.GetSession(r)
-		rq := jw.NewRequest(w, r)
+		rq := jw.NewRequest(r)
 		if sess != rq.Session() {
 			t.Error(sess)
 		}
@@ -259,7 +259,7 @@ func TestSession_Delete(t *testing.T) {
 		t.Error(x)
 	}
 
-	rq2 := ts.jw.NewRequest(httptest.NewRecorder(), hr2)
+	rq2 := ts.jw.NewRequest(hr2)
 	if x := rq2.Session(); x != ts.sess {
 		t.Error(x)
 	}
@@ -277,7 +277,7 @@ func TestSession_Delete(t *testing.T) {
 	}
 
 	ts.rq.Register("byebye", func(e *Element, evt what.What, val string) error {
-		sess2 := ts.jw.GetSession(e.Request.Initial)
+		sess2 := ts.jw.GetSession(e.Request().Initial)
 		if x := sess2; x != ts.sess {
 			t.Error(x)
 		}
@@ -391,7 +391,7 @@ func TestSession_Cleanup(t *testing.T) {
 		t.Fatal(x)
 	}
 
-	r1 := jw.NewRequest(httptest.NewRecorder(), hr)
+	r1 := jw.NewRequest(hr)
 	if x := sess; x != r1.Session() {
 		t.Error(x)
 	}
@@ -434,7 +434,7 @@ func TestSession_ReplacesOld(t *testing.T) {
 	s1 := jw.NewSession(w1, h1)
 	is.Equal(jw.GetSession(h1), s1)
 	is.Equal(len(w1.Result().Cookies()), 1)
-	r1 := jw.NewRequest(httptest.NewRecorder(), h1)
+	r1 := jw.NewRequest(h1)
 	is.Equal(r1.Session(), s1)
 	c1 := w1.Result().Cookies()[0]
 	is.Equal(c1.MaxAge, 0)
@@ -454,7 +454,7 @@ func TestSession_ReplacesOld(t *testing.T) {
 	s2 := jw.NewSession(w2, h2)
 	is.Equal(jw.GetSession(h2), s2)
 	is.Equal(len(w2.Result().Cookies()), 1)
-	r2 := jw.NewRequest(httptest.NewRecorder(), h2)
+	r2 := jw.NewRequest(h2)
 	is.Equal(r2.Session(), s2)
 	c2 := w2.Result().Cookies()[0]
 	is.Equal(c2.MaxAge, 0)
@@ -475,7 +475,7 @@ func TestSession_ReplacesOld(t *testing.T) {
 	w4 := httptest.NewRecorder()
 	h4 := httptest.NewRequest("GET", "/", nil)
 	h4.AddCookie(&c1copy)
-	r4 := jw.NewRequest(httptest.NewRecorder(), h4)
+	r4 := jw.NewRequest(h4)
 	is.Equal(r4.Session(), s1)
 	is.Equal(jw.GetSession(h4), s1)
 	is.Equal(len(w4.Result().Cookies()), 0)

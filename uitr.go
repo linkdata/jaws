@@ -20,6 +20,6 @@ func NewUiTr(innerHtml HtmlGetter) *UiTr {
 	}
 }
 
-func (rq *Request) Tr(innerHtml interface{}, params ...interface{}) error {
+func (rq RequestWriter) Tr(innerHtml interface{}, params ...interface{}) error {
 	return rq.UI(NewUiTr(makeHtmlGetter(innerHtml)), params...)
 }

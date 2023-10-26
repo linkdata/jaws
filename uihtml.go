@@ -14,7 +14,7 @@ type UiHtml struct {
 func (ui *UiHtml) parseGetter(e *Element, getter interface{}) {
 	if getter != nil {
 		if tagger, ok := getter.(TagGetter); ok {
-			ui.Tag = tagger.JawsGetTag(e.Request)
+			ui.Tag = tagger.JawsGetTag(e.Request())
 			if ch, ok := getter.(ClickHandler); ok {
 				e.handlers = append(e.handlers, clickHandlerWapper{ch})
 			}

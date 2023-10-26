@@ -34,7 +34,7 @@ func newTestServer() (ts *testServer) {
 	rr := httptest.NewRecorder()
 	hr := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
 	sess := jw.NewSession(rr, hr)
-	rq := jw.NewRequest(rr, hr)
+	rq := jw.NewRequest(hr)
 	if rq != jw.UseRequest(rq.JawsKey, hr) {
 		panic("UseRequest failed")
 	}
@@ -89,7 +89,7 @@ func TestWS_UpgradeRequired(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 	w := httptest.NewRecorder()
-	rq := jw.NewRequest(w, nil)
+	rq := jw.NewRequest(nil)
 	req := httptest.NewRequest("", "/jaws/"+rq.JawsKeyString(), nil)
 	rq.ServeHTTP(w, req)
 	if w.Code != http.StatusUpgradeRequired {

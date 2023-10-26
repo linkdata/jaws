@@ -13,16 +13,12 @@ type UI interface {
 	JawsUpdate(e *Element)
 }
 
-func (rq *Request) UI(ui UI, params ...interface{}) error {
-	return rq.JawsRender(rq.NewElement(ui), rq.wr, params)
-}
-
 func (rq *Request) JawsRender(elem *Element, w io.Writer, params []interface{}) (err error) {
 	if err = elem.ui.JawsRender(elem, w, params); err == nil {
 		if rq.Jaws.Debug {
 			var sb strings.Builder
 			_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", elem.jid, elem.ui)
-			for i, tag := range elem.Request.TagsOf(elem) {
+			for i, tag := range elem.Request().TagsOf(elem) {
 				if i > 0 {
 					sb.WriteString(", ")
 				}

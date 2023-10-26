@@ -20,6 +20,6 @@ func NewUiLabel(innerHtml HtmlGetter) *UiLabel {
 	}
 }
 
-func (rq *Request) Label(innerHtml interface{}, params ...interface{}) error {
+func (rq RequestWriter) Label(innerHtml interface{}, params ...interface{}) error {
 	return rq.UI(NewUiLabel(makeHtmlGetter(innerHtml)), params...)
 }

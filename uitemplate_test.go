@@ -71,7 +71,7 @@ func TestRequest_Template(t *testing.T) {
 			if tt.errtxt != "" {
 				t.Fail()
 			}
-			gotTags := elem.TagsOf(elem)
+			gotTags := elem.Request().TagsOf(elem)
 			is.Equal(len(tt.tags), len(gotTags))
 			for _, tag := range tt.tags {
 				is.True(elem.HasTag(tag))

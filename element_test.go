@@ -141,8 +141,8 @@ func TestElement_Queued(t *testing.T) {
 		},
 	}
 
-	pendingRq := rq.Jaws.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
-	pendingRq.UI(tss)
+	pendingRq := rq.Jaws.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	RequestWriter{pendingRq, httptest.NewRecorder()}.UI(tss)
 
 	rq.UI(tss)
 	rq.Jaws.Dirty(tss)

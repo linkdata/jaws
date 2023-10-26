@@ -168,7 +168,7 @@ func TestRequest_Container_Alteration(t *testing.T) {
 			jw := New()
 			defer jw.Close()
 			nextJid = 0
-			rq := jw.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+			rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 			ui := NewUiContainer("div", tt.c)
 			elem := rq.NewElement(ui)
 			var sb strings.Builder

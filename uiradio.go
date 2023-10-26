@@ -20,6 +20,6 @@ func NewUiRadio(vp BoolSetter) *UiRadio {
 	}
 }
 
-func (rq *Request) Radio(value interface{}, params ...interface{}) error {
+func (rq RequestWriter) Radio(value interface{}, params ...interface{}) error {
 	return rq.UI(NewUiRadio(makeBoolSetter(value)), params...)
 }

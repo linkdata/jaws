@@ -20,6 +20,6 @@ func NewUiPassword(g StringSetter) *UiPassword {
 	}
 }
 
-func (rq *Request) Password(value interface{}, params ...interface{}) error {
+func (rq RequestWriter) Password(value interface{}, params ...interface{}) error {
 	return rq.UI(NewUiPassword(makeStringSetter(value)), params...)
 }

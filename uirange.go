@@ -20,6 +20,6 @@ func NewUiRange(g FloatSetter) *UiRange {
 	}
 }
 
-func (rq *Request) Range(value interface{}, params ...interface{}) error {
+func (rq RequestWriter) Range(value interface{}, params ...interface{}) error {
 	return rq.UI(NewUiRange(makeFloatSetter(value)), params...)
 }

@@ -20,6 +20,6 @@ func NewUiText(vp StringSetter) (ui *UiText) {
 	}
 }
 
-func (rq *Request) Text(value interface{}, params ...interface{}) error {
+func (rq RequestWriter) Text(value interface{}, params ...interface{}) error {
 	return rq.UI(NewUiText(makeStringSetter(value)), params...)
 }

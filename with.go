@@ -5,7 +5,7 @@ import (
 )
 
 type With struct {
-	*Element
+	ElementWriter
 	Dot   interface{}
 	Attrs template.HTMLAttr
 }

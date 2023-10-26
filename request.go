@@ -35,7 +35,6 @@ type Request struct {
 	JawsKey   uint64                  // (read-only) a random number used in the WebSocket URI to identify this Request
 	Created   time.Time               // (read-only) when the Request was created, used for automatic cleanup
 	Initial   *http.Request           // (read-only) initial HTTP request passed to Jaws.NewRequest
-	wr        io.Writer               // (read-only) initial io.Writer passed to Jaws.NewRequest
 	remoteIP  netip.Addr              // (read-only) remote IP, or nil
 	session   *Session                // (read-only) session, if established
 	mu        deadlock.RWMutex        // protects following
@@ -65,13 +64,12 @@ func newRequest() interface{} {
 	return rq
 }
 
-func getRequest(jw *Jaws, jawsKey uint64, hr *http.Request, wr io.Writer) (rq *Request) {
+func getRequest(jw *Jaws, jawsKey uint64, hr *http.Request) (rq *Request) {
 	rq = requestPool.Get().(*Request)
 	rq.Jaws = jw
 	rq.JawsKey = jawsKey
 	rq.Created = time.Now()
 	rq.Initial = hr
-	rq.wr = wr
 	rq.ctx, rq.cancelFn = context.WithCancelCause(context.Background())
 	if hr != nil {
 		rq.remoteIP = parseIP(hr.RemoteAddr)
@@ -308,9 +306,9 @@ var nextJid Jid
 
 func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 	elem = &Element{
-		jid:     Jid(atomic.AddInt64((*int64)(&nextJid), 1)),
-		ui:      ui,
-		Request: rq,
+		jid: Jid(atomic.AddInt64((*int64)(&nextJid), 1)),
+		ui:  ui,
+		rq:  rq,
 	}
 	rq.elems = append(rq.elems, elem)
 	return
@@ -374,8 +372,8 @@ func (rq *Request) tagExpanded(elem *Element, expandedtags []interface{}) {
 
 // Tag adds the given tags to the given Element.
 func (rq *Request) Tag(elem *Element, tags ...interface{}) {
-	if elem != nil && len(tags) > 0 && elem.Request == rq {
-		rq.tagExpanded(elem, MustTagExpand(elem.Request, tags))
+	if elem != nil && len(tags) > 0 && elem.rq == rq {
+		rq.tagExpanded(elem, MustTagExpand(elem.rq, tags))
 	}
 }
 
@@ -646,7 +644,7 @@ func (rq *Request) sendQueue(outboundCh chan<- string, wsQueue []wsMsg) []wsMsg 
 }
 
 func (rq *Request) deleteElementLocked(e *Element) {
-	e.Request = nil
+	e.rq = nil
 	rq.elems = slices.DeleteFunc(rq.elems, func(elem *Element) bool { return elem == e })
 	for k := range rq.tagMap {
 		rq.tagMap[k] = slices.DeleteFunc(rq.tagMap[k], func(elem *Element) bool { return elem == e })
@@ -705,8 +703,6 @@ func (rq *Request) onConnect() (err error) {
 	return
 }
 
-var _ io.Writer = (*Request)(nil)
-
-func (rq *Request) Write(p []byte) (int, error) {
-	return rq.wr.Write(p)
+func (rq *Request) Writer(w io.Writer) RequestWriter {
+	return RequestWriter{Request: rq, Writer: w}
 }

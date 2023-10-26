@@ -20,6 +20,6 @@ func NewUiNumber(g FloatSetter) *UiNumber {
 	}
 }
 
-func (rq *Request) Number(value interface{}, params ...interface{}) error {
+func (rq RequestWriter) Number(value interface{}, params ...interface{}) error {
 	return rq.UI(NewUiNumber(makeFloatSetter(value)), params...)
 }

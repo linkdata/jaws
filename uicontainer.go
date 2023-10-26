@@ -22,6 +22,6 @@ func (ui *UiContainer) JawsRender(e *Element, w io.Writer, params []interface{})
 	return ui.renderContainer(e, w, ui.OuterHtmlTag, params)
 }
 
-func (rq *Request) Container(outerHtmlTag string, c Container, params ...interface{}) error {
+func (rq RequestWriter) Container(outerHtmlTag string, c Container, params ...interface{}) error {
 	return rq.UI(NewUiContainer(outerHtmlTag, c), params...)
 }

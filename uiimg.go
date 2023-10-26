@@ -34,6 +34,6 @@ func NewUiImg(g StringSetter) *UiImg {
 	}
 }
 
-func (rq *Request) Img(imageSrc interface{}, params ...interface{}) error {
+func (rq RequestWriter) Img(imageSrc interface{}, params ...interface{}) error {
 	return rq.UI(NewUiImg(makeStringSetter(imageSrc)), params...)
 }

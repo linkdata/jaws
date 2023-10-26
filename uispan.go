@@ -20,6 +20,6 @@ func NewUiSpan(innerHtml HtmlGetter) *UiSpan {
 	}
 }
 
-func (rq *Request) Span(innerHtml interface{}, params ...interface{}) error {
+func (rq RequestWriter) Span(innerHtml interface{}, params ...interface{}) error {
 	return rq.UI(NewUiSpan(makeHtmlGetter(innerHtml)), params...)
 }

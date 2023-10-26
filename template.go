@@ -40,15 +40,19 @@ func (t Template) String() string {
 }
 
 func (t Template) JawsRender(e *Element, w io.Writer, params []interface{}) error {
-	if expandedtags, err := TagExpand(e.Request, t.Dot); err != ErrIllegalTagType {
-		e.Request.tagExpanded(e, expandedtags)
+	if expandedtags, err := TagExpand(e.Request(), t.Dot); err != ErrIllegalTagType {
+		e.Request().tagExpanded(e, expandedtags)
 	}
 	var sb strings.Builder
 	for _, s := range parseParams(e, params) {
 		sb.WriteByte(' ')
 		sb.WriteString(s)
 	}
-	return t.Execute(w, With{Element: e, Dot: t.Dot, Attrs: template.HTMLAttr(sb.String())}) // #nosec G203
+	return t.Execute(w, With{
+		ElementWriter: ElementWriter{Element: e, RequestWriter: e.Request().Writer(w)},
+		Dot:           t.Dot,
+		Attrs:         template.HTMLAttr(sb.String()), // #nosec G203
+	})
 }
 
 func (t Template) JawsUpdate(e *Element) {

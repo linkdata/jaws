@@ -20,6 +20,6 @@ func (ui *UiTbody) JawsRender(e *Element, w io.Writer, params []interface{}) err
 	return ui.renderContainer(e, w, "tbody", params)
 }
 
-func (rq *Request) Tbody(c Container, params ...interface{}) error {
+func (rq RequestWriter) Tbody(c Container, params ...interface{}) error {
 	return rq.UI(NewUiTbody(c), params...)
 }

@@ -16,7 +16,7 @@ func TestUiHtmlInner_JawsUpdate(t *testing.T) {
 	defer jw.Close()
 	nextJid = 0
 	ts := newTestSetter(template.HTML("first"))
-	rq := jw.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	ui := NewUiDiv(ts)
 	elem := rq.NewElement(ui)
 	var sb strings.Builder

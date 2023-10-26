@@ -27,6 +27,6 @@ func NewUiTextarea(g StringSetter) (ui *UiTextarea) {
 	}
 }
 
-func (rq *Request) Textarea(value interface{}, params ...interface{}) error {
+func (rq RequestWriter) Textarea(value interface{}, params ...interface{}) error {
 	return rq.UI(NewUiTextarea(makeStringSetter(value)), params...)
 }

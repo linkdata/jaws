@@ -22,6 +22,6 @@ func NewUiDate(g TimeSetter) *UiDate {
 	}
 }
 
-func (rq *Request) Date(value interface{}, params ...interface{}) error {
+func (rq RequestWriter) Date(value interface{}, params ...interface{}) error {
 	return rq.UI(NewUiDate(makeTimeSetter(value)), params...)
 }

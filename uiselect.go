@@ -38,6 +38,6 @@ func (ui *UiSelect) JawsEvent(e *Element, wht what.What, val string) (err error)
 	return ui.UiHtml.JawsEvent(e, wht, val)
 }
 
-func (rq *Request) Select(sh SelectHandler, params ...interface{}) error {
+func (rq RequestWriter) Select(sh SelectHandler, params ...interface{}) error {
 	return rq.UI(NewUiSelect(sh), params...)
 }

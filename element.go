@@ -12,9 +12,9 @@ import (
 
 // An Element is an instance of a *Request, an UI object and a Jid.
 type Element struct {
-	ui       UI      // (read-only) the UI object
-	jid      jid.Jid // (read-only) JaWS ID, unique to this Element within it's Request
-	*Request         // (read-only) the Request the Element belongs to
+	ui  UI       // (read-only) the UI object
+	jid jid.Jid  // (read-only) JaWS ID, unique to this Element within it's Request
+	rq  *Request // (read-only) the Request the Element belongs to
 	// internals
 	updating bool           // about to have Update() called
 	wsQueue  []wsMsg        // changes queued
@@ -22,17 +22,26 @@ type Element struct {
 }
 
 func (e *Element) String() string {
-	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", e.ui, e.jid, e.Request.TagsOf(e))
+	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", e.ui, e.jid, e.rq.TagsOf(e))
+}
+
+func (e *Element) Request() *Request {
+	return e.rq
+}
+
+// Dirty calls Request().Dirty()
+func (e *Element) Dirty(tags ...interface{}) {
+	e.rq.Dirty(tags...)
 }
 
 // Tag adds the given tags to the Element.
 func (e *Element) Tag(tags ...interface{}) {
-	e.Request.Tag(e, tags...)
+	e.rq.Tag(e, tags...)
 }
 
 // HasTag returns true if this Element has the given tag.
 func (e *Element) HasTag(tag interface{}) bool {
-	return e.Request.HasTag(e, tag)
+	return e.rq.HasTag(e, tag)
 }
 
 // Jid returns the JaWS ID for this Element, unique within it's Request.
@@ -47,7 +56,7 @@ func (e *Element) Ui() UI {
 
 // Render calls Request.JawsRender() for this Element.
 func (e *Element) Render(w io.Writer, params []interface{}) error {
-	return e.Request.JawsRender(e, w, params)
+	return e.rq.JawsRender(e, w, params)
 }
 
 func (e *Element) queue(wht what.What, data string) {
@@ -58,7 +67,7 @@ func (e *Element) queue(wht what.What, data string) {
 			What: wht,
 		})
 	} else {
-		e.Request.cancelFn(ErrWebsocketQueueOverflow)
+		e.rq.cancelFn(ErrWebsocketQueueOverflow)
 	}
 }
 

@@ -20,6 +20,6 @@ func NewUiButton(innerHtml HtmlGetter) *UiButton {
 	}
 }
 
-func (rq *Request) Button(innerHtml interface{}, params ...interface{}) error {
+func (rq RequestWriter) Button(innerHtml interface{}, params ...interface{}) error {
 	return rq.UI(NewUiButton(makeHtmlGetter(innerHtml)), params...)
 }

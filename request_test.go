@@ -60,7 +60,7 @@ func TestRequest_SendPanicsAfterRecycle(t *testing.T) {
 	}()
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(httptest.NewRecorder(), nil)
+	rq := jw.NewRequest(nil)
 	rq.recycle()
 	rq.Jaws.Broadcast(Message{})
 }
@@ -69,7 +69,7 @@ func TestRequest_HeadHTML(t *testing.T) {
 	is := testHelper{t}
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(httptest.NewRecorder(), nil)
+	rq := jw.NewRequest(nil)
 	defer rq.recycle()
 
 	txt := rq.HeadHTML()
@@ -580,7 +580,7 @@ func TestRequest_WsQueueOverflowCancels(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	rq := jw.NewRequest(httptest.NewRecorder(), hr)
+	rq := jw.NewRequest(hr)
 	elem := rq.NewElement(NewUiDiv(makeHtmlGetter("foo")))
 	go func() {
 		for i := 0; i < maxWsQueueLengthPerElement*10; i++ {
