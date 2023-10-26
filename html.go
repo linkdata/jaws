@@ -70,12 +70,6 @@ func WriteHtmlInput(w io.Writer, jid jid.Jid, typ, val string, attrs ...string) 
 	return
 }
 
-func HtmlInput(jid jid.Jid, typ, val string, attrs ...string) template.HTML {
-	var sb strings.Builder
-	_ = WriteHtmlInput(&sb, jid, typ, val, attrs...)
-	return template.HTML(sb.String()) // #nosec G203
-}
-
 func WriteHtmlInner(w io.Writer, jid jid.Jid, tag, typ string, inner template.HTML, attrs ...string) (err error) {
 	need := 1 + len(tag)*2 + jidPrealloc + 8 + len(typ) + 1 + 1 + getAttrsLen(attrs) + 1 + len(inner) + 2 + 1
 	b := make([]byte, 0, need)
