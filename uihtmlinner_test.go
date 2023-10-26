@@ -20,7 +20,9 @@ func TestUiHtmlInner_JawsUpdate(t *testing.T) {
 	ui := NewUiDiv(ts)
 	elem := rq.NewElement(ui)
 	var sb strings.Builder
-	ui.JawsRender(elem, &sb, nil)
+	if err := ui.JawsRender(elem, &sb, nil); err != nil {
+		t.Fatal(err)
+	}
 	wantHtml := "<div id=\"Jid.1\">first</div>"
 	if sb.String() != wantHtml {
 		t.Errorf("got %q, want %q", sb.String(), wantHtml)

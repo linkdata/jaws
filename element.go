@@ -46,8 +46,8 @@ func (e *Element) Ui() UI {
 }
 
 // Render calls Request.JawsRender() for this Element.
-func (e *Element) Render(w io.Writer, params []interface{}) {
-	e.Request.JawsRender(e, w, params)
+func (e *Element) Render(w io.Writer, params []interface{}) error {
+	return e.Request.JawsRender(e, w, params)
 }
 
 func (e *Element) queue(wht what.What, data string) {

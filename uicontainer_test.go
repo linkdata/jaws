@@ -172,7 +172,9 @@ func TestRequest_Container_Alteration(t *testing.T) {
 			ui := NewUiContainer("div", tt.c)
 			elem := rq.NewElement(ui)
 			var sb strings.Builder
-			ui.JawsRender(elem, &sb, nil)
+			if err := ui.JawsRender(elem, &sb, nil); err != nil {
+				t.Fatal(err)
+			}
 			tt.c.contents = tt.l
 			ui.JawsUpdate(elem)
 			if !slices.Equal(elem.wsQueue, tt.want) {

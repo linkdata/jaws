@@ -21,7 +21,7 @@ type testUi struct {
 	getCalled    int32
 	setCalled    int32
 	s            string
-	renderFn     func(e *Element, w io.Writer, params []any)
+	renderFn     func(e *Element, w io.Writer, params []any) error
 	updateFn     func(e *Element)
 }
 
@@ -39,13 +39,13 @@ func (tss *testUi) JawsSetString(e *Element, s string) error {
 	return nil
 }
 
-func (tss *testUi) JawsRender(e *Element, w io.Writer, params []any) error {
+func (tss *testUi) JawsRender(e *Element, w io.Writer, params []any) (err error) {
 	e.Tag(tss)
 	atomic.AddInt32(&tss.renderCalled, 1)
 	if tss.renderFn != nil {
-		tss.renderFn(e, w, params)
+		err = tss.renderFn(e, w, params)
 	}
-	return nil
+	return
 }
 
 func (tss *testUi) JawsUpdate(e *Element) {

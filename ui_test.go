@@ -23,10 +23,11 @@ func TestRequest_JawsRender_DebugOutput(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 	rq.Jaws.Debug = true
-	rq.UI(&testUi{renderFn: func(e *Element, w io.Writer, params []any) {
+	rq.UI(&testUi{renderFn: func(e *Element, w io.Writer, params []any) error {
 		e.Tag(Tag("footag"))
 		e.Tag(e.Request)
 		e.Tag(testStringer{})
+		return nil
 	}})
 	h := rq.BodyString()
 	t.Log(h)

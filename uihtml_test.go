@@ -113,7 +113,9 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 
 	elem := rq.getElementByJid(id2)
 	var sb strings.Builder
-	elem.ui.JawsRender(elem, &sb, []any{"attr"})
+	if err := elem.ui.JawsRender(elem, &sb, []any{"attr"}); err != nil {
+		t.Fatal(err)
+	}
 	select {
 	case <-tmr.C:
 		t.Error("timeout")
