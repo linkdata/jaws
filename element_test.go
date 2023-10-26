@@ -55,7 +55,7 @@ func (tss *testUi) JawsUpdate(e *Element) {
 	}
 }
 
-func TestElement_Jaws_Request(t *testing.T) {
+func TestElement_helpers(t *testing.T) {
 	is := testHelper{t}
 	rq := newTestRequest()
 	defer rq.Close()
@@ -64,6 +64,9 @@ func TestElement_Jaws_Request(t *testing.T) {
 	e := rq.NewElement(tss)
 	is.Equal(e.Jaws(), rq.jw.Jaws)
 	is.Equal(e.Request(), rq.Request)
+	is.Equal(e.Session(), nil)
+	e.Set("foo", "bar") // no session, so no effect
+	is.Equal(e.Get("foo"), nil)
 }
 
 func TestElement_Tag(t *testing.T) {

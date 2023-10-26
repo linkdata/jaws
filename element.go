@@ -35,6 +35,21 @@ func (e *Element) Request() *Request {
 	return e.rq
 }
 
+// Session returns the Elements's Session, or nil.
+func (e *Element) Session() *Session {
+	return e.rq.Session()
+}
+
+// Get calls Session().Get()
+func (e *Element) Get(key string) (val interface{}) {
+	return e.Session().Get(key)
+}
+
+// Set calls Session().Get()
+func (e *Element) Set(key string, val interface{}) {
+	e.Session().Set(key, val)
+}
+
 // Dirty calls Request().Dirty()
 func (e *Element) Dirty(tags ...interface{}) {
 	e.rq.Dirty(tags...)
