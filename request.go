@@ -196,13 +196,12 @@ func (rq *Request) Context() (ctx context.Context) {
 }
 
 func (rq *Request) cancel(err error) {
-	if rq != nil {
-		rq.mu.RLock()
-		cancelFn := rq.cancelFn
-		rq.mu.RUnlock()
-		if cancelFn != nil {
-			cancelFn(err)
-		}
+	rq.mu.Lock()
+	cancelFn := rq.cancelFn
+	rq.killSessionLocked()
+	rq.mu.Unlock()
+	if cancelFn != nil {
+		cancelFn(err)
 	}
 }
 

@@ -508,6 +508,9 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			jw.maintenance(requestTimeout)
 		case sub := <-jw.subCh:
 			if sub.msgCh != nil {
+				if sub.rq == nil {
+					panic("meh")
+				}
 				subs[sub.msgCh] = sub.rq
 			}
 		case msgCh := <-jw.unsubCh:
@@ -525,13 +528,7 @@ func (jw *Jaws) Serve() {
 	jw.ServeWithTimeout(time.Second * 10)
 }
 
-func (jw *Jaws) subscribe(rq *Request, minSize int) chan Message {
-	size := minSize
-	if rq != nil {
-		if size = 4 + len(rq.elems)*4; size < minSize {
-			size = minSize
-		}
-	}
+func (jw *Jaws) subscribe(rq *Request, size int) chan Message {
 	msgCh := make(chan Message, size)
 	select {
 	case <-jw.Done():

@@ -10,6 +10,7 @@ import (
 )
 
 func TestRequest_Date(t *testing.T) {
+	th := newTestHelper(t)
 	nextJid = 0
 	rq := newTestRequest()
 	defer rq.Close()
@@ -26,8 +27,8 @@ func TestRequest_Date(t *testing.T) {
 	tmr := time.NewTimer(testTimeout)
 	defer tmr.Stop()
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case <-ts.setCalled:
 	}
 	if ts.Get() != val {
@@ -43,8 +44,8 @@ func TestRequest_Date(t *testing.T) {
 	ts.Set(val)
 	rq.Dirty(ts)
 	select {
-	case <-tmr.C:
-		t.Error("timeout waiting for Value")
+	case <-th.C:
+		th.Timeout()
 	case s := <-rq.outCh:
 		if s != fmt.Sprintf("Value\tJid.1\t\"%s\"\n", val.Format(ISO8601)) {
 			t.Error("wrong Value")
@@ -59,8 +60,8 @@ func TestRequest_Date(t *testing.T) {
 
 	rq.inCh <- wsMsg{Data: "omg", Jid: 1, What: what.Input}
 	select {
-	case <-tmr.C:
-		t.Error("timeout waiting for Alert")
+	case <-th.C:
+		th.Timeout()
 	case s := <-rq.outCh:
 		if s != "Alert\t\t\"danger\\nparsing time &#34;omg&#34; as &#34;2006-01-02&#34;: cannot parse &#34;omg&#34; as &#34;2006&#34;\"\n" {
 			t.Errorf("wrong Alert: %q", s)
@@ -70,8 +71,8 @@ func TestRequest_Date(t *testing.T) {
 	ts.err = errors.New("meh")
 	rq.inCh <- wsMsg{Data: val.Format(ISO8601), Jid: 1, What: what.Input}
 	select {
-	case <-tmr.C:
-		t.Error("timeout waiting for Alert")
+	case <-th.C:
+		th.Timeout()
 	case s := <-rq.outCh:
 		if s != "Alert\t\t\"danger\\nmeh\"\n" {
 			t.Errorf("wrong Alert: %q", s)

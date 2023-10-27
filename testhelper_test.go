@@ -3,50 +3,51 @@ package jaws
 import (
 	"reflect"
 	"testing"
+	"time"
 )
 
-type testHelper struct{ *testing.T }
-
-func testNil(object any) (bool, reflect.Type) {
-	if object == nil {
-		return true, nil
-	}
-	value := reflect.ValueOf(object)
-	kind := value.Kind()
-	return kind >= reflect.Chan && kind <= reflect.Slice && value.IsNil(), value.Type()
+type testHelper struct {
+	*time.Timer
+	*testing.T
 }
 
-func testEqual(a, b any) bool {
-	if reflect.DeepEqual(a, b) {
-		return true
+func newTestHelper(t *testing.T) (th *testHelper) {
+	th = &testHelper{
+		T:     t,
+		Timer: time.NewTimer(time.Second * 3),
 	}
-	aIsNil, aType := testNil(a)
-	bIsNil, bType := testNil(b)
-	if !(aIsNil && bIsNil) {
-		return false
-	}
-	return aType == nil || bType == nil || (aType == bType)
+	t.Cleanup(th.Cleanup)
+	return
 }
 
-func (th testHelper) Equal(a, b any) {
+func (th *testHelper) Cleanup() {
+	th.Timer.Stop()
+}
+
+func (th *testHelper) Equal(a, b any) {
 	if !testEqual(a, b) {
 		th.Helper()
 		th.Errorf("%T(%v) != %T(%v)", a, a, b, b)
 	}
 }
 
-func (th testHelper) True(a bool) {
+func (th *testHelper) True(a bool) {
 	if !a {
 		th.Helper()
 		th.Error("not true")
 	}
 }
 
-func (th testHelper) NoErr(err error) {
+func (th *testHelper) NoErr(err error) {
 	if err != nil {
 		th.Helper()
 		th.Error(err)
 	}
+}
+
+func (th *testHelper) Timeout() {
+	th.Helper()
+	th.Fatal("timeout")
 }
 
 func Test_testHelper(t *testing.T) {
@@ -73,4 +74,25 @@ func Test_testHelper(t *testing.T) {
 	mustNotEqual(1, 2)
 	mustNotEqual((*testing.T)(nil), (*testHelper)(nil))
 	mustNotEqual(int(1), int32(1))
+}
+
+func testNil(object any) (bool, reflect.Type) {
+	if object == nil {
+		return true, nil
+	}
+	value := reflect.ValueOf(object)
+	kind := value.Kind()
+	return kind >= reflect.Chan && kind <= reflect.Slice && value.IsNil(), value.Type()
+}
+
+func testEqual(a, b any) bool {
+	if reflect.DeepEqual(a, b) {
+		return true
+	}
+	aIsNil, aType := testNil(a)
+	bIsNil, bType := testNil(b)
+	if !(aIsNil && bIsNil) {
+		return false
+	}
+	return aType == nil || bType == nil || (aType == bType)
 }

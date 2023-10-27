@@ -2,7 +2,6 @@ package jaws
 
 import (
 	"testing"
-	"time"
 
 	"github.com/linkdata/jaws/what"
 )
@@ -22,8 +21,7 @@ func (tje *testJawsClick) JawsClick(e *Element, name string) (err error) {
 var _ ClickHandler = (*testJawsClick)(nil)
 
 func Test_clickHandlerWapper_JawsEvent(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	nextJid = 0
 	rq := newTestRequest()
 	defer rq.Close()
@@ -41,8 +39,8 @@ func Test_clickHandlerWapper_JawsEvent(t *testing.T) {
 
 	rq.inCh <- wsMsg{Data: "text", Jid: 1, What: what.Input}
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-rq.outCh:
 		t.Errorf("%q", s)
 	default:
@@ -50,8 +48,8 @@ func Test_clickHandlerWapper_JawsEvent(t *testing.T) {
 
 	rq.inCh <- wsMsg{Data: "adam", Jid: 1, What: what.Click}
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case name := <-tjc.clickCh:
 		if name != "adam" {
 			t.Error(name)

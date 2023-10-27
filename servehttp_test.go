@@ -11,7 +11,7 @@ func TestServeHTTP_GetJavascript(t *testing.T) {
 	go jw.Serve()
 	defer jw.Close()
 
-	is := testHelper{t}
+	is := newTestHelper(t)
 
 	mux := http.NewServeMux()
 	mux.Handle("/jaws/", jw)
@@ -51,7 +51,7 @@ func TestServeHTTP_GetJavascript(t *testing.T) {
 }
 
 func TestServeHTTP_GetPing(t *testing.T) {
-	is := testHelper{t}
+	is := newTestHelper(t)
 	jw := New()
 	go jw.Serve()
 	defer jw.Close()
@@ -92,7 +92,7 @@ func TestServeHTTP_GetPing(t *testing.T) {
 }
 
 func TestServeHTTP_GetKey(t *testing.T) {
-	is := testHelper{t}
+	is := newTestHelper(t)
 	jw := New()
 	go jw.Serve()
 	defer jw.Close()

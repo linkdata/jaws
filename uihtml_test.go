@@ -6,7 +6,6 @@ import (
 	"io"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/linkdata/jaws/what"
 )
@@ -46,8 +45,7 @@ var _ TagGetter = (*testJawsEvent)(nil)
 var _ UI = (*testJawsEvent)(nil)
 
 func TestUiHtml_JawsEvent(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	nextJid = 0
 	rq := newTestRequest()
 	defer rq.Close()
@@ -60,8 +58,8 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 
 	rq.inCh <- wsMsg{Data: "text", Jid: id, What: what.Input}
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-tje.msgCh:
 		if s != "JawsEvent: Input \"text\"" {
 			t.Error(s)
@@ -70,8 +68,8 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 
 	rq.inCh <- wsMsg{Data: "name", Jid: id, What: what.Click}
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-msgCh:
 		if s != "JawsClick: \"name\"" {
 			t.Error(s)
@@ -83,8 +81,8 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 
 	rq.inCh <- wsMsg{Data: "text2", Jid: id2, What: what.Input}
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-tje.msgCh:
 		if s != "JawsEvent: Input \"text2\"" {
 			t.Error(s)
@@ -93,8 +91,8 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 
 	rq.inCh <- wsMsg{Data: "name2", Jid: id2, What: what.Click}
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-msgCh:
 		if s != "JawsClick: \"name2\"" {
 			t.Error(s)
@@ -103,8 +101,8 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 
 	rq.Dirty(tje)
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-msgCh:
 		if s != "JawsUpdate" {
 			t.Error(s)
@@ -117,8 +115,8 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-msgCh:
 		if s != "JawsRender" {
 			t.Error(s)

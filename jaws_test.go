@@ -18,7 +18,7 @@ import (
 )
 
 func TestJaws_parseIP(t *testing.T) {
-	is := testHelper{t}
+	is := newTestHelper(t)
 	is.True(!parseIP("").IsValid())
 	is.True(parseIP("192.168.0.1").Compare(netip.MustParseAddr("192.168.0.1")) == 0)
 	is.True(parseIP("192.168.0.2:1234").Compare(netip.MustParseAddr("192.168.0.2")) == 0)
@@ -35,7 +35,7 @@ func TestJaws_parseIP(t *testing.T) {
 func TestJaws_getCookieSessionsIds(t *testing.T) {
 	const sessId = 1234
 	sessCookie := JawsKeyString(sessId)
-	is := testHelper{t}
+	is := newTestHelper(t)
 	is.Equal(getCookieSessionsIds(nil, "meh"), nil)
 	is.Equal(getCookieSessionsIds(http.Header{}, "meh"), nil)
 	is.Equal(getCookieSessionsIds(http.Header{"Cookie": []string{}}, "meh"), nil)
@@ -52,7 +52,7 @@ func TestJaws_MultipleCloseCalls(t *testing.T) {
 }
 
 func TestJaws_MakeID(t *testing.T) {
-	is := testHelper{t}
+	is := newTestHelper(t)
 	jw := New()
 	defer jw.Close()
 	go jw.Serve()
@@ -64,7 +64,7 @@ func TestJaws_MakeID(t *testing.T) {
 }
 
 func TestJaws_maybePanic(t *testing.T) {
-	is := testHelper{t}
+	is := newTestHelper(t)
 	defer func() {
 		if recover() == nil {
 			is.Fail()
@@ -74,7 +74,7 @@ func TestJaws_maybePanic(t *testing.T) {
 }
 
 func TestJaws_Logger(t *testing.T) {
-	is := testHelper{t}
+	is := newTestHelper(t)
 	jw := New()
 	defer jw.Close()
 	var b bytes.Buffer
@@ -87,7 +87,7 @@ func TestJaws_Logger(t *testing.T) {
 }
 
 func TestJaws_MustLog(t *testing.T) {
-	is := testHelper{t}
+	is := newTestHelper(t)
 	jw := New()
 	defer jw.Close()
 
@@ -118,12 +118,11 @@ func TestJaws_BroadcastDoesntBlockWhenClosed(t *testing.T) {
 }
 
 func TestJaws_BroadcastWaitsWhenFull(t *testing.T) {
-	is := testHelper{t}
-
+	th := newTestHelper(t)
 	jw := New()
 	go jw.ServeWithTimeout(testTimeout)
 
-	subCh := jw.subscribe(nil, 0)
+	subCh := jw.subscribe(jw.NewRequest(nil), 0)
 	defer jw.unsubscribe(subCh)
 
 	// ensure our sub has been processed
@@ -132,21 +131,21 @@ func TestJaws_BroadcastWaitsWhenFull(t *testing.T) {
 
 	// send two broadcasts
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-th.C:
+		th.Timeout()
 	case jw.bcastCh <- Message{What: what.Reload}:
 	}
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-th.C:
+		th.Timeout()
 	case jw.bcastCh <- Message{What: what.Reload}:
 	}
 
 	// read one of the broadcasts, the other is
 	// left to fall into the retry loop
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-th.C:
+		th.Timeout()
 	case <-subCh:
 	}
 
@@ -155,30 +154,31 @@ func TestJaws_BroadcastWaitsWhenFull(t *testing.T) {
 
 	// finally, read the msg
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-th.C:
+		th.Timeout()
 	case <-subCh:
 	}
 }
 
 func TestJaws_BroadcastFullClosesChannel(t *testing.T) {
-	is := testHelper{t}
+	th := newTestHelper(t)
 	jw := New()
 	go jw.ServeWithTimeout(time.Millisecond)
 
 	doneCh := make(chan struct{})
 	failCh := make(chan struct{})
 
-	subCh1 := jw.subscribe(nil, 0)
+	subCh1 := jw.subscribe(jw.NewRequest(nil), 0)
+
 	defer jw.unsubscribe(subCh1)
-	subCh2 := jw.subscribe(nil, 0)
+	subCh2 := jw.subscribe(jw.NewRequest(nil), 0)
 	defer jw.unsubscribe(subCh2)
 	jw.subCh <- subscription{}
 	jw.subCh <- subscription{}
 
 	go func() {
 		select {
-		case <-time.NewTimer(testTimeout).C:
+		case <-th.C:
 			close(failCh)
 		case <-subCh2:
 			close(doneCh)
@@ -186,16 +186,16 @@ func TestJaws_BroadcastFullClosesChannel(t *testing.T) {
 	}()
 
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-th.C:
+		th.Timeout()
 	case jw.bcastCh <- Message{What: what.Reload}:
 	}
 
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-th.C:
+		th.Timeout()
 	case <-failCh:
-		is.Fail()
+		th.Timeout()
 	case <-doneCh:
 	}
 
@@ -205,72 +205,71 @@ func TestJaws_BroadcastFullClosesChannel(t *testing.T) {
 
 	select {
 	case msg, ok := <-subCh1:
-		is.True(!ok)
-		is.Equal(msg, Message{})
+		th.True(!ok)
+		th.Equal(msg, Message{})
 	default:
 	}
 }
 
 func TestJaws_UseRequest(t *testing.T) {
-	is := testHelper{t}
+	th := newTestHelper(t)
 	jw := New()
 	defer jw.Close()
 
-	is.Equal(0, jw.RequestCount())
+	th.Equal(0, jw.RequestCount())
 
 	rq1 := jw.NewRequest(nil)
-	is.True(rq1.JawsKey != 0)
+	th.True(rq1.JawsKey != 0)
 
 	rq2 := jw.NewRequest(&http.Request{RemoteAddr: "10.0.0.2:1010"})
-	is.True(rq2.JawsKey != 0)
-	is.True(rq1.JawsKey != rq2.JawsKey)
-	is.Equal(jw.Pending(), 2)
+	th.True(rq2.JawsKey != 0)
+	th.True(rq1.JawsKey != rq2.JawsKey)
+	th.Equal(jw.Pending(), 2)
 
 	rqfail := jw.UseRequest(0, nil) // wrong JawsKey
-	is.Equal(rqfail, nil)
-	is.Equal(jw.Pending(), 2)
+	th.Equal(rqfail, nil)
+	th.Equal(jw.Pending(), 2)
 
 	rqfail = jw.UseRequest(rq1.JawsKey, &http.Request{RemoteAddr: "10.0.0.1:1010"}) // wrong IP, expect blank
-	is.Equal(rqfail, nil)
-	is.Equal(jw.Pending(), 2)
+	th.Equal(rqfail, nil)
+	th.Equal(jw.Pending(), 2)
 
 	rqfail = jw.UseRequest(rq2.JawsKey, &http.Request{RemoteAddr: "10.0.0.1:1010"}) // wrong IP, expect .2
-	is.Equal(rqfail, nil)
-	is.Equal(jw.Pending(), 2)
+	th.Equal(rqfail, nil)
+	th.Equal(jw.Pending(), 2)
 
 	rq2ret := jw.UseRequest(rq2.JawsKey, &http.Request{RemoteAddr: "10.0.0.2:1212"}) // different port is OK
-	is.Equal(rq2, rq2ret)
-	is.Equal(jw.Pending(), 1)
+	th.Equal(rq2, rq2ret)
+	th.Equal(jw.Pending(), 1)
 
 	rq1ret := jw.UseRequest(rq1.JawsKey, nil)
-	is.Equal(rq1, rq1ret)
-	is.Equal(jw.Pending(), 0)
+	th.Equal(rq1, rq1ret)
+	th.Equal(jw.Pending(), 0)
 }
 
 func TestJaws_BlockingRandomPanics(t *testing.T) {
-	is := testHelper{t}
+	th := newTestHelper(t)
 	defer func() {
 		if recover() == nil {
-			is.Fail()
+			th.Error("expected error")
 		}
 	}()
 	jw := New()
 	defer jw.Close()
 	jw.kg = bufio.NewReader(&bytes.Buffer{})
 	jw.NewRequest(nil)
-	is.Fail()
 }
 
 func TestJaws_CleansUpUnconnected(t *testing.T) {
 	const numReqs = 1000
-	is := testHelper{t}
+	th := newTestHelper(t)
 	jw := New()
 	defer jw.Close()
 	var b bytes.Buffer
 	w := bufio.NewWriter(&b)
 	jw.Logger = log.New(w, "", 0)
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	is.Equal(jw.Pending(), 0)
+	th.Equal(jw.Pending(), 0)
 	deadline := time.Now().Add(testTimeout)
 	var expectLen int
 	for i := 0; i < numReqs; i++ {
@@ -287,7 +286,7 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 		}
 		expectLen += len(err.Error() + "\n")
 	}
-	is.Equal(jw.Pending(), numReqs)
+	th.Equal(jw.Pending(), numReqs)
 
 	go jw.ServeWithTimeout(time.Millisecond)
 
@@ -299,25 +298,23 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 		}
 	}
 
-	is.Equal(jw.Pending(), 0)
+	th.Equal(jw.Pending(), 0)
 
 	jw.Close()
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-th.C:
+		th.Timeout()
 	case <-jw.Done():
 	}
 	w.Flush()
 	if x := b.Len(); x != expectLen {
 		t.Log(b.String())
-		is.Equal(b.Len(), expectLen)
+		th.Equal(b.Len(), expectLen)
 	}
 }
 
 func TestJaws_UnconnectedLivesUntilDeadline(t *testing.T) {
-	is := testHelper{t}
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	jw := New()
 	defer jw.Close()
 
@@ -328,36 +325,36 @@ func TestJaws_UnconnectedLivesUntilDeadline(t *testing.T) {
 	rq2.Created = time.Now().Add(-time.Second * 10)
 	rq2ctx := rq2.Context()
 
-	is.Equal(jw.Pending(), 2)
+	th.Equal(jw.Pending(), 2)
 
 	go jw.ServeWithTimeout(time.Second)
 
 	for jw.Pending() > 1 {
 		select {
-		case <-tmr.C:
-			is.Fatal("timeout")
+		case <-th.C:
+			th.Timeout()
 		case <-jw.Done():
-			is.Error("unexpected close")
+			th.Error("unexpected close")
 		default:
 			time.Sleep(time.Millisecond)
 		}
 	}
 
-	is.Equal(jw.Pending(), 1)
+	th.Equal(jw.Pending(), 1)
 
 	jw.Close()
 	select {
-	case <-tmr.C:
-		is.Fatal("timeout")
+	case <-th.C:
+		th.Timeout()
 	case <-jw.Done():
 	}
 
-	is.NoErr(context.Cause(rq1ctx))
-	is.True(errors.Is(context.Cause(rq2ctx), ErrNoWebSocketRequest{}))
+	th.NoErr(context.Cause(rq1ctx))
+	th.True(errors.Is(context.Cause(rq2ctx), ErrNoWebSocketRequest{}))
 
 	// neither should have been recycled
-	is.Equal(rq1.Jaws, jw)
-	is.Equal(rq2.Jaws, jw)
+	th.Equal(rq1.Jaws, jw)
+	th.Equal(rq2.Jaws, jw)
 }
 
 func TestJaws_BroadcastsCallable(t *testing.T) {
@@ -382,7 +379,7 @@ func TestJaws_BroadcastsCallable(t *testing.T) {
 }
 
 func TestJaws_subscribeOnClosedReturnsNil(t *testing.T) {
-	is := testHelper{t}
+	th := newTestHelper(t)
 	jw := New()
 	jw.Close()
 	<-jw.doneCh
@@ -393,23 +390,23 @@ func TestJaws_subscribeOnClosedReturnsNil(t *testing.T) {
 		}
 	}
 
-	is.Equal(jw.subscribe(nil, 1), nil)
+	th.Equal(jw.subscribe(jw.NewRequest(nil), 1), nil)
 }
 
 func TestJaws_GenerateHeadHTML(t *testing.T) {
 	const extraScript = "someExtraScript.js?disregard"
 	const extraStyle = "http://other.server/someExtraStyle.css"
-	is := testHelper{t}
+	th := newTestHelper(t)
 	jw := New()
 	jw.Close()
 
 	jw.GenerateHeadHTML()
-	is.True(strings.Contains(string(jw.headPrefix), JavascriptPath))
+	th.True(strings.Contains(string(jw.headPrefix), JavascriptPath))
 	jw.GenerateHeadHTML(extraScript, extraStyle)
-	is.True(strings.Contains(string(jw.headPrefix), JavascriptPath))
-	is.True(strings.Contains(string(jw.headPrefix), extraScript))
-	is.True(strings.Contains(string(jw.headPrefix), extraStyle))
+	th.True(strings.Contains(string(jw.headPrefix), JavascriptPath))
+	th.True(strings.Contains(string(jw.headPrefix), extraScript))
+	th.True(strings.Contains(string(jw.headPrefix), extraStyle))
 
-	is.True(jw.GenerateHeadHTML("random.crap") != nil)
-	is.True(jw.GenerateHeadHTML("\n") != nil)
+	th.True(jw.GenerateHeadHTML("random.crap") != nil)
+	th.True(jw.GenerateHeadHTML("\n") != nil)
 }

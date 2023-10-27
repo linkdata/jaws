@@ -15,7 +15,7 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		if err = rq.onConnect(); err == nil {
 			incomingMsgCh := make(chan wsMsg)
-			broadcastMsgCh := rq.Jaws.subscribe(rq, 1)
+			broadcastMsgCh := rq.Jaws.subscribe(rq, 4+len(rq.elems)*4)
 			outboundCh := make(chan string, cap(broadcastMsgCh))
 			go wsReader(rq.ctx, rq.cancelFn, rq.Jaws.Done(), incomingMsgCh, ws) // closes incomingMsgCh
 			go wsWriter(rq.ctx, rq.cancelFn, rq.Jaws.Done(), outboundCh, ws)    // calls ws.Close()

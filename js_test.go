@@ -12,7 +12,7 @@ import (
 func Test_Javascript(t *testing.T) {
 	const prefix = "/jaws/jaws."
 	const suffix = ".js"
-	is := testHelper{t}
+	is := newTestHelper(t)
 
 	h := fnv.New64a()
 	_, err := h.Write(JavascriptText)
@@ -34,7 +34,7 @@ func Test_Javascript(t *testing.T) {
 func Test_HeadHTML(t *testing.T) {
 	const extraScript = "someExtraScript.js"
 	const extraStyle = "someExtraStyle.css"
-	is := testHelper{t}
+	is := newTestHelper(t)
 	txt := HeadHTML(nil, nil)
 	is.Equal(strings.Contains(string(txt), JavascriptPath), false)
 	txt = HeadHTML([]string{JavascriptPath, extraScript}, []string{extraStyle})

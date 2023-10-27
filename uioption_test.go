@@ -3,12 +3,10 @@ package jaws
 import (
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestUiOption(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	nextJid = 0
 	rq := newTestRequest()
 	defer rq.Close()
@@ -30,8 +28,8 @@ func TestUiOption(t *testing.T) {
 	nb.Set(false)
 	rq.Dirty(nb)
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-rq.outCh:
 		if s != "RAttr\tJid.1\t\"selected\"\n" {
 			t.Errorf("%q", s)
@@ -41,8 +39,8 @@ func TestUiOption(t *testing.T) {
 	nb.Set(true)
 	rq.Dirty(nb)
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-rq.outCh:
 		if s != "SAttr\tJid.1\t\"selected\\n\"\n" {
 			t.Errorf("%q", s)

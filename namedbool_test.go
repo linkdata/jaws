@@ -6,7 +6,7 @@ import (
 )
 
 func TestNamedBool(t *testing.T) {
-	is := testHelper{t}
+	is := newTestHelper(t)
 
 	nba := NewNamedBoolArray()
 	nba.Add("1", "one")

@@ -3,10 +3,10 @@ package jaws
 import (
 	"strconv"
 	"testing"
-	"time"
 )
 
 func TestRequest_Img(t *testing.T) {
+	th := newTestHelper(t)
 	nextJid = 0
 	rq := newTestRequest()
 	defer rq.Close()
@@ -19,13 +19,12 @@ func TestRequest_Img(t *testing.T) {
 		t.Errorf("Request.Img() = %q, want %q", gotHtml, wantHtml)
 	}
 
-	tmr := time.NewTimer(testTimeout)
 	ts.Set("unquoted.jpg")
 	rq.Dirty(ts)
 
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-rq.outCh:
 		if s != "SAttr\tJid.1\t\"src\\n\\\"unquoted.jpg\\\"\"\n" {
 			t.Error(strconv.Quote(s))

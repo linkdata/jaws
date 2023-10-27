@@ -212,8 +212,7 @@ func TestSession_Requests(t *testing.T) {
 }
 
 func TestSession_Delete(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	ts := newTestServer()
 	defer ts.Close()
 	go ts.jw.ServeWithTimeout(time.Second)
@@ -348,8 +347,8 @@ func TestSession_Delete(t *testing.T) {
 	}
 
 	select {
-	case <-tmr.C:
-		t.Fatal("timeout")
+	case <-th.C:
+		th.Timeout()
 	case rr, ok := <-resultChan:
 		if ok {
 			if x := rr.err; x != nil {
@@ -425,7 +424,7 @@ func TestSession_ReplacesOld(t *testing.T) {
 	defer jw.Close()
 	go jw.ServeWithTimeout(time.Second)
 
-	is := testHelper{t}
+	is := newTestHelper(t)
 
 	is.Equal(jw.SessionCount(), 0)
 

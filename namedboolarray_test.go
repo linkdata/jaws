@@ -7,7 +7,7 @@ import (
 )
 
 func Test_NamedBoolArray(t *testing.T) {
-	is := testHelper{t}
+	is := newTestHelper(t)
 	nba := NewNamedBoolArray()
 	is.Equal(len(nba.data), 0)
 
