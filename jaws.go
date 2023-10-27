@@ -560,7 +560,7 @@ func maybeErrPendingCancelled(rq *Request, deadline time.Time) (err error) {
 }
 
 func (jw *Jaws) maintenance(requestTimeout time.Duration) {
-	var killReqs []*Request
+	var killReqs []uint64
 	var killSess []uint64
 
 	jw.mu.RLock()
@@ -569,7 +569,7 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	for _, rq := range jw.pending {
 		if err := jw.Log(maybeErrPendingCancelled(rq, deadline)); err != nil {
 			rq.cancel(err)
-			killReqs = append(killReqs, rq)
+			killReqs = append(killReqs, rq.JawsKey)
 		}
 	}
 	for k, sess := range jw.sessions {
@@ -581,8 +581,8 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 
 	if len(killReqs)+len(killSess) > 0 {
 		jw.mu.Lock()
-		for _, rq := range killReqs {
-			delete(jw.pending, rq.JawsKey)
+		for _, k := range killReqs {
+			delete(jw.pending, k)
 		}
 		for _, k := range killSess {
 			delete(jw.sessions, k)
