@@ -508,9 +508,6 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			jw.maintenance(requestTimeout)
 		case sub := <-jw.subCh:
 			if sub.msgCh != nil {
-				if sub.rq == nil {
-					panic("meh")
-				}
 				subs[sub.msgCh] = sub.rq
 			}
 		case msgCh := <-jw.unsubCh:
@@ -565,6 +562,7 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	deadline := now.Add(-requestTimeout)
 	for _, rq := range jw.pending {
 		if err := jw.Log(maybeErrPendingCancelled(rq, deadline)); err != nil {
+			// rq.recycle()
 			rq.cancel(err)
 			killReqs = append(killReqs, rq.JawsKey)
 		}
