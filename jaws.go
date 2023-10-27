@@ -77,10 +77,10 @@ func NewWithDone(doneCh <-chan struct{}) (jw *Jaws) {
 		dirty:        make(map[interface{}]int),
 	}
 	jw.reqPool.New = func() any {
-		return &Request{
+		return (&Request{
 			Jaws:   jw,
 			tagMap: make(map[any][]*Element),
-		}
+		}).clearLocked()
 	}
 	return
 }
@@ -541,24 +541,12 @@ func (jw *Jaws) unsubscribe(msgCh chan Message) {
 	}
 }
 
-func maybeErrPendingCancelled(rq *Request, deadline time.Time) (err error) {
-	if err = context.Cause(rq.ctx); err == nil && rq.Created.Before(deadline) {
-		err = newErrNoWebSocketRequest(rq)
-	}
-	if err != nil {
-		err = newErrPendingCancelled(rq, err)
-	}
-	return
-}
-
 func (jw *Jaws) maintenance(requestTimeout time.Duration) {
-	now := time.Now()
-	deadline := now.Add(-requestTimeout)
+	deadline := time.Now().Add(-requestTimeout)
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	for _, rq := range jw.requests {
-		if err := jw.Log(maybeErrPendingCancelled(rq, deadline)); err != nil {
-			rq.cancel(err)
+		if rq.maintenance(deadline) {
 			jw.recycleLocked(rq)
 		}
 	}
@@ -710,9 +698,11 @@ func (jw *Jaws) getRequestLocked(jawsKey uint64, hr *http.Request) (rq *Request)
 func (jw *Jaws) recycleLocked(rq *Request) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	delete(jw.requests, rq.JawsKey)
-	rq.clearLocked()
-	jw.reqPool.Put(rq)
+	if rq.JawsKey != 0 {
+		delete(jw.requests, rq.JawsKey)
+		rq.clearLocked()
+		jw.reqPool.Put(rq)
+	}
 }
 
 func (jw *Jaws) recycle(rq *Request) {

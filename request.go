@@ -38,6 +38,7 @@ type Request struct {
 	session   *Session                // (read-only) session, if established
 	mu        deadlock.RWMutex        // protects following
 	claimed   bool                    // if UseRequest() has been called for it
+	running   bool                    // if ServeHTTP() is running
 	todoDirt  []interface{}           // dirty tags
 	ctx       context.Context         // current context, derived from either Jaws or WS HTTP req
 	cancelFn  context.CancelCauseFunc // cancel function
@@ -104,19 +105,20 @@ func (rq *Request) killSession() {
 	rq.mu.Unlock()
 }
 
-func (rq *Request) clearLocked() {
+func (rq *Request) clearLocked() *Request {
 	rq.JawsKey = 0
 	rq.connectFn = nil
 	rq.Created = time.Time{}
 	rq.Initial = nil
 	rq.claimed = false
-	rq.ctx = context.Background()
-	rq.cancelFn = nil
+	rq.running = false
+	rq.ctx, rq.cancelFn = context.WithCancelCause(context.Background())
 	rq.todoDirt = rq.todoDirt[:0]
 	rq.remoteIP = netip.Addr{}
 	rq.elems = rq.elems[:0]
 	rq.killSessionLocked()
 	clear(rq.tagMap)
+	return rq
 }
 
 // HeadHTML returns the HTML code needed to write in the HTML page's HEAD section.
@@ -167,14 +169,29 @@ func (rq *Request) Context() (ctx context.Context) {
 	return
 }
 
+func (rq *Request) maintenance(deadline time.Time) (doRecycle bool) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	if doRecycle = (!rq.running && rq.Created.Before(deadline)); doRecycle {
+		rq.cancelLocked(newErrNoWebSocketRequest(rq))
+	}
+	return
+}
+
+func (rq *Request) cancelLocked(err error) {
+	if rq.JawsKey != 0 && rq.ctx.Err() == nil {
+		if !rq.running {
+			err = newErrPendingCancelled(rq, err)
+		}
+		rq.cancelFn(rq.Jaws.Log(err))
+		rq.killSessionLocked()
+	}
+}
+
 func (rq *Request) cancel(err error) {
 	rq.mu.Lock()
-	cancelFn := rq.cancelFn
-	rq.killSessionLocked()
-	rq.mu.Unlock()
-	if cancelFn != nil {
-		cancelFn(err)
-	}
+	defer rq.mu.Unlock()
+	rq.cancelLocked(err)
 }
 
 // Alert attempts to show an alert message on the current request webpage if it has an HTML element with the id 'jaws-alert'.
@@ -247,7 +264,6 @@ func (rq *Request) Register(tagitem interface{}, params ...interface{}) jid.Jid 
 	elem := rq.NewElement(uib)
 	uib.parseGetter(elem, tagitem)
 	uib.parseParams(elem, params)
-	rq.Dirty(uib.Tag)
 	return elem.jid
 }
 

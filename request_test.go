@@ -561,7 +561,7 @@ func TestRequest_WsQueueOverflowCancels(t *testing.T) {
 		th.Timeout()
 	case <-rq.Done():
 	}
-	th.Equal(context.Cause(rq.Context()), ErrWebsocketQueueOverflow)
+	th.True(errors.Is(context.Cause(rq.Context()), ErrWebsocketQueueOverflow))
 }
 
 func TestRequest_Dirty(t *testing.T) {

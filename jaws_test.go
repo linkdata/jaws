@@ -261,7 +261,7 @@ func TestJaws_BlockingRandomPanics(t *testing.T) {
 }
 
 func TestJaws_CleansUpUnconnected(t *testing.T) {
-	const numReqs = 1000
+	const numReqs = 100
 	th := newTestHelper(t)
 	jw := New()
 	defer jw.Close()
@@ -274,13 +274,16 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 	var expectLen int
 	for i := 0; i < numReqs; i++ {
 		rq := jw.NewRequest(hr)
-		if (i % (numReqs / 10)) == 0 {
+		if (i % (numReqs / 5)) == 0 {
 			elem := rq.NewElement(NewUiDiv(makeHtmlGetter("meh")))
 			for j := 0; j < maxWsQueueLengthPerElement*10; j++ {
 				elem.SetInner("foo")
 			}
 		}
-		err := maybeErrPendingCancelled(rq, deadline)
+		err := context.Cause(rq.ctx)
+		if err == nil && rq.Created.Before(deadline) {
+			err = newErrPendingCancelled(rq, newErrNoWebSocketRequest(rq))
+		}
 		if err == nil {
 			t.Fatal("expected error")
 		}

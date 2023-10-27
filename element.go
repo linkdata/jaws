@@ -88,7 +88,7 @@ func (e *Element) queue(wht what.What, data string) {
 			What: wht,
 		})
 	} else {
-		e.rq.cancelFn(ErrWebsocketQueueOverflow)
+		e.rq.cancel(ErrWebsocketQueueOverflow)
 	}
 }
 

@@ -26,17 +26,20 @@ func (tje *testJawsEvent) JawsEvent(e *Element, wht what.What, val string) (err 
 }
 
 func (tje *testJawsEvent) JawsGetTag(*Request) (tag any) {
-	return tje.tag
+	if tje.tag != nil {
+		return tje.tag
+	}
+	return nil
 }
 
 func (tje *testJawsEvent) JawsRender(e *Element, w io.Writer, params []any) error {
 	w.Write([]byte(fmt.Sprint(params)))
-	tje.msgCh <- "JawsRender"
+	tje.msgCh <- fmt.Sprintf("JawsRender(%d)", e.jid)
 	return nil
 }
 
 func (tje *testJawsEvent) JawsUpdate(e *Element) {
-	tje.msgCh <- "JawsUpdate"
+	tje.msgCh <- fmt.Sprintf("JawsUpdate(%d)", e.jid)
 }
 
 var _ ClickHandler = (*testJawsEvent)(nil)
@@ -78,6 +81,7 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 
 	tje.tag = tje
 	id2 := rq.Register(tje)
+	th.Equal(id2, Jid(2))
 
 	rq.inCh <- wsMsg{Data: "text2", Jid: id2, What: what.Input}
 	select {
@@ -88,6 +92,11 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 			t.Error(s)
 		}
 	}
+
+	// nothing should be marked dirty,
+	// but if it is, this ensures the
+	// test fails reliably
+	rq.jw.distributeDirt()
 
 	rq.inCh <- wsMsg{Data: "name2", Jid: id2, What: what.Click}
 	select {
@@ -104,7 +113,7 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 	case <-th.C:
 		th.Timeout()
 	case s := <-msgCh:
-		if s != "JawsUpdate" {
+		if s != "JawsUpdate(2)" {
 			t.Error(s)
 		}
 	}
@@ -118,7 +127,7 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 	case <-th.C:
 		th.Timeout()
 	case s := <-msgCh:
-		if s != "JawsRender" {
+		if s != "JawsRender(2)" {
 			t.Error(s)
 		}
 	}

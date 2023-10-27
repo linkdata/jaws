@@ -89,7 +89,9 @@ func TestWS_UpgradeRequired(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 	w := httptest.NewRecorder()
-	rq := jw.NewRequest(nil)
+	hr := httptest.NewRequest("", "/", nil)
+	rq := jw.NewRequest(hr)
+	jw.UseRequest(rq.JawsKey, hr)
 	req := httptest.NewRequest("", "/jaws/"+rq.JawsKeyString(), nil)
 	rq.ServeHTTP(w, req)
 	if w.Code != http.StatusUpgradeRequired {
