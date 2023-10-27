@@ -9,7 +9,8 @@ func TestRequest_Td(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 	want := `<td id="Jid.1">inner</td>`
-	if got := string(rq.Td("inner")); got != want {
+	rq.Td("inner")
+	if got := rq.BodyString(); got != want {
 		t.Errorf("Request.Td() = %q, want %q", got, want)
 	}
 }

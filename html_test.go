@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"html/template"
+	"strings"
 	"testing"
 
 	"github.com/linkdata/jaws/jid"
@@ -17,7 +18,7 @@ func TestHtmlInput(t *testing.T) {
 	tests := []struct {
 		name string
 		args args
-		want template.HTML
+		want string
 	}{
 		{
 			name: "HtmlInput no attrs",
@@ -61,7 +62,11 @@ func TestHtmlInput(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := HtmlInput(tt.args.jid, tt.args.typ, tt.args.val, tt.args.attrs...); got != tt.want {
+			var sb strings.Builder
+			if err := WriteHtmlInput(&sb, tt.args.jid, tt.args.typ, tt.args.val, tt.args.attrs...); err != nil {
+				t.Fatal(err)
+			}
+			if got := sb.String(); got != tt.want {
 				t.Errorf("HtmlInput() = %v, want %v", got, tt.want)
 			}
 		})
@@ -79,7 +84,7 @@ func TestHtmlInner(t *testing.T) {
 	tests := []struct {
 		name string
 		args args
-		want template.HTML
+		want string
 	}{
 		{
 			name: "HtmlInner no attrs",
@@ -115,7 +120,11 @@ func TestHtmlInner(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := HtmlInner(tt.args.jid, tt.args.tag, tt.args.typ, tt.args.inner, tt.args.attrs...); got != tt.want {
+			var sb strings.Builder
+			if err := WriteHtmlInner(&sb, tt.args.jid, tt.args.tag, tt.args.typ, tt.args.inner, tt.args.attrs...); err != nil {
+				t.Fatal(err)
+			}
+			if got := sb.String(); got != tt.want {
 				t.Errorf("HtmlInner() = %v, want %v", got, tt.want)
 			}
 		})
@@ -131,7 +140,7 @@ func TestHtmlSelect(t *testing.T) {
 	tests := []struct {
 		name string
 		args args
-		want template.HTML
+		want string
 	}{
 		{
 			name: "HtmlSelect empty NamedBoolArray and one attr",
@@ -166,7 +175,11 @@ func TestHtmlSelect(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := HtmlSelect(tt.args.jid, tt.args.val, tt.args.attrs...); got != tt.want {
+			var sb strings.Builder
+			if err := WriteHtmlSelect(&sb, tt.args.jid, tt.args.val, tt.args.attrs...); err != nil {
+				t.Fatal(err)
+			}
+			if got := sb.String(); got != tt.want {
 				t.Errorf("HtmlSelect() = %v, want %v", got, tt.want)
 			}
 		})

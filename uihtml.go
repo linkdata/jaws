@@ -14,7 +14,7 @@ type UiHtml struct {
 func (ui *UiHtml) parseGetter(e *Element, getter interface{}) {
 	if getter != nil {
 		if tagger, ok := getter.(TagGetter); ok {
-			ui.Tag = tagger.JawsGetTag(e.Request)
+			ui.Tag = tagger.JawsGetTag(e.Request())
 			if ch, ok := getter.(ClickHandler); ok {
 				e.handlers = append(e.handlers, clickHandlerWapper{ch})
 			}
@@ -63,10 +63,11 @@ func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []stri
 	return
 }
 
-func (ui *UiHtml) JawsRender(e *Element, w io.Writer, params []interface{}) {
+func (ui *UiHtml) JawsRender(e *Element, w io.Writer, params []interface{}) (err error) {
 	if h, ok := ui.Tag.(UI); ok {
-		h.JawsRender(e, w, params)
+		err = h.JawsRender(e, w, params)
 	}
+	return
 }
 
 func (ui *UiHtml) JawsUpdate(e *Element) {

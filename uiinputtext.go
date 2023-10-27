@@ -11,12 +11,12 @@ type UiInputText struct {
 	StringSetter
 }
 
-func (ui *UiInputText) renderStringInput(e *Element, w io.Writer, htmltype string, params ...interface{}) {
+func (ui *UiInputText) renderStringInput(e *Element, w io.Writer, htmltype string, params ...interface{}) error {
 	ui.parseGetter(e, ui.StringSetter)
 	attrs := ui.parseParams(e, params)
 	v := ui.JawsGetString(e)
 	ui.Last.Store(v)
-	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, v, attrs...))
+	return WriteHtmlInput(w, e.Jid(), htmltype, v, attrs...)
 }
 
 func (ui *UiInputText) JawsUpdate(e *Element) {

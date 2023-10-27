@@ -28,6 +28,7 @@ func newTestJaws() (tj *testJaws) {
 
 type testRequest struct {
 	hr          *http.Request
+	rr          *httptest.ResponseRecorder
 	jw          *testJaws
 	readyCh     chan struct{}
 	doneCh      chan struct{}
@@ -40,6 +41,7 @@ type testRequest struct {
 	panicked    bool
 	panicVal    any
 	*Request
+	RequestWriter
 }
 
 func (tj *testJaws) newRequest(hr *http.Request) (tr *testRequest) {
@@ -48,6 +50,8 @@ func (tj *testJaws) newRequest(hr *http.Request) (tr *testRequest) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	hr = hr.WithContext(ctx)
+	rr := httptest.NewRecorder()
+	rr.Body = &bytes.Buffer{}
 	rq := tj.NewRequest(hr)
 	if rq == nil || tj.UseRequest(rq.JawsKey, hr) != rq {
 		panic("failed to create or use jaws.Request")
@@ -58,16 +62,18 @@ func (tj *testJaws) newRequest(hr *http.Request) (tr *testRequest) {
 	}
 
 	tr = &testRequest{
-		hr:      hr,
-		jw:      tj,
-		readyCh: make(chan struct{}),
-		doneCh:  make(chan struct{}),
-		inCh:    make(chan wsMsg),
-		outCh:   make(chan string, cap(bcastCh)),
-		bcastCh: bcastCh,
-		ctx:     ctx,
-		cancel:  cancel,
-		Request: rq,
+		hr:            hr,
+		rr:            rr,
+		jw:            tj,
+		readyCh:       make(chan struct{}),
+		doneCh:        make(chan struct{}),
+		inCh:          make(chan wsMsg),
+		outCh:         make(chan string, cap(bcastCh)),
+		bcastCh:       bcastCh,
+		ctx:           ctx,
+		cancel:        cancel,
+		Request:       rq,
+		RequestWriter: rq.Writer(rr),
 	}
 
 	go func() {
@@ -81,15 +87,27 @@ func (tj *testJaws) newRequest(hr *http.Request) (tr *testRequest) {
 		}()
 		close(tr.readyCh)
 		tr.process(tr.bcastCh, tr.inCh, tr.outCh) // usubs from bcase, closes outCh
-		tr.recycle()
+		tr.jw.recycle(tr.Request)
 	}()
 
 	return
 }
 
+func (tr *testRequest) BodyString() string {
+	return tr.rr.Body.String()
+}
+
+func (tr *testRequest) BodyHtml() template.HTML {
+	return template.HTML(tr.BodyString())
+}
+
 func (tr *testRequest) Close() {
 	tr.cancel()
 	tr.jw.Close()
+}
+
+func (tr *testRequest) Write(buf []byte) (int, error) {
+	return tr.rr.Write(buf)
 }
 
 func newTestRequest() (tr *testRequest) {

@@ -9,7 +9,8 @@ func TestRequest_Li(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 	want := `<li id="Jid.1">inner</li>`
-	if got := string(rq.Li("inner")); got != want {
+	rq.Li("inner")
+	if got := rq.BodyString(); got != want {
 		t.Errorf("Request.Li() = %q, want %q", got, want)
 	}
 }

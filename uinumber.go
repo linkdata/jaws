@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"html/template"
 	"io"
 )
 
@@ -9,8 +8,8 @@ type UiNumber struct {
 	UiInputFloat
 }
 
-func (ui *UiNumber) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.renderFloatInput(e, w, "number", params...)
+func (ui *UiNumber) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+	return ui.renderFloatInput(e, w, "number", params...)
 }
 
 func NewUiNumber(g FloatSetter) *UiNumber {
@@ -21,6 +20,6 @@ func NewUiNumber(g FloatSetter) *UiNumber {
 	}
 }
 
-func (rq *Request) Number(value interface{}, params ...interface{}) template.HTML {
+func (rq RequestWriter) Number(value interface{}, params ...interface{}) error {
 	return rq.UI(NewUiNumber(makeFloatSetter(value)), params...)
 }

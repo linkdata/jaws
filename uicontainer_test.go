@@ -60,7 +60,8 @@ func TestRequest_Container(t *testing.T) {
 			nextJid = 0
 			rq := newTestRequest()
 			defer rq.Close()
-			if got := rq.Container("div", tt.args.c, tt.args.params...); !reflect.DeepEqual(got, tt.want) {
+			rq.Container("div", tt.args.c, tt.args.params...)
+			if got := rq.BodyHtml(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Request.Container() = %v, want %v", got, tt.want)
 			}
 		})
@@ -171,7 +172,9 @@ func TestRequest_Container_Alteration(t *testing.T) {
 			ui := NewUiContainer("div", tt.c)
 			elem := rq.NewElement(ui)
 			var sb strings.Builder
-			ui.JawsRender(elem, &sb, nil)
+			if err := ui.JawsRender(elem, &sb, nil); err != nil {
+				t.Fatal(err)
+			}
 			tt.c.contents = tt.l
 			ui.JawsUpdate(elem)
 			if !slices.Equal(elem.wsQueue, tt.want) {

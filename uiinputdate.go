@@ -16,11 +16,11 @@ func (ui *UiInputDate) str() string {
 	return ui.Last.Load().(time.Time).Format(ISO8601)
 }
 
-func (ui *UiInputDate) renderDateInput(e *Element, w io.Writer, jid Jid, htmltype string, params ...interface{}) {
+func (ui *UiInputDate) renderDateInput(e *Element, w io.Writer, jid Jid, htmltype string, params ...interface{}) error {
 	ui.parseGetter(e, ui.TimeSetter)
 	attrs := ui.parseParams(e, params)
 	ui.Last.Store(ui.JawsGetTime(e))
-	maybePanic(WriteHtmlInput(w, e.Jid(), htmltype, ui.str(), attrs...))
+	return WriteHtmlInput(w, e.Jid(), htmltype, ui.str(), attrs...)
 }
 
 func (ui *UiInputDate) JawsUpdate(e *Element) {

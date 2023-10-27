@@ -21,7 +21,7 @@ type testUi struct {
 	getCalled    int32
 	setCalled    int32
 	s            string
-	renderFn     func(e *Element, w io.Writer, params []any)
+	renderFn     func(e *Element, w io.Writer, params []any) error
 	updateFn     func(e *Element)
 }
 
@@ -39,12 +39,13 @@ func (tss *testUi) JawsSetString(e *Element, s string) error {
 	return nil
 }
 
-func (tss *testUi) JawsRender(e *Element, w io.Writer, params []any) {
+func (tss *testUi) JawsRender(e *Element, w io.Writer, params []any) (err error) {
 	e.Tag(tss)
 	atomic.AddInt32(&tss.renderCalled, 1)
 	if tss.renderFn != nil {
-		tss.renderFn(e, w, params)
+		err = tss.renderFn(e, w, params)
 	}
+	return
 }
 
 func (tss *testUi) JawsUpdate(e *Element) {
@@ -54,8 +55,22 @@ func (tss *testUi) JawsUpdate(e *Element) {
 	}
 }
 
+func TestElement_helpers(t *testing.T) {
+	is := newTestHelper(t)
+	rq := newTestRequest()
+	defer rq.Close()
+
+	tss := &testUi{}
+	e := rq.NewElement(tss)
+	is.Equal(e.Jaws(), rq.jw.Jaws)
+	is.Equal(e.Request(), rq.Request)
+	is.Equal(e.Session(), nil)
+	e.Set("foo", "bar") // no session, so no effect
+	is.Equal(e.Get("foo"), nil)
+}
+
 func TestElement_Tag(t *testing.T) {
-	is := testHelper{t}
+	is := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 
@@ -68,7 +83,7 @@ func TestElement_Tag(t *testing.T) {
 }
 
 func TestElement_Queued(t *testing.T) {
-	is := testHelper{t}
+	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 
@@ -85,7 +100,7 @@ func TestElement_Queued(t *testing.T) {
 			e.Order([]jid.Jid{1, 2})
 			replaceHtml := template.HTML(fmt.Sprintf("<div id=\"%s\"></div>", e.Jid().String()))
 			e.Replace(replaceHtml)
-			is.Equal(e.wsQueue, []wsMsg{
+			th.Equal(e.wsQueue, []wsMsg{
 				{
 					Data: "hidden\n",
 					Jid:  e.jid,
@@ -141,26 +156,25 @@ func TestElement_Queued(t *testing.T) {
 	}
 
 	pendingRq := rq.Jaws.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
-	pendingRq.UI(tss)
+	RequestWriter{pendingRq, httptest.NewRecorder()}.UI(tss)
 
 	rq.UI(tss)
 	rq.Jaws.Dirty(tss)
 	rq.Dirty(tss)
-	tmr := time.NewTimer(testTimeout)
 	for atomic.LoadInt32(&tss.updateCalled) < 1 {
 		select {
-		case <-tmr.C:
-			is.Fail()
+		case <-th.C:
+			th.Timeout()
 		default:
 			time.Sleep(time.Millisecond)
 		}
 	}
-	is.Equal(tss.updateCalled, int32(1))
-	is.Equal(tss.renderCalled, int32(2))
+	th.Equal(tss.updateCalled, int32(1))
+	th.Equal(tss.renderCalled, int32(2))
 }
 
 func TestElement_ReplacePanicsOnMissingId(t *testing.T) {
-	is := testHelper{t}
+	is := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 	defer func() {

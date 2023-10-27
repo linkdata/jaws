@@ -39,16 +39,22 @@ func (t Template) String() string {
 	return fmt.Sprintf("{%q, %s}", t.Template.Name(), TagString(t.Dot))
 }
 
-func (t Template) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	if expandedtags, err := TagExpand(e.Request, t.Dot); err != ErrIllegalTagType {
-		e.Request.tagExpanded(e, expandedtags)
+func (t Template) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+	if expandedtags, err := TagExpand(e.Request(), t.Dot); err != ErrIllegalTagType {
+		e.Request().tagExpanded(e, expandedtags)
 	}
 	var sb strings.Builder
 	for _, s := range parseParams(e, params) {
 		sb.WriteByte(' ')
 		sb.WriteString(s)
 	}
-	maybePanic(t.Execute(w, With{Element: e, Dot: t.Dot, Attrs: template.HTMLAttr(sb.String())})) // #nosec G203
+	attrs := template.HTMLAttr(sb.String()) // #nosec G203
+	return t.Execute(w, With{
+		Element:       e,
+		RequestWriter: e.Request().Writer(w),
+		Dot:           t.Dot,
+		Attrs:         attrs,
+	})
 }
 
 func (t Template) JawsUpdate(e *Element) {

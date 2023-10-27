@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -48,11 +49,11 @@ type Jaws struct {
 	unsubCh      chan chan Message
 	updateTicker *time.Ticker
 	headPrefix   string
+	reqPool      sync.Pool
 	mu           deadlock.RWMutex // protects following
 	kg           *bufio.Reader
 	closeCh      chan struct{}
-	pending      map[uint64]*Request
-	active       map[*Request]struct{}
+	requests     map[uint64]*Request
 	sessions     map[uint64]*Session
 	dirty        map[interface{}]int
 	dirtOrder    int
@@ -61,8 +62,8 @@ type Jaws struct {
 // NewWithDone returns a new JaWS object using the given completion channel.
 // This is expected to be created once per HTTP server and handles
 // publishing HTML changes across all connections.
-func NewWithDone(doneCh <-chan struct{}) *Jaws {
-	return &Jaws{
+func NewWithDone(doneCh <-chan struct{}) (jw *Jaws) {
+	jw = &Jaws{
 		CookieName:   DefaultCookieName,
 		doneCh:       doneCh,
 		bcastCh:      make(chan Message, 1),
@@ -71,11 +72,17 @@ func NewWithDone(doneCh <-chan struct{}) *Jaws {
 		updateTicker: time.NewTicker(DefaultUpdateInterval),
 		headPrefix:   HeadHTML([]string{JavascriptPath}, nil),
 		kg:           bufio.NewReader(rand.Reader),
-		pending:      make(map[uint64]*Request),
-		active:       make(map[*Request]struct{}),
+		requests:     make(map[uint64]*Request),
 		sessions:     make(map[uint64]*Session),
 		dirty:        make(map[interface{}]int),
 	}
+	jw.reqPool.New = func() any {
+		return (&Request{
+			Jaws:   jw,
+			tagMap: make(map[any][]*Element),
+		}).clearLocked()
+	}
+	return
 }
 
 // New returns a new JaWS object that must be closed using Close().
@@ -107,15 +114,13 @@ func (jw *Jaws) Done() <-chan struct{} {
 	return jw.doneCh
 }
 
-// RequestCount returns the number of active and pending Requests.
+// RequestCount returns the number of Requests.
 //
-// "Active" Requests are those for which there is a WebSocket connection
-// and messages are being routed for. "Pending" are those for which the
-// initial HTTP request has been made but we have not yet received the
-// WebSocket callback and started processing.
+// The count includes all Requests, including those being rendered,
+// those waiting for the WebSocket callback and those active.
 func (jw *Jaws) RequestCount() (n int) {
 	jw.mu.RLock()
-	n = len(jw.pending) + len(jw.active)
+	n = len(jw.requests)
 	jw.mu.RUnlock()
 	return
 }
@@ -169,9 +174,9 @@ func (jw *Jaws) NewRequest(hr *http.Request) (rq *Request) {
 	defer jw.mu.Unlock()
 	for rq == nil {
 		jawsKey := jw.nonZeroRandomLocked()
-		if _, ok := jw.pending[jawsKey]; !ok {
-			rq = getRequest(jw, jawsKey, hr)
-			jw.pending[jawsKey] = rq
+		if _, ok := jw.requests[jawsKey]; !ok {
+			rq = jw.getRequestLocked(jawsKey, hr)
+			jw.requests[jawsKey] = rq
 		}
 	}
 	return
@@ -201,11 +206,9 @@ func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) {
 	if jawsKey != 0 {
 		var err error
 		jw.mu.Lock()
-		if waitingRq, ok := jw.pending[jawsKey]; ok {
-			if err = waitingRq.start(hr); err == nil {
-				delete(jw.pending, jawsKey)
+		if waitingRq, ok := jw.requests[jawsKey]; ok {
+			if err = waitingRq.claim(hr); err == nil {
 				rq = waitingRq
-				jw.active[rq] = struct{}{}
 			}
 		}
 		jw.mu.Unlock()
@@ -391,11 +394,8 @@ func (jw *Jaws) distributeDirt() int {
 
 	var reqs []*Request
 	if len(dirt) > 0 {
-		reqs = make([]*Request, 0, len(jw.pending)+len(jw.active))
-		for _, rq := range jw.pending {
-			reqs = append(reqs, rq)
-		}
-		for rq := range jw.active {
+		reqs = make([]*Request, 0, len(jw.requests))
+		for _, rq := range jw.requests {
 			reqs = append(reqs, rq)
 		}
 	}
@@ -441,15 +441,13 @@ func (jw *Jaws) Alert(lvl, msg string) {
 // Count returns the number of requests waiting for their WebSocket callbacks.
 func (jw *Jaws) Pending() (n int) {
 	jw.mu.RLock()
-	n = len(jw.pending)
+	for _, rq := range jw.requests {
+		if !rq.claimed {
+			n++
+		}
+	}
 	jw.mu.RUnlock()
 	return
-}
-
-func (jw *Jaws) deactivate(rq *Request) {
-	jw.mu.Lock()
-	delete(jw.active, rq)
-	jw.mu.Unlock()
 }
 
 // ServeWithTimeout begins processing requests with the given timeout.
@@ -525,13 +523,7 @@ func (jw *Jaws) Serve() {
 	jw.ServeWithTimeout(time.Second * 10)
 }
 
-func (jw *Jaws) subscribe(rq *Request, minSize int) chan Message {
-	size := minSize
-	if rq != nil {
-		if size = 4 + len(rq.elems)*4; size < minSize {
-			size = minSize
-		}
-	}
+func (jw *Jaws) subscribe(rq *Request, size int) chan Message {
 	msgCh := make(chan Message, size)
 	select {
 	case <-jw.Done():
@@ -549,45 +541,19 @@ func (jw *Jaws) unsubscribe(msgCh chan Message) {
 	}
 }
 
-func maybeErrPendingCancelled(rq *Request, deadline time.Time) (err error) {
-	if err = context.Cause(rq.ctx); err == nil && rq.Created.Before(deadline) {
-		err = newErrNoWebSocketRequest(rq)
-	}
-	if err != nil {
-		err = newErrPendingCancelled(rq, err)
-	}
-	return
-}
-
 func (jw *Jaws) maintenance(requestTimeout time.Duration) {
-	var killReqs []*Request
-	var killSess []uint64
-
-	jw.mu.RLock()
-	now := time.Now()
-	deadline := now.Add(-requestTimeout)
-	for _, rq := range jw.pending {
-		if err := jw.Log(maybeErrPendingCancelled(rq, deadline)); err != nil {
-			rq.cancel(err)
-			killReqs = append(killReqs, rq)
+	deadline := time.Now().Add(-requestTimeout)
+	jw.mu.Lock()
+	defer jw.mu.Unlock()
+	for _, rq := range jw.requests {
+		if rq.maintenance(deadline) {
+			jw.recycleLocked(rq)
 		}
 	}
 	for k, sess := range jw.sessions {
 		if sess.isDead() {
-			killSess = append(killSess, k)
-		}
-	}
-	jw.mu.RUnlock()
-
-	if len(killReqs)+len(killSess) > 0 {
-		jw.mu.Lock()
-		for _, rq := range killReqs {
-			delete(jw.pending, rq.JawsKey)
-		}
-		for _, k := range killSess {
 			delete(jw.sessions, k)
 		}
-		jw.mu.Unlock()
 	}
 }
 
@@ -711,4 +677,36 @@ func (jw *Jaws) Append(target interface{}, html template.HTML) {
 		What: what.Append,
 		Data: html,
 	})
+}
+
+func (jw *Jaws) getRequestLocked(jawsKey uint64, hr *http.Request) (rq *Request) {
+	rq = jw.reqPool.Get().(*Request)
+	rq.JawsKey = jawsKey
+	rq.Created = time.Now()
+	rq.Initial = hr
+	rq.ctx, rq.cancelFn = context.WithCancelCause(context.Background())
+	if hr != nil {
+		rq.remoteIP = parseIP(hr.RemoteAddr)
+		if sess := jw.getSessionLocked(getCookieSessionsIds(hr.Header, jw.CookieName), rq.remoteIP); sess != nil {
+			sess.addRequest(rq)
+			rq.session = sess
+		}
+	}
+	return rq
+}
+
+func (jw *Jaws) recycleLocked(rq *Request) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	if rq.JawsKey != 0 {
+		delete(jw.requests, rq.JawsKey)
+		rq.clearLocked()
+		jw.reqPool.Put(rq)
+	}
+}
+
+func (jw *Jaws) recycle(rq *Request) {
+	jw.mu.Lock()
+	defer jw.mu.Unlock()
+	jw.recycleLocked(rq)
 }

@@ -3,27 +3,26 @@ package jaws
 import (
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/linkdata/jaws/what"
 )
 
 func TestRequest_Text(t *testing.T) {
+	th := newTestHelper(t)
 	nextJid = 0
 	rq := newTestRequest()
 	defer rq.Close()
 
 	ss := newTestSetter("foo")
 	want := `<input id="Jid.1" type="text" value="foo">`
-	if got := string(rq.Text(ss)); got != want {
+	rq.Text(ss)
+	if got := rq.BodyString(); got != want {
 		t.Errorf("Request.Text() = %q, want %q", got, want)
 	}
-	tmr := time.NewTimer(testTimeout)
 	rq.inCh <- wsMsg{Data: "bar", Jid: 1, What: what.Input}
-	defer tmr.Stop()
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case <-ss.setCalled:
 	}
 	if ss.Get() != "bar" {
@@ -37,8 +36,8 @@ func TestRequest_Text(t *testing.T) {
 	ss.Set("quux")
 	rq.Dirty(ss)
 	select {
-	case <-tmr.C:
-		t.Error("timeout waiting for Value")
+	case <-th.C:
+		th.Timeout()
 	case s := <-rq.outCh:
 		if s != "Value\tJid.1\t\"quux\"\n" {
 			t.Error("wrong Value")
@@ -54,8 +53,8 @@ func TestRequest_Text(t *testing.T) {
 	ss.err = errors.New("meh")
 	rq.inCh <- wsMsg{Data: "omg", Jid: 1, What: what.Input}
 	select {
-	case <-tmr.C:
-		t.Error("timeout waiting for Alert")
+	case <-th.C:
+		th.Timeout()
 	case s := <-rq.outCh:
 		if s != "Alert\t\t\"danger\\nmeh\"\n" {
 			t.Errorf("wrong Alert: %q", s)

@@ -21,6 +21,7 @@ type testServer struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	hr          *http.Request
+	rr          *httptest.ResponseRecorder
 	rq          *Request
 	sess        *Session
 	srv         *httptest.Server
@@ -30,8 +31,9 @@ type testServer struct {
 func newTestServer() (ts *testServer) {
 	jw := New()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+	rr := httptest.NewRecorder()
 	hr := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
-	sess := jw.NewSession(nil, hr)
+	sess := jw.NewSession(rr, hr)
 	rq := jw.NewRequest(hr)
 	if rq != jw.UseRequest(rq.JawsKey, hr) {
 		panic("UseRequest failed")
@@ -41,6 +43,7 @@ func newTestServer() (ts *testServer) {
 		ctx:         ctx,
 		cancel:      cancel,
 		hr:          hr,
+		rr:          rr,
 		rq:          rq,
 		sess:        sess,
 		connectedCh: make(chan struct{}),
@@ -85,10 +88,11 @@ func (ts *testServer) Close() {
 func TestWS_UpgradeRequired(t *testing.T) {
 	jw := New()
 	defer jw.Close()
-	rq := jw.NewRequest(nil)
-
-	req := httptest.NewRequest("", "/jaws/"+rq.JawsKeyString(), nil)
 	w := httptest.NewRecorder()
+	hr := httptest.NewRequest("", "/", nil)
+	rq := jw.NewRequest(hr)
+	jw.UseRequest(rq.JawsKey, hr)
+	req := httptest.NewRequest("", "/jaws/"+rq.JawsKeyString(), nil)
 	rq.ServeHTTP(w, req)
 	if w.Code != http.StatusUpgradeRequired {
 		t.Error(w.Code)
@@ -124,8 +128,7 @@ func TestWS_ConnectFnFails(t *testing.T) {
 }
 
 func TestWS_NormalExchange(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -156,8 +159,8 @@ func TestWS_NormalExchange(t *testing.T) {
 		t.Fatal(err)
 	}
 	select {
-	case <-tmr.C:
-		t.Fatal("timeout")
+	case <-th.C:
+		th.Timeout()
 	case <-gotCallCh:
 	}
 
@@ -176,8 +179,7 @@ func TestWS_NormalExchange(t *testing.T) {
 }
 
 func TestReader_RespectsContextDone(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -206,15 +208,14 @@ func TestReader_RespectsContextDone(t *testing.T) {
 	ts.cancel()
 
 	select {
-	case <-tmr.C:
-		t.Error("did not unblock")
+	case <-th.C:
+		th.Timeout()
 	case <-doneCh:
 	}
 }
 
 func TestReader_RespectsJawsDone(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -238,15 +239,14 @@ func TestReader_RespectsJawsDone(t *testing.T) {
 	}
 
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case <-doneCh:
 	}
 }
 
 func TestWriter_SendsThePayload(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -268,14 +268,14 @@ func TestWriter_SendsThePayload(t *testing.T) {
 
 	msg := wsMsg{Jid: Jid(1234)}
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case outCh <- msg.Format():
 	}
 
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case <-doneCh:
 	}
 
@@ -290,15 +290,14 @@ func TestWriter_SendsThePayload(t *testing.T) {
 	}
 
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case <-client.CloseRead(ts.ctx).Done():
 	}
 }
 
 func TestWriter_RespectsContext(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -316,16 +315,15 @@ func TestWriter_RespectsContext(t *testing.T) {
 	ts.cancel()
 
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case <-doneCh:
 		return
 	}
 }
 
 func TestWriter_RespectsJawsDone(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -343,15 +341,14 @@ func TestWriter_RespectsJawsDone(t *testing.T) {
 	ts.jw.Close()
 
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case <-doneCh:
 	}
 }
 
 func TestWriter_RespectsOutboundClosed(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -368,8 +365,8 @@ func TestWriter_RespectsOutboundClosed(t *testing.T) {
 	close(outCh)
 
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case <-doneCh:
 	}
 
@@ -379,8 +376,7 @@ func TestWriter_RespectsOutboundClosed(t *testing.T) {
 }
 
 func TestWriter_ReportsError(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -397,14 +393,14 @@ func TestWriter_ReportsError(t *testing.T) {
 
 	msg := wsMsg{Jid: Jid(1234)}
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case outCh <- msg.Format():
 	}
 
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case <-doneCh:
 	}
 
@@ -415,8 +411,7 @@ func TestWriter_ReportsError(t *testing.T) {
 }
 
 func TestReader_ReportsError(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -438,8 +433,8 @@ func TestReader_ReportsError(t *testing.T) {
 	}
 
 	select {
-	case <-tmr.C:
-		t.Fatal("timeout")
+	case <-th.C:
+		th.Timeout()
 	case <-doneCh:
 	}
 

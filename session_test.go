@@ -212,8 +212,7 @@ func TestSession_Requests(t *testing.T) {
 }
 
 func TestSession_Delete(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	ts := newTestServer()
 	defer ts.Close()
 	go ts.jw.ServeWithTimeout(time.Second)
@@ -277,7 +276,7 @@ func TestSession_Delete(t *testing.T) {
 	}
 
 	ts.rq.Register("byebye", func(e *Element, evt what.What, val string) error {
-		sess2 := ts.jw.GetSession(e.Request.Initial)
+		sess2 := ts.jw.GetSession(e.Request().Initial)
 		if x := sess2; x != ts.sess {
 			t.Error(x)
 		}
@@ -348,8 +347,8 @@ func TestSession_Delete(t *testing.T) {
 	}
 
 	select {
-	case <-tmr.C:
-		t.Fatal("timeout")
+	case <-th.C:
+		th.Timeout()
 	case rr, ok := <-resultChan:
 		if ok {
 			if x := rr.err; x != nil {
@@ -402,7 +401,7 @@ func TestSession_Cleanup(t *testing.T) {
 		t.Error(x)
 	}
 
-	r1.recycle()
+	jw.recycle(r1)
 	r1 = nil
 	sess.deadline = time.Now()
 	if x := jw.SessionCount(); x != 1 {
@@ -425,7 +424,7 @@ func TestSession_ReplacesOld(t *testing.T) {
 	defer jw.Close()
 	go jw.ServeWithTimeout(time.Second)
 
-	is := testHelper{t}
+	is := newTestHelper(t)
 
 	is.Equal(jw.SessionCount(), 0)
 
@@ -480,7 +479,7 @@ func TestSession_ReplacesOld(t *testing.T) {
 	is.Equal(jw.GetSession(h4), s1)
 	is.Equal(len(w4.Result().Cookies()), 0)
 
-	r4.recycle()
+	jw.recycle(r4)
 
 	w3 := httptest.NewRecorder()
 	h3 := httptest.NewRequest("GET", "/", nil)

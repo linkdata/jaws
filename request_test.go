@@ -29,7 +29,7 @@ func fillWsCh(ch chan string) {
 }
 
 func TestRequest_Registrations(t *testing.T) {
-	is := testHelper{t}
+	is := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 
@@ -49,28 +49,12 @@ func TestRequest_Registrations(t *testing.T) {
 	is.True(jid != jid2)
 }
 
-func TestRequest_SendPanicsAfterRecycle(t *testing.T) {
-	is := testHelper{t}
-	defer func() {
-		e := recover()
-		if e == nil {
-			is.Fail()
-		}
-		t.Log(e)
-	}()
-	jw := New()
-	defer jw.Close()
-	rq := jw.NewRequest(nil)
-	rq.recycle()
-	rq.Jaws.Broadcast(Message{})
-}
-
 func TestRequest_HeadHTML(t *testing.T) {
-	is := testHelper{t}
+	is := newTestHelper(t)
 	jw := New()
 	defer jw.Close()
 	rq := jw.NewRequest(nil)
-	defer rq.recycle()
+	defer jw.recycle(rq)
 
 	txt := rq.HeadHTML()
 	is.Equal(strings.Contains(string(txt), rq.JawsKeyString()), true)
@@ -78,7 +62,7 @@ func TestRequest_HeadHTML(t *testing.T) {
 }
 
 func TestRequest_SendArrivesOk(t *testing.T) {
-	is := testHelper{t}
+	is := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 	jid := rq.Register("foo")
@@ -96,9 +80,7 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 }
 
 func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
-	is := testHelper{t}
+	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 	jw := rq.jw
@@ -107,24 +89,24 @@ func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
 	rq.ctx = context.Background()
 	rq.Register(tag, func(e *Element, evt what.What, val string) error {
 		atomic.AddInt32(&callCount, 1)
-		is.Equal(1, jw.RequestCount())
+		th.Equal(1, jw.RequestCount())
 		jw.Close()
 		return nil
 	})
 	fillWsCh(rq.outCh)
 	jw.Broadcast(Message{Dest: Tag("foo"), What: what.Hook, Data: "bar"})
 	select {
-	case <-tmr.C:
-		is.Equal(int(atomic.LoadInt32(&callCount)), 0)
-		is.Fail()
+	case <-th.C:
+		th.Equal(int(atomic.LoadInt32(&callCount)), 0)
+		th.Timeout()
 	case <-rq.Done():
-		is.Error("request ctx cancelled too soon")
+		th.Error("request ctx cancelled too soon")
 	case <-jw.Done():
 	}
-	is.Equal(int(atomic.LoadInt32(&callCount)), 1)
+	th.Equal(int(atomic.LoadInt32(&callCount)), 1)
 	select {
 	case <-rq.Done():
-		is.Error("request ctx cancelled too soon")
+		th.Error("request ctx cancelled too soon")
 	default:
 	}
 	if jw.log.Len() != 0 {
@@ -133,9 +115,7 @@ func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
 }
 
 func TestRequest_OutboundRespectsContextDone(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
-	is := testHelper{t}
+	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 	var callCount int32
@@ -149,25 +129,25 @@ func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 	rq.jw.Broadcast(Message{Dest: Tag("foo"), What: what.Hook, Data: "bar"})
 
 	select {
-	case <-tmr.C:
-		is.Equal(int(atomic.LoadInt32(&callCount)), 0)
-		is.Fatal(int(atomic.LoadInt32(&callCount)))
+	case <-th.C:
+		th.Equal(int(atomic.LoadInt32(&callCount)), 0)
+		th.Timeout()
 	case <-rq.jw.Done():
-		is.Fatal("jaws done too soon")
+		th.Fatal("jaws done too soon")
 	case <-rq.ctx.Done():
 	}
 
-	is.Equal(int(atomic.LoadInt32(&callCount)), 1)
+	th.Equal(int(atomic.LoadInt32(&callCount)), 1)
 
 	select {
 	case <-rq.jw.Done():
-		is.Fatal("jaws done too soon")
+		th.Fatal("jaws done too soon")
 	default:
 	}
 }
 
 func TestRequest_OutboundOverflowPanicsWithNoLogger(t *testing.T) {
-	is := testHelper{t}
+	th := newTestHelper(t)
 	rq := newTestRequest()
 	rq.expectPanic = true
 	rq.jw.Logger = nil
@@ -176,16 +156,16 @@ func TestRequest_OutboundOverflowPanicsWithNoLogger(t *testing.T) {
 	fillWsCh(rq.outCh)
 	rq.Jaws.Broadcast(Message{Dest: Tag("foo"), What: what.Inner, Data: "bar"})
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-th.C:
+		th.Timeout()
 	case <-rq.doneCh:
-		is.Equal(len(rq.outCh), cap(rq.outCh))
-		is.True(rq.panicked)
+		th.Equal(len(rq.outCh), cap(rq.outCh))
+		th.True(rq.panicked)
 	}
 }
 
 func TestRequest_Trigger(t *testing.T) {
-	is := testHelper{t}
+	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 	gotFooCall := make(chan struct{})
@@ -207,32 +187,32 @@ func TestRequest_Trigger(t *testing.T) {
 	// rq.Broadcast(Message{Dest: Tag("err"), What: what.Input, Data: "baz"})
 	rq.jw.Broadcast(Message{Dest: Tag("end"), What: what.Input, Data: ""}) // to know when to stop
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
-	case <-rq.outCh:
-		is.Fail()
+	case <-th.C:
+		th.Timeout()
+	case s := <-rq.outCh:
+		th.Fatal(s)
 	case <-gotFooCall:
-		is.Fail()
+		th.Fatal("gotFooCall")
 	case <-gotEndCall:
 	}
 
 	// global broadcast should invoke fn
 	rq.jw.Broadcast(Message{Dest: Tag("foo"), What: what.Input, Data: "bar"})
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
-	case <-rq.outCh:
-		is.Fail()
+	case <-th.C:
+		th.Timeout()
+	case s := <-rq.outCh:
+		th.Fatal(s)
 	case <-gotFooCall:
 	}
 
 	// fn returning error should send an danger alert message
 	rq.jw.Broadcast(Message{Dest: Tag("err"), What: what.Input, Data: "omg"})
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-th.C:
+		th.Timeout()
 	case msg := <-rq.outCh:
-		is.Equal(msg, (&wsMsg{
+		th.Equal(msg, (&wsMsg{
 			Data: "danger\nomg",
 			Jid:  jid.Jid(0),
 			What: what.Alert,
@@ -241,7 +221,7 @@ func TestRequest_Trigger(t *testing.T) {
 }
 
 func TestRequest_EventFnQueue(t *testing.T) {
-	is := testHelper{t}
+	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 
@@ -253,7 +233,7 @@ func TestRequest_EventFnQueue(t *testing.T) {
 		count := int(atomic.AddInt32(&callCount, 1))
 		if val != strconv.Itoa(count) {
 			t.Logf("val=%s, count=%d, cap=%d", val, count, cap(rq.outCh))
-			is.Fail()
+			th.Fail()
 		}
 		if count == 1 {
 			close(firstDoneCh)
@@ -269,33 +249,32 @@ func TestRequest_EventFnQueue(t *testing.T) {
 	}
 
 	select {
-	case <-time.NewTimer(testTimeout * 100).C:
-		is.Fail()
+	case <-th.C:
+		th.Timeout()
 	case <-rq.doneCh:
-		is.Fail()
+		th.Fatal("doneCh")
 	case <-firstDoneCh:
 	}
 
-	is.Equal(atomic.LoadInt32(&callCount), int32(1))
+	th.Equal(atomic.LoadInt32(&callCount), int32(1))
 	atomic.StoreInt32(&sleepDone, 1)
-	is.Equal(rq.panicVal, nil)
+	th.Equal(rq.panicVal, nil)
 
-	tmr := time.NewTimer(testTimeout * 100)
 	for int(atomic.LoadInt32(&callCount)) < cap(rq.outCh) {
 		select {
-		case <-tmr.C:
+		case <-th.C:
 			t.Logf("callCount=%d, cap=%d", atomic.LoadInt32(&callCount), cap(rq.outCh))
-			is.Equal(rq.panicVal, nil)
-			is.Fail()
+			th.Equal(rq.panicVal, nil)
+			th.Timeout()
 		default:
 			time.Sleep(time.Millisecond)
 		}
 	}
-	is.Equal(atomic.LoadInt32(&callCount), int32(cap(rq.outCh)))
+	th.Equal(atomic.LoadInt32(&callCount), int32(cap(rq.outCh)))
 }
 
 func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
-	is := testHelper{t}
+	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 
@@ -308,26 +287,23 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 
 	rq.expectPanic = true
 	rq.jw.Logger = nil
-	tmr := time.NewTimer(testTimeout)
-
 	jid := jidForTag(rq.Request, Tag("bomb"))
 
-	defer tmr.Stop()
 	for {
 		select {
 		case <-rq.doneCh:
-			is.True(rq.panicked)
-			is.True(strings.Contains(rq.panicVal.(error).Error(), "eventCallCh is full sending"))
+			th.True(rq.panicked)
+			th.True(strings.Contains(rq.panicVal.(error).Error(), "eventCallCh is full sending"))
 			return
-		case <-tmr.C:
-			is.Fail()
+		case <-th.C:
+			th.Timeout()
 		case rq.inCh <- wsMsg{Jid: jid, What: what.Input}:
 		}
 	}
 }
 
 func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
-	is := testHelper{t}
+	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 
@@ -355,39 +331,38 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 		time.Sleep(time.Millisecond)
 		waited++
 	}
-	is.Equal(atomic.LoadInt32(&spewState), int32(1))
-	is.Equal(cap(rq.outCh), len(rq.outCh))
-	is.True(waited < 1000)
+	th.Equal(atomic.LoadInt32(&spewState), int32(1))
+	th.Equal(cap(rq.outCh), len(rq.outCh))
+	th.True(waited < 1000)
 
 	// sending a message will now fail the rq since the
 	// outbound channel is full, but with the
 	// event fn holding it won't be able to end
 	select {
 	case rq.bcastCh <- Message{Dest: Tag("foo"), What: what.Inner, Data: ""}:
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-th.C:
+		th.Timeout()
 	case <-rq.doneCh:
-		is.Fail()
+		th.Fatal()
 	}
 
 	// rq should now be in shutdown phase draining channels
 	// while waiting for the event fn to return
-	tmr := time.NewTimer(testTimeout)
 	for i := 0; i < cap(rq.outCh)*2; i++ {
 		select {
 		case <-rq.doneCh:
-			is.Fail()
-		case <-tmr.C:
-			is.Fail()
+			th.Fatal()
+		case <-th.C:
+			th.Timeout()
 		default:
 			rq.Jaws.Broadcast(Message{Dest: rq})
 		}
 		select {
 		case rq.inCh <- wsMsg{}:
 		case <-rq.doneCh:
-			is.Fail()
-		case <-tmr.C:
-			is.Fail()
+			th.Fatal()
+		case <-th.C:
+			th.Timeout()
 		}
 	}
 
@@ -396,18 +371,17 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 
 	select {
 	case <-rq.doneCh:
-		is.True(atomic.LoadInt32(&callCount) > 1)
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+		th.True(atomic.LoadInt32(&callCount) > 1)
+	case <-th.C:
+		th.Timeout()
 	}
 
 	// log data should contain message that we were unable to deliver error
-	is.True(strings.Contains(rq.jw.log.String(), "outboundMsgCh full sending event"))
+	th.True(strings.Contains(rq.jw.log.String(), "outboundMsgCh full sending event"))
 }
 
 func TestRequest_Alert(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	tj := newTestJaws()
 	defer tj.Close()
 	rq1 := tj.newRequest(nil)
@@ -415,8 +389,8 @@ func TestRequest_Alert(t *testing.T) {
 
 	rq1.Alert("info", "<html>\nnot\tescaped")
 	select {
-	case <-tmr.C:
-		t.Fatal("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-rq1.outCh:
 		if s != "Alert\t\t\"info\\n<html>\\nnot\\tescaped\"\n" {
 			t.Errorf("%q", s)
@@ -430,8 +404,7 @@ func TestRequest_Alert(t *testing.T) {
 }
 
 func TestRequest_Redirect(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	tj := newTestJaws()
 	defer tj.Close()
 	rq1 := tj.newRequest(nil)
@@ -439,8 +412,8 @@ func TestRequest_Redirect(t *testing.T) {
 
 	rq1.Redirect("some-url")
 	select {
-	case <-tmr.C:
-		t.Fatal("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-rq1.outCh:
 		if s != "Redirect\t\t\"some-url\"\n" {
 			t.Errorf("%q", s)
@@ -454,15 +427,14 @@ func TestRequest_Redirect(t *testing.T) {
 }
 
 func TestRequest_AlertError(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	tj := newTestJaws()
 	defer tj.Close()
 	rq := tj.newRequest(nil)
 	rq.AlertError(errors.New("<html>\nshould-be-escaped"))
 	select {
-	case <-tmr.C:
-		t.Fatal("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-rq.outCh:
 		if s != "Alert\t\t\"danger\\n&lt;html&gt;\\nshould-be-escaped\"\n" {
 			t.Errorf("%q", s)
@@ -471,49 +443,47 @@ func TestRequest_AlertError(t *testing.T) {
 }
 
 func TestRequest_DeleteByTag(t *testing.T) {
-	is := testHelper{t}
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	tj := newTestJaws()
 	defer tj.Close()
 	nextJid = 0
 	rq1 := tj.newRequest(nil)
 	ui1 := &testUi{}
 	e11 := rq1.NewElement(ui1)
-	is.Equal(e11.jid, Jid(1))
+	th.Equal(e11.jid, Jid(1))
 	e11.Tag(Tag("e11"), Tag("foo"))
 	e12 := rq1.NewElement(ui1)
-	is.Equal(e12.jid, Jid(2))
+	th.Equal(e12.jid, Jid(2))
 	e12.Tag(Tag("e12"))
 	e13 := rq1.NewElement(ui1)
-	is.Equal(e13.jid, Jid(3))
+	th.Equal(e13.jid, Jid(3))
 	e13.Tag(Tag("e13"), Tag("bar"))
 
 	rq2 := tj.newRequest(nil)
 	ui2 := &testUi{}
 	e21 := rq2.NewElement(ui2)
-	is.Equal(e21.jid, Jid(4))
+	th.Equal(e21.jid, Jid(4))
 	e21.Tag(Tag("e21"), Tag("foo"))
 	e22 := rq2.NewElement(ui2)
-	is.Equal(e22.jid, Jid(5))
+	th.Equal(e22.jid, Jid(5))
 	e22.Tag(Tag("e22"))
 	e23 := rq2.NewElement(ui2)
-	is.Equal(e23.jid, Jid(6))
+	th.Equal(e23.jid, Jid(6))
 	e23.Tag(Tag("e23"))
 
 	tj.Delete([]any{Tag("foo"), Tag("bar"), Tag("nothere"), Tag("e23")})
 
 	select {
-	case <-tmr.C:
-		t.Fatal("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-rq1.outCh:
 		if s != "Delete\tJid.1\t\"\"\nDelete\tJid.3\t\"\"\n" {
 			t.Errorf("%q", s)
 		}
 	}
 	select {
-	case <-tmr.C:
-		t.Fatal("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-rq2.outCh:
 		if s != "Delete\tJid.4\t\"\"\nDelete\tJid.6\t\"\"\n" {
 			t.Errorf("%q", s)
@@ -522,8 +492,7 @@ func TestRequest_DeleteByTag(t *testing.T) {
 }
 
 func TestRequest_HtmlIdBroadcast(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	tj := newTestJaws()
 	defer tj.Close()
 	rq1 := tj.newRequest(nil)
@@ -535,16 +504,16 @@ func TestRequest_HtmlIdBroadcast(t *testing.T) {
 		Data: "inner",
 	})
 	select {
-	case <-tmr.C:
-		t.Fatal("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-rq1.outCh:
 		if s != "Inner\tfooId\t\"inner\"\n" {
 			t.Errorf("%q", s)
 		}
 	}
 	select {
-	case <-tmr.C:
-		t.Fatal("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-rq2.outCh:
 		if s != "Inner\tfooId\t\"inner\"\n" {
 			t.Errorf("%q", s)
@@ -560,23 +529,23 @@ func jidForTag(rq *Request, tag interface{}) jid.Jid {
 }
 
 func TestRequest_ConnectFn(t *testing.T) {
-	is := testHelper{t}
+	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 
-	is.Equal(rq.GetConnectFn(), nil)
-	is.NoErr(rq.onConnect())
+	th.Equal(rq.GetConnectFn(), nil)
+	th.NoErr(rq.onConnect())
 
 	wantErr := errors.New("getouttahere")
 	fn := func(rq *Request) error {
 		return wantErr
 	}
 	rq.SetConnectFn(fn)
-	is.Equal(rq.onConnect(), wantErr)
+	th.Equal(rq.onConnect(), wantErr)
 }
 
 func TestRequest_WsQueueOverflowCancels(t *testing.T) {
-	is := testHelper{t}
+	th := newTestHelper(t)
 	jw := New()
 	defer jw.Close()
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -588,29 +557,28 @@ func TestRequest_WsQueueOverflowCancels(t *testing.T) {
 		}
 	}()
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-th.C:
+		th.Timeout()
 	case <-rq.Done():
 	}
-	is.Equal(context.Cause(rq.Context()), ErrWebsocketQueueOverflow)
+	th.True(errors.Is(context.Cause(rq.Context()), ErrWebsocketQueueOverflow))
 }
 
 func TestRequest_Dirty(t *testing.T) {
-	is := testHelper{t}
+	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 
 	tss := &testUi{s: "foo"}
-	h := rq.UI(NewUiText(tss))
-	is.Equal(tss.getCalled, int32(1))
-	is.True(strings.Contains(string(h), "foo"))
+	rq.UI(NewUiText(tss))
+	th.Equal(tss.getCalled, int32(1))
+	th.True(strings.Contains(string(rq.BodyString()), "foo"))
 
 	rq.Dirty(tss)
-	tmr := time.NewTimer(testTimeout)
 	for atomic.LoadInt32(&tss.getCalled) < 2 {
 		select {
-		case <-tmr.C:
-			is.Fail()
+		case <-th.C:
+			th.Timeout()
 		default:
 			time.Sleep(time.Millisecond)
 		}
@@ -618,8 +586,7 @@ func TestRequest_Dirty(t *testing.T) {
 }
 
 func TestRequest_UpdatePanicLogs(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	nextJid = 0
 	rq := newTestRequest()
 	defer rq.Close()
@@ -631,8 +598,8 @@ func TestRequest_UpdatePanicLogs(t *testing.T) {
 	rq.UI(tss)
 	rq.Dirty(tss)
 	select {
-	case <-tmr.C:
-		t.Fatal("timeout")
+	case <-th.C:
+		th.Timeout()
 	case <-rq.doneCh:
 	}
 	if s := rq.jw.log.String(); !strings.Contains(s, "wildpanic") {
@@ -641,8 +608,7 @@ func TestRequest_UpdatePanicLogs(t *testing.T) {
 }
 
 func TestRequest_IncomingRemove(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	nextJid = 0
 	rq := newTestRequest()
 	defer rq.Close()
@@ -651,16 +617,16 @@ func TestRequest_IncomingRemove(t *testing.T) {
 	rq.UI(NewUiText(tss))
 
 	select {
-	case <-tmr.C:
-		t.Fatal("timeout")
+	case <-th.C:
+		th.Timeout()
 	case rq.inCh <- wsMsg{What: what.Remove, Data: "Jid.1"}:
 	}
 
 	elem := rq.getElementByJid(1)
 	for elem != nil {
 		select {
-		case <-tmr.C:
-			t.Fatal("timeout")
+		case <-th.C:
+			th.Timeout()
 		default:
 			time.Sleep(time.Millisecond)
 			elem = rq.getElementByJid(1)
@@ -669,8 +635,7 @@ func TestRequest_IncomingRemove(t *testing.T) {
 }
 
 func TestRequest_IncomingClick(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	nextJid = 0
 	rq := newTestRequest()
 	defer rq.Close()
@@ -689,14 +654,14 @@ func TestRequest_IncomingClick(t *testing.T) {
 	rq.Div("2", tjc2)
 
 	select {
-	case <-tmr.C:
-		t.Fatal("timeout")
+	case <-th.C:
+		th.Timeout()
 	case rq.inCh <- wsMsg{What: what.Click, Data: "name\tJid.1\tJid.2"}:
 	}
 
 	select {
-	case <-tmr.C:
-		t.Fatal("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-tjc2.clickCh:
 		if s != "name" {
 			t.Error(s)
@@ -710,16 +675,16 @@ func TestRequest_IncomingClick(t *testing.T) {
 }
 
 func TestRequest_CustomErrors(t *testing.T) {
-	is := testHelper{t}
+	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 	cause := newErrNoWebSocketRequest(rq.Request)
 	err := newErrPendingCancelled(rq.Request, cause)
-	is.True(errors.Is(err, ErrPendingCancelled{}))
-	is.True(errors.Is(err, ErrNoWebSocketRequest{}))
-	is.Equal(errors.Is(cause, ErrPendingCancelled{}), false)
+	th.True(errors.Is(err, ErrPendingCancelled{}))
+	th.True(errors.Is(err, ErrNoWebSocketRequest{}))
+	th.Equal(errors.Is(cause, ErrPendingCancelled{}), false)
 	var target1 ErrNoWebSocketRequest
-	is.True(errors.As(err, &target1))
+	th.True(errors.As(err, &target1))
 	var target2 ErrPendingCancelled
-	is.Equal(errors.As(cause, &target2), false)
+	th.Equal(errors.As(cause, &target2), false)
 }

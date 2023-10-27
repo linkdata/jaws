@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"html"
 	"html/template"
+	"io"
 	"net/http"
 	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -37,6 +37,8 @@ type Request struct {
 	remoteIP  netip.Addr              // (read-only) remote IP, or nil
 	session   *Session                // (read-only) session, if established
 	mu        deadlock.RWMutex        // protects following
+	claimed   bool                    // if UseRequest() has been called for it
+	running   bool                    // if ServeHTTP() is running
 	todoDirt  []interface{}           // dirty tags
 	ctx       context.Context         // current context, derived from either Jaws or WS HTTP req
 	cancelFn  context.CancelCauseFunc // cancel function
@@ -54,31 +56,6 @@ type eventFnCall struct {
 const maxWsQueueLengthPerElement = 20
 
 var ErrWebsocketQueueOverflow = errors.New("websocket queue overflow")
-var requestPool = sync.Pool{New: newRequest}
-
-func newRequest() interface{} {
-	rq := &Request{
-		tagMap: make(map[interface{}][]*Element),
-	}
-	return rq
-}
-
-func getRequest(jw *Jaws, jawsKey uint64, hr *http.Request) (rq *Request) {
-	rq = requestPool.Get().(*Request)
-	rq.Jaws = jw
-	rq.JawsKey = jawsKey
-	rq.Initial = hr
-	rq.Created = time.Now()
-	rq.ctx, rq.cancelFn = context.WithCancelCause(context.Background())
-	if hr != nil {
-		rq.remoteIP = parseIP(hr.RemoteAddr)
-		if sess := jw.getSessionLocked(getCookieSessionsIds(hr.Header, jw.CookieName), rq.remoteIP); sess != nil {
-			sess.addRequest(rq)
-			rq.session = sess
-		}
-	}
-	return rq
-}
 
 func (rq *Request) JawsKeyString() string {
 	jawsKey := uint64(0)
@@ -92,20 +69,26 @@ func (rq *Request) String() string {
 	return "Request<" + rq.JawsKeyString() + ">"
 }
 
-func (rq *Request) start(hr *http.Request) (err error) {
+var ErrRequestAlreadyClaimed = errors.New("request already claimed")
+
+func (rq *Request) claim(hr *http.Request) (err error) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	if rq.claimed {
+		return ErrRequestAlreadyClaimed
+	}
 	var actualIP netip.Addr
 	ctx := context.Background()
 	if hr != nil {
 		actualIP = parseIP(hr.RemoteAddr)
 		ctx = hr.Context()
 	}
-	rq.mu.Lock()
 	if equalIP(rq.remoteIP, actualIP) {
 		rq.ctx, rq.cancelFn = context.WithCancelCause(ctx)
+		rq.claimed = true
 	} else {
 		err = fmt.Errorf("/jaws/%s: expected IP %q, got %q", rq.JawsKeyString(), rq.remoteIP.String(), actualIP.String())
 	}
-	rq.mu.Unlock()
 	return
 }
 
@@ -122,28 +105,20 @@ func (rq *Request) killSession() {
 	rq.mu.Unlock()
 }
 
-func (rq *Request) recycle() {
-	rq.mu.Lock()
-	jw := rq.Jaws
-	if jw != nil {
-		rq.Jaws = nil
-		rq.JawsKey = 0
-		rq.connectFn = nil
-		rq.Initial = nil
-		rq.Created = time.Time{}
-		rq.ctx = context.Background()
-		rq.cancelFn = nil
-		rq.todoDirt = rq.todoDirt[:0]
-		rq.remoteIP = netip.Addr{}
-		rq.elems = rq.elems[:0]
-		rq.killSessionLocked()
-		clear(rq.tagMap)
-	}
-	rq.mu.Unlock()
-	if jw != nil {
-		jw.deactivate(rq)
-		requestPool.Put(rq)
-	}
+func (rq *Request) clearLocked() *Request {
+	rq.JawsKey = 0
+	rq.connectFn = nil
+	rq.Created = time.Time{}
+	rq.Initial = nil
+	rq.claimed = false
+	rq.running = false
+	rq.ctx, rq.cancelFn = context.WithCancelCause(context.Background())
+	rq.todoDirt = rq.todoDirt[:0]
+	rq.remoteIP = netip.Addr{}
+	rq.elems = rq.elems[:0]
+	rq.killSessionLocked()
+	clear(rq.tagMap)
+	return rq
 }
 
 // HeadHTML returns the HTML code needed to write in the HTML page's HEAD section.
@@ -194,15 +169,29 @@ func (rq *Request) Context() (ctx context.Context) {
 	return
 }
 
-func (rq *Request) cancel(err error) {
-	if rq != nil {
-		rq.mu.RLock()
-		cancelFn := rq.cancelFn
-		rq.mu.RUnlock()
-		if cancelFn != nil {
-			cancelFn(err)
-		}
+func (rq *Request) maintenance(deadline time.Time) (doRecycle bool) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	if doRecycle = (!rq.running && rq.Created.Before(deadline)); doRecycle {
+		rq.cancelLocked(newErrNoWebSocketRequest(rq))
 	}
+	return
+}
+
+func (rq *Request) cancelLocked(err error) {
+	if rq.JawsKey != 0 && rq.ctx.Err() == nil {
+		if !rq.running {
+			err = newErrPendingCancelled(rq, err)
+		}
+		rq.cancelFn(rq.Jaws.Log(err))
+		rq.killSessionLocked()
+	}
+}
+
+func (rq *Request) cancel(err error) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	rq.cancelLocked(err)
 }
 
 // Alert attempts to show an alert message on the current request webpage if it has an HTML element with the id 'jaws-alert'.
@@ -275,7 +264,6 @@ func (rq *Request) Register(tagitem interface{}, params ...interface{}) jid.Jid 
 	elem := rq.NewElement(uib)
 	uib.parseGetter(elem, tagitem)
 	uib.parseParams(elem, params)
-	rq.Dirty(uib.Tag)
 	return elem.jid
 }
 
@@ -305,9 +293,9 @@ var nextJid Jid
 
 func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 	elem = &Element{
-		jid:     Jid(atomic.AddInt64((*int64)(&nextJid), 1)),
-		ui:      ui,
-		Request: rq,
+		jid: Jid(atomic.AddInt64((*int64)(&nextJid), 1)),
+		ui:  ui,
+		rq:  rq,
 	}
 	rq.elems = append(rq.elems, elem)
 	return
@@ -371,8 +359,8 @@ func (rq *Request) tagExpanded(elem *Element, expandedtags []interface{}) {
 
 // Tag adds the given tags to the given Element.
 func (rq *Request) Tag(elem *Element, tags ...interface{}) {
-	if elem != nil && len(tags) > 0 && elem.Request == rq {
-		rq.tagExpanded(elem, MustTagExpand(elem.Request, tags))
+	if elem != nil && len(tags) > 0 && elem.rq == rq {
+		rq.tagExpanded(elem, MustTagExpand(elem.rq, tags))
 	}
 }
 
@@ -413,7 +401,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 
 	defer func() {
 		rq.killSession()
-		rq.Jaws.deactivate(rq)
 		rq.Jaws.unsubscribe(broadcastMsgCh)
 		close(eventCallCh)
 		for {
@@ -430,6 +417,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					}
 					rq.Jaws.MustLog(err)
 				}
+				rq.Jaws.recycle(rq)
 				return
 			}
 		}
@@ -643,7 +631,7 @@ func (rq *Request) sendQueue(outboundCh chan<- string, wsQueue []wsMsg) []wsMsg 
 }
 
 func (rq *Request) deleteElementLocked(e *Element) {
-	e.Request = nil
+	e.rq = nil
 	rq.elems = slices.DeleteFunc(rq.elems, func(elem *Element) bool { return elem == e })
 	for k := range rq.tagMap {
 		rq.tagMap[k] = slices.DeleteFunc(rq.tagMap[k], func(elem *Element) bool { return elem == e })
@@ -700,4 +688,8 @@ func (rq *Request) onConnect() (err error) {
 		err = connectFn(rq)
 	}
 	return
+}
+
+func (rq *Request) Writer(w io.Writer) RequestWriter {
+	return RequestWriter{Request: rq, Writer: w}
 }

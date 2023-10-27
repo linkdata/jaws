@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"html/template"
 	"io"
 
 	"github.com/linkdata/jaws/what"
@@ -19,8 +18,8 @@ func NewUiSelect(sh SelectHandler) *UiSelect {
 	}
 }
 
-func (ui *UiSelect) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.renderContainer(e, w, "select", params)
+func (ui *UiSelect) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+	return ui.renderContainer(e, w, "select", params)
 }
 
 func (ui *UiSelect) JawsUpdate(e *Element) {
@@ -39,6 +38,6 @@ func (ui *UiSelect) JawsEvent(e *Element, wht what.What, val string) (err error)
 	return ui.UiHtml.JawsEvent(e, wht, val)
 }
 
-func (rq *Request) Select(sh SelectHandler, params ...interface{}) template.HTML {
+func (rq RequestWriter) Select(sh SelectHandler, params ...interface{}) error {
 	return rq.UI(NewUiSelect(sh), params...)
 }

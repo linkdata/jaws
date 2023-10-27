@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"html/template"
 	"io"
 )
 
@@ -9,8 +8,8 @@ type UiDiv struct {
 	UiHtmlInner
 }
 
-func (ui *UiDiv) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.renderInner(e, w, "div", "", params)
+func (ui *UiDiv) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+	return ui.renderInner(e, w, "div", "", params)
 }
 
 func NewUiDiv(innerHtml HtmlGetter) *UiDiv {
@@ -21,6 +20,6 @@ func NewUiDiv(innerHtml HtmlGetter) *UiDiv {
 	}
 }
 
-func (rq *Request) Div(innerHtml interface{}, params ...interface{}) template.HTML {
+func (rq RequestWriter) Div(innerHtml interface{}, params ...interface{}) error {
 	return rq.UI(NewUiDiv(makeHtmlGetter(innerHtml)), params...)
 }

@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"html/template"
 	"io"
 )
 
@@ -9,8 +8,8 @@ type UiTd struct {
 	UiHtmlInner
 }
 
-func (ui *UiTd) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.renderInner(e, w, "td", "", params)
+func (ui *UiTd) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+	return ui.renderInner(e, w, "td", "", params)
 }
 
 func NewUiTd(innerHtml HtmlGetter) *UiTd {
@@ -21,6 +20,6 @@ func NewUiTd(innerHtml HtmlGetter) *UiTd {
 	}
 }
 
-func (rq *Request) Td(innerHtml interface{}, params ...interface{}) template.HTML {
+func (rq RequestWriter) Td(innerHtml interface{}, params ...interface{}) error {
 	return rq.UI(NewUiTd(makeHtmlGetter(innerHtml)), params...)
 }

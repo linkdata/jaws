@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"html/template"
 	"io"
 )
 
@@ -9,8 +8,8 @@ type UiRange struct {
 	UiInputFloat
 }
 
-func (ui *UiRange) JawsRender(e *Element, w io.Writer, params []interface{}) {
-	ui.renderFloatInput(e, w, "range", params...)
+func (ui *UiRange) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+	return ui.renderFloatInput(e, w, "range", params...)
 }
 
 func NewUiRange(g FloatSetter) *UiRange {
@@ -21,6 +20,6 @@ func NewUiRange(g FloatSetter) *UiRange {
 	}
 }
 
-func (rq *Request) Range(value interface{}, params ...interface{}) template.HTML {
+func (rq RequestWriter) Range(value interface{}, params ...interface{}) error {
 	return rq.UI(NewUiRange(makeFloatSetter(value)), params...)
 }

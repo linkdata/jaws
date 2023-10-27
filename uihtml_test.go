@@ -6,7 +6,6 @@ import (
 	"io"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/linkdata/jaws/what"
 )
@@ -27,16 +26,20 @@ func (tje *testJawsEvent) JawsEvent(e *Element, wht what.What, val string) (err 
 }
 
 func (tje *testJawsEvent) JawsGetTag(*Request) (tag any) {
-	return tje.tag
+	if tje.tag != nil {
+		return tje.tag
+	}
+	return nil
 }
 
-func (tje *testJawsEvent) JawsRender(e *Element, w io.Writer, params []any) {
+func (tje *testJawsEvent) JawsRender(e *Element, w io.Writer, params []any) error {
 	w.Write([]byte(fmt.Sprint(params)))
-	tje.msgCh <- "JawsRender"
+	tje.msgCh <- fmt.Sprintf("JawsRender(%d)", e.jid)
+	return nil
 }
 
 func (tje *testJawsEvent) JawsUpdate(e *Element) {
-	tje.msgCh <- "JawsUpdate"
+	tje.msgCh <- fmt.Sprintf("JawsUpdate(%d)", e.jid)
 }
 
 var _ ClickHandler = (*testJawsEvent)(nil)
@@ -45,8 +48,7 @@ var _ TagGetter = (*testJawsEvent)(nil)
 var _ UI = (*testJawsEvent)(nil)
 
 func TestUiHtml_JawsEvent(t *testing.T) {
-	tmr := time.NewTimer(testTimeout)
-	defer tmr.Stop()
+	th := newTestHelper(t)
 	nextJid = 0
 	rq := newTestRequest()
 	defer rq.Close()
@@ -59,8 +61,8 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 
 	rq.inCh <- wsMsg{Data: "text", Jid: id, What: what.Input}
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-tje.msgCh:
 		if s != "JawsEvent: Input \"text\"" {
 			t.Error(s)
@@ -69,8 +71,8 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 
 	rq.inCh <- wsMsg{Data: "name", Jid: id, What: what.Click}
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-msgCh:
 		if s != "JawsClick: \"name\"" {
 			t.Error(s)
@@ -79,21 +81,27 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 
 	tje.tag = tje
 	id2 := rq.Register(tje)
+	th.Equal(id2, Jid(2))
 
 	rq.inCh <- wsMsg{Data: "text2", Jid: id2, What: what.Input}
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-tje.msgCh:
 		if s != "JawsEvent: Input \"text2\"" {
 			t.Error(s)
 		}
 	}
 
+	// nothing should be marked dirty,
+	// but if it is, this ensures the
+	// test fails reliably
+	rq.jw.distributeDirt()
+
 	rq.inCh <- wsMsg{Data: "name2", Jid: id2, What: what.Click}
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-msgCh:
 		if s != "JawsClick: \"name2\"" {
 			t.Error(s)
@@ -102,22 +110,24 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 
 	rq.Dirty(tje)
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-msgCh:
-		if s != "JawsUpdate" {
+		if s != "JawsUpdate(2)" {
 			t.Error(s)
 		}
 	}
 
 	elem := rq.getElementByJid(id2)
 	var sb strings.Builder
-	elem.ui.JawsRender(elem, &sb, []any{"attr"})
+	if err := elem.ui.JawsRender(elem, &sb, []any{"attr"}); err != nil {
+		t.Fatal(err)
+	}
 	select {
-	case <-tmr.C:
-		t.Error("timeout")
+	case <-th.C:
+		th.Timeout()
 	case s := <-msgCh:
-		if s != "JawsRender" {
+		if s != "JawsRender(2)" {
 			t.Error(s)
 		}
 	}

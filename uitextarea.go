@@ -9,10 +9,10 @@ type UiTextarea struct {
 	UiInputText
 }
 
-func (ui *UiTextarea) JawsRender(e *Element, w io.Writer, params []interface{}) {
+func (ui *UiTextarea) JawsRender(e *Element, w io.Writer, params []interface{}) error {
 	ui.parseGetter(e, ui.StringSetter)
 	attrs := ui.parseParams(e, params)
-	maybePanic(WriteHtmlInner(w, e.Jid(), "textarea", "", template.HTML(ui.JawsGetString(e)), attrs...)) // #nosec G203
+	return WriteHtmlInner(w, e.Jid(), "textarea", "", template.HTML(ui.JawsGetString(e)), attrs...) // #nosec G203
 }
 
 func (ui *UiTextarea) JawsUpdate(e *Element) {
@@ -27,6 +27,6 @@ func NewUiTextarea(g StringSetter) (ui *UiTextarea) {
 	}
 }
 
-func (rq *Request) Textarea(value interface{}, params ...interface{}) template.HTML {
+func (rq RequestWriter) Textarea(value interface{}, params ...interface{}) error {
 	return rq.UI(NewUiTextarea(makeStringSetter(value)), params...)
 }

@@ -4,7 +4,6 @@ import (
 	"html/template"
 	"io"
 	"strconv"
-	"strings"
 
 	"github.com/linkdata/jaws/jid"
 )
@@ -70,12 +69,6 @@ func WriteHtmlInput(w io.Writer, jid jid.Jid, typ, val string, attrs ...string) 
 	return
 }
 
-func HtmlInput(jid jid.Jid, typ, val string, attrs ...string) template.HTML {
-	var sb strings.Builder
-	_ = WriteHtmlInput(&sb, jid, typ, val, attrs...)
-	return template.HTML(sb.String()) // #nosec G203
-}
-
 func WriteHtmlInner(w io.Writer, jid jid.Jid, tag, typ string, inner template.HTML, attrs ...string) (err error) {
 	need := 1 + len(tag)*2 + jidPrealloc + 8 + len(typ) + 1 + 1 + getAttrsLen(attrs) + 1 + len(inner) + 2 + 1
 	b := make([]byte, 0, need)
@@ -94,12 +87,6 @@ func WriteHtmlInner(w io.Writer, jid jid.Jid, tag, typ string, inner template.HT
 	}
 	_, err = w.Write(b)
 	return
-}
-
-func HtmlInner(jid jid.Jid, tag, typ string, inner template.HTML, attrs ...string) template.HTML {
-	var sb strings.Builder
-	_ = WriteHtmlInner(&sb, jid, tag, typ, inner, attrs...)
-	return template.HTML(sb.String()) // #nosec G203
 }
 
 func WriteHtmlSelect(w io.Writer, jid jid.Jid, nba *NamedBoolArray, attrs ...string) (err error) {
@@ -131,10 +118,4 @@ func WriteHtmlSelect(w io.Writer, jid jid.Jid, nba *NamedBoolArray, attrs ...str
 	b = append(b, "</select>\n"...)
 	_, err = w.Write(b)
 	return
-}
-
-func HtmlSelect(jid jid.Jid, nba *NamedBoolArray, attrs ...string) template.HTML {
-	var sb strings.Builder
-	_ = WriteHtmlSelect(&sb, jid, nba, attrs...)
-	return template.HTML(sb.String()) // #nosec G203
 }

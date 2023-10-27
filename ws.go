@@ -7,31 +7,46 @@ import (
 	"nhooyr.io/websocket"
 )
 
+func (rq *Request) startServe() (ok bool) {
+	rq.mu.Lock()
+	if ok = !rq.running && rq.claimed; ok {
+		rq.running = true
+	}
+	rq.mu.Unlock()
+	return
+}
+
+func (rq *Request) stopServe() {
+	rq.mu.Lock()
+	rq.running = false
+	rq.mu.Unlock()
+}
+
 // ServeHTTP implements http.HanderFunc.
 //
-// Assumes UseRequest() have been successfully called for the Request.
+// Requires UseRequest() have been successfully called for the Request.
 func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ws, err := websocket.Accept(w, r, nil)
-	if err == nil {
-		if err = rq.onConnect(); err == nil {
-			incomingMsgCh := make(chan wsMsg)
-			broadcastMsgCh := rq.Jaws.subscribe(rq, 1)
-			outboundCh := make(chan string, cap(broadcastMsgCh))
-			go wsReader(rq.ctx, rq.cancelFn, rq.Jaws.Done(), incomingMsgCh, ws) // closes incomingMsgCh
-			go wsWriter(rq.ctx, rq.cancelFn, rq.Jaws.Done(), outboundCh, ws)    // calls ws.Close()
-			rq.process(broadcastMsgCh, incomingMsgCh, outboundCh)               // unsubscribes broadcastMsgCh, closes outboundMsgCh
-		} else {
-			defer ws.Close(websocket.StatusNormalClosure, err.Error())
-			var msg wsMsg
-			msg.FillAlert(rq.Jaws.Log(err))
-			_ = ws.Write(r.Context(), websocket.MessageText, msg.Append(nil))
+	if rq.startServe() {
+		defer rq.stopServe()
+		ws, err := websocket.Accept(w, r, nil)
+		if err == nil {
+			if err = rq.onConnect(); err == nil {
+				incomingMsgCh := make(chan wsMsg)
+				broadcastMsgCh := rq.Jaws.subscribe(rq, 4+len(rq.elems)*4)
+				outboundCh := make(chan string, cap(broadcastMsgCh))
+				go wsReader(rq.ctx, rq.cancelFn, rq.Jaws.Done(), incomingMsgCh, ws) // closes incomingMsgCh
+				go wsWriter(rq.ctx, rq.cancelFn, rq.Jaws.Done(), outboundCh, ws)    // calls ws.Close()
+				rq.process(broadcastMsgCh, incomingMsgCh, outboundCh)               // unsubscribes broadcastMsgCh, closes outboundMsgCh
+			} else {
+				defer ws.Close(websocket.StatusNormalClosure, err.Error())
+				var msg wsMsg
+				msg.FillAlert(rq.Jaws.Log(err))
+				_ = ws.Write(r.Context(), websocket.MessageText, msg.Append(nil))
+			}
 		}
-	}
-	if err != nil {
 		rq.cancel(err)
-		_ = rq.Jaws.Log(err)
+		rq.Jaws.recycle(rq)
 	}
-	rq.recycle()
 }
 
 // wsReader reads websocket text messages, parses them and sends them on incomingMsgCh.

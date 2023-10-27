@@ -11,7 +11,8 @@ func TestRequest_Radio(t *testing.T) {
 
 	ts := newTestSetter(true)
 	want := `<input id="Jid.1" type="radio" checked>`
-	if got := string(rq.Radio(ts)); got != want {
+	rq.Radio(ts)
+	if got := rq.BodyString(); got != want {
 		t.Errorf("Request.Radio() = %q, want %q", got, want)
 	}
 }

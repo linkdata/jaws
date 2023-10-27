@@ -10,7 +10,8 @@ func TestRequest_Password(t *testing.T) {
 	defer rq.Close()
 	ts := newTestSetter("")
 	want := `<input id="Jid.1" type="password">`
-	if got := string(rq.Password(ts)); got != want {
+	rq.Password(ts)
+	if got := rq.BodyString(); got != want {
 		t.Errorf("Request.Password() = %q, want %q", got, want)
 	}
 }

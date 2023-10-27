@@ -11,7 +11,7 @@ import (
 )
 
 func TestRequest_Template(t *testing.T) {
-	is := testHelper{t}
+	is := newTestHelper(t)
 	type args struct {
 		templ  interface{}
 		dot    interface{}
@@ -64,13 +64,14 @@ func TestRequest_Template(t *testing.T) {
 					t.Fail()
 				}()
 			}
-			got := rq.Template(tt.args.templ, tt.args.dot, tt.args.params...)
+			rq.Template(tt.args.templ, tt.args.dot, tt.args.params...)
+			got := rq.BodyHtml()
 			is.Equal(len(rq.elems), 1)
 			elem := rq.elems[0]
 			if tt.errtxt != "" {
 				t.Fail()
 			}
-			gotTags := elem.TagsOf(elem)
+			gotTags := elem.Request().TagsOf(elem)
 			is.Equal(len(tt.tags), len(gotTags))
 			for _, tag := range tt.tags {
 				is.True(elem.HasTag(tag))
@@ -96,11 +97,11 @@ func (td *templateDot) JawsClick(e *Element, name string) error {
 var _ ClickHandler = &templateDot{}
 
 func TestRequest_Template_Event(t *testing.T) {
-	is := testHelper{t}
+	is := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 	dot := &templateDot{clickedCh: make(chan struct{})}
-	_ = rq.Template("testtemplate", dot)
+	rq.Template("testtemplate", dot)
 	rq.jw.Broadcast(Message{
 		Dest: dot,
 		What: what.Update,

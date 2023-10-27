@@ -16,7 +16,7 @@ type uiWrapContainer struct {
 	contents []*Element
 }
 
-func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag string, params []interface{}) {
+func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag string, params []interface{}) error {
 	ui.parseGetter(e, ui.Container)
 	attrs := ui.parseParams(e, params)
 	b := e.jid.AppendStartTagAttr(nil, outerhtmltag)
@@ -27,18 +27,22 @@ func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag
 	b = append(b, '>')
 	_, err := w.Write(b)
 	if err == nil {
-		for _, cui := range ui.Container.JawsContains(e.Request) {
-			elem := e.Request.NewElement(cui)
-			ui.contents = append(ui.contents, elem)
-			elem.Render(w, nil)
+		for _, cui := range ui.Container.JawsContains(e.Request()) {
+			if err == nil {
+				elem := e.Request().NewElement(cui)
+				ui.contents = append(ui.contents, elem)
+				err = elem.Render(w, nil)
+			}
 		}
 		b = b[:0]
 		b = append(b, "</"...)
 		b = append(b, outerhtmltag...)
 		b = append(b, '>')
-		_, err = w.Write(b)
+		if err == nil {
+			_, err = w.Write(b)
+		}
 	}
-	maybePanic(err)
+	return err
 }
 
 func (ui *uiWrapContainer) JawsUpdate(e *Element) {
@@ -47,7 +51,7 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 
 	oldMap := make(map[UI]*Element)
 	newMap := make(map[UI]struct{})
-	newContents := ui.Container.JawsContains(e.Request)
+	newContents := ui.Container.JawsContains(e.Request())
 	for _, t := range newContents {
 		newMap[t] = struct{}{}
 	}
@@ -65,7 +69,7 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 	for _, cui := range newContents {
 		var elem *Element
 		if elem = oldMap[cui]; elem == nil {
-			elem = e.Request.NewElement(cui)
+			elem = e.Request().NewElement(cui)
 			toAppend = append(toAppend, elem)
 		}
 		ui.contents = append(ui.contents, elem)
@@ -75,12 +79,12 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 
 	for _, elem := range toRemove {
 		e.Remove(elem.jid.String())
-		e.deleteElement(elem)
+		e.Request().deleteElement(elem)
 	}
 
 	for _, elem := range toAppend {
 		var sb strings.Builder
-		elem.ui.JawsRender(elem, &sb, nil)
+		maybePanic(elem.ui.JawsRender(elem, &sb, nil))
 		e.Append(template.HTML(sb.String())) // #nosec G203
 	}
 

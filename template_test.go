@@ -7,7 +7,7 @@ import (
 )
 
 func TestTemplate_String(t *testing.T) {
-	is := testHelper{t}
+	is := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 
