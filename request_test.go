@@ -49,28 +49,12 @@ func TestRequest_Registrations(t *testing.T) {
 	is.True(jid != jid2)
 }
 
-func TestRequest_SendPanicsAfterRecycle(t *testing.T) {
-	is := newTestHelper(t)
-	defer func() {
-		e := recover()
-		if e == nil {
-			is.Fail()
-		}
-		t.Log(e)
-	}()
-	jw := New()
-	defer jw.Close()
-	rq := jw.NewRequest(nil)
-	rq.recycle()
-	rq.Jaws.Broadcast(Message{})
-}
-
 func TestRequest_HeadHTML(t *testing.T) {
 	is := newTestHelper(t)
 	jw := New()
 	defer jw.Close()
 	rq := jw.NewRequest(nil)
-	defer rq.recycle()
+	defer jw.recycle(rq)
 
 	txt := rq.HeadHTML()
 	is.Equal(strings.Contains(string(txt), rq.JawsKeyString()), true)

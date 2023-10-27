@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -38,6 +37,7 @@ type Request struct {
 	remoteIP  netip.Addr              // (read-only) remote IP, or nil
 	session   *Session                // (read-only) session, if established
 	mu        deadlock.RWMutex        // protects following
+	claimed   bool                    // if UseRequest() has been called for it
 	todoDirt  []interface{}           // dirty tags
 	ctx       context.Context         // current context, derived from either Jaws or WS HTTP req
 	cancelFn  context.CancelCauseFunc // cancel function
@@ -55,31 +55,6 @@ type eventFnCall struct {
 const maxWsQueueLengthPerElement = 20
 
 var ErrWebsocketQueueOverflow = errors.New("websocket queue overflow")
-var requestPool = sync.Pool{New: newRequest}
-
-func newRequest() interface{} {
-	rq := &Request{
-		tagMap: make(map[interface{}][]*Element),
-	}
-	return rq
-}
-
-func getRequest(jw *Jaws, jawsKey uint64, hr *http.Request) (rq *Request) {
-	rq = requestPool.Get().(*Request)
-	rq.Jaws = jw
-	rq.JawsKey = jawsKey
-	rq.Created = time.Now()
-	rq.Initial = hr
-	rq.ctx, rq.cancelFn = context.WithCancelCause(context.Background())
-	if hr != nil {
-		rq.remoteIP = parseIP(hr.RemoteAddr)
-		if sess := jw.getSessionLocked(getCookieSessionsIds(hr.Header, jw.CookieName), rq.remoteIP); sess != nil {
-			sess.addRequest(rq)
-			rq.session = sess
-		}
-	}
-	return rq
-}
 
 func (rq *Request) JawsKeyString() string {
 	jawsKey := uint64(0)
@@ -93,20 +68,26 @@ func (rq *Request) String() string {
 	return "Request<" + rq.JawsKeyString() + ">"
 }
 
-func (rq *Request) start(hr *http.Request) (err error) {
+var ErrRequestAlreadyClaimed = errors.New("request already claimed")
+
+func (rq *Request) claim(hr *http.Request) (err error) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	if rq.claimed {
+		return ErrRequestAlreadyClaimed
+	}
 	var actualIP netip.Addr
 	ctx := context.Background()
 	if hr != nil {
 		actualIP = parseIP(hr.RemoteAddr)
 		ctx = hr.Context()
 	}
-	rq.mu.Lock()
 	if equalIP(rq.remoteIP, actualIP) {
 		rq.ctx, rq.cancelFn = context.WithCancelCause(ctx)
+		rq.claimed = true
 	} else {
 		err = fmt.Errorf("/jaws/%s: expected IP %q, got %q", rq.JawsKeyString(), rq.remoteIP.String(), actualIP.String())
 	}
-	rq.mu.Unlock()
 	return
 }
 
@@ -123,28 +104,19 @@ func (rq *Request) killSession() {
 	rq.mu.Unlock()
 }
 
-func (rq *Request) recycle() {
-	rq.mu.Lock()
-	jw := rq.Jaws
-	if jw != nil {
-		rq.Jaws = nil
-		rq.JawsKey = 0
-		rq.connectFn = nil
-		rq.Initial = nil
-		rq.Created = time.Time{}
-		rq.ctx = context.Background()
-		rq.cancelFn = nil
-		rq.todoDirt = rq.todoDirt[:0]
-		rq.remoteIP = netip.Addr{}
-		rq.elems = rq.elems[:0]
-		rq.killSessionLocked()
-		clear(rq.tagMap)
-	}
-	rq.mu.Unlock()
-	if jw != nil {
-		jw.deactivate(rq)
-		requestPool.Put(rq)
-	}
+func (rq *Request) clearLocked() {
+	rq.JawsKey = 0
+	rq.connectFn = nil
+	rq.Created = time.Time{}
+	rq.Initial = nil
+	rq.claimed = false
+	rq.ctx = context.Background()
+	rq.cancelFn = nil
+	rq.todoDirt = rq.todoDirt[:0]
+	rq.remoteIP = netip.Addr{}
+	rq.elems = rq.elems[:0]
+	rq.killSessionLocked()
+	clear(rq.tagMap)
 }
 
 // HeadHTML returns the HTML code needed to write in the HTML page's HEAD section.
@@ -413,7 +385,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 
 	defer func() {
 		rq.killSession()
-		rq.Jaws.deactivate(rq)
 		rq.Jaws.unsubscribe(broadcastMsgCh)
 		close(eventCallCh)
 		for {
@@ -430,6 +401,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					}
 					rq.Jaws.MustLog(err)
 				}
+				rq.Jaws.recycle(rq)
 				return
 			}
 		}

@@ -401,7 +401,7 @@ func TestSession_Cleanup(t *testing.T) {
 		t.Error(x)
 	}
 
-	r1.recycle()
+	jw.recycle(r1)
 	r1 = nil
 	sess.deadline = time.Now()
 	if x := jw.SessionCount(); x != 1 {
@@ -479,7 +479,7 @@ func TestSession_ReplacesOld(t *testing.T) {
 	is.Equal(jw.GetSession(h4), s1)
 	is.Equal(len(w4.Result().Cookies()), 0)
 
-	r4.recycle()
+	jw.recycle(r4)
 
 	w3 := httptest.NewRecorder()
 	h3 := httptest.NewRequest("GET", "/", nil)

@@ -87,7 +87,7 @@ func (tj *testJaws) newRequest(hr *http.Request) (tr *testRequest) {
 		}()
 		close(tr.readyCh)
 		tr.process(tr.bcastCh, tr.inCh, tr.outCh) // usubs from bcase, closes outCh
-		tr.recycle()
+		tr.jw.recycle(tr.Request)
 	}()
 
 	return

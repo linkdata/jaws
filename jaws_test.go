@@ -349,12 +349,15 @@ func TestJaws_UnconnectedLivesUntilDeadline(t *testing.T) {
 	case <-jw.Done():
 	}
 
-	th.NoErr(context.Cause(rq1ctx))
-	th.True(errors.Is(context.Cause(rq2ctx), ErrNoWebSocketRequest{}))
-
 	// neither should have been recycled
 	th.Equal(rq1.Jaws, jw)
 	th.Equal(rq2.Jaws, jw)
+
+	th.NoErr(context.Cause(rq1ctx))
+	if !errors.Is(context.Cause(rq2ctx), ErrNoWebSocketRequest{}) {
+		th.Error(context.Cause(rq2ctx))
+	}
+
 }
 
 func TestJaws_BroadcastsCallable(t *testing.T) {

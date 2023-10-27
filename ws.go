@@ -31,7 +31,7 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		rq.cancel(err)
 		_ = rq.Jaws.Log(err)
 	}
-	rq.recycle()
+	rq.Jaws.recycle(rq)
 }
 
 // wsReader reads websocket text messages, parses them and sends them on incomingMsgCh.
