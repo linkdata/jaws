@@ -17,9 +17,8 @@ func (rq *Request) startServe() (ok bool) {
 }
 
 func (rq *Request) stopServe() {
-	rq.mu.Lock()
-	rq.running = false
-	rq.mu.Unlock()
+	rq.cancel(nil)
+	rq.Jaws.recycle(rq)
 }
 
 // ServeHTTP implements http.HanderFunc.
@@ -45,7 +44,6 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		rq.cancel(err)
-		rq.Jaws.recycle(rq)
 	}
 }
 

@@ -169,13 +169,19 @@ func (rq *Request) Context() (ctx context.Context) {
 	return
 }
 
-func (rq *Request) maintenance(deadline time.Time) (doRecycle bool) {
-	rq.mu.Lock()
-	defer rq.mu.Unlock()
-	if doRecycle = (!rq.running && rq.Created.Before(deadline)); doRecycle {
-		rq.cancelLocked(newErrNoWebSocketRequest(rq))
+func (rq *Request) maintenance(deadline time.Time) bool {
+	rq.mu.RLock()
+	defer rq.mu.RUnlock()
+	if !rq.running {
+		if rq.ctx.Err() != nil {
+			return true
+		}
+		if rq.Created.Before(deadline) {
+			rq.cancelLocked(newErrNoWebSocketRequest(rq))
+			return true
+		}
 	}
-	return
+	return false
 }
 
 func (rq *Request) cancelLocked(err error) {
@@ -184,7 +190,6 @@ func (rq *Request) cancelLocked(err error) {
 			err = newErrPendingCancelled(rq, err)
 		}
 		rq.cancelFn(rq.Jaws.Log(err))
-		rq.killSessionLocked()
 	}
 }
 
@@ -400,8 +405,8 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 	go rq.eventCaller(eventCallCh, outboundCh, eventDoneCh)
 
 	defer func() {
-		rq.killSession()
 		rq.Jaws.unsubscribe(broadcastMsgCh)
+		rq.killSession()
 		close(eventCallCh)
 		for {
 			select {
@@ -417,7 +422,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					}
 					rq.Jaws.MustLog(err)
 				}
-				rq.Jaws.recycle(rq)
 				return
 			}
 		}
