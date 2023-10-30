@@ -56,7 +56,9 @@ func TestRequest_HeadHTML(t *testing.T) {
 	rq := jw.NewRequest(nil)
 	defer jw.recycle(rq)
 
-	txt := rq.HeadHTML()
+	var sb strings.Builder
+	rq.Writer(&sb).HeadHTML()
+	txt := sb.String()
 	is.Equal(strings.Contains(string(txt), rq.JawsKeyString()), true)
 	is.Equal(strings.Contains(string(txt), JavascriptPath), true)
 }

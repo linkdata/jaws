@@ -18,7 +18,7 @@ func (rq *Request) JawsRender(elem *Element, w io.Writer, params []interface{}) 
 		if rq.Jaws.Debug {
 			var sb strings.Builder
 			_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", elem.jid, elem.ui)
-			for i, tag := range elem.Request().TagsOf(elem) {
+			for i, tag := range elem.Request.TagsOf(elem) {
 				if i > 0 {
 					sb.WriteString(", ")
 				}

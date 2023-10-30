@@ -70,8 +70,9 @@ func TestSession_Use(t *testing.T) {
 			return
 		}
 
+		var sb strings.Builder
 		sess := jw.GetSession(r)
-		rq := jw.NewRequest(r)
+		rq := jw.NewRequest(r).Writer(&sb)
 		if sess != rq.Session() {
 			t.Error(sess)
 		}
@@ -100,7 +101,7 @@ func TestSession_Use(t *testing.T) {
 			rq.Set("bar", "quux")
 		}
 		w.WriteHeader(http.StatusOK)
-		jw.UseRequest(rq.JawsKey, r)
+		jw.UseRequest(rq.Request().JawsKey, r)
 	})
 
 	srv := httptest.NewServer(h)
@@ -276,7 +277,7 @@ func TestSession_Delete(t *testing.T) {
 	}
 
 	ts.rq.Register("byebye", func(e *Element, evt what.What, val string) error {
-		sess2 := ts.jw.GetSession(e.Request().Initial)
+		sess2 := ts.jw.GetSession(e.Request.Initial)
 		if x := sess2; x != ts.sess {
 			t.Error(x)
 		}

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"html/template"
 	"io"
 	"net/http"
 	"net/netip"
@@ -121,10 +120,14 @@ func (rq *Request) clearLocked() *Request {
 	return rq
 }
 
-// HeadHTML returns the HTML code needed to write in the HTML page's HEAD section.
-func (rq *Request) HeadHTML() template.HTML {
-	s := rq.Jaws.headPrefix + rq.JawsKeyString() + `";</script>`
-	return template.HTML(s) // #nosec G203
+// HeadHTML writes the HTML code needed in the HTML page's HEAD section.
+func (rq *Request) HeadHTML(w io.Writer) (err error) {
+	if _, err = w.Write([]byte(rq.Jaws.headPrefix)); err == nil {
+		if _, err = w.Write([]byte(rq.JawsKeyString())); err == nil {
+			_, err = w.Write([]byte(`";</script><noscript><div class="jaws-alert">This site requires Javascript for full functionality.</div></noscript>`))
+		}
+	}
+	return
 }
 
 // GetConnectFn returns the currently set ConnectFn. That function will be called before starting the WebSocket tunnel if not nil.
@@ -298,9 +301,9 @@ var nextJid Jid
 
 func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 	elem = &Element{
-		jid: Jid(atomic.AddInt64((*int64)(&nextJid), 1)),
-		ui:  ui,
-		rq:  rq,
+		jid:     Jid(atomic.AddInt64((*int64)(&nextJid), 1)),
+		ui:      ui,
+		Request: rq,
 	}
 	rq.elems = append(rq.elems, elem)
 	return
@@ -364,8 +367,8 @@ func (rq *Request) tagExpanded(elem *Element, expandedtags []interface{}) {
 
 // Tag adds the given tags to the given Element.
 func (rq *Request) Tag(elem *Element, tags ...interface{}) {
-	if elem != nil && len(tags) > 0 && elem.rq == rq {
-		rq.tagExpanded(elem, MustTagExpand(elem.rq, tags))
+	if elem != nil && len(tags) > 0 && elem.Request == rq {
+		rq.tagExpanded(elem, MustTagExpand(elem.Request, tags))
 	}
 }
 
@@ -635,7 +638,7 @@ func (rq *Request) sendQueue(outboundCh chan<- string, wsQueue []wsMsg) []wsMsg 
 }
 
 func (rq *Request) deleteElementLocked(e *Element) {
-	e.rq = nil
+	e.Request = nil
 	rq.elems = slices.DeleteFunc(rq.elems, func(elem *Element) bool { return elem == e })
 	for k := range rq.tagMap {
 		rq.tagMap[k] = slices.DeleteFunc(rq.tagMap[k], func(elem *Element) bool { return elem == e })
@@ -695,5 +698,5 @@ func (rq *Request) onConnect() (err error) {
 }
 
 func (rq *Request) Writer(w io.Writer) RequestWriter {
-	return RequestWriter{Request: rq, Writer: w}
+	return RequestWriter{rq: rq, Writer: w}
 }

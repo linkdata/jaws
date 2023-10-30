@@ -54,6 +54,7 @@ func JawsKeyValue(jawsKey string) uint64 {
 const jsLoader = `.forEach(function(c){var e=document.createElement("script");e.src=c;e.async=!1;document.head.appendChild(e);});`
 
 // HeadHTML returns HTML code to load the given scripts and CSS files efficiently,
+// as well as a basic CSS "jaws-alert" class for JaWS to use.
 func HeadHTML(js []string, css []string) string {
 	var s []byte
 
@@ -67,6 +68,10 @@ func HeadHTML(js []string, css []string) string {
 		s = strconv.AppendQuote(s, e)
 		s = append(s, " as=\"script\">\n"...)
 	}
+	s = append(s, `<style>
+.jaws-alert { height: 3em; display: flex; justify-content: center; align-items: center; background-color: red; color: white; }
+</style>
+`...)
 
 	s = append(s, "<script>["...)
 	for i, e := range js {

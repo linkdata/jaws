@@ -62,8 +62,8 @@ func TestElement_helpers(t *testing.T) {
 
 	tss := &testUi{}
 	e := rq.NewElement(tss)
-	is.Equal(e.Jaws(), rq.jw.Jaws)
-	is.Equal(e.Request(), rq.Request)
+	is.Equal(e.Jaws, rq.jw.Jaws)
+	is.Equal(e.Request, rq.Request)
 	is.Equal(e.Session(), nil)
 	e.Set("foo", "bar") // no session, so no effect
 	is.Equal(e.Get("foo"), nil)

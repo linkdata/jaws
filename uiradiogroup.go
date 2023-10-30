@@ -11,13 +11,13 @@ type RadioElement struct {
 	nameAttr string
 }
 
-func (rq *Request) RadioGroup(nba *NamedBoolArray) (rel []RadioElement) {
+func (rw RequestWriter) RadioGroup(nba *NamedBoolArray) (rel []RadioElement) {
 	nameAttr := `name="` + MakeID() + `"`
 	nba.ReadLocked(func(nbl []*NamedBool) {
 		for _, nb := range nbl {
 			rel = append(rel, RadioElement{
-				radio:    rq.NewElement(NewUiRadio(nb)),
-				label:    rq.NewElement(NewUiLabel(nb)),
+				radio:    rw.Request().NewElement(NewUiRadio(nb)),
+				label:    rw.Request().NewElement(NewUiLabel(nb)),
 				nameAttr: nameAttr,
 			},
 			)
@@ -34,7 +34,7 @@ func (re RadioElement) Radio(params ...interface{}) template.HTML {
 }
 
 // Label renders a HTML label element.
-func (re *RadioElement) Label(params ...interface{}) template.HTML {
+func (re RadioElement) Label(params ...interface{}) template.HTML {
 	var sb strings.Builder
 	forAttr := string(re.radio.jid.AppendQuote([]byte("for=")))
 	maybePanic(re.label.Render(&sb, append(params, forAttr)))

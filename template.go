@@ -40,8 +40,8 @@ func (t Template) String() string {
 }
 
 func (t Template) JawsRender(e *Element, w io.Writer, params []interface{}) error {
-	if expandedtags, err := TagExpand(e.Request(), t.Dot); err != ErrIllegalTagType {
-		e.Request().tagExpanded(e, expandedtags)
+	if expandedtags, err := TagExpand(e.Request, t.Dot); err != ErrIllegalTagType {
+		e.Request.tagExpanded(e, expandedtags)
 	}
 	var sb strings.Builder
 	for _, s := range parseParams(e, params) {
@@ -51,7 +51,7 @@ func (t Template) JawsRender(e *Element, w io.Writer, params []interface{}) erro
 	attrs := template.HTMLAttr(sb.String()) // #nosec G203
 	return t.Execute(w, With{
 		Element:       e,
-		RequestWriter: e.Request().Writer(w),
+		RequestWriter: e.Request.Writer(w),
 		Dot:           t.Dot,
 		Attrs:         attrs,
 	})
