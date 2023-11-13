@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"html/template"
 	"io"
 	"net/http"
 	"net/netip"
@@ -490,6 +491,8 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		switch data := tagmsg.Data.(type) {
 		case string:
 			wsdata = data
+		case template.HTML:
+			wsdata = string(data)
 		default:
 			// do nothing
 		}
