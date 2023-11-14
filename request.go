@@ -485,15 +485,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			return
 		}
 
-		// prepare the data to send in the WS message
-		var wsdata string
-		switch data := tagmsg.Data.(type) {
-		case string:
-			wsdata = data
-		default:
-			// do nothing
-		}
-
 		// collect all elements marked with the tag in the message
 		var todo []*Element
 		switch v := tagmsg.Dest.(type) {
@@ -503,7 +494,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		case string:
 			// target is a regular HTML ID
 			wsQueue = append(wsQueue, wsMsg{
-				Data: v + "\t" + strconv.Quote(wsdata),
+				Data: v + "\t" + strconv.Quote(tagmsg.Data),
 				What: tagmsg.What,
 				Jid:  -1,
 			})
@@ -515,7 +506,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		case what.Reload, what.Redirect, what.Order, what.Alert:
 			wsQueue = append(wsQueue, wsMsg{
 				Jid:  0,
-				Data: wsdata,
+				Data: tagmsg.Data,
 				What: tagmsg.What,
 			})
 		default:
@@ -532,15 +523,15 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					// they won't be sent out on the WebSocket, but will queue up a
 					// call to the event function (if any).
 					// primary usecase is tests.
-					rq.queueEvent(eventCallCh, eventFnCall{jid: elem.jid, wht: tagmsg.What, data: wsdata})
+					rq.queueEvent(eventCallCh, eventFnCall{jid: elem.jid, wht: tagmsg.What, data: tagmsg.Data})
 				case what.Hook:
 					// "hook" messages are used to synchronously call an event function.
 					// the function must not send any messages itself, but may return
 					// an error to be sent out as an alert message.
 					// primary usecase is tests.
-					if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.jid, tagmsg.What, wsdata)); err != nil {
+					if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.jid, tagmsg.What, tagmsg.Data)); err != nil {
 						wsQueue = append(wsQueue, wsMsg{
-							Data: wsdata,
+							Data: tagmsg.Data,
 							Jid:  elem.jid,
 							What: what.Alert,
 						})
@@ -549,7 +540,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					elem.Ui().JawsUpdate(elem)
 				default:
 					wsQueue = append(wsQueue, wsMsg{
-						Data: wsdata,
+						Data: tagmsg.Data,
 						Jid:  elem.jid,
 						What: tagmsg.What,
 					})

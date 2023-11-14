@@ -10,7 +10,7 @@ import (
 type Message struct {
 	Dest interface{} // destination (tag, html ID or *Element)
 	What what.What   // what to change or do
-	Data interface{} // data (e.g. inner HTML content or slice of tags)
+	Data string      // data (e.g. inner HTML content or slice of tags)
 }
 
 // String returns the Message in a form suitable for debug output.

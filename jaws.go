@@ -584,7 +584,7 @@ func (jw *Jaws) SetInner(target interface{}, innerHtml template.HTML) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.Inner,
-		Data: innerHtml,
+		Data: string(innerHtml),
 	})
 }
 
@@ -675,7 +675,7 @@ func (jw *Jaws) Append(target interface{}, html template.HTML) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.Append,
-		Data: html,
+		Data: string(html),
 	})
 }
 
