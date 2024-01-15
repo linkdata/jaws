@@ -13,7 +13,7 @@ func TestHtmlInput(t *testing.T) {
 		jid   jid.Jid
 		typ   string
 		val   string
-		attrs []string
+		attrs []template.HTMLAttr
 	}
 	tests := []struct {
 		name string
@@ -35,7 +35,7 @@ func TestHtmlInput(t *testing.T) {
 				jid:   2,
 				typ:   "input_type2",
 				val:   "initial_val2",
-				attrs: []string{""},
+				attrs: []template.HTMLAttr{""},
 			},
 			want: `<input id="Jid.2" type="input_type2" value="initial_val2">`,
 		},
@@ -45,7 +45,7 @@ func TestHtmlInput(t *testing.T) {
 				jid:   3,
 				typ:   "input_type2",
 				val:   "initial_val2",
-				attrs: []string{"some_attr"},
+				attrs: []template.HTMLAttr{"some_attr"},
 			},
 			want: `<input id="Jid.3" type="input_type2" value="initial_val2" some_attr>`,
 		},
@@ -55,7 +55,7 @@ func TestHtmlInput(t *testing.T) {
 				jid:   4,
 				typ:   "input_type2",
 				val:   "initial_val2",
-				attrs: []string{"some_attr1", "", "some_attr2"},
+				attrs: []template.HTMLAttr{"some_attr1", "", "some_attr2"},
 			},
 			want: `<input id="Jid.4" type="input_type2" value="initial_val2" some_attr1 some_attr2>`,
 		},
@@ -79,7 +79,7 @@ func TestHtmlInner(t *testing.T) {
 		tag   string
 		typ   string
 		inner template.HTML
-		attrs []string
+		attrs []template.HTMLAttr
 	}
 	tests := []struct {
 		name string
@@ -113,7 +113,7 @@ func TestHtmlInner(t *testing.T) {
 				tag:   "tag1",
 				typ:   "typ1",
 				inner: "inner_text",
-				attrs: []string{"some_attr1", "some_attr2", ""},
+				attrs: []template.HTMLAttr{"some_attr1", "some_attr2", ""},
 			},
 			want: `<tag1 id="Jid.3" type="typ1" some_attr1 some_attr2>inner_text</tag1>`,
 		},
@@ -135,7 +135,7 @@ func TestHtmlSelect(t *testing.T) {
 	type args struct {
 		jid   jid.Jid
 		val   *NamedBoolArray
-		attrs []string
+		attrs []template.HTMLAttr
 	}
 	tests := []struct {
 		name string
@@ -147,7 +147,7 @@ func TestHtmlSelect(t *testing.T) {
 			args: args{
 				jid:   2,
 				val:   NewNamedBoolArray(),
-				attrs: []string{"attr1"},
+				attrs: []template.HTMLAttr{"attr1"},
 			},
 			want: "<select id=\"Jid.2\" attr1>\n</select>\n",
 		},
@@ -163,7 +163,7 @@ func TestHtmlSelect(t *testing.T) {
 					nba.Set("two", true)
 					return
 				}(),
-				attrs: []string{"", "attr2"},
+				attrs: []template.HTMLAttr{"", "attr2"},
 			},
 			want: `<select id="Jid.3" attr2>
 <option value="one">1</option>

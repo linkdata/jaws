@@ -154,3 +154,35 @@ func (e *Element) Order(jidList []jid.Jid) {
 func (e *Element) Remove(htmlId string) {
 	e.queue(what.Remove, htmlId)
 }
+
+// ParseParams parses the parameters passed to UI() when creating a new Element,
+// setting event handlers and returning a list of HTML attributes.
+func (e *Element) ParseParams(params []interface{}) (attrs []template.HTMLAttr) {
+	for i := range params {
+		switch data := params[i].(type) {
+		case template.HTMLAttr:
+			attrs = append(attrs, data)
+		case []template.HTMLAttr:
+			attrs = append(attrs, data...)
+		case string:
+			attrs = append(attrs, template.HTMLAttr(data))
+		case []string:
+			for _, s := range data {
+				attrs = append(attrs, template.HTMLAttr(s))
+			}
+		case EventFn:
+			if data != nil {
+				e.handlers = append(e.handlers, eventFnWrapper{data})
+			}
+		default:
+			if h, ok := data.(ClickHandler); ok {
+				e.handlers = append(e.handlers, clickHandlerWapper{h})
+			}
+			if h, ok := data.(EventHandler); ok {
+				e.handlers = append(e.handlers, h)
+			}
+			e.Tag(data)
+		}
+	}
+	return
+}

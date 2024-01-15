@@ -11,7 +11,7 @@ type UiTextarea struct {
 
 func (ui *UiTextarea) JawsRender(e *Element, w io.Writer, params []interface{}) error {
 	ui.parseGetter(e, ui.StringSetter)
-	attrs := ui.parseParams(e, params)
+	attrs := e.ParseParams(params)
 	return WriteHtmlInner(w, e.Jid(), "textarea", "", template.HTML(ui.JawsGetString(e)), attrs...) // #nosec G203
 }
 

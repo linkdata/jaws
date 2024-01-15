@@ -11,8 +11,7 @@ type UiHtmlInner struct {
 
 func (ui *UiHtmlInner) renderInner(e *Element, w io.Writer, htmltag, htmltype string, params []interface{}) error {
 	ui.parseGetter(e, ui.HtmlGetter)
-	attrs := ui.parseParams(e, params)
-	return WriteHtmlInner(w, e.Jid(), htmltag, htmltype, ui.JawsGetHtml(e), attrs...)
+	return WriteHtmlInner(w, e.Jid(), htmltag, htmltype, ui.JawsGetHtml(e), e.ParseParams(params)...)
 }
 
 func (ui *UiHtmlInner) JawsUpdate(e *Element) {

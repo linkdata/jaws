@@ -34,7 +34,7 @@ func needClosingTag(tag string) bool {
 	return !ok
 }
 
-func getAttrsLen(attrs []string) (attrslen int) {
+func getAttrsLen(attrs []template.HTMLAttr) (attrslen int) {
 	for _, s := range attrs {
 		if s != "" {
 			attrslen += 1 + len(s)
@@ -43,7 +43,7 @@ func getAttrsLen(attrs []string) (attrslen int) {
 	return
 }
 
-func appendAttrs(b []byte, attrs []string) []byte {
+func appendAttrs(b []byte, attrs []template.HTMLAttr) []byte {
 	for _, s := range attrs {
 		if s != "" {
 			b = append(b, ' ')
@@ -53,7 +53,7 @@ func appendAttrs(b []byte, attrs []string) []byte {
 	return b
 }
 
-func WriteHtmlInput(w io.Writer, jid jid.Jid, typ, val string, attrs ...string) (err error) {
+func WriteHtmlInput(w io.Writer, jid jid.Jid, typ, val string, attrs ...template.HTMLAttr) (err error) {
 	need := 11 + jidPrealloc + 8 + len(typ) + 9 + len(val) + 1 + 1 + getAttrsLen(attrs) + 1
 	b := make([]byte, 0, need)
 	b = jid.AppendStartTagAttr(b, "input")
@@ -69,7 +69,7 @@ func WriteHtmlInput(w io.Writer, jid jid.Jid, typ, val string, attrs ...string) 
 	return
 }
 
-func WriteHtmlInner(w io.Writer, jid jid.Jid, tag, typ string, inner template.HTML, attrs ...string) (err error) {
+func WriteHtmlInner(w io.Writer, jid jid.Jid, tag, typ string, inner template.HTML, attrs ...template.HTMLAttr) (err error) {
 	need := 1 + len(tag)*2 + jidPrealloc + 8 + len(typ) + 1 + 1 + getAttrsLen(attrs) + 1 + len(inner) + 2 + 1
 	b := make([]byte, 0, need)
 	b = jid.AppendStartTagAttr(b, tag)
@@ -89,7 +89,7 @@ func WriteHtmlInner(w io.Writer, jid jid.Jid, tag, typ string, inner template.HT
 	return
 }
 
-func WriteHtmlSelect(w io.Writer, jid jid.Jid, nba *NamedBoolArray, attrs ...string) (err error) {
+func WriteHtmlSelect(w io.Writer, jid jid.Jid, nba *NamedBoolArray, attrs ...template.HTMLAttr) (err error) {
 	need := 12 + jidPrealloc + 2 + getAttrsLen(attrs) + 2 + 10
 	nba.ReadLocked(func(nba []*NamedBool) {
 		for _, nb := range nba {

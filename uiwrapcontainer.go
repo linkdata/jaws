@@ -18,7 +18,7 @@ type uiWrapContainer struct {
 
 func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag string, params []interface{}) error {
 	ui.parseGetter(e, ui.Container)
-	attrs := ui.parseParams(e, params)
+	attrs := e.ParseParams(params)
 	b := e.jid.AppendStartTagAttr(nil, outerhtmltag)
 	for _, attr := range attrs {
 		b = append(b, ' ')

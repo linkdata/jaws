@@ -18,7 +18,7 @@ func (ui *UiInputDate) str() string {
 
 func (ui *UiInputDate) renderDateInput(e *Element, w io.Writer, jid Jid, htmltype string, params ...interface{}) error {
 	ui.parseGetter(e, ui.TimeSetter)
-	attrs := ui.parseParams(e, params)
+	attrs := e.ParseParams(params)
 	ui.Last.Store(ui.JawsGetTime(e))
 	return WriteHtmlInput(w, e.Jid(), htmltype, ui.str(), attrs...)
 }

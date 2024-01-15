@@ -259,8 +259,8 @@ func (rq *Request) Register(tagitem interface{}, params ...interface{}) jid.Jid 
 	switch data := tagitem.(type) {
 	case jid.Jid:
 		if elem := rq.getElementByJid(data); elem != nil {
-			if uib, ok := elem.Ui().(*UiHtml); ok {
-				uib.parseParams(elem, params)
+			if _, ok := elem.Ui().(*UiHtml); ok {
+				elem.ParseParams(params)
 			}
 		}
 		return data
@@ -271,7 +271,7 @@ func (rq *Request) Register(tagitem interface{}, params ...interface{}) jid.Jid 
 	uib := &UiHtml{}
 	elem := rq.NewElement(uib)
 	uib.parseGetter(elem, tagitem)
-	uib.parseParams(elem, params)
+	elem.ParseParams(params)
 	return elem.jid
 }
 
