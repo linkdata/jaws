@@ -53,15 +53,16 @@ func appendAttrs(b []byte, attrs []template.HTMLAttr) []byte {
 	return b
 }
 
-func WriteHtmlInput(w io.Writer, jid jid.Jid, typ, val string, attrs ...template.HTMLAttr) (err error) {
-	need := 11 + jidPrealloc + 8 + len(typ) + 9 + len(val) + 1 + 1 + getAttrsLen(attrs) + 1
-	b := make([]byte, 0, need)
-	b = jid.AppendStartTagAttr(b, "input")
-	b = append(b, ` type=`...)
-	b = strconv.AppendQuote(b, typ)
-	if val != "" {
+func WriteHtmlTag(w io.Writer, jid jid.Jid, htmlTag, typeAttr, valueAttr string, attrs []template.HTMLAttr) (err error) {
+	b := make([]byte, 0, 64)
+	b = jid.AppendStartTagAttr(b, htmlTag)
+	if typeAttr != "" {
+		b = append(b, ` type=`...)
+		b = strconv.AppendQuote(b, typeAttr)
+	}
+	if valueAttr != "" {
 		b = append(b, ` value=`...)
-		b = strconv.AppendQuote(b, val)
+		b = strconv.AppendQuote(b, valueAttr)
 	}
 	b = appendAttrs(b, attrs)
 	b = append(b, '>')
@@ -69,23 +70,21 @@ func WriteHtmlInput(w io.Writer, jid jid.Jid, typ, val string, attrs ...template
 	return
 }
 
-func WriteHtmlInner(w io.Writer, jid jid.Jid, tag, typ string, inner template.HTML, attrs ...template.HTMLAttr) (err error) {
-	need := 1 + len(tag)*2 + jidPrealloc + 8 + len(typ) + 1 + 1 + getAttrsLen(attrs) + 1 + len(inner) + 2 + 1
-	b := make([]byte, 0, need)
-	b = jid.AppendStartTagAttr(b, tag)
-	if typ != "" {
-		b = append(b, ` type=`...)
-		b = strconv.AppendQuote(b, typ)
+func WriteHtmlInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs []template.HTMLAttr) (err error) {
+	return WriteHtmlTag(w, jid, "input", typeAttr, valueAttr, attrs)
+}
+
+func WriteHtmlInner(w io.Writer, jid jid.Jid, htmlTag, typeAttr string, innerHtml template.HTML, attrs ...template.HTMLAttr) (err error) {
+	if err = WriteHtmlTag(w, jid, htmlTag, typeAttr, "", attrs); err == nil {
+		if innerHtml != "" || needClosingTag(htmlTag) {
+			w.Write([]byte(innerHtml))
+			var b []byte
+			b = append(b, "</"...)
+			b = append(b, htmlTag...)
+			b = append(b, '>')
+			w.Write(b)
+		}
 	}
-	b = appendAttrs(b, attrs)
-	b = append(b, '>')
-	if inner != "" || needClosingTag(tag) {
-		b = append(b, inner...)
-		b = append(b, "</"...)
-		b = append(b, tag...)
-		b = append(b, '>')
-	}
-	_, err = w.Write(b)
 	return
 }
 

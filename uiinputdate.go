@@ -20,7 +20,7 @@ func (ui *UiInputDate) renderDateInput(e *Element, w io.Writer, jid Jid, htmltyp
 	ui.parseGetter(e, ui.TimeSetter)
 	attrs := e.ParseParams(params)
 	ui.Last.Store(ui.JawsGetTime(e))
-	return WriteHtmlInput(w, e.Jid(), htmltype, ui.str(), attrs...)
+	return WriteHtmlInput(w, e.Jid(), htmltype, ui.str(), attrs)
 }
 
 func (ui *UiInputDate) JawsUpdate(e *Element) {

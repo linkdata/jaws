@@ -63,7 +63,7 @@ func TestHtmlInput(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var sb strings.Builder
-			if err := WriteHtmlInput(&sb, tt.args.jid, tt.args.typ, tt.args.val, tt.args.attrs...); err != nil {
+			if err := WriteHtmlInput(&sb, tt.args.jid, tt.args.typ, tt.args.val, tt.args.attrs); err != nil {
 				t.Fatal(err)
 			}
 			if got := sb.String(); got != tt.want {
