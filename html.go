@@ -88,7 +88,7 @@ func WriteHtmlInner(w io.Writer, jid jid.Jid, htmlTag, typeAttr string, innerHtm
 	return
 }
 
-func WriteHtmlSelect(w io.Writer, jid jid.Jid, nba *NamedBoolArray, attrs ...template.HTMLAttr) (err error) {
+func WriteHtmlSelect(w io.Writer, jid jid.Jid, nba *NamedBoolArray, attrs []template.HTMLAttr) (err error) {
 	need := 12 + jidPrealloc + 2 + getAttrsLen(attrs) + 2 + 10
 	nba.ReadLocked(func(nba []*NamedBool) {
 		for _, nb := range nba {
@@ -98,23 +98,22 @@ func WriteHtmlSelect(w io.Writer, jid jid.Jid, nba *NamedBoolArray, attrs ...tem
 			}
 		}
 	})
-	b := make([]byte, 0, need)
-	b = jid.AppendStartTagAttr(b, "select")
-	b = appendAttrs(b, attrs)
-	b = append(b, ">\n"...)
-	nba.ReadLocked(func(nba []*NamedBool) {
-		for _, nb := range nba {
-			b = append(b, `<option value=`...)
-			b = strconv.AppendQuote(b, nb.Name())
-			if nb.Checked() {
-				b = append(b, ` selected`...)
+	if err = WriteHtmlTag(w, jid, "select", "", "", attrs); err == nil {
+		nba.ReadLocked(func(nba []*NamedBool) {
+			for _, nb := range nba {
+				var b []byte
+				b = append(b, "\n<option value="...)
+				b = strconv.AppendQuote(b, nb.Name())
+				if nb.Checked() {
+					b = append(b, ` selected`...)
+				}
+				b = append(b, '>')
+				b = append(b, nb.Html()...)
+				b = append(b, "</option>"...)
+				w.Write(b)
 			}
-			b = append(b, '>')
-			b = append(b, nb.Html()...)
-			b = append(b, "</option>\n"...)
-		}
-	})
-	b = append(b, "</select>\n"...)
-	_, err = w.Write(b)
+		})
+		_, err = w.Write([]byte("\n</select>"))
+	}
 	return
 }

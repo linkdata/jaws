@@ -149,7 +149,7 @@ func TestHtmlSelect(t *testing.T) {
 				val:   NewNamedBoolArray(),
 				attrs: []template.HTMLAttr{"attr1"},
 			},
-			want: "<select id=\"Jid.2\" attr1>\n</select>\n",
+			want: "<select id=\"Jid.2\" attr1>\n</select>",
 		},
 		{
 			name: "HtmlSelect NamedBoolArray with data",
@@ -169,18 +169,17 @@ func TestHtmlSelect(t *testing.T) {
 <option value="one">1</option>
 <option value="two" selected>2</option>
 <option value="three">2</option>
-</select>
-`,
+</select>`,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var sb strings.Builder
-			if err := WriteHtmlSelect(&sb, tt.args.jid, tt.args.val, tt.args.attrs...); err != nil {
+			if err := WriteHtmlSelect(&sb, tt.args.jid, tt.args.val, tt.args.attrs); err != nil {
 				t.Fatal(err)
 			}
 			if got := sb.String(); got != tt.want {
-				t.Errorf("HtmlSelect() = %v, want %v", got, tt.want)
+				t.Errorf("HtmlSelect():\n got = %q\nwant = %q", got, tt.want)
 			}
 		})
 	}
