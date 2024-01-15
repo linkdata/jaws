@@ -21,7 +21,8 @@ func (ui *UiImg) SrcAttr(e *Element) string {
 
 func (ui *UiImg) JawsRender(e *Element, w io.Writer, params []interface{}) error {
 	ui.parseGetter(e, ui.StringSetter)
-	attrs := append(e.ParseParams(params), template.HTMLAttr("src="+ui.SrcAttr(e)))
+	srcattr := template.HTMLAttr("src=" + ui.SrcAttr(e)) // #nosec G203
+	attrs := append(e.ParseParams(params), srcattr)
 	return WriteHtmlInner(w, e.Jid(), "img", "", "", attrs...)
 }
 

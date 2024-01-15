@@ -11,7 +11,8 @@ type UiOption struct{ *NamedBool }
 func (ui UiOption) JawsRender(e *Element, w io.Writer, params []interface{}) error {
 	e.Tag(ui.NamedBool)
 	attrs := e.ParseParams(params)
-	attrs = append(attrs, template.HTMLAttr(`value="`+html.EscapeString(ui.JawsGetString(e))+`"`))
+	valattr := template.HTMLAttr(`value="` + html.EscapeString(ui.JawsGetString(e)) + `"`) // #nosec G203
+	attrs = append(attrs, valattr)
 	if ui.Checked() {
 		attrs = append(attrs, "selected")
 	}

@@ -165,10 +165,10 @@ func (e *Element) ParseParams(params []interface{}) (attrs []template.HTMLAttr) 
 		case []template.HTMLAttr:
 			attrs = append(attrs, data...)
 		case string:
-			attrs = append(attrs, template.HTMLAttr(data))
+			attrs = append(attrs, template.HTMLAttr(data)) // #nosec G203
 		case []string:
 			for _, s := range data {
-				attrs = append(attrs, template.HTMLAttr(s))
+				attrs = append(attrs, template.HTMLAttr(s)) // #nosec G203
 			}
 		case EventFn:
 			if data != nil {
