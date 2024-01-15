@@ -66,12 +66,13 @@ func WriteHtmlInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs 
 func WriteHtmlInner(w io.Writer, jid jid.Jid, htmlTag, typeAttr string, innerHtml template.HTML, attrs ...template.HTMLAttr) (err error) {
 	if err = WriteHtmlTag(w, jid, htmlTag, typeAttr, "", attrs); err == nil {
 		if innerHtml != "" || needClosingTag(htmlTag) {
-			w.Write([]byte(innerHtml))
-			var b []byte
-			b = append(b, "</"...)
-			b = append(b, htmlTag...)
-			b = append(b, '>')
-			w.Write(b)
+			if _, err = w.Write([]byte(innerHtml)); err == nil {
+				var b []byte
+				b = append(b, "</"...)
+				b = append(b, htmlTag...)
+				b = append(b, '>')
+				_, err = w.Write(b)
+			}
 		}
 	}
 	return
@@ -79,9 +80,9 @@ func WriteHtmlInner(w io.Writer, jid jid.Jid, htmlTag, typeAttr string, innerHtm
 
 func WriteHtmlSelect(w io.Writer, jid jid.Jid, nba *NamedBoolArray, attrs []template.HTMLAttr) (err error) {
 	if err = WriteHtmlTag(w, jid, "select", "", "", attrs); err == nil {
+		var b []byte
 		nba.ReadLocked(func(nba []*NamedBool) {
 			for _, nb := range nba {
-				var b []byte
 				b = append(b, "\n<option value="...)
 				b = strconv.AppendQuote(b, nb.Name())
 				if nb.Checked() {
@@ -90,10 +91,10 @@ func WriteHtmlSelect(w io.Writer, jid jid.Jid, nba *NamedBoolArray, attrs []temp
 				b = append(b, '>')
 				b = append(b, nb.Html()...)
 				b = append(b, "</option>"...)
-				w.Write(b)
 			}
 		})
-		_, err = w.Write([]byte("\n</select>"))
+		b = append(b, "\n</select>"...)
+		_, err = w.Write(b)
 	}
 	return
 }
