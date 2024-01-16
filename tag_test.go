@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"reflect"
+	"strings"
 	"sync/atomic"
 	"testing"
 )
@@ -80,7 +81,10 @@ func TestTagExpand_IllegalTypesPanic(t *testing.T) {
 				if !ok {
 					t.Fail()
 				}
-				if e.Error() != ErrIllegalTagType.Error() {
+				if !errors.Is(e, ErrIllegalTagType) {
+					t.Fail()
+				}
+				if !strings.Contains(e.Error(), fmt.Sprintf("%T", tag)) {
 					t.Fail()
 				}
 			}()

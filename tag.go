@@ -27,10 +27,16 @@ func (errTooManyTags) Error() string {
 
 var ErrTooManyTags = errTooManyTags{}
 
-type errIllegalTagType struct{}
+type errIllegalTagType struct {
+	tag any
+}
 
-func (errIllegalTagType) Error() string {
-	return "illegal tag type"
+func (e errIllegalTagType) Error() string {
+	return fmt.Sprintf("illegal tag type %T", e.tag)
+}
+
+func (errIllegalTagType) Is(other error) bool {
+	return other == ErrIllegalTagType
 }
 
 var ErrIllegalTagType = errIllegalTagType{}
@@ -82,7 +88,7 @@ func tagExpand(l int, rq *Request, tag interface{}, result []interface{}) ([]int
 	default:
 		return append(result, data), nil
 	}
-	return result, ErrIllegalTagType
+	return result, errIllegalTagType{tag: tag}
 }
 
 func TagExpand(rq *Request, tag interface{}) ([]interface{}, error) {
