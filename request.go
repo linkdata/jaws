@@ -629,7 +629,6 @@ func (rq *Request) sendQueue(outboundCh chan<- string, wsQueue []wsMsg) []wsMsg 
 }
 
 func (rq *Request) deleteElementLocked(e *Element) {
-	e.Request = nil
 	rq.elems = slices.DeleteFunc(rq.elems, func(elem *Element) bool { return elem == e })
 	for k := range rq.tagMap {
 		rq.tagMap[k] = slices.DeleteFunc(rq.tagMap[k], func(elem *Element) bool { return elem == e })
