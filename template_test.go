@@ -66,3 +66,23 @@ func TestRequest_MustTemplate_Panics(t *testing.T) {
 		})
 	}
 }
+
+func TestRequest_MustTemplate_PanicsIfJawsTemplateNil(t *testing.T) {
+	rq := newTestRequest()
+	defer rq.Close()
+
+	const name = "JawsTemplateIsNil"
+	rq.Jaws.Template = nil
+
+	defer func() {
+		x := recover()
+		if e, ok := x.(error); ok {
+			if strings.Contains(e.Error(), name) {
+				return
+			}
+		}
+		t.Fail()
+	}()
+	rq.MustTemplate(name)
+	t.Fail()
+}

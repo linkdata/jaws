@@ -23,10 +23,13 @@ func (rq *Request) MustTemplate(v interface{}) (tp *template.Template) {
 	case *template.Template:
 		tp = v
 	case string:
+		if rq.Jaws.Template == nil {
+			panic(fmt.Errorf("Jaws.Template is nil, can't look up %q", v))
+		}
 		tp = rq.Jaws.Template.Lookup(v)
 	}
 	if tp == nil {
-		panic(fmt.Errorf("expected template, not %v", v))
+		panic(fmt.Errorf("expected template or string, not %v", v))
 	}
 	return
 }
