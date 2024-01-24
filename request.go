@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/netip"
-	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -628,10 +627,30 @@ func (rq *Request) sendQueue(outboundCh chan<- string, wsQueue []wsMsg) []wsMsg 
 	return wsQueue[:0]
 }
 
+func deleteElement(s []*Element, e *Element) []*Element {
+	for i, v := range s {
+		if e == v {
+			j := i
+			for i++; i < len(s); i++ {
+				v = s[i]
+				if e != v {
+					s[j] = v
+					j++
+				}
+			}
+			for i := j; i < len(s); i++ {
+				s[i] = nil
+			}
+			return s[:j]
+		}
+	}
+	return s
+}
+
 func (rq *Request) deleteElementLocked(e *Element) {
-	rq.elems = slices.DeleteFunc(rq.elems, func(elem *Element) bool { return elem == e })
+	rq.elems = deleteElement(rq.elems, e)
 	for k := range rq.tagMap {
-		rq.tagMap[k] = slices.DeleteFunc(rq.tagMap[k], func(elem *Element) bool { return elem == e })
+		rq.tagMap[k] = deleteElement(rq.tagMap[k], e)
 	}
 }
 
