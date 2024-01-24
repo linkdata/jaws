@@ -271,7 +271,7 @@ func (rq *Request) Register(tagitem interface{}, params ...interface{}) jid.Jid 
 	elem := rq.NewElement(uib)
 	uib.parseGetter(elem, tagitem)
 	elem.ParseParams(params)
-	return elem.jid
+	return elem.Jid()
 }
 
 // Dirty marks all Elements that have one or more of the given tags as dirty.
@@ -316,7 +316,7 @@ func (rq *Request) NewElement(ui UI) *Element {
 
 func (rq *Request) getElementByJidLocked(jid Jid) (elem *Element) {
 	for _, e := range rq.elems {
-		if e.jid == jid {
+		if e.Jid() == jid {
 			elem = e
 			break
 		}
@@ -440,15 +440,15 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			wsQueue = rq.sendQueue(outboundCh, wsQueue)
 		}
 
-		// empty the dirty tags list and call JawsUpdate()
-		// for identified elements. this queues up wsMsg
-		// in rq.wsQueue.
+		// Empty the dirty tags list and call JawsUpdate()
+		// for identified elements. This queues up wsMsg's
+		// in elem.wsQueue.
 		for _, elem := range rq.makeUpdateList() {
-			elem.Ui().JawsUpdate(elem)
+			elem.Update()
 		}
 
-		// append pending WS messages to the queue
-		// in the order of Element creation
+		// Append pending WS messages to the queue
+		// in the order of Element creation.
 		rq.mu.RLock()
 		for _, elem := range rq.elems {
 			wsQueue = append(wsQueue, elem.wsQueue...)
@@ -513,7 +513,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 				switch tagmsg.What {
 				case what.Delete:
 					wsQueue = append(wsQueue, wsMsg{
-						Jid:  elem.jid,
+						Jid:  elem.Jid(),
 						What: what.Delete,
 					})
 					rq.deleteElement(elem)
@@ -522,16 +522,16 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					// they won't be sent out on the WebSocket, but will queue up a
 					// call to the event function (if any).
 					// primary usecase is tests.
-					rq.queueEvent(eventCallCh, eventFnCall{jid: elem.jid, wht: tagmsg.What, data: tagmsg.Data})
+					rq.queueEvent(eventCallCh, eventFnCall{jid: elem.Jid(), wht: tagmsg.What, data: tagmsg.Data})
 				case what.Hook:
 					// "hook" messages are used to synchronously call an event function.
 					// the function must not send any messages itself, but may return
 					// an error to be sent out as an alert message.
 					// primary usecase is tests.
-					if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.jid, tagmsg.What, tagmsg.Data)); err != nil {
+					if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.Jid(), tagmsg.What, tagmsg.Data)); err != nil {
 						wsQueue = append(wsQueue, wsMsg{
 							Data: tagmsg.Data,
-							Jid:  elem.jid,
+							Jid:  elem.Jid(),
 							What: what.Alert,
 						})
 					}
@@ -540,7 +540,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 				default:
 					wsQueue = append(wsQueue, wsMsg{
 						Data: tagmsg.Data,
-						Jid:  elem.jid,
+						Jid:  elem.Jid(),
 						What: tagmsg.What,
 					})
 				}
@@ -585,12 +585,14 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err 
 	rq.mu.RUnlock()
 
 	for _, e := range elems {
-		if err = callEventHandler(e.ui, e, wht, val); err != ErrEventUnhandled {
-			return
-		}
-		for _, h := range e.handlers {
-			if err = h.JawsEvent(e, wht, val); err != ErrEventUnhandled {
+		if !e.deleted {
+			if err = callEventHandler(e.Ui(), e, wht, val); err != ErrEventUnhandled {
 				return
+			}
+			for _, h := range e.handlers {
+				if err = h.JawsEvent(e, wht, val); err != ErrEventUnhandled {
+					return
+				}
 			}
 		}
 	}
@@ -648,6 +650,7 @@ func deleteElement(s []*Element, e *Element) []*Element {
 }
 
 func (rq *Request) deleteElementLocked(e *Element) {
+	e.deleted = true
 	rq.elems = deleteElement(rq.elems, e)
 	for k := range rq.tagMap {
 		rq.tagMap[k] = deleteElement(rq.tagMap[k], e)

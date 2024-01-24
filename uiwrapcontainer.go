@@ -19,7 +19,7 @@ type uiWrapContainer struct {
 func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag string, params []interface{}) error {
 	ui.parseGetter(e, ui.Container)
 	attrs := e.ParseParams(params)
-	b := e.jid.AppendStartTagAttr(nil, outerhtmltag)
+	b := e.Jid().AppendStartTagAttr(nil, outerhtmltag)
 	for _, attr := range attrs {
 		b = append(b, ' ')
 		b = append(b, attr...)
@@ -59,9 +59,9 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 	ui.mu.Lock()
 	oldOrder := make([]Jid, len(ui.contents))
 	for i, elem := range ui.contents {
-		oldOrder[i] = elem.jid
-		oldMap[elem.ui] = elem
-		if _, ok := newMap[elem.ui]; !ok {
+		oldOrder[i] = elem.Jid()
+		oldMap[elem.Ui()] = elem
+		if _, ok := newMap[elem.Ui()]; !ok {
 			toRemove = append(toRemove, elem)
 		}
 	}
@@ -73,18 +73,18 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 			toAppend = append(toAppend, elem)
 		}
 		ui.contents = append(ui.contents, elem)
-		orderData = append(orderData, elem.jid)
+		orderData = append(orderData, elem.Jid())
 	}
 	ui.mu.Unlock()
 
 	for _, elem := range toRemove {
-		e.Remove(elem.jid.String())
+		e.Remove(elem.Jid().String())
 		e.Request.deleteElement(elem)
 	}
 
 	for _, elem := range toAppend {
 		var sb strings.Builder
-		maybePanic(elem.ui.JawsRender(elem, &sb, nil))
+		maybePanic(elem.Render(&sb, nil))
 		e.Append(template.HTML(sb.String())) // #nosec G203
 	}
 

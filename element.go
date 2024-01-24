@@ -12,27 +12,30 @@ import (
 
 // An Element is an instance of a *Request, an UI object and a Jid.
 type Element struct {
-	*Request         // (read-only) the Request the Element belongs to
-	ui       UI      // (read-only) the UI object
-	jid      jid.Jid // (read-only) JaWS ID, unique to this Element within it's Request
+	*Request // (read-only) the Request the Element belongs to
 	// internals
-	updating bool           // about to have Update() called
+	ui       UI             // the UI object
 	wsQueue  []wsMsg        // changes queued
 	handlers []EventHandler // custom event handlers registered, if any
+	jid      jid.Jid        // JaWS ID, unique to this Element within it's Request
+	updating bool           // about to have Update() called
+	deleted  bool           // true if deleteElement() has been called for this Element
 }
 
 func (e *Element) String() string {
-	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", e.ui, e.jid, e.Request.TagsOf(e))
+	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", e.Ui(), e.Jid(), e.Request.TagsOf(e))
 }
 
 // Tag adds the given tags to the Element.
 func (e *Element) Tag(tags ...interface{}) {
-	e.Request.Tag(e, tags...)
+	if !e.deleted {
+		e.Request.Tag(e, tags...)
+	}
 }
 
 // HasTag returns true if this Element has the given tag.
 func (e *Element) HasTag(tag interface{}) bool {
-	return e.Request.HasTag(e, tag)
+	return !e.deleted && e.Request.HasTag(e, tag)
 }
 
 // Jid returns the JaWS ID for this Element, unique within it's Request.
@@ -45,20 +48,32 @@ func (e *Element) Ui() UI {
 	return e.ui
 }
 
+// Update calls Ui().JawsUpdate() for this Element.
+func (e *Element) Update() {
+	if !e.deleted {
+		e.Ui().JawsUpdate(e)
+	}
+}
+
 // Render calls Request.JawsRender() for this Element.
-func (e *Element) Render(w io.Writer, params []interface{}) error {
-	return e.Request.JawsRender(e, w, params)
+func (e *Element) Render(w io.Writer, params []interface{}) (err error) {
+	if !e.deleted {
+		err = e.Request.JawsRender(e, w, params)
+	}
+	return
 }
 
 func (e *Element) queue(wht what.What, data string) {
-	if len(e.wsQueue) < maxWsQueueLengthPerElement {
-		e.wsQueue = append(e.wsQueue, wsMsg{
-			Data: data,
-			Jid:  e.jid,
-			What: wht,
-		})
-	} else {
-		e.Request.cancel(ErrWebsocketQueueOverflow)
+	if !e.deleted {
+		if len(e.wsQueue) < maxWsQueueLengthPerElement {
+			e.wsQueue = append(e.wsQueue, wsMsg{
+				Data: data,
+				Jid:  e.jid,
+				What: wht,
+			})
+		} else {
+			e.Request.cancel(ErrWebsocketQueueOverflow)
+		}
 	}
 }
 
@@ -115,13 +130,15 @@ func (e *Element) SetValue(val string) {
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) Replace(htmlCode template.HTML) {
-	var b []byte
-	b = append(b, "id="...)
-	b = e.Jid().AppendQuote(b)
-	if !bytes.Contains([]byte(htmlCode), b) {
-		panic(fmt.Errorf("jaws: Element.Replace(): expected HTML " + string(b)))
+	if !e.deleted {
+		var b []byte
+		b = append(b, "id="...)
+		b = e.Jid().AppendQuote(b)
+		if !bytes.Contains([]byte(htmlCode), b) {
+			panic(fmt.Errorf("jaws: Element.Replace(): expected HTML " + string(b)))
+		}
+		e.queue(what.Replace, string(htmlCode))
 	}
-	e.queue(what.Replace, string(htmlCode))
 }
 
 // Append appends a new HTML element as a child to the current one.
@@ -135,7 +152,7 @@ func (e *Element) Append(htmlCode template.HTML) {
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) Order(jidList []jid.Jid) {
-	if len(jidList) > 0 {
+	if !e.deleted && len(jidList) > 0 {
 		var b []byte
 		for i, jid := range jidList {
 			if i > 0 {
@@ -158,30 +175,32 @@ func (e *Element) Remove(htmlId string) {
 // ParseParams parses the parameters passed to UI() when creating a new Element,
 // setting event handlers and returning a list of HTML attributes.
 func (e *Element) ParseParams(params []interface{}) (attrs []template.HTMLAttr) {
-	for i := range params {
-		switch data := params[i].(type) {
-		case template.HTMLAttr:
-			attrs = append(attrs, data)
-		case []template.HTMLAttr:
-			attrs = append(attrs, data...)
-		case string:
-			attrs = append(attrs, template.HTMLAttr(data)) // #nosec G203
-		case []string:
-			for _, s := range data {
-				attrs = append(attrs, template.HTMLAttr(s)) // #nosec G203
+	if !e.deleted {
+		for i := range params {
+			switch data := params[i].(type) {
+			case template.HTMLAttr:
+				attrs = append(attrs, data)
+			case []template.HTMLAttr:
+				attrs = append(attrs, data...)
+			case string:
+				attrs = append(attrs, template.HTMLAttr(data)) // #nosec G203
+			case []string:
+				for _, s := range data {
+					attrs = append(attrs, template.HTMLAttr(s)) // #nosec G203
+				}
+			case EventFn:
+				if data != nil {
+					e.handlers = append(e.handlers, eventFnWrapper{data})
+				}
+			default:
+				if h, ok := data.(ClickHandler); ok {
+					e.handlers = append(e.handlers, clickHandlerWapper{h})
+				}
+				if h, ok := data.(EventHandler); ok {
+					e.handlers = append(e.handlers, h)
+				}
+				e.Tag(data)
 			}
-		case EventFn:
-			if data != nil {
-				e.handlers = append(e.handlers, eventFnWrapper{data})
-			}
-		default:
-			if h, ok := data.(ClickHandler); ok {
-				e.handlers = append(e.handlers, clickHandlerWapper{h})
-			}
-			if h, ok := data.(EventHandler); ok {
-				e.handlers = append(e.handlers, h)
-			}
-			e.Tag(data)
 		}
 	}
 	return

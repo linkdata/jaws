@@ -36,7 +36,7 @@ func (re RadioElement) Radio(params ...interface{}) template.HTML {
 // Label renders a HTML label element.
 func (re RadioElement) Label(params ...interface{}) template.HTML {
 	var sb strings.Builder
-	forAttr := string(re.radio.jid.AppendQuote([]byte("for=")))
+	forAttr := string(re.radio.Jid().AppendQuote([]byte("for=")))
 	maybePanic(re.label.Render(&sb, append(params, forAttr)))
 	return template.HTML(sb.String()) // #nosec G203
 }

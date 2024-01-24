@@ -120,7 +120,7 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 
 	elem := rq.getElementByJid(id2)
 	var sb strings.Builder
-	if err := elem.ui.JawsRender(elem, &sb, []any{"attr"}); err != nil {
+	if err := elem.Render(&sb, []any{"attr"}); err != nil {
 		t.Fatal(err)
 	}
 	select {
