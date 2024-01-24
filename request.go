@@ -536,7 +536,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 						})
 					}
 				case what.Update:
-					elem.Ui().JawsUpdate(elem)
+					elem.Update()
 				default:
 					wsQueue = append(wsQueue, wsMsg{
 						Data: tagmsg.Data,
