@@ -26,8 +26,8 @@ func TestRequest_MustTemplate(t *testing.T) {
 		arg    any
 		wantTp *template.Template
 	}{
-		{"*template.Template", rq.jw.Template, rq.jw.Template},
-		{"named template", "testtemplate", rq.jw.Template},
+		{"*template.Template", rq.jw.testtmpl, rq.jw.testtmpl},
+		{"named template", "testtemplate", rq.jw.testtmpl},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -47,8 +47,8 @@ func TestRequest_MustTemplate_Panics(t *testing.T) {
 		arg    any
 		wantTp *template.Template
 	}{
-		{"nil", nil, rq.jw.Template},
-		{"nosuchtemplate", "nosuchtemplate", rq.jw.Template},
+		{"nil", nil, rq.jw.testtmpl},
+		{"nosuchtemplate", "nosuchtemplate", rq.jw.testtmpl},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -65,24 +65,4 @@ func TestRequest_MustTemplate_Panics(t *testing.T) {
 			t.Fail()
 		})
 	}
-}
-
-func TestRequest_MustTemplate_PanicsIfJawsTemplateNil(t *testing.T) {
-	rq := newTestRequest()
-	defer rq.Close()
-
-	const name = "JawsTemplateIsNil"
-	rq.Jaws.Template = nil
-
-	defer func() {
-		x := recover()
-		if e, ok := x.(error); ok {
-			if strings.Contains(e.Error(), name) {
-				return
-			}
-		}
-		t.Fail()
-	}()
-	rq.MustTemplate(name)
-	t.Fail()
 }

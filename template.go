@@ -17,16 +17,13 @@ type Template struct {
 var _ UI = Template{}           // statically ensure interface is defined
 var _ EventHandler = Template{} // statically ensure interface is defined
 
-// GetTemplate resolves 'v' to a *template.Template or panics.
+// MustTemplate resolves 'v' to a *template.Template or panics.
 func (rq *Request) MustTemplate(v interface{}) (tp *template.Template) {
 	switch v := v.(type) {
 	case *template.Template:
 		tp = v
 	case string:
-		if rq.Jaws.Template == nil {
-			panic(fmt.Errorf("Jaws.Template is nil, can't look up %q", v))
-		}
-		tp = rq.Jaws.Template.Lookup(v)
+		tp = rq.Jaws.Lookup(v)
 	}
 	if tp == nil {
 		panic(fmt.Errorf("expected template or string, not %v", v))

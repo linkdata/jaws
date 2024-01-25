@@ -416,3 +416,13 @@ func TestJaws_GenerateHeadHTML(t *testing.T) {
 	th.True(jw.GenerateHeadHTML("random.crap") != nil)
 	th.True(jw.GenerateHeadHTML("\n") != nil)
 }
+
+func TestJaws_TemplateLookuper(t *testing.T) {
+	th := newTestHelper(t)
+	rq := newTestRequest()
+	defer rq.Close()
+	th.Equal(rq.Jaws.Lookup("nosuchtemplate"), nil)
+	th.Equal(rq.Jaws.Lookup("testtemplate"), rq.jw.testtmpl)
+	rq.Jaws.RemoveTemplateLookuper(rq.jw.testtmpl)
+	th.Equal(rq.Jaws.Lookup("testtemplate"), nil)
+}

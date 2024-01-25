@@ -39,10 +39,9 @@ const (
 type Jid = jid.Jid // convenience alias
 
 type Jaws struct {
-	CookieName   string             // Name for session cookies, defaults to "jaws"
-	Logger       *log.Logger        // If not nil, send debug info and errors here
-	Template     *template.Template // User templates in use, may be nil
-	Debug        bool               // set to true to enable debugging output
+	CookieName   string      // Name for session cookies, defaults to "jaws"
+	Logger       *log.Logger // If not nil, send debug info and errors here
+	Debug        bool        // set to true to enable debugging output
 	doneCh       <-chan struct{}
 	bcastCh      chan Message
 	subCh        chan subscription
@@ -51,6 +50,7 @@ type Jaws struct {
 	headPrefix   string
 	reqPool      sync.Pool
 	mu           deadlock.RWMutex // protects following
+	tmplookers   map[TemplateLookuper]struct{}
 	kg           *bufio.Reader
 	closeCh      chan struct{}
 	requests     map[uint64]*Request
@@ -71,6 +71,7 @@ func NewWithDone(doneCh <-chan struct{}) (jw *Jaws) {
 		unsubCh:      make(chan chan Message, 1),
 		updateTicker: time.NewTicker(DefaultUpdateInterval),
 		headPrefix:   HeadHTML([]string{JavascriptPath}, nil),
+		tmplookers:   make(map[TemplateLookuper]struct{}),
 		kg:           bufio.NewReader(rand.Reader),
 		requests:     make(map[uint64]*Request),
 		sessions:     make(map[uint64]*Session),
@@ -112,6 +113,39 @@ func (jw *Jaws) Close() {
 // Done returns the completion channel.
 func (jw *Jaws) Done() <-chan struct{} {
 	return jw.doneCh
+}
+
+// AddTemplateLookuper adds an object that can resolve
+// strings to *template.Template.
+func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) {
+	if tl != nil && tl != jw {
+		jw.mu.Lock()
+		jw.tmplookers[tl] = struct{}{}
+		jw.mu.Unlock()
+	}
+}
+
+// RemoveTemplateLookuper removes the given object from
+// the map of TemplateLookupers.
+func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) {
+	if tl != nil {
+		jw.mu.Lock()
+		delete(jw.tmplookers, tl)
+		jw.mu.Unlock()
+	}
+}
+
+// Lookup queries the known TemplateLookupers in random
+// order for the given template name and returns the first found.
+func (jw *Jaws) Lookup(name string) *template.Template {
+	jw.mu.RLock()
+	defer jw.mu.RUnlock()
+	for tl := range jw.tmplookers {
+		if t := tl.Lookup(name); t != nil {
+			return t
+		}
+	}
+	return nil
 }
 
 // RequestCount returns the number of Requests.

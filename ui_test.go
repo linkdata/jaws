@@ -94,7 +94,7 @@ func TestRequest_InsideTemplate(t *testing.T) {
 		"<tr id=\"Jid.26\">tr</tr>" +
 		")"
 
-	jw.Template = template.Must(template.New("nested").Parse(nestedTmplText))
+	jw.AddTemplateLookuper(template.Must(template.New("nested").Parse(nestedTmplText)))
 	tmpl := template.Must(template.New("normal").Parse(tmplText))
 	w := httptest.NewRecorder()
 	w.Body = &bytes.Buffer{}
