@@ -16,8 +16,7 @@ func TestString_StringSetter(t *testing.T) {
 }
 
 func TestString_HtmlGetter(t *testing.T) {
-	var s String
-	s.Set("<foo>")
+	s := String{Value: "<foo>"}
 	if v := s.JawsGetHtml(nil); v != "&lt;foo&gt;" {
 		t.Errorf("%q", v)
 	}
