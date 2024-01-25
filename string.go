@@ -30,8 +30,9 @@ func (s *String) String() string {
 	return s.Get()
 }
 
-func (s *String) JawsGetHtml(*Element) template.HTML {
-	return template.HTML(html.EscapeString(s.Get()))
+func (s *String) JawsGetHtml(*Element) (val template.HTML) {
+	val = template.HTML(html.EscapeString(s.Get())) // #nosec G203
+	return
 }
 
 func (s *String) JawsGetString(*Element) string {
