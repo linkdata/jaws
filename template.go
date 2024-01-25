@@ -10,8 +10,8 @@ import (
 )
 
 type Template struct {
-	Dot interface{}
-	*template.Template
+	Dot      interface{}
+	Template any
 }
 
 var _ UI = Template{}           // statically ensure interface is defined
@@ -26,17 +26,17 @@ func (rq *Request) MustTemplate(v interface{}) (tp *template.Template) {
 		tp = rq.Jaws.Lookup(v)
 	}
 	if tp == nil {
-		panic(fmt.Errorf("expected template or string, not %v", v))
+		panic(fmt.Errorf("expected template or string, not %T(%v)", v, v))
 	}
 	return
 }
 
 func (rq *Request) MakeTemplate(templ, dot interface{}) Template {
-	return Template{Template: rq.MustTemplate(templ), Dot: dot}
+	return Template{Template: templ, Dot: dot}
 }
 
 func (t Template) String() string {
-	return fmt.Sprintf("{%q, %s}", t.Template.Name(), TagString(t.Dot))
+	return fmt.Sprintf("{%q, %s}", t.Template, TagString(t.Dot))
 }
 
 func (t Template) JawsRender(e *Element, w io.Writer, params []interface{}) error {
@@ -49,7 +49,7 @@ func (t Template) JawsRender(e *Element, w io.Writer, params []interface{}) erro
 		sb.WriteString(string(s))
 	}
 	attrs := template.HTMLAttr(sb.String()) // #nosec G203
-	return t.Execute(w, With{
+	return e.Request.MustTemplate(t.Template).Execute(w, With{
 		Element:       e,
 		RequestWriter: e.Request.Writer(w),
 		Dot:           t.Dot,
