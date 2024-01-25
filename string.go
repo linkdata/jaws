@@ -9,7 +9,7 @@ import (
 // String wraps a mutex and a string, and implements jaws.StringSetter and jaws.HtmlGetter.
 // String.JawsGetHtml() will escape the string before returning it.
 type String struct {
-	mu    sync.RWMutex
+	mu    sync.Mutex
 	Value string
 }
 
@@ -20,9 +20,9 @@ func (s *String) Set(val string) {
 }
 
 func (s *String) Get() (val string) {
-	s.mu.RLock()
+	s.mu.Lock()
 	val = s.Value
-	s.mu.RUnlock()
+	s.mu.Unlock()
 	return
 }
 
