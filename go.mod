@@ -7,4 +7,4 @@ require (
 	nhooyr.io/websocket v1.8.10
 )
 
-require github.com/petermattis/goid v0.0.0-20230317030725-371a4b8eda08 // indirect
+require github.com/petermattis/goid v0.0.0-20231207134359-e60b3f734c67 // indirect
