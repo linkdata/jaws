@@ -80,7 +80,7 @@ func Test_atomicSetter_JawsGetHtml(t *testing.T) {
 	tests := []struct {
 		name string
 		av   atomic.Value
-		v    interface{}
+		v    any
 		want template.HTML
 	}{
 		{

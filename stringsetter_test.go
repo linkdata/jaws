@@ -32,11 +32,11 @@ func Test_makeStringSetter(t *testing.T) {
 
 	tests := []struct {
 		name string
-		v    interface{}
+		v    any
 		want StringSetter
 		out  string
 		err  error
-		tag  interface{}
+		tag  any
 	}{
 		{
 			name: "StringSetter",

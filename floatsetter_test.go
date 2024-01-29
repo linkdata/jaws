@@ -31,11 +31,11 @@ func Test_makeFloatSetter(t *testing.T) {
 
 	tests := []struct {
 		name string
-		v    interface{}
+		v    any
 		want FloatSetter
 		out  float64
 		err  error
-		tag  interface{}
+		tag  any
 	}{
 		{
 			name: "FloatSetter",

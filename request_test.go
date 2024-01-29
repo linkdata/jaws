@@ -523,7 +523,7 @@ func TestRequest_HtmlIdBroadcast(t *testing.T) {
 	}
 }
 
-func jidForTag(rq *Request, tag interface{}) jid.Jid {
+func jidForTag(rq *Request, tag any) jid.Jid {
 	if elems := rq.GetElements(tag); len(elems) > 0 {
 		return elems[0].jid
 	}

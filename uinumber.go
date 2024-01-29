@@ -8,7 +8,7 @@ type UiNumber struct {
 	UiInputFloat
 }
 
-func (ui *UiNumber) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+func (ui *UiNumber) JawsRender(e *Element, w io.Writer, params []any) error {
 	return ui.renderFloatInput(e, w, "number", params...)
 }
 
@@ -20,6 +20,6 @@ func NewUiNumber(g FloatSetter) *UiNumber {
 	}
 }
 
-func (rq RequestWriter) Number(value interface{}, params ...interface{}) error {
+func (rq RequestWriter) Number(value any, params ...any) error {
 	return rq.UI(NewUiNumber(makeFloatSetter(value)), params...)
 }

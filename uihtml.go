@@ -10,7 +10,7 @@ type UiHtml struct {
 	Tag any
 }
 
-func (ui *UiHtml) parseGetter(e *Element, getter interface{}) {
+func (ui *UiHtml) parseGetter(e *Element, getter any) {
 	if getter != nil {
 		if tagger, ok := getter.(TagGetter); ok {
 			ui.Tag = tagger.JawsGetTag(e.Request)
@@ -27,11 +27,11 @@ func (ui *UiHtml) parseGetter(e *Element, getter interface{}) {
 	}
 }
 
-/*func (ui *UiHtml) parseParams(elem *Element, params []interface{}) (attrs []string) {
+/*func (ui *UiHtml) parseParams(elem *Element, params []any) (attrs []string) {
 	return elem.ParseParams(params)
 }*/
 
-func (ui *UiHtml) JawsRender(e *Element, w io.Writer, params []interface{}) (err error) {
+func (ui *UiHtml) JawsRender(e *Element, w io.Writer, params []any) (err error) {
 	if h, ok := ui.Tag.(UI); ok {
 		err = h.JawsRender(e, w, params)
 	}

@@ -55,7 +55,7 @@ type Jaws struct {
 	closeCh      chan struct{}
 	requests     map[uint64]*Request
 	sessions     map[uint64]*Session
-	dirty        map[interface{}]int
+	dirty        map[any]int
 	dirtOrder    int
 }
 
@@ -75,7 +75,7 @@ func NewWithDone(doneCh <-chan struct{}) (jw *Jaws) {
 		kg:           bufio.NewReader(rand.Reader),
 		requests:     make(map[uint64]*Request),
 		sessions:     make(map[uint64]*Session),
-		dirty:        make(map[interface{}]int),
+		dirty:        make(map[any]int),
 	}
 	jw.reqPool.New = func() any {
 		return (&Request{
@@ -408,13 +408,13 @@ func (jw *Jaws) setDirty(tags []any) {
 //
 // Note that if any of the tags are a TagGetter, it will be called with a nil Request.
 // Prefer using Request.Dirty() which avoids this.
-func (jw *Jaws) Dirty(tags ...interface{}) {
+func (jw *Jaws) Dirty(tags ...any) {
 	jw.setDirty(MustTagExpand(nil, tags))
 }
 
 func (jw *Jaws) distributeDirt() int {
 	type orderedDirt struct {
-		tag   interface{}
+		tag   any
 		order int
 	}
 
@@ -437,7 +437,7 @@ func (jw *Jaws) distributeDirt() int {
 
 	if len(dirt) > 0 {
 		sort.Slice(dirt, func(i, j int) bool { return dirt[i].order < dirt[j].order })
-		tags := make([]interface{}, len(dirt))
+		tags := make([]any, len(dirt))
 		for i := range dirt {
 			tags[i] = dirt[i].tag
 		}
@@ -614,7 +614,7 @@ func maybePanic(err error) {
 
 // SetInner sends a request to replace the inner HTML of
 // all HTML elements matching target.
-func (jw *Jaws) SetInner(target interface{}, innerHtml template.HTML) {
+func (jw *Jaws) SetInner(target any, innerHtml template.HTML) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.Inner,
@@ -624,7 +624,7 @@ func (jw *Jaws) SetInner(target interface{}, innerHtml template.HTML) {
 
 // SetAttr sends a request to replace the given attribute value in
 // all HTML elements matching target.
-func (jw *Jaws) SetAttr(target interface{}, attr, val string) {
+func (jw *Jaws) SetAttr(target any, attr, val string) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.SAttr,
@@ -634,7 +634,7 @@ func (jw *Jaws) SetAttr(target interface{}, attr, val string) {
 
 // RemoveAttr sends a request to remove the given attribute from
 // all HTML elements matching target.
-func (jw *Jaws) RemoveAttr(target interface{}, attr string) {
+func (jw *Jaws) RemoveAttr(target any, attr string) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.RAttr,
@@ -644,7 +644,7 @@ func (jw *Jaws) RemoveAttr(target interface{}, attr string) {
 
 // SetClass sends a request to set the given class in
 // all HTML elements matching target.
-func (jw *Jaws) SetClass(target interface{}, cls string) {
+func (jw *Jaws) SetClass(target any, cls string) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.SClass,
@@ -654,7 +654,7 @@ func (jw *Jaws) SetClass(target interface{}, cls string) {
 
 // RemoveClass sends a request to remove the given class from
 // all HTML elements matching target.
-func (jw *Jaws) RemoveClass(target interface{}, cls string) {
+func (jw *Jaws) RemoveClass(target any, cls string) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.RClass,
@@ -664,7 +664,7 @@ func (jw *Jaws) RemoveClass(target interface{}, cls string) {
 
 // SetValue sends a request to set the HTML "value" attribute of
 // all HTML elements matching target.
-func (jw *Jaws) SetValue(target interface{}, val string) {
+func (jw *Jaws) SetValue(target any, val string) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.Value,
@@ -676,7 +676,7 @@ func (jw *Jaws) SetValue(target interface{}, val string) {
 // all HTML elements matching target.
 //
 // The position parameter 'where' may be either a HTML ID, an child index or the text 'null'.
-func (jw *Jaws) Insert(target interface{}, where, html string) {
+func (jw *Jaws) Insert(target any, where, html string) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.Insert,
@@ -688,7 +688,7 @@ func (jw *Jaws) Insert(target interface{}, where, html string) {
 // all HTML elements matching target.
 //
 // The position parameter 'where' may be either a HTML ID or an index.
-func (jw *Jaws) Replace(target interface{}, where, html string) {
+func (jw *Jaws) Replace(target any, where, html string) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.Replace,
@@ -697,7 +697,7 @@ func (jw *Jaws) Replace(target interface{}, where, html string) {
 }
 
 // Delete removes the HTML element(s) matching target.
-func (jw *Jaws) Delete(target interface{}) {
+func (jw *Jaws) Delete(target any) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.Delete,
@@ -705,7 +705,7 @@ func (jw *Jaws) Delete(target interface{}) {
 }
 
 // Append calls the Javascript 'appendChild()' method on all HTML elements matching target.
-func (jw *Jaws) Append(target interface{}, html template.HTML) {
+func (jw *Jaws) Append(target any, html template.HTML) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.Append,

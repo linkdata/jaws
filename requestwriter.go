@@ -10,7 +10,7 @@ type RequestWriter struct {
 	io.Writer
 }
 
-func (rw RequestWriter) UI(ui UI, params ...interface{}) error {
+func (rw RequestWriter) UI(ui UI, params ...any) error {
 	return rw.rq.JawsRender(rw.rq.NewElement(ui), rw.Writer, params)
 }
 
@@ -35,11 +35,11 @@ func (rw RequestWriter) Session() *Session {
 }
 
 // Get calls Request().Get()
-func (rw RequestWriter) Get(key string) (val interface{}) {
+func (rw RequestWriter) Get(key string) (val any) {
 	return rw.Request().Get(key)
 }
 
 // Set calls Request().Set()
-func (rw RequestWriter) Set(key string, val interface{}) {
+func (rw RequestWriter) Set(key string, val any) {
 	rw.Request().Set(key, val)
 }

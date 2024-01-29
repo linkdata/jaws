@@ -21,11 +21,11 @@ func (g timeGetter) JawsSetTime(*Element, time.Time) error {
 	return ErrValueNotSettable
 }
 
-func (g timeGetter) JawsGetTag(rq *Request) interface{} {
+func (g timeGetter) JawsGetTag(rq *Request) any {
 	return nil
 }
 
-func makeTimeSetter(v interface{}) TimeSetter {
+func makeTimeSetter(v any) TimeSetter {
 	switch v := v.(type) {
 	case TimeSetter:
 		return v

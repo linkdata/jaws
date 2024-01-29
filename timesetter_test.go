@@ -32,11 +32,11 @@ func Test_makeTimeSetter(t *testing.T) {
 
 	tests := []struct {
 		name string
-		v    interface{}
+		v    any
 		want TimeSetter
 		out  time.Time
 		err  error
-		tag  interface{}
+		tag  any
 	}{
 		{
 			name: "TimeSetter",

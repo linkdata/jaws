@@ -13,9 +13,9 @@ import (
 func TestRequest_Template(t *testing.T) {
 	is := newTestHelper(t)
 	type args struct {
-		templ  interface{}
-		dot    interface{}
-		params []interface{}
+		templ  any
+		dot    any
+		params []any
 	}
 	tests := []struct {
 		name   string

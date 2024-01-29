@@ -8,7 +8,7 @@ type UiRadio struct {
 	UiInputBool
 }
 
-func (ui *UiRadio) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+func (ui *UiRadio) JawsRender(e *Element, w io.Writer, params []any) error {
 	return ui.renderBoolInput(e, w, "radio", params...)
 }
 
@@ -20,6 +20,6 @@ func NewUiRadio(vp BoolSetter) *UiRadio {
 	}
 }
 
-func (rq RequestWriter) Radio(value interface{}, params ...interface{}) error {
+func (rq RequestWriter) Radio(value any, params ...any) error {
 	return rq.UI(NewUiRadio(makeBoolSetter(value)), params...)
 }

@@ -16,8 +16,8 @@ var _ HtmlGetter = testHtmlGetter("foo")
 
 func TestRequest_A(t *testing.T) {
 	type args struct {
-		innerHtml interface{}
-		params    []interface{}
+		innerHtml any
+		params    []any
 	}
 	tests := []struct {
 		name string
@@ -28,7 +28,7 @@ func TestRequest_A(t *testing.T) {
 			name: "string",
 			args: args{
 				innerHtml: "string",
-				params:    []interface{}{},
+				params:    []any{},
 			},
 			want: `<a id="Jid.1">string</a>`,
 		},
@@ -36,7 +36,7 @@ func TestRequest_A(t *testing.T) {
 			name: "template.HTML",
 			args: args{
 				innerHtml: template.HTML("<div></div>"),
-				params:    []interface{}{`href="#"`},
+				params:    []any{`href="#"`},
 			},
 			want: `<a id="Jid.1" href="#"><div></div></a>`,
 		},
@@ -44,7 +44,7 @@ func TestRequest_A(t *testing.T) {
 			name: "HtmlGetter",
 			args: args{
 				innerHtml: testHtmlGetter("<div></div>"),
-				params:    []interface{}{},
+				params:    []any{},
 			},
 			want: `<a id="Jid.1"><div></div></a>`,
 		},

@@ -18,10 +18,10 @@ func NewUiContainer(outerHtmlTag string, c Container) *UiContainer {
 	}
 }
 
-func (ui *UiContainer) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+func (ui *UiContainer) JawsRender(e *Element, w io.Writer, params []any) error {
 	return ui.renderContainer(e, w, ui.OuterHtmlTag, params)
 }
 
-func (rq RequestWriter) Container(outerHtmlTag string, c Container, params ...interface{}) error {
+func (rq RequestWriter) Container(outerHtmlTag string, c Container, params ...any) error {
 	return rq.UI(NewUiContainer(outerHtmlTag, c), params...)
 }

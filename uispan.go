@@ -8,7 +8,7 @@ type UiSpan struct {
 	UiHtmlInner
 }
 
-func (ui *UiSpan) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+func (ui *UiSpan) JawsRender(e *Element, w io.Writer, params []any) error {
 	return ui.renderInner(e, w, "span", "", params)
 }
 
@@ -20,6 +20,6 @@ func NewUiSpan(innerHtml HtmlGetter) *UiSpan {
 	}
 }
 
-func (rq RequestWriter) Span(innerHtml interface{}, params ...interface{}) error {
+func (rq RequestWriter) Span(innerHtml any, params ...any) error {
 	return rq.UI(NewUiSpan(makeHtmlGetter(innerHtml)), params...)
 }

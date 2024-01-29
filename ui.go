@@ -9,11 +9,11 @@ import (
 // If any of these functions panic, the Request will be closed and the panic logged.
 // Optionally you may also implement ClickHandler and/or EventHandler.
 type UI interface {
-	JawsRender(e *Element, w io.Writer, params []interface{}) error
+	JawsRender(e *Element, w io.Writer, params []any) error
 	JawsUpdate(e *Element)
 }
 
-func (rq *Request) JawsRender(elem *Element, w io.Writer, params []interface{}) (err error) {
+func (rq *Request) JawsRender(elem *Element, w io.Writer, params []any) (err error) {
 	if err = elem.Ui().JawsRender(elem, w, params); err == nil {
 		if rq.Jaws.Debug {
 			var sb strings.Builder

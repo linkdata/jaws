@@ -21,11 +21,11 @@ func (g stringGetter) JawsSetString(*Element, string) error {
 	return ErrValueNotSettable
 }
 
-func (g stringGetter) JawsGetTag(rq *Request) interface{} {
+func (g stringGetter) JawsGetTag(rq *Request) any {
 	return nil
 }
 
-func makeStringSetter(v interface{}) StringSetter {
+func makeStringSetter(v any) StringSetter {
 	switch v := v.(type) {
 	case StringSetter:
 		return v

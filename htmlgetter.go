@@ -17,7 +17,7 @@ func (g htmlGetter) JawsGetHtml(e *Element) template.HTML {
 	return g.v
 }
 
-func (g htmlGetter) JawsGetTag(rq *Request) interface{} {
+func (g htmlGetter) JawsGetTag(rq *Request) any {
 	return nil
 }
 
@@ -27,11 +27,11 @@ func (g htmlStringGetter) JawsGetHtml(e *Element) template.HTML {
 	return template.HTML(html.EscapeString(g.v.JawsGetString(e))) // #nosec G203
 }
 
-func (g htmlStringGetter) JawsGetTag(rq *Request) interface{} {
+func (g htmlStringGetter) JawsGetTag(rq *Request) any {
 	return g.v
 }
 
-func makeHtmlGetter(v interface{}) HtmlGetter {
+func makeHtmlGetter(v any) HtmlGetter {
 	switch v := v.(type) {
 	case HtmlGetter:
 		return v

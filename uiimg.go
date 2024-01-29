@@ -19,7 +19,7 @@ func (ui *UiImg) SrcAttr(e *Element) string {
 	return src
 }
 
-func (ui *UiImg) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+func (ui *UiImg) JawsRender(e *Element, w io.Writer, params []any) error {
 	ui.parseGetter(e, ui.StringSetter)
 	srcattr := template.HTMLAttr("src=" + ui.SrcAttr(e)) // #nosec G203
 	attrs := append(e.ParseParams(params), srcattr)
@@ -36,6 +36,6 @@ func NewUiImg(g StringSetter) *UiImg {
 	}
 }
 
-func (rq RequestWriter) Img(imageSrc interface{}, params ...interface{}) error {
+func (rq RequestWriter) Img(imageSrc any, params ...any) error {
 	return rq.UI(NewUiImg(makeStringSetter(imageSrc)), params...)
 }

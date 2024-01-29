@@ -16,7 +16,7 @@ type uiWrapContainer struct {
 	contents []*Element
 }
 
-func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag string, params []interface{}) error {
+func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag string, params []any) error {
 	ui.parseGetter(e, ui.Container)
 	attrs := e.ParseParams(params)
 	b := e.Jid().AppendStartTagAttr(nil, outerhtmltag)

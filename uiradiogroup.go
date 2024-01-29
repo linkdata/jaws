@@ -27,14 +27,14 @@ func (rw RequestWriter) RadioGroup(nba *NamedBoolArray) (rel []RadioElement) {
 }
 
 // Radio renders a HTML input element of type 'radio'.
-func (re RadioElement) Radio(params ...interface{}) template.HTML {
+func (re RadioElement) Radio(params ...any) template.HTML {
 	var sb strings.Builder
 	maybePanic(re.radio.Render(&sb, append(params, re.nameAttr)))
 	return template.HTML(sb.String()) // #nosec G203
 }
 
 // Label renders a HTML label element.
-func (re RadioElement) Label(params ...interface{}) template.HTML {
+func (re RadioElement) Label(params ...any) template.HTML {
 	var sb strings.Builder
 	forAttr := string(re.radio.Jid().AppendQuote([]byte("for=")))
 	maybePanic(re.label.Render(&sb, append(params, forAttr)))

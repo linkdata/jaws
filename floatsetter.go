@@ -20,11 +20,11 @@ func (g floatGetter) JawsSetFloat(*Element, float64) error {
 	return ErrValueNotSettable
 }
 
-func (g floatGetter) JawsGetTag(rq *Request) interface{} {
+func (g floatGetter) JawsGetTag(rq *Request) any {
 	return nil
 }
 
-func makeFloatSetter(v interface{}) FloatSetter {
+func makeFloatSetter(v any) FloatSetter {
 	switch v := v.(type) {
 	case FloatSetter:
 		return v

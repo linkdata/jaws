@@ -10,7 +10,7 @@ import (
 )
 
 type Template struct {
-	Dot      interface{}
+	Dot      any
 	Template any
 }
 
@@ -18,7 +18,7 @@ var _ UI = Template{}           // statically ensure interface is defined
 var _ EventHandler = Template{} // statically ensure interface is defined
 
 // MustTemplate resolves 'v' to a *template.Template or panics.
-func (rq *Request) MustTemplate(v interface{}) (tp *template.Template) {
+func (rq *Request) MustTemplate(v any) (tp *template.Template) {
 	switch v := v.(type) {
 	case *template.Template:
 		tp = v
@@ -31,7 +31,7 @@ func (rq *Request) MustTemplate(v interface{}) (tp *template.Template) {
 	return
 }
 
-func (rq *Request) MakeTemplate(templ, dot interface{}) Template {
+func (rq *Request) MakeTemplate(templ, dot any) Template {
 	return Template{Template: templ, Dot: dot}
 }
 
@@ -39,7 +39,7 @@ func (t Template) String() string {
 	return fmt.Sprintf("{%q, %s}", t.Template, TagString(t.Dot))
 }
 
-func (t Template) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+func (t Template) JawsRender(e *Element, w io.Writer, params []any) error {
 	if expandedtags, err := TagExpand(e.Request, t.Dot); err != ErrIllegalTagType {
 		e.Request.tagExpanded(e, expandedtags)
 	}

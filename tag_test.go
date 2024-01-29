@@ -14,8 +14,8 @@ func TestTagExpand(t *testing.T) {
 	var av atomic.Value
 	tests := []struct {
 		name string
-		tag  interface{}
-		want []interface{}
+		tag  any
+		want []any
 	}{
 		{
 			name: "nil",
@@ -25,22 +25,22 @@ func TestTagExpand(t *testing.T) {
 		{
 			name: "Tag",
 			tag:  Tag("foo"),
-			want: []interface{}{Tag("foo")},
+			want: []any{Tag("foo")},
 		},
 		{
 			name: "TagGetter",
 			tag:  atomicSetter{&av},
-			want: []interface{}{&av},
+			want: []any{&av},
 		},
 		{
 			name: "[]Tag",
 			tag:  []Tag{Tag("a"), Tag("b"), Tag("c")},
-			want: []interface{}{Tag("a"), Tag("b"), Tag("c")},
+			want: []any{Tag("a"), Tag("b"), Tag("c")},
 		},
 		{
-			name: "[]interface{}",
-			tag:  []interface{}{Tag("a"), &av},
-			want: []interface{}{Tag("a"), &av},
+			name: "[]any",
+			tag:  []any{Tag("a"), &av},
+			want: []any{Tag("a"), &av},
 		},
 	}
 	for _, tt := range tests {

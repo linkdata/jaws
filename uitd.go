@@ -8,7 +8,7 @@ type UiTd struct {
 	UiHtmlInner
 }
 
-func (ui *UiTd) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+func (ui *UiTd) JawsRender(e *Element, w io.Writer, params []any) error {
 	return ui.renderInner(e, w, "td", "", params)
 }
 
@@ -20,6 +20,6 @@ func NewUiTd(innerHtml HtmlGetter) *UiTd {
 	}
 }
 
-func (rq RequestWriter) Td(innerHtml interface{}, params ...interface{}) error {
+func (rq RequestWriter) Td(innerHtml any, params ...any) error {
 	return rq.UI(NewUiTd(makeHtmlGetter(innerHtml)), params...)
 }

@@ -8,7 +8,7 @@ import (
 
 type Tag string
 
-func TagString(tag interface{}) string {
+func TagString(tag any) string {
 	if rv := reflect.ValueOf(tag); rv.IsValid() {
 		if rv.Kind() == reflect.Pointer {
 			return fmt.Sprintf("%T(%p)", tag, tag)
@@ -41,7 +41,7 @@ func (errIllegalTagType) Is(other error) bool {
 
 var ErrIllegalTagType = errIllegalTagType{}
 
-func tagExpand(l int, rq *Request, tag interface{}, result []interface{}) ([]interface{}, error) {
+func tagExpand(l int, rq *Request, tag any, result []any) ([]any, error) {
 	if l > 10 || len(result) > 100 {
 		return result, ErrTooManyTags
 	}
@@ -77,7 +77,7 @@ func tagExpand(l int, rq *Request, tag interface{}, result []interface{}) ([]int
 			return tagExpand(l+1, rq, newTag, result)
 		}
 		return append(result, tag), nil
-	case []interface{}:
+	case []any:
 		var err error
 		for _, v := range data {
 			if result, err = tagExpand(l+1, rq, v, result); err != nil {
@@ -91,11 +91,11 @@ func tagExpand(l int, rq *Request, tag interface{}, result []interface{}) ([]int
 	return result, errIllegalTagType{tag: tag}
 }
 
-func TagExpand(rq *Request, tag interface{}) ([]interface{}, error) {
+func TagExpand(rq *Request, tag any) ([]any, error) {
 	return tagExpand(0, rq, tag, nil)
 }
 
-func MustTagExpand(rq *Request, tag interface{}) []interface{} {
+func MustTagExpand(rq *Request, tag any) []any {
 	result, err := TagExpand(rq, tag)
 	if err != nil {
 		panic(err)

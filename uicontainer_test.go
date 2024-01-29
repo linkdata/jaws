@@ -23,7 +23,7 @@ var _ Container = &testContainer{}
 func TestRequest_Container(t *testing.T) {
 	type args struct {
 		c      Container
-		params []interface{}
+		params []any
 	}
 	tests := []struct {
 		name string
@@ -34,7 +34,7 @@ func TestRequest_Container(t *testing.T) {
 			name: "empty",
 			args: args{
 				c:      &testContainer{},
-				params: []interface{}{},
+				params: []any{},
 			},
 			want: `<div id="Jid.1"></div>`,
 		},
@@ -42,7 +42,7 @@ func TestRequest_Container(t *testing.T) {
 			name: "one",
 			args: args{
 				c:      &testContainer{[]UI{NewUiSpan(testHtmlGetter("foo"))}},
-				params: []interface{}{"hidden"},
+				params: []any{"hidden"},
 			},
 			want: `<div id="Jid.1" hidden><span id="Jid.2">foo</span></div>`,
 		},
@@ -50,7 +50,7 @@ func TestRequest_Container(t *testing.T) {
 			name: "two",
 			args: args{
 				c:      &testContainer{[]UI{NewUiSpan(testHtmlGetter("foo")), NewUiSpan(testHtmlGetter("bar"))}},
-				params: []interface{}{"hidden"},
+				params: []any{"hidden"},
 			},
 			want: `<div id="Jid.1" hidden><span id="Jid.2">foo</span><span id="Jid.3">bar</span></div>`,
 		},

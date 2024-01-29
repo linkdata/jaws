@@ -23,11 +23,11 @@ func (g boolGetter) JawsSetBool(*Element, bool) error {
 	return ErrValueNotSettable
 }
 
-func (g boolGetter) JawsGetTag(rq *Request) interface{} {
+func (g boolGetter) JawsGetTag(rq *Request) any {
 	return nil
 }
 
-func makeBoolSetter(v interface{}) BoolSetter {
+func makeBoolSetter(v any) BoolSetter {
 	switch v := v.(type) {
 	case BoolSetter:
 		return v

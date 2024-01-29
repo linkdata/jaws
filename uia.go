@@ -8,7 +8,7 @@ type UiA struct {
 	UiHtmlInner
 }
 
-func (ui *UiA) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+func (ui *UiA) JawsRender(e *Element, w io.Writer, params []any) error {
 	return ui.renderInner(e, w, "a", "", params)
 }
 
@@ -20,6 +20,6 @@ func NewUiA(innerHtml HtmlGetter) *UiA {
 	}
 }
 
-func (rq RequestWriter) A(innerHtml interface{}, params ...interface{}) error {
+func (rq RequestWriter) A(innerHtml any, params ...any) error {
 	return rq.UI(NewUiA(makeHtmlGetter(innerHtml)), params...)
 }

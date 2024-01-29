@@ -31,11 +31,11 @@ func Test_makeBoolSetter(t *testing.T) {
 
 	tests := []struct {
 		name string
-		v    interface{}
+		v    any
 		want BoolSetter
 		out  bool
 		err  error
-		tag  interface{}
+		tag  any
 	}{
 		{
 			name: "BoolSetter",

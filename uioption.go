@@ -8,7 +8,7 @@ import (
 
 type UiOption struct{ *NamedBool }
 
-func (ui UiOption) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+func (ui UiOption) JawsRender(e *Element, w io.Writer, params []any) error {
 	e.Tag(ui.NamedBool)
 	attrs := e.ParseParams(params)
 	valattr := template.HTMLAttr(`value="` + html.EscapeString(ui.JawsGetString(e)) + `"`) // #nosec G203

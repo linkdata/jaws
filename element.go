@@ -27,14 +27,14 @@ func (e *Element) String() string {
 }
 
 // Tag adds the given tags to the Element.
-func (e *Element) Tag(tags ...interface{}) {
+func (e *Element) Tag(tags ...any) {
 	if !e.deleted {
 		e.Request.Tag(e, tags...)
 	}
 }
 
 // HasTag returns true if this Element has the given tag.
-func (e *Element) HasTag(tag interface{}) bool {
+func (e *Element) HasTag(tag any) bool {
 	return !e.deleted && e.Request.HasTag(e, tag)
 }
 
@@ -56,7 +56,7 @@ func (e *Element) Update() {
 }
 
 // Render calls Request.JawsRender() for this Element.
-func (e *Element) Render(w io.Writer, params []interface{}) (err error) {
+func (e *Element) Render(w io.Writer, params []any) (err error) {
 	if !e.deleted {
 		err = e.Request.JawsRender(e, w, params)
 	}
@@ -174,7 +174,7 @@ func (e *Element) Remove(htmlId string) {
 
 // ParseParams parses the parameters passed to UI() when creating a new Element,
 // setting event handlers and returning a list of HTML attributes.
-func (e *Element) ParseParams(params []interface{}) (attrs []template.HTMLAttr) {
+func (e *Element) ParseParams(params []any) (attrs []template.HTMLAttr) {
 	if !e.deleted {
 		for i := range params {
 			switch data := params[i].(type) {

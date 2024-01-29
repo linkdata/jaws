@@ -35,10 +35,10 @@ func Test_makeHtmlGetter(t *testing.T) {
 
 	tests := []struct {
 		name string
-		v    interface{}
+		v    any
 		want HtmlGetter
 		out  template.HTML
-		tag  interface{}
+		tag  any
 	}{
 		{
 			name: "HtmlGetter",

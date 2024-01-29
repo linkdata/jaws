@@ -12,7 +12,7 @@ type UiInputBool struct {
 	BoolSetter
 }
 
-func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string, params ...interface{}) error {
+func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string, params ...any) error {
 	ui.parseGetter(e, ui.BoolSetter)
 	attrs := e.ParseParams(params)
 	v := ui.JawsGetBool(e)

@@ -11,7 +11,7 @@ type UiInputText struct {
 	StringSetter
 }
 
-func (ui *UiInputText) renderStringInput(e *Element, w io.Writer, htmltype string, params ...interface{}) error {
+func (ui *UiInputText) renderStringInput(e *Element, w io.Writer, htmltype string, params ...any) error {
 	ui.parseGetter(e, ui.StringSetter)
 	attrs := e.ParseParams(params)
 	v := ui.JawsGetString(e)

@@ -17,7 +17,7 @@ type Session struct {
 	requests  []*Request
 	deadline  time.Time
 	cookie    http.Cookie
-	data      map[string]interface{}
+	data      map[string]any
 }
 
 func newSession(jw *Jaws, sessionID uint64, remoteIP netip.Addr) *Session {
@@ -34,7 +34,7 @@ func newSession(jw *Jaws, sessionID uint64, remoteIP netip.Addr) *Session {
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
 		},
-		data: make(map[string]interface{}),
+		data: make(map[string]any),
 	}
 }
 
@@ -75,7 +75,7 @@ func (sess *Session) delRequest(rq *Request) {
 
 // Get returns the value associated with the key, or nil.
 // It is safe to call on a nil Session.
-func (sess *Session) Get(key string) (val interface{}) {
+func (sess *Session) Get(key string) (val any) {
 	if sess != nil {
 		sess.mu.RLock()
 		val = sess.data[key]
@@ -87,7 +87,7 @@ func (sess *Session) Get(key string) (val interface{}) {
 // Set sets a value to be associated with the key.
 // If value is nil, the key is removed from the session.
 // It is safe to call on a nil Session.
-func (sess *Session) Set(key string, val interface{}) {
+func (sess *Session) Set(key string, val any) {
 	if sess != nil {
 		sess.mu.Lock()
 		if val == nil {

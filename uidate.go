@@ -10,7 +10,7 @@ type UiDate struct {
 	UiInputDate
 }
 
-func (ui *UiDate) JawsRender(e *Element, w io.Writer, params []interface{}) error {
+func (ui *UiDate) JawsRender(e *Element, w io.Writer, params []any) error {
 	return ui.renderDateInput(e, w, e.Jid(), "date", params...)
 }
 
@@ -22,6 +22,6 @@ func NewUiDate(g TimeSetter) *UiDate {
 	}
 }
 
-func (rq RequestWriter) Date(value interface{}, params ...interface{}) error {
+func (rq RequestWriter) Date(value any, params ...any) error {
 	return rq.UI(NewUiDate(makeTimeSetter(value)), params...)
 }

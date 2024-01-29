@@ -16,7 +16,7 @@ func (ui *UiInputDate) str() string {
 	return ui.Last.Load().(time.Time).Format(ISO8601)
 }
 
-func (ui *UiInputDate) renderDateInput(e *Element, w io.Writer, jid Jid, htmltype string, params ...interface{}) error {
+func (ui *UiInputDate) renderDateInput(e *Element, w io.Writer, jid Jid, htmltype string, params ...any) error {
 	ui.parseGetter(e, ui.TimeSetter)
 	attrs := e.ParseParams(params)
 	ui.Last.Store(ui.JawsGetTime(e))

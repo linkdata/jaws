@@ -37,12 +37,12 @@ type Request struct {
 	mu        deadlock.RWMutex        // protects following
 	claimed   bool                    // if UseRequest() has been called for it
 	running   bool                    // if ServeHTTP() is running
-	todoDirt  []interface{}           // dirty tags
+	todoDirt  []any                   // dirty tags
 	ctx       context.Context         // current context, derived from either Jaws or WS HTTP req
 	cancelFn  context.CancelCauseFunc // cancel function
 	connectFn ConnectFn               // a ConnectFn to call before starting message processing for the Request
 	elems     []*Element
-	tagMap    map[interface{}][]*Element
+	tagMap    map[any][]*Element
 }
 
 type eventFnCall struct {
@@ -151,14 +151,14 @@ func (rq *Request) Session() *Session {
 
 // Get is shorthand for `Session().Get()` and returns the session value associated with the key, or nil.
 // It no session is associated with the Request, returns nil.
-func (rq *Request) Get(key string) interface{} {
+func (rq *Request) Get(key string) any {
 	return rq.Session().Get(key)
 }
 
 // Set is shorthand for `Session().Set()` and sets a session value to be associated with the key.
 // If value is nil, the key is removed from the session.
 // Does nothing if there is no session is associated with the Request.
-func (rq *Request) Set(key string, val interface{}) {
+func (rq *Request) Set(key string, val any) {
 	rq.Session().Set(key, val)
 }
 
@@ -229,7 +229,7 @@ func (rq *Request) Redirect(url string) {
 	})
 }
 
-func (rq *Request) TagsOf(elem *Element) (tags []interface{}) {
+func (rq *Request) TagsOf(elem *Element) (tags []any) {
 	if elem != nil {
 		rq.mu.RLock()
 		defer rq.mu.RUnlock()
@@ -254,7 +254,7 @@ func (rq *Request) TagsOf(elem *Element) (tags []interface{}) {
 // Returns a Jid, suitable for including as a HTML "id" attribute:
 //
 //	<div id="{{$.Register `footag`}}">
-func (rq *Request) Register(tagitem interface{}, params ...interface{}) jid.Jid {
+func (rq *Request) Register(tagitem any, params ...any) jid.Jid {
 	switch data := tagitem.(type) {
 	case jid.Jid:
 		if elem := rq.getElementByJid(data); elem != nil {
@@ -275,7 +275,7 @@ func (rq *Request) Register(tagitem interface{}, params ...interface{}) jid.Jid 
 }
 
 // Dirty marks all Elements that have one or more of the given tags as dirty.
-func (rq *Request) Dirty(tags ...interface{}) {
+func (rq *Request) Dirty(tags ...any) {
 	rq.Jaws.setDirty(MustTagExpand(rq, tags))
 }
 
@@ -331,7 +331,7 @@ func (rq *Request) getElementByJid(jid Jid) (e *Element) {
 	return
 }
 
-func (rq *Request) hasTagLocked(elem *Element, tag interface{}) bool {
+func (rq *Request) hasTagLocked(elem *Element, tag any) bool {
 	for _, e := range rq.tagMap[tag] {
 		if elem == e {
 			return true
@@ -340,21 +340,21 @@ func (rq *Request) hasTagLocked(elem *Element, tag interface{}) bool {
 	return false
 }
 
-func (rq *Request) HasTag(elem *Element, tag interface{}) (yes bool) {
+func (rq *Request) HasTag(elem *Element, tag any) (yes bool) {
 	rq.mu.RLock()
 	yes = rq.hasTagLocked(elem, tag)
 	rq.mu.RUnlock()
 	return
 }
 
-func (rq *Request) appendDirtyTags(tags []interface{}) {
+func (rq *Request) appendDirtyTags(tags []any) {
 	rq.mu.Lock()
 	rq.todoDirt = append(rq.todoDirt, tags...)
 	rq.mu.Unlock()
 }
 
 // Tag adds the given tags to the given Element.
-func (rq *Request) tagExpanded(elem *Element, expandedtags []interface{}) {
+func (rq *Request) tagExpanded(elem *Element, expandedtags []any) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	for _, tag := range expandedtags {
@@ -365,14 +365,14 @@ func (rq *Request) tagExpanded(elem *Element, expandedtags []interface{}) {
 }
 
 // Tag adds the given tags to the given Element.
-func (rq *Request) Tag(elem *Element, tags ...interface{}) {
+func (rq *Request) Tag(elem *Element, tags ...any) {
 	if elem != nil && len(tags) > 0 && elem.Request == rq {
 		rq.tagExpanded(elem, MustTagExpand(elem.Request, tags))
 	}
 }
 
 // GetElements returns a list of the UI elements in the Request that have the given tag(s).
-func (rq *Request) GetElements(tagitem interface{}) (elems []*Element) {
+func (rq *Request) GetElements(tagitem any) (elems []*Element) {
 	tags := MustTagExpand(rq, tagitem)
 	seen := map[*Element]struct{}{}
 	rq.mu.RLock()

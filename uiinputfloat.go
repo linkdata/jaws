@@ -16,7 +16,7 @@ func (ui *UiInputFloat) str() string {
 	return strconv.FormatFloat(ui.Last.Load().(float64), 'f', -1, 64)
 }
 
-func (ui *UiInputFloat) renderFloatInput(e *Element, w io.Writer, htmltype string, params ...interface{}) error {
+func (ui *UiInputFloat) renderFloatInput(e *Element, w io.Writer, htmltype string, params ...any) error {
 	ui.parseGetter(e, ui.FloatSetter)
 	attrs := e.ParseParams(params)
 	ui.Last.Store(ui.JawsGetFloat(e))
