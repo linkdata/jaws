@@ -27,7 +27,7 @@ func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag
 	b = append(b, '>')
 	_, err := w.Write(b)
 	if err == nil {
-		for _, cui := range ui.Container.JawsContains(e.Request) {
+		for _, cui := range ui.Container.JawsContains(e) {
 			if err == nil {
 				elem := e.Request.NewElement(cui)
 				ui.contents = append(ui.contents, elem)
@@ -51,7 +51,7 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 
 	oldMap := make(map[UI]*Element)
 	newMap := make(map[UI]struct{})
-	newContents := ui.Container.JawsContains(e.Request)
+	newContents := ui.Container.JawsContains(e)
 	for _, t := range newContents {
 		newMap[t] = struct{}{}
 	}

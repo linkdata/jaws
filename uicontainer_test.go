@@ -14,7 +14,7 @@ import (
 
 type testContainer struct{ contents []UI }
 
-func (tc *testContainer) JawsContains(rq *Request) (contents []UI) {
+func (tc *testContainer) JawsContains(e *Element) (contents []UI) {
 	return tc.contents
 }
 

@@ -42,7 +42,7 @@ func (nba *NamedBoolArray) WriteLocked(fn func(nbl []*NamedBool) []*NamedBool) {
 	nba.data = fn(nba.data)
 }
 
-func (nba *NamedBoolArray) JawsContains(rq *Request) (contents []UI) {
+func (nba *NamedBoolArray) JawsContains(e *Element) (contents []UI) {
 	nba.mu.RLock()
 	for _, nb := range nba.data {
 		contents = append(contents, UiOption{nb})
