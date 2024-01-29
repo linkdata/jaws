@@ -357,7 +357,7 @@ func TestJaws_UnconnectedLivesUntilDeadline(t *testing.T) {
 	th.Equal(rq2.Jaws, jw)
 
 	th.NoErr(context.Cause(rq1ctx))
-	if !errors.Is(context.Cause(rq2ctx), ErrNoWebSocketRequest{}) {
+	if !errors.Is(context.Cause(rq2ctx), errNoWebSocketRequest{}) {
 		th.Error(context.Cause(rq2ctx))
 	}
 

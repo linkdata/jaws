@@ -51,9 +51,7 @@ type eventFnCall struct {
 	data string
 }
 
-const maxWsQueueLengthPerElement = 20
-
-var ErrWebsocketQueueOverflow = errors.New("websocket queue overflow")
+const maxWsQueueLengthPerElement = 100
 
 func (rq *Request) JawsKeyString() string {
 	jawsKey := uint64(0)
@@ -231,13 +229,14 @@ func (rq *Request) Redirect(url string) {
 
 func (rq *Request) TagsOf(elem *Element) (tags []any) {
 	if elem != nil {
-		rq.mu.RLock()
-		defer rq.mu.RUnlock()
-		for tag, elems := range rq.tagMap {
-			for _, e := range elems {
-				if e == elem {
-					tags = append(tags, tag)
-					break
+		if rq.mu.TryRLock() {
+			defer rq.mu.RUnlock()
+			for tag, elems := range rq.tagMap {
+				for _, e := range elems {
+					if e == elem {
+						tags = append(tags, tag)
+						break
+					}
 				}
 			}
 		}
