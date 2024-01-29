@@ -405,8 +405,8 @@ func TestWriter_ReportsError(t *testing.T) {
 	}
 
 	err := context.Cause(ts.rq.Context())
-	if !strings.Contains(err.Error(), "WebSocket closed") {
-		t.Error(err)
+	if !errors.Is(err, net.ErrClosed) {
+		t.Errorf("%T(%v)", err, err)
 	}
 }
 
@@ -439,8 +439,8 @@ func TestReader_ReportsError(t *testing.T) {
 	}
 
 	err = context.Cause(ts.rq.Context())
-	if !strings.Contains(err.Error(), "WebSocket closed") {
-		t.Error(err)
+	if !errors.Is(err, net.ErrClosed) {
+		t.Errorf("%T(%v)", err, err)
 	}
 }
 
