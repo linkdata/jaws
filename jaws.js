@@ -75,15 +75,18 @@ function jawsRemoving(topElem) {
 	jaws.send("Remove\t" + topElem.id + "\t" + JSON.stringify(val) + "\n");
 }
 
-function jawsAttach(topElem) {
+function jawsAttach(elem) {
+	if (jawsIsInputTag(elem.tagName)) {
+		elem.addEventListener('input', jawsInputHandler, false);
+	} else {
+		elem.addEventListener('click', jawsClickHandler, false);
+	}
+}
+
+function jawsAttachChildren(topElem) {
 	var elements = topElem.querySelectorAll('[id^="Jid."]');
 	for (var i = 0; i < elements.length; i++) {
-		var elem = elements[i];
-		if (jawsIsInputTag(elem.tagName)) {
-			elem.addEventListener('input', jawsInputHandler, false);
-		} else {
-			elem.addEventListener('click', jawsClickHandler, false);
-		}
+		jawsAttach(elements[i]);
 	}
 	return topElem;
 }
@@ -144,7 +147,22 @@ function jawsSetValue(elem, str) {
 		return;
 	}
 	if (elem.tagName.toLowerCase() === 'textarea') {
-		elem.textContent = str;
+		if (elem.textContent != str) {
+			elem.textContent = str;
+			// work around browser bug where textContent
+			// and textLength go out of sync sometimes
+			if (elem.textLength != elem.textContent.length) {
+				var parent = elem.parentNode;
+				var clone = document.createElement(elem.tagName);
+				for (var i = 0; i < elem.attributes.length; i++) {
+					clone.setAttribute(elem.attributes[i].nodeName, elem.attributes[i].nodeValue);
+				}
+				clone.textContent = str;
+				parent.insertBefore(clone, elem);
+				elem.remove();
+				jawsAttach(clone);
+			}
+		}
 		return;
 	}
 	if (elem.value == str) {
@@ -258,7 +276,7 @@ function jawsInsert(elem, data) {
 	var lines = data.split('\n');
 	var where = jawsWhere(elem, lines.shift());
 	if (where instanceof Node) {
-		elem.insertBefore(jawsAttach(jawsElement(lines.join('\n'))), where);
+		elem.insertBefore(jawsAttachChildren(jawsElement(lines.join('\n'))), where);
 	}
 }
 
@@ -304,17 +322,17 @@ function jawsPerform(what, id, data) {
 		case 'Inner':
 			jawsRemoving(elem);
 			elem.innerHTML = data;
-			jawsAttach(elem);
+			jawsAttachChildren(elem);
 			break;
 		case 'Value':
 			jawsSetValue(elem, data);
 			break;
 		case 'Append':
-			elem.appendChild(jawsAttach(jawsElement(data)));
+			elem.appendChild(jawsAttachChildren(jawsElement(data)));
 			break;
 		case 'Replace':
 			jawsRemoving(elem);
-			elem.replaceWith(jawsAttach(jawsElement(data)));
+			elem.replaceWith(jawsAttachChildren(jawsElement(data)));
 			break;
 		case 'Delete':
 			jawsRemoving(elem);
@@ -362,7 +380,7 @@ function jawsConnect() {
 	window.addEventListener('beforeunload', jawsUnloading);
 	window.addEventListener('pageshow', jawsPageshow);
 	jaws = new WebSocket(wsScheme + window.location.host + '/jaws/' + encodeURIComponent(jawsKey));
-	jaws.addEventListener('open', function () { jawsAttach(document); });
+	jaws.addEventListener('open', function () { jawsAttachChildren(document); });
 	jaws.addEventListener('message', jawsMessage);
 	jaws.addEventListener('close', jawsFailed);
 	jaws.addEventListener('error', jawsFailed);
