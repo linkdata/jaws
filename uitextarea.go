@@ -16,7 +16,7 @@ func (ui *UiTextarea) JawsRender(e *Element, w io.Writer, params []any) error {
 }
 
 func (ui *UiTextarea) JawsUpdate(e *Element) {
-	e.SetInner(template.HTML(ui.JawsGetString(e))) // #nosec G203
+	e.SetValue(ui.JawsGetString(e))
 }
 
 func NewUiTextarea(g StringSetter) (ui *UiTextarea) {

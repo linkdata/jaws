@@ -38,7 +38,7 @@ func TestRequest_Textarea(t *testing.T) {
 	case <-th.C:
 		th.Timeout()
 	case s := <-rq.outCh:
-		if s != "Inner\tJid.1\t\"quux\"\n" {
+		if s != "Value\tJid.1\t\"quux\"\n" {
 			t.Fail()
 		}
 	}

@@ -143,6 +143,10 @@ function jawsSetValue(elem, str) {
 		elem.selected = jawsIsTrue(str);
 		return;
 	}
+	if (elem.tagName.toLowerCase() === 'textarea') {
+		elem.textContent = str;
+		return;
+	}
 	if (elem.value == str) {
 		return;
 	}
