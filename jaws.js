@@ -22,19 +22,19 @@ function jawsIsTrue(v) {
 	return jawsContains(['true', 't', 'on', '1', 'yes', 'y', 'selected'], v);
 }
 
-function jawsGetName(elem) {
-	var val = elem.id;
-	if (elem != null) {
-		val = elem.getAttribute('name');
-		if (val == null) {
-			if (elem.tagName.toLowerCase() === 'button') {
-				val = elem.innerHTML;
-			} else {
-				val = jawsGetName(elem.parentElement);
-			}
+function jawsGetName(e) {
+	var elem = e;
+	while (elem != null) {
+		var name = elem.getAttribute('name');
+		if (name == null && elem.tagName.toLowerCase() === 'button') {
+			name = elem.textContent;
 		}
+		if (name != null) {
+			return name.replaceAll('\t', ' ');
+		}
+		elem = elem.parentElement;
 	}
-	return val.replaceAll('\t', ' ');
+	return e.id;
 }
 
 function jawsClickHandler(e) {
