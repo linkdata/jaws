@@ -22,20 +22,26 @@ function jawsIsTrue(v) {
 	return jawsContains(['true', 't', 'on', '1', 'yes', 'y', 'selected'], v);
 }
 
-function jawsClickHandler(e) {
-	if (jaws instanceof WebSocket && e instanceof Event) {
-		e.stopPropagation();
-		var elem = e.target;
-		var val = elem.getAttribute('name');
+function jawsGetName(elem) {
+	var val = elem.id;
+	if (elem != null) {
+		val = elem.getAttribute('name');
 		if (val == null) {
 			if (elem.tagName.toLowerCase() === 'button') {
 				val = elem.innerHTML;
 			} else {
-				val = elem.id;
+				val = jawsGetName(elem.parentElement);
 			}
 		}
-		val.replaceAll('\t', ' ');
+	}
+	return val.replaceAll('\t', ' ');
+}
 
+function jawsClickHandler(e) {
+	if (jaws instanceof WebSocket && e instanceof Event) {
+		e.stopPropagation();
+		var elem = e.target;
+		var val = jawsGetName(elem);
 		while (elem != null) {
 			if (elem.id.startsWith('Jid.') && !jawsIsInputTag(elem.tagName)) {
 				val += "\t" + elem.id;
