@@ -33,8 +33,8 @@ type Request struct {
 	Created   time.Time               // (read-only) when the Request was created, used for automatic cleanup
 	Initial   *http.Request           // (read-only) initial HTTP request passed to Jaws.NewRequest
 	remoteIP  netip.Addr              // (read-only) remote IP, or nil
-	session   *Session                // (read-only) session, if established
 	mu        deadlock.RWMutex        // protects following
+	session   *Session                // session, if established
 	claimed   bool                    // if UseRequest() has been called for it
 	running   bool                    // if ServeHTTP() is running
 	todoDirt  []any                   // dirty tags
@@ -143,8 +143,11 @@ func (rq *Request) SetConnectFn(fn ConnectFn) {
 }
 
 // Session returns the Request's Session, or nil.
-func (rq *Request) Session() *Session {
-	return rq.session
+func (rq *Request) Session() (sess *Session) {
+	rq.mu.RLock()
+	sess = rq.session
+	rq.mu.RUnlock()
+	return
 }
 
 // Get is shorthand for `Session().Get()` and returns the session value associated with the key, or nil.
