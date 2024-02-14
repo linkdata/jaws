@@ -282,7 +282,7 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 		}
 		err := context.Cause(rq.ctx)
 		if err == nil && rq.Created.Before(deadline) {
-			err = newErrPendingCancelled(rq, newErrNoWebSocketRequest(rq))
+			err = newErrPendingCancelledLocked(rq, newErrNoWebSocketRequest(rq))
 		}
 		if err == nil {
 			t.Fatal("expected error")

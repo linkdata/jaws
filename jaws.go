@@ -717,7 +717,7 @@ func (jw *Jaws) getRequestLocked(jawsKey uint64, hr *http.Request) (rq *Request)
 	rq = jw.reqPool.Get().(*Request)
 	rq.JawsKey = jawsKey
 	rq.Created = time.Now()
-	rq.Initial = hr
+	rq.initial = hr
 	rq.ctx, rq.cancelFn = context.WithCancelCause(context.Background())
 	if hr != nil {
 		rq.remoteIP = parseIP(hr.RemoteAddr)

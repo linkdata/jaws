@@ -21,7 +21,7 @@ func (rw RequestWriter) Request() *Request {
 
 // Initial returns the initial http.Request.
 func (rw RequestWriter) Initial() *http.Request {
-	return rw.Request().Initial
+	return rw.Request().Initial()
 }
 
 // HeadHTML outputs the HTML code needed in the HEAD section.

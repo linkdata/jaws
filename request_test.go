@@ -681,7 +681,7 @@ func TestRequest_CustomErrors(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 	cause := newErrNoWebSocketRequest(rq.Request)
-	err := newErrPendingCancelled(rq.Request, cause)
+	err := newErrPendingCancelledLocked(rq.Request, cause)
 	th.True(errors.Is(err, ErrPendingCancelled))
 	th.True(errors.Is(err, ErrNoWebSocketRequest))
 	th.Equal(errors.Is(cause, ErrPendingCancelled), false)

@@ -31,9 +31,9 @@ type Request struct {
 	Jaws      *Jaws                   // (read-only) the JaWS instance the Request belongs to
 	JawsKey   uint64                  // (read-only) a random number used in the WebSocket URI to identify this Request
 	Created   time.Time               // (read-only) when the Request was created, used for automatic cleanup
-	Initial   *http.Request           // (read-only) initial HTTP request passed to Jaws.NewRequest
 	remoteIP  netip.Addr              // (read-only) remote IP, or nil
 	mu        deadlock.RWMutex        // protects following
+	initial   *http.Request           // initial HTTP request passed to Jaws.NewRequest
 	session   *Session                // session, if established
 	claimed   bool                    // if UseRequest() has been called for it
 	running   bool                    // if ServeHTTP() is running
@@ -105,7 +105,7 @@ func (rq *Request) clearLocked() *Request {
 	rq.JawsKey = 0
 	rq.connectFn = nil
 	rq.Created = time.Time{}
-	rq.Initial = nil
+	rq.initial = nil
 	rq.claimed = false
 	rq.running = false
 	rq.ctx, rq.cancelFn = context.WithCancelCause(context.Background())
@@ -150,6 +150,14 @@ func (rq *Request) Session() (sess *Session) {
 	return
 }
 
+// Initial returns the Request's initial HTTP request, or nil.
+func (rq *Request) Initial() (r *http.Request) {
+	rq.mu.RLock()
+	r = rq.initial
+	rq.mu.RUnlock()
+	return
+}
+
 // Get is shorthand for `Session().Get()` and returns the session value associated with the key, or nil.
 // It no session is associated with the Request, returns nil.
 func (rq *Request) Get(key string) any {
@@ -190,7 +198,7 @@ func (rq *Request) maintenance(deadline time.Time) bool {
 func (rq *Request) cancelLocked(err error) {
 	if rq.JawsKey != 0 && rq.ctx.Err() == nil {
 		if !rq.running {
-			err = newErrPendingCancelled(rq, err)
+			err = newErrPendingCancelledLocked(rq, err)
 		}
 		rq.cancelFn(rq.Jaws.Log(err))
 	}

@@ -277,7 +277,7 @@ func TestSession_Delete(t *testing.T) {
 	}
 
 	ts.rq.Register("byebye", func(e *Element, evt what.What, val string) error {
-		sess2 := ts.jw.GetSession(e.Request.Initial)
+		sess2 := ts.jw.GetSession(e.Request.Initial())
 		if x := sess2; x != ts.sess {
 			t.Error(x)
 		}
