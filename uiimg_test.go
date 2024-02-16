@@ -25,7 +25,8 @@ func TestRequest_Img(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq.outCh:
+	case msg := <-rq.outCh:
+		s := msg.Format()
 		if s != "SAttr\tJid.1\t\"src\\n\\\"unquoted.jpg\\\"\"\n" {
 			t.Error(strconv.Quote(s))
 		}

@@ -42,7 +42,8 @@ func TestRequest_Checkbox(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq.outCh:
+	case msg := <-rq.outCh:
+		s := msg.Format()
 		if s != "Value\tJid.1\t\"true\"\n" {
 			t.Errorf("%q", s)
 		}
@@ -58,7 +59,8 @@ func TestRequest_Checkbox(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq.outCh:
+	case msg := <-rq.outCh:
+		s := msg.Format()
 		if s != "Alert\t\t\"danger\\nstrconv.ParseBool: parsing &#34;omg&#34;: invalid syntax\"\n" {
 			t.Errorf("wrong Alert: %q", s)
 		}
@@ -69,7 +71,8 @@ func TestRequest_Checkbox(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq.outCh:
+	case msg := <-rq.outCh:
+		s := msg.Format()
 		if s != "Alert\t\t\"danger\\nmeh\"\n" {
 			t.Errorf("wrong Alert: %q", s)
 		}

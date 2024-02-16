@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"strings"
 
@@ -38,10 +39,10 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if err = rq.onConnect(); err == nil {
 				incomingMsgCh := make(chan wsMsg)
 				broadcastMsgCh := rq.Jaws.subscribe(rq, 4+len(rq.elems)*4)
-				outboundCh := make(chan string, cap(broadcastMsgCh))
+				outboundMsgCh := make(chan wsMsg, cap(broadcastMsgCh))
 				go wsReader(rq.ctx, rq.cancelFn, rq.Jaws.Done(), incomingMsgCh, ws) // closes incomingMsgCh
-				go wsWriter(rq.ctx, rq.cancelFn, rq.Jaws.Done(), outboundCh, ws)    // calls ws.Close()
-				rq.process(broadcastMsgCh, incomingMsgCh, outboundCh)               // unsubscribes broadcastMsgCh, closes outboundMsgCh
+				go wsWriter(rq.ctx, rq.cancelFn, rq.Jaws.Done(), outboundMsgCh, ws) // calls ws.Close()
+				rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh)            // unsubscribes broadcastMsgCh, closes outboundMsgCh
 			} else {
 				defer ws.Close(websocket.StatusNormalClosure, err.Error())
 				var msg wsMsg
@@ -82,7 +83,7 @@ func wsReader(ctx context.Context, ccf context.CancelCauseFunc, jawsDoneCh <-cha
 // wsWriter reads JaWS messages from outboundMsgCh, formats them and writes them to the websocket.
 //
 // Closes the websocket on exit.
-func wsWriter(ctx context.Context, ccf context.CancelCauseFunc, jawsDoneCh <-chan struct{}, outboundCh <-chan string, ws *websocket.Conn) {
+func wsWriter(ctx context.Context, ccf context.CancelCauseFunc, jawsDoneCh <-chan struct{}, outboundMsgCh <-chan wsMsg, ws *websocket.Conn) {
 	defer ws.Close(websocket.StatusNormalClosure, "")
 	var err error
 	for err == nil {
@@ -91,14 +92,31 @@ func wsWriter(ctx context.Context, ccf context.CancelCauseFunc, jawsDoneCh <-cha
 			return
 		case <-jawsDoneCh:
 			return
-		case msg, ok := <-outboundCh:
+		case msg, ok := <-outboundMsgCh:
 			if !ok {
 				return
 			}
-			err = ws.Write(ctx, websocket.MessageText, []byte(msg))
+			var wc io.WriteCloser
+			if wc, err = ws.Writer(ctx, websocket.MessageText); err == nil {
+				err = wsWriteData(wc, msg, outboundMsgCh)
+			}
 		}
 	}
 	if ccf != nil {
 		ccf(err)
+	}
+}
+
+func wsWriteData(wc io.WriteCloser, firstMsg wsMsg, outboundMsgCh <-chan wsMsg) (err error) {
+	defer wc.Close()
+	b := firstMsg.Append(nil)
+	for {
+		select {
+		case msg := <-outboundMsgCh:
+			b = msg.Append(b)
+		default:
+			_, err = wc.Write(b)
+			return
+		}
 	}
 }

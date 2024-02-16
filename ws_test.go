@@ -250,7 +250,7 @@ func TestWriter_SendsThePayload(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	outCh := make(chan string)
+	outCh := make(chan wsMsg)
 	defer close(outCh)
 	client, server := Pipe()
 
@@ -270,7 +270,7 @@ func TestWriter_SendsThePayload(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case outCh <- msg.Format():
+	case outCh <- msg:
 	}
 
 	select {
@@ -296,13 +296,70 @@ func TestWriter_SendsThePayload(t *testing.T) {
 	}
 }
 
+func TestWriter_ConcatenatesMessages(t *testing.T) {
+	th := newTestHelper(t)
+	ts := newTestServer()
+	defer ts.Close()
+
+	outCh := make(chan wsMsg, 2)
+	defer close(outCh)
+	client, server := Pipe()
+
+	go wsWriter(ts.ctx, nil, ts.jw.Done(), outCh, server)
+
+	var mt websocket.MessageType
+	var b []byte
+	var err error
+	doneCh := make(chan struct{})
+	go func() {
+		defer close(doneCh)
+		mt, b, err = client.Read(ts.ctx)
+		ts.cancel()
+	}()
+
+	msg := wsMsg{Jid: Jid(1234)}
+	select {
+	case <-th.C:
+		th.Timeout()
+	case outCh <- msg:
+	}
+	select {
+	case <-th.C:
+		th.Timeout()
+	case outCh <- msg:
+	}
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case <-doneCh:
+	}
+
+	if err != nil {
+		t.Error(err)
+	}
+	if mt != websocket.MessageText {
+		t.Error(mt)
+	}
+	want := msg.Format() + msg.Format()
+	if string(b) != want {
+		t.Error(string(b))
+	}
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case <-client.CloseRead(ts.ctx).Done():
+	}
+}
+
 func TestWriter_RespectsContext(t *testing.T) {
 	th := newTestHelper(t)
 	ts := newTestServer()
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	outCh := make(chan string)
+	outCh := make(chan wsMsg)
 	defer close(outCh)
 	client, server := Pipe()
 	client.CloseRead(context.Background())
@@ -328,7 +385,7 @@ func TestWriter_RespectsJawsDone(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	outCh := make(chan string)
+	outCh := make(chan wsMsg)
 	defer close(outCh)
 	client, server := Pipe()
 	client.CloseRead(ts.ctx)
@@ -353,7 +410,7 @@ func TestWriter_RespectsOutboundClosed(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	outCh := make(chan string)
+	outCh := make(chan wsMsg)
 	client, server := Pipe()
 	client.CloseRead(ts.ctx)
 
@@ -381,7 +438,7 @@ func TestWriter_ReportsError(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	outCh := make(chan string)
+	outCh := make(chan wsMsg)
 	client, server := Pipe()
 	client.CloseRead(ts.ctx)
 	server.Close(websocket.StatusNormalClosure, "")
@@ -395,7 +452,7 @@ func TestWriter_ReportsError(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case outCh <- msg.Format():
+	case outCh <- msg:
 	}
 
 	select {

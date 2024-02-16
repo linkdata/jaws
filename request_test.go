@@ -18,10 +18,10 @@ import (
 
 const testTimeout = time.Second * 3
 
-func fillWsCh(ch chan string) {
+func fillWsCh(ch chan wsMsg) {
 	for {
 		select {
-		case ch <- "":
+		case ch <- wsMsg{}:
 		default:
 			return
 		}
@@ -72,9 +72,7 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 	select {
 	case <-time.NewTimer(testTimeout).C:
 		is.Fail()
-	case msgstr := <-rq.outCh:
-		msg, ok := wsParse([]byte(msgstr))
-		is.True(ok)
+	case msg := <-rq.outCh:
 		elem := rq.getElementByJid(jid)
 		is.True(elem != nil)
 		is.Equal(msg, wsMsg{Jid: elem.jid, Data: "bar", What: what.Inner})
@@ -214,7 +212,7 @@ func TestRequest_Trigger(t *testing.T) {
 	case <-th.C:
 		th.Timeout()
 	case msg := <-rq.outCh:
-		th.Equal(msg, (&wsMsg{
+		th.Equal(msg.Format(), (&wsMsg{
 			Data: "danger\nomg",
 			Jid:  jid.Jid(0),
 			What: what.Alert,
@@ -393,7 +391,8 @@ func TestRequest_Alert(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq1.outCh:
+	case msg := <-rq1.outCh:
+		s := msg.Format()
 		if s != "Alert\t\t\"info\\n<html>\\nnot\\tescaped\"\n" {
 			t.Errorf("%q", s)
 		}
@@ -416,7 +415,8 @@ func TestRequest_Redirect(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq1.outCh:
+	case msg := <-rq1.outCh:
+		s := msg.Format()
 		if s != "Redirect\t\t\"some-url\"\n" {
 			t.Errorf("%q", s)
 		}
@@ -437,7 +437,8 @@ func TestRequest_AlertError(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq.outCh:
+	case msg := <-rq.outCh:
+		s := msg.Format()
 		if s != "Alert\t\t\"danger\\n&lt;html&gt;\\nshould-be-escaped\"\n" {
 			t.Errorf("%q", s)
 		}
@@ -478,19 +479,43 @@ func TestRequest_DeleteByTag(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq1.outCh:
-		if s != "Delete\tJid.1\t\"\"\nDelete\tJid.3\t\"\"\n" {
+	case msg := <-rq1.outCh:
+		s := msg.Format()
+		if s != "Delete\tJid.1\t\"\"\n" {
 			t.Errorf("%q", s)
 		}
 	}
+
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq2.outCh:
-		if s != "Delete\tJid.4\t\"\"\nDelete\tJid.6\t\"\"\n" {
+	case msg := <-rq1.outCh:
+		s := msg.Format()
+		if s != "Delete\tJid.3\t\"\"\n" {
 			t.Errorf("%q", s)
 		}
 	}
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case msg := <-rq2.outCh:
+		s := msg.Format()
+		if s != "Delete\tJid.4\t\"\"\n" {
+			t.Errorf("%q", s)
+		}
+	}
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case msg := <-rq2.outCh:
+		s := msg.Format()
+		if s != "Delete\tJid.6\t\"\"\n" {
+			t.Errorf("%q", s)
+		}
+	}
+
 }
 
 func TestRequest_HtmlIdBroadcast(t *testing.T) {
@@ -508,7 +533,8 @@ func TestRequest_HtmlIdBroadcast(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq1.outCh:
+	case msg := <-rq1.outCh:
+		s := msg.Format()
 		if s != "Inner\tfooId\t\"inner\"\n" {
 			t.Errorf("%q", s)
 		}
@@ -516,7 +542,8 @@ func TestRequest_HtmlIdBroadcast(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq2.outCh:
+	case msg := <-rq2.outCh:
+		s := msg.Format()
 		if s != "Inner\tfooId\t\"inner\"\n" {
 			t.Errorf("%q", s)
 		}

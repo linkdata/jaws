@@ -37,7 +37,8 @@ func TestRequest_Textarea(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq.outCh:
+	case msg := <-rq.outCh:
+		s := msg.Format()
 		if s != "Value\tJid.1\t\"quux\"\n" {
 			t.Fail()
 		}

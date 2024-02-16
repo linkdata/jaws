@@ -46,7 +46,8 @@ func TestRequest_Date(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq.outCh:
+	case msg := <-rq.outCh:
+		s := msg.Format()
 		if s != fmt.Sprintf("Value\tJid.1\t\"%s\"\n", val.Format(ISO8601)) {
 			t.Error("wrong Value")
 		}
@@ -62,7 +63,8 @@ func TestRequest_Date(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq.outCh:
+	case msg := <-rq.outCh:
+		s := msg.Format()
 		if s != "Alert\t\t\"danger\\nparsing time &#34;omg&#34; as &#34;2006-01-02&#34;: cannot parse &#34;omg&#34; as &#34;2006&#34;\"\n" {
 			t.Errorf("wrong Alert: %q", s)
 		}
@@ -73,7 +75,8 @@ func TestRequest_Date(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq.outCh:
+	case msg := <-rq.outCh:
+		s := msg.Format()
 		if s != "Alert\t\t\"danger\\nmeh\"\n" {
 			t.Errorf("wrong Alert: %q", s)
 		}
