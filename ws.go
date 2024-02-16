@@ -3,6 +3,7 @@ package jaws
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"nhooyr.io/websocket"
 )
@@ -27,6 +28,11 @@ func (rq *Request) stopServe() {
 func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if rq.startServe() {
 		defer rq.stopServe()
+		if strings.HasSuffix(r.RequestURI, "/noscript") {
+			w.WriteHeader(http.StatusNoContent)
+			rq.cancel(nil)
+			return
+		}
 		ws, err := websocket.Accept(w, r, nil)
 		if err == nil {
 			if err = rq.onConnect(); err == nil {

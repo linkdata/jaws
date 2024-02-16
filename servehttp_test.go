@@ -116,3 +116,16 @@ func TestServeHTTP_GetKey(t *testing.T) {
 	is.Equal(w.Code, http.StatusUpgradeRequired)
 	is.Equal(w.Header()["Cache-Control"], nil)
 }
+
+func TestServeHTTP_Noscript(t *testing.T) {
+	is := newTestHelper(t)
+	jw := New()
+	go jw.Serve()
+	defer jw.Close()
+
+	w := httptest.NewRecorder()
+	rq := jw.NewRequest(httptest.NewRequest("", "/", nil))
+	req := httptest.NewRequest("", "/jaws/"+rq.JawsKeyString()+"/noscript", nil)
+	jw.ServeHTTP(w, req)
+	is.Equal(w.Code, http.StatusNoContent)
+}

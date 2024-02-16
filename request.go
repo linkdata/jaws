@@ -66,6 +66,7 @@ func (rq *Request) String() string {
 }
 
 var ErrRequestAlreadyClaimed = errors.New("request already claimed")
+var ErrJavascriptDisabled = errors.New("javascript is disabled")
 
 func (rq *Request) claim(hr *http.Request) (err error) {
 	rq.mu.Lock()
@@ -119,9 +120,16 @@ func (rq *Request) clearLocked() *Request {
 
 // HeadHTML writes the HTML code needed in the HTML page's HEAD section.
 func (rq *Request) HeadHTML(w io.Writer) (err error) {
+	const headMid = `";</script><noscript>` +
+		`<div class="jaws-alert">This site requires Javascript for full functionality.</div>`
 	if _, err = w.Write([]byte(rq.Jaws.headPrefix)); err == nil {
-		if _, err = w.Write([]byte(rq.JawsKeyString())); err == nil {
-			_, err = w.Write([]byte(`";</script><noscript><div class="jaws-alert">This site requires Javascript for full functionality.</div></noscript>`))
+		keyString := rq.JawsKeyString()
+		if _, err = w.Write([]byte(keyString)); err == nil {
+			if _, err = w.Write([]byte(headMid)); err == nil {
+				if _, err = fmt.Fprintf(w, `<img src="/jaws/%s/noscript">`, keyString); err == nil {
+					_, err = w.Write([]byte(`</noscript>`))
+				}
+			}
 		}
 	}
 	return

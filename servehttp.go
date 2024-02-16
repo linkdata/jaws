@@ -18,38 +18,41 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	switch r.RequestURI {
-	case JavascriptPath:
-		hdr := w.Header()
-		hdr["Cache-Control"] = headerCacheStatic
-		hdr["Content-Type"] = headerContentType
-		hdr["Vary"] = headerAcceptEncoding
-		js := JavascriptText
-		for _, s := range r.Header["Accept-Encoding"] {
-			for _, v := range strings.Split(s, ",") {
-				if strings.TrimSpace(v) == "gzip" {
-					js = JavascriptGZip
-					hdr["Content-Encoding"] = headerContentGZip
-					break
+	if len(r.RequestURI) > 6 && strings.HasPrefix(r.RequestURI, "/jaws/") {
+		if r.RequestURI[6] == '.' {
+			switch r.RequestURI {
+			case JavascriptPath:
+				hdr := w.Header()
+				hdr["Cache-Control"] = headerCacheStatic
+				hdr["Content-Type"] = headerContentType
+				hdr["Vary"] = headerAcceptEncoding
+				js := JavascriptText
+				for _, s := range r.Header["Accept-Encoding"] {
+					for _, v := range strings.Split(s, ",") {
+						if strings.TrimSpace(v) == "gzip" {
+							js = JavascriptGZip
+							hdr["Content-Encoding"] = headerContentGZip
+							break
+						}
+					}
 				}
+				hdr["Content-Length"] = []string{strconv.Itoa(len(js))}
+				_, _ = w.Write(js) // #nosec G104
+				return
+			case "/jaws/.ping":
+				w.Header()["Cache-Control"] = headerCacheNoCache
+				select {
+				case <-jw.Done():
+					w.WriteHeader(http.StatusServiceUnavailable)
+				default:
+					w.WriteHeader(http.StatusNoContent)
+				}
+				return
 			}
+		} else if rq := jw.UseRequest(JawsKeyValue(r.RequestURI[6:]), r); rq != nil {
+			rq.ServeHTTP(w, r)
+			return
 		}
-		hdr["Content-Length"] = []string{strconv.Itoa(len(js))}
-		_, _ = w.Write(js) // #nosec G104
-		return
-	case "/jaws/.ping":
-		w.Header()["Cache-Control"] = headerCacheNoCache
-		select {
-		case <-jw.Done():
-			w.WriteHeader(http.StatusServiceUnavailable)
-		default:
-			w.WriteHeader(http.StatusNoContent)
-		}
-		return
-	}
-	if rq := jw.UseRequest(JawsKeyValue(strings.TrimPrefix(r.RequestURI, "/jaws/")), r); rq != nil {
-		rq.ServeHTTP(w, r)
-		return
 	}
 	w.WriteHeader(http.StatusNotFound)
 }

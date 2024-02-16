@@ -11,7 +11,7 @@ import (
 )
 
 func Test_Javascript(t *testing.T) {
-	const prefix = "/jaws/jaws."
+	const prefix = "/jaws/.jaws."
 	const suffix = ".js"
 	th := newTestHelper(t)
 
@@ -48,4 +48,40 @@ func TestJawsKeyString(t *testing.T) {
 	th := newTestHelper(t)
 	th.Equal(JawsKeyString(0), "")
 	th.Equal(JawsKeyString(1), "1")
+}
+
+func TestJawsKeyValue(t *testing.T) {
+	tests := []struct {
+		name    string
+		jawsKey string
+		want    uint64
+	}{
+		{
+			name:    "blank",
+			jawsKey: "",
+			want:    0,
+		},
+		{
+			name:    "1",
+			jawsKey: "1",
+			want:    1,
+		},
+		{
+			name:    "-1",
+			jawsKey: "-1",
+			want:    0,
+		},
+		{
+			name:    "2/",
+			jawsKey: "2/",
+			want:    2,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := JawsKeyValue(tt.jawsKey); got != tt.want {
+				t.Errorf("JawsKeyValue() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

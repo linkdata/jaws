@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"hash/fnv"
 	"strconv"
+	"strings"
 )
 
 // JavascriptText is the source code for the client-side JaWS Javascript library.
@@ -32,7 +33,7 @@ func makeJavascriptPath() string {
 	h := fnv.New64a()
 	_, err := h.Write(JavascriptText)
 	maybePanic(err)
-	return "/jaws/jaws." + strconv.FormatUint(h.Sum64(), 36) + ".js"
+	return "/jaws/.jaws." + strconv.FormatUint(h.Sum64(), 36) + ".js"
 }
 
 // JawsKeyString returns the string to be used for the given JaWS key.
@@ -45,7 +46,11 @@ func JawsKeyString(jawsKey uint64) string {
 
 // JawsKeyValue parses a key string (as returned JawsKeyString) into a uint64.
 func JawsKeyValue(jawsKey string) uint64 {
-	if val, err := strconv.ParseUint(jawsKey, 32, 64); err == nil {
+	slashIdx := strings.IndexByte(jawsKey, '/')
+	if slashIdx < 0 {
+		slashIdx = len(jawsKey)
+	}
+	if val, err := strconv.ParseUint(jawsKey[:slashIdx], 32, 64); err == nil {
 		return val
 	}
 	return 0
