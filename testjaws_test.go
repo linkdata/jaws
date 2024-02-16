@@ -35,7 +35,7 @@ type testRequest struct {
 	readyCh     chan struct{}
 	doneCh      chan struct{}
 	inCh        chan wsMsg
-	outCh       chan string
+	outCh       chan wsMsg
 	bcastCh     chan Message
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -70,7 +70,7 @@ func (tj *testJaws) newRequest(hr *http.Request) (tr *testRequest) {
 		readyCh:       make(chan struct{}),
 		doneCh:        make(chan struct{}),
 		inCh:          make(chan wsMsg),
-		outCh:         make(chan string, cap(bcastCh)),
+		outCh:         make(chan wsMsg, cap(bcastCh)),
 		bcastCh:       bcastCh,
 		ctx:           ctx,
 		cancel:        cancel,

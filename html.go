@@ -43,8 +43,7 @@ func appendAttrs(b []byte, attrs []template.HTMLAttr) []byte {
 }
 
 func WriteHtmlTag(w io.Writer, jid jid.Jid, htmlTag, typeAttr, valueAttr string, attrs []template.HTMLAttr) (err error) {
-	b := make([]byte, 0, 64)
-	b = jid.AppendStartTagAttr(b, htmlTag)
+	b := jid.AppendStartTagAttr(nil, htmlTag)
 	if typeAttr != "" {
 		b = append(b, ` type=`...)
 		b = strconv.AppendQuote(b, typeAttr)
@@ -66,13 +65,12 @@ func WriteHtmlInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs 
 func WriteHtmlInner(w io.Writer, jid jid.Jid, htmlTag, typeAttr string, innerHtml template.HTML, attrs ...template.HTMLAttr) (err error) {
 	if err = WriteHtmlTag(w, jid, htmlTag, typeAttr, "", attrs); err == nil {
 		if innerHtml != "" || needClosingTag(htmlTag) {
-			if _, err = w.Write([]byte(innerHtml)); err == nil {
-				var b []byte
-				b = append(b, "</"...)
-				b = append(b, htmlTag...)
-				b = append(b, '>')
-				_, err = w.Write(b)
-			}
+			var b []byte
+			b = append(b, innerHtml...)
+			b = append(b, "</"...)
+			b = append(b, htmlTag...)
+			b = append(b, '>')
+			_, err = w.Write(b)
 		}
 	}
 	return

@@ -82,7 +82,8 @@ func TestRequest_Select(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq.outCh:
+	case msg := <-rq.outCh:
+		s := msg.Format()
 		if s != "Value\tJid.1\t\"\"\n" {
 			t.Error("wrong Value")
 		}
@@ -100,7 +101,8 @@ func TestRequest_Select(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq.outCh:
+	case msg := <-rq.outCh:
+		s := msg.Format()
 		if s != "Alert\t\t\"danger\\nmeh\"\n" {
 			t.Errorf("wrong Alert: %q", s)
 		}

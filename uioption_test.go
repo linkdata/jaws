@@ -30,7 +30,8 @@ func TestUiOption(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq.outCh:
+	case msg := <-rq.outCh:
+		s := msg.Format()
 		if s != "RAttr\tJid.1\t\"selected\"\n" {
 			t.Errorf("%q", s)
 		}
@@ -41,7 +42,8 @@ func TestUiOption(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-rq.outCh:
+	case msg := <-rq.outCh:
+		s := msg.Format()
 		if s != "SAttr\tJid.1\t\"selected\\n\"\n" {
 			t.Errorf("%q", s)
 		}
