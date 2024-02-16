@@ -228,7 +228,7 @@ function jawsLost() {
 function jawsHandleReconnect(e) {
 	if (e.currentTarget.readyState == 4) {
 		if (e.currentTarget.status == 204) {
-			window.location.replace(window.location.href);
+			window.location.reload();
 		} else {
 			jawsLost();
 		}
