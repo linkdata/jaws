@@ -36,12 +36,17 @@ func makeJavascriptPath() string {
 	return "/jaws/.jaws." + strconv.FormatUint(h.Sum64(), 36) + ".js"
 }
 
+// JawsKeyAppend appends the JaWS key as a string to the buffer.
+func JawsKeyAppend(b []byte, jawsKey uint64) []byte {
+	if jawsKey != 0 {
+		b = strconv.AppendUint(b, jawsKey, 32)
+	}
+	return b
+}
+
 // JawsKeyString returns the string to be used for the given JaWS key.
 func JawsKeyString(jawsKey uint64) string {
-	if jawsKey == 0 {
-		return ""
-	}
-	return strconv.FormatUint(jawsKey, 32)
+	return string(JawsKeyAppend(nil, jawsKey))
 }
 
 // JawsKeyValue parses a key string (as returned JawsKeyString) into a uint64.

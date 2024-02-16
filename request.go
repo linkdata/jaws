@@ -120,18 +120,17 @@ func (rq *Request) clearLocked() *Request {
 
 // HeadHTML writes the HTML code needed in the HTML page's HEAD section.
 func (rq *Request) HeadHTML(w io.Writer) (err error) {
-	const headMid = `";</script><noscript>` +
-		`<div class="jaws-alert">This site requires Javascript for full functionality.</div>`
-	if _, err = w.Write([]byte(rq.Jaws.headPrefix)); err == nil {
-		keyString := rq.JawsKeyString()
-		if _, err = w.Write([]byte(keyString)); err == nil {
-			if _, err = w.Write([]byte(headMid)); err == nil {
-				if _, err = fmt.Fprintf(w, `<img src="/jaws/%s/noscript">`, keyString); err == nil {
-					_, err = w.Write([]byte(`</noscript>`))
-				}
-			}
-		}
-	}
+	rq.mu.RLock()
+	var b []byte
+	b = append(b, rq.Jaws.headPrefix...)
+	b = JawsKeyAppend(b, rq.JawsKey)
+	b = append(b, `";</script><noscript>`+
+		`<div class="jaws-alert">This site requires Javascript for full functionality.</div>`+
+		`<img src="/jaws/`...)
+	b = JawsKeyAppend(b, rq.JawsKey)
+	b = append(b, `/noscript"></noscript>`...)
+	rq.mu.RUnlock()
+	_, err = w.Write(b)
 	return
 }
 
