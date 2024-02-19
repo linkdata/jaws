@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/netip"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -43,6 +44,7 @@ type Request struct {
 	connectFn ConnectFn               // a ConnectFn to call before starting message processing for the Request
 	elems     []*Element
 	tagMap    map[any][]*Element
+	wsQueue   []wsMsg
 }
 
 type eventFnCall struct {
@@ -249,12 +251,12 @@ func (rq *Request) TagsOf(elem *Element) (tags []any) {
 	if elem != nil {
 		if rq.mu.TryRLock() {
 			defer rq.mu.RUnlock()
-			for tag, elems := range rq.tagMap {
-				for _, e := range elems {
-					if e == elem {
-						tags = append(tags, tag)
-						break
-					}
+		}
+		for tag, elems := range rq.tagMap {
+			for _, e := range elems {
+				if e == elem {
+					tags = append(tags, tag)
+					break
 				}
 			}
 		}
@@ -446,16 +448,12 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		}
 	}()
 
-	var wsQueue []wsMsg
-
 	for {
 		var tagmsg Message
 		var wsmsg wsMsg
 		var ok bool
 
-		if len(wsQueue) > 0 {
-			wsQueue = rq.sendQueue(outboundMsgCh, wsQueue)
-		}
+		rq.sendQueue(outboundMsgCh)
 
 		// Empty the dirty tags list and call JawsUpdate()
 		// for identified elements. This queues up wsMsg's
@@ -464,18 +462,16 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			elem.Update()
 		}
 
-		// Append pending WS messages to the queue
+		/*// Append pending WS messages to the queue
 		// in the order of Element creation.
 		rq.mu.RLock()
 		for _, elem := range rq.elems {
 			wsQueue = append(wsQueue, elem.wsQueue...)
 			elem.wsQueue = elem.wsQueue[:0]
 		}
-		rq.mu.RUnlock()
+		rq.mu.RUnlock()*/
 
-		if len(wsQueue) > 0 {
-			wsQueue = rq.sendQueue(outboundMsgCh, wsQueue)
-		}
+		rq.sendQueue(outboundMsgCh)
 
 		select {
 		case <-jawsDoneCh:
@@ -509,7 +505,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		case *Request:
 		case string:
 			// target is a regular HTML ID
-			wsQueue = append(wsQueue, wsMsg{
+			rq.queue(wsMsg{
 				Data: v + "\t" + strconv.Quote(tagmsg.Data),
 				What: tagmsg.What,
 				Jid:  -1,
@@ -520,7 +516,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 
 		switch tagmsg.What {
 		case what.Reload, what.Redirect, what.Order, what.Alert:
-			wsQueue = append(wsQueue, wsMsg{
+			rq.queue(wsMsg{
 				Jid:  0,
 				Data: tagmsg.Data,
 				What: tagmsg.What,
@@ -529,7 +525,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			for _, elem := range todo {
 				switch tagmsg.What {
 				case what.Delete:
-					wsQueue = append(wsQueue, wsMsg{
+					rq.queue(wsMsg{
 						Jid:  elem.Jid(),
 						What: what.Delete,
 					})
@@ -546,7 +542,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					// an error to be sent out as an alert message.
 					// primary usecase is tests.
 					if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.Jid(), tagmsg.What, tagmsg.Data)); err != nil {
-						wsQueue = append(wsQueue, wsMsg{
+						rq.queue(wsMsg{
 							Data: tagmsg.Data,
 							Jid:  elem.Jid(),
 							What: what.Alert,
@@ -555,7 +551,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 				case what.Update:
 					elem.Update()
 				default:
-					wsQueue = append(wsQueue, wsMsg{
+					rq.queue(wsMsg{
 						Data: tagmsg.Data,
 						Jid:  elem.Jid(),
 						What: tagmsg.What,
@@ -574,6 +570,12 @@ func (rq *Request) handleRemove(data string) {
 			rq.deleteElementLocked(e)
 		}
 	}
+}
+
+func (rq *Request) queue(msg wsMsg) {
+	// rq.mu.Lock()
+	rq.wsQueue = append(rq.wsQueue, msg)
+	// rq.mu.Unlock()
 }
 
 func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err error) {
@@ -628,20 +630,38 @@ func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
 	}
 }
 
-func (rq *Request) wsSend(outboundMsgCh chan<- wsMsg, msg wsMsg) {
-	select {
-	case <-rq.Done():
-	case outboundMsgCh <- msg:
-	default:
-		panic(fmt.Errorf("jaws: %v: outbound message channel is full (%d) sending %s", rq, len(outboundMsgCh), msg))
-	}
-}
+func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg) {
+	var toSend []wsMsg
+	validJids := map[Jid]struct{}{}
 
-func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg, wsQueue []wsMsg) []wsMsg {
-	for _, msg := range wsQueue {
-		rq.wsSend(outboundMsgCh, msg)
+	rq.mu.Lock()
+	if len(rq.wsQueue) > 0 {
+		for _, elem := range rq.elems {
+			if !elem.deleted {
+				validJids[elem.Jid()] = struct{}{}
+			}
+		}
+		for _, msg := range rq.wsQueue {
+			ok := msg.Jid < 1 || msg.What == what.Delete
+			if !ok {
+				_, ok = validJids[msg.Jid]
+			}
+			if ok {
+				toSend = append(toSend, msg)
+			}
+		}
+		rq.wsQueue = rq.wsQueue[:0]
 	}
-	return wsQueue[:0]
+	rq.mu.Unlock()
+
+	for _, msg := range toSend {
+		select {
+		case <-rq.Done():
+		case outboundMsgCh <- msg:
+		default:
+			panic(fmt.Errorf("jaws: %v: outbound message channel is full (%d) sending %s", rq, len(outboundMsgCh), msg))
+		}
+	}
 }
 
 func deleteElement(s []*Element, e *Element) []*Element {
@@ -693,6 +713,7 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 		elem.updating = false
 	}
 	rq.todoDirt = rq.todoDirt[:0]
+	sort.Slice(todo, func(i, j int) bool { return todo[i].Jid() < todo[j].Jid() })
 	return
 }
 

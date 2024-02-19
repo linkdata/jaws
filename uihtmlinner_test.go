@@ -34,7 +34,7 @@ func TestUiHtmlInner_JawsUpdate(t *testing.T) {
 		Jid:  1,
 		What: what.Inner,
 	}}
-	if !slices.Equal(elem.wsQueue, want) {
+	if !slices.Equal(rq.wsQueue, want) {
 		t.Errorf("got %v, want %v", elem.wsQueue, want)
 	}
 }
