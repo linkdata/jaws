@@ -628,18 +628,28 @@ func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
 	}
 }
 
-func (rq *Request) wsSend(outboundMsgCh chan<- wsMsg, msg wsMsg) {
-	select {
-	case <-rq.Done():
-	case outboundMsgCh <- msg:
-	default:
-		panic(fmt.Errorf("jaws: %v: outbound message channel is full (%d) sending %s", rq, len(outboundMsgCh), msg))
-	}
-}
-
 func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg, wsQueue []wsMsg) []wsMsg {
+	validJids := map[Jid]struct{}{}
+	rq.mu.RLock()
+	for _, elem := range rq.elems {
+		if !elem.deleted {
+			validJids[elem.Jid()] = struct{}{}
+		}
+	}
+	rq.mu.RUnlock()
 	for _, msg := range wsQueue {
-		rq.wsSend(outboundMsgCh, msg)
+		ok := msg.Jid < 1 || msg.What == what.Delete
+		if !ok {
+			_, ok = validJids[msg.Jid]
+		}
+		if ok {
+			select {
+			case <-rq.Done():
+			case outboundMsgCh <- msg:
+			default:
+				panic(fmt.Errorf("jaws: %v: outbound message channel is full (%d) sending %s", rq, len(outboundMsgCh), msg))
+			}
+		}
 	}
 	return wsQueue[:0]
 }
