@@ -79,7 +79,12 @@ func TestElement_Tag(t *testing.T) {
 	is.True(!e.HasTag(Tag("zomg")))
 	e.Tag(Tag("zomg"))
 	is.True(e.HasTag(Tag("zomg")))
-	is.True(strings.Contains(e.String(), "zomg"))
+	rq.mu.RLock()
+	defer rq.mu.RUnlock()
+	s := e.String()
+	if !strings.Contains(s, "zomg") {
+		t.Error(s)
+	}
 }
 
 func TestElement_Queued(t *testing.T) {
@@ -100,7 +105,7 @@ func TestElement_Queued(t *testing.T) {
 			e.Order([]jid.Jid{1, 2})
 			replaceHtml := template.HTML(fmt.Sprintf("<div id=\"%s\"></div>", e.Jid().String()))
 			e.Replace(replaceHtml)
-			th.Equal(e.wsQueue, []wsMsg{
+			th.Equal(rq.wsQueue, []wsMsg{
 				{
 					Data: "hidden\n",
 					Jid:  e.jid,

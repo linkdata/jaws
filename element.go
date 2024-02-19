@@ -15,7 +15,6 @@ type Element struct {
 	*Request // (read-only) the Request the Element belongs to
 	// internals
 	ui       UI             // the UI object
-	wsQueue  []wsMsg        // changes queued
 	handlers []EventHandler // custom event handlers registered, if any
 	jid      jid.Jid        // JaWS ID, unique to this Element within it's Request
 	updating bool           // about to have Update() called
@@ -65,15 +64,11 @@ func (e *Element) Render(w io.Writer, params []any) (err error) {
 
 func (e *Element) queue(wht what.What, data string) {
 	if !e.deleted {
-		if len(e.wsQueue) < maxWsQueueLengthPerElement {
-			e.wsQueue = append(e.wsQueue, wsMsg{
-				Data: data,
-				Jid:  e.jid,
-				What: wht,
-			})
-		} else {
-			e.Request.cancel(newErrWebsocketQueueOverflow(e))
-		}
+		e.Request.queue(wsMsg{
+			Data: data,
+			Jid:  e.jid,
+			What: wht,
+		})
 	}
 }
 

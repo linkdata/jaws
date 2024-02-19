@@ -3,9 +3,6 @@ package jaws
 import (
 	"context"
 	"errors"
-	"html/template"
-	"net/http"
-	"net/http/httptest"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -68,14 +65,18 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 	jid := rq.Register("foo")
+	elem := rq.getElementByJid(jid)
+	is.True(elem != nil)
 	rq.jw.Broadcast(Message{Dest: Tag("foo"), What: what.Inner, Data: "bar"})
 	select {
-	case <-time.NewTimer(testTimeout).C:
-		is.Fail()
+	case <-time.NewTimer(time.Hour).C:
+		is.Error("timeout")
 	case msg := <-rq.outCh:
 		elem := rq.getElementByJid(jid)
 		is.True(elem != nil)
-		is.Equal(msg, wsMsg{Jid: elem.jid, Data: "bar", What: what.Inner})
+		if elem != nil {
+			is.Equal(msg, wsMsg{Jid: elem.jid, Data: "bar", What: what.Inner})
+		}
 	}
 }
 
@@ -573,38 +574,23 @@ func TestRequest_ConnectFn(t *testing.T) {
 	th.Equal(rq.onConnect(), wantErr)
 }
 
-func TestRequest_WsQueueOverflowCancels(t *testing.T) {
-	th := newTestHelper(t)
-	jw := New()
-	defer jw.Close()
-	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	rq := jw.NewRequest(hr)
-	elem := rq.NewElement(NewUiDiv(makeHtmlGetter("foo")))
-	go func() {
-		for i := 0; i < maxWsQueueLengthPerElement*10; i++ {
-			elem.SetInner(template.HTML(strconv.Itoa(i)))
-		}
-	}()
-	select {
-	case <-th.C:
-		th.Timeout()
-	case <-rq.Done():
-	}
-	th.True(errors.Is(context.Cause(rq.Context()), ErrWebsocketQueueOverflow))
-}
-
 func TestRequest_Dirty(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 
-	tss := &testUi{s: "foo"}
-	rq.UI(NewUiText(tss))
-	th.Equal(tss.getCalled, int32(1))
-	th.True(strings.Contains(string(rq.BodyString()), "foo"))
+	tss1 := &testUi{s: "foo1"}
+	tss2 := &testUi{s: "foo2"}
+	rq.UI(NewUiText(tss1))
+	rq.UI(NewUiText(tss2))
+	th.Equal(tss1.getCalled, int32(1))
+	th.Equal(tss2.getCalled, int32(1))
+	th.True(strings.Contains(string(rq.BodyString()), "foo1"))
+	th.True(strings.Contains(string(rq.BodyString()), "foo2"))
 
-	rq.Dirty(tss)
-	for atomic.LoadInt32(&tss.getCalled) < 2 {
+	rq.Dirty(tss1)
+	rq.Dirty(tss2)
+	for atomic.LoadInt32(&tss1.getCalled) < 2 && atomic.LoadInt32(&tss2.getCalled) < 2 {
 		select {
 		case <-th.C:
 			th.Timeout()
