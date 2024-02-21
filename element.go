@@ -47,19 +47,19 @@ func (e *Element) Ui() UI {
 	return e.ui
 }
 
-// Update calls Ui().JawsUpdate() for this Element.
-func (e *Element) Update() {
-	if !e.deleted {
-		e.Ui().JawsUpdate(e)
-	}
-}
-
 // Render calls Request.JawsRender() for this Element.
 func (e *Element) Render(w io.Writer, params []any) (err error) {
 	if !e.deleted {
 		err = e.Request.JawsRender(e, w, params)
 	}
 	return
+}
+
+// update calls Ui().JawsUpdate() for this Element.
+func (e *Element) update() {
+	if !e.deleted {
+		e.Ui().JawsUpdate(e)
+	}
 }
 
 func (e *Element) queue(wht what.What, data string) {

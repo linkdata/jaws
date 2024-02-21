@@ -459,7 +459,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		// for identified elements. This queues up wsMsg's
 		// in elem.wsQueue.
 		for _, elem := range rq.makeUpdateList() {
-			elem.Update()
+			elem.update()
 		}
 
 		/*// Append pending WS messages to the queue
@@ -549,7 +549,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 						})
 					}
 				case what.Update:
-					elem.Update()
+					elem.update()
 				default:
 					rq.queue(wsMsg{
 						Data: tagmsg.Data,
