@@ -79,8 +79,6 @@ func TestElement_Tag(t *testing.T) {
 	is.True(!e.HasTag(Tag("zomg")))
 	e.Tag(Tag("zomg"))
 	is.True(e.HasTag(Tag("zomg")))
-	rq.mu.RLock()
-	defer rq.mu.RUnlock()
 	s := e.String()
 	if !strings.Contains(s, "zomg") {
 		t.Error(s)

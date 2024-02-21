@@ -120,19 +120,28 @@ func (rq *Request) clearLocked() *Request {
 	return rq
 }
 
+func (rq *Request) renderDebug(elem *Element, w io.Writer) {
+	var sb strings.Builder
+	_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", elem.Jid(), elem.Ui())
+	if rq.mu.TryRLock() {
+		defer rq.mu.RUnlock()
+		for i, tag := range rq.tagsOfLocked(elem) {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(TagString(tag))
+		}
+	} else {
+		sb.WriteString("n/a")
+	}
+	sb.WriteByte(']')
+	_, _ = w.Write([]byte(strings.ReplaceAll(sb.String(), "-->", "==>") + " -->"))
+}
+
 func (rq *Request) render(elem *Element, w io.Writer, params []any) (err error) {
 	if err = elem.Ui().JawsRender(elem, w, params); err == nil {
 		if rq.Jaws.Debug {
-			var sb strings.Builder
-			_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", elem.Jid(), elem.Ui())
-			for i, tag := range elem.Request.TagsOf(elem) {
-				if i > 0 {
-					sb.WriteString(", ")
-				}
-				sb.WriteString(TagString(tag))
-			}
-			sb.WriteByte(']')
-			_, _ = w.Write([]byte(strings.ReplaceAll(sb.String(), "-->", "==>") + " -->"))
+			rq.renderDebug(elem, w)
 		}
 	}
 	return
@@ -265,19 +274,23 @@ func (rq *Request) Redirect(url string) {
 	})
 }
 
-func (rq *Request) TagsOf(elem *Element) (tags []any) {
-	if elem != nil {
-		if rq.mu.TryRLock() {
-			defer rq.mu.RUnlock()
-		}
-		for tag, elems := range rq.tagMap {
-			for _, e := range elems {
-				if e == elem {
-					tags = append(tags, tag)
-					break
-				}
+func (rq *Request) tagsOfLocked(elem *Element) (tags []any) {
+	for tag, elems := range rq.tagMap {
+		for _, e := range elems {
+			if e == elem {
+				tags = append(tags, tag)
+				break
 			}
 		}
+	}
+	return
+}
+
+func (rq *Request) TagsOf(elem *Element) (tags []any) {
+	if elem != nil {
+		rq.mu.RLock()
+		defer rq.mu.RUnlock()
+		tags = rq.tagsOfLocked(elem)
 	}
 	return
 }

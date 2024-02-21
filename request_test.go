@@ -516,7 +516,6 @@ func TestRequest_DeleteByTag(t *testing.T) {
 			t.Errorf("%q", s)
 		}
 	}
-
 }
 
 func TestRequest_HtmlIdBroadcast(t *testing.T) {
@@ -702,4 +701,32 @@ func TestRequest_CustomErrors(t *testing.T) {
 	th.True(errors.As(err, &target1))
 	var target2 errPendingCancelled
 	th.Equal(errors.As(cause, &target2), false)
+}
+
+func TestRequest_renderDebugLocked(t *testing.T) {
+	is := newTestHelper(t)
+	jw := New()
+	defer jw.Close()
+	rq := jw.NewRequest(nil)
+	defer jw.recycle(rq)
+
+	tss := &testUi{}
+	e := rq.NewElement(tss)
+	e.Tag(Tag("zomg"))
+
+	var sb strings.Builder
+	rq.renderDebug(e, &sb)
+
+	txt := sb.String()
+	is.Equal(strings.Contains(txt, "zomg"), true)
+	is.Equal(strings.Contains(txt, "n/a"), false)
+
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	sb.Reset()
+	rq.renderDebug(e, &sb)
+
+	txt = sb.String()
+	is.Equal(strings.Contains(txt, "zomg"), false)
+	is.Equal(strings.Contains(txt, "n/a"), true)
 }
