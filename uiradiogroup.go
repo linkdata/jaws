@@ -29,7 +29,7 @@ func (rw RequestWriter) RadioGroup(nba *NamedBoolArray) (rel []RadioElement) {
 // Radio renders a HTML input element of type 'radio'.
 func (re RadioElement) Radio(params ...any) template.HTML {
 	var sb strings.Builder
-	maybePanic(re.radio.render(&sb, append(params, re.nameAttr)))
+	maybePanic(re.radio.JawsRender(&sb, append(params, re.nameAttr)))
 	return template.HTML(sb.String()) // #nosec G203
 }
 
@@ -37,6 +37,6 @@ func (re RadioElement) Radio(params ...any) template.HTML {
 func (re RadioElement) Label(params ...any) template.HTML {
 	var sb strings.Builder
 	forAttr := string(re.radio.Jid().AppendQuote([]byte("for=")))
-	maybePanic(re.label.render(&sb, append(params, forAttr)))
+	maybePanic(re.label.JawsRender(&sb, append(params, forAttr)))
 	return template.HTML(sb.String()) // #nosec G203
 }

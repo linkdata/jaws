@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"strings"
 
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
@@ -47,16 +48,42 @@ func (e *Element) Ui() UI {
 	return e.ui
 }
 
-// render calls Request.render() for this Element.
-func (e *Element) render(w io.Writer, params []any) (err error) {
+func (e *Element) renderDebug(w io.Writer) {
+	var sb strings.Builder
+	_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", e.Jid(), e.Ui())
+	if e.mu.TryRLock() {
+		defer e.mu.RUnlock()
+		for i, tag := range e.tagsOfLocked(e) {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(TagString(tag))
+		}
+	} else {
+		sb.WriteString("n/a")
+	}
+	sb.WriteByte(']')
+	_, _ = w.Write([]byte(strings.ReplaceAll(sb.String(), "-->", "==>") + " -->"))
+}
+
+// JawsRender calls Ui().JawsRender() for this Element.
+//
+// Do not call this yourself unless it's from within another JawsRender implementation.
+func (e *Element) JawsRender(w io.Writer, params []any) (err error) {
 	if !e.deleted {
-		err = e.Request.render(e, w, params)
+		if err = e.Ui().JawsRender(e, w, params); err == nil {
+			if e.Jaws.Debug {
+				e.renderDebug(w)
+			}
+		}
 	}
 	return
 }
 
-// update calls Ui().JawsUpdate() for this Element.
-func (e *Element) update() {
+// JawsUpdate calls Ui().JawsUpdate() for this Element.
+//
+// Do not call this yourself unless it's from within another JawsUpdate implementation.
+func (e *Element) JawsUpdate() {
 	if !e.deleted {
 		e.Ui().JawsUpdate(e)
 	}

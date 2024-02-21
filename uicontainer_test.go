@@ -176,7 +176,7 @@ func TestRequest_Container_Alteration(t *testing.T) {
 				t.Fatal(err)
 			}
 			tt.c.contents = tt.l
-			elem.update()
+			elem.JawsUpdate()
 			if !slices.Equal(rq.wsQueue, tt.want) {
 				t.Errorf("got %v, want %v", rq.wsQueue, tt.want)
 			}

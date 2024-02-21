@@ -11,7 +11,7 @@ type RequestWriter struct {
 }
 
 func (rw RequestWriter) UI(ui UI, params ...any) error {
-	return rw.rq.render(rw.rq.NewElement(ui), rw, params)
+	return rw.rq.NewElement(ui).JawsRender(rw, params)
 }
 
 func (rw RequestWriter) Write(p []byte) (n int, err error) {

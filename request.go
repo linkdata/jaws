@@ -119,33 +119,6 @@ func (rq *Request) clearLocked() *Request {
 	return rq
 }
 
-func (rq *Request) renderDebug(elem *Element, w io.Writer) {
-	var sb strings.Builder
-	_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", elem.Jid(), elem.Ui())
-	if rq.mu.TryRLock() {
-		defer rq.mu.RUnlock()
-		for i, tag := range rq.tagsOfLocked(elem) {
-			if i > 0 {
-				sb.WriteString(", ")
-			}
-			sb.WriteString(TagString(tag))
-		}
-	} else {
-		sb.WriteString("n/a")
-	}
-	sb.WriteByte(']')
-	_, _ = w.Write([]byte(strings.ReplaceAll(sb.String(), "-->", "==>") + " -->"))
-}
-
-func (rq *Request) render(elem *Element, w io.Writer, params []any) (err error) {
-	if err = elem.Ui().JawsRender(elem, w, params); err == nil {
-		if rq.Jaws.Debug {
-			rq.renderDebug(elem, w)
-		}
-	}
-	return
-}
-
 // HeadHTML writes the HTML code needed in the HTML page's HEAD section.
 func (rq *Request) HeadHTML(w io.Writer) (err error) {
 	rq.mu.RLock()
@@ -496,7 +469,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		// for identified elements. This queues up wsMsg's
 		// in elem.wsQueue.
 		for _, elem := range rq.makeUpdateList() {
-			elem.update()
+			elem.JawsUpdate()
 		}
 
 		rq.sendQueue(outboundMsgCh)
@@ -577,7 +550,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 						})
 					}
 				case what.Update:
-					elem.update()
+					elem.JawsUpdate()
 				default:
 					rq.queue(wsMsg{
 						Data: tagmsg.Data,

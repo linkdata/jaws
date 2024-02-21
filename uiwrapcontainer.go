@@ -31,7 +31,7 @@ func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag
 			if err == nil {
 				elem := e.Request.NewElement(cui)
 				ui.contents = append(ui.contents, elem)
-				err = elem.render(w, nil)
+				err = elem.JawsRender(w, nil)
 			}
 		}
 		b = b[:0]
@@ -84,7 +84,7 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 
 	for _, elem := range toAppend {
 		var sb strings.Builder
-		maybePanic(elem.render(&sb, nil))
+		maybePanic(elem.JawsRender(&sb, nil))
 		e.Append(template.HTML(sb.String())) // #nosec G203
 	}
 
