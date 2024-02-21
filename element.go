@@ -47,10 +47,10 @@ func (e *Element) Ui() UI {
 	return e.ui
 }
 
-// Render calls Request.JawsRender() for this Element.
-func (e *Element) Render(w io.Writer, params []any) (err error) {
+// render calls Request.render() for this Element.
+func (e *Element) render(w io.Writer, params []any) (err error) {
 	if !e.deleted {
-		err = e.Request.JawsRender(e, w, params)
+		err = e.Request.render(e, w, params)
 	}
 	return
 }

@@ -11,7 +11,7 @@ type RequestWriter struct {
 }
 
 func (rw RequestWriter) UI(ui UI, params ...any) error {
-	return rw.rq.JawsRender(rw.rq.NewElement(ui), rw.Writer, params)
+	return rw.rq.render(rw.rq.NewElement(ui), rw.Writer, params)
 }
 
 // Request returns the current jaws.Request.

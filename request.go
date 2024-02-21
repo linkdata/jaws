@@ -120,6 +120,24 @@ func (rq *Request) clearLocked() *Request {
 	return rq
 }
 
+func (rq *Request) render(elem *Element, w io.Writer, params []any) (err error) {
+	if err = elem.Ui().JawsRender(elem, w, params); err == nil {
+		if rq.Jaws.Debug {
+			var sb strings.Builder
+			_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", elem.Jid(), elem.Ui())
+			for i, tag := range elem.Request.TagsOf(elem) {
+				if i > 0 {
+					sb.WriteString(", ")
+				}
+				sb.WriteString(TagString(tag))
+			}
+			sb.WriteByte(']')
+			_, _ = w.Write([]byte(strings.ReplaceAll(sb.String(), "-->", "==>") + " -->"))
+		}
+	}
+	return
+}
+
 // HeadHTML writes the HTML code needed in the HTML page's HEAD section.
 func (rq *Request) HeadHTML(w io.Writer) (err error) {
 	rq.mu.RLock()
