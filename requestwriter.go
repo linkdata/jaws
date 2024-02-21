@@ -11,7 +11,12 @@ type RequestWriter struct {
 }
 
 func (rw RequestWriter) UI(ui UI, params ...any) error {
-	return rw.rq.render(rw.rq.NewElement(ui), rw.Writer, params)
+	return rw.rq.render(rw.rq.NewElement(ui), rw, params)
+}
+
+func (rw RequestWriter) Write(p []byte) (n int, err error) {
+	rw.rq.rendering.Store(true)
+	return rw.Writer.Write(p)
 }
 
 // Request returns the current jaws.Request.

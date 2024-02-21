@@ -31,13 +31,14 @@ type ConnectFn = func(rq *Request) error
 type Request struct {
 	Jaws      *Jaws                   // (read-only) the JaWS instance the Request belongs to
 	JawsKey   uint64                  // (read-only) a random number used in the WebSocket URI to identify this Request
-	Created   time.Time               // (read-only) when the Request was created, used for automatic cleanup
 	remoteIP  netip.Addr              // (read-only) remote IP, or nil
+	rendering atomic.Bool             // set to true by RequestWriter.Write()
+	running   atomic.Bool             // if ServeHTTP() is running
+	claimed   atomic.Bool             // if UseRequest() has been called for it
 	mu        deadlock.RWMutex        // protects following
+	lastWrite time.Time               // when the initial HTML was last written to, used for automatic cleanup
 	initial   *http.Request           // initial HTTP request passed to Jaws.NewRequest
 	session   *Session                // session, if established
-	claimed   bool                    // if UseRequest() has been called for it
-	running   bool                    // if ServeHTTP() is running
 	todoDirt  []any                   // dirty tags
 	ctx       context.Context         // current context, derived from either Jaws or WS HTTP req
 	cancelFn  context.CancelCauseFunc // cancel function
@@ -52,8 +53,6 @@ type eventFnCall struct {
 	wht  what.What
 	data string
 }
-
-const maxWsQueueLengthPerElement = 100
 
 func (rq *Request) JawsKeyString() string {
 	jawsKey := uint64(0)
@@ -70,25 +69,25 @@ func (rq *Request) String() string {
 var ErrRequestAlreadyClaimed = errors.New("request already claimed")
 var ErrJavascriptDisabled = errors.New("javascript is disabled")
 
-func (rq *Request) claim(hr *http.Request) (err error) {
-	rq.mu.Lock()
-	defer rq.mu.Unlock()
-	if rq.claimed {
-		return ErrRequestAlreadyClaimed
+func (rq *Request) claim(hr *http.Request) error {
+	if !rq.claimed.Load() {
+		var actualIP netip.Addr
+		ctx := context.Background()
+		if hr != nil {
+			actualIP = parseIP(hr.RemoteAddr)
+			ctx = hr.Context()
+		}
+		rq.mu.Lock()
+		defer rq.mu.Unlock()
+		if !equalIP(rq.remoteIP, actualIP) {
+			return fmt.Errorf("/jaws/%s: expected IP %q, got %q", rq.JawsKeyString(), rq.remoteIP.String(), actualIP.String())
+		}
+		if rq.claimed.CompareAndSwap(false, true) {
+			rq.ctx, rq.cancelFn = context.WithCancelCause(ctx)
+			return nil
+		}
 	}
-	var actualIP netip.Addr
-	ctx := context.Background()
-	if hr != nil {
-		actualIP = parseIP(hr.RemoteAddr)
-		ctx = hr.Context()
-	}
-	if equalIP(rq.remoteIP, actualIP) {
-		rq.ctx, rq.cancelFn = context.WithCancelCause(ctx)
-		rq.claimed = true
-	} else {
-		err = fmt.Errorf("/jaws/%s: expected IP %q, got %q", rq.JawsKeyString(), rq.remoteIP.String(), actualIP.String())
-	}
-	return
+	return ErrRequestAlreadyClaimed
 }
 
 func (rq *Request) killSessionLocked() {
@@ -107,10 +106,10 @@ func (rq *Request) killSession() {
 func (rq *Request) clearLocked() *Request {
 	rq.JawsKey = 0
 	rq.connectFn = nil
-	rq.Created = time.Time{}
+	rq.lastWrite = time.Time{}
 	rq.initial = nil
-	rq.claimed = false
-	rq.running = false
+	rq.running.Store(false)
+	rq.claimed.Store(false)
 	rq.ctx, rq.cancelFn = context.WithCancelCause(context.Background())
 	rq.todoDirt = rq.todoDirt[:0]
 	rq.remoteIP = netip.Addr{}
@@ -216,15 +215,22 @@ func (rq *Request) Context() (ctx context.Context) {
 	return
 }
 
-func (rq *Request) maintenance(deadline time.Time) bool {
-	rq.mu.RLock()
-	defer rq.mu.RUnlock()
-	if !rq.running {
-		if rq.ctx.Err() != nil {
+func (rq *Request) maintenance(now time.Time, requestTimeout time.Duration) bool {
+	if !rq.running.Load() {
+		if rq.rendering.Swap(false) {
+			rq.mu.Lock()
+			rq.lastWrite = now
+			rq.mu.Unlock()
+		}
+		rq.mu.RLock()
+		err := rq.ctx.Err()
+		since := now.Sub(rq.lastWrite)
+		rq.mu.RUnlock()
+		if err != nil {
 			return true
 		}
-		if rq.Created.Before(deadline) {
-			rq.cancelLocked(newErrNoWebSocketRequest(rq))
+		if since > requestTimeout {
+			rq.cancel(newErrNoWebSocketRequest(rq))
 			return true
 		}
 	}
@@ -233,7 +239,7 @@ func (rq *Request) maintenance(deadline time.Time) bool {
 
 func (rq *Request) cancelLocked(err error) {
 	if rq.JawsKey != 0 && rq.ctx.Err() == nil {
-		if !rq.running {
+		if !rq.running.Load() {
 			err = newErrPendingCancelledLocked(rq, err)
 		}
 		rq.cancelFn(rq.Jaws.Log(err))
@@ -493,15 +499,6 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			elem.update()
 		}
 
-		/*// Append pending WS messages to the queue
-		// in the order of Element creation.
-		rq.mu.RLock()
-		for _, elem := range rq.elems {
-			wsQueue = append(wsQueue, elem.wsQueue...)
-			elem.wsQueue = elem.wsQueue[:0]
-		}
-		rq.mu.RUnlock()*/
-
 		rq.sendQueue(outboundMsgCh)
 
 		select {
@@ -604,9 +601,7 @@ func (rq *Request) handleRemove(data string) {
 }
 
 func (rq *Request) queue(msg wsMsg) {
-	// rq.mu.Lock()
 	rq.wsQueue = append(rq.wsQueue, msg)
-	// rq.mu.Unlock()
 }
 
 func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err error) {
@@ -745,6 +740,13 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 	}
 	rq.todoDirt = rq.todoDirt[:0]
 	sort.Slice(todo, func(i, j int) bool { return todo[i].Jid() < todo[j].Jid() })
+	return
+}
+
+func (rq *Request) getLastWrite() (when time.Time) {
+	rq.mu.RLock()
+	when = rq.lastWrite
+	rq.mu.RUnlock()
 	return
 }
 

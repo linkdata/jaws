@@ -10,12 +10,7 @@ import (
 )
 
 func (rq *Request) startServe() (ok bool) {
-	rq.mu.Lock()
-	if ok = !rq.running && rq.claimed; ok {
-		rq.running = true
-	}
-	rq.mu.Unlock()
-	return
+	return rq.claimed.Load() && rq.running.CompareAndSwap(false, true)
 }
 
 func (rq *Request) stopServe() {

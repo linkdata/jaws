@@ -475,12 +475,12 @@ func (jw *Jaws) Alert(lvl, msg string) {
 // Count returns the number of requests waiting for their WebSocket callbacks.
 func (jw *Jaws) Pending() (n int) {
 	jw.mu.RLock()
+	defer jw.mu.RUnlock()
 	for _, rq := range jw.requests {
-		if !rq.claimed {
+		if !rq.claimed.Load() {
 			n++
 		}
 	}
-	jw.mu.RUnlock()
 	return
 }
 
@@ -576,11 +576,11 @@ func (jw *Jaws) unsubscribe(msgCh chan Message) {
 }
 
 func (jw *Jaws) maintenance(requestTimeout time.Duration) {
-	deadline := time.Now().Add(-requestTimeout)
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
+	now := time.Now()
 	for _, rq := range jw.requests {
-		if rq.maintenance(deadline) {
+		if rq.maintenance(now, requestTimeout) {
 			jw.recycleLocked(rq)
 		}
 	}
@@ -716,7 +716,7 @@ func (jw *Jaws) Append(target any, html template.HTML) {
 func (jw *Jaws) getRequestLocked(jawsKey uint64, hr *http.Request) (rq *Request) {
 	rq = jw.reqPool.Get().(*Request)
 	rq.JawsKey = jawsKey
-	rq.Created = time.Now()
+	rq.lastWrite = time.Now()
 	rq.initial = hr
 	rq.ctx, rq.cancelFn = context.WithCancelCause(context.Background())
 	if hr != nil {

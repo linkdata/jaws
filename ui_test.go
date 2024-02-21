@@ -18,7 +18,6 @@ func (s testStringer) String() string {
 }
 
 func TestRequest_JawsRender_DebugOutput(t *testing.T) {
-
 	is := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()

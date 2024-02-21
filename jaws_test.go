@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -242,6 +243,10 @@ func TestJaws_UseRequest(t *testing.T) {
 	th.Equal(rq2, rq2ret)
 	th.Equal(jw.Pending(), 1)
 
+	rqfail = jw.UseRequest(rq2.JawsKey, &http.Request{RemoteAddr: "10.0.0.2:1214"}) // already claimed
+	th.Equal(rqfail, nil)
+	th.Equal(jw.Pending(), 1)
+
 	rq1ret := jw.UseRequest(rq1.JawsKey, nil)
 	th.Equal(rq1, rq1ret)
 	th.Equal(jw.Pending(), 0)
@@ -275,13 +280,10 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 	for i := 0; i < numReqs; i++ {
 		rq := jw.NewRequest(hr)
 		if (i % (numReqs / 5)) == 0 {
-			elem := rq.NewElement(NewUiDiv(makeHtmlGetter("meh")))
-			for j := 0; j < maxWsQueueLengthPerElement*10; j++ {
-				elem.SetInner("foo")
-			}
+			rq.NewElement(NewUiDiv(makeHtmlGetter("meh")))
 		}
 		err := context.Cause(rq.ctx)
-		if err == nil && rq.Created.Before(deadline) {
+		if err == nil && rq.lastWrite.Before(deadline) {
 			err = newErrPendingCancelledLocked(rq, newErrNoWebSocketRequest(rq))
 		}
 		if err == nil {
@@ -316,6 +318,54 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 	}
 }
 
+func TestJaws_RequestWriterExtendsDeadline(t *testing.T) {
+	th := newTestHelper(t)
+	jw := New()
+	defer jw.Close()
+	var b bytes.Buffer
+	w := bufio.NewWriter(&b)
+	jw.Logger = log.New(w, "", 0)
+	defer jw.Close()
+
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	rq := jw.NewRequest(hr)
+	rq.lastWrite = time.Now().Add(time.Second)
+	lastWrite := rq.lastWrite
+
+	var sb strings.Builder
+	rw := rq.Writer(&sb)
+
+	ui := &testUi{renderFn: func(e *Element, w io.Writer, params []any) error {
+		w.Write(nil)
+		return nil
+	}}
+
+	rw.UI(ui)
+
+	th.True(ui.renderCalled > 0)
+	th.True(rq.rendering.Load())
+	th.Equal(lastWrite, rq.getLastWrite())
+
+	go jw.ServeWithTimeout(time.Millisecond)
+
+	for lastWrite == rq.getLastWrite() {
+		select {
+		case <-th.C:
+			th.Timeout()
+		case <-jw.Done():
+			th.Error("unexpected close")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+	if rq.getLastWrite().IsZero() {
+		th.Error("last write is zero")
+	}
+	if rq.getLastWrite() == lastWrite {
+		th.Error("last write not modified")
+	}
+}
+
 func TestJaws_UnconnectedLivesUntilDeadline(t *testing.T) {
 	th := newTestHelper(t)
 	jw := New()
@@ -325,7 +375,7 @@ func TestJaws_UnconnectedLivesUntilDeadline(t *testing.T) {
 	rq1 := jw.NewRequest(hr)
 	rq1ctx := rq1.Context()
 	rq2 := jw.NewRequest(hr)
-	rq2.Created = time.Now().Add(-time.Second * 10)
+	rq2.lastWrite = time.Now().Add(-time.Second * 10)
 	rq2ctx := rq2.Context()
 
 	th.Equal(jw.Pending(), 2)
