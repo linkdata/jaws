@@ -18,7 +18,6 @@ type Element struct {
 	ui       UI             // the UI object
 	handlers []EventHandler // custom event handlers registered, if any
 	jid      jid.Jid        // JaWS ID, unique to this Element within it's Request
-	updating bool           // about to have Update() called
 	deleted  bool           // true if deleteElement() has been called for this Element
 }
 
