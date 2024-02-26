@@ -109,12 +109,9 @@ func wsWriteData(wc io.WriteCloser, firstMsg wsMsg, outboundMsgCh <-chan wsMsg) 
 		select {
 		case msg := <-outboundMsgCh:
 			b = msg.Append(b)
-			if len(b) < 2*1024 {
-				continue
-			}
 		default:
+			_, err = wc.Write(b)
+			return
 		}
-		_, err = wc.Write(b)
-		return
 	}
 }

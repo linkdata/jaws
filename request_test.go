@@ -147,7 +147,7 @@ func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 	}
 }
 
-func TestRequest_OutboundOverflowPanicsWithNoLogger(t *testing.T) {
+/*func TestRequest_OutboundOverflowPanicsWithNoLogger(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest()
 	rq.expectPanic = true
@@ -163,7 +163,7 @@ func TestRequest_OutboundOverflowPanicsWithNoLogger(t *testing.T) {
 		th.Equal(len(rq.outCh), cap(rq.outCh))
 		th.True(rq.panicked)
 	}
-}
+}*/
 
 func TestRequest_Trigger(t *testing.T) {
 	th := newTestHelper(t)
@@ -336,16 +336,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	th.Equal(cap(rq.outCh), len(rq.outCh))
 	th.True(waited < 1000)
 
-	// sending a message will now fail the rq since the
-	// outbound channel is full, but with the
-	// event fn holding it won't be able to end
-	select {
-	case rq.bcastCh <- Message{Dest: Tag("foo"), What: what.Inner, Data: ""}:
-	case <-th.C:
-		th.Timeout()
-	case <-rq.doneCh:
-		th.Fatal()
-	}
+	rq.cancel()
 
 	// rq should now be in shutdown phase draining channels
 	// while waiting for the event fn to return

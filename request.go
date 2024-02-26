@@ -658,10 +658,9 @@ func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg) {
 
 	for i := range toSend {
 		select {
+		case <-rq.Jaws.doneCh:
 		case <-rq.Done():
 		case outboundMsgCh <- toSend[i]:
-		default:
-			panic(fmt.Errorf("jaws: %v: outbound message channel is full (%d) sending %s", rq, len(outboundMsgCh), toSend[i]))
 		}
 	}
 }
