@@ -26,7 +26,7 @@ func (rq *Request) MustTemplate(v any) (tp *template.Template) {
 		tp = rq.Jaws.Lookup(v)
 	}
 	if tp == nil {
-		panic(fmt.Errorf("expected template or string, not %T(%v)", v, v))
+		panic(fmt.Errorf("template not found: %T(%v)", v, v))
 	}
 	return
 }
