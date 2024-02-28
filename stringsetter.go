@@ -7,31 +7,33 @@ import (
 )
 
 type StringSetter interface {
-	JawsGetString(e *Element) string
+	StringGetter
 	JawsSetString(e *Element, v string) (err error)
 }
 
-type stringGetter struct{ v string }
-
-func (g stringGetter) JawsGetString(e *Element) string {
-	return g.v
+type stringSetter struct {
+	StringGetter
 }
 
-func (g stringGetter) JawsSetString(*Element, string) error {
+func (stringSetter) JawsSetString(e *Element, v string) (err error) {
 	return ErrValueNotSettable
 }
 
-func (g stringGetter) JawsGetTag(rq *Request) any {
-	return nil
+func (g stringSetter) JawsGetTag(rq *Request) any {
+	return g.StringGetter
 }
 
 func makeStringSetter(v any) StringSetter {
 	switch v := v.(type) {
 	case StringSetter:
 		return v
+	case StringGetter:
+		return stringSetter{v}
 	case string:
 		return stringGetter{v}
 	case template.HTML:
+		return stringGetter{string(v)}
+	case template.HTMLAttr:
 		return stringGetter{string(v)}
 	case *atomic.Value:
 		return atomicSetter{v}

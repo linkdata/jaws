@@ -24,11 +24,35 @@ func Test_makeStringSetter_panic(t *testing.T) {
 	makeStringSetter(uint32(42))
 }
 
+type simpleGetter struct {
+	Value string
+}
+
+func (g simpleGetter) JawsGetString(e *Element) string {
+	return g.Value
+}
+
+type simpleNotagGetter struct {
+	v string
+}
+
+func (g simpleNotagGetter) JawsGetString(e *Element) string {
+	return g.v
+}
+
+func (g simpleNotagGetter) JawsGetTag(rq *Request) any {
+	return nil
+}
+
 func Test_makeStringSetter(t *testing.T) {
 	val := "<span>"
 	var av atomic.Value
 	av.Store(val)
 	ts := newTestSetter(val)
+
+	sg := simpleGetter{Value: val}
+
+	sng := simpleNotagGetter{v: val}
 
 	tests := []struct {
 		name string
@@ -39,11 +63,27 @@ func Test_makeStringSetter(t *testing.T) {
 		tag  any
 	}{
 		{
+			name: "StringGetter_untagged",
+			v:    sng,
+			want: stringSetter{sng},
+			out:  val,
+			err:  ErrValueNotSettable,
+			tag:  nil,
+		},
+		{
 			name: "StringSetter",
 			v:    ts,
 			want: ts,
 			out:  val,
 			tag:  ts,
+		},
+		{
+			name: "StringGetter",
+			v:    sg,
+			want: stringSetter{sg},
+			out:  val,
+			err:  ErrValueNotSettable,
+			tag:  sg,
 		},
 		{
 			name: "string",
@@ -56,6 +96,14 @@ func Test_makeStringSetter(t *testing.T) {
 		{
 			name: "template.HTML",
 			v:    template.HTML(val),
+			want: stringGetter{val},
+			out:  val,
+			err:  ErrValueNotSettable,
+			tag:  nil,
+		},
+		{
+			name: "template.HTMLAttr",
+			v:    template.HTMLAttr(val),
 			want: stringGetter{val},
 			out:  val,
 			err:  ErrValueNotSettable,
@@ -81,12 +129,14 @@ func Test_makeStringSetter(t *testing.T) {
 			if err := got.JawsSetString(nil, "str"); err != tt.err {
 				t.Errorf("makeStringSetter().JawsSetString() = %v, want %v", err, tt.err)
 			}
-			gotTag := any(got)
-			if tg, ok := got.(TagGetter); ok {
-				gotTag = tg.JawsGetTag(nil)
-			}
-			if gotTag != tt.tag {
-				t.Errorf("makeStringSetter().tag = %v, want %v", gotTag, tt.tag)
+
+			gotTag := MustTagExpand(nil, got)
+			if len(gotTag) == 1 {
+				if gotTag[0] != tt.tag {
+					t.Errorf("makeStringSetter().tag = %v, want %v", gotTag, tt.tag)
+				}
+			} else if tt.tag != nil {
+				t.Error(len(gotTag))
 			}
 		})
 	}
