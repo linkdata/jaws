@@ -11,15 +11,15 @@ func TestRequest_Img(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 
-	ts := newTestSetter("\"quoted.png\"")
+	ts := newTestSetter("image.png")
 
-	wantHtml := "<img id=\"Jid.1\" hidden src=\"quoted.png\">"
+	wantHtml := "<img id=\"Jid.1\" hidden src=\"image.png\">"
 	rq.Img(ts, "hidden")
 	if gotHtml := rq.BodyString(); gotHtml != wantHtml {
 		t.Errorf("Request.Img() = %q, want %q", gotHtml, wantHtml)
 	}
 
-	ts.Set("unquoted.jpg")
+	ts.Set("image2.jpg")
 	rq.Dirty(ts)
 
 	select {
@@ -27,7 +27,7 @@ func TestRequest_Img(t *testing.T) {
 		th.Timeout()
 	case msg := <-rq.outCh:
 		s := msg.Format()
-		if s != "SAttr\tJid.1\t\"src\\n\\\"unquoted.jpg\\\"\"\n" {
+		if s != "SAttr\tJid.1\t\"src\\nimage2.jpg\"\n" {
 			t.Error(strconv.Quote(s))
 		}
 	}

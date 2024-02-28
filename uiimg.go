@@ -11,23 +11,15 @@ type UiImg struct {
 	StringSetter
 }
 
-func (ui *UiImg) SrcAttr(e *Element) string {
-	src := ui.JawsGetString(e)
-	if len(src) < 1 || src[0] != '"' {
-		return strconv.Quote(src)
-	}
-	return src
-}
-
 func (ui *UiImg) JawsRender(e *Element, w io.Writer, params []any) error {
 	ui.parseGetter(e, ui.StringSetter)
-	srcattr := template.HTMLAttr("src=" + ui.SrcAttr(e)) // #nosec G203
+	srcattr := template.HTMLAttr("src=" + strconv.Quote(ui.JawsGetString(e))) // #nosec G203
 	attrs := append(e.ParseParams(params), srcattr)
 	return WriteHtmlInner(w, e.Jid(), "img", "", "", attrs...)
 }
 
-func (ui *UiImg) JawsUpdate(u *Element) {
-	u.SetAttr("src", ui.SrcAttr(u))
+func (ui *UiImg) JawsUpdate(e *Element) {
+	e.SetAttr("src", ui.JawsGetString(e))
 }
 
 func NewUiImg(g StringSetter) *UiImg {
