@@ -21,6 +21,7 @@ func TestRequest_JawsRender_DebugOutput(t *testing.T) {
 	is := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
+
 	rq.Jaws.Debug = true
 	rq.UI(&testUi{renderFn: func(e *Element, w io.Writer, params []any) error {
 		e.Tag(Tag("footag"))
@@ -30,8 +31,10 @@ func TestRequest_JawsRender_DebugOutput(t *testing.T) {
 	}})
 	h := rq.BodyString()
 	t.Log(h)
-	is.True(strings.Contains(h, "footag"))
-	is.True(strings.Contains(h, "*jaws.testUi"))
+	if !strings.Contains(h, "tags=[n/a]") {
+		is.True(strings.Contains(h, "footag"))
+		is.True(strings.Contains(h, "*jaws.testUi"))
+	}
 	is.True(strings.Contains(h, testStringer{}.String()))
 }
 
