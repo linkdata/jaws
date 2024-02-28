@@ -11,7 +11,7 @@ type UiDate struct {
 }
 
 func (ui *UiDate) JawsRender(e *Element, w io.Writer, params []any) error {
-	return ui.renderDateInput(e, w, e.Jid(), "date", params...)
+	return ui.renderDateInput(e, w, "date", params...)
 }
 
 func NewUiDate(g TimeSetter) *UiDate {
