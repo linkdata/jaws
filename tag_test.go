@@ -56,6 +56,7 @@ func TestTagExpand_IllegalTypesPanic(t *testing.T) {
 	tags := []any{
 		string("string"),
 		template.HTML("template.HTML"),
+		template.HTMLAttr("template.HTMLAttr"),
 		int(1),
 		int8(2),
 		int16(3),
@@ -72,6 +73,7 @@ func TestTagExpand_IllegalTypesPanic(t *testing.T) {
 		errors.New("error"),
 		[]string{"a", "b"},
 		[]template.HTML{"a", "b"},
+		map[int]int{1: 1},
 	}
 	for _, tag := range tags {
 		t.Run(fmt.Sprintf("%T", tag), func(t *testing.T) {
@@ -79,13 +81,13 @@ func TestTagExpand_IllegalTypesPanic(t *testing.T) {
 				x := recover()
 				e, ok := x.(error)
 				if !ok {
-					t.Fail()
+					t.FailNow()
 				}
 				if !errors.Is(e, ErrIllegalTagType) {
-					t.Fail()
+					t.FailNow()
 				}
 				if !strings.Contains(e.Error(), fmt.Sprintf("%T", tag)) {
-					t.Fail()
+					t.FailNow()
 				}
 			}()
 			MustTagExpand(nil, tag)

@@ -41,6 +41,17 @@ func (errIllegalTagType) Is(other error) bool {
 
 var ErrIllegalTagType = errIllegalTagType{}
 
+func checkHashable(tag any) (yes bool) {
+	defer func() {
+		if recover() == nil {
+			yes = true
+		}
+	}()
+	tmp := map[any]struct{}{}
+	tmp[tag] = struct{}{}
+	return
+}
+
 func tagExpand(l int, rq *Request, tag any, result []any) ([]any, error) {
 	if l > 10 || len(result) > 100 {
 		return result, ErrTooManyTags
@@ -48,6 +59,7 @@ func tagExpand(l int, rq *Request, tag any, result []any) ([]any, error) {
 	switch data := tag.(type) {
 	case string:
 	case template.HTML:
+	case template.HTMLAttr:
 	case int:
 	case int8:
 	case int16:
@@ -62,8 +74,6 @@ func tagExpand(l int, rq *Request, tag any, result []any) ([]any, error) {
 	case float64:
 	case bool:
 	case error:
-	case []string:
-	case []template.HTML:
 
 	case nil:
 		return result, nil
@@ -86,7 +96,9 @@ func tagExpand(l int, rq *Request, tag any, result []any) ([]any, error) {
 		}
 		return result, err
 	default:
-		return append(result, data), nil
+		if checkHashable(data) {
+			return append(result, data), nil
+		}
 	}
 	return result, errIllegalTagType{tag: tag}
 }
