@@ -21,6 +21,14 @@ func (tc *testContainer) JawsContains(e *Element) (contents []UI) {
 var _ Container = &testContainer{}
 
 func TestRequest_Container(t *testing.T) {
+	notHashableUI := struct {
+		*UiSpan
+		x map[int]int
+	}{
+		UiSpan: NewUiSpan(testHtmlGetter("foo")),
+		x:      map[int]int{},
+	}
+
 	type args struct {
 		c      Container
 		params []any
@@ -29,6 +37,7 @@ func TestRequest_Container(t *testing.T) {
 		name string
 		args args
 		want template.HTML
+		err  error
 	}{
 		{
 			name: "empty",
@@ -54,15 +63,26 @@ func TestRequest_Container(t *testing.T) {
 			},
 			want: `<div id="Jid.1" hidden><span id="Jid.2">foo</span><span id="Jid.3">bar</span></div>`,
 		},
+		{
+			name: "nonhashable",
+			args: args{
+				c: &testContainer{[]UI{notHashableUI}},
+			},
+			err:  newErrNotHashableType(notHashableUI),
+			want: `<div id="Jid.1"></div>`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			nextJid = 0
 			rq := newTestRequest()
 			defer rq.Close()
-			rq.Container("div", tt.args.c, tt.args.params...)
+			err := rq.Container("div", tt.args.c, tt.args.params...)
+			if err != tt.err {
+				t.Errorf("got error %v, wanted %v", err, tt.err)
+			}
 			if got := rq.BodyHtml(); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Request.Container() = %v, want %v", got, tt.want)
+				t.Errorf("Request.Container()\nwant %v\n got %v", tt.want, got)
 			}
 		})
 	}

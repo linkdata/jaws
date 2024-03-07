@@ -130,6 +130,6 @@ func TestRequest_InsideTemplate(t *testing.T) {
 	}
 	w.Flush()
 	if x := w.Body.String(); x != want {
-		t.Errorf("%q", x)
+		t.Errorf("mismatch:\nwant %q\n got %q", want, x)
 	}
 }

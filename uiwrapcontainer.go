@@ -16,7 +16,7 @@ type uiWrapContainer struct {
 	contents []*Element
 }
 
-func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag string, params []any) error {
+func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag string, params []any) (err error) {
 	ui.parseGetter(e, ui.Container)
 	attrs := e.ParseParams(params)
 	b := e.Jid().AppendStartTagAttr(nil, outerhtmltag)
@@ -25,21 +25,23 @@ func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag
 		b = append(b, attr...)
 	}
 	b = append(b, '>')
-	_, err := w.Write(b)
+	_, err = w.Write(b)
 	if err == nil {
 		for _, cui := range ui.Container.JawsContains(e) {
 			if err == nil {
-				elem := e.Request.NewElement(cui)
-				ui.contents = append(ui.contents, elem)
-				err = elem.JawsRender(w, nil)
+				if err = checkHashable(cui); err == nil {
+					elem := e.Request.NewElement(cui)
+					ui.contents = append(ui.contents, elem)
+					err = elem.JawsRender(w, nil)
+				}
 			}
 		}
 		b = b[:0]
 		b = append(b, "</"...)
 		b = append(b, outerhtmltag...)
 		b = append(b, '>')
-		if err == nil {
-			_, err = w.Write(b)
+		if _, err2 := w.Write(b); err == nil {
+			err = err2
 		}
 	}
 	return err
