@@ -1,6 +1,9 @@
 package jaws
 
-import "fmt"
+import (
+	"fmt"
+	"reflect"
+)
 
 type errNotComparable struct {
 	s string
@@ -23,13 +26,9 @@ func newErrNotComparable(tag any) error {
 // ErrNotComparable is returned when a UI object or tag is not comparable.
 var ErrNotComparable = errNotComparable{}
 
-func checkComparable(x any) (err error) {
-	defer func() {
-		if recover() != nil {
-			err = newErrNotComparable(x)
-		}
-	}()
-	tmp := map[any]struct{}{}
-	tmp[x] = struct{}{}
-	return
+func checkComparable(x any) error {
+	if reflect.TypeOf(x).Comparable() {
+		return nil
+	}
+	return newErrNotComparable(x)
 }
