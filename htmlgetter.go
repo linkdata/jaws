@@ -21,29 +21,29 @@ func (g htmlGetter) JawsGetTag(rq *Request) any {
 	return nil
 }
 
-type htmlStringGetter struct{ v StringSetter }
+type htmlStringGetter struct{ sg StringGetter }
 
 func (g htmlStringGetter) JawsGetHtml(e *Element) template.HTML {
-	return template.HTML(html.EscapeString(g.v.JawsGetString(e))) // #nosec G203
+	return template.HTML(html.EscapeString(g.sg.JawsGetString(e))) // #nosec G203
 }
 
 func (g htmlStringGetter) JawsGetTag(rq *Request) any {
-	return g.v
+	return g.sg
 }
 
 func makeHtmlGetter(v any) HtmlGetter {
 	switch v := v.(type) {
 	case HtmlGetter:
 		return v
-	case StringSetter:
+	case StringGetter:
 		return htmlStringGetter{v}
+	case *atomic.Value:
+		return atomicSetter{v}
 	case template.HTML:
 		return htmlGetter{v}
 	case string:
 		h := template.HTML(v) // #nosec G203
 		return htmlGetter{h}
-	case *atomic.Value:
-		return atomicSetter{v}
 	}
-	panic(fmt.Errorf("expected jaws.HtmlGetter or string, not %T", v))
+	panic(fmt.Errorf("expected string, jaws.StringGetter or jaws.HtmlGetter, not %T", v))
 }
