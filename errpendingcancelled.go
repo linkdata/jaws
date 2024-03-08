@@ -18,8 +18,7 @@ func (e errPendingCancelled) Error() string {
 }
 
 func (e errPendingCancelled) Is(target error) (yes bool) {
-	_, yes = target.(errPendingCancelled)
-	return
+	return target == ErrPendingCancelled
 }
 
 func (e errPendingCancelled) Unwrap() error {

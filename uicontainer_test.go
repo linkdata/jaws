@@ -29,6 +29,10 @@ func TestRequest_Container(t *testing.T) {
 		x:      map[int]int{},
 	}
 
+	if newErrNotComparable(notHashableUI) == nil {
+		t.FailNow()
+	}
+
 	type args struct {
 		c      Container
 		params []any

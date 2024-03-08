@@ -18,9 +18,8 @@ func (e errNoWebSocketRequest) Error() string {
 	return fmt.Sprintf("no WebSocket request received from %v", e.Addr)
 }
 
-func (e errNoWebSocketRequest) Is(target error) (yes bool) {
-	_, yes = target.(errNoWebSocketRequest)
-	return
+func (e errNoWebSocketRequest) Is(target error) bool {
+	return target == ErrNoWebSocketRequest
 }
 
 func newErrNoWebSocketRequest(rq *Request) error {

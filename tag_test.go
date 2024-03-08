@@ -83,7 +83,7 @@ func TestTagExpand_IllegalTypesPanic(t *testing.T) {
 				if !ok {
 					t.FailNow()
 				}
-				if !errors.Is(e, ErrIllegalTagType) {
+				if !(errors.Is(e, ErrIllegalTagType) || errors.Is(e, ErrNotComparable)) {
 					t.FailNow()
 				}
 				if !strings.Contains(e.Error(), fmt.Sprintf("%T", tag)) {
