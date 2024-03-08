@@ -27,20 +27,6 @@ func (errTooManyTags) Error() string {
 
 var ErrTooManyTags = errTooManyTags{}
 
-type errIllegalTagType struct {
-	tag any
-}
-
-func (e errIllegalTagType) Error() string {
-	return fmt.Sprintf("illegal tag type %T", e.tag)
-}
-
-func (errIllegalTagType) Is(other error) bool {
-	return other == ErrIllegalTagType
-}
-
-var ErrIllegalTagType = errIllegalTagType{}
-
 func tagExpand(l int, rq *Request, tag any, result []any) ([]any, error) {
 	if l > 10 || len(result) > 100 {
 		return result, ErrTooManyTags
