@@ -29,11 +29,9 @@ func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag
 	if err == nil {
 		for _, cui := range ui.Container.JawsContains(e) {
 			if err == nil {
-				if err = newErrNotComparable(cui); err == nil {
-					elem := e.Request.NewElement(cui)
-					ui.contents = append(ui.contents, elem)
-					err = elem.JawsRender(w, nil)
-				}
+				elem := e.Request.NewElement(cui)
+				ui.contents = append(ui.contents, elem)
+				err = elem.JawsRender(w, nil)
 			}
 		}
 		b = b[:0]

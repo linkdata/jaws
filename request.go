@@ -338,7 +338,15 @@ func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 	return
 }
 
+// NewElement creates a new Element using the given UI object.
+//
+// Panics if the build tag "debug" is set and the UI object doesn't satisfy all requirements.
 func (rq *Request) NewElement(ui UI) *Element {
+	if deadlock.Debug {
+		if err := newErrNotComparable(ui); err != nil {
+			panic(err)
+		}
+	}
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	return rq.newElementLocked(ui)

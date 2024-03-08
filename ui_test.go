@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"bytes"
+	"errors"
 	"html/template"
 	"io"
 	"net/http"
@@ -9,12 +10,51 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/linkdata/deadlock"
 )
 
 type testStringer struct{}
 
 func (s testStringer) String() string {
 	return "I_Am_A_testStringer"
+}
+
+func TestRequest_NewElement_DebugPanicsIfNotComparable(t *testing.T) {
+	notHashableUI := struct {
+		*UiSpan
+		x map[int]int
+	}{
+		UiSpan: NewUiSpan(testHtmlGetter("foo")),
+		x:      map[int]int{},
+	}
+
+	if newErrNotComparable(notHashableUI) == nil {
+		t.FailNow()
+	}
+
+	if !deadlock.Debug {
+		return
+	}
+
+	defer func() {
+		if x := recover(); x != nil {
+			if err, ok := x.(error); ok {
+				if !errors.Is(err, ErrNotComparable) {
+					t.Errorf("%T", err)
+				}
+				return
+			}
+		}
+		t.Fail()
+	}()
+
+	nextJid = 0
+	rq := newTestRequest()
+	defer rq.Close()
+
+	rq.NewElement(notHashableUI)
+	t.Fail()
 }
 
 func TestRequest_JawsRender_DebugOutput(t *testing.T) {
