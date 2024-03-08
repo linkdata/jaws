@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"html/template"
 	"reflect"
+
+	"github.com/linkdata/deadlock"
 )
 
 type Tag string
@@ -71,8 +73,10 @@ func tagExpand(l int, rq *Request, tag any, result []any) ([]any, error) {
 		}
 		return result, err
 	default:
-		if err := newErrNotComparable(data); err != nil {
-			return result, err
+		if deadlock.Debug {
+			if err := newErrNotComparable(data); err != nil {
+				return result, err
+			}
 		}
 		return append(result, data), nil
 	}
