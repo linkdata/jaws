@@ -85,7 +85,7 @@ func tagExpand(l int, rq *Request, tag any, result []any) ([]any, error) {
 		}
 		return result, err
 	default:
-		if err := checkHashable(data); err != nil {
+		if err := checkComparable(data); err != nil {
 			return result, err
 		}
 		return append(result, data), nil

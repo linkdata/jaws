@@ -2,33 +2,34 @@ package jaws
 
 import "fmt"
 
-type errNotHashableType struct {
+type errNotComparable struct {
 	s string
 }
 
-func (e errNotHashableType) Error() string {
+func (e errNotComparable) Error() string {
 	return fmt.Sprintf("not hashable type %s", e.s)
 }
 
-func (errNotHashableType) Is(other error) bool {
+func (errNotComparable) Is(other error) bool {
 	return other == ErrIllegalTagType
 }
 
-func newErrNotHashableType(tag any) error {
-	return errNotHashableType{
+func newErrNotComparable(tag any) error {
+	return errNotComparable{
 		s: fmt.Sprintf("%T", tag),
 	}
 }
 
-var ErrNotHashableType = errNotHashableType{}
+// ErrNotComparable is returned when a UI object or tag is not comparable.
+var ErrNotComparable = errNotComparable{}
 
-func checkHashable(tag any) (err error) {
+func checkComparable(x any) (err error) {
 	defer func() {
 		if recover() != nil {
-			err = newErrNotHashableType(tag)
+			err = newErrNotComparable(x)
 		}
 	}()
 	tmp := map[any]struct{}{}
-	tmp[tag] = struct{}{}
+	tmp[x] = struct{}{}
 	return
 }

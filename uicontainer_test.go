@@ -68,7 +68,7 @@ func TestRequest_Container(t *testing.T) {
 			args: args{
 				c: &testContainer{[]UI{notHashableUI}},
 			},
-			err:  newErrNotHashableType(notHashableUI),
+			err:  newErrNotComparable(notHashableUI),
 			want: `<div id="Jid.1"></div>`,
 		},
 	}
