@@ -34,8 +34,8 @@ func TestRequest_JawsRender_DebugOutput(t *testing.T) {
 	if !strings.Contains(h, "tags=[n/a]") {
 		is.True(strings.Contains(h, "footag"))
 		is.True(strings.Contains(h, "*jaws.testUi"))
+		is.True(strings.Contains(h, testStringer{}.String()))
 	}
-	is.True(strings.Contains(h, testStringer{}.String()))
 }
 
 func TestRequest_InsideTemplate(t *testing.T) {
