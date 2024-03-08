@@ -3,7 +3,7 @@ package jaws
 import "fmt"
 
 // ErrIllegalTagType is returned when a UI tag type is disallowed
-var ErrIllegalTagType = errIllegalTagType{}
+var ErrIllegalTagType errIllegalTagType
 
 type errIllegalTagType struct {
 	tag any

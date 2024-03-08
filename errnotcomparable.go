@@ -5,7 +5,7 @@ import (
 )
 
 // ErrNotComparable is returned when a UI object or tag is not comparable.
-var ErrNotComparable = errNotComparable{}
+var ErrNotComparable errNotComparable
 
 type errNotComparable struct {
 	t reflect.Type
