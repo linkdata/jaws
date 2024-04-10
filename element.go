@@ -193,38 +193,13 @@ func (e *Element) Remove(htmlId string) {
 	e.queue(what.Remove, htmlId)
 }
 
-// ParseParams parses the parameters passed to UI() when creating a new Element,
-// setting event handlers and returning a list of HTML attributes.
-func (e *Element) ParseParams(params []any) (attrs []template.HTMLAttr) {
+// ApplyParams parses the parameters passed to UI() when creating a new Element,
+// adding UI tags, setting event handlers and returning a list of HTML attributes.
+func (e *Element) ApplyParams(params []any) []template.HTMLAttr {
+	tags, handlers, attrs := ParseParams(params)
 	if !e.deleted {
-		for i := range params {
-			switch data := params[i].(type) {
-			case template.HTMLAttr:
-				attrs = append(attrs, data)
-			case []template.HTMLAttr:
-				attrs = append(attrs, data...)
-			case string:
-				attr := template.HTMLAttr(data) // #nosec G203
-				attrs = append(attrs, attr)
-			case []string:
-				for _, s := range data {
-					attr := template.HTMLAttr(s) // #nosec G203
-					attrs = append(attrs, attr)
-				}
-			case EventFn:
-				if data != nil {
-					e.handlers = append(e.handlers, eventFnWrapper{data})
-				}
-			default:
-				if h, ok := data.(ClickHandler); ok {
-					e.handlers = append(e.handlers, clickHandlerWapper{h})
-				}
-				if h, ok := data.(EventHandler); ok {
-					e.handlers = append(e.handlers, h)
-				}
-				e.Tag(data)
-			}
-		}
+		e.handlers = append(e.handlers, handlers...)
+		e.Tag(tags...)
 	}
-	return
+	return attrs
 }

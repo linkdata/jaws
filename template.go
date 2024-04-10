@@ -44,7 +44,7 @@ func (t Template) JawsRender(e *Element, w io.Writer, params []any) error {
 		e.Request.tagExpanded(e, expandedtags)
 	}
 	var sb strings.Builder
-	for _, s := range e.ParseParams(params) {
+	for _, s := range e.ApplyParams(params) {
 		sb.WriteByte(' ')
 		sb.WriteString(string(s))
 	}

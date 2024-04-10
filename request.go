@@ -289,7 +289,7 @@ func (rq *Request) Register(tagitem any, params ...any) jid.Jid {
 	case jid.Jid:
 		if elem := rq.getElementByJid(data); elem != nil {
 			if _, ok := elem.Ui().(*UiHtml); ok {
-				elem.ParseParams(params)
+				elem.ApplyParams(params)
 			}
 		}
 		return data
@@ -300,7 +300,7 @@ func (rq *Request) Register(tagitem any, params ...any) jid.Jid {
 	uib := &UiHtml{}
 	elem := rq.NewElement(uib)
 	uib.parseGetter(elem, tagitem)
-	elem.ParseParams(params)
+	elem.ApplyParams(params)
 	return elem.Jid()
 }
 

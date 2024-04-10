@@ -18,7 +18,7 @@ func (ui *UiInputFloat) str() string {
 
 func (ui *UiInputFloat) renderFloatInput(e *Element, w io.Writer, htmltype string, params ...any) error {
 	ui.parseGetter(e, ui.FloatSetter)
-	attrs := e.ParseParams(params)
+	attrs := e.ApplyParams(params)
 	ui.Last.Store(ui.JawsGetFloat(e))
 	return WriteHtmlInput(w, e.Jid(), htmltype, ui.str(), attrs)
 }
