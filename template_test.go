@@ -17,6 +17,18 @@ func TestTemplate_String(t *testing.T) {
 	is.Equal(tmpl.String(), `{"testtemplate", 123}`)
 }
 
+func TestTemplate_Calls_Dot_Updater(t *testing.T) {
+	rq := newTestRequest()
+	defer rq.Close()
+
+	dot := &testUi{}
+	tmpl := rq.MakeTemplate("testtemplate", dot)
+	tmpl.JawsUpdate(nil)
+	if dot.updateCalled != 1 {
+		t.Error(dot.updateCalled)
+	}
+}
+
 func TestRequest_MustTemplate(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()

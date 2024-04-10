@@ -56,7 +56,9 @@ func (t Template) JawsRender(e *Element, w io.Writer, params []any) error {
 }
 
 func (t Template) JawsUpdate(e *Element) {
-	// does nothing
+	if dot, ok := t.Dot.(Updater); ok {
+		dot.JawsUpdate(e)
+	}
 }
 
 func (t Template) JawsEvent(e *Element, wht what.What, val string) error {
