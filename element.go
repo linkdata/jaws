@@ -195,11 +195,15 @@ func (e *Element) Remove(htmlId string) {
 
 // ApplyParams parses the parameters passed to UI() when creating a new Element,
 // adding UI tags, setting event handlers and returning a list of HTML attributes.
-func (e *Element) ApplyParams(params []any) []template.HTMLAttr {
+func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) {
 	tags, handlers, attrs := ParseParams(params)
 	if !e.deleted {
 		e.handlers = append(e.handlers, handlers...)
 		e.Tag(tags...)
+		for _, s := range attrs {
+			attr := template.HTMLAttr(s) // #nosec G203
+			retv = append(retv, attr)
+		}
 	}
-	return attrs
+	return
 }

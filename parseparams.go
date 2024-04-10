@@ -4,21 +4,19 @@ import "html/template"
 
 // ParseParams parses the parameters passed to UI() when creating a new Element,
 // returning UI tags, event handlers and HTML attributes.
-func ParseParams(params []any) (tags []any, handlers []EventHandler, attrs []template.HTMLAttr) {
+func ParseParams(params []any) (tags []any, handlers []EventHandler, attrs []string) {
 	for i := range params {
 		switch data := params[i].(type) {
 		case template.HTMLAttr:
-			attrs = append(attrs, data)
+			attrs = append(attrs, string(data))
 		case []template.HTMLAttr:
-			attrs = append(attrs, data...)
-		case string:
-			attr := template.HTMLAttr(data) // #nosec G203
-			attrs = append(attrs, attr)
-		case []string:
 			for _, s := range data {
-				attr := template.HTMLAttr(s) // #nosec G203
-				attrs = append(attrs, attr)
+				attrs = append(attrs, string(s))
 			}
+		case string:
+			attrs = append(attrs, data)
+		case []string:
+			attrs = append(attrs, data...)
 		case EventFn:
 			if data != nil {
 				handlers = append(handlers, eventFnWrapper{data})

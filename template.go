@@ -43,17 +43,15 @@ func (t Template) JawsRender(e *Element, w io.Writer, params []any) error {
 	if expandedtags, err := TagExpand(e.Request, t.Dot); err != ErrIllegalTagType {
 		e.Request.tagExpanded(e, expandedtags)
 	}
-	var sb strings.Builder
-	for _, s := range e.ApplyParams(params) {
-		sb.WriteByte(' ')
-		sb.WriteString(string(s))
-	}
-	attrs := template.HTMLAttr(sb.String()) // #nosec G203
+	tags, handlers, attrs := ParseParams(params)
+	e.Tag(tags...)
+	e.handlers = append(e.handlers, handlers...)
+	attrstr := template.HTMLAttr(strings.Join(attrs, " ")) // #nosec G203
 	return e.Request.MustTemplate(t.Template).Execute(w, With{
 		Element:       e,
 		RequestWriter: e.Request.Writer(w),
 		Dot:           t.Dot,
-		Attrs:         attrs,
+		Attrs:         attrstr,
 	})
 }
 
