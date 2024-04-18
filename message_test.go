@@ -12,7 +12,13 @@ func Test_Message_String(t *testing.T) {
 		What: what.Update,
 		Data: "Data\nText",
 	}
-	if msg.String() != "{\"Elem\", Update, \"Data\\nText\"}" {
-		t.Fail()
+	if s := msg.String(); s != "{Elem, Update, \"Data\\nText\"}" {
+		t.Error(s)
+	}
+	msg = Message{
+		What: what.Click,
+	}
+	if s := msg.String(); s != "{<nil>, Click, \"\"}" {
+		t.Error(s)
 	}
 }

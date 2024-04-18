@@ -15,7 +15,7 @@ type Message struct {
 
 // String returns the Message in a form suitable for debug output.
 func (msg *Message) String() string {
-	return fmt.Sprintf("{%q, %v, %q}",
+	return fmt.Sprintf("{%v, %v, %q}",
 		msg.Dest,
 		msg.What,
 		msg.Data,
