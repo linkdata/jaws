@@ -521,8 +521,11 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 				select {
 				case msgCh <- msg:
 				default:
-					killSub(msgCh)
-					rq.cancel(fmt.Errorf("%v: broadcast channel full sending %s", rq, msg.String()))
+					// the exception is Update messages, more will follow eventually
+					if msg.What != what.Update {
+						killSub(msgCh)
+						rq.cancel(fmt.Errorf("%v: broadcast channel full sending %s", rq, msg.String()))
+					}
 				}
 			}
 		}
