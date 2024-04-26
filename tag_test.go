@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/linkdata/deadlock"
 )
 
 func TestTagExpand(t *testing.T) {
@@ -53,6 +55,10 @@ func TestTagExpand(t *testing.T) {
 }
 
 func TestTagExpand_IllegalTypesPanic(t *testing.T) {
+	if !deadlock.Debug {
+		t.Log("skipped, not debugging")
+		return
+	}
 	tags := []any{
 		string("string"),
 		template.HTML("template.HTML"),
