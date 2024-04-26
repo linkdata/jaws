@@ -497,9 +497,17 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	if maintenanceInterval < minInterval {
 		maintenanceInterval = minInterval
 	}
-	t := time.NewTicker(maintenanceInterval)
-	defer t.Stop()
+
 	subs := map[chan Message]*Request{}
+	t := time.NewTicker(maintenanceInterval)
+
+	defer func() {
+		t.Stop()
+		for ch, rq := range subs {
+			rq.cancel(nil)
+			close(ch)
+		}
+	}()
 
 	killSub := func(msgCh chan Message) {
 		if _, ok := subs[msgCh]; ok {
