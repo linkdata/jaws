@@ -4,6 +4,7 @@ import "sync"
 
 var _ BoolSetter = UiBool{}
 
+// UiBool implements BoolSetter given a sync.Locker (or RLocker) and a bool pointer.
 type UiBool struct {
 	L sync.Locker
 	P *bool
