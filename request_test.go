@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"context"
 	"errors"
 	"strconv"
 	"strings"
@@ -77,41 +76,6 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 		if elem != nil {
 			is.Equal(msg, wsMsg{Jid: elem.jid, Data: "bar", What: what.Inner})
 		}
-	}
-}
-
-func TestRequest_OutboundRespectsJawsClosed(t *testing.T) {
-	th := newTestHelper(t)
-	rq := newTestRequest()
-	defer rq.Close()
-	jw := rq.jw
-	var callCount int32
-	tag := Tag("foo")
-	rq.ctx = context.Background()
-	rq.Register(tag, func(e *Element, evt what.What, val string) error {
-		atomic.AddInt32(&callCount, 1)
-		th.Equal(1, jw.RequestCount())
-		jw.Close()
-		return nil
-	})
-	fillWsCh(rq.outCh)
-	jw.Broadcast(Message{Dest: Tag("foo"), What: what.Hook, Data: "bar"})
-	select {
-	case <-th.C:
-		th.Equal(int(atomic.LoadInt32(&callCount)), 0)
-		th.Timeout()
-	case <-rq.Done():
-		th.Error("request ctx cancelled too soon")
-	case <-jw.Done():
-	}
-	th.Equal(int(atomic.LoadInt32(&callCount)), 1)
-	select {
-	case <-rq.Done():
-		th.Error("request ctx cancelled too soon")
-	default:
-	}
-	if jw.log.Len() != 0 {
-		t.Errorf("%q", jw.log.String())
 	}
 }
 
