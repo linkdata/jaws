@@ -43,3 +43,12 @@ func (s *String) JawsSetString(e *Element, val string) error {
 	s.Set(val)
 	return nil
 }
+
+func (s *String) MarshalText() ([]byte, error) {
+	return []byte(s.Get()), nil
+}
+
+func (s *String) UnmarshalText(b []byte) (err error) {
+	s.Set(string(b))
+	return
+}
