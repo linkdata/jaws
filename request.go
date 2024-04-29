@@ -44,9 +44,10 @@ type Request struct {
 	ctx       context.Context         // current context, derived from either Jaws or WS HTTP req
 	cancelFn  context.CancelCauseFunc // cancel function
 	connectFn ConnectFn               // a ConnectFn to call before starting message processing for the Request
-	elems     []*Element
-	tagMap    map[any][]*Element
-	wsQueue   []wsMsg
+	elems     []*Element              // our Elements
+	tagMap    map[any][]*Element      // maps tags to Elements
+	muQueue   deadlock.Mutex          // protects wsQueue
+	wsQueue   []wsMsg                 // queued messages to send
 }
 
 type eventFnCall struct {
@@ -581,9 +582,9 @@ func (rq *Request) handleRemove(data string) {
 }
 
 func (rq *Request) queue(msg wsMsg) {
-	rq.mu.Lock()
+	rq.muQueue.Lock()
 	rq.wsQueue = append(rq.wsQueue, msg)
-	rq.mu.Unlock()
+	rq.muQueue.Unlock()
 }
 
 func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err error) {
@@ -640,15 +641,18 @@ func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
 
 func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg) {
 	var toSend []wsMsg
+	validJids := map[Jid]struct{}{}
 
-	rq.mu.Lock()
-	if len(rq.wsQueue) > 0 {
-		validJids := map[Jid]struct{}{}
-		for _, elem := range rq.elems {
-			if !elem.deleted {
-				validJids[elem.Jid()] = struct{}{}
-			}
+	rq.mu.RLock()
+	for _, elem := range rq.elems {
+		if !elem.deleted {
+			validJids[elem.Jid()] = struct{}{}
 		}
+	}
+	rq.mu.RUnlock()
+
+	rq.muQueue.Lock()
+	if len(rq.wsQueue) > 0 {
 		for i := range rq.wsQueue {
 			ok := rq.wsQueue[i].Jid < 1 || rq.wsQueue[i].What == what.Delete
 			if !ok {
@@ -660,7 +664,7 @@ func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg) {
 		}
 		rq.wsQueue = rq.wsQueue[:0]
 	}
-	rq.mu.Unlock()
+	rq.muQueue.Unlock()
 
 	slices.SortStableFunc(toSend, func(a, b wsMsg) int { return int(a.Jid - b.Jid) })
 
