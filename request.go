@@ -122,7 +122,6 @@ func (rq *Request) clearLocked() *Request {
 
 // HeadHTML writes the HTML code needed in the HTML page's HEAD section.
 func (rq *Request) HeadHTML(w io.Writer) (err error) {
-	rq.mu.RLock()
 	var b []byte
 	b = append(b, rq.Jaws.headPrefix...)
 	b = JawsKeyAppend(b, rq.JawsKey)
@@ -131,7 +130,6 @@ func (rq *Request) HeadHTML(w io.Writer) (err error) {
 		`<img src="/jaws/`...)
 	b = JawsKeyAppend(b, rq.JawsKey)
 	b = append(b, `/noscript"></noscript>`...)
-	rq.mu.RUnlock()
 	_, err = w.Write(b)
 	return
 }
