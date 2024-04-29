@@ -649,8 +649,6 @@ func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg) {
 			validJids[elem.Jid()] = struct{}{}
 		}
 	}
-	rq.mu.RUnlock()
-
 	rq.muQueue.Lock()
 	if len(rq.wsQueue) > 0 {
 		for i := range rq.wsQueue {
@@ -665,6 +663,7 @@ func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg) {
 		rq.wsQueue = rq.wsQueue[:0]
 	}
 	rq.muQueue.Unlock()
+	rq.mu.RUnlock()
 
 	slices.SortStableFunc(toSend, func(a, b wsMsg) int { return int(a.Jid - b.Jid) })
 
