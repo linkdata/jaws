@@ -583,7 +583,9 @@ func (rq *Request) handleRemove(data string) {
 }
 
 func (rq *Request) queue(msg wsMsg) {
+	rq.mu.Lock()
 	rq.wsQueue = append(rq.wsQueue, msg)
+	rq.mu.Unlock()
 }
 
 func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err error) {
