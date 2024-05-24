@@ -11,8 +11,8 @@ func NewUiTemplate(t Template) UiTemplate {
 
 // Template renders the given template using jaws.With{Dot: dot} as data.
 //
-// The templ argument can either be a string, in which case Jaws.Template.Lookup() will
-// be used to resolve it. Or it can be a *template.Template directly.
+// The name argument is a string to be resolved to a *template.Template
+// using Jaws.LookupTemplate().
 func (rq RequestWriter) Template(name string, dot any, params ...any) error {
-	return rq.UI(NewUiTemplate(NewTemplate(name, dot)), params...)
+	return rq.UI(NewUiTemplate(Template{Name: name, Dot: dot}), params...)
 }

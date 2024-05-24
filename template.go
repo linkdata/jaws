@@ -10,7 +10,7 @@ import (
 )
 
 type Template struct {
-	Name string // Template name to be looked up using jaws.Lookup()
+	Name string // Template name to be looked up using jaws.LookupTemplate()
 	Dot  any    // Dot value to place in With structure
 }
 
