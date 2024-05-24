@@ -57,22 +57,6 @@ func (t Template) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	t.Log(t.NewRequest(r).NewElement(t).JawsRender(wr, nil))
 }
 
-/*
-// MustTemplate resolves 'v' to a *template.Template or panics.
-
-	func (jw *Jaws) MustTemplate(v any) (tp *template.Template) {
-		switch v := v.(type) {
-		case *template.Template:
-			tp = v
-		case string:
-			tp = jw.Lookup(v)
-		}
-		if tp == nil {
-			panic(fmt.Errorf("template not found: %T(%v)", v, v))
-		}
-		return
-	}
-*/
 func (jw *Jaws) NewTemplate(name string, dot any) Template {
 	return Template{Jaws: jw, Template: name, Dot: dot}
 }
