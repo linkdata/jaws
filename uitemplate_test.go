@@ -13,7 +13,7 @@ import (
 func TestRequest_Template(t *testing.T) {
 	is := newTestHelper(t)
 	type args struct {
-		templ  any
+		templ  string
 		dot    any
 		params []any
 	}
