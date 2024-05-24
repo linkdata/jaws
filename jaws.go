@@ -20,6 +20,7 @@ import (
 	"net/netip"
 	"net/textproto"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -50,7 +51,7 @@ type Jaws struct {
 	headPrefix   string
 	reqPool      sync.Pool
 	mu           deadlock.RWMutex // protects following
-	tmplookers   map[TemplateLookuper]struct{}
+	tmplookers   []TemplateLookuper
 	kg           *bufio.Reader
 	closeCh      chan struct{}
 	requests     map[uint64]*Request
@@ -71,7 +72,6 @@ func NewWithDone(doneCh <-chan struct{}) (jw *Jaws) {
 		unsubCh:      make(chan chan Message, 1),
 		updateTicker: time.NewTicker(DefaultUpdateInterval),
 		headPrefix:   HeadHTML([]string{JavascriptPath}, nil),
-		tmplookers:   make(map[TemplateLookuper]struct{}),
 		kg:           bufio.NewReader(rand.Reader),
 		requests:     make(map[uint64]*Request),
 		sessions:     make(map[uint64]*Session),
@@ -120,7 +120,9 @@ func (jw *Jaws) Done() <-chan struct{} {
 func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) {
 	if tl != nil && tl != jw {
 		jw.mu.Lock()
-		jw.tmplookers[tl] = struct{}{}
+		if !slices.Contains(jw.tmplookers, tl) {
+			jw.tmplookers = append(jw.tmplookers, tl)
+		}
 		jw.mu.Unlock()
 	}
 }
@@ -130,7 +132,7 @@ func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) {
 func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) {
 	if tl != nil {
 		jw.mu.Lock()
-		delete(jw.tmplookers, tl)
+		jw.tmplookers = slices.DeleteFunc(jw.tmplookers, func(x TemplateLookuper) bool { return x == tl })
 		jw.mu.Unlock()
 	}
 }
@@ -140,7 +142,7 @@ func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) {
 func (jw *Jaws) Lookup(name string) *template.Template {
 	jw.mu.RLock()
 	defer jw.mu.RUnlock()
-	for tl := range jw.tmplookers {
+	for _, tl := range jw.tmplookers {
 		if t := tl.Lookup(name); t != nil {
 			return t
 		}
