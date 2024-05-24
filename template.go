@@ -47,6 +47,6 @@ func (t Template) JawsEvent(e *Element, wht what.What, val string) error {
 	return callEventHandler(t.Dot, e, wht, val)
 }
 
-func (jw *Jaws) NewTemplate(name string, dot any) Template {
+func NewTemplate(name string, dot any) Template {
 	return Template{Template: name, Dot: dot}
 }

@@ -10,7 +10,7 @@ func TestTemplate_String(t *testing.T) {
 	defer rq.Close()
 
 	dot := 123
-	tmpl := rq.Jaws.NewTemplate("testtemplate", dot)
+	tmpl := NewTemplate("testtemplate", dot)
 
 	is.Equal(tmpl.String(), `{"testtemplate", 123}`)
 }
@@ -20,7 +20,7 @@ func TestTemplate_Calls_Dot_Updater(t *testing.T) {
 	defer rq.Close()
 
 	dot := &testUi{}
-	tmpl := rq.Jaws.NewTemplate("testtemplate", dot)
+	tmpl := NewTemplate("testtemplate", dot)
 	tmpl.JawsUpdate(nil)
 	if dot.updateCalled != 1 {
 		t.Error(dot.updateCalled)
