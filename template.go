@@ -54,7 +54,7 @@ func (t Template) JawsEvent(e *Element, wht what.What, val string) error {
 //
 //	http.DefaultServeMux.Handle("/user", myJaws.NewTemplate("user.html", userData))
 func (t Template) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
-	t.Log(t.NewRequest(r).NewElement(t).JawsRender(wr, nil))
+	_ = t.Log(t.NewRequest(r).NewElement(t).JawsRender(wr, nil))
 }
 
 func (jw *Jaws) NewTemplate(name string, dot any) Template {
