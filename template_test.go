@@ -12,7 +12,7 @@ func TestTemplate_String(t *testing.T) {
 	defer rq.Close()
 
 	dot := 123
-	tmpl := rq.MakeTemplate("testtemplate", dot)
+	tmpl := rq.Jaws.MakeTemplate("testtemplate", dot)
 
 	is.Equal(tmpl.String(), `{"testtemplate", 123}`)
 }
@@ -22,7 +22,7 @@ func TestTemplate_Calls_Dot_Updater(t *testing.T) {
 	defer rq.Close()
 
 	dot := &testUi{}
-	tmpl := rq.MakeTemplate("testtemplate", dot)
+	tmpl := rq.Jaws.MakeTemplate("testtemplate", dot)
 	tmpl.JawsUpdate(nil)
 	if dot.updateCalled != 1 {
 		t.Error(dot.updateCalled)
@@ -43,7 +43,7 @@ func TestRequest_MustTemplate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if gotTp := rq.MustTemplate(tt.arg); gotTp != tt.wantTp {
+			if gotTp := rq.Jaws.MustTemplate(tt.arg); gotTp != tt.wantTp {
 				t.Errorf("Request.MustTemplate() = %v, want %v", gotTp, tt.wantTp)
 			}
 		})
@@ -73,7 +73,7 @@ func TestRequest_MustTemplate_Panics(t *testing.T) {
 				}
 				t.Fail()
 			}()
-			rq.MustTemplate(tt.arg)
+			rq.Jaws.MustTemplate(tt.arg)
 			t.Fail()
 		})
 	}

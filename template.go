@@ -17,24 +17,6 @@ type Template struct {
 var _ UI = Template{}           // statically ensure interface is defined
 var _ EventHandler = Template{} // statically ensure interface is defined
 
-// MustTemplate resolves 'v' to a *template.Template or panics.
-func (rq *Request) MustTemplate(v any) (tp *template.Template) {
-	switch v := v.(type) {
-	case *template.Template:
-		tp = v
-	case string:
-		tp = rq.Jaws.Lookup(v)
-	}
-	if tp == nil {
-		panic(fmt.Errorf("template not found: %T(%v)", v, v))
-	}
-	return
-}
-
-func (rq *Request) MakeTemplate(templ, dot any) Template {
-	return Template{Template: templ, Dot: dot}
-}
-
 func (t Template) String() string {
 	return fmt.Sprintf("{%q, %s}", t.Template, TagString(t.Dot))
 }
@@ -47,7 +29,7 @@ func (t Template) JawsRender(e *Element, w io.Writer, params []any) error {
 	e.Tag(tags...)
 	e.handlers = append(e.handlers, handlers...)
 	attrstr := template.HTMLAttr(strings.Join(attrs, " ")) // #nosec G203
-	return e.Request.MustTemplate(t.Template).Execute(w, With{
+	return e.Request.Jaws.MustTemplate(t.Template).Execute(w, With{
 		Element:       e,
 		RequestWriter: e.Request.Writer(w),
 		Dot:           t.Dot,
@@ -63,4 +45,22 @@ func (t Template) JawsUpdate(e *Element) {
 
 func (t Template) JawsEvent(e *Element, wht what.What, val string) error {
 	return callEventHandler(t.Dot, e, wht, val)
+}
+
+// MustTemplate resolves 'v' to a *template.Template or panics.
+func (jw *Jaws) MustTemplate(v any) (tp *template.Template) {
+	switch v := v.(type) {
+	case *template.Template:
+		tp = v
+	case string:
+		tp = jw.Lookup(v)
+	}
+	if tp == nil {
+		panic(fmt.Errorf("template not found: %T(%v)", v, v))
+	}
+	return
+}
+
+func (jw *Jaws) MakeTemplate(templ, dot any) Template {
+	return Template{Template: templ, Dot: dot}
 }
