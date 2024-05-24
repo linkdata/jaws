@@ -14,5 +14,5 @@ func (h Handler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 
 // Handler returns a http.Handler using a jaws.Template
 func (jw *Jaws) Handler(name string, dot any) http.Handler {
-	return Handler{Jaws: jw, Template: Template{Template: name, Dot: dot}}
+	return Handler{Jaws: jw, Template: Template{Name: name, Dot: dot}}
 }

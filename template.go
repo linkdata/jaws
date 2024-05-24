@@ -10,15 +10,15 @@ import (
 )
 
 type Template struct {
-	Template string
-	Dot      any
+	Name string // Template name to be looked up using jaws.Lookup()
+	Dot  any    // Dot value to place in With structure
 }
 
 var _ UI = Template{}           // statically ensure interface is defined
 var _ EventHandler = Template{} // statically ensure interface is defined
 
 func (t Template) String() string {
-	return fmt.Sprintf("{%q, %s}", t.Template, TagString(t.Dot))
+	return fmt.Sprintf("{%q, %s}", t.Name, TagString(t.Dot))
 }
 
 func (t Template) JawsRender(e *Element, wr io.Writer, params []any) error {
@@ -29,7 +29,7 @@ func (t Template) JawsRender(e *Element, wr io.Writer, params []any) error {
 	e.Tag(tags...)
 	e.handlers = append(e.handlers, handlers...)
 	attrstr := template.HTMLAttr(strings.Join(attrs, " ")) // #nosec G203
-	return e.Request.Jaws.Lookup(t.Template).Execute(wr, With{
+	return e.Request.Jaws.Lookup(t.Name).Execute(wr, With{
 		Element:       e,
 		RequestWriter: e.Request.Writer(wr),
 		Dot:           t.Dot,
@@ -48,5 +48,5 @@ func (t Template) JawsEvent(e *Element, wht what.What, val string) error {
 }
 
 func NewTemplate(name string, dot any) Template {
-	return Template{Template: name, Dot: dot}
+	return Template{Name: name, Dot: dot}
 }
