@@ -471,8 +471,8 @@ func TestJaws_TemplateLookuper(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
-	th.Equal(rq.Jaws.Lookup("nosuchtemplate"), nil)
-	th.Equal(rq.Jaws.Lookup("testtemplate"), rq.jw.testtmpl)
+	th.Equal(rq.Jaws.LookupTemplate("nosuchtemplate"), nil)
+	th.Equal(rq.Jaws.LookupTemplate("testtemplate"), rq.jw.testtmpl)
 	rq.Jaws.RemoveTemplateLookuper(rq.jw.testtmpl)
-	th.Equal(rq.Jaws.Lookup("testtemplate"), nil)
+	th.Equal(rq.Jaws.LookupTemplate("testtemplate"), nil)
 }

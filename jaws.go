@@ -118,7 +118,7 @@ func (jw *Jaws) Done() <-chan struct{} {
 // AddTemplateLookuper adds an object that can resolve
 // strings to *template.Template.
 func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) {
-	if tl != nil && tl != jw {
+	if tl != nil {
 		jw.mu.Lock()
 		if !slices.Contains(jw.tmplookers, tl) {
 			jw.tmplookers = append(jw.tmplookers, tl)
@@ -128,7 +128,7 @@ func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) {
 }
 
 // RemoveTemplateLookuper removes the given object from
-// the map of TemplateLookupers.
+// the list of TemplateLookupers.
 func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) {
 	if tl != nil {
 		jw.mu.Lock()
@@ -137,9 +137,9 @@ func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) {
 	}
 }
 
-// Lookup queries the known TemplateLookupers in random
-// order for the given template name and returns the first found.
-func (jw *Jaws) Lookup(name string) *template.Template {
+// LookupTemplate queries the known TemplateLookupers in the order
+// they were added and returns the first found.
+func (jw *Jaws) LookupTemplate(name string) *template.Template {
 	jw.mu.RLock()
 	defer jw.mu.RUnlock()
 	for _, tl := range jw.tmplookers {
