@@ -50,3 +50,11 @@ func (t Template) JawsEvent(e *Element, wht what.What, val string) error {
 func NewTemplate(name string, dot any) Template {
 	return Template{Name: name, Dot: dot}
 }
+
+// Template renders the given template using jaws.With{Dot: dot} as data.
+//
+// The name argument is a string to be resolved to a *template.Template
+// using Jaws.LookupTemplate().
+func (rq RequestWriter) Template(name string, dot any, params ...any) error {
+	return rq.UI(Template{Name: name, Dot: dot}, params...)
+}
