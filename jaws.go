@@ -71,12 +71,12 @@ func NewWithDone(doneCh <-chan struct{}) (jw *Jaws) {
 		subCh:        make(chan subscription, 1),
 		unsubCh:      make(chan chan Message, 1),
 		updateTicker: time.NewTicker(DefaultUpdateInterval),
-		headPrefix:   HeadHTML([]string{JavascriptPath}, nil),
 		kg:           bufio.NewReader(rand.Reader),
 		requests:     make(map[uint64]*Request),
 		sessions:     make(map[uint64]*Session),
 		dirty:        make(map[any]int),
 	}
+	_ = jw.GenerateHeadHTML()
 	jw.reqPool.New = func() any {
 		return (&Request{
 			Jaws:   jw,
