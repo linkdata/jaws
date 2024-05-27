@@ -7,10 +7,65 @@
 
 Javascript and WebSockets used to create responsive webpages.
 
+* Moves web application state fully to the server.
+* Does not trust the web browser or the Javascript.
+* Binds application data to UI elements using user-definable 'tags'.
+
 There is a [demo application](https://github.com/linkdata/jawsdemo)
 with plenty of comments to use as a tutorial.
 
-## HTTP request flow and associating the WebSocket
+## Usage
+
+```go
+import (
+	"html/template"
+	"log"
+	"net/http"
+
+	"github.com/linkdata/jaws"
+)
+
+const indexhtml = `
+<html>
+<head>{{$.HeadHTML}}</head>
+<body>{{$.Range .Dot}}</body>
+</html>
+`
+
+func main() {
+	jw := jaws.New()          // create a default JaWS instance
+	defer jw.Close()          // ensure we clean up
+
+	// parse our template and inform JaWS about it
+	templates := template.Must(template.New("index").Parse(indexhtml))
+	jw.AddTemplateLookuper(templates)
+
+	go jw.Serve()                             // start the JaWS processing loop
+	http.DefaultServeMux.Handle("/jaws/", jw) // ensure the JaWS routes are handled
+
+	var f jaws.Float // somewhere to store the slider data
+	http.DefaultServeMux.Handle("/", jw.Handler("index", &f))
+	log.Fatal(http.ListenAndServe("localhost:8080", nil))
+}
+```
+
+### Creating HTML entities and Javascript events
+
+When JawsRender() is called for a UI object, it can call
+NewElement() to create new Elements while writing their initial
+HTML code to the web page. Each Element is a unique instance
+of a UI object bound to a specific Request, and will have a
+unique HTML id.
+
+If a HTML entity is not registered in a Request, JaWS will not
+forward events from it, nor perform DOM manipulations for it.
+
+Dynamic updates of HTML entities is done using the different methods on
+the Element object when the JawsUpdate() method is called.
+
+## Technical notes
+
+### HTTP request flow and associating the WebSocket
 
 When a new HTTP request is received, create a JaWS Request using the JaWS
 object's `NewRequest()` method, and then use the Request's `HeadHTML()` 
@@ -25,7 +80,7 @@ the URL and call the JaWS object's `UseRequest()` method to retrieve the
 Request created in the first step. Then call it's `ServeHTTP()` method to
 start up the WebSocket and begin processing Javascript events and DOM updates.
 
-## Routing
+### Routing
 
 JaWS doesn't enforce any particular router, but it does require several
 endpoints to be registered in whichever router you choose to use. All of
@@ -84,24 +139,7 @@ router.GET("/jaws/*", func(c echo.Context) error {
 })
 ```
 
-## Registering HTML entities and Javascript events
-
-The application registers the HTML entities it wants to interact with
-*per request*, usually while rendering the HTML template. If a HTML entity
-is not registered in a Request, JaWS will not forward events from it,
-nor perform DOM manipulations for it.
-
-Dynamic updates of HTML entities is done using the different methods on
-the JaWS object and Request object. If the JaWS object is used to update
-HTML entities, all Requests will receive the update request. If the Request 
-object's methods are used, the update is forwarded to to all *other* Requests.
-
-Each HTML entity registered with JaWS will have the `jid` attribute set in
-the generated HTML code with the same value as it's JaWS id when it was
-registered. Unlike HTML ID's you can have multiple HTML entities with
-the same `jid`, and all will be affected by DOM updates.
-
-## Session handling
+### Session handling
 
 JaWS has non-persistent session handling integrated. Sessions won't 
 be persisted across restarts and must have an expiry time. A new
@@ -124,7 +162,7 @@ No data is stored in the client browser except the randomly generated
 session cookie. You can set the cookie name in `Jaws.CookieName`, the
 default is `jaws`.
 
-## A note on the Context
+### A note on the Context
 
 The Request object embeds a context.Context inside it's struct,
 contrary to recommended Go practice.
@@ -133,7 +171,7 @@ The reason is that there is no unbroken call chain from the time the Request
 object is created when the initial HTTP request comes in and when it's 
 requested during the Javascript WebSocket HTTP request.
 
-## Security of the WebSocket callback
+### Security of the WebSocket callback
 
 Each JaWS request gets a unique 64-bit random value assigned to it when you 
 create the Request object. This value is written to the HTML output so it
@@ -153,7 +191,7 @@ In order to guess (and thus hijack) a WebSocket you'd have to make on the
 order of 2^63 requests before the genuine request comes in, or 10 seconds
 pass assuming you can reliably prevent the genuine WebSocket request.
 
-## Dependencies
+### Dependencies
 
 We try to minimize dependencies outside of the standard library.
 
