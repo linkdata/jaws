@@ -123,13 +123,14 @@ func (rq *Request) clearLocked() *Request {
 
 // HeadHTML writes the HTML code needed in the HTML page's HEAD section.
 func (rq *Request) HeadHTML(w io.Writer) (err error) {
-	var b []byte
+	var b, jk []byte
+	jk = JawsKeyAppend(jk, rq.JawsKey)
 	b = append(b, rq.Jaws.headPrefix...)
-	b = JawsKeyAppend(b, rq.JawsKey)
+	b = append(b, jk...)
 	b = append(b, `";</script><noscript>`+
 		`<div class="jaws-alert">This site requires Javascript for full functionality.</div>`+
 		`<img src="/jaws/`...)
-	b = JawsKeyAppend(b, rq.JawsKey)
+	b = append(b, jk...)
 	b = append(b, `/noscript"></noscript>`...)
 	_, err = w.Write(b)
 	return
