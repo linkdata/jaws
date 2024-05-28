@@ -360,6 +360,12 @@ func (jw *Jaws) deleteSession(sessionID uint64) {
 	jw.mu.Unlock()
 }
 
+const jawsAlertStyle = `
+<style>
+  .jaws-alert { height: 3em; display: flex; justify-content: center; align-items: center; background-color: red; color: white; }
+</style>
+`
+
 // GenerateHeadHTML (re-)generates the HTML code that goes in the HEAD section, ensuring
 // that the provided scripts and stylesheets in `extra` are loaded.
 //
@@ -384,7 +390,8 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) error {
 	if !addedJaws {
 		js = append(js, JavascriptPath)
 	}
-	jw.headPrefix = HeadHTML(js, css) + `<script>var jawsKey="`
+	jw.headPrefix = HeadHTML(js, css) + jawsAlertStyle + `<script>var jawsKey="`
+
 	return nil
 }
 

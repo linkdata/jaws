@@ -37,11 +37,13 @@ func Test_HeadHTML(t *testing.T) {
 	const extraStyle = "someExtraStyle.css"
 	th := newTestHelper(t)
 	txt := HeadHTML(nil, nil)
-	th.Equal(strings.Contains(string(txt), JavascriptPath), false)
+	th.Equal(strings.Contains(txt, JavascriptPath), false)
+	th.Equal(strings.Count(txt, "<script>"), strings.Count(txt, "</script>"))
 	txt = HeadHTML([]string{JavascriptPath, extraScript}, []string{extraStyle})
-	th.Equal(strings.Contains(string(txt), JavascriptPath), true)
-	th.Equal(strings.Contains(string(txt), extraScript), true)
-	th.Equal(strings.Contains(string(txt), extraStyle), true)
+	th.Equal(strings.Contains(txt, JavascriptPath), true)
+	th.Equal(strings.Contains(txt, extraScript), true)
+	th.Equal(strings.Contains(txt, extraStyle), true)
+	th.Equal(strings.Count(txt, "<script>"), strings.Count(txt, "</script>"))
 }
 
 func TestJawsKeyString(t *testing.T) {
