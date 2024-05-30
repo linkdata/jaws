@@ -4,6 +4,7 @@ import (
 	"embed"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"testing"
 
 	"github.com/linkdata/jaws/staticserve"
@@ -12,17 +13,23 @@ import (
 //go:embed assets
 var assetsFS embed.FS
 
-func Test_MuxServeFS(t *testing.T) {
+func Test_WalkDir(t *testing.T) {
+	var uris []string
 	mux := http.NewServeMux()
-	uris, err := staticserve.MuxServeFS(mux, "/", assetsFS)
+	err := staticserve.WalkDir(assetsFS, "assets", func(filepath string, ss *staticserve.StaticServe) (err error) {
+		uri := path.Join("/static", ss.Name)
+		t.Log(filepath, uri)
+		uris = append(uris, uri)
+		mux.Handle(uri, ss)
+		return
+	})
 	if err != nil {
 		t.Error(err)
 	}
 	if len(uris) != 2 {
 		t.Error("expected two uris")
 	}
-	for fn, uri := range uris {
-		t.Log(fn, uri)
+	for _, uri := range uris {
 		rq := httptest.NewRequest(http.MethodGet, uri, nil)
 		rr := httptest.NewRecorder()
 		mux.ServeHTTP(rr, rq)
