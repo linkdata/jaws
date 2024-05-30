@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 var headerCacheControl = []string{"public, max-age=31536000, s-maxage=31536000, immutable"}
@@ -14,7 +15,7 @@ var headerContentEncoding = []string{"gzip"}
 
 func acceptsGzip(hdr http.Header) bool {
 	for _, s := range hdr["Accept-Encoding"] {
-		if s == "gzip" {
+		if strings.Contains(s, "gzip") {
 			return true
 		}
 	}
