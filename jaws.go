@@ -11,6 +11,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -367,32 +368,26 @@ const jawsAlertStyle = `
 `
 
 // GenerateHeadHTML (re-)generates the HTML code that goes in the HEAD section, ensuring
-// that the provided scripts and stylesheets in `extra` are loaded.
+// that the provided URL resources in `extra` are loaded, along with the JaWS javascript.
 //
 // You only need to call this if you want to add your own scripts and stylesheets.
-func (jw *Jaws) GenerateHeadHTML(extra ...string) error {
-	var js, css []string
-	addedJaws := false
-	for _, e := range extra {
-		if u, err := url.Parse(e); err == nil {
-			if strings.HasSuffix(u.Path, ".js") {
-				js = append(js, e)
-				addedJaws = addedJaws || strings.HasSuffix(u.Path, JavascriptPath)
-			} else if strings.HasSuffix(e, ".css") {
-				css = append(css, e)
+func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
+	var jawsurl *url.URL
+	if jawsurl, err = url.Parse(JavascriptPath); err == nil {
+		var urls []*url.URL
+		urls = append(urls, jawsurl)
+		for _, urlstr := range extra {
+			if u, e := url.Parse(urlstr); e == nil {
+				if !strings.HasSuffix(u.Path, jawsurl.Path) {
+					urls = append(urls, u)
+				}
 			} else {
-				return fmt.Errorf("%q: not .js or .css", u.Path)
+				err = errors.Join(e)
 			}
-		} else {
-			return err
 		}
+		jw.headPrefix = PreloadHTML(urls...) + jawsAlertStyle + `<script>var jawsKey="`
 	}
-	if !addedJaws {
-		js = append(js, JavascriptPath)
-	}
-	jw.headPrefix = HeadHTML(js, css) + jawsAlertStyle + `<script>var jawsKey="`
-
-	return nil
+	return
 }
 
 // Broadcast sends a message to all Requests.

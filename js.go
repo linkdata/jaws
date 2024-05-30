@@ -5,6 +5,9 @@ import (
 	"compress/gzip"
 	_ "embed"
 	"hash/fnv"
+	"mime"
+	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -61,36 +64,66 @@ func JawsKeyValue(jawsKey string) uint64 {
 	return 0
 }
 
-const jsLoader = `.forEach(function(c){var e=document.createElement("script");e.src=c;e.async=!1;document.head.appendChild(e);});`
-
-// HeadHTML returns HTML code to load the given scripts and CSS files efficiently.
-func HeadHTML(js []string, css []string) string {
-	var s []byte
-
-	for _, e := range css {
-		s = append(s, "<link rel=\"preload\" href="...)
-		s = strconv.AppendQuote(s, e)
-		s = append(s, " as=\"style\">\n"...)
-	}
-	for _, e := range js {
-		s = append(s, "<link rel=\"preload\" href="...)
-		s = strconv.AppendQuote(s, e)
-		s = append(s, " as=\"script\">\n"...)
-	}
-	s = append(s, "<script>["...)
-	for i, e := range js {
-		if i > 0 {
-			s = append(s, ',')
+// PreloadHTML returns HTML code to load the given resources efficiently.
+func PreloadHTML(urls ...*url.URL) string {
+	var jsurls, cssurls []string
+	var buf []byte
+	for _, u := range urls {
+		var asattr string
+		ext := strings.ToLower(filepath.Ext(u.Path))
+		mimetype := mime.TypeByExtension(ext)
+		if semi := strings.IndexByte(mimetype, ';'); semi > 0 {
+			mimetype = mimetype[:semi]
 		}
-		s = strconv.AppendQuote(s, e)
+		urlstr := u.String()
+		switch ext {
+		case ".js":
+			jsurls = append(jsurls, urlstr)
+			asattr = "script"
+		case ".css":
+			cssurls = append(cssurls, urlstr)
+			asattr = "style"
+		default:
+			if strings.HasPrefix(mimetype, "image") {
+				asattr = "image"
+			} else if strings.HasPrefix(mimetype, "font") {
+				asattr = "font"
+			}
+		}
+		buf = append(buf, `<link rel="preload" href="`...)
+		buf = append(buf, urlstr...)
+		buf = append(buf, '"')
+		if asattr != "" {
+			buf = append(buf, ` as="`...)
+			buf = append(buf, asattr...)
+			buf = append(buf, '"')
+		}
+		if mimetype != "" {
+			buf = append(buf, ` type="`...)
+			buf = append(buf, mimetype...)
+			buf = append(buf, '"')
+		}
+		buf = append(buf, ">\n"...)
 	}
-	s = append(s, "]"+jsLoader+"</script>\n"...)
 
-	for _, e := range css {
-		s = append(s, "<link rel=\"stylesheet\" href="...)
-		s = strconv.AppendQuote(s, e)
-		s = append(s, ">\n"...)
+	if len(jsurls) > 0 {
+		buf = append(buf, `<script>[`...)
+		for i, urlstr := range jsurls {
+			if i > 0 {
+				buf = append(buf, ',')
+			}
+			buf = append(buf, '"')
+			buf = append(buf, urlstr...)
+			buf = append(buf, '"')
+		}
+		buf = append(buf, "].forEach(function(c){var e=document.createElement(\"script\");e.src=c;e.async=!1;document.head.appendChild(e);});</script>\n"...)
 	}
 
-	return string(s)
+	for _, urlstr := range cssurls {
+		buf = append(buf, `<link rel="stylesheet" href="`...)
+		buf = append(buf, urlstr...)
+		buf = append(buf, "\">\n"...)
+	}
+
+	return string(buf)
 }

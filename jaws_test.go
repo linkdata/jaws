@@ -452,18 +452,22 @@ func TestJaws_subscribeOnClosedReturnsNil(t *testing.T) {
 func TestJaws_GenerateHeadHTML(t *testing.T) {
 	const extraScript = "someExtraScript.js?disregard"
 	const extraStyle = "http://other.server/someExtraStyle.css"
+	const extraImage = "someExtraImage.png"
+	const extraFont = "someExtraFont.woff2"
 	th := newTestHelper(t)
 	jw := New()
 	jw.Close()
 
-	jw.GenerateHeadHTML()
+	th.NoErr(jw.GenerateHeadHTML())
 	th.True(strings.Contains(string(jw.headPrefix), JavascriptPath))
-	jw.GenerateHeadHTML(extraScript, extraStyle)
+
+	th.NoErr(jw.GenerateHeadHTML(extraScript, extraStyle, extraImage, extraFont))
 	th.True(strings.Contains(string(jw.headPrefix), JavascriptPath))
 	th.True(strings.Contains(string(jw.headPrefix), extraScript))
 	th.True(strings.Contains(string(jw.headPrefix), extraStyle))
+	th.True(strings.Contains(string(jw.headPrefix), extraImage))
+	th.True(strings.Contains(string(jw.headPrefix), extraFont))
 
-	th.True(jw.GenerateHeadHTML("random.crap") != nil)
 	th.True(jw.GenerateHeadHTML("\n") != nil)
 }
 

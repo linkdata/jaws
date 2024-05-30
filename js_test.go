@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	_ "embed"
 	"hash/fnv"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -32,18 +33,38 @@ func Test_Javascript(t *testing.T) {
 	th.Equal(b.Bytes(), JavascriptGZip)
 }
 
-func Test_HeadHTML(t *testing.T) {
+func Test_PreloadHTML(t *testing.T) {
 	const extraScript = "someExtraScript.js"
 	const extraStyle = "someExtraStyle.css"
+	const extraImage = "someExtraImage.png"
+	const extraFont = "someExtraFont.woff2"
 	th := newTestHelper(t)
-	txt := HeadHTML(nil, nil)
+
+	txt := PreloadHTML()
 	th.Equal(strings.Contains(txt, JavascriptPath), false)
 	th.Equal(strings.Count(txt, "<script>"), strings.Count(txt, "</script>"))
-	txt = HeadHTML([]string{JavascriptPath, extraScript}, []string{extraStyle})
+
+	mustParseUrl := func(urlstr string) *url.URL {
+		u, err := url.Parse(urlstr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u
+	}
+
+	txt = PreloadHTML(
+		mustParseUrl(JavascriptPath),
+		mustParseUrl(extraScript),
+		mustParseUrl(extraStyle),
+		mustParseUrl(extraImage),
+		mustParseUrl(extraFont))
 	th.Equal(strings.Contains(txt, JavascriptPath), true)
 	th.Equal(strings.Contains(txt, extraScript), true)
 	th.Equal(strings.Contains(txt, extraStyle), true)
+	th.Equal(strings.Contains(txt, extraImage), true)
+	th.Equal(strings.Contains(txt, extraFont), true)
 	th.Equal(strings.Count(txt, "<script>"), strings.Count(txt, "</script>"))
+	t.Log(txt)
 }
 
 func TestJawsKeyString(t *testing.T) {
