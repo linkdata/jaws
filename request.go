@@ -541,7 +541,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					})
 					rq.deleteElement(elem)
 				case what.Input, what.Click:
-					// Input or Click messages recieved here are from Request.Send() or broadcasts.
+					// Input or Click messages received here are from Request.Send() or broadcasts.
 					// they won't be sent out on the WebSocket, but will queue up a
 					// call to the event function (if any).
 					// primary usecase is tests.
