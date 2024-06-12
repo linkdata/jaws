@@ -15,31 +15,31 @@ type testJawsEvent struct {
 	tag   any
 }
 
-func (tje *testJawsEvent) JawsClick(e *Element, name string) (err error) {
-	tje.msgCh <- fmt.Sprintf("JawsClick: %q", name)
+func (t *testJawsEvent) JawsClick(e *Element, name string) (err error) {
+	t.msgCh <- fmt.Sprintf("JawsClick: %q", name)
 	return
 }
 
-func (tje *testJawsEvent) JawsEvent(e *Element, wht what.What, val string) (err error) {
-	tje.msgCh <- fmt.Sprintf("JawsEvent: %s %q", wht, val)
+func (t *testJawsEvent) JawsEvent(e *Element, wht what.What, val string) (err error) {
+	t.msgCh <- fmt.Sprintf("JawsEvent: %s %q", wht, val)
 	return
 }
 
-func (tje *testJawsEvent) JawsGetTag(*Request) (tag any) {
-	if tje.tag != nil {
-		return tje.tag
+func (t *testJawsEvent) JawsGetTag(*Request) (tag any) {
+	if t.tag != nil {
+		return t.tag
 	}
 	return nil
 }
 
-func (tje *testJawsEvent) JawsRender(e *Element, w io.Writer, params []any) error {
+func (t *testJawsEvent) JawsRender(e *Element, w io.Writer, params []any) error {
 	w.Write([]byte(fmt.Sprint(params)))
-	tje.msgCh <- fmt.Sprintf("JawsRender(%d)", e.jid)
+	t.msgCh <- fmt.Sprintf("JawsRender(%d)", e.jid)
 	return nil
 }
 
-func (tje *testJawsEvent) JawsUpdate(e *Element) {
-	tje.msgCh <- fmt.Sprintf("JawsUpdate(%d)", e.jid)
+func (t *testJawsEvent) JawsUpdate(e *Element) {
+	t.msgCh <- fmt.Sprintf("JawsUpdate(%d)", e.jid)
 }
 
 var _ ClickHandler = (*testJawsEvent)(nil)
@@ -55,15 +55,15 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 
 	msgCh := make(chan string, 1)
 	defer close(msgCh)
-	tje := &testJawsEvent{msgCh: msgCh}
+	je := &testJawsEvent{msgCh: msgCh}
 
-	id := rq.Register(Tag("zomg"), tje, "attr1", []string{"attr2"}, template.HTMLAttr("attr3"), []template.HTMLAttr{"attr4"})
+	id := rq.Register(Tag("zomg"), je, "attr1", []string{"attr2"}, template.HTMLAttr("attr3"), []template.HTMLAttr{"attr4"})
 
 	rq.inCh <- wsMsg{Data: "text", Jid: id, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-tje.msgCh:
+	case s := <-je.msgCh:
 		if s != "JawsEvent: Input \"text\"" {
 			t.Error(s)
 		}
@@ -79,15 +79,15 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 		}
 	}
 
-	tje.tag = tje
-	id2 := rq.Register(tje)
+	je.tag = je
+	id2 := rq.Register(je)
 	th.Equal(id2, Jid(2))
 
 	rq.inCh <- wsMsg{Data: "text2", Jid: id2, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
-	case s := <-tje.msgCh:
+	case s := <-je.msgCh:
 		if s != "JawsEvent: Input \"text2\"" {
 			t.Error(s)
 		}
@@ -108,7 +108,7 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 		}
 	}
 
-	rq.Dirty(tje)
+	rq.Dirty(je)
 	select {
 	case <-th.C:
 		th.Timeout()
