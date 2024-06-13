@@ -167,7 +167,7 @@ func (jw *Jaws) RequestCount() (n int) {
 // Returns err.
 func (jw *Jaws) Log(err error) error {
 	if err != nil && jw != nil && jw.Logger != nil {
-		LogError(jw.Logger, err.Error())
+		jw.Logger.Error(err.Error())
 	}
 	return err
 }
@@ -178,7 +178,7 @@ func (jw *Jaws) Log(err error) error {
 func (jw *Jaws) MustLog(err error) {
 	if err != nil {
 		if jw != nil && jw.Logger != nil {
-			LogError(jw.Logger, err.Error())
+			jw.Logger.Error(err.Error())
 		} else {
 			panic(err)
 		}
