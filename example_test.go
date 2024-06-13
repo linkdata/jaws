@@ -2,7 +2,7 @@ package jaws_test
 
 import (
 	"html/template"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/linkdata/jaws"
@@ -15,10 +15,10 @@ const indexhtml = `
 </html>
 `
 
-func ExampleNew() {
-	jw := jaws.New()          // create a default JaWS instance
-	defer jw.Close()          // ensure we clean up
-	jw.Logger = log.Default() // optionally set the logger to use
+func Example() {
+	jw := jaws.New()           // create a default JaWS instance
+	defer jw.Close()           // ensure we clean up
+	jw.Logger = slog.Default() // optionally set the logger to use
 
 	// parse our template and inform JaWS about it
 	templates := template.Must(template.New("index").Parse(indexhtml))
@@ -29,5 +29,5 @@ func ExampleNew() {
 
 	var f jaws.Float // somewhere to store the slider data
 	http.DefaultServeMux.Handle("/", jw.Handler("index", &f))
-	log.Fatal(http.ListenAndServe("localhost:8080", nil))
+	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 }
