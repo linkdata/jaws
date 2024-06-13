@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -40,9 +41,9 @@ const (
 type Jid = jid.Jid // convenience alias
 
 type Jaws struct {
-	CookieName   string // Name for session cookies, defaults to "jaws"
-	Logger       any    // If not nil, send debug info and errors here
-	Debug        bool   // set to true to enable debugging output
+	CookieName   string       // Name for session cookies, defaults to "jaws"
+	Logger       *slog.Logger // Optional logger to use
+	Debug        bool         // Set to true to enable debug info in generated HTML code
 	doneCh       <-chan struct{}
 	bcastCh      chan Message
 	subCh        chan subscription
@@ -166,7 +167,7 @@ func (jw *Jaws) RequestCount() (n int) {
 // Returns err.
 func (jw *Jaws) Log(err error) error {
 	if err != nil && jw != nil && jw.Logger != nil {
-		LogError(jw.Logger, err.Error())
+		jw.Logger.Error(err.Error())
 	}
 	return err
 }
@@ -177,7 +178,7 @@ func (jw *Jaws) Log(err error) error {
 func (jw *Jaws) MustLog(err error) {
 	if err != nil {
 		if jw != nil && jw.Logger != nil {
-			LogError(jw.Logger, err.Error())
+			jw.Logger.Error(err.Error())
 		} else {
 			panic(err)
 		}

@@ -19,7 +19,7 @@ with plenty of comments to use as a tutorial.
 ```go
 import (
 	"html/template"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/linkdata/jaws"
@@ -33,8 +33,9 @@ const indexhtml = `
 `
 
 func main() {
-	jw := jaws.New()          // create a default JaWS instance
-	defer jw.Close()          // ensure we clean up
+	jw := jaws.New()           // create a default JaWS instance
+	defer jw.Close()           // ensure we clean up
+	jw.Logger = slog.Default() // optionally set the logger to use
 
 	// parse our template and inform JaWS about it
 	templates := template.Must(template.New("index").Parse(indexhtml))
@@ -45,7 +46,7 @@ func main() {
 
 	var f jaws.Float // somewhere to store the slider data
 	http.DefaultServeMux.Handle("/", jw.Handler("index", &f))
-	log.Fatal(http.ListenAndServe("localhost:8080", nil))
+	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 }
 ```
 

@@ -5,9 +5,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"html/template"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -79,12 +80,10 @@ func TestJaws_Logger(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 	var b bytes.Buffer
-	w := bufio.NewWriter(&b)
-	jw.Logger = log.New(w, "[foo] ", 0)
+	jw.Logger = slog.New(slog.NewTextHandler(&b, nil))
 	go jw.Serve()
 	jw.Log(errors.New("bar"))
-	w.Flush()
-	is.Equal(b.String(), "[foo] bar\n")
+	is.True(strings.Contains(b.String(), "msg=bar"))
 }
 
 func TestJaws_MustLog(t *testing.T) {
@@ -99,12 +98,10 @@ func TestJaws_MustLog(t *testing.T) {
 	}()
 
 	var b bytes.Buffer
-	w := bufio.NewWriter(&b)
-	jw.Logger = log.New(w, "[foo] ", 0)
+	jw.Logger = slog.New(slog.NewTextHandler(&b, nil))
 	go jw.Serve()
 	jw.MustLog(barErr)
-	w.Flush()
-	is.Equal(b.String(), "[foo] bar\n")
+	is.True(strings.Contains(b.String(), "msg=bar"))
 	jw.Logger = nil
 	jw.MustLog(barErr)
 }
@@ -265,14 +262,36 @@ func TestJaws_BlockingRandomPanics(t *testing.T) {
 	jw.NewRequest(nil)
 }
 
+type rawLogger struct {
+	w io.Writer
+}
+
+var _ slog.Handler = &rawLogger{}
+
+func (h *rawLogger) Enabled(_ context.Context, level slog.Level) bool {
+	return true
+}
+
+func (h *rawLogger) Handle(ctx context.Context, r slog.Record) error {
+	_, err := fmt.Fprintf(h.w, "%s\n", r.Message)
+	return err
+}
+
+func (h *rawLogger) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return h
+}
+
+func (h *rawLogger) WithGroup(name string) slog.Handler {
+	return h
+}
+
 func TestJaws_CleansUpUnconnected(t *testing.T) {
 	const numReqs = 100
 	th := newTestHelper(t)
 	jw := New()
 	defer jw.Close()
 	var b bytes.Buffer
-	w := bufio.NewWriter(&b)
-	jw.Logger = log.New(w, "", 0)
+	jw.Logger = slog.New(&rawLogger{w: &b})
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
 	th.Equal(jw.Pending(), 0)
 	deadline := time.Now().Add(testTimeout)
@@ -311,7 +330,6 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 		th.Timeout()
 	case <-jw.Done():
 	}
-	w.Flush()
 	if x := b.Len(); x != expectLen {
 		t.Log(b.String())
 		th.Equal(b.Len(), expectLen)
@@ -323,8 +341,7 @@ func TestJaws_RequestWriterExtendsDeadline(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 	var b bytes.Buffer
-	w := bufio.NewWriter(&b)
-	jw.Logger = log.New(w, "", 0)
+	jw.Logger = slog.New(slog.NewTextHandler(&b, nil))
 	defer jw.Close()
 
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)

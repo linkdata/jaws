@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"html/template"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"time"
@@ -20,7 +20,7 @@ func newTestJaws() (tj *testJaws) {
 	tj = &testJaws{
 		Jaws: New(),
 	}
-	tj.Jaws.Logger = log.New(&tj.log, "", 0)
+	tj.Jaws.Logger = slog.New(slog.NewTextHandler(&tj.log, nil))
 	tj.testtmpl = template.Must(template.New("testtemplate").Parse(`{{with $.Dot}}<div id="{{$.Jid}}" {{$.Attrs}}>{{.}}</div>{{end}}`))
 	tj.AddTemplateLookuper(tj.testtmpl)
 	tj.Jaws.updateTicker = time.NewTicker(time.Millisecond)
