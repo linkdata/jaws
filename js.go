@@ -67,6 +67,7 @@ func JawsKeyValue(jawsKey string) uint64 {
 // PreloadHTML returns HTML code to load the given resources efficiently.
 func PreloadHTML(urls ...*url.URL) string {
 	var jsurls, cssurls []string
+	var faviconurl, favicontype string
 	var buf []byte
 	for _, u := range urls {
 		var asattr string
@@ -86,24 +87,30 @@ func PreloadHTML(urls ...*url.URL) string {
 		default:
 			if strings.HasPrefix(mimetype, "image") {
 				asattr = "image"
+				if strings.HasSuffix(strings.TrimSuffix(u.Path, ext), "favicon") {
+					favicontype = mimetype
+					faviconurl = urlstr
+				}
 			} else if strings.HasPrefix(mimetype, "font") {
 				asattr = "font"
 			}
 		}
-		buf = append(buf, `<link rel="preload" href="`...)
-		buf = append(buf, urlstr...)
-		buf = append(buf, '"')
-		if asattr != "" {
-			buf = append(buf, ` as="`...)
-			buf = append(buf, asattr...)
+		if urlstr != faviconurl {
+			buf = append(buf, `<link rel="preload" href="`...)
+			buf = append(buf, urlstr...)
 			buf = append(buf, '"')
+			if asattr != "" {
+				buf = append(buf, ` as="`...)
+				buf = append(buf, asattr...)
+				buf = append(buf, '"')
+			}
+			if mimetype != "" {
+				buf = append(buf, ` type="`...)
+				buf = append(buf, mimetype...)
+				buf = append(buf, '"')
+			}
+			buf = append(buf, ">\n"...)
 		}
-		if mimetype != "" {
-			buf = append(buf, ` type="`...)
-			buf = append(buf, mimetype...)
-			buf = append(buf, '"')
-		}
-		buf = append(buf, ">\n"...)
 	}
 
 	if len(jsurls) > 0 {
@@ -122,6 +129,14 @@ func PreloadHTML(urls ...*url.URL) string {
 	for _, urlstr := range cssurls {
 		buf = append(buf, `<link rel="stylesheet" href="`...)
 		buf = append(buf, urlstr...)
+		buf = append(buf, "\">\n"...)
+	}
+
+	if faviconurl != "" {
+		buf = append(buf, `<link rel="icon" type="`...)
+		buf = append(buf, favicontype...)
+		buf = append(buf, `" href="`...)
+		buf = append(buf, faviconurl...)
 		buf = append(buf, "\">\n"...)
 	}
 

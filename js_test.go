@@ -36,7 +36,7 @@ func Test_Javascript(t *testing.T) {
 func Test_PreloadHTML(t *testing.T) {
 	const extraScript = "someExtraScript.js"
 	const extraStyle = "someExtraStyle.css"
-	const extraImage = "someExtraImage.png"
+	const extraImage = "favicon.png"
 	const extraFont = "someExtraFont.woff2"
 	th := newTestHelper(t)
 
