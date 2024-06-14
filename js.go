@@ -87,7 +87,7 @@ func PreloadHTML(urls ...*url.URL) string {
 		default:
 			if strings.HasPrefix(mimetype, "image") {
 				asattr = "image"
-				if strings.HasSuffix(strings.TrimSuffix(u.Path, ext), "favicon") {
+				if strings.HasPrefix(filepath.Base(u.Path), "favicon") {
 					favicontype = mimetype
 					faviconurl = urlstr
 				}
