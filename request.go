@@ -766,3 +766,19 @@ func (rq *Request) onConnect() (err error) {
 func (rq *Request) Writer(w io.Writer) RequestWriter {
 	return RequestWriter{rq: rq, Writer: w}
 }
+
+// JsSet queues sending a new Javascript value in textual form to the browser.
+func (rq *Request) JsSet(name, val string) {
+	rq.queue(wsMsg{
+		Data: name + "\t" + val,
+		What: what.Set,
+	})
+}
+
+// JsCall queues a Javascript function invocation in the browser.
+func (rq *Request) JsCall(name, val string) {
+	rq.queue(wsMsg{
+		Data: name + "\t" + val,
+		What: what.Call,
+	})
+}
