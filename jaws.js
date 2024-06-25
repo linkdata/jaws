@@ -313,9 +313,8 @@ function jawsCallSet(id, data, callit) {
 		if (obj !== null) {
 			if (callit) {
 				return obj[keys[keys.length - 1]](data);
-			} else {
-				return (obj[keys[keys.length - 1]] = data);
 			}
+			return (obj[keys[keys.length - 1]] = data);
 		}
 	}
 }
