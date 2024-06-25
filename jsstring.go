@@ -10,11 +10,11 @@ type JsString struct {
 }
 
 func (ui *JsString) JawsRender(e *Element, w io.Writer, params []any) error {
-	return ui.render(ui.StringSetter, e, w, params)
+	return ui.render(ui.StringSetter, ui.JawsGetString(e), e, w, params)
 }
 
 func (ui *JsString) JawsUpdate(e *Element) {
-	e.JsSet(ui.Name, ui.JawsGetString(e))
+	_ = e.JsSet(ui.Name, ui.JawsGetString(e))
 }
 
 func NewJsString(g StringSetter, name string) *JsString {

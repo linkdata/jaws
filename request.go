@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
@@ -767,18 +768,24 @@ func (rq *Request) Writer(w io.Writer) RequestWriter {
 	return RequestWriter{rq: rq, Writer: w}
 }
 
-// JsSet queues sending a new Javascript value in textual form to the browser.
-func (rq *Request) JsSet(name, val string) {
-	rq.queue(wsMsg{
-		Data: name + "\t" + val,
-		What: what.Set,
-	})
+// JsSet queues sending a new Javascript value to the browser.
+func (rq *Request) jsCallSet(name string, val any, wht what.What) (err error) {
+	var b []byte
+	if b, err = json.Marshal(val); err == nil {
+		rq.queue(wsMsg{
+			Data: name + "\n" + string(b),
+			What: wht,
+		})
+	}
+	return
+}
+
+// JsSet queues sending a new Javascript value to the browser.
+func (rq *Request) JsSet(name string, val any) error {
+	return rq.jsCallSet(name, val, what.Set)
 }
 
 // JsCall queues a Javascript function invocation in the browser.
-func (rq *Request) JsCall(name, val string) {
-	rq.queue(wsMsg{
-		Data: name + "\t" + val,
-		What: what.Call,
-	})
+func (rq *Request) JsCall(name string, param any) error {
+	return rq.jsCallSet(name, param, what.Call)
 }
