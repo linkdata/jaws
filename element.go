@@ -207,3 +207,26 @@ func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) {
 	}
 	return
 }
+
+// ApplyGetter examines getter, and if it's not nil, either adds it
+// as a Tag, or, if it is a TagGetter, adds the result of that as a Tag.
+// If getter is a ClickHandler or an EventHandler, it's added to the
+// list of handlers for the Element.
+//
+// Returns the Tag added, or nil.
+func (e *Element) ApplyGetter(getter any) (tag any) {
+	if getter != nil {
+		tag = getter
+		if tagger, ok := getter.(TagGetter); ok {
+			tag = tagger.JawsGetTag(e.Request)
+		}
+		e.Tag(tag)
+		if ch, ok := getter.(ClickHandler); ok {
+			e.handlers = append(e.handlers, clickHandlerWapper{ch})
+		}
+		if eh, ok := getter.(EventHandler); ok {
+			e.handlers = append(e.handlers, eh)
+		}
+	}
+	return
+}
