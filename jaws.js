@@ -302,9 +302,8 @@ function jawsMessage(e) {
 	}
 }
 
-function jawsCallSet(data, callit) {
-	var idx = data.indexOf('\n');
-	var keys = data.substring(0, idx).split('.');
+function jawsVar(id, data, operation) {
+	var keys = id.split('.');
 	if (keys.length > 0) {
 		var obj = window;
 		var i;
@@ -313,13 +312,21 @@ function jawsCallSet(data, callit) {
 		}
 		if (obj !== null) {
 			var lastkey = keys[keys.length - 1];
-			data = JSON.parse(data.substring(idx + 1));
-			if (callit) {
-				return obj[lastkey](data);
+			switch (operation) {
+				case 'Call':
+					return obj[lastkey](JSON.parse(data));
+				case 'Set':
+					return (obj[lastkey] = JSON.parse(data));
+				default:
+					return jaws.send("Set\t\t" + id + "\n" + JSON.stringify(obj[lastkey]) + "\n");
 			}
-			return (obj[lastkey] = data);
 		}
 	}
+}
+
+function jawsCallSet(data, operation) {
+	var idx = data.indexOf('\n');
+	return jawsVar(data.substring(0, idx), data.substring(idx + 1), operation);
 }
 
 function jawsPerform(what, id, data) {
@@ -338,10 +345,8 @@ function jawsPerform(what, id, data) {
 			jawsOrder(data);
 			return;
 		case 'Call':
-			jawsCallSet(data, true);
-			return;
 		case 'Set':
-			jawsCallSet(data, false);
+			jawsCallSet(data, what);
 			return;
 	}
 	var elem = document.getElementById(id);
