@@ -21,7 +21,11 @@ func (ui *JsVariable) render(getter any, val any, e *Element, w io.Writer, param
 		b = append(b, ui.Name...)
 		b = append(b, '=')
 		b = append(b, buf...)
-		b = append(b, ';')
+		b = append(b, "; (window.jawsVars=window.jawsVars||{})['"...)
+		b = append(b, ui.Name...)
+		b = append(b, "']='"...)
+		b = e.Jid().Append(b)
+		b = append(b, "';"...)
 		e.ApplyGetter(getter)
 		attrs := e.ApplyParams(params)
 		innerHTML := template.HTML(b) //#nosec G203

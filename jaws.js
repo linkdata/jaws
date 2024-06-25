@@ -318,7 +318,11 @@ function jawsVar(id, data, operation) {
 				case 'Set':
 					return (obj[lastkey] = JSON.parse(data));
 				default:
-					return jaws.send("Set\t\t" + id + "\n" + JSON.stringify(obj[lastkey]) + "\n");
+					var jid = window.jawsVars[id];
+					if (jid) {
+						return jaws.send("Set\t" + jid + "\t" + id + "\n" + JSON.stringify(obj[lastkey]) + "\n");
+					}
+					console.log("jaws: unknown variable: " + id);
 			}
 		}
 	}
