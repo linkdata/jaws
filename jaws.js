@@ -279,16 +279,16 @@ function jawsWhere(elem, pos) {
 }
 
 function jawsInsert(elem, data) {
-	var lines = data.split('\n');
-	var where = jawsWhere(elem, lines.shift());
+	var idx = data.indexOf('\n');
+	var where = jawsWhere(elem, data.substring(0, idx));
 	if (where instanceof Node) {
-		elem.insertBefore(jawsAttachChildren(jawsElement(lines.join('\n'))), where);
+		elem.insertBefore(jawsAttachChildren(jawsElement(data.substring(idx + 1))), where);
 	}
 }
 
 function jawsSetAttr(elem, data) {
-	var lines = data.split('\n');
-	elem.setAttribute(lines.shift(), lines.join('\n'));
+	var idx = data.indexOf('\n');
+	elem.setAttribute(data.substring(0, idx), data.substring(idx + 1));
 }
 
 function jawsMessage(e) {
