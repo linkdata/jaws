@@ -302,6 +302,24 @@ function jawsMessage(e) {
 	}
 }
 
+function jawsGlobal(id, data, callit) {
+	var keys = id.split('.');
+	if (keys.length > 0) {
+		var obj = window;
+		var i;
+		for (i = 0; i < keys.length - 1; i++) {
+			obj = obj[keys[i]];
+		}
+		if (obj !== null) {
+			if (callit) {
+				obj[keys[keys.length - 1]](data);
+			} else {
+				obj[keys[keys.length - 1]] = data;
+			}
+		}
+	}
+}
+
 function jawsPerform(what, id, data) {
 	data = JSON.parse(data);
 	switch (what) {
@@ -316,6 +334,12 @@ function jawsPerform(what, id, data) {
 			return;
 		case 'Order':
 			jawsOrder(data);
+			return;
+		case 'Call':
+			jawsGlobal(id, data, true);
+			return;
+		case 'Set':
+			jawsGlobal(id, data, false);
 			return;
 	}
 	var elem = document.getElementById(id);
