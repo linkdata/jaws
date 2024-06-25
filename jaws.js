@@ -312,9 +312,9 @@ function jawsGlobal(id, data, callit) {
 		}
 		if (obj !== null) {
 			if (callit) {
-				obj[keys[keys.length - 1]](data);
+				return obj[keys[keys.length - 1]](data);
 			} else {
-				obj[keys[keys.length - 1]] = data;
+				return (obj[keys[keys.length - 1]] = data);
 			}
 		}
 	}
