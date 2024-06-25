@@ -302,7 +302,7 @@ function jawsMessage(e) {
 	}
 }
 
-function jawsGlobal(id, data, callit) {
+function jawsCallSet(id, data, callit) {
 	var keys = id.split('.');
 	if (keys.length > 0) {
 		var obj = window;
@@ -336,10 +336,10 @@ function jawsPerform(what, id, data) {
 			jawsOrder(data);
 			return;
 		case 'Call':
-			jawsGlobal(id, data, true);
+			jawsCallSet(id, data, true);
 			return;
 		case 'Set':
-			jawsGlobal(id, data, false);
+			jawsCallSet(id, data, false);
 			return;
 	}
 	var elem = document.getElementById(id);
