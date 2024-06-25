@@ -304,8 +304,7 @@ function jawsMessage(e) {
 
 function jawsCallSet(data, callit) {
 	var idx = data.indexOf('\n');
-	var id = data.substring(0, idx);
-	var keys = id.split('.');
+	var keys = data.substring(0, idx).split('.');
 	if (keys.length > 0) {
 		var obj = window;
 		var i;
