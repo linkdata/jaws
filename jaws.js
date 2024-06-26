@@ -92,9 +92,7 @@ function jawsAttach(elem) {
 }
 
 function jawsInitVar(elem) {
-	var id = elem.id.substring(5);
-	var data = elem.dataset.json;
-	jawsVar(id, data, 'Set');
+	jawsVar(elem.id.substring(jawsVarPrefix.length), elem.dataset.json, 'Set');
 }
 
 function jawsAttachChildren(topElem) {
