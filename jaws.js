@@ -1,6 +1,8 @@
 // https://github.com/linkdata/jaws
 
 var jaws = null;
+var jawsIdPrefix = 'Jid.';
+var jawsVarPrefix = 'Jvar.';
 
 function jawsContains(a, v) {
 	return a.indexOf(String(v).trim().toLowerCase()) !== -1;
@@ -43,7 +45,7 @@ function jawsClickHandler(e) {
 		var elem = e.target;
 		var val = jawsGetName(elem);
 		while (elem != null) {
-			if (elem.id.startsWith('Jid.') && !jawsIsInputTag(elem.tagName)) {
+			if (elem.id.startsWith(jawsIdPrefix) && !jawsIsInputTag(elem.tagName)) {
 				val += "\t" + elem.id;
 			}
 			elem = elem.parentElement;
@@ -69,7 +71,7 @@ function jawsInputHandler(e) {
 }
 
 function jawsRemoving(topElem) {
-	var elements = topElem.querySelectorAll('[id^="Jid."]');
+	var elements = topElem.querySelectorAll('[id^="' + jawsIdPrefix + '"]');
 	if (elements.length == 0) return;
 	var val = '';
 	for (var i = 0; i < elements.length; i++) {
@@ -89,11 +91,15 @@ function jawsAttach(elem) {
 	}
 }
 
+function jawsInitVar(elem) {
+	var id = elem.id.substring(5);
+	var data = elem.dataset.json;
+	jawsVar(id, data, 'Set');
+}
+
 function jawsAttachChildren(topElem) {
-	var elements = topElem.querySelectorAll('[id^="Jid."]');
-	for (var i = 0; i < elements.length; i++) {
-		jawsAttach(elements[i]);
-	}
+	topElem.querySelectorAll('[id^="' + jawsIdPrefix + '"]').forEach(jawsAttach);
+	topElem.querySelectorAll('[id^="' + jawsVarPrefix + '"]').forEach(jawsInitVar);
 	return topElem;
 }
 
@@ -318,11 +324,12 @@ function jawsVar(id, data, operation) {
 				case 'Set':
 					return (obj[lastkey] = JSON.parse(data));
 				default:
-					var jid = window.jawsVars[id];
-					if (jid) {
-						return jaws.send("Set\t" + jid + "\t" + id + "\n" + JSON.stringify(obj[lastkey]) + "\n");
+					var elem = document.getElementById(jawsVarPrefix + id);
+					if (elem === null) {
+						console.log("jaws: unknown variable: " + id);
+						return;
 					}
-					console.log("jaws: unknown variable: " + id);
+					return jaws.send("Set\t" + elem.dataset.jid + "\t" + id + "\n" + JSON.stringify(obj[lastkey]) + "\n");
 			}
 		}
 	}

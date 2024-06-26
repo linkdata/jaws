@@ -1,9 +1,9 @@
 package jaws
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
-	"html/template"
 	"io"
 )
 
@@ -16,20 +16,19 @@ type JsVariable struct {
 func (ui *JsVariable) render(getter any, val any, e *Element, w io.Writer, params []any) (err error) {
 	var buf []byte
 	if buf, err = json.Marshal(val); err == nil {
-		var b []byte
-		b = append(b, "var "...)
-		b = append(b, ui.Name...)
-		b = append(b, '=')
-		b = append(b, buf...)
-		b = append(b, "; (window.jawsVars=window.jawsVars||{})['"...)
-		b = append(b, ui.Name...)
-		b = append(b, "']='"...)
-		b = e.Jid().Append(b)
-		b = append(b, "';"...)
+		buf = bytes.ReplaceAll(buf, []byte(`'`), []byte(`\u0027`))
 		e.ApplyGetter(getter)
 		attrs := e.ApplyParams(params)
-		innerHTML := template.HTML(b) //#nosec G203
-		err = WriteHtmlInner(w, e.Jid(), "script", "", innerHTML, attrs...)
+		var b []byte
+		b = append(b, `<div id="Jvar.`...)
+		b = append(b, ui.Name...)
+		b = append(b, `" data-jid=`...)
+		b = e.Jid().AppendQuote(b)
+		b = appendAttrs(b, attrs)
+		b = append(b, ` data-json='`...)
+		b = append(b, buf...)
+		b = append(b, `'></div>`...)
+		_, err = w.Write(b)
 	}
 	return
 }
