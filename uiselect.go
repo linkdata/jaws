@@ -28,14 +28,11 @@ func (ui *UiSelect) JawsUpdate(e *Element) {
 }
 
 func (ui *UiSelect) JawsEvent(e *Element, wht what.What, val string) (err error) {
+	err = ErrEventUnhandled
 	if wht == what.Input {
-		err = ui.uiWrapContainer.Container.(StringSetter).JawsSetString(e, val)
-		e.Dirty(ui.Tag)
-		if err != nil {
-			return
-		}
+		_, err = e.maybeDirty(ui, ui.uiWrapContainer.Container.(StringSetter).JawsSetString(e, val))
 	}
-	return ui.UiHtml.JawsEvent(e, wht, val)
+	return
 }
 
 func (rq RequestWriter) Select(sh SelectHandler, params ...any) error {

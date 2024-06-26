@@ -8,6 +8,7 @@ import (
 
 type BoolSetter interface {
 	JawsGetBool(rq *Element) bool
+	// JawsSetBool may return ErrValueUnchanged to indicate value was already set.
 	JawsSetBool(rq *Element, v bool) (err error)
 }
 

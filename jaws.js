@@ -316,19 +316,29 @@ function jawsVar(id, data, operation) {
 		}
 		if (obj !== null) {
 			var lastkey = keys[keys.length - 1];
+			if (operation === undefined) {
+				var elem = document.getElementById(jawsVarPrefix + id);
+				if (elem === null) {
+					console.log("jaws: unknown variable: " + id);
+					return;
+				}
+				if (data === undefined) {
+					data = obj[lastkey];
+				} else {
+					obj[lastkey] = data;
+				}
+				if (jaws instanceof WebSocket && jaws.readyState === 1) {
+					jaws.send("Set\t" + elem.dataset.jid + "\t" + JSON.stringify(data) + "\n");
+				}
+				return data;
+			}
 			switch (operation) {
 				case 'Call':
 					return obj[lastkey](JSON.parse(data));
 				case 'Set':
 					return (obj[lastkey] = JSON.parse(data));
-				default:
-					var elem = document.getElementById(jawsVarPrefix + id);
-					if (elem === null) {
-						console.log("jaws: unknown variable: " + id);
-						return;
-					}
-					return jaws.send("Set\t" + elem.dataset.jid + "\t" + id + "\n" + JSON.stringify(obj[lastkey]) + "\n");
 			}
+			console.log("jaws: unknown operation: " + operation);
 		}
 	}
 }

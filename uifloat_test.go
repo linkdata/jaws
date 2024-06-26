@@ -20,6 +20,10 @@ func TestUiFloat(t *testing.T) {
 		t.Error(x)
 	}
 
+	if x := ui.JawsSetFloat(nil, ui.JawsGetFloat(nil)); x != ErrValueUnchanged {
+		t.Error(x)
+	}
+
 	ui.L = &rl
 
 	if ui.JawsGetFloat(nil) != -1 {

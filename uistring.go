@@ -29,7 +29,11 @@ func (ui UiString) JawsGetString(e *Element) (val string) {
 
 func (ui UiString) JawsSetString(e *Element, val string) (err error) {
 	ui.L.Lock()
-	*ui.P = val
+	if *ui.P == val {
+		err = ErrValueUnchanged
+	} else {
+		*ui.P = val
+	}
 	ui.L.Unlock()
 	return
 }

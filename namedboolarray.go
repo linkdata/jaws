@@ -140,7 +140,10 @@ func (nba *NamedBoolArray) JawsGetString(e *Element) string {
 }
 
 func (nba *NamedBoolArray) JawsSetString(e *Element, name string) (err error) {
-	nba.Set(name, true)
-	e.Dirty(nba)
+	if nba.Set(name, true) {
+		e.Dirty(nba)
+	} else {
+		err = ErrValueUnchanged
+	}
 	return
 }

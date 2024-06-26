@@ -2,11 +2,17 @@ package jaws
 
 import (
 	"io"
+
+	"github.com/linkdata/jaws/what"
 )
 
 type JsString struct {
 	JsVariable
 	StringSetter
+}
+
+func (ui *JsString) JawsGetTag(rq *Request) any {
+	return ui.StringSetter
 }
 
 func (ui *JsString) JawsRender(e *Element, w io.Writer, params []any) error {
@@ -15,6 +21,14 @@ func (ui *JsString) JawsRender(e *Element, w io.Writer, params []any) error {
 
 func (ui *JsString) JawsUpdate(e *Element) {
 	_ = e.JsSet(ui.Name, ui.JawsGetString(e))
+}
+
+func (ui *JsString) JawsEvent(e *Element, wht what.What, val string) (err error) {
+	err = ErrEventUnhandled
+	if wht == what.Set {
+		_, err = e.maybeDirty(ui, ui.JawsSetString(e, val))
+	}
+	return
 }
 
 func NewJsString(g StringSetter, name string) *JsString {

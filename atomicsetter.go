@@ -18,7 +18,9 @@ func (g atomicSetter) JawsGetBool(e *Element) (v bool) {
 }
 
 func (g atomicSetter) JawsSetBool(e *Element, v bool) (err error) {
-	g.v.Store(v)
+	if g.v.Swap(v) == v {
+		err = ErrValueUnchanged
+	}
 	return
 }
 
@@ -30,7 +32,9 @@ func (g atomicSetter) JawsGetFloat(e *Element) (v float64) {
 }
 
 func (g atomicSetter) JawsSetFloat(e *Element, v float64) (err error) {
-	g.v.Store(v)
+	if g.v.Swap(v) == v {
+		err = ErrValueUnchanged
+	}
 	return
 }
 
@@ -42,7 +46,9 @@ func (g atomicSetter) JawsGetString(e *Element) (v string) {
 }
 
 func (g atomicSetter) JawsSetString(e *Element, v string) (err error) {
-	g.v.Store(v)
+	if g.v.Swap(v) == v {
+		err = ErrValueUnchanged
+	}
 	return
 }
 
@@ -54,7 +60,9 @@ func (g atomicSetter) JawsGetTime(e *Element) (v time.Time) {
 }
 
 func (g atomicSetter) JawsSetTime(e *Element, v time.Time) (err error) {
-	g.v.Store(v)
+	if g.v.Swap(v) == v {
+		err = ErrValueUnchanged
+	}
 	return
 }
 

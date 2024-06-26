@@ -8,6 +8,7 @@ import (
 
 type StringSetter interface {
 	StringGetter
+	// JawsSetString may return ErrValueUnchanged to indicate value was already set.
 	JawsSetString(e *Element, v string) (err error)
 }
 

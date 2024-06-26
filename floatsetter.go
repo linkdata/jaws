@@ -7,6 +7,7 @@ import (
 
 type FloatSetter interface {
 	JawsGetFloat(e *Element) float64
+	// JawsSetFloat may return ErrValueUnchanged to indicate value was already set.
 	JawsSetFloat(e *Element, v float64) (err error)
 }
 

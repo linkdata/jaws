@@ -26,6 +26,13 @@ func (s *Float) Get() (val float64) {
 	return
 }
 
+func (s *Float) Swap(val float64) (old float64) {
+	s.mu.Lock()
+	old, s.Value = s.Value, val
+	s.mu.Unlock()
+	return
+}
+
 func (s *Float) String() string {
 	return strconv.FormatFloat(s.Get(), 'f', -1, 64)
 }
@@ -35,7 +42,9 @@ func (s *Float) JawsGetFloat(*Element) float64 {
 }
 
 func (s *Float) JawsSetFloat(e *Element, val float64) error {
-	s.Set(val)
+	if s.Swap(val) == val {
+		return ErrValueUnchanged
+	}
 	return nil
 }
 

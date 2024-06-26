@@ -493,7 +493,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 				// incoming event message from the websocket
 				if wsmsg.Jid.IsValid() {
 					switch wsmsg.What {
-					case what.Input, what.Click:
+					case what.Input, what.Click, what.Set:
 						rq.queueEvent(eventCallCh, eventFnCall{jid: wsmsg.Jid, wht: wsmsg.What, data: wsmsg.Data})
 					case what.Remove:
 						rq.handleRemove(wsmsg.Data)
@@ -616,13 +616,8 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err 
 
 	for _, e := range elems {
 		if !e.deleted {
-			if err = callEventHandler(e.Ui(), e, wht, val); err != ErrEventUnhandled {
+			if err = callEventHandlers(e.Ui(), e, wht, val); err != ErrEventUnhandled {
 				return
-			}
-			for _, h := range e.handlers {
-				if err = h.JawsEvent(e, wht, val); err != ErrEventUnhandled {
-					return
-				}
 			}
 		}
 	}

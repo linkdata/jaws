@@ -47,6 +47,17 @@ func (e *Element) Ui() UI {
 	return e.ui
 }
 
+func (e *Element) maybeDirty(ui any, err error) (bool, error) {
+	switch err {
+	case nil:
+		e.Dirty(ui)
+		return true, nil
+	case ErrValueUnchanged:
+		return false, nil
+	}
+	return false, err
+}
+
 func (e *Element) renderDebug(w io.Writer) {
 	var sb strings.Builder
 	_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", e.Jid(), e.Ui())

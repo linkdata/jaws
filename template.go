@@ -44,7 +44,7 @@ func (t Template) JawsUpdate(e *Element) {
 }
 
 func (t Template) JawsEvent(e *Element, wht what.What, val string) error {
-	return callEventHandler(t.Dot, e, wht, val)
+	return callEventHandlers(t.Dot, e, wht, val)
 }
 
 // NewTemplate simply returns a Template{} with the members set.

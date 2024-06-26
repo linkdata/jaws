@@ -28,5 +28,5 @@ func (ui *UiHtml) JawsUpdate(e *Element) {
 }
 
 func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) error {
-	return callEventHandler(ui.Tag, e, wht, val)
+	return callEventHandlers(ui.Tag, e, wht, val)
 }
