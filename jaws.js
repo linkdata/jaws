@@ -342,9 +342,9 @@ function jawsVar(obj, data, operation) {
 					}
 					return data;
 				case 'Call':
-					return obj[lastkey](JSON.parse(data));
+					return obj[lastkey](data);
 				case 'Set':
-					return (obj[lastkey] = JSON.parse(data));
+					return (obj[lastkey] = data);
 			}
 			console.log("jaws: unknown operation: " + operation);
 		}
