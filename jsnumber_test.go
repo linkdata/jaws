@@ -13,8 +13,8 @@ func TestJsNumber_JawsRender(t *testing.T) {
 
 	val := float64(1.2)
 	ts := newTestSetter(val)
-	th.NoErr(rq.JsNumber(ts, "varname", "hidden"))
-	wantHtml := "<div id=\"Jvar.varname\" data-json='1.2' data-jid=\"Jid.1\" hidden></div>"
+	th.NoErr(rq.JsNumber(ts, "varname", "readonly"))
+	wantHtml := "<div id=\"Jid.1\" data-jawsdata='1.2' data-jawsname=\"varname\" readonly hidden></div>"
 	if gotHtml := rq.BodyString(); gotHtml != wantHtml {
 		t.Errorf("Request.JsNumber() = %q, want %q", gotHtml, wantHtml)
 	}
@@ -27,7 +27,7 @@ func TestJsNumber_JawsRender(t *testing.T) {
 		th.Timeout()
 	case msg := <-rq.outCh:
 		s := msg.Format()
-		if s != "Set\t\t\"varname\\n1.3\"\n" {
+		if s != "Set\tJid.1\t1.3\n" {
 			t.Error(strconv.Quote(s))
 		}
 	}

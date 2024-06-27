@@ -2,7 +2,6 @@
 
 var jaws = null;
 var jawsIdPrefix = 'Jid.';
-var jawsVarPrefix = 'Jvar.';
 
 function jawsContains(a, v) {
 	return a.indexOf(String(v).trim().toLowerCase()) !== -1;
@@ -84,20 +83,22 @@ function jawsRemoving(topElem) {
 }
 
 function jawsAttach(elem) {
+	if (elem.hasAttribute("data-jawsname")) {
+		window.jawsNames[elem.dataset.jawsname] = elem;
+		if (elem.hasAttribute("data-jawsdata")) {
+			jawsVar(elem, elem.dataset.jawsdata, 'Set');
+		}
+		return;
+	}
 	if (jawsIsInputTag(elem.tagName)) {
 		elem.addEventListener('input', jawsInputHandler, false);
-	} else {
-		elem.addEventListener('click', jawsClickHandler, false);
+		return;
 	}
-}
-
-function jawsInitVar(elem) {
-	jawsVar(elem.id.substring(jawsVarPrefix.length), elem.dataset.json, 'Set');
+	elem.addEventListener('click', jawsClickHandler, false);
 }
 
 function jawsAttachChildren(topElem) {
 	topElem.querySelectorAll('[id^="' + jawsIdPrefix + '"]').forEach(jawsAttach);
-	topElem.querySelectorAll('[id^="' + jawsVarPrefix + '"]').forEach(jawsInitVar);
 	return topElem;
 }
 
@@ -306,33 +307,40 @@ function jawsMessage(e) {
 	}
 }
 
-function jawsVar(id, data, operation) {
-	var keys = id.split('.');
+function jawsVar(obj, data, operation) {
+	var elem;
+	var name;
+	if (obj instanceof Element) {
+		elem = obj;
+		name = elem.dataset.jawsname;
+	} else {
+		name = obj;
+		elem = window.jawsNames[name];
+	}
+	if (!elem || !name) {
+		throw "jaws: unknown object: " + obj;
+	}
+
+	var keys = name.split('.');
 	if (keys.length > 0) {
-		var obj = window;
 		var i;
+		obj = window;
 		for (i = 0; i < keys.length - 1; i++) {
 			obj = obj[keys[i]];
 		}
 		if (obj !== null) {
 			var lastkey = keys[keys.length - 1];
-			if (operation === undefined) {
-				var elem = document.getElementById(jawsVarPrefix + id);
-				if (elem === null) {
-					console.log("jaws: unknown variable: " + id);
-					return;
-				}
-				if (data === undefined) {
-					data = obj[lastkey];
-				} else {
-					obj[lastkey] = data;
-				}
-				if (jaws instanceof WebSocket && jaws.readyState === 1) {
-					jaws.send("Set\t" + elem.dataset.jid + "\t" + JSON.stringify(data) + "\n");
-				}
-				return data;
-			}
 			switch (operation) {
+				case undefined:
+					if (data === undefined) {
+						data = obj[lastkey];
+					} else {
+						obj[lastkey] = data;
+					}
+					if (jaws instanceof WebSocket && jaws.readyState === 1) {
+						jaws.send("Set\t" + elem.id + "\t" + JSON.stringify(data) + "\n");
+					}
+					return data;
 				case 'Call':
 					return obj[lastkey](JSON.parse(data));
 				case 'Set':
@@ -341,11 +349,6 @@ function jawsVar(id, data, operation) {
 			console.log("jaws: unknown operation: " + operation);
 		}
 	}
-}
-
-function jawsCallSet(data, operation) {
-	var idx = data.indexOf('\n');
-	return jawsVar(data.substring(0, idx), data.substring(idx + 1), operation);
 }
 
 function jawsPerform(what, id, data) {
@@ -363,15 +366,10 @@ function jawsPerform(what, id, data) {
 		case 'Order':
 			jawsOrder(data);
 			return;
-		case 'Call':
-		case 'Set':
-			jawsCallSet(data, what);
-			return;
 	}
 	var elem = document.getElementById(id);
 	if (elem === null) {
-		console.log("jaws: id not found: " + id);
-		return;
+		throw "jaws: element not found: " + id;
 	}
 	var where = null;
 	switch (what) {
@@ -379,47 +377,52 @@ function jawsPerform(what, id, data) {
 			jawsRemoving(elem);
 			elem.innerHTML = data;
 			jawsAttachChildren(elem);
-			break;
+			return;
 		case 'Value':
 			jawsSetValue(elem, data);
-			break;
+			return;
 		case 'Append':
 			elem.appendChild(jawsAttachChildren(jawsElement(data)));
-			break;
+			return;
 		case 'Replace':
 			jawsRemoving(elem);
 			elem.replaceWith(jawsAttachChildren(jawsElement(data)));
-			break;
+			return;
 		case 'Delete':
 			jawsRemoving(elem);
 			elem.remove();
-			break;
+			return;
 		case 'Remove':
 			where = jawsWhere(elem, data);
 			if (where instanceof Node) {
 				jawsRemoving(where);
 				elem.removeChild(where);
 			}
-			break;
+			return;
 		case 'Insert':
 			jawsInsert(elem, data);
-			break;
+			return;
 		case 'SAttr':
 			jawsSetAttr(elem, data);
-			break;
+			return;
 		case 'RAttr':
 			elem.removeAttribute(data);
-			break;
+			return;
 		case 'SClass':
 			elem.classList.add(data);
-			break;
+			return;
 		case 'RClass':
 			elem.classList.remove(data);
-			break;
-		default:
-			console.log("jaws: unknown operation: " + what);
+			return;
+		case 'Set':
+			jawsVar(elem, data, 'Set');
+			return;
+		case 'Call':
+			jawsVar(elem, data, 'Call');
 			return;
 	}
+	console.log("jaws: unknown operation: " + what);
+	return;
 }
 
 function jawsPageshow(e) {
@@ -433,6 +436,7 @@ function jawsConnect() {
 	if (window.location.protocol === 'https:') {
 		wsScheme = 'wss://';
 	}
+	window.jawsNames = {};
 	window.addEventListener('beforeunload', jawsUnloading);
 	window.addEventListener('pageshow', jawsPageshow);
 	jaws = new WebSocket(wsScheme + window.location.host + '/jaws/' + encodeURIComponent(jawsKey));

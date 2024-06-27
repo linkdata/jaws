@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -202,6 +203,14 @@ func (e *Element) Order(jidList []jid.Jid) {
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) Remove(htmlId string) {
 	e.queue(what.Remove, htmlId)
+}
+
+func (e *Element) JsSet(val any) (err error) {
+	var b []byte
+	if b, err = json.Marshal(val); err == nil {
+		e.queue(what.Set, string(b))
+	}
+	return
 }
 
 // ApplyParams parses the parameters passed to UI() when creating a new Element,

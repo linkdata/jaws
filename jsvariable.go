@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strconv"
 )
 
 var ErrMissingJavascriptName = errors.New("missing Javascript name")
@@ -19,20 +20,20 @@ func (ui *JsVariable) JawsGetTag(rq *Request) any {
 }
 
 func (ui *JsVariable) render(getter any, val any, e *Element, w io.Writer, params []any) (err error) {
-	var buf []byte
-	if buf, err = json.Marshal(val); err == nil {
-		buf = bytes.ReplaceAll(buf, []byte(`'`), []byte(`\u0027`))
+	var data []byte
+	if data, err = json.Marshal(val); err == nil {
+		data = bytes.ReplaceAll(data, []byte(`'`), []byte(`\u0027`))
 		ui.Tag = e.ApplyGetter(getter)
 		attrs := e.ApplyParams(params)
 		var b []byte
-		b = append(b, `<div id="Jvar.`...)
-		b = append(b, ui.Name...)
-		b = append(b, `" data-json='`...)
-		b = append(b, buf...)
-		b = append(b, `' data-jid=`...)
+		b = append(b, `<div id=`...)
 		b = e.Jid().AppendQuote(b)
+		b = append(b, ` data-jawsdata='`...)
+		b = append(b, data...)
+		b = append(b, `' data-jawsname=`...)
+		b = strconv.AppendQuote(b, ui.Name)
 		b = appendAttrs(b, attrs)
-		b = append(b, `></div>`...)
+		b = append(b, ` hidden></div>`...)
 		_, err = w.Write(b)
 	}
 	return

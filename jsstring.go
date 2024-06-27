@@ -16,7 +16,7 @@ func (ui *JsString) JawsRender(e *Element, w io.Writer, params []any) error {
 }
 
 func (ui *JsString) JawsUpdate(e *Element) {
-	_ = e.JsSet(ui.Name, ui.JawsGetString(e))
+	_ = e.JsSet(ui.JawsGetString(e))
 }
 
 func (ui *JsString) JawsEvent(e *Element, wht what.What, val string) (err error) {

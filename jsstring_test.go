@@ -14,7 +14,7 @@ func TestJsString_JawsRender(t *testing.T) {
 	val := "text'1"
 	ts := newTestSetter(val)
 	th.NoErr(rq.JsString(ts, "varname"))
-	wantHtml := "<div id=\"Jvar.varname\" data-json='\"text\\u00271\"' data-jid=\"Jid.1\"></div>"
+	wantHtml := "<div id=\"Jid.1\" data-jawsdata='\"text\\u00271\"' data-jawsname=\"varname\" hidden></div>"
 	if gotHtml := rq.BodyString(); gotHtml != wantHtml {
 		t.Errorf("Request.JsString() = %q, want %q", gotHtml, wantHtml)
 	}
@@ -27,7 +27,7 @@ func TestJsString_JawsRender(t *testing.T) {
 		th.Timeout()
 	case msg := <-rq.outCh:
 		s := msg.Format()
-		if s != "Set\t\t\"varname\\n\\\"text'2\\\"\"\n" {
+		if s != "Set\tJid.1\t\"text'2\"\n" {
 			t.Error(strconv.Quote(s))
 		}
 	}
