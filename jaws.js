@@ -326,28 +326,29 @@ function jawsVar(obj, data, operation) {
 		var i;
 		obj = window;
 		for (i = 0; i < keys.length - 1; i++) {
+			if (!(keys[i] in obj)) {
+				throw "jaws: object undefined: " + name;
+			}
 			obj = obj[keys[i]];
 		}
-		if (obj !== null) {
-			var lastkey = keys[keys.length - 1];
-			switch (operation) {
-				case undefined:
-					if (data === undefined) {
-						data = obj[lastkey];
-					} else {
-						obj[lastkey] = data;
-					}
-					if (jaws instanceof WebSocket && jaws.readyState === 1) {
-						jaws.send("Set\t" + elem.id + "\t" + JSON.stringify(data) + "\n");
-					}
-					return data;
-				case 'Call':
-					return obj[lastkey](data);
-				case 'Set':
-					return (obj[lastkey] = data);
-			}
-			console.log("jaws: unknown operation: " + operation);
+		var lastkey = keys[keys.length - 1];
+		switch (operation) {
+			case undefined:
+				if (data === undefined) {
+					data = obj[lastkey];
+				} else {
+					obj[lastkey] = data;
+				}
+				if (jaws instanceof WebSocket && jaws.readyState === 1) {
+					jaws.send("Set\t" + elem.id + "\t" + JSON.stringify(data) + "\n");
+				}
+				return data;
+			case 'Call':
+				return obj[lastkey](data);
+			case 'Set':
+				return (obj[lastkey] = data);
 		}
+		console.log("jaws: unknown operation: " + operation);
 	}
 }
 
