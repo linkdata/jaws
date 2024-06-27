@@ -28,7 +28,7 @@ func (ui *UiInputText) JawsUpdate(e *Element) {
 func (ui *UiInputText) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
 	if wht == what.Input {
-		err = ui.maybeDirty(ui, val, e, ui.StringSetter.JawsSetString(e, val))
+		err = ui.maybeDirty(val, e, ui.StringSetter.JawsSetString(e, val))
 	}
 	return
 }

@@ -30,7 +30,7 @@ func (ui *UiSelect) JawsUpdate(e *Element) {
 func (ui *UiSelect) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
 	if wht == what.Input {
-		_, err = e.maybeDirty(ui, ui.uiWrapContainer.Container.(StringSetter).JawsSetString(e, val))
+		_, err = e.maybeDirty(ui.Tag, ui.uiWrapContainer.Container.(StringSetter).JawsSetString(e, val))
 	}
 	return
 }

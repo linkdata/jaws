@@ -11,10 +11,6 @@ type JsString struct {
 	StringSetter
 }
 
-func (ui *JsString) JawsGetTag(rq *Request) any {
-	return ui.StringSetter
-}
-
 func (ui *JsString) JawsRender(e *Element, w io.Writer, params []any) error {
 	return ui.render(ui.StringSetter, ui.JawsGetString(e), e, w, params)
 }
@@ -26,7 +22,7 @@ func (ui *JsString) JawsUpdate(e *Element) {
 func (ui *JsString) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
 	if wht == what.Set {
-		_, err = e.maybeDirty(ui, ui.JawsSetString(e, val))
+		_, err = e.maybeDirty(ui.Tag, ui.JawsSetString(e, val))
 	}
 	return
 }

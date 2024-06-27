@@ -10,14 +10,19 @@ import (
 var ErrMissingJavascriptName = errors.New("missing Javascript name")
 
 type JsVariable struct {
+	Tag  any
 	Name string
+}
+
+func (ui *JsVariable) JawsGetTag(rq *Request) any {
+	return ui.Tag
 }
 
 func (ui *JsVariable) render(getter any, val any, e *Element, w io.Writer, params []any) (err error) {
 	var buf []byte
 	if buf, err = json.Marshal(val); err == nil {
 		buf = bytes.ReplaceAll(buf, []byte(`'`), []byte(`\u0027`))
-		e.ApplyGetter(getter)
+		ui.Tag = e.ApplyGetter(getter)
 		attrs := e.ApplyParams(params)
 		var b []byte
 		b = append(b, `<div id="Jvar.`...)

@@ -38,7 +38,7 @@ func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err er
 				return
 			}
 		}
-		err = ui.maybeDirty(ui, v, e, ui.FloatSetter.JawsSetFloat(e, v))
+		err = ui.maybeDirty(v, e, ui.FloatSetter.JawsSetFloat(e, v))
 	}
 	return
 }

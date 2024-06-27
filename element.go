@@ -47,10 +47,10 @@ func (e *Element) Ui() UI {
 	return e.ui
 }
 
-func (e *Element) maybeDirty(ui any, err error) (bool, error) {
+func (e *Element) maybeDirty(tag any, err error) (bool, error) {
 	switch err {
 	case nil:
-		e.Dirty(ui)
+		e.Dirty(tag)
 		return true, nil
 	case ErrValueUnchanged:
 		return false, nil
@@ -226,7 +226,7 @@ func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) {
 // If getter is a ClickHandler or an EventHandler, it's added to the
 // list of handlers for the Element.
 //
-// Returns the Tag added, or nil.
+// Returns the Tag added, or nil if getter was nil.
 func (e *Element) ApplyGetter(getter any) (tag any) {
 	if getter != nil {
 		tag = getter

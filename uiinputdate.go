@@ -38,7 +38,7 @@ func (ui *UiInputDate) JawsEvent(e *Element, wht what.What, val string) (err err
 				return
 			}
 		}
-		err = ui.maybeDirty(ui, v, e, ui.TimeSetter.JawsSetTime(e, v))
+		err = ui.maybeDirty(v, e, ui.TimeSetter.JawsSetTime(e, v))
 	}
 	return
 }
