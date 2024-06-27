@@ -300,7 +300,7 @@ func (rq *Request) Register(tagitem any, params ...any) jid.Jid {
 
 	uib := &UiHtml{}
 	elem := rq.NewElement(uib)
-	uib.parseGetter(elem, tagitem)
+	uib.applyGetter(elem, tagitem)
 	elem.ApplyParams(params)
 	return elem.Jid()
 }

@@ -13,7 +13,7 @@ type UiInputBool struct {
 }
 
 func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string, params ...any) error {
-	ui.parseGetter(e, ui.BoolSetter)
+	ui.applyGetter(e, ui.BoolSetter)
 	attrs := e.ApplyParams(params)
 	v := ui.JawsGetBool(e)
 	ui.Last.Store(v)

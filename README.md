@@ -50,7 +50,7 @@ func main() {
 }
 ```
 
-### Creating HTML entities and Javascript events
+### Creating HTML entities
 
 When JawsRender() is called for a UI object, it can call
 NewElement() to create new Elements while writing their initial
@@ -63,6 +63,20 @@ forward events from it, nor perform DOM manipulations for it.
 
 Dynamic updates of HTML entities is done using the different methods on
 the Element object when the JawsUpdate() method is called.
+
+### Javascript events
+
+Supported Javascript events are sent to the server and
+are handled by the Element's UI type. If that didn't handle the event,
+any extra objects added to the Element are invoked (in order) until one
+handles the event. If none handle the event, it is ignored.
+
+The generic event handler is `JawsEvent`. An event handler should
+return `ErrEventUnhandled` if it didn't handle the event or wants
+to pass it to the next handler.
+
+* `onclick` invokes `JawsClick` if present, otherwise `JawsEvent` with `what.Click`
+* `oninput` invokes `JawsEvent` with `what.Input`
 
 ## Technical notes
 

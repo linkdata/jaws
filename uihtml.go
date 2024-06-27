@@ -2,15 +2,13 @@ package jaws
 
 import (
 	"io"
-
-	"github.com/linkdata/jaws/what"
 )
 
 type UiHtml struct {
 	Tag any
 }
 
-func (ui *UiHtml) parseGetter(e *Element, getter any) {
+func (ui *UiHtml) applyGetter(e *Element, getter any) {
 	ui.Tag = e.ApplyGetter(getter)
 }
 
@@ -25,8 +23,4 @@ func (ui *UiHtml) JawsUpdate(e *Element) {
 	if h, ok := ui.Tag.(UI); ok {
 		h.JawsUpdate(e)
 	}
-}
-
-func (ui *UiHtml) JawsEvent(e *Element, wht what.What, val string) error {
-	return callEventHandlers(ui.Tag, e, wht, val)
 }

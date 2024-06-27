@@ -12,7 +12,7 @@ type UiInputText struct {
 }
 
 func (ui *UiInputText) renderStringInput(e *Element, w io.Writer, htmltype string, params ...any) error {
-	ui.parseGetter(e, ui.StringSetter)
+	ui.applyGetter(e, ui.StringSetter)
 	attrs := e.ApplyParams(params)
 	v := ui.JawsGetString(e)
 	ui.Last.Store(v)
