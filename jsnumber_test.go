@@ -64,4 +64,10 @@ func TestJsNumber_JawsEvent(t *testing.T) {
 	}
 
 	th.Equal(ts.Get(), 1.3)
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "1.3"}:
+	}
 }
