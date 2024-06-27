@@ -22,12 +22,12 @@ func (ui *JsVariable) render(getter any, val any, e *Element, w io.Writer, param
 		var b []byte
 		b = append(b, `<div id="Jvar.`...)
 		b = append(b, ui.Name...)
-		b = append(b, `" data-jid=`...)
+		b = append(b, `" data-json='`...)
+		b = append(b, buf...)
+		b = append(b, `' data-jid=`...)
 		b = e.Jid().AppendQuote(b)
 		b = appendAttrs(b, attrs)
-		b = append(b, ` data-json='`...)
-		b = append(b, buf...)
-		b = append(b, `'></div>`...)
+		b = append(b, `></div>`...)
 		_, err = w.Write(b)
 	}
 	return
