@@ -3,12 +3,9 @@ package jaws
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"io"
 	"strconv"
 )
-
-var ErrMissingJavascriptName = errors.New("missing Javascript name")
 
 type JsVariable struct {
 	Tag  any
