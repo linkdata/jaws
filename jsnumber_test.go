@@ -3,6 +3,8 @@ package jaws
 import (
 	"strconv"
 	"testing"
+
+	"github.com/linkdata/jaws/what"
 )
 
 func TestJsNumber_JawsRender(t *testing.T) {
@@ -31,4 +33,35 @@ func TestJsNumber_JawsRender(t *testing.T) {
 			t.Error(strconv.Quote(s))
 		}
 	}
+}
+
+func TestJsNumber_JawsEvent(t *testing.T) {
+	th := newTestHelper(t)
+	nextJid = 0
+	rq := newTestRequest()
+	defer rq.Close()
+
+	msgCh := make(chan string, 1)
+	defer close(msgCh)
+
+	val := float64(1.2)
+	ts := newTestSetter(val)
+	ui := NewJsNumber(ts, "varname")
+	th.NoErr(rq.UI(ui))
+
+	th.Equal(ui.JawsGetTag(rq.Request), ts)
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "1.3"}:
+	}
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case <-ts.setCalled:
+	}
+
+	th.Equal(ts.Get(), 1.3)
 }
