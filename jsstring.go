@@ -29,7 +29,7 @@ func (ui *JsString) JawsEvent(e *Element, wht what.What, val string) (err error)
 
 func NewJsString(g StringSetter, name string) *JsString {
 	return &JsString{
-		JsVariable:   JsVariable{Name: name},
+		JsVariable:   JsVariable{JsName{Name: name}},
 		StringSetter: g,
 	}
 }

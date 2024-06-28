@@ -66,6 +66,17 @@ func (g atomicSetter) JawsSetTime(e *Element, v time.Time) (err error) {
 	return
 }
 
+func (g atomicSetter) JawsGetAny(e *Element) (v any) {
+	return g.v.Load()
+}
+
+func (g atomicSetter) JawsSetAny(e *Element, v any) (err error) {
+	if g.v.Swap(v) == v {
+		err = ErrValueUnchanged
+	}
+	return
+}
+
 func (g atomicSetter) JawsGetHtml(e *Element) template.HTML {
 	switch v := g.v.Load().(type) {
 	case nil:

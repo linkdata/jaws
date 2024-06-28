@@ -157,6 +157,33 @@ func (ts *testSetter[float64]) JawsSetFloat(e *Element, val float64) (err error)
 	return
 }
 
+func (ts *testSetter[any]) JawsGetAny(e *Element) (val any) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	ts.getCount++
+	if ts.getCount == 1 {
+		close(ts.getCalled)
+	}
+	val = ts.val
+	return
+}
+
+func (ts *testSetter[any]) JawsSetAny(e *Element, val any) (err error) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	ts.setCount++
+	if ts.setCount == 1 {
+		close(ts.setCalled)
+	}
+	if err = ts.err; err == nil {
+		if ts.val == val {
+			err = ErrValueUnchanged
+		}
+		ts.val = val
+	}
+	return
+}
+
 func (ts *testSetter[T]) JawsGetHtml(e *Element) (val T) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()

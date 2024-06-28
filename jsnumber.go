@@ -33,7 +33,7 @@ func (ui *JsNumber) JawsEvent(e *Element, wht what.What, val string) (err error)
 
 func NewJsNumber(g FloatSetter, name string) *JsNumber {
 	return &JsNumber{
-		JsVariable:  JsVariable{Name: name},
+		JsVariable:  JsVariable{JsName{Name: name}},
 		FloatSetter: g,
 	}
 }
