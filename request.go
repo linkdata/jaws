@@ -758,6 +758,7 @@ func (rq *Request) onConnect() (err error) {
 	return
 }
 
+// Writer returns a RequestWriter with this Request and the given Writer.
 func (rq *Request) Writer(w io.Writer) RequestWriter {
 	return RequestWriter{rq: rq, Writer: w}
 }

@@ -84,9 +84,10 @@ function jawsRemoving(topElem) {
 
 function jawsAttach(elem) {
 	if (elem.hasAttribute("data-jawsname")) {
-		window.jawsNames[elem.dataset.jawsname] = elem;
+		var name = elem.dataset.jawsname;
+		window.jawsNames[name] = elem.id;
 		if (elem.hasAttribute("data-jawsdata")) {
-			jawsVar(elem, elem.dataset.jawsdata, 'Set');
+			jawsVar(name, elem.dataset.jawsdata, 'Set');
 		}
 		return;
 	}
@@ -307,31 +308,18 @@ function jawsMessage(e) {
 	}
 }
 
-function jawsVar(obj, data, operation) {
-	var elem;
-	var name;
-	if (obj instanceof Element) {
-		elem = obj;
-		name = elem.dataset.jawsname;
-	} else {
-		name = obj;
-		elem = window.jawsNames[name];
-	}
-	if (!elem || !name) {
-		throw "jaws: unknown object: " + obj;
-	}
-
+function jawsVar(name, data, operation) {
 	var keys = name.split('.');
 	if (keys.length > 0) {
+		var obj = window;
+		var lastkey = keys[keys.length - 1];
 		var i;
-		obj = window;
 		for (i = 0; i < keys.length - 1; i++) {
 			if (!(keys[i] in obj)) {
 				throw "jaws: object undefined: " + name;
 			}
 			obj = obj[keys[i]];
 		}
-		var lastkey = keys[keys.length - 1];
 		switch (operation) {
 			case undefined:
 				if (data === undefined) {
@@ -339,16 +327,19 @@ function jawsVar(obj, data, operation) {
 				} else {
 					obj[lastkey] = data;
 				}
-				if (jaws instanceof WebSocket && jaws.readyState === 1) {
-					jaws.send("Set\t" + elem.id + "\t" + JSON.stringify(data) + "\n");
-				}
-				return data;
+				break;
 			case 'Call':
-				return obj[lastkey](data);
+				data = obj[lastkey](data);
+				break;
 			case 'Set':
 				return (obj[lastkey] = data);
+			default:
+				throw "jaws: unknown operation: " + operation;
 		}
-		console.log("jaws: unknown operation: " + operation);
+		if (jaws instanceof WebSocket && jaws.readyState === 1) {
+			jaws.send("Set\t" + window.jawsNames[name] + "\t" + JSON.stringify(data) + "\n");
+		}
+		return data;
 	}
 }
 
@@ -416,14 +407,11 @@ function jawsPerform(what, id, data) {
 			elem.classList.remove(data);
 			return;
 		case 'Set':
-			jawsVar(elem, data, 'Set');
-			return;
 		case 'Call':
-			jawsVar(elem, data, 'Call');
+			jawsVar(elem.dataset.jawsname, data, what);
 			return;
 	}
-	console.log("jaws: unknown operation: " + what);
-	return;
+	throw "jaws: unknown operation: " + what;
 }
 
 function jawsPageshow(e) {

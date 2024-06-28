@@ -205,10 +205,23 @@ func (e *Element) Remove(htmlId string) {
 	e.queue(what.Remove, htmlId)
 }
 
+// JsSet sends a Javascript variable update to the browser.
 func (e *Element) JsSet(val any) (err error) {
 	var b []byte
 	if b, err = json.Marshal(val); err == nil {
 		e.queue(what.Set, string(b))
+	}
+	return
+}
+
+// JsCall queues a Javascript function invocation to be sent to the browser.
+//
+// The browser will respond by setting this Element's value to the
+// function return value (unless there was a Javascript exception).
+func (e *Element) JsCall(param any) (err error) {
+	var b []byte
+	if b, err = json.Marshal(param); err == nil {
+		e.queue(what.Call, string(b))
 	}
 	return
 }

@@ -13,7 +13,7 @@ import (
 // wsMsg is a message sent to or from a WebSocket.
 type wsMsg struct {
 	Data string    // data to send
-	Jid  Jid       // Jid to send, or negative to not send
+	Jid  Jid       // Jid to send, or -1 if Data contains that already
 	What what.What // command
 }
 
@@ -25,9 +25,10 @@ func (m *wsMsg) Append(b []byte) []byte {
 			b = m.Jid.Append(b)
 		}
 		b = append(b, '\t')
-		if m.What == what.Set {
+		switch m.What {
+		case what.Set, what.Call:
 			b = append(b, m.Data...)
-		} else {
+		default:
 			b = strconv.AppendQuote(b, m.Data)
 		}
 	} else {
