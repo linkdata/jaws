@@ -25,7 +25,7 @@ func (ui *JsFunction) JawsUpdate(e *Element) {
 
 func (ui *JsFunction) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
-	if wht == what.Set && ui.ResultTag != nil {
+	if wht == what.Set {
 		var v any
 		if err = json.Unmarshal([]byte(val), &v); err == nil {
 			_, err = e.maybeDirty(ui.ResultTag, ui.Result.JawsSetAny(e, v))
