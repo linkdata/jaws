@@ -26,4 +26,5 @@ func TestNamedBool(t *testing.T) {
 	is.NoErr(nb.JawsSetBool(e, true))
 	is.True(nb.Checked())
 	is.Equal(nb.Checked(), nb.JawsGetBool(nil))
+	is.Equal(nb.JawsSetBool(e, true), ErrValueUnchanged)
 }

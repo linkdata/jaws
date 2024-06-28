@@ -40,9 +40,14 @@ func Test_atomicSetter_bool(t *testing.T) {
 	var av atomic.Value
 	g := atomicSetter{v: &av}
 	val := true
-	g.JawsSetBool(nil, val)
+	if err := g.JawsSetBool(nil, val); err != nil {
+		t.Error(err)
+	}
 	if g.JawsGetBool(nil) != val {
 		t.Fail()
+	}
+	if err := g.JawsSetBool(nil, val); err != ErrValueUnchanged {
+		t.Error(err)
 	}
 }
 
@@ -50,9 +55,14 @@ func Test_atomicSetter_float64(t *testing.T) {
 	var av atomic.Value
 	g := atomicSetter{v: &av}
 	val := float64(1.2)
-	g.JawsSetFloat(nil, val)
+	if err := g.JawsSetFloat(nil, val); err != nil {
+		t.Error(err)
+	}
 	if g.JawsGetFloat(nil) != val {
 		t.Fail()
+	}
+	if err := g.JawsSetFloat(nil, val); err != ErrValueUnchanged {
+		t.Error(err)
 	}
 }
 
@@ -60,9 +70,14 @@ func Test_atomicSetter_string(t *testing.T) {
 	var av atomic.Value
 	g := atomicSetter{v: &av}
 	val := "str"
-	g.JawsSetString(nil, val)
+	if err := g.JawsSetString(nil, val); err != nil {
+		t.Error(err)
+	}
 	if g.JawsGetString(nil) != val {
 		t.Fail()
+	}
+	if err := g.JawsSetString(nil, val); err != ErrValueUnchanged {
+		t.Error(err)
 	}
 }
 
@@ -70,9 +85,29 @@ func Test_atomicSetter_time(t *testing.T) {
 	var av atomic.Value
 	g := atomicSetter{v: &av}
 	val := time.Now()
-	g.JawsSetTime(nil, val)
+	if err := g.JawsSetTime(nil, val); err != nil {
+		t.Error(err)
+	}
 	if g.JawsGetTime(nil) != val {
 		t.Fail()
+	}
+	if err := g.JawsSetTime(nil, val); err != ErrValueUnchanged {
+		t.Error(err)
+	}
+}
+
+func Test_atomicSetter_any(t *testing.T) {
+	var av atomic.Value
+	g := atomicSetter{v: &av}
+	val := "str"
+	if err := g.JawsSetAny(nil, val); err != nil {
+		t.Error(err)
+	}
+	if g.JawsGetAny(nil) != val {
+		t.Fail()
+	}
+	if err := g.JawsSetAny(nil, val); err != ErrValueUnchanged {
+		t.Error(err)
 	}
 }
 

@@ -10,12 +10,17 @@ func TestFloat_FloatSetter(t *testing.T) {
 	if s.String() != "0" {
 		t.Fail()
 	}
-	s.JawsSetFloat(nil, 1)
+	if err := s.JawsSetFloat(nil, 1); err != nil {
+		t.Error(err)
+	}
 	if s.JawsGetFloat(nil) != 1 {
 		t.Fail()
 	}
 	if s.String() != "1" {
 		t.Fail()
+	}
+	if err := s.JawsSetFloat(nil, 1); err != ErrValueUnchanged {
+		t.Error(err)
 	}
 }
 

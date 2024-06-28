@@ -113,24 +113,6 @@ func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 	}
 }
 
-/*func TestRequest_OutboundOverflowPanicsWithNoLogger(t *testing.T) {
-	th := newTestHelper(t)
-	rq := newTestRequest()
-	rq.expectPanic = true
-	rq.jw.Logger = nil
-	defer rq.Close()
-	rq.Register(Tag("foo"))
-	fillWsCh(rq.outCh)
-	rq.Jaws.Broadcast(Message{Dest: Tag("foo"), What: what.Inner, Data: "bar"})
-	select {
-	case <-th.C:
-		th.Timeout()
-	case <-rq.doneCh:
-		th.Equal(len(rq.outCh), cap(rq.outCh))
-		th.True(rq.panicked)
-	}
-}*/
-
 func TestRequest_Trigger(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest()

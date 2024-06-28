@@ -7,12 +7,17 @@ import (
 
 func TestString_StringSetter(t *testing.T) {
 	var s String
-	s.JawsSetString(nil, "foo")
+	if err := s.JawsSetString(nil, "foo"); err != nil {
+		t.Error(err)
+	}
 	if s.JawsGetString(nil) != "foo" {
 		t.Fail()
 	}
 	if s.String() != s.Get() {
 		t.Fail()
+	}
+	if err := s.JawsSetString(nil, "foo"); err != ErrValueUnchanged {
+		t.Error(err)
 	}
 }
 

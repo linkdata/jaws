@@ -17,7 +17,7 @@ func (ui *UiInputFloat) str() string {
 }
 
 func (ui *UiInputFloat) renderFloatInput(e *Element, w io.Writer, htmltype string, params ...any) error {
-	ui.parseGetter(e, ui.FloatSetter)
+	ui.applyGetter(e, ui.FloatSetter)
 	attrs := e.ApplyParams(params)
 	ui.Last.Store(ui.JawsGetFloat(e))
 	return WriteHtmlInput(w, e.Jid(), htmltype, ui.str(), attrs)
@@ -30,6 +30,7 @@ func (ui *UiInputFloat) JawsUpdate(e *Element) {
 }
 
 func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err error) {
+	err = ErrEventUnhandled
 	if wht == what.Input {
 		var v float64
 		if val != "" {
@@ -37,12 +38,7 @@ func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err er
 				return
 			}
 		}
-		ui.Last.Store(v)
-		err = ui.FloatSetter.JawsSetFloat(e, v)
-		e.Dirty(ui.Tag)
-		if err != nil {
-			return
-		}
+		err = ui.maybeDirty(v, e, ui.FloatSetter.JawsSetFloat(e, v))
 	}
-	return ui.UiHtml.JawsEvent(e, wht, val)
+	return
 }

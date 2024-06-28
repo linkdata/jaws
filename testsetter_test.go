@@ -68,6 +68,9 @@ func (ts *testSetter[T]) JawsSetTime(e *Element, val T) (err error) {
 		close(ts.setCalled)
 	}
 	if err = ts.err; err == nil {
+		if ts.val == val {
+			err = ErrValueUnchanged
+		}
 		ts.val = val
 	}
 	return
@@ -92,6 +95,9 @@ func (ts *testSetter[string]) JawsSetString(e *Element, val string) (err error) 
 		close(ts.setCalled)
 	}
 	if err = ts.err; err == nil {
+		if ts.val == val {
+			err = ErrValueUnchanged
+		}
 		ts.val = val
 	}
 	return
@@ -116,6 +122,9 @@ func (ts *testSetter[bool]) JawsSetBool(e *Element, val bool) (err error) {
 		close(ts.setCalled)
 	}
 	if err = ts.err; err == nil {
+		if ts.val == val {
+			err = ErrValueUnchanged
+		}
 		ts.val = val
 	}
 	return
@@ -140,6 +149,36 @@ func (ts *testSetter[float64]) JawsSetFloat(e *Element, val float64) (err error)
 		close(ts.setCalled)
 	}
 	if err = ts.err; err == nil {
+		if ts.val == val {
+			err = ErrValueUnchanged
+		}
+		ts.val = val
+	}
+	return
+}
+
+func (ts *testSetter[any]) JawsGetAny(e *Element) (val any) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	ts.getCount++
+	if ts.getCount == 1 {
+		close(ts.getCalled)
+	}
+	val = ts.val
+	return
+}
+
+func (ts *testSetter[any]) JawsSetAny(e *Element, val any) (err error) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	ts.setCount++
+	if ts.setCount == 1 {
+		close(ts.setCalled)
+	}
+	if err = ts.err; err == nil {
+		if ts.val == val {
+			err = ErrValueUnchanged
+		}
 		ts.val = val
 	}
 	return

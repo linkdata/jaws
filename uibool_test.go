@@ -20,6 +20,10 @@ func TestUiBool(t *testing.T) {
 		t.Error(x)
 	}
 
+	if x := ui.JawsSetBool(nil, ui.JawsGetBool(nil)); x != ErrValueUnchanged {
+		t.Error(x)
+	}
+
 	ui.L = &rl
 
 	if !ui.JawsGetBool(nil) {

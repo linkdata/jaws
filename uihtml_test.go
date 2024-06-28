@@ -11,25 +11,31 @@ import (
 )
 
 type testJawsEvent struct {
-	msgCh chan string
-	tag   any
+	UiHtml
+	msgCh    chan string
+	tag      any
+	clickerr error
+	eventerr error
 }
 
 func (t *testJawsEvent) JawsClick(e *Element, name string) (err error) {
-	t.msgCh <- fmt.Sprintf("JawsClick: %q", name)
+	if err = t.clickerr; err == nil {
+		t.msgCh <- fmt.Sprintf("JawsClick: %q", name)
+	}
 	return
 }
 
 func (t *testJawsEvent) JawsEvent(e *Element, wht what.What, val string) (err error) {
-	t.msgCh <- fmt.Sprintf("JawsEvent: %s %q", wht, val)
+	if err = t.eventerr; err == nil {
+		t.msgCh <- fmt.Sprintf("JawsEvent: %s %q", wht, val)
+	} else {
+		t.msgCh <- err.Error()
+	}
 	return
 }
 
 func (t *testJawsEvent) JawsGetTag(*Request) (tag any) {
-	if t.tag != nil {
-		return t.tag
-	}
-	return nil
+	return t.tag
 }
 
 func (t *testJawsEvent) JawsRender(e *Element, w io.Writer, params []any) error {
@@ -133,5 +139,54 @@ func TestUiHtml_JawsEvent(t *testing.T) {
 	}
 	if x := sb.String(); x != "[attr]" {
 		t.Error(x)
+	}
+}
+
+func Test_JawsEvent_ClickUnhandled(t *testing.T) {
+	th := newTestHelper(t)
+	nextJid = 0
+	rq := newTestRequest()
+	defer rq.Close()
+
+	msgCh := make(chan string, 1)
+	defer close(msgCh)
+	je := &testJawsEvent{msgCh: msgCh}
+
+	id := rq.Register(Tag("zomg"), je, "attr1", []string{"attr2"}, template.HTMLAttr("attr3"), []template.HTMLAttr{"attr4"})
+
+	je.clickerr = ErrEventUnhandled
+	rq.inCh <- wsMsg{Data: "name", Jid: id, What: what.Click}
+	select {
+	case <-th.C:
+		th.Timeout()
+	case s := <-msgCh:
+		if s != "JawsEvent: Click \"name\"" {
+			t.Error(s)
+		}
+	}
+}
+
+func Test_JawsEvent_AllUnhandled(t *testing.T) {
+	th := newTestHelper(t)
+	nextJid = 0
+	rq := newTestRequest()
+	defer rq.Close()
+
+	msgCh := make(chan string, 1)
+	defer close(msgCh)
+	je := &testJawsEvent{msgCh: msgCh}
+
+	id := rq.Register(Tag("zomg"), je, "attr1", []string{"attr2"}, template.HTMLAttr("attr3"), []template.HTMLAttr{"attr4"})
+
+	je.clickerr = ErrEventUnhandled
+	je.eventerr = ErrEventUnhandled
+	rq.inCh <- wsMsg{Data: "name", Jid: id, What: what.Click}
+	select {
+	case <-th.C:
+		th.Timeout()
+	case s := <-msgCh:
+		if s != ErrEventUnhandled.Error() {
+			t.Error(s)
+		}
 	}
 }

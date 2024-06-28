@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -45,6 +46,17 @@ func (e *Element) Jid() jid.Jid {
 // Ui returns the UI object.
 func (e *Element) Ui() UI {
 	return e.ui
+}
+
+func (e *Element) maybeDirty(tag any, err error) (bool, error) {
+	switch err {
+	case nil:
+		e.Dirty(tag)
+		return true, nil
+	case ErrValueUnchanged:
+		return false, nil
+	}
+	return false, err
 }
 
 func (e *Element) renderDebug(w io.Writer) {
@@ -193,8 +205,31 @@ func (e *Element) Remove(htmlId string) {
 	e.queue(what.Remove, htmlId)
 }
 
+// JsSet sends a Javascript variable update to the browser.
+func (e *Element) JsSet(val any) (err error) {
+	var b []byte
+	if b, err = json.Marshal(val); err == nil {
+		e.queue(what.Set, string(b))
+	}
+	return
+}
+
+// JsCall queues a Javascript function invocation to be sent to the browser.
+//
+// The browser will respond by setting this Element's value to the
+// function return value (unless there was a Javascript exception).
+func (e *Element) JsCall(param any) (err error) {
+	var b []byte
+	if b, err = json.Marshal(param); err == nil {
+		e.queue(what.Call, string(b))
+	}
+	return
+}
+
 // ApplyParams parses the parameters passed to UI() when creating a new Element,
-// adding UI tags, setting event handlers and returning a list of HTML attributes.
+// adding UI tags, adding any additional event handlers found.
+//
+// Returns the list of HTML attributes found, if any.
 func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) {
 	tags, handlers, attrs := ParseParams(params)
 	if !e.deleted {
@@ -203,6 +238,29 @@ func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) {
 		for _, s := range attrs {
 			attr := template.HTMLAttr(s) // #nosec G203
 			retv = append(retv, attr)
+		}
+	}
+	return
+}
+
+// ApplyGetter examines getter, and if it's not nil, either adds it
+// as a Tag, or, if it is a TagGetter, adds the result of that as a Tag.
+// If getter is a ClickHandler or an EventHandler, it's added to the
+// list of handlers for the Element.
+//
+// Returns the Tag added, or nil if getter was nil.
+func (e *Element) ApplyGetter(getter any) (tag any) {
+	if getter != nil {
+		tag = getter
+		if tagger, ok := getter.(TagGetter); ok {
+			tag = tagger.JawsGetTag(e.Request)
+		}
+		e.Tag(tag)
+		if ch, ok := getter.(ClickHandler); ok {
+			e.handlers = append(e.handlers, clickHandlerWapper{ch})
+		}
+		if eh, ok := getter.(EventHandler); ok {
+			e.handlers = append(e.handlers, eh)
 		}
 	}
 	return

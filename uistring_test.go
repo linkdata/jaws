@@ -20,6 +20,10 @@ func TestUiString(t *testing.T) {
 		t.Error(x)
 	}
 
+	if x := ui.JawsSetString(nil, ui.JawsGetString(nil)); x != ErrValueUnchanged {
+		t.Error(x)
+	}
+
 	ui.L = &rl
 
 	if ui.JawsGetHtml(nil) != "foo&lt;" {

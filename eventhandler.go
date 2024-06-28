@@ -43,3 +43,14 @@ func callEventHandler(obj any, e *Element, wht what.What, val string) (err error
 	}
 	return ErrEventUnhandled
 }
+
+func callEventHandlers(ui any, e *Element, wht what.What, val string) (err error) {
+	if err = callEventHandler(ui, e, wht, val); err == ErrEventUnhandled {
+		for _, h := range e.handlers {
+			if err = callEventHandler(h, e, wht, val); err != ErrEventUnhandled {
+				return
+			}
+		}
+	}
+	return
+}

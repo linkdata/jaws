@@ -19,6 +19,13 @@ func (s *String) Set(val string) {
 	s.mu.Unlock()
 }
 
+func (s *String) Swap(val string) (old string) {
+	s.mu.Lock()
+	old, s.Value = s.Value, val
+	s.mu.Unlock()
+	return
+}
+
 func (s *String) Get() (val string) {
 	s.mu.Lock()
 	val = s.Value
@@ -39,9 +46,11 @@ func (s *String) JawsGetString(*Element) string {
 	return s.String()
 }
 
-func (s *String) JawsSetString(e *Element, val string) error {
-	s.Set(val)
-	return nil
+func (s *String) JawsSetString(e *Element, val string) (err error) {
+	if s.Swap(val) == val {
+		err = ErrValueUnchanged
+	}
+	return
 }
 
 func (s *String) MarshalText() ([]byte, error) {

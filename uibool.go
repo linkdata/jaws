@@ -25,7 +25,11 @@ func (ui UiBool) JawsGetBool(e *Element) (val bool) {
 
 func (ui UiBool) JawsSetBool(e *Element, val bool) (err error) {
 	ui.L.Lock()
-	*ui.P = val
+	if *ui.P == val {
+		err = ErrValueUnchanged
+	} else {
+		*ui.P = val
+	}
 	ui.L.Unlock()
 	return
 }

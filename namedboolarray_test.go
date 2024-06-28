@@ -85,4 +85,5 @@ func Test_NamedBoolArray(t *testing.T) {
 	is.Equal(nba.JawsGetString(e), "2")
 	is.NoErr(nba.JawsSetString(e, "1"))
 	is.Equal(nba.JawsGetString(e), "1")
+	is.Equal(nba.JawsSetString(e, "1"), ErrValueUnchanged)
 }

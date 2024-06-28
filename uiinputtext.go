@@ -12,7 +12,7 @@ type UiInputText struct {
 }
 
 func (ui *UiInputText) renderStringInput(e *Element, w io.Writer, htmltype string, params ...any) error {
-	ui.parseGetter(e, ui.StringSetter)
+	ui.applyGetter(e, ui.StringSetter)
 	attrs := e.ApplyParams(params)
 	v := ui.JawsGetString(e)
 	ui.Last.Store(v)
@@ -26,13 +26,9 @@ func (ui *UiInputText) JawsUpdate(e *Element) {
 }
 
 func (ui *UiInputText) JawsEvent(e *Element, wht what.What, val string) (err error) {
+	err = ErrEventUnhandled
 	if wht == what.Input {
-		ui.Last.Store(val)
-		err = ui.StringSetter.JawsSetString(e, val)
-		e.Dirty(ui.Tag)
-		if err != nil {
-			return
-		}
+		err = ui.maybeDirty(val, e, ui.StringSetter.JawsSetString(e, val))
 	}
-	return ui.UiHtml.JawsEvent(e, wht, val)
+	return
 }

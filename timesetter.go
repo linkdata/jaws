@@ -8,6 +8,7 @@ import (
 
 type TimeSetter interface {
 	JawsGetTime(e *Element) time.Time
+	// JawsSetTime may return ErrValueUnchanged to indicate value was already set.
 	JawsSetTime(e *Element, v time.Time) (err error)
 }
 

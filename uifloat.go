@@ -27,7 +27,11 @@ func (ui UiFloat) JawsGetFloat(e *Element) (val float64) {
 
 func (ui UiFloat) JawsSetFloat(e *Element, val float64) (err error) {
 	ui.L.Lock()
-	*ui.P = val
+	if *ui.P == val {
+		err = ErrValueUnchanged
+	} else {
+		*ui.P = val
+	}
 	ui.L.Unlock()
 	return
 }

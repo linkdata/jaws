@@ -11,12 +11,17 @@ func TestBool_BoolSetter(t *testing.T) {
 	if s.String() != "false" {
 		t.Fail()
 	}
-	s.JawsSetBool(nil, true)
+	if err := s.JawsSetBool(nil, true); err != nil {
+		t.Error(err)
+	}
 	if s.JawsGetBool(nil) != true {
 		t.Fail()
 	}
 	if s.String() != "true" {
 		t.Fail()
+	}
+	if err := s.JawsSetBool(nil, true); err != ErrValueUnchanged {
+		t.Error(err)
 	}
 }
 

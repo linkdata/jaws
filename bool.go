@@ -24,6 +24,13 @@ func (s *Bool) Get() (val bool) {
 	return
 }
 
+func (s *Bool) Swap(val bool) (old bool) {
+	s.mu.Lock()
+	old, s.Value = s.Value, val
+	s.mu.Unlock()
+	return
+}
+
 func (s *Bool) String() string {
 	if s.Get() {
 		return "true"
@@ -36,7 +43,9 @@ func (s *Bool) JawsGetBool(*Element) bool {
 }
 
 func (s *Bool) JawsSetBool(e *Element, val bool) error {
-	s.Set(val)
+	if s.Swap(val) == val {
+		return ErrValueUnchanged
+	}
 	return nil
 }
 

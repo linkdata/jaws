@@ -7,12 +7,18 @@ type What uint8
 
 const (
 	invalid What = iota
+
 	// Commands not associated with an Element
 	Update   // Used for update scheduling
 	Reload   // Tells browser to reload the current URL
 	Redirect // Tells browser to load another URL
 	Alert    // Display (if using Bootstrap) an alert message
 	Order    // Re-order a set of elements
+	Call     // Call javascript function
+	Set      // Set javascript variable
+
+	separator
+
 	// Element manipulation
 	Inner   // Set the elements inner HTML
 	Delete  // Delete the element
@@ -33,11 +39,11 @@ const (
 )
 
 func (w What) IsCommand() bool {
-	return w <= Order && w.IsValid()
+	return w < separator && w.IsValid()
 }
 
 func (w What) IsValid() bool {
-	return w != invalid
+	return w != invalid && w != separator
 }
 
 func Parse(s string) What {
