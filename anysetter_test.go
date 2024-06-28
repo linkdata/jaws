@@ -40,15 +40,6 @@ func Test_makeAnySetter(t *testing.T) {
 			tag:  nil,
 		},
 		{
-			name: "unchanged",
-			v:    &av,
-			want: atomicSetter{&av},
-			in:   val,
-			out:  val,
-			tag:  &av,
-			err:  ErrValueUnchanged,
-		},
-		{
 			name: "*atomic.Value",
 			v:    &av,
 			want: atomicSetter{&av},

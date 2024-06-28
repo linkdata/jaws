@@ -96,6 +96,21 @@ func Test_atomicSetter_time(t *testing.T) {
 	}
 }
 
+func Test_atomicSetter_any(t *testing.T) {
+	var av atomic.Value
+	g := atomicSetter{v: &av}
+	val := "str"
+	if err := g.JawsSetAny(nil, val); err != nil {
+		t.Error(err)
+	}
+	if g.JawsGetAny(nil) != val {
+		t.Fail()
+	}
+	if err := g.JawsSetAny(nil, val); err != ErrValueUnchanged {
+		t.Error(err)
+	}
+}
+
 func Test_atomicSetter_JawsGetHtml(t *testing.T) {
 	tests := []struct {
 		name string
