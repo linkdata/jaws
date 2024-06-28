@@ -53,7 +53,7 @@ func wsParse(txt []byte) (wsMsg, bool) {
 				if wht := what.Parse(string(txt[0:nl1])); wht.IsValid() {
 					if id := jid.ParseString(string(txt[nl1+1 : nl2])); id.IsValid() {
 						data := string(txt[nl2+1 : len(txt)-1])
-						if txt[nl2+1] == '"' {
+						if wht != what.Set && txt[nl2+1] == '"' {
 							var err error
 							if data, err = strconv.Unquote(data); err != nil {
 								return wsMsg{}, false

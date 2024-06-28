@@ -41,9 +41,6 @@ func TestJsString_JawsEvent(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 
-	msgCh := make(chan string, 1)
-	defer close(msgCh)
-
 	val := "text'1"
 	ts := newTestSetter(val)
 	th.NoErr(rq.JsString(ts, "varname"))

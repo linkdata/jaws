@@ -332,7 +332,10 @@ function jawsVar(name, data, operation) {
 				data = obj[lastkey](data);
 				break;
 			case 'Set':
-				return (obj[lastkey] = data);
+				if (typeof obj[lastkey] !== 'function') {
+					obj[lastkey] = data;
+				}
+				return data;
 			default:
 				throw "jaws: unknown operation: " + operation;
 		}
