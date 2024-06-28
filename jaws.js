@@ -315,7 +315,7 @@ function jawsVar(name, data, operation) {
 		var lastkey = keys[keys.length - 1];
 		var i;
 		for (i = 0; i < keys.length - 1; i++) {
-			if (!(keys[i] in obj)) {
+			if (!obj.hasOwnProperty(keys[i])) {
 				throw "jaws: object undefined: " + name;
 			}
 			obj = obj[keys[i]];
