@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/linkdata/jaws/what"
-	"nhooyr.io/websocket"
 )
 
 type testServer struct {

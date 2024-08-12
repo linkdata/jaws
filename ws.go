@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 func (rq *Request) startServe() (ok bool) {

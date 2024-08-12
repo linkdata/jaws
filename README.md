@@ -210,5 +210,5 @@ pass assuming you can reliably prevent the genuine WebSocket request.
 
 We try to minimize dependencies outside of the standard library.
 
-* Depends on https://github.com/nhooyr/websocket for WebSocket functionality.
+* Depends on https://github.com/coder/websocket for WebSocket functionality.
 * Depends on https://github.com/linkdata/deadlock if race detection is enabled.
