@@ -1,7 +1,6 @@
 github.com/coder/websocket v1.8.12 h1:5bUXkEPPIbewrnkU8LTCLVaxi4N4J8ahufH2vlo4NAo=
 github.com/coder/websocket v1.8.12/go.mod h1:LNVeNrXQZfe5qhS9ALED3uA+l5pPqvwXg3CKoDBB2gs=
-github.com/linkdata/deadlock v0.4.0 h1:OM4Vqn5LinkHiCy9IqcA5aJ7zKU1kv5XhC7kiW4Lckc=
-github.com/linkdata/deadlock v0.4.0/go.mod h1:MvI1hZGGcTghOKTcL6lATkgXkVVIOwHZ62l1Y0xprUI=
-github.com/petermattis/goid v0.0.0-20230317030725-371a4b8eda08/go.mod h1:pxMtw7cyUw6B2bRH0ZBANSPg+AoSud1I1iyJHI69jH4=
-github.com/petermattis/goid v0.0.0-20231207134359-e60b3f734c67 h1:jik8PHtAIsPlCRJjJzl4udgEf7hawInF9texMeO2jrU=
-github.com/petermattis/goid v0.0.0-20231207134359-e60b3f734c67/go.mod h1:pxMtw7cyUw6B2bRH0ZBANSPg+AoSud1I1iyJHI69jH4=
+github.com/linkdata/deadlock v0.5.0 h1:tFsL/6ZEzd8ZTmd8s7dL9xLHZhrFpq7yYMjISyXORjk=
+github.com/linkdata/deadlock v0.5.0/go.mod h1:M3Td2tmYASdLm6xblKGlFvfu8SI+nPjrB7mDeFDEz/k=
+github.com/petermattis/goid v0.0.0-20240813172612-4fcff4a6cae7 h1:Dx7Ovyv/SFnMFw3fD4oEoeorXc6saIiQ23LrGLth0Gw=
+github.com/petermattis/goid v0.0.0-20240813172612-4fcff4a6cae7/go.mod h1:pxMtw7cyUw6B2bRH0ZBANSPg+AoSud1I1iyJHI69jH4=
