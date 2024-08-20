@@ -89,7 +89,7 @@ func TestRequest_InsideTemplate(t *testing.T) {
 	}
 }
 
-func BenchmarkRequest_InsideTemplate(b *testing.B) {
+func BenchmarkPageRender(b *testing.B) {
 	jw := New()
 	defer jw.Close()
 
