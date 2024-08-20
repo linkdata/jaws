@@ -75,11 +75,10 @@ func TestRequest_JawsRender_DebugOutput(t *testing.T) {
 }
 
 func TestRequest_InsideTemplate(t *testing.T) {
-	jw := New()
-	defer jw.Close()
-
 	var buf bytes.Buffer
-	tp := newTestPage(jw)
+	tr := newTestRequest()
+	defer tr.Close()
+	tp := newTestPage(tr)
 	err := tp.render(&buf)
 	if err != nil {
 		t.Fatal(err)
@@ -90,12 +89,30 @@ func TestRequest_InsideTemplate(t *testing.T) {
 }
 
 func BenchmarkPageRender(b *testing.B) {
-	jw := New()
-	defer jw.Close()
+	tr := newTestRequest()
+	defer tr.Close()
 
-	tp := newTestPage(jw)
+	tp := newTestPage(tr)
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		var buf bytes.Buffer
 		tp.render(&buf)
+	}
+}
+
+func BenchmarkPageUpdate(b *testing.B) {
+	tr := newTestRequest()
+	defer tr.Close()
+	tp := newTestPage(tr)
+	var buf bytes.Buffer
+	tp.render(&buf)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var x []byte
+		tp.updateElems()
+		for _, wsmsg := range tr.rq.wsQueue {
+			x = wsmsg.Append(x)
+		}
+		tr.rq.wsQueue = tr.rq.wsQueue[:0]
 	}
 }

@@ -3,8 +3,6 @@ package jaws
 import (
 	"html/template"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"time"
 )
 
@@ -38,7 +36,7 @@ const testPageNestedTmplText = "<x id=\"{{$.Jid}}\" {{$.Attrs}}>" +
 	"</x>"
 
 const testPageWant = "(" +
-	"/path" +
+	"/" +
 	"<a id=\"Jid.5\">a</a>" +
 	"<button id=\"Jid.6\" type=\"button\">button</button>" +
 	"<input id=\"Jid.7\" type=\"checkbox\" checkbox checked>" +
@@ -56,7 +54,7 @@ const testPageWant = "(" +
 	"<span id=\"Jid.19\">span</span>" +
 	"<tbody id=\"Jid.20\"></tbody>" +
 	"<td id=\"Jid.21\">td</td>" +
-	"<x id=\"Jid.22\" someattr>/pathdot<span id=\"Jid.23\">span2</span></x>" +
+	"<x id=\"Jid.22\" someattr>/dot<span id=\"Jid.23\">span2</span></x>" +
 	"<input id=\"Jid.24\" type=\"text\" value=\"bar\">" +
 	"<textarea id=\"Jid.25\">bar</textarea>" +
 	"<tr id=\"Jid.26\">tr</tr>" +
@@ -64,7 +62,6 @@ const testPageWant = "(" +
 
 type testPage struct {
 	RequestWriter
-	*Jaws
 	Normal       *template.Template
 	TheBool      BoolSetter
 	TheContainer Container
@@ -75,33 +72,38 @@ type testPage struct {
 	TheDot       any
 }
 
-func newTestPage(jw *Jaws) *testPage {
+func newTestPage(tr *testRequest) *testPage {
 	testDate, _ := time.Parse(ISO8601, "1901-02-03")
-	jw.AddTemplateLookuper(template.Must(template.New("nested").Parse(testPageNestedTmplText)))
+	tr.jw.AddTemplateLookuper(template.Must(template.New("nested").Parse(testPageNestedTmplText)))
 	tmpl := template.Must(template.New("normal").Parse(testPageTmplText))
 
 	tp := &testPage{
-		Jaws:         jw,
-		TheBool:      newTestSetter(true),
-		TheContainer: &testContainer{},
-		TheTime:      newTestSetter(testDate),
-		TheNumber:    newTestSetter(float64(1.2)),
-		TheString:    newTestSetter("bar"),
+		RequestWriter: RequestWriter{rq: tr.rq},
+		Normal:        tmpl,
+		TheBool:       newTestSetter(true),
+		TheContainer:  &testContainer{},
+		TheTime:       newTestSetter(testDate),
+		TheNumber:     newTestSetter(float64(1.2)),
+		TheString:     newTestSetter("bar"),
 		TheSelector: &testNamedBoolArray{
 			setCalled:      make(chan struct{}),
 			NamedBoolArray: NewNamedBoolArray(),
 		},
 		TheDot: "dot",
-		Normal: tmpl,
 	}
 
 	return tp
 }
 
 func (tp *testPage) render(w io.Writer) (err error) {
-	hr := httptest.NewRequest(http.MethodGet, "/path", nil)
-	rq := tp.Jaws.NewRequest(hr)
 	nextJid = 4
-	tp.RequestWriter = RequestWriter{rq: rq, Writer: w}
+	tp.RequestWriter.Writer = w
 	return tp.Normal.Execute(w, tp)
+}
+
+func (tp *testPage) updateElems() {
+	rq := tp.RequestWriter.rq
+	for _, elem := range rq.elems {
+		elem.JawsUpdate()
+	}
 }
