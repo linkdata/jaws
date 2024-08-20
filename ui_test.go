@@ -102,12 +102,12 @@ func TestRequest_InsideTemplate(t *testing.T) {
 		"{{$.Span `span`}}" +
 		"{{$.Tbody .TheContainer}}" +
 		"{{$.Td `td`}}" +
-		"{{$.Template `nested` .TheDot}}" +
+		"{{$.Template `nested` .TheDot `someattr`}}" +
 		"{{$.Text .TheString}}" +
 		"{{$.Textarea .TheString}}" +
 		"{{$.Tr `tr`}}" +
 		")"
-	const nestedTmplText = "<x id=\"{{$.Jid}}\">" +
+	const nestedTmplText = "<x id=\"{{$.Jid}}\" {{$.Attrs}}>" +
 		"{{$.Initial.URL.Path}}" +
 		"{{with .Dot}}{{.}}{{$.Span `span2`}}{{end}}" +
 		"</x>"
@@ -130,7 +130,7 @@ func TestRequest_InsideTemplate(t *testing.T) {
 		"<span id=\"Jid.19\">span</span>" +
 		"<tbody id=\"Jid.20\"></tbody>" +
 		"<td id=\"Jid.21\">td</td>" +
-		"<x id=\"Jid.22\">/pathdot<span id=\"Jid.23\">span2</span></x>" +
+		"<x id=\"Jid.22\" someattr>/pathdot<span id=\"Jid.23\">span2</span></x>" +
 		"<input id=\"Jid.24\" type=\"text\" value=\"bar\">" +
 		"<textarea id=\"Jid.25\">bar</textarea>" +
 		"<tr id=\"Jid.26\">tr</tr>" +
