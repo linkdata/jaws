@@ -3,13 +3,9 @@ package jaws
 import (
 	"bytes"
 	"errors"
-	"html/template"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/linkdata/deadlock"
 )
@@ -81,95 +77,25 @@ func TestRequest_JawsRender_DebugOutput(t *testing.T) {
 func TestRequest_InsideTemplate(t *testing.T) {
 	jw := New()
 	defer jw.Close()
-	nextJid = 4
 
-	const tmplText = "(" +
-		"{{$.Initial.URL.Path}}" +
-		"{{$.A `a`}}" +
-		"{{$.Button `button`}}" +
-		"{{$.Checkbox .TheBool `checkbox`}}" +
-		"{{$.Container `container` .TheContainer}}" +
-		"{{$.Date .TheTime `date`}}" +
-		"{{$.Div `div`}}" +
-		"{{$.Img `img`}}" +
-		"{{$.Label `label`}}" +
-		"{{$.Li `li`}}" +
-		"{{$.Number .TheNumber}}" +
-		"{{$.Password .TheString}}" +
-		"{{$.Radio .TheBool}}" +
-		"{{$.Range .TheNumber}}" +
-		"{{$.Select .TheSelector}}" +
-		"{{$.Span `span`}}" +
-		"{{$.Tbody .TheContainer}}" +
-		"{{$.Td `td`}}" +
-		"{{$.Template `nested` .TheDot `someattr`}}" +
-		"{{$.Text .TheString}}" +
-		"{{$.Textarea .TheString}}" +
-		"{{$.Tr `tr`}}" +
-		")"
-	const nestedTmplText = "<x id=\"{{$.Jid}}\" {{$.Attrs}}>" +
-		"{{$.Initial.URL.Path}}" +
-		"{{with .Dot}}{{.}}{{$.Span `span2`}}{{end}}" +
-		"</x>"
-	const want = "(" +
-		"/path" +
-		"<a id=\"Jid.5\">a</a>" +
-		"<button id=\"Jid.6\" type=\"button\">button</button>" +
-		"<input id=\"Jid.7\" type=\"checkbox\" checkbox checked>" +
-		"<container id=\"Jid.8\"></container>" +
-		"<input id=\"Jid.9\" type=\"date\" value=\"1901-02-03\" date>" +
-		"<div id=\"Jid.10\">div</div>" +
-		"<img id=\"Jid.11\" src=\"img\">" +
-		"<label id=\"Jid.12\">label</label>" +
-		"<li id=\"Jid.13\">li</li>" +
-		"<input id=\"Jid.14\" type=\"number\" value=\"1.2\">" +
-		"<input id=\"Jid.15\" type=\"password\" value=\"bar\">" +
-		"<input id=\"Jid.16\" type=\"radio\" checked>" +
-		"<input id=\"Jid.17\" type=\"range\" value=\"1.2\">" +
-		"<select id=\"Jid.18\"></select>" +
-		"<span id=\"Jid.19\">span</span>" +
-		"<tbody id=\"Jid.20\"></tbody>" +
-		"<td id=\"Jid.21\">td</td>" +
-		"<x id=\"Jid.22\" someattr>/pathdot<span id=\"Jid.23\">span2</span></x>" +
-		"<input id=\"Jid.24\" type=\"text\" value=\"bar\">" +
-		"<textarea id=\"Jid.25\">bar</textarea>" +
-		"<tr id=\"Jid.26\">tr</tr>" +
-		")"
-
-	jw.AddTemplateLookuper(template.Must(template.New("nested").Parse(nestedTmplText)))
-	tmpl := template.Must(template.New("normal").Parse(tmplText))
-	w := httptest.NewRecorder()
-	w.Body = &bytes.Buffer{}
-	hr := httptest.NewRequest(http.MethodGet, "/path", nil)
-	rq := jw.NewRequest(hr)
-	testDate, _ := time.Parse(ISO8601, "1901-02-03")
-	dot := struct {
-		RequestWriter
-		TheBool      BoolSetter
-		TheContainer Container
-		TheTime      TimeSetter
-		TheNumber    FloatSetter
-		TheString    StringSetter
-		TheSelector  SelectHandler
-		TheDot       any
-	}{
-		RequestWriter: RequestWriter{rq, w},
-		TheBool:       newTestSetter(true),
-		TheContainer:  &testContainer{},
-		TheTime:       newTestSetter(testDate),
-		TheNumber:     newTestSetter(float64(1.2)),
-		TheString:     newTestSetter("bar"),
-		TheSelector: &testNamedBoolArray{
-			setCalled:      make(chan struct{}),
-			NamedBoolArray: NewNamedBoolArray(),
-		},
-		TheDot: "dot",
-	}
-	if err := tmpl.Execute(w, dot); err != nil {
+	var buf bytes.Buffer
+	tp := newTestPage(jw)
+	err := tp.render(&buf)
+	if err != nil {
 		t.Fatal(err)
 	}
-	w.Flush()
-	if x := w.Body.String(); x != want {
-		t.Errorf("mismatch:\nwant %q\n got %q", want, x)
+	if x := buf.String(); x != testPageWant {
+		t.Errorf("mismatch:\nwant %q\n got %q", testPageWant, x)
+	}
+}
+
+func BenchmarkRequest_InsideTemplate(b *testing.B) {
+	jw := New()
+	defer jw.Close()
+
+	tp := newTestPage(jw)
+	for i := 0; i < b.N; i++ {
+		var buf bytes.Buffer
+		tp.render(&buf)
 	}
 }
