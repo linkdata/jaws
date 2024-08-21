@@ -338,7 +338,10 @@ func (jw *Jaws) NewSession(w http.ResponseWriter, hr *http.Request) (sess *Sessi
 		oldSess.Clear()
 		oldSess.Close()
 	}
+	return jw.newSession(w, hr)
+}
 
+func (jw *Jaws) newSession(w http.ResponseWriter, hr *http.Request) (sess *Session) {
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	for sess == nil {
