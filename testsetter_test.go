@@ -49,6 +49,33 @@ func (ts *testSetter[T]) GetCount() (n int) {
 	return
 }
 
+func (ts *testSetter[T]) JawsGet(e *Element) (val T) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	ts.getCount++
+	if ts.getCount == 1 {
+		close(ts.getCalled)
+	}
+	val = ts.val
+	return
+}
+
+func (ts *testSetter[T]) JawsSet(e *Element, val T) (err error) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	ts.setCount++
+	if ts.setCount == 1 {
+		close(ts.setCalled)
+	}
+	if err = ts.err; err == nil {
+		if ts.val == val {
+			err = ErrValueUnchanged
+		}
+		ts.val = val
+	}
+	return
+}
+
 func (ts *testSetter[T]) JawsGetTime(e *Element) (val T) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()

@@ -32,6 +32,26 @@ func (g simpleGetter) JawsGetString(e *Element) string {
 	return g.Value
 }
 
+type simpleGetterT struct {
+	Value string
+}
+
+func (g simpleGetterT) JawsGet(e *Element) string {
+	return g.Value
+}
+
+type simpleSetterT struct {
+	Value string
+}
+
+func (g simpleSetterT) JawsGet(e *Element) string {
+	return g.Value
+}
+
+func (g simpleSetterT) JawsSet(e *Element, v string) error {
+	return nil
+}
+
 type simpleNotagGetter struct {
 	v string
 }
@@ -51,7 +71,8 @@ func Test_makeStringSetter(t *testing.T) {
 	ts := newTestSetter(val)
 
 	sg := simpleGetter{Value: val}
-
+	sgt := simpleGetterT{Value: val}
+	sst := simpleSetterT{Value: val}
 	sng := simpleNotagGetter{v: val}
 
 	tests := []struct {
@@ -84,6 +105,21 @@ func Test_makeStringSetter(t *testing.T) {
 			out:  val,
 			err:  ErrValueNotSettable,
 			tag:  sg,
+		},
+		{
+			name: "Setter[string]",
+			v:    sst,
+			want: stringSetterT{sst},
+			out:  val,
+			tag:  sst,
+		},
+		{
+			name: "Getter[string]",
+			v:    sgt,
+			want: stringGetterT{sgt},
+			out:  val,
+			err:  ErrValueNotSettable,
+			tag:  sgt,
 		},
 		{
 			name: "string",

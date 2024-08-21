@@ -26,6 +26,7 @@ func Test_makeStringGetter_panic(t *testing.T) {
 func Test_makeStringGetter(t *testing.T) {
 	val := "<span>"
 	ts := newTestSetter(val)
+	sgt := simpleGetterT{Value: val}
 
 	tests := []struct {
 		name string
@@ -41,6 +42,13 @@ func Test_makeStringGetter(t *testing.T) {
 			want: ts,
 			out:  val,
 			tag:  ts,
+		},
+		{
+			name: "Getter[string]",
+			v:    sgt,
+			want: stringGetterT{sgt},
+			out:  val,
+			tag:  sgt,
 		},
 		{
 			name: "string",
