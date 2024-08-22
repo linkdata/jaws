@@ -71,6 +71,6 @@ func NewJsVar[T comparable](name string, setter Setter[T]) (v JsVar[T]) {
 	}
 }
 
-func (rq RequestWriter) JsVar(jsVar VarNamer) error {
-	return rq.UI(jsVar.(UI), nil)
+func (rq RequestWriter) JsVar(jsVar VarNamer, params ...any) error {
+	return rq.UI(jsVar.(UI), params...)
 }
