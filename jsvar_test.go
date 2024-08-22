@@ -29,7 +29,7 @@ func Test_JsVar_Render(t *testing.T) {
 	bind := Bind(&mu, &val)
 	dot := NewJsVar(varname, bind)
 
-	if x := dot.JawsVarName(); x != varname {
+	if x := dot.JawsVarInit(nil); x != varname {
 		t.Error(x)
 	}
 

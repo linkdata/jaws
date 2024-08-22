@@ -9,20 +9,22 @@ import (
 	"github.com/linkdata/jaws/what"
 )
 
-type VarNamer interface {
-	JawsVarName() string
+type VarIniter interface {
+	// JawsVarInit is called before rendering. Return the Javascript variable name path.
+	JawsVarInit(e *Element) string
 }
 
 type JsVar[T comparable] struct {
-	Name string // Javascript variable name path
 	Setter[T]
+	name string // Javascript variable name path
 }
 
-func (ui JsVar[T]) JawsVarName() string {
-	return ui.Name
+func (ui JsVar[T]) JawsVarInit(e *Element) string {
+	return ui.name
 }
 
 func (ui JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error) {
+	name := ui.JawsVarInit(e)
 	e.ApplyGetter(ui.Setter)
 	attrs := e.ApplyParams(params)
 	var b []byte
@@ -38,7 +40,7 @@ func (ui JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error)
 	}
 
 	b = append(b, ` data-jawsname=`...)
-	b = strconv.AppendQuote(b, ui.Name)
+	b = strconv.AppendQuote(b, name)
 	b = appendAttrs(b, attrs)
 	b = append(b, ` hidden></div>`...)
 	_, err = w.Write(b)
@@ -66,11 +68,11 @@ func (ui JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) 
 
 func NewJsVar[T comparable](name string, setter Setter[T]) (v JsVar[T]) {
 	return JsVar[T]{
-		Name:   name,
 		Setter: setter,
+		name:   name,
 	}
 }
 
-func (rq RequestWriter) JsVar(jsVar VarNamer, params ...any) error {
+func (rq RequestWriter) JsVar(jsVar VarIniter, params ...any) error {
 	return rq.UI(jsVar.(UI), params...)
 }
