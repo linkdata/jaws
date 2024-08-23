@@ -87,7 +87,7 @@ function jawsAttach(elem) {
 		var name = elem.dataset.jawsname;
 		window.jawsNames[name] = elem.id;
 		if (elem.hasAttribute("data-jawsdata")) {
-			jawsVar(name, elem.dataset.jawsdata, 'Set');
+			jawsVar(name, JSON.parse(elem.dataset.jawsdata), 'Set');
 		}
 		return;
 	}

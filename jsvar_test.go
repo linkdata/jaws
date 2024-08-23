@@ -11,29 +11,48 @@ import (
 	"github.com/linkdata/jaws/what"
 )
 
-func Test_JsVar_Render(t *testing.T) {
+const varname = "myjsvar"
+
+type valtype struct {
+	String string
+	Number float64
+}
+
+type varmaker struct {
+	mu  sync.Mutex
+	val string
+	err error
+}
+
+func (vm *varmaker) JawsVarMake(rq *Request) (UI, error) {
+	bind := Bind(&vm.mu, &vm.val)
+	return NewJsVar(varname, bind), vm.err
+}
+
+type variniter[T comparable] struct {
+	JsVar[T]
+}
+
+func (vm *variniter[T]) JawsVarInit(rq *Request) error {
+	vm.JsVar.Name = varname
+	return nil
+}
+
+func Test_JsVar_VarIniter(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 
-	const varname = "myjsvar"
 	nextJid = 0
-	tmpltext := `{{$.JsVar .Dot}}`
-	rq.jw.AddTemplateLookuper(template.Must(template.New("jsvartemplate").Parse(tmpltext)))
+	rq.jw.AddTemplateLookuper(template.Must(template.New("jsvartemplate").Parse(`{{$.JsVar .Dot}}`)))
 
-	type valtype struct {
-		String string
-		Number float64
-	}
 	var mu sync.RWMutex
 	var val valtype
 	bind := Bind(&mu, &val)
-	dot := NewJsVar(varname, bind)
+	jsv := NewJsVar("", bind)
+	dot := &variniter[valtype]{JsVar: jsv}
+	elem := rq.NewElement(dot)
 
-	if x := dot.JawsVarInit(nil); x != varname {
-		t.Error(x)
-	}
-
-	if err := dot.JawsSet(nil, valtype{String: "text", Number: 1.23}); err != nil {
+	if err := dot.JawsSet(elem, valtype{String: "text", Number: 1.23}); err != nil {
 		t.Error(err)
 	}
 
@@ -42,9 +61,36 @@ func Test_JsVar_Render(t *testing.T) {
 	}
 
 	got := string(rq.BodyHtml())
-	want := `<div id="Jid.2" data-jawsdata='{"String":"text","Number":1.23}' data-jawsname="myjsvar" hidden></div>`
+	want := `<div id="Jid.3" data-jawsdata='{"String":"text","Number":1.23}' data-jawsname="myjsvar" hidden></div>`
 	if got != want {
 		t.Errorf("\n got: %q\nwant: %q\n", got, want)
+	}
+}
+
+func Test_JsVar_VarMaker(t *testing.T) {
+	rq := newTestRequest()
+	defer rq.Close()
+
+	nextJid = 0
+
+	dot := &varmaker{
+		val: "foo",
+	}
+	if err := rq.JsVar(dot); err != nil {
+		t.Error(err)
+	}
+	got := string(rq.BodyHtml())
+	want := `<div id="Jid.1" data-jawsdata='"foo"' data-jawsname="myjsvar" hidden></div>`
+	if got != want {
+		t.Errorf("\n got: %q\nwant: %q\n", got, want)
+	}
+
+	dot = &varmaker{
+		val: "bar",
+		err: ErrValueUnchanged,
+	}
+	if err := rq.JsVar(dot); err != ErrValueUnchanged {
+		t.Error(err)
 	}
 }
 
@@ -73,7 +119,6 @@ func Test_JsVar_Update(t *testing.T) {
 	defer jw.Close()
 	nextJid = 0
 
-	const varname = "myjsvar"
 	type valtype struct {
 		String string
 		Number float64
@@ -162,4 +207,17 @@ func Test_JsVar_Event(t *testing.T) {
 	}
 
 	th.Equal(val, valtype{"y", 3})
+}
+
+func Test_JsVar_PanicsOnWrongType(t *testing.T) {
+	th := newTestHelper(t)
+	rq := newTestRequest()
+	defer rq.Close()
+	defer func() {
+		if x := recover(); x == nil {
+			th.Fail()
+		}
+	}()
+	rq.JsVar(1, "")
+	th.Fail()
 }
