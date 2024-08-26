@@ -37,6 +37,42 @@ var (
 	_ IsJsVar = &variniter[int]{}
 )
 
+func Test_JsVar_string(t *testing.T) {
+	var mu sync.Mutex
+	var val string
+	v := JsVar[string]{Bind(&mu, &val)}
+	if err := v.JawsSetString(nil, "foo"); err != nil {
+		t.Error(err)
+	}
+	if s := v.JawsGetString(nil); s != "foo" {
+		t.Error(s)
+	}
+}
+
+func Test_JsVar_float64(t *testing.T) {
+	var mu sync.Mutex
+	var val float64
+	v := JsVar[float64]{Bind(&mu, &val)}
+	if err := v.JawsSetFloat(nil, 1.2); err != nil {
+		t.Error(err)
+	}
+	if s := v.JawsGetFloat(nil); s != 1.2 {
+		t.Error(s)
+	}
+}
+
+func Test_JsVar_bool(t *testing.T) {
+	var mu sync.Mutex
+	var val bool
+	v := JsVar[bool]{Bind(&mu, &val)}
+	if err := v.JawsSetBool(nil, true); err != nil {
+		t.Error(err)
+	}
+	if s := v.JawsGetBool(nil); s != true {
+		t.Error(s)
+	}
+}
+
 func Test_JsVar_JawsRender(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()

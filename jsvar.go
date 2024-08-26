@@ -34,6 +34,30 @@ var (
 func (ui JsVar[T]) JawsIsJsVar() {
 }
 
+func (ui JsVar[string]) JawsSetString(e *Element, val string) (err error) {
+	return ui.JawsSet(e, val)
+}
+
+func (ui JsVar[string]) JawsGetString(e *Element) string {
+	return ui.JawsGet(e)
+}
+
+func (ui JsVar[float64]) JawsSetFloat(e *Element, val float64) (err error) {
+	return ui.JawsSet(e, val)
+}
+
+func (ui JsVar[float64]) JawsGetFloat(e *Element) float64 {
+	return ui.JawsGet(e)
+}
+
+func (ui JsVar[bool]) JawsSetBool(e *Element, val bool) (err error) {
+	return ui.JawsSet(e, val)
+}
+
+func (ui JsVar[bool]) JawsGetBool(e *Element) bool {
+	return ui.JawsGet(e)
+}
+
 func (ui JsVar[T]) AppendJSON(b []byte, e *Element) []byte {
 	if data, err := json.Marshal(ui.JawsGet(e)); err == nil {
 		bytes.ReplaceAll(data, []byte(`'`), []byte(`\u0027`))
