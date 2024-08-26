@@ -103,7 +103,7 @@ func TestElement_Queued(t *testing.T) {
 			e.Order([]jid.Jid{1, 2})
 			replaceHtml := template.HTML(fmt.Sprintf("<div id=\"%s\"></div>", e.Jid().String()))
 			e.Replace(replaceHtml)
-			e.JsCall("test\n1")
+			e.JsCall("\"test\\n1\"")
 			th.Equal(rq.wsQueue, []wsMsg{
 				{
 					Data: "hidden\n",
@@ -195,4 +195,24 @@ func TestElement_ReplacePanicsOnMissingId(t *testing.T) {
 	e := rq.NewElement(tss)
 	e.Replace(template.HTML("<div id=\"wrong\"></div>"))
 	is.Fail()
+}
+
+func TestElement_maybeDirty(t *testing.T) {
+	th := newTestHelper(t)
+	rq := newTestRequest()
+	defer rq.Close()
+	tss := &testUi{s: "foo"}
+	e := rq.NewElement(tss)
+
+	changed, err := e.maybeDirty(e, nil)
+	th.True(changed)
+	th.NoErr(err)
+
+	changed, err = e.maybeDirty(e, ErrValueUnchanged)
+	th.Equal(changed, false)
+	th.Equal(err, nil)
+
+	changed, err = e.maybeDirty(e, ErrNotComparable)
+	th.Equal(changed, false)
+	th.Equal(err, ErrNotComparable)
 }

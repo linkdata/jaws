@@ -2,7 +2,6 @@ package jaws
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -206,24 +205,18 @@ func (e *Element) Remove(htmlId string) {
 }
 
 // JsSet sends a Javascript variable update to the browser.
-func (e *Element) JsSet(val any) (err error) {
-	var b []byte
-	if b, err = json.Marshal(val); err == nil {
-		e.queue(what.Set, string(b))
-	}
-	return
+// The string 'val' must be valid JSON.
+func (e *Element) JsSet(val string) {
+	e.queue(what.Set, val)
 }
 
 // JsCall queues a Javascript function invocation to be sent to the browser.
+// The string 'arg' must be valid JSON.
 //
 // The browser will respond by setting this Element's value to the
 // function return value (unless there was a Javascript exception).
-func (e *Element) JsCall(param any) (err error) {
-	var b []byte
-	if b, err = json.Marshal(param); err == nil {
-		e.queue(what.Call, string(b))
-	}
-	return
+func (e *Element) JsCall(arg string) {
+	e.queue(what.Call, arg)
 }
 
 // ApplyParams parses the parameters passed to UI() when creating a new Element,

@@ -24,7 +24,7 @@ type varmaker struct {
 	err error
 }
 
-func (vm *varmaker) JawsVarMake(rq *Request) (UI, error) {
+func (vm *varmaker) JawsVarMake(rq *Request) (IsJsVar, error) {
 	bind := Bind(&vm.mu, &vm.val)
 	return NewJsVar(bind), vm.err
 }
@@ -33,16 +33,16 @@ type variniter[T comparable] struct {
 	JsVar[T]
 }
 
-func (vm *variniter[T]) JawsVarInit(rq *Request) error {
-	return nil
-}
+var (
+	_ IsJsVar = &variniter[int]{}
+)
 
-func Test_JsVar_VarIniter(t *testing.T) {
+func Test_JsVar_JawsRender(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 
 	nextJid = 0
-	rq.jw.AddTemplateLookuper(template.Must(template.New("jsvartemplate").Parse(`{{$.JsVar .Dot "` + varname + `"}}`)))
+	rq.jw.AddTemplateLookuper(template.Must(template.New("jsvartemplate").Parse(`{{$.JsVar "` + varname + `" .Dot}}`)))
 
 	var mu sync.RWMutex
 	var val valtype
@@ -75,7 +75,7 @@ func Test_JsVar_VarMaker(t *testing.T) {
 	dot := &varmaker{
 		val: "foo",
 	}
-	if err := rq.JsVar(dot, varname); err != nil {
+	if err := rq.JsVar(varname, dot); err != nil {
 		t.Error(err)
 	}
 	got := string(rq.BodyHtml())
@@ -88,7 +88,7 @@ func Test_JsVar_VarMaker(t *testing.T) {
 		val: "bar",
 		err: ErrValueUnchanged,
 	}
-	if err := rq.JsVar(dot, ""); err != ErrValueUnchanged {
+	if err := rq.JsVar("", dot); err != ErrValueUnchanged {
 		t.Error(err)
 	}
 }
@@ -206,6 +206,22 @@ func Test_JsVar_Event(t *testing.T) {
 	}
 
 	th.Equal(val, valtype{"y", 3})
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: `1`}:
+	}
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case msg := <-rq.outCh:
+		s := msg.Format()
+		if !strings.Contains(s, "cannot unmarshal") {
+			th.Error(s)
+		}
+	}
 }
 
 func Test_JsVar_PanicsOnWrongType(t *testing.T) {
@@ -217,6 +233,23 @@ func Test_JsVar_PanicsOnWrongType(t *testing.T) {
 			th.Fail()
 		}
 	}()
-	rq.JsVar(1, "")
+	rq.JsVar("", 1)
 	th.Fail()
+}
+
+func Test_JsVar_AppendJSON_PanicsOnFailure(t *testing.T) {
+	defer func() {
+		if x := recover(); x == nil {
+			t.Fail()
+		}
+	}()
+	var mu sync.Mutex
+	ch := make(chan int)
+
+	jsv := JsVar[chan int]{
+		Bind(&mu, &ch),
+	}
+	jsv.JawsIsJsVar()
+	jsv.AppendJSON(nil, nil)
+	t.Fail()
 }
