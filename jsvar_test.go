@@ -26,7 +26,7 @@ type varmaker struct {
 
 func (vm *varmaker) JawsVarMake(rq *Request) (UI, error) {
 	bind := Bind(&vm.mu, &vm.val)
-	return NewJsVar(varname, bind), vm.err
+	return NewJsVar(bind), vm.err
 }
 
 type variniter[T comparable] struct {
@@ -34,7 +34,6 @@ type variniter[T comparable] struct {
 }
 
 func (vm *variniter[T]) JawsVarInit(rq *Request) error {
-	vm.JsVar.Name = varname
 	return nil
 }
 
@@ -43,12 +42,12 @@ func Test_JsVar_VarIniter(t *testing.T) {
 	defer rq.Close()
 
 	nextJid = 0
-	rq.jw.AddTemplateLookuper(template.Must(template.New("jsvartemplate").Parse(`{{$.JsVar .Dot}}`)))
+	rq.jw.AddTemplateLookuper(template.Must(template.New("jsvartemplate").Parse(`{{$.JsVar .Dot "` + varname + `"}}`)))
 
 	var mu sync.RWMutex
 	var val valtype
 	bind := Bind(&mu, &val)
-	jsv := NewJsVar("", bind)
+	jsv := NewJsVar(bind)
 	dot := &variniter[valtype]{JsVar: jsv}
 	elem := rq.NewElement(dot)
 
@@ -76,7 +75,7 @@ func Test_JsVar_VarMaker(t *testing.T) {
 	dot := &varmaker{
 		val: "foo",
 	}
-	if err := rq.JsVar(dot); err != nil {
+	if err := rq.JsVar(dot, varname); err != nil {
 		t.Error(err)
 	}
 	got := string(rq.BodyHtml())
@@ -89,7 +88,7 @@ func Test_JsVar_VarMaker(t *testing.T) {
 		val: "bar",
 		err: ErrValueUnchanged,
 	}
-	if err := rq.JsVar(dot); err != ErrValueUnchanged {
+	if err := rq.JsVar(dot, ""); err != ErrValueUnchanged {
 		t.Error(err)
 	}
 }
@@ -131,10 +130,10 @@ func Test_JsVar_Update(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 
-	dot := NewJsVar(varname, bind)
+	dot := NewJsVar(bind)
 	elem := rq.NewElement(dot)
 	var sb strings.Builder
-	if err := dot.JawsRender(elem, &sb, nil); err != nil {
+	if err := dot.JawsRender(elem, &sb, []any{varname}); err != nil {
 		t.Fatal(err)
 	}
 	want := `<div id="Jid.1" data-jawsdata='{"String":"","Number":0}' data-jawsname="myjsvar" hidden></div>`
@@ -183,10 +182,10 @@ func Test_JsVar_Event(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 
-	dot := NewJsVar(varname, bind)
+	dot := NewJsVar(bind)
 	elem := rq.NewElement(dot)
 	var sb strings.Builder
-	if err := dot.JawsRender(elem, &sb, nil); err != nil {
+	if err := dot.JawsRender(elem, &sb, []any{varname}); err != nil {
 		t.Fatal(err)
 	}
 	want := `<div id="Jid.1" data-jawsdata='{"String":"","Number":0}' data-jawsname="myjsvar" hidden></div>`

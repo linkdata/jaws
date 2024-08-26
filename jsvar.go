@@ -3,7 +3,6 @@ package jaws
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"strconv"
 
@@ -11,27 +10,23 @@ import (
 )
 
 type VarMaker interface {
-	// JawsVarMake must return an object that implements VarIniter, Setter and UI, usually a JsVar.
+	// JawsVarMake must return an object that implements Setter[T] and UI, usually a JsVar[T].
 	JawsVarMake(rq *Request) (UI, error)
 }
 
-type VarIniter interface {
-	// JawsVarInit is called before rendering a JsVar.
-	JawsVarInit(rq *Request) error
-}
-
 type JsVar[T comparable] struct {
-	Name string // default Javascript variable name path
-	Setter[T]
+	Setter[T] // typed generic Setter
 }
 
-func (ui JsVar[T]) JawsVarInit(rq *Request) error {
-	return nil
-}
+var (
+	_ Setter[int] = JsVar[int]{}
+	_ UI          = JsVar[int]{}
+)
 
 func (ui JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error) {
 	e.ApplyGetter(ui.Setter)
-	attrs := e.ApplyParams(params)
+	jsvarname := params[len(params)-1].(string)
+	attrs := e.ApplyParams(params[:len(params)-1])
 	var b []byte
 	b = append(b, `<div id=`...)
 	b = e.Jid().AppendQuote(b)
@@ -43,9 +38,8 @@ func (ui JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error)
 		b = append(b, data...)
 		b = append(b, '\'')
 	}
-
 	b = append(b, ` data-jawsname=`...)
-	b = strconv.AppendQuote(b, ui.Name)
+	b = strconv.AppendQuote(b, jsvarname)
 	b = appendAttrs(b, attrs)
 	b = append(b, ` hidden></div>`...)
 	_, err = w.Write(b)
@@ -54,10 +48,6 @@ func (ui JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error)
 
 func (ui JsVar[T]) JawsUpdate(e *Element) {
 	_ = e.JsSet(ui.JawsGet(e))
-}
-
-func (ui JsVar[T]) JawsGetTag(rq *Request) any {
-	return ui.Setter
 }
 
 func (ui JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) {
@@ -71,24 +61,21 @@ func (ui JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) 
 	return
 }
 
-func NewJsVar[T comparable](name string, setter Setter[T]) (v JsVar[T]) {
-	return JsVar[T]{
-		Name:   name,
-		Setter: setter,
-	}
+func NewJsVar[T comparable](setter Setter[T]) (v JsVar[T]) {
+	return JsVar[T]{Setter: setter}
 }
 
-func (rq RequestWriter) JsVar(v any, params ...any) (err error) {
-	if vm, ok := v.(VarMaker); ok {
-		if v, err = vm.JawsVarMake(rq.Request()); err != nil {
-			return
-		}
+// JsVar binds a Setter[T] to a named Javascript variable.
+//
+// Alternatively you may also pass a VarMaker that returns an object that
+// implements Setter[T] and UI.
+func (rq RequestWriter) JsVar(setter any, jsvarname string, params ...any) (err error) {
+	if vm, ok := setter.(VarMaker); ok {
+		setter, err = vm.JawsVarMake(rq.Request())
 	}
-	if vi, ok := v.(VarIniter); ok {
-		if err = vi.JawsVarInit(rq.Request()); err == nil {
-			err = rq.UI(v.(UI), params...)
-		}
-		return
+	if err == nil {
+		params = append(params, jsvarname)
+		err = rq.UI(setter.(UI), params...)
 	}
-	panic(fmt.Sprintf("expected VarIniter, not %T", v))
+	return
 }
