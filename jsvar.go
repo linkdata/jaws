@@ -88,6 +88,10 @@ func (ui JsVar[T]) JawsUpdate(e *Element) {
 	e.JsSet(string(ui.AppendJSON(nil, e)))
 }
 
+func (ui JsVar[T]) JawsGetTag(rq *Request) any {
+	return ui.Setter
+}
+
 func (ui JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
 	if wht == what.Set {
