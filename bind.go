@@ -46,8 +46,32 @@ func (bind Binding[T]) JawsGetTag(*Request) any {
 	return bind.P
 }
 
-// Bind returns a Binding with the given sync.Locker (or RWLocker) and a pointer to the underlying value.
-// It implements Setter. The pointer will be used as the UI tag.
+func (bind Binding[string]) JawsSetString(e *Element, val string) (err error) {
+	return bind.JawsSet(e, val)
+}
+
+func (bind Binding[string]) JawsGetString(e *Element) string {
+	return bind.JawsGet(e)
+}
+
+func (bind Binding[float64]) JawsSetFloat(e *Element, val float64) (err error) {
+	return bind.JawsSet(e, val)
+}
+
+func (bind Binding[float64]) JawsGetFloat(e *Element) float64 {
+	return bind.JawsGet(e)
+}
+
+func (bind Binding[bool]) JawsSetBool(e *Element, val bool) (err error) {
+	return bind.JawsSet(e, val)
+}
+
+func (bind Binding[bool]) JawsGetBool(e *Element) bool {
+	return bind.JawsGet(e)
+}
+
+// Bind returns a Binding[T] with the given sync.Locker (or RWLocker) and a pointer to the underlying value of type T.
+// It implements Setter[T]. The pointer will be used as the UI tag.
 func Bind[T comparable](l sync.Locker, p *T) Binding[T] {
 	return Binding[T]{L: l, P: p}
 }
