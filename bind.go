@@ -5,8 +5,9 @@ import (
 	"time"
 )
 
-// Binding combines a lock with a pointer to a value of type T, and implements
-// the Setter[T], BoolSetter, FloatSetter, StringSetter and TimeSetter interfaces.
+// Binding combines a lock with a pointer to a value of type T, and implements Setter[T].
+// It also implements BoolSetter, FloatSetter, StringSetter and TimeSetter, but will panic
+// if the underlying type T is not correct.
 type Binding[T comparable] struct {
 	L sync.Locker
 	P *T
@@ -55,42 +56,41 @@ func (bind Binding[T]) JawsGetTag(*Request) any {
 	return bind.P
 }
 
-func (bind Binding[string]) JawsSetString(e *Element, val string) (err error) {
-	return bind.JawsSet(e, val)
+func (bind Binding[T]) JawsSetString(e *Element, val string) (err error) {
+	return bind.JawsSet(e, any(val).(T))
 }
 
-func (bind Binding[string]) JawsGetString(e *Element) string {
-	return bind.JawsGet(e)
+func (bind Binding[T]) JawsGetString(e *Element) string {
+	return any(bind.JawsGet(e)).(string)
 }
 
-func (bind Binding[float64]) JawsSetFloat(e *Element, val float64) (err error) {
-	return bind.JawsSet(e, val)
+func (bind Binding[T]) JawsSetFloat(e *Element, val float64) (err error) {
+	return bind.JawsSet(e, any(val).(T))
 }
 
-func (bind Binding[float64]) JawsGetFloat(e *Element) float64 {
-	return bind.JawsGet(e)
+func (bind Binding[T]) JawsGetFloat(e *Element) float64 {
+	return any(bind.JawsGet(e)).(float64)
 }
 
-func (bind Binding[bool]) JawsSetBool(e *Element, val bool) (err error) {
-	return bind.JawsSet(e, val)
+func (bind Binding[T]) JawsSetBool(e *Element, val bool) (err error) {
+	return bind.JawsSet(e, any(val).(T))
 }
 
-func (bind Binding[bool]) JawsGetBool(e *Element) bool {
-	return bind.JawsGet(e)
+func (bind Binding[T]) JawsGetBool(e *Element) bool {
+	return any(bind.JawsGet(e)).(bool)
 }
 
-type Time = time.Time
-
-func (bind Binding[Time]) JawsGetTime(elem *Element) time.Time {
+func (bind Binding[T]) JawsGetTime(elem *Element) time.Time {
 	return any(bind.JawsGet(elem)).(time.Time)
 }
 
-func (bind Binding[Time]) JawsSetTime(elem *Element, value time.Time) error {
-	return bind.Set(any(value).(Time))
+func (bind Binding[T]) JawsSetTime(elem *Element, value time.Time) error {
+	return bind.Set(any(value).(T))
 }
 
 // Bind returns a Binding[T] with the given sync.Locker (or RWLocker) and a pointer to the underlying value of type T.
-// It implements Setter[T], BoolSetter, FloatSetter, StringSetter and TimeSetter.
+// It implements Setter[T]. It also implements BoolSetter, FloatSetter, StringSetter and TimeSetter, but will panic
+// if the underlying type T is not correct.
 // The pointer will be used as the UI tag.
 func Bind[T comparable](l sync.Locker, p *T) Binding[T] {
 	return Binding[T]{L: l, P: p}
