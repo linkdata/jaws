@@ -3,6 +3,7 @@ package jaws
 import (
 	"sync"
 	"testing"
+	"time"
 )
 
 func Test_Bind_string(t *testing.T) {
@@ -38,5 +39,19 @@ func Test_Bind_bool(t *testing.T) {
 	}
 	if s := v.JawsGetBool(nil); s != true {
 		t.Error(s)
+	}
+}
+
+func Test_Bind_Time(t *testing.T) {
+	var mu sync.Mutex
+	var val time.Time
+	v := Bind(&mu, &val)
+	now := time.Now()
+
+	if err := v.JawsSetTime(nil, now); err != nil {
+		t.Error(err)
+	}
+	if v := v.JawsGetTime(nil); v != now {
+		t.Error(v)
 	}
 }

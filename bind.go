@@ -2,13 +2,22 @@ package jaws
 
 import (
 	"sync"
+	"time"
 )
 
-// Binding combines a lock with a pointer to a value, and implements the Setter interface.
+// Binding combines a lock with a pointer to a value of type T, and implements
+// the Setter[T], BoolSetter, FloatSetter, StringSetter and TimeSetter interfaces.
 type Binding[T comparable] struct {
 	L sync.Locker
 	P *T
 }
+
+var (
+	_ BoolSetter   = Binding[bool]{}
+	_ FloatSetter  = Binding[float64]{}
+	_ StringSetter = Binding[string]{}
+	_ TimeSetter   = Binding[time.Time]{}
+)
 
 func (bind Binding[T]) Get() (value T) {
 	if rl, ok := bind.L.(RLocker); ok {
@@ -70,8 +79,19 @@ func (bind Binding[bool]) JawsGetBool(e *Element) bool {
 	return bind.JawsGet(e)
 }
 
+type Time = time.Time
+
+func (bind Binding[Time]) JawsGetTime(elem *Element) time.Time {
+	return any(bind.JawsGet(elem)).(time.Time)
+}
+
+func (bind Binding[Time]) JawsSetTime(elem *Element, value time.Time) error {
+	return bind.Set(any(value).(Time))
+}
+
 // Bind returns a Binding[T] with the given sync.Locker (or RWLocker) and a pointer to the underlying value of type T.
-// It implements Setter[T]. The pointer will be used as the UI tag.
+// It implements Setter[T], BoolSetter, FloatSetter, StringSetter and TimeSetter.
+// The pointer will be used as the UI tag.
 func Bind[T comparable](l sync.Locker, p *T) Binding[T] {
 	return Binding[T]{L: l, P: p}
 }
