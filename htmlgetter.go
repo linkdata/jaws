@@ -8,7 +8,7 @@ import (
 )
 
 type HtmlGetter interface {
-	JawsGetHtml(rq *Element) template.HTML
+	JawsGetHtml(e *Element) template.HTML
 }
 
 type htmlGetter struct{ v template.HTML }

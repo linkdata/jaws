@@ -7,9 +7,9 @@ import (
 )
 
 type BoolSetter interface {
-	JawsGetBool(rq *Element) bool
+	JawsGetBool(e *Element) bool
 	// JawsSetBool may return ErrValueUnchanged to indicate value was already set.
-	JawsSetBool(rq *Element, v bool) (err error)
+	JawsSetBool(e *Element, v bool) (err error)
 }
 
 type boolGetter struct{ v bool }
