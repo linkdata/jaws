@@ -11,7 +11,6 @@ type UiRegister struct {
 }
 
 func (ui UiRegister) JawsRender(e *Element, w io.Writer, params []any) (err error) {
-	ui.Updater.JawsUpdate(e)
 	return
 }
 
@@ -27,5 +26,6 @@ func (rq RequestWriter) Register(updater Updater, params ...any) jid.Jid {
 	elem := rq.rq.NewElement(UiRegister{Updater: updater})
 	elem.Tag(updater)
 	elem.ApplyParams(params)
+	updater.JawsUpdate(elem)
 	return elem.Jid()
 }

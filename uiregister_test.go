@@ -13,7 +13,7 @@ func TestRequestWriter_Register(t *testing.T) {
 	item := &testUi{}
 	jid := rq.Register(item)
 	th.Equal(jid, Jid(1))
+	th.Equal(atomic.LoadInt32(&item.updateCalled), int32(1))
 	e := rq.getElementByJid(jid)
 	th.NoErr(e.JawsRender(nil, nil))
-	th.Equal(atomic.LoadInt32(&item.updateCalled), int32(1))
 }
