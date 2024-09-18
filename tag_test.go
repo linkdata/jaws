@@ -12,8 +12,16 @@ import (
 	"github.com/linkdata/deadlock"
 )
 
+type testSelfTagger struct {
+}
+
+func (tt *testSelfTagger) JawsGetTag(rq *Request) any {
+	return tt
+}
+
 func TestTagExpand(t *testing.T) {
 	var av atomic.Value
+	selftagger := &testSelfTagger{}
 	tests := []struct {
 		name string
 		tag  any
@@ -33,6 +41,11 @@ func TestTagExpand(t *testing.T) {
 			name: "TagGetter",
 			tag:  atomicSetter{&av},
 			want: []any{&av},
+		},
+		{
+			name: "TagGetter(Self)",
+			tag:  selftagger,
+			want: []any{selftagger},
 		},
 		{
 			name: "[]Tag",

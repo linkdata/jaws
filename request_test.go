@@ -29,20 +29,12 @@ func TestRequest_Registrations(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 
-	is.Equal(rq.wantMessage(&Message{Dest: Tag("sometag")}), false)
-	jid := rq.Register("sometag")
+	x := &testUi{}
+
+	is.Equal(rq.wantMessage(&Message{Dest: x}), false)
+	jid := rq.Register(x)
 	is.True(jid.IsValid())
-	is.Equal(rq.wantMessage(&Message{Dest: Tag("sometag")}), true)
-
-	jid2 := rq.Register(jid)
-	is.Equal(jid, jid2)
-
-	jid = rq.Register("foo")
-	is.True(jid.IsValid())
-
-	jid2 = rq.Register("")
-	is.True(jid2.IsValid())
-	is.True(jid != jid2)
+	is.Equal(rq.wantMessage(&Message{Dest: x}), true)
 }
 
 func TestRequest_HeadHTML(t *testing.T) {
@@ -65,10 +57,12 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 	is := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
-	jid := rq.Register("foo")
+
+	x := &testUi{}
+	jid := rq.Register(x)
 	elem := rq.getElementByJid(jid)
 	is.True(elem != nil)
-	rq.jw.Broadcast(Message{Dest: Tag("foo"), What: what.Inner, Data: "bar"})
+	rq.jw.Broadcast(Message{Dest: x, What: what.Inner, Data: "bar"})
 	select {
 	case <-time.NewTimer(time.Hour).C:
 		is.Error("timeout")
@@ -86,14 +80,14 @@ func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 	var callCount int32
-	tag := Tag("foo")
-	rq.Register(tag, func(e *Element, evt what.What, val string) error {
+	x := &testUi{}
+	rq.Register(x, func(e *Element, evt what.What, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		rq.cancel()
 		return errors.New(val)
 	})
 	fillWsCh(rq.outCh)
-	rq.jw.Broadcast(Message{Dest: Tag("foo"), What: what.Hook, Data: "bar"})
+	rq.jw.Broadcast(Message{Dest: x, What: what.Hook, Data: "bar"})
 
 	select {
 	case <-th.C:
@@ -119,22 +113,23 @@ func TestRequest_Trigger(t *testing.T) {
 	defer rq.Close()
 	gotFooCall := make(chan struct{})
 	gotEndCall := make(chan struct{})
-	rq.Register("foo", func(e *Element, evt what.What, val string) error {
+	fooItem := &testUi{}
+	rq.Register(fooItem, func(e *Element, evt what.What, val string) error {
 		defer close(gotFooCall)
 		return nil
 	})
-	rq.Register(("err"), func(e *Element, evt what.What, val string) error {
+	errItem := &testUi{}
+	rq.Register(errItem, func(e *Element, evt what.What, val string) error {
 		return errors.New(val)
 	})
-	rq.Register(("end"), func(e *Element, evt what.What, val string) error {
+	endItem := &testUi{}
+	rq.Register(endItem, func(e *Element, evt what.What, val string) error {
 		defer close(gotEndCall)
 		return nil
 	})
 
 	// broadcasts from ourselves should not invoke fn
-	// rq.Broadcast(Message{Dest: Tag("foo"), What: what.Input, Data: "bar"})
-	// rq.Broadcast(Message{Dest: Tag("err"), What: what.Input, Data: "baz"})
-	rq.jw.Broadcast(Message{Dest: Tag("end"), What: what.Input, Data: ""}) // to know when to stop
+	rq.jw.Broadcast(Message{Dest: endItem, What: what.Input, Data: ""}) // to know when to stop
 	select {
 	case <-th.C:
 		th.Timeout()
@@ -146,7 +141,7 @@ func TestRequest_Trigger(t *testing.T) {
 	}
 
 	// global broadcast should invoke fn
-	rq.jw.Broadcast(Message{Dest: Tag("foo"), What: what.Input, Data: "bar"})
+	rq.jw.Broadcast(Message{Dest: fooItem, What: what.Input, Data: "bar"})
 	select {
 	case <-th.C:
 		th.Timeout()
@@ -156,7 +151,7 @@ func TestRequest_Trigger(t *testing.T) {
 	}
 
 	// fn returning error should send an danger alert message
-	rq.jw.Broadcast(Message{Dest: Tag("err"), What: what.Input, Data: "omg"})
+	rq.jw.Broadcast(Message{Dest: errItem, What: what.Input, Data: "omg"})
 	select {
 	case <-th.C:
 		th.Timeout()
@@ -178,7 +173,8 @@ func TestRequest_EventFnQueue(t *testing.T) {
 	firstDoneCh := make(chan struct{})
 	var sleepDone int32
 	var callCount int32
-	rq.Register(("sleep"), func(e *Element, evt what.What, val string) error {
+	sleepItem := &testUi{}
+	rq.Register(sleepItem, func(e *Element, evt what.What, val string) error {
 		count := int(atomic.AddInt32(&callCount, 1))
 		if val != strconv.Itoa(count) {
 			t.Logf("val=%s, count=%d, cap=%d", val, count, cap(rq.outCh))
@@ -194,7 +190,7 @@ func TestRequest_EventFnQueue(t *testing.T) {
 	})
 
 	for i := 0; i < cap(rq.outCh); i++ {
-		rq.jw.Broadcast(Message{Dest: Tag("sleep"), What: what.Input, Data: strconv.Itoa(i + 1)})
+		rq.jw.Broadcast(Message{Dest: sleepItem, What: what.Input, Data: strconv.Itoa(i + 1)})
 	}
 
 	select {
@@ -229,14 +225,15 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 
 	var wait int32
 
-	rq.Register(("bomb"), func(e *Element, evt what.What, val string) error {
+	bombItem := &testUi{}
+	rq.Register(bombItem, func(e *Element, evt what.What, val string) error {
 		time.Sleep(time.Millisecond * time.Duration(atomic.AddInt32(&wait, 1)))
 		return nil
 	})
 
 	rq.expectPanic = true
 	rq.jw.Logger = nil
-	jid := jidForTag(rq.Request, Tag("bomb"))
+	jid := jidForTag(rq.Request, bombItem)
 
 	for {
 		select {
@@ -258,10 +255,11 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 
 	var spewState int32
 	var callCount int32
-	rq.Register(("spew"), func(e *Element, evt what.What, val string) error {
+	spewItem := &testUi{}
+	rq.Register(spewItem, func(e *Element, evt what.What, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		if len(rq.outCh) < cap(rq.outCh) {
-			rq.jw.Broadcast(Message{Dest: Tag("spew"), What: what.Input})
+			rq.jw.Broadcast(Message{Dest: spewItem, What: what.Input})
 		} else {
 			atomic.StoreInt32(&spewState, 1)
 			for atomic.LoadInt32(&spewState) == 1 {
@@ -270,9 +268,11 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 		}
 		return errors.New("chunks")
 	})
-	rq.Register(Tag("foo"))
 
-	rq.jw.Broadcast(Message{Dest: Tag("spew"), What: what.Input})
+	fooItem := &testUi{}
+	rq.Register(fooItem)
+
+	rq.jw.Broadcast(Message{Dest: spewItem, What: what.Input})
 
 	// wait for the event fn to be in hold state
 	waited := 0

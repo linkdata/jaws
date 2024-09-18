@@ -135,8 +135,8 @@ func TestWS_NormalExchange(t *testing.T) {
 	fooError := errors.New("this foo failed")
 
 	gotCallCh := make(chan struct{})
-
-	ts.rq.Register(("foo"), func(e *Element, evt what.What, val string) error {
+	fooItem := &testUi{}
+	RequestWriter{ts.rq, httptest.NewRecorder()}.Register(fooItem, func(e *Element, evt what.What, val string) error {
 		close(gotCallCh)
 		return fooError
 	})
@@ -150,7 +150,7 @@ func TestWS_NormalExchange(t *testing.T) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	msg := wsMsg{Jid: jidForTag(ts.rq, Tag("foo")), What: what.Input}
+	msg := wsMsg{Jid: jidForTag(ts.rq, fooItem), What: what.Input}
 	ctx, cancel := context.WithTimeout(ts.ctx, testTimeout)
 	defer cancel()
 

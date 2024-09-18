@@ -275,35 +275,6 @@ func (rq *Request) TagsOf(elem *Element) (tags []any) {
 	return
 }
 
-// Register creates a new Element with the given tagitem as a valid target
-// for dynamic updates.
-//
-// This function can accept a string or a Jid as the tagitem. A string
-// will be interpreted as jaws.Tag(string).
-//
-// Returns a Jid, suitable for including as a HTML "id" attribute:
-//
-//	<div id="{{$.Register `footag`}}">
-func (rq *Request) Register(tagitem any, params ...any) jid.Jid {
-	switch data := tagitem.(type) {
-	case jid.Jid:
-		if elem := rq.getElementByJid(data); elem != nil {
-			if _, ok := elem.Ui().(*UiHtml); ok {
-				elem.ApplyParams(params)
-			}
-		}
-		return data
-	case string:
-		tagitem = Tag(data)
-	}
-
-	uib := &UiHtml{}
-	elem := rq.NewElement(uib)
-	uib.applyGetter(elem, tagitem)
-	elem.ApplyParams(params)
-	return elem.Jid()
-}
-
 // Dirty marks all Elements that have one or more of the given tags as dirty.
 func (rq *Request) Dirty(tags ...any) {
 	rq.Jaws.setDirty(MustTagExpand(rq, tags))
