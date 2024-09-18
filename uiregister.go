@@ -11,11 +11,14 @@ type UiRegister struct {
 }
 
 func (ui UiRegister) JawsRender(e *Element, w io.Writer, params []any) (err error) {
+	ui.Updater.JawsUpdate(e)
 	return
 }
 
 // Register creates a new Element with the given Updater as a tag
 // for dynamic updates. Additional tags may be provided in params.
+// The updaters JawsUpdate method will be called immediately to
+// ensure the initial rendering is correct.
 //
 // Returns a Jid, suitable for including as a HTML "id" attribute:
 //
