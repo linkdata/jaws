@@ -276,7 +276,8 @@ func TestSession_Delete(t *testing.T) {
 		t.Errorf("%v missing from %v", rq2, rl)
 	}
 
-	ts.rq.Register("byebye", func(e *Element, evt what.What, val string) error {
+	byebyeItem := &testUi{}
+	RequestWriter{ts.rq, httptest.NewRecorder()}.Register(byebyeItem, func(e *Element, evt what.What, val string) error {
 		sess2 := ts.jw.GetSession(e.Request.Initial())
 		if x := sess2; x != ts.sess {
 			t.Error(x)
@@ -313,7 +314,7 @@ func TestSession_Delete(t *testing.T) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	msg := wsMsg{Jid: jidForTag(ts.rq, Tag("byebye")), What: what.Input}
+	msg := wsMsg{Jid: jidForTag(ts.rq, byebyeItem), What: what.Input}
 	ctx, cancel := context.WithCancel(ts.ctx)
 	defer cancel()
 

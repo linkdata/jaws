@@ -216,3 +216,25 @@ func TestElement_maybeDirty(t *testing.T) {
 	th.Equal(changed, false)
 	th.Equal(err, ErrNotComparable)
 }
+
+type testClickHandler struct {
+}
+
+func (tch testClickHandler) JawsClick(e *Element, name string) (err error) {
+	return nil
+}
+
+var _ ClickHandler = testClickHandler{}
+
+func TestElement_ApplyGetter(t *testing.T) {
+	is := newTestHelper(t)
+	rq := newTestRequest()
+	defer rq.Close()
+
+	tss := &testUi{s: "foo"}
+	e := rq.NewElement(tss)
+
+	var tch testClickHandler
+	e.ApplyGetter(tch)
+	is.Equal(len(e.handlers), 1)
+}
