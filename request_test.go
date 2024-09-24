@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"bytes"
 	"errors"
 	"strconv"
 	"strings"
@@ -51,6 +52,33 @@ func TestRequest_HeadHTML(t *testing.T) {
 	is.Equal(strings.Contains(txt, JavascriptPath), true)
 	is.Equal(strings.Count(txt, "<script>"), strings.Count(txt, "</script>"))
 	is.Equal(strings.Count(txt, "<style>"), strings.Count(txt, "</style>"))
+}
+
+func TestRequestWriter_TailHTML(t *testing.T) {
+	th := newTestHelper(t)
+	nextJid = 0
+	rq := newTestRequest()
+	defer rq.Close()
+	item := &testUi{}
+	item.updateFn = func(e *Element) {
+		e.SetAttr("hidden", "yes")
+		e.RemoveAttr("hidden")
+		e.SetClass("cls")
+		e.RemoveClass("cls")
+	}
+	jid := rq.Register(item)
+	th.Equal(jid, Jid(1))
+	th.Equal(atomic.LoadInt32(&item.updateCalled), int32(1))
+	var buf bytes.Buffer
+	rq.rq.Writer(&buf).TailHTML()
+	want := `
+<script>
+document.getElementById("Jid.1")?.setAttribute("hidden","yes");
+document.getElementById("Jid.1")?.removeAttribute("hidden");
+document.getElementById("Jid.1")?.classList?.add("cls");
+document.getElementById("Jid.1")?.classList?.remove("cls");
+</script>`
+	th.Equal(want, buf.String())
 }
 
 func TestRequest_SendArrivesOk(t *testing.T) {
