@@ -57,20 +57,24 @@ func TestRequest_HeadHTML(t *testing.T) {
 func TestRequestWriter_TailHTML(t *testing.T) {
 	th := newTestHelper(t)
 	nextJid = 0
-	rq := newTestRequest()
-	defer rq.Close()
+	jw := New()
+	defer jw.Close()
+	rq := jw.NewRequest(nil)
+	defer jw.recycle(rq)
 	item := &testUi{}
-	item.updateFn = func(e *Element) {
-		e.SetAttr("hidden", "yes")
-		e.RemoveAttr("hidden")
-		e.SetClass("cls")
-		e.RemoveClass("cls")
-	}
-	jid := rq.Register(item)
-	th.Equal(jid, Jid(1))
-	th.Equal(atomic.LoadInt32(&item.updateCalled), int32(1))
+	e := rq.NewElement(item)
+	e.SetAttr("hidden", "yes")
+	e.RemoveAttr("hidden")
+	e.SetClass("cls")
+	e.RemoveClass("cls")
+
+	rq.muQueue.Lock()
+	num := len(rq.wsQueue)
+	rq.muQueue.Unlock()
+	th.Equal(num, 4)
+
 	var buf bytes.Buffer
-	rq.rq.Writer(&buf).TailHTML()
+	rq.Writer(&buf).TailHTML()
 	want := `
 <script>
 document.getElementById("Jid.1")?.setAttribute("hidden","yes");
