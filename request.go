@@ -136,6 +136,56 @@ func (rq *Request) HeadHTML(w io.Writer) (err error) {
 	return
 }
 
+func (rq *Request) getTailActions() (b []byte) {
+	rq.muQueue.Lock()
+	defer rq.muQueue.Unlock()
+	for _, msg := range rq.wsQueue {
+		var fn string
+		switch msg.What {
+		case what.SAttr:
+			fn = "setAttribute"
+		case what.RAttr:
+			fn = "removeAttribute"
+		case what.SClass:
+			fn = "classList?.add"
+		case what.RClass:
+			fn = "classList?.remove"
+		}
+		if fn != "" {
+			if len(b) == 0 {
+				b = append(b, "\n<script>"...)
+			}
+			b = append(b, "\ndocument.getElementById("...)
+			b = msg.Jid.AppendQuote(b)
+			b = append(b, ")?."...)
+			b = append(b, fn...)
+			b = append(b, "("...)
+			attr, val, ok := strings.Cut(msg.Data, "\n")
+			b = strconv.AppendQuote(b, attr)
+			if ok {
+				b = append(b, ',')
+				b = strconv.AppendQuote(b, val)
+			}
+			b = append(b, ");"...)
+		}
+	}
+	if len(b) > 0 {
+		b = append(b, "\n</script>"...)
+	}
+	return
+}
+
+// TailHTML writes optional HTML code at the end of the page's BODY section that
+// will immediately apply HTML attribute and class updates made during initial
+// rendering, which eliminates flicker without having to write the correct
+// value in templates or during JawsRender().
+func (rq *Request) TailHTML(w io.Writer) (err error) {
+	if actions := rq.getTailActions(); len(actions) > 0 {
+		_, err = w.Write(actions)
+	}
+	return
+}
+
 // GetConnectFn returns the currently set ConnectFn. That function will be called before starting the WebSocket tunnel if not nil.
 func (rq *Request) GetConnectFn() (fn ConnectFn) {
 	rq.mu.RLock()
@@ -606,17 +656,19 @@ func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
 	}
 }
 
-func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg) {
-	var toSend []wsMsg
-	validJids := map[Jid]struct{}{}
-
+func (rq *Request) getSendMsgs() (toSend []wsMsg) {
 	rq.mu.RLock()
+	defer rq.mu.RUnlock()
+
+	validJids := map[Jid]struct{}{}
 	for _, elem := range rq.elems {
 		if !elem.deleted {
 			validJids[elem.Jid()] = struct{}{}
 		}
 	}
+
 	rq.muQueue.Lock()
+	defer rq.muQueue.Unlock()
 	if len(rq.wsQueue) > 0 {
 		for i := range rq.wsQueue {
 			ok := rq.wsQueue[i].Jid < 1 || rq.wsQueue[i].What == what.Delete
@@ -629,15 +681,16 @@ func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg) {
 		}
 		rq.wsQueue = rq.wsQueue[:0]
 	}
-	rq.muQueue.Unlock()
-	rq.mu.RUnlock()
 
 	slices.SortStableFunc(toSend, func(a, b wsMsg) int { return int(a.Jid - b.Jid) })
+	return
+}
 
-	for i := range toSend {
+func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg) {
+	for _, msg := range rq.getSendMsgs() {
 		select {
 		case <-rq.Done():
-		case outboundMsgCh <- toSend[i]:
+		case outboundMsgCh <- msg:
 		}
 	}
 }

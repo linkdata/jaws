@@ -34,6 +34,12 @@ func (rw RequestWriter) HeadHTML() error {
 	return rw.Request().HeadHTML(rw)
 }
 
+// TailHTML writes optional HTML code at the end of the page's BODY section that
+// will immediately apply updates made during initial rendering.
+func (rw RequestWriter) TailHTML() error {
+	return rw.Request().TailHTML(rw)
+}
+
 // Session returns the Requests's Session, or nil.
 func (rw RequestWriter) Session() *Session {
 	return rw.Request().Session()
