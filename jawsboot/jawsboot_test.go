@@ -11,7 +11,7 @@ import (
 func TestJawsBoot_Setup(t *testing.T) {
 	jw := jaws.New()
 	defer jw.Close()
-	if err := jawsboot.Setup(jw); err != nil {
+	if err := jawsboot.Setup(jw, nil, "/other/foobar.js"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -25,10 +25,13 @@ func TestJawsBoot_Setup(t *testing.T) {
 	if !strings.Contains(txt, jaws.JavascriptPath) {
 		t.Error(txt)
 	}
-	if !strings.Contains(txt, jawsboot.DefaultBootstrapVersion) {
+	if !strings.Contains(txt, "/static/bootstrap.bundle.min") {
 		t.Error(txt)
 	}
-	if !strings.Contains(txt, jawsboot.DefaultBootstrapCDN) {
+	if !strings.Contains(txt, "/static/bootstrap.min") {
+		t.Error(txt)
+	}
+	if !strings.Contains(txt, "/other/foobar.js") {
 		t.Error(txt)
 	}
 }
