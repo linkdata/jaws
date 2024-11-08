@@ -73,6 +73,15 @@ func (sess *Session) delRequest(rq *Request) {
 	}
 }
 
+// Jaws returns the Jaws instance of the Session, or nil.
+// It is safe to call on a nil Session.
+func (sess *Session) Jaws() (jw *Jaws) {
+	if sess != nil {
+		jw = sess.jw
+	}
+	return
+}
+
 // Get returns the value associated with the key, or nil.
 // It is safe to call on a nil Session.
 func (sess *Session) Get(key string) (val any) {

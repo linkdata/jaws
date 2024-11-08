@@ -28,6 +28,11 @@ func TestSession_Object(t *testing.T) {
 	}
 
 	sess = newSession(jw, sessionId, netip.Addr{})
+
+	if sess.Jaws() != jw {
+		t.Fatal("Jaws pointer mismatch")
+	}
+
 	sess.Set("foo", "bar")
 	if x := sess.Get("foo"); x != "bar" {
 		t.Error(x)
