@@ -16,6 +16,9 @@ type StaticServe struct {
 	Gz          []byte
 }
 
+// New returns a StaticServe that serves the given data with a filename like 'filename.12345678.ext'.
+// The filename must have the suffix ".gz" if the data is GZip compressed. The ".gz" suffix will
+// not be part of the filename presented in this case.
 func New(filename string, data []byte) (ss *StaticServe, err error) {
 	var gz []byte
 	if strings.HasSuffix(filename, ".gz") {
