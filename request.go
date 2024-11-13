@@ -621,24 +621,22 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err 
 				var jidStr string
 				jidStr, after, found = strings.Cut(after, "\t")
 				if id = jid.ParseString(jidStr); id > 0 {
-					if e := rq.getElementByJidLocked(id); e != nil {
+					if e := rq.getElementByJidLocked(id); e != nil && !e.deleted {
 						elems = append(elems, e)
 					}
 				}
 			}
 		}
 	} else {
-		if e := rq.getElementByJidLocked(id); e != nil {
+		if e := rq.getElementByJidLocked(id); e != nil && !e.deleted {
 			elems = append(elems, e)
 		}
 	}
 	rq.mu.RUnlock()
 
 	for _, e := range elems {
-		if !e.deleted {
-			if err = callEventHandlers(e.Ui(), e, wht, val); err != ErrEventUnhandled {
-				return
-			}
+		if err = callEventHandlers(e.Ui(), e, wht, val); err != ErrEventUnhandled {
+			return
 		}
 	}
 	if err == ErrEventUnhandled {
