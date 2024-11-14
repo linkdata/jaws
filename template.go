@@ -30,6 +30,7 @@ func (t Template) JawsRender(e *Element, wr io.Writer, params []any) error {
 	e.handlers = append(e.handlers, handlers...)
 	attrstr := template.HTMLAttr(strings.Join(attrs, " ")) // #nosec G203
 	var auth Auth
+	auth = defaultAuth{}
 	if f := e.Request.Jaws.MakeAuth; f != nil {
 		auth = f(e.Request)
 	}
