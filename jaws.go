@@ -44,6 +44,7 @@ type Jaws struct {
 	CookieName   string       // Name for session cookies, defaults to "jaws"
 	Logger       *slog.Logger // Optional logger to use
 	Debug        bool         // Set to true to enable debug info in generated HTML code
+	MakeAuth     MakeAuthFn   // Optional function to create With.Auth for Templates
 	doneCh       <-chan struct{}
 	bcastCh      chan Message
 	subCh        chan subscription

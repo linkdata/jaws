@@ -18,7 +18,6 @@ func TestTemplate_String(t *testing.T) {
 func TestTemplate_Calls_Dot_Updater(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
-
 	dot := &testUi{}
 	tmpl := NewTemplate("testtemplate", dot)
 	tmpl.JawsUpdate(nil)

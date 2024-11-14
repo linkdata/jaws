@@ -29,11 +29,16 @@ func (t Template) JawsRender(e *Element, wr io.Writer, params []any) error {
 	e.Tag(tags...)
 	e.handlers = append(e.handlers, handlers...)
 	attrstr := template.HTMLAttr(strings.Join(attrs, " ")) // #nosec G203
+	var auth Auth
+	if f := e.Request.Jaws.MakeAuth; f != nil {
+		auth = f(e.Request)
+	}
 	return e.Request.Jaws.LookupTemplate(t.Name).Execute(wr, With{
 		Element:       e,
 		RequestWriter: e.Request.Writer(wr),
 		Dot:           t.Dot,
 		Attrs:         attrstr,
+		Auth:          auth,
 	})
 }
 

@@ -16,11 +16,31 @@ type testJaws struct {
 	log      bytes.Buffer
 }
 
+type testAuth struct{}
+
+// Data implements Auth.
+func (t testAuth) Data() map[string]any {
+	return nil
+}
+
+// Email implements Auth.
+func (t testAuth) Email() string {
+	return ""
+}
+
+// IsAdmin implements Auth.
+func (t testAuth) IsAdmin() bool {
+	return false
+}
+
 func newTestJaws() (tj *testJaws) {
 	tj = &testJaws{
 		Jaws: New(),
 	}
 	tj.Jaws.Logger = slog.New(slog.NewTextHandler(&tj.log, nil))
+	tj.Jaws.MakeAuth = func(r *Request) Auth {
+		return testAuth{}
+	}
 	tj.testtmpl = template.Must(template.New("testtemplate").Parse(`{{with $.Dot}}<div id="{{$.Jid}}" {{$.Attrs}}>{{.}}</div>{{end}}`))
 	tj.AddTemplateLookuper(tj.testtmpl)
 	tj.Jaws.updateTicker = time.NewTicker(time.Millisecond)
