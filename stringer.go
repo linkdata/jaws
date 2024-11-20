@@ -6,17 +6,17 @@ type stringer interface {
 	String() string
 }
 
-type stringizer struct {
-	v *any
+type stringizer[T any] struct {
+	v *T
 }
 
-func (s stringizer) String() string {
+func (s stringizer[T]) String() string {
 	if s.v == nil {
 		return "<nil>"
 	}
 	return fmt.Sprint(*s.v)
 }
 
-func Stringer(v *any) stringer {
-	return stringizer{v}
+func Stringer[T any](v *T) stringer {
+	return stringizer[T]{v}
 }

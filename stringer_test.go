@@ -1,45 +1,22 @@
 package jaws
 
 import (
-	"reflect"
 	"testing"
 )
 
 func TestStringer(t *testing.T) {
-	var pnil any
-	txt := any("text")
-	num := any(int(123))
-	tests := []struct {
-		name string
-		arg  *any
-		want string
-	}{
-		{
-			name: "nil",
-			arg:  nil,
-			want: "<nil>",
-		},
-		{
-			name: "pointer to nil",
-			arg:  &pnil,
-			want: "<nil>",
-		},
-		{
-			name: "text",
-			arg:  &txt,
-			want: "text",
-		},
-		{
-			name: "num",
-			arg:  &num,
-			want: "123",
-		},
+	var x *int
+	if s := Stringer(x).String(); s != "<nil>" {
+		t.Error(s)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := Stringer(tt.arg).String(); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Stringer() = %v, want %v", got, tt.want)
-			}
-		})
+
+	txt := "text"
+	if s := Stringer(&txt).String(); s != "text" {
+		t.Error(s)
+	}
+
+	num := int(123)
+	if s := Stringer(&num).String(); s != "123" {
+		t.Error(s)
 	}
 }
