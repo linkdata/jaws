@@ -11,9 +11,6 @@ type stringizer[T any] struct {
 }
 
 func (s stringizer[T]) String() string {
-	if s.v == nil {
-		return "<nil>"
-	}
 	return fmt.Sprint(*s.v)
 }
 
