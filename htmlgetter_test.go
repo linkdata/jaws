@@ -32,6 +32,7 @@ func Test_makeHtmlGetter(t *testing.T) {
 	var avUntyped, avTyped atomic.Value
 	avUntyped.Store(untypedText)
 	avTyped.Store(typedText)
+	stringer := testStringer{}
 
 	tests := []struct {
 		name string
@@ -40,6 +41,13 @@ func Test_makeHtmlGetter(t *testing.T) {
 		out  template.HTML
 		tag  any
 	}{
+		{
+			name: "StringerGetter",
+			v:    stringer,
+			want: htmlStringGetter{stringerGetter{stringer}},
+			out:  template.HTML(testStringer{}.String()),
+			tag:  stringerGetter{stringer},
+		},
 		{
 			name: "HtmlGetter",
 			v:    htmlGetter{typedText},

@@ -27,6 +27,7 @@ func Test_makeStringGetter(t *testing.T) {
 	val := "<span>"
 	ts := newTestSetter(val)
 	sgt := simpleGetterT{Value: val}
+	stringer := testStringer{}
 
 	tests := []struct {
 		name string
@@ -42,6 +43,13 @@ func Test_makeStringGetter(t *testing.T) {
 			want: ts,
 			out:  val,
 			tag:  ts,
+		},
+		{
+			name: "StringerGetter",
+			v:    stringer,
+			want: stringerGetter{stringer},
+			out:  testStringer{}.String(),
+			tag:  stringer,
 		},
 		{
 			name: "Getter[string]",

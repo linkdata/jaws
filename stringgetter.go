@@ -51,6 +51,8 @@ func makeStringGetter(v any) StringGetter {
 		return stringGetter{string(v)}
 	case template.HTMLAttr:
 		return stringGetter{string(v)}
+	case Stringer:
+		return stringerGetter{v}
 	}
 	panic(fmt.Errorf("expected jaws.StringGetter or string, not %T", v))
 }

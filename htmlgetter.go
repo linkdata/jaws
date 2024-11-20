@@ -41,6 +41,8 @@ func makeHtmlGetter(v any) HtmlGetter {
 		return atomicSetter{v}
 	case template.HTML:
 		return htmlGetter{v}
+	case Stringer:
+		return htmlStringGetter{stringerGetter{v}}
 	case string:
 		h := template.HTML(v) // #nosec G203
 		return htmlGetter{h}

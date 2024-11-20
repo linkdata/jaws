@@ -69,6 +69,7 @@ func Test_makeStringSetter(t *testing.T) {
 	var av atomic.Value
 	av.Store(val)
 	ts := newTestSetter(val)
+	stringer := testStringer{}
 
 	sg := simpleGetter{Value: val}
 	sgt := simpleGetterT{Value: val}
@@ -105,6 +106,14 @@ func Test_makeStringSetter(t *testing.T) {
 			out:  val,
 			err:  ErrValueNotSettable,
 			tag:  sg,
+		},
+		{
+			name: "StringerGetter",
+			v:    stringer,
+			want: stringerGetter{stringer},
+			out:  testStringer{}.String(),
+			err:  ErrValueNotSettable,
+			tag:  stringer,
 		},
 		{
 			name: "Setter[string]",
