@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"reflect"
+	"sync"
 	"testing"
 )
 
@@ -18,9 +19,12 @@ func (s *testPtrStringer) String() string {
 }
 
 func TestStringer(t *testing.T) {
+	var mu sync.Mutex
+	var mu2 sync.RWMutex
+
 	txt := "text"
 	stringer := Stringer(&txt)
-	if s := Bind(nil, &stringer).JawsGetString(nil); s != "text" {
+	if s := Bind(&mu, &stringer).JawsGetString(nil); s != "text" {
 		t.Error(s)
 	}
 	if tags := MustTagExpand(nil, stringer); !reflect.DeepEqual(tags, []any{&txt}) {
@@ -29,7 +33,7 @@ func TestStringer(t *testing.T) {
 
 	num := int(123)
 	stringer = Stringer(&num)
-	if s := Bind(nil, &stringer).JawsGetString(nil); s != "123" {
+	if s := Bind(&mu, &stringer).JawsGetString(nil); s != "123" {
 		t.Error(s)
 	}
 	if tags := MustTagExpand(nil, stringer); !reflect.DeepEqual(tags, []any{&num}) {
@@ -44,7 +48,7 @@ func TestStringer(t *testing.T) {
 	if tags := MustTagExpand(nil, stringer); !reflect.DeepEqual(tags, []any{teststringer}) {
 		t.Errorf("%#v", tags)
 	}
-	b1 := Bind(nil, &stringer)
+	b1 := Bind(&mu, &stringer)
 	if s := b1.JawsGetString(nil); s != (testStringer{}).String() {
 		t.Error(s)
 	}
@@ -61,7 +65,7 @@ func TestStringer(t *testing.T) {
 		t.Errorf("%#v", tags)
 	}
 
-	b2 := Bind(nil, &stringer)
+	b2 := Bind(&mu2, &stringer)
 	if s := b2.JawsGetString(nil); s != (&testPtrStringer{}).String() {
 		t.Error(s)
 	}
@@ -69,7 +73,7 @@ func TestStringer(t *testing.T) {
 		t.Errorf("%#v", tags)
 	}
 
-	b3 := Bind(nil, testptrstringer)
+	b3 := Bind(&mu2, testptrstringer)
 	if s := b3.JawsGetString(nil); s != (&testPtrStringer{}).String() {
 		t.Error(s)
 	}

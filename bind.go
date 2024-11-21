@@ -21,14 +21,18 @@ var (
 	_ TimeSetter   = Binding[time.Time]{}
 )
 
+func (bind Binding[T]) getLocked() T {
+	return *bind.P
+}
+
 func (bind Binding[T]) Get() (value T) {
 	if rl, ok := bind.L.(RLocker); ok {
 		rl.RLock()
-		value = *bind.P
+		value = bind.getLocked()
 		rl.RUnlock()
 	} else {
 		bind.L.Lock()
-		value = *bind.P
+		value = bind.getLocked()
 		bind.L.Unlock()
 	}
 	return
@@ -45,7 +49,11 @@ func (bind Binding[T]) Set(value T) (err error) {
 	return
 }
 
-func (bind Binding[T]) JawsGet(elem *Element) T {
+func (bind Binding[T]) jawsGetLocked(*Element) T {
+	return bind.getLocked()
+}
+
+func (bind Binding[T]) JawsGet(*Element) T {
 	return bind.Get()
 }
 
@@ -68,13 +76,20 @@ func (bind Binding[T]) JawsSetString(e *Element, val string) (err error) {
 }
 
 func (bind Binding[T]) JawsGetString(e *Element) string {
+	if rl, ok := bind.L.(RLocker); ok {
+		rl.RLock()
+		defer rl.RUnlock()
+	} else {
+		bind.L.Lock()
+		defer bind.L.Unlock()
+	}
 	if x, ok := any(*bind.P).(fmt.Stringer); ok {
 		return x.String()
 	}
 	if x, ok := any(bind.P).(fmt.Stringer); ok {
 		return x.String()
 	}
-	return any(bind.JawsGet(e)).(string)
+	return any(bind.jawsGetLocked(e)).(string)
 }
 
 func (bind Binding[T]) JawsSetFloat(e *Element, val float64) (err error) {
