@@ -55,3 +55,16 @@ func Test_Bind_Time(t *testing.T) {
 		t.Error(v)
 	}
 }
+
+func Test_Bind_panic(t *testing.T) {
+	var mu sync.Mutex
+	var val bool
+	defer func() {
+		if e := recover(); e == nil {
+			t.Error("expected panic")
+		}
+	}()
+	v := Bind(&mu, &val)
+	_ = v.JawsSetString(nil, "foo")
+	t.Error("expected panic")
+}

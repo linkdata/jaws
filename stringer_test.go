@@ -55,6 +55,9 @@ func TestStringer(t *testing.T) {
 	if tags := MustTagExpand(nil, b1); !reflect.DeepEqual(tags, []any{teststringer}) {
 		t.Errorf("%#v", tags)
 	}
+	if err := b1.JawsSetString(nil, "x"); err != ErrValueNotSettable {
+		t.Error(err)
+	}
 
 	testptrstringer := &testPtrStringer{}
 	stringer = Stringer(testptrstringer)
@@ -72,6 +75,9 @@ func TestStringer(t *testing.T) {
 	if tags := MustTagExpand(nil, b2); !reflect.DeepEqual(tags, []any{testptrstringer}) {
 		t.Errorf("%#v", tags)
 	}
+	if err := b2.JawsSetString(nil, "x"); err != ErrValueNotSettable {
+		t.Error(err)
+	}
 
 	b3 := Bind(&mu2, testptrstringer)
 	if s := b3.JawsGetString(nil); s != (&testPtrStringer{}).String() {
@@ -79,5 +85,8 @@ func TestStringer(t *testing.T) {
 	}
 	if tags := MustTagExpand(nil, b3); !reflect.DeepEqual(tags, []any{testptrstringer}) {
 		t.Errorf("%#v", tags)
+	}
+	if err := b3.JawsSetString(nil, "x"); err != ErrValueNotSettable {
+		t.Error(err)
 	}
 }

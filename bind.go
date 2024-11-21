@@ -72,6 +72,17 @@ func (bind Binding[T]) JawsGetTag(*Request) any {
 }
 
 func (bind Binding[T]) JawsSetString(e *Element, val string) (err error) {
+	defer func() {
+		if e := recover(); e != nil {
+			if _, ok := any(*bind.P).(fmt.Stringer); ok {
+				err = ErrValueNotSettable
+			} else if _, ok := any(bind.P).(fmt.Stringer); ok {
+				err = ErrValueNotSettable
+			} else {
+				panic(e)
+			}
+		}
+	}()
 	return bind.JawsSet(e, any(val).(T))
 }
 
@@ -117,9 +128,13 @@ func (bind Binding[T]) JawsSetTime(elem *Element, value time.Time) error {
 }
 
 // Bind returns a Binding[T] with the given sync.Locker (or RWLocker) and a pointer to the underlying value of type T.
+//
 // It implements Setter[T]. It also implements BoolSetter, FloatSetter, StringSetter and TimeSetter, but will panic
-// if the underlying type T is not correct or not settable.
-// It has special support for fmt.Stringer, and will call T.String() for JawsGetString().
+// if the underlying type T is not correct.
+//
+// It has special support for fmt.Stringer, and will call T.String() for JawsGetString()
+// and return ErrValueNotSettable for JawsSetString().
+//
 // The pointer (or fmt.Stringer if applicable) will be used as the UI tag.
 func Bind[T comparable](l sync.Locker, p *T) Binding[T] {
 	return Binding[T]{L: l, P: p}
