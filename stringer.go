@@ -42,7 +42,8 @@ func (s lockedstringer) JawsGetTag(*Request) any {
 }
 
 // Stringer returns a lock protected fmt.Stringer using fmt.Sprintf(formatting, *T).
-// If formatting is omitted and *T or T implements fmt.Stringer, that will be used instead of fmt.Sprintf.
+// If formatting is omitted fmt.Sprint(*T) is used.
+// If formatting is omitted and *T or T implements fmt.Stringer, that will be used instead of fmt.Sprint.
 func Stringer[T any](l sync.Locker, p *T, formatting ...string) fmt.Stringer {
 	var f string
 	if len(formatting) > 0 {
