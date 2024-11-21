@@ -7,10 +7,14 @@ import (
 
 type stringizer[T any] struct {
 	v *T
+	f string
 }
 
 func (s stringizer[T]) String() string {
-	return fmt.Sprint(*s.v)
+	if s.f == "" {
+		return fmt.Sprint(*s.v)
+	}
+	return fmt.Sprintf(s.f, *s.v)
 }
 
 func (s stringizer[T]) JawsGetTag(*Request) any {
@@ -37,14 +41,19 @@ func (s lockedstringer) JawsGetTag(*Request) any {
 	return s.s
 }
 
-// Stringer returns a lock protected fmt.Stringer using fmt.Sprint(*T)
-// unless *T or T implements fmt.Stringer, in which case that will be used.
-func Stringer[T any](l sync.Locker, p *T) fmt.Stringer {
-	if x, ok := any(*p).(fmt.Stringer); ok {
-		return lockedstringer{l, x}
+// Stringer returns a lock protected fmt.Stringer using fmt.Sprintf(formatting, *T).
+// If formatting is omitted and *T or T implements fmt.Stringer, that will be used instead of fmt.Sprintf.
+func Stringer[T any](l sync.Locker, p *T, formatting ...string) fmt.Stringer {
+	var f string
+	if len(formatting) > 0 {
+		f = formatting[0]
+	} else {
+		if x, ok := any(*p).(fmt.Stringer); ok {
+			return lockedstringer{l, x}
+		}
+		if x, ok := any(p).(fmt.Stringer); ok {
+			return lockedstringer{l, x}
+		}
 	}
-	if x, ok := any(p).(fmt.Stringer); ok {
-		return lockedstringer{l, x}
-	}
-	return lockedstringer{l, stringizer[T]{p}}
+	return lockedstringer{l, stringizer[T]{p, f}}
 }

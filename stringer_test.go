@@ -40,6 +40,15 @@ func TestStringer(t *testing.T) {
 		t.Error(tags)
 	}
 
+	flt := float64(456.123)
+	stringer = Stringer(&mu, &flt, "%.0f")
+	if s := stringer.String(); s != "456" {
+		t.Error(s)
+	}
+	if tags := MustTagExpand(nil, stringer); !reflect.DeepEqual(tags, []any{&flt}) {
+		t.Error(tags)
+	}
+
 	teststringer := testStringer{}
 	stringer = Stringer(&mu, &teststringer)
 	if s := stringer.String(); s != (testStringer{}).String() {
