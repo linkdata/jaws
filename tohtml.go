@@ -23,9 +23,10 @@ func (fh formathtml) JawsGetTag(*Request) any {
 	return fh.s
 }
 
-// ToHTML return a jaws.HtmlGetter using the given stringer.
-// The string returned from the stringer will be escaped using html.EscapeString.
-// If formatting is provided the escaped result is passed to fmt.Sprintf(formatting, escapedstring)
+// ToHTML return a jaws.HtmlGetter using the given stringer with
+// the string returned from the stringer escaped using html.EscapeString.
+//
+// If formatting is provided the escaped result is passed to fmt.Sprintf(formatting, escapedstring).
 // Make sure any provided formatting produces correct HTML.
 func ToHTML(stringer fmt.Stringer, formatting ...string) HtmlGetter {
 	var f string
