@@ -10,12 +10,6 @@ import (
 	"github.com/linkdata/deadlock"
 )
 
-type testStringer struct{}
-
-func (s testStringer) String() string {
-	return "I_Am_A_testStringer"
-}
-
 func TestRequest_NewElement_DebugPanicsIfNotComparable(t *testing.T) {
 	notHashableUI := struct {
 		*UiSpan

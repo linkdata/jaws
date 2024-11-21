@@ -18,5 +18,8 @@ func Stringer[T any](v *T) fmt.Stringer {
 	if x, ok := any(*v).(fmt.Stringer); ok {
 		return x
 	}
+	if x, ok := any(v).(fmt.Stringer); ok {
+		return x
+	}
 	return stringizer[T]{v}
 }
