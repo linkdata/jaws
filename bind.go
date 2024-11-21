@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"fmt"
 	"sync"
 	"time"
 )
@@ -21,18 +20,14 @@ var (
 	_ TimeSetter   = Binding[time.Time]{}
 )
 
-func (bind Binding[T]) getLocked() T {
-	return *bind.P
-}
-
 func (bind Binding[T]) Get() (value T) {
 	if rl, ok := bind.L.(RLocker); ok {
 		rl.RLock()
-		value = bind.getLocked()
+		value = *bind.P
 		rl.RUnlock()
 	} else {
 		bind.L.Lock()
-		value = bind.getLocked()
+		value = *bind.P
 		bind.L.Unlock()
 	}
 	return
@@ -49,10 +44,6 @@ func (bind Binding[T]) Set(value T) (err error) {
 	return
 }
 
-func (bind Binding[T]) jawsGetLocked(*Element) T {
-	return bind.getLocked()
-}
-
 func (bind Binding[T]) JawsGet(*Element) T {
 	return bind.Get()
 }
@@ -62,45 +53,15 @@ func (bind Binding[T]) JawsSet(elem *Element, value T) error {
 }
 
 func (bind Binding[T]) JawsGetTag(*Request) any {
-	if x, ok := any(*bind.P).(fmt.Stringer); ok {
-		return x
-	}
-	if x, ok := any(bind.P).(fmt.Stringer); ok {
-		return x
-	}
 	return bind.P
 }
 
 func (bind Binding[T]) JawsSetString(e *Element, val string) (err error) {
-	defer func() {
-		if e := recover(); e != nil {
-			if _, ok := any(*bind.P).(fmt.Stringer); ok {
-				err = ErrValueNotSettable
-			} else if _, ok := any(bind.P).(fmt.Stringer); ok {
-				err = ErrValueNotSettable
-			} else {
-				panic(e)
-			}
-		}
-	}()
 	return bind.JawsSet(e, any(val).(T))
 }
 
 func (bind Binding[T]) JawsGetString(e *Element) string {
-	if rl, ok := bind.L.(RLocker); ok {
-		rl.RLock()
-		defer rl.RUnlock()
-	} else {
-		bind.L.Lock()
-		defer bind.L.Unlock()
-	}
-	if x, ok := any(*bind.P).(fmt.Stringer); ok {
-		return x.String()
-	}
-	if x, ok := any(bind.P).(fmt.Stringer); ok {
-		return x.String()
-	}
-	return any(bind.jawsGetLocked(e)).(string)
+	return any(bind.JawsGet(e)).(string)
 }
 
 func (bind Binding[T]) JawsSetFloat(e *Element, val float64) (err error) {
@@ -132,10 +93,7 @@ func (bind Binding[T]) JawsSetTime(elem *Element, value time.Time) error {
 // It implements Setter[T]. It also implements BoolSetter, FloatSetter, StringSetter and TimeSetter, but will panic
 // if the underlying type T is not correct.
 //
-// It has special support for fmt.Stringer, and will call T.String() for JawsGetString()
-// and return ErrValueNotSettable for JawsSetString().
-//
-// The pointer (or fmt.Stringer if applicable) will be used as the UI tag.
+// The pointer will be used as the UI tag.
 func Bind[T comparable](l sync.Locker, p *T) Binding[T] {
 	return Binding[T]{L: l, P: p}
 }
