@@ -120,7 +120,7 @@ func (bind Binding[T]) JawsSetTime(elem *Element, value time.Time) error {
 // It implements Setter[T]. It also implements BoolSetter, FloatSetter, StringSetter and TimeSetter, but will panic
 // if the underlying type T is not correct or not settable.
 // It has special support for fmt.Stringer, and will call T.String() for JawsGetString().
-// The pointer will be used as the UI tag.
+// The pointer (or fmt.Stringer if applicable) will be used as the UI tag.
 func Bind[T comparable](l sync.Locker, p *T) Binding[T] {
 	return Binding[T]{L: l, P: p}
 }
