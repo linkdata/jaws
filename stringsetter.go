@@ -50,7 +50,7 @@ func makeStringSetter(v any) StringSetter {
 		return stringSetterT{v}
 	case Getter[string]:
 		return stringGetterT{v}
-	case stringer:
+	case fmt.Stringer:
 		return stringerGetter{v}
 	case string:
 		return stringGetter{v}

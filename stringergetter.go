@@ -1,6 +1,8 @@
 package jaws
 
-type stringerGetter struct{ v stringer }
+import "fmt"
+
+type stringerGetter struct{ v fmt.Stringer }
 
 func (g stringerGetter) JawsGetString(e *Element) string {
 	return g.v.String()
