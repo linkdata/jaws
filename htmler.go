@@ -32,7 +32,7 @@ func (h htmler) JawsGetHtml(e *Element) template.HTML {
 		}
 		args = append(args, arg)
 	}
-	return template.HTML(fmt.Sprintf(h.f, args...))
+	return template.HTML( /*#nosec G203*/ fmt.Sprintf(h.f, args...))
 }
 
 func (h htmler) JawsGetTag(*Request) any {

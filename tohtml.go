@@ -16,7 +16,7 @@ func (fh formathtml) JawsGetHtml(*Element) template.HTML {
 	if fh.f != "" {
 		s = fmt.Sprintf(fh.f, s)
 	}
-	return template.HTML(s)
+	return template.HTML(s) //#nosec G203
 }
 
 func (fh formathtml) JawsGetTag(*Request) any {
