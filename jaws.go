@@ -365,10 +365,15 @@ func (jw *Jaws) deleteSession(sessionID uint64) {
 	jw.mu.Unlock()
 }
 
-const jawsAlertStyle = `
-<style>
-  .jaws-alert { height: 3em; display: flex; justify-content: center; align-items: center; background-color: red; color: white; }
-</style>
+const jawsLostStyle = `
+<style>.jaws-lost {
+display: flex; position: relative; 
+height: 3em; width: 100vw;
+left: 50%; margin-left: -50vw;
+right: 50%; margin-right:-50vw;
+justify-content: center; align-items: center;
+background-color: red; color: white;
+}</style>
 `
 
 // GenerateHeadHTML (re-)generates the HTML code that goes in the HEAD section, ensuring
@@ -389,7 +394,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 				err = errors.Join(e)
 			}
 		}
-		jw.headPrefix = PreloadHTML(urls...) + jawsAlertStyle + `<script>var jawsKey="`
+		jw.headPrefix = PreloadHTML(urls...) + jawsLostStyle + `<script>var jawsKey="`
 	}
 	return
 }

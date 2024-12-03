@@ -222,7 +222,7 @@ function jawsLost() {
 	innerHTML += '. Trying to reconnect.';
 	var elem = document.getElementById('jaws-lost');
 	if (elem == null) {
-		elem = jawsElement('<div id="jaws-lost" class="jaws-alert">' + innerHTML + '</div>');
+		elem = jawsElement('<div id="jaws-lost" class="jaws-lost">' + innerHTML + '</div>');
 		document.body.prepend(elem);
 		document.body.scrollTop = document.documentElement.scrollTop = 0;
 	} else {
