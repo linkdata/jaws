@@ -85,7 +85,7 @@ func (bind Binding[T]) JawsGetTime(elem *Element) time.Time {
 }
 
 func (bind Binding[T]) JawsSetTime(elem *Element, value time.Time) error {
-	return bind.Set(any(value).(T))
+	return bind.JawsSet(elem, any(value).(T))
 }
 
 // Bind returns a Binding[T] with the given sync.Locker (or RWLocker) and a pointer to the underlying value of type T.
