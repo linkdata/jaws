@@ -2,14 +2,16 @@ package jaws
 
 import "time"
 
+type AfterSetFunc[T comparable] func(bind Binding[T]) (err error)
+
 type AfterSetter[T comparable] struct {
 	Binding[T]
-	Func func()
+	AfterSetFunc[T]
 }
 
 func (as *AfterSetter[T]) Set(value T) (err error) {
 	if err = as.Binding.Set(value); err == nil {
-		as.Func()
+		err = as.AfterSetFunc(as.Binding)
 	}
 	return
 }
@@ -35,10 +37,13 @@ func (as *AfterSetter[T]) JawsSetTime(elem *Element, value time.Time) error {
 }
 
 // AfterSet returns a wrapped Binding with a function to call after a
-// successful Set.
-func AfterSet[T comparable](bind Binding[T], fn func()) *AfterSetter[T] {
+// successful bind.Set.
+//
+// The functions return value replaces that of Set, and the function may
+// use the Binding to inspect and modify the value.
+func AfterSet[T comparable](bind Binding[T], fn AfterSetFunc[T]) *AfterSetter[T] {
 	return &AfterSetter[T]{
-		Binding: bind,
-		Func:    fn,
+		Binding:      bind,
+		AfterSetFunc: fn,
 	}
 }
