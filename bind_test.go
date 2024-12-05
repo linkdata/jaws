@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -15,6 +16,10 @@ func Test_Bind_string(t *testing.T) {
 	}
 	if s := v.JawsGetString(nil); s != "foo" {
 		t.Error(s)
+	}
+
+	if tags := MustTagExpand(nil, v); !reflect.DeepEqual(tags, []any{&val}) {
+		t.Error(tags)
 	}
 }
 
