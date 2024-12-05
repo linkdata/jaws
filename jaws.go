@@ -367,7 +367,7 @@ func (jw *Jaws) deleteSession(sessionID uint64) {
 
 const jawsLostStyle = `
 <style>.jaws-lost {
-display: flex; position: relative; 
+display: flex; position: relative; z-index: 1000;
 height: 3em; width: 100vw;
 left: 50%; margin-left: -50vw;
 right: 50%; margin-right:-50vw;
