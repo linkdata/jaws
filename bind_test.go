@@ -272,7 +272,7 @@ func TestBindFunc_String(t *testing.T) {
 
 	testBind_Hooks(t, "foo")
 	testBind_StringSetter(t, Bind(&mu, &val).(StringSetter))
-	testBind_StringSetter(t, Bind(&mu, &val).Success(func() (err error) { return }).(StringSetter))
+	testBind_StringSetter(t, Bind(&mu, &val).Success(func() {}).(StringSetter))
 }
 
 func testBind_FloatSetter(t *testing.T, v FloatSetter) {
@@ -291,7 +291,7 @@ func TestBindFunc_Float(t *testing.T) {
 
 	testBind_Hooks(t, float64(1.23))
 	testBind_FloatSetter(t, Bind(&mu, &val).(FloatSetter))
-	testBind_FloatSetter(t, Bind(&mu, &val).Success(func() (err error) { return }).(FloatSetter))
+	testBind_FloatSetter(t, Bind(&mu, &val).Success(func() {}).(FloatSetter))
 }
 
 func testBind_BoolSetter(t *testing.T, v BoolSetter) {
@@ -310,7 +310,7 @@ func TestBindFunc_Bool(t *testing.T) {
 
 	testBind_Hooks(t, true)
 	testBind_BoolSetter(t, Bind(&mu, &val).(BoolSetter))
-	testBind_BoolSetter(t, Bind(&mu, &val).Success(func() (err error) { return }).(BoolSetter))
+	testBind_BoolSetter(t, Bind(&mu, &val).Success(func() {}).(BoolSetter))
 }
 
 func testBind_TimeSetter(t *testing.T, v TimeSetter) {
@@ -329,5 +329,5 @@ func TestBindFunc_Time(t *testing.T) {
 
 	testBind_Hooks(t, time.Now())
 	testBind_TimeSetter(t, Bind(&mu, &val).(TimeSetter))
-	testBind_TimeSetter(t, Bind(&mu, &val).Success(func() (err error) { return }).(TimeSetter))
+	testBind_TimeSetter(t, Bind(&mu, &val).Success(func() {}).(TimeSetter))
 }

@@ -43,12 +43,18 @@ type Binder[T comparable] interface {
 	//
 	// The lock will be held at this point.
 	// Do not lock or unlock the Binder within fn. Do not call JawsSet.
+	//
+	// The bind argument to the function is the previous Binder in the chain,
+	// and you probably want to call it's JawsSetLocked first.
 	SetLocked(fn BindSetHook[T]) (newbind Binder[T])
 
 	// GetLocked returns a Binder[T] that will call fn instead of JawsGetLocked.
 	//
 	// The lock will be held at this point, preferring RLock over Lock, if available.
 	// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+	//
+	// The bind argument to the function is the previous Binder in the chain,
+	// and you probably want to call it's JawsGetLocked first.
 	GetLocked(fn BindGetHook[T]) (newbind Binder[T])
 
 	// Success returns a Binder[T] that will call fn after the value has been set

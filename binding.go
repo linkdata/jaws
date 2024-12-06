@@ -106,6 +106,9 @@ func (bind Binding[T]) RUnlock() {
 //
 // The lock will be held at this point.
 // Do not lock or unlock the Binder within fn. Do not call JawsSet.
+//
+// The bind argument to the function is the previous Binder in the chain,
+// and you probably want to call it's JawsSetLocked first.
 func (bind Binding[T]) SetLocked(setFn BindSetHook[T]) Binder[T] {
 	return &BindingHook[T]{
 		Binder:      bind,
@@ -117,6 +120,9 @@ func (bind Binding[T]) SetLocked(setFn BindSetHook[T]) Binder[T] {
 //
 // The lock will be held at this point, preferring RLock over Lock, if available.
 // Do not lock or unlock the Binder within fn. Do not call JawsGet.
+//
+// The bind argument to the function is the previous Binder in the chain,
+// and you probably want to call it's JawsGetLocked first.
 func (bind Binding[T]) GetLocked(setFn BindGetHook[T]) Binder[T] {
 	return &BindingHook[T]{
 		Binder:      bind,
