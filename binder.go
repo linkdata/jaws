@@ -35,7 +35,7 @@ type Binder[T comparable] interface {
 	Setter[T]
 	JawsGetTag(*Request) any
 
-	JawsBinderPrev() Binder[T] // returns the previous Binder in the chail, or nil
+	JawsBinderPrev() Binder[T] // returns the previous Binder in the chain, or nil
 	JawsGetLocked(elem *Element) (value T)
 	JawsSetLocked(elem *Element, value T) (err error)
 
