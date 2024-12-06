@@ -20,6 +20,10 @@ var (
 	_ TimeSetter   = Binding[time.Time]{}
 )
 
+func (bind Binding[T]) JawsBinderPrev() Binder[T] {
+	return nil
+}
+
 func (bind Binding[T]) JawsGetLocked(*Element) T {
 	return *bind.ptr
 }
@@ -32,16 +36,18 @@ func (bind Binding[T]) JawsSetLocked(elem *Element, value T) (err error) {
 	return nil
 }
 
-func (bind Binding[T]) JawsGet(elem *Element) T {
+func (bind Binding[T]) JawsGet(elem *Element) (value T) {
 	bind.RLock()
-	defer bind.RUnlock()
-	return bind.JawsGetLocked(elem)
+	value = bind.JawsGetLocked(elem)
+	bind.RUnlock()
+	return
 }
 
-func (bind Binding[T]) JawsSet(elem *Element, value T) error {
+func (bind Binding[T]) JawsSet(elem *Element, value T) (err error) {
 	bind.Lock()
-	defer bind.Unlock()
-	return bind.JawsSetLocked(elem, value)
+	err = bind.JawsSetLocked(elem, value)
+	bind.Unlock()
+	return
 }
 
 func (bind Binding[T]) JawsGetTag(*Request) any {
@@ -96,23 +102,62 @@ func (bind Binding[T]) RUnlock() {
 	}
 }
 
-func (bind Binding[T]) SetHook(setFn BindSetHook[T]) Binder[T] {
-	return &BindingHookSet[T]{
+// SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
+//
+// The lock will be held at this point.
+// Do not lock or unlock the Binder within fn. Do not call JawsSet.
+func (bind Binding[T]) SetLocked(setFn BindSetHook[T]) Binder[T] {
+	return &BindingHook[T]{
 		Binder:      bind,
 		BindSetHook: setFn,
 	}
 }
 
-func (bind Binding[T]) GetHook(setFn BindGetHook[T]) Binder[T] {
-	return &BindingHookGet[T]{
+// GetLocked returns a Binder[T] that will call fn instead of JawsGetLocked.
+//
+// The lock will be held at this point, preferring RLock over Lock, if available.
+// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+func (bind Binding[T]) GetLocked(setFn BindGetHook[T]) Binder[T] {
+	return &BindingHook[T]{
 		Binder:      bind,
 		BindGetHook: setFn,
 	}
 }
 
-func (bind Binding[T]) Success(setFn BindSuccessHook) Binder[T] {
-	return &BindingHookSet[T]{
+// Success returns a Binder[T] that will call fn after the value has been set
+// with no errors. No locks are held when the function is called.
+// If the function returns an error, that will be returned from JawsSet.
+//
+// The function must have one of the following signatures:
+//   - func()
+//   - func() error
+//   - func(*Element)
+//   - func(*Element) error
+func (bind Binding[T]) Success(fn any) Binder[T] {
+	return &BindingHook[T]{
 		Binder:          bind,
-		BindSuccessHook: setFn,
+		BindSuccessHook: wrapSuccessHook(fn),
 	}
+}
+
+func wrapSuccessHook(fn any) (hook BindSuccessHook) {
+	switch fn := fn.(type) {
+	case func():
+		return func(*Element) error {
+			fn()
+			return nil
+		}
+	case func() error:
+		return func(*Element) error {
+			return fn()
+		}
+	case func(*Element):
+		return func(elem *Element) error {
+			fn(elem)
+			return nil
+		}
+	case func(*Element) error:
+		return fn
+	}
+	panic("Binding[T].Success(): function has wrong signature")
 }
