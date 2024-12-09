@@ -6,14 +6,14 @@ import (
 
 var _ FloatSetter = UiFloat{}
 
-// UiFloat implements FloatSetter given a sync.Locker (or RLocker) and a float64 pointer.
+// UiFloat implements FloatSetter given a sync.Locker (or RWLocker) and a float64 pointer.
 type UiFloat struct {
 	L sync.Locker
 	P *float64
 }
 
 func (ui UiFloat) JawsGetFloat(e *Element) (val float64) {
-	if rl, ok := ui.L.(RLocker); ok {
+	if rl, ok := ui.L.(RWLocker); ok {
 		rl.RLock()
 		val = *ui.P
 		rl.RUnlock()

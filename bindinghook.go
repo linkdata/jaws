@@ -25,8 +25,8 @@ func (bind *BindingHook[T]) JawsGetLocked(elem *Element) T {
 }
 
 func (bind *BindingHook[T]) JawsGet(elem *Element) T {
-	bind.RLock()
-	defer bind.RUnlock()
+	bind.Binder.RLock()
+	defer bind.Binder.RUnlock()
 	return bind.JawsGetLocked(elem)
 }
 
@@ -38,8 +38,8 @@ func (bind *BindingHook[T]) JawsSetLocked(elem *Element, value T) error {
 }
 
 func (bind *BindingHook[T]) jawsSetLocking(elem *Element, value T) (err error) {
-	bind.Lock()
-	defer bind.Unlock()
+	bind.Binder.Lock()
+	defer bind.Binder.Unlock()
 	return bind.JawsSetLocked(elem, value)
 }
 
@@ -65,31 +65,27 @@ func (bind *BindingHook[T]) JawsSet(elem *Element, value T) (err error) {
 func (bind *BindingHook[T]) JawsGetString(elem *Element) string {
 	return any(bind.JawsGet(elem)).(string)
 }
+func (bind *BindingHook[T]) JawsSetString(e *Element, val string) (err error) {
+	return bind.JawsSet(e, any(val).(T))
+}
 
 func (bind *BindingHook[T]) JawsGetFloat(elem *Element) float64 {
 	return any(bind.JawsGet(elem)).(float64)
+}
+func (bind *BindingHook[T]) JawsSetFloat(e *Element, val float64) (err error) {
+	return bind.JawsSet(e, any(val).(T))
 }
 
 func (bind *BindingHook[T]) JawsGetBool(elem *Element) bool {
 	return any(bind.JawsGet(elem)).(bool)
 }
-
-func (bind *BindingHook[T]) JawsGetTime(elem *Element) time.Time {
-	return any(bind.JawsGet(elem)).(time.Time)
-}
-
-func (bind *BindingHook[T]) JawsSetString(e *Element, val string) (err error) {
-	return bind.JawsSet(e, any(val).(T))
-}
-
-func (bind *BindingHook[T]) JawsSetFloat(e *Element, val float64) (err error) {
-	return bind.JawsSet(e, any(val).(T))
-}
-
 func (bind *BindingHook[T]) JawsSetBool(e *Element, val bool) (err error) {
 	return bind.JawsSet(e, any(val).(T))
 }
 
+func (bind *BindingHook[T]) JawsGetTime(elem *Element) time.Time {
+	return any(bind.JawsGet(elem)).(time.Time)
+}
 func (bind *BindingHook[T]) JawsSetTime(elem *Element, value time.Time) error {
 	return bind.JawsSet(elem, any(value).(T))
 }

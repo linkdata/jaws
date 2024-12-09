@@ -15,7 +15,7 @@ type htmler struct {
 
 // JawsGetHtml implements HtmlGetter.
 func (h htmler) JawsGetHtml(e *Element) template.HTML {
-	if rl, ok := h.l.(RLocker); ok {
+	if rl, ok := h.l.(RWLocker); ok {
 		rl.RLock()
 		defer rl.RUnlock()
 	} else {
