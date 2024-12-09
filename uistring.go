@@ -8,14 +8,14 @@ import (
 
 var _ StringSetter = UiString{}
 
-// UiString implements StringSetter and HtmlGetter given a sync.Locker (or RLocker) and a string pointer.
+// UiString implements StringSetter and HtmlGetter given a sync.Locker (or RWLocker) and a string pointer.
 type UiString struct {
 	L sync.Locker
 	P *string
 }
 
 func (ui UiString) JawsGetString(e *Element) (val string) {
-	if rl, ok := ui.L.(RLocker); ok {
+	if rl, ok := ui.L.(RWLocker); ok {
 		rl.RLock()
 		val = *ui.P
 		rl.RUnlock()

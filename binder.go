@@ -1,7 +1,5 @@
 package jaws
 
-import "sync"
-
 // BindSetHook is a function that replaces JawsSetLocked for a Binder.
 //
 // The lock will be held before calling the function, preferring RLock over Lock, if available.
@@ -30,8 +28,7 @@ type BindGetHook[T comparable] func(bind Binder[T], elem *Element) (value T)
 type BindSuccessHook func(*Element) (err error)
 
 type Binder[T comparable] interface {
-	sync.Locker
-	RLocker
+	RWLocker
 	Setter[T]
 	JawsGetTag(*Request) any
 

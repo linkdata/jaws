@@ -11,7 +11,7 @@ type lockedstringer struct {
 }
 
 func (s lockedstringer) String() (value string) {
-	if rl, ok := s.l.(RLocker); ok {
+	if rl, ok := s.l.(RWLocker); ok {
 		rl.RLock()
 		defer rl.RUnlock()
 	} else {
