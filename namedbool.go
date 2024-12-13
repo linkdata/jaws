@@ -47,14 +47,14 @@ func (nb *NamedBool) JawsGetHtml(*Element) (h template.HTML) {
 	return nb.Html()
 }
 
-func (nb *NamedBool) JawsGetBool(*Element) (v bool) {
+func (nb *NamedBool) JawsGet(*Element) (v bool) {
 	nb.mu.RLock()
 	v = nb.checked
 	nb.mu.RUnlock()
 	return
 }
 
-func (nb *NamedBool) JawsSetBool(e *Element, checked bool) (err error) {
+func (nb *NamedBool) JawsSet(e *Element, checked bool) (err error) {
 	var nba *NamedBoolArray
 	nb.mu.Lock()
 	if nb.checked != checked {

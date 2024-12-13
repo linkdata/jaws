@@ -23,10 +23,18 @@ func Test_makeStringGetter_panic(t *testing.T) {
 	makeStringGetter(uint32(42))
 }
 
+type simpleGetterT[T comparable] struct {
+	Value T
+}
+
+func (sg *simpleGetterT[T]) JawsGet(*Element) T {
+	return sg.Value
+}
+
 func Test_makeStringGetter(t *testing.T) {
 	val := "<span>"
 	ts := newTestSetter(val)
-	sgt := simpleGetterT{Value: val}
+	sgt := &simpleGetterT[string]{Value: val}
 	stringer := testStringer{}
 
 	tests := []struct {
@@ -61,7 +69,7 @@ func Test_makeStringGetter(t *testing.T) {
 		{
 			name: "string",
 			v:    val,
-			want: stringGetter{val},
+			want: stringGetterStatic{val},
 			out:  val,
 			err:  ErrValueNotSettable,
 			tag:  nil,
@@ -69,7 +77,7 @@ func Test_makeStringGetter(t *testing.T) {
 		{
 			name: "template.HTML",
 			v:    template.HTML(val),
-			want: stringGetter{val},
+			want: stringGetterStatic{val},
 			out:  val,
 			err:  ErrValueNotSettable,
 			tag:  nil,
@@ -77,7 +85,7 @@ func Test_makeStringGetter(t *testing.T) {
 		{
 			name: "template.HTMLAttr",
 			v:    template.HTMLAttr(val),
-			want: stringGetter{val},
+			want: stringGetterStatic{val},
 			out:  val,
 			err:  ErrValueNotSettable,
 			tag:  nil,

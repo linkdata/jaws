@@ -38,11 +38,6 @@ func TestTagExpand(t *testing.T) {
 			want: []any{Tag("foo")},
 		},
 		{
-			name: "TagGetter",
-			tag:  atomicSetter{&av},
-			want: []any{&av},
-		},
-		{
 			name: "TagGetter(Self)",
 			tag:  selftagger,
 			want: []any{selftagger},

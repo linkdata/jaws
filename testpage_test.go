@@ -63,11 +63,11 @@ const testPageWant = "(" +
 type testPage struct {
 	RequestWriter
 	Normal       *template.Template
-	TheBool      BoolSetter
+	TheBool      Setter[bool]
 	TheContainer Container
-	TheTime      TimeSetter
-	TheNumber    FloatSetter
-	TheString    StringSetter
+	TheTime      Setter[time.Time]
+	TheNumber    Setter[float64]
+	TheString    Setter[string]
 	TheSelector  SelectHandler
 	TheDot       any
 }

@@ -16,11 +16,11 @@ type testNamedBoolArray struct {
 	*NamedBoolArray
 }
 
-func (ts *testNamedBoolArray) JawsSetString(e *Element, val string) (err error) {
+func (ts *testNamedBoolArray) JawsSet(e *Element, val string) (err error) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	if err = ts.err; err == nil {
-		err = ts.NamedBoolArray.JawsSetString(e, val)
+		err = ts.NamedBoolArray.JawsSet(e, val)
 		ts.setCount++
 		if ts.setCount == 1 {
 			close(ts.setCalled)

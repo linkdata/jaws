@@ -1,7 +1,5 @@
 package jaws
 
-import "time"
-
 type successHooker interface {
 	JawsBinderSuccess(elem *Element) (err error)
 }
@@ -28,6 +26,10 @@ func (bind *BindingHook[T]) JawsGet(elem *Element) T {
 	bind.Binder.RLock()
 	defer bind.Binder.RUnlock()
 	return bind.JawsGetLocked(elem)
+}
+
+func (bind *BindingHook[T]) JawsGetAny(elem *Element) (value any) {
+	return bind.JawsGet(elem)
 }
 
 func (bind *BindingHook[T]) JawsSetLocked(elem *Element, value T) error {
@@ -62,32 +64,8 @@ func (bind *BindingHook[T]) JawsSet(elem *Element, value T) (err error) {
 	return
 }
 
-func (bind *BindingHook[T]) JawsGetString(elem *Element) string {
-	return any(bind.JawsGet(elem)).(string)
-}
-func (bind *BindingHook[T]) JawsSetString(e *Element, val string) (err error) {
-	return bind.JawsSet(e, any(val).(T))
-}
-
-func (bind *BindingHook[T]) JawsGetFloat(elem *Element) float64 {
-	return any(bind.JawsGet(elem)).(float64)
-}
-func (bind *BindingHook[T]) JawsSetFloat(e *Element, val float64) (err error) {
-	return bind.JawsSet(e, any(val).(T))
-}
-
-func (bind *BindingHook[T]) JawsGetBool(elem *Element) bool {
-	return any(bind.JawsGet(elem)).(bool)
-}
-func (bind *BindingHook[T]) JawsSetBool(e *Element, val bool) (err error) {
-	return bind.JawsSet(e, any(val).(T))
-}
-
-func (bind *BindingHook[T]) JawsGetTime(elem *Element) time.Time {
-	return any(bind.JawsGet(elem)).(time.Time)
-}
-func (bind *BindingHook[T]) JawsSetTime(elem *Element, value time.Time) error {
-	return bind.JawsSet(elem, any(value).(T))
+func (bind *BindingHook[T]) JawsSetAny(elem *Element, value any) error {
+	return bind.JawsSet(elem, value.(T))
 }
 
 // SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.

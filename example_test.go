@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"sync"
 
 	"github.com/linkdata/jaws"
 )
@@ -27,7 +28,9 @@ func Example() {
 	go jw.Serve()                             // start the JaWS processing loop
 	http.DefaultServeMux.Handle("/jaws/", jw) // ensure the JaWS routes are handled
 
-	var f jaws.Float // somewhere to store the slider data
-	http.DefaultServeMux.Handle("/", jw.Handler("index", &f))
+	var mu sync.Mutex
+	var f float64
+
+	http.DefaultServeMux.Handle("/", jw.Handler("index", jaws.Bind(&mu, &f)))
 	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 }

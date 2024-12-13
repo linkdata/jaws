@@ -72,9 +72,9 @@ func TestRequest_Container(t *testing.T) {
 }
 
 func TestRequest_Container_Alteration(t *testing.T) {
-	span1 := NewUiSpan(makeHtmlGetter("span1"))
-	span2 := NewUiSpan(makeHtmlGetter("span2"))
-	span3 := NewUiSpan(makeHtmlGetter("span3"))
+	span1 := NewUiSpan(MakeHtmlGetter("span1"))
+	span2 := NewUiSpan(MakeHtmlGetter("span2"))
+	span3 := NewUiSpan(MakeHtmlGetter("span3"))
 	tests := []struct {
 		name string
 		c    *testContainer

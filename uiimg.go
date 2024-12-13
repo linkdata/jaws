@@ -8,26 +8,26 @@ import (
 
 type UiImg struct {
 	UiHtml
-	StringGetter
+	Getter[string]
 }
 
 func (ui *UiImg) JawsRender(e *Element, w io.Writer, params []any) error {
-	ui.applyGetter(e, ui.StringGetter)
-	srcattr := template.HTMLAttr("src=" + strconv.Quote(ui.JawsGetString(e))) // #nosec G203
+	ui.applyGetter(e, ui.Getter)
+	srcattr := template.HTMLAttr("src=" + strconv.Quote(ui.JawsGet(e))) // #nosec G203
 	attrs := append(e.ApplyParams(params), srcattr)
 	return WriteHtmlInner(w, e.Jid(), "img", "", "", attrs...)
 }
 
 func (ui *UiImg) JawsUpdate(e *Element) {
-	e.SetAttr("src", ui.JawsGetString(e))
+	e.SetAttr("src", ui.JawsGet(e))
 }
 
-func NewUiImg(g StringGetter) *UiImg {
+func NewUiImg(g Getter[string]) *UiImg {
 	return &UiImg{
-		StringGetter: g,
+		Getter: g,
 	}
 }
 
 func (rq RequestWriter) Img(imageSrc any, params ...any) error {
-	return rq.UI(NewUiImg(makeStringGetter(imageSrc)), params...)
+	return rq.UI(NewUiImg(makeGetter[string](imageSrc)), params...)
 }

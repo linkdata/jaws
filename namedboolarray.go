@@ -135,11 +135,11 @@ func (nba *NamedBoolArray) String() string {
 	return sb.String()
 }
 
-func (nba *NamedBoolArray) JawsGetString(e *Element) string {
+func (nba *NamedBoolArray) JawsGet(e *Element) string {
 	return nba.Get()
 }
 
-func (nba *NamedBoolArray) JawsSetString(e *Element, name string) (err error) {
+func (nba *NamedBoolArray) JawsSet(e *Element, name string) (err error) {
 	if nba.Set(name, true) {
 		e.Dirty(nba)
 	} else {

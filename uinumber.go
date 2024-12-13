@@ -12,14 +12,14 @@ func (ui *UiNumber) JawsRender(e *Element, w io.Writer, params []any) error {
 	return ui.renderFloatInput(e, w, "number", params...)
 }
 
-func NewUiNumber(g FloatSetter) *UiNumber {
+func NewUiNumber(g Setter[float64]) *UiNumber {
 	return &UiNumber{
 		UiInputFloat{
-			FloatSetter: g,
+			Setter: g,
 		},
 	}
 }
 
 func (rq RequestWriter) Number(value any, params ...any) error {
-	return rq.UI(NewUiNumber(makeFloatSetter(value)), params...)
+	return rq.UI(NewUiNumber(makeSetter[float64](value)), params...)
 }

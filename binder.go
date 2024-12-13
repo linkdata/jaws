@@ -30,6 +30,7 @@ type BindSuccessHook func(*Element) (err error)
 type Binder[T comparable] interface {
 	RWLocker
 	Setter[T]
+	AnySetter
 	JawsGetTag(*Request) any
 
 	JawsBinderPrev() Binder[T] // returns the previous Binder in the chain, or nil

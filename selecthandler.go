@@ -2,5 +2,5 @@ package jaws
 
 type SelectHandler interface {
 	Container
-	StringSetter
+	Setter[string]
 }

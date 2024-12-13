@@ -21,5 +21,5 @@ func NewUiTr(innerHtml HtmlGetter) *UiTr {
 }
 
 func (rq RequestWriter) Tr(innerHtml any, params ...any) error {
-	return rq.UI(NewUiTr(makeHtmlGetter(innerHtml)), params...)
+	return rq.UI(NewUiTr(MakeHtmlGetter(innerHtml)), params...)
 }
