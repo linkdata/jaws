@@ -23,14 +23,14 @@ func (ui *UiSelect) JawsRender(e *Element, w io.Writer, params []any) error {
 }
 
 func (ui *UiSelect) JawsUpdate(e *Element) {
-	e.SetValue(ui.uiWrapContainer.Container.(StringSetter).JawsGetString(e))
+	e.SetValue(ui.uiWrapContainer.Container.(Getter[string]).JawsGet(e))
 	ui.uiWrapContainer.JawsUpdate(e)
 }
 
 func (ui *UiSelect) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
 	if wht == what.Input {
-		_, err = e.maybeDirty(ui.Tag, ui.uiWrapContainer.Container.(StringSetter).JawsSetString(e, val))
+		_, err = e.maybeDirty(ui.Tag, ui.uiWrapContainer.Container.(Setter[string]).JawsSet(e, val))
 	}
 	return
 }

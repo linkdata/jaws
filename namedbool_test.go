@@ -23,8 +23,8 @@ func TestNamedBool(t *testing.T) {
 	is.Equal(nb.Name(), nb.JawsGetString(nil))
 	is.Equal(nb.Html(), nb.JawsGetHtml(nil))
 
-	is.NoErr(nb.JawsSetBool(e, true))
+	is.NoErr(nb.JawsSet(e, true))
 	is.True(nb.Checked())
-	is.Equal(nb.Checked(), nb.JawsGetBool(nil))
-	is.Equal(nb.JawsSetBool(e, true), ErrValueUnchanged)
+	is.Equal(nb.Checked(), nb.JawsGet(nil))
+	is.Equal(nb.JawsSet(e, true), ErrValueUnchanged)
 }

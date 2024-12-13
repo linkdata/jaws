@@ -26,14 +26,14 @@ type testUi struct {
 }
 
 var _ UI = (*testUi)(nil)
-var _ StringSetter = (*testUi)(nil)
+var _ Setter[string] = (*testUi)(nil)
 
-func (tss *testUi) JawsGetString(e *Element) string {
+func (tss *testUi) JawsGet(e *Element) string {
 	atomic.AddInt32(&tss.getCalled, 1)
 	return tss.s
 }
 
-func (tss *testUi) JawsSetString(e *Element, s string) error {
+func (tss *testUi) JawsSet(e *Element, s string) error {
 	atomic.AddInt32(&tss.setCalled, 1)
 	tss.s = s
 	return nil

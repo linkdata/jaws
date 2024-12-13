@@ -76,33 +76,6 @@ func (ts *testSetter[T]) JawsSet(e *Element, val T) (err error) {
 	return
 }
 
-func (ts *testSetter[T]) JawsGetTime(e *Element) (val T) {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	ts.getCount++
-	if ts.getCount == 1 {
-		close(ts.getCalled)
-	}
-	val = ts.val
-	return
-}
-
-func (ts *testSetter[T]) JawsSetTime(e *Element, val T) (err error) {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	ts.setCount++
-	if ts.setCount == 1 {
-		close(ts.setCalled)
-	}
-	if err = ts.err; err == nil {
-		if ts.val == val {
-			err = ErrValueUnchanged
-		}
-		ts.val = val
-	}
-	return
-}
-
 func (ts *testSetter[string]) JawsGetString(e *Element) (val string) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
@@ -111,76 +84,6 @@ func (ts *testSetter[string]) JawsGetString(e *Element) (val string) {
 		close(ts.getCalled)
 	}
 	val = ts.val
-	return
-}
-
-func (ts *testSetter[string]) JawsSetString(e *Element, val string) (err error) {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	ts.setCount++
-	if ts.setCount == 1 {
-		close(ts.setCalled)
-	}
-	if err = ts.err; err == nil {
-		if ts.val == val {
-			err = ErrValueUnchanged
-		}
-		ts.val = val
-	}
-	return
-}
-
-func (ts *testSetter[bool]) JawsGetBool(e *Element) (val bool) {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	ts.getCount++
-	if ts.getCount == 1 {
-		close(ts.getCalled)
-	}
-	val = ts.val
-	return
-}
-
-func (ts *testSetter[bool]) JawsSetBool(e *Element, val bool) (err error) {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	ts.setCount++
-	if ts.setCount == 1 {
-		close(ts.setCalled)
-	}
-	if err = ts.err; err == nil {
-		if ts.val == val {
-			err = ErrValueUnchanged
-		}
-		ts.val = val
-	}
-	return
-}
-
-func (ts *testSetter[float64]) JawsGetFloat(e *Element) (val float64) {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	ts.getCount++
-	if ts.getCount == 1 {
-		close(ts.getCalled)
-	}
-	val = ts.val
-	return
-}
-
-func (ts *testSetter[float64]) JawsSetFloat(e *Element, val float64) (err error) {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	ts.setCount++
-	if ts.setCount == 1 {
-		close(ts.setCalled)
-	}
-	if err = ts.err; err == nil {
-		if ts.val == val {
-			err = ErrValueUnchanged
-		}
-		ts.val = val
-	}
 	return
 }
 

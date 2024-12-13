@@ -1,5 +1,9 @@
 package jaws
 
+import "errors"
+
+var ErrValueNotSettable = errors.New("value not settable")
+
 type AnyGetter interface {
 	JawsGetAny(elem *Element) (value any)
 }

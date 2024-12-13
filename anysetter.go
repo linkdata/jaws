@@ -1,9 +1,5 @@
 package jaws
 
-import (
-	"sync/atomic"
-)
-
 type AnySetter interface {
 	AnyGetter
 	// JawsSetAny may return ErrValueUnchanged to indicate value was already set.
@@ -15,8 +11,6 @@ func makeAnySetter(v any) AnySetter {
 	switch v := v.(type) {
 	case AnySetter:
 		return v
-	case *atomic.Value:
-		return atomicSetter{v}
 	}
 	return anyGetter{v}
 }

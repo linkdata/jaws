@@ -9,13 +9,13 @@ import (
 
 type UiInputBool struct {
 	UiInput
-	BoolSetter
+	Setter[bool]
 }
 
 func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string, params ...any) error {
-	ui.applyGetter(e, ui.BoolSetter)
+	ui.applyGetter(e, ui.Setter)
 	attrs := e.ApplyParams(params)
-	v := ui.JawsGetBool(e)
+	v := ui.JawsGet(e)
 	ui.Last.Store(v)
 	if v {
 		attrs = append(attrs, "checked")
@@ -24,7 +24,7 @@ func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string,
 }
 
 func (ui *UiInputBool) JawsUpdate(e *Element) {
-	v := ui.JawsGetBool(e)
+	v := ui.JawsGet(e)
 	if ui.Last.Swap(v) != v {
 		txt := "false"
 		if v {
@@ -43,7 +43,7 @@ func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (err err
 				return
 			}
 		}
-		err = ui.maybeDirty(v, e, ui.BoolSetter.JawsSetBool(e, v))
+		err = ui.maybeDirty(v, e, ui.Setter.JawsSet(e, v))
 	}
 	return
 }

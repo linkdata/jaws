@@ -82,8 +82,8 @@ func Test_NamedBoolArray(t *testing.T) {
 	e := rq.NewElement(NewUiSelect(nba))
 	defer rq.Close()
 
-	is.Equal(nba.JawsGetString(e), "2")
-	is.NoErr(nba.JawsSetString(e, "1"))
-	is.Equal(nba.JawsGetString(e), "1")
-	is.Equal(nba.JawsSetString(e, "1"), ErrValueUnchanged)
+	is.Equal(nba.JawsGet(e), "2")
+	is.NoErr(nba.JawsSet(e, "1"))
+	is.Equal(nba.JawsGet(e), "1")
+	is.Equal(nba.JawsSet(e, "1"), ErrValueUnchanged)
 }

@@ -9,7 +9,7 @@ import (
 
 type UiInputDate struct {
 	UiInput
-	TimeSetter
+	Setter[time.Time]
 }
 
 func (ui *UiInputDate) str() string {
@@ -17,14 +17,14 @@ func (ui *UiInputDate) str() string {
 }
 
 func (ui *UiInputDate) renderDateInput(e *Element, w io.Writer, htmltype string, params ...any) error {
-	ui.applyGetter(e, ui.TimeSetter)
+	ui.applyGetter(e, ui.Setter)
 	attrs := e.ApplyParams(params)
-	ui.Last.Store(ui.JawsGetTime(e))
+	ui.Last.Store(ui.JawsGet(e))
 	return WriteHtmlInput(w, e.Jid(), htmltype, ui.str(), attrs)
 }
 
 func (ui *UiInputDate) JawsUpdate(e *Element) {
-	if t := ui.JawsGetTime(e); ui.Last.Swap(t) != t {
+	if t := ui.JawsGet(e); ui.Last.Swap(t) != t {
 		e.SetValue(ui.str())
 	}
 }
@@ -38,7 +38,7 @@ func (ui *UiInputDate) JawsEvent(e *Element, wht what.What, val string) (err err
 				return
 			}
 		}
-		err = ui.maybeDirty(v, e, ui.TimeSetter.JawsSetTime(e, v))
+		err = ui.maybeDirty(v, e, ui.Setter.JawsSet(e, v))
 	}
 	return
 }

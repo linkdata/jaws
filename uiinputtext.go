@@ -8,19 +8,19 @@ import (
 
 type UiInputText struct {
 	UiInput
-	StringSetter
+	Setter[string]
 }
 
 func (ui *UiInputText) renderStringInput(e *Element, w io.Writer, htmltype string, params ...any) error {
-	ui.applyGetter(e, ui.StringSetter)
+	ui.applyGetter(e, ui.Setter)
 	attrs := e.ApplyParams(params)
-	v := ui.JawsGetString(e)
+	v := ui.JawsGet(e)
 	ui.Last.Store(v)
 	return WriteHtmlInput(w, e.Jid(), htmltype, v, attrs)
 }
 
 func (ui *UiInputText) JawsUpdate(e *Element) {
-	if v := ui.JawsGetString(e); ui.Last.Swap(v) != v {
+	if v := ui.JawsGet(e); ui.Last.Swap(v) != v {
 		e.SetValue(v)
 	}
 }
@@ -28,7 +28,7 @@ func (ui *UiInputText) JawsUpdate(e *Element) {
 func (ui *UiInputText) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
 	if wht == what.Input {
-		err = ui.maybeDirty(val, e, ui.StringSetter.JawsSetString(e, val))
+		err = ui.maybeDirty(val, e, ui.Setter.JawsSet(e, val))
 	}
 	return
 }

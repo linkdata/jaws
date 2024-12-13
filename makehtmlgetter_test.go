@@ -61,10 +61,10 @@ func Test_MakeHtmlGetter(t *testing.T) {
 		},
 		{
 			name: "StringGetter",
-			v:    stringGetter{untypedText},
-			want: htmlGetterStringGetter{stringGetter{untypedText}},
+			v:    stringGetterStatic{untypedText},
+			want: htmlGetterStringGetter{stringGetterStatic{untypedText}},
 			out:  escapedTypedText,
-			tag:  stringGetter{untypedText},
+			tag:  stringGetterStatic{untypedText},
 		},
 		{
 			name: "Getter[string]",

@@ -9,7 +9,7 @@ import (
 
 type UiInputFloat struct {
 	UiInput
-	FloatSetter
+	Setter[float64]
 }
 
 func (ui *UiInputFloat) str() string {
@@ -17,14 +17,14 @@ func (ui *UiInputFloat) str() string {
 }
 
 func (ui *UiInputFloat) renderFloatInput(e *Element, w io.Writer, htmltype string, params ...any) error {
-	ui.applyGetter(e, ui.FloatSetter)
+	ui.applyGetter(e, ui.Setter)
 	attrs := e.ApplyParams(params)
-	ui.Last.Store(ui.JawsGetFloat(e))
+	ui.Last.Store(ui.JawsGet(e))
 	return WriteHtmlInput(w, e.Jid(), htmltype, ui.str(), attrs)
 }
 
 func (ui *UiInputFloat) JawsUpdate(e *Element) {
-	if f := ui.JawsGetFloat(e); ui.Last.Swap(f) != f {
+	if f := ui.JawsGet(e); ui.Last.Swap(f) != f {
 		e.SetValue(ui.str())
 	}
 }
@@ -38,7 +38,7 @@ func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err er
 				return
 			}
 		}
-		err = ui.maybeDirty(v, e, ui.FloatSetter.JawsSetFloat(e, v))
+		err = ui.maybeDirty(v, e, ui.Setter.JawsSet(e, v))
 	}
 	return
 }
