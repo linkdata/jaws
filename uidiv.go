@@ -21,5 +21,5 @@ func NewUiDiv(innerHtml HtmlGetter) *UiDiv {
 }
 
 func (rq RequestWriter) Div(innerHtml any, params ...any) error {
-	return rq.UI(NewUiDiv(makeHtmlGetter(innerHtml)), params...)
+	return rq.UI(NewUiDiv(MakeHtmlGetter(innerHtml)), params...)
 }

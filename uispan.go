@@ -21,5 +21,5 @@ func NewUiSpan(innerHtml HtmlGetter) *UiSpan {
 }
 
 func (rq RequestWriter) Span(innerHtml any, params ...any) error {
-	return rq.UI(NewUiSpan(makeHtmlGetter(innerHtml)), params...)
+	return rq.UI(NewUiSpan(MakeHtmlGetter(innerHtml)), params...)
 }

@@ -52,6 +52,14 @@ func (g simpleSetterT) JawsSet(e *Element, v string) error {
 	return nil
 }
 
+func (g simpleSetterT) JawsGetAny(e *Element) any {
+	return g.Value
+}
+
+func (g simpleSetterT) JawsSetAny(e *Element, v any) error {
+	return nil
+}
+
 type simpleNotagGetter struct {
 	v string
 }

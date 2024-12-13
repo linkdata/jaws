@@ -21,5 +21,5 @@ func NewUiLabel(innerHtml HtmlGetter) *UiLabel {
 }
 
 func (rq RequestWriter) Label(innerHtml any, params ...any) error {
-	return rq.UI(NewUiLabel(makeHtmlGetter(innerHtml)), params...)
+	return rq.UI(NewUiLabel(MakeHtmlGetter(innerHtml)), params...)
 }

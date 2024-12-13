@@ -21,5 +21,5 @@ func NewUiLi(innerHtml HtmlGetter) *UiLi {
 }
 
 func (rq RequestWriter) Li(innerHtml any, params ...any) error {
-	return rq.UI(NewUiLi(makeHtmlGetter(innerHtml)), params...)
+	return rq.UI(NewUiLi(MakeHtmlGetter(innerHtml)), params...)
 }

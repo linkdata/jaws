@@ -21,5 +21,5 @@ func NewUiButton(innerHtml HtmlGetter) *UiButton {
 }
 
 func (rq RequestWriter) Button(innerHtml any, params ...any) error {
-	return rq.UI(NewUiButton(makeHtmlGetter(innerHtml)), params...)
+	return rq.UI(NewUiButton(MakeHtmlGetter(innerHtml)), params...)
 }
