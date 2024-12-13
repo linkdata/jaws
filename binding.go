@@ -13,14 +13,6 @@ func (bind binding[T]) JawsGetLocked(*Element) T {
 	return *bind.ptr
 }
 
-func (bind binding[T]) JawsSetLocked(elem *Element, value T) (err error) {
-	if value == *bind.ptr {
-		return ErrValueUnchanged
-	}
-	*bind.ptr = value
-	return nil
-}
-
 func (bind binding[T]) JawsGet(elem *Element) (value T) {
 	bind.lock.RLock()
 	value = bind.JawsGetLocked(elem)
@@ -30,6 +22,14 @@ func (bind binding[T]) JawsGet(elem *Element) (value T) {
 
 func (bind binding[T]) JawsGetAny(elem *Element) (value any) {
 	return bind.JawsGet(elem)
+}
+
+func (bind binding[T]) JawsSetLocked(elem *Element, value T) (err error) {
+	if value == *bind.ptr {
+		return ErrValueUnchanged
+	}
+	*bind.ptr = value
+	return nil
 }
 
 func (bind binding[T]) JawsSet(elem *Element, value T) (err error) {
@@ -70,10 +70,10 @@ func (bind binding[T]) RUnlock() {
 //
 // The bind argument to the function is the previous Binder in the chain,
 // and you probably want to call it's JawsSetLocked first.
-func (bind binding[T]) SetLocked(setFn BindSetHook[T]) Binder[T] {
+func (bind binding[T]) SetLocked(fn BindSetHook[T]) Binder[T] {
 	return &BindingHook[T]{
 		Binder:      bind,
-		BindSetHook: setFn,
+		BindSetHook: fn,
 	}
 }
 
@@ -84,10 +84,10 @@ func (bind binding[T]) SetLocked(setFn BindSetHook[T]) Binder[T] {
 //
 // The bind argument to the function is the previous Binder in the chain,
 // and you probably want to call it's JawsGetLocked first.
-func (bind binding[T]) GetLocked(setFn BindGetHook[T]) Binder[T] {
+func (bind binding[T]) GetLocked(fn BindGetHook[T]) Binder[T] {
 	return &BindingHook[T]{
 		Binder:      bind,
-		BindGetHook: setFn,
+		BindGetHook: fn,
 	}
 }
 
@@ -107,39 +107,6 @@ func (bind binding[T]) Success(fn any) Binder[T] {
 	}
 }
 
-/*
-	func (bind binding[T]) JawsGetString(elem *Element) string {
-		return any(bind.JawsGet(elem)).(string)
-	}
-
-	func (bind binding[T]) JawsSetString(e *Element, val string) (err error) {
-		return bind.JawsSet(e, any(val).(T))
-	}
-
-	func (bind binding[T]) JawsGetFloat(elem *Element) float64 {
-		return any(bind.JawsGet(elem)).(float64)
-	}
-
-	func (bind binding[T]) JawsSetFloat(e *Element, val float64) (err error) {
-		return bind.JawsSet(e, any(val).(T))
-	}
-
-	func (bind binding[T]) JawsGetBool(elem *Element) bool {
-		return any(bind.JawsGet(elem)).(bool)
-	}
-
-	func (bind binding[T]) JawsSetBool(e *Element, val bool) (err error) {
-		return bind.JawsSet(e, any(val).(T))
-	}
-
-	func (bind binding[T]) JawsGetTime(elem *Element) time.Time {
-		return any(bind.JawsGet(elem)).(time.Time)
-	}
-
-	func (bind binding[T]) JawsSetTime(elem *Element, value time.Time) error {
-		return bind.JawsSet(elem, any(value).(T))
-	}
-*/
 func wrapSuccessHook(fn any) (hook BindSuccessHook) {
 	switch fn := fn.(type) {
 	case func():
