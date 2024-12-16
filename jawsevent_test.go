@@ -10,7 +10,6 @@ import (
 )
 
 type testJawsEvent struct {
-	UiHtml
 	msgCh    chan string
 	tag      any
 	clickerr error

@@ -10,14 +10,14 @@ import (
 )
 
 type uiWrapContainer struct {
-	UiHtml
 	Container
+	Tag      any
 	mu       deadlock.Mutex
 	contents []*Element
 }
 
 func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag string, params []any) (err error) {
-	ui.applyGetter(e, ui.Container)
+	ui.Tag = e.ApplyGetter(ui.Container)
 	attrs := e.ApplyParams(params)
 	b := e.Jid().AppendStartTagAttr(nil, outerhtmltag)
 	for _, attr := range attrs {
