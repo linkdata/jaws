@@ -12,7 +12,7 @@ type UiSelect struct {
 
 func NewUiSelect(sh SelectHandler) *UiSelect {
 	return &UiSelect{
-		uiWrapContainer{
+		uiWrapContainer: uiWrapContainer{
 			Container: sh,
 		},
 	}
