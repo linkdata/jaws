@@ -14,6 +14,6 @@ func (g *stringGetterFunc) JawsGetTag(e *Request) any {
 }
 
 // StringGetterFunc wraps a function and returns a StringGetter.
-func StringGetterFunc(fn func(*Element) string, tags ...any) StringGetter {
+func StringGetterFunc(fn func(elem *Element) (s string), tags ...any) StringGetter {
 	return &stringGetterFunc{fn: fn, tags: tags}
 }

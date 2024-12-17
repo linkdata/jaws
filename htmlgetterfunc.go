@@ -18,6 +18,6 @@ func (g *htmlGetterFunc) JawsGetTag(e *Request) any {
 }
 
 // HTMLGetterFunc wraps a function and returns a HTMLGetter.
-func HTMLGetterFunc(fn func(*Element) template.HTML, tags ...any) HTMLGetter {
+func HTMLGetterFunc(fn func(elem *Element) (tmpl template.HTML), tags ...any) HTMLGetter {
 	return &htmlGetterFunc{fn: fn, tags: tags}
 }
