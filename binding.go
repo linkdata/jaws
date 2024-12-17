@@ -112,6 +112,18 @@ func (bind binding[T]) Format(f string) (newbind Binder[T]) {
 	}
 }
 
+// FormatHTML returns a Binder[T] that will implement JawsGetHTML(elem)
+// using fmt.Sprintf(f, JawsGet[T](elem))
+func (bind binding[T]) FormatHTML(f string) (newbind Binder[T]) {
+	return bindingHook[T]{
+		Binder: bind,
+		hook: BindFormatHook[T](func(value T, elem *Element) (tmpl template.HTML) {
+			return template.HTML(fmt.Sprintf(f, value))
+		}),
+	}
+
+}
+
 func wrapSuccessHook(fn any) (hook BindSuccessHook) {
 	switch fn := fn.(type) {
 	case func():

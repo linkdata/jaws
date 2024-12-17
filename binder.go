@@ -74,4 +74,8 @@ type Binder[T comparable] interface {
 	// Format returns a Binder[T] that will implement JawsGetHTML(elem)
 	// using html.EscapeString(fmt.Sprintf(f, JawsGet[T](elem)))
 	Format(f string) (newbind Binder[T])
+
+	// FormatHTML returns a Binder[T] that will implement JawsGetHTML(elem)
+	// using fmt.Sprintf(f, JawsGet[T](elem))
+	FormatHTML(f string) (newbind Binder[T])
 }

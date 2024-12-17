@@ -396,3 +396,23 @@ func TestBindFormat(t *testing.T) {
 		t.Errorf("%q", s)
 	}
 }
+
+func TestBindFormatHTML(t *testing.T) {
+	var mu sync.Mutex
+	val := "<span>"
+
+	bind1 := Bind(&mu, &val)
+	if s := bind1.JawsGetHTML(nil); s != "&lt;span&gt;" {
+		t.Errorf("%q", s)
+	}
+
+	bind2 := bind1.FormatHTML("%v")
+	if s := bind2.JawsGetHTML(nil); s != "<span>" {
+		t.Errorf("%q", s)
+	}
+
+	bind3 := bind2.FormatHTML("<p>%v</p>")
+	if s := bind3.JawsGetHTML(nil); s != "<p><span></p>" {
+		t.Errorf("%q", s)
+	}
+}
