@@ -127,7 +127,7 @@ func (bind bindingHook[T]) Format(f string) (newbind Binder[T]) {
 	return bindingHook[T]{
 		Binder: bind,
 		hook: BindFormatHook[T](func(value T, elem *Element) (tmpl template.HTML) {
-			return template.HTML(html.EscapeString(fmt.Sprintf(f, value)))
+			return template.HTML( /*#nosec G203*/ html.EscapeString(fmt.Sprintf(f, value)))
 		}),
 	}
 }
@@ -138,7 +138,7 @@ func (bind bindingHook[T]) FormatHTML(f string) (newbind Binder[T]) {
 	return bindingHook[T]{
 		Binder: bind,
 		hook: BindFormatHook[T](func(value T, elem *Element) (tmpl template.HTML) {
-			return template.HTML(fmt.Sprintf(f, value))
+			return template.HTML( /*#nosec G203*/ fmt.Sprintf(f, value))
 		}),
 	}
 

@@ -54,7 +54,7 @@ func (bind binding[T]) JawsGetTag(*Request) any {
 }
 
 func (bind binding[T]) JawsGetHTML(elem *Element) (tmpl template.HTML) {
-	return template.HTML(html.EscapeString(fmt.Sprint(bind.JawsGet(elem))))
+	return template.HTML( /*#nosec G203*/ html.EscapeString(fmt.Sprint(bind.JawsGet(elem))))
 }
 
 // SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
@@ -107,7 +107,7 @@ func (bind binding[T]) Format(f string) (newbind Binder[T]) {
 	return bindingHook[T]{
 		Binder: bind,
 		hook: BindFormatHook[T](func(value T, elem *Element) (tmpl template.HTML) {
-			return template.HTML(html.EscapeString(fmt.Sprintf(f, value)))
+			return template.HTML( /*#nosec G203*/ html.EscapeString(fmt.Sprintf(f, value)))
 		}),
 	}
 }
@@ -118,7 +118,7 @@ func (bind binding[T]) FormatHTML(f string) (newbind Binder[T]) {
 	return bindingHook[T]{
 		Binder: bind,
 		hook: BindFormatHook[T](func(value T, elem *Element) (tmpl template.HTML) {
-			return template.HTML(fmt.Sprintf(f, value))
+			return template.HTML( /*#nosec G203*/ fmt.Sprintf(f, value))
 		}),
 	}
 
