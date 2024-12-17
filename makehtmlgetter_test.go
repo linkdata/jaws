@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-var _ HtmlGetter = (*testSetter[template.HTML])(nil)
+var _ HTMLGetter = (*testSetter[template.HTML])(nil)
 
 type testAnySetter struct {
 	Value any
@@ -24,7 +24,7 @@ func (ag *testAnySetter) JawsSetAny(e *Element, v any) error {
 	return nil
 }
 
-func Test_MakeHtmlGetter(t *testing.T) {
+func Test_MakeHTMLGetter(t *testing.T) {
 	untypedText := "<span>"
 	typedText := template.HTML(untypedText)
 	escapedTypedText := template.HTML(html.EscapeString(untypedText))
@@ -41,12 +41,12 @@ func Test_MakeHtmlGetter(t *testing.T) {
 	tests := []struct {
 		name string
 		v    any
-		want HtmlGetter
+		want HTMLGetter
 		out  template.HTML
 		tag  any
 	}{
 		{
-			name: "HtmlGetter",
+			name: "HTMLGetter",
 			v:    htmlGetter{typedText},
 			want: htmlGetter{typedText},
 			out:  typedText,
@@ -111,15 +111,15 @@ func Test_MakeHtmlGetter(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := MakeHtmlGetter(tt.v)
+			got := MakeHTMLGetter(tt.v)
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("MakeHtmlGetter()\n  got %#v\n want %#v", got, tt.want)
+				t.Errorf("MakeHTMLGetter()\n  got %#v\n want %#v", got, tt.want)
 			}
-			if txt := got.JawsGetHtml(nil); txt != tt.out {
-				t.Errorf("MakeHtmlGetter().JawsGetHtml() = %v, want %v", txt, tt.out)
+			if txt := got.JawsGetHTML(nil); txt != tt.out {
+				t.Errorf("MakeHTMLGetter().JawsGetHTML() = %v, want %v", txt, tt.out)
 			}
 			if tag := got.(TagGetter).JawsGetTag(nil); tag != tt.tag {
-				t.Errorf("MakeHtmlGetter().JawsGetTag() = %v, want %v", tag, tt.tag)
+				t.Errorf("MakeHTMLGetter().JawsGetTag() = %v, want %v", tag, tt.tag)
 			}
 		})
 	}

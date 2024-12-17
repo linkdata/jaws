@@ -11,7 +11,7 @@ type formathtml struct {
 	f string
 }
 
-func (fh formathtml) JawsGetHtml(*Element) template.HTML {
+func (fh formathtml) JawsGetHTML(*Element) template.HTML {
 	s := html.EscapeString(fh.s.String())
 	if fh.f != "" {
 		s = fmt.Sprintf(fh.f, s)
@@ -23,12 +23,12 @@ func (fh formathtml) JawsGetTag(*Request) any {
 	return fh.s
 }
 
-// ToHTML return a jaws.HtmlGetter using the given stringer with
+// ToHTML return a jaws.HTMLGetter using the given stringer with
 // the string returned from the stringer escaped using html.EscapeString.
 //
 // If formatting is provided the escaped result is passed to fmt.Sprintf(formatting, escapedstring).
 // Make sure any provided formatting produces correct HTML.
-func ToHTML(stringer fmt.Stringer, formatting ...string) HtmlGetter {
+func ToHTML(stringer fmt.Stringer, formatting ...string) HTMLGetter {
 	var f string
 	if len(formatting) > 0 {
 		f = formatting[0]

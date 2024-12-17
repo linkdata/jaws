@@ -42,7 +42,7 @@ func appendAttrs(b []byte, attrs []template.HTMLAttr) []byte {
 	return b
 }
 
-func WriteHtmlTag(w io.Writer, jid jid.Jid, htmlTag, typeAttr, valueAttr string, attrs []template.HTMLAttr) (err error) {
+func WriteHTMLTag(w io.Writer, jid jid.Jid, htmlTag, typeAttr, valueAttr string, attrs []template.HTMLAttr) (err error) {
 	b := jid.AppendStartTagAttr(nil, htmlTag)
 	if typeAttr != "" {
 		b = append(b, ` type=`...)
@@ -58,15 +58,15 @@ func WriteHtmlTag(w io.Writer, jid jid.Jid, htmlTag, typeAttr, valueAttr string,
 	return
 }
 
-func WriteHtmlInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs []template.HTMLAttr) (err error) {
-	return WriteHtmlTag(w, jid, "input", typeAttr, valueAttr, attrs)
+func WriteHTMLInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs []template.HTMLAttr) (err error) {
+	return WriteHTMLTag(w, jid, "input", typeAttr, valueAttr, attrs)
 }
 
-func WriteHtmlInner(w io.Writer, jid jid.Jid, htmlTag, typeAttr string, innerHtml template.HTML, attrs ...template.HTMLAttr) (err error) {
-	if err = WriteHtmlTag(w, jid, htmlTag, typeAttr, "", attrs); err == nil {
-		if innerHtml != "" || needClosingTag(htmlTag) {
+func WriteHTMLInner(w io.Writer, jid jid.Jid, htmlTag, typeAttr string, innerHTML template.HTML, attrs ...template.HTMLAttr) (err error) {
+	if err = WriteHTMLTag(w, jid, htmlTag, typeAttr, "", attrs); err == nil {
+		if innerHTML != "" || needClosingTag(htmlTag) {
 			var b []byte
-			b = append(b, innerHtml...)
+			b = append(b, innerHTML...)
 			b = append(b, "</"...)
 			b = append(b, htmlTag...)
 			b = append(b, '>')
@@ -76,8 +76,8 @@ func WriteHtmlInner(w io.Writer, jid jid.Jid, htmlTag, typeAttr string, innerHtm
 	return
 }
 
-func WriteHtmlSelect(w io.Writer, jid jid.Jid, nba *NamedBoolArray, attrs []template.HTMLAttr) (err error) {
-	if err = WriteHtmlTag(w, jid, "select", "", "", attrs); err == nil {
+func WriteHTMLSelect(w io.Writer, jid jid.Jid, nba *NamedBoolArray, attrs []template.HTMLAttr) (err error) {
+	if err = WriteHTMLTag(w, jid, "select", "", "", attrs); err == nil {
 		var b []byte
 		nba.ReadLocked(func(nba []*NamedBool) {
 			for _, nb := range nba {
@@ -87,7 +87,7 @@ func WriteHtmlSelect(w io.Writer, jid jid.Jid, nba *NamedBoolArray, attrs []temp
 					b = append(b, ` selected`...)
 				}
 				b = append(b, '>')
-				b = append(b, nb.Html()...)
+				b = append(b, nb.HTML()...)
 				b = append(b, "</option>"...)
 			}
 		})

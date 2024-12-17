@@ -16,7 +16,7 @@ func (ui *UiInputText) renderStringInput(e *Element, w io.Writer, htmltype strin
 	attrs := e.ApplyParams(params)
 	v := ui.JawsGet(e)
 	ui.Last.Store(v)
-	return WriteHtmlInput(w, e.Jid(), htmltype, v, attrs)
+	return WriteHTMLInput(w, e.Jid(), htmltype, v, attrs)
 }
 
 func (ui *UiInputText) JawsUpdate(e *Element) {

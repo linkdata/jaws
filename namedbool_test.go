@@ -18,10 +18,10 @@ func TestNamedBool(t *testing.T) {
 
 	is.Equal(nba, nb.Array())
 	is.Equal("1", nb.Name())
-	is.Equal(template.HTML("one"), nb.Html())
+	is.Equal(template.HTML("one"), nb.HTML())
 
 	is.Equal(nb.Name(), nb.JawsGetString(nil))
-	is.Equal(nb.Html(), nb.JawsGetHtml(nil))
+	is.Equal(nb.HTML(), nb.JawsGetHTML(nil))
 
 	is.NoErr(nb.JawsSet(e, true))
 	is.True(nb.Checked())

@@ -5,21 +5,21 @@ import (
 )
 
 type UiTr struct {
-	UiHtmlInner
+	UiHTMLInner
 }
 
 func (ui *UiTr) JawsRender(e *Element, w io.Writer, params []any) error {
 	return ui.renderInner(e, w, "tr", "", params)
 }
 
-func NewUiTr(innerHtml HtmlGetter) *UiTr {
+func NewUiTr(innerHTML HTMLGetter) *UiTr {
 	return &UiTr{
-		UiHtmlInner{
-			HtmlGetter: innerHtml,
+		UiHTMLInner{
+			HTMLGetter: innerHTML,
 		},
 	}
 }
 
-func (rq RequestWriter) Tr(innerHtml any, params ...any) error {
-	return rq.UI(NewUiTr(MakeHtmlGetter(innerHtml)), params...)
+func (rq RequestWriter) Tr(innerHTML any, params ...any) error {
+	return rq.UI(NewUiTr(MakeHTMLGetter(innerHTML)), params...)
 }

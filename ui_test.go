@@ -15,7 +15,7 @@ func TestRequest_NewElement_DebugPanicsIfNotComparable(t *testing.T) {
 		*UiSpan
 		x map[int]int
 	}{
-		UiSpan: NewUiSpan(testHtmlGetter("foo")),
+		UiSpan: NewUiSpan(testHTMLGetter("foo")),
 		x:      map[int]int{},
 	}
 

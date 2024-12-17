@@ -102,7 +102,7 @@ func (tr *testRequest) BodyString() string {
 	return tr.rr.Body.String()
 }
 
-func (tr *testRequest) BodyHtml() template.HTML {
+func (tr *testRequest) BodyHTML() template.HTML {
 	return template.HTML(tr.BodyString())
 }
 

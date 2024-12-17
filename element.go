@@ -145,8 +145,8 @@ func (e *Element) RemoveClass(cls string) {
 // to the browser for the Element.
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
-func (e *Element) SetInner(innerHtml template.HTML) {
-	e.queue(what.Inner, string(innerHtml))
+func (e *Element) SetInner(innerHTML template.HTML) {
+	e.queue(what.Inner, string(innerHTML))
 }
 
 // SetValue queues sending a new current input value in textual form

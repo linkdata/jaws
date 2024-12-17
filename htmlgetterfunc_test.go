@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-func TestHtmlGetterFunc(t *testing.T) {
+func TestHTMLGetterFunc(t *testing.T) {
 	tt := &testSelfTagger{}
-	hg := HtmlGetterFunc(func(e *Element) template.HTML {
+	hg := HTMLGetterFunc(func(e *Element) template.HTML {
 		return "foo"
 	}, tt)
-	if s := hg.JawsGetHtml(nil); s != "foo" {
+	if s := hg.JawsGetHTML(nil); s != "foo" {
 		t.Error(s)
 	}
 	if tags := MustTagExpand(nil, hg); !reflect.DeepEqual(tags, []any{tt}) {

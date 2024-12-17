@@ -13,10 +13,10 @@ func TestRequest_Img(t *testing.T) {
 
 	ts := newTestSetter("image.png")
 
-	wantHtml := "<img id=\"Jid.1\" hidden src=\"image.png\">"
+	wantHTML := "<img id=\"Jid.1\" hidden src=\"image.png\">"
 	rq.Img(ts, "hidden")
-	if gotHtml := rq.BodyString(); gotHtml != wantHtml {
-		t.Errorf("Request.Img() = %q, want %q", gotHtml, wantHtml)
+	if gotHTML := rq.BodyString(); gotHTML != wantHTML {
+		t.Errorf("Request.Img() = %q, want %q", gotHTML, wantHTML)
 	}
 
 	ts.Set("image2.jpg")

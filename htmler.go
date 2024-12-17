@@ -13,8 +13,7 @@ type htmler struct {
 	args []any
 }
 
-// JawsGetHtml implements HtmlGetter.
-func (h htmler) JawsGetHtml(e *Element) template.HTML {
+func (h htmler) JawsGetHTML(e *Element) template.HTML {
 	if rl, ok := h.l.(RWLocker); ok {
 		rl.RLock()
 		defer rl.RUnlock()
@@ -45,11 +44,11 @@ func (h htmler) JawsGetTag(*Request) any {
 	return tags
 }
 
-// HTMLer return a lock protected jaws.HtmlGetter using the given formatting
+// HTMLer return a lock protected jaws.HTMLGetter using the given formatting
 // and arguments. Arguments of type string or fmt.Stringer will be escaped
 // using html.EscapeString().
 //
 // Returns all fmt.Stringer arguments as UI tags.
-func HTMLer(l sync.Locker, formatting string, args ...any) HtmlGetter {
+func HTMLer(l sync.Locker, formatting string, args ...any) HTMLGetter {
 	return htmler{l, formatting, args}
 }

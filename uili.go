@@ -5,21 +5,21 @@ import (
 )
 
 type UiLi struct {
-	UiHtmlInner
+	UiHTMLInner
 }
 
 func (ui *UiLi) JawsRender(e *Element, w io.Writer, params []any) error {
 	return ui.renderInner(e, w, "li", "", params)
 }
 
-func NewUiLi(innerHtml HtmlGetter) *UiLi {
+func NewUiLi(innerHTML HTMLGetter) *UiLi {
 	return &UiLi{
-		UiHtmlInner{
-			HtmlGetter: innerHtml,
+		UiHTMLInner{
+			HTMLGetter: innerHTML,
 		},
 	}
 }
 
-func (rq RequestWriter) Li(innerHtml any, params ...any) error {
-	return rq.UI(NewUiLi(MakeHtmlGetter(innerHtml)), params...)
+func (rq RequestWriter) Li(innerHTML any, params ...any) error {
+	return rq.UI(NewUiLi(MakeHTMLGetter(innerHTML)), params...)
 }

@@ -41,7 +41,7 @@ func TestRequest_Container(t *testing.T) {
 		{
 			name: "one",
 			args: args{
-				c:      &testContainer{[]UI{NewUiSpan(testHtmlGetter("foo"))}},
+				c:      &testContainer{[]UI{NewUiSpan(testHTMLGetter("foo"))}},
 				params: []any{"hidden"},
 			},
 			want: `<div id="Jid.1" hidden><span id="Jid.2">foo</span></div>`,
@@ -49,7 +49,7 @@ func TestRequest_Container(t *testing.T) {
 		{
 			name: "two",
 			args: args{
-				c:      &testContainer{[]UI{NewUiSpan(testHtmlGetter("foo")), NewUiSpan(testHtmlGetter("bar"))}},
+				c:      &testContainer{[]UI{NewUiSpan(testHTMLGetter("foo")), NewUiSpan(testHTMLGetter("bar"))}},
 				params: []any{"hidden"},
 			},
 			want: `<div id="Jid.1" hidden><span id="Jid.2">foo</span><span id="Jid.3">bar</span></div>`,
@@ -64,7 +64,7 @@ func TestRequest_Container(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			if got := rq.BodyHtml(); !reflect.DeepEqual(got, tt.want) {
+			if got := rq.BodyHTML(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Request.Container()\nwant %v\n got %v", tt.want, got)
 			}
 		})
@@ -72,9 +72,9 @@ func TestRequest_Container(t *testing.T) {
 }
 
 func TestRequest_Container_Alteration(t *testing.T) {
-	span1 := NewUiSpan(MakeHtmlGetter("span1"))
-	span2 := NewUiSpan(MakeHtmlGetter("span2"))
-	span3 := NewUiSpan(MakeHtmlGetter("span3"))
+	span1 := NewUiSpan(MakeHTMLGetter("span1"))
+	span2 := NewUiSpan(MakeHTMLGetter("span2"))
+	span3 := NewUiSpan(MakeHTMLGetter("span3"))
 	tests := []struct {
 		name string
 		c    *testContainer

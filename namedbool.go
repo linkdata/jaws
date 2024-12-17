@@ -34,7 +34,7 @@ func (nb *NamedBool) Name() (s string) {
 	return
 }
 
-func (nb *NamedBool) Html() (h template.HTML) {
+func (nb *NamedBool) HTML() (h template.HTML) {
 	h = nb.html
 	return
 }
@@ -43,8 +43,8 @@ func (nb *NamedBool) JawsGetString(*Element) (name string) {
 	return nb.Name()
 }
 
-func (nb *NamedBool) JawsGetHtml(*Element) (h template.HTML) {
-	return nb.Html()
+func (nb *NamedBool) JawsGetHTML(*Element) (h template.HTML) {
+	return nb.HTML()
 }
 
 func (nb *NamedBool) JawsGet(*Element) (v bool) {
@@ -93,5 +93,5 @@ func (nb *NamedBool) Set(checked bool) (changed bool) {
 
 // String returns a string representation of the NamedBool suitable for debugging.
 func (nb *NamedBool) String() string {
-	return fmt.Sprintf("&{%q,%q,%v}", nb.Name(), nb.Html(), nb.Checked())
+	return fmt.Sprintf("&{%q,%q,%v}", nb.Name(), nb.HTML(), nb.Checked())
 }

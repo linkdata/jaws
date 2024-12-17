@@ -5,21 +5,21 @@ import (
 )
 
 type UiSpan struct {
-	UiHtmlInner
+	UiHTMLInner
 }
 
 func (ui *UiSpan) JawsRender(e *Element, w io.Writer, params []any) error {
 	return ui.renderInner(e, w, "span", "", params)
 }
 
-func NewUiSpan(innerHtml HtmlGetter) *UiSpan {
+func NewUiSpan(innerHTML HTMLGetter) *UiSpan {
 	return &UiSpan{
-		UiHtmlInner{
-			HtmlGetter: innerHtml,
+		UiHTMLInner{
+			HTMLGetter: innerHTML,
 		},
 	}
 }
 
-func (rq RequestWriter) Span(innerHtml any, params ...any) error {
-	return rq.UI(NewUiSpan(MakeHtmlGetter(innerHtml)), params...)
+func (rq RequestWriter) Span(innerHTML any, params ...any) error {
+	return rq.UI(NewUiSpan(MakeHTMLGetter(innerHTML)), params...)
 }

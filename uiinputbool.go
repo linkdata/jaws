@@ -20,7 +20,7 @@ func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string,
 	if v {
 		attrs = append(attrs, "checked")
 	}
-	return WriteHtmlInput(w, e.Jid(), htmltype, "", attrs)
+	return WriteHTMLInput(w, e.Jid(), htmltype, "", attrs)
 }
 
 func (ui *UiInputBool) JawsUpdate(e *Element) {
