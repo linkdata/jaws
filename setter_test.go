@@ -1,22 +1,31 @@
 package jaws
 
 import (
+	"html/template"
 	"testing"
 )
 
-type testStringGetter struct{}
+const testStringGetterText = "<span>"
 
-func (testStringGetter) JawsGet(*Element) string {
-	return "static"
+type testGetterString struct{}
+
+func (testGetterString) JawsGet(*Element) string {
+	return testStringGetterText
+}
+
+type testGetterHTML struct{}
+
+func (testGetterHTML) JawsGet(*Element) template.HTML {
+	return testStringGetterText
 }
 
 func Test_makeSetter(t *testing.T) {
-	tsg := testStringGetter{}
+	tsg := testGetterString{}
 	setter1 := makeSetter[string](tsg)
 	if err := setter1.JawsSet(nil, "foo"); err != ErrValueNotSettable {
 		t.Error(err)
 	}
-	if s := setter1.JawsGet(nil); s != "static" {
+	if s := setter1.JawsGet(nil); s != testStringGetterText {
 		t.Error(s)
 	}
 	if tag := setter1.(TagGetter).JawsGetTag(nil); tag != tsg {

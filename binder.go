@@ -1,5 +1,7 @@
 package jaws
 
+import "html/template"
+
 // BindSetHook is a function that replaces JawsSetLocked for a Binder.
 //
 // The lock will be held before calling the function, preferring RLock over Lock, if available.
@@ -27,11 +29,14 @@ type BindGetHook[T comparable] func(bind Binder[T], elem *Element) (value T)
 // no more success hooks are called.
 type BindSuccessHook func(*Element) (err error)
 
+type BindFormatHook[T comparable] func(value T, elem *Element) (tmpl template.HTML)
+
 type Binder[T comparable] interface {
 	RWLocker
 	Setter[T]
 	AnySetter
-	JawsGetTag(*Request) any
+	HTMLGetter
+	TagGetter
 
 	JawsBinderPrev() Binder[T] // returns the previous Binder in the chain, or nil
 	JawsGetLocked(elem *Element) (value T)
@@ -65,4 +70,12 @@ type Binder[T comparable] interface {
 	//  * func(*Element)
 	//  * func(*Element) error
 	Success(fn any) (newbind Binder[T])
+
+	// Format returns a Binder[T] that will implement JawsGetHTML(elem)
+	// using html.EscapeString(fmt.Sprintf(f, JawsGet[T](elem)))
+	Format(f string) (newbind Binder[T])
+
+	// FormatHTML returns a Binder[T] that will implement JawsGetHTML(elem)
+	// using fmt.Sprintf(f, JawsGet[T](elem))
+	FormatHTML(f string) (newbind Binder[T])
 }

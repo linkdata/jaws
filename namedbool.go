@@ -39,10 +39,6 @@ func (nb *NamedBool) HTML() (h template.HTML) {
 	return
 }
 
-func (nb *NamedBool) JawsGetString(*Element) (name string) {
-	return nb.Name()
-}
-
 func (nb *NamedBool) JawsGetHTML(*Element) (h template.HTML) {
 	return nb.HTML()
 }

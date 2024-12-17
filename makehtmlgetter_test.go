@@ -4,7 +4,6 @@ import (
 	"html"
 	"html/template"
 	"reflect"
-	"sync"
 	"sync/atomic"
 	"testing"
 )
@@ -33,9 +32,8 @@ func Test_MakeHTMLGetter(t *testing.T) {
 	avTyped.Store(typedText)
 	stringer := testStringer{}
 
-	var mu sync.Mutex
-	getterHTML := Bind(&mu, &escapedTypedText)
-	getterString := Bind(&mu, &untypedText)
+	getterHTML := testGetterHTML{}
+	getterString := testGetterString{}
 	getterAny := &testAnySetter{Value: untypedText}
 
 	tests := []struct {
@@ -56,21 +54,14 @@ func Test_MakeHTMLGetter(t *testing.T) {
 			name: "Getter[template.HTML]",
 			v:    getterHTML,
 			want: htmlGetterHTML{getterHTML},
-			out:  escapedTypedText,
+			out:  getterHTML.JawsGet(nil),
 			tag:  getterHTML,
-		},
-		{
-			name: "StringGetter",
-			v:    stringGetterStatic{untypedText},
-			want: htmlGetterStringGetter{stringGetterStatic{untypedText}},
-			out:  escapedTypedText,
-			tag:  stringGetterStatic{untypedText},
 		},
 		{
 			name: "Getter[string]",
 			v:    getterString,
 			want: htmlGetterString{getterString},
-			out:  escapedTypedText,
+			out:  template.HTML(html.EscapeString(getterString.JawsGet(nil))),
 			tag:  getterString,
 		},
 		{
@@ -81,11 +72,11 @@ func Test_MakeHTMLGetter(t *testing.T) {
 			tag:  getterAny,
 		},
 		{
-			name: "StringerGetter",
+			name: "fmt.Stringer",
 			v:    stringer,
-			want: htmlGetterStringGetter{stringerGetter{stringer}},
-			out:  template.HTML(testStringer{}.String()),
-			tag:  stringerGetter{stringer},
+			want: htmlStringerGetter{stringer},
+			out:  template.HTML(html.EscapeString(stringer.String())),
+			tag:  stringer,
 		},
 		{
 			name: "template.HTML",
@@ -113,13 +104,13 @@ func Test_MakeHTMLGetter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := MakeHTMLGetter(tt.v)
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("MakeHTMLGetter()\n  got %#v\n want %#v", got, tt.want)
+				t.Errorf("MakeHTMLGetter(%s)\n  got %#v\n want %#v", tt.name, got, tt.want)
 			}
 			if txt := got.JawsGetHTML(nil); txt != tt.out {
-				t.Errorf("MakeHTMLGetter().JawsGetHTML() = %v, want %v", txt, tt.out)
+				t.Errorf("MakeHTMLGetter(%s).JawsGetHTML() = %v, want %v", tt.name, txt, tt.out)
 			}
 			if tag := got.(TagGetter).JawsGetTag(nil); tag != tt.tag {
-				t.Errorf("MakeHTMLGetter().JawsGetTag() = %v, want %v", tag, tt.tag)
+				t.Errorf("MakeHTMLGetter(%s).JawsGetTag() = %v, want %v", tt.name, tag, tt.tag)
 			}
 		})
 	}

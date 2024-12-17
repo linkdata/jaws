@@ -1,8 +1,14 @@
 package jaws
 
+import (
+	"fmt"
+	"html"
+	"html/template"
+)
+
 type binding[T comparable] struct {
-	lock RWLocker
-	ptr  *T
+	RWLocker
+	ptr *T
 }
 
 func (bind binding[T]) JawsBinderPrev() Binder[T] {
@@ -14,9 +20,9 @@ func (bind binding[T]) JawsGetLocked(*Element) T {
 }
 
 func (bind binding[T]) JawsGet(elem *Element) (value T) {
-	bind.lock.RLock()
+	bind.RWLocker.RLock()
 	value = bind.JawsGetLocked(elem)
-	bind.lock.RUnlock()
+	bind.RWLocker.RUnlock()
 	return
 }
 
@@ -33,9 +39,9 @@ func (bind binding[T]) JawsSetLocked(elem *Element, value T) (err error) {
 }
 
 func (bind binding[T]) JawsSet(elem *Element, value T) (err error) {
-	bind.lock.Lock()
+	bind.RWLocker.Lock()
 	err = bind.JawsSetLocked(elem, value)
-	bind.lock.Unlock()
+	bind.RWLocker.Unlock()
 	return
 }
 
@@ -47,20 +53,8 @@ func (bind binding[T]) JawsGetTag(*Request) any {
 	return bind.ptr
 }
 
-func (bind binding[T]) Lock() {
-	bind.lock.Lock()
-}
-
-func (bind binding[T]) Unlock() {
-	bind.lock.Unlock()
-}
-
-func (bind binding[T]) RLock() {
-	bind.lock.RLock()
-}
-
-func (bind binding[T]) RUnlock() {
-	bind.lock.RUnlock()
+func (bind binding[T]) JawsGetHTML(elem *Element) (tmpl template.HTML) {
+	return template.HTML( /*#nosec G203*/ html.EscapeString(fmt.Sprint(bind.JawsGet(elem))))
 }
 
 // SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
@@ -71,9 +65,9 @@ func (bind binding[T]) RUnlock() {
 // The bind argument to the function is the previous Binder in the chain,
 // and you probably want to call it's JawsSetLocked first.
 func (bind binding[T]) SetLocked(fn BindSetHook[T]) Binder[T] {
-	return &BindingHook[T]{
-		Binder:      bind,
-		BindSetHook: fn,
+	return bindingHook[T]{
+		Binder: bind,
+		hook:   fn,
 	}
 }
 
@@ -85,9 +79,9 @@ func (bind binding[T]) SetLocked(fn BindSetHook[T]) Binder[T] {
 // The bind argument to the function is the previous Binder in the chain,
 // and you probably want to call it's JawsGetLocked first.
 func (bind binding[T]) GetLocked(fn BindGetHook[T]) Binder[T] {
-	return &BindingHook[T]{
-		Binder:      bind,
-		BindGetHook: fn,
+	return bindingHook[T]{
+		Binder: bind,
+		hook:   fn,
 	}
 }
 
@@ -101,10 +95,33 @@ func (bind binding[T]) GetLocked(fn BindGetHook[T]) Binder[T] {
 //   - func(*Element)
 //   - func(*Element) error
 func (bind binding[T]) Success(fn any) Binder[T] {
-	return &BindingHook[T]{
-		Binder:          bind,
-		BindSuccessHook: wrapSuccessHook(fn),
+	return bindingHook[T]{
+		Binder: bind,
+		hook:   wrapSuccessHook(fn),
 	}
+}
+
+// Format returns a Binder[T] that will implement JawsGetString(elem)
+// using fmt.Sprintf(f, JawsGet[T](elem))
+func (bind binding[T]) Format(f string) (newbind Binder[T]) {
+	return bindingHook[T]{
+		Binder: bind,
+		hook: BindFormatHook[T](func(value T, elem *Element) (tmpl template.HTML) {
+			return template.HTML( /*#nosec G203*/ html.EscapeString(fmt.Sprintf(f, value)))
+		}),
+	}
+}
+
+// FormatHTML returns a Binder[T] that will implement JawsGetHTML(elem)
+// using fmt.Sprintf(f, JawsGet[T](elem))
+func (bind binding[T]) FormatHTML(f string) (newbind Binder[T]) {
+	return bindingHook[T]{
+		Binder: bind,
+		hook: BindFormatHook[T](func(value T, elem *Element) (tmpl template.HTML) {
+			return template.HTML( /*#nosec G203*/ fmt.Sprintf(f, value))
+		}),
+	}
+
 }
 
 func wrapSuccessHook(fn any) (hook BindSuccessHook) {

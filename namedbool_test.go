@@ -20,7 +20,6 @@ func TestNamedBool(t *testing.T) {
 	is.Equal("1", nb.Name())
 	is.Equal(template.HTML("one"), nb.HTML())
 
-	is.Equal(nb.Name(), nb.JawsGetString(nil))
 	is.Equal(nb.HTML(), nb.JawsGetHTML(nil))
 
 	is.NoErr(nb.JawsSet(e, true))

@@ -1,47 +1,47 @@
 package jaws
 
-type successHooker interface {
-	JawsBinderSuccess(elem *Element) (err error)
-}
+import (
+	"fmt"
+	"html"
+	"html/template"
+)
 
-type BindingHook[T comparable] struct {
+type bindingHook[T comparable] struct {
 	Binder[T]
-	BindGetHook[T]
-	BindSetHook[T]
-	BindSuccessHook
+	hook any // one of: BindGetHook[T] BindSetHook[T] BindSuccessHook
 }
 
-func (bind *BindingHook[T]) JawsBinderPrev() Binder[T] {
+func (bind bindingHook[T]) JawsBinderPrev() Binder[T] {
 	return bind.Binder
 }
 
-func (bind *BindingHook[T]) JawsGetLocked(elem *Element) T {
-	if bind.BindGetHook != nil {
-		return bind.BindGetHook(bind.Binder, elem)
+func (bind bindingHook[T]) JawsGetLocked(elem *Element) T {
+	if fn, ok := bind.hook.(BindGetHook[T]); ok {
+		return fn(bind.Binder, elem)
 	}
 	return bind.Binder.JawsGetLocked(elem)
 }
 
-func (bind *BindingHook[T]) JawsGet(elem *Element) T {
-	bind.Binder.RLock()
-	defer bind.Binder.RUnlock()
+func (bind bindingHook[T]) JawsGet(elem *Element) T {
+	bind.RLock()
+	defer bind.RUnlock()
 	return bind.JawsGetLocked(elem)
 }
 
-func (bind *BindingHook[T]) JawsGetAny(elem *Element) (value any) {
+func (bind bindingHook[T]) JawsGetAny(elem *Element) (value any) {
 	return bind.JawsGet(elem)
 }
 
-func (bind *BindingHook[T]) JawsSetLocked(elem *Element, value T) error {
-	if bind.BindSetHook != nil {
-		return bind.BindSetHook(bind.Binder, elem, value)
+func (bind bindingHook[T]) JawsSetLocked(elem *Element, value T) error {
+	if fn, ok := bind.hook.(BindSetHook[T]); ok {
+		return fn(bind.Binder, elem, value)
 	}
 	return bind.Binder.JawsSetLocked(elem, value)
 }
 
-func (bind *BindingHook[T]) jawsSetLocking(elem *Element, value T) (err error) {
-	bind.Binder.Lock()
-	defer bind.Binder.Unlock()
+func (bind bindingHook[T]) jawsSetLocking(elem *Element, value T) (err error) {
+	bind.Lock()
+	defer bind.Unlock()
 	return bind.JawsSetLocked(elem, value)
 }
 
@@ -50,22 +50,31 @@ func callSuccess[T comparable](binder Binder[T], elem *Element) (err error) {
 		err = callSuccess(prev, elem)
 	}
 	if err == nil {
-		if successer, ok := binder.(successHooker); ok {
-			err = successer.JawsBinderSuccess(elem)
+		if bind, ok := binder.(bindingHook[T]); ok {
+			if fn, ok := bind.hook.(BindSuccessHook); ok {
+				return fn(elem)
+			}
 		}
 	}
 	return
 }
 
-func (bind *BindingHook[T]) JawsSet(elem *Element, value T) (err error) {
+func (bind bindingHook[T]) JawsSet(elem *Element, value T) (err error) {
 	if err = bind.jawsSetLocking(elem, value); err == nil {
 		err = callSuccess(bind, elem)
 	}
 	return
 }
 
-func (bind *BindingHook[T]) JawsSetAny(elem *Element, value any) error {
+func (bind bindingHook[T]) JawsSetAny(elem *Element, value any) error {
 	return bind.JawsSet(elem, value.(T))
+}
+
+func (bind bindingHook[T]) JawsGetHTML(elem *Element) (tmpl template.HTML) {
+	if fn, ok := bind.hook.(BindFormatHook[T]); ok {
+		return fn(bind.JawsGet(elem), elem)
+	}
+	return bind.Binder.JawsGetHTML(elem)
 }
 
 // SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
@@ -75,10 +84,10 @@ func (bind *BindingHook[T]) JawsSetAny(elem *Element, value any) error {
 //
 // The bind argument to the function is the previous Binder in the chain,
 // and you probably want to call it's JawsSetLocked first.
-func (bind *BindingHook[T]) SetLocked(setFn BindSetHook[T]) Binder[T] {
-	return &BindingHook[T]{
-		Binder:      bind,
-		BindSetHook: setFn,
+func (bind bindingHook[T]) SetLocked(setFn BindSetHook[T]) Binder[T] {
+	return bindingHook[T]{
+		Binder: bind,
+		hook:   setFn,
 	}
 }
 
@@ -89,10 +98,10 @@ func (bind *BindingHook[T]) SetLocked(setFn BindSetHook[T]) Binder[T] {
 //
 // The bind argument to the function is the previous Binder in the chain,
 // and you probably want to call it's JawsGetLocked first.
-func (bind *BindingHook[T]) GetLocked(setFn BindGetHook[T]) Binder[T] {
-	return &BindingHook[T]{
-		Binder:      bind,
-		BindGetHook: setFn,
+func (bind bindingHook[T]) GetLocked(setFn BindGetHook[T]) Binder[T] {
+	return bindingHook[T]{
+		Binder: bind,
+		hook:   setFn,
 	}
 }
 
@@ -105,16 +114,31 @@ func (bind *BindingHook[T]) GetLocked(setFn BindGetHook[T]) Binder[T] {
 //   - func() error
 //   - func(*Element)
 //   - func(*Element) error
-func (bind *BindingHook[T]) Success(fn any) Binder[T] {
-	return &BindingHook[T]{
-		Binder:          bind,
-		BindSuccessHook: wrapSuccessHook(fn),
+func (bind bindingHook[T]) Success(fn any) Binder[T] {
+	return bindingHook[T]{
+		Binder: bind,
+		hook:   wrapSuccessHook(fn),
 	}
 }
 
-func (bind *BindingHook[T]) JawsBinderSuccess(elem *Element) (err error) {
-	if bind.BindSuccessHook != nil {
-		err = bind.BindSuccessHook(elem)
+// Format returns a Binder[T] that will implement
+// using fmt.Sprintf(f, JawsGet[T](elem))
+func (bind bindingHook[T]) Format(f string) (newbind Binder[T]) {
+	return bindingHook[T]{
+		Binder: bind,
+		hook: BindFormatHook[T](func(value T, elem *Element) (tmpl template.HTML) {
+			return template.HTML( /*#nosec G203*/ html.EscapeString(fmt.Sprintf(f, value)))
+		}),
 	}
-	return
+}
+
+// FormatHTML returns a Binder[T] that will implement JawsGetHTML(elem)
+// using fmt.Sprintf(f, JawsGet[T](elem))
+func (bind bindingHook[T]) FormatHTML(f string) (newbind Binder[T]) {
+	return bindingHook[T]{
+		Binder: bind,
+		hook: BindFormatHook[T](func(value T, elem *Element) (tmpl template.HTML) {
+			return template.HTML( /*#nosec G203*/ fmt.Sprintf(f, value))
+		}),
+	}
 }
