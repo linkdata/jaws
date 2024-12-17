@@ -11,7 +11,7 @@ import (
 	"github.com/linkdata/jaws/what"
 )
 
-func TestUiHtmlInner_JawsUpdate(t *testing.T) {
+func TestUiHTMLInner_JawsUpdate(t *testing.T) {
 	jw := New()
 	defer jw.Close()
 	nextJid = 0
@@ -23,9 +23,9 @@ func TestUiHtmlInner_JawsUpdate(t *testing.T) {
 	if err := ui.JawsRender(elem, &sb, nil); err != nil {
 		t.Fatal(err)
 	}
-	wantHtml := "<div id=\"Jid.1\">first</div>"
-	if sb.String() != wantHtml {
-		t.Errorf("got %q, want %q", sb.String(), wantHtml)
+	wantHTML := "<div id=\"Jid.1\">first</div>"
+	if sb.String() != wantHTML {
+		t.Errorf("got %q, want %q", sb.String(), wantHTML)
 	}
 	ts.Set(template.HTML("second"))
 	ui.JawsUpdate(elem)

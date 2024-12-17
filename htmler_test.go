@@ -12,7 +12,7 @@ func TestHTMLer(t *testing.T) {
 
 	txt := "<text>"
 	htmler := HTMLer(&mu, "<p>%s</p>", Fmt(&txt))
-	if s := htmler.JawsGetHtml(nil); s != "<p>&lt;text&gt;</p>" {
+	if s := htmler.JawsGetHTML(nil); s != "<p>&lt;text&gt;</p>" {
 		t.Error(s)
 	}
 	tags, err := TagExpand(nil, htmler)
@@ -25,7 +25,7 @@ func TestHTMLer(t *testing.T) {
 
 	num := 123
 	htmler = HTMLer(&mu2, "<p>%s%s%s</p>", Fmt(&txt), "<!>", Fmt(&num))
-	if s := htmler.JawsGetHtml(nil); s != "<p>&lt;text&gt;&lt;!&gt;123</p>" {
+	if s := htmler.JawsGetHTML(nil); s != "<p>&lt;text&gt;&lt;!&gt;123</p>" {
 		t.Error(s)
 	}
 	tags, err = TagExpand(nil, htmler)

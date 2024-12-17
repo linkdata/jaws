@@ -12,7 +12,7 @@ type UiTextarea struct {
 func (ui *UiTextarea) JawsRender(e *Element, w io.Writer, params []any) error {
 	ui.applyGetter(e, ui.Setter)
 	attrs := e.ApplyParams(params)
-	return WriteHtmlInner(w, e.Jid(), "textarea", "", template.HTML(ui.JawsGet(e)), attrs...) // #nosec G203
+	return WriteHTMLInner(w, e.Jid(), "textarea", "", template.HTML(ui.JawsGet(e)), attrs...) // #nosec G203
 }
 
 func (ui *UiTextarea) JawsUpdate(e *Element) {

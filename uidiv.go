@@ -5,21 +5,21 @@ import (
 )
 
 type UiDiv struct {
-	UiHtmlInner
+	UiHTMLInner
 }
 
 func (ui *UiDiv) JawsRender(e *Element, w io.Writer, params []any) error {
 	return ui.renderInner(e, w, "div", "", params)
 }
 
-func NewUiDiv(innerHtml HtmlGetter) *UiDiv {
+func NewUiDiv(innerHTML HTMLGetter) *UiDiv {
 	return &UiDiv{
-		UiHtmlInner{
-			HtmlGetter: innerHtml,
+		UiHTMLInner{
+			HTMLGetter: innerHTML,
 		},
 	}
 }
 
-func (rq RequestWriter) Div(innerHtml any, params ...any) error {
-	return rq.UI(NewUiDiv(MakeHtmlGetter(innerHtml)), params...)
+func (rq RequestWriter) Div(innerHTML any, params ...any) error {
+	return rq.UI(NewUiDiv(MakeHTMLGetter(innerHTML)), params...)
 }

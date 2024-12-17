@@ -5,13 +5,13 @@ import (
 )
 
 type UiContainer struct {
-	OuterHtmlTag string
+	OuterHTMLTag string
 	uiWrapContainer
 }
 
-func NewUiContainer(outerHtmlTag string, c Container) *UiContainer {
+func NewUiContainer(outerHTMLTag string, c Container) *UiContainer {
 	return &UiContainer{
-		OuterHtmlTag: outerHtmlTag,
+		OuterHTMLTag: outerHTMLTag,
 		uiWrapContainer: uiWrapContainer{
 			Container: c,
 		},
@@ -19,9 +19,9 @@ func NewUiContainer(outerHtmlTag string, c Container) *UiContainer {
 }
 
 func (ui *UiContainer) JawsRender(e *Element, w io.Writer, params []any) error {
-	return ui.renderContainer(e, w, ui.OuterHtmlTag, params)
+	return ui.renderContainer(e, w, ui.OuterHTMLTag, params)
 }
 
-func (rq RequestWriter) Container(outerHtmlTag string, c Container, params ...any) error {
-	return rq.UI(NewUiContainer(outerHtmlTag, c), params...)
+func (rq RequestWriter) Container(outerHTMLTag string, c Container, params ...any) error {
+	return rq.UI(NewUiContainer(outerHTMLTag, c), params...)
 }

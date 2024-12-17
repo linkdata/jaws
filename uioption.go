@@ -16,7 +16,7 @@ func (ui UiOption) JawsRender(e *Element, w io.Writer, params []any) error {
 	if ui.Checked() {
 		attrs = append(attrs, "selected")
 	}
-	return WriteHtmlInner(w, e.Jid(), "option", "", ui.JawsGetHtml(e), attrs...)
+	return WriteHTMLInner(w, e.Jid(), "option", "", ui.JawsGetHTML(e), attrs...)
 }
 
 func (ui UiOption) JawsUpdate(e *Element) {

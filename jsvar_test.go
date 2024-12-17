@@ -59,7 +59,7 @@ func Test_JsVar_JawsRender(t *testing.T) {
 		t.Error(err)
 	}
 
-	got := string(rq.BodyHtml())
+	got := string(rq.BodyHTML())
 	want := `<div id="Jid.3" data-jawsdata='{"String":"text","Number":1.23}' data-jawsname="myjsvar" hidden></div>`
 	if got != want {
 		t.Errorf("\n got: %q\nwant: %q\n", got, want)
@@ -78,7 +78,7 @@ func Test_JsVar_VarMaker(t *testing.T) {
 	if err := rq.JsVar(varname, dot); err != nil {
 		t.Error(err)
 	}
-	got := string(rq.BodyHtml())
+	got := string(rq.BodyHTML())
 	want := `<div id="Jid.1" data-jawsdata='"foo"' data-jawsname="myjsvar" hidden></div>`
 	if got != want {
 		t.Errorf("\n got: %q\nwant: %q\n", got, want)

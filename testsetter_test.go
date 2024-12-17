@@ -114,7 +114,7 @@ func (ts *testSetter[any]) JawsSetAny(e *Element, val any) (err error) {
 	return
 }
 
-func (ts *testSetter[T]) JawsGetHtml(e *Element) (val T) {
+func (ts *testSetter[T]) JawsGetHTML(e *Element) (val T) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.getCount++

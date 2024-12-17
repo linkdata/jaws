@@ -6,17 +6,17 @@ import (
 	"testing"
 )
 
-type testHtmlGetter string
+type testHTMLGetter string
 
-func (g testHtmlGetter) JawsGetHtml(e *Element) template.HTML {
+func (g testHTMLGetter) JawsGetHTML(e *Element) template.HTML {
 	return template.HTML(g)
 }
 
-var _ HtmlGetter = testHtmlGetter("foo")
+var _ HTMLGetter = testHTMLGetter("foo")
 
 func TestRequest_A(t *testing.T) {
 	type args struct {
-		innerHtml any
+		innerHTML any
 		params    []any
 	}
 	tests := []struct {
@@ -27,7 +27,7 @@ func TestRequest_A(t *testing.T) {
 		{
 			name: "string",
 			args: args{
-				innerHtml: "string",
+				innerHTML: "string",
 				params:    []any{},
 			},
 			want: `<a id="Jid.1">string</a>`,
@@ -35,15 +35,15 @@ func TestRequest_A(t *testing.T) {
 		{
 			name: "template.HTML",
 			args: args{
-				innerHtml: template.HTML("<div></div>"),
+				innerHTML: template.HTML("<div></div>"),
 				params:    []any{`href="#"`},
 			},
 			want: `<a id="Jid.1" href="#"><div></div></a>`,
 		},
 		{
-			name: "HtmlGetter",
+			name: "HTMLGetter",
 			args: args{
-				innerHtml: testHtmlGetter("<div></div>"),
+				innerHTML: testHTMLGetter("<div></div>"),
 				params:    []any{},
 			},
 			want: `<a id="Jid.1"><div></div></a>`,
@@ -54,8 +54,8 @@ func TestRequest_A(t *testing.T) {
 			nextJid = 0
 			rq := newTestRequest()
 			defer rq.Close()
-			rq.A(tt.args.innerHtml, tt.args.params...)
-			if got := rq.BodyHtml(); !reflect.DeepEqual(got, tt.want) {
+			rq.A(tt.args.innerHTML, tt.args.params...)
+			if got := rq.BodyHTML(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Request.A() = %v, want %v", got, tt.want)
 			}
 		})

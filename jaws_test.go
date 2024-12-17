@@ -299,7 +299,7 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 	for i := 0; i < numReqs; i++ {
 		rq := jw.NewRequest(hr)
 		if (i % (numReqs / 5)) == 0 {
-			rq.NewElement(NewUiDiv(MakeHtmlGetter("meh")))
+			rq.NewElement(NewUiDiv(MakeHTMLGetter("meh")))
 		}
 		err := context.Cause(rq.ctx)
 		if err == nil && rq.lastWrite.Before(deadline) {
@@ -443,8 +443,8 @@ func TestJaws_BroadcastsCallable(t *testing.T) {
 	jw.Redirect("foo")
 	jw.Alert("info", "bar")
 	someTags := []any{Tag("tag1"), Tag("tag2")}
-	jw.SetInner("regularHtmlId", template.HTML(""))
-	jw.SetValue("regularHtmlId", "value")
+	jw.SetInner("regularHTMLId", template.HTML(""))
+	jw.SetValue("regularHTMLId", "value")
 	jw.SetAttr(someTags, "attribute", "value")
 	jw.RemoveAttr(someTags, "attribute")
 	jw.SetClass(someTags, "classname")

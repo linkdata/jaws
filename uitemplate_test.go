@@ -65,7 +65,7 @@ func TestRequest_Template(t *testing.T) {
 				}()
 			}
 			rq.Template(tt.args.templ, tt.args.dot, tt.args.params...)
-			got := rq.BodyHtml()
+			got := rq.BodyHTML()
 			is.Equal(len(rq.elems), 1)
 			elem := rq.elems[0]
 			if tt.errtxt != "" {

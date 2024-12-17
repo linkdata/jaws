@@ -44,7 +44,7 @@ func TestJsFunc_JawsRender(t *testing.T) {
 		t.Error(err)
 	}
 
-	got := string(rq.BodyHtml())
+	got := string(rq.BodyHTML())
 	want := `<div id="Jid.3" data-jawsname="somefn" someattr hidden></div>`
 	if got != want {
 		t.Errorf("\n got: %q\nwant: %q\n", got, want)
@@ -87,9 +87,9 @@ func TestJsFunc_JawsEvent(t *testing.T) {
 	if err := dot.JawsRender(elem, &sb, []any{"fnname"}); err != nil {
 		t.Fatal(err)
 	}
-	wantHtml := "<div id=\"Jid.1\" data-jawsname=\"fnname\" hidden></div>"
-	if gotHtml := sb.String(); gotHtml != wantHtml {
-		t.Errorf("\n got %q\nwant %q\n", gotHtml, wantHtml)
+	wantHTML := "<div id=\"Jid.1\" data-jawsname=\"fnname\" hidden></div>"
+	if gotHTML := sb.String(); gotHTML != wantHTML {
+		t.Errorf("\n got %q\nwant %q\n", gotHTML, wantHTML)
 	}
 
 	th.Equal(retvval, "")

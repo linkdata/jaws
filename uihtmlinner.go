@@ -4,15 +4,15 @@ import (
 	"io"
 )
 
-type UiHtmlInner struct {
-	HtmlGetter
+type UiHTMLInner struct {
+	HTMLGetter
 }
 
-func (ui *UiHtmlInner) renderInner(e *Element, w io.Writer, htmltag, htmltype string, params []any) error {
-	e.ApplyGetter(ui.HtmlGetter)
-	return WriteHtmlInner(w, e.Jid(), htmltag, htmltype, ui.JawsGetHtml(e), e.ApplyParams(params)...)
+func (ui *UiHTMLInner) renderInner(e *Element, w io.Writer, htmltag, htmltype string, params []any) error {
+	e.ApplyGetter(ui.HTMLGetter)
+	return WriteHTMLInner(w, e.Jid(), htmltag, htmltype, ui.JawsGetHTML(e), e.ApplyParams(params)...)
 }
 
-func (ui *UiHtmlInner) JawsUpdate(e *Element) {
-	e.SetInner(ui.JawsGetHtml(e))
+func (ui *UiHTMLInner) JawsUpdate(e *Element) {
+	e.SetInner(ui.JawsGetHTML(e))
 }

@@ -9,7 +9,7 @@ type htmlGetterFunc struct {
 
 var _ TagGetter = &htmlGetterFunc{}
 
-func (g *htmlGetterFunc) JawsGetHtml(e *Element) template.HTML {
+func (g *htmlGetterFunc) JawsGetHTML(e *Element) template.HTML {
 	return g.fn(e)
 }
 
@@ -17,7 +17,7 @@ func (g *htmlGetterFunc) JawsGetTag(e *Request) any {
 	return g.tags
 }
 
-// HtmlGetterFunc wraps a function and returns a HtmlGetter.
-func HtmlGetterFunc(fn func(*Element) template.HTML, tags ...any) HtmlGetter {
+// HTMLGetterFunc wraps a function and returns a HTMLGetter.
+func HTMLGetterFunc(fn func(*Element) template.HTML, tags ...any) HTMLGetter {
 	return &htmlGetterFunc{fn: fn, tags: tags}
 }

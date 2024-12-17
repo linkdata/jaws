@@ -20,7 +20,7 @@ func (ui *UiInputFloat) renderFloatInput(e *Element, w io.Writer, htmltype strin
 	ui.applyGetter(e, ui.Setter)
 	attrs := e.ApplyParams(params)
 	ui.Last.Store(ui.JawsGet(e))
-	return WriteHtmlInput(w, e.Jid(), htmltype, ui.str(), attrs)
+	return WriteHTMLInput(w, e.Jid(), htmltype, ui.str(), attrs)
 }
 
 func (ui *UiInputFloat) JawsUpdate(e *Element) {

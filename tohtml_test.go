@@ -11,7 +11,7 @@ func TestToHTML(t *testing.T) {
 
 	txt := "<p>text</p>"
 	htmler := ToHTML(Stringer(&mu, &txt), "<div>%s</div>")
-	if s := htmler.JawsGetHtml(nil); s != "<div>&lt;p&gt;text&lt;/p&gt;</div>" {
+	if s := htmler.JawsGetHTML(nil); s != "<div>&lt;p&gt;text&lt;/p&gt;</div>" {
 		t.Error(s)
 	}
 	if tags := MustTagExpand(nil, htmler); !reflect.DeepEqual(tags, []any{&txt}) {

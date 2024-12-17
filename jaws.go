@@ -638,11 +638,11 @@ func maybePanic(err error) {
 
 // SetInner sends a request to replace the inner HTML of
 // all HTML elements matching target.
-func (jw *Jaws) SetInner(target any, innerHtml template.HTML) {
+func (jw *Jaws) SetInner(target any, innerHTML template.HTML) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.Inner,
-		Data: string(innerHtml),
+		Data: string(innerHTML),
 	})
 }
 

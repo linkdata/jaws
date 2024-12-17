@@ -489,7 +489,7 @@ func TestRequest_DeleteByTag(t *testing.T) {
 	}
 }
 
-func TestRequest_HtmlIdBroadcast(t *testing.T) {
+func TestRequest_HTMLIdBroadcast(t *testing.T) {
 	th := newTestHelper(t)
 	tj := newTestJaws()
 	defer tj.Close()

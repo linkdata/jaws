@@ -5,21 +5,21 @@ import (
 )
 
 type UiLabel struct {
-	UiHtmlInner
+	UiHTMLInner
 }
 
 func (ui *UiLabel) JawsRender(e *Element, w io.Writer, params []any) error {
 	return ui.renderInner(e, w, "label", "", params)
 }
 
-func NewUiLabel(innerHtml HtmlGetter) *UiLabel {
+func NewUiLabel(innerHTML HTMLGetter) *UiLabel {
 	return &UiLabel{
-		UiHtmlInner{
-			HtmlGetter: innerHtml,
+		UiHTMLInner{
+			HTMLGetter: innerHTML,
 		},
 	}
 }
 
-func (rq RequestWriter) Label(innerHtml any, params ...any) error {
-	return rq.UI(NewUiLabel(MakeHtmlGetter(innerHtml)), params...)
+func (rq RequestWriter) Label(innerHTML any, params ...any) error {
+	return rq.UI(NewUiLabel(MakeHTMLGetter(innerHTML)), params...)
 }

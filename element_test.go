@@ -101,8 +101,8 @@ func TestElement_Queued(t *testing.T) {
 			e.Append("<div></div>")
 			e.Remove("some-id")
 			e.Order([]jid.Jid{1, 2})
-			replaceHtml := template.HTML(fmt.Sprintf("<div id=\"%s\"></div>", e.Jid().String()))
-			e.Replace(replaceHtml)
+			replaceHTML := template.HTML(fmt.Sprintf("<div id=\"%s\"></div>", e.Jid().String()))
+			e.Replace(replaceHTML)
 			e.JsCall("\"test\\n1\"")
 			th.Equal(rq.wsQueue, []wsMsg{
 				{
@@ -151,7 +151,7 @@ func TestElement_Queued(t *testing.T) {
 					What: what.Order,
 				},
 				{
-					Data: string(replaceHtml),
+					Data: string(replaceHTML),
 					Jid:  e.jid,
 					What: what.Replace,
 				},

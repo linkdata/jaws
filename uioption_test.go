@@ -20,9 +20,9 @@ func TestUiOption(t *testing.T) {
 	if err := ui.JawsRender(elem, &sb, []any{"hidden"}); err != nil {
 		t.Fatal(err)
 	}
-	wantHtml := "<option id=\"Jid.1\" hidden value=\"escape&#34;me\" selected><unescaped></option>"
-	if gotHtml := sb.String(); gotHtml != wantHtml {
-		t.Errorf("got %q, want %q", gotHtml, wantHtml)
+	wantHTML := "<option id=\"Jid.1\" hidden value=\"escape&#34;me\" selected><unescaped></option>"
+	if gotHTML := sb.String(); gotHTML != wantHTML {
+		t.Errorf("got %q, want %q", gotHTML, wantHTML)
 	}
 
 	nb.Set(false)

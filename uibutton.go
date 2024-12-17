@@ -5,21 +5,21 @@ import (
 )
 
 type UiButton struct {
-	UiHtmlInner
+	UiHTMLInner
 }
 
 func (ui *UiButton) JawsRender(e *Element, w io.Writer, params []any) error {
 	return ui.renderInner(e, w, "button", "button", params)
 }
 
-func NewUiButton(innerHtml HtmlGetter) *UiButton {
+func NewUiButton(innerHTML HTMLGetter) *UiButton {
 	return &UiButton{
-		UiHtmlInner{
-			HtmlGetter: innerHtml,
+		UiHTMLInner{
+			HTMLGetter: innerHTML,
 		},
 	}
 }
 
-func (rq RequestWriter) Button(innerHtml any, params ...any) error {
-	return rq.UI(NewUiButton(MakeHtmlGetter(innerHtml)), params...)
+func (rq RequestWriter) Button(innerHTML any, params ...any) error {
+	return rq.UI(NewUiButton(MakeHTMLGetter(innerHTML)), params...)
 }

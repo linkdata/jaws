@@ -43,10 +43,10 @@ func TestRequest_Select(t *testing.T) {
 	a.Add("2", "two")
 	a.Set("1", true)
 
-	wantHtml := "<select id=\"Jid.1\" disabled><option id=\"Jid.2\" value=\"1\" selected>one</option><option id=\"Jid.3\" value=\"2\">two</option></select>"
+	wantHTML := "<select id=\"Jid.1\" disabled><option id=\"Jid.2\" value=\"1\" selected>one</option><option id=\"Jid.3\" value=\"2\">two</option></select>"
 	rq.Select(a, "disabled")
-	if gotHtml := rq.BodyString(); gotHtml != wantHtml {
-		t.Errorf("Request.Select() = %q, want %q", gotHtml, wantHtml)
+	if gotHTML := rq.BodyString(); gotHTML != wantHTML {
+		t.Errorf("Request.Select() = %q, want %q", gotHTML, wantHTML)
 	}
 
 	if !a.IsChecked("1") {

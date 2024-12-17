@@ -8,7 +8,7 @@ import (
 	"github.com/linkdata/jaws/jid"
 )
 
-func Test_WriteHtmlInner(t *testing.T) {
+func Test_WriteHTMLInner(t *testing.T) {
 	type args struct {
 		jid   jid.Jid
 		tag   string
@@ -22,7 +22,7 @@ func Test_WriteHtmlInner(t *testing.T) {
 		want string
 	}{
 		{
-			name: "HtmlInner no attrs",
+			name: "HTMLInner no attrs",
 			args: args{
 				jid:   1,
 				tag:   "tag1",
@@ -32,7 +32,7 @@ func Test_WriteHtmlInner(t *testing.T) {
 			want: `<tag1 id="Jid.1" type="typ1">inner_text</tag1>`,
 		},
 		{
-			name: "HtmlInner singleton tag",
+			name: "HTMLInner singleton tag",
 			args: args{
 				jid:   2,
 				tag:   "img",
@@ -42,7 +42,7 @@ func Test_WriteHtmlInner(t *testing.T) {
 			want: `<img id="Jid.2">`,
 		},
 		{
-			name: "HtmlInner two filled attrs, one empty",
+			name: "HTMLInner two filled attrs, one empty",
 			args: args{
 				jid:   3,
 				tag:   "tag1",
@@ -56,17 +56,17 @@ func Test_WriteHtmlInner(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var sb strings.Builder
-			if err := WriteHtmlInner(&sb, tt.args.jid, tt.args.tag, tt.args.typ, tt.args.inner, tt.args.attrs...); err != nil {
+			if err := WriteHTMLInner(&sb, tt.args.jid, tt.args.tag, tt.args.typ, tt.args.inner, tt.args.attrs...); err != nil {
 				t.Fatal(err)
 			}
 			if got := sb.String(); got != tt.want {
-				t.Errorf("HtmlInner() = %v, want %v", got, tt.want)
+				t.Errorf("HTMLInner() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func Test_WriteHtmlSelect(t *testing.T) {
+func Test_WriteHTMLSelect(t *testing.T) {
 	type args struct {
 		jid   jid.Jid
 		val   *NamedBoolArray
@@ -78,7 +78,7 @@ func Test_WriteHtmlSelect(t *testing.T) {
 		want string
 	}{
 		{
-			name: "HtmlSelect empty NamedBoolArray and one attr",
+			name: "HTMLSelect empty NamedBoolArray and one attr",
 			args: args{
 				jid:   2,
 				val:   NewNamedBoolArray(),
@@ -87,7 +87,7 @@ func Test_WriteHtmlSelect(t *testing.T) {
 			want: "<select id=\"Jid.2\" attr1>\n</select>",
 		},
 		{
-			name: "HtmlSelect NamedBoolArray with data",
+			name: "HTMLSelect NamedBoolArray with data",
 			args: args{
 				jid: 3,
 				val: func() (nba *NamedBoolArray) {
@@ -110,17 +110,17 @@ func Test_WriteHtmlSelect(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var sb strings.Builder
-			if err := WriteHtmlSelect(&sb, tt.args.jid, tt.args.val, tt.args.attrs); err != nil {
+			if err := WriteHTMLSelect(&sb, tt.args.jid, tt.args.val, tt.args.attrs); err != nil {
 				t.Fatal(err)
 			}
 			if got := sb.String(); got != tt.want {
-				t.Errorf("HtmlSelect():\n got = %q\nwant = %q", got, tt.want)
+				t.Errorf("HTMLSelect():\n got = %q\nwant = %q", got, tt.want)
 			}
 		})
 	}
 }
 
-func Test_WriteHtmlInput(t *testing.T) {
+func Test_WriteHTMLInput(t *testing.T) {
 	type args struct {
 		jid   jid.Jid
 		typ   string
@@ -133,7 +133,7 @@ func Test_WriteHtmlInput(t *testing.T) {
 		want string
 	}{
 		{
-			name: "HtmlInput no attrs",
+			name: "HTMLInput no attrs",
 			args: args{
 				jid: 1,
 				typ: "input_type",
@@ -142,7 +142,7 @@ func Test_WriteHtmlInput(t *testing.T) {
 			want: `<input id="Jid.1" type="input_type" value="initial_val">`,
 		},
 		{
-			name: "HtmlInput one empty attr",
+			name: "HTMLInput one empty attr",
 			args: args{
 				jid:   2,
 				typ:   "input_type2",
@@ -152,7 +152,7 @@ func Test_WriteHtmlInput(t *testing.T) {
 			want: `<input id="Jid.2" type="input_type2" value="initial_val2">`,
 		},
 		{
-			name: "HtmlInput one filled attr",
+			name: "HTMLInput one filled attr",
 			args: args{
 				jid:   3,
 				typ:   "input_type2",
@@ -162,7 +162,7 @@ func Test_WriteHtmlInput(t *testing.T) {
 			want: `<input id="Jid.3" type="input_type2" value="initial_val2" some_attr>`,
 		},
 		{
-			name: "HtmlInput two filled attr, one empty",
+			name: "HTMLInput two filled attr, one empty",
 			args: args{
 				jid:   4,
 				typ:   "input_type2",
@@ -175,11 +175,11 @@ func Test_WriteHtmlInput(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var sb strings.Builder
-			if err := WriteHtmlInput(&sb, tt.args.jid, tt.args.typ, tt.args.val, tt.args.attrs); err != nil {
+			if err := WriteHTMLInput(&sb, tt.args.jid, tt.args.typ, tt.args.val, tt.args.attrs); err != nil {
 				t.Fatal(err)
 			}
 			if got := sb.String(); got != tt.want {
-				t.Errorf("HtmlInput() = %v, want %v", got, tt.want)
+				t.Errorf("HTMLInput() = %v, want %v", got, tt.want)
 			}
 		})
 	}

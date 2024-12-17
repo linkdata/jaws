@@ -4,6 +4,6 @@ import (
 	"html/template"
 )
 
-type HtmlGetter interface {
-	JawsGetHtml(e *Element) template.HTML
+type HTMLGetter interface {
+	JawsGetHTML(e *Element) template.HTML
 }

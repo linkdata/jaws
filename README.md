@@ -156,11 +156,11 @@ router.GET("/jaws/*", func(c echo.Context) error {
 
 ### HTML rendering
 
-HTML output elements (e.g. `jaws.RequestWriter.Div()`) require a `jaws.HtmlGetter` or something that can
-be made into one using `jaws.MakeHtmlGetter()`.
+HTML output elements (e.g. `jaws.RequestWriter.Div()`) require a `jaws.HTMLGetter` or something that can
+be made into one using `jaws.MakeHTMLGetter()`.
 
 In order of precedence, this can be:
-* `jaws.HtmlGetter`: `JawsGetHtml(*Element) template.HTML` to be used as-is.
+* `jaws.HTMLGetter`: `JawsGetHTML(*Element) template.HTML` to be used as-is.
 * `jaws.Getter[template.HTML]`: `JawsGet(*Element) template.HTML` to be used as-is.
 * `jaws.StringGetter`: `JawsGetString(*Element) string` that will be escaped using `html.EscapeString`.
 * `jaws.Getter[string]`: `JawsGet(*Element) string` that will be escaped using `html.EscapeString`.
@@ -176,7 +176,7 @@ The first argument to these is usually a `Setter[T]` where `T` is one of `string
 also be a `Getter[T]`, in which case the HTML element should be made read-only.
 
 You can also use a `Binder[T]` that combines a (RW)Locker and a pointer to the value, and allows you to add chained setters,
-getters and on-success handlers. It can be used as a `jaws.HtmlGetter`.
+getters and on-success handlers. It can be used as a `jaws.HTMLGetter`.
 
 ### Session handling
 
