@@ -47,6 +47,10 @@ func TestRequest_NewElement_DebugPanicsIfNotComparable(t *testing.T) {
 	t.Fail()
 }
 
+type testStringer struct{}
+
+func (testStringer) String() string { return "foo" }
+
 func TestRequest_JawsRender_DebugOutput(t *testing.T) {
 	is := newTestHelper(t)
 	rq := newTestRequest()
