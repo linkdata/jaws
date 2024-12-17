@@ -141,5 +141,4 @@ func (bind bindingHook[T]) FormatHTML(f string) (newbind Binder[T]) {
 			return template.HTML( /*#nosec G203*/ fmt.Sprintf(f, value))
 		}),
 	}
-
 }
