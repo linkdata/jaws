@@ -9,13 +9,13 @@ import (
 type testStringer struct{}
 
 func (s testStringer) String() string {
-	return "I_Am_A_testStringer"
+	return "<I_Am_A_testStringer>"
 }
 
 type testPtrStringer struct{}
 
 func (s *testPtrStringer) String() string {
-	return "I_Am_A_testPtrStringer"
+	return "<I_Am_A_testPtrStringer>"
 }
 
 func TestStringer(t *testing.T) {

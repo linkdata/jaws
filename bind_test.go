@@ -371,3 +371,28 @@ func TestBindFunc_Time(t *testing.T) {
 	testBind_TimeSetter(t, Bind(&mu, &val))
 	testBind_TimeSetter(t, Bind(&mu, &val).Success(func() {}))
 }
+
+func TestBindFormat(t *testing.T) {
+	var mu sync.Mutex
+	val := 12
+
+	bind1 := Bind(&mu, &val)
+	if s := bind1.JawsGetHTML(nil); s != "12" {
+		t.Errorf("%q", s)
+	}
+
+	bind2 := bind1.Format("%3v")
+	if s := bind2.JawsGetHTML(nil); s != " 12" {
+		t.Errorf("%q", s)
+	}
+
+	bind3 := bind2.Success(func() {})
+	if s := bind3.JawsGetHTML(nil); s != " 12" {
+		t.Errorf("%q", s)
+	}
+
+	bind4 := bind3.Format("%4v")
+	if s := bind4.JawsGetHTML(nil); s != "  12" {
+		t.Errorf("%q", s)
+	}
+}

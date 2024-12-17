@@ -1,5 +1,11 @@
 package jaws
 
+import (
+	"fmt"
+	"html"
+	"html/template"
+)
+
 type bindingHook[T comparable] struct {
 	Binder[T]
 	hook any // one of: BindGetHook[T] BindSetHook[T] BindSuccessHook
@@ -64,6 +70,13 @@ func (bind bindingHook[T]) JawsSetAny(elem *Element, value any) error {
 	return bind.JawsSet(elem, value.(T))
 }
 
+func (bind bindingHook[T]) JawsGetHTML(elem *Element) (tmpl template.HTML) {
+	if fn, ok := bind.hook.(BindFormatHook[T]); ok {
+		return fn(bind.JawsGet(elem), elem)
+	}
+	return bind.Binder.JawsGetHTML(elem)
+}
+
 // SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
 //
 // The lock will be held at this point.
@@ -105,5 +118,16 @@ func (bind bindingHook[T]) Success(fn any) Binder[T] {
 	return bindingHook[T]{
 		Binder: bind,
 		hook:   wrapSuccessHook(fn),
+	}
+}
+
+// Format returns a Binder[T] that will implement
+// using fmt.Sprintf(f, JawsGet[T](elem))
+func (bind bindingHook[T]) Format(f string) (newbind Binder[T]) {
+	return bindingHook[T]{
+		Binder: bind,
+		hook: BindFormatHook[T](func(value T, elem *Element) (tmpl template.HTML) {
+			return template.HTML(html.EscapeString(fmt.Sprintf(f, value)))
+		}),
 	}
 }
