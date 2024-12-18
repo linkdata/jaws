@@ -11,8 +11,11 @@ import (
 
 const indexhtml = `
 <html>
-<head>{{$.HeadHTML}}</head>
-<body>{{$.Range .Dot}}</body>
+  <head>{{$.HeadHTML}}</head>
+  <body>
+    {{$.Range .Dot}}
+    {{$.TailHTML}}
+  </body>
 </html>
 `
 
