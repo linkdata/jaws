@@ -24,7 +24,7 @@ func setupRoutes(jw *jaws.Jaws, mux *http.ServeMux) (faviconuri string, err erro
 }
 ```
 
-Expects an `assets` directory in the source tree:
+The example expects an `assets` directory in the source tree:
 
 ```
 assets
