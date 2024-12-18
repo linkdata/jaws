@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-var _ HTMLGetter = (*testSetter[template.HTML])(nil)
-
 type testAnySetter struct {
 	Value any
 }
@@ -32,7 +30,6 @@ func Test_MakeHTMLGetter(t *testing.T) {
 	avTyped.Store(typedText)
 	stringer := testStringer{}
 
-	getterHTML := testGetterHTML{}
 	getterString := testGetterString{}
 	getterAny := &testAnySetter{Value: untypedText}
 
@@ -49,13 +46,6 @@ func Test_MakeHTMLGetter(t *testing.T) {
 			want: htmlGetter{typedText},
 			out:  typedText,
 			tag:  nil,
-		},
-		{
-			name: "Getter[template.HTML]",
-			v:    getterHTML,
-			want: htmlGetterHTML{getterHTML},
-			out:  getterHTML.JawsGet(nil),
-			tag:  getterHTML,
 		},
 		{
 			name: "Getter[string]",

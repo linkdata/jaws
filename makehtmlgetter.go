@@ -26,16 +26,6 @@ func (g htmlStringerGetter) JawsGetTag(rq *Request) any {
 	return g.sg
 }
 
-type htmlGetterHTML struct{ sg Getter[template.HTML] }
-
-func (g htmlGetterHTML) JawsGetHTML(e *Element) template.HTML {
-	return g.sg.JawsGet(e)
-}
-
-func (g htmlGetterHTML) JawsGetTag(rq *Request) any {
-	return g.sg
-}
-
 type htmlGetterString struct{ sg Getter[string] }
 
 func (g htmlGetterString) JawsGetHTML(e *Element) template.HTML {
@@ -62,7 +52,6 @@ func (g htmlGetterAny) JawsGetTag(rq *Request) any {
 // Depending on the type of v, we return:
 //
 //   - jaws.HTMLGetter: `JawsGetHTML(e *Element) template.HTML` to be used as-is.
-//   - jaws.Getter[template.HTML]: `JawsGet(elem *Element) template.HTML` to be used as-is.
 //   - jaws.Getter[string]: `JawsGet(elem *Element) string` that will be escaped using `html.EscapeString`.
 //   - jaws.AnyGetter: `JawsGetAny(elem *Element) any` that will be rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
 //   - fmt.Stringer: `String() string` that will be escaped using `html.EscapeString`.
@@ -72,8 +61,6 @@ func MakeHTMLGetter(v any) HTMLGetter {
 	switch v := v.(type) {
 	case HTMLGetter:
 		return v
-	case Getter[template.HTML]:
-		return htmlGetterHTML{v}
 	case Getter[string]:
 		return htmlGetterString{v}
 	case AnyGetter:

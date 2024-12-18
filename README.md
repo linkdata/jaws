@@ -161,8 +161,6 @@ be made into one using `jaws.MakeHTMLGetter()`.
 
 In order of precedence, this can be:
 * `jaws.HTMLGetter`: `JawsGetHTML(*Element) template.HTML` to be used as-is.
-* `jaws.Getter[template.HTML]`: `JawsGet(*Element) template.HTML` to be used as-is.
-* `jaws.StringGetter`: `JawsGetString(*Element) string` that will be escaped using `html.EscapeString`.
 * `jaws.Getter[string]`: `JawsGet(*Element) string` that will be escaped using `html.EscapeString`.
 * `jaws.AnyGetter`: `JawsGetAny(*Element) any` that will be rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
 * `fmt.Stringer`: `String() string` that will be escaped using `html.EscapeString`.
@@ -170,7 +168,7 @@ In order of precedence, this can be:
 * everything else is rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
 
 You can use `jaws.HTMLGetterFunc` or `jaws.StringGetterFunc` to easily build a custom renderer
-for those trivial rendering tasks.
+for trivial rendering tasks.
 
 ### Data binding
 
