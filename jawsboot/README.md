@@ -23,3 +23,16 @@ func setupRoutes(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
 	return
 }
 ```
+
+Expects an `assets` directory in the source tree:
+
+```
+assets
+├── static
+│   └── images
+│       └── favicon.png
+└── ui
+    ├── somepage.html
+    ├── otherpage.html
+    └── index.html
+```
