@@ -376,24 +376,28 @@ func TestBindFormat(t *testing.T) {
 	var mu sync.Mutex
 	val := 12
 
-	bind1 := Bind(&mu, &val)
-	if s := bind1.JawsGetHTML(nil); s != "12" {
-		t.Errorf("%q", s)
+	bind := Bind(&mu, &val)
+	if v := MakeHTMLGetter(bind).JawsGetHTML(nil); v != "12" {
+		t.Errorf("%q", v)
 	}
 
-	bind2 := bind1.Format("%3v")
-	if s := bind2.JawsGetHTML(nil); s != " 12" {
+	getter := bind.Format("%3v")
+	if s := getter.JawsGet(nil); s != " 12" {
 		t.Errorf("%q", s)
 	}
-
-	bind3 := bind2.Success(func() {})
-	if s := bind3.JawsGetHTML(nil); s != " 12" {
-		t.Errorf("%q", s)
+	tags := MustTagExpand(nil, getter)
+	if !reflect.DeepEqual(tags, []any{&val}) {
+		t.Error(tags)
 	}
 
-	bind4 := bind3.Format("%4v")
-	if s := bind4.JawsGetHTML(nil); s != "  12" {
+	bind2 := bind.Success(func() {})
+	getter = bind2.Format("%3v")
+	if s := getter.JawsGet(nil); s != " 12" {
 		t.Errorf("%q", s)
+	}
+	tags = MustTagExpand(nil, getter)
+	if !reflect.DeepEqual(tags, []any{&val}) {
+		t.Error(tags)
 	}
 }
 
@@ -401,18 +405,30 @@ func TestBindFormatHTML(t *testing.T) {
 	var mu sync.Mutex
 	val := "<span>"
 
-	bind1 := Bind(&mu, &val)
-	if s := bind1.JawsGetHTML(nil); s != "&lt;span&gt;" {
+	bind := Bind(&mu, &val)
+	if s := MakeHTMLGetter(bind).JawsGetHTML(nil); s != "&lt;span&gt;" {
 		t.Errorf("%q", s)
 	}
 
-	bind2 := bind1.FormatHTML("%v")
-	if s := bind2.JawsGetHTML(nil); s != "<span>" {
+	getter := bind.FormatHTML("%v")
+	if s := getter.JawsGetHTML(nil); s != "<span>" {
 		t.Errorf("%q", s)
 	}
+	tags := MustTagExpand(nil, getter)
+	if !reflect.DeepEqual(tags, []any{&val}) {
+		t.Error(tags)
+	}
 
-	bind3 := bind2.FormatHTML("<p>%v</p>")
-	if s := bind3.JawsGetHTML(nil); s != "<p><span></p>" {
+	bind2 := bind.Success(func() {})
+	if s := bind2.JawsGet(nil); s != "<span>" {
 		t.Errorf("%q", s)
+	}
+	getter = bind2.FormatHTML("%q")
+	if s := getter.JawsGetHTML(nil); s != "\"<span>\"" {
+		t.Errorf("%q", s)
+	}
+	tags = MustTagExpand(nil, getter)
+	if !reflect.DeepEqual(tags, []any{&val}) {
+		t.Error(tags)
 	}
 }
