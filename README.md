@@ -167,8 +167,8 @@ In order of precedence, this can be:
 * a static `template.HTML` or `string` to be used as-is with no HTML escaping.
 * everything else is rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
 
-You can use `jaws.HTMLGetterFunc` or `jaws.StringGetterFunc` to easily build a custom renderer
-for trivial rendering tasks.
+You can use `jaws.Bind().FormatHTML()`, `jaws.HTMLGetterFunc()` or `jaws.StringGetterFunc()` to build a custom renderer
+for trivial rendering tasks, or define a custom type implementing `HTMLGetter`.
 
 ### Data binding
 

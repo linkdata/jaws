@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"html/template"
 	"testing"
 )
 
@@ -10,12 +9,6 @@ const testStringGetterText = "<span>"
 type testGetterString struct{}
 
 func (testGetterString) JawsGet(*Element) string {
-	return testStringGetterText
-}
-
-type testGetterHTML struct{}
-
-func (testGetterHTML) JawsGet(*Element) template.HTML {
 	return testStringGetterText
 }
 
