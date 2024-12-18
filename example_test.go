@@ -12,10 +12,10 @@ import (
 const indexhtml = `
 <html>
   <head>{{$.HeadHTML}}</head>
-  <body>
-    {{$.Range .Dot}}
+  <body>{{with .Dot}}
+    {{$.Range .}}
     {{$.TailHTML}}
-  </body>
+  {{end}}</body>
 </html>
 `
 
