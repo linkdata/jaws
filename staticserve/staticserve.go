@@ -11,9 +11,9 @@ import (
 )
 
 type StaticServe struct {
-	Name        string
-	ContentType string
-	Gz          []byte
+	Name        string // the cache-busting file name, e.g. "static/filename.1234567.js"
+	ContentType string // Content-Type of the file, e.g. "application/javascript"
+	Gz          []byte // gzipped data, will be unpacked as needed
 }
 
 // New returns a StaticServe that serves the given data with a filename like 'filename.12345678.ext'.
