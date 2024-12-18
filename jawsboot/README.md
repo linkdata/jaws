@@ -9,13 +9,13 @@ so that when running with `-tags debug` or `-race` templates are reloaded from d
 //go:embed assets
 var assetsFS embed.FS
 
-func setupRoutes(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
+func setupRoutes(jw *jaws.Jaws, mux *http.ServeMux) (faviconuri string, err error) {
 	var tmpl jaws.TemplateLookuper
 	if tmpl, err = templatereloader.New(assetsFS, "assets/ui/*.html", ""); err == nil {
 		jw.AddTemplateLookuper(tmpl)
-		var faviconuri string
 		if faviconuri, err = staticserve.HandleFS(assetsFS, "assets", "static/images/favicon.png", mux.Handle); err == nil {
 			if err = jawsboot.Setup(jw, mux.Handle, faviconuri); err == nil {
+				mux.Handle("/jaws/", jw) // ensure the JaWS routes are handled
 				// set up your other routes
 			}
 		}
