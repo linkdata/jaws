@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -167,7 +168,7 @@ func (e *Element) Replace(htmlCode template.HTML) {
 		b = append(b, "id="...)
 		b = e.Jid().AppendQuote(b)
 		if !bytes.Contains([]byte(htmlCode), b) {
-			panic(fmt.Errorf("jaws: Element.Replace(): expected HTML " + string(b)))
+			panic(errors.New("jaws: Element.Replace(): expected HTML " + string(b)))
 		}
 		e.queue(what.Replace, string(htmlCode))
 	}
