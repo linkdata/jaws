@@ -1,6 +1,8 @@
 package jaws
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type Setter[T comparable] interface {
 	Getter[T]
@@ -20,10 +22,6 @@ func (s setterReadOnly[T]) JawsGetTag(*Request) any {
 	return s.Getter
 }
 
-func makeReadOnlySetter[T comparable](g Getter[T]) Setter[T] {
-	return setterReadOnly[T]{g}
-}
-
 type setterStatic[T comparable] struct {
 	v T
 }
@@ -40,19 +38,15 @@ func (s setterStatic[T]) JawsGetTag(*Request) any {
 	return nil
 }
 
-func makeStaticSetter[T comparable](v T) Setter[T] {
-	return setterStatic[T]{v}
-}
-
 func makeSetter[T comparable](v any) Setter[T] {
 	switch v := v.(type) {
 	case Setter[T]:
 		return v
 	case Getter[T]:
-		return makeReadOnlySetter(v)
+		return setterReadOnly[T]{v}
 	case T:
-		return makeStaticSetter(v)
+		return setterStatic[T]{v}
 	}
 	var blank T
-	panic(fmt.Errorf("jaws.Setter[%T], jaws.Getter[%T] or %T not %T", blank, blank, blank, v))
+	panic(fmt.Errorf("expected jaws.Setter[%T], jaws.Getter[%T] or %T not %T", blank, blank, blank, v))
 }
