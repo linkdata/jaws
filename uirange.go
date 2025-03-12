@@ -21,5 +21,5 @@ func NewUiRange(g Setter[float64]) *UiRange {
 }
 
 func (rq RequestWriter) Range(value any, params ...any) error {
-	return rq.UI(NewUiRange(makeSetter[float64](value)), params...)
+	return rq.UI(NewUiRange(makeSetterFloat64(value)), params...)
 }

@@ -21,5 +21,5 @@ func NewUiNumber(g Setter[float64]) *UiNumber {
 }
 
 func (rq RequestWriter) Number(value any, params ...any) error {
-	return rq.UI(NewUiNumber(makeSetter[float64](value)), params...)
+	return rq.UI(NewUiNumber(makeSetterFloat64(value)), params...)
 }
