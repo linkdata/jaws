@@ -15,12 +15,16 @@ func TestNew(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tr := tl.(*TemplateReloader)
-	tr.when = tr.when.Add(-time.Second * 2)
+	tr, ok := tl.(*TemplateReloader)
+	if ok {
+		tr.when = tr.when.Add(-time.Second * 2)
 
-	tmpl := tl.Lookup("test.html")
-	if tmpl == nil {
-		t.Fail()
+		tmpl := tl.Lookup("test.html")
+		if tmpl == nil {
+			t.Fail()
+		}
+	} else {
+		t.Skip("not running with debug tag")
 	}
 }
 
