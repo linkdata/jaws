@@ -105,13 +105,16 @@ func wsWriter(ctx context.Context, ccf context.CancelCauseFunc, jawsDoneCh <-cha
 func wsWriteData(wc io.WriteCloser, firstMsg wsMsg, outboundMsgCh <-chan wsMsg) (err error) {
 	defer wc.Close()
 	b := firstMsg.Append(nil)
-	for {
+	done := false
+	for !done {
 		select {
 		case msg := <-outboundMsgCh:
 			b = msg.Append(b)
+			done = len(b) > 256*1024
 		default:
-			_, err = wc.Write(b)
-			return
+			done = true
 		}
 	}
+	_, err = wc.Write(b)
+	return
 }

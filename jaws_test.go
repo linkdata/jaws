@@ -365,7 +365,7 @@ func TestJaws_RequestWriterExtendsDeadline(t *testing.T) {
 
 	go jw.ServeWithTimeout(time.Millisecond)
 
-	for lastWrite == rq.getLastWrite() {
+	for lastWrite.Equal(rq.getLastWrite()) {
 		select {
 		case <-th.C:
 			th.Timeout()
@@ -378,7 +378,7 @@ func TestJaws_RequestWriterExtendsDeadline(t *testing.T) {
 	if rq.getLastWrite().IsZero() {
 		th.Error("last write is zero")
 	}
-	if rq.getLastWrite() == lastWrite {
+	if lastWrite.Equal(rq.getLastWrite()) {
 		th.Error("last write not modified")
 	}
 }
