@@ -110,7 +110,7 @@ func wsWriteData(wc io.WriteCloser, firstMsg wsMsg, outboundMsgCh <-chan wsMsg) 
 		select {
 		case msg := <-outboundMsgCh:
 			b = msg.Append(b)
-			done = len(b) > 256*1024
+			done = len(b) >= 32*1024
 		default:
 			done = true
 		}
