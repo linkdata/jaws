@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -103,18 +104,19 @@ func wsWriter(ctx context.Context, ccf context.CancelCauseFunc, jawsDoneCh <-cha
 }
 
 func wsWriteData(wc io.WriteCloser, firstMsg wsMsg, outboundMsgCh <-chan wsMsg) (err error) {
-	defer wc.Close()
 	b := firstMsg.Append(nil)
-	done := false
-	for !done {
+	// accumulate data to send as long as more messages
+	// are available until it exceeds 32K
+batchloop:
+	for len(b) < 32*1024 {
 		select {
 		case msg := <-outboundMsgCh:
 			b = msg.Append(b)
-			done = len(b) >= 32*1024
 		default:
-			done = true
+			break batchloop
 		}
 	}
 	_, err = wc.Write(b)
+	err = errors.Join(err, wc.Close())
 	return
 }
