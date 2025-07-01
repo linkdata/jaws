@@ -30,25 +30,25 @@ type ConnectFn = func(rq *Request) error
 // Note that we have to store the context inside the struct because there is no call chain
 // between the Request being created and it being used once the WebSocket is created.
 type Request struct {
-	Jaws      *Jaws                   // (read-only) the JaWS instance the Request belongs to
-	JawsKey   uint64                  // (read-only) a random number used in the WebSocket URI to identify this Request
-	remoteIP  netip.Addr              // (read-only) remote IP, or nil
-	rendering atomic.Bool             // set to true by RequestWriter.Write()
-	running   atomic.Bool             // if ServeHTTP() is running
-	claimed   atomic.Bool             // if UseRequest() has been called for it
-	mu        deadlock.RWMutex        // protects following
-	lastWrite time.Time               // when the initial HTML was last written to, used for automatic cleanup
-	initial   *http.Request           // initial HTTP request passed to Jaws.NewRequest
-	session   *Session                // session, if established
-	todoDirt  []any                   // dirty tags
-	ctx       context.Context         // current context, derived from either Jaws or WS HTTP req
-	wsDoneCh  <-chan struct{}         // once claimed, set to http.Request.Context().Done()
-	cancelFn  context.CancelCauseFunc // cancel function
-	connectFn ConnectFn               // a ConnectFn to call before starting message processing for the Request
-	elems     []*Element              // our Elements
-	tagMap    map[any][]*Element      // maps tags to Elements
-	muQueue   deadlock.Mutex          // protects wsQueue
-	wsQueue   []wsMsg                 // queued messages to send
+	Jaws       *Jaws                   // (read-only) the JaWS instance the Request belongs to
+	JawsKey    uint64                  // (read-only) a random number used in the WebSocket URI to identify this Request
+	remoteIP   netip.Addr              // (read-only) remote IP, or nil
+	rendering  atomic.Bool             // set to true by RequestWriter.Write()
+	running    atomic.Bool             // if ServeHTTP() is running
+	claimed    atomic.Bool             // if UseRequest() has been called for it
+	mu         deadlock.RWMutex        // protects following
+	lastWrite  time.Time               // when the initial HTML was last written to, used for automatic cleanup
+	initial    *http.Request           // initial HTTP request passed to Jaws.NewRequest
+	session    *Session                // session, if established
+	todoDirt   []any                   // dirty tags
+	ctx        context.Context         // current context, derived from either Jaws or WS HTTP req
+	httpDoneCh <-chan struct{}         // once claimed, set to http.Request.Context().Done()
+	cancelFn   context.CancelCauseFunc // cancel function
+	connectFn  ConnectFn               // a ConnectFn to call before starting message processing for the Request
+	elems      []*Element              // our Elements
+	tagMap     map[any][]*Element      // maps tags to Elements
+	muQueue    deadlock.Mutex          // protects wsQueue
+	wsQueue    []wsMsg                 // queued messages to send
 }
 
 type eventFnCall struct {
@@ -75,10 +75,10 @@ var ErrJavascriptDisabled = errors.New("javascript is disabled")
 func (rq *Request) claim(hr *http.Request) error {
 	if !rq.claimed.Load() {
 		var actualIP netip.Addr
-		var wsDoneCh <-chan struct{}
+		var httpDoneCh <-chan struct{}
 		if hr != nil { // can be nil in tests
 			actualIP = parseIP(hr.RemoteAddr)
-			wsDoneCh = hr.Context().Done()
+			httpDoneCh = hr.Context().Done()
 		}
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
@@ -87,7 +87,7 @@ func (rq *Request) claim(hr *http.Request) error {
 		}
 		if rq.claimed.CompareAndSwap(false, true) {
 			rq.ctx, rq.cancelFn = context.WithCancelCause(rq.ctx)
-			rq.wsDoneCh = wsDoneCh
+			rq.httpDoneCh = httpDoneCh
 			return nil
 		}
 	}
@@ -461,7 +461,7 @@ func (rq *Request) GetElements(tagitem any) (elems []*Element) {
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
 func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsMsg, outboundMsgCh chan<- wsMsg) {
 	jawsDoneCh := rq.Jaws.Done()
-	wsDoneCh := rq.wsDoneCh
+	httpDoneCh := rq.httpDoneCh
 	eventDoneCh := make(chan struct{})
 	eventCallCh := make(chan eventFnCall, cap(outboundMsgCh))
 	go rq.eventCaller(eventCallCh, outboundMsgCh, eventDoneCh)
@@ -507,7 +507,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 
 		select {
 		case <-jawsDoneCh:
-		case <-wsDoneCh:
+		case <-httpDoneCh:
 		case <-rq.Context().Done():
 		case tagmsg, ok = <-broadcastMsgCh:
 		case wsmsg, ok = <-incomingMsgCh:
