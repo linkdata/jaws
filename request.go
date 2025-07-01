@@ -74,8 +74,8 @@ var ErrJavascriptDisabled = errors.New("javascript is disabled")
 func (rq *Request) claim(hr *http.Request) error {
 	if !rq.claimed.Load() {
 		var actualIP netip.Addr
-		ctx := context.Background()
-		if hr != nil {
+		ctx := rq.ctx
+		if hr != nil { // can be nil in tests
 			actualIP = parseIP(hr.RemoteAddr)
 			ctx = hr.Context()
 		}
@@ -230,13 +230,20 @@ func (rq *Request) Set(key string, val any) {
 	rq.Session().Set(key, val)
 }
 
-// Context returns the Request's Context, which is derived from the
-// WebSocket's HTTP requests Context.
+// Context returns the Request's Context, which is by default derived from jaws.BaseContext.
 func (rq *Request) Context() (ctx context.Context) {
 	rq.mu.RLock()
 	ctx = rq.ctx
 	rq.mu.RUnlock()
 	return
+}
+
+// SetContext atomically replaces the Request's context with the function return value.
+// The function is given the current context and must return a new non-nil context.
+func (rq *Request) SetContext(fn func(oldctx context.Context) (newctx context.Context)) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	rq.ctx = fn(rq.ctx)
 }
 
 func (rq *Request) maintenance(now time.Time, requestTimeout time.Duration) bool {
@@ -449,18 +456,9 @@ func (rq *Request) GetElements(tagitem any) (elems []*Element) {
 	return
 }
 
-// Done returns the Request completion channel.
-func (rq *Request) Done() (ch <-chan struct{}) {
-	rq.mu.RLock()
-	ch = rq.ctx.Done()
-	rq.mu.RUnlock()
-	return
-}
-
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
 func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsMsg, outboundMsgCh chan<- wsMsg) {
 	jawsDoneCh := rq.Jaws.Done()
-	ctxDoneCh := rq.Done()
 	eventDoneCh := make(chan struct{})
 	eventCallCh := make(chan eventFnCall, cap(outboundMsgCh))
 	go rq.eventCaller(eventCallCh, outboundMsgCh, eventDoneCh)
@@ -506,7 +504,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 
 		select {
 		case <-jawsDoneCh:
-		case <-ctxDoneCh:
+		case <-rq.Context().Done():
 		case tagmsg, ok = <-broadcastMsgCh:
 		case wsmsg, ok = <-incomingMsgCh:
 			if ok {
@@ -687,7 +685,7 @@ func (rq *Request) getSendMsgs() (toSend []wsMsg) {
 func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg) {
 	for _, msg := range rq.getSendMsgs() {
 		select {
-		case <-rq.Done():
+		case <-rq.Context().Done():
 		case outboundMsgCh <- msg:
 		}
 	}

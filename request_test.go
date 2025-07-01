@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"strconv"
 	"strings"
@@ -104,6 +105,18 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 		if elem != nil {
 			is.Equal(msg, wsMsg{Jid: elem.jid, Data: "bar", What: what.Inner})
 		}
+	}
+}
+
+func TestRequest_SetContext(t *testing.T) {
+	rq := newTestRequest()
+	defer rq.Close()
+	type testKey string
+	rq.SetContext(func(oldctx context.Context) (newctx context.Context) {
+		return context.WithValue(oldctx, testKey("key"), "val")
+	})
+	if rq.Context().Value(testKey("key")) != "val" {
+		t.Fatal("val not set")
 	}
 }
 
