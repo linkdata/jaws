@@ -41,10 +41,11 @@ const (
 type Jid = jid.Jid // convenience alias
 
 type Jaws struct {
-	CookieName   string       // Name for session cookies, defaults to "jaws"
-	Logger       *slog.Logger // Optional logger to use
-	Debug        bool         // Set to true to enable debug info in generated HTML code
-	MakeAuth     MakeAuthFn   // Optional function to create With.Auth for Templates
+	CookieName   string          // Name for session cookies, defaults to "jaws"
+	Logger       *slog.Logger    // Optional logger to use
+	Debug        bool            // Set to true to enable debug info in generated HTML code
+	MakeAuth     MakeAuthFn      // Optional function to create With.Auth for Templates
+	BaseContext  context.Context // Base context for Requests, default is context.Background()
 	bcastCh      chan Message
 	subCh        chan subscription
 	unsubCh      chan chan Message
@@ -67,6 +68,7 @@ type Jaws struct {
 func New() (jw *Jaws, err error) {
 	tmp := &Jaws{
 		CookieName:   DefaultCookieName,
+		BaseContext:  context.Background(),
 		bcastCh:      make(chan Message, 1),
 		subCh:        make(chan subscription, 1),
 		unsubCh:      make(chan chan Message, 1),
@@ -491,10 +493,9 @@ func (jw *Jaws) Pending() (n int) {
 }
 
 // ServeWithTimeout begins processing requests with the given timeout.
-// The provided context is passed on to Requests.
 // It is intended to run on it's own goroutine.
 // It returns when Close is called.
-func (jw *Jaws) ServeWithTimeout(ctx context.Context, requestTimeout time.Duration) {
+func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	const minInterval = time.Millisecond * 10
 	const maxInterval = time.Second
 	maintenanceInterval := requestTimeout / 2
@@ -571,11 +572,10 @@ func (jw *Jaws) ServeWithTimeout(ctx context.Context, requestTimeout time.Durati
 }
 
 // Serve calls ServeWithTimeout(ctx, time.Second*10).
-// The provided context is passed on to Requests.
 // It is intended to run on it's own goroutine.
 // It returns when Close is called.
-func (jw *Jaws) Serve(ctx context.Context) {
-	jw.ServeWithTimeout(ctx, time.Second*10)
+func (jw *Jaws) Serve() {
+	jw.ServeWithTimeout(time.Second * 10)
 }
 
 func (jw *Jaws) subscribe(rq *Request, size int) chan Message {
@@ -739,7 +739,7 @@ func (jw *Jaws) getRequestLocked(jawsKey uint64, hr *http.Request) (rq *Request)
 	rq.JawsKey = jawsKey
 	rq.lastWrite = time.Now()
 	rq.initial = hr
-	rq.ctx, rq.cancelFn = context.WithCancelCause(context.Background())
+	rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
 	if hr != nil {
 		rq.remoteIP = parseIP(hr.RemoteAddr)
 		if sess := jw.getSessionLocked(getCookieSessionsIds(hr.Header, jw.CookieName), rq.remoteIP); sess != nil {

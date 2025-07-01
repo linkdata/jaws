@@ -63,7 +63,7 @@ func TestSession_Object(t *testing.T) {
 func TestSession_Use(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
-	go jw.ServeWithTimeout(context.Background(), time.Second)
+	go jw.ServeWithTimeout(time.Second)
 	var wantSess *Session
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/3" {
@@ -221,7 +221,7 @@ func TestSession_Delete(t *testing.T) {
 	th := newTestHelper(t)
 	ts := newTestServer()
 	defer ts.Close()
-	go ts.jw.ServeWithTimeout(context.Background(), time.Second)
+	go ts.jw.ServeWithTimeout(time.Second)
 
 	// the test session is there
 	sl := ts.jw.Sessions()
@@ -415,7 +415,7 @@ func TestSession_Cleanup(t *testing.T) {
 		t.Error(x)
 	}
 
-	go jw.ServeWithTimeout(context.Background(), time.Millisecond)
+	go jw.ServeWithTimeout(time.Millisecond)
 	waited := 0
 	for waited < 100 && jw.SessionCount() > 0 {
 		waited++
@@ -429,7 +429,7 @@ func TestSession_Cleanup(t *testing.T) {
 func TestSession_ReplacesOld(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
-	go jw.ServeWithTimeout(context.Background(), time.Second)
+	go jw.ServeWithTimeout(time.Second)
 
 	is := newTestHelper(t)
 
