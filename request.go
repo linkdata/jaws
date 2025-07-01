@@ -239,7 +239,7 @@ func (rq *Request) Context() (ctx context.Context) {
 }
 
 // SetContext atomically replaces the Request's context with the function return value.
-// The function is given the current context and must return a new non-nil context.
+// The function is given the current context and must return a non-nil context.
 func (rq *Request) SetContext(fn func(oldctx context.Context) (newctx context.Context)) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
