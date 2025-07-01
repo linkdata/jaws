@@ -23,28 +23,26 @@ func TestRequest_NewElement_DebugPanicsIfNotComparable(t *testing.T) {
 		t.FailNow()
 	}
 
-	if !deadlock.Debug {
-		return
-	}
-
-	defer func() {
-		if x := recover(); x != nil {
-			if err, ok := x.(error); ok {
-				if !errors.Is(err, ErrNotComparable) {
-					t.Errorf("%T", err)
+	if deadlock.Debug {
+		defer func() {
+			if x := recover(); x != nil {
+				if err, ok := x.(error); ok {
+					if !errors.Is(err, ErrNotComparable) {
+						t.Errorf("%T", err)
+					}
+					return
 				}
-				return
 			}
-		}
+			t.Fail()
+		}()
+
+		nextJid = 0
+		rq := newTestRequest()
+		defer rq.Close()
+
+		rq.NewElement(notHashableUI)
 		t.Fail()
-	}()
-
-	nextJid = 0
-	rq := newTestRequest()
-	defer rq.Close()
-
-	rq.NewElement(notHashableUI)
-	t.Fail()
+	}
 }
 
 type testStringer struct{}
