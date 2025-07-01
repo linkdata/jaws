@@ -491,8 +491,9 @@ func (jw *Jaws) Pending() (n int) {
 }
 
 // ServeWithTimeout begins processing requests with the given timeout.
+// The provided context is passed on to Requests.
 // It is intended to run on it's own goroutine.
-// It returns when the completion channel is closed.
+// It returns when Close is called.
 func (jw *Jaws) ServeWithTimeout(ctx context.Context, requestTimeout time.Duration) {
 	const minInterval = time.Millisecond * 10
 	const maxInterval = time.Second
@@ -547,8 +548,6 @@ func (jw *Jaws) ServeWithTimeout(ctx context.Context, requestTimeout time.Durati
 
 	for {
 		select {
-		case <-ctx.Done():
-			return
 		case <-jw.Done():
 			return
 		case <-jw.updateTicker.C:
@@ -572,6 +571,9 @@ func (jw *Jaws) ServeWithTimeout(ctx context.Context, requestTimeout time.Durati
 }
 
 // Serve calls ServeWithTimeout(ctx, time.Second*10).
+// The provided context is passed on to Requests.
+// It is intended to run on it's own goroutine.
+// It returns when Close is called.
 func (jw *Jaws) Serve(ctx context.Context) {
 	jw.ServeWithTimeout(ctx, time.Second*10)
 }
