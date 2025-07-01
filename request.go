@@ -461,6 +461,7 @@ func (rq *Request) GetElements(tagitem any) (elems []*Element) {
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
 func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsMsg, outboundMsgCh chan<- wsMsg) {
 	jawsDoneCh := rq.Jaws.Done()
+	wsDoneCh := rq.wsDoneCh
 	eventDoneCh := make(chan struct{})
 	eventCallCh := make(chan eventFnCall, cap(outboundMsgCh))
 	go rq.eventCaller(eventCallCh, outboundMsgCh, eventDoneCh)
@@ -506,7 +507,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 
 		select {
 		case <-jawsDoneCh:
-		case <-rq.wsDoneCh:
+		case <-wsDoneCh:
 		case <-rq.Context().Done():
 		case tagmsg, ok = <-broadcastMsgCh:
 		case wsmsg, ok = <-incomingMsgCh:
