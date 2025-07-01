@@ -17,8 +17,12 @@ type testJaws struct {
 }
 
 func newTestJaws() (tj *testJaws) {
+	jw, err := New()
+	if err != nil {
+		panic(err)
+	}
 	tj = &testJaws{
-		Jaws: New(),
+		Jaws: jw,
 	}
 	tj.Jaws.Logger = slog.New(slog.NewTextHandler(&tj.log, nil))
 	tj.Jaws.MakeAuth = func(r *Request) Auth {
@@ -27,7 +31,7 @@ func newTestJaws() (tj *testJaws) {
 	tj.testtmpl = template.Must(template.New("testtemplate").Parse(`{{with $.Dot}}<div id="{{$.Jid}}" {{$.Attrs}}>{{.}}</div>{{end}}`))
 	tj.AddTemplateLookuper(tj.testtmpl)
 	tj.Jaws.updateTicker = time.NewTicker(time.Millisecond)
-	go tj.Serve()
+	go tj.Serve(context.Background())
 	return
 }
 

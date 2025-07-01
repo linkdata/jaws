@@ -114,7 +114,7 @@ func (tb *testBind[T]) JawsSet(e *Element, val T) (err error) {
 
 func Test_JsVar_Update(t *testing.T) {
 	th := newTestHelper(t)
-	jw := New()
+	jw, _ := New()
 	defer jw.Close()
 	nextJid = 0
 
@@ -165,7 +165,7 @@ func Test_JsVar_Update(t *testing.T) {
 
 func Test_JsVar_Event(t *testing.T) {
 	th := newTestHelper(t)
-	jw := New()
+	jw, _ := New()
 	defer jw.Close()
 	nextJid = 0
 

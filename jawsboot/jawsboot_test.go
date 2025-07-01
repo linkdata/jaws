@@ -9,7 +9,7 @@ import (
 )
 
 func TestJawsBoot_Setup(t *testing.T) {
-	jw := jaws.New()
+	jw, _ := jaws.New()
 	defer jw.Close()
 	if err := jawsboot.Setup(jw, nil, "/other/foobar.js"); err != nil {
 		t.Fatal(err)

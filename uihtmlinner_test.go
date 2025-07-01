@@ -12,7 +12,7 @@ import (
 )
 
 func TestUiHTMLInner_JawsUpdate(t *testing.T) {
-	jw := New()
+	jw, _ := New()
 	defer jw.Close()
 	nextJid = 0
 	ts := newTestSetter(template.HTML("first"))

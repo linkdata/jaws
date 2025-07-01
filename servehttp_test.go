@@ -1,14 +1,15 @@
 package jaws
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
 func TestServeHTTP_GetJavascript(t *testing.T) {
-	jw := New()
-	go jw.Serve()
+	jw, _ := New()
+	go jw.Serve(context.Background())
 	defer jw.Close()
 
 	is := newTestHelper(t)
@@ -52,8 +53,8 @@ func TestServeHTTP_GetJavascript(t *testing.T) {
 
 func TestServeHTTP_GetPing(t *testing.T) {
 	is := newTestHelper(t)
-	jw := New()
-	go jw.Serve()
+	jw, _ := New()
+	go jw.Serve(context.Background())
 	defer jw.Close()
 
 	req := httptest.NewRequest("", "/jaws/.ping", nil)
@@ -93,8 +94,8 @@ func TestServeHTTP_GetPing(t *testing.T) {
 
 func TestServeHTTP_GetKey(t *testing.T) {
 	is := newTestHelper(t)
-	jw := New()
-	go jw.Serve()
+	jw, _ := New()
+	go jw.Serve(context.Background())
 	defer jw.Close()
 
 	req := httptest.NewRequest("", "/jaws/", nil)
@@ -119,8 +120,8 @@ func TestServeHTTP_GetKey(t *testing.T) {
 
 func TestServeHTTP_Noscript(t *testing.T) {
 	is := newTestHelper(t)
-	jw := New()
-	go jw.Serve()
+	jw, _ := New()
+	go jw.Serve(context.Background())
 	defer jw.Close()
 
 	w := httptest.NewRecorder()

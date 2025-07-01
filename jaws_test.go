@@ -47,17 +47,17 @@ func TestJaws_getCookieSessionsIds(t *testing.T) {
 }
 
 func TestJaws_MultipleCloseCalls(t *testing.T) {
-	jw := New()
-	go jw.Serve()
+	jw, _ := New()
+	go jw.Serve(context.Background())
 	jw.Close()
 	jw.Close()
 }
 
 func TestJaws_MakeID(t *testing.T) {
 	is := newTestHelper(t)
-	jw := New()
+	jw, _ := New()
 	defer jw.Close()
-	go jw.Serve()
+	go jw.Serve(context.Background())
 	id1 := MakeID()
 	id2 := MakeID()
 	is.True(strings.HasPrefix(id1, "jaws."))
@@ -77,18 +77,18 @@ func TestJaws_maybePanic(t *testing.T) {
 
 func TestJaws_Logger(t *testing.T) {
 	is := newTestHelper(t)
-	jw := New()
+	jw, _ := New()
 	defer jw.Close()
 	var b bytes.Buffer
 	jw.Logger = slog.New(slog.NewTextHandler(&b, nil))
-	go jw.Serve()
+	go jw.Serve(context.Background())
 	jw.Log(errors.New("bar"))
 	is.True(strings.Contains(b.String(), "msg=bar"))
 }
 
 func TestJaws_MustLog(t *testing.T) {
 	is := newTestHelper(t)
-	jw := New()
+	jw, _ := New()
 	defer jw.Close()
 
 	barErr := errors.New("bar")
@@ -99,7 +99,7 @@ func TestJaws_MustLog(t *testing.T) {
 
 	var b bytes.Buffer
 	jw.Logger = slog.New(slog.NewTextHandler(&b, nil))
-	go jw.Serve()
+	go jw.Serve(context.Background())
 	jw.MustLog(barErr)
 	is.True(strings.Contains(b.String(), "msg=bar"))
 	jw.Logger = nil
@@ -107,8 +107,8 @@ func TestJaws_MustLog(t *testing.T) {
 }
 
 func TestJaws_BroadcastDoesntBlockWhenClosed(t *testing.T) {
-	jw := New()
-	go jw.Serve()
+	jw, _ := New()
+	go jw.Serve(context.Background())
 	jw.Close()
 	for i := 0; i < cap(jw.bcastCh)+1; i++ {
 		jw.Broadcast(Message{})
@@ -117,8 +117,8 @@ func TestJaws_BroadcastDoesntBlockWhenClosed(t *testing.T) {
 
 func TestJaws_BroadcastWaitsWhenFull(t *testing.T) {
 	th := newTestHelper(t)
-	jw := New()
-	go jw.ServeWithTimeout(testTimeout)
+	jw, _ := New()
+	go jw.ServeWithTimeout(context.Background(), testTimeout)
 
 	subCh := jw.subscribe(jw.NewRequest(nil), 0)
 	defer jw.unsubscribe(subCh)
@@ -160,8 +160,8 @@ func TestJaws_BroadcastWaitsWhenFull(t *testing.T) {
 
 func TestJaws_BroadcastFullClosesChannel(t *testing.T) {
 	th := newTestHelper(t)
-	jw := New()
-	go jw.ServeWithTimeout(time.Millisecond)
+	jw, _ := New()
+	go jw.ServeWithTimeout(context.Background(), time.Millisecond)
 
 	doneCh := make(chan struct{})
 	failCh := make(chan struct{})
@@ -211,7 +211,7 @@ func TestJaws_BroadcastFullClosesChannel(t *testing.T) {
 
 func TestJaws_UseRequest(t *testing.T) {
 	th := newTestHelper(t)
-	jw := New()
+	jw, _ := New()
 	defer jw.Close()
 
 	th.Equal(0, jw.RequestCount())
@@ -256,7 +256,7 @@ func TestJaws_BlockingRandomPanics(t *testing.T) {
 			th.Error("expected error")
 		}
 	}()
-	jw := New()
+	jw, _ := New()
 	defer jw.Close()
 	jw.kg = bufio.NewReader(&bytes.Buffer{})
 	jw.NewRequest(nil)
@@ -288,7 +288,7 @@ func (h *rawLogger) WithGroup(name string) slog.Handler {
 func TestJaws_CleansUpUnconnected(t *testing.T) {
 	const numReqs = 100
 	th := newTestHelper(t)
-	jw := New()
+	jw, _ := New()
 	defer jw.Close()
 	var b bytes.Buffer
 	jw.Logger = slog.New(&rawLogger{w: &b})
@@ -312,7 +312,7 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 	}
 	th.Equal(jw.Pending(), numReqs)
 
-	go jw.ServeWithTimeout(time.Millisecond)
+	go jw.ServeWithTimeout(context.Background(), time.Millisecond)
 
 	lastPending := jw.Pending()
 	for jw.Pending() > 0 && time.Now().Before(deadline) {
@@ -338,7 +338,7 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 
 func TestJaws_RequestWriterExtendsDeadline(t *testing.T) {
 	th := newTestHelper(t)
-	jw := New()
+	jw, _ := New()
 	defer jw.Close()
 	var b bytes.Buffer
 	jw.Logger = slog.New(slog.NewTextHandler(&b, nil))
@@ -363,7 +363,7 @@ func TestJaws_RequestWriterExtendsDeadline(t *testing.T) {
 	th.True(rq.rendering.Load())
 	th.Equal(lastWrite, rq.getLastWrite())
 
-	go jw.ServeWithTimeout(time.Millisecond)
+	go jw.ServeWithTimeout(context.Background(), time.Millisecond)
 
 	for lastWrite.Equal(rq.getLastWrite()) {
 		select {
@@ -385,7 +385,7 @@ func TestJaws_RequestWriterExtendsDeadline(t *testing.T) {
 
 func TestJaws_UnconnectedLivesUntilDeadline(t *testing.T) {
 	th := newTestHelper(t)
-	jw := New()
+	jw, _ := New()
 	defer jw.Close()
 
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -397,7 +397,7 @@ func TestJaws_UnconnectedLivesUntilDeadline(t *testing.T) {
 
 	th.Equal(jw.Pending(), 2)
 
-	go jw.ServeWithTimeout(time.Second)
+	go jw.ServeWithTimeout(context.Background(), time.Second)
 
 	for jw.Pending() > 1 {
 		select {
@@ -431,9 +431,9 @@ func TestJaws_UnconnectedLivesUntilDeadline(t *testing.T) {
 }
 
 func TestJaws_BroadcastsCallable(t *testing.T) {
-	jw := New()
+	jw, _ := New()
 	defer jw.Close()
-	go jw.Serve()
+	go jw.Serve(context.Background())
 
 	jw.Delete("foo")
 	jw.Insert("foo", "bar", "baz")
@@ -453,9 +453,9 @@ func TestJaws_BroadcastsCallable(t *testing.T) {
 
 func TestJaws_subscribeOnClosedReturnsNil(t *testing.T) {
 	th := newTestHelper(t)
-	jw := New()
+	jw, _ := New()
 	jw.Close()
-	<-jw.doneCh
+	<-jw.Done()
 	for len(jw.subCh) < cap(jw.subCh) {
 		select {
 		case jw.subCh <- subscription{}:
@@ -472,7 +472,7 @@ func TestJaws_GenerateHeadHTML(t *testing.T) {
 	const extraImage = "someExtraImage.png"
 	const extraFont = "someExtraFont.woff2"
 	th := newTestHelper(t)
-	jw := New()
+	jw, _ := New()
 	jw.Close()
 
 	th.NoErr(jw.GenerateHeadHTML())

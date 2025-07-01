@@ -40,7 +40,7 @@ func TestRequest_Registrations(t *testing.T) {
 
 func TestRequest_HeadHTML(t *testing.T) {
 	is := newTestHelper(t)
-	jw := New()
+	jw, _ := New()
 	defer jw.Close()
 	rq := jw.NewRequest(nil)
 	defer jw.recycle(rq)
@@ -57,7 +57,7 @@ func TestRequest_HeadHTML(t *testing.T) {
 func TestRequestWriter_TailHTML(t *testing.T) {
 	th := newTestHelper(t)
 	nextJid = 0
-	jw := New()
+	jw, _ := New()
 	defer jw.Close()
 	rq := jw.NewRequest(nil)
 	defer jw.recycle(rq)
@@ -676,7 +676,7 @@ func TestRequest_CustomErrors(t *testing.T) {
 
 func TestRequest_renderDebugLocked(t *testing.T) {
 	is := newTestHelper(t)
-	jw := New()
+	jw, _ := New()
 	defer jw.Close()
 	rq := jw.NewRequest(nil)
 	defer jw.recycle(rq)

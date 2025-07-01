@@ -45,7 +45,6 @@ type Jaws struct {
 	Logger       *slog.Logger // Optional logger to use
 	Debug        bool         // Set to true to enable debug info in generated HTML code
 	MakeAuth     MakeAuthFn   // Optional function to create With.Auth for Templates
-	doneCh       <-chan struct{}
 	bcastCh      chan Message
 	subCh        chan subscription
 	unsubCh      chan chan Message
@@ -55,20 +54,19 @@ type Jaws struct {
 	mu           deadlock.RWMutex // protects following
 	tmplookers   []TemplateLookuper
 	kg           *bufio.Reader
-	closeCh      chan struct{}
+	closeCh      chan struct{} // closed when Close() has been called
 	requests     map[uint64]*Request
 	sessions     map[uint64]*Session
 	dirty        map[any]int
 	dirtOrder    int
 }
 
-// NewWithDone returns a new JaWS object using the given completion channel.
+// New returns a new JaWS object.
 // This is expected to be created once per HTTP server and handles
 // publishing HTML changes across all connections.
-func NewWithDone(doneCh <-chan struct{}) (jw *Jaws) {
-	jw = &Jaws{
+func New() (jw *Jaws, err error) {
+	tmp := &Jaws{
 		CookieName:   DefaultCookieName,
-		doneCh:       doneCh,
 		bcastCh:      make(chan Message, 1),
 		subCh:        make(chan subscription, 1),
 		unsubCh:      make(chan chan Message, 1),
@@ -77,24 +75,17 @@ func NewWithDone(doneCh <-chan struct{}) (jw *Jaws) {
 		requests:     make(map[uint64]*Request),
 		sessions:     make(map[uint64]*Session),
 		dirty:        make(map[any]int),
+		closeCh:      make(chan struct{}),
 	}
-	_ = jw.GenerateHeadHTML()
-	jw.reqPool.New = func() any {
-		return (&Request{
-			Jaws:   jw,
-			tagMap: make(map[any][]*Element),
-		}).clearLocked()
+	if err = tmp.GenerateHeadHTML(); err == nil {
+		jw = tmp
+		jw.reqPool.New = func() any {
+			return (&Request{
+				Jaws:   jw,
+				tagMap: make(map[any][]*Element),
+			}).clearLocked()
+		}
 	}
-	return
-}
-
-// New returns a new JaWS object that must be closed using Close().
-// This is expected to be created once per HTTP server and handles
-// publishing HTML changes across all connections.
-func New() (jw *Jaws) {
-	closeCh := make(chan struct{})
-	jw = NewWithDone(closeCh)
-	jw.closeCh = closeCh
 	return
 }
 
@@ -104,17 +95,19 @@ func New() (jw *Jaws) {
 // Subsequent calls to Close() have no effect.
 func (jw *Jaws) Close() {
 	jw.mu.Lock()
-	if jw.closeCh != nil {
+	select {
+	case <-jw.closeCh:
+		// already closed
+	default:
 		close(jw.closeCh)
-		jw.closeCh = nil
 	}
 	jw.updateTicker.Stop()
 	jw.mu.Unlock()
 }
 
-// Done returns the completion channel.
+// Done returns the channel that is closed when Close has been called.
 func (jw *Jaws) Done() <-chan struct{} {
-	return jw.doneCh
+	return jw.closeCh
 }
 
 // AddTemplateLookuper adds an object that can resolve
@@ -500,7 +493,7 @@ func (jw *Jaws) Pending() (n int) {
 // ServeWithTimeout begins processing requests with the given timeout.
 // It is intended to run on it's own goroutine.
 // It returns when the completion channel is closed.
-func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
+func (jw *Jaws) ServeWithTimeout(ctx context.Context, requestTimeout time.Duration) {
 	const minInterval = time.Millisecond * 10
 	const maxInterval = time.Second
 	maintenanceInterval := requestTimeout / 2
@@ -576,9 +569,9 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	}
 }
 
-// Serve calls ServeWithTimeout(time.Second * 10).
-func (jw *Jaws) Serve() {
-	jw.ServeWithTimeout(time.Second * 10)
+// Serve calls ServeWithTimeout(ctx, time.Second*10).
+func (jw *Jaws) Serve(ctx context.Context) {
+	jw.ServeWithTimeout(ctx, time.Second*10)
 }
 
 func (jw *Jaws) subscribe(rq *Request, size int) chan Message {

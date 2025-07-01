@@ -168,7 +168,7 @@ func TestRequest_Container_Alteration(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			jw := New()
+			jw, _ := New()
 			defer jw.Close()
 			nextJid = 0
 			rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))

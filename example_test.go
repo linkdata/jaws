@@ -1,10 +1,14 @@
 package jaws_test
 
 import (
+	"context"
 	"html/template"
 	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 
 	"github.com/linkdata/jaws"
 )
@@ -20,7 +24,13 @@ const indexhtml = `
 `
 
 func Example() {
-	jw := jaws.New()           // create a default JaWS instance
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill, syscall.SIGTERM)
+	defer cancel()
+
+	jw, err := jaws.New() // create a default JaWS instance
+	if err != nil {
+		panic(err)
+	}
 	defer jw.Close()           // ensure we clean up
 	jw.Logger = slog.Default() // optionally set the logger to use
 
@@ -28,7 +38,7 @@ func Example() {
 	templates := template.Must(template.New("index").Parse(indexhtml))
 	jw.AddTemplateLookuper(templates)
 
-	go jw.Serve()                             // start the JaWS processing loop
+	go jw.Serve(ctx)                          // start the JaWS processing loop
 	http.DefaultServeMux.Handle("/jaws/", jw) // ensure the JaWS routes are handled
 
 	var mu sync.Mutex

@@ -29,7 +29,7 @@ type testServer struct {
 }
 
 func newTestServer() (ts *testServer) {
-	jw := New()
+	jw, _ := New()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	rr := httptest.NewRecorder()
 	hr := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
@@ -86,7 +86,7 @@ func (ts *testServer) Close() {
 }
 
 func TestWS_UpgradeRequired(t *testing.T) {
-	jw := New()
+	jw, _ := New()
 	defer jw.Close()
 	w := httptest.NewRecorder()
 	hr := httptest.NewRequest("", "/", nil)
