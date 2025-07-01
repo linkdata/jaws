@@ -547,6 +547,8 @@ func (jw *Jaws) ServeWithTimeout(ctx context.Context, requestTimeout time.Durati
 
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case <-jw.Done():
 			return
 		case <-jw.updateTicker.C:
