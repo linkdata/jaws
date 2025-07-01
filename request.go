@@ -42,6 +42,7 @@ type Request struct {
 	session   *Session                // session, if established
 	todoDirt  []any                   // dirty tags
 	ctx       context.Context         // current context, derived from either Jaws or WS HTTP req
+	wsDoneCh  <-chan struct{}         // once claimed, set to http.Request.Context().Done()
 	cancelFn  context.CancelCauseFunc // cancel function
 	connectFn ConnectFn               // a ConnectFn to call before starting message processing for the Request
 	elems     []*Element              // our Elements
@@ -74,8 +75,10 @@ var ErrJavascriptDisabled = errors.New("javascript is disabled")
 func (rq *Request) claim(hr *http.Request) error {
 	if !rq.claimed.Load() {
 		var actualIP netip.Addr
+		var wsDoneCh <-chan struct{}
 		if hr != nil { // can be nil in tests
 			actualIP = parseIP(hr.RemoteAddr)
+			wsDoneCh = hr.Context().Done()
 		}
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
@@ -84,6 +87,7 @@ func (rq *Request) claim(hr *http.Request) error {
 		}
 		if rq.claimed.CompareAndSwap(false, true) {
 			rq.ctx, rq.cancelFn = context.WithCancelCause(rq.ctx)
+			rq.wsDoneCh = wsDoneCh
 			return nil
 		}
 	}
@@ -502,6 +506,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 
 		select {
 		case <-jawsDoneCh:
+		case <-rq.wsDoneCh:
 		case <-rq.Context().Done():
 		case tagmsg, ok = <-broadcastMsgCh:
 		case wsmsg, ok = <-incomingMsgCh:

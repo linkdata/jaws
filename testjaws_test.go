@@ -57,11 +57,11 @@ func (tj *testJaws) newRequest(hr *http.Request) (tr *testRequest) {
 	if hr == nil {
 		hr = httptest.NewRequest(http.MethodGet, "/", nil)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+	hr = hr.WithContext(ctx)
 	rr := httptest.NewRecorder()
 	rr.Body = &bytes.Buffer{}
 	rq := tj.NewRequest(hr)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
-	rq.SetContext(func(oldctx context.Context) (newctx context.Context) { return ctx })
 	if rq == nil || tj.UseRequest(rq.JawsKey, hr) != rq {
 		panic("failed to create or use jaws.Request")
 	}
