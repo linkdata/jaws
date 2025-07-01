@@ -303,6 +303,11 @@ func TestWriter_ConcatenatesMessages(t *testing.T) {
 
 	outCh := make(chan wsMsg, 2)
 	defer close(outCh)
+
+	msg := wsMsg{Jid: Jid(1234)}
+	outCh <- msg
+	outCh <- msg
+
 	client, server := Pipe()
 
 	go wsWriter(ts.ctx, nil, ts.jw.Done(), outCh, server)
@@ -316,18 +321,6 @@ func TestWriter_ConcatenatesMessages(t *testing.T) {
 		mt, b, err = client.Read(ts.ctx)
 		ts.cancel()
 	}()
-
-	msg := wsMsg{Jid: Jid(1234)}
-	select {
-	case <-th.C:
-		th.Timeout()
-	case outCh <- msg:
-	}
-	select {
-	case <-th.C:
-		th.Timeout()
-	case outCh <- msg:
-	}
 
 	select {
 	case <-th.C:

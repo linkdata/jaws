@@ -210,6 +210,16 @@ func Test_JsVar_Event(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
+	case msg := <-rq.outCh:
+		s := msg.Format()
+		if s != "Set\tJid.1\t{\"String\":\"y\",\"Number\":3}\n" {
+			th.Error(s)
+		}
+	}
+
+	select {
+	case <-th.C:
+		th.Timeout()
 	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: `1`}:
 	}
 
