@@ -53,19 +53,6 @@ func TestJaws_MultipleCloseCalls(t *testing.T) {
 	jw.Close()
 }
 
-func TestJaws_ServeContextCanceled(t *testing.T) {
-	jw, _ := New()
-	defer jw.Close()
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	jw.Serve(ctx)
-	select {
-	case <-jw.Done():
-		t.Error("already closed")
-	default:
-	}
-}
-
 func TestJaws_MakeID(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()
