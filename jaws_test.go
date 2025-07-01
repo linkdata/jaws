@@ -216,8 +216,15 @@ func TestJaws_UseRequest(t *testing.T) {
 
 	th.Equal(0, jw.RequestCount())
 
+	type testKey string
 	rq1 := jw.NewRequest(nil)
 	th.True(rq1.JawsKey != 0)
+	rq1.SetContext(func(oldctx context.Context) (newctx context.Context) {
+		return context.WithValue(oldctx, testKey("key"), "val")
+	})
+	if val := rq1.Context().Value(testKey("key")); val != "val" {
+		t.Error("value wrong", val)
+	}
 
 	rq2 := jw.NewRequest(&http.Request{RemoteAddr: "10.0.0.2:1010"})
 	th.True(rq2.JawsKey != 0)
@@ -247,6 +254,10 @@ func TestJaws_UseRequest(t *testing.T) {
 	rq1ret := jw.UseRequest(rq1.JawsKey, nil)
 	th.Equal(rq1, rq1ret)
 	th.Equal(jw.Pending(), 0)
+
+	if val := rq1.Context().Value(testKey("key")); val != "val" {
+		t.Error("value no longer set", val)
+	}
 }
 
 func TestJaws_BlockingRandomPanics(t *testing.T) {

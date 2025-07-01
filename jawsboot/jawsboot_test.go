@@ -1,6 +1,7 @@
 package jawsboot_test
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 
@@ -9,8 +10,13 @@ import (
 )
 
 func TestJawsBoot_Setup(t *testing.T) {
+	oldmux := http.DefaultServeMux
+	http.DefaultServeMux = http.NewServeMux()
 	jw, _ := jaws.New()
-	defer jw.Close()
+	defer func() {
+		jw.Close()
+		http.DefaultServeMux = oldmux
+	}()
 	if err := jawsboot.Setup(jw, nil, "/other/foobar.js"); err != nil {
 		t.Fatal(err)
 	}

@@ -74,10 +74,8 @@ var ErrJavascriptDisabled = errors.New("javascript is disabled")
 func (rq *Request) claim(hr *http.Request) error {
 	if !rq.claimed.Load() {
 		var actualIP netip.Addr
-		ctx := rq.ctx
 		if hr != nil { // can be nil in tests
 			actualIP = parseIP(hr.RemoteAddr)
-			ctx = hr.Context()
 		}
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
@@ -85,7 +83,7 @@ func (rq *Request) claim(hr *http.Request) error {
 			return fmt.Errorf("/jaws/%s: expected IP %q, got %q", rq.JawsKeyString(), rq.remoteIP.String(), actualIP.String())
 		}
 		if rq.claimed.CompareAndSwap(false, true) {
-			rq.ctx, rq.cancelFn = context.WithCancelCause(ctx)
+			rq.ctx, rq.cancelFn = context.WithCancelCause(rq.ctx)
 			return nil
 		}
 	}
