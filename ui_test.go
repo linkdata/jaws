@@ -33,7 +33,7 @@ func TestRequest_NewElement_DebugPanicsIfNotComparable(t *testing.T) {
 					return
 				}
 			}
-			t.Fail()
+			t.Fatal("expected ErrNotComparable")
 		}()
 
 		nextJid = 0
