@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -22,14 +21,6 @@ var _ EventHandler = Template{} // statically ensure interface is defined
 
 func (t Template) String() string {
 	return fmt.Sprintf("{%q, %s}", t.Name, TagString(t.Dot))
-}
-
-func mustJidOrJs(node parse.Node) (err error) {
-	err = ErrNoJidReference
-	if findJidOrJs(node) {
-		err = nil
-	}
-	return
 }
 
 func findJidOrJs(node parse.Node) (found bool) {
@@ -98,8 +89,10 @@ func (t Template) JawsRender(e *Element, wr io.Writer, params []any) (err error)
 				Attrs:         attrstr,
 				Auth:          auth,
 			})
-			if deadlock.Debug {
-				err = errors.Join(err, mustJidOrJs(tmpl.Tree.Root))
+			if deadlock.Debug && e.Jaws.Logger != nil {
+				if !findJidOrJs(tmpl.Tree.Root) {
+					e.Jaws.Logger.Warn("jaws: template has no Jid reference", "template", t.Name)
+				}
 			}
 		}
 	}
