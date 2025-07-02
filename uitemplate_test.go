@@ -28,6 +28,23 @@ func TestRequest_TemplateMissingJid(t *testing.T) {
 	}
 }
 
+func TestRequest_TemplateJidInsideIf(t *testing.T) {
+	if !deadlock.Debug {
+		t.Skip("debug tag not set")
+	}
+	nextJid = 0
+	rq := newTestRequest()
+	defer rq.Close()
+	rq.jw.AddTemplateLookuper(template.Must(template.New("iftesttemplate").Parse(`{{with $.Dot}}{{if true}}<div id="{{$.Jid}}" {{$.Attrs}}>{{.}}</div>{{end}}{{end}}`)))
+	if e := rq.Template("iftesttemplate", nil, nil); e != nil {
+		t.Error(e)
+	}
+	if strings.Contains(rq.jw.log.String(), "WARN") && strings.Contains(rq.jw.log.String(), "iftesttemplate") {
+		t.Error("found WARN in the log")
+		t.Log(rq.jw.log.String())
+	}
+}
+
 func TestRequest_Template(t *testing.T) {
 	is := newTestHelper(t)
 
