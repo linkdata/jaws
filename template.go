@@ -45,6 +45,12 @@ func findJidOrJs(node parse.Node) (found bool) {
 			found = found || findJidOrJs(node.List)
 			found = found || findJidOrJs(node.ElseList)
 		}
+	case *parse.IfNode:
+		if node != nil {
+			found = findJidOrJs(node.Pipe)
+			found = found || findJidOrJs(node.List)
+			found = found || findJidOrJs(node.ElseList)
+		}
 	case *parse.PipeNode:
 		if node != nil {
 			for _, n := range node.Cmds {
