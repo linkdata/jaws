@@ -7,11 +7,32 @@ import (
 	"testing"
 	"time"
 
+	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/what"
 )
 
+func TestRequest_TemplateMissingJid(t *testing.T) {
+	if !deadlock.Debug {
+		t.Skip("debug tag not set")
+	}
+	nextJid = 0
+	rq := newTestRequest()
+	defer rq.Close()
+	rq.jw.AddTemplateLookuper(template.Must(template.New("badtesttemplate").Parse(`{{with $.Dot}}<div {{$.Attrs}}>{{.}}</div>{{end}}`)))
+	if e := rq.Template("badtesttemplate", nil, nil); e != nil {
+		t.Error(e)
+	}
+	if !strings.Contains(rq.jw.log.String(), "WARN") || !strings.Contains(rq.jw.log.String(), "badtesttemplate") {
+		t.Error("expected WARN in the log")
+		t.Log(rq.jw.log.String())
+	}
+}
+
 func TestRequest_Template(t *testing.T) {
 	is := newTestHelper(t)
+
+	type intTag int
+
 	type args struct {
 		templ  string
 		dot    any
@@ -28,11 +49,11 @@ func TestRequest_Template(t *testing.T) {
 			name: "testtemplate",
 			args: args{
 				"testtemplate",
-				1234,
+				intTag(1234),
 				[]any{"hidden"},
 			},
 			want:   `<div id="Jid.1" hidden>1234</div>`,
-			tags:   nil,
+			tags:   []any{intTag(1234)},
 			errtxt: "",
 		},
 		{
@@ -64,7 +85,9 @@ func TestRequest_Template(t *testing.T) {
 					t.Fail()
 				}()
 			}
-			rq.Template(tt.args.templ, tt.args.dot, tt.args.params...)
+			if e := rq.Template(tt.args.templ, tt.args.dot, tt.args.params...); e != nil {
+				t.Error(e)
+			}
 			got := rq.BodyHTML()
 			is.Equal(len(rq.elems), 1)
 			elem := rq.elems[0]

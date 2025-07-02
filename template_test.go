@@ -1,8 +1,23 @@
 package jaws
 
 import (
+	"errors"
+	"strings"
 	"testing"
 )
+
+func TestTemplate_Missing(t *testing.T) {
+	rq := newTestRequest()
+	defer rq.Close()
+
+	err := rq.Template("missingtemplate", nil, nil)
+	if !errors.Is(err, ErrMissingTemplate) {
+		t.Error("wrong error", err)
+	}
+	if !strings.Contains(err.Error(), "missingtemplate") {
+		t.Error("wrong error", err)
+	}
+}
 
 func TestTemplate_String(t *testing.T) {
 	is := newTestHelper(t)

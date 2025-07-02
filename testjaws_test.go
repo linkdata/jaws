@@ -30,6 +30,7 @@ func newTestJaws() (tj *testJaws) {
 	}
 	tj.testtmpl = template.Must(template.New("testtemplate").Parse(`{{with $.Dot}}<div id="{{$.Jid}}" {{$.Attrs}}>{{.}}</div>{{end}}`))
 	tj.AddTemplateLookuper(tj.testtmpl)
+
 	tj.Jaws.updateTicker = time.NewTicker(time.Millisecond)
 	go tj.Serve()
 	return
