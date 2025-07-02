@@ -11,7 +11,7 @@ func TestJaws_Session(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 
-	dot := 123
+	dot := Tag("123")
 
 	h := rq.Jaws.Session(rq.Jaws.Handler("testtemplate", dot))
 	var buf bytes.Buffer

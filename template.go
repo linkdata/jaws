@@ -1,11 +1,14 @@
 package jaws
 
 import (
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
 	"strings"
+	"text/template/parse"
 
+	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -21,26 +24,86 @@ func (t Template) String() string {
 	return fmt.Sprintf("{%q, %s}", t.Name, TagString(t.Dot))
 }
 
-func (t Template) JawsRender(e *Element, wr io.Writer, params []any) error {
-	if expandedtags, err := TagExpand(e.Request, t.Dot); err != ErrIllegalTagType {
+func mustJidOrJs(node parse.Node) (err error) {
+	err = ErrNoJidReference
+	if findJidOrJs(node) {
+		err = nil
+	}
+	return
+}
+
+func findJidOrJs(node parse.Node) (found bool) {
+	switch node := node.(type) {
+	case *parse.ListNode:
+		if node != nil {
+			for _, n := range node.Nodes {
+				found = found || findJidOrJs(n)
+			}
+		}
+	case *parse.ActionNode:
+		if node != nil {
+			found = findJidOrJs(node.Pipe)
+		}
+	case *parse.WithNode:
+		if node != nil {
+			found = findJidOrJs(&node.BranchNode)
+		}
+	case *parse.BranchNode:
+		if node != nil {
+			found = findJidOrJs(node.Pipe)
+			found = found || findJidOrJs(node.List)
+			found = found || findJidOrJs(node.ElseList)
+		}
+	case *parse.PipeNode:
+		if node != nil {
+			for _, n := range node.Cmds {
+				found = found || findJidOrJs(n)
+			}
+		}
+	case *parse.CommandNode:
+		if node != nil {
+			for _, n := range node.Args {
+				found = found || findJidOrJs(n)
+			}
+		}
+	case *parse.VariableNode:
+		if node != nil {
+			for _, s := range node.Ident {
+				found = found || (s == "Jid") || (s == "JsFunc") || (s == "JsVar")
+			}
+		}
+	}
+	return
+}
+
+func (t Template) JawsRender(e *Element, wr io.Writer, params []any) (err error) {
+	var expandedtags []any
+	if expandedtags, err = TagExpand(e.Request, t.Dot); err == nil {
 		e.Request.tagExpanded(e, expandedtags)
+		tags, handlers, attrs := ParseParams(params)
+		e.Tag(tags...)
+		e.handlers = append(e.handlers, handlers...)
+		attrstr := template.HTMLAttr(strings.Join(attrs, " ")) // #nosec G203
+		var auth Auth
+		auth = defaultAuth{}
+		if f := e.Request.Jaws.MakeAuth; f != nil {
+			auth = f(e.Request)
+		}
+		err = errMissingTemplate(t.Name)
+		if tmpl := e.Request.Jaws.LookupTemplate(t.Name); tmpl != nil {
+			err = tmpl.Execute(wr, With{
+				Element:       e,
+				RequestWriter: e.Request.Writer(wr),
+				Dot:           t.Dot,
+				Attrs:         attrstr,
+				Auth:          auth,
+			})
+			if deadlock.Debug {
+				err = errors.Join(err, mustJidOrJs(tmpl.Tree.Root))
+			}
+		}
 	}
-	tags, handlers, attrs := ParseParams(params)
-	e.Tag(tags...)
-	e.handlers = append(e.handlers, handlers...)
-	attrstr := template.HTMLAttr(strings.Join(attrs, " ")) // #nosec G203
-	var auth Auth
-	auth = defaultAuth{}
-	if f := e.Request.Jaws.MakeAuth; f != nil {
-		auth = f(e.Request)
-	}
-	return e.Request.Jaws.LookupTemplate(t.Name).Execute(wr, With{
-		Element:       e,
-		RequestWriter: e.Request.Writer(wr),
-		Dot:           t.Dot,
-		Attrs:         attrstr,
-		Auth:          auth,
-	})
+	return
 }
 
 func (t Template) JawsUpdate(e *Element) {

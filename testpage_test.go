@@ -89,7 +89,7 @@ func newTestPage(tr *testRequest) *testPage {
 			setCalled:      make(chan struct{}),
 			NamedBoolArray: NewNamedBoolArray(),
 		},
-		TheDot: "dot",
+		TheDot: Tag("dot"),
 	}
 
 	return tp
