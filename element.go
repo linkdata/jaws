@@ -239,11 +239,16 @@ func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) {
 
 // ApplyGetter examines getter, and if it's not nil, either adds it
 // as a Tag, or, if it is a TagGetter, adds the result of that as a Tag.
+//
 // If getter is a ClickHandler or an EventHandler, it's added to the
 // list of handlers for the Element.
 //
-// Returns the Tag added, or nil if getter was nil.
-func (e *Element) ApplyGetter(getter any) (tag any) {
+// Finally, if getter is an InitHandler, it's JawsInit()
+// function is called.
+//
+// Returns the Tag added, or nil if getter was nil, along with
+// any error returned from JawsInit() if it was called.
+func (e *Element) ApplyGetter(getter any) (tag any, err error) {
 	if getter != nil {
 		tag = getter
 		if tagger, ok := getter.(TagGetter); ok {
@@ -255,6 +260,9 @@ func (e *Element) ApplyGetter(getter any) (tag any) {
 		}
 		if eh, ok := getter.(EventHandler); ok {
 			e.handlers = append(e.handlers, eh)
+		}
+		if initer, ok := getter.(InitHandler); ok {
+			err = initer.JawsInit(e)
 		}
 	}
 	return

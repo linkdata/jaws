@@ -12,15 +12,17 @@ type UiInputBool struct {
 	Setter[bool]
 }
 
-func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string, params ...any) error {
-	ui.applyGetter(e, ui.Setter)
-	attrs := e.ApplyParams(params)
-	v := ui.JawsGet(e)
-	ui.Last.Store(v)
-	if v {
-		attrs = append(attrs, "checked")
+func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string, params ...any) (err error) {
+	if err = ui.applyGetter(e, ui.Setter); err == nil {
+		attrs := e.ApplyParams(params)
+		v := ui.JawsGet(e)
+		ui.Last.Store(v)
+		if v {
+			attrs = append(attrs, "checked")
+		}
+		err = WriteHTMLInput(w, e.Jid(), htmltype, "", attrs)
 	}
-	return WriteHTMLInput(w, e.Jid(), htmltype, "", attrs)
+	return
 }
 
 func (ui *UiInputBool) JawsUpdate(e *Element) {

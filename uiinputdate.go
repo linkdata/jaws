@@ -16,11 +16,13 @@ func (ui *UiInputDate) str() string {
 	return ui.Last.Load().(time.Time).Format(ISO8601)
 }
 
-func (ui *UiInputDate) renderDateInput(e *Element, w io.Writer, htmltype string, params ...any) error {
-	ui.applyGetter(e, ui.Setter)
-	attrs := e.ApplyParams(params)
-	ui.Last.Store(ui.JawsGet(e))
-	return WriteHTMLInput(w, e.Jid(), htmltype, ui.str(), attrs)
+func (ui *UiInputDate) renderDateInput(e *Element, w io.Writer, htmltype string, params ...any) (err error) {
+	if err = ui.applyGetter(e, ui.Setter); err == nil {
+		attrs := e.ApplyParams(params)
+		ui.Last.Store(ui.JawsGet(e))
+		err = WriteHTMLInput(w, e.Jid(), htmltype, ui.str(), attrs)
+	}
+	return
 }
 
 func (ui *UiInputDate) JawsUpdate(e *Element) {

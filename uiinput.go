@@ -7,8 +7,9 @@ type UiInput struct {
 	Last atomic.Value
 }
 
-func (ui *UiInput) applyGetter(e *Element, getter any) {
-	ui.Tag = e.ApplyGetter(getter)
+func (ui *UiInput) applyGetter(e *Element, getter any) (err error) {
+	ui.Tag, err = e.ApplyGetter(getter)
+	return
 }
 
 func (ui *UiInput) maybeDirty(val any, e *Element, err error) error {

@@ -16,11 +16,13 @@ func (ui *UiInputFloat) str() string {
 	return strconv.FormatFloat(ui.Last.Load().(float64), 'f', -1, 64)
 }
 
-func (ui *UiInputFloat) renderFloatInput(e *Element, w io.Writer, htmltype string, params ...any) error {
-	ui.applyGetter(e, ui.Setter)
-	attrs := e.ApplyParams(params)
-	ui.Last.Store(ui.JawsGet(e))
-	return WriteHTMLInput(w, e.Jid(), htmltype, ui.str(), attrs)
+func (ui *UiInputFloat) renderFloatInput(e *Element, w io.Writer, htmltype string, params ...any) (err error) {
+	if err = ui.applyGetter(e, ui.Setter); err == nil {
+		attrs := e.ApplyParams(params)
+		ui.Last.Store(ui.JawsGet(e))
+		err = WriteHTMLInput(w, e.Jid(), htmltype, ui.str(), attrs)
+	}
+	return
 }
 
 func (ui *UiInputFloat) JawsUpdate(e *Element) {

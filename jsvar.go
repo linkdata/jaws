@@ -44,19 +44,20 @@ func (ui JsVar[T]) AppendJSON(b []byte, e *Element) []byte {
 }
 
 func (ui JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error) {
-	e.ApplyGetter(ui.Setter)
-	jsvarname := params[0].(string)
-	attrs := e.ApplyParams(params[1:])
-	var b []byte
-	b = append(b, `<div id=`...)
-	b = e.Jid().AppendQuote(b)
-	b = append(b, ` data-jawsdata='`...)
-	b = ui.AppendJSON(b, e)
-	b = append(b, `' data-jawsname=`...)
-	b = strconv.AppendQuote(b, jsvarname)
-	b = appendAttrs(b, attrs)
-	b = append(b, ` hidden></div>`...)
-	_, err = w.Write(b)
+	if _, err = e.ApplyGetter(ui.Setter); err == nil {
+		jsvarname := params[0].(string)
+		attrs := e.ApplyParams(params[1:])
+		var b []byte
+		b = append(b, `<div id=`...)
+		b = e.Jid().AppendQuote(b)
+		b = append(b, ` data-jawsdata='`...)
+		b = ui.AppendJSON(b, e)
+		b = append(b, `' data-jawsname=`...)
+		b = strconv.AppendQuote(b, jsvarname)
+		b = appendAttrs(b, attrs)
+		b = append(b, ` hidden></div>`...)
+		_, err = w.Write(b)
+	}
 	return
 }
 

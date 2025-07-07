@@ -20,13 +20,22 @@ type testUi struct {
 	updateCalled int32
 	getCalled    int32
 	setCalled    int32
+	initCalled   int32
+	initError    error
 	s            string
 	renderFn     func(e *Element, w io.Writer, params []any) error
 	updateFn     func(e *Element)
 }
 
+// JawsInit implements InitHandler.
+func (tss *testUi) JawsInit(e *Element) (err error) {
+	atomic.AddInt32(&tss.initCalled, 1)
+	return tss.initError
+}
+
 var _ UI = (*testUi)(nil)
 var _ Setter[string] = (*testUi)(nil)
+var _ InitHandler = (*testUi)(nil)
 
 func (tss *testUi) JawsGet(e *Element) string {
 	atomic.AddInt32(&tss.getCalled, 1)
@@ -235,6 +244,31 @@ func TestElement_ApplyGetter(t *testing.T) {
 	e := rq.NewElement(tss)
 
 	var tch testClickHandler
-	e.ApplyGetter(tch)
+	tag, err := e.ApplyGetter(tch)
+	if tag != tch {
+		t.Errorf("tag was %#v", tag)
+	}
+	if err != nil {
+		t.Error(err)
+	}
 	is.Equal(len(e.handlers), 1)
+}
+
+func TestElement_JawsInit(t *testing.T) {
+	is := newTestHelper(t)
+	rq := newTestRequest()
+	defer rq.Close()
+
+	tss := &testUi{s: "foo"}
+	tss.initError = ErrNotComparable
+	e := rq.NewElement(tss)
+
+	tag, err := e.ApplyGetter(tss)
+	is.Equal(atomic.LoadInt32(&tss.initCalled), int32(1))
+	if tag != tss {
+		t.Errorf("tag was %#v", tag)
+	}
+	if err != ErrNotComparable {
+		t.Error(err)
+	}
 }
