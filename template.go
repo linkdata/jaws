@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"bytes"
 	"fmt"
 	"html/template"
 	"io"
@@ -23,44 +24,48 @@ func (t Template) String() string {
 	return fmt.Sprintf("{%q, %s}", t.Name, TagString(t.Dot))
 }
 
-func findJidOrJs(node parse.Node) (found bool) {
+func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
 	switch node := node.(type) {
+	case *parse.TextNode:
+		if node != nil {
+			found = found || bytes.Equal(node.Text, []byte("<html>"))
+		}
 	case *parse.ListNode:
 		if node != nil {
 			for _, n := range node.Nodes {
-				found = found || findJidOrJs(n)
+				found = found || findJidOrJsOrHTMLNode(n)
 			}
 		}
 	case *parse.ActionNode:
 		if node != nil {
-			found = findJidOrJs(node.Pipe)
+			found = findJidOrJsOrHTMLNode(node.Pipe)
 		}
 	case *parse.WithNode:
 		if node != nil {
-			found = findJidOrJs(&node.BranchNode)
+			found = findJidOrJsOrHTMLNode(&node.BranchNode)
 		}
 	case *parse.BranchNode:
 		if node != nil {
-			found = findJidOrJs(node.Pipe)
-			found = found || findJidOrJs(node.List)
-			found = found || findJidOrJs(node.ElseList)
+			found = findJidOrJsOrHTMLNode(node.Pipe)
+			found = found || findJidOrJsOrHTMLNode(node.List)
+			found = found || findJidOrJsOrHTMLNode(node.ElseList)
 		}
 	case *parse.IfNode:
 		if node != nil {
-			found = findJidOrJs(node.Pipe)
-			found = found || findJidOrJs(node.List)
-			found = found || findJidOrJs(node.ElseList)
+			found = findJidOrJsOrHTMLNode(node.Pipe)
+			found = found || findJidOrJsOrHTMLNode(node.List)
+			found = found || findJidOrJsOrHTMLNode(node.ElseList)
 		}
 	case *parse.PipeNode:
 		if node != nil {
 			for _, n := range node.Cmds {
-				found = found || findJidOrJs(n)
+				found = found || findJidOrJsOrHTMLNode(n)
 			}
 		}
 	case *parse.CommandNode:
 		if node != nil {
 			for _, n := range node.Args {
-				found = found || findJidOrJs(n)
+				found = found || findJidOrJsOrHTMLNode(n)
 			}
 		}
 	case *parse.VariableNode:
@@ -96,7 +101,7 @@ func (t Template) JawsRender(e *Element, wr io.Writer, params []any) (err error)
 				Auth:          auth,
 			})
 			if deadlock.Debug && e.Jaws.Logger != nil {
-				if !findJidOrJs(tmpl.Tree.Root) {
+				if !findJidOrJsOrHTMLNode(tmpl.Tree.Root) {
 					e.Jaws.Logger.Warn("jaws: template has no Jid reference", "template", t.Name)
 				}
 			}
