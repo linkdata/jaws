@@ -63,7 +63,7 @@ func Test_PreloadHTML(t *testing.T) {
 	th.Equal(strings.Contains(txt, extraStyle), true)
 	th.Equal(strings.Contains(txt, extraImage), true)
 	th.Equal(strings.Contains(txt, extraFont), true)
-	th.Equal(strings.Count(txt, "<script>"), strings.Count(txt, "</script>"))
+	th.Equal(strings.Count(txt, "<script"), strings.Count(txt, "</script>"))
 	t.Log(txt)
 }
 

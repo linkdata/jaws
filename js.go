@@ -113,19 +113,6 @@ func PreloadHTML(urls ...*url.URL) string {
 		}
 	}
 
-	if len(jsurls) > 0 {
-		buf = append(buf, `<script>[`...)
-		for i, urlstr := range jsurls {
-			if i > 0 {
-				buf = append(buf, ',')
-			}
-			buf = append(buf, '"')
-			buf = append(buf, urlstr...)
-			buf = append(buf, '"')
-		}
-		buf = append(buf, "].forEach(function(c){var e=document.createElement(\"script\");e.src=c;e.async=!1;document.head.appendChild(e);});</script>\n"...)
-	}
-
 	for _, urlstr := range cssurls {
 		buf = append(buf, `<link rel="stylesheet" href="`...)
 		buf = append(buf, urlstr...)
@@ -138,6 +125,12 @@ func PreloadHTML(urls ...*url.URL) string {
 		buf = append(buf, `" href="`...)
 		buf = append(buf, faviconurl...)
 		buf = append(buf, "\">\n"...)
+	}
+
+	for _, urlstr := range jsurls {
+		buf = append(buf, `<script defer src="`...)
+		buf = append(buf, []byte(urlstr)...)
+		buf = append(buf, "\"></script>\n"...)
 	}
 
 	return string(buf)
