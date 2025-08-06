@@ -1,6 +1,7 @@
 package staticserve
 
 import (
+	"errors"
 	"io"
 	"io/fs"
 	"net/http"
@@ -19,6 +20,8 @@ func ensurePrefixSlash(s string) string {
 	return s
 }
 
+// Handle creates a new StaticServe for the fpath that returns the data given.
+// Returns the URI of the resource.
 func Handle(fpath string, data []byte, handleFn HandleFunc) (uri string, err error) {
 	var ss *StaticServe
 	if ss, err = New(fpath, data); err == nil {
@@ -28,14 +31,22 @@ func Handle(fpath string, data []byte, handleFn HandleFunc) (uri string, err err
 	return
 }
 
-func HandleFS(fsys fs.FS, root, fpath string, handleFn HandleFunc) (uri string, err error) {
-	var f fs.File
-	if f, err = fsys.Open(path.Join(root, fpath)); err == nil {
-		defer f.Close()
-		var b []byte
-		if b, err = io.ReadAll(f); err == nil {
-			uri, err = Handle(fpath, b, handleFn)
+// HandleFS creates StaticServe handlers for the filepaths given.
+// Returns the URI(s) of the resources. If an error occurs, the URI
+// of the failed resource will be the empty string.
+func HandleFS(fsys fs.FS, handleFn HandleFunc, root string, filepaths ...string) (uris []string, err error) {
+	for _, filepath := range filepaths {
+		var uri string
+		f, ferr := fsys.Open(path.Join(root, filepath))
+		if ferr == nil {
+			var b []byte
+			if b, ferr = io.ReadAll(f); ferr == nil {
+				uri, ferr = Handle(filepath, b, handleFn)
+			}
+			f.Close()
 		}
+		uris = append(uris, uri)
+		err = errors.Join(err, ferr)
 	}
 	return
 }

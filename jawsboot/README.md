@@ -13,8 +13,8 @@ func setupRoutes(jw *jaws.Jaws, mux *http.ServeMux) (faviconuri string, err erro
 	var tmpl jaws.TemplateLookuper
 	if tmpl, err = templatereloader.New(assetsFS, "assets/ui/*.html", ""); err == nil {
 		jw.AddTemplateLookuper(tmpl)
-		if faviconuri, err = staticserve.HandleFS(assetsFS, "assets", "static/images/favicon.png", mux.Handle); err == nil {
-			if err = jawsboot.Setup(jw, mux.Handle, faviconuri); err == nil {
+		if uris, err = staticserve.HandleFS(assetsFS, mux.Handle, "assets", "static/images/favicon.png"); err == nil {
+			if err = jawsboot.Setup(jw, mux.Handle, uris...); err == nil {
 				mux.Handle("/jaws/", jw) // ensure the JaWS routes are handled
 				// set up your other routes
 			}
