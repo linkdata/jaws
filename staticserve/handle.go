@@ -43,7 +43,7 @@ func HandleFS(fsys fs.FS, handleFn HandleFunc, root string, filepaths ...string)
 			if b, ferr = io.ReadAll(f); ferr == nil {
 				uri, ferr = Handle(filepath, b, handleFn)
 			}
-			f.Close()
+			ferr = errors.Join(ferr, f.Close())
 		}
 		uris = append(uris, uri)
 		err = errors.Join(err, ferr)
