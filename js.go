@@ -80,37 +80,36 @@ func PreloadHTML(urls ...*url.URL) string {
 		switch ext {
 		case ".js":
 			jsurls = append(jsurls, urlstr)
-			asattr = "script"
+			continue
 		case ".css":
 			cssurls = append(cssurls, urlstr)
-			asattr = "style"
+			continue
 		default:
 			if strings.HasPrefix(mimetype, "image") {
 				asattr = "image"
 				if strings.HasPrefix(filepath.Base(u.Path), "favicon") {
 					favicontype = mimetype
 					faviconurl = urlstr
+					continue
 				}
 			} else if strings.HasPrefix(mimetype, "font") {
 				asattr = "font"
 			}
 		}
-		if urlstr != faviconurl {
-			buf = append(buf, `<link rel="preload" href="`...)
-			buf = append(buf, urlstr...)
+		buf = append(buf, `<link rel="preload" href="`...)
+		buf = append(buf, urlstr...)
+		buf = append(buf, '"')
+		if asattr != "" {
+			buf = append(buf, ` as="`...)
+			buf = append(buf, asattr...)
 			buf = append(buf, '"')
-			if asattr != "" {
-				buf = append(buf, ` as="`...)
-				buf = append(buf, asattr...)
-				buf = append(buf, '"')
-			}
-			if mimetype != "" {
-				buf = append(buf, ` type="`...)
-				buf = append(buf, mimetype...)
-				buf = append(buf, '"')
-			}
-			buf = append(buf, ">\n"...)
 		}
+		if mimetype != "" {
+			buf = append(buf, ` type="`...)
+			buf = append(buf, mimetype...)
+			buf = append(buf, '"')
+		}
+		buf = append(buf, ">\n"...)
 	}
 
 	for _, urlstr := range cssurls {
