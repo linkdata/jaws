@@ -126,15 +126,10 @@ func (rq *Request) clearLocked() *Request {
 
 // HeadHTML writes the HTML code needed in the HTML page's HEAD section.
 func (rq *Request) HeadHTML(w io.Writer) (err error) {
-	var b, jk []byte
-	jk = JawsKeyAppend(jk, rq.JawsKey)
+	var b []byte
 	b = append(b, rq.Jaws.headPrefix...)
-	b = append(b, jk...)
-	b = append(b, `";</script><noscript>`+
-		`<div class="jaws-alert">This site requires Javascript for full functionality.</div>`+
-		`<img src="/jaws/`...)
-	b = append(b, jk...)
-	b = append(b, `/noscript"></noscript>`...)
+	b = JawsKeyAppend(b, rq.JawsKey)
+	b = append(b, `">`...)
 	_, err = w.Write(b)
 	return
 }
@@ -182,7 +177,12 @@ func (rq *Request) getTailActions() (b []byte) {
 // will immediately apply HTML attribute and class updates made during initial
 // rendering, which eliminates flicker without having to write the correct
 // value in templates or during JawsRender().
+//
+// It also adds a <noscript> tag that warns of reduces functionality.
 func (rq *Request) TailHTML(w io.Writer) (err error) {
+	fmt.Fprintf(w, "\n"+`<noscript>`+
+		`<div class="jaws-alert">This site requires Javascript for full functionality.</div>`+
+		`<img src="/jaws/%s/noscript" alt="noscript"></noscript>`, rq.JawsKeyString())
 	if actions := rq.getTailActions(); len(actions) > 0 {
 		_, err = w.Write(actions)
 	}

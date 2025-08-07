@@ -17,11 +17,17 @@ import (
 //go:embed jaws.js
 var JavascriptText []byte
 
+//go:embed jaws.css
+var JawsCSS []byte
+
 // JavascriptGZip is the embedded Javascript library GZipped.
 var JavascriptGZip = makeJavascriptGZip()
 
 // JavascriptPath is the path for the embedded JaWS Javascript library.
 var JavascriptPath = makeJavascriptPath()
+
+// JawsCSSPath is the path for the embedded JaWS CSS styles.
+var JawsCSSPath = makeJawsCSSPath()
 
 func makeJavascriptGZip() []byte {
 	b := bytes.Buffer{}
@@ -37,6 +43,13 @@ func makeJavascriptPath() string {
 	_, err := h.Write(JavascriptText)
 	maybePanic(err)
 	return "/jaws/.jaws." + strconv.FormatUint(h.Sum64(), 36) + ".js"
+}
+
+func makeJawsCSSPath() string {
+	h := fnv.New64a()
+	_, err := h.Write(JawsCSS)
+	maybePanic(err)
+	return "/jaws/.jaws." + strconv.FormatUint(h.Sum64(), 36) + ".css"
 }
 
 // JawsKeyAppend appends the JaWS key as a string to the buffer.

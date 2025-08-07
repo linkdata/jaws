@@ -359,17 +359,6 @@ func (jw *Jaws) deleteSession(sessionID uint64) {
 	jw.mu.Unlock()
 }
 
-const jawsLostStyle = `
-<style>.jaws-lost {
-display: flex; position: relative; z-index: 1000;
-height: 3em; width: 100vw;
-left: 50%; margin-left: -50vw;
-right: 50%; margin-right:-50vw;
-justify-content: center; align-items: center;
-background-color: red; color: white;
-}</style>
-`
-
 // GenerateHeadHTML (re-)generates the HTML code that goes in the HEAD section, ensuring
 // that the provided URL resources in `extra` are loaded, along with the JaWS javascript.
 //
@@ -377,18 +366,22 @@ background-color: red; color: white;
 func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 	var jawsurl *url.URL
 	if jawsurl, err = url.Parse(JavascriptPath); err == nil {
-		var urls []*url.URL
-		urls = append(urls, jawsurl)
-		for _, urlstr := range extra {
-			if u, e := url.Parse(urlstr); e == nil {
-				if !strings.HasSuffix(u.Path, jawsurl.Path) {
-					urls = append(urls, u)
+		var cssurl *url.URL
+		if cssurl, err = url.Parse(JawsCSSPath); err == nil {
+			var urls []*url.URL
+			urls = append(urls, cssurl)
+			urls = append(urls, jawsurl)
+			for _, urlstr := range extra {
+				if u, e := url.Parse(urlstr); e == nil {
+					if !strings.HasSuffix(u.Path, jawsurl.Path) {
+						urls = append(urls, u)
+					}
+				} else {
+					err = errors.Join(e)
 				}
-			} else {
-				err = errors.Join(e)
 			}
+			jw.headPrefix = PreloadHTML(urls...) + `<meta name="jawsKey" content="`
 		}
-		jw.headPrefix = PreloadHTML(urls...) + jawsLostStyle + `<script>var jawsKey="`
 	}
 	return
 }

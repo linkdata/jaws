@@ -24,7 +24,7 @@ func TestServeHTTP_GetJavascript(t *testing.T) {
 	is.Equal(w.Code, http.StatusOK)
 	is.Equal(w.Body.Len(), len(JavascriptText))
 	is.Equal(w.Header()["Cache-Control"], headerCacheStatic)
-	is.Equal(w.Header()["Content-Type"], headerContentType)
+	is.Equal(w.Header()["Content-Type"], headerContentTypeJS)
 	is.Equal(w.Header()["Content-Encoding"], nil)
 
 	req = httptest.NewRequest("", JavascriptPath, nil)
@@ -35,7 +35,7 @@ func TestServeHTTP_GetJavascript(t *testing.T) {
 	is.Equal(w.Code, http.StatusOK)
 	is.Equal(w.Body.Len(), len(JavascriptGZip))
 	is.Equal(w.Header()["Cache-Control"], headerCacheStatic)
-	is.Equal(w.Header()["Content-Type"], headerContentType)
+	is.Equal(w.Header()["Content-Type"], headerContentTypeJS)
 	is.Equal(w.Header()["Content-Encoding"], headerContentGZip)
 
 	req = httptest.NewRequest("", JavascriptPath, nil)
@@ -46,8 +46,28 @@ func TestServeHTTP_GetJavascript(t *testing.T) {
 	is.Equal(w.Code, http.StatusOK)
 	is.Equal(w.Body.Len(), len(JavascriptGZip))
 	is.Equal(w.Header()["Cache-Control"], headerCacheStatic)
-	is.Equal(w.Header()["Content-Type"], headerContentType)
+	is.Equal(w.Header()["Content-Type"], headerContentTypeJS)
 	is.Equal(w.Header()["Content-Encoding"], headerContentGZip)
+}
+
+func TestServeHTTP_GetCSS(t *testing.T) {
+	jw, _ := New()
+	go jw.Serve()
+	defer jw.Close()
+
+	is := newTestHelper(t)
+
+	mux := http.NewServeMux()
+	mux.Handle("/jaws/", jw)
+
+	req := httptest.NewRequest("", JawsCSSPath, nil)
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, req)
+	is.Equal(w.Code, http.StatusOK)
+	is.Equal(w.Body.Len(), len(JawsCSS))
+	is.Equal(w.Header()["Cache-Control"], headerCacheStatic)
+	is.Equal(w.Header()["Content-Type"], headerContentTypeCSS)
 }
 
 func TestServeHTTP_GetPing(t *testing.T) {

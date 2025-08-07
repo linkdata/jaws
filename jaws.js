@@ -431,7 +431,7 @@ function jawsConnect() {
 	window.jawsNames = {};
 	window.addEventListener('beforeunload', jawsUnloading);
 	window.addEventListener('pageshow', jawsPageshow);
-	jaws = new WebSocket(wsScheme + window.location.host + '/jaws/' + encodeURIComponent(jawsKey));
+	jaws = new WebSocket(wsScheme + window.location.host + '/jaws/' + encodeURIComponent(document.querySelector('meta[name="jawsKey"]').content));
 	jaws.addEventListener('open', function () { jawsAttachChildren(document); });
 	jaws.addEventListener('message', jawsMessage);
 	jaws.addEventListener('close', jawsFailed);

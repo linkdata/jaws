@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -76,13 +77,14 @@ func TestRequestWriter_TailHTML(t *testing.T) {
 
 	var buf bytes.Buffer
 	rq.Writer(&buf).TailHTML()
-	want := `
+	want := fmt.Sprintf(`
+<noscript><div class="jaws-alert">This site requires Javascript for full functionality.</div><img src="/jaws/%s/noscript" alt="noscript"></noscript>
 <script>
 document.getElementById("Jid.1")?.setAttribute("hidden","yes");
 document.getElementById("Jid.1")?.removeAttribute("hidden");
 document.getElementById("Jid.1")?.classList?.add("cls");
 document.getElementById("Jid.1")?.classList?.remove("cls");
-</script>`
+</script>`, rq.JawsKeyString())
 	th.Equal(want, buf.String())
 }
 
