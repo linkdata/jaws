@@ -1,8 +1,6 @@
 package jaws
 
 import (
-	"bytes"
-	"compress/gzip"
 	_ "embed"
 	"hash/fnv"
 	"net/url"
@@ -20,17 +18,7 @@ func Test_Javascript(t *testing.T) {
 	_, err := h.Write(JavascriptText)
 	th.NoErr(err)
 	th.Equal(JavascriptPath, prefix+strconv.FormatUint(h.Sum64(), 36)+suffix)
-
 	th.True(len(JavascriptText) > 0)
-	th.True(len(JavascriptGZip) > 0)
-	th.True(len(JavascriptGZip) < len(JavascriptText))
-
-	b := bytes.Buffer{}
-	gw := gzip.NewWriter(&b)
-	_, err = gw.Write(JavascriptText)
-	th.NoErr(err)
-	th.NoErr(gw.Close())
-	th.Equal(b.Bytes(), JavascriptGZip)
 }
 
 func Test_PreloadHTML(t *testing.T) {

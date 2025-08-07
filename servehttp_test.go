@@ -1,10 +1,16 @@
 package jaws
 
 import (
+	"compress/gzip"
+	"mime"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/linkdata/jaws/staticserve"
 )
+
+var headerContentGZip = []string{"gzip"}
 
 func TestServeHTTP_GetJavascript(t *testing.T) {
 	jw, _ := New()
@@ -23,8 +29,8 @@ func TestServeHTTP_GetJavascript(t *testing.T) {
 	mux.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusOK)
 	is.Equal(w.Body.Len(), len(JavascriptText))
-	is.Equal(w.Header()["Cache-Control"], headerCacheStatic)
-	is.Equal(w.Header()["Content-Type"], headerContentTypeJS)
+	is.Equal(w.Header()["Cache-Control"], staticserve.HeaderCacheControl)
+	is.Equal(w.Header()["Content-Type"], []string{mime.TypeByExtension(".js")})
 	is.Equal(w.Header()["Content-Encoding"], nil)
 
 	req = httptest.NewRequest("", JavascriptPath, nil)
@@ -33,21 +39,19 @@ func TestServeHTTP_GetJavascript(t *testing.T) {
 
 	mux.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusOK)
-	is.Equal(w.Body.Len(), len(JavascriptGZip))
-	is.Equal(w.Header()["Cache-Control"], headerCacheStatic)
-	is.Equal(w.Header()["Content-Type"], headerContentTypeJS)
+	is.Equal(w.Header()["Cache-Control"], staticserve.HeaderCacheControl)
+	is.Equal(w.Header()["Content-Type"], []string{mime.TypeByExtension(".js")})
 	is.Equal(w.Header()["Content-Encoding"], headerContentGZip)
 
-	req = httptest.NewRequest("", JavascriptPath, nil)
-	req.Header.Add("Accept-Encoding", "gzip, deflate, br")
-	w = httptest.NewRecorder()
-
-	mux.ServeHTTP(w, req)
-	is.Equal(w.Code, http.StatusOK)
-	is.Equal(w.Body.Len(), len(JavascriptGZip))
-	is.Equal(w.Header()["Cache-Control"], headerCacheStatic)
-	is.Equal(w.Header()["Content-Type"], headerContentTypeJS)
-	is.Equal(w.Header()["Content-Encoding"], headerContentGZip)
+	gr, err := gzip.NewReader(w.Body)
+	is.NoErr(err)
+	b := make([]byte, len(JavascriptText)+32)
+	n, err := gr.Read(b)
+	b = b[:n]
+	is.NoErr(err)
+	is.NoErr(gr.Close())
+	is.Equal(len(JavascriptText), len(b))
+	is.Equal(string(JavascriptText), string(b))
 }
 
 func TestServeHTTP_GetCSS(t *testing.T) {
@@ -66,8 +70,8 @@ func TestServeHTTP_GetCSS(t *testing.T) {
 	mux.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusOK)
 	is.Equal(w.Body.Len(), len(JawsCSS))
-	is.Equal(w.Header()["Cache-Control"], headerCacheStatic)
-	is.Equal(w.Header()["Content-Type"], headerContentTypeCSS)
+	is.Equal(w.Header()["Cache-Control"], staticserve.HeaderCacheControl)
+	is.Equal(w.Header()["Content-Type"], []string{mime.TypeByExtension(".css")})
 }
 
 func TestServeHTTP_GetPing(t *testing.T) {

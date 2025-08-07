@@ -30,6 +30,7 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/jid"
+	"github.com/linkdata/jaws/staticserve"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -51,6 +52,8 @@ type Jaws struct {
 	updateTicker *time.Ticker
 	headPrefix   string
 	reqPool      sync.Pool
+	serveJS      *staticserve.StaticServe
+	serveCSS     *staticserve.StaticServe
 	mu           deadlock.RWMutex // protects following
 	tmplookers   []TemplateLookuper
 	kg           *bufio.Reader
@@ -65,28 +68,36 @@ type Jaws struct {
 // This is expected to be created once per HTTP server and handles
 // publishing HTML changes across all connections.
 func New() (jw *Jaws, err error) {
-	tmp := &Jaws{
-		CookieName:   DefaultCookieName,
-		BaseContext:  context.Background(),
-		bcastCh:      make(chan Message, 1),
-		subCh:        make(chan subscription, 1),
-		unsubCh:      make(chan chan Message, 1),
-		updateTicker: time.NewTicker(DefaultUpdateInterval),
-		kg:           bufio.NewReader(rand.Reader),
-		requests:     make(map[uint64]*Request),
-		sessions:     make(map[uint64]*Session),
-		dirty:        make(map[any]int),
-		closeCh:      make(chan struct{}),
-	}
-	if err = tmp.GenerateHeadHTML(); err == nil {
-		jw = tmp
-		jw.reqPool.New = func() any {
-			return (&Request{
-				Jaws:   jw,
-				tagMap: make(map[any][]*Element),
-			}).clearLocked()
+	var serveJS, serveCSS *staticserve.StaticServe
+	if serveJS, err = staticserve.New(JavascriptPath, JavascriptText); err == nil {
+		if serveCSS, err = staticserve.New(JawsCSSPath, JawsCSS); err == nil {
+			tmp := &Jaws{
+				CookieName:   DefaultCookieName,
+				BaseContext:  context.Background(),
+				serveJS:      serveJS,
+				serveCSS:     serveCSS,
+				bcastCh:      make(chan Message, 1),
+				subCh:        make(chan subscription, 1),
+				unsubCh:      make(chan chan Message, 1),
+				updateTicker: time.NewTicker(DefaultUpdateInterval),
+				kg:           bufio.NewReader(rand.Reader),
+				requests:     make(map[uint64]*Request),
+				sessions:     make(map[uint64]*Session),
+				dirty:        make(map[any]int),
+				closeCh:      make(chan struct{}),
+			}
+			if err = tmp.GenerateHeadHTML(); err == nil {
+				jw = tmp
+				jw.reqPool.New = func() any {
+					return (&Request{
+						Jaws:   jw,
+						tagMap: make(map[any][]*Element),
+					}).clearLocked()
+				}
+			}
 		}
 	}
+
 	return
 }
 

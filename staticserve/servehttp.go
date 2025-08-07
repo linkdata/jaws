@@ -9,8 +9,8 @@ import (
 	"strings"
 )
 
-var headerCacheControl = []string{"public, max-age=31536000, s-maxage=31536000, immutable"}
-var headerVary = []string{"Accept-Encoding"}
+var HeaderCacheControl = []string{"public, max-age=31536000, s-maxage=31536000, immutable"}
+var HeaderVary = []string{"Accept-Encoding"}
 var headerContentEncoding = []string{"gzip"}
 
 func acceptsGzip(hdr http.Header) bool {
@@ -40,8 +40,8 @@ func (ss *StaticServe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		if body != nil {
 			statusCode = http.StatusOK
-			hdr["Cache-Control"] = headerCacheControl
-			hdr["Vary"] = headerVary
+			hdr["Cache-Control"] = HeaderCacheControl
+			hdr["Vary"] = HeaderVary
 			if ss.ContentType != "" {
 				hdr["Content-Type"] = []string{ss.ContentType}
 			}

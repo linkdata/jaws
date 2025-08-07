@@ -1,8 +1,6 @@
 package jaws
 
 import (
-	"bytes"
-	"compress/gzip"
 	_ "embed"
 	"hash/fnv"
 	"mime"
@@ -20,23 +18,11 @@ var JavascriptText []byte
 //go:embed jaws.css
 var JawsCSS []byte
 
-// JavascriptGZip is the embedded Javascript library GZipped.
-var JavascriptGZip = makeJavascriptGZip()
-
 // JavascriptPath is the path for the embedded JaWS Javascript library.
 var JavascriptPath = makeJavascriptPath()
 
 // JawsCSSPath is the path for the embedded JaWS CSS styles.
 var JawsCSSPath = makeJawsCSSPath()
-
-func makeJavascriptGZip() []byte {
-	b := bytes.Buffer{}
-	gw := gzip.NewWriter(&b)
-	_, err := gw.Write(JavascriptText)
-	maybePanic(err)
-	maybePanic(gw.Close())
-	return b.Bytes()
-}
 
 func makeJavascriptPath() string {
 	h := fnv.New64a()

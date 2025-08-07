@@ -2,16 +2,10 @@ package jaws
 
 import (
 	"net/http"
-	"strconv"
 	"strings"
 )
 
-var headerCacheStatic = []string{"public, max-age=31536000, s-maxage=31536000, immutable"}
 var headerCacheNoCache = []string{"no-cache"}
-var headerAcceptEncoding = []string{"Accept-Encoding"}
-var headerContentTypeJS = []string{"application/javascript; charset=utf-8"}
-var headerContentTypeCSS = []string{"text/css; charset=utf-8"}
-var headerContentGZip = []string{"gzip"}
 
 // ServeHTTP can handle the required JaWS endpoints, which all start with "/jaws/".
 func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -23,29 +17,10 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.RequestURI[6] == '.' {
 			switch r.RequestURI {
 			case JawsCSSPath:
-				hdr := w.Header()
-				hdr["Cache-Control"] = headerCacheStatic
-				hdr["Content-Type"] = headerContentTypeCSS
-				hdr["Content-Length"] = []string{strconv.Itoa(len(JawsCSS))}
-				_, _ = w.Write(JawsCSS) // #nosec G104
+				jw.serveCSS.ServeHTTP(w, r)
 				return
 			case JavascriptPath:
-				hdr := w.Header()
-				hdr["Cache-Control"] = headerCacheStatic
-				hdr["Content-Type"] = headerContentTypeJS
-				hdr["Vary"] = headerAcceptEncoding
-				js := JavascriptText
-				for _, s := range r.Header["Accept-Encoding"] {
-					for _, v := range strings.Split(s, ",") {
-						if strings.TrimSpace(v) == "gzip" {
-							js = JavascriptGZip
-							hdr["Content-Encoding"] = headerContentGZip
-							break
-						}
-					}
-				}
-				hdr["Content-Length"] = []string{strconv.Itoa(len(js))}
-				_, _ = w.Write(js) // #nosec G104
+				jw.serveJS.ServeHTTP(w, r)
 				return
 			case "/jaws/.ping":
 				w.Header()["Cache-Control"] = headerCacheNoCache
