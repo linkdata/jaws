@@ -487,10 +487,12 @@ func TestJaws_GenerateHeadHTML(t *testing.T) {
 	jw.Close()
 
 	th.NoErr(jw.GenerateHeadHTML())
-	th.True(strings.Contains(string(jw.headPrefix), JavascriptPath))
+	th.True(strings.Contains(string(jw.headPrefix), jw.serveJS.Name))
+	th.True(strings.Contains(string(jw.headPrefix), jw.serveCSS.Name))
 
 	th.NoErr(jw.GenerateHeadHTML(extraScript, extraStyle, extraImage, extraFont))
-	th.True(strings.Contains(string(jw.headPrefix), JavascriptPath))
+	th.True(strings.Contains(string(jw.headPrefix), jw.serveJS.Name))
+	th.True(strings.Contains(string(jw.headPrefix), jw.serveCSS.Name))
 	th.True(strings.Contains(string(jw.headPrefix), extraScript))
 	th.True(strings.Contains(string(jw.headPrefix), extraStyle))
 	th.True(strings.Contains(string(jw.headPrefix), extraImage))

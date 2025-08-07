@@ -2,24 +2,12 @@ package jaws
 
 import (
 	_ "embed"
-	"hash/fnv"
 	"net/url"
-	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/linkdata/jaws/staticserve"
 )
-
-func Test_Javascript(t *testing.T) {
-	const prefix = "/jaws/.jaws."
-	const suffix = ".js"
-	th := newTestHelper(t)
-
-	h := fnv.New64a()
-	_, err := h.Write(JavascriptText)
-	th.NoErr(err)
-	th.Equal(JavascriptPath, prefix+strconv.FormatUint(h.Sum64(), 36)+suffix)
-	th.True(len(JavascriptText) > 0)
-}
 
 func Test_PreloadHTML(t *testing.T) {
 	const extraScript = "someExtraScript.js"
@@ -28,8 +16,11 @@ func Test_PreloadHTML(t *testing.T) {
 	const extraFont = "someExtraFont.woff2"
 	th := newTestHelper(t)
 
+	serveJS, err := staticserve.New("/jaws/.jaws.js", JavascriptText)
+	th.NoErr(err)
+
 	txt := PreloadHTML()
-	th.Equal(strings.Contains(txt, JavascriptPath), false)
+	th.Equal(strings.Contains(txt, serveJS.Name), false)
 	th.Equal(strings.Count(txt, "<script>"), strings.Count(txt, "</script>"))
 
 	mustParseUrl := func(urlstr string) *url.URL {
@@ -41,12 +32,12 @@ func Test_PreloadHTML(t *testing.T) {
 	}
 
 	txt = PreloadHTML(
-		mustParseUrl(JavascriptPath),
+		mustParseUrl(serveJS.Name),
 		mustParseUrl(extraScript),
 		mustParseUrl(extraStyle),
 		mustParseUrl(extraImage),
 		mustParseUrl(extraFont))
-	th.Equal(strings.Contains(txt, JavascriptPath), true)
+	th.Equal(strings.Contains(txt, serveJS.Name), true)
 	th.Equal(strings.Contains(txt, extraScript), true)
 	th.Equal(strings.Contains(txt, extraStyle), true)
 	th.Equal(strings.Contains(txt, extraImage), true)

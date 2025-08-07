@@ -2,7 +2,6 @@ package jaws
 
 import (
 	_ "embed"
-	"hash/fnv"
 	"mime"
 	"net/url"
 	"path/filepath"
@@ -17,26 +16,6 @@ var JavascriptText []byte
 
 //go:embed jaws.css
 var JawsCSS []byte
-
-// JavascriptPath is the path for the embedded JaWS Javascript library.
-var JavascriptPath = makeJavascriptPath()
-
-// JawsCSSPath is the path for the embedded JaWS CSS styles.
-var JawsCSSPath = makeJawsCSSPath()
-
-func makeJavascriptPath() string {
-	h := fnv.New64a()
-	_, err := h.Write(JavascriptText)
-	maybePanic(err)
-	return "/jaws/.jaws." + strconv.FormatUint(h.Sum64(), 36) + ".js"
-}
-
-func makeJawsCSSPath() string {
-	h := fnv.New64a()
-	_, err := h.Write(JawsCSS)
-	maybePanic(err)
-	return "/jaws/.jaws." + strconv.FormatUint(h.Sum64(), 36) + ".css"
-}
 
 // JawsKeyAppend appends the JaWS key as a string to the buffer.
 func JawsKeyAppend(b []byte, jawsKey uint64) []byte {

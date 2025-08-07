@@ -28,9 +28,6 @@ func TestJawsBoot_Setup(t *testing.T) {
 	if !strings.Contains(txt, rq.JawsKeyString()) {
 		t.Error(txt)
 	}
-	if !strings.Contains(txt, jaws.JavascriptPath) {
-		t.Error(txt)
-	}
 	if !strings.Contains(txt, "/static/bootstrap.bundle.min") {
 		t.Error(txt)
 	}

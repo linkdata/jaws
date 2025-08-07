@@ -16,10 +16,10 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if len(r.RequestURI) > 6 && strings.HasPrefix(r.RequestURI, "/jaws/") {
 		if r.RequestURI[6] == '.' {
 			switch r.RequestURI {
-			case JawsCSSPath:
+			case jw.serveCSS.Name:
 				jw.serveCSS.ServeHTTP(w, r)
 				return
-			case JavascriptPath:
+			case jw.serveJS.Name:
 				jw.serveJS.ServeHTTP(w, r)
 				return
 			case "/jaws/.ping":

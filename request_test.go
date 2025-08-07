@@ -51,7 +51,7 @@ func TestRequest_HeadHTML(t *testing.T) {
 	rq.Writer(&sb).HeadHTML()
 	txt := sb.String()
 	is.Equal(strings.Contains(txt, rq.JawsKeyString()), true)
-	is.Equal(strings.Contains(txt, JavascriptPath), true)
+	is.Equal(strings.Contains(txt, jw.serveJS.Name), true)
 	is.Equal(strings.Count(txt, "<script"), strings.Count(txt, "</script>"))
 	is.Equal(strings.Count(txt, "<style>"), strings.Count(txt, "</style>"))
 }

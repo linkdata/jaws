@@ -69,8 +69,8 @@ type Jaws struct {
 // publishing HTML changes across all connections.
 func New() (jw *Jaws, err error) {
 	var serveJS, serveCSS *staticserve.StaticServe
-	if serveJS, err = staticserve.New(JavascriptPath, JavascriptText); err == nil {
-		if serveCSS, err = staticserve.New(JawsCSSPath, JawsCSS); err == nil {
+	if serveJS, err = staticserve.New("/jaws/.jaws.js", JavascriptText); err == nil {
+		if serveCSS, err = staticserve.New("/jaws/.jaws.css", JawsCSS); err == nil {
 			tmp := &Jaws{
 				CookieName:   DefaultCookieName,
 				BaseContext:  context.Background(),
@@ -376,9 +376,9 @@ func (jw *Jaws) deleteSession(sessionID uint64) {
 // You only need to call this if you want to add your own scripts and stylesheets.
 func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 	var jawsurl *url.URL
-	if jawsurl, err = url.Parse(JavascriptPath); err == nil {
+	if jawsurl, err = url.Parse(jw.serveJS.Name); err == nil {
 		var cssurl *url.URL
-		if cssurl, err = url.Parse(JawsCSSPath); err == nil {
+		if cssurl, err = url.Parse(jw.serveCSS.Name); err == nil {
 			var urls []*url.URL
 			urls = append(urls, cssurl)
 			urls = append(urls, jawsurl)
