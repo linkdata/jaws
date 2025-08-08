@@ -50,3 +50,17 @@ func New(filename string, data []byte) (ss *StaticServe, err error) {
 
 	return
 }
+
+func MaybePanic(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+// Must calls New and panics on error.
+func Must(filename string, data []byte) (ss *StaticServe) {
+	var err error
+	ss, err = New(filename, data)
+	MaybePanic(err)
+	return
+}

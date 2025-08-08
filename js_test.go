@@ -19,9 +19,10 @@ func Test_PreloadHTML(t *testing.T) {
 	serveJS, err := staticserve.New("/jaws/.jaws.js", JavascriptText)
 	th.NoErr(err)
 
-	txt := PreloadHTML()
+	txt, fav := PreloadHTML()
 	th.Equal(strings.Contains(txt, serveJS.Name), false)
 	th.Equal(strings.Count(txt, "<script>"), strings.Count(txt, "</script>"))
+	th.Equal(fav, "")
 
 	mustParseUrl := func(urlstr string) *url.URL {
 		u, err := url.Parse(urlstr)
@@ -31,7 +32,7 @@ func Test_PreloadHTML(t *testing.T) {
 		return u
 	}
 
-	txt = PreloadHTML(
+	txt, fav = PreloadHTML(
 		mustParseUrl(serveJS.Name),
 		mustParseUrl(extraScript),
 		mustParseUrl(extraStyle),
@@ -43,6 +44,7 @@ func Test_PreloadHTML(t *testing.T) {
 	th.Equal(strings.Contains(txt, extraImage), true)
 	th.Equal(strings.Contains(txt, extraFont), true)
 	th.Equal(strings.Count(txt, "<script"), strings.Count(txt, "</script>"))
+	th.Equal(fav, extraImage)
 	t.Log(txt)
 }
 

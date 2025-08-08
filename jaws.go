@@ -51,6 +51,7 @@ type Jaws struct {
 	unsubCh      chan chan Message
 	updateTicker *time.Ticker
 	headPrefix   string
+	faviconURL   string
 	reqPool      sync.Pool
 	serveJS      *staticserve.StaticServe
 	serveCSS     *staticserve.StaticServe
@@ -370,10 +371,16 @@ func (jw *Jaws) deleteSession(sessionID uint64) {
 	jw.mu.Unlock()
 }
 
+func (jw *Jaws) FaviconURL() string {
+	return jw.faviconURL
+}
+
 // GenerateHeadHTML (re-)generates the HTML code that goes in the HEAD section, ensuring
 // that the provided URL resources in `extra` are loaded, along with the JaWS javascript.
+// If one of the resources is named "favicon", it's URL will be stored and can
+// be retrieved using FaviconURL().
 //
-// You only need to call this if you want to add your own scripts and stylesheets.
+// You only need to call this if you add your own images, scripts and stylesheets.
 func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 	var jawsurl *url.URL
 	if jawsurl, err = url.Parse(jw.serveJS.Name); err == nil {
@@ -391,7 +398,8 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 					err = errors.Join(e)
 				}
 			}
-			jw.headPrefix = PreloadHTML(urls...) + `<meta name="jawsKey" content="`
+			jw.headPrefix, jw.faviconURL = PreloadHTML(urls...)
+			jw.headPrefix += `<meta name="jawsKey" content="`
 		}
 	}
 	return

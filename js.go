@@ -43,9 +43,9 @@ func JawsKeyValue(jawsKey string) uint64 {
 }
 
 // PreloadHTML returns HTML code to load the given resources efficiently.
-func PreloadHTML(urls ...*url.URL) string {
+func PreloadHTML(urls ...*url.URL) (htmlcode, faviconurl string) {
 	var jsurls, cssurls []string
-	var faviconurl, favicontype string
+	var favicontype string
 	var buf []byte
 	for _, u := range urls {
 		var asattr string
@@ -89,13 +89,11 @@ func PreloadHTML(urls ...*url.URL) string {
 		}
 		buf = append(buf, ">\n"...)
 	}
-
 	for _, urlstr := range cssurls {
 		buf = append(buf, `<link rel="stylesheet" href="`...)
 		buf = append(buf, urlstr...)
 		buf = append(buf, "\">\n"...)
 	}
-
 	if faviconurl != "" {
 		buf = append(buf, `<link rel="icon" type="`...)
 		buf = append(buf, favicontype...)
@@ -103,12 +101,11 @@ func PreloadHTML(urls ...*url.URL) string {
 		buf = append(buf, faviconurl...)
 		buf = append(buf, "\">\n"...)
 	}
-
 	for _, urlstr := range jsurls {
 		buf = append(buf, `<script defer src="`...)
 		buf = append(buf, []byte(urlstr)...)
 		buf = append(buf, "\"></script>\n"...)
 	}
-
-	return string(buf)
+	htmlcode = string(buf)
+	return
 }

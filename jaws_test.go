@@ -481,6 +481,7 @@ func TestJaws_GenerateHeadHTML(t *testing.T) {
 	const extraScript = "someExtraScript.js?disregard"
 	const extraStyle = "http://other.server/someExtraStyle.css"
 	const extraImage = "someExtraImage.png"
+	const extraIcon = "favicon.png"
 	const extraFont = "someExtraFont.woff2"
 	th := newTestHelper(t)
 	jw, _ := New()
@@ -490,13 +491,16 @@ func TestJaws_GenerateHeadHTML(t *testing.T) {
 	th.True(strings.Contains(string(jw.headPrefix), jw.serveJS.Name))
 	th.True(strings.Contains(string(jw.headPrefix), jw.serveCSS.Name))
 
-	th.NoErr(jw.GenerateHeadHTML(extraScript, extraStyle, extraImage, extraFont))
+	th.NoErr(jw.GenerateHeadHTML(extraScript, extraStyle, extraImage, extraIcon, extraFont))
 	th.True(strings.Contains(string(jw.headPrefix), jw.serveJS.Name))
 	th.True(strings.Contains(string(jw.headPrefix), jw.serveCSS.Name))
 	th.True(strings.Contains(string(jw.headPrefix), extraScript))
 	th.True(strings.Contains(string(jw.headPrefix), extraStyle))
 	th.True(strings.Contains(string(jw.headPrefix), extraImage))
+	th.True(strings.Contains(string(jw.headPrefix), extraIcon))
 	th.True(strings.Contains(string(jw.headPrefix), extraFont))
+
+	th.Equal(jw.FaviconURL(), extraIcon)
 
 	th.True(jw.GenerateHeadHTML("\n") != nil)
 }

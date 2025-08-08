@@ -17,7 +17,8 @@ func TestJawsBoot_Setup(t *testing.T) {
 		jw.Close()
 		http.DefaultServeMux = oldmux
 	}()
-	if err := jawsboot.Setup(jw, nil, "/other/foobar.js"); err != nil {
+	err := jw.Setup(http.DefaultServeMux.Handle, "/static", jawsboot.Setup, "/other/foobar.js")
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -28,13 +29,13 @@ func TestJawsBoot_Setup(t *testing.T) {
 	if !strings.Contains(txt, rq.JawsKeyString()) {
 		t.Error(txt)
 	}
-	if !strings.Contains(txt, "/static/bootstrap.bundle.min") {
+	if !strings.Contains(txt, "\"/static/bootstrap.bundle.min") {
 		t.Error(txt)
 	}
-	if !strings.Contains(txt, "/static/bootstrap.min") {
+	if !strings.Contains(txt, "\"/static/bootstrap.min") {
 		t.Error(txt)
 	}
-	if !strings.Contains(txt, "/other/foobar.js") {
+	if !strings.Contains(txt, "\"/other/foobar.js\"") {
 		t.Error(txt)
 	}
 }

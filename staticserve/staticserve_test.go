@@ -2,6 +2,7 @@ package staticserve_test
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 
@@ -43,4 +44,21 @@ func Test_New(t *testing.T) {
 	if ss3.ContentType != "" {
 		t.Error(ss3.ContentType)
 	}
+}
+
+func Test_Must(t *testing.T) {
+	ss := staticserve.Must("test", nil)
+	if ss == nil {
+		t.FailNow()
+	}
+}
+
+func Test_MaybePanic(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fail()
+		}
+	}()
+	staticserve.MaybePanic(io.EOF)
+	t.Fail()
 }
