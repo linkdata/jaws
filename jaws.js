@@ -428,16 +428,16 @@ function jawsConnect() {
 	if (window.location.protocol === 'https:') {
 		wsScheme = 'wss://';
 	}
-	window.jawsNames = {};
 	window.addEventListener('beforeunload', jawsUnloading);
 	window.addEventListener('pageshow', jawsPageshow);
 	jaws = new WebSocket(wsScheme + window.location.host + '/jaws/' + encodeURIComponent(document.querySelector('meta[name="jawsKey"]').content));
-	jaws.addEventListener('open', function () { jawsAttachChildren(document); });
 	jaws.addEventListener('message', jawsMessage);
 	jaws.addEventListener('close', jawsFailed);
 	jaws.addEventListener('error', jawsFailed);
 }
 
+window.jawsNames = {};
+jawsAttachChildren(document);
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
 	jawsConnect();
 } else {
