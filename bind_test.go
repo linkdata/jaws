@@ -3,6 +3,7 @@ package jaws
 import (
 	"io"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -283,6 +284,31 @@ func TestBindFunc_String(t *testing.T) {
 	testBind_Hooks(t, "foo")
 	testBind_StringSetter(t, Bind(&mu, &val))
 	testBind_StringSetter(t, Bind(&mu, &val).Success(func() {}))
+}
+
+type stringEqualler string
+
+func (se *stringEqualler) DeepEqual(other *stringEqualler) (yes bool) {
+	return strings.EqualFold(string(*se), string(*other))
+}
+
+func TestBindFunc_Equaller(t *testing.T) {
+	var mu sync.Mutex
+	var val stringEqualler = "foo"
+
+	b := Bind(&mu, &val)
+	err := b.JawsSet(nil, val)
+	if err != ErrValueUnchanged {
+		t.Error(err)
+	}
+	err = b.JawsSet(nil, "FOO")
+	if err != ErrValueUnchanged {
+		t.Error(err)
+	}
+	err = b.JawsSet(nil, "bar")
+	if err != nil {
+		t.Error(err)
+	}
 }
 
 func testBind_FloatSetter(t *testing.T, v Setter[float64]) {

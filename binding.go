@@ -30,11 +30,13 @@ func (bind binding[T]) JawsGetAny(elem *Element) (value any) {
 }
 
 func (bind binding[T]) JawsSetLocked(elem *Element, value T) (err error) {
-	if value == *bind.ptr {
-		return ErrValueUnchanged
+	if value != *bind.ptr {
+		if eq, ok := (any(bind.ptr)).(DeepEqualler[T]); !ok || !eq.DeepEqual(&value) {
+			*bind.ptr = value
+			return nil
+		}
 	}
-	*bind.ptr = value
-	return nil
+	return ErrValueUnchanged
 }
 
 func (bind binding[T]) JawsSet(elem *Element, value T) (err error) {
