@@ -288,9 +288,11 @@ func TestBindFunc_String(t *testing.T) {
 
 type stringEqualler string
 
-func (se *stringEqualler) DeepEqual(other *stringEqualler) (yes bool) {
-	return strings.EqualFold(string(*se), string(*other))
+func (se stringEqualler) DeepEqual(other stringEqualler) (yes bool) {
+	return strings.EqualFold(string(se), string(other))
 }
+
+var _ DeepEqualler[stringEqualler] = stringEqualler("")
 
 func TestBindFunc_Equaller(t *testing.T) {
 	var mu sync.Mutex
