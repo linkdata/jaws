@@ -314,6 +314,8 @@ function jawsVar(name, data, operation) {
 		var obj = window;
 		var lastkey = keys[keys.length - 1];
 		var i;
+		var path = keys.slice(1).join(".");
+		name = keys[0];
 		for (i = 0; i < keys.length - 1; i++) {
 			if (!obj.hasOwnProperty(keys[i])) {
 				throw "jaws: object undefined: " + name;
@@ -340,7 +342,7 @@ function jawsVar(name, data, operation) {
 				throw "jaws: unknown operation: " + operation;
 		}
 		if (jaws instanceof WebSocket && jaws.readyState === 1) {
-			jaws.send("Set\t" + window.jawsNames[name] + "\t" + JSON.stringify(data) + "\n");
+			jaws.send("Set\t" + window.jawsNames[name] + "\t" + path + "\t" + JSON.stringify(data) + "\n");
 		}
 		return data;
 	}
