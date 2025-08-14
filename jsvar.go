@@ -24,7 +24,7 @@ type JsVar[T any] struct {
 	value  *T
 }
 
-func (ui *JsVar[T]) JawsGet(elem *Element) (value T) {
+func (ui JsVar[T]) JawsGet(elem *Element) (value T) {
 	if ui.locker != nil {
 		if rwl, ok := ui.locker.(RWLocker); ok {
 			rwl.RLock()
@@ -40,7 +40,7 @@ func (ui *JsVar[T]) JawsGet(elem *Element) (value T) {
 	return
 }
 
-func (ui *JsVar[T]) JawsSet(elem *Element, value T) (err error) {
+func (ui JsVar[T]) JawsSet(elem *Element, value T) (err error) {
 	if ui.locker != nil {
 		ui.locker.Lock()
 		defer ui.locker.Unlock()
@@ -51,12 +51,12 @@ func (ui *JsVar[T]) JawsSet(elem *Element, value T) (err error) {
 }
 
 var (
-	_ IsJsVar     = &JsVar[int]{}
-	_ Setter[int] = &JsVar[int]{}
-	_ UI          = &JsVar[int]{}
+	_ IsJsVar     = JsVar[int]{}
+	_ Setter[int] = JsVar[int]{}
+	_ UI          = JsVar[int]{}
 )
 
-func (ui *JsVar[T]) AppendJSON(b []byte, e *Element) []byte {
+func (ui JsVar[T]) AppendJSON(b []byte, e *Element) []byte {
 	if data, err := json.Marshal(ui.JawsGet(e)); err == nil {
 		bytes.ReplaceAll(data, []byte(`'`), []byte(`\u0027`))
 		return append(b, data...)
@@ -65,7 +65,7 @@ func (ui *JsVar[T]) AppendJSON(b []byte, e *Element) []byte {
 	}
 }
 
-func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error) {
+func (ui JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error) {
 	if _, err = e.ApplyGetter(ui); err == nil {
 		jsvarname := params[0].(string)
 		attrs := e.ApplyParams(params[1:])
@@ -83,15 +83,15 @@ func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error
 	return
 }
 
-func (ui *JsVar[T]) JawsUpdate(e *Element) {
+func (ui JsVar[T]) JawsUpdate(e *Element) {
 	e.JsSet("", string(ui.AppendJSON(nil, e)))
 }
 
-func (ui *JsVar[T]) JawsGetTag(rq *Request) any {
+func (ui JsVar[T]) JawsGetTag(rq *Request) any {
 	return ui.value
 }
 
-func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) {
+func (ui JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
 	if wht == what.Set {
 		if jspath, jsval, found := strings.Cut(val, "\t"); found {
@@ -110,10 +110,10 @@ func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error)
 	return
 }
 
-func NewJsVar[T any](v *T, l sync.Locker) (jsvar *JsVar[T]) {
+func NewJsVar[T any](v *T, l sync.Locker) (jsvar JsVar[T]) {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() == reflect.Pointer && !rv.IsNil() {
-		return &JsVar[T]{locker: l, value: v}
+		return JsVar[T]{locker: l, value: v}
 	}
 	panic(fmt.Sprintf("expected non-nil pointer not %s", rv.Type().String()))
 }
