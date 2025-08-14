@@ -19,7 +19,7 @@ type IsJsVar interface {
 	AppendJSON(b []byte, e *Element) []byte
 }
 
-type JsVar[T comparable] struct {
+type JsVar[T any] struct {
 	locker sync.Locker
 	value  *T
 }
