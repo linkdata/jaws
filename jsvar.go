@@ -110,7 +110,7 @@ func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error)
 	return
 }
 
-func NewJsVar[T comparable](v *T, l sync.Locker) (jsvar *JsVar[T]) {
+func NewJsVar[T any](v *T, l sync.Locker) (jsvar *JsVar[T]) {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() == reflect.Pointer && !rv.IsNil() {
 		return &JsVar[T]{locker: l, value: v}
