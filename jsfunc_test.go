@@ -5,12 +5,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/linkdata/jaws/what"
 )
 
-type DotStruct struct {
+type testDotStruct struct {
 	Arg  IsJsVar
 	Retv IsJsVar
 }
@@ -26,14 +27,12 @@ func TestJsFunc_JawsRender(t *testing.T) {
 
 	var mu sync.RWMutex
 	var argval float64
-	argbind := Bind(&mu, &argval)
-	arg := NewJsVar(argbind)
+	arg := NewJsVar(&argval, &mu)
 
 	var retvval string
-	retvbind := Bind(&mu, &retvval)
-	retv := NewJsVar(retvbind)
+	retv := NewJsVar(&retvval, &mu)
 
-	dot := DotStruct{
+	dot := testDotStruct{
 		Arg:  arg,
 		Retv: retv,
 	}
@@ -65,6 +64,26 @@ func TestJsFunc_JawsRender(t *testing.T) {
 	}
 }
 
+type testLocker struct {
+	sync.Locker
+	unlockCalled chan struct{}
+	unlockCount  int32
+}
+
+func (tl *testLocker) reset() {
+	tl.unlockCalled = make(chan struct{})
+	atomic.StoreInt32(&tl.unlockCount, 0)
+}
+
+func (tl *testLocker) Unlock() {
+	tl.Locker.Unlock()
+	if atomic.AddInt32(&tl.unlockCount, 1) == 1 {
+		if tl.unlockCalled != nil {
+			close(tl.unlockCalled)
+		}
+	}
+}
+
 func TestJsFunc_JawsEvent(t *testing.T) {
 	th := newTestHelper(t)
 	nextJid = 0
@@ -72,14 +91,13 @@ func TestJsFunc_JawsEvent(t *testing.T) {
 	defer rq.Close()
 
 	var mu sync.RWMutex
+	argtl := testLocker{Locker: &mu, unlockCalled: make(chan struct{})}
 	var argval float64
-	argbind := Bind(&mu, &argval)
-	arg := NewJsVar(argbind)
+	arg := NewJsVar(&argval, &argtl)
 
 	var retvval string
-	rawbind := Bind(&mu, &retvval)
-	retvbind := &testBind[string]{Setter: rawbind, setCalled: make(chan struct{})}
-	retv := NewJsVar(retvbind)
+	retvtl := testLocker{Locker: &mu, unlockCalled: make(chan struct{})}
+	retv := NewJsVar(&retvval, &retvtl)
 
 	dot := NewJsFunc(arg, retv)
 	elem := rq.NewElement(dot)
@@ -97,13 +115,13 @@ func TestJsFunc_JawsEvent(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: `"sometext"`}:
+	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "\t\"sometext\""}:
 	}
 
 	select {
 	case <-th.C:
 		th.Timeout()
-	case <-retvbind.setCalled:
+	case <-retvtl.unlockCalled:
 	}
 
 	th.Equal(argval, float64(0))
@@ -112,7 +130,7 @@ func TestJsFunc_JawsEvent(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: `1.2`}:
+	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "\t1.2"}:
 	}
 
 	select {
@@ -120,16 +138,16 @@ func TestJsFunc_JawsEvent(t *testing.T) {
 		th.Timeout()
 	case msg := <-rq.outCh:
 		s := msg.Format()
-		if !strings.Contains(s, "cannot unmarshal") {
+		if !strings.Contains(s, "jq: expected string, not float64") {
 			th.Error(s)
 		}
 	}
 
-	vm := &varmaker{
+	/*vm := &varmaker{
 		val: "bar",
 		err: ErrValueUnchanged,
 	}
 	if err := rq.JsFunc("", arg, vm); err != ErrValueUnchanged {
 		t.Error(err)
-	}
+	}*/
 }

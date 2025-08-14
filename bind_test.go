@@ -277,7 +277,7 @@ func testBind_StringSetter(t *testing.T, v Setter[string]) {
 }
 
 func TestBindFunc_String(t *testing.T) {
-	var mu sync.Mutex
+	var mu sync.RWMutex
 	var val string
 
 	testBind_Hooks(t, "foo")

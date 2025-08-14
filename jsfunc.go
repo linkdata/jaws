@@ -9,7 +9,7 @@ import (
 
 type JsFunc struct {
 	Arg  IsJsVar
-	Retv IsJsVar
+	Retv EventHandler
 }
 
 func (ui JsFunc) JawsRender(e *Element, w io.Writer, params []any) (err error) {
@@ -40,35 +40,24 @@ func (ui JsFunc) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	return
 }
 
-func NewJsFunc(arg IsJsVar, retv IsJsVar) JsFunc {
+func NewJsFunc(arg IsJsVar, retv EventHandler) JsFunc {
 	return JsFunc{
 		Arg:  arg,
 		Retv: retv,
 	}
 }
 
-func (rq RequestWriter) JsFunc(jsfuncname string, getter any, params ...any) (err error) {
-	var arg IsJsVar
-	var retv IsJsVar
+func (rq RequestWriter) JsFunc(jsfuncname string, arg any, params ...any) (err error) {
+	var retv EventHandler
 	var newparams []any
-
-	if arg, err = makeJsVar(rq.Request(), getter); err == nil {
-		newparams = append(newparams, jsfuncname)
-		for _, param := range params {
-			if err == nil {
-				if vm, ok := param.(VarMaker); ok {
-					if param, err = vm.JawsVarMake(rq.Request()); err != nil {
-						return
-					}
-				}
-				if jsvar, ok := param.(IsJsVar); ok {
-					retv = jsvar
-				} else {
-					newparams = append(newparams, param)
-				}
-			}
+	newparams = append(newparams, jsfuncname)
+	for _, param := range params {
+		if jsvar, ok := param.(IsJsVar); ok {
+			retv = jsvar
+		} else {
+			newparams = append(newparams, param)
 		}
-		err = rq.UI(NewJsFunc(arg, retv), newparams...)
 	}
+	err = rq.UI(NewJsFunc(arg.(IsJsVar), retv), newparams...)
 	return
 }

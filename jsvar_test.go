@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/linkdata/jaws/what"
@@ -16,17 +15,6 @@ const varname = "myjsvar"
 type valtype struct {
 	String string
 	Number float64
-}
-
-type varmaker struct {
-	mu  sync.Mutex
-	val string
-	err error
-}
-
-func (vm *varmaker) JawsVarMake(rq *Request) (IsJsVar, error) {
-	bind := Bind(&vm.mu, &vm.val)
-	return NewJsVar(bind), vm.err
 }
 
 type variniter[T comparable] struct {
@@ -46,13 +34,21 @@ func Test_JsVar_JawsRender(t *testing.T) {
 
 	var mu sync.RWMutex
 	var val valtype
-	bind := Bind(&mu, &val)
-	jsv := NewJsVar(bind)
-	dot := &variniter[valtype]{JsVar: jsv}
+	jsv := NewJsVar(&val, &mu)
+	dot := jsv
 	elem := rq.NewElement(dot)
 
 	if err := dot.JawsSet(elem, valtype{String: "text", Number: 1.23}); err != nil {
 		t.Error(err)
+	}
+
+	if val.String != "text" {
+		t.Error(val)
+	}
+
+	x := dot.JawsGet(elem)
+	if !reflect.DeepEqual(x, val) {
+		t.Error(x)
 	}
 
 	if err := rq.Template("jsvartemplate", dot); err != nil {
@@ -64,52 +60,6 @@ func Test_JsVar_JawsRender(t *testing.T) {
 	if got != want {
 		t.Errorf("\n got: %q\nwant: %q\n", got, want)
 	}
-}
-
-func Test_JsVar_VarMaker(t *testing.T) {
-	rq := newTestRequest()
-	defer rq.Close()
-
-	nextJid = 0
-
-	dot := &varmaker{
-		val: "foo",
-	}
-	if err := rq.JsVar(varname, dot); err != nil {
-		t.Error(err)
-	}
-	got := string(rq.BodyHTML())
-	want := `<div id="Jid.1" data-jawsdata='"foo"' data-jawsname="myjsvar" hidden></div>`
-	if got != want {
-		t.Errorf("\n got: %q\nwant: %q\n", got, want)
-	}
-
-	dot = &varmaker{
-		val: "bar",
-		err: ErrValueUnchanged,
-	}
-	if err := rq.JsVar("", dot); err != ErrValueUnchanged {
-		t.Error(err)
-	}
-}
-
-type testBind[T comparable] struct {
-	Setter[T]
-	setCalled chan struct{}
-	setCount  int32
-}
-
-func (tb *testBind[T]) JawsGet(e *Element) (val T) {
-	val = tb.Setter.JawsGet(e)
-	return
-}
-
-func (tb *testBind[T]) JawsSet(e *Element, val T) (err error) {
-	err = tb.Setter.JawsSet(e, val)
-	if atomic.AddInt32(&tb.setCount, 1) == 1 {
-		close(tb.setCalled)
-	}
-	return
 }
 
 func Test_JsVar_Update(t *testing.T) {
@@ -124,13 +74,11 @@ func Test_JsVar_Update(t *testing.T) {
 	}
 	var mu sync.Mutex
 	var val valtype
+	dot := NewJsVar(&val, &mu)
 
-	rawbind := Bind(&mu, &val)
-	bind := &testBind[valtype]{Setter: rawbind, setCalled: make(chan struct{})}
 	rq := newTestRequest()
 	defer rq.Close()
 
-	dot := NewJsVar(bind)
 	elem := rq.NewElement(dot)
 	var sb strings.Builder
 	if err := dot.JawsRender(elem, &sb, []any{varname}); err != nil {
@@ -140,20 +88,17 @@ func Test_JsVar_Update(t *testing.T) {
 	if sb.String() != want {
 		t.Errorf("\n got %q\nwant %q\n", sb.String(), want)
 	}
-	if err := dot.JawsSet(elem, dot.JawsGet(elem)); err != ErrValueUnchanged {
-		t.Error(err)
-	}
 	if err := dot.JawsSet(elem, valtype{"x", 2}); err != nil {
 		t.Error(err)
 	}
-	rq.Dirty(dot.Setter)
+	rq.Dirty(dot)
 
 	select {
 	case <-th.C:
 		th.Timeout()
 	case gotMsg := <-rq.outCh:
 		wantMsg := wsMsg{
-			Data: `{"String":"x","Number":2}`,
+			Data: "\t{\"String\":\"x\",\"Number\":2}",
 			Jid:  1,
 			What: what.Set,
 		}
@@ -176,13 +121,12 @@ func Test_JsVar_Event(t *testing.T) {
 	}
 	var mu sync.Mutex
 	var val valtype
+	tl := testLocker{Locker: &mu, unlockCalled: make(chan struct{})}
+	dot := NewJsVar(&val, &tl)
 
-	rawbind := Bind(&mu, &val)
-	bind := &testBind[valtype]{Setter: rawbind, setCalled: make(chan struct{})}
 	rq := newTestRequest()
 	defer rq.Close()
 
-	dot := NewJsVar(bind)
 	elem := rq.NewElement(dot)
 	var sb strings.Builder
 	if err := dot.JawsRender(elem, &sb, []any{varname}); err != nil {
@@ -196,13 +140,20 @@ func Test_JsVar_Event(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: `{"String":"y","Number":3}`}:
+	case <-tl.unlockCalled:
+		tl.reset()
 	}
 
 	select {
 	case <-th.C:
 		th.Timeout()
-	case <-bind.setCalled:
+	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "\t{\"String\":\"y\",\"Number\":3}"}:
+	}
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case <-tl.unlockCalled:
 	}
 
 	th.Equal(val, valtype{"y", 3})
@@ -212,15 +163,15 @@ func Test_JsVar_Event(t *testing.T) {
 		th.Timeout()
 	case msg := <-rq.outCh:
 		s := msg.Format()
-		if s != "Set\tJid.1\t{\"String\":\"y\",\"Number\":3}\n" {
-			th.Error(s)
+		if s != "Set\tJid.1\t\t{\"String\":\"y\",\"Number\":3}\n" {
+			th.Fatal(s)
 		}
 	}
 
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: `1`}:
+	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "\t1"}:
 	}
 
 	select {
@@ -228,7 +179,7 @@ func Test_JsVar_Event(t *testing.T) {
 		th.Timeout()
 	case msg := <-rq.outCh:
 		s := msg.Format()
-		if !strings.Contains(s, "cannot unmarshal") {
+		if !strings.Contains(s, "jq: expected jaws.valtype, not float64") {
 			th.Error(s)
 		}
 	}
@@ -256,10 +207,19 @@ func Test_JsVar_AppendJSON_PanicsOnFailure(t *testing.T) {
 	var mu sync.Mutex
 	ch := make(chan int)
 
-	jsv := JsVar[chan int]{
-		Bind(&mu, &ch),
-	}
-	jsv.JawsIsJsVar()
+	jsv := NewJsVar(&ch, &mu)
 	jsv.AppendJSON(nil, nil)
+	t.Fail()
+}
+
+func Test_NewJsVar_PanicsOnFailure(t *testing.T) {
+	defer func() {
+		if x := recover(); x == nil {
+			t.Fail()
+		}
+	}()
+	var mu sync.Mutex
+	var x *int
+	_ = NewJsVar(x, &mu)
 	t.Fail()
 }
