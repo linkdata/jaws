@@ -12,20 +12,26 @@ import (
 	"github.com/linkdata/jq"
 )
 
-type IsJsVar interface {
+type isJsVar interface {
+	UI
 	EventHandler
 	AppendJSON(b []byte, e *Element) []byte
 }
 
+var (
+	_ isJsVar     = JsVar[int]{}
+	_ Setter[int] = JsVar[int]{}
+)
+
 type JsVar[T any] struct {
 	RWLocker
-	value *T
+	ptr *T
 }
 
 func (ui JsVar[T]) JawsGet(elem *Element) (value T) {
 	ui.RLock()
 	defer ui.RUnlock()
-	pvalue, _ := jq.GetAs[*T](ui.value, "")
+	pvalue, _ := jq.GetAs[*T](ui.ptr, "")
 	value = *pvalue
 	return
 }
@@ -33,15 +39,9 @@ func (ui JsVar[T]) JawsGet(elem *Element) (value T) {
 func (ui JsVar[T]) JawsSet(elem *Element, value T) (err error) {
 	ui.Lock()
 	defer ui.Unlock()
-	err = jq.Set(ui.value, "", value)
+	err = jq.Set(ui.ptr, "", value)
 	return
 }
-
-var (
-	_ IsJsVar     = JsVar[int]{}
-	_ Setter[int] = JsVar[int]{}
-	_ UI          = JsVar[int]{}
-)
 
 func (ui JsVar[T]) AppendJSON(b []byte, e *Element) []byte {
 	if data, err := json.Marshal(ui.JawsGet(e)); err == nil {
@@ -75,7 +75,7 @@ func (ui JsVar[T]) JawsUpdate(e *Element) {
 }
 
 func (ui JsVar[T]) JawsGetTag(rq *Request) any {
-	return ui.value
+	return ui.ptr
 }
 
 func (ui JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) {
@@ -86,7 +86,7 @@ func (ui JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) 
 			if err = json.Unmarshal([]byte(jsval), &v); err == nil {
 				ui.Lock()
 				defer ui.Unlock()
-				if err = jq.Set(ui.value, jspath, v); err == nil {
+				if err = jq.Set(ui.ptr, jspath, v); err == nil {
 					e.Dirty(ui)
 				}
 			}
@@ -97,9 +97,9 @@ func (ui JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) 
 
 func NewJsVar[T any](l sync.Locker, v *T) JsVar[T] {
 	if rl, ok := l.(RWLocker); ok {
-		return JsVar[T]{RWLocker: rl, value: v}
+		return JsVar[T]{RWLocker: rl, ptr: v}
 	}
-	return JsVar[T]{RWLocker: rwlocker{l}, value: v}
+	return JsVar[T]{RWLocker: rwlocker{l}, ptr: v}
 }
 
 // JsVar binds a JsVar[T] to a named Javascript variable.

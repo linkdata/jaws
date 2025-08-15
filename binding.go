@@ -25,10 +25,6 @@ func (bind binding[T]) JawsGet(elem *Element) (value T) {
 	return
 }
 
-func (bind binding[T]) JawsGetAny(elem *Element) (value any) {
-	return bind.JawsGet(elem)
-}
-
 func (bind binding[T]) JawsSetLocked(elem *Element, value T) (err error) {
 	if value != *bind.ptr {
 		*bind.ptr = value
@@ -42,10 +38,6 @@ func (bind binding[T]) JawsSet(elem *Element, value T) (err error) {
 	err = bind.JawsSetLocked(elem, value)
 	bind.RWLocker.Unlock()
 	return
-}
-
-func (bind binding[T]) JawsSetAny(elem *Element, value any) (err error) {
-	return bind.JawsSet(elem, value.(T))
 }
 
 func (bind binding[T]) JawsGetTag(*Request) any {

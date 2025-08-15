@@ -1,6 +1,11 @@
 package jaws
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+var ErrValueNotSettable = errors.New("value not settable")
 
 type Getter[T comparable] interface {
 	JawsGet(elem *Element) (value T)

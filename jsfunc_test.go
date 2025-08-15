@@ -12,8 +12,8 @@ import (
 )
 
 type testDotStruct struct {
-	Arg  IsJsVar
-	Retv IsJsVar
+	Arg  isJsVar
+	Retv isJsVar
 }
 
 func TestJsFunc_JawsRender(t *testing.T) {

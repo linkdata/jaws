@@ -152,7 +152,6 @@ func testBind_Hook_Success[T comparable](t *testing.T, testval T) {
 func testBind_Hook_Set[T comparable](t *testing.T, testval T) {
 	var mu sync.Mutex
 	var val T
-	var blankval T
 
 	calls1 := 0
 	bind1 := Bind(&mu, &val).
@@ -183,13 +182,16 @@ func testBind_Hook_Set[T comparable](t *testing.T, testval T) {
 			calls2++
 			return bind.JawsSetLocked(elem, value)
 		})
-	if err := bind2.JawsSetAny(nil, blankval); err != nil {
-		t.Error(err)
-	}
-	if calls1 != 3 {
+
+	/*
+		var blankval T
+		if err := bind2.JawsSetAny(nil, blankval); err != nil {
+			t.Error(err)
+		}*/
+	if calls1 != 2 {
 		t.Error(calls1)
 	}
-	if calls2 != 1 {
+	if calls2 != 0 {
 		t.Error(calls2)
 	}
 	tags2 := MustTagExpand(nil, bind2)
@@ -201,7 +203,6 @@ func testBind_Hook_Set[T comparable](t *testing.T, testval T) {
 func testBind_Hook_Get[T comparable](t *testing.T, testval T) {
 	var mu sync.Mutex
 	var val T
-	var blankval T
 
 	calls1 := 0
 	bind1 := Bind(&mu, &val).
@@ -232,16 +233,18 @@ func testBind_Hook_Get[T comparable](t *testing.T, testval T) {
 			calls2++
 			return bind.JawsGetLocked(elem)
 		})
+	var blankval T
 	if err := bind2.JawsSet(nil, blankval); err != nil {
 		t.Error(err)
 	}
-	if x := bind2.JawsGetAny(nil); x != blankval {
-		t.Error(x)
-	}
-	if calls1 != 2 {
+	/*
+		if x := bind2.JawsGetAny(nil); x != blankval {
+			t.Error(x)
+		}*/
+	if calls1 != 1 {
 		t.Error(calls1)
 	}
-	if calls2 != 1 {
+	if calls2 != 0 {
 		t.Error(calls2)
 	}
 	tags2 := MustTagExpand(nil, bind2)
@@ -264,16 +267,6 @@ func testBind_StringSetter(t *testing.T, v Setter[string]) {
 	if x := v.JawsGet(nil); x != val {
 		t.Error(x)
 	}
-	as := v.(AnySetter)
-	if x := as.JawsGetAny(nil); x != val {
-		t.Error(x)
-	}
-	if err := as.JawsSetAny(nil, val+"?"); err != nil {
-		t.Error(err)
-	}
-	if x := as.JawsGetAny(nil); x != val+"?" {
-		t.Error(x)
-	}
 }
 
 func TestBindFunc_String(t *testing.T) {
@@ -293,7 +286,7 @@ func testBind_FloatSetter(t *testing.T, v Setter[float64]) {
 	if x := v.JawsGet(nil); x != val {
 		t.Error(x)
 	}
-	as := v.(AnySetter)
+	/*as := v.(AnySetter)
 	if x := as.JawsGetAny(nil); x != val {
 		t.Error(x)
 	}
@@ -302,7 +295,7 @@ func testBind_FloatSetter(t *testing.T, v Setter[float64]) {
 	}
 	if x := as.JawsGetAny(nil); x != val+1 {
 		t.Error(x)
-	}
+	}*/
 }
 
 func TestBindFunc_Float(t *testing.T) {
@@ -322,7 +315,7 @@ func testBind_BoolSetter(t *testing.T, v Setter[bool]) {
 	if x := v.JawsGet(nil); x != val {
 		t.Error(x)
 	}
-	as := v.(AnySetter)
+	/*as := v.(AnySetter)
 	if x := as.JawsGetAny(nil); x != val {
 		t.Error(x)
 	}
@@ -331,7 +324,7 @@ func testBind_BoolSetter(t *testing.T, v Setter[bool]) {
 	}
 	if x := as.JawsGetAny(nil); x != !val {
 		t.Error(x)
-	}
+	}*/
 }
 
 func TestBindFunc_Bool(t *testing.T) {
@@ -351,7 +344,7 @@ func testBind_TimeSetter(t *testing.T, v Setter[time.Time]) {
 	if x := v.JawsGet(nil); x != val {
 		t.Error(x)
 	}
-	as := v.(AnySetter)
+	/*as := v.(AnySetter)
 	if x := as.JawsGetAny(nil); x != val {
 		t.Error(x)
 	}
@@ -360,7 +353,7 @@ func testBind_TimeSetter(t *testing.T, v Setter[time.Time]) {
 	}
 	if x := as.JawsGetAny(nil); x != val.Add(time.Second) {
 		t.Error(x)
-	}
+	}*/
 }
 
 func TestBindFunc_Time(t *testing.T) {
@@ -378,7 +371,7 @@ func TestBindFormat(t *testing.T) {
 
 	bind := Bind(&mu, &val)
 	if v := MakeHTMLGetter(bind).JawsGetHTML(nil); v != "12" {
-		t.Errorf("%q", v)
+		t.Errorf("%T %#v", v, v)
 	}
 
 	getter := bind.Format("%3v")

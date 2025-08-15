@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-type testAnySetter struct {
+/*type testAnySetter struct {
 	Value any
 }
 
@@ -19,19 +19,17 @@ func (ag *testAnySetter) JawsGetAny(*Element) any {
 func (ag *testAnySetter) JawsSetAny(e *Element, v any) error {
 	ag.Value = v
 	return nil
-}
+}*/
 
 func Test_MakeHTMLGetter(t *testing.T) {
 	untypedText := "<span>"
 	typedText := template.HTML(untypedText)
-	escapedTypedText := template.HTML(html.EscapeString(untypedText))
 	var avUntyped, avTyped atomic.Value
 	avUntyped.Store(untypedText)
 	avTyped.Store(typedText)
 	stringer := testStringer{}
 
 	getterString := testGetterString{}
-	getterAny := &testAnySetter{Value: untypedText}
 
 	tests := []struct {
 		name string
@@ -54,13 +52,13 @@ func Test_MakeHTMLGetter(t *testing.T) {
 			out:  template.HTML(html.EscapeString(getterString.JawsGet(nil))),
 			tag:  getterString,
 		},
-		{
+		/*{
 			name: "Getter[any]",
 			v:    getterAny,
 			want: htmlGetterAny{getterAny},
 			out:  escapedTypedText,
 			tag:  getterAny,
-		},
+		},*/
 		{
 			name: "fmt.Stringer",
 			v:    stringer,

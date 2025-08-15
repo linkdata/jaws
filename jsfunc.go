@@ -8,7 +8,7 @@ import (
 )
 
 type JsFunc struct {
-	Arg  IsJsVar
+	Arg  isJsVar
 	Retv EventHandler
 }
 
@@ -40,7 +40,7 @@ func (ui JsFunc) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	return
 }
 
-func NewJsFunc(arg IsJsVar, retv EventHandler) JsFunc {
+func NewJsFunc(arg isJsVar, retv EventHandler) JsFunc {
 	return JsFunc{
 		Arg:  arg,
 		Retv: retv,
@@ -52,12 +52,12 @@ func (rq RequestWriter) JsFunc(jsfuncname string, arg any, params ...any) (err e
 	var newparams []any
 	newparams = append(newparams, jsfuncname)
 	for _, param := range params {
-		if jsvar, ok := param.(IsJsVar); ok {
+		if jsvar, ok := param.(isJsVar); ok {
 			retv = jsvar
 		} else {
 			newparams = append(newparams, param)
 		}
 	}
-	err = rq.UI(NewJsFunc(arg.(IsJsVar), retv), newparams...)
+	err = rq.UI(NewJsFunc(arg.(isJsVar), retv), newparams...)
 	return
 }

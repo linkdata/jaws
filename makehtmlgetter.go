@@ -36,17 +36,6 @@ func (g htmlGetterString) JawsGetTag(rq *Request) any {
 	return g.sg
 }
 
-type htmlGetterAny struct{ ag AnyGetter }
-
-func (g htmlGetterAny) JawsGetHTML(e *Element) template.HTML {
-	s := fmt.Sprint(g.ag.JawsGetAny(e))
-	return template.HTML(html.EscapeString(s)) // #nosec G203
-}
-
-func (g htmlGetterAny) JawsGetTag(rq *Request) any {
-	return g.ag
-}
-
 // MakeHTMLGetter returns a HTMLGetter for v.
 //
 // Depending on the type of v, we return:
@@ -61,16 +50,16 @@ func MakeHTMLGetter(v any) HTMLGetter {
 	switch v := v.(type) {
 	case HTMLGetter:
 		return v
-	case Getter[string]:
-		return htmlGetterString{v}
-	case AnyGetter:
-		return htmlGetterAny{v}
-	case fmt.Stringer:
-		return htmlStringerGetter{v}
 	case template.HTML:
 		return htmlGetter{v}
+	case Getter[string]:
+		return htmlGetterString{v}
+	case fmt.Stringer:
+		return htmlStringerGetter{v}
 	case string:
 		return htmlGetter{template.HTML(v)} // #nosec G203
+	case Formatter:
+		return htmlGetterString{v.Format("%v")}
 	default:
 		return htmlGetter{template.HTML(html.EscapeString(fmt.Sprint(v)))} // #nosec G203
 	}

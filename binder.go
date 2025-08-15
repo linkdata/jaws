@@ -27,11 +27,16 @@ type BindGetHook[T comparable] func(bind Binder[T], elem *Element) (value T)
 // no more success hooks are called.
 type BindSuccessHook func(*Element) (err error)
 
+type Formatter interface {
+	// Format returns a Getter[string] using fmt.Sprintf(f, JawsGet[T](elem))
+	Format(f string) (getter Getter[string])
+}
+
 type Binder[T comparable] interface {
 	RWLocker
 	Setter[T]
-	AnySetter
 	TagGetter
+	Formatter
 
 	JawsBinderPrev() Binder[T] // returns the previous Binder in the chain, or nil
 	JawsGetLocked(elem *Element) (value T)
@@ -65,9 +70,6 @@ type Binder[T comparable] interface {
 	//  * func(*Element)
 	//  * func(*Element) error
 	Success(fn any) (newbind Binder[T])
-
-	// Format returns a Getter[string] using fmt.Sprintf(f, JawsGet[T](elem))
-	Format(f string) (getter Getter[string])
 
 	// FormatHTML returns a HTMLGetter using fmt.Sprintf(f, JawsGet[T](elem))
 	FormatHTML(f string) (getter HTMLGetter)

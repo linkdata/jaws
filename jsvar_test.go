@@ -22,7 +22,7 @@ type variniter[T comparable] struct {
 }
 
 var (
-	_ IsJsVar = &variniter[int]{}
+	_ isJsVar = &variniter[int]{}
 )
 
 func Test_JsVar_JawsRender(t *testing.T) {

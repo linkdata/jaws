@@ -27,10 +27,6 @@ func (bind bindingHook[T]) JawsGet(elem *Element) T {
 	return bind.JawsGetLocked(elem)
 }
 
-func (bind bindingHook[T]) JawsGetAny(elem *Element) (value any) {
-	return bind.JawsGet(elem)
-}
-
 func (bind bindingHook[T]) JawsSetLocked(elem *Element, value T) error {
 	if fn, ok := bind.hook.(BindSetHook[T]); ok {
 		return fn(bind.Binder, elem, value)
@@ -63,10 +59,6 @@ func (bind bindingHook[T]) JawsSet(elem *Element, value T) (err error) {
 		err = callSuccess(bind, elem)
 	}
 	return
-}
-
-func (bind bindingHook[T]) JawsSetAny(elem *Element, value any) error {
-	return bind.JawsSet(elem, value.(T))
 }
 
 // SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
