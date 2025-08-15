@@ -7,13 +7,9 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/what"
 )
-
-type testDotStruct struct {
-	Arg  IsJsVar
-	Retv IsJsVar
-}
 
 func TestJsFunc_JawsRender(t *testing.T) {
 	th := newTestHelper(t)
@@ -22,31 +18,24 @@ func TestJsFunc_JawsRender(t *testing.T) {
 	defer rq.Close()
 
 	nextJid = 0
-	rq.jw.AddTemplateLookuper(template.Must(template.New("jsfunctemplate").Parse(`{{$.JsFunc "somefn" .Dot.Arg .Dot.Retv "someattr"}}`)))
+	rq.jw.AddTemplateLookuper(template.Must(template.New("jsfunctemplate").Parse(`{{$.JsFunc .Dot "someattr"}}`)))
 
-	var mu sync.RWMutex
+	var mu deadlock.RWMutex
 	var argval float64
-	arg := NewJsVar(&mu, &argval)
+	arg := Bind(&mu, &argval)
 
 	var retvval string
-	retv := NewJsVar(&mu, &retvval)
+	retv := Bind(&mu, &retvval)
+	dot := NewJsFunc("somefn", arg, retv)
 
-	dot := testDotStruct{
-		Arg:  arg,
-		Retv: retv,
-	}
-
-	elem := rq.NewElement(arg)
+	elem := rq.NewElement(dot)
 
 	if err := rq.Template("jsfunctemplate", dot); err != nil {
 		t.Error(err)
 	}
 
 	got := string(rq.BodyHTML())
-	want := `<div id="Jid.3" data-jawsname="somefn" someattr hidden></div>`
-	if got != want {
-		t.Errorf("\n got: %q\nwant: %q\n", got, want)
-	}
+	th.Equal(got, "\n"+`<div id="Jid.3" data-jawsname="somefn" someattr hidden></div>`+"\n")
 
 	arg.JawsSet(elem, 1.3)
 	rq.Dirty(arg)
@@ -86,25 +75,23 @@ func TestJsFunc_JawsEvent(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 
-	var mu sync.RWMutex
-	argtl := testLocker{Locker: &mu, unlockCalled: make(chan struct{})}
+	var mu deadlock.RWMutex
 	var argval float64
-	arg := NewJsVar(&argtl, &argval)
+	argtl := testLocker{Locker: &mu, unlockCalled: make(chan struct{})}
+	arg := Bind(&argtl, &argval)
 
 	var retvval string
 	retvtl := testLocker{Locker: &mu, unlockCalled: make(chan struct{})}
-	retv := NewJsVar(&retvtl, &retvval)
+	retv := Bind(&retvtl, &retvval)
 
-	dot := NewJsFunc(arg, retv)
+	dot := NewJsFunc("fnname", arg, retv)
 	elem := rq.NewElement(dot)
 	var sb strings.Builder
-	if err := dot.JawsRender(elem, &sb, []any{"fnname"}); err != nil {
+	if err := dot.JawsRender(elem, &sb, nil); err != nil {
 		t.Fatal(err)
 	}
-	wantHTML := "<div id=\"Jid.1\" data-jawsname=\"fnname\" hidden></div>"
-	if gotHTML := sb.String(); gotHTML != wantHTML {
-		t.Errorf("\n got %q\nwant %q\n", gotHTML, wantHTML)
-	}
+	wantHTML := "\n<div id=\"Jid.1\" data-jawsname=\"fnname\" hidden></div>\n"
+	th.Equal(sb.String(), wantHTML)
 
 	th.Equal(retvval, "")
 
@@ -134,16 +121,8 @@ func TestJsFunc_JawsEvent(t *testing.T) {
 		th.Timeout()
 	case msg := <-rq.outCh:
 		s := msg.Format()
-		if !strings.Contains(s, "jq: expected string, not float64") {
+		if !strings.Contains(s, "cannot unmarshal number") {
 			th.Error(s)
 		}
 	}
-
-	/*vm := &varmaker{
-		val: "bar",
-		err: ErrValueUnchanged,
-	}
-	if err := rq.JsFunc("", arg, vm); err != ErrValueUnchanged {
-		t.Error(err)
-	}*/
 }

@@ -5,9 +5,9 @@ import (
 	"html/template"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 
+	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -33,7 +33,7 @@ func Test_JsVar_JawsRender(t *testing.T) {
 	nextJid = 0
 	rq.jw.AddTemplateLookuper(template.Must(template.New("jsvartemplate").Parse(`{{$.JsVar "` + varname + `" .Dot}}`)))
 
-	var mu sync.RWMutex
+	var mu deadlock.RWMutex
 	var val valtype
 	jsv := NewJsVar(&mu, &val)
 	dot := jsv
@@ -73,7 +73,7 @@ func Test_JsVar_Update(t *testing.T) {
 		String string
 		Number float64
 	}
-	var mu sync.Mutex
+	var mu deadlock.Mutex
 	var val valtype
 	dot := NewJsVar(&mu, &val)
 
@@ -120,7 +120,7 @@ func Test_JsVar_Event(t *testing.T) {
 		String string
 		Number float64
 	}
-	var mu sync.Mutex
+	var mu deadlock.Mutex
 	var val valtype
 	tl := testLocker{Locker: &mu, unlockCalled: make(chan struct{})}
 	dot := NewJsVar(&tl, &val)
@@ -142,8 +142,9 @@ func Test_JsVar_Event(t *testing.T) {
 	case <-th.C:
 		th.Timeout()
 	case <-tl.unlockCalled:
-		tl.reset()
 	}
+
+	tl.reset()
 
 	select {
 	case <-th.C:
@@ -171,6 +172,8 @@ func Test_JsVar_Event(t *testing.T) {
 			err := json.Unmarshal([]byte(after), &x)
 			th.NoErr(err)
 			th.Equal(x, valtype{"y", 3})
+		} else {
+			t.Fatalf("%q", s)
 		}
 	}
 
@@ -210,11 +213,11 @@ func Test_JsVar_AppendJSON_PanicsOnFailure(t *testing.T) {
 			t.Fail()
 		}
 	}()
-	var mu sync.Mutex
+	var mu deadlock.Mutex
 	ch := make(chan int)
 
 	jsv := NewJsVar(&mu, &ch)
-	jsv.AppendJSON(nil, nil)
+	jsv.AppendJSONLocked(nil, nil)
 	t.Fail()
 }
 
@@ -223,7 +226,7 @@ type testVarMaker struct {
 
 // JawsMakeJsVar implements JsVarMaker.
 func (t *testVarMaker) JawsMakeJsVar(rq *Request) (v IsJsVar, err error) {
-	var mu sync.Mutex
+	var mu deadlock.Mutex
 	val := "quote(')"
 	return NewJsVar(&mu, &val), nil
 }

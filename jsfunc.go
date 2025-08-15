@@ -1,63 +1,79 @@
 package jaws
 
 import (
+	"encoding/json"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/linkdata/jaws/what"
 )
 
-type JsFunc struct {
-	Arg  IsJsVar
-	Retv EventHandler
+type IsJsFunc interface {
+	UI
+	IsJsFunc()
 }
 
-func (ui JsFunc) JawsRender(e *Element, w io.Writer, params []any) (err error) {
+type JsFunc[T, U comparable] struct {
+	Name string
+	Arg  Binder[T]
+	Retv Binder[U]
+}
+
+var _ IsJsFunc = JsFunc[int, int]{}
+
+func (ui JsFunc[T, U]) IsJsFunc() {}
+
+func (ui JsFunc[T, U]) JawsRender(e *Element, w io.Writer, params []any) (err error) {
 	if _, err = e.ApplyGetter(ui.Arg); err == nil {
-		jsvarname := params[0].(string)
-		attrs := e.ApplyParams(params[1:])
+		attrs := e.ApplyParams(params)
 		var b []byte
-		b = append(b, `<div id=`...)
+		b = append(b, "\n"+`<div id=`...)
 		b = e.Jid().AppendQuote(b)
 		b = append(b, ` data-jawsname=`...)
-		b = strconv.AppendQuote(b, jsvarname)
+		b = strconv.AppendQuote(b, ui.Name)
 		b = appendAttrs(b, attrs)
-		b = append(b, ` hidden></div>`...)
+		b = append(b, ` hidden></div>`+"\n"...)
 		_, err = w.Write(b)
 	}
 	return
 }
 
-func (ui JsFunc) JawsUpdate(e *Element) {
-	e.JsCall(string(ui.Arg.AppendJSON(nil, e)))
+func (ui JsFunc[T, U]) JawsUpdate(e *Element) {
+	v := ui.Arg.JawsGet(e)
+	b, err := json.Marshal(v)
+	if e.Jaws.Log(err) == nil {
+		e.JsCall(string(b))
+	}
 }
 
-func (ui JsFunc) JawsEvent(e *Element, wht what.What, val string) (err error) {
+func (ui JsFunc[T, U]) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
-	if ui.Retv != nil {
-		err = ui.Retv.JawsEvent(e, wht, val)
+	if wht == what.Set {
+		if _, jsval, found := strings.Cut(val, "="); found {
+			var v U
+			if err = json.Unmarshal([]byte(jsval), &v); err == nil {
+				err = ui.Retv.JawsSet(e, v)
+			}
+		}
 	}
 	return
 }
 
-func NewJsFunc(arg IsJsVar, retv EventHandler) JsFunc {
-	return JsFunc{
+func NewJsFunc[T, U comparable](name string, arg Binder[T], retv Binder[U]) JsFunc[T, U] {
+	return JsFunc[T, U]{
+		Name: name,
 		Arg:  arg,
 		Retv: retv,
 	}
 }
 
-func (rq RequestWriter) JsFunc(jsfuncname string, arg any, params ...any) (err error) {
-	var retv EventHandler
-	var newparams []any
-	newparams = append(newparams, jsfuncname)
-	for _, param := range params {
-		if jsvar, ok := param.(IsJsVar); ok {
-			retv = jsvar
-		} else {
-			newparams = append(newparams, param)
-		}
+func (rq RequestWriter) JsFunc(arg any, params ...any) (err error) {
+	var jsfunc IsJsFunc
+	switch arg := arg.(type) {
+	case IsJsFunc:
+		jsfunc = arg
 	}
-	err = rq.UI(NewJsFunc(arg.(IsJsVar), retv), newparams...)
+	err = rq.UI(jsfunc, params...)
 	return
 }

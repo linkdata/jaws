@@ -16,16 +16,11 @@ type IsJsVar interface {
 	RWLocker
 	UI
 	EventHandler
-	AppendJSON(b []byte, e *Element) []byte
+	AppendJSONLocked(b []byte, e *Element) []byte
 }
 
 type JsVarMaker interface {
 	JawsMakeJsVar(rq *Request) (v IsJsVar, err error)
-}
-
-type jsChange struct {
-	path  string
-	value any
 }
 
 var (
@@ -35,8 +30,7 @@ var (
 
 type JsVar[T any] struct {
 	RWLocker
-	ptr     *T
-	changes []jsChange
+	ptr *T
 }
 
 func (ui *JsVar[T]) JawsGet(elem *Element) (value T) {
@@ -52,15 +46,13 @@ func (ui *JsVar[T]) JawsSet(elem *Element, value T) (err error) {
 	defer ui.Unlock()
 	var changed bool
 	if changed, err = jq.Set(ui.ptr, "", value); changed {
-		ui.changes = ui.changes[:0]
-		ui.changes = append(ui.changes, jsChange{"", value})
-		elem.Dirty(ui)
+		elem.JsSet("", string(ui.AppendJSONLocked(nil, elem)))
 	}
 	return
 }
 
-func (ui *JsVar[T]) AppendJSON(b []byte, e *Element) []byte {
-	if data, err := json.Marshal(ui.JawsGet(e)); err == nil {
+func (ui *JsVar[T]) AppendJSONLocked(b []byte, e *Element) []byte {
+	if data, err := json.Marshal(ui.ptr); err == nil {
 		return append(b, data...)
 	} else {
 		panic(err)
@@ -68,6 +60,8 @@ func (ui *JsVar[T]) AppendJSON(b []byte, e *Element) []byte {
 }
 
 func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error) {
+	ui.Lock()
+	defer ui.Unlock()
 	if _, err = e.ApplyGetter(ui); err == nil {
 		jsvarname := params[0].(string)
 		attrs := e.ApplyParams(params[1:])
@@ -77,7 +71,7 @@ func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error
 		b = append(b, ` data-jawsname=`...)
 		b = strconv.AppendQuote(b, jsvarname)
 		b = append(b, ` data-jawsdata='`...)
-		b = append(b, bytes.ReplaceAll(ui.AppendJSON(nil, e), []byte(`'`), []byte(`\u0027`))...)
+		b = append(b, bytes.ReplaceAll(ui.AppendJSONLocked(nil, e), []byte(`'`), []byte(`\u0027`))...)
 		b = append(b, "'"...)
 		b = appendAttrs(b, attrs)
 		b = append(b, ` hidden></div>`...)
@@ -87,15 +81,17 @@ func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error
 }
 
 func (ui *JsVar[T]) JawsUpdate(e *Element) {
-	ui.Lock()
-	defer ui.Unlock()
-	for _, change := range ui.changes {
-		b, err := json.Marshal(change.value)
-		if e.Jaws.Log(err) == nil {
-			e.JsSet(change.path, string(b))
+	/*
+		ui.Lock()
+		defer ui.Unlock()
+		for _, change := range ui.changes {
+			b, err := json.Marshal(change.value)
+			if e.Jaws.Log(err) == nil {
+				e.JsSet(change.path, string(b))
+			}
 		}
-	}
-	ui.changes = ui.changes[:0]
+		ui.changes = ui.changes[:0]
+	*/
 }
 
 func (ui *JsVar[T]) JawsGetTag(rq *Request) any {
@@ -111,8 +107,8 @@ func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error)
 				ui.Lock()
 				defer ui.Unlock()
 				var changed bool
-				if changed, err = jq.Set(ui.ptr, jspath, v); changed {
-					ui.changes = append(ui.changes, jsChange{jspath, v})
+				if changed, err = jq.Set(ui.ptr, jspath, v); changed && err == nil {
+					e.JsSet(jspath, jsval)
 					e.Dirty(ui)
 				}
 			}

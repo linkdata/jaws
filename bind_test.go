@@ -3,9 +3,10 @@ package jaws
 import (
 	"io"
 	"reflect"
-	"sync"
 	"testing"
 	"time"
+
+	"github.com/linkdata/deadlock"
 )
 
 func TestBind_Hook_Success_panic(t *testing.T) {
@@ -14,14 +15,14 @@ func TestBind_Hook_Success_panic(t *testing.T) {
 			t.Fail()
 		}
 	}()
-	var mu sync.Mutex
+	var mu deadlock.Mutex
 	var val string
 	Bind(&mu, &val).Success(func(n int) {})
 	t.Fail()
 }
 
 func TestBind_Hook_Success_breaksonerr(t *testing.T) {
-	var mu sync.Mutex
+	var mu deadlock.Mutex
 	var val string
 
 	calls1 := 0
@@ -53,7 +54,7 @@ func TestBind_Hook_Success_breaksonerr(t *testing.T) {
 }
 
 func testBind_Hook_Success[T comparable](t *testing.T, testval T) {
-	var mu sync.Mutex
+	var mu deadlock.Mutex
 	var val T
 	var blankval T
 
@@ -150,7 +151,7 @@ func testBind_Hook_Success[T comparable](t *testing.T, testval T) {
 }
 
 func testBind_Hook_Set[T comparable](t *testing.T, testval T) {
-	var mu sync.Mutex
+	var mu deadlock.Mutex
 	var val T
 
 	calls1 := 0
@@ -201,7 +202,7 @@ func testBind_Hook_Set[T comparable](t *testing.T, testval T) {
 }
 
 func testBind_Hook_Get[T comparable](t *testing.T, testval T) {
-	var mu sync.Mutex
+	var mu deadlock.Mutex
 	var val T
 
 	calls1 := 0
@@ -270,7 +271,7 @@ func testBind_StringSetter(t *testing.T, v Setter[string]) {
 }
 
 func TestBindFunc_String(t *testing.T) {
-	var mu sync.RWMutex
+	var mu deadlock.RWMutex
 	var val string
 
 	testBind_Hooks(t, "foo")
@@ -299,7 +300,7 @@ func testBind_FloatSetter(t *testing.T, v Setter[float64]) {
 }
 
 func TestBindFunc_Float(t *testing.T) {
-	var mu sync.Mutex
+	var mu deadlock.Mutex
 	var val float64
 
 	testBind_Hooks(t, float64(1.23))
@@ -328,7 +329,7 @@ func testBind_BoolSetter(t *testing.T, v Setter[bool]) {
 }
 
 func TestBindFunc_Bool(t *testing.T) {
-	var mu sync.Mutex
+	var mu deadlock.Mutex
 	var val bool
 
 	testBind_Hooks(t, true)
@@ -357,7 +358,7 @@ func testBind_TimeSetter(t *testing.T, v Setter[time.Time]) {
 }
 
 func TestBindFunc_Time(t *testing.T) {
-	var mu sync.Mutex
+	var mu deadlock.Mutex
 	var val time.Time
 
 	testBind_Hooks(t, time.Now())
@@ -366,7 +367,7 @@ func TestBindFunc_Time(t *testing.T) {
 }
 
 func TestBindFormat(t *testing.T) {
-	var mu sync.Mutex
+	var mu deadlock.Mutex
 	val := 12
 
 	bind := Bind(&mu, &val)
@@ -395,7 +396,7 @@ func TestBindFormat(t *testing.T) {
 }
 
 func TestBindFormatHTML(t *testing.T) {
-	var mu sync.Mutex
+	var mu deadlock.Mutex
 	val := "<span>"
 
 	bind := Bind(&mu, &val)
