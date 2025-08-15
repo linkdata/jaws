@@ -23,7 +23,7 @@ type Element struct {
 }
 
 func (e *Element) String() string {
-	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", e.UI(), e.Jid(), e.Request.TagsOf(e))
+	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", e.Ui(), e.Jid(), e.Request.TagsOf(e))
 }
 
 // Tag adds the given tags to the Element.
@@ -43,8 +43,8 @@ func (e *Element) Jid() jid.Jid {
 	return e.jid
 }
 
-// UI returns the UI object.
-func (e *Element) UI() UI {
+// Ui returns the UI object.
+func (e *Element) Ui() UI {
 	return e.ui
 }
 
@@ -61,7 +61,7 @@ func (e *Element) maybeDirty(tag any, err error) (bool, error) {
 
 func (e *Element) renderDebug(w io.Writer) {
 	var sb strings.Builder
-	_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", e.Jid(), e.UI())
+	_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", e.Jid(), e.Ui())
 	if e.mu.TryRLock() {
 		defer e.mu.RUnlock()
 		for i, tag := range e.tagsOfLocked(e) {
@@ -82,7 +82,7 @@ func (e *Element) renderDebug(w io.Writer) {
 // Do not call this yourself unless it's from within another JawsRender implementation.
 func (e *Element) JawsRender(w io.Writer, params []any) (err error) {
 	if !e.deleted {
-		if err = e.UI().JawsRender(e, w, params); err == nil {
+		if err = e.Ui().JawsRender(e, w, params); err == nil {
 			if e.Jaws.Debug {
 				e.renderDebug(w)
 			}
@@ -96,7 +96,7 @@ func (e *Element) JawsRender(w io.Writer, params []any) (err error) {
 // Do not call this yourself unless it's from within another JawsUpdate implementation.
 func (e *Element) JawsUpdate() {
 	if !e.deleted {
-		e.UI().JawsUpdate(e)
+		e.Ui().JawsUpdate(e)
 	}
 }
 
