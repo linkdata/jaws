@@ -61,8 +61,8 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 	oldOrder := make([]Jid, len(ui.contents))
 	for i, elem := range ui.contents {
 		oldOrder[i] = elem.Jid()
-		oldMap[elem.Ui()] = elem
-		if _, ok := newMap[elem.Ui()]; !ok {
+		oldMap[elem.UI()] = elem
+		if _, ok := newMap[elem.UI()]; !ok {
 			toRemove = append(toRemove, elem)
 		}
 	}
