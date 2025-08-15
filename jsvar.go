@@ -39,7 +39,10 @@ func (ui JsVar[T]) JawsGet(elem *Element) (value T) {
 func (ui JsVar[T]) JawsSet(elem *Element, value T) (err error) {
 	ui.Lock()
 	defer ui.Unlock()
-	err = jq.Set(ui.ptr, "", value)
+	var changed bool
+	if changed, err = jq.Set(ui.ptr, "", value); changed {
+		elem.Dirty(ui)
+	}
 	return
 }
 
@@ -86,7 +89,8 @@ func (ui JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) 
 			if err = json.Unmarshal([]byte(jsval), &v); err == nil {
 				ui.Lock()
 				defer ui.Unlock()
-				if err = jq.Set(ui.ptr, jspath, v); err == nil {
+				var changed bool
+				if changed, err = jq.Set(ui.ptr, jspath, v); changed {
 					e.Dirty(ui)
 				}
 			}
