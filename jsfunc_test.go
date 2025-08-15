@@ -111,7 +111,7 @@ func TestJsFunc_JawsEvent(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "\t\"sometext\""}:
+	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "=\"sometext\""}:
 	}
 
 	select {
@@ -126,7 +126,7 @@ func TestJsFunc_JawsEvent(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "\t1.2"}:
+	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "=1.2"}:
 	}
 
 	select {

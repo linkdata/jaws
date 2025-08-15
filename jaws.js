@@ -342,13 +342,21 @@ function jawsVar(name, data, operation) {
 				throw "jaws: unknown operation: " + operation;
 		}
 		if (jaws instanceof WebSocket && jaws.readyState === 1) {
-			jaws.send("Set\t" + window.jawsNames[name] + "\t" + path + "\t" + JSON.stringify(data) + "\n");
+			jaws.send("Set\t" + window.jawsNames[name] + "\t" + path + "=" + JSON.stringify(data) + "\n");
 		}
 		return data;
 	}
 }
 
 function jawsPerform(what, id, data) {
+	var path = "";
+	var equalPos = data.indexOf("=");
+	if (equalPos >= 0) {
+		if (equalPos > 0) {
+			path = "." + data.slice(0, equalPos);
+		}
+		data = data.slice(equalPos + 1);
+	}
 	data = JSON.parse(data);
 	switch (what) {
 		case 'Reload':
@@ -413,7 +421,7 @@ function jawsPerform(what, id, data) {
 			return;
 		case 'Set':
 		case 'Call':
-			jawsVar(elem.dataset.jawsname, data, what);
+			jawsVar(elem.dataset.jawsname + path, data, what);
 			return;
 	}
 	throw "jaws: unknown operation: " + what;

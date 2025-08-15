@@ -209,7 +209,7 @@ func (e *Element) Remove(htmlId string) {
 // The string 'jspath' must be empty or a valid JSON path string.
 // The string 'jsval' must be valid JSON.
 func (e *Element) JsSet(jspath, jsval string) {
-	e.queue(what.Set, jspath+"\t"+jsval)
+	e.queue(what.Set, jspath+"="+jsval)
 }
 
 // JsCall queues a Javascript function invocation to be sent to the browser.

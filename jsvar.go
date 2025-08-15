@@ -74,10 +74,11 @@ func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error
 		var b []byte
 		b = append(b, `<div id=`...)
 		b = e.Jid().AppendQuote(b)
+		b = append(b, ` data-jawsname=`...)
+		b = strconv.AppendQuote(b, jsvarname)
 		b = append(b, ` data-jawsdata='`...)
 		b = append(b, bytes.ReplaceAll(ui.AppendJSON(nil, e), []byte(`'`), []byte(`\u0027`))...)
-		b = append(b, `' data-jawsname=`...)
-		b = strconv.AppendQuote(b, jsvarname)
+		b = append(b, "'"...)
 		b = appendAttrs(b, attrs)
 		b = append(b, ` hidden></div>`...)
 		_, err = w.Write(b)
@@ -94,7 +95,7 @@ func (ui *JsVar[T]) JawsUpdate(e *Element) {
 			e.JsSet(change.path, string(b))
 		}
 	}
-	clear(ui.changes)
+	ui.changes = ui.changes[:0]
 }
 
 func (ui *JsVar[T]) JawsGetTag(rq *Request) any {
@@ -104,7 +105,7 @@ func (ui *JsVar[T]) JawsGetTag(rq *Request) any {
 func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
 	if wht == what.Set {
-		if jspath, jsval, found := strings.Cut(val, "\t"); found {
+		if jspath, jsval, found := strings.Cut(val, "="); found {
 			var v any
 			if err = json.Unmarshal([]byte(jsval), &v); err == nil {
 				ui.Lock()

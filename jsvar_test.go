@@ -57,7 +57,7 @@ func Test_JsVar_JawsRender(t *testing.T) {
 	}
 
 	got := string(rq.BodyHTML())
-	want := `<div id="Jid.3" data-jawsdata='{"String":"text","Number":1.23}' data-jawsname="myjsvar" hidden></div>`
+	want := `<div id="Jid.3" data-jawsname="myjsvar" data-jawsdata='{"String":"text","Number":1.23}' hidden></div>`
 	if got != want {
 		t.Errorf("\n got: %q\nwant: %q\n", got, want)
 	}
@@ -85,7 +85,7 @@ func Test_JsVar_Update(t *testing.T) {
 	if err := dot.JawsRender(elem, &sb, []any{varname}); err != nil {
 		t.Fatal(err)
 	}
-	want := `<div id="Jid.1" data-jawsdata='{"String":"","Number":0}' data-jawsname="myjsvar" hidden></div>`
+	want := `<div id="Jid.1" data-jawsname="myjsvar" data-jawsdata='{"String":"","Number":0}' hidden></div>`
 	if sb.String() != want {
 		t.Errorf("\n got %q\nwant %q\n", sb.String(), want)
 	}
@@ -99,7 +99,7 @@ func Test_JsVar_Update(t *testing.T) {
 		th.Timeout()
 	case gotMsg := <-rq.outCh:
 		wantMsg := wsMsg{
-			Data: "\t{\"String\":\"x\",\"Number\":2}",
+			Data: "={\"String\":\"x\",\"Number\":2}",
 			Jid:  1,
 			What: what.Set,
 		}
@@ -133,7 +133,7 @@ func Test_JsVar_Event(t *testing.T) {
 	if err := dot.JawsRender(elem, &sb, []any{varname}); err != nil {
 		t.Fatal(err)
 	}
-	want := `<div id="Jid.1" data-jawsdata='{"String":"","Number":0}' data-jawsname="myjsvar" hidden></div>`
+	want := `<div id="Jid.1" data-jawsname="myjsvar" data-jawsdata='{"String":"","Number":0}' hidden></div>`
 	if sb.String() != want {
 		t.Errorf("\n got %q\nwant %q\n", sb.String(), want)
 	}
@@ -148,7 +148,7 @@ func Test_JsVar_Event(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "\t{\"String\":\"y\",\"Number\":3}"}:
+	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "={\"String\":\"y\",\"Number\":3}"}:
 	}
 
 	select {
@@ -164,7 +164,7 @@ func Test_JsVar_Event(t *testing.T) {
 		th.Timeout()
 	case msg := <-rq.outCh:
 		s := msg.Format()
-		after, found := strings.CutPrefix(s, "Set\tJid.1\t\t")
+		after, found := strings.CutPrefix(s, "Set\tJid.1\t=")
 		th.Equal(found, true)
 		if found {
 			var x valtype
@@ -177,7 +177,7 @@ func Test_JsVar_Event(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "\t1"}:
+	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "=1"}:
 	}
 
 	select {
@@ -237,5 +237,5 @@ func Test_JsVar_JsVarMaker(t *testing.T) {
 	defer rq.Close()
 	err := rq.JsVar("foo", &testVarMaker{})
 	th.NoErr(err)
-	th.Equal(rq.BodyHTML(), template.HTML("<div id=\"Jid.1\" data-jawsdata='\"quote(\\u0027)\"' data-jawsname=\"foo\" hidden></div>"))
+	th.Equal(rq.BodyHTML(), template.HTML("<div id=\"Jid.1\" data-jawsname=\"foo\" data-jawsdata='\"quote(\\u0027)\"' hidden></div>"))
 }
