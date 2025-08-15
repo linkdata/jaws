@@ -2,7 +2,6 @@ package jaws
 
 import (
 	"html/template"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -12,8 +11,8 @@ import (
 )
 
 type testDotStruct struct {
-	Arg  isJsVar
-	Retv isJsVar
+	Arg  IsJsVar
+	Retv IsJsVar
 }
 
 func TestJsFunc_JawsRender(t *testing.T) {
@@ -57,10 +56,7 @@ func TestJsFunc_JawsRender(t *testing.T) {
 		th.Timeout()
 	case msg := <-rq.outCh:
 		got := msg.Format()
-		want := "Call\tJid.3\t1.3\n"
-		if got != want {
-			t.Error(strconv.Quote(got))
-		}
+		th.Equal(got, "Call\tJid.3\t1.3\n")
 	}
 }
 

@@ -23,7 +23,7 @@ type variniter[T comparable] struct {
 }
 
 var (
-	_ isJsVar = &variniter[int]{}
+	_ IsJsVar = &variniter[int]{}
 )
 
 func Test_JsVar_JawsRender(t *testing.T) {
@@ -216,4 +216,26 @@ func Test_JsVar_AppendJSON_PanicsOnFailure(t *testing.T) {
 	jsv := NewJsVar(&mu, &ch)
 	jsv.AppendJSON(nil, nil)
 	t.Fail()
+}
+
+type testVarMaker struct {
+}
+
+// JawsMakeJsVar implements JsVarMaker.
+func (t *testVarMaker) JawsMakeJsVar(rq *Request) (v IsJsVar, err error) {
+	var mu sync.Mutex
+	val := "quote(')"
+	return NewJsVar(&mu, &val), nil
+}
+
+var _ JsVarMaker = &testVarMaker{}
+
+func Test_JsVar_JsVarMaker(t *testing.T) {
+	nextJid = 0
+	th := newTestHelper(t)
+	rq := newTestRequest()
+	defer rq.Close()
+	err := rq.JsVar("foo", &testVarMaker{})
+	th.NoErr(err)
+	th.Equal(rq.BodyHTML(), template.HTML("<div id=\"Jid.1\" data-jawsdata='\"quote(\\u0027)\"' data-jawsname=\"foo\" hidden></div>"))
 }

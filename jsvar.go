@@ -12,10 +12,15 @@ import (
 	"github.com/linkdata/jq"
 )
 
-type isJsVar interface {
+type IsJsVar interface {
+	RWLocker
 	UI
 	EventHandler
 	AppendJSON(b []byte, e *Element) []byte
+}
+
+type JsVarMaker interface {
+	JawsMakeJsVar(rq *Request) (v IsJsVar, err error)
 }
 
 type jsChange struct {
@@ -24,7 +29,7 @@ type jsChange struct {
 }
 
 var (
-	_ isJsVar     = &JsVar[int]{}
+	_ IsJsVar     = &JsVar[int]{}
 	_ Setter[int] = &JsVar[int]{}
 )
 
@@ -56,7 +61,6 @@ func (ui *JsVar[T]) JawsSet(elem *Element, value T) (err error) {
 
 func (ui *JsVar[T]) AppendJSON(b []byte, e *Element) []byte {
 	if data, err := json.Marshal(ui.JawsGet(e)); err == nil {
-		bytes.ReplaceAll(data, []byte(`'`), []byte(`\u0027`))
 		return append(b, data...)
 	} else {
 		panic(err)
@@ -71,7 +75,7 @@ func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error
 		b = append(b, `<div id=`...)
 		b = e.Jid().AppendQuote(b)
 		b = append(b, ` data-jawsdata='`...)
-		b = ui.AppendJSON(b, e)
+		b = append(b, bytes.ReplaceAll(ui.AppendJSON(nil, e), []byte(`'`), []byte(`\u0027`))...)
 		b = append(b, `' data-jawsname=`...)
 		b = strconv.AppendQuote(b, jsvarname)
 		b = appendAttrs(b, attrs)
@@ -124,10 +128,17 @@ func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 }
 
 // JsVar binds a JsVar[T] to a named Javascript variable.
+//
+// You can also pass a JsVarMaker instead of a JsVar[T].
 func (rq RequestWriter) JsVar(jsvarname string, jsvar any, params ...any) (err error) {
-	var newparams []any
-	newparams = append(newparams, jsvarname)
-	newparams = append(newparams, params...)
-	err = rq.UI(jsvar.(UI), newparams...)
+	if jvm, ok := jsvar.(JsVarMaker); ok {
+		jsvar, err = jvm.JawsMakeJsVar(rq.Request())
+	}
+	if err == nil {
+		var newparams []any
+		newparams = append(newparams, jsvarname)
+		newparams = append(newparams, params...)
+		err = rq.UI(jsvar.(UI), newparams...)
+	}
 	return
 }
