@@ -27,7 +27,7 @@ func (th *testHelper) Cleanup() {
 func (th *testHelper) Equal(a, b any) {
 	if !testEqual(a, b) {
 		th.Helper()
-		th.Errorf("%T(%v) != %T(%v)", a, a, b, b)
+		th.Errorf("\n got %T(%#v)\nwant %T(%#v)\n", a, a, b, b)
 	}
 }
 

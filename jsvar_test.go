@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"encoding/json"
 	"html/template"
 	"reflect"
 	"strings"
@@ -163,8 +164,13 @@ func Test_JsVar_Event(t *testing.T) {
 		th.Timeout()
 	case msg := <-rq.outCh:
 		s := msg.Format()
-		if s != "Set\tJid.1\t\t{\"String\":\"y\",\"Number\":3}\n" {
-			th.Fatal(s)
+		after, found := strings.CutPrefix(s, "Set\tJid.1\t\t")
+		th.Equal(found, true)
+		if found {
+			var x valtype
+			err := json.Unmarshal([]byte(after), &x)
+			th.NoErr(err)
+			th.Equal(x, valtype{"y", 3})
 		}
 	}
 

@@ -18,17 +18,23 @@ type isJsVar interface {
 	AppendJSON(b []byte, e *Element) []byte
 }
 
+type jsChange struct {
+	path  string
+	value any
+}
+
 var (
-	_ isJsVar     = JsVar[int]{}
-	_ Setter[int] = JsVar[int]{}
+	_ isJsVar     = &JsVar[int]{}
+	_ Setter[int] = &JsVar[int]{}
 )
 
 type JsVar[T any] struct {
 	RWLocker
-	ptr *T
+	ptr     *T
+	changes []jsChange
 }
 
-func (ui JsVar[T]) JawsGet(elem *Element) (value T) {
+func (ui *JsVar[T]) JawsGet(elem *Element) (value T) {
 	ui.RLock()
 	defer ui.RUnlock()
 	pvalue, _ := jq.GetAs[*T](ui.ptr, "")
@@ -36,17 +42,19 @@ func (ui JsVar[T]) JawsGet(elem *Element) (value T) {
 	return
 }
 
-func (ui JsVar[T]) JawsSet(elem *Element, value T) (err error) {
+func (ui *JsVar[T]) JawsSet(elem *Element, value T) (err error) {
 	ui.Lock()
 	defer ui.Unlock()
 	var changed bool
 	if changed, err = jq.Set(ui.ptr, "", value); changed {
+		ui.changes = ui.changes[:0]
+		ui.changes = append(ui.changes, jsChange{"", value})
 		elem.Dirty(ui)
 	}
 	return
 }
 
-func (ui JsVar[T]) AppendJSON(b []byte, e *Element) []byte {
+func (ui *JsVar[T]) AppendJSON(b []byte, e *Element) []byte {
 	if data, err := json.Marshal(ui.JawsGet(e)); err == nil {
 		bytes.ReplaceAll(data, []byte(`'`), []byte(`\u0027`))
 		return append(b, data...)
@@ -55,7 +63,7 @@ func (ui JsVar[T]) AppendJSON(b []byte, e *Element) []byte {
 	}
 }
 
-func (ui JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error) {
+func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error) {
 	if _, err = e.ApplyGetter(ui); err == nil {
 		jsvarname := params[0].(string)
 		attrs := e.ApplyParams(params[1:])
@@ -73,15 +81,23 @@ func (ui JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error)
 	return
 }
 
-func (ui JsVar[T]) JawsUpdate(e *Element) {
-	e.JsSet("", string(ui.AppendJSON(nil, e)))
+func (ui *JsVar[T]) JawsUpdate(e *Element) {
+	ui.Lock()
+	defer ui.Unlock()
+	for _, change := range ui.changes {
+		b, err := json.Marshal(change.value)
+		if e.Jaws.Log(err) == nil {
+			e.JsSet(change.path, string(b))
+		}
+	}
+	clear(ui.changes)
 }
 
-func (ui JsVar[T]) JawsGetTag(rq *Request) any {
+func (ui *JsVar[T]) JawsGetTag(rq *Request) any {
 	return ui.ptr
 }
 
-func (ui JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) {
+func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
 	if wht == what.Set {
 		if jspath, jsval, found := strings.Cut(val, "\t"); found {
@@ -91,6 +107,7 @@ func (ui JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) 
 				defer ui.Unlock()
 				var changed bool
 				if changed, err = jq.Set(ui.ptr, jspath, v); changed {
+					ui.changes = append(ui.changes, jsChange{jspath, v})
 					e.Dirty(ui)
 				}
 			}
@@ -99,11 +116,11 @@ func (ui JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) 
 	return
 }
 
-func NewJsVar[T any](l sync.Locker, v *T) JsVar[T] {
+func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 	if rl, ok := l.(RWLocker); ok {
-		return JsVar[T]{RWLocker: rl, ptr: v}
+		return &JsVar[T]{RWLocker: rl, ptr: v}
 	}
-	return JsVar[T]{RWLocker: rwlocker{l}, ptr: v}
+	return &JsVar[T]{RWLocker: rwlocker{l}, ptr: v}
 }
 
 // JsVar binds a JsVar[T] to a named Javascript variable.
