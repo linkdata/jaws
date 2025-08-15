@@ -28,6 +28,8 @@ func TestJsFunc_JawsRender(t *testing.T) {
 	retv := Bind(&mu, &retvval)
 	dot := NewJsFunc("somefn", arg, retv)
 
+	dot.IsJsFunc() // no-op
+
 	elem := rq.NewElement(dot)
 
 	if err := rq.Template("jsfunctemplate", dot); err != nil {

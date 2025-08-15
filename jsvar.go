@@ -46,7 +46,11 @@ func (ui *JsVar[T]) JawsSet(elem *Element, value T) (err error) {
 	defer ui.Unlock()
 	var changed bool
 	if changed, err = jq.Set(ui.ptr, "", value); changed {
-		elem.JsSet("", string(ui.AppendJSONLocked(nil, elem)))
+		elem.Jaws.Broadcast(Message{
+			Dest: ui.JawsGetTag(elem.Request),
+			What: what.Set,
+			Data: "=" + string(ui.AppendJSONLocked(nil, elem)),
+		})
 	}
 	return
 }
@@ -81,17 +85,6 @@ func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error
 }
 
 func (ui *JsVar[T]) JawsUpdate(e *Element) {
-	/*
-		ui.Lock()
-		defer ui.Unlock()
-		for _, change := range ui.changes {
-			b, err := json.Marshal(change.value)
-			if e.Jaws.Log(err) == nil {
-				e.JsSet(change.path, string(b))
-			}
-		}
-		ui.changes = ui.changes[:0]
-	*/
 }
 
 func (ui *JsVar[T]) JawsGetTag(rq *Request) any {
@@ -108,8 +101,11 @@ func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error)
 				defer ui.Unlock()
 				var changed bool
 				if changed, err = jq.Set(ui.ptr, jspath, v); changed && err == nil {
-					e.JsSet(jspath, jsval)
-					e.Dirty(ui)
+					e.Jaws.Broadcast(Message{
+						Dest: ui.JawsGetTag(e.Request),
+						What: what.Set,
+						Data: val,
+					})
 				}
 			}
 		}

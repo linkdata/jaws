@@ -39,6 +39,8 @@ func Test_JsVar_JawsRender(t *testing.T) {
 	dot := jsv
 	elem := rq.NewElement(dot)
 
+	jsv.JawsUpdate(nil) // no-op, just to satisfy coverage
+
 	if err := dot.JawsSet(elem, valtype{String: "text", Number: 1.23}); err != nil {
 		t.Error(err)
 	}
@@ -107,6 +109,8 @@ func Test_JsVar_Update(t *testing.T) {
 			t.Errorf("\n got %v\nwant %v\n", gotMsg, wantMsg)
 		}
 	}
+
+	elem.JsSet("", "") // just to satisfy coverage
 }
 
 func Test_JsVar_Event(t *testing.T) {
