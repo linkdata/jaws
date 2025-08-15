@@ -27,10 +27,10 @@ func TestJsFunc_JawsRender(t *testing.T) {
 
 	var mu sync.RWMutex
 	var argval float64
-	arg := NewJsVar(&argval, &mu)
+	arg := NewJsVar(&mu, &argval)
 
 	var retvval string
-	retv := NewJsVar(&retvval, &mu)
+	retv := NewJsVar(&mu, &retvval)
 
 	dot := testDotStruct{
 		Arg:  arg,
@@ -93,11 +93,11 @@ func TestJsFunc_JawsEvent(t *testing.T) {
 	var mu sync.RWMutex
 	argtl := testLocker{Locker: &mu, unlockCalled: make(chan struct{})}
 	var argval float64
-	arg := NewJsVar(&argval, &argtl)
+	arg := NewJsVar(&argtl, &argval)
 
 	var retvval string
 	retvtl := testLocker{Locker: &mu, unlockCalled: make(chan struct{})}
-	retv := NewJsVar(&retvval, &retvtl)
+	retv := NewJsVar(&retvtl, &retvval)
 
 	dot := NewJsFunc(arg, retv)
 	elem := rq.NewElement(dot)

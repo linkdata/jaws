@@ -34,7 +34,7 @@ func Test_JsVar_JawsRender(t *testing.T) {
 
 	var mu sync.RWMutex
 	var val valtype
-	jsv := NewJsVar(&val, &mu)
+	jsv := NewJsVar(&mu, &val)
 	dot := jsv
 	elem := rq.NewElement(dot)
 
@@ -74,7 +74,7 @@ func Test_JsVar_Update(t *testing.T) {
 	}
 	var mu sync.Mutex
 	var val valtype
-	dot := NewJsVar(&val, &mu)
+	dot := NewJsVar(&mu, &val)
 
 	rq := newTestRequest()
 	defer rq.Close()
@@ -122,7 +122,7 @@ func Test_JsVar_Event(t *testing.T) {
 	var mu sync.Mutex
 	var val valtype
 	tl := testLocker{Locker: &mu, unlockCalled: make(chan struct{})}
-	dot := NewJsVar(&val, &tl)
+	dot := NewJsVar(&tl, &val)
 
 	rq := newTestRequest()
 	defer rq.Close()
@@ -207,19 +207,7 @@ func Test_JsVar_AppendJSON_PanicsOnFailure(t *testing.T) {
 	var mu sync.Mutex
 	ch := make(chan int)
 
-	jsv := NewJsVar(&ch, &mu)
+	jsv := NewJsVar(&mu, &ch)
 	jsv.AppendJSON(nil, nil)
-	t.Fail()
-}
-
-func Test_NewJsVar_PanicsOnFailure(t *testing.T) {
-	defer func() {
-		if x := recover(); x == nil {
-			t.Fail()
-		}
-	}()
-	var mu sync.Mutex
-	var x *int
-	_ = NewJsVar(x, &mu)
 	t.Fail()
 }

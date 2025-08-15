@@ -3,9 +3,7 @@ package jaws
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
-	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,33 +18,22 @@ type IsJsVar interface {
 }
 
 type JsVar[T any] struct {
-	locker sync.Locker
-	value  *T
+	RWLocker
+	value *T
 }
 
 func (ui JsVar[T]) JawsGet(elem *Element) (value T) {
-	if ui.locker != nil {
-		if rwl, ok := ui.locker.(RWLocker); ok {
-			rwl.RLock()
-			defer rwl.RUnlock()
-		} else {
-			ui.locker.Lock()
-			defer ui.locker.Unlock()
-		}
-	}
-
+	ui.RLock()
+	defer ui.RUnlock()
 	pvalue, _ := jq.GetAs[*T](ui.value, "")
 	value = *pvalue
 	return
 }
 
 func (ui JsVar[T]) JawsSet(elem *Element, value T) (err error) {
-	if ui.locker != nil {
-		ui.locker.Lock()
-		defer ui.locker.Unlock()
-	}
+	ui.Lock()
+	defer ui.Unlock()
 	err = jq.Set(ui.value, "", value)
-	elem.Dirty(ui)
 	return
 }
 
@@ -97,10 +84,8 @@ func (ui JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) 
 		if jspath, jsval, found := strings.Cut(val, "\t"); found {
 			var v any
 			if err = json.Unmarshal([]byte(jsval), &v); err == nil {
-				if ui.locker != nil {
-					ui.locker.Lock()
-					defer ui.locker.Unlock()
-				}
+				ui.Lock()
+				defer ui.Unlock()
 				if err = jq.Set(ui.value, jspath, v); err == nil {
 					e.Dirty(ui)
 				}
@@ -110,12 +95,11 @@ func (ui JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) 
 	return
 }
 
-func NewJsVar[T any](v *T, l sync.Locker) (jsvar JsVar[T]) {
-	rv := reflect.ValueOf(v)
-	if rv.Kind() == reflect.Pointer && !rv.IsNil() {
-		return JsVar[T]{locker: l, value: v}
+func NewJsVar[T any](l sync.Locker, v *T) JsVar[T] {
+	if rl, ok := l.(RWLocker); ok {
+		return JsVar[T]{RWLocker: rl, value: v}
 	}
-	panic(fmt.Sprintf("expected non-nil pointer not %s", rv.Type().String()))
+	return JsVar[T]{RWLocker: rwlocker{l}, value: v}
 }
 
 // JsVar binds a JsVar[T] to a named Javascript variable.
