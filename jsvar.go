@@ -61,7 +61,7 @@ func (ui *JsVar[T]) setPathLocked(elem *Element, jspath string, value any, notre
 	if changed && err == nil {
 		var data []byte
 		if data, err = json.Marshal(value); err == nil {
-			dest := []any{ui.ptr}
+			dest := []any{ui.JawsGetTag(elem.Request)}
 			if notreq != nil {
 				dest = append(dest, ExceptRequest(notreq))
 			}
@@ -89,7 +89,7 @@ func (ui *JsVar[T]) JawsSet(elem *Element, value T) (err error) {
 func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error) {
 	ui.Lock()
 	defer ui.Unlock()
-	if _, err = e.ApplyGetter(ui.ptr); err == nil {
+	if _, err = e.ApplyGetter(ui); err == nil {
 		var data []byte
 		if data, err = json.Marshal(ui.ptr); err == nil {
 			jsvarname := params[0].(string)
@@ -108,6 +108,10 @@ func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error
 		}
 	}
 	return
+}
+
+func (ui *JsVar[T]) JawsGetTag(rq *Request) any {
+	return ui.ptr
 }
 
 func (ui *JsVar[T]) JawsUpdate(e *Element) {} // no-op for JsVar[T]
