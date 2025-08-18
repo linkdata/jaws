@@ -19,14 +19,6 @@ type valtype struct {
 	Number float64
 }
 
-type variniter[T comparable] struct {
-	JsVar[T]
-}
-
-var (
-	_ IsJsVar = &variniter[int]{}
-)
-
 func Test_JsVar_JawsRender(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
@@ -222,24 +214,49 @@ func Test_JsVar_PanicsOnWrongType(t *testing.T) {
 	th.Fail()
 }
 
-type testVarMaker struct {
+type testJsVarMaker struct {
 }
 
-// JawsMakeJsVar implements JsVarMaker.
-func (t *testVarMaker) JawsMakeJsVar(rq *Request) (v IsJsVar, err error) {
+func (t *testJsVarMaker) JawsMakeJsVar(rq *Request) (v IsJsVar, err error) {
 	var mu deadlock.Mutex
 	val := "quote(')"
 	return NewJsVar(&mu, &val), nil
 }
 
-var _ JsVarMaker = &testVarMaker{}
+var _ JsVarMaker = &testJsVarMaker{}
 
 func Test_JsVar_JsVarMaker(t *testing.T) {
 	nextJid = 0
 	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
-	err := rq.JsVar("foo", &testVarMaker{})
+	err := rq.JsVar("foo", &testJsVarMaker{})
 	th.NoErr(err)
 	th.Equal(rq.BodyHTML(), template.HTML("<div id=\"Jid.1\" data-jawsname=\"foo\" data-jawsdata='\"quote(\\u0027)\"' hidden></div>"))
+}
+
+type testJsVarPathSetter struct {
+	Value string
+}
+
+func (t *testJsVarPathSetter) JawsSetPath(elem *Element, jspath string, value any) (changed bool, err error) {
+	t.Value = value.(string) + "!!"
+	return true, nil
+}
+
+var _ PathSetter = &testJsVarPathSetter{}
+
+func Test_JsVar_PathSetter(t *testing.T) {
+	nextJid = 0
+	th := newTestHelper(t)
+	rq := newTestRequest()
+	defer rq.Close()
+
+	var mu deadlock.Mutex
+	var val testJsVarPathSetter
+	jsv := NewJsVar(&mu, &val)
+	elem := rq.NewElement(jsv)
+	_, err := jsv.JawsSetPath(elem, "", "foo")
+	th.NoErr(err)
+	th.Equal(val.Value, "foo!!")
 }

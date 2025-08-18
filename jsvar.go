@@ -12,10 +12,15 @@ import (
 	"github.com/linkdata/jq"
 )
 
+type PathSetter interface {
+	JawsSetPath(elem *Element, jspath string, value any) (changed bool, err error)
+}
+
 type IsJsVar interface {
 	RWLocker
 	UI
 	EventHandler
+	PathSetter
 }
 
 type JsVarMaker interface {
@@ -47,15 +52,21 @@ func (ui *JsVar[T]) JawsGet(elem *Element) (value T) {
 	return
 }
 
-func (ui *JsVar[T]) JawsSetPath(elem *Element, jspath string, value any) (err error) {
-	ui.Lock()
-	defer ui.Unlock()
-	var changed bool
-	if changed, err = jq.Set(ui.ptr, jspath, value); changed {
+func (ui *JsVar[T]) setPathLocked(elem *Element, jspath string, value any, notreq *Request) (changed bool, err error) {
+	if ps, ok := ((any)(ui.ptr).(PathSetter)); ok {
+		changed, err = ps.JawsSetPath(elem, jspath, value)
+	} else {
+		changed, err = jq.Set(ui.ptr, jspath, value)
+	}
+	if changed && err == nil {
 		var data []byte
 		if data, err = json.Marshal(value); err == nil {
+			dest := []any{ui.ptr}
+			if notreq != nil {
+				dest = append(dest, ExceptRequest(notreq))
+			}
 			elem.Jaws.Broadcast(Message{
-				Dest: ui.ptr,
+				Dest: dest,
 				What: what.Set,
 				Data: jspath + "=" + string(data),
 			})
@@ -64,8 +75,15 @@ func (ui *JsVar[T]) JawsSetPath(elem *Element, jspath string, value any) (err er
 	return
 }
 
+func (ui *JsVar[T]) JawsSetPath(elem *Element, jspath string, value any) (changed bool, err error) {
+	ui.Lock()
+	defer ui.Unlock()
+	return ui.setPathLocked(elem, jspath, value, nil)
+}
+
 func (ui *JsVar[T]) JawsSet(elem *Element, value T) (err error) {
-	return ui.JawsSetPath(elem, "", value)
+	_, err = ui.JawsSetPath(elem, "", value)
+	return
 }
 
 func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error) {
@@ -102,14 +120,7 @@ func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error)
 			if err = json.Unmarshal([]byte(jsval), &v); err == nil {
 				ui.Lock()
 				defer ui.Unlock()
-				var changed bool
-				if changed, err = jq.Set(ui.ptr, jspath, v); changed && err == nil {
-					e.Jaws.Broadcast(Message{
-						Dest: []any{ui.ptr, ExceptRequest(e.Request)},
-						What: what.Set,
-						Data: val,
-					})
-				}
+				_, err = ui.setPathLocked(e, jspath, v, e.Request)
 			}
 		}
 	}
@@ -130,7 +141,8 @@ func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error)
 // synchronized across browsers using immediate broadcasts.
 //
 // Changes to JsVar's should be made using their [JawsSet] or
-// [JawsSetPath] methods.
+// [JawsSetPath] methods. If *T implements [PathSetter],
+// that will be used instead of jq.Set().
 func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 	if rl, ok := l.(RWLocker); ok {
 		return &JsVar[T]{RWLocker: rl, ptr: v}
