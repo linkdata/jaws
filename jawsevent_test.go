@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/linkdata/jaws/what"
@@ -36,10 +37,13 @@ func (t *testJawsEvent) JawsGetTag(*Request) (tag any) {
 	return t.tag
 }
 
-func (t *testJawsEvent) JawsRender(e *Element, w io.Writer, params []any) error {
-	w.Write([]byte(fmt.Sprint(params)))
-	t.msgCh <- fmt.Sprintf("JawsRender(%d)", e.jid)
-	return nil
+func (t *testJawsEvent) JawsRender(e *Element, w io.Writer, params []any) (err error) {
+	var tag any
+	if tag, err = e.ApplyGetter(t); err == nil {
+		w.Write([]byte(fmt.Sprint(params)))
+		t.msgCh <- fmt.Sprintf("JawsRender(%d)%#v", e.jid, tag)
+	}
+	return
 }
 
 func (t *testJawsEvent) JawsUpdate(e *Element) {
@@ -97,5 +101,49 @@ func Test_JawsEvent_AllUnhandled(t *testing.T) {
 		if s != ErrEventUnhandled.Error() {
 			t.Error(s)
 		}
+	}
+}
+
+type testJawsEventHandler struct {
+	UI
+	msgCh    chan string
+	eventerr error
+}
+
+func (t *testJawsEventHandler) JawsGetHTML(e *Element) template.HTML {
+	return "tjEH"
+}
+
+func (t *testJawsEventHandler) JawsEvent(e *Element, wht what.What, val string) (err error) {
+	if err = t.eventerr; err == nil {
+		t.msgCh <- fmt.Sprintf("JawsEvent: %s %q", wht, val)
+	} else {
+		t.msgCh <- err.Error()
+	}
+	return
+}
+
+func Test_JawsEvent_ExtraHandler(t *testing.T) {
+	th := newTestHelper(t)
+	nextJid = 0
+	rq := newTestRequest()
+	defer rq.Close()
+
+	msgCh := make(chan string, 1)
+	defer close(msgCh)
+
+	je := NewUiDiv(&testJawsEventHandler{msgCh: msgCh})
+
+	var sb strings.Builder
+	elem := rq.NewElement(je)
+	th.NoErr(je.JawsRender(elem, &sb, nil))
+	th.Equal(sb.String(), "<div id=\"Jid.1\">tjEH</div>")
+
+	rq.inCh <- wsMsg{Data: "name", Jid: 1, What: what.Click}
+	select {
+	case <-th.C:
+		th.Timeout()
+	case s := <-msgCh:
+		th.Equal(s, "JawsEvent: Click \"name\"")
 	}
 }
