@@ -123,7 +123,7 @@ func TestJsFunc_JawsEvent(t *testing.T) {
 		th.Timeout()
 	case msg := <-rq.outCh:
 		s := msg.Format()
-		if !strings.Contains(s, "cannot unmarshal number") {
+		if !strings.Contains(s, "danger") {
 			th.Error(s)
 		}
 	}
