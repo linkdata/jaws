@@ -38,6 +38,7 @@ func TestRequest_Registrations(t *testing.T) {
 	jid := rq.Register(x)
 	is.True(jid.IsValid())
 	is.Equal(rq.wantMessage(&Message{Dest: x}), true)
+	is.Equal(rq.wantMessage(&Message{Dest: []any{x, ExceptRequest(rq.Request)}}), false)
 }
 
 func TestRequest_HeadHTML(t *testing.T) {

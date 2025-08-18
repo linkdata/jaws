@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"reflect"
 	"strings"
@@ -94,7 +95,7 @@ func Test_JsVar_Update(t *testing.T) {
 	if err := dot.JawsSet(elem, valtype{"x", 2}); err != nil {
 		t.Error(err)
 	}
-	rq.Dirty(dot)
+	// rq.Dirty(dot)
 
 	select {
 	case <-th.C:
@@ -129,18 +130,25 @@ func Test_JsVar_Event(t *testing.T) {
 	tl := testLocker{Locker: &mu, unlockCalled: make(chan struct{})}
 	dot := NewJsVar(&tl, &val)
 
-	rq := newTestRequest()
-	defer rq.Close()
+	tj := newTestJaws()
+	defer tj.Close()
+	const expectedHTML = `<div id="Jid.%d" data-jawsname="myjsvar" data-jawsdata='{"String":"","Number":0}' hidden></div>`
 
-	elem := rq.NewElement(dot)
-	var sb strings.Builder
-	if err := dot.JawsRender(elem, &sb, []any{varname}); err != nil {
+	rq1 := tj.newRequest(nil)
+	elem1 := rq1.NewElement(dot)
+	var sb1 strings.Builder
+	if err := dot.JawsRender(elem1, &sb1, []any{varname}); err != nil {
 		t.Fatal(err)
 	}
-	want := `<div id="Jid.1" data-jawsname="myjsvar" data-jawsdata='{"String":"","Number":0}' hidden></div>`
-	if sb.String() != want {
-		t.Errorf("\n got %q\nwant %q\n", sb.String(), want)
+	th.Equal(sb1.String(), fmt.Sprintf(expectedHTML, 1))
+
+	rq2 := tj.newRequest(nil)
+	elem2 := rq2.NewElement(dot)
+	var sb2 strings.Builder
+	if err := dot.JawsRender(elem2, &sb2, []any{varname}); err != nil {
+		t.Fatal(err)
 	}
+	th.Equal(sb2.String(), fmt.Sprintf(expectedHTML, 2))
 
 	select {
 	case <-th.C:
@@ -153,7 +161,7 @@ func Test_JsVar_Event(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "={\"String\":\"y\",\"Number\":3}"}:
+	case rq1.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "={\"String\":\"y\",\"Number\":3}"}:
 	}
 
 	select {
@@ -167,9 +175,12 @@ func Test_JsVar_Event(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq1.outCh:
+		// the JsVar Set event should not echo back to the emitting request
+		t.Fatal(msg)
+	case msg := <-rq2.outCh:
 		s := msg.Format()
-		after, found := strings.CutPrefix(s, "Set\tJid.1\t=")
+		after, found := strings.CutPrefix(s, "Set\tJid.2\t=")
 		th.Equal(found, true)
 		if found {
 			var x valtype
@@ -184,13 +195,13 @@ func Test_JsVar_Event(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "=1"}:
+	case rq1.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "=1"}:
 	}
 
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq1.outCh:
 		s := msg.Format()
 		if !strings.Contains(s, "jq: expected jaws.valtype, not float64") {
 			th.Error(s)

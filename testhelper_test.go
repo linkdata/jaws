@@ -24,10 +24,10 @@ func (th *testHelper) Cleanup() {
 	th.Timer.Stop()
 }
 
-func (th *testHelper) Equal(a, b any) {
-	if !testEqual(a, b) {
+func (th *testHelper) Equal(got, want any) {
+	if !testEqual(got, want) {
 		th.Helper()
-		th.Errorf("\n got %T(%#v)\nwant %T(%#v)\n", a, a, b, b)
+		th.Errorf("\n got %T(%#v)\nwant %T(%#v)\n", got, got, want, want)
 	}
 }
 

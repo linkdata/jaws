@@ -12,6 +12,21 @@ import (
 	"github.com/linkdata/jq"
 )
 
+/*
+	JsVar's use JawsRender, and that rendering will contain the
+	JSON representation of the underlying data. This will be used to
+	initialize the named Javascript variable before "DOMContentLoaded"
+	fires. Note that we don't render the Javascript variable declaration,
+	you'll have to do that yourself.
+
+	JsVar's do *NOT* use JawsUpdate, so changing the underlying data and
+	calling JawsUpdate will have no effect. Instead, JsVar's are
+	synchronized across browsers using immediate broadcasts.
+
+	Changes to JsVar's should be made using their [JawsSet] or
+	[JawsSetPath] methods.
+*/
+
 type IsJsVar interface {
 	RWLocker
 	UI
@@ -33,26 +48,40 @@ type JsVar[T any] struct {
 	ptr *T
 }
 
-func (ui *JsVar[T]) JawsGet(elem *Element) (value T) {
+func (ui *JsVar[T]) JawsGetPath(elem *Element, jspath string) (value any) {
 	ui.RLock()
 	defer ui.RUnlock()
-	pvalue, _ := jq.GetAs[*T](ui.ptr, "")
-	value = *pvalue
+	var err error
+	value, err = jq.Get(ui.ptr, jspath)
+	_ = elem.Jaws.Log(err)
+	return
+}
+
+func (ui *JsVar[T]) JawsGet(elem *Element) (value T) {
+	anyval := ui.JawsGetPath(elem, "")
+	value = *((anyval).(*T))
+	return
+}
+
+func (ui *JsVar[T]) JawsSetPath(elem *Element, jspath string, value any) (err error) {
+	ui.Lock()
+	defer ui.Unlock()
+	var changed bool
+	if changed, err = jq.Set(ui.ptr, jspath, value); changed {
+		var data []byte
+		if data, err = json.Marshal(value); err == nil {
+			elem.Jaws.Broadcast(Message{
+				Dest: ui.JawsGetTag(elem.Request),
+				What: what.Set,
+				Data: jspath + "=" + string(data),
+			})
+		}
+	}
 	return
 }
 
 func (ui *JsVar[T]) JawsSet(elem *Element, value T) (err error) {
-	ui.Lock()
-	defer ui.Unlock()
-	var changed bool
-	if changed, err = jq.Set(ui.ptr, "", value); changed {
-		elem.Jaws.Broadcast(Message{
-			Dest: ui.JawsGetTag(elem.Request),
-			What: what.Set,
-			Data: "=" + string(ui.AppendJSONLocked(nil, elem)),
-		})
-	}
-	return
+	return ui.JawsSetPath(elem, "", value)
 }
 
 func (ui *JsVar[T]) AppendJSONLocked(b []byte, e *Element) []byte {
@@ -84,8 +113,7 @@ func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error
 	return
 }
 
-func (ui *JsVar[T]) JawsUpdate(e *Element) {
-}
+func (ui *JsVar[T]) JawsUpdate(e *Element) {} // no-op for JsVar[T]
 
 func (ui *JsVar[T]) JawsGetTag(rq *Request) any {
 	return ui.ptr
@@ -102,7 +130,7 @@ func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error)
 				var changed bool
 				if changed, err = jq.Set(ui.ptr, jspath, v); changed && err == nil {
 					e.Jaws.Broadcast(Message{
-						Dest: ui.JawsGetTag(e.Request),
+						Dest: []any{ui.JawsGetTag(e.Request), ExceptRequest(e.Request)},
 						What: what.Set,
 						Data: val,
 					})

@@ -51,6 +51,11 @@ type Request struct {
 	wsQueue    []wsMsg                 // queued messages to send
 }
 
+// ExceptRequest is a UI tag that prevents a Message from being delivered to that *Request.
+//
+// Combine it with at least one normal tag in a []any slice.
+type ExceptRequest *Request
+
 type eventFnCall struct {
 	jid  Jid
 	wht  what.What
@@ -344,11 +349,21 @@ func (rq *Request) Dirty(tags ...any) {
 func (rq *Request) wantMessage(msg *Message) (yes bool) {
 	switch dest := msg.Dest.(type) {
 	case *Request:
-		yes = dest == rq
+		return dest == rq
 	case string: // HTML id
-		yes = true
+		return true
 	case []any: // more than one tag
-		yes = true
+		rq.mu.RLock()
+		defer rq.mu.RUnlock()
+		for i := range dest {
+			if !yes {
+				_, yes = rq.tagMap[dest[i]]
+			}
+			if dest[i] == ExceptRequest(rq) {
+				yes = false
+				break
+			}
+		}
 	default:
 		rq.mu.RLock()
 		_, yes = rq.tagMap[msg.Dest]
