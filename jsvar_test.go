@@ -222,20 +222,6 @@ func Test_JsVar_PanicsOnWrongType(t *testing.T) {
 	th.Fail()
 }
 
-func Test_JsVar_AppendJSON_PanicsOnFailure(t *testing.T) {
-	defer func() {
-		if x := recover(); x == nil {
-			t.Fail()
-		}
-	}()
-	var mu deadlock.Mutex
-	ch := make(chan int)
-
-	jsv := NewJsVar(&mu, &ch)
-	jsv.AppendJSONLocked(nil, nil)
-	t.Fail()
-}
-
 type testVarMaker struct {
 }
 

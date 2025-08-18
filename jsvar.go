@@ -16,7 +16,6 @@ type IsJsVar interface {
 	RWLocker
 	UI
 	EventHandler
-	AppendJSONLocked(b []byte, e *Element) []byte
 }
 
 type JsVarMaker interface {
@@ -69,31 +68,26 @@ func (ui *JsVar[T]) JawsSet(elem *Element, value T) (err error) {
 	return ui.JawsSetPath(elem, "", value)
 }
 
-func (ui *JsVar[T]) AppendJSONLocked(b []byte, e *Element) []byte {
-	if data, err := json.Marshal(ui.ptr); err == nil {
-		return append(b, data...)
-	} else {
-		panic(err)
-	}
-}
-
 func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error) {
 	ui.Lock()
 	defer ui.Unlock()
 	if _, err = e.ApplyGetter(ui.ptr); err == nil {
-		jsvarname := params[0].(string)
-		attrs := e.ApplyParams(params[1:])
-		var b []byte
-		b = append(b, `<div id=`...)
-		b = e.Jid().AppendQuote(b)
-		b = append(b, ` data-jawsname=`...)
-		b = strconv.AppendQuote(b, jsvarname)
-		b = append(b, ` data-jawsdata='`...)
-		b = append(b, bytes.ReplaceAll(ui.AppendJSONLocked(nil, e), []byte(`'`), []byte(`\u0027`))...)
-		b = append(b, "'"...)
-		b = appendAttrs(b, attrs)
-		b = append(b, ` hidden></div>`...)
-		_, err = w.Write(b)
+		var data []byte
+		if data, err = json.Marshal(ui.ptr); err == nil {
+			jsvarname := params[0].(string)
+			attrs := e.ApplyParams(params[1:])
+			var b []byte
+			b = append(b, `<div id=`...)
+			b = e.Jid().AppendQuote(b)
+			b = append(b, ` data-jawsname=`...)
+			b = strconv.AppendQuote(b, jsvarname)
+			b = append(b, ` data-jawsdata='`...)
+			b = append(b, bytes.ReplaceAll(data, []byte(`'`), []byte(`\u0027`))...)
+			b = append(b, "'"...)
+			b = appendAttrs(b, attrs)
+			b = append(b, ` hidden></div>`...)
+			_, err = w.Write(b)
+		}
 	}
 	return
 }
