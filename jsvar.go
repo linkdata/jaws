@@ -71,7 +71,7 @@ func (ui *JsVar[T]) JawsSetPath(elem *Element, jspath string, value any) (err er
 		var data []byte
 		if data, err = json.Marshal(value); err == nil {
 			elem.Jaws.Broadcast(Message{
-				Dest: ui.JawsGetTag(elem.Request),
+				Dest: ui.ptr,
 				What: what.Set,
 				Data: jspath + "=" + string(data),
 			})
@@ -95,7 +95,7 @@ func (ui *JsVar[T]) AppendJSONLocked(b []byte, e *Element) []byte {
 func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error) {
 	ui.Lock()
 	defer ui.Unlock()
-	if _, err = e.ApplyGetter(ui); err == nil {
+	if _, err = e.ApplyGetter(ui.ptr); err == nil {
 		jsvarname := params[0].(string)
 		attrs := e.ApplyParams(params[1:])
 		var b []byte
@@ -115,10 +115,6 @@ func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error
 
 func (ui *JsVar[T]) JawsUpdate(e *Element) {} // no-op for JsVar[T]
 
-func (ui *JsVar[T]) JawsGetTag(rq *Request) any {
-	return ui.ptr
-}
-
 func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
 	if wht == what.Set {
@@ -130,7 +126,7 @@ func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error)
 				var changed bool
 				if changed, err = jq.Set(ui.ptr, jspath, v); changed && err == nil {
 					e.Jaws.Broadcast(Message{
-						Dest: []any{ui.JawsGetTag(e.Request), ExceptRequest(e.Request)},
+						Dest: []any{ui.ptr, ExceptRequest(e.Request)},
 						What: what.Set,
 						Data: val,
 					})
