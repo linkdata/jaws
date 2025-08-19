@@ -328,11 +328,17 @@ function jawsVar(name, data, operation) {
 					data = obj[lastkey];
 				} else {
 					obj[lastkey] = data;
+					if (jaws instanceof WebSocket && jaws.readyState === 1) {
+						jaws.send("Set\t" + window.jawsNames[name] + "\t" + path + "=" + JSON.stringify(data) + "\n");
+					}
 				}
-				break;
+				return data;
 			case 'Call':
-				data = obj[lastkey](data);
-				break;
+				if (typeof obj[lastkey] === 'function') {
+					obj[lastkey](data);
+					return;
+				}
+				throw "jaws: not a function: " + name + path;
 			case 'Set':
 				if (typeof obj[lastkey] !== 'function') {
 					obj[lastkey] = data;
@@ -341,10 +347,6 @@ function jawsVar(name, data, operation) {
 			default:
 				throw "jaws: unknown operation: " + operation;
 		}
-		if (jaws instanceof WebSocket && jaws.readyState === 1) {
-			jaws.send("Set\t" + window.jawsNames[name] + "\t" + path + "=" + JSON.stringify(data) + "\n");
-		}
-		return data;
 	}
 }
 
