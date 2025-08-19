@@ -255,9 +255,13 @@ type testJsVarPathSetter struct {
 	atomic.Bool
 }
 
-func (t *testJsVarPathSetter) JawsSetPath(elem *Element, jspath string, value any) (changed bool, err error) {
-	t.Value = value.(string) + "!!"
-	return true, nil
+func (t *testJsVarPathSetter) JawsSetPath(elem *Element, jspath string, value any) (err error) {
+	s := value.(string) + "!!"
+	if t.Value == s {
+		return ErrValueUnchanged
+	}
+	t.Value = s
+	return nil
 }
 
 func (t *testJsVarPathSetter) JawsPathSet(elem *Element, jspath string, value any) {
@@ -267,7 +271,7 @@ func (t *testJsVarPathSetter) JawsPathSet(elem *Element, jspath string, value an
 var _ PathSetter = &testJsVarPathSetter{}
 var _ SetPather = &testJsVarPathSetter{}
 
-func Test_JsVar_PathSetter(t *testing.T) {
+func Test_JsVar_PathSetter_SetPather(t *testing.T) {
 	nextJid = 0
 	th := newTestHelper(t)
 	rq := newTestRequest()
@@ -277,8 +281,26 @@ func Test_JsVar_PathSetter(t *testing.T) {
 	var val testJsVarPathSetter
 	jsv := NewJsVar(&mu, &val)
 	elem := rq.NewElement(jsv)
-	_, err := jsv.JawsSetPath(elem, "", "foo")
+	err := jsv.JawsSetPath(elem, "", "foo")
 	th.NoErr(err)
 	th.Equal(val.Value, "foo!!")
 	th.Equal(val.Bool.Load(), true)
+}
+
+func Test_JsVar_Unchanged(t *testing.T) {
+	nextJid = 0
+	th := newTestHelper(t)
+	rq := newTestRequest()
+	defer rq.Close()
+
+	var mu deadlock.Mutex
+	var val string
+	jsv := NewJsVar(&mu, &val)
+	elem := rq.NewElement(jsv)
+	err := jsv.JawsSetPath(elem, "", "foo")
+	th.NoErr(err)
+	th.Equal(val, "foo")
+
+	err = jsv.JawsSetPath(elem, "", "foo")
+	th.Equal(err, ErrValueUnchanged)
 }
