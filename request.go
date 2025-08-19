@@ -399,13 +399,6 @@ func (rq *Request) getElementByJidLocked(jid Jid) (elem *Element) {
 	return
 }
 
-func (rq *Request) getElementByJid(jid Jid) (e *Element) {
-	rq.mu.RLock()
-	e = rq.getElementByJidLocked(jid)
-	rq.mu.RUnlock()
-	return
-}
-
 func (rq *Request) hasTagLocked(elem *Element, tag any) bool {
 	for _, e := range rq.tagMap[tag] {
 		if elem == e {

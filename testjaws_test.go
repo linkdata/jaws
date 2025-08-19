@@ -120,6 +120,13 @@ func (tr *testRequest) Write(buf []byte) (int, error) {
 	return tr.rr.Write(buf)
 }
 
+func (tr *testRequest) getElementByJid(jid Jid) (e *Element) {
+	tr.Request.mu.RLock()
+	e = tr.Request.getElementByJidLocked(jid)
+	tr.Request.mu.RUnlock()
+	return
+}
+
 func newTestRequest() (tr *testRequest) {
 	tj := newTestJaws()
 	return tj.newRequest(nil)
