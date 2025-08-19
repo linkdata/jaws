@@ -44,6 +44,7 @@ var (
 type JsVar[T any] struct {
 	RWLocker
 	ptr *T
+	tag any
 }
 
 func (ui *JsVar[T]) JawsGetPath(elem *Element, jspath string) (value any) {
@@ -74,7 +75,7 @@ func (ui *JsVar[T]) setPathLocked(elem *Element, jspath string, value any) (err 
 		var data []byte
 		if data, err = json.Marshal(value); err == nil {
 			elem.Jaws.Broadcast(Message{
-				Dest: ui.JawsGetTag(elem.Request),
+				Dest: ui.tag,
 				What: what.Set,
 				Data: jspath + "=" + string(data),
 			})
@@ -110,7 +111,7 @@ func (ui *JsVar[T]) JawsSet(elem *Element, value T) (err error) {
 func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error) {
 	ui.Lock()
 	defer ui.Unlock()
-	if _, err = e.ApplyGetter(ui); err == nil {
+	if ui.tag, err = e.ApplyGetter(ui.ptr); err == nil {
 		var data []byte
 		if data, err = json.Marshal(ui.ptr); err == nil {
 			jsvarname := params[0].(string)
@@ -129,10 +130,6 @@ func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error
 		}
 	}
 	return
-}
-
-func (ui *JsVar[T]) JawsGetTag(rq *Request) any {
-	return ui.ptr
 }
 
 func (ui *JsVar[T]) JawsUpdate(e *Element) {} // no-op for JsVar[T]
