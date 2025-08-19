@@ -168,8 +168,22 @@ func Test_JsVar_Event(t *testing.T) {
 	case <-th.C:
 		th.Timeout()
 	case msg := <-rq1.outCh:
-		// the JsVar Set event should not echo back to the emitting request
-		t.Fatal(msg)
+		s := msg.Format()
+		after, found := strings.CutPrefix(s, "Set\tJid.1\t=")
+		th.Equal(found, true)
+		if found {
+			var x valtype
+			err := json.Unmarshal([]byte(after), &x)
+			th.NoErr(err)
+			th.Equal(x, valtype{"y", 3})
+		} else {
+			t.Fatalf("%q", s)
+		}
+	}
+
+	select {
+	case <-th.C:
+		th.Timeout()
 	case msg := <-rq2.outCh:
 		s := msg.Format()
 		after, found := strings.CutPrefix(s, "Set\tJid.2\t=")

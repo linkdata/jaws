@@ -52,7 +52,7 @@ func (ui *JsVar[T]) JawsGet(elem *Element) (value T) {
 	return
 }
 
-func (ui *JsVar[T]) setPathLocked(elem *Element, jspath string, value any, notreq *Request) (changed bool, err error) {
+func (ui *JsVar[T]) setPathLocked(elem *Element, jspath string, value any) (changed bool, err error) {
 	if ps, ok := ((any)(ui.ptr).(PathSetter)); ok {
 		changed, err = ps.JawsSetPath(elem, jspath, value)
 	} else {
@@ -61,12 +61,8 @@ func (ui *JsVar[T]) setPathLocked(elem *Element, jspath string, value any, notre
 	if changed && err == nil {
 		var data []byte
 		if data, err = json.Marshal(value); err == nil {
-			dest := []any{ui.JawsGetTag(elem.Request)}
-			if notreq != nil {
-				dest = append(dest, ExceptRequest(notreq))
-			}
 			elem.Jaws.Broadcast(Message{
-				Dest: dest,
+				Dest: ui.JawsGetTag(elem.Request),
 				What: what.Set,
 				Data: jspath + "=" + string(data),
 			})
@@ -78,7 +74,7 @@ func (ui *JsVar[T]) setPathLocked(elem *Element, jspath string, value any, notre
 func (ui *JsVar[T]) JawsSetPath(elem *Element, jspath string, value any) (changed bool, err error) {
 	ui.Lock()
 	defer ui.Unlock()
-	return ui.setPathLocked(elem, jspath, value, nil)
+	return ui.setPathLocked(elem, jspath, value)
 }
 
 func (ui *JsVar[T]) JawsSet(elem *Element, value T) (err error) {
@@ -124,7 +120,7 @@ func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error)
 			if err = json.Unmarshal([]byte(jsval), &v); err == nil {
 				ui.Lock()
 				defer ui.Unlock()
-				_, err = ui.setPathLocked(e, jspath, v, e.Request)
+				_, err = ui.setPathLocked(e, jspath, v)
 			}
 		}
 	}
