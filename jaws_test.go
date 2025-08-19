@@ -347,6 +347,13 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 	}
 }
 
+func getLastWrite(rq *Request) (when time.Time) {
+	rq.mu.RLock()
+	when = rq.lastWrite
+	rq.mu.RUnlock()
+	return
+}
+
 func TestJaws_RequestWriterExtendsDeadline(t *testing.T) {
 	th := newTestHelper(t)
 	jw, _ := New()
@@ -372,11 +379,11 @@ func TestJaws_RequestWriterExtendsDeadline(t *testing.T) {
 
 	th.True(ui.renderCalled > 0)
 	th.True(rq.rendering.Load())
-	th.Equal(lastWrite, rq.getLastWrite())
+	th.Equal(lastWrite, getLastWrite(rq))
 
 	go jw.ServeWithTimeout(time.Millisecond)
 
-	for lastWrite.Equal(rq.getLastWrite()) {
+	for lastWrite.Equal(getLastWrite(rq)) {
 		select {
 		case <-th.C:
 			th.Timeout()
@@ -386,10 +393,10 @@ func TestJaws_RequestWriterExtendsDeadline(t *testing.T) {
 			time.Sleep(time.Millisecond)
 		}
 	}
-	if rq.getLastWrite().IsZero() {
+	if getLastWrite(rq).IsZero() {
 		th.Error("last write is zero")
 	}
-	if lastWrite.Equal(rq.getLastWrite()) {
+	if lastWrite.Equal(getLastWrite(rq)) {
 		th.Error("last write not modified")
 	}
 }

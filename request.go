@@ -747,13 +747,6 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 	return
 }
 
-func (rq *Request) getLastWrite() (when time.Time) {
-	rq.mu.RLock()
-	when = rq.lastWrite
-	rq.mu.RUnlock()
-	return
-}
-
 // eventCaller calls event functions
 func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh chan<- wsMsg, eventDoneCh chan<- struct{}) {
 	defer close(eventDoneCh)
