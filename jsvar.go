@@ -13,7 +13,14 @@ import (
 )
 
 type PathSetter interface {
+	// JawsSetPath should set the JSON object member identified by jspath to the given value.
 	JawsSetPath(elem *Element, jspath string, value any) (changed bool, err error)
+}
+
+type SetPather interface {
+	// JawsPathSet notifies that a JSON object member identified by jspath has been set
+	// to the given value and the change has been queued for broadcast.
+	JawsPathSet(elem *Element, jspath string, value any)
 }
 
 type IsJsVar interface {
@@ -71,10 +78,20 @@ func (ui *JsVar[T]) setPathLocked(elem *Element, jspath string, value any) (chan
 	return
 }
 
-func (ui *JsVar[T]) JawsSetPath(elem *Element, jspath string, value any) (changed bool, err error) {
+func (ui *JsVar[T]) setPath(elem *Element, jspath string, value any) (changed bool, err error) {
 	ui.Lock()
 	defer ui.Unlock()
 	return ui.setPathLocked(elem, jspath, value)
+}
+
+func (ui *JsVar[T]) JawsSetPath(elem *Element, jspath string, value any) (changed bool, err error) {
+	changed, err = ui.setPath(elem, jspath, value)
+	if changed {
+		if sp, ok := ((any)(ui.ptr).(SetPather)); ok {
+			sp.JawsPathSet(elem, jspath, value)
+		}
+	}
+	return
 }
 
 func (ui *JsVar[T]) JawsSet(elem *Element, value T) (err error) {

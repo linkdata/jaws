@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/linkdata/deadlock"
@@ -251,6 +252,7 @@ func Test_JsVar_JsVarMaker(t *testing.T) {
 
 type testJsVarPathSetter struct {
 	Value string
+	atomic.Bool
 }
 
 func (t *testJsVarPathSetter) JawsSetPath(elem *Element, jspath string, value any) (changed bool, err error) {
@@ -258,7 +260,12 @@ func (t *testJsVarPathSetter) JawsSetPath(elem *Element, jspath string, value an
 	return true, nil
 }
 
+func (t *testJsVarPathSetter) JawsPathSet(elem *Element, jspath string, value any) {
+	t.Bool.Store(true)
+}
+
 var _ PathSetter = &testJsVarPathSetter{}
+var _ SetPather = &testJsVarPathSetter{}
 
 func Test_JsVar_PathSetter(t *testing.T) {
 	nextJid = 0
@@ -273,4 +280,5 @@ func Test_JsVar_PathSetter(t *testing.T) {
 	_, err := jsv.JawsSetPath(elem, "", "foo")
 	th.NoErr(err)
 	th.Equal(val.Value, "foo!!")
+	th.Equal(val.Bool.Load(), true)
 }
