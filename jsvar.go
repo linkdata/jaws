@@ -78,19 +78,24 @@ func (ui *JsVar[T]) setPathLocked(elem *Element, jspath string, value any) (chan
 	return
 }
 
-func (ui *JsVar[T]) setPath(elem *Element, jspath string, value any) (changed bool, err error) {
+func (ui *JsVar[T]) setPathLock(elem *Element, jspath string, value any) (changed bool, err error) {
 	ui.Lock()
 	defer ui.Unlock()
-	return ui.setPathLocked(elem, jspath, value)
+	changed, err = ui.setPathLocked(elem, jspath, value)
+	return
 }
 
-func (ui *JsVar[T]) JawsSetPath(elem *Element, jspath string, value any) (changed bool, err error) {
-	changed, err = ui.setPath(elem, jspath, value)
-	if changed {
+func (ui *JsVar[T]) setPath(elem *Element, jspath string, value any) (changed bool, err error) {
+	if changed, err = ui.setPathLock(elem, jspath, value); changed {
 		if sp, ok := ((any)(ui.ptr).(SetPather)); ok {
 			sp.JawsPathSet(elem, jspath, value)
 		}
 	}
+	return
+}
+
+func (ui *JsVar[T]) JawsSetPath(elem *Element, jspath string, value any) (changed bool, err error) {
+	changed, err = ui.setPath(elem, jspath, value)
 	return
 }
 
@@ -135,9 +140,7 @@ func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error)
 		if jspath, jsval, found := strings.Cut(val, "="); found {
 			var v any
 			if err = json.Unmarshal([]byte(jsval), &v); err == nil {
-				ui.Lock()
-				defer ui.Unlock()
-				_, err = ui.setPathLocked(e, jspath, v)
+				_, err = ui.setPath(e, jspath, v)
 			}
 		}
 	}
