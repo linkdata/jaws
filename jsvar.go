@@ -14,6 +14,10 @@ import (
 
 type PathSetter interface {
 	// JawsSetPath should set the JSON object member identified by jspath to the given value.
+	//
+	// It may refuse to do so, in which case it should return false for changed along
+	// with an error. If the member is already the given value, it should return
+	// false for changed and with no error.
 	JawsSetPath(elem *Element, jspath string, value any) (changed bool, err error)
 }
 
