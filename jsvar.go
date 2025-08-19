@@ -132,6 +132,10 @@ func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error
 	return
 }
 
+func (ui *JsVar[T]) JawsGetTag(rq *Request) any {
+	return ui.tag
+}
+
 func (ui *JsVar[T]) JawsUpdate(e *Element) {} // no-op for JsVar[T]
 
 func elideErrValueUnchanged(err error) error {
