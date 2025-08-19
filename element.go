@@ -205,22 +205,6 @@ func (e *Element) Remove(htmlId string) {
 	e.queue(what.Remove, htmlId)
 }
 
-// JsSet sends a Javascript variable update to the browser.
-// The string 'jspath' must be empty or a valid JSON path string.
-// The string 'jsval' must be valid JSON.
-func (e *Element) JsSet(jspath, jsval string) {
-	e.queue(what.Set, jspath+"="+jsval)
-}
-
-// JsCall queues a Javascript function invocation to be sent to the browser.
-// The string 'arg' must be valid JSON.
-//
-// The browser will respond by setting this Element's value to the
-// function return value (unless there was a Javascript exception).
-func (e *Element) JsCall(arg string) {
-	e.queue(what.Call, arg)
-}
-
 // ApplyParams parses the parameters passed to UI() when creating a new Element,
 // adding UI tags, adding any additional event handlers found.
 //

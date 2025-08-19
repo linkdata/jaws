@@ -103,8 +103,6 @@ func Test_JsVar_Update(t *testing.T) {
 			t.Errorf("\n got %v\nwant %v\n", gotMsg, wantMsg)
 		}
 	}
-
-	elem.JsSet("", "") // just to satisfy coverage
 }
 
 func Test_JsVar_Event(t *testing.T) {

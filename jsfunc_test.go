@@ -6,9 +6,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-
-	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/what"
 )
 
 func TestJsFunc_JawsRender(t *testing.T) {
@@ -17,37 +14,47 @@ func TestJsFunc_JawsRender(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 
-	nextJid = 0
-	rq.jw.AddTemplateLookuper(template.Must(template.New("jsfunctemplate").Parse(`{{$.JsFunc .Dot "someattr"}}`)))
+	rq.jw.AddTemplateLookuper(template.Must(template.New("jsfunctemplate").Parse(`{{$.JsFunc .Dot "someattr"}}{{$.JsFunc "somefn2"}}`)))
 
-	var mu deadlock.RWMutex
-	var argval float64
-	arg := Bind(&mu, &argval)
-
-	var retvval string
-	retv := Bind(&mu, &retvval)
-	dot := NewJsFunc("somefn", arg, retv)
-
-	dot.IsJsFunc() // no-op
-
+	dot := NewJsFunc("somefn")
 	elem := rq.NewElement(dot)
+	th.Equal(elem.Jid(), Jid(1))
 
 	if err := rq.Template("jsfunctemplate", dot); err != nil {
 		t.Error(err)
 	}
 
 	got := string(rq.BodyHTML())
-	th.Equal(got, "\n"+`<div id="Jid.3" data-jawsname="somefn" someattr hidden></div>`+"\n")
+	th.Equal(got, "\n"+`<div id="Jid.3" data-jawsname="somefn" someattr hidden></div>`+"\n"+
+		"\n"+`<div id="Jid.4" data-jawsname="somefn2" hidden></div>`+"\n")
+}
 
-	arg.JawsSet(elem, 1.3)
-	rq.Dirty(arg)
+func TestJsFunc_JsCall(t *testing.T) {
+	th := newTestHelper(t)
+	nextJid = 0
+	rq := newTestRequest()
+	defer rq.Close()
+
+	dot := NewJsFunc("somefn")
+
+	dot.IsJsFunc() // no-op
+
+	var sb strings.Builder
+	elem := rq.NewElement(dot)
+	th.Equal(elem.Jid(), Jid(1))
+	err := elem.JawsRender(&sb, nil)
+	th.NoErr(err)
+
+	dot.JawsUpdate(elem) // no-op
+
+	elem.Jaws.JsCall(dot, "1.3")
 
 	select {
 	case <-th.C:
 		th.Timeout()
 	case msg := <-rq.outCh:
 		got := msg.Format()
-		th.Equal(got, "Call\tJid.3\t1.3\n")
+		th.Equal(got, "Call\tJid.1\t1.3\n")
 	}
 }
 
@@ -77,16 +84,7 @@ func TestJsFunc_JawsEvent(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 
-	var mu deadlock.RWMutex
-	var argval float64
-	argtl := testLocker{Locker: &mu, unlockCalled: make(chan struct{})}
-	arg := Bind(&argtl, &argval)
-
-	var retvval string
-	retvtl := testLocker{Locker: &mu, unlockCalled: make(chan struct{})}
-	retv := Bind(&retvtl, &retvval)
-
-	dot := NewJsFunc("fnname", arg, retv)
+	dot := NewJsFunc("fnname")
 	elem := rq.NewElement(dot)
 	var sb strings.Builder
 	if err := dot.JawsRender(elem, &sb, nil); err != nil {
@@ -95,36 +93,35 @@ func TestJsFunc_JawsEvent(t *testing.T) {
 	wantHTML := "\n<div id=\"Jid.1\" data-jawsname=\"fnname\" hidden></div>\n"
 	th.Equal(sb.String(), wantHTML)
 
-	th.Equal(retvval, "")
-
-	select {
-	case <-th.C:
-		th.Timeout()
-	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "=\"sometext\""}:
-	}
-
-	select {
-	case <-th.C:
-		th.Timeout()
-	case <-retvtl.unlockCalled:
-	}
-
-	th.Equal(argval, float64(0))
-	th.Equal(retvval, "sometext")
-
-	select {
-	case <-th.C:
-		th.Timeout()
-	case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "=1.2"}:
-	}
-
-	select {
-	case <-th.C:
-		th.Timeout()
-	case msg := <-rq.outCh:
-		s := msg.Format()
-		if !strings.Contains(s, "danger") {
-			th.Error(s)
+	/*
+		select {
+		case <-th.C:
+			th.Timeout()
+		case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "=\"sometext\""}:
 		}
-	}
+
+		select {
+		case <-th.C:
+			th.Timeout()
+		case <-retvtl.unlockCalled:
+		}
+
+		th.Equal(argval, float64(0))
+		th.Equal(retvval, "sometext")
+
+		select {
+		case <-th.C:
+			th.Timeout()
+		case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "=1.2"}:
+		}
+
+		select {
+		case <-th.C:
+			th.Timeout()
+		case msg := <-rq.outCh:
+			s := msg.Format()
+			if !strings.Contains(s, "danger") {
+				th.Error(s)
+			}
+		}*/
 }
