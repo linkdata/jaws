@@ -137,13 +137,20 @@ func (ui *JsVar[T]) JawsGetTag(rq *Request) any {
 
 func (ui *JsVar[T]) JawsUpdate(e *Element) {} // no-op for JsVar[T]
 
+func elideErrValueUnchanged(err error) error {
+	if err == ErrValueUnchanged {
+		return nil
+	}
+	return err
+}
+
 func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
 	if wht == what.Set {
 		if jspath, jsval, found := strings.Cut(val, "="); found {
 			var v any
 			if err = json.Unmarshal([]byte(jsval), &v); err == nil {
-				err = ui.setPath(e, jspath, v)
+				err = elideErrValueUnchanged(ui.setPath(e, jspath, v))
 			}
 		}
 	}

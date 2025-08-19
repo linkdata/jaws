@@ -303,4 +303,5 @@ func Test_JsVar_Unchanged(t *testing.T) {
 
 	err = jsv.JawsSetPath(elem, "", "foo")
 	th.Equal(err, ErrValueUnchanged)
+	th.Equal(nil, elideErrValueUnchanged(err))
 }
