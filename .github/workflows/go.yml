@@ -32,7 +32,7 @@ jobs:
         run: go build -v ./...
 
       - name: Test
-        run: go test -tags debug -bench=. -coverprofile=coverage.txt ./...
+        run: go test -tags debug -bench=. -coverprofile=coverage.out ./...
       
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master
@@ -61,7 +61,9 @@ jobs:
 
       - name: Extract code coverage
         id: coverage
-        run: echo "COVERAGE=$(go tool cover -func=coverage.txt | grep total | tr -s '\t' | cut -f 3)" >> $GITHUB_OUTPUT
+        # Change this to extract the coverage percentage (without the percent sign) for your language.
+        # Here we are using the 'coverage.out' file generated in the test step.
+        run: echo "COVERAGE=$(go tool cover -func=coverage.out | grep total | tr -s '\t' | cut -f 3 | rev | cut -c2- | rev)" >> $GITHUB_OUTPUT
       - name: Extract branch name
         run: echo "BRANCH=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_OUTPUT
         id: extract_branch
@@ -77,7 +79,7 @@ jobs:
         uses: emibcn/badge-action@v2.0.3
         with:
           label: 'coverage'
-          status: ${{ steps.coverage.outputs.coverage }}
+          status: ${{ steps.coverage.outputs.coverage }}%
           path: badges/${{ steps.extract_branch.outputs.branch }}/badge.svg
           color: ${{
                 steps.coverage.outputs.coverage > 90 && 'green'              ||
