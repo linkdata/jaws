@@ -317,10 +317,12 @@ function jawsVar(name, data, operation) {
 		var path = keys.slice(1).join(".");
 		name = keys[0];
 		for (i = 0; i < keys.length - 1; i++) {
-			if (!obj.hasOwnProperty(keys[i])) {
-				throw "jaws: object undefined: " + name;
+			if (keys[i] != "") {
+				if (!obj.hasOwnProperty(keys[i])) {
+					throw "jaws: object undefined: " + name;
+				}
+				obj = obj[keys[i]];
 			}
-			obj = obj[keys[i]];
 		}
 		switch (operation) {
 			case undefined:
@@ -355,7 +357,7 @@ function jawsPerform(what, id, data) {
 	if (what == 'Set' || what == 'Call') {
 		var equalPos = data.indexOf("=");
 		if (equalPos > 0) {
-			path = "." + data.slice(0, equalPos);
+			path = data.slice(0, equalPos);
 		}
 		data = data.slice(equalPos + 1);
 	}
@@ -421,9 +423,11 @@ function jawsPerform(what, id, data) {
 		case 'RClass':
 			elem.classList.remove(data);
 			return;
-		case 'Set':
 		case 'Call':
-			jawsVar(elem.dataset.jawsname + path, data, what);
+			jawsVar(path, data, what);
+			return;
+		case 'Set':
+			jawsVar(elem.dataset.jawsname + "." + path, data, what);
 			return;
 	}
 	throw "jaws: unknown operation: " + what;
