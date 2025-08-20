@@ -125,7 +125,7 @@ func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error
 			jsvarname := params[0].(string)
 			attrs := e.ApplyParams(params[1:])
 			var b []byte
-			b = append(b, `<div id=`...)
+			b = append(b, "\n<div id="...)
 			b = e.Jid().AppendQuote(b)
 			b = append(b, ` data-jawsname=`...)
 			b = strconv.AppendQuote(b, jsvarname)
@@ -135,7 +135,7 @@ func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error
 				b = append(b, "'"...)
 			}
 			b = appendAttrs(b, attrs)
-			b = append(b, ` hidden></div>`...)
+			b = append(b, " hidden></div>"...)
 			_, err = w.Write(b)
 		}
 	}

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"time"
 )
 
@@ -108,7 +109,7 @@ func (tr *testRequest) BodyString() string {
 }
 
 func (tr *testRequest) BodyHTML() template.HTML {
-	return template.HTML(tr.BodyString())
+	return template.HTML(strings.TrimSpace(tr.BodyString()))
 }
 
 func (tr *testRequest) Close() {

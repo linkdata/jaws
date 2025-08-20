@@ -21,6 +21,7 @@ type valtype struct {
 }
 
 func Test_JsVar_JawsRender(t *testing.T) {
+	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 
@@ -39,24 +40,17 @@ func Test_JsVar_JawsRender(t *testing.T) {
 		t.Error(err)
 	}
 
-	if val.String != "text" {
-		t.Error(val)
-	}
+	th.Equal(val.String, "text")
 
 	x := dot.JawsGet(elem)
-	if !reflect.DeepEqual(x, val) {
-		t.Error(x)
-	}
+	th.Equal(x, val)
 
 	if err := rq.Template("jsvartemplate", dot); err != nil {
 		t.Error(err)
 	}
 
-	got := string(rq.BodyHTML())
 	want := `<div id="Jid.3" data-jawsname="myjsvar" data-jawsdata='{"String":"text","Number":1.23}' hidden></div>`
-	if got != want {
-		t.Errorf("\n got: %q\nwant: %q\n", got, want)
-	}
+	th.Equal(string(rq.BodyHTML()), want)
 }
 
 func Test_JsVar_Update(t *testing.T) {
@@ -81,10 +75,9 @@ func Test_JsVar_Update(t *testing.T) {
 	if err := dot.JawsRender(elem, &sb, []any{varname}); err != nil {
 		t.Fatal(err)
 	}
-	want := `<div id="Jid.1" data-jawsname="myjsvar" data-jawsdata='{"String":"","Number":0}' hidden></div>`
-	if sb.String() != want {
-		t.Errorf("\n got %q\nwant %q\n", sb.String(), want)
-	}
+	// data-jawsdata not present because it's the zero value
+	want := `<div id="Jid.1" data-jawsname="myjsvar" hidden></div>`
+	th.Equal(strings.TrimSpace(sb.String()), want)
 	if err := dot.JawsSet(elem, valtype{"x", 2}); err != nil {
 		t.Error(err)
 	}
@@ -117,13 +110,13 @@ func Test_JsVar_Event(t *testing.T) {
 		Number float64
 	}
 	var mu deadlock.Mutex
-	var val valtype
+	val := valtype{String: "!"}
 	tl := testLocker{Locker: &mu, unlockCalled: make(chan struct{})}
 	dot := NewJsVar(&tl, &val)
 
 	tj := newTestJaws()
 	defer tj.Close()
-	const expectedHTML = `<div id="Jid.%d" data-jawsname="myjsvar" data-jawsdata='{"String":"","Number":0}' hidden></div>`
+	const expectedHTML = `<div id="Jid.%d" data-jawsname="myjsvar" data-jawsdata='{"String":"!","Number":0}' hidden></div>`
 
 	rq1 := tj.newRequest(nil)
 	elem1 := rq1.NewElement(dot)
@@ -131,7 +124,7 @@ func Test_JsVar_Event(t *testing.T) {
 	if err := dot.JawsRender(elem1, &sb1, []any{varname}); err != nil {
 		t.Fatal(err)
 	}
-	th.Equal(sb1.String(), fmt.Sprintf(expectedHTML, 1))
+	th.Equal(strings.TrimSpace(sb1.String()), fmt.Sprintf(expectedHTML, 1))
 
 	rq2 := tj.newRequest(nil)
 	elem2 := rq2.NewElement(dot)
@@ -139,7 +132,7 @@ func Test_JsVar_Event(t *testing.T) {
 	if err := dot.JawsRender(elem2, &sb2, []any{varname}); err != nil {
 		t.Fatal(err)
 	}
-	th.Equal(sb2.String(), fmt.Sprintf(expectedHTML, 2))
+	th.Equal(strings.TrimSpace(sb2.String()), fmt.Sprintf(expectedHTML, 2))
 
 	select {
 	case <-th.C:
@@ -245,7 +238,7 @@ func Test_JsVar_JsVarMaker(t *testing.T) {
 	defer rq.Close()
 	err := rq.JsVar("foo", &testJsVarMaker{})
 	th.NoErr(err)
-	th.Equal(rq.BodyHTML(), template.HTML("<div id=\"Jid.1\" data-jawsname=\"foo\" data-jawsdata='\"quote(\\u0027)\"' hidden></div>"))
+	th.Equal(string(rq.BodyHTML()), "<div id=\"Jid.1\" data-jawsname=\"foo\" data-jawsdata='\"quote(\\u0027)\"' hidden></div>")
 }
 
 type testJsVarPathSetter struct {

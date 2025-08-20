@@ -24,9 +24,8 @@ func TestJsFunc_JawsRender(t *testing.T) {
 		t.Error(err)
 	}
 
-	got := string(rq.BodyHTML())
-	th.Equal(got, "\n"+`<div id="Jid.3" data-jawsname="somefn" someattr hidden></div>`+"\n"+
-		"\n"+`<div id="Jid.4" data-jawsname="somefn2" hidden></div>`+"\n")
+	th.Equal(string(rq.BodyHTML()), `<div id="Jid.3" data-jawsname="somefn" someattr hidden></div>`+
+		"\n"+`<div id="Jid.4" data-jawsname="somefn2" hidden></div>`)
 }
 
 func TestJsFunc_JsCall(t *testing.T) {
@@ -90,38 +89,6 @@ func TestJsFunc_JawsEvent(t *testing.T) {
 	if err := dot.JawsRender(elem, &sb, nil); err != nil {
 		t.Fatal(err)
 	}
-	wantHTML := "\n<div id=\"Jid.1\" data-jawsname=\"fnname\" hidden></div>\n"
+	wantHTML := "\n<div id=\"Jid.1\" data-jawsname=\"fnname\" hidden></div>"
 	th.Equal(sb.String(), wantHTML)
-
-	/*
-		select {
-		case <-th.C:
-			th.Timeout()
-		case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "=\"sometext\""}:
-		}
-
-		select {
-		case <-th.C:
-			th.Timeout()
-		case <-retvtl.unlockCalled:
-		}
-
-		th.Equal(argval, float64(0))
-		th.Equal(retvval, "sometext")
-
-		select {
-		case <-th.C:
-			th.Timeout()
-		case rq.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "=1.2"}:
-		}
-
-		select {
-		case <-th.C:
-			th.Timeout()
-		case msg := <-rq.outCh:
-			s := msg.Format()
-			if !strings.Contains(s, "danger") {
-				th.Error(s)
-			}
-		}*/
 }
