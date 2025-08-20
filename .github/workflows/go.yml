@@ -41,23 +41,59 @@ jobs:
 
       # https://stackoverflow.com/questions/59203704/how-to-create-a-badge-with-test-coverage-jacoco-on-github-actions
       #
+      # git checkout main
       # git checkout --orphan badges
       # git rm --cached $(git ls-files)
       # echo '# Badges branch' > README.md
       # git add README.md
       # git commit -m 'Add dedicated README'
       # git push origin badges
+      # git checkout --force main
 
       - name: Extract code coverage
-        id: codecoverage
-        run: |
-          echo "CODECOVERAGE=$(go tool cover -func=coverage.txt | grep total | tr -s '\t' | cut -f 3)" >> $GITHUB_OUTPUT
-
-      - name: actions-goveralls
-        uses: shogo82148/actions-goveralls@v1
-        continue-on-error: true
+        id: coverage
+        run: echo "COVERAGE=$(go tool cover -func=coverage.txt | grep total | tr -s '\t' | cut -f 3)" >> $GITHUB_OUTPUT
+      - name: Extract branch name
+        run: echo "BRANCH=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_OUTPUT
+        id: extract_branch
+      - uses: actions/checkout@v3
         with:
-          path-to-profile: coverage.txt
+          ref: badges
+          path: badges
+      - name: Create badges dir if necessary
+        env:
+          BRANCH: ${{ steps.extract_branch.outputs.branch }}
+        run: mkdir -p badges/${BRANCH}
+      - name: Generate the badge SVG image
+        uses: emibcn/badge-action@v2.0.3
+        with:
+          label: 'coverage'
+          status: ${{ steps.coverage.outputs.coverage }}
+          color: 'blue,555,daf'
+          path: badges/${{ steps.extract_branch.outputs.branch }}/badge.svg
+      - name: Commit badge
+        env:
+          BRANCH: ${{ steps.extract_branch.outputs.branch }}
+        run: |
+          pushd badges
+              git config --local user.email "action@github.com"
+              git config --local user.name "GitHub Action"
+              git add "${BRANCH}/badge.svg"
+              git commit -m "Add/Update badge"
+              git push
+          popd
+      #- name: Push badge commit
+      #  uses: ad-m/github-push-action@master
+      #  with:
+      #    github_token: ${{ secrets.GITHUB_TOKEN }}
+      #    branch: badges
+      #    directory: badges
+
+      #- name: actions-goveralls
+      #  uses: shogo82148/actions-goveralls@v1
+      #  continue-on-error: true
+      #  with:
+      #    path-to-profile: coverage.txt
 
       - name: Go report card
         uses: creekorful/goreportcard-action@v1.0
