@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -115,7 +116,12 @@ func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error
 	defer ui.Unlock()
 	if ui.tag, err = e.ApplyGetter(ui.ptr); err == nil {
 		var data []byte
-		if data, err = json.Marshal(ui.ptr); err == nil {
+		if ui.ptr != nil {
+			if !reflect.ValueOf(*ui.ptr).IsZero() {
+				data, err = json.Marshal(ui.ptr)
+			}
+		}
+		if err == nil {
 			jsvarname := params[0].(string)
 			attrs := e.ApplyParams(params[1:])
 			var b []byte
@@ -123,9 +129,11 @@ func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error
 			b = e.Jid().AppendQuote(b)
 			b = append(b, ` data-jawsname=`...)
 			b = strconv.AppendQuote(b, jsvarname)
-			b = append(b, ` data-jawsdata='`...)
-			b = append(b, bytes.ReplaceAll(data, []byte(`'`), []byte(`\u0027`))...)
-			b = append(b, "'"...)
+			if data != nil {
+				b = append(b, ` data-jawsdata='`...)
+				b = append(b, bytes.ReplaceAll(data, []byte(`'`), []byte(`\u0027`))...)
+				b = append(b, "'"...)
+			}
 			b = appendAttrs(b, attrs)
 			b = append(b, ` hidden></div>`...)
 			_, err = w.Write(b)
@@ -164,9 +172,10 @@ func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error)
 // pointer to underlying data.
 //
 // JsVar's use JawsRender, and that rendering will contain the
-// JSON representation of the underlying data. This will be used to
-// initialize the named Javascript variable before "DOMContentLoaded"
-// fires. Note that we don't render the Javascript variable declaration,
+// JSON representation of the underlying data unless it is the
+// zero value. If so, it will be used to initialize the named
+// Javascript variable before "DOMContentLoaded" fires.
+// Note that we don't render the Javascript variable declaration,
 // you'll have to do that yourself.
 //
 // JsVar's do *NOT* use JawsUpdate, so changing the underlying data and
