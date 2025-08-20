@@ -40,6 +40,14 @@ jobs:
           args: ./...
 
       # https://stackoverflow.com/questions/59203704/how-to-create-a-badge-with-test-coverage-jacoco-on-github-actions
+      #
+      # git checkout --orphan badges
+      # git rm --cached $(git ls-files)
+      # echo '# Badges branch' > README.md
+      # git add README.md
+      # git commit -m 'Add dedicated README'
+      # git push origin badges
+
       - name: Extract code coverage
         id: codecoverage
         run: |
