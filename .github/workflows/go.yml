@@ -46,9 +46,9 @@ jobs:
       # Generate code coverage badge and push it to the 'badges' branch.
       # Reference it in your README.md like this:
       #
-      #   [![coverage](https://github.com/USERNAME/REPO/blob/badges/BRANCH/badge.svg)](#)
+      #  [![coverage](https://github.com/USERNAME/REPO/blob/badges/BRANCH/badge.svg)](#)
       #
-      # To create the 'badges' branch for the project:
+      # To create the 'badges' branch for the repository:
       #
       #  git checkout BRANCH
       #  git checkout --orphan badges
