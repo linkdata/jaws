@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -18,6 +19,26 @@ const varname = "myjsvar"
 type valtype struct {
 	String string
 	Number float64
+}
+
+type testLocker struct {
+	sync.Locker
+	unlockCalled chan struct{}
+	unlockCount  int32
+}
+
+func (tl *testLocker) reset() {
+	tl.unlockCalled = make(chan struct{})
+	atomic.StoreInt32(&tl.unlockCount, 0)
+}
+
+func (tl *testLocker) Unlock() {
+	tl.Locker.Unlock()
+	if atomic.AddInt32(&tl.unlockCount, 1) == 1 {
+		if tl.unlockCalled != nil {
+			close(tl.unlockCalled)
+		}
+	}
 }
 
 func Test_JsVar_JawsRender(t *testing.T) {

@@ -352,7 +352,7 @@ function jawsVar(name, data, operation) {
 
 function jawsPerform(what, id, data) {
 	var path = "";
-	if (what == 'Set') {
+	if (what == 'Set' || what == 'Call') {
 		var equalPos = data.indexOf("=");
 		if (equalPos > 0) {
 			path = "." + data.slice(0, equalPos);

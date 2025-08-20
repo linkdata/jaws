@@ -491,17 +491,6 @@ func (jw *Jaws) Alert(lvl, msg string) {
 	})
 }
 
-// JsCall broadcasts to all Requests that have the given JsFunc to invoke the
-// function in the browser with the given JSON data. The jsonstr argument
-// must valid JSON formatting.
-func (jw *Jaws) JsCall(fn JsFunc, jsonstr string) {
-	jw.Broadcast(Message{
-		Dest: fn,
-		What: what.Call,
-		Data: jsonstr,
-	})
-}
-
 // Count returns the number of requests waiting for their WebSocket callbacks.
 func (jw *Jaws) Pending() (n int) {
 	jw.mu.RLock()
@@ -753,6 +742,17 @@ func (jw *Jaws) Append(target any, html template.HTML) {
 		Dest: target,
 		What: what.Append,
 		Data: string(html),
+	})
+}
+
+// JsCall calls the Javascript function 'jsfunc' with the argument 'jsonstr'
+// on all Requests that have the target UI tag.
+// The jsonstr argument must a valid JSON object in string format.
+func (jw *Jaws) JsCall(tag any, jsfunc, jsonstr string) {
+	jw.Broadcast(Message{
+		Dest: tag,
+		What: what.Call,
+		Data: jsfunc + "=" + jsonstr,
 	})
 }
 
