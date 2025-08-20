@@ -34,15 +34,16 @@ jobs:
       - name: Test
         run: go test -tags debug -bench=. -coverprofile=coverage.txt ./...
       
-      - name: Extract code coverage
-        id: codecoverage
-        run: |
-          echo "CODECOVERAGE=$(go tool cover -func=coverage.txt | grep total | tr -s '\t' | cut -f 3)" >> $GITHUB_OUTPUT
-
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master
         with:
           args: ./...
+
+      # https://stackoverflow.com/questions/59203704/how-to-create-a-badge-with-test-coverage-jacoco-on-github-actions
+      - name: Extract code coverage
+        id: codecoverage
+        run: |
+          echo "CODECOVERAGE=$(go tool cover -func=coverage.txt | grep total | tr -s '\t' | cut -f 3)" >> $GITHUB_OUTPUT
 
       - name: actions-goveralls
         uses: shogo82148/actions-goveralls@v1
