@@ -44,15 +44,15 @@ var (
 
 type JsVar[T any] struct {
 	RWLocker
-	ptr *T
-	tag any
+	Ptr *T
+	Tag any
 }
 
 func (ui *JsVar[T]) JawsGetPath(elem *Element, jspath string) (value any) {
 	ui.RLock()
 	defer ui.RUnlock()
 	var err error
-	value, err = jq.Get(ui.ptr, jspath)
+	value, err = jq.Get(ui.Ptr, jspath)
 	if elem != nil {
 		_ = elem.Jaws.Log(err)
 	}
@@ -66,11 +66,11 @@ func (ui *JsVar[T]) JawsGet(elem *Element) (value T) {
 }
 
 func (ui *JsVar[T]) setPathLocked(elem *Element, jspath string, value any) (err error) {
-	if ps, ok := ((any)(ui.ptr).(PathSetter)); ok {
+	if ps, ok := ((any)(ui.Ptr).(PathSetter)); ok {
 		err = ps.JawsSetPath(elem, jspath, value)
 	} else {
 		var changed bool
-		if changed, err = jq.Set(ui.ptr, jspath, value); err == nil && !changed {
+		if changed, err = jq.Set(ui.Ptr, jspath, value); err == nil && !changed {
 			err = ErrValueUnchanged
 		}
 	}
@@ -78,7 +78,7 @@ func (ui *JsVar[T]) setPathLocked(elem *Element, jspath string, value any) (err 
 		var data []byte
 		if data, err = json.Marshal(value); err == nil {
 			elem.Jaws.Broadcast(Message{
-				Dest: ui.tag,
+				Dest: ui.Tag,
 				What: what.Set,
 				Data: jspath + "=" + string(data),
 			})
@@ -96,7 +96,7 @@ func (ui *JsVar[T]) setPathLock(elem *Element, jspath string, value any) (err er
 
 func (ui *JsVar[T]) setPath(elem *Element, jspath string, value any) (err error) {
 	if err = ui.setPathLock(elem, jspath, value); err == nil {
-		if sp, ok := ((any)(ui.ptr).(SetPather)); ok {
+		if sp, ok := ((any)(ui.Ptr).(SetPather)); ok {
 			sp.JawsPathSet(elem, jspath, value)
 		}
 	}
@@ -114,11 +114,11 @@ func (ui *JsVar[T]) JawsSet(elem *Element, value T) (err error) {
 func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error) {
 	ui.Lock()
 	defer ui.Unlock()
-	if ui.tag, err = e.ApplyGetter(ui.ptr); err == nil {
+	if ui.Tag, err = e.ApplyGetter(ui.Ptr); err == nil {
 		var data []byte
-		if ui.ptr != nil {
-			if !reflect.ValueOf(*ui.ptr).IsZero() {
-				data, err = json.Marshal(ui.ptr)
+		if ui.Ptr != nil {
+			if !reflect.ValueOf(*ui.Ptr).IsZero() {
+				data, err = json.Marshal(ui.Ptr)
 			}
 		}
 		if err == nil {
@@ -143,7 +143,7 @@ func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error
 }
 
 func (ui *JsVar[T]) JawsGetTag(rq *Request) any {
-	return ui.tag
+	return ui.Tag
 }
 
 func (ui *JsVar[T]) JawsUpdate(e *Element) {} // no-op for JsVar[T]
@@ -187,9 +187,9 @@ func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error)
 // that will be used instead of jq.Set().
 func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 	if rl, ok := l.(RWLocker); ok {
-		return &JsVar[T]{RWLocker: rl, ptr: v}
+		return &JsVar[T]{RWLocker: rl, Ptr: v}
 	}
-	return &JsVar[T]{RWLocker: rwlocker{l}, ptr: v}
+	return &JsVar[T]{RWLocker: rwlocker{l}, Ptr: v}
 }
 
 // JsVar binds a JsVar[T] to a named Javascript variable.
