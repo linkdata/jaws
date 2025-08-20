@@ -69,8 +69,17 @@ jobs:
         with:
           label: 'coverage'
           status: ${{ steps.coverage.outputs.coverage }}
-          color: 'blue,555,daf'
           path: badges/${{ steps.extract_branch.outputs.branch }}/badge.svg
+          color: ${{
+                steps.coverage.outputs.coverage > 90 && 'green'              ||
+                steps.coverage.outputs.coverage > 80 && 'yellow,green'       ||
+                steps.coverage.outputs.coverage > 70 && 'yellow'             ||
+                steps.coverage.outputs.coverage > 60 && 'orange,yellow'      ||
+                steps.coverage.outputs.coverage > 50 && 'orange'             ||
+                steps.coverage.outputs.coverage > 40 && 'red,orange'         ||
+                steps.coverage.outputs.coverage > 30 && 'red,red,orange'     ||
+                steps.coverage.outputs.coverage > 20 && 'red,red,red,orange' ||
+                'red' }}
       - name: Commit badge
         env:
           BRANCH: ${{ steps.extract_branch.outputs.branch }}
@@ -82,18 +91,7 @@ jobs:
               git commit -m "Add/Update badge"
               git push
           popd
-      #- name: Push badge commit
-      #  uses: ad-m/github-push-action@master
-      #  with:
-      #    github_token: ${{ secrets.GITHUB_TOKEN }}
-      #    branch: badges
-      #    directory: badges
-
-      #- name: actions-goveralls
-      #  uses: shogo82148/actions-goveralls@v1
-      #  continue-on-error: true
-      #  with:
-      #    path-to-profile: coverage.txt
 
       - name: Go report card
         uses: creekorful/goreportcard-action@v1.0
+        continue-on-error: true
