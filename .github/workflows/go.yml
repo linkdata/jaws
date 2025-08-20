@@ -44,7 +44,7 @@ jobs:
         continue-on-error: true
 
       # Generate code coverage badge and push it to the 'badges' branch.
-      # Reference it you README.md like this:
+      # Reference it in your README.md like this:
       #
       #   [![coverage](https://github.com/USERNAME/REPO/blob/badges/BRANCH/badge.svg)](#)
       #
