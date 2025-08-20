@@ -39,16 +39,25 @@ jobs:
         with:
           args: ./...
 
-      # https://stackoverflow.com/questions/59203704/how-to-create-a-badge-with-test-coverage-jacoco-on-github-actions
+      - name: Go report card
+        uses: creekorful/goreportcard-action@v1.0
+        continue-on-error: true
+
+      # Generate code coverage badge and push it to the 'badges' branch.
+      # Reference it you README.md like this:
       #
-      # git checkout main
-      # git checkout --orphan badges
-      # git rm --cached $(git ls-files)
-      # echo '# Badges branch' > README.md
-      # git add README.md
-      # git commit -m 'Add dedicated README'
-      # git push origin badges
-      # git checkout --force main
+      #   [![coverage](https://github.com/USERNAME/REPO/blob/badges/BRANCH/badge.svg)](#)
+      #
+      # To create the 'badges' branch for the project:
+      #
+      #  git checkout BRANCH
+      #  git checkout --orphan badges
+      #  git rm --cached $(git ls-files)
+      #  echo '# Badges branch' > README.md
+      #  git add README.md
+      #  git commit -m 'Add dedicated README'
+      #  git push origin badges
+      #  git checkout --force BRANCH
 
       - name: Extract code coverage
         id: coverage
@@ -92,6 +101,3 @@ jobs:
               git push
           popd
 
-      - name: Go report card
-        uses: creekorful/goreportcard-action@v1.0
-        continue-on-error: true
