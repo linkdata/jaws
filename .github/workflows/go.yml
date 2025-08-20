@@ -92,6 +92,8 @@ jobs:
                 steps.coverage.outputs.coverage > 20 && 'red,red,red,orange' ||
                 'red' }}
       - name: Commit badge
+        # ignore errors because badge may not have changed
+        continue-on-error: true
         env:
           BRANCH: ${{ steps.extract_branch.outputs.branch }}
         run: |
