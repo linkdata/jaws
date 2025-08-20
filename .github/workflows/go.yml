@@ -33,6 +33,11 @@ jobs:
 
       - name: Test
         run: go test -tags debug -bench=. -coverprofile=coverage.txt ./...
+      
+      - name: Extract code coverage
+        id: codecoverage
+        run: |
+          echo "CODECOVERAGE=$(go tool cover -func=coverage.txt | grep total | tr -s '\t' | cut -f 3)" >> $GITHUB_OUTPUT
 
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master
