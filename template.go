@@ -28,7 +28,7 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
 	switch node := node.(type) {
 	case *parse.TextNode:
 		if node != nil {
-			found = found || bytes.Equal(node.Text, []byte("</html>"))
+			found = found || bytes.Contains(node.Text, []byte("</html>"))
 		}
 	case *parse.ListNode:
 		if node != nil {
