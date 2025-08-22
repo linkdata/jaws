@@ -4553,7 +4553,7 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) <span class="cov8" titl
         switch node := node.(type) </span>{
         case *parse.TextNode:<span class="cov8" title="1">
                 if node != nil </span><span class="cov8" title="1">{
-                        found = found || bytes.Equal(node.Text, []byte("&lt;/html&gt;"))
+                        found = found || bytes.Contains(node.Text, []byte("&lt;/html&gt;"))
                 }</span>
         case *parse.ListNode:<span class="cov8" title="1">
                 if node != nil </span><span class="cov8" title="1">{
