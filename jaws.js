@@ -427,6 +427,9 @@ function jawsPerform(what, id, data) {
 			jawsVar(path, data, what);
 			return;
 		case 'Set':
+			if (!elem.dataset.jawsname) {
+				throw "jaws: " + id + " missing data-jawsname (wrong UI tag?)";
+			}
 			jawsVar(elem.dataset.jawsname + "." + path, data, what);
 			return;
 	}
