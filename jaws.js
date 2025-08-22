@@ -309,7 +309,7 @@ function jawsMessage(e) {
 }
 
 function jawsVar(name, data, operation) {
-	var keys = name.split('.');
+	var keys = name.split('.').filter(function(key){return key != "";});
 	if (keys.length > 0) {
 		var obj = window;
 		var lastkey = keys[keys.length - 1];
@@ -317,12 +317,10 @@ function jawsVar(name, data, operation) {
 		var path = keys.slice(1).join(".");
 		name = keys[0];
 		for (i = 0; i < keys.length - 1; i++) {
-			if (keys[i] != "") {
-				if (!obj.hasOwnProperty(keys[i])) {
-					throw "jaws: object undefined: " + name;
-				}
-				obj = obj[keys[i]];
+			if (!obj.hasOwnProperty(keys[i])) {
+				throw "jaws: object undefined: " + name;
 			}
+			obj = obj[keys[i]];
 		}
 		switch (operation) {
 			case undefined:
@@ -427,10 +425,11 @@ function jawsPerform(what, id, data) {
 			jawsVar(path, data, what);
 			return;
 		case 'Set':
-			if (!elem.dataset.jawsname) {
-				throw "jaws: " + id + " missing data-jawsname (wrong UI tag?)";
+			if (elem.dataset.jawsname) {
+				jawsVar(elem.dataset.jawsname + "." + path, data, what);
+			} else {
+				console.log("jaws: id " + id + " is not a JsVar");
 			}
-			jawsVar(elem.dataset.jawsname + "." + path, data, what);
 			return;
 	}
 	throw "jaws: unknown operation: " + what;
