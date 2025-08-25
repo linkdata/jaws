@@ -1,0 +1,12 @@
+.jawstree {
+    background-color: inherit;
+    border: 0px !important;
+    padding: 5px !important;
+    border: none !important;
+    margin: 0px !important;
+    box-shadow: none !important;
+    width: 100%;
+    max-width: 600px;
+    max-height: calc(100vh - 15em);
+    overflow-y: auto;
+}
