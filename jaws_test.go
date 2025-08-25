@@ -80,7 +80,7 @@ func TestJaws_Logger(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
 	var b bytes.Buffer
-	jw.Logger = slog.New(slog.NewTextHandler(&b, nil))
+	jw.SetLogger(slog.New(slog.NewTextHandler(&b, nil)))
 	go jw.Serve()
 	jw.Log(errors.New("bar"))
 	is.True(strings.Contains(b.String(), "msg=bar"))
@@ -98,11 +98,11 @@ func TestJaws_MustLog(t *testing.T) {
 	}()
 
 	var b bytes.Buffer
-	jw.Logger = slog.New(slog.NewTextHandler(&b, nil))
+	jw.SetLogger(slog.New(slog.NewTextHandler(&b, nil)))
 	go jw.Serve()
 	jw.MustLog(barErr)
 	is.True(strings.Contains(b.String(), "msg=bar"))
-	jw.Logger = nil
+	jw.SetLogger(nil)
 	jw.MustLog(barErr)
 }
 
@@ -110,7 +110,7 @@ func TestJaws_BroadcastDoesntBlockWhenClosed(t *testing.T) {
 	jw, _ := New()
 	go jw.Serve()
 	jw.Close()
-	for i := 0; i < cap(jw.bcastCh)+1; i++ {
+	for i := 0; i < cap(jw.(*jwsvc).bcastCh)+1; i++ {
 		jw.Broadcast(Message{})
 	}
 }
@@ -120,23 +120,23 @@ func TestJaws_BroadcastWaitsWhenFull(t *testing.T) {
 	jw, _ := New()
 	go jw.ServeWithTimeout(testTimeout)
 
-	subCh := jw.subscribe(jw.NewRequest(nil), 0)
-	defer jw.unsubscribe(subCh)
+	subCh := jw.(*jwsvc).subscribe(jw.NewRequest(nil), 0)
+	defer jw.(*jwsvc).unsubscribe(subCh)
 
 	// ensure our sub has been processed
-	jw.subCh <- subscription{}
-	jw.subCh <- subscription{}
+	jw.(*jwsvc).subCh <- subscription{}
+	jw.(*jwsvc).subCh <- subscription{}
 
 	// send two broadcasts
 	select {
 	case <-th.C:
 		th.Timeout()
-	case jw.bcastCh <- Message{What: what.Reload}:
+	case jw.(*jwsvc).bcastCh <- Message{What: what.Reload}:
 	}
 	select {
 	case <-th.C:
 		th.Timeout()
-	case jw.bcastCh <- Message{What: what.Reload}:
+	case jw.(*jwsvc).bcastCh <- Message{What: what.Reload}:
 	}
 
 	// read one of the broadcasts, the other is
@@ -160,7 +160,8 @@ func TestJaws_BroadcastWaitsWhenFull(t *testing.T) {
 
 func TestJaws_BroadcastFullClosesChannel(t *testing.T) {
 	th := newTestHelper(t)
-	jw, _ := New()
+	jaws, _ := New()
+	jw := jaws.(*jwsvc)
 	go jw.ServeWithTimeout(time.Millisecond)
 
 	doneCh := make(chan struct{})
@@ -218,7 +219,7 @@ func TestJaws_UseRequest(t *testing.T) {
 
 	type testKey string
 	rq1 := jw.NewRequest(nil)
-	th.True(rq1.JawsKey != 0)
+	th.True(rq1.JawsKey() != 0)
 	rq1.SetContext(func(oldctx context.Context) (newctx context.Context) {
 		return context.WithValue(oldctx, testKey("key"), "val")
 	})
@@ -227,31 +228,31 @@ func TestJaws_UseRequest(t *testing.T) {
 	}
 
 	rq2 := jw.NewRequest(&http.Request{RemoteAddr: "10.0.0.2:1010"})
-	th.True(rq2.JawsKey != 0)
-	th.True(rq1.JawsKey != rq2.JawsKey)
+	th.True(rq2.JawsKey() != 0)
+	th.True(rq1.JawsKey() != rq2.JawsKey())
 	th.Equal(jw.Pending(), 2)
 
 	rqfail := jw.UseRequest(0, nil) // wrong JawsKey
 	th.Equal(rqfail, nil)
 	th.Equal(jw.Pending(), 2)
 
-	rqfail = jw.UseRequest(rq1.JawsKey, &http.Request{RemoteAddr: "10.0.0.1:1010"}) // wrong IP, expect blank
+	rqfail = jw.UseRequest(rq1.JawsKey(), &http.Request{RemoteAddr: "10.0.0.1:1010"}) // wrong IP, expect blank
 	th.Equal(rqfail, nil)
 	th.Equal(jw.Pending(), 2)
 
-	rqfail = jw.UseRequest(rq2.JawsKey, &http.Request{RemoteAddr: "10.0.0.1:1010"}) // wrong IP, expect .2
+	rqfail = jw.UseRequest(rq2.JawsKey(), &http.Request{RemoteAddr: "10.0.0.1:1010"}) // wrong IP, expect .2
 	th.Equal(rqfail, nil)
 	th.Equal(jw.Pending(), 2)
 
-	rq2ret := jw.UseRequest(rq2.JawsKey, &http.Request{RemoteAddr: "10.0.0.2:1212"}) // different port is OK
+	rq2ret := jw.UseRequest(rq2.JawsKey(), &http.Request{RemoteAddr: "10.0.0.2:1212"}) // different port is OK
 	th.Equal(rq2, rq2ret)
 	th.Equal(jw.Pending(), 1)
 
-	rqfail = jw.UseRequest(rq2.JawsKey, &http.Request{RemoteAddr: "10.0.0.2:1214"}) // already claimed
+	rqfail = jw.UseRequest(rq2.JawsKey(), &http.Request{RemoteAddr: "10.0.0.2:1214"}) // already claimed
 	th.Equal(rqfail, nil)
 	th.Equal(jw.Pending(), 1)
 
-	rq1ret := jw.UseRequest(rq1.JawsKey, nil)
+	rq1ret := jw.UseRequest(rq1.JawsKey(), nil)
 	th.Equal(rq1, rq1ret)
 	th.Equal(jw.Pending(), 0)
 
@@ -267,7 +268,8 @@ func TestJaws_BlockingRandomPanics(t *testing.T) {
 			th.Error("expected error")
 		}
 	}()
-	jw, _ := New()
+	jaws, _ := New()
+	jw := jaws.(*jwsvc)
 	defer jw.Close()
 	jw.kg = bufio.NewReader(&bytes.Buffer{})
 	jw.NewRequest(nil)
@@ -299,7 +301,8 @@ func (h *rawLogger) WithGroup(name string) slog.Handler {
 func TestJaws_CleansUpUnconnected(t *testing.T) {
 	const numReqs = 100
 	th := newTestHelper(t)
-	jw, _ := New()
+	jaws, _ := New()
+	jw := jaws.(*jwsvc)
 	defer jw.Close()
 	var b bytes.Buffer
 	jw.Logger = slog.New(&rawLogger{w: &b})
@@ -312,8 +315,8 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 		if (i % (numReqs / 5)) == 0 {
 			rq.NewElement(NewUiDiv(MakeHTMLGetter("meh")))
 		}
-		err := context.Cause(rq.ctx)
-		if err == nil && rq.lastWrite.Before(deadline) {
+		err := context.Cause(rq.Context())
+		if err == nil && rq.(*request).lastWrite.Before(deadline) {
 			err = newErrPendingCancelledLocked(rq, newErrNoWebSocketRequest(rq))
 		}
 		if err == nil {
@@ -348,9 +351,9 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 }
 
 func getLastWrite(rq *request) (when time.Time) {
-	rq.mu.RLock()
+	rq.RWMutex.RLock()
 	when = rq.lastWrite
-	rq.mu.RUnlock()
+	rq.RWMutex.RUnlock()
 	return
 }
 
@@ -359,13 +362,13 @@ func TestJaws_RequestWriterExtendsDeadline(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
 	var b bytes.Buffer
-	jw.Logger = slog.New(slog.NewTextHandler(&b, nil))
+	jw.SetLogger(slog.New(slog.NewTextHandler(&b, nil)))
 	defer jw.Close()
 
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
 	rq := jw.NewRequest(hr)
-	rq.lastWrite = time.Now().Add(time.Second)
-	lastWrite := rq.lastWrite
+	rq.(*request).lastWrite = time.Now().Add(time.Second)
+	lastWrite := rq.(*request).lastWrite
 
 	var sb strings.Builder
 	rw := rq.Writer(&sb)
@@ -378,12 +381,12 @@ func TestJaws_RequestWriterExtendsDeadline(t *testing.T) {
 	rw.UI(ui)
 
 	th.True(ui.renderCalled > 0)
-	th.True(rq.rendering.Load())
-	th.Equal(lastWrite, getLastWrite(rq))
+	th.True(rq.(*request).rendering.Load())
+	th.Equal(lastWrite, getLastWrite(rq.(*request)))
 
 	go jw.ServeWithTimeout(time.Millisecond)
 
-	for lastWrite.Equal(getLastWrite(rq)) {
+	for lastWrite.Equal(getLastWrite(rq.(*request))) {
 		select {
 		case <-th.C:
 			th.Timeout()
@@ -393,10 +396,10 @@ func TestJaws_RequestWriterExtendsDeadline(t *testing.T) {
 			time.Sleep(time.Millisecond)
 		}
 	}
-	if getLastWrite(rq).IsZero() {
+	if getLastWrite(rq.(*request)).IsZero() {
 		th.Error("last write is zero")
 	}
-	if lastWrite.Equal(getLastWrite(rq)) {
+	if lastWrite.Equal(getLastWrite(rq.(*request))) {
 		th.Error("last write not modified")
 	}
 }
@@ -410,7 +413,7 @@ func TestJaws_UnconnectedLivesUntilDeadline(t *testing.T) {
 	rq1 := jw.NewRequest(hr)
 	rq1ctx := rq1.Context()
 	rq2 := jw.NewRequest(hr)
-	rq2.lastWrite = time.Now().Add(-time.Second * 10)
+	rq2.(*request).lastWrite = time.Now().Add(-time.Second * 10)
 	rq2ctx := rq2.Context()
 
 	th.Equal(jw.Pending(), 2)
@@ -438,8 +441,8 @@ func TestJaws_UnconnectedLivesUntilDeadline(t *testing.T) {
 	}
 
 	// neither should have been recycled
-	th.Equal(rq1.Jaws(), jw)
-	th.Equal(rq2.Jaws(), jw)
+	th.Equal(rq1.GetJaws(), jw)
+	th.Equal(rq2.GetJaws(), jw)
 
 	th.NoErr(context.Cause(rq1ctx))
 	if !errors.Is(context.Cause(rq2ctx), errNoWebSocketRequest{}) {
@@ -453,25 +456,26 @@ func TestJaws_BroadcastsCallable(t *testing.T) {
 	defer jw.Close()
 	go jw.Serve()
 
-	jw.Delete("foo")
-	jw.Insert("foo", "bar", "baz")
-	jw.Append("foo", "bar")
-	jw.Replace("foo", "bar", "baz")
-	jw.Reload()
-	jw.Redirect("foo")
-	jw.Alert("info", "bar")
+	jw.BroadcastDelete("foo")
+	jw.BroadcastInsert("foo", "bar", "baz")
+	jw.BroadcastAppend("foo", "bar")
+	jw.BroadcastReplace("foo", "bar", "baz")
+	jw.BroadcastReload()
+	jw.BroadcastRedirect("foo")
+	jw.BroadcastAlert("info", "bar")
 	someTags := []any{Tag("tag1"), Tag("tag2")}
-	jw.SetInner("regularHTMLId", template.HTML(""))
-	jw.SetValue("regularHTMLId", "value")
-	jw.SetAttr(someTags, "attribute", "value")
-	jw.RemoveAttr(someTags, "attribute")
-	jw.SetClass(someTags, "classname")
-	jw.RemoveClass(someTags, "classname")
+	jw.BroadcastSetInner("regularHTMLId", template.HTML(""))
+	jw.BroadcastSetValue("regularHTMLId", "value")
+	jw.BroadcastSetAttr(someTags, "attribute", "value")
+	jw.BroadcastRemoveAttr(someTags, "attribute")
+	jw.BroadcastSetClass(someTags, "classname")
+	jw.BroadcastRemoveClass(someTags, "classname")
 }
 
 func TestJaws_subscribeOnClosedReturnsNil(t *testing.T) {
 	th := newTestHelper(t)
-	jw, _ := New()
+	jaws, _ := New()
+	jw := jaws.(*jwsvc)
 	jw.Close()
 	<-jw.Done()
 	for len(jw.subCh) < cap(jw.subCh) {
@@ -491,7 +495,8 @@ func TestJaws_GenerateHeadHTML(t *testing.T) {
 	const extraIcon = "favicon.png"
 	const extraFont = "someExtraFont.woff2"
 	th := newTestHelper(t)
-	jw, _ := New()
+	jaws, _ := New()
+	jw := jaws.(*jwsvc)
 	jw.Close()
 
 	th.NoErr(jw.GenerateHeadHTML())
@@ -516,10 +521,10 @@ func TestJaws_TemplateLookuper(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
-	th.Equal(rq.Jaws().LookupTemplate("nosuchtemplate"), nil)
-	th.Equal(rq.Jaws().LookupTemplate("testtemplate"), rq.jw.testtmpl)
-	rq.Jaws().RemoveTemplateLookuper(rq.jw.testtmpl)
-	th.Equal(rq.Jaws().LookupTemplate("testtemplate"), nil)
+	th.Equal(rq.LookupTemplate("nosuchtemplate"), nil)
+	th.Equal(rq.LookupTemplate("testtemplate"), rq.jw.testtmpl)
+	rq.RemoveTemplateLookuper(rq.jw.testtmpl)
+	th.Equal(rq.LookupTemplate("testtemplate"), nil)
 }
 
 func TestJaws_JsCall(t *testing.T) {
@@ -536,7 +541,7 @@ func TestJaws_JsCall(t *testing.T) {
 	err := elem.JawsRender(&sb, nil)
 	th.NoErr(err)
 
-	elem.Jaws().JsCall(tss, "somefn", "1.3")
+	elem.JsCall(tss, "somefn", "1.3")
 
 	select {
 	case <-th.C:

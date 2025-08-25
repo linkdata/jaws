@@ -54,7 +54,7 @@ func TestRequest_JawsRender_DebugOutput(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 
-	rq.jaws.Debug = true
+	rq.SetDebug(true)
 	rq.UI(&testUi{renderFn: func(e Element, w io.Writer, params []any) error {
 		e.Tag(Tag("footag"))
 		e.Tag(e.GetRequest())

@@ -2,5 +2,5 @@ package jaws
 
 type subscription struct {
 	msgCh chan Message
-	rq    *request
+	rq    Request
 }

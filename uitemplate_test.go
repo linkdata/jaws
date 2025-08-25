@@ -123,12 +123,12 @@ func TestRequest_Template(t *testing.T) {
 				t.Error(e)
 			}
 			got := rq.BodyHTML()
-			is.Equal(len(rq.elems), 1)
-			elem := rq.elems[0]
+			is.Equal(len(rq.Request.(*request).elems), 1)
+			elem := rq.Request.(*request).elems[0]
 			if tt.errtxt != "" {
 				t.Fail()
 			}
-			gotTags := elem.GetRequest().TagsOf(elem)
+			gotTags := elem.TagsOf(elem)
 			is.Equal(len(tt.tags), len(gotTags))
 			for _, tag := range tt.tags {
 				is.True(elem.HasTag(tag))

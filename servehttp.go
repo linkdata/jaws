@@ -8,7 +8,7 @@ import (
 var headerCacheNoCache = []string{"no-cache"}
 
 // ServeHTTP can handle the required JaWS endpoints, which all start with "/jaws/".
-func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (jw *jwsvc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return

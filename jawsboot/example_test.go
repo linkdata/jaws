@@ -24,7 +24,7 @@ import (
 //go:embed assets
 var assetsFS embed.FS
 
-func setupJaws(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
+func setupJaws(jw jaws.Jaws, mux *http.ServeMux) (err error) {
 	mux.Handle("/jaws/", jw) // Ensure the JaWS routes are handled
 	var tmpl jaws.TemplateLookuper
 	if tmpl, err = templatereloader.New(assetsFS, "assets/ui/*.html", ""); err == nil {
@@ -48,7 +48,7 @@ func setupJaws(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
 func Example() {
 	jw, err := jaws.New()
 	if err == nil {
-		jw.Logger = slog.Default()
+		jw.SetLogger(slog.Default())
 		if err = setupJaws(jw, http.DefaultServeMux); err == nil {
 			// start the JaWS processing loop and the HTTP server
 			go jw.Serve()

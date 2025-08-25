@@ -88,11 +88,11 @@ func (t Template) JawsRender(e Element, wr io.Writer, params []any) (err error) 
 		attrstr := template.HTMLAttr(strings.Join(attrs, " ")) // #nosec G203
 		var auth Auth
 		auth = defaultAuth{}
-		if f := e.Jaws().GetMakeAuth(); f != nil {
+		if f := e.GetMakeAuth(); f != nil {
 			auth = f(e.GetRequest())
 		}
 		err = errMissingTemplate(t.Name)
-		if tmpl := e.Jaws().LookupTemplate(t.Name); tmpl != nil {
+		if tmpl := e.LookupTemplate(t.Name); tmpl != nil {
 			err = tmpl.Execute(wr, With{
 				Element:       e,
 				RequestWriter: e.GetRequest().Writer(wr),
@@ -101,7 +101,7 @@ func (t Template) JawsRender(e Element, wr io.Writer, params []any) (err error) 
 				Auth:          auth,
 			})
 			if deadlock.Debug {
-				if l := e.Jaws().GetLogger(); l != nil {
+				if l := e.GetLogger(); l != nil {
 					if !findJidOrJsOrHTMLNode(tmpl.Tree.Root) {
 						l.Warn("jaws: template has no Jid reference", "template", t.Name)
 					}

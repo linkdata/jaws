@@ -16,7 +16,8 @@ import (
 )
 
 func TestSession_Object(t *testing.T) {
-	jw, _ := New()
+	jws, _ := New()
+	jw := jws.(*jwsvc)
 	defer jw.Close()
 
 	sessionId := uint64(0x12345)
@@ -45,7 +46,7 @@ func TestSession_Object(t *testing.T) {
 
 	cookie := sess.Cookie()
 
-	if jw.CookieName != cookie.Name {
+	if jw.cookieName != cookie.Name {
 		t.Error(cookie.Name)
 	}
 	if JawsKeyString(sessionId) != cookie.Value {
@@ -106,7 +107,7 @@ func TestSession_Use(t *testing.T) {
 			rq.Set("bar", "quux")
 		}
 		w.WriteHeader(http.StatusOK)
-		jw.UseRequest(rq.Request().GetJawsKey(), r)
+		jw.UseRequest(rq.Request().JawsKey(), r)
 	})
 
 	srv := httptest.NewServer(h)
@@ -120,7 +121,7 @@ func TestSession_Use(t *testing.T) {
 	if len(cookies) != 1 {
 		t.Error(len(cookies))
 	}
-	if cookies[0].Name != jw.CookieName {
+	if cookies[0].Name != jw.CookieName() {
 		t.Error(cookies[0].Name)
 	}
 	if wantSess == nil {
@@ -207,7 +208,8 @@ func TestSession_Use(t *testing.T) {
 }
 
 func TestSession_Requests(t *testing.T) {
-	jw, _ := New()
+	jws, _ := New()
+	jw := jws.(*jwsvc)
 	defer jw.Close()
 
 	sessionId := uint64(0x12345)
@@ -235,7 +237,7 @@ func TestSession_Delete(t *testing.T) {
 	// session cookie seems ok
 	cookie1 := &ts.sess.cookie
 	if cookie1 != nil {
-		if x := cookie1.Name; x != ts.jw.CookieName {
+		if x := cookie1.Name; x != ts.jw.cookieName {
 			t.Error(x)
 		}
 	} else {
@@ -383,7 +385,8 @@ func TestSession_Delete(t *testing.T) {
 }
 
 func TestSession_Cleanup(t *testing.T) {
-	jw, _ := New()
+	jws, _ := New()
+	jw := jws.(*jwsvc)
 	defer jw.Close()
 
 	rr := httptest.NewRecorder()
@@ -427,7 +430,8 @@ func TestSession_Cleanup(t *testing.T) {
 }
 
 func TestSession_ReplacesOld(t *testing.T) {
-	jw, _ := New()
+	jws, _ := New()
+	jw := jws.(*jwsvc)
 	defer jw.Close()
 	go jw.ServeWithTimeout(time.Second)
 

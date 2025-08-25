@@ -29,7 +29,7 @@ func TestTree(t *testing.T) {
 	maybeError(t, err)
 
 	rq := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
-	rq = rq.Jaws().UseRequest(rq.JawsKey, httptest.NewRequest("GET", "/", nil))
+	rq = rq.UseRequest(rq.JawsKey(), httptest.NewRequest("GET", "/", nil))
 
 	root, err := os.OpenRoot(".")
 	maybeError(t, err)

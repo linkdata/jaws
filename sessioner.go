@@ -3,7 +3,7 @@ package jaws
 import "net/http"
 
 type sessioner struct {
-	jw *Jaws
+	jw *jwsvc
 	h  http.Handler
 }
 
@@ -14,7 +14,7 @@ func (sess sessioner) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	sess.h.ServeHTTP(wr, r)
 }
 
-// Session returns a http.Handler that ensures a JaWS Session exists before invoking h.
-func (jw *Jaws) Session(h http.Handler) http.Handler {
+// EnsureSession returns a http.Handler that ensures a JaWS Session exists before invoking h.
+func (jw *jwsvc) EnsureSession(h http.Handler) http.Handler {
 	return sessioner{jw: jw, h: h}
 }

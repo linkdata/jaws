@@ -16,7 +16,7 @@ func (rq *request) startServe() (ok bool) {
 
 func (rq *request) stopServe() {
 	rq.cancel(nil)
-	rq.jaws.recycle(rq)
+	rq.recycle(rq)
 }
 
 // ServeHTTP implements http.HanderFunc.
@@ -34,15 +34,15 @@ func (rq *request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			if err = rq.onConnect(); err == nil {
 				incomingMsgCh := make(chan wsMsg)
-				broadcastMsgCh := rq.jaws.subscribe(rq, 4+len(rq.elems)*4)
+				broadcastMsgCh := rq.subscribe(rq, 4+len(rq.elems)*4)
 				outboundMsgCh := make(chan wsMsg, cap(broadcastMsgCh))
-				go wsReader(rq.ctx, rq.cancelFn, rq.jaws.Done(), incomingMsgCh, ws) // closes incomingMsgCh
-				go wsWriter(rq.ctx, rq.cancelFn, rq.jaws.Done(), outboundMsgCh, ws) // calls ws.Close()
-				rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh)            // unsubscribes broadcastMsgCh, closes outboundMsgCh
+				go wsReader(rq.ctx, rq.cancelFn, rq.Done(), incomingMsgCh, ws) // closes incomingMsgCh
+				go wsWriter(rq.ctx, rq.cancelFn, rq.Done(), outboundMsgCh, ws) // calls ws.Close()
+				rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh)       // unsubscribes broadcastMsgCh, closes outboundMsgCh
 			} else {
 				defer ws.Close(websocket.StatusNormalClosure, err.Error())
 				var msg wsMsg
-				msg.FillAlert(rq.jaws.Log(err))
+				msg.FillAlert(rq.Log(err))
 				_ = ws.Write(r.Context(), websocket.MessageText, msg.Append(nil))
 			}
 		}

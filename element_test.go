@@ -71,11 +71,11 @@ func TestElement_helpers(t *testing.T) {
 
 	tss := &testUi{}
 	e := rq.NewElement(tss)
-	is.Equal(e.GetRequest().Jaws(), rq.jw.Jaws)
-	is.Equal(e.GetRequest(), rq.request)
-	is.Equal(e.GetRequest().Session(), nil)
-	e.GetRequest().Session().Set("foo", "bar") // no session, so no effect
-	is.Equal(e.GetRequest().Session().Get("foo"), nil)
+	is.Equal(e.GetJaws(), rq.jw.jwsvc)
+	is.Equal(e.GetRequest(), rq.Request)
+	is.Equal(e.Session(), nil)
+	e.Set("foo", "bar") // no session, so no effect
+	is.Equal(e.Get("foo"), nil)
 }
 
 func TestElement_Tag(t *testing.T) {
@@ -112,7 +112,7 @@ func TestElement_Queued(t *testing.T) {
 			e.Order([]jid.Jid{1, 2})
 			replaceHTML := template.HTML(fmt.Sprintf("<div id=\"%s\"></div>", e.Jid().String()))
 			e.Replace(replaceHTML)
-			th.Equal(rq.wsQueue, []wsMsg{
+			th.Equal(rq.Request.(*request).wsQueue, []wsMsg{
 				{
 					Data: "hidden\n",
 					Jid:  e.Jid(),
@@ -167,11 +167,10 @@ func TestElement_Queued(t *testing.T) {
 		},
 	}
 
-	pendingRq := rq.Jaws().NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	pendingRq := rq.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	RequestWriter{pendingRq, httptest.NewRecorder()}.UI(tss)
 
 	rq.UI(tss)
-	rq.Jaws().Dirty(tss)
 	rq.Dirty(tss)
 	for atomic.LoadInt32(&tss.updateCalled) < 1 {
 		select {

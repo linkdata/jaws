@@ -10,24 +10,24 @@ import (
 )
 
 type Session struct {
-	jw        *Jaws
+	jw        *jwsvc
 	sessionID uint64
 	remoteIP  netip.Addr
 	mu        deadlock.RWMutex // protects following
-	requests  []*request
+	requests  []Request
 	deadline  time.Time
 	cookie    http.Cookie
 	data      map[string]any
 }
 
-func newSession(jw *Jaws, sessionID uint64, remoteIP netip.Addr) *Session {
+func newSession(jw *jwsvc, sessionID uint64, remoteIP netip.Addr) *Session {
 	return &Session{
 		jw:        jw,
 		sessionID: sessionID,
 		remoteIP:  remoteIP,
 		deadline:  time.Now().Add(time.Minute),
 		cookie: http.Cookie{
-			Name:     jw.CookieName,
+			Name:     jw.cookieName,
 			Path:     "/",
 			Value:    JawsKeyString(sessionID),
 			Secure:   true,
@@ -75,7 +75,7 @@ func (sess *Session) delRequest(rq *request) {
 
 // Jaws returns the Jaws instance of the Session, or nil.
 // It is safe to call on a nil Session.
-func (sess *Session) Jaws() (jw *Jaws) {
+func (sess *Session) Jaws() (jw *jwsvc) {
 	if sess != nil {
 		jw = sess.jw
 	}
@@ -191,7 +191,7 @@ func (sess *Session) Clear() {
 
 // Requests returns a list of the Requests using this Session.
 // It is safe to call on a nil Session.
-func (sess *Session) Requests() (rl []*request) {
+func (sess *Session) Requests() (rl []Request) {
 	if sess != nil {
 		sess.mu.RLock()
 		rl = append(rl, sess.requests...)

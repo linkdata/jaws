@@ -4,7 +4,7 @@ import "net/http"
 
 // Handler implements ServeHTTP with a jaws.Template
 type Handler struct {
-	*Jaws
+	*jwsvc
 	Template
 }
 
@@ -13,6 +13,6 @@ func (h Handler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 }
 
 // Handler returns a http.Handler using a jaws.Template
-func (jw *Jaws) Handler(name string, dot any) http.Handler {
-	return Handler{Jaws: jw, Template: Template{Name: name, Dot: dot}}
+func (jw *jwsvc) Handler(name string, dot any) http.Handler {
+	return Handler{jwsvc: jw, Template: Template{Name: name, Dot: dot}}
 }

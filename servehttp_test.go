@@ -13,7 +13,8 @@ import (
 var headerContentGZip = []string{"gzip"}
 
 func TestServeHTTP_GetJavascript(t *testing.T) {
-	jw, _ := New()
+	jws, _ := New()
+	jw := jws.(*jwsvc)
 	go jw.Serve()
 	defer jw.Close()
 
@@ -55,7 +56,8 @@ func TestServeHTTP_GetJavascript(t *testing.T) {
 }
 
 func TestServeHTTP_GetCSS(t *testing.T) {
-	jw, _ := New()
+	jws, _ := New()
+	jw := jws.(*jwsvc)
 	go jw.Serve()
 	defer jw.Close()
 

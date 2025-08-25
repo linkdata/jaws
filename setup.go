@@ -17,7 +17,7 @@ type HandleFunc = func(uri string, handler http.Handler)
 // SetupFunc is called by Setup and allows setting up addons for JaWS.
 //
 // The urls returned will be used in a call to GenerateHeadHTML.
-type SetupFunc = func(jw *Jaws, handleFn HandleFunc, prefix string) (urls []*url.URL, err error)
+type SetupFunc = func(jw Jaws, handleFn HandleFunc, prefix string) (urls []*url.URL, err error)
 
 // makeAbsPath prepends the prefix to u's path if it is relative.
 // Returns the (possibly modified) u.
@@ -37,7 +37,7 @@ func makeAbsPath(prefix string, u *url.URL) *url.URL {
 //
 // It calls GenerateHeadHTML with the final list of URLs, with any
 // relative URL paths prefixed with prefix.
-func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err error) {
+func (jw *jwsvc) Setup(handleFn HandleFunc, prefix string, extras ...any) (err error) {
 	var urls []*url.URL
 
 	handleStaticServe := func(ss *staticserve.StaticServe) {

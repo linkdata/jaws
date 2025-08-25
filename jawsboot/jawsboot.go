@@ -14,7 +14,7 @@ import (
 //go:embed assets
 var assetsFS embed.FS
 
-func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.URL, err error) {
+func Setup(jw jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.URL, err error) {
 	var files []*staticserve.StaticServe
 	if err = staticserve.WalkDir(assetsFS, "assets/static", func(filename string, ss *staticserve.StaticServe) (err error) {
 		files = append(files, ss)

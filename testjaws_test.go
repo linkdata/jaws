@@ -12,7 +12,7 @@ import (
 )
 
 type testJaws struct {
-	*Jaws
+	*jwsvc
 	testtmpl *template.Template
 	log      bytes.Buffer
 }
@@ -23,16 +23,16 @@ func newTestJaws() (tj *testJaws) {
 		panic(err)
 	}
 	tj = &testJaws{
-		Jaws: jw,
+		jwsvc: jw.(*jwsvc),
 	}
-	tj.Jaws.Logger = slog.New(slog.NewTextHandler(&tj.log, nil))
-	tj.Jaws.MakeAuth = func(r Request) Auth {
+	tj.jwsvc.Logger = slog.New(slog.NewTextHandler(&tj.log, nil))
+	tj.jwsvc.MakeAuth = func(r Request) Auth {
 		return defaultAuth{}
 	}
 	tj.testtmpl = template.Must(template.New("testtemplate").Parse(`{{with $.Dot}}<div id="{{$.Jid}}" {{$.Attrs}}>{{.}}</div>{{end}}`))
 	tj.AddTemplateLookuper(tj.testtmpl)
 
-	tj.Jaws.updateTicker = time.NewTicker(time.Millisecond)
+	tj.jwsvc.updateTicker = time.NewTicker(time.Millisecond)
 	go tj.Serve()
 	return
 }
@@ -51,7 +51,7 @@ type testRequest struct {
 	expectPanic bool
 	panicked    bool
 	panicVal    any
-	*request
+	Request
 	RequestWriter
 }
 
@@ -64,7 +64,7 @@ func (tj *testJaws) newRequest(hr *http.Request) (tr *testRequest) {
 	rr := httptest.NewRecorder()
 	rr.Body = &bytes.Buffer{}
 	rq := tj.NewRequest(hr)
-	if rq == nil || tj.UseRequest(rq.JawsKey, hr) != rq {
+	if rq == nil || tj.UseRequest(rq.JawsKey(), hr) != rq {
 		panic("failed to create or use jaws.Request")
 	}
 	bcastCh := tj.subscribe(rq, 64)
@@ -83,7 +83,7 @@ func (tj *testJaws) newRequest(hr *http.Request) (tr *testRequest) {
 		bcastCh:       bcastCh,
 		ctx:           ctx,
 		cancel:        cancel,
-		request:       rq,
+		Request:       rq,
 		RequestWriter: rq.Writer(rr),
 	}
 
@@ -97,8 +97,8 @@ func (tj *testJaws) newRequest(hr *http.Request) (tr *testRequest) {
 			close(tr.doneCh)
 		}()
 		close(tr.readyCh)
-		tr.process(tr.bcastCh, tr.inCh, tr.outCh) // usubs from bcase, closes outCh
-		tr.jw.recycle(tr.request)
+		tr.Request.(*request).process(tr.bcastCh, tr.inCh, tr.outCh) // usubs from bcase, closes outCh
+		tr.jw.recycle(tr.Request)
 	}()
 
 	return
@@ -122,9 +122,11 @@ func (tr *testRequest) Write(buf []byte) (int, error) {
 }
 
 func (tr *testRequest) getElementByJid(jid Jid) (e Element) {
-	tr.request.mu.RLock()
-	e = tr.request.getElementByJidLocked(jid)
-	tr.request.mu.RUnlock()
+	if r, ok := (tr.Request).(*request); ok {
+		r.RWMutex.RLock()
+		e = r.getElementByJidLocked(jid)
+		r.RWMutex.RUnlock()
+	}
 	return
 }
 

@@ -25,7 +25,7 @@ func (tm *testMux) Handle(uri string, handler http.Handler) {
 type testSetupper struct {
 }
 
-func (ts *testSetupper) JawsSetupFunc(jw *Jaws, handleFn HandleFunc, prefix string) (urls []*url.URL, err error) {
+func (ts *testSetupper) JawsSetupFunc(jw Jaws, handleFn HandleFunc, prefix string) (urls []*url.URL, err error) {
 	ss, _ := staticserve.New("foo.txt", []byte("foo"))
 	u, _ := url.Parse(ss.Name)
 	urls = append(urls, u)

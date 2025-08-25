@@ -16,7 +16,7 @@ var assetsFS embed.FS
 
 // treeview from https://github.com/stefaneichert/quercus.js
 
-func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.URL, err error) {
+func Setup(jw jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.URL, err error) {
 	var files []*staticserve.StaticServe
 	if err = staticserve.WalkDir(assetsFS, "assets", func(filename string, ss *staticserve.StaticServe) (err error) {
 		files = append(files, ss)

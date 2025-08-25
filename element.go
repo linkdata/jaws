@@ -114,8 +114,8 @@ func (e *element) MaybeDirty(tag any, err error) (bool, error) {
 func (e *element) RenderDebug(w io.Writer) {
 	var sb strings.Builder
 	_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", e.Jid(), e.Ui())
-	if rq, ok := e.Request.(*request); ok && rq.mu.TryRLock() {
-		defer rq.mu.RUnlock()
+	if l, ok := e.Request.(TryRWLocker); ok && l.TryRLock() {
+		defer l.RUnlock()
 		for i, tag := range e.TagsOfLocked(e) {
 			if i > 0 {
 				sb.WriteString(", ")
@@ -135,7 +135,7 @@ func (e *element) RenderDebug(w io.Writer) {
 func (e *element) JawsRender(w io.Writer, params []any) (err error) {
 	if !e.deleted {
 		if err = e.Ui().JawsRender(e, w, params); err == nil {
-			if e.Jaws().IsDebug() {
+			if e.IsDebug() {
 				e.RenderDebug(w)
 			}
 		}

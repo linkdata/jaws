@@ -17,25 +17,26 @@ import (
 )
 
 type testServer struct {
-	jw          *Jaws
+	jw          *jwsvc
 	ctx         context.Context
 	cancel      context.CancelFunc
 	hr          *http.Request
 	rr          *httptest.ResponseRecorder
-	rq          *request
+	rq          Request
 	sess        *Session
 	srv         *httptest.Server
 	connectedCh chan struct{}
 }
 
 func newTestServer() (ts *testServer) {
-	jw, _ := New()
+	jws, _ := New()
+	jw := jws.(*jwsvc)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	rr := httptest.NewRecorder()
 	hr := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
 	sess := jw.NewSession(rr, hr)
 	rq := jw.NewRequest(hr)
-	if rq != jw.UseRequest(rq.JawsKey, hr) {
+	if rq != jw.UseRequest(rq.JawsKey(), hr) {
 		panic("UseRequest failed")
 	}
 	ts = &testServer{
@@ -91,7 +92,7 @@ func TestWS_UpgradeRequired(t *testing.T) {
 	w := httptest.NewRecorder()
 	hr := httptest.NewRequest("", "/", nil)
 	rq := jw.NewRequest(hr)
-	jw.UseRequest(rq.JawsKey, hr)
+	jw.UseRequest(rq.JawsKey(), hr)
 	req := httptest.NewRequest("", "/jaws/"+rq.JawsKeyString(), nil)
 	rq.ServeHTTP(w, req)
 	if w.Code != http.StatusUpgradeRequired {
@@ -438,7 +439,7 @@ func TestWriter_ReportsError(t *testing.T) {
 
 	go func() {
 		defer close(doneCh)
-		wsWriter(ts.rq.ctx, ts.rq.cancelFn, ts.jw.Done(), outCh, server)
+		wsWriter(ts.rq.(*request).ctx, ts.rq.(*request).cancelFn, ts.jw.Done(), outCh, server)
 	}()
 
 	msg := wsMsg{Jid: Jid(1234)}
@@ -473,7 +474,7 @@ func TestReader_ReportsError(t *testing.T) {
 
 	go func() {
 		defer close(doneCh)
-		wsReader(ts.rq.ctx, ts.rq.cancelFn, ts.jw.Done(), inCh, server)
+		wsReader(ts.rq.(*request).ctx, ts.rq.(*request).cancelFn, ts.jw.Done(), inCh, server)
 	}()
 
 	msg := wsMsg{Jid: Jid(1234), What: what.Input}

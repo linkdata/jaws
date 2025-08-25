@@ -54,7 +54,7 @@ func (ui *JsVar[T]) JawsGetPath(elem Element, jspath string) (value any) {
 	var err error
 	value, err = jq.Get(ui.Ptr, jspath)
 	if elem != nil {
-		_ = elem.Jaws().Log(err)
+		_ = elem.Log(err)
 	}
 	return
 }
@@ -77,7 +77,7 @@ func (ui *JsVar[T]) setPathLocked(elem Element, jspath string, value any) (err e
 	if err == nil && elem != nil {
 		var data []byte
 		if data, err = json.Marshal(value); err == nil {
-			elem.Jaws().Broadcast(Message{
+			elem.Broadcast(Message{
 				Dest: ui.Tag,
 				What: what.Set,
 				Data: jspath + "=" + string(data),

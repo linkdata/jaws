@@ -141,7 +141,7 @@ func (nba *NamedBoolArray) JawsGet(e Element) string {
 
 func (nba *NamedBoolArray) JawsSet(e Element, name string) (err error) {
 	if nba.Set(name, true) {
-		e.Jaws().Dirty(nba)
+		e.Dirty(nba)
 	} else {
 		err = ErrValueUnchanged
 	}

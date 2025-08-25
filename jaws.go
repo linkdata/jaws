@@ -40,8 +40,10 @@ const (
 
 type Jid = jid.Jid // convenience alias
 
-type JawsIf interface {
+type Jaws interface {
+	http.Handler
 	Close()
+	SetDebug(bool)
 	IsDebug() bool
 	Done() <-chan struct{}
 	AddTemplateLookuper(tl TemplateLookuper)
@@ -50,43 +52,47 @@ type JawsIf interface {
 	RequestCount() (n int)
 	Log(err error) error
 	MustLog(err error)
-	NewRequest(hr *http.Request) (rq *request)
-	UseRequest(jawsKey uint64, hr *http.Request) (rq *request)
+	NewRequest(hr *http.Request) (rq Request)
+	UseRequest(jawsKey uint64, hr *http.Request) (rq Request)
+	EnsureSession(h http.Handler) http.Handler
 	SessionCount() (n int)
 	Sessions() (sl []*Session)
 	GetSession(hr *http.Request) (sess *Session)
 	NewSession(w http.ResponseWriter, hr *http.Request) (sess *Session)
 	FaviconURL() string
 	GenerateHeadHTML(extra ...string) (err error)
-	Broadcast(msg Message)
 	Dirty(tags ...any)
-	Reload()
-	Redirect(url string)
-	Alert(lvl, msg string)
 	Pending() (n int)
 	ServeWithTimeout(requestTimeout time.Duration)
 	Serve()
-	SetInner(target any, innerHTML template.HTML)
-	SetAttr(target any, attr, val string)
-	RemoveAttr(target any, attr string)
-	SetClass(target any, cls string)
-	RemoveClass(target any, cls string)
-	SetValue(target any, val string)
-	Insert(target any, where, html string)
-	Replace(target any, where, html string)
-	Delete(target any)
-	Append(target any, html template.HTML)
+	Broadcast(msg Message)
+	BroadcastReload()
+	BroadcastRedirect(url string)
+	BroadcastAlert(lvl, msg string)
+	BroadcastSetInner(target any, innerHTML template.HTML)
+	BroadcastSetAttr(target any, attr, val string)
+	BroadcastRemoveAttr(target any, attr string)
+	BroadcastSetClass(target any, cls string)
+	BroadcastRemoveClass(target any, cls string)
+	BroadcastSetValue(target any, val string)
+	BroadcastInsert(target any, where, html string)
+	BroadcastReplace(target any, where, html string)
+	BroadcastDelete(target any)
+	BroadcastAppend(target any, html template.HTML)
 	JsCall(tag any, jsfunc, jsonstr string)
 	Handler(name string, dot any) http.Handler
 	GetBaseContext() context.Context
+	SetLogger(Logger)
 	GetLogger() Logger
 	GetMakeAuth() MakeAuthFn
+	Setup(handleFn HandleFunc, prefix string, extras ...any) (err error)
+	CookieName() string
 }
 
-var _ JawsIf = &Jaws{}
+var _ Jaws = &jwsvc{}
 
-type Jaws struct {
-	CookieName   string          // Name for session cookies, defaults to "jaws"
+type jwsvc struct {
+	cookieName   string          // Name for session cookies, defaults to "jaws"
 	Logger       Logger          // Optional logger to use
 	Debug        bool            // Set to true to enable debug info in generated HTML code
 	MakeAuth     MakeAuthFn      // Optional function to create With.Auth for Templates
@@ -104,7 +110,7 @@ type Jaws struct {
 	tmplookers   []TemplateLookuper
 	kg           *bufio.Reader
 	closeCh      chan struct{} // closed when Close() has been called
-	requests     map[uint64]*request
+	requests     map[uint64]Request
 	sessions     map[uint64]*Session
 	dirty        map[any]int
 	dirtOrder    int
@@ -113,12 +119,12 @@ type Jaws struct {
 // New returns a new JaWS object.
 // This is expected to be created once per HTTP server and handles
 // publishing HTML changes across all connections.
-func New() (jw *Jaws, err error) {
+func New() (jw Jaws, err error) {
 	var serveJS, serveCSS *staticserve.StaticServe
 	if serveJS, err = staticserve.New("/jaws/.jaws.js", JavascriptText); err == nil {
 		if serveCSS, err = staticserve.New("/jaws/.jaws.css", JawsCSS); err == nil {
-			tmp := &Jaws{
-				CookieName:   DefaultCookieName,
+			tmp := &jwsvc{
+				cookieName:   DefaultCookieName,
 				BaseContext:  context.Background(),
 				serveJS:      serveJS,
 				serveCSS:     serveCSS,
@@ -127,18 +133,18 @@ func New() (jw *Jaws, err error) {
 				unsubCh:      make(chan chan Message, 1),
 				updateTicker: time.NewTicker(DefaultUpdateInterval),
 				kg:           bufio.NewReader(rand.Reader),
-				requests:     make(map[uint64]*request),
+				requests:     make(map[uint64]Request),
 				sessions:     make(map[uint64]*Session),
 				dirty:        make(map[any]int),
 				closeCh:      make(chan struct{}),
 			}
 			if err = tmp.GenerateHeadHTML(); err == nil {
 				jw = tmp
-				jw.reqPool.New = func() any {
+				tmp.reqPool.New = func() any {
 					return (&request{
-						jaws:   jw,
+						jwsvc:  tmp,
 						tagMap: make(map[any][]Element),
-					}).clearLocked()
+					}).ClearLocked()
 				}
 			}
 		}
@@ -147,19 +153,31 @@ func New() (jw *Jaws, err error) {
 	return
 }
 
-func (jw *Jaws) IsDebug() bool {
+func (jw *jwsvc) SetDebug(yes bool) {
+	jw.Debug = yes
+}
+
+func (jw *jwsvc) IsDebug() bool {
 	return jw.Debug
 }
 
-func (jw *Jaws) GetLogger() Logger {
+func (jw *jwsvc) SetLogger(l Logger) {
+	jw.Logger = l
+}
+
+func (jw *jwsvc) GetLogger() Logger {
 	return jw.Logger
 }
 
-func (jw *Jaws) GetBaseContext() context.Context {
+func (jw *jwsvc) CookieName() string {
+	return jw.cookieName
+}
+
+func (jw *jwsvc) GetBaseContext() context.Context {
 	return jw.BaseContext
 }
 
-func (jw *Jaws) GetMakeAuth() MakeAuthFn {
+func (jw *jwsvc) GetMakeAuth() MakeAuthFn {
 	return jw.MakeAuth
 }
 
@@ -167,7 +185,7 @@ func (jw *Jaws) GetMakeAuth() MakeAuthFn {
 // closes the completion channel if the JaWS was created with New().
 // Once the completion channel is closed, broadcasts and sends may be discarded.
 // Subsequent calls to Close() have no effect.
-func (jw *Jaws) Close() {
+func (jw *jwsvc) Close() {
 	jw.mu.Lock()
 	select {
 	case <-jw.closeCh:
@@ -180,13 +198,13 @@ func (jw *Jaws) Close() {
 }
 
 // Done returns the channel that is closed when Close has been called.
-func (jw *Jaws) Done() <-chan struct{} {
+func (jw *jwsvc) Done() <-chan struct{} {
 	return jw.closeCh
 }
 
 // AddTemplateLookuper adds an object that can resolve
 // strings to *template.Template.
-func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) {
+func (jw *jwsvc) AddTemplateLookuper(tl TemplateLookuper) {
 	if tl != nil {
 		jw.mu.Lock()
 		if !slices.Contains(jw.tmplookers, tl) {
@@ -198,7 +216,7 @@ func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) {
 
 // RemoveTemplateLookuper removes the given object from
 // the list of TemplateLookupers.
-func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) {
+func (jw *jwsvc) RemoveTemplateLookuper(tl TemplateLookuper) {
 	if tl != nil {
 		jw.mu.Lock()
 		jw.tmplookers = slices.DeleteFunc(jw.tmplookers, func(x TemplateLookuper) bool { return x == tl })
@@ -208,7 +226,7 @@ func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) {
 
 // LookupTemplate queries the known TemplateLookupers in the order
 // they were added and returns the first found.
-func (jw *Jaws) LookupTemplate(name string) *template.Template {
+func (jw *jwsvc) LookupTemplate(name string) *template.Template {
 	jw.mu.RLock()
 	defer jw.mu.RUnlock()
 	for _, tl := range jw.tmplookers {
@@ -223,7 +241,7 @@ func (jw *Jaws) LookupTemplate(name string) *template.Template {
 //
 // The count includes all Requests, including those being rendered,
 // those waiting for the WebSocket callback and those active.
-func (jw *Jaws) RequestCount() (n int) {
+func (jw *jwsvc) RequestCount() (n int) {
 	jw.mu.RLock()
 	n = len(jw.requests)
 	jw.mu.RUnlock()
@@ -233,7 +251,7 @@ func (jw *Jaws) RequestCount() (n int) {
 // Log sends an error to the Logger set in the Jaws.
 // Has no effect if the err is nil or the Logger is nil.
 // Returns err.
-func (jw *Jaws) Log(err error) error {
+func (jw *jwsvc) Log(err error) error {
 	if err != nil && jw != nil && jw.Logger != nil {
 		jw.Logger.Error(err.Error())
 	}
@@ -243,7 +261,7 @@ func (jw *Jaws) Log(err error) error {
 // MustLog sends an error to the Logger set in the Jaws or
 // panics with the given error if no Logger is set.
 // Has no effect if the err is nil.
-func (jw *Jaws) MustLog(err error) {
+func (jw *jwsvc) MustLog(err error) {
 	if err != nil {
 		if jw != nil && jw.Logger != nil {
 			jw.Logger.Error(err.Error())
@@ -274,7 +292,7 @@ func MakeID() string {
 // returned Request pointer so it can be used while constructing the HTML
 // response in order to register the JaWS id's you use in the response, and
 // use it's Key attribute when sending the Javascript portion of the reply.
-func (jw *Jaws) NewRequest(hr *http.Request) (rq *request) {
+func (jw *jwsvc) NewRequest(hr *http.Request) (rq Request) {
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	for rq == nil {
@@ -287,7 +305,7 @@ func (jw *Jaws) NewRequest(hr *http.Request) (rq *request) {
 	return
 }
 
-func (jw *Jaws) nonZeroRandomLocked() (val uint64) {
+func (jw *jwsvc) nonZeroRandomLocked() (val uint64) {
 	random := make([]byte, 8)
 	for val == 0 {
 		if _, err := io.ReadFull(jw.kg, random); err != nil {
@@ -307,12 +325,12 @@ func (jw *Jaws) nonZeroRandomLocked() (val uint64) {
 //
 // Returns nil if the key was not found or the IP doesn't match, in which
 // case you should return a HTTP "404 Not Found" status.
-func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *request) {
+func (jw *jwsvc) UseRequest(jawsKey uint64, hr *http.Request) (rq Request) {
 	if jawsKey != 0 {
 		var err error
 		jw.mu.Lock()
 		if waitingRq, ok := jw.requests[jawsKey]; ok {
-			if err = waitingRq.claim(hr); err == nil {
+			if err = waitingRq.Claim(hr); err == nil {
 				rq = waitingRq
 			}
 		}
@@ -323,7 +341,7 @@ func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *request) {
 }
 
 // SessionCount returns the number of active sessions.
-func (jw *Jaws) SessionCount() (n int) {
+func (jw *jwsvc) SessionCount() (n int) {
 	jw.mu.RLock()
 	n = len(jw.sessions)
 	jw.mu.RUnlock()
@@ -331,7 +349,7 @@ func (jw *Jaws) SessionCount() (n int) {
 }
 
 // Sessions returns a list of all active sessions, which may be nil.
-func (jw *Jaws) Sessions() (sl []*Session) {
+func (jw *jwsvc) Sessions() (sl []*Session) {
 	jw.mu.RLock()
 	if n := len(jw.sessions); n > 0 {
 		sl = make([]*Session, 0, n)
@@ -343,7 +361,7 @@ func (jw *Jaws) Sessions() (sl []*Session) {
 	return
 }
 
-func (jw *Jaws) getSessionLocked(sessIds []uint64, remoteIP netip.Addr) *Session {
+func (jw *jwsvc) getSessionLocked(sessIds []uint64, remoteIP netip.Addr) *Session {
 	for _, sessId := range sessIds {
 		if sess, ok := jw.sessions[sessId]; ok && equalIP(remoteIP, sess.remoteIP) {
 			return sess
@@ -385,8 +403,8 @@ func getCookieSessionsIds(h http.Header, wanted string) (cookies []uint64) {
 }
 
 // GetSession returns the Session associated with the given *http.Request, or nil.
-func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
-	if sessIds := getCookieSessionsIds(hr.Header, jw.CookieName); len(sessIds) > 0 {
+func (jw *jwsvc) GetSession(hr *http.Request) (sess *Session) {
+	if sessIds := getCookieSessionsIds(hr.Header, jw.cookieName); len(sessIds) > 0 {
 		remoteIP := parseIP(hr.RemoteAddr)
 		jw.mu.RLock()
 		sess = jw.getSessionLocked(sessIds, remoteIP)
@@ -401,7 +419,7 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
 //
 // Subsequent Requests created with `NewRequest()` that have the cookie set and
 // originates from the same IP will be able to access the Session.
-func (jw *Jaws) NewSession(w http.ResponseWriter, hr *http.Request) (sess *Session) {
+func (jw *jwsvc) NewSession(w http.ResponseWriter, hr *http.Request) (sess *Session) {
 	if oldSess := jw.GetSession(hr); oldSess != nil {
 		oldSess.Clear()
 		oldSess.Close()
@@ -409,7 +427,7 @@ func (jw *Jaws) NewSession(w http.ResponseWriter, hr *http.Request) (sess *Sessi
 	return jw.newSession(w, hr)
 }
 
-func (jw *Jaws) newSession(w http.ResponseWriter, hr *http.Request) (sess *Session) {
+func (jw *jwsvc) newSession(w http.ResponseWriter, hr *http.Request) (sess *Session) {
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	for sess == nil {
@@ -426,13 +444,13 @@ func (jw *Jaws) newSession(w http.ResponseWriter, hr *http.Request) (sess *Sessi
 	return
 }
 
-func (jw *Jaws) deleteSession(sessionID uint64) {
+func (jw *jwsvc) deleteSession(sessionID uint64) {
 	jw.mu.Lock()
 	delete(jw.sessions, sessionID)
 	jw.mu.Unlock()
 }
 
-func (jw *Jaws) FaviconURL() string {
+func (jw *jwsvc) FaviconURL() string {
 	return jw.faviconURL
 }
 
@@ -442,7 +460,7 @@ func (jw *Jaws) FaviconURL() string {
 // be retrieved using FaviconURL().
 //
 // You only need to call this if you add your own images, scripts and stylesheets.
-func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
+func (jw *jwsvc) GenerateHeadHTML(extra ...string) (err error) {
 	var jawsurl *url.URL
 	if jawsurl, err = url.Parse(jw.serveJS.Name); err == nil {
 		var cssurl *url.URL
@@ -467,7 +485,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 }
 
 // Broadcast sends a message to all Requests.
-func (jw *Jaws) Broadcast(msg Message) {
+func (jw *jwsvc) Broadcast(msg Message) {
 	select {
 	case <-jw.Done():
 	case jw.bcastCh <- msg:
@@ -475,7 +493,7 @@ func (jw *Jaws) Broadcast(msg Message) {
 }
 
 // setDirty marks all Elements that have one or more of the given tags as dirty.
-func (jw *Jaws) setDirty(tags []any) {
+func (jw *jwsvc) setDirty(tags []any) {
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	for _, tag := range tags {
@@ -488,11 +506,11 @@ func (jw *Jaws) setDirty(tags []any) {
 //
 // Note that if any of the tags are a TagGetter, it will be called with a nil Request.
 // Prefer using Request.Dirty() which avoids this.
-func (jw *Jaws) Dirty(tags ...any) {
+func (jw *jwsvc) Dirty(tags ...any) {
 	jw.setDirty(MustTagExpand(nil, tags))
 }
 
-func (jw *Jaws) distributeDirt() int {
+func (jw *jwsvc) distributeDirt() int {
 	type orderedDirt struct {
 		tag   any
 		order int
@@ -506,9 +524,9 @@ func (jw *Jaws) distributeDirt() int {
 	}
 	jw.dirtOrder = 0
 
-	var reqs []*request
+	var reqs []Request
 	if len(dirt) > 0 {
-		reqs = make([]*request, 0, len(jw.requests))
+		reqs = make([]Request, 0, len(jw.requests))
 		for _, rq := range jw.requests {
 			reqs = append(reqs, rq)
 		}
@@ -522,21 +540,21 @@ func (jw *Jaws) distributeDirt() int {
 			tags[i] = dirt[i].tag
 		}
 		for _, rq := range reqs {
-			rq.appendDirtyTags(tags)
+			rq.AppendDirtyTags(tags)
 		}
 	}
 	return len(dirt)
 }
 
 // Reload requests all Requests to reload their current page.
-func (jw *Jaws) Reload() {
+func (jw *jwsvc) BroadcastReload() {
 	jw.Broadcast(Message{
 		What: what.Reload,
 	})
 }
 
 // Redirect requests all Requests to navigate to the given URL.
-func (jw *Jaws) Redirect(url string) {
+func (jw *jwsvc) BroadcastRedirect(url string) {
 	jw.Broadcast(Message{
 		What: what.Redirect,
 		Data: url,
@@ -545,7 +563,7 @@ func (jw *Jaws) Redirect(url string) {
 
 // Alert sends an alert to all Requests. The lvl argument should be one of Bootstraps alert levels:
 // primary, secondary, success, danger, warning, info, light or dark.
-func (jw *Jaws) Alert(lvl, msg string) {
+func (jw *jwsvc) BroadcastAlert(lvl, msg string) {
 	jw.Broadcast(Message{
 		What: what.Alert,
 		Data: lvl + "\n" + msg,
@@ -553,11 +571,11 @@ func (jw *Jaws) Alert(lvl, msg string) {
 }
 
 // Count returns the number of requests waiting for their WebSocket callbacks.
-func (jw *Jaws) Pending() (n int) {
+func (jw *jwsvc) Pending() (n int) {
 	jw.mu.RLock()
 	defer jw.mu.RUnlock()
 	for _, rq := range jw.requests {
-		if !rq.claimed.Load() {
+		if !rq.Claimed() {
 			n++
 		}
 	}
@@ -567,7 +585,7 @@ func (jw *Jaws) Pending() (n int) {
 // ServeWithTimeout begins processing requests with the given timeout.
 // It is intended to run on it's own goroutine.
 // It returns when Close is called.
-func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
+func (jw *jwsvc) ServeWithTimeout(requestTimeout time.Duration) {
 	const minInterval = time.Millisecond * 10
 	const maxInterval = time.Second
 	maintenanceInterval := requestTimeout / 2
@@ -578,13 +596,13 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		maintenanceInterval = minInterval
 	}
 
-	subs := map[chan Message]*request{}
+	subs := map[chan Message]Request{}
 	t := time.NewTicker(maintenanceInterval)
 
 	defer func() {
 		t.Stop()
 		for ch, rq := range subs {
-			rq.cancel(nil)
+			rq.(*request).cancel(nil)
 			close(ch)
 		}
 	}()
@@ -605,14 +623,14 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	// random failures in processing logic.
 	mustBroadcast := func(msg Message) {
 		for msgCh, rq := range subs {
-			if msg.Dest == nil || rq.wantMessage(&msg) {
+			if msg.Dest == nil || rq.WantMessage(&msg) {
 				select {
 				case msgCh <- msg:
 				default:
 					// the exception is Update messages, more will follow eventually
 					if msg.What != what.Update {
 						killSub(msgCh)
-						rq.cancel(fmt.Errorf("%v: broadcast channel full sending %s", rq, msg.String()))
+						rq.(*request).cancel(fmt.Errorf("%v: broadcast channel full sending %s", rq, msg.String()))
 					}
 				}
 			}
@@ -646,11 +664,11 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 // Serve calls ServeWithTimeout(ctx, time.Second*10).
 // It is intended to run on it's own goroutine.
 // It returns when Close is called.
-func (jw *Jaws) Serve() {
+func (jw *jwsvc) Serve() {
 	jw.ServeWithTimeout(time.Second * 10)
 }
 
-func (jw *Jaws) subscribe(rq *request, size int) chan Message {
+func (jw *jwsvc) subscribe(rq Request, size int) chan Message {
 	msgCh := make(chan Message, size)
 	select {
 	case <-jw.Done():
@@ -661,19 +679,19 @@ func (jw *Jaws) subscribe(rq *request, size int) chan Message {
 	return msgCh
 }
 
-func (jw *Jaws) unsubscribe(msgCh chan Message) {
+func (jw *jwsvc) unsubscribe(msgCh chan Message) {
 	select {
 	case <-jw.Done():
 	case jw.unsubCh <- msgCh:
 	}
 }
 
-func (jw *Jaws) maintenance(requestTimeout time.Duration) {
+func (jw *jwsvc) maintenance(requestTimeout time.Duration) {
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	now := time.Now()
 	for _, rq := range jw.requests {
-		if rq.maintenance(now, requestTimeout) {
+		if rq.Maintenance(now, requestTimeout) {
 			jw.recycleLocked(rq)
 		}
 	}
@@ -707,7 +725,7 @@ func maybePanic(err error) {
 
 // SetInner sends a request to replace the inner HTML of
 // all HTML elements matching target.
-func (jw *Jaws) SetInner(target any, innerHTML template.HTML) {
+func (jw *jwsvc) BroadcastSetInner(target any, innerHTML template.HTML) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.Inner,
@@ -717,7 +735,7 @@ func (jw *Jaws) SetInner(target any, innerHTML template.HTML) {
 
 // SetAttr sends a request to replace the given attribute value in
 // all HTML elements matching target.
-func (jw *Jaws) SetAttr(target any, attr, val string) {
+func (jw *jwsvc) BroadcastSetAttr(target any, attr, val string) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.SAttr,
@@ -727,7 +745,7 @@ func (jw *Jaws) SetAttr(target any, attr, val string) {
 
 // RemoveAttr sends a request to remove the given attribute from
 // all HTML elements matching target.
-func (jw *Jaws) RemoveAttr(target any, attr string) {
+func (jw *jwsvc) BroadcastRemoveAttr(target any, attr string) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.RAttr,
@@ -737,7 +755,7 @@ func (jw *Jaws) RemoveAttr(target any, attr string) {
 
 // SetClass sends a request to set the given class in
 // all HTML elements matching target.
-func (jw *Jaws) SetClass(target any, cls string) {
+func (jw *jwsvc) BroadcastSetClass(target any, cls string) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.SClass,
@@ -747,7 +765,7 @@ func (jw *Jaws) SetClass(target any, cls string) {
 
 // RemoveClass sends a request to remove the given class from
 // all HTML elements matching target.
-func (jw *Jaws) RemoveClass(target any, cls string) {
+func (jw *jwsvc) BroadcastRemoveClass(target any, cls string) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.RClass,
@@ -757,7 +775,7 @@ func (jw *Jaws) RemoveClass(target any, cls string) {
 
 // SetValue sends a request to set the HTML "value" attribute of
 // all HTML elements matching target.
-func (jw *Jaws) SetValue(target any, val string) {
+func (jw *jwsvc) BroadcastSetValue(target any, val string) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.Value,
@@ -769,7 +787,7 @@ func (jw *Jaws) SetValue(target any, val string) {
 // all HTML elements matching target.
 //
 // The position parameter 'where' may be either a HTML ID, an child index or the text 'null'.
-func (jw *Jaws) Insert(target any, where, html string) {
+func (jw *jwsvc) BroadcastInsert(target any, where, html string) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.Insert,
@@ -781,7 +799,7 @@ func (jw *Jaws) Insert(target any, where, html string) {
 // all HTML elements matching target.
 //
 // The position parameter 'where' may be either a HTML ID or an index.
-func (jw *Jaws) Replace(target any, where, html string) {
+func (jw *jwsvc) BroadcastReplace(target any, where, html string) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.Replace,
@@ -790,7 +808,7 @@ func (jw *Jaws) Replace(target any, where, html string) {
 }
 
 // Delete removes the HTML element(s) matching target.
-func (jw *Jaws) Delete(target any) {
+func (jw *jwsvc) BroadcastDelete(target any) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.Delete,
@@ -798,7 +816,7 @@ func (jw *Jaws) Delete(target any) {
 }
 
 // Append calls the Javascript 'appendChild()' method on all HTML elements matching target.
-func (jw *Jaws) Append(target any, html template.HTML) {
+func (jw *jwsvc) BroadcastAppend(target any, html template.HTML) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.Append,
@@ -809,7 +827,7 @@ func (jw *Jaws) Append(target any, html template.HTML) {
 // JsCall calls the Javascript function 'jsfunc' with the argument 'jsonstr'
 // on all Requests that have the target UI tag.
 // The jsonstr argument must a valid JSON object in string format.
-func (jw *Jaws) JsCall(tag any, jsfunc, jsonstr string) {
+func (jw *jwsvc) JsCall(tag any, jsfunc, jsonstr string) {
 	jw.Broadcast(Message{
 		Dest: tag,
 		What: what.Call,
@@ -817,15 +835,15 @@ func (jw *Jaws) JsCall(tag any, jsfunc, jsonstr string) {
 	})
 }
 
-func (jw *Jaws) getRequestLocked(jawsKey uint64, hr *http.Request) (rq *request) {
+func (jw *jwsvc) getRequestLocked(jawsKey uint64, hr *http.Request) (rq *request) {
 	rq = jw.reqPool.Get().(*request)
-	rq.JawsKey = jawsKey
+	rq.jawsKey = jawsKey
 	rq.lastWrite = time.Now()
 	rq.initial = hr
 	rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
 	if hr != nil {
 		rq.remoteIP = parseIP(hr.RemoteAddr)
-		if sess := jw.getSessionLocked(getCookieSessionsIds(hr.Header, jw.CookieName), rq.remoteIP); sess != nil {
+		if sess := jw.getSessionLocked(getCookieSessionsIds(hr.Header, jw.cookieName), rq.remoteIP); sess != nil {
 			sess.addRequest(rq)
 			rq.session = sess
 		}
@@ -833,17 +851,17 @@ func (jw *Jaws) getRequestLocked(jawsKey uint64, hr *http.Request) (rq *request)
 	return rq
 }
 
-func (jw *Jaws) recycleLocked(rq *request) {
-	rq.mu.Lock()
-	defer rq.mu.Unlock()
-	if rq.JawsKey != 0 {
-		delete(jw.requests, rq.JawsKey)
-		rq.clearLocked()
+func (jw *jwsvc) recycleLocked(rq Request) {
+	rq.Lock()
+	defer rq.Unlock()
+	if rq.JawsKey() != 0 {
+		delete(jw.requests, rq.JawsKey())
+		rq.ClearLocked()
 		jw.reqPool.Put(rq)
 	}
 }
 
-func (jw *Jaws) recycle(rq *request) {
+func (jw *jwsvc) recycle(rq Request) {
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	jw.recycleLocked(rq)

@@ -15,5 +15,8 @@ func TestRequestWriter_Register(t *testing.T) {
 	th.Equal(jid, Jid(1))
 	th.Equal(atomic.LoadInt32(&item.updateCalled), int32(1))
 	e := rq.getElementByJid(jid)
+	if e == nil {
+		t.Fatal("nil element")
+	}
 	th.NoErr(e.JawsRender(nil, nil))
 }

@@ -180,8 +180,12 @@ func TestRequest_Container_Alteration(t *testing.T) {
 			}
 			tt.c.contents = tt.l
 			elem.JawsUpdate()
-			if !slices.Equal(rq.wsQueue, tt.want) {
-				t.Errorf("got %v, want %v", rq.wsQueue, tt.want)
+			if rq, ok := rq.(*request); ok {
+				if !slices.Equal(rq.wsQueue, tt.want) {
+					t.Errorf("got %v, want %v", rq.wsQueue, tt.want)
+				}
+			} else {
+				panic("not *request")
 			}
 		})
 	}

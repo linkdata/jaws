@@ -34,15 +34,16 @@ func TestRequest_Registrations(t *testing.T) {
 
 	x := &testUi{}
 
-	is.Equal(rq.wantMessage(&Message{Dest: x}), false)
+	is.Equal(rq.WantMessage(&Message{Dest: x}), false)
 	jid := rq.Register(x)
 	is.True(jid.IsValid())
-	is.Equal(rq.wantMessage(&Message{Dest: x}), true)
+	is.Equal(rq.WantMessage(&Message{Dest: x}), true)
 }
 
 func TestRequest_HeadHTML(t *testing.T) {
 	is := newTestHelper(t)
-	jw, _ := New()
+	jaws, _ := New()
+	jw := jaws.(*jwsvc)
 	defer jw.Close()
 	rq := jw.NewRequest(nil)
 	defer jw.recycle(rq)
@@ -59,9 +60,11 @@ func TestRequest_HeadHTML(t *testing.T) {
 func TestRequestWriter_TailHTML(t *testing.T) {
 	th := newTestHelper(t)
 	nextJid = 0
-	jw, _ := New()
+	jaws, _ := New()
+	jw := jaws.(*jwsvc)
 	defer jw.Close()
-	rq := jw.NewRequest(nil)
+	req := jw.NewRequest(nil)
+	rq := req.(*request)
 	defer jw.recycle(rq)
 	item := &testUi{}
 	e := rq.NewElement(item)
@@ -96,7 +99,9 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 	x := &testUi{}
 	jid := rq.Register(x)
 	elem := rq.getElementByJid(jid)
-	is.True(elem != nil)
+	if elem == nil {
+		t.Fatal("nil element", jid)
+	}
 	rq.jw.Broadcast(Message{Dest: x, What: what.Inner, Data: "bar"})
 	select {
 	case <-time.NewTimer(time.Hour).C:
@@ -280,7 +285,7 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 
 	rq.expectPanic = true
 	rq.jw.Logger = nil
-	jid := jidForTag(rq.request, bombItem)
+	jid := jidForTag(rq.Request, bombItem)
 
 	for {
 		select {
@@ -342,7 +347,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 		case <-th.C:
 			th.Timeout()
 		default:
-			rq.Jaws().Broadcast(Message{Dest: rq})
+			rq.Broadcast(Message{Dest: rq})
 		}
 		select {
 		case rq.inCh <- wsMsg{}:
@@ -461,7 +466,7 @@ func TestRequest_DeleteByTag(t *testing.T) {
 	th.Equal(e23.Jid(), Jid(6))
 	e23.Tag(Tag("e23"))
 
-	tj.Delete([]any{Tag("foo"), Tag("bar"), Tag("nothere"), Tag("e23")})
+	tj.BroadcastDelete([]any{Tag("foo"), Tag("bar"), Tag("nothere"), Tag("e23")})
 
 	select {
 	case <-th.C:
@@ -536,7 +541,7 @@ func TestRequest_HTMLIdBroadcast(t *testing.T) {
 	}
 }
 
-func jidForTag(rq *request, tag any) jid.Jid {
+func jidForTag(rq Request, tag any) jid.Jid {
 	if elems := rq.GetElements(tag); len(elems) > 0 {
 		return elems[0].Jid()
 	}
@@ -549,14 +554,14 @@ func TestRequest_ConnectFn(t *testing.T) {
 	defer rq.Close()
 
 	th.Equal(rq.GetConnectFn(), nil)
-	th.NoErr(rq.onConnect())
+	th.NoErr(rq.Request.(*request).onConnect())
 
 	wantErr := errors.New("getouttahere")
 	fn := func(rq *request) error {
 		return wantErr
 	}
 	rq.SetConnectFn(fn)
-	th.Equal(rq.onConnect(), wantErr)
+	th.Equal(rq.Request.(*request).onConnect(), wantErr)
 }
 
 func TestRequest_Dirty(t *testing.T) {
@@ -678,8 +683,8 @@ func TestRequest_CustomErrors(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
-	cause := newErrNoWebSocketRequest(rq.request)
-	err := newErrPendingCancelledLocked(rq.request, cause)
+	cause := newErrNoWebSocketRequest(rq.Request)
+	err := newErrPendingCancelledLocked(rq.Request, cause)
 	th.True(errors.Is(err, ErrPendingCancelled))
 	th.True(errors.Is(err, ErrNoWebSocketRequest))
 	th.Equal(errors.Is(cause, ErrPendingCancelled), false)
@@ -691,7 +696,8 @@ func TestRequest_CustomErrors(t *testing.T) {
 
 func TestRequest_renderDebugLocked(t *testing.T) {
 	is := newTestHelper(t)
-	jw, _ := New()
+	jws, _ := New()
+	jw := jws.(*jwsvc)
 	defer jw.Close()
 	rq := jw.NewRequest(nil)
 	defer jw.recycle(rq)
@@ -707,8 +713,8 @@ func TestRequest_renderDebugLocked(t *testing.T) {
 	is.Equal(strings.Contains(txt, "zomg"), true)
 	is.Equal(strings.Contains(txt, "n/a"), false)
 
-	rq.mu.Lock()
-	defer rq.mu.Unlock()
+	rq.Lock()
+	defer rq.Unlock()
 	sb.Reset()
 	e.RenderDebug(&sb)
 

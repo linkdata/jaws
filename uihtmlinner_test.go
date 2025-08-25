@@ -34,5 +34,5 @@ func TestUiHTMLInner_JawsUpdate(t *testing.T) {
 		Jid:  1,
 		What: what.Inner,
 	}}
-	th.Equal(rq.wsQueue, want)
+	th.Equal(rq.(*request).wsQueue, want)
 }

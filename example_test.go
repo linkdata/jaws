@@ -24,8 +24,8 @@ func Example() {
 	if err != nil {
 		panic(err)
 	}
-	defer jw.Close()           // ensure we clean up
-	jw.Logger = slog.Default() // optionally set the logger to use
+	defer jw.Close()             // ensure we clean up
+	jw.SetLogger(slog.Default()) // optionally set the logger to use
 
 	// parse our template and inform JaWS about it
 	templates := template.Must(template.New("index").Parse(indexhtml))

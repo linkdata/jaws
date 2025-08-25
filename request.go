@@ -31,8 +31,10 @@ type TryRWLocker interface {
 
 type Request interface {
 	fmt.Stringer
-	Jaws() JawsIf
-	GetJawsKey() uint64
+	Jaws
+	TryRWLocker
+	GetJaws() Jaws
+	JawsKey() uint64
 	JawsKeyString() string
 	ElementSetTag(elem Element, tags ...any)
 	ElementHasTag(elem Element, tag any) (yes bool)
@@ -42,6 +44,7 @@ type Request interface {
 	SetConnectFn(fn ConnectFn)
 	Session() (sess *Session)
 	Initial() (r *http.Request)
+	InitialLocked() (r *http.Request)
 	Get(key string) any
 	Set(key string, val any)
 	Context() (ctx context.Context)
@@ -59,6 +62,13 @@ type Request interface {
 	Queue(msg wsMsg)
 	DeleteElement(e Element)
 	SetRendering()
+	GetRemoteIP() netip.Addr
+	Claim(hr *http.Request) error
+	Claimed() bool
+	AppendDirtyTags(tags []any)
+	WantMessage(msg *Message) (yes bool)
+	Maintenance(now time.Time, requestTimeout time.Duration) bool
+	ClearLocked() Request
 }
 
 var _ Request = &request{}
@@ -69,25 +79,25 @@ var _ Request = &request{}
 // Note that we have to store the context inside the struct because there is no call chain
 // between the request being created and it being used once the WebSocket is created.
 type request struct {
-	jaws       *Jaws                   // (read-only) the JaWS instance the Request belongs to
-	JawsKey    uint64                  // (read-only) a random number used in the WebSocket URI to identify this Request
-	remoteIP   netip.Addr              // (read-only) remote IP, or nil
-	rendering  atomic.Bool             // set to true by RequestWriter.Write()
-	running    atomic.Bool             // if ServeHTTP() is running
-	claimed    atomic.Bool             // if UseRequest() has been called for it
-	mu         deadlock.RWMutex        // protects following
-	lastWrite  time.Time               // when the initial HTML was last written to, used for automatic cleanup
-	initial    *http.Request           // initial HTTP request passed to Jaws.NewRequest
-	session    *Session                // session, if established
-	todoDirt   []any                   // dirty tags
-	ctx        context.Context         // current context, derived from either Jaws or WS HTTP req
-	httpDoneCh <-chan struct{}         // once claimed, set to http.Request.Context().Done()
-	cancelFn   context.CancelCauseFunc // cancel function
-	connectFn  ConnectFn               // a ConnectFn to call before starting message processing for the Request
-	elems      []Element               // our Elements
-	tagMap     map[any][]Element       // maps tags to Elements
-	muQueue    deadlock.Mutex          // protects wsQueue
-	wsQueue    []wsMsg                 // queued messages to send
+	*jwsvc                                   // (read-only) the JaWS instance the Request belongs to
+	jawsKey          uint64                  // (read-only) a random number used in the WebSocket URI to identify this Request
+	remoteIP         netip.Addr              // (read-only) remote IP, or nil
+	rendering        atomic.Bool             // set to true by RequestWriter.Write()
+	running          atomic.Bool             // if ServeHTTP() is running
+	claimed          atomic.Bool             // if UseRequest() has been called for it
+	deadlock.RWMutex                         // protects following
+	lastWrite        time.Time               // when the initial HTML was last written to, used for automatic cleanup
+	initial          *http.Request           // initial HTTP request passed to Jaws.NewRequest
+	session          *Session                // session, if established
+	todoDirt         []any                   // dirty tags
+	ctx              context.Context         // current context, derived from either Jaws or WS HTTP req
+	httpDoneCh       <-chan struct{}         // once claimed, set to http.Request.Context().Done()
+	cancelFn         context.CancelCauseFunc // cancel function
+	connectFn        ConnectFn               // a ConnectFn to call before starting message processing for the Request
+	elems            []Element               // our Elements
+	tagMap           map[any][]Element       // maps tags to Elements
+	muQueue          deadlock.Mutex          // protects wsQueue
+	wsQueue          []wsMsg                 // queued messages to send
 }
 
 type eventFnCall struct {
@@ -96,22 +106,26 @@ type eventFnCall struct {
 	data string
 }
 
-func (rq *request) Jaws() JawsIf {
-	return rq.jaws
+func (rq *request) GetJaws() Jaws {
+	return rq.jwsvc
 }
 
 func (rq *request) SetRendering() {
 	rq.rendering.Store(true)
 }
 
-func (rq *request) GetJawsKey() uint64 {
-	return rq.JawsKey
+func (rq *request) JawsKey() uint64 {
+	return rq.jawsKey
+}
+
+func (rq *request) GetRemoteIP() netip.Addr {
+	return rq.remoteIP
 }
 
 func (rq *request) JawsKeyString() string {
 	jawsKey := uint64(0)
 	if rq != nil {
-		jawsKey = rq.JawsKey
+		jawsKey = rq.jawsKey
 	}
 	return JawsKeyString(jawsKey)
 }
@@ -123,7 +137,7 @@ func (rq *request) String() string {
 var ErrRequestAlreadyClaimed = errors.New("request already claimed")
 var ErrJavascriptDisabled = errors.New("javascript is disabled")
 
-func (rq *request) claim(hr *http.Request) error {
+func (rq *request) Claim(hr *http.Request) error {
 	if !rq.claimed.Load() {
 		var actualIP netip.Addr
 		var httpDoneCh <-chan struct{}
@@ -131,8 +145,8 @@ func (rq *request) claim(hr *http.Request) error {
 			actualIP = parseIP(hr.RemoteAddr)
 			httpDoneCh = hr.Context().Done()
 		}
-		rq.mu.Lock()
-		defer rq.mu.Unlock()
+		rq.RWMutex.Lock()
+		defer rq.RWMutex.Unlock()
 		if !equalIP(rq.remoteIP, actualIP) {
 			return fmt.Errorf("/jaws/%s: expected IP %q, got %q", rq.JawsKeyString(), rq.remoteIP.String(), actualIP.String())
 		}
@@ -145,6 +159,10 @@ func (rq *request) claim(hr *http.Request) error {
 	return ErrRequestAlreadyClaimed
 }
 
+func (rq *request) Claimed() bool {
+	return rq.claimed.Load()
+}
+
 func (rq *request) killSessionLocked() {
 	if rq.session != nil {
 		rq.session.delRequest(rq)
@@ -153,19 +171,19 @@ func (rq *request) killSessionLocked() {
 }
 
 func (rq *request) killSession() {
-	rq.mu.Lock()
+	rq.RWMutex.Lock()
 	rq.killSessionLocked()
-	rq.mu.Unlock()
+	rq.RWMutex.Unlock()
 }
 
-func (rq *request) clearLocked() *request {
-	rq.JawsKey = 0
+func (rq *request) ClearLocked() Request {
+	rq.jawsKey = 0
 	rq.connectFn = nil
 	rq.lastWrite = time.Time{}
 	rq.initial = nil
 	rq.running.Store(false)
 	rq.claimed.Store(false)
-	rq.ctx, rq.cancelFn = context.WithCancelCause(rq.Jaws().GetBaseContext())
+	rq.ctx, rq.cancelFn = context.WithCancelCause(rq.GetBaseContext())
 	rq.httpDoneCh = nil
 	rq.todoDirt = rq.todoDirt[:0]
 	rq.remoteIP = netip.Addr{}
@@ -178,8 +196,8 @@ func (rq *request) clearLocked() *request {
 // HeadHTML writes the HTML code needed in the HTML page's HEAD section.
 func (rq *request) HeadHTML(w io.Writer) (err error) {
 	var b []byte
-	b = append(b, rq.jaws.headPrefix...)
-	b = JawsKeyAppend(b, rq.JawsKey)
+	b = append(b, rq.headPrefix...)
+	b = JawsKeyAppend(b, rq.jawsKey)
 	b = append(b, `">`...)
 	_, err = w.Write(b)
 	return
@@ -242,33 +260,38 @@ func (rq *request) TailHTML(w io.Writer) (err error) {
 
 // GetConnectFn returns the currently set ConnectFn. That function will be called before starting the WebSocket tunnel if not nil.
 func (rq *request) GetConnectFn() (fn ConnectFn) {
-	rq.mu.RLock()
+	rq.RWMutex.RLock()
 	fn = rq.connectFn
-	rq.mu.RUnlock()
+	rq.RWMutex.RUnlock()
 	return
 }
 
 // SetConnectFn sets ConnectFn. That function will be called before starting the WebSocket tunnel if not nil.
 func (rq *request) SetConnectFn(fn ConnectFn) {
-	rq.mu.Lock()
+	rq.RWMutex.Lock()
 	rq.connectFn = fn
-	rq.mu.Unlock()
+	rq.RWMutex.Unlock()
 }
 
 // Session returns the Request's Session, or nil.
 func (rq *request) Session() (sess *Session) {
-	rq.mu.RLock()
+	rq.RWMutex.RLock()
 	sess = rq.session
-	rq.mu.RUnlock()
+	rq.RWMutex.RUnlock()
+	return
+}
+
+// InitialLocked returns the Request's initial HTTP request, or nil.
+func (rq *request) InitialLocked() (r *http.Request) {
+	r = rq.initial
 	return
 }
 
 // Initial returns the Request's initial HTTP request, or nil.
 func (rq *request) Initial() (r *http.Request) {
-	rq.mu.RLock()
-	r = rq.initial
-	rq.mu.RUnlock()
-	return
+	rq.RWMutex.RLock()
+	defer rq.RWMutex.RUnlock()
+	return rq.InitialLocked()
 }
 
 // Get is shorthand for `Session().Get()` and returns the session value associated with the key, or nil.
@@ -286,31 +309,31 @@ func (rq *request) Set(key string, val any) {
 
 // Context returns the Request's Context, which is by default derived from jaws.BaseContext.
 func (rq *request) Context() (ctx context.Context) {
-	rq.mu.RLock()
+	rq.RWMutex.RLock()
 	ctx = rq.ctx
-	rq.mu.RUnlock()
+	rq.RWMutex.RUnlock()
 	return
 }
 
 // SetContext atomically replaces the Request's context with the function return value.
 // The function is given the current context and must return a non-nil context.
 func (rq *request) SetContext(fn func(oldctx context.Context) (newctx context.Context)) {
-	rq.mu.Lock()
-	defer rq.mu.Unlock()
+	rq.RWMutex.Lock()
+	defer rq.RWMutex.Unlock()
 	rq.ctx = fn(rq.ctx)
 }
 
-func (rq *request) maintenance(now time.Time, requestTimeout time.Duration) bool {
+func (rq *request) Maintenance(now time.Time, requestTimeout time.Duration) bool {
 	if !rq.running.Load() {
 		if rq.rendering.Swap(false) {
-			rq.mu.Lock()
+			rq.RWMutex.Lock()
 			rq.lastWrite = now
-			rq.mu.Unlock()
+			rq.RWMutex.Unlock()
 		}
-		rq.mu.RLock()
+		rq.RWMutex.RLock()
 		err := rq.ctx.Err()
 		since := now.Sub(rq.lastWrite)
-		rq.mu.RUnlock()
+		rq.RWMutex.RUnlock()
 		if err != nil {
 			return true
 		}
@@ -323,17 +346,17 @@ func (rq *request) maintenance(now time.Time, requestTimeout time.Duration) bool
 }
 
 func (rq *request) cancelLocked(err error) {
-	if rq.JawsKey != 0 && rq.ctx.Err() == nil {
+	if rq.jawsKey != 0 && rq.ctx.Err() == nil {
 		if !rq.running.Load() {
 			err = newErrPendingCancelledLocked(rq, err)
 		}
-		rq.cancelFn(rq.Jaws().Log(err))
+		rq.cancelFn(rq.Log(err))
 	}
 }
 
 func (rq *request) cancel(err error) {
-	rq.mu.Lock()
-	defer rq.mu.Unlock()
+	rq.RWMutex.Lock()
+	defer rq.RWMutex.Unlock()
 	rq.cancelLocked(err)
 }
 
@@ -342,7 +365,7 @@ func (rq *request) cancel(err error) {
 //
 // The default JaWS javascript only supports Bootstrap.js dismissable alerts.
 func (rq *request) Alert(lvl, msg string) {
-	rq.jaws.Broadcast(Message{
+	rq.Broadcast(Message{
 		Dest: rq,
 		What: what.Alert,
 		Data: lvl + "\n" + msg,
@@ -351,14 +374,14 @@ func (rq *request) Alert(lvl, msg string) {
 
 // AlertError calls Alert if the given error is not nil.
 func (rq *request) AlertError(err error) {
-	if rq.jaws.Log(err) != nil {
+	if rq.Log(err) != nil {
 		rq.Alert("danger", html.EscapeString(err.Error()))
 	}
 }
 
 // Redirect requests the current Request to navigate to the given URL.
 func (rq *request) Redirect(url string) {
-	rq.jaws.Broadcast(Message{
+	rq.Broadcast(Message{
 		Dest: rq,
 		What: what.Redirect,
 		Data: url,
@@ -367,8 +390,8 @@ func (rq *request) Redirect(url string) {
 
 func (rq *request) TagsOf(elem Element) (tags []any) {
 	if elem != nil {
-		rq.mu.RLock()
-		defer rq.mu.RUnlock()
+		rq.RWMutex.RLock()
+		defer rq.RWMutex.RUnlock()
 		tags = rq.TagsOfLocked(elem)
 	}
 	return
@@ -376,7 +399,7 @@ func (rq *request) TagsOf(elem Element) (tags []any) {
 
 // Dirty marks all Elements that have one or more of the given tags as dirty.
 func (rq *request) Dirty(tags ...any) {
-	rq.jaws.setDirty(MustTagExpand(rq, tags))
+	rq.setDirty(MustTagExpand(rq, tags))
 }
 
 func (rq *request) TagsOfLocked(elem Element) (tags []any) {
@@ -391,25 +414,25 @@ func (rq *request) TagsOfLocked(elem Element) (tags []any) {
 	return
 }
 
-// wantMessage returns true if the Request want the message.
-func (rq *request) wantMessage(msg *Message) (yes bool) {
+// WantMessage returns true if the Request want the message.
+func (rq *request) WantMessage(msg *Message) (yes bool) {
 	switch dest := msg.Dest.(type) {
 	case *request:
 		return dest == rq
 	case string: // HTML id
 		return true
 	case []any: // more than one tag
-		rq.mu.RLock()
-		defer rq.mu.RUnlock()
+		rq.RWMutex.RLock()
+		defer rq.RWMutex.RUnlock()
 		for i := range dest {
 			if _, yes = rq.tagMap[dest[i]]; yes {
 				break
 			}
 		}
 	default:
-		rq.mu.RLock()
+		rq.RWMutex.RLock()
 		_, yes = rq.tagMap[msg.Dest]
-		rq.mu.RUnlock()
+		rq.RWMutex.RUnlock()
 	}
 	return
 }
@@ -435,8 +458,8 @@ func (rq *request) NewElement(ui UI) Element {
 			panic(err)
 		}
 	}
-	rq.mu.Lock()
-	defer rq.mu.Unlock()
+	rq.RWMutex.Lock()
+	defer rq.RWMutex.Unlock()
 	return rq.newElementLocked(ui)
 }
 
@@ -460,22 +483,22 @@ func (rq *request) hasTagLocked(elem Element, tag any) bool {
 }
 
 func (rq *request) ElementHasTag(elem Element, tag any) (yes bool) {
-	rq.mu.RLock()
+	rq.RWMutex.RLock()
 	yes = rq.hasTagLocked(elem, tag)
-	rq.mu.RUnlock()
+	rq.RWMutex.RUnlock()
 	return
 }
 
-func (rq *request) appendDirtyTags(tags []any) {
-	rq.mu.Lock()
+func (rq *request) AppendDirtyTags(tags []any) {
+	rq.RWMutex.Lock()
 	rq.todoDirt = append(rq.todoDirt, tags...)
-	rq.mu.Unlock()
+	rq.RWMutex.Unlock()
 }
 
 // Tag adds the given tags to the given Element.
 func (rq *request) TagExpanded(elem Element, expandedtags []any) {
-	rq.mu.Lock()
-	defer rq.mu.Unlock()
+	rq.RWMutex.Lock()
+	defer rq.RWMutex.Unlock()
 	for _, tag := range expandedtags {
 		if !rq.hasTagLocked(elem, tag) {
 			rq.tagMap[tag] = append(rq.tagMap[tag], elem)
@@ -494,8 +517,8 @@ func (rq *request) ElementSetTag(elem Element, tags ...any) {
 func (rq *request) GetElements(tagitem any) (elems []Element) {
 	tags := MustTagExpand(rq, tagitem)
 	seen := map[Element]struct{}{}
-	rq.mu.RLock()
-	defer rq.mu.RUnlock()
+	rq.RWMutex.RLock()
+	defer rq.RWMutex.RUnlock()
 	for _, tag := range tags {
 		if el, ok := rq.tagMap[tag]; ok {
 			for _, e := range el {
@@ -511,14 +534,14 @@ func (rq *request) GetElements(tagitem any) (elems []Element) {
 
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
 func (rq *request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsMsg, outboundMsgCh chan<- wsMsg) {
-	jawsDoneCh := rq.jaws.Done()
+	jawsDoneCh := rq.Done()
 	httpDoneCh := rq.httpDoneCh
 	eventDoneCh := make(chan struct{})
 	eventCallCh := make(chan eventFnCall, cap(outboundMsgCh))
 	go rq.eventCaller(eventCallCh, outboundMsgCh, eventDoneCh)
 
 	defer func() {
-		rq.jaws.unsubscribe(broadcastMsgCh)
+		rq.unsubscribe(broadcastMsgCh)
 		rq.killSession()
 		close(eventCallCh)
 		for {
@@ -533,7 +556,7 @@ func (rq *request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					if err, ok = x.(error); !ok {
 						err = fmt.Errorf("jaws: %v panic: %v", rq, x)
 					}
-					rq.jaws.MustLog(err)
+					rq.MustLog(err)
 				}
 				return
 			}
@@ -625,7 +648,7 @@ func (rq *request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					// the function must not send any messages itself, but may return
 					// an error to be sent out as an alert message.
 					// primary usecase is tests.
-					if err := rq.jaws.Log(rq.callAllEventHandlers(elem.Jid(), tagmsg.What, tagmsg.Data)); err != nil {
+					if err := rq.Log(rq.callAllEventHandlers(elem.Jid(), tagmsg.What, tagmsg.Data)); err != nil {
 						rq.queue(wsMsg{
 							Data: tagmsg.Data,
 							Jid:  elem.Jid(),
@@ -647,8 +670,8 @@ func (rq *request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 }
 
 func (rq *request) handleRemove(data string) {
-	rq.mu.Lock()
-	defer rq.mu.Unlock()
+	rq.RWMutex.Lock()
+	defer rq.RWMutex.Unlock()
 	for _, jidstr := range strings.Split(data, "\t") {
 		if e := rq.getElementByJidLocked(jid.ParseString(jidstr)); e != nil {
 			rq.deleteElementLocked(e)
@@ -668,7 +691,7 @@ func (rq *request) queue(msg wsMsg) {
 
 func (rq *request) callAllEventHandlers(id Jid, wht what.What, val string) (err error) {
 	var elems []Element
-	rq.mu.RLock()
+	rq.RWMutex.RLock()
 	if id == 0 {
 		if wht == what.Click {
 			var after string
@@ -689,7 +712,7 @@ func (rq *request) callAllEventHandlers(id Jid, wht what.What, val string) (err 
 			elems = append(elems, e)
 		}
 	}
-	rq.mu.RUnlock()
+	rq.RWMutex.RUnlock()
 
 	for _, e := range elems {
 		if err = callEventHandlers(e.Ui(), e, wht, val); err != ErrEventUnhandled {
@@ -706,14 +729,14 @@ func (rq *request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
 	select {
 	case eventCallCh <- call:
 	default:
-		rq.jaws.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, call))
+		rq.MustLog(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, call))
 		return
 	}
 }
 
 func (rq *request) getSendMsgs() (toSend []wsMsg) {
-	rq.mu.RLock()
-	defer rq.mu.RUnlock()
+	rq.RWMutex.RLock()
+	defer rq.RWMutex.RUnlock()
 
 	validJids := map[Jid]struct{}{}
 	for _, elem := range rq.elems {
@@ -779,13 +802,13 @@ func (rq *request) deleteElementLocked(e Element) {
 }
 
 func (rq *request) DeleteElement(e Element) {
-	rq.mu.Lock()
-	defer rq.mu.Unlock()
+	rq.RWMutex.Lock()
+	defer rq.RWMutex.Unlock()
 	rq.deleteElementLocked(e)
 }
 
 func (rq *request) makeUpdateList() (todo []Element) {
-	rq.mu.Lock()
+	rq.RWMutex.Lock()
 	seen := map[Element]struct{}{}
 	for _, tag := range rq.todoDirt {
 		for _, elem := range rq.tagMap[tag] {
@@ -797,7 +820,7 @@ func (rq *request) makeUpdateList() (todo []Element) {
 	}
 	clear(rq.todoDirt)
 	rq.todoDirt = rq.todoDirt[:0]
-	rq.mu.Unlock()
+	rq.RWMutex.Unlock()
 	sort.Slice(todo, func(i, j int) bool { return todo[i].Jid() < todo[j].Jid() })
 	return
 }
@@ -812,7 +835,7 @@ func (rq *request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 			select {
 			case outboundMsgCh <- m:
 			default:
-				_ = rq.jaws.Log(fmt.Errorf("jaws: outboundMsgCh full sending event error '%s'", err.Error()))
+				_ = rq.Log(fmt.Errorf("jaws: outboundMsgCh full sending event error '%s'", err.Error()))
 			}
 		}
 	}
@@ -821,9 +844,9 @@ func (rq *request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 // onConnect calls the Request's ConnectFn if it's not nil, and returns the error from it.
 // Returns nil if ConnectFn is nil.
 func (rq *request) onConnect() (err error) {
-	rq.mu.RLock()
+	rq.RWMutex.RLock()
 	connectFn := rq.connectFn
-	rq.mu.RUnlock()
+	rq.RWMutex.RUnlock()
 	if connectFn != nil {
 		err = connectFn(rq)
 	}

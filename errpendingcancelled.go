@@ -25,13 +25,13 @@ func (e errPendingCancelled) Unwrap() error {
 	return e.Cause
 }
 
-func newErrPendingCancelledLocked(rq *request, cause error) (err error) {
+func newErrPendingCancelledLocked(rq Request, cause error) (err error) {
 	var initial string
-	if rq.initial != nil {
-		initial = fmt.Sprintf(" %s %q:", rq.initial.Method, rq.initial.RequestURI)
+	if r := rq.InitialLocked(); r != nil {
+		initial = fmt.Sprintf(" %s %q:", r.Method, r.RequestURI)
 	}
 	return errPendingCancelled{
-		JawsKey: rq.JawsKey,
+		JawsKey: rq.JawsKey(),
 		Cause:   cause,
 		Initial: initial,
 	}
