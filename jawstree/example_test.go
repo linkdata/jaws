@@ -1,10 +1,4 @@
-# jawstree
-
-Provides a statically served and embedded version of [Quercus.js](https://github.com/stefaneichert/quercus.js),
-a lightweight and customizable JavaScript treeview library with no dependencies.
-
-```go
-package main
+package jawstree_test
 
 import (
 	"embed"
@@ -53,7 +47,7 @@ func setupJaws(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
 	return
 }
 
-func main() {
+func Example() {
 	jw, err := jaws.New()
 	if err == nil {
 		jw.Logger = slog.Default()
@@ -67,17 +61,3 @@ func main() {
 		panic(err)
 	}
 }
-```
-
-The example expects an `assets` directory in the source tree:
-
-```
-assets
-├── static
-│   └── images
-│       └── favicon.png
-└── ui
-    ├── somepage.html
-    ├── otherpage.html
-    └── index.html
-```
