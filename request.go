@@ -397,11 +397,6 @@ func (rq *request) TagsOf(elem Element) (tags []any) {
 	return
 }
 
-// Dirty marks all Elements that have one or more of the given tags as dirty.
-func (rq *request) Dirty(tags ...any) {
-	rq.setDirty(MustTagExpand(rq, tags))
-}
-
 func (rq *request) TagsOfLocked(elem Element) (tags []any) {
 	for tag, elems := range rq.tagMap {
 		for _, e := range elems {
