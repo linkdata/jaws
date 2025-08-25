@@ -7,18 +7,18 @@ import (
 type Setter[T comparable] interface {
 	Getter[T]
 	// JawsSet may return ErrValueUnchanged to indicate value was already set.
-	JawsSet(elem ElementIf, value T) (err error)
+	JawsSet(elem Element, value T) (err error)
 }
 
 type setterReadOnly[T comparable] struct {
 	Getter[T]
 }
 
-func (setterReadOnly[T]) JawsSet(ElementIf, T) error {
+func (setterReadOnly[T]) JawsSet(Element, T) error {
 	return ErrValueNotSettable
 }
 
-func (s setterReadOnly[T]) JawsGetTag(RequestIf) any {
+func (s setterReadOnly[T]) JawsGetTag(Request) any {
 	return s.Getter
 }
 
@@ -26,15 +26,15 @@ type setterStatic[T comparable] struct {
 	v T
 }
 
-func (setterStatic[T]) JawsSet(ElementIf, T) error {
+func (setterStatic[T]) JawsSet(Element, T) error {
 	return ErrValueNotSettable
 }
 
-func (s setterStatic[T]) JawsGet(ElementIf) T {
+func (s setterStatic[T]) JawsGet(Element) T {
 	return s.v
 }
 
-func (s setterStatic[T]) JawsGetTag(RequestIf) any {
+func (s setterStatic[T]) JawsGetTag(Request) any {
 	return nil
 }
 

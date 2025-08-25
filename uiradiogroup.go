@@ -6,8 +6,8 @@ import (
 )
 
 type RadioElement struct {
-	radio    ElementIf
-	label    ElementIf
+	radio    Element
+	label    Element
 	nameAttr string
 }
 

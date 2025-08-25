@@ -8,7 +8,7 @@ type UiLabel struct {
 	UiHTMLInner
 }
 
-func (ui *UiLabel) JawsRender(e ElementIf, w io.Writer, params []any) error {
+func (ui *UiLabel) JawsRender(e Element, w io.Writer, params []any) error {
 	return ui.renderInner(e, w, "label", "", params)
 }
 

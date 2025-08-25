@@ -49,7 +49,7 @@ func (ts *testSetter[T]) GetCount() (n int) {
 	return
 }
 
-func (ts *testSetter[T]) JawsGet(e ElementIf) (val T) {
+func (ts *testSetter[T]) JawsGet(e Element) (val T) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.getCount++
@@ -60,7 +60,7 @@ func (ts *testSetter[T]) JawsGet(e ElementIf) (val T) {
 	return
 }
 
-func (ts *testSetter[T]) JawsSet(e ElementIf, val T) (err error) {
+func (ts *testSetter[T]) JawsSet(e Element, val T) (err error) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.setCount++
@@ -76,7 +76,7 @@ func (ts *testSetter[T]) JawsSet(e ElementIf, val T) (err error) {
 	return
 }
 
-func (ts *testSetter[string]) JawsGetString(e ElementIf) (val string) {
+func (ts *testSetter[string]) JawsGetString(e Element) (val string) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.getCount++
@@ -87,7 +87,7 @@ func (ts *testSetter[string]) JawsGetString(e ElementIf) (val string) {
 	return
 }
 
-func (ts *testSetter[any]) JawsGetAny(e ElementIf) (val any) {
+func (ts *testSetter[any]) JawsGetAny(e Element) (val any) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.getCount++
@@ -98,7 +98,7 @@ func (ts *testSetter[any]) JawsGetAny(e ElementIf) (val any) {
 	return
 }
 
-func (ts *testSetter[any]) JawsSetAny(e ElementIf, val any) (err error) {
+func (ts *testSetter[any]) JawsSetAny(e Element, val any) (err error) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.setCount++
@@ -114,7 +114,7 @@ func (ts *testSetter[any]) JawsSetAny(e ElementIf, val any) (err error) {
 	return
 }
 
-func (ts *testSetter[T]) JawsGetHTML(e ElementIf) (val T) {
+func (ts *testSetter[T]) JawsGetHTML(e Element) (val T) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.getCount++

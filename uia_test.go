@@ -8,7 +8,7 @@ import (
 
 type testHTMLGetter string
 
-func (g testHTMLGetter) JawsGetHTML(e ElementIf) template.HTML {
+func (g testHTMLGetter) JawsGetHTML(e Element) template.HTML {
 	return template.HTML(g)
 }
 

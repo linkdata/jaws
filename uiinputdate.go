@@ -16,7 +16,7 @@ func (ui *UiInputDate) str() string {
 	return ui.Last.Load().(time.Time).Format(ISO8601)
 }
 
-func (ui *UiInputDate) renderDateInput(e ElementIf, w io.Writer, htmltype string, params ...any) (err error) {
+func (ui *UiInputDate) renderDateInput(e Element, w io.Writer, htmltype string, params ...any) (err error) {
 	if err = ui.applyGetter(e, ui.Setter); err == nil {
 		attrs := e.ApplyParams(params)
 		ui.Last.Store(ui.JawsGet(e))
@@ -25,13 +25,13 @@ func (ui *UiInputDate) renderDateInput(e ElementIf, w io.Writer, htmltype string
 	return
 }
 
-func (ui *UiInputDate) JawsUpdate(e ElementIf) {
+func (ui *UiInputDate) JawsUpdate(e Element) {
 	if t := ui.JawsGet(e); ui.Last.Swap(t) != t {
 		e.SetValue(ui.str())
 	}
 }
 
-func (ui *UiInputDate) JawsEvent(e ElementIf, wht what.What, val string) (err error) {
+func (ui *UiInputDate) JawsEvent(e Element, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
 	if wht == what.Input {
 		var v time.Time

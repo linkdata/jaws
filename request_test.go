@@ -128,7 +128,7 @@ func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 	defer rq.Close()
 	var callCount int32
 	x := &testUi{}
-	rq.Register(x, func(e ElementIf, evt what.What, val string) error {
+	rq.Register(x, func(e Element, evt what.What, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		rq.cancel()
 		return errors.New(val)
@@ -161,16 +161,16 @@ func TestRequest_Trigger(t *testing.T) {
 	gotFooCall := make(chan struct{})
 	gotEndCall := make(chan struct{})
 	fooItem := &testUi{}
-	rq.Register(fooItem, func(e ElementIf, evt what.What, val string) error {
+	rq.Register(fooItem, func(e Element, evt what.What, val string) error {
 		defer close(gotFooCall)
 		return nil
 	})
 	errItem := &testUi{}
-	rq.Register(errItem, func(e ElementIf, evt what.What, val string) error {
+	rq.Register(errItem, func(e Element, evt what.What, val string) error {
 		return errors.New(val)
 	})
 	endItem := &testUi{}
-	rq.Register(endItem, func(e ElementIf, evt what.What, val string) error {
+	rq.Register(endItem, func(e Element, evt what.What, val string) error {
 		defer close(gotEndCall)
 		return nil
 	})
@@ -221,7 +221,7 @@ func TestRequest_EventFnQueue(t *testing.T) {
 	var sleepDone int32
 	var callCount int32
 	sleepItem := &testUi{}
-	rq.Register(sleepItem, func(e ElementIf, evt what.What, val string) error {
+	rq.Register(sleepItem, func(e Element, evt what.What, val string) error {
 		count := int(atomic.AddInt32(&callCount, 1))
 		if val != strconv.Itoa(count) {
 			t.Logf("val=%s, count=%d, cap=%d", val, count, cap(rq.outCh))
@@ -273,14 +273,14 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 	var wait int32
 
 	bombItem := &testUi{}
-	rq.Register(bombItem, func(e ElementIf, evt what.What, val string) error {
+	rq.Register(bombItem, func(e Element, evt what.What, val string) error {
 		time.Sleep(time.Millisecond * time.Duration(atomic.AddInt32(&wait, 1)))
 		return nil
 	})
 
 	rq.expectPanic = true
 	rq.jw.Logger = nil
-	jid := jidForTag(rq.Request, bombItem)
+	jid := jidForTag(rq.request, bombItem)
 
 	for {
 		select {
@@ -303,7 +303,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	var spewState int32
 	var callCount int32
 	spewItem := &testUi{}
-	rq.Register(spewItem, func(e ElementIf, evt what.What, val string) error {
+	rq.Register(spewItem, func(e Element, evt what.What, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		if len(rq.outCh) < cap(rq.outCh) {
 			rq.jw.Broadcast(Message{Dest: spewItem, What: what.Input})
@@ -536,7 +536,7 @@ func TestRequest_HTMLIdBroadcast(t *testing.T) {
 	}
 }
 
-func jidForTag(rq *Request, tag any) jid.Jid {
+func jidForTag(rq *request, tag any) jid.Jid {
 	if elems := rq.GetElements(tag); len(elems) > 0 {
 		return elems[0].Jid()
 	}
@@ -552,7 +552,7 @@ func TestRequest_ConnectFn(t *testing.T) {
 	th.NoErr(rq.onConnect())
 
 	wantErr := errors.New("getouttahere")
-	fn := func(rq *Request) error {
+	fn := func(rq *request) error {
 		return wantErr
 	}
 	rq.SetConnectFn(fn)
@@ -592,7 +592,7 @@ func TestRequest_UpdatePanicLogs(t *testing.T) {
 	defer rq.Close()
 
 	tss := &testUi{
-		updateFn: func(e ElementIf) {
+		updateFn: func(e Element) {
 			panic("wildpanic")
 		}}
 	rq.UI(tss)
@@ -678,8 +678,8 @@ func TestRequest_CustomErrors(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
-	cause := newErrNoWebSocketRequest(rq.Request)
-	err := newErrPendingCancelledLocked(rq.Request, cause)
+	cause := newErrNoWebSocketRequest(rq.request)
+	err := newErrPendingCancelledLocked(rq.request, cause)
 	th.True(errors.Is(err, ErrPendingCancelled))
 	th.True(errors.Is(err, ErrNoWebSocketRequest))
 	th.Equal(errors.Is(cause, ErrPendingCancelled), false)

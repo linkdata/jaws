@@ -5,7 +5,7 @@ import (
 )
 
 type RequestWriter struct {
-	rq RequestIf
+	rq Request
 	io.Writer
 }
 
@@ -19,7 +19,7 @@ func (rw RequestWriter) Write(p []byte) (n int, err error) {
 }
 
 // Request returns the current jaws.Request.
-func (rw RequestWriter) Request() RequestIf {
+func (rw RequestWriter) Request() Request {
 	return rw.rq
 }
 

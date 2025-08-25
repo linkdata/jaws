@@ -8,31 +8,31 @@ import (
 
 type htmlGetter struct{ v template.HTML }
 
-func (g htmlGetter) JawsGetHTML(e ElementIf) template.HTML {
+func (g htmlGetter) JawsGetHTML(e Element) template.HTML {
 	return g.v
 }
 
-func (g htmlGetter) JawsGetTag(rq RequestIf) any {
+func (g htmlGetter) JawsGetTag(rq Request) any {
 	return nil
 }
 
 type htmlStringerGetter struct{ sg fmt.Stringer }
 
-func (g htmlStringerGetter) JawsGetHTML(e ElementIf) template.HTML {
+func (g htmlStringerGetter) JawsGetHTML(e Element) template.HTML {
 	return template.HTML(html.EscapeString(g.sg.String())) // #nosec G203
 }
 
-func (g htmlStringerGetter) JawsGetTag(rq RequestIf) any {
+func (g htmlStringerGetter) JawsGetTag(rq Request) any {
 	return g.sg
 }
 
 type htmlGetterString struct{ sg Getter[string] }
 
-func (g htmlGetterString) JawsGetHTML(e ElementIf) template.HTML {
+func (g htmlGetterString) JawsGetHTML(e Element) template.HTML {
 	return template.HTML(html.EscapeString(g.sg.JawsGet(e))) // #nosec G203
 }
 
-func (g htmlGetterString) JawsGetTag(rq RequestIf) any {
+func (g htmlGetterString) JawsGetTag(rq Request) any {
 	return g.sg
 }
 

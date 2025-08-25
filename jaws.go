@@ -50,8 +50,8 @@ type JawsIf interface {
 	RequestCount() (n int)
 	Log(err error) error
 	MustLog(err error)
-	NewRequest(hr *http.Request) (rq *Request)
-	UseRequest(jawsKey uint64, hr *http.Request) (rq *Request)
+	NewRequest(hr *http.Request) (rq *request)
+	UseRequest(jawsKey uint64, hr *http.Request) (rq *request)
 	SessionCount() (n int)
 	Sessions() (sl []*Session)
 	GetSession(hr *http.Request) (sess *Session)
@@ -104,7 +104,7 @@ type Jaws struct {
 	tmplookers   []TemplateLookuper
 	kg           *bufio.Reader
 	closeCh      chan struct{} // closed when Close() has been called
-	requests     map[uint64]*Request
+	requests     map[uint64]*request
 	sessions     map[uint64]*Session
 	dirty        map[any]int
 	dirtOrder    int
@@ -127,7 +127,7 @@ func New() (jw *Jaws, err error) {
 				unsubCh:      make(chan chan Message, 1),
 				updateTicker: time.NewTicker(DefaultUpdateInterval),
 				kg:           bufio.NewReader(rand.Reader),
-				requests:     make(map[uint64]*Request),
+				requests:     make(map[uint64]*request),
 				sessions:     make(map[uint64]*Session),
 				dirty:        make(map[any]int),
 				closeCh:      make(chan struct{}),
@@ -135,9 +135,9 @@ func New() (jw *Jaws, err error) {
 			if err = tmp.GenerateHeadHTML(); err == nil {
 				jw = tmp
 				jw.reqPool.New = func() any {
-					return (&Request{
+					return (&request{
 						jaws:   jw,
-						tagMap: make(map[any][]ElementIf),
+						tagMap: make(map[any][]Element),
 					}).clearLocked()
 				}
 			}
@@ -274,7 +274,7 @@ func MakeID() string {
 // returned Request pointer so it can be used while constructing the HTML
 // response in order to register the JaWS id's you use in the response, and
 // use it's Key attribute when sending the Javascript portion of the reply.
-func (jw *Jaws) NewRequest(hr *http.Request) (rq *Request) {
+func (jw *Jaws) NewRequest(hr *http.Request) (rq *request) {
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	for rq == nil {
@@ -307,7 +307,7 @@ func (jw *Jaws) nonZeroRandomLocked() (val uint64) {
 //
 // Returns nil if the key was not found or the IP doesn't match, in which
 // case you should return a HTTP "404 Not Found" status.
-func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) {
+func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *request) {
 	if jawsKey != 0 {
 		var err error
 		jw.mu.Lock()
@@ -506,9 +506,9 @@ func (jw *Jaws) distributeDirt() int {
 	}
 	jw.dirtOrder = 0
 
-	var reqs []*Request
+	var reqs []*request
 	if len(dirt) > 0 {
-		reqs = make([]*Request, 0, len(jw.requests))
+		reqs = make([]*request, 0, len(jw.requests))
 		for _, rq := range jw.requests {
 			reqs = append(reqs, rq)
 		}
@@ -578,7 +578,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		maintenanceInterval = minInterval
 	}
 
-	subs := map[chan Message]*Request{}
+	subs := map[chan Message]*request{}
 	t := time.NewTicker(maintenanceInterval)
 
 	defer func() {
@@ -650,7 +650,7 @@ func (jw *Jaws) Serve() {
 	jw.ServeWithTimeout(time.Second * 10)
 }
 
-func (jw *Jaws) subscribe(rq *Request, size int) chan Message {
+func (jw *Jaws) subscribe(rq *request, size int) chan Message {
 	msgCh := make(chan Message, size)
 	select {
 	case <-jw.Done():
@@ -817,8 +817,8 @@ func (jw *Jaws) JsCall(tag any, jsfunc, jsonstr string) {
 	})
 }
 
-func (jw *Jaws) getRequestLocked(jawsKey uint64, hr *http.Request) (rq *Request) {
-	rq = jw.reqPool.Get().(*Request)
+func (jw *Jaws) getRequestLocked(jawsKey uint64, hr *http.Request) (rq *request) {
+	rq = jw.reqPool.Get().(*request)
 	rq.JawsKey = jawsKey
 	rq.lastWrite = time.Now()
 	rq.initial = hr
@@ -833,7 +833,7 @@ func (jw *Jaws) getRequestLocked(jawsKey uint64, hr *http.Request) (rq *Request)
 	return rq
 }
 
-func (jw *Jaws) recycleLocked(rq *Request) {
+func (jw *Jaws) recycleLocked(rq *request) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	if rq.JawsKey != 0 {
@@ -843,7 +843,7 @@ func (jw *Jaws) recycleLocked(rq *Request) {
 	}
 }
 
-func (jw *Jaws) recycle(rq *Request) {
+func (jw *Jaws) recycle(rq *request) {
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	jw.recycleLocked(rq)

@@ -22,7 +22,7 @@ type testServer struct {
 	cancel      context.CancelFunc
 	hr          *http.Request
 	rr          *httptest.ResponseRecorder
-	rq          *Request
+	rq          *request
 	sess        *Session
 	srv         *httptest.Server
 	connectedCh chan struct{}
@@ -53,7 +53,7 @@ func newTestServer() (ts *testServer) {
 	return
 }
 
-func (ts *testServer) connected(rq *Request) error {
+func (ts *testServer) connected(rq *request) error {
 	if rq == ts.rq {
 		close(ts.connectedCh)
 	}
@@ -103,7 +103,7 @@ func TestWS_ConnectFnFails(t *testing.T) {
 	const nope = "nope"
 	ts := newTestServer()
 	defer ts.Close()
-	ts.rq.SetConnectFn(func(_ *Request) error { return errors.New(nope) })
+	ts.rq.SetConnectFn(func(_ *request) error { return errors.New(nope) })
 
 	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), nil)
 	if conn != nil {
@@ -136,7 +136,7 @@ func TestWS_NormalExchange(t *testing.T) {
 
 	gotCallCh := make(chan struct{})
 	fooItem := &testUi{}
-	RequestWriter{ts.rq, httptest.NewRecorder()}.Register(fooItem, func(e ElementIf, evt what.What, val string) error {
+	RequestWriter{ts.rq, httptest.NewRecorder()}.Register(fooItem, func(e Element, evt what.What, val string) error {
 		close(gotCallCh)
 		return fooError
 	})

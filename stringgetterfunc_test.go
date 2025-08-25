@@ -7,7 +7,7 @@ import (
 
 func TestStringGetterFunc(t *testing.T) {
 	tt := &testSelfTagger{}
-	sg := StringGetterFunc(func(e ElementIf) string {
+	sg := StringGetterFunc(func(e Element) string {
 		return "foo"
 	}, tt)
 	if s := sg.JawsGet(nil); s != "foo" {

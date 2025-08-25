@@ -6,5 +6,5 @@ package jaws
 // but at that point you don't have access to the Element, Element.Context
 // or Element.Session.
 type InitHandler interface {
-	JawsInit(e ElementIf) (err error)
+	JawsInit(e Element) (err error)
 }

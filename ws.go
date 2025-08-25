@@ -10,11 +10,11 @@ import (
 	"github.com/coder/websocket"
 )
 
-func (rq *Request) startServe() (ok bool) {
+func (rq *request) startServe() (ok bool) {
 	return rq.claimed.Load() && rq.running.CompareAndSwap(false, true)
 }
 
-func (rq *Request) stopServe() {
+func (rq *request) stopServe() {
 	rq.cancel(nil)
 	rq.jaws.recycle(rq)
 }
@@ -22,7 +22,7 @@ func (rq *Request) stopServe() {
 // ServeHTTP implements http.HanderFunc.
 //
 // Requires UseRequest() have been successfully called for the Request.
-func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (rq *request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if rq.startServe() {
 		defer rq.stopServe()
 		if strings.HasSuffix(r.RequestURI, "/noscript") {

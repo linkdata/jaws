@@ -6,5 +6,5 @@ import (
 
 // A HTMLGetter is the primary way to deliver generated HTML content to dynamic HTML nodes.
 type HTMLGetter interface {
-	JawsGetHTML(e ElementIf) template.HTML
+	JawsGetHTML(e Element) template.HTML
 }

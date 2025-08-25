@@ -8,7 +8,7 @@ type UiLi struct {
 	UiHTMLInner
 }
 
-func (ui *UiLi) JawsRender(e ElementIf, w io.Writer, params []any) error {
+func (ui *UiLi) JawsRender(e Element, w io.Writer, params []any) error {
 	return ui.renderInner(e, w, "li", "", params)
 }
 

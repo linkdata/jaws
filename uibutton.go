@@ -8,7 +8,7 @@ type UiButton struct {
 	UiHTMLInner
 }
 
-func (ui *UiButton) JawsRender(e ElementIf, w io.Writer, params []any) error {
+func (ui *UiButton) JawsRender(e Element, w io.Writer, params []any) error {
 	return ui.renderInner(e, w, "button", "button", params)
 }
 

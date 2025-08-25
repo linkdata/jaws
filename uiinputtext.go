@@ -11,7 +11,7 @@ type UiInputText struct {
 	Setter[string]
 }
 
-func (ui *UiInputText) renderStringInput(e ElementIf, w io.Writer, htmltype string, params ...any) (err error) {
+func (ui *UiInputText) renderStringInput(e Element, w io.Writer, htmltype string, params ...any) (err error) {
 	if err = ui.applyGetter(e, ui.Setter); err == nil {
 		attrs := e.ApplyParams(params)
 		v := ui.JawsGet(e)
@@ -21,13 +21,13 @@ func (ui *UiInputText) renderStringInput(e ElementIf, w io.Writer, htmltype stri
 	return
 }
 
-func (ui *UiInputText) JawsUpdate(e ElementIf) {
+func (ui *UiInputText) JawsUpdate(e Element) {
 	if v := ui.JawsGet(e); ui.Last.Swap(v) != v {
 		e.SetValue(v)
 	}
 }
 
-func (ui *UiInputText) JawsEvent(e ElementIf, wht what.What, val string) (err error) {
+func (ui *UiInputText) JawsEvent(e Element, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
 	if wht == what.Input {
 		err = ui.MaybeDirty(val, e, ui.Setter.JawsSet(e, val))

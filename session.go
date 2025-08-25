@@ -14,7 +14,7 @@ type Session struct {
 	sessionID uint64
 	remoteIP  netip.Addr
 	mu        deadlock.RWMutex // protects following
-	requests  []*Request
+	requests  []*request
 	deadline  time.Time
 	cookie    http.Cookie
 	data      map[string]any
@@ -49,13 +49,13 @@ func (sess *Session) isDead() (yes bool) {
 	return
 }
 
-func (sess *Session) addRequest(rq *Request) {
+func (sess *Session) addRequest(rq *request) {
 	sess.mu.Lock()
 	sess.requests = append(sess.requests, rq)
 	sess.mu.Unlock()
 }
 
-func (sess *Session) delRequest(rq *Request) {
+func (sess *Session) delRequest(rq *request) {
 	sess.mu.Lock()
 	defer sess.mu.Unlock()
 	for i := range sess.requests {
@@ -191,7 +191,7 @@ func (sess *Session) Clear() {
 
 // Requests returns a list of the Requests using this Session.
 // It is safe to call on a nil Session.
-func (sess *Session) Requests() (rl []*Request) {
+func (sess *Session) Requests() (rl []*request) {
 	if sess != nil {
 		sess.mu.RLock()
 		rl = append(rl, sess.requests...)

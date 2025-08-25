@@ -17,13 +17,13 @@ type PathSetter interface {
 	// JawsSetPath should set the JSON object member identified by jspath to the given value.
 	//
 	// If the member is already the given value, it should return ErrValueUnchanged.
-	JawsSetPath(elem ElementIf, jspath string, value any) (err error)
+	JawsSetPath(elem Element, jspath string, value any) (err error)
 }
 
 type SetPather interface {
 	// JawsPathSet notifies that a JSON object member identified by jspath has been set
 	// to the given value and the change has been queued for broadcast.
-	JawsPathSet(elem ElementIf, jspath string, value any)
+	JawsPathSet(elem Element, jspath string, value any)
 }
 
 type IsJsVar interface {
@@ -34,7 +34,7 @@ type IsJsVar interface {
 }
 
 type JsVarMaker interface {
-	JawsMakeJsVar(rq RequestIf) (v IsJsVar, err error)
+	JawsMakeJsVar(rq Request) (v IsJsVar, err error)
 }
 
 var (
@@ -48,7 +48,7 @@ type JsVar[T any] struct {
 	Tag any
 }
 
-func (ui *JsVar[T]) JawsGetPath(elem ElementIf, jspath string) (value any) {
+func (ui *JsVar[T]) JawsGetPath(elem Element, jspath string) (value any) {
 	ui.RLock()
 	defer ui.RUnlock()
 	var err error
@@ -59,13 +59,13 @@ func (ui *JsVar[T]) JawsGetPath(elem ElementIf, jspath string) (value any) {
 	return
 }
 
-func (ui *JsVar[T]) JawsGet(elem ElementIf) (value T) {
+func (ui *JsVar[T]) JawsGet(elem Element) (value T) {
 	anyval := ui.JawsGetPath(elem, "")
 	value = *((anyval).(*T))
 	return
 }
 
-func (ui *JsVar[T]) setPathLocked(elem ElementIf, jspath string, value any) (err error) {
+func (ui *JsVar[T]) setPathLocked(elem Element, jspath string, value any) (err error) {
 	if ps, ok := ((any)(ui.Ptr).(PathSetter)); ok {
 		err = ps.JawsSetPath(elem, jspath, value)
 	} else {
@@ -87,14 +87,14 @@ func (ui *JsVar[T]) setPathLocked(elem ElementIf, jspath string, value any) (err
 	return
 }
 
-func (ui *JsVar[T]) setPathLock(elem ElementIf, jspath string, value any) (err error) {
+func (ui *JsVar[T]) setPathLock(elem Element, jspath string, value any) (err error) {
 	ui.Lock()
 	defer ui.Unlock()
 	err = ui.setPathLocked(elem, jspath, value)
 	return
 }
 
-func (ui *JsVar[T]) setPath(elem ElementIf, jspath string, value any) (err error) {
+func (ui *JsVar[T]) setPath(elem Element, jspath string, value any) (err error) {
 	if err = ui.setPathLock(elem, jspath, value); err == nil {
 		if sp, ok := ((any)(ui.Ptr).(SetPather)); ok {
 			sp.JawsPathSet(elem, jspath, value)
@@ -103,15 +103,15 @@ func (ui *JsVar[T]) setPath(elem ElementIf, jspath string, value any) (err error
 	return
 }
 
-func (ui *JsVar[T]) JawsSetPath(elem ElementIf, jspath string, value any) (err error) {
+func (ui *JsVar[T]) JawsSetPath(elem Element, jspath string, value any) (err error) {
 	return ui.setPath(elem, jspath, value)
 }
 
-func (ui *JsVar[T]) JawsSet(elem ElementIf, value T) (err error) {
+func (ui *JsVar[T]) JawsSet(elem Element, value T) (err error) {
 	return ui.JawsSetPath(elem, "", value)
 }
 
-func (ui *JsVar[T]) JawsRender(e ElementIf, w io.Writer, params []any) (err error) {
+func (ui *JsVar[T]) JawsRender(e Element, w io.Writer, params []any) (err error) {
 	ui.Lock()
 	defer ui.Unlock()
 	if ui.Tag, err = e.ApplyGetter(ui.Ptr); err == nil {
@@ -142,11 +142,11 @@ func (ui *JsVar[T]) JawsRender(e ElementIf, w io.Writer, params []any) (err erro
 	return
 }
 
-func (ui *JsVar[T]) JawsGetTag(rq RequestIf) any {
+func (ui *JsVar[T]) JawsGetTag(rq Request) any {
 	return ui.Tag
 }
 
-func (ui *JsVar[T]) JawsUpdate(e ElementIf) {} // no-op for JsVar[T]
+func (ui *JsVar[T]) JawsUpdate(e Element) {} // no-op for JsVar[T]
 
 func elideErrValueUnchanged(err error) error {
 	if err == ErrValueUnchanged {
@@ -155,7 +155,7 @@ func elideErrValueUnchanged(err error) error {
 	return err
 }
 
-func (ui *JsVar[T]) JawsEvent(e ElementIf, wht what.What, val string) (err error) {
+func (ui *JsVar[T]) JawsEvent(e Element, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
 	if wht == what.Set {
 		if jspath, jsval, found := strings.Cut(val, "="); found {

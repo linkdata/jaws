@@ -107,7 +107,7 @@ func (tp *testPage) render(w io.Writer) (err error) {
 }
 
 func (tp *testPage) updateElems() {
-	rq := tp.RequestWriter.rq.(*Request)
+	rq := tp.RequestWriter.rq.(*request)
 	for _, elem := range rq.elems {
 		elem.JawsUpdate()
 	}

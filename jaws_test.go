@@ -347,7 +347,7 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 	}
 }
 
-func getLastWrite(rq *Request) (when time.Time) {
+func getLastWrite(rq *request) (when time.Time) {
 	rq.mu.RLock()
 	when = rq.lastWrite
 	rq.mu.RUnlock()
@@ -370,7 +370,7 @@ func TestJaws_RequestWriterExtendsDeadline(t *testing.T) {
 	var sb strings.Builder
 	rw := rq.Writer(&sb)
 
-	ui := &testUi{renderFn: func(e ElementIf, w io.Writer, params []any) error {
+	ui := &testUi{renderFn: func(e Element, w io.Writer, params []any) error {
 		w.Write(nil)
 		return nil
 	}}

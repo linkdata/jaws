@@ -23,12 +23,12 @@ type testUi struct {
 	initCalled   int32
 	initError    error
 	s            string
-	renderFn     func(e ElementIf, w io.Writer, params []any) error
-	updateFn     func(e ElementIf)
+	renderFn     func(e Element, w io.Writer, params []any) error
+	updateFn     func(e Element)
 }
 
 // JawsInit implements InitHandler.
-func (tss *testUi) JawsInit(e ElementIf) (err error) {
+func (tss *testUi) JawsInit(e Element) (err error) {
 	atomic.AddInt32(&tss.initCalled, 1)
 	return tss.initError
 }
@@ -37,18 +37,18 @@ var _ UI = (*testUi)(nil)
 var _ Setter[string] = (*testUi)(nil)
 var _ InitHandler = (*testUi)(nil)
 
-func (tss *testUi) JawsGet(e ElementIf) string {
+func (tss *testUi) JawsGet(e Element) string {
 	atomic.AddInt32(&tss.getCalled, 1)
 	return tss.s
 }
 
-func (tss *testUi) JawsSet(e ElementIf, s string) error {
+func (tss *testUi) JawsSet(e Element, s string) error {
 	atomic.AddInt32(&tss.setCalled, 1)
 	tss.s = s
 	return nil
 }
 
-func (tss *testUi) JawsRender(e ElementIf, w io.Writer, params []any) (err error) {
+func (tss *testUi) JawsRender(e Element, w io.Writer, params []any) (err error) {
 	e.Tag(tss)
 	atomic.AddInt32(&tss.renderCalled, 1)
 	if tss.renderFn != nil {
@@ -57,7 +57,7 @@ func (tss *testUi) JawsRender(e ElementIf, w io.Writer, params []any) (err error
 	return
 }
 
-func (tss *testUi) JawsUpdate(e ElementIf) {
+func (tss *testUi) JawsUpdate(e Element) {
 	atomic.AddInt32(&tss.updateCalled, 1)
 	if tss.updateFn != nil {
 		tss.updateFn(e)
@@ -71,11 +71,11 @@ func TestElement_helpers(t *testing.T) {
 
 	tss := &testUi{}
 	e := rq.NewElement(tss)
-	is.Equal(e.Request().Jaws(), rq.jw.Jaws)
-	is.Equal(e.Request(), rq.Request)
-	is.Equal(e.Request().Session(), nil)
-	e.Request().Session().Set("foo", "bar") // no session, so no effect
-	is.Equal(e.Request().Session().Get("foo"), nil)
+	is.Equal(e.GetRequest().Jaws(), rq.jw.Jaws)
+	is.Equal(e.GetRequest(), rq.request)
+	is.Equal(e.GetRequest().Session(), nil)
+	e.GetRequest().Session().Set("foo", "bar") // no session, so no effect
+	is.Equal(e.GetRequest().Session().Get("foo"), nil)
 }
 
 func TestElement_Tag(t *testing.T) {
@@ -100,7 +100,7 @@ func TestElement_Queued(t *testing.T) {
 	defer rq.Close()
 
 	tss := &testUi{
-		updateFn: func(e ElementIf) {
+		updateFn: func(e Element) {
 			e.SetAttr("hidden", "")
 			e.RemoveAttr("hidden")
 			e.SetClass("bah")
@@ -223,7 +223,7 @@ func TestElement_MaybeDirty(t *testing.T) {
 type testClickHandler struct {
 }
 
-func (tch testClickHandler) JawsClick(e ElementIf, name string) (err error) {
+func (tch testClickHandler) JawsClick(e Element, name string) (err error) {
 	return nil
 }
 

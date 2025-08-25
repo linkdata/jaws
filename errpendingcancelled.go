@@ -25,7 +25,7 @@ func (e errPendingCancelled) Unwrap() error {
 	return e.Cause
 }
 
-func newErrPendingCancelledLocked(rq *Request, cause error) (err error) {
+func newErrPendingCancelledLocked(rq *request, cause error) (err error) {
 	var initial string
 	if rq.initial != nil {
 		initial = fmt.Sprintf(" %s %q:", rq.initial.Method, rq.initial.RequestURI)

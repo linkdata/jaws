@@ -8,7 +8,7 @@ type UiTr struct {
 	UiHTMLInner
 }
 
-func (ui *UiTr) JawsRender(e ElementIf, w io.Writer, params []any) error {
+func (ui *UiTr) JawsRender(e Element, w io.Writer, params []any) error {
 	return ui.renderInner(e, w, "tr", "", params)
 }
 

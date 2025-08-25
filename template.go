@@ -78,10 +78,10 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
 	return
 }
 
-func (t Template) JawsRender(e ElementIf, wr io.Writer, params []any) (err error) {
+func (t Template) JawsRender(e Element, wr io.Writer, params []any) (err error) {
 	var expandedtags []any
-	if expandedtags, err = TagExpand(e.Request(), t.Dot); err == nil {
-		e.Request().TagExpanded(e, expandedtags)
+	if expandedtags, err = TagExpand(e.GetRequest(), t.Dot); err == nil {
+		e.GetRequest().TagExpanded(e, expandedtags)
 		tags, handlers, attrs := ParseParams(params)
 		e.Tag(tags...)
 		e.AddHandlers(handlers...)
@@ -89,13 +89,13 @@ func (t Template) JawsRender(e ElementIf, wr io.Writer, params []any) (err error
 		var auth Auth
 		auth = defaultAuth{}
 		if f := e.Jaws().GetMakeAuth(); f != nil {
-			auth = f(e.Request())
+			auth = f(e.GetRequest())
 		}
 		err = errMissingTemplate(t.Name)
 		if tmpl := e.Jaws().LookupTemplate(t.Name); tmpl != nil {
 			err = tmpl.Execute(wr, With{
-				ElementIf:     e,
-				RequestWriter: e.Request().Writer(wr),
+				Element:       e,
+				RequestWriter: e.GetRequest().Writer(wr),
 				Dot:           t.Dot,
 				Attrs:         attrstr,
 				Auth:          auth,
@@ -112,13 +112,13 @@ func (t Template) JawsRender(e ElementIf, wr io.Writer, params []any) (err error
 	return
 }
 
-func (t Template) JawsUpdate(e ElementIf) {
+func (t Template) JawsUpdate(e Element) {
 	if dot, ok := t.Dot.(Updater); ok {
 		dot.JawsUpdate(e)
 	}
 }
 
-func (t Template) JawsEvent(e ElementIf, wht what.What, val string) error {
+func (t Template) JawsEvent(e Element, wht what.What, val string) error {
 	return callEventHandlers(t.Dot, e, wht, val)
 }
 

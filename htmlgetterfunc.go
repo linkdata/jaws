@@ -3,21 +3,21 @@ package jaws
 import "html/template"
 
 type htmlGetterFunc struct {
-	fn   func(ElementIf) template.HTML
+	fn   func(Element) template.HTML
 	tags []any
 }
 
 var _ TagGetter = &htmlGetterFunc{}
 
-func (g *htmlGetterFunc) JawsGetHTML(e ElementIf) template.HTML {
+func (g *htmlGetterFunc) JawsGetHTML(e Element) template.HTML {
 	return g.fn(e)
 }
 
-func (g *htmlGetterFunc) JawsGetTag(rq RequestIf) any {
+func (g *htmlGetterFunc) JawsGetTag(rq Request) any {
 	return g.tags
 }
 
 // HTMLGetterFunc wraps a function and returns a HTMLGetter.
-func HTMLGetterFunc(fn func(elem ElementIf) (tmpl template.HTML), tags ...any) HTMLGetter {
+func HTMLGetterFunc(fn func(elem Element) (tmpl template.HTML), tags ...any) HTMLGetter {
 	return &htmlGetterFunc{fn: fn, tags: tags}
 }

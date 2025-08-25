@@ -22,6 +22,6 @@ func (e errNoWebSocketRequest) Is(target error) bool {
 	return target == ErrNoWebSocketRequest
 }
 
-func newErrNoWebSocketRequest(rq *Request) error {
+func newErrNoWebSocketRequest(rq *request) error {
 	return errNoWebSocketRequest{Addr: rq.remoteIP}
 }

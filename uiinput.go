@@ -7,12 +7,12 @@ type UiInput struct {
 	Last atomic.Value
 }
 
-func (ui *UiInput) applyGetter(e ElementIf, getter any) (err error) {
+func (ui *UiInput) applyGetter(e Element, getter any) (err error) {
 	ui.Tag, err = e.ApplyGetter(getter)
 	return
 }
 
-func (ui *UiInput) MaybeDirty(val any, e ElementIf, err error) error {
+func (ui *UiInput) MaybeDirty(val any, e Element, err error) error {
 	var changed bool
 	if changed, err = e.MaybeDirty(ui.Tag, err); changed {
 		ui.Last.Store(val)

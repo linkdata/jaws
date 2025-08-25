@@ -26,7 +26,7 @@ func newTestJaws() (tj *testJaws) {
 		Jaws: jw,
 	}
 	tj.Jaws.Logger = slog.New(slog.NewTextHandler(&tj.log, nil))
-	tj.Jaws.MakeAuth = func(r RequestIf) Auth {
+	tj.Jaws.MakeAuth = func(r Request) Auth {
 		return defaultAuth{}
 	}
 	tj.testtmpl = template.Must(template.New("testtemplate").Parse(`{{with $.Dot}}<div id="{{$.Jid}}" {{$.Attrs}}>{{.}}</div>{{end}}`))
@@ -51,7 +51,7 @@ type testRequest struct {
 	expectPanic bool
 	panicked    bool
 	panicVal    any
-	*Request
+	*request
 	RequestWriter
 }
 
@@ -83,7 +83,7 @@ func (tj *testJaws) newRequest(hr *http.Request) (tr *testRequest) {
 		bcastCh:       bcastCh,
 		ctx:           ctx,
 		cancel:        cancel,
-		Request:       rq,
+		request:       rq,
 		RequestWriter: rq.Writer(rr),
 	}
 
@@ -98,7 +98,7 @@ func (tj *testJaws) newRequest(hr *http.Request) (tr *testRequest) {
 		}()
 		close(tr.readyCh)
 		tr.process(tr.bcastCh, tr.inCh, tr.outCh) // usubs from bcase, closes outCh
-		tr.jw.recycle(tr.Request)
+		tr.jw.recycle(tr.request)
 	}()
 
 	return
@@ -121,10 +121,10 @@ func (tr *testRequest) Write(buf []byte) (int, error) {
 	return tr.rr.Write(buf)
 }
 
-func (tr *testRequest) getElementByJid(jid Jid) (e ElementIf) {
-	tr.Request.mu.RLock()
-	e = tr.Request.getElementByJidLocked(jid)
-	tr.Request.mu.RUnlock()
+func (tr *testRequest) getElementByJid(jid Jid) (e Element) {
+	tr.request.mu.RLock()
+	e = tr.request.getElementByJidLocked(jid)
+	tr.request.mu.RUnlock()
 	return
 }
 

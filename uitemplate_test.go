@@ -128,7 +128,7 @@ func TestRequest_Template(t *testing.T) {
 			if tt.errtxt != "" {
 				t.Fail()
 			}
-			gotTags := elem.Request().TagsOf(elem)
+			gotTags := elem.GetRequest().TagsOf(elem)
 			is.Equal(len(tt.tags), len(gotTags))
 			for _, tag := range tt.tags {
 				is.True(elem.HasTag(tag))
@@ -145,7 +145,7 @@ type templateDot struct {
 	gotName   string
 }
 
-func (td *templateDot) JawsClick(e ElementIf, name string) error {
+func (td *templateDot) JawsClick(e Element, name string) error {
 	defer close(td.clickedCh)
 	td.gotName = name
 	return nil
