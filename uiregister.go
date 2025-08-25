@@ -10,7 +10,7 @@ type UiRegister struct {
 	Updater
 }
 
-func (ui UiRegister) JawsRender(e *Element, w io.Writer, params []any) (err error) {
+func (ui UiRegister) JawsRender(e ElementIf, w io.Writer, params []any) (err error) {
 	return
 }
 

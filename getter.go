@@ -8,22 +8,22 @@ import (
 var ErrValueNotSettable = errors.New("value not settable")
 
 type Getter[T comparable] interface {
-	JawsGet(elem *Element) (value T)
+	JawsGet(elem ElementIf) (value T)
 }
 
 type getterStatic[T comparable] struct {
 	v T
 }
 
-func (getterStatic[T]) JawsSet(*Element, T) error {
+func (getterStatic[T]) JawsSet(ElementIf, T) error {
 	return ErrValueNotSettable
 }
 
-func (s getterStatic[T]) JawsGet(*Element) T {
+func (s getterStatic[T]) JawsGet(ElementIf) T {
 	return s.v
 }
 
-func (s getterStatic[T]) JawsGetTag(*Request) any {
+func (s getterStatic[T]) JawsGetTag(RequestIf) any {
 	return nil
 }
 

@@ -6,7 +6,7 @@ type Auth interface {
 	IsAdmin() bool        // return true if admins are defined and current user is one, or if no admins are defined
 }
 
-type MakeAuthFn func(*Request) Auth
+type MakeAuthFn func(RequestIf) Auth
 
 type defaultAuth struct{}
 

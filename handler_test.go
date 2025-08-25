@@ -12,7 +12,7 @@ func TestHandler_ServeHTTP(t *testing.T) {
 	defer rq.Close()
 
 	dot := Tag("123")
-	h := rq.Jaws.Handler("testtemplate", dot)
+	h := rq.Jaws().Handler("testtemplate", dot)
 	var buf bytes.Buffer
 	var rr httptest.ResponseRecorder
 	rr.Body = &buf

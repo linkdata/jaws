@@ -14,33 +14,33 @@ func (bind bindingHook[T]) JawsBinderPrev() Binder[T] {
 	return bind.Binder
 }
 
-func (bind bindingHook[T]) JawsGetLocked(elem *Element) T {
+func (bind bindingHook[T]) JawsGetLocked(elem ElementIf) T {
 	if fn, ok := bind.hook.(BindGetHook[T]); ok {
 		return fn(bind.Binder, elem)
 	}
 	return bind.Binder.JawsGetLocked(elem)
 }
 
-func (bind bindingHook[T]) JawsGet(elem *Element) T {
+func (bind bindingHook[T]) JawsGet(elem ElementIf) T {
 	bind.RLock()
 	defer bind.RUnlock()
 	return bind.JawsGetLocked(elem)
 }
 
-func (bind bindingHook[T]) JawsSetLocked(elem *Element, value T) error {
+func (bind bindingHook[T]) JawsSetLocked(elem ElementIf, value T) error {
 	if fn, ok := bind.hook.(BindSetHook[T]); ok {
 		return fn(bind.Binder, elem, value)
 	}
 	return bind.Binder.JawsSetLocked(elem, value)
 }
 
-func (bind bindingHook[T]) jawsSetLocking(elem *Element, value T) (err error) {
+func (bind bindingHook[T]) jawsSetLocking(elem ElementIf, value T) (err error) {
 	bind.Lock()
 	defer bind.Unlock()
 	return bind.JawsSetLocked(elem, value)
 }
 
-func callSuccess[T comparable](binder Binder[T], elem *Element) (err error) {
+func callSuccess[T comparable](binder Binder[T], elem ElementIf) (err error) {
 	if prev := binder.JawsBinderPrev(); prev != nil {
 		err = callSuccess(prev, elem)
 	}
@@ -54,7 +54,7 @@ func callSuccess[T comparable](binder Binder[T], elem *Element) (err error) {
 	return
 }
 
-func (bind bindingHook[T]) JawsSet(elem *Element, value T) (err error) {
+func (bind bindingHook[T]) JawsSet(elem ElementIf, value T) (err error) {
 	if err = bind.jawsSetLocking(elem, value); err == nil {
 		err = callSuccess(bind, elem)
 	}
@@ -96,8 +96,8 @@ func (bind bindingHook[T]) GetLocked(setFn BindGetHook[T]) Binder[T] {
 // The function must have one of the following signatures:
 //   - func()
 //   - func() error
-//   - func(*Element)
-//   - func(*Element) error
+//   - func(ElementIf)
+//   - func(ElementIf) error
 func (bind bindingHook[T]) Success(fn any) Binder[T] {
 	return bindingHook[T]{
 		Binder: bind,
@@ -107,13 +107,13 @@ func (bind bindingHook[T]) Success(fn any) Binder[T] {
 
 // Format returns a Getter[string] using fmt.Sprintf(f, JawsGet[T](elem))
 func (bind bindingHook[T]) Format(f string) (getter Getter[string]) {
-	return StringGetterFunc(func(elem *Element) (s string) { return fmt.Sprintf(f, bind.JawsGet(elem)) }, bind)
+	return StringGetterFunc(func(elem ElementIf) (s string) { return fmt.Sprintf(f, bind.JawsGet(elem)) }, bind)
 }
 
 // FormatHTML returns a HTMLGetter using fmt.Sprintf(f, JawsGet[T](elem)).
 // Ensure that the generated string is valid HTML.
 func (bind bindingHook[T]) FormatHTML(f string) (getter HTMLGetter) {
-	return HTMLGetterFunc(func(elem *Element) (tmpl template.HTML) {
+	return HTMLGetterFunc(func(elem ElementIf) (tmpl template.HTML) {
 		return template.HTML( /*#nosec G203*/ fmt.Sprintf(f, bind.JawsGet(elem)))
 	}, bind)
 }

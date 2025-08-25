@@ -14,18 +14,18 @@ func (bind binding[T]) JawsBinderPrev() Binder[T] {
 	return nil
 }
 
-func (bind binding[T]) JawsGetLocked(*Element) T {
+func (bind binding[T]) JawsGetLocked(ElementIf) T {
 	return *bind.ptr
 }
 
-func (bind binding[T]) JawsGet(elem *Element) (value T) {
+func (bind binding[T]) JawsGet(elem ElementIf) (value T) {
 	bind.RWLocker.RLock()
 	value = bind.JawsGetLocked(elem)
 	bind.RWLocker.RUnlock()
 	return
 }
 
-func (bind binding[T]) JawsSetLocked(elem *Element, value T) (err error) {
+func (bind binding[T]) JawsSetLocked(elem ElementIf, value T) (err error) {
 	if value != *bind.ptr {
 		*bind.ptr = value
 		return nil
@@ -33,14 +33,14 @@ func (bind binding[T]) JawsSetLocked(elem *Element, value T) (err error) {
 	return ErrValueUnchanged
 }
 
-func (bind binding[T]) JawsSet(elem *Element, value T) (err error) {
+func (bind binding[T]) JawsSet(elem ElementIf, value T) (err error) {
 	bind.RWLocker.Lock()
 	err = bind.JawsSetLocked(elem, value)
 	bind.RWLocker.Unlock()
 	return
 }
 
-func (bind binding[T]) JawsGetTag(*Request) any {
+func (bind binding[T]) JawsGetTag(RequestIf) any {
 	return bind.ptr
 }
 
@@ -79,8 +79,8 @@ func (bind binding[T]) GetLocked(fn BindGetHook[T]) Binder[T] {
 // The function must have one of the following signatures:
 //   - func()
 //   - func() error
-//   - func(*Element)
-//   - func(*Element) error
+//   - func(ElementIf)
+//   - func(ElementIf) error
 func (bind binding[T]) Success(fn any) Binder[T] {
 	return bindingHook[T]{
 		Binder: bind,
@@ -90,13 +90,13 @@ func (bind binding[T]) Success(fn any) Binder[T] {
 
 // Format returns a Getter[string] using fmt.Sprintf(f, JawsGet[T](elem))
 func (bind binding[T]) Format(f string) (getter Getter[string]) {
-	return StringGetterFunc(func(elem *Element) (s string) { return fmt.Sprintf(f, bind.JawsGet(elem)) }, bind)
+	return StringGetterFunc(func(elem ElementIf) (s string) { return fmt.Sprintf(f, bind.JawsGet(elem)) }, bind)
 }
 
 // FormatHTML returns a HTMLGetter using fmt.Sprintf(f, JawsGet[T](elem)).
 // Ensure that the generated string is valid HTML.
 func (bind binding[T]) FormatHTML(f string) (getter HTMLGetter) {
-	return HTMLGetterFunc(func(elem *Element) (tmpl template.HTML) {
+	return HTMLGetterFunc(func(elem ElementIf) (tmpl template.HTML) {
 		return template.HTML( /*#nosec G203*/ fmt.Sprintf(f, bind.JawsGet(elem)))
 	}, bind)
 }
@@ -104,20 +104,20 @@ func (bind binding[T]) FormatHTML(f string) (getter HTMLGetter) {
 func wrapSuccessHook(fn any) (hook BindSuccessHook) {
 	switch fn := fn.(type) {
 	case func():
-		return func(*Element) error {
+		return func(ElementIf) error {
 			fn()
 			return nil
 		}
 	case func() error:
-		return func(*Element) error {
+		return func(ElementIf) error {
 			return fn()
 		}
-	case func(*Element):
-		return func(elem *Element) error {
+	case func(ElementIf):
+		return func(elem ElementIf) error {
 			fn(elem)
 			return nil
 		}
-	case func(*Element) error:
+	case func(ElementIf) error:
 		return fn
 	}
 	panic("Binding[T].Success(): function has wrong signature")

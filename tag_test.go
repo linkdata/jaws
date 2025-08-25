@@ -15,7 +15,7 @@ import (
 type testSelfTagger struct {
 }
 
-func (tt *testSelfTagger) JawsGetTag(rq *Request) any {
+func (tt *testSelfTagger) JawsGetTag(rq RequestIf) any {
 	return tt
 }
 

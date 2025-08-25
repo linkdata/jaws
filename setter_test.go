@@ -8,7 +8,7 @@ const testStringGetterText = "<span>"
 
 type testGetterString struct{}
 
-func (testGetterString) JawsGet(*Element) string {
+func (testGetterString) JawsGet(ElementIf) string {
 	return testStringGetterText
 }
 

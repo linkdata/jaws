@@ -4,7 +4,6 @@ import (
 	"html/template"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"testing"
 
@@ -12,6 +11,7 @@ import (
 )
 
 func TestUiHTMLInner_JawsUpdate(t *testing.T) {
+	th := newTestHelper(t)
 	jw, _ := New()
 	defer jw.Close()
 	nextJid = 0
@@ -34,7 +34,5 @@ func TestUiHTMLInner_JawsUpdate(t *testing.T) {
 		Jid:  1,
 		What: what.Inner,
 	}}
-	if !slices.Equal(rq.wsQueue, want) {
-		t.Errorf("got %v, want %v", elem.wsQueue, want)
-	}
+	th.Equal(rq.wsQueue, want)
 }

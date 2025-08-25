@@ -16,7 +16,7 @@ func NewUiTbody(c Container) *UiTbody {
 	}
 }
 
-func (ui *UiTbody) JawsRender(e *Element, w io.Writer, params []any) error {
+func (ui *UiTbody) JawsRender(e ElementIf, w io.Writer, params []any) error {
 	return ui.renderContainer(e, w, "tbody", params)
 }
 

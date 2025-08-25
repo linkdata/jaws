@@ -26,7 +26,7 @@ func newTestJaws() (tj *testJaws) {
 		Jaws: jw,
 	}
 	tj.Jaws.Logger = slog.New(slog.NewTextHandler(&tj.log, nil))
-	tj.Jaws.MakeAuth = func(r *Request) Auth {
+	tj.Jaws.MakeAuth = func(r RequestIf) Auth {
 		return defaultAuth{}
 	}
 	tj.testtmpl = template.Must(template.New("testtemplate").Parse(`{{with $.Dot}}<div id="{{$.Jid}}" {{$.Attrs}}>{{.}}</div>{{end}}`))
@@ -121,7 +121,7 @@ func (tr *testRequest) Write(buf []byte) (int, error) {
 	return tr.rr.Write(buf)
 }
 
-func (tr *testRequest) getElementByJid(jid Jid) (e *Element) {
+func (tr *testRequest) getElementByJid(jid Jid) (e ElementIf) {
 	tr.Request.mu.RLock()
 	e = tr.Request.getElementByJidLocked(jid)
 	tr.Request.mu.RUnlock()

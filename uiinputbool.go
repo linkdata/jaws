@@ -12,7 +12,7 @@ type UiInputBool struct {
 	Setter[bool]
 }
 
-func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string, params ...any) (err error) {
+func (ui *UiInputBool) renderBoolInput(e ElementIf, w io.Writer, htmltype string, params ...any) (err error) {
 	if err = ui.applyGetter(e, ui.Setter); err == nil {
 		attrs := e.ApplyParams(params)
 		v := ui.JawsGet(e)
@@ -25,7 +25,7 @@ func (ui *UiInputBool) renderBoolInput(e *Element, w io.Writer, htmltype string,
 	return
 }
 
-func (ui *UiInputBool) JawsUpdate(e *Element) {
+func (ui *UiInputBool) JawsUpdate(e ElementIf) {
 	v := ui.JawsGet(e)
 	if ui.Last.Swap(v) != v {
 		txt := "false"
@@ -36,7 +36,7 @@ func (ui *UiInputBool) JawsUpdate(e *Element) {
 	}
 }
 
-func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (err error) {
+func (ui *UiInputBool) JawsEvent(e ElementIf, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
 	if wht == what.Input {
 		var v bool
@@ -45,7 +45,7 @@ func (ui *UiInputBool) JawsEvent(e *Element, wht what.What, val string) (err err
 				return
 			}
 		}
-		err = ui.maybeDirty(v, e, ui.Setter.JawsSet(e, v))
+		err = ui.MaybeDirty(v, e, ui.Setter.JawsSet(e, v))
 	}
 	return
 }

@@ -8,31 +8,31 @@ import (
 
 type htmlGetter struct{ v template.HTML }
 
-func (g htmlGetter) JawsGetHTML(e *Element) template.HTML {
+func (g htmlGetter) JawsGetHTML(e ElementIf) template.HTML {
 	return g.v
 }
 
-func (g htmlGetter) JawsGetTag(rq *Request) any {
+func (g htmlGetter) JawsGetTag(rq RequestIf) any {
 	return nil
 }
 
 type htmlStringerGetter struct{ sg fmt.Stringer }
 
-func (g htmlStringerGetter) JawsGetHTML(e *Element) template.HTML {
+func (g htmlStringerGetter) JawsGetHTML(e ElementIf) template.HTML {
 	return template.HTML(html.EscapeString(g.sg.String())) // #nosec G203
 }
 
-func (g htmlStringerGetter) JawsGetTag(rq *Request) any {
+func (g htmlStringerGetter) JawsGetTag(rq RequestIf) any {
 	return g.sg
 }
 
 type htmlGetterString struct{ sg Getter[string] }
 
-func (g htmlGetterString) JawsGetHTML(e *Element) template.HTML {
+func (g htmlGetterString) JawsGetHTML(e ElementIf) template.HTML {
 	return template.HTML(html.EscapeString(g.sg.JawsGet(e))) // #nosec G203
 }
 
-func (g htmlGetterString) JawsGetTag(rq *Request) any {
+func (g htmlGetterString) JawsGetTag(rq RequestIf) any {
 	return g.sg
 }
 
@@ -40,9 +40,9 @@ func (g htmlGetterString) JawsGetTag(rq *Request) any {
 //
 // Depending on the type of v, we return:
 //
-//   - jaws.HTMLGetter: `JawsGetHTML(e *Element) template.HTML` to be used as-is.
-//   - jaws.Getter[string]: `JawsGet(elem *Element) string` that will be escaped using `html.EscapeString`.
-//   - jaws.AnyGetter: `JawsGetAny(elem *Element) any` that will be rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
+//   - jaws.HTMLGetter: `JawsGetHTML(e ElementIf) template.HTML` to be used as-is.
+//   - jaws.Getter[string]: `JawsGet(elem ElementIf) string` that will be escaped using `html.EscapeString`.
+//   - jaws.AnyGetter: `JawsGetAny(elem ElementIf) any` that will be rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
 //   - fmt.Stringer: `String() string` that will be escaped using `html.EscapeString`.
 //   - a static `template.HTML` or `string` to be used as-is with no HTML escaping.
 //   - everything else is rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.

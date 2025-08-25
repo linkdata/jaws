@@ -42,7 +42,7 @@ func (nba *NamedBoolArray) WriteLocked(fn func(nbl []*NamedBool) []*NamedBool) {
 	nba.data = fn(nba.data)
 }
 
-func (nba *NamedBoolArray) JawsContains(e *Element) (contents []UI) {
+func (nba *NamedBoolArray) JawsContains(e ElementIf) (contents []UI) {
 	nba.mu.RLock()
 	for _, nb := range nba.data {
 		contents = append(contents, UiOption{nb})
@@ -135,13 +135,13 @@ func (nba *NamedBoolArray) String() string {
 	return sb.String()
 }
 
-func (nba *NamedBoolArray) JawsGet(e *Element) string {
+func (nba *NamedBoolArray) JawsGet(e ElementIf) string {
 	return nba.Get()
 }
 
-func (nba *NamedBoolArray) JawsSet(e *Element, name string) (err error) {
+func (nba *NamedBoolArray) JawsSet(e ElementIf, name string) (err error) {
 	if nba.Set(name, true) {
-		e.Dirty(nba)
+		e.Jaws().Dirty(nba)
 	} else {
 		err = ErrValueUnchanged
 	}

@@ -7,7 +7,7 @@ package jaws
 //
 // The bind argument is the previous Binder in the chain, and you probably
 // want to call it's JawsSetLocked first.
-type BindSetHook[T comparable] func(bind Binder[T], elem *Element, value T) (err error)
+type BindSetHook[T comparable] func(bind Binder[T], elem ElementIf, value T) (err error)
 
 // BindGetHook is a function that replaces JawsGetLocked for a Binder.
 //
@@ -16,7 +16,7 @@ type BindSetHook[T comparable] func(bind Binder[T], elem *Element, value T) (err
 //
 // The bind argument is the previous Binder in the chain, and you probably
 // want to call it's JawsGetLocked first.
-type BindGetHook[T comparable] func(bind Binder[T], elem *Element) (value T)
+type BindGetHook[T comparable] func(bind Binder[T], elem ElementIf) (value T)
 
 // BindSuccessHook is a function to call when a call to JawsSet returns with no error.
 //
@@ -25,7 +25,7 @@ type BindGetHook[T comparable] func(bind Binder[T], elem *Element) (value T)
 // Success hooks in a Binder chain are called in the order they were registered.
 // If one of them returns an error, that error is returned from JawsSet and
 // no more success hooks are called.
-type BindSuccessHook func(*Element) (err error)
+type BindSuccessHook func(ElementIf) (err error)
 
 type Formatter interface {
 	// Format returns a Getter[string] using fmt.Sprintf(f, JawsGet[T](elem))
@@ -39,8 +39,8 @@ type Binder[T comparable] interface {
 	Formatter
 
 	JawsBinderPrev() Binder[T] // returns the previous Binder in the chain, or nil
-	JawsGetLocked(elem *Element) (value T)
-	JawsSetLocked(elem *Element, value T) (err error)
+	JawsGetLocked(elem ElementIf) (value T)
+	JawsSetLocked(elem ElementIf, value T) (err error)
 
 	// SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
 	//
@@ -67,8 +67,8 @@ type Binder[T comparable] interface {
 	// The function must have one of the following signatures:
 	//  * func()
 	//  * func() error
-	//  * func(*Element)
-	//  * func(*Element) error
+	//  * func(ElementIf)
+	//  * func(ElementIf) error
 	Success(fn any) (newbind Binder[T])
 
 	// FormatHTML returns a HTMLGetter using fmt.Sprintf(f, JawsGet[T](elem))

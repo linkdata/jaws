@@ -370,7 +370,7 @@ func TestJaws_RequestWriterExtendsDeadline(t *testing.T) {
 	var sb strings.Builder
 	rw := rq.Writer(&sb)
 
-	ui := &testUi{renderFn: func(e *Element, w io.Writer, params []any) error {
+	ui := &testUi{renderFn: func(e ElementIf, w io.Writer, params []any) error {
 		w.Write(nil)
 		return nil
 	}}
@@ -438,8 +438,8 @@ func TestJaws_UnconnectedLivesUntilDeadline(t *testing.T) {
 	}
 
 	// neither should have been recycled
-	th.Equal(rq1.Jaws, jw)
-	th.Equal(rq2.Jaws, jw)
+	th.Equal(rq1.Jaws(), jw)
+	th.Equal(rq2.Jaws(), jw)
 
 	th.NoErr(context.Cause(rq1ctx))
 	if !errors.Is(context.Cause(rq2ctx), errNoWebSocketRequest{}) {
@@ -516,10 +516,10 @@ func TestJaws_TemplateLookuper(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
-	th.Equal(rq.Jaws.LookupTemplate("nosuchtemplate"), nil)
-	th.Equal(rq.Jaws.LookupTemplate("testtemplate"), rq.jw.testtmpl)
-	rq.Jaws.RemoveTemplateLookuper(rq.jw.testtmpl)
-	th.Equal(rq.Jaws.LookupTemplate("testtemplate"), nil)
+	th.Equal(rq.Jaws().LookupTemplate("nosuchtemplate"), nil)
+	th.Equal(rq.Jaws().LookupTemplate("testtemplate"), rq.jw.testtmpl)
+	rq.Jaws().RemoveTemplateLookuper(rq.jw.testtmpl)
+	th.Equal(rq.Jaws().LookupTemplate("testtemplate"), nil)
 }
 
 func TestJaws_JsCall(t *testing.T) {
@@ -536,7 +536,7 @@ func TestJaws_JsCall(t *testing.T) {
 	err := elem.JawsRender(&sb, nil)
 	th.NoErr(err)
 
-	elem.Jaws.JsCall(tss, "somefn", "1.3")
+	elem.Jaws().JsCall(tss, "somefn", "1.3")
 
 	select {
 	case <-th.C:

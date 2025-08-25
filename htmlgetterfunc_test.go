@@ -8,7 +8,7 @@ import (
 
 func TestHTMLGetterFunc(t *testing.T) {
 	tt := &testSelfTagger{}
-	hg := HTMLGetterFunc(func(e *Element) template.HTML {
+	hg := HTMLGetterFunc(func(e ElementIf) template.HTML {
 		return "foo"
 	}, tt)
 	if s := hg.JawsGetHTML(nil); s != "foo" {

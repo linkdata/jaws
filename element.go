@@ -12,9 +12,41 @@ import (
 	"github.com/linkdata/jaws/what"
 )
 
+type ElementIf interface {
+	fmt.Stringer
+	RequestIf
+	Request() RequestIf
+	Tag(tags ...any)
+	HasTag(tag any) bool
+	Jid() jid.Jid
+	Ui() UI
+	JawsRender(w io.Writer, params []any) (err error)
+	JawsUpdate()
+	SetAttr(attr, val string)
+	RemoveAttr(attr string)
+	SetClass(cls string)
+	RemoveClass(cls string)
+	SetInner(innerHTML template.HTML)
+	SetValue(val string)
+	Replace(htmlCode template.HTML)
+	Append(htmlCode template.HTML)
+	Order(jidList []jid.Jid)
+	Remove(htmlId string)
+	ApplyParams(params []any) (retv []template.HTMLAttr)
+	ApplyGetter(getter any) (tag any, err error)
+	MaybeDirty(tag any, err error) (bool, error)
+	RenderDebug(w io.Writer)
+	IsDeleted() bool
+	SetDeleted()
+	AddHandlers(h ...EventHandler)
+	GetHandlers() []EventHandler
+}
+
+var _ ElementIf = &Element{}
+
 // An Element is an instance of a *Request, an UI object and a Jid.
 type Element struct {
-	*Request // (read-only) the Request the Element belongs to
+	RequestIf // (read-only) the Request the Element belongs to
 	// internals
 	ui       UI             // the UI object
 	handlers []EventHandler // custom event handlers registered, if any
@@ -23,19 +55,31 @@ type Element struct {
 }
 
 func (e *Element) String() string {
-	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", e.Ui(), e.Jid(), e.Request.TagsOf(e))
+	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", e.Ui(), e.Jid(), e.Request().TagsOf(e))
+}
+
+func (e *Element) Request() RequestIf {
+	return e.RequestIf
+}
+
+func (e *Element) AddHandlers(h ...EventHandler) {
+	e.handlers = append(e.handlers, h...)
+}
+
+func (e *Element) GetHandlers() []EventHandler {
+	return e.handlers
 }
 
 // Tag adds the given tags to the Element.
 func (e *Element) Tag(tags ...any) {
 	if !e.deleted {
-		e.Request.Tag(e, tags...)
+		e.RequestIf.ElementSetTag(e, tags...)
 	}
 }
 
 // HasTag returns true if this Element has the given tag.
 func (e *Element) HasTag(tag any) bool {
-	return !e.deleted && e.Request.HasTag(e, tag)
+	return !e.deleted && e.RequestIf.ElementHasTag(e, tag)
 }
 
 // Jid returns the JaWS ID for this Element, unique within it's Request.
@@ -48,7 +92,15 @@ func (e *Element) Ui() UI {
 	return e.ui
 }
 
-func (e *Element) maybeDirty(tag any, err error) (bool, error) {
+func (e *Element) IsDeleted() bool {
+	return e.deleted
+}
+
+func (e *Element) SetDeleted() {
+	e.deleted = true
+}
+
+func (e *Element) MaybeDirty(tag any, err error) (bool, error) {
 	switch err {
 	case nil:
 		e.Dirty(tag)
@@ -59,12 +111,12 @@ func (e *Element) maybeDirty(tag any, err error) (bool, error) {
 	return false, err
 }
 
-func (e *Element) renderDebug(w io.Writer) {
+func (e *Element) RenderDebug(w io.Writer) {
 	var sb strings.Builder
 	_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", e.Jid(), e.Ui())
-	if e.mu.TryRLock() {
-		defer e.mu.RUnlock()
-		for i, tag := range e.tagsOfLocked(e) {
+	if rq, ok := e.RequestIf.(*Request); ok && rq.mu.TryRLock() {
+		defer rq.mu.RUnlock()
+		for i, tag := range e.TagsOfLocked(e) {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
@@ -83,8 +135,8 @@ func (e *Element) renderDebug(w io.Writer) {
 func (e *Element) JawsRender(w io.Writer, params []any) (err error) {
 	if !e.deleted {
 		if err = e.Ui().JawsRender(e, w, params); err == nil {
-			if e.Jaws.Debug {
-				e.renderDebug(w)
+			if e.Jaws().IsDebug() {
+				e.RenderDebug(w)
 			}
 		}
 	}
@@ -102,7 +154,7 @@ func (e *Element) JawsUpdate() {
 
 func (e *Element) queue(wht what.What, data string) {
 	if !e.deleted {
-		e.Request.queue(wsMsg{
+		e.RequestIf.Queue(wsMsg{
 			Data: data,
 			Jid:  e.jid,
 			What: wht,
@@ -237,7 +289,7 @@ func (e *Element) ApplyGetter(getter any) (tag any, err error) {
 	if getter != nil {
 		tag = getter
 		if tagger, ok := getter.(TagGetter); ok {
-			tag = tagger.JawsGetTag(e.Request)
+			tag = tagger.JawsGetTag(e.RequestIf)
 		}
 		e.Tag(tag)
 		if ch, ok := getter.(ClickHandler); ok {

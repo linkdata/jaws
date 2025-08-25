@@ -29,7 +29,7 @@ func (errTooManyTags) Error() string {
 
 var ErrTooManyTags = errTooManyTags{}
 
-func tagExpand(l int, rq *Request, tag any, result []any) ([]any, error) {
+func tagExpand(l int, rq RequestIf, tag any, result []any) ([]any, error) {
 	if l > 10 || len(result) > 100 {
 		return result, ErrTooManyTags
 	}
@@ -83,11 +83,11 @@ func tagExpand(l int, rq *Request, tag any, result []any) ([]any, error) {
 	return result, errIllegalTagType{tag: tag}
 }
 
-func TagExpand(rq *Request, tag any) ([]any, error) {
+func TagExpand(rq RequestIf, tag any) ([]any, error) {
 	return tagExpand(0, rq, tag, nil)
 }
 
-func MustTagExpand(rq *Request, tag any) []any {
+func MustTagExpand(rq RequestIf, tag any) []any {
 	result, err := TagExpand(rq, tag)
 	if err != nil {
 		panic(err)

@@ -2,11 +2,10 @@ package jaws
 
 import (
 	"io"
-	"net/http"
 )
 
 type RequestWriter struct {
-	rq *Request
+	rq RequestIf
 	io.Writer
 }
 
@@ -15,18 +14,13 @@ func (rw RequestWriter) UI(ui UI, params ...any) error {
 }
 
 func (rw RequestWriter) Write(p []byte) (n int, err error) {
-	rw.rq.rendering.Store(true)
+	rw.rq.SetRendering()
 	return rw.Writer.Write(p)
 }
 
 // Request returns the current jaws.Request.
-func (rw RequestWriter) Request() *Request {
+func (rw RequestWriter) Request() RequestIf {
 	return rw.rq
-}
-
-// Initial returns the initial http.Request.
-func (rw RequestWriter) Initial() *http.Request {
-	return rw.Request().Initial()
 }
 
 // HeadHTML outputs the HTML code needed in the HEAD section.

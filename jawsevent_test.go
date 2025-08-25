@@ -17,14 +17,14 @@ type testJawsEvent struct {
 	eventerr error
 }
 
-func (t *testJawsEvent) JawsClick(e *Element, name string) (err error) {
+func (t *testJawsEvent) JawsClick(e ElementIf, name string) (err error) {
 	if err = t.clickerr; err == nil {
 		t.msgCh <- fmt.Sprintf("JawsClick: %q", name)
 	}
 	return
 }
 
-func (t *testJawsEvent) JawsEvent(e *Element, wht what.What, val string) (err error) {
+func (t *testJawsEvent) JawsEvent(e ElementIf, wht what.What, val string) (err error) {
 	if err = t.eventerr; err == nil {
 		t.msgCh <- fmt.Sprintf("JawsEvent: %s %q", wht, val)
 	} else {
@@ -33,21 +33,21 @@ func (t *testJawsEvent) JawsEvent(e *Element, wht what.What, val string) (err er
 	return
 }
 
-func (t *testJawsEvent) JawsGetTag(*Request) (tag any) {
+func (t *testJawsEvent) JawsGetTag(RequestIf) (tag any) {
 	return t.tag
 }
 
-func (t *testJawsEvent) JawsRender(e *Element, w io.Writer, params []any) (err error) {
+func (t *testJawsEvent) JawsRender(e ElementIf, w io.Writer, params []any) (err error) {
 	var tag any
 	if tag, err = e.ApplyGetter(t); err == nil {
 		w.Write([]byte(fmt.Sprint(params)))
-		t.msgCh <- fmt.Sprintf("JawsRender(%d)%#v", e.jid, tag)
+		t.msgCh <- fmt.Sprintf("JawsRender(%d)%#v", e.Jid(), tag)
 	}
 	return
 }
 
-func (t *testJawsEvent) JawsUpdate(e *Element) {
-	t.msgCh <- fmt.Sprintf("JawsUpdate(%d)", e.jid)
+func (t *testJawsEvent) JawsUpdate(e ElementIf) {
+	t.msgCh <- fmt.Sprintf("JawsUpdate(%d)", e.Jid())
 }
 
 var _ ClickHandler = (*testJawsEvent)(nil)
@@ -110,11 +110,11 @@ type testJawsEventHandler struct {
 	eventerr error
 }
 
-func (t *testJawsEventHandler) JawsGetHTML(e *Element) template.HTML {
+func (t *testJawsEventHandler) JawsGetHTML(e ElementIf) template.HTML {
 	return "tjEH"
 }
 
-func (t *testJawsEventHandler) JawsEvent(e *Element, wht what.What, val string) (err error) {
+func (t *testJawsEventHandler) JawsEvent(e ElementIf, wht what.What, val string) (err error) {
 	if err = t.eventerr; err == nil {
 		t.msgCh <- fmt.Sprintf("JawsEvent: %s %q", wht, val)
 	} else {

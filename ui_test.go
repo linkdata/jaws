@@ -54,10 +54,10 @@ func TestRequest_JawsRender_DebugOutput(t *testing.T) {
 	rq := newTestRequest()
 	defer rq.Close()
 
-	rq.Jaws.Debug = true
-	rq.UI(&testUi{renderFn: func(e *Element, w io.Writer, params []any) error {
+	rq.jaws.Debug = true
+	rq.UI(&testUi{renderFn: func(e ElementIf, w io.Writer, params []any) error {
 		e.Tag(Tag("footag"))
-		e.Tag(e.Request)
+		e.Tag(e.Request())
 		e.Tag(testStringer{})
 		return nil
 	}})
@@ -103,12 +103,13 @@ func BenchmarkPageUpdate(b *testing.B) {
 	var buf bytes.Buffer
 	tp.render(&buf)
 	b.ResetTimer()
+	rq := tr.rq.(*Request)
 	for i := 0; i < b.N; i++ {
 		var x []byte
 		tp.updateElems()
-		for _, wsmsg := range tr.rq.wsQueue {
+		for _, wsmsg := range rq.wsQueue {
 			x = wsmsg.Append(x)
 		}
-		tr.rq.wsQueue = tr.rq.wsQueue[:0]
+		rq.wsQueue = rq.wsQueue[:0]
 	}
 }

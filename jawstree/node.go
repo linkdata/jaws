@@ -20,9 +20,9 @@ type Node struct {
 	Children []*Node `json:"children,omitzero"`
 }
 
-func (n *Node) JawsPathSet(elem *jaws.Element, jspath string, value any) {
+func (n *Node) JawsPathSet(elem jaws.ElementIf, jspath string, value any) {
 	if jspath, ok := strings.CutSuffix(jspath, ".selected"); ok {
-		elem.Jaws.JsCall(n.Tree.Tag, "jawstreeSetPath", fmt.Sprintf(`{"tree":%q,"id":%q,"set":%v}`, n.Tree.id, jspath, value))
+		elem.Jaws().JsCall(n.Tree.Tag, "jawstreeSetPath", fmt.Sprintf(`{"tree":%q,"id":%q,"set":%v}`, n.Tree.id, jspath, value))
 	}
 }
 

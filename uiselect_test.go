@@ -16,7 +16,7 @@ type testNamedBoolArray struct {
 	*NamedBoolArray
 }
 
-func (ts *testNamedBoolArray) JawsSet(e *Element, val string) (err error) {
+func (ts *testNamedBoolArray) JawsSet(e ElementIf, val string) (err error) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	if err = ts.err; err == nil {

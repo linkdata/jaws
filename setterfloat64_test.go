@@ -9,7 +9,7 @@ type testGetter[T comparable] struct {
 	v T
 }
 
-func (tg testGetter[T]) JawsGet(*Element) T {
+func (tg testGetter[T]) JawsGet(ElementIf) T {
 	return tg.v
 }
 

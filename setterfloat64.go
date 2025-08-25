@@ -13,23 +13,23 @@ type numeric interface {
 type SetterFloat64[T numeric] interface {
 	Getter[T]
 	// JawsSet may return ErrValueUnchanged to indicate value was already set.
-	JawsSet(elem *Element, value T) (err error)
+	JawsSet(elem ElementIf, value T) (err error)
 }
 
 type setterFloat64[T numeric] struct {
 	Setter[T]
 }
 
-func (s setterFloat64[T]) JawsGet(e *Element) float64 {
+func (s setterFloat64[T]) JawsGet(e ElementIf) float64 {
 	v := s.Setter.JawsGet(e)
 	return float64(v)
 }
 
-func (s setterFloat64[T]) JawsSet(e *Element, v float64) error {
+func (s setterFloat64[T]) JawsSet(e ElementIf, v float64) error {
 	return s.Setter.JawsSet(e, T(v))
 }
 
-func (s setterFloat64[T]) JawsGetTag(*Request) any {
+func (s setterFloat64[T]) JawsGetTag(RequestIf) any {
 	return s.Setter
 }
 
@@ -37,16 +37,16 @@ type setterFloat64ReadOnly[T numeric] struct {
 	Getter[T]
 }
 
-func (s setterFloat64ReadOnly[T]) JawsGet(e *Element) float64 {
+func (s setterFloat64ReadOnly[T]) JawsGet(e ElementIf) float64 {
 	v := s.Getter.JawsGet(e)
 	return float64(v)
 }
 
-func (setterFloat64ReadOnly[T]) JawsSet(*Element, float64) error {
+func (setterFloat64ReadOnly[T]) JawsSet(ElementIf, float64) error {
 	return ErrValueNotSettable
 }
 
-func (s setterFloat64ReadOnly[T]) JawsGetTag(*Request) any {
+func (s setterFloat64ReadOnly[T]) JawsGetTag(RequestIf) any {
 	return s.Getter
 }
 
@@ -54,15 +54,15 @@ type setterFloat64Static[T numeric] struct {
 	v float64
 }
 
-func (setterFloat64Static[T]) JawsSet(*Element, float64) error {
+func (setterFloat64Static[T]) JawsSet(ElementIf, float64) error {
 	return ErrValueNotSettable
 }
 
-func (s setterFloat64Static[T]) JawsGet(*Element) float64 {
+func (s setterFloat64Static[T]) JawsGet(ElementIf) float64 {
 	return s.v
 }
 
-func (s setterFloat64Static[T]) JawsGetTag(*Request) any {
+func (s setterFloat64Static[T]) JawsGetTag(RequestIf) any {
 	return nil
 }
 

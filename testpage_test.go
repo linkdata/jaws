@@ -3,6 +3,7 @@ package jaws
 import (
 	"html/template"
 	"io"
+	"net/http"
 	"time"
 )
 
@@ -95,6 +96,10 @@ func newTestPage(tr *testRequest) *testPage {
 	return tp
 }
 
+func (tp *testPage) Initial() (r *http.Request) {
+	return tp.rq.Initial()
+}
+
 func (tp *testPage) render(w io.Writer) (err error) {
 	nextJid = 4
 	tp.RequestWriter.Writer = w
@@ -102,7 +107,7 @@ func (tp *testPage) render(w io.Writer) (err error) {
 }
 
 func (tp *testPage) updateElems() {
-	rq := tp.RequestWriter.rq
+	rq := tp.RequestWriter.rq.(*Request)
 	for _, elem := range rq.elems {
 		elem.JawsUpdate()
 	}

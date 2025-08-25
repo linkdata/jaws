@@ -18,7 +18,7 @@ func NewUiContainer(outerHTMLTag string, c Container) *UiContainer {
 	}
 }
 
-func (ui *UiContainer) JawsRender(e *Element, w io.Writer, params []any) error {
+func (ui *UiContainer) JawsRender(e ElementIf, w io.Writer, params []any) error {
 	return ui.renderContainer(e, w, ui.OuterHTMLTag, params)
 }
 

@@ -5,7 +5,7 @@ import (
 )
 
 type EventHandler interface {
-	JawsEvent(e *Element, wht what.What, val string) (err error)
+	JawsEvent(e ElementIf, wht what.What, val string) (err error)
 }
 
 type errEventUnhandled struct{}
@@ -20,17 +20,17 @@ var ErrEventUnhandled = errEventUnhandled{}
 
 // EventFn is the signature of a event handling function to be called when JaWS receives
 // an event message from the Javascript via the WebSocket connection.
-type EventFn = func(e *Element, wht what.What, val string) (err error)
+type EventFn = func(e ElementIf, wht what.What, val string) (err error)
 
 type eventFnWrapper struct{ EventFn }
 
-func (ehf eventFnWrapper) JawsEvent(e *Element, w what.What, v string) (err error) {
+func (ehf eventFnWrapper) JawsEvent(e ElementIf, w what.What, v string) (err error) {
 	return ehf.EventFn(e, w, v)
 }
 
 var _ EventFn = eventFnWrapper{}.JawsEvent // statically ensure JawsEvent and EventFn are compatible
 
-func callEventHandler(obj any, e *Element, wht what.What, val string) (err error) {
+func callEventHandler(obj any, e ElementIf, wht what.What, val string) (err error) {
 	if wht == what.Click {
 		if h, ok := obj.(ClickHandler); ok {
 			if err = h.JawsClick(e, val); err != ErrEventUnhandled {
@@ -44,9 +44,9 @@ func callEventHandler(obj any, e *Element, wht what.What, val string) (err error
 	return ErrEventUnhandled
 }
 
-func callEventHandlers(ui any, e *Element, wht what.What, val string) (err error) {
+func callEventHandlers(ui any, e ElementIf, wht what.What, val string) (err error) {
 	if err = callEventHandler(ui, e, wht, val); err == ErrEventUnhandled {
-		for _, h := range e.handlers {
+		for _, h := range e.GetHandlers() {
 			if err = callEventHandler(h, e, wht, val); err != ErrEventUnhandled {
 				return
 			}

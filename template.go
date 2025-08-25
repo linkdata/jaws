@@ -78,31 +78,33 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
 	return
 }
 
-func (t Template) JawsRender(e *Element, wr io.Writer, params []any) (err error) {
+func (t Template) JawsRender(e ElementIf, wr io.Writer, params []any) (err error) {
 	var expandedtags []any
-	if expandedtags, err = TagExpand(e.Request, t.Dot); err == nil {
-		e.Request.tagExpanded(e, expandedtags)
+	if expandedtags, err = TagExpand(e.Request(), t.Dot); err == nil {
+		e.Request().TagExpanded(e, expandedtags)
 		tags, handlers, attrs := ParseParams(params)
 		e.Tag(tags...)
-		e.handlers = append(e.handlers, handlers...)
+		e.AddHandlers(handlers...)
 		attrstr := template.HTMLAttr(strings.Join(attrs, " ")) // #nosec G203
 		var auth Auth
 		auth = defaultAuth{}
-		if f := e.Request.Jaws.MakeAuth; f != nil {
-			auth = f(e.Request)
+		if f := e.Jaws().GetMakeAuth(); f != nil {
+			auth = f(e.Request())
 		}
 		err = errMissingTemplate(t.Name)
-		if tmpl := e.Request.Jaws.LookupTemplate(t.Name); tmpl != nil {
+		if tmpl := e.Jaws().LookupTemplate(t.Name); tmpl != nil {
 			err = tmpl.Execute(wr, With{
-				Element:       e,
-				RequestWriter: e.Request.Writer(wr),
+				ElementIf:     e,
+				RequestWriter: e.Request().Writer(wr),
 				Dot:           t.Dot,
 				Attrs:         attrstr,
 				Auth:          auth,
 			})
-			if deadlock.Debug && e.Jaws.Logger != nil {
-				if !findJidOrJsOrHTMLNode(tmpl.Tree.Root) {
-					e.Jaws.Logger.Warn("jaws: template has no Jid reference", "template", t.Name)
+			if deadlock.Debug {
+				if l := e.Jaws().GetLogger(); l != nil {
+					if !findJidOrJsOrHTMLNode(tmpl.Tree.Root) {
+						l.Warn("jaws: template has no Jid reference", "template", t.Name)
+					}
 				}
 			}
 		}
@@ -110,13 +112,13 @@ func (t Template) JawsRender(e *Element, wr io.Writer, params []any) (err error)
 	return
 }
 
-func (t Template) JawsUpdate(e *Element) {
+func (t Template) JawsUpdate(e ElementIf) {
 	if dot, ok := t.Dot.(Updater); ok {
 		dot.JawsUpdate(e)
 	}
 }
 
-func (t Template) JawsEvent(e *Element, wht what.What, val string) error {
+func (t Template) JawsEvent(e ElementIf, wht what.What, val string) error {
 	return callEventHandlers(t.Dot, e, wht, val)
 }
 

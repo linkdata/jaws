@@ -16,7 +16,7 @@ func (ui *UiInputFloat) str() string {
 	return strconv.FormatFloat(ui.Last.Load().(float64), 'f', -1, 64)
 }
 
-func (ui *UiInputFloat) renderFloatInput(e *Element, w io.Writer, htmltype string, params ...any) (err error) {
+func (ui *UiInputFloat) renderFloatInput(e ElementIf, w io.Writer, htmltype string, params ...any) (err error) {
 	if err = ui.applyGetter(e, ui.Setter); err == nil {
 		attrs := e.ApplyParams(params)
 		ui.Last.Store(ui.JawsGet(e))
@@ -25,13 +25,13 @@ func (ui *UiInputFloat) renderFloatInput(e *Element, w io.Writer, htmltype strin
 	return
 }
 
-func (ui *UiInputFloat) JawsUpdate(e *Element) {
+func (ui *UiInputFloat) JawsUpdate(e ElementIf) {
 	if f := ui.JawsGet(e); ui.Last.Swap(f) != f {
 		e.SetValue(ui.str())
 	}
 }
 
-func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err error) {
+func (ui *UiInputFloat) JawsEvent(e ElementIf, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
 	if wht == what.Input {
 		var v float64
@@ -40,7 +40,7 @@ func (ui *UiInputFloat) JawsEvent(e *Element, wht what.What, val string) (err er
 				return
 			}
 		}
-		err = ui.maybeDirty(v, e, ui.Setter.JawsSet(e, v))
+		err = ui.MaybeDirty(v, e, ui.Setter.JawsSet(e, v))
 	}
 	return
 }

@@ -8,7 +8,7 @@ type UiText struct {
 	UiInputText
 }
 
-func (ui *UiText) JawsRender(e *Element, w io.Writer, params []any) error {
+func (ui *UiText) JawsRender(e ElementIf, w io.Writer, params []any) error {
 	return ui.renderStringInput(e, w, "text", params...)
 }
 

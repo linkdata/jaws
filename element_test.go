@@ -23,12 +23,12 @@ type testUi struct {
 	initCalled   int32
 	initError    error
 	s            string
-	renderFn     func(e *Element, w io.Writer, params []any) error
-	updateFn     func(e *Element)
+	renderFn     func(e ElementIf, w io.Writer, params []any) error
+	updateFn     func(e ElementIf)
 }
 
 // JawsInit implements InitHandler.
-func (tss *testUi) JawsInit(e *Element) (err error) {
+func (tss *testUi) JawsInit(e ElementIf) (err error) {
 	atomic.AddInt32(&tss.initCalled, 1)
 	return tss.initError
 }
@@ -37,18 +37,18 @@ var _ UI = (*testUi)(nil)
 var _ Setter[string] = (*testUi)(nil)
 var _ InitHandler = (*testUi)(nil)
 
-func (tss *testUi) JawsGet(e *Element) string {
+func (tss *testUi) JawsGet(e ElementIf) string {
 	atomic.AddInt32(&tss.getCalled, 1)
 	return tss.s
 }
 
-func (tss *testUi) JawsSet(e *Element, s string) error {
+func (tss *testUi) JawsSet(e ElementIf, s string) error {
 	atomic.AddInt32(&tss.setCalled, 1)
 	tss.s = s
 	return nil
 }
 
-func (tss *testUi) JawsRender(e *Element, w io.Writer, params []any) (err error) {
+func (tss *testUi) JawsRender(e ElementIf, w io.Writer, params []any) (err error) {
 	e.Tag(tss)
 	atomic.AddInt32(&tss.renderCalled, 1)
 	if tss.renderFn != nil {
@@ -57,7 +57,7 @@ func (tss *testUi) JawsRender(e *Element, w io.Writer, params []any) (err error)
 	return
 }
 
-func (tss *testUi) JawsUpdate(e *Element) {
+func (tss *testUi) JawsUpdate(e ElementIf) {
 	atomic.AddInt32(&tss.updateCalled, 1)
 	if tss.updateFn != nil {
 		tss.updateFn(e)
@@ -71,11 +71,11 @@ func TestElement_helpers(t *testing.T) {
 
 	tss := &testUi{}
 	e := rq.NewElement(tss)
-	is.Equal(e.Jaws, rq.jw.Jaws)
-	is.Equal(e.Request, rq.Request)
-	is.Equal(e.Session(), nil)
-	e.Set("foo", "bar") // no session, so no effect
-	is.Equal(e.Get("foo"), nil)
+	is.Equal(e.Request().Jaws(), rq.jw.Jaws)
+	is.Equal(e.Request(), rq.Request)
+	is.Equal(e.Request().Session(), nil)
+	e.Request().Session().Set("foo", "bar") // no session, so no effect
+	is.Equal(e.Request().Session().Get("foo"), nil)
 }
 
 func TestElement_Tag(t *testing.T) {
@@ -100,7 +100,7 @@ func TestElement_Queued(t *testing.T) {
 	defer rq.Close()
 
 	tss := &testUi{
-		updateFn: func(e *Element) {
+		updateFn: func(e ElementIf) {
 			e.SetAttr("hidden", "")
 			e.RemoveAttr("hidden")
 			e.SetClass("bah")
@@ -115,63 +115,63 @@ func TestElement_Queued(t *testing.T) {
 			th.Equal(rq.wsQueue, []wsMsg{
 				{
 					Data: "hidden\n",
-					Jid:  e.jid,
+					Jid:  e.Jid(),
 					What: what.SAttr,
 				},
 				{
 					Data: "hidden",
-					Jid:  e.jid,
+					Jid:  e.Jid(),
 					What: what.RAttr,
 				},
 				{
 					Data: "bah",
-					Jid:  e.jid,
+					Jid:  e.Jid(),
 					What: what.SClass,
 				},
 				{
 					Data: "bah",
-					Jid:  e.jid,
+					Jid:  e.Jid(),
 					What: what.RClass,
 				},
 				{
 					Data: "foo",
-					Jid:  e.jid,
+					Jid:  e.Jid(),
 					What: what.Value,
 				},
 				{
 					Data: "meh",
-					Jid:  e.jid,
+					Jid:  e.Jid(),
 					What: what.Inner,
 				},
 				{
 					Data: "<div></div>",
-					Jid:  e.jid,
+					Jid:  e.Jid(),
 					What: what.Append,
 				},
 				{
 					Data: "some-id",
-					Jid:  e.jid,
+					Jid:  e.Jid(),
 					What: what.Remove,
 				},
 				{
 					Data: fmt.Sprintf("%s %s", Jid(1).String(), Jid(2).String()),
-					Jid:  e.jid,
+					Jid:  e.Jid(),
 					What: what.Order,
 				},
 				{
 					Data: string(replaceHTML),
-					Jid:  e.jid,
+					Jid:  e.Jid(),
 					What: what.Replace,
 				},
 			})
 		},
 	}
 
-	pendingRq := rq.Jaws.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	pendingRq := rq.Jaws().NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	RequestWriter{pendingRq, httptest.NewRecorder()}.UI(tss)
 
 	rq.UI(tss)
-	rq.Jaws.Dirty(tss)
+	rq.Jaws().Dirty(tss)
 	rq.Dirty(tss)
 	for atomic.LoadInt32(&tss.updateCalled) < 1 {
 		select {
@@ -200,22 +200,22 @@ func TestElement_ReplacePanicsOnMissingId(t *testing.T) {
 	is.Fail()
 }
 
-func TestElement_maybeDirty(t *testing.T) {
+func TestElement_MaybeDirty(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest()
 	defer rq.Close()
 	tss := &testUi{s: "foo"}
 	e := rq.NewElement(tss)
 
-	changed, err := e.maybeDirty(e, nil)
+	changed, err := e.MaybeDirty(e, nil)
 	th.True(changed)
 	th.NoErr(err)
 
-	changed, err = e.maybeDirty(e, ErrValueUnchanged)
+	changed, err = e.MaybeDirty(e, ErrValueUnchanged)
 	th.Equal(changed, false)
 	th.Equal(err, nil)
 
-	changed, err = e.maybeDirty(e, ErrNotComparable)
+	changed, err = e.MaybeDirty(e, ErrNotComparable)
 	th.Equal(changed, false)
 	th.Equal(err, ErrNotComparable)
 }
@@ -223,7 +223,7 @@ func TestElement_maybeDirty(t *testing.T) {
 type testClickHandler struct {
 }
 
-func (tch testClickHandler) JawsClick(e *Element, name string) (err error) {
+func (tch testClickHandler) JawsClick(e ElementIf, name string) (err error) {
 	return nil
 }
 
@@ -245,7 +245,7 @@ func TestElement_ApplyGetter(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	is.Equal(len(e.handlers), 1)
+	is.Equal(len(e.GetHandlers()), 1)
 }
 
 func TestElement_JawsInit(t *testing.T) {

@@ -11,7 +11,7 @@ type testJawsClick struct {
 	*testSetter[string]
 }
 
-func (tjc *testJawsClick) JawsClick(e *Element, name string) (err error) {
+func (tjc *testJawsClick) JawsClick(e ElementIf, name string) (err error) {
 	if err = tjc.err; err == nil {
 		tjc.clickCh <- name
 	}

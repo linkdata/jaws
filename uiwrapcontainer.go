@@ -13,10 +13,10 @@ type uiWrapContainer struct {
 	Container
 	Tag      any
 	mu       deadlock.Mutex
-	contents []*Element
+	contents []ElementIf
 }
 
-func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag string, params []any) (err error) {
+func (ui *uiWrapContainer) renderContainer(e ElementIf, w io.Writer, outerhtmltag string, params []any) (err error) {
 	if ui.Tag, err = e.ApplyGetter(ui.Container); err == nil {
 		attrs := e.ApplyParams(params)
 		b := e.Jid().AppendStartTagAttr(nil, outerhtmltag)
@@ -29,7 +29,7 @@ func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag
 		if err == nil {
 			for _, cui := range ui.Container.JawsContains(e) {
 				if err == nil {
-					elem := e.Request.NewElement(cui)
+					elem := e.Request().NewElement(cui)
 					ui.contents = append(ui.contents, elem)
 					err = elem.JawsRender(w, nil)
 				}
@@ -46,11 +46,11 @@ func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag
 	return
 }
 
-func (ui *uiWrapContainer) JawsUpdate(e *Element) {
-	var toRemove, toAppend []*Element
+func (ui *uiWrapContainer) JawsUpdate(e ElementIf) {
+	var toRemove, toAppend []ElementIf
 	var orderData []Jid
 
-	oldMap := make(map[UI]*Element)
+	oldMap := make(map[UI]ElementIf)
 	newMap := make(map[UI]struct{})
 	newContents := ui.Container.JawsContains(e)
 	for _, t := range newContents {
@@ -68,9 +68,9 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 	}
 	ui.contents = ui.contents[:0]
 	for _, cui := range newContents {
-		var elem *Element
+		var elem ElementIf
 		if elem = oldMap[cui]; elem == nil {
-			elem = e.Request.NewElement(cui)
+			elem = e.Request().NewElement(cui)
 			toAppend = append(toAppend, elem)
 		}
 		ui.contents = append(ui.contents, elem)
@@ -80,7 +80,7 @@ func (ui *uiWrapContainer) JawsUpdate(e *Element) {
 
 	for _, elem := range toRemove {
 		e.Remove(elem.Jid().String())
-		e.Request.deleteElement(elem)
+		e.Request().DeleteElement(elem)
 	}
 
 	for _, elem := range toAppend {

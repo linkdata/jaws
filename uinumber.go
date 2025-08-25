@@ -8,7 +8,7 @@ type UiNumber struct {
 	UiInputFloat
 }
 
-func (ui *UiNumber) JawsRender(e *Element, w io.Writer, params []any) error {
+func (ui *UiNumber) JawsRender(e ElementIf, w io.Writer, params []any) error {
 	return ui.renderFloatInput(e, w, "number", params...)
 }
 

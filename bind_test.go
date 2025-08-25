@@ -105,7 +105,7 @@ func testBind_Hook_Success[T comparable](t *testing.T, testval T) {
 
 	calls3 := 0
 	bind3 := bind2.
-		Success(func(*Element) {
+		Success(func(ElementIf) {
 			calls3++
 			if calls2 <= calls3 {
 				t.Error(calls2, calls3)
@@ -126,7 +126,7 @@ func testBind_Hook_Success[T comparable](t *testing.T, testval T) {
 
 	calls4 := 0
 	bind4 := bind3.
-		Success(func(*Element) (err error) {
+		Success(func(ElementIf) (err error) {
 			calls4++
 			if calls3 <= calls4 {
 				t.Error(calls3, calls4)
@@ -156,7 +156,7 @@ func testBind_Hook_Set[T comparable](t *testing.T, testval T) {
 
 	calls1 := 0
 	bind1 := Bind(&mu, &val).
-		SetLocked(func(bind Binder[T], elem *Element, value T) (err error) {
+		SetLocked(func(bind Binder[T], elem ElementIf, value T) (err error) {
 			calls1++
 			return bind.JawsSetLocked(elem, value)
 		})
@@ -179,7 +179,7 @@ func testBind_Hook_Set[T comparable](t *testing.T, testval T) {
 
 	calls2 := 0
 	bind2 := bind1.
-		SetLocked(func(bind Binder[T], elem *Element, value T) (err error) {
+		SetLocked(func(bind Binder[T], elem ElementIf, value T) (err error) {
 			calls2++
 			return bind.JawsSetLocked(elem, value)
 		})
@@ -207,7 +207,7 @@ func testBind_Hook_Get[T comparable](t *testing.T, testval T) {
 
 	calls1 := 0
 	bind1 := Bind(&mu, &val).
-		GetLocked(func(bind Binder[T], elem *Element) (value T) {
+		GetLocked(func(bind Binder[T], elem ElementIf) (value T) {
 			calls1++
 			return bind.JawsGetLocked(elem)
 		})
@@ -230,7 +230,7 @@ func testBind_Hook_Get[T comparable](t *testing.T, testval T) {
 
 	calls2 := 0
 	bind2 := bind1.
-		GetLocked(func(bind Binder[T], elem *Element) (value T) {
+		GetLocked(func(bind Binder[T], elem ElementIf) (value T) {
 			calls2++
 			return bind.JawsGetLocked(elem)
 		})

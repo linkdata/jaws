@@ -13,13 +13,13 @@ func TestJaws_Session(t *testing.T) {
 
 	dot := Tag("123")
 
-	h := rq.Jaws.Session(rq.Jaws.Handler("testtemplate", dot))
+	h := rq.jaws.Session(rq.jaws.Handler("testtemplate", dot))
 	var buf bytes.Buffer
 	var rr httptest.ResponseRecorder
 	rr.Body = &buf
 	r := httptest.NewRequest("GET", "/", nil)
 
-	if sess := rq.Jaws.GetSession(r); sess != nil {
+	if sess := rq.jaws.GetSession(r); sess != nil {
 		t.Error("session already exists")
 	}
 
@@ -28,7 +28,7 @@ func TestJaws_Session(t *testing.T) {
 		t.Error(got)
 	}
 
-	sess := rq.Jaws.GetSession(r)
+	sess := rq.Jaws().GetSession(r)
 	if sess == nil {
 		t.Error("no session")
 	}

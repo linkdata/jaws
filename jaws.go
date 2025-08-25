@@ -40,6 +40,51 @@ const (
 
 type Jid = jid.Jid // convenience alias
 
+type JawsIf interface {
+	Close()
+	IsDebug() bool
+	Done() <-chan struct{}
+	AddTemplateLookuper(tl TemplateLookuper)
+	RemoveTemplateLookuper(tl TemplateLookuper)
+	LookupTemplate(name string) *template.Template
+	RequestCount() (n int)
+	Log(err error) error
+	MustLog(err error)
+	NewRequest(hr *http.Request) (rq *Request)
+	UseRequest(jawsKey uint64, hr *http.Request) (rq *Request)
+	SessionCount() (n int)
+	Sessions() (sl []*Session)
+	GetSession(hr *http.Request) (sess *Session)
+	NewSession(w http.ResponseWriter, hr *http.Request) (sess *Session)
+	FaviconURL() string
+	GenerateHeadHTML(extra ...string) (err error)
+	Broadcast(msg Message)
+	Dirty(tags ...any)
+	Reload()
+	Redirect(url string)
+	Alert(lvl, msg string)
+	Pending() (n int)
+	ServeWithTimeout(requestTimeout time.Duration)
+	Serve()
+	SetInner(target any, innerHTML template.HTML)
+	SetAttr(target any, attr, val string)
+	RemoveAttr(target any, attr string)
+	SetClass(target any, cls string)
+	RemoveClass(target any, cls string)
+	SetValue(target any, val string)
+	Insert(target any, where, html string)
+	Replace(target any, where, html string)
+	Delete(target any)
+	Append(target any, html template.HTML)
+	JsCall(tag any, jsfunc, jsonstr string)
+	Handler(name string, dot any) http.Handler
+	GetBaseContext() context.Context
+	GetLogger() Logger
+	GetMakeAuth() MakeAuthFn
+}
+
+var _ JawsIf = &Jaws{}
+
 type Jaws struct {
 	CookieName   string          // Name for session cookies, defaults to "jaws"
 	Logger       Logger          // Optional logger to use
@@ -91,8 +136,8 @@ func New() (jw *Jaws, err error) {
 				jw = tmp
 				jw.reqPool.New = func() any {
 					return (&Request{
-						Jaws:   jw,
-						tagMap: make(map[any][]*Element),
+						jaws:   jw,
+						tagMap: make(map[any][]ElementIf),
 					}).clearLocked()
 				}
 			}
@@ -100,6 +145,22 @@ func New() (jw *Jaws, err error) {
 	}
 
 	return
+}
+
+func (jw *Jaws) IsDebug() bool {
+	return jw.Debug
+}
+
+func (jw *Jaws) GetLogger() Logger {
+	return jw.Logger
+}
+
+func (jw *Jaws) GetBaseContext() context.Context {
+	return jw.BaseContext
+}
+
+func (jw *Jaws) GetMakeAuth() MakeAuthFn {
+	return jw.MakeAuth
 }
 
 // Close frees resources associated with the JaWS object, and

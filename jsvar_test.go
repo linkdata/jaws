@@ -244,7 +244,7 @@ func Test_JsVar_PanicsOnWrongType(t *testing.T) {
 type testJsVarMaker struct {
 }
 
-func (t *testJsVarMaker) JawsMakeJsVar(rq *Request) (v IsJsVar, err error) {
+func (t *testJsVarMaker) JawsMakeJsVar(rq RequestIf) (v IsJsVar, err error) {
 	var mu deadlock.Mutex
 	val := "quote(')"
 	return NewJsVar(&mu, &val), nil
@@ -267,7 +267,7 @@ type testJsVarPathSetter struct {
 	atomic.Bool
 }
 
-func (t *testJsVarPathSetter) JawsSetPath(elem *Element, jspath string, value any) (err error) {
+func (t *testJsVarPathSetter) JawsSetPath(elem ElementIf, jspath string, value any) (err error) {
 	s := value.(string) + "!!"
 	if t.Value == s {
 		return ErrValueUnchanged
@@ -276,7 +276,7 @@ func (t *testJsVarPathSetter) JawsSetPath(elem *Element, jspath string, value an
 	return nil
 }
 
-func (t *testJsVarPathSetter) JawsPathSet(elem *Element, jspath string, value any) {
+func (t *testJsVarPathSetter) JawsPathSet(elem ElementIf, jspath string, value any) {
 	t.Bool.Store(true)
 }
 

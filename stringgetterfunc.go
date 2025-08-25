@@ -1,19 +1,19 @@
 package jaws
 
 type stringGetterFunc struct {
-	fn   func(*Element) string
+	fn   func(ElementIf) string
 	tags []any
 }
 
-func (g *stringGetterFunc) JawsGet(e *Element) string {
+func (g *stringGetterFunc) JawsGet(e ElementIf) string {
 	return g.fn(e)
 }
 
-func (g *stringGetterFunc) JawsGetTag(e *Request) any {
+func (g *stringGetterFunc) JawsGetTag(e RequestIf) any {
 	return g.tags
 }
 
 // StringGetterFunc wraps a function and returns a Getter[string]
-func StringGetterFunc(fn func(elem *Element) (s string), tags ...any) Getter[string] {
+func StringGetterFunc(fn func(elem ElementIf) (s string), tags ...any) Getter[string] {
 	return &stringGetterFunc{fn: fn, tags: tags}
 }

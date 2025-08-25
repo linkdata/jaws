@@ -105,7 +105,7 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 		elem := rq.getElementByJid(jid)
 		is.True(elem != nil)
 		if elem != nil {
-			is.Equal(msg, wsMsg{Jid: elem.jid, Data: "bar", What: what.Inner})
+			is.Equal(msg, wsMsg{Jid: elem.Jid(), Data: "bar", What: what.Inner})
 		}
 	}
 }
@@ -128,7 +128,7 @@ func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 	defer rq.Close()
 	var callCount int32
 	x := &testUi{}
-	rq.Register(x, func(e *Element, evt what.What, val string) error {
+	rq.Register(x, func(e ElementIf, evt what.What, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		rq.cancel()
 		return errors.New(val)
@@ -161,16 +161,16 @@ func TestRequest_Trigger(t *testing.T) {
 	gotFooCall := make(chan struct{})
 	gotEndCall := make(chan struct{})
 	fooItem := &testUi{}
-	rq.Register(fooItem, func(e *Element, evt what.What, val string) error {
+	rq.Register(fooItem, func(e ElementIf, evt what.What, val string) error {
 		defer close(gotFooCall)
 		return nil
 	})
 	errItem := &testUi{}
-	rq.Register(errItem, func(e *Element, evt what.What, val string) error {
+	rq.Register(errItem, func(e ElementIf, evt what.What, val string) error {
 		return errors.New(val)
 	})
 	endItem := &testUi{}
-	rq.Register(endItem, func(e *Element, evt what.What, val string) error {
+	rq.Register(endItem, func(e ElementIf, evt what.What, val string) error {
 		defer close(gotEndCall)
 		return nil
 	})
@@ -221,7 +221,7 @@ func TestRequest_EventFnQueue(t *testing.T) {
 	var sleepDone int32
 	var callCount int32
 	sleepItem := &testUi{}
-	rq.Register(sleepItem, func(e *Element, evt what.What, val string) error {
+	rq.Register(sleepItem, func(e ElementIf, evt what.What, val string) error {
 		count := int(atomic.AddInt32(&callCount, 1))
 		if val != strconv.Itoa(count) {
 			t.Logf("val=%s, count=%d, cap=%d", val, count, cap(rq.outCh))
@@ -273,7 +273,7 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 	var wait int32
 
 	bombItem := &testUi{}
-	rq.Register(bombItem, func(e *Element, evt what.What, val string) error {
+	rq.Register(bombItem, func(e ElementIf, evt what.What, val string) error {
 		time.Sleep(time.Millisecond * time.Duration(atomic.AddInt32(&wait, 1)))
 		return nil
 	})
@@ -303,7 +303,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	var spewState int32
 	var callCount int32
 	spewItem := &testUi{}
-	rq.Register(spewItem, func(e *Element, evt what.What, val string) error {
+	rq.Register(spewItem, func(e ElementIf, evt what.What, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		if len(rq.outCh) < cap(rq.outCh) {
 			rq.jw.Broadcast(Message{Dest: spewItem, What: what.Input})
@@ -342,7 +342,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 		case <-th.C:
 			th.Timeout()
 		default:
-			rq.Jaws.Broadcast(Message{Dest: rq})
+			rq.Jaws().Broadcast(Message{Dest: rq})
 		}
 		select {
 		case rq.inCh <- wsMsg{}:
@@ -440,25 +440,25 @@ func TestRequest_DeleteByTag(t *testing.T) {
 	rq1 := tj.newRequest(nil)
 	ui1 := &testUi{}
 	e11 := rq1.NewElement(ui1)
-	th.Equal(e11.jid, Jid(1))
+	th.Equal(e11.Jid(), Jid(1))
 	e11.Tag(Tag("e11"), Tag("foo"))
 	e12 := rq1.NewElement(ui1)
-	th.Equal(e12.jid, Jid(2))
+	th.Equal(e12.Jid(), Jid(2))
 	e12.Tag(Tag("e12"))
 	e13 := rq1.NewElement(ui1)
-	th.Equal(e13.jid, Jid(3))
+	th.Equal(e13.Jid(), Jid(3))
 	e13.Tag(Tag("e13"), Tag("bar"))
 
 	rq2 := tj.newRequest(nil)
 	ui2 := &testUi{}
 	e21 := rq2.NewElement(ui2)
-	th.Equal(e21.jid, Jid(4))
+	th.Equal(e21.Jid(), Jid(4))
 	e21.Tag(Tag("e21"), Tag("foo"))
 	e22 := rq2.NewElement(ui2)
-	th.Equal(e22.jid, Jid(5))
+	th.Equal(e22.Jid(), Jid(5))
 	e22.Tag(Tag("e22"))
 	e23 := rq2.NewElement(ui2)
-	th.Equal(e23.jid, Jid(6))
+	th.Equal(e23.Jid(), Jid(6))
 	e23.Tag(Tag("e23"))
 
 	tj.Delete([]any{Tag("foo"), Tag("bar"), Tag("nothere"), Tag("e23")})
@@ -538,7 +538,7 @@ func TestRequest_HTMLIdBroadcast(t *testing.T) {
 
 func jidForTag(rq *Request, tag any) jid.Jid {
 	if elems := rq.GetElements(tag); len(elems) > 0 {
-		return elems[0].jid
+		return elems[0].Jid()
 	}
 	return 0
 }
@@ -592,7 +592,7 @@ func TestRequest_UpdatePanicLogs(t *testing.T) {
 	defer rq.Close()
 
 	tss := &testUi{
-		updateFn: func(e *Element) {
+		updateFn: func(e ElementIf) {
 			panic("wildpanic")
 		}}
 	rq.UI(tss)
@@ -701,7 +701,7 @@ func TestRequest_renderDebugLocked(t *testing.T) {
 	e.Tag(Tag("zomg"))
 
 	var sb strings.Builder
-	e.renderDebug(&sb)
+	e.RenderDebug(&sb)
 
 	txt := sb.String()
 	is.Equal(strings.Contains(txt, "zomg"), true)
@@ -710,7 +710,7 @@ func TestRequest_renderDebugLocked(t *testing.T) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	sb.Reset()
-	e.renderDebug(&sb)
+	e.RenderDebug(&sb)
 
 	txt = sb.String()
 	is.Equal(strings.Contains(txt, "zomg"), false)
