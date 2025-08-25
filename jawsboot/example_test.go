@@ -1,12 +1,4 @@
-# jawsboot
-
-Provides a statically served and embedded version of [Bootstrap](https://getbootstrap.com/).
-
-Example usage that loads your templates, favicon and Bootstrap. Also uses a `templatereloader`
-so that when running with `-tags debug` or `-race` templates are reloaded from disk as needed.
-
-```go
-package main
+package jawsboot_test
 
 import (
 	"embed"
@@ -19,6 +11,15 @@ import (
 	"github.com/linkdata/jaws/staticserve"
 	"github.com/linkdata/jaws/templatereloader"
 )
+
+// This example assumes an 'assets' directory:
+//
+//.  assets/
+//.    static/
+//.      images/
+//.        favicon.png
+//.    ui/
+//.      index.html
 
 //go:embed assets
 var assetsFS embed.FS
@@ -44,8 +45,9 @@ func setupJaws(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
 	return
 }
 
-func main() {
-	if jw, err := jaws.New(); err == nil {
+func Example() {
+	jw, err := jaws.New()
+	if err == nil {
 		jw.Logger = slog.Default()
 		if err = setupJaws(jw, http.DefaultServeMux); err == nil {
 			// start the JaWS processing loop and the HTTP server
@@ -53,18 +55,7 @@ func main() {
 			slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 		}
 	}
+	if err != nil {
+		panic(err)
+	}
 }
-```
-
-The example expects an `assets` directory in the source tree:
-
-```
-assets
-├── static
-│   └── images
-│       └── favicon.png
-└── ui
-    ├── somepage.html
-    ├── otherpage.html
-    └── index.html
-```
