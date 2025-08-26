@@ -139,6 +139,19 @@ func MakeHTMLGetter(v any) HTMLGetter {
 	return pkg.MakeHTMLGetter(v)
 }
 
+func NewNamedBool(nba *NamedBoolArray, name string, html template.HTML, checked bool) *NamedBool {
+	return pkg.NewNamedBool(nba, name, html, checked)
+}
+
+// NewNamedBoolArray creates a new object to track a related set of named booleans.
+//
+// The JaWS ID string 'jid' is used as the ID for <select> elements and the
+// value for the 'name' attribute for radio buttons. If left empty, MakeID() will
+// be used to assign a unique ID.
+func NewNamedBoolArray() *NamedBoolArray {
+	return pkg.NewNamedBoolArray()
+}
+
 type (
 	UiA         = pkg.UiA
 	UiButton    = pkg.UiButton
@@ -160,19 +173,6 @@ type (
 	UiText      = pkg.UiText
 	UiTr        = pkg.UiTr
 )
-
-func NewNamedBool(nba *NamedBoolArray, name string, html template.HTML, checked bool) *NamedBool {
-	return pkg.NewNamedBool(nba, name, html, checked)
-}
-
-// NewNamedBoolArray creates a new object to track a related set of named booleans.
-//
-// The JaWS ID string 'jid' is used as the ID for <select> elements and the
-// value for the 'name' attribute for radio buttons. If left empty, MakeID() will
-// be used to assign a unique ID.
-func NewNamedBoolArray() *NamedBoolArray {
-	return pkg.NewNamedBoolArray()
-}
 
 func NewUiA(innerHTML HTMLGetter) *UiA {
 	return pkg.NewUiA(innerHTML)

@@ -15,7 +15,7 @@ import (
 	"github.com/linkdata/jaws"
 )
 
-const testPageTmplText = "(" +
+const testPageTmplText = "({{with .Dot}}" +
 	"{{$.Initial.URL.Path}}" +
 	"{{$.A `a`}}" +
 	"{{$.Button `button`}}" +
@@ -38,7 +38,7 @@ const testPageTmplText = "(" +
 	"{{$.Text .TheString}}" +
 	"{{$.Textarea .TheString}}" +
 	"{{$.Tr `tr`}}" +
-	")"
+	"{{end}})"
 const testPageNestedTmplText = "<x id=\"{{$.Jid}}\" {{$.Attrs}}>" +
 	"{{$.Initial.URL.Path}}" +
 	"{{with .Dot}}{{.}}{{$.Span `span2`}}{{end}}" +
@@ -46,27 +46,27 @@ const testPageNestedTmplText = "<x id=\"{{$.Jid}}\" {{$.Attrs}}>" +
 
 const testPageWant = "(" +
 	"/" +
-	"<a id=\"Jid.1\">a</a>" +
-	"<button id=\"Jid.2\" type=\"button\">button</button>" +
-	"<input id=\"Jid.3\" type=\"checkbox\" checkbox checked>" +
-	"<container id=\"Jid.4\"></container>" +
-	"<input id=\"Jid.5\" type=\"date\" value=\"1901-02-03\" dateattr>" +
-	"<div id=\"Jid.6\">div</div>" +
-	"<img id=\"Jid.7\" src=\"img\">" +
-	"<label id=\"Jid.8\">label</label>" +
-	"<li id=\"Jid.9\">li</li>" +
-	"<input id=\"Jid.10\" type=\"number\" value=\"1.2\">" +
-	"<input id=\"Jid.11\" type=\"password\" value=\"bar\">" +
-	"<input id=\"Jid.12\" type=\"radio\" checked>" +
-	"<input id=\"Jid.13\" type=\"range\" value=\"1.2\">" +
-	"<select id=\"Jid.14\"></select>" +
-	"<span id=\"Jid.15\">span</span>" +
-	"<tbody id=\"Jid.16\"></tbody>" +
-	"<td id=\"Jid.17\">td</td>" +
-	"<x id=\"Jid.18\" someattr>/dot<span id=\"Jid.19\">span2</span></x>" +
-	"<input id=\"Jid.20\" type=\"text\" value=\"bar\">" +
-	"<textarea id=\"Jid.21\">bar</textarea>" +
-	"<tr id=\"Jid.22\">tr</tr>" +
+	"<a id=\"Jid.2\">a</a>" +
+	"<button id=\"Jid.3\" type=\"button\">button</button>" +
+	"<input id=\"Jid.4\" type=\"checkbox\" checkbox checked>" +
+	"<container id=\"Jid.5\"></container>" +
+	"<input id=\"Jid.6\" type=\"date\" value=\"1901-02-03\" dateattr>" +
+	"<div id=\"Jid.7\">div</div>" +
+	"<img id=\"Jid.8\" src=\"img\">" +
+	"<label id=\"Jid.9\">label</label>" +
+	"<li id=\"Jid.10\">li</li>" +
+	"<input id=\"Jid.11\" type=\"number\" value=\"1.2\">" +
+	"<input id=\"Jid.12\" type=\"password\" value=\"bar\">" +
+	"<input id=\"Jid.13\" type=\"radio\" checked>" +
+	"<input id=\"Jid.14\" type=\"range\" value=\"1.2\">" +
+	"<select id=\"Jid.15\"></select>" +
+	"<span id=\"Jid.16\">span</span>" +
+	"<tbody id=\"Jid.17\"></tbody>" +
+	"<td id=\"Jid.18\">td</td>" +
+	"<x id=\"Jid.19\" someattr>/dot<span id=\"Jid.20\">span2</span></x>" +
+	"<input id=\"Jid.21\" type=\"text\" value=\"bar\">" +
+	"<textarea id=\"Jid.22\">bar</textarea>" +
+	"<tr id=\"Jid.23\">tr</tr>" +
 	")"
 
 type testContainer struct{ contents []jaws.UI }
@@ -93,13 +93,13 @@ func maybeFatal(t *testing.T, err error) {
 	}
 }
 
-func TestTemplate(t *testing.T) {
+func TestNewTemplate(t *testing.T) {
 	jw, err := jaws.New()
 	maybeFatal(t, err)
 	defer jw.Close()
 
 	jw.AddTemplateLookuper(template.Must(template.New("nested").Parse(testPageNestedTmplText)))
-	tmpl := template.Must(template.New("normal").Parse(testPageTmplText))
+	jw.AddTemplateLookuper(template.Must(template.New("normal").Parse(testPageTmplText)))
 
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
 	rq := jw.NewRequest(hr)
@@ -115,20 +115,44 @@ func TestTemplate(t *testing.T) {
 	nba := jaws.NewNamedBoolArray()
 
 	tp := &testPage{
-		RequestWriter: rqwr,
-		TheBool:       jaws.Bind(&mu, &vbool),
-		TheContainer:  &testContainer{},
-		TheTime:       jaws.Bind(&mu, &vtime),
-		TheNumber:     jaws.Bind(&mu, &vnumber),
-		TheString:     jaws.Bind(&mu, &vstring),
-		TheSelector:   nba,
-		TheDot:        jaws.Tag("dot"),
+		TheBool:      jaws.Bind(&mu, &vbool),
+		TheContainer: &testContainer{},
+		TheTime:      jaws.Bind(&mu, &vtime),
+		TheNumber:    jaws.Bind(&mu, &vnumber),
+		TheString:    jaws.Bind(&mu, &vstring),
+		TheSelector:  nba,
+		TheDot:       jaws.Tag("dot"),
 	}
 
-	err = tmpl.Execute(rqwr, tp)
+	tmpl := jaws.NewTemplate("normal", tp)
+	elem := rq.NewElement(tmpl)
+	err = tmpl.JawsRender(elem, rqwr, nil)
 	maybeFatal(t, err)
+
 	if sb.String() != testPageWant {
 		t.Errorf("\n got: %q\nwant: %q\n", sb.String(), testPageWant)
+	}
+}
+
+func TestJsVar(t *testing.T) {
+	var mu sync.RWMutex
+	vbool := true
+	_ = jaws.NewJsVar(&mu, &vbool)
+}
+
+func TestJawsKeyString(t *testing.T) {
+	if s := jaws.JawsKeyString(1000); s != "v8" {
+		t.Error(s)
+	}
+}
+
+func TestWriteHTMLTag(t *testing.T) {
+	var sb strings.Builder
+	err := jaws.WriteHTMLTag(&sb, 1, "foo", "checkbox", "false", []template.HTMLAttr{"someattr"})
+	maybeFatal(t, err)
+	want := "<foo id=\"Jid.1\" type=\"checkbox\" value=\"false\" someattr>"
+	if sb.String() != want {
+		t.Errorf("\n got: %q\nwant: %q\n", sb.String(), want)
 	}
 }
 
