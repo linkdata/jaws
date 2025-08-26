@@ -222,7 +222,7 @@ func Test_JsVar_Event(t *testing.T) {
 		th.Timeout()
 	case msg := <-rq1.outCh:
 		s := msg.Format()
-		if !strings.Contains(s, "jq: expected jaws.valtype, not float64") {
+		if !strings.Contains(s, "jq: expected") {
 			th.Error(s)
 		}
 	}

@@ -168,23 +168,6 @@ func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error)
 	return
 }
 
-// NewJsVar creates a binding with a Locker (or RWLocker) and
-// pointer to underlying data.
-//
-// JsVar's use JawsRender, and that rendering will contain the
-// JSON representation of the underlying data unless it is the
-// zero value. If so, it will be used to initialize the named
-// Javascript variable before "DOMContentLoaded" fires.
-// Note that we don't render the Javascript variable declaration,
-// you'll have to do that yourself.
-//
-// JsVar's do *NOT* use JawsUpdate, so changing the underlying data and
-// calling JawsUpdate will have no effect. Instead, JsVar's are
-// synchronized across browsers using immediate broadcasts.
-//
-// Changes to JsVar's should be made using their [JawsSet] or
-// [JawsSetPath] methods. If *T implements [PathSetter],
-// that will be used instead of jq.Set().
 func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 	if rl, ok := l.(RWLocker); ok {
 		return &JsVar[T]{RWLocker: rl, Ptr: v}

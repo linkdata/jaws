@@ -120,9 +120,6 @@ func (t Template) JawsEvent(e *Element, wht what.What, val string) error {
 	return callEventHandlers(t.Dot, e, wht, val)
 }
 
-// NewTemplate simply returns a Template{} with the members set.
-//
-// Provided as convenience so as to not have to name the structure members.
 func NewTemplate(name string, dot any) Template {
 	return Template{Name: name, Dot: dot}
 }

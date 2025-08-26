@@ -18,11 +18,6 @@ type NamedBoolArray struct {
 
 var _ SelectHandler = (*NamedBoolArray)(nil)
 
-// NewNamedBoolArray creates a new object to track a related set of named booleans.
-//
-// The JaWS ID string 'jid' is used as the ID for <select> elements and the
-// value for the 'name' attribute for radio buttons. If left empty, MakeID() will
-// be used to assign a unique ID.
 func NewNamedBoolArray() *NamedBoolArray {
 	return &NamedBoolArray{}
 }
