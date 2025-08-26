@@ -1523,7 +1523,7 @@ func (jw *Jaws) RequestCount() (n int) <span class="cov8" title="1">{
 // Returns err.
 func (jw *Jaws) Log(err error) error <span class="cov8" title="1">{
         if err != nil &amp;&amp; jw != nil &amp;&amp; jw.Logger != nil </span><span class="cov8" title="1">{
-                jw.Logger.Error(err.Error())
+                jw.Logger.Error("jaws", "err", err)
         }</span>
         <span class="cov8" title="1">return err</span>
 }
@@ -1534,7 +1534,7 @@ func (jw *Jaws) Log(err error) error <span class="cov8" title="1">{
 func (jw *Jaws) MustLog(err error) <span class="cov8" title="1">{
         if err != nil </span><span class="cov8" title="1">{
                 if jw != nil &amp;&amp; jw.Logger != nil </span><span class="cov8" title="1">{
-                        jw.Logger.Error(err.Error())
+                        jw.Logger.Error("jaws", "err", err)
                 }</span> else<span class="cov8" title="1"> {
                         panic(err)</span>
                 }
