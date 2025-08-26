@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -76,14 +77,15 @@ func TestJaws_maybePanic(t *testing.T) {
 }
 
 func TestJaws_Logger(t *testing.T) {
-	is := newTestHelper(t)
 	jw, _ := New()
 	defer jw.Close()
 	var b bytes.Buffer
 	jw.Logger = slog.New(slog.NewTextHandler(&b, nil))
 	go jw.Serve()
 	jw.Log(errors.New("bar"))
-	is.True(strings.Contains(b.String(), "msg=bar"))
+	if !strings.Contains(b.String(), "msg=jaws err=bar") {
+		t.Error(b.String())
+	}
 }
 
 func TestJaws_MustLog(t *testing.T) {
@@ -101,7 +103,7 @@ func TestJaws_MustLog(t *testing.T) {
 	jw.Logger = slog.New(slog.NewTextHandler(&b, nil))
 	go jw.Serve()
 	jw.MustLog(barErr)
-	is.True(strings.Contains(b.String(), "msg=bar"))
+	is.True(strings.Contains(b.String(), "err=bar"))
 	jw.Logger = nil
 	jw.MustLog(barErr)
 }
@@ -284,7 +286,12 @@ func (h *rawLogger) Enabled(_ context.Context, level slog.Level) bool {
 }
 
 func (h *rawLogger) Handle(ctx context.Context, r slog.Record) error {
-	_, err := fmt.Fprintf(h.w, "%s\n", r.Message)
+	_, err := h.w.Write([]byte(r.Message))
+	r.Attrs(func(a slog.Attr) bool {
+		fmt.Fprintf(h.w, " %s=%q", a.Key, a.Value)
+		return true
+	})
+	h.w.Write([]byte("\n"))
 	return err
 }
 
@@ -319,7 +326,7 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		expectLen += len(err.Error() + "\n")
+		expectLen += len("jaws " + "err=" + strconv.Quote(err.Error()) + "\n")
 	}
 	th.Equal(jw.Pending(), numReqs)
 
