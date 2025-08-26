@@ -1,5 +1,8 @@
 package jaws_test
 
+// this is just to satisfy coverage,
+// proper tests are in jaws/jaws
+
 import (
 	"html/template"
 	"net/http"
@@ -130,9 +133,6 @@ func TestTemplate(t *testing.T) {
 }
 
 func TestNewUi(t *testing.T) {
-	// this is just to satisfy coverage,
-	// proper tests are in jaws/jaws
-
 	htmlGetter := jaws.MakeHTMLGetter("x")
 	htmlGetter2 := jaws.HTMLGetterFunc(func(elem *jaws.Element) (tmpl template.HTML) {
 		return "x"
@@ -143,6 +143,7 @@ func TestNewUi(t *testing.T) {
 	vnumber := float64(1.2)
 	vstring := "bar"
 	nba := jaws.NewNamedBoolArray()
+	_ = jaws.NewNamedBool(nba, "escape\"me", "<unescaped>", true)
 
 	jaws.NewUiA(htmlGetter)
 	jaws.NewUiButton(htmlGetter2)

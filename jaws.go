@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"io"
 	"sync"
+	"time"
 
 	pkg "github.com/linkdata/jaws/jaws"
 	"github.com/linkdata/jaws/jid"
@@ -75,6 +76,7 @@ func New() (jw *Jaws, err error) {
 	return pkg.New()
 }
 
+// JawsKeyString returns the string to be used for the given JaWS key.
 func JawsKeyString(jawsKey uint64) string {
 	return pkg.JawsKeyString(jawsKey)
 }
@@ -111,19 +113,6 @@ func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 	return pkg.NewJsVar(l, v)
 }
 
-func NewNamedBool(nba *NamedBoolArray, name string, html template.HTML, checked bool) *NamedBool {
-	return pkg.NewNamedBool(nba, name, html, checked)
-}
-
-// NewNamedBoolArray creates a new object to track a related set of named booleans.
-//
-// The JaWS ID string 'jid' is used as the ID for <select> elements and the
-// value for the 'name' attribute for radio buttons. If left empty, MakeID() will
-// be used to assign a unique ID.
-func NewNamedBoolArray() *NamedBoolArray {
-	return pkg.NewNamedBoolArray()
-}
-
 // NewTemplate simply returns a Template{} with the members set.
 //
 // Provided as convenience so as to not have to name the structure members.
@@ -148,4 +137,97 @@ func HTMLGetterFunc(fn func(elem *Element) (tmpl template.HTML), tags ...any) HT
 //   - everything else is rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
 func MakeHTMLGetter(v any) HTMLGetter {
 	return pkg.MakeHTMLGetter(v)
+}
+
+type (
+	UiA         = pkg.UiA
+	UiButton    = pkg.UiButton
+	UiCheckbox  = pkg.UiCheckbox
+	UiContainer = pkg.UiContainer
+	UiDate      = pkg.UiDate
+	UiDiv       = pkg.UiDiv
+	UiImg       = pkg.UiImg
+	UiLabel     = pkg.UiLabel
+	UiLi        = pkg.UiLi
+	UiNumber    = pkg.UiNumber
+	UiPassword  = pkg.UiPassword
+	UiRadio     = pkg.UiRadio
+	UiRange     = pkg.UiRange
+	UiSelect    = pkg.UiSelect
+	UiSpan      = pkg.UiSpan
+	UiTbody     = pkg.UiTbody
+	UiTd        = pkg.UiTd
+	UiText      = pkg.UiText
+	UiTr        = pkg.UiTr
+)
+
+func NewNamedBool(nba *NamedBoolArray, name string, html template.HTML, checked bool) *NamedBool {
+	return pkg.NewNamedBool(nba, name, html, checked)
+}
+
+// NewNamedBoolArray creates a new object to track a related set of named booleans.
+//
+// The JaWS ID string 'jid' is used as the ID for <select> elements and the
+// value for the 'name' attribute for radio buttons. If left empty, MakeID() will
+// be used to assign a unique ID.
+func NewNamedBoolArray() *NamedBoolArray {
+	return pkg.NewNamedBoolArray()
+}
+
+func NewUiA(innerHTML HTMLGetter) *UiA {
+	return pkg.NewUiA(innerHTML)
+}
+func NewUiButton(innerHTML HTMLGetter) *UiButton {
+	return pkg.NewUiButton(innerHTML)
+}
+func NewUiCheckbox(g Setter[bool]) *UiCheckbox {
+	return pkg.NewUiCheckbox(g)
+}
+func NewUiContainer(outerHTMLTag string, c Container) *UiContainer {
+	return pkg.NewUiContainer(outerHTMLTag, c)
+}
+func NewUiDate(g Setter[time.Time]) *UiDate {
+	return pkg.NewUiDate(g)
+}
+func NewUiDiv(innerHTML HTMLGetter) *UiDiv {
+	return pkg.NewUiDiv(innerHTML)
+}
+func NewUiImg(g Getter[string]) *UiImg {
+	return pkg.NewUiImg(g)
+}
+func NewUiLabel(innerHTML HTMLGetter) *UiLabel {
+	return pkg.NewUiLabel(innerHTML)
+}
+func NewUiLi(innerHTML HTMLGetter) *UiLi {
+	return pkg.NewUiLi(innerHTML)
+}
+func NewUiNumber(g Setter[float64]) *UiNumber {
+	return pkg.NewUiNumber(g)
+}
+func NewUiPassword(g Setter[string]) *UiPassword {
+	return pkg.NewUiPassword(g)
+}
+func NewUiRadio(vp Setter[bool]) *UiRadio {
+	return pkg.NewUiRadio(vp)
+}
+func NewUiRange(g Setter[float64]) *UiRange {
+	return pkg.NewUiRange(g)
+}
+func NewUiSelect(sh SelectHandler) *UiSelect {
+	return pkg.NewUiSelect(sh)
+}
+func NewUiSpan(innerHTML HTMLGetter) *UiSpan {
+	return pkg.NewUiSpan(innerHTML)
+}
+func NewUiTbody(c Container) *UiTbody {
+	return pkg.NewUiTbody(c)
+}
+func NewUiTd(innerHTML HTMLGetter) *UiTd {
+	return pkg.NewUiTd(innerHTML)
+}
+func NewUiText(vp Setter[string]) *UiText {
+	return pkg.NewUiText(vp)
+}
+func NewUiTr(innerHTML HTMLGetter) *UiTr {
+	return pkg.NewUiTr(innerHTML)
 }
