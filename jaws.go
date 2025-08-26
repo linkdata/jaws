@@ -1,16 +1,16 @@
 package jaws
 
-// The point of this is to not have a zillion files in the repository root.
-
 import (
 	"html/template"
 	"io"
 	"sync"
-	"time"
 
 	pkg "github.com/linkdata/jaws/jaws"
 	"github.com/linkdata/jaws/jid"
 )
+
+// The point of this is to not have a zillion files in the repository root
+// while keeping the import path unchanged.
 
 type (
 	Jid                  = jid.Jid
@@ -47,6 +47,7 @@ type (
 	RequestWriter        = pkg.RequestWriter
 	With                 = pkg.With
 	Session              = pkg.Session
+	Tag                  = pkg.Tag
 )
 
 var (
@@ -63,26 +64,15 @@ var (
 	ErrTooManyTags           = pkg.ErrTooManyTags
 )
 
+const (
+	ISO8601 = pkg.ISO8601
+)
+
 // New returns a new JaWS object.
 // This is expected to be created once per HTTP server and handles
 // publishing HTML changes across all connections.
 func New() (jw *Jaws, err error) {
 	return pkg.New()
-}
-
-// NextID returns a uint64 unique within lifetime of the program.
-func NextID() int64 {
-	return pkg.NextID()
-}
-
-// AppendID appends the result of NextID() in text form to the given slice.
-func AppendID(b []byte) []byte {
-	return pkg.AppendID(b)
-}
-
-// MakeID returns a string in the form 'jaws.X' where X is a unique string within lifetime of the program.
-func MakeID() string {
-	return pkg.MakeID()
 }
 
 func JawsKeyString(jawsKey uint64) string {
@@ -146,84 +136,16 @@ func HTMLGetterFunc(fn func(elem *Element) (tmpl template.HTML), tags ...any) HT
 	return pkg.HTMLGetterFunc(fn)
 }
 
-// UI constructors
-
-type (
-	UiA         = pkg.UiA
-	UiButton    = pkg.UiButton
-	UiCheckbox  = pkg.UiCheckbox
-	UiContainer = pkg.UiContainer
-	UiDate      = pkg.UiDate
-	UiDiv       = pkg.UiDiv
-	UiImg       = pkg.UiImg
-	UiLabel     = pkg.UiLabel
-	UiLi        = pkg.UiLi
-	UiNumber    = pkg.UiNumber
-	UiPassword  = pkg.UiPassword
-	UiRadio     = pkg.UiRadio
-	UiRange     = pkg.UiRange
-	UiSelect    = pkg.UiSelect
-	UiSpan      = pkg.UiSpan
-	UiTbody     = pkg.UiTbody
-	UiTd        = pkg.UiTd
-	UiText      = pkg.UiText
-	UiTr        = pkg.UiTr
-)
-
-func NewUiA(innerHTML HTMLGetter) *UiA {
-	return pkg.NewUiA(innerHTML)
-}
-func NewUiButton(innerHTML HTMLGetter) *UiButton {
-	return pkg.NewUiButton(innerHTML)
-}
-func NewUiCheckbox(g Setter[bool]) *UiCheckbox {
-	return pkg.NewUiCheckbox(g)
-}
-func NewUiContainer(outerHTMLTag string, c Container) *UiContainer {
-	return pkg.NewUiContainer(outerHTMLTag, c)
-}
-func NewUiDate(g Setter[time.Time]) *UiDate {
-	return pkg.NewUiDate(g)
-}
-func NewUiDiv(innerHTML HTMLGetter) *UiDiv {
-	return pkg.NewUiDiv(innerHTML)
-}
-func NewUiImg(g Getter[string]) *UiImg {
-	return pkg.NewUiImg(g)
-}
-func NewUiLabel(innerHTML HTMLGetter) *UiLabel {
-	return pkg.NewUiLabel(innerHTML)
-}
-func NewUiLi(innerHTML HTMLGetter) *UiLi {
-	return pkg.NewUiLi(innerHTML)
-}
-func NewUiNumber(g Setter[float64]) *UiNumber {
-	return pkg.NewUiNumber(g)
-}
-func NewUiPassword(g Setter[string]) *UiPassword {
-	return pkg.NewUiPassword(g)
-}
-func NewUiRadio(vp Setter[bool]) *UiRadio {
-	return pkg.NewUiRadio(vp)
-}
-func NewUiRange(g Setter[float64]) *UiRange {
-	return pkg.NewUiRange(g)
-}
-func NewUiSelect(sh SelectHandler) *UiSelect {
-	return pkg.NewUiSelect(sh)
-}
-func NewUiSpan(innerHTML HTMLGetter) *UiSpan {
-	return pkg.NewUiSpan(innerHTML)
-}
-func NewUiTbody(c Container) *UiTbody {
-	return pkg.NewUiTbody(c)
-}
-func NewUiTd(innerHTML HTMLGetter) *UiTd {
-	return pkg.NewUiTd(innerHTML)
-}
-func NewUiText(vp Setter[string]) (ui *UiText) {
-	return pkg.NewUiText(vp)
-}
-func NewUiTr(innerHTML HTMLGetter) *UiTr {
-	return pkg.NewUiTr(innerHTML)
+// MakeHTMLGetter returns a HTMLGetter for v.
+//
+// Depending on the type of v, we return:
+//
+//   - jaws.HTMLGetter: `JawsGetHTML(e *Element) template.HTML` to be used as-is.
+//   - jaws.Getter[string]: `JawsGet(elem *Element) string` that will be escaped using `html.EscapeString`.
+//   - jaws.AnyGetter: `JawsGetAny(elem *Element) any` that will be rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
+//   - fmt.Stringer: `String() string` that will be escaped using `html.EscapeString`.
+//   - a static `template.HTML` or `string` to be used as-is with no HTML escaping.
+//   - everything else is rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
+func MakeHTMLGetter(v any) HTMLGetter {
+	return pkg.MakeHTMLGetter(v)
 }

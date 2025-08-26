@@ -1,0 +1,167 @@
+package jaws_test
+
+import (
+	"html/template"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/linkdata/jaws"
+)
+
+const testPageTmplText = "(" +
+	"{{$.Initial.URL.Path}}" +
+	"{{$.A `a`}}" +
+	"{{$.Button `button`}}" +
+	"{{$.Checkbox .TheBool `checkbox`}}" +
+	"{{$.Container `container` .TheContainer}}" +
+	"{{$.Date .TheTime `dateattr`}}" +
+	"{{$.Div `div`}}" +
+	"{{$.Img `img`}}" +
+	"{{$.Label `label`}}" +
+	"{{$.Li `li`}}" +
+	"{{$.Number .TheNumber}}" +
+	"{{$.Password .TheString}}" +
+	"{{$.Radio .TheBool}}" +
+	"{{$.Range .TheNumber}}" +
+	"{{$.Select .TheSelector}}" +
+	"{{$.Span `span`}}" +
+	"{{$.Tbody .TheContainer}}" +
+	"{{$.Td `td`}}" +
+	"{{$.Template `nested` .TheDot `someattr`}}" +
+	"{{$.Text .TheString}}" +
+	"{{$.Textarea .TheString}}" +
+	"{{$.Tr `tr`}}" +
+	")"
+const testPageNestedTmplText = "<x id=\"{{$.Jid}}\" {{$.Attrs}}>" +
+	"{{$.Initial.URL.Path}}" +
+	"{{with .Dot}}{{.}}{{$.Span `span2`}}{{end}}" +
+	"</x>"
+
+const testPageWant = "(" +
+	"/" +
+	"<a id=\"Jid.1\">a</a>" +
+	"<button id=\"Jid.2\" type=\"button\">button</button>" +
+	"<input id=\"Jid.3\" type=\"checkbox\" checkbox checked>" +
+	"<container id=\"Jid.4\"></container>" +
+	"<input id=\"Jid.5\" type=\"date\" value=\"1901-02-03\" dateattr>" +
+	"<div id=\"Jid.6\">div</div>" +
+	"<img id=\"Jid.7\" src=\"img\">" +
+	"<label id=\"Jid.8\">label</label>" +
+	"<li id=\"Jid.9\">li</li>" +
+	"<input id=\"Jid.10\" type=\"number\" value=\"1.2\">" +
+	"<input id=\"Jid.11\" type=\"password\" value=\"bar\">" +
+	"<input id=\"Jid.12\" type=\"radio\" checked>" +
+	"<input id=\"Jid.13\" type=\"range\" value=\"1.2\">" +
+	"<select id=\"Jid.14\"></select>" +
+	"<span id=\"Jid.15\">span</span>" +
+	"<tbody id=\"Jid.16\"></tbody>" +
+	"<td id=\"Jid.17\">td</td>" +
+	"<x id=\"Jid.18\" someattr>/dot<span id=\"Jid.19\">span2</span></x>" +
+	"<input id=\"Jid.20\" type=\"text\" value=\"bar\">" +
+	"<textarea id=\"Jid.21\">bar</textarea>" +
+	"<tr id=\"Jid.22\">tr</tr>" +
+	")"
+
+type testContainer struct{ contents []jaws.UI }
+
+func (tc *testContainer) JawsContains(e *jaws.Element) (contents []jaws.UI) {
+	return tc.contents
+}
+
+type testPage struct {
+	jaws.RequestWriter
+	TheBool      jaws.Setter[bool]
+	TheContainer jaws.Container
+	TheTime      jaws.Setter[time.Time]
+	TheNumber    jaws.Setter[float64]
+	TheString    jaws.Setter[string]
+	TheSelector  jaws.SelectHandler
+	TheDot       any
+}
+
+func maybeFatal(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTemplate(t *testing.T) {
+	jw, err := jaws.New()
+	maybeFatal(t, err)
+	defer jw.Close()
+
+	jw.AddTemplateLookuper(template.Must(template.New("nested").Parse(testPageNestedTmplText)))
+	tmpl := template.Must(template.New("normal").Parse(testPageTmplText))
+
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	rq := jw.NewRequest(hr)
+	jw.UseRequest(rq.JawsKey, hr)
+	var sb strings.Builder
+	rqwr := rq.Writer(&sb)
+
+	var mu sync.RWMutex
+	vbool := true
+	vtime, _ := time.Parse(jaws.ISO8601, "1901-02-03")
+	vnumber := float64(1.2)
+	vstring := "bar"
+	nba := jaws.NewNamedBoolArray()
+
+	tp := &testPage{
+		RequestWriter: rqwr,
+		TheBool:       jaws.Bind(&mu, &vbool),
+		TheContainer:  &testContainer{},
+		TheTime:       jaws.Bind(&mu, &vtime),
+		TheNumber:     jaws.Bind(&mu, &vnumber),
+		TheString:     jaws.Bind(&mu, &vstring),
+		TheSelector:   nba,
+		TheDot:        jaws.Tag("dot"),
+	}
+
+	err = tmpl.Execute(rqwr, tp)
+	maybeFatal(t, err)
+	if sb.String() != testPageWant {
+		t.Errorf("\n got: %q\nwant: %q\n", sb.String(), testPageWant)
+	}
+}
+
+func TestNewUi(t *testing.T) {
+	// this is just to satisfy coverage,
+	// proper tests are in jaws/jaws
+
+	htmlGetter := jaws.MakeHTMLGetter("x")
+	htmlGetter2 := jaws.HTMLGetterFunc(func(elem *jaws.Element) (tmpl template.HTML) {
+		return "x"
+	})
+	var mu sync.RWMutex
+	vbool := true
+	vtime, _ := time.Parse(jaws.ISO8601, "1901-02-03")
+	vnumber := float64(1.2)
+	vstring := "bar"
+	nba := jaws.NewNamedBoolArray()
+
+	jaws.NewUiA(htmlGetter)
+	jaws.NewUiButton(htmlGetter2)
+	jaws.NewUiCheckbox(jaws.Bind(&mu, &vbool))
+	jaws.NewUiContainer("tbody", &testContainer{})
+	jaws.NewUiDate(jaws.Bind(&mu, &vtime))
+	jaws.NewUiDiv(htmlGetter)
+	jaws.NewUiImg(jaws.Bind(&mu, &vstring))
+	jaws.NewUiLabel(htmlGetter)
+	jaws.NewUiLi(htmlGetter)
+	jaws.NewUiNumber(jaws.Bind(&mu, &vnumber))
+	jaws.NewUiPassword(jaws.Bind(&mu, &vstring))
+	jaws.NewUiRadio(jaws.Bind(&mu, &vbool))
+	jaws.NewUiRange(jaws.Bind(&mu, &vnumber))
+	jaws.NewUiSelect(nba)
+	jaws.NewUiSpan(htmlGetter)
+	jaws.NewUiTbody(&testContainer{})
+	jaws.NewUiTd(htmlGetter)
+	jaws.NewUiText(jaws.Bind(&mu, &vstring))
+	jaws.NewUiTr(htmlGetter)
+
+}
