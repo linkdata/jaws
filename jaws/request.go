@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"slices"
 	"sort"
 	"strconv"
@@ -57,6 +58,14 @@ type eventFnCall struct {
 	data string
 }
 
+var (
+	ErrWebsocketOriginMissing     = errors.New("websocket request missing Origin header")
+	ErrWebsocketOriginWrongScheme = errors.New("websocket Origin not http or https")
+	ErrWebsocketOriginWrongHost   = errors.New("websocket Origin not http or https")
+	ErrRequestAlreadyClaimed      = errors.New("request already claimed")
+	ErrJavascriptDisabled         = errors.New("javascript is disabled")
+)
+
 func (rq *Request) JawsKeyString() string {
 	jawsKey := uint64(0)
 	if rq != nil {
@@ -68,9 +77,6 @@ func (rq *Request) JawsKeyString() string {
 func (rq *Request) String() string {
 	return "Request<" + rq.JawsKeyString() + ">"
 }
-
-var ErrRequestAlreadyClaimed = errors.New("request already claimed")
-var ErrJavascriptDisabled = errors.New("javascript is disabled")
 
 func (rq *Request) claim(hr *http.Request) error {
 	if !rq.claimed.Load() {
@@ -778,4 +784,26 @@ func (rq *Request) onConnect() (err error) {
 // Writer returns a RequestWriter with this Request and the given Writer.
 func (rq *Request) Writer(w io.Writer) RequestWriter {
 	return RequestWriter{rq: rq, Writer: w}
+}
+
+func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) {
+	err = ErrWebsocketOriginMissing
+	if origin := r.Header.Get("Origin"); origin != "" {
+		var u *url.URL
+		if u, err = url.Parse(origin); err == nil {
+			err = ErrWebsocketOriginWrongScheme
+			switch u.Scheme {
+			case "http", "https":
+				err = ErrWebsocketOriginWrongHost
+				if u.Host != "" {
+					if initial := rq.Initial(); initial != nil {
+						if strings.EqualFold(u.Host, initial.Host) {
+							err = nil
+						}
+					}
+				}
+			}
+		}
+	}
+	return
 }
