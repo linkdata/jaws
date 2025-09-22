@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -50,6 +51,7 @@ func newTestServer() (ts *testServer) {
 	}
 	rq.SetConnectFn(ts.connected)
 	ts.srv = httptest.NewServer(ts)
+	ts.setInitialRequestOrigin()
 	return
 }
 
@@ -79,6 +81,51 @@ func (ts *testServer) Url() string {
 	return ts.srv.URL + ts.Path()
 }
 
+func (ts *testServer) setInitialRequestOrigin() {
+	if ts.hr == nil {
+		return
+	}
+	u, err := url.Parse(ts.srv.URL)
+	if err != nil {
+		return
+	}
+	ts.hr.Host = u.Host
+	if ts.hr.URL != nil {
+		ts.hr.URL.Host = u.Host
+		ts.hr.URL.Scheme = u.Scheme
+	}
+}
+
+func (ts *testServer) origin() string {
+	scheme := "http"
+	if ts.hr != nil && ts.hr.URL != nil && ts.hr.URL.Scheme != "" {
+		scheme = ts.hr.URL.Scheme
+	}
+	host := ""
+	if ts.hr != nil {
+		host = ts.hr.Host
+	}
+	if host == "" {
+		if u, err := url.Parse(ts.srv.URL); err == nil {
+			host = u.Host
+			if scheme == "" {
+				scheme = u.Scheme
+			}
+		}
+	}
+	if scheme == "" {
+		scheme = "http"
+	}
+	return scheme + "://" + host
+}
+
+func (ts *testServer) Dial() (*websocket.Conn, *http.Response, error) {
+	hdr := http.Header{}
+	hdr.Set("Origin", ts.origin())
+	opts := &websocket.DialOptions{HTTPHeader: hdr}
+	return websocket.Dial(ts.ctx, ts.Url(), opts)
+}
+
 func (ts *testServer) Close() {
 	ts.cancel()
 	ts.srv.Close()
@@ -99,13 +146,61 @@ func TestWS_UpgradeRequired(t *testing.T) {
 	}
 }
 
+func TestWS_RejectsMissingOrigin(t *testing.T) {
+	ts := newTestServer()
+	defer ts.Close()
+
+	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), nil)
+	if conn != nil {
+		conn.Close(websocket.StatusNormalClosure, "")
+		t.Fatal("expected handshake to be rejected")
+	}
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if resp == nil {
+		t.Fatal("expected response")
+	}
+	if resp.Body != nil {
+		resp.Body.Close()
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("status %d", resp.StatusCode)
+	}
+}
+
+func TestWS_RejectsCrossOrigin(t *testing.T) {
+	ts := newTestServer()
+	defer ts.Close()
+
+	hdr := http.Header{}
+	hdr.Set("Origin", "https://evil.invalid")
+	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), &websocket.DialOptions{HTTPHeader: hdr})
+	if conn != nil {
+		conn.Close(websocket.StatusNormalClosure, "")
+		t.Fatal("expected handshake to be rejected")
+	}
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if resp == nil {
+		t.Fatal("expected response")
+	}
+	if resp.Body != nil {
+		resp.Body.Close()
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("status %d", resp.StatusCode)
+	}
+}
+
 func TestWS_ConnectFnFails(t *testing.T) {
 	const nope = "nope"
 	ts := newTestServer()
 	defer ts.Close()
 	ts.rq.SetConnectFn(func(_ *Request) error { return errors.New(nope) })
 
-	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), nil)
+	conn, resp, err := ts.Dial()
 	if conn != nil {
 		defer conn.Close(websocket.StatusNormalClosure, "")
 	}
@@ -141,7 +236,7 @@ func TestWS_NormalExchange(t *testing.T) {
 		return fooError
 	})
 
-	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), nil)
+	conn, resp, err := ts.Dial()
 	if err != nil {
 		t.Fatal(err)
 	}

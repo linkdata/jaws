@@ -310,7 +310,7 @@ func TestSession_Delete(t *testing.T) {
 		return nil
 	})
 
-	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), nil)
+	conn, resp, err := ts.Dial()
 	if err != nil {
 		t.Fatal(err)
 	}

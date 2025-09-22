@@ -3,8 +3,10 @@ package jaws
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/coder/websocket"
@@ -30,7 +32,16 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			rq.cancel(nil)
 			return
 		}
-		ws, err := websocket.Accept(w, r, nil)
+		var err error
+		if r.Header.Get("Sec-WebSocket-Key") != "" {
+			if err = rq.validateWebSocketOrigin(r); err != nil {
+				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+				rq.cancel(err)
+				return
+			}
+		}
+		var ws *websocket.Conn
+		ws, err = websocket.Accept(w, r, nil)
 		if err == nil {
 			if err = rq.onConnect(); err == nil {
 				incomingMsgCh := make(chan wsMsg)
@@ -48,6 +59,51 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		rq.cancel(err)
 	}
+}
+
+func requestHost(req *http.Request) string {
+	if req == nil {
+		return ""
+	}
+	if host := req.Host; host != "" {
+		return host
+	}
+	if req.URL != nil && req.URL.Host != "" {
+		return req.URL.Host
+	}
+	return ""
+}
+
+func (rq *Request) validateWebSocketOrigin(r *http.Request) error {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return errors.New("websocket request missing Origin header")
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return fmt.Errorf("invalid websocket Origin %q: %w", origin, err)
+	}
+	switch scheme := strings.ToLower(u.Scheme); scheme {
+	case "http", "https":
+	default:
+		return fmt.Errorf("websocket Origin %q must use http or https", origin)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("websocket Origin %q missing host", origin)
+	}
+	expectedHost := requestHost(r)
+	if initial := rq.Initial(); initial != nil {
+		if host := requestHost(initial); host != "" {
+			expectedHost = host
+		}
+	}
+	if expectedHost == "" {
+		return errors.New("unable to determine expected websocket origin host")
+	}
+	if !strings.EqualFold(u.Host, expectedHost) {
+		return fmt.Errorf("websocket Origin host %q is not allowed", u.Host)
+	}
+	return nil
 }
 
 // wsReader reads websocket text messages, parses them and sends them on incomingMsgCh.
