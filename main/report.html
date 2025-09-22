@@ -191,7 +191,7 @@
 				
 				<option value="file67">github.com/linkdata/jaws/jaws/writehtml.go (100.0%)</option>
 				
-				<option value="file68">github.com/linkdata/jaws/jaws/ws.go (91.0%)</option>
+				<option value="file68">github.com/linkdata/jaws/jaws/ws.go (100.0%)</option>
 				
 				<option value="file69">github.com/linkdata/jaws/jaws/wsmsg.go (100.0%)</option>
 				
@@ -5593,7 +5593,6 @@ func WriteHTMLSelect(w io.Writer, jid jid.Jid, nba *NamedBoolArray, attrs []temp
 import (
         "context"
         "errors"
-        "fmt"
         "io"
         "net/http"
         "net/url"
@@ -5651,49 +5650,32 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class
         }
 }
 
-func requestHost(req *http.Request) string <span class="cov8" title="1">{
-        if req == nil </span><span class="cov0" title="0">{
-                return ""
-        }</span>
-        <span class="cov8" title="1">if host := req.Host; host != "" </span><span class="cov8" title="1">{
-                return host
-        }</span>
-        <span class="cov0" title="0">if req.URL != nil &amp;&amp; req.URL.Host != "" </span><span class="cov0" title="0">{
-                return req.URL.Host
-        }</span>
-        <span class="cov0" title="0">return ""</span>
-}
+var (
+        ErrWebsocketOriginMissing     = errors.New("websocket request missing Origin header")
+        ErrWebsocketOriginWrongScheme = errors.New("websocket Origin not http or https")
+        ErrWebsocketOriginWrongHost   = errors.New("websocket Origin not http or https")
+)
 
-func (rq *Request) validateWebSocketOrigin(r *http.Request) error <span class="cov8" title="1">{
-        origin := r.Header.Get("Origin")
-        if origin == "" </span><span class="cov8" title="1">{
-                return errors.New("websocket request missing Origin header")
-        }</span>
-        <span class="cov8" title="1">u, err := url.Parse(origin)
-        if err != nil </span><span class="cov0" title="0">{
-                return fmt.Errorf("invalid websocket Origin %q: %w", origin, err)
-        }</span>
-        <span class="cov8" title="1">switch scheme := strings.ToLower(u.Scheme); scheme </span>{
-        case "http", "https":<span class="cov8" title="1"></span>
-        default:<span class="cov0" title="0">
-                return fmt.Errorf("websocket Origin %q must use http or https", origin)</span>
+func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) <span class="cov8" title="1">{
+        err = ErrWebsocketOriginMissing
+        if origin := r.Header.Get("Origin"); origin != "" </span><span class="cov8" title="1">{
+                var u *url.URL
+                if u, err = url.Parse(origin); err == nil </span><span class="cov8" title="1">{
+                        err = ErrWebsocketOriginWrongScheme
+                        switch u.Scheme </span>{
+                        case "http", "https":<span class="cov8" title="1">
+                                err = ErrWebsocketOriginWrongHost
+                                if u.Host != "" </span><span class="cov8" title="1">{
+                                        if initial := rq.Initial(); initial != nil </span><span class="cov8" title="1">{
+                                                if strings.EqualFold(u.Host, initial.Host) </span><span class="cov8" title="1">{
+                                                        err = nil
+                                                }</span>
+                                        }
+                                }
+                        }
+                }
         }
-        <span class="cov8" title="1">if u.Host == "" </span><span class="cov0" title="0">{
-                return fmt.Errorf("websocket Origin %q missing host", origin)
-        }</span>
-        <span class="cov8" title="1">expectedHost := requestHost(r)
-        if initial := rq.Initial(); initial != nil </span><span class="cov8" title="1">{
-                if host := requestHost(initial); host != "" </span><span class="cov8" title="1">{
-                        expectedHost = host
-                }</span>
-        }
-        <span class="cov8" title="1">if expectedHost == "" </span><span class="cov0" title="0">{
-                return errors.New("unable to determine expected websocket origin host")
-        }</span>
-        <span class="cov8" title="1">if !strings.EqualFold(u.Host, expectedHost) </span><span class="cov8" title="1">{
-                return fmt.Errorf("websocket Origin host %q is not allowed", u.Host)
-        }</span>
-        <span class="cov8" title="1">return nil</span>
+        <span class="cov8" title="1">return</span>
 }
 
 // wsReader reads websocket text messages, parses them and sends them on incomingMsgCh.
