@@ -12,6 +12,12 @@ import (
 	"github.com/linkdata/jaws/what"
 )
 
+// Template references a Go html/template to be rendered through JaWS.
+//
+// The Name field identifies the template to execute and Dot contains the data
+// that will be exposed to the template through the With structure constructed
+// during rendering. Additional tag bindings and event handlers can be supplied
+// at render time through the RequestWriter.Template helper.
 type Template struct {
 	Name string // Template name to be looked up using jaws.LookupTemplate()
 	Dot  any    // Dot value to place in With structure
@@ -120,6 +126,10 @@ func (t Template) JawsEvent(e *Element, wht what.What, val string) error {
 	return callEventHandlers(t.Dot, e, wht, val)
 }
 
+// NewTemplate constructs a Template with the provided name and data value.
+//
+// It is a small helper that makes it convenient to use Template values with
+// other JaWS helpers without having to fill the struct fields manually.
 func NewTemplate(name string, dot any) Template {
 	return Template{Name: name, Dot: dot}
 }
