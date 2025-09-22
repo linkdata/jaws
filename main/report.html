@@ -1309,7 +1309,12 @@ func makeGetter[T comparable](v any) Getter[T] <span class="cov8" title="1">{
 
 import "net/http"
 
-// Handler implements ServeHTTP with a jaws.Template
+// Handler is an http.Handler that renders a template for every request.
+//
+// It wires the incoming HTTP request through the JaWS rendering pipeline by
+// creating a Request, instantiating the configured Template and streaming the
+// resulting HTML to the caller. Applications typically obtain a Handler via the
+// Jaws.Handler helper.
 type Handler struct {
         *Jaws
         Template
@@ -1319,7 +1324,11 @@ func (h Handler) ServeHTTP(wr http.ResponseWriter, r *http.Request) <span class=
         _ = h.Log(h.NewRequest(r).NewElement(h.Template).JawsRender(wr, nil))
 }</span>
 
-// Handler returns a http.Handler using a jaws.Template
+// Handler returns an http.Handler that renders the named template.
+//
+// The returned handler can be registered directly with a router. Each request
+// results in the template being looked up through the configured Template
+// lookupers and rendered with dot as the template data.
 func (jw *Jaws) Handler(name string, dot any) http.Handler <span class="cov8" title="1">{
         return Handler{Jaws: jw, Template: Template{Name: name, Dot: dot}}
 }</span>
@@ -1390,8 +1399,19 @@ const (
         DefaultUpdateInterval = time.Millisecond * 100 // Default browser update interval
 )
 
+// Jid is the identifier type used for HTML elements managed by JaWS.
+//
+// It is provided as a convenience alias to the value defined in the jid
+// subpackage so applications do not have to import that package directly
+// when working with element IDs.
 type Jid = jid.Jid // convenience alias
 
+// Jaws holds the server-side state and configuration for a JaWS instance.
+//
+// A single Jaws value coordinates template lookup, session handling and the
+// request lifecycle that keeps the browser and backend synchronized via
+// WebSockets. The zero value is not ready for use; construct instances with
+// New to ensure the helper goroutines and static assets are prepared.
 type Jaws struct {
         CookieName   string          // Name for session cookies, defaults to "jaws"
         Logger       Logger          // Optional logger to use
@@ -1417,6 +1437,11 @@ type Jaws struct {
         dirtOrder    int
 }
 
+// New allocates a JaWS instance with the default configuration.
+//
+// The returned Jaws value is ready for use: static assets are embedded,
+// internal goroutines are configured and the request pool is primed. Call
+// Close when the instance is no longer needed to free associated resources.
 func New() (jw *Jaws, err error) <span class="cov8" title="1">{
         var serveJS, serveCSS *staticserve.StaticServe
         if serveJS, err = staticserve.New("/jaws/.jaws.js", JavascriptText); err == nil </span><span class="cov8" title="1">{
@@ -4381,6 +4406,12 @@ import (
         "github.com/linkdata/jaws/what"
 )
 
+// Template references a Go html/template to be rendered through JaWS.
+//
+// The Name field identifies the template to execute and Dot contains the data
+// that will be exposed to the template through the With structure constructed
+// during rendering. Additional tag bindings and event handlers can be supplied
+// at render time through the RequestWriter.Template helper.
 type Template struct {
         Name string // Template name to be looked up using jaws.LookupTemplate()
         Dot  any    // Dot value to place in With structure
@@ -4489,6 +4520,10 @@ func (t Template) JawsEvent(e *Element, wht what.What, val string) error <span c
         return callEventHandlers(t.Dot, e, wht, val)
 }</span>
 
+// NewTemplate constructs a Template with the provided name and data value.
+//
+// It is a small helper that makes it convenient to use Template values with
+// other JaWS helpers without having to fill the struct fields manually.
 func NewTemplate(name string, dot any) Template <span class="cov8" title="1">{
         return Template{Name: name, Dot: dot}
 }</span>
