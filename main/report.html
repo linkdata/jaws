@@ -2826,6 +2826,7 @@ import (
         "io"
         "net/http"
         "net/netip"
+        "net/url"
         "slices"
         "sort"
         "strconv"
@@ -2875,6 +2876,14 @@ type eventFnCall struct {
         data string
 }
 
+var (
+        ErrWebsocketOriginMissing     = errors.New("websocket request missing Origin header")
+        ErrWebsocketOriginWrongScheme = errors.New("websocket Origin not http or https")
+        ErrWebsocketOriginWrongHost   = errors.New("websocket Origin not http or https")
+        ErrRequestAlreadyClaimed      = errors.New("request already claimed")
+        ErrJavascriptDisabled         = errors.New("javascript is disabled")
+)
+
 func (rq *Request) JawsKeyString() string <span class="cov8" title="1">{
         jawsKey := uint64(0)
         if rq != nil </span><span class="cov8" title="1">{
@@ -2886,9 +2895,6 @@ func (rq *Request) JawsKeyString() string <span class="cov8" title="1">{
 func (rq *Request) String() string <span class="cov8" title="1">{
         return "Request&lt;" + rq.JawsKeyString() + "&gt;"
 }</span>
-
-var ErrRequestAlreadyClaimed = errors.New("request already claimed")
-var ErrJavascriptDisabled = errors.New("javascript is disabled")
 
 func (rq *Request) claim(hr *http.Request) error <span class="cov8" title="1">{
         if !rq.claimed.Load() </span><span class="cov8" title="1">{
@@ -3597,6 +3603,28 @@ func (rq *Request) onConnect() (err error) <span class="cov8" title="1">{
 func (rq *Request) Writer(w io.Writer) RequestWriter <span class="cov8" title="1">{
         return RequestWriter{rq: rq, Writer: w}
 }</span>
+
+func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) <span class="cov8" title="1">{
+        err = ErrWebsocketOriginMissing
+        if origin := r.Header.Get("Origin"); origin != "" </span><span class="cov8" title="1">{
+                var u *url.URL
+                if u, err = url.Parse(origin); err == nil </span><span class="cov8" title="1">{
+                        err = ErrWebsocketOriginWrongScheme
+                        switch u.Scheme </span>{
+                        case "http", "https":<span class="cov8" title="1">
+                                err = ErrWebsocketOriginWrongHost
+                                if u.Host != "" </span><span class="cov8" title="1">{
+                                        if initial := rq.Initial(); initial != nil </span><span class="cov8" title="1">{
+                                                if strings.EqualFold(u.Host, initial.Host) </span><span class="cov8" title="1">{
+                                                        err = nil
+                                                }</span>
+                                        }
+                                }
+                        }
+                }
+        }
+        <span class="cov8" title="1">return</span>
+}
 </pre>
 		
 		<pre class="file" id="file26" style="display: none">package jaws
@@ -5595,7 +5623,6 @@ import (
         "errors"
         "io"
         "net/http"
-        "net/url"
         "strings"
 
         "github.com/coder/websocket"
@@ -5648,34 +5675,6 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class
                 }
                 <span class="cov8" title="1">rq.cancel(err)</span>
         }
-}
-
-var (
-        ErrWebsocketOriginMissing     = errors.New("websocket request missing Origin header")
-        ErrWebsocketOriginWrongScheme = errors.New("websocket Origin not http or https")
-        ErrWebsocketOriginWrongHost   = errors.New("websocket Origin not http or https")
-)
-
-func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) <span class="cov8" title="1">{
-        err = ErrWebsocketOriginMissing
-        if origin := r.Header.Get("Origin"); origin != "" </span><span class="cov8" title="1">{
-                var u *url.URL
-                if u, err = url.Parse(origin); err == nil </span><span class="cov8" title="1">{
-                        err = ErrWebsocketOriginWrongScheme
-                        switch u.Scheme </span>{
-                        case "http", "https":<span class="cov8" title="1">
-                                err = ErrWebsocketOriginWrongHost
-                                if u.Host != "" </span><span class="cov8" title="1">{
-                                        if initial := rq.Initial(); initial != nil </span><span class="cov8" title="1">{
-                                                if strings.EqualFold(u.Host, initial.Host) </span><span class="cov8" title="1">{
-                                                        err = nil
-                                                }</span>
-                                        }
-                                }
-                        }
-                }
-        }
-        <span class="cov8" title="1">return</span>
 }
 
 // wsReader reads websocket text messages, parses them and sends them on incomingMsgCh.
