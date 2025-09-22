@@ -201,11 +201,11 @@ func TestWS_ConnectFnFails(t *testing.T) {
 	ts.rq.SetConnectFn(func(_ *Request) error { return errors.New(nope) })
 
 	conn, resp, err := ts.Dial()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if conn != nil {
 		defer conn.Close(websocket.StatusNormalClosure, "")
-	}
-	if err != nil {
-		t.Error(err)
 	}
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		t.Error(resp.StatusCode)

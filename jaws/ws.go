@@ -3,7 +3,6 @@ package jaws
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -61,49 +60,32 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func requestHost(req *http.Request) string {
-	if req == nil {
-		return ""
-	}
-	if host := req.Host; host != "" {
-		return host
-	}
-	if req.URL != nil && req.URL.Host != "" {
-		return req.URL.Host
-	}
-	return ""
-}
+var (
+	ErrWebsocketOriginMissing     = errors.New("websocket request missing Origin header")
+	ErrWebsocketOriginWrongScheme = errors.New("websocket Origin not http or https")
+	ErrWebsocketOriginWrongHost   = errors.New("websocket Origin not http or https")
+)
 
-func (rq *Request) validateWebSocketOrigin(r *http.Request) error {
-	origin := r.Header.Get("Origin")
-	if origin == "" {
-		return errors.New("websocket request missing Origin header")
-	}
-	u, err := url.Parse(origin)
-	if err != nil {
-		return fmt.Errorf("invalid websocket Origin %q: %w", origin, err)
-	}
-	switch scheme := strings.ToLower(u.Scheme); scheme {
-	case "http", "https":
-	default:
-		return fmt.Errorf("websocket Origin %q must use http or https", origin)
-	}
-	if u.Host == "" {
-		return fmt.Errorf("websocket Origin %q missing host", origin)
-	}
-	expectedHost := requestHost(r)
-	if initial := rq.Initial(); initial != nil {
-		if host := requestHost(initial); host != "" {
-			expectedHost = host
+func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) {
+	err = ErrWebsocketOriginMissing
+	if origin := r.Header.Get("Origin"); origin != "" {
+		var u *url.URL
+		if u, err = url.Parse(origin); err == nil {
+			err = ErrWebsocketOriginWrongScheme
+			switch u.Scheme {
+			case "http", "https":
+				err = ErrWebsocketOriginWrongHost
+				if u.Host != "" {
+					if initial := rq.Initial(); initial != nil {
+						if strings.EqualFold(u.Host, initial.Host) {
+							err = nil
+						}
+					}
+				}
+			}
 		}
 	}
-	if expectedHost == "" {
-		return errors.New("unable to determine expected websocket origin host")
-	}
-	if !strings.EqualFold(u.Host, expectedHost) {
-		return fmt.Errorf("websocket Origin host %q is not allowed", u.Host)
-	}
-	return nil
+	return
 }
 
 // wsReader reads websocket text messages, parses them and sends them on incomingMsgCh.
