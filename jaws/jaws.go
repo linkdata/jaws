@@ -38,8 +38,19 @@ const (
 	DefaultUpdateInterval = time.Millisecond * 100 // Default browser update interval
 )
 
+// Jid is the identifier type used for HTML elements managed by JaWS.
+//
+// It is provided as a convenience alias to the value defined in the jid
+// subpackage so applications do not have to import that package directly
+// when working with element IDs.
 type Jid = jid.Jid // convenience alias
 
+// Jaws holds the server-side state and configuration for a JaWS instance.
+//
+// A single Jaws value coordinates template lookup, session handling and the
+// request lifecycle that keeps the browser and backend synchronized via
+// WebSockets. The zero value is not ready for use; construct instances with
+// New to ensure the helper goroutines and static assets are prepared.
 type Jaws struct {
 	CookieName   string          // Name for session cookies, defaults to "jaws"
 	Logger       Logger          // Optional logger to use
@@ -65,6 +76,11 @@ type Jaws struct {
 	dirtOrder    int
 }
 
+// New allocates a JaWS instance with the default configuration.
+//
+// The returned Jaws value is ready for use: static assets are embedded,
+// internal goroutines are configured and the request pool is primed. Call
+// Close when the instance is no longer needed to free associated resources.
 func New() (jw *Jaws, err error) {
 	var serveJS, serveCSS *staticserve.StaticServe
 	if serveJS, err = staticserve.New("/jaws/.jaws.js", JavascriptText); err == nil {
