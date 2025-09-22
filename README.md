@@ -7,12 +7,44 @@
 
 Javascript and WebSockets used to create responsive webpages.
 
+JaWS embraces a "server holds the truth" philosophy and keeps the
+complexity of modern browser applications on the backend. The
+client-side script becomes a thin transport layer that faithfully
+relays events and DOM updates.
+
+## Features
+
 * Moves web application state fully to the server.
-* Does not trust the web browser or the Javascript.
-* Binds application data to UI elements using user-definable 'tags'.
+* Keeps the browser intentionally dumb – no implicit trust in
+  JavaScript logic running on the client.
+* Binds application data to UI elements using user-defined tags and
+  type-aware binders.
+* Integrates with the standard library as well as third-party routers
+  such as Echo.
+* Ships with a small standard library of UI widgets and helper types
+  that can be extended through interfaces.
 
 There is a [demo application](https://github.com/linkdata/jawsdemo)
 with plenty of comments to use as a tutorial.
+
+## Installation
+
+JaWS is distributed as a standard Go module. To add it to an existing
+project use the `go get` command:
+
+```bash
+go get github.com/linkdata/jaws
+```
+
+After the dependency is added, your Go module will be able to import
+and use JaWS as demonstrated below.
+
+## Quick start
+
+The following minimal program renders a single range input whose value
+is kept on the server. Copy the snippet into a new module, run `go
+mod tidy`, and start it with `go run .`. Visiting
+http://localhost:8080/ demonstrates the full request lifecycle.
 
 ## Usage
 
@@ -48,6 +80,13 @@ func main() {
 	http.DefaultServeMux.Handle("/", jw.Handler("index", &f))
 	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 }
+
+Next steps when building a real application typically include:
+
+1. Adding more templates and wiring them with `AddTemplateLookuper`.
+2. Creating types that implement `JawsRender` and `JawsUpdate` so they
+   can be reused as widgets.
+3. Introducing sessions (see below) to keep track of user state.
 ```
 
 ### Creating HTML entities
@@ -82,18 +121,20 @@ to pass it to the next handler.
 
 ### HTTP request flow and associating the WebSocket
 
-When a new HTTP request is received, create a JaWS Request using the JaWS
-object's `NewRequest()` method, and then use the Request's `HeadHTML()` 
-method to get the HTML code needed in the HEAD section of the HTML page.
+When a new HTTP request is received, create a JaWS Request using the
+JaWS object's `NewRequest()` method, and then use the Request's
+`HeadHTML()` method to get the HTML code needed in the `<head>` section
+of the HTML page.
 
-When the client has finished loading the document and parsed the scripts,
-the JaWS Javascript will request a WebSocket connection on `/jaws/*`, 
-with the `*` being the encoded Request.JawsKey value.
+When the client has finished loading the document and parsed the
+scripts, the JaWS JavaScript will request a WebSocket connection on
+`/jaws/*`, with the `*` being the encoded `Request.JawsKey` value.
 
-On receiving the WebSocket HTTP request, decode the key parameter from 
+On receiving the WebSocket HTTP request, decode the key parameter from
 the URL and call the JaWS object's `UseRequest()` method to retrieve the
-Request created in the first step. Then call it's `ServeHTTP()` method to
-start up the WebSocket and begin processing Javascript events and DOM updates.
+Request created in the first step. Then call its `ServeHTTP()` method to
+start up the WebSocket and begin processing JavaScript events and DOM
+updates.
 
 ### Routing
 
@@ -112,12 +153,12 @@ of them.
 
 * `/jaws/[0-9a-z]+`
 
-  The WebSocket endpoint. The trailing string must be decoded using 
+  The WebSocket endpoint. The trailing string must be decoded using
   `jaws.JawsKeyValue()` and then the matching JaWS Request retrieved
   using the JaWS object's `UseRequest()` method.
 
   If the Request is not found, return a **404 Not Found**, otherwise 
-  call the Request `ServeHTTP()` method to start the WebSocket and begin 
+  call the Request `ServeHTTP()` method to start the WebSocket and begin
   processing events and updates.
 
 * `/jaws/.ping`
@@ -238,3 +279,12 @@ We try to minimize dependencies outside of the standard library.
 
 * Depends on https://github.com/coder/websocket for WebSocket functionality.
 * Depends on https://github.com/linkdata/deadlock if race detection is enabled.
+
+## Learn more
+
+* Browse the [Go package documentation](https://pkg.go.dev/github.com/linkdata/jaws)
+  for an API-by-API overview.
+* Inspect the [`example_test.go`](./example_test.go) file for executable
+  examples that can be run with `go test`.
+* Explore the [demo application](https://github.com/linkdata/jawsdemo)
+  to see a more complete, heavily commented project structure.
