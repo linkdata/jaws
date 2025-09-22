@@ -65,7 +65,10 @@ const indexhtml = `
 `
 
 func main() {
-	jw := jaws.New()           // create a default JaWS instance
+	jw, err := jaws.New() // create a default JaWS instance
+	if err != nil {
+		panic(err)
+	}
 	defer jw.Close()           // ensure we clean up
 	jw.Logger = slog.Default() // optionally set the logger to use
 
@@ -76,10 +79,13 @@ func main() {
 	go jw.Serve()                             // start the JaWS processing loop
 	http.DefaultServeMux.Handle("/jaws/", jw) // ensure the JaWS routes are handled
 
-	var f jaws.Float // somewhere to store the slider data
-	http.DefaultServeMux.Handle("/", jw.Handler("index", &f))
+	var mu sync.Mutex
+	var f float64
+
+	http.DefaultServeMux.Handle("/", jw.Handler("index", jaws.Bind(&mu, &f)))
 	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 }
+```
 
 Next steps when building a real application typically include:
 
@@ -87,7 +93,6 @@ Next steps when building a real application typically include:
 2. Creating types that implement `JawsRender` and `JawsUpdate` so they
    can be reused as widgets.
 3. Introducing sessions (see below) to keep track of user state.
-```
 
 ### Creating HTML entities
 
