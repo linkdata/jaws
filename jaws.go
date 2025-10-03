@@ -125,6 +125,11 @@ func HTMLGetterFunc(fn func(elem *Element) (tmpl template.HTML), tags ...any) HT
 	return pkg.HTMLGetterFunc(fn)
 }
 
+// StringGetterFunc wraps a function and returns a Getter[string]
+func StringGetterFunc(fn func(elem *Element) (s string), tags ...any) Getter[string] {
+	return pkg.StringGetterFunc(fn)
+}
+
 // MakeHTMLGetter returns a HTMLGetter for v.
 //
 // Depending on the type of v, we return:

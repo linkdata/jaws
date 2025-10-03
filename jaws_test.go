@@ -161,6 +161,9 @@ func TestNewUi(t *testing.T) {
 	htmlGetter2 := jaws.HTMLGetterFunc(func(elem *jaws.Element) (tmpl template.HTML) {
 		return "x"
 	})
+	stringGetter := jaws.StringGetterFunc(func(elem *jaws.Element) (s string) {
+		return "s"
+	})
 	var mu sync.RWMutex
 	vbool := true
 	vtime, _ := time.Parse(jaws.ISO8601, "1901-02-03")
@@ -175,7 +178,7 @@ func TestNewUi(t *testing.T) {
 	jaws.NewUiContainer("tbody", &testContainer{})
 	jaws.NewUiDate(jaws.Bind(&mu, &vtime))
 	jaws.NewUiDiv(htmlGetter)
-	jaws.NewUiImg(jaws.Bind(&mu, &vstring))
+	jaws.NewUiImg(stringGetter)
 	jaws.NewUiLabel(htmlGetter)
 	jaws.NewUiLi(htmlGetter)
 	jaws.NewUiNumber(jaws.Bind(&mu, &vnumber))
