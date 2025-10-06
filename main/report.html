@@ -6110,25 +6110,29 @@ import (
 var _ jaws.UI = (*Tree)(nil)
 
 type Tree struct {
-        id string // HTML ID of the tree
+        id      string // HTML ID of the tree
+        options Option
         *jaws.JsVar[Node]
 }
 
-func New(id string, jsvar *jaws.JsVar[Node]) (t *Tree) <span class="cov8" title="1">{
+func New(id string, jsvar *jaws.JsVar[Node], options ...Option) (t *Tree) <span class="cov8" title="1">{
         t = &amp;Tree{
                 id:    id,
                 JsVar: jsvar,
         }
-        jsvar.Ptr.Walk("", func(jspath string, n *Node) </span><span class="cov8" title="1">{ n.ID = jspath; n.Tree = t }</span>)
+        for _, opt := range options </span><span class="cov8" title="1">{
+                t.options |= opt
+        }</span>
+        <span class="cov8" title="1">jsvar.Ptr.Walk("", func(jspath string, n *Node) </span><span class="cov8" title="1">{ n.ID = jspath; n.Tree = t }</span>)
         <span class="cov8" title="1">return</span>
 }
 
 const newtreeTemplate = `
-&lt;script&gt;var jawstreeroot_%s; document.addEventListener("DOMContentLoaded",function(){window.jawstree_%s=jawstreeNew("%s",jawstreeroot_%s);});&lt;/script&gt;`
+&lt;script&gt;var jawstreeroot_%s; document.addEventListener("DOMContentLoaded",function(){window.jawstree_%s=jawstreeNew("%s",jawstreeroot_%s,%v);});&lt;/script&gt;`
 
 func (t *Tree) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) <span class="cov8" title="1">{
         if err = t.JsVar.JawsRender(e, w, []any{"jawstreeroot_" + t.id}); err == nil </span><span class="cov8" title="1">{
-                if _, err = fmt.Fprintf(w, newtreeTemplate, t.id, t.id, t.id, t.id); err == nil </span>{<span class="cov8" title="1">
+                if _, err = fmt.Fprintf(w, newtreeTemplate, t.id, t.id, t.id, t.id, t.options); err == nil </span>{<span class="cov8" title="1">
                 }</span>
         }
         <span class="cov8" title="1">return</span>
