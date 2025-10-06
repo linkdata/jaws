@@ -5984,17 +5984,14 @@ func (n *Node) marshalJSON(b []byte) []byte <span class="cov8" title="1">{
         <span class="cov8" title="1">if n.Disabled </span><span class="cov8" title="1">{
                 b = append(b, `,"selectable":false`...)
         }</span>
-        <span class="cov8" title="1">if len(n.Children) &gt; 0 </span><span class="cov8" title="1">{
-                b = append(b, `,"children":[`...)
-                for i, c := range n.Children </span><span class="cov8" title="1">{
-                        if i &gt; 0 </span><span class="cov8" title="1">{
-                                b = append(b, ',')
-                        }</span>
-                        <span class="cov8" title="1">b = c.marshalJSON(b)</span>
-                }
-                <span class="cov8" title="1">b = append(b, ']')</span>
+        <span class="cov8" title="1">b = append(b, `,"children":[`...)
+        for i, c := range n.Children </span><span class="cov8" title="1">{
+                if i &gt; 0 </span><span class="cov8" title="1">{
+                        b = append(b, ',')
+                }</span>
+                <span class="cov8" title="1">b = c.marshalJSON(b)</span>
         }
-        <span class="cov8" title="1">b = append(b, '}')
+        <span class="cov8" title="1">b = append(b, "]}"...)
         return b</span>
 }
 
