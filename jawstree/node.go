@@ -13,13 +13,13 @@ import (
 var _ jaws.SetPather = (*Node)(nil)
 
 type Node struct {
-	Tree     *Tree
-	Parent   *Node
-	Name     string
-	ID       string
-	Selected bool
-	Disabled bool // !selectable
-	Children []*Node
+	Tree     *Tree   `json:"-"`
+	Parent   *Node   `json:"-"`
+	Name     string  `json:"name"`
+	ID       string  `json:"id,omitzero"`
+	Selected bool    `json:"selected,omitzero"`
+	Disabled bool    `json:"disabled,omitzero"` // !selectable
+	Children []*Node `json:"children,omitzero"`
 }
 
 func (n *Node) marshalJSON(b []byte) []byte {
