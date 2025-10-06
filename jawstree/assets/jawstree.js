@@ -13,17 +13,27 @@ function jawstreeSet(arg) {
 }
 
 function jawstreeSetPath(arg) {
-    window["jawstree_"+arg.tree].selectNodeById(arg.id,arg.set);
+    var t = window["jawstree_"+arg.tree];
+    if (arg.set || t.options.multiSelectEnabled) {
+        t.selectNodeById(arg.id,arg.set);
+    }
 }
 
-function jawstreeNew(treename, rootnode) {
+function jawstreeNew(treename, rootnode, options) {
     return new Treeview({
         containerId: treename,
         data: rootnode.children,
-        searchEnabled: true,
-        initiallyExpanded: false,
-        multiSelectEnabled: true,
-        cascadeSelectChildren: false,
+        /*jslint bitwise: true */
+        searchEnabled: options & (1<<0),
+        initiallyExpanded: options & (1<<1),
+        multiSelectEnabled: options & (1<<2),
+        showSelectAllButton: options & (1<<3),
+        showInvertSelectionButton: options & (1<<4),
+        showExpandCollapseAllButtons: options & (1<<5),
+        nodeSelectionEnabled: !(options & (1<<6)),
+        cascadeSelectChildren: options & (1<<7),
+        checkboxSelectionEnabled: options & (1<<8),
+        /*jslint bitwise: false */
         onSelectionChange: function(selectedNodesData) {
             jawstreeForEachNode("jawstreeroot_"+treename, rootnode, function(path, node) {
                 var selected = false;

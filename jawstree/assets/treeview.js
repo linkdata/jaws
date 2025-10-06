@@ -586,7 +586,7 @@
                     this.treeviewContainer.querySelectorAll('.treeview-checkbox').forEach(cb => cb.checked = false);
                 }
 
-                if (isSelected && !wasAlreadySolelySelected) {
+                if (isSelected) {
                     this.selectedNodes.add(nodeElement);
                     nodeElement.classList.add('selected');
                     if (checkbox) checkbox.checked = true;

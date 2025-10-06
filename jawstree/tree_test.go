@@ -39,7 +39,7 @@ func TestTree(t *testing.T) {
 	maybeError(t, err)
 
 	var rootmu deadlock.RWMutex
-	tree := New("tree", jaws.NewJsVar(&rootmu, rootnode))
+	tree := New("tree", jaws.NewJsVar(&rootmu, rootnode), SearchEnabled)
 	elem := rq.NewElement(tree)
 
 	var sb strings.Builder
