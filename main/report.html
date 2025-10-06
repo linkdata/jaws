@@ -5950,6 +5950,7 @@ func Setup(jw *jaws.Jaws, handleFn HandleFunc, extra ...string) (err error) {
 		<pre class="file" id="file71" style="display: none">package jawstree
 
 import (
+        "encoding/json"
         "fmt"
         "slices"
         "strconv"
@@ -5961,13 +5962,48 @@ import (
 var _ jaws.SetPather = (*Node)(nil)
 
 type Node struct {
-        Tree     *Tree   `json:"-"`
-        Parent   *Node   `json:"-"`
-        ID       string  `json:"id,omitzero"`
-        Name     string  `json:"name"`
-        Selected bool    `json:"selected,omitzero"`
-        Children []*Node `json:"children,omitzero"`
+        Tree     *Tree
+        Parent   *Node
+        Name     string
+        ID       string
+        Selected bool
+        Disabled bool // !selectable
+        Children []*Node
 }
+
+func (n *Node) marshalJSON(b []byte) []byte <span class="cov8" title="1">{
+        b = append(b, `{"name":`...)
+        b = strconv.AppendQuote(b, n.Name)
+        if n.ID != "" </span><span class="cov8" title="1">{
+                b = append(b, `,"id":`...)
+                b = strconv.AppendQuote(b, n.ID)
+        }</span>
+        <span class="cov8" title="1">if n.Selected </span><span class="cov8" title="1">{
+                b = append(b, `,"selected":true`...)
+        }</span>
+        <span class="cov8" title="1">if n.Disabled </span><span class="cov8" title="1">{
+                b = append(b, `,"selectable":false`...)
+        }</span>
+        <span class="cov8" title="1">if len(n.Children) &gt; 0 </span><span class="cov8" title="1">{
+                b = append(b, `,"children":[`...)
+                for i, c := range n.Children </span><span class="cov8" title="1">{
+                        if i &gt; 0 </span><span class="cov8" title="1">{
+                                b = append(b, ',')
+                        }</span>
+                        <span class="cov8" title="1">b = c.marshalJSON(b)</span>
+                }
+                <span class="cov8" title="1">b = append(b, ']')</span>
+        }
+        <span class="cov8" title="1">b = append(b, '}')
+        return b</span>
+}
+
+func (n *Node) MarshalJSON() (b []byte, err error) <span class="cov8" title="1">{
+        b = n.marshalJSON(nil)
+        return
+}</span>
+
+var _ json.Marshaler = &amp;Node{}
 
 func (n *Node) JawsPathSet(elem *jaws.Element, jspath string, value any) <span class="cov8" title="1">{
         if jspath, ok := strings.CutSuffix(jspath, ".selected"); ok </span><span class="cov8" title="1">{
