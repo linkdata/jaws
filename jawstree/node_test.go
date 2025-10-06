@@ -23,7 +23,7 @@ func TestNode_MarshalJSON(t *testing.T) {
 		},
 	}
 	b, _ := rootnode.MarshalJSON()
-	want := `{"name":"foo","id":"bar","selected":true,"children":[{"name":"child1","selectable":false},{"name":"child2"}]}`
+	want := `{"name":"foo","id":"bar","selected":true,"children":[{"name":"child1","selectable":false,"children":[]},{"name":"child2","children":[]}]}`
 	if string(b) != want {
 		t.Errorf("\n got %s\nwant %s\n", string(b), want)
 	}
