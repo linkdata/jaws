@@ -35,7 +35,7 @@ func TestTree(t *testing.T) {
 	maybeError(t, err)
 	defer root.Close()
 
-	rootnode, err := Root(root)
+	rootnode, err := Root(root, nil)
 	maybeError(t, err)
 
 	var rootmu deadlock.RWMutex
