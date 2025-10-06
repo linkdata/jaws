@@ -6035,24 +6035,33 @@ import (
         "path"
 )
 
-func Root(r *os.Root) (rootnode *Node, err error) <span class="cov8" title="1">{
+// Root builds a root node from a os.Root. If filterfn is not nil, it must return true
+// for a directory entry to be included in the tree.
+func Root(r *os.Root, filterfn func(dirpath string, ent fs.DirEntry) (include bool)) (rootnode *Node, err error) <span class="cov8" title="1">{
         rootnode = &amp;Node{}
-        err = getNodes(r.FS(), rootnode, ".")
+        err = getNodes(r.FS(), rootnode, ".", filterfn)
         return
 }</span>
 
-func getNodes(rootfs fs.FS, parent *Node, dirpath string) (err error) <span class="cov8" title="1">{
+func getNodes(rootfs fs.FS, parent *Node, dirpath string, filterfn func(dirpath string, ent fs.DirEntry) (include bool)) (err error) <span class="cov8" title="1">{
         var ents []fs.DirEntry
         if ents, err = fs.ReadDir(rootfs, dirpath); err == nil </span><span class="cov8" title="1">{
                 for _, ent := range ents </span><span class="cov8" title="1">{
-                        id := path.Join(parent.ID, ent.Name())
-                        child := &amp;Node{Tree: parent.Tree, Parent: parent, ID: id, Name: ent.Name()}
-                        if ent.Type().IsRegular() </span><span class="cov8" title="1">{
-                                parent.Children = append(parent.Children, child)
-                        }</span> else<span class="cov8" title="1"> if ent.IsDir() </span><span class="cov8" title="1">{
-                                if err = errors.Join(err, getNodes(rootfs, child, path.Join(dirpath, child.Name))); err == nil </span><span class="cov8" title="1">{
+                        ent.Name()
+                        if filterfn == nil || filterfn(dirpath, ent) </span><span class="cov8" title="1">{
+                                child := &amp;Node{
+                                        Tree:   parent.Tree,
+                                        Parent: parent,
+                                        ID:     path.Join(parent.ID, ent.Name()),
+                                        Name:   ent.Name(),
+                                }
+                                if ent.Type().IsRegular() </span><span class="cov8" title="1">{
                                         parent.Children = append(parent.Children, child)
-                                }</span>
+                                }</span> else<span class="cov8" title="1"> if ent.IsDir() </span><span class="cov8" title="1">{
+                                        if err = errors.Join(err, getNodes(rootfs, child, path.Join(dirpath, ent.Name()), filterfn)); err == nil </span><span class="cov8" title="1">{
+                                                parent.Children = append(parent.Children, child)
+                                        }</span>
+                                }
                         }
                 }
         }
