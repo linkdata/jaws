@@ -35,17 +35,14 @@ func (n *Node) marshalJSON(b []byte) []byte {
 	if n.Disabled {
 		b = append(b, `,"selectable":false`...)
 	}
-	if len(n.Children) > 0 {
-		b = append(b, `,"children":[`...)
-		for i, c := range n.Children {
-			if i > 0 {
-				b = append(b, ',')
-			}
-			b = c.marshalJSON(b)
+	b = append(b, `,"children":[`...)
+	for i, c := range n.Children {
+		if i > 0 {
+			b = append(b, ',')
 		}
-		b = append(b, ']')
+		b = c.marshalJSON(b)
 	}
-	b = append(b, '}')
+	b = append(b, "]}"...)
 	return b
 }
 
