@@ -1,6 +1,7 @@
 package jawstree
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strconv"
@@ -12,13 +13,48 @@ import (
 var _ jaws.SetPather = (*Node)(nil)
 
 type Node struct {
-	Tree     *Tree   `json:"-"`
-	Parent   *Node   `json:"-"`
-	ID       string  `json:"id,omitzero"`
-	Name     string  `json:"name"`
-	Selected bool    `json:"selected,omitzero"`
-	Children []*Node `json:"children,omitzero"`
+	Tree     *Tree
+	Parent   *Node
+	Name     string
+	ID       string
+	Selected bool
+	Disabled bool // !selectable
+	Children []*Node
 }
+
+func (n *Node) marshalJSON(b []byte) []byte {
+	b = append(b, `{"name":`...)
+	b = strconv.AppendQuote(b, n.Name)
+	if n.ID != "" {
+		b = append(b, `,"id":`...)
+		b = strconv.AppendQuote(b, n.ID)
+	}
+	if n.Selected {
+		b = append(b, `,"selected":true`...)
+	}
+	if n.Disabled {
+		b = append(b, `,"selectable":false`...)
+	}
+	if len(n.Children) > 0 {
+		b = append(b, `,"children":[`...)
+		for i, c := range n.Children {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = c.marshalJSON(b)
+		}
+		b = append(b, ']')
+	}
+	b = append(b, '}')
+	return b
+}
+
+func (n *Node) MarshalJSON() (b []byte, err error) {
+	b = n.marshalJSON(nil)
+	return
+}
+
+var _ json.Marshaler = &Node{}
 
 func (n *Node) JawsPathSet(elem *jaws.Element, jspath string, value any) {
 	if jspath, ok := strings.CutSuffix(jspath, ".selected"); ok {
