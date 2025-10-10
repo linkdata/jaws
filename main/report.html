@@ -4351,7 +4351,6 @@ func tagExpand(l int, rq *Request, tag any, result []any) ([]any, error) <span c
         case float32:<span class="cov8" title="1"></span>
         case float64:<span class="cov8" title="1"></span>
         case bool:<span class="cov8" title="1"></span>
-        case error:<span class="cov8" title="1"></span>
 
         case nil:<span class="cov8" title="1">
                 return result, nil</span>
@@ -6677,10 +6676,11 @@ const _What_name = "invalidUpdateReloadRedirectAlertOrderCallSetseparatorInnerDe
 var _What_index = [...]uint8{0, 7, 13, 19, 27, 32, 37, 41, 44, 53, 58, 64, 71, 77, 83, 89, 94, 99, 105, 111, 116, 121, 126, 130}
 
 func (i What) String() string <span class="cov8" title="1">{
-        if i &gt;= What(len(_What_index)-1) </span><span class="cov8" title="1">{
+        idx := int(i) - 0
+        if i &lt; 0 || idx &gt;= len(_What_index)-1 </span><span class="cov8" title="1">{
                 return "What(" + strconv.FormatInt(int64(i), 10) + ")"
         }</span>
-        <span class="cov8" title="1">return _What_name[_What_index[i]:_What_index[i+1]]</span>
+        <span class="cov8" title="1">return _What_name[_What_index[idx]:_What_index[idx+1]]</span>
 }
 </pre>
 		
