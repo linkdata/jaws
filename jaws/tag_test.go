@@ -52,6 +52,11 @@ func TestTagExpand(t *testing.T) {
 			tag:  []any{Tag("a"), &av},
 			want: []any{Tag("a"), &av},
 		},
+		{
+			name: "error",
+			tag:  ErrEventUnhandled,
+			want: []any{ErrEventUnhandled},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -84,7 +89,6 @@ func TestTagExpand_IllegalTypesPanic(t *testing.T) {
 		float32(11),
 		float64(12),
 		bool(true),
-		errors.New("error"),
 		[]string{"a", "b"},
 		[]template.HTML{"a", "b"},
 		map[int]int{1: 1},

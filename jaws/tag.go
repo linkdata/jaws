@@ -50,7 +50,6 @@ func tagExpand(l int, rq *Request, tag any, result []any) ([]any, error) {
 	case float32:
 	case float64:
 	case bool:
-	case error:
 
 	case nil:
 		return result, nil
