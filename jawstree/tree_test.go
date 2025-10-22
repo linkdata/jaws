@@ -77,6 +77,21 @@ func TestTree(t *testing.T) {
 		t.Fatal("selection mismatch")
 	}
 
-	rootnode.JawsPathSet(elem, changed[0].ID+".selected", "false")
 	tree.JawsUpdate(elem)
+	select {
+	case <-t.Context().Done():
+	case msg := <-rq.OutCh:
+		if s := string(rootnode.marshalJSON(nil)); !strings.Contains(msg.Data, s) {
+			t.Error("msg data did not contain our JSON")
+		}
+	}
+
+	rootnode.JawsPathSet(elem, changed[0].ID+".selected", "false")
+	select {
+	case <-t.Context().Done():
+	case msg := <-rq.OutCh:
+		if s := "jawstreeSetPath={\"tree\":\"tree\",\"id\":\"children.1.children.1\",\"set\":false}"; msg.Data != s {
+			t.Errorf("unexpected data: %q", msg.Data)
+		}
+	}
 }
