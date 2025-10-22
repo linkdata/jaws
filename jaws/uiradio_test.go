@@ -6,7 +6,7 @@ import (
 
 func TestRequest_Radio(t *testing.T) {
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	ts := newTestSetter(true)

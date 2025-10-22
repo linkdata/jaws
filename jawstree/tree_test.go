@@ -3,7 +3,6 @@ package jawstree
 import (
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"reflect"
 	"strings"
@@ -25,11 +24,12 @@ func TestTree(t *testing.T) {
 	maybeError(t, err)
 	defer jw.Close()
 
-	err = jw.Setup(http.DefaultServeMux.Handle, "/", Setup)
+	mux := http.NewServeMux()
+	err = jw.Setup(mux.Handle, "/", Setup)
 	maybeError(t, err)
 
-	rq := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
-	rq = rq.Jaws.UseRequest(rq.JawsKey, httptest.NewRequest("GET", "/", nil))
+	go jw.Serve()
+	rq := jaws.NewTestRequest(jw, nil)
 
 	root, err := os.OpenRoot(".")
 	maybeError(t, err)
@@ -78,5 +78,26 @@ func TestTree(t *testing.T) {
 		t.Fatal("selection mismatch")
 	}
 
+	changed[0].Disabled = true
+	tree.JawsUpdate(elem)
+	select {
+	case <-t.Context().Done():
+	case msg := <-rq.OutCh:
+		if s := string(rootnode.marshalJSON(nil)); !strings.Contains(msg.Data, s) {
+			t.Log(msg.Data)
+			t.Error("msg data did not contain our JSON")
+		}
+		if !strings.Contains(msg.Data, `"selectable":false`) {
+			t.Error("msg data did not contain selectable:false")
+		}
+	}
+
 	rootnode.JawsPathSet(elem, changed[0].ID+".selected", "false")
+	select {
+	case <-t.Context().Done():
+	case msg := <-rq.OutCh:
+		if s := "jawstreeSetPath={\"tree\":\"tree\",\"id\":\"children.1.children.1\",\"set\":false}"; msg.Data != s {
+			t.Errorf("unexpected data: %q", msg.Data)
+		}
+	}
 }

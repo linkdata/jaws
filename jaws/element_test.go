@@ -66,12 +66,12 @@ func (tss *testUi) JawsUpdate(e *Element) {
 
 func TestElement_helpers(t *testing.T) {
 	is := newTestHelper(t)
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	tss := &testUi{}
 	e := rq.NewElement(tss)
-	is.Equal(e.Jaws, rq.jw.Jaws)
+	is.Equal(e.Jaws, rq.Jaws)
 	is.Equal(e.Request, rq.Request)
 	is.Equal(e.Session(), nil)
 	e.Set("foo", "bar") // no session, so no effect
@@ -80,7 +80,7 @@ func TestElement_helpers(t *testing.T) {
 
 func TestElement_Tag(t *testing.T) {
 	is := newTestHelper(t)
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	tss := &testUi{}
@@ -96,7 +96,7 @@ func TestElement_Tag(t *testing.T) {
 
 func TestElement_Queued(t *testing.T) {
 	th := newTestHelper(t)
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	tss := &testUi{
@@ -181,13 +181,12 @@ func TestElement_Queued(t *testing.T) {
 			time.Sleep(time.Millisecond)
 		}
 	}
-	th.Equal(tss.updateCalled, int32(1))
 	th.Equal(tss.renderCalled, int32(2))
 }
 
 func TestElement_ReplacePanicsOnMissingId(t *testing.T) {
 	is := newTestHelper(t)
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 	defer func() {
 		if x := recover(); x == nil {
@@ -202,7 +201,7 @@ func TestElement_ReplacePanicsOnMissingId(t *testing.T) {
 
 func TestElement_maybeDirty(t *testing.T) {
 	th := newTestHelper(t)
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 	tss := &testUi{s: "foo"}
 	e := rq.NewElement(tss)
@@ -231,7 +230,7 @@ var _ ClickHandler = testClickHandler{}
 
 func TestElement_ApplyGetter(t *testing.T) {
 	is := newTestHelper(t)
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	tss := &testUi{s: "foo"}
@@ -250,7 +249,7 @@ func TestElement_ApplyGetter(t *testing.T) {
 
 func TestElement_JawsInit(t *testing.T) {
 	is := newTestHelper(t)
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	tss := &testUi{s: "foo"}

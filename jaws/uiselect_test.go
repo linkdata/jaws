@@ -32,7 +32,7 @@ func (ts *testNamedBoolArray) JawsSet(e *Element, val string) (err error) {
 func TestRequest_Select(t *testing.T) {
 	th := newTestHelper(t)
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	a := &testNamedBoolArray{
@@ -56,7 +56,7 @@ func TestRequest_Select(t *testing.T) {
 		t.Error("2 is checked")
 	}
 
-	rq.inCh <- wsMsg{Data: "2", Jid: 1, What: what.Input}
+	rq.InCh <- wsMsg{Data: "2", Jid: 1, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
@@ -71,9 +71,13 @@ func TestRequest_Select(t *testing.T) {
 	}
 
 	select {
-	case s := <-rq.outCh:
-		t.Errorf("%q", s)
-	default:
+	case <-th.C:
+		th.Timeout()
+	case msg := <-rq.OutCh:
+		s := msg.Format()
+		if s != "Value\tJid.1\t\"2\"\n" {
+			t.Errorf("wrong Value %q", s)
+		}
 	}
 
 	a.Set("2", false)
@@ -82,10 +86,10 @@ func TestRequest_Select(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq.OutCh:
 		s := msg.Format()
 		if s != "Value\tJid.1\t\"\"\n" {
-			t.Error("wrong Value")
+			t.Errorf("wrong Value %q", s)
 		}
 	}
 
@@ -96,15 +100,23 @@ func TestRequest_Select(t *testing.T) {
 		t.Error("2 is checked")
 	}
 
+	a.mu.Lock()
 	a.err = errors.New("meh")
-	rq.inCh <- wsMsg{Data: "1", Jid: 1, What: what.Input}
+	a.mu.Unlock()
+	rq.InCh <- wsMsg{Data: "1", Jid: 1, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq.OutCh:
 		s := msg.Format()
 		if s != "Alert\t\t\"danger\\nmeh\"\n" {
 			t.Errorf("wrong Alert: %q", s)
+			select {
+			case msg := <-rq.OutCh:
+				s := msg.Format()
+				t.Errorf("queued msg: %q", s)
+			default:
+			}
 		}
 	}
 

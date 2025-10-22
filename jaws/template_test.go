@@ -7,7 +7,7 @@ import (
 )
 
 func TestTemplate_Missing(t *testing.T) {
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	err := rq.Template("missingtemplate", nil, nil)
@@ -21,7 +21,7 @@ func TestTemplate_Missing(t *testing.T) {
 
 func TestTemplate_String(t *testing.T) {
 	is := newTestHelper(t)
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	dot := 123
@@ -31,7 +31,7 @@ func TestTemplate_String(t *testing.T) {
 }
 
 func TestTemplate_Calls_Dot_Updater(t *testing.T) {
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 	dot := &testUi{}
 	tmpl := NewTemplate("testtemplate", dot)

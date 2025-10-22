@@ -6,7 +6,7 @@ import (
 
 func TestRequest_Li(t *testing.T) {
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 	want := `<li id="Jid.1">inner</li>`
 	rq.Li("inner")

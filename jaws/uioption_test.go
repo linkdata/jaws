@@ -8,7 +8,7 @@ import (
 func TestUiOption(t *testing.T) {
 	th := newTestHelper(t)
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	nba := NewNamedBoolArray()
@@ -30,7 +30,7 @@ func TestUiOption(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq.OutCh:
 		s := msg.Format()
 		if s != "RAttr\tJid.1\t\"selected\"\n" {
 			t.Errorf("%q", s)
@@ -42,7 +42,7 @@ func TestUiOption(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq.OutCh:
 		s := msg.Format()
 		if s != "SAttr\tJid.1\t\"selected\\n\"\n" {
 			t.Errorf("%q", s)

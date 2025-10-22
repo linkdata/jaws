@@ -1,7 +1,9 @@
 package jaws
 
 import (
+	"bytes"
 	"html/template"
+	"log/slog"
 	"reflect"
 	"strings"
 	"testing"
@@ -16,15 +18,17 @@ func TestRequest_TemplateMissingJid(t *testing.T) {
 		t.Skip("debug tag not set")
 	}
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
-	rq.jw.AddTemplateLookuper(template.Must(template.New("badtesttemplate").Parse(`{{with $.Dot}}<div {{$.Attrs}}>{{.}}</div>{{end}}`)))
+	var log bytes.Buffer
+	rq.Jaws.Logger = slog.New(slog.NewTextHandler(&log, nil))
+	rq.Jaws.AddTemplateLookuper(template.Must(template.New("badtesttemplate").Parse(`{{with $.Dot}}<div {{$.Attrs}}>{{.}}</div>{{end}}`)))
 	if e := rq.Template("badtesttemplate", nil, nil); e != nil {
 		t.Error(e)
 	}
-	if !strings.Contains(rq.jw.log.String(), "WARN") || !strings.Contains(rq.jw.log.String(), "badtesttemplate") {
+	if !strings.Contains(log.String(), "WARN") || !strings.Contains(log.String(), "badtesttemplate") {
 		t.Error("expected WARN in the log")
-		t.Log(rq.jw.log.String())
+		t.Log(log.String())
 	}
 }
 
@@ -33,15 +37,17 @@ func TestRequest_TemplateJidInsideIf(t *testing.T) {
 		t.Skip("debug tag not set")
 	}
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
-	rq.jw.AddTemplateLookuper(template.Must(template.New("iftesttemplate").Parse(`{{with $.Dot}}{{if true}}<div id="{{$.Jid}}" {{$.Attrs}}>{{.}}</div>{{end}}{{end}}`)))
+	var log bytes.Buffer
+	rq.Jaws.Logger = slog.New(slog.NewTextHandler(&log, nil))
+	rq.Jaws.AddTemplateLookuper(template.Must(template.New("iftesttemplate").Parse(`{{with $.Dot}}{{if true}}<div id="{{$.Jid}}" {{$.Attrs}}>{{.}}</div>{{end}}{{end}}`)))
 	if e := rq.Template("iftesttemplate", nil, nil); e != nil {
 		t.Error(e)
 	}
-	if strings.Contains(rq.jw.log.String(), "WARN") && strings.Contains(rq.jw.log.String(), "iftesttemplate") {
+	if strings.Contains(log.String(), "WARN") && strings.Contains(log.String(), "iftesttemplate") {
 		t.Error("found WARN in the log")
-		t.Log(rq.jw.log.String())
+		t.Log(log.String())
 	}
 }
 
@@ -50,15 +56,17 @@ func TestRequest_TemplateMissingJidButHasHTMLTag(t *testing.T) {
 		t.Skip("debug tag not set")
 	}
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
-	rq.jw.AddTemplateLookuper(template.Must(template.New("badtesttemplate").Parse(`<html>{{with $.Dot}}<div {{$.Attrs}}>{{.}}</div>{{end}}</html>`)))
+	var log bytes.Buffer
+	rq.Jaws.Logger = slog.New(slog.NewTextHandler(&log, nil))
+	rq.Jaws.AddTemplateLookuper(template.Must(template.New("badtesttemplate").Parse(`<html>{{with $.Dot}}<div {{$.Attrs}}>{{.}}</div>{{end}}</html>`)))
 	if e := rq.Template("badtesttemplate", nil, nil); e != nil {
 		t.Error(e)
 	}
-	if strings.Contains(rq.jw.log.String(), "WARN") {
+	if strings.Contains(log.String(), "WARN") {
 		t.Error("expected no WARN in the log")
-		t.Log(rq.jw.log.String())
+		t.Log(log.String())
 	}
 }
 
@@ -106,7 +114,7 @@ func TestRequest_Template(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			nextJid = 0
-			rq := newTestRequest()
+			rq := newTestRequest(t)
 			defer rq.Close()
 			if tt.errtxt != "" {
 				defer func() {
@@ -155,15 +163,15 @@ var _ ClickHandler = &templateDot{}
 
 func TestRequest_Template_Event(t *testing.T) {
 	is := newTestHelper(t)
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 	dot := &templateDot{clickedCh: make(chan struct{})}
 	rq.Template("testtemplate", dot)
-	rq.jw.Broadcast(Message{
+	rq.Jaws.Broadcast(Message{
 		Dest: dot,
 		What: what.Update,
 	})
-	rq.jw.Broadcast(Message{
+	rq.Jaws.Broadcast(Message{
 		Dest: dot,
 		What: what.Click,
 		Data: "foo",

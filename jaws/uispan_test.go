@@ -6,7 +6,7 @@ import (
 
 func TestRequest_Span(t *testing.T) {
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 	want := `<span id="Jid.1">inner</span>`
 	rq.Span("inner")

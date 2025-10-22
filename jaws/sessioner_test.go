@@ -8,7 +8,7 @@ import (
 
 func TestJaws_Session(t *testing.T) {
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	dot := Tag("123")

@@ -6,7 +6,7 @@ import (
 
 func TestRequest_Label(t *testing.T) {
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 	want := `<label id="Jid.1">inner</label>`
 	rq.Label("inner")

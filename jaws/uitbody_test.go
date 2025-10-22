@@ -6,7 +6,7 @@ import (
 
 func TestRequest_Tbody(t *testing.T) {
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 	want := `<tbody id="Jid.1"></tbody>`
 	rq.Tbody(&testContainer{})

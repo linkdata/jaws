@@ -8,7 +8,7 @@ import (
 func TestRequest_Img(t *testing.T) {
 	th := newTestHelper(t)
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	ts := newTestSetter("image.png")
@@ -25,7 +25,7 @@ func TestRequest_Img(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq.OutCh:
 		s := msg.Format()
 		if s != "SAttr\tJid.1\t\"src\\nimage2.jpg\"\n" {
 			t.Error(strconv.Quote(s))

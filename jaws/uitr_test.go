@@ -6,7 +6,7 @@ import (
 
 func TestRequest_Tr(t *testing.T) {
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 	want := `<tr id="Jid.1">inner</tr>`
 	rq.Tr("inner")

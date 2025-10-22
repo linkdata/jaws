@@ -52,7 +52,7 @@ func TestRequest_A(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			nextJid = 0
-			rq := newTestRequest()
+			rq := newTestRequest(t)
 			defer rq.Close()
 			rq.A(tt.args.innerHTML, tt.args.params...)
 			if got := rq.BodyHTML(); !reflect.DeepEqual(got, tt.want) {

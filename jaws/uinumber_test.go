@@ -11,7 +11,7 @@ import (
 func TestRequest_Number(t *testing.T) {
 	th := newTestHelper(t)
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	ts := newTestSetter(float64(1.2))
@@ -22,7 +22,7 @@ func TestRequest_Number(t *testing.T) {
 	}
 
 	val := float64(2.3)
-	rq.inCh <- wsMsg{Data: fmt.Sprint(val), Jid: 1, What: what.Input}
+	rq.InCh <- wsMsg{Data: fmt.Sprint(val), Jid: 1, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
@@ -32,7 +32,7 @@ func TestRequest_Number(t *testing.T) {
 		t.Error(ts.Get(), "!=", val)
 	}
 	select {
-	case s := <-rq.outCh:
+	case s := <-rq.OutCh:
 		t.Errorf("%q", s)
 	default:
 	}
@@ -43,7 +43,7 @@ func TestRequest_Number(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq.OutCh:
 		s := msg.Format()
 		if s != fmt.Sprintf("Value\tJid.1\t\"%v\"\n", val) {
 			t.Error("wrong Value")
@@ -56,11 +56,11 @@ func TestRequest_Number(t *testing.T) {
 		t.Error("SetCount", ts.SetCount())
 	}
 
-	rq.inCh <- wsMsg{Data: "omg", Jid: 1, What: what.Input}
+	rq.InCh <- wsMsg{Data: "omg", Jid: 1, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq.OutCh:
 		s := msg.Format()
 		if s != "Alert\t\t\"danger\\nstrconv.ParseFloat: parsing &#34;omg&#34;: invalid syntax\"\n" {
 			t.Errorf("wrong Alert: %q", s)
@@ -68,11 +68,11 @@ func TestRequest_Number(t *testing.T) {
 	}
 
 	ts.err = errors.New("meh")
-	rq.inCh <- wsMsg{Data: fmt.Sprint(val), Jid: 1, What: what.Input}
+	rq.InCh <- wsMsg{Data: fmt.Sprint(val), Jid: 1, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq.OutCh:
 		s := msg.Format()
 		if s != "Alert\t\t\"danger\\nmeh\"\n" {
 			t.Errorf("wrong Alert: %q", s)

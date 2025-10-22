@@ -395,6 +395,13 @@ func (rq *Request) NewElement(ui UI) *Element {
 	return rq.newElementLocked(ui)
 }
 
+func (rq *Request) GetElementByJid(jid Jid) (e *Element) {
+	rq.mu.RLock()
+	defer rq.mu.RUnlock()
+	e = rq.getElementByJidLocked(jid)
+	return
+}
+
 func (rq *Request) getElementByJidLocked(jid Jid) (elem *Element) {
 	for _, e := range rq.elems {
 		if e.Jid() == jid {

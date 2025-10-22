@@ -9,7 +9,7 @@ import (
 func TestRequest_Textarea(t *testing.T) {
 	th := newTestHelper(t)
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	ss := newTestSetter("foo")
@@ -18,7 +18,7 @@ func TestRequest_Textarea(t *testing.T) {
 	if got := rq.BodyString(); got != want {
 		t.Errorf("Request.Textarea() = %q, want %q", got, want)
 	}
-	rq.inCh <- wsMsg{Data: "bar", Jid: 1, What: what.Input}
+	rq.InCh <- wsMsg{Data: "bar", Jid: 1, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
@@ -28,7 +28,7 @@ func TestRequest_Textarea(t *testing.T) {
 		t.Fail()
 	}
 	select {
-	case s := <-rq.outCh:
+	case s := <-rq.OutCh:
 		t.Errorf("%q", s)
 	default:
 	}
@@ -37,7 +37,7 @@ func TestRequest_Textarea(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq.OutCh:
 		s := msg.Format()
 		if s != "Value\tJid.1\t\"quux\"\n" {
 			t.Fail()

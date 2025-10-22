@@ -43,11 +43,11 @@ func (tl *testLocker) Unlock() {
 
 func Test_JsVar_JawsRender(t *testing.T) {
 	th := newTestHelper(t)
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	nextJid = 0
-	rq.jw.AddTemplateLookuper(template.Must(template.New("jsvartemplate").Parse(`{{$.JsVar "` + varname + `" .Dot}}`)))
+	rq.Jaws.AddTemplateLookuper(template.Must(template.New("jsvartemplate").Parse(`{{$.JsVar "` + varname + `" .Dot}}`)))
 
 	var mu deadlock.RWMutex
 	var val valtype
@@ -88,7 +88,7 @@ func Test_JsVar_Update(t *testing.T) {
 	var val valtype
 	dot := NewJsVar(&mu, &val)
 
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	elem := rq.NewElement(dot)
@@ -107,7 +107,7 @@ func Test_JsVar_Update(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case gotMsg := <-rq.outCh:
+	case gotMsg := <-rq.OutCh:
 		wantMsg := wsMsg{
 			Data: "={\"String\":\"x\",\"Number\":2}",
 			Jid:  1,
@@ -166,7 +166,7 @@ func Test_JsVar_Event(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq1.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "={\"String\":\"y\",\"Number\":3}"}:
+	case rq1.InCh <- wsMsg{Jid: 1, What: what.Set, Data: "={\"String\":\"y\",\"Number\":3}"}:
 	}
 
 	select {
@@ -180,7 +180,7 @@ func Test_JsVar_Event(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq1.outCh:
+	case msg := <-rq1.OutCh:
 		s := msg.Format()
 		after, found := strings.CutPrefix(s, "Set\tJid.1\t=")
 		th.Equal(found, true)
@@ -197,7 +197,7 @@ func Test_JsVar_Event(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq2.outCh:
+	case msg := <-rq2.OutCh:
 		s := msg.Format()
 		after, found := strings.CutPrefix(s, "Set\tJid.2\t=")
 		th.Equal(found, true)
@@ -214,13 +214,13 @@ func Test_JsVar_Event(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq1.inCh <- wsMsg{Jid: 1, What: what.Set, Data: "=1"}:
+	case rq1.InCh <- wsMsg{Jid: 1, What: what.Set, Data: "=1"}:
 	}
 
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq1.outCh:
+	case msg := <-rq1.OutCh:
 		s := msg.Format()
 		if !strings.Contains(s, "jq: expected") {
 			th.Error(s)
@@ -230,7 +230,7 @@ func Test_JsVar_Event(t *testing.T) {
 
 func Test_JsVar_PanicsOnWrongType(t *testing.T) {
 	th := newTestHelper(t)
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 	defer func() {
 		if x := recover(); x == nil {
@@ -255,7 +255,7 @@ var _ JsVarMaker = &testJsVarMaker{}
 func Test_JsVar_JsVarMaker(t *testing.T) {
 	nextJid = 0
 	th := newTestHelper(t)
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 	err := rq.JsVar("foo", &testJsVarMaker{})
 	th.NoErr(err)
@@ -286,7 +286,7 @@ var _ SetPather = &testJsVarPathSetter{}
 func Test_JsVar_PathSetter_SetPather(t *testing.T) {
 	nextJid = 0
 	th := newTestHelper(t)
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	var mu deadlock.Mutex
@@ -302,7 +302,7 @@ func Test_JsVar_PathSetter_SetPather(t *testing.T) {
 func Test_JsVar_Unchanged(t *testing.T) {
 	nextJid = 0
 	th := newTestHelper(t)
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	var mu deadlock.Mutex

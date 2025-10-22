@@ -6,7 +6,7 @@ import (
 
 func TestRequest_Password(t *testing.T) {
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 	ts := newTestSetter("")
 	want := `<input id="Jid.1" type="password">`

@@ -1,10 +1,56 @@
 package jaws
 
 import (
+	"bytes"
+	"fmt"
 	"reflect"
+	"regexp"
+	"runtime"
+	"sort"
 	"testing"
 	"time"
+
+	"github.com/linkdata/deadlock"
 )
+
+func printGoroutineOrigins(t *testing.T) {
+	t.Helper()
+	buf := make([]byte, 1<<20)
+	n := runtime.Stack(buf, true)
+	buf = buf[:n]
+
+	lines := bytes.Split(buf, []byte("\n"))
+	re := regexp.MustCompile(`\t(.*?):(\d+) \+0x`)
+	counts := make(map[string]int)
+
+	for _, line := range lines {
+		m := re.FindSubmatch(line)
+		if len(m) == 3 {
+			loc := fmt.Sprintf("%s:%s", m[1], m[2])
+			counts[loc]++
+		}
+	}
+
+	// Convert to slice for sorting
+	type pair struct {
+		loc   string
+		count int
+	}
+	var items []pair
+	for k, v := range counts {
+		if v > 1 { // omit entries with only one goroutine
+			items = append(items, pair{k, v})
+		}
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].count > items[j].count
+	})
+
+	for _, item := range items {
+		t.Logf("%-50s %4d goroutines\n", item.loc, item.count)
+	}
+}
 
 type testHelper struct {
 	*time.Timer
@@ -12,9 +58,13 @@ type testHelper struct {
 }
 
 func newTestHelper(t *testing.T) (th *testHelper) {
+	seconds := 3
+	if deadlock.Debug {
+		seconds *= 10
+	}
 	th = &testHelper{
 		T:     t,
-		Timer: time.NewTimer(time.Second * 3),
+		Timer: time.NewTimer(time.Second * time.Duration(seconds)),
 	}
 	t.Cleanup(th.Cleanup)
 	return
@@ -47,7 +97,8 @@ func (th *testHelper) NoErr(err error) {
 
 func (th *testHelper) Timeout() {
 	th.Helper()
-	th.Fatal("timeout")
+	printGoroutineOrigins(th.T)
+	th.Fatalf("timeout")
 }
 
 func Test_testHelper(t *testing.T) {
