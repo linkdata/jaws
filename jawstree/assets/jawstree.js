@@ -9,7 +9,7 @@ function jawstreeForEachNode(path, node, fn) {
 }
 
 function jawstreeSet(arg) {
-    window["jawstree_"+arg.tree].setData(arg.data);
+    window["jawstree_"+arg.tree].setData(arg.data.children);
 }
 
 function jawstreeSetPath(arg) {

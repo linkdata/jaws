@@ -32,7 +32,7 @@ const newtreeTemplate = `
 <script>var jawstreeroot_%s; document.addEventListener("DOMContentLoaded",function(){window.jawstree_%s=jawstreeNew("%s",jawstreeroot_%s,%v);});</script>`
 
 func (t *Tree) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) {
-	if err = t.JsVar.JawsRender(e, w, []any{"jawstreeroot_" + t.id}); err == nil {
+	if err = t.JsVar.JawsRender(e, w, append([]any{"jawstreeroot_" + t.id}, params...)); err == nil {
 		if _, err = fmt.Fprintf(w, newtreeTemplate, t.id, t.id, t.id, t.id, t.options); err == nil {
 		}
 	}
