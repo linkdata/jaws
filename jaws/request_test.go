@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -218,9 +217,6 @@ func TestRequest_EventFnQueue(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest(t)
 	defer rq.Close()
-
-	t.Logf("%v goroutines", runtime.NumGoroutine())
-	printGoroutineOrigins(t)
 
 	// calls to slow event functions queue up and are executed in order
 	firstDoneCh := make(chan struct{})

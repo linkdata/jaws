@@ -525,7 +525,7 @@ func TestJaws_TemplateLookuper(t *testing.T) {
 	th := newTestHelper(t)
 	tj := newTestJaws()
 	defer tj.Close()
-	rq := NewTestRequest(tj.Jaws, httptest.NewRequest("GET", "/", nil))
+	rq := NewTestRequest(tj.Jaws, nil)
 	defer rq.Close()
 	th.Equal(rq.Jaws.LookupTemplate("nosuchtemplate"), nil)
 	th.Equal(rq.Jaws.LookupTemplate("testtemplate"), tj.testtmpl)
