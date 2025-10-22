@@ -3,7 +3,6 @@ package jawstree
 import (
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"reflect"
 	"strings"
@@ -28,9 +27,8 @@ func TestTree(t *testing.T) {
 	err = jw.Setup(http.DefaultServeMux.Handle, "/", Setup)
 	maybeError(t, err)
 
-	hr := httptest.NewRequest("GET", "/", nil)
-	rq := jw.NewRequest(hr)
-	rq = rq.Jaws.UseRequest(rq.JawsKey, hr)
+	go jw.Serve()
+	rq := jaws.NewTestRequest(jw, nil)
 
 	root, err := os.OpenRoot(".")
 	maybeError(t, err)
@@ -80,6 +78,5 @@ func TestTree(t *testing.T) {
 	}
 
 	rootnode.JawsPathSet(elem, changed[0].ID+".selected", "false")
-
-	// tree.JawsUpdate(elem)
+	tree.JawsUpdate(elem)
 }
