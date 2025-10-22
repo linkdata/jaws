@@ -73,9 +73,9 @@ func (tr *TestRequest) Close() {
 }
 
 func (tr *TestRequest) BodyString() string {
-	return tr.Body.String()
+	return strings.TrimSpace(tr.Body.String())
 }
 
 func (tr *TestRequest) BodyHTML() template.HTML {
-	return template.HTML(strings.TrimSpace(tr.BodyString()))
+	return template.HTML(tr.BodyString()) /* #nosec G203 */
 }
