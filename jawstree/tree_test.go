@@ -77,11 +77,13 @@ func TestTree(t *testing.T) {
 		t.Fatal("selection mismatch")
 	}
 
+	changed[0].Disabled = true
 	tree.JawsUpdate(elem)
 	select {
 	case <-t.Context().Done():
 	case msg := <-rq.OutCh:
 		if s := string(rootnode.marshalJSON(nil)); !strings.Contains(msg.Data, s) {
+			t.Log(msg.Data)
 			t.Error("msg data did not contain our JSON")
 		}
 	}
