@@ -93,45 +93,49 @@ func maybeFatal(t *testing.T, err error) {
 	}
 }
 
+var onlyOnce sync.Once
+
 func TestNewTemplate(t *testing.T) {
-	jw, err := jaws.New()
-	maybeFatal(t, err)
-	defer jw.Close()
+	onlyOnce.Do(func() {
+		jw, err := jaws.New()
+		maybeFatal(t, err)
+		defer jw.Close()
 
-	jw.AddTemplateLookuper(template.Must(template.New("nested").Parse(testPageNestedTmplText)))
-	jw.AddTemplateLookuper(template.Must(template.New("normal").Parse(testPageTmplText)))
+		jw.AddTemplateLookuper(template.Must(template.New("nested").Parse(testPageNestedTmplText)))
+		jw.AddTemplateLookuper(template.Must(template.New("normal").Parse(testPageTmplText)))
 
-	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	rq := jw.NewRequest(hr)
-	jw.UseRequest(rq.JawsKey, hr)
-	var sb strings.Builder
-	rqwr := rq.Writer(&sb)
+		hr := httptest.NewRequest(http.MethodGet, "/", nil)
+		rq := jw.NewRequest(hr)
+		jw.UseRequest(rq.JawsKey, hr)
+		var sb strings.Builder
+		rqwr := rq.Writer(&sb)
 
-	var mu sync.RWMutex
-	vbool := true
-	vtime, _ := time.Parse(jaws.ISO8601, "1901-02-03")
-	vnumber := float64(1.2)
-	vstring := "bar"
-	nba := jaws.NewNamedBoolArray()
+		var mu sync.RWMutex
+		vbool := true
+		vtime, _ := time.Parse(jaws.ISO8601, "1901-02-03")
+		vnumber := float64(1.2)
+		vstring := "bar"
+		nba := jaws.NewNamedBoolArray()
 
-	tp := &testPage{
-		TheBool:      jaws.Bind(&mu, &vbool),
-		TheContainer: &testContainer{},
-		TheTime:      jaws.Bind(&mu, &vtime),
-		TheNumber:    jaws.Bind(&mu, &vnumber),
-		TheString:    jaws.Bind(&mu, &vstring),
-		TheSelector:  nba,
-		TheDot:       jaws.Tag("dot"),
-	}
+		tp := &testPage{
+			TheBool:      jaws.Bind(&mu, &vbool),
+			TheContainer: &testContainer{},
+			TheTime:      jaws.Bind(&mu, &vtime),
+			TheNumber:    jaws.Bind(&mu, &vnumber),
+			TheString:    jaws.Bind(&mu, &vstring),
+			TheSelector:  nba,
+			TheDot:       jaws.Tag("dot"),
+		}
 
-	tmpl := jaws.NewTemplate("normal", tp)
-	elem := rq.NewElement(tmpl)
-	err = tmpl.JawsRender(elem, rqwr, nil)
-	maybeFatal(t, err)
+		tmpl := jaws.NewTemplate("normal", tp)
+		elem := rq.NewElement(tmpl)
+		err = tmpl.JawsRender(elem, rqwr, nil)
+		maybeFatal(t, err)
 
-	if sb.String() != testPageWant {
-		t.Errorf("\n got: %q\nwant: %q\n", sb.String(), testPageWant)
-	}
+		if s := sb.String(); s != testPageWant {
+			t.Errorf("\n got: %q\nwant: %q\n", s, testPageWant)
+		}
+	})
 }
 
 func TestJsVar(t *testing.T) {
