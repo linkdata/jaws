@@ -191,5 +191,16 @@ func TestNewUi(t *testing.T) {
 	jaws.NewUiTd(htmlGetter)
 	jaws.NewUiText(jaws.Bind(&mu, &vstring))
 	jaws.NewUiTr(htmlGetter)
+}
 
+func TestNewTestRequest(t *testing.T) {
+	jw, err := jaws.New()
+	maybeFatal(t, err)
+	defer jw.Close()
+	go jw.Serve()
+	if tr := jaws.NewTestRequest(jw, nil); tr == nil {
+		t.Fatal("got nil")
+	} else {
+		tr.Close()
+	}
 }

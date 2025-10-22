@@ -3,6 +3,7 @@ package jaws
 import (
 	"html/template"
 	"io"
+	"net/http"
 	"sync"
 	"time"
 
@@ -49,6 +50,7 @@ type (
 	With                 = pkg.With
 	Session              = pkg.Session
 	Tag                  = pkg.Tag
+	TestRequest          = pkg.TestRequest
 )
 
 var (
@@ -235,4 +237,8 @@ func NewUiText(vp Setter[string]) *UiText {
 }
 func NewUiTr(innerHTML HTMLGetter) *UiTr {
 	return pkg.NewUiTr(innerHTML)
+}
+
+func NewTestRequest(jw *Jaws, hr *http.Request) (tr *TestRequest) {
+	return pkg.NewTestRequest(jw, hr)
 }
