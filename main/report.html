@@ -6271,7 +6271,7 @@ const newtreeTemplate = `
 &lt;script&gt;var jawstreeroot_%s; document.addEventListener("DOMContentLoaded",function(){window.jawstree_%s=jawstreeNew("%s",jawstreeroot_%s,%v);});&lt;/script&gt;`
 
 func (t *Tree) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) <span class="cov8" title="1">{
-        if err = t.JsVar.JawsRender(e, w, []any{"jawstreeroot_" + t.id}); err == nil </span><span class="cov8" title="1">{
+        if err = t.JsVar.JawsRender(e, w, append([]any{"jawstreeroot_" + t.id}, params...)); err == nil </span><span class="cov8" title="1">{
                 if _, err = fmt.Fprintf(w, newtreeTemplate, t.id, t.id, t.id, t.id, t.options); err == nil </span>{<span class="cov8" title="1">
                 }</span>
         }
