@@ -78,7 +78,7 @@ func Test_NamedBoolArray(t *testing.T) {
 	(nba.data)[1].Set(true)
 	is.Equal(nba.IsChecked("2"), true)
 
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	e := rq.NewElement(NewUiSelect(nba))
 	defer rq.Close()
 

@@ -10,7 +10,7 @@ import (
 func TestRequest_Checkbox(t *testing.T) {
 	th := newTestHelper(t)
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	ts := newTestSetter(true)
@@ -21,7 +21,7 @@ func TestRequest_Checkbox(t *testing.T) {
 	}
 
 	val := false
-	rq.inCh <- wsMsg{Data: "false", Jid: 1, What: what.Input}
+	rq.InCh <- wsMsg{Data: "false", Jid: 1, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
@@ -31,7 +31,7 @@ func TestRequest_Checkbox(t *testing.T) {
 		t.Error(ts.Get(), "!=", val)
 	}
 	select {
-	case s := <-rq.outCh:
+	case s := <-rq.OutCh:
 		t.Errorf("%q", s)
 	default:
 	}
@@ -42,7 +42,7 @@ func TestRequest_Checkbox(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq.OutCh:
 		s := msg.Format()
 		if s != "Value\tJid.1\t\"true\"\n" {
 			t.Errorf("%q", s)
@@ -55,11 +55,11 @@ func TestRequest_Checkbox(t *testing.T) {
 		t.Error("SetCount", ts.SetCount())
 	}
 
-	rq.inCh <- wsMsg{Data: "omg", Jid: 1, What: what.Input}
+	rq.InCh <- wsMsg{Data: "omg", Jid: 1, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq.OutCh:
 		s := msg.Format()
 		if s != "Alert\t\t\"danger\\nstrconv.ParseBool: parsing &#34;omg&#34;: invalid syntax\"\n" {
 			t.Errorf("wrong Alert: %q", s)
@@ -67,11 +67,11 @@ func TestRequest_Checkbox(t *testing.T) {
 	}
 
 	ts.err = errors.New("meh")
-	rq.inCh <- wsMsg{Data: "true", Jid: 1, What: what.Input}
+	rq.InCh <- wsMsg{Data: "true", Jid: 1, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq.OutCh:
 		s := msg.Format()
 		if s != "Alert\t\t\"danger\\nmeh\"\n" {
 			t.Errorf("wrong Alert: %q", s)

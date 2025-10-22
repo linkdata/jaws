@@ -3,6 +3,7 @@ package jawstree
 import (
 	"fmt"
 	"io"
+	"strconv"
 
 	"github.com/linkdata/jaws"
 )
@@ -36,4 +37,14 @@ func (t *Tree) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error
 		}
 	}
 	return
+}
+
+func (t *Tree) JawsUpdate(elem *jaws.Element) {
+	var b []byte
+	b = append(b, `{"tree":`...)
+	b = strconv.AppendQuote(b, t.id)
+	b = append(b, `,"data":`...)
+	b = t.JsVar.Ptr.marshalJSON(b)
+	b = append(b, `}`...)
+	elem.Jaws.JsCall(t.Tag, "jawstreeSet", string(b))
 }

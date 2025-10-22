@@ -10,7 +10,7 @@ import (
 func TestRequest_Range(t *testing.T) {
 	th := newTestHelper(t)
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	ts := newTestSetter(float64(1))
@@ -19,7 +19,7 @@ func TestRequest_Range(t *testing.T) {
 	if got := rq.BodyString(); got != want {
 		t.Errorf("Request.Range() = %q, want %q", got, want)
 	}
-	rq.inCh <- wsMsg{Data: "2.1", Jid: 1, What: what.Input}
+	rq.InCh <- wsMsg{Data: "2.1", Jid: 1, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
@@ -29,7 +29,7 @@ func TestRequest_Range(t *testing.T) {
 		t.Error(ts.Get())
 	}
 	select {
-	case s := <-rq.outCh:
+	case s := <-rq.OutCh:
 		t.Errorf("%q", s)
 	default:
 	}
@@ -38,7 +38,7 @@ func TestRequest_Range(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq.OutCh:
 		s := msg.Format()
 		if s != "Value\tJid.1\t\"2.3\"\n" {
 			t.Error(s)
@@ -52,11 +52,11 @@ func TestRequest_Range(t *testing.T) {
 	}
 
 	ts.err = errors.New("meh")
-	rq.inCh <- wsMsg{Data: "3.4", Jid: 1, What: what.Input}
+	rq.InCh <- wsMsg{Data: "3.4", Jid: 1, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq.OutCh:
 		s := msg.Format()
 		if s != "Alert\t\t\"danger\\nmeh\"\n" {
 			t.Errorf("wrong Alert: %q", s)

@@ -2,12 +2,11 @@ package jaws
 
 import (
 	"bytes"
-	"context"
 	"html/template"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
+	"testing"
 	"time"
 )
 
@@ -16,6 +15,8 @@ type testJaws struct {
 	testtmpl *template.Template
 	log      bytes.Buffer
 }
+
+// type testRequest = TestRequest
 
 func newTestJaws() (tj *testJaws) {
 	jw, err := New()
@@ -37,20 +38,22 @@ func newTestJaws() (tj *testJaws) {
 	return
 }
 
-type testRequest struct {
-	hr          *http.Request
+func (tj *testJaws) newRequest(hr *http.Request) (tr *TestRequest) {
+	return NewTestRequest(tj.Jaws, hr)
+}
+
+/*type testRequest struct {
 	rr          *httptest.ResponseRecorder
-	jw          *testJaws
-	readyCh     chan struct{}
-	doneCh      chan struct{}
-	inCh        chan wsMsg
-	outCh       chan wsMsg
-	bcastCh     chan Message
+	ReadyCh     chan struct{}
+	DoneCh      chan struct{}
+	InCh        chan wsMsg
+	OutCh       chan wsMsg
+	BcastCh     chan Message
 	ctx         context.Context
 	cancel      context.CancelFunc
-	expectPanic bool
-	panicked    bool
-	panicVal    any
+	ExpectPanic bool
+	Panicked    bool
+	PanicVal    any
 	*Request
 	RequestWriter
 }
@@ -73,14 +76,12 @@ func (tj *testJaws) newRequest(hr *http.Request) (tr *testRequest) {
 	}
 
 	tr = &testRequest{
-		hr:            hr,
 		rr:            rr,
-		jw:            tj,
-		readyCh:       make(chan struct{}),
-		doneCh:        make(chan struct{}),
-		inCh:          make(chan wsMsg),
-		outCh:         make(chan wsMsg, cap(bcastCh)),
-		bcastCh:       bcastCh,
+		ReadyCh:       make(chan struct{}),
+		DoneCh:        make(chan struct{}),
+		InCh:          make(chan wsMsg),
+		OutCh:         make(chan wsMsg, cap(bcastCh)),
+		BcastCh:       bcastCh,
 		ctx:           ctx,
 		cancel:        cancel,
 		Request:       rq,
@@ -89,16 +90,18 @@ func (tj *testJaws) newRequest(hr *http.Request) (tr *testRequest) {
 
 	go func() {
 		defer func() {
-			if tr.expectPanic {
-				if tr.panicVal = recover(); tr.panicVal != nil {
-					tr.panicked = true
+			if tr.ExpectPanic {
+				if tr.PanicVal = recover(); tr.PanicVal != nil {
+					tr.Panicked = true
 				}
+			} else {
+				close(tr.InCh)
 			}
-			close(tr.doneCh)
+			close(tr.DoneCh)
 		}()
-		close(tr.readyCh)
-		tr.process(tr.bcastCh, tr.inCh, tr.outCh) // usubs from bcase, closes outCh
-		tr.jw.recycle(tr.Request)
+		close(tr.ReadyCh)
+		tr.process(tr.BcastCh, tr.InCh, tr.OutCh) // usubs from bcase, closes outCh
+		tr.Jaws.recycle(tr.Request)
 	}()
 
 	return
@@ -114,21 +117,30 @@ func (tr *testRequest) BodyHTML() template.HTML {
 
 func (tr *testRequest) Close() {
 	tr.cancel()
-	tr.jw.Close()
+	tr.Jaws.Close()
 }
 
 func (tr *testRequest) Write(buf []byte) (int, error) {
 	return tr.rr.Write(buf)
 }
 
-func (tr *testRequest) getElementByJid(jid Jid) (e *Element) {
+func (tr *testRequest) GetElementByJid(jid Jid) (e *Element) {
 	tr.Request.mu.RLock()
+	defer tr.Request.mu.RUnlock()
 	e = tr.Request.getElementByJidLocked(jid)
-	tr.Request.mu.RUnlock()
 	return
 }
 
-func newTestRequest() (tr *testRequest) {
+func newTestRequest(t) (tr *testRequest) {
 	tj := newTestJaws()
-	return tj.newRequest(nil)
+	return tj.newRequest(httptest.NewRequest("GET", "/", nil))
+}*/
+
+func newTestRequest(t *testing.T) (tr *TestRequest) {
+	tj := newTestJaws()
+	if t != nil {
+		t.Helper()
+		t.Cleanup(tj.Close)
+	}
+	return NewTestRequest(tj.Jaws, httptest.NewRequest("GET", "/", nil))
 }

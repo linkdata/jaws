@@ -8,7 +8,7 @@ import (
 
 func TestHandler_ServeHTTP(t *testing.T) {
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	dot := Tag("123")

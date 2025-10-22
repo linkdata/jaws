@@ -72,9 +72,9 @@ type testPage struct {
 	TheDot       any
 }
 
-func newTestPage(tr *testRequest) *testPage {
+func newTestPage(tr *TestRequest) *testPage {
 	testDate, _ := time.Parse(ISO8601, "1901-02-03")
-	tr.jw.AddTemplateLookuper(template.Must(template.New("nested").Parse(testPageNestedTmplText)))
+	tr.Jaws.AddTemplateLookuper(template.Must(template.New("nested").Parse(testPageNestedTmplText)))
 	tmpl := template.Must(template.New("normal").Parse(testPageTmplText))
 
 	tp := &testPage{

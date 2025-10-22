@@ -58,7 +58,7 @@ func TestRequest_Container(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			nextJid = 0
-			rq := newTestRequest()
+			rq := newTestRequest(t)
 			defer rq.Close()
 			err := rq.Container("div", tt.args.c, tt.args.params...)
 			if err != nil {

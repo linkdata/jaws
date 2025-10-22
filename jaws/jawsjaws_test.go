@@ -178,6 +178,8 @@ func TestJaws_BroadcastFullClosesChannel(t *testing.T) {
 
 	go func() {
 		select {
+		case <-t.Context().Done():
+			close(failCh)
 		case <-th.C:
 			close(failCh)
 		case <-subCh2:
@@ -521,18 +523,20 @@ func TestJaws_GenerateHeadHTML(t *testing.T) {
 
 func TestJaws_TemplateLookuper(t *testing.T) {
 	th := newTestHelper(t)
-	rq := newTestRequest()
+	tj := newTestJaws()
+	defer tj.Close()
+	rq := NewTestRequest(tj.Jaws, httptest.NewRequest("GET", "/", nil))
 	defer rq.Close()
 	th.Equal(rq.Jaws.LookupTemplate("nosuchtemplate"), nil)
-	th.Equal(rq.Jaws.LookupTemplate("testtemplate"), rq.jw.testtmpl)
-	rq.Jaws.RemoveTemplateLookuper(rq.jw.testtmpl)
+	th.Equal(rq.Jaws.LookupTemplate("testtemplate"), tj.testtmpl)
+	rq.Jaws.RemoveTemplateLookuper(tj.testtmpl)
 	th.Equal(rq.Jaws.LookupTemplate("testtemplate"), nil)
 }
 
 func TestJaws_JsCall(t *testing.T) {
 	th := newTestHelper(t)
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	tss := &testUi{}
@@ -548,7 +552,7 @@ func TestJaws_JsCall(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq.OutCh:
 		got := msg.Format()
 		th.Equal(got, "Call\tJid.1\tsomefn=1.3\n")
 	}

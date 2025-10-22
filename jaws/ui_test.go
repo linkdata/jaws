@@ -37,7 +37,7 @@ func TestRequest_NewElement_DebugPanicsIfNotComparable(t *testing.T) {
 		}()
 
 		nextJid = 0
-		rq := newTestRequest()
+		rq := newTestRequest(t)
 		defer rq.Close()
 
 		rq.NewElement(notHashableUI)
@@ -51,7 +51,7 @@ func (testStringer) String() string { return "foo" }
 
 func TestRequest_JawsRender_DebugOutput(t *testing.T) {
 	is := newTestHelper(t)
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	rq.Jaws.Debug = true
@@ -72,7 +72,7 @@ func TestRequest_JawsRender_DebugOutput(t *testing.T) {
 
 func TestRequest_InsideTemplate(t *testing.T) {
 	var buf bytes.Buffer
-	tr := newTestRequest()
+	tr := newTestRequest(t)
 	defer tr.Close()
 	tp := newTestPage(tr)
 	err := tp.render(&buf)
@@ -85,7 +85,7 @@ func TestRequest_InsideTemplate(t *testing.T) {
 }
 
 func BenchmarkPageRender(b *testing.B) {
-	tr := newTestRequest()
+	tr := newTestRequest(nil)
 	defer tr.Close()
 
 	tp := newTestPage(tr)
@@ -97,7 +97,7 @@ func BenchmarkPageRender(b *testing.B) {
 }
 
 func BenchmarkPageUpdate(b *testing.B) {
-	tr := newTestRequest()
+	tr := newTestRequest(nil)
 	defer tr.Close()
 	tp := newTestPage(tr)
 	var buf bytes.Buffer

@@ -28,8 +28,9 @@ func TestTree(t *testing.T) {
 	err = jw.Setup(http.DefaultServeMux.Handle, "/", Setup)
 	maybeError(t, err)
 
-	rq := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
-	rq = rq.Jaws.UseRequest(rq.JawsKey, httptest.NewRequest("GET", "/", nil))
+	hr := httptest.NewRequest("GET", "/", nil)
+	rq := jw.NewRequest(hr)
+	rq = rq.Jaws.UseRequest(rq.JawsKey, hr)
 
 	root, err := os.OpenRoot(".")
 	maybeError(t, err)
@@ -79,4 +80,6 @@ func TestTree(t *testing.T) {
 	}
 
 	rootnode.JawsPathSet(elem, changed[0].ID+".selected", "false")
+
+	// tree.JawsUpdate(elem)
 }

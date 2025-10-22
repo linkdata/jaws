@@ -12,7 +12,7 @@ func TestNamedBool(t *testing.T) {
 	nba.Add("1", "one")
 	nb := nba.data[0]
 
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	e := rq.NewElement(NewUiCheckbox(nb))
 	defer rq.Close()
 

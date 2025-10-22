@@ -12,7 +12,7 @@ import (
 func TestRequest_Date(t *testing.T) {
 	th := newTestHelper(t)
 	nextJid = 0
-	rq := newTestRequest()
+	rq := newTestRequest(t)
 	defer rq.Close()
 
 	ts := newTestSetter(time.Now())
@@ -23,7 +23,7 @@ func TestRequest_Date(t *testing.T) {
 	}
 
 	val, _ := time.Parse(ISO8601, "1970-02-03")
-	rq.inCh <- wsMsg{Data: val.Format(ISO8601), Jid: 1, What: what.Input}
+	rq.InCh <- wsMsg{Data: val.Format(ISO8601), Jid: 1, What: what.Input}
 	tmr := time.NewTimer(testTimeout)
 	defer tmr.Stop()
 	select {
@@ -35,7 +35,7 @@ func TestRequest_Date(t *testing.T) {
 		t.Error(ts.Get(), "!=", val)
 	}
 	select {
-	case s := <-rq.outCh:
+	case s := <-rq.OutCh:
 		t.Errorf("%q", s)
 	default:
 	}
@@ -46,7 +46,7 @@ func TestRequest_Date(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq.OutCh:
 		s := msg.Format()
 		if s != fmt.Sprintf("Value\tJid.1\t\"%s\"\n", val.Format(ISO8601)) {
 			t.Error("wrong Value")
@@ -59,11 +59,11 @@ func TestRequest_Date(t *testing.T) {
 		t.Error("SetCount", ts.SetCount())
 	}
 
-	rq.inCh <- wsMsg{Data: "omg", Jid: 1, What: what.Input}
+	rq.InCh <- wsMsg{Data: "omg", Jid: 1, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq.OutCh:
 		s := msg.Format()
 		if s != "Alert\t\t\"danger\\nparsing time &#34;omg&#34; as &#34;2006-01-02&#34;: cannot parse &#34;omg&#34; as &#34;2006&#34;\"\n" {
 			t.Errorf("wrong Alert: %q", s)
@@ -71,11 +71,11 @@ func TestRequest_Date(t *testing.T) {
 	}
 
 	ts.err = errors.New("meh")
-	rq.inCh <- wsMsg{Data: val.Format(ISO8601), Jid: 1, What: what.Input}
+	rq.InCh <- wsMsg{Data: val.Format(ISO8601), Jid: 1, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
-	case msg := <-rq.outCh:
+	case msg := <-rq.OutCh:
 		s := msg.Format()
 		if s != "Alert\t\t\"danger\\nmeh\"\n" {
 			t.Errorf("wrong Alert: %q", s)
