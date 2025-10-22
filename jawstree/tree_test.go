@@ -86,6 +86,9 @@ func TestTree(t *testing.T) {
 			t.Log(msg.Data)
 			t.Error("msg data did not contain our JSON")
 		}
+		if !strings.Contains(msg.Data, `"selectable":false`) {
+			t.Error("msg data did not contain selectable:false")
+		}
 	}
 
 	rootnode.JawsPathSet(elem, changed[0].ID+".selected", "false")
