@@ -24,7 +24,8 @@ func TestTree(t *testing.T) {
 	maybeError(t, err)
 	defer jw.Close()
 
-	err = jw.Setup(http.DefaultServeMux.Handle, "/", Setup)
+	mux := http.NewServeMux()
+	err = jw.Setup(mux.Handle, "/", Setup)
 	maybeError(t, err)
 
 	go jw.Serve()
