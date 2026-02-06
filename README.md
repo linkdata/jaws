@@ -1,5 +1,5 @@
 [![build](https://github.com/linkdata/jaws/actions/workflows/build.yml/badge.svg)](https://github.com/linkdata/jaws/actions/workflows/build.yml)
-[![coverage](https://github.com/linkdata/jaws/blob/coverage/main/badge.svg)](https://htmlpreview.github.io/?https://github.com/linkdata/jaws/blob/coverage/main/report.html)
+[![coverage](https://github.com/linkdata/jaws/blob/coverage/main/badge.svg)](https://html-preview.github.io/?url=https://github.com/linkdata/jaws/blob/coverage/main/report.html)
 [![goreport](https://goreportcard.com/badge/github.com/linkdata/jaws)](https://goreportcard.com/report/github.com/linkdata/jaws)
 [![Docs](https://godoc.org/github.com/linkdata/jaws?status.svg)](https://godoc.org/github.com/linkdata/jaws)
 
