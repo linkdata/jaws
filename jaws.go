@@ -1,9 +1,6 @@
 package jaws
 
 import (
-	"html/template"
-	"io"
-	"net/http"
 	"sync"
 	"time"
 
@@ -13,6 +10,9 @@ import (
 
 // The point of this is to not have a zillion files in the repository root
 // while keeping the import path unchanged.
+//
+// Most exports use direct assignment to avoid wrapper overhead.
+// Generic functions must be wrapped since they cannot be assigned without instantiation.
 
 type (
 	Jid                  = jid.Jid
@@ -71,92 +71,26 @@ const (
 	ISO8601 = pkg.ISO8601
 )
 
-// New returns a new JaWS object.
-// This is expected to be created once per HTTP server and handles
-// publishing HTML changes across all connections.
-func New() (jw *Jaws, err error) {
-	return pkg.New()
-}
+// Non-generic function assignments (no wrapper overhead)
+var (
+	New               = pkg.New
+	JawsKeyString     = pkg.JawsKeyString
+	WriteHTMLTag      = pkg.WriteHTMLTag
+	NewTemplate       = pkg.NewTemplate
+	HTMLGetterFunc    = pkg.HTMLGetterFunc
+	StringGetterFunc  = pkg.StringGetterFunc
+	MakeHTMLGetter    = pkg.MakeHTMLGetter
+	NewNamedBool      = pkg.NewNamedBool
+	NewNamedBoolArray = pkg.NewNamedBoolArray
+)
 
-// JawsKeyString returns the string to be used for the given JaWS key.
-func JawsKeyString(jawsKey uint64) string {
-	return pkg.JawsKeyString(jawsKey)
-}
-
-func WriteHTMLTag(w io.Writer, jid jid.Jid, htmlTag string, typeAttr string, valueAttr string, attrs []template.HTMLAttr) (err error) {
-	return pkg.WriteHTMLTag(w, jid, htmlTag, typeAttr, valueAttr, attrs)
-}
-
-// Bind returns a Binder[T] with the given sync.Locker (or RWLocker) and a pointer to the underlying value of type T.
-//
-// The pointer will be used as the UI tag.
+// Generic functions must be wrapped
 func Bind[T comparable](l sync.Locker, p *T) Binder[T] {
 	return pkg.Bind(l, p)
 }
 
-// NewJsVar creates a binding with a Locker (or RWLocker) and
-// pointer to underlying data.
-//
-// JsVar's use JawsRender, and that rendering will contain the
-// JSON representation of the underlying data unless it is the
-// zero value. If so, it will be used to initialize the named
-// Javascript variable before "DOMContentLoaded" fires.
-// Note that we don't render the Javascript variable declaration,
-// you'll have to do that yourself.
-//
-// JsVar's do *NOT* use JawsUpdate, so changing the underlying data and
-// calling JawsUpdate will have no effect. Instead, JsVar's are
-// synchronized across browsers using immediate broadcasts.
-//
-// Changes to JsVar's should be made using their [JawsSet] or
-// [JawsSetPath] methods. If *T implements [PathSetter],
-// that will be used instead of jq.Set().
 func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 	return pkg.NewJsVar(l, v)
-}
-
-// NewTemplate simply returns a Template{} with the members set.
-//
-// Provided as convenience so as to not have to name the structure members.
-func NewTemplate(name string, dot any) Template {
-	return pkg.NewTemplate(name, dot)
-}
-
-// HTMLGetterFunc wraps a function and returns a HTMLGetter.
-func HTMLGetterFunc(fn func(elem *Element) (tmpl template.HTML), tags ...any) HTMLGetter {
-	return pkg.HTMLGetterFunc(fn)
-}
-
-// StringGetterFunc wraps a function and returns a Getter[string]
-func StringGetterFunc(fn func(elem *Element) (s string), tags ...any) Getter[string] {
-	return pkg.StringGetterFunc(fn)
-}
-
-// MakeHTMLGetter returns a HTMLGetter for v.
-//
-// Depending on the type of v, we return:
-//
-//   - jaws.HTMLGetter: `JawsGetHTML(e *Element) template.HTML` to be used as-is.
-//   - jaws.Getter[string]: `JawsGet(elem *Element) string` that will be escaped using `html.EscapeString`.
-//   - jaws.AnyGetter: `JawsGetAny(elem *Element) any` that will be rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
-//   - fmt.Stringer: `String() string` that will be escaped using `html.EscapeString`.
-//   - a static `template.HTML` or `string` to be used as-is with no HTML escaping.
-//   - everything else is rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
-func MakeHTMLGetter(v any) HTMLGetter {
-	return pkg.MakeHTMLGetter(v)
-}
-
-func NewNamedBool(nba *NamedBoolArray, name string, html template.HTML, checked bool) *NamedBool {
-	return pkg.NewNamedBool(nba, name, html, checked)
-}
-
-// NewNamedBoolArray creates a new object to track a related set of named booleans.
-//
-// The JaWS ID string 'jid' is used as the ID for <select> elements and the
-// value for the 'name' attribute for radio buttons. If left empty, MakeID() will
-// be used to assign a unique ID.
-func NewNamedBoolArray() *NamedBoolArray {
-	return pkg.NewNamedBoolArray()
 }
 
 type (
@@ -181,64 +115,51 @@ type (
 	UiTr        = pkg.UiTr
 )
 
-func NewUiA(innerHTML HTMLGetter) *UiA {
-	return pkg.NewUiA(innerHTML)
-}
-func NewUiButton(innerHTML HTMLGetter) *UiButton {
-	return pkg.NewUiButton(innerHTML)
-}
+// UI constructor assignments (generic types require wrappers, others are direct)
+var (
+	NewUiA         = pkg.NewUiA
+	NewUiButton    = pkg.NewUiButton
+	NewUiContainer = pkg.NewUiContainer
+	NewUiDiv       = pkg.NewUiDiv
+	NewUiLabel     = pkg.NewUiLabel
+	NewUiLi        = pkg.NewUiLi
+	NewUiSelect    = pkg.NewUiSelect
+	NewUiSpan      = pkg.NewUiSpan
+	NewUiTbody     = pkg.NewUiTbody
+	NewUiTd        = pkg.NewUiTd
+	NewUiTr        = pkg.NewUiTr
+	NewTestRequest = pkg.NewTestRequest
+)
+
+// UI constructors with generic parameters must be wrapped
 func NewUiCheckbox(g Setter[bool]) *UiCheckbox {
 	return pkg.NewUiCheckbox(g)
 }
-func NewUiContainer(outerHTMLTag string, c Container) *UiContainer {
-	return pkg.NewUiContainer(outerHTMLTag, c)
-}
+
 func NewUiDate(g Setter[time.Time]) *UiDate {
 	return pkg.NewUiDate(g)
 }
-func NewUiDiv(innerHTML HTMLGetter) *UiDiv {
-	return pkg.NewUiDiv(innerHTML)
-}
+
 func NewUiImg(g Getter[string]) *UiImg {
 	return pkg.NewUiImg(g)
 }
-func NewUiLabel(innerHTML HTMLGetter) *UiLabel {
-	return pkg.NewUiLabel(innerHTML)
-}
-func NewUiLi(innerHTML HTMLGetter) *UiLi {
-	return pkg.NewUiLi(innerHTML)
-}
+
 func NewUiNumber(g Setter[float64]) *UiNumber {
 	return pkg.NewUiNumber(g)
 }
+
 func NewUiPassword(g Setter[string]) *UiPassword {
 	return pkg.NewUiPassword(g)
 }
+
 func NewUiRadio(vp Setter[bool]) *UiRadio {
 	return pkg.NewUiRadio(vp)
 }
+
 func NewUiRange(g Setter[float64]) *UiRange {
 	return pkg.NewUiRange(g)
 }
-func NewUiSelect(sh SelectHandler) *UiSelect {
-	return pkg.NewUiSelect(sh)
-}
-func NewUiSpan(innerHTML HTMLGetter) *UiSpan {
-	return pkg.NewUiSpan(innerHTML)
-}
-func NewUiTbody(c Container) *UiTbody {
-	return pkg.NewUiTbody(c)
-}
-func NewUiTd(innerHTML HTMLGetter) *UiTd {
-	return pkg.NewUiTd(innerHTML)
-}
+
 func NewUiText(vp Setter[string]) *UiText {
 	return pkg.NewUiText(vp)
-}
-func NewUiTr(innerHTML HTMLGetter) *UiTr {
-	return pkg.NewUiTr(innerHTML)
-}
-
-func NewTestRequest(jw *Jaws, hr *http.Request) (tr *TestRequest) {
-	return pkg.NewTestRequest(jw, hr)
 }
