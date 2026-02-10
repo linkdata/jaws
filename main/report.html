@@ -5585,14 +5585,18 @@ func (ui *uiWrapContainer) renderContainer(e *Element, w io.Writer, outerhtmltag
                 <span class="cov8" title="1">b = append(b, '&gt;')
                 _, err = w.Write(b)
                 if err == nil </span><span class="cov8" title="1">{
+                        var contents []*Element
                         for _, cui := range ui.Container.JawsContains(e) </span><span class="cov8" title="1">{
-                                if err == nil </span><span class="cov8" title="1">{
-                                        elem := e.Request.NewElement(cui)
-                                        ui.contents = append(ui.contents, elem)
-                                        err = elem.JawsRender(w, nil)
-                                }</span>
+                                elem := e.Request.NewElement(cui)
+                                if err = elem.JawsRender(w, nil); err != nil </span><span class="cov8" title="1">{
+                                        break</span>
+                                }
+                                <span class="cov8" title="1">contents = append(contents, elem)</span>
                         }
-                        <span class="cov8" title="1">b = b[:0]
+                        <span class="cov8" title="1">ui.mu.Lock()
+                        ui.contents = contents
+                        ui.mu.Unlock()
+                        b = b[:0]
                         b = append(b, "&lt;/"...)
                         b = append(b, outerhtmltag...)
                         b = append(b, '&gt;')
