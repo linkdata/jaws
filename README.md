@@ -58,6 +58,70 @@ This maps legacy names to the new package naming:
 * `jaws.UiSpan` -> `ui.Span`
 * `jaws.NewUiSpan(...)` -> `ui.NewSpan(...)`
 
+### Migration regex cookbook
+
+These regexes are intended for project-wide find/replace in editors that support
+capture groups.
+
+1. Import path move (`jaws/jaws` -> `jaws/core`)
+
+   Find:
+
+   ```regex
+   "github\.com/linkdata/jaws/jaws"
+   ```
+
+   Replace:
+
+   ```text
+   "github.com/linkdata/jaws/core"
+   ```
+
+2. Legacy widget constructor calls (`jaws.NewUiX(...)` -> `ui.NewX(...)`)
+
+   Find:
+
+   ```regex
+   \bjaws\.NewUi([A-Z][A-Za-z0-9_]*)\(
+   ```
+
+   Replace:
+
+   ```text
+   ui.New$1(
+   ```
+
+3. Legacy widget type names (`jaws.UiX` -> `ui.X`)
+
+   Find:
+
+   ```regex
+   \bjaws\.Ui([A-Z][A-Za-z0-9_]*)\b
+   ```
+
+   Replace:
+
+   ```text
+   ui.$1
+   ```
+
+4. Optional alias cleanup for migrated imports (`pkg`/`jaws` alias -> no alias)
+
+   Find:
+
+   ```regex
+   ^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s+"github\.com/linkdata/jaws/core"\s*$
+   ```
+
+   Replace:
+
+   ```text
+   "github.com/linkdata/jaws/core"
+   ```
+
+After applying regex replacements, run `go test ./...` and fix any import/grouping
+formatting with `gofmt -w`.
+
 For widget authoring guidance see `ui/README.md`.
 
 ### RequestWriter widget calls

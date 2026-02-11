@@ -24,6 +24,66 @@ Examples:
 - `jaws.UiSelect` -> `ui.Select`
 - `jaws.NewUiSelect(...)` -> `ui.NewSelect(...)`
 
+### Regex find/replace
+
+Use these for bulk migration in editors with regex capture-group support:
+
+1. `jaws.UiX` -> `ui.X`
+
+   Find:
+
+   ```regex
+   \bjaws\.Ui([A-Z][A-Za-z0-9_]*)\b
+   ```
+
+   Replace:
+
+   ```text
+   ui.$1
+   ```
+
+2. `jaws.NewUiX(...)` -> `ui.NewX(...)`
+
+   Find:
+
+   ```regex
+   \bjaws\.NewUi([A-Z][A-Za-z0-9_]*)\(
+   ```
+
+   Replace:
+
+   ```text
+   ui.New$1(
+   ```
+
+3. Internal core package import path (`jaws/jaws` -> `jaws/core`)
+
+   Find:
+
+   ```regex
+   "github\.com/linkdata/jaws/jaws"
+   ```
+
+   Replace:
+
+   ```text
+   "github.com/linkdata/jaws/core"
+   ```
+
+4. Optional alias cleanup for core imports
+
+   Find:
+
+   ```regex
+   ^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s+"github\.com/linkdata/jaws/core"\s*$
+   ```
+
+   Replace:
+
+   ```text
+   "github.com/linkdata/jaws/core"
+   ```
+
 ### RequestWriter helper calls
 
 `jaws.RequestWriter` still exposes helper methods like `rw.Span(...)`,
