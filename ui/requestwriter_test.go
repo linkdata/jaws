@@ -10,20 +10,20 @@ import (
 	"testing"
 	"time"
 
-	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 )
 
 type testRWUpdater struct {
 	called int
 }
 
-func (u *testRWUpdater) JawsUpdate(*pkg.Element) {
+func (u *testRWUpdater) JawsUpdate(*core.Element) {
 	u.called++
 }
 
-func newSessionBoundRequest(t *testing.T) (*pkg.Jaws, *pkg.Request) {
+func newSessionBoundRequest(t *testing.T) (*core.Jaws, *core.Request) {
 	t.Helper()
-	jw, err := pkg.New()
+	jw, err := core.New()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,10 +78,10 @@ func TestRequestWriter_MethodsAndWidgetHelpers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tc := &testContainer{contents: []pkg.UI{NewSpan(testHTMLGetter("in"))}}
+	tc := &testContainer{contents: []core.UI{NewSpan(testHTMLGetter("in"))}}
 	date := time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)
 	sh := &testSelectHandler{
-		testContainer: &testContainer{contents: []pkg.UI{NewOption(pkg.NewNamedBool(nil, "x", "X", true))}},
+		testContainer: &testContainer{contents: []core.UI{NewOption(core.NewNamedBool(nil, "x", "X", true))}},
 		testSetter:    newTestSetter("x"),
 	}
 

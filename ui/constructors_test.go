@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 )
 
 func TestConstructors(t *testing.T) {
@@ -16,17 +16,17 @@ func TestConstructors(t *testing.T) {
 	num := 0.0
 	when := time.Now()
 
-	textSetter := pkg.Bind(&mu, &txt)
-	boolSetter := pkg.Bind(&mu, &checked)
-	numSetter := pkg.Bind(&mu, &num)
-	timeSetter := pkg.Bind(&mu, &when)
+	textSetter := core.Bind(&mu, &txt)
+	boolSetter := core.Bind(&mu, &checked)
+	numSetter := core.Bind(&mu, &num)
+	timeSetter := core.Bind(&mu, &when)
 
-	htmlGetter := pkg.MakeHTMLGetter("x")
-	imgGetter := pkg.StringGetterFunc(func(*pkg.Element) string { return "img" })
-	nba := pkg.NewNamedBoolArray().Add("a", template.HTML("A"))
-	tc := testContainer{contents: []pkg.UI{NewSpan(htmlGetter)}}
+	htmlGetter := core.MakeHTMLGetter("x")
+	imgGetter := core.StringGetterFunc(func(*core.Element) string { return "img" })
+	nba := core.NewNamedBoolArray().Add("a", template.HTML("A"))
+	tc := testContainer{contents: []core.UI{NewSpan(htmlGetter)}}
 
-	all := []pkg.UI{
+	all := []core.UI{
 		NewA(htmlGetter),
 		NewButton(htmlGetter),
 		NewCheckbox(boolSetter),

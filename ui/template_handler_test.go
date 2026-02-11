@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/deadlock"
-	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -28,11 +28,11 @@ type templateDot struct {
 	events  int
 }
 
-func (d *templateDot) JawsUpdate(*pkg.Element) {
+func (d *templateDot) JawsUpdate(*core.Element) {
 	d.updated++
 }
 
-func (d *templateDot) JawsEvent(*pkg.Element, what.What, string) error {
+func (d *templateDot) JawsEvent(*core.Element, what.What, string) error {
 	d.events++
 	return nil
 }
@@ -47,7 +47,7 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 	jw, rq := newRequest(t)
 	log := &templateLogger{}
 	jw.Logger = log
-	jw.MakeAuth = func(*pkg.Request) pkg.Auth { return templateAuth{} }
+	jw.MakeAuth = func(*core.Request) core.Auth { return templateAuth{} }
 
 	jw.AddTemplateLookuper(template.Must(template.New("uitempl").Parse(
 		`{{with $.Dot}}<div id="{{$.Jid}}" {{$.Attrs}} data-auth="{{$.Auth.Email}}">{{.}}</div>{{end}}`,
@@ -57,7 +57,7 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 	var sb bytes.Buffer
 	rw := RequestWriter{Request: rq, Writer: &sb}
 
-	if err := rw.Template("uitempl", pkg.Tag("dot"), "hidden"); err != nil {
+	if err := rw.Template("uitempl", core.Tag("dot"), "hidden"); err != nil {
 		t.Fatal(err)
 	}
 	got := sb.String()
@@ -85,7 +85,7 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 		t.Fatalf("expected event call count 1, got %d", td.events)
 	}
 
-	if err := rw.Template("warn", pkg.Tag("x")); err != nil {
+	if err := rw.Template("warn", core.Tag("x")); err != nil {
 		t.Fatal(err)
 	}
 	if deadlock.Debug && log.warns == 0 {
@@ -121,14 +121,14 @@ func TestTemplate_findJidOrJsOrHTMLNode(t *testing.T) {
 }
 
 func TestHandler_NewHandlerServeHTTP(t *testing.T) {
-	jw, err := pkg.New()
+	jw, err := core.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer jw.Close()
 	jw.AddTemplateLookuper(template.Must(template.New("handler").Parse(`{{with $.Dot}}<div id="{{$.Jid}}">{{.}}</div>{{end}}`)))
 
-	h := NewHandler(jw, "handler", pkg.Tag("ok"))
+	h := NewHandler(jw, "handler", core.Tag("ok"))
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	h.ServeHTTP(rr, req)

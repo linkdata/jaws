@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 )
 
 // WrapContainer is a helper for widgets that render dynamic child collections.
@@ -15,17 +15,17 @@ import (
 // It tracks previously rendered child elements and performs append/remove/order
 // updates during JawsUpdate.
 type WrapContainer struct {
-	Container pkg.Container
+	Container core.Container
 	Tag       any
 	mu        sync.Mutex
-	contents  []*pkg.Element
+	contents  []*core.Element
 }
 
-func NewWrapContainer(c pkg.Container) WrapContainer {
+func NewWrapContainer(c core.Container) WrapContainer {
 	return WrapContainer{Container: c}
 }
 
-func (ui *WrapContainer) RenderContainer(e *pkg.Element, w io.Writer, outerHTMLTag string, params []any) (err error) {
+func (ui *WrapContainer) RenderContainer(e *core.Element, w io.Writer, outerHTMLTag string, params []any) (err error) {
 	if ui.Tag, err = e.ApplyGetter(ui.Container); err == nil {
 		attrs := e.ApplyParams(params)
 		b := e.Jid().AppendStartTagAttr(nil, outerHTMLTag)
@@ -36,7 +36,7 @@ func (ui *WrapContainer) RenderContainer(e *pkg.Element, w io.Writer, outerHTMLT
 		b = append(b, '>')
 		_, err = w.Write(b)
 		if err == nil {
-			var contents []*pkg.Element
+			var contents []*core.Element
 			for _, childUI := range ui.Container.JawsContains(e) {
 				elem := e.Request.NewElement(childUI)
 				if err = elem.JawsRender(w, nil); err != nil {
@@ -59,19 +59,19 @@ func (ui *WrapContainer) RenderContainer(e *pkg.Element, w io.Writer, outerHTMLT
 	return
 }
 
-func (ui *WrapContainer) UpdateContainer(e *pkg.Element) {
-	var toRemove, toAppend []*pkg.Element
-	var orderData []pkg.Jid
+func (ui *WrapContainer) UpdateContainer(e *core.Element) {
+	var toRemove, toAppend []*core.Element
+	var orderData []core.Jid
 
-	oldMap := make(map[pkg.UI]*pkg.Element)
-	newMap := make(map[pkg.UI]struct{})
+	oldMap := make(map[core.UI]*core.Element)
+	newMap := make(map[core.UI]struct{})
 	newContents := ui.Container.JawsContains(e)
 	for _, childUI := range newContents {
 		newMap[childUI] = struct{}{}
 	}
 
 	ui.mu.Lock()
-	oldOrder := make([]pkg.Jid, len(ui.contents))
+	oldOrder := make([]core.Jid, len(ui.contents))
 	for i, elem := range ui.contents {
 		oldOrder[i] = elem.Jid()
 		oldMap[elem.Ui()] = elem

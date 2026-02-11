@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/ui"
 )
@@ -17,78 +17,78 @@ import (
 
 type (
 	Jid                  = jid.Jid
-	Jaws                 = pkg.Jaws
-	Request              = pkg.Request
-	Element              = pkg.Element
-	UI                   = pkg.UI
-	Updater              = pkg.Updater
-	Renderer             = pkg.Renderer
-	TemplateLookuper     = pkg.TemplateLookuper
-	HandleFunc           = pkg.HandleFunc
+	Jaws                 = core.Jaws
+	Request              = core.Request
+	Element              = core.Element
+	UI                   = core.UI
+	Updater              = core.Updater
+	Renderer             = core.Renderer
+	TemplateLookuper     = core.TemplateLookuper
+	HandleFunc           = core.HandleFunc
 	PathSetter           = ui.PathSetter
 	SetPather            = ui.SetPather
-	Formatter            = pkg.Formatter
-	Auth                 = pkg.Auth
-	InitHandler          = pkg.InitHandler
-	ClickHandler         = pkg.ClickHandler
-	EventHandler         = pkg.EventHandler
-	SelectHandler        = pkg.SelectHandler
-	Container            = pkg.Container
-	Getter[T comparable] = pkg.Getter[T]
-	Setter[T comparable] = pkg.Setter[T]
-	Binder[T comparable] = pkg.Binder[T]
-	HTMLGetter           = pkg.HTMLGetter
+	Formatter            = core.Formatter
+	Auth                 = core.Auth
+	InitHandler          = core.InitHandler
+	ClickHandler         = core.ClickHandler
+	EventHandler         = core.EventHandler
+	SelectHandler        = core.SelectHandler
+	Container            = core.Container
+	Getter[T comparable] = core.Getter[T]
+	Setter[T comparable] = core.Setter[T]
+	Binder[T comparable] = core.Binder[T]
+	HTMLGetter           = core.HTMLGetter
 	JsVar[T any]         = ui.JsVar[T]
 	IsJsVar              = ui.IsJsVar
 	JsVarMaker           = ui.JsVarMaker
-	Logger               = pkg.Logger
-	RWLocker             = pkg.RWLocker
-	TagGetter            = pkg.TagGetter
-	NamedBool            = pkg.NamedBool
-	NamedBoolArray       = pkg.NamedBoolArray
+	Logger               = core.Logger
+	RWLocker             = core.RWLocker
+	TagGetter            = core.TagGetter
+	NamedBool            = core.NamedBool
+	NamedBoolArray       = core.NamedBoolArray
 	Template             = ui.Template
 	RequestWriter        = ui.RequestWriter
 	With                 = ui.With
-	Session              = pkg.Session
-	Tag                  = pkg.Tag
-	TestRequest          = pkg.TestRequest
+	Session              = core.Session
+	Tag                  = core.Tag
+	TestRequest          = core.TestRequest
 )
 
 var (
-	ErrEventUnhandled        = pkg.ErrEventUnhandled
-	ErrIllegalTagType        = pkg.ErrIllegalTagType // ErrIllegalTagType is returned when a UI tag type is disallowed
+	ErrEventUnhandled        = core.ErrEventUnhandled
+	ErrIllegalTagType        = core.ErrIllegalTagType // ErrIllegalTagType is returned when a UI tag type is disallowed
 	ErrMissingTemplate       = ui.ErrMissingTemplate
-	ErrNotComparable         = pkg.ErrNotComparable
-	ErrNoWebSocketRequest    = pkg.ErrNoWebSocketRequest
-	ErrPendingCancelled      = pkg.ErrPendingCancelled
-	ErrValueUnchanged        = pkg.ErrValueUnchanged
-	ErrValueNotSettable      = pkg.ErrValueNotSettable
-	ErrRequestAlreadyClaimed = pkg.ErrRequestAlreadyClaimed
-	ErrJavascriptDisabled    = pkg.ErrJavascriptDisabled
-	ErrTooManyTags           = pkg.ErrTooManyTags
+	ErrNotComparable         = core.ErrNotComparable
+	ErrNoWebSocketRequest    = core.ErrNoWebSocketRequest
+	ErrPendingCancelled      = core.ErrPendingCancelled
+	ErrValueUnchanged        = core.ErrValueUnchanged
+	ErrValueNotSettable      = core.ErrValueNotSettable
+	ErrRequestAlreadyClaimed = core.ErrRequestAlreadyClaimed
+	ErrJavascriptDisabled    = core.ErrJavascriptDisabled
+	ErrTooManyTags           = core.ErrTooManyTags
 )
 
 const (
-	ISO8601 = pkg.ISO8601
+	ISO8601 = core.ISO8601
 )
 
 // Non-generic function assignments (no wrapper overhead)
 var (
-	New               = pkg.New
-	JawsKeyString     = pkg.JawsKeyString
-	WriteHTMLTag      = pkg.WriteHTMLTag
+	New               = core.New
+	JawsKeyString     = core.JawsKeyString
+	WriteHTMLTag      = core.WriteHTMLTag
 	NewTemplate       = ui.NewTemplate
-	HTMLGetterFunc    = pkg.HTMLGetterFunc
-	StringGetterFunc  = pkg.StringGetterFunc
-	MakeHTMLGetter    = pkg.MakeHTMLGetter
-	NewNamedBool      = pkg.NewNamedBool
-	NewNamedBoolArray = pkg.NewNamedBoolArray
-	NewTestRequest    = pkg.NewTestRequest
+	HTMLGetterFunc    = core.HTMLGetterFunc
+	StringGetterFunc  = core.StringGetterFunc
+	MakeHTMLGetter    = core.MakeHTMLGetter
+	NewNamedBool      = core.NewNamedBool
+	NewNamedBoolArray = core.NewNamedBoolArray
+	NewTestRequest    = core.NewTestRequest
 )
 
 // Generic functions must be wrapped
 func Bind[T comparable](l sync.Locker, p *T) Binder[T] {
-	return pkg.Bind(l, p)
+	return core.Bind(l, p)
 }
 
 func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {

@@ -3,21 +3,21 @@ package ui
 import (
 	"io"
 
-	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 )
 
 type Tbody struct {
 	WrapContainer
 }
 
-func NewTbody(c pkg.Container) *Tbody {
+func NewTbody(c core.Container) *Tbody {
 	return &Tbody{WrapContainer: NewWrapContainer(c)}
 }
 
-func (ui *Tbody) JawsRender(e *pkg.Element, w io.Writer, params []any) error {
+func (ui *Tbody) JawsRender(e *core.Element, w io.Writer, params []any) error {
 	return ui.RenderContainer(e, w, "tbody", params)
 }
 
-func (ui *Tbody) JawsUpdate(e *pkg.Element) {
+func (ui *Tbody) JawsUpdate(e *core.Element) {
 	ui.UpdateContainer(e)
 }

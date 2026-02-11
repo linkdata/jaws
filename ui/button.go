@@ -3,12 +3,12 @@ package ui
 import (
 	"io"
 
-	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 )
 
 type Button struct{ HTMLInner }
 
-func NewButton(innerHTML pkg.HTMLGetter) *Button { return &Button{HTMLInner{HTMLGetter: innerHTML}} }
-func (ui *Button) JawsRender(e *pkg.Element, w io.Writer, params []any) error {
+func NewButton(innerHTML core.HTMLGetter) *Button { return &Button{HTMLInner{HTMLGetter: innerHTML}} }
+func (ui *Button) JawsRender(e *core.Element, w io.Writer, params []any) error {
 	return ui.renderInner(e, w, "button", "button", params)
 }

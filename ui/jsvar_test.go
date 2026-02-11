@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -24,23 +24,23 @@ type jsVarPathHooks struct {
 	pathSetCall int
 }
 
-func (d *jsVarPathHooks) JawsSetPath(_ *pkg.Element, _ string, v any) error {
+func (d *jsVarPathHooks) JawsSetPath(_ *core.Element, _ string, v any) error {
 	s := fmt.Sprint(v)
 	if d.Value == s {
-		return pkg.ErrValueUnchanged
+		return core.ErrValueUnchanged
 	}
 	d.Value = s
 	d.setCalls++
 	return nil
 }
 
-func (d *jsVarPathHooks) JawsPathSet(*pkg.Element, string, any) {
+func (d *jsVarPathHooks) JawsPathSet(*core.Element, string, any) {
 	d.pathSetCall++
 }
 
 type testJsVarMaker struct{}
 
-func (testJsVarMaker) JawsMakeJsVar(*pkg.Request) (IsJsVar, error) {
+func (testJsVarMaker) JawsMakeJsVar(*core.Request) (IsJsVar, error) {
 	var mu sync.Mutex
 	v := jsVarData{Text: "maker", Num: 1}
 	return NewJsVar(&mu, &v), nil
@@ -48,7 +48,7 @@ func (testJsVarMaker) JawsMakeJsVar(*pkg.Request) (IsJsVar, error) {
 
 type errorJsVarMaker struct{}
 
-func (errorJsVarMaker) JawsMakeJsVar(*pkg.Request) (IsJsVar, error) {
+func (errorJsVarMaker) JawsMakeJsVar(*core.Request) (IsJsVar, error) {
 	return nil, errors.New("maker error")
 }
 
@@ -87,7 +87,7 @@ func TestJsVar_RenderSetAndEvent(t *testing.T) {
 	if err := jsv.JawsSetPath(elem, "text", "new"); err != nil {
 		t.Fatal(err)
 	}
-	if err := jsv.JawsSetPath(elem, "text", "new"); !errors.Is(err, pkg.ErrValueUnchanged) {
+	if err := jsv.JawsSetPath(elem, "text", "new"); !errors.Is(err, core.ErrValueUnchanged) {
 		t.Fatalf("expected ErrValueUnchanged, got %v", err)
 	}
 	if err := jsv.JawsSet(elem, jsVarData{Text: "obj", Num: 2}); err != nil {
@@ -106,14 +106,14 @@ func TestJsVar_RenderSetAndEvent(t *testing.T) {
 	if err := jsv.JawsEvent(elem, what.Set, `text=`); err == nil {
 		t.Fatal("expected unmarshal error")
 	}
-	if err := jsv.JawsEvent(elem, what.Set, `badpayload`); !errors.Is(err, pkg.ErrEventUnhandled) {
+	if err := jsv.JawsEvent(elem, what.Set, `badpayload`); !errors.Is(err, core.ErrEventUnhandled) {
 		t.Fatalf("expected ErrEventUnhandled, got %v", err)
 	}
-	if err := jsv.JawsEvent(elem, what.Click, `text="x"`); !errors.Is(err, pkg.ErrEventUnhandled) {
+	if err := jsv.JawsEvent(elem, what.Click, `text="x"`); !errors.Is(err, core.ErrEventUnhandled) {
 		t.Fatalf("expected ErrEventUnhandled, got %v", err)
 	}
 
-	if err := elideErrValueUnchanged(pkg.ErrValueUnchanged); err != nil {
+	if err := elideErrValueUnchanged(core.ErrValueUnchanged); err != nil {
 		t.Fatalf("expected nil, got %v", err)
 	}
 	other := errors.New("other")
@@ -147,7 +147,7 @@ func TestJsVar_PathHooksAndRequestWriter(t *testing.T) {
 	if v.pathSetCall == 0 {
 		t.Fatalf("expected JawsPathSet callback, got %#v", v)
 	}
-	if err := jsv.JawsSetPath(elem, "value", "c"); !errors.Is(err, pkg.ErrValueUnchanged) {
+	if err := jsv.JawsSetPath(elem, "value", "c"); !errors.Is(err, core.ErrValueUnchanged) {
 		t.Fatalf("expected ErrValueUnchanged, got %v", err)
 	}
 

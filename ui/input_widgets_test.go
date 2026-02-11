@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -23,7 +23,7 @@ func TestInputTextWidgets(t *testing.T) {
 	if ss.Get() != "bar" {
 		t.Fatalf("want bar got %q", ss.Get())
 	}
-	if err := text.JawsEvent(elem, what.Click, "noop"); !errors.Is(err, pkg.ErrEventUnhandled) {
+	if err := text.JawsEvent(elem, what.Click, "noop"); !errors.Is(err, core.ErrEventUnhandled) {
 		t.Fatalf("want ErrEventUnhandled got %v", err)
 	}
 	ss.SetErr(errors.New("meh"))
@@ -94,7 +94,7 @@ func TestInputFloatWidgets(t *testing.T) {
 
 func TestInputDateWidget(t *testing.T) {
 	_, rq := newRequest(t)
-	d0, _ := time.Parse(pkg.ISO8601, "2020-01-02")
+	d0, _ := time.Parse(core.ISO8601, "2020-01-02")
 	sd := newTestSetter(d0)
 
 	date := NewDate(sd)
@@ -104,13 +104,13 @@ func TestInputDateWidget(t *testing.T) {
 	if err := date.JawsEvent(elem, what.Input, "2021-02-03"); err != nil {
 		t.Fatal(err)
 	}
-	if sd.Get().Format(pkg.ISO8601) != "2021-02-03" {
+	if sd.Get().Format(core.ISO8601) != "2021-02-03" {
 		t.Fatalf("unexpected date %v", sd.Get())
 	}
 	if err := date.JawsEvent(elem, what.Input, "bad"); err == nil {
 		t.Fatal("expected parse error")
 	}
-	d1, _ := time.Parse(pkg.ISO8601, "2022-03-04")
+	d1, _ := time.Parse(core.ISO8601, "2022-03-04")
 	sd.Set(d1)
 	date.JawsUpdate(elem)
 }

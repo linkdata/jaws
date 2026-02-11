@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 )
 
 var jidPattern = regexp.MustCompile(`Jid\.[0-9]+`)
@@ -25,9 +25,9 @@ func mustMatch(t *testing.T, pattern, got string) {
 	}
 }
 
-func newRequest(t *testing.T) (*pkg.Jaws, *pkg.Request) {
+func newRequest(t *testing.T) (*core.Jaws, *core.Request) {
 	t.Helper()
-	jw, err := pkg.New()
+	jw, err := core.New()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func newRequest(t *testing.T) (*pkg.Jaws, *pkg.Request) {
 	return jw, rq
 }
 
-func renderUI(t *testing.T, rq *pkg.Request, ui pkg.UI, params ...any) (*pkg.Element, string) {
+func renderUI(t *testing.T, rq *core.Request, ui core.UI, params ...any) (*core.Element, string) {
 	t.Helper()
 	elem := rq.NewElement(ui)
 	var sb strings.Builder
@@ -51,7 +51,7 @@ func renderUI(t *testing.T, rq *pkg.Request, ui pkg.UI, params ...any) (*pkg.Ele
 
 type testHTMLGetter string
 
-func (g testHTMLGetter) JawsGetHTML(*pkg.Element) template.HTML {
+func (g testHTMLGetter) JawsGetHTML(*core.Element) template.HTML {
 	return template.HTML(g)
 }
 
@@ -66,20 +66,20 @@ func newTestSetter[T comparable](v T) *testSetter[T] {
 	return &testSetter[T]{v: v}
 }
 
-func (ts *testSetter[T]) JawsGet(*pkg.Element) T {
+func (ts *testSetter[T]) JawsGet(*core.Element) T {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	return ts.v
 }
 
-func (ts *testSetter[T]) JawsSet(_ *pkg.Element, v T) error {
+func (ts *testSetter[T]) JawsSet(_ *core.Element, v T) error {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	if ts.err != nil {
 		return ts.err
 	}
 	if ts.v == v {
-		return pkg.ErrValueUnchanged
+		return core.ErrValueUnchanged
 	}
 	ts.v = v
 	ts.setCount++
@@ -105,10 +105,10 @@ func (ts *testSetter[T]) SetErr(err error) {
 }
 
 type testContainer struct {
-	contents []pkg.UI
+	contents []core.UI
 }
 
-func (tc *testContainer) JawsContains(*pkg.Element) []pkg.UI {
+func (tc *testContainer) JawsContains(*core.Element) []core.UI {
 	return tc.contents
 }
 
@@ -116,14 +116,14 @@ type errorUI struct {
 	err error
 }
 
-func (ui errorUI) JawsRender(*pkg.Element, io.Writer, []any) error {
+func (ui errorUI) JawsRender(*core.Element, io.Writer, []any) error {
 	if ui.err != nil {
 		return ui.err
 	}
 	return errors.New("errorUI")
 }
 
-func (errorUI) JawsUpdate(*pkg.Element) {}
+func (errorUI) JawsUpdate(*core.Element) {}
 
 func waitUntil(t *testing.T, fn func() bool) {
 	t.Helper()

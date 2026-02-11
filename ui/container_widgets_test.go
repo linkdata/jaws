@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/what"
 )
 
 func TestContainerAndTbodyRender(t *testing.T) {
 	_, rq := newRequest(t)
-	tc := &testContainer{contents: []pkg.UI{NewSpan(testHTMLGetter("foo")), NewSpan(testHTMLGetter("bar"))}}
+	tc := &testContainer{contents: []core.UI{NewSpan(testHTMLGetter("foo")), NewSpan(testHTMLGetter("bar"))}}
 
 	container := NewContainer("div", tc)
 	_, got := renderUI(t, rq, container, "hidden")
@@ -30,7 +30,7 @@ func TestWrapContainerUpdateContainer(t *testing.T) {
 	span2 := NewSpan(testHTMLGetter("span2"))
 	span3 := NewSpan(testHTMLGetter("span3"))
 
-	tc := &testContainer{contents: []pkg.UI{span1}}
+	tc := &testContainer{contents: []core.UI{span1}}
 	container := NewContainer("div", tc)
 	elem, _ := renderUI(t, rq, container)
 
@@ -39,7 +39,7 @@ func TestWrapContainerUpdateContainer(t *testing.T) {
 	}
 
 	// append + reorder path
-	tc.contents = []pkg.UI{span1, span2, span3}
+	tc.contents = []core.UI{span1, span2, span3}
 	container.JawsUpdate(elem)
 	if len(container.contents) != 3 {
 		t.Fatalf("want 3 contents got %d", len(container.contents))
@@ -47,14 +47,14 @@ func TestWrapContainerUpdateContainer(t *testing.T) {
 
 	// remove path
 	removedJid := container.contents[0].Jid()
-	tc.contents = []pkg.UI{span2, span3}
+	tc.contents = []core.UI{span2, span3}
 	container.JawsUpdate(elem)
 	if got := rq.GetElementByJid(removedJid); got != nil {
 		t.Fatal("expected removed element to be deleted from request")
 	}
 
 	// reorder + replace path
-	tc.contents = []pkg.UI{span3, span1}
+	tc.contents = []core.UI{span3, span1}
 	container.JawsUpdate(elem)
 	if len(container.contents) != 2 {
 		t.Fatalf("want 2 contents got %d", len(container.contents))
@@ -65,7 +65,7 @@ func TestWrapContainerRenderErrorPaths(t *testing.T) {
 	_, rq := newRequest(t)
 	renderErr := errors.New("render error")
 	errChild := testRenderErrorUI{err: renderErr}
-	tc := &testContainer{contents: []pkg.UI{NewSpan(testHTMLGetter("first")), errChild, NewSpan(testHTMLGetter("third"))}}
+	tc := &testContainer{contents: []core.UI{NewSpan(testHTMLGetter("first")), errChild, NewSpan(testHTMLGetter("third"))}}
 
 	container := NewContainer("div", tc)
 	elem := rq.NewElement(container)
@@ -82,7 +82,7 @@ func TestWrapContainerRenderErrorPaths(t *testing.T) {
 	tc2 := &testContainer{}
 	container2 := NewContainer("div", tc2)
 	elem2, _ := renderUI(t, rq, container2)
-	tc2.contents = []pkg.UI{testRenderErrorUI{err: errors.New("append fail")}}
+	tc2.contents = []core.UI{testRenderErrorUI{err: errors.New("append fail")}}
 	defer func() {
 		if recover() == nil {
 			t.Fatal("expected panic from must")
@@ -95,11 +95,11 @@ type testRenderErrorUI struct {
 	err error
 }
 
-func (ui testRenderErrorUI) JawsRender(*pkg.Element, io.Writer, []any) error {
+func (ui testRenderErrorUI) JawsRender(*core.Element, io.Writer, []any) error {
 	return ui.err
 }
 
-func (testRenderErrorUI) JawsUpdate(*pkg.Element) {}
+func (testRenderErrorUI) JawsUpdate(*core.Element) {}
 
 type testSelectHandler struct {
 	*testContainer
@@ -109,7 +109,7 @@ type testSelectHandler struct {
 func TestSelectWidget(t *testing.T) {
 	_, rq := newRequest(t)
 	sh := &testSelectHandler{
-		testContainer: &testContainer{contents: []pkg.UI{NewOption(pkg.NewNamedBool(nil, "1", "one", true))}},
+		testContainer: &testContainer{contents: []core.UI{NewOption(core.NewNamedBool(nil, "1", "one", true))}},
 		testSetter:    newTestSetter("1"),
 	}
 	selectUI := NewSelect(sh)
@@ -118,7 +118,7 @@ func TestSelectWidget(t *testing.T) {
 
 	selectUI.JawsUpdate(elem)
 
-	if err := selectUI.JawsEvent(elem, what.Click, "noop"); !errors.Is(err, pkg.ErrEventUnhandled) {
+	if err := selectUI.JawsEvent(elem, what.Click, "noop"); !errors.Is(err, core.ErrEventUnhandled) {
 		t.Fatalf("want ErrEventUnhandled got %v", err)
 	}
 	if err := selectUI.JawsEvent(elem, what.Input, "2"); err != nil {

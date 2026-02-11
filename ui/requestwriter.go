@@ -4,15 +4,15 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 )
 
 type RequestWriter struct {
-	*jaws.Request
+	*core.Request
 	io.Writer
 }
 
-func (rqw RequestWriter) UI(ui jaws.UI, params ...any) error {
+func (rqw RequestWriter) UI(ui core.UI, params ...any) error {
 	return rqw.NewElement(ui).JawsRender(rqw, params)
 }
 
@@ -27,7 +27,7 @@ func (rqw RequestWriter) Initial() *http.Request {
 }
 
 // Session returns the Requests's Session, or nil.
-func (rqw RequestWriter) Session() *jaws.Session {
+func (rqw RequestWriter) Session() *core.Session {
 	return rqw.Request.Session()
 }
 

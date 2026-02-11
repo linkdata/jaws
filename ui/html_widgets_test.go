@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 )
 
 func TestHTMLWidgets_ConstructorsAndRender(t *testing.T) {
@@ -14,7 +14,7 @@ func TestHTMLWidgets_ConstructorsAndRender(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		ui      pkg.UI
+		ui      core.UI
 		params  []any
 		pattern string
 	}{
@@ -52,9 +52,9 @@ type initFailGetter struct {
 	err error
 }
 
-func (g *initFailGetter) JawsGetHTML(*pkg.Element) template.HTML { return "x" }
-func (g *initFailGetter) JawsGetTag(*pkg.Request) any            { return g }
-func (g *initFailGetter) JawsInit(*pkg.Element) error            { return g.err }
+func (g *initFailGetter) JawsGetHTML(*core.Element) template.HTML { return "x" }
+func (g *initFailGetter) JawsGetTag(*core.Request) any            { return g }
+func (g *initFailGetter) JawsInit(*core.Element) error            { return g.err }
 
 func TestImg_RenderAndUpdate(t *testing.T) {
 	_, rq := newRequest(t)
@@ -68,8 +68,8 @@ func TestImg_RenderAndUpdate(t *testing.T) {
 
 func TestOption_RenderAndUpdate(t *testing.T) {
 	_, rq := newRequest(t)
-	nba := pkg.NewNamedBoolArray()
-	nb := pkg.NewNamedBool(nba, `escape"me`, "<unescaped>", true)
+	nba := core.NewNamedBoolArray()
+	nb := core.NewNamedBool(nba, `escape"me`, "<unescaped>", true)
 	ui := NewOption(nb)
 	elem, got := renderUI(t, rq, ui, "hidden")
 	mustMatch(t, `^<option id="Jid\.[0-9]+" hidden value="escape&#34;me" selected><unescaped></option>$`, got)

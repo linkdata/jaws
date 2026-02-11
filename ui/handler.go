@@ -3,7 +3,7 @@ package ui
 import (
 	"net/http"
 
-	"github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 )
 
 // Handler is an http.Handler that renders a template for every request.
@@ -13,7 +13,7 @@ import (
 // resulting HTML to the caller. Applications typically obtain a Handler via the
 // Jaws.Handler helper.
 type Handler struct {
-	*jaws.Jaws
+	*core.Jaws
 	Template
 }
 
@@ -26,6 +26,6 @@ func (h Handler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 // The returned handler can be registered directly with a router. Each request
 // results in the template being looked up through the configured Template
 // lookupers and rendered with dot as the template data.
-func NewHandler(jw *jaws.Jaws, name string, dot any) http.Handler {
+func NewHandler(jw *core.Jaws, name string, dot any) http.Handler {
 	return Handler{Jaws: jw, Template: Template{Name: name, Dot: dot}}
 }

@@ -5,18 +5,18 @@ import (
 	"io"
 	"strconv"
 
-	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 )
 
-type Img struct{ pkg.Getter[string] }
+type Img struct{ core.Getter[string] }
 
-func NewImg(g pkg.Getter[string]) *Img { return &Img{Getter: g} }
-func (ui *Img) JawsRender(e *pkg.Element, w io.Writer, params []any) (err error) {
+func NewImg(g core.Getter[string]) *Img { return &Img{Getter: g} }
+func (ui *Img) JawsRender(e *core.Element, w io.Writer, params []any) (err error) {
 	if _, err = e.ApplyGetter(ui.Getter); err == nil {
 		srcAttr := template.HTMLAttr("src=" + strconv.Quote(ui.JawsGet(e))) // #nosec G203
 		attrs := append(e.ApplyParams(params), srcAttr)
-		err = pkg.WriteHTMLInner(w, e.Jid(), "img", "", "", attrs...)
+		err = core.WriteHTMLInner(w, e.Jid(), "img", "", "", attrs...)
 	}
 	return
 }
-func (ui *Img) JawsUpdate(e *pkg.Element) { e.SetAttr("src", ui.JawsGet(e)) }
+func (ui *Img) JawsUpdate(e *core.Element) { e.SetAttr("src", ui.JawsGet(e)) }

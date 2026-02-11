@@ -5,13 +5,13 @@ import (
 	"html/template"
 	"io"
 
-	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 )
 
-type Option struct{ *pkg.NamedBool }
+type Option struct{ *core.NamedBool }
 
-func NewOption(nb *pkg.NamedBool) Option { return Option{NamedBool: nb} }
-func (ui Option) JawsRender(e *pkg.Element, w io.Writer, params []any) error {
+func NewOption(nb *core.NamedBool) Option { return Option{NamedBool: nb} }
+func (ui Option) JawsRender(e *core.Element, w io.Writer, params []any) error {
 	e.Tag(ui.NamedBool)
 	attrs := e.ApplyParams(params)
 	valAttr := template.HTMLAttr(`value="` + html.EscapeString(ui.Name()) + `"`) // #nosec G203
@@ -19,9 +19,9 @@ func (ui Option) JawsRender(e *pkg.Element, w io.Writer, params []any) error {
 	if ui.Checked() {
 		attrs = append(attrs, "selected")
 	}
-	return pkg.WriteHTMLInner(w, e.Jid(), "option", "", ui.JawsGetHTML(e), attrs...)
+	return core.WriteHTMLInner(w, e.Jid(), "option", "", ui.JawsGetHTML(e), attrs...)
 }
-func (ui Option) JawsUpdate(e *pkg.Element) {
+func (ui Option) JawsUpdate(e *core.Element) {
 	if ui.Checked() {
 		e.SetAttr("selected", "")
 	} else {

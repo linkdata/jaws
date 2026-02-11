@@ -3,12 +3,12 @@ package ui
 import (
 	"io"
 
-	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 )
 
 type Radio struct{ InputBool }
 
-func NewRadio(vp pkg.Setter[bool]) *Radio { return &Radio{InputBool{Setter: vp}} }
-func (ui *Radio) JawsRender(e *pkg.Element, w io.Writer, params []any) error {
+func NewRadio(vp core.Setter[bool]) *Radio { return &Radio{InputBool{Setter: vp}} }
+func (ui *Radio) JawsRender(e *core.Element, w io.Writer, params []any) error {
 	return ui.renderBoolInput(e, w, "radio", params...)
 }

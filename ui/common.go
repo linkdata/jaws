@@ -1,6 +1,6 @@
 package ui
 
-import pkg "github.com/linkdata/jaws/jaws"
+import "github.com/linkdata/jaws/core"
 
 func must(err error) {
 	if err != nil {
@@ -8,12 +8,12 @@ func must(err error) {
 	}
 }
 
-func applyDirty(tag any, e *pkg.Element, err error) (changed bool, retErr error) {
+func applyDirty(tag any, e *core.Element, err error) (changed bool, retErr error) {
 	switch err {
 	case nil:
 		e.Dirty(tag)
 		return true, nil
-	case pkg.ErrValueUnchanged:
+	case core.ErrValueUnchanged:
 		return false, nil
 	default:
 		return false, err

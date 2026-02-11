@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -16,12 +16,12 @@ type Input struct {
 	Last atomic.Value
 }
 
-func (ui *Input) applyGetter(e *pkg.Element, getter any) (err error) {
+func (ui *Input) applyGetter(e *core.Element, getter any) (err error) {
 	ui.Tag, err = e.ApplyGetter(getter)
 	return
 }
 
-func (ui *Input) maybeDirty(val any, e *pkg.Element, err error) error {
+func (ui *Input) maybeDirty(val any, e *core.Element, err error) error {
 	if changed, err := applyDirty(ui.Tag, e, err); err != nil {
 		return err
 	} else if changed {
@@ -32,27 +32,27 @@ func (ui *Input) maybeDirty(val any, e *pkg.Element, err error) error {
 
 type InputText struct {
 	Input
-	pkg.Setter[string]
+	core.Setter[string]
 }
 
-func (ui *InputText) renderStringInput(e *pkg.Element, w io.Writer, htmlType string, params ...any) (err error) {
+func (ui *InputText) renderStringInput(e *core.Element, w io.Writer, htmlType string, params ...any) (err error) {
 	if err = ui.applyGetter(e, ui.Setter); err == nil {
 		attrs := e.ApplyParams(params)
 		v := ui.JawsGet(e)
 		ui.Last.Store(v)
-		err = pkg.WriteHTMLInput(w, e.Jid(), htmlType, v, attrs)
+		err = core.WriteHTMLInput(w, e.Jid(), htmlType, v, attrs)
 	}
 	return
 }
 
-func (ui *InputText) JawsUpdate(e *pkg.Element) {
+func (ui *InputText) JawsUpdate(e *core.Element) {
 	if v := ui.JawsGet(e); ui.Last.Swap(v) != v {
 		e.SetValue(v)
 	}
 }
 
-func (ui *InputText) JawsEvent(e *pkg.Element, wht what.What, val string) (err error) {
-	err = pkg.ErrEventUnhandled
+func (ui *InputText) JawsEvent(e *core.Element, wht what.What, val string) (err error) {
+	err = core.ErrEventUnhandled
 	if wht == what.Input {
 		err = ui.maybeDirty(val, e, ui.Setter.JawsSet(e, val))
 	}
@@ -61,10 +61,10 @@ func (ui *InputText) JawsEvent(e *pkg.Element, wht what.What, val string) (err e
 
 type InputBool struct {
 	Input
-	pkg.Setter[bool]
+	core.Setter[bool]
 }
 
-func (ui *InputBool) renderBoolInput(e *pkg.Element, w io.Writer, htmlType string, params ...any) (err error) {
+func (ui *InputBool) renderBoolInput(e *core.Element, w io.Writer, htmlType string, params ...any) (err error) {
 	if err = ui.applyGetter(e, ui.Setter); err == nil {
 		attrs := e.ApplyParams(params)
 		v := ui.JawsGet(e)
@@ -72,12 +72,12 @@ func (ui *InputBool) renderBoolInput(e *pkg.Element, w io.Writer, htmlType strin
 		if v {
 			attrs = append(attrs, "checked")
 		}
-		err = pkg.WriteHTMLInput(w, e.Jid(), htmlType, "", attrs)
+		err = core.WriteHTMLInput(w, e.Jid(), htmlType, "", attrs)
 	}
 	return
 }
 
-func (ui *InputBool) JawsUpdate(e *pkg.Element) {
+func (ui *InputBool) JawsUpdate(e *core.Element) {
 	v := ui.JawsGet(e)
 	if ui.Last.Swap(v) != v {
 		txt := "false"
@@ -88,8 +88,8 @@ func (ui *InputBool) JawsUpdate(e *pkg.Element) {
 	}
 }
 
-func (ui *InputBool) JawsEvent(e *pkg.Element, wht what.What, val string) (err error) {
-	err = pkg.ErrEventUnhandled
+func (ui *InputBool) JawsEvent(e *core.Element, wht what.What, val string) (err error) {
+	err = core.ErrEventUnhandled
 	if wht == what.Input {
 		var v bool
 		if val != "" {
@@ -104,30 +104,30 @@ func (ui *InputBool) JawsEvent(e *pkg.Element, wht what.What, val string) (err e
 
 type InputFloat struct {
 	Input
-	pkg.Setter[float64]
+	core.Setter[float64]
 }
 
 func (ui *InputFloat) str() string {
 	return strconv.FormatFloat(ui.Last.Load().(float64), 'f', -1, 64)
 }
 
-func (ui *InputFloat) renderFloatInput(e *pkg.Element, w io.Writer, htmlType string, params ...any) (err error) {
+func (ui *InputFloat) renderFloatInput(e *core.Element, w io.Writer, htmlType string, params ...any) (err error) {
 	if err = ui.applyGetter(e, ui.Setter); err == nil {
 		attrs := e.ApplyParams(params)
 		ui.Last.Store(ui.JawsGet(e))
-		err = pkg.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(), attrs)
+		err = core.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(), attrs)
 	}
 	return
 }
 
-func (ui *InputFloat) JawsUpdate(e *pkg.Element) {
+func (ui *InputFloat) JawsUpdate(e *core.Element) {
 	if f := ui.JawsGet(e); ui.Last.Swap(f) != f {
 		e.SetValue(ui.str())
 	}
 }
 
-func (ui *InputFloat) JawsEvent(e *pkg.Element, wht what.What, val string) (err error) {
-	err = pkg.ErrEventUnhandled
+func (ui *InputFloat) JawsEvent(e *core.Element, wht what.What, val string) (err error) {
+	err = core.ErrEventUnhandled
 	if wht == what.Input {
 		var v float64
 		if val != "" {
@@ -142,34 +142,34 @@ func (ui *InputFloat) JawsEvent(e *pkg.Element, wht what.What, val string) (err 
 
 type InputDate struct {
 	Input
-	pkg.Setter[time.Time]
+	core.Setter[time.Time]
 }
 
 func (ui *InputDate) str() string {
-	return ui.Last.Load().(time.Time).Format(pkg.ISO8601)
+	return ui.Last.Load().(time.Time).Format(core.ISO8601)
 }
 
-func (ui *InputDate) renderDateInput(e *pkg.Element, w io.Writer, htmlType string, params ...any) (err error) {
+func (ui *InputDate) renderDateInput(e *core.Element, w io.Writer, htmlType string, params ...any) (err error) {
 	if err = ui.applyGetter(e, ui.Setter); err == nil {
 		attrs := e.ApplyParams(params)
 		ui.Last.Store(ui.JawsGet(e))
-		err = pkg.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(), attrs)
+		err = core.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(), attrs)
 	}
 	return
 }
 
-func (ui *InputDate) JawsUpdate(e *pkg.Element) {
+func (ui *InputDate) JawsUpdate(e *core.Element) {
 	if t := ui.JawsGet(e); ui.Last.Swap(t) != t {
 		e.SetValue(ui.str())
 	}
 }
 
-func (ui *InputDate) JawsEvent(e *pkg.Element, wht what.What, val string) (err error) {
-	err = pkg.ErrEventUnhandled
+func (ui *InputDate) JawsEvent(e *core.Element, wht what.What, val string) (err error) {
+	err = core.ErrEventUnhandled
 	if wht == what.Input {
 		var v time.Time
 		if val != "" {
-			if v, err = time.Parse(pkg.ISO8601, val); err != nil {
+			if v, err = time.Parse(core.ISO8601, val); err != nil {
 				return
 			}
 		}

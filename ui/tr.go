@@ -3,12 +3,12 @@ package ui
 import (
 	"io"
 
-	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/core"
 )
 
 type Tr struct{ HTMLInner }
 
-func NewTr(innerHTML pkg.HTMLGetter) *Tr { return &Tr{HTMLInner{HTMLGetter: innerHTML}} }
-func (ui *Tr) JawsRender(e *pkg.Element, w io.Writer, params []any) error {
+func NewTr(innerHTML core.HTMLGetter) *Tr { return &Tr{HTMLInner{HTMLGetter: innerHTML}} }
+func (ui *Tr) JawsRender(e *core.Element, w io.Writer, params []any) error {
 	return ui.renderInner(e, w, "tr", "", params)
 }
