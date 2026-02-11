@@ -8,6 +8,12 @@ import (
 	"testing"
 )
 
+type testStringer struct{}
+
+func (testStringer) String() string {
+	return "<x>"
+}
+
 /*type testAnySetter struct {
 	Value any
 }

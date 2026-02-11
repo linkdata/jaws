@@ -742,6 +742,15 @@ func (rq *Request) deleteElement(e *Element) {
 	rq.deleteElementLocked(e)
 }
 
+// DeleteElement removes elem from the Request element registry.
+//
+// This is primarily intended for UI implementations that manage dynamic child
+// element sets and need to drop stale elements after issuing a corresponding
+// DOM remove operation.
+func (rq *Request) DeleteElement(elem *Element) {
+	rq.deleteElement(elem)
+}
+
 func (rq *Request) makeUpdateList() (todo []*Element) {
 	rq.mu.Lock()
 	seen := map[*Element]struct{}{}

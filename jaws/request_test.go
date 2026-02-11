@@ -604,8 +604,8 @@ func TestRequest_Dirty(t *testing.T) {
 
 	tss1 := &testUi{s: "foo1"}
 	tss2 := &testUi{s: "foo2"}
-	rq.UI(NewUiText(tss1))
-	rq.UI(NewUiText(tss2))
+	rq.UI(newTestTextInputWidget(tss1))
+	rq.UI(newTestTextInputWidget(tss2))
 	th.Equal(tss1.getCalled, int32(1))
 	th.Equal(tss2.getCalled, int32(1))
 	th.True(strings.Contains(string(rq.BodyString()), "foo1"))
@@ -654,7 +654,7 @@ func TestRequest_IncomingRemove(t *testing.T) {
 	defer rq.Close()
 
 	tss := newTestSetter("")
-	rq.UI(NewUiText(tss))
+	rq.UI(newTestTextInputWidget(tss))
 
 	select {
 	case <-th.C:
@@ -690,8 +690,8 @@ func TestRequest_IncomingClick(t *testing.T) {
 		testSetter: newTestSetter(""),
 	}
 
-	rq.Div("1", tjc1)
-	rq.Div("2", tjc2)
+	rq.UI(testDivWidget{inner: "1"}, tjc1)
+	rq.UI(testDivWidget{inner: "2"}, tjc2)
 
 	select {
 	case <-th.C:

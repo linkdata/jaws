@@ -6,6 +6,7 @@ import (
 
 	pkg "github.com/linkdata/jaws/jaws"
 	"github.com/linkdata/jaws/jid"
+	uipkg "github.com/linkdata/jaws/ui"
 )
 
 // The point of this is to not have a zillion files in the repository root
@@ -46,8 +47,8 @@ type (
 	NamedBool            = pkg.NamedBool
 	NamedBoolArray       = pkg.NamedBoolArray
 	Template             = pkg.Template
-	RequestWriter        = pkg.RequestWriter
-	With                 = pkg.With
+	RequestWriter        = uipkg.RequestWriter
+	With                 = uipkg.With
 	Session              = pkg.Session
 	Tag                  = pkg.Tag
 	TestRequest          = pkg.TestRequest
@@ -94,72 +95,72 @@ func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 }
 
 type (
-	UiA         = pkg.UiA
-	UiButton    = pkg.UiButton
-	UiCheckbox  = pkg.UiCheckbox
-	UiContainer = pkg.UiContainer
-	UiDate      = pkg.UiDate
-	UiDiv       = pkg.UiDiv
-	UiImg       = pkg.UiImg
-	UiLabel     = pkg.UiLabel
-	UiLi        = pkg.UiLi
-	UiNumber    = pkg.UiNumber
-	UiPassword  = pkg.UiPassword
-	UiRadio     = pkg.UiRadio
-	UiRange     = pkg.UiRange
-	UiSelect    = pkg.UiSelect
-	UiSpan      = pkg.UiSpan
-	UiTbody     = pkg.UiTbody
-	UiTd        = pkg.UiTd
-	UiText      = pkg.UiText
-	UiTr        = pkg.UiTr
+	UiA         = uipkg.A
+	UiButton    = uipkg.Button
+	UiCheckbox  = uipkg.Checkbox
+	UiContainer = uipkg.Container
+	UiDate      = uipkg.Date
+	UiDiv       = uipkg.Div
+	UiImg       = uipkg.Img
+	UiLabel     = uipkg.Label
+	UiLi        = uipkg.Li
+	UiNumber    = uipkg.Number
+	UiPassword  = uipkg.Password
+	UiRadio     = uipkg.Radio
+	UiRange     = uipkg.Range
+	UiSelect    = uipkg.Select
+	UiSpan      = uipkg.Span
+	UiTbody     = uipkg.Tbody
+	UiTd        = uipkg.Td
+	UiText      = uipkg.Text
+	UiTr        = uipkg.Tr
 )
 
 // UI constructor assignments (generic types require wrappers, others are direct)
 var (
-	NewUiA         = pkg.NewUiA
-	NewUiButton    = pkg.NewUiButton
-	NewUiContainer = pkg.NewUiContainer
-	NewUiDiv       = pkg.NewUiDiv
-	NewUiLabel     = pkg.NewUiLabel
-	NewUiLi        = pkg.NewUiLi
-	NewUiSelect    = pkg.NewUiSelect
-	NewUiSpan      = pkg.NewUiSpan
-	NewUiTbody     = pkg.NewUiTbody
-	NewUiTd        = pkg.NewUiTd
-	NewUiTr        = pkg.NewUiTr
+	NewUiA         = uipkg.NewA
+	NewUiButton    = uipkg.NewButton
+	NewUiContainer = uipkg.NewContainer
+	NewUiDiv       = uipkg.NewDiv
+	NewUiLabel     = uipkg.NewLabel
+	NewUiLi        = uipkg.NewLi
+	NewUiSelect    = uipkg.NewSelect
+	NewUiSpan      = uipkg.NewSpan
+	NewUiTbody     = uipkg.NewTbody
+	NewUiTd        = uipkg.NewTd
+	NewUiTr        = uipkg.NewTr
 	NewTestRequest = pkg.NewTestRequest
 )
 
 // UI constructors with generic parameters must be wrapped
 func NewUiCheckbox(g Setter[bool]) *UiCheckbox {
-	return pkg.NewUiCheckbox(g)
+	return uipkg.NewCheckbox(g)
 }
 
 func NewUiDate(g Setter[time.Time]) *UiDate {
-	return pkg.NewUiDate(g)
+	return uipkg.NewDate(g)
 }
 
 func NewUiImg(g Getter[string]) *UiImg {
-	return pkg.NewUiImg(g)
+	return uipkg.NewImg(g)
 }
 
 func NewUiNumber(g Setter[float64]) *UiNumber {
-	return pkg.NewUiNumber(g)
+	return uipkg.NewNumber(g)
 }
 
 func NewUiPassword(g Setter[string]) *UiPassword {
-	return pkg.NewUiPassword(g)
+	return uipkg.NewPassword(g)
 }
 
 func NewUiRadio(vp Setter[bool]) *UiRadio {
-	return pkg.NewUiRadio(vp)
+	return uipkg.NewRadio(vp)
 }
 
 func NewUiRange(g Setter[float64]) *UiRange {
-	return pkg.NewUiRange(g)
+	return uipkg.NewRange(g)
 }
 
 func NewUiText(vp Setter[string]) *UiText {
-	return pkg.NewUiText(vp)
+	return uipkg.NewText(vp)
 }

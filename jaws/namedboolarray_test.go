@@ -79,7 +79,7 @@ func Test_NamedBoolArray(t *testing.T) {
 	is.Equal(nba.IsChecked("2"), true)
 
 	rq := newTestRequest(t)
-	e := rq.NewElement(NewUiSelect(nba))
+	e := rq.NewElement(&testUi{})
 	defer rq.Close()
 
 	is.Equal(nba.JawsGet(e), "2")

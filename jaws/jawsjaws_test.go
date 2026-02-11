@@ -319,7 +319,7 @@ func TestJaws_CleansUpUnconnected(t *testing.T) {
 	for i := 0; i < numReqs; i++ {
 		rq := jw.NewRequest(hr)
 		if (i % (numReqs / 5)) == 0 {
-			rq.NewElement(NewUiDiv(MakeHTMLGetter("meh")))
+			rq.NewElement(testDivWidget{inner: "meh"})
 		}
 		err := context.Cause(rq.ctx)
 		if err == nil && rq.lastWrite.Before(deadline) {

@@ -132,11 +132,11 @@ func Test_JawsEvent_ExtraHandler(t *testing.T) {
 	msgCh := make(chan string, 1)
 	defer close(msgCh)
 
-	je := NewUiDiv(&testJawsEventHandler{msgCh: msgCh})
+	je := &testJawsEventHandler{msgCh: msgCh}
 
 	var sb strings.Builder
-	elem := rq.NewElement(je)
-	th.NoErr(je.JawsRender(elem, &sb, nil))
+	elem := rq.NewElement(testDivWidget{inner: "tjEH"})
+	th.NoErr(elem.JawsRender(&sb, []any{je}))
 	th.Equal(sb.String(), "<div id=\"Jid.1\">tjEH</div>")
 
 	rq.InCh <- wsMsg{Data: "name", Jid: 1, What: what.Click}

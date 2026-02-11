@@ -39,6 +39,53 @@ go get github.com/linkdata/jaws
 After the dependency is added, your Go module will be able to import
 and use JaWS as demonstrated below.
 
+## UI package
+
+The widget types are also available from `github.com/linkdata/jaws/ui`
+using short names:
+
+```go
+import (
+  "github.com/linkdata/jaws"
+  "github.com/linkdata/jaws/ui"
+)
+
+var span *ui.Span = ui.NewSpan(jaws.MakeHTMLGetter("hello"))
+```
+
+This maps legacy names to the new package naming:
+
+* `jaws.UiSpan` -> `ui.Span`
+* `jaws.NewUiSpan(...)` -> `ui.NewSpan(...)`
+
+For widget authoring guidance see `ui/README.md`.
+
+### RequestWriter widget calls
+
+`RequestWriter` keeps the intuitive widget helper API:
+
+```go
+rw.Span("hello", "hidden")
+rw.Text(mySetter)
+rw.Select(mySelectHandler, "disabled")
+```
+
+Template usage remains concise:
+
+```gotemplate
+{{$.Span "hello"}}
+{{$.Text .MySetter}}
+```
+
+The explicit constructor style is also supported and is useful when you want
+to prebuild or share widget instances:
+
+```go
+rw.UI(ui.NewSpan(jaws.MakeHTMLGetter("hello")), "hidden")
+rw.UI(ui.NewText(mySetter))
+rw.UI(ui.NewSelect(mySelectHandler), "disabled")
+```
+
 ## Quick start
 
 The following minimal program renders a single range input whose value

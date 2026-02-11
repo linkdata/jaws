@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"html/template"
 	"testing"
 
 	"github.com/linkdata/jaws/what"
@@ -32,9 +33,9 @@ func Test_clickHandlerWapper_JawsEvent(t *testing.T) {
 	}
 
 	want := `<div id="Jid.1">inner</div>`
-	rq.Div("inner", tjc)
+	rq.UI(testDivWidget{inner: template.HTML("inner")}, tjc)
 	if got := rq.BodyString(); got != want {
-		t.Errorf("Request.Div() = %q, want %q", got, want)
+		t.Errorf("Request.UI(NewDiv()) = %q, want %q", got, want)
 	}
 
 	rq.InCh <- wsMsg{Data: "text", Jid: 1, What: what.Input}
