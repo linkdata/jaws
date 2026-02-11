@@ -71,17 +71,30 @@ Use these for bulk migration in editors with regex capture-group support:
    ```
 
 4. Handler helper move (`jw.Handler(name, dot)` -> `ui.NewHandler(jw, name, dot)`)
+   Use targeted patterns only to avoid rewriting custom handlers.
 
    Find:
 
    ```regex
-   \b([A-Za-z_][A-Za-z0-9_]*)\.Handler\(
+   \b([A-Za-z_][A-Za-z0-9_]*)\.Jaws\.Handler\(
    ```
 
    Replace:
 
    ```text
-   ui.NewHandler($1, 
+   ui.NewHandler($1.Jaws, 
+   ```
+
+   Find:
+
+   ```regex
+   \bjw\.Handler\(
+   ```
+
+   Replace:
+
+   ```text
+   ui.NewHandler(jw, 
    ```
 
 5. Optional alias cleanup for core imports
@@ -112,8 +125,13 @@ find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
 done
 
 find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
-  grep -Eq '\b[A-Za-z_][A-Za-z0-9_]*\.Handler\(' "$f" || continue
-  perl -i -pe 's/\b([A-Za-z_][A-Za-z0-9_]*)\.Handler\(/ui.NewHandler($1, /g' "$f"
+  grep -Eq '\b[A-Za-z_][A-Za-z0-9_]*\.Jaws\.Handler\(' "$f" || continue
+  perl -i -pe 's/\b([A-Za-z_][A-Za-z0-9_]*)\.Jaws\.Handler\(/ui.NewHandler($1.Jaws, /g' "$f"
+done
+
+find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
+  grep -Eq '\bjw\.Handler\(' "$f" || continue
+  perl -i -pe 's/\bjw\.Handler\(/ui.NewHandler(jw, /g' "$f"
 done
 
 find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
@@ -124,6 +142,8 @@ done
 
 gofmt -w $(find . -name '*.go' -type f)
 go test ./...
+
+find . -name '*.go' -type f -exec grep -nE '\.[A-Za-z_][A-Za-z0-9_]*Handler\(|\.Handler\(' {} +
 ```
 
 ### RequestWriter helper calls

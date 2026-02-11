@@ -106,17 +106,30 @@ capture groups.
    ```
 
 4. Handler helper move (`jw.Handler(name, dot)` -> `ui.NewHandler(jw, name, dot)`)
+   Use targeted patterns only to avoid rewriting custom handlers.
 
    Find:
 
    ```regex
-   \b([A-Za-z_][A-Za-z0-9_]*)\.Handler\(
+   \b([A-Za-z_][A-Za-z0-9_]*)\.Jaws\.Handler\(
    ```
 
    Replace:
 
    ```text
-   ui.NewHandler($1, 
+   ui.NewHandler($1.Jaws, 
+   ```
+
+   Find:
+
+   ```regex
+   \bjw\.Handler\(
+   ```
+
+   Replace:
+
+   ```text
+   ui.NewHandler(jw, 
    ```
 
 5. Optional alias cleanup for migrated imports (`pkg`/`jaws` alias -> no alias)
@@ -151,22 +164,31 @@ find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
   perl -i -pe 's/\bjaws\.NewUi([A-Z][A-Za-z0-9_]*)\(/ui.New$1(/g; s/\bjaws\.Ui([A-Z][A-Za-z0-9_]*)\b/ui.$1/g' "$f"
 done
 
-# 3) handler call rewrite: jw.Handler(...) -> ui.NewHandler(jw, ...)
+# 3) handler call rewrite (safe patterns only)
 find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
-  grep -Eq '\b[A-Za-z_][A-Za-z0-9_]*\.Handler\(' "$f" || continue
-  perl -i -pe 's/\b([A-Za-z_][A-Za-z0-9_]*)\.Handler\(/ui.NewHandler($1, /g' "$f"
+  grep -Eq '\b[A-Za-z_][A-Za-z0-9_]*\.Jaws\.Handler\(' "$f" || continue
+  perl -i -pe 's/\b([A-Za-z_][A-Za-z0-9_]*)\.Jaws\.Handler\(/ui.NewHandler($1.Jaws, /g' "$f"
 done
 
-# 4) ensure ui import exists where ui.NewHandler is used
+# 4) common direct rewrite: jw.Handler(...) -> ui.NewHandler(jw, ...)
+find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
+  grep -Eq '\bjw\.Handler\(' "$f" || continue
+  perl -i -pe 's/\bjw\.Handler\(/ui.NewHandler(jw, /g' "$f"
+done
+
+# 5) ensure ui import exists where ui.NewHandler is used
 find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
   grep -q 'ui.NewHandler(' "$f" || continue
   grep -q '"github.com/linkdata/jaws/ui"' "$f" || \
     perl -0777 -i -pe 's@("github.com/linkdata/jaws"\n)@$1\t"github.com/linkdata/jaws/ui"\n@' "$f"
 done
 
-# 5) format and verify
+# 6) format and verify
 gofmt -w $(find . -name '*.go' -type f)
 go test ./...
+
+# 7) optional audit: inspect remaining custom .Handler(...) calls manually
+find . -name '*.go' -type f -exec grep -nE '\.[A-Za-z_][A-Za-z0-9_]*Handler\(|\.Handler\(' {} +
 ```
 
 If `go mod` updates are requested after migration, run:
