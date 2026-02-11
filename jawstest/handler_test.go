@@ -1,21 +1,22 @@
-//go:build integration
-// +build integration
-
 package jawstest
 
 import (
 	"bytes"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/linkdata/jaws"
+	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/ui"
 )
 
 func TestHandler_ServeHTTP(t *testing.T) {
-	nextJid = 0
+	pkg.NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 
-	dot := Tag("123")
-	h := rq.Jaws.Handler("testtemplate", dot)
+	dot := jaws.Tag("123")
+	h := ui.NewHandler(rq.TestRequest.Request.Jaws, "testtemplate", dot)
 	var buf bytes.Buffer
 	var rr httptest.ResponseRecorder
 	rr.Body = &buf

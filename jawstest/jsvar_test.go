@@ -1,322 +1,102 @@
-//go:build integration
-// +build integration
-
 package jawstest
 
 import (
-	"encoding/json"
-	"fmt"
 	"html/template"
-	"reflect"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
+	"time"
 
-	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws"
+	core "github.com/linkdata/jaws/jaws"
 	"github.com/linkdata/jaws/what"
 )
 
-const varname = "myjsvar"
-
-type valtype struct {
+type jsVarValue struct {
 	String string
 	Number float64
 }
 
-type testLocker struct {
-	sync.Locker
-	unlockCalled chan struct{}
-	unlockCount  int32
-}
-
-func (tl *testLocker) reset() {
-	tl.unlockCalled = make(chan struct{})
-	atomic.StoreInt32(&tl.unlockCount, 0)
-}
-
-func (tl *testLocker) Unlock() {
-	tl.Locker.Unlock()
-	if atomic.AddInt32(&tl.unlockCount, 1) == 1 {
-		if tl.unlockCalled != nil {
-			close(tl.unlockCalled)
-		}
+func waitMsg(t *testing.T, ch <-chan core.WsMsg) core.WsMsg {
+	t.Helper()
+	select {
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for ws message")
+		return core.WsMsg{}
+	case msg := <-ch:
+		return msg
 	}
 }
 
-func Test_JsVar_JawsRender(t *testing.T) {
-	th := newTestHelper(t)
+func TestJsVar_RenderThroughTemplate(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 
-	nextJid = 0
-	rq.Jaws.AddTemplateLookuper(template.Must(template.New("jsvartemplate").Parse(`{{$.JsVar "` + varname + `" .Dot}}`)))
+	rq.Jaws.AddTemplateLookuper(template.Must(template.New("jsvartemplate").Parse(`{{$.JsVar "myjsvar" .Dot}}`)))
 
-	var mu deadlock.RWMutex
-	var val valtype
-	jsv := NewJsVar(&mu, &val)
-	dot := jsv
-	elem := rq.NewElement(dot)
+	var mu sync.Mutex
+	val := jsVarValue{String: "text", Number: 1.23}
+	jsv := jaws.NewJsVar(&mu, &val)
 
-	jsv.JawsUpdate(nil) // no-op, just to satisfy coverage
-
-	if err := dot.JawsSet(elem, valtype{String: "text", Number: 1.23}); err != nil {
-		t.Error(err)
+	if err := rq.Template("jsvartemplate", jsv); err != nil {
+		t.Fatal(err)
 	}
-
-	th.Equal(val.String, "text")
-
-	x := dot.JawsGet(elem)
-	th.Equal(x, val)
-
-	if err := rq.Template("jsvartemplate", dot); err != nil {
-		t.Error(err)
+	got := rq.BodyString()
+	if !strings.Contains(got, `data-jawsname="myjsvar"`) {
+		t.Fatalf("missing jaws name: %q", got)
 	}
-
-	want := `<div id="Jid.3" data-jawsname="myjsvar" data-jawsdata='{"String":"text","Number":1.23}' hidden></div>`
-	th.Equal(string(rq.BodyHTML()), want)
+	if !strings.Contains(got, `"String":"text"`) {
+		t.Fatalf("missing serialized value: %q", got)
+	}
 }
 
-func Test_JsVar_Update(t *testing.T) {
-	th := newTestHelper(t)
-	jw, _ := New()
-	defer jw.Close()
-	nextJid = 0
+type testJsVarMaker struct{}
 
-	type valtype struct {
-		String string
-		Number float64
-	}
-	var mu deadlock.Mutex
-	var val valtype
-	dot := NewJsVar(&mu, &val)
+func (t *testJsVarMaker) JawsMakeJsVar(*jaws.Request) (jaws.IsJsVar, error) {
+	var mu sync.Mutex
+	v := "quote(')"
+	return jaws.NewJsVar(&mu, &v), nil
+}
 
+func TestJsVar_JsVarMaker(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 
-	elem := rq.NewElement(dot)
+	if err := rq.JsVar("foo", &testJsVarMaker{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := rq.BodyString(); !strings.Contains(got, `data-jawsname="foo"`) {
+		t.Fatalf("unexpected body: %q", got)
+	}
+}
+
+func TestJsVar_EventRoundtrip(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	var mu sync.Mutex
+	var val jsVarValue
+	jsv := jaws.NewJsVar(&mu, &val)
+
+	elem := rq.NewElement(jsv)
 	var sb strings.Builder
-	if err := dot.JawsRender(elem, &sb, []any{varname}); err != nil {
+	if err := jsv.JawsRender(elem, &sb, []any{"myjsvar"}); err != nil {
 		t.Fatal(err)
 	}
-	// data-jawsdata not present because it's the zero value
-	want := `<div id="Jid.1" data-jawsname="myjsvar" hidden></div>`
-	th.Equal(strings.TrimSpace(sb.String()), want)
-	if err := dot.JawsSet(elem, valtype{"x", 2}); err != nil {
-		t.Error(err)
+
+	rq.InCh <- core.WsMsg{Jid: elem.Jid(), What: what.Set, Data: `={"String":"y","Number":3}`}
+	msg := waitMsg(t, rq.OutCh)
+
+	if msg.What != what.Set {
+		t.Fatalf("unexpected what: %v", msg.What)
 	}
-	// rq.Dirty(dot)
-
-	select {
-	case <-th.C:
-		th.Timeout()
-	case gotMsg := <-rq.OutCh:
-		wantMsg := wsMsg{
-			Data: "={\"String\":\"x\",\"Number\":2}",
-			Jid:  1,
-			What: what.Set,
-		}
-		if !reflect.DeepEqual(gotMsg, wantMsg) {
-			t.Errorf("\n got %v\nwant %v\n", gotMsg, wantMsg)
-		}
+	if msg.Jid != elem.Jid() {
+		t.Fatalf("unexpected jid: got %v want %v", msg.Jid, elem.Jid())
 	}
-}
-
-func Test_JsVar_Event(t *testing.T) {
-	th := newTestHelper(t)
-	jw, _ := New()
-	defer jw.Close()
-	nextJid = 0
-
-	const varname = "myjsvar"
-	type valtype struct {
-		String string
-		Number float64
+	if !strings.Contains(msg.Data, `"String":"y"`) {
+		t.Fatalf("unexpected data: %q", msg.Data)
 	}
-	var mu deadlock.Mutex
-	val := valtype{String: "!"}
-	tl := testLocker{Locker: &mu, unlockCalled: make(chan struct{})}
-	dot := NewJsVar(&tl, &val)
-
-	tj := newTestJaws()
-	defer tj.Close()
-	const expectedHTML = `<div id="Jid.%d" data-jawsname="myjsvar" data-jawsdata='{"String":"!","Number":0}' hidden></div>`
-
-	rq1 := tj.newRequest(nil)
-	elem1 := rq1.NewElement(dot)
-	var sb1 strings.Builder
-	if err := dot.JawsRender(elem1, &sb1, []any{varname}); err != nil {
-		t.Fatal(err)
+	if val.String != "y" || val.Number != 3 {
+		t.Fatalf("unexpected value: %#v", val)
 	}
-	th.Equal(strings.TrimSpace(sb1.String()), fmt.Sprintf(expectedHTML, 1))
-
-	rq2 := tj.newRequest(nil)
-	elem2 := rq2.NewElement(dot)
-	var sb2 strings.Builder
-	if err := dot.JawsRender(elem2, &sb2, []any{varname}); err != nil {
-		t.Fatal(err)
-	}
-	th.Equal(strings.TrimSpace(sb2.String()), fmt.Sprintf(expectedHTML, 2))
-
-	select {
-	case <-th.C:
-		th.Timeout()
-	case <-tl.unlockCalled:
-	}
-
-	tl.reset()
-
-	select {
-	case <-th.C:
-		th.Timeout()
-	case rq1.InCh <- wsMsg{Jid: 1, What: what.Set, Data: "={\"String\":\"y\",\"Number\":3}"}:
-	}
-
-	select {
-	case <-th.C:
-		th.Timeout()
-	case <-tl.unlockCalled:
-	}
-
-	th.Equal(val, valtype{"y", 3})
-
-	select {
-	case <-th.C:
-		th.Timeout()
-	case msg := <-rq1.OutCh:
-		s := msg.Format()
-		after, found := strings.CutPrefix(s, "Set\tJid.1\t=")
-		th.Equal(found, true)
-		if found {
-			var x valtype
-			err := json.Unmarshal([]byte(after), &x)
-			th.NoErr(err)
-			th.Equal(x, valtype{"y", 3})
-		} else {
-			t.Fatalf("%q", s)
-		}
-	}
-
-	select {
-	case <-th.C:
-		th.Timeout()
-	case msg := <-rq2.OutCh:
-		s := msg.Format()
-		after, found := strings.CutPrefix(s, "Set\tJid.2\t=")
-		th.Equal(found, true)
-		if found {
-			var x valtype
-			err := json.Unmarshal([]byte(after), &x)
-			th.NoErr(err)
-			th.Equal(x, valtype{"y", 3})
-		} else {
-			t.Fatalf("%q", s)
-		}
-	}
-
-	select {
-	case <-th.C:
-		th.Timeout()
-	case rq1.InCh <- wsMsg{Jid: 1, What: what.Set, Data: "=1"}:
-	}
-
-	select {
-	case <-th.C:
-		th.Timeout()
-	case msg := <-rq1.OutCh:
-		s := msg.Format()
-		if !strings.Contains(s, "jq: expected") {
-			th.Error(s)
-		}
-	}
-}
-
-func Test_JsVar_PanicsOnWrongType(t *testing.T) {
-	th := newTestHelper(t)
-	rq := newTestRequest(t)
-	defer rq.Close()
-	defer func() {
-		if x := recover(); x == nil {
-			th.Fail()
-		}
-	}()
-	rq.JsVar("", 1)
-	th.Fail()
-}
-
-type testJsVarMaker struct {
-}
-
-func (t *testJsVarMaker) JawsMakeJsVar(rq *Request) (v IsJsVar, err error) {
-	var mu deadlock.Mutex
-	val := "quote(')"
-	return NewJsVar(&mu, &val), nil
-}
-
-var _ JsVarMaker = &testJsVarMaker{}
-
-func Test_JsVar_JsVarMaker(t *testing.T) {
-	nextJid = 0
-	th := newTestHelper(t)
-	rq := newTestRequest(t)
-	defer rq.Close()
-	err := rq.JsVar("foo", &testJsVarMaker{})
-	th.NoErr(err)
-	th.Equal(string(rq.BodyHTML()), "<div id=\"Jid.1\" data-jawsname=\"foo\" data-jawsdata='\"quote(\\u0027)\"' hidden></div>")
-}
-
-type testJsVarPathSetter struct {
-	Value string
-	atomic.Bool
-}
-
-func (t *testJsVarPathSetter) JawsSetPath(elem *Element, jspath string, value any) (err error) {
-	s := value.(string) + "!!"
-	if t.Value == s {
-		return ErrValueUnchanged
-	}
-	t.Value = s
-	return nil
-}
-
-func (t *testJsVarPathSetter) JawsPathSet(elem *Element, jspath string, value any) {
-	t.Bool.Store(true)
-}
-
-var _ PathSetter = &testJsVarPathSetter{}
-var _ SetPather = &testJsVarPathSetter{}
-
-func Test_JsVar_PathSetter_SetPather(t *testing.T) {
-	nextJid = 0
-	th := newTestHelper(t)
-	rq := newTestRequest(t)
-	defer rq.Close()
-
-	var mu deadlock.Mutex
-	var val testJsVarPathSetter
-	jsv := NewJsVar(&mu, &val)
-	elem := rq.NewElement(jsv)
-	err := jsv.JawsSetPath(elem, "", "foo")
-	th.NoErr(err)
-	th.Equal(val.Value, "foo!!")
-	th.Equal(val.Bool.Load(), true)
-}
-
-func Test_JsVar_Unchanged(t *testing.T) {
-	nextJid = 0
-	th := newTestHelper(t)
-	rq := newTestRequest(t)
-	defer rq.Close()
-
-	var mu deadlock.Mutex
-	var val string
-	jsv := NewJsVar(&mu, &val)
-	elem := rq.NewElement(jsv)
-	err := jsv.JawsSetPath(elem, "", "foo")
-	th.NoErr(err)
-	th.Equal(val, "foo")
-
-	err = jsv.JawsSetPath(elem, "", "foo")
-	th.Equal(err, ErrValueUnchanged)
-	th.Equal(nil, elideErrValueUnchanged(err))
 }

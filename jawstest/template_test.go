@@ -1,12 +1,11 @@
-//go:build integration
-// +build integration
-
 package jawstest
 
 import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/linkdata/jaws"
 )
 
 func TestTemplate_Missing(t *testing.T) {
@@ -14,7 +13,7 @@ func TestTemplate_Missing(t *testing.T) {
 	defer rq.Close()
 
 	err := rq.Template("missingtemplate", nil, nil)
-	if !errors.Is(err, ErrMissingTemplate) {
+	if !errors.Is(err, jaws.ErrMissingTemplate) {
 		t.Error("wrong error", err)
 	}
 	if !strings.Contains(err.Error(), "missingtemplate") {
@@ -23,23 +22,32 @@ func TestTemplate_Missing(t *testing.T) {
 }
 
 func TestTemplate_String(t *testing.T) {
-	is := newTestHelper(t)
 	rq := newTestRequest(t)
 	defer rq.Close()
 
 	dot := 123
-	tmpl := NewTemplate("testtemplate", dot)
+	tmpl := jaws.NewTemplate("testtemplate", dot)
 
-	is.Equal(tmpl.String(), `{"testtemplate", 123}`)
+	if tmpl.String() != `{"testtemplate", 123}` {
+		t.Fatalf("unexpected template string: %q", tmpl.String())
+	}
 }
 
 func TestTemplate_Calls_Dot_Updater(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
-	dot := &testUi{}
-	tmpl := NewTemplate("testtemplate", dot)
+	dot := &testUpdater{}
+	tmpl := jaws.NewTemplate("testtemplate", dot)
 	tmpl.JawsUpdate(nil)
-	if dot.updateCalled != 1 {
-		t.Error(dot.updateCalled)
+	if dot.called != 1 {
+		t.Error(dot.called)
 	}
+}
+
+type testUpdater struct {
+	called int
+}
+
+func (tu *testUpdater) JawsUpdate(*jaws.Element) {
+	tu.called++
 }

@@ -1,6 +1,3 @@
-//go:build integration
-// +build integration
-
 package jawstest
 
 import (
@@ -9,17 +6,18 @@ import (
 	"log/slog"
 	"net/http"
 	"testing"
-	"time"
+
+	"github.com/linkdata/jaws"
 )
 
 type testJaws struct {
-	*Jaws
+	*jaws.Jaws
 	testtmpl *template.Template
 	log      bytes.Buffer
 }
 
 func newTestJaws() (tj *testJaws) {
-	jw, err := New()
+	jw, err := jaws.New()
 	if err != nil {
 		panic(err)
 	}
@@ -27,13 +25,11 @@ func newTestJaws() (tj *testJaws) {
 		Jaws: jw,
 	}
 	tj.Jaws.Logger = slog.New(slog.NewTextHandler(&tj.log, nil))
-	tj.Jaws.MakeAuth = func(r *Request) Auth {
-		return DefaultAuth{}
+	tj.Jaws.MakeAuth = func(r *jaws.Request) jaws.Auth {
+		return testAuth{}
 	}
 	tj.testtmpl = template.Must(template.New("testtemplate").Parse(`{{with $.Dot}}<div id="{{$.Jid}}" {{$.Attrs}}>{{.}}</div>{{end}}`))
 	tj.AddTemplateLookuper(tj.testtmpl)
-
-	tj.Jaws.updateTicker = time.NewTicker(time.Millisecond)
 	go tj.Serve()
 	return
 }
@@ -50,3 +46,9 @@ func newTestRequest(t *testing.T) (tr *TestRequest) {
 	}
 	return NewTestRequest(tj.Jaws, nil)
 }
+
+type testAuth struct{}
+
+func (testAuth) Data() map[string]any { return nil }
+func (testAuth) Email() string        { return "" }
+func (testAuth) IsAdmin() bool        { return true }
