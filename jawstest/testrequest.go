@@ -16,9 +16,6 @@ type TestRequest struct {
 // NewTestRequest forwards to jaws.NewTestRequest.
 func NewTestRequest(jw *jaws.Jaws, hr *http.Request) *TestRequest {
 	tr := jaws.NewTestRequest(jw, hr)
-	if tr == nil {
-		return nil
-	}
 	return &TestRequest{
 		TestRequest: tr,
 		rw: ui.RequestWriter{
