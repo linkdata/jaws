@@ -10,6 +10,7 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawstest"
 	"github.com/linkdata/jaws/ui"
 )
 
@@ -30,7 +31,7 @@ func TestTree(t *testing.T) {
 	maybeError(t, err)
 
 	go jw.Serve()
-	rq := jaws.NewTestRequest(jw, nil)
+	rq := jawstest.NewTestRequest(jw, nil)
 
 	root, err := os.OpenRoot(".")
 	maybeError(t, err)
