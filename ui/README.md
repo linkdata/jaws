@@ -136,8 +136,18 @@ done
 
 find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
   grep -q 'ui.NewHandler(' "$f" || continue
-  grep -q '"github.com/linkdata/jaws/ui"' "$f" || \
-    perl -0777 -i -pe 's@("github.com/linkdata/jaws"\n)@$1\t"github.com/linkdata/jaws/ui"\n@' "$f"
+  grep -q '"github.com/linkdata/jaws/ui"' "$f" && continue
+  perl -0777 -i -pe '
+    if (/ui.NewHandler\(/ && !/"github.com\/linkdata\/jaws\/ui"/) {
+      if (/import\s*\(/s) {
+        s/import\s*\(\n/import (\n\t"github.com\/linkdata\/jaws\/ui"\n/s;
+      } elsif (/^import\s+"[^"]+"\s*$/m) {
+        s/^import\s+"([^"]+)"\s*$/import (\n\t"$1"\n\t"github.com\/linkdata\/jaws\/ui"\n)/m;
+      } else {
+        s/^(package\s+\w+\s*\n)/$1\nimport "github.com\/linkdata\/jaws\/ui"\n/s;
+      }
+    }
+  ' "$f"
 done
 
 gofmt -w $(find . -name '*.go' -type f)
