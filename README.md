@@ -105,7 +105,21 @@ capture groups.
    ui.$1
    ```
 
-4. Optional alias cleanup for migrated imports (`pkg`/`jaws` alias -> no alias)
+4. Handler helper move (`jw.Handler(name, dot)` -> `ui.NewHandler(jw, name, dot)`)
+
+   Find:
+
+   ```regex
+   \b([A-Za-z_][A-Za-z0-9_]*)\.Handler\(
+   ```
+
+   Replace:
+
+   ```text
+   ui.NewHandler($1, 
+   ```
+
+5. Optional alias cleanup for migrated imports (`pkg`/`jaws` alias -> no alias)
 
    Find:
 
@@ -119,8 +133,47 @@ capture groups.
    "github.com/linkdata/jaws/core"
    ```
 
-After applying regex replacements, run `go test ./...` and fix any import/grouping
-formatting with `gofmt -w`.
+### Tested shell commands
+
+These commands were validated on `/home/johlin/Proj/jawsdemo` and use only
+standard tools (`find`, `grep`, `sed`, `perl`, `gofmt`):
+
+```bash
+# 1) import path move: jaws/jaws -> jaws/core
+find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
+  grep -q '"github.com/linkdata/jaws/jaws"' "$f" || continue
+  sed -i 's#"github.com/linkdata/jaws/jaws"#"github.com/linkdata/jaws/core"#g' "$f"
+done
+
+# 2) constructor and type rename: NewUiX/UiX -> ui.NewX/ui.X
+find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
+  grep -Eq '\bjaws\.NewUi[A-Z]|\bjaws\.Ui[A-Z]' "$f" || continue
+  perl -i -pe 's/\bjaws\.NewUi([A-Z][A-Za-z0-9_]*)\(/ui.New$1(/g; s/\bjaws\.Ui([A-Z][A-Za-z0-9_]*)\b/ui.$1/g' "$f"
+done
+
+# 3) handler call rewrite: jw.Handler(...) -> ui.NewHandler(jw, ...)
+find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
+  grep -Eq '\b[A-Za-z_][A-Za-z0-9_]*\.Handler\(' "$f" || continue
+  perl -i -pe 's/\b([A-Za-z_][A-Za-z0-9_]*)\.Handler\(/ui.NewHandler($1, /g' "$f"
+done
+
+# 4) ensure ui import exists where ui.NewHandler is used
+find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
+  grep -q 'ui.NewHandler(' "$f" || continue
+  grep -q '"github.com/linkdata/jaws/ui"' "$f" || \
+    perl -0777 -i -pe 's@("github.com/linkdata/jaws"\n)@$1\t"github.com/linkdata/jaws/ui"\n@' "$f"
+done
+
+# 5) format and verify
+gofmt -w $(find . -name '*.go' -type f)
+go test ./...
+```
+
+If `go mod` updates are requested after migration, run:
+
+```bash
+go mod tidy
+```
 
 For widget authoring guidance see `ui/README.md`.
 
@@ -164,8 +217,10 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"sync"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/ui"
 )
 
 const indexhtml = `
@@ -193,7 +248,7 @@ func main() {
 	var mu sync.Mutex
 	var f float64
 
-	http.DefaultServeMux.Handle("/", jw.Handler("index", jaws.Bind(&mu, &f)))
+	http.DefaultServeMux.Handle("/", ui.NewHandler(jw, "index", jaws.Bind(&mu, &f)))
 	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 }
 ```

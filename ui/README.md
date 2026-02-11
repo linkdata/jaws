@@ -70,7 +70,21 @@ Use these for bulk migration in editors with regex capture-group support:
    "github.com/linkdata/jaws/core"
    ```
 
-4. Optional alias cleanup for core imports
+4. Handler helper move (`jw.Handler(name, dot)` -> `ui.NewHandler(jw, name, dot)`)
+
+   Find:
+
+   ```regex
+   \b([A-Za-z_][A-Za-z0-9_]*)\.Handler\(
+   ```
+
+   Replace:
+
+   ```text
+   ui.NewHandler($1, 
+   ```
+
+5. Optional alias cleanup for core imports
 
    Find:
 
@@ -83,6 +97,34 @@ Use these for bulk migration in editors with regex capture-group support:
    ```text
    "github.com/linkdata/jaws/core"
    ```
+
+### Command sequence
+
+```bash
+find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
+  grep -q '"github.com/linkdata/jaws/jaws"' "$f" || continue
+  sed -i 's#"github.com/linkdata/jaws/jaws"#"github.com/linkdata/jaws/core"#g' "$f"
+done
+
+find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
+  grep -Eq '\bjaws\.NewUi[A-Z]|\bjaws\.Ui[A-Z]' "$f" || continue
+  perl -i -pe 's/\bjaws\.NewUi([A-Z][A-Za-z0-9_]*)\(/ui.New$1(/g; s/\bjaws\.Ui([A-Z][A-Za-z0-9_]*)\b/ui.$1/g' "$f"
+done
+
+find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
+  grep -Eq '\b[A-Za-z_][A-Za-z0-9_]*\.Handler\(' "$f" || continue
+  perl -i -pe 's/\b([A-Za-z_][A-Za-z0-9_]*)\.Handler\(/ui.NewHandler($1, /g' "$f"
+done
+
+find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
+  grep -q 'ui.NewHandler(' "$f" || continue
+  grep -q '"github.com/linkdata/jaws/ui"' "$f" || \
+    perl -0777 -i -pe 's@("github.com/linkdata/jaws"\n)@$1\t"github.com/linkdata/jaws/ui"\n@' "$f"
+done
+
+gofmt -w $(find . -name '*.go' -type f)
+go test ./...
+```
 
 ### RequestWriter helper calls
 
