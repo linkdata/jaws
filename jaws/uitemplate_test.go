@@ -17,7 +17,7 @@ func TestRequest_TemplateMissingJid(t *testing.T) {
 	if !deadlock.Debug {
 		t.Skip("debug tag not set")
 	}
-	nextJid = 0
+	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 	var log bytes.Buffer
@@ -36,7 +36,7 @@ func TestRequest_TemplateJidInsideIf(t *testing.T) {
 	if !deadlock.Debug {
 		t.Skip("debug tag not set")
 	}
-	nextJid = 0
+	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 	var log bytes.Buffer
@@ -55,7 +55,7 @@ func TestRequest_TemplateMissingJidButHasHTMLTag(t *testing.T) {
 	if !deadlock.Debug {
 		t.Skip("debug tag not set")
 	}
-	nextJid = 0
+	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 	var log bytes.Buffer
@@ -113,7 +113,7 @@ func TestRequest_Template(t *testing.T) {
 	// `{{with $.Dot}}<div id="{{$.Jid}}{{$.Attrs}}">{{.}}</div>{{end}}`
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			nextJid = 0
+			NextJid = 0
 			rq := newTestRequest(t)
 			defer rq.Close()
 			if tt.errtxt != "" {

@@ -57,7 +57,7 @@ var _ UI = (*testJawsEvent)(nil)
 
 func Test_JawsEvent_ClickUnhandled(t *testing.T) {
 	th := newTestHelper(t)
-	nextJid = 0
+	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 
@@ -81,7 +81,7 @@ func Test_JawsEvent_ClickUnhandled(t *testing.T) {
 
 func Test_JawsEvent_AllUnhandled(t *testing.T) {
 	th := newTestHelper(t)
-	nextJid = 0
+	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 
@@ -125,7 +125,7 @@ func (t *testJawsEventHandler) JawsEvent(e *Element, wht what.What, val string) 
 
 func Test_JawsEvent_ExtraHandler(t *testing.T) {
 	th := newTestHelper(t)
-	nextJid = 0
+	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 

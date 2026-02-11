@@ -23,7 +23,7 @@ var _ ClickHandler = (*testJawsClick)(nil)
 
 func Test_clickHandlerWapper_JawsEvent(t *testing.T) {
 	th := newTestHelper(t)
-	nextJid = 0
+	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 

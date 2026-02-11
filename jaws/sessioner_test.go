@@ -7,7 +7,7 @@ import (
 )
 
 func TestJaws_Session(t *testing.T) {
-	nextJid = 0
+	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 

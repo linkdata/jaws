@@ -369,11 +369,12 @@ func (rq *Request) wantMessage(msg *Message) (yes bool) {
 	return
 }
 
-var nextJid Jid
+// NextJid is the next Jid that should be used. Used when testing. Do not modify it outside of tests.
+var NextJid Jid
 
 func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 	elem = &Element{
-		jid:     Jid(atomic.AddInt64((*int64)(&nextJid), 1)),
+		jid:     Jid(atomic.AddInt64((*int64)(&NextJid), 1)),
 		ui:      ui,
 		Request: rq,
 	}

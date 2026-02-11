@@ -60,7 +60,7 @@ func TestRequest_HeadHTML(t *testing.T) {
 
 func TestRequestWriter_TailHTML(t *testing.T) {
 	th := newTestHelper(t)
-	nextJid = 0
+	NextJid = 0
 	jw, _ := New()
 	defer jw.Close()
 	rq := jw.NewRequest(nil)
@@ -474,7 +474,7 @@ func TestRequest_DeleteByTag(t *testing.T) {
 	th := newTestHelper(t)
 	tj := newTestJaws()
 	defer tj.Close()
-	nextJid = 0
+	NextJid = 0
 	rq1 := tj.newRequest(nil)
 	ui1 := &testUi{}
 	e11 := rq1.NewElement(ui1)
@@ -625,7 +625,7 @@ func TestRequest_Dirty(t *testing.T) {
 
 func TestRequest_UpdatePanicLogs(t *testing.T) {
 	th := newTestHelper(t)
-	nextJid = 0
+	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 	var log bytes.Buffer
@@ -649,7 +649,7 @@ func TestRequest_UpdatePanicLogs(t *testing.T) {
 
 func TestRequest_IncomingRemove(t *testing.T) {
 	th := newTestHelper(t)
-	nextJid = 0
+	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 
@@ -676,7 +676,7 @@ func TestRequest_IncomingRemove(t *testing.T) {
 
 func TestRequest_IncomingClick(t *testing.T) {
 	th := newTestHelper(t)
-	nextJid = 0
+	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 
