@@ -135,7 +135,7 @@ capture groups.
 
 ### Tested shell commands
 
-These commands were validated on `/home/johlin/Proj/jawsdemo` and use only
+These commands were validated on `https://github.com/linkdata/jawsdemo` and use only
 standard tools (`find`, `grep`, `sed`, `perl`, `gofmt`):
 
 ```bash
