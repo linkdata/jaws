@@ -51,6 +51,7 @@ type (
 	With                 = ui.With
 	Session              = pkg.Session
 	Tag                  = pkg.Tag
+	TestRequest          = pkg.TestRequest
 )
 
 var (
@@ -82,6 +83,7 @@ var (
 	MakeHTMLGetter    = pkg.MakeHTMLGetter
 	NewNamedBool      = pkg.NewNamedBool
 	NewNamedBoolArray = pkg.NewNamedBoolArray
+	NewTestRequest    = pkg.NewTestRequest
 )
 
 // Generic functions must be wrapped

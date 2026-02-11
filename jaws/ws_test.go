@@ -231,7 +231,7 @@ func TestWS_NormalExchange(t *testing.T) {
 
 	gotCallCh := make(chan struct{})
 	fooItem := &testUi{}
-	RequestWriter{ts.rq, httptest.NewRecorder()}.Register(fooItem, func(e *Element, evt what.What, val string) error {
+	testRequestWriter{rq: ts.rq, Writer: httptest.NewRecorder()}.Register(fooItem, func(e *Element, evt what.What, val string) error {
 		close(gotCallCh)
 		return fooError
 	})

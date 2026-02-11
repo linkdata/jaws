@@ -1,7 +1,4 @@
-//go:build integration
-// +build integration
-
-package jawstest
+package jaws
 
 import (
 	"bytes"
@@ -23,9 +20,7 @@ func newTestJaws() (tj *testJaws) {
 	if err != nil {
 		panic(err)
 	}
-	tj = &testJaws{
-		Jaws: jw,
-	}
+	tj = &testJaws{Jaws: jw}
 	tj.Jaws.Logger = slog.New(slog.NewTextHandler(&tj.log, nil))
 	tj.Jaws.MakeAuth = func(r *Request) Auth {
 		return DefaultAuth{}
@@ -42,11 +37,11 @@ func (tj *testJaws) newRequest(hr *http.Request) (tr *TestRequest) {
 	return NewTestRequest(tj.Jaws, hr)
 }
 
-func newTestRequest(t *testing.T) (tr *TestRequest) {
+func newTestRequest(t *testing.T) (tr *testRequest) {
 	tj := newTestJaws()
 	if t != nil {
 		t.Helper()
 		t.Cleanup(tj.Close)
 	}
-	return NewTestRequest(tj.Jaws, nil)
+	return newWrappedTestRequest(tj.Jaws, nil)
 }

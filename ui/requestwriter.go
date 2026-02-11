@@ -2,6 +2,7 @@ package ui
 
 import (
 	"io"
+	"net/http"
 
 	"github.com/linkdata/jaws/jaws"
 )
@@ -18,6 +19,26 @@ func (rqw RequestWriter) UI(ui jaws.UI, params ...any) error {
 func (rqw RequestWriter) Write(p []byte) (n int, err error) {
 	rqw.Rendering.Store(true)
 	return rqw.Writer.Write(p)
+}
+
+// Initial returns the initial http.Request.
+func (rqw RequestWriter) Initial() *http.Request {
+	return rqw.Request.Initial()
+}
+
+// Session returns the Requests's Session, or nil.
+func (rqw RequestWriter) Session() *jaws.Session {
+	return rqw.Request.Session()
+}
+
+// Get calls Request().Get()
+func (rqw RequestWriter) Get(key string) (val any) {
+	return rqw.Request.Get(key)
+}
+
+// Set calls Request().Set()
+func (rqw RequestWriter) Set(key string, val any) {
+	rqw.Request.Set(key, val)
 }
 
 // HeadHTML outputs the HTML code needed in the HEAD section.
