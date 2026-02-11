@@ -10,12 +10,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/linkdata/jaws/core"
 )
-
-var jidPattern = regexp.MustCompile(`Jid\.[0-9]+`)
 
 func mustMatch(t *testing.T, pattern, got string) {
 	t.Helper()
@@ -124,14 +121,3 @@ func (ui errorUI) JawsRender(*core.Element, io.Writer, []any) error {
 }
 
 func (errorUI) JawsUpdate(*core.Element) {}
-
-func waitUntil(t *testing.T, fn func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for !fn() {
-		if time.Now().After(deadline) {
-			t.Fatal("timeout")
-		}
-		time.Sleep(time.Millisecond)
-	}
-}
