@@ -1,4 +1,4 @@
-package jaws
+package ui
 
 import (
 	"bytes"
@@ -9,6 +9,7 @@ import (
 	"text/template/parse"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/jaws"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -23,11 +24,11 @@ type Template struct {
 	Dot  any    // Dot value to place in With structure
 }
 
-var _ UI = Template{}           // statically ensure interface is defined
-var _ EventHandler = Template{} // statically ensure interface is defined
+var _ jaws.UI = Template{}           // statically ensure interface is defined
+var _ jaws.EventHandler = Template{} // statically ensure interface is defined
 
 func (t Template) String() string {
-	return fmt.Sprintf("{%q, %s}", t.Name, TagString(t.Dot))
+	return fmt.Sprintf("{%q, %s}", t.Name, jaws.TagString(t.Dot))
 }
 
 func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
@@ -84,16 +85,16 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
 	return
 }
 
-func (t Template) JawsRender(e *Element, wr io.Writer, params []any) (err error) {
+func (t Template) JawsRender(e *jaws.Element, wr io.Writer, params []any) (err error) {
 	var expandedtags []any
-	if expandedtags, err = TagExpand(e.Request, t.Dot); err == nil {
-		e.Request.tagExpanded(e, expandedtags)
-		tags, handlers, attrs := ParseParams(params)
+	if expandedtags, err = jaws.TagExpand(e.Request, t.Dot); err == nil {
+		e.Request.TagExpanded(e, expandedtags)
+		tags, handlers, attrs := jaws.ParseParams(params)
 		e.Tag(tags...)
-		e.handlers = append(e.handlers, handlers...)
+		e.AddHandlers(handlers...)
 		attrstr := template.HTMLAttr(strings.Join(attrs, " ")) // #nosec G203
-		var auth Auth
-		auth = defaultAuth{}
+		var auth jaws.Auth
+		auth = jaws.DefaultAuth{}
 		if f := e.Request.Jaws.MakeAuth; f != nil {
 			auth = f(e.Request)
 		}
@@ -101,7 +102,7 @@ func (t Template) JawsRender(e *Element, wr io.Writer, params []any) (err error)
 		if tmpl := e.Request.Jaws.LookupTemplate(t.Name); tmpl != nil {
 			err = tmpl.Execute(wr, With{
 				Element:       e,
-				RequestWriter: e.Request.Writer(wr),
+				RequestWriter: RequestWriter{Request: e.Request, Writer: wr},
 				Dot:           t.Dot,
 				Attrs:         attrstr,
 				Auth:          auth,
@@ -116,14 +117,14 @@ func (t Template) JawsRender(e *Element, wr io.Writer, params []any) (err error)
 	return
 }
 
-func (t Template) JawsUpdate(e *Element) {
-	if dot, ok := t.Dot.(Updater); ok {
+func (t Template) JawsUpdate(e *jaws.Element) {
+	if dot, ok := t.Dot.(jaws.Updater); ok {
 		dot.JawsUpdate(e)
 	}
 }
 
-func (t Template) JawsEvent(e *Element, wht what.What, val string) error {
-	return callEventHandlers(t.Dot, e, wht, val)
+func (t Template) JawsEvent(e *jaws.Element, wht what.What, val string) error {
+	return jaws.CallEventHandlers(t.Dot, e, wht, val)
 }
 
 // NewTemplate constructs a Template with the provided name and data value.
@@ -138,6 +139,6 @@ func NewTemplate(name string, dot any) Template {
 //
 // The name argument is a string to be resolved to a *template.Template
 // using Jaws.LookupTemplate().
-func (rq RequestWriter) Template(name string, dot any, params ...any) error {
-	return rq.UI(NewTemplate(name, dot), params...)
+func (rqw RequestWriter) Template(name string, dot any, params ...any) error {
+	return rqw.UI(NewTemplate(name, dot), params...)
 }

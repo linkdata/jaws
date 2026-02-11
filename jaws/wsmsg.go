@@ -10,14 +10,14 @@ import (
 	"github.com/linkdata/jaws/what"
 )
 
-// wsMsg is a message sent to or from a WebSocket.
-type wsMsg struct {
+// WsMsg is a message sent to or from a WebSocket.
+type WsMsg struct {
 	Data string    // data to send
 	Jid  Jid       // Jid to send, or -1 if Data contains that already
 	What what.What // command
 }
 
-func (m *wsMsg) Append(b []byte) []byte {
+func (m *WsMsg) Append(b []byte) []byte {
 	b = append(b, m.What.String()...)
 	b = append(b, '\t')
 	if m.Jid >= 0 {
@@ -38,12 +38,12 @@ func (m *wsMsg) Append(b []byte) []byte {
 	return b
 }
 
-func (m *wsMsg) Format() string {
+func (m *WsMsg) Format() string {
 	return string(m.Append(nil))
 }
 
 // wsParse parses an incoming text buffer into a message.
-func wsParse(txt []byte) (wsMsg, bool) {
+func wsParse(txt []byte) (WsMsg, bool) {
 	if len(txt) > 2 && txt[len(txt)-1] == '\n' {
 		if nl1 := bytes.IndexByte(txt, '\t'); nl1 >= 0 {
 			if nl2 := bytes.IndexByte(txt[nl1+1:], '\t'); nl2 >= 0 {
@@ -56,10 +56,10 @@ func wsParse(txt []byte) (wsMsg, bool) {
 						if wht != what.Set && txt[nl2+1] == '"' {
 							var err error
 							if data, err = strconv.Unquote(data); err != nil {
-								return wsMsg{}, false
+								return WsMsg{}, false
 							}
 						}
-						return wsMsg{
+						return WsMsg{
 							Data: strings.ToValidUTF8(data, ""),
 							Jid:  id,
 							What: wht,
@@ -69,10 +69,10 @@ func wsParse(txt []byte) (wsMsg, bool) {
 			}
 		}
 	}
-	return wsMsg{}, false
+	return WsMsg{}, false
 }
 
-func (m *wsMsg) FillAlert(err error) {
+func (m *WsMsg) FillAlert(err error) {
 	m.Jid = 0
 	m.What = what.Alert
 	m.Data = "danger\n" + html.EscapeString(err.Error())

@@ -1,4 +1,4 @@
-package jaws
+package jawstest
 
 import (
 	"bytes"
@@ -25,7 +25,7 @@ func newTestJaws() (tj *testJaws) {
 	}
 	tj.Jaws.Logger = slog.New(slog.NewTextHandler(&tj.log, nil))
 	tj.Jaws.MakeAuth = func(r *Request) Auth {
-		return defaultAuth{}
+		return DefaultAuth{}
 	}
 	tj.testtmpl = template.Must(template.New("testtemplate").Parse(`{{with $.Dot}}<div id="{{$.Jid}}" {{$.Attrs}}>{{.}}</div>{{end}}`))
 	tj.AddTemplateLookuper(tj.testtmpl)

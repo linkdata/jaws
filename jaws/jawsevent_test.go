@@ -68,7 +68,7 @@ func Test_JawsEvent_ClickUnhandled(t *testing.T) {
 	id := rq.Register(zomgItem, je, "attr1", []string{"attr2"}, template.HTMLAttr("attr3"), []template.HTMLAttr{"attr4"})
 
 	je.clickerr = ErrEventUnhandled
-	rq.InCh <- wsMsg{Data: "name", Jid: id, What: what.Click}
+	rq.InCh <- WsMsg{Data: "name", Jid: id, What: what.Click}
 	select {
 	case <-th.C:
 		th.Timeout()
@@ -93,7 +93,7 @@ func Test_JawsEvent_AllUnhandled(t *testing.T) {
 
 	je.clickerr = ErrEventUnhandled
 	je.eventerr = ErrEventUnhandled
-	rq.InCh <- wsMsg{Data: "name", Jid: id, What: what.Click}
+	rq.InCh <- WsMsg{Data: "name", Jid: id, What: what.Click}
 	select {
 	case <-th.C:
 		th.Timeout()
@@ -139,7 +139,7 @@ func Test_JawsEvent_ExtraHandler(t *testing.T) {
 	th.NoErr(elem.JawsRender(&sb, []any{je}))
 	th.Equal(sb.String(), "<div id=\"Jid.1\">tjEH</div>")
 
-	rq.InCh <- wsMsg{Data: "name", Jid: 1, What: what.Click}
+	rq.InCh <- WsMsg{Data: "name", Jid: 1, What: what.Click}
 	select {
 	case <-th.C:
 		th.Timeout()

@@ -8,8 +8,8 @@ type Auth interface {
 
 type MakeAuthFn func(*Request) Auth
 
-type defaultAuth struct{}
+type DefaultAuth struct{}
 
-func (defaultAuth) Data() map[string]any { return nil }
-func (defaultAuth) Email() string        { return "" }
-func (defaultAuth) IsAdmin() bool        { return true }
+func (DefaultAuth) Data() map[string]any { return nil }
+func (DefaultAuth) Email() string        { return "" }
+func (DefaultAuth) IsAdmin() bool        { return true }

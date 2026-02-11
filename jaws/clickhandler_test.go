@@ -38,7 +38,7 @@ func Test_clickHandlerWapper_JawsEvent(t *testing.T) {
 		t.Errorf("Request.UI(NewDiv()) = %q, want %q", got, want)
 	}
 
-	rq.InCh <- wsMsg{Data: "text", Jid: 1, What: what.Input}
+	rq.InCh <- WsMsg{Data: "text", Jid: 1, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
@@ -47,7 +47,7 @@ func Test_clickHandlerWapper_JawsEvent(t *testing.T) {
 	default:
 	}
 
-	rq.InCh <- wsMsg{Data: "adam", Jid: 1, What: what.Click}
+	rq.InCh <- WsMsg{Data: "adam", Jid: 1, What: what.Click}
 	select {
 	case <-th.C:
 		th.Timeout()

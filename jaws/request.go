@@ -34,7 +34,7 @@ type Request struct {
 	Jaws       *Jaws                   // (read-only) the JaWS instance the Request belongs to
 	JawsKey    uint64                  // (read-only) a random number used in the WebSocket URI to identify this Request
 	remoteIP   netip.Addr              // (read-only) remote IP, or nil
-	rendering  atomic.Bool             // set to true by RequestWriter.Write()
+	Rendering  atomic.Bool             // set to true by RequestWriter.Write()
 	running    atomic.Bool             // if ServeHTTP() is running
 	claimed    atomic.Bool             // if UseRequest() has been called for it
 	mu         deadlock.RWMutex        // protects following
@@ -49,7 +49,7 @@ type Request struct {
 	elems      []*Element              // our Elements
 	tagMap     map[any][]*Element      // maps tags to Elements
 	muQueue    deadlock.Mutex          // protects wsQueue
-	wsQueue    []wsMsg                 // queued messages to send
+	wsQueue    []WsMsg                 // queued messages to send
 }
 
 type eventFnCall struct {
@@ -257,7 +257,7 @@ func (rq *Request) SetContext(fn func(oldctx context.Context) (newctx context.Co
 
 func (rq *Request) maintenance(now time.Time, requestTimeout time.Duration) bool {
 	if !rq.running.Load() {
-		if rq.rendering.Swap(false) {
+		if rq.Rendering.Swap(false) {
 			rq.mu.Lock()
 			rq.lastWrite = now
 			rq.mu.Unlock()
@@ -435,7 +435,7 @@ func (rq *Request) appendDirtyTags(tags []any) {
 }
 
 // Tag adds the given tags to the given Element.
-func (rq *Request) tagExpanded(elem *Element, expandedtags []any) {
+func (rq *Request) TagExpanded(elem *Element, expandedtags []any) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	for _, tag := range expandedtags {
@@ -448,7 +448,7 @@ func (rq *Request) tagExpanded(elem *Element, expandedtags []any) {
 // Tag adds the given tags to the given Element.
 func (rq *Request) Tag(elem *Element, tags ...any) {
 	if elem != nil && len(tags) > 0 && elem.Request == rq {
-		rq.tagExpanded(elem, MustTagExpand(elem.Request, tags))
+		rq.TagExpanded(elem, MustTagExpand(elem.Request, tags))
 	}
 }
 
@@ -472,7 +472,7 @@ func (rq *Request) GetElements(tagitem any) (elems []*Element) {
 }
 
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
-func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsMsg, outboundMsgCh chan<- wsMsg) {
+func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan WsMsg, outboundMsgCh chan<- WsMsg) {
 	jawsDoneCh := rq.Jaws.Done()
 	httpDoneCh := rq.httpDoneCh
 	eventDoneCh := make(chan struct{})
@@ -504,7 +504,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 
 	for {
 		var tagmsg Message
-		var wsmsg wsMsg
+		var wsmsg WsMsg
 		var ok bool
 
 		rq.sendQueue(outboundMsgCh)
@@ -551,7 +551,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 		case *Request:
 		case string:
 			// target is a regular HTML ID
-			rq.queue(wsMsg{
+			rq.queue(WsMsg{
 				Data: v + "\t" + strconv.Quote(tagmsg.Data),
 				What: tagmsg.What,
 				Jid:  -1,
@@ -562,7 +562,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 
 		switch tagmsg.What {
 		case what.Reload, what.Redirect, what.Order, what.Alert:
-			rq.queue(wsMsg{
+			rq.queue(WsMsg{
 				Jid:  0,
 				Data: tagmsg.Data,
 				What: tagmsg.What,
@@ -571,7 +571,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 			for _, elem := range todo {
 				switch tagmsg.What {
 				case what.Delete:
-					rq.queue(wsMsg{
+					rq.queue(WsMsg{
 						Jid:  elem.Jid(),
 						What: what.Delete,
 					})
@@ -588,7 +588,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 					// an error to be sent out as an alert message.
 					// primary usecase is tests.
 					if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.Jid(), tagmsg.What, tagmsg.Data)); err != nil {
-						rq.queue(wsMsg{
+						rq.queue(WsMsg{
 							Data: tagmsg.Data,
 							Jid:  elem.Jid(),
 							What: what.Alert,
@@ -597,7 +597,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan wsM
 				case what.Update:
 					elem.JawsUpdate()
 				default:
-					rq.queue(wsMsg{
+					rq.queue(WsMsg{
 						Data: tagmsg.Data,
 						Jid:  elem.Jid(),
 						What: tagmsg.What,
@@ -618,7 +618,7 @@ func (rq *Request) handleRemove(data string) {
 	}
 }
 
-func (rq *Request) queue(msg wsMsg) {
+func (rq *Request) queue(msg WsMsg) {
 	rq.muQueue.Lock()
 	rq.wsQueue = append(rq.wsQueue, msg)
 	rq.muQueue.Unlock()
@@ -650,7 +650,7 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err 
 	rq.mu.RUnlock()
 
 	for _, e := range elems {
-		if err = callEventHandlers(e.Ui(), e, wht, val); err != ErrEventUnhandled {
+		if err = CallEventHandlers(e.Ui(), e, wht, val); err != ErrEventUnhandled {
 			return
 		}
 	}
@@ -669,7 +669,7 @@ func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
 	}
 }
 
-func (rq *Request) getSendMsgs() (toSend []wsMsg) {
+func (rq *Request) getSendMsgs() (toSend []WsMsg) {
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
 
@@ -695,11 +695,11 @@ func (rq *Request) getSendMsgs() (toSend []wsMsg) {
 		rq.wsQueue = rq.wsQueue[:0]
 	}
 
-	slices.SortStableFunc(toSend, func(a, b wsMsg) int { return int(a.Jid - b.Jid) })
+	slices.SortStableFunc(toSend, func(a, b WsMsg) int { return int(a.Jid - b.Jid) })
 	return
 }
 
-func (rq *Request) sendQueue(outboundMsgCh chan<- wsMsg) {
+func (rq *Request) sendQueue(outboundMsgCh chan<- WsMsg) {
 	for _, msg := range rq.getSendMsgs() {
 		select {
 		case <-rq.Context().Done():
@@ -770,11 +770,11 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 }
 
 // eventCaller calls event functions
-func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh chan<- wsMsg, eventDoneCh chan<- struct{}) {
+func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh chan<- WsMsg, eventDoneCh chan<- struct{}) {
 	defer close(eventDoneCh)
 	for call := range eventCallCh {
 		if err := rq.callAllEventHandlers(call.jid, call.wht, call.data); err != nil {
-			var m wsMsg
+			var m WsMsg
 			m.FillAlert(err)
 			select {
 			case outboundMsgCh <- m:
@@ -795,11 +795,6 @@ func (rq *Request) onConnect() (err error) {
 		err = connectFn(rq)
 	}
 	return
-}
-
-// Writer returns a RequestWriter with this Request and the given Writer.
-func (rq *Request) Writer(w io.Writer) RequestWriter {
-	return RequestWriter{rq: rq, Writer: w}
 }
 
 func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) {

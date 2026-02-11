@@ -1,4 +1,4 @@
-package jaws
+package jawstest
 
 import (
 	"encoding/json"

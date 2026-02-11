@@ -319,7 +319,7 @@ func TestSession_Delete(t *testing.T) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	msg := wsMsg{Jid: jidForTag(ts.rq, byebyeItem), What: what.Input}
+	msg := WsMsg{Jid: jidForTag(ts.rq, byebyeItem), What: what.Input}
 	ctx, cancel := context.WithCancel(ts.ctx)
 	defer cancel()
 

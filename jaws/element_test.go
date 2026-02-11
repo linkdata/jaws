@@ -112,7 +112,7 @@ func TestElement_Queued(t *testing.T) {
 			e.Order([]jid.Jid{1, 2})
 			replaceHTML := template.HTML(fmt.Sprintf("<div id=\"%s\"></div>", e.Jid().String()))
 			e.Replace(replaceHTML)
-			th.Equal(rq.wsQueue, []wsMsg{
+			th.Equal(rq.wsQueue, []WsMsg{
 				{
 					Data: "hidden\n",
 					Jid:  e.jid,

@@ -5,7 +5,7 @@ import (
 )
 
 func Test_defaultAuth(t *testing.T) {
-	a := defaultAuth{}
+	a := DefaultAuth{}
 	if a.Data() != nil {
 		t.Fatal()
 	}

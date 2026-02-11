@@ -1,4 +1,4 @@
-package jaws
+package ui
 
 import (
 	"strconv"

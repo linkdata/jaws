@@ -11,7 +11,7 @@ import (
 )
 
 func Benchmark_wsMsg_AppendAlert(b *testing.B) {
-	m := wsMsg{
+	m := WsMsg{
 		Data: "name",
 		Jid:  1,
 		What: what.Alert,
@@ -79,7 +79,7 @@ func Test_wsMsg_Append(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := wsMsg{
+			m := WsMsg{
 				Data: tt.fields.Data,
 				Jid:  tt.fields.Jid,
 				What: tt.fields.What,
@@ -100,12 +100,12 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 	tests := []struct {
 		name string
 		txt  string
-		want wsMsg
+		want WsMsg
 	}{
-		{"shortest", "Update\t\t\n", wsMsg{What: what.Update}},
-		{"unquoted", "Input\tJid.1\ttrue\n", wsMsg{Jid: Jid(1), What: what.Input, Data: "true"}},
-		{"normal", "Input\tJid.2\t\"c\"\n", wsMsg{Jid: Jid(2), What: what.Input, Data: "c"}},
-		{"newline", "Input\tJid.3\t\"c\\nd\"\n", wsMsg{Jid: Jid(3), What: what.Input, Data: "c\nd"}},
+		{"shortest", "Update\t\t\n", WsMsg{What: what.Update}},
+		{"unquoted", "Input\tJid.1\ttrue\n", WsMsg{Jid: Jid(1), What: what.Input, Data: "true"}},
+		{"normal", "Input\tJid.2\t\"c\"\n", WsMsg{Jid: Jid(2), What: what.Input, Data: "c"}},
+		{"newline", "Input\tJid.3\t\"c\\nd\"\n", WsMsg{Jid: Jid(3), What: what.Input, Data: "c\nd"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -132,7 +132,7 @@ func Test_wsParse_IncompleteFails(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, ok := wsParse(tt.txt)
-			if ok || !reflect.DeepEqual(got, wsMsg{}) {
+			if ok || !reflect.DeepEqual(got, WsMsg{}) {
 				t.Errorf("wsParse(%q): got %q wanted wsMsg{}", tt.txt, got)
 			}
 		})
@@ -169,7 +169,7 @@ func Test_wsMsg_FillAlert(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var m wsMsg
+			var m WsMsg
 			m.FillAlert(tt.err)
 			got := m.Format()
 			if got != tt.want {

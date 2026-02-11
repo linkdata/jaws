@@ -3,13 +3,30 @@ package ui
 import (
 	"io"
 
-	pkg "github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/jid"
 )
 
 // Register creates an element used for update-only registration.
-type Register struct{ pkg.Updater }
+type Register struct{ jaws.Updater }
 
-func NewRegister(updater pkg.Updater) Register { return Register{Updater: updater} }
-func (ui Register) JawsRender(*pkg.Element, io.Writer, []any) error {
+func NewRegister(updater jaws.Updater) Register { return Register{Updater: updater} }
+func (ui Register) JawsRender(*jaws.Element, io.Writer, []any) error {
 	return nil
+}
+
+// Register creates a new Element with the given Updater as a tag
+// for dynamic updates. Additional tags may be provided in params.
+// The updaters JawsUpdate method will be called immediately to
+// ensure the initial rendering is correct.
+//
+// Returns a Jid, suitable for including as a HTML "id" attribute:
+//
+//	<div id="{{$.Register .MyUpdater}}">...</div>
+func (rqw RequestWriter) Register(updater jaws.Updater, params ...any) jid.Jid {
+	elem := rqw.NewElement(Register{Updater: updater})
+	elem.Tag(updater)
+	elem.ApplyParams(params)
+	updater.JawsUpdate(elem)
+	return elem.Jid()
 }

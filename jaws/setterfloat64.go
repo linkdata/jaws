@@ -81,7 +81,7 @@ func makeSetterFloat64for[T numeric](s *Setter[float64], v any) bool {
 	return false
 }
 
-func makeSetterFloat64(v any) (s Setter[float64]) {
+func MakeSetterFloat64(v any) (s Setter[float64]) {
 	switch v := v.(type) {
 	case Setter[float64]:
 		return v

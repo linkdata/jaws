@@ -38,7 +38,7 @@ func (s setterStatic[T]) JawsGetTag(*Request) any {
 	return nil
 }
 
-func makeSetter[T comparable](v any) Setter[T] {
+func MakeSetter[T comparable](v any) Setter[T] {
 	switch v := v.(type) {
 	case Setter[T]:
 		return v

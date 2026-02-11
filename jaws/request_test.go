@@ -19,10 +19,10 @@ import (
 
 const testTimeout = time.Second * 3
 
-func fillWsCh(ch chan wsMsg) {
+func fillWsCh(ch chan WsMsg) {
 	for {
 		select {
-		case ch <- wsMsg{}:
+		case ch <- WsMsg{}:
 		default:
 			return
 		}
@@ -107,7 +107,7 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 		elem := rq.GetElementByJid(jid)
 		is.True(elem != nil)
 		if elem != nil {
-			is.Equal(msg, wsMsg{Jid: elem.jid, Data: "bar", What: what.Inner})
+			is.Equal(msg, WsMsg{Jid: elem.jid, Data: "bar", What: what.Inner})
 		}
 	}
 }
@@ -205,7 +205,7 @@ func TestRequest_Trigger(t *testing.T) {
 	case <-th.C:
 		th.Timeout()
 	case msg := <-rq.OutCh:
-		th.Equal(msg.Format(), (&wsMsg{
+		th.Equal(msg.Format(), (&WsMsg{
 			Data: "danger\nomg",
 			Jid:  jid.Jid(0),
 			What: what.Alert,
@@ -312,7 +312,7 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 			return
 		case <-th.C:
 			th.Timeout()
-		case rq.InCh <- wsMsg{Jid: jid, What: what.Input}:
+		case rq.InCh <- WsMsg{Jid: jid, What: what.Input}:
 		}
 	}
 }
@@ -380,7 +380,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 			rq.Jaws.Broadcast(Message{Dest: rq})
 		}
 		select {
-		case rq.InCh <- wsMsg{}:
+		case rq.InCh <- WsMsg{}:
 		case <-rq.DoneCh:
 			th.Fatal()
 		case <-th.C:
@@ -659,7 +659,7 @@ func TestRequest_IncomingRemove(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.InCh <- wsMsg{What: what.Remove, Data: "Jid.1"}:
+	case rq.InCh <- WsMsg{What: what.Remove, Data: "Jid.1"}:
 	}
 
 	elem := rq.GetElementByJid(1)
@@ -696,7 +696,7 @@ func TestRequest_IncomingClick(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.InCh <- wsMsg{What: what.Click, Data: "name\tJid.1\tJid.2"}:
+	case rq.InCh <- WsMsg{What: what.Click, Data: "name\tJid.1\tJid.2"}:
 	}
 
 	select {

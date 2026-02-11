@@ -1,4 +1,4 @@
-package jaws
+package jawstest
 
 import (
 	"bufio"
@@ -387,7 +387,7 @@ func TestJaws_RequestWriterExtendsDeadline(t *testing.T) {
 	rw.UI(ui)
 
 	th.True(ui.renderCalled > 0)
-	th.True(rq.rendering.Load())
+	th.True(rq.Rendering.Load())
 	th.Equal(lastWrite, getLastWrite(rq))
 
 	go jw.ServeWithTimeout(time.Millisecond)

@@ -53,7 +53,7 @@ func Test_makeSetterFloat64types(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if gotS := makeSetterFloat64(tt.v); !reflect.DeepEqual(gotS, tt.wantS) {
+			if gotS := MakeSetterFloat64(tt.v); !reflect.DeepEqual(gotS, tt.wantS) {
 				t.Errorf("makeSetterFloat64() = %#v, want %#v", gotS, tt.wantS)
 			}
 		})
@@ -62,7 +62,7 @@ func Test_makeSetterFloat64types(t *testing.T) {
 
 func Test_makeSetterFloat64_int(t *testing.T) {
 	tsint := newTestSetter(int(0))
-	gotS := makeSetterFloat64(tsint)
+	gotS := MakeSetterFloat64(tsint)
 	err := gotS.JawsSet(nil, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +78,7 @@ func Test_makeSetterFloat64_int(t *testing.T) {
 
 func Test_makeSetterFloat64ReadOnly_int(t *testing.T) {
 	tgint := testGetter[int]{1}
-	gotS := makeSetterFloat64(tgint)
+	gotS := MakeSetterFloat64(tgint)
 	err := gotS.JawsSet(nil, 2)
 	if err == nil {
 		t.Fatal("expected error")
@@ -94,7 +94,7 @@ func Test_makeSetterFloat64ReadOnly_int(t *testing.T) {
 
 func Test_makeSetterFloat64Static_int(t *testing.T) {
 	v := 1
-	gotS := makeSetterFloat64(v)
+	gotS := MakeSetterFloat64(v)
 	err := gotS.JawsSet(nil, 2)
 	if err == nil {
 		t.Fatal("expected error")
@@ -115,6 +115,6 @@ func Test_makeSetterFloat64_panic(t *testing.T) {
 		}
 	}()
 
-	_ = makeSetterFloat64("x")
+	_ = MakeSetterFloat64("x")
 	t.Fatal("expected panic")
 }

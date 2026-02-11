@@ -10,6 +10,7 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/ui"
 )
 
 func maybeError(t *testing.T, err error) {
@@ -39,7 +40,7 @@ func TestTree(t *testing.T) {
 	maybeError(t, err)
 
 	var rootmu deadlock.RWMutex
-	tree := New("tree", jaws.NewJsVar(&rootmu, rootnode), SearchEnabled)
+	tree := New("tree", ui.NewJsVar(&rootmu, rootnode), SearchEnabled)
 	elem := rq.NewElement(tree)
 
 	var sb strings.Builder

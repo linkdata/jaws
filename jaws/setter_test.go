@@ -14,7 +14,7 @@ func (testGetterString) JawsGet(*Element) string {
 
 func Test_makeSetter(t *testing.T) {
 	tsg := testGetterString{}
-	setter1 := makeSetter[string](tsg)
+	setter1 := MakeSetter[string](tsg)
 	if err := setter1.JawsSet(nil, "foo"); err != ErrValueNotSettable {
 		t.Error(err)
 	}
@@ -25,7 +25,7 @@ func Test_makeSetter(t *testing.T) {
 		t.Error(tag)
 	}
 
-	setter2 := makeSetter[string]("quux")
+	setter2 := MakeSetter[string]("quux")
 	if err := setter2.JawsSet(nil, "foo"); err != ErrValueNotSettable {
 		t.Error(err)
 	}
@@ -43,6 +43,6 @@ func Test_makeSetter_panic(t *testing.T) {
 			t.Fail()
 		}
 	}()
-	setter2 := makeSetter[string](123)
+	setter2 := MakeSetter[string](123)
 	t.Error(setter2)
 }

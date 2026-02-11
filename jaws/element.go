@@ -26,6 +26,13 @@ func (e *Element) String() string {
 	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", e.Ui(), e.Jid(), e.Request.TagsOf(e))
 }
 
+// AddHandler adds the given handlers to the Element.
+func (e *Element) AddHandlers(h ...EventHandler) {
+	if !e.deleted {
+		e.handlers = append(e.handlers, h...)
+	}
+}
+
 // Tag adds the given tags to the Element.
 func (e *Element) Tag(tags ...any) {
 	if !e.deleted {
@@ -102,7 +109,7 @@ func (e *Element) JawsUpdate() {
 
 func (e *Element) queue(wht what.What, data string) {
 	if !e.deleted {
-		e.Request.queue(wsMsg{
+		e.Request.queue(WsMsg{
 			Data: data,
 			Jid:  e.jid,
 			What: wht,

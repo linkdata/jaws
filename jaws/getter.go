@@ -31,7 +31,7 @@ func makeStaticGetter[T comparable](v T) Getter[T] {
 	return getterStatic[T]{v}
 }
 
-func makeGetter[T comparable](v any) Getter[T] {
+func MakeGetter[T comparable](v any) Getter[T] {
 	switch v := v.(type) {
 	case Getter[T]:
 		return v

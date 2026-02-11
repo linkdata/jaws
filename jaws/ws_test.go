@@ -245,7 +245,7 @@ func TestWS_NormalExchange(t *testing.T) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	msg := wsMsg{Jid: jidForTag(ts.rq, fooItem), What: what.Input}
+	msg := WsMsg{Jid: jidForTag(ts.rq, fooItem), What: what.Input}
 	ctx, cancel := context.WithTimeout(ts.ctx, testTimeout)
 	defer cancel()
 
@@ -266,7 +266,7 @@ func TestWS_NormalExchange(t *testing.T) {
 	if mt != websocket.MessageText {
 		t.Error(mt)
 	}
-	var m2 wsMsg
+	var m2 WsMsg
 	m2.FillAlert(fooError)
 	if !bytes.Equal(b, m2.Append(nil)) {
 		t.Error(b)
@@ -278,9 +278,9 @@ func TestReader_RespectsContextDone(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	msg := wsMsg{Jid: Jid(1234), What: what.Input}
+	msg := WsMsg{Jid: Jid(1234), What: what.Input}
 	doneCh := make(chan struct{})
-	inCh := make(chan wsMsg)
+	inCh := make(chan WsMsg)
 	client, server := Pipe()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
@@ -315,7 +315,7 @@ func TestReader_RespectsJawsDone(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	inCh := make(chan wsMsg)
+	inCh := make(chan WsMsg)
 	client, server := Pipe()
 
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
@@ -327,7 +327,7 @@ func TestReader_RespectsJawsDone(t *testing.T) {
 	}()
 
 	ts.jw.Close()
-	msg := wsMsg{Jid: Jid(1234), What: what.Input}
+	msg := WsMsg{Jid: Jid(1234), What: what.Input}
 	err := client.Write(ctx, websocket.MessageText, []byte(msg.Format()))
 	if err != nil {
 		t.Error(err)
@@ -345,7 +345,7 @@ func TestWriter_SendsThePayload(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	outCh := make(chan wsMsg)
+	outCh := make(chan WsMsg)
 	defer close(outCh)
 	client, server := Pipe()
 
@@ -361,7 +361,7 @@ func TestWriter_SendsThePayload(t *testing.T) {
 		ts.cancel()
 	}()
 
-	msg := wsMsg{Jid: Jid(1234)}
+	msg := WsMsg{Jid: Jid(1234)}
 	select {
 	case <-th.C:
 		th.Timeout()
@@ -396,10 +396,10 @@ func TestWriter_ConcatenatesMessages(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	outCh := make(chan wsMsg, 2)
+	outCh := make(chan WsMsg, 2)
 	defer close(outCh)
 
-	msg := wsMsg{Jid: Jid(1234)}
+	msg := WsMsg{Jid: Jid(1234)}
 	outCh <- msg
 	outCh <- msg
 
@@ -447,7 +447,7 @@ func TestWriter_RespectsContext(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	outCh := make(chan wsMsg)
+	outCh := make(chan WsMsg)
 	defer close(outCh)
 	client, server := Pipe()
 	client.CloseRead(context.Background())
@@ -473,7 +473,7 @@ func TestWriter_RespectsJawsDone(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	outCh := make(chan wsMsg)
+	outCh := make(chan WsMsg)
 	defer close(outCh)
 	client, server := Pipe()
 	client.CloseRead(ts.ctx)
@@ -498,7 +498,7 @@ func TestWriter_RespectsOutboundClosed(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	outCh := make(chan wsMsg)
+	outCh := make(chan WsMsg)
 	client, server := Pipe()
 	client.CloseRead(ts.ctx)
 
@@ -526,7 +526,7 @@ func TestWriter_ReportsError(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	outCh := make(chan wsMsg)
+	outCh := make(chan WsMsg)
 	client, server := Pipe()
 	client.CloseRead(ts.ctx)
 	server.Close(websocket.StatusNormalClosure, "")
@@ -536,7 +536,7 @@ func TestWriter_ReportsError(t *testing.T) {
 		wsWriter(ts.rq.ctx, ts.rq.cancelFn, ts.jw.Done(), outCh, server)
 	}()
 
-	msg := wsMsg{Jid: Jid(1234)}
+	msg := WsMsg{Jid: Jid(1234)}
 	select {
 	case <-th.C:
 		th.Timeout()
@@ -561,7 +561,7 @@ func TestReader_ReportsError(t *testing.T) {
 	defer ts.Close()
 
 	doneCh := make(chan struct{})
-	inCh := make(chan wsMsg)
+	inCh := make(chan WsMsg)
 	client, server := Pipe()
 	client.CloseRead(ts.ctx)
 	server.Close(websocket.StatusNormalClosure, "")
@@ -571,7 +571,7 @@ func TestReader_ReportsError(t *testing.T) {
 		wsReader(ts.rq.ctx, ts.rq.cancelFn, ts.jw.Done(), inCh, server)
 	}()
 
-	msg := wsMsg{Jid: Jid(1234), What: what.Input}
+	msg := WsMsg{Jid: Jid(1234), What: what.Input}
 	err := client.Write(ts.ctx, websocket.MessageText, []byte(msg.Format()))
 	if err == nil {
 		t.Fatal("expected error")

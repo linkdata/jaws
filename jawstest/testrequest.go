@@ -1,4 +1,4 @@
-package jaws
+package jawstest
 
 import (
 	"bytes"
@@ -6,17 +6,20 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+
+	"github.com/linkdata/jaws/jaws"
+	"github.com/linkdata/jaws/ui"
 )
 
 type TestRequest struct {
-	*Request
+	*jaws.Request
 	*httptest.ResponseRecorder
-	RequestWriter
+	ui.RequestWriter
 	ReadyCh     chan struct{}
 	DoneCh      chan struct{}
-	InCh        chan wsMsg
-	OutCh       chan wsMsg
-	BcastCh     chan Message
+	InCh        chan jaws.WsMsg
+	OutCh       chan jaws.WsMsg
+	BcastCh     chan jaws.Message
 	ExpectPanic bool
 	Panicked    bool
 	PanicVal    any
@@ -26,7 +29,7 @@ type TestRequest struct {
 // Passing nil for hr will create a "GET /" request with no body.
 //
 // If NewRequest() or UseRequest() fails, it returns nil.
-func NewTestRequest(jw *Jaws, hr *http.Request) (tr *TestRequest) {
+func NewTestRequest(jw *jaws.Jaws, hr *http.Request) (tr *TestRequest) {
 	if hr == nil {
 		hr = httptest.NewRequest(http.MethodGet, "/", nil)
 	}
@@ -36,17 +39,17 @@ func NewTestRequest(jw *Jaws, hr *http.Request) (tr *TestRequest) {
 	if rq != nil && jw.UseRequest(rq.JawsKey, hr) == rq {
 		bcastCh := jw.subscribe(rq, 64)
 		for i := 0; i <= cap(jw.subCh); i++ {
-			jw.subCh <- subscription{} // ensure subscription is processed
+			jw.subCh <- jaws.subscription{} // ensure subscription is processed
 		}
 
 		tr = &TestRequest{
 			ReadyCh:          make(chan struct{}),
 			DoneCh:           make(chan struct{}),
-			InCh:             make(chan wsMsg),
-			OutCh:            make(chan wsMsg, cap(bcastCh)),
+			InCh:             make(chan jaws.WsMsg),
+			OutCh:            make(chan jaws.WsMsg, cap(bcastCh)),
 			BcastCh:          bcastCh,
 			Request:          rq,
-			RequestWriter:    rq.Writer(rr),
+			RequestWriter:    ui.RequestWriter{Request: rq, Writer: rr},
 			ResponseRecorder: rr,
 		}
 

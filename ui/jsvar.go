@@ -1,14 +1,16 @@
-package jaws
+package ui
 
 import (
 	"bytes"
 	"encoding/json"
+	"html/template"
 	"io"
 	"reflect"
 	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/linkdata/jaws/jaws"
 	"github.com/linkdata/jaws/what"
 	"github.com/linkdata/jq"
 )
@@ -17,38 +19,38 @@ type PathSetter interface {
 	// JawsSetPath should set the JSON object member identified by jspath to the given value.
 	//
 	// If the member is already the given value, it should return ErrValueUnchanged.
-	JawsSetPath(elem *Element, jspath string, value any) (err error)
+	JawsSetPath(elem *jaws.Element, jspath string, value any) (err error)
 }
 
 type SetPather interface {
 	// JawsPathSet notifies that a JSON object member identified by jspath has been set
 	// to the given value and the change has been queued for broadcast.
-	JawsPathSet(elem *Element, jspath string, value any)
+	JawsPathSet(elem *jaws.Element, jspath string, value any)
 }
 
 type IsJsVar interface {
-	RWLocker
-	UI
-	EventHandler
+	jaws.RWLocker
+	jaws.UI
+	jaws.EventHandler
 	PathSetter
 }
 
 type JsVarMaker interface {
-	JawsMakeJsVar(rq *Request) (v IsJsVar, err error)
+	JawsMakeJsVar(rq *jaws.Request) (v IsJsVar, err error)
 }
 
 var (
-	_ IsJsVar     = &JsVar[int]{}
-	_ Setter[int] = &JsVar[int]{}
+	_ IsJsVar          = &JsVar[int]{}
+	_ jaws.Setter[int] = &JsVar[int]{}
 )
 
 type JsVar[T any] struct {
-	RWLocker
+	jaws.RWLocker
 	Ptr *T
 	Tag any
 }
 
-func (ui *JsVar[T]) JawsGetPath(elem *Element, jspath string) (value any) {
+func (ui *JsVar[T]) JawsGetPath(elem *jaws.Element, jspath string) (value any) {
 	ui.RLock()
 	defer ui.RUnlock()
 	var err error
@@ -59,25 +61,25 @@ func (ui *JsVar[T]) JawsGetPath(elem *Element, jspath string) (value any) {
 	return
 }
 
-func (ui *JsVar[T]) JawsGet(elem *Element) (value T) {
+func (ui *JsVar[T]) JawsGet(elem *jaws.Element) (value T) {
 	anyval := ui.JawsGetPath(elem, "")
 	value = *((anyval).(*T))
 	return
 }
 
-func (ui *JsVar[T]) setPathLocked(elem *Element, jspath string, value any) (err error) {
+func (ui *JsVar[T]) setPathLocked(elem *jaws.Element, jspath string, value any) (err error) {
 	if ps, ok := ((any)(ui.Ptr).(PathSetter)); ok {
 		err = ps.JawsSetPath(elem, jspath, value)
 	} else {
 		var changed bool
 		if changed, err = jq.Set(ui.Ptr, jspath, value); err == nil && !changed {
-			err = ErrValueUnchanged
+			err = jaws.ErrValueUnchanged
 		}
 	}
 	if err == nil && elem != nil {
 		var data []byte
 		if data, err = json.Marshal(value); err == nil {
-			elem.Jaws.Broadcast(Message{
+			elem.Jaws.Broadcast(jaws.Message{
 				Dest: ui.Tag,
 				What: what.Set,
 				Data: jspath + "=" + string(data),
@@ -87,14 +89,14 @@ func (ui *JsVar[T]) setPathLocked(elem *Element, jspath string, value any) (err 
 	return
 }
 
-func (ui *JsVar[T]) setPathLock(elem *Element, jspath string, value any) (err error) {
+func (ui *JsVar[T]) setPathLock(elem *jaws.Element, jspath string, value any) (err error) {
 	ui.Lock()
 	defer ui.Unlock()
 	err = ui.setPathLocked(elem, jspath, value)
 	return
 }
 
-func (ui *JsVar[T]) setPath(elem *Element, jspath string, value any) (err error) {
+func (ui *JsVar[T]) setPath(elem *jaws.Element, jspath string, value any) (err error) {
 	if err = ui.setPathLock(elem, jspath, value); err == nil {
 		if sp, ok := ((any)(ui.Ptr).(SetPather)); ok {
 			sp.JawsPathSet(elem, jspath, value)
@@ -103,15 +105,25 @@ func (ui *JsVar[T]) setPath(elem *Element, jspath string, value any) (err error)
 	return
 }
 
-func (ui *JsVar[T]) JawsSetPath(elem *Element, jspath string, value any) (err error) {
+func (ui *JsVar[T]) JawsSetPath(elem *jaws.Element, jspath string, value any) (err error) {
 	return ui.setPath(elem, jspath, value)
 }
 
-func (ui *JsVar[T]) JawsSet(elem *Element, value T) (err error) {
+func (ui *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 	return ui.JawsSetPath(elem, "", value)
 }
 
-func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error) {
+func appendAttrs(b []byte, attrs []template.HTMLAttr) []byte {
+	for _, s := range attrs {
+		if s != "" {
+			b = append(b, ' ')
+			b = append(b, s...)
+		}
+	}
+	return b
+}
+
+func (ui *JsVar[T]) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) {
 	ui.Lock()
 	defer ui.Unlock()
 	if ui.Tag, err = e.ApplyGetter(ui.Ptr); err == nil {
@@ -142,21 +154,21 @@ func (ui *JsVar[T]) JawsRender(e *Element, w io.Writer, params []any) (err error
 	return
 }
 
-func (ui *JsVar[T]) JawsGetTag(rq *Request) any {
+func (ui *JsVar[T]) JawsGetTag(rq *jaws.Request) any {
 	return ui.Tag
 }
 
-func (ui *JsVar[T]) JawsUpdate(e *Element) {} // no-op for JsVar[T]
+func (ui *JsVar[T]) JawsUpdate(e *jaws.Element) {} // no-op for JsVar[T]
 
 func elideErrValueUnchanged(err error) error {
-	if err == ErrValueUnchanged {
+	if err == jaws.ErrValueUnchanged {
 		return nil
 	}
 	return err
 }
 
-func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error) {
-	err = ErrEventUnhandled
+func (ui *JsVar[T]) JawsEvent(e *jaws.Element, wht what.What, val string) (err error) {
+	err = jaws.ErrEventUnhandled
 	if wht == what.Set {
 		if jspath, jsval, found := strings.Cut(val, "="); found {
 			var v any
@@ -169,7 +181,7 @@ func (ui *JsVar[T]) JawsEvent(e *Element, wht what.What, val string) (err error)
 }
 
 func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
-	if rl, ok := l.(RWLocker); ok {
+	if rl, ok := l.(jaws.RWLocker); ok {
 		return &JsVar[T]{RWLocker: rl, Ptr: v}
 	}
 	return &JsVar[T]{RWLocker: rwlocker{l}, Ptr: v}
@@ -178,15 +190,15 @@ func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 // JsVar binds a JsVar[T] to a named Javascript variable.
 //
 // You can also pass a JsVarMaker instead of a JsVar[T].
-func (rq RequestWriter) JsVar(jsvarname string, jsvar any, params ...any) (err error) {
+func (rqw RequestWriter) JsVar(jsvarname string, jsvar any, params ...any) (err error) {
 	if jvm, ok := jsvar.(JsVarMaker); ok {
-		jsvar, err = jvm.JawsMakeJsVar(rq.Request())
+		jsvar, err = jvm.JawsMakeJsVar(rqw.Request)
 	}
 	if err == nil {
 		var newparams []any
 		newparams = append(newparams, jsvarname)
 		newparams = append(newparams, params...)
-		err = rq.UI(jsvar.(UI), newparams...)
+		err = rqw.UI(jsvar.(jaws.UI), newparams...)
 	}
 	return
 }
