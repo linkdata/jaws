@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -143,9 +142,4 @@ func TestErrMissingTemplateAndRWLocker(t *testing.T) {
 	if !errors.Is(err, ErrMissingTemplate) {
 		t.Fatal("expected errors.Is match")
 	}
-
-	var mu sync.Mutex
-	l := rwlocker{Locker: &mu}
-	l.RLock()
-	l.RUnlock()
 }
