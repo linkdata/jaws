@@ -493,6 +493,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan WsM
 	defer func() {
 		rq.Jaws.unsubscribe(broadcastMsgCh)
 		rq.killSession()
+		rq.cancelFn(nil)
 		close(eventCallCh)
 		for {
 			select {
@@ -785,7 +786,13 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 // eventCaller calls event functions
 func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh chan<- WsMsg, eventDoneCh chan<- struct{}) {
 	defer close(eventDoneCh)
+	ctxDoneCh := rq.Context().Done()
 	for call := range eventCallCh {
+		select {
+		case <-ctxDoneCh:
+			continue
+		default:
+		}
 		if err := rq.callAllEventHandlers(call.jid, call.wht, call.data); err != nil {
 			var m WsMsg
 			m.FillAlert(err)
