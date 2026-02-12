@@ -69,6 +69,10 @@ func TestCoverage_ServeWithTimeoutFullSubscriberChannel(t *testing.T) {
 		close(done)
 	}()
 	jw.subCh <- subscription{msgCh: msgCh, rq: rq}
+	// Ensure ServeWithTimeout has consumed the subscription before broadcast.
+	for i := 0; i <= cap(jw.subCh); i++ {
+		jw.subCh <- subscription{}
+	}
 	jw.bcastCh <- Message{What: what.Alert, Data: "x"}
 
 	waitUntil := time.Now().Add(time.Second)
