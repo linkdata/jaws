@@ -96,6 +96,26 @@ document.getElementById("Jid.1")?.classList?.remove("cls");
 	th.Equal(num, 0)
 }
 
+func TestRequestWriter_TailHTML_EscapesScriptClose(t *testing.T) {
+	th := newTestHelper(t)
+	NextJid = 0
+	jw, _ := New()
+	defer jw.Close()
+	rq := jw.NewRequest(nil)
+	defer jw.recycle(rq)
+	item := &testUi{}
+	e := rq.NewElement(item)
+	e.SetAttr("title", "</script><img onerror=alert(1) src=x>")
+
+	var buf bytes.Buffer
+	rq.Writer(&buf).TailHTML()
+	s := buf.String()
+	if strings.Contains(s, "</script><img") {
+		t.Fatalf("getTailActions did not escape </script> in attribute value: %s", s)
+	}
+	th.True(strings.Contains(s, `\x3c/script>`))
+}
+
 func TestRequestWriter_TailHTML_PreservesNonAttrMessages(t *testing.T) {
 	th := newTestHelper(t)
 	NextJid = 0

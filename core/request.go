@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"errors"
@@ -141,6 +142,13 @@ func (rq *Request) HeadHTML(w io.Writer) (err error) {
 	return
 }
 
+// appendJSQuote is like strconv.AppendQuote but also escapes '<' as '\x3c'
+// to prevent '</script>' from closing the script block when embedded in HTML.
+func appendJSQuote(b []byte, s string) []byte {
+	quoted := strconv.AppendQuote(nil, s)
+	return append(b, bytes.ReplaceAll(quoted, []byte("<"), []byte(`\x3c`))...)
+}
+
 func (rq *Request) getTailActions() (b []byte) {
 	rq.muQueue.Lock()
 	defer rq.muQueue.Unlock()
@@ -167,10 +175,10 @@ func (rq *Request) getTailActions() (b []byte) {
 			b = append(b, fn...)
 			b = append(b, "("...)
 			attr, val, ok := strings.Cut(msg.Data, "\n")
-			b = strconv.AppendQuote(b, attr)
+			b = appendJSQuote(b, attr)
 			if ok {
 				b = append(b, ',')
-				b = strconv.AppendQuote(b, val)
+				b = appendJSQuote(b, val)
 			}
 			b = append(b, ");"...)
 		} else {
