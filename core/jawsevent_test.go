@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -121,6 +122,49 @@ func (t *testJawsEventHandler) JawsEvent(e *Element, wht what.What, val string) 
 		t.msgCh <- err.Error()
 	}
 	return
+}
+
+type testPanicEventHandler struct {
+	panicVal any
+}
+
+func (h testPanicEventHandler) JawsEvent(e *Element, wht what.What, val string) error {
+	panic(h.panicVal)
+}
+
+func Test_CallEventHandlers_PanicError(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	elem := rq.NewElement(testDivWidget{inner: "x"})
+	wantErr := fmt.Errorf("boom")
+	err := CallEventHandlers(testPanicEventHandler{panicVal: wantErr}, elem, what.Input, "")
+	if !errors.Is(err, ErrEventHandlerPanic) {
+		t.Errorf("got %v, want ErrEventHandlerPanic", err)
+	}
+	if !errors.Is(err, wantErr) {
+		t.Errorf("Unwrap: got %v, want %v", errors.Unwrap(err), wantErr)
+	}
+	if !strings.Contains(err.Error(), "boom") {
+		t.Errorf("Error() = %q, want it to contain %q", err.Error(), "boom")
+	}
+}
+
+func Test_CallEventHandlers_PanicString(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	elem := rq.NewElement(testDivWidget{inner: "x"})
+	err := CallEventHandlers(testPanicEventHandler{panicVal: "oops"}, elem, what.Input, "")
+	if !errors.Is(err, ErrEventHandlerPanic) {
+		t.Errorf("got %v, want ErrEventHandlerPanic", err)
+	}
+	if errors.Unwrap(err) != nil {
+		t.Errorf("Unwrap: got %v, want nil", errors.Unwrap(err))
+	}
+	if !strings.Contains(err.Error(), "oops") {
+		t.Errorf("Error() = %q, want it to contain %q", err.Error(), "oops")
+	}
 }
 
 func Test_JawsEvent_ExtraHandler(t *testing.T) {

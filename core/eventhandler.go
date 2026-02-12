@@ -1,8 +1,34 @@
 package core
 
 import (
+	"fmt"
+	"reflect"
+
 	"github.com/linkdata/jaws/what"
 )
+
+// ErrEventHandlerPanic is returned when an event handler panics.
+var ErrEventHandlerPanic errEventHandlerPanic
+
+type errEventHandlerPanic struct {
+	Type  reflect.Type
+	Value any
+}
+
+func (e errEventHandlerPanic) Error() string {
+	return fmt.Sprintf("jaws: %v panic: %v", e.Type, e.Value)
+}
+
+func (errEventHandlerPanic) Is(target error) bool {
+	return target == ErrEventHandlerPanic
+}
+
+func (e errEventHandlerPanic) Unwrap() error {
+	if err, ok := e.Value.(error); ok {
+		return err
+	}
+	return nil
+}
 
 type EventHandler interface {
 	JawsEvent(e *Element, wht what.What, val string) (err error)
@@ -44,7 +70,7 @@ func callEventHandler(obj any, e *Element, wht what.What, val string) (err error
 	return ErrEventUnhandled
 }
 
-func CallEventHandlers(ui any, e *Element, wht what.What, val string) (err error) {
+func callEventHandlers(ui any, e *Element, wht what.What, val string) (err error) {
 	if err = callEventHandler(ui, e, wht, val); err == ErrEventUnhandled {
 		for _, h := range e.handlers {
 			if err = callEventHandler(h, e, wht, val); err != ErrEventUnhandled {
@@ -53,4 +79,18 @@ func CallEventHandlers(ui any, e *Element, wht what.What, val string) (err error
 		}
 	}
 	return
+}
+
+// CallEventHandlers calls the event handlers for the given Element.
+// Recovers from panics in user-provided handlers, returning them as errors.
+func CallEventHandlers(ui any, e *Element, wht what.What, val string) (err error) {
+	defer func() {
+		if x := recover(); x != nil {
+			err = errEventHandlerPanic{
+				Type:  reflect.TypeOf(ui),
+				Value: x,
+			}
+		}
+	}()
+	return callEventHandlers(ui, e, wht, val)
 }
