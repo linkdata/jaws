@@ -411,7 +411,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 						urls = append(urls, u)
 					}
 				} else {
-					err = errors.Join(e)
+					err = errors.Join(err, e)
 				}
 			}
 			jw.headPrefix, jw.faviconURL = PreloadHTML(urls...)
