@@ -10,8 +10,8 @@ import (
 //
 // It wires the incoming HTTP request through the JaWS rendering pipeline by
 // creating a Request, instantiating the configured Template and streaming the
-// resulting HTML to the caller. Applications typically obtain a Handler via the
-// Jaws.Handler helper.
+// resulting HTML to the caller. Applications typically construct handlers with
+// NewHandler.
 type Handler struct {
 	*core.Jaws
 	Template

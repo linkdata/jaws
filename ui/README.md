@@ -116,7 +116,7 @@ Use these for bulk migration in editors with regex capture-group support:
 ```bash
 find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
   grep -q '"github.com/linkdata/jaws/jaws"' "$f" || continue
-  sed -i 's#"github.com/linkdata/jaws/jaws"#"github.com/linkdata/jaws/core"#g' "$f"
+  sed -i.bak 's#"github.com/linkdata/jaws/jaws"#"github.com/linkdata/jaws/core"#g' "$f"
 done
 
 find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
@@ -150,16 +150,21 @@ find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
   ' "$f"
 done
 
-gofmt -w $(find . -name '*.go' -type f)
+find . -name '*.go' -type f -exec gofmt -w {} +
 go test ./...
 
 find . -name '*.go' -type f -exec grep -nE '\.[A-Za-z_][A-Za-z0-9_]*Handler\(|\.Handler\(' {} +
+
+find . -name '*.go.bak' -type f -delete
 ```
 
 ### RequestWriter helper calls
 
-`jaws.RequestWriter` still exposes helper methods like `rw.Span(...)`,
+`ui.RequestWriter` exposes helper methods like `rw.Span(...)`,
 `rw.Text(...)`, and `rw.Select(...)` for concise template use.
+
+The root package alias `jaws.RequestWriter` remains available for backwards
+compatibility.
 
 You can also use explicit constructors through:
 

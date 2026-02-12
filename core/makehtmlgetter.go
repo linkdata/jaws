@@ -40,9 +40,9 @@ func (g htmlGetterString) JawsGetTag(rq *Request) any {
 //
 // Depending on the type of v, we return:
 //
-//   - jaws.HTMLGetter: `JawsGetHTML(e *Element) template.HTML` to be used as-is.
-//   - jaws.Getter[string]: `JawsGet(elem *Element) string` that will be escaped using `html.EscapeString`.
-//   - jaws.AnyGetter: `JawsGetAny(elem *Element) any` that will be rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
+//   - HTMLGetter: `JawsGetHTML(e *Element) template.HTML` to be used as-is.
+//   - Getter[string]: `JawsGet(elem *Element) string` that will be escaped using `html.EscapeString`.
+//   - Formatter: `Format("%v") string` that will be escaped using `html.EscapeString`.
 //   - fmt.Stringer: `String() string` that will be escaped using `html.EscapeString`.
 //   - a static `template.HTML` or `string` to be used as-is with no HTML escaping.
 //   - everything else is rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.

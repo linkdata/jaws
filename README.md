@@ -148,14 +148,13 @@ capture groups.
 
 ### Tested shell commands
 
-These commands were validated on `https://github.com/linkdata/jawsdemo` and use only
-standard tools (`find`, `grep`, `sed`, `perl`, `gofmt`):
+These commands use only standard tools (`find`, `grep`, `sed`, `perl`, `gofmt`):
 
 ```bash
 # 1) import path move: jaws/jaws -> jaws/core
 find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
   grep -q '"github.com/linkdata/jaws/jaws"' "$f" || continue
-  sed -i 's#"github.com/linkdata/jaws/jaws"#"github.com/linkdata/jaws/core"#g' "$f"
+  sed -i.bak 's#"github.com/linkdata/jaws/jaws"#"github.com/linkdata/jaws/core"#g' "$f"
 done
 
 # 2) constructor and type rename: NewUiX/UiX -> ui.NewX/ui.X
@@ -194,11 +193,14 @@ find . -name '*.go' -type f -print0 | while IFS= read -r -d '' f; do
 done
 
 # 6) format and verify
-gofmt -w $(find . -name '*.go' -type f)
+find . -name '*.go' -type f -exec gofmt -w {} +
 go test ./...
 
 # 7) optional audit: inspect remaining custom .Handler(...) calls manually
 find . -name '*.go' -type f -exec grep -nE '\.[A-Za-z_][A-Za-z0-9_]*Handler\(|\.Handler\(' {} +
+
+# 8) remove backup files created by sed
+find . -name '*.go.bak' -type f -delete
 ```
 
 If `go mod` updates are requested after migration, run:
@@ -346,15 +348,19 @@ endpoints to be registered in whichever router you choose to use. All of
 the endpoints start with "/jaws/", and `Jaws.ServeHTTP()` will handle all
 of them.
 
-* `/jaws/jaws.*.js`
+* `/jaws/\.jaws\.[0-9a-z]+\.css`
 
-  The exact URL is the value of `jaws.JavascriptPath`. It must return
-  the client-side Javascript, the uncompressed contents of which can be had with
-  `jaws.JavascriptText`, or a gzipped version with `jaws.JavascriptGZip`.
+  Serves the built-in JaWS stylesheet.
 
   The response should be cached indefinitely.
 
-* `/jaws/[0-9a-z]+`
+* `/jaws/\.jaws\.[0-9a-z]+\.js`
+
+  Serves the built-in JaWS client-side JavaScript.
+
+  The response should be cached indefinitely.
+
+* `/jaws/[0-9a-z]+` (and `/jaws/[0-9a-z]+/noscript`)
 
   The WebSocket endpoint. The trailing string must be decoded using
   `jaws.JawsKeyValue()` and then the matching JaWS Request retrieved
@@ -370,7 +376,7 @@ of them.
   come online. This is done in order to not spam the WebSocket endpoint with
   connection requests, and browsers are better at handling XHR requests failing.
 
-  If you don't have a JaWS object, or if it's completion channel is closed (see
+  If you don't have a JaWS object, or if its completion channel is closed (see
   `Jaws.Done()`), return **503 Service Unavailable**. If you're ready to serve
   requests, return **204 No Content**.
   
@@ -379,7 +385,10 @@ of them.
 Handling the routes with the standard library's `http.DefaultServeMux`:
 
 ```go
-jw := jaws.New()
+jw, err := jaws.New()
+if err != nil {
+  panic(err)
+}
 defer jw.Close()
 go jw.Serve()
 http.DefaultServeMux.Handle("/jaws/", jw)
@@ -388,7 +397,10 @@ http.DefaultServeMux.Handle("/jaws/", jw)
 Handling the routes with [Echo](https://echo.labstack.com/):
 
 ```go
-jw := jaws.New()
+jw, err := jaws.New()
+if err != nil {
+  panic(err)
+}
 defer jw.Close()
 go jw.Serve()
 router := echo.New()
@@ -406,7 +418,7 @@ be made into one using `jaws.MakeHTMLGetter()`.
 In order of precedence, this can be:
 * `jaws.HTMLGetter`: `JawsGetHTML(*Element) template.HTML` to be used as-is.
 * `jaws.Getter[string]`: `JawsGet(*Element) string` that will be escaped using `html.EscapeString`.
-* `jaws.AnyGetter`: `JawsGetAny(*Element) any` that will be rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
+* `jaws.Formatter`: `Format("%v") string` that will be escaped using `html.EscapeString`.
 * `fmt.Stringer`: `String() string` that will be escaped using `html.EscapeString`.
 * a static `template.HTML` or `string` to be used as-is with no HTML escaping.
 * everything else is rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
@@ -427,9 +439,12 @@ getters and on-success handlers.
 ### Session handling
 
 JaWS has non-persistent session handling integrated. Sessions won't 
-be persisted across restarts and must have an expiry time. A new
-session is created with `EnsureSession()` and sending it's `Cookie()`
-to the client browser.
+be persisted across restarts and must have an expiry time.
+
+Use one of these patterns:
+
+* Wrap page handlers with `Jaws.Session(handler)` to ensure a session exists.
+* Call `Jaws.NewSession(w, r)` explicitly to create and attach a fresh session cookie.
 
 When subsequent Requests are created with `NewRequest()`, if the
 HTTP request has the cookie set and comes from the correct IP,
@@ -449,11 +464,11 @@ default is `jaws`.
 
 ### A note on the Context
 
-The Request object embeds a context.Context inside it's struct,
+The Request object embeds a context.Context inside its struct,
 contrary to recommended Go practice.
 
 The reason is that there is no unbroken call chain from the time the Request
-object is created when the initial HTTP request comes in and when it's 
+object is created when the initial HTTP request comes in and when it is
 requested during the Javascript WebSocket HTTP request.
 
 ### Security of the WebSocket callback
