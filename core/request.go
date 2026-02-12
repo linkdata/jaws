@@ -488,8 +488,10 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan WsM
 		close(eventCallCh)
 		for {
 			select {
-			case <-eventCallCh:
-			case <-incomingMsgCh:
+			case _, ok := <-incomingMsgCh:
+				if !ok {
+					incomingMsgCh = nil
+				}
 			case <-eventDoneCh:
 				close(outboundMsgCh)
 				if x := recover(); x != nil {
