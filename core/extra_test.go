@@ -2,6 +2,7 @@ package core
 
 import (
 	"io"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -116,8 +117,12 @@ func TestCoverage_namedBoolOptionAndContains(t *testing.T) {
 
 func TestCoverage_elementBranches(t *testing.T) {
 	NextJid = 0
-	rq := newTestRequest(t)
-	defer rq.Close()
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	rq := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
 
 	tu := &testUi{renderFn: func(*Element, io.Writer, []any) error { return nil }}
 	elem := rq.NewElement(tu)
