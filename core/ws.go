@@ -119,7 +119,10 @@ func wsWriteData(wc io.WriteCloser, firstMsg WsMsg, outboundMsgCh <-chan WsMsg) 
 batchloop:
 	for len(b) < 32*1024 {
 		select {
-		case msg := <-outboundMsgCh:
+		case msg, ok := <-outboundMsgCh:
+			if !ok {
+				break batchloop
+			}
 			b = msg.Append(b)
 		default:
 			break batchloop

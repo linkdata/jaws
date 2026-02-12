@@ -441,6 +441,56 @@ func TestWriter_ConcatenatesMessages(t *testing.T) {
 	}
 }
 
+func TestWriter_ConcatenatesMessagesClosedChannel(t *testing.T) {
+	th := newTestHelper(t)
+	ts := newTestServer()
+	defer ts.Close()
+
+	outCh := make(chan WsMsg, 2)
+
+	msg := WsMsg{Jid: Jid(1234)}
+	outCh <- msg
+	close(outCh)
+
+	client, server := Pipe()
+
+	go wsWriter(ts.ctx, nil, ts.jw.Done(), outCh, server)
+
+	var mt websocket.MessageType
+	var b []byte
+	var err error
+	doneCh := make(chan struct{})
+	go func() {
+		defer close(doneCh)
+		mt, b, err = client.Read(ts.ctx)
+		ts.cancel()
+	}()
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case <-doneCh:
+	}
+
+	if err != nil {
+		t.Error(err)
+	}
+	if mt != websocket.MessageText {
+		t.Error(mt)
+	}
+	// only the one real message, no zero-value WsMsg appended
+	want := msg.Format()
+	if string(b) != want {
+		t.Errorf("got %q, want %q", string(b), want)
+	}
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case <-client.CloseRead(ts.ctx).Done():
+	}
+}
+
 func TestWriter_RespectsContext(t *testing.T) {
 	th := newTestHelper(t)
 	ts := newTestServer()
