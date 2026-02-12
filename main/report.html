@@ -2450,6 +2450,7 @@ func ParseParams(params []any) (tags []any, handlers []EventHandler, attrs []str
 		<pre class="file" id="file22" style="display: none">package core
 
 import (
+        "bytes"
         "cmp"
         "context"
         "errors"
@@ -2590,6 +2591,13 @@ func (rq *Request) HeadHTML(w io.Writer) (err error) <span class="cov8" title="1
         return
 }</span>
 
+// appendJSQuote is like strconv.AppendQuote but also escapes '&lt;' as '\x3c'
+// to prevent '&lt;/script&gt;' from closing the script block when embedded in HTML.
+func appendJSQuote(b []byte, s string) []byte <span class="cov8" title="1">{
+        quoted := strconv.AppendQuote(nil, s)
+        return append(b, bytes.ReplaceAll(quoted, []byte("&lt;"), []byte(`\x3c`))...)
+}</span>
+
 func (rq *Request) getTailActions() (b []byte) <span class="cov8" title="1">{
         rq.muQueue.Lock()
         defer rq.muQueue.Unlock()
@@ -2616,10 +2624,10 @@ func (rq *Request) getTailActions() (b []byte) <span class="cov8" title="1">{
                         b = append(b, fn...)
                         b = append(b, "("...)
                         attr, val, ok := strings.Cut(msg.Data, "\n")
-                        b = strconv.AppendQuote(b, attr)
+                        b = appendJSQuote(b, attr)
                         if ok </span><span class="cov8" title="1">{
                                 b = append(b, ',')
-                                b = strconv.AppendQuote(b, val)
+                                b = appendJSQuote(b, val)
                         }</span>
                         <span class="cov8" title="1">b = append(b, ");"...)</span>
                 } else<span class="cov8" title="1"> {
