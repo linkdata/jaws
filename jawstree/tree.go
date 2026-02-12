@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/ui"
 )
 
 var _ jaws.UI = (*Tree)(nil)
@@ -13,10 +14,10 @@ var _ jaws.UI = (*Tree)(nil)
 type Tree struct {
 	id      string // HTML ID of the tree
 	options Option
-	*jaws.JsVar[Node]
+	*ui.JsVar[Node]
 }
 
-func New(id string, jsvar *jaws.JsVar[Node], options ...Option) (t *Tree) {
+func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	t = &Tree{
 		id:    id,
 		JsVar: jsvar,

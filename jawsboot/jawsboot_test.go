@@ -7,6 +7,7 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawsboot"
+	"github.com/linkdata/jaws/ui"
 )
 
 func TestJawsBoot_Setup(t *testing.T) {
@@ -24,7 +25,7 @@ func TestJawsBoot_Setup(t *testing.T) {
 
 	rq := jw.NewRequest(nil)
 	var sb strings.Builder
-	rq.Writer(&sb).HeadHTML()
+	ui.RequestWriter{Request: rq, Writer: &sb}.HeadHTML()
 	txt := sb.String()
 	if !strings.Contains(txt, rq.JawsKeyString()) {
 		t.Error(txt)

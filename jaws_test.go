@@ -1,7 +1,6 @@
 package jaws_test
 
-// this is just to satisfy coverage,
-// proper tests are in jaws/jaws
+// just to satisfy test coverage
 
 import (
 	"html/template"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/ui"
 )
 
 const testPageTmplText = "({{with .Dot}}" +
@@ -108,7 +108,7 @@ func TestNewTemplate(t *testing.T) {
 		rq := jw.NewRequest(hr)
 		jw.UseRequest(rq.JawsKey, hr)
 		var sb strings.Builder
-		rqwr := rq.Writer(&sb)
+		rqwr := ui.RequestWriter{Request: rq, Writer: &sb}
 
 		var mu sync.RWMutex
 		vbool := true
@@ -195,16 +195,4 @@ func TestNewUi(t *testing.T) {
 	jaws.NewUiTd(htmlGetter)
 	jaws.NewUiText(jaws.Bind(&mu, &vstring))
 	jaws.NewUiTr(htmlGetter)
-}
-
-func TestNewTestRequest(t *testing.T) {
-	jw, err := jaws.New()
-	maybeFatal(t, err)
-	defer jw.Close()
-	go jw.Serve()
-	if tr := jaws.NewTestRequest(jw, nil); tr == nil {
-		t.Fatal("got nil")
-	} else {
-		tr.Close()
-	}
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/linkdata/jaws/jawsboot"
 	"github.com/linkdata/jaws/staticserve"
 	"github.com/linkdata/jaws/templatereloader"
+	"github.com/linkdata/jaws/ui"
 )
 
 // This example assumes an 'assets' directory:
@@ -39,7 +40,7 @@ func setupJaws(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
 			// Add a route to our index template with a bound variable accessible as '.Dot' in the template
 			var mu sync.Mutex
 			var f float64
-			mux.Handle("/", jw.Handler("index.html", jaws.Bind(&mu, &f)))
+			mux.Handle("/", ui.Handler(jw, "index.html", jaws.Bind(&mu, &f)))
 		}
 	}
 	return

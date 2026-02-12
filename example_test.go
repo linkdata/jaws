@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/ui"
 )
 
 const indexhtml = `
@@ -37,6 +38,6 @@ func Example() {
 	var mu sync.Mutex
 	var f float64
 
-	http.DefaultServeMux.Handle("/", jw.Handler("index", jaws.Bind(&mu, &f)))
+	http.DefaultServeMux.Handle("/", ui.Handler(jw, "index", jaws.Bind(&mu, &f)))
 	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 }

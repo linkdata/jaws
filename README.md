@@ -39,6 +39,8 @@ go get github.com/linkdata/jaws
 After the dependency is added, your Go module will be able to import
 and use JaWS as demonstrated below.
 
+For widget authoring guidance see `ui/README.md`.
+
 ## Quick start
 
 The following minimal program renders a single range input whose value
@@ -53,8 +55,10 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"sync"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/ui"
 )
 
 const indexhtml = `
@@ -82,7 +86,7 @@ func main() {
 	var mu sync.Mutex
 	var f float64
 
-	http.DefaultServeMux.Handle("/", jw.Handler("index", jaws.Bind(&mu, &f)))
+	http.DefaultServeMux.Handle("/", ui.Handler(jw, "index", jaws.Bind(&mu, &f)))
 	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 }
 ```
@@ -148,15 +152,19 @@ endpoints to be registered in whichever router you choose to use. All of
 the endpoints start with "/jaws/", and `Jaws.ServeHTTP()` will handle all
 of them.
 
-* `/jaws/jaws.*.js`
+* `/jaws/\.jaws\.[0-9a-z]+\.css`
 
-  The exact URL is the value of `jaws.JavascriptPath`. It must return
-  the client-side Javascript, the uncompressed contents of which can be had with
-  `jaws.JavascriptText`, or a gzipped version with `jaws.JavascriptGZip`.
+  Serves the built-in JaWS stylesheet.
 
   The response should be cached indefinitely.
 
-* `/jaws/[0-9a-z]+`
+* `/jaws/\.jaws\.[0-9a-z]+\.js`
+
+  Serves the built-in JaWS client-side JavaScript.
+
+  The response should be cached indefinitely.
+
+* `/jaws/[0-9a-z]+` (and `/jaws/[0-9a-z]+/noscript`)
 
   The WebSocket endpoint. The trailing string must be decoded using
   `jaws.JawsKeyValue()` and then the matching JaWS Request retrieved
@@ -172,7 +180,7 @@ of them.
   come online. This is done in order to not spam the WebSocket endpoint with
   connection requests, and browsers are better at handling XHR requests failing.
 
-  If you don't have a JaWS object, or if it's completion channel is closed (see
+  If you don't have a JaWS object, or if its completion channel is closed (see
   `Jaws.Done()`), return **503 Service Unavailable**. If you're ready to serve
   requests, return **204 No Content**.
   
@@ -181,7 +189,10 @@ of them.
 Handling the routes with the standard library's `http.DefaultServeMux`:
 
 ```go
-jw := jaws.New()
+jw, err := jaws.New()
+if err != nil {
+  panic(err)
+}
 defer jw.Close()
 go jw.Serve()
 http.DefaultServeMux.Handle("/jaws/", jw)
@@ -190,7 +201,10 @@ http.DefaultServeMux.Handle("/jaws/", jw)
 Handling the routes with [Echo](https://echo.labstack.com/):
 
 ```go
-jw := jaws.New()
+jw, err := jaws.New()
+if err != nil {
+  panic(err)
+}
 defer jw.Close()
 go jw.Serve()
 router := echo.New()
@@ -208,7 +222,7 @@ be made into one using `jaws.MakeHTMLGetter()`.
 In order of precedence, this can be:
 * `jaws.HTMLGetter`: `JawsGetHTML(*Element) template.HTML` to be used as-is.
 * `jaws.Getter[string]`: `JawsGet(*Element) string` that will be escaped using `html.EscapeString`.
-* `jaws.AnyGetter`: `JawsGetAny(*Element) any` that will be rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
+* `jaws.Formatter`: `Format("%v") string` that will be escaped using `html.EscapeString`.
 * `fmt.Stringer`: `String() string` that will be escaped using `html.EscapeString`.
 * a static `template.HTML` or `string` to be used as-is with no HTML escaping.
 * everything else is rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
@@ -229,9 +243,12 @@ getters and on-success handlers.
 ### Session handling
 
 JaWS has non-persistent session handling integrated. Sessions won't 
-be persisted across restarts and must have an expiry time. A new
-session is created with `EnsureSession()` and sending it's `Cookie()`
-to the client browser.
+be persisted across restarts and must have an expiry time.
+
+Use one of these patterns:
+
+* Wrap page handlers with `Jaws.Session(handler)` to ensure a session exists.
+* Call `Jaws.NewSession(w, r)` explicitly to create and attach a fresh session cookie.
 
 When subsequent Requests are created with `NewRequest()`, if the
 HTTP request has the cookie set and comes from the correct IP,
@@ -251,11 +268,11 @@ default is `jaws`.
 
 ### A note on the Context
 
-The Request object embeds a context.Context inside it's struct,
+The Request object embeds a context.Context inside its struct,
 contrary to recommended Go practice.
 
 The reason is that there is no unbroken call chain from the time the Request
-object is created when the initial HTTP request comes in and when it's 
+object is created when the initial HTTP request comes in and when it is
 requested during the Javascript WebSocket HTTP request.
 
 ### Security of the WebSocket callback
