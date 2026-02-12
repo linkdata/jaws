@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/ui"
 )
 
 func TestTemplate_Missing(t *testing.T) {
@@ -13,7 +14,7 @@ func TestTemplate_Missing(t *testing.T) {
 	defer rq.Close()
 
 	err := rq.Template("missingtemplate", nil, nil)
-	if !errors.Is(err, jaws.ErrMissingTemplate) {
+	if !errors.Is(err, ui.ErrMissingTemplate) {
 		t.Error("wrong error", err)
 	}
 	if !strings.Contains(err.Error(), "missingtemplate") {
