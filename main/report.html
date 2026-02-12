@@ -957,8 +957,34 @@ func newErrPendingCancelledLocked(rq *Request, cause error) (err error) <span cl
 		<pre class="file" id="file11" style="display: none">package core
 
 import (
+        "fmt"
+        "reflect"
+
         "github.com/linkdata/jaws/what"
 )
+
+// ErrEventHandlerPanic is returned when an event handler panics.
+var ErrEventHandlerPanic errEventHandlerPanic
+
+type errEventHandlerPanic struct {
+        Type  reflect.Type
+        Value any
+}
+
+func (e errEventHandlerPanic) Error() string <span class="cov8" title="1">{
+        return fmt.Sprintf("jaws: %v panic: %v", e.Type, e.Value)
+}</span>
+
+func (errEventHandlerPanic) Is(target error) bool <span class="cov8" title="1">{
+        return target == ErrEventHandlerPanic
+}</span>
+
+func (e errEventHandlerPanic) Unwrap() error <span class="cov8" title="1">{
+        if err, ok := e.Value.(error); ok </span><span class="cov8" title="1">{
+                return err
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
 
 type EventHandler interface {
         JawsEvent(e *Element, wht what.What, val string) (err error)
@@ -1000,7 +1026,7 @@ func callEventHandler(obj any, e *Element, wht what.What, val string) (err error
         <span class="cov8" title="1">return ErrEventUnhandled</span>
 }
 
-func CallEventHandlers(ui any, e *Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
+func callEventHandlers(ui any, e *Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
         if err = callEventHandler(ui, e, wht, val); err == ErrEventUnhandled </span><span class="cov8" title="1">{
                 for _, h := range e.handlers </span><span class="cov8" title="1">{
                         if err = callEventHandler(h, e, wht, val); err != ErrEventUnhandled </span><span class="cov8" title="1">{
@@ -1009,6 +1035,20 @@ func CallEventHandlers(ui any, e *Element, wht what.What, val string) (err error
                 }
         }
         <span class="cov8" title="1">return</span>
+}
+
+// CallEventHandlers calls the event handlers for the given Element.
+// Recovers from panics in user-provided handlers, returning them as errors.
+func CallEventHandlers(ui any, e *Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
+        defer func() </span><span class="cov8" title="1">{
+                if x := recover(); x != nil </span><span class="cov8" title="1">{
+                        err = errEventHandlerPanic{
+                                Type:  reflect.TypeOf(ui),
+                                Value: x,
+                        }
+                }</span>
+        }()
+        <span class="cov8" title="1">return callEventHandlers(ui, e, wht, val)</span>
 }
 </pre>
 		
@@ -1495,7 +1535,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
                                                 urls = append(urls, u)
                                         }</span>
                                 } else<span class="cov8" title="1"> {
-                                        err = errors.Join(e)
+                                        err = errors.Join(err, e)
                                 }</span>
                         }
                         <span class="cov8" title="1">jw.headPrefix, jw.faviconURL = PreloadHTML(urls...)
@@ -2058,12 +2098,12 @@ func MakeHTMLGetter(v any) HTMLGetter <span class="cov8" title="1">{
                 return htmlGetter{v}</span>
         case Getter[string]:<span class="cov8" title="1">
                 return htmlGetterString{v}</span>
+        case Formatter:<span class="cov8" title="1">
+                return htmlGetterString{v.Format("%v")}</span>
         case fmt.Stringer:<span class="cov8" title="1">
                 return htmlStringerGetter{v}</span>
         case string:<span class="cov8" title="1">
                 return htmlGetter{template.HTML(v)}</span> // #nosec G203
-        case Formatter:<span class="cov8" title="1">
-                return htmlGetterString{v.Format("%v")}</span>
         default:<span class="cov8" title="1">
                 return htmlGetter{template.HTML(html.EscapeString(fmt.Sprint(v)))}</span> // #nosec G203
         }
