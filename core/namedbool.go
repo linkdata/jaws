@@ -64,7 +64,9 @@ func (nb *NamedBool) JawsSet(e *Element, checked bool) (err error) {
 		e.Dirty(nb)
 		if nba != nil {
 			e.Dirty(nba)
-			nb.nba.Set(nb.name, checked)
+			nba.mu.RLock()
+			nba.deselectOthersLocked(nb.name, checked)
+			nba.mu.RUnlock()
 		}
 	}
 	return
