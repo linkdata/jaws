@@ -20,7 +20,7 @@ import (
 // during rendering. Additional tag bindings and event handlers can be supplied
 // at render time through the RequestWriter.Template helper.
 type Template struct {
-	Name string // Template name to be looked up using core.LookupTemplate()
+	Name string // Template name to be looked up using Jaws.LookupTemplate()
 	Dot  any    // Dot value to place in With structure
 }
 
@@ -135,10 +135,10 @@ func NewTemplate(name string, dot any) Template {
 	return Template{Name: name, Dot: dot}
 }
 
-// Template renders the given template using core.With{Dot: dot} as data.
+// Template renders the given template using ui.With as data.
 //
-// The name argument is a string to be resolved to a *template.Template
-// using Jaws.LookupTemplate().
+// The Dot field in ui.With is set to dot, and name is resolved to a
+// *template.Template using Jaws.LookupTemplate().
 func (rqw RequestWriter) Template(name string, dot any, params ...any) error {
 	return rqw.UI(NewTemplate(name, dot), params...)
 }

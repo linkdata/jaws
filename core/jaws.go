@@ -205,7 +205,7 @@ func (jw *Jaws) MustLog(err error) {
 	}
 }
 
-// NextID returns a uint64 unique within lifetime of the program.
+// NextID returns an int64 unique within lifetime of the program.
 func NextID() int64 {
 	return atomic.AddInt64((*int64)(&NextJid), 1)
 }
@@ -220,12 +220,15 @@ func MakeID() string {
 	return string(AppendID([]byte("jaws.")))
 }
 
-// NewRequest returns a new pending JaWS request that times out after 10 seconds.
+// NewRequest returns a new pending JaWS request.
 //
 // Call this as soon as you start processing a HTML request, and store the
 // returned Request pointer so it can be used while constructing the HTML
 // response in order to register the JaWS id's you use in the response, and
 // use it's Key attribute when sending the Javascript portion of the reply.
+//
+// Automatic timeout handling is performed by ServeWithTimeout. The default
+// Serve() helper uses a 10-second timeout.
 func (jw *Jaws) NewRequest(hr *http.Request) (rq *Request) {
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
@@ -504,7 +507,7 @@ func (jw *Jaws) Alert(lvl, msg string) {
 	})
 }
 
-// Count returns the number of requests waiting for their WebSocket callbacks.
+// Pending returns the number of requests waiting for their WebSocket callbacks.
 func (jw *Jaws) Pending() (n int) {
 	jw.mu.RLock()
 	defer jw.mu.RUnlock()
@@ -595,7 +598,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	}
 }
 
-// Serve calls ServeWithTimeout(ctx, time.Second*10).
+// Serve calls ServeWithTimeout(time.Second * 10).
 // It is intended to run on it's own goroutine.
 // It returns when Close is called.
 func (jw *Jaws) Serve() {
