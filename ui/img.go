@@ -11,6 +11,10 @@ import (
 type Img struct{ core.Getter[string] }
 
 func NewImg(g core.Getter[string]) *Img { return &Img{Getter: g} }
+func (rw RequestWriter) Img(imageSrc any, params ...any) error {
+	return rw.UI(NewImg(core.MakeGetter[string](imageSrc)), params...)
+}
+
 func (ui *Img) JawsRender(e *core.Element, w io.Writer, params []any) (err error) {
 	if _, err = e.ApplyGetter(ui.Getter); err == nil {
 		srcAttr := template.HTMLAttr("src=" + strconv.Quote(ui.JawsGet(e))) // #nosec G203

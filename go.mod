@@ -8,4 +8,4 @@ require (
 	github.com/linkdata/jq v0.0.2
 )
 
-require github.com/petermattis/goid v0.0.0-20250813065127-a731cc31b4fe // indirect
+require github.com/petermattis/goid v0.0.0-20260113132338-7c7de50cc741 // indirect

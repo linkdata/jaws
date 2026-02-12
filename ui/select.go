@@ -15,6 +15,10 @@ func NewSelect(sh core.SelectHandler) *Select {
 	return &Select{WrapContainer: NewWrapContainer(sh)}
 }
 
+func (rw RequestWriter) Select(sh core.SelectHandler, params ...any) error {
+	return rw.UI(NewSelect(sh), params...)
+}
+
 func (ui *Select) JawsRender(e *core.Element, w io.Writer, params []any) error {
 	return ui.RenderContainer(e, w, "select", params)
 }
