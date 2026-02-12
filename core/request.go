@@ -1,6 +1,7 @@
 package core
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -61,7 +62,7 @@ type eventFnCall struct {
 var (
 	ErrWebsocketOriginMissing     = errors.New("websocket request missing Origin header")
 	ErrWebsocketOriginWrongScheme = errors.New("websocket Origin not http or https")
-	ErrWebsocketOriginWrongHost   = errors.New("websocket Origin not http or https")
+	ErrWebsocketOriginWrongHost   = errors.New("websocket Origin host mismatch")
 	ErrRequestAlreadyClaimed      = errors.New("request already claimed")
 	ErrJavascriptDisabled         = errors.New("javascript is disabled")
 )
@@ -186,11 +187,12 @@ func (rq *Request) getTailActions() (b []byte) {
 //
 // It also adds a <noscript> tag that warns of reduces functionality.
 func (rq *Request) TailHTML(w io.Writer) (err error) {
-	fmt.Fprintf(w, "\n"+`<noscript>`+
+	if _, err = fmt.Fprintf(w, "\n"+`<noscript>`+
 		`<div class="jaws-alert">This site requires Javascript for full functionality.</div>`+
-		`<img src="/jaws/%s/noscript" alt="noscript"></noscript>`, rq.JawsKeyString())
-	if actions := rq.getTailActions(); len(actions) > 0 {
-		_, err = w.Write(actions)
+		`<img src="/jaws/%s/noscript" alt="noscript"></noscript>`, rq.JawsKeyString()); err == nil {
+		if actions := rq.getTailActions(); len(actions) > 0 {
+			_, err = w.Write(actions)
+		}
 	}
 	return
 }
@@ -464,7 +466,7 @@ func (rq *Request) GetElements(tagitem any) (elems []*Element) {
 			for _, e := range el {
 				if _, ok = seen[e]; !ok {
 					seen[e] = struct{}{}
-					elems = append(elems, el...)
+					elems = append(elems, e)
 				}
 			}
 		}
@@ -696,7 +698,7 @@ func (rq *Request) getSendMsgs() (toSend []WsMsg) {
 		rq.wsQueue = rq.wsQueue[:0]
 	}
 
-	slices.SortStableFunc(toSend, func(a, b WsMsg) int { return int(a.Jid - b.Jid) })
+	slices.SortStableFunc(toSend, func(a, b WsMsg) int { return cmp.Compare(a.Jid, b.Jid) })
 	return
 }
 
