@@ -46,6 +46,12 @@ func (g htmlGetterString) JawsGetTag(rq *Request) any {
 //   - fmt.Stringer: `String() string` that will be escaped using `html.EscapeString`.
 //   - a static `template.HTML` or `string` to be used as-is with no HTML escaping.
 //   - everything else is rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
+//
+// WARNING: Plain string values are NOT HTML-escaped. This is intentional so that
+// HTML markup can be passed conveniently from Go templates (e.g. `{{$.Span "<i>text</i>"}}`).
+// Never pass untrusted user input as a plain string; use [template.HTML] to signal
+// that the content is trusted, or wrap user input in a [Getter] or [fmt.Stringer]
+// so it will be escaped automatically.
 func MakeHTMLGetter(v any) HTMLGetter {
 	switch v := v.(type) {
 	case HTMLGetter:
