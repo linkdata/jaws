@@ -248,7 +248,7 @@ func (e *Element) ApplyGetter(getter any) (tag any, err error) {
 		}
 		e.Tag(tag)
 		if ch, ok := getter.(ClickHandler); ok {
-			e.handlers = append(e.handlers, clickHandlerWapper{ch})
+			e.handlers = append(e.handlers, clickHandlerWrapper{ch})
 		}
 		if eh, ok := getter.(EventHandler); ok {
 			e.handlers = append(e.handlers, eh)
