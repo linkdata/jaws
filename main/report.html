@@ -1548,7 +1548,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
         select </span>{
-        case &lt;-jw.Done():<span class="cov0" title="0"></span>
+        case &lt;-jw.Done():<span class="cov8" title="1"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
 }
@@ -2207,7 +2207,9 @@ func (nb *NamedBool) JawsSet(e *Element, checked bool) (err error) <span class="
                 e.Dirty(nb)
                 if nba != nil </span><span class="cov8" title="1">{
                         e.Dirty(nba)
-                        nb.nba.Set(nb.name, checked)
+                        nba.mu.RLock()
+                        nba.deselectOthersLocked(nb.name, checked)
+                        nba.mu.RUnlock()
                 }</span>
         }
         <span class="cov8" title="1">return</span>
@@ -2305,7 +2307,14 @@ func (nba *NamedBoolArray) Set(name string, state bool) (changed bool) <span cla
                         changed = nb.Set(state) || changed
                 }</span>
         }
-        <span class="cov8" title="1">if state &amp;&amp; !nba.Multi </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">changed = nba.deselectOthersLocked(name, state) || changed
+        return</span>
+}
+
+// deselectOthersLocked clears all NamedBools whose name differs from
+// the given name when the array is in single-select mode and state is true.
+func (nba *NamedBoolArray) deselectOthersLocked(name string, state bool) (changed bool) <span class="cov8" title="1">{
+        if state &amp;&amp; !nba.Multi </span><span class="cov8" title="1">{
                 for _, nb := range nba.data </span><span class="cov8" title="1">{
                         if nb.Name() != name </span><span class="cov8" title="1">{
                                 changed = nb.Set(false) || changed
