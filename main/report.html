@@ -1289,7 +1289,7 @@ func (jw *Jaws) MustLog(err error) <span class="cov8" title="1">{
         }
 }
 
-// NextID returns a uint64 unique within lifetime of the program.
+// NextID returns an int64 unique within lifetime of the program.
 func NextID() int64 <span class="cov8" title="1">{
         return atomic.AddInt64((*int64)(&amp;NextJid), 1)
 }</span>
@@ -1304,12 +1304,15 @@ func MakeID() string <span class="cov8" title="1">{
         return string(AppendID([]byte("jaws.")))
 }</span>
 
-// NewRequest returns a new pending JaWS request that times out after 10 seconds.
+// NewRequest returns a new pending JaWS request.
 //
 // Call this as soon as you start processing a HTML request, and store the
 // returned Request pointer so it can be used while constructing the HTML
 // response in order to register the JaWS id's you use in the response, and
 // use it's Key attribute when sending the Javascript portion of the reply.
+//
+// Automatic timeout handling is performed by ServeWithTimeout. The default
+// Serve() helper uses a 10-second timeout.
 func (jw *Jaws) NewRequest(hr *http.Request) (rq *Request) <span class="cov8" title="1">{
         jw.mu.Lock()
         defer jw.mu.Unlock()
@@ -1505,7 +1508,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
         select </span>{
-        case &lt;-jw.Done():<span class="cov0" title="0"></span>
+        case &lt;-jw.Done():<span class="cov8" title="1"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
 }
@@ -1588,7 +1591,7 @@ func (jw *Jaws) Alert(lvl, msg string) <span class="cov8" title="1">{
         })
 }</span>
 
-// Count returns the number of requests waiting for their WebSocket callbacks.
+// Pending returns the number of requests waiting for their WebSocket callbacks.
 func (jw *Jaws) Pending() (n int) <span class="cov8" title="1">{
         jw.mu.RLock()
         defer jw.mu.RUnlock()
@@ -1679,7 +1682,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) <span class="cov8
         }
 }
 
-// Serve calls ServeWithTimeout(ctx, time.Second*10).
+// Serve calls ServeWithTimeout(time.Second * 10).
 // It is intended to run on it's own goroutine.
 // It returns when Close is called.
 func (jw *Jaws) Serve() <span class="cov8" title="1">{
@@ -6560,7 +6563,7 @@ import (
 // during rendering. Additional tag bindings and event handlers can be supplied
 // at render time through the RequestWriter.Template helper.
 type Template struct {
-        Name string // Template name to be looked up using core.LookupTemplate()
+        Name string // Template name to be looked up using Jaws.LookupTemplate()
         Dot  any    // Dot value to place in With structure
 }
 
@@ -6675,10 +6678,10 @@ func NewTemplate(name string, dot any) Template <span class="cov8" title="1">{
         return Template{Name: name, Dot: dot}
 }</span>
 
-// Template renders the given template using core.With{Dot: dot} as data.
+// Template renders the given template using ui.With as data.
 //
-// The name argument is a string to be resolved to a *template.Template
-// using Jaws.LookupTemplate().
+// The Dot field in ui.With is set to dot, and name is resolved to a
+// *template.Template using Jaws.LookupTemplate().
 func (rqw RequestWriter) Template(name string, dot any, params ...any) error <span class="cov8" title="1">{
         return rqw.UI(NewTemplate(name, dot), params...)
 }</span>
