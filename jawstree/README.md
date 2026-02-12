@@ -48,7 +48,7 @@ func setupJaws(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
 			// Add a route to our index template with a bound variable accessible as '.Dot' in the template
 			var mu sync.Mutex
 			var f float64
-			mux.Handle("/", ui.NewHandler(jw, "index.html", jaws.Bind(&mu, &f)))
+			mux.Handle("/", ui.Handler(jw, "index.html", jaws.Bind(&mu, &f)))
 		}
 	}
 	return

@@ -16,7 +16,7 @@ func TestHandler_ServeHTTP(t *testing.T) {
 	defer rq.Close()
 
 	dot := jaws.Tag("123")
-	h := ui.NewHandler(rq.TestRequest.Request.Jaws, "testtemplate", dot)
+	h := ui.Handler(rq.TestRequest.Request.Jaws, "testtemplate", dot)
 	var buf bytes.Buffer
 	var rr httptest.ResponseRecorder
 	rr.Body = &buf

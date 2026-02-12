@@ -6,26 +6,26 @@ import (
 	"github.com/linkdata/jaws/core"
 )
 
-// Handler is an http.Handler that renders a template for every request.
+// uiHandler is an http.uiHandler that renders a template for every request.
 //
 // It wires the incoming HTTP request through the JaWS rendering pipeline by
 // creating a Request, instantiating the configured Template and streaming the
 // resulting HTML to the caller. Applications typically construct handlers with
-// NewHandler.
-type Handler struct {
+// Handler.
+type uiHandler struct {
 	*core.Jaws
 	Template
 }
 
-func (h Handler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
+func (h uiHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	_ = h.Log(h.NewRequest(r).NewElement(h.Template).JawsRender(wr, nil))
 }
 
-// NewHandler returns an http.Handler that renders the named template.
+// Handler returns an http.Handler that renders the named template.
 //
 // The returned handler can be registered directly with a router. Each request
 // results in the template being looked up through the configured Template
 // lookupers and rendered with dot as the template data.
-func NewHandler(jw *core.Jaws, name string, dot any) http.Handler {
-	return Handler{Jaws: jw, Template: Template{Name: name, Dot: dot}}
+func Handler(jw *core.Jaws, name string, dot any) http.Handler {
+	return uiHandler{Jaws: jw, Template: Template{Name: name, Dot: dot}}
 }

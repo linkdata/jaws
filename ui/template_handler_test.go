@@ -120,7 +120,7 @@ func TestTemplate_findJidOrJsOrHTMLNode(t *testing.T) {
 	}
 }
 
-func TestHandler_NewHandlerServeHTTP(t *testing.T) {
+func TestHandler_HandlerServeHTTP(t *testing.T) {
 	jw, err := core.New()
 	if err != nil {
 		t.Fatal(err)
@@ -128,7 +128,7 @@ func TestHandler_NewHandlerServeHTTP(t *testing.T) {
 	defer jw.Close()
 	jw.AddTemplateLookuper(template.Must(template.New("handler").Parse(`{{with $.Dot}}<div id="{{$.Jid}}">{{.}}</div>{{end}}`)))
 
-	h := NewHandler(jw, "handler", core.Tag("ok"))
+	h := Handler(jw, "handler", core.Tag("ok"))
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	h.ServeHTTP(rr, req)
