@@ -54,12 +54,12 @@ func MakeHTMLGetter(v any) HTMLGetter {
 		return htmlGetter{v}
 	case Getter[string]:
 		return htmlGetterString{v}
+	case Formatter:
+		return htmlGetterString{v.Format("%v")}
 	case fmt.Stringer:
 		return htmlStringerGetter{v}
 	case string:
 		return htmlGetter{template.HTML(v)} // #nosec G203
-	case Formatter:
-		return htmlGetterString{v.Format("%v")}
 	default:
 		return htmlGetter{template.HTML(html.EscapeString(fmt.Sprint(v)))} // #nosec G203
 	}
