@@ -88,6 +88,43 @@ document.getElementById("Jid.1")?.classList?.add("cls");
 document.getElementById("Jid.1")?.classList?.remove("cls");
 </script>`, rq.JawsKeyString())
 	th.Equal(want, buf.String())
+
+	// verify getTailActions drained the consumed messages from wsQueue
+	rq.muQueue.Lock()
+	num = len(rq.wsQueue)
+	rq.muQueue.Unlock()
+	th.Equal(num, 0)
+}
+
+func TestRequestWriter_TailHTML_PreservesNonAttrMessages(t *testing.T) {
+	th := newTestHelper(t)
+	NextJid = 0
+	jw, _ := New()
+	defer jw.Close()
+	rq := jw.NewRequest(nil)
+	defer jw.recycle(rq)
+	item := &testUi{}
+	e := rq.NewElement(item)
+
+	// queue a mix of attribute and non-attribute messages
+	e.SetAttr("hidden", "")
+	e.SetValue("hello")
+	e.SetClass("cls")
+	e.SetInner("content")
+
+	rq.muQueue.Lock()
+	th.Equal(len(rq.wsQueue), 4)
+	rq.muQueue.Unlock()
+
+	var buf bytes.Buffer
+	rq.Writer(&buf).TailHTML()
+
+	// SAttr and SClass consumed, Value and Inner preserved
+	rq.muQueue.Lock()
+	th.Equal(len(rq.wsQueue), 2)
+	th.Equal(rq.wsQueue[0].What, what.Value)
+	th.Equal(rq.wsQueue[1].What, what.Inner)
+	rq.muQueue.Unlock()
 }
 
 func TestRequest_SendArrivesOk(t *testing.T) {

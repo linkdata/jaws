@@ -144,6 +144,7 @@ func (rq *Request) HeadHTML(w io.Writer) (err error) {
 func (rq *Request) getTailActions() (b []byte) {
 	rq.muQueue.Lock()
 	defer rq.muQueue.Unlock()
+	n := 0
 	for _, msg := range rq.wsQueue {
 		var fn string
 		switch msg.What {
@@ -172,8 +173,15 @@ func (rq *Request) getTailActions() (b []byte) {
 				b = strconv.AppendQuote(b, val)
 			}
 			b = append(b, ");"...)
+		} else {
+			rq.wsQueue[n] = msg
+			n++
 		}
 	}
+	for i := n; i < len(rq.wsQueue); i++ {
+		rq.wsQueue[i] = WsMsg{}
+	}
+	rq.wsQueue = rq.wsQueue[:n]
 	if len(b) > 0 {
 		b = append(b, "\n</script>"...)
 	}
