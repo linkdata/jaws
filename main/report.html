@@ -1508,7 +1508,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
         select </span>{
-        case &lt;-jw.Done():<span class="cov0" title="0"></span>
+        case &lt;-jw.Done():<span class="cov8" title="1"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
 }
@@ -2553,6 +2553,7 @@ func (rq *Request) HeadHTML(w io.Writer) (err error) <span class="cov8" title="1
 func (rq *Request) getTailActions() (b []byte) <span class="cov8" title="1">{
         rq.muQueue.Lock()
         defer rq.muQueue.Unlock()
+        n := 0
         for _, msg := range rq.wsQueue </span><span class="cov8" title="1">{
                 var fn string
                 switch msg.What </span>{
@@ -2581,9 +2582,16 @@ func (rq *Request) getTailActions() (b []byte) <span class="cov8" title="1">{
                                 b = strconv.AppendQuote(b, val)
                         }</span>
                         <span class="cov8" title="1">b = append(b, ");"...)</span>
-                }
+                } else<span class="cov8" title="1"> {
+                        rq.wsQueue[n] = msg
+                        n++
+                }</span>
         }
-        <span class="cov8" title="1">if len(b) &gt; 0 </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">for i := n; i &lt; len(rq.wsQueue); i++ </span><span class="cov8" title="1">{
+                rq.wsQueue[i] = WsMsg{}
+        }</span>
+        <span class="cov8" title="1">rq.wsQueue = rq.wsQueue[:n]
+        if len(b) &gt; 0 </span><span class="cov8" title="1">{
                 b = append(b, "\n&lt;/script&gt;"...)
         }</span>
         <span class="cov8" title="1">return</span>
@@ -2894,6 +2902,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh &lt;-chan 
         defer func() </span><span class="cov8" title="1">{
                 rq.Jaws.unsubscribe(broadcastMsgCh)
                 rq.killSession()
+                rq.cancelFn(nil)
                 close(eventCallCh)
                 for </span><span class="cov8" title="1">{
                         select </span>{
@@ -3186,8 +3195,14 @@ func (rq *Request) makeUpdateList() (todo []*Element) <span class="cov8" title="
 // eventCaller calls event functions
 func (rq *Request) eventCaller(eventCallCh &lt;-chan eventFnCall, outboundMsgCh chan&lt;- WsMsg, eventDoneCh chan&lt;- struct{}) <span class="cov8" title="1">{
         defer close(eventDoneCh)
+        ctxDoneCh := rq.Context().Done()
         for call := range eventCallCh </span><span class="cov8" title="1">{
-                if err := rq.callAllEventHandlers(call.jid, call.wht, call.data); err != nil </span><span class="cov8" title="1">{
+                select </span>{
+                case &lt;-ctxDoneCh:<span class="cov8" title="1">
+                        continue</span>
+                default:<span class="cov8" title="1"></span>
+                }
+                <span class="cov8" title="1">if err := rq.callAllEventHandlers(call.jid, call.wht, call.data); err != nil </span><span class="cov8" title="1">{
                         var m WsMsg
                         m.FillAlert(err)
                         select </span>{
@@ -4220,8 +4235,11 @@ func wsWriteData(wc io.WriteCloser, firstMsg WsMsg, outboundMsgCh &lt;-chan WsMs
 batchloop:
         for len(b) &lt; 32*1024 </span><span class="cov8" title="1">{
                 select </span>{
-                case msg := &lt;-outboundMsgCh:<span class="cov8" title="1">
-                        b = msg.Append(b)</span>
+                case msg, ok := &lt;-outboundMsgCh:<span class="cov8" title="1">
+                        if !ok </span><span class="cov8" title="1">{
+                                break batchloop</span>
+                        }
+                        <span class="cov8" title="1">b = msg.Append(b)</span>
                 default:<span class="cov8" title="1">
                         break batchloop</span>
                 }
