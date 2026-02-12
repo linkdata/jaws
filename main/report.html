@@ -2410,6 +2410,7 @@ func ParseParams(params []any) (tags []any, handlers []EventHandler, attrs []str
 		<pre class="file" id="file22" style="display: none">package core
 
 import (
+        "cmp"
         "context"
         "errors"
         "fmt"
@@ -2470,7 +2471,7 @@ type eventFnCall struct {
 var (
         ErrWebsocketOriginMissing     = errors.New("websocket request missing Origin header")
         ErrWebsocketOriginWrongScheme = errors.New("websocket Origin not http or https")
-        ErrWebsocketOriginWrongHost   = errors.New("websocket Origin not http or https")
+        ErrWebsocketOriginWrongHost   = errors.New("websocket Origin host mismatch")
         ErrRequestAlreadyClaimed      = errors.New("request already claimed")
         ErrJavascriptDisabled         = errors.New("javascript is disabled")
 )
@@ -2595,12 +2596,13 @@ func (rq *Request) getTailActions() (b []byte) <span class="cov8" title="1">{
 //
 // It also adds a &lt;noscript&gt; tag that warns of reduces functionality.
 func (rq *Request) TailHTML(w io.Writer) (err error) <span class="cov8" title="1">{
-        fmt.Fprintf(w, "\n"+`&lt;noscript&gt;`+
+        if _, err = fmt.Fprintf(w, "\n"+`&lt;noscript&gt;`+
                 `&lt;div class="jaws-alert"&gt;This site requires Javascript for full functionality.&lt;/div&gt;`+
-                `&lt;img src="/jaws/%s/noscript" alt="noscript"&gt;&lt;/noscript&gt;`, rq.JawsKeyString())
-        if actions := rq.getTailActions(); len(actions) &gt; 0 </span><span class="cov8" title="1">{
-                _, err = w.Write(actions)
-        }</span>
+                `&lt;img src="/jaws/%s/noscript" alt="noscript"&gt;&lt;/noscript&gt;`, rq.JawsKeyString()); err == nil </span><span class="cov8" title="1">{
+                if actions := rq.getTailActions(); len(actions) &gt; 0 </span><span class="cov8" title="1">{
+                        _, err = w.Write(actions)
+                }</span>
+        }
         <span class="cov8" title="1">return</span>
 }
 
@@ -2873,7 +2875,7 @@ func (rq *Request) GetElements(tagitem any) (elems []*Element) <span class="cov8
                         for _, e := range el </span><span class="cov8" title="1">{
                                 if _, ok = seen[e]; !ok </span><span class="cov8" title="1">{
                                         seen[e] = struct{}{}
-                                        elems = append(elems, el...)
+                                        elems = append(elems, e)
                                 }</span>
                         }
                 }
@@ -2895,8 +2897,10 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh &lt;-chan 
                 close(eventCallCh)
                 for </span><span class="cov8" title="1">{
                         select </span>{
-                        case &lt;-eventCallCh:<span class="cov8" title="1"></span>
-                        case &lt;-incomingMsgCh:<span class="cov8" title="1"></span>
+                        case _, ok := &lt;-incomingMsgCh:<span class="cov8" title="1">
+                                if !ok </span><span class="cov8" title="1">{
+                                        incomingMsgCh = nil
+                                }</span>
                         case &lt;-eventDoneCh:<span class="cov8" title="1">
                                 close(outboundMsgCh)
                                 if x := recover(); x != nil </span><span class="cov8" title="1">{
@@ -3105,7 +3109,7 @@ func (rq *Request) getSendMsgs() (toSend []WsMsg) <span class="cov8" title="1">{
                 <span class="cov8" title="1">rq.wsQueue = rq.wsQueue[:0]</span>
         }
 
-        <span class="cov8" title="1">slices.SortStableFunc(toSend, func(a, b WsMsg) int </span><span class="cov8" title="1">{ return int(a.Jid - b.Jid) }</span>)
+        <span class="cov8" title="1">slices.SortStableFunc(toSend, func(a, b WsMsg) int </span><span class="cov8" title="1">{ return cmp.Compare(a.Jid, b.Jid) }</span>)
         <span class="cov8" title="1">return</span>
 }
 
