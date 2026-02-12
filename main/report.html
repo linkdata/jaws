@@ -529,9 +529,9 @@ type ClickHandler interface {
         JawsClick(e *Element, name string) (err error)
 }
 
-type clickHandlerWapper struct{ ClickHandler }
+type clickHandlerWrapper struct{ ClickHandler }
 
-func (chw clickHandlerWapper) JawsEvent(e *Element, w what.What, v string) error <span class="cov8" title="1">{
+func (chw clickHandlerWrapper) JawsEvent(e *Element, w what.What, v string) error <span class="cov8" title="1">{
         if w == what.Click </span><span class="cov8" title="1">{
                 return chw.JawsClick(e, v)
         }</span>
@@ -823,7 +823,7 @@ func (e *Element) ApplyGetter(getter any) (tag any, err error) <span class="cov8
                 }</span>
                 <span class="cov8" title="1">e.Tag(tag)
                 if ch, ok := getter.(ClickHandler); ok </span><span class="cov8" title="1">{
-                        e.handlers = append(e.handlers, clickHandlerWapper{ch})
+                        e.handlers = append(e.handlers, clickHandlerWrapper{ch})
                 }</span>
                 <span class="cov8" title="1">if eh, ok := getter.(EventHandler); ok </span><span class="cov8" title="1">{
                         e.handlers = append(e.handlers, eh)
@@ -1508,7 +1508,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
         select </span>{
-        case &lt;-jw.Done():<span class="cov0" title="0"></span>
+        case &lt;-jw.Done():<span class="cov8" title="1"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
 }
@@ -2395,7 +2395,7 @@ func ParseParams(params []any) (tags []any, handlers []EventHandler, attrs []str
                         }</span>
                 default:<span class="cov8" title="1">
                         if h, ok := data.(ClickHandler); ok </span><span class="cov8" title="1">{
-                                handlers = append(handlers, clickHandlerWapper{h})
+                                handlers = append(handlers, clickHandlerWrapper{h})
                         }</span>
                         <span class="cov8" title="1">if h, ok := data.(EventHandler); ok </span><span class="cov8" title="1">{
                                 handlers = append(handlers, h)
