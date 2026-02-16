@@ -60,8 +60,8 @@ func (nba *NamedBoolArray) Add(name string, text template.HTML) *NamedBoolArray 
 
 // Set sets the Checked state for the NamedBool(s) with the given name.
 func (nba *NamedBoolArray) Set(name string, state bool) (changed bool) {
-	nba.mu.RLock()
-	defer nba.mu.RUnlock()
+	nba.mu.Lock()
+	defer nba.mu.Unlock()
 	for _, nb := range nba.data {
 		if nb.Name() == name {
 			changed = nb.Set(state) || changed
