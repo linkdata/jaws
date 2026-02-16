@@ -51,22 +51,23 @@ func (nb *NamedBool) JawsGet(*Element) (v bool) {
 }
 
 func (nb *NamedBool) JawsSet(e *Element, checked bool) (err error) {
-	var nba *NamedBoolArray
+	err = ErrValueUnchanged
+	nba := nb.nba
+	if nba != nil {
+		nba.mu.Lock()
+		defer nba.mu.Unlock()
+	}
 	nb.mu.Lock()
 	if nb.checked != checked {
 		nb.checked = checked
-		nba = nb.nba
-	} else {
-		err = ErrValueUnchanged
+		err = nil
 	}
 	nb.mu.Unlock()
 	if err == nil {
 		e.Dirty(nb)
 		if nba != nil {
-			e.Dirty(nba)
-			nba.mu.Lock()
 			nba.deselectOthersLocked(nb.name, checked)
-			nba.mu.Unlock()
+			e.Dirty(nba)
 		}
 	}
 	return
