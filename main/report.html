@@ -870,9 +870,12 @@ type errNotComparable struct {
         t reflect.Type
 }
 
-func (e errNotComparable) Error() string <span class="cov8" title="1">{
-        return e.t.String() + " is not comparable"
-}</span>
+func (e errNotComparable) Error() (s string) <span class="cov8" title="1">{
+        if e.t != nil </span><span class="cov8" title="1">{
+                s = e.t.String() + " is "
+        }</span>
+        <span class="cov8" title="1">return s + "not comparable"</span>
+}
 
 func (errNotComparable) Is(target error) bool <span class="cov8" title="1">{
         return target == ErrNotComparable
@@ -1554,7 +1557,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
         select </span>{
-        case &lt;-jw.Done():<span class="cov8" title="1"></span>
+        case &lt;-jw.Done():<span class="cov0" title="0"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
 }
@@ -2213,9 +2216,9 @@ func (nb *NamedBool) JawsSet(e *Element, checked bool) (err error) <span class="
                 e.Dirty(nb)
                 if nba != nil </span><span class="cov8" title="1">{
                         e.Dirty(nba)
-                        nba.mu.RLock()
+                        nba.mu.Lock()
                         nba.deselectOthersLocked(nb.name, checked)
-                        nba.mu.RUnlock()
+                        nba.mu.Unlock()
                 }</span>
         }
         <span class="cov8" title="1">return</span>
@@ -2306,8 +2309,8 @@ func (nba *NamedBoolArray) Add(name string, text template.HTML) *NamedBoolArray 
 
 // Set sets the Checked state for the NamedBool(s) with the given name.
 func (nba *NamedBoolArray) Set(name string, state bool) (changed bool) <span class="cov8" title="1">{
-        nba.mu.RLock()
-        defer nba.mu.RUnlock()
+        nba.mu.Lock()
+        defer nba.mu.Unlock()
         for _, nb := range nba.data </span><span class="cov8" title="1">{
                 if nb.Name() == name </span><span class="cov8" title="1">{
                         changed = nb.Set(state) || changed
@@ -2597,12 +2600,16 @@ func (rq *Request) clearLocked() *Request <span class="cov8" title="1">{
         rq.httpDoneCh = nil
         rq.todoDirt = rq.todoDirt[:0]
         rq.remoteIP = netip.Addr{}
+        for _, e := range rq.elems </span><span class="cov8" title="1">{
+                e.Request = nil
+        }</span>
+        <span class="cov8" title="1">clear(rq.elems)
         rq.elems = rq.elems[:0]
-        rq.killSessionLocked()
         rq.wsQueue = rq.wsQueue[:0]
         clear(rq.tagMap)
-        return rq
-}</span>
+        rq.killSessionLocked()
+        return rq</span>
+}
 
 // HeadHTML writes the HTML code needed in the HTML page's HEAD section.
 func (rq *Request) HeadHTML(w io.Writer) (err error) <span class="cov8" title="1">{
