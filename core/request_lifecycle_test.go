@@ -174,3 +174,22 @@ func TestCoverage_RequestProcessHTTPDoneAndBroadcastDone(t *testing.T) {
 	jw.Close()
 	jw.Broadcast(Message{What: what.Update})
 }
+
+func TestRequestRecycle_StaleElementIsInert(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	rq := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
+	elem := rq.NewElement(testDivWidget{inner: "x"})
+
+	jw.recycle(rq)
+	if elem.Request != nil {
+		t.Fatal("expected recycled element to have nil Request")
+	}
+	if got := len(rq.tagMap); got != 0 {
+		t.Fatalf("expected no tags in recycled request, got %d", got)
+	}
+}

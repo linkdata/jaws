@@ -128,7 +128,11 @@ func (rq *Request) clearLocked() *Request {
 	rq.todoDirt = rq.todoDirt[:0]
 	rq.remoteIP = netip.Addr{}
 	for _, e := range rq.elems {
-		e.Request = nil
+		if e != nil {
+			e.Request = nil
+			e.handlers = nil
+			e.ui = nil
+		}
 	}
 	clear(rq.elems)
 	rq.elems = rq.elems[:0]
