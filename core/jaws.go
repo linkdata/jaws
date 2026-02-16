@@ -61,12 +61,12 @@ type Jaws struct {
 	subCh        chan subscription
 	unsubCh      chan chan Message
 	updateTicker *time.Ticker
-	headPrefix   string
-	faviconURL   string
 	reqPool      sync.Pool
 	serveJS      *staticserve.StaticServe
 	serveCSS     *staticserve.StaticServe
 	mu           deadlock.RWMutex // protects following
+	headPrefix   string
+	faviconURL   string
 	tmplookers   []TemplateLookuper
 	kg           *bufio.Reader
 	closeCh      chan struct{} // closed when Close() has been called
@@ -393,10 +393,11 @@ func (jw *Jaws) deleteSession(sessionID uint64) {
 	jw.mu.Unlock()
 }
 
-func (jw *Jaws) FaviconURL() string {
+func (jw *Jaws) FaviconURL() (s string) {
 	jw.mu.RLock()
-	defer jw.mu.RUnlock()
-	return jw.faviconURL
+	s = jw.faviconURL
+	jw.mu.RUnlock()
+	return
 }
 
 // GenerateHeadHTML (re-)generates the HTML code that goes in the HEAD section, ensuring

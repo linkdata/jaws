@@ -147,7 +147,9 @@ func (rq *Request) clearLocked() *Request {
 // HeadHTML writes the HTML code needed in the HTML page's HEAD section.
 func (rq *Request) HeadHTML(w io.Writer) (err error) {
 	var b []byte
+	rq.Jaws.mu.RLock()
 	b = append(b, rq.Jaws.headPrefix...)
+	rq.Jaws.mu.RUnlock()
 	b = JawsKeyAppend(b, rq.JawsKey)
 	b = append(b, `">`...)
 	_, err = w.Write(b)
