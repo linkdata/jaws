@@ -1470,7 +1470,7 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) <span class="cov8" 
                         remoteIP := parseIP(hr.RemoteAddr)
                         jw.mu.RLock()
                         if sess = jw.getSessionLocked(sessIds, remoteIP); sess != nil </span><span class="cov8" title="1">{
-                                if sess.isDeadLocked() </span><span class="cov8" title="1">{
+                                if sess.isDead() </span><span class="cov8" title="1">{
                                         sess = nil
                                 }</span>
                         }
@@ -1565,7 +1565,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
         select </span>{
-        case &lt;-jw.Done():<span class="cov8" title="1"></span>
+        case &lt;-jw.Done():<span class="cov0" title="0"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
 }
