@@ -148,7 +148,7 @@ func TestCoverage_elementBranches(t *testing.T) {
 	rq.Jaws.Debug = false
 
 	// deleted branch in Element.JawsRender/JawsUpdate
-	rq.deleteElement(elem)
+	rq.DeleteElement(elem)
 	if err := elem.JawsRender(&sb, nil); err != nil {
 		t.Fatal(err)
 	}

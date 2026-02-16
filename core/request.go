@@ -599,7 +599,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan WsM
 						Jid:  elem.Jid(),
 						What: what.Delete,
 					})
-					rq.deleteElement(elem)
+					rq.DeleteElement(elem)
 				case what.Input, what.Click:
 					// Input or Click messages received here are from Request.Send() or broadcasts.
 					// they won't be sent out on the WebSocket, but will queue up a
@@ -659,14 +659,14 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err 
 				var jidStr string
 				jidStr, after, found = strings.Cut(after, "\t")
 				if id = jid.ParseString(jidStr); id > 0 {
-					if e := rq.getElementByJidLocked(id); e != nil && !e.deleted {
+					if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() {
 						elems = append(elems, e)
 					}
 				}
 			}
 		}
 	} else {
-		if e := rq.getElementByJidLocked(id); e != nil && !e.deleted {
+		if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() {
 			elems = append(elems, e)
 		}
 	}
@@ -698,7 +698,7 @@ func (rq *Request) getSendMsgs() (toSend []WsMsg) {
 
 	validJids := map[Jid]struct{}{}
 	for _, elem := range rq.elems {
-		if !elem.deleted {
+		if !elem.deleted.Load() {
 			validJids[elem.Jid()] = struct{}{}
 		}
 	}
@@ -752,17 +752,11 @@ func deleteElement(s []*Element, e *Element) []*Element {
 }
 
 func (rq *Request) deleteElementLocked(e *Element) {
-	e.deleted = true
+	e.deleted.Store(true)
 	rq.elems = deleteElement(rq.elems, e)
 	for k := range rq.tagMap {
 		rq.tagMap[k] = deleteElement(rq.tagMap[k], e)
 	}
-}
-
-func (rq *Request) deleteElement(e *Element) {
-	rq.mu.Lock()
-	defer rq.mu.Unlock()
-	rq.deleteElementLocked(e)
 }
 
 // DeleteElement removes elem from the Request element registry.
@@ -771,7 +765,9 @@ func (rq *Request) deleteElement(e *Element) {
 // element sets and need to drop stale elements after issuing a corresponding
 // DOM remove operation.
 func (rq *Request) DeleteElement(elem *Element) {
-	rq.deleteElement(elem)
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	rq.deleteElementLocked(elem)
 }
 
 func (rq *Request) makeUpdateList() (todo []*Element) {

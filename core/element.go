@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"io"
 	"strings"
+	"sync/atomic"
 
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
@@ -19,7 +20,7 @@ type Element struct {
 	ui       UI             // the UI object
 	handlers []EventHandler // custom event handlers registered, if any
 	jid      jid.Jid        // JaWS ID, unique to this Element within it's Request
-	deleted  bool           // true if deleteElement() has been called for this Element
+	deleted  atomic.Bool    // true if deleteElement() has been called for this Element
 }
 
 func (e *Element) String() string {
@@ -28,21 +29,21 @@ func (e *Element) String() string {
 
 // AddHandler adds the given handlers to the Element.
 func (e *Element) AddHandlers(h ...EventHandler) {
-	if !e.deleted {
+	if !e.deleted.Load() {
 		e.handlers = append(e.handlers, h...)
 	}
 }
 
 // Tag adds the given tags to the Element.
 func (e *Element) Tag(tags ...any) {
-	if !e.deleted {
+	if !e.deleted.Load() {
 		e.Request.Tag(e, tags...)
 	}
 }
 
 // HasTag returns true if this Element has the given tag.
 func (e *Element) HasTag(tag any) bool {
-	return !e.deleted && e.Request.HasTag(e, tag)
+	return !e.deleted.Load() && e.Request.HasTag(e, tag)
 }
 
 // Jid returns the JaWS ID for this Element, unique within it's Request.
@@ -88,7 +89,7 @@ func (e *Element) renderDebug(w io.Writer) {
 //
 // Do not call this yourself unless it's from within another JawsRender implementation.
 func (e *Element) JawsRender(w io.Writer, params []any) (err error) {
-	if !e.deleted {
+	if !e.deleted.Load() {
 		if err = e.Ui().JawsRender(e, w, params); err == nil {
 			if e.Jaws.Debug {
 				e.renderDebug(w)
@@ -102,13 +103,13 @@ func (e *Element) JawsRender(w io.Writer, params []any) (err error) {
 //
 // Do not call this yourself unless it's from within another JawsUpdate implementation.
 func (e *Element) JawsUpdate() {
-	if !e.deleted {
+	if !e.deleted.Load() {
 		e.Ui().JawsUpdate(e)
 	}
 }
 
 func (e *Element) queue(wht what.What, data string) {
-	if !e.deleted {
+	if !e.deleted.Load() {
 		e.Request.queue(WsMsg{
 			Data: data,
 			Jid:  e.jid,
@@ -170,7 +171,7 @@ func (e *Element) SetValue(val string) {
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) Replace(htmlCode template.HTML) {
-	if !e.deleted {
+	if !e.deleted.Load() {
 		var b []byte
 		b = append(b, "id="...)
 		b = e.Jid().AppendQuote(b)
@@ -192,7 +193,7 @@ func (e *Element) Append(htmlCode template.HTML) {
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) Order(jidList []jid.Jid) {
-	if !e.deleted && len(jidList) > 0 {
+	if !e.deleted.Load() && len(jidList) > 0 {
 		var b []byte
 		for i, jid := range jidList {
 			if i > 0 {
@@ -218,7 +219,7 @@ func (e *Element) Remove(htmlId string) {
 // Returns the list of HTML attributes found, if any.
 func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) {
 	tags, handlers, attrs := ParseParams(params)
-	if !e.deleted {
+	if !e.deleted.Load() {
 		e.handlers = append(e.handlers, handlers...)
 		e.Tag(tags...)
 		for _, s := range attrs {
