@@ -13,9 +13,6 @@ type ClickHandler interface {
 
 type clickHandlerWrapper struct{ ClickHandler }
 
-func (chw clickHandlerWrapper) JawsEvent(e *Element, w what.What, v string) error {
-	if w == what.Click {
-		return chw.JawsClick(e, v)
-	}
+func (chw clickHandlerWrapper) JawsEvent(*Element, what.What, string) error {
 	return ErrEventUnhandled
 }

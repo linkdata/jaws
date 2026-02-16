@@ -105,6 +105,29 @@ func Test_JawsEvent_AllUnhandled(t *testing.T) {
 	}
 }
 
+func Test_JawsEvent_NonClickInvokesJawsEventForDualHandler(t *testing.T) {
+	th := newTestHelper(t)
+	NextJid = 0
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	msgCh := make(chan string, 1)
+	defer close(msgCh)
+	je := &testJawsEvent{msgCh: msgCh}
+	zomgItem := &testUi{}
+	id := rq.Register(zomgItem, je, "attr1", []string{"attr2"}, template.HTMLAttr("attr3"), []template.HTMLAttr{"attr4"})
+
+	rq.InCh <- WsMsg{Data: "typed", Jid: id, What: what.Input}
+	select {
+	case <-th.C:
+		th.Timeout()
+	case s := <-msgCh:
+		if s != `JawsEvent: Input "typed"` {
+			t.Errorf("unexpected handler call: %q", s)
+		}
+	}
+}
+
 type testJawsEventHandler struct {
 	UI
 	msgCh    chan string
@@ -130,6 +153,21 @@ type testPanicEventHandler struct {
 
 func (h testPanicEventHandler) JawsEvent(e *Element, wht what.What, val string) error {
 	panic(h.panicVal)
+}
+
+type testClickCounter struct {
+	n         int
+	wantName  string
+	lastValue string
+}
+
+func (c *testClickCounter) JawsClick(_ *Element, name string) error {
+	c.lastValue = name
+	if name != c.wantName {
+		return ErrEventUnhandled
+	}
+	c.n++
+	return nil
 }
 
 func Test_CallEventHandlers_PanicError(t *testing.T) {
@@ -164,6 +202,56 @@ func Test_CallEventHandlers_PanicString(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "oops") {
 		t.Errorf("Error() = %q, want it to contain %q", err.Error(), "oops")
+	}
+}
+
+func Test_CallEventHandlers_ClickOnlyHandlerViaApplyGetter(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	elem := rq.NewElement(testDivWidget{inner: "x"})
+	clickCounter := &testClickCounter{wantName: "name"}
+	if _, err := elem.ApplyGetter(clickCounter); err != nil {
+		t.Fatalf("ApplyGetter returned error: %v", err)
+	}
+
+	err := CallEventHandlers(elem.Ui(), elem, what.Click, "name")
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if clickCounter.n != 1 {
+		t.Fatalf("expected click handler to be called once, got %d", clickCounter.n)
+	}
+	err = CallEventHandlers(elem.Ui(), elem, what.Click, "wrong")
+	if err != ErrEventUnhandled {
+		t.Fatalf("expected ErrEventUnhandled for wrong name, got %v", err)
+	}
+	if clickCounter.n != 1 {
+		t.Fatalf("expected click count to stay 1 for wrong name, got %d", clickCounter.n)
+	}
+}
+
+func Test_CallEventHandlers_ClickOnlyHandlerViaApplyParams(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	elem := rq.NewElement(testDivWidget{inner: "x"})
+	clickCounter := &testClickCounter{wantName: "name"}
+	elem.ApplyParams([]any{clickCounter})
+
+	err := CallEventHandlers(elem.Ui(), elem, what.Click, "name")
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if clickCounter.n != 1 {
+		t.Fatalf("expected click handler to be called once, got %d", clickCounter.n)
+	}
+	err = CallEventHandlers(elem.Ui(), elem, what.Click, "wrong")
+	if err != ErrEventUnhandled {
+		t.Fatalf("expected ErrEventUnhandled for wrong name, got %v", err)
+	}
+	if clickCounter.n != 1 {
+		t.Fatalf("expected click count to stay 1 for wrong name, got %d", clickCounter.n)
 	}
 }
 
