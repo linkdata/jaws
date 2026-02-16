@@ -167,7 +167,7 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 		sess.jw.deleteSession(sess.sessionID)
 		sess.mu.Lock()
 		sess.cookie.MaxAge = -1
-		sess.broadcastLocked(Message{What: what.Reload})
+		sess.broadcastLocked(Message{What: what.Reload}, true)
 		sess.requests = sess.requests[:0]
 		cookie = new(http.Cookie)
 		*cookie = sess.cookie
@@ -205,10 +205,15 @@ func (sess *Session) Requests() (rl []*Request) {
 	return
 }
 
-func (sess *Session) broadcastLocked(msg Message) {
+func (sess *Session) broadcastLocked(msg Message, closing bool) {
 	for _, rq := range sess.requests {
 		msg.Dest = rq
 		sess.jw.Broadcast(msg)
+		if closing {
+			rq.mu.Lock()
+			rq.session = nil
+			rq.mu.Unlock()
+		}
 	}
 }
 
@@ -221,6 +226,6 @@ func (sess *Session) Broadcast(msg Message) {
 	if sess != nil {
 		sess.mu.RLock()
 		defer sess.mu.RUnlock()
-		sess.broadcastLocked(msg)
+		sess.broadcastLocked(msg, false)
 	}
 }

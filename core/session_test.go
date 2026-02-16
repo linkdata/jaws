@@ -514,6 +514,38 @@ func TestSession_GetSessionExpiredBeforeCleanup(t *testing.T) {
 	}
 }
 
+func TestSession_CloseDetachesRequestSession(t *testing.T) {
+	jw, _ := New()
+	defer jw.Close()
+	go jw.ServeWithTimeout(time.Second)
+
+	rr := httptest.NewRecorder()
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	sess := jw.NewSession(rr, hr)
+	if sess == nil {
+		t.Fatal("expected session")
+	}
+	sess.Set("foo", "bar")
+
+	rq := jw.NewRequest(hr)
+	if rq.Session() != sess {
+		t.Fatal("expected request session association")
+	}
+
+	cookie := sess.Close()
+	if cookie == nil || cookie.MaxAge != -1 {
+		t.Fatalf("expected delete cookie, got %#v", cookie)
+	}
+	if got := rq.Session(); got != nil {
+		t.Fatalf("expected closed session to detach from request, got %v", got)
+	}
+	if got := rq.Get("foo"); got != nil {
+		t.Fatalf("expected detached request Get to return nil, got %v", got)
+	}
+
+	jw.recycle(rq)
+}
+
 func TestSession_ReplacesOld(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
