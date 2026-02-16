@@ -167,9 +167,16 @@ func TestCoverage_applyGetterBranchesAndDebugNewElement(t *testing.T) {
 	}
 
 	// getter with tag/click/event/init handler
-	ag := testApplyGetterAll{}
-	if tag, err := elem.ApplyGetter(ag); tag != Tag("tg") || err != nil {
-		t.Fatalf("unexpected %v %v", tag, err)
+	ag := &testApplyGetterAll{}
+	tags, err := elem.ApplyGetter(ag)
+	if err != nil {
+		t.Fatalf("unexpected error %v", err)
+	}
+	if !elem.HasTag(Tag("tg")) {
+		t.Fatalf("missing Tag('tg') in %#v", tags)
+	}
+	if !elem.HasTag(ag) {
+		t.Fatalf("missing tag %#v in %#v", ag, tags)
 	}
 	agErr := testApplyGetterAll{initErr: ErrNotComparable}
 	if _, err := elem.ApplyGetter(agErr); err != ErrNotComparable {
