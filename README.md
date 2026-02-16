@@ -160,6 +160,11 @@ loop (`Serve()` or `ServeWithTimeout()`):
 * Static/ping JaWS endpoints via `(*Jaws).ServeHTTP()`:
   `/jaws/.ping`, `/jaws/.jaws.*.js`, `/jaws/.jaws.*.css`.
 
+Broadcasting APIs are not safe before the processing loop starts. In particular,
+`(*Jaws).Broadcast()` (and helpers that call it), `(*Session).Broadcast()`,
+`(*Session).Reload()` and `(*Session).Close()` may block before `Serve()` or
+`ServeWithTimeout()` is running.
+
 ### Routing
 
 JaWS doesn't enforce any particular router, but it does require several

@@ -363,6 +363,8 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
 // NewSession creates a new Session.
 //
 // Any pre-existing Session will be cleared and closed.
+// This may call Session.Close() on an existing session and therefore requires
+// the JaWS processing loop (`Serve()` or `ServeWithTimeout()`) to be running.
 //
 // Subsequent Requests created with `NewRequest()` that have the cookie set and
 // originates from the same IP will be able to access the Session.
@@ -443,6 +445,12 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 }
 
 // Broadcast sends a message to all Requests.
+//
+// It must not be called before the JaWS processing loop (`Serve()` or
+// `ServeWithTimeout()`) is running. Otherwise this call may block once the
+// internal broadcast channel fills.
+//
+// All convenience helpers on Jaws that call Broadcast inherit this requirement.
 func (jw *Jaws) Broadcast(msg Message) {
 	switch msg.Dest.(type) {
 	case nil:

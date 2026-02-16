@@ -281,6 +281,8 @@ func (rq *Request) Context() (ctx context.Context) {
 
 // SetContext atomically replaces the Request's context with the function return value.
 // The function is given the current context and must return a non-nil context.
+// The returned context must be derived from oldctx so cancellation and deadlines
+// continue to propagate to Request.Context().
 func (rq *Request) SetContext(fn func(oldctx context.Context) (newctx context.Context)) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
@@ -330,6 +332,7 @@ func (rq *Request) cancel(err error) {
 // The lvl argument should be one of Bootstraps alert levels: primary, secondary, success, danger, warning, info, light or dark.
 //
 // The default JaWS javascript only supports Bootstrap.js dismissable alerts.
+// See Jaws.Broadcast for processing-loop requirements.
 func (rq *Request) Alert(lvl, msg string) {
 	rq.Jaws.Broadcast(Message{
 		Dest: rq,
@@ -346,6 +349,7 @@ func (rq *Request) AlertError(err error) {
 }
 
 // Redirect requests the current Request to navigate to the given URL.
+// See Jaws.Broadcast for processing-loop requirements.
 func (rq *Request) Redirect(url string) {
 	rq.Jaws.Broadcast(Message{
 		Dest: rq,

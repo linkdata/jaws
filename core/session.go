@@ -156,6 +156,9 @@ func (sess *Session) Cookie() (cookie *http.Cookie) {
 // Existing Requests already associated with the Session will ask the browser to reload the pages.
 // Key/value pairs in the Session are left unmodified, you can use `Session.Clear()` to remove all of them.
 //
+// It must not be called before the JaWS processing loop (`Serve()` or
+// `ServeWithTimeout()`) is running, because reload broadcasts may block.
+//
 // Returns a cookie to be sent to the client browser that will delete the browser cookie.
 // Returns nil if the session was not found.
 // It is safe to call on a nil Session.
@@ -174,6 +177,7 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 }
 
 // Reload calls Broadcast with a message asking browsers to reload the page.
+// See Broadcast for the processing-loop requirement.
 func (sess *Session) Reload() {
 	sess.Broadcast(Message{What: what.Reload})
 }
@@ -209,6 +213,9 @@ func (sess *Session) broadcastLocked(msg Message) {
 }
 
 // Broadcast attempts to send a message to all Requests using this session.
+//
+// It must not be called before the JaWS processing loop (`Serve()` or
+// `ServeWithTimeout()`) is running. Otherwise this call may block.
 // It is safe to call on a nil Session.
 func (sess *Session) Broadcast(msg Message) {
 	if sess != nil {
