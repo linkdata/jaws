@@ -1180,7 +1180,7 @@ type Jaws struct {
         Logger       Logger          // Optional logger to use
         Debug        bool            // Set to true to enable debug info in generated HTML code
         MakeAuth     MakeAuthFn      // Optional function to create With.Auth for Templates
-        BaseContext  context.Context // Base context for Requests, default is context.Background()
+        BaseContext  context.Context // Non-nil base context for Requests, set to context.Background() in New()
         bcastCh      chan Message
         subCh        chan subscription
         unsubCh      chan chan Message
@@ -1569,7 +1569,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
         select </span>{
-        case &lt;-jw.Done():<span class="cov8" title="1"></span>
+        case &lt;-jw.Done():<span class="cov0" title="0"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
 }
