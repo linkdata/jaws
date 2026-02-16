@@ -166,7 +166,8 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 		sess.cookie.MaxAge = -1
 		sess.broadcastLocked(Message{What: what.Reload})
 		sess.requests = sess.requests[:0]
-		cookie = &sess.cookie
+		cookie = new(http.Cookie)
+		*cookie = sess.cookie
 		sess.mu.Unlock()
 	}
 	return
