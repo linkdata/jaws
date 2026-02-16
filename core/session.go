@@ -20,7 +20,7 @@ type Session struct {
 	data      map[string]any
 }
 
-func newSession(jw *Jaws, sessionID uint64, remoteIP netip.Addr) *Session {
+func newSession(jw *Jaws, sessionID uint64, remoteIP netip.Addr, secure bool) *Session {
 	return &Session{
 		jw:        jw,
 		sessionID: sessionID,
@@ -30,7 +30,7 @@ func newSession(jw *Jaws, sessionID uint64, remoteIP netip.Addr) *Session {
 			Name:     jw.CookieName,
 			Path:     "/",
 			Value:    JawsKeyString(sessionID),
-			Secure:   true,
+			Secure:   secure,
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
 		},

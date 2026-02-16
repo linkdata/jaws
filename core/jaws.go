@@ -370,12 +370,13 @@ func (jw *Jaws) NewSession(w http.ResponseWriter, hr *http.Request) (sess *Sessi
 }
 
 func (jw *Jaws) newSession(w http.ResponseWriter, hr *http.Request) (sess *Session) {
+	secure := requestIsSecure(hr)
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	for sess == nil {
 		sessionID := jw.nonZeroRandomLocked()
 		if _, ok := jw.sessions[sessionID]; !ok {
-			sess = newSession(jw, sessionID, parseIP(hr.RemoteAddr))
+			sess = newSession(jw, sessionID, parseIP(hr.RemoteAddr), secure)
 			jw.sessions[sessionID] = sess
 			if w != nil {
 				http.SetCookie(w, &sess.cookie)
@@ -393,6 +394,8 @@ func (jw *Jaws) deleteSession(sessionID uint64) {
 }
 
 func (jw *Jaws) FaviconURL() string {
+	jw.mu.RLock()
+	defer jw.mu.RUnlock()
 	return jw.faviconURL
 }
 
@@ -419,8 +422,12 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 					err = errors.Join(err, e)
 				}
 			}
-			jw.headPrefix, jw.faviconURL = PreloadHTML(urls...)
-			jw.headPrefix += `<meta name="jawsKey" content="`
+			headPrefix, faviconURL := PreloadHTML(urls...)
+			headPrefix += `<meta name="jawsKey" content="`
+			jw.mu.Lock()
+			jw.headPrefix = headPrefix
+			jw.faviconURL = faviconURL
+			jw.mu.Unlock()
 		}
 	}
 	return
@@ -654,6 +661,21 @@ func parseIP(remoteAddr string) (ip netip.Addr) {
 			ip, _ = netip.ParseAddr(host)
 		} else {
 			ip, _ = netip.ParseAddr(remoteAddr)
+		}
+	}
+	return
+}
+
+func requestIsSecure(hr *http.Request) (yes bool) {
+	if hr != nil {
+		yes = (hr.TLS != nil)
+		yes = yes || (hr.URL != nil && strings.EqualFold(hr.URL.Scheme, "https"))
+		yes = yes || strings.EqualFold(strings.TrimSpace(hr.Header.Get("X-Forwarded-Ssl")), "on")
+		yes = yes || strings.EqualFold(strings.TrimSpace(hr.Header.Get("Front-End-Https")), "on")
+		if !yes {
+			for proto := range strings.FieldsFuncSeq(hr.Header.Get("X-Forwarded-Proto"), func(r rune) bool { return r == ',' || r == ' ' }) {
+				yes = yes || strings.EqualFold(proto, "https")
+			}
 		}
 	}
 	return
