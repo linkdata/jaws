@@ -3278,7 +3278,10 @@ func (rq *Request) deleteElementLocked(e *Element) <span class="cov8" title="1">
                 rq.elems = deleteElement(rq.elems, e)
                 for k := range rq.tagMap </span><span class="cov8" title="1">{
                         rq.tagMap[k] = deleteElement(rq.tagMap[k], e)
-                }</span>
+                        if len(rq.tagMap[k]) == 0 </span><span class="cov8" title="1">{
+                                delete(rq.tagMap, k)
+                        }</span>
+                }
         }
 }
 
