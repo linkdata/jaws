@@ -882,3 +882,14 @@ func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) {
 	}
 	return
 }
+
+// MustLog sends an error to the Logger set in the Jaws or
+// panics with the given error if no Logger is set.
+// Has no effect if the err is nil.
+func (rq *Request) MustLog(err error) {
+	var jw *Jaws
+	if rq != nil {
+		jw = rq.Jaws
+	}
+	jw.MustLog(err)
+}
