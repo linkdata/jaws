@@ -90,8 +90,6 @@ func TagExpand(rq *Request, tag any) ([]any, error) {
 
 func MustTagExpand(rq *Request, tag any) []any {
 	result, err := TagExpand(rq, tag)
-	if err != nil {
-		panic(err)
-	}
+	rq.MustLog(err)
 	return result
 }
