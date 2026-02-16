@@ -3356,10 +3356,9 @@ func (rq *Request) makeUpdateList() (todo []*Element) <span class="cov8" title="
 // eventCaller calls event functions
 func (rq *Request) eventCaller(eventCallCh &lt;-chan eventFnCall, outboundMsgCh chan&lt;- WsMsg, eventDoneCh chan&lt;- struct{}) <span class="cov8" title="1">{
         defer close(eventDoneCh)
-        ctxDoneCh := rq.Context().Done()
         for call := range eventCallCh </span><span class="cov8" title="1">{
                 select </span>{
-                case &lt;-ctxDoneCh:<span class="cov8" title="1">
+                case &lt;-rq.Context().Done():<span class="cov8" title="1">
                         continue</span>
                 default:<span class="cov8" title="1"></span>
                 }
@@ -3675,7 +3674,7 @@ func (sess *Session) Close() (cookie *http.Cookie) <span class="cov8" title="1">
                 sess.jw.deleteSession(sess.sessionID)
                 sess.mu.Lock()
                 sess.cookie.MaxAge = -1
-                sess.broadcastLocked(Message{What: what.Reload})
+                sess.broadcastLocked(Message{What: what.Reload}, true)
                 sess.requests = sess.requests[:0]
                 cookie = new(http.Cookie)
                 *cookie = sess.cookie
@@ -3713,11 +3712,16 @@ func (sess *Session) Requests() (rl []*Request) <span class="cov8" title="1">{
         <span class="cov8" title="1">return</span>
 }
 
-func (sess *Session) broadcastLocked(msg Message) <span class="cov8" title="1">{
+func (sess *Session) broadcastLocked(msg Message, closing bool) <span class="cov8" title="1">{
         for _, rq := range sess.requests </span><span class="cov8" title="1">{
                 msg.Dest = rq
                 sess.jw.Broadcast(msg)
-        }</span>
+                if closing </span><span class="cov8" title="1">{
+                        rq.mu.Lock()
+                        rq.session = nil
+                        rq.mu.Unlock()
+                }</span>
+        }
 }
 
 // Broadcast attempts to send a message to all Requests using this session.
@@ -3729,7 +3733,7 @@ func (sess *Session) Broadcast(msg Message) <span class="cov8" title="1">{
         if sess != nil </span><span class="cov8" title="1">{
                 sess.mu.RLock()
                 defer sess.mu.RUnlock()
-                sess.broadcastLocked(msg)
+                sess.broadcastLocked(msg, false)
         }</span>
 }
 </pre>
