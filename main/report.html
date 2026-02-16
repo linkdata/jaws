@@ -1802,7 +1802,6 @@ func parseIP(remoteAddr string) (ip netip.Addr) <span class="cov8" title="1">{
 func requestIsSecure(hr *http.Request) (yes bool) <span class="cov8" title="1">{
         if hr != nil </span><span class="cov8" title="1">{
                 yes = (hr.TLS != nil)
-                yes = yes || (hr.URL != nil &amp;&amp; strings.EqualFold(hr.URL.Scheme, "https"))
                 yes = yes || strings.EqualFold(strings.TrimSpace(hr.Header.Get("X-Forwarded-Ssl")), "on")
                 yes = yes || strings.EqualFold(strings.TrimSpace(hr.Header.Get("Front-End-Https")), "on")
                 if !yes </span><span class="cov8" title="1">{
@@ -3349,25 +3348,35 @@ func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) <span cl
         if origin := r.Header.Get("Origin"); origin != "" </span><span class="cov8" title="1">{
                 var u *url.URL
                 if u, err = url.Parse(origin); err == nil </span><span class="cov8" title="1">{
-                        err = ErrWebsocketOriginWrongScheme
-                        switch u.Scheme </span>{
-                        case "http", "https":<span class="cov8" title="1">
+                        if initial := rq.Initial(); initial != nil </span><span class="cov8" title="1">{
+                                secure := requestIsSecure(initial)
+                                port := ""
+                                uhost := u.Host
+                                ihost := initial.Host
+                                err = ErrWebsocketOriginWrongScheme
+                                switch u.Scheme </span>{
+                                case "http":<span class="cov8" title="1">
+                                        if secure </span><span class="cov8" title="1">{
+                                                return
+                                        }</span>
+                                        <span class="cov8" title="1">port = ":80"</span>
+                                case "https":<span class="cov8" title="1">
+                                        if !secure </span><span class="cov8" title="1">{
+                                                return
+                                        }</span>
+                                        <span class="cov8" title="1">port = ":443"</span>
+                                default:<span class="cov8" title="1">
+                                        return</span>
+                                }
+                                <span class="cov8" title="1">uhost = strings.TrimSuffix(uhost, port)
+                                ihost = strings.TrimSuffix(ihost, port)
                                 err = ErrWebsocketOriginWrongHost
-                                if u.Host != "" </span><span class="cov8" title="1">{
-                                        if initial := rq.Initial(); initial != nil </span><span class="cov8" title="1">{
-                                                // Browser WebSocket requests use the page origin.
-                                                // Compare both scheme and host against the initial request.
-                                                wantScheme := "http"
-                                                if requestIsSecure(initial) </span><span class="cov8" title="1">{
-                                                        wantScheme = "https"
-                                                }</span>
-                                                <span class="cov8" title="1">if initial.URL != nil &amp;&amp; initial.URL.Scheme != "" </span><span class="cov8" title="1">{
-                                                        wantScheme = initial.URL.Scheme
-                                                }</span>
-                                                <span class="cov8" title="1">if strings.EqualFold(u.Scheme, wantScheme) &amp;&amp; strings.EqualFold(u.Host, initial.Host) </span><span class="cov8" title="1">{
-                                                        err = nil
-                                                }</span>
-                                        }
+                                if uhost != "" </span><span class="cov8" title="1">{
+                                        // Browser WebSocket requests use the page origin.
+                                        // Compare both scheme and host against the initial request.
+                                        if strings.EqualFold(uhost, ihost) </span><span class="cov8" title="1">{
+                                                err = nil
+                                        }</span>
                                 }
                         }
                 }
