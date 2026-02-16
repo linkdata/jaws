@@ -1431,8 +1431,10 @@ func (jw *Jaws) Sessions() (sl []*Session) <span class="cov8" title="1">{
 func (jw *Jaws) getSessionLocked(sessIds []uint64, remoteIP netip.Addr) *Session <span class="cov8" title="1">{
         for _, sessId := range sessIds </span><span class="cov8" title="1">{
                 if sess, ok := jw.sessions[sessId]; ok &amp;&amp; equalIP(remoteIP, sess.remoteIP) </span><span class="cov8" title="1">{
-                        return sess
-                }</span>
+                        if !sess.isDead() </span><span class="cov8" title="1">{
+                                return sess
+                        }</span>
+                }
         }
         <span class="cov8" title="1">return nil</span>
 }
@@ -1475,13 +1477,9 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) <span class="cov8" 
                 if sessIds := getCookieSessionsIds(hr.Header, jw.CookieName); len(sessIds) &gt; 0 </span><span class="cov8" title="1">{
                         remoteIP := parseIP(hr.RemoteAddr)
                         jw.mu.RLock()
-                        if sess = jw.getSessionLocked(sessIds, remoteIP); sess != nil </span><span class="cov8" title="1">{
-                                if sess.isDead() </span><span class="cov8" title="1">{
-                                        sess = nil
-                                }</span>
-                        }
-                        <span class="cov8" title="1">jw.mu.RUnlock()</span>
-                }
+                        sess = jw.getSessionLocked(sessIds, remoteIP)
+                        jw.mu.RUnlock()
+                }</span>
         }
         <span class="cov8" title="1">return</span>
 }
@@ -1571,7 +1569,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
         select </span>{
-        case &lt;-jw.Done():<span class="cov8" title="1"></span>
+        case &lt;-jw.Done():<span class="cov0" title="0"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
 }
@@ -3357,7 +3355,16 @@ func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) <span cl
                                 err = ErrWebsocketOriginWrongHost
                                 if u.Host != "" </span><span class="cov8" title="1">{
                                         if initial := rq.Initial(); initial != nil </span><span class="cov8" title="1">{
-                                                if strings.EqualFold(u.Host, initial.Host) </span><span class="cov8" title="1">{
+                                                // Browser WebSocket requests use the page origin.
+                                                // Compare both scheme and host against the initial request.
+                                                wantScheme := "http"
+                                                if requestIsSecure(initial) </span><span class="cov8" title="1">{
+                                                        wantScheme = "https"
+                                                }</span>
+                                                <span class="cov8" title="1">if initial.URL != nil &amp;&amp; initial.URL.Scheme != "" </span><span class="cov8" title="1">{
+                                                        wantScheme = initial.URL.Scheme
+                                                }</span>
+                                                <span class="cov8" title="1">if strings.EqualFold(u.Scheme, wantScheme) &amp;&amp; strings.EqualFold(u.Host, initial.Host) </span><span class="cov8" title="1">{
                                                         err = nil
                                                 }</span>
                                         }
