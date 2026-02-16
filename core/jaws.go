@@ -678,7 +678,6 @@ func parseIP(remoteAddr string) (ip netip.Addr) {
 func requestIsSecure(hr *http.Request) (yes bool) {
 	if hr != nil {
 		yes = (hr.TLS != nil)
-		yes = yes || (hr.URL != nil && strings.EqualFold(hr.URL.Scheme, "https"))
 		yes = yes || strings.EqualFold(strings.TrimSpace(hr.Header.Get("X-Forwarded-Ssl")), "on")
 		yes = yes || strings.EqualFold(strings.TrimSpace(hr.Header.Get("Front-End-Https")), "on")
 		if !yes {

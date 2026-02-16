@@ -847,24 +847,34 @@ func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) {
 	if origin := r.Header.Get("Origin"); origin != "" {
 		var u *url.URL
 		if u, err = url.Parse(origin); err == nil {
-			err = ErrWebsocketOriginWrongScheme
-			switch u.Scheme {
-			case "http", "https":
+			if initial := rq.Initial(); initial != nil {
+				secure := requestIsSecure(initial)
+				port := ""
+				uhost := u.Host
+				ihost := initial.Host
+				err = ErrWebsocketOriginWrongScheme
+				switch u.Scheme {
+				case "http":
+					if secure {
+						return
+					}
+					port = ":80"
+				case "https":
+					if !secure {
+						return
+					}
+					port = ":443"
+				default:
+					return
+				}
+				uhost = strings.TrimSuffix(uhost, port)
+				ihost = strings.TrimSuffix(ihost, port)
 				err = ErrWebsocketOriginWrongHost
-				if u.Host != "" {
-					if initial := rq.Initial(); initial != nil {
-						// Browser WebSocket requests use the page origin.
-						// Compare both scheme and host against the initial request.
-						wantScheme := "http"
-						if requestIsSecure(initial) {
-							wantScheme = "https"
-						}
-						if initial.URL != nil && initial.URL.Scheme != "" {
-							wantScheme = initial.URL.Scheme
-						}
-						if strings.EqualFold(u.Scheme, wantScheme) && strings.EqualFold(u.Host, initial.Host) {
-							err = nil
-						}
+				if uhost != "" {
+					// Browser WebSocket requests use the page origin.
+					// Compare both scheme and host against the initial request.
+					if strings.EqualFold(uhost, ihost) {
+						err = nil
 					}
 				}
 			}

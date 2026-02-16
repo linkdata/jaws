@@ -3,11 +3,13 @@ package core
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -698,6 +700,12 @@ func TestRequest_validateWebSocketOrigin_MatchesInitialRequestOrigin(t *testing.
 			wantErr:    nil,
 		},
 		{
+			name:       "same origin https with explicit default port accepted",
+			initialURL: "https://example.test/page",
+			origin:     "https://example.test:443",
+			wantErr:    nil,
+		},
+		{
 			name:       "different host rejected",
 			initialURL: "https://example.test/page",
 			origin:     "https://evil.test",
@@ -713,7 +721,7 @@ func TestRequest_validateWebSocketOrigin_MatchesInitialRequestOrigin(t *testing.
 			name:       "different scheme rejected",
 			initialURL: "https://example.test/page",
 			origin:     "http://example.test",
-			wantErr:    ErrWebsocketOriginWrongHost,
+			wantErr:    ErrWebsocketOriginWrongScheme,
 		},
 		{
 			name:       "missing origin rejected",
@@ -737,7 +745,20 @@ func TestRequest_validateWebSocketOrigin_MatchesInitialRequestOrigin(t *testing.
 			}
 			defer jw.Close()
 
-			initial := httptest.NewRequest(http.MethodGet, tt.initialURL, nil)
+			initialURL, err := url.Parse(tt.initialURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := initialURL.Path
+			if path == "" {
+				path = "/"
+			}
+			// Server requests don't populate URL.Scheme/URL.Host, only Host.
+			initial := httptest.NewRequest(http.MethodGet, path, nil)
+			initial.Host = initialURL.Host
+			if strings.EqualFold(initialURL.Scheme, "https") {
+				initial.TLS = &tls.ConnectionState{}
+			}
 			rq := jw.NewRequest(initial)
 			defer jw.recycle(rq)
 
