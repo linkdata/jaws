@@ -346,7 +346,7 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
 			remoteIP := parseIP(hr.RemoteAddr)
 			jw.mu.RLock()
 			if sess = jw.getSessionLocked(sessIds, remoteIP); sess != nil {
-				if sess.isDeadLocked() {
+				if sess.isDead() {
 					sess = nil
 				}
 			}
