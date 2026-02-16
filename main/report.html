@@ -1262,24 +1262,30 @@ func (jw *Jaws) Done() &lt;-chan struct{} <span class="cov8" title="1">{
 
 // AddTemplateLookuper adds an object that can resolve
 // strings to *template.Template.
-func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) <span class="cov8" title="1">{
+func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) (err error) <span class="cov8" title="1">{
         if tl != nil </span><span class="cov8" title="1">{
-                jw.mu.Lock()
-                if !slices.Contains(jw.tmplookers, tl) </span><span class="cov8" title="1">{
-                        jw.tmplookers = append(jw.tmplookers, tl)
-                }</span>
-                <span class="cov8" title="1">jw.mu.Unlock()</span>
+                if err = newErrNotComparable(tl); err == nil </span><span class="cov8" title="1">{
+                        jw.mu.Lock()
+                        if !slices.Contains(jw.tmplookers, tl) </span><span class="cov8" title="1">{
+                                jw.tmplookers = append(jw.tmplookers, tl)
+                        }</span>
+                        <span class="cov8" title="1">jw.mu.Unlock()</span>
+                }
         }
+        <span class="cov8" title="1">return</span>
 }
 
 // RemoveTemplateLookuper removes the given object from
 // the list of TemplateLookupers.
-func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) <span class="cov8" title="1">{
+func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) (err error) <span class="cov8" title="1">{
         if tl != nil </span><span class="cov8" title="1">{
-                jw.mu.Lock()
-                jw.tmplookers = slices.DeleteFunc(jw.tmplookers, func(x TemplateLookuper) bool </span><span class="cov8" title="1">{ return x == tl }</span>)
-                <span class="cov8" title="1">jw.mu.Unlock()</span>
+                if err = newErrNotComparable(tl); err == nil </span><span class="cov8" title="1">{
+                        jw.mu.Lock()
+                        jw.tmplookers = slices.DeleteFunc(jw.tmplookers, func(x TemplateLookuper) bool </span><span class="cov8" title="1">{ return x == tl }</span>)
+                        <span class="cov8" title="1">jw.mu.Unlock()</span>
+                }
         }
+        <span class="cov8" title="1">return</span>
 }
 
 // LookupTemplate queries the known TemplateLookupers in the order
@@ -1565,7 +1571,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
         select </span>{
-        case &lt;-jw.Done():<span class="cov0" title="0"></span>
+        case &lt;-jw.Done():<span class="cov8" title="1"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
 }
@@ -2011,46 +2017,48 @@ func PreloadHTML(urls ...*url.URL) (htmlcode, faviconurl string) <span class="co
         var favicontype string
         var buf []byte
         for _, u := range urls </span><span class="cov8" title="1">{
-                var asattr string
-                ext := strings.ToLower(filepath.Ext(u.Path))
-                mimetype := mime.TypeByExtension(ext)
-                if semi := strings.IndexByte(mimetype, ';'); semi &gt; 0 </span><span class="cov8" title="1">{
-                        mimetype = mimetype[:semi]
-                }</span>
-                <span class="cov8" title="1">urlstr := u.String()
-                switch ext </span>{
-                case ".js":<span class="cov8" title="1">
-                        jsurls = append(jsurls, urlstr)
-                        continue</span>
-                case ".css":<span class="cov8" title="1">
-                        cssurls = append(cssurls, urlstr)
-                        continue</span>
-                default:<span class="cov8" title="1">
-                        if strings.HasPrefix(mimetype, "image") </span><span class="cov8" title="1">{
-                                asattr = "image"
-                                if strings.HasPrefix(filepath.Base(u.Path), "favicon") </span><span class="cov8" title="1">{
-                                        favicontype = mimetype
-                                        faviconurl = urlstr
-                                        continue</span>
-                                }
-                        } else<span class="cov8" title="1"> if strings.HasPrefix(mimetype, "font") </span><span class="cov8" title="1">{
-                                asattr = "font"
+                if u != nil </span><span class="cov8" title="1">{
+                        var asattr string
+                        ext := strings.ToLower(filepath.Ext(u.Path))
+                        mimetype := mime.TypeByExtension(ext)
+                        if semi := strings.IndexByte(mimetype, ';'); semi &gt; 0 </span><span class="cov8" title="1">{
+                                mimetype = mimetype[:semi]
                         }</span>
+                        <span class="cov8" title="1">urlstr := u.String()
+                        switch ext </span>{
+                        case ".js":<span class="cov8" title="1">
+                                jsurls = append(jsurls, urlstr)
+                                continue</span>
+                        case ".css":<span class="cov8" title="1">
+                                cssurls = append(cssurls, urlstr)
+                                continue</span>
+                        default:<span class="cov8" title="1">
+                                if strings.HasPrefix(mimetype, "image") </span><span class="cov8" title="1">{
+                                        asattr = "image"
+                                        if strings.HasPrefix(filepath.Base(u.Path), "favicon") </span><span class="cov8" title="1">{
+                                                favicontype = mimetype
+                                                faviconurl = urlstr
+                                                continue</span>
+                                        }
+                                } else<span class="cov8" title="1"> if strings.HasPrefix(mimetype, "font") </span><span class="cov8" title="1">{
+                                        asattr = "font"
+                                }</span>
+                        }
+                        <span class="cov8" title="1">buf = append(buf, `&lt;link rel="preload" href="`...)
+                        buf = append(buf, urlstr...)
+                        buf = append(buf, '"')
+                        if asattr != "" </span><span class="cov8" title="1">{
+                                buf = append(buf, ` as="`...)
+                                buf = append(buf, asattr...)
+                                buf = append(buf, '"')
+                        }</span>
+                        <span class="cov8" title="1">if mimetype != "" </span><span class="cov8" title="1">{
+                                buf = append(buf, ` type="`...)
+                                buf = append(buf, mimetype...)
+                                buf = append(buf, '"')
+                        }</span>
+                        <span class="cov8" title="1">buf = append(buf, "&gt;\n"...)</span>
                 }
-                <span class="cov8" title="1">buf = append(buf, `&lt;link rel="preload" href="`...)
-                buf = append(buf, urlstr...)
-                buf = append(buf, '"')
-                if asattr != "" </span><span class="cov8" title="1">{
-                        buf = append(buf, ` as="`...)
-                        buf = append(buf, asattr...)
-                        buf = append(buf, '"')
-                }</span>
-                <span class="cov8" title="1">if mimetype != "" </span><span class="cov8" title="1">{
-                        buf = append(buf, ` type="`...)
-                        buf = append(buf, mimetype...)
-                        buf = append(buf, '"')
-                }</span>
-                <span class="cov8" title="1">buf = append(buf, "&gt;\n"...)</span>
         }
         <span class="cov8" title="1">for _, urlstr := range cssurls </span><span class="cov8" title="1">{
                 buf = append(buf, `&lt;link rel="stylesheet" href="`...)
@@ -2967,12 +2975,14 @@ func (rq *Request) appendDirtyTags(tags []any) <span class="cov8" title="1">{
 
 // Tag adds the given tags to the given Element.
 func (rq *Request) TagExpanded(elem *Element, expandedtags []any) <span class="cov8" title="1">{
-        rq.mu.Lock()
-        defer rq.mu.Unlock()
-        for _, tag := range expandedtags </span><span class="cov8" title="1">{
-                if !rq.hasTagLocked(elem, tag) </span><span class="cov8" title="1">{
-                        rq.tagMap[tag] = append(rq.tagMap[tag], elem)
-                }</span>
+        if elem != nil &amp;&amp; elem.Request == rq </span><span class="cov8" title="1">{
+                rq.mu.Lock()
+                defer rq.mu.Unlock()
+                for _, tag := range expandedtags </span><span class="cov8" title="1">{
+                        if !rq.hasTagLocked(elem, tag) </span><span class="cov8" title="1">{
+                                rq.tagMap[tag] = append(rq.tagMap[tag], elem)
+                        }</span>
+                }
         }
 }
 
