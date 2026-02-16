@@ -1569,7 +1569,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
         select </span>{
-        case &lt;-jw.Done():<span class="cov8" title="1"></span>
+        case &lt;-jw.Done():<span class="cov0" title="0"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
 }
@@ -3383,6 +3383,17 @@ func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) <span cl
         }
         <span class="cov8" title="1">return</span>
 }
+
+// MustLog sends an error to the Logger set in the Jaws or
+// panics with the given error if no Logger is set.
+// Has no effect if the err is nil.
+func (rq *Request) MustLog(err error) <span class="cov8" title="1">{
+        var jw *Jaws
+        if rq != nil </span><span class="cov8" title="1">{
+                jw = rq.Jaws
+        }</span>
+        <span class="cov8" title="1">jw.MustLog(err)</span>
+}
 </pre>
 		
 		<pre class="file" id="file23" style="display: none">package core
@@ -4062,11 +4073,9 @@ func TagExpand(rq *Request, tag any) ([]any, error) <span class="cov8" title="1"
 
 func MustTagExpand(rq *Request, tag any) []any <span class="cov8" title="1">{
         result, err := TagExpand(rq, tag)
-        if err != nil </span><span class="cov8" title="1">{
-                panic(err)</span>
-        }
-        <span class="cov8" title="1">return result</span>
-}
+        rq.MustLog(err)
+        return result
+}</span>
 </pre>
 		
 		<pre class="file" id="file32" style="display: none">package core
