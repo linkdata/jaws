@@ -1185,12 +1185,12 @@ type Jaws struct {
         subCh        chan subscription
         unsubCh      chan chan Message
         updateTicker *time.Ticker
-        headPrefix   string
-        faviconURL   string
         reqPool      sync.Pool
         serveJS      *staticserve.StaticServe
         serveCSS     *staticserve.StaticServe
         mu           deadlock.RWMutex // protects following
+        headPrefix   string
+        faviconURL   string
         tmplookers   []TemplateLookuper
         kg           *bufio.Reader
         closeCh      chan struct{} // closed when Close() has been called
@@ -1494,12 +1494,13 @@ func (jw *Jaws) NewSession(w http.ResponseWriter, hr *http.Request) (sess *Sessi
 }
 
 func (jw *Jaws) newSession(w http.ResponseWriter, hr *http.Request) (sess *Session) <span class="cov8" title="1">{
+        secure := requestIsSecure(hr)
         jw.mu.Lock()
         defer jw.mu.Unlock()
         for sess == nil </span><span class="cov8" title="1">{
                 sessionID := jw.nonZeroRandomLocked()
                 if _, ok := jw.sessions[sessionID]; !ok </span><span class="cov8" title="1">{
-                        sess = newSession(jw, sessionID, parseIP(hr.RemoteAddr))
+                        sess = newSession(jw, sessionID, parseIP(hr.RemoteAddr), secure)
                         jw.sessions[sessionID] = sess
                         if w != nil </span><span class="cov8" title="1">{
                                 http.SetCookie(w, &amp;sess.cookie)
@@ -1516,8 +1517,11 @@ func (jw *Jaws) deleteSession(sessionID uint64) <span class="cov8" title="1">{
         jw.mu.Unlock()
 }</span>
 
-func (jw *Jaws) FaviconURL() string <span class="cov8" title="1">{
-        return jw.faviconURL
+func (jw *Jaws) FaviconURL() (s string) <span class="cov8" title="1">{
+        jw.mu.RLock()
+        s = jw.faviconURL
+        jw.mu.RUnlock()
+        return
 }</span>
 
 // GenerateHeadHTML (re-)generates the HTML code that goes in the HEAD section, ensuring
@@ -1543,8 +1547,12 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
                                         err = errors.Join(err, e)
                                 }</span>
                         }
-                        <span class="cov8" title="1">jw.headPrefix, jw.faviconURL = PreloadHTML(urls...)
-                        jw.headPrefix += `&lt;meta name="jawsKey" content="`</span>
+                        <span class="cov8" title="1">headPrefix, faviconURL := PreloadHTML(urls...)
+                        headPrefix += `&lt;meta name="jawsKey" content="`
+                        jw.mu.Lock()
+                        jw.headPrefix = headPrefix
+                        jw.faviconURL = faviconURL
+                        jw.mu.Unlock()</span>
                 }
         }
         <span class="cov8" title="1">return</span>
@@ -1553,7 +1561,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
         select </span>{
-        case &lt;-jw.Done():<span class="cov8" title="1"></span>
+        case &lt;-jw.Done():<span class="cov0" title="0"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
 }
@@ -1779,6 +1787,21 @@ func parseIP(remoteAddr string) (ip netip.Addr) <span class="cov8" title="1">{
                 }</span> else<span class="cov8" title="1"> {
                         ip, _ = netip.ParseAddr(remoteAddr)
                 }</span>
+        }
+        <span class="cov8" title="1">return</span>
+}
+
+func requestIsSecure(hr *http.Request) (yes bool) <span class="cov8" title="1">{
+        if hr != nil </span><span class="cov8" title="1">{
+                yes = (hr.TLS != nil)
+                yes = yes || (hr.URL != nil &amp;&amp; strings.EqualFold(hr.URL.Scheme, "https"))
+                yes = yes || strings.EqualFold(strings.TrimSpace(hr.Header.Get("X-Forwarded-Ssl")), "on")
+                yes = yes || strings.EqualFold(strings.TrimSpace(hr.Header.Get("Front-End-Https")), "on")
+                if !yes </span><span class="cov8" title="1">{
+                        for proto := range strings.FieldsFuncSeq(hr.Header.Get("X-Forwarded-Proto"), func(r rune) bool </span><span class="cov8" title="1">{ return r == ',' || r == ' ' }</span>) <span class="cov8" title="1">{
+                                yes = yes || strings.EqualFold(proto, "https")
+                        }</span>
+                }
         }
         <span class="cov8" title="1">return</span>
 }
@@ -2617,7 +2640,9 @@ func (rq *Request) clearLocked() *Request <span class="cov8" title="1">{
 // HeadHTML writes the HTML code needed in the HTML page's HEAD section.
 func (rq *Request) HeadHTML(w io.Writer) (err error) <span class="cov8" title="1">{
         var b []byte
+        rq.Jaws.mu.RLock()
         b = append(b, rq.Jaws.headPrefix...)
+        rq.Jaws.mu.RUnlock()
         b = JawsKeyAppend(b, rq.JawsKey)
         b = append(b, `"&gt;`...)
         _, err = w.Write(b)
@@ -3419,7 +3444,7 @@ type Session struct {
         data      map[string]any
 }
 
-func newSession(jw *Jaws, sessionID uint64, remoteIP netip.Addr) *Session <span class="cov8" title="1">{
+func newSession(jw *Jaws, sessionID uint64, remoteIP netip.Addr, secure bool) *Session <span class="cov8" title="1">{
         return &amp;Session{
                 jw:        jw,
                 sessionID: sessionID,
@@ -3429,7 +3454,7 @@ func newSession(jw *Jaws, sessionID uint64, remoteIP netip.Addr) *Session <span 
                         Name:     jw.CookieName,
                         Path:     "/",
                         Value:    JawsKeyString(sessionID),
-                        Secure:   true,
+                        Secure:   secure,
                         HttpOnly: true,
                         SameSite: http.SameSiteLaxMode,
                 },
