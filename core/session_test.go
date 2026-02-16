@@ -486,6 +486,34 @@ func TestSession_Cleanup(t *testing.T) {
 	}
 }
 
+func TestSession_GetSessionExpiredBeforeCleanup(t *testing.T) {
+	jw, _ := New()
+	defer jw.Close()
+
+	rr := httptest.NewRecorder()
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	sess := jw.NewSession(rr, hr)
+	if sess == nil {
+		t.Fatal("expected session")
+	}
+	if got := jw.GetSession(hr); got != sess {
+		t.Fatalf("expected live session, got %v", got)
+	}
+
+	// Expire the session without running maintenance cleanup.
+	sess.mu.Lock()
+	sess.deadline = time.Now().Add(-time.Second)
+	sess.mu.Unlock()
+
+	if got := jw.SessionCount(); got != 1 {
+		t.Fatalf("expected expired session to still be in map before cleanup, got %d", got)
+	}
+	if got := jw.GetSession(hr); got != nil {
+		t.Fatalf("expected expired session to be ignored by GetSession, got %v", got)
+	}
+}
+
 func TestSession_ReplacesOld(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()

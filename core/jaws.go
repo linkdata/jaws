@@ -345,7 +345,11 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
 		if sessIds := getCookieSessionsIds(hr.Header, jw.CookieName); len(sessIds) > 0 {
 			remoteIP := parseIP(hr.RemoteAddr)
 			jw.mu.RLock()
-			sess = jw.getSessionLocked(sessIds, remoteIP)
+			if sess = jw.getSessionLocked(sessIds, remoteIP); sess != nil {
+				if sess.isDeadLocked() {
+					sess = nil
+				}
+			}
 			jw.mu.RUnlock()
 		}
 	}
