@@ -1466,12 +1466,14 @@ func getCookieSessionsIds(h http.Header, wanted string) (cookies []uint64) <span
 
 // GetSession returns the Session associated with the given *http.Request, or nil.
 func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) <span class="cov8" title="1">{
-        if sessIds := getCookieSessionsIds(hr.Header, jw.CookieName); len(sessIds) &gt; 0 </span><span class="cov8" title="1">{
-                remoteIP := parseIP(hr.RemoteAddr)
-                jw.mu.RLock()
-                sess = jw.getSessionLocked(sessIds, remoteIP)
-                jw.mu.RUnlock()
-        }</span>
+        if hr != nil </span><span class="cov8" title="1">{
+                if sessIds := getCookieSessionsIds(hr.Header, jw.CookieName); len(sessIds) &gt; 0 </span><span class="cov8" title="1">{
+                        remoteIP := parseIP(hr.RemoteAddr)
+                        jw.mu.RLock()
+                        sess = jw.getSessionLocked(sessIds, remoteIP)
+                        jw.mu.RUnlock()
+                }</span>
+        }
         <span class="cov8" title="1">return</span>
 }
 
@@ -1482,11 +1484,14 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) <span class="cov8" 
 // Subsequent Requests created with `NewRequest()` that have the cookie set and
 // originates from the same IP will be able to access the Session.
 func (jw *Jaws) NewSession(w http.ResponseWriter, hr *http.Request) (sess *Session) <span class="cov8" title="1">{
-        if oldSess := jw.GetSession(hr); oldSess != nil </span><span class="cov8" title="1">{
-                oldSess.Clear()
-                oldSess.Close()
-        }</span>
-        <span class="cov8" title="1">return jw.newSession(w, hr)</span>
+        if hr != nil </span><span class="cov8" title="1">{
+                if oldSess := jw.GetSession(hr); oldSess != nil </span><span class="cov8" title="1">{
+                        oldSess.Clear()
+                        oldSess.Close()
+                }</span>
+                <span class="cov8" title="1">sess = jw.newSession(w, hr)</span>
+        }
+        <span class="cov8" title="1">return</span>
 }
 
 func (jw *Jaws) newSession(w http.ResponseWriter, hr *http.Request) (sess *Session) <span class="cov8" title="1">{
