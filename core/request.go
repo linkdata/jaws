@@ -471,7 +471,7 @@ func (rq *Request) appendDirtyTags(tags []any) {
 
 // Tag adds the given tags to the given Element.
 func (rq *Request) TagExpanded(elem *Element, expandedtags []any) {
-	if elem != nil && elem.Request == rq {
+	if elem != nil && !elem.deleted.Load() && elem.Request == rq {
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
 		for _, tag := range expandedtags {
