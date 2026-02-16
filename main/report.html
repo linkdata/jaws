@@ -2586,6 +2586,7 @@ func (rq *Request) clearLocked() *Request <span class="cov8" title="1">{
         rq.initial = nil
         rq.running.Store(false)
         rq.claimed.Store(false)
+        rq.Rendering.Store(false)
         rq.ctx, rq.cancelFn = context.WithCancelCause(rq.Jaws.BaseContext)
         rq.httpDoneCh = nil
         rq.todoDirt = rq.todoDirt[:0]
@@ -2593,6 +2594,7 @@ func (rq *Request) clearLocked() *Request <span class="cov8" title="1">{
         rq.elems = rq.elems[:0]
         rq.killSessionLocked()
         clear(rq.tagMap)
+        clear(rq.wsQueue)
         return rq
 }</span>
 
@@ -4203,9 +4205,9 @@ func (rq *Request) stopServe() <span class="cov8" title="1">{
 func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
         if rq.startServe() </span><span class="cov8" title="1">{
                 defer rq.stopServe()
-                if strings.HasSuffix(r.RequestURI, "/noscript") </span><span class="cov8" title="1">{
+                if strings.HasSuffix(r.URL.Path, "/noscript") </span><span class="cov8" title="1">{
                         w.WriteHeader(http.StatusNoContent)
-                        rq.cancel(nil)
+                        rq.cancel(ErrJavascriptDisabled)
                         return
                 }</span>
                 <span class="cov8" title="1">var err error
