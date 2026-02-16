@@ -56,55 +56,6 @@ var _ EventHandler = (*testJawsEvent)(nil)
 var _ TagGetter = (*testJawsEvent)(nil)
 var _ UI = (*testJawsEvent)(nil)
 
-func Test_JawsEvent_ClickUnhandled(t *testing.T) {
-	th := newTestHelper(t)
-	NextJid = 0
-	rq := newTestRequest(t)
-	defer rq.Close()
-
-	msgCh := make(chan string, 1)
-	defer close(msgCh)
-	je := &testJawsEvent{msgCh: msgCh}
-	zomgItem := &testUi{}
-	id := rq.Register(zomgItem, je, "attr1", []string{"attr2"}, template.HTMLAttr("attr3"), []template.HTMLAttr{"attr4"})
-
-	je.clickerr = ErrEventUnhandled
-	rq.InCh <- WsMsg{Data: "name", Jid: id, What: what.Click}
-	select {
-	case <-th.C:
-		th.Timeout()
-	case s := <-msgCh:
-		if s != "JawsEvent: Click \"name\"" {
-			t.Error(s)
-		}
-	}
-}
-
-func Test_JawsEvent_AllUnhandled(t *testing.T) {
-	th := newTestHelper(t)
-	NextJid = 0
-	rq := newTestRequest(t)
-	defer rq.Close()
-
-	msgCh := make(chan string, 1)
-	defer close(msgCh)
-	je := &testJawsEvent{msgCh: msgCh}
-	zomgItem := &testUi{}
-	id := rq.Register(zomgItem, je, "attr1", []string{"attr2"}, template.HTMLAttr("attr3"), []template.HTMLAttr{"attr4"})
-
-	je.clickerr = ErrEventUnhandled
-	je.eventerr = ErrEventUnhandled
-	rq.InCh <- WsMsg{Data: "name", Jid: id, What: what.Click}
-	select {
-	case <-th.C:
-		th.Timeout()
-	case s := <-msgCh:
-		if s != ErrEventUnhandled.Error() {
-			t.Error(s)
-		}
-	}
-}
-
 func Test_JawsEvent_NonClickInvokesJawsEventForDualHandler(t *testing.T) {
 	th := newTestHelper(t)
 	NextJid = 0
@@ -168,6 +119,139 @@ func (c *testClickCounter) JawsClick(_ *Element, name string) error {
 	}
 	c.n++
 	return nil
+}
+
+type clickEventComboRecorder struct {
+	clickRet   error
+	eventRet   error
+	clickCalls int
+	eventCalls int
+}
+
+type clickOnlyComboHandler struct{ rec *clickEventComboRecorder }
+
+func (h clickOnlyComboHandler) JawsClick(*Element, string) error {
+	h.rec.clickCalls++
+	return h.rec.clickRet
+}
+
+type eventOnlyComboHandler struct{ rec *clickEventComboRecorder }
+
+func (h eventOnlyComboHandler) JawsEvent(*Element, what.What, string) error {
+	h.rec.eventCalls++
+	return h.rec.eventRet
+}
+
+type dualComboHandler struct{ rec *clickEventComboRecorder }
+
+func (h dualComboHandler) JawsClick(*Element, string) error {
+	h.rec.clickCalls++
+	return h.rec.clickRet
+}
+
+func (h dualComboHandler) JawsEvent(*Element, what.What, string) error {
+	h.rec.eventCalls++
+	return h.rec.eventRet
+}
+
+func Test_CallEventHandlers_ClickDispatchCombinations(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+	elem := rq.NewElement(testDivWidget{inner: "x"})
+
+	tests := []struct {
+		name       string
+		make       func(*clickEventComboRecorder) any
+		clickRet   error
+		eventRet   error
+		wantErr    error
+		wantClicks int
+		wantEvents int
+	}{
+		{
+			name: "click-only returns nil",
+			make: func(rec *clickEventComboRecorder) any { return clickOnlyComboHandler{rec: rec} },
+			wantErr:    nil,
+			wantClicks: 1,
+			wantEvents: 0,
+		},
+		{
+			name:     "click-only returns ErrEventUnhandled",
+			make:     func(rec *clickEventComboRecorder) any { return clickOnlyComboHandler{rec: rec} },
+			clickRet: ErrEventUnhandled,
+			wantErr:  ErrEventUnhandled,
+			wantClicks: 1,
+			wantEvents: 0,
+		},
+		{
+			name: "event-only returns nil",
+			make: func(rec *clickEventComboRecorder) any { return eventOnlyComboHandler{rec: rec} },
+			wantErr:    nil,
+			wantClicks: 0,
+			wantEvents: 1,
+		},
+		{
+			name:     "event-only returns ErrEventUnhandled",
+			make:     func(rec *clickEventComboRecorder) any { return eventOnlyComboHandler{rec: rec} },
+			eventRet: ErrEventUnhandled,
+			wantErr:  ErrEventUnhandled,
+			wantClicks: 0,
+			wantEvents: 1,
+		},
+		{
+			name: "dual returns nil from click and nil from event",
+			make: func(rec *clickEventComboRecorder) any { return dualComboHandler{rec: rec} },
+			wantErr:    nil,
+			wantClicks: 1,
+			wantEvents: 0,
+		},
+		{
+			name:     "dual returns nil from click and ErrEventUnhandled from event",
+			make:     func(rec *clickEventComboRecorder) any { return dualComboHandler{rec: rec} },
+			eventRet: ErrEventUnhandled,
+			wantErr:  nil,
+			wantClicks: 1,
+			wantEvents: 0,
+		},
+		{
+			name:     "dual returns ErrEventUnhandled from click and nil from event",
+			make:     func(rec *clickEventComboRecorder) any { return dualComboHandler{rec: rec} },
+			clickRet: ErrEventUnhandled,
+			wantErr:  nil,
+			wantClicks: 1,
+			wantEvents: 1,
+		},
+		{
+			name:     "dual returns ErrEventUnhandled from click and ErrEventUnhandled from event",
+			make:     func(rec *clickEventComboRecorder) any { return dualComboHandler{rec: rec} },
+			clickRet: ErrEventUnhandled,
+			eventRet: ErrEventUnhandled,
+			wantErr:  ErrEventUnhandled,
+			wantClicks: 1,
+			wantEvents: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := &clickEventComboRecorder{
+				clickRet: tt.clickRet,
+				eventRet: tt.eventRet,
+			}
+			handler := tt.make(rec)
+
+			err := CallEventHandlers(handler, elem, what.Click, "name")
+			if err != tt.wantErr {
+				t.Fatalf("err = %v, want %v", err, tt.wantErr)
+			}
+			if rec.clickCalls != tt.wantClicks {
+				t.Fatalf("click calls = %d, want %d", rec.clickCalls, tt.wantClicks)
+			}
+			if rec.eventCalls != tt.wantEvents {
+				t.Fatalf("event calls = %d, want %d", rec.eventCalls, tt.wantEvents)
+			}
+		})
+	}
 }
 
 func Test_CallEventHandlers_PanicError(t *testing.T) {
