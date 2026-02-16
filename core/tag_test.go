@@ -19,6 +19,12 @@ func (tt *testSelfTagger) JawsGetTag(rq *Request) any {
 	return tt
 }
 
+type testBadTagGetter []int
+
+func (tt testBadTagGetter) JawsGetTag(*Request) any {
+	return tt
+}
+
 func TestTagExpand(t *testing.T) {
 	var av atomic.Value
 	selftagger := &testSelfTagger{}
@@ -129,4 +135,11 @@ func TestTagExpand_TooManyTagsPanic(t *testing.T) {
 	}()
 	MustTagExpand(nil, tags)
 	t.FailNow()
+}
+
+func TestTagExpand_TagGetterNonComparable(t *testing.T) {
+	_, err := TagExpand(nil, testBadTagGetter{1})
+	if !errors.Is(err, ErrNotComparable) {
+		t.Fatalf("expected ErrNotComparable, got %v", err)
+	}
 }

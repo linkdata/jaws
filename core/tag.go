@@ -57,10 +57,16 @@ func tagExpand(l int, rq *Request, tag any, result []any) ([]any, error) {
 		}
 		return result, nil
 	case TagGetter:
-		if newTag := data.JawsGetTag(rq); data != newTag {
-			return tagExpand(l+1, rq, newTag, result)
+		newTag := data.JawsGetTag(rq)
+		if reflect.TypeOf(data) == reflect.TypeOf(newTag) {
+			if err := newErrNotComparable(newTag); err != nil {
+				return result, err
+			}
+			if data == newTag {
+				return append(result, data), nil
+			}
 		}
-		return append(result, data), nil
+		return tagExpand(l+1, rq, newTag, result)
 	case []any:
 		var err error
 		for _, v := range data {
