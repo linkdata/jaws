@@ -820,11 +820,10 @@ func (e *Element) ApplyGetter(getter any) (tag any, err error) <span class="cov8
                         tag = tagger.JawsGetTag(e.Request)
                 }</span>
                 <span class="cov8" title="1">e.Tag(tag)
-                if ch, ok := getter.(ClickHandler); ok </span><span class="cov8" title="1">{
-                        e.handlers = append(e.handlers, clickHandlerWrapper{ch})
-                }</span>
-                <span class="cov8" title="1">if eh, ok := getter.(EventHandler); ok </span><span class="cov8" title="1">{
+                if eh, ok := getter.(EventHandler); ok </span><span class="cov8" title="1">{
                         e.handlers = append(e.handlers, eh)
+                }</span> else<span class="cov8" title="1"> if ch, ok := getter.(ClickHandler); ok </span><span class="cov8" title="1">{
+                        e.handlers = append(e.handlers, clickHandlerWrapper{ch})
                 }</span>
                 <span class="cov8" title="1">if initer, ok := getter.(InitHandler); ok </span><span class="cov8" title="1">{
                         err = initer.JawsInit(e)
@@ -2200,22 +2199,23 @@ func (nb *NamedBool) JawsGet(*Element) (v bool) <span class="cov8" title="1">{
 }</span>
 
 func (nb *NamedBool) JawsSet(e *Element, checked bool) (err error) <span class="cov8" title="1">{
-        var nba *NamedBoolArray
-        nb.mu.Lock()
+        err = ErrValueUnchanged
+        nba := nb.nba
+        if nba != nil </span><span class="cov8" title="1">{
+                nba.mu.Lock()
+                defer nba.mu.Unlock()
+        }</span>
+        <span class="cov8" title="1">nb.mu.Lock()
         if nb.checked != checked </span><span class="cov8" title="1">{
                 nb.checked = checked
-                nba = nb.nba
-        }</span> else<span class="cov8" title="1"> {
-                err = ErrValueUnchanged
+                err = nil
         }</span>
         <span class="cov8" title="1">nb.mu.Unlock()
         if err == nil </span><span class="cov8" title="1">{
                 e.Dirty(nb)
                 if nba != nil </span><span class="cov8" title="1">{
-                        e.Dirty(nba)
-                        nba.mu.Lock()
                         nba.deselectOthersLocked(nb.name, checked)
-                        nba.mu.Unlock()
+                        e.Dirty(nba)
                 }</span>
         }
         <span class="cov8" title="1">return</span>
@@ -2593,8 +2593,10 @@ func (rq *Request) clearLocked() *Request <span class="cov8" title="1">{
         rq.running.Store(false)
         rq.claimed.Store(false)
         rq.Rendering.Store(false)
-        rq.ctx, rq.cancelFn = context.WithCancelCause(rq.Jaws.BaseContext)
-        rq.httpDoneCh = nil
+        if rq.cancelFn != nil </span><span class="cov8" title="1">{
+                rq.cancelFn(nil)
+        }</span>
+        <span class="cov8" title="1">rq.httpDoneCh = nil
         rq.todoDirt = rq.todoDirt[:0]
         rq.remoteIP = netip.Addr{}
         for _, e := range rq.elems </span><span class="cov8" title="1">{
