@@ -123,7 +123,9 @@ func (rq *Request) clearLocked() *Request {
 	rq.running.Store(false)
 	rq.claimed.Store(false)
 	rq.Rendering.Store(false)
-	rq.ctx, rq.cancelFn = context.WithCancelCause(rq.Jaws.BaseContext)
+	if rq.cancelFn != nil {
+		rq.cancelFn(nil)
+	}
 	rq.httpDoneCh = nil
 	rq.todoDirt = rq.todoDirt[:0]
 	rq.remoteIP = netip.Addr{}
