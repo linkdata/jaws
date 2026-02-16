@@ -238,6 +238,24 @@ func (tch testNonComparableClickHandler) JawsClick(e *Element, name string) erro
 
 var _ ClickHandler = testNonComparableClickHandler{}
 
+type testEventHandler struct{}
+
+func (testEventHandler) JawsEvent(*Element, what.What, string) error {
+	return nil
+}
+
+var _ EventHandler = testEventHandler{}
+
+type testNonComparableEventHandler struct {
+	names []string
+}
+
+func (testNonComparableEventHandler) JawsEvent(*Element, what.What, string) error {
+	return nil
+}
+
+var _ EventHandler = testNonComparableEventHandler{}
+
 func TestElement_ApplyGetter(t *testing.T) {
 	is := newTestHelper(t)
 	rq := newTestRequest(t)
@@ -295,6 +313,46 @@ func TestElement_ApplyParams_NonComparableHandler(t *testing.T) {
 	}
 	if err := CallEventHandlers(e.Ui(), e, what.Click, "name"); err != nil {
 		t.Fatalf("expected click handler to run, got %v", err)
+	}
+}
+
+func TestElement_ApplyGetter_EventHandlerAutoTag(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	e := rq.NewElement(testDivWidget{inner: "x"})
+	h := testEventHandler{}
+	if _, err := e.ApplyGetter(h); err != nil {
+		t.Fatalf("ApplyGetter returned error: %v", err)
+	}
+	if len(e.handlers) != 1 {
+		t.Fatalf("expected 1 handler, got %d", len(e.handlers))
+	}
+	if !e.HasTag(h) {
+		t.Fatal("expected comparable event handler to be auto-tagged")
+	}
+	if err := CallEventHandlers(e.Ui(), e, what.Input, "name"); err != nil {
+		t.Fatalf("expected event handler to run, got %v", err)
+	}
+}
+
+func TestElement_ApplyGetter_EventHandlerNonComparableNoAutoTag(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	e := rq.NewElement(testDivWidget{inner: "x"})
+	h := testNonComparableEventHandler{names: []string{"name"}}
+	if _, err := e.ApplyGetter(h); err != nil {
+		t.Fatalf("ApplyGetter returned error: %v", err)
+	}
+	if len(e.handlers) != 1 {
+		t.Fatalf("expected 1 handler, got %d", len(e.handlers))
+	}
+	if got := rq.TagsOf(e); len(got) != 0 {
+		t.Fatalf("expected non-comparable event handler to not be auto-tagged, got %v", got)
+	}
+	if err := CallEventHandlers(e.Ui(), e, what.Input, "name"); err != nil {
+		t.Fatalf("expected event handler to run, got %v", err)
 	}
 }
 

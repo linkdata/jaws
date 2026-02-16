@@ -143,3 +143,47 @@ func TestTagExpand_TagGetterNonComparable(t *testing.T) {
 		t.Fatalf("expected ErrNotComparable, got %v", err)
 	}
 }
+
+func TestTagExpand_IllegalTagTypeError(t *testing.T) {
+	_, err := TagExpand(nil, "plain-string")
+	if !errors.Is(err, ErrIllegalTagType) {
+		t.Fatalf("expected ErrIllegalTagType, got %v", err)
+	}
+	if err == nil || !strings.Contains(err.Error(), "string") {
+		t.Fatalf("expected error text to contain type name, got %v", err)
+	}
+}
+
+func TestTagExpand_IllegalTypesAsErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		tag     any
+		wantErr error
+	}{
+		{name: "template.HTML", tag: template.HTML("x"), wantErr: ErrIllegalTagType},
+		{name: "template.HTMLAttr", tag: template.HTMLAttr(`x="y"`), wantErr: ErrIllegalTagType},
+		{name: "int", tag: int(1), wantErr: ErrIllegalTagType},
+		{name: "int8", tag: int8(2), wantErr: ErrIllegalTagType},
+		{name: "int16", tag: int16(3), wantErr: ErrIllegalTagType},
+		{name: "int32", tag: int32(4), wantErr: ErrIllegalTagType},
+		{name: "int64", tag: int64(5), wantErr: ErrIllegalTagType},
+		{name: "uint", tag: uint(6), wantErr: ErrIllegalTagType},
+		{name: "uint8", tag: uint8(7), wantErr: ErrIllegalTagType},
+		{name: "uint16", tag: uint16(8), wantErr: ErrIllegalTagType},
+		{name: "uint32", tag: uint32(9), wantErr: ErrIllegalTagType},
+		{name: "uint64", tag: uint64(10), wantErr: ErrIllegalTagType},
+		{name: "float32", tag: float32(1), wantErr: ErrIllegalTagType},
+		{name: "float64", tag: float64(2), wantErr: ErrIllegalTagType},
+		{name: "bool", tag: true, wantErr: ErrIllegalTagType},
+		{name: "map", tag: map[int]int{1: 1}, wantErr: ErrNotComparable},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := TagExpand(nil, tt.tag)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("TagExpand(%T): got %v want %v", tt.tag, err, tt.wantErr)
+			}
+		})
+	}
+}
