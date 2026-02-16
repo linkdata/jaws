@@ -181,6 +181,28 @@ func TestRequest_SetContext(t *testing.T) {
 	}
 }
 
+func TestRequest_SetContext_NilPanics(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	rq := jw.NewRequest(nil)
+	defer jw.recycle(rq)
+
+	defer func() {
+		x := recover()
+		if x == nil {
+			t.Fatal("expected panic")
+		}
+		if got := fmt.Sprint(x); got != "context must not be nil" {
+			t.Fatalf("unexpected panic %q", got)
+		}
+	}()
+
+	rq.SetContext(func(context.Context) context.Context { return nil })
+}
+
 func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest(t)

@@ -280,7 +280,9 @@ func (rq *Request) Context() (ctx context.Context) {
 func (rq *Request) SetContext(fn func(oldctx context.Context) (newctx context.Context)) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	rq.ctx = fn(rq.ctx)
+	if rq.ctx = fn(rq.ctx); rq.ctx == nil {
+		panic("context must not be nil")
+	}
 }
 
 func (rq *Request) maintenance(now time.Time, requestTimeout time.Duration) bool {
@@ -583,8 +585,12 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan WsM
 		case *Request:
 		case string:
 			// target is a regular HTML ID
+			data := tagmsg.Data
+			if tagmsg.What != what.Set && tagmsg.What != what.Call {
+				data = strconv.Quote(data)
+			}
 			rq.queue(WsMsg{
-				Data: v + "\t" + strconv.Quote(tagmsg.Data),
+				Data: v + "\t" + data,
 				What: tagmsg.What,
 				Jid:  -1,
 			})
