@@ -122,6 +122,7 @@ func (rq *Request) clearLocked() *Request {
 	rq.initial = nil
 	rq.running.Store(false)
 	rq.claimed.Store(false)
+	rq.Rendering.Store(false)
 	rq.ctx, rq.cancelFn = context.WithCancelCause(rq.Jaws.BaseContext)
 	rq.httpDoneCh = nil
 	rq.todoDirt = rq.todoDirt[:0]
@@ -129,6 +130,7 @@ func (rq *Request) clearLocked() *Request {
 	rq.elems = rq.elems[:0]
 	rq.killSessionLocked()
 	clear(rq.tagMap)
+	clear(rq.wsQueue)
 	return rq
 }
 
