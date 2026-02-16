@@ -27,7 +27,7 @@ func TestSession_Object(t *testing.T) {
 		t.Error(x)
 	}
 
-	sess = newSession(jw, sessionId, netip.Addr{})
+	sess = newSession(jw, sessionId, netip.Addr{}, false)
 
 	if sess.Jaws() != jw {
 		t.Fatal("Jaws pointer mismatch")
@@ -58,6 +58,66 @@ func TestSession_Object(t *testing.T) {
 		t.Error(sess.IP())
 	}
 	sess.Reload()
+}
+
+func TestRequestIsSecure(t *testing.T) {
+	t.Run("http", func(t *testing.T) {
+		hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+		if requestIsSecure(hr) {
+			t.Fatal("expected insecure request")
+		}
+	})
+	t.Run("https", func(t *testing.T) {
+		hr := httptest.NewRequest(http.MethodGet, "https://example.test/", nil)
+		if !requestIsSecure(hr) {
+			t.Fatal("expected secure request")
+		}
+	})
+	t.Run("forwarded proto", func(t *testing.T) {
+		hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+		hr.Header.Set("X-Forwarded-Proto", "https")
+		if !requestIsSecure(hr) {
+			t.Fatal("expected secure request")
+		}
+	})
+	t.Run("forwarded ssl", func(t *testing.T) {
+		hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+		hr.Header.Set("X-Forwarded-Ssl", "on")
+		if !requestIsSecure(hr) {
+			t.Fatal("expected secure request")
+		}
+	})
+}
+
+func TestSession_CookieSecureMatchesRequest(t *testing.T) {
+	jw, _ := New()
+	defer jw.Close()
+
+	sHTTP := jw.NewSession(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "http://example.test/", nil))
+	if sHTTP == nil {
+		t.Fatal("expected session")
+	}
+	if sHTTP.Cookie() == nil || sHTTP.Cookie().Secure {
+		t.Fatal("expected insecure cookie for http request")
+	}
+
+	sHTTPS := jw.NewSession(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "https://example.test/", nil))
+	if sHTTPS == nil {
+		t.Fatal("expected session")
+	}
+	if sHTTPS.Cookie() == nil || !sHTTPS.Cookie().Secure {
+		t.Fatal("expected secure cookie for https request")
+	}
+
+	hrForwarded := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	hrForwarded.Header.Set("X-Forwarded-Proto", "https")
+	sForwarded := jw.NewSession(httptest.NewRecorder(), hrForwarded)
+	if sForwarded == nil {
+		t.Fatal("expected session")
+	}
+	if sForwarded.Cookie() == nil || !sForwarded.Cookie().Secure {
+		t.Fatal("expected secure cookie when request is forwarded as https")
+	}
 }
 
 func TestSession_Use(t *testing.T) {
@@ -211,7 +271,7 @@ func TestSession_Requests(t *testing.T) {
 	defer jw.Close()
 
 	sessionId := uint64(0x12345)
-	sess := newSession(jw, sessionId, netip.Addr{})
+	sess := newSession(jw, sessionId, netip.Addr{}, false)
 	if x := sess.Requests(); x != nil {
 		t.Error(x)
 	}
