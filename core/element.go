@@ -243,26 +243,16 @@ func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) {
 // any error returned from JawsInit() if it was called.
 func (e *Element) ApplyGetter(getter any) (tag any, err error) {
 	if getter != nil {
-		var tags []any
+		tag = getter
 		if tagger, ok := getter.(TagGetter); ok {
-			tags = append(tags, tagger.JawsGetTag(e.Request))
+			tag = tagger.JawsGetTag(e.Request)
 		}
 		if eh, ok := getter.(EventHandler); ok {
 			e.handlers = append(e.handlers, eh)
-			tags = append(tags, shouldAutoTagHandler(getter))
 		} else if ch, ok := getter.(ClickHandler); ok {
 			e.handlers = append(e.handlers, clickHandlerWrapper{ch})
-			tags = append(tags, shouldAutoTagHandler(getter))
 		}
-		if len(tags) == 0 {
-			tags = append(tags, getter)
-		}
-		if len(tags) == 1 {
-			tag = tags[0]
-		} else {
-			tag = tags
-		}
-		e.Tag(tags)
+		e.Tag(tag)
 		if initer, ok := getter.(InitHandler); ok {
 			err = initer.JawsInit(e)
 		}
