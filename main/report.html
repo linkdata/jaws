@@ -879,7 +879,7 @@ func (errNotComparable) Is(target error) bool <span class="cov8" title="1">{
 }</span>
 
 func newErrNotComparable(x any) error <span class="cov8" title="1">{
-        if t := reflect.TypeOf(x); !t.Comparable() </span><span class="cov8" title="1">{
+        if t := reflect.TypeOf(x); t != nil &amp;&amp; !t.Comparable() </span><span class="cov8" title="1">{
                 return errNotComparable{t: t}
         }</span>
         <span class="cov8" title="1">return nil</span>
@@ -1554,7 +1554,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
         select </span>{
-        case &lt;-jw.Done():<span class="cov0" title="0"></span>
+        case &lt;-jw.Done():<span class="cov8" title="1"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
 }
@@ -2750,8 +2750,10 @@ func (rq *Request) Context() (ctx context.Context) <span class="cov8" title="1">
 func (rq *Request) SetContext(fn func(oldctx context.Context) (newctx context.Context)) <span class="cov8" title="1">{
         rq.mu.Lock()
         defer rq.mu.Unlock()
-        rq.ctx = fn(rq.ctx)
-}</span>
+        if rq.ctx = fn(rq.ctx); rq.ctx == nil </span><span class="cov8" title="1">{
+                panic("context must not be nil")</span>
+        }
+}
 
 func (rq *Request) maintenance(now time.Time, requestTimeout time.Duration) bool <span class="cov8" title="1">{
         if !rq.running.Load() </span><span class="cov8" title="1">{
@@ -3053,8 +3055,12 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh &lt;-chan 
                 case *Request:<span class="cov8" title="1"></span>
                 case string:<span class="cov8" title="1">
                         // target is a regular HTML ID
-                        rq.queue(WsMsg{
-                                Data: v + "\t" + strconv.Quote(tagmsg.Data),
+                        data := tagmsg.Data
+                        if tagmsg.What != what.Set &amp;&amp; tagmsg.What != what.Call </span><span class="cov8" title="1">{
+                                data = strconv.Quote(data)
+                        }</span>
+                        <span class="cov8" title="1">rq.queue(WsMsg{
+                                Data: v + "\t" + data,
                                 What: tagmsg.What,
                                 Jid:  -1,
                         })</span>
@@ -3548,7 +3554,7 @@ func (sess *Session) Cookie() (cookie *http.Cookie) <span class="cov8" title="1"
 // Key/value pairs in the Session are left unmodified, you can use `Session.Clear()` to remove all of them.
 //
 // Returns a cookie to be sent to the client browser that will delete the browser cookie.
-// Returns nil if the session was not found or is already closed.
+// Returns nil if the session was not found.
 // It is safe to call on a nil Session.
 func (sess *Session) Close() (cookie *http.Cookie) <span class="cov8" title="1">{
         if sess != nil </span><span class="cov8" title="1">{
