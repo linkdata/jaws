@@ -818,14 +818,15 @@ func (e *Element) ApplyGetter(getter any) (tag any, err error) <span class="cov8
                 tag = getter
                 if tagger, ok := getter.(TagGetter); ok </span><span class="cov8" title="1">{
                         tag = tagger.JawsGetTag(e.Request)
-                }</span>
-                <span class="cov8" title="1">e.Tag(tag)
-                if eh, ok := getter.(EventHandler); ok </span><span class="cov8" title="1">{
+                }</span> else<span class="cov8" title="1"> if eh, ok := getter.(EventHandler); ok </span><span class="cov8" title="1">{
                         e.handlers = append(e.handlers, eh)
+                        tag = shouldAutoTagHandler(getter)
                 }</span> else<span class="cov8" title="1"> if ch, ok := getter.(ClickHandler); ok </span><span class="cov8" title="1">{
                         e.handlers = append(e.handlers, clickHandlerWrapper{ch})
+                        tag = shouldAutoTagHandler(getter)
                 }</span>
-                <span class="cov8" title="1">if initer, ok := getter.(InitHandler); ok </span><span class="cov8" title="1">{
+                <span class="cov8" title="1">e.Tag(tag)
+                if initer, ok := getter.(InitHandler); ok </span><span class="cov8" title="1">{
                         err = initer.JawsInit(e)
                 }</span>
         }
@@ -2467,6 +2468,15 @@ func (ui namedBoolOption) JawsUpdate(e *Element) <span class="cov8" title="1">{
 
 import "html/template"
 
+// shouldAutoTagHandler returns true if a handler value is safe to use as a tag.
+// Non-comparable handlers are only auto-tagged when they provide an explicit TagGetter.
+func shouldAutoTagHandler(handler any) any <span class="cov8" title="1">{
+        if _, ok := handler.(TagGetter); ok || newErrNotComparable(handler) == nil </span><span class="cov8" title="1">{
+                return handler
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
 // ParseParams parses the parameters passed to UI() when creating a new Element,
 // returning UI tags, event handlers and HTML attributes.
 func ParseParams(params []any) (tags []any, handlers []EventHandler, attrs []string) <span class="cov8" title="1">{
@@ -2489,8 +2499,10 @@ func ParseParams(params []any) (tags []any, handlers []EventHandler, attrs []str
                 default:<span class="cov8" title="1">
                         if h, ok := data.(EventHandler); ok </span><span class="cov8" title="1">{
                                 handlers = append(handlers, h)
+                                data = shouldAutoTagHandler(data)
                         }</span> else<span class="cov8" title="1"> if h, ok := data.(ClickHandler); ok </span><span class="cov8" title="1">{
                                 handlers = append(handlers, clickHandlerWrapper{h})
+                                data = shouldAutoTagHandler(data)
                         }</span>
                         <span class="cov8" title="1">tags = append(tags, data)</span>
                 }
