@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -674,6 +676,86 @@ func TestRequest_ConnectFn(t *testing.T) {
 	}
 	rq.SetConnectFn(fn)
 	th.Equal(rq.onConnect(), wantErr)
+}
+
+func TestRequest_validateWebSocketOrigin_MatchesInitialRequestOrigin(t *testing.T) {
+	tests := []struct {
+		name       string
+		initialURL string
+		origin     string
+		wantErr    error
+	}{
+		{
+			name:       "same origin http accepted",
+			initialURL: "http://example.test/page",
+			origin:     "http://example.test",
+			wantErr:    nil,
+		},
+		{
+			name:       "same origin https with non-default port accepted",
+			initialURL: "https://example.test:8443/page",
+			origin:     "https://example.test:8443",
+			wantErr:    nil,
+		},
+		{
+			name:       "different host rejected",
+			initialURL: "https://example.test/page",
+			origin:     "https://evil.test",
+			wantErr:    ErrWebsocketOriginWrongHost,
+		},
+		{
+			name:       "different port rejected",
+			initialURL: "http://example.test:8080/page",
+			origin:     "http://example.test:8081",
+			wantErr:    ErrWebsocketOriginWrongHost,
+		},
+		{
+			name:       "different scheme rejected",
+			initialURL: "https://example.test/page",
+			origin:     "http://example.test",
+			wantErr:    ErrWebsocketOriginWrongHost,
+		},
+		{
+			name:       "missing origin rejected",
+			initialURL: "http://example.test/page",
+			origin:     "",
+			wantErr:    ErrWebsocketOriginMissing,
+		},
+		{
+			name:       "unsupported origin scheme rejected",
+			initialURL: "http://example.test/page",
+			origin:     "ws://example.test",
+			wantErr:    ErrWebsocketOriginWrongScheme,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer jw.Close()
+
+			initial := httptest.NewRequest(http.MethodGet, tt.initialURL, nil)
+			rq := jw.NewRequest(initial)
+			defer jw.recycle(rq)
+
+			wsReq := httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString(), nil)
+			if tt.origin != "" {
+				wsReq.Header.Set("Origin", tt.origin)
+			}
+
+			err = rq.validateWebSocketOrigin(wsReq)
+			if tt.wantErr == nil {
+				if err != nil {
+					t.Fatalf("validateWebSocketOrigin() error = %v, want nil", err)
+				}
+			} else if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("validateWebSocketOrigin() error = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
 }
 
 func TestRequest_Dirty(t *testing.T) {

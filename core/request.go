@@ -853,7 +853,16 @@ func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) {
 				err = ErrWebsocketOriginWrongHost
 				if u.Host != "" {
 					if initial := rq.Initial(); initial != nil {
-						if strings.EqualFold(u.Host, initial.Host) {
+						// Browser WebSocket requests use the page origin.
+						// Compare both scheme and host against the initial request.
+						wantScheme := "http"
+						if requestIsSecure(initial) {
+							wantScheme = "https"
+						}
+						if initial.URL != nil && initial.URL.Scheme != "" {
+							wantScheme = initial.URL.Scheme
+						}
+						if strings.EqualFold(u.Scheme, wantScheme) && strings.EqualFold(u.Host, initial.Host) {
 							err = nil
 						}
 					}
