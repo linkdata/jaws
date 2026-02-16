@@ -471,11 +471,13 @@ func (rq *Request) appendDirtyTags(tags []any) {
 
 // Tag adds the given tags to the given Element.
 func (rq *Request) TagExpanded(elem *Element, expandedtags []any) {
-	rq.mu.Lock()
-	defer rq.mu.Unlock()
-	for _, tag := range expandedtags {
-		if !rq.hasTagLocked(elem, tag) {
-			rq.tagMap[tag] = append(rq.tagMap[tag], elem)
+	if elem != nil && elem.Request == rq {
+		rq.mu.Lock()
+		defer rq.mu.Unlock()
+		for _, tag := range expandedtags {
+			if !rq.hasTagLocked(elem, tag) {
+				rq.tagMap[tag] = append(rq.tagMap[tag], elem)
+			}
 		}
 	}
 }

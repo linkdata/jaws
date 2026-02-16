@@ -48,46 +48,48 @@ func PreloadHTML(urls ...*url.URL) (htmlcode, faviconurl string) {
 	var favicontype string
 	var buf []byte
 	for _, u := range urls {
-		var asattr string
-		ext := strings.ToLower(filepath.Ext(u.Path))
-		mimetype := mime.TypeByExtension(ext)
-		if semi := strings.IndexByte(mimetype, ';'); semi > 0 {
-			mimetype = mimetype[:semi]
-		}
-		urlstr := u.String()
-		switch ext {
-		case ".js":
-			jsurls = append(jsurls, urlstr)
-			continue
-		case ".css":
-			cssurls = append(cssurls, urlstr)
-			continue
-		default:
-			if strings.HasPrefix(mimetype, "image") {
-				asattr = "image"
-				if strings.HasPrefix(filepath.Base(u.Path), "favicon") {
-					favicontype = mimetype
-					faviconurl = urlstr
-					continue
-				}
-			} else if strings.HasPrefix(mimetype, "font") {
-				asattr = "font"
+		if u != nil {
+			var asattr string
+			ext := strings.ToLower(filepath.Ext(u.Path))
+			mimetype := mime.TypeByExtension(ext)
+			if semi := strings.IndexByte(mimetype, ';'); semi > 0 {
+				mimetype = mimetype[:semi]
 			}
-		}
-		buf = append(buf, `<link rel="preload" href="`...)
-		buf = append(buf, urlstr...)
-		buf = append(buf, '"')
-		if asattr != "" {
-			buf = append(buf, ` as="`...)
-			buf = append(buf, asattr...)
+			urlstr := u.String()
+			switch ext {
+			case ".js":
+				jsurls = append(jsurls, urlstr)
+				continue
+			case ".css":
+				cssurls = append(cssurls, urlstr)
+				continue
+			default:
+				if strings.HasPrefix(mimetype, "image") {
+					asattr = "image"
+					if strings.HasPrefix(filepath.Base(u.Path), "favicon") {
+						favicontype = mimetype
+						faviconurl = urlstr
+						continue
+					}
+				} else if strings.HasPrefix(mimetype, "font") {
+					asattr = "font"
+				}
+			}
+			buf = append(buf, `<link rel="preload" href="`...)
+			buf = append(buf, urlstr...)
 			buf = append(buf, '"')
+			if asattr != "" {
+				buf = append(buf, ` as="`...)
+				buf = append(buf, asattr...)
+				buf = append(buf, '"')
+			}
+			if mimetype != "" {
+				buf = append(buf, ` type="`...)
+				buf = append(buf, mimetype...)
+				buf = append(buf, '"')
+			}
+			buf = append(buf, ">\n"...)
 		}
-		if mimetype != "" {
-			buf = append(buf, ` type="`...)
-			buf = append(buf, mimetype...)
-			buf = append(buf, '"')
-		}
-		buf = append(buf, ">\n"...)
 	}
 	for _, urlstr := range cssurls {
 		buf = append(buf, `<link rel="stylesheet" href="`...)
