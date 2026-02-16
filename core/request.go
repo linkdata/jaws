@@ -129,8 +129,8 @@ func (rq *Request) clearLocked() *Request {
 	rq.remoteIP = netip.Addr{}
 	rq.elems = rq.elems[:0]
 	rq.killSessionLocked()
+	rq.wsQueue = rq.wsQueue[:0]
 	clear(rq.tagMap)
-	clear(rq.wsQueue)
 	return rq
 }
 
