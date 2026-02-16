@@ -248,11 +248,10 @@ func (e *Element) ApplyGetter(getter any) (tag any, err error) {
 			tag = tagger.JawsGetTag(e.Request)
 		}
 		e.Tag(tag)
-		if ch, ok := getter.(ClickHandler); ok {
-			e.handlers = append(e.handlers, clickHandlerWrapper{ch})
-		}
 		if eh, ok := getter.(EventHandler); ok {
 			e.handlers = append(e.handlers, eh)
+		} else if ch, ok := getter.(ClickHandler); ok {
+			e.handlers = append(e.handlers, clickHandlerWrapper{ch})
 		}
 		if initer, ok := getter.(InitHandler); ok {
 			err = initer.JawsInit(e)
