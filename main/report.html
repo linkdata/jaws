@@ -83,7 +83,7 @@
 				
 				<option value="file13">github.com/linkdata/jaws/core/htmlgetterfunc.go (100.0%)</option>
 				
-				<option value="file14">github.com/linkdata/jaws/core/jaws.go (100.0%)</option>
+				<option value="file14">github.com/linkdata/jaws/core/jaws.go (99.7%)</option>
 				
 				<option value="file15">github.com/linkdata/jaws/core/js.go (100.0%)</option>
 				
@@ -811,19 +811,18 @@ func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) <span cla
 // Finally, if getter is an InitHandler, it's JawsInit()
 // function is called.
 //
-// Returns the Tag added, or nil if getter was nil, along with
+// Returns the Tag(s) added, or nil if getter was nil, along with
 // any error returned from JawsInit() if it was called.
 func (e *Element) ApplyGetter(getter any) (tag any, err error) <span class="cov8" title="1">{
         if getter != nil </span><span class="cov8" title="1">{
                 tag = getter
                 if tagger, ok := getter.(TagGetter); ok </span><span class="cov8" title="1">{
                         tag = tagger.JawsGetTag(e.Request)
-                }</span> else<span class="cov8" title="1"> if eh, ok := getter.(EventHandler); ok </span><span class="cov8" title="1">{
+                }</span>
+                <span class="cov8" title="1">if eh, ok := getter.(EventHandler); ok </span><span class="cov8" title="1">{
                         e.handlers = append(e.handlers, eh)
-                        tag = shouldAutoTagHandler(getter)
                 }</span> else<span class="cov8" title="1"> if ch, ok := getter.(ClickHandler); ok </span><span class="cov8" title="1">{
                         e.handlers = append(e.handlers, clickHandlerWrapper{ch})
-                        tag = shouldAutoTagHandler(getter)
                 }</span>
                 <span class="cov8" title="1">e.Tag(tag)
                 if initer, ok := getter.(InitHandler); ok </span><span class="cov8" title="1">{
@@ -1569,7 +1568,23 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
 
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
-        select </span>{
+        switch msg.Dest.(type) </span>{
+        case nil:<span class="cov8" title="1"></span>
+        case *Request:<span class="cov8" title="1"></span>
+        case string:<span class="cov8" title="1"></span> // HTML id
+        default:<span class="cov8" title="1">
+                tags := MustTagExpand(nil, msg.Dest)
+                switch len(tags) </span>{
+                case 0:<span class="cov0" title="0">
+                        // Preserve "match none" semantics instead of turning into Dest=nil (broadcast all).
+                        msg.Dest = []any{}</span>
+                case 1:<span class="cov8" title="1">
+                        msg.Dest = tags[0]</span>
+                default:<span class="cov8" title="1">
+                        msg.Dest = tags</span>
+                }
+        }
+        <span class="cov8" title="1">select </span>{
         case &lt;-jw.Done():<span class="cov0" title="0"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
@@ -2984,7 +2999,7 @@ func (rq *Request) appendDirtyTags(tags []any) <span class="cov8" title="1">{
 
 // Tag adds the given tags to the given Element.
 func (rq *Request) TagExpanded(elem *Element, expandedtags []any) <span class="cov8" title="1">{
-        if elem != nil &amp;&amp; elem.Request == rq </span><span class="cov8" title="1">{
+        if elem != nil &amp;&amp; !elem.deleted.Load() &amp;&amp; elem.Request == rq </span><span class="cov8" title="1">{
                 rq.mu.Lock()
                 defer rq.mu.Unlock()
                 for _, tag := range expandedtags </span><span class="cov8" title="1">{
