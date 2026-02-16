@@ -25,9 +25,9 @@ func (rq *Request) stopServe() {
 func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if rq.startServe() {
 		defer rq.stopServe()
-		if strings.HasSuffix(r.RequestURI, "/noscript") {
+		if strings.HasSuffix(r.URL.Path, "/noscript") {
 			w.WriteHeader(http.StatusNoContent)
-			rq.cancel(nil)
+			rq.cancel(ErrJavascriptDisabled)
 			return
 		}
 		var err error
