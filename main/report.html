@@ -582,6 +582,7 @@ import (
         "html/template"
         "io"
         "strings"
+        "sync/atomic"
 
         "github.com/linkdata/jaws/jid"
         "github.com/linkdata/jaws/what"
@@ -594,7 +595,7 @@ type Element struct {
         ui       UI             // the UI object
         handlers []EventHandler // custom event handlers registered, if any
         jid      jid.Jid        // JaWS ID, unique to this Element within it's Request
-        deleted  bool           // true if deleteElement() has been called for this Element
+        deleted  atomic.Bool    // true if deleteElement() has been called for this Element
 }
 
 func (e *Element) String() string <span class="cov8" title="1">{
@@ -603,21 +604,21 @@ func (e *Element) String() string <span class="cov8" title="1">{
 
 // AddHandler adds the given handlers to the Element.
 func (e *Element) AddHandlers(h ...EventHandler) <span class="cov8" title="1">{
-        if !e.deleted </span><span class="cov8" title="1">{
+        if !e.deleted.Load() </span><span class="cov8" title="1">{
                 e.handlers = append(e.handlers, h...)
         }</span>
 }
 
 // Tag adds the given tags to the Element.
 func (e *Element) Tag(tags ...any) <span class="cov8" title="1">{
-        if !e.deleted </span><span class="cov8" title="1">{
+        if !e.deleted.Load() </span><span class="cov8" title="1">{
                 e.Request.Tag(e, tags...)
         }</span>
 }
 
 // HasTag returns true if this Element has the given tag.
 func (e *Element) HasTag(tag any) bool <span class="cov8" title="1">{
-        return !e.deleted &amp;&amp; e.Request.HasTag(e, tag)
+        return !e.deleted.Load() &amp;&amp; e.Request.HasTag(e, tag)
 }</span>
 
 // Jid returns the JaWS ID for this Element, unique within it's Request.
@@ -663,7 +664,7 @@ func (e *Element) renderDebug(w io.Writer) <span class="cov8" title="1">{
 //
 // Do not call this yourself unless it's from within another JawsRender implementation.
 func (e *Element) JawsRender(w io.Writer, params []any) (err error) <span class="cov8" title="1">{
-        if !e.deleted </span><span class="cov8" title="1">{
+        if !e.deleted.Load() </span><span class="cov8" title="1">{
                 if err = e.Ui().JawsRender(e, w, params); err == nil </span><span class="cov8" title="1">{
                         if e.Jaws.Debug </span><span class="cov8" title="1">{
                                 e.renderDebug(w)
@@ -677,13 +678,13 @@ func (e *Element) JawsRender(w io.Writer, params []any) (err error) <span class=
 //
 // Do not call this yourself unless it's from within another JawsUpdate implementation.
 func (e *Element) JawsUpdate() <span class="cov8" title="1">{
-        if !e.deleted </span><span class="cov8" title="1">{
+        if !e.deleted.Load() </span><span class="cov8" title="1">{
                 e.Ui().JawsUpdate(e)
         }</span>
 }
 
 func (e *Element) queue(wht what.What, data string) <span class="cov8" title="1">{
-        if !e.deleted </span><span class="cov8" title="1">{
+        if !e.deleted.Load() </span><span class="cov8" title="1">{
                 e.Request.queue(WsMsg{
                         Data: data,
                         Jid:  e.jid,
@@ -745,7 +746,7 @@ func (e *Element) SetValue(val string) <span class="cov8" title="1">{
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) Replace(htmlCode template.HTML) <span class="cov8" title="1">{
-        if !e.deleted </span><span class="cov8" title="1">{
+        if !e.deleted.Load() </span><span class="cov8" title="1">{
                 var b []byte
                 b = append(b, "id="...)
                 b = e.Jid().AppendQuote(b)
@@ -767,7 +768,7 @@ func (e *Element) Append(htmlCode template.HTML) <span class="cov8" title="1">{
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) Order(jidList []jid.Jid) <span class="cov8" title="1">{
-        if !e.deleted &amp;&amp; len(jidList) &gt; 0 </span><span class="cov8" title="1">{
+        if !e.deleted.Load() &amp;&amp; len(jidList) &gt; 0 </span><span class="cov8" title="1">{
                 var b []byte
                 for i, jid := range jidList </span><span class="cov8" title="1">{
                         if i &gt; 0 </span><span class="cov8" title="1">{
@@ -793,7 +794,7 @@ func (e *Element) Remove(htmlId string) <span class="cov8" title="1">{
 // Returns the list of HTML attributes found, if any.
 func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) <span class="cov8" title="1">{
         tags, handlers, attrs := ParseParams(params)
-        if !e.deleted </span><span class="cov8" title="1">{
+        if !e.deleted.Load() </span><span class="cov8" title="1">{
                 e.handlers = append(e.handlers, handlers...)
                 e.Tag(tags...)
                 for _, s := range attrs </span><span class="cov8" title="1">{
@@ -3063,7 +3064,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh &lt;-chan 
                                                 Jid:  elem.Jid(),
                                                 What: what.Delete,
                                         })
-                                        rq.deleteElement(elem)</span>
+                                        rq.DeleteElement(elem)</span>
                                 case what.Input, what.Click:<span class="cov8" title="1">
                                         // Input or Click messages received here are from Request.Send() or broadcasts.
                                         // they won't be sent out on the WebSocket, but will queue up a
@@ -3123,14 +3124,14 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err 
                                 var jidStr string
                                 jidStr, after, found = strings.Cut(after, "\t")
                                 if id = jid.ParseString(jidStr); id &gt; 0 </span><span class="cov8" title="1">{
-                                        if e := rq.getElementByJidLocked(id); e != nil &amp;&amp; !e.deleted </span><span class="cov8" title="1">{
+                                        if e := rq.getElementByJidLocked(id); e != nil &amp;&amp; !e.deleted.Load() </span><span class="cov8" title="1">{
                                                 elems = append(elems, e)
                                         }</span>
                                 }
                         }
                 }
         } else<span class="cov8" title="1"> {
-                if e := rq.getElementByJidLocked(id); e != nil &amp;&amp; !e.deleted </span><span class="cov8" title="1">{
+                if e := rq.getElementByJidLocked(id); e != nil &amp;&amp; !e.deleted.Load() </span><span class="cov8" title="1">{
                         elems = append(elems, e)
                 }</span>
         }
@@ -3162,7 +3163,7 @@ func (rq *Request) getSendMsgs() (toSend []WsMsg) <span class="cov8" title="1">{
 
         validJids := map[Jid]struct{}{}
         for _, elem := range rq.elems </span><span class="cov8" title="1">{
-                if !elem.deleted </span><span class="cov8" title="1">{
+                if !elem.deleted.Load() </span><span class="cov8" title="1">{
                         validJids[elem.Jid()] = struct{}{}
                 }</span>
         }
@@ -3216,18 +3217,12 @@ func deleteElement(s []*Element, e *Element) []*Element <span class="cov8" title
 }
 
 func (rq *Request) deleteElementLocked(e *Element) <span class="cov8" title="1">{
-        e.deleted = true
+        e.deleted.Store(true)
         rq.elems = deleteElement(rq.elems, e)
         for k := range rq.tagMap </span><span class="cov8" title="1">{
                 rq.tagMap[k] = deleteElement(rq.tagMap[k], e)
         }</span>
 }
-
-func (rq *Request) deleteElement(e *Element) <span class="cov8" title="1">{
-        rq.mu.Lock()
-        defer rq.mu.Unlock()
-        rq.deleteElementLocked(e)
-}</span>
 
 // DeleteElement removes elem from the Request element registry.
 //
@@ -3235,7 +3230,9 @@ func (rq *Request) deleteElement(e *Element) <span class="cov8" title="1">{
 // element sets and need to drop stale elements after issuing a corresponding
 // DOM remove operation.
 func (rq *Request) DeleteElement(elem *Element) <span class="cov8" title="1">{
-        rq.deleteElement(elem)
+        rq.mu.Lock()
+        defer rq.mu.Unlock()
+        rq.deleteElementLocked(elem)
 }</span>
 
 func (rq *Request) makeUpdateList() (todo []*Element) <span class="cov8" title="1">{
@@ -3547,7 +3544,8 @@ func (sess *Session) Close() (cookie *http.Cookie) <span class="cov8" title="1">
                 sess.cookie.MaxAge = -1
                 sess.broadcastLocked(Message{What: what.Reload})
                 sess.requests = sess.requests[:0]
-                cookie = &amp;sess.cookie
+                cookie = new(http.Cookie)
+                *cookie = sess.cookie
                 sess.mu.Unlock()
         }</span>
         <span class="cov8" title="1">return</span>
