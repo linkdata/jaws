@@ -1549,7 +1549,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
         select </span>{
-        case &lt;-jw.Done():<span class="cov0" title="0"></span>
+        case &lt;-jw.Done():<span class="cov8" title="1"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
 }
@@ -3901,8 +3901,6 @@ import (
         "fmt"
         "html/template"
         "reflect"
-
-        "github.com/linkdata/deadlock"
 )
 
 type Tag string
@@ -3969,11 +3967,9 @@ func tagExpand(l int, rq *Request, tag any, result []any) ([]any, error) <span c
                 }
                 <span class="cov8" title="1">return result, err</span>
         default:<span class="cov8" title="1">
-                if deadlock.Debug </span><span class="cov8" title="1">{
-                        if err := newErrNotComparable(data); err != nil </span><span class="cov8" title="1">{
-                                return result, err
-                        }</span>
-                }
+                if err := newErrNotComparable(data); err != nil </span><span class="cov8" title="1">{
+                        return result, err
+                }</span>
                 <span class="cov8" title="1">return append(result, data), nil</span>
         }
         <span class="cov8" title="1">return result, errIllegalTagType{tag: tag}</span>
