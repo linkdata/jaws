@@ -610,11 +610,10 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan WsM
 					// an error to be sent out as an alert message.
 					// primary usecase is tests.
 					if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.Jid(), tagmsg.What, tagmsg.Data)); err != nil {
-						rq.queue(WsMsg{
-							Data: tagmsg.Data,
-							Jid:  elem.Jid(),
-							What: what.Alert,
-						})
+						var m WsMsg
+						m.FillAlert(err)
+						m.Jid = elem.Jid()
+						rq.queue(m)
 					}
 				case what.Update:
 					elem.JawsUpdate()
