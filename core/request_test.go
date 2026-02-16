@@ -207,6 +207,63 @@ func TestRequest_SetContext_NilPanics(t *testing.T) {
 	rq.SetContext(func(context.Context) context.Context { return nil })
 }
 
+func TestRequest_SetContextCancellationStopsQueuedEvents(t *testing.T) {
+	th := newTestHelper(t)
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	block := make(chan struct{})
+	started := make(chan struct{}, 1)
+	var calls int32
+
+	item := &testUi{}
+	rq.Register(item, func(e *Element, evt what.What, val string) error {
+		if atomic.AddInt32(&calls, 1) == 1 {
+			started <- struct{}{}
+			<-block
+		}
+		return nil
+	})
+	jid := jidForTag(rq.Request, item)
+	if jid == 0 {
+		t.Fatal("missing jid")
+	}
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case rq.InCh <- WsMsg{Jid: jid, What: what.Input, Data: "1"}:
+	}
+	select {
+	case <-th.C:
+		th.Timeout()
+	case rq.InCh <- WsMsg{Jid: jid, What: what.Input, Data: "2"}:
+	}
+	select {
+	case <-th.C:
+		th.Timeout()
+	case <-started:
+	}
+
+	rq.SetContext(func(oldctx context.Context) context.Context {
+		ctx, cancel := context.WithCancel(oldctx)
+		cancel()
+		return ctx
+	})
+	close(block)
+
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if atomic.LoadInt32(&calls) > 1 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Fatalf("expected queued events to stop after context replacement cancellation, got %d calls", got)
+	}
+}
+
 func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest(t)

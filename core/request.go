@@ -820,10 +820,9 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 // eventCaller calls event functions
 func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh chan<- WsMsg, eventDoneCh chan<- struct{}) {
 	defer close(eventDoneCh)
-	ctxDoneCh := rq.Context().Done()
 	for call := range eventCallCh {
 		select {
-		case <-ctxDoneCh:
+		case <-rq.Context().Done():
 			continue
 		default:
 		}
