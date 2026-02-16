@@ -1469,9 +1469,13 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) <span class="cov8" 
                 if sessIds := getCookieSessionsIds(hr.Header, jw.CookieName); len(sessIds) &gt; 0 </span><span class="cov8" title="1">{
                         remoteIP := parseIP(hr.RemoteAddr)
                         jw.mu.RLock()
-                        sess = jw.getSessionLocked(sessIds, remoteIP)
-                        jw.mu.RUnlock()
-                }</span>
+                        if sess = jw.getSessionLocked(sessIds, remoteIP); sess != nil </span><span class="cov8" title="1">{
+                                if sess.isDeadLocked() </span><span class="cov8" title="1">{
+                                        sess = nil
+                                }</span>
+                        }
+                        <span class="cov8" title="1">jw.mu.RUnlock()</span>
+                }
         }
         <span class="cov8" title="1">return</span>
 }
@@ -2478,11 +2482,10 @@ func ParseParams(params []any) (tags []any, handlers []EventHandler, attrs []str
                                 handlers = append(handlers, eventFnWrapper{data})
                         }</span>
                 default:<span class="cov8" title="1">
-                        if h, ok := data.(ClickHandler); ok </span><span class="cov8" title="1">{
-                                handlers = append(handlers, clickHandlerWrapper{h})
-                        }</span>
-                        <span class="cov8" title="1">if h, ok := data.(EventHandler); ok </span><span class="cov8" title="1">{
+                        if h, ok := data.(EventHandler); ok </span><span class="cov8" title="1">{
                                 handlers = append(handlers, h)
+                        }</span> else<span class="cov8" title="1"> if h, ok := data.(ClickHandler); ok </span><span class="cov8" title="1">{
+                                handlers = append(handlers, clickHandlerWrapper{h})
                         }</span>
                         <span class="cov8" title="1">tags = append(tags, data)</span>
                 }
