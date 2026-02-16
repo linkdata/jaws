@@ -56,7 +56,7 @@ type Jaws struct {
 	Logger       Logger          // Optional logger to use
 	Debug        bool            // Set to true to enable debug info in generated HTML code
 	MakeAuth     MakeAuthFn      // Optional function to create With.Auth for Templates
-	BaseContext  context.Context // Base context for Requests, default is context.Background()
+	BaseContext  context.Context // Non-nil base context for Requests, set to context.Background() in New()
 	bcastCh      chan Message
 	subCh        chan subscription
 	unsubCh      chan chan Message
