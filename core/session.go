@@ -157,7 +157,7 @@ func (sess *Session) Cookie() (cookie *http.Cookie) {
 // Key/value pairs in the Session are left unmodified, you can use `Session.Clear()` to remove all of them.
 //
 // Returns a cookie to be sent to the client browser that will delete the browser cookie.
-// Returns nil if the session was not found or is already closed.
+// Returns nil if the session was not found.
 // It is safe to call on a nil Session.
 func (sess *Session) Close() (cookie *http.Cookie) {
 	if sess != nil {
