@@ -1557,7 +1557,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
         select </span>{
-        case &lt;-jw.Done():<span class="cov8" title="1"></span>
+        case &lt;-jw.Done():<span class="cov0" title="0"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
 }
@@ -3966,10 +3966,10 @@ func tagExpand(l int, rq *Request, tag any, result []any) ([]any, error) <span c
                 }</span>
                 <span class="cov8" title="1">return result, nil</span>
         case TagGetter:<span class="cov8" title="1">
-                if newTag := data.JawsGetTag(rq); tag != newTag </span><span class="cov8" title="1">{
+                if newTag := data.JawsGetTag(rq); data != newTag </span><span class="cov8" title="1">{
                         return tagExpand(l+1, rq, newTag, result)
                 }</span>
-                <span class="cov8" title="1">return append(result, tag), nil</span>
+                <span class="cov8" title="1">return append(result, data), nil</span>
         case []any:<span class="cov8" title="1">
                 var err error
                 for _, v := range data </span><span class="cov8" title="1">{
