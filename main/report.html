@@ -3273,11 +3273,13 @@ func deleteElement(s []*Element, e *Element) []*Element <span class="cov8" title
 }
 
 func (rq *Request) deleteElementLocked(e *Element) <span class="cov8" title="1">{
-        e.deleted.Store(true)
-        rq.elems = deleteElement(rq.elems, e)
-        for k := range rq.tagMap </span><span class="cov8" title="1">{
-                rq.tagMap[k] = deleteElement(rq.tagMap[k], e)
-        }</span>
+        if e.Request == rq </span><span class="cov8" title="1">{
+                e.deleted.Store(true)
+                rq.elems = deleteElement(rq.elems, e)
+                for k := range rq.tagMap </span><span class="cov8" title="1">{
+                        rq.tagMap[k] = deleteElement(rq.tagMap[k], e)
+                }</span>
+        }
 }
 
 // DeleteElement removes elem from the Request element registry.
@@ -4453,7 +4455,7 @@ func wsParse(txt []byte) (WsMsg, bool) <span class="cov8" title="1">{
                                 if wht := what.Parse(string(txt[0:nl1])); wht.IsValid() </span><span class="cov8" title="1">{
                                         if id := jid.ParseString(string(txt[nl1+1 : nl2])); id.IsValid() </span><span class="cov8" title="1">{
                                                 data := string(txt[nl2+1 : len(txt)-1])
-                                                if wht != what.Set &amp;&amp; txt[nl2+1] == '"' </span><span class="cov8" title="1">{
+                                                if txt[nl2+1] == '"' &amp;&amp; wht != what.Set &amp;&amp; wht != what.Call </span><span class="cov8" title="1">{
                                                         var err error
                                                         if data, err = strconv.Unquote(data); err != nil </span><span class="cov8" title="1">{
                                                                 return WsMsg{}, false
