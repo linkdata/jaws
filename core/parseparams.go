@@ -22,11 +22,10 @@ func ParseParams(params []any) (tags []any, handlers []EventHandler, attrs []str
 				handlers = append(handlers, eventFnWrapper{data})
 			}
 		default:
-			if h, ok := data.(ClickHandler); ok {
-				handlers = append(handlers, clickHandlerWrapper{h})
-			}
 			if h, ok := data.(EventHandler); ok {
 				handlers = append(handlers, h)
+			} else if h, ok := data.(ClickHandler); ok {
+				handlers = append(handlers, clickHandlerWrapper{h})
 			}
 			tags = append(tags, data)
 		}
