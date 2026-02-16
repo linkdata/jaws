@@ -341,11 +341,13 @@ func getCookieSessionsIds(h http.Header, wanted string) (cookies []uint64) {
 
 // GetSession returns the Session associated with the given *http.Request, or nil.
 func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
-	if sessIds := getCookieSessionsIds(hr.Header, jw.CookieName); len(sessIds) > 0 {
-		remoteIP := parseIP(hr.RemoteAddr)
-		jw.mu.RLock()
-		sess = jw.getSessionLocked(sessIds, remoteIP)
-		jw.mu.RUnlock()
+	if hr != nil {
+		if sessIds := getCookieSessionsIds(hr.Header, jw.CookieName); len(sessIds) > 0 {
+			remoteIP := parseIP(hr.RemoteAddr)
+			jw.mu.RLock()
+			sess = jw.getSessionLocked(sessIds, remoteIP)
+			jw.mu.RUnlock()
+		}
 	}
 	return
 }
@@ -357,11 +359,14 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
 // Subsequent Requests created with `NewRequest()` that have the cookie set and
 // originates from the same IP will be able to access the Session.
 func (jw *Jaws) NewSession(w http.ResponseWriter, hr *http.Request) (sess *Session) {
-	if oldSess := jw.GetSession(hr); oldSess != nil {
-		oldSess.Clear()
-		oldSess.Close()
+	if hr != nil {
+		if oldSess := jw.GetSession(hr); oldSess != nil {
+			oldSess.Clear()
+			oldSess.Close()
+		}
+		sess = jw.newSession(w, hr)
 	}
-	return jw.newSession(w, hr)
+	return
 }
 
 func (jw *Jaws) newSession(w http.ResponseWriter, hr *http.Request) (sess *Session) {
