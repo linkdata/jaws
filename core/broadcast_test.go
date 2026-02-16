@@ -7,6 +7,12 @@ import (
 	"github.com/linkdata/jaws/what"
 )
 
+type testBroadcastTagGetter struct{}
+
+func (testBroadcastTagGetter) JawsGetTag(*Request) any {
+	return Tag("expanded")
+}
+
 func TestCoverage_GenerateHeadAndConvenienceBroadcasts(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -77,5 +83,54 @@ func TestCoverage_GenerateHeadAndConvenienceBroadcasts(t *testing.T) {
 	jw.JsCall("t", "fn", `{"a":1}`)
 	if msg := nextBroadcast(t, jw); msg.What != what.Call || msg.Data != `fn={"a":1}` {
 		t.Fatalf("unexpected jscall msg %#v", msg)
+	}
+}
+
+func TestBroadcast_ExpandsTagDestBeforeQueue(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	tagger := testBroadcastTagGetter{}
+
+	jw.Broadcast(Message{
+		Dest: tagger,
+		What: what.Inner,
+		Data: "x",
+	})
+	msg := nextBroadcast(t, jw)
+	if msg.What != what.Inner || msg.Data != "x" {
+		t.Fatalf("unexpected msg %#v", msg)
+	}
+	if got, ok := msg.Dest.(Tag); !ok || got != Tag("expanded") {
+		t.Fatalf("expected expanded Tag destination, got %T(%#v)", msg.Dest, msg.Dest)
+	}
+
+	jw.Broadcast(Message{
+		Dest: []any{tagger, Tag("extra")},
+		What: what.Value,
+		Data: "v",
+	})
+	msg = nextBroadcast(t, jw)
+	if msg.What != what.Value || msg.Data != "v" {
+		t.Fatalf("unexpected msg %#v", msg)
+	}
+	dest, ok := msg.Dest.([]any)
+	if !ok {
+		t.Fatalf("expected []any destination, got %T(%#v)", msg.Dest, msg.Dest)
+	}
+	if len(dest) != 2 || dest[0] != Tag("expanded") || dest[1] != Tag("extra") {
+		t.Fatalf("unexpected expanded destination %#v", dest)
+	}
+
+	jw.Broadcast(Message{
+		Dest: "html-id",
+		What: what.Delete,
+	})
+	msg = nextBroadcast(t, jw)
+	if got, ok := msg.Dest.(string); !ok || got != "html-id" {
+		t.Fatalf("expected raw html-id destination, got %T(%#v)", msg.Dest, msg.Dest)
 	}
 }

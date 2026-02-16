@@ -444,6 +444,22 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) {
+	switch msg.Dest.(type) {
+	case nil:
+	case *Request:
+	case string: // HTML id
+	default:
+		tags := MustTagExpand(nil, msg.Dest)
+		switch len(tags) {
+		case 0:
+			// Preserve "match none" semantics instead of turning into Dest=nil (broadcast all).
+			msg.Dest = []any{}
+		case 1:
+			msg.Dest = tags[0]
+		default:
+			msg.Dest = tags
+		}
+	}
 	select {
 	case <-jw.Done():
 	case jw.bcastCh <- msg:
