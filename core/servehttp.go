@@ -13,9 +13,9 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	if len(r.RequestURI) > 6 && strings.HasPrefix(r.RequestURI, "/jaws/") {
-		if r.RequestURI[6] == '.' {
-			switch r.RequestURI {
+	if len(r.URL.Path) > 6 && strings.HasPrefix(r.URL.Path, "/jaws/") {
+		if r.URL.Path[6] == '.' {
+			switch r.URL.Path {
 			case jw.serveCSS.Name:
 				jw.serveCSS.ServeHTTP(w, r)
 				return
@@ -32,7 +32,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 				return
 			}
-		} else if rq := jw.UseRequest(JawsKeyValue(r.RequestURI[6:]), r); rq != nil {
+		} else if rq := jw.UseRequest(JawsKeyValue(r.URL.Path[6:]), r); rq != nil {
 			rq.ServeHTTP(w, r)
 			return
 		}
