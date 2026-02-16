@@ -1487,6 +1487,8 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) <span class="cov8" 
 // NewSession creates a new Session.
 //
 // Any pre-existing Session will be cleared and closed.
+// This may call Session.Close() on an existing session and therefore requires
+// the JaWS processing loop (`Serve()` or `ServeWithTimeout()`) to be running.
 //
 // Subsequent Requests created with `NewRequest()` that have the cookie set and
 // originates from the same IP will be able to access the Session.
@@ -1567,6 +1569,12 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
 }
 
 // Broadcast sends a message to all Requests.
+//
+// It must not be called before the JaWS processing loop (`Serve()` or
+// `ServeWithTimeout()`) is running. Otherwise this call may block once the
+// internal broadcast channel fills.
+//
+// All convenience helpers on Jaws that call Broadcast inherit this requirement.
 func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
         switch msg.Dest.(type) </span>{
         case nil:<span class="cov8" title="1"></span>
@@ -1585,7 +1593,7 @@ func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
                 }
         }
         <span class="cov8" title="1">select </span>{
-        case &lt;-jw.Done():<span class="cov0" title="0"></span>
+        case &lt;-jw.Done():<span class="cov8" title="1"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
 }
@@ -2809,6 +2817,8 @@ func (rq *Request) Context() (ctx context.Context) <span class="cov8" title="1">
 
 // SetContext atomically replaces the Request's context with the function return value.
 // The function is given the current context and must return a non-nil context.
+// The returned context must be derived from oldctx so cancellation and deadlines
+// continue to propagate to Request.Context().
 func (rq *Request) SetContext(fn func(oldctx context.Context) (newctx context.Context)) <span class="cov8" title="1">{
         rq.mu.Lock()
         defer rq.mu.Unlock()
@@ -2858,6 +2868,7 @@ func (rq *Request) cancel(err error) <span class="cov8" title="1">{
 // The lvl argument should be one of Bootstraps alert levels: primary, secondary, success, danger, warning, info, light or dark.
 //
 // The default JaWS javascript only supports Bootstrap.js dismissable alerts.
+// See Jaws.Broadcast for processing-loop requirements.
 func (rq *Request) Alert(lvl, msg string) <span class="cov8" title="1">{
         rq.Jaws.Broadcast(Message{
                 Dest: rq,
@@ -2874,6 +2885,7 @@ func (rq *Request) AlertError(err error) <span class="cov8" title="1">{
 }
 
 // Redirect requests the current Request to navigate to the given URL.
+// See Jaws.Broadcast for processing-loop requirements.
 func (rq *Request) Redirect(url string) <span class="cov8" title="1">{
         rq.Jaws.Broadcast(Message{
                 Dest: rq,
@@ -3652,6 +3664,9 @@ func (sess *Session) Cookie() (cookie *http.Cookie) <span class="cov8" title="1"
 // Existing Requests already associated with the Session will ask the browser to reload the pages.
 // Key/value pairs in the Session are left unmodified, you can use `Session.Clear()` to remove all of them.
 //
+// It must not be called before the JaWS processing loop (`Serve()` or
+// `ServeWithTimeout()`) is running, because reload broadcasts may block.
+//
 // Returns a cookie to be sent to the client browser that will delete the browser cookie.
 // Returns nil if the session was not found.
 // It is safe to call on a nil Session.
@@ -3670,6 +3685,7 @@ func (sess *Session) Close() (cookie *http.Cookie) <span class="cov8" title="1">
 }
 
 // Reload calls Broadcast with a message asking browsers to reload the page.
+// See Broadcast for the processing-loop requirement.
 func (sess *Session) Reload() <span class="cov8" title="1">{
         sess.Broadcast(Message{What: what.Reload})
 }</span>
@@ -3705,6 +3721,9 @@ func (sess *Session) broadcastLocked(msg Message) <span class="cov8" title="1">{
 }
 
 // Broadcast attempts to send a message to all Requests using this session.
+//
+// It must not be called before the JaWS processing loop (`Serve()` or
+// `ServeWithTimeout()`) is running. Otherwise this call may block.
 // It is safe to call on a nil Session.
 func (sess *Session) Broadcast(msg Message) <span class="cov8" title="1">{
         if sess != nil </span><span class="cov8" title="1">{
