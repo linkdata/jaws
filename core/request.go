@@ -130,10 +130,11 @@ func (rq *Request) clearLocked() *Request {
 	for _, e := range rq.elems {
 		e.Request = nil
 	}
+	clear(rq.elems)
 	rq.elems = rq.elems[:0]
-	rq.killSessionLocked()
 	rq.wsQueue = rq.wsQueue[:0]
 	clear(rq.tagMap)
+	rq.killSessionLocked()
 	return rq
 }
 
