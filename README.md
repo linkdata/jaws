@@ -145,6 +145,21 @@ Request created in the first step. Then call its `ServeHTTP()` method to
 start up the WebSocket and begin processing JavaScript events and DOM
 updates.
 
+### Safe to call before `Serve()`
+
+The following APIs are safe to call before starting the JaWS processing
+loop (`Serve()` or `ServeWithTimeout()`):
+
+* Construction and lifecycle: `jaws.New()`, `(*Jaws).Close()`, `(*Jaws).Done()`.
+* Configuration: `(*Jaws).AddTemplateLookuper()`, `(*Jaws).RemoveTemplateLookuper()`,
+  `(*Jaws).LookupTemplate()`, `(*Jaws).GenerateHeadHTML()`, `(*Jaws).Setup()`,
+  `(*Jaws).FaviconURL()`.
+* Inspection and logging helpers: `(*Jaws).RequestCount()`, `(*Jaws).Pending()`,
+  `(*Jaws).SessionCount()`, `(*Jaws).Sessions()`, `(*Jaws).Log()`,
+  `(*Jaws).MustLog()`.
+* Static/ping JaWS endpoints via `(*Jaws).ServeHTTP()`:
+  `/jaws/.ping`, `/jaws/.jaws.*.js`, `/jaws/.jaws.*.css`.
+
 ### Routing
 
 JaWS doesn't enforce any particular router, but it does require several
