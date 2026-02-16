@@ -777,6 +777,9 @@ func (rq *Request) deleteElementLocked(e *Element) {
 		rq.elems = deleteElement(rq.elems, e)
 		for k := range rq.tagMap {
 			rq.tagMap[k] = deleteElement(rq.tagMap[k], e)
+			if len(rq.tagMap[k]) == 0 {
+				delete(rq.tagMap, k)
+			}
 		}
 	}
 }
