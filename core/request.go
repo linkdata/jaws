@@ -127,6 +127,9 @@ func (rq *Request) clearLocked() *Request {
 	rq.httpDoneCh = nil
 	rq.todoDirt = rq.todoDirt[:0]
 	rq.remoteIP = netip.Addr{}
+	for _, e := range rq.elems {
+		e.Request = nil
+	}
 	rq.elems = rq.elems[:0]
 	rq.killSessionLocked()
 	rq.wsQueue = rq.wsQueue[:0]
