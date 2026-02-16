@@ -138,24 +138,30 @@ func (jw *Jaws) Done() <-chan struct{} {
 
 // AddTemplateLookuper adds an object that can resolve
 // strings to *template.Template.
-func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) {
+func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) (err error) {
 	if tl != nil {
-		jw.mu.Lock()
-		if !slices.Contains(jw.tmplookers, tl) {
-			jw.tmplookers = append(jw.tmplookers, tl)
+		if err = newErrNotComparable(tl); err == nil {
+			jw.mu.Lock()
+			if !slices.Contains(jw.tmplookers, tl) {
+				jw.tmplookers = append(jw.tmplookers, tl)
+			}
+			jw.mu.Unlock()
 		}
-		jw.mu.Unlock()
 	}
+	return
 }
 
 // RemoveTemplateLookuper removes the given object from
 // the list of TemplateLookupers.
-func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) {
+func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) (err error) {
 	if tl != nil {
-		jw.mu.Lock()
-		jw.tmplookers = slices.DeleteFunc(jw.tmplookers, func(x TemplateLookuper) bool { return x == tl })
-		jw.mu.Unlock()
+		if err = newErrNotComparable(tl); err == nil {
+			jw.mu.Lock()
+			jw.tmplookers = slices.DeleteFunc(jw.tmplookers, func(x TemplateLookuper) bool { return x == tl })
+			jw.mu.Unlock()
+		}
 	}
+	return
 }
 
 // LookupTemplate queries the known TemplateLookupers in the order
