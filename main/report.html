@@ -531,12 +531,9 @@ type ClickHandler interface {
 
 type clickHandlerWrapper struct{ ClickHandler }
 
-func (chw clickHandlerWrapper) JawsEvent(e *Element, w what.What, v string) error <span class="cov8" title="1">{
-        if w == what.Click </span><span class="cov8" title="1">{
-                return chw.JawsClick(e, v)
-        }</span>
-        <span class="cov8" title="1">return ErrEventUnhandled</span>
-}
+func (chw clickHandlerWrapper) JawsEvent(*Element, what.What, string) error <span class="cov8" title="1">{
+        return ErrEventUnhandled
+}</span>
 </pre>
 		
 		<pre class="file" id="file5" style="display: none">package core
@@ -1557,7 +1554,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
 // Broadcast sends a message to all Requests.
 func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
         select </span>{
-        case &lt;-jw.Done():<span class="cov0" title="0"></span>
+        case &lt;-jw.Done():<span class="cov8" title="1"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
 }
@@ -2601,8 +2598,12 @@ func (rq *Request) clearLocked() *Request <span class="cov8" title="1">{
         rq.todoDirt = rq.todoDirt[:0]
         rq.remoteIP = netip.Addr{}
         for _, e := range rq.elems </span><span class="cov8" title="1">{
-                e.Request = nil
-        }</span>
+                if e != nil </span><span class="cov8" title="1">{
+                        e.Request = nil
+                        e.handlers = nil
+                        e.ui = nil
+                }</span>
+        }
         <span class="cov8" title="1">clear(rq.elems)
         rq.elems = rq.elems[:0]
         rq.wsQueue = rq.wsQueue[:0]
@@ -3966,10 +3967,16 @@ func tagExpand(l int, rq *Request, tag any, result []any) ([]any, error) <span c
                 }</span>
                 <span class="cov8" title="1">return result, nil</span>
         case TagGetter:<span class="cov8" title="1">
-                if newTag := data.JawsGetTag(rq); data != newTag </span><span class="cov8" title="1">{
-                        return tagExpand(l+1, rq, newTag, result)
-                }</span>
-                <span class="cov8" title="1">return append(result, data), nil</span>
+                newTag := data.JawsGetTag(rq)
+                if reflect.TypeOf(data) == reflect.TypeOf(newTag) </span><span class="cov8" title="1">{
+                        if err := newErrNotComparable(newTag); err != nil </span><span class="cov8" title="1">{
+                                return result, err
+                        }</span>
+                        <span class="cov8" title="1">if data == newTag </span><span class="cov8" title="1">{
+                                return append(result, data), nil
+                        }</span>
+                }
+                <span class="cov8" title="1">return tagExpand(l+1, rq, newTag, result)</span>
         case []any:<span class="cov8" title="1">
                 var err error
                 for _, v := range data </span><span class="cov8" title="1">{
