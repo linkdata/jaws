@@ -228,6 +228,16 @@ func (tch testClickHandler) JawsClick(e *Element, name string) (err error) {
 
 var _ ClickHandler = testClickHandler{}
 
+type testNonComparableClickHandler struct {
+	names []string
+}
+
+func (tch testNonComparableClickHandler) JawsClick(e *Element, name string) error {
+	return nil
+}
+
+var _ ClickHandler = testNonComparableClickHandler{}
+
 func TestElement_ApplyGetter(t *testing.T) {
 	is := newTestHelper(t)
 	rq := newTestRequest(t)
@@ -245,6 +255,47 @@ func TestElement_ApplyGetter(t *testing.T) {
 		t.Error(err)
 	}
 	is.Equal(len(e.handlers), 1)
+	if !e.HasTag(tch) {
+		t.Fatal("expected comparable click handler to be tagged")
+	}
+}
+
+func TestElement_ApplyGetter_NonComparableHandler(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	e := rq.NewElement(&testUi{s: "foo"})
+	tch := testNonComparableClickHandler{names: []string{"name"}}
+	if _, err := e.ApplyGetter(tch); err != nil {
+		t.Fatalf("ApplyGetter returned error: %v", err)
+	}
+	if len(e.handlers) != 1 {
+		t.Fatalf("expected 1 handler, got %d", len(e.handlers))
+	}
+	if got := rq.TagsOf(e); len(got) != 0 {
+		t.Fatalf("expected non-comparable handler to not be auto-tagged, got %v", got)
+	}
+	if err := CallEventHandlers(e.Ui(), e, what.Click, "name"); err != nil {
+		t.Fatalf("expected click handler to run, got %v", err)
+	}
+}
+
+func TestElement_ApplyParams_NonComparableHandler(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	e := rq.NewElement(testDivWidget{inner: "x"})
+	tch := testNonComparableClickHandler{names: []string{"name"}}
+	e.ApplyParams([]any{tch})
+	if len(e.handlers) != 1 {
+		t.Fatalf("expected 1 handler, got %d", len(e.handlers))
+	}
+	if got := rq.TagsOf(e); len(got) != 0 {
+		t.Fatalf("expected non-comparable handler to not be auto-tagged, got %v", got)
+	}
+	if err := CallEventHandlers(e.Ui(), e, what.Click, "name"); err != nil {
+		t.Fatalf("expected click handler to run, got %v", err)
+	}
 }
 
 func TestElement_JawsInit(t *testing.T) {

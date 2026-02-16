@@ -2,6 +2,15 @@ package core
 
 import "html/template"
 
+// shouldAutoTagHandler returns true if a handler value is safe to use as a tag.
+// Non-comparable handlers are only auto-tagged when they provide an explicit TagGetter.
+func shouldAutoTagHandler(handler any) any {
+	if _, ok := handler.(TagGetter); ok || newErrNotComparable(handler) == nil {
+		return handler
+	}
+	return nil
+}
+
 // ParseParams parses the parameters passed to UI() when creating a new Element,
 // returning UI tags, event handlers and HTML attributes.
 func ParseParams(params []any) (tags []any, handlers []EventHandler, attrs []string) {
@@ -24,8 +33,10 @@ func ParseParams(params []any) (tags []any, handlers []EventHandler, attrs []str
 		default:
 			if h, ok := data.(EventHandler); ok {
 				handlers = append(handlers, h)
+				data = shouldAutoTagHandler(data)
 			} else if h, ok := data.(ClickHandler); ok {
 				handlers = append(handlers, clickHandlerWrapper{h})
+				data = shouldAutoTagHandler(data)
 			}
 			tags = append(tags, data)
 		}
