@@ -307,7 +307,9 @@ func (jw *Jaws) Sessions() (sl []*Session) {
 func (jw *Jaws) getSessionLocked(sessIds []uint64, remoteIP netip.Addr) *Session {
 	for _, sessId := range sessIds {
 		if sess, ok := jw.sessions[sessId]; ok && equalIP(remoteIP, sess.remoteIP) {
-			return sess
+			if !sess.isDead() {
+				return sess
+			}
 		}
 	}
 	return nil
@@ -351,11 +353,7 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
 		if sessIds := getCookieSessionsIds(hr.Header, jw.CookieName); len(sessIds) > 0 {
 			remoteIP := parseIP(hr.RemoteAddr)
 			jw.mu.RLock()
-			if sess = jw.getSessionLocked(sessIds, remoteIP); sess != nil {
-				if sess.isDead() {
-					sess = nil
-				}
-			}
+			sess = jw.getSessionLocked(sessIds, remoteIP)
 			jw.mu.RUnlock()
 		}
 	}
