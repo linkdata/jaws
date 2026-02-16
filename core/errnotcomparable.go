@@ -11,8 +11,11 @@ type errNotComparable struct {
 	t reflect.Type
 }
 
-func (e errNotComparable) Error() string {
-	return e.t.String() + " is not comparable"
+func (e errNotComparable) Error() (s string) {
+	if e.t != nil {
+		s = e.t.String() + " is "
+	}
+	return s + "not comparable"
 }
 
 func (errNotComparable) Is(target error) bool {
