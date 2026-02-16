@@ -3074,11 +3074,10 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh &lt;-chan 
                                         // an error to be sent out as an alert message.
                                         // primary usecase is tests.
                                         if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.Jid(), tagmsg.What, tagmsg.Data)); err != nil </span><span class="cov8" title="1">{
-                                                rq.queue(WsMsg{
-                                                        Data: tagmsg.Data,
-                                                        Jid:  elem.Jid(),
-                                                        What: what.Alert,
-                                                })
+                                                var m WsMsg
+                                                m.FillAlert(err)
+                                                m.Jid = elem.Jid()
+                                                rq.queue(m)
                                         }</span>
                                 case what.Update:<span class="cov8" title="1">
                                         elem.JawsUpdate()</span>
@@ -3350,9 +3349,9 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class="c
                 w.WriteHeader(http.StatusMethodNotAllowed)
                 return
         }</span>
-        <span class="cov8" title="1">if len(r.RequestURI) &gt; 6 &amp;&amp; strings.HasPrefix(r.RequestURI, "/jaws/") </span><span class="cov8" title="1">{
-                if r.RequestURI[6] == '.' </span><span class="cov8" title="1">{
-                        switch r.RequestURI </span>{
+        <span class="cov8" title="1">if len(r.URL.Path) &gt; 6 &amp;&amp; strings.HasPrefix(r.URL.Path, "/jaws/") </span><span class="cov8" title="1">{
+                if r.URL.Path[6] == '.' </span><span class="cov8" title="1">{
+                        switch r.URL.Path </span>{
                         case jw.serveCSS.Name:<span class="cov8" title="1">
                                 jw.serveCSS.ServeHTTP(w, r)
                                 return</span>
@@ -3369,7 +3368,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class="c
                                 }
                                 <span class="cov8" title="1">return</span>
                         }
-                } else<span class="cov8" title="1"> if rq := jw.UseRequest(JawsKeyValue(r.RequestURI[6:]), r); rq != nil </span><span class="cov8" title="1">{
+                } else<span class="cov8" title="1"> if rq := jw.UseRequest(JawsKeyValue(r.URL.Path[6:]), r); rq != nil </span><span class="cov8" title="1">{
                         rq.ServeHTTP(w, r)
                         return
                 }</span>
