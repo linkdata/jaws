@@ -41,13 +41,15 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 	var urls []*url.URL
 
 	handleStaticServe := func(ss *staticserve.StaticServe) {
-		u, uerr := url.Parse(ss.Name)
-		err = errors.Join(err, uerr)
-		if u != nil {
-			u = makeAbsPath(prefix, u)
-			urls = append(urls, u)
-			if handleFn != nil {
-				handleFn(u.String(), ss)
+		if ss != nil {
+			u, uerr := url.Parse(ss.Name)
+			err = errors.Join(err, uerr)
+			if u != nil {
+				u = makeAbsPath(prefix, u)
+				urls = append(urls, u)
+				if handleFn != nil {
+					handleFn(u.String(), ss)
+				}
 			}
 		}
 	}
