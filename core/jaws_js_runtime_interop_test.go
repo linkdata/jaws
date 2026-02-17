@@ -116,3 +116,23 @@ process.stdout.write(jaws.sent[0] || "");
 		t.Fatalf("expected invalid untrusted Remove frame to be dropped by parser, got %+v from %q", msg, raw)
 	}
 }
+
+func TestJawsJS_JsVarWithoutRegisteredTopLevelNameDoesNotEmitInvalidFrame(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+
+window.app = { state: 0 };
+jaws = new FakeSocket();
+
+jawsVar("app.state", 42);
+process.stdout.write(jaws.sent[0] || "");
+`)
+
+	if raw != "" {
+		if _, ok := wsParse([]byte(raw)); !ok {
+			t.Fatalf("jawsVar should not emit unparseable Set frame when JsVar name is unregistered, got %q", raw)
+		}
+	}
+}

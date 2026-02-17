@@ -898,7 +898,7 @@ func TestRequest_IncomingRemove(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.InCh <- WsMsg{What: what.Remove, Data: "Jid.1"}:
+	case rq.InCh <- WsMsg{What: what.Remove, Jid: 1, Data: "Jid.1"}:
 	}
 
 	elem := rq.GetElementByJid(1)

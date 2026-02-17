@@ -121,3 +121,63 @@ func TestRequest_JsCallProducesJawsJSFrameSafeWireData(t *testing.T) {
 		})
 	}
 }
+
+func TestRequest_JsCallFunctionPathDoesNotBreakWireFraming(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	tag := &testUi{}
+	rq.Register(tag)
+
+	tests := []struct {
+		name   string
+		jsfunc string
+	}{
+		{
+			name:   "tab in function path",
+			jsfunc: "fn\tpart",
+		},
+		{
+			name:   "newline in function path",
+			jsfunc: "fn\npart",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rq.Jaws.JsCall(tag, tt.jsfunc, `{"a":1}`)
+			msg := nextOutboundMsg(t, rq)
+			wire := msg.Format()
+
+			if got := strings.Count(wire, "\n"); got != 1 {
+				t.Fatalf("wire message contains embedded newlines (%d): %q", got, wire)
+			}
+			if got := strings.Count(wire, "\t"); got != 2 {
+				t.Fatalf("wire message contains embedded tab separators (%d): %q", got, wire)
+			}
+		})
+	}
+}
+
+func TestRequest_IncomingRemoveWithZeroContainerJidIsIgnored(t *testing.T) {
+	NextJid = 0
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	elem := rq.NewElement(&testUi{})
+
+	select {
+	case rq.InCh <- WsMsg{What: what.Remove, Jid: 0, Data: elem.Jid().String()}:
+	case <-time.After(time.Second):
+		t.Fatal("timeout sending incoming Remove message")
+	}
+
+	select {
+	case <-time.After(20 * time.Millisecond):
+	case <-rq.DoneCh:
+		t.Fatal("request shut down unexpectedly")
+	}
+	if got := rq.GetElementByJid(elem.Jid()); got == nil {
+		t.Fatalf("element %s should not be deletable through zero-container Remove", elem.Jid())
+	}
+}
