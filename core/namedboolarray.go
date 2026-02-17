@@ -59,6 +59,9 @@ func (nba *NamedBoolArray) Add(name string, text template.HTML) *NamedBoolArray 
 }
 
 // Set sets the Checked state for the NamedBool(s) with the given name.
+//
+// If the given name doesn't match any NamedBool(s) in single-select
+// mode, everything will be deselected.
 func (nba *NamedBoolArray) Set(name string, state bool) (changed bool) {
 	nba.mu.Lock()
 	defer nba.mu.Unlock()
