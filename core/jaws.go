@@ -820,19 +820,24 @@ func (jw *Jaws) Append(target any, html template.HTML) {
 	})
 }
 
+func maybeCompactJSON(in string) (out string) {
+	out = in
+	if strings.ContainsAny(in, "\n\t") {
+		var b bytes.Buffer
+		if err := json.Compact(&b, []byte(in)); err == nil {
+			out = b.String()
+		}
+	}
+	return
+}
+
 // JsCall calls the Javascript function 'jsfunc' with the argument 'jsonstr'
 // on all Requests that have the target UI tag.
 func (jw *Jaws) JsCall(tag any, jsfunc, jsonstr string) {
-	if strings.ContainsAny(jsonstr, "\n\t") {
-		var b bytes.Buffer
-		if err := json.Compact(&b, []byte(jsonstr)); err == nil {
-			jsonstr = b.String()
-		}
-	}
 	jw.Broadcast(Message{
 		Dest: tag,
 		What: what.Call,
-		Data: jsfunc + "=" + jsonstr,
+		Data: maybeCompactJSON(jsfunc) + "=" + maybeCompactJSON(jsonstr),
 	})
 }
 
