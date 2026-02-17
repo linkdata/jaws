@@ -137,8 +137,7 @@ client/server protocol code:
 * `what.Remove` means remove child element(s). For browser-originated `Remove`
   messages, the websocket `Jid` identifies the parent/container and `Data`
   carries the removed managed child IDs.
-* `what.Replace` always uses `where + "\n" + html` in `Data`.
-  `Element.Replace` encodes self-replace as empty `where`, i.e. `"\n" + html`.
+* `what.Replace` replaces the target element HTML and carries plain HTML in `Data`.
 * `what.Call`/`what.Set` use `path + "=" + json` inside `Data`. Embedded tabs
   or newlines in JSON break message framing; `Jaws.JsCall` compacts valid JSON
   before sending.
