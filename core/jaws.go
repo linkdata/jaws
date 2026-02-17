@@ -831,13 +831,15 @@ func maybeCompactJSON(in string) (out string) {
 	return
 }
 
+var whitespaceRemover = strings.NewReplacer(" ", "", "\n", "", "\t", "")
+
 // JsCall calls the Javascript function 'jsfunc' with the argument 'jsonstr'
 // on all Requests that have the target UI tag.
 func (jw *Jaws) JsCall(tag any, jsfunc, jsonstr string) {
 	jw.Broadcast(Message{
 		Dest: tag,
 		What: what.Call,
-		Data: maybeCompactJSON(jsfunc) + "=" + maybeCompactJSON(jsonstr),
+		Data: whitespaceRemover.Replace(jsfunc) + "=" + maybeCompactJSON(jsonstr),
 	})
 }
 
