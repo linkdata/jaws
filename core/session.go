@@ -165,13 +165,21 @@ func (sess *Session) Cookie() (cookie *http.Cookie) {
 func (sess *Session) Close() (cookie *http.Cookie) {
 	if sess != nil {
 		sess.jw.deleteSession(sess.sessionID)
+
 		sess.mu.Lock()
 		sess.cookie.MaxAge = -1
-		sess.broadcastLocked(Message{What: what.Reload}, true)
-		sess.requests = sess.requests[:0]
+		requests := sess.requests
+		sess.requests = nil
 		cookie = new(http.Cookie)
 		*cookie = sess.cookie
 		sess.mu.Unlock()
+
+		msg := Message{What: what.Reload}
+		for _, rq := range requests {
+			rq.deadSession(sess)
+			msg.Dest = rq
+			sess.jw.Broadcast(msg)
+		}
 	}
 	return
 }
@@ -205,18 +213,6 @@ func (sess *Session) Requests() (rl []*Request) {
 	return
 }
 
-func (sess *Session) broadcastLocked(msg Message, closing bool) {
-	for _, rq := range sess.requests {
-		msg.Dest = rq
-		sess.jw.Broadcast(msg)
-		if closing {
-			rq.mu.Lock()
-			rq.session = nil
-			rq.mu.Unlock()
-		}
-	}
-}
-
 // Broadcast attempts to send a message to all Requests using this session.
 //
 // It must not be called before the JaWS processing loop (`Serve()` or
@@ -226,6 +222,9 @@ func (sess *Session) Broadcast(msg Message) {
 	if sess != nil {
 		sess.mu.RLock()
 		defer sess.mu.RUnlock()
-		sess.broadcastLocked(msg, false)
+		for _, rq := range sess.requests {
+			msg.Dest = rq
+			sess.jw.Broadcast(msg)
+		}
 	}
 }

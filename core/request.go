@@ -115,6 +115,14 @@ func (rq *Request) killSession() {
 	rq.mu.Unlock()
 }
 
+func (rq *Request) deadSession(sess *Session) {
+	rq.mu.Lock()
+	if rq.session == sess {
+		rq.session = nil
+	}
+	rq.mu.Unlock()
+}
+
 func (rq *Request) clearLocked() *Request {
 	rq.JawsKey = 0
 	rq.connectFn = nil
