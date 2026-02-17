@@ -136,7 +136,7 @@ func TestBroadcast_ExpandsTagDestBeforeQueue(t *testing.T) {
 	}
 }
 
-func TestBroadcast_PreservesMatchNoneDestination(t *testing.T) {
+func TestBroadcast_NoneDestination(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -148,13 +148,11 @@ func TestBroadcast_PreservesMatchNoneDestination(t *testing.T) {
 		What: what.Update,
 		Data: "x",
 	})
-	msg := nextBroadcast(t, jw)
-	dest, ok := msg.Dest.([]any)
-	if !ok {
-		t.Fatalf("expected []any destination, got %T(%#v)", msg.Dest, msg.Dest)
-	}
-	if len(dest) != 0 {
-		t.Fatalf("expected empty destination slice, got %#v", dest)
+
+	select {
+	case msg := <-jw.bcastCh:
+		t.Fatalf("expected no pending broadcast, got %T(%#v)", msg.Dest, msg.Dest)
+	default:
 	}
 }
 

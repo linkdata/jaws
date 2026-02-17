@@ -453,15 +453,16 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 // All convenience helpers on Jaws that call Broadcast inherit this requirement.
 func (jw *Jaws) Broadcast(msg Message) {
 	switch msg.Dest.(type) {
-	case nil:
-	case *Request:
-	case string: // HTML id
+	case nil: // send to all requests
+	case *Request: // send to that request
+	case string: // HTML id (accepted by all requests)
 	default:
-		tags := MustTagExpand(nil, msg.Dest)
+		tags, err := TagExpand(nil, msg.Dest)
+		jw.MustLog(err)
 		switch len(tags) {
 		case 0:
-			// Preserve "match none" semantics instead of turning into Dest=nil (broadcast all).
-			msg.Dest = []any{}
+			// no tags, so no requests will match
+			return
 		case 1:
 			msg.Dest = tags[0]
 		default:
