@@ -178,7 +178,7 @@ func (e *Element) Replace(htmlCode template.HTML) {
 		if !bytes.Contains([]byte(htmlCode), b) {
 			panic(errors.New("jaws: Element.Replace(): expected HTML " + string(b)))
 		}
-		e.queue(what.Replace, "\n"+string(htmlCode))
+		e.queue(what.Replace, string(htmlCode))
 	}
 }
 
