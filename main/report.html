@@ -83,7 +83,7 @@
 				
 				<option value="file13">github.com/linkdata/jaws/core/htmlgetterfunc.go (100.0%)</option>
 				
-				<option value="file14">github.com/linkdata/jaws/core/jaws.go (99.7%)</option>
+				<option value="file14">github.com/linkdata/jaws/core/jaws.go (100.0%)</option>
 				
 				<option value="file15">github.com/linkdata/jaws/core/js.go (100.0%)</option>
 				
@@ -105,7 +105,7 @@
 				
 				<option value="file24">github.com/linkdata/jaws/core/servehttp.go (100.0%)</option>
 				
-				<option value="file25">github.com/linkdata/jaws/core/session.go (97.6%)</option>
+				<option value="file25">github.com/linkdata/jaws/core/session.go (100.0%)</option>
 				
 				<option value="file26">github.com/linkdata/jaws/core/sessioner.go (100.0%)</option>
 				
@@ -1577,15 +1577,16 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
 // All convenience helpers on Jaws that call Broadcast inherit this requirement.
 func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
         switch msg.Dest.(type) </span>{
-        case nil:<span class="cov8" title="1"></span>
-        case *Request:<span class="cov8" title="1"></span>
-        case string:<span class="cov8" title="1"></span> // HTML id
+        case nil:<span class="cov8" title="1"></span> // send to all requests
+        case *Request:<span class="cov8" title="1"></span> // send to that request
+        case string:<span class="cov8" title="1"></span> // HTML id (accepted by all requests)
         default:<span class="cov8" title="1">
-                tags := MustTagExpand(nil, msg.Dest)
+                tags, err := TagExpand(nil, msg.Dest)
+                jw.MustLog(err)
                 switch len(tags) </span>{
-                case 0:<span class="cov0" title="0">
-                        // Preserve "match none" semantics instead of turning into Dest=nil (broadcast all).
-                        msg.Dest = []any{}</span>
+                case 0:<span class="cov8" title="1">
+                        // no tags, so no requests will match
+                        return</span>
                 case 1:<span class="cov8" title="1">
                         msg.Dest = tags[0]</span>
                 default:<span class="cov8" title="1">
@@ -1593,7 +1594,7 @@ func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
                 }
         }
         <span class="cov8" title="1">select </span>{
-        case &lt;-jw.Done():<span class="cov0" title="0"></span>
+        case &lt;-jw.Done():<span class="cov8" title="1"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
 }
@@ -3710,11 +3711,9 @@ func (sess *Session) Reload() <span class="cov8" title="1">{
 func (sess *Session) Clear() <span class="cov8" title="1">{
         if sess != nil </span><span class="cov8" title="1">{
                 sess.mu.Lock()
-                for k := range sess.data </span><span class="cov8" title="1">{
-                        delete(sess.data, k)
-                }</span>
-                <span class="cov8" title="1">sess.mu.Unlock()</span>
-        }
+                clear(sess.data)
+                sess.mu.Unlock()
+        }</span>
 }
 
 // Requests returns a list of the Requests using this Session.
@@ -3737,7 +3736,7 @@ func (sess *Session) Broadcast(msg Message) <span class="cov8" title="1">{
         if sess != nil </span><span class="cov8" title="1">{
                 sess.mu.RLock()
                 defer sess.mu.RUnlock()
-                for _, rq := range sess.requests </span><span class="cov0" title="0">{
+                for _, rq := range sess.requests </span><span class="cov8" title="1">{
                         msg.Dest = rq
                         sess.jw.Broadcast(msg)
                 }</span>
