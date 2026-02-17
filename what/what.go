@@ -22,8 +22,8 @@ const (
 	// Element manipulation
 	Inner   // Set the elements inner HTML
 	Delete  // Delete the element
-	Replace // Replace the element with new HTML
-	Remove  // Remove child element
+	Replace // Replace target identified by Data "where\nhtml" (empty where means self)
+	Remove  // Remove child element (Data identifies child; Jid identifies parent)
 	Insert  // Insert child element
 	Append  // Append child element
 	SAttr   // Set element attribute

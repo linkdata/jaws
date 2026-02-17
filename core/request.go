@@ -664,6 +664,9 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan WsM
 }
 
 func (rq *Request) handleRemove(data string) {
+	// For incoming what.Remove from jaws.js, Data is a tab-separated list of
+	// managed descendant IDs that were removed. The websocket Jid identifies the
+	// parent/container in the DOM and must not itself be deleted here.
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	for _, jidstr := range strings.Split(data, "\t") {

@@ -128,6 +128,21 @@ to pass it to the next handler.
 
 ## Technical notes
 
+### WebSocket wire format notes
+
+JaWS websocket messages are line-based and field-delimited:
+`What<TAB>Jid<TAB>Data<LF>`. Keep these invariants in mind when changing
+client/server protocol code:
+
+* `what.Remove` means remove child element(s). For browser-originated `Remove`
+  messages, the websocket `Jid` identifies the parent/container and `Data`
+  carries the removed managed child IDs.
+* `what.Replace` always uses `where + "\n" + html` in `Data`.
+  `Element.Replace` encodes self-replace as empty `where`, i.e. `"\n" + html`.
+* `what.Call`/`what.Set` use `path + "=" + json` inside `Data`. Embedded tabs
+  or newlines in JSON break message framing; `Jaws.JsCall` compacts valid JSON
+  before sending.
+
 ### HTTP request flow and associating the WebSocket
 
 When a new HTTP request is received, create a JaWS Request using the
