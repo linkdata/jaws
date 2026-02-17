@@ -8,9 +8,11 @@ package core
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -792,15 +794,12 @@ func (jw *Jaws) Insert(target any, where, html string) {
 	})
 }
 
-// Replace replaces the HTML content on
-// all HTML elements matching target.
-//
-// The position parameter 'where' may be either a HTML ID or an index.
-func (jw *Jaws) Replace(target any, where, html string) {
+// Replace replaces HTML on all HTML elements matching target.
+func (jw *Jaws) Replace(target any, html string) {
 	jw.Broadcast(Message{
 		Dest: target,
 		What: what.Replace,
-		Data: where + "\n" + html,
+		Data: html,
 	})
 }
 
@@ -823,8 +822,13 @@ func (jw *Jaws) Append(target any, html template.HTML) {
 
 // JsCall calls the Javascript function 'jsfunc' with the argument 'jsonstr'
 // on all Requests that have the target UI tag.
-// The jsonstr argument must a valid JSON object in string format.
 func (jw *Jaws) JsCall(tag any, jsfunc, jsonstr string) {
+	if strings.ContainsAny(jsonstr, "\n\t") {
+		var b bytes.Buffer
+		if err := json.Compact(&b, []byte(jsonstr)); err == nil {
+			jsonstr = b.String()
+		}
+	}
 	jw.Broadcast(Message{
 		Dest: tag,
 		What: what.Call,
