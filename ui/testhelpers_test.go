@@ -1,9 +1,7 @@
 package ui
 
 import (
-	"errors"
 	"html/template"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -108,16 +106,3 @@ type testContainer struct {
 func (tc *testContainer) JawsContains(*core.Element) []core.UI {
 	return tc.contents
 }
-
-type errorUI struct {
-	err error
-}
-
-func (ui errorUI) JawsRender(*core.Element, io.Writer, []any) error {
-	if ui.err != nil {
-		return ui.err
-	}
-	return errors.New("errorUI")
-}
-
-func (errorUI) JawsUpdate(*core.Element) {}
