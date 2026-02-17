@@ -1132,9 +1132,11 @@ package core
 
 import (
         "bufio"
+        "bytes"
         "context"
         "crypto/rand"
         "encoding/binary"
+        "encoding/json"
         "errors"
         "fmt"
         "html/template"
@@ -1916,15 +1918,12 @@ func (jw *Jaws) Insert(target any, where, html string) <span class="cov8" title=
         })
 }</span>
 
-// Replace replaces the HTML content on
-// all HTML elements matching target.
-//
-// The position parameter 'where' may be either a HTML ID or an index.
-func (jw *Jaws) Replace(target any, where, html string) <span class="cov8" title="1">{
+// Replace replaces HTML on all HTML elements matching target.
+func (jw *Jaws) Replace(target any, html string) <span class="cov8" title="1">{
         jw.Broadcast(Message{
                 Dest: target,
                 What: what.Replace,
-                Data: where + "\n" + html,
+                Data: html,
         })
 }</span>
 
@@ -1947,14 +1946,19 @@ func (jw *Jaws) Append(target any, html template.HTML) <span class="cov8" title=
 
 // JsCall calls the Javascript function 'jsfunc' with the argument 'jsonstr'
 // on all Requests that have the target UI tag.
-// The jsonstr argument must a valid JSON object in string format.
 func (jw *Jaws) JsCall(tag any, jsfunc, jsonstr string) <span class="cov8" title="1">{
-        jw.Broadcast(Message{
+        if strings.ContainsAny(jsonstr, "\n\t") </span><span class="cov8" title="1">{
+                var b bytes.Buffer
+                if err := json.Compact(&amp;b, []byte(jsonstr)); err == nil </span><span class="cov8" title="1">{
+                        jsonstr = b.String()
+                }</span>
+        }
+        <span class="cov8" title="1">jw.Broadcast(Message{
                 Dest: tag,
                 What: what.Call,
                 Data: jsfunc + "=" + jsonstr,
-        })
-}</span>
+        })</span>
+}
 
 func (jw *Jaws) getRequestLocked(jawsKey uint64, hr *http.Request) (rq *Request) <span class="cov8" title="1">{
         rq = jw.reqPool.Get().(*Request)
@@ -3204,6 +3208,9 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh &lt;-chan 
 }
 
 func (rq *Request) handleRemove(data string) <span class="cov8" title="1">{
+        // For incoming what.Remove from jaws.js, Data is a tab-separated list of
+        // managed descendant IDs that were removed. The websocket Jid identifies the
+        // parent/container in the DOM and must not itself be deleted here.
         rq.mu.Lock()
         defer rq.mu.Unlock()
         for _, jidstr := range strings.Split(data, "\t") </span><span class="cov8" title="1">{
@@ -7015,7 +7022,7 @@ const (
         Inner   // Set the elements inner HTML
         Delete  // Delete the element
         Replace // Replace the element with new HTML
-        Remove  // Remove child element
+        Remove  // Remove child element (Data identifies child; Jid identifies parent)
         Insert  // Insert child element
         Append  // Append child element
         SAttr   // Set element attribute
