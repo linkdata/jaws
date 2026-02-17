@@ -134,13 +134,21 @@ JaWS websocket messages are line-based and field-delimited:
 `What<TAB>Jid<TAB>Data<LF>`. Keep these invariants in mind when changing
 client/server protocol code:
 
+* The browser is not trusted. Incoming frames are validated (`What`, `Jid`,
+  framing, quoting) and invalid frames are ignored/dropped.
 * `what.Remove` means remove child element(s). For browser-originated `Remove`
-  messages, the websocket `Jid` identifies the parent/container and `Data`
-  carries the removed managed child IDs.
+  messages, the websocket `Jid` must be a valid JaWS element ID for the
+  managed parent/container and `Data` carries removed managed child IDs.
+  Remove frames from non-managed containers are expected to be invalid and
+  therefore dropped.
 * `what.Replace` replaces the target element HTML and carries plain HTML in `Data`.
 * `what.Call`/`what.Set` use `path + "=" + json` inside `Data`. Embedded tabs
   or newlines in JSON break message framing; `Jaws.JsCall` compacts valid JSON
   before sending.
+* `jawsVar(name, ...)` resolves properties from `window`, but websocket routing
+  uses the top-level symbol name only. Register JaWS `JsVar` names as top-level
+  identifiers (example: `app`), and use dotted suffixes as the JSON path
+  (example: `jawsVar("app.state", value)` sends path `state`).
 
 ### HTTP request flow and associating the WebSocket
 
