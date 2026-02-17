@@ -9,6 +9,7 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/core"
+	"github.com/linkdata/jaws/ui"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -36,7 +37,7 @@ func TestJsVar_RenderThroughTemplate(t *testing.T) {
 
 	var mu sync.Mutex
 	val := jsVarValue{String: "text", Number: 1.23}
-	jsv := jaws.NewJsVar(&mu, &val)
+	jsv := ui.NewJsVar(&mu, &val)
 
 	if err := rq.Template("jsvartemplate", jsv); err != nil {
 		t.Fatal(err)
@@ -52,10 +53,10 @@ func TestJsVar_RenderThroughTemplate(t *testing.T) {
 
 type testJsVarMaker struct{}
 
-func (t *testJsVarMaker) JawsMakeJsVar(*jaws.Request) (jaws.IsJsVar, error) {
+func (t *testJsVarMaker) JawsMakeJsVar(*jaws.Request) (ui.IsJsVar, error) {
 	var mu sync.Mutex
 	v := "quote(')"
-	return jaws.NewJsVar(&mu, &v), nil
+	return ui.NewJsVar(&mu, &v), nil
 }
 
 func TestJsVar_JsVarMaker(t *testing.T) {
@@ -76,7 +77,7 @@ func TestJsVar_EventRoundtrip(t *testing.T) {
 
 	var mu sync.Mutex
 	var val jsVarValue
-	jsv := jaws.NewJsVar(&mu, &val)
+	jsv := ui.NewJsVar(&mu, &val)
 
 	elem := rq.NewElement(jsv)
 	var sb strings.Builder

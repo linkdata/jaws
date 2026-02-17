@@ -27,7 +27,7 @@ func TestTemplate_String(t *testing.T) {
 	defer rq.Close()
 
 	dot := 123
-	tmpl := jaws.NewTemplate("testtemplate", dot)
+	tmpl := ui.NewTemplate("testtemplate", dot)
 
 	if tmpl.String() != `{"testtemplate", 123}` {
 		t.Fatalf("unexpected template string: %q", tmpl.String())
@@ -38,7 +38,7 @@ func TestTemplate_Calls_Dot_Updater(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 	dot := &testUpdater{}
-	tmpl := jaws.NewTemplate("testtemplate", dot)
+	tmpl := ui.NewTemplate("testtemplate", dot)
 	tmpl.JawsUpdate(nil)
 	if dot.called != 1 {
 		t.Error(dot.called)
