@@ -1,6 +1,8 @@
 package jid
 
 import (
+	"fmt"
+	"math"
 	"reflect"
 	"testing"
 )
@@ -17,7 +19,7 @@ func TestParseJid(t *testing.T) {
 		{"empty string", "", 0},
 		{"random text", "hello, world!", Invalid},
 		{"missing number", Prefix, Invalid},
-		{"overflow", Prefix + "42949672950", Invalid},
+		{"overflow", Prefix + fmt.Sprint(uint64(math.MaxInt64+1)), Invalid},
 		{"spaces", Prefix + " 1", Invalid},
 	}
 	for _, tt := range tests {

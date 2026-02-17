@@ -56,7 +56,7 @@ func (jid Jid) AppendStartTagAttr(dst []byte, startTag string) []byte {
 //
 // Returns jid.Invalid if it's not a valid Jid or an error occurs.
 func ParseInt(s string) Jid {
-	if n, err := strconv.ParseInt(s, 10, 32); err == nil && n >= 0 {
+	if n, err := strconv.ParseInt(s, 10, 64); err == nil && n >= 0 {
 		return Jid(n)
 	}
 	return Invalid
