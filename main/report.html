@@ -2362,6 +2362,9 @@ func (nba *NamedBoolArray) Add(name string, text template.HTML) *NamedBoolArray 
 }</span>
 
 // Set sets the Checked state for the NamedBool(s) with the given name.
+//
+// If the given name doesn't match any NamedBool(s) in single-select
+// mode, everything will be deselected.
 func (nba *NamedBoolArray) Set(name string, state bool) (changed bool) <span class="cov8" title="1">{
         nba.mu.Lock()
         defer nba.mu.Unlock()
@@ -5314,7 +5317,7 @@ func (jid Jid) AppendStartTagAttr(dst []byte, startTag string) []byte <span clas
 //
 // Returns jid.Invalid if it's not a valid Jid or an error occurs.
 func ParseInt(s string) Jid <span class="cov8" title="1">{
-        if n, err := strconv.ParseInt(s, 10, 32); err == nil &amp;&amp; n &gt;= 0 </span><span class="cov8" title="1">{
+        if n, err := strconv.ParseInt(s, 10, 64); err == nil &amp;&amp; n &gt;= 0 </span><span class="cov8" title="1">{
                 return Jid(n)
         }</span>
         <span class="cov8" title="1">return Invalid</span>
