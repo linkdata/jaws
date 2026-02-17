@@ -105,7 +105,7 @@
 				
 				<option value="file24">github.com/linkdata/jaws/core/servehttp.go (100.0%)</option>
 				
-				<option value="file25">github.com/linkdata/jaws/core/session.go (100.0%)</option>
+				<option value="file25">github.com/linkdata/jaws/core/session.go (97.6%)</option>
 				
 				<option value="file26">github.com/linkdata/jaws/core/sessioner.go (100.0%)</option>
 				
@@ -1593,7 +1593,7 @@ func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
                 }
         }
         <span class="cov8" title="1">select </span>{
-        case &lt;-jw.Done():<span class="cov0" title="0"></span>
+        case &lt;-jw.Done():<span class="cov8" title="1"></span>
         case jw.bcastCh &lt;- msg:<span class="cov8" title="1"></span>
         }
 }
@@ -2651,6 +2651,14 @@ func (rq *Request) killSession() <span class="cov8" title="1">{
         rq.mu.Unlock()
 }</span>
 
+func (rq *Request) deadSession(sess *Session) <span class="cov8" title="1">{
+        rq.mu.Lock()
+        if rq.session == sess </span><span class="cov8" title="1">{
+                rq.session = nil
+        }</span>
+        <span class="cov8" title="1">rq.mu.Unlock()</span>
+}
+
 func (rq *Request) clearLocked() *Request <span class="cov8" title="1">{
         rq.JawsKey = 0
         rq.connectFn = nil
@@ -3672,14 +3680,22 @@ func (sess *Session) Cookie() (cookie *http.Cookie) <span class="cov8" title="1"
 func (sess *Session) Close() (cookie *http.Cookie) <span class="cov8" title="1">{
         if sess != nil </span><span class="cov8" title="1">{
                 sess.jw.deleteSession(sess.sessionID)
+
                 sess.mu.Lock()
                 sess.cookie.MaxAge = -1
-                sess.broadcastLocked(Message{What: what.Reload}, true)
-                sess.requests = sess.requests[:0]
+                requests := sess.requests
+                sess.requests = nil
                 cookie = new(http.Cookie)
                 *cookie = sess.cookie
                 sess.mu.Unlock()
-        }</span>
+
+                msg := Message{What: what.Reload}
+                for _, rq := range requests </span><span class="cov8" title="1">{
+                        rq.deadSession(sess)
+                        msg.Dest = rq
+                        sess.jw.Broadcast(msg)
+                }</span>
+        }
         <span class="cov8" title="1">return</span>
 }
 
@@ -3712,18 +3728,6 @@ func (sess *Session) Requests() (rl []*Request) <span class="cov8" title="1">{
         <span class="cov8" title="1">return</span>
 }
 
-func (sess *Session) broadcastLocked(msg Message, closing bool) <span class="cov8" title="1">{
-        for _, rq := range sess.requests </span><span class="cov8" title="1">{
-                msg.Dest = rq
-                sess.jw.Broadcast(msg)
-                if closing </span><span class="cov8" title="1">{
-                        rq.mu.Lock()
-                        rq.session = nil
-                        rq.mu.Unlock()
-                }</span>
-        }
-}
-
 // Broadcast attempts to send a message to all Requests using this session.
 //
 // It must not be called before the JaWS processing loop (`Serve()` or
@@ -3733,8 +3737,11 @@ func (sess *Session) Broadcast(msg Message) <span class="cov8" title="1">{
         if sess != nil </span><span class="cov8" title="1">{
                 sess.mu.RLock()
                 defer sess.mu.RUnlock()
-                sess.broadcastLocked(msg, false)
-        }</span>
+                for _, rq := range sess.requests </span><span class="cov0" title="0">{
+                        msg.Dest = rq
+                        sess.jw.Broadcast(msg)
+                }</span>
+        }
 }
 </pre>
 		
