@@ -159,7 +159,7 @@ func TestElement_Queued(t *testing.T) {
 					What: what.Order,
 				},
 				{
-					Data: string(replaceHTML),
+					Data: "\n" + string(replaceHTML),
 					Jid:  e.jid,
 					What: what.Replace,
 				},
