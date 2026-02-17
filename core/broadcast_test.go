@@ -3,6 +3,7 @@ package core
 import (
 	"html/template"
 	"testing"
+	"time"
 
 	"github.com/linkdata/jaws/what"
 )
@@ -132,5 +133,60 @@ func TestBroadcast_ExpandsTagDestBeforeQueue(t *testing.T) {
 	msg = nextBroadcast(t, jw)
 	if got, ok := msg.Dest.(string); !ok || got != "html-id" {
 		t.Fatalf("expected raw html-id destination, got %T(%#v)", msg.Dest, msg.Dest)
+	}
+}
+
+func TestBroadcast_PreservesMatchNoneDestination(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	jw.Broadcast(Message{
+		Dest: []any{},
+		What: what.Update,
+		Data: "x",
+	})
+	msg := nextBroadcast(t, jw)
+	dest, ok := msg.Dest.([]any)
+	if !ok {
+		t.Fatalf("expected []any destination, got %T(%#v)", msg.Dest, msg.Dest)
+	}
+	if len(dest) != 0 {
+		t.Fatalf("expected empty destination slice, got %#v", dest)
+	}
+}
+
+func TestBroadcast_ReturnsWhenClosedAndQueueFull(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	jw.Broadcast(Message{What: what.Alert, Data: "info\nfirst"})
+	jw.Close()
+
+	done := make(chan struct{})
+	go func() {
+		jw.Broadcast(Message{What: what.Alert, Data: "info\nsecond"})
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("broadcast blocked after close")
+	}
+
+	msg := nextBroadcast(t, jw)
+	if msg.Data != "info\nfirst" {
+		t.Fatalf("unexpected queued message %#v", msg)
+	}
+	select {
+	case extra := <-jw.bcastCh:
+		t.Fatalf("unexpected extra message after close %#v", extra)
+	default:
 	}
 }

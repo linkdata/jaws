@@ -277,6 +277,66 @@ func TestSession_Requests(t *testing.T) {
 	}
 }
 
+func TestSession_Broadcast(t *testing.T) {
+	jw, _ := New()
+	defer jw.Close()
+
+	rr := httptest.NewRecorder()
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	sess := jw.NewSession(rr, hr)
+	if sess == nil {
+		t.Fatal("expected session")
+	}
+
+	rq1 := jw.NewRequest(hr)
+	hr2 := httptest.NewRequest(http.MethodGet, "/2", nil)
+	hr2.RemoteAddr = hr.RemoteAddr
+	hr2.AddCookie(sess.Cookie())
+	rq2 := jw.NewRequest(hr2)
+
+	if got := rq1.Session(); got != sess {
+		t.Fatalf("request 1 session mismatch: %v", got)
+	}
+	if got := rq2.Session(); got != sess {
+		t.Fatalf("request 2 session mismatch: %v", got)
+	}
+
+	msg := Message{What: what.Alert, Data: "info\nhello"}
+	done := make(chan struct{})
+	go func() {
+		sess.Broadcast(msg)
+		close(done)
+	}()
+
+	msg1 := nextBroadcast(t, jw)
+	msg2 := nextBroadcast(t, jw)
+
+	for i, got := range []Message{msg1, msg2} {
+		if got.What != msg.What || got.Data != msg.Data {
+			t.Fatalf("message %d mismatch: %#v", i+1, got)
+		}
+		if _, ok := got.Dest.(*Request); !ok {
+			t.Fatalf("message %d destination type: %T", i+1, got.Dest)
+		}
+	}
+
+	seen := map[*Request]bool{}
+	seen[msg1.Dest.(*Request)] = true
+	seen[msg2.Dest.(*Request)] = true
+	if !seen[rq1] || !seen[rq2] || len(seen) != 2 {
+		t.Fatalf("expected broadcasts for both requests, got %#v", seen)
+	}
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for Session.Broadcast to finish")
+	}
+
+	jw.recycle(rq1)
+	jw.recycle(rq2)
+}
+
 func TestSession_Delete(t *testing.T) {
 	th := newTestHelper(t)
 	ts := newTestServer()
