@@ -68,7 +68,7 @@ func TestImg_RenderAndUpdate(t *testing.T) {
 
 func TestOption_RenderAndUpdate(t *testing.T) {
 	_, rq := newRequest(t)
-	nba := core.NewNamedBoolArray()
+	nba := core.NewNamedBoolArray(false)
 	nb := core.NewNamedBool(nba, `escape"me`, "<unescaped>", true)
 	ui := NewOption(nb)
 	elem, got := renderUI(t, rq, ui, "hidden")

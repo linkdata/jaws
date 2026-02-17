@@ -8,7 +8,7 @@ import (
 func TestNamedBool(t *testing.T) {
 	is := newTestHelper(t)
 
-	nba := NewNamedBoolArray()
+	nba := NewNamedBoolArray(false)
 	nba.Add("1", "one")
 	nb := nba.data[0]
 

@@ -8,7 +8,7 @@ import (
 
 func Test_NamedBoolArray(t *testing.T) {
 	is := newTestHelper(t)
-	nba := NewNamedBoolArray()
+	nba := NewNamedBoolArray(false)
 	is.Equal(len(nba.data), 0)
 
 	nba.Add("1", "one")
@@ -60,14 +60,23 @@ func Test_NamedBoolArray(t *testing.T) {
 	is.Equal((nba.data)[1].Checked(), false)
 	is.Equal((nba.data)[2].Checked(), true)
 
-	nba.Multi = true
-	nba.Set("2", true)
-	is.Equal((nba.data)[0].Checked(), true)
-	is.Equal((nba.data)[1].Checked(), true)
-	is.Equal((nba.data)[2].Checked(), true)
-	is.Equal(nba.Get(), "2")
+	nbaMulti := NewNamedBoolArray(true)
+	nbaMulti.Add("1", "one")
+	nbaMulti.Add("2", "two")
+	nbaMulti.Add("2", "also two")
+	nbaMulti.WriteLocked(func(nba []*NamedBool) []*NamedBool {
+		sort.Slice(nba, func(i, j int) bool {
+			return nba[i].Name() > nba[j].Name()
+		})
+		return nba
+	})
+	nbaMulti.Set("1", true)
+	nbaMulti.Set("2", true)
+	is.Equal((nbaMulti.data)[0].Checked(), true)
+	is.Equal((nbaMulti.data)[1].Checked(), true)
+	is.Equal((nbaMulti.data)[2].Checked(), true)
+	is.Equal(nbaMulti.Get(), "2")
 
-	nba.Multi = false
 	nba.Set("1", true)
 	is.Equal((nba.data)[0].Checked(), false)
 	is.Equal((nba.data)[1].Checked(), false)

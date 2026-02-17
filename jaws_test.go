@@ -115,7 +115,7 @@ func TestNewTemplate(t *testing.T) {
 		vtime, _ := time.Parse(jaws.ISO8601, "1901-02-03")
 		vnumber := float64(1.2)
 		vstring := "bar"
-		nba := jaws.NewNamedBoolArray()
+		nba := jaws.NewNamedBoolArray(false)
 
 		tp := &testPage{
 			TheBool:      jaws.Bind(&mu, &vbool),
@@ -173,7 +173,7 @@ func TestNewUi(t *testing.T) {
 	vtime, _ := time.Parse(jaws.ISO8601, "1901-02-03")
 	vnumber := float64(1.2)
 	vstring := "bar"
-	nba := jaws.NewNamedBoolArray()
+	nba := jaws.NewNamedBoolArray(false)
 	_ = jaws.NewNamedBool(nba, "escape\"me", "<unescaped>", true)
 
 	jaws.NewUiA(htmlGetter)

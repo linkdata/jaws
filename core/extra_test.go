@@ -96,7 +96,7 @@ func TestCoverage_namedBoolOptionAndContains(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 
-	nba := NewNamedBoolArray().Add("1", "one")
+	nba := NewNamedBoolArray(false).Add("1", "one")
 	nba.Set("1", true)
 	contents := nba.JawsContains(nil)
 	if len(contents) != 1 {

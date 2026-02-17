@@ -23,7 +23,7 @@ func TestConstructors(t *testing.T) {
 
 	htmlGetter := core.MakeHTMLGetter("x")
 	imgGetter := core.StringGetterFunc(func(*core.Element) string { return "img" })
-	nba := core.NewNamedBoolArray().Add("a", template.HTML("A"))
+	nba := core.NewNamedBoolArray(false).Add("a", template.HTML("A"))
 	tc := testContainer{contents: []core.UI{NewSpan(htmlGetter)}}
 
 	all := []core.UI{

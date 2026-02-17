@@ -81,7 +81,7 @@ func Test_WriteHTMLSelect(t *testing.T) {
 			name: "HTMLSelect empty NamedBoolArray and one attr",
 			args: args{
 				jid:   2,
-				val:   NewNamedBoolArray(),
+					val:   NewNamedBoolArray(false),
 				attrs: []template.HTMLAttr{"attr1"},
 			},
 			want: "<select id=\"Jid.2\" attr1>\n</select>",
@@ -91,7 +91,7 @@ func Test_WriteHTMLSelect(t *testing.T) {
 			args: args{
 				jid: 3,
 				val: func() (nba *NamedBoolArray) {
-					nba = NewNamedBoolArray()
+						nba = NewNamedBoolArray(false)
 					nba.Add("one", "1")
 					nba.Add("two", "2")
 					nba.Add("three", "2")

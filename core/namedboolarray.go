@@ -11,15 +11,15 @@ import (
 // and sets of HTML radio buttons. It it safe to use from multiple goroutines
 // concurrently.
 type NamedBoolArray struct {
-	Multi bool             // allow multiple NamedBools to be true
+	multi bool             // allow multiple NamedBools to be true
 	mu    deadlock.RWMutex // protects following
 	data  []*NamedBool
 }
 
 var _ SelectHandler = (*NamedBoolArray)(nil)
 
-func NewNamedBoolArray() *NamedBoolArray {
-	return &NamedBoolArray{}
+func NewNamedBoolArray(multi bool) *NamedBoolArray {
+	return &NamedBoolArray{multi: multi}
 }
 
 // ReadLocked calls the given function with the NamedBoolArray locked for reading.
@@ -77,7 +77,7 @@ func (nba *NamedBoolArray) Set(name string, state bool) (changed bool) {
 // deselectOthersLocked clears all NamedBools whose name differs from
 // the given name when the array is in single-select mode and state is true.
 func (nba *NamedBoolArray) deselectOthersLocked(name string, state bool) (changed bool) {
-	if state && !nba.Multi {
+	if state && !nba.multi {
 		for _, nb := range nba.data {
 			if nb.Name() != name {
 				changed = nb.Set(false) || changed
