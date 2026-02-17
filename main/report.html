@@ -5025,9 +5025,10 @@ import (
         "strings"
 
         "github.com/linkdata/jaws"
+        "github.com/linkdata/jaws/ui"
 )
 
-var _ jaws.SetPather = (*Node)(nil)
+var _ ui.SetPather = (*Node)(nil)
 
 type Node struct {
         Tree     *Tree   `json:"-"`
