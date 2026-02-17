@@ -330,7 +330,10 @@ function jawsVar(name, data, operation) {
 					obj[lastkey] = data;
 				}
 				if (jaws instanceof WebSocket && jaws.readyState === 1) {
-					jaws.send("Set\t" + window.jawsNames[name] + "\t" + path + "=" + JSON.stringify(data) + "\n");
+					var id = window.jawsNames[name];
+					if (typeof id === 'string' && id.startsWith(jawsIdPrefix)) {
+						jaws.send("Set\t" + id + "\t" + path + "=" + JSON.stringify(data) + "\n");
+					}
 				}
 				return data;
 			case 'Call':
