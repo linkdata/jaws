@@ -75,6 +75,13 @@ func TestElement_ReplaceMessageTargetsElementHTML(t *testing.T) {
 	html := `<div id="` + jid.String() + `">replaced</div>`
 
 	elem.Replace(template.HTML(html))
+	// Element.Replace queues directly on the Request, so poke the process loop
+	// once to ensure queued messages are flushed to OutCh in this harness.
+	select {
+	case rq.InCh <- WsMsg{}:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waking request process loop")
+	}
 	msg := nextOutboundMsg(t, rq)
 
 	if msg.What != what.Replace {
