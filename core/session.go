@@ -195,9 +195,7 @@ func (sess *Session) Reload() {
 func (sess *Session) Clear() {
 	if sess != nil {
 		sess.mu.Lock()
-		for k := range sess.data {
-			delete(sess.data, k)
-		}
+		clear(sess.data)
 		sess.mu.Unlock()
 	}
 }
