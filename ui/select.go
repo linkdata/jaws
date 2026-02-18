@@ -24,6 +24,7 @@ func (ui *Select) JawsRender(e *core.Element, w io.Writer, params []any) error {
 }
 
 func (ui *Select) JawsUpdate(e *core.Element) {
+	// core.Setter[T] includes core.Getter[T]
 	e.SetValue(ui.ContainerHelper.Container.(core.Getter[string]).JawsGet(e))
 	ui.UpdateContainer(e)
 }
