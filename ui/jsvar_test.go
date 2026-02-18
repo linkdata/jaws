@@ -18,6 +18,10 @@ type jsVarData struct {
 	Num  float64 `json:"num"`
 }
 
+type jsVarNilData struct {
+	Value string `json:"value"`
+}
+
 type jsVarPathHooks struct {
 	Value       string `json:"value"`
 	setCalls    int
@@ -219,5 +223,30 @@ func TestErrIllegalJsVarName_Error(t *testing.T) {
 	}
 	if got := errIllegalJsVarName("illegal syntax").Error(); got != "illegal jsvar name: illegal syntax" {
 		t.Fatalf("unexpected detailed error string %q", got)
+	}
+}
+
+func TestJsVar_JawsGetWithNilPointerReturnsZeroValue(t *testing.T) {
+	_, rq := newRequest(t)
+
+	var mu sync.Mutex
+	var ptr *jsVarNilData
+	jsv := NewJsVar(&mu, ptr)
+	elem := rq.NewElement(jsv)
+
+	var sb bytes.Buffer
+	if err := jsv.JawsRender(elem, &sb, []any{"nilptr"}); err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("JawsGet should not panic for nil pointer: %v", r)
+		}
+	}()
+
+	got := jsv.JawsGet(elem)
+	if got != (jsVarNilData{}) {
+		t.Fatalf("want zero value got %#v", got)
 	}
 }

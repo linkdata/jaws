@@ -82,8 +82,11 @@ func (ui *JsVar[T]) JawsGetPath(elem *core.Element, jspath string) (value any) {
 }
 
 func (ui *JsVar[T]) JawsGet(elem *core.Element) (value T) {
-	anyval := ui.JawsGetPath(elem, "")
-	value = *((anyval).(*T))
+	ui.RLock()
+	defer ui.RUnlock()
+	if ui.Ptr != nil {
+		value = *ui.Ptr
+	}
 	return
 }
 
