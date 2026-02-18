@@ -120,6 +120,7 @@ func TestContainerHelperUpdateContainerDuplicates(t *testing.T) {
 }
 
 func TestContainerHelperRenderErrorPaths(t *testing.T) {
+	core.NextJid = 0
 	_, rq := newRequest(t)
 	renderErr := errors.New("render error")
 	errChild := testRenderErrorUI{err: renderErr}
