@@ -176,7 +176,48 @@ func TestJsVar_PathHooksAndRequestWriter(t *testing.T) {
 	if err := rw.JsVar("bad", errorJsVarMaker{}); err == nil || err.Error() != "maker error" {
 		t.Fatalf("expected maker error, got %v", err)
 	}
+	if err := rw.JsVar("bad.name", jsv); !errors.Is(err, ErrIllegalJsVarName) {
+		t.Fatalf("expected ErrIllegalJsVarName, got %v", err)
+	}
+	if err := rw.JsVar("badtype", 123); !errors.Is(err, ErrJsVarArgumentType) {
+		t.Fatalf("expected ErrJsVarArgumentType, got %v", err)
+	}
 	if got := sb.String(); !strings.Contains(got, `data-jawsname="direct"`) || !strings.Contains(got, `data-jawsname="maker"`) {
 		t.Fatalf("unexpected jsvar output %q", got)
+	}
+}
+
+func TestJsVar_RenderParamValidation(t *testing.T) {
+	_, rq := newRequest(t)
+
+	var mu sync.Mutex
+	v := jsVarData{}
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+
+	var sb bytes.Buffer
+	if err := jsv.JawsRender(elem, &sb, nil); !errors.Is(err, ErrIllegalJsVarName) {
+		t.Fatalf("expected ErrIllegalJsVarName, got %v", err)
+	}
+	if err := jsv.JawsRender(elem, &sb, []any{123}); !errors.Is(err, ErrIllegalJsVarName) {
+		t.Fatalf("expected ErrIllegalJsVarName, got %v", err)
+	}
+	if err := jsv.JawsRender(elem, &sb, []any{""}); !errors.Is(err, ErrIllegalJsVarName) {
+		t.Fatalf("expected ErrIllegalJsVarName, got %v", err)
+	}
+	if err := jsv.JawsRender(elem, &sb, []any{"9bad"}); !errors.Is(err, ErrIllegalJsVarName) {
+		t.Fatalf("expected ErrIllegalJsVarName, got %v", err)
+	}
+	if err := jsv.JawsRender(elem, &sb, []any{"bad.name"}); !errors.Is(err, ErrIllegalJsVarName) {
+		t.Fatalf("expected ErrIllegalJsVarName, got %v", err)
+	}
+}
+
+func TestErrIllegalJsVarName_Error(t *testing.T) {
+	if got := errIllegalJsVarName("").Error(); got != "illegal jsvar name" {
+		t.Fatalf("unexpected empty error string %q", got)
+	}
+	if got := errIllegalJsVarName("illegal syntax").Error(); got != "illegal jsvar name: illegal syntax" {
+		t.Fatalf("unexpected detailed error string %q", got)
 	}
 }

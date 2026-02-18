@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"io"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,6 +15,25 @@ import (
 	"github.com/linkdata/jaws/what"
 	"github.com/linkdata/jq"
 )
+
+var jsVarNameRx = regexp.MustCompile(`^[A-Za-z_$][A-Za-z0-9_$]*$`)
+
+func validateJsVarName(v []any) (name string, err error) {
+	if len(v) > 0 {
+		var ok bool
+		if name, ok = v[0].(string); !ok {
+			err = errIllegalJsVarName("expected string")
+			return
+		}
+		if !jsVarNameRx.MatchString(name) {
+			err = errIllegalJsVarName("illegal syntax")
+		}
+	}
+	if name == "" {
+		err = errIllegalJsVarName("missing")
+	}
+	return
+}
 
 type PathSetter interface {
 	// JawsSetPath should set the JSON object member identified by jspath to the given value.
@@ -127,28 +147,30 @@ func (ui *JsVar[T]) JawsRender(e *core.Element, w io.Writer, params []any) (err 
 	ui.Lock()
 	defer ui.Unlock()
 	if ui.Tag, err = e.ApplyGetter(ui.Ptr); err == nil {
-		var data []byte
-		if ui.Ptr != nil {
-			if !reflect.ValueOf(*ui.Ptr).IsZero() {
-				data, err = json.Marshal(ui.Ptr)
+		var jsvarname string
+		if jsvarname, err = validateJsVarName(params); err == nil {
+			var data []byte
+			if ui.Ptr != nil {
+				if !reflect.ValueOf(*ui.Ptr).IsZero() {
+					data, err = json.Marshal(ui.Ptr)
+				}
 			}
-		}
-		if err == nil {
-			jsvarname := params[0].(string)
-			attrs := e.ApplyParams(params[1:])
-			var b []byte
-			b = append(b, "\n<div id="...)
-			b = e.Jid().AppendQuote(b)
-			b = append(b, ` data-jawsname=`...)
-			b = strconv.AppendQuote(b, jsvarname)
-			if data != nil {
-				b = append(b, ` data-jawsdata='`...)
-				b = append(b, bytes.ReplaceAll(data, []byte(`'`), []byte(`\u0027`))...)
-				b = append(b, "'"...)
+			if err == nil {
+				attrs := e.ApplyParams(params[1:])
+				var b []byte
+				b = append(b, "\n<div id="...)
+				b = e.Jid().AppendQuote(b)
+				b = append(b, ` data-jawsname=`...)
+				b = strconv.AppendQuote(b, jsvarname)
+				if data != nil {
+					b = append(b, ` data-jawsdata='`...)
+					b = append(b, bytes.ReplaceAll(data, []byte(`'`), []byte(`\u0027`))...)
+					b = append(b, "'"...)
+				}
+				b = appendAttrs(b, attrs)
+				b = append(b, " hidden></div>"...)
+				_, err = w.Write(b)
 			}
-			b = appendAttrs(b, attrs)
-			b = append(b, " hidden></div>"...)
-			_, err = w.Write(b)
 		}
 	}
 	return
@@ -191,14 +213,19 @@ func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 //
 // You can also pass a JsVarMaker instead of a JsVar[T].
 func (rqw RequestWriter) JsVar(jsvarname string, jsvar any, params ...any) (err error) {
-	if jvm, ok := jsvar.(JsVarMaker); ok {
-		jsvar, err = jvm.JawsMakeJsVar(rqw.Request)
-	}
-	if err == nil {
-		var newparams []any
-		newparams = append(newparams, jsvarname)
-		newparams = append(newparams, params...)
-		err = rqw.UI(jsvar.(core.UI), newparams...)
+	if _, err = validateJsVarName([]any{jsvarname}); err == nil {
+		if jvm, ok := jsvar.(JsVarMaker); ok {
+			jsvar, err = jvm.JawsMakeJsVar(rqw.Request)
+		}
+		if err == nil {
+			err = ErrJsVarArgumentType
+			if ui, ok := jsvar.(core.UI); ok {
+				var newparams []any
+				newparams = append(newparams, jsvarname)
+				newparams = append(newparams, params...)
+				err = rqw.UI(ui, newparams...)
+			}
+		}
 	}
 	return
 }
