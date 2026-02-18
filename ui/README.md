@@ -112,3 +112,13 @@ func (w *UList) JawsUpdate(e *jaws.Element) {
   w.UpdateContainer(e)
 }
 ```
+
+## Container error behavior
+
+`ContainerHelper` treats child render/update failures as application bugs.
+
+- During initial render, child render failures are returned as errors.
+- During updates, append render failures are reported through `MustLog` (and
+  may panic if no logger is configured).
+- After such failures, partial DOM/request state updates are expected; state may
+  remain inconsistent until a subsequent full render/reload.
