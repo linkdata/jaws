@@ -6258,7 +6258,6 @@ import (
         "encoding/json"
         "html/template"
         "io"
-        "reflect"
         "regexp"
         "strconv"
         "strings"
@@ -6407,11 +6406,8 @@ func (ui *JsVar[T]) JawsRender(e *core.Element, w io.Writer, params []any) (err 
                 if jsvarname, err = validateJsVarName(params); err == nil </span><span class="cov8" title="1">{
                         var data []byte
                         if ui.Ptr != nil </span><span class="cov8" title="1">{
-                                rv := reflect.ValueOf(*ui.Ptr)
-                                if rv.IsValid() &amp;&amp; !rv.IsZero() </span><span class="cov8" title="1">{
-                                        data, err = json.Marshal(ui.Ptr)
-                                }</span>
-                        }
+                                data, err = json.Marshal(ui.Ptr)
+                        }</span>
                         <span class="cov8" title="1">if err == nil </span><span class="cov8" title="1">{
                                 attrs := e.ApplyParams(params[1:])
                                 var b []byte
