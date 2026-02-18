@@ -98,7 +98,7 @@ func (ui *WrapContainer) UpdateContainer(e *core.Element) {
 
 	for _, elem := range toAppend {
 		var sb strings.Builder
-		must(elem.JawsRender(&sb, nil))
+		e.Jaws.MustLog(elem.JawsRender(&sb, nil))
 		e.Append(template.HTML(sb.String())) // #nosec G203
 	}
 

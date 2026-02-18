@@ -28,13 +28,3 @@ func TestCommon_applyDirty(t *testing.T) {
 		t.Fatalf("want unchanged,%v got %v,%v", wantErr, changed, err)
 	}
 }
-
-func TestCommon_must(t *testing.T) {
-	must(nil)
-	defer func() {
-		if recover() == nil {
-			t.Fatal("expected panic")
-		}
-	}()
-	must(errors.New("panic"))
-}
