@@ -60,40 +60,42 @@ func (ui *ContainerHelper) RenderContainer(e *core.Element, w io.Writer, outerHT
 }
 
 func (ui *ContainerHelper) UpdateContainer(e *core.Element) {
-	var toRemove, toAppend []*core.Element
-	var orderData []core.Jid
+	var toAppend []*core.Element
 
-	oldMap := make(map[core.UI]*core.Element)
-	newMap := make(map[core.UI]struct{})
-	newContents := ui.Container.JawsContains(e)
-	for _, childUI := range newContents {
-		newMap[childUI] = struct{}{}
-	}
+	wantContents := ui.Container.JawsContains(e)
+	newOrder := make([]core.Jid, 0, len(wantContents))
 
 	ui.mu.Lock()
+	// build pool of reusable Elements keyed by UI, preserving duplicates
+	pool := make(map[core.UI][]*core.Element, len(ui.contents))
 	oldOrder := make([]core.Jid, len(ui.contents))
 	for i, elem := range ui.contents {
 		oldOrder[i] = elem.Jid()
-		oldMap[elem.Ui()] = elem
-		if _, ok := newMap[elem.Ui()]; !ok {
-			toRemove = append(toRemove, elem)
-		}
+		pool[elem.Ui()] = append(pool[elem.Ui()], elem)
 	}
+
+	// build new contents, reusing pooled Elements where possible
 	ui.contents = ui.contents[:0]
-	for _, childUI := range newContents {
-		elem := oldMap[childUI]
-		if elem == nil {
+	for _, childUI := range wantContents {
+		var elem *core.Element
+		if elems := pool[childUI]; len(elems) > 0 {
+			elem = elems[0]
+			pool[childUI] = elems[1:]
+		} else {
 			elem = e.Request.NewElement(childUI)
 			toAppend = append(toAppend, elem)
 		}
 		ui.contents = append(ui.contents, elem)
-		orderData = append(orderData, elem.Jid())
+		newOrder = append(newOrder, elem.Jid())
 	}
 	ui.mu.Unlock()
 
-	for _, elem := range toRemove {
-		e.Remove(elem.Jid().String())
-		e.Request.DeleteElement(elem)
+	// remove leftover Elements not present in new contents
+	for _, elems := range pool {
+		for _, elem := range elems {
+			e.Remove(elem.Jid().String())
+			e.Request.DeleteElement(elem)
+		}
 	}
 
 	for _, elem := range toAppend {
@@ -102,7 +104,7 @@ func (ui *ContainerHelper) UpdateContainer(e *core.Element) {
 		e.Append(template.HTML(sb.String())) // #nosec G203
 	}
 
-	if !slices.Equal(oldOrder, orderData) {
-		e.Order(orderData)
+	if !slices.Equal(oldOrder, newOrder) {
+		e.Order(newOrder)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws/core"
+	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -58,6 +59,63 @@ func TestContainerHelperUpdateContainer(t *testing.T) {
 	container.JawsUpdate(elem)
 	if len(container.contents) != 2 {
 		t.Fatalf("want 2 contents got %d", len(container.contents))
+	}
+}
+
+func TestContainerHelperUpdateContainerDuplicates(t *testing.T) {
+	_, rq := newRequest(t)
+	span1 := NewSpan(testHTMLGetter("span1"))
+	span2 := NewSpan(testHTMLGetter("span2"))
+
+	// render with duplicate UI
+	tc := &testContainer{contents: []core.UI{span1, span2, span1}}
+	container := NewContainer("div", tc)
+	elem, _ := renderUI(t, rq, container)
+
+	if len(container.contents) != 3 {
+		t.Fatalf("want 3 contents got %d", len(container.contents))
+	}
+	// the two span1 Elements must have distinct Jids
+	jid0 := container.contents[0].Jid()
+	jid2 := container.contents[2].Jid()
+	if jid0 == jid2 {
+		t.Fatal("duplicate UI must produce distinct Jids")
+	}
+
+	// remove one duplicate, keep the other
+	tc.contents = []core.UI{span2, span1}
+	container.JawsUpdate(elem)
+	if len(container.contents) != 2 {
+		t.Fatalf("want 2 contents got %d", len(container.contents))
+	}
+	// one of the two span1 Jids should have been removed
+	kept := container.contents[1].Jid()
+	if kept != jid0 && kept != jid2 {
+		t.Fatalf("expected kept Jid to be one of the original span1 Jids")
+	}
+	var removedJid jid.Jid
+	if kept == jid0 {
+		removedJid = jid2
+	} else {
+		removedJid = jid0
+	}
+	if got := rq.GetElementByJid(removedJid); got != nil {
+		t.Fatal("expected surplus duplicate to be deleted from request")
+	}
+
+	// add more duplicates
+	tc.contents = []core.UI{span1, span2, span1, span2}
+	container.JawsUpdate(elem)
+	if len(container.contents) != 4 {
+		t.Fatalf("want 4 contents got %d", len(container.contents))
+	}
+	// all four must have distinct Jids
+	jids := make(map[jid.Jid]struct{}, 4)
+	for i, c := range container.contents {
+		if _, ok := jids[c.Jid()]; ok {
+			t.Fatalf("contents[%d] has duplicate Jid %v", i, c.Jid())
+		}
+		jids[c.Jid()] = struct{}{}
 	}
 }
 
