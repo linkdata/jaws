@@ -3,6 +3,7 @@ package ui
 import (
 	"bytes"
 	"errors"
+	"html/template"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,6 +20,14 @@ type testRWUpdater struct {
 func (u *testRWUpdater) JawsUpdate(*core.Element) {
 	u.called++
 }
+
+type requestWriterFailGetter struct {
+	err error
+}
+
+func (g requestWriterFailGetter) JawsGetHTML(*core.Element) template.HTML { return "x" }
+func (g requestWriterFailGetter) JawsGetTag(*core.Request) any            { return g }
+func (g requestWriterFailGetter) JawsInit(*core.Element) error            { return g.err }
 
 func newSessionBoundRequest(t *testing.T) (*core.Jaws, *core.Request) {
 	t.Helper()
@@ -141,5 +150,21 @@ func TestErrMissingTemplateAndRWLocker(t *testing.T) {
 	}
 	if !errors.Is(err, ErrMissingTemplate) {
 		t.Fatal("expected errors.Is match")
+	}
+}
+
+func TestRequestWriterUI_RenderErrorDoesNotLeakElement(t *testing.T) {
+	core.NextJid = 0
+	_, rq := newRequest(t)
+	var buf bytes.Buffer
+	rw := RequestWriter{Request: rq, Writer: &buf}
+
+	renderErr := errors.New("render failed")
+	if err := rw.UI(NewA(requestWriterFailGetter{err: renderErr})); !errors.Is(err, renderErr) {
+		t.Fatalf("want %v got %v", renderErr, err)
+	}
+
+	if leaked := rq.GetElementByJid(1); leaked != nil {
+		t.Fatalf("expected failed render element to be removed from request registry: %v", leaked.Jid())
 	}
 }

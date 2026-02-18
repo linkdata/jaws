@@ -12,8 +12,12 @@ type RequestWriter struct {
 	io.Writer
 }
 
-func (rqw RequestWriter) UI(ui core.UI, params ...any) error {
-	return rqw.NewElement(ui).JawsRender(rqw, params)
+func (rqw RequestWriter) UI(ui core.UI, params ...any) (err error) {
+	elem := rqw.NewElement(ui)
+	if err = elem.JawsRender(rqw, params); err != nil {
+		rqw.DeleteElement(elem)
+	}
+	return
 }
 
 func (rqw RequestWriter) Write(p []byte) (n int, err error) {
