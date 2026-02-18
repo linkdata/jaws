@@ -6752,9 +6752,13 @@ type RequestWriter struct {
         io.Writer
 }
 
-func (rqw RequestWriter) UI(ui core.UI, params ...any) error <span class="cov8" title="1">{
-        return rqw.NewElement(ui).JawsRender(rqw, params)
-}</span>
+func (rqw RequestWriter) UI(ui core.UI, params ...any) (err error) <span class="cov8" title="1">{
+        elem := rqw.NewElement(ui)
+        if err = elem.JawsRender(rqw, params); err != nil </span><span class="cov8" title="1">{
+                rqw.DeleteElement(elem)
+        }</span>
+        <span class="cov8" title="1">return</span>
+}
 
 func (rqw RequestWriter) Write(p []byte) (n int, err error) <span class="cov8" title="1">{
         rqw.Rendering.Store(true)
