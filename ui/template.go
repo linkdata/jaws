@@ -32,6 +32,9 @@ func (t Template) String() string {
 }
 
 func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
+	isJidOrJs := func(s string) bool {
+		return (s == "Jid") || (s == "JsFunc") || (s == "JsVar")
+	}
 	switch node := node.(type) {
 	case *parse.TextNode:
 		if node != nil {
@@ -63,6 +66,16 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
 			found = found || findJidOrJsOrHTMLNode(node.List)
 			found = found || findJidOrJsOrHTMLNode(node.ElseList)
 		}
+	case *parse.RangeNode:
+		if node != nil {
+			found = findJidOrJsOrHTMLNode(node.Pipe)
+			found = found || findJidOrJsOrHTMLNode(node.List)
+			found = found || findJidOrJsOrHTMLNode(node.ElseList)
+		}
+	case *parse.TemplateNode:
+		if node != nil {
+			found = findJidOrJsOrHTMLNode(node.Pipe)
+		}
 	case *parse.PipeNode:
 		if node != nil {
 			for _, n := range node.Cmds {
@@ -78,7 +91,24 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
 	case *parse.VariableNode:
 		if node != nil {
 			for _, s := range node.Ident {
-				found = found || (s == "Jid") || (s == "JsFunc") || (s == "JsVar")
+				found = found || isJidOrJs(s)
+			}
+		}
+	case *parse.FieldNode:
+		if node != nil {
+			for _, s := range node.Ident {
+				found = found || isJidOrJs(s)
+			}
+		}
+	case *parse.IdentifierNode:
+		if node != nil {
+			found = found || isJidOrJs(node.Ident)
+		}
+	case *parse.ChainNode:
+		if node != nil {
+			found = findJidOrJsOrHTMLNode(node.Node)
+			for _, s := range node.Field {
+				found = found || isJidOrJs(s)
 			}
 		}
 	}

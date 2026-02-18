@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"text/template/parse"
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/core"
@@ -117,6 +118,39 @@ func TestTemplate_findJidOrJsOrHTMLNode(t *testing.T) {
 	))
 	if !findJidOrJsOrHTMLNode(complex.Tree.Root) {
 		t.Fatal("expected Jid/Js node match")
+	}
+
+	rangeNode := template.Must(template.New("range").Parse(`{{range .}}{{$.Jid}}{{end}}`))
+	if !findJidOrJsOrHTMLNode(rangeNode.Tree.Root) {
+		t.Fatal("expected range node Jid match")
+	}
+
+	templateNode := &parse.TemplateNode{
+		Pipe: &parse.PipeNode{
+			Cmds: []*parse.CommandNode{{
+				Args: []parse.Node{
+					&parse.VariableNode{Ident: []string{"$", "Jid"}},
+				},
+			}},
+		},
+	}
+	if !findJidOrJsOrHTMLNode(templateNode) {
+		t.Fatal("expected template node Jid match")
+	}
+
+	if !findJidOrJsOrHTMLNode(&parse.FieldNode{Ident: []string{"Jid"}}) {
+		t.Fatal("expected field node Jid match")
+	}
+
+	if !findJidOrJsOrHTMLNode(&parse.IdentifierNode{Ident: "JsVar"}) {
+		t.Fatal("expected identifier node JsVar match")
+	}
+
+	if !findJidOrJsOrHTMLNode(&parse.ChainNode{
+		Node:  &parse.VariableNode{Ident: []string{"$"}},
+		Field: []string{"JsFunc"},
+	}) {
+		t.Fatal("expected chain node JsFunc match")
 	}
 }
 
