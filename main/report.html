@@ -197,33 +197,35 @@
 				
 				<option value="file70">github.com/linkdata/jaws/ui/radio.go (100.0%)</option>
 				
-				<option value="file71">github.com/linkdata/jaws/ui/range.go (100.0%)</option>
+				<option value="file71">github.com/linkdata/jaws/ui/radiogroup.go (100.0%)</option>
 				
-				<option value="file72">github.com/linkdata/jaws/ui/register.go (100.0%)</option>
+				<option value="file72">github.com/linkdata/jaws/ui/range.go (100.0%)</option>
 				
-				<option value="file73">github.com/linkdata/jaws/ui/requestwriter.go (100.0%)</option>
+				<option value="file73">github.com/linkdata/jaws/ui/register.go (100.0%)</option>
 				
-				<option value="file74">github.com/linkdata/jaws/ui/rwlocker.go (100.0%)</option>
+				<option value="file74">github.com/linkdata/jaws/ui/requestwriter.go (100.0%)</option>
 				
-				<option value="file75">github.com/linkdata/jaws/ui/select.go (100.0%)</option>
+				<option value="file75">github.com/linkdata/jaws/ui/rwlocker.go (100.0%)</option>
 				
-				<option value="file76">github.com/linkdata/jaws/ui/span.go (100.0%)</option>
+				<option value="file76">github.com/linkdata/jaws/ui/select.go (100.0%)</option>
 				
-				<option value="file77">github.com/linkdata/jaws/ui/tbody.go (100.0%)</option>
+				<option value="file77">github.com/linkdata/jaws/ui/span.go (100.0%)</option>
 				
-				<option value="file78">github.com/linkdata/jaws/ui/td.go (100.0%)</option>
+				<option value="file78">github.com/linkdata/jaws/ui/tbody.go (100.0%)</option>
 				
-				<option value="file79">github.com/linkdata/jaws/ui/template.go (100.0%)</option>
+				<option value="file79">github.com/linkdata/jaws/ui/td.go (100.0%)</option>
 				
-				<option value="file80">github.com/linkdata/jaws/ui/text.go (100.0%)</option>
+				<option value="file80">github.com/linkdata/jaws/ui/template.go (100.0%)</option>
 				
-				<option value="file81">github.com/linkdata/jaws/ui/textarea.go (100.0%)</option>
+				<option value="file81">github.com/linkdata/jaws/ui/text.go (100.0%)</option>
 				
-				<option value="file82">github.com/linkdata/jaws/ui/tr.go (100.0%)</option>
+				<option value="file82">github.com/linkdata/jaws/ui/textarea.go (100.0%)</option>
 				
-				<option value="file83">github.com/linkdata/jaws/what/what.go (100.0%)</option>
+				<option value="file83">github.com/linkdata/jaws/ui/tr.go (100.0%)</option>
 				
-				<option value="file84">github.com/linkdata/jaws/what/what_string.go (100.0%)</option>
+				<option value="file84">github.com/linkdata/jaws/what/what.go (100.0%)</option>
+				
+				<option value="file85">github.com/linkdata/jaws/what/what_string.go (100.0%)</option>
 				
 				</select>
 			</div>
@@ -6615,6 +6617,52 @@ func (ui *Radio) JawsRender(e *core.Element, w io.Writer, params []any) error <s
 		<pre class="file" id="file71" style="display: none">package ui
 
 import (
+        "html/template"
+        "strings"
+
+        "github.com/linkdata/jaws/core"
+)
+
+type RadioElement struct {
+        radio    *core.Element
+        label    *core.Element
+        nameAttr string
+}
+
+func (rw RequestWriter) RadioGroup(nba *core.NamedBoolArray) (rel []RadioElement) <span class="cov8" title="1">{
+        nameAttr := `name="` + core.MakeID() + `"`
+        nba.ReadLocked(func(nbl []*core.NamedBool) </span><span class="cov8" title="1">{
+                for _, nb := range nbl </span><span class="cov8" title="1">{
+                        rel = append(rel, RadioElement{
+                                radio:    rw.Request.NewElement(NewRadio(nb)),
+                                label:    rw.Request.NewElement(NewLabel(nb)),
+                                nameAttr: nameAttr,
+                        },
+                        )
+                }</span>
+        })
+        <span class="cov8" title="1">return</span>
+}
+
+// Radio renders a HTML input element of type 'radio'.
+func (re RadioElement) Radio(params ...any) template.HTML <span class="cov8" title="1">{
+        var sb strings.Builder
+        re.radio.Jaws.MustLog(re.radio.JawsRender(&amp;sb, append(params, re.nameAttr)))
+        return template.HTML(sb.String()) // #nosec G203
+}</span>
+
+// Label renders a HTML label element.
+func (re RadioElement) Label(params ...any) template.HTML <span class="cov8" title="1">{
+        var sb strings.Builder
+        forAttr := string(re.radio.Jid().AppendQuote([]byte("for=")))
+        re.label.Jaws.MustLog(re.label.JawsRender(&amp;sb, append(params, forAttr)))
+        return template.HTML(sb.String()) // #nosec G203
+}</span>
+</pre>
+		
+		<pre class="file" id="file72" style="display: none">package ui
+
+import (
         "io"
 
         "github.com/linkdata/jaws/core"
@@ -6632,7 +6680,7 @@ func (ui *Range) JawsRender(e *core.Element, w io.Writer, params []any) error <s
 }</span>
 </pre>
 		
-		<pre class="file" id="file72" style="display: none">package ui
+		<pre class="file" id="file73" style="display: none">package ui
 
 import (
         "io"
@@ -6666,7 +6714,7 @@ func (rqw RequestWriter) Register(updater core.Updater, params ...any) jid.Jid <
 }</span>
 </pre>
 		
-		<pre class="file" id="file73" style="display: none">package ui
+		<pre class="file" id="file74" style="display: none">package ui
 
 import (
         "io"
@@ -6721,7 +6769,7 @@ func (rqw RequestWriter) TailHTML() error <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file74" style="display: none">package ui
+		<pre class="file" id="file75" style="display: none">package ui
 
 import "sync"
 
@@ -6738,7 +6786,7 @@ func (l rwlocker) RUnlock() <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file75" style="display: none">package ui
+		<pre class="file" id="file76" style="display: none">package ui
 
 import (
         "io"
@@ -6777,7 +6825,7 @@ func (ui *Select) JawsEvent(e *core.Element, wht what.What, val string) (err err
 }
 </pre>
 		
-		<pre class="file" id="file76" style="display: none">package ui
+		<pre class="file" id="file77" style="display: none">package ui
 
 import (
         "io"
@@ -6797,7 +6845,7 @@ func (ui *Span) JawsRender(e *core.Element, w io.Writer, params []any) error <sp
 }</span>
 </pre>
 		
-		<pre class="file" id="file77" style="display: none">package ui
+		<pre class="file" id="file78" style="display: none">package ui
 
 import (
         "io"
@@ -6826,7 +6874,7 @@ func (ui *Tbody) JawsUpdate(e *core.Element) <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file78" style="display: none">package ui
+		<pre class="file" id="file79" style="display: none">package ui
 
 import (
         "io"
@@ -6846,7 +6894,7 @@ func (ui *Td) JawsRender(e *core.Element, w io.Writer, params []any) error <span
 }</span>
 </pre>
 		
-		<pre class="file" id="file79" style="display: none">package ui
+		<pre class="file" id="file80" style="display: none">package ui
 
 import (
         "bytes"
@@ -7022,7 +7070,7 @@ func (rqw RequestWriter) Template(name string, dot any, params ...any) error <sp
 }</span>
 </pre>
 		
-		<pre class="file" id="file80" style="display: none">package ui
+		<pre class="file" id="file81" style="display: none">package ui
 
 import (
         "io"
@@ -7042,7 +7090,7 @@ func (ui *Text) JawsRender(e *core.Element, w io.Writer, params []any) error <sp
 }</span>
 </pre>
 		
-		<pre class="file" id="file81" style="display: none">package ui
+		<pre class="file" id="file82" style="display: none">package ui
 
 import (
         "html/template"
@@ -7069,7 +7117,7 @@ func (ui *Textarea) JawsRender(e *core.Element, w io.Writer, params []any) (err 
 func (ui *Textarea) JawsUpdate(e *core.Element) <span class="cov8" title="1">{ e.SetValue(ui.JawsGet(e)) }</span>
 </pre>
 		
-		<pre class="file" id="file82" style="display: none">package ui
+		<pre class="file" id="file83" style="display: none">package ui
 
 import (
         "io"
@@ -7089,7 +7137,7 @@ func (ui *Tr) JawsRender(e *core.Element, w io.Writer, params []any) error <span
 }</span>
 </pre>
 		
-		<pre class="file" id="file83" style="display: none">package what
+		<pre class="file" id="file84" style="display: none">package what
 
 import "strings"
 
@@ -7155,7 +7203,7 @@ func Parse(s string) What <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file84" style="display: none">// Code generated by "stringer -type=What"; DO NOT EDIT.
+		<pre class="file" id="file85" style="display: none">// Code generated by "stringer -type=What"; DO NOT EDIT.
 
 package what
 
