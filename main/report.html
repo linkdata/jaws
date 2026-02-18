@@ -5834,6 +5834,7 @@ func (ui *ContainerHelper) RenderContainer(e *core.Element, w io.Writer, outerHT
                         for _, childUI := range ui.Container.JawsContains(e) </span><span class="cov8" title="1">{
                                 elem := e.Request.NewElement(childUI)
                                 if err = elem.JawsRender(w, nil); err != nil </span><span class="cov8" title="1">{
+                                        e.Request.DeleteElement(elem)
                                         break</span>
                                 }
                                 <span class="cov8" title="1">contents = append(contents, elem)</span>
@@ -6265,6 +6266,7 @@ import (
         "encoding/json"
         "html/template"
         "io"
+        "reflect"
         "regexp"
         "strconv"
         "strings"
@@ -6472,6 +6474,14 @@ func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] <span class="cov8" title="1"
         <span class="cov8" title="1">return &amp;JsVar[T]{RWLocker: rwlocker{l}, Ptr: v}</span>
 }
 
+func isNilUI(ui core.UI) (yes bool) <span class="cov8" title="1">{
+        if yes = (ui == nil); !yes </span><span class="cov8" title="1">{
+                rv := reflect.ValueOf(ui)
+                yes = rv.Kind() == reflect.Pointer &amp;&amp; rv.IsNil()
+        }</span>
+        <span class="cov8" title="1">return</span>
+}
+
 // JsVar binds a JsVar[T] to a named Javascript variable.
 //
 // You can also pass a JsVarMaker instead of a JsVar[T].
@@ -6483,11 +6493,13 @@ func (rqw RequestWriter) JsVar(jsvarname string, jsvar any, params ...any) (err 
                 <span class="cov8" title="1">if err == nil </span><span class="cov8" title="1">{
                         err = ErrJsVarArgumentType
                         if ui, ok := jsvar.(core.UI); ok </span><span class="cov8" title="1">{
-                                var newparams []any
-                                newparams = append(newparams, jsvarname)
-                                newparams = append(newparams, params...)
-                                err = rqw.UI(ui, newparams...)
-                        }</span>
+                                if !isNilUI(ui) </span><span class="cov8" title="1">{
+                                        var newparams []any
+                                        newparams = append(newparams, jsvarname)
+                                        newparams = append(newparams, params...)
+                                        err = rqw.UI(ui, newparams...)
+                                }</span>
+                        }
                 }
         }
         <span class="cov8" title="1">return</span>
@@ -6824,6 +6836,7 @@ func (ui *Select) JawsRender(e *core.Element, w io.Writer, params []any) error <
 }</span>
 
 func (ui *Select) JawsUpdate(e *core.Element) <span class="cov8" title="1">{
+        // core.Setter[T] includes core.Getter[T]
         e.SetValue(ui.ContainerHelper.Container.(core.Getter[string]).JawsGet(e))
         ui.UpdateContainer(e)
 }</span>
