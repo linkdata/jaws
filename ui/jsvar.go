@@ -154,7 +154,8 @@ func (ui *JsVar[T]) JawsRender(e *core.Element, w io.Writer, params []any) (err 
 		if jsvarname, err = validateJsVarName(params); err == nil {
 			var data []byte
 			if ui.Ptr != nil {
-				if !reflect.ValueOf(*ui.Ptr).IsZero() {
+				rv := reflect.ValueOf(*ui.Ptr)
+				if rv.IsValid() && !rv.IsZero() {
 					data, err = json.Marshal(ui.Ptr)
 				}
 			}
@@ -205,6 +206,9 @@ func (ui *JsVar[T]) JawsEvent(e *core.Element, wht what.What, val string) (err e
 	return
 }
 
+// NewJsVar creates a JsVar over v protected by l.
+//
+// The locker l must be non-nil and must remain valid for the lifetime of the JsVar.
 func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 	if rl, ok := l.(core.RWLocker); ok {
 		return &JsVar[T]{RWLocker: rl, Ptr: v}

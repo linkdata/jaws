@@ -250,3 +250,28 @@ func TestJsVar_JawsGetWithNilPointerReturnsZeroValue(t *testing.T) {
 		t.Fatalf("want zero value got %#v", got)
 	}
 }
+
+func TestJsVar_RenderWithNilInterfaceValueDoesNotPanic(t *testing.T) {
+	_, rq := newRequest(t)
+
+	var mu sync.Mutex
+	var data any
+	jsv := NewJsVar(&mu, &data)
+	elem := rq.NewElement(jsv)
+
+	var sb bytes.Buffer
+	panicked := false
+	var panicValue any
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				panicked = true
+				panicValue = r
+			}
+		}()
+		_ = jsv.JawsRender(elem, &sb, []any{"niliface"})
+	}()
+	if panicked {
+		t.Fatalf("JawsRender should not panic for nil interface values: %v", panicValue)
+	}
+}
