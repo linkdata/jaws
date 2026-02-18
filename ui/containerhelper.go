@@ -50,6 +50,7 @@ func (ui *ContainerHelper) RenderContainer(e *core.Element, w io.Writer, outerHT
 			for _, childUI := range ui.Container.JawsContains(e) {
 				elem := e.Request.NewElement(childUI)
 				if err = elem.JawsRender(w, nil); err != nil {
+					e.Request.DeleteElement(elem)
 					break
 				}
 				contents = append(contents, elem)

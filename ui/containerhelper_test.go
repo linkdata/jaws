@@ -160,6 +160,41 @@ func (ui testRenderErrorUI) JawsRender(*core.Element, io.Writer, []any) error {
 
 func (testRenderErrorUI) JawsUpdate(*core.Element) {}
 
+type testRenderErrorCaptureUI struct {
+	err error
+	jid core.Jid
+}
+
+func (ui *testRenderErrorCaptureUI) JawsRender(e *core.Element, _ io.Writer, _ []any) error {
+	ui.jid = e.Jid()
+	return ui.err
+}
+
+func (*testRenderErrorCaptureUI) JawsUpdate(*core.Element) {}
+
+func TestContainerHelperRenderErrorDoesNotLeakFailedChildElement(t *testing.T) {
+	core.NextJid = 0
+	_, rq := newRequest(t)
+
+	renderErr := errors.New("render error")
+	failingChild := &testRenderErrorCaptureUI{err: renderErr}
+	tc := &testContainer{contents: []core.UI{NewSpan(testHTMLGetter("ok")), failingChild}}
+	container := NewContainer("div", tc)
+
+	elem := rq.NewElement(container)
+	var sb strings.Builder
+	if err := elem.JawsRender(&sb, nil); !errors.Is(err, renderErr) {
+		t.Fatalf("want %v got %v", renderErr, err)
+	}
+
+	if !failingChild.jid.IsValid() {
+		t.Fatal("expected failing child jid to be captured")
+	}
+	if leaked := rq.GetElementByJid(failingChild.jid); leaked != nil {
+		t.Fatalf("expected failed child %v to be removed from request registry", failingChild.jid)
+	}
+}
+
 type testSelectHandler struct {
 	*testContainer
 	*testSetter[string]
