@@ -6,7 +6,7 @@
 //   - `HTMLInner`: base renderer for tags with inner HTML content.
 //   - `Input`, `InputText`, `InputBool`, `InputFloat`, `InputDate`:
 //     typed input helpers that handle event/update flow.
-//   - `WrapContainer`: helper for widgets that render dynamic child UI lists.
+//   - `ContainerHelper`: helper for widgets that render dynamic child UI lists.
 //
 // Naming follows short widget names (`Span`, `NewSpan`) instead of the
 // legacy core names (`UiSpan`, `NewUiSpan`).

@@ -7,11 +7,11 @@ import (
 )
 
 type Tbody struct {
-	WrapContainer
+	ContainerHelper
 }
 
 func NewTbody(c core.Container) *Tbody {
-	return &Tbody{WrapContainer: NewWrapContainer(c)}
+	return &Tbody{ContainerHelper: NewContainerHelper(c)}
 }
 
 func (rw RequestWriter) Tbody(c core.Container, params ...any) error {

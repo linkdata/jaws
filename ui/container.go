@@ -8,13 +8,13 @@ import (
 
 type Container struct {
 	OuterHTMLTag string
-	WrapContainer
+	ContainerHelper
 }
 
 func NewContainer(outerHTMLTag string, c core.Container) *Container {
 	return &Container{
-		OuterHTMLTag:  outerHTMLTag,
-		WrapContainer: NewWrapContainer(c),
+		OuterHTMLTag:    outerHTMLTag,
+		ContainerHelper: NewContainerHelper(c),
 	}
 }
 

@@ -10,22 +10,22 @@ import (
 	"github.com/linkdata/jaws/core"
 )
 
-// WrapContainer is a helper for widgets that render dynamic child collections.
+// ContainerHelper is a helper for widgets that render dynamic child collections.
 //
 // It tracks previously rendered child elements and performs append/remove/order
 // updates during JawsUpdate.
-type WrapContainer struct {
+type ContainerHelper struct {
 	Container core.Container
 	Tag       any
 	mu        sync.Mutex
 	contents  []*core.Element
 }
 
-func NewWrapContainer(c core.Container) WrapContainer {
-	return WrapContainer{Container: c}
+func NewContainerHelper(c core.Container) ContainerHelper {
+	return ContainerHelper{Container: c}
 }
 
-func (ui *WrapContainer) RenderContainer(e *core.Element, w io.Writer, outerHTMLTag string, params []any) (err error) {
+func (ui *ContainerHelper) RenderContainer(e *core.Element, w io.Writer, outerHTMLTag string, params []any) (err error) {
 	if ui.Tag, err = e.ApplyGetter(ui.Container); err == nil {
 		attrs := e.ApplyParams(params)
 		b := e.Jid().AppendStartTagAttr(nil, outerHTMLTag)
@@ -59,7 +59,7 @@ func (ui *WrapContainer) RenderContainer(e *core.Element, w io.Writer, outerHTML
 	return
 }
 
-func (ui *WrapContainer) UpdateContainer(e *core.Element) {
+func (ui *ContainerHelper) UpdateContainer(e *core.Element) {
 	var toRemove, toAppend []*core.Element
 	var orderData []core.Jid
 

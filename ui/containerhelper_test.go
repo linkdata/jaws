@@ -24,7 +24,7 @@ func TestContainerAndTbodyRender(t *testing.T) {
 	tbody.JawsUpdate(elem)
 }
 
-func TestWrapContainerUpdateContainer(t *testing.T) {
+func TestContainerHelperUpdateContainer(t *testing.T) {
 	_, rq := newRequest(t)
 	span1 := NewSpan(testHTMLGetter("span1"))
 	span2 := NewSpan(testHTMLGetter("span2"))
@@ -61,7 +61,7 @@ func TestWrapContainerUpdateContainer(t *testing.T) {
 	}
 }
 
-func TestWrapContainerRenderErrorPaths(t *testing.T) {
+func TestContainerHelperRenderErrorPaths(t *testing.T) {
 	_, rq := newRequest(t)
 	renderErr := errors.New("render error")
 	errChild := testRenderErrorUI{err: renderErr}

@@ -49,7 +49,7 @@ rw.UI(ui.NewRange(myFloatSetter))
   - For tags like `<div>...</div>`, `<span>...</span>`, `<td>...</td>`.
 - `Input`, `InputText`, `InputBool`, `InputFloat`, `InputDate`
   - For interactive inputs with typed parse/update behavior.
-- `WrapContainer`
+- `ContainerHelper`
   - For widgets that render and maintain dynamic child lists.
 
 ## Adding a simple static widget
@@ -86,13 +86,13 @@ Each base handles:
 
 ## Adding a container widget
 
-Use `WrapContainer`:
+Use `ContainerHelper`:
 
 ```go
-type UList struct{ ui.WrapContainer }
+type UList struct{ ui.ContainerHelper }
 
 func NewUList(c jaws.Container) *UList {
-  return &UList{WrapContainer: ui.NewWrapContainer(c)}
+  return &UList{ContainerHelper: ui.NewContainerHelper(c)}
 }
 
 func (w *UList) JawsRender(e *jaws.Element, wr io.Writer, params []any) error {

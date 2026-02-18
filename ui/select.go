@@ -8,11 +8,11 @@ import (
 )
 
 type Select struct {
-	WrapContainer
+	ContainerHelper
 }
 
 func NewSelect(sh core.SelectHandler) *Select {
-	return &Select{WrapContainer: NewWrapContainer(sh)}
+	return &Select{ContainerHelper: NewContainerHelper(sh)}
 }
 
 func (rw RequestWriter) Select(sh core.SelectHandler, params ...any) error {
@@ -24,14 +24,14 @@ func (ui *Select) JawsRender(e *core.Element, w io.Writer, params []any) error {
 }
 
 func (ui *Select) JawsUpdate(e *core.Element) {
-	e.SetValue(ui.WrapContainer.Container.(core.Getter[string]).JawsGet(e))
+	e.SetValue(ui.ContainerHelper.Container.(core.Getter[string]).JawsGet(e))
 	ui.UpdateContainer(e)
 }
 
 func (ui *Select) JawsEvent(e *core.Element, wht what.What, val string) (err error) {
 	err = core.ErrEventUnhandled
 	if wht == what.Input {
-		_, err = applyDirty(ui.Tag, e, ui.WrapContainer.Container.(core.Setter[string]).JawsSet(e, val))
+		_, err = applyDirty(ui.Tag, e, ui.ContainerHelper.Container.(core.Setter[string]).JawsSet(e, val))
 	}
 	return
 }
