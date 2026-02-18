@@ -5833,16 +5833,21 @@ func (ui *ContainerHelper) RenderContainer(e *core.Element, w io.Writer, outerHT
                         var contents []*core.Element
                         for _, childUI := range ui.Container.JawsContains(e) </span><span class="cov8" title="1">{
                                 elem := e.Request.NewElement(childUI)
+                                contents = append(contents, elem)
                                 if err = elem.JawsRender(w, nil); err != nil </span><span class="cov8" title="1">{
-                                        e.Request.DeleteElement(elem)
                                         break</span>
                                 }
-                                <span class="cov8" title="1">contents = append(contents, elem)</span>
                         }
-                        <span class="cov8" title="1">ui.mu.Lock()
-                        ui.contents = contents
-                        ui.mu.Unlock()
-                        b = b[:0]
+                        <span class="cov8" title="1">if err == nil </span><span class="cov8" title="1">{
+                                ui.mu.Lock()
+                                ui.contents = contents
+                                ui.mu.Unlock()
+                        }</span> else<span class="cov8" title="1"> {
+                                for _, elem := range contents </span><span class="cov8" title="1">{
+                                        e.Request.DeleteElement(elem)
+                                }</span>
+                        }
+                        <span class="cov8" title="1">b = b[:0]
                         b = append(b, "&lt;/"...)
                         b = append(b, outerHTMLTag...)
                         b = append(b, '&gt;')
@@ -6841,7 +6846,7 @@ func (ui *Select) JawsRender(e *core.Element, w io.Writer, params []any) error <
 
 func (ui *Select) JawsUpdate(e *core.Element) <span class="cov8" title="1">{
         // core.Setter[T] includes core.Getter[T]
-        e.SetValue(ui.ContainerHelper.Container.(core.Getter[string]).JawsGet(e))
+        e.SetValue(ui.ContainerHelper.Container.(core.Setter[string]).JawsGet(e))
         ui.UpdateContainer(e)
 }</span>
 
