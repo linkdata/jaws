@@ -5734,12 +5734,6 @@ func (ui *Checkbox) JawsRender(e *core.Element, w io.Writer, params []any) error
 
 import "github.com/linkdata/jaws/core"
 
-func must(err error) <span class="cov8" title="1">{
-        if err != nil </span><span class="cov8" title="1">{
-                panic(err)</span>
-        }
-}
-
 func applyDirty(tag any, e *core.Element, err error) (changed bool, retErr error) <span class="cov8" title="1">{
         switch err </span>{
         case nil:<span class="cov8" title="1">
@@ -5886,7 +5880,7 @@ func (ui *WrapContainer) UpdateContainer(e *core.Element) <span class="cov8" tit
 
         <span class="cov8" title="1">for _, elem := range toAppend </span><span class="cov8" title="1">{
                 var sb strings.Builder
-                must(elem.JawsRender(&amp;sb, nil))
+                e.Jaws.MustLog(elem.JawsRender(&amp;sb, nil))
                 e.Append(template.HTML(sb.String())) // #nosec G203
         }</span>
 
@@ -6334,10 +6328,13 @@ func (ui *JsVar[T]) JawsGetPath(elem *core.Element, jspath string) (value any) <
 }
 
 func (ui *JsVar[T]) JawsGet(elem *core.Element) (value T) <span class="cov8" title="1">{
-        anyval := ui.JawsGetPath(elem, "")
-        value = *((anyval).(*T))
-        return
-}</span>
+        ui.RLock()
+        defer ui.RUnlock()
+        if ui.Ptr != nil </span><span class="cov8" title="1">{
+                value = *ui.Ptr
+        }</span>
+        <span class="cov8" title="1">return</span>
+}
 
 func (ui *JsVar[T]) setPathLocked(elem *core.Element, jspath string, value any) (err error) <span class="cov8" title="1">{
         if ps, ok := ((any)(ui.Ptr).(PathSetter)); ok </span><span class="cov8" title="1">{
