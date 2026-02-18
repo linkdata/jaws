@@ -171,57 +171,59 @@
 				
 				<option value="file57">github.com/linkdata/jaws/ui/div.go (100.0%)</option>
 				
-				<option value="file58">github.com/linkdata/jaws/ui/errmissingtemplate.go (100.0%)</option>
+				<option value="file58">github.com/linkdata/jaws/ui/errjsvar.go (100.0%)</option>
 				
-				<option value="file59">github.com/linkdata/jaws/ui/handler.go (100.0%)</option>
+				<option value="file59">github.com/linkdata/jaws/ui/errmissingtemplate.go (100.0%)</option>
 				
-				<option value="file60">github.com/linkdata/jaws/ui/html_widgets.go (100.0%)</option>
+				<option value="file60">github.com/linkdata/jaws/ui/handler.go (100.0%)</option>
 				
-				<option value="file61">github.com/linkdata/jaws/ui/img.go (100.0%)</option>
+				<option value="file61">github.com/linkdata/jaws/ui/html_widgets.go (100.0%)</option>
 				
-				<option value="file62">github.com/linkdata/jaws/ui/input_widgets.go (100.0%)</option>
+				<option value="file62">github.com/linkdata/jaws/ui/img.go (100.0%)</option>
 				
-				<option value="file63">github.com/linkdata/jaws/ui/jsvar.go (100.0%)</option>
+				<option value="file63">github.com/linkdata/jaws/ui/input_widgets.go (100.0%)</option>
 				
-				<option value="file64">github.com/linkdata/jaws/ui/label.go (100.0%)</option>
+				<option value="file64">github.com/linkdata/jaws/ui/jsvar.go (100.0%)</option>
 				
-				<option value="file65">github.com/linkdata/jaws/ui/li.go (100.0%)</option>
+				<option value="file65">github.com/linkdata/jaws/ui/label.go (100.0%)</option>
 				
-				<option value="file66">github.com/linkdata/jaws/ui/number.go (100.0%)</option>
+				<option value="file66">github.com/linkdata/jaws/ui/li.go (100.0%)</option>
 				
-				<option value="file67">github.com/linkdata/jaws/ui/option.go (100.0%)</option>
+				<option value="file67">github.com/linkdata/jaws/ui/number.go (100.0%)</option>
 				
-				<option value="file68">github.com/linkdata/jaws/ui/password.go (100.0%)</option>
+				<option value="file68">github.com/linkdata/jaws/ui/option.go (100.0%)</option>
 				
-				<option value="file69">github.com/linkdata/jaws/ui/radio.go (100.0%)</option>
+				<option value="file69">github.com/linkdata/jaws/ui/password.go (100.0%)</option>
 				
-				<option value="file70">github.com/linkdata/jaws/ui/range.go (100.0%)</option>
+				<option value="file70">github.com/linkdata/jaws/ui/radio.go (100.0%)</option>
 				
-				<option value="file71">github.com/linkdata/jaws/ui/register.go (100.0%)</option>
+				<option value="file71">github.com/linkdata/jaws/ui/range.go (100.0%)</option>
 				
-				<option value="file72">github.com/linkdata/jaws/ui/requestwriter.go (100.0%)</option>
+				<option value="file72">github.com/linkdata/jaws/ui/register.go (100.0%)</option>
 				
-				<option value="file73">github.com/linkdata/jaws/ui/rwlocker.go (100.0%)</option>
+				<option value="file73">github.com/linkdata/jaws/ui/requestwriter.go (100.0%)</option>
 				
-				<option value="file74">github.com/linkdata/jaws/ui/select.go (100.0%)</option>
+				<option value="file74">github.com/linkdata/jaws/ui/rwlocker.go (100.0%)</option>
 				
-				<option value="file75">github.com/linkdata/jaws/ui/span.go (100.0%)</option>
+				<option value="file75">github.com/linkdata/jaws/ui/select.go (100.0%)</option>
 				
-				<option value="file76">github.com/linkdata/jaws/ui/tbody.go (100.0%)</option>
+				<option value="file76">github.com/linkdata/jaws/ui/span.go (100.0%)</option>
 				
-				<option value="file77">github.com/linkdata/jaws/ui/td.go (100.0%)</option>
+				<option value="file77">github.com/linkdata/jaws/ui/tbody.go (100.0%)</option>
 				
-				<option value="file78">github.com/linkdata/jaws/ui/template.go (100.0%)</option>
+				<option value="file78">github.com/linkdata/jaws/ui/td.go (100.0%)</option>
 				
-				<option value="file79">github.com/linkdata/jaws/ui/text.go (100.0%)</option>
+				<option value="file79">github.com/linkdata/jaws/ui/template.go (100.0%)</option>
 				
-				<option value="file80">github.com/linkdata/jaws/ui/textarea.go (100.0%)</option>
+				<option value="file80">github.com/linkdata/jaws/ui/text.go (100.0%)</option>
 				
-				<option value="file81">github.com/linkdata/jaws/ui/tr.go (100.0%)</option>
+				<option value="file81">github.com/linkdata/jaws/ui/textarea.go (100.0%)</option>
 				
-				<option value="file82">github.com/linkdata/jaws/what/what.go (100.0%)</option>
+				<option value="file82">github.com/linkdata/jaws/ui/tr.go (100.0%)</option>
 				
-				<option value="file83">github.com/linkdata/jaws/what/what_string.go (100.0%)</option>
+				<option value="file83">github.com/linkdata/jaws/what/what.go (100.0%)</option>
+				
+				<option value="file84">github.com/linkdata/jaws/what/what_string.go (100.0%)</option>
 				
 				</select>
 			</div>
@@ -5937,6 +5939,32 @@ func (ui *Div) JawsRender(e *core.Element, w io.Writer, params []any) error <spa
 		
 		<pre class="file" id="file58" style="display: none">package ui
 
+import "errors"
+
+// ErrIllegalJsVarName is returned when a JsVar name is missing, not a string,
+// or does not follow valid top-level identifier syntax.
+var ErrIllegalJsVarName errIllegalJsVarName
+
+type errIllegalJsVarName string
+
+func (e errIllegalJsVarName) Error() string <span class="cov8" title="1">{
+        if why := string(e); why != "" </span><span class="cov8" title="1">{
+                return "illegal jsvar name: " + why
+        }</span>
+        <span class="cov8" title="1">return "illegal jsvar name"</span>
+}
+
+func (errIllegalJsVarName) Is(target error) bool <span class="cov8" title="1">{
+        return target == ErrIllegalJsVarName
+}</span>
+
+// ErrJsVarArgumentType is returned when RequestWriter.JsVar receives an
+// argument that is neither a core.UI nor a JsVarMaker.
+var ErrJsVarArgumentType = errors.New("expected core.UI or JsVarMaker")
+</pre>
+		
+		<pre class="file" id="file59" style="display: none">package ui
+
 import (
         "strconv"
 )
@@ -5955,7 +5983,7 @@ func (errMissingTemplate) Is(target error) bool <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file59" style="display: none">package ui
+		<pre class="file" id="file60" style="display: none">package ui
 
 import (
         "net/http"
@@ -5988,7 +6016,7 @@ func Handler(jw *core.Jaws, name string, dot any) http.Handler <span class="cov8
 }</span>
 </pre>
 		
-		<pre class="file" id="file60" style="display: none">package ui
+		<pre class="file" id="file61" style="display: none">package ui
 
 import (
         "io"
@@ -6013,7 +6041,7 @@ func (ui *HTMLInner) JawsUpdate(e *core.Element) <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file61" style="display: none">package ui
+		<pre class="file" id="file62" style="display: none">package ui
 
 import (
         "html/template"
@@ -6041,7 +6069,7 @@ func (ui *Img) JawsRender(e *core.Element, w io.Writer, params []any) (err error
 func (ui *Img) JawsUpdate(e *core.Element) <span class="cov8" title="1">{ e.SetAttr("src", ui.JawsGet(e)) }</span>
 </pre>
 		
-		<pre class="file" id="file62" style="display: none">package ui
+		<pre class="file" id="file63" style="display: none">package ui
 
 import (
         "io"
@@ -6222,7 +6250,7 @@ func (ui *InputDate) JawsEvent(e *core.Element, wht what.What, val string) (err 
 }
 </pre>
 		
-		<pre class="file" id="file63" style="display: none">package ui
+		<pre class="file" id="file64" style="display: none">package ui
 
 import (
         "bytes"
@@ -6230,6 +6258,7 @@ import (
         "html/template"
         "io"
         "reflect"
+        "regexp"
         "strconv"
         "strings"
         "sync"
@@ -6238,6 +6267,25 @@ import (
         "github.com/linkdata/jaws/what"
         "github.com/linkdata/jq"
 )
+
+var jsVarNameRx = regexp.MustCompile(`^[A-Za-z_$][A-Za-z0-9_$]*$`)
+
+func validateJsVarName(v []any) (name string, err error) <span class="cov8" title="1">{
+        if len(v) &gt; 0 </span><span class="cov8" title="1">{
+                var ok bool
+                if name, ok = v[0].(string); !ok </span><span class="cov8" title="1">{
+                        err = errIllegalJsVarName("expected string")
+                        return
+                }</span>
+                <span class="cov8" title="1">if !jsVarNameRx.MatchString(name) </span><span class="cov8" title="1">{
+                        err = errIllegalJsVarName("illegal syntax")
+                }</span>
+        }
+        <span class="cov8" title="1">if name == "" </span><span class="cov8" title="1">{
+                err = errIllegalJsVarName("missing")
+        }</span>
+        <span class="cov8" title="1">return</span>
+}
 
 type PathSetter interface {
         // JawsSetPath should set the JSON object member identified by jspath to the given value.
@@ -6351,28 +6399,30 @@ func (ui *JsVar[T]) JawsRender(e *core.Element, w io.Writer, params []any) (err 
         ui.Lock()
         defer ui.Unlock()
         if ui.Tag, err = e.ApplyGetter(ui.Ptr); err == nil </span><span class="cov8" title="1">{
-                var data []byte
-                if ui.Ptr != nil </span><span class="cov8" title="1">{
-                        if !reflect.ValueOf(*ui.Ptr).IsZero() </span><span class="cov8" title="1">{
-                                data, err = json.Marshal(ui.Ptr)
-                        }</span>
-                }
-                <span class="cov8" title="1">if err == nil </span><span class="cov8" title="1">{
-                        jsvarname := params[0].(string)
-                        attrs := e.ApplyParams(params[1:])
-                        var b []byte
-                        b = append(b, "\n&lt;div id="...)
-                        b = e.Jid().AppendQuote(b)
-                        b = append(b, ` data-jawsname=`...)
-                        b = strconv.AppendQuote(b, jsvarname)
-                        if data != nil </span><span class="cov8" title="1">{
-                                b = append(b, ` data-jawsdata='`...)
-                                b = append(b, bytes.ReplaceAll(data, []byte(`'`), []byte(`\u0027`))...)
-                                b = append(b, "'"...)
-                        }</span>
-                        <span class="cov8" title="1">b = appendAttrs(b, attrs)
-                        b = append(b, " hidden&gt;&lt;/div&gt;"...)
-                        _, err = w.Write(b)</span>
+                var jsvarname string
+                if jsvarname, err = validateJsVarName(params); err == nil </span><span class="cov8" title="1">{
+                        var data []byte
+                        if ui.Ptr != nil </span><span class="cov8" title="1">{
+                                if !reflect.ValueOf(*ui.Ptr).IsZero() </span><span class="cov8" title="1">{
+                                        data, err = json.Marshal(ui.Ptr)
+                                }</span>
+                        }
+                        <span class="cov8" title="1">if err == nil </span><span class="cov8" title="1">{
+                                attrs := e.ApplyParams(params[1:])
+                                var b []byte
+                                b = append(b, "\n&lt;div id="...)
+                                b = e.Jid().AppendQuote(b)
+                                b = append(b, ` data-jawsname=`...)
+                                b = strconv.AppendQuote(b, jsvarname)
+                                if data != nil </span><span class="cov8" title="1">{
+                                        b = append(b, ` data-jawsdata='`...)
+                                        b = append(b, bytes.ReplaceAll(data, []byte(`'`), []byte(`\u0027`))...)
+                                        b = append(b, "'"...)
+                                }</span>
+                                <span class="cov8" title="1">b = appendAttrs(b, attrs)
+                                b = append(b, " hidden&gt;&lt;/div&gt;"...)
+                                _, err = w.Write(b)</span>
+                        }
                 }
         }
         <span class="cov8" title="1">return</span>
@@ -6415,20 +6465,25 @@ func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] <span class="cov8" title="1"
 //
 // You can also pass a JsVarMaker instead of a JsVar[T].
 func (rqw RequestWriter) JsVar(jsvarname string, jsvar any, params ...any) (err error) <span class="cov8" title="1">{
-        if jvm, ok := jsvar.(JsVarMaker); ok </span><span class="cov8" title="1">{
-                jsvar, err = jvm.JawsMakeJsVar(rqw.Request)
-        }</span>
-        <span class="cov8" title="1">if err == nil </span><span class="cov8" title="1">{
-                var newparams []any
-                newparams = append(newparams, jsvarname)
-                newparams = append(newparams, params...)
-                err = rqw.UI(jsvar.(core.UI), newparams...)
-        }</span>
+        if _, err = validateJsVarName([]any{jsvarname}); err == nil </span><span class="cov8" title="1">{
+                if jvm, ok := jsvar.(JsVarMaker); ok </span><span class="cov8" title="1">{
+                        jsvar, err = jvm.JawsMakeJsVar(rqw.Request)
+                }</span>
+                <span class="cov8" title="1">if err == nil </span><span class="cov8" title="1">{
+                        err = ErrJsVarArgumentType
+                        if ui, ok := jsvar.(core.UI); ok </span><span class="cov8" title="1">{
+                                var newparams []any
+                                newparams = append(newparams, jsvarname)
+                                newparams = append(newparams, params...)
+                                err = rqw.UI(ui, newparams...)
+                        }</span>
+                }
+        }
         <span class="cov8" title="1">return</span>
 }
 </pre>
 		
-		<pre class="file" id="file64" style="display: none">package ui
+		<pre class="file" id="file65" style="display: none">package ui
 
 import (
         "io"
@@ -6448,7 +6503,7 @@ func (ui *Label) JawsRender(e *core.Element, w io.Writer, params []any) error <s
 }</span>
 </pre>
 		
-		<pre class="file" id="file65" style="display: none">package ui
+		<pre class="file" id="file66" style="display: none">package ui
 
 import (
         "io"
@@ -6468,7 +6523,7 @@ func (ui *Li) JawsRender(e *core.Element, w io.Writer, params []any) error <span
 }</span>
 </pre>
 		
-		<pre class="file" id="file66" style="display: none">package ui
+		<pre class="file" id="file67" style="display: none">package ui
 
 import (
         "io"
@@ -6488,7 +6543,7 @@ func (ui *Number) JawsRender(e *core.Element, w io.Writer, params []any) error <
 }</span>
 </pre>
 		
-		<pre class="file" id="file67" style="display: none">package ui
+		<pre class="file" id="file68" style="display: none">package ui
 
 import (
         "html"
@@ -6520,7 +6575,7 @@ func (ui Option) JawsUpdate(e *core.Element) <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file68" style="display: none">package ui
+		<pre class="file" id="file69" style="display: none">package ui
 
 import (
         "io"
@@ -6540,7 +6595,7 @@ func (ui *Password) JawsRender(e *core.Element, w io.Writer, params []any) error
 }</span>
 </pre>
 		
-		<pre class="file" id="file69" style="display: none">package ui
+		<pre class="file" id="file70" style="display: none">package ui
 
 import (
         "io"
@@ -6560,7 +6615,7 @@ func (ui *Radio) JawsRender(e *core.Element, w io.Writer, params []any) error <s
 }</span>
 </pre>
 		
-		<pre class="file" id="file70" style="display: none">package ui
+		<pre class="file" id="file71" style="display: none">package ui
 
 import (
         "io"
@@ -6580,7 +6635,7 @@ func (ui *Range) JawsRender(e *core.Element, w io.Writer, params []any) error <s
 }</span>
 </pre>
 		
-		<pre class="file" id="file71" style="display: none">package ui
+		<pre class="file" id="file72" style="display: none">package ui
 
 import (
         "io"
@@ -6614,7 +6669,7 @@ func (rqw RequestWriter) Register(updater core.Updater, params ...any) jid.Jid <
 }</span>
 </pre>
 		
-		<pre class="file" id="file72" style="display: none">package ui
+		<pre class="file" id="file73" style="display: none">package ui
 
 import (
         "io"
@@ -6669,7 +6724,7 @@ func (rqw RequestWriter) TailHTML() error <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file73" style="display: none">package ui
+		<pre class="file" id="file74" style="display: none">package ui
 
 import "sync"
 
@@ -6686,7 +6741,7 @@ func (l rwlocker) RUnlock() <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file74" style="display: none">package ui
+		<pre class="file" id="file75" style="display: none">package ui
 
 import (
         "io"
@@ -6725,7 +6780,7 @@ func (ui *Select) JawsEvent(e *core.Element, wht what.What, val string) (err err
 }
 </pre>
 		
-		<pre class="file" id="file75" style="display: none">package ui
+		<pre class="file" id="file76" style="display: none">package ui
 
 import (
         "io"
@@ -6745,7 +6800,7 @@ func (ui *Span) JawsRender(e *core.Element, w io.Writer, params []any) error <sp
 }</span>
 </pre>
 		
-		<pre class="file" id="file76" style="display: none">package ui
+		<pre class="file" id="file77" style="display: none">package ui
 
 import (
         "io"
@@ -6774,7 +6829,7 @@ func (ui *Tbody) JawsUpdate(e *core.Element) <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file77" style="display: none">package ui
+		<pre class="file" id="file78" style="display: none">package ui
 
 import (
         "io"
@@ -6794,7 +6849,7 @@ func (ui *Td) JawsRender(e *core.Element, w io.Writer, params []any) error <span
 }</span>
 </pre>
 		
-		<pre class="file" id="file78" style="display: none">package ui
+		<pre class="file" id="file79" style="display: none">package ui
 
 import (
         "bytes"
@@ -6828,7 +6883,10 @@ func (t Template) String() string <span class="cov8" title="1">{
 }</span>
 
 func findJidOrJsOrHTMLNode(node parse.Node) (found bool) <span class="cov8" title="1">{
-        switch node := node.(type) </span>{
+        isJidOrJs := func(s string) bool </span><span class="cov8" title="1">{
+                return (s == "Jid") || (s == "JsFunc") || (s == "JsVar")
+        }</span>
+        <span class="cov8" title="1">switch node := node.(type) </span>{
         case *parse.TextNode:<span class="cov8" title="1">
                 if node != nil </span><span class="cov8" title="1">{
                         found = found || bytes.Contains(node.Text, []byte("&lt;/html&gt;"))
@@ -6859,6 +6917,16 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) <span class="cov8" titl
                         found = found || findJidOrJsOrHTMLNode(node.List)
                         found = found || findJidOrJsOrHTMLNode(node.ElseList)
                 }</span>
+        case *parse.RangeNode:<span class="cov8" title="1">
+                if node != nil </span><span class="cov8" title="1">{
+                        found = findJidOrJsOrHTMLNode(node.Pipe)
+                        found = found || findJidOrJsOrHTMLNode(node.List)
+                        found = found || findJidOrJsOrHTMLNode(node.ElseList)
+                }</span>
+        case *parse.TemplateNode:<span class="cov8" title="1">
+                if node != nil </span><span class="cov8" title="1">{
+                        found = findJidOrJsOrHTMLNode(node.Pipe)
+                }</span>
         case *parse.PipeNode:<span class="cov8" title="1">
                 if node != nil </span><span class="cov8" title="1">{
                         for _, n := range node.Cmds </span><span class="cov8" title="1">{
@@ -6874,7 +6942,24 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) <span class="cov8" titl
         case *parse.VariableNode:<span class="cov8" title="1">
                 if node != nil </span><span class="cov8" title="1">{
                         for _, s := range node.Ident </span><span class="cov8" title="1">{
-                                found = found || (s == "Jid") || (s == "JsFunc") || (s == "JsVar")
+                                found = found || isJidOrJs(s)
+                        }</span>
+                }
+        case *parse.FieldNode:<span class="cov8" title="1">
+                if node != nil </span><span class="cov8" title="1">{
+                        for _, s := range node.Ident </span><span class="cov8" title="1">{
+                                found = found || isJidOrJs(s)
+                        }</span>
+                }
+        case *parse.IdentifierNode:<span class="cov8" title="1">
+                if node != nil </span><span class="cov8" title="1">{
+                        found = found || isJidOrJs(node.Ident)
+                }</span>
+        case *parse.ChainNode:<span class="cov8" title="1">
+                if node != nil </span><span class="cov8" title="1">{
+                        found = findJidOrJsOrHTMLNode(node.Node)
+                        for _, s := range node.Field </span><span class="cov8" title="1">{
+                                found = found || isJidOrJs(s)
                         }</span>
                 }
         }
@@ -6940,7 +7025,7 @@ func (rqw RequestWriter) Template(name string, dot any, params ...any) error <sp
 }</span>
 </pre>
 		
-		<pre class="file" id="file79" style="display: none">package ui
+		<pre class="file" id="file80" style="display: none">package ui
 
 import (
         "io"
@@ -6960,7 +7045,7 @@ func (ui *Text) JawsRender(e *core.Element, w io.Writer, params []any) error <sp
 }</span>
 </pre>
 		
-		<pre class="file" id="file80" style="display: none">package ui
+		<pre class="file" id="file81" style="display: none">package ui
 
 import (
         "html/template"
@@ -6979,14 +7064,15 @@ func (rw RequestWriter) Textarea(value any, params ...any) error <span class="co
 func (ui *Textarea) JawsRender(e *core.Element, w io.Writer, params []any) (err error) <span class="cov8" title="1">{
         if err = ui.applyGetter(e, ui.Setter); err == nil </span><span class="cov8" title="1">{
                 attrs := e.ApplyParams(params)
-                err = core.WriteHTMLInner(w, e.Jid(), "textarea", "", template.HTML(ui.JawsGet(e)), attrs...) // #nosec G203
+                value := template.HTMLEscapeString(ui.JawsGet(e))
+                err = core.WriteHTMLInner(w, e.Jid(), "textarea", "", template.HTML(value), attrs...) // #nosec G203
         }</span>
         <span class="cov8" title="1">return</span>
 }
 func (ui *Textarea) JawsUpdate(e *core.Element) <span class="cov8" title="1">{ e.SetValue(ui.JawsGet(e)) }</span>
 </pre>
 		
-		<pre class="file" id="file81" style="display: none">package ui
+		<pre class="file" id="file82" style="display: none">package ui
 
 import (
         "io"
@@ -7006,7 +7092,7 @@ func (ui *Tr) JawsRender(e *core.Element, w io.Writer, params []any) error <span
 }</span>
 </pre>
 		
-		<pre class="file" id="file82" style="display: none">package what
+		<pre class="file" id="file83" style="display: none">package what
 
 import "strings"
 
@@ -7072,7 +7158,7 @@ func Parse(s string) What <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file83" style="display: none">// Code generated by "stringer -type=What"; DO NOT EDIT.
+		<pre class="file" id="file84" style="display: none">// Code generated by "stringer -type=What"; DO NOT EDIT.
 
 package what
 
