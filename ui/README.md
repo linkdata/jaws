@@ -52,6 +52,15 @@ rw.UI(ui.NewRange(myFloatSetter))
 - `ContainerHelper`
   - For widgets that render and maintain dynamic child lists.
 
+## Widget lifetime
+
+UI widget values are render-scoped. Construct them during rendering, typically
+through `RequestWriter` helpers such as `$.Container(...)` and `$.Tbody(...)`.
+
+Do not cache and reuse `*ui.Container` / `*ui.Tbody` instances across requests.
+Those widgets keep internal render/update bookkeeping and are intended to be
+created fresh for each render.
+
 ## Adding a simple static widget
 
 Use `HTMLInner`:
