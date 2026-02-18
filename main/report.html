@@ -6407,7 +6407,8 @@ func (ui *JsVar[T]) JawsRender(e *core.Element, w io.Writer, params []any) (err 
                 if jsvarname, err = validateJsVarName(params); err == nil </span><span class="cov8" title="1">{
                         var data []byte
                         if ui.Ptr != nil </span><span class="cov8" title="1">{
-                                if !reflect.ValueOf(*ui.Ptr).IsZero() </span><span class="cov8" title="1">{
+                                rv := reflect.ValueOf(*ui.Ptr)
+                                if rv.IsValid() &amp;&amp; !rv.IsZero() </span><span class="cov8" title="1">{
                                         data, err = json.Marshal(ui.Ptr)
                                 }</span>
                         }
@@ -6458,6 +6459,9 @@ func (ui *JsVar[T]) JawsEvent(e *core.Element, wht what.What, val string) (err e
         <span class="cov8" title="1">return</span>
 }
 
+// NewJsVar creates a JsVar over v protected by l.
+//
+// The locker l must be non-nil and must remain valid for the lifetime of the JsVar.
 func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] <span class="cov8" title="1">{
         if rl, ok := l.(core.RWLocker); ok </span><span class="cov8" title="1">{
                 return &amp;JsVar[T]{RWLocker: rl, Ptr: v}
