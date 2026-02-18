@@ -165,7 +165,7 @@
 				
 				<option value="file54">github.com/linkdata/jaws/ui/container.go (100.0%)</option>
 				
-				<option value="file55">github.com/linkdata/jaws/ui/container_widgets.go (100.0%)</option>
+				<option value="file55">github.com/linkdata/jaws/ui/containerhelper.go (100.0%)</option>
 				
 				<option value="file56">github.com/linkdata/jaws/ui/date.go (100.0%)</option>
 				
@@ -5757,13 +5757,13 @@ import (
 
 type Container struct {
         OuterHTMLTag string
-        WrapContainer
+        ContainerHelper
 }
 
 func NewContainer(outerHTMLTag string, c core.Container) *Container <span class="cov8" title="1">{
         return &amp;Container{
-                OuterHTMLTag:  outerHTMLTag,
-                WrapContainer: NewWrapContainer(c),
+                OuterHTMLTag:    outerHTMLTag,
+                ContainerHelper: NewContainerHelper(c),
         }
 }</span>
 
@@ -5792,22 +5792,22 @@ import (
         "github.com/linkdata/jaws/core"
 )
 
-// WrapContainer is a helper for widgets that render dynamic child collections.
+// ContainerHelper is a helper for widgets that render dynamic child collections.
 //
 // It tracks previously rendered child elements and performs append/remove/order
 // updates during JawsUpdate.
-type WrapContainer struct {
+type ContainerHelper struct {
         Container core.Container
         Tag       any
         mu        sync.Mutex
         contents  []*core.Element
 }
 
-func NewWrapContainer(c core.Container) WrapContainer <span class="cov8" title="1">{
-        return WrapContainer{Container: c}
+func NewContainerHelper(c core.Container) ContainerHelper <span class="cov8" title="1">{
+        return ContainerHelper{Container: c}
 }</span>
 
-func (ui *WrapContainer) RenderContainer(e *core.Element, w io.Writer, outerHTMLTag string, params []any) (err error) <span class="cov8" title="1">{
+func (ui *ContainerHelper) RenderContainer(e *core.Element, w io.Writer, outerHTMLTag string, params []any) (err error) <span class="cov8" title="1">{
         if ui.Tag, err = e.ApplyGetter(ui.Container); err == nil </span><span class="cov8" title="1">{
                 attrs := e.ApplyParams(params)
                 b := e.Jid().AppendStartTagAttr(nil, outerHTMLTag)
@@ -5841,7 +5841,7 @@ func (ui *WrapContainer) RenderContainer(e *core.Element, w io.Writer, outerHTML
         <span class="cov8" title="1">return</span>
 }
 
-func (ui *WrapContainer) UpdateContainer(e *core.Element) <span class="cov8" title="1">{
+func (ui *ContainerHelper) UpdateContainer(e *core.Element) <span class="cov8" title="1">{
         var toRemove, toAppend []*core.Element
         var orderData []core.Jid
 
@@ -6748,11 +6748,11 @@ import (
 )
 
 type Select struct {
-        WrapContainer
+        ContainerHelper
 }
 
 func NewSelect(sh core.SelectHandler) *Select <span class="cov8" title="1">{
-        return &amp;Select{WrapContainer: NewWrapContainer(sh)}
+        return &amp;Select{ContainerHelper: NewContainerHelper(sh)}
 }</span>
 
 func (rw RequestWriter) Select(sh core.SelectHandler, params ...any) error <span class="cov8" title="1">{
@@ -6764,14 +6764,14 @@ func (ui *Select) JawsRender(e *core.Element, w io.Writer, params []any) error <
 }</span>
 
 func (ui *Select) JawsUpdate(e *core.Element) <span class="cov8" title="1">{
-        e.SetValue(ui.WrapContainer.Container.(core.Getter[string]).JawsGet(e))
+        e.SetValue(ui.ContainerHelper.Container.(core.Getter[string]).JawsGet(e))
         ui.UpdateContainer(e)
 }</span>
 
 func (ui *Select) JawsEvent(e *core.Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
         err = core.ErrEventUnhandled
         if wht == what.Input </span><span class="cov8" title="1">{
-                _, err = applyDirty(ui.Tag, e, ui.WrapContainer.Container.(core.Setter[string]).JawsSet(e, val))
+                _, err = applyDirty(ui.Tag, e, ui.ContainerHelper.Container.(core.Setter[string]).JawsSet(e, val))
         }</span>
         <span class="cov8" title="1">return</span>
 }
@@ -6806,11 +6806,11 @@ import (
 )
 
 type Tbody struct {
-        WrapContainer
+        ContainerHelper
 }
 
 func NewTbody(c core.Container) *Tbody <span class="cov8" title="1">{
-        return &amp;Tbody{WrapContainer: NewWrapContainer(c)}
+        return &amp;Tbody{ContainerHelper: NewContainerHelper(c)}
 }</span>
 
 func (rw RequestWriter) Tbody(c core.Container, params ...any) error <span class="cov8" title="1">{
