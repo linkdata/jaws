@@ -5844,41 +5844,43 @@ func (ui *ContainerHelper) RenderContainer(e *core.Element, w io.Writer, outerHT
 }
 
 func (ui *ContainerHelper) UpdateContainer(e *core.Element) <span class="cov8" title="1">{
-        var toRemove, toAppend []*core.Element
-        var orderData []core.Jid
+        var toAppend []*core.Element
 
-        oldMap := make(map[core.UI]*core.Element)
-        newMap := make(map[core.UI]struct{})
-        newContents := ui.Container.JawsContains(e)
-        for _, childUI := range newContents </span><span class="cov8" title="1">{
-                newMap[childUI] = struct{}{}
-        }</span>
+        wantContents := ui.Container.JawsContains(e)
+        newOrder := make([]core.Jid, 0, len(wantContents))
 
-        <span class="cov8" title="1">ui.mu.Lock()
+        ui.mu.Lock()
+        // build pool of reusable Elements keyed by UI, preserving duplicates
+        pool := make(map[core.UI][]*core.Element, len(ui.contents))
         oldOrder := make([]core.Jid, len(ui.contents))
         for i, elem := range ui.contents </span><span class="cov8" title="1">{
                 oldOrder[i] = elem.Jid()
-                oldMap[elem.Ui()] = elem
-                if _, ok := newMap[elem.Ui()]; !ok </span><span class="cov8" title="1">{
-                        toRemove = append(toRemove, elem)
-                }</span>
-        }
+                pool[elem.Ui()] = append(pool[elem.Ui()], elem)
+        }</span>
+
+        // build new contents, reusing pooled Elements where possible
         <span class="cov8" title="1">ui.contents = ui.contents[:0]
-        for _, childUI := range newContents </span><span class="cov8" title="1">{
-                elem := oldMap[childUI]
-                if elem == nil </span><span class="cov8" title="1">{
+        for _, childUI := range wantContents </span><span class="cov8" title="1">{
+                var elem *core.Element
+                if elems := pool[childUI]; len(elems) &gt; 0 </span><span class="cov8" title="1">{
+                        elem = elems[0]
+                        pool[childUI] = elems[1:]
+                }</span> else<span class="cov8" title="1"> {
                         elem = e.Request.NewElement(childUI)
                         toAppend = append(toAppend, elem)
                 }</span>
                 <span class="cov8" title="1">ui.contents = append(ui.contents, elem)
-                orderData = append(orderData, elem.Jid())</span>
+                newOrder = append(newOrder, elem.Jid())</span>
         }
         <span class="cov8" title="1">ui.mu.Unlock()
 
-        for _, elem := range toRemove </span><span class="cov8" title="1">{
-                e.Remove(elem.Jid().String())
-                e.Request.DeleteElement(elem)
-        }</span>
+        // remove leftover Elements not present in new contents
+        for _, elems := range pool </span><span class="cov8" title="1">{
+                for _, elem := range elems </span><span class="cov8" title="1">{
+                        e.Remove(elem.Jid().String())
+                        e.Request.DeleteElement(elem)
+                }</span>
+        }
 
         <span class="cov8" title="1">for _, elem := range toAppend </span><span class="cov8" title="1">{
                 var sb strings.Builder
@@ -5886,8 +5888,8 @@ func (ui *ContainerHelper) UpdateContainer(e *core.Element) <span class="cov8" t
                 e.Append(template.HTML(sb.String())) // #nosec G203
         }</span>
 
-        <span class="cov8" title="1">if !slices.Equal(oldOrder, orderData) </span><span class="cov8" title="1">{
-                e.Order(orderData)
+        <span class="cov8" title="1">if !slices.Equal(oldOrder, newOrder) </span><span class="cov8" title="1">{
+                e.Order(newOrder)
         }</span>
 }
 </pre>
