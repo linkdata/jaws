@@ -191,6 +191,24 @@ func TestJsVar_PathHooksAndRequestWriter(t *testing.T) {
 	}
 }
 
+func TestRequestWriterJsVarTypedNilDoesNotPanic(t *testing.T) {
+	_, rq := newRequest(t)
+	var sb bytes.Buffer
+	rw := RequestWriter{Request: rq, Writer: &sb}
+
+	var nilJsVar *JsVar[int]
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("JsVar should reject typed nil values with an error, got panic: %v", r)
+		}
+	}()
+
+	if err := rw.JsVar("typednil", nilJsVar); err == nil {
+		t.Fatal("expected error for typed nil JsVar")
+	}
+}
+
 func TestJsVar_RenderParamValidation(t *testing.T) {
 	_, rq := newRequest(t)
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"html/template"
 	"io"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -212,6 +213,14 @@ func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 	return &JsVar[T]{RWLocker: rwlocker{l}, Ptr: v}
 }
 
+func isNilUI(ui core.UI) (yes bool) {
+	if yes = (ui == nil); !yes {
+		rv := reflect.ValueOf(ui)
+		yes = rv.Kind() == reflect.Pointer && rv.IsNil()
+	}
+	return
+}
+
 // JsVar binds a JsVar[T] to a named Javascript variable.
 //
 // You can also pass a JsVarMaker instead of a JsVar[T].
@@ -223,10 +232,12 @@ func (rqw RequestWriter) JsVar(jsvarname string, jsvar any, params ...any) (err 
 		if err == nil {
 			err = ErrJsVarArgumentType
 			if ui, ok := jsvar.(core.UI); ok {
-				var newparams []any
-				newparams = append(newparams, jsvarname)
-				newparams = append(newparams, params...)
-				err = rqw.UI(ui, newparams...)
+				if !isNilUI(ui) {
+					var newparams []any
+					newparams = append(newparams, jsvarname)
+					newparams = append(newparams, params...)
+					err = rqw.UI(ui, newparams...)
+				}
 			}
 		}
 	}
