@@ -124,3 +124,11 @@ func TestInputMaybeDirtyErrValueUnchanged(t *testing.T) {
 		t.Fatalf("want nil got %v", err)
 	}
 }
+
+func TestTextarea_RenderEscapesHTML(t *testing.T) {
+	_, rq := newRequest(t)
+	ss := newTestSetter(`x</textarea><script>alert("x")</script>`)
+
+	_, got := renderUI(t, rq, NewTextarea(ss))
+	mustMatch(t, `^<textarea id="Jid\.[0-9]+">x&lt;/textarea&gt;&lt;script&gt;alert\(&#34;x&#34;\)&lt;/script&gt;</textarea>$`, got)
+}
