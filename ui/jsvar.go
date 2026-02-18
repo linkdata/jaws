@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"html/template"
 	"io"
-	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -154,10 +153,7 @@ func (ui *JsVar[T]) JawsRender(e *core.Element, w io.Writer, params []any) (err 
 		if jsvarname, err = validateJsVarName(params); err == nil {
 			var data []byte
 			if ui.Ptr != nil {
-				rv := reflect.ValueOf(*ui.Ptr)
-				if rv.IsValid() && !rv.IsZero() {
-					data, err = json.Marshal(ui.Ptr)
-				}
+				data, err = json.Marshal(ui.Ptr)
 			}
 			if err == nil {
 				attrs := e.ApplyParams(params[1:])

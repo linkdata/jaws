@@ -275,3 +275,20 @@ func TestJsVar_RenderWithNilInterfaceValueDoesNotPanic(t *testing.T) {
 		t.Fatalf("JawsRender should not panic for nil interface values: %v", panicValue)
 	}
 }
+
+func TestJsVar_RenderIncludesZeroValueData(t *testing.T) {
+	_, rq := newRequest(t)
+
+	var mu sync.Mutex
+	v := jsVarData{}
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+
+	var sb bytes.Buffer
+	if err := jsv.JawsRender(elem, &sb, []any{"zerovar"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := sb.String(); !strings.Contains(got, `data-jawsdata='`) {
+		t.Fatalf("expected data-jawsdata for zero value, got %q", got)
+	}
+}
