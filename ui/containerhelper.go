@@ -49,15 +49,20 @@ func (ui *ContainerHelper) RenderContainer(e *core.Element, w io.Writer, outerHT
 			var contents []*core.Element
 			for _, childUI := range ui.Container.JawsContains(e) {
 				elem := e.Request.NewElement(childUI)
+				contents = append(contents, elem)
 				if err = elem.JawsRender(w, nil); err != nil {
-					e.Request.DeleteElement(elem)
 					break
 				}
-				contents = append(contents, elem)
 			}
-			ui.mu.Lock()
-			ui.contents = contents
-			ui.mu.Unlock()
+			if err == nil {
+				ui.mu.Lock()
+				ui.contents = contents
+				ui.mu.Unlock()
+			} else {
+				for _, elem := range contents {
+					e.Request.DeleteElement(elem)
+				}
+			}
 			b = b[:0]
 			b = append(b, "</"...)
 			b = append(b, outerHTMLTag...)

@@ -133,8 +133,8 @@ func TestContainerHelperRenderErrorPaths(t *testing.T) {
 	if !errors.Is(err, renderErr) {
 		t.Fatalf("want %v got %v", renderErr, err)
 	}
-	if len(container.contents) != 1 {
-		t.Fatalf("want 1 successful child got %d", len(container.contents))
+	if len(container.contents) != 0 {
+		t.Fatalf("want 0 successful child got %d", len(container.contents))
 	}
 
 	// panic path from must() during append
@@ -192,6 +192,29 @@ func TestContainerHelperRenderErrorDoesNotLeakFailedChildElement(t *testing.T) {
 	}
 	if leaked := rq.GetElementByJid(failingChild.jid); leaked != nil {
 		t.Fatalf("expected failed child %v to be removed from request registry", failingChild.jid)
+	}
+}
+
+func TestRequestWriterUI_ContainerRenderErrorDoesNotLeakSuccessfulChildren(t *testing.T) {
+	core.NextJid = 0
+	_, rq := newRequest(t)
+	var sb strings.Builder
+	rw := RequestWriter{Request: rq, Writer: &sb}
+
+	renderErr := errors.New("render error")
+	okChild := &testRenderErrorCaptureUI{}
+	failChild := &testRenderErrorCaptureUI{err: renderErr}
+	tc := &testContainer{contents: []core.UI{okChild, failChild}}
+
+	if err := rw.UI(NewContainer("div", tc)); !errors.Is(err, renderErr) {
+		t.Fatalf("want %v got %v", renderErr, err)
+	}
+
+	if !okChild.jid.IsValid() {
+		t.Fatal("expected successful child jid to be captured")
+	}
+	if leaked := rq.GetElementByJid(okChild.jid); leaked != nil {
+		t.Fatalf("expected successful child %v to be removed when parent render fails", okChild.jid)
 	}
 }
 
