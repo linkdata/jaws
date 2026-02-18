@@ -5798,6 +5798,9 @@ import (
 //
 // It tracks previously rendered child elements and performs append/remove/order
 // updates during JawsUpdate.
+//
+// A ContainerHelper belongs to a widget instance and is intended for render-scoped
+// widget lifetimes (for example widgets created via RequestWriter helper methods).
 type ContainerHelper struct {
         Container core.Container
         Tag       any
