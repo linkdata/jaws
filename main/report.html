@@ -5801,6 +5801,13 @@ import (
 //
 // A ContainerHelper belongs to a widget instance and is intended for render-scoped
 // widget lifetimes (for example widgets created via RequestWriter helper methods).
+//
+// Error model:
+// Child render/update failures are treated as application bugs. Initial-render
+// errors are returned to the caller, and update-time append render errors are
+// reported through MustLog (which may panic when no logger is configured).
+// After such failures, DOM and request-tracked element state may be partially
+// updated and therefore inconsistent until the next full render/reload.
 type ContainerHelper struct {
         Container core.Container
         Tag       any
