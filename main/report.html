@@ -2694,7 +2694,6 @@ func (rq *Request) clearLocked() *Request <span class="cov8" title="1">{
         rq.remoteIP = netip.Addr{}
         for _, e := range rq.elems </span><span class="cov8" title="1">{
                 if e != nil </span><span class="cov8" title="1">{
-                        e.Request = nil
                         e.handlers = nil
                         e.ui = nil
                 }</span>
