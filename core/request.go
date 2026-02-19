@@ -139,7 +139,6 @@ func (rq *Request) clearLocked() *Request {
 	rq.remoteIP = netip.Addr{}
 	for _, e := range rq.elems {
 		if e != nil {
-			e.Request = nil
 			e.handlers = nil
 			e.ui = nil
 		}

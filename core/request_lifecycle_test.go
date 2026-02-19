@@ -186,8 +186,8 @@ func TestRequestRecycle_StaleElementIsInert(t *testing.T) {
 	elem := rq.NewElement(testDivWidget{inner: "x"})
 
 	jw.recycle(rq)
-	if elem.Request != nil {
-		t.Fatal("expected recycled element to have nil Request")
+	if elem.ui != nil {
+		t.Fatal("expected recycled element to have nil ui")
 	}
 	if got := len(rq.tagMap); got != 0 {
 		t.Fatalf("expected no tags in recycled request, got %d", got)
