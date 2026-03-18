@@ -20,7 +20,7 @@ func Test_WalkDir(t *testing.T) {
 		uri := path.Join("/static", ss.Name)
 		t.Log(filepath, uri)
 		uris = append(uris, uri)
-		mux.Handle(uri, ss)
+		mux.Handle("GET "+uri, ss)
 		return
 	})
 	if err != nil {

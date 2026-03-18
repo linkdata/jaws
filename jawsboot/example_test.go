@@ -26,7 +26,7 @@ import (
 var assetsFS embed.FS
 
 func setupJaws(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
-	mux.Handle("/jaws/", jw) // Ensure the JaWS routes are handled
+	mux.Handle("GET /jaws/", jw) // Ensure the JaWS routes are handled
 	var tmpl jaws.TemplateLookuper
 	if tmpl, err = templatereloader.New(assetsFS, "assets/ui/*.html", ""); err == nil {
 		jw.AddTemplateLookuper(tmpl)
@@ -40,7 +40,7 @@ func setupJaws(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
 			// Add a route to our index template with a bound variable accessible as '.Dot' in the template
 			var mu sync.Mutex
 			var f float64
-			mux.Handle("/", ui.Handler(jw, "index.html", jaws.Bind(&mu, &f)))
+			mux.Handle("GET /", ui.Handler(jw, "index.html", jaws.Bind(&mu, &f)))
 		}
 	}
 	return

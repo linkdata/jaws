@@ -50,8 +50,53 @@ func TestJaws_Setup(t *testing.T) {
 		t.Log(len(mux.m))
 		t.Error(mux.m)
 	}
+	for pattern := range mux.m {
+		if !strings.HasPrefix(pattern, "GET "+prefix+"/") {
+			t.Errorf("unexpected pattern: %q", pattern)
+		}
+	}
 	if x := jw.FaviconURL(); x != path.Join(prefix, ss1.Name) {
 		t.Error(x)
+	}
+}
+
+func TestJaws_SetupEmptyPrefix(t *testing.T) {
+	ss := staticserve.Must("favicon.png", []byte("Hello"))
+
+	jw, _ := New()
+	defer jw.Close()
+	mux := &testMux{}
+	_ = jw.Setup(mux.Handle, "", ss)
+
+	if got := jw.FaviconURL(); got != ss.Name {
+		t.Errorf("unexpected favicon URL: %q", got)
+	}
+	if len(mux.m) != 1 {
+		t.Fatalf("expected 1 handler, got %d", len(mux.m))
+	}
+	for pattern := range mux.m {
+		if want := "GET /" + ss.Name; pattern != want {
+			t.Errorf("expected pattern %q, got %q", want, pattern)
+		}
+	}
+}
+
+func TestJaws_SetupKeepsMethodPattern(t *testing.T) {
+	jw, _ := New()
+	defer jw.Close()
+	mux := &testMux{}
+	err := jw.Setup(mux.Handle, "", SetupFunc(func(_ *Jaws, handleFn HandleFunc, _ string) (urls []*url.URL, err error) {
+		handleFn("POST\t/custom", http.NotFoundHandler())
+		return
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mux.m) != 1 {
+		t.Fatalf("expected 1 handler, got %d", len(mux.m))
+	}
+	if _, ok := mux.m["POST\t/custom"]; !ok {
+		t.Errorf("registered patterns: %#v", mux.m)
 	}
 }
 

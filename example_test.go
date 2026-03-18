@@ -32,12 +32,12 @@ func Example() {
 	templates := template.Must(template.New("index").Parse(indexhtml))
 	jw.AddTemplateLookuper(templates)
 
-	go jw.Serve()                             // start the JaWS processing loop
-	http.DefaultServeMux.Handle("/jaws/", jw) // ensure the JaWS routes are handled
+	go jw.Serve()                                 // start the JaWS processing loop
+	http.DefaultServeMux.Handle("GET /jaws/", jw) // ensure the JaWS routes are handled
 
 	var mu sync.Mutex
 	var f float64
 
-	http.DefaultServeMux.Handle("/", ui.Handler(jw, "index", jaws.Bind(&mu, &f)))
+	http.DefaultServeMux.Handle("GET /", ui.Handler(jw, "index", jaws.Bind(&mu, &f)))
 	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 }

@@ -7,11 +7,13 @@ import (
 	"net/url"
 	"path"
 
+	"github.com/linkdata/jaws/internal/routepattern"
 	"github.com/linkdata/jaws/staticserve"
 )
 
-// HandleFunc matches the signature of http.ServeMux.Handle(), but is called without
-// method or parameters for the pattern. E.g. ("/static/filename.1234567.js").
+// HandleFunc matches the signature of http.ServeMux.Handle().
+//
+// Setup passes method-aware patterns. Bare path patterns are normalized to GET.
 type HandleFunc = func(uri string, handler http.Handler)
 
 // SetupFunc is called by Setup and allows setting up addons for JaWS.
@@ -39,6 +41,12 @@ func makeAbsPath(prefix string, u *url.URL) *url.URL {
 // relative URL paths prefixed with prefix.
 func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err error) {
 	var urls []*url.URL
+	normalizedHandleFn := handleFn
+	if handleFn != nil {
+		normalizedHandleFn = func(pattern string, handler http.Handler) {
+			handleFn(routepattern.NormalizeGET(pattern), handler)
+		}
+	}
 
 	handleStaticServe := func(ss *staticserve.StaticServe) {
 		if ss != nil {
@@ -47,8 +55,8 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 			if u != nil {
 				u = makeAbsPath(prefix, u)
 				urls = append(urls, u)
-				if handleFn != nil {
-					handleFn(u.String(), ss)
+				if normalizedHandleFn != nil {
+					normalizedHandleFn(u.String(), ss)
 				}
 			}
 		}
@@ -69,7 +77,7 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 		case *staticserve.StaticServe:
 			handleStaticServe(extra)
 		case SetupFunc:
-			setupurls, setuperr := extra(jw, handleFn, prefix)
+			setupurls, setuperr := extra(jw, normalizedHandleFn, prefix)
 			err = errors.Join(err, setuperr)
 			for _, u := range setupurls {
 				urls = append(urls, makeAbsPath(prefix, u))

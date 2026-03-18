@@ -6,6 +6,19 @@ import (
 	"testing"
 )
 
+func TestHandle_Pattern(t *testing.T) {
+	var gotPattern string
+	uri, err := Handle("file.txt", []byte("abc"), func(pattern string, _ http.Handler) {
+		gotPattern = pattern
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "GET " + uri; gotPattern != want {
+		t.Fatalf("expected pattern %q, got %q", want, gotPattern)
+	}
+}
+
 func TestHandleFS(t *testing.T) {
 	mux := http.NewServeMux()
 	uris, err := HandleFS(assetsFS, mux.Handle, "assets", "subdir/test.txt", "test.js")

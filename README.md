@@ -81,12 +81,12 @@ func main() {
 	jw.AddTemplateLookuper(templates)
 
 	go jw.Serve()                             // start the JaWS processing loop
-	http.DefaultServeMux.Handle("/jaws/", jw) // ensure the JaWS routes are handled
+	http.DefaultServeMux.Handle("GET /jaws/", jw) // ensure the JaWS routes are handled
 
 	var mu sync.Mutex
 	var f float64
 
-	http.DefaultServeMux.Handle("/", ui.Handler(jw, "index", jaws.Bind(&mu, &f)))
+	http.DefaultServeMux.Handle("GET /", ui.Handler(jw, "index", jaws.Bind(&mu, &f)))
 	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 }
 ```
@@ -237,7 +237,7 @@ if err != nil {
 }
 defer jw.Close()
 go jw.Serve()
-http.DefaultServeMux.Handle("/jaws/", jw)
+http.DefaultServeMux.Handle("GET /jaws/", jw)
 ```
 
 Handling the routes with [Echo](https://echo.labstack.com/):

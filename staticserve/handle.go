@@ -7,10 +7,13 @@ import (
 	"net/http"
 	"path"
 	"strings"
+
+	"github.com/linkdata/jaws/internal/routepattern"
 )
 
-// HandleFunc matches the signature of http.ServeMux.Handle(), but is called without
-// method or parameters for the pattern. E.g. ("/static/filename.1234567.js").
+// HandleFunc matches the signature of http.ServeMux.Handle().
+//
+// Handle and HandleFS pass method-aware patterns. Bare path patterns are normalized to GET.
 type HandleFunc = func(uri string, handler http.Handler)
 
 func ensurePrefixSlash(s string) string {
@@ -26,7 +29,7 @@ func Handle(fpath string, data []byte, handleFn HandleFunc) (uri string, err err
 	var ss *StaticServe
 	if ss, err = New(fpath, data); err == nil {
 		uri = ensurePrefixSlash(ss.Name)
-		handleFn(uri, ss)
+		handleFn(routepattern.NormalizeGET(uri), ss)
 	}
 	return
 }

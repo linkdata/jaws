@@ -20,7 +20,7 @@ func TestServeHTTP_GetJavascript(t *testing.T) {
 	is := newTestHelper(t)
 
 	mux := http.NewServeMux()
-	mux.Handle("/jaws/", jw)
+	mux.Handle("GET /jaws/", jw)
 
 	req := httptest.NewRequest("", jw.serveJS.Name, nil)
 	req.Header.Add("Accept-Encoding", "blepp")
@@ -62,7 +62,7 @@ func TestServeHTTP_GetCSS(t *testing.T) {
 	is := newTestHelper(t)
 
 	mux := http.NewServeMux()
-	mux.Handle("/jaws/", jw)
+	mux.Handle("GET /jaws/", jw)
 
 	req := httptest.NewRequest("", jw.serveCSS.Name, nil)
 	w := httptest.NewRecorder()

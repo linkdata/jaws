@@ -24,12 +24,12 @@ func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.
 			u, e := url.Parse(path.Join(prefix, ss.Name))
 			if e == nil {
 				urls = append(urls, u)
-				handleFn(u.String(), ss)
+				handleFn(http.MethodGet+" "+u.String(), ss)
 			}
 			err = errors.Join(err, e)
 		}
-		handleFn(path.Join(prefix, "bootstrap.bundle.min.js.map"), http.NotFoundHandler())
-		handleFn(path.Join(prefix, "bootstrap.min.css.map"), http.NotFoundHandler())
+		handleFn(http.MethodGet+" "+path.Join(prefix, "bootstrap.bundle.min.js.map"), http.NotFoundHandler())
+		handleFn(http.MethodGet+" "+path.Join(prefix, "bootstrap.min.css.map"), http.NotFoundHandler())
 	}
 	return
 }
