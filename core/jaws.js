@@ -4,6 +4,11 @@
 // provided data before sending it. The script must not
 // itself HTML-escape strings from the server, as the
 // server needs to be able to inject arbitrary HTML.
+//
+// The script needs 'jawsKey' to be defined in a HTML
+// meta tag. This is a per-request randomly generated
+// key used to associate the WebSocket callback with
+// the initial HTTP request.
 
 var jaws = null;
 var jawsIdPrefix = 'Jid.';
