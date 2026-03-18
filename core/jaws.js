@@ -1,4 +1,9 @@
 // https://github.com/linkdata/jaws
+//
+// This script trusts the server to HTML escape user
+// provided data before sending it. The script must not
+// itself HTML-escape strings from the server, as the
+// server needs to be able to inject arbitrary HTML.
 
 var jaws = null;
 var jawsIdPrefix = 'Jid.';
