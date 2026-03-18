@@ -109,6 +109,9 @@ function jawsAttach(elem) {
 }
 
 function jawsAttachChildren(topElem) {
+	topElem.querySelectorAll('[data-jawsonchangesubmit]').forEach(function(elem) {
+		elem.addEventListener('change', function() { this.form.submit(); });
+	});
 	topElem.querySelectorAll('[id^="' + jawsIdPrefix + '"]').forEach(jawsAttach);
 	return topElem;
 }
@@ -469,9 +472,6 @@ function jawsConnect() {
 
 window.jawsNames = {};
 jawsAttachChildren(document);
-document.querySelectorAll('[data-jawsonchangesubmit]').forEach(function(elem) {
-	elem.addEventListener('change', function() { this.form.submit(); });
-});
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
 	jawsConnect();
 } else {
