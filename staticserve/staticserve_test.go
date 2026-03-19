@@ -34,6 +34,13 @@ func Test_New(t *testing.T) {
 	if !strings.Contains(ss2.ContentType, "javascript") {
 		t.Error("ss2 not javascript")
 	}
+	ssUpper, err := staticserve.New("test.JS.gz", ss.Gz)
+	if err != nil {
+		t.Error(err)
+	}
+	if !strings.Contains(ssUpper.ContentType, "javascript") {
+		t.Error("ssUpper not javascript")
+	}
 	if ss.Name != ss2.Name {
 		t.Error(ss.Name, "!=", ss2.Name)
 	}
