@@ -32,6 +32,7 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/jid"
+	"github.com/linkdata/jaws/secureheaders"
 	"github.com/linkdata/jaws/staticserve"
 	"github.com/linkdata/jaws/what"
 )
@@ -703,16 +704,7 @@ func parseIP(remoteAddr string) (ip netip.Addr) {
 }
 
 func requestIsSecure(hr *http.Request) (yes bool) {
-	if hr != nil {
-		yes = (hr.TLS != nil)
-		yes = yes || strings.EqualFold(strings.TrimSpace(hr.Header.Get("X-Forwarded-Ssl")), "on")
-		yes = yes || strings.EqualFold(strings.TrimSpace(hr.Header.Get("Front-End-Https")), "on")
-		if !yes {
-			for proto := range strings.FieldsFuncSeq(hr.Header.Get("X-Forwarded-Proto"), func(r rune) bool { return r == ',' || r == ' ' }) {
-				yes = yes || strings.EqualFold(proto, "https")
-			}
-		}
-	}
+	yes = secureheaders.RequestIsSecure(hr, true)
 	return
 }
 

@@ -80,9 +80,23 @@ func TestRequestIsSecure(t *testing.T) {
 			t.Fatal("expected secure request")
 		}
 	})
+	t.Run("forwarded proto first hop wins", func(t *testing.T) {
+		hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+		hr.Header.Set("X-Forwarded-Proto", "http, https")
+		if requestIsSecure(hr) {
+			t.Fatal("expected insecure request")
+		}
+	})
 	t.Run("forwarded ssl", func(t *testing.T) {
 		hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
 		hr.Header.Set("X-Forwarded-Ssl", "on")
+		if !requestIsSecure(hr) {
+			t.Fatal("expected secure request")
+		}
+	})
+	t.Run("forwarded standard header", func(t *testing.T) {
+		hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+		hr.Header.Set("Forwarded", "for=192.0.2.1;proto=https;by=203.0.113.9")
 		if !requestIsSecure(hr) {
 			t.Fatal("expected secure request")
 		}
