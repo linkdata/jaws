@@ -11,7 +11,7 @@
  * Optional "Select All/Deselect All" and "Expand All/Collapse All" buttons.
  * Custom Node Rendering via onRenderNode callback.
  * Option to disable node selection.
- * Option to cascade selection to children when a parent is selected.
+ * Option to cascade selection to children when a parent node is selected.
  * - If `multiSelectEnabled` is false, it's a single-select cascade (selects node and children, clears others).
  * - If `multiSelectEnabled` is true, it's a multi-select cascade (adds node and children to selection).
  * Option to display checkboxes for node selection, positioned between expander and label.
@@ -46,11 +46,13 @@
                 data: [],
                 searchEnabled: false,
                 searchPlaceholder: 'Search tree...',
+                showChildrenOnSearch: false,
                 initiallyExpanded: false,
                 multiSelectEnabled: false,
                 onSelectionChange: null,
                 onRenderNode: null,
                 showSelectAllButton: false,
+                showInvertSelectionButton: false,
                 showExpandCollapseAllButtons: false,
                 nodeSelectionEnabled: true,
                 cascadeSelectChildren: false,
@@ -63,8 +65,11 @@
             this.treeSearchInput = null;
             this.selectedNodes = new Set();
             this.selectAllButton = null;
+            this.invertSelectionButton = null;
             this.expandAllButton = null;
             this.collapseAllButton = null;
+            this._initialExpansionStates = new Map(); // Store initial expansion states for search reset
+
 
             this._initialize();
         }
@@ -86,11 +91,29 @@
             this._createControls();
             this._renderTree(this.options.data, this.treeviewContainer);
 
+            // Apply initial expansion state after rendering
             if (this.options.initiallyExpanded) {
-                this.treeviewContainer.querySelectorAll('li.expanded > ul').forEach(ul => {
-                    ul.style.height = 'auto';
+                this.treeviewContainer.querySelectorAll('li.has-children').forEach(li => {
+                    li.classList.add('expanded');
+                    const expander = li.querySelector('.treeview-expander');
+                    if (expander) expander.textContent = '-';
+                    const childUl = li.querySelector('ul');
+                    if (childUl) {
+                        childUl.style.height = 'auto'; // Ensure it's fully expanded
+                    }
+                });
+            } else {
+                this.treeviewContainer.querySelectorAll('li.has-children').forEach(li => {
+                    li.classList.remove('expanded');
+                    const expander = li.querySelector('.treeview-expander');
+                    if (expander) expander.textContent = '+';
+                    const childUl = li.querySelector('ul');
+                    if (childUl) {
+                        childUl.style.height = ''; // Reset height to allow CSS to manage (collapse)
+                    }
                 });
             }
+
 
             // Handle initial selection from data after rendering the tree
             if (this.options.nodeSelectionEnabled) {
@@ -203,6 +226,15 @@
                 this.selectAllButton.addEventListener('click', () => this._toggleSelectAll());
             }
 
+            if (this.options.showInvertSelectionButton && this.options.multiSelectEnabled && this.options.nodeSelectionEnabled && !this.options.cascadeSelectChildren) {
+                this.invertSelectionButton = document.createElement('button');
+                this.invertSelectionButton.classList.add('treeview-control-button', 'treeview-invert-selection');
+                this.invertSelectionButton.textContent = 'Invert Selection';
+                buttonContainer.appendChild(this.invertSelectionButton);
+
+                this.invertSelectionButton.addEventListener('click', () => this.invertSelection());
+            }
+
             if (this.options.showExpandCollapseAllButtons) {
                 this.expandAllButton = document.createElement('button');
                 this.expandAllButton.classList.add('treeview-control-button', 'treeview-expand-all');
@@ -218,6 +250,7 @@
 
                 this.collapseAllButton.addEventListener('click', () => this._collapseAll());
             }
+
 
             if (buttonContainer.children.length > 0) {
                 this.treeviewContainer.appendChild(buttonContainer);
@@ -405,9 +438,7 @@
 
                 // Recursively render children if they exist
                 if (node.children && node.children.length > 0) {
-                    if (this.options.initiallyExpanded) {
-                        li.classList.add('expanded');
-                    }
+                    // Initial expansion state for children is handled in _initialize, not here
                     this._renderTree(node.children, li);
 
                     expanderOrPlaceholder.addEventListener('click', (event) => {
@@ -586,7 +617,7 @@
                     this.treeviewContainer.querySelectorAll('.treeview-checkbox').forEach(cb => cb.checked = false);
                 }
 
-                if (isSelected) {
+                if (isSelected && !wasAlreadySolelySelected) {
                     this.selectedNodes.add(nodeElement);
                     nodeElement.classList.add('selected');
                     if (checkbox) checkbox.checked = true;
@@ -627,30 +658,68 @@
 
         _searchTree(searchTerm) {
             const allListItems = this.treeviewContainer.querySelectorAll('li');
+            const expandableListItems = this.treeviewContainer.querySelectorAll('li.has-children');
 
             if (searchTerm === '') {
-                // When search is cleared, restore nodes to their initial expanded/collapsed state
+                // Restore nodes to their initial expansion state
                 allListItems.forEach(item => {
                     item.classList.remove('hidden', 'highlight'); // Remove search-related classes
+                });
 
+                expandableListItems.forEach(item => {
+                    const nodeId = item.dataset.id;
                     const expander = item.querySelector('.treeview-expander');
                     const childUl = item.querySelector('ul');
 
-                    if (item.classList.contains('has-children')) {
-                        // Restore initial expansion state
+                    if (this._initialExpansionStates.has(nodeId)) {
+                        const wasExpanded = this._initialExpansionStates.get(nodeId);
+                        if (wasExpanded) {
+                            item.classList.add('expanded');
+                            if (expander) expander.textContent = '-';
+                            if (childUl) childUl.style.height = 'auto';
+                        } else {
+                            // Only trigger collapse animation if it's currently expanded and should be collapsed
+                            if (item.classList.contains('expanded')) {
+                                item.classList.remove('expanded');
+                                if (expander) expander.textContent = '+';
+                                if (childUl) {
+                                    childUl.style.height = `${childUl.scrollHeight}px`;
+                                    requestAnimationFrame(() => {
+                                        childUl.style.height = '0px';
+                                    });
+                                    childUl.addEventListener('transitionend', function handler() {
+                                        childUl.removeEventListener('transitionend', handler);
+                                        childUl.style.height = '';
+                                    }, { once: true });
+                                }
+                            } else {
+                                // If it was already collapsed, just ensure height is reset
+                                if (childUl) childUl.style.height = '';
+                            }
+                        }
+                    } else {
+                        // Fallback to initiallyExpanded if state wasn't captured (e.g., node added after search)
                         if (this.options.initiallyExpanded) {
                             item.classList.add('expanded');
                             if (expander) expander.textContent = '-';
-                            if (childUl) childUl.style.height = 'auto'; // Ensure it's fully expanded
+                            if (childUl) childUl.style.height = 'auto';
                         } else {
                             item.classList.remove('expanded');
                             if (expander) expander.textContent = '+';
-                            if (childUl) childUl.style.height = ''; // Reset height to allow collapse transition from default CSS
+                            if (childUl) childUl.style.height = '';
                         }
                     }
-                    // For non-has-children, just ensure no expanded class or height is set.
                 });
+                this._initialExpansionStates.clear(); // Clear stored states after restoring
                 return; // Exit the function after resetting
+            }
+
+            // Store current expansion states before modifying for search
+            if (this._initialExpansionStates.size === 0) { // Only store if not already stored from an active search
+                expandableListItems.forEach(item => {
+                    const nodeId = item.dataset.id;
+                    this._initialExpansionStates.set(nodeId, item.classList.contains('expanded'));
+                });
             }
 
             const matchingNodes = new Set();
@@ -683,6 +752,11 @@
                         }
                         parentUL = parentUL.parentElement.closest('ul');
                     }
+                    if (this.options.showChildrenOnSearch) {
+                        for( const child of item.getElementsByTagName('li') ) {
+                            matchingNodes.add(child);
+                        }
+                    }
                 }
             });
 
@@ -712,14 +786,34 @@
             this.options.data = newData;
             this.treeviewContainer.innerHTML = '';
             this.selectedNodes.clear();
+            this._initialExpansionStates.clear(); // Clear stored states on new data
             this._createControls(); // Re-create search bar and buttons
             this._renderTree(this.options.data, this.treeviewContainer);
 
+            // Re-apply initial expansion state after setData
             if (this.options.initiallyExpanded) {
-                this.treeviewContainer.querySelectorAll('li.expanded > ul').forEach(ul => {
-                    ul.style.height = 'auto';
+                this.treeviewContainer.querySelectorAll('li.has-children').forEach(li => {
+                    li.classList.add('expanded');
+                    const expander = li.querySelector('.treeview-expander');
+                    if (expander) expander.textContent = '-';
+                    const childUl = li.querySelector('ul');
+                    if (childUl) {
+                        childUl.style.height = 'auto';
+                    }
+                });
+            } else {
+                this.treeviewContainer.querySelectorAll('li.has-children').forEach(li => {
+                    li.classList.remove('expanded');
+                    const expander = li.querySelector('.treeview-expander');
+                    if (expander) expander.textContent = '+';
+                    const childUl = li.querySelector('ul');
+                    if (childUl) {
+                        childUl.style.height = '';
+                    }
                 });
             }
+
+
             // Re-apply initial selections if any after setData
             if (this.options.nodeSelectionEnabled) {
                 const initiallySelectedNodeIds = [];
@@ -796,7 +890,116 @@
             }
             this._searchTree(searchTerm);
         }
+
+        /**
+         * Returns an array of values for a specified key from all selected nodes and their recursive children.
+         * @param {string} key The key whose values are to be extracted.
+         * @returns {Array<any>} An array of values found. Duplicates are included.
+         */
+        getSelectedNodesAndChildrenValues(key) {
+            const values = [];
+            const processedNodes = new Set(); // To prevent infinite loops with circular references or re-processing
+
+            // Helper to recursively collect values
+            const collectValues = (nodeElement) => {
+                if (!nodeElement || processedNodes.has(nodeElement)) {
+                    return;
+                }
+                processedNodes.add(nodeElement);
+
+                try {
+                    const nodeData = JSON.parse(nodeElement.dataset.nodeData);
+                    if (nodeData && Object.prototype.hasOwnProperty.call(nodeData, key)) {
+                        values.push(nodeData[key]);
+                    }
+                } catch (e) {
+                    console.error("Quercus.js: Error parsing node data for value collection:", e);
+                }
+
+                // Recursively get children and process them
+                const childUl = nodeElement.querySelector('ul');
+                if (childUl) {
+                    Array.from(childUl.children).forEach(childLi => {
+                        collectValues(childLi);
+                    });
+                }
+            };
+
+            // Start with selected nodes
+            this.selectedNodes.forEach(selectedNodeElement => {
+                collectValues(selectedNodeElement);
+            });
+
+            return values;
+        }
+
+        /**
+         * Inverts the selection state of all selectable nodes in the tree.
+         * If a node is currently selected, it becomes deselected, and vice-versa.
+         * This operation is only available if multiSelectEnabled is true and cascadeSelectChildren is false.
+         */
+        invertSelection() {
+            if (!this.options.nodeSelectionEnabled) {
+                console.warn("Quercus.js: Node selection is disabled, cannot invert selection.");
+                return;
+            }
+            if (!this.options.multiSelectEnabled) {
+                console.warn("Quercus.js: Invert Selection requires multi-select to be enabled.");
+                return;
+            }
+            if (this.options.cascadeSelectChildren) {
+                console.warn("Quercus.js: Invert Selection is not applicable when cascading selection is enabled.");
+                return;
+            }
+
+            const allSelectableNodes = Array.from(this.treeviewContainer.querySelectorAll('li')).filter(li => {
+                try {
+                    const nodeData = JSON.parse(li.dataset.nodeData);
+                    return nodeData.selectable === undefined || nodeData.selectable === true;
+                } catch (e) {
+                    console.error("Quercus.js: Error parsing node data for selectable check during invert:", e);
+                    return false; // Treat as not selectable if data is malformed
+                }
+            });
+
+            const nodesToSelect = [];
+            const nodesToDeselect = [];
+
+            allSelectableNodes.forEach(li => {
+                if (this.selectedNodes.has(li)) {
+                    nodesToDeselect.push(li);
+                } else {
+                    nodesToSelect.push(li);
+                }
+            });
+
+            // Perform deselection first
+            nodesToDeselect.forEach(li => {
+                this.selectedNodes.delete(li);
+                li.classList.remove('selected');
+                const checkbox = li.querySelector('.treeview-checkbox');
+                if (checkbox) checkbox.checked = false;
+            });
+
+            // Then perform selection
+            nodesToSelect.forEach(li => {
+                this.selectedNodes.add(li);
+                li.classList.add('selected');
+                const checkbox = li.querySelector('.treeview-checkbox');
+                if (checkbox) checkbox.checked = true;
+            });
+
+            // Update the "Select All" button text if it's present
+            if (this.selectAllButton && this.options.multiSelectEnabled && this.options.nodeSelectionEnabled && !this.options.cascadeSelectChildren) {
+                const isAllSelected = allSelectableNodes.length > 0 && this.selectedNodes.size === allSelectableNodes.length;
+                this.selectAllButton.textContent = isAllSelected ? 'Deselect All' : 'Select All';
+            }
+
+            this._triggerSelectionChange();
+        }
     }
+
+
 
     // Expose the Treeview class to the global scope (window)
     window.Treeview = Treeview;
