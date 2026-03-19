@@ -32,7 +32,8 @@ func hasMethodPrefix(pattern string) bool {
 	return false
 }
 
-func ensurePrefixSlash(s string) string {
+// EnsurePrefixSlash returns s with a leading slash.
+func EnsurePrefixSlash(s string) string {
 	if !strings.HasPrefix(s, "/") {
 		s = "/" + s
 	}
@@ -48,5 +49,5 @@ func NormalizeGET(pattern string) string {
 	if hasMethodPrefix(pattern) {
 		return pattern
 	}
-	return http.MethodGet + " " + ensurePrefixSlash(pattern)
+	return http.MethodGet + " " + EnsurePrefixSlash(pattern)
 }

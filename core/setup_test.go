@@ -50,10 +50,26 @@ func TestJaws_Setup(t *testing.T) {
 		t.Log(len(mux.m))
 		t.Error(mux.m)
 	}
+	if _, ok := mux.m["GET "+path.Join(prefix, ss1.Name)]; !ok {
+		t.Errorf("registered patterns: %#v", mux.m)
+	}
+	if _, ok := mux.m["GET "+path.Join(prefix, ss2.Name)]; !ok {
+		t.Errorf("registered patterns: %#v", mux.m)
+	}
+	if _, ok := mux.m["GET "+path.Join(prefix, ss3.Name)]; !ok {
+		t.Errorf("registered patterns: %#v", mux.m)
+	}
+	var barePatterns []string
 	for pattern := range mux.m {
-		if !strings.HasPrefix(pattern, "GET "+prefix+"/") {
-			t.Errorf("unexpected pattern: %q", pattern)
+		if !strings.HasPrefix(pattern, "GET ") {
+			barePatterns = append(barePatterns, pattern)
 		}
+	}
+	if len(barePatterns) != 1 {
+		t.Fatalf("expected 1 bare path pattern, got %d: %#v", len(barePatterns), mux.m)
+	}
+	if got := barePatterns[0]; !strings.HasPrefix(got, prefix+"/foo.") || !strings.HasSuffix(got, ".txt") {
+		t.Errorf("unexpected setupfunc pattern: %q", got)
 	}
 	if x := jw.FaviconURL(); x != path.Join(prefix, ss1.Name) {
 		t.Error(x)
@@ -96,6 +112,25 @@ func TestJaws_SetupKeepsMethodPattern(t *testing.T) {
 		t.Fatalf("expected 1 handler, got %d", len(mux.m))
 	}
 	if _, ok := mux.m["POST\t/custom"]; !ok {
+		t.Errorf("registered patterns: %#v", mux.m)
+	}
+}
+
+func TestJaws_SetupSetupFuncBarePathIsUnchanged(t *testing.T) {
+	jw, _ := New()
+	defer jw.Close()
+	mux := &testMux{}
+	err := jw.Setup(mux.Handle, "", SetupFunc(func(_ *Jaws, handleFn HandleFunc, _ string) (urls []*url.URL, err error) {
+		handleFn("custom", http.NotFoundHandler())
+		return
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mux.m) != 1 {
+		t.Fatalf("expected 1 handler, got %d", len(mux.m))
+	}
+	if _, ok := mux.m["custom"]; !ok {
 		t.Errorf("registered patterns: %#v", mux.m)
 	}
 }

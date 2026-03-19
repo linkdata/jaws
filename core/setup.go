@@ -12,9 +12,7 @@ import (
 )
 
 // HandleFunc matches the signature of http.ServeMux.Handle().
-//
-// Setup passes method-aware patterns. Bare path patterns are normalized to GET.
-type HandleFunc = func(uri string, handler http.Handler)
+type HandleFunc = func(pattern string, handler http.Handler)
 
 // SetupFunc is called by Setup and allows setting up addons for JaWS.
 //
@@ -41,12 +39,6 @@ func makeAbsPath(prefix string, u *url.URL) *url.URL {
 // relative URL paths prefixed with prefix.
 func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err error) {
 	var urls []*url.URL
-	normalizedHandleFn := handleFn
-	if handleFn != nil {
-		normalizedHandleFn = func(pattern string, handler http.Handler) {
-			handleFn(routepattern.NormalizeGET(pattern), handler)
-		}
-	}
 
 	handleStaticServe := func(ss *staticserve.StaticServe) {
 		if ss != nil {
@@ -55,8 +47,8 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 			if u != nil {
 				u = makeAbsPath(prefix, u)
 				urls = append(urls, u)
-				if normalizedHandleFn != nil {
-					normalizedHandleFn(u.String(), ss)
+				if handleFn != nil {
+					handleFn(routepattern.NormalizeGET(u.String()), ss)
 				}
 			}
 		}
@@ -77,7 +69,7 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 		case *staticserve.StaticServe:
 			handleStaticServe(extra)
 		case SetupFunc:
-			setupurls, setuperr := extra(jw, normalizedHandleFn, prefix)
+			setupurls, setuperr := extra(jw, handleFn, prefix)
 			err = errors.Join(err, setuperr)
 			for _, u := range setupurls {
 				urls = append(urls, makeAbsPath(prefix, u))

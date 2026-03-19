@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"net/http"
 	"path"
-	"strings"
 
 	"github.com/linkdata/jaws/internal/routepattern"
 )
@@ -16,19 +15,12 @@ import (
 // Handle and HandleFS pass method-aware patterns. Bare path patterns are normalized to GET.
 type HandleFunc = func(uri string, handler http.Handler)
 
-func ensurePrefixSlash(s string) string {
-	if !strings.HasPrefix(s, "/") {
-		s = "/" + s
-	}
-	return s
-}
-
 // Handle creates a new StaticServe for the fpath that returns the data given.
 // Returns the URI of the resource.
 func Handle(fpath string, data []byte, handleFn HandleFunc) (uri string, err error) {
 	var ss *StaticServe
 	if ss, err = New(fpath, data); err == nil {
-		uri = ensurePrefixSlash(ss.Name)
+		uri = routepattern.EnsurePrefixSlash(ss.Name)
 		handleFn(routepattern.NormalizeGET(uri), ss)
 	}
 	return
