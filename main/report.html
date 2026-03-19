@@ -3970,9 +3970,7 @@ import (
 )
 
 // HandleFunc matches the signature of http.ServeMux.Handle().
-//
-// Setup passes method-aware patterns. Bare path patterns are normalized to GET.
-type HandleFunc = func(uri string, handler http.Handler)
+type HandleFunc = func(pattern string, handler http.Handler)
 
 // SetupFunc is called by Setup and allows setting up addons for JaWS.
 //
@@ -3999,22 +3997,16 @@ func makeAbsPath(prefix string, u *url.URL) *url.URL <span class="cov8" title="1
 // relative URL paths prefixed with prefix.
 func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err error) <span class="cov8" title="1">{
         var urls []*url.URL
-        normalizedHandleFn := handleFn
-        if handleFn != nil </span><span class="cov8" title="1">{
-                normalizedHandleFn = func(pattern string, handler http.Handler) </span><span class="cov8" title="1">{
-                        handleFn(routepattern.NormalizeGET(pattern), handler)
-                }</span>
-        }
 
-        <span class="cov8" title="1">handleStaticServe := func(ss *staticserve.StaticServe) </span><span class="cov8" title="1">{
+        handleStaticServe := func(ss *staticserve.StaticServe) </span><span class="cov8" title="1">{
                 if ss != nil </span><span class="cov8" title="1">{
                         u, uerr := url.Parse(ss.Name)
                         err = errors.Join(err, uerr)
                         if u != nil </span><span class="cov8" title="1">{
                                 u = makeAbsPath(prefix, u)
                                 urls = append(urls, u)
-                                if normalizedHandleFn != nil </span><span class="cov8" title="1">{
-                                        normalizedHandleFn(u.String(), ss)
+                                if handleFn != nil </span><span class="cov8" title="1">{
+                                        handleFn(routepattern.NormalizeGET(u.String()), ss)
                                 }</span>
                         }
                 }
@@ -4035,7 +4027,7 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
                 case *staticserve.StaticServe:<span class="cov8" title="1">
                         handleStaticServe(extra)</span>
                 case SetupFunc:<span class="cov8" title="1">
-                        setupurls, setuperr := extra(jw, normalizedHandleFn, prefix)
+                        setupurls, setuperr := extra(jw, handleFn, prefix)
                         err = errors.Join(err, setuperr)
                         for _, u := range setupurls </span><span class="cov8" title="1">{
                                 urls = append(urls, makeAbsPath(prefix, u))
@@ -4608,7 +4600,8 @@ func hasMethodPrefix(pattern string) bool <span class="cov8" title="1">{
         <span class="cov8" title="1">return false</span>
 }
 
-func ensurePrefixSlash(s string) string <span class="cov8" title="1">{
+// EnsurePrefixSlash returns s with a leading slash.
+func EnsurePrefixSlash(s string) string <span class="cov8" title="1">{
         if !strings.HasPrefix(s, "/") </span><span class="cov8" title="1">{
                 s = "/" + s
         }</span>
@@ -4624,7 +4617,7 @@ func NormalizeGET(pattern string) string <span class="cov8" title="1">{
         if hasMethodPrefix(pattern) </span><span class="cov8" title="1">{
                 return pattern
         }</span>
-        <span class="cov8" title="1">return http.MethodGet + " " + ensurePrefixSlash(pattern)</span>
+        <span class="cov8" title="1">return http.MethodGet + " " + EnsurePrefixSlash(pattern)</span>
 }
 </pre>
 		
@@ -5012,46 +5005,6 @@ func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.
         }
         <span class="cov8" title="1">return</span>
 }
-
-/*
-// GenerateHeadHTML calls jw.GenerateHeadHTML with URL's for the staticserve files
-// prefixed with the given path prefix and any extra URL's you provide.
-func GenerateHeadHTML(jw *jaws.Jaws, prefix string, files []*staticserve.StaticServe, extra ...string) (err error) {
-        var extraFiles []string
-        for _, ss := range files {
-                extraFiles = append(extraFiles, path.Join(prefix, ss.Name))
-        }
-        extraFiles = append(extraFiles, extra...)
-        return jw.GenerateHeadHTML(extraFiles...)
-}
-
-
-// SetupUsing sets up Jaws to serve the Bootstrap files from the prefix path,
-// calling handleFn for each URI and staticserve.StaticServe.
-// If handleFn is nil, http.DefaultServeMux.Handle is used instead.
-// Any extra URL's given are passed to GenerateHeadHTML.
-func SetupUsing(jw *jaws.Jaws, prefix string, handleFn HandleFunc, extra ...string) (err error) {
-        var files []*staticserve.StaticServe
-        if handleFn == nil {
-                handleFn = http.DefaultServeMux.Handle
-        }
-        if files, err = Files(); err == nil {
-                if err = GenerateHeadHTML(jw, prefix, files, extra...); err == nil {
-                        for _, ss := range files {
-                                handleFn(path.Join(prefix, ss.Name), ss)
-                        }
-                        handleFn(path.Join(prefix, "bootstrap.bundle.min.js.map"), http.NotFoundHandler())
-                        handleFn(path.Join(prefix, "bootstrap.min.css.map"), http.NotFoundHandler())
-                }
-        }
-        return
-}
-
-// Setup calls SetupUsing with a prefix of "/static".
-func Setup(jw *jaws.Jaws, handleFn HandleFunc, extra ...string) (err error) {
-        return SetupUsing(jw, "/static", handleFn, extra...)
-}
-*/
 </pre>
 		
 		<pre class="file" id="file39" style="display: none">package jawstest
@@ -5439,7 +5392,6 @@ import (
         "io/fs"
         "net/http"
         "path"
-        "strings"
 
         "github.com/linkdata/jaws/internal/routepattern"
 )
@@ -5449,19 +5401,12 @@ import (
 // Handle and HandleFS pass method-aware patterns. Bare path patterns are normalized to GET.
 type HandleFunc = func(uri string, handler http.Handler)
 
-func ensurePrefixSlash(s string) string <span class="cov8" title="1">{
-        if !strings.HasPrefix(s, "/") </span><span class="cov8" title="1">{
-                s = "/" + s
-        }</span>
-        <span class="cov8" title="1">return s</span>
-}
-
 // Handle creates a new StaticServe for the fpath that returns the data given.
 // Returns the URI of the resource.
 func Handle(fpath string, data []byte, handleFn HandleFunc) (uri string, err error) <span class="cov8" title="1">{
         var ss *StaticServe
         if ss, err = New(fpath, data); err == nil </span><span class="cov8" title="1">{
-                uri = ensurePrefixSlash(ss.Name)
+                uri = routepattern.EnsurePrefixSlash(ss.Name)
                 handleFn(routepattern.NormalizeGET(uri), ss)
         }</span>
         <span class="cov8" title="1">return</span>
