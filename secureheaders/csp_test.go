@@ -17,7 +17,7 @@ func mustParseURL(t *testing.T, raw string) *url.URL {
 	return u
 }
 
-func TestBuildContentSecurityPolicy_Default(t *testing.T) {
+func TestSecureHeaders_BuildContentSecurityPolicy_Default(t *testing.T) {
 	got, err := secureheaders.BuildContentSecurityPolicy(nil, "")
 	if err != nil {
 		t.Fatal(err)
@@ -37,7 +37,7 @@ func TestBuildContentSecurityPolicy_Default(t *testing.T) {
 	}
 }
 
-func TestBuildContentSecurityPolicy_ExternalResourcesAndListenURL(t *testing.T) {
+func TestSecureHeaders_BuildContentSecurityPolicy_ExternalResourcesAndListenURL(t *testing.T) {
 	urls := []*url.URL{
 		mustParseURL(t, "https://cdn.jsdelivr.net/npm/bootstrap@5/dist/css/bootstrap.min.css"),
 		mustParseURL(t, "https://cdn.jsdelivr.net/npm/bootstrap@5/dist/js/bootstrap.min.js"),
@@ -65,7 +65,7 @@ func TestBuildContentSecurityPolicy_ExternalResourcesAndListenURL(t *testing.T) 
 	}
 }
 
-func TestBuildContentSecurityPolicy_InvalidListenURL(t *testing.T) {
+func TestSecureHeaders_BuildContentSecurityPolicy_InvalidListenURL(t *testing.T) {
 	_, err := secureheaders.BuildContentSecurityPolicy(nil, "https://bad host")
 	if err == nil {
 		t.Fatal("expected parse error for listenURL")
@@ -75,7 +75,7 @@ func TestBuildContentSecurityPolicy_InvalidListenURL(t *testing.T) {
 	}
 }
 
-func TestBuildContentSecurityPolicy_ConnectResourceAndHTTPListenURL(t *testing.T) {
+func TestSecureHeaders_BuildContentSecurityPolicy_ConnectResourceAndHTTPListenURL(t *testing.T) {
 	urls := []*url.URL{
 		mustParseURL(t, "wss://events.example.com/socket"),
 		mustParseURL(t, "https://cdn.example.com/asset.unknownext"),
