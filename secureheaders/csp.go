@@ -30,6 +30,8 @@ func BuildContentSecurityPolicy(resourceURLs []*url.URL, listenURL string) (valu
 					scriptSrc[source] = struct{}{}
 				case "style":
 					styleSrc[source] = struct{}{}
+					// Stylesheets commonly reference webfonts via relative URLs.
+					fontSrc[source] = struct{}{}
 				case "img":
 					imgSrc[source] = struct{}{}
 				case "font":
@@ -78,19 +80,15 @@ func cspDirectiveForURL(u *url.URL) string {
 		return "connect"
 	}
 
-	ext := strings.ToLower(filepath.Ext(u.Path))
-	switch ext {
-	case ".js":
-		return "script"
-	case ".css":
+	mimetype := mime.TypeByExtension(filepath.Ext(u.Path))
+	switch {
+	case strings.HasPrefix(mimetype, "text/css"):
 		return "style"
-	}
-
-	mimetype := mime.TypeByExtension(ext)
-	if strings.HasPrefix(mimetype, "image/") {
+	case strings.HasPrefix(mimetype, "text/javascript"):
+		return "script"
+	case strings.HasPrefix(mimetype, "image/"):
 		return "img"
-	}
-	if strings.HasPrefix(mimetype, "font/") {
+	case strings.HasPrefix(mimetype, "font/"):
 		return "font"
 	}
 	return ""
