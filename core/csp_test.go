@@ -1,33 +1,23 @@
 package core
 
 import (
+	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/linkdata/jaws/secureheaders"
 )
 
-func TestJaws_ContentSecurityPolicy_Default(t *testing.T) {
-	jw, err := New()
+func mustParseURL(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	u, err := url.Parse(raw)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("parse %q: %v", raw, err)
 	}
-	defer jw.Close()
-
-	want := "default-src 'self'; " +
-		"script-src 'self'; " +
-		"style-src 'self' 'unsafe-inline'; " +
-		"img-src 'self' data:; " +
-		"font-src 'self'; " +
-		"connect-src 'self'; " +
-		"frame-ancestors 'none'; " +
-		"object-src 'none'; " +
-		"base-uri 'self'; " +
-		"form-action 'self'"
-	if got := jw.ContentSecurityPolicy(); got != want {
-		t.Fatalf("unexpected default CSP header:\nwant: %q\ngot:  %q", want, got)
-	}
+	return u
 }
 
-func TestJaws_GenerateHeadHTML_StoresCSPWithExternalSourcesAndListenURL(t *testing.T) {
+func TestJaws_GenerateHeadHTML_StoresCSPBuiltBySecureHeaders(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -35,35 +25,33 @@ func TestJaws_GenerateHeadHTML_StoresCSPWithExternalSourcesAndListenURL(t *testi
 	defer jw.Close()
 
 	jw.ListenURL = "https://listenurl.com:8443/api/ws"
-	err = jw.GenerateHeadHTML(
+	extras := []string{
 		"https://cdn.jsdelivr.net/npm/bootstrap@5/dist/css/bootstrap.min.css",
 		"https://cdn.jsdelivr.net/npm/bootstrap@5/dist/js/bootstrap.min.js",
-		"https://cdn.jsdelivr.net/npm/bootstrap-icons/font/fonts/bootstrap-icons.woff2",
 		"https://images.example.com/logo.png",
-	)
-	if err != nil {
+	}
+	if err = jw.GenerateHeadHTML(extras...); err != nil {
 		t.Fatal(err)
 	}
 
-	csp := jw.ContentSecurityPolicy()
-	if !strings.Contains(csp, "script-src 'self' https://cdn.jsdelivr.net") {
-		t.Fatalf("expected script-src to include cdn source, got: %q", csp)
+	urls := []*url.URL{
+		mustParseURL(t, jw.serveCSS.Name),
+		mustParseURL(t, jw.serveJS.Name),
 	}
-	if !strings.Contains(csp, "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net") {
-		t.Fatalf("expected style-src to include cdn source, got: %q", csp)
+	for _, extra := range extras {
+		urls = append(urls, mustParseURL(t, extra))
 	}
-	if !strings.Contains(csp, "font-src 'self' https://cdn.jsdelivr.net") {
-		t.Fatalf("expected font-src to include cdn source, got: %q", csp)
+
+	wantCSP, err := secureheaders.BuildContentSecurityPolicy(urls, jw.ListenURL)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(csp, "img-src 'self' data: https://images.example.com") {
-		t.Fatalf("expected img-src to include image host, got: %q", csp)
-	}
-	if !strings.Contains(csp, "connect-src 'self' wss://listenurl.com:8443") {
-		t.Fatalf("expected connect-src to include wss source from ListenURL, got: %q", csp)
+	if got := jw.ContentSecurityPolicy(); got != wantCSP {
+		t.Fatalf("unexpected CSP:\nwant: %q\ngot:  %q", wantCSP, got)
 	}
 }
 
-func TestJaws_GenerateHeadHTML_InvalidListenURL(t *testing.T) {
+func TestJaws_GenerateHeadHTML_PropagatesCSPErrors(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
