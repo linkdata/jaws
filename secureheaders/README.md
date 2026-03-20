@@ -47,6 +47,42 @@ When `trustForwardedHeaders` is `true`, it also checks:
 
 For list-valued forwarding headers, the first hop is used.
 
+## CSP builder
+
+`BuildContentSecurityPolicy(resourceURLs, listenURL)` builds a
+`Content-Security-Policy` header value from known external resources and the
+listener URL used for websocket connections.
+
+Behavior:
+
+- Starts with a strict baseline:
+  `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';`
+  `img-src 'self' data:; font-src 'self'; connect-src 'self';`
+  `frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'`.
+- Adds external source expressions from `resourceURLs` by resource type:
+  - `.js` -> `script-src`
+  - `.css` -> `style-src`
+  - image MIME types -> `img-src`
+  - font MIME types -> `font-src`
+  - `ws://`/`wss://` URLs -> `connect-src`
+- Adds a websocket source from `listenURL` host:
+  - `https://host[:port]` -> `wss://host[:port]`
+  - `http://host[:port]` -> `ws://host[:port]`
+- Returns an error if `listenURL` cannot be parsed.
+
+Example:
+
+```go
+u1, _ := url.Parse("https://cdn.jsdelivr.net/npm/bootstrap@5/dist/css/bootstrap.min.css")
+u2, _ := url.Parse("https://cdn.jsdelivr.net/npm/bootstrap@5/dist/js/bootstrap.min.js")
+
+csp, err := secureheaders.BuildContentSecurityPolicy([]*url.URL{u1, u2}, "https://listen.example.com:8443/ws")
+if err != nil {
+	panic(err)
+}
+w.Header().Set("Content-Security-Policy", csp)
+```
+
 ## Custom header writer
 
 The middleware calls `SetHeaders` before invoking the wrapped handler.

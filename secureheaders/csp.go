@@ -13,7 +13,7 @@ import (
 // Resource URLs contribute external source expressions to script, style, image,
 // font and connect directives according to their type.
 //
-// If listenURL is non-empty and parseable with a host, an additional WSS source
+// If listenURL is non-empty and parseable with a host, an additional websocket source
 // expression is added to connect-src using that host.
 func BuildContentSecurityPolicy(resourceURLs []*url.URL, listenURL string) (value string, err error) {
 	scriptSrc := make(map[string]struct{})
@@ -42,7 +42,7 @@ func BuildContentSecurityPolicy(resourceURLs []*url.URL, listenURL string) (valu
 	}
 
 	var listenSource string
-	if listenSource, err = cspListenWSSSource(listenURL); err == nil {
+	if listenSource, err = cspListenWebSocketSource(listenURL); err == nil {
 		if listenSource != "" {
 			connectSrc[listenSource] = struct{}{}
 		}
@@ -106,7 +106,7 @@ func cspSourceExpr(u *url.URL) (src string) {
 	return
 }
 
-func cspListenWSSSource(listenURL string) (src string, err error) {
+func cspListenWebSocketSource(listenURL string) (src string, err error) {
 	var u *url.URL
 	if u, err = url.Parse(listenURL); err == nil && u.Host != "" {
 		switch u.Scheme {
