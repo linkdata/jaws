@@ -59,6 +59,7 @@ type Jaws struct {
 	Logger       Logger          // Optional logger to use
 	Debug        bool            // Set to true to enable debug info in generated HTML code
 	MakeAuth     MakeAuthFn      // Optional function to create With.Auth for Templates
+	ListenURL    string          // Optional websocket listener URL, used when generating Content-Security-Policy connect-src
 	BaseContext  context.Context // Non-nil base context for Requests, set to context.Background() in New()
 	bcastCh      chan Message
 	subCh        chan subscription
@@ -70,6 +71,7 @@ type Jaws struct {
 	mu           deadlock.RWMutex // protects following
 	headPrefix   string
 	faviconURL   string
+	cspHeader    string
 	tmplookers   []TemplateLookuper
 	kg           *bufio.Reader
 	closeCh      chan struct{} // closed when Close() has been called
@@ -413,6 +415,14 @@ func (jw *Jaws) FaviconURL() (s string) {
 	return
 }
 
+// ContentSecurityPolicy returns the generated Content-Security-Policy header value.
+func (jw *Jaws) ContentSecurityPolicy() (s string) {
+	jw.mu.RLock()
+	s = jw.cspHeader
+	jw.mu.RUnlock()
+	return
+}
+
 // GenerateHeadHTML (re-)generates the HTML code that goes in the HEAD section, ensuring
 // that the provided URL resources in `extra` are loaded, along with the JaWS javascript.
 // If one of the resources is named "favicon", it's URL will be stored and can
@@ -438,9 +448,12 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 			}
 			headPrefix, faviconURL := PreloadHTML(urls...)
 			headPrefix += `<meta name="jawsKey" content="`
+			cspHeader, csperr := secureheaders.BuildContentSecurityPolicy(urls, jw.ListenURL)
+			err = errors.Join(err, csperr)
 			jw.mu.Lock()
 			jw.headPrefix = headPrefix
 			jw.faviconURL = faviconURL
+			jw.cspHeader = cspHeader
 			jw.mu.Unlock()
 		}
 	}
