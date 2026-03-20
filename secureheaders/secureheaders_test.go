@@ -17,6 +17,46 @@ var wantDefaultHeaders = map[string]string{
 	"Permissions-Policy":      "camera=(), microphone=(), geolocation=(), payment=()",
 }
 
+func TestSecureHeaders_DefaultHeaders(t *testing.T) {
+	for key, want := range wantDefaultHeaders {
+		if got := secureheaders.DefaultHeaders.Get(key); got != want {
+			t.Errorf("%s: expected %q, got %q", key, want, got)
+		}
+	}
+	if got := secureheaders.DefaultHeaders.Get("Strict-Transport-Security"); got != "max-age=31536000; includeSubDomains" {
+		t.Errorf("Strict-Transport-Security: expected %q, got %q", "max-age=31536000; includeSubDomains", got)
+	}
+}
+
+func TestSecureHeaders_SetHeaders_UsesDefaultHeaders(t *testing.T) {
+	orig := secureheaders.DefaultHeaders.Clone()
+	defer func() {
+		secureheaders.DefaultHeaders = orig
+	}()
+
+	secureheaders.DefaultHeaders.Set("Referrer-Policy", "no-referrer")
+	secureheaders.DefaultHeaders.Set("Strict-Transport-Security", "max-age=123")
+
+	rr := httptest.NewRecorder()
+	secureheaders.SetHeaders(nil, rr, false)
+	if got := rr.Header().Get("Referrer-Policy"); got != "no-referrer" {
+		t.Fatalf("expected updated header value, got %q", got)
+	}
+	if got := rr.Header().Get("Strict-Transport-Security"); got != "" {
+		t.Fatalf("expected no HSTS over HTTP, got %q", got)
+	}
+}
+
+func TestSecureHeaders_SetHeaders_CopiesHeaderValues(t *testing.T) {
+	rr := httptest.NewRecorder()
+	secureheaders.SetHeaders(nil, rr, true)
+	rr.Header().Set("Referrer-Policy", "mutated")
+
+	if got := secureheaders.DefaultHeaders.Get("Referrer-Policy"); got != "strict-origin-when-cross-origin" {
+		t.Fatalf("expected DefaultHeaders to be unchanged, got %q", got)
+	}
+}
+
 func assertDefaultHeaders(t *testing.T, hdr http.Header, wantHSTS bool) {
 	t.Helper()
 
@@ -35,16 +75,16 @@ func assertDefaultHeaders(t *testing.T, hdr http.Header, wantHSTS bool) {
 	}
 }
 
-func TestDefaultWriteHeaders(t *testing.T) {
+func TestSetHeaders(t *testing.T) {
 	t.Run("http", func(t *testing.T) {
 		rr := httptest.NewRecorder()
-		secureheaders.DefaultSetHeaders(rr, false)
+		secureheaders.SetHeaders(nil, rr, false)
 		assertDefaultHeaders(t, rr.Header(), false)
 	})
 
 	t.Run("https", func(t *testing.T) {
 		rr := httptest.NewRecorder()
-		secureheaders.DefaultSetHeaders(rr, true)
+		secureheaders.SetHeaders(nil, rr, true)
 		assertDefaultHeaders(t, rr.Header(), true)
 	})
 }
@@ -139,6 +179,21 @@ func TestMiddlewareWithTrustForwardedHeaders(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, r)
 	assertDefaultHeaders(t, rr.Result().Header, false)
+}
+
+func TestMiddleware_HeaderOverride(t *testing.T) {
+	h := secureheaders.Middleware{
+		Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+		Header: http.Header{
+			"Content-Security-Policy": {"default-src 'none'"},
+		},
+	}
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "http://example.test/", nil))
+
+	if got := rr.Header().Get("Content-Security-Policy"); got != "default-src 'none'" {
+		t.Fatalf("expected override CSP header, got %q", got)
+	}
 }
 
 func TestRequestIsSecure(t *testing.T) {

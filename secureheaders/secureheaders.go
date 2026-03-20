@@ -5,31 +5,32 @@ import (
 	"strings"
 )
 
-var headerReferrerPolicy = []string{"strict-origin-when-cross-origin"}
-var headerContentSecurityPolicy = []string{"default-src 'self'; frame-ancestors 'none'"}
-var headerXContentTypeOptions = []string{"nosniff"}
-var headerXFrameOptions = []string{"DENY"}
-var headerXXssProtection = []string{"0"}
-var headerPermissionsPolicy = []string{"camera=(), microphone=(), geolocation=(), payment=()"}
-var headerStrictTransportSecurity = []string{"max-age=31536000; includeSubDomains"}
-
-// SetHeaders is called by the middleware to set response headers.
-// It defaults to DefaultSetHeaders.
-var SetHeaders = DefaultSetHeaders
-
-// DefaultSetHeaders sets a secure baseline of HTTP response headers.
+// DefaultHeaders contains the default security header values used by SetHeaders.
 //
-// If ishttps is true, it also sets Strict-Transport-Security.
-func DefaultSetHeaders(hw http.ResponseWriter, ishttps bool) {
+// These are not protected by a mutex, so modifying the map while serving requests is racy.
+var DefaultHeaders = http.Header{
+	"Referrer-Policy":           {"strict-origin-when-cross-origin"},
+	"Content-Security-Policy":   {"default-src 'self'; frame-ancestors 'none'"},
+	"X-Content-Type-Options":    {"nosniff"},
+	"X-Frame-Options":           {"DENY"},
+	"X-Xss-Protection":          {"0"},
+	"Permissions-Policy":        {"camera=(), microphone=(), geolocation=(), payment=()"},
+	"Strict-Transport-Security": {"max-age=31536000; includeSubDomains"},
+}
+
+// SetHeaders sets the response headers to the values in src.
+// If src is nil, DefaultHeaders is used.
+//
+// If ishttps is false, Strict-Transport-Security is not set.
+func SetHeaders(src http.Header, hw http.ResponseWriter, ishttps bool) {
+	if src == nil {
+		src = DefaultHeaders
+	}
 	hdr := hw.Header()
-	hdr["Referrer-Policy"] = headerReferrerPolicy
-	hdr["Content-Security-Policy"] = headerContentSecurityPolicy
-	hdr["X-Content-Type-Options"] = headerXContentTypeOptions
-	hdr["X-Frame-Options"] = headerXFrameOptions
-	hdr["X-Xss-Protection"] = headerXXssProtection
-	hdr["Permissions-Policy"] = headerPermissionsPolicy
-	if ishttps {
-		hdr["Strict-Transport-Security"] = headerStrictTransportSecurity
+	for k, v := range src {
+		if ishttps || k != "Strict-Transport-Security" {
+			hdr[k] = v
+		}
 	}
 }
 
@@ -39,6 +40,7 @@ func DefaultSetHeaders(hw http.ResponseWriter, ishttps bool) {
 // The embedded Handler must be non-nil.
 type Middleware struct {
 	http.Handler // Handler receives the request after security headers are set.
+	http.Header  // The headers to set. If nil, uses DefaultHeaders
 	// TrustForwardedHeaders enables forwarded-header HTTPS detection
 	// (X-Forwarded-Ssl, Front-End-Https, X-Forwarded-Proto and Forwarded).
 	// Enable only when these headers are set and sanitized by trusted
@@ -47,7 +49,7 @@ type Middleware struct {
 }
 
 func (m Middleware) ServeHTTP(hw http.ResponseWriter, hr *http.Request) {
-	SetHeaders(hw, RequestIsSecure(hr, m.TrustForwardedHeaders))
+	SetHeaders(m.Header, hw, RequestIsSecure(hr, m.TrustForwardedHeaders))
 	m.Handler.ServeHTTP(hw, hr)
 }
 

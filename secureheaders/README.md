@@ -5,7 +5,7 @@ HTTP response headers.
 
 ## Default headers
 
-`DefaultSetHeaders` sets:
+`SetHeaders` sets:
 
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'`
@@ -83,16 +83,7 @@ if err != nil {
 w.Header().Set("Content-Security-Policy", csp)
 ```
 
-## Custom header writer
+## Extra headers
 
-The middleware calls `SetHeaders` before invoking the wrapped handler.
-
-By default, `SetHeaders` points to `DefaultSetHeaders`, but you can override it
-if you need custom behavior:
-
-```go
-secureheaders.SetHeaders = func(w http.ResponseWriter, isHTTPS bool) {
-	secureheaders.DefaultSetHeaders(w, isHTTPS)
-	w.Header()["Cross-Origin-Opener-Policy"] = []string{"same-origin"}
-}
-```
+To add additional response headers, wrap your handler around the middleware
+or set them in the wrapped handler itself after middleware processing.
