@@ -5424,7 +5424,9 @@ func BuildContentSecurityPolicy(resourceURLs []*url.URL, listenURL string) (valu
                                 case "script":<span class="cov8" title="1">
                                         scriptSrc[source] = struct{}{}</span>
                                 case "style":<span class="cov8" title="1">
-                                        styleSrc[source] = struct{}{}</span>
+                                        styleSrc[source] = struct{}{}
+                                        // Stylesheets commonly reference webfonts via relative URLs.
+                                        fontSrc[source] = struct{}{}</span>
                                 case "img":<span class="cov8" title="1">
                                         imgSrc[source] = struct{}{}</span>
                                 case "font":<span class="cov8" title="1">
@@ -5473,21 +5475,17 @@ func cspDirectiveForURL(u *url.URL) string <span class="cov8" title="1">{
                 return "connect"</span>
         }
 
-        <span class="cov8" title="1">ext := strings.ToLower(filepath.Ext(u.Path))
-        switch ext </span>{
-        case ".js":<span class="cov8" title="1">
-                return "script"</span>
-        case ".css":<span class="cov8" title="1">
+        <span class="cov8" title="1">mimetype := mime.TypeByExtension(filepath.Ext(u.Path))
+        switch </span>{
+        case strings.HasPrefix(mimetype, "text/css"):<span class="cov8" title="1">
                 return "style"</span>
+        case strings.HasPrefix(mimetype, "text/javascript"):<span class="cov8" title="1">
+                return "script"</span>
+        case strings.HasPrefix(mimetype, "image/"):<span class="cov8" title="1">
+                return "img"</span>
+        case strings.HasPrefix(mimetype, "font/"):<span class="cov8" title="1">
+                return "font"</span>
         }
-
-        <span class="cov8" title="1">mimetype := mime.TypeByExtension(ext)
-        if strings.HasPrefix(mimetype, "image/") </span><span class="cov8" title="1">{
-                return "img"
-        }</span>
-        <span class="cov8" title="1">if strings.HasPrefix(mimetype, "font/") </span><span class="cov8" title="1">{
-                return "font"
-        }</span>
         <span class="cov8" title="1">return ""</span>
 }
 
