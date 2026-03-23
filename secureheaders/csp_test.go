@@ -30,19 +30,10 @@ func TestSecureHeaders_BuildContentSecurityPolicy_Default(t *testing.T) {
 		"script-src 'self'; " +
 		"style-src 'self' 'unsafe-inline'; " +
 		"img-src 'self' data:; " +
-		"font-src 'self'"
+		"font-src 'self'; " +
+		"connect-src 'self'"
 	if got != want {
 		t.Fatalf("unexpected default CSP:\nwant: %q\ngot:  %q", want, got)
-	}
-}
-
-func TestSecureHeaders_BuildContentSecurityPolicy_EmptyListenURLDoesNotAddConnectDirective(t *testing.T) {
-	got, err := secureheaders.BuildContentSecurityPolicy(nil, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(got, "connect-src") {
-		t.Fatalf("expected no connect-src directive without listen URL hosts, got: %q", got)
 	}
 }
 

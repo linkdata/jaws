@@ -57,7 +57,7 @@ Behavior:
 
 - Starts with a strict baseline:
   `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';`
-  `img-src 'self' data:; font-src 'self';`
+  `img-src 'self' data:; font-src 'self'; connect-src 'self'; `
   `frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'`.
 - Adds external source expressions from `resourceURLs` by resource type:
   - `.js` -> `script-src`
@@ -68,7 +68,6 @@ Behavior:
 - Adds a websocket source from each `listenURL` host:
   - `https://host[:port]` -> `wss://host[:port]`
   - `http://host[:port]` -> `ws://host[:port]`
-- Emits `connect-src` only when at least one connect source is discovered.
 - Returns an error if any `listenURL` cannot be parsed.
 
 Example:
