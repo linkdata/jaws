@@ -5396,6 +5396,7 @@ func (jid Jid) String() string <span class="cov8" title="1">{
 		<pre class="file" id="file45" style="display: none">package secureheaders
 
 import (
+        "errors"
         "mime"
         "net/url"
         "path/filepath"
@@ -5403,14 +5404,14 @@ import (
         "strings"
 )
 
-// BuildContentSecurityPolicy returns a CSP header value based on resources and listener URL.
+// BuildContentSecurityPolicy returns a CSP header value based on resources and listener URLs.
 //
 // Resource URLs contribute external source expressions to script, style, image,
 // font and connect directives according to their type.
 //
-// If listenURL is non-empty and parseable with a host, an additional websocket source
-// expression is added to connect-src using that host.
-func BuildContentSecurityPolicy(resourceURLs []*url.URL, listenURL string) (value string, err error) <span class="cov8" title="1">{
+// If a listenURL entry is non-empty and parseable with a host, an additional
+// websocket source expression is added to connect-src using that host.
+func BuildContentSecurityPolicy(resourceURLs []*url.URL, listenURLs ...string) (value string, err error) <span class="cov8" title="1">{
         scriptSrc := make(map[string]struct{})
         styleSrc := make(map[string]struct{})
         imgSrc := make(map[string]struct{})
@@ -5438,12 +5439,8 @@ func BuildContentSecurityPolicy(resourceURLs []*url.URL, listenURL string) (valu
                 }
         }
 
-        <span class="cov8" title="1">var listenSource string
-        if listenSource, err = cspListenWebSocketSource(listenURL); err == nil </span><span class="cov8" title="1">{
-                if listenSource != "" </span><span class="cov8" title="1">{
-                        connectSrc[listenSource] = struct{}{}
-                }</span>
-                <span class="cov8" title="1">value = strings.Join([]string{
+        <span class="cov8" title="1">if err = cspListenWebSocketSource(connectSrc, listenURLs); err == nil </span><span class="cov8" title="1">{
+                value = strings.Join([]string{
                         "default-src 'self'",
                         cspDirective("script-src", []string{"'self'"}, scriptSrc),
                         cspDirective("style-src", []string{"'self'", "'unsafe-inline'"}, styleSrc),
@@ -5454,8 +5451,8 @@ func BuildContentSecurityPolicy(resourceURLs []*url.URL, listenURL string) (valu
                         "object-src 'none'",
                         "base-uri 'self'",
                         "form-action 'self'",
-                }, "; ")</span>
-        }
+                }, "; ")
+        }</span>
 
         <span class="cov8" title="1">return</span>
 }
@@ -5499,16 +5496,22 @@ func cspSourceExpr(u *url.URL) (src string) <span class="cov8" title="1">{
         <span class="cov8" title="1">return</span>
 }
 
-func cspListenWebSocketSource(listenURL string) (src string, err error) <span class="cov8" title="1">{
-        var u *url.URL
-        if u, err = url.Parse(listenURL); err == nil &amp;&amp; u.Host != "" </span><span class="cov8" title="1">{
-                switch u.Scheme </span>{
-                case "https":<span class="cov8" title="1">
-                        src = "wss://"</span>
-                case "http":<span class="cov8" title="1">
-                        src = "ws://"</span>
+func cspListenWebSocketSource(connectSrc map[string]struct{}, listenURLs []string) (err error) <span class="cov8" title="1">{
+        for _, listenURL := range listenURLs </span><span class="cov8" title="1">{
+                u, e := url.Parse(listenURL)
+                err = errors.Join(err, e)
+                if e == nil </span><span class="cov8" title="1">{
+                        if u.Host != "" </span><span class="cov8" title="1">{
+                                var src string
+                                switch u.Scheme </span>{
+                                case "https":<span class="cov8" title="1">
+                                        src = "wss://"</span>
+                                case "http":<span class="cov8" title="1">
+                                        src = "ws://"</span>
+                                }
+                                <span class="cov8" title="1">connectSrc[src+u.Host] = struct{}{}</span>
+                        }
                 }
-                <span class="cov8" title="1">src += u.Host</span>
         }
         <span class="cov8" title="1">return</span>
 }
