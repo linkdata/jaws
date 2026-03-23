@@ -187,6 +187,21 @@ Broadcasting APIs are not safe before the processing loop starts. In particular,
 `(*Session).Reload()` and `(*Session).Close()` may block before `Serve()` or
 `ServeWithTimeout()` is running.
 
+### Secure Response Headers
+
+Use `(*Jaws).SecureHeadersMiddleware(next)` to wrap page handlers with a
+security-header baseline and a `Content-Security-Policy` that matches the
+resources currently configured for JaWS.
+
+The middleware snapshots `secureheaders.DefaultHeaders`, replaces
+`Content-Security-Policy` with `jw.ContentSecurityPolicy()`, and does not trust
+forwarded HTTPS headers.
+
+```go
+page := ui.Handler(jw, "index", jaws.Bind(&mu, &f))
+http.DefaultServeMux.Handle("GET /", jw.SecureHeadersMiddleware(page))
+```
+
 ### Routing
 
 JaWS doesn't enforce any particular router, but it does require several

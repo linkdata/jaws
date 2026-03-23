@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/netip"
@@ -421,6 +422,24 @@ func (jw *Jaws) ContentSecurityPolicy() (s string) {
 	s = jw.cspHeader
 	jw.mu.RUnlock()
 	return
+}
+
+// SecureHeadersMiddleware wraps next with security headers that match the
+// current JaWS configuration.
+//
+// It snapshots secureheaders.DefaultHeaders, replacing the
+// Content-Security-Policy value with ContentSecurityPolicy so responses allow
+// the resources configured by GenerateHeadHTML.
+//
+// The returned middleware does not trust forwarded HTTPS headers.
+// The next handler must be non-nil.
+func (jw *Jaws) SecureHeadersMiddleware(next http.Handler) http.Handler {
+	hdrs := maps.Clone(secureheaders.DefaultHeaders)
+	hdrs["Content-Security-Policy"] = []string{jw.ContentSecurityPolicy()}
+	return secureheaders.Middleware{
+		Handler: next,
+		Header:  hdrs,
+	}
 }
 
 // GenerateHeadHTML (re-)generates the HTML code that goes in the HEAD section, ensuring
