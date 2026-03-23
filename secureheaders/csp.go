@@ -16,6 +16,9 @@ import (
 //
 // If a listenURL entry is non-empty and parseable with a host, an additional
 // websocket source expression is added to connect-src using that host.
+//
+// The connect-src directive is only emitted when one or more connect sources
+// are discovered from resourceURLs or listenURLs.
 func BuildContentSecurityPolicy(resourceURLs []*url.URL, listenURLs ...string) (value string, err error) {
 	scriptSrc := make(map[string]struct{})
 	styleSrc := make(map[string]struct{})
@@ -45,18 +48,21 @@ func BuildContentSecurityPolicy(resourceURLs []*url.URL, listenURLs ...string) (
 	}
 
 	if err = cspListenWebSocketSource(connectSrc, listenURLs); err == nil {
-		value = strings.Join([]string{
+		directives := []string{
 			"default-src 'self'",
-			cspDirective("script-src", []string{"'self'"}, scriptSrc),
-			cspDirective("style-src", []string{"'self'", "'unsafe-inline'"}, styleSrc),
-			cspDirective("img-src", []string{"'self'", "data:"}, imgSrc),
-			cspDirective("font-src", []string{"'self'"}, fontSrc),
-			cspDirective("connect-src", []string{"'self'"}, connectSrc),
 			"frame-ancestors 'none'",
 			"object-src 'none'",
 			"base-uri 'self'",
 			"form-action 'self'",
-		}, "; ")
+			cspDirective("script-src", []string{"'self'"}, scriptSrc),
+			cspDirective("style-src", []string{"'self'", "'unsafe-inline'"}, styleSrc),
+			cspDirective("img-src", []string{"'self'", "data:"}, imgSrc),
+			cspDirective("font-src", []string{"'self'"}, fontSrc),
+		}
+		if len(connectSrc) > 0 {
+			directives = append(directives, cspDirective("connect-src", []string{"'self'"}, connectSrc))
+		}
+		value = strings.Join(directives, "; ")
 	}
 
 	return
