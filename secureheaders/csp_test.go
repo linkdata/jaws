@@ -18,7 +18,7 @@ func mustParseURL(t *testing.T, raw string) *url.URL {
 }
 
 func TestSecureHeaders_BuildContentSecurityPolicy_Default(t *testing.T) {
-	got, err := secureheaders.BuildContentSecurityPolicy(nil, "")
+	got, err := secureheaders.BuildContentSecurityPolicy(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestSecureHeaders_BuildContentSecurityPolicy_StyleSourceAlsoAllowsFonts(t *
 	urls := []*url.URL{
 		mustParseURL(t, "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.min.css"),
 	}
-	got, err := secureheaders.BuildContentSecurityPolicy(urls, "")
+	got, err := secureheaders.BuildContentSecurityPolicy(urls)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestSecureHeaders_BuildContentSecurityPolicy_FontExtensionWithQuery(t *test
 	urls := []*url.URL{
 		mustParseURL(t, "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/fonts/bootstrap-icons.woff2?1fa40e"),
 	}
-	got, err := secureheaders.BuildContentSecurityPolicy(urls, "")
+	got, err := secureheaders.BuildContentSecurityPolicy(urls)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,11 +122,25 @@ func TestSecureHeaders_BuildContentSecurityPolicy_FontByMIMEExtension(t *testing
 	urls := []*url.URL{
 		mustParseURL(t, "https://cdn.jsdelivr.net/fonts/family.ttc"),
 	}
-	got, err := secureheaders.BuildContentSecurityPolicy(urls, "")
+	got, err := secureheaders.BuildContentSecurityPolicy(urls)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(got, "font-src 'self' https://cdn.jsdelivr.net") {
 		t.Fatalf("expected .ttc source in font-src via MIME detection, got: %q", got)
+	}
+}
+
+func TestSecureHeaders_BuildContentSecurityPolicy_MultipleListenURLs(t *testing.T) {
+	got, err := secureheaders.BuildContentSecurityPolicy(
+		nil,
+		"http://listen-a.example:8080/path",
+		"https://listen-b.example:8443/api/ws",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "connect-src 'self' ws://listen-a.example:8080 wss://listen-b.example:8443") {
+		t.Fatalf("expected connect-src to include all listen websocket sources, got: %q", got)
 	}
 }

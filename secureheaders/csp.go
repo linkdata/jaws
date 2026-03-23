@@ -1,6 +1,7 @@
 package secureheaders
 
 import (
+	"errors"
 	"mime"
 	"net/url"
 	"path/filepath"
@@ -8,14 +9,14 @@ import (
 	"strings"
 )
 
-// BuildContentSecurityPolicy returns a CSP header value based on resources and listener URL.
+// BuildContentSecurityPolicy returns a CSP header value based on resources and listener URLs.
 //
 // Resource URLs contribute external source expressions to script, style, image,
 // font and connect directives according to their type.
 //
-// If listenURL is non-empty and parseable with a host, an additional websocket source
-// expression is added to connect-src using that host.
-func BuildContentSecurityPolicy(resourceURLs []*url.URL, listenURL string) (value string, err error) {
+// If a listenURL entry is non-empty and parseable with a host, an additional
+// websocket source expression is added to connect-src using that host.
+func BuildContentSecurityPolicy(resourceURLs []*url.URL, listenURLs ...string) (value string, err error) {
 	scriptSrc := make(map[string]struct{})
 	styleSrc := make(map[string]struct{})
 	imgSrc := make(map[string]struct{})
@@ -43,11 +44,7 @@ func BuildContentSecurityPolicy(resourceURLs []*url.URL, listenURL string) (valu
 		}
 	}
 
-	var listenSource string
-	if listenSource, err = cspListenWebSocketSource(listenURL); err == nil {
-		if listenSource != "" {
-			connectSrc[listenSource] = struct{}{}
-		}
+	if err = cspListenWebSocketSource(connectSrc, listenURLs); err == nil {
 		value = strings.Join([]string{
 			"default-src 'self'",
 			cspDirective("script-src", []string{"'self'"}, scriptSrc),
@@ -104,16 +101,22 @@ func cspSourceExpr(u *url.URL) (src string) {
 	return
 }
 
-func cspListenWebSocketSource(listenURL string) (src string, err error) {
-	var u *url.URL
-	if u, err = url.Parse(listenURL); err == nil && u.Host != "" {
-		switch u.Scheme {
-		case "https":
-			src = "wss://"
-		case "http":
-			src = "ws://"
+func cspListenWebSocketSource(connectSrc map[string]struct{}, listenURLs []string) (err error) {
+	for _, listenURL := range listenURLs {
+		u, e := url.Parse(listenURL)
+		err = errors.Join(err, e)
+		if e == nil {
+			if u.Host != "" {
+				var src string
+				switch u.Scheme {
+				case "https":
+					src = "wss://"
+				case "http":
+					src = "ws://"
+				}
+				connectSrc[src+u.Host] = struct{}{}
+			}
 		}
-		src += u.Host
 	}
 	return
 }
