@@ -1194,7 +1194,6 @@ type Jaws struct {
         Logger       Logger          // Optional logger to use
         Debug        bool            // Set to true to enable debug info in generated HTML code
         MakeAuth     MakeAuthFn      // Optional function to create With.Auth for Templates
-        ListenURL    string          // Optional listener URL, used when generating Content-Security-Policy connect-src
         BaseContext  context.Context // Non-nil base context for Requests, set to context.Background() in New()
         bcastCh      chan Message
         subCh        chan subscription
@@ -1601,7 +1600,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
                         }
                         <span class="cov8" title="1">headPrefix, faviconURL := PreloadHTML(urls...)
                         headPrefix += `&lt;meta name="jawsKey" content="`
-                        cspHeader, csperr := secureheaders.BuildContentSecurityPolicy(urls, jw.ListenURL)
+                        cspHeader, csperr := secureheaders.BuildContentSecurityPolicy(urls)
                         err = errors.Join(err, csperr)
                         jw.mu.Lock()
                         jw.headPrefix = headPrefix
@@ -5600,7 +5599,6 @@ func (jid Jid) String() string <span class="cov8" title="1">{
 		<pre class="file" id="file45" style="display: none">package secureheaders
 
 import (
-        "errors"
         "mime"
         "net/url"
         "path/filepath"
@@ -5608,14 +5606,11 @@ import (
         "strings"
 )
 
-// BuildContentSecurityPolicy returns a CSP header value based on resources and listener URLs.
+// BuildContentSecurityPolicy returns a CSP header value based on resource URLs.
 //
 // Resource URLs contribute external source expressions to script, style, image,
 // font and connect directives according to their type.
-//
-// If a listenURL entry is non-empty and parseable with a host, an additional
-// websocket source expression is added to connect-src using that host.
-func BuildContentSecurityPolicy(resourceURLs []*url.URL, listenURLs ...string) (value string, err error) <span class="cov8" title="1">{
+func BuildContentSecurityPolicy(resourceURLs []*url.URL) (value string, err error) <span class="cov8" title="1">{
         scriptSrc := make(map[string]struct{})
         styleSrc := make(map[string]struct{})
         imgSrc := make(map[string]struct{})
@@ -5643,22 +5638,20 @@ func BuildContentSecurityPolicy(resourceURLs []*url.URL, listenURLs ...string) (
                 }
         }
 
-        <span class="cov8" title="1">if err = cspListenWebSocketSource(connectSrc, listenURLs); err == nil </span><span class="cov8" title="1">{
-                value = strings.Join([]string{
-                        "default-src 'self'",
-                        "frame-ancestors 'none'",
-                        "object-src 'none'",
-                        "base-uri 'self'",
-                        "form-action 'self'",
-                        cspDirective("script-src", []string{"'self'"}, scriptSrc),
-                        cspDirective("style-src", []string{"'self'", "'unsafe-inline'"}, styleSrc),
-                        cspDirective("img-src", []string{"'self'", "data:"}, imgSrc),
-                        cspDirective("font-src", []string{"'self'"}, fontSrc),
-                        cspDirective("connect-src", []string{"'self'"}, connectSrc),
-                }, "; ")
-        }</span>
+        <span class="cov8" title="1">value = strings.Join([]string{
+                "default-src 'self'",
+                "frame-ancestors 'none'",
+                "object-src 'none'",
+                "base-uri 'self'",
+                "form-action 'self'",
+                cspDirective("script-src", []string{"'self'"}, scriptSrc),
+                cspDirective("style-src", []string{"'self'", "'unsafe-inline'"}, styleSrc),
+                cspDirective("img-src", []string{"'self'", "data:"}, imgSrc),
+                cspDirective("font-src", []string{"'self'"}, fontSrc),
+                cspDirective("connect-src", []string{"'self'"}, connectSrc),
+        }, "; ")
 
-        <span class="cov8" title="1">return</span>
+        return</span>
 }
 
 func cspDirective(name string, defaults []string, extras map[string]struct{}) string <span class="cov8" title="1">{
@@ -5695,26 +5688,6 @@ func cspSourceExpr(u *url.URL) (src string) <span class="cov8" title="1">{
                 switch u.Scheme </span>{
                 case "http", "https", "ws", "wss":<span class="cov8" title="1">
                         src = u.Scheme + "://" + u.Host</span>
-                }
-        }
-        <span class="cov8" title="1">return</span>
-}
-
-func cspListenWebSocketSource(connectSrc map[string]struct{}, listenURLs []string) (err error) <span class="cov8" title="1">{
-        for _, listenURL := range listenURLs </span><span class="cov8" title="1">{
-                u, e := url.Parse(listenURL)
-                err = errors.Join(err, e)
-                if e == nil </span><span class="cov8" title="1">{
-                        if u.Host != "" </span><span class="cov8" title="1">{
-                                var src string
-                                switch u.Scheme </span>{
-                                case "https":<span class="cov8" title="1">
-                                        src = "wss://"</span>
-                                case "http":<span class="cov8" title="1">
-                                        src = "ws://"</span>
-                                }
-                                <span class="cov8" title="1">connectSrc[src+u.Host] = struct{}{}</span>
-                        }
                 }
         }
         <span class="cov8" title="1">return</span>
