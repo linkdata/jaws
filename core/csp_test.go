@@ -24,7 +24,6 @@ func TestJaws_GenerateHeadHTML_StoresCSPBuiltBySecureHeaders(t *testing.T) {
 	}
 	defer jw.Close()
 
-	jw.ListenURL = "https://listenurl.com:8443/api/ws"
 	extras := []string{
 		"https://cdn.jsdelivr.net/npm/bootstrap@5/dist/css/bootstrap.min.css",
 		"https://cdn.jsdelivr.net/npm/bootstrap@5/dist/js/bootstrap.min.js",
@@ -42,7 +41,7 @@ func TestJaws_GenerateHeadHTML_StoresCSPBuiltBySecureHeaders(t *testing.T) {
 		urls = append(urls, mustParseURL(t, extra))
 	}
 
-	wantCSP, err := secureheaders.BuildContentSecurityPolicy(urls, jw.ListenURL)
+	wantCSP, err := secureheaders.BuildContentSecurityPolicy(urls)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,17 +50,16 @@ func TestJaws_GenerateHeadHTML_StoresCSPBuiltBySecureHeaders(t *testing.T) {
 	}
 }
 
-func TestJaws_GenerateHeadHTML_PropagatesCSPErrors(t *testing.T) {
+func TestJaws_GenerateHeadHTML_PropagatesResourceParseErrors(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer jw.Close()
 
-	jw.ListenURL = "https://bad host"
-	err = jw.GenerateHeadHTML()
+	err = jw.GenerateHeadHTML("https://bad host")
 	if err == nil {
-		t.Fatal("expected parse error for ListenURL")
+		t.Fatal("expected parse error for extra resource URL")
 	}
 	if !strings.Contains(err.Error(), "invalid character") {
 		t.Fatalf("expected parse error, got: %v", err)

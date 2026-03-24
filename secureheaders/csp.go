@@ -1,7 +1,6 @@
 package secureheaders
 
 import (
-	"errors"
 	"mime"
 	"net/url"
 	"path/filepath"
@@ -9,14 +8,11 @@ import (
 	"strings"
 )
 
-// BuildContentSecurityPolicy returns a CSP header value based on resources and listener URLs.
+// BuildContentSecurityPolicy returns a CSP header value based on resource URLs.
 //
 // Resource URLs contribute external source expressions to script, style, image,
 // font and connect directives according to their type.
-//
-// If a listenURL entry is non-empty and parseable with a host, an additional
-// websocket source expression is added to connect-src using that host.
-func BuildContentSecurityPolicy(resourceURLs []*url.URL, listenURLs ...string) (value string, err error) {
+func BuildContentSecurityPolicy(resourceURLs []*url.URL) (value string, err error) {
 	scriptSrc := make(map[string]struct{})
 	styleSrc := make(map[string]struct{})
 	imgSrc := make(map[string]struct{})
@@ -44,20 +40,18 @@ func BuildContentSecurityPolicy(resourceURLs []*url.URL, listenURLs ...string) (
 		}
 	}
 
-	if err = cspListenWebSocketSource(connectSrc, listenURLs); err == nil {
-		value = strings.Join([]string{
-			"default-src 'self'",
-			"frame-ancestors 'none'",
-			"object-src 'none'",
-			"base-uri 'self'",
-			"form-action 'self'",
-			cspDirective("script-src", []string{"'self'"}, scriptSrc),
-			cspDirective("style-src", []string{"'self'", "'unsafe-inline'"}, styleSrc),
-			cspDirective("img-src", []string{"'self'", "data:"}, imgSrc),
-			cspDirective("font-src", []string{"'self'"}, fontSrc),
-			cspDirective("connect-src", []string{"'self'"}, connectSrc),
-		}, "; ")
-	}
+	value = strings.Join([]string{
+		"default-src 'self'",
+		"frame-ancestors 'none'",
+		"object-src 'none'",
+		"base-uri 'self'",
+		"form-action 'self'",
+		cspDirective("script-src", []string{"'self'"}, scriptSrc),
+		cspDirective("style-src", []string{"'self'", "'unsafe-inline'"}, styleSrc),
+		cspDirective("img-src", []string{"'self'", "data:"}, imgSrc),
+		cspDirective("font-src", []string{"'self'"}, fontSrc),
+		cspDirective("connect-src", []string{"'self'"}, connectSrc),
+	}, "; ")
 
 	return
 }
@@ -96,26 +90,6 @@ func cspSourceExpr(u *url.URL) (src string) {
 		switch u.Scheme {
 		case "http", "https", "ws", "wss":
 			src = u.Scheme + "://" + u.Host
-		}
-	}
-	return
-}
-
-func cspListenWebSocketSource(connectSrc map[string]struct{}, listenURLs []string) (err error) {
-	for _, listenURL := range listenURLs {
-		u, e := url.Parse(listenURL)
-		err = errors.Join(err, e)
-		if e == nil {
-			if u.Host != "" {
-				var src string
-				switch u.Scheme {
-				case "https":
-					src = "wss://"
-				case "http":
-					src = "ws://"
-				}
-				connectSrc[src+u.Host] = struct{}{}
-			}
 		}
 	}
 	return

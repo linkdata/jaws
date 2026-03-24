@@ -60,7 +60,6 @@ type Jaws struct {
 	Logger       Logger          // Optional logger to use
 	Debug        bool            // Set to true to enable debug info in generated HTML code
 	MakeAuth     MakeAuthFn      // Optional function to create With.Auth for Templates
-	ListenURL    string          // Optional listener URL, used when generating Content-Security-Policy connect-src
 	BaseContext  context.Context // Non-nil base context for Requests, set to context.Background() in New()
 	bcastCh      chan Message
 	subCh        chan subscription
@@ -467,7 +466,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 			}
 			headPrefix, faviconURL := PreloadHTML(urls...)
 			headPrefix += `<meta name="jawsKey" content="`
-			cspHeader, csperr := secureheaders.BuildContentSecurityPolicy(urls, jw.ListenURL)
+			cspHeader, csperr := secureheaders.BuildContentSecurityPolicy(urls)
 			err = errors.Join(err, csperr)
 			jw.mu.Lock()
 			jw.headPrefix = headPrefix
