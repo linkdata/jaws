@@ -91,41 +91,57 @@ func Bind[T comparable](l sync.Locker, p *T) Binder[T] {
 // Template is an alias for ui.Template.
 //
 // Deprecated: use ui.Template directly.
+//
+//go:fix inline
 type Template = ui.Template
 
 // RequestWriter is an alias for ui.RequestWriter.
 //
 // Deprecated: use ui.RequestWriter directly.
+//
+//go:fix inline
 type RequestWriter = ui.RequestWriter
 
 // PathSetter is an alias for ui.PathSetter.
 //
 // Deprecated: use ui.PathSetter directly.
+//
+//go:fix inline
 type PathSetter = ui.PathSetter
 
 // SetPather is an alias for ui.SetPather.
 //
 // Deprecated: use ui.SetPather directly.
+//
+//go:fix inline
 type SetPather = ui.SetPather
 
 // JsVar is an alias for ui.JsVar.
 //
 // Deprecated: use ui.JsVar directly.
+//
+//go:fix inline
 type JsVar[T any] = ui.JsVar[T]
 
 // IsJsVar is an alias for ui.IsJsVar.
 //
 // Deprecated: use ui.IsJsVar directly.
+//
+//go:fix inline
 type IsJsVar = ui.IsJsVar
 
 // JsVarMaker is an alias for ui.JsVarMaker.
 //
 // Deprecated: use ui.JsVarMaker directly.
+//
+//go:fix inline
 type JsVarMaker = ui.JsVarMaker
 
 // With is an alias for ui.With.
 //
 // Deprecated: use ui.With directly.
+//
+//go:fix inline
 type With = ui.With
 
 // NewTemplate creates a new ui.Template.
@@ -136,6 +152,8 @@ var NewTemplate = ui.NewTemplate
 // NewJsVar creates a new ui.JsVar.
 //
 // Deprecated: use ui.NewJsVar directly.
+//
+//go:fix inline
 func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 	return ui.NewJsVar(l, v)
 }
@@ -143,96 +161,134 @@ func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 // UiA is an alias for ui.A.
 //
 // Deprecated: use ui.A directly.
+//
+//go:fix inline
 type UiA = ui.A
 
 // UiButton is an alias for ui.Button.
 //
 // Deprecated: use ui.Button directly.
+//
+//go:fix inline
 type UiButton = ui.Button
 
 // UiCheckbox is an alias for ui.Checkbox.
 //
 // Deprecated: use ui.Checkbox directly.
+//
+//go:fix inline
 type UiCheckbox = ui.Checkbox
 
 // UiContainer is an alias for ui.Container.
 //
 // Deprecated: use ui.Container directly.
+//
+//go:fix inline
 type UiContainer = ui.Container
 
 // UiDate is an alias for ui.Date.
 //
 // Deprecated: use ui.Date directly.
+//
+//go:fix inline
 type UiDate = ui.Date
 
 // UiDiv is an alias for ui.Div.
 //
 // Deprecated: use ui.Div directly.
+//
+//go:fix inline
 type UiDiv = ui.Div
 
 // UiImg is an alias for ui.Img.
 //
 // Deprecated: use ui.Img directly.
+//
+//go:fix inline
 type UiImg = ui.Img
 
 // UiLabel is an alias for ui.Label.
 //
 // Deprecated: use ui.Label directly.
+//
+//go:fix inline
 type UiLabel = ui.Label
 
 // UiLi is an alias for ui.Li.
 //
 // Deprecated: use ui.Li directly.
+//
+//go:fix inline
 type UiLi = ui.Li
 
 // UiNumber is an alias for ui.Number.
 //
 // Deprecated: use ui.Number directly.
+//
+//go:fix inline
 type UiNumber = ui.Number
 
 // UiPassword is an alias for ui.Password.
 //
 // Deprecated: use ui.Password directly.
+//
+//go:fix inline
 type UiPassword = ui.Password
 
 // UiRadio is an alias for ui.Radio.
 //
 // Deprecated: use ui.Radio directly.
+//
+//go:fix inline
 type UiRadio = ui.Radio
 
 // UiRange is an alias for ui.Range.
 //
 // Deprecated: use ui.Range directly.
+//
+//go:fix inline
 type UiRange = ui.Range
 
 // UiSelect is an alias for ui.Select.
 //
 // Deprecated: use ui.Select directly.
+//
+//go:fix inline
 type UiSelect = ui.Select
 
 // UiSpan is an alias for ui.Span.
 //
 // Deprecated: use ui.Span directly.
+//
+//go:fix inline
 type UiSpan = ui.Span
 
 // UiTbody is an alias for ui.Tbody.
 //
 // Deprecated: use ui.Tbody directly.
+//
+//go:fix inline
 type UiTbody = ui.Tbody
 
 // UiTd is an alias for ui.Td.
 //
 // Deprecated: use ui.Td directly.
+//
+//go:fix inline
 type UiTd = ui.Td
 
 // UiText is an alias for ui.Text.
 //
 // Deprecated: use ui.Text directly.
+//
+//go:fix inline
 type UiText = ui.Text
 
 // UiTr is an alias for ui.Tr.
 //
 // Deprecated: use ui.Tr directly.
+//
+//go:fix inline
 type UiTr = ui.Tr
 
 // NewUiA creates a new ui.A.
@@ -293,6 +349,8 @@ var NewUiTr = ui.NewTr
 // NewUiCheckbox creates a new ui.Checkbox.
 //
 // Deprecated: use ui.NewCheckbox directly.
+//
+//go:fix inline
 func NewUiCheckbox(g Setter[bool]) *UiCheckbox {
 	return ui.NewCheckbox(g)
 }
@@ -300,6 +358,8 @@ func NewUiCheckbox(g Setter[bool]) *UiCheckbox {
 // NewUiDate creates a new ui.Date.
 //
 // Deprecated: use ui.NewDate directly.
+//
+//go:fix inline
 func NewUiDate(g Setter[time.Time]) *UiDate {
 	return ui.NewDate(g)
 }
@@ -307,6 +367,8 @@ func NewUiDate(g Setter[time.Time]) *UiDate {
 // NewUiImg creates a new ui.Img.
 //
 // Deprecated: use ui.NewImg directly.
+//
+//go:fix inline
 func NewUiImg(g Getter[string]) *UiImg {
 	return ui.NewImg(g)
 }
@@ -314,6 +376,8 @@ func NewUiImg(g Getter[string]) *UiImg {
 // NewUiNumber creates a new ui.Number.
 //
 // Deprecated: use ui.NewNumber directly.
+//
+//go:fix inline
 func NewUiNumber(g Setter[float64]) *UiNumber {
 	return ui.NewNumber(g)
 }
@@ -321,6 +385,8 @@ func NewUiNumber(g Setter[float64]) *UiNumber {
 // NewUiPassword creates a new ui.Password.
 //
 // Deprecated: use ui.NewPassword directly.
+//
+//go:fix inline
 func NewUiPassword(g Setter[string]) *UiPassword {
 	return ui.NewPassword(g)
 }
@@ -328,6 +394,8 @@ func NewUiPassword(g Setter[string]) *UiPassword {
 // NewUiRadio creates a new ui.Radio.
 //
 // Deprecated: use ui.NewRadio directly.
+//
+//go:fix inline
 func NewUiRadio(vp Setter[bool]) *UiRadio {
 	return ui.NewRadio(vp)
 }
@@ -335,6 +403,8 @@ func NewUiRadio(vp Setter[bool]) *UiRadio {
 // NewUiRange creates a new ui.Range.
 //
 // Deprecated: use ui.NewRange directly.
+//
+//go:fix inline
 func NewUiRange(g Setter[float64]) *UiRange {
 	return ui.NewRange(g)
 }
@@ -342,6 +412,8 @@ func NewUiRange(g Setter[float64]) *UiRange {
 // NewUiText creates a new ui.Text.
 //
 // Deprecated: use ui.NewText directly.
+//
+//go:fix inline
 func NewUiText(vp Setter[string]) *UiText {
 	return ui.NewText(vp)
 }
