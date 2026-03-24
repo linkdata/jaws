@@ -147,7 +147,11 @@ type With = ui.With
 // NewTemplate creates a new ui.Template.
 //
 // Deprecated: use ui.NewTemplate directly.
-var NewTemplate = ui.NewTemplate
+//
+//go:fix inline
+func NewTemplate(name string, dot any) Template {
+	return ui.NewTemplate(name, dot)
+}
 
 // NewJsVar creates a new ui.JsVar.
 //
@@ -294,57 +298,101 @@ type UiTr = ui.Tr
 // NewUiA creates a new ui.A.
 //
 // Deprecated: use ui.NewA directly.
-var NewUiA = ui.NewA
+//
+//go:fix inline
+func NewUiA(innerHTML HTMLGetter) *UiA {
+	return ui.NewA(innerHTML)
+}
 
 // NewUiButton creates a new ui.Button.
 //
 // Deprecated: use ui.NewButton directly.
-var NewUiButton = ui.NewButton
+//
+//go:fix inline
+func NewUiButton(innerHTML HTMLGetter) *UiButton {
+	return ui.NewButton(innerHTML)
+}
 
 // NewUiContainer creates a new ui.Container.
 //
 // Deprecated: use ui.NewContainer directly.
-var NewUiContainer = ui.NewContainer
+//
+//go:fix inline
+func NewUiContainer(outerHTMLTag string, c Container) *UiContainer {
+	return ui.NewContainer(outerHTMLTag, c)
+}
 
 // NewUiDiv creates a new ui.Div.
 //
 // Deprecated: use ui.NewDiv directly.
-var NewUiDiv = ui.NewDiv
+//
+//go:fix inline
+func NewUiDiv(innerHTML HTMLGetter) *UiDiv {
+	return ui.NewDiv(innerHTML)
+}
 
 // NewUiLabel creates a new ui.Label.
 //
 // Deprecated: use ui.NewLabel directly.
-var NewUiLabel = ui.NewLabel
+//
+//go:fix inline
+func NewUiLabel(innerHTML HTMLGetter) *UiLabel {
+	return ui.NewLabel(innerHTML)
+}
 
 // NewUiLi creates a new ui.Li.
 //
 // Deprecated: use ui.NewLi directly.
-var NewUiLi = ui.NewLi
+//
+//go:fix inline
+func NewUiLi(innerHTML HTMLGetter) *UiLi {
+	return ui.NewLi(innerHTML)
+}
 
 // NewUiSelect creates a new ui.Select.
 //
 // Deprecated: use ui.NewSelect directly.
-var NewUiSelect = ui.NewSelect
+//
+//go:fix inline
+func NewUiSelect(sh SelectHandler) *UiSelect {
+	return ui.NewSelect(sh)
+}
 
 // NewUiSpan creates a new ui.Span.
 //
 // Deprecated: use ui.NewSpan directly.
-var NewUiSpan = ui.NewSpan
+//
+//go:fix inline
+func NewUiSpan(innerHTML HTMLGetter) *UiSpan {
+	return ui.NewSpan(innerHTML)
+}
 
 // NewUiTbody creates a new ui.Tbody.
 //
 // Deprecated: use ui.NewTbody directly.
-var NewUiTbody = ui.NewTbody
+//
+//go:fix inline
+func NewUiTbody(c Container) *UiTbody {
+	return ui.NewTbody(c)
+}
 
 // NewUiTd creates a new ui.Td.
 //
 // Deprecated: use ui.NewTd directly.
-var NewUiTd = ui.NewTd
+//
+//go:fix inline
+func NewUiTd(innerHTML HTMLGetter) *UiTd {
+	return ui.NewTd(innerHTML)
+}
 
 // NewUiTr creates a new ui.Tr.
 //
 // Deprecated: use ui.NewTr directly.
-var NewUiTr = ui.NewTr
+//
+//go:fix inline
+func NewUiTr(innerHTML HTMLGetter) *UiTr {
+	return ui.NewTr(innerHTML)
+}
 
 // NewUiCheckbox creates a new ui.Checkbox.
 //
