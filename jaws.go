@@ -16,17 +16,43 @@ import (
 // Generic functions must be wrapped since they cannot be assigned without instantiation.
 
 type (
-	Jid                  = jid.Jid
-	Jaws                 = core.Jaws
-	Request              = core.Request
-	Element              = core.Element
-	UI                   = core.UI
-	Updater              = core.Updater
-	Renderer             = core.Renderer
-	TemplateLookuper     = core.TemplateLookuper
-	HandleFunc           = core.HandleFunc
-	Formatter            = core.Formatter
-	Auth                 = core.Auth
+	// Jid is the identifier type used for HTML elements managed by JaWS.
+	//
+	// It is provided as a convenience alias to the value defined in the jid
+	// subpackage so applications do not have to import that package directly
+	// when working with element IDs.
+	Jid = jid.Jid
+	// Jaws holds the server-side state and configuration for a JaWS instance.
+	//
+	// A single Jaws value coordinates template lookup, session handling and the
+	// request lifecycle that keeps the browser and backend synchronized via
+	// WebSockets. The zero value is not ready for use; construct instances with
+	// New to ensure the helper goroutines and static assets are prepared.
+	Jaws = core.Jaws
+	// Request maintains the state for a JaWS WebSocket connection, and handles processing
+	// of events and broadcasts.
+	//
+	// Note that we have to store the context inside the struct because there is no call chain
+	// between the Request being created and it being used once the WebSocket is created.
+	Request = core.Request
+	// An Element is an instance of a *Request, an UI object and a Jid.
+	Element = core.Element
+	// UI defines the required methods on JaWS UI objects.
+	// In addition, all UI objects must be comparable so they can be used as map keys.
+	UI       = core.UI
+	Updater  = core.Updater
+	Renderer = core.Renderer
+	// TemplateLookuper resolves a name to a *template.Template.
+	TemplateLookuper = core.TemplateLookuper
+	// HandleFunc matches the signature of http.ServeMux.Handle().
+	HandleFunc = core.HandleFunc
+	Formatter  = core.Formatter
+	Auth       = core.Auth
+	// InitHandler allows initializing UI getters and setters before their use.
+	//
+	// You can of course initialize them in the call from the template engine,
+	// but at that point you don't have access to the Element, Element.Context
+	// or Element.Session.
 	InitHandler          = core.InitHandler
 	ClickHandler         = core.ClickHandler
 	EventHandler         = core.EventHandler
@@ -35,15 +61,24 @@ type (
 	Getter[T comparable] = core.Getter[T]
 	Setter[T comparable] = core.Setter[T]
 	Binder[T comparable] = core.Binder[T]
-	HTMLGetter           = core.HTMLGetter
-	Logger               = core.Logger
-	RWLocker             = core.RWLocker
-	TagGetter            = core.TagGetter
-	NamedBool            = core.NamedBool
-	NamedBoolArray       = core.NamedBoolArray
-	Session              = core.Session
-	Tag                  = core.Tag
-	TestRequest          = core.TestRequest
+	// A HTMLGetter is the primary way to deliver generated HTML content to dynamic HTML nodes.
+	HTMLGetter = core.HTMLGetter
+	// Logger matches the log/slog.Logger interface.
+	Logger    = core.Logger
+	RWLocker  = core.RWLocker
+	TagGetter = core.TagGetter
+	// NamedBool stores a named boolen value with a HTML representation.
+	NamedBool = core.NamedBool
+	// NamedBoolArray stores the data required to support HTML 'select' elements
+	// and sets of HTML radio buttons. It it safe to use from multiple goroutines
+	// concurrently.
+	NamedBoolArray = core.NamedBoolArray
+	Session        = core.Session
+	Tag            = core.Tag
+	// TestRequest is a request harness intended for tests.
+	//
+	// Exposed for testing only.
+	TestRequest = core.TestRequest
 )
 
 var (
@@ -60,23 +95,53 @@ var (
 )
 
 const (
+	// ISO8601 is the date format used by date input widgets (YYYY-MM-DD).
 	ISO8601 = core.ISO8601
 )
 
-// Non-generic function assignments (no wrapper overhead)
 var (
-	New               = core.New
-	JawsKeyString     = core.JawsKeyString
-	WriteHTMLTag      = core.WriteHTMLTag
-	HTMLGetterFunc    = core.HTMLGetterFunc
-	StringGetterFunc  = core.StringGetterFunc
+	// New allocates a JaWS instance with the default configuration.
+	//
+	// The returned Jaws value is ready for use: static assets are embedded,
+	// internal goroutines are configured and the request pool is primed. Call
+	// Close when the instance is no longer needed to free associated resources.
+	New = core.New
+	// JawsKeyString returns the string to be used for the given JaWS key.
+	JawsKeyString = core.JawsKeyString
+	WriteHTMLTag  = core.WriteHTMLTag
+	// HTMLGetterFunc wraps a function and returns a HTMLGetter.
+	HTMLGetterFunc = core.HTMLGetterFunc
+	// StringGetterFunc wraps a function and returns a Getter[string]
+	StringGetterFunc = core.StringGetterFunc
+	// MakeHTMLGetter returns a HTMLGetter for v.
+	//
+	// Depending on the type of v, we return:
+	//
+	//   - HTMLGetter: `JawsGetHTML(e *Element) template.HTML` to be used as-is.
+	//   - Getter[string]: `JawsGet(elem *Element) string` that will be escaped using `html.EscapeString`.
+	//   - Formatter: `Format("%v") string` that will be escaped using `html.EscapeString`.
+	//   - fmt.Stringer: `String() string` that will be escaped using `html.EscapeString`.
+	//   - a static `template.HTML` or `string` to be used as-is with no HTML escaping.
+	//   - everything else is rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
+	//
+	// WARNING: Plain string values are NOT HTML-escaped. This is intentional so that
+	// HTML markup can be passed conveniently from Go templates (e.g. `{{$.Span "<i>text</i>"}}`).
+	// Never pass untrusted user input as a plain string; use [template.HTML] to signal
+	// that the content is trusted, or wrap user input in a [Getter] or [fmt.Stringer]
+	// so it will be escaped automatically.
 	MakeHTMLGetter    = core.MakeHTMLGetter
 	NewNamedBool      = core.NewNamedBool
 	NewNamedBoolArray = core.NewNamedBoolArray
-	NewTestRequest    = core.NewTestRequest
+	// NewTestRequest creates a TestRequest for use when testing.
+	// Passing nil for hr will create a "GET /" request with no body.
+	//
+	// Exposed for testing only.
+	NewTestRequest = core.NewTestRequest
 )
 
-// Generic functions must be wrapped
+// Bind returns a Binder[T] with the given sync.Locker (or RWLocker) and a pointer to the underlying value of type T.
+//
+// The pointer will be used as the UI tag.
 func Bind[T comparable](l sync.Locker, p *T) Binder[T] {
 	return core.Bind(l, p)
 }
