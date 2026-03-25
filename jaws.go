@@ -85,6 +85,7 @@ var (
 	ErrEventUnhandled        = core.ErrEventUnhandled
 	ErrIllegalTagType        = core.ErrIllegalTagType // ErrIllegalTagType is returned when a UI tag type is disallowed
 	ErrNotComparable         = core.ErrNotComparable
+	ErrNotUsableAsTag        = core.ErrNotUsableAsTag
 	ErrNoWebSocketRequest    = core.ErrNoWebSocketRequest
 	ErrPendingCancelled      = core.ErrPendingCancelled
 	ErrValueUnchanged        = core.ErrValueUnchanged

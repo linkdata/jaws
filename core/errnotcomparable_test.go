@@ -5,6 +5,10 @@ import (
 	"testing"
 )
 
+type testRuntimeNonComparable struct {
+	v any
+}
+
 func Test_newErrNotComparable_Error(t *testing.T) {
 	err := newErrNotComparable([]int{1, 2, 3})
 	if err == nil {
@@ -25,3 +29,9 @@ func Test_newErrNotComparable_Error(t *testing.T) {
 	}
 }
 
+func Test_newErrNotComparable_RuntimeNonComparable(t *testing.T) {
+	err := newErrNotComparable(testRuntimeNonComparable{v: func() {}})
+	if !errors.Is(err, ErrNotComparable) {
+		t.Fatalf("expected ErrNotComparable, got %v", err)
+	}
+}

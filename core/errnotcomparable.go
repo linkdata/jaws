@@ -23,8 +23,10 @@ func (errNotComparable) Is(target error) bool {
 }
 
 func newErrNotComparable(x any) error {
-	if t := reflect.TypeOf(x); t != nil && !t.Comparable() {
-		return errNotComparable{t: t}
+	if x != nil {
+		if v := reflect.ValueOf(x); !v.Comparable() {
+			return errNotComparable{t: reflect.TypeOf(x)}
+		}
 	}
 	return nil
 }

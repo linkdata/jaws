@@ -25,6 +25,10 @@ func (tt testBadTagGetter) JawsGetTag(*Request) any {
 	return tt
 }
 
+type testTagExpandNestedTagGetter struct {
+	Setter Setter[int]
+}
+
 func TestTagExpand(t *testing.T) {
 	var av atomic.Value
 	selftagger := &testSelfTagger{}
@@ -139,8 +143,51 @@ func TestTagExpand_TooManyTagsPanic(t *testing.T) {
 
 func TestTagExpand_TagGetterNonComparable(t *testing.T) {
 	_, err := TagExpand(nil, testBadTagGetter{1})
+	if !errors.Is(err, ErrNotUsableAsTag) {
+		t.Fatalf("expected ErrNotUsableAsTag, got %v", err)
+	}
 	if !errors.Is(err, ErrNotComparable) {
 		t.Fatalf("expected ErrNotComparable, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "found nested TagGetter at <value>") {
+		t.Fatalf("expected TagGetter search result in error text, got %q", err.Error())
+	}
+}
+
+func TestTagExpand_NotUsableAsTag_WithNestedTagGetterHint(t *testing.T) {
+	var mu deadlock.Mutex
+	var val int
+	tag := testTagExpandNestedTagGetter{
+		Setter: Bind(&mu, &val).Success(func() {}),
+	}
+	_, err := TagExpand(nil, tag)
+	if !errors.Is(err, ErrNotUsableAsTag) {
+		t.Fatalf("expected ErrNotUsableAsTag, got %v", err)
+	}
+	if !errors.Is(err, ErrNotComparable) {
+		t.Fatalf("expected ErrNotComparable compatibility, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "found nested TagGetter at Setter") {
+		t.Fatalf("expected nested TagGetter search result in error text, got %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "implement JawsGetTag(*Request)") {
+		t.Fatalf("expected remediation hint in error text, got %q", err.Error())
+	}
+}
+
+func TestTagExpand_NotUsableAsTag_NoNestedTagGetterHint(t *testing.T) {
+	_, err := TagExpand(nil, map[int]int{1: 1})
+	if !errors.Is(err, ErrNotUsableAsTag) {
+		t.Fatalf("expected ErrNotUsableAsTag, got %v", err)
+	}
+	if !errors.Is(err, ErrNotComparable) {
+		t.Fatalf("expected ErrNotComparable compatibility, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "found no nested TagGetter") {
+		t.Fatalf("expected no-TagGetter search result in error text, got %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "use a comparable tag value") {
+		t.Fatalf("expected remediation hint in error text, got %q", err.Error())
 	}
 }
 
