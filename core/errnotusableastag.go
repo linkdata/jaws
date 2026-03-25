@@ -97,10 +97,7 @@ func findTagGetter(x any) (path string, tgType reflect.Type, found bool) {
 				}
 			}
 		case reflect.Array:
-			n := v.Len()
-			if n > 4 {
-				n = 4
-			}
+			n := min(v.Len(), 4)
 			for i := range n {
 				next := "[" + strconv.Itoa(i) + "]"
 				if currentPath != "" {
@@ -119,10 +116,7 @@ func findTagGetter(x any) (path string, tgType reflect.Type, found bool) {
 				return false
 			}
 			seen[p] = struct{}{}
-			n := v.Len()
-			if n > 4 {
-				n = 4
-			}
+			n := min(v.Len(), 4)
 			for i := range n {
 				next := "[" + strconv.Itoa(i) + "]"
 				if currentPath != "" {
