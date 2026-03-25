@@ -44,7 +44,7 @@ func newErrNotUsableAsTag(x any) error {
 	return nil
 }
 
-var tagGetterType = reflect.TypeOf((*TagGetter)(nil)).Elem()
+var tagGetterType = reflect.TypeFor[TagGetter]()
 
 func findTagGetter(x any) (path string, tgType reflect.Type, found bool) {
 	if x == nil {

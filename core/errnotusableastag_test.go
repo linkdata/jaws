@@ -76,7 +76,7 @@ func TestFindTagGetter_ArrayAndSliceMatches(t *testing.T) {
 	if path != "Outer.Arr[3]" {
 		t.Fatalf("unexpected array path %q", path)
 	}
-	if tgType != reflect.TypeOf(testFindTagGetter{}) {
+	if tgType != reflect.TypeFor[testFindTagGetter]() {
 		t.Fatalf("unexpected array TagGetter type %v", tgType)
 	}
 
@@ -94,7 +94,7 @@ func TestFindTagGetter_ArrayAndSliceMatches(t *testing.T) {
 	if path != "Outer.S[2]" {
 		t.Fatalf("unexpected slice path %q", path)
 	}
-	if tgType != reflect.TypeOf(testFindTagGetter{}) {
+	if tgType != reflect.TypeFor[testFindTagGetter]() {
 		t.Fatalf("unexpected slice TagGetter type %v", tgType)
 	}
 }
