@@ -945,7 +945,7 @@ func newErrNotUsableAsTag(x any) error <span class="cov8" title="1">{
         <span class="cov8" title="1">return nil</span>
 }
 
-var tagGetterType = reflect.TypeOf((*TagGetter)(nil)).Elem()
+var tagGetterType = reflect.TypeFor[TagGetter]()
 
 func findTagGetter(x any) (path string, tgType reflect.Type, found bool) <span class="cov8" title="1">{
         if x == nil </span><span class="cov8" title="1">{
