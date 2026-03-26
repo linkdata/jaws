@@ -2763,6 +2763,7 @@ type Request struct {
         Rendering  atomic.Bool             // set to true by RequestWriter.Write()
         running    atomic.Bool             // if ServeHTTP() is running
         claimed    atomic.Bool             // if UseRequest() has been called for it
+        tailsent   atomic.Bool             // true if the tail script has been sent
         mu         deadlock.RWMutex        // protects following
         lastWrite  time.Time               // when the initial HTML was last written to, used for automatic cleanup
         initial    *http.Request           // initial HTTP request passed to Jaws.NewRequest
@@ -2855,6 +2856,7 @@ func (rq *Request) clearLocked() *Request <span class="cov8" title="1">{
         rq.running.Store(false)
         rq.claimed.Store(false)
         rq.Rendering.Store(false)
+        rq.tailsent.Store(false)
         if rq.cancelFn != nil </span><span class="cov8" title="1">{
                 rq.cancelFn(nil)
         }</span>
@@ -2894,9 +2896,10 @@ func appendJSQuote(b []byte, s string) []byte <span class="cov8" title="1">{
         return append(b, bytes.ReplaceAll(quoted, []byte("&lt;"), []byte(`\x3c`))...)
 }</span>
 
-func (rq *Request) getTailActions() (b []byte) <span class="cov8" title="1">{
+func (rq *Request) writeTailScript(w io.Writer) (err error) <span class="cov8" title="1">{
         rq.muQueue.Lock()
         defer rq.muQueue.Unlock()
+        var b []byte
         n := 0
         for _, msg := range rq.wsQueue </span><span class="cov8" title="1">{
                 var fn string
@@ -2911,10 +2914,7 @@ func (rq *Request) getTailActions() (b []byte) <span class="cov8" title="1">{
                         fn = "classList?.remove"</span>
                 }
                 <span class="cov8" title="1">if fn != "" </span><span class="cov8" title="1">{
-                        if len(b) == 0 </span><span class="cov8" title="1">{
-                                b = append(b, "\n&lt;script&gt;"...)
-                        }</span>
-                        <span class="cov8" title="1">b = append(b, "\ndocument.getElementById("...)
+                        b = append(b, "\ndocument.getElementById("...)
                         b = msg.Jid.AppendQuote(b)
                         b = append(b, ")?."...)
                         b = append(b, fn...)
@@ -2936,7 +2936,7 @@ func (rq *Request) getTailActions() (b []byte) <span class="cov8" title="1">{
         }</span>
         <span class="cov8" title="1">rq.wsQueue = rq.wsQueue[:n]
         if len(b) &gt; 0 </span><span class="cov8" title="1">{
-                b = append(b, "\n&lt;/script&gt;"...)
+                _, err = w.Write(b)
         }</span>
         <span class="cov8" title="1">return</span>
 }
@@ -2948,15 +2948,13 @@ func (rq *Request) getTailActions() (b []byte) <span class="cov8" title="1">{
 //
 // It also adds a &lt;noscript&gt; tag that warns of reduces functionality.
 func (rq *Request) TailHTML(w io.Writer) (err error) <span class="cov8" title="1">{
-        if _, err = fmt.Fprintf(w, "\n"+`&lt;noscript&gt;`+
+        ks := rq.JawsKeyString()
+        _, err = fmt.Fprintf(w, "\n"+`&lt;noscript&gt;`+
                 `&lt;div class="jaws-alert"&gt;This site requires Javascript for full functionality.&lt;/div&gt;`+
-                `&lt;img src="/jaws/%s/noscript" alt="noscript"&gt;&lt;/noscript&gt;`, rq.JawsKeyString()); err == nil </span><span class="cov8" title="1">{
-                if actions := rq.getTailActions(); len(actions) &gt; 0 </span><span class="cov8" title="1">{
-                        _, err = w.Write(actions)
-                }</span>
-        }
-        <span class="cov8" title="1">return</span>
-}
+                `&lt;img src="/jaws/%s/noscript" alt="noscript"&gt;&lt;/noscript&gt;`+"\n"+
+                `&lt;script src="/jaws/%s/tailscript"&gt;&lt;/script&gt;`+"\n", ks, ks)
+        return
+}</span>
 
 // GetConnectFn returns the currently set ConnectFn. That function will be called before starting the WebSocket tunnel if not nil.
 func (rq *Request) GetConnectFn() (fn ConnectFn) <span class="cov8" title="1">{
@@ -3669,7 +3667,7 @@ import (
         "strings"
 )
 
-var headerCacheNoCache = []string{"no-cache"}
+var headerCacheControlNoStore = []string{"no-store"}
 
 // ServeHTTP can handle the required JaWS endpoints, which all start with "/jaws/".
 func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
@@ -3687,7 +3685,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class="c
                                 jw.serveJS.ServeHTTP(w, r)
                                 return</span>
                         case "/jaws/.ping":<span class="cov8" title="1">
-                                w.Header()["Cache-Control"] = headerCacheNoCache
+                                w.Header()["Cache-Control"] = headerCacheControlNoStore
                                 select </span>{
                                 case &lt;-jw.Done():<span class="cov8" title="1">
                                         w.WriteHeader(http.StatusServiceUnavailable)</span>
@@ -4537,6 +4535,8 @@ func (rq *Request) stopServe() <span class="cov8" title="1">{
         rq.Jaws.recycle(rq)
 }</span>
 
+var headerContentTypeJavaScript = []string{"text/javascript"}
+
 // ServeHTTP implements http.HanderFunc.
 //
 // Requires UseRequest() have been successfully called for the Request.
@@ -4548,6 +4548,17 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class
                         rq.cancel(ErrJavascriptDisabled)
                         return
                 }</span>
+                <span class="cov8" title="1">if strings.HasSuffix(r.URL.Path, "/tailscript") </span><span class="cov8" title="1">{
+                        if rq.tailsent.CompareAndSwap(false, true) </span><span class="cov8" title="1">{
+                                hdr := w.Header()
+                                hdr["Content-Type"] = headerContentTypeJavaScript
+                                hdr["Cache-Control"] = headerCacheControlNoStore
+                                if err := rq.writeTailScript(w); err != nil </span><span class="cov8" title="1">{
+                                        rq.cancel(err)
+                                }</span>
+                        }
+                        <span class="cov8" title="1">return</span>
+                }
                 <span class="cov8" title="1">var err error
                 if r.Header.Get("Sec-WebSocket-Key") != "" </span><span class="cov8" title="1">{
                         if err = rq.validateWebSocketOrigin(r); err != nil </span><span class="cov8" title="1">{
