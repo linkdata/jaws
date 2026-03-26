@@ -39,6 +39,7 @@ type Request struct {
 	Rendering  atomic.Bool             // set to true by RequestWriter.Write()
 	running    atomic.Bool             // if ServeHTTP() is running
 	claimed    atomic.Bool             // if UseRequest() has been called for it
+	tailsent   atomic.Bool             // true if the tail script has been sent
 	mu         deadlock.RWMutex        // protects following
 	lastWrite  time.Time               // when the initial HTML was last written to, used for automatic cleanup
 	initial    *http.Request           // initial HTTP request passed to Jaws.NewRequest
@@ -170,9 +171,10 @@ func appendJSQuote(b []byte, s string) []byte {
 	return append(b, bytes.ReplaceAll(quoted, []byte("<"), []byte(`\x3c`))...)
 }
 
-func (rq *Request) getTailActions() (b []byte) {
+func (rq *Request) writeTailScript(w io.Writer) (err error) {
 	rq.muQueue.Lock()
 	defer rq.muQueue.Unlock()
+	var b []byte
 	n := 0
 	for _, msg := range rq.wsQueue {
 		var fn string
@@ -187,9 +189,6 @@ func (rq *Request) getTailActions() (b []byte) {
 			fn = "classList?.remove"
 		}
 		if fn != "" {
-			if len(b) == 0 {
-				b = append(b, "\n<script>"...)
-			}
 			b = append(b, "\ndocument.getElementById("...)
 			b = msg.Jid.AppendQuote(b)
 			b = append(b, ")?."...)
@@ -212,7 +211,7 @@ func (rq *Request) getTailActions() (b []byte) {
 	}
 	rq.wsQueue = rq.wsQueue[:n]
 	if len(b) > 0 {
-		b = append(b, "\n</script>"...)
+		_, err = w.Write(b)
 	}
 	return
 }
@@ -224,13 +223,11 @@ func (rq *Request) getTailActions() (b []byte) {
 //
 // It also adds a <noscript> tag that warns of reduces functionality.
 func (rq *Request) TailHTML(w io.Writer) (err error) {
-	if _, err = fmt.Fprintf(w, "\n"+`<noscript>`+
+	ks := rq.JawsKeyString()
+	_, err = fmt.Fprintf(w, "\n"+`<noscript>`+
 		`<div class="jaws-alert">This site requires Javascript for full functionality.</div>`+
-		`<img src="/jaws/%s/noscript" alt="noscript"></noscript>`, rq.JawsKeyString()); err == nil {
-		if actions := rq.getTailActions(); len(actions) > 0 {
-			_, err = w.Write(actions)
-		}
-	}
+		`<img src="/jaws/%s/noscript" alt="noscript"></noscript>`+"\n"+
+		`<script src="/jaws/%s/tailscript"></script>`+"\n", ks, ks)
 	return
 }
 

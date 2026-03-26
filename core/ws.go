@@ -30,6 +30,15 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			rq.cancel(ErrJavascriptDisabled)
 			return
 		}
+		if strings.HasSuffix(r.URL.Path, "/tailscript") {
+			if rq.tailsent.CompareAndSwap(false, true) {
+				w.Header().Set("Content-Type", "text/javascript")
+				if err := rq.writeTailScript(w); err != nil {
+					rq.cancel(err)
+				}
+			}
+			return
+		}
 		var err error
 		if r.Header.Get("Sec-WebSocket-Key") != "" {
 			if err = rq.validateWebSocketOrigin(r); err != nil {
