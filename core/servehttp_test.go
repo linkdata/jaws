@@ -194,7 +194,7 @@ func TestServeHTTP_TailScript(t *testing.T) {
 	e.SetClass("cls")
 	e.SetInner("kept")
 
-	req := httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString()+"/tailscript", nil)
+	req := httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString()+"/tailscript.js", nil)
 	req.RemoteAddr = hr.RemoteAddr
 	w := httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
@@ -217,13 +217,13 @@ func TestServeHTTP_TailScript_EndpointIsPerRequest(t *testing.T) {
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
 	rq := jw.NewRequest(hr)
 
-	req := httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString()+"/tailscript", nil)
+	req := httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString()+"/tailscript.js", nil)
 	req.RemoteAddr = hr.RemoteAddr
 	w := httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusOK)
 
-	req = httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString()+"/tailscript", nil)
+	req = httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString()+"/tailscript.js", nil)
 	req.RemoteAddr = hr.RemoteAddr
 	w = httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
@@ -241,7 +241,7 @@ func TestServeHTTP_TailScript_WriteError(t *testing.T) {
 	item := &testUi{}
 	rq.NewElement(item).SetClass("cls")
 
-	req := httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString()+"/tailscript", nil)
+	req := httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString()+"/tailscript.js", nil)
 	req.RemoteAddr = hr.RemoteAddr
 	w := &errResponseWriter{writeErr: errors.New("write failed")}
 	jw.ServeHTTP(w, req)

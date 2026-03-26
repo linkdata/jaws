@@ -31,6 +31,24 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusNoContent)
 				}
 				return
+			default:
+				if jawsKeyString, ok := strings.CutPrefix(r.URL.Path, "/jaws/.tail/"); ok {
+					jawsKey := JawsKeyValue(jawsKeyString)
+					jw.mu.RLock()
+					rq := jw.requests[jawsKey]
+					jw.mu.RUnlock()
+					if rq != nil {
+						if rq.tailsent.CompareAndSwap(false, true) {
+							hdr := w.Header()
+							hdr["Content-Type"] = headerContentTypeJavaScript
+							hdr["Cache-Control"] = headerCacheControlNoStore
+							if err := rq.writeTailScript(w); err != nil {
+								rq.cancel(err)
+							}
+							return
+						}
+					}
+				}
 			}
 		} else if rq := jw.UseRequest(JawsKeyValue(r.URL.Path[6:]), r); rq != nil {
 			rq.ServeHTTP(w, r)

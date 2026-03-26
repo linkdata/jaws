@@ -190,7 +190,7 @@ func (rq *Request) writeTailScript(w io.Writer) (err error) {
 			fn = "classList?.remove"
 		}
 		if fn != "" {
-			b = append(b, "\ndocument.getElementById("...)
+			b = append(b, "document.getElementById("...)
 			b = msg.Jid.AppendQuote(b)
 			b = append(b, ")?."...)
 			b = append(b, fn...)
@@ -228,7 +228,7 @@ func (rq *Request) TailHTML(w io.Writer) (err error) {
 	_, err = fmt.Fprintf(w, "\n"+`<noscript>`+
 		`<div class="jaws-alert">This site requires Javascript for full functionality.</div>`+
 		`<img src="/jaws/%s/noscript" alt="noscript"></noscript>`+"\n"+
-		`<script src="/jaws/%s/tailscript"></script>`+"\n", ks, ks)
+		`<script src="/jaws/.tail/%s"></script>`+"\n", ks, ks)
 	return
 }
 
