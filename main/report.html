@@ -2763,7 +2763,6 @@ type Request struct {
         Rendering  atomic.Bool             // set to true by RequestWriter.Write()
         running    atomic.Bool             // if ServeHTTP() is running
         claimed    atomic.Bool             // if UseRequest() has been called for it
-        tailsent   atomic.Bool             // true if the tail script has been sent
         mu         deadlock.RWMutex        // protects following
         lastWrite  time.Time               // when the initial HTML was last written to, used for automatic cleanup
         initial    *http.Request           // initial HTTP request passed to Jaws.NewRequest
@@ -2775,8 +2774,9 @@ type Request struct {
         connectFn  ConnectFn               // a ConnectFn to call before starting message processing for the Request
         elems      []*Element              // our Elements
         tagMap     map[any][]*Element      // maps tags to Elements
-        muQueue    deadlock.Mutex          // protects wsQueue
+        muQueue    deadlock.Mutex          // protects wsQueue and tailsent
         wsQueue    []WsMsg                 // queued messages to send
+        tailsent   bool
 }
 
 type eventFnCall struct {
@@ -2856,7 +2856,7 @@ func (rq *Request) clearLocked() *Request <span class="cov8" title="1">{
         rq.running.Store(false)
         rq.claimed.Store(false)
         rq.Rendering.Store(false)
-        rq.tailsent.Store(false)
+        rq.tailsent = false
         if rq.cancelFn != nil </span><span class="cov8" title="1">{
                 rq.cancelFn(nil)
         }</span>
@@ -2896,47 +2896,55 @@ func appendJSQuote(b []byte, s string) []byte <span class="cov8" title="1">{
         return append(b, bytes.ReplaceAll(quoted, []byte("&lt;"), []byte(`\x3c`))...)
 }</span>
 
-func (rq *Request) writeTailScript(w io.Writer) (err error) <span class="cov8" title="1">{
+func (rq *Request) writeTailScript(w http.ResponseWriter) (err error) <span class="cov8" title="1">{
+        hdr := w.Header()
+        hdr["Cache-Control"] = headerCacheControlNoStore
         rq.muQueue.Lock()
         defer rq.muQueue.Unlock()
-        var b []byte
-        n := 0
-        for _, msg := range rq.wsQueue </span><span class="cov8" title="1">{
-                var fn string
-                switch msg.What </span>{
-                case what.SAttr:<span class="cov8" title="1">
-                        fn = "setAttribute"</span>
-                case what.RAttr:<span class="cov8" title="1">
-                        fn = "removeAttribute"</span>
-                case what.SClass:<span class="cov8" title="1">
-                        fn = "classList?.add"</span>
-                case what.RClass:<span class="cov8" title="1">
-                        fn = "classList?.remove"</span>
-                }
-                <span class="cov8" title="1">if fn != "" </span><span class="cov8" title="1">{
-                        b = append(b, "\ndocument.getElementById("...)
-                        b = msg.Jid.AppendQuote(b)
-                        b = append(b, ")?."...)
-                        b = append(b, fn...)
-                        b = append(b, "("...)
-                        attr, val, ok := strings.Cut(msg.Data, "\n")
-                        b = appendJSQuote(b, attr)
-                        if ok </span><span class="cov8" title="1">{
-                                b = append(b, ',')
-                                b = appendJSQuote(b, val)
+        if !rq.tailsent </span><span class="cov8" title="1">{
+                rq.tailsent = true
+                hdr["Content-Type"] = headerContentTypeJavaScript
+                var b []byte
+                n := 0
+                for _, msg := range rq.wsQueue </span><span class="cov8" title="1">{
+                        var fn string
+                        switch msg.What </span>{
+                        case what.SAttr:<span class="cov8" title="1">
+                                fn = "setAttribute"</span>
+                        case what.RAttr:<span class="cov8" title="1">
+                                fn = "removeAttribute"</span>
+                        case what.SClass:<span class="cov8" title="1">
+                                fn = "classList?.add"</span>
+                        case what.RClass:<span class="cov8" title="1">
+                                fn = "classList?.remove"</span>
+                        }
+                        <span class="cov8" title="1">if fn != "" </span><span class="cov8" title="1">{
+                                b = append(b, "document.getElementById("...)
+                                b = msg.Jid.AppendQuote(b)
+                                b = append(b, ")?."...)
+                                b = append(b, fn...)
+                                b = append(b, "("...)
+                                attr, val, ok := strings.Cut(msg.Data, "\n")
+                                b = appendJSQuote(b, attr)
+                                if ok </span><span class="cov8" title="1">{
+                                        b = append(b, ',')
+                                        b = appendJSQuote(b, val)
+                                }</span>
+                                <span class="cov8" title="1">b = append(b, ");"...)</span>
+                        } else<span class="cov8" title="1"> {
+                                rq.wsQueue[n] = msg
+                                n++
                         }</span>
-                        <span class="cov8" title="1">b = append(b, ");"...)</span>
-                } else<span class="cov8" title="1"> {
-                        rq.wsQueue[n] = msg
-                        n++
+                }
+                <span class="cov8" title="1">for i := n; i &lt; len(rq.wsQueue); i++ </span><span class="cov8" title="1">{
+                        rq.wsQueue[i] = WsMsg{}
                 }</span>
-        }
-        <span class="cov8" title="1">for i := n; i &lt; len(rq.wsQueue); i++ </span><span class="cov8" title="1">{
-                rq.wsQueue[i] = WsMsg{}
-        }</span>
-        <span class="cov8" title="1">rq.wsQueue = rq.wsQueue[:n]
-        if len(b) &gt; 0 </span><span class="cov8" title="1">{
-                _, err = w.Write(b)
+                <span class="cov8" title="1">rq.wsQueue = rq.wsQueue[:n]
+                if len(b) &gt; 0 </span><span class="cov8" title="1">{
+                        _, err = w.Write(b)
+                }</span>
+        } else<span class="cov8" title="1"> {
+                w.WriteHeader(http.StatusNoContent)
         }</span>
         <span class="cov8" title="1">return</span>
 }
@@ -2952,7 +2960,7 @@ func (rq *Request) TailHTML(w io.Writer) (err error) <span class="cov8" title="1
         _, err = fmt.Fprintf(w, "\n"+`&lt;noscript&gt;`+
                 `&lt;div class="jaws-alert"&gt;This site requires Javascript for full functionality.&lt;/div&gt;`+
                 `&lt;img src="/jaws/%s/noscript" alt="noscript"&gt;&lt;/noscript&gt;`+"\n"+
-                `&lt;script src="/jaws/%s/tailscript"&gt;&lt;/script&gt;`+"\n", ks, ks)
+                `&lt;script src="/jaws/.tail/%s"&gt;&lt;/script&gt;`+"\n", ks, ks)
         return
 }</span>
 
@@ -3693,6 +3701,19 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class="c
                                         w.WriteHeader(http.StatusNoContent)</span>
                                 }
                                 <span class="cov8" title="1">return</span>
+                        default:<span class="cov8" title="1">
+                                if jawsKeyString, ok := strings.CutPrefix(r.URL.Path, "/jaws/.tail/"); ok </span><span class="cov8" title="1">{
+                                        jawsKey := JawsKeyValue(jawsKeyString)
+                                        jw.mu.RLock()
+                                        rq := jw.requests[jawsKey]
+                                        jw.mu.RUnlock()
+                                        if rq != nil </span><span class="cov8" title="1">{
+                                                if err := rq.writeTailScript(w); err != nil </span><span class="cov8" title="1">{
+                                                        rq.cancel(err)
+                                                }</span>
+                                                <span class="cov8" title="1">return</span>
+                                        }
+                                }
                         }
                 } else<span class="cov8" title="1"> if rq := jw.UseRequest(JawsKeyValue(r.URL.Path[6:]), r); rq != nil </span><span class="cov8" title="1">{
                         rq.ServeHTTP(w, r)
@@ -4548,17 +4569,6 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class
                         rq.cancel(ErrJavascriptDisabled)
                         return
                 }</span>
-                <span class="cov8" title="1">if strings.HasSuffix(r.URL.Path, "/tailscript") </span><span class="cov8" title="1">{
-                        if rq.tailsent.CompareAndSwap(false, true) </span><span class="cov8" title="1">{
-                                hdr := w.Header()
-                                hdr["Content-Type"] = headerContentTypeJavaScript
-                                hdr["Cache-Control"] = headerCacheControlNoStore
-                                if err := rq.writeTailScript(w); err != nil </span><span class="cov8" title="1">{
-                                        rq.cancel(err)
-                                }</span>
-                        }
-                        <span class="cov8" title="1">return</span>
-                }
                 <span class="cov8" title="1">var err error
                 if r.Header.Get("Sec-WebSocket-Key") != "" </span><span class="cov8" title="1">{
                         if err = rq.validateWebSocketOrigin(r); err != nil </span><span class="cov8" title="1">{
