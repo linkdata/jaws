@@ -19,6 +19,8 @@ func (rq *Request) stopServe() {
 	rq.Jaws.recycle(rq)
 }
 
+var headerContentTypeJavaScript = []string{"text/javascript"}
+
 // ServeHTTP implements http.HanderFunc.
 //
 // Requires UseRequest() have been successfully called for the Request.
@@ -32,7 +34,9 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		if strings.HasSuffix(r.URL.Path, "/tailscript") {
 			if rq.tailsent.CompareAndSwap(false, true) {
-				w.Header().Set("Content-Type", "text/javascript")
+				hdr := w.Header()
+				hdr["Content-Type"] = headerContentTypeJavaScript
+				hdr["Cache-Control"] = headerCacheControlNoStore
 				if err := rq.writeTailScript(w); err != nil {
 					rq.cancel(err)
 				}

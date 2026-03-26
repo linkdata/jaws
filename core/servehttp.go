@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-var headerCacheNoCache = []string{"no-cache"}
+var headerCacheControlNoStore = []string{"no-store"}
 
 // ServeHTTP can handle the required JaWS endpoints, which all start with "/jaws/".
 func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -23,7 +23,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				jw.serveJS.ServeHTTP(w, r)
 				return
 			case "/jaws/.ping":
-				w.Header()["Cache-Control"] = headerCacheNoCache
+				w.Header()["Cache-Control"] = headerCacheControlNoStore
 				select {
 				case <-jw.Done():
 					w.WriteHeader(http.StatusServiceUnavailable)

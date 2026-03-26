@@ -83,7 +83,7 @@ func TestServeHTTP_GetPing(t *testing.T) {
 	req := httptest.NewRequest("", "/jaws/.ping", nil)
 	w := httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
-	is.Equal(w.Header()["Cache-Control"], headerCacheNoCache)
+	is.Equal(w.Header()["Cache-Control"], headerCacheControlNoStore)
 	is.Equal(len(w.Body.Bytes()), 0)
 	is.Equal(w.Header()["Content-Length"], nil)
 	is.Equal(w.Code, http.StatusNoContent)
@@ -112,7 +112,7 @@ func TestServeHTTP_GetPing(t *testing.T) {
 	w = httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusServiceUnavailable)
-	is.Equal(w.Header()["Cache-Control"], headerCacheNoCache)
+	is.Equal(w.Header()["Cache-Control"], headerCacheControlNoStore)
 }
 
 func TestServeHTTP_GetKey(t *testing.T) {
