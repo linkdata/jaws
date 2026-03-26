@@ -194,7 +194,7 @@ func TestServeHTTP_TailScript(t *testing.T) {
 	e.SetClass("cls")
 	e.SetInner("kept")
 
-	req := httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString()+"/tailscript.js", nil)
+	req := httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString(), nil)
 	req.RemoteAddr = hr.RemoteAddr
 	w := httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
@@ -205,7 +205,7 @@ func TestServeHTTP_TailScript(t *testing.T) {
 	is.Equal(strings.Contains(w.Body.String(), `setAttribute("title","\x3c/script>\x3cimg onerror=alert(1) src=x>");`), true)
 	is.Equal(strings.Contains(w.Body.String(), `classList?.add("cls");`), true)
 	is.Equal(strings.Contains(w.Body.String(), "kept"), false)
-	is.Equal(jw.RequestCount(), 0)
+	is.Equal(jw.RequestCount(), 1)
 }
 
 func TestServeHTTP_TailScript_EndpointIsPerRequest(t *testing.T) {
@@ -217,13 +217,13 @@ func TestServeHTTP_TailScript_EndpointIsPerRequest(t *testing.T) {
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
 	rq := jw.NewRequest(hr)
 
-	req := httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString()+"/tailscript.js", nil)
+	req := httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString(), nil)
 	req.RemoteAddr = hr.RemoteAddr
 	w := httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusOK)
 
-	req = httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString()+"/tailscript.js", nil)
+	req = httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString(), nil)
 	req.RemoteAddr = hr.RemoteAddr
 	w = httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
@@ -241,7 +241,7 @@ func TestServeHTTP_TailScript_WriteError(t *testing.T) {
 	item := &testUi{}
 	rq.NewElement(item).SetClass("cls")
 
-	req := httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString()+"/tailscript.js", nil)
+	req := httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString(), nil)
 	req.RemoteAddr = hr.RemoteAddr
 	w := &errResponseWriter{writeErr: errors.New("write failed")}
 	jw.ServeHTTP(w, req)
@@ -249,5 +249,5 @@ func TestServeHTTP_TailScript_WriteError(t *testing.T) {
 	is.Equal(w.writeCall > 0, true)
 	is.Equal(w.Header()["Content-Type"], headerContentTypeJavaScript)
 	is.Equal(w.Header()["Cache-Control"], headerCacheControlNoStore)
-	is.Equal(jw.RequestCount(), 0)
+	is.Equal(jw.RequestCount(), 1)
 }

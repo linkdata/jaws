@@ -85,7 +85,7 @@ func TestRequestWriter_TailHTML(t *testing.T) {
 	rq.Writer(&buf).TailHTML()
 	want := fmt.Sprintf(`
 <noscript><div class="jaws-alert">This site requires Javascript for full functionality.</div><img src="/jaws/%s/noscript" alt="noscript"></noscript>
-<script src="/jaws/%s/tailscript.js"></script>
+<script src="/jaws/.tail/%s"></script>
 `, rq.JawsKeyString(), rq.JawsKeyString())
 	th.Equal(buf.String(), want)
 
