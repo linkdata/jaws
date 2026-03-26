@@ -3,6 +3,7 @@ package jawstree
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"reflect"
 	"strings"
@@ -48,8 +49,42 @@ func TestTree(t *testing.T) {
 	err = tree.JawsRender(elem, &sb, nil)
 	maybeError(t, err)
 
-	if !strings.Contains(sb.String(), "DOMContentLoaded") {
-		t.Error("missing DOMContentLoaded")
+	if strings.Contains(sb.String(), "DOMContentLoaded") {
+		t.Error("unexpected inline script")
+	}
+
+	initURL := initScriptURL("tree", SearchEnabled)
+	if !strings.Contains(sb.String(), `<script src="`+initURL+`"></script>`) {
+		t.Errorf("missing init script URL: %q", initURL)
+	}
+
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, initURL, nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("init script status code = %d", w.Code)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != headerContentTypeJavaScript[0] {
+		t.Errorf("unexpected Content-Type: %q", ct)
+	}
+	if cc := w.Header().Get("Cache-Control"); cc != headerCacheControlNoStore[0] {
+		t.Errorf("unexpected Cache-Control: %q", cc)
+	}
+	if got, want := w.Body.String(), string(appendInitScript(nil, "tree", SearchEnabled)); got != want {
+		t.Errorf("unexpected init script:\n got %s\nwant %s\n", got, want)
+	}
+
+	badReq := httptest.NewRequest(http.MethodGet, "/jaws/.jawstree/tree/not-a-number", nil)
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, badReq)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("bad init script status code = %d", w.Code)
+	}
+
+	badReq = httptest.NewRequest(http.MethodGet, "/jaws/.jawstree/tree-1/1", nil)
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, badReq)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("bad init script tree status code = %d", w.Code)
 	}
 
 	numnodes := 0

@@ -30,6 +30,7 @@ func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.
 			}
 			err = errors.Join(err, e)
 		}
+		handleFn(http.MethodGet+" "+initScriptPattern, http.HandlerFunc(serveInitScript))
 		handleFn(http.MethodGet+" "+path.Join(prefix, "treeview.js.map"), http.NotFoundHandler())
 	}
 	return

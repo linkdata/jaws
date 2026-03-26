@@ -30,11 +30,11 @@ func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 }
 
 const newtreeTemplate = `
-<script>var jawstreeroot_%s; document.addEventListener("DOMContentLoaded",function(){window.jawstree_%s=jawstreeNew("%s",jawstreeroot_%s,%v);});</script>`
+<script src=%q></script>`
 
 func (t *Tree) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) {
 	if err = t.JsVar.JawsRender(e, w, append([]any{"jawstreeroot_" + t.id}, params...)); err == nil {
-		if _, err = fmt.Fprintf(w, newtreeTemplate, t.id, t.id, t.id, t.id, t.options); err == nil {
+		if _, err = fmt.Fprintf(w, newtreeTemplate, initScriptURL(t.id, t.options)); err == nil {
 		}
 	}
 	return
