@@ -132,6 +132,7 @@ func (rq *Request) clearLocked() *Request {
 	rq.running.Store(false)
 	rq.claimed.Store(false)
 	rq.Rendering.Store(false)
+	rq.tailsent.Store(false)
 	if rq.cancelFn != nil {
 		rq.cancelFn(nil)
 	}

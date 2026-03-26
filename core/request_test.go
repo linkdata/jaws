@@ -85,22 +85,18 @@ func TestRequestWriter_TailHTML(t *testing.T) {
 	rq.Writer(&buf).TailHTML()
 	want := fmt.Sprintf(`
 <noscript><div class="jaws-alert">This site requires Javascript for full functionality.</div><img src="/jaws/%s/noscript" alt="noscript"></noscript>
-<script>
-document.getElementById("Jid.1")?.setAttribute("hidden","yes");
-document.getElementById("Jid.1")?.removeAttribute("hidden");
-document.getElementById("Jid.1")?.classList?.add("cls");
-document.getElementById("Jid.1")?.classList?.remove("cls");
-</script>`, rq.JawsKeyString())
-	th.Equal(want, buf.String())
+<script src="/jaws/%s/tailscript"></script>
+`, rq.JawsKeyString(), rq.JawsKeyString())
+	th.Equal(buf.String(), want)
 
-	// verify getTailActions drained the consumed messages from wsQueue
+	// TailHTML should not consume wsQueue messages.
 	rq.muQueue.Lock()
 	num = len(rq.wsQueue)
 	rq.muQueue.Unlock()
-	th.Equal(num, 0)
+	th.Equal(num, 4)
 }
 
-func TestRequestWriter_TailHTML_EscapesScriptClose(t *testing.T) {
+func TestRequest_writeTailScript_EscapesScriptClose(t *testing.T) {
 	th := newTestHelper(t)
 	NextJid = 0
 	jw, _ := New()
@@ -112,15 +108,17 @@ func TestRequestWriter_TailHTML_EscapesScriptClose(t *testing.T) {
 	e.SetAttr("title", "</script><img onerror=alert(1) src=x>")
 
 	var buf bytes.Buffer
-	rq.Writer(&buf).TailHTML()
+	if err := rq.writeTailScript(&buf); err != nil {
+		t.Fatal(err)
+	}
 	s := buf.String()
 	if strings.Contains(s, "</script><img") {
-		t.Fatalf("getTailActions did not escape </script> in attribute value: %s", s)
+		t.Fatalf("writeTailScript did not escape </script> in attribute value: %s", s)
 	}
 	th.True(strings.Contains(s, `\x3c/script>`))
 }
 
-func TestRequestWriter_TailHTML_PreservesNonAttrMessages(t *testing.T) {
+func TestRequest_writeTailScript_PreservesNonAttrMessages(t *testing.T) {
 	th := newTestHelper(t)
 	NextJid = 0
 	jw, _ := New()
@@ -141,13 +139,40 @@ func TestRequestWriter_TailHTML_PreservesNonAttrMessages(t *testing.T) {
 	rq.muQueue.Unlock()
 
 	var buf bytes.Buffer
-	rq.Writer(&buf).TailHTML()
+	if err := rq.writeTailScript(&buf); err != nil {
+		t.Fatal(err)
+	}
 
 	// SAttr and SClass consumed, Value and Inner preserved
 	rq.muQueue.Lock()
 	th.Equal(len(rq.wsQueue), 2)
 	th.Equal(rq.wsQueue[0].What, what.Value)
 	th.Equal(rq.wsQueue[1].What, what.Inner)
+	rq.muQueue.Unlock()
+}
+
+func TestRequest_writeTailScript_RemoveAttrAndClass(t *testing.T) {
+	th := newTestHelper(t)
+	NextJid = 0
+	jw, _ := New()
+	defer jw.Close()
+	rq := jw.NewRequest(nil)
+	defer jw.recycle(rq)
+	item := &testUi{}
+	e := rq.NewElement(item)
+	e.RemoveAttr("hidden")
+	e.RemoveClass("cls")
+
+	var buf bytes.Buffer
+	if err := rq.writeTailScript(&buf); err != nil {
+		t.Fatal(err)
+	}
+	s := buf.String()
+	th.True(strings.Contains(s, `removeAttribute("hidden");`))
+	th.True(strings.Contains(s, `classList?.remove("cls");`))
+
+	rq.muQueue.Lock()
+	th.Equal(len(rq.wsQueue), 0)
 	rq.muQueue.Unlock()
 }
 
