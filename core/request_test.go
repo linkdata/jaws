@@ -107,11 +107,11 @@ func TestRequest_writeTailScript_EscapesScriptClose(t *testing.T) {
 	e := rq.NewElement(item)
 	e.SetAttr("title", "</script><img onerror=alert(1) src=x>")
 
-	var buf bytes.Buffer
-	if err := rq.writeTailScript(&buf); err != nil {
+	w := httptest.NewRecorder()
+	if err := rq.writeTailScript(w); err != nil {
 		t.Fatal(err)
 	}
-	s := buf.String()
+	s := w.Body.String()
 	if strings.Contains(s, "</script><img") {
 		t.Fatalf("writeTailScript did not escape </script> in attribute value: %s", s)
 	}
@@ -138,8 +138,8 @@ func TestRequest_writeTailScript_PreservesNonAttrMessages(t *testing.T) {
 	th.Equal(len(rq.wsQueue), 4)
 	rq.muQueue.Unlock()
 
-	var buf bytes.Buffer
-	if err := rq.writeTailScript(&buf); err != nil {
+	w := httptest.NewRecorder()
+	if err := rq.writeTailScript(w); err != nil {
 		t.Fatal(err)
 	}
 
@@ -163,11 +163,11 @@ func TestRequest_writeTailScript_RemoveAttrAndClass(t *testing.T) {
 	e.RemoveAttr("hidden")
 	e.RemoveClass("cls")
 
-	var buf bytes.Buffer
-	if err := rq.writeTailScript(&buf); err != nil {
+	w := httptest.NewRecorder()
+	if err := rq.writeTailScript(w); err != nil {
 		t.Fatal(err)
 	}
-	s := buf.String()
+	s := w.Body.String()
 	th.True(strings.Contains(s, `removeAttribute("hidden");`))
 	th.True(strings.Contains(s, `classList?.remove("cls");`))
 

@@ -227,7 +227,7 @@ func TestServeHTTP_TailScript_EndpointIsPerRequest(t *testing.T) {
 	req.RemoteAddr = hr.RemoteAddr
 	w = httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
-	is.Equal(w.Code, http.StatusNotFound)
+	is.Equal(w.Code, http.StatusNoContent)
 }
 
 func TestServeHTTP_TailScript_WriteError(t *testing.T) {

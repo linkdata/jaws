@@ -38,15 +38,10 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					rq := jw.requests[jawsKey]
 					jw.mu.RUnlock()
 					if rq != nil {
-						if rq.tailsent.CompareAndSwap(false, true) {
-							hdr := w.Header()
-							hdr["Content-Type"] = headerContentTypeJavaScript
-							hdr["Cache-Control"] = headerCacheControlNoStore
-							if err := rq.writeTailScript(w); err != nil {
-								rq.cancel(err)
-							}
-							return
+						if err := rq.writeTailScript(w); err != nil {
+							rq.cancel(err)
 						}
+						return
 					}
 				}
 			}

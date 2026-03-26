@@ -39,7 +39,6 @@ type Request struct {
 	Rendering  atomic.Bool             // set to true by RequestWriter.Write()
 	running    atomic.Bool             // if ServeHTTP() is running
 	claimed    atomic.Bool             // if UseRequest() has been called for it
-	tailsent   atomic.Bool             // true if the tail script has been sent
 	mu         deadlock.RWMutex        // protects following
 	lastWrite  time.Time               // when the initial HTML was last written to, used for automatic cleanup
 	initial    *http.Request           // initial HTTP request passed to Jaws.NewRequest
@@ -51,8 +50,9 @@ type Request struct {
 	connectFn  ConnectFn               // a ConnectFn to call before starting message processing for the Request
 	elems      []*Element              // our Elements
 	tagMap     map[any][]*Element      // maps tags to Elements
-	muQueue    deadlock.Mutex          // protects wsQueue
+	muQueue    deadlock.Mutex          // protects wsQueue and tailsent
 	wsQueue    []WsMsg                 // queued messages to send
+	tailsent   bool
 }
 
 type eventFnCall struct {
@@ -132,7 +132,7 @@ func (rq *Request) clearLocked() *Request {
 	rq.running.Store(false)
 	rq.claimed.Store(false)
 	rq.Rendering.Store(false)
-	rq.tailsent.Store(false)
+	rq.tailsent = false
 	if rq.cancelFn != nil {
 		rq.cancelFn(nil)
 	}
@@ -172,47 +172,55 @@ func appendJSQuote(b []byte, s string) []byte {
 	return append(b, bytes.ReplaceAll(quoted, []byte("<"), []byte(`\x3c`))...)
 }
 
-func (rq *Request) writeTailScript(w io.Writer) (err error) {
+func (rq *Request) writeTailScript(w http.ResponseWriter) (err error) {
+	hdr := w.Header()
+	hdr["Cache-Control"] = headerCacheControlNoStore
 	rq.muQueue.Lock()
 	defer rq.muQueue.Unlock()
-	var b []byte
-	n := 0
-	for _, msg := range rq.wsQueue {
-		var fn string
-		switch msg.What {
-		case what.SAttr:
-			fn = "setAttribute"
-		case what.RAttr:
-			fn = "removeAttribute"
-		case what.SClass:
-			fn = "classList?.add"
-		case what.RClass:
-			fn = "classList?.remove"
-		}
-		if fn != "" {
-			b = append(b, "document.getElementById("...)
-			b = msg.Jid.AppendQuote(b)
-			b = append(b, ")?."...)
-			b = append(b, fn...)
-			b = append(b, "("...)
-			attr, val, ok := strings.Cut(msg.Data, "\n")
-			b = appendJSQuote(b, attr)
-			if ok {
-				b = append(b, ',')
-				b = appendJSQuote(b, val)
+	if !rq.tailsent {
+		rq.tailsent = true
+		hdr["Content-Type"] = headerContentTypeJavaScript
+		var b []byte
+		n := 0
+		for _, msg := range rq.wsQueue {
+			var fn string
+			switch msg.What {
+			case what.SAttr:
+				fn = "setAttribute"
+			case what.RAttr:
+				fn = "removeAttribute"
+			case what.SClass:
+				fn = "classList?.add"
+			case what.RClass:
+				fn = "classList?.remove"
 			}
-			b = append(b, ");"...)
-		} else {
-			rq.wsQueue[n] = msg
-			n++
+			if fn != "" {
+				b = append(b, "document.getElementById("...)
+				b = msg.Jid.AppendQuote(b)
+				b = append(b, ")?."...)
+				b = append(b, fn...)
+				b = append(b, "("...)
+				attr, val, ok := strings.Cut(msg.Data, "\n")
+				b = appendJSQuote(b, attr)
+				if ok {
+					b = append(b, ',')
+					b = appendJSQuote(b, val)
+				}
+				b = append(b, ");"...)
+			} else {
+				rq.wsQueue[n] = msg
+				n++
+			}
 		}
-	}
-	for i := n; i < len(rq.wsQueue); i++ {
-		rq.wsQueue[i] = WsMsg{}
-	}
-	rq.wsQueue = rq.wsQueue[:n]
-	if len(b) > 0 {
-		_, err = w.Write(b)
+		for i := n; i < len(rq.wsQueue); i++ {
+			rq.wsQueue[i] = WsMsg{}
+		}
+		rq.wsQueue = rq.wsQueue[:n]
+		if len(b) > 0 {
+			_, err = w.Write(b)
+		}
+	} else {
+		w.WriteHeader(http.StatusNoContent)
 	}
 	return
 }
