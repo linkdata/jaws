@@ -2,14 +2,10 @@ package ui
 
 import "github.com/linkdata/jaws/core"
 
-func applyDirty(tag any, e *core.Element, err error) (changed bool, retErr error) {
-	switch err {
-	case nil:
+func applyDirty(tag any, e *core.Element, err error) (retErr error) {
+	if err != core.ErrValueUnchanged {
+		retErr = err
 		e.Dirty(tag)
-		return true, nil
-	case core.ErrValueUnchanged:
-		return false, nil
-	default:
-		return false, err
 	}
+	return
 }

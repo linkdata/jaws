@@ -11,9 +11,10 @@ import (
 )
 
 // Input stores common state for interactive input widgets.
+// There is one of these per request and input widget.
 type Input struct {
 	Tag  any
-	Last atomic.Value
+	Last atomic.Value // the last value received from the request
 }
 
 func (ui *Input) applyGetter(e *core.Element, getter any) (err error) {
@@ -21,13 +22,9 @@ func (ui *Input) applyGetter(e *core.Element, getter any) (err error) {
 	return
 }
 
-func (ui *Input) maybeDirty(val any, e *core.Element, err error) error {
-	if changed, err := applyDirty(ui.Tag, e, err); err != nil {
-		return err
-	} else if changed {
-		ui.Last.Store(val)
-	}
-	return nil
+func (ui *Input) maybeDirty(e *core.Element, inerr error) (err error) {
+	err = applyDirty(ui.Tag, e, inerr)
+	return
 }
 
 type InputText struct {
@@ -54,7 +51,8 @@ func (ui *InputText) JawsUpdate(e *core.Element) {
 func (ui *InputText) JawsEvent(e *core.Element, wht what.What, val string) (err error) {
 	err = core.ErrEventUnhandled
 	if wht == what.Input {
-		err = ui.maybeDirty(val, e, ui.Setter.JawsSet(e, val))
+		ui.Last.Store(val)
+		err = ui.maybeDirty(e, ui.Setter.JawsSet(e, val))
 	}
 	return
 }
@@ -91,13 +89,14 @@ func (ui *InputBool) JawsUpdate(e *core.Element) {
 func (ui *InputBool) JawsEvent(e *core.Element, wht what.What, val string) (err error) {
 	err = core.ErrEventUnhandled
 	if wht == what.Input {
-		var v bool
-		if val != "" {
-			if v, err = strconv.ParseBool(val); err != nil {
-				return
-			}
+		if val == "" {
+			val = "false"
 		}
-		err = ui.maybeDirty(v, e, ui.Setter.JawsSet(e, v))
+		var v bool
+		if v, err = strconv.ParseBool(val); err == nil {
+			err = ui.maybeDirty(e, ui.Setter.JawsSet(e, v))
+		}
+		ui.Last.Store(v)
 	}
 	return
 }
@@ -107,35 +106,38 @@ type InputFloat struct {
 	core.Setter[float64]
 }
 
-func (ui *InputFloat) str() string {
-	return strconv.FormatFloat(ui.Last.Load().(float64), 'f', -1, 64)
+func (ui *InputFloat) str(v float64) string {
+	return strconv.FormatFloat(v, 'f', -1, 64)
 }
 
 func (ui *InputFloat) renderFloatInput(e *core.Element, w io.Writer, htmlType string, params ...any) (err error) {
 	if err = ui.applyGetter(e, ui.Setter); err == nil {
 		attrs := e.ApplyParams(params)
-		ui.Last.Store(ui.JawsGet(e))
-		err = core.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(), attrs)
+		v := ui.JawsGet(e)
+		ui.Last.Store(v)
+		err = core.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(v), attrs)
 	}
 	return
 }
 
 func (ui *InputFloat) JawsUpdate(e *core.Element) {
-	if f := ui.JawsGet(e); ui.Last.Swap(f) != f {
-		e.SetValue(ui.str())
+	v := ui.JawsGet(e)
+	if ui.Last.Swap(v) != v {
+		e.SetValue(ui.str(v))
 	}
 }
 
 func (ui *InputFloat) JawsEvent(e *core.Element, wht what.What, val string) (err error) {
 	err = core.ErrEventUnhandled
 	if wht == what.Input {
-		var v float64
-		if val != "" {
-			if v, err = strconv.ParseFloat(val, 64); err != nil {
-				return
-			}
+		if val == "" {
+			val = "0"
 		}
-		err = ui.maybeDirty(v, e, ui.Setter.JawsSet(e, v))
+		var v float64
+		if v, err = strconv.ParseFloat(val, 64); err == nil {
+			err = ui.maybeDirty(e, ui.Setter.JawsSet(e, v))
+		}
+		ui.Last.Store(v)
 	}
 	return
 }
@@ -145,35 +147,38 @@ type InputDate struct {
 	core.Setter[time.Time]
 }
 
-func (ui *InputDate) str() string {
-	return ui.Last.Load().(time.Time).Format(core.ISO8601)
+func (ui *InputDate) str(v time.Time) string {
+	return v.Format(core.ISO8601)
 }
 
 func (ui *InputDate) renderDateInput(e *core.Element, w io.Writer, htmlType string, params ...any) (err error) {
 	if err = ui.applyGetter(e, ui.Setter); err == nil {
 		attrs := e.ApplyParams(params)
-		ui.Last.Store(ui.JawsGet(e))
-		err = core.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(), attrs)
+		v := ui.JawsGet(e)
+		ui.Last.Store(v)
+		err = core.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(v), attrs)
 	}
 	return
 }
 
 func (ui *InputDate) JawsUpdate(e *core.Element) {
-	if t := ui.JawsGet(e); ui.Last.Swap(t) != t {
-		e.SetValue(ui.str())
+	v := ui.JawsGet(e)
+	if ui.Last.Swap(v) != v {
+		e.SetValue(ui.str(v))
 	}
 }
 
 func (ui *InputDate) JawsEvent(e *core.Element, wht what.What, val string) (err error) {
 	err = core.ErrEventUnhandled
 	if wht == what.Input {
-		var v time.Time
-		if val != "" {
-			if v, err = time.Parse(core.ISO8601, val); err != nil {
-				return
-			}
+		if val == "" {
+			val = "0001-01-01"
 		}
-		err = ui.maybeDirty(v, e, ui.Setter.JawsSet(e, v))
+		var v time.Time
+		if v, err = time.Parse(core.ISO8601, val); err == nil {
+			err = ui.maybeDirty(e, ui.Setter.JawsSet(e, v))
+		}
+		ui.Last.Store(v)
 	}
 	return
 }
