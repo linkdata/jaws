@@ -2595,23 +2595,30 @@ func (nba *NamedBoolArray) Get() (name string) <span class="cov8" title="1">{
         return</span>
 }
 
-func (nba *NamedBoolArray) isCheckedLocked(name string) bool <span class="cov8" title="1">{
+// Count returns the number of NamedBool in the set that have the given name.
+func (nba *NamedBoolArray) Count(name string) (n int) <span class="cov8" title="1">{
+        nba.mu.RLock()
+        defer nba.mu.RUnlock()
         for _, nb := range nba.data </span><span class="cov8" title="1">{
-                if nb.Checked() &amp;&amp; nb.Name() == name </span><span class="cov8" title="1">{
-                        return true
+                if nb.Name() == name </span><span class="cov8" title="1">{
+                        n++
                 }</span>
         }
-        <span class="cov8" title="1">return false</span>
+        <span class="cov8" title="1">return</span>
 }
 
 // IsChecked returns true if any of the NamedBool in the set that have the
 // given name are Checked. Returns false if the name is not found.
 func (nba *NamedBoolArray) IsChecked(name string) (state bool) <span class="cov8" title="1">{
         nba.mu.RLock()
-        state = nba.isCheckedLocked(name)
-        nba.mu.RUnlock()
-        return
-}</span>
+        defer nba.mu.RUnlock()
+        for _, nb := range nba.data </span><span class="cov8" title="1">{
+                if nb.Name() == name &amp;&amp; nb.Checked() </span><span class="cov8" title="1">{
+                        return true
+                }</span>
+        }
+        <span class="cov8" title="1">return false</span>
+}
 
 // String returns a string representation of the NamedBoolArray suitable for debugging.
 func (nba *NamedBoolArray) String() string <span class="cov8" title="1">{
