@@ -206,7 +206,7 @@ func (rq *Request) writeTailScript(w http.ResponseWriter) (err error) {
 					b = append(b, ',')
 					b = appendJSQuote(b, val)
 				}
-				b = append(b, ");"...)
+				b = append(b, ");\n"...)
 			} else {
 				rq.wsQueue[n] = msg
 				n++
