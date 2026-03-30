@@ -64,7 +64,7 @@ func (bind bindingHook[T]) JawsSet(elem *Element, value T) (err error) {
 
 func (bind bindingHook[T]) JawsClick(elem *Element, name string) (err error) {
 	err = ErrEventUnhandled
-	if fn, ok := bind.hook.(BindClickedHook); ok {
+	if fn, ok := bind.hook.(BindClickedHook[T]); ok {
 		err = fn(elem, name)
 	}
 	return
@@ -98,7 +98,10 @@ func (bind bindingHook[T]) GetLocked(setFn BindGetHook[T]) Binder[T] {
 	}
 }
 
-func (bind bindingHook[T]) Clicked(fn BindClickedHook) Binder[T] {
+// Clicked returns a Binder[T] that will call fn when JawsClick is invoked.
+//
+// The Binder locks are not held when the function is called.
+func (bind bindingHook[T]) Clicked(fn BindClickedHook[T]) Binder[T] {
 	return bindingHook[T]{
 		Binder: bind,
 		hook:   fn,

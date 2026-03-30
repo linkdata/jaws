@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"errors"
 	"io"
 	"reflect"
 	"testing"
@@ -251,6 +252,112 @@ func testBind_Hook_Get[T comparable](t *testing.T, testval T) {
 	tags2 := MustTagExpand(nil, bind2)
 	if !reflect.DeepEqual(tags2, []any{&val}) {
 		t.Error(tags2)
+	}
+}
+
+func TestBind_Hook_Clicked_binding(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	calls := 0
+	gotElem := &Element{}
+	gotName := ""
+	bind := Bind(&mu, &val).
+		Clicked(func(elem *Element, name string) (err error) {
+			calls++
+			gotElem = elem
+			gotName = name
+			return nil
+		})
+
+	handler, ok := bind.(ClickHandler)
+	if !ok {
+		t.Fatalf("%T does not implement ClickHandler", bind)
+	}
+
+	elem := &Element{}
+	if err := handler.JawsClick(elem, "save"); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Error(calls)
+	}
+	if gotElem != elem {
+		t.Error(gotElem)
+	}
+	if gotName != "save" {
+		t.Error(gotName)
+	}
+	tags := MustTagExpand(nil, bind)
+	if !reflect.DeepEqual(tags, []any{&val}) {
+		t.Error(tags)
+	}
+}
+
+func TestBind_Hook_Clicked_bindingHook(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	successCalls := 0
+	bindWithSuccess := Bind(&mu, &val).Success(func() {
+		successCalls++
+	})
+
+	clickCalls1 := 0
+	clickCalls2 := 0
+	clickBind1 := bindWithSuccess.Clicked(func(*Element, string) error {
+		clickCalls1++
+		return nil
+	})
+	clickBind2 := clickBind1.Clicked(func(*Element, string) error {
+		clickCalls2++
+		return nil
+	})
+
+	handler1, ok := clickBind1.(ClickHandler)
+	if !ok {
+		t.Fatalf("%T does not implement ClickHandler", clickBind1)
+	}
+	handler2, ok := clickBind2.(ClickHandler)
+	if !ok {
+		t.Fatalf("%T does not implement ClickHandler", clickBind2)
+	}
+
+	if err := handler1.JawsClick(nil, "one"); err != nil {
+		t.Fatal(err)
+	}
+	if clickCalls1 != 1 {
+		t.Error(clickCalls1)
+	}
+	if clickCalls2 != 0 {
+		t.Error(clickCalls2)
+	}
+
+	if err := handler2.JawsClick(nil, "two"); err != nil {
+		t.Fatal(err)
+	}
+	if clickCalls1 != 1 {
+		t.Error(clickCalls1)
+	}
+	if clickCalls2 != 1 {
+		t.Error(clickCalls2)
+	}
+
+	if err := clickBind2.JawsSet(nil, "foo"); err != nil {
+		t.Fatal(err)
+	}
+	if successCalls != 1 {
+		t.Error(successCalls)
+	}
+	if got := clickBind2.JawsGet(nil); got != "foo" {
+		t.Error(got)
+	}
+	if err := bindWithSuccess.(ClickHandler).JawsClick(nil, "x"); !errors.Is(err, ErrEventUnhandled) {
+		t.Fatal(err)
+	}
+	tags := MustTagExpand(nil, clickBind2)
+	if !reflect.DeepEqual(tags, []any{&val}) {
+		t.Error(tags)
 	}
 }
 

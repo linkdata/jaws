@@ -44,6 +44,10 @@ func (bind binding[T]) JawsGetTag(*Request) any {
 	return bind.ptr
 }
 
+func (bind binding[T]) JawsClick(*Element, string) error {
+	return ErrEventUnhandled
+}
+
 // SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
 //
 // The lock will be held at this point.
@@ -72,7 +76,10 @@ func (bind binding[T]) GetLocked(fn BindGetHook[T]) Binder[T] {
 	}
 }
 
-func (bind binding[T]) Clicked(fn BindClickedHook) Binder[T] {
+// Clicked returns a Binder[T] that will call fn when JawsClick is invoked.
+//
+// The Binder locks are not held when the function is called.
+func (bind binding[T]) Clicked(fn BindClickedHook[T]) Binder[T] {
 	return bindingHook[T]{
 		Binder: bind,
 		hook:   fn,
