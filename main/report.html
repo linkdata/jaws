@@ -249,7 +249,7 @@
 		</div>
 		<div id="content">
 		
-		<pre class="file" id="file0" style="display: none">package core
+		<pre class="file" id="file0" style="display: none">package jaws
 
 type Auth interface {
         Data() map[string]any // returns authenticated user data, or nil
@@ -266,7 +266,7 @@ func (DefaultAuth) Email() string        <span class="cov8" title="1">{ return "
 func (DefaultAuth) IsAdmin() bool        <span class="cov8" title="1">{ return true }</span>
 </pre>
 		
-		<pre class="file" id="file1" style="display: none">package core
+		<pre class="file" id="file1" style="display: none">package jaws
 
 import (
         "sync"
@@ -283,7 +283,7 @@ func Bind[T comparable](l sync.Locker, p *T) Binder[T] <span class="cov8" title=
 }
 </pre>
 		
-		<pre class="file" id="file2" style="display: none">package core
+		<pre class="file" id="file2" style="display: none">package jaws
 
 import (
         "fmt"
@@ -409,7 +409,7 @@ func wrapSuccessHook(fn any) (hook BindSuccessHook) <span class="cov8" title="1"
 }
 </pre>
 		
-		<pre class="file" id="file3" style="display: none">package core
+		<pre class="file" id="file3" style="display: none">package jaws
 
 import (
         "fmt"
@@ -530,7 +530,7 @@ func (bind bindingHook[T]) FormatHTML(f string) (getter HTMLGetter) <span class=
 }
 </pre>
 		
-		<pre class="file" id="file4" style="display: none">package core
+		<pre class="file" id="file4" style="display: none">package jaws
 
 import "github.com/linkdata/jaws/what"
 
@@ -550,7 +550,7 @@ func (chw clickHandlerWrapper) JawsEvent(*Element, what.What, string) error <spa
 }</span>
 </pre>
 		
-		<pre class="file" id="file5" style="display: none">package core
+		<pre class="file" id="file5" style="display: none">package jaws
 
 import (
         "os"
@@ -584,7 +584,7 @@ func makeCookieName(exename string) (cookie string) <span class="cov8" title="1"
 }
 </pre>
 		
-		<pre class="file" id="file6" style="display: none">package core
+		<pre class="file" id="file6" style="display: none">package jaws
 
 import (
         "bytes"
@@ -847,7 +847,7 @@ func (e *Element) ApplyGetter(getter any) (tag any, err error) <span class="cov8
 }
 </pre>
 		
-		<pre class="file" id="file7" style="display: none">package core
+		<pre class="file" id="file7" style="display: none">package jaws
 
 import "fmt"
 
@@ -867,7 +867,7 @@ func (errIllegalTagType) Is(other error) bool <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file8" style="display: none">package core
+		<pre class="file" id="file8" style="display: none">package jaws
 
 import (
         "reflect"
@@ -901,7 +901,7 @@ func newErrNotComparable(x any) error <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file9" style="display: none">package core
+		<pre class="file" id="file9" style="display: none">package jaws
 
 import (
         "fmt"
@@ -1037,7 +1037,7 @@ func findTagGetter(x any) (path string, tgType reflect.Type, found bool) <span c
 }
 </pre>
 		
-		<pre class="file" id="file10" style="display: none">package core
+		<pre class="file" id="file10" style="display: none">package jaws
 
 import (
         "fmt"
@@ -1066,7 +1066,7 @@ func newErrNoWebSocketRequest(rq *Request) error <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file11" style="display: none">package core
+		<pre class="file" id="file11" style="display: none">package jaws
 
 import (
         "fmt"
@@ -1106,7 +1106,7 @@ func newErrPendingCancelledLocked(rq *Request, cause error) (err error) <span cl
 }
 </pre>
 		
-		<pre class="file" id="file12" style="display: none">package core
+		<pre class="file" id="file12" style="display: none">package jaws
 
 import (
         "fmt"
@@ -1204,7 +1204,7 @@ func CallEventHandlers(ui any, e *Element, wht what.What, val string) (err error
 }
 </pre>
 		
-		<pre class="file" id="file13" style="display: none">package core
+		<pre class="file" id="file13" style="display: none">package jaws
 
 import (
         "errors"
@@ -1249,7 +1249,7 @@ func MakeGetter[T comparable](v any) Getter[T] <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file14" style="display: none">package core
+		<pre class="file" id="file14" style="display: none">package jaws
 
 import "html/template"
 
@@ -1274,13 +1274,13 @@ func HTMLGetterFunc(fn func(elem *Element) (tmpl template.HTML), tags ...any) HT
 }</span>
 </pre>
 		
-		<pre class="file" id="file15" style="display: none">// package core provides a mechanism to create dynamic
+		<pre class="file" id="file15" style="display: none">// package jaws provides a mechanism to create dynamic
 // webpages using Javascript and WebSockets.
 //
 // It integrates well with Go's html/template package,
 // but can be used without it. It can be used with any
 // router that supports the standard ServeHTTP interface.
-package core
+package jaws
 
 import (
         "bufio"
@@ -2165,7 +2165,7 @@ func (jw *Jaws) recycle(rq *Request) <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file16" style="display: none">package core
+		<pre class="file" id="file16" style="display: none">package jaws
 
 import (
         _ "embed"
@@ -2280,7 +2280,7 @@ func PreloadHTML(urls ...*url.URL) (htmlcode, faviconurl string) <span class="co
 }
 </pre>
 		
-		<pre class="file" id="file17" style="display: none">package core
+		<pre class="file" id="file17" style="display: none">package jaws
 
 import (
         "fmt"
@@ -2354,7 +2354,7 @@ func MakeHTMLGetter(v any) HTMLGetter <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file18" style="display: none">package core
+		<pre class="file" id="file18" style="display: none">package jaws
 
 import (
         "fmt"
@@ -2379,7 +2379,7 @@ func (msg *Message) String() string <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file19" style="display: none">package core
+		<pre class="file" id="file19" style="display: none">package jaws
 
 import (
         "fmt"
@@ -2477,7 +2477,7 @@ func (nb *NamedBool) String() string <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file20" style="display: none">package core
+		<pre class="file" id="file20" style="display: none">package jaws
 
 import (
         "html/template"
@@ -2640,7 +2640,7 @@ func (nba *NamedBoolArray) JawsSet(e *Element, name string) (err error) <span cl
 }
 </pre>
 		
-		<pre class="file" id="file21" style="display: none">package core
+		<pre class="file" id="file21" style="display: none">package jaws
 
 import (
         "html"
@@ -2674,7 +2674,7 @@ func (ui namedBoolOption) JawsUpdate(e *Element) <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file22" style="display: none">package core
+		<pre class="file" id="file22" style="display: none">package jaws
 
 import "html/template"
 
@@ -2721,7 +2721,7 @@ func ParseParams(params []any) (tags []any, handlers []EventHandler, attrs []str
 }
 </pre>
 		
-		<pre class="file" id="file23" style="display: none">package core
+		<pre class="file" id="file23" style="display: none">package jaws
 
 import (
         "bytes"
@@ -3651,7 +3651,7 @@ func (rq *Request) MustLog(err error) <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file24" style="display: none">package core
+		<pre class="file" id="file24" style="display: none">package jaws
 
 import "sync"
 
@@ -3674,7 +3674,7 @@ func (l rwlocker) RUnlock() <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file25" style="display: none">package core
+		<pre class="file" id="file25" style="display: none">package jaws
 
 import (
         "net/http"
@@ -3730,7 +3730,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class="c
 }
 </pre>
 		
-		<pre class="file" id="file26" style="display: none">package core
+		<pre class="file" id="file26" style="display: none">package jaws
 
 import (
         "net/http"
@@ -3960,7 +3960,7 @@ func (sess *Session) Broadcast(msg Message) <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file27" style="display: none">package core
+		<pre class="file" id="file27" style="display: none">package jaws
 
 import "net/http"
 
@@ -3982,7 +3982,7 @@ func (jw *Jaws) Session(h http.Handler) http.Handler <span class="cov8" title="1
 }</span>
 </pre>
 		
-		<pre class="file" id="file28" style="display: none">package core
+		<pre class="file" id="file28" style="display: none">package jaws
 
 import (
         "fmt"
@@ -4036,7 +4036,7 @@ func MakeSetter[T comparable](v any) Setter[T] <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file29" style="display: none">package core
+		<pre class="file" id="file29" style="display: none">package jaws
 
 import (
         "fmt"
@@ -4148,7 +4148,7 @@ func MakeSetterFloat64(v any) (s Setter[float64]) <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file30" style="display: none">package core
+		<pre class="file" id="file30" style="display: none">package jaws
 
 import (
         "errors"
@@ -4239,7 +4239,7 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 }
 </pre>
 		
-		<pre class="file" id="file31" style="display: none">package core
+		<pre class="file" id="file31" style="display: none">package jaws
 
 type stringGetterFunc struct {
         fn   func(*Element) string
@@ -4260,7 +4260,7 @@ func StringGetterFunc(fn func(elem *Element) (s string), tags ...any) Getter[str
 }</span>
 </pre>
 		
-		<pre class="file" id="file32" style="display: none">package core
+		<pre class="file" id="file32" style="display: none">package jaws
 
 import (
         "fmt"
@@ -4357,7 +4357,7 @@ func MustTagExpand(rq *Request, tag any) []any <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file33" style="display: none">package core
+		<pre class="file" id="file33" style="display: none">package jaws
 
 import (
         "bytes"
@@ -4441,7 +4441,7 @@ func (tr *TestRequest) BodyHTML() template.HTML <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file34" style="display: none">package core
+		<pre class="file" id="file34" style="display: none">package jaws
 
 import (
         "html/template"
@@ -4541,7 +4541,7 @@ func WriteHTMLSelect(w io.Writer, jid jid.Jid, nba *NamedBoolArray, attrs []temp
 }
 </pre>
 		
-		<pre class="file" id="file35" style="display: none">package core
+		<pre class="file" id="file35" style="display: none">package jaws
 
 import (
         "context"
@@ -4679,7 +4679,7 @@ batchloop:
 }
 </pre>
 		
-		<pre class="file" id="file36" style="display: none">package core
+		<pre class="file" id="file36" style="display: none">package jaws
 
 import (
         "bytes"
@@ -4821,7 +4821,7 @@ import (
         "sync"
         "time"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
         "github.com/linkdata/jaws/jid"
         "github.com/linkdata/jaws/ui"
 )
@@ -6349,7 +6349,7 @@ func (tr *TemplateReloader) Lookup(name string) *template.Template <span class="
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type A struct{ HTMLInner }
@@ -6369,7 +6369,7 @@ func (ui *A) JawsRender(e *core.Element, w io.Writer, params []any) error <span 
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Button struct{ HTMLInner }
@@ -6389,7 +6389,7 @@ func (ui *Button) JawsRender(e *core.Element, w io.Writer, params []any) error <
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Checkbox struct{ InputBool }
@@ -6406,7 +6406,7 @@ func (ui *Checkbox) JawsRender(e *core.Element, w io.Writer, params []any) error
 		
 		<pre class="file" id="file58" style="display: none">package ui
 
-import "github.com/linkdata/jaws/core"
+import core "github.com/linkdata/jaws/core"
 
 func applyDirty(tag any, e *core.Element, err error) (retErr error) <span class="cov8" title="1">{
         if err != core.ErrValueUnchanged </span><span class="cov8" title="1">{
@@ -6422,7 +6422,7 @@ func applyDirty(tag any, e *core.Element, err error) (retErr error) <span class=
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Container struct {
@@ -6459,7 +6459,7 @@ import (
         "strings"
         "sync"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 // ContainerHelper is a helper for widgets that render dynamic child collections.
@@ -6584,7 +6584,7 @@ import (
         "io"
         "time"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Date struct{ InputDate }
@@ -6604,7 +6604,7 @@ func (ui *Date) JawsRender(e *core.Element, w io.Writer, params []any) error <sp
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Div struct{ HTMLInner }
@@ -6670,7 +6670,7 @@ func (errMissingTemplate) Is(target error) bool <span class="cov8" title="1">{
 import (
         "net/http"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 // uiHandler is an http.uiHandler that renders a template for every request.
@@ -6703,7 +6703,7 @@ func Handler(jw *core.Jaws, name string, dot any) http.Handler <span class="cov8
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 // HTMLInner is a reusable base for widgets that render as `&lt;tag&gt;inner&lt;/tag&gt;`.
@@ -6730,7 +6730,7 @@ import (
         "io"
         "strconv"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Img struct{ core.Getter[string] }
@@ -6759,7 +6759,7 @@ import (
         "sync/atomic"
         "time"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
         "github.com/linkdata/jaws/what"
 )
 
@@ -6950,7 +6950,7 @@ import (
         "strings"
         "sync"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
         "github.com/linkdata/jaws/what"
         "github.com/linkdata/jq"
 )
@@ -7189,7 +7189,7 @@ func (rqw RequestWriter) JsVar(jsvarname string, jsvar any, params ...any) (err 
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Label struct{ HTMLInner }
@@ -7209,7 +7209,7 @@ func (ui *Label) JawsRender(e *core.Element, w io.Writer, params []any) error <s
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Li struct{ HTMLInner }
@@ -7229,7 +7229,7 @@ func (ui *Li) JawsRender(e *core.Element, w io.Writer, params []any) error <span
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Number struct{ InputFloat }
@@ -7251,7 +7251,7 @@ import (
         "html/template"
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Option struct{ *core.NamedBool }
@@ -7281,7 +7281,7 @@ func (ui Option) JawsUpdate(e *core.Element) <span class="cov8" title="1">{
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Password struct{ InputText }
@@ -7301,7 +7301,7 @@ func (ui *Password) JawsRender(e *core.Element, w io.Writer, params []any) error
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Radio struct{ InputBool }
@@ -7322,7 +7322,7 @@ import (
         "html/template"
         "strings"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type RadioElement struct {
@@ -7367,7 +7367,7 @@ func (re RadioElement) Label(params ...any) template.HTML <span class="cov8" tit
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Range struct{ InputFloat }
@@ -7387,7 +7387,7 @@ func (ui *Range) JawsRender(e *core.Element, w io.Writer, params []any) error <s
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
         "github.com/linkdata/jaws/jid"
 )
 
@@ -7422,7 +7422,7 @@ import (
         "io"
         "net/http"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type RequestWriter struct {
@@ -7497,7 +7497,7 @@ func (l rwlocker) RUnlock() <span class="cov8" title="1">{
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
         "github.com/linkdata/jaws/what"
 )
 
@@ -7537,7 +7537,7 @@ func (ui *Select) JawsEvent(e *core.Element, wht what.What, val string) (err err
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Span struct{ HTMLInner }
@@ -7557,7 +7557,7 @@ func (ui *Span) JawsRender(e *core.Element, w io.Writer, params []any) error <sp
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Tbody struct {
@@ -7586,7 +7586,7 @@ func (ui *Tbody) JawsUpdate(e *core.Element) <span class="cov8" title="1">{
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Td struct{ HTMLInner }
@@ -7612,7 +7612,7 @@ import (
         "text/template/parse"
 
         "github.com/linkdata/deadlock"
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
         "github.com/linkdata/jaws/what"
 )
 
@@ -7782,7 +7782,7 @@ func (rqw RequestWriter) Template(name string, dot any, params ...any) error <sp
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Text struct{ InputText }
@@ -7803,7 +7803,7 @@ import (
         "html/template"
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Textarea struct{ InputText }
@@ -7829,7 +7829,7 @@ func (ui *Textarea) JawsUpdate(e *core.Element) <span class="cov8" title="1">{ e
 import (
         "io"
 
-        "github.com/linkdata/jaws/core"
+        core "github.com/linkdata/jaws/core"
 )
 
 type Tr struct{ HTMLInner }
