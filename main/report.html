@@ -191,7 +191,7 @@
 				
 				<option value="file67">github.com/linkdata/jaws/ui/img.go (100.0%)</option>
 				
-				<option value="file68">github.com/linkdata/jaws/ui/input_widgets.go (100.0%)</option>
+				<option value="file68">github.com/linkdata/jaws/ui/input_widgets.go (96.2%)</option>
 				
 				<option value="file69">github.com/linkdata/jaws/ui/jsvar.go (100.0%)</option>
 				
@@ -6401,16 +6401,12 @@ func (ui *Checkbox) JawsRender(e *core.Element, w io.Writer, params []any) error
 
 import "github.com/linkdata/jaws/core"
 
-func applyDirty(tag any, e *core.Element, err error) (changed bool, retErr error) <span class="cov8" title="1">{
-        switch err </span>{
-        case nil:<span class="cov8" title="1">
+func applyDirty(tag any, e *core.Element, err error) (retErr error) <span class="cov8" title="1">{
+        if err != core.ErrValueUnchanged </span><span class="cov8" title="1">{
+                retErr = err
                 e.Dirty(tag)
-                return true, nil</span>
-        case core.ErrValueUnchanged:<span class="cov8" title="1">
-                return false, nil</span>
-        default:<span class="cov8" title="1">
-                return false, err</span>
-        }
+        }</span>
+        <span class="cov8" title="1">return</span>
 }
 </pre>
 		
@@ -6761,9 +6757,10 @@ import (
 )
 
 // Input stores common state for interactive input widgets.
+// There is one of these per request and input widget.
 type Input struct {
         Tag  any
-        Last atomic.Value
+        Last atomic.Value // the last value received from the request
 }
 
 func (ui *Input) applyGetter(e *core.Element, getter any) (err error) <span class="cov8" title="1">{
@@ -6771,14 +6768,10 @@ func (ui *Input) applyGetter(e *core.Element, getter any) (err error) <span clas
         return
 }</span>
 
-func (ui *Input) maybeDirty(val any, e *core.Element, err error) error <span class="cov8" title="1">{
-        if changed, err := applyDirty(ui.Tag, e, err); err != nil </span><span class="cov8" title="1">{
-                return err
-        }</span> else<span class="cov8" title="1"> if changed </span><span class="cov8" title="1">{
-                ui.Last.Store(val)
-        }</span>
-        <span class="cov8" title="1">return nil</span>
-}
+func (ui *Input) maybeDirty(e *core.Element, inerr error) (err error) <span class="cov8" title="1">{
+        err = applyDirty(ui.Tag, e, inerr)
+        return
+}</span>
 
 type InputText struct {
         Input
@@ -6804,7 +6797,8 @@ func (ui *InputText) JawsUpdate(e *core.Element) <span class="cov8" title="1">{
 func (ui *InputText) JawsEvent(e *core.Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
         err = core.ErrEventUnhandled
         if wht == what.Input </span><span class="cov8" title="1">{
-                err = ui.maybeDirty(val, e, ui.Setter.JawsSet(e, val))
+                ui.Last.Store(val)
+                err = ui.maybeDirty(e, ui.Setter.JawsSet(e, val))
         }</span>
         <span class="cov8" title="1">return</span>
 }
@@ -6841,13 +6835,14 @@ func (ui *InputBool) JawsUpdate(e *core.Element) <span class="cov8" title="1">{
 func (ui *InputBool) JawsEvent(e *core.Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
         err = core.ErrEventUnhandled
         if wht == what.Input </span><span class="cov8" title="1">{
-                var v bool
-                if val != "" </span><span class="cov8" title="1">{
-                        if v, err = strconv.ParseBool(val); err != nil </span><span class="cov8" title="1">{
-                                return
-                        }</span>
-                }
-                <span class="cov8" title="1">err = ui.maybeDirty(v, e, ui.Setter.JawsSet(e, v))</span>
+                if val == "" </span><span class="cov0" title="0">{
+                        val = "false"
+                }</span>
+                <span class="cov8" title="1">var v bool
+                if v, err = strconv.ParseBool(val); err == nil </span><span class="cov8" title="1">{
+                        err = ui.maybeDirty(e, ui.Setter.JawsSet(e, v))
+                }</span>
+                <span class="cov8" title="1">ui.Last.Store(v)</span>
         }
         <span class="cov8" title="1">return</span>
 }
@@ -6857,35 +6852,38 @@ type InputFloat struct {
         core.Setter[float64]
 }
 
-func (ui *InputFloat) str() string <span class="cov8" title="1">{
-        return strconv.FormatFloat(ui.Last.Load().(float64), 'f', -1, 64)
+func (ui *InputFloat) str(v float64) string <span class="cov8" title="1">{
+        return strconv.FormatFloat(v, 'f', -1, 64)
 }</span>
 
 func (ui *InputFloat) renderFloatInput(e *core.Element, w io.Writer, htmlType string, params ...any) (err error) <span class="cov8" title="1">{
         if err = ui.applyGetter(e, ui.Setter); err == nil </span><span class="cov8" title="1">{
                 attrs := e.ApplyParams(params)
-                ui.Last.Store(ui.JawsGet(e))
-                err = core.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(), attrs)
+                v := ui.JawsGet(e)
+                ui.Last.Store(v)
+                err = core.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(v), attrs)
         }</span>
         <span class="cov8" title="1">return</span>
 }
 
 func (ui *InputFloat) JawsUpdate(e *core.Element) <span class="cov8" title="1">{
-        if f := ui.JawsGet(e); ui.Last.Swap(f) != f </span><span class="cov8" title="1">{
-                e.SetValue(ui.str())
+        v := ui.JawsGet(e)
+        if ui.Last.Swap(v) != v </span><span class="cov8" title="1">{
+                e.SetValue(ui.str(v))
         }</span>
 }
 
 func (ui *InputFloat) JawsEvent(e *core.Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
         err = core.ErrEventUnhandled
         if wht == what.Input </span><span class="cov8" title="1">{
-                var v float64
-                if val != "" </span><span class="cov8" title="1">{
-                        if v, err = strconv.ParseFloat(val, 64); err != nil </span><span class="cov8" title="1">{
-                                return
-                        }</span>
-                }
-                <span class="cov8" title="1">err = ui.maybeDirty(v, e, ui.Setter.JawsSet(e, v))</span>
+                if val == "" </span><span class="cov0" title="0">{
+                        val = "0"
+                }</span>
+                <span class="cov8" title="1">var v float64
+                if v, err = strconv.ParseFloat(val, 64); err == nil </span><span class="cov8" title="1">{
+                        err = ui.maybeDirty(e, ui.Setter.JawsSet(e, v))
+                }</span>
+                <span class="cov8" title="1">ui.Last.Store(v)</span>
         }
         <span class="cov8" title="1">return</span>
 }
@@ -6895,35 +6893,38 @@ type InputDate struct {
         core.Setter[time.Time]
 }
 
-func (ui *InputDate) str() string <span class="cov8" title="1">{
-        return ui.Last.Load().(time.Time).Format(core.ISO8601)
+func (ui *InputDate) str(v time.Time) string <span class="cov8" title="1">{
+        return v.Format(core.ISO8601)
 }</span>
 
 func (ui *InputDate) renderDateInput(e *core.Element, w io.Writer, htmlType string, params ...any) (err error) <span class="cov8" title="1">{
         if err = ui.applyGetter(e, ui.Setter); err == nil </span><span class="cov8" title="1">{
                 attrs := e.ApplyParams(params)
-                ui.Last.Store(ui.JawsGet(e))
-                err = core.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(), attrs)
+                v := ui.JawsGet(e)
+                ui.Last.Store(v)
+                err = core.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(v), attrs)
         }</span>
         <span class="cov8" title="1">return</span>
 }
 
 func (ui *InputDate) JawsUpdate(e *core.Element) <span class="cov8" title="1">{
-        if t := ui.JawsGet(e); ui.Last.Swap(t) != t </span><span class="cov8" title="1">{
-                e.SetValue(ui.str())
+        v := ui.JawsGet(e)
+        if ui.Last.Swap(v) != v </span><span class="cov8" title="1">{
+                e.SetValue(ui.str(v))
         }</span>
 }
 
 func (ui *InputDate) JawsEvent(e *core.Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
         err = core.ErrEventUnhandled
         if wht == what.Input </span><span class="cov8" title="1">{
-                var v time.Time
-                if val != "" </span><span class="cov8" title="1">{
-                        if v, err = time.Parse(core.ISO8601, val); err != nil </span><span class="cov8" title="1">{
-                                return
-                        }</span>
-                }
-                <span class="cov8" title="1">err = ui.maybeDirty(v, e, ui.Setter.JawsSet(e, v))</span>
+                if val == "" </span><span class="cov0" title="0">{
+                        val = "0001-01-01"
+                }</span>
+                <span class="cov8" title="1">var v time.Time
+                if v, err = time.Parse(core.ISO8601, val); err == nil </span><span class="cov8" title="1">{
+                        err = ui.maybeDirty(e, ui.Setter.JawsSet(e, v))
+                }</span>
+                <span class="cov8" title="1">ui.Last.Store(v)</span>
         }
         <span class="cov8" title="1">return</span>
 }
@@ -7518,7 +7519,7 @@ func (ui *Select) JawsUpdate(e *core.Element) <span class="cov8" title="1">{
 func (ui *Select) JawsEvent(e *core.Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
         err = core.ErrEventUnhandled
         if wht == what.Input </span><span class="cov8" title="1">{
-                _, err = applyDirty(ui.Tag, e, ui.ContainerHelper.Container.(core.Setter[string]).JawsSet(e, val))
+                err = applyDirty(ui.Tag, e, ui.ContainerHelper.Container.(core.Setter[string]).JawsSet(e, val))
         }</span>
         <span class="cov8" title="1">return</span>
 }
