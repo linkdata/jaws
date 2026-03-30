@@ -191,7 +191,7 @@
 				
 				<option value="file67">github.com/linkdata/jaws/ui/img.go (100.0%)</option>
 				
-				<option value="file68">github.com/linkdata/jaws/ui/input_widgets.go (96.2%)</option>
+				<option value="file68">github.com/linkdata/jaws/ui/input_widgets.go (100.0%)</option>
 				
 				<option value="file69">github.com/linkdata/jaws/ui/jsvar.go (100.0%)</option>
 				
@@ -6835,7 +6835,7 @@ func (ui *InputBool) JawsUpdate(e *core.Element) <span class="cov8" title="1">{
 func (ui *InputBool) JawsEvent(e *core.Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
         err = core.ErrEventUnhandled
         if wht == what.Input </span><span class="cov8" title="1">{
-                if val == "" </span><span class="cov0" title="0">{
+                if val == "" </span><span class="cov8" title="1">{
                         val = "false"
                 }</span>
                 <span class="cov8" title="1">var v bool
@@ -6876,7 +6876,7 @@ func (ui *InputFloat) JawsUpdate(e *core.Element) <span class="cov8" title="1">{
 func (ui *InputFloat) JawsEvent(e *core.Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
         err = core.ErrEventUnhandled
         if wht == what.Input </span><span class="cov8" title="1">{
-                if val == "" </span><span class="cov0" title="0">{
+                if val == "" </span><span class="cov8" title="1">{
                         val = "0"
                 }</span>
                 <span class="cov8" title="1">var v float64
@@ -6917,7 +6917,7 @@ func (ui *InputDate) JawsUpdate(e *core.Element) <span class="cov8" title="1">{
 func (ui *InputDate) JawsEvent(e *core.Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
         err = core.ErrEventUnhandled
         if wht == what.Input </span><span class="cov8" title="1">{
-                if val == "" </span><span class="cov0" title="0">{
+                if val == "" </span><span class="cov8" title="1">{
                         val = "0001-01-01"
                 }</span>
                 <span class="cov8" title="1">var v time.Time
