@@ -4,7 +4,7 @@ import (
 	"html/template"
 	"strings"
 
-	"github.com/linkdata/jaws/core"
+	core "github.com/linkdata/jaws/core"
 )
 
 type RadioElement struct {

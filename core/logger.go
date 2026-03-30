@@ -1,4 +1,4 @@
-package core
+package jaws
 
 // Logger matches the log/slog.Logger interface.
 type Logger interface {

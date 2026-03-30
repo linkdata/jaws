@@ -1,10 +1,10 @@
-// package core provides a mechanism to create dynamic
+// package jaws provides a mechanism to create dynamic
 // webpages using Javascript and WebSockets.
 //
 // It integrates well with Go's html/template package,
 // but can be used without it. It can be used with any
 // router that supports the standard ServeHTTP interface.
-package core
+package jaws
 
 import (
 	"bufio"

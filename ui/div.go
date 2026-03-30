@@ -3,7 +3,7 @@ package ui
 import (
 	"io"
 
-	"github.com/linkdata/jaws/core"
+	core "github.com/linkdata/jaws/core"
 )
 
 type Div struct{ HTMLInner }

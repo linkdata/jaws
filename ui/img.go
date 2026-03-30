@@ -5,7 +5,7 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/linkdata/jaws/core"
+	core "github.com/linkdata/jaws/core"
 )
 
 type Img struct{ core.Getter[string] }

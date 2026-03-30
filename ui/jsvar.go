@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/linkdata/jaws/core"
+	core "github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/what"
 	"github.com/linkdata/jq"
 )

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/linkdata/jaws/core"
+	core "github.com/linkdata/jaws/core"
 )
 
 func mustMatch(t *testing.T, pattern, got string) {

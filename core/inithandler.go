@@ -1,4 +1,4 @@
-package core
+package jaws
 
 // InitHandler allows initializing UI getters and setters before their use.
 //

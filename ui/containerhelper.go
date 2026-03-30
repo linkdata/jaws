@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/linkdata/jaws/core"
+	core "github.com/linkdata/jaws/core"
 )
 
 // ContainerHelper is a helper for widgets that render dynamic child collections.

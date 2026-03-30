@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/linkdata/jaws/core"
+	core "github.com/linkdata/jaws/core"
 )
 
 func TestRequest_RadioGroup(t *testing.T) {

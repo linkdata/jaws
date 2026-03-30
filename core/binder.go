@@ -1,4 +1,4 @@
-package core
+package jaws
 
 // BindSetHook is a function that replaces JawsSetLocked for a Binder.
 //

@@ -4,7 +4,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/linkdata/jaws/core"
+	core "github.com/linkdata/jaws/core"
 )
 
 type RequestWriter struct {

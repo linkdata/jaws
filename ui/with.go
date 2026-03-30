@@ -3,7 +3,7 @@ package ui
 import (
 	"html/template"
 
-	"github.com/linkdata/jaws/core"
+	core "github.com/linkdata/jaws/core"
 )
 
 // With is passed as the data parameter when using RequestWriter.Template(),

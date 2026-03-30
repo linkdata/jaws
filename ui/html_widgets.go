@@ -3,7 +3,7 @@ package ui
 import (
 	"io"
 
-	"github.com/linkdata/jaws/core"
+	core "github.com/linkdata/jaws/core"
 )
 
 // HTMLInner is a reusable base for widgets that render as `<tag>inner</tag>`.

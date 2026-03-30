@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/linkdata/jaws/core"
+	core "github.com/linkdata/jaws/core"
 )
 
 type testRWUpdater struct {

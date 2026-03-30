@@ -1,4 +1,4 @@
-package core
+package jaws
 
 type Updater interface {
 	// JawsUpdate is called for an Element that has been marked dirty to update it's HTML.

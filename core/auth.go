@@ -1,4 +1,4 @@
-package core
+package jaws
 
 type Auth interface {
 	Data() map[string]any // returns authenticated user data, or nil

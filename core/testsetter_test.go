@@ -1,4 +1,4 @@
-package core
+package jaws
 
 import (
 	"github.com/linkdata/deadlock"

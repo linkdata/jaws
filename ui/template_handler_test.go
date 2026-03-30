@@ -11,7 +11,7 @@ import (
 	"text/template/parse"
 
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/core"
+	core "github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/what"
 )
 

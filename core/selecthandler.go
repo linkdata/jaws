@@ -1,4 +1,4 @@
-package core
+package jaws
 
 type SelectHandler interface {
 	Container

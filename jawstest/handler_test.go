@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/core"
+	core "github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/ui"
 )
 

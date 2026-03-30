@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/linkdata/jaws/core"
+	core "github.com/linkdata/jaws/core"
 )
 
 func TestCommon_applyDirty(t *testing.T) {

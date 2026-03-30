@@ -5,7 +5,7 @@ import (
 	"html/template"
 	"io"
 
-	"github.com/linkdata/jaws/core"
+	core "github.com/linkdata/jaws/core"
 )
 
 type Option struct{ *core.NamedBool }

@@ -4,7 +4,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/linkdata/jaws/core"
+	core "github.com/linkdata/jaws/core"
 )
 
 type Date struct{ InputDate }

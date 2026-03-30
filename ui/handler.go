@@ -3,7 +3,7 @@ package ui
 import (
 	"net/http"
 
-	"github.com/linkdata/jaws/core"
+	core "github.com/linkdata/jaws/core"
 )
 
 // uiHandler is an http.uiHandler that renders a template for every request.

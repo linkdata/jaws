@@ -1,4 +1,4 @@
-package core
+package jaws
 
 import "html/template"
 

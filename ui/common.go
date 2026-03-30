@@ -1,6 +1,6 @@
 package ui
 
-import "github.com/linkdata/jaws/core"
+import core "github.com/linkdata/jaws/core"
 
 func applyDirty(tag any, e *core.Element, err error) (retErr error) {
 	if err != core.ErrValueUnchanged {

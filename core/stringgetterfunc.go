@@ -1,4 +1,4 @@
-package core
+package jaws
 
 type stringGetterFunc struct {
 	fn   func(*Element) string

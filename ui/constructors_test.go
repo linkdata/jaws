@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/linkdata/jaws/core"
+	core "github.com/linkdata/jaws/core"
 )
 
 func TestConstructors(t *testing.T) {
