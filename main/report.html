@@ -1788,11 +1788,11 @@ func (jw *Jaws) Broadcast(msg Message) <span class="cov8" title="1">{
 // setDirty marks all Elements that have one or more of the given tags as dirty.
 func (jw *Jaws) setDirty(tags []any) <span class="cov8" title="1">{
         jw.mu.Lock()
-        defer jw.mu.Unlock()
         for _, tag := range tags </span><span class="cov8" title="1">{
                 jw.dirtOrder++
                 jw.dirty[tag] = jw.dirtOrder
         }</span>
+        <span class="cov8" title="1">jw.mu.Unlock()</span>
 }
 
 // Dirty marks all Elements that have one or more of the given tags as dirty.
@@ -1813,9 +1813,9 @@ func (jw *Jaws) distributeDirt() int <span class="cov8" title="1">{
         dirt := make([]orderedDirt, 0, len(jw.dirty))
         for k, v := range jw.dirty </span><span class="cov8" title="1">{
                 dirt = append(dirt, orderedDirt{tag: k, order: v})
-                delete(jw.dirty, k)
         }</span>
-        <span class="cov8" title="1">jw.dirtOrder = 0
+        <span class="cov8" title="1">clear(jw.dirty)
+        jw.dirtOrder = 0
 
         var reqs []*Request
         if len(dirt) &gt; 0 </span><span class="cov8" title="1">{
