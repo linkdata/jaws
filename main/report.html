@@ -329,6 +329,10 @@ func (bind binding[T]) JawsGetTag(*Request) any <span class="cov8" title="1">{
         return bind.ptr
 }</span>
 
+func (bind binding[T]) JawsClick(*Element, string) error <span class="cov8" title="1">{
+        return ErrEventUnhandled
+}</span>
+
 // SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
 //
 // The lock will be held at this point.
@@ -351,6 +355,16 @@ func (bind binding[T]) SetLocked(fn BindSetHook[T]) Binder[T] <span class="cov8"
 // The bind argument to the function is the previous Binder in the chain,
 // and you probably want to call it's JawsGetLocked first.
 func (bind binding[T]) GetLocked(fn BindGetHook[T]) Binder[T] <span class="cov8" title="1">{
+        return bindingHook[T]{
+                Binder: bind,
+                hook:   fn,
+        }
+}</span>
+
+// Clicked returns a Binder[T] that will call fn when JawsClick is invoked.
+//
+// The Binder locks are not held when the function is called.
+func (bind binding[T]) Clicked(fn BindClickedHook[T]) Binder[T] <span class="cov8" title="1">{
         return bindingHook[T]{
                 Binder: bind,
                 hook:   fn,
@@ -418,7 +432,8 @@ import (
 
 type bindingHook[T comparable] struct {
         Binder[T]
-        hook any // one of: BindGetHook[T] BindSetHook[T] BindSuccessHook
+        ClickHandler
+        hook any // one of: BindGetHook[T] BindSetHook[T] BindClickedHook BindSuccessHook
 }
 
 func (bind bindingHook[T]) JawsBinderPrev() Binder[T] <span class="cov8" title="1">{
@@ -472,6 +487,14 @@ func (bind bindingHook[T]) JawsSet(elem *Element, value T) (err error) <span cla
         <span class="cov8" title="1">return</span>
 }
 
+func (bind bindingHook[T]) JawsClick(elem *Element, name string) (err error) <span class="cov8" title="1">{
+        err = ErrEventUnhandled
+        if fn, ok := bind.hook.(BindClickedHook[T]); ok </span><span class="cov8" title="1">{
+                err = fn(elem, name)
+        }</span>
+        <span class="cov8" title="1">return</span>
+}
+
 // SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
 //
 // The lock will be held at this point.
@@ -497,6 +520,16 @@ func (bind bindingHook[T]) GetLocked(setFn BindGetHook[T]) Binder[T] <span class
         return bindingHook[T]{
                 Binder: bind,
                 hook:   setFn,
+        }
+}</span>
+
+// Clicked returns a Binder[T] that will call fn when JawsClick is invoked.
+//
+// The Binder locks are not held when the function is called.
+func (bind bindingHook[T]) Clicked(fn BindClickedHook[T]) Binder[T] <span class="cov8" title="1">{
+        return bindingHook[T]{
+                Binder: bind,
+                hook:   fn,
         }
 }</span>
 
@@ -2308,6 +2341,12 @@ func (g htmlStringerGetter) JawsGetTag(rq *Request) any <span class="cov8" title
         return g.sg
 }</span>
 
+type htmlBinderString struct{ Binder[string] }
+
+func (g htmlBinderString) JawsGetHTML(e *Element) template.HTML <span class="cov8" title="1">{
+        return template.HTML(html.EscapeString(g.Binder.JawsGet(e))) // #nosec G203
+}</span>
+
 type htmlGetterString struct{ sg Getter[string] }
 
 func (g htmlGetterString) JawsGetHTML(e *Element) template.HTML <span class="cov8" title="1">{
@@ -2340,6 +2379,8 @@ func MakeHTMLGetter(v any) HTMLGetter <span class="cov8" title="1">{
                 return v</span>
         case template.HTML:<span class="cov8" title="1">
                 return htmlGetter{v}</span>
+        case Binder[string]:<span class="cov8" title="1">
+                return htmlBinderString{v}</span>
         case Getter[string]:<span class="cov8" title="1">
                 return htmlGetterString{v}</span>
         case Formatter:<span class="cov8" title="1">
