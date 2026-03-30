@@ -234,7 +234,7 @@ func (rq *Request) writeTailScriptResponse(w http.ResponseWriter) (err error) {
 
 // TailHTML writes optional HTML code at the end of the page's BODY section that
 // will immediately apply HTML attribute and class updates made during initial
-// rendering, which eliminates flicker without having to write the correct
+// rendering, which minimizes flicker without having to write the correct
 // value in templates or during JawsRender().
 //
 // It also adds a <noscript> tag that warns of reduces functionality.
