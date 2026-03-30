@@ -106,22 +106,29 @@ func (nba *NamedBoolArray) Get() (name string) {
 	return
 }
 
-func (nba *NamedBoolArray) isCheckedLocked(name string) bool {
+// Count returns the number of NamedBool in the set that have the given name.
+func (nba *NamedBoolArray) Count(name string) (n int) {
+	nba.mu.RLock()
+	defer nba.mu.RUnlock()
 	for _, nb := range nba.data {
-		if nb.Checked() && nb.Name() == name {
-			return true
+		if nb.Name() == name {
+			n++
 		}
 	}
-	return false
+	return
 }
 
 // IsChecked returns true if any of the NamedBool in the set that have the
 // given name are Checked. Returns false if the name is not found.
 func (nba *NamedBoolArray) IsChecked(name string) (state bool) {
 	nba.mu.RLock()
-	state = nba.isCheckedLocked(name)
-	nba.mu.RUnlock()
-	return
+	defer nba.mu.RUnlock()
+	for _, nb := range nba.data {
+		if nb.Name() == name && nb.Checked() {
+			return true
+		}
+	}
+	return false
 }
 
 // String returns a string representation of the NamedBoolArray suitable for debugging.

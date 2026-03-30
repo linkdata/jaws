@@ -56,6 +56,10 @@ func Test_NamedBoolArray(t *testing.T) {
 		is.Equal(nba[2].Name(), "1")
 	})
 
+	is.Equal(nba.Count("1"), 1)
+	is.Equal(nba.Count("2"), 2)
+	is.Equal(nba.Count("3"), 0)
+
 	is.Equal((nba.data)[0].Checked(), false)
 	is.Equal((nba.data)[1].Checked(), false)
 	is.Equal((nba.data)[2].Checked(), true)
