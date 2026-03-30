@@ -2929,7 +2929,7 @@ func (rq *Request) writeTailScript(w http.ResponseWriter) (err error) <span clas
                                         b = append(b, ',')
                                         b = appendJSQuote(b, val)
                                 }</span>
-                                <span class="cov8" title="1">b = append(b, ");"...)</span>
+                                <span class="cov8" title="1">b = append(b, ");\n"...)</span>
                         } else<span class="cov8" title="1"> {
                                 rq.wsQueue[n] = msg
                                 n++
