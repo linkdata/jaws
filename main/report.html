@@ -2895,14 +2895,12 @@ func appendJSQuote(b []byte, s string) []byte <span class="cov8" title="1">{
         return append(b, bytes.ReplaceAll(quoted, []byte("&lt;"), []byte(`\x3c`))...)
 }</span>
 
-func (rq *Request) writeTailScript(w http.ResponseWriter) (err error) <span class="cov8" title="1">{
-        hdr := w.Header()
-        hdr["Cache-Control"] = headerCacheControlNoStore
+func (rq *Request) writeTailScript(w io.Writer) (sent bool, err error) <span class="cov8" title="1">{
         rq.muQueue.Lock()
         defer rq.muQueue.Unlock()
         if !rq.tailsent </span><span class="cov8" title="1">{
                 rq.tailsent = true
-                hdr["Content-Type"] = headerContentTypeJavaScript
+                sent = true
                 var b []byte
                 n := 0
                 for _, msg := range rq.wsQueue </span><span class="cov8" title="1">{
@@ -2942,7 +2940,16 @@ func (rq *Request) writeTailScript(w http.ResponseWriter) (err error) <span clas
                 if len(b) &gt; 0 </span><span class="cov8" title="1">{
                         _, err = w.Write(b)
                 }</span>
-        } else<span class="cov8" title="1"> {
+        }
+        <span class="cov8" title="1">return</span>
+}
+
+func (rq *Request) writeTailScriptResponse(w http.ResponseWriter) (err error) <span class="cov8" title="1">{
+        hdr := w.Header()
+        hdr["Cache-Control"] = headerCacheControlNoStore
+        hdr["Content-Type"] = headerContentTypeJavaScript
+        var sent bool
+        if sent, err = rq.writeTailScript(w); !sent </span><span class="cov8" title="1">{
                 w.WriteHeader(http.StatusNoContent)
         }</span>
         <span class="cov8" title="1">return</span>
@@ -2950,7 +2957,7 @@ func (rq *Request) writeTailScript(w http.ResponseWriter) (err error) <span clas
 
 // TailHTML writes optional HTML code at the end of the page's BODY section that
 // will immediately apply HTML attribute and class updates made during initial
-// rendering, which eliminates flicker without having to write the correct
+// rendering, which minimizes flicker without having to write the correct
 // value in templates or during JawsRender().
 //
 // It also adds a &lt;noscript&gt; tag that warns of reduces functionality.
@@ -3707,7 +3714,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class="c
                                         rq := jw.requests[jawsKey]
                                         jw.mu.RUnlock()
                                         if rq != nil </span><span class="cov8" title="1">{
-                                                if err := rq.writeTailScript(w); err != nil </span><span class="cov8" title="1">{
+                                                if err := rq.writeTailScriptResponse(w); err != nil </span><span class="cov8" title="1">{
                                                         rq.cancel(err)
                                                 }</span>
                                                 <span class="cov8" title="1">return</span>
