@@ -361,6 +361,20 @@ func TestBind_Hook_Clicked_bindingHook(t *testing.T) {
 	}
 }
 
+func TestBind_Click_defaultUnhandled(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	bind := Bind(&mu, &val)
+	handler, ok := bind.(ClickHandler)
+	if !ok {
+		t.Fatalf("%T does not implement ClickHandler", bind)
+	}
+	if err := handler.JawsClick(nil, "ignored"); !errors.Is(err, ErrEventUnhandled) {
+		t.Fatal(err)
+	}
+}
+
 func testBind_Hooks[T comparable](t *testing.T, testval T) {
 	testBind_Hook_Success(t, testval)
 	testBind_Hook_Set(t, testval)
