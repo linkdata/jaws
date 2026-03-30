@@ -108,7 +108,7 @@ func TestRequest_writeTailScript_EscapesScriptClose(t *testing.T) {
 	e.SetAttr("title", "</script><img onerror=alert(1) src=x>")
 
 	w := httptest.NewRecorder()
-	if err := rq.writeTailScript(w); err != nil {
+	if err := rq.writeTailScriptResponse(w); err != nil {
 		t.Fatal(err)
 	}
 	s := w.Body.String()
@@ -139,7 +139,7 @@ func TestRequest_writeTailScript_PreservesNonAttrMessages(t *testing.T) {
 	rq.muQueue.Unlock()
 
 	w := httptest.NewRecorder()
-	if err := rq.writeTailScript(w); err != nil {
+	if err := rq.writeTailScriptResponse(w); err != nil {
 		t.Fatal(err)
 	}
 
@@ -164,7 +164,7 @@ func TestRequest_writeTailScript_RemoveAttrAndClass(t *testing.T) {
 	e.RemoveClass("cls")
 
 	w := httptest.NewRecorder()
-	if err := rq.writeTailScript(w); err != nil {
+	if err := rq.writeTailScriptResponse(w); err != nil {
 		t.Fatal(err)
 	}
 	s := w.Body.String()

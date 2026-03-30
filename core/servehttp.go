@@ -38,7 +38,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					rq := jw.requests[jawsKey]
 					jw.mu.RUnlock()
 					if rq != nil {
-						if err := rq.writeTailScript(w); err != nil {
+						if err := rq.writeTailScriptResponse(w); err != nil {
 							rq.cancel(err)
 						}
 						return

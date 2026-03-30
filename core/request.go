@@ -172,14 +172,12 @@ func appendJSQuote(b []byte, s string) []byte {
 	return append(b, bytes.ReplaceAll(quoted, []byte("<"), []byte(`\x3c`))...)
 }
 
-func (rq *Request) writeTailScript(w http.ResponseWriter) (err error) {
-	hdr := w.Header()
-	hdr["Cache-Control"] = headerCacheControlNoStore
+func (rq *Request) writeTailScript(w io.Writer) (sent bool, err error) {
 	rq.muQueue.Lock()
 	defer rq.muQueue.Unlock()
 	if !rq.tailsent {
 		rq.tailsent = true
-		hdr["Content-Type"] = headerContentTypeJavaScript
+		sent = true
 		var b []byte
 		n := 0
 		for _, msg := range rq.wsQueue {
@@ -219,7 +217,16 @@ func (rq *Request) writeTailScript(w http.ResponseWriter) (err error) {
 		if len(b) > 0 {
 			_, err = w.Write(b)
 		}
-	} else {
+	}
+	return
+}
+
+func (rq *Request) writeTailScriptResponse(w http.ResponseWriter) (err error) {
+	hdr := w.Header()
+	hdr["Cache-Control"] = headerCacheControlNoStore
+	hdr["Content-Type"] = headerContentTypeJavaScript
+	var sent bool
+	if sent, err = rq.writeTailScript(w); !sent {
 		w.WriteHeader(http.StatusNoContent)
 	}
 	return
