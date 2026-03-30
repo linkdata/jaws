@@ -57,6 +57,12 @@ func TestInputBoolWidgets(t *testing.T) {
 	if sb.Get() {
 		t.Fatal("expected false")
 	}
+	if err := checkbox.JawsEvent(elem, what.Input, ""); err != nil {
+		t.Fatal(err)
+	}
+	if sb.Get() {
+		t.Fatal("expected false for empty input")
+	}
 	if err := checkbox.JawsEvent(elem, what.Input, "bad"); err == nil {
 		t.Fatal("expected parse error")
 	}
@@ -80,6 +86,12 @@ func TestInputFloatWidgets(t *testing.T) {
 	}
 	if sf.Get() != 2.3 {
 		t.Fatalf("want 2.3 got %v", sf.Get())
+	}
+	if err := number.JawsEvent(elem, what.Input, ""); err != nil {
+		t.Fatal(err)
+	}
+	if sf.Get() != 0 {
+		t.Fatalf("want 0 got %v", sf.Get())
 	}
 	if err := number.JawsEvent(elem, what.Input, "bad"); err == nil {
 		t.Fatal("expected parse error")
@@ -106,6 +118,12 @@ func TestInputDateWidget(t *testing.T) {
 	}
 	if sd.Get().Format(core.ISO8601) != "2021-02-03" {
 		t.Fatalf("unexpected date %v", sd.Get())
+	}
+	if err := date.JawsEvent(elem, what.Input, ""); err != nil {
+		t.Fatal(err)
+	}
+	if !sd.Get().IsZero() {
+		t.Fatalf("expected zero date for empty input, got %v", sd.Get())
 	}
 	if err := date.JawsEvent(elem, what.Input, "bad"); err == nil {
 		t.Fatal("expected parse error")
