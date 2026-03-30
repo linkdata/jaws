@@ -26,6 +26,12 @@ func (g htmlStringerGetter) JawsGetTag(rq *Request) any {
 	return g.sg
 }
 
+type htmlBinderString struct{ Binder[string] }
+
+func (g htmlBinderString) JawsGetHTML(e *Element) template.HTML {
+	return template.HTML(html.EscapeString(g.Binder.JawsGet(e))) // #nosec G203
+}
+
 type htmlGetterString struct{ sg Getter[string] }
 
 func (g htmlGetterString) JawsGetHTML(e *Element) template.HTML {
@@ -58,6 +64,8 @@ func MakeHTMLGetter(v any) HTMLGetter {
 		return v
 	case template.HTML:
 		return htmlGetter{v}
+	case Binder[string]:
+		return htmlBinderString{v}
 	case Getter[string]:
 		return htmlGetterString{v}
 	case Formatter:
