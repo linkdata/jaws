@@ -72,6 +72,13 @@ func (bind binding[T]) GetLocked(fn BindGetHook[T]) Binder[T] {
 	}
 }
 
+func (bind binding[T]) Clicked(fn BindClickedHook) Binder[T] {
+	return bindingHook[T]{
+		Binder: bind,
+		hook:   fn,
+	}
+}
+
 // Success returns a Binder[T] that will call fn after the value has been set
 // with no errors. No locks are held when the function is called.
 // If the function returns an error, that will be returned from JawsSet.

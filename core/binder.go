@@ -18,6 +18,14 @@ type BindSetHook[T comparable] func(bind Binder[T], elem *Element, value T) (err
 // want to call it's JawsGetLocked first.
 type BindGetHook[T comparable] func(bind Binder[T], elem *Element) (value T)
 
+// BindClickedHook is a function to call when a click event is received.
+//
+// The Binder locks are not held when the function is called.
+//
+// Clicked hooks in a Binder chain are called in the order they were registered
+// until one returns something else than ErrEventUnhandled.
+type BindClickedHook func(elem *Element, name string) (err error)
+
 // BindSuccessHook is a function to call when a call to JawsSet returns with no error.
 //
 // The Binder locks are not held when the function is called.
@@ -73,4 +81,6 @@ type Binder[T comparable] interface {
 
 	// FormatHTML returns a HTMLGetter using fmt.Sprintf(f, JawsGet[T](elem))
 	FormatHTML(f string) (getter HTMLGetter)
+
+	Clicked(fn BindClickedHook) (newbind Binder[T])
 }

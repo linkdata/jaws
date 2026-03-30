@@ -7,7 +7,8 @@ import (
 
 type bindingHook[T comparable] struct {
 	Binder[T]
-	hook any // one of: BindGetHook[T] BindSetHook[T] BindSuccessHook
+	ClickHandler
+	hook any // one of: BindGetHook[T] BindSetHook[T] BindClickedHook BindSuccessHook
 }
 
 func (bind bindingHook[T]) JawsBinderPrev() Binder[T] {
@@ -61,6 +62,14 @@ func (bind bindingHook[T]) JawsSet(elem *Element, value T) (err error) {
 	return
 }
 
+func (bind bindingHook[T]) JawsClick(elem *Element, name string) (err error) {
+	err = ErrEventUnhandled
+	if fn, ok := bind.hook.(BindClickedHook); ok {
+		err = fn(elem, name)
+	}
+	return
+}
+
 // SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
 //
 // The lock will be held at this point.
@@ -86,6 +95,13 @@ func (bind bindingHook[T]) GetLocked(setFn BindGetHook[T]) Binder[T] {
 	return bindingHook[T]{
 		Binder: bind,
 		hook:   setFn,
+	}
+}
+
+func (bind bindingHook[T]) Clicked(fn BindClickedHook) Binder[T] {
+	return bindingHook[T]{
+		Binder: bind,
+		hook:   fn,
 	}
 }
 
