@@ -512,11 +512,11 @@ func (jw *Jaws) Broadcast(msg Message) {
 // setDirty marks all Elements that have one or more of the given tags as dirty.
 func (jw *Jaws) setDirty(tags []any) {
 	jw.mu.Lock()
-	defer jw.mu.Unlock()
 	for _, tag := range tags {
 		jw.dirtOrder++
 		jw.dirty[tag] = jw.dirtOrder
 	}
+	jw.mu.Unlock()
 }
 
 // Dirty marks all Elements that have one or more of the given tags as dirty.
@@ -537,8 +537,8 @@ func (jw *Jaws) distributeDirt() int {
 	dirt := make([]orderedDirt, 0, len(jw.dirty))
 	for k, v := range jw.dirty {
 		dirt = append(dirt, orderedDirt{tag: k, order: v})
-		delete(jw.dirty, k)
 	}
+	clear(jw.dirty)
 	jw.dirtOrder = 0
 
 	var reqs []*Request
