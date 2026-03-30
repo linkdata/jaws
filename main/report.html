@@ -1804,21 +1804,18 @@ func (jw *Jaws) Dirty(tags ...any) <span class="cov8" title="1">{
 }</span>
 
 func (jw *Jaws) distributeDirt() int <span class="cov8" title="1">{
-        type orderedDirt struct {
-                tag   any
-                order int
-        }
+        var reqs []*Request
+        var dirt []any
 
         jw.mu.Lock()
-        dirt := make([]orderedDirt, 0, len(jw.dirty))
-        for k, v := range jw.dirty </span><span class="cov8" title="1">{
-                dirt = append(dirt, orderedDirt{tag: k, order: v})
-        }</span>
-        <span class="cov8" title="1">clear(jw.dirty)
-        jw.dirtOrder = 0
-
-        var reqs []*Request
-        if len(dirt) &gt; 0 </span><span class="cov8" title="1">{
+        if len(jw.dirty) &gt; 0 </span><span class="cov8" title="1">{
+                dirt = make([]any, 0, len(jw.dirty))
+                for k := range jw.dirty </span><span class="cov8" title="1">{
+                        dirt = append(dirt, k)
+                }</span>
+                <span class="cov8" title="1">sort.Slice(dirt, func(i, j int) bool </span><span class="cov8" title="1">{ return jw.dirty[dirt[i]] &lt; jw.dirty[dirt[j]] }</span>)
+                <span class="cov8" title="1">clear(jw.dirty)
+                jw.dirtOrder = 0
                 reqs = make([]*Request, 0, len(jw.requests))
                 for _, rq := range jw.requests </span><span class="cov8" title="1">{
                         reqs = append(reqs, rq)
@@ -1826,16 +1823,9 @@ func (jw *Jaws) distributeDirt() int <span class="cov8" title="1">{
         }
         <span class="cov8" title="1">jw.mu.Unlock()
 
-        if len(dirt) &gt; 0 </span><span class="cov8" title="1">{
-                sort.Slice(dirt, func(i, j int) bool </span><span class="cov8" title="1">{ return dirt[i].order &lt; dirt[j].order }</span>)
-                <span class="cov8" title="1">tags := make([]any, len(dirt))
-                for i := range dirt </span><span class="cov8" title="1">{
-                        tags[i] = dirt[i].tag
-                }</span>
-                <span class="cov8" title="1">for _, rq := range reqs </span><span class="cov8" title="1">{
-                        rq.appendDirtyTags(tags)
-                }</span>
-        }
+        for _, rq := range reqs </span><span class="cov8" title="1">{
+                rq.appendDirtyTags(dirt)
+        }</span>
         <span class="cov8" title="1">return len(dirt)</span>
 }
 
