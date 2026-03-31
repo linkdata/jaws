@@ -4,8 +4,8 @@ import (
 	"io"
 	"time"
 
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/jawsbind"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawsbind"
 )
 
 type Date struct{ InputDate }
@@ -15,6 +15,6 @@ func (rw RequestWriter) Date(value any, params ...any) error {
 	return rw.UI(NewDate(jawsbind.MakeSetter[time.Time](value)), params...)
 }
 
-func (ui *Date) JawsRender(e *core.Element, w io.Writer, params []any) error {
+func (ui *Date) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
 	return ui.renderDateInput(e, w, "date", params...)
 }

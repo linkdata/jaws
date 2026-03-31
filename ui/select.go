@@ -3,9 +3,9 @@ package ui
 import (
 	"io"
 
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/jawsbind"
-	"github.com/linkdata/jaws/core/jawsbool"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawsbind"
+	"github.com/linkdata/jaws/jawsbool"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -21,18 +21,18 @@ func (rw RequestWriter) Select(sh jawsbool.SelectHandler, params ...any) error {
 	return rw.UI(NewSelect(sh), params...)
 }
 
-func (ui *Select) JawsRender(e *core.Element, w io.Writer, params []any) error {
+func (ui *Select) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
 	return ui.RenderContainer(e, w, "select", params)
 }
 
-func (ui *Select) JawsUpdate(e *core.Element) {
+func (ui *Select) JawsUpdate(e *jaws.Element) {
 	// jawsbind.Setter[T] includes jawsbind.Getter[T]
 	e.SetValue(ui.ContainerHelper.Container.(jawsbind.Setter[string]).JawsGet(e))
 	ui.UpdateContainer(e)
 }
 
-func (ui *Select) JawsEvent(e *core.Element, wht what.What, val string) (err error) {
-	err = core.ErrEventUnhandled
+func (ui *Select) JawsEvent(e *jaws.Element, wht what.What, val string) (err error) {
+	err = jaws.ErrEventUnhandled
 	if wht == what.Input {
 		err = applyDirty(ui.Tag, e, ui.ContainerHelper.Container.(jawsbind.Setter[string]).JawsSet(e, val))
 	}

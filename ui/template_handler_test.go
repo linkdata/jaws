@@ -11,8 +11,8 @@ import (
 	"text/template/parse"
 
 	"github.com/linkdata/deadlock"
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/jawstags"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawstags"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -30,11 +30,11 @@ type templateDot struct {
 	events  int
 }
 
-func (d *templateDot) JawsUpdate(*core.Element) {
+func (d *templateDot) JawsUpdate(*jaws.Element) {
 	d.updated++
 }
 
-func (d *templateDot) JawsEvent(*core.Element, what.What, string) error {
+func (d *templateDot) JawsEvent(*jaws.Element, what.What, string) error {
 	d.events++
 	return nil
 }
@@ -49,7 +49,7 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	log := &templateLogger{}
 	jw.Logger = log
-	jw.MakeAuth = func(*core.Request) core.Auth { return templateAuth{} }
+	jw.MakeAuth = func(*jaws.Request) jaws.Auth { return templateAuth{} }
 
 	jw.AddTemplateLookuper(template.Must(template.New("uitempl").Parse(
 		`{{with $.Dot}}<div id="{{$.Jid}}" {{$.Attrs}} data-auth="{{$.Auth.Email}}">{{.}}</div>{{end}}`,
@@ -156,7 +156,7 @@ func TestTemplate_findJidOrJsOrHTMLNode(t *testing.T) {
 }
 
 func TestHandler_HandlerServeHTTP(t *testing.T) {
-	jw, err := core.New()
+	jw, err := jaws.New()
 	if err != nil {
 		t.Fatal(err)
 	}

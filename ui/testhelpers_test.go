@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	core "github.com/linkdata/jaws/core"
+	"github.com/linkdata/jaws"
 )
 
 func mustMatch(t *testing.T, pattern, got string) {
@@ -20,9 +20,9 @@ func mustMatch(t *testing.T, pattern, got string) {
 	}
 }
 
-func newCoreRequest(t *testing.T) (*core.Jaws, *core.Request) {
+func newCoreRequest(t *testing.T) (*jaws.Jaws, *jaws.Request) {
 	t.Helper()
-	jw, err := core.New()
+	jw, err := jaws.New()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,9 +34,9 @@ func newCoreRequest(t *testing.T) (*core.Jaws, *core.Request) {
 	return jw, rq
 }
 
-func newCoreSessionBoundRequest(t *testing.T) (*core.Jaws, *core.Request) {
+func newCoreSessionBoundRequest(t *testing.T) (*jaws.Jaws, *jaws.Request) {
 	t.Helper()
-	jw, err := core.New()
+	jw, err := jaws.New()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func newCoreSessionBoundRequest(t *testing.T) (*core.Jaws, *core.Request) {
 	return jw, rq
 }
 
-func renderUI(t *testing.T, rq *core.Request, ui core.UI, params ...any) (*core.Element, string) {
+func renderUI(t *testing.T, rq *jaws.Request, ui jaws.UI, params ...any) (*jaws.Element, string) {
 	t.Helper()
 	elem := rq.NewElement(ui)
 	var sb strings.Builder
@@ -66,7 +66,7 @@ func renderUI(t *testing.T, rq *core.Request, ui core.UI, params ...any) (*core.
 
 type testHTMLGetter string
 
-func (g testHTMLGetter) JawsGetHTML(*core.Element) template.HTML {
+func (g testHTMLGetter) JawsGetHTML(*jaws.Element) template.HTML {
 	return template.HTML(g)
 }
 
@@ -81,20 +81,20 @@ func newTestSetter[T comparable](v T) *testSetter[T] {
 	return &testSetter[T]{v: v}
 }
 
-func (ts *testSetter[T]) JawsGet(*core.Element) T {
+func (ts *testSetter[T]) JawsGet(*jaws.Element) T {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	return ts.v
 }
 
-func (ts *testSetter[T]) JawsSet(_ *core.Element, v T) error {
+func (ts *testSetter[T]) JawsSet(_ *jaws.Element, v T) error {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	if ts.err != nil {
 		return ts.err
 	}
 	if ts.v == v {
-		return core.ErrValueUnchanged
+		return jaws.ErrValueUnchanged
 	}
 	ts.v = v
 	ts.setCount++
@@ -120,9 +120,9 @@ func (ts *testSetter[T]) SetErr(err error) {
 }
 
 type testContainer struct {
-	contents []core.UI
+	contents []jaws.UI
 }
 
-func (tc *testContainer) JawsContains(*core.Element) []core.UI {
+func (tc *testContainer) JawsContains(*jaws.Element) []jaws.UI {
 	return tc.contents
 }

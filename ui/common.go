@@ -1,9 +1,9 @@
 package ui
 
-import core "github.com/linkdata/jaws/core"
+import "github.com/linkdata/jaws"
 
-func applyDirty(tag any, e *core.Element, err error) (retErr error) {
-	if err != core.ErrValueUnchanged {
+func applyDirty(tag any, e *jaws.Element, err error) (retErr error) {
+	if err != jaws.ErrValueUnchanged {
 		retErr = err
 		e.Dirty(tag)
 	}

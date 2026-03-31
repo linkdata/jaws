@@ -5,9 +5,9 @@ import (
 	"io"
 	"strconv"
 
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/jawsbind"
-	"github.com/linkdata/jaws/core/jawshtml"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawsbind"
+	"github.com/linkdata/jaws/jawshtml"
 )
 
 type Img struct{ jawsbind.Getter[string] }
@@ -17,7 +17,7 @@ func (rw RequestWriter) Img(imageSrc any, params ...any) error {
 	return rw.UI(NewImg(jawsbind.MakeGetter[string](imageSrc)), params...)
 }
 
-func (ui *Img) JawsRender(e *core.Element, w io.Writer, params []any) (err error) {
+func (ui *Img) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) {
 	if _, err = e.ApplyGetter(ui.Getter); err == nil {
 		srcAttr := template.HTMLAttr("src=" + strconv.Quote(ui.JawsGet(e))) // #nosec G203
 		attrs := append(e.ApplyParams(params), srcAttr)
@@ -25,4 +25,4 @@ func (ui *Img) JawsRender(e *core.Element, w io.Writer, params []any) (err error
 	}
 	return
 }
-func (ui *Img) JawsUpdate(e *core.Element) { e.SetAttr("src", ui.JawsGet(e)) }
+func (ui *Img) JawsUpdate(e *jaws.Element) { e.SetAttr("src", ui.JawsGet(e)) }

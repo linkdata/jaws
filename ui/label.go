@@ -3,8 +3,8 @@ package ui
 import (
 	"io"
 
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/jawsbind"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawsbind"
 )
 
 type Label struct{ HTMLInner }
@@ -14,6 +14,6 @@ func (rw RequestWriter) Label(innerHTML any, params ...any) error {
 	return rw.UI(NewLabel(jawsbind.MakeHTMLGetter(innerHTML)), params...)
 }
 
-func (ui *Label) JawsRender(e *core.Element, w io.Writer, params []any) error {
+func (ui *Label) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
 	return ui.renderInner(e, w, "label", "", params)
 }

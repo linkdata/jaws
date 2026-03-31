@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	core "github.com/linkdata/jaws/core"
+	"github.com/linkdata/jaws"
 )
 
 // ContainerHelper is a helper for widgets that render dynamic child collections.
@@ -25,17 +25,17 @@ import (
 // After such failures, DOM and request-tracked element state may be partially
 // updated and therefore inconsistent until the next full render/reload.
 type ContainerHelper struct {
-	Container core.Container
+	Container jaws.Container
 	Tag       any
 	mu        sync.Mutex
-	contents  []*core.Element
+	contents  []*jaws.Element
 }
 
-func NewContainerHelper(c core.Container) ContainerHelper {
+func NewContainerHelper(c jaws.Container) ContainerHelper {
 	return ContainerHelper{Container: c}
 }
 
-func (ui *ContainerHelper) RenderContainer(e *core.Element, w io.Writer, outerHTMLTag string, params []any) (err error) {
+func (ui *ContainerHelper) RenderContainer(e *jaws.Element, w io.Writer, outerHTMLTag string, params []any) (err error) {
 	if ui.Tag, err = e.ApplyGetter(ui.Container); err == nil {
 		attrs := e.ApplyParams(params)
 		b := e.Jid().AppendStartTagAttr(nil, outerHTMLTag)
@@ -46,7 +46,7 @@ func (ui *ContainerHelper) RenderContainer(e *core.Element, w io.Writer, outerHT
 		b = append(b, '>')
 		_, err = w.Write(b)
 		if err == nil {
-			var contents []*core.Element
+			var contents []*jaws.Element
 			for _, childUI := range ui.Container.JawsContains(e) {
 				elem := e.Request.NewElement(childUI)
 				contents = append(contents, elem)
@@ -75,16 +75,16 @@ func (ui *ContainerHelper) RenderContainer(e *core.Element, w io.Writer, outerHT
 	return
 }
 
-func (ui *ContainerHelper) UpdateContainer(e *core.Element) {
-	var toAppend []*core.Element
+func (ui *ContainerHelper) UpdateContainer(e *jaws.Element) {
+	var toAppend []*jaws.Element
 
 	wantContents := ui.Container.JawsContains(e)
-	newOrder := make([]core.Jid, 0, len(wantContents))
+	newOrder := make([]jaws.Jid, 0, len(wantContents))
 
 	ui.mu.Lock()
 	// build pool of reusable Elements keyed by UI, preserving duplicates
-	pool := make(map[core.UI][]*core.Element, len(ui.contents))
-	oldOrder := make([]core.Jid, len(ui.contents))
+	pool := make(map[jaws.UI][]*jaws.Element, len(ui.contents))
+	oldOrder := make([]jaws.Jid, len(ui.contents))
 	for i, elem := range ui.contents {
 		oldOrder[i] = elem.Jid()
 		pool[elem.Ui()] = append(pool[elem.Ui()], elem)
@@ -93,7 +93,7 @@ func (ui *ContainerHelper) UpdateContainer(e *core.Element) {
 	// build new contents, reusing pooled Elements where possible
 	ui.contents = ui.contents[:0]
 	for _, childUI := range wantContents {
-		var elem *core.Element
+		var elem *jaws.Element
 		if elems := pool[childUI]; len(elems) > 0 {
 			elem = elems[0]
 			pool[childUI] = elems[1:]

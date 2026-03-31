@@ -3,8 +3,8 @@ package ui
 import (
 	"io"
 
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/jawsbind"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawsbind"
 )
 
 type Radio struct{ InputBool }
@@ -14,6 +14,6 @@ func (rw RequestWriter) Radio(value any, params ...any) error {
 	return rw.UI(NewRadio(jawsbind.MakeSetter[bool](value)), params...)
 }
 
-func (ui *Radio) JawsRender(e *core.Element, w io.Writer, params []any) error {
+func (ui *Radio) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
 	return ui.renderBoolInput(e, w, "radio", params...)
 }

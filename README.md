@@ -273,7 +273,7 @@ router.GET("/jaws/*", func(c echo.Context) error {
 
 ### HTML rendering
 
-HTML output elements (e.g. `jaws.RequestWriter.Div()`) require a `jaws.HTMLGetter` or something that can
+HTML output elements (e.g. `ui.RequestWriter.Div()`) require a `jaws.HTMLGetter` or something that can
 be made into one using `jaws.MakeHTMLGetter()`.
 
 In order of precedence, this can be:
@@ -289,7 +289,7 @@ for trivial rendering tasks, or define a custom type implementing `HTMLGetter`.
 
 ### Data binding
 
-HTML input elements (e.g. `jaws.RequestWriter.Range()`) require bi-directional data flow between the server and the browser.
+HTML input elements (e.g. `ui.RequestWriter.Range()`) require bi-directional data flow between the server and the browser.
 The first argument to these is usually a `Setter[T]` where `T` is one of `string`, `float64`, `bool` or `time.Time`. It can
 also be a `Getter[T]`, in which case the HTML element should be made read-only.
 

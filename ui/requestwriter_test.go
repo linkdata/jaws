@@ -8,16 +8,16 @@ import (
 	"testing"
 	"time"
 
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/jawsbool"
-	"github.com/linkdata/jaws/core/jawstags"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawsbool"
+	"github.com/linkdata/jaws/jawstags"
 )
 
 type testRWUpdater struct {
 	called int
 }
 
-func (u *testRWUpdater) JawsUpdate(*core.Element) {
+func (u *testRWUpdater) JawsUpdate(*jaws.Element) {
 	u.called++
 }
 
@@ -25,9 +25,9 @@ type requestWriterFailGetter struct {
 	err error
 }
 
-func (g requestWriterFailGetter) JawsGetHTML(*core.Element) template.HTML { return "x" }
+func (g requestWriterFailGetter) JawsGetHTML(*jaws.Element) template.HTML { return "x" }
 func (g requestWriterFailGetter) JawsGetTag(jawstags.Context) any         { return g }
-func (g requestWriterFailGetter) JawsInit(*core.Element) error            { return g.err }
+func (g requestWriterFailGetter) JawsInit(*jaws.Element) error            { return g.err }
 
 func TestRequestWriter_MethodsAndWidgetHelpers(t *testing.T) {
 	jw, rq := newCoreSessionBoundRequest(t)
@@ -66,10 +66,10 @@ func TestRequestWriter_MethodsAndWidgetHelpers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tc := &testContainer{contents: []core.UI{NewSpan(testHTMLGetter("in"))}}
+	tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("in"))}}
 	date := time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)
 	sh := &testSelectHandler{
-		testContainer: &testContainer{contents: []core.UI{NewOption(jawsbool.NewNamedBool(nil, "x", "X", true))}},
+		testContainer: &testContainer{contents: []jaws.UI{NewOption(jawsbool.NewNamedBool(nil, "x", "X", true))}},
 		testSetter:    newTestSetter("x"),
 	}
 
@@ -134,7 +134,7 @@ func TestErrMissingTemplateAndRWLocker(t *testing.T) {
 }
 
 func TestRequestWriterUI_RenderErrorDoesNotLeakElement(t *testing.T) {
-	core.NextJid = 0
+	jaws.NextJid = 0
 	_, rq := newCoreRequest(t)
 	var buf bytes.Buffer
 	rw := RequestWriter{Request: rq, Writer: &buf}

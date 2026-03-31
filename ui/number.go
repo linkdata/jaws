@@ -3,8 +3,8 @@ package ui
 import (
 	"io"
 
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/jawsbind"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawsbind"
 )
 
 type Number struct{ InputFloat }
@@ -14,6 +14,6 @@ func (rw RequestWriter) Number(value any, params ...any) error {
 	return rw.UI(NewNumber(jawsbind.MakeSetterFloat64(value)), params...)
 }
 
-func (ui *Number) JawsRender(e *core.Element, w io.Writer, params []any) error {
+func (ui *Number) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
 	return ui.renderFloatInput(e, w, "number", params...)
 }

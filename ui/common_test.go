@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	core "github.com/linkdata/jaws/core"
+	"github.com/linkdata/jaws"
 )
 
 func TestCommon_applyDirty(t *testing.T) {
@@ -17,7 +17,7 @@ func TestCommon_applyDirty(t *testing.T) {
 		t.Fatalf("want nil got %v", err)
 	}
 
-	err = applyDirty(tag, elem, core.ErrValueUnchanged)
+	err = applyDirty(tag, elem, jaws.ErrValueUnchanged)
 	if err != nil {
 		t.Fatalf("want nil got %v", err)
 	}

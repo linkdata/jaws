@@ -3,7 +3,7 @@ package ui
 import (
 	"io"
 
-	core "github.com/linkdata/jaws/core"
+	"github.com/linkdata/jaws"
 )
 
 type Container struct {
@@ -11,21 +11,21 @@ type Container struct {
 	ContainerHelper
 }
 
-func NewContainer(outerHTMLTag string, c core.Container) *Container {
+func NewContainer(outerHTMLTag string, c jaws.Container) *Container {
 	return &Container{
 		OuterHTMLTag:    outerHTMLTag,
 		ContainerHelper: NewContainerHelper(c),
 	}
 }
 
-func (rw RequestWriter) Container(outerHTMLTag string, c core.Container, params ...any) error {
+func (rw RequestWriter) Container(outerHTMLTag string, c jaws.Container, params ...any) error {
 	return rw.UI(NewContainer(outerHTMLTag, c), params...)
 }
 
-func (ui *Container) JawsRender(e *core.Element, w io.Writer, params []any) error {
+func (ui *Container) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
 	return ui.RenderContainer(e, w, ui.OuterHTMLTag, params)
 }
 
-func (ui *Container) JawsUpdate(e *core.Element) {
+func (ui *Container) JawsUpdate(e *jaws.Element) {
 	ui.UpdateContainer(e)
 }

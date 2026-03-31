@@ -9,8 +9,8 @@ import (
 	"text/template/parse"
 
 	"github.com/linkdata/deadlock"
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/jawstags"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawstags"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -25,8 +25,8 @@ type Template struct {
 	Dot  any    // Dot value to place in With structure
 }
 
-var _ core.UI = Template{}           // statically ensure interface is defined
-var _ core.EventHandler = Template{} // statically ensure interface is defined
+var _ jaws.UI = Template{}           // statically ensure interface is defined
+var _ jaws.EventHandler = Template{} // statically ensure interface is defined
 
 func (t Template) String() string {
 	return fmt.Sprintf("{%q, %s}", t.Name, jawstags.TagString(t.Dot))
@@ -116,16 +116,16 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
 	return
 }
 
-func (t Template) JawsRender(e *core.Element, wr io.Writer, params []any) (err error) {
+func (t Template) JawsRender(e *jaws.Element, wr io.Writer, params []any) (err error) {
 	var expandedtags []any
 	if expandedtags, err = jawstags.TagExpand(e.Request, t.Dot); err == nil {
 		e.Request.TagExpanded(e, expandedtags)
-		tags, handlers, attrs := core.ParseParams(params)
+		tags, handlers, attrs := jaws.ParseParams(params)
 		e.Tag(tags...)
 		e.AddHandlers(handlers...)
 		attrstr := template.HTMLAttr(strings.Join(attrs, " ")) // #nosec G203
-		var auth core.Auth
-		auth = core.DefaultAuth{}
+		var auth jaws.Auth
+		auth = jaws.DefaultAuth{}
 		if f := e.Request.Jaws.MakeAuth; f != nil {
 			auth = f(e.Request)
 		}
@@ -148,14 +148,14 @@ func (t Template) JawsRender(e *core.Element, wr io.Writer, params []any) (err e
 	return
 }
 
-func (t Template) JawsUpdate(e *core.Element) {
-	if dot, ok := t.Dot.(core.Updater); ok {
+func (t Template) JawsUpdate(e *jaws.Element) {
+	if dot, ok := t.Dot.(jaws.Updater); ok {
 		dot.JawsUpdate(e)
 	}
 }
 
-func (t Template) JawsEvent(e *core.Element, wht what.What, val string) error {
-	return core.CallEventHandlers(t.Dot, e, wht, val)
+func (t Template) JawsEvent(e *jaws.Element, wht what.What, val string) error {
+	return jaws.CallEventHandlers(t.Dot, e, wht, val)
 }
 
 // NewTemplate constructs a Template with the provided name and data value.

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/core/jawswire"
+	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/ui"
 	"github.com/linkdata/jaws/what"
 )

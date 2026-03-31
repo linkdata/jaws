@@ -11,10 +11,10 @@ import (
 	"strings"
 	"sync"
 
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/jawsbind"
-	"github.com/linkdata/jaws/core/jawstags"
-	"github.com/linkdata/jaws/core/jawswire"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawsbind"
+	"github.com/linkdata/jaws/jawstags"
+	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/what"
 	"github.com/linkdata/jq"
 )
@@ -42,24 +42,24 @@ type PathSetter interface {
 	// JawsSetPath should set the JSON object member identified by jspath to the given value.
 	//
 	// If the member is already the given value, it should return ErrValueUnchanged.
-	JawsSetPath(elem *core.Element, jspath string, value any) (err error)
+	JawsSetPath(elem *jaws.Element, jspath string, value any) (err error)
 }
 
 type SetPather interface {
 	// JawsPathSet notifies that a JSON object member identified by jspath has been set
 	// to the given value and the change has been queued for broadcast.
-	JawsPathSet(elem *core.Element, jspath string, value any)
+	JawsPathSet(elem *jaws.Element, jspath string, value any)
 }
 
 type IsJsVar interface {
 	jawsbind.RWLocker
-	core.UI
-	core.EventHandler
+	jaws.UI
+	jaws.EventHandler
 	PathSetter
 }
 
 type JsVarMaker interface {
-	JawsMakeJsVar(rq *core.Request) (v IsJsVar, err error)
+	JawsMakeJsVar(rq *jaws.Request) (v IsJsVar, err error)
 }
 
 var (
@@ -73,7 +73,7 @@ type JsVar[T any] struct {
 	Tag any
 }
 
-func (ui *JsVar[T]) JawsGetPath(elem *core.Element, jspath string) (value any) {
+func (ui *JsVar[T]) JawsGetPath(elem *jaws.Element, jspath string) (value any) {
 	ui.RLock()
 	defer ui.RUnlock()
 	var err error
@@ -84,7 +84,7 @@ func (ui *JsVar[T]) JawsGetPath(elem *core.Element, jspath string) (value any) {
 	return
 }
 
-func (ui *JsVar[T]) JawsGet(elem *core.Element) (value T) {
+func (ui *JsVar[T]) JawsGet(elem *jaws.Element) (value T) {
 	ui.RLock()
 	defer ui.RUnlock()
 	if ui.Ptr != nil {
@@ -93,13 +93,13 @@ func (ui *JsVar[T]) JawsGet(elem *core.Element) (value T) {
 	return
 }
 
-func (ui *JsVar[T]) setPathLocked(elem *core.Element, jspath string, value any) (err error) {
+func (ui *JsVar[T]) setPathLocked(elem *jaws.Element, jspath string, value any) (err error) {
 	if ps, ok := ((any)(ui.Ptr).(PathSetter)); ok {
 		err = ps.JawsSetPath(elem, jspath, value)
 	} else {
 		var changed bool
 		if changed, err = jq.Set(ui.Ptr, jspath, value); err == nil && !changed {
-			err = core.ErrValueUnchanged
+			err = jaws.ErrValueUnchanged
 		}
 	}
 	if err == nil && elem != nil {
@@ -115,14 +115,14 @@ func (ui *JsVar[T]) setPathLocked(elem *core.Element, jspath string, value any) 
 	return
 }
 
-func (ui *JsVar[T]) setPathLock(elem *core.Element, jspath string, value any) (err error) {
+func (ui *JsVar[T]) setPathLock(elem *jaws.Element, jspath string, value any) (err error) {
 	ui.Lock()
 	defer ui.Unlock()
 	err = ui.setPathLocked(elem, jspath, value)
 	return
 }
 
-func (ui *JsVar[T]) setPath(elem *core.Element, jspath string, value any) (err error) {
+func (ui *JsVar[T]) setPath(elem *jaws.Element, jspath string, value any) (err error) {
 	if err = ui.setPathLock(elem, jspath, value); err == nil {
 		if sp, ok := ((any)(ui.Ptr).(SetPather)); ok {
 			sp.JawsPathSet(elem, jspath, value)
@@ -131,11 +131,11 @@ func (ui *JsVar[T]) setPath(elem *core.Element, jspath string, value any) (err e
 	return
 }
 
-func (ui *JsVar[T]) JawsSetPath(elem *core.Element, jspath string, value any) (err error) {
+func (ui *JsVar[T]) JawsSetPath(elem *jaws.Element, jspath string, value any) (err error) {
 	return ui.setPath(elem, jspath, value)
 }
 
-func (ui *JsVar[T]) JawsSet(elem *core.Element, value T) (err error) {
+func (ui *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 	return ui.JawsSetPath(elem, "", value)
 }
 
@@ -149,7 +149,7 @@ func appendAttrs(b []byte, attrs []template.HTMLAttr) []byte {
 	return b
 }
 
-func (ui *JsVar[T]) JawsRender(e *core.Element, w io.Writer, params []any) (err error) {
+func (ui *JsVar[T]) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) {
 	ui.Lock()
 	defer ui.Unlock()
 	if ui.Tag, err = e.ApplyGetter(ui.Ptr); err == nil {
@@ -184,17 +184,17 @@ func (ui *JsVar[T]) JawsGetTag(jawstags.Context) any {
 	return ui.Tag
 }
 
-func (ui *JsVar[T]) JawsUpdate(e *core.Element) {} // no-op for JsVar[T]
+func (ui *JsVar[T]) JawsUpdate(e *jaws.Element) {} // no-op for JsVar[T]
 
 func elideErrValueUnchanged(err error) error {
-	if err == core.ErrValueUnchanged {
+	if err == jaws.ErrValueUnchanged {
 		return nil
 	}
 	return err
 }
 
-func (ui *JsVar[T]) JawsEvent(e *core.Element, wht what.What, val string) (err error) {
-	err = core.ErrEventUnhandled
+func (ui *JsVar[T]) JawsEvent(e *jaws.Element, wht what.What, val string) (err error) {
+	err = jaws.ErrEventUnhandled
 	if wht == what.Set {
 		if jspath, jsval, found := strings.Cut(val, "="); found {
 			var v any
@@ -216,7 +216,7 @@ func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 	return &JsVar[T]{RWLocker: rwlocker{l}, Ptr: v}
 }
 
-func isNilUI(ui core.UI) (yes bool) {
+func isNilUI(ui jaws.UI) (yes bool) {
 	if yes = (ui == nil); !yes {
 		rv := reflect.ValueOf(ui)
 		yes = rv.Kind() == reflect.Pointer && rv.IsNil()
@@ -234,7 +234,7 @@ func (rqw RequestWriter) JsVar(jsvarname string, jsvar any, params ...any) (err 
 		}
 		if err == nil {
 			err = ErrJsVarArgumentType
-			if ui, ok := jsvar.(core.UI); ok {
+			if ui, ok := jsvar.(jaws.UI); ok {
 				if !isNilUI(ui) {
 					var newparams []any
 					newparams = append(newparams, jsvarname)

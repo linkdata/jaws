@@ -6,15 +6,15 @@ import (
 	"strings"
 	"testing"
 
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/jawsbool"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawsbool"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
 )
 
 func TestContainerAndTbodyRender(t *testing.T) {
 	_, rq := newCoreRequest(t)
-	tc := &testContainer{contents: []core.UI{NewSpan(testHTMLGetter("foo")), NewSpan(testHTMLGetter("bar"))}}
+	tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("foo")), NewSpan(testHTMLGetter("bar"))}}
 
 	container := NewContainer("div", tc)
 	_, got := renderUI(t, rq, container, "hidden")
@@ -32,7 +32,7 @@ func TestContainerHelperUpdateContainer(t *testing.T) {
 	span2 := NewSpan(testHTMLGetter("span2"))
 	span3 := NewSpan(testHTMLGetter("span3"))
 
-	tc := &testContainer{contents: []core.UI{span1}}
+	tc := &testContainer{contents: []jaws.UI{span1}}
 	container := NewContainer("div", tc)
 	elem, _ := renderUI(t, rq, container)
 
@@ -41,7 +41,7 @@ func TestContainerHelperUpdateContainer(t *testing.T) {
 	}
 
 	// append + reorder path
-	tc.contents = []core.UI{span1, span2, span3}
+	tc.contents = []jaws.UI{span1, span2, span3}
 	container.JawsUpdate(elem)
 	if len(container.contents) != 3 {
 		t.Fatalf("want 3 contents got %d", len(container.contents))
@@ -49,14 +49,14 @@ func TestContainerHelperUpdateContainer(t *testing.T) {
 
 	// remove path
 	removedJid := container.contents[0].Jid()
-	tc.contents = []core.UI{span2, span3}
+	tc.contents = []jaws.UI{span2, span3}
 	container.JawsUpdate(elem)
 	if got := rq.GetElementByJid(removedJid); got != nil {
 		t.Fatal("expected removed element to be deleted from request")
 	}
 
 	// reorder + replace path
-	tc.contents = []core.UI{span3, span1}
+	tc.contents = []jaws.UI{span3, span1}
 	container.JawsUpdate(elem)
 	if len(container.contents) != 2 {
 		t.Fatalf("want 2 contents got %d", len(container.contents))
@@ -69,7 +69,7 @@ func TestContainerHelperUpdateContainerDuplicates(t *testing.T) {
 	span2 := NewSpan(testHTMLGetter("span2"))
 
 	// render with duplicate UI
-	tc := &testContainer{contents: []core.UI{span1, span2, span1}}
+	tc := &testContainer{contents: []jaws.UI{span1, span2, span1}}
 	container := NewContainer("div", tc)
 	elem, _ := renderUI(t, rq, container)
 
@@ -84,7 +84,7 @@ func TestContainerHelperUpdateContainerDuplicates(t *testing.T) {
 	}
 
 	// remove one duplicate, keep the other
-	tc.contents = []core.UI{span2, span1}
+	tc.contents = []jaws.UI{span2, span1}
 	container.JawsUpdate(elem)
 	if len(container.contents) != 2 {
 		t.Fatalf("want 2 contents got %d", len(container.contents))
@@ -105,7 +105,7 @@ func TestContainerHelperUpdateContainerDuplicates(t *testing.T) {
 	}
 
 	// add more duplicates
-	tc.contents = []core.UI{span1, span2, span1, span2}
+	tc.contents = []jaws.UI{span1, span2, span1, span2}
 	container.JawsUpdate(elem)
 	if len(container.contents) != 4 {
 		t.Fatalf("want 4 contents got %d", len(container.contents))
@@ -121,11 +121,11 @@ func TestContainerHelperUpdateContainerDuplicates(t *testing.T) {
 }
 
 func TestContainerHelperRenderErrorPaths(t *testing.T) {
-	core.NextJid = 0
+	jaws.NextJid = 0
 	_, rq := newCoreRequest(t)
 	renderErr := errors.New("render error")
 	errChild := testRenderErrorUI{err: renderErr}
-	tc := &testContainer{contents: []core.UI{NewSpan(testHTMLGetter("first")), errChild, NewSpan(testHTMLGetter("third"))}}
+	tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("first")), errChild, NewSpan(testHTMLGetter("third"))}}
 
 	container := NewContainer("div", tc)
 	elem := rq.NewElement(container)
@@ -142,7 +142,7 @@ func TestContainerHelperRenderErrorPaths(t *testing.T) {
 	tc2 := &testContainer{}
 	container2 := NewContainer("div", tc2)
 	elem2, _ := renderUI(t, rq, container2)
-	tc2.contents = []core.UI{testRenderErrorUI{err: errors.New("append fail")}}
+	tc2.contents = []jaws.UI{testRenderErrorUI{err: errors.New("append fail")}}
 	defer func() {
 		if recover() == nil {
 			t.Fatal("expected panic from must")
@@ -155,31 +155,31 @@ type testRenderErrorUI struct {
 	err error
 }
 
-func (ui testRenderErrorUI) JawsRender(*core.Element, io.Writer, []any) error {
+func (ui testRenderErrorUI) JawsRender(*jaws.Element, io.Writer, []any) error {
 	return ui.err
 }
 
-func (testRenderErrorUI) JawsUpdate(*core.Element) {}
+func (testRenderErrorUI) JawsUpdate(*jaws.Element) {}
 
 type testRenderErrorCaptureUI struct {
 	err error
-	jid core.Jid
+	jid jaws.Jid
 }
 
-func (ui *testRenderErrorCaptureUI) JawsRender(e *core.Element, _ io.Writer, _ []any) error {
+func (ui *testRenderErrorCaptureUI) JawsRender(e *jaws.Element, _ io.Writer, _ []any) error {
 	ui.jid = e.Jid()
 	return ui.err
 }
 
-func (*testRenderErrorCaptureUI) JawsUpdate(*core.Element) {}
+func (*testRenderErrorCaptureUI) JawsUpdate(*jaws.Element) {}
 
 func TestContainerHelperRenderErrorDoesNotLeakFailedChildElement(t *testing.T) {
-	core.NextJid = 0
+	jaws.NextJid = 0
 	_, rq := newCoreRequest(t)
 
 	renderErr := errors.New("render error")
 	failingChild := &testRenderErrorCaptureUI{err: renderErr}
-	tc := &testContainer{contents: []core.UI{NewSpan(testHTMLGetter("ok")), failingChild}}
+	tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("ok")), failingChild}}
 	container := NewContainer("div", tc)
 
 	elem := rq.NewElement(container)
@@ -197,7 +197,7 @@ func TestContainerHelperRenderErrorDoesNotLeakFailedChildElement(t *testing.T) {
 }
 
 func TestRequestWriterUI_ContainerRenderErrorDoesNotLeakSuccessfulChildren(t *testing.T) {
-	core.NextJid = 0
+	jaws.NextJid = 0
 	_, rq := newCoreRequest(t)
 	var sb strings.Builder
 	rw := RequestWriter{Request: rq, Writer: &sb}
@@ -205,7 +205,7 @@ func TestRequestWriterUI_ContainerRenderErrorDoesNotLeakSuccessfulChildren(t *te
 	renderErr := errors.New("render error")
 	okChild := &testRenderErrorCaptureUI{}
 	failChild := &testRenderErrorCaptureUI{err: renderErr}
-	tc := &testContainer{contents: []core.UI{okChild, failChild}}
+	tc := &testContainer{contents: []jaws.UI{okChild, failChild}}
 
 	if err := rw.UI(NewContainer("div", tc)); !errors.Is(err, renderErr) {
 		t.Fatalf("want %v got %v", renderErr, err)
@@ -227,7 +227,7 @@ type testSelectHandler struct {
 func TestSelectWidget(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	sh := &testSelectHandler{
-		testContainer: &testContainer{contents: []core.UI{NewOption(jawsbool.NewNamedBool(nil, "1", "one", true))}},
+		testContainer: &testContainer{contents: []jaws.UI{NewOption(jawsbool.NewNamedBool(nil, "1", "one", true))}},
 		testSetter:    newTestSetter("1"),
 	}
 	selectUI := NewSelect(sh)
@@ -236,7 +236,7 @@ func TestSelectWidget(t *testing.T) {
 
 	selectUI.JawsUpdate(elem)
 
-	if err := selectUI.JawsEvent(elem, what.Click, "noop"); !errors.Is(err, core.ErrEventUnhandled) {
+	if err := selectUI.JawsEvent(elem, what.Click, "noop"); !errors.Is(err, jaws.ErrEventUnhandled) {
 		t.Fatalf("want ErrEventUnhandled got %v", err)
 	}
 	if err := selectUI.JawsEvent(elem, what.Input, "2"); err != nil {

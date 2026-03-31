@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/jawsbool"
-	"github.com/linkdata/jaws/core/jawstags"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawsbool"
+	"github.com/linkdata/jaws/jawstags"
 )
 
 func TestHTMLWidgets_ConstructorsAndRender(t *testing.T) {
@@ -16,7 +16,7 @@ func TestHTMLWidgets_ConstructorsAndRender(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		ui      core.UI
+		ui      jaws.UI
 		params  []any
 		pattern string
 	}{
@@ -54,9 +54,9 @@ type initFailGetter struct {
 	err error
 }
 
-func (g *initFailGetter) JawsGetHTML(*core.Element) template.HTML { return "x" }
+func (g *initFailGetter) JawsGetHTML(*jaws.Element) template.HTML { return "x" }
 func (g *initFailGetter) JawsGetTag(jawstags.Context) any         { return g }
-func (g *initFailGetter) JawsInit(*core.Element) error            { return g.err }
+func (g *initFailGetter) JawsInit(*jaws.Element) error            { return g.err }
 
 func TestImg_RenderAndUpdate(t *testing.T) {
 	_, rq := newCoreRequest(t)

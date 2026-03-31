@@ -6,12 +6,11 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
-	core "github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/ui"
 )
 
 func TestHandler_ServeHTTP(t *testing.T) {
-	core.NextJid = 0
+	jaws.NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 

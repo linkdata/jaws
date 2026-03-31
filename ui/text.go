@@ -3,8 +3,8 @@ package ui
 import (
 	"io"
 
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/jawsbind"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawsbind"
 )
 
 type Text struct{ InputText }
@@ -14,6 +14,6 @@ func (rw RequestWriter) Text(value any, params ...any) error {
 	return rw.UI(NewText(jawsbind.MakeSetter[string](value)), params...)
 }
 
-func (ui *Text) JawsRender(e *core.Element, w io.Writer, params []any) error {
+func (ui *Text) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
 	return ui.renderStringInput(e, w, "text", params...)
 }

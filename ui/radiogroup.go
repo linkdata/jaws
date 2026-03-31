@@ -4,18 +4,18 @@ import (
 	"html/template"
 	"strings"
 
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/jawsbool"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawsbool"
 )
 
 type RadioElement struct {
-	radio    *core.Element
-	label    *core.Element
+	radio    *jaws.Element
+	label    *jaws.Element
 	nameAttr string
 }
 
 func (rw RequestWriter) RadioGroup(nba *jawsbool.NamedBoolArray) (rel []RadioElement) {
-	nameAttr := `name="` + core.MakeID() + `"`
+	nameAttr := `name="` + jaws.MakeID() + `"`
 	nba.ReadLocked(func(nbl []*jawsbool.NamedBool) {
 		for _, nb := range nbl {
 			rel = append(rel, RadioElement{

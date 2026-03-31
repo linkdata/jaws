@@ -3,8 +3,8 @@ package ui
 import (
 	"io"
 
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/jawsbind"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawsbind"
 )
 
 type Range struct{ InputFloat }
@@ -14,6 +14,6 @@ func (rw RequestWriter) Range(value any, params ...any) error {
 	return rw.UI(NewRange(jawsbind.MakeSetterFloat64(value)), params...)
 }
 
-func (ui *Range) JawsRender(e *core.Element, w io.Writer, params []any) error {
+func (ui *Range) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
 	return ui.renderFloatInput(e, w, "range", params...)
 }

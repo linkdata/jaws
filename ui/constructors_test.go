@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/jawsbind"
-	"github.com/linkdata/jaws/core/jawsbool"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawsbind"
+	"github.com/linkdata/jaws/jawsbool"
 )
 
 func TestConstructors(t *testing.T) {
@@ -24,11 +24,11 @@ func TestConstructors(t *testing.T) {
 	timeSetter := jawsbind.Bind(&mu, &when)
 
 	htmlGetter := jawsbind.MakeHTMLGetter("x")
-	imgGetter := jawsbind.StringGetterFunc(func(*core.Element) string { return "img" })
+	imgGetter := jawsbind.StringGetterFunc(func(*jaws.Element) string { return "img" })
 	nba := jawsbool.NewNamedBoolArray(false).Add("a", template.HTML("A"))
-	tc := testContainer{contents: []core.UI{NewSpan(htmlGetter)}}
+	tc := testContainer{contents: []jaws.UI{NewSpan(htmlGetter)}}
 
-	all := []core.UI{
+	all := []jaws.UI{
 		NewA(htmlGetter),
 		NewButton(htmlGetter),
 		NewCheckbox(boolSetter),

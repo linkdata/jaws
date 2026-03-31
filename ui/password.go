@@ -3,8 +3,8 @@ package ui
 import (
 	"io"
 
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/jawsbind"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawsbind"
 )
 
 type Password struct{ InputText }
@@ -14,6 +14,6 @@ func (rw RequestWriter) Password(value any, params ...any) error {
 	return rw.UI(NewPassword(jawsbind.MakeSetter[string](value)), params...)
 }
 
-func (ui *Password) JawsRender(e *core.Element, w io.Writer, params []any) error {
+func (ui *Password) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
 	return ui.renderStringInput(e, w, "password", params...)
 }

@@ -20,5 +20,5 @@ func (errIllegalJsVarName) Is(target error) bool {
 }
 
 // ErrJsVarArgumentType is returned when RequestWriter.JsVar receives an
-// argument that is neither a core.UI nor a JsVarMaker.
-var ErrJsVarArgumentType = errors.New("expected core.UI or JsVarMaker")
+// argument that is neither a jaws.UI nor a JsVarMaker.
+var ErrJsVarArgumentType = errors.New("expected jaws.UI or JsVarMaker")

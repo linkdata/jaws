@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/jawsdata"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawsdata"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -24,7 +24,7 @@ func TestInputTextWidgets(t *testing.T) {
 	if ss.Get() != "bar" {
 		t.Fatalf("want bar got %q", ss.Get())
 	}
-	if err := text.JawsEvent(elem, what.Click, "noop"); !errors.Is(err, core.ErrEventUnhandled) {
+	if err := text.JawsEvent(elem, what.Click, "noop"); !errors.Is(err, jaws.ErrEventUnhandled) {
 		t.Fatalf("want ErrEventUnhandled got %v", err)
 	}
 	ss.SetErr(errors.New("meh"))
