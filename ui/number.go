@@ -4,14 +4,14 @@ import (
 	"io"
 
 	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/bind"
+	"github.com/linkdata/jaws/core/jawsbind"
 )
 
 type Number struct{ InputFloat }
 
-func NewNumber(g bind.Setter[float64]) *Number { return &Number{InputFloat{Setter: g}} }
+func NewNumber(g jawsbind.Setter[float64]) *Number { return &Number{InputFloat{Setter: g}} }
 func (rw RequestWriter) Number(value any, params ...any) error {
-	return rw.UI(NewNumber(bind.MakeSetterFloat64(value)), params...)
+	return rw.UI(NewNumber(jawsbind.MakeSetterFloat64(value)), params...)
 }
 
 func (ui *Number) JawsRender(e *core.Element, w io.Writer, params []any) error {

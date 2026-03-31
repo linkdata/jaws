@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/core/htmlx"
-	"github.com/linkdata/jaws/core/tags"
+	"github.com/linkdata/jaws/core/jawshtml"
+	"github.com/linkdata/jaws/core/jawstags"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -172,7 +172,7 @@ type testTemplateUI struct {
 }
 
 func (t testTemplateUI) String() string {
-	return fmt.Sprintf("{%q, %s}", t.Name, tags.TagString(t.Dot))
+	return fmt.Sprintf("{%q, %s}", t.Name, jawstags.TagString(t.Dot))
 }
 
 func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
@@ -231,7 +231,7 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
 
 func (t testTemplateUI) JawsRender(e *Element, wr io.Writer, params []any) (err error) {
 	var expandedtags []any
-	if expandedtags, err = tags.TagExpand(e.Request, t.Dot); err == nil {
+	if expandedtags, err = jawstags.TagExpand(e.Request, t.Dot); err == nil {
 		e.Request.TagExpanded(e, expandedtags)
 		tags, handlers, attrs := ParseParams(params)
 		e.Tag(tags...)
@@ -280,7 +280,7 @@ type testDivWidget struct {
 
 func (ui testDivWidget) JawsRender(e *Element, w io.Writer, params []any) error {
 	e.ApplyParams(params)
-	return htmlx.WriteHTMLInner(w, e.Jid(), "div", "", ui.inner)
+	return jawshtml.WriteHTMLInner(w, e.Jid(), "div", "", ui.inner)
 }
 
 func (testDivWidget) JawsUpdate(*Element) {}
@@ -305,7 +305,7 @@ func (ui *testTextInputWidget) JawsRender(e *Element, w io.Writer, params []any)
 		attrs := e.ApplyParams(params)
 		v := ui.setter.JawsGet(e)
 		ui.last = v
-		err = htmlx.WriteHTMLInput(w, e.Jid(), "text", v, attrs)
+		err = jawshtml.WriteHTMLInput(w, e.Jid(), "text", v, attrs)
 	}
 	return
 }

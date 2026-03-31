@@ -12,17 +12,17 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/core/wire"
+	"github.com/linkdata/jaws/core/jawswire"
 )
 
-func nextBroadcast(t *testing.T, jw *Jaws) wire.Message {
+func nextBroadcast(t *testing.T, jw *Jaws) jawswire.Message {
 	t.Helper()
 	select {
 	case msg := <-jw.bcastCh:
 		return msg
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for broadcast")
-		return wire.Message{}
+		return jawswire.Message{}
 	}
 }
 

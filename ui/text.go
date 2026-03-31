@@ -4,14 +4,14 @@ import (
 	"io"
 
 	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/bind"
+	"github.com/linkdata/jaws/core/jawsbind"
 )
 
 type Text struct{ InputText }
 
-func NewText(vp bind.Setter[string]) *Text { return &Text{InputText{Setter: vp}} }
+func NewText(vp jawsbind.Setter[string]) *Text { return &Text{InputText{Setter: vp}} }
 func (rw RequestWriter) Text(value any, params ...any) error {
-	return rw.UI(NewText(bind.MakeSetter[string](value)), params...)
+	return rw.UI(NewText(jawsbind.MakeSetter[string](value)), params...)
 }
 
 func (ui *Text) JawsRender(e *core.Element, w io.Writer, params []any) error {

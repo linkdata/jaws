@@ -6,10 +6,10 @@ import (
 
 	core "github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/core/assets"
-	"github.com/linkdata/jaws/core/bind"
-	"github.com/linkdata/jaws/core/htmlx"
-	"github.com/linkdata/jaws/core/named"
-	"github.com/linkdata/jaws/core/tags"
+	"github.com/linkdata/jaws/core/jawsbind"
+	"github.com/linkdata/jaws/core/jawsbool"
+	"github.com/linkdata/jaws/core/jawshtml"
+	"github.com/linkdata/jaws/core/jawstags"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/ui"
 )
@@ -51,7 +51,7 @@ type (
 	TemplateLookuper = core.TemplateLookuper
 	// HandleFunc matches the signature of http.ServeMux.Handle().
 	HandleFunc = core.HandleFunc
-	Formatter  = bind.Formatter
+	Formatter  = jawsbind.Formatter
 	Auth       = core.Auth
 	// InitHandler allows initializing UI getters and setters before their use.
 	//
@@ -61,25 +61,25 @@ type (
 	InitHandler          = core.InitHandler
 	ClickHandler         = core.ClickHandler
 	EventHandler         = core.EventHandler
-	SelectHandler        = named.SelectHandler
+	SelectHandler        = jawsbool.SelectHandler
 	Container            = core.Container
-	Getter[T comparable] = bind.Getter[T]
-	Setter[T comparable] = bind.Setter[T]
-	Binder[T comparable] = bind.Binder[T]
+	Getter[T comparable] = jawsbind.Getter[T]
+	Setter[T comparable] = jawsbind.Setter[T]
+	Binder[T comparable] = jawsbind.Binder[T]
 	// A HTMLGetter is the primary way to deliver generated HTML content to dynamic HTML nodes.
-	HTMLGetter = bind.HTMLGetter
+	HTMLGetter = jawsbind.HTMLGetter
 	// Logger matches the log/slog.Logger interface.
 	Logger    = core.Logger
-	RWLocker  = bind.RWLocker
-	TagGetter = tags.TagGetter
+	RWLocker  = jawsbind.RWLocker
+	TagGetter = jawstags.TagGetter
 	// NamedBool stores a named boolen value with a HTML representation.
-	NamedBool = named.NamedBool
+	NamedBool = jawsbool.NamedBool
 	// NamedBoolArray stores the data required to support HTML 'select' elements
 	// and sets of HTML radio buttons. It it safe to use from multiple goroutines
 	// concurrently.
-	NamedBoolArray = named.NamedBoolArray
+	NamedBoolArray = jawsbool.NamedBoolArray
 	Session        = core.Session
-	Tag            = tags.Tag
+	Tag            = jawstags.Tag
 	// TestRequest is a request harness intended for tests.
 	//
 	// Exposed for testing only.
@@ -88,16 +88,16 @@ type (
 
 var (
 	ErrEventUnhandled        = core.ErrEventUnhandled
-	ErrIllegalTagType        = tags.ErrIllegalTagType // ErrIllegalTagType is returned when a UI tag type is disallowed
-	ErrNotComparable         = tags.ErrNotComparable
-	ErrNotUsableAsTag        = tags.ErrNotUsableAsTag
+	ErrIllegalTagType        = jawstags.ErrIllegalTagType // ErrIllegalTagType is returned when a UI tag type is disallowed
+	ErrNotComparable         = jawstags.ErrNotComparable
+	ErrNotUsableAsTag        = jawstags.ErrNotUsableAsTag
 	ErrNoWebSocketRequest    = core.ErrNoWebSocketRequest
 	ErrPendingCancelled      = core.ErrPendingCancelled
 	ErrValueUnchanged        = core.ErrValueUnchanged
-	ErrValueNotSettable      = bind.ErrValueNotSettable
+	ErrValueNotSettable      = jawsbind.ErrValueNotSettable
 	ErrRequestAlreadyClaimed = core.ErrRequestAlreadyClaimed
 	ErrJavascriptDisabled    = core.ErrJavascriptDisabled
-	ErrTooManyTags           = tags.ErrTooManyTags
+	ErrTooManyTags           = jawstags.ErrTooManyTags
 )
 
 const (
@@ -114,11 +114,11 @@ var (
 	New = core.New
 	// JawsKeyString returns the string to be used for the given JaWS key.
 	JawsKeyString = assets.JawsKeyString
-	WriteHTMLTag  = htmlx.WriteHTMLTag
+	WriteHTMLTag  = jawshtml.WriteHTMLTag
 	// HTMLGetterFunc wraps a function and returns a HTMLGetter.
-	HTMLGetterFunc = bind.HTMLGetterFunc
+	HTMLGetterFunc = jawsbind.HTMLGetterFunc
 	// StringGetterFunc wraps a function and returns a Getter[string]
-	StringGetterFunc = bind.StringGetterFunc
+	StringGetterFunc = jawsbind.StringGetterFunc
 	// MakeHTMLGetter returns a HTMLGetter for v.
 	//
 	// Depending on the type of v, we return:
@@ -135,9 +135,9 @@ var (
 	// Never pass untrusted user input as a plain string; use [template.HTML] to signal
 	// that the content is trusted, or wrap user input in a [Getter] or [fmt.Stringer]
 	// so it will be escaped automatically.
-	MakeHTMLGetter    = bind.MakeHTMLGetter
-	NewNamedBool      = named.NewNamedBool
-	NewNamedBoolArray = named.NewNamedBoolArray
+	MakeHTMLGetter    = jawsbind.MakeHTMLGetter
+	NewNamedBool      = jawsbool.NewNamedBool
+	NewNamedBoolArray = jawsbool.NewNamedBoolArray
 	// NewTestRequest creates a TestRequest for use when testing.
 	// Passing nil for hr will create a "GET /" request with no body.
 	//
@@ -149,7 +149,7 @@ var (
 //
 // The pointer will be used as the UI tag.
 func Bind[T comparable](l sync.Locker, p *T) Binder[T] {
-	return bind.Bind(l, p)
+	return jawsbind.Bind(l, p)
 }
 
 /*

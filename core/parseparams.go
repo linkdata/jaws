@@ -3,13 +3,13 @@ package jaws
 import (
 	"html/template"
 
-	"github.com/linkdata/jaws/core/tags"
+	"github.com/linkdata/jaws/core/jawstags"
 )
 
 // shouldAutoTagHandler returns true if a handler value is safe to use as a tag.
-// Non-comparable handlers are only auto-tagged when they provide an explicit tags.TagGetter.
+// Non-comparable handlers are only auto-tagged when they provide an explicit jawstags.TagGetter.
 func shouldAutoTagHandler(handler any) any {
-	if _, ok := handler.(tags.TagGetter); ok || tags.NewErrNotComparable(handler) == nil {
+	if _, ok := handler.(jawstags.TagGetter); ok || jawstags.NewErrNotComparable(handler) == nil {
 		return handler
 	}
 	return nil

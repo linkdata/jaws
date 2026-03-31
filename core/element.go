@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/linkdata/jaws/core/tags"
-	"github.com/linkdata/jaws/core/wire"
+	"github.com/linkdata/jaws/core/jawstags"
+	"github.com/linkdata/jaws/core/jawswire"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
 )
@@ -78,7 +78,7 @@ func (e *Element) renderDebug(w io.Writer) {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			sb.WriteString(tags.TagString(tag))
+			sb.WriteString(jawstags.TagString(tag))
 		}
 	} else {
 		sb.WriteString("n/a")
@@ -112,7 +112,7 @@ func (e *Element) JawsUpdate() {
 
 func (e *Element) queue(wht what.What, data string) {
 	if !e.deleted.Load() {
-		e.Request.queue(wire.WsMsg{
+		e.Request.queue(jawswire.WsMsg{
 			Data: data,
 			Jid:  e.jid,
 			What: wht,
@@ -246,7 +246,7 @@ func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) {
 func (e *Element) ApplyGetter(getter any) (tag any, err error) {
 	if getter != nil {
 		tag = getter
-		if tagger, ok := getter.(tags.TagGetter); ok {
+		if tagger, ok := getter.(jawstags.TagGetter); ok {
 			tag = tagger.JawsGetTag(e.Request)
 		}
 		if eh, ok := getter.(EventHandler); ok {

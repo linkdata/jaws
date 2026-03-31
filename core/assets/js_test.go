@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/linkdata/jaws/core/wire"
+	"github.com/linkdata/jaws/core/jawswire"
 	"github.com/linkdata/jaws/staticserve"
 	"github.com/linkdata/jaws/what"
 )
@@ -169,9 +169,9 @@ process.stdout.write(jaws.sent[0] || "");
 		t.Fatal("jawsVar did not emit a websocket frame")
 	}
 
-	msg, ok := wire.Parse([]byte(raw))
+	msg, ok := jawswire.Parse([]byte(raw))
 	if !ok {
-		t.Fatalf("Set frame must be parseable by wire.Parse, got %q", raw)
+		t.Fatalf("Set frame must be parseable by jawswire.Parse, got %q", raw)
 	}
 	if msg.What != what.Set {
 		t.Fatalf("unexpected what: got %v", msg.What)
@@ -205,7 +205,7 @@ process.stdout.write(jaws.sent[0] || "");
 		t.Fatal("jawsRemoving did not emit a websocket frame")
 	}
 
-	if msg, ok := wire.Parse([]byte(raw)); ok {
+	if msg, ok := jawswire.Parse([]byte(raw)); ok {
 		t.Fatalf("expected invalid untrusted Remove frame to be dropped by parser, got %+v from %q", msg, raw)
 	}
 }
@@ -224,7 +224,7 @@ process.stdout.write(jaws.sent[0] || "");
 `)
 
 	if raw != "" {
-		if _, ok := wire.Parse([]byte(raw)); !ok {
+		if _, ok := jawswire.Parse([]byte(raw)); !ok {
 			t.Fatalf("jawsVar should not emit unparseable Set frame when JsVar name is unregistered, got %q", raw)
 		}
 	}

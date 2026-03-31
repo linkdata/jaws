@@ -8,8 +8,8 @@ import (
 
 	core "github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/core/assets"
-	"github.com/linkdata/jaws/core/bind"
-	"github.com/linkdata/jaws/core/htmlx"
+	"github.com/linkdata/jaws/core/jawsbind"
+	"github.com/linkdata/jaws/core/jawshtml"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -32,7 +32,7 @@ func (ui *Input) maybeDirty(e *core.Element, inerr error) (err error) {
 
 type InputText struct {
 	Input
-	bind.Setter[string]
+	jawsbind.Setter[string]
 }
 
 func (ui *InputText) renderStringInput(e *core.Element, w io.Writer, htmlType string, params ...any) (err error) {
@@ -40,7 +40,7 @@ func (ui *InputText) renderStringInput(e *core.Element, w io.Writer, htmlType st
 		attrs := e.ApplyParams(params)
 		v := ui.JawsGet(e)
 		ui.Last.Store(v)
-		err = htmlx.WriteHTMLInput(w, e.Jid(), htmlType, v, attrs)
+		err = jawshtml.WriteHTMLInput(w, e.Jid(), htmlType, v, attrs)
 	}
 	return
 }
@@ -62,7 +62,7 @@ func (ui *InputText) JawsEvent(e *core.Element, wht what.What, val string) (err 
 
 type InputBool struct {
 	Input
-	bind.Setter[bool]
+	jawsbind.Setter[bool]
 }
 
 func (ui *InputBool) renderBoolInput(e *core.Element, w io.Writer, htmlType string, params ...any) (err error) {
@@ -73,7 +73,7 @@ func (ui *InputBool) renderBoolInput(e *core.Element, w io.Writer, htmlType stri
 		if v {
 			attrs = append(attrs, "checked")
 		}
-		err = htmlx.WriteHTMLInput(w, e.Jid(), htmlType, "", attrs)
+		err = jawshtml.WriteHTMLInput(w, e.Jid(), htmlType, "", attrs)
 	}
 	return
 }
@@ -106,7 +106,7 @@ func (ui *InputBool) JawsEvent(e *core.Element, wht what.What, val string) (err 
 
 type InputFloat struct {
 	Input
-	bind.Setter[float64]
+	jawsbind.Setter[float64]
 }
 
 func (ui *InputFloat) str(v float64) string {
@@ -118,7 +118,7 @@ func (ui *InputFloat) renderFloatInput(e *core.Element, w io.Writer, htmlType st
 		attrs := e.ApplyParams(params)
 		v := ui.JawsGet(e)
 		ui.Last.Store(v)
-		err = htmlx.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(v), attrs)
+		err = jawshtml.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(v), attrs)
 	}
 	return
 }
@@ -147,7 +147,7 @@ func (ui *InputFloat) JawsEvent(e *core.Element, wht what.What, val string) (err
 
 type InputDate struct {
 	Input
-	bind.Setter[time.Time]
+	jawsbind.Setter[time.Time]
 }
 
 func (ui *InputDate) str(v time.Time) string {
@@ -159,7 +159,7 @@ func (ui *InputDate) renderDateInput(e *core.Element, w io.Writer, htmlType stri
 		attrs := e.ApplyParams(params)
 		v := ui.JawsGet(e)
 		ui.Last.Store(v)
-		err = htmlx.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(v), attrs)
+		err = jawshtml.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(v), attrs)
 	}
 	return
 }

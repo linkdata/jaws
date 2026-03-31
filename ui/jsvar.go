@@ -12,9 +12,9 @@ import (
 	"sync"
 
 	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/bind"
-	"github.com/linkdata/jaws/core/tags"
-	"github.com/linkdata/jaws/core/wire"
+	"github.com/linkdata/jaws/core/jawsbind"
+	"github.com/linkdata/jaws/core/jawstags"
+	"github.com/linkdata/jaws/core/jawswire"
 	"github.com/linkdata/jaws/what"
 	"github.com/linkdata/jq"
 )
@@ -52,7 +52,7 @@ type SetPather interface {
 }
 
 type IsJsVar interface {
-	bind.RWLocker
+	jawsbind.RWLocker
 	core.UI
 	core.EventHandler
 	PathSetter
@@ -63,12 +63,12 @@ type JsVarMaker interface {
 }
 
 var (
-	_ IsJsVar          = &JsVar[int]{}
-	_ bind.Setter[int] = &JsVar[int]{}
+	_ IsJsVar              = &JsVar[int]{}
+	_ jawsbind.Setter[int] = &JsVar[int]{}
 )
 
 type JsVar[T any] struct {
-	bind.RWLocker
+	jawsbind.RWLocker
 	Ptr *T
 	Tag any
 }
@@ -105,7 +105,7 @@ func (ui *JsVar[T]) setPathLocked(elem *core.Element, jspath string, value any) 
 	if err == nil && elem != nil {
 		var data []byte
 		if data, err = json.Marshal(value); err == nil {
-			elem.Jaws.Broadcast(wire.Message{
+			elem.Jaws.Broadcast(jawswire.Message{
 				Dest: ui.Tag,
 				What: what.Set,
 				Data: jspath + "=" + string(data),
@@ -180,7 +180,7 @@ func (ui *JsVar[T]) JawsRender(e *core.Element, w io.Writer, params []any) (err 
 	return
 }
 
-func (ui *JsVar[T]) JawsGetTag(tags.Context) any {
+func (ui *JsVar[T]) JawsGetTag(jawstags.Context) any {
 	return ui.Tag
 }
 
@@ -210,7 +210,7 @@ func (ui *JsVar[T]) JawsEvent(e *core.Element, wht what.What, val string) (err e
 //
 // The locker l must be non-nil and must remain valid for the lifetime of the JsVar.
 func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
-	if rl, ok := l.(bind.RWLocker); ok {
+	if rl, ok := l.(jawsbind.RWLocker); ok {
 		return &JsVar[T]{RWLocker: rl, Ptr: v}
 	}
 	return &JsVar[T]{RWLocker: rwlocker{l}, Ptr: v}

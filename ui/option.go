@@ -6,13 +6,13 @@ import (
 	"io"
 
 	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/htmlx"
-	"github.com/linkdata/jaws/core/named"
+	"github.com/linkdata/jaws/core/jawsbool"
+	"github.com/linkdata/jaws/core/jawshtml"
 )
 
-type Option struct{ *named.NamedBool }
+type Option struct{ *jawsbool.NamedBool }
 
-func NewOption(nb *named.NamedBool) Option { return Option{NamedBool: nb} }
+func NewOption(nb *jawsbool.NamedBool) Option { return Option{NamedBool: nb} }
 func (ui Option) JawsRender(e *core.Element, w io.Writer, params []any) error {
 	e.Tag(ui.NamedBool)
 	attrs := e.ApplyParams(params)
@@ -21,7 +21,7 @@ func (ui Option) JawsRender(e *core.Element, w io.Writer, params []any) error {
 	if ui.Checked() {
 		attrs = append(attrs, "selected")
 	}
-	return htmlx.WriteHTMLInner(w, e.Jid(), "option", "", ui.JawsGetHTML(e), attrs...)
+	return jawshtml.WriteHTMLInner(w, e.Jid(), "option", "", ui.JawsGetHTML(e), attrs...)
 }
 func (ui Option) JawsUpdate(e *core.Element) {
 	if ui.Checked() {

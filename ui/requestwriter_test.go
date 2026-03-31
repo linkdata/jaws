@@ -9,8 +9,8 @@ import (
 	"time"
 
 	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/named"
-	"github.com/linkdata/jaws/core/tags"
+	"github.com/linkdata/jaws/core/jawsbool"
+	"github.com/linkdata/jaws/core/jawstags"
 )
 
 type testRWUpdater struct {
@@ -26,7 +26,7 @@ type requestWriterFailGetter struct {
 }
 
 func (g requestWriterFailGetter) JawsGetHTML(*core.Element) template.HTML { return "x" }
-func (g requestWriterFailGetter) JawsGetTag(tags.Context) any             { return g }
+func (g requestWriterFailGetter) JawsGetTag(jawstags.Context) any         { return g }
 func (g requestWriterFailGetter) JawsInit(*core.Element) error            { return g.err }
 
 func TestRequestWriter_MethodsAndWidgetHelpers(t *testing.T) {
@@ -69,7 +69,7 @@ func TestRequestWriter_MethodsAndWidgetHelpers(t *testing.T) {
 	tc := &testContainer{contents: []core.UI{NewSpan(testHTMLGetter("in"))}}
 	date := time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)
 	sh := &testSelectHandler{
-		testContainer: &testContainer{contents: []core.UI{NewOption(named.NewNamedBool(nil, "x", "X", true))}},
+		testContainer: &testContainer{contents: []core.UI{NewOption(jawsbool.NewNamedBool(nil, "x", "X", true))}},
 		testSetter:    newTestSetter("x"),
 	}
 

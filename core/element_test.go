@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/core/tags"
-	"github.com/linkdata/jaws/core/wire"
+	"github.com/linkdata/jaws/core/jawstags"
+	"github.com/linkdata/jaws/core/jawswire"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
 )
@@ -70,7 +70,7 @@ type testApplyGetterAll struct {
 	initErr error
 }
 
-func (a testApplyGetterAll) JawsGetTag(tags.Context) any { return tags.Tag("tg") }
+func (a testApplyGetterAll) JawsGetTag(jawstags.Context) any { return jawstags.Tag("tg") }
 func (a testApplyGetterAll) JawsClick(*Element, string) error {
 	return ErrEventUnhandled
 }
@@ -102,9 +102,9 @@ func TestElement_Tag(t *testing.T) {
 
 	tss := &testUi{}
 	e := rq.NewElement(tss)
-	is.True(!e.HasTag(tags.Tag("zomg")))
-	e.Tag(tags.Tag("zomg"))
-	is.True(e.HasTag(tags.Tag("zomg")))
+	is.True(!e.HasTag(jawstags.Tag("zomg")))
+	e.Tag(jawstags.Tag("zomg"))
+	is.True(e.HasTag(jawstags.Tag("zomg")))
 	s := e.String()
 	if !strings.Contains(s, "zomg") {
 		t.Error(s)
@@ -129,7 +129,7 @@ func TestElement_Queued(t *testing.T) {
 			e.Order([]jid.Jid{1, 2})
 			replaceHTML := template.HTML(fmt.Sprintf("<div id=\"%s\"></div>", e.Jid().String()))
 			e.Replace(replaceHTML)
-			th.Equal(rq.wsQueue, []wire.WsMsg{
+			th.Equal(rq.wsQueue, []jawswire.WsMsg{
 				{
 					Data: "hidden\n",
 					Jid:  e.jid,
@@ -232,7 +232,7 @@ func TestElement_ReplaceMessageTargetsElementHTML(t *testing.T) {
 	// Element.Replace queues directly on the Request, so poke the process loop
 	// once to ensure queued messages are flushed to OutCh in this harness.
 	select {
-	case rq.InCh <- wire.WsMsg{}:
+	case rq.InCh <- jawswire.WsMsg{}:
 	case <-time.After(time.Second):
 		t.Fatal("timeout waking request process loop")
 	}
@@ -261,9 +261,9 @@ func TestElement_maybeDirty(t *testing.T) {
 	th.Equal(changed, false)
 	th.Equal(err, nil)
 
-	changed, err = e.maybeDirty(e, tags.ErrNotComparable)
+	changed, err = e.maybeDirty(e, jawstags.ErrNotComparable)
 	th.Equal(changed, false)
-	th.Equal(err, tags.ErrNotComparable)
+	th.Equal(err, jawstags.ErrNotComparable)
 }
 
 func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
@@ -283,7 +283,7 @@ func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
 	elem.renderDebug(&sb)
 	rq.mu.Unlock()
 
-	elem.Tag(tags.Tag("a"), tags.Tag("b"))
+	elem.Tag(jawstags.Tag("a"), jawstags.Tag("b"))
 	sb.Reset()
 	elem.renderDebug(&sb)
 	if !strings.Contains(sb.String(), ", ") {
@@ -319,11 +319,11 @@ func TestElement_ApplyGetterDebugBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error %v", err)
 	}
-	if !elem.HasTag(tags.Tag("tg")) {
+	if !elem.HasTag(jawstags.Tag("tg")) {
 		t.Fatalf("missing Tag('tg') in %#v", gotTags)
 	}
-	agErr := testApplyGetterAll{initErr: tags.ErrNotComparable}
-	if _, err := elem.ApplyGetter(agErr); err != tags.ErrNotComparable {
+	agErr := testApplyGetterAll{initErr: jawstags.ErrNotComparable}
+	if _, err := elem.ApplyGetter(agErr); err != jawstags.ErrNotComparable {
 		t.Fatalf("expected init err, got %v", err)
 	}
 
@@ -487,7 +487,7 @@ func TestElement_JawsInit(t *testing.T) {
 	defer rq.Close()
 
 	tss := &testUi{s: "foo"}
-	tss.initError = tags.ErrNotComparable
+	tss.initError = jawstags.ErrNotComparable
 	e := rq.NewElement(tss)
 
 	tag, err := e.ApplyGetter(tss)
@@ -495,7 +495,7 @@ func TestElement_JawsInit(t *testing.T) {
 	if tag != tss {
 		t.Errorf("tag was %#v", tag)
 	}
-	if err != tags.ErrNotComparable {
+	if err != jawstags.ErrNotComparable {
 		t.Error(err)
 	}
 }

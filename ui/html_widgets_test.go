@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/named"
-	"github.com/linkdata/jaws/core/tags"
+	"github.com/linkdata/jaws/core/jawsbool"
+	"github.com/linkdata/jaws/core/jawstags"
 )
 
 func TestHTMLWidgets_ConstructorsAndRender(t *testing.T) {
@@ -55,7 +55,7 @@ type initFailGetter struct {
 }
 
 func (g *initFailGetter) JawsGetHTML(*core.Element) template.HTML { return "x" }
-func (g *initFailGetter) JawsGetTag(tags.Context) any             { return g }
+func (g *initFailGetter) JawsGetTag(jawstags.Context) any         { return g }
 func (g *initFailGetter) JawsInit(*core.Element) error            { return g.err }
 
 func TestImg_RenderAndUpdate(t *testing.T) {
@@ -70,8 +70,8 @@ func TestImg_RenderAndUpdate(t *testing.T) {
 
 func TestOption_RenderAndUpdate(t *testing.T) {
 	_, rq := newCoreRequest(t)
-	nba := named.NewNamedBoolArray(false)
-	nb := named.NewNamedBool(nba, `escape"me`, "<unescaped>", true)
+	nba := jawsbool.NewNamedBoolArray(false)
+	nb := jawsbool.NewNamedBool(nba, `escape"me`, "<unescaped>", true)
 	ui := NewOption(nb)
 	elem, got := renderUI(t, rq, ui, "hidden")
 	mustMatch(t, `^<option id="Jid\.[0-9]+" hidden value="escape&#34;me" selected><unescaped></option>$`, got)

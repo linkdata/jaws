@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/linkdata/jaws/core/tags"
-	"github.com/linkdata/jaws/core/wire"
+	"github.com/linkdata/jaws/core/jawstags"
+	"github.com/linkdata/jaws/core/jawswire"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -36,7 +36,7 @@ func (t *testJawsEvent) JawsEvent(e *Element, wht what.What, val string) (err er
 	return
 }
 
-func (t *testJawsEvent) JawsGetTag(tags.Context) (tag any) {
+func (t *testJawsEvent) JawsGetTag(jawstags.Context) (tag any) {
 	return t.tag
 }
 
@@ -55,7 +55,7 @@ func (t *testJawsEvent) JawsUpdate(e *Element) {
 
 var _ ClickHandler = (*testJawsEvent)(nil)
 var _ EventHandler = (*testJawsEvent)(nil)
-var _ tags.TagGetter = (*testJawsEvent)(nil)
+var _ jawstags.TagGetter = (*testJawsEvent)(nil)
 var _ UI = (*testJawsEvent)(nil)
 
 func Test_JawsEvent_NonClickInvokesJawsEventForDualHandler(t *testing.T) {
@@ -70,7 +70,7 @@ func Test_JawsEvent_NonClickInvokesJawsEventForDualHandler(t *testing.T) {
 	zomgItem := &testUi{}
 	id := rq.Register(zomgItem, je, "attr1", []string{"attr2"}, template.HTMLAttr("attr3"), []template.HTMLAttr{"attr4"})
 
-	rq.InCh <- wire.WsMsg{Data: "typed", Jid: id, What: what.Input}
+	rq.InCh <- jawswire.WsMsg{Data: "typed", Jid: id, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
@@ -357,7 +357,7 @@ func Test_JawsEvent_ExtraHandler(t *testing.T) {
 	th.NoErr(elem.JawsRender(&sb, []any{je}))
 	th.Equal(sb.String(), "<div id=\"Jid.1\">tjEH</div>")
 
-	rq.InCh <- wire.WsMsg{Data: "name", Jid: 1, What: what.Click}
+	rq.InCh <- jawswire.WsMsg{Data: "name", Jid: 1, What: what.Click}
 	select {
 	case <-th.C:
 		th.Timeout()

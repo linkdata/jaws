@@ -4,14 +4,16 @@ import (
 	"io"
 
 	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/bind"
+	"github.com/linkdata/jaws/core/jawsbind"
 )
 
 type Button struct{ HTMLInner }
 
-func NewButton(innerHTML bind.HTMLGetter) *Button { return &Button{HTMLInner{HTMLGetter: innerHTML}} }
+func NewButton(innerHTML jawsbind.HTMLGetter) *Button {
+	return &Button{HTMLInner{HTMLGetter: innerHTML}}
+}
 func (rw RequestWriter) Button(innerHTML any, params ...any) error {
-	return rw.UI(NewButton(bind.MakeHTMLGetter(innerHTML)), params...)
+	return rw.UI(NewButton(jawsbind.MakeHTMLGetter(innerHTML)), params...)
 }
 
 func (ui *Button) JawsRender(e *core.Element, w io.Writer, params []any) error {
