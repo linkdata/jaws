@@ -18,3 +18,18 @@ func Test_makeGetter(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestMakeGetter_GetterPassThroughAndTag(t *testing.T) {
+	g := MakeGetter[string]("x")
+	if got := g.JawsGet(nil); got != "x" {
+		t.Fatalf("unexpected getter value %q", got)
+	}
+	if tag := g.(TagGetter).JawsGetTag(nil); tag != nil {
+		t.Fatalf("expected nil tag, got %#v", tag)
+	}
+
+	g2 := MakeGetter[string](Getter[string](getterStatic[string]{v: "y"}))
+	if got := g2.JawsGet(nil); got != "y" {
+		t.Fatalf("unexpected passthrough getter value %q", got)
+	}
+}

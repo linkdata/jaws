@@ -96,6 +96,18 @@ func Test_wsMsg_Append(t *testing.T) {
 	}
 }
 
+func Test_wsMsg_AppendNegativeJidAndCallPayload(t *testing.T) {
+	msg := WsMsg{Jid: Jid(-1), What: what.Update, Data: "raw\tdata"}
+	if got := string(msg.Append(nil)); got != "Update\traw\tdata\n" {
+		t.Fatalf("unexpected ws append result %q", got)
+	}
+
+	msg = WsMsg{Jid: 1, What: what.Call, Data: `fn={"a":1}`}
+	if got := string(msg.Append(nil)); !strings.Contains(got, `fn={"a":1}`) || strings.Contains(got, `"fn={"`) {
+		t.Fatalf("unexpected ws append quoted call payload %q", got)
+	}
+}
+
 func Test_wsParse_CompletePasses(t *testing.T) {
 	tests := []struct {
 		name string

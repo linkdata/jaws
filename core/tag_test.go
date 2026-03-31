@@ -25,8 +25,21 @@ func (tt testBadTagGetter) JawsGetTag(*Request) any {
 	return tt
 }
 
+type testStringTag struct{}
+
+func (testStringTag) String() string { return "str" }
+
 type testTagExpandNestedTagGetter struct {
 	Setter Setter[int]
+}
+
+func TestTagString_StringerAndPointer(t *testing.T) {
+	if got := TagString(testStringTag{}); !strings.Contains(got, "testStringTag(str)") {
+		t.Fatalf("TagString(testStringTag{}) = %q, want value stringer representation", got)
+	}
+	if got := TagString(&testStringTag{}); !strings.Contains(got, "*jaws.testStringTag(") {
+		t.Fatalf("TagString(&testStringTag{}) = %q, want pointer representation", got)
+	}
 }
 
 func TestTagExpand(t *testing.T) {

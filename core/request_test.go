@@ -6,10 +6,12 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"html/template"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -30,6 +32,32 @@ func fillWsCh(ch chan WsMsg) {
 		default:
 			return
 		}
+	}
+}
+
+func TestRequest_MiscBranches(t *testing.T) {
+	NextJid = 0
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	reg := testRegisterUI{Updater: &testUi{}}
+	elem := rq.NewElement(reg)
+	if err := elem.JawsRender(nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if rq.Request.Initial() == nil {
+		t.Fatal("expected initial request")
+	}
+	if rq.Initial() == nil {
+		t.Fatal("expected initial request from writer")
+	}
+
+	e2 := rq.NewElement(&testUi{})
+	id2 := e2.Jid()
+	rq.DeleteElement(e2)
+	if rq.GetElementByJid(id2) != nil {
+		t.Fatal("expected deleted element")
 	}
 }
 
@@ -1019,4 +1047,508 @@ func TestRequest_renderDebugLocked(t *testing.T) {
 	txt = sb.String()
 	is.Equal(strings.Contains(txt, "zomg"), false)
 	is.Equal(strings.Contains(txt, "n/a"), true)
+}
+
+func TestCoverage_PendingSubscribeMaintenanceAndParse(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	hr := httptest.NewRequest("GET", "/", nil)
+	rq := jw.NewRequest(hr)
+	if got := jw.Pending(); got != 1 {
+		t.Fatalf("expected one pending request, got %d", got)
+	}
+	if claimed := jw.UseRequest(rq.JawsKey, hr); claimed != rq {
+		t.Fatal("expected request claim")
+	}
+	if got := jw.Pending(); got != 0 {
+		t.Fatalf("expected zero pending requests, got %d", got)
+	}
+
+	msgCh := jw.subscribe(rq, 1)
+	if msgCh == nil {
+		t.Fatal("expected non-nil subscription channel")
+	}
+	if sub := <-jw.subCh; sub.msgCh != msgCh {
+		t.Fatal("unexpected subscription")
+	}
+	jw.unsubscribe(msgCh)
+	if got := <-jw.unsubCh; got != msgCh {
+		t.Fatal("unexpected unsubscribe channel")
+	}
+
+	// Request timeout path.
+	rq.mu.Lock()
+	rq.lastWrite = time.Now().Add(-time.Hour)
+	rq.mu.Unlock()
+	jw.maintenance(time.Second)
+	if got := jw.RequestCount(); got != 0 {
+		t.Fatalf("expected request recycled, got %d", got)
+	}
+
+	// Dead session cleanup path.
+	sess := jw.newSession(nil, hr)
+	sess.mu.Lock()
+	sess.deadline = time.Now().Add(-time.Second)
+	sess.mu.Unlock()
+	jw.maintenance(time.Second)
+	if got := jw.SessionCount(); got != 0 {
+		t.Fatalf("expected dead session cleanup, got %d", got)
+	}
+
+	// done-channel branch in subscribe and unsubscribe.
+	jw.subCh <- subscription{} // fill channel so send case is not selectable
+	jw.unsubCh <- make(chan Message)
+	jw.Close()
+	if ch := jw.subscribe(nil, 1); ch != nil {
+		t.Fatalf("expected nil subscription after close, got %v", ch)
+	}
+	jw.unsubscribe(nil)
+}
+
+func TestCoverage_RequestMaintenanceClaimAndErrors(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	hr := httptest.NewRequest("GET", "/", nil)
+	rq := jw.NewRequest(hr)
+	if err := rq.claim(hr); err != nil {
+		t.Fatal(err)
+	}
+	if err := rq.claim(hr); !errors.Is(err, ErrRequestAlreadyClaimed) {
+		t.Fatalf("expected ErrRequestAlreadyClaimed, got %v", err)
+	}
+
+	hrA := httptest.NewRequest("GET", "/", nil)
+	hrA.RemoteAddr = "1.2.3.4:1234"
+	rqA := jw.NewRequest(hrA)
+	hrB := httptest.NewRequest("GET", "/", nil)
+	hrB.RemoteAddr = "2.2.2.2:4321"
+	if err := rqA.claim(hrB); err == nil {
+		t.Fatal("expected ip mismatch error")
+	}
+
+	now := time.Now()
+	rqM := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
+	rqM.lastWrite = now.Add(-time.Hour)
+	if !rqM.maintenance(now, time.Second) {
+		t.Fatal("expected maintenance timeout")
+	}
+	rqR := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
+	nowR := time.Now()
+	rqR.Rendering.Store(true)
+	if rqR.maintenance(nowR, time.Hour) {
+		t.Fatal("expected maintenance continue")
+	}
+	rqR.mu.RLock()
+	lastWrite := rqR.lastWrite
+	rqR.mu.RUnlock()
+	if lastWrite != nowR {
+		t.Fatalf("expected lastWrite updated to now, got %v want %v", lastWrite, nowR)
+	}
+	rqC := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
+	rqC.cancel(errors.New("cancelled"))
+	if !rqC.maintenance(time.Now(), time.Hour) {
+		t.Fatal("expected maintenance cancellation")
+	}
+	rqOK := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
+	rqOK.lastWrite = time.Now()
+	if rqOK.maintenance(time.Now(), time.Hour) {
+		t.Fatal("expected maintenance keepalive")
+	}
+
+	errNoWS := newErrNoWebSocketRequest(rqOK)
+	if !errors.Is(errNoWS, ErrNoWebSocketRequest) {
+		t.Fatalf("expected no-websocket error type, got %v", errNoWS)
+	}
+	if got := errNoWS.Error(); !strings.Contains(got, "no WebSocket request received from") {
+		t.Fatalf("unexpected error text %q", got)
+	}
+
+	maybePanic(nil)
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic from maybePanic")
+		}
+	}()
+	maybePanic(errors.New("boom"))
+}
+
+func TestCoverage_RequestProcessHTTPDoneAndBroadcastDone(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hr := httptest.NewRequest("GET", "/", nil).WithContext(ctx)
+	rq := jw.NewRequest(hr)
+	if err := rq.claim(hr); err != nil {
+		t.Fatal(err)
+	}
+	bcastCh := make(chan Message)
+	inCh := make(chan WsMsg)
+	outCh := make(chan WsMsg, 1)
+	done := make(chan struct{})
+	go func() {
+		rq.process(bcastCh, inCh, outCh)
+		close(done)
+	}()
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for process exit on httpDone")
+	}
+
+	jw.Close()
+	jw.Broadcast(Message{What: what.Update})
+}
+
+func TestRequestRecycle_StaleElementIsInert(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	rq := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
+	elem := rq.NewElement(testDivWidget{inner: "x"})
+
+	jw.recycle(rq)
+	if elem.ui != nil {
+		t.Fatal("expected recycled element to have nil ui")
+	}
+	if got := len(rq.tagMap); got != 0 {
+		t.Fatalf("expected no tags in recycled request, got %d", got)
+	}
+}
+
+func TestRequest_TemplateMissingJid(t *testing.T) {
+	if !deadlock.Debug {
+		t.Skip("debug tag not set")
+	}
+	NextJid = 0
+	rq := newTestRequest(t)
+	defer rq.Close()
+	var log bytes.Buffer
+	rq.Jaws.Logger = slog.New(slog.NewTextHandler(&log, nil))
+	rq.Jaws.AddTemplateLookuper(template.Must(template.New("badtesttemplate").Parse(`{{with $.Dot}}<div {{$.Attrs}}>{{.}}</div>{{end}}`)))
+	if e := rq.Template("badtesttemplate", nil, nil); e != nil {
+		t.Error(e)
+	}
+	if !strings.Contains(log.String(), "WARN") || !strings.Contains(log.String(), "badtesttemplate") {
+		t.Error("expected WARN in the log")
+		t.Log(log.String())
+	}
+}
+
+func TestRequest_TemplateJidInsideIf(t *testing.T) {
+	if !deadlock.Debug {
+		t.Skip("debug tag not set")
+	}
+	NextJid = 0
+	rq := newTestRequest(t)
+	defer rq.Close()
+	var log bytes.Buffer
+	rq.Jaws.Logger = slog.New(slog.NewTextHandler(&log, nil))
+	rq.Jaws.AddTemplateLookuper(template.Must(template.New("iftesttemplate").Parse(`{{with $.Dot}}{{if true}}<div id="{{$.Jid}}" {{$.Attrs}}>{{.}}</div>{{end}}{{end}}`)))
+	if e := rq.Template("iftesttemplate", nil, nil); e != nil {
+		t.Error(e)
+	}
+	if strings.Contains(log.String(), "WARN") && strings.Contains(log.String(), "iftesttemplate") {
+		t.Error("found WARN in the log")
+		t.Log(log.String())
+	}
+}
+
+func TestRequest_TemplateMissingJidButHasHTMLTag(t *testing.T) {
+	if !deadlock.Debug {
+		t.Skip("debug tag not set")
+	}
+	NextJid = 0
+	rq := newTestRequest(t)
+	defer rq.Close()
+	var log bytes.Buffer
+	rq.Jaws.Logger = slog.New(slog.NewTextHandler(&log, nil))
+	rq.Jaws.AddTemplateLookuper(template.Must(template.New("badtesttemplate").Parse(`<html>{{with $.Dot}}<div {{$.Attrs}}>{{.}}</div>{{end}}</html>`)))
+	if e := rq.Template("badtesttemplate", nil, nil); e != nil {
+		t.Error(e)
+	}
+	if strings.Contains(log.String(), "WARN") {
+		t.Error("expected no WARN in the log")
+		t.Log(log.String())
+	}
+}
+
+func TestRequest_Template(t *testing.T) {
+	is := newTestHelper(t)
+
+	type intTag int
+
+	type args struct {
+		templ  string
+		dot    any
+		params []any
+	}
+	tests := []struct {
+		name   string
+		args   args
+		want   template.HTML
+		tags   []any
+		errtxt string
+	}{
+		{
+			name: "testtemplate",
+			args: args{
+				"testtemplate",
+				intTag(1234),
+				[]any{"hidden"},
+			},
+			want:   `<div id="Jid.1" hidden>1234</div>`,
+			tags:   []any{intTag(1234)},
+			errtxt: "",
+		},
+		{
+			name: "testtemplate-with-tags",
+			args: args{
+				"testtemplate",
+				Tag("stringtag1"),
+				[]any{`style="display: none"`, Tag("stringtag2"), "hidden"},
+			},
+			want:   `<div id="Jid.1" style="display: none" hidden>stringtag1</div>`,
+			tags:   []any{Tag("stringtag1"), Tag("stringtag2")},
+			errtxt: "",
+		},
+	}
+	// `{{with $.Dot}}<div id="{{$.Jid}}{{$.Attrs}}">{{.}}</div>{{end}}`
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			NextJid = 0
+			rq := newTestRequest(t)
+			defer rq.Close()
+			if tt.errtxt != "" {
+				defer func() {
+					x := recover()
+					if e, ok := x.(error); ok {
+						if strings.Contains(e.Error(), tt.errtxt) {
+							return
+						}
+					}
+					t.Fail()
+				}()
+			}
+			if e := rq.Template(tt.args.templ, tt.args.dot, tt.args.params...); e != nil {
+				t.Error(e)
+			}
+			got := rq.BodyHTML()
+			is.Equal(len(rq.elems), 1)
+			elem := rq.elems[0]
+			if tt.errtxt != "" {
+				t.Fail()
+			}
+			gotTags := elem.Request.TagsOf(elem)
+			is.Equal(len(tt.tags), len(gotTags))
+			for _, tag := range tt.tags {
+				is.True(elem.HasTag(tag))
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Request.Template() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+type templateDot struct {
+	clickedCh chan struct{}
+	gotName   string
+}
+
+func (td *templateDot) JawsClick(e *Element, name string) error {
+	defer close(td.clickedCh)
+	td.gotName = name
+	return nil
+}
+
+var _ ClickHandler = &templateDot{}
+
+func TestRequest_Template_Event(t *testing.T) {
+	is := newTestHelper(t)
+	rq := newTestRequest(t)
+	defer rq.Close()
+	dot := &templateDot{clickedCh: make(chan struct{})}
+	rq.Template("testtemplate", dot)
+	rq.Jaws.Broadcast(Message{
+		Dest: dot,
+		What: what.Update,
+	})
+	rq.Jaws.Broadcast(Message{
+		Dest: dot,
+		What: what.Click,
+		Data: "foo",
+	})
+	select {
+	case <-time.NewTimer(testTimeout).C:
+		is.Fail()
+	case <-dot.clickedCh:
+	}
+	is.Equal(dot.gotName, "foo")
+}
+
+func nextOutboundMsg(t *testing.T, rq *testRequest) WsMsg {
+	t.Helper()
+	select {
+	case msg := <-rq.OutCh:
+		return msg
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for outbound ws message")
+		return WsMsg{}
+	}
+}
+
+func TestRequest_IncomingRemoveDoesNotDeleteMessageJid(t *testing.T) {
+	NextJid = 0
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	elem := rq.NewElement(&testUi{})
+
+	select {
+	case rq.InCh <- WsMsg{What: what.Remove, Jid: elem.Jid(), Data: ""}:
+	case <-time.After(time.Second):
+		t.Fatal("timeout sending incoming Remove message")
+	}
+
+	select {
+	case <-time.After(20 * time.Millisecond):
+	case <-rq.DoneCh:
+		t.Fatal("request shut down unexpectedly")
+	}
+	if got := rq.GetElementByJid(elem.Jid()); got == nil {
+		t.Fatalf("element %s should still exist after Remove with empty data", elem.Jid())
+	}
+}
+
+func TestRequest_ReplaceMessageTargetsElementHTML(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	tag := &testUi{}
+	jid := rq.Register(tag)
+	html := `<div id="` + jid.String() + `">replaced</div>`
+
+	rq.Jaws.Replace(tag, html)
+	msg := nextOutboundMsg(t, rq)
+
+	if msg.What != what.Replace {
+		t.Fatalf("unexpected message type %v", msg.What)
+	}
+	if msg.Data != html {
+		t.Fatalf("replace payload mismatch: got %q want %q", msg.Data, html)
+	}
+}
+
+func TestRequest_JsCallProducesJawsJSFrameSafeWireData(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	tag := &testUi{}
+	rq.Register(tag)
+
+	tests := []struct {
+		name    string
+		jsonstr string
+	}{
+		{
+			name:    "pretty json with newline",
+			jsonstr: "{\n\"a\":1}",
+		},
+		{
+			name:    "pretty json with tab",
+			jsonstr: "{\t\"a\":1}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rq.Jaws.JsCall(tag, "fn", tt.jsonstr)
+			msg := nextOutboundMsg(t, rq)
+			wire := msg.Format()
+
+			if got := strings.Count(wire, "\n"); got != 1 {
+				t.Fatalf("wire message contains embedded newlines (%d): %q", got, wire)
+			}
+			if got := strings.Count(wire, "\t"); got != 2 {
+				t.Fatalf("wire message contains embedded tab separators (%d): %q", got, wire)
+			}
+		})
+	}
+}
+
+func TestRequest_JsCallFunctionPathDoesNotBreakWireFraming(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	tag := &testUi{}
+	rq.Register(tag)
+
+	tests := []struct {
+		name   string
+		jsfunc string
+	}{
+		{
+			name:   "tab in function path",
+			jsfunc: "fn\tpart",
+		},
+		{
+			name:   "newline in function path",
+			jsfunc: "fn\npart",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rq.Jaws.JsCall(tag, tt.jsfunc, `{"a":1}`)
+			msg := nextOutboundMsg(t, rq)
+			wire := msg.Format()
+
+			if got := strings.Count(wire, "\n"); got != 1 {
+				t.Fatalf("wire message contains embedded newlines (%d): %q", got, wire)
+			}
+			if got := strings.Count(wire, "\t"); got != 2 {
+				t.Fatalf("wire message contains embedded tab separators (%d): %q", got, wire)
+			}
+		})
+	}
+}
+
+func TestRequest_IncomingRemoveWithZeroContainerJidIsIgnored(t *testing.T) {
+	NextJid = 0
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	elem := rq.NewElement(&testUi{})
+
+	select {
+	case rq.InCh <- WsMsg{What: what.Remove, Jid: 0, Data: elem.Jid().String()}:
+	case <-time.After(time.Second):
+		t.Fatal("timeout sending incoming Remove message")
+	}
+
+	select {
+	case <-time.After(20 * time.Millisecond):
+	case <-rq.DoneCh:
+		t.Fatal("request shut down unexpectedly")
+	}
+	if got := rq.GetElementByJid(elem.Jid()); got == nil {
+		t.Fatalf("element %s should not be deletable through zero-container Remove", elem.Jid())
+	}
 }

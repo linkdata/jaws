@@ -46,3 +46,18 @@ func Test_makeSetter_panic(t *testing.T) {
 	setter2 := MakeSetter[string](123)
 	t.Error(setter2)
 }
+
+func TestMakeSetter_SetterPassThrough(t *testing.T) {
+	s := MakeSetter[string]("x")
+	if got := s.JawsGet(nil); got != "x" {
+		t.Fatalf("unexpected setter getter value %q", got)
+	}
+	if err := s.JawsSet(nil, "x"); err != ErrValueNotSettable {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	s2 := MakeSetter[string](Setter[string](setterStatic[string]{v: "z"}))
+	if got := s2.JawsGet(nil); got != "z" {
+		t.Fatalf("unexpected passthrough setter value %q", got)
+	}
+}

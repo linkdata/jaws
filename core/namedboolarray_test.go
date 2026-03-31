@@ -3,6 +3,7 @@ package jaws
 import (
 	"html/template"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -99,4 +100,28 @@ func Test_NamedBoolArray(t *testing.T) {
 	is.NoErr(nba.JawsSet(e, "1"))
 	is.Equal(nba.JawsGet(e), "1")
 	is.Equal(nba.JawsSet(e, "1"), ErrValueUnchanged)
+}
+
+func TestNamedBoolOption_RenderAndUpdateBranches(t *testing.T) {
+	NextJid = 0
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	nba := NewNamedBoolArray(false).Add("1", "one")
+	nba.Set("1", true)
+	contents := nba.JawsContains(nil)
+	if len(contents) != 1 {
+		t.Fatalf("want 1 content got %d", len(contents))
+	}
+	elem := rq.NewElement(contents[0])
+	var sb strings.Builder
+	if err := elem.JawsRender(&sb, []any{"hidden"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sb.String(), "selected") {
+		t.Fatal("expected selected option rendering")
+	}
+	contents[0].JawsUpdate(elem)
+	nba.Set("1", false)
+	contents[0].JawsUpdate(elem)
 }

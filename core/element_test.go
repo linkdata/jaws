@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
 )
@@ -62,6 +63,21 @@ func (tss *testUi) JawsUpdate(e *Element) {
 	if tss.updateFn != nil {
 		tss.updateFn(e)
 	}
+}
+
+type testApplyGetterAll struct {
+	initErr error
+}
+
+func (a testApplyGetterAll) JawsGetTag(*Request) any { return Tag("tg") }
+func (a testApplyGetterAll) JawsClick(*Element, string) error {
+	return ErrEventUnhandled
+}
+func (a testApplyGetterAll) JawsEvent(*Element, what.What, string) error {
+	return ErrEventUnhandled
+}
+func (a testApplyGetterAll) JawsInit(*Element) error {
+	return a.initErr
 }
 
 func TestElement_helpers(t *testing.T) {
@@ -199,6 +215,36 @@ func TestElement_ReplacePanicsOnMissingId(t *testing.T) {
 	is.Fail()
 }
 
+func TestElement_ReplaceMessageTargetsElementHTML(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	tag := &testUi{}
+	jid := rq.Register(tag)
+	elem := rq.GetElementByJid(jid)
+	if elem == nil {
+		t.Fatal("missing element")
+	}
+	html := `<div id="` + jid.String() + `">replaced</div>`
+
+	elem.Replace(template.HTML(html))
+	// Element.Replace queues directly on the Request, so poke the process loop
+	// once to ensure queued messages are flushed to OutCh in this harness.
+	select {
+	case rq.InCh <- WsMsg{}:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waking request process loop")
+	}
+	msg := nextOutboundMsg(t, rq)
+
+	if msg.What != what.Replace {
+		t.Fatalf("unexpected message type %v", msg.What)
+	}
+	if msg.Data != html {
+		t.Fatalf("replace payload mismatch: got %q want %q", msg.Data, html)
+	}
+}
+
 func TestElement_maybeDirty(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest(t)
@@ -217,6 +263,77 @@ func TestElement_maybeDirty(t *testing.T) {
 	changed, err = e.maybeDirty(e, ErrNotComparable)
 	th.Equal(changed, false)
 	th.Equal(err, ErrNotComparable)
+}
+
+func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
+	NextJid = 0
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+
+	tu := &testUi{renderFn: func(*Element, io.Writer, []any) error { return nil }}
+	elem := rq.NewElement(tu)
+
+	rq.mu.Lock()
+	var sb strings.Builder
+	elem.renderDebug(&sb)
+	rq.mu.Unlock()
+
+	elem.Tag(Tag("a"), Tag("b"))
+	sb.Reset()
+	elem.renderDebug(&sb)
+	if !strings.Contains(sb.String(), ", ") {
+		t.Fatal("expected comma-separated tags in debug output")
+	}
+
+	rq.Jaws.Debug = true
+	sb.Reset()
+	if err := elem.JawsRender(&sb, nil); err != nil {
+		t.Fatal(err)
+	}
+	rq.Jaws.Debug = false
+
+	rq.DeleteElement(elem)
+	if err := elem.JawsRender(&sb, nil); err != nil {
+		t.Fatal(err)
+	}
+	elem.JawsUpdate()
+}
+
+func TestElement_ApplyGetterDebugBranches(t *testing.T) {
+	NextJid = 0
+	rq := newTestRequest(t)
+	defer rq.Close()
+	elem := rq.NewElement(&testUi{})
+
+	if tag, err := elem.ApplyGetter(nil); tag != nil || err != nil {
+		t.Fatalf("unexpected %v %v", tag, err)
+	}
+
+	ag := testApplyGetterAll{}
+	tags, err := elem.ApplyGetter(ag)
+	if err != nil {
+		t.Fatalf("unexpected error %v", err)
+	}
+	if !elem.HasTag(Tag("tg")) {
+		t.Fatalf("missing Tag('tg') in %#v", tags)
+	}
+	agErr := testApplyGetterAll{initErr: ErrNotComparable}
+	if _, err := elem.ApplyGetter(agErr); err != ErrNotComparable {
+		t.Fatalf("expected init err, got %v", err)
+	}
+
+	if deadlock.Debug {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("expected panic for non-comparable UI in debug mode")
+			}
+		}()
+		rq.NewElement(testUnhashableUI{m: map[string]int{"x": 1}})
+	}
 }
 
 type testClickHandler struct {
@@ -255,6 +372,13 @@ func (testNonComparableEventHandler) JawsEvent(*Element, what.What, string) erro
 }
 
 var _ EventHandler = testNonComparableEventHandler{}
+
+type testUnhashableUI struct {
+	m map[string]int
+}
+
+func (testUnhashableUI) JawsRender(*Element, io.Writer, []any) error { return nil }
+func (testUnhashableUI) JawsUpdate(*Element)                         {}
 
 func TestElement_ApplyGetter(t *testing.T) {
 	is := newTestHelper(t)
