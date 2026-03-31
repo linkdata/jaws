@@ -3,6 +3,8 @@ package jaws
 import (
 	"net/http"
 	"strings"
+
+	"github.com/linkdata/jaws/core/assets"
 )
 
 var headerCacheControlNoStore = []string{"no-store"}
@@ -33,7 +35,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			default:
 				if jawsKeyString, ok := strings.CutPrefix(r.URL.Path, "/jaws/.tail/"); ok {
-					jawsKey := JawsKeyValue(jawsKeyString)
+					jawsKey := assets.JawsKeyValue(jawsKeyString)
 					jw.mu.RLock()
 					rq := jw.requests[jawsKey]
 					jw.mu.RUnlock()
@@ -45,7 +47,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			}
-		} else if rq := jw.UseRequest(JawsKeyValue(r.URL.Path[6:]), r); rq != nil {
+		} else if rq := jw.UseRequest(assets.JawsKeyValue(r.URL.Path[6:]), r); rq != nil {
 			rq.ServeHTTP(w, r)
 			return
 		}

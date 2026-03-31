@@ -1,4 +1,4 @@
-package jaws
+package wire
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -24,7 +25,7 @@ func Benchmark_wsMsg_AppendAlert(b *testing.B) {
 func Test_wsMsg_Append(t *testing.T) {
 	type fields struct {
 		Data string
-		Jid  Jid
+		Jid  jid.Jid
 		What what.What
 	}
 	tests := []struct {
@@ -87,9 +88,9 @@ func Test_wsMsg_Append(t *testing.T) {
 			if got := string(m.Append(nil)); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("wsMsg.Append() = %q, want %q", got, tt.want)
 			} else if !tt.noparse {
-				m2, ok := wsParse([]byte(got))
+				m2, ok := Parse([]byte(got))
 				if !ok || !reflect.DeepEqual(m, m2) {
-					t.Errorf("wsParse(%q) = %v, %v want %v", got, m2, ok, m)
+					t.Errorf("Parse(%q) = %v, %v want %v", got, m2, ok, m)
 				}
 			}
 		})
@@ -97,7 +98,7 @@ func Test_wsMsg_Append(t *testing.T) {
 }
 
 func Test_wsMsg_AppendNegativeJidAndCallPayload(t *testing.T) {
-	msg := WsMsg{Jid: Jid(-1), What: what.Update, Data: "raw\tdata"}
+	msg := WsMsg{Jid: jid.Jid(-1), What: what.Update, Data: "raw\tdata"}
 	if got := string(msg.Append(nil)); got != "Update\traw\tdata\n" {
 		t.Fatalf("unexpected ws append result %q", got)
 	}
@@ -115,15 +116,15 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 		want WsMsg
 	}{
 		{"shortest", "Update\t\t\n", WsMsg{What: what.Update}},
-		{"unquoted", "Input\tJid.1\ttrue\n", WsMsg{Jid: Jid(1), What: what.Input, Data: "true"}},
-		{"normal", "Input\tJid.2\t\"c\"\n", WsMsg{Jid: Jid(2), What: what.Input, Data: "c"}},
-		{"newline", "Input\tJid.3\t\"c\\nd\"\n", WsMsg{Jid: Jid(3), What: what.Input, Data: "c\nd"}},
+		{"unquoted", "Input\tJid.1\ttrue\n", WsMsg{Jid: jid.Jid(1), What: what.Input, Data: "true"}},
+		{"normal", "Input\tJid.2\t\"c\"\n", WsMsg{Jid: jid.Jid(2), What: what.Input, Data: "c"}},
+		{"newline", "Input\tJid.3\t\"c\\nd\"\n", WsMsg{Jid: jid.Jid(3), What: what.Input, Data: "c\nd"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := wsParse([]byte(tt.txt))
+			got, ok := Parse([]byte(tt.txt))
 			if !ok || tt.want != got {
-				t.Errorf("wsParse(%q): got %q want %q", tt.txt, got, tt.want)
+				t.Errorf("Parse(%q): got %q want %q", tt.txt, got, tt.want)
 			}
 		})
 	}
@@ -143,9 +144,9 @@ func Test_wsParse_IncompleteFails(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := wsParse(tt.txt)
+			got, ok := Parse(tt.txt)
 			if ok || !reflect.DeepEqual(got, WsMsg{}) {
-				t.Errorf("wsParse(%q): got %q wanted wsMsg{}", tt.txt, got)
+				t.Errorf("Parse(%q): got %q wanted wsMsg{}", tt.txt, got)
 			}
 		})
 	}
@@ -156,7 +157,7 @@ func Fuzz_wsParse(f *testing.F) {
 	f.Add([]byte("Click\t\t\" \\n\"\n"))
 	f.Add([]byte("Inner\tJid.1\t\"data\\nline\"\n"))
 	f.Fuzz(func(t *testing.T, a []byte) {
-		if msg, ok := wsParse(a); ok {
+		if msg, ok := Parse(a); ok {
 			b := msg.Append(nil)
 			if !bytes.Equal(a, b) {
 				t.Errorf("%q != %q", string(a), string(b))
@@ -176,7 +177,7 @@ func Test_wsMsg_FillAlert(t *testing.T) {
 		err  error
 		want string
 	}{
-		{"ErrEventUnhandled", ErrEventUnhandled, "Alert\t\t\"danger\\nevent unhandled\"\n"},
+		{"event unhandled", errors.New("event unhandled"), "Alert\t\t\"danger\\nevent unhandled\"\n"},
 		{"escape error text", fooError, "Alert\t\t\"danger\\n&lt;&#34;\"\n"},
 	}
 	for _, tt := range tests {

@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+
+	"github.com/linkdata/jaws/core/wire"
 )
 
 // TestRequest is a request harness intended for tests.
@@ -16,9 +18,9 @@ type TestRequest struct {
 	*httptest.ResponseRecorder
 	ReadyCh     chan struct{}
 	DoneCh      chan struct{}
-	InCh        chan WsMsg
-	OutCh       chan WsMsg
-	BcastCh     chan Message
+	InCh        chan wire.WsMsg
+	OutCh       chan wire.WsMsg
+	BcastCh     chan wire.Message
 	ExpectPanic bool
 	Panicked    bool
 	PanicVal    any
@@ -44,8 +46,8 @@ func NewTestRequest(jw *Jaws, hr *http.Request) (tr *TestRequest) {
 		tr = &TestRequest{
 			ReadyCh:          make(chan struct{}),
 			DoneCh:           make(chan struct{}),
-			InCh:             make(chan WsMsg),
-			OutCh:            make(chan WsMsg, cap(bcastCh)),
+			InCh:             make(chan wire.WsMsg),
+			OutCh:            make(chan wire.WsMsg, cap(bcastCh)),
 			BcastCh:          bcastCh,
 			Request:          rq,
 			ResponseRecorder: rr,

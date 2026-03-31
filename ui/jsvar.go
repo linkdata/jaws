@@ -13,6 +13,7 @@ import (
 
 	core "github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/core/tags"
+	"github.com/linkdata/jaws/core/wire"
 	"github.com/linkdata/jaws/what"
 	"github.com/linkdata/jq"
 )
@@ -103,7 +104,7 @@ func (ui *JsVar[T]) setPathLocked(elem *core.Element, jspath string, value any) 
 	if err == nil && elem != nil {
 		var data []byte
 		if data, err = json.Marshal(value); err == nil {
-			elem.Jaws.Broadcast(core.Message{
+			elem.Jaws.Broadcast(wire.Message{
 				Dest: ui.Tag,
 				What: what.Set,
 				Data: jspath + "=" + string(data),

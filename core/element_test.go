@@ -261,9 +261,9 @@ func TestElement_maybeDirty(t *testing.T) {
 	th.Equal(changed, false)
 	th.Equal(err, nil)
 
-	changed, err = e.maybeDirty(e, ErrNotComparable)
+	changed, err = e.maybeDirty(e, tags.ErrNotComparable)
 	th.Equal(changed, false)
-	th.Equal(err, ErrNotComparable)
+	th.Equal(err, tags.ErrNotComparable)
 }
 
 func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
@@ -315,15 +315,15 @@ func TestElement_ApplyGetterDebugBranches(t *testing.T) {
 	}
 
 	ag := testApplyGetterAll{}
-	tags, err := elem.ApplyGetter(ag)
+	gotTags, err := elem.ApplyGetter(ag)
 	if err != nil {
 		t.Fatalf("unexpected error %v", err)
 	}
 	if !elem.HasTag(Tag("tg")) {
-		t.Fatalf("missing Tag('tg') in %#v", tags)
+		t.Fatalf("missing Tag('tg') in %#v", gotTags)
 	}
-	agErr := testApplyGetterAll{initErr: ErrNotComparable}
-	if _, err := elem.ApplyGetter(agErr); err != ErrNotComparable {
+	agErr := testApplyGetterAll{initErr: tags.ErrNotComparable}
+	if _, err := elem.ApplyGetter(agErr); err != tags.ErrNotComparable {
 		t.Fatalf("expected init err, got %v", err)
 	}
 
@@ -487,7 +487,7 @@ func TestElement_JawsInit(t *testing.T) {
 	defer rq.Close()
 
 	tss := &testUi{s: "foo"}
-	tss.initError = ErrNotComparable
+	tss.initError = tags.ErrNotComparable
 	e := rq.NewElement(tss)
 
 	tag, err := e.ApplyGetter(tss)
@@ -495,7 +495,7 @@ func TestElement_JawsInit(t *testing.T) {
 	if tag != tss {
 		t.Errorf("tag was %#v", tag)
 	}
-	if err != ErrNotComparable {
+	if err != tags.ErrNotComparable {
 		t.Error(err)
 	}
 }

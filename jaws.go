@@ -6,6 +6,7 @@ import (
 
 	core "github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/core/assets"
+	"github.com/linkdata/jaws/core/tags"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/ui"
 )
@@ -67,7 +68,7 @@ type (
 	// Logger matches the log/slog.Logger interface.
 	Logger    = core.Logger
 	RWLocker  = core.RWLocker
-	TagGetter = core.TagGetter
+	TagGetter = tags.TagGetter
 	// NamedBool stores a named boolen value with a HTML representation.
 	NamedBool = core.NamedBool
 	// NamedBoolArray stores the data required to support HTML 'select' elements
@@ -75,7 +76,7 @@ type (
 	// concurrently.
 	NamedBoolArray = core.NamedBoolArray
 	Session        = core.Session
-	Tag            = core.Tag
+	Tag            = tags.Tag
 	// TestRequest is a request harness intended for tests.
 	//
 	// Exposed for testing only.
@@ -84,16 +85,16 @@ type (
 
 var (
 	ErrEventUnhandled        = core.ErrEventUnhandled
-	ErrIllegalTagType        = core.ErrIllegalTagType // ErrIllegalTagType is returned when a UI tag type is disallowed
-	ErrNotComparable         = core.ErrNotComparable
-	ErrNotUsableAsTag        = core.ErrNotUsableAsTag
+	ErrIllegalTagType        = tags.ErrIllegalTagType // ErrIllegalTagType is returned when a UI tag type is disallowed
+	ErrNotComparable         = tags.ErrNotComparable
+	ErrNotUsableAsTag        = tags.ErrNotUsableAsTag
 	ErrNoWebSocketRequest    = core.ErrNoWebSocketRequest
 	ErrPendingCancelled      = core.ErrPendingCancelled
 	ErrValueUnchanged        = core.ErrValueUnchanged
 	ErrValueNotSettable      = core.ErrValueNotSettable
 	ErrRequestAlreadyClaimed = core.ErrRequestAlreadyClaimed
 	ErrJavascriptDisabled    = core.ErrJavascriptDisabled
-	ErrTooManyTags           = core.ErrTooManyTags
+	ErrTooManyTags           = tags.ErrTooManyTags
 )
 
 const (
@@ -109,7 +110,7 @@ var (
 	// Close when the instance is no longer needed to free associated resources.
 	New = core.New
 	// JawsKeyString returns the string to be used for the given JaWS key.
-	JawsKeyString = core.JawsKeyString
+	JawsKeyString = assets.JawsKeyString
 	WriteHTMLTag  = core.WriteHTMLTag
 	// HTMLGetterFunc wraps a function and returns a HTMLGetter.
 	HTMLGetterFunc = core.HTMLGetterFunc

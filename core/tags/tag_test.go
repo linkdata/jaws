@@ -1,4 +1,4 @@
-package jaws
+package tags
 
 import (
 	"errors"
@@ -10,19 +10,17 @@ import (
 	"testing"
 
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/core/tags"
 )
 
-type testSelfTagger struct {
-}
+type testSelfTagger struct{}
 
-func (tt *testSelfTagger) JawsGetTag(tags.Context) any {
+func (tt *testSelfTagger) JawsGetTag(Context) any {
 	return tt
 }
 
 type testBadTagGetter []int
 
-func (tt testBadTagGetter) JawsGetTag(tags.Context) any {
+func (tt testBadTagGetter) JawsGetTag(Context) any {
 	return tt
 }
 
@@ -30,15 +28,22 @@ type testStringTag struct{}
 
 func (testStringTag) String() string { return "str" }
 
+type testNestedTagGetter struct{}
+
+func (testNestedTagGetter) JawsGetTag(Context) any {
+	return Tag("nested")
+}
+
 type testTagExpandNestedTagGetter struct {
-	Setter Setter[int]
+	Setter testNestedTagGetter
+	Vals   []int
 }
 
 func TestTagString_StringerAndPointer(t *testing.T) {
 	if got := TagString(testStringTag{}); !strings.Contains(got, "testStringTag(str)") {
 		t.Fatalf("TagString(testStringTag{}) = %q, want value stringer representation", got)
 	}
-	if got := TagString(&testStringTag{}); !strings.Contains(got, "*jaws.testStringTag(") {
+	if got := TagString(&testStringTag{}); !strings.Contains(got, "*tags.testStringTag(") {
 		t.Fatalf("TagString(&testStringTag{}) = %q, want pointer representation", got)
 	}
 }
@@ -46,6 +51,7 @@ func TestTagString_StringerAndPointer(t *testing.T) {
 func TestTagExpand(t *testing.T) {
 	var av atomic.Value
 	selftagger := &testSelfTagger{}
+	boom := errors.New("boom")
 	tests := []struct {
 		name string
 		tag  any
@@ -78,8 +84,8 @@ func TestTagExpand(t *testing.T) {
 		},
 		{
 			name: "error",
-			tag:  ErrEventUnhandled,
-			want: []any{ErrEventUnhandled},
+			tag:  boom,
+			want: []any{boom},
 		},
 	}
 	for _, tt := range tests {
@@ -169,10 +175,9 @@ func TestTagExpand_TagGetterNonComparable(t *testing.T) {
 }
 
 func TestTagExpand_NotUsableAsTag_WithNestedTagGetterHint(t *testing.T) {
-	var mu deadlock.Mutex
-	var val int
 	tag := testTagExpandNestedTagGetter{
-		Setter: Bind(&mu, &val).Success(func() {}),
+		Setter: testNestedTagGetter{},
+		Vals:   []int{1},
 	}
 	_, err := TagExpand(nil, tag)
 	if !errors.Is(err, ErrNotUsableAsTag) {

@@ -19,6 +19,9 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/core/assets"
+	"github.com/linkdata/jaws/core/tags"
+	"github.com/linkdata/jaws/core/wire"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
 )
@@ -51,7 +54,7 @@ type Request struct {
 	elems      []*Element              // our Elements
 	tagMap     map[any][]*Element      // maps tags to Elements
 	muQueue    deadlock.Mutex          // protects wsQueue and tailsent
-	wsQueue    []WsMsg                 // queued messages to send
+	wsQueue    []wire.WsMsg            // queued messages to send
 	tailsent   bool
 }
 
@@ -74,7 +77,7 @@ func (rq *Request) JawsKeyString() string {
 	if rq != nil {
 		jawsKey = rq.JawsKey
 	}
-	return JawsKeyString(jawsKey)
+	return assets.JawsKeyString(jawsKey)
 }
 
 func (rq *Request) String() string {
@@ -159,7 +162,7 @@ func (rq *Request) HeadHTML(w io.Writer) (err error) {
 	rq.Jaws.mu.RLock()
 	b = append(b, rq.Jaws.headPrefix...)
 	rq.Jaws.mu.RUnlock()
-	b = JawsKeyAppend(b, rq.JawsKey)
+	b = assets.JawsKeyAppend(b, rq.JawsKey)
 	b = append(b, `">`...)
 	_, err = w.Write(b)
 	return
@@ -211,7 +214,7 @@ func (rq *Request) writeTailScript(w io.Writer) (sent bool, err error) {
 			}
 		}
 		for i := n; i < len(rq.wsQueue); i++ {
-			rq.wsQueue[i] = WsMsg{}
+			rq.wsQueue[i] = wire.WsMsg{}
 		}
 		rq.wsQueue = rq.wsQueue[:n]
 		if len(b) > 0 {
@@ -354,7 +357,7 @@ func (rq *Request) cancel(err error) {
 // The default JaWS javascript only supports Bootstrap.js dismissable alerts.
 // See Jaws.Broadcast for processing-loop requirements.
 func (rq *Request) Alert(lvl, msg string) {
-	rq.Jaws.Broadcast(Message{
+	rq.Jaws.Broadcast(wire.Message{
 		Dest: rq,
 		What: what.Alert,
 		Data: lvl + "\n" + msg,
@@ -371,7 +374,7 @@ func (rq *Request) AlertError(err error) {
 // Redirect requests the current Request to navigate to the given URL.
 // See Jaws.Broadcast for processing-loop requirements.
 func (rq *Request) Redirect(url string) {
-	rq.Jaws.Broadcast(Message{
+	rq.Jaws.Broadcast(wire.Message{
 		Dest: rq,
 		What: what.Redirect,
 		Data: url,
@@ -400,12 +403,12 @@ func (rq *Request) TagsOf(elem *Element) (tags []any) {
 }
 
 // Dirty marks all Elements that have one or more of the given tags as dirty.
-func (rq *Request) Dirty(tags ...any) {
-	rq.Jaws.setDirty(MustTagExpand(rq, tags))
+func (rq *Request) Dirty(dirtyTags ...any) {
+	rq.Jaws.setDirty(tags.MustTagExpand(rq, dirtyTags))
 }
 
 // wantMessage returns true if the Request want the message.
-func (rq *Request) wantMessage(msg *Message) (yes bool) {
+func (rq *Request) wantMessage(msg *wire.Message) (yes bool) {
 	switch dest := msg.Dest.(type) {
 	case *Request:
 		return dest == rq
@@ -445,7 +448,7 @@ func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 // Panics if the build tag "debug" is set and the UI object doesn't satisfy all requirements.
 func (rq *Request) NewElement(ui UI) *Element {
 	if deadlock.Debug {
-		if err := newErrNotComparable(ui); err != nil {
+		if err := tags.NewErrNotComparable(ui); err != nil {
 			panic(err)
 		}
 	}
@@ -507,19 +510,19 @@ func (rq *Request) TagExpanded(elem *Element, expandedtags []any) {
 }
 
 // Tag adds the given tags to the given Element.
-func (rq *Request) Tag(elem *Element, tags ...any) {
-	if elem != nil && len(tags) > 0 && elem.Request == rq {
-		rq.TagExpanded(elem, MustTagExpand(elem.Request, tags))
+func (rq *Request) Tag(elem *Element, tagItems ...any) {
+	if elem != nil && len(tagItems) > 0 && elem.Request == rq {
+		rq.TagExpanded(elem, tags.MustTagExpand(elem.Request, tagItems))
 	}
 }
 
 // GetElements returns a list of the UI elements in the Request that have the given tag(s).
 func (rq *Request) GetElements(tagitem any) (elems []*Element) {
-	tags := MustTagExpand(rq, tagitem)
+	expanded := tags.MustTagExpand(rq, tagitem)
 	seen := map[*Element]struct{}{}
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
-	for _, tag := range tags {
+	for _, tag := range expanded {
 		if el, ok := rq.tagMap[tag]; ok {
 			for _, e := range el {
 				if _, ok = seen[e]; !ok {
@@ -533,7 +536,7 @@ func (rq *Request) GetElements(tagitem any) (elems []*Element) {
 }
 
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
-func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan WsMsg, outboundMsgCh chan<- WsMsg) {
+func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-chan wire.WsMsg, outboundMsgCh chan<- wire.WsMsg) {
 	jawsDoneCh := rq.Jaws.Done()
 	httpDoneCh := rq.httpDoneCh
 	eventDoneCh := make(chan struct{})
@@ -567,8 +570,8 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan WsM
 	}()
 
 	for {
-		var tagmsg Message
-		var wsmsg WsMsg
+		var tagmsg wire.Message
+		var wsmsg wire.WsMsg
 		var ok bool
 
 		rq.sendQueue(outboundMsgCh)
@@ -619,7 +622,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan WsM
 			if tagmsg.What != what.Set && tagmsg.What != what.Call {
 				data = strconv.Quote(data)
 			}
-			rq.queue(WsMsg{
+			rq.queue(wire.WsMsg{
 				Data: v + "\t" + data,
 				What: tagmsg.What,
 				Jid:  -1,
@@ -630,7 +633,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan WsM
 
 		switch tagmsg.What {
 		case what.Reload, what.Redirect, what.Order, what.Alert:
-			rq.queue(WsMsg{
+			rq.queue(wire.WsMsg{
 				Jid:  0,
 				Data: tagmsg.Data,
 				What: tagmsg.What,
@@ -639,7 +642,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan WsM
 			for _, elem := range todo {
 				switch tagmsg.What {
 				case what.Delete:
-					rq.queue(WsMsg{
+					rq.queue(wire.WsMsg{
 						Jid:  elem.Jid(),
 						What: what.Delete,
 					})
@@ -656,7 +659,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan WsM
 					// an error to be sent out as an alert message.
 					// primary usecase is tests.
 					if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.Jid(), tagmsg.What, tagmsg.Data)); err != nil {
-						var m WsMsg
+						var m wire.WsMsg
 						m.FillAlert(err)
 						m.Jid = elem.Jid()
 						rq.queue(m)
@@ -664,7 +667,7 @@ func (rq *Request) process(broadcastMsgCh chan Message, incomingMsgCh <-chan WsM
 				case what.Update:
 					elem.JawsUpdate()
 				default:
-					rq.queue(WsMsg{
+					rq.queue(wire.WsMsg{
 						Data: tagmsg.Data,
 						Jid:  elem.Jid(),
 						What: tagmsg.What,
@@ -690,7 +693,7 @@ func (rq *Request) handleRemove(containerJid Jid, data string) {
 	}
 }
 
-func (rq *Request) queue(msg WsMsg) {
+func (rq *Request) queue(msg wire.WsMsg) {
 	rq.muQueue.Lock()
 	rq.wsQueue = append(rq.wsQueue, msg)
 	rq.muQueue.Unlock()
@@ -741,7 +744,7 @@ func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
 	}
 }
 
-func (rq *Request) getSendMsgs() (toSend []WsMsg) {
+func (rq *Request) getSendMsgs() (toSend []wire.WsMsg) {
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
 
@@ -767,11 +770,11 @@ func (rq *Request) getSendMsgs() (toSend []WsMsg) {
 		rq.wsQueue = rq.wsQueue[:0]
 	}
 
-	slices.SortStableFunc(toSend, func(a, b WsMsg) int { return cmp.Compare(a.Jid, b.Jid) })
+	slices.SortStableFunc(toSend, func(a, b wire.WsMsg) int { return cmp.Compare(a.Jid, b.Jid) })
 	return
 }
 
-func (rq *Request) sendQueue(outboundMsgCh chan<- WsMsg) {
+func (rq *Request) sendQueue(outboundMsgCh chan<- wire.WsMsg) {
 	for _, msg := range rq.getSendMsgs() {
 		select {
 		case <-rq.Context().Done():
@@ -843,7 +846,7 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 }
 
 // eventCaller calls event functions
-func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh chan<- WsMsg, eventDoneCh chan<- struct{}) {
+func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh chan<- wire.WsMsg, eventDoneCh chan<- struct{}) {
 	defer close(eventDoneCh)
 	for call := range eventCallCh {
 		select {
@@ -852,7 +855,7 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 		default:
 		}
 		if err := rq.callAllEventHandlers(call.jid, call.wht, call.data); err != nil {
-			var m WsMsg
+			var m wire.WsMsg
 			m.FillAlert(err)
 			select {
 			case outboundMsgCh <- m:

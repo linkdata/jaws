@@ -1,4 +1,4 @@
-package jaws
+package wire
 
 import (
 	"testing"

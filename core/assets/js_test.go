@@ -1,8 +1,7 @@
-package jaws
+package assets
 
 import (
 	"bytes"
-	_ "embed"
 	"net/url"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/linkdata/jaws/core/wire"
 	"github.com/linkdata/jaws/staticserve"
 	"github.com/linkdata/jaws/what"
 )
@@ -19,17 +19,24 @@ func Test_PreloadHTML(t *testing.T) {
 	const extraStyle = "someExtraStyle.css"
 	const extraImage = "favicon.png"
 	const extraFont = "someExtraFont.woff2"
-	th := newTestHelper(t)
 
 	serveJS, err := staticserve.New("/jaws/.jaws.js", JavascriptText)
-	th.NoErr(err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	txt, fav := PreloadHTML()
-	th.Equal(strings.Contains(txt, serveJS.Name), false)
-	th.Equal(strings.Count(txt, "<script>"), strings.Count(txt, "</script>"))
-	th.Equal(fav, "")
+	if strings.Contains(txt, serveJS.Name) {
+		t.Fatalf("unexpected preload output contains %q: %q", serveJS.Name, txt)
+	}
+	if strings.Count(txt, "<script>") != strings.Count(txt, "</script>") {
+		t.Fatalf("script tags are unbalanced: %q", txt)
+	}
+	if fav != "" {
+		t.Fatalf("unexpected favicon %q", fav)
+	}
 
-	mustParseUrl := func(urlstr string) *url.URL {
+	mustParseURL := func(urlstr string) *url.URL {
 		u, err := url.Parse(urlstr)
 		if err != nil {
 			t.Fatal(err)
@@ -38,25 +45,42 @@ func Test_PreloadHTML(t *testing.T) {
 	}
 
 	txt, fav = PreloadHTML(
-		mustParseUrl(serveJS.Name),
-		mustParseUrl(extraScript),
-		mustParseUrl(extraStyle),
-		mustParseUrl(extraImage),
-		mustParseUrl(extraFont))
-	th.Equal(strings.Contains(txt, serveJS.Name), true)
-	th.Equal(strings.Contains(txt, extraScript), true)
-	th.Equal(strings.Contains(txt, extraStyle), true)
-	th.Equal(strings.Contains(txt, extraImage), true)
-	th.Equal(strings.Contains(txt, extraFont), true)
-	th.Equal(strings.Count(txt, "<script"), strings.Count(txt, "</script>"))
-	th.Equal(fav, extraImage)
-	t.Log(txt)
+		mustParseURL(serveJS.Name),
+		mustParseURL(extraScript),
+		mustParseURL(extraStyle),
+		mustParseURL(extraImage),
+		mustParseURL(extraFont),
+	)
+	if !strings.Contains(txt, serveJS.Name) {
+		t.Fatalf("missing %q in preload output: %q", serveJS.Name, txt)
+	}
+	if !strings.Contains(txt, extraScript) {
+		t.Fatalf("missing %q in preload output: %q", extraScript, txt)
+	}
+	if !strings.Contains(txt, extraStyle) {
+		t.Fatalf("missing %q in preload output: %q", extraStyle, txt)
+	}
+	if !strings.Contains(txt, extraImage) {
+		t.Fatalf("missing %q in preload output: %q", extraImage, txt)
+	}
+	if !strings.Contains(txt, extraFont) {
+		t.Fatalf("missing %q in preload output: %q", extraFont, txt)
+	}
+	if strings.Count(txt, "<script") != strings.Count(txt, "</script>") {
+		t.Fatalf("script tags are unbalanced: %q", txt)
+	}
+	if fav != extraImage {
+		t.Fatalf("favicon = %q, want %q", fav, extraImage)
+	}
 }
 
 func TestJawsKeyString(t *testing.T) {
-	th := newTestHelper(t)
-	th.Equal(JawsKeyString(0), "")
-	th.Equal(JawsKeyString(1), "1")
+	if got := JawsKeyString(0); got != "" {
+		t.Fatalf("JawsKeyString(0) = %q, want empty", got)
+	}
+	if got := JawsKeyString(1); got != "1" {
+		t.Fatalf("JawsKeyString(1) = %q, want %q", got, "1")
+	}
 }
 
 func TestJawsKeyValue(t *testing.T) {
@@ -65,26 +89,10 @@ func TestJawsKeyValue(t *testing.T) {
 		jawsKey string
 		want    uint64
 	}{
-		{
-			name:    "blank",
-			jawsKey: "",
-			want:    0,
-		},
-		{
-			name:    "1",
-			jawsKey: "1",
-			want:    1,
-		},
-		{
-			name:    "-1",
-			jawsKey: "-1",
-			want:    0,
-		},
-		{
-			name:    "2/",
-			jawsKey: "2/",
-			want:    2,
-		},
+		{name: "blank", jawsKey: "", want: 0},
+		{name: "1", jawsKey: "1", want: 1},
+		{name: "-1", jawsKey: "-1", want: 0},
+		{name: "2/", jawsKey: "2/", want: 2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -161,9 +169,9 @@ process.stdout.write(jaws.sent[0] || "");
 		t.Fatal("jawsVar did not emit a websocket frame")
 	}
 
-	msg, ok := wsParse([]byte(raw))
+	msg, ok := wire.Parse([]byte(raw))
 	if !ok {
-		t.Fatalf("Set frame must be parseable by core wsParse, got %q", raw)
+		t.Fatalf("Set frame must be parseable by wire.Parse, got %q", raw)
 	}
 	if msg.What != what.Set {
 		t.Fatalf("unexpected what: got %v", msg.What)
@@ -197,7 +205,7 @@ process.stdout.write(jaws.sent[0] || "");
 		t.Fatal("jawsRemoving did not emit a websocket frame")
 	}
 
-	if msg, ok := wsParse([]byte(raw)); ok {
+	if msg, ok := wire.Parse([]byte(raw)); ok {
 		t.Fatalf("expected invalid untrusted Remove frame to be dropped by parser, got %+v from %q", msg, raw)
 	}
 }
@@ -216,7 +224,7 @@ process.stdout.write(jaws.sent[0] || "");
 `)
 
 	if raw != "" {
-		if _, ok := wsParse([]byte(raw)); !ok {
+		if _, ok := wire.Parse([]byte(raw)); !ok {
 			t.Fatalf("jawsVar should not emit unparseable Set frame when JsVar name is unregistered, got %q", raw)
 		}
 	}

@@ -1,4 +1,4 @@
-package jaws
+package tags
 
 import (
 	"errors"
@@ -10,7 +10,7 @@ type testRuntimeNonComparable struct {
 }
 
 func Test_newErrNotComparable_Error(t *testing.T) {
-	err := newErrNotComparable([]int{1, 2, 3})
+	err := NewErrNotComparable([]int{1, 2, 3})
 	if err == nil {
 		t.Fatal("expected error for non-comparable value")
 	}
@@ -26,7 +26,7 @@ func Test_newErrNotComparable_Error(t *testing.T) {
 }
 
 func Test_newErrNotComparable_RuntimeNonComparable(t *testing.T) {
-	err := newErrNotComparable(testRuntimeNonComparable{v: func() {}})
+	err := NewErrNotComparable(testRuntimeNonComparable{v: func() {}})
 	if !errors.Is(err, ErrNotComparable) {
 		t.Fatalf("expected ErrNotComparable, got %v", err)
 	}

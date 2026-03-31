@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/core/assets"
+	"github.com/linkdata/jaws/core/wire"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -29,7 +31,7 @@ func newSession(jw *Jaws, sessionID uint64, remoteIP netip.Addr, secure bool) *S
 		cookie: http.Cookie{
 			Name:     jw.CookieName,
 			Path:     "/",
-			Value:    JawsKeyString(sessionID),
+			Value:    assets.JawsKeyString(sessionID),
 			Secure:   secure,
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
@@ -174,7 +176,7 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 		*cookie = sess.cookie
 		sess.mu.Unlock()
 
-		msg := Message{What: what.Reload}
+		msg := wire.Message{What: what.Reload}
 		for _, rq := range requests {
 			rq.deadSession(sess)
 			msg.Dest = rq
@@ -187,7 +189,7 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 // Reload calls Broadcast with a message asking browsers to reload the page.
 // See Broadcast for the processing-loop requirement.
 func (sess *Session) Reload() {
-	sess.Broadcast(Message{What: what.Reload})
+	sess.Broadcast(wire.Message{What: what.Reload})
 }
 
 // Clear removes all key/value pairs from the session.
@@ -216,7 +218,7 @@ func (sess *Session) Requests() (rl []*Request) {
 // It must not be called before the JaWS processing loop (`Serve()` or
 // `ServeWithTimeout()`) is running. Otherwise this call may block.
 // It is safe to call on a nil Session.
-func (sess *Session) Broadcast(msg Message) {
+func (sess *Session) Broadcast(msg wire.Message) {
 	if sess != nil {
 		sess.mu.RLock()
 		defer sess.mu.RUnlock()

@@ -11,7 +11,7 @@ type htmlGetterFunc struct {
 	tags []any
 }
 
-var _ TagGetter = &htmlGetterFunc{}
+var _ tags.TagGetter = &htmlGetterFunc{}
 
 func (g *htmlGetterFunc) JawsGetHTML(e *Element) template.HTML {
 	return g.fn(e)
