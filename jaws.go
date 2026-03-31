@@ -5,6 +5,7 @@ import (
 	"time"
 
 	core "github.com/linkdata/jaws/core"
+	"github.com/linkdata/jaws/core/assets"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/ui"
 )
@@ -97,7 +98,7 @@ var (
 
 const (
 	// ISO8601 is the date format used by date input widgets (YYYY-MM-DD).
-	ISO8601 = core.ISO8601
+	ISO8601 = assets.ISO8601
 )
 
 var (

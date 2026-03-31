@@ -1,4 +1,4 @@
-package jaws
+package assets
 
 import (
 	"path"
@@ -19,7 +19,7 @@ func Test_makeCookieName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if gotCookie := makeCookieName(tt.exename); gotCookie != tt.wantCookie {
+			if gotCookie := MakeCookieName(tt.exename); gotCookie != tt.wantCookie {
 				t.Errorf("makeCookieName() = %v, want %v", gotCookie, tt.wantCookie)
 			}
 		})

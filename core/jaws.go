@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/core/assets"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/secureheaders"
 	"github.com/linkdata/jaws/staticserve"
@@ -91,7 +92,7 @@ func New() (jw *Jaws, err error) {
 	if serveJS, err = staticserve.New("/jaws/.jaws.js", JavascriptText); err == nil {
 		if serveCSS, err = staticserve.New("/jaws/.jaws.css", JawsCSS); err == nil {
 			tmp := &Jaws{
-				CookieName:   DefaultCookieName,
+				CookieName:   assets.DefaultCookieName,
 				BaseContext:  context.Background(),
 				serveJS:      serveJS,
 				serveCSS:     serveCSS,
