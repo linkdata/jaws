@@ -13,6 +13,7 @@ import (
 	"github.com/linkdata/deadlock"
 	core "github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/core/tags"
+	"github.com/linkdata/jaws/internal/testutil"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -46,7 +47,7 @@ func (templateAuth) Email() string        { return "test@example.com" }
 func (templateAuth) IsAdmin() bool        { return true }
 
 func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
-	jw, rq := newRequest(t)
+	jw, rq := testutil.NewCoreRequest(t)
 	log := &templateLogger{}
 	jw.Logger = log
 	jw.MakeAuth = func(*core.Request) core.Auth { return templateAuth{} }

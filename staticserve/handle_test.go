@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/linkdata/jaws/internal/testutil"
 	"github.com/linkdata/jaws/staticserve"
 )
 
@@ -25,8 +26,8 @@ func TestHandle_Pattern(t *testing.T) {
 }
 
 func TestHandleFS(t *testing.T) {
-	filepaths := assetFilepaths(t)
-	expected := expectedAssets(t, filepaths...)
+	filepaths := testutil.AssetFilepaths(t, assetsFS, "assets")
+	expected := testutil.ExpectedStaticAssets(t, assetsFS, "assets", "/", filepaths...)
 
 	mux := http.NewServeMux()
 	uris, err := staticserve.HandleFS(assetsFS, mux.Handle, "assets", filepaths...)

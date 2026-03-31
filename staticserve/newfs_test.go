@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/linkdata/jaws/internal/testutil"
 	"github.com/linkdata/jaws/staticserve"
 )
 
 func TestNewFS(t *testing.T) {
-	for _, exp := range expectedAssets(t) {
+	for _, exp := range testutil.ExpectedStaticAssets(t, assetsFS, "assets", "/") {
 		ss, err := staticserve.NewFS(assetsFS, "assets", exp.Filepath)
 		if err != nil {
 			t.Fatal(err)
@@ -29,7 +30,7 @@ func TestNewFS(t *testing.T) {
 }
 
 func TestMustNewFS(t *testing.T) {
-	expected := expectedAssets(t)
+	expected := testutil.ExpectedStaticAssets(t, assetsFS, "assets", "/")
 	filepaths := make([]string, 0, len(expected))
 	for _, exp := range expected {
 		filepaths = append(filepaths, exp.Filepath)

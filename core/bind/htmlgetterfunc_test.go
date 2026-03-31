@@ -5,11 +5,12 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/linkdata/jaws/core/internal/testutil"
 	"github.com/linkdata/jaws/core/tags"
 )
 
 func TestHTMLGetterFunc(t *testing.T) {
-	tt := &testSelfTagger{}
+	tt := &testutil.SelfTagger{}
 	hg := HTMLGetterFunc(func(e *Element) template.HTML {
 		return "foo"
 	}, tt)

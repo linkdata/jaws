@@ -8,11 +8,13 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/linkdata/jaws/internal/testutil"
 	"github.com/linkdata/jaws/staticserve"
 )
 
 func Test_WalkDir(t *testing.T) {
-	expected := expectedAssetMap(t, assetFilepaths(t)...)
+	filepaths := testutil.AssetFilepaths(t, assetsFS, "assets")
+	expected := testutil.ExpectedStaticAssetMap(t, assetsFS, "assets", "/", filepaths...)
 	seen := map[string]bool{}
 	mux := http.NewServeMux()
 	err := staticserve.WalkDir(assetsFS, "assets", func(filepath string, ss *staticserve.StaticServe) (err error) {

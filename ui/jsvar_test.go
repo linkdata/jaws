@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	core "github.com/linkdata/jaws/core"
+	"github.com/linkdata/jaws/internal/testutil"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -57,7 +58,7 @@ func (errorJsVarMaker) JawsMakeJsVar(*core.Request) (IsJsVar, error) {
 }
 
 func TestJsVar_RenderSetAndEvent(t *testing.T) {
-	jw, rq := newRequest(t)
+	jw, rq := testutil.NewCoreRequest(t)
 	go jw.Serve()
 
 	var mu sync.Mutex
@@ -127,7 +128,7 @@ func TestJsVar_RenderSetAndEvent(t *testing.T) {
 }
 
 func TestJsVar_PathHooksAndRequestWriter(t *testing.T) {
-	jw, rq := newRequest(t)
+	jw, rq := testutil.NewCoreRequest(t)
 	go jw.Serve()
 
 	var mu sync.Mutex
@@ -192,7 +193,7 @@ func TestJsVar_PathHooksAndRequestWriter(t *testing.T) {
 }
 
 func TestRequestWriterJsVarTypedNilDoesNotPanic(t *testing.T) {
-	_, rq := newRequest(t)
+	_, rq := testutil.NewCoreRequest(t)
 	var sb bytes.Buffer
 	rw := RequestWriter{Request: rq, Writer: &sb}
 
@@ -210,7 +211,7 @@ func TestRequestWriterJsVarTypedNilDoesNotPanic(t *testing.T) {
 }
 
 func TestJsVar_RenderParamValidation(t *testing.T) {
-	_, rq := newRequest(t)
+	_, rq := testutil.NewCoreRequest(t)
 
 	var mu sync.Mutex
 	v := jsVarData{}
@@ -245,7 +246,7 @@ func TestErrIllegalJsVarName_Error(t *testing.T) {
 }
 
 func TestJsVar_JawsGetWithNilPointerReturnsZeroValue(t *testing.T) {
-	_, rq := newRequest(t)
+	_, rq := testutil.NewCoreRequest(t)
 
 	var mu sync.Mutex
 	var ptr *jsVarNilData
@@ -270,7 +271,7 @@ func TestJsVar_JawsGetWithNilPointerReturnsZeroValue(t *testing.T) {
 }
 
 func TestJsVar_RenderWithNilInterfaceValueDoesNotPanic(t *testing.T) {
-	_, rq := newRequest(t)
+	_, rq := testutil.NewCoreRequest(t)
 
 	var mu sync.Mutex
 	var data any
@@ -295,7 +296,7 @@ func TestJsVar_RenderWithNilInterfaceValueDoesNotPanic(t *testing.T) {
 }
 
 func TestJsVar_RenderIncludesZeroValueData(t *testing.T) {
-	_, rq := newRequest(t)
+	_, rq := testutil.NewCoreRequest(t)
 
 	var mu sync.Mutex
 	v := jsVarData{}

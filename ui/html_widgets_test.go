@@ -9,10 +9,11 @@ import (
 	core "github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/core/named"
 	"github.com/linkdata/jaws/core/tags"
+	"github.com/linkdata/jaws/internal/testutil"
 )
 
 func TestHTMLWidgets_ConstructorsAndRender(t *testing.T) {
-	_, rq := newRequest(t)
+	_, rq := testutil.NewCoreRequest(t)
 
 	tests := []struct {
 		name    string
@@ -39,7 +40,7 @@ func TestHTMLWidgets_ConstructorsAndRender(t *testing.T) {
 }
 
 func TestHTMLInner_RenderInnerApplyGetterError(t *testing.T) {
-	_, rq := newRequest(t)
+	_, rq := testutil.NewCoreRequest(t)
 
 	wantErr := errors.New("init fail")
 	g := &initFailGetter{err: wantErr}
@@ -59,7 +60,7 @@ func (g *initFailGetter) JawsGetTag(tags.Context) any             { return g }
 func (g *initFailGetter) JawsInit(*core.Element) error            { return g.err }
 
 func TestImg_RenderAndUpdate(t *testing.T) {
-	_, rq := newRequest(t)
+	_, rq := testutil.NewCoreRequest(t)
 	src := newTestSetter("image.png")
 	ui := NewImg(src)
 	elem, got := renderUI(t, rq, ui, "hidden")
@@ -69,7 +70,7 @@ func TestImg_RenderAndUpdate(t *testing.T) {
 }
 
 func TestOption_RenderAndUpdate(t *testing.T) {
-	_, rq := newRequest(t)
+	_, rq := testutil.NewCoreRequest(t)
 	nba := named.NewNamedBoolArray(false)
 	nb := named.NewNamedBool(nba, `escape"me`, "<unescaped>", true)
 	ui := NewOption(nb)
@@ -83,7 +84,7 @@ func TestOption_RenderAndUpdate(t *testing.T) {
 }
 
 func TestRegister_Render(t *testing.T) {
-	_, rq := newRequest(t)
+	_, rq := testutil.NewCoreRequest(t)
 	ui := NewRegister(NewSpan(testHTMLGetter("x")))
 	_, got := renderUI(t, rq, ui)
 	if got != "" {

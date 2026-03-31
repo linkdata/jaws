@@ -7,11 +7,12 @@ import (
 
 	core "github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/core/assets"
+	"github.com/linkdata/jaws/internal/testutil"
 	"github.com/linkdata/jaws/what"
 )
 
 func TestInputTextWidgets(t *testing.T) {
-	_, rq := newRequest(t)
+	_, rq := testutil.NewCoreRequest(t)
 	ss := newTestSetter("foo")
 
 	text := NewText(ss)
@@ -46,7 +47,7 @@ func TestInputTextWidgets(t *testing.T) {
 }
 
 func TestInputBoolWidgets(t *testing.T) {
-	_, rq := newRequest(t)
+	_, rq := testutil.NewCoreRequest(t)
 	sb := newTestSetter(true)
 
 	checkbox := NewCheckbox(sb)
@@ -76,7 +77,7 @@ func TestInputBoolWidgets(t *testing.T) {
 }
 
 func TestInputFloatWidgets(t *testing.T) {
-	_, rq := newRequest(t)
+	_, rq := testutil.NewCoreRequest(t)
 	sf := newTestSetter(1.2)
 
 	number := NewNumber(sf)
@@ -106,7 +107,7 @@ func TestInputFloatWidgets(t *testing.T) {
 }
 
 func TestInputDateWidget(t *testing.T) {
-	_, rq := newRequest(t)
+	_, rq := testutil.NewCoreRequest(t)
 	d0, _ := time.Parse(assets.ISO8601, "2020-01-02")
 	sd := newTestSetter(d0)
 
@@ -135,7 +136,7 @@ func TestInputDateWidget(t *testing.T) {
 }
 
 func TestInputMaybeDirtyErrValueUnchanged(t *testing.T) {
-	_, rq := newRequest(t)
+	_, rq := testutil.NewCoreRequest(t)
 	ss := newTestSetter("foo")
 	text := NewText(ss)
 	elem, _ := renderUI(t, rq, text)
@@ -145,7 +146,7 @@ func TestInputMaybeDirtyErrValueUnchanged(t *testing.T) {
 }
 
 func TestTextarea_RenderEscapesHTML(t *testing.T) {
-	_, rq := newRequest(t)
+	_, rq := testutil.NewCoreRequest(t)
 	ss := newTestSetter(`x</textarea><script>alert("x")</script>`)
 
 	_, got := renderUI(t, rq, NewTextarea(ss))

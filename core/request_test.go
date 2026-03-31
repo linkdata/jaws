@@ -977,13 +977,13 @@ func TestRequest_IncomingClick(t *testing.T) {
 	defer rq.Close()
 
 	tjc1 := &testJawsClick{
-		clickCh:    make(chan string, 2),
-		testSetter: newTestSetter(""),
+		clickCh: make(chan string, 2),
+		Setter:  newTestSetter(""),
 	}
-	tjc1.err = ErrEventUnhandled
+	tjc1.SetErr(ErrEventUnhandled)
 	tjc2 := &testJawsClick{
-		clickCh:    make(chan string, 2),
-		testSetter: newTestSetter(""),
+		clickCh: make(chan string, 2),
+		Setter:  newTestSetter(""),
 	}
 
 	rq.UI(testDivWidget{inner: "1"}, tjc1)

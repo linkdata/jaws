@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"html/template"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +11,7 @@ import (
 	core "github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/core/named"
 	"github.com/linkdata/jaws/core/tags"
+	"github.com/linkdata/jaws/internal/testutil"
 )
 
 type testRWUpdater struct {
@@ -31,28 +30,8 @@ func (g requestWriterFailGetter) JawsGetHTML(*core.Element) template.HTML { retu
 func (g requestWriterFailGetter) JawsGetTag(tags.Context) any             { return g }
 func (g requestWriterFailGetter) JawsInit(*core.Element) error            { return g.err }
 
-func newSessionBoundRequest(t *testing.T) (*core.Jaws, *core.Request) {
-	t.Helper()
-	jw, err := core.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(jw.Close)
-
-	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	rr := httptest.NewRecorder()
-	if sess := jw.NewSession(rr, hr); sess == nil {
-		t.Fatal("expected session")
-	}
-	rq := jw.NewRequest(hr)
-	if rq == nil {
-		t.Fatal("expected request")
-	}
-	return jw, rq
-}
-
 func TestRequestWriter_MethodsAndWidgetHelpers(t *testing.T) {
-	jw, rq := newSessionBoundRequest(t)
+	jw, rq := testutil.NewCoreSessionBoundRequest(t)
 	var buf bytes.Buffer
 	rw := RequestWriter{Request: rq, Writer: &buf}
 
@@ -157,7 +136,7 @@ func TestErrMissingTemplateAndRWLocker(t *testing.T) {
 
 func TestRequestWriterUI_RenderErrorDoesNotLeakElement(t *testing.T) {
 	core.NextJid = 0
-	_, rq := newRequest(t)
+	_, rq := testutil.NewCoreRequest(t)
 	var buf bytes.Buffer
 	rw := RequestWriter{Request: rq, Writer: &buf}
 

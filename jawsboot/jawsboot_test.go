@@ -2,19 +2,17 @@ package jawsboot_test
 
 import (
 	"bytes"
-	"compress/gzip"
 	"embed"
 	"io"
-	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"path"
-	"sort"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/internal/testutil"
 	"github.com/linkdata/jaws/jawsboot"
 	"github.com/linkdata/jaws/staticserve"
 	"github.com/linkdata/jaws/ui"
@@ -23,75 +21,9 @@ import (
 //go:embed assets
 var testAssetsFS embed.FS
 
-type expectedAsset struct {
-	Filepath string
-	URI      string
-	Plain    []byte
-	SS       *staticserve.StaticServe
-}
-
-func readGzip(t *testing.T, b []byte) []byte {
-	t.Helper()
-	gzr, err := gzip.NewReader(bytes.NewReader(b))
-	if err != nil {
-		t.Fatal(err)
-	}
-	plain, err := io.ReadAll(gzr)
-	if cerr := gzr.Close(); cerr != nil && err == nil {
-		err = cerr
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	return plain
-}
-
-func expectedAssets(t *testing.T, prefix string) (expected []expectedAsset) {
-	t.Helper()
-	var filepaths []string
-	err := fs.WalkDir(testAssetsFS, "assets/static", func(pathname string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		filepaths = append(filepaths, strings.TrimPrefix(pathname, "assets/static/"))
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	sort.Strings(filepaths)
-	if len(filepaths) == 0 {
-		t.Fatal("expected at least one static asset")
-	}
-	for _, filepath := range filepaths {
-		b, err := fs.ReadFile(testAssetsFS, path.Join("assets/static", filepath))
-		if err != nil {
-			t.Fatal(err)
-		}
-		ss, err := staticserve.New(filepath, b)
-		if err != nil {
-			t.Fatal(err)
-		}
-		plain := b
-		if strings.HasSuffix(filepath, ".gz") {
-			plain = readGzip(t, b)
-		}
-		expected = append(expected, expectedAsset{
-			Filepath: filepath,
-			URI:      path.Join(prefix, ss.Name),
-			Plain:    plain,
-			SS:       ss,
-		})
-	}
-	return
-}
-
 func TestJawsBoot_Setup(t *testing.T) {
 	const prefix = "/static"
-	expected := expectedAssets(t, prefix)
+	expected := testutil.ExpectedStaticAssets(t, testAssetsFS, "assets/static", prefix)
 	mux := http.NewServeMux()
 
 	jw, _ := jaws.New()
@@ -180,7 +112,7 @@ func TestJawsBoot_Setup(t *testing.T) {
 		if !bytes.Equal(b, exp.SS.Gz) {
 			t.Errorf("%q gzip: body mismatch", exp.Filepath)
 		}
-		if unpacked := readGzip(t, b); !bytes.Equal(unpacked, exp.Plain) {
+		if unpacked := testutil.ReadGzip(t, b); !bytes.Equal(unpacked, exp.Plain) {
 			t.Errorf("%q gzip: unpacked body mismatch", exp.Filepath)
 		}
 		if err = res.Body.Close(); err != nil {

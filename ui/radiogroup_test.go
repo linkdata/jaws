@@ -6,11 +6,12 @@ import (
 
 	core "github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/core/named"
+	"github.com/linkdata/jaws/internal/testutil"
 )
 
 func TestRequest_RadioGroup(t *testing.T) {
 	core.NextJid = 0
-	_, rq := newRequest(t)
+	_, rq := testutil.NewCoreRequest(t)
 	var sb strings.Builder
 	rw := RequestWriter{Request: rq, Writer: &sb}
 
