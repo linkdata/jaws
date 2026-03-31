@@ -432,8 +432,7 @@ import (
 
 type bindingHook[T comparable] struct {
         Binder[T]
-        ClickHandler
-        hook any // one of: BindGetHook[T] BindSetHook[T] BindClickedHook BindSuccessHook
+        hook any // one of: BindGetHook[T] BindSetHook[T] BindClickedHook[T] BindSuccessHook
 }
 
 func (bind bindingHook[T]) JawsBinderPrev() Binder[T] <span class="cov8" title="1">{
@@ -466,15 +465,34 @@ func (bind bindingHook[T]) jawsSetLocking(elem *Element, value T) (err error) <s
         return bind.JawsSetLocked(elem, value)
 }</span>
 
-func callSuccess[T comparable](binder Binder[T], elem *Element) (err error) <span class="cov8" title="1">{
+type callChainType int
+
+const (
+        callChainInvalid = callChainType(iota)
+        callChainSuccess
+        callChainClicked
+)
+
+func callChain[T comparable](binder Binder[T], elem *Element, kind callChainType, param any) (err error) <span class="cov8" title="1">{
         if prev := binder.JawsBinderPrev(); prev != nil </span><span class="cov8" title="1">{
-                err = callSuccess(prev, elem)
+                err = callChain(prev, elem, kind, param)
+        }</span> else<span class="cov8" title="1"> if kind == callChainClicked </span><span class="cov8" title="1">{
+                err = ErrEventUnhandled
         }</span>
-        <span class="cov8" title="1">if err == nil </span><span class="cov8" title="1">{
-                if bind, ok := binder.(bindingHook[T]); ok </span><span class="cov8" title="1">{
-                        if fn, ok := bind.hook.(BindSuccessHook); ok </span><span class="cov8" title="1">{
-                                return fn(elem)
-                        }</span>
+        <span class="cov8" title="1">if bh, ok := binder.(bindingHook[T]); ok </span><span class="cov8" title="1">{
+                switch kind </span>{
+                case callChainSuccess:<span class="cov8" title="1">
+                        if err == nil </span><span class="cov8" title="1">{
+                                if fn, ok := bh.hook.(BindSuccessHook); ok </span><span class="cov8" title="1">{
+                                        err = fn(elem)
+                                }</span>
+                        }
+                case callChainClicked:<span class="cov8" title="1">
+                        if err == ErrEventUnhandled </span><span class="cov8" title="1">{
+                                if fn, ok := bh.hook.(BindClickedHook[T]); ok </span><span class="cov8" title="1">{
+                                        err = fn(elem, param.(string))
+                                }</span>
+                        }
                 }
         }
         <span class="cov8" title="1">return</span>
@@ -482,18 +500,15 @@ func callSuccess[T comparable](binder Binder[T], elem *Element) (err error) <spa
 
 func (bind bindingHook[T]) JawsSet(elem *Element, value T) (err error) <span class="cov8" title="1">{
         if err = bind.jawsSetLocking(elem, value); err == nil </span><span class="cov8" title="1">{
-                err = callSuccess(bind, elem)
+                err = callChain(bind, elem, callChainSuccess, nil)
         }</span>
         <span class="cov8" title="1">return</span>
 }
 
 func (bind bindingHook[T]) JawsClick(elem *Element, name string) (err error) <span class="cov8" title="1">{
-        err = ErrEventUnhandled
-        if fn, ok := bind.hook.(BindClickedHook[T]); ok </span><span class="cov8" title="1">{
-                err = fn(elem, name)
-        }</span>
-        <span class="cov8" title="1">return</span>
-}
+        err = callChain(bind, elem, callChainClicked, name)
+        return
+}</span>
 
 // SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
 //
