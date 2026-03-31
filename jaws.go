@@ -10,7 +10,6 @@ import (
 	"github.com/linkdata/jaws/core/htmlx"
 	"github.com/linkdata/jaws/core/named"
 	"github.com/linkdata/jaws/core/tags"
-	"github.com/linkdata/jaws/core/testkit"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/ui"
 )
@@ -84,7 +83,7 @@ type (
 	// TestRequest is a request harness intended for tests.
 	//
 	// Exposed for testing only.
-	TestRequest = testkit.TestRequest
+	TestRequest = core.TestRequest
 )
 
 var (
@@ -143,7 +142,7 @@ var (
 	// Passing nil for hr will create a "GET /" request with no body.
 	//
 	// Exposed for testing only.
-	NewTestRequest = testkit.NewTestRequest
+	NewTestRequest = core.NewTestRequest
 )
 
 // Bind returns a Binder[T] with the given sync.Locker (or RWLocker) and a pointer to the underlying value of type T.
