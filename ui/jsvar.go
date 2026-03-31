@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	core "github.com/linkdata/jaws/core"
+	"github.com/linkdata/jaws/core/tags"
 	"github.com/linkdata/jaws/what"
 	"github.com/linkdata/jq"
 )
@@ -177,7 +178,7 @@ func (ui *JsVar[T]) JawsRender(e *core.Element, w io.Writer, params []any) (err 
 	return
 }
 
-func (ui *JsVar[T]) JawsGetTag(rq *core.Request) any {
+func (ui *JsVar[T]) JawsGetTag(tags.Context) any {
 	return ui.Tag
 }
 

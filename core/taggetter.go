@@ -1,5 +1,8 @@
 package jaws
 
-type TagGetter interface {
-	JawsGetTag(rq *Request) any // Note that the Request may be nil
-}
+import "github.com/linkdata/jaws/core/tags"
+
+// TagContext is passed to TagGetter.JawsGetTag when resolving dynamic tags.
+type TagContext = tags.Context
+
+type TagGetter = tags.TagGetter

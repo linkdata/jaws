@@ -20,12 +20,8 @@ func Test_newErrNotComparable_Error(t *testing.T) {
 		t.Fatalf("unexpected error text %q, want %q", got, want)
 	}
 
-	var typed errNotComparable
-	if !errors.As(err, &typed) {
-		t.Fatalf("expected errNotComparable, got %T", err)
-	}
-	if got := typed.Error(); got != want {
-		t.Fatalf("unexpected typed error text %q, want %q", got, want)
+	if !errors.Is(err, ErrNotComparable) {
+		t.Fatalf("expected ErrNotComparable, got %v", err)
 	}
 }
 

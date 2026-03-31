@@ -11,6 +11,7 @@ import (
 	"time"
 
 	core "github.com/linkdata/jaws/core"
+	"github.com/linkdata/jaws/core/tags"
 )
 
 type testRWUpdater struct {
@@ -26,7 +27,7 @@ type requestWriterFailGetter struct {
 }
 
 func (g requestWriterFailGetter) JawsGetHTML(*core.Element) template.HTML { return "x" }
-func (g requestWriterFailGetter) JawsGetTag(*core.Request) any            { return g }
+func (g requestWriterFailGetter) JawsGetTag(tags.Context) any             { return g }
 func (g requestWriterFailGetter) JawsInit(*core.Element) error            { return g.err }
 
 func newSessionBoundRequest(t *testing.T) (*core.Jaws, *core.Request) {

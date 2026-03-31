@@ -1,6 +1,10 @@
 package jaws
 
-import "html/template"
+import (
+	"html/template"
+
+	"github.com/linkdata/jaws/core/tags"
+)
 
 type htmlGetterFunc struct {
 	fn   func(*Element) template.HTML
@@ -13,7 +17,7 @@ func (g *htmlGetterFunc) JawsGetHTML(e *Element) template.HTML {
 	return g.fn(e)
 }
 
-func (g *htmlGetterFunc) JawsGetTag(e *Request) any {
+func (g *htmlGetterFunc) JawsGetTag(tags.Context) any {
 	return g.tags
 }
 

@@ -13,13 +13,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/linkdata/jaws/core/tags"
 	"github.com/linkdata/jaws/secureheaders"
 	"github.com/linkdata/jaws/what"
 )
 
 type testBroadcastTagGetter struct{}
 
-func (testBroadcastTagGetter) JawsGetTag(*Request) any {
+func (testBroadcastTagGetter) JawsGetTag(tags.Context) any {
 	return Tag("expanded")
 }
 

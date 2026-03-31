@@ -3,6 +3,8 @@ package jaws
 import (
 	"errors"
 	"fmt"
+
+	"github.com/linkdata/jaws/core/tags"
 )
 
 var ErrValueNotSettable = errors.New("value not settable")
@@ -23,7 +25,7 @@ func (s getterStatic[T]) JawsGet(*Element) T {
 	return s.v
 }
 
-func (s getterStatic[T]) JawsGetTag(*Request) any {
+func (s getterStatic[T]) JawsGetTag(tags.Context) any {
 	return nil
 }
 

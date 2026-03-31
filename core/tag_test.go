@@ -10,18 +10,19 @@ import (
 	"testing"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/core/tags"
 )
 
 type testSelfTagger struct {
 }
 
-func (tt *testSelfTagger) JawsGetTag(rq *Request) any {
+func (tt *testSelfTagger) JawsGetTag(tags.Context) any {
 	return tt
 }
 
 type testBadTagGetter []int
 
-func (tt testBadTagGetter) JawsGetTag(*Request) any {
+func (tt testBadTagGetter) JawsGetTag(tags.Context) any {
 	return tt
 }
 
@@ -183,7 +184,7 @@ func TestTagExpand_NotUsableAsTag_WithNestedTagGetterHint(t *testing.T) {
 	if !strings.Contains(err.Error(), "found nested TagGetter at Setter") {
 		t.Fatalf("expected nested TagGetter search result in error text, got %q", err.Error())
 	}
-	if !strings.Contains(err.Error(), "implement JawsGetTag(*Request)") {
+	if !strings.Contains(err.Error(), "implement JawsGetTag(tags.Context)") {
 		t.Fatalf("expected remediation hint in error text, got %q", err.Error())
 	}
 }

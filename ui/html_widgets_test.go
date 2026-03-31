@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	core "github.com/linkdata/jaws/core"
+	"github.com/linkdata/jaws/core/tags"
 )
 
 func TestHTMLWidgets_ConstructorsAndRender(t *testing.T) {
@@ -53,7 +54,7 @@ type initFailGetter struct {
 }
 
 func (g *initFailGetter) JawsGetHTML(*core.Element) template.HTML { return "x" }
-func (g *initFailGetter) JawsGetTag(*core.Request) any            { return g }
+func (g *initFailGetter) JawsGetTag(tags.Context) any             { return g }
 func (g *initFailGetter) JawsInit(*core.Element) error            { return g.err }
 
 func TestImg_RenderAndUpdate(t *testing.T) {

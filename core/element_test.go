@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/core/tags"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
 )
@@ -69,7 +70,7 @@ type testApplyGetterAll struct {
 	initErr error
 }
 
-func (a testApplyGetterAll) JawsGetTag(*Request) any { return Tag("tg") }
+func (a testApplyGetterAll) JawsGetTag(tags.Context) any { return Tag("tg") }
 func (a testApplyGetterAll) JawsClick(*Element, string) error {
 	return ErrEventUnhandled
 }

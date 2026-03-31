@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/linkdata/jaws/core/tags"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -34,7 +35,7 @@ func (t *testJawsEvent) JawsEvent(e *Element, wht what.What, val string) (err er
 	return
 }
 
-func (t *testJawsEvent) JawsGetTag(*Request) (tag any) {
+func (t *testJawsEvent) JawsGetTag(tags.Context) (tag any) {
 	return t.tag
 }
 

@@ -1,0 +1,16 @@
+.jaws-lost {
+    display: flex;
+    position: relative;
+    z-index: 1000;
+    height: 3em;
+    width: 100vw;
+    left: 50%;
+    margin-left: -50vw;
+    right: 50%;
+    margin-right:-50vw;
+    justify-content: center;
+    align-items: center;
+    background-color: red;
+    color: white;
+}
+

@@ -2,6 +2,8 @@ package jaws
 
 import (
 	"fmt"
+
+	"github.com/linkdata/jaws/core/tags"
 )
 
 type Setter[T comparable] interface {
@@ -18,7 +20,7 @@ func (setterReadOnly[T]) JawsSet(*Element, T) error {
 	return ErrValueNotSettable
 }
 
-func (s setterReadOnly[T]) JawsGetTag(*Request) any {
+func (s setterReadOnly[T]) JawsGetTag(tags.Context) any {
 	return s.Getter
 }
 
@@ -34,7 +36,7 @@ func (s setterStatic[T]) JawsGet(*Element) T {
 	return s.v
 }
 
-func (s setterStatic[T]) JawsGetTag(*Request) any {
+func (s setterStatic[T]) JawsGetTag(tags.Context) any {
 	return nil
 }
 

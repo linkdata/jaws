@@ -3,6 +3,8 @@ package jaws
 import (
 	"fmt"
 	"html/template"
+
+	"github.com/linkdata/jaws/core/tags"
 )
 
 type binding[T comparable] struct {
@@ -40,7 +42,7 @@ func (bind binding[T]) JawsSet(elem *Element, value T) (err error) {
 	return
 }
 
-func (bind binding[T]) JawsGetTag(*Request) any {
+func (bind binding[T]) JawsGetTag(tags.Context) any {
 	return bind.ptr
 }
 

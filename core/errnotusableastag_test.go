@@ -3,11 +3,13 @@ package jaws
 import (
 	"reflect"
 	"testing"
+
+	"github.com/linkdata/jaws/core/tags"
 )
 
 type testFindTagGetter struct{}
 
-func (testFindTagGetter) JawsGetTag(*Request) any {
+func (testFindTagGetter) JawsGetTag(tags.Context) any {
 	return Tag("tg")
 }
 
