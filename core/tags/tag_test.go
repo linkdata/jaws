@@ -253,3 +253,40 @@ func TestTagExpand_IllegalTypesAsErrors(t *testing.T) {
 		})
 	}
 }
+
+type mustLogContext struct {
+	err error
+}
+
+func (ctx *mustLogContext) MustLog(err error) {
+	ctx.err = err
+}
+
+func TestTagString_DefaultFormatting(t *testing.T) {
+	got := TagString(Tag("plain"))
+	if !strings.Contains(got, `"plain"`) {
+		t.Fatalf("TagString(Tag(\"plain\")) = %q, want quoted fallback formatting", got)
+	}
+}
+
+func TestTagExpand_TagGetterRecurses(t *testing.T) {
+	got, err := TagExpand(nil, testNestedTagGetter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []any{Tag("nested")}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("TagExpand(testNestedTagGetter{}):\n got %#v\nwant %#v", got, want)
+	}
+}
+
+func TestMustTagExpand_UsesContextMustLog(t *testing.T) {
+	ctx := &mustLogContext{}
+	got := MustTagExpand(ctx, "plain-string")
+	if got != nil {
+		t.Fatalf("MustTagExpand returned %#v, want nil", got)
+	}
+	if !errors.Is(ctx.err, ErrIllegalTagType) {
+		t.Fatalf("expected ErrIllegalTagType, got %v", ctx.err)
+	}
+}
