@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/linkdata/jaws/core/tags"
 )
 
 func TestJaws_Session(t *testing.T) {
@@ -11,7 +13,7 @@ func TestJaws_Session(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 
-	dot := Tag("123")
+	dot := tags.Tag("123")
 
 	h := rq.Jaws.Session(rq.Jaws.Handler("testtemplate", dot))
 	var buf bytes.Buffer

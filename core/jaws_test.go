@@ -13,7 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/linkdata/jaws/core/assets"
 	"github.com/linkdata/jaws/core/tags"
+	"github.com/linkdata/jaws/core/wire"
 	"github.com/linkdata/jaws/secureheaders"
 	"github.com/linkdata/jaws/what"
 )
@@ -21,7 +23,7 @@ import (
 type testBroadcastTagGetter struct{}
 
 func (testBroadcastTagGetter) JawsGetTag(tags.Context) any {
-	return Tag("expanded")
+	return tags.Tag("expanded")
 }
 
 func TestCoverage_GenerateHeadAndConvenienceBroadcasts(t *testing.T) {
@@ -106,7 +108,7 @@ func TestBroadcast_ExpandsTagDestBeforeQueue(t *testing.T) {
 
 	tagger := testBroadcastTagGetter{}
 
-	jw.Broadcast(Message{
+	jw.Broadcast(wire.Message{
 		Dest: tagger,
 		What: what.Inner,
 		Data: "x",
@@ -115,12 +117,12 @@ func TestBroadcast_ExpandsTagDestBeforeQueue(t *testing.T) {
 	if msg.What != what.Inner || msg.Data != "x" {
 		t.Fatalf("unexpected msg %#v", msg)
 	}
-	if got, ok := msg.Dest.(Tag); !ok || got != Tag("expanded") {
+	if got, ok := msg.Dest.(tags.Tag); !ok || got != tags.Tag("expanded") {
 		t.Fatalf("expected expanded Tag destination, got %T(%#v)", msg.Dest, msg.Dest)
 	}
 
-	jw.Broadcast(Message{
-		Dest: []any{tagger, Tag("extra")},
+	jw.Broadcast(wire.Message{
+		Dest: []any{tagger, tags.Tag("extra")},
 		What: what.Value,
 		Data: "v",
 	})
@@ -132,11 +134,11 @@ func TestBroadcast_ExpandsTagDestBeforeQueue(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected []any destination, got %T(%#v)", msg.Dest, msg.Dest)
 	}
-	if len(dest) != 2 || dest[0] != Tag("expanded") || dest[1] != Tag("extra") {
+	if len(dest) != 2 || dest[0] != tags.Tag("expanded") || dest[1] != tags.Tag("extra") {
 		t.Fatalf("unexpected expanded destination %#v", dest)
 	}
 
-	jw.Broadcast(Message{
+	jw.Broadcast(wire.Message{
 		Dest: "html-id",
 		What: what.Delete,
 	})
@@ -153,7 +155,7 @@ func TestBroadcast_NoneDestination(t *testing.T) {
 	}
 	defer jw.Close()
 
-	jw.Broadcast(Message{
+	jw.Broadcast(wire.Message{
 		Dest: []any{},
 		What: what.Update,
 		Data: "x",
@@ -173,12 +175,12 @@ func TestBroadcast_ReturnsWhenClosedAndQueueFull(t *testing.T) {
 	}
 	defer jw.Close()
 
-	jw.Broadcast(Message{What: what.Alert, Data: "info\nfirst"})
+	jw.Broadcast(wire.Message{What: what.Alert, Data: "info\nfirst"})
 	jw.Close()
 
 	done := make(chan struct{})
 	go func() {
-		jw.Broadcast(Message{What: what.Alert, Data: "info\nsecond"})
+		jw.Broadcast(wire.Message{What: what.Alert, Data: "info\nsecond"})
 		close(done)
 	}()
 
@@ -357,11 +359,11 @@ func TestJaws_distributeDirt_AscendingOrder(t *testing.T) {
 	rq := &Request{}
 	jw.mu.Lock()
 	jw.requests[1] = rq
-	jw.dirty[Tag("fourth")] = 4
-	jw.dirty[Tag("second")] = 2
-	jw.dirty[Tag("fifth")] = 5
-	jw.dirty[Tag("first")] = 1
-	jw.dirty[Tag("third")] = 3
+	jw.dirty[tags.Tag("fourth")] = 4
+	jw.dirty[tags.Tag("second")] = 2
+	jw.dirty[tags.Tag("fifth")] = 5
+	jw.dirty[tags.Tag("first")] = 1
+	jw.dirty[tags.Tag("third")] = 3
 	jw.dirtOrder = 5
 	jw.mu.Unlock()
 
@@ -374,11 +376,11 @@ func TestJaws_distributeDirt_AscendingOrder(t *testing.T) {
 	rq.mu.RUnlock()
 
 	want := []any{
-		Tag("first"),
-		Tag("second"),
-		Tag("third"),
-		Tag("fourth"),
-		Tag("fifth"),
+		tags.Tag("first"),
+		tags.Tag("second"),
+		tags.Tag("third"),
+		tags.Tag("fourth"),
+		tags.Tag("fifth"),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("dirty tags = %#v, want %#v", got, want)
@@ -478,8 +480,8 @@ func TestCoverage_IDAndLookupHelpers(t *testing.T) {
 
 func TestCoverage_CookieParseAndIP(t *testing.T) {
 	h := http.Header{}
-	h.Add("Cookie", `a=1; jaws=`+JawsKeyString(11)+`; x=2`)
-	h.Add("Cookie", `jaws="`+JawsKeyString(12)+`"`)
+	h.Add("Cookie", `a=1; jaws=`+assets.JawsKeyString(11)+`; x=2`)
+	h.Add("Cookie", `jaws="`+assets.JawsKeyString(12)+`"`)
 	h.Add("Cookie", `jaws=not-a-key`)
 
 	ids := getCookieSessionsIds(h, "jaws")
@@ -564,7 +566,7 @@ func TestJaws_ServeWithTimeoutFullSubscriberChannel(t *testing.T) {
 	}
 	defer jw.Close()
 	rq := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
-	msgCh := make(chan Message) // unbuffered: always full when nobody receives
+	msgCh := make(chan wire.Message) // unbuffered: always full when nobody receives
 	done := make(chan struct{})
 	go func() {
 		jw.ServeWithTimeout(50 * time.Millisecond)
@@ -575,7 +577,7 @@ func TestJaws_ServeWithTimeoutFullSubscriberChannel(t *testing.T) {
 	for i := 0; i <= cap(jw.subCh); i++ {
 		jw.subCh <- subscription{}
 	}
-	jw.bcastCh <- Message{What: what.Alert, Data: "x"}
+	jw.bcastCh <- wire.Message{What: what.Alert, Data: "x"}
 
 	waitUntil := time.Now().Add(time.Second)
 	closed := false

@@ -3,6 +3,8 @@ package jaws
 import (
 	"reflect"
 	"testing"
+
+	"github.com/linkdata/jaws/core/tags"
 )
 
 func TestStringGetterFunc(t *testing.T) {
@@ -13,7 +15,7 @@ func TestStringGetterFunc(t *testing.T) {
 	if s := sg.JawsGet(nil); s != "foo" {
 		t.Error(s)
 	}
-	if tags := MustTagExpand(nil, sg); !reflect.DeepEqual(tags, []any{tt}) {
-		t.Error(tags)
+	if got := tags.MustTagExpand(nil, sg); !reflect.DeepEqual(got, []any{tt}) {
+		t.Error(got)
 	}
 }

@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/linkdata/jaws/core/assets"
+	"github.com/linkdata/jaws/core/wire"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -48,7 +50,7 @@ func TestSession_Object(t *testing.T) {
 	if jw.CookieName != cookie.Name {
 		t.Error(cookie.Name)
 	}
-	if JawsKeyString(sessionId) != cookie.Value {
+	if assets.JawsKeyString(sessionId) != cookie.Value {
 		t.Error(cookie.Value)
 	}
 	if sessionId != sess.ID() {
@@ -315,7 +317,7 @@ func TestSession_Broadcast(t *testing.T) {
 		t.Fatalf("request 2 session mismatch: %v", got)
 	}
 
-	msg := Message{What: what.Alert, Data: "info\nhello"}
+	msg := wire.Message{What: what.Alert, Data: "info\nhello"}
 	done := make(chan struct{})
 	go func() {
 		sess.Broadcast(msg)
@@ -325,7 +327,7 @@ func TestSession_Broadcast(t *testing.T) {
 	msg1 := nextBroadcast(t, jw)
 	msg2 := nextBroadcast(t, jw)
 
-	for i, got := range []Message{msg1, msg2} {
+	for i, got := range []wire.Message{msg1, msg2} {
 		if got.What != msg.What || got.Data != msg.Data {
 			t.Fatalf("message %d mismatch: %#v", i+1, got)
 		}
@@ -453,7 +455,7 @@ func TestSession_Delete(t *testing.T) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	msg := WsMsg{Jid: jidForTag(ts.rq, byebyeItem), What: what.Input}
+	msg := wire.WsMsg{Jid: jidForTag(ts.rq, byebyeItem), What: what.Input}
 	ctx, cancel := context.WithCancel(ts.ctx)
 	defer cancel()
 

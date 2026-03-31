@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"sync/atomic"
 	"testing"
+
+	"github.com/linkdata/jaws/core/tags"
 )
 
 type testStringer struct{}
@@ -103,7 +105,7 @@ func Test_MakeHTMLGetter(t *testing.T) {
 			if txt := got.JawsGetHTML(nil); txt != tt.out {
 				t.Errorf("MakeHTMLGetter(%s).JawsGetHTML() = %v, want %v", tt.name, txt, tt.out)
 			}
-			if tag := got.(TagGetter).JawsGetTag(nil); tag != tt.tag {
+			if tag := got.(tags.TagGetter).JawsGetTag(nil); tag != tt.tag {
 				t.Errorf("MakeHTMLGetter(%s).JawsGetTag() = %v, want %v", tt.name, tag, tt.tag)
 			}
 		})

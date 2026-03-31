@@ -4,16 +4,18 @@ import (
 	"io"
 	"testing"
 	"time"
+
+	"github.com/linkdata/jaws/core/wire"
 )
 
-func nextBroadcast(t *testing.T, jw *Jaws) Message {
+func nextBroadcast(t *testing.T, jw *Jaws) wire.Message {
 	t.Helper()
 	select {
 	case msg := <-jw.bcastCh:
 		return msg
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for broadcast")
-		return Message{}
+		return wire.Message{}
 	}
 }
 

@@ -19,16 +19,18 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/core/tags"
+	"github.com/linkdata/jaws/core/wire"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
 )
 
 const testTimeout = time.Second * 3
 
-func fillWsCh(ch chan WsMsg) {
+func fillWsCh(ch chan wire.WsMsg) {
 	for {
 		select {
-		case ch <- WsMsg{}:
+		case ch <- wire.WsMsg{}:
 		default:
 			return
 		}
@@ -68,10 +70,10 @@ func TestRequest_Registrations(t *testing.T) {
 
 	x := &testUi{}
 
-	is.Equal(rq.wantMessage(&Message{Dest: x}), false)
+	is.Equal(rq.wantMessage(&wire.Message{Dest: x}), false)
 	jid := rq.Register(x)
 	is.True(jid.IsValid())
-	is.Equal(rq.wantMessage(&Message{Dest: x}), true)
+	is.Equal(rq.wantMessage(&wire.Message{Dest: x}), true)
 }
 
 func TestRequest_HeadHTML(t *testing.T) {
@@ -213,7 +215,7 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 	jid := rq.Register(x)
 	elem := rq.GetElementByJid(jid)
 	is.True(elem != nil)
-	rq.Jaws.Broadcast(Message{Dest: x, What: what.Inner, Data: "bar"})
+	rq.Jaws.Broadcast(wire.Message{Dest: x, What: what.Inner, Data: "bar"})
 	select {
 	case <-time.NewTimer(time.Hour).C:
 		is.Error("timeout")
@@ -221,7 +223,7 @@ func TestRequest_SendArrivesOk(t *testing.T) {
 		elem := rq.GetElementByJid(jid)
 		is.True(elem != nil)
 		if elem != nil {
-			is.Equal(msg, WsMsg{Jid: elem.jid, Data: "bar", What: what.Inner})
+			is.Equal(msg, wire.WsMsg{Jid: elem.jid, Data: "bar", What: what.Inner})
 		}
 	}
 }
@@ -285,12 +287,12 @@ func TestRequest_SetContextCancellationStopsQueuedEvents(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.InCh <- WsMsg{Jid: jid, What: what.Input, Data: "1"}:
+	case rq.InCh <- wire.WsMsg{Jid: jid, What: what.Input, Data: "1"}:
 	}
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.InCh <- WsMsg{Jid: jid, What: what.Input, Data: "2"}:
+	case rq.InCh <- wire.WsMsg{Jid: jid, What: what.Input, Data: "2"}:
 	}
 	select {
 	case <-th.C:
@@ -329,7 +331,7 @@ func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 		return errors.New(val)
 	})
 	fillWsCh(rq.OutCh)
-	rq.Jaws.Broadcast(Message{Dest: x, What: what.Hook, Data: "bar"})
+	rq.Jaws.Broadcast(wire.Message{Dest: x, What: what.Hook, Data: "bar"})
 
 	select {
 	case <-th.C:
@@ -371,7 +373,7 @@ func TestRequest_Trigger(t *testing.T) {
 	})
 
 	// broadcasts from ourselves should not invoke fn
-	rq.Jaws.Broadcast(Message{Dest: endItem, What: what.Input, Data: ""}) // to know when to stop
+	rq.Jaws.Broadcast(wire.Message{Dest: endItem, What: what.Input, Data: ""}) // to know when to stop
 	select {
 	case <-th.C:
 		th.Timeout()
@@ -383,7 +385,7 @@ func TestRequest_Trigger(t *testing.T) {
 	}
 
 	// global broadcast should invoke fn
-	rq.Jaws.Broadcast(Message{Dest: fooItem, What: what.Input, Data: "bar"})
+	rq.Jaws.Broadcast(wire.Message{Dest: fooItem, What: what.Input, Data: "bar"})
 	select {
 	case <-th.C:
 		th.Timeout()
@@ -393,12 +395,12 @@ func TestRequest_Trigger(t *testing.T) {
 	}
 
 	// fn returning error should send an danger alert message
-	rq.Jaws.Broadcast(Message{Dest: errItem, What: what.Input, Data: "omg"})
+	rq.Jaws.Broadcast(wire.Message{Dest: errItem, What: what.Input, Data: "omg"})
 	select {
 	case <-th.C:
 		th.Timeout()
 	case msg := <-rq.OutCh:
-		th.Equal(msg.Format(), (&WsMsg{
+		th.Equal(msg.Format(), (&wire.WsMsg{
 			Data: "danger\nomg",
 			Jid:  jid.Jid(0),
 			What: what.Alert,
@@ -437,7 +439,7 @@ func TestRequest_EventFnQueue(t *testing.T) {
 	})
 
 	for i := 0; i < cap(rq.OutCh); i++ {
-		rq.Jaws.Broadcast(Message{Dest: sleepItem, What: what.Input, Data: strconv.Itoa(i + 1)})
+		rq.Jaws.Broadcast(wire.Message{Dest: sleepItem, What: what.Input, Data: strconv.Itoa(i + 1)})
 	}
 
 	select {
@@ -505,7 +507,7 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 			return
 		case <-th.C:
 			th.Timeout()
-		case rq.InCh <- WsMsg{Jid: jid, What: what.Input}:
+		case rq.InCh <- wire.WsMsg{Jid: jid, What: what.Input}:
 		}
 	}
 }
@@ -528,7 +530,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	rq.Register(spewItem, func(e *Element, evt what.What, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		if len(rq.OutCh) < cap(rq.OutCh) {
-			rq.Jaws.Broadcast(Message{Dest: spewItem, What: what.Input})
+			rq.Jaws.Broadcast(wire.Message{Dest: spewItem, What: what.Input})
 			return errors.New("chunks")
 		}
 		atomic.StoreInt32(&spewState, 1)
@@ -547,7 +549,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	fooItem := &testUi{}
 	rq.Register(fooItem)
 
-	rq.Jaws.Broadcast(Message{Dest: spewItem, What: what.Input})
+	rq.Jaws.Broadcast(wire.Message{Dest: spewItem, What: what.Input})
 
 	// wait for the event fn to be in hold state
 	waited := 0
@@ -570,10 +572,10 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 		case <-th.C:
 			th.Timeout()
 		default:
-			rq.Jaws.Broadcast(Message{Dest: rq})
+			rq.Jaws.Broadcast(wire.Message{Dest: rq})
 		}
 		select {
-		case rq.InCh <- WsMsg{}:
+		case rq.InCh <- wire.WsMsg{}:
 		case <-rq.DoneCh:
 			th.Fatal()
 		case <-th.C:
@@ -672,27 +674,27 @@ func TestRequest_DeleteByTag(t *testing.T) {
 	ui1 := &testUi{}
 	e11 := rq1.NewElement(ui1)
 	th.Equal(e11.jid, Jid(1))
-	e11.Tag(Tag("e11"), Tag("foo"))
+	e11.Tag(tags.Tag("e11"), tags.Tag("foo"))
 	e12 := rq1.NewElement(ui1)
 	th.Equal(e12.jid, Jid(2))
-	e12.Tag(Tag("e12"))
+	e12.Tag(tags.Tag("e12"))
 	e13 := rq1.NewElement(ui1)
 	th.Equal(e13.jid, Jid(3))
-	e13.Tag(Tag("e13"), Tag("bar"))
+	e13.Tag(tags.Tag("e13"), tags.Tag("bar"))
 
 	rq2 := tj.newRequest(nil)
 	ui2 := &testUi{}
 	e21 := rq2.NewElement(ui2)
 	th.Equal(e21.jid, Jid(4))
-	e21.Tag(Tag("e21"), Tag("foo"))
+	e21.Tag(tags.Tag("e21"), tags.Tag("foo"))
 	e22 := rq2.NewElement(ui2)
 	th.Equal(e22.jid, Jid(5))
-	e22.Tag(Tag("e22"))
+	e22.Tag(tags.Tag("e22"))
 	e23 := rq2.NewElement(ui2)
 	th.Equal(e23.jid, Jid(6))
-	e23.Tag(Tag("e23"))
+	e23.Tag(tags.Tag("e23"))
 
-	tj.Delete([]any{Tag("foo"), Tag("bar"), Tag("nothere"), Tag("e23")})
+	tj.Delete([]any{tags.Tag("foo"), tags.Tag("bar"), tags.Tag("nothere"), tags.Tag("e23")})
 
 	select {
 	case <-th.C:
@@ -742,7 +744,7 @@ func TestRequest_HTMLIdBroadcast(t *testing.T) {
 	rq1 := tj.newRequest(nil)
 	rq2 := tj.newRequest(nil)
 
-	tj.Broadcast(Message{
+	tj.Broadcast(wire.Message{
 		Dest: "fooId",
 		What: what.Inner,
 		Data: "inner",
@@ -951,7 +953,7 @@ func TestRequest_IncomingRemove(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.InCh <- WsMsg{What: what.Remove, Jid: 1, Data: "Jid.1"}:
+	case rq.InCh <- wire.WsMsg{What: what.Remove, Jid: 1, Data: "Jid.1"}:
 	}
 
 	elem := rq.GetElementByJid(1)
@@ -988,7 +990,7 @@ func TestRequest_IncomingClick(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.InCh <- WsMsg{What: what.Click, Data: "name\tJid.1\tJid.2"}:
+	case rq.InCh <- wire.WsMsg{What: what.Click, Data: "name\tJid.1\tJid.2"}:
 	}
 
 	select {
@@ -1030,7 +1032,7 @@ func TestRequest_renderDebugLocked(t *testing.T) {
 
 	tss := &testUi{}
 	e := rq.NewElement(tss)
-	e.Tag(Tag("zomg"))
+	e.Tag(tags.Tag("zomg"))
 
 	var sb strings.Builder
 	e.renderDebug(&sb)
@@ -1101,7 +1103,7 @@ func TestCoverage_PendingSubscribeMaintenanceAndParse(t *testing.T) {
 
 	// done-channel branch in subscribe and unsubscribe.
 	jw.subCh <- subscription{} // fill channel so send case is not selectable
-	jw.unsubCh <- make(chan Message)
+	jw.unsubCh <- make(chan wire.Message)
 	jw.Close()
 	if ch := jw.subscribe(nil, 1); ch != nil {
 		t.Fatalf("expected nil subscription after close, got %v", ch)
@@ -1194,9 +1196,9 @@ func TestCoverage_RequestProcessHTTPDoneAndBroadcastDone(t *testing.T) {
 	if err := rq.claim(hr); err != nil {
 		t.Fatal(err)
 	}
-	bcastCh := make(chan Message)
-	inCh := make(chan WsMsg)
-	outCh := make(chan WsMsg, 1)
+	bcastCh := make(chan wire.Message)
+	inCh := make(chan wire.WsMsg)
+	outCh := make(chan wire.WsMsg, 1)
 	done := make(chan struct{})
 	go func() {
 		rq.process(bcastCh, inCh, outCh)
@@ -1210,7 +1212,7 @@ func TestCoverage_RequestProcessHTTPDoneAndBroadcastDone(t *testing.T) {
 	}
 
 	jw.Close()
-	jw.Broadcast(Message{What: what.Update})
+	jw.Broadcast(wire.Message{What: what.Update})
 }
 
 func TestRequestRecycle_StaleElementIsInert(t *testing.T) {
@@ -1321,11 +1323,11 @@ func TestRequest_Template(t *testing.T) {
 			name: "testtemplate-with-tags",
 			args: args{
 				"testtemplate",
-				Tag("stringtag1"),
-				[]any{`style="display: none"`, Tag("stringtag2"), "hidden"},
+				tags.Tag("stringtag1"),
+				[]any{`style="display: none"`, tags.Tag("stringtag2"), "hidden"},
 			},
 			want:   `<div id="Jid.1" style="display: none" hidden>stringtag1</div>`,
-			tags:   []any{Tag("stringtag1"), Tag("stringtag2")},
+			tags:   []any{tags.Tag("stringtag1"), tags.Tag("stringtag2")},
 			errtxt: "",
 		},
 	}
@@ -1386,11 +1388,11 @@ func TestRequest_Template_Event(t *testing.T) {
 	defer rq.Close()
 	dot := &templateDot{clickedCh: make(chan struct{})}
 	rq.Template("testtemplate", dot)
-	rq.Jaws.Broadcast(Message{
+	rq.Jaws.Broadcast(wire.Message{
 		Dest: dot,
 		What: what.Update,
 	})
-	rq.Jaws.Broadcast(Message{
+	rq.Jaws.Broadcast(wire.Message{
 		Dest: dot,
 		What: what.Click,
 		Data: "foo",
@@ -1403,14 +1405,14 @@ func TestRequest_Template_Event(t *testing.T) {
 	is.Equal(dot.gotName, "foo")
 }
 
-func nextOutboundMsg(t *testing.T, rq *testRequest) WsMsg {
+func nextOutboundMsg(t *testing.T, rq *testRequest) wire.WsMsg {
 	t.Helper()
 	select {
 	case msg := <-rq.OutCh:
 		return msg
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for outbound ws message")
-		return WsMsg{}
+		return wire.WsMsg{}
 	}
 }
 
@@ -1422,7 +1424,7 @@ func TestRequest_IncomingRemoveDoesNotDeleteMessageJid(t *testing.T) {
 	elem := rq.NewElement(&testUi{})
 
 	select {
-	case rq.InCh <- WsMsg{What: what.Remove, Jid: elem.Jid(), Data: ""}:
+	case rq.InCh <- wire.WsMsg{What: what.Remove, Jid: elem.Jid(), Data: ""}:
 	case <-time.After(time.Second):
 		t.Fatal("timeout sending incoming Remove message")
 	}
@@ -1538,7 +1540,7 @@ func TestRequest_IncomingRemoveWithZeroContainerJidIsIgnored(t *testing.T) {
 	elem := rq.NewElement(&testUi{})
 
 	select {
-	case rq.InCh <- WsMsg{What: what.Remove, Jid: 0, Data: elem.Jid().String()}:
+	case rq.InCh <- wire.WsMsg{What: what.Remove, Jid: 0, Data: elem.Jid().String()}:
 	case <-time.After(time.Second):
 		t.Fatal("timeout sending incoming Remove message")
 	}

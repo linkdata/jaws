@@ -2,6 +2,8 @@ package jaws
 
 import (
 	"testing"
+
+	"github.com/linkdata/jaws/core/tags"
 )
 
 const testStringGetterText = "<span>"
@@ -21,7 +23,7 @@ func Test_makeSetter(t *testing.T) {
 	if s := setter1.JawsGet(nil); s != testStringGetterText {
 		t.Error(s)
 	}
-	if tag := setter1.(TagGetter).JawsGetTag(nil); tag != tsg {
+	if tag := setter1.(tags.TagGetter).JawsGetTag(nil); tag != tsg {
 		t.Error(tag)
 	}
 
@@ -32,7 +34,7 @@ func Test_makeSetter(t *testing.T) {
 	if s := setter2.JawsGet(nil); s != "quux" {
 		t.Error(s)
 	}
-	if tag := setter2.(TagGetter).JawsGetTag(nil); tag != nil {
+	if tag := setter2.(tags.TagGetter).JawsGetTag(nil); tag != nil {
 		t.Error(tag)
 	}
 }

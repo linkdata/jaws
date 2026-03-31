@@ -3,6 +3,8 @@ package jaws
 import (
 	"reflect"
 	"testing"
+
+	"github.com/linkdata/jaws/core/tags"
 )
 
 type testGetter[T comparable] struct {
@@ -70,7 +72,7 @@ func Test_makeSetterFloat64_int(t *testing.T) {
 	if x := gotS.JawsGet(nil); x != 1 {
 		t.Error(x)
 	}
-	tg := gotS.(TagGetter)
+	tg := gotS.(tags.TagGetter)
 	if x := tg.JawsGetTag(nil); x != tsint {
 		t.Error(x)
 	}
@@ -86,7 +88,7 @@ func Test_makeSetterFloat64ReadOnly_int(t *testing.T) {
 	if x := gotS.JawsGet(nil); x != 1 {
 		t.Error(x)
 	}
-	tg := gotS.(TagGetter)
+	tg := gotS.(tags.TagGetter)
 	if x := tg.JawsGetTag(nil); x != tgint {
 		t.Error(x)
 	}
@@ -102,7 +104,7 @@ func Test_makeSetterFloat64Static_int(t *testing.T) {
 	if x := gotS.JawsGet(nil); x != 1 {
 		t.Error(x)
 	}
-	tg := gotS.(TagGetter)
+	tg := gotS.(tags.TagGetter)
 	if x := tg.JawsGetTag(nil); x != nil {
 		t.Error(x)
 	}

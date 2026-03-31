@@ -4,6 +4,8 @@ import (
 	"html/template"
 	"reflect"
 	"testing"
+
+	"github.com/linkdata/jaws/core/tags"
 )
 
 func TestHTMLGetterFunc(t *testing.T) {
@@ -14,7 +16,7 @@ func TestHTMLGetterFunc(t *testing.T) {
 	if s := hg.JawsGetHTML(nil); s != "foo" {
 		t.Error(s)
 	}
-	if tags := MustTagExpand(nil, hg); !reflect.DeepEqual(tags, []any{tt}) {
-		t.Error(tags)
+	if got := tags.MustTagExpand(nil, hg); !reflect.DeepEqual(got, []any{tt}) {
+		t.Error(got)
 	}
 }

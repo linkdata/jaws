@@ -13,6 +13,7 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/core/tags"
+	"github.com/linkdata/jaws/core/wire"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
 )
@@ -70,7 +71,7 @@ type testApplyGetterAll struct {
 	initErr error
 }
 
-func (a testApplyGetterAll) JawsGetTag(tags.Context) any { return Tag("tg") }
+func (a testApplyGetterAll) JawsGetTag(tags.Context) any { return tags.Tag("tg") }
 func (a testApplyGetterAll) JawsClick(*Element, string) error {
 	return ErrEventUnhandled
 }
@@ -102,9 +103,9 @@ func TestElement_Tag(t *testing.T) {
 
 	tss := &testUi{}
 	e := rq.NewElement(tss)
-	is.True(!e.HasTag(Tag("zomg")))
-	e.Tag(Tag("zomg"))
-	is.True(e.HasTag(Tag("zomg")))
+	is.True(!e.HasTag(tags.Tag("zomg")))
+	e.Tag(tags.Tag("zomg"))
+	is.True(e.HasTag(tags.Tag("zomg")))
 	s := e.String()
 	if !strings.Contains(s, "zomg") {
 		t.Error(s)
@@ -129,7 +130,7 @@ func TestElement_Queued(t *testing.T) {
 			e.Order([]jid.Jid{1, 2})
 			replaceHTML := template.HTML(fmt.Sprintf("<div id=\"%s\"></div>", e.Jid().String()))
 			e.Replace(replaceHTML)
-			th.Equal(rq.wsQueue, []WsMsg{
+			th.Equal(rq.wsQueue, []wire.WsMsg{
 				{
 					Data: "hidden\n",
 					Jid:  e.jid,
@@ -232,7 +233,7 @@ func TestElement_ReplaceMessageTargetsElementHTML(t *testing.T) {
 	// Element.Replace queues directly on the Request, so poke the process loop
 	// once to ensure queued messages are flushed to OutCh in this harness.
 	select {
-	case rq.InCh <- WsMsg{}:
+	case rq.InCh <- wire.WsMsg{}:
 	case <-time.After(time.Second):
 		t.Fatal("timeout waking request process loop")
 	}
@@ -283,7 +284,7 @@ func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
 	elem.renderDebug(&sb)
 	rq.mu.Unlock()
 
-	elem.Tag(Tag("a"), Tag("b"))
+	elem.Tag(tags.Tag("a"), tags.Tag("b"))
 	sb.Reset()
 	elem.renderDebug(&sb)
 	if !strings.Contains(sb.String(), ", ") {
@@ -319,7 +320,7 @@ func TestElement_ApplyGetterDebugBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error %v", err)
 	}
-	if !elem.HasTag(Tag("tg")) {
+	if !elem.HasTag(tags.Tag("tg")) {
 		t.Fatalf("missing Tag('tg') in %#v", gotTags)
 	}
 	agErr := testApplyGetterAll{initErr: tags.ErrNotComparable}

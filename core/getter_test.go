@@ -1,6 +1,10 @@
 package jaws
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/linkdata/jaws/core/tags"
+)
 
 func Test_makeGetter_panic(t *testing.T) {
 	defer func() {
@@ -24,7 +28,7 @@ func TestMakeGetter_GetterPassThroughAndTag(t *testing.T) {
 	if got := g.JawsGet(nil); got != "x" {
 		t.Fatalf("unexpected getter value %q", got)
 	}
-	if tag := g.(TagGetter).JawsGetTag(nil); tag != nil {
+	if tag := g.(tags.TagGetter).JawsGetTag(nil); tag != nil {
 		t.Fatalf("expected nil tag, got %#v", tag)
 	}
 
