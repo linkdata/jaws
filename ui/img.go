@@ -6,20 +6,22 @@ import (
 	"strconv"
 
 	core "github.com/linkdata/jaws/core"
+	"github.com/linkdata/jaws/core/bind"
+	"github.com/linkdata/jaws/core/htmlx"
 )
 
-type Img struct{ core.Getter[string] }
+type Img struct{ bind.Getter[string] }
 
-func NewImg(g core.Getter[string]) *Img { return &Img{Getter: g} }
+func NewImg(g bind.Getter[string]) *Img { return &Img{Getter: g} }
 func (rw RequestWriter) Img(imageSrc any, params ...any) error {
-	return rw.UI(NewImg(core.MakeGetter[string](imageSrc)), params...)
+	return rw.UI(NewImg(bind.MakeGetter[string](imageSrc)), params...)
 }
 
 func (ui *Img) JawsRender(e *core.Element, w io.Writer, params []any) (err error) {
 	if _, err = e.ApplyGetter(ui.Getter); err == nil {
 		srcAttr := template.HTMLAttr("src=" + strconv.Quote(ui.JawsGet(e))) // #nosec G203
 		attrs := append(e.ApplyParams(params), srcAttr)
-		err = core.WriteHTMLInner(w, e.Jid(), "img", "", "", attrs...)
+		err = htmlx.WriteHTMLInner(w, e.Jid(), "img", "", "", attrs...)
 	}
 	return
 }

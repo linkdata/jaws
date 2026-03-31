@@ -4,13 +4,14 @@ import (
 	"io"
 
 	core "github.com/linkdata/jaws/core"
+	"github.com/linkdata/jaws/core/bind"
 )
 
 type A struct{ HTMLInner }
 
-func NewA(innerHTML core.HTMLGetter) *A { return &A{HTMLInner{HTMLGetter: innerHTML}} }
+func NewA(innerHTML bind.HTMLGetter) *A { return &A{HTMLInner{HTMLGetter: innerHTML}} }
 func (rw RequestWriter) A(innerHTML any, params ...any) error {
-	return rw.UI(NewA(core.MakeHTMLGetter(innerHTML)), params...)
+	return rw.UI(NewA(bind.MakeHTMLGetter(innerHTML)), params...)
 }
 
 func (ui *A) JawsRender(e *core.Element, w io.Writer, params []any) error {

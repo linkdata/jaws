@@ -11,6 +11,7 @@ import (
 	"time"
 
 	core "github.com/linkdata/jaws/core"
+	"github.com/linkdata/jaws/core/named"
 	"github.com/linkdata/jaws/core/tags"
 )
 
@@ -90,7 +91,7 @@ func TestRequestWriter_MethodsAndWidgetHelpers(t *testing.T) {
 	tc := &testContainer{contents: []core.UI{NewSpan(testHTMLGetter("in"))}}
 	date := time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)
 	sh := &testSelectHandler{
-		testContainer: &testContainer{contents: []core.UI{NewOption(core.NewNamedBool(nil, "x", "X", true))}},
+		testContainer: &testContainer{contents: []core.UI{NewOption(named.NewNamedBool(nil, "x", "X", true))}},
 		testSetter:    newTestSetter("x"),
 	}
 

@@ -37,7 +37,6 @@ func (tss *testUi) JawsInit(e *Element) (err error) {
 }
 
 var _ UI = (*testUi)(nil)
-var _ Setter[string] = (*testUi)(nil)
 var _ InitHandler = (*testUi)(nil)
 
 func (tss *testUi) JawsGet(e *Element) string {

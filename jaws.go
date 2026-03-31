@@ -6,7 +6,11 @@ import (
 
 	core "github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/core/assets"
+	"github.com/linkdata/jaws/core/bind"
+	"github.com/linkdata/jaws/core/htmlx"
+	"github.com/linkdata/jaws/core/named"
 	"github.com/linkdata/jaws/core/tags"
+	"github.com/linkdata/jaws/core/testkit"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/ui"
 )
@@ -48,7 +52,7 @@ type (
 	TemplateLookuper = core.TemplateLookuper
 	// HandleFunc matches the signature of http.ServeMux.Handle().
 	HandleFunc = core.HandleFunc
-	Formatter  = core.Formatter
+	Formatter  = bind.Formatter
 	Auth       = core.Auth
 	// InitHandler allows initializing UI getters and setters before their use.
 	//
@@ -58,29 +62,29 @@ type (
 	InitHandler          = core.InitHandler
 	ClickHandler         = core.ClickHandler
 	EventHandler         = core.EventHandler
-	SelectHandler        = core.SelectHandler
+	SelectHandler        = named.SelectHandler
 	Container            = core.Container
-	Getter[T comparable] = core.Getter[T]
-	Setter[T comparable] = core.Setter[T]
-	Binder[T comparable] = core.Binder[T]
+	Getter[T comparable] = bind.Getter[T]
+	Setter[T comparable] = bind.Setter[T]
+	Binder[T comparable] = bind.Binder[T]
 	// A HTMLGetter is the primary way to deliver generated HTML content to dynamic HTML nodes.
-	HTMLGetter = core.HTMLGetter
+	HTMLGetter = bind.HTMLGetter
 	// Logger matches the log/slog.Logger interface.
 	Logger    = core.Logger
-	RWLocker  = core.RWLocker
+	RWLocker  = bind.RWLocker
 	TagGetter = tags.TagGetter
 	// NamedBool stores a named boolen value with a HTML representation.
-	NamedBool = core.NamedBool
+	NamedBool = named.NamedBool
 	// NamedBoolArray stores the data required to support HTML 'select' elements
 	// and sets of HTML radio buttons. It it safe to use from multiple goroutines
 	// concurrently.
-	NamedBoolArray = core.NamedBoolArray
+	NamedBoolArray = named.NamedBoolArray
 	Session        = core.Session
 	Tag            = tags.Tag
 	// TestRequest is a request harness intended for tests.
 	//
 	// Exposed for testing only.
-	TestRequest = core.TestRequest
+	TestRequest = testkit.TestRequest
 )
 
 var (
@@ -91,7 +95,7 @@ var (
 	ErrNoWebSocketRequest    = core.ErrNoWebSocketRequest
 	ErrPendingCancelled      = core.ErrPendingCancelled
 	ErrValueUnchanged        = core.ErrValueUnchanged
-	ErrValueNotSettable      = core.ErrValueNotSettable
+	ErrValueNotSettable      = bind.ErrValueNotSettable
 	ErrRequestAlreadyClaimed = core.ErrRequestAlreadyClaimed
 	ErrJavascriptDisabled    = core.ErrJavascriptDisabled
 	ErrTooManyTags           = tags.ErrTooManyTags
@@ -111,11 +115,11 @@ var (
 	New = core.New
 	// JawsKeyString returns the string to be used for the given JaWS key.
 	JawsKeyString = assets.JawsKeyString
-	WriteHTMLTag  = core.WriteHTMLTag
+	WriteHTMLTag  = htmlx.WriteHTMLTag
 	// HTMLGetterFunc wraps a function and returns a HTMLGetter.
-	HTMLGetterFunc = core.HTMLGetterFunc
+	HTMLGetterFunc = bind.HTMLGetterFunc
 	// StringGetterFunc wraps a function and returns a Getter[string]
-	StringGetterFunc = core.StringGetterFunc
+	StringGetterFunc = bind.StringGetterFunc
 	// MakeHTMLGetter returns a HTMLGetter for v.
 	//
 	// Depending on the type of v, we return:
@@ -132,21 +136,21 @@ var (
 	// Never pass untrusted user input as a plain string; use [template.HTML] to signal
 	// that the content is trusted, or wrap user input in a [Getter] or [fmt.Stringer]
 	// so it will be escaped automatically.
-	MakeHTMLGetter    = core.MakeHTMLGetter
-	NewNamedBool      = core.NewNamedBool
-	NewNamedBoolArray = core.NewNamedBoolArray
+	MakeHTMLGetter    = bind.MakeHTMLGetter
+	NewNamedBool      = named.NewNamedBool
+	NewNamedBoolArray = named.NewNamedBoolArray
 	// NewTestRequest creates a TestRequest for use when testing.
 	// Passing nil for hr will create a "GET /" request with no body.
 	//
 	// Exposed for testing only.
-	NewTestRequest = core.NewTestRequest
+	NewTestRequest = testkit.NewTestRequest
 )
 
 // Bind returns a Binder[T] with the given sync.Locker (or RWLocker) and a pointer to the underlying value of type T.
 //
 // The pointer will be used as the UI tag.
 func Bind[T comparable](l sync.Locker, p *T) Binder[T] {
-	return core.Bind(l, p)
+	return bind.Bind(l, p)
 }
 
 /*

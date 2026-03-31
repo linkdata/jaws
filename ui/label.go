@@ -4,13 +4,14 @@ import (
 	"io"
 
 	core "github.com/linkdata/jaws/core"
+	"github.com/linkdata/jaws/core/bind"
 )
 
 type Label struct{ HTMLInner }
 
-func NewLabel(innerHTML core.HTMLGetter) *Label { return &Label{HTMLInner{HTMLGetter: innerHTML}} }
+func NewLabel(innerHTML bind.HTMLGetter) *Label { return &Label{HTMLInner{HTMLGetter: innerHTML}} }
 func (rw RequestWriter) Label(innerHTML any, params ...any) error {
-	return rw.UI(NewLabel(core.MakeHTMLGetter(innerHTML)), params...)
+	return rw.UI(NewLabel(bind.MakeHTMLGetter(innerHTML)), params...)
 }
 
 func (ui *Label) JawsRender(e *core.Element, w io.Writer, params []any) error {

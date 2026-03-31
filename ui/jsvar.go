@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	core "github.com/linkdata/jaws/core"
+	"github.com/linkdata/jaws/core/bind"
 	"github.com/linkdata/jaws/core/tags"
 	"github.com/linkdata/jaws/core/wire"
 	"github.com/linkdata/jaws/what"
@@ -51,7 +52,7 @@ type SetPather interface {
 }
 
 type IsJsVar interface {
-	core.RWLocker
+	bind.RWLocker
 	core.UI
 	core.EventHandler
 	PathSetter
@@ -63,11 +64,11 @@ type JsVarMaker interface {
 
 var (
 	_ IsJsVar          = &JsVar[int]{}
-	_ core.Setter[int] = &JsVar[int]{}
+	_ bind.Setter[int] = &JsVar[int]{}
 )
 
 type JsVar[T any] struct {
-	core.RWLocker
+	bind.RWLocker
 	Ptr *T
 	Tag any
 }
@@ -209,7 +210,7 @@ func (ui *JsVar[T]) JawsEvent(e *core.Element, wht what.What, val string) (err e
 //
 // The locker l must be non-nil and must remain valid for the lifetime of the JsVar.
 func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
-	if rl, ok := l.(core.RWLocker); ok {
+	if rl, ok := l.(bind.RWLocker); ok {
 		return &JsVar[T]{RWLocker: rl, Ptr: v}
 	}
 	return &JsVar[T]{RWLocker: rwlocker{l}, Ptr: v}

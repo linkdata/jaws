@@ -7,6 +7,8 @@ import (
 	"time"
 
 	core "github.com/linkdata/jaws/core"
+	"github.com/linkdata/jaws/core/bind"
+	"github.com/linkdata/jaws/core/named"
 )
 
 func TestConstructors(t *testing.T) {
@@ -16,14 +18,14 @@ func TestConstructors(t *testing.T) {
 	num := 0.0
 	when := time.Now()
 
-	textSetter := core.Bind(&mu, &txt)
-	boolSetter := core.Bind(&mu, &checked)
-	numSetter := core.Bind(&mu, &num)
-	timeSetter := core.Bind(&mu, &when)
+	textSetter := bind.Bind(&mu, &txt)
+	boolSetter := bind.Bind(&mu, &checked)
+	numSetter := bind.Bind(&mu, &num)
+	timeSetter := bind.Bind(&mu, &when)
 
-	htmlGetter := core.MakeHTMLGetter("x")
-	imgGetter := core.StringGetterFunc(func(*core.Element) string { return "img" })
-	nba := core.NewNamedBoolArray(false).Add("a", template.HTML("A"))
+	htmlGetter := bind.MakeHTMLGetter("x")
+	imgGetter := bind.StringGetterFunc(func(*core.Element) string { return "img" })
+	nba := named.NewNamedBoolArray(false).Add("a", template.HTML("A"))
 	tc := testContainer{contents: []core.UI{NewSpan(htmlGetter)}}
 
 	all := []core.UI{
