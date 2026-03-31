@@ -336,10 +336,10 @@ func TestBind_Hook_Clicked_bindingHook(t *testing.T) {
 	if err := handler2.JawsClick(nil, "two"); err != nil {
 		t.Fatal(err)
 	}
-	if clickCalls1 != 1 {
+	if clickCalls1 != 2 {
 		t.Error(clickCalls1)
 	}
-	if clickCalls2 != 1 {
+	if clickCalls2 != 0 {
 		t.Error(clickCalls2)
 	}
 
@@ -358,6 +358,43 @@ func TestBind_Hook_Clicked_bindingHook(t *testing.T) {
 	tags := MustTagExpand(nil, clickBind2)
 	if !reflect.DeepEqual(tags, []any{&val}) {
 		t.Error(tags)
+	}
+}
+
+func TestBind_Hook_Clicked_bindingHook_fallsThroughUnhandled(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	order := []int{}
+	clickCalls1 := 0
+	clickCalls2 := 0
+	clickBind2 := Bind(&mu, &val).
+		Clicked(func(*Element, string) error {
+			clickCalls1++
+			order = append(order, 1)
+			return ErrEventUnhandled
+		}).
+		Clicked(func(*Element, string) error {
+			clickCalls2++
+			order = append(order, 2)
+			return nil
+		})
+
+	handler, ok := clickBind2.(ClickHandler)
+	if !ok {
+		t.Fatalf("%T does not implement ClickHandler", clickBind2)
+	}
+	if err := handler.JawsClick(nil, "two"); err != nil {
+		t.Fatal(err)
+	}
+	if clickCalls1 != 1 {
+		t.Error(clickCalls1)
+	}
+	if clickCalls2 != 1 {
+		t.Error(clickCalls2)
+	}
+	if !reflect.DeepEqual(order, []int{1, 2}) {
+		t.Error(order)
 	}
 }
 

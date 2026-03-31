@@ -7,8 +7,7 @@ import (
 
 type bindingHook[T comparable] struct {
 	Binder[T]
-	ClickHandler
-	hook any // one of: BindGetHook[T] BindSetHook[T] BindClickedHook BindSuccessHook
+	hook any // one of: BindGetHook[T] BindSetHook[T] BindClickedHook[T] BindSuccessHook
 }
 
 func (bind bindingHook[T]) JawsBinderPrev() Binder[T] {
@@ -41,14 +40,33 @@ func (bind bindingHook[T]) jawsSetLocking(elem *Element, value T) (err error) {
 	return bind.JawsSetLocked(elem, value)
 }
 
-func callSuccess[T comparable](binder Binder[T], elem *Element) (err error) {
+type callChainType int
+
+const (
+	callChainInvalid = callChainType(iota)
+	callChainSuccess
+	callChainClicked
+)
+
+func callChain[T comparable](binder Binder[T], elem *Element, kind callChainType, param any) (err error) {
 	if prev := binder.JawsBinderPrev(); prev != nil {
-		err = callSuccess(prev, elem)
+		err = callChain(prev, elem, kind, param)
+	} else if kind == callChainClicked {
+		err = ErrEventUnhandled
 	}
-	if err == nil {
-		if bind, ok := binder.(bindingHook[T]); ok {
-			if fn, ok := bind.hook.(BindSuccessHook); ok {
-				return fn(elem)
+	if bh, ok := binder.(bindingHook[T]); ok {
+		switch kind {
+		case callChainSuccess:
+			if err == nil {
+				if fn, ok := bh.hook.(BindSuccessHook); ok {
+					err = fn(elem)
+				}
+			}
+		case callChainClicked:
+			if err == ErrEventUnhandled {
+				if fn, ok := bh.hook.(BindClickedHook[T]); ok {
+					err = fn(elem, param.(string))
+				}
 			}
 		}
 	}
@@ -57,16 +75,13 @@ func callSuccess[T comparable](binder Binder[T], elem *Element) (err error) {
 
 func (bind bindingHook[T]) JawsSet(elem *Element, value T) (err error) {
 	if err = bind.jawsSetLocking(elem, value); err == nil {
-		err = callSuccess(bind, elem)
+		err = callChain(bind, elem, callChainSuccess, nil)
 	}
 	return
 }
 
 func (bind bindingHook[T]) JawsClick(elem *Element, name string) (err error) {
-	err = ErrEventUnhandled
-	if fn, ok := bind.hook.(BindClickedHook[T]); ok {
-		err = fn(elem, name)
-	}
+	err = callChain(bind, elem, callChainClicked, name)
 	return
 }
 
