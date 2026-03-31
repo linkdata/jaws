@@ -3,6 +3,8 @@ package jaws
 import (
 	"html/template"
 	"io"
+
+	"github.com/linkdata/jaws/what"
 )
 
 type Container interface {
@@ -49,3 +51,32 @@ type Updater interface {
 	// Do not call this yourself unless it's from within another JawsUpdate implementation.
 	JawsUpdate(e *Element)
 }
+
+type ClickHandler interface {
+	// JawsClick is called when an Element's HTML element or something within it
+	// is clicked in the browser.
+	//
+	// The name parameter is taken from the first 'name' HTML attribute or HTML
+	// 'button' textContent found when traversing the DOM. It may be empty.
+	JawsClick(e *Element, name string) (err error)
+}
+
+type clickHandlerWrapper struct{ ClickHandler }
+
+func (chw clickHandlerWrapper) JawsEvent(*Element, what.What, string) error {
+	return ErrEventUnhandled
+}
+
+type Auth interface {
+	Data() map[string]any // returns authenticated user data, or nil
+	Email() string        // returns authenticated user email, or an empty string
+	IsAdmin() bool        // return true if admins are defined and current user is one, or if no admins are defined
+}
+
+type MakeAuthFn func(*Request) Auth
+
+type DefaultAuth struct{}
+
+func (DefaultAuth) Data() map[string]any { return nil }
+func (DefaultAuth) Email() string        { return "" }
+func (DefaultAuth) IsAdmin() bool        { return true }
