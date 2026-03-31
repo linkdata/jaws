@@ -185,11 +185,6 @@ func testBind_Hook_Set[T comparable](t *testing.T, testval T) {
 			return bind.JawsSetLocked(elem, value)
 		})
 
-	/*
-		var blankval T
-		if err := bind2.JawsSetAny(nil, blankval); err != nil {
-			t.Error(err)
-		}*/
 	if calls1 != 2 {
 		t.Error(calls1)
 	}
@@ -239,10 +234,6 @@ func testBind_Hook_Get[T comparable](t *testing.T, testval T) {
 	if err := bind2.JawsSet(nil, blankval); err != nil {
 		t.Error(err)
 	}
-	/*
-		if x := bind2.JawsGetAny(nil); x != blankval {
-			t.Error(x)
-		}*/
 	if calls1 != 1 {
 		t.Error(calls1)
 	}
@@ -445,16 +436,6 @@ func testBind_FloatSetter(t *testing.T, v Setter[float64]) {
 	if x := v.JawsGet(nil); x != val {
 		t.Error(x)
 	}
-	/*as := v.(AnySetter)
-	if x := as.JawsGetAny(nil); x != val {
-		t.Error(x)
-	}
-	if err := as.JawsSetAny(nil, val+1); err != nil {
-		t.Error(err)
-	}
-	if x := as.JawsGetAny(nil); x != val+1 {
-		t.Error(x)
-	}*/
 }
 
 func TestBindFunc_Float(t *testing.T) {
@@ -503,16 +484,6 @@ func testBind_TimeSetter(t *testing.T, v Setter[time.Time]) {
 	if x := v.JawsGet(nil); x != val {
 		t.Error(x)
 	}
-	/*as := v.(AnySetter)
-	if x := as.JawsGetAny(nil); x != val {
-		t.Error(x)
-	}
-	if err := as.JawsSetAny(nil, val.Add(time.Second)); err != nil {
-		t.Error(err)
-	}
-	if x := as.JawsGetAny(nil); x != val.Add(time.Second) {
-		t.Error(x)
-	}*/
 }
 
 func TestBindFunc_Time(t *testing.T) {
