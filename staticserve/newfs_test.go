@@ -4,36 +4,35 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/linkdata/jaws/internal/testutil"
 	"github.com/linkdata/jaws/staticserve"
 )
 
 func TestNewFS(t *testing.T) {
-	for _, exp := range testutil.ExpectedStaticAssets(t, assetsFS, "assets", "/") {
-		ss, err := staticserve.NewFS(assetsFS, "assets", exp.Filepath)
+	for _, exp := range expectedStaticAssets(t, assetsFS, "assets", "/") {
+		ss, err := staticserve.NewFS(assetsFS, "assets", exp.filepath)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if ss == nil {
-			t.Fatalf("%q: nil StaticServe", exp.Filepath)
+			t.Fatalf("%q: nil StaticServe", exp.filepath)
 		}
-		if ss.Name != exp.Name {
-			t.Errorf("%q: expected name %q, got %q", exp.Filepath, exp.Name, ss.Name)
+		if ss.Name != exp.name {
+			t.Errorf("%q: expected name %q, got %q", exp.filepath, exp.name, ss.Name)
 		}
-		if ss.ContentType != exp.ContentType {
-			t.Errorf("%q: expected content type %q, got %q", exp.Filepath, exp.ContentType, ss.ContentType)
+		if ss.ContentType != exp.contentType {
+			t.Errorf("%q: expected content type %q, got %q", exp.filepath, exp.contentType, ss.ContentType)
 		}
-		if !bytes.Equal(ss.Gz, exp.Gz) {
-			t.Errorf("%q: gz payload mismatch", exp.Filepath)
+		if !bytes.Equal(ss.Gz, exp.gz) {
+			t.Errorf("%q: gz payload mismatch", exp.filepath)
 		}
 	}
 }
 
 func TestMustNewFS(t *testing.T) {
-	expected := testutil.ExpectedStaticAssets(t, assetsFS, "assets", "/")
+	expected := expectedStaticAssets(t, assetsFS, "assets", "/")
 	filepaths := make([]string, 0, len(expected))
 	for _, exp := range expected {
-		filepaths = append(filepaths, exp.Filepath)
+		filepaths = append(filepaths, exp.filepath)
 	}
 
 	got := staticserve.MustNewFS(assetsFS, "assets", filepaths...)
@@ -42,16 +41,16 @@ func TestMustNewFS(t *testing.T) {
 	}
 	for i := range expected {
 		if got[i] == nil {
-			t.Fatalf("%q: nil StaticServe", expected[i].Filepath)
+			t.Fatalf("%q: nil StaticServe", expected[i].filepath)
 		}
-		if got[i].Name != expected[i].Name {
-			t.Errorf("%q: expected name %q, got %q", expected[i].Filepath, expected[i].Name, got[i].Name)
+		if got[i].Name != expected[i].name {
+			t.Errorf("%q: expected name %q, got %q", expected[i].filepath, expected[i].name, got[i].Name)
 		}
-		if got[i].ContentType != expected[i].ContentType {
-			t.Errorf("%q: expected content type %q, got %q", expected[i].Filepath, expected[i].ContentType, got[i].ContentType)
+		if got[i].ContentType != expected[i].contentType {
+			t.Errorf("%q: expected content type %q, got %q", expected[i].filepath, expected[i].contentType, got[i].ContentType)
 		}
-		if !bytes.Equal(got[i].Gz, expected[i].Gz) {
-			t.Errorf("%q: gz payload mismatch", expected[i].Filepath)
+		if !bytes.Equal(got[i].Gz, expected[i].gz) {
+			t.Errorf("%q: gz payload mismatch", expected[i].filepath)
 		}
 	}
 }

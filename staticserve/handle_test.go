@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/linkdata/jaws/internal/testutil"
 	"github.com/linkdata/jaws/staticserve"
 )
 
@@ -26,8 +25,8 @@ func TestHandle_Pattern(t *testing.T) {
 }
 
 func TestHandleFS(t *testing.T) {
-	filepaths := testutil.AssetFilepaths(t, assetsFS, "assets")
-	expected := testutil.ExpectedStaticAssets(t, assetsFS, "assets", "/", filepaths...)
+	filepaths := assetFilepaths(t, assetsFS, "assets")
+	expected := expectedStaticAssets(t, assetsFS, "assets", "/", filepaths...)
 
 	mux := http.NewServeMux()
 	uris, err := staticserve.HandleFS(assetsFS, mux.Handle, "assets", filepaths...)
@@ -39,69 +38,69 @@ func TestHandleFS(t *testing.T) {
 	}
 
 	for i, exp := range expected {
-		if uris[i] != exp.URI {
-			t.Errorf("%q: expected uri %q, got %q", exp.Filepath, exp.URI, uris[i])
+		if uris[i] != exp.uri {
+			t.Errorf("%q: expected uri %q, got %q", exp.filepath, exp.uri, uris[i])
 		}
 
-		rq := httptest.NewRequest(http.MethodGet, exp.URI, nil)
+		rq := httptest.NewRequest(http.MethodGet, exp.uri, nil)
 		rr := httptest.NewRecorder()
 		mux.ServeHTTP(rr, rq)
 		res := rr.Result()
 		if sc := res.StatusCode; sc != http.StatusOK {
-			t.Errorf("%q plain: expected status %d, got %d", exp.Filepath, http.StatusOK, sc)
+			t.Errorf("%q plain: expected status %d, got %d", exp.filepath, http.StatusOK, sc)
 		}
 		if cc := res.Header.Get("Cache-Control"); cc != staticserve.HeaderCacheControl[0] {
-			t.Errorf("%q plain: expected cache-control %q, got %q", exp.Filepath, staticserve.HeaderCacheControl[0], cc)
+			t.Errorf("%q plain: expected cache-control %q, got %q", exp.filepath, staticserve.HeaderCacheControl[0], cc)
 		}
 		if vary := res.Header.Get("Vary"); vary != staticserve.HeaderVary[0] {
-			t.Errorf("%q plain: expected vary %q, got %q", exp.Filepath, staticserve.HeaderVary[0], vary)
+			t.Errorf("%q plain: expected vary %q, got %q", exp.filepath, staticserve.HeaderVary[0], vary)
 		}
 		if ce := res.Header.Get("Content-Encoding"); ce != "" {
-			t.Errorf("%q plain: expected empty content-encoding, got %q", exp.Filepath, ce)
+			t.Errorf("%q plain: expected empty content-encoding, got %q", exp.filepath, ce)
 		}
-		if ct := res.Header.Get("Content-Type"); ct != exp.ContentType {
-			t.Errorf("%q plain: expected content type %q, got %q", exp.Filepath, exp.ContentType, ct)
+		if ct := res.Header.Get("Content-Type"); ct != exp.contentType {
+			t.Errorf("%q plain: expected content type %q, got %q", exp.filepath, exp.contentType, ct)
 		}
 		b, err := io.ReadAll(res.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Equal(b, exp.Plain) {
-			t.Errorf("%q plain: body mismatch", exp.Filepath)
+		if !bytes.Equal(b, exp.plain) {
+			t.Errorf("%q plain: body mismatch", exp.filepath)
 		}
 		if err := res.Body.Close(); err != nil {
 			t.Fatal(err)
 		}
 
-		rq = httptest.NewRequest(http.MethodGet, exp.URI, nil)
+		rq = httptest.NewRequest(http.MethodGet, exp.uri, nil)
 		rq.Header.Set("Accept-Encoding", "gzip")
 		rr = httptest.NewRecorder()
 		mux.ServeHTTP(rr, rq)
 		res = rr.Result()
 		if sc := res.StatusCode; sc != http.StatusOK {
-			t.Errorf("%q gzip: expected status %d, got %d", exp.Filepath, http.StatusOK, sc)
+			t.Errorf("%q gzip: expected status %d, got %d", exp.filepath, http.StatusOK, sc)
 		}
 		if cc := res.Header.Get("Cache-Control"); cc != staticserve.HeaderCacheControl[0] {
-			t.Errorf("%q gzip: expected cache-control %q, got %q", exp.Filepath, staticserve.HeaderCacheControl[0], cc)
+			t.Errorf("%q gzip: expected cache-control %q, got %q", exp.filepath, staticserve.HeaderCacheControl[0], cc)
 		}
 		if vary := res.Header.Get("Vary"); vary != staticserve.HeaderVary[0] {
-			t.Errorf("%q gzip: expected vary %q, got %q", exp.Filepath, staticserve.HeaderVary[0], vary)
+			t.Errorf("%q gzip: expected vary %q, got %q", exp.filepath, staticserve.HeaderVary[0], vary)
 		}
 		if ce := res.Header.Get("Content-Encoding"); ce != "gzip" {
-			t.Errorf("%q gzip: expected content-encoding %q, got %q", exp.Filepath, "gzip", ce)
+			t.Errorf("%q gzip: expected content-encoding %q, got %q", exp.filepath, "gzip", ce)
 		}
-		if cl := res.Header.Get("Content-Length"); cl != strconv.Itoa(len(exp.Gz)) {
-			t.Errorf("%q gzip: expected content-length %d, got %q", exp.Filepath, len(exp.Gz), cl)
+		if cl := res.Header.Get("Content-Length"); cl != strconv.Itoa(len(exp.gz)) {
+			t.Errorf("%q gzip: expected content-length %d, got %q", exp.filepath, len(exp.gz), cl)
 		}
-		if ct := res.Header.Get("Content-Type"); ct != exp.ContentType {
-			t.Errorf("%q gzip: expected content type %q, got %q", exp.Filepath, exp.ContentType, ct)
+		if ct := res.Header.Get("Content-Type"); ct != exp.contentType {
+			t.Errorf("%q gzip: expected content type %q, got %q", exp.filepath, exp.contentType, ct)
 		}
 		b, err = io.ReadAll(res.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Equal(b, exp.Gz) {
-			t.Errorf("%q gzip: body mismatch", exp.Filepath)
+		if !bytes.Equal(b, exp.gz) {
+			t.Errorf("%q gzip: body mismatch", exp.filepath)
 		}
 		if err := res.Body.Close(); err != nil {
 			t.Fatal(err)

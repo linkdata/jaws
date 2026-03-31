@@ -8,13 +8,12 @@ import (
 
 	core "github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/core/named"
-	"github.com/linkdata/jaws/internal/testutil"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/what"
 )
 
 func TestContainerAndTbodyRender(t *testing.T) {
-	_, rq := testutil.NewCoreRequest(t)
+	_, rq := newCoreRequest(t)
 	tc := &testContainer{contents: []core.UI{NewSpan(testHTMLGetter("foo")), NewSpan(testHTMLGetter("bar"))}}
 
 	container := NewContainer("div", tc)
@@ -28,7 +27,7 @@ func TestContainerAndTbodyRender(t *testing.T) {
 }
 
 func TestContainerHelperUpdateContainer(t *testing.T) {
-	_, rq := testutil.NewCoreRequest(t)
+	_, rq := newCoreRequest(t)
 	span1 := NewSpan(testHTMLGetter("span1"))
 	span2 := NewSpan(testHTMLGetter("span2"))
 	span3 := NewSpan(testHTMLGetter("span3"))
@@ -65,7 +64,7 @@ func TestContainerHelperUpdateContainer(t *testing.T) {
 }
 
 func TestContainerHelperUpdateContainerDuplicates(t *testing.T) {
-	_, rq := testutil.NewCoreRequest(t)
+	_, rq := newCoreRequest(t)
 	span1 := NewSpan(testHTMLGetter("span1"))
 	span2 := NewSpan(testHTMLGetter("span2"))
 
@@ -123,7 +122,7 @@ func TestContainerHelperUpdateContainerDuplicates(t *testing.T) {
 
 func TestContainerHelperRenderErrorPaths(t *testing.T) {
 	core.NextJid = 0
-	_, rq := testutil.NewCoreRequest(t)
+	_, rq := newCoreRequest(t)
 	renderErr := errors.New("render error")
 	errChild := testRenderErrorUI{err: renderErr}
 	tc := &testContainer{contents: []core.UI{NewSpan(testHTMLGetter("first")), errChild, NewSpan(testHTMLGetter("third"))}}
@@ -176,7 +175,7 @@ func (*testRenderErrorCaptureUI) JawsUpdate(*core.Element) {}
 
 func TestContainerHelperRenderErrorDoesNotLeakFailedChildElement(t *testing.T) {
 	core.NextJid = 0
-	_, rq := testutil.NewCoreRequest(t)
+	_, rq := newCoreRequest(t)
 
 	renderErr := errors.New("render error")
 	failingChild := &testRenderErrorCaptureUI{err: renderErr}
@@ -199,7 +198,7 @@ func TestContainerHelperRenderErrorDoesNotLeakFailedChildElement(t *testing.T) {
 
 func TestRequestWriterUI_ContainerRenderErrorDoesNotLeakSuccessfulChildren(t *testing.T) {
 	core.NextJid = 0
-	_, rq := testutil.NewCoreRequest(t)
+	_, rq := newCoreRequest(t)
 	var sb strings.Builder
 	rw := RequestWriter{Request: rq, Writer: &sb}
 
@@ -226,7 +225,7 @@ type testSelectHandler struct {
 }
 
 func TestSelectWidget(t *testing.T) {
-	_, rq := testutil.NewCoreRequest(t)
+	_, rq := newCoreRequest(t)
 	sh := &testSelectHandler{
 		testContainer: &testContainer{contents: []core.UI{NewOption(named.NewNamedBool(nil, "1", "one", true))}},
 		testSetter:    newTestSetter("1"),

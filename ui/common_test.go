@@ -5,11 +5,10 @@ import (
 	"testing"
 
 	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/internal/testutil"
 )
 
 func TestCommon_applyDirty(t *testing.T) {
-	_, rq := testutil.NewCoreRequest(t)
+	_, rq := newCoreRequest(t)
 	elem, _ := renderUI(t, rq, NewSpan(testHTMLGetter("x")))
 	tag := &struct{}{}
 

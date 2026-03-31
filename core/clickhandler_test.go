@@ -4,14 +4,13 @@ import (
 	"html/template"
 	"testing"
 
-	"github.com/linkdata/jaws/core/internal/testutil"
 	"github.com/linkdata/jaws/core/wire"
 	"github.com/linkdata/jaws/what"
 )
 
 type testJawsClick struct {
 	clickCh chan string
-	*testutil.Setter[string, Element]
+	*testSetter[string]
 }
 
 func (tjc *testJawsClick) JawsClick(e *Element, name string) (err error) {
@@ -30,8 +29,8 @@ func Test_clickHandlerWapper_JawsEvent(t *testing.T) {
 	defer rq.Close()
 
 	tjc := &testJawsClick{
-		clickCh: make(chan string),
-		Setter:  newTestSetter(""),
+		clickCh:    make(chan string),
+		testSetter: newTestSetter(""),
 	}
 
 	want := `<div id="Jid.1">inner</div>`

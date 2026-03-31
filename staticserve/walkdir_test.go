@@ -8,13 +8,12 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/linkdata/jaws/internal/testutil"
 	"github.com/linkdata/jaws/staticserve"
 )
 
 func Test_WalkDir(t *testing.T) {
-	filepaths := testutil.AssetFilepaths(t, assetsFS, "assets")
-	expected := testutil.ExpectedStaticAssetMap(t, assetsFS, "assets", "/", filepaths...)
+	filepaths := assetFilepaths(t, assetsFS, "assets")
+	expected := expectedStaticAssetMap(t, assetsFS, "assets", "/", filepaths...)
 	seen := map[string]bool{}
 	mux := http.NewServeMux()
 	err := staticserve.WalkDir(assetsFS, "assets", func(filepath string, ss *staticserve.StaticServe) (err error) {
@@ -27,16 +26,16 @@ func Test_WalkDir(t *testing.T) {
 			t.Errorf("nil StaticServe for %q", filepath)
 			return
 		}
-		if ss.Name != exp.Name {
-			t.Errorf("%q: expected name %q, got %q", filepath, exp.Name, ss.Name)
+		if ss.Name != exp.name {
+			t.Errorf("%q: expected name %q, got %q", filepath, exp.name, ss.Name)
 		}
-		if ss.ContentType != exp.ContentType {
-			t.Errorf("%q: expected content type %q, got %q", filepath, exp.ContentType, ss.ContentType)
+		if ss.ContentType != exp.contentType {
+			t.Errorf("%q: expected content type %q, got %q", filepath, exp.contentType, ss.ContentType)
 		}
 		if len(ss.Gz) == 0 {
 			t.Errorf("%q: empty gz payload", filepath)
 		}
-		if !bytes.Equal(ss.Gz, exp.Gz) {
+		if !bytes.Equal(ss.Gz, exp.gz) {
 			t.Errorf("%q: gz payload mismatch", filepath)
 		}
 
@@ -57,7 +56,7 @@ func Test_WalkDir(t *testing.T) {
 		if !seen[filepath] {
 			t.Fatalf("missing filepath %q", filepath)
 		}
-		uri := "/static/" + exp.Name
+		uri := "/static/" + exp.name
 
 		rq := httptest.NewRequest(http.MethodGet, uri, nil)
 		rr := httptest.NewRecorder()
@@ -75,14 +74,14 @@ func Test_WalkDir(t *testing.T) {
 		if ce := res.Header.Get("Content-Encoding"); ce != "" {
 			t.Errorf("%q plain: unexpected content-encoding %q", filepath, ce)
 		}
-		if ct := res.Header.Get("Content-Type"); ct != exp.ContentType {
-			t.Errorf("%q plain: expected content type %q, got %q", filepath, exp.ContentType, ct)
+		if ct := res.Header.Get("Content-Type"); ct != exp.contentType {
+			t.Errorf("%q plain: expected content type %q, got %q", filepath, exp.contentType, ct)
 		}
 		b, err := io.ReadAll(res.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Equal(b, exp.Plain) {
+		if !bytes.Equal(b, exp.plain) {
 			t.Errorf("%q plain: unexpected body", filepath)
 		}
 		if err = res.Body.Close(); err != nil {
@@ -106,17 +105,17 @@ func Test_WalkDir(t *testing.T) {
 		if ce := res.Header.Get("Content-Encoding"); ce != "gzip" {
 			t.Errorf("%q gzip: expected content-encoding %q, got %q", filepath, "gzip", ce)
 		}
-		if cl := res.Header.Get("Content-Length"); cl != strconv.Itoa(len(exp.Gz)) {
-			t.Errorf("%q gzip: expected content-length %d, got %q", filepath, len(exp.Gz), cl)
+		if cl := res.Header.Get("Content-Length"); cl != strconv.Itoa(len(exp.gz)) {
+			t.Errorf("%q gzip: expected content-length %d, got %q", filepath, len(exp.gz), cl)
 		}
-		if ct := res.Header.Get("Content-Type"); ct != exp.ContentType {
-			t.Errorf("%q gzip: expected content type %q, got %q", filepath, exp.ContentType, ct)
+		if ct := res.Header.Get("Content-Type"); ct != exp.contentType {
+			t.Errorf("%q gzip: expected content type %q, got %q", filepath, exp.contentType, ct)
 		}
 		b, err = io.ReadAll(res.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Equal(b, exp.Gz) {
+		if !bytes.Equal(b, exp.gz) {
 			t.Errorf("%q gzip: unexpected body", filepath)
 		}
 		if err = res.Body.Close(); err != nil {

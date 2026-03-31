@@ -11,7 +11,6 @@ import (
 	core "github.com/linkdata/jaws/core"
 	"github.com/linkdata/jaws/core/named"
 	"github.com/linkdata/jaws/core/tags"
-	"github.com/linkdata/jaws/internal/testutil"
 )
 
 type testRWUpdater struct {
@@ -31,7 +30,7 @@ func (g requestWriterFailGetter) JawsGetTag(tags.Context) any             { retu
 func (g requestWriterFailGetter) JawsInit(*core.Element) error            { return g.err }
 
 func TestRequestWriter_MethodsAndWidgetHelpers(t *testing.T) {
-	jw, rq := testutil.NewCoreSessionBoundRequest(t)
+	jw, rq := newCoreSessionBoundRequest(t)
 	var buf bytes.Buffer
 	rw := RequestWriter{Request: rq, Writer: &buf}
 
@@ -136,7 +135,7 @@ func TestErrMissingTemplateAndRWLocker(t *testing.T) {
 
 func TestRequestWriterUI_RenderErrorDoesNotLeakElement(t *testing.T) {
 	core.NextJid = 0
-	_, rq := testutil.NewCoreRequest(t)
+	_, rq := newCoreRequest(t)
 	var buf bytes.Buffer
 	rw := RequestWriter{Request: rq, Writer: &buf}
 

@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/internal/testutil"
 )
 
 func Test_NamedBoolArray(t *testing.T) {
@@ -127,8 +126,8 @@ func Test_NamedBoolArray(t *testing.T) {
 		t.Fatal("expected IsChecked(2)=true")
 	}
 
-	_, rq := testutil.NewCoreRequest(t)
-	e := rq.NewElement(testutil.NoopCoreUI{})
+	_, rq := newCoreRequest(t)
+	e := rq.NewElement(noopUI{})
 
 	if got := nba.JawsGet(e); got != "2" {
 		t.Fatalf("JawsGet=%q want 2", got)
@@ -146,7 +145,7 @@ func Test_NamedBoolArray(t *testing.T) {
 
 func TestNamedBoolOption_RenderAndUpdateBranches(t *testing.T) {
 	core.NextJid = 0
-	_, rq := testutil.NewCoreRequest(t)
+	_, rq := newCoreRequest(t)
 
 	nba := NewNamedBoolArray(false).Add("1", "one")
 	nba.Set("1", true)

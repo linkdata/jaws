@@ -2,6 +2,8 @@ package ui
 
 import (
 	"html/template"
+	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"strings"
 	"sync"
@@ -16,6 +18,40 @@ func mustMatch(t *testing.T, pattern, got string) {
 	if !re.MatchString(got) {
 		t.Fatalf("pattern %q did not match %q", pattern, got)
 	}
+}
+
+func newCoreRequest(t *testing.T) (*core.Jaws, *core.Request) {
+	t.Helper()
+	jw, err := core.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	if rq == nil {
+		t.Fatal("nil request")
+	}
+	return jw, rq
+}
+
+func newCoreSessionBoundRequest(t *testing.T) (*core.Jaws, *core.Request) {
+	t.Helper()
+	jw, err := core.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+	if sess := jw.NewSession(rr, hr); sess == nil {
+		t.Fatal("expected session")
+	}
+	rq := jw.NewRequest(hr)
+	if rq == nil {
+		t.Fatal("expected request")
+	}
+	return jw, rq
 }
 
 func renderUI(t *testing.T, rq *core.Request, ui core.UI, params ...any) (*core.Element, string) {

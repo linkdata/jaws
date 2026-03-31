@@ -3,8 +3,6 @@ package named
 import (
 	"html/template"
 	"testing"
-
-	"github.com/linkdata/jaws/internal/testutil"
 )
 
 func TestNamedBool(t *testing.T) {
@@ -12,8 +10,8 @@ func TestNamedBool(t *testing.T) {
 	nba.Add("1", "one")
 	nb := nba.data[0]
 
-	_, rq := testutil.NewCoreRequest(t)
-	e := rq.NewElement(testutil.NoopCoreUI{})
+	_, rq := newCoreRequest(t)
+	e := rq.NewElement(noopUI{})
 
 	if nb.Array() != nba {
 		t.Fatalf("array mismatch: got %p want %p", nb.Array(), nba)

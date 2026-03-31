@@ -1,9 +1,8 @@
-package staticserve_test
+package jawsboot_test
 
 import (
 	"bytes"
 	"compress/gzip"
-	"embed"
 	"io"
 	"io/fs"
 	"path"
@@ -14,17 +13,11 @@ import (
 	"github.com/linkdata/jaws/staticserve"
 )
 
-//go:embed assets
-var assetsFS embed.FS
-
 type expectedStaticAsset struct {
-	filepath    string
-	name        string
-	uri         string
-	contentType string
-	plain       []byte
-	gz          []byte
-	ss          *staticserve.StaticServe
+	filepath string
+	uri      string
+	plain    []byte
+	ss       *staticserve.StaticServe
 }
 
 func readGzip(t *testing.T, b []byte) []byte {
@@ -43,8 +36,9 @@ func readGzip(t *testing.T, b []byte) []byte {
 	return plain
 }
 
-func assetFilepaths(t *testing.T, fsys fs.FS, root string) (filepaths []string) {
+func expectedStaticAssets(t *testing.T, fsys fs.FS, root, uriPrefix string) (expected []expectedStaticAsset) {
 	t.Helper()
+	var filepaths []string
 	root = path.Clean(root)
 	err := fs.WalkDir(fsys, root, func(pathname string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -63,14 +57,6 @@ func assetFilepaths(t *testing.T, fsys fs.FS, root string) (filepaths []string) 
 	if len(filepaths) == 0 {
 		t.Fatal("expected at least one asset file")
 	}
-	return
-}
-
-func expectedStaticAssets(t *testing.T, fsys fs.FS, root, uriPrefix string, filepaths ...string) (expected []expectedStaticAsset) {
-	t.Helper()
-	if len(filepaths) == 0 {
-		filepaths = assetFilepaths(t, fsys, root)
-	}
 	for _, filepath := range filepaths {
 		b, err := fs.ReadFile(fsys, path.Join(root, filepath))
 		if err != nil {
@@ -85,23 +71,11 @@ func expectedStaticAssets(t *testing.T, fsys fs.FS, root, uriPrefix string, file
 			plain = readGzip(t, b)
 		}
 		expected = append(expected, expectedStaticAsset{
-			filepath:    filepath,
-			name:        ss.Name,
-			uri:         path.Join(uriPrefix, ss.Name),
-			contentType: ss.ContentType,
-			plain:       plain,
-			gz:          ss.Gz,
-			ss:          ss,
+			filepath: filepath,
+			uri:      path.Join(uriPrefix, ss.Name),
+			plain:    plain,
+			ss:       ss,
 		})
-	}
-	return
-}
-
-func expectedStaticAssetMap(t *testing.T, fsys fs.FS, root, uriPrefix string, filepaths ...string) map[string]expectedStaticAsset {
-	t.Helper()
-	expected := map[string]expectedStaticAsset{}
-	for _, exp := range expectedStaticAssets(t, fsys, root, uriPrefix, filepaths...) {
-		expected[exp.filepath] = exp
 	}
 	return expected
 }
