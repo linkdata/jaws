@@ -3,6 +3,7 @@ package jaws
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -11,7 +12,26 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/core/internal/testutil"
+	"github.com/linkdata/jaws/core/wire"
 )
+
+func nextBroadcast(t *testing.T, jw *Jaws) wire.Message {
+	t.Helper()
+	select {
+	case msg := <-jw.bcastCh:
+		return msg
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for broadcast")
+		return wire.Message{}
+	}
+}
+
+type errReader struct{}
+
+func (errReader) Read([]byte) (int, error) {
+	return 0, io.EOF
+}
 
 func printGoroutineOrigins(t *testing.T) {
 	t.Helper()
@@ -31,14 +51,13 @@ func printGoroutineOrigins(t *testing.T) {
 		}
 	}
 
-	// Convert to slice for sorting
 	type pair struct {
 		loc   string
 		count int
 	}
 	var items []pair
 	for k, v := range counts {
-		if v > 1 { // omit entries with only one goroutine
+		if v > 1 {
 			items = append(items, pair{k, v})
 		}
 	}
@@ -146,4 +165,8 @@ func testEqual(a, b any) bool {
 		return false
 	}
 	return aType == nil || bType == nil || (aType == bType)
+}
+
+func newTestSetter[T comparable](val T) *testutil.Setter[T, Element] {
+	return testutil.NewSetter[T, Element](val, ErrValueUnchanged)
 }
