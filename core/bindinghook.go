@@ -65,7 +65,7 @@ func callChain[T comparable](binder Binder[T], elem *Element, kind callChainType
 		case callChainClicked:
 			if err == ErrEventUnhandled {
 				if fn, ok := bh.hook.(BindClickedHook[T]); ok {
-					err = fn(elem, param.(string))
+					err = fn(bh, elem, param.(string))
 				}
 			}
 		}

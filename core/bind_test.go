@@ -263,7 +263,7 @@ func TestBind_Hook_Clicked_binding(t *testing.T) {
 	gotElem := &Element{}
 	gotName := ""
 	bind := Bind(&mu, &val).
-		Clicked(func(elem *Element, name string) (err error) {
+		Clicked(func(bind Binder[string], elem *Element, name string) (err error) {
 			calls++
 			gotElem = elem
 			gotName = name
@@ -305,11 +305,11 @@ func TestBind_Hook_Clicked_bindingHook(t *testing.T) {
 
 	clickCalls1 := 0
 	clickCalls2 := 0
-	clickBind1 := bindWithSuccess.Clicked(func(*Element, string) error {
+	clickBind1 := bindWithSuccess.Clicked(func(Binder[string], *Element, string) error {
 		clickCalls1++
 		return nil
 	})
-	clickBind2 := clickBind1.Clicked(func(*Element, string) error {
+	clickBind2 := clickBind1.Clicked(func(Binder[string], *Element, string) error {
 		clickCalls2++
 		return nil
 	})
@@ -369,12 +369,12 @@ func TestBind_Hook_Clicked_bindingHook_fallsThroughUnhandled(t *testing.T) {
 	clickCalls1 := 0
 	clickCalls2 := 0
 	clickBind2 := Bind(&mu, &val).
-		Clicked(func(*Element, string) error {
+		Clicked(func(Binder[string], *Element, string) error {
 			clickCalls1++
 			order = append(order, 1)
 			return ErrEventUnhandled
 		}).
-		Clicked(func(*Element, string) error {
+		Clicked(func(Binder[string], *Element, string) error {
 			clickCalls2++
 			order = append(order, 2)
 			return nil
