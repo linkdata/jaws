@@ -7,8 +7,8 @@ import (
 	"time"
 
 	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/assets"
 	"github.com/linkdata/jaws/core/jawsbind"
+	"github.com/linkdata/jaws/core/jawsdata"
 	"github.com/linkdata/jaws/core/jawshtml"
 	"github.com/linkdata/jaws/what"
 )
@@ -151,7 +151,7 @@ type InputDate struct {
 }
 
 func (ui *InputDate) str(v time.Time) string {
-	return v.Format(assets.ISO8601)
+	return v.Format(jawsdata.ISO8601)
 }
 
 func (ui *InputDate) renderDateInput(e *core.Element, w io.Writer, htmlType string, params ...any) (err error) {
@@ -178,7 +178,7 @@ func (ui *InputDate) JawsEvent(e *core.Element, wht what.What, val string) (err 
 			val = "0001-01-01"
 		}
 		var v time.Time
-		if v, err = time.Parse(assets.ISO8601, val); err == nil {
+		if v, err = time.Parse(jawsdata.ISO8601, val); err == nil {
 			err = ui.maybeDirty(e, ui.Setter.JawsSet(e, v))
 		}
 		ui.Last.Store(v)

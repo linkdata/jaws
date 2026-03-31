@@ -6,7 +6,7 @@ import (
 	"time"
 
 	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/assets"
+	"github.com/linkdata/jaws/core/jawsdata"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -107,7 +107,7 @@ func TestInputFloatWidgets(t *testing.T) {
 
 func TestInputDateWidget(t *testing.T) {
 	_, rq := newCoreRequest(t)
-	d0, _ := time.Parse(assets.ISO8601, "2020-01-02")
+	d0, _ := time.Parse(jawsdata.ISO8601, "2020-01-02")
 	sd := newTestSetter(d0)
 
 	date := NewDate(sd)
@@ -117,7 +117,7 @@ func TestInputDateWidget(t *testing.T) {
 	if err := date.JawsEvent(elem, what.Input, "2021-02-03"); err != nil {
 		t.Fatal(err)
 	}
-	if sd.Get().Format(assets.ISO8601) != "2021-02-03" {
+	if sd.Get().Format(jawsdata.ISO8601) != "2021-02-03" {
 		t.Fatalf("unexpected date %v", sd.Get())
 	}
 	if err := date.JawsEvent(elem, what.Input, ""); err != nil {
@@ -129,7 +129,7 @@ func TestInputDateWidget(t *testing.T) {
 	if err := date.JawsEvent(elem, what.Input, "bad"); err == nil {
 		t.Fatal("expected parse error")
 	}
-	d1, _ := time.Parse(assets.ISO8601, "2022-03-04")
+	d1, _ := time.Parse(jawsdata.ISO8601, "2022-03-04")
 	sd.Set(d1)
 	date.JawsUpdate(elem)
 }

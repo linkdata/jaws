@@ -20,7 +20,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/core/assets"
+	"github.com/linkdata/jaws/core/jawsdata"
 	"github.com/linkdata/jaws/core/jawstags"
 	"github.com/linkdata/jaws/core/jawswire"
 	"github.com/linkdata/jaws/jid"
@@ -1604,7 +1604,7 @@ func (ts *testServer) connected(rq *Request) error {
 
 func (ts *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/jaws/") {
-		jawsKey := assets.JawsKeyValue(strings.TrimPrefix(r.URL.Path, "/jaws/"))
+		jawsKey := jawsdata.JawsKeyValue(strings.TrimPrefix(r.URL.Path, "/jaws/"))
 		if rq := ts.jw.UseRequest(jawsKey, r); rq != nil {
 			rq.ServeHTTP(w, r)
 			return

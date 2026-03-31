@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/linkdata/jaws/core/assets"
+	"github.com/linkdata/jaws/core/jawsdata"
 	"github.com/linkdata/jaws/core/jawswire"
 	"github.com/linkdata/jaws/what"
 )
@@ -50,7 +50,7 @@ func TestSession_Object(t *testing.T) {
 	if jw.CookieName != cookie.Name {
 		t.Error(cookie.Name)
 	}
-	if assets.JawsKeyString(sessionId) != cookie.Value {
+	if jawsdata.JawsKeyString(sessionId) != cookie.Value {
 		t.Error(cookie.Value)
 	}
 	if sessionId != sess.ID() {

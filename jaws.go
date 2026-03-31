@@ -5,9 +5,9 @@ import (
 	"time"
 
 	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/core/assets"
 	"github.com/linkdata/jaws/core/jawsbind"
 	"github.com/linkdata/jaws/core/jawsbool"
+	"github.com/linkdata/jaws/core/jawsdata"
 	"github.com/linkdata/jaws/core/jawshtml"
 	"github.com/linkdata/jaws/core/jawstags"
 	"github.com/linkdata/jaws/jid"
@@ -102,7 +102,7 @@ var (
 
 const (
 	// ISO8601 is the date format used by date input widgets (YYYY-MM-DD).
-	ISO8601 = assets.ISO8601
+	ISO8601 = jawsdata.ISO8601
 )
 
 var (
@@ -113,7 +113,7 @@ var (
 	// Close when the instance is no longer needed to free associated resources.
 	New = core.New
 	// JawsKeyString returns the string to be used for the given JaWS key.
-	JawsKeyString = assets.JawsKeyString
+	JawsKeyString = jawsdata.JawsKeyString
 	WriteHTMLTag  = jawshtml.WriteHTMLTag
 	// HTMLGetterFunc wraps a function and returns a HTMLGetter.
 	HTMLGetterFunc = jawsbind.HTMLGetterFunc

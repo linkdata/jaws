@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/linkdata/jaws/core/assets"
+	"github.com/linkdata/jaws/core/jawsdata"
 	"github.com/linkdata/jaws/core/jawstags"
 	"github.com/linkdata/jaws/core/jawswire"
 	"github.com/linkdata/jaws/secureheaders"
@@ -484,8 +484,8 @@ func TestCoverage_IDAndLookupHelpers(t *testing.T) {
 
 func TestCoverage_CookieParseAndIP(t *testing.T) {
 	h := http.Header{}
-	h.Add("Cookie", `a=1; jaws=`+assets.JawsKeyString(11)+`; x=2`)
-	h.Add("Cookie", `jaws="`+assets.JawsKeyString(12)+`"`)
+	h.Add("Cookie", `a=1; jaws=`+jawsdata.JawsKeyString(11)+`; x=2`)
+	h.Add("Cookie", `jaws="`+jawsdata.JawsKeyString(12)+`"`)
 	h.Add("Cookie", `jaws=not-a-key`)
 
 	ids := getCookieSessionsIds(h, "jaws")
@@ -646,7 +646,7 @@ func TestServeHTTP_GetJavascript(t *testing.T) {
 
 	mux.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusOK)
-	is.Equal(w.Body.Len(), len(assets.JavascriptText))
+	is.Equal(w.Body.Len(), len(jawsdata.JavascriptText))
 	is.Equal(w.Header()["Cache-Control"], staticserve.HeaderCacheControl)
 	is.Equal(w.Header()["Content-Type"], []string{mime.TypeByExtension(".js")})
 	is.Equal(w.Header()["Content-Encoding"], nil)
@@ -663,13 +663,13 @@ func TestServeHTTP_GetJavascript(t *testing.T) {
 
 	gr, err := gzip.NewReader(w.Body)
 	is.NoErr(err)
-	b := make([]byte, len(assets.JavascriptText)+32)
+	b := make([]byte, len(jawsdata.JavascriptText)+32)
 	n, err := gr.Read(b)
 	b = b[:n]
 	is.NoErr(err)
 	is.NoErr(gr.Close())
-	is.Equal(len(assets.JavascriptText), len(b))
-	is.Equal(string(assets.JavascriptText), string(b))
+	is.Equal(len(jawsdata.JavascriptText), len(b))
+	is.Equal(string(jawsdata.JavascriptText), string(b))
 }
 
 func TestServeHTTP_GetCSS(t *testing.T) {
@@ -687,7 +687,7 @@ func TestServeHTTP_GetCSS(t *testing.T) {
 
 	mux.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusOK)
-	is.Equal(w.Body.Len(), len(assets.JawsCSS))
+	is.Equal(w.Body.Len(), len(jawsdata.JawsCSS))
 	is.Equal(w.Header()["Cache-Control"], staticserve.HeaderCacheControl)
 	is.Equal(w.Header()["Content-Type"], []string{mime.TypeByExtension(".css")})
 }
