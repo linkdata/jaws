@@ -928,8 +928,7 @@ func (rq *Request) Log(err error) error {
 	if rq != nil {
 		jw = rq.Jaws
 	}
-	jw.Log(err)
-	return err
+	return jw.Log(err)
 }
 
 // MustLog sends an error to the Logger set in the Jaws or
