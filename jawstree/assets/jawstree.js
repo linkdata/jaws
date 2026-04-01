@@ -14,6 +14,12 @@ function jawstreeSet(arg) {
 
 function jawstreeSetPath(arg) {
     var t = window["jawstree_"+arg.tree];
+    if (!t.options.multiSelectEnabled && !t.options.cascadeSelectChildren && arg.set) {
+        var selectedNodes = t.getSelectedNodes();
+        if (selectedNodes.length == 1 && selectedNodes[0].id == arg.id) {
+            return;
+        }
+    }
     if (arg.set || t.options.multiSelectEnabled) {
         t.selectNodeById(arg.id,arg.set);
     }
