@@ -1,4 +1,4 @@
-package jawsbind
+package bind
 
 import "github.com/linkdata/jaws/jawstags"
 

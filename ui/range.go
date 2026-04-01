@@ -4,14 +4,14 @@ import (
 	"io"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawsbind"
+	"github.com/linkdata/jaws/bind"
 )
 
 type Range struct{ InputFloat }
 
-func NewRange(g jawsbind.Setter[float64]) *Range { return &Range{InputFloat{Setter: g}} }
+func NewRange(g bind.Setter[float64]) *Range { return &Range{InputFloat{Setter: g}} }
 func (rw RequestWriter) Range(value any, params ...any) error {
-	return rw.UI(NewRange(jawsbind.MakeSetterFloat64(value)), params...)
+	return rw.UI(NewRange(bind.MakeSetterFloat64(value)), params...)
 }
 
 func (ui *Range) JawsRender(e *jaws.Element, w io.Writer, params []any) error {

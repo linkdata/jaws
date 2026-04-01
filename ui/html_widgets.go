@@ -4,13 +4,13 @@ import (
 	"io"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawsbind"
+	"github.com/linkdata/jaws/bind"
 	"github.com/linkdata/jaws/jawshtml"
 )
 
 // HTMLInner is a reusable base for widgets that render as `<tag>inner</tag>`.
 type HTMLInner struct {
-	HTMLGetter jawsbind.HTMLGetter
+	HTMLGetter bind.HTMLGetter
 }
 
 func (ui *HTMLInner) renderInner(e *jaws.Element, w io.Writer, htmlTag, htmlType string, params []any) (err error) {

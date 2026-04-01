@@ -4,7 +4,7 @@ import (
 	"io"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawsbind"
+	"github.com/linkdata/jaws/bind"
 	"github.com/linkdata/jaws/jawsbool"
 	"github.com/linkdata/jaws/what"
 )
@@ -27,14 +27,14 @@ func (ui *Select) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
 
 func (ui *Select) JawsUpdate(e *jaws.Element) {
 	// jawsbind.Setter[T] includes jawsbind.Getter[T]
-	e.SetValue(ui.ContainerHelper.Container.(jawsbind.Setter[string]).JawsGet(e))
+	e.SetValue(ui.ContainerHelper.Container.(bind.Setter[string]).JawsGet(e))
 	ui.UpdateContainer(e)
 }
 
 func (ui *Select) JawsEvent(e *jaws.Element, wht what.What, val string) (err error) {
 	err = jaws.ErrEventUnhandled
 	if wht == what.Input {
-		err = applyDirty(ui.Tag, e, ui.ContainerHelper.Container.(jawsbind.Setter[string]).JawsSet(e, val))
+		err = applyDirty(ui.Tag, e, ui.ContainerHelper.Container.(bind.Setter[string]).JawsSet(e, val))
 	}
 	return
 }

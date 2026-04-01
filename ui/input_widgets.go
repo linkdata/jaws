@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawsbind"
+	"github.com/linkdata/jaws/bind"
 	"github.com/linkdata/jaws/jawsdata"
 	"github.com/linkdata/jaws/jawshtml"
 	"github.com/linkdata/jaws/what"
@@ -32,7 +32,7 @@ func (ui *Input) maybeDirty(e *jaws.Element, inerr error) (err error) {
 
 type InputText struct {
 	Input
-	jawsbind.Setter[string]
+	bind.Setter[string]
 }
 
 func (ui *InputText) renderStringInput(e *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
@@ -62,7 +62,7 @@ func (ui *InputText) JawsEvent(e *jaws.Element, wht what.What, val string) (err 
 
 type InputBool struct {
 	Input
-	jawsbind.Setter[bool]
+	bind.Setter[bool]
 }
 
 func (ui *InputBool) renderBoolInput(e *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
@@ -106,7 +106,7 @@ func (ui *InputBool) JawsEvent(e *jaws.Element, wht what.What, val string) (err 
 
 type InputFloat struct {
 	Input
-	jawsbind.Setter[float64]
+	bind.Setter[float64]
 }
 
 func (ui *InputFloat) str(v float64) string {
@@ -147,7 +147,7 @@ func (ui *InputFloat) JawsEvent(e *jaws.Element, wht what.What, val string) (err
 
 type InputDate struct {
 	Input
-	jawsbind.Setter[time.Time]
+	bind.Setter[time.Time]
 }
 
 func (ui *InputDate) str(v time.Time) string {

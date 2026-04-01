@@ -4,14 +4,14 @@ import (
 	"io"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawsbind"
+	"github.com/linkdata/jaws/bind"
 )
 
 type Checkbox struct{ InputBool }
 
-func NewCheckbox(g jawsbind.Setter[bool]) *Checkbox { return &Checkbox{InputBool{Setter: g}} }
+func NewCheckbox(g bind.Setter[bool]) *Checkbox { return &Checkbox{InputBool{Setter: g}} }
 func (rw RequestWriter) Checkbox(value any, params ...any) error {
-	return rw.UI(NewCheckbox(jawsbind.MakeSetter[bool](value)), params...)
+	return rw.UI(NewCheckbox(bind.MakeSetter[bool](value)), params...)
 }
 
 func (ui *Checkbox) JawsRender(e *jaws.Element, w io.Writer, params []any) error {

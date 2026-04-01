@@ -6,15 +6,15 @@ import (
 	"strconv"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawsbind"
+	"github.com/linkdata/jaws/bind"
 	"github.com/linkdata/jaws/jawshtml"
 )
 
-type Img struct{ jawsbind.Getter[string] }
+type Img struct{ bind.Getter[string] }
 
-func NewImg(g jawsbind.Getter[string]) *Img { return &Img{Getter: g} }
+func NewImg(g bind.Getter[string]) *Img { return &Img{Getter: g} }
 func (rw RequestWriter) Img(imageSrc any, params ...any) error {
-	return rw.UI(NewImg(jawsbind.MakeGetter[string](imageSrc)), params...)
+	return rw.UI(NewImg(bind.MakeGetter[string](imageSrc)), params...)
 }
 
 func (ui *Img) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) {

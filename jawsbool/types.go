@@ -2,7 +2,7 @@ package jawsbool
 
 import (
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawsbind"
+	"github.com/linkdata/jaws/bind"
 )
 
 type (
@@ -13,7 +13,7 @@ type (
 	// Container is an alias for jaws.Container.
 	Container = jaws.Container
 	// Setter is an alias for jawsbind.Setter.
-	Setter[T comparable] = jawsbind.Setter[T]
+	Setter[T comparable] = bind.Setter[T]
 )
 
 var (

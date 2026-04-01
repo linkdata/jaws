@@ -5,15 +5,15 @@ import (
 	"io"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawsbind"
+	"github.com/linkdata/jaws/bind"
 	"github.com/linkdata/jaws/jawshtml"
 )
 
 type Textarea struct{ InputText }
 
-func NewTextarea(g jawsbind.Setter[string]) *Textarea { return &Textarea{InputText{Setter: g}} }
+func NewTextarea(g bind.Setter[string]) *Textarea { return &Textarea{InputText{Setter: g}} }
 func (rw RequestWriter) Textarea(value any, params ...any) error {
-	return rw.UI(NewTextarea(jawsbind.MakeSetter[string](value)), params...)
+	return rw.UI(NewTextarea(bind.MakeSetter[string](value)), params...)
 }
 
 func (ui *Textarea) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) {

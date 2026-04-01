@@ -1,4 +1,4 @@
-package jawsbind
+package bind
 
 import (
 	"errors"
@@ -19,7 +19,7 @@ func TestBind_Hook_Success_panic(t *testing.T) {
 	}()
 	var mu deadlock.Mutex
 	var val string
-	Bind(&mu, &val).Success(func(n int) {})
+	New(&mu, &val).Success(func(n int) {})
 	t.Fail()
 }
 
@@ -30,7 +30,7 @@ func TestBind_Hook_Success_breaksonerr(t *testing.T) {
 	calls1 := 0
 	calls2 := 0
 	calls3 := 0
-	bind1 := Bind(&mu, &val).
+	bind1 := New(&mu, &val).
 		Success(func() {
 			calls1++
 		}).
@@ -61,7 +61,7 @@ func testBind_Hook_Success[T comparable](t *testing.T, testval T) {
 	var blankval T
 
 	calls1 := 0
-	bind1 := Bind(&mu, &val).
+	bind1 := New(&mu, &val).
 		Success(func() {
 			calls1++
 		})
@@ -157,7 +157,7 @@ func testBind_Hook_Set[T comparable](t *testing.T, testval T) {
 	var val T
 
 	calls1 := 0
-	bind1 := Bind(&mu, &val).
+	bind1 := New(&mu, &val).
 		SetLocked(func(bind Binder[T], elem *Element, value T) (err error) {
 			calls1++
 			return bind.JawsSetLocked(elem, value)
@@ -203,7 +203,7 @@ func testBind_Hook_Get[T comparable](t *testing.T, testval T) {
 	var val T
 
 	calls1 := 0
-	bind1 := Bind(&mu, &val).
+	bind1 := New(&mu, &val).
 		GetLocked(func(bind Binder[T], elem *Element) (value T) {
 			calls1++
 			return bind.JawsGetLocked(elem)
@@ -254,7 +254,7 @@ func TestBind_Hook_Clicked_binding(t *testing.T) {
 	calls := 0
 	gotElem := &Element{}
 	gotName := ""
-	bind := Bind(&mu, &val).
+	bind := New(&mu, &val).
 		Clicked(func(bind Binder[string], elem *Element, name string) (err error) {
 			calls++
 			gotElem = elem
@@ -291,7 +291,7 @@ func TestBind_Hook_Clicked_bindingHook(t *testing.T) {
 	var val string
 
 	successCalls := 0
-	bindWithSuccess := Bind(&mu, &val).Success(func() {
+	bindWithSuccess := New(&mu, &val).Success(func() {
 		successCalls++
 	})
 
@@ -360,7 +360,7 @@ func TestBind_Hook_Clicked_bindingHook_fallsThroughUnhandled(t *testing.T) {
 	order := []int{}
 	clickCalls1 := 0
 	clickCalls2 := 0
-	clickBind2 := Bind(&mu, &val).
+	clickBind2 := New(&mu, &val).
 		Clicked(func(Binder[string], *Element, string) error {
 			clickCalls1++
 			order = append(order, 1)
@@ -394,7 +394,7 @@ func TestBind_Click_defaultUnhandled(t *testing.T) {
 	var mu deadlock.Mutex
 	var val string
 
-	bind := Bind(&mu, &val)
+	bind := New(&mu, &val)
 	handler, ok := bind.(ClickHandler)
 	if !ok {
 		t.Fatalf("%T does not implement ClickHandler", bind)
@@ -425,8 +425,8 @@ func TestBindFunc_String(t *testing.T) {
 	var val string
 
 	testBind_Hooks(t, "foo")
-	testBind_StringSetter(t, Bind(&mu, &val))
-	testBind_StringSetter(t, Bind(&mu, &val).Success(func() {}))
+	testBind_StringSetter(t, New(&mu, &val))
+	testBind_StringSetter(t, New(&mu, &val).Success(func() {}))
 }
 
 func testBind_FloatSetter(t *testing.T, v Setter[float64]) {
@@ -444,8 +444,8 @@ func TestBindFunc_Float(t *testing.T) {
 	var val float64
 
 	testBind_Hooks(t, float64(1.23))
-	testBind_FloatSetter(t, Bind(&mu, &val))
-	testBind_FloatSetter(t, Bind(&mu, &val).Success(func() {}))
+	testBind_FloatSetter(t, New(&mu, &val))
+	testBind_FloatSetter(t, New(&mu, &val).Success(func() {}))
 }
 
 func testBind_BoolSetter(t *testing.T, v Setter[bool]) {
@@ -473,8 +473,8 @@ func TestBindFunc_Bool(t *testing.T) {
 	var val bool
 
 	testBind_Hooks(t, true)
-	testBind_BoolSetter(t, Bind(&mu, &val))
-	testBind_BoolSetter(t, Bind(&mu, &val).Success(func() {}))
+	testBind_BoolSetter(t, New(&mu, &val))
+	testBind_BoolSetter(t, New(&mu, &val).Success(func() {}))
 }
 
 func testBind_TimeSetter(t *testing.T, v Setter[time.Time]) {
@@ -492,15 +492,15 @@ func TestBindFunc_Time(t *testing.T) {
 	var val time.Time
 
 	testBind_Hooks(t, time.Now())
-	testBind_TimeSetter(t, Bind(&mu, &val))
-	testBind_TimeSetter(t, Bind(&mu, &val).Success(func() {}))
+	testBind_TimeSetter(t, New(&mu, &val))
+	testBind_TimeSetter(t, New(&mu, &val).Success(func() {}))
 }
 
 func TestBindFormat(t *testing.T) {
 	var mu deadlock.Mutex
 	val := 12
 
-	bind := Bind(&mu, &val)
+	bind := New(&mu, &val)
 	if v := MakeHTMLGetter(bind).JawsGetHTML(nil); v != "12" {
 		t.Errorf("%T %#v", v, v)
 	}
@@ -529,7 +529,7 @@ func TestBindFormatHTML(t *testing.T) {
 	var mu deadlock.Mutex
 	val := "<span>"
 
-	bind := Bind(&mu, &val)
+	bind := New(&mu, &val)
 	if s := MakeHTMLGetter(bind).JawsGetHTML(nil); s != "&lt;span&gt;" {
 		t.Errorf("%q", s)
 	}
