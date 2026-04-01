@@ -15,7 +15,7 @@ import (
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawsboot"
 	"github.com/linkdata/jaws/jawstree"
-	"github.com/linkdata/jaws/staticserve"
+	"github.com/linkdata/staticserve"
 	"github.com/linkdata/jaws/lib/templatereloader"
 	"github.com/linkdata/jaws/lib/ui"
 )

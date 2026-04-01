@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/linkdata/jaws/staticserve"
+	"github.com/linkdata/staticserve"
 )
 
 type testMux struct {

@@ -12,7 +12,7 @@ import (
 	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/templatereloader"
 	"github.com/linkdata/jaws/lib/ui"
-	"github.com/linkdata/jaws/staticserve"
+	"github.com/linkdata/staticserve"
 )
 
 // This example assumes an 'assets' directory:

@@ -8,7 +8,7 @@ import (
 	"path"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/staticserve"
+	"github.com/linkdata/staticserve"
 )
 
 //go:embed assets

@@ -38,7 +38,7 @@ import (
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 	"github.com/linkdata/jaws/secureheaders"
-	"github.com/linkdata/jaws/staticserve"
+	"github.com/linkdata/staticserve"
 )
 
 const (

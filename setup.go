@@ -7,8 +7,7 @@ import (
 	"net/url"
 	"path"
 
-	"github.com/linkdata/jaws/lib/routepattern"
-	"github.com/linkdata/jaws/staticserve"
+	"github.com/linkdata/staticserve"
 )
 
 // HandleFunc matches the signature of http.ServeMux.Handle().
@@ -48,7 +47,7 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 				u = makeAbsPath(prefix, u)
 				urls = append(urls, u)
 				if handleFn != nil {
-					handleFn(routepattern.NormalizeGET(u.String()), ss)
+					handleFn(staticserve.NormalizeGET(u.String()), ss)
 				}
 			}
 		}

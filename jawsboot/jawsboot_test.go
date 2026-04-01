@@ -14,7 +14,7 @@ import (
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawsboot"
 	"github.com/linkdata/jaws/lib/ui"
-	"github.com/linkdata/jaws/staticserve"
+	"github.com/linkdata/staticserve"
 )
 
 //go:embed assets

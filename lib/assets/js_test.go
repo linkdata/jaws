@@ -11,7 +11,7 @@ import (
 
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
-	"github.com/linkdata/jaws/staticserve"
+	"github.com/linkdata/staticserve"
 )
 
 func Test_PreloadHTML(t *testing.T) {
