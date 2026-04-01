@@ -1,4 +1,4 @@
-package namedbool
+package named
 
 import (
 	"html/template"
@@ -10,7 +10,7 @@ import (
 )
 
 func Test_NamedBoolArray(t *testing.T) {
-	nba := NewArray(false)
+	nba := NewBoolArray(false)
 	if len(nba.data) != 0 {
 		t.Fatalf("len(data)=%d want 0", len(nba.data))
 	}
@@ -64,14 +64,14 @@ func Test_NamedBoolArray(t *testing.T) {
 		t.Fatalf("string mismatch: got %q", got)
 	}
 
-	nba.WriteLocked(func(nba []*NamedBool) []*NamedBool {
+	nba.WriteLocked(func(nba []*Bool) []*Bool {
 		sort.Slice(nba, func(i, j int) bool {
 			return nba[i].Name() > nba[j].Name()
 		})
 		return nba
 	})
 
-	nba.ReadLocked(func(nba []*NamedBool) {
+	nba.ReadLocked(func(nba []*Bool) {
 		if nba[0].Name() != "2" || nba[1].Name() != "2" || nba[2].Name() != "1" {
 			t.Fatalf("unexpected order: %q, %q, %q", nba[0].Name(), nba[1].Name(), nba[2].Name())
 		}
@@ -91,11 +91,11 @@ func Test_NamedBoolArray(t *testing.T) {
 		t.Fatal("unexpected checked state after sort/set")
 	}
 
-	nbaMulti := NewArray(true)
+	nbaMulti := NewBoolArray(true)
 	nbaMulti.Add("1", "one")
 	nbaMulti.Add("2", "two")
 	nbaMulti.Add("2", "also two")
-	nbaMulti.WriteLocked(func(nba []*NamedBool) []*NamedBool {
+	nbaMulti.WriteLocked(func(nba []*Bool) []*Bool {
 		sort.Slice(nba, func(i, j int) bool {
 			return nba[i].Name() > nba[j].Name()
 		})
@@ -147,7 +147,7 @@ func TestNamedBoolOption_RenderAndUpdateBranches(t *testing.T) {
 	jaws.NextJid = 0
 	_, rq := newCoreRequest(t)
 
-	nba := NewArray(false).Add("1", "one")
+	nba := NewBoolArray(false).Add("1", "one")
 	nba.Set("1", true)
 	contents := nba.JawsContains(nil)
 	if len(contents) != 1 {

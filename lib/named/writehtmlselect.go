@@ -1,4 +1,4 @@
-package namedbool
+package named
 
 import (
 	"html/template"
@@ -10,10 +10,10 @@ import (
 )
 
 // WriteHTMLSelect writes a select tag with options from a NamedBoolArray.
-func WriteHTMLSelect(w io.Writer, jid jid.Jid, nba *NamedBoolArray, attrs []template.HTMLAttr) (err error) {
+func WriteHTMLSelect(w io.Writer, jid jid.Jid, nba *BoolArray, attrs []template.HTMLAttr) (err error) {
 	if err = htmlio.WriteHTMLTag(w, jid, "select", "", "", attrs); err == nil {
 		var b []byte
-		nba.ReadLocked(func(nba []*NamedBool) {
+		nba.ReadLocked(func(nba []*Bool) {
 			for _, nb := range nba {
 				b = append(b, "\n<option value="...)
 				b = strconv.AppendQuote(b, nb.Name())

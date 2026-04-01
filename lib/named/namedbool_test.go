@@ -1,4 +1,4 @@
-package namedbool
+package named
 
 import (
 	"html/template"
@@ -8,7 +8,7 @@ import (
 )
 
 func TestNamedBool(t *testing.T) {
-	nba := NewArray(false)
+	nba := NewBoolArray(false)
 	nba.Add("1", "one")
 	nb := nba.data[0]
 

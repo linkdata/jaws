@@ -1,4 +1,4 @@
-package namedbool
+package named
 
 import (
 	"github.com/linkdata/jaws"

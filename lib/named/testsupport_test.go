@@ -1,4 +1,4 @@
-package namedbool
+package named
 
 import (
 	"io"

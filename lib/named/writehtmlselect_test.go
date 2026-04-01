@@ -1,4 +1,4 @@
-package namedbool
+package named
 
 import (
 	"errors"
@@ -18,7 +18,7 @@ func (w errWriteHTMLSelectWriter) Write([]byte) (int, error) {
 }
 
 func TestWriteHTMLSelect_Error(t *testing.T) {
-	nba := NewArray(false).Add("one", "1")
+	nba := NewBoolArray(false).Add("one", "1")
 	wantErr := errors.New("boom")
 	err := WriteHTMLSelect(errWriteHTMLSelectWriter{err: wantErr}, jid.Jid(1), nba, nil)
 	if !errors.Is(err, wantErr) {
@@ -29,7 +29,7 @@ func TestWriteHTMLSelect_Error(t *testing.T) {
 func Test_WriteHTMLSelect(t *testing.T) {
 	type args struct {
 		jid   jid.Jid
-		val   *NamedBoolArray
+		val   *BoolArray
 		attrs []template.HTMLAttr
 	}
 	tests := []struct {
@@ -41,7 +41,7 @@ func Test_WriteHTMLSelect(t *testing.T) {
 			name: "HTMLSelect empty NamedBoolArray and one attr",
 			args: args{
 				jid:   2,
-				val:   NewArray(false),
+				val:   NewBoolArray(false),
 				attrs: []template.HTMLAttr{"attr1"},
 			},
 			want: "<select id=\"Jid.2\" attr1>\n</select>",
@@ -50,8 +50,8 @@ func Test_WriteHTMLSelect(t *testing.T) {
 			name: "HTMLSelect NamedBoolArray with data",
 			args: args{
 				jid: 3,
-				val: func() (nba *NamedBoolArray) {
-					nba = NewArray(false)
+				val: func() (nba *BoolArray) {
+					nba = NewBoolArray(false)
 					nba.Add("one", "1")
 					nba.Add("two", "2")
 					nba.Add("three", "2")

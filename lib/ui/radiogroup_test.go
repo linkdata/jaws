@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/namedbool"
+	"github.com/linkdata/jaws/lib/named"
 )
 
 func TestRequest_RadioGroup(t *testing.T) {
@@ -14,7 +14,7 @@ func TestRequest_RadioGroup(t *testing.T) {
 	var sb strings.Builder
 	rw := RequestWriter{Request: rq, Writer: &sb}
 
-	nba := namedbool.NewArray(false)
+	nba := named.NewBoolArray(false)
 	nba.Add("1", "one")
 	rel := rw.RadioGroup(nba)
 

@@ -1,4 +1,4 @@
-package namedbool
+package named
 
 import (
 	"html/template"
@@ -8,23 +8,23 @@ import (
 	"github.com/linkdata/jaws"
 )
 
-// NamedBoolArray stores the data required to support HTML 'select' elements
+// BoolArray stores the data required to support HTML 'select' elements
 // and sets of HTML radio buttons. It it safe to use from multiple goroutines
 // concurrently.
-type NamedBoolArray struct {
+type BoolArray struct {
 	multi bool             // allow multiple NamedBools to be true
 	mu    deadlock.RWMutex // protects following
-	data  []*NamedBool
+	data  []*Bool
 }
 
-var _ SelectHandler = (*NamedBoolArray)(nil)
+var _ SelectHandler = (*BoolArray)(nil)
 
-func NewArray(multi bool) *NamedBoolArray {
-	return &NamedBoolArray{multi: multi}
+func NewBoolArray(multi bool) *BoolArray {
+	return &BoolArray{multi: multi}
 }
 
 // ReadLocked calls the given function with the NamedBoolArray locked for reading.
-func (nba *NamedBoolArray) ReadLocked(fn func(nbl []*NamedBool)) {
+func (nba *BoolArray) ReadLocked(fn func(nbl []*Bool)) {
 	nba.mu.RLock()
 	defer nba.mu.RUnlock()
 	fn(nba.data)
@@ -32,13 +32,13 @@ func (nba *NamedBoolArray) ReadLocked(fn func(nbl []*NamedBool)) {
 
 // WriteLocked calls the given function with the NamedBoolArray locked for writing and
 // replaces the internal []*NamedBool slice with the return value.
-func (nba *NamedBoolArray) WriteLocked(fn func(nbl []*NamedBool) []*NamedBool) {
+func (nba *BoolArray) WriteLocked(fn func(nbl []*Bool) []*Bool) {
 	nba.mu.Lock()
 	defer nba.mu.Unlock()
 	nba.data = fn(nba.data)
 }
 
-func (nba *NamedBoolArray) JawsContains(e *jaws.Element) (contents []jaws.UI) {
+func (nba *BoolArray) JawsContains(e *jaws.Element) (contents []jaws.UI) {
 	nba.mu.RLock()
 	for _, nb := range nba.data {
 		contents = append(contents, namedBoolOption{nb})
@@ -52,9 +52,9 @@ func (nba *NamedBoolArray) JawsContains(e *jaws.Element) (contents []jaws.UI) {
 //
 // Note that while it's legal to have multiple NamedBool with the same name
 // since it's allowed in HTML, it's probably not a good idea.
-func (nba *NamedBoolArray) Add(name string, text template.HTML) *NamedBoolArray {
+func (nba *BoolArray) Add(name string, text template.HTML) *BoolArray {
 	nba.mu.Lock()
-	nba.data = append(nba.data, New(nba, name, text, false))
+	nba.data = append(nba.data, NewBool(nba, name, text, false))
 	nba.mu.Unlock()
 	return nba
 }
@@ -63,7 +63,7 @@ func (nba *NamedBoolArray) Add(name string, text template.HTML) *NamedBoolArray 
 //
 // If the given name doesn't match any NamedBool(s) in single-select
 // mode, everything will be deselected.
-func (nba *NamedBoolArray) Set(name string, state bool) (changed bool) {
+func (nba *BoolArray) Set(name string, state bool) (changed bool) {
 	nba.mu.Lock()
 	defer nba.mu.Unlock()
 	for _, nb := range nba.data {
@@ -77,7 +77,7 @@ func (nba *NamedBoolArray) Set(name string, state bool) (changed bool) {
 
 // deselectOthersLocked clears all NamedBools whose name differs from
 // the given name when the array is in single-select mode and state is true.
-func (nba *NamedBoolArray) deselectOthersLocked(name string, state bool) (changed bool) {
+func (nba *BoolArray) deselectOthersLocked(name string, state bool) (changed bool) {
 	if state && !nba.multi {
 		for _, nb := range nba.data {
 			if nb.Name() != name {
@@ -95,7 +95,7 @@ func (nba *NamedBoolArray) deselectOthersLocked(name string, state bool) (change
 // In case you can have more than one selected or you need to
 // distinguish between a blank name and the fact that none are
 // set to true, use ReadLocked() to inspect the data directly.
-func (nba *NamedBoolArray) Get() (name string) {
+func (nba *BoolArray) Get() (name string) {
 	nba.mu.RLock()
 	for _, nb := range nba.data {
 		if nb.Checked() {
@@ -108,7 +108,7 @@ func (nba *NamedBoolArray) Get() (name string) {
 }
 
 // Count returns the number of NamedBool in the set that have the given name.
-func (nba *NamedBoolArray) Count(name string) (n int) {
+func (nba *BoolArray) Count(name string) (n int) {
 	nba.mu.RLock()
 	defer nba.mu.RUnlock()
 	for _, nb := range nba.data {
@@ -121,7 +121,7 @@ func (nba *NamedBoolArray) Count(name string) (n int) {
 
 // IsChecked returns true if any of the NamedBool in the set that have the
 // given name are Checked. Returns false if the name is not found.
-func (nba *NamedBoolArray) IsChecked(name string) (state bool) {
+func (nba *BoolArray) IsChecked(name string) (state bool) {
 	nba.mu.RLock()
 	defer nba.mu.RUnlock()
 	for _, nb := range nba.data {
@@ -133,7 +133,7 @@ func (nba *NamedBoolArray) IsChecked(name string) (state bool) {
 }
 
 // String returns a string representation of the NamedBoolArray suitable for debugging.
-func (nba *NamedBoolArray) String() string {
+func (nba *BoolArray) String() string {
 	var sb strings.Builder
 	sb.WriteString("&NamedBoolArray{[")
 	nba.mu.RLock()
@@ -148,11 +148,11 @@ func (nba *NamedBoolArray) String() string {
 	return sb.String()
 }
 
-func (nba *NamedBoolArray) JawsGet(e *jaws.Element) string {
+func (nba *BoolArray) JawsGet(e *jaws.Element) string {
 	return nba.Get()
 }
 
-func (nba *NamedBoolArray) JawsSet(e *jaws.Element, name string) (err error) {
+func (nba *BoolArray) JawsSet(e *jaws.Element, name string) (err error) {
 	if nba.Set(name, true) {
 		e.Dirty(nba)
 	} else {

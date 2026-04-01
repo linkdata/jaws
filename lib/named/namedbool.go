@@ -1,4 +1,4 @@
-package namedbool
+package named
 
 import (
 	"fmt"
@@ -8,17 +8,17 @@ import (
 	"github.com/linkdata/jaws"
 )
 
-// NamedBool stores a named boolen value with a HTML representation.
-type NamedBool struct {
-	nba     *NamedBoolArray  // (read-only) NamedBoolArray that this is part of (may be nil)
+// Bool stores a named boolen value with a HTML representation.
+type Bool struct {
+	nba     *BoolArray       // (read-only) NamedBoolArray that this is part of (may be nil)
 	name    string           // (read-only) name within the named bool set
 	html    template.HTML    // (read-only) HTML code used in select lists or labels
 	mu      deadlock.RWMutex // protects following
 	checked bool             // it's state
 }
 
-func New(nba *NamedBoolArray, name string, html template.HTML, checked bool) *NamedBool {
-	return &NamedBool{
+func NewBool(nba *BoolArray, name string, html template.HTML, checked bool) *Bool {
+	return &Bool{
 		nba:     nba,
 		name:    name,
 		html:    html,
@@ -26,32 +26,32 @@ func New(nba *NamedBoolArray, name string, html template.HTML, checked bool) *Na
 	}
 }
 
-func (nb *NamedBool) Array() *NamedBoolArray {
+func (nb *Bool) Array() *BoolArray {
 	return nb.nba
 }
 
-func (nb *NamedBool) Name() (s string) {
+func (nb *Bool) Name() (s string) {
 	s = nb.name
 	return
 }
 
-func (nb *NamedBool) HTML() (h template.HTML) {
+func (nb *Bool) HTML() (h template.HTML) {
 	h = nb.html
 	return
 }
 
-func (nb *NamedBool) JawsGetHTML(*jaws.Element) (h template.HTML) {
+func (nb *Bool) JawsGetHTML(*jaws.Element) (h template.HTML) {
 	return nb.HTML()
 }
 
-func (nb *NamedBool) JawsGet(*jaws.Element) (v bool) {
+func (nb *Bool) JawsGet(*jaws.Element) (v bool) {
 	nb.mu.RLock()
 	v = nb.checked
 	nb.mu.RUnlock()
 	return
 }
 
-func (nb *NamedBool) JawsSet(e *jaws.Element, checked bool) (err error) {
+func (nb *Bool) JawsSet(e *jaws.Element, checked bool) (err error) {
 	err = jaws.ErrValueUnchanged
 	nba := nb.nba
 	if nba != nil {
@@ -74,14 +74,14 @@ func (nb *NamedBool) JawsSet(e *jaws.Element, checked bool) (err error) {
 	return
 }
 
-func (nb *NamedBool) Checked() (checked bool) {
+func (nb *Bool) Checked() (checked bool) {
 	nb.mu.RLock()
 	checked = nb.checked
 	nb.mu.RUnlock()
 	return
 }
 
-func (nb *NamedBool) Set(checked bool) (changed bool) {
+func (nb *Bool) Set(checked bool) (changed bool) {
 	nb.mu.Lock()
 	if nb.checked != checked {
 		nb.checked = checked
@@ -92,6 +92,6 @@ func (nb *NamedBool) Set(checked bool) (changed bool) {
 }
 
 // String returns a string representation of the NamedBool suitable for debugging.
-func (nb *NamedBool) String() string {
+func (nb *Bool) String() string {
 	return fmt.Sprintf("&{%q,%q,%v}", nb.Name(), nb.HTML(), nb.Checked())
 }

@@ -5,7 +5,7 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
-	"github.com/linkdata/jaws/lib/namedbool"
+	"github.com/linkdata/jaws/lib/named"
 	"github.com/linkdata/jaws/lib/what"
 )
 
@@ -13,11 +13,11 @@ type Select struct {
 	ContainerHelper
 }
 
-func NewSelect(sh namedbool.SelectHandler) *Select {
+func NewSelect(sh named.SelectHandler) *Select {
 	return &Select{ContainerHelper: NewContainerHelper(sh)}
 }
 
-func (rw RequestWriter) Select(sh namedbool.SelectHandler, params ...any) error {
+func (rw RequestWriter) Select(sh named.SelectHandler, params ...any) error {
 	return rw.UI(NewSelect(sh), params...)
 }
 

@@ -1,4 +1,4 @@
-package namedbool
+package named
 
 import (
 	"html"
@@ -12,11 +12,11 @@ import (
 // namedBoolOption is an internal UI wrapper used by NamedBoolArray.JawsContains.
 // It intentionally stays unexported; public option widgets live in package ui.
 type namedBoolOption struct {
-	*NamedBool
+	*Bool
 }
 
 func (ui namedBoolOption) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	e.Tag(ui.NamedBool)
+	e.Tag(ui.Bool)
 	attrs := e.ApplyParams(params)
 	valattr := template.HTMLAttr(`value="` + html.EscapeString(ui.Name()) + `"`) // #nosec G203
 	attrs = append(attrs, valattr)
