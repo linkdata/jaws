@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 
+	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstags"
 )
 
@@ -16,26 +17,26 @@ func (bind binding[T]) JawsBinderPrev() Binder[T] {
 	return nil
 }
 
-func (bind binding[T]) JawsGetLocked(*Element) T {
+func (bind binding[T]) JawsGetLocked(*jaws.Element) T {
 	return *bind.ptr
 }
 
-func (bind binding[T]) JawsGet(elem *Element) (value T) {
+func (bind binding[T]) JawsGet(elem *jaws.Element) (value T) {
 	bind.RWLocker.RLock()
 	value = bind.JawsGetLocked(elem)
 	bind.RWLocker.RUnlock()
 	return
 }
 
-func (bind binding[T]) JawsSetLocked(elem *Element, value T) (err error) {
+func (bind binding[T]) JawsSetLocked(elem *jaws.Element, value T) (err error) {
 	if value != *bind.ptr {
 		*bind.ptr = value
 		return nil
 	}
-	return ErrValueUnchanged
+	return jaws.ErrValueUnchanged
 }
 
-func (bind binding[T]) JawsSet(elem *Element, value T) (err error) {
+func (bind binding[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 	bind.RWLocker.Lock()
 	err = bind.JawsSetLocked(elem, value)
 	bind.RWLocker.Unlock()
@@ -46,8 +47,8 @@ func (bind binding[T]) JawsGetTag(jawstags.Context) any {
 	return bind.ptr
 }
 
-func (bind binding[T]) JawsClick(*Element, string) error {
-	return ErrEventUnhandled
+func (bind binding[T]) JawsClick(*jaws.Element, string) error {
+	return jaws.ErrEventUnhandled
 }
 
 // SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
@@ -106,13 +107,13 @@ func (bind binding[T]) Success(fn any) Binder[T] {
 
 // Format returns a Getter[string] using fmt.Sprintf(f, JawsGet[T](elem))
 func (bind binding[T]) Format(f string) (getter Getter[string]) {
-	return StringGetterFunc(func(elem *Element) (s string) { return fmt.Sprintf(f, bind.JawsGet(elem)) }, bind)
+	return StringGetterFunc(func(elem *jaws.Element) (s string) { return fmt.Sprintf(f, bind.JawsGet(elem)) }, bind)
 }
 
 // FormatHTML returns a HTMLGetter using fmt.Sprintf(f, JawsGet[T](elem)).
 // Ensure that the generated string is valid HTML.
 func (bind binding[T]) FormatHTML(f string) (getter HTMLGetter) {
-	return HTMLGetterFunc(func(elem *Element) (tmpl template.HTML) {
+	return HTMLGetterFunc(func(elem *jaws.Element) (tmpl template.HTML) {
 		return template.HTML( /*#nosec G203*/ fmt.Sprintf(f, bind.JawsGet(elem)))
 	}, bind)
 }
@@ -120,20 +121,20 @@ func (bind binding[T]) FormatHTML(f string) (getter HTMLGetter) {
 func wrapSuccessHook(fn any) (hook BindSuccessHook) {
 	switch fn := fn.(type) {
 	case func():
-		return func(*Element) error {
+		return func(*jaws.Element) error {
 			fn()
 			return nil
 		}
 	case func() error:
-		return func(*Element) error {
+		return func(*jaws.Element) error {
 			return fn()
 		}
-	case func(*Element):
-		return func(elem *Element) error {
+	case func(*jaws.Element):
+		return func(elem *jaws.Element) error {
 			fn(elem)
 			return nil
 		}
-	case func(*Element) error:
+	case func(*jaws.Element) error:
 		return fn
 	}
 	panic("Binding[T].Success(): function has wrong signature")

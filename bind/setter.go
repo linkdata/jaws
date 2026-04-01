@@ -3,20 +3,21 @@ package bind
 import (
 	"fmt"
 
+	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstags"
 )
 
 type Setter[T comparable] interface {
 	Getter[T]
 	// JawsSet may return ErrValueUnchanged to indicate value was already set.
-	JawsSet(elem *Element, value T) (err error)
+	JawsSet(elem *jaws.Element, value T) (err error)
 }
 
 type setterReadOnly[T comparable] struct {
 	Getter[T]
 }
 
-func (setterReadOnly[T]) JawsSet(*Element, T) error {
+func (setterReadOnly[T]) JawsSet(*jaws.Element, T) error {
 	return ErrValueNotSettable
 }
 
@@ -28,11 +29,11 @@ type setterStatic[T comparable] struct {
 	v T
 }
 
-func (setterStatic[T]) JawsSet(*Element, T) error {
+func (setterStatic[T]) JawsSet(*jaws.Element, T) error {
 	return ErrValueNotSettable
 }
 
-func (s setterStatic[T]) JawsGet(*Element) T {
+func (s setterStatic[T]) JawsGet(*jaws.Element) T {
 	return s.v
 }
 

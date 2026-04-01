@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawstags"
 	"github.com/linkdata/jaws/ui"
 )
 
@@ -14,7 +15,7 @@ func TestHandler_ServeHTTP(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 
-	dot := jaws.Tag("123")
+	dot := jawstags.Tag("123")
 	h := ui.Handler(rq.TestRequest.Request.Jaws, "testtemplate", dot)
 	var buf bytes.Buffer
 	var rr httptest.ResponseRecorder

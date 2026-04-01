@@ -1,13 +1,16 @@
 package bind
 
-import "github.com/linkdata/jaws/jawstags"
+import (
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawstags"
+)
 
 type stringGetterFunc struct {
-	fn   func(*Element) string
+	fn   func(*jaws.Element) string
 	tags []any
 }
 
-func (g *stringGetterFunc) JawsGet(e *Element) string {
+func (g *stringGetterFunc) JawsGet(e *jaws.Element) string {
 	return g.fn(e)
 }
 
@@ -16,6 +19,6 @@ func (g *stringGetterFunc) JawsGetTag(jawstags.Context) any {
 }
 
 // StringGetterFunc wraps a function and returns a Getter[string]
-func StringGetterFunc(fn func(elem *Element) (s string), tags ...any) Getter[string] {
+func StringGetterFunc(fn func(elem *jaws.Element) (s string), tags ...any) Getter[string] {
 	return &stringGetterFunc{fn: fn, tags: tags}
 }

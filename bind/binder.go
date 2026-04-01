@@ -1,6 +1,9 @@
 package bind
 
-import "github.com/linkdata/jaws/jawstags"
+import (
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawstags"
+)
 
 // BindSetHook is a function that replaces JawsSetLocked for a Binder.
 //
@@ -9,7 +12,7 @@ import "github.com/linkdata/jaws/jawstags"
 //
 // The bind argument is the previous Binder in the chain, and you probably
 // want to call it's JawsSetLocked first.
-type BindSetHook[T comparable] func(bind Binder[T], elem *Element, value T) (err error)
+type BindSetHook[T comparable] func(bind Binder[T], elem *jaws.Element, value T) (err error)
 
 // BindGetHook is a function that replaces JawsGetLocked for a Binder.
 //
@@ -18,12 +21,12 @@ type BindSetHook[T comparable] func(bind Binder[T], elem *Element, value T) (err
 //
 // The bind argument is the previous Binder in the chain, and you probably
 // want to call it's JawsGetLocked first.
-type BindGetHook[T comparable] func(bind Binder[T], elem *Element) (value T)
+type BindGetHook[T comparable] func(bind Binder[T], elem *jaws.Element) (value T)
 
 // BindClickedHook is a function to call when a click event is received.
 //
 // The Binder locks are not held when the function is called.
-type BindClickedHook[T comparable] func(bind Binder[T], elem *Element, name string) (err error)
+type BindClickedHook[T comparable] func(bind Binder[T], elem *jaws.Element, name string) (err error)
 
 // BindSuccessHook is a function to call when a call to JawsSet returns with no error.
 //
@@ -32,7 +35,7 @@ type BindClickedHook[T comparable] func(bind Binder[T], elem *Element, name stri
 // Success hooks in a Binder chain are called in the order they were registered.
 // If one of them returns an error, that error is returned from JawsSet and
 // no more success hooks are called.
-type BindSuccessHook func(*Element) (err error)
+type BindSuccessHook func(*jaws.Element) (err error)
 
 type Formatter interface {
 	// Format returns a Getter[string] using fmt.Sprintf(f, JawsGet[T](elem))
@@ -44,11 +47,11 @@ type Binder[T comparable] interface {
 	Setter[T]
 	jawstags.TagGetter
 	Formatter
-	ClickHandler
+	jaws.ClickHandler
 
 	JawsBinderPrev() Binder[T] // returns the previous Binder in the chain, or nil
-	JawsGetLocked(elem *Element) (value T)
-	JawsSetLocked(elem *Element, value T) (err error)
+	JawsGetLocked(elem *jaws.Element) (value T)
+	JawsSetLocked(elem *jaws.Element, value T) (err error)
 
 	// SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
 	//

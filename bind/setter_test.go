@@ -3,6 +3,7 @@ package bind
 import (
 	"testing"
 
+	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstags"
 )
 
@@ -10,7 +11,7 @@ const testStringGetterText = "<span>"
 
 type testGetterString struct{}
 
-func (testGetterString) JawsGet(*Element) string {
+func (testGetterString) JawsGet(*jaws.Element) string {
 	return testStringGetterText
 }
 

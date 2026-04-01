@@ -3,6 +3,7 @@ package bind
 import (
 	"fmt"
 
+	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstags"
 )
 
@@ -15,19 +16,19 @@ type numeric interface {
 type SetterFloat64[T numeric] interface {
 	Getter[T]
 	// JawsSet may return ErrValueUnchanged to indicate value was already set.
-	JawsSet(elem *Element, value T) (err error)
+	JawsSet(elem *jaws.Element, value T) (err error)
 }
 
 type setterFloat64[T numeric] struct {
 	Setter[T]
 }
 
-func (s setterFloat64[T]) JawsGet(e *Element) float64 {
+func (s setterFloat64[T]) JawsGet(e *jaws.Element) float64 {
 	v := s.Setter.JawsGet(e)
 	return float64(v)
 }
 
-func (s setterFloat64[T]) JawsSet(e *Element, v float64) error {
+func (s setterFloat64[T]) JawsSet(e *jaws.Element, v float64) error {
 	return s.Setter.JawsSet(e, T(v))
 }
 
@@ -39,12 +40,12 @@ type setterFloat64ReadOnly[T numeric] struct {
 	Getter[T]
 }
 
-func (s setterFloat64ReadOnly[T]) JawsGet(e *Element) float64 {
+func (s setterFloat64ReadOnly[T]) JawsGet(e *jaws.Element) float64 {
 	v := s.Getter.JawsGet(e)
 	return float64(v)
 }
 
-func (setterFloat64ReadOnly[T]) JawsSet(*Element, float64) error {
+func (setterFloat64ReadOnly[T]) JawsSet(*jaws.Element, float64) error {
 	return ErrValueNotSettable
 }
 
@@ -56,11 +57,11 @@ type setterFloat64Static[T numeric] struct {
 	v float64
 }
 
-func (setterFloat64Static[T]) JawsSet(*Element, float64) error {
+func (setterFloat64Static[T]) JawsSet(*jaws.Element, float64) error {
 	return ErrValueNotSettable
 }
 
-func (s setterFloat64Static[T]) JawsGet(*Element) float64 {
+func (s setterFloat64Static[T]) JawsGet(*jaws.Element) float64 {
 	return s.v
 }
 

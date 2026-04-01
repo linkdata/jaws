@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstags"
 )
 
@@ -11,7 +12,7 @@ type testGetter[T comparable] struct {
 	v T
 }
 
-func (tg testGetter[T]) JawsGet(*Element) T {
+func (tg testGetter[T]) JawsGet(*jaws.Element) T {
 	return tg.v
 }
 

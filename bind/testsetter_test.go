@@ -2,6 +2,7 @@ package bind
 
 import (
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstags"
 )
 
@@ -62,7 +63,7 @@ func (ts *testSetter[T]) GetCount() (n int) {
 	return
 }
 
-func (ts *testSetter[T]) JawsGet(*Element) (val T) {
+func (ts *testSetter[T]) JawsGet(*jaws.Element) (val T) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.getCount++
@@ -73,7 +74,7 @@ func (ts *testSetter[T]) JawsGet(*Element) (val T) {
 	return
 }
 
-func (ts *testSetter[T]) JawsSet(_ *Element, val T) (err error) {
+func (ts *testSetter[T]) JawsSet(_ *jaws.Element, val T) (err error) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.setCount++
@@ -82,14 +83,14 @@ func (ts *testSetter[T]) JawsSet(_ *Element, val T) (err error) {
 	}
 	if err = ts.err; err == nil {
 		if ts.val == val {
-			err = ErrValueUnchanged
+			err = jaws.ErrValueUnchanged
 		}
 		ts.val = val
 	}
 	return
 }
 
-func (ts *testSetter[string]) JawsGetString(*Element) (val string) {
+func (ts *testSetter[string]) JawsGetString(*jaws.Element) (val string) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.getCount++
@@ -100,7 +101,7 @@ func (ts *testSetter[string]) JawsGetString(*Element) (val string) {
 	return
 }
 
-func (ts *testSetter[any]) JawsGetAny(*Element) (val any) {
+func (ts *testSetter[any]) JawsGetAny(*jaws.Element) (val any) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.getCount++
@@ -111,7 +112,7 @@ func (ts *testSetter[any]) JawsGetAny(*Element) (val any) {
 	return
 }
 
-func (ts *testSetter[any]) JawsSetAny(_ *Element, val any) (err error) {
+func (ts *testSetter[any]) JawsSetAny(_ *jaws.Element, val any) (err error) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.setCount++
@@ -120,14 +121,14 @@ func (ts *testSetter[any]) JawsSetAny(_ *Element, val any) (err error) {
 	}
 	if err = ts.err; err == nil {
 		if ts.val == val {
-			err = ErrValueUnchanged
+			err = jaws.ErrValueUnchanged
 		}
 		ts.val = val
 	}
 	return
 }
 
-func (ts *testSetter[T]) JawsGetHTML(*Element) (val T) {
+func (ts *testSetter[T]) JawsGetHTML(*jaws.Element) (val T) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.getCount++

@@ -4,24 +4,25 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstags"
 )
 
 var ErrValueNotSettable = errors.New("value not settable")
 
 type Getter[T comparable] interface {
-	JawsGet(elem *Element) (value T)
+	JawsGet(elem *jaws.Element) (value T)
 }
 
 type getterStatic[T comparable] struct {
 	v T
 }
 
-func (getterStatic[T]) JawsSet(*Element, T) error {
+func (getterStatic[T]) JawsSet(*jaws.Element, T) error {
 	return ErrValueNotSettable
 }
 
-func (s getterStatic[T]) JawsGet(*Element) T {
+func (s getterStatic[T]) JawsGet(*jaws.Element) T {
 	return s.v
 }
 

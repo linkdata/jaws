@@ -3,6 +3,8 @@ package bind
 import (
 	"fmt"
 	"html/template"
+
+	"github.com/linkdata/jaws"
 )
 
 type bindingHook[T comparable] struct {
@@ -14,27 +16,27 @@ func (bind bindingHook[T]) JawsBinderPrev() Binder[T] {
 	return bind.Binder
 }
 
-func (bind bindingHook[T]) JawsGetLocked(elem *Element) T {
+func (bind bindingHook[T]) JawsGetLocked(elem *jaws.Element) T {
 	if fn, ok := bind.hook.(BindGetHook[T]); ok {
 		return fn(bind.Binder, elem)
 	}
 	return bind.Binder.JawsGetLocked(elem)
 }
 
-func (bind bindingHook[T]) JawsGet(elem *Element) T {
+func (bind bindingHook[T]) JawsGet(elem *jaws.Element) T {
 	bind.RLock()
 	defer bind.RUnlock()
 	return bind.JawsGetLocked(elem)
 }
 
-func (bind bindingHook[T]) JawsSetLocked(elem *Element, value T) error {
+func (bind bindingHook[T]) JawsSetLocked(elem *jaws.Element, value T) error {
 	if fn, ok := bind.hook.(BindSetHook[T]); ok {
 		return fn(bind.Binder, elem, value)
 	}
 	return bind.Binder.JawsSetLocked(elem, value)
 }
 
-func (bind bindingHook[T]) jawsSetLocking(elem *Element, value T) (err error) {
+func (bind bindingHook[T]) jawsSetLocking(elem *jaws.Element, value T) (err error) {
 	bind.Lock()
 	defer bind.Unlock()
 	return bind.JawsSetLocked(elem, value)
@@ -48,11 +50,11 @@ const (
 	callChainClicked
 )
 
-func callChain[T comparable](binder Binder[T], elem *Element, kind callChainType, param any) (err error) {
+func callChain[T comparable](binder Binder[T], elem *jaws.Element, kind callChainType, param any) (err error) {
 	if prev := binder.JawsBinderPrev(); prev != nil {
 		err = callChain(prev, elem, kind, param)
 	} else if kind == callChainClicked {
-		err = ErrEventUnhandled
+		err = jaws.ErrEventUnhandled
 	}
 	if bh, ok := binder.(bindingHook[T]); ok {
 		switch kind {
@@ -63,7 +65,7 @@ func callChain[T comparable](binder Binder[T], elem *Element, kind callChainType
 				}
 			}
 		case callChainClicked:
-			if err == ErrEventUnhandled {
+			if err == jaws.ErrEventUnhandled {
 				if fn, ok := bh.hook.(BindClickedHook[T]); ok {
 					err = fn(bh, elem, param.(string))
 				}
@@ -73,14 +75,14 @@ func callChain[T comparable](binder Binder[T], elem *Element, kind callChainType
 	return
 }
 
-func (bind bindingHook[T]) JawsSet(elem *Element, value T) (err error) {
+func (bind bindingHook[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 	if err = bind.jawsSetLocking(elem, value); err == nil {
 		err = callChain(bind, elem, callChainSuccess, nil)
 	}
 	return
 }
 
-func (bind bindingHook[T]) JawsClick(elem *Element, name string) (err error) {
+func (bind bindingHook[T]) JawsClick(elem *jaws.Element, name string) (err error) {
 	err = callChain(bind, elem, callChainClicked, name)
 	return
 }
@@ -141,13 +143,13 @@ func (bind bindingHook[T]) Success(fn any) Binder[T] {
 
 // Format returns a Getter[string] using fmt.Sprintf(f, JawsGet[T](elem))
 func (bind bindingHook[T]) Format(f string) (getter Getter[string]) {
-	return StringGetterFunc(func(elem *Element) (s string) { return fmt.Sprintf(f, bind.JawsGet(elem)) }, bind)
+	return StringGetterFunc(func(elem *jaws.Element) (s string) { return fmt.Sprintf(f, bind.JawsGet(elem)) }, bind)
 }
 
 // FormatHTML returns a HTMLGetter using fmt.Sprintf(f, JawsGet[T](elem)).
 // Ensure that the generated string is valid HTML.
 func (bind bindingHook[T]) FormatHTML(f string) (getter HTMLGetter) {
-	return HTMLGetterFunc(func(elem *Element) (tmpl template.HTML) {
+	return HTMLGetterFunc(func(elem *jaws.Element) (tmpl template.HTML) {
 		return template.HTML( /*#nosec G203*/ fmt.Sprintf(f, bind.JawsGet(elem)))
 	}, bind)
 }

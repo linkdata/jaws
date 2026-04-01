@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstags"
 )
 
@@ -71,7 +72,7 @@ func testBind_Hook_Success[T comparable](t *testing.T, testval T) {
 	if x := bind1.JawsGet(nil); x != testval {
 		t.Error(x)
 	}
-	if err := bind1.JawsSet(nil, testval); err != ErrValueUnchanged {
+	if err := bind1.JawsSet(nil, testval); err != jaws.ErrValueUnchanged {
 		t.Error(err)
 	}
 	if calls1 != 1 {
@@ -107,7 +108,7 @@ func testBind_Hook_Success[T comparable](t *testing.T, testval T) {
 
 	calls3 := 0
 	bind3 := bind2.
-		Success(func(*Element) {
+		Success(func(*jaws.Element) {
 			calls3++
 			if calls2 <= calls3 {
 				t.Error(calls2, calls3)
@@ -128,7 +129,7 @@ func testBind_Hook_Success[T comparable](t *testing.T, testval T) {
 
 	calls4 := 0
 	bind4 := bind3.
-		Success(func(*Element) (err error) {
+		Success(func(*jaws.Element) (err error) {
 			calls4++
 			if calls3 <= calls4 {
 				t.Error(calls3, calls4)
@@ -158,7 +159,7 @@ func testBind_Hook_Set[T comparable](t *testing.T, testval T) {
 
 	calls1 := 0
 	bind1 := New(&mu, &val).
-		SetLocked(func(bind Binder[T], elem *Element, value T) (err error) {
+		SetLocked(func(bind Binder[T], elem *jaws.Element, value T) (err error) {
 			calls1++
 			return bind.JawsSetLocked(elem, value)
 		})
@@ -168,7 +169,7 @@ func testBind_Hook_Set[T comparable](t *testing.T, testval T) {
 	if x := bind1.JawsGet(nil); x != testval {
 		t.Error(x)
 	}
-	if err := bind1.JawsSet(nil, testval); err != ErrValueUnchanged {
+	if err := bind1.JawsSet(nil, testval); err != jaws.ErrValueUnchanged {
 		t.Error(err)
 	}
 	if calls1 != 2 {
@@ -181,7 +182,7 @@ func testBind_Hook_Set[T comparable](t *testing.T, testval T) {
 
 	calls2 := 0
 	bind2 := bind1.
-		SetLocked(func(bind Binder[T], elem *Element, value T) (err error) {
+		SetLocked(func(bind Binder[T], elem *jaws.Element, value T) (err error) {
 			calls2++
 			return bind.JawsSetLocked(elem, value)
 		})
@@ -204,7 +205,7 @@ func testBind_Hook_Get[T comparable](t *testing.T, testval T) {
 
 	calls1 := 0
 	bind1 := New(&mu, &val).
-		GetLocked(func(bind Binder[T], elem *Element) (value T) {
+		GetLocked(func(bind Binder[T], elem *jaws.Element) (value T) {
 			calls1++
 			return bind.JawsGetLocked(elem)
 		})
@@ -214,7 +215,7 @@ func testBind_Hook_Get[T comparable](t *testing.T, testval T) {
 	if x := bind1.JawsGet(nil); x != testval {
 		t.Error(x)
 	}
-	if err := bind1.JawsSet(nil, testval); err != ErrValueUnchanged {
+	if err := bind1.JawsSet(nil, testval); err != jaws.ErrValueUnchanged {
 		t.Error(err)
 	}
 	if calls1 != 1 {
@@ -227,7 +228,7 @@ func testBind_Hook_Get[T comparable](t *testing.T, testval T) {
 
 	calls2 := 0
 	bind2 := bind1.
-		GetLocked(func(bind Binder[T], elem *Element) (value T) {
+		GetLocked(func(bind Binder[T], elem *jaws.Element) (value T) {
 			calls2++
 			return bind.JawsGetLocked(elem)
 		})
@@ -252,22 +253,22 @@ func TestBind_Hook_Clicked_binding(t *testing.T) {
 	var val string
 
 	calls := 0
-	gotElem := &Element{}
+	gotElem := &jaws.Element{}
 	gotName := ""
 	bind := New(&mu, &val).
-		Clicked(func(bind Binder[string], elem *Element, name string) (err error) {
+		Clicked(func(bind Binder[string], elem *jaws.Element, name string) (err error) {
 			calls++
 			gotElem = elem
 			gotName = name
 			return nil
 		})
 
-	handler, ok := bind.(ClickHandler)
+	handler, ok := bind.(jaws.ClickHandler)
 	if !ok {
 		t.Fatalf("%T does not implement ClickHandler", bind)
 	}
 
-	elem := &Element{}
+	elem := &jaws.Element{}
 	if err := handler.JawsClick(elem, "save"); err != nil {
 		t.Fatal(err)
 	}
@@ -297,20 +298,20 @@ func TestBind_Hook_Clicked_bindingHook(t *testing.T) {
 
 	clickCalls1 := 0
 	clickCalls2 := 0
-	clickBind1 := bindWithSuccess.Clicked(func(Binder[string], *Element, string) error {
+	clickBind1 := bindWithSuccess.Clicked(func(Binder[string], *jaws.Element, string) error {
 		clickCalls1++
 		return nil
 	})
-	clickBind2 := clickBind1.Clicked(func(Binder[string], *Element, string) error {
+	clickBind2 := clickBind1.Clicked(func(Binder[string], *jaws.Element, string) error {
 		clickCalls2++
 		return nil
 	})
 
-	handler1, ok := clickBind1.(ClickHandler)
+	handler1, ok := clickBind1.(jaws.ClickHandler)
 	if !ok {
 		t.Fatalf("%T does not implement ClickHandler", clickBind1)
 	}
-	handler2, ok := clickBind2.(ClickHandler)
+	handler2, ok := clickBind2.(jaws.ClickHandler)
 	if !ok {
 		t.Fatalf("%T does not implement ClickHandler", clickBind2)
 	}
@@ -344,7 +345,7 @@ func TestBind_Hook_Clicked_bindingHook(t *testing.T) {
 	if got := clickBind2.JawsGet(nil); got != "foo" {
 		t.Error(got)
 	}
-	if err := bindWithSuccess.(ClickHandler).JawsClick(nil, "x"); !errors.Is(err, ErrEventUnhandled) {
+	if err := bindWithSuccess.(jaws.ClickHandler).JawsClick(nil, "x"); !errors.Is(err, jaws.ErrEventUnhandled) {
 		t.Fatal(err)
 	}
 	tags := jawstags.MustTagExpand(nil, clickBind2)
@@ -361,18 +362,18 @@ func TestBind_Hook_Clicked_bindingHook_fallsThroughUnhandled(t *testing.T) {
 	clickCalls1 := 0
 	clickCalls2 := 0
 	clickBind2 := New(&mu, &val).
-		Clicked(func(Binder[string], *Element, string) error {
+		Clicked(func(Binder[string], *jaws.Element, string) error {
 			clickCalls1++
 			order = append(order, 1)
-			return ErrEventUnhandled
+			return jaws.ErrEventUnhandled
 		}).
-		Clicked(func(Binder[string], *Element, string) error {
+		Clicked(func(Binder[string], *jaws.Element, string) error {
 			clickCalls2++
 			order = append(order, 2)
 			return nil
 		})
 
-	handler, ok := clickBind2.(ClickHandler)
+	handler, ok := clickBind2.(jaws.ClickHandler)
 	if !ok {
 		t.Fatalf("%T does not implement ClickHandler", clickBind2)
 	}
@@ -395,11 +396,11 @@ func TestBind_Click_defaultUnhandled(t *testing.T) {
 	var val string
 
 	bind := New(&mu, &val)
-	handler, ok := bind.(ClickHandler)
+	handler, ok := bind.(jaws.ClickHandler)
 	if !ok {
 		t.Fatalf("%T does not implement ClickHandler", bind)
 	}
-	if err := handler.JawsClick(nil, "ignored"); !errors.Is(err, ErrEventUnhandled) {
+	if err := handler.JawsClick(nil, "ignored"); !errors.Is(err, jaws.ErrEventUnhandled) {
 		t.Fatal(err)
 	}
 }
