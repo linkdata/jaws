@@ -3,6 +3,8 @@ package jawsbool
 import (
 	"html/template"
 	"testing"
+
+	"github.com/linkdata/jaws"
 )
 
 func TestNamedBool(t *testing.T) {
@@ -36,7 +38,7 @@ func TestNamedBool(t *testing.T) {
 	if got := nb.JawsGet(nil); got != nb.Checked() {
 		t.Fatalf("JawsGet mismatch: got %v want %v", got, nb.Checked())
 	}
-	if err := nb.JawsSet(e, true); err != ErrValueUnchanged {
+	if err := nb.JawsSet(e, true); err != jaws.ErrValueUnchanged {
 		t.Fatalf("expected ErrValueUnchanged, got %v", err)
 	}
 }

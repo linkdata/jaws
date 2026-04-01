@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"io"
 
+	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawshtml"
 )
 
@@ -14,7 +15,7 @@ type namedBoolOption struct {
 	*NamedBool
 }
 
-func (ui namedBoolOption) JawsRender(e *Element, w io.Writer, params []any) error {
+func (ui namedBoolOption) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
 	e.Tag(ui.NamedBool)
 	attrs := e.ApplyParams(params)
 	valattr := template.HTMLAttr(`value="` + html.EscapeString(ui.Name()) + `"`) // #nosec G203
@@ -25,7 +26,7 @@ func (ui namedBoolOption) JawsRender(e *Element, w io.Writer, params []any) erro
 	return jawshtml.WriteHTMLInner(w, e.Jid(), "option", "", ui.JawsGetHTML(e), attrs...)
 }
 
-func (ui namedBoolOption) JawsUpdate(e *Element) {
+func (ui namedBoolOption) JawsUpdate(e *jaws.Element) {
 	if ui.Checked() {
 		e.SetAttr("selected", "")
 	} else {

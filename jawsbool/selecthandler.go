@@ -1,6 +1,8 @@
 package jawsbool
 
+import "github.com/linkdata/jaws"
+
 type SelectHandler interface {
-	Container
-	Setter[string]
+	jaws.Container
+	jaws.Setter[string]
 }

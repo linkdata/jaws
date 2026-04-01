@@ -5,6 +5,7 @@ import (
 	"html/template"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws"
 )
 
 // NamedBool stores a named boolen value with a HTML representation.
@@ -39,19 +40,19 @@ func (nb *NamedBool) HTML() (h template.HTML) {
 	return
 }
 
-func (nb *NamedBool) JawsGetHTML(*Element) (h template.HTML) {
+func (nb *NamedBool) JawsGetHTML(*jaws.Element) (h template.HTML) {
 	return nb.HTML()
 }
 
-func (nb *NamedBool) JawsGet(*Element) (v bool) {
+func (nb *NamedBool) JawsGet(*jaws.Element) (v bool) {
 	nb.mu.RLock()
 	v = nb.checked
 	nb.mu.RUnlock()
 	return
 }
 
-func (nb *NamedBool) JawsSet(e *Element, checked bool) (err error) {
-	err = ErrValueUnchanged
+func (nb *NamedBool) JawsSet(e *jaws.Element, checked bool) (err error) {
+	err = jaws.ErrValueUnchanged
 	nba := nb.nba
 	if nba != nil {
 		nba.mu.Lock()

@@ -138,7 +138,7 @@ func Test_NamedBoolArray(t *testing.T) {
 	if got := nba.JawsGet(e); got != "1" {
 		t.Fatalf("JawsGet=%q want 1", got)
 	}
-	if err := nba.JawsSet(e, "1"); err != ErrValueUnchanged {
+	if err := nba.JawsSet(e, "1"); err != jaws.ErrValueUnchanged {
 		t.Fatalf("expected ErrValueUnchanged, got %v", err)
 	}
 }
