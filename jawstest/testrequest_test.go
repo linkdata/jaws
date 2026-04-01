@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/bind"
 	"github.com/linkdata/jaws/ui"
 )
 
@@ -23,7 +24,7 @@ func TestTestRequest_WrapperUIAndRegister(t *testing.T) {
 	rq := tj.newRequest(nil)
 	defer rq.Close()
 
-	if err := rq.UI(ui.NewSpan(jaws.MakeHTMLGetter("ok"))); err != nil {
+	if err := rq.UI(ui.NewSpan(bind.MakeHTMLGetter("ok"))); err != nil {
 		t.Fatal(err)
 	}
 	if got := rq.BodyString(); !strings.Contains(got, `<span id="Jid.`) || !strings.Contains(got, `>ok</span>`) {

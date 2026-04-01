@@ -1,8 +1,11 @@
 package namedbool
 
-import "github.com/linkdata/jaws"
+import (
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/bind"
+)
 
 type SelectHandler interface {
 	jaws.Container
-	jaws.Setter[string]
+	bind.Setter[string]
 }
