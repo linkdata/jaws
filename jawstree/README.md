@@ -15,9 +15,10 @@ import (
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawsboot"
 	"github.com/linkdata/jaws/jawstree"
-	"github.com/linkdata/jaws/staticserve"
-	"github.com/linkdata/jaws/templatereloader"
-	"github.com/linkdata/jaws/ui"
+	"github.com/linkdata/jaws/lib/bind"
+	"github.com/linkdata/jaws/lib/templatereloader"
+	"github.com/linkdata/jaws/lib/ui"
+	"github.com/linkdata/staticserve"
 )
 
 // This example assumes an 'assets' directory:
@@ -39,7 +40,7 @@ func setupJaws(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
 		jw.AddTemplateLookuper(tmpl)
 		// Initialize jawsboot, we will serve the Javascript and CSS from /static/*.[js|css]
 		// All files under assets/static will be available under /static. Any favicon loaded
-		// this way will have its URL available using jaws.FaviconURL().
+		// this way will have its URL available using jw.FaviconURL().
 		if err = jw.Setup(mux.Handle, "/static",
 			jawsboot.Setup,
 			jawstree.Setup,
@@ -48,7 +49,7 @@ func setupJaws(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
 			// Add a route to our index template with a bound variable accessible as '.Dot' in the template
 			var mu sync.Mutex
 			var f float64
-			mux.Handle("GET /", ui.Handler(jw, "index.html", jaws.Bind(&mu, &f)))
+			mux.Handle("GET /", ui.Handler(jw, "index.html", bind.New(&mu, &f)))
 		}
 	}
 	return

@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/ui"
+	"github.com/linkdata/jaws/lib/ui"
 )
 
 var _ ui.SetPather = (*Node)(nil)

@@ -11,8 +11,7 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawstest"
-	"github.com/linkdata/jaws/ui"
+	"github.com/linkdata/jaws/lib/ui"
 )
 
 func maybeError(t *testing.T, err error) {
@@ -32,7 +31,11 @@ func TestTree(t *testing.T) {
 	maybeError(t, err)
 
 	go jw.Serve()
-	rq := jawstest.NewTestRequest(jw, nil)
+	rq := jaws.NewTestRequest(jw, nil)
+	if rq == nil {
+		t.Fatal("nil test request")
+	}
+	defer rq.Close()
 
 	root, err := os.OpenRoot(".")
 	maybeError(t, err)

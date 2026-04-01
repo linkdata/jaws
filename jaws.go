@@ -1,533 +1,962 @@
+// package jaws provides a mechanism to create dynamic
+// webpages using Javascript and WebSockets.
+//
+// It integrates well with Go's html/template package,
+// but can be used without it. It can be used with any
+// router that supports the standard ServeHTTP interface.
 package jaws
 
 import (
+	"bufio"
+	"bytes"
+	"context"
+	"crypto/rand"
+	"encoding/binary"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"html/template"
+	"io"
+	"maps"
+	"net"
+	"net/http"
+	"net/netip"
+	"net/textproto"
+	"net/url"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	core "github.com/linkdata/jaws/core"
-	"github.com/linkdata/jaws/jid"
-	"github.com/linkdata/jaws/ui"
-)
-
-// The point of this is to not have a zillion files in the repository root
-// while keeping the import path unchanged.
-//
-// Most exports use direct assignment to avoid wrapper overhead.
-// Generic functions must be wrapped since they cannot be assigned without instantiation.
-
-type (
-	// Jid is the identifier type used for HTML elements managed by JaWS.
-	//
-	// It is provided as a convenience alias to the value defined in the jid
-	// subpackage so applications do not have to import that package directly
-	// when working with element IDs.
-	Jid = jid.Jid
-	// Jaws holds the server-side state and configuration for a JaWS instance.
-	//
-	// A single Jaws value coordinates template lookup, session handling and the
-	// request lifecycle that keeps the browser and backend synchronized via
-	// WebSockets. The zero value is not ready for use; construct instances with
-	// New to ensure the helper goroutines and static assets are prepared.
-	Jaws = core.Jaws
-	// Request maintains the state for a JaWS WebSocket connection, and handles processing
-	// of events and broadcasts.
-	//
-	// Note that we have to store the context inside the struct because there is no call chain
-	// between the Request being created and it being used once the WebSocket is created.
-	Request = core.Request
-	// An Element is an instance of a *Request, an UI object and a Jid.
-	Element = core.Element
-	// UI defines the required methods on JaWS UI objects.
-	// In addition, all UI objects must be comparable so they can be used as map keys.
-	UI       = core.UI
-	Updater  = core.Updater
-	Renderer = core.Renderer
-	// TemplateLookuper resolves a name to a *template.Template.
-	TemplateLookuper = core.TemplateLookuper
-	// HandleFunc matches the signature of http.ServeMux.Handle().
-	HandleFunc = core.HandleFunc
-	Formatter  = core.Formatter
-	Auth       = core.Auth
-	// InitHandler allows initializing UI getters and setters before their use.
-	//
-	// You can of course initialize them in the call from the template engine,
-	// but at that point you don't have access to the Element, Element.Context
-	// or Element.Session.
-	InitHandler          = core.InitHandler
-	ClickHandler         = core.ClickHandler
-	EventHandler         = core.EventHandler
-	SelectHandler        = core.SelectHandler
-	Container            = core.Container
-	Getter[T comparable] = core.Getter[T]
-	Setter[T comparable] = core.Setter[T]
-	Binder[T comparable] = core.Binder[T]
-	// A HTMLGetter is the primary way to deliver generated HTML content to dynamic HTML nodes.
-	HTMLGetter = core.HTMLGetter
-	// Logger matches the log/slog.Logger interface.
-	Logger    = core.Logger
-	RWLocker  = core.RWLocker
-	TagGetter = core.TagGetter
-	// NamedBool stores a named boolen value with a HTML representation.
-	NamedBool = core.NamedBool
-	// NamedBoolArray stores the data required to support HTML 'select' elements
-	// and sets of HTML radio buttons. It it safe to use from multiple goroutines
-	// concurrently.
-	NamedBoolArray = core.NamedBoolArray
-	Session        = core.Session
-	Tag            = core.Tag
-	// TestRequest is a request harness intended for tests.
-	//
-	// Exposed for testing only.
-	TestRequest = core.TestRequest
-)
-
-var (
-	ErrEventUnhandled        = core.ErrEventUnhandled
-	ErrIllegalTagType        = core.ErrIllegalTagType // ErrIllegalTagType is returned when a UI tag type is disallowed
-	ErrNotComparable         = core.ErrNotComparable
-	ErrNotUsableAsTag        = core.ErrNotUsableAsTag
-	ErrNoWebSocketRequest    = core.ErrNoWebSocketRequest
-	ErrPendingCancelled      = core.ErrPendingCancelled
-	ErrValueUnchanged        = core.ErrValueUnchanged
-	ErrValueNotSettable      = core.ErrValueNotSettable
-	ErrRequestAlreadyClaimed = core.ErrRequestAlreadyClaimed
-	ErrJavascriptDisabled    = core.ErrJavascriptDisabled
-	ErrTooManyTags           = core.ErrTooManyTags
+	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/lib/assets"
+	"github.com/linkdata/jaws/lib/jid"
+	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jaws/lib/wire"
+	"github.com/linkdata/secureheaders"
+	"github.com/linkdata/staticserve"
 )
 
 const (
-	// ISO8601 is the date format used by date input widgets (YYYY-MM-DD).
-	ISO8601 = core.ISO8601
+	DefaultUpdateInterval = time.Millisecond * 100 // Default browser update interval
 )
 
-var (
-	// New allocates a JaWS instance with the default configuration.
-	//
-	// The returned Jaws value is ready for use: static assets are embedded,
-	// internal goroutines are configured and the request pool is primed. Call
-	// Close when the instance is no longer needed to free associated resources.
-	New = core.New
-	// JawsKeyString returns the string to be used for the given JaWS key.
-	JawsKeyString = core.JawsKeyString
-	WriteHTMLTag  = core.WriteHTMLTag
-	// HTMLGetterFunc wraps a function and returns a HTMLGetter.
-	HTMLGetterFunc = core.HTMLGetterFunc
-	// StringGetterFunc wraps a function and returns a Getter[string]
-	StringGetterFunc = core.StringGetterFunc
-	// MakeHTMLGetter returns a HTMLGetter for v.
-	//
-	// Depending on the type of v, we return:
-	//
-	//   - HTMLGetter: `JawsGetHTML(e *Element) template.HTML` to be used as-is.
-	//   - Getter[string]: `JawsGet(elem *Element) string` that will be escaped using `html.EscapeString`.
-	//   - Formatter: `Format("%v") string` that will be escaped using `html.EscapeString`.
-	//   - fmt.Stringer: `String() string` that will be escaped using `html.EscapeString`.
-	//   - a static `template.HTML` or `string` to be used as-is with no HTML escaping.
-	//   - everything else is rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
-	//
-	// WARNING: Plain string values are NOT HTML-escaped. This is intentional so that
-	// HTML markup can be passed conveniently from Go templates (e.g. `{{$.Span "<i>text</i>"}}`).
-	// Never pass untrusted user input as a plain string; use [template.HTML] to signal
-	// that the content is trusted, or wrap user input in a [Getter] or [fmt.Stringer]
-	// so it will be escaped automatically.
-	MakeHTMLGetter    = core.MakeHTMLGetter
-	NewNamedBool      = core.NewNamedBool
-	NewNamedBoolArray = core.NewNamedBoolArray
-	// NewTestRequest creates a TestRequest for use when testing.
-	// Passing nil for hr will create a "GET /" request with no body.
-	//
-	// Exposed for testing only.
-	NewTestRequest = core.NewTestRequest
-)
-
-// Bind returns a Binder[T] with the given sync.Locker (or RWLocker) and a pointer to the underlying value of type T.
-//
-// The pointer will be used as the UI tag.
-func Bind[T comparable](l sync.Locker, p *T) Binder[T] {
-	return core.Bind(l, p)
+type subscription struct {
+	msgCh chan wire.Message
+	rq    *Request
 }
 
-/*
-	The following should no longer be accessed using jaws.X,
-	but should instead be ui.X.
+// Jid is the identifier type used for HTML elements managed by JaWS.
+//
+// It is provided as a convenience alias to the value defined in the jid
+// subpackage so applications do not have to import that package directly
+// when working with element IDs.
+type Jid = jid.Jid // convenience alias
 
-	Mark as deprecated.
-*/
-
-// Template is an alias for ui.Template.
+// Jaws holds the server-side state and configuration for a JaWS instance.
 //
-// Deprecated: use ui.Template directly.
-//
-//go:fix inline
-type Template = ui.Template
-
-// RequestWriter is an alias for ui.RequestWriter.
-//
-// Deprecated: use ui.RequestWriter directly.
-//
-//go:fix inline
-type RequestWriter = ui.RequestWriter
-
-// PathSetter is an alias for ui.PathSetter.
-//
-// Deprecated: use ui.PathSetter directly.
-//
-//go:fix inline
-type PathSetter = ui.PathSetter
-
-// SetPather is an alias for ui.SetPather.
-//
-// Deprecated: use ui.SetPather directly.
-//
-//go:fix inline
-type SetPather = ui.SetPather
-
-// JsVar is an alias for ui.JsVar.
-//
-// Deprecated: use ui.JsVar directly.
-//
-//go:fix inline
-type JsVar[T any] = ui.JsVar[T]
-
-// IsJsVar is an alias for ui.IsJsVar.
-//
-// Deprecated: use ui.IsJsVar directly.
-//
-//go:fix inline
-type IsJsVar = ui.IsJsVar
-
-// JsVarMaker is an alias for ui.JsVarMaker.
-//
-// Deprecated: use ui.JsVarMaker directly.
-//
-//go:fix inline
-type JsVarMaker = ui.JsVarMaker
-
-// With is an alias for ui.With.
-//
-// Deprecated: use ui.With directly.
-//
-//go:fix inline
-type With = ui.With
-
-// NewTemplate creates a new ui.Template.
-//
-// Deprecated: use ui.NewTemplate directly.
-//
-//go:fix inline
-func NewTemplate(name string, dot any) Template {
-	return ui.NewTemplate(name, dot)
+// A single Jaws value coordinates template lookup, session handling and the
+// request lifecycle that keeps the browser and backend synchronized via
+// WebSockets. The zero value is not ready for use; construct instances with
+// New to ensure the helper goroutines and static assets are prepared.
+type Jaws struct {
+	CookieName   string          // Name for session cookies, defaults to "jaws"
+	Logger       Logger          // Optional logger to use
+	Debug        bool            // Set to true to enable debug info in generated HTML code
+	MakeAuth     MakeAuthFn      // Optional function to create With.Auth for Templates
+	BaseContext  context.Context // Non-nil base context for Requests, set to context.Background() in New()
+	bcastCh      chan wire.Message
+	subCh        chan subscription
+	unsubCh      chan chan wire.Message
+	updateTicker *time.Ticker
+	reqPool      sync.Pool
+	serveJS      *staticserve.StaticServe
+	serveCSS     *staticserve.StaticServe
+	mu           deadlock.RWMutex // protects following
+	headPrefix   string
+	faviconURL   string
+	cspHeader    string
+	tmplookers   []TemplateLookuper
+	kg           *bufio.Reader
+	closeCh      chan struct{} // closed when Close() has been called
+	requests     map[uint64]*Request
+	sessions     map[uint64]*Session
+	dirty        map[any]int
+	dirtOrder    int
 }
 
-// NewJsVar creates a new ui.JsVar.
+// New allocates a JaWS instance with the default configuration.
 //
-// Deprecated: use ui.NewJsVar directly.
-//
-//go:fix inline
-func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
-	return ui.NewJsVar(l, v)
+// The returned Jaws value is ready for use: static assets are embedded,
+// internal goroutines are configured and the request pool is primed. Call
+// Close when the instance is no longer needed to free associated resources.
+func New() (jw *Jaws, err error) {
+	var serveJS, serveCSS *staticserve.StaticServe
+	if serveJS, err = staticserve.New("/jaws/.jaws.js", assets.JavascriptText); err == nil {
+		if serveCSS, err = staticserve.New("/jaws/.jaws.css", assets.JawsCSS); err == nil {
+			tmp := &Jaws{
+				CookieName:   assets.DefaultCookieName,
+				BaseContext:  context.Background(),
+				serveJS:      serveJS,
+				serveCSS:     serveCSS,
+				bcastCh:      make(chan wire.Message, 1),
+				subCh:        make(chan subscription, 1),
+				unsubCh:      make(chan chan wire.Message, 1),
+				updateTicker: time.NewTicker(DefaultUpdateInterval),
+				kg:           bufio.NewReader(rand.Reader),
+				requests:     make(map[uint64]*Request),
+				sessions:     make(map[uint64]*Session),
+				dirty:        make(map[any]int),
+				closeCh:      make(chan struct{}),
+			}
+			if err = tmp.GenerateHeadHTML(); err == nil {
+				jw = tmp
+				jw.reqPool.New = func() any {
+					return (&Request{
+						Jaws:   jw,
+						tagMap: make(map[any][]*Element),
+					}).clearLocked()
+				}
+			}
+		}
+	}
+
+	return
 }
 
-// UiA is an alias for ui.A.
-//
-// Deprecated: use ui.A directly.
-//
-//go:fix inline
-type UiA = ui.A
-
-// UiButton is an alias for ui.Button.
-//
-// Deprecated: use ui.Button directly.
-//
-//go:fix inline
-type UiButton = ui.Button
-
-// UiCheckbox is an alias for ui.Checkbox.
-//
-// Deprecated: use ui.Checkbox directly.
-//
-//go:fix inline
-type UiCheckbox = ui.Checkbox
-
-// UiContainer is an alias for ui.Container.
-//
-// Deprecated: use ui.Container directly.
-//
-//go:fix inline
-type UiContainer = ui.Container
-
-// UiDate is an alias for ui.Date.
-//
-// Deprecated: use ui.Date directly.
-//
-//go:fix inline
-type UiDate = ui.Date
-
-// UiDiv is an alias for ui.Div.
-//
-// Deprecated: use ui.Div directly.
-//
-//go:fix inline
-type UiDiv = ui.Div
-
-// UiImg is an alias for ui.Img.
-//
-// Deprecated: use ui.Img directly.
-//
-//go:fix inline
-type UiImg = ui.Img
-
-// UiLabel is an alias for ui.Label.
-//
-// Deprecated: use ui.Label directly.
-//
-//go:fix inline
-type UiLabel = ui.Label
-
-// UiLi is an alias for ui.Li.
-//
-// Deprecated: use ui.Li directly.
-//
-//go:fix inline
-type UiLi = ui.Li
-
-// UiNumber is an alias for ui.Number.
-//
-// Deprecated: use ui.Number directly.
-//
-//go:fix inline
-type UiNumber = ui.Number
-
-// UiPassword is an alias for ui.Password.
-//
-// Deprecated: use ui.Password directly.
-//
-//go:fix inline
-type UiPassword = ui.Password
-
-// UiRadio is an alias for ui.Radio.
-//
-// Deprecated: use ui.Radio directly.
-//
-//go:fix inline
-type UiRadio = ui.Radio
-
-// UiRange is an alias for ui.Range.
-//
-// Deprecated: use ui.Range directly.
-//
-//go:fix inline
-type UiRange = ui.Range
-
-// UiSelect is an alias for ui.Select.
-//
-// Deprecated: use ui.Select directly.
-//
-//go:fix inline
-type UiSelect = ui.Select
-
-// UiSpan is an alias for ui.Span.
-//
-// Deprecated: use ui.Span directly.
-//
-//go:fix inline
-type UiSpan = ui.Span
-
-// UiTbody is an alias for ui.Tbody.
-//
-// Deprecated: use ui.Tbody directly.
-//
-//go:fix inline
-type UiTbody = ui.Tbody
-
-// UiTd is an alias for ui.Td.
-//
-// Deprecated: use ui.Td directly.
-//
-//go:fix inline
-type UiTd = ui.Td
-
-// UiText is an alias for ui.Text.
-//
-// Deprecated: use ui.Text directly.
-//
-//go:fix inline
-type UiText = ui.Text
-
-// UiTr is an alias for ui.Tr.
-//
-// Deprecated: use ui.Tr directly.
-//
-//go:fix inline
-type UiTr = ui.Tr
-
-// NewUiA creates a new ui.A.
-//
-// Deprecated: use ui.NewA directly.
-//
-//go:fix inline
-func NewUiA(innerHTML HTMLGetter) *UiA {
-	return ui.NewA(innerHTML)
+// Close frees resources associated with the JaWS object, and
+// closes the completion channel if the JaWS was created with New().
+// Once the completion channel is closed, broadcasts and sends may be discarded.
+// Subsequent calls to Close() have no effect.
+func (jw *Jaws) Close() {
+	jw.mu.Lock()
+	select {
+	case <-jw.closeCh:
+		// already closed
+	default:
+		close(jw.closeCh)
+	}
+	jw.updateTicker.Stop()
+	jw.mu.Unlock()
 }
 
-// NewUiButton creates a new ui.Button.
-//
-// Deprecated: use ui.NewButton directly.
-//
-//go:fix inline
-func NewUiButton(innerHTML HTMLGetter) *UiButton {
-	return ui.NewButton(innerHTML)
+// Done returns the channel that is closed when Close has been called.
+func (jw *Jaws) Done() <-chan struct{} {
+	return jw.closeCh
 }
 
-// NewUiContainer creates a new ui.Container.
-//
-// Deprecated: use ui.NewContainer directly.
-//
-//go:fix inline
-func NewUiContainer(outerHTMLTag string, c Container) *UiContainer {
-	return ui.NewContainer(outerHTMLTag, c)
+// AddTemplateLookuper adds an object that can resolve
+// strings to *template.Template.
+func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) (err error) {
+	if tl != nil {
+		if err = jtag.NewErrNotComparable(tl); err == nil {
+			jw.mu.Lock()
+			if !slices.Contains(jw.tmplookers, tl) {
+				jw.tmplookers = append(jw.tmplookers, tl)
+			}
+			jw.mu.Unlock()
+		}
+	}
+	return
 }
 
-// NewUiDiv creates a new ui.Div.
-//
-// Deprecated: use ui.NewDiv directly.
-//
-//go:fix inline
-func NewUiDiv(innerHTML HTMLGetter) *UiDiv {
-	return ui.NewDiv(innerHTML)
+// RemoveTemplateLookuper removes the given object from
+// the list of TemplateLookupers.
+func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) (err error) {
+	if tl != nil {
+		if err = jtag.NewErrNotComparable(tl); err == nil {
+			jw.mu.Lock()
+			jw.tmplookers = slices.DeleteFunc(jw.tmplookers, func(x TemplateLookuper) bool { return x == tl })
+			jw.mu.Unlock()
+		}
+	}
+	return
 }
 
-// NewUiLabel creates a new ui.Label.
-//
-// Deprecated: use ui.NewLabel directly.
-//
-//go:fix inline
-func NewUiLabel(innerHTML HTMLGetter) *UiLabel {
-	return ui.NewLabel(innerHTML)
+// LookupTemplate queries the known TemplateLookupers in the order
+// they were added and returns the first found.
+func (jw *Jaws) LookupTemplate(name string) *template.Template {
+	jw.mu.RLock()
+	defer jw.mu.RUnlock()
+	for _, tl := range jw.tmplookers {
+		if t := tl.Lookup(name); t != nil {
+			return t
+		}
+	}
+	return nil
 }
 
-// NewUiLi creates a new ui.Li.
+// RequestCount returns the number of Requests.
 //
-// Deprecated: use ui.NewLi directly.
-//
-//go:fix inline
-func NewUiLi(innerHTML HTMLGetter) *UiLi {
-	return ui.NewLi(innerHTML)
+// The count includes all Requests, including those being rendered,
+// those waiting for the WebSocket callback and those active.
+func (jw *Jaws) RequestCount() (n int) {
+	jw.mu.RLock()
+	n = len(jw.requests)
+	jw.mu.RUnlock()
+	return
 }
 
-// NewUiSelect creates a new ui.Select.
-//
-// Deprecated: use ui.NewSelect directly.
-//
-//go:fix inline
-func NewUiSelect(sh SelectHandler) *UiSelect {
-	return ui.NewSelect(sh)
+// Log sends an error to the Logger set in the Jaws.
+// Has no effect if the err is nil or the Logger is nil.
+// Returns err.
+func (jw *Jaws) Log(err error) error {
+	if err != nil && jw != nil && jw.Logger != nil {
+		jw.Logger.Error("jaws", "err", err)
+	}
+	return err
 }
 
-// NewUiSpan creates a new ui.Span.
-//
-// Deprecated: use ui.NewSpan directly.
-//
-//go:fix inline
-func NewUiSpan(innerHTML HTMLGetter) *UiSpan {
-	return ui.NewSpan(innerHTML)
+// MustLog sends an error to the Logger set in the Jaws or
+// panics with the given error if no Logger is set.
+// Has no effect if the err is nil.
+func (jw *Jaws) MustLog(err error) {
+	if err != nil {
+		if jw != nil && jw.Logger != nil {
+			jw.Logger.Error("jaws", "err", err)
+		} else {
+			panic(err)
+		}
+	}
 }
 
-// NewUiTbody creates a new ui.Tbody.
-//
-// Deprecated: use ui.NewTbody directly.
-//
-//go:fix inline
-func NewUiTbody(c Container) *UiTbody {
-	return ui.NewTbody(c)
+// NextID returns an int64 unique within lifetime of the program.
+func NextID() int64 {
+	return atomic.AddInt64((*int64)(&NextJid), 1)
 }
 
-// NewUiTd creates a new ui.Td.
-//
-// Deprecated: use ui.NewTd directly.
-//
-//go:fix inline
-func NewUiTd(innerHTML HTMLGetter) *UiTd {
-	return ui.NewTd(innerHTML)
+// AppendID appends the result of NextID() in text form to the given slice.
+func AppendID(b []byte) []byte {
+	return strconv.AppendInt(b, NextID(), 32)
 }
 
-// NewUiTr creates a new ui.Tr.
-//
-// Deprecated: use ui.NewTr directly.
-//
-//go:fix inline
-func NewUiTr(innerHTML HTMLGetter) *UiTr {
-	return ui.NewTr(innerHTML)
+// MakeID returns a string in the form 'jaws.X' where X is a unique string within lifetime of the program.
+func MakeID() string {
+	return string(AppendID([]byte("jaws.")))
 }
 
-// NewUiCheckbox creates a new ui.Checkbox.
+// NewRequest returns a new pending JaWS request.
 //
-// Deprecated: use ui.NewCheckbox directly.
+// Call this as soon as you start processing a HTML request, and store the
+// returned Request pointer so it can be used while constructing the HTML
+// response in order to register the JaWS id's you use in the response, and
+// use it's Key attribute when sending the Javascript portion of the reply.
 //
-//go:fix inline
-func NewUiCheckbox(g Setter[bool]) *UiCheckbox {
-	return ui.NewCheckbox(g)
+// Automatic timeout handling is performed by ServeWithTimeout. The default
+// Serve() helper uses a 10-second timeout.
+func (jw *Jaws) NewRequest(hr *http.Request) (rq *Request) {
+	jw.mu.Lock()
+	defer jw.mu.Unlock()
+	for rq == nil {
+		jawsKey := jw.nonZeroRandomLocked()
+		if _, ok := jw.requests[jawsKey]; !ok {
+			rq = jw.getRequestLocked(jawsKey, hr)
+			jw.requests[jawsKey] = rq
+		}
+	}
+	return
 }
 
-// NewUiDate creates a new ui.Date.
-//
-// Deprecated: use ui.NewDate directly.
-//
-//go:fix inline
-func NewUiDate(g Setter[time.Time]) *UiDate {
-	return ui.NewDate(g)
+func (jw *Jaws) nonZeroRandomLocked() (val uint64) {
+	random := make([]byte, 8)
+	for val == 0 {
+		if _, err := io.ReadFull(jw.kg, random); err != nil {
+			panic(err)
+		}
+		val = binary.LittleEndian.Uint64(random)
+	}
+	return
 }
 
-// NewUiImg creates a new ui.Img.
+// UseRequest extracts the JaWS request with the given key from the request
+// map if it exists and the HTTP request remote IP matches.
 //
-// Deprecated: use ui.NewImg directly.
+// Call it when receiving the WebSocket connection on '/jaws/:key' to get the
+// associated Request, and then call it's ServeHTTP method to process the
+// WebSocket messages.
 //
-//go:fix inline
-func NewUiImg(g Getter[string]) *UiImg {
-	return ui.NewImg(g)
+// Returns nil if the key was not found or the IP doesn't match, in which
+// case you should return a HTTP "404 Not Found" status.
+func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) {
+	if jawsKey != 0 {
+		var err error
+		jw.mu.Lock()
+		if waitingRq, ok := jw.requests[jawsKey]; ok {
+			if err = waitingRq.claim(hr); err == nil {
+				rq = waitingRq
+			}
+		}
+		jw.mu.Unlock()
+		_ = jw.Log(err)
+	}
+	return
 }
 
-// NewUiNumber creates a new ui.Number.
-//
-// Deprecated: use ui.NewNumber directly.
-//
-//go:fix inline
-func NewUiNumber(g Setter[float64]) *UiNumber {
-	return ui.NewNumber(g)
+// SessionCount returns the number of active sessions.
+func (jw *Jaws) SessionCount() (n int) {
+	jw.mu.RLock()
+	n = len(jw.sessions)
+	jw.mu.RUnlock()
+	return
 }
 
-// NewUiPassword creates a new ui.Password.
-//
-// Deprecated: use ui.NewPassword directly.
-//
-//go:fix inline
-func NewUiPassword(g Setter[string]) *UiPassword {
-	return ui.NewPassword(g)
+// Sessions returns a list of all active sessions, which may be nil.
+func (jw *Jaws) Sessions() (sl []*Session) {
+	jw.mu.RLock()
+	if n := len(jw.sessions); n > 0 {
+		sl = make([]*Session, 0, n)
+		for _, sess := range jw.sessions {
+			sl = append(sl, sess)
+		}
+	}
+	jw.mu.RUnlock()
+	return
 }
 
-// NewUiRadio creates a new ui.Radio.
-//
-// Deprecated: use ui.NewRadio directly.
-//
-//go:fix inline
-func NewUiRadio(vp Setter[bool]) *UiRadio {
-	return ui.NewRadio(vp)
+func (jw *Jaws) getSessionLocked(sessIds []uint64, remoteIP netip.Addr) *Session {
+	for _, sessId := range sessIds {
+		if sess, ok := jw.sessions[sessId]; ok && equalIP(remoteIP, sess.remoteIP) {
+			if !sess.isDead() {
+				return sess
+			}
+		}
+	}
+	return nil
 }
 
-// NewUiRange creates a new ui.Range.
-//
-// Deprecated: use ui.NewRange directly.
-//
-//go:fix inline
-func NewUiRange(g Setter[float64]) *UiRange {
-	return ui.NewRange(g)
+func cutString(s string, sep byte) (before, after string) {
+	if i := strings.IndexByte(s, sep); i >= 0 {
+		return s[:i], s[i+1:]
+	}
+	return s, ""
 }
 
-// NewUiText creates a new ui.Text.
+func getCookieSessionsIds(h http.Header, wanted string) (cookies []uint64) {
+	for _, line := range h["Cookie"] {
+		if strings.Contains(line, wanted) {
+			var part string
+			line = textproto.TrimString(line)
+			for len(line) > 0 {
+				part, line = cutString(line, ';')
+				if part = textproto.TrimString(part); part != "" {
+					name, val := cutString(part, '=')
+					name = textproto.TrimString(name)
+					if name == wanted {
+						if len(val) > 1 && val[0] == '"' && val[len(val)-1] == '"' {
+							val = val[1 : len(val)-1]
+						}
+						if sessId := assets.JawsKeyValue(val); sessId != 0 {
+							cookies = append(cookies, sessId)
+						}
+					}
+				}
+			}
+		}
+	}
+	return
+}
+
+// GetSession returns the Session associated with the given *http.Request, or nil.
+func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
+	if hr != nil {
+		if sessIds := getCookieSessionsIds(hr.Header, jw.CookieName); len(sessIds) > 0 {
+			remoteIP := parseIP(hr.RemoteAddr)
+			jw.mu.RLock()
+			sess = jw.getSessionLocked(sessIds, remoteIP)
+			jw.mu.RUnlock()
+		}
+	}
+	return
+}
+
+// NewSession creates a new Session.
 //
-// Deprecated: use ui.NewText directly.
+// Any pre-existing Session will be cleared and closed.
+// This may call Session.Close() on an existing session and therefore requires
+// the JaWS processing loop (`Serve()` or `ServeWithTimeout()`) to be running.
 //
-//go:fix inline
-func NewUiText(vp Setter[string]) *UiText {
-	return ui.NewText(vp)
+// Subsequent Requests created with `NewRequest()` that have the cookie set and
+// originates from the same IP will be able to access the Session.
+func (jw *Jaws) NewSession(w http.ResponseWriter, hr *http.Request) (sess *Session) {
+	if hr != nil {
+		if oldSess := jw.GetSession(hr); oldSess != nil {
+			oldSess.Clear()
+			oldSess.Close()
+		}
+		sess = jw.newSession(w, hr)
+	}
+	return
+}
+
+func (jw *Jaws) newSession(w http.ResponseWriter, hr *http.Request) (sess *Session) {
+	secure := requestIsSecure(hr)
+	jw.mu.Lock()
+	defer jw.mu.Unlock()
+	for sess == nil {
+		sessionID := jw.nonZeroRandomLocked()
+		if _, ok := jw.sessions[sessionID]; !ok {
+			sess = newSession(jw, sessionID, parseIP(hr.RemoteAddr), secure)
+			jw.sessions[sessionID] = sess
+			if w != nil {
+				http.SetCookie(w, &sess.cookie)
+			}
+			hr.AddCookie(&sess.cookie)
+		}
+	}
+	return
+}
+
+func (jw *Jaws) deleteSession(sessionID uint64) {
+	jw.mu.Lock()
+	delete(jw.sessions, sessionID)
+	jw.mu.Unlock()
+}
+
+func (jw *Jaws) FaviconURL() (s string) {
+	jw.mu.RLock()
+	s = jw.faviconURL
+	jw.mu.RUnlock()
+	return
+}
+
+// ContentSecurityPolicy returns the generated Content-Security-Policy header value.
+func (jw *Jaws) ContentSecurityPolicy() (s string) {
+	jw.mu.RLock()
+	s = jw.cspHeader
+	jw.mu.RUnlock()
+	return
+}
+
+// SecureHeadersMiddleware wraps next with security headers that match the
+// current JaWS configuration.
+//
+// It snapshots secureheaders.DefaultHeaders, replacing the
+// Content-Security-Policy value with ContentSecurityPolicy so responses allow
+// the resources configured by GenerateHeadHTML.
+//
+// The returned middleware does not trust forwarded HTTPS headers.
+// The next handler must be non-nil.
+func (jw *Jaws) SecureHeadersMiddleware(next http.Handler) http.Handler {
+	hdrs := maps.Clone(secureheaders.DefaultHeaders)
+	hdrs["Content-Security-Policy"] = []string{jw.ContentSecurityPolicy()}
+	return secureheaders.Middleware{
+		Handler: next,
+		Header:  hdrs,
+	}
+}
+
+// GenerateHeadHTML (re-)generates the HTML code that goes in the HEAD section, ensuring
+// that the provided URL resources in `extra` are loaded, along with the JaWS javascript.
+// If one of the resources is named "favicon", it's URL will be stored and can
+// be retrieved using FaviconURL().
+//
+// You only need to call this if you add your own images, scripts and stylesheets.
+func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
+	var jawsurl *url.URL
+	if jawsurl, err = url.Parse(jw.serveJS.Name); err == nil {
+		var cssurl *url.URL
+		if cssurl, err = url.Parse(jw.serveCSS.Name); err == nil {
+			var urls []*url.URL
+			urls = append(urls, cssurl)
+			urls = append(urls, jawsurl)
+			for _, urlstr := range extra {
+				if u, e := url.Parse(urlstr); e == nil {
+					if !strings.HasSuffix(u.Path, jawsurl.Path) {
+						urls = append(urls, u)
+					}
+				} else {
+					err = errors.Join(err, e)
+				}
+			}
+			headPrefix, faviconURL := assets.PreloadHTML(urls...)
+			headPrefix += `<meta name="jawsKey" content="`
+			cspHeader, csperr := secureheaders.BuildContentSecurityPolicy(urls)
+			err = errors.Join(err, csperr)
+			jw.mu.Lock()
+			jw.headPrefix = headPrefix
+			jw.faviconURL = faviconURL
+			jw.cspHeader = cspHeader
+			jw.mu.Unlock()
+		}
+	}
+	return
+}
+
+// Broadcast sends a message to all Requests.
+//
+// It must not be called before the JaWS processing loop (`Serve()` or
+// `ServeWithTimeout()`) is running. Otherwise this call may block once the
+// internal broadcast channel fills.
+//
+// All convenience helpers on Jaws that call Broadcast inherit this requirement.
+func (jw *Jaws) Broadcast(msg wire.Message) {
+	switch msg.Dest.(type) {
+	case nil: // send to all requests
+	case *Request: // send to that request
+	case string: // HTML id (accepted by all requests)
+	default:
+		expanded, err := jtag.TagExpand(nil, msg.Dest)
+		jw.MustLog(err)
+		switch len(expanded) {
+		case 0:
+			// no tags, so no requests will match
+			return
+		case 1:
+			msg.Dest = expanded[0]
+		default:
+			msg.Dest = expanded
+		}
+	}
+	select {
+	case <-jw.Done():
+	case jw.bcastCh <- msg:
+	}
+}
+
+// setDirty marks all Elements that have one or more of the given tags as dirty.
+func (jw *Jaws) setDirty(tags []any) {
+	jw.mu.Lock()
+	for _, tag := range tags {
+		jw.dirtOrder++
+		jw.dirty[tag] = jw.dirtOrder
+	}
+	jw.mu.Unlock()
+}
+
+// Dirty marks all Elements that have one or more of the given tags as dirty.
+//
+// Note that if any of the tags are a TagGetter, it will be called with a nil Request.
+// Prefer using Request.Dirty() which avoids this.
+func (jw *Jaws) Dirty(dirtyTags ...any) {
+	jw.setDirty(jtag.MustTagExpand(nil, dirtyTags))
+}
+
+func (jw *Jaws) distributeDirt() int {
+	var reqs []*Request
+	var dirt []any
+
+	jw.mu.Lock()
+	if len(jw.dirty) > 0 {
+		dirt = make([]any, 0, len(jw.dirty))
+		for k := range jw.dirty {
+			dirt = append(dirt, k)
+		}
+		sort.Slice(dirt, func(i, j int) bool { return jw.dirty[dirt[i]] < jw.dirty[dirt[j]] })
+		clear(jw.dirty)
+		jw.dirtOrder = 0
+		reqs = make([]*Request, 0, len(jw.requests))
+		for _, rq := range jw.requests {
+			reqs = append(reqs, rq)
+		}
+	}
+	jw.mu.Unlock()
+
+	for _, rq := range reqs {
+		rq.appendDirtyTags(dirt)
+	}
+	return len(dirt)
+}
+
+// Reload requests all Requests to reload their current page.
+func (jw *Jaws) Reload() {
+	jw.Broadcast(wire.Message{
+		What: what.Reload,
+	})
+}
+
+// Redirect requests all Requests to navigate to the given URL.
+func (jw *Jaws) Redirect(url string) {
+	jw.Broadcast(wire.Message{
+		What: what.Redirect,
+		Data: url,
+	})
+}
+
+// Alert sends an alert to all Requests. The lvl argument should be one of Bootstraps alert levels:
+// primary, secondary, success, danger, warning, info, light or dark.
+func (jw *Jaws) Alert(lvl, msg string) {
+	jw.Broadcast(wire.Message{
+		What: what.Alert,
+		Data: lvl + "\n" + msg,
+	})
+}
+
+// Pending returns the number of requests waiting for their WebSocket callbacks.
+func (jw *Jaws) Pending() (n int) {
+	jw.mu.RLock()
+	defer jw.mu.RUnlock()
+	for _, rq := range jw.requests {
+		if !rq.claimed.Load() {
+			n++
+		}
+	}
+	return
+}
+
+// ServeWithTimeout begins processing requests with the given timeout.
+// It is intended to run on it's own goroutine.
+// It returns when Close is called.
+func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
+	const minInterval = time.Millisecond * 10
+	const maxInterval = time.Second
+	maintenanceInterval := requestTimeout / 2
+	if maintenanceInterval > maxInterval {
+		maintenanceInterval = maxInterval
+	}
+	if maintenanceInterval < minInterval {
+		maintenanceInterval = minInterval
+	}
+
+	subs := map[chan wire.Message]*Request{}
+	t := time.NewTicker(maintenanceInterval)
+
+	defer func() {
+		t.Stop()
+		for ch, rq := range subs {
+			rq.cancel(nil)
+			close(ch)
+		}
+	}()
+
+	killSub := func(msgCh chan wire.Message) {
+		if _, ok := subs[msgCh]; ok {
+			delete(subs, msgCh)
+			close(msgCh)
+		}
+	}
+
+	// it's critical that we keep the broadcast
+	// distribution loop running, so any Request
+	// that fails to process it's messages quickly
+	// enough must be terminated. the alternative
+	// would be to drop some messages, but that
+	// could mean nonreproducible and seemingly
+	// random failures in processing logic.
+	mustBroadcast := func(msg wire.Message) {
+		for msgCh, rq := range subs {
+			if msg.Dest == nil || rq.wantMessage(&msg) {
+				select {
+				case msgCh <- msg:
+				default:
+					// the exception is Update messages, more will follow eventually
+					if msg.What != what.Update {
+						killSub(msgCh)
+						rq.cancel(fmt.Errorf("%v: broadcast channel full sending %s", rq, msg.String()))
+					}
+				}
+			}
+		}
+	}
+
+	for {
+		select {
+		case <-jw.Done():
+			return
+		case <-jw.updateTicker.C:
+			if jw.distributeDirt() > 0 {
+				mustBroadcast(wire.Message{What: what.Update})
+			}
+		case <-t.C:
+			jw.maintenance(requestTimeout)
+		case sub := <-jw.subCh:
+			if sub.msgCh != nil {
+				subs[sub.msgCh] = sub.rq
+			}
+		case msgCh := <-jw.unsubCh:
+			killSub(msgCh)
+		case msg, ok := <-jw.bcastCh:
+			if ok {
+				mustBroadcast(msg)
+			}
+		}
+	}
+}
+
+// Serve calls ServeWithTimeout(time.Second * 10).
+// It is intended to run on it's own goroutine.
+// It returns when Close is called.
+func (jw *Jaws) Serve() {
+	jw.ServeWithTimeout(time.Second * 10)
+}
+
+func (jw *Jaws) subscribe(rq *Request, size int) chan wire.Message {
+	msgCh := make(chan wire.Message, size)
+	select {
+	case <-jw.Done():
+		close(msgCh)
+		return nil
+	case jw.subCh <- subscription{msgCh: msgCh, rq: rq}:
+	}
+	return msgCh
+}
+
+func (jw *Jaws) unsubscribe(msgCh chan wire.Message) {
+	select {
+	case <-jw.Done():
+	case jw.unsubCh <- msgCh:
+	}
+}
+
+func (jw *Jaws) maintenance(requestTimeout time.Duration) {
+	jw.mu.Lock()
+	defer jw.mu.Unlock()
+	now := time.Now()
+	for _, rq := range jw.requests {
+		if rq.maintenance(now, requestTimeout) {
+			jw.recycleLocked(rq)
+		}
+	}
+	for k, sess := range jw.sessions {
+		if sess.isDead() {
+			delete(jw.sessions, k)
+		}
+	}
+}
+
+func equalIP(a, b netip.Addr) bool {
+	return a.Compare(b) == 0 || (a.IsLoopback() && b.IsLoopback())
+}
+
+func parseIP(remoteAddr string) (ip netip.Addr) {
+	if remoteAddr != "" {
+		if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
+			ip, _ = netip.ParseAddr(host)
+		} else {
+			ip, _ = netip.ParseAddr(remoteAddr)
+		}
+	}
+	return
+}
+
+func requestIsSecure(hr *http.Request) (yes bool) {
+	yes = secureheaders.RequestIsSecure(hr, true)
+	return
+}
+
+func maybePanic(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+// SetInner sends a request to replace the inner HTML of
+// all HTML elements matching target.
+func (jw *Jaws) SetInner(target any, innerHTML template.HTML) {
+	jw.Broadcast(wire.Message{
+		Dest: target,
+		What: what.Inner,
+		Data: string(innerHTML),
+	})
+}
+
+// SetAttr sends a request to replace the given attribute value in
+// all HTML elements matching target.
+func (jw *Jaws) SetAttr(target any, attr, val string) {
+	jw.Broadcast(wire.Message{
+		Dest: target,
+		What: what.SAttr,
+		Data: attr + "\n" + val,
+	})
+}
+
+// RemoveAttr sends a request to remove the given attribute from
+// all HTML elements matching target.
+func (jw *Jaws) RemoveAttr(target any, attr string) {
+	jw.Broadcast(wire.Message{
+		Dest: target,
+		What: what.RAttr,
+		Data: attr,
+	})
+}
+
+// SetClass sends a request to set the given class in
+// all HTML elements matching target.
+func (jw *Jaws) SetClass(target any, cls string) {
+	jw.Broadcast(wire.Message{
+		Dest: target,
+		What: what.SClass,
+		Data: cls,
+	})
+}
+
+// RemoveClass sends a request to remove the given class from
+// all HTML elements matching target.
+func (jw *Jaws) RemoveClass(target any, cls string) {
+	jw.Broadcast(wire.Message{
+		Dest: target,
+		What: what.RClass,
+		Data: cls,
+	})
+}
+
+// SetValue sends a request to set the HTML "value" attribute of
+// all HTML elements matching target.
+func (jw *Jaws) SetValue(target any, val string) {
+	jw.Broadcast(wire.Message{
+		Dest: target,
+		What: what.Value,
+		Data: val,
+	})
+}
+
+// Insert calls the Javascript 'insertBefore()' method on
+// all HTML elements matching target.
+//
+// The position parameter 'where' may be either a HTML ID, an child index or the text 'null'.
+func (jw *Jaws) Insert(target any, where, html string) {
+	jw.Broadcast(wire.Message{
+		Dest: target,
+		What: what.Insert,
+		Data: where + "\n" + html,
+	})
+}
+
+// Replace replaces HTML on all HTML elements matching target.
+func (jw *Jaws) Replace(target any, html string) {
+	jw.Broadcast(wire.Message{
+		Dest: target,
+		What: what.Replace,
+		Data: html,
+	})
+}
+
+// Delete removes the HTML element(s) matching target.
+func (jw *Jaws) Delete(target any) {
+	jw.Broadcast(wire.Message{
+		Dest: target,
+		What: what.Delete,
+	})
+}
+
+// Append calls the Javascript 'appendChild()' method on all HTML elements matching target.
+func (jw *Jaws) Append(target any, html template.HTML) {
+	jw.Broadcast(wire.Message{
+		Dest: target,
+		What: what.Append,
+		Data: string(html),
+	})
+}
+
+func maybeCompactJSON(in string) (out string) {
+	out = in
+	if strings.ContainsAny(in, "\n\t") {
+		var b bytes.Buffer
+		if err := json.Compact(&b, []byte(in)); err == nil {
+			out = b.String()
+		}
+	}
+	return
+}
+
+var whitespaceRemover = strings.NewReplacer(" ", "", "\n", "", "\t", "")
+
+// JsCall calls the Javascript function 'jsfunc' with the argument 'jsonstr'
+// on all Requests that have the target UI tag.
+func (jw *Jaws) JsCall(tag any, jsfunc, jsonstr string) {
+	jw.Broadcast(wire.Message{
+		Dest: tag,
+		What: what.Call,
+		Data: whitespaceRemover.Replace(jsfunc) + "=" + maybeCompactJSON(jsonstr),
+	})
+}
+
+func (jw *Jaws) getRequestLocked(jawsKey uint64, hr *http.Request) (rq *Request) {
+	rq = jw.reqPool.Get().(*Request)
+	rq.JawsKey = jawsKey
+	rq.lastWrite = time.Now()
+	rq.initial = hr
+	rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
+	if hr != nil {
+		rq.remoteIP = parseIP(hr.RemoteAddr)
+		if sess := jw.getSessionLocked(getCookieSessionsIds(hr.Header, jw.CookieName), rq.remoteIP); sess != nil {
+			sess.addRequest(rq)
+			rq.session = sess
+		}
+	}
+	return rq
+}
+
+func (jw *Jaws) recycleLocked(rq *Request) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	if rq.JawsKey != 0 {
+		delete(jw.requests, rq.JawsKey)
+		rq.clearLocked()
+		jw.reqPool.Put(rq)
+	}
+}
+
+func (jw *Jaws) recycle(rq *Request) {
+	jw.mu.Lock()
+	defer jw.mu.Unlock()
+	jw.recycleLocked(rq)
+}
+
+var headerCacheControlNoStore = []string{"no-store"}
+
+// ServeHTTP can handle the required JaWS endpoints, which all start with "/jaws/".
+func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if len(r.URL.Path) > 6 && strings.HasPrefix(r.URL.Path, "/jaws/") {
+		if r.URL.Path[6] == '.' {
+			switch r.URL.Path {
+			case jw.serveCSS.Name:
+				jw.serveCSS.ServeHTTP(w, r)
+				return
+			case jw.serveJS.Name:
+				jw.serveJS.ServeHTTP(w, r)
+				return
+			case "/jaws/.ping":
+				w.Header()["Cache-Control"] = headerCacheControlNoStore
+				select {
+				case <-jw.Done():
+					w.WriteHeader(http.StatusServiceUnavailable)
+				default:
+					w.WriteHeader(http.StatusNoContent)
+				}
+				return
+			default:
+				if jawsKeyString, ok := strings.CutPrefix(r.URL.Path, "/jaws/.tail/"); ok {
+					jawsKey := assets.JawsKeyValue(jawsKeyString)
+					jw.mu.RLock()
+					rq := jw.requests[jawsKey]
+					jw.mu.RUnlock()
+					if rq != nil {
+						if err := rq.writeTailScriptResponse(w); err != nil {
+							rq.cancel(err)
+						}
+						return
+					}
+				}
+			}
+		} else if rq := jw.UseRequest(assets.JawsKeyValue(r.URL.Path[6:]), r); rq != nil {
+			rq.ServeHTTP(w, r)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNotFound)
+}
+
+type sessioner struct {
+	jw *Jaws
+	h  http.Handler
+}
+
+func (sess sessioner) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
+	if sess.jw.GetSession(r) == nil {
+		sess.jw.newSession(wr, r)
+	}
+	sess.h.ServeHTTP(wr, r)
+}
+
+// Session returns a http.Handler that ensures a JaWS Session exists before invoking h.
+func (jw *Jaws) Session(h http.Handler) http.Handler {
+	return sessioner{jw: jw, h: h}
 }
