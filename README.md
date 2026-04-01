@@ -193,6 +193,9 @@ Use `(*Jaws).SecureHeadersMiddleware(next)` to wrap page handlers with a
 security-header baseline and a `Content-Security-Policy` that matches the
 resources currently configured for JaWS.
 
+The baseline headers come from
+[`github.com/linkdata/secureheaders`](https://github.com/linkdata/secureheaders).
+
 The middleware snapshots `secureheaders.DefaultHeaders`, replaces
 `Content-Security-Policy` with `jw.ContentSecurityPolicy()`, and does not trust
 forwarded HTTPS headers.

@@ -20,7 +20,7 @@ import (
 	"github.com/linkdata/jaws/lib/jtag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
-	"github.com/linkdata/jaws/secureheaders"
+	"github.com/linkdata/secureheaders"
 	"github.com/linkdata/staticserve"
 )
 
