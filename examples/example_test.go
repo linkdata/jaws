@@ -1,4 +1,4 @@
-package jaws_test
+package example
 
 import (
 	"html/template"
@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/bind"
 	"github.com/linkdata/jaws/ui"
 )
 
@@ -38,6 +39,6 @@ func Example() {
 	var mu sync.Mutex
 	var f float64
 
-	http.DefaultServeMux.Handle("GET /", ui.Handler(jw, "index", jaws.Bind(&mu, &f)))
+	http.DefaultServeMux.Handle("GET /", ui.Handler(jw, "index", bind.New(&mu, &f)))
 	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 }

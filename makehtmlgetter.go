@@ -28,11 +28,11 @@ func (g htmlStringerGetter) JawsGetTag(jawstags.Context) any {
 	return g.sg
 }
 
-type htmlBinderString struct{ Binder[string] }
+/*type htmlBinderString struct{ Binder[string] }
 
 func (g htmlBinderString) JawsGetHTML(e *Element) template.HTML {
 	return template.HTML(html.EscapeString(g.Binder.JawsGet(e))) // #nosec G203
-}
+}*/
 
 type htmlGetterString struct{ sg Getter[string] }
 
@@ -66,12 +66,12 @@ func MakeHTMLGetter(v any) HTMLGetter {
 		return v
 	case template.HTML:
 		return htmlGetter{v}
-	case Binder[string]:
-		return htmlBinderString{v}
+	//case bind.Binder[string]:
+	//	return htmlBinderString{v}
 	case Getter[string]:
 		return htmlGetterString{v}
-	case Formatter:
-		return htmlGetterString{v.Format("%v")}
+	//case Formatter:
+	//	return htmlGetterString{v.Format("%v")}
 	case fmt.Stringer:
 		return htmlStringerGetter{v}
 	case string:
