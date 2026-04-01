@@ -1,9 +1,11 @@
 package jtag
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
+	"net/http"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -43,7 +45,7 @@ func TestTagString_StringerAndPointer(t *testing.T) {
 	if got := TagString(testStringTag{}); !strings.Contains(got, "testStringTag(str)") {
 		t.Fatalf("TagString(testStringTag{}) = %q, want value stringer representation", got)
 	}
-	if got := TagString(&testStringTag{}); !strings.Contains(got, "*jawstags.testStringTag(") {
+	if got := TagString(&testStringTag{}); !strings.Contains(got, "*jtag.testStringTag(") {
 		t.Fatalf("TagString(&testStringTag{}) = %q, want pointer representation", got)
 	}
 }
@@ -256,6 +258,25 @@ func TestTagExpand_IllegalTypesAsErrors(t *testing.T) {
 
 type mustLogContext struct {
 	err error
+}
+
+func (ctx *mustLogContext) Initial() *http.Request {
+	return nil
+}
+
+func (ctx *mustLogContext) Get(string) any {
+	return nil
+}
+
+func (ctx *mustLogContext) Set(string, any) {}
+
+func (ctx *mustLogContext) Context() context.Context {
+	return context.Background()
+}
+
+func (ctx *mustLogContext) Log(err error) error {
+	ctx.err = err
+	return err
 }
 
 func (ctx *mustLogContext) MustLog(err error) {
