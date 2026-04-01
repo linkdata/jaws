@@ -33,9 +33,9 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/jawsdata"
-	"github.com/linkdata/jaws/jawstags"
 	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/jid"
+	"github.com/linkdata/jaws/jtag"
 	"github.com/linkdata/jaws/secureheaders"
 	"github.com/linkdata/jaws/staticserve"
 	"github.com/linkdata/jaws/what"
@@ -153,7 +153,7 @@ func (jw *Jaws) Done() <-chan struct{} {
 // strings to *template.Template.
 func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) (err error) {
 	if tl != nil {
-		if err = jawstags.NewErrNotComparable(tl); err == nil {
+		if err = jtag.NewErrNotComparable(tl); err == nil {
 			jw.mu.Lock()
 			if !slices.Contains(jw.tmplookers, tl) {
 				jw.tmplookers = append(jw.tmplookers, tl)
@@ -168,7 +168,7 @@ func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) (err error) {
 // the list of TemplateLookupers.
 func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) (err error) {
 	if tl != nil {
-		if err = jawstags.NewErrNotComparable(tl); err == nil {
+		if err = jtag.NewErrNotComparable(tl); err == nil {
 			jw.mu.Lock()
 			jw.tmplookers = slices.DeleteFunc(jw.tmplookers, func(x TemplateLookuper) bool { return x == tl })
 			jw.mu.Unlock()
@@ -499,7 +499,7 @@ func (jw *Jaws) Broadcast(msg jawswire.Message) {
 	case *Request: // send to that request
 	case string: // HTML id (accepted by all requests)
 	default:
-		expanded, err := jawstags.TagExpand(nil, msg.Dest)
+		expanded, err := jtag.TagExpand(nil, msg.Dest)
 		jw.MustLog(err)
 		switch len(expanded) {
 		case 0:
@@ -532,7 +532,7 @@ func (jw *Jaws) setDirty(tags []any) {
 // Note that if any of the tags are a TagGetter, it will be called with a nil Request.
 // Prefer using Request.Dirty() which avoids this.
 func (jw *Jaws) Dirty(dirtyTags ...any) {
-	jw.setDirty(jawstags.MustTagExpand(nil, dirtyTags))
+	jw.setDirty(jtag.MustTagExpand(nil, dirtyTags))
 }
 
 func (jw *Jaws) distributeDirt() int {

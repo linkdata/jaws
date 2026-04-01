@@ -3,7 +3,7 @@ package bind
 import (
 	"testing"
 
-	"github.com/linkdata/jaws/jawstags"
+	"github.com/linkdata/jaws/jtag"
 )
 
 func Test_makeGetter_panic(t *testing.T) {
@@ -28,7 +28,7 @@ func TestMakeGetter_GetterPassThroughAndTag(t *testing.T) {
 	if got := g.JawsGet(nil); got != "x" {
 		t.Fatalf("unexpected getter value %q", got)
 	}
-	if tag := g.(jawstags.TagGetter).JawsGetTag(nil); tag != nil {
+	if tag := g.(jtag.TagGetter).JawsGetTag(nil); tag != nil {
 		t.Fatalf("expected nil tag, got %#v", tag)
 	}
 

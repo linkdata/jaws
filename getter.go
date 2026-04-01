@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/linkdata/jaws/jawstags"
+	"github.com/linkdata/jaws/jtag"
 )
 
 var ErrValueNotSettable = errors.New("value not settable")
@@ -25,7 +25,7 @@ func (s getterStatic[T]) JawsGet(*Element) T {
 	return s.v
 }
 
-func (s getterStatic[T]) JawsGetTag(jawstags.Context) any {
+func (s getterStatic[T]) JawsGetTag(jtag.Context) any {
 	return nil
 }
 

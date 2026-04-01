@@ -1,6 +1,6 @@
 package jaws
 
-import "github.com/linkdata/jaws/jawstags"
+import "github.com/linkdata/jaws/jtag"
 
 type stringGetterFunc struct {
 	fn   func(*Element) string
@@ -11,7 +11,7 @@ func (g *stringGetterFunc) JawsGet(e *Element) string {
 	return g.fn(e)
 }
 
-func (g *stringGetterFunc) JawsGetTag(jawstags.Context) any {
+func (g *stringGetterFunc) JawsGetTag(jtag.Context) any {
 	return g.tags
 }
 

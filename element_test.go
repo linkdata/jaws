@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/jawstags"
 	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/jid"
+	"github.com/linkdata/jaws/jtag"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -70,7 +70,7 @@ type testApplyGetterAll struct {
 	initErr error
 }
 
-func (a testApplyGetterAll) JawsGetTag(jawstags.Context) any { return jawstags.Tag("tg") }
+func (a testApplyGetterAll) JawsGetTag(jtag.Context) any { return jtag.Tag("tg") }
 func (a testApplyGetterAll) JawsClick(*Element, string) error {
 	return ErrEventUnhandled
 }
@@ -102,9 +102,9 @@ func TestElement_Tag(t *testing.T) {
 
 	tss := &testUi{}
 	e := rq.NewElement(tss)
-	is.True(!e.HasTag(jawstags.Tag("zomg")))
-	e.Tag(jawstags.Tag("zomg"))
-	is.True(e.HasTag(jawstags.Tag("zomg")))
+	is.True(!e.HasTag(jtag.Tag("zomg")))
+	e.Tag(jtag.Tag("zomg"))
+	is.True(e.HasTag(jtag.Tag("zomg")))
 	s := e.String()
 	if !strings.Contains(s, "zomg") {
 		t.Error(s)
@@ -261,9 +261,9 @@ func TestElement_maybeDirty(t *testing.T) {
 	th.Equal(changed, false)
 	th.Equal(err, nil)
 
-	changed, err = e.maybeDirty(e, jawstags.ErrNotComparable)
+	changed, err = e.maybeDirty(e, jtag.ErrNotComparable)
 	th.Equal(changed, false)
-	th.Equal(err, jawstags.ErrNotComparable)
+	th.Equal(err, jtag.ErrNotComparable)
 }
 
 func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
@@ -283,7 +283,7 @@ func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
 	elem.renderDebug(&sb)
 	rq.mu.Unlock()
 
-	elem.Tag(jawstags.Tag("a"), jawstags.Tag("b"))
+	elem.Tag(jtag.Tag("a"), jtag.Tag("b"))
 	sb.Reset()
 	elem.renderDebug(&sb)
 	if !strings.Contains(sb.String(), ", ") {
@@ -319,11 +319,11 @@ func TestElement_ApplyGetterDebugBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error %v", err)
 	}
-	if !elem.HasTag(jawstags.Tag("tg")) {
+	if !elem.HasTag(jtag.Tag("tg")) {
 		t.Fatalf("missing Tag('tg') in %#v", gotTags)
 	}
-	agErr := testApplyGetterAll{initErr: jawstags.ErrNotComparable}
-	if _, err := elem.ApplyGetter(agErr); err != jawstags.ErrNotComparable {
+	agErr := testApplyGetterAll{initErr: jtag.ErrNotComparable}
+	if _, err := elem.ApplyGetter(agErr); err != jtag.ErrNotComparable {
 		t.Fatalf("expected init err, got %v", err)
 	}
 
@@ -487,7 +487,7 @@ func TestElement_JawsInit(t *testing.T) {
 	defer rq.Close()
 
 	tss := &testUi{s: "foo"}
-	tss.initError = jawstags.ErrNotComparable
+	tss.initError = jtag.ErrNotComparable
 	e := rq.NewElement(tss)
 
 	tag, err := e.ApplyGetter(tss)
@@ -495,7 +495,7 @@ func TestElement_JawsInit(t *testing.T) {
 	if tag != tss {
 		t.Errorf("tag was %#v", tag)
 	}
-	if err != jawstags.ErrNotComparable {
+	if err != jtag.ErrNotComparable {
 		t.Error(err)
 	}
 }

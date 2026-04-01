@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws/jawsdata"
-	"github.com/linkdata/jaws/jawstags"
 	"github.com/linkdata/jaws/jawswire"
+	"github.com/linkdata/jaws/jtag"
 	"github.com/linkdata/jaws/secureheaders"
 	"github.com/linkdata/jaws/staticserve"
 	"github.com/linkdata/jaws/what"
@@ -26,8 +26,8 @@ import (
 
 type testBroadcastTagGetter struct{}
 
-func (testBroadcastTagGetter) JawsGetTag(jawstags.Context) any {
-	return jawstags.Tag("expanded")
+func (testBroadcastTagGetter) JawsGetTag(jtag.Context) any {
+	return jtag.Tag("expanded")
 }
 
 func TestCoverage_GenerateHeadAndConvenienceBroadcasts(t *testing.T) {
@@ -121,12 +121,12 @@ func TestBroadcast_ExpandsTagDestBeforeQueue(t *testing.T) {
 	if msg.What != what.Inner || msg.Data != "x" {
 		t.Fatalf("unexpected msg %#v", msg)
 	}
-	if got, ok := msg.Dest.(jawstags.Tag); !ok || got != jawstags.Tag("expanded") {
+	if got, ok := msg.Dest.(jtag.Tag); !ok || got != jtag.Tag("expanded") {
 		t.Fatalf("expected expanded Tag destination, got %T(%#v)", msg.Dest, msg.Dest)
 	}
 
 	jw.Broadcast(jawswire.Message{
-		Dest: []any{tagger, jawstags.Tag("extra")},
+		Dest: []any{tagger, jtag.Tag("extra")},
 		What: what.Value,
 		Data: "v",
 	})
@@ -138,7 +138,7 @@ func TestBroadcast_ExpandsTagDestBeforeQueue(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected []any destination, got %T(%#v)", msg.Dest, msg.Dest)
 	}
-	if len(dest) != 2 || dest[0] != jawstags.Tag("expanded") || dest[1] != jawstags.Tag("extra") {
+	if len(dest) != 2 || dest[0] != jtag.Tag("expanded") || dest[1] != jtag.Tag("extra") {
 		t.Fatalf("unexpected expanded destination %#v", dest)
 	}
 
@@ -363,11 +363,11 @@ func TestJaws_distributeDirt_AscendingOrder(t *testing.T) {
 	rq := &Request{}
 	jw.mu.Lock()
 	jw.requests[1] = rq
-	jw.dirty[jawstags.Tag("fourth")] = 4
-	jw.dirty[jawstags.Tag("second")] = 2
-	jw.dirty[jawstags.Tag("fifth")] = 5
-	jw.dirty[jawstags.Tag("first")] = 1
-	jw.dirty[jawstags.Tag("third")] = 3
+	jw.dirty[jtag.Tag("fourth")] = 4
+	jw.dirty[jtag.Tag("second")] = 2
+	jw.dirty[jtag.Tag("fifth")] = 5
+	jw.dirty[jtag.Tag("first")] = 1
+	jw.dirty[jtag.Tag("third")] = 3
 	jw.dirtOrder = 5
 	jw.mu.Unlock()
 
@@ -380,11 +380,11 @@ func TestJaws_distributeDirt_AscendingOrder(t *testing.T) {
 	rq.mu.RUnlock()
 
 	want := []any{
-		jawstags.Tag("first"),
-		jawstags.Tag("second"),
-		jawstags.Tag("third"),
-		jawstags.Tag("fourth"),
-		jawstags.Tag("fifth"),
+		jtag.Tag("first"),
+		jtag.Tag("second"),
+		jtag.Tag("third"),
+		jtag.Tag("fourth"),
+		jtag.Tag("fifth"),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("dirty tags = %#v, want %#v", got, want)
@@ -850,7 +850,7 @@ func TestJaws_Session(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 
-	dot := jawstags.Tag("123")
+	dot := jtag.Tag("123")
 
 	h := rq.Jaws.Session(rq.Jaws.Handler("testtemplate", dot))
 	var buf bytes.Buffer

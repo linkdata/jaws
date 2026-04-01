@@ -5,7 +5,7 @@ import (
 	"html"
 	"html/template"
 
-	"github.com/linkdata/jaws/jawstags"
+	"github.com/linkdata/jaws/jtag"
 )
 
 type htmlGetter struct{ v template.HTML }
@@ -14,7 +14,7 @@ func (g htmlGetter) JawsGetHTML(e *Element) template.HTML {
 	return g.v
 }
 
-func (g htmlGetter) JawsGetTag(jawstags.Context) any {
+func (g htmlGetter) JawsGetTag(jtag.Context) any {
 	return nil
 }
 
@@ -24,7 +24,7 @@ func (g htmlStringerGetter) JawsGetHTML(e *Element) template.HTML {
 	return template.HTML(html.EscapeString(g.sg.String())) // #nosec G203
 }
 
-func (g htmlStringerGetter) JawsGetTag(jawstags.Context) any {
+func (g htmlStringerGetter) JawsGetTag(jtag.Context) any {
 	return g.sg
 }
 
@@ -40,7 +40,7 @@ func (g htmlGetterString) JawsGetHTML(e *Element) template.HTML {
 	return template.HTML(html.EscapeString(g.sg.JawsGet(e))) // #nosec G203
 }
 
-func (g htmlGetterString) JawsGetTag(jawstags.Context) any {
+func (g htmlGetterString) JawsGetTag(jtag.Context) any {
 	return g.sg
 }
 

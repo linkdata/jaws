@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawstags"
+	"github.com/linkdata/jaws/jtag"
 	"github.com/linkdata/jaws/namedbool"
 )
 
@@ -26,7 +26,7 @@ type requestWriterFailGetter struct {
 }
 
 func (g requestWriterFailGetter) JawsGetHTML(*jaws.Element) template.HTML { return "x" }
-func (g requestWriterFailGetter) JawsGetTag(jawstags.Context) any         { return g }
+func (g requestWriterFailGetter) JawsGetTag(jtag.Context) any             { return g }
 func (g requestWriterFailGetter) JawsInit(*jaws.Element) error            { return g.err }
 
 func TestRequestWriter_MethodsAndWidgetHelpers(t *testing.T) {

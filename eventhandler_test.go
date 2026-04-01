@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/linkdata/jaws/jawstags"
 	"github.com/linkdata/jaws/jawswire"
+	"github.com/linkdata/jaws/jtag"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -36,7 +36,7 @@ func (t *testJawsEvent) JawsEvent(e *Element, wht what.What, val string) (err er
 	return
 }
 
-func (t *testJawsEvent) JawsGetTag(jawstags.Context) (tag any) {
+func (t *testJawsEvent) JawsGetTag(jtag.Context) (tag any) {
 	return t.tag
 }
 
@@ -55,7 +55,7 @@ func (t *testJawsEvent) JawsUpdate(e *Element) {
 
 var _ ClickHandler = (*testJawsEvent)(nil)
 var _ EventHandler = (*testJawsEvent)(nil)
-var _ jawstags.TagGetter = (*testJawsEvent)(nil)
+var _ jtag.TagGetter = (*testJawsEvent)(nil)
 var _ UI = (*testJawsEvent)(nil)
 
 func Test_JawsEvent_NonClickInvokesJawsEventForDualHandler(t *testing.T) {

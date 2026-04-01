@@ -1,4 +1,4 @@
-package jawstags
+package jtag
 
 import (
 	"reflect"

@@ -2,7 +2,7 @@ package bind
 
 import (
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawstags"
+	"github.com/linkdata/jaws/jtag"
 )
 
 type stringGetterFunc struct {
@@ -14,7 +14,7 @@ func (g *stringGetterFunc) JawsGet(e *jaws.Element) string {
 	return g.fn(e)
 }
 
-func (g *stringGetterFunc) JawsGetTag(jawstags.Context) any {
+func (g *stringGetterFunc) JawsGetTag(jtag.Context) any {
 	return g.tags
 }
 

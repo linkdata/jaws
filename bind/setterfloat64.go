@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawstags"
+	"github.com/linkdata/jaws/jtag"
 )
 
 type numeric interface {
@@ -32,7 +32,7 @@ func (s setterFloat64[T]) JawsSet(e *jaws.Element, v float64) error {
 	return s.Setter.JawsSet(e, T(v))
 }
 
-func (s setterFloat64[T]) JawsGetTag(jawstags.Context) any {
+func (s setterFloat64[T]) JawsGetTag(jtag.Context) any {
 	return s.Setter
 }
 
@@ -49,7 +49,7 @@ func (setterFloat64ReadOnly[T]) JawsSet(*jaws.Element, float64) error {
 	return ErrValueNotSettable
 }
 
-func (s setterFloat64ReadOnly[T]) JawsGetTag(jawstags.Context) any {
+func (s setterFloat64ReadOnly[T]) JawsGetTag(jtag.Context) any {
 	return s.Getter
 }
 
@@ -65,7 +65,7 @@ func (s setterFloat64Static[T]) JawsGet(*jaws.Element) float64 {
 	return s.v
 }
 
-func (s setterFloat64Static[T]) JawsGetTag(jawstags.Context) any {
+func (s setterFloat64Static[T]) JawsGetTag(jtag.Context) any {
 	return nil
 }
 

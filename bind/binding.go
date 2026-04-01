@@ -5,7 +5,7 @@ import (
 	"html/template"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawstags"
+	"github.com/linkdata/jaws/jtag"
 )
 
 type binding[T comparable] struct {
@@ -43,7 +43,7 @@ func (bind binding[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 	return
 }
 
-func (bind binding[T]) JawsGetTag(jawstags.Context) any {
+func (bind binding[T]) JawsGetTag(jtag.Context) any {
 	return bind.ptr
 }
 

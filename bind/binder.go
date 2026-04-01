@@ -2,7 +2,7 @@ package bind
 
 import (
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawstags"
+	"github.com/linkdata/jaws/jtag"
 )
 
 // BindSetHook is a function that replaces JawsSetLocked for a Binder.
@@ -45,7 +45,7 @@ type Formatter interface {
 type Binder[T comparable] interface {
 	RWLocker
 	Setter[T]
-	jawstags.TagGetter
+	jtag.TagGetter
 	Formatter
 	jaws.ClickHandler
 

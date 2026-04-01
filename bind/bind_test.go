@@ -9,7 +9,7 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawstags"
+	"github.com/linkdata/jaws/jtag"
 )
 
 func TestBind_Hook_Success_panic(t *testing.T) {
@@ -78,7 +78,7 @@ func testBind_Hook_Success[T comparable](t *testing.T, testval T) {
 	if calls1 != 1 {
 		t.Error(calls1)
 	}
-	tags1 := jawstags.MustTagExpand(nil, bind1)
+	tags1 := jtag.MustTagExpand(nil, bind1)
 	if !reflect.DeepEqual(tags1, []any{&val}) {
 		t.Error(tags1)
 	}
@@ -101,7 +101,7 @@ func testBind_Hook_Success[T comparable](t *testing.T, testval T) {
 	if calls2 != 1 {
 		t.Error(calls2)
 	}
-	tags2 := jawstags.MustTagExpand(nil, bind2)
+	tags2 := jtag.MustTagExpand(nil, bind2)
 	if !reflect.DeepEqual(tags2, []any{&val}) {
 		t.Error(tags2)
 	}
@@ -175,7 +175,7 @@ func testBind_Hook_Set[T comparable](t *testing.T, testval T) {
 	if calls1 != 2 {
 		t.Error(calls1)
 	}
-	tags1 := jawstags.MustTagExpand(nil, bind1)
+	tags1 := jtag.MustTagExpand(nil, bind1)
 	if !reflect.DeepEqual(tags1, []any{&val}) {
 		t.Error(tags1)
 	}
@@ -193,7 +193,7 @@ func testBind_Hook_Set[T comparable](t *testing.T, testval T) {
 	if calls2 != 0 {
 		t.Error(calls2)
 	}
-	tags2 := jawstags.MustTagExpand(nil, bind2)
+	tags2 := jtag.MustTagExpand(nil, bind2)
 	if !reflect.DeepEqual(tags2, []any{&val}) {
 		t.Error(tags2)
 	}
@@ -221,7 +221,7 @@ func testBind_Hook_Get[T comparable](t *testing.T, testval T) {
 	if calls1 != 1 {
 		t.Error(calls1)
 	}
-	tags1 := jawstags.MustTagExpand(nil, bind1)
+	tags1 := jtag.MustTagExpand(nil, bind1)
 	if !reflect.DeepEqual(tags1, []any{&val}) {
 		t.Error(tags1)
 	}
@@ -242,7 +242,7 @@ func testBind_Hook_Get[T comparable](t *testing.T, testval T) {
 	if calls2 != 0 {
 		t.Error(calls2)
 	}
-	tags2 := jawstags.MustTagExpand(nil, bind2)
+	tags2 := jtag.MustTagExpand(nil, bind2)
 	if !reflect.DeepEqual(tags2, []any{&val}) {
 		t.Error(tags2)
 	}
@@ -281,7 +281,7 @@ func TestBind_Hook_Clicked_binding(t *testing.T) {
 	if gotName != "save" {
 		t.Error(gotName)
 	}
-	tags := jawstags.MustTagExpand(nil, bind)
+	tags := jtag.MustTagExpand(nil, bind)
 	if !reflect.DeepEqual(tags, []any{&val}) {
 		t.Error(tags)
 	}
@@ -348,7 +348,7 @@ func TestBind_Hook_Clicked_bindingHook(t *testing.T) {
 	if err := bindWithSuccess.(jaws.ClickHandler).JawsClick(nil, "x"); !errors.Is(err, jaws.ErrEventUnhandled) {
 		t.Fatal(err)
 	}
-	tags := jawstags.MustTagExpand(nil, clickBind2)
+	tags := jtag.MustTagExpand(nil, clickBind2)
 	if !reflect.DeepEqual(tags, []any{&val}) {
 		t.Error(tags)
 	}
@@ -510,7 +510,7 @@ func TestBindFormat(t *testing.T) {
 	if s := getter.JawsGet(nil); s != " 12" {
 		t.Errorf("%q", s)
 	}
-	tags := jawstags.MustTagExpand(nil, getter)
+	tags := jtag.MustTagExpand(nil, getter)
 	if !reflect.DeepEqual(tags, []any{&val}) {
 		t.Error(tags)
 	}
@@ -520,7 +520,7 @@ func TestBindFormat(t *testing.T) {
 	if s := getter.JawsGet(nil); s != " 12" {
 		t.Errorf("%q", s)
 	}
-	tags = jawstags.MustTagExpand(nil, getter)
+	tags = jtag.MustTagExpand(nil, getter)
 	if !reflect.DeepEqual(tags, []any{&val}) {
 		t.Error(tags)
 	}
@@ -539,7 +539,7 @@ func TestBindFormatHTML(t *testing.T) {
 	if s := getter.JawsGetHTML(nil); s != "<span>" {
 		t.Errorf("%q", s)
 	}
-	tags := jawstags.MustTagExpand(nil, getter)
+	tags := jtag.MustTagExpand(nil, getter)
 	if !reflect.DeepEqual(tags, []any{&val}) {
 		t.Error(tags)
 	}
@@ -552,7 +552,7 @@ func TestBindFormatHTML(t *testing.T) {
 	if s := getter.JawsGetHTML(nil); s != "\"<span>\"" {
 		t.Errorf("%q", s)
 	}
-	tags = jawstags.MustTagExpand(nil, getter)
+	tags = jtag.MustTagExpand(nil, getter)
 	if !reflect.DeepEqual(tags, []any{&val}) {
 		t.Error(tags)
 	}

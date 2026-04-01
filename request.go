@@ -21,9 +21,9 @@ import (
 	"github.com/coder/websocket"
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/jawsdata"
-	"github.com/linkdata/jaws/jawstags"
 	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/jid"
+	"github.com/linkdata/jaws/jtag"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -405,7 +405,7 @@ func (rq *Request) TagsOf(elem *Element) (tags []any) {
 
 // Dirty marks all Elements that have one or more of the given tags as dirty.
 func (rq *Request) Dirty(dirtyTags ...any) {
-	rq.Jaws.setDirty(jawstags.MustTagExpand(rq, dirtyTags))
+	rq.Jaws.setDirty(jtag.MustTagExpand(rq, dirtyTags))
 }
 
 // wantMessage returns true if the Request want the message.
@@ -449,7 +449,7 @@ func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 // Panics if the build tag "debug" is set and the UI object doesn't satisfy all requirements.
 func (rq *Request) NewElement(ui UI) *Element {
 	if deadlock.Debug {
-		if err := jawstags.NewErrNotComparable(ui); err != nil {
+		if err := jtag.NewErrNotComparable(ui); err != nil {
 			panic(err)
 		}
 	}
@@ -513,13 +513,13 @@ func (rq *Request) TagExpanded(elem *Element, expandedtags []any) {
 // Tag adds the given tags to the given Element.
 func (rq *Request) Tag(elem *Element, tagItems ...any) {
 	if elem != nil && len(tagItems) > 0 && elem.Request == rq {
-		rq.TagExpanded(elem, jawstags.MustTagExpand(elem.Request, tagItems))
+		rq.TagExpanded(elem, jtag.MustTagExpand(elem.Request, tagItems))
 	}
 }
 
 // GetElements returns a list of the UI elements in the Request that have the given tag(s).
 func (rq *Request) GetElements(tagitem any) (elems []*Element) {
-	expanded := jawstags.MustTagExpand(rq, tagitem)
+	expanded := jtag.MustTagExpand(rq, tagitem)
 	seen := map[*Element]struct{}{}
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()

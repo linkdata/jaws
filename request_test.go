@@ -21,9 +21,9 @@ import (
 	"github.com/coder/websocket"
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/jawsdata"
-	"github.com/linkdata/jaws/jawstags"
 	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/jid"
+	"github.com/linkdata/jaws/jtag"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -676,27 +676,27 @@ func TestRequest_DeleteByTag(t *testing.T) {
 	ui1 := &testUi{}
 	e11 := rq1.NewElement(ui1)
 	th.Equal(e11.jid, Jid(1))
-	e11.Tag(jawstags.Tag("e11"), jawstags.Tag("foo"))
+	e11.Tag(jtag.Tag("e11"), jtag.Tag("foo"))
 	e12 := rq1.NewElement(ui1)
 	th.Equal(e12.jid, Jid(2))
-	e12.Tag(jawstags.Tag("e12"))
+	e12.Tag(jtag.Tag("e12"))
 	e13 := rq1.NewElement(ui1)
 	th.Equal(e13.jid, Jid(3))
-	e13.Tag(jawstags.Tag("e13"), jawstags.Tag("bar"))
+	e13.Tag(jtag.Tag("e13"), jtag.Tag("bar"))
 
 	rq2 := tj.newRequest(nil)
 	ui2 := &testUi{}
 	e21 := rq2.NewElement(ui2)
 	th.Equal(e21.jid, Jid(4))
-	e21.Tag(jawstags.Tag("e21"), jawstags.Tag("foo"))
+	e21.Tag(jtag.Tag("e21"), jtag.Tag("foo"))
 	e22 := rq2.NewElement(ui2)
 	th.Equal(e22.jid, Jid(5))
-	e22.Tag(jawstags.Tag("e22"))
+	e22.Tag(jtag.Tag("e22"))
 	e23 := rq2.NewElement(ui2)
 	th.Equal(e23.jid, Jid(6))
-	e23.Tag(jawstags.Tag("e23"))
+	e23.Tag(jtag.Tag("e23"))
 
-	tj.Delete([]any{jawstags.Tag("foo"), jawstags.Tag("bar"), jawstags.Tag("nothere"), jawstags.Tag("e23")})
+	tj.Delete([]any{jtag.Tag("foo"), jtag.Tag("bar"), jtag.Tag("nothere"), jtag.Tag("e23")})
 
 	select {
 	case <-th.C:
@@ -1034,7 +1034,7 @@ func TestRequest_renderDebugLocked(t *testing.T) {
 
 	tss := &testUi{}
 	e := rq.NewElement(tss)
-	e.Tag(jawstags.Tag("zomg"))
+	e.Tag(jtag.Tag("zomg"))
 
 	var sb strings.Builder
 	e.renderDebug(&sb)
@@ -1325,11 +1325,11 @@ func TestRequest_Template(t *testing.T) {
 			name: "testtemplate-with-tags",
 			args: args{
 				"testtemplate",
-				jawstags.Tag("stringtag1"),
-				[]any{`style="display: none"`, jawstags.Tag("stringtag2"), "hidden"},
+				jtag.Tag("stringtag1"),
+				[]any{`style="display: none"`, jtag.Tag("stringtag2"), "hidden"},
 			},
 			want:   `<div id="Jid.1" style="display: none" hidden>stringtag1</div>`,
-			tags:   []any{jawstags.Tag("stringtag1"), jawstags.Tag("stringtag2")},
+			tags:   []any{jtag.Tag("stringtag1"), jtag.Tag("stringtag2")},
 			errtxt: "",
 		},
 	}

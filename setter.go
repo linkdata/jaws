@@ -3,7 +3,7 @@ package jaws
 import (
 	"fmt"
 
-	"github.com/linkdata/jaws/jawstags"
+	"github.com/linkdata/jaws/jtag"
 )
 
 type Setter[T comparable] interface {
@@ -20,7 +20,7 @@ func (setterReadOnly[T]) JawsSet(*Element, T) error {
 	return ErrValueNotSettable
 }
 
-func (s setterReadOnly[T]) JawsGetTag(jawstags.Context) any {
+func (s setterReadOnly[T]) JawsGetTag(jtag.Context) any {
 	return s.Getter
 }
 
@@ -36,7 +36,7 @@ func (s setterStatic[T]) JawsGet(*Element) T {
 	return s.v
 }
 
-func (s setterStatic[T]) JawsGetTag(jawstags.Context) any {
+func (s setterStatic[T]) JawsGetTag(jtag.Context) any {
 	return nil
 }
 

@@ -14,7 +14,7 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/jawshtml"
-	"github.com/linkdata/jaws/jawstags"
+	"github.com/linkdata/jaws/jtag"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -172,7 +172,7 @@ type testTemplateUI struct {
 }
 
 func (t testTemplateUI) String() string {
-	return fmt.Sprintf("{%q, %s}", t.Name, jawstags.TagString(t.Dot))
+	return fmt.Sprintf("{%q, %s}", t.Name, jtag.TagString(t.Dot))
 }
 
 func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
@@ -231,7 +231,7 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
 
 func (t testTemplateUI) JawsRender(e *Element, wr io.Writer, params []any) (err error) {
 	var expandedtags []any
-	if expandedtags, err = jawstags.TagExpand(e.Request, t.Dot); err == nil {
+	if expandedtags, err = jtag.TagExpand(e.Request, t.Dot); err == nil {
 		e.Request.TagExpanded(e, expandedtags)
 		tags, handlers, attrs := ParseParams(params)
 		e.Tag(tags...)

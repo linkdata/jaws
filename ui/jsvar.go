@@ -13,8 +13,8 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/bind"
-	"github.com/linkdata/jaws/jawstags"
 	"github.com/linkdata/jaws/jawswire"
+	"github.com/linkdata/jaws/jtag"
 	"github.com/linkdata/jaws/what"
 	"github.com/linkdata/jq"
 )
@@ -180,7 +180,7 @@ func (ui *JsVar[T]) JawsRender(e *jaws.Element, w io.Writer, params []any) (err 
 	return
 }
 
-func (ui *JsVar[T]) JawsGetTag(jawstags.Context) any {
+func (ui *JsVar[T]) JawsGetTag(jtag.Context) any {
 	return ui.Tag
 }
 
