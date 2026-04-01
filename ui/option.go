@@ -6,7 +6,7 @@ import (
 	"io"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawshtml"
+	"github.com/linkdata/jaws/htmlio"
 	"github.com/linkdata/jaws/namedbool"
 )
 
@@ -21,7 +21,7 @@ func (ui Option) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
 	if ui.Checked() {
 		attrs = append(attrs, "selected")
 	}
-	return jawshtml.WriteHTMLInner(w, e.Jid(), "option", "", ui.JawsGetHTML(e), attrs...)
+	return htmlio.WriteHTMLInner(w, e.Jid(), "option", "", ui.JawsGetHTML(e), attrs...)
 }
 func (ui Option) JawsUpdate(e *jaws.Element) {
 	if ui.Checked() {

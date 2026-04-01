@@ -6,7 +6,7 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/bind"
-	"github.com/linkdata/jaws/jawshtml"
+	"github.com/linkdata/jaws/htmlio"
 )
 
 type Textarea struct{ InputText }
@@ -20,7 +20,7 @@ func (ui *Textarea) JawsRender(e *jaws.Element, w io.Writer, params []any) (err 
 	if err = ui.applyGetter(e, ui.Setter); err == nil {
 		attrs := e.ApplyParams(params)
 		value := template.HTMLEscapeString(ui.JawsGet(e))
-		err = jawshtml.WriteHTMLInner(w, e.Jid(), "textarea", "", template.HTML(value), attrs...) // #nosec G203
+		err = htmlio.WriteHTMLInner(w, e.Jid(), "textarea", "", template.HTML(value), attrs...) // #nosec G203
 	}
 	return
 }

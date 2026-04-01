@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/jawshtml"
+	"github.com/linkdata/jaws/htmlio"
 	"github.com/linkdata/jaws/jtag"
 	"github.com/linkdata/jaws/what"
 )
@@ -280,7 +280,7 @@ type testDivWidget struct {
 
 func (ui testDivWidget) JawsRender(e *Element, w io.Writer, params []any) error {
 	e.ApplyParams(params)
-	return jawshtml.WriteHTMLInner(w, e.Jid(), "div", "", ui.inner)
+	return htmlio.WriteHTMLInner(w, e.Jid(), "div", "", ui.inner)
 }
 
 func (testDivWidget) JawsUpdate(*Element) {}
@@ -305,7 +305,7 @@ func (ui *testTextInputWidget) JawsRender(e *Element, w io.Writer, params []any)
 		attrs := e.ApplyParams(params)
 		v := ui.setter.JawsGet(e)
 		ui.last = v
-		err = jawshtml.WriteHTMLInput(w, e.Jid(), "text", v, attrs)
+		err = htmlio.WriteHTMLInput(w, e.Jid(), "text", v, attrs)
 	}
 	return
 }

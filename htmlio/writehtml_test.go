@@ -1,11 +1,11 @@
-package jawshtml_test
+package htmlio_test
 
 import (
 	"html/template"
 	"strings"
 	"testing"
 
-	"github.com/linkdata/jaws/jawshtml"
+	"github.com/linkdata/jaws/htmlio"
 	"github.com/linkdata/jaws/jid"
 )
 
@@ -57,7 +57,7 @@ func Test_WriteHTMLInner(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var sb strings.Builder
-			if err := jawshtml.WriteHTMLInner(&sb, tt.args.jid, tt.args.tag, tt.args.typ, tt.args.inner, tt.args.attrs...); err != nil {
+			if err := htmlio.WriteHTMLInner(&sb, tt.args.jid, tt.args.tag, tt.args.typ, tt.args.inner, tt.args.attrs...); err != nil {
 				t.Fatal(err)
 			}
 			if got := sb.String(); got != tt.want {
@@ -122,7 +122,7 @@ func Test_WriteHTMLInput(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var sb strings.Builder
-			if err := jawshtml.WriteHTMLInput(&sb, tt.args.jid, tt.args.typ, tt.args.val, tt.args.attrs); err != nil {
+			if err := htmlio.WriteHTMLInput(&sb, tt.args.jid, tt.args.typ, tt.args.val, tt.args.attrs); err != nil {
 				t.Fatal(err)
 			}
 			if got := sb.String(); got != tt.want {

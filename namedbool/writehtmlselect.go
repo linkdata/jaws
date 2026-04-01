@@ -5,13 +5,13 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/linkdata/jaws/jawshtml"
+	"github.com/linkdata/jaws/htmlio"
 	"github.com/linkdata/jaws/jid"
 )
 
 // WriteHTMLSelect writes a select tag with options from a NamedBoolArray.
 func WriteHTMLSelect(w io.Writer, jid jid.Jid, nba *NamedBoolArray, attrs []template.HTMLAttr) (err error) {
-	if err = jawshtml.WriteHTMLTag(w, jid, "select", "", "", attrs); err == nil {
+	if err = htmlio.WriteHTMLTag(w, jid, "select", "", "", attrs); err == nil {
 		var b []byte
 		nba.ReadLocked(func(nba []*NamedBool) {
 			for _, nb := range nba {

@@ -1,4 +1,4 @@
-package jawshtml
+package htmlio
 
 import (
 	"html/template"

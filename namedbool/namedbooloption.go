@@ -6,7 +6,7 @@ import (
 	"io"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawshtml"
+	"github.com/linkdata/jaws/htmlio"
 )
 
 // namedBoolOption is an internal UI wrapper used by NamedBoolArray.JawsContains.
@@ -23,7 +23,7 @@ func (ui namedBoolOption) JawsRender(e *jaws.Element, w io.Writer, params []any)
 	if ui.Checked() {
 		attrs = append(attrs, "selected")
 	}
-	return jawshtml.WriteHTMLInner(w, e.Jid(), "option", "", ui.JawsGetHTML(e), attrs...)
+	return htmlio.WriteHTMLInner(w, e.Jid(), "option", "", ui.JawsGetHTML(e), attrs...)
 }
 
 func (ui namedBoolOption) JawsUpdate(e *jaws.Element) {

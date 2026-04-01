@@ -9,7 +9,7 @@ import (
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/assets"
 	"github.com/linkdata/jaws/bind"
-	"github.com/linkdata/jaws/jawshtml"
+	"github.com/linkdata/jaws/htmlio"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -40,7 +40,7 @@ func (ui *InputText) renderStringInput(e *jaws.Element, w io.Writer, htmlType st
 		attrs := e.ApplyParams(params)
 		v := ui.JawsGet(e)
 		ui.Last.Store(v)
-		err = jawshtml.WriteHTMLInput(w, e.Jid(), htmlType, v, attrs)
+		err = htmlio.WriteHTMLInput(w, e.Jid(), htmlType, v, attrs)
 	}
 	return
 }
@@ -73,7 +73,7 @@ func (ui *InputBool) renderBoolInput(e *jaws.Element, w io.Writer, htmlType stri
 		if v {
 			attrs = append(attrs, "checked")
 		}
-		err = jawshtml.WriteHTMLInput(w, e.Jid(), htmlType, "", attrs)
+		err = htmlio.WriteHTMLInput(w, e.Jid(), htmlType, "", attrs)
 	}
 	return
 }
@@ -118,7 +118,7 @@ func (ui *InputFloat) renderFloatInput(e *jaws.Element, w io.Writer, htmlType st
 		attrs := e.ApplyParams(params)
 		v := ui.JawsGet(e)
 		ui.Last.Store(v)
-		err = jawshtml.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(v), attrs)
+		err = htmlio.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(v), attrs)
 	}
 	return
 }
@@ -159,7 +159,7 @@ func (ui *InputDate) renderDateInput(e *jaws.Element, w io.Writer, htmlType stri
 		attrs := e.ApplyParams(params)
 		v := ui.JawsGet(e)
 		ui.Last.Store(v)
-		err = jawshtml.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(v), attrs)
+		err = htmlio.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(v), attrs)
 	}
 	return
 }

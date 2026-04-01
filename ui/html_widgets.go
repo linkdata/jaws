@@ -5,7 +5,7 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/bind"
-	"github.com/linkdata/jaws/jawshtml"
+	"github.com/linkdata/jaws/htmlio"
 )
 
 // HTMLInner is a reusable base for widgets that render as `<tag>inner</tag>`.
@@ -15,7 +15,7 @@ type HTMLInner struct {
 
 func (ui *HTMLInner) renderInner(e *jaws.Element, w io.Writer, htmlTag, htmlType string, params []any) (err error) {
 	if _, err = e.ApplyGetter(ui.HTMLGetter); err == nil {
-		err = jawshtml.WriteHTMLInner(w, e.Jid(), htmlTag, htmlType, ui.HTMLGetter.JawsGetHTML(e), e.ApplyParams(params)...)
+		err = htmlio.WriteHTMLInner(w, e.Jid(), htmlTag, htmlType, ui.HTMLGetter.JawsGetHTML(e), e.ApplyParams(params)...)
 	}
 	return
 }
