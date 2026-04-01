@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/linkdata/jaws/what"
+	"github.com/linkdata/jaws/lib/what"
 )
 
 // ErrEventHandlerPanic is returned when an event handler panics.

@@ -4,9 +4,9 @@ import (
 	"io"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/bind"
-	"github.com/linkdata/jaws/namedbool"
-	"github.com/linkdata/jaws/what"
+	"github.com/linkdata/jaws/lib/bind"
+	"github.com/linkdata/jaws/lib/namedbool"
+	"github.com/linkdata/jaws/lib/what"
 )
 
 type Select struct {

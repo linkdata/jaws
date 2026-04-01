@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/linkdata/jaws/assets"
-	"github.com/linkdata/jaws/what"
-	"github.com/linkdata/jaws/wire"
+	"github.com/linkdata/jaws/lib/assets"
+	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jaws/lib/wire"
 )
 
 func TestSession_Object(t *testing.T) {

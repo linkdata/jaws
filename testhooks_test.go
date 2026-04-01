@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/linkdata/jaws/what"
-	"github.com/linkdata/jaws/wire"
+	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jaws/lib/wire"
 )
 
 func TestErrEventUnhandled_Error(t *testing.T) {

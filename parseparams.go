@@ -3,7 +3,7 @@ package jaws
 import (
 	"html/template"
 
-	"github.com/linkdata/jaws/jtag"
+	"github.com/linkdata/jaws/lib/jtag"
 )
 
 // shouldAutoTagHandler returns true if a handler value is safe to use as a tag.

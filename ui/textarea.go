@@ -5,8 +5,8 @@ import (
 	"io"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/bind"
-	"github.com/linkdata/jaws/htmlio"
+	"github.com/linkdata/jaws/lib/bind"
+	"github.com/linkdata/jaws/lib/htmlio"
 )
 
 type Textarea struct{ InputText }

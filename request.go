@@ -20,11 +20,11 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/assets"
-	"github.com/linkdata/jaws/jid"
-	"github.com/linkdata/jaws/jtag"
-	"github.com/linkdata/jaws/what"
-	"github.com/linkdata/jaws/wire"
+	"github.com/linkdata/jaws/lib/assets"
+	"github.com/linkdata/jaws/lib/jid"
+	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jaws/lib/wire"
 )
 
 // ConnectFn can be used to interact with a Request before message processing starts.

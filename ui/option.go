@@ -6,8 +6,8 @@ import (
 	"io"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/htmlio"
-	"github.com/linkdata/jaws/namedbool"
+	"github.com/linkdata/jaws/lib/htmlio"
+	"github.com/linkdata/jaws/lib/namedbool"
 )
 
 type Option struct{ *namedbool.NamedBool }

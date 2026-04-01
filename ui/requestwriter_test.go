@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jtag"
-	"github.com/linkdata/jaws/namedbool"
+	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/namedbool"
 )
 
 type testRWUpdater struct {

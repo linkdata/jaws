@@ -4,8 +4,8 @@ import (
 	"io"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/bind"
-	"github.com/linkdata/jaws/htmlio"
+	"github.com/linkdata/jaws/lib/bind"
+	"github.com/linkdata/jaws/lib/htmlio"
 )
 
 // HTMLInner is a reusable base for widgets that render as `<tag>inner</tag>`.

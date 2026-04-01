@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jtag"
-	"github.com/linkdata/jaws/namedbool"
+	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/namedbool"
 )
 
 func TestHTMLWidgets_ConstructorsAndRender(t *testing.T) {

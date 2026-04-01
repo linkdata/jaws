@@ -4,7 +4,7 @@ import (
 	"io"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jid"
+	"github.com/linkdata/jaws/lib/jid"
 )
 
 // Register creates an element used for update-only registration.

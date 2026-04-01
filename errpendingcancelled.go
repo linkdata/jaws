@@ -3,7 +3,7 @@ package jaws
 import (
 	"fmt"
 
-	"github.com/linkdata/jaws/assets"
+	"github.com/linkdata/jaws/lib/assets"
 )
 
 // ErrPendingCancelled indicates a pending Request was cancelled. Use Unwrap() to see the underlying cause.

@@ -20,11 +20,11 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/assets"
-	"github.com/linkdata/jaws/jid"
-	"github.com/linkdata/jaws/jtag"
-	"github.com/linkdata/jaws/what"
-	"github.com/linkdata/jaws/wire"
+	"github.com/linkdata/jaws/lib/assets"
+	"github.com/linkdata/jaws/lib/jid"
+	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jaws/lib/wire"
 )
 
 const testTimeout = time.Second * 3

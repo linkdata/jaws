@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/what"
+	"github.com/linkdata/jaws/lib/what"
 )
 
 type jsVarData struct {

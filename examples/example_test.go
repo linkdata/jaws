@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/bind"
+	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/ui"
 )
 

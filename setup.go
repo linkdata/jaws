@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"path"
 
-	"github.com/linkdata/jaws/internal/routepattern"
+	"github.com/linkdata/jaws/lib/routepattern"
 	"github.com/linkdata/jaws/staticserve"
 )
 

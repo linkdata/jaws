@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/namedbool"
+	"github.com/linkdata/jaws/lib/namedbool"
 )
 
 type RadioElement struct {

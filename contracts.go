@@ -4,7 +4,7 @@ import (
 	"html/template"
 	"io"
 
-	"github.com/linkdata/jaws/what"
+	"github.com/linkdata/jaws/lib/what"
 )
 
 type Container interface {

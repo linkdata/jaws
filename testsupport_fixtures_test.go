@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/htmlio"
-	"github.com/linkdata/jaws/jtag"
-	"github.com/linkdata/jaws/what"
+	"github.com/linkdata/jaws/lib/htmlio"
+	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/what"
 )
 
 type testJaws struct {

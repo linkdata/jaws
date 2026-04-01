@@ -4,7 +4,7 @@ import (
 	"io"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/bind"
+	"github.com/linkdata/jaws/lib/bind"
 )
 
 type Button struct{ HTMLInner }

@@ -10,8 +10,8 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jtag"
-	"github.com/linkdata/jaws/what"
+	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/what"
 )
 
 // Template references a Go html/template to be rendered through JaWS.

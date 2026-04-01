@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/wire"
+	"github.com/linkdata/jaws/lib/wire"
 )
 
 func nextBroadcast(t *testing.T, jw *Jaws) wire.Message {

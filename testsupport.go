@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 
-	"github.com/linkdata/jaws/wire"
+	"github.com/linkdata/jaws/lib/wire"
 )
 
 // TestRequest is a request harness intended for tests.

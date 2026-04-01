@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/namedbool"
+	"github.com/linkdata/jaws/lib/namedbool"
 )
 
 func TestRequest_RadioGroup(t *testing.T) {

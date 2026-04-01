@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/bind"
-	"github.com/linkdata/jaws/namedbool"
+	"github.com/linkdata/jaws/lib/bind"
+	"github.com/linkdata/jaws/lib/namedbool"
 )
 
 func TestConstructors(t *testing.T) {

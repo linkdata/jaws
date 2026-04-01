@@ -1,6 +1,6 @@
 package jaws
 
-import "github.com/linkdata/jaws/wire"
+import "github.com/linkdata/jaws/lib/wire"
 
 // SubscribeForTest subscribes rq to broadcasts with the given channel size.
 //

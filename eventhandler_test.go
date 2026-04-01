@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/linkdata/jaws/jtag"
-	"github.com/linkdata/jaws/what"
-	"github.com/linkdata/jaws/wire"
+	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jaws/lib/wire"
 )
 
 type testJawsEvent struct {

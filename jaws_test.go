@@ -16,12 +16,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/linkdata/jaws/assets"
-	"github.com/linkdata/jaws/jtag"
+	"github.com/linkdata/jaws/lib/assets"
+	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jaws/lib/wire"
 	"github.com/linkdata/jaws/secureheaders"
 	"github.com/linkdata/jaws/staticserve"
-	"github.com/linkdata/jaws/what"
-	"github.com/linkdata/jaws/wire"
 )
 
 type testBroadcastTagGetter struct{}

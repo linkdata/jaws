@@ -7,10 +7,10 @@ import (
 	"sync"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/bind"
 	"github.com/linkdata/jaws/jawsboot"
+	"github.com/linkdata/jaws/lib/bind"
+	"github.com/linkdata/jaws/lib/templatereloader"
 	"github.com/linkdata/jaws/staticserve"
-	"github.com/linkdata/jaws/templatereloader"
 	"github.com/linkdata/jaws/ui"
 )
 

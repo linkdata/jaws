@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jid"
-	"github.com/linkdata/jaws/namedbool"
-	"github.com/linkdata/jaws/what"
+	"github.com/linkdata/jaws/lib/jid"
+	"github.com/linkdata/jaws/lib/namedbool"
+	"github.com/linkdata/jaws/lib/what"
 )
 
 func TestContainerAndTbodyRender(t *testing.T) {

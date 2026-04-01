@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"path"
 
-	"github.com/linkdata/jaws/internal/routepattern"
+	"github.com/linkdata/jaws/lib/routepattern"
 )
 
 // HandleFunc matches the signature of http.ServeMux.Handle().

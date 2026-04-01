@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/assets"
-	"github.com/linkdata/jaws/bind"
-	"github.com/linkdata/jaws/htmlio"
-	"github.com/linkdata/jaws/what"
+	"github.com/linkdata/jaws/lib/assets"
+	"github.com/linkdata/jaws/lib/bind"
+	"github.com/linkdata/jaws/lib/htmlio"
+	"github.com/linkdata/jaws/lib/what"
 )
 
 // Input stores common state for interactive input widgets.

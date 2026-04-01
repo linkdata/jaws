@@ -1,0 +1,559 @@
+package bind
+
+import (
+	"errors"
+	"io"
+	"reflect"
+	"testing"
+	"time"
+
+	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/lib/jtag"
+)
+
+func TestBind_Hook_Success_panic(t *testing.T) {
+	defer func() {
+		if x := recover(); x == nil {
+			t.Fail()
+		}
+	}()
+	var mu deadlock.Mutex
+	var val string
+	New(&mu, &val).Success(func(n int) {})
+	t.Fail()
+}
+
+func TestBind_Hook_Success_breaksonerr(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	calls1 := 0
+	calls2 := 0
+	calls3 := 0
+	bind1 := New(&mu, &val).
+		Success(func() {
+			calls1++
+		}).
+		Success(func() error {
+			calls2++
+			return io.EOF
+		}).
+		Success(func() {
+			calls3++
+		})
+	if err := bind1.JawsSet(nil, "foo"); err != io.EOF {
+		t.Error(err)
+	}
+	if calls1 != 1 {
+		t.Error(calls1)
+	}
+	if calls2 != 1 {
+		t.Error(calls2)
+	}
+	if calls3 != 0 {
+		t.Error(calls3)
+	}
+}
+
+func testBind_Hook_Success[T comparable](t *testing.T, testval T) {
+	var mu deadlock.Mutex
+	var val T
+	var blankval T
+
+	calls1 := 0
+	bind1 := New(&mu, &val).
+		Success(func() {
+			calls1++
+		})
+	if err := bind1.JawsSet(nil, testval); err != nil {
+		t.Error(err)
+	}
+	if x := bind1.JawsGet(nil); x != testval {
+		t.Error(x)
+	}
+	if err := bind1.JawsSet(nil, testval); err != jaws.ErrValueUnchanged {
+		t.Error(err)
+	}
+	if calls1 != 1 {
+		t.Error(calls1)
+	}
+	tags1 := jtag.MustTagExpand(nil, bind1)
+	if !reflect.DeepEqual(tags1, []any{&val}) {
+		t.Error(tags1)
+	}
+
+	calls2 := 0
+	bind2 := bind1.
+		Success(func() (err error) {
+			calls2++
+			if calls1 <= calls2 {
+				t.Error(calls1, calls2)
+			}
+			return
+		})
+	if err := bind2.JawsSet(nil, blankval); err != nil {
+		t.Error(err)
+	}
+	if calls1 != 2 {
+		t.Error(calls1)
+	}
+	if calls2 != 1 {
+		t.Error(calls2)
+	}
+	tags2 := jtag.MustTagExpand(nil, bind2)
+	if !reflect.DeepEqual(tags2, []any{&val}) {
+		t.Error(tags2)
+	}
+
+	calls3 := 0
+	bind3 := bind2.
+		Success(func(*jaws.Element) {
+			calls3++
+			if calls2 <= calls3 {
+				t.Error(calls2, calls3)
+			}
+		})
+	if err := bind3.JawsSet(nil, testval); err != nil {
+		t.Error(err)
+	}
+	if calls1 != 3 {
+		t.Error(calls1)
+	}
+	if calls2 != 2 {
+		t.Error(calls2)
+	}
+	if calls3 != 1 {
+		t.Error(calls3)
+	}
+
+	calls4 := 0
+	bind4 := bind3.
+		Success(func(*jaws.Element) (err error) {
+			calls4++
+			if calls3 <= calls4 {
+				t.Error(calls3, calls4)
+			}
+			return
+		})
+	if err := bind4.JawsSet(nil, blankval); err != nil {
+		t.Error(err)
+	}
+	if calls1 != 4 {
+		t.Error(calls1)
+	}
+	if calls2 != 3 {
+		t.Error(calls2)
+	}
+	if calls3 != 2 {
+		t.Error(calls3)
+	}
+	if calls4 != 1 {
+		t.Error(calls4)
+	}
+}
+
+func testBind_Hook_Set[T comparable](t *testing.T, testval T) {
+	var mu deadlock.Mutex
+	var val T
+
+	calls1 := 0
+	bind1 := New(&mu, &val).
+		SetLocked(func(bind Binder[T], elem *jaws.Element, value T) (err error) {
+			calls1++
+			return bind.JawsSetLocked(elem, value)
+		})
+	if err := bind1.JawsSet(nil, testval); err != nil {
+		t.Error(err)
+	}
+	if x := bind1.JawsGet(nil); x != testval {
+		t.Error(x)
+	}
+	if err := bind1.JawsSet(nil, testval); err != jaws.ErrValueUnchanged {
+		t.Error(err)
+	}
+	if calls1 != 2 {
+		t.Error(calls1)
+	}
+	tags1 := jtag.MustTagExpand(nil, bind1)
+	if !reflect.DeepEqual(tags1, []any{&val}) {
+		t.Error(tags1)
+	}
+
+	calls2 := 0
+	bind2 := bind1.
+		SetLocked(func(bind Binder[T], elem *jaws.Element, value T) (err error) {
+			calls2++
+			return bind.JawsSetLocked(elem, value)
+		})
+
+	if calls1 != 2 {
+		t.Error(calls1)
+	}
+	if calls2 != 0 {
+		t.Error(calls2)
+	}
+	tags2 := jtag.MustTagExpand(nil, bind2)
+	if !reflect.DeepEqual(tags2, []any{&val}) {
+		t.Error(tags2)
+	}
+}
+
+func testBind_Hook_Get[T comparable](t *testing.T, testval T) {
+	var mu deadlock.Mutex
+	var val T
+
+	calls1 := 0
+	bind1 := New(&mu, &val).
+		GetLocked(func(bind Binder[T], elem *jaws.Element) (value T) {
+			calls1++
+			return bind.JawsGetLocked(elem)
+		})
+	if err := bind1.JawsSet(nil, testval); err != nil {
+		t.Error(err)
+	}
+	if x := bind1.JawsGet(nil); x != testval {
+		t.Error(x)
+	}
+	if err := bind1.JawsSet(nil, testval); err != jaws.ErrValueUnchanged {
+		t.Error(err)
+	}
+	if calls1 != 1 {
+		t.Error(calls1)
+	}
+	tags1 := jtag.MustTagExpand(nil, bind1)
+	if !reflect.DeepEqual(tags1, []any{&val}) {
+		t.Error(tags1)
+	}
+
+	calls2 := 0
+	bind2 := bind1.
+		GetLocked(func(bind Binder[T], elem *jaws.Element) (value T) {
+			calls2++
+			return bind.JawsGetLocked(elem)
+		})
+	var blankval T
+	if err := bind2.JawsSet(nil, blankval); err != nil {
+		t.Error(err)
+	}
+	if calls1 != 1 {
+		t.Error(calls1)
+	}
+	if calls2 != 0 {
+		t.Error(calls2)
+	}
+	tags2 := jtag.MustTagExpand(nil, bind2)
+	if !reflect.DeepEqual(tags2, []any{&val}) {
+		t.Error(tags2)
+	}
+}
+
+func TestBind_Hook_Clicked_binding(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	calls := 0
+	gotElem := &jaws.Element{}
+	gotName := ""
+	bind := New(&mu, &val).
+		Clicked(func(bind Binder[string], elem *jaws.Element, name string) (err error) {
+			calls++
+			gotElem = elem
+			gotName = name
+			return nil
+		})
+
+	handler, ok := bind.(jaws.ClickHandler)
+	if !ok {
+		t.Fatalf("%T does not implement ClickHandler", bind)
+	}
+
+	elem := &jaws.Element{}
+	if err := handler.JawsClick(elem, "save"); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Error(calls)
+	}
+	if gotElem != elem {
+		t.Error(gotElem)
+	}
+	if gotName != "save" {
+		t.Error(gotName)
+	}
+	tags := jtag.MustTagExpand(nil, bind)
+	if !reflect.DeepEqual(tags, []any{&val}) {
+		t.Error(tags)
+	}
+}
+
+func TestBind_Hook_Clicked_bindingHook(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	successCalls := 0
+	bindWithSuccess := New(&mu, &val).Success(func() {
+		successCalls++
+	})
+
+	clickCalls1 := 0
+	clickCalls2 := 0
+	clickBind1 := bindWithSuccess.Clicked(func(Binder[string], *jaws.Element, string) error {
+		clickCalls1++
+		return nil
+	})
+	clickBind2 := clickBind1.Clicked(func(Binder[string], *jaws.Element, string) error {
+		clickCalls2++
+		return nil
+	})
+
+	handler1, ok := clickBind1.(jaws.ClickHandler)
+	if !ok {
+		t.Fatalf("%T does not implement ClickHandler", clickBind1)
+	}
+	handler2, ok := clickBind2.(jaws.ClickHandler)
+	if !ok {
+		t.Fatalf("%T does not implement ClickHandler", clickBind2)
+	}
+
+	if err := handler1.JawsClick(nil, "one"); err != nil {
+		t.Fatal(err)
+	}
+	if clickCalls1 != 1 {
+		t.Error(clickCalls1)
+	}
+	if clickCalls2 != 0 {
+		t.Error(clickCalls2)
+	}
+
+	if err := handler2.JawsClick(nil, "two"); err != nil {
+		t.Fatal(err)
+	}
+	if clickCalls1 != 2 {
+		t.Error(clickCalls1)
+	}
+	if clickCalls2 != 0 {
+		t.Error(clickCalls2)
+	}
+
+	if err := clickBind2.JawsSet(nil, "foo"); err != nil {
+		t.Fatal(err)
+	}
+	if successCalls != 1 {
+		t.Error(successCalls)
+	}
+	if got := clickBind2.JawsGet(nil); got != "foo" {
+		t.Error(got)
+	}
+	if err := bindWithSuccess.(jaws.ClickHandler).JawsClick(nil, "x"); !errors.Is(err, jaws.ErrEventUnhandled) {
+		t.Fatal(err)
+	}
+	tags := jtag.MustTagExpand(nil, clickBind2)
+	if !reflect.DeepEqual(tags, []any{&val}) {
+		t.Error(tags)
+	}
+}
+
+func TestBind_Hook_Clicked_bindingHook_fallsThroughUnhandled(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	order := []int{}
+	clickCalls1 := 0
+	clickCalls2 := 0
+	clickBind2 := New(&mu, &val).
+		Clicked(func(Binder[string], *jaws.Element, string) error {
+			clickCalls1++
+			order = append(order, 1)
+			return jaws.ErrEventUnhandled
+		}).
+		Clicked(func(Binder[string], *jaws.Element, string) error {
+			clickCalls2++
+			order = append(order, 2)
+			return nil
+		})
+
+	handler, ok := clickBind2.(jaws.ClickHandler)
+	if !ok {
+		t.Fatalf("%T does not implement ClickHandler", clickBind2)
+	}
+	if err := handler.JawsClick(nil, "two"); err != nil {
+		t.Fatal(err)
+	}
+	if clickCalls1 != 1 {
+		t.Error(clickCalls1)
+	}
+	if clickCalls2 != 1 {
+		t.Error(clickCalls2)
+	}
+	if !reflect.DeepEqual(order, []int{1, 2}) {
+		t.Error(order)
+	}
+}
+
+func TestBind_Click_defaultUnhandled(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	bind := New(&mu, &val)
+	handler, ok := bind.(jaws.ClickHandler)
+	if !ok {
+		t.Fatalf("%T does not implement ClickHandler", bind)
+	}
+	if err := handler.JawsClick(nil, "ignored"); !errors.Is(err, jaws.ErrEventUnhandled) {
+		t.Fatal(err)
+	}
+}
+
+func testBind_Hooks[T comparable](t *testing.T, testval T) {
+	testBind_Hook_Success(t, testval)
+	testBind_Hook_Set(t, testval)
+	testBind_Hook_Get(t, testval)
+}
+
+func testBind_StringSetter(t *testing.T, v Setter[string]) {
+	val := v.JawsGet(nil) + "!"
+	if err := v.JawsSet(nil, val); err != nil {
+		t.Error(err)
+	}
+	if x := v.JawsGet(nil); x != val {
+		t.Error(x)
+	}
+}
+
+func TestBindFunc_String(t *testing.T) {
+	var mu deadlock.RWMutex
+	var val string
+
+	testBind_Hooks(t, "foo")
+	testBind_StringSetter(t, New(&mu, &val))
+	testBind_StringSetter(t, New(&mu, &val).Success(func() {}))
+}
+
+func testBind_FloatSetter(t *testing.T, v Setter[float64]) {
+	val := v.JawsGet(nil) + 1
+	if err := v.JawsSet(nil, val); err != nil {
+		t.Error(err)
+	}
+	if x := v.JawsGet(nil); x != val {
+		t.Error(x)
+	}
+}
+
+func TestBindFunc_Float(t *testing.T) {
+	var mu deadlock.Mutex
+	var val float64
+
+	testBind_Hooks(t, float64(1.23))
+	testBind_FloatSetter(t, New(&mu, &val))
+	testBind_FloatSetter(t, New(&mu, &val).Success(func() {}))
+}
+
+func testBind_BoolSetter(t *testing.T, v Setter[bool]) {
+	val := !v.JawsGet(nil)
+	if err := v.JawsSet(nil, val); err != nil {
+		t.Error(err)
+	}
+	if x := v.JawsGet(nil); x != val {
+		t.Error(x)
+	}
+	/*as := v.(AnySetter)
+	if x := as.JawsGetAny(nil); x != val {
+		t.Error(x)
+	}
+	if err := as.JawsSetAny(nil, !val); err != nil {
+		t.Error(err)
+	}
+	if x := as.JawsGetAny(nil); x != !val {
+		t.Error(x)
+	}*/
+}
+
+func TestBindFunc_Bool(t *testing.T) {
+	var mu deadlock.Mutex
+	var val bool
+
+	testBind_Hooks(t, true)
+	testBind_BoolSetter(t, New(&mu, &val))
+	testBind_BoolSetter(t, New(&mu, &val).Success(func() {}))
+}
+
+func testBind_TimeSetter(t *testing.T, v Setter[time.Time]) {
+	val := v.JawsGet(nil).Add(time.Second)
+	if err := v.JawsSet(nil, val); err != nil {
+		t.Error(err)
+	}
+	if x := v.JawsGet(nil); x != val {
+		t.Error(x)
+	}
+}
+
+func TestBindFunc_Time(t *testing.T) {
+	var mu deadlock.Mutex
+	var val time.Time
+
+	testBind_Hooks(t, time.Now())
+	testBind_TimeSetter(t, New(&mu, &val))
+	testBind_TimeSetter(t, New(&mu, &val).Success(func() {}))
+}
+
+func TestBindFormat(t *testing.T) {
+	var mu deadlock.Mutex
+	val := 12
+
+	bind := New(&mu, &val)
+	if v := MakeHTMLGetter(bind).JawsGetHTML(nil); v != "12" {
+		t.Errorf("%T %#v", v, v)
+	}
+
+	getter := bind.Format("%3v")
+	if s := getter.JawsGet(nil); s != " 12" {
+		t.Errorf("%q", s)
+	}
+	tags := jtag.MustTagExpand(nil, getter)
+	if !reflect.DeepEqual(tags, []any{&val}) {
+		t.Error(tags)
+	}
+
+	bind2 := bind.Success(func() {})
+	getter = bind2.Format("%3v")
+	if s := getter.JawsGet(nil); s != " 12" {
+		t.Errorf("%q", s)
+	}
+	tags = jtag.MustTagExpand(nil, getter)
+	if !reflect.DeepEqual(tags, []any{&val}) {
+		t.Error(tags)
+	}
+}
+
+func TestBindFormatHTML(t *testing.T) {
+	var mu deadlock.Mutex
+	val := "<span>"
+
+	bind := New(&mu, &val)
+	if s := MakeHTMLGetter(bind).JawsGetHTML(nil); s != "&lt;span&gt;" {
+		t.Errorf("%q", s)
+	}
+
+	getter := bind.FormatHTML("%v")
+	if s := getter.JawsGetHTML(nil); s != "<span>" {
+		t.Errorf("%q", s)
+	}
+	tags := jtag.MustTagExpand(nil, getter)
+	if !reflect.DeepEqual(tags, []any{&val}) {
+		t.Error(tags)
+	}
+
+	bind2 := bind.Success(func() {})
+	if s := bind2.JawsGet(nil); s != "<span>" {
+		t.Errorf("%q", s)
+	}
+	getter = bind2.FormatHTML("%q")
+	if s := getter.JawsGetHTML(nil); s != "\"<span>\"" {
+		t.Errorf("%q", s)
+	}
+	tags = jtag.MustTagExpand(nil, getter)
+	if !reflect.DeepEqual(tags, []any{&val}) {
+		t.Error(tags)
+	}
+}
