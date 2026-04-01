@@ -32,7 +32,7 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/jawsdata"
+	"github.com/linkdata/jaws/assets"
 	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/jtag"
@@ -96,10 +96,10 @@ type Jaws struct {
 // Close when the instance is no longer needed to free associated resources.
 func New() (jw *Jaws, err error) {
 	var serveJS, serveCSS *staticserve.StaticServe
-	if serveJS, err = staticserve.New("/jaws/.jaws.js", jawsdata.JavascriptText); err == nil {
-		if serveCSS, err = staticserve.New("/jaws/.jaws.css", jawsdata.JawsCSS); err == nil {
+	if serveJS, err = staticserve.New("/jaws/.jaws.js", assets.JavascriptText); err == nil {
+		if serveCSS, err = staticserve.New("/jaws/.jaws.css", assets.JawsCSS); err == nil {
 			tmp := &Jaws{
-				CookieName:   jawsdata.DefaultCookieName,
+				CookieName:   assets.DefaultCookieName,
 				BaseContext:  context.Background(),
 				serveJS:      serveJS,
 				serveCSS:     serveCSS,
@@ -349,7 +349,7 @@ func getCookieSessionsIds(h http.Header, wanted string) (cookies []uint64) {
 						if len(val) > 1 && val[0] == '"' && val[len(val)-1] == '"' {
 							val = val[1 : len(val)-1]
 						}
-						if sessId := jawsdata.JawsKeyValue(val); sessId != 0 {
+						if sessId := assets.JawsKeyValue(val); sessId != 0 {
 							cookies = append(cookies, sessId)
 						}
 					}
@@ -472,7 +472,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 					err = errors.Join(err, e)
 				}
 			}
-			headPrefix, faviconURL := jawsdata.PreloadHTML(urls...)
+			headPrefix, faviconURL := assets.PreloadHTML(urls...)
 			headPrefix += `<meta name="jawsKey" content="`
 			cspHeader, csperr := secureheaders.BuildContentSecurityPolicy(urls)
 			err = errors.Join(err, csperr)
@@ -924,7 +924,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			default:
 				if jawsKeyString, ok := strings.CutPrefix(r.URL.Path, "/jaws/.tail/"); ok {
-					jawsKey := jawsdata.JawsKeyValue(jawsKeyString)
+					jawsKey := assets.JawsKeyValue(jawsKeyString)
 					jw.mu.RLock()
 					rq := jw.requests[jawsKey]
 					jw.mu.RUnlock()
@@ -936,7 +936,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			}
-		} else if rq := jw.UseRequest(jawsdata.JawsKeyValue(r.URL.Path[6:]), r); rq != nil {
+		} else if rq := jw.UseRequest(assets.JawsKeyValue(r.URL.Path[6:]), r); rq != nil {
 			rq.ServeHTTP(w, r)
 			return
 		}

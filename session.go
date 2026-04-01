@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/jawsdata"
+	"github.com/linkdata/jaws/assets"
 	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/what"
 )
@@ -31,7 +31,7 @@ func newSession(jw *Jaws, sessionID uint64, remoteIP netip.Addr, secure bool) *S
 		cookie: http.Cookie{
 			Name:     jw.CookieName,
 			Path:     "/",
-			Value:    jawsdata.JawsKeyString(sessionID),
+			Value:    assets.JawsKeyString(sessionID),
 			Secure:   secure,
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,

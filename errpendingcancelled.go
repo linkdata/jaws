@@ -3,7 +3,7 @@ package jaws
 import (
 	"fmt"
 
-	"github.com/linkdata/jaws/jawsdata"
+	"github.com/linkdata/jaws/assets"
 )
 
 // ErrPendingCancelled indicates a pending Request was cancelled. Use Unwrap() to see the underlying cause.
@@ -16,7 +16,7 @@ type errPendingCancelled struct {
 }
 
 func (e errPendingCancelled) Error() string {
-	return fmt.Sprintf("Request<%s>:%s %v", jawsdata.JawsKeyString(e.JawsKey), e.Initial, e.Cause)
+	return fmt.Sprintf("Request<%s>:%s %v", assets.JawsKeyString(e.JawsKey), e.Initial, e.Cause)
 }
 
 func (e errPendingCancelled) Is(target error) (yes bool) {

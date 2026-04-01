@@ -20,7 +20,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/jawsdata"
+	"github.com/linkdata/jaws/assets"
 	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/jtag"
@@ -78,7 +78,7 @@ func (rq *Request) JawsKeyString() string {
 	if rq != nil {
 		jawsKey = rq.JawsKey
 	}
-	return jawsdata.JawsKeyString(jawsKey)
+	return assets.JawsKeyString(jawsKey)
 }
 
 func (rq *Request) String() string {
@@ -163,7 +163,7 @@ func (rq *Request) HeadHTML(w io.Writer) (err error) {
 	rq.Jaws.mu.RLock()
 	b = append(b, rq.Jaws.headPrefix...)
 	rq.Jaws.mu.RUnlock()
-	b = jawsdata.JawsKeyAppend(b, rq.JawsKey)
+	b = assets.JawsKeyAppend(b, rq.JawsKey)
 	b = append(b, `">`...)
 	_, err = w.Write(b)
 	return

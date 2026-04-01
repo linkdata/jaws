@@ -1,4 +1,4 @@
-package jawsdata
+package assets
 
 import (
 	"bytes"
