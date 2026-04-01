@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/ui"
 	"github.com/linkdata/jaws/what"
+	"github.com/linkdata/jaws/wire"
 )
 
 type jsVarValue struct {
@@ -18,12 +18,12 @@ type jsVarValue struct {
 	Number float64
 }
 
-func waitMsg(t *testing.T, ch <-chan jawswire.WsMsg) jawswire.WsMsg {
+func waitMsg(t *testing.T, ch <-chan wire.WsMsg) wire.WsMsg {
 	t.Helper()
 	select {
 	case <-time.After(2 * time.Second):
 		t.Fatal("timeout waiting for ws message")
-		return jawswire.WsMsg{}
+		return wire.WsMsg{}
 	case msg := <-ch:
 		return msg
 	}
@@ -85,7 +85,7 @@ func TestJsVar_EventRoundtrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rq.InCh <- jawswire.WsMsg{Jid: elem.Jid(), What: what.Set, Data: `={"String":"y","Number":3}`}
+	rq.InCh <- wire.WsMsg{Jid: elem.Jid(), What: what.Set, Data: `={"String":"y","Number":3}`}
 	msg := waitMsg(t, rq.OutCh)
 
 	if msg.What != what.Set {

@@ -7,8 +7,8 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/assets"
-	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/what"
+	"github.com/linkdata/jaws/wire"
 )
 
 type Session struct {
@@ -176,7 +176,7 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 		*cookie = sess.cookie
 		sess.mu.Unlock()
 
-		msg := jawswire.Message{What: what.Reload}
+		msg := wire.Message{What: what.Reload}
 		for _, rq := range requests {
 			rq.deadSession(sess)
 			msg.Dest = rq
@@ -189,7 +189,7 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 // Reload calls Broadcast with a message asking browsers to reload the page.
 // See Broadcast for the processing-loop requirement.
 func (sess *Session) Reload() {
-	sess.Broadcast(jawswire.Message{What: what.Reload})
+	sess.Broadcast(wire.Message{What: what.Reload})
 }
 
 // Clear removes all key/value pairs from the session.
@@ -218,7 +218,7 @@ func (sess *Session) Requests() (rl []*Request) {
 // It must not be called before the JaWS processing loop (`Serve()` or
 // `ServeWithTimeout()`) is running. Otherwise this call may block.
 // It is safe to call on a nil Session.
-func (sess *Session) Broadcast(msg jawswire.Message) {
+func (sess *Session) Broadcast(msg wire.Message) {
 	if sess != nil {
 		sess.mu.RLock()
 		defer sess.mu.RUnlock()

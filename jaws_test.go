@@ -17,11 +17,11 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws/assets"
-	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/jtag"
 	"github.com/linkdata/jaws/secureheaders"
 	"github.com/linkdata/jaws/staticserve"
 	"github.com/linkdata/jaws/what"
+	"github.com/linkdata/jaws/wire"
 )
 
 type testBroadcastTagGetter struct{}
@@ -112,7 +112,7 @@ func TestBroadcast_ExpandsTagDestBeforeQueue(t *testing.T) {
 
 	tagger := testBroadcastTagGetter{}
 
-	jw.Broadcast(jawswire.Message{
+	jw.Broadcast(wire.Message{
 		Dest: tagger,
 		What: what.Inner,
 		Data: "x",
@@ -125,7 +125,7 @@ func TestBroadcast_ExpandsTagDestBeforeQueue(t *testing.T) {
 		t.Fatalf("expected expanded Tag destination, got %T(%#v)", msg.Dest, msg.Dest)
 	}
 
-	jw.Broadcast(jawswire.Message{
+	jw.Broadcast(wire.Message{
 		Dest: []any{tagger, jtag.Tag("extra")},
 		What: what.Value,
 		Data: "v",
@@ -142,7 +142,7 @@ func TestBroadcast_ExpandsTagDestBeforeQueue(t *testing.T) {
 		t.Fatalf("unexpected expanded destination %#v", dest)
 	}
 
-	jw.Broadcast(jawswire.Message{
+	jw.Broadcast(wire.Message{
 		Dest: "html-id",
 		What: what.Delete,
 	})
@@ -159,7 +159,7 @@ func TestBroadcast_NoneDestination(t *testing.T) {
 	}
 	defer jw.Close()
 
-	jw.Broadcast(jawswire.Message{
+	jw.Broadcast(wire.Message{
 		Dest: []any{},
 		What: what.Update,
 		Data: "x",
@@ -179,12 +179,12 @@ func TestBroadcast_ReturnsWhenClosedAndQueueFull(t *testing.T) {
 	}
 	defer jw.Close()
 
-	jw.Broadcast(jawswire.Message{What: what.Alert, Data: "info\nfirst"})
+	jw.Broadcast(wire.Message{What: what.Alert, Data: "info\nfirst"})
 	jw.Close()
 
 	done := make(chan struct{})
 	go func() {
-		jw.Broadcast(jawswire.Message{What: what.Alert, Data: "info\nsecond"})
+		jw.Broadcast(wire.Message{What: what.Alert, Data: "info\nsecond"})
 		close(done)
 	}()
 
@@ -570,7 +570,7 @@ func TestJaws_ServeWithTimeoutFullSubscriberChannel(t *testing.T) {
 	}
 	defer jw.Close()
 	rq := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
-	msgCh := make(chan jawswire.Message) // unbuffered: always full when nobody receives
+	msgCh := make(chan wire.Message) // unbuffered: always full when nobody receives
 	done := make(chan struct{})
 	go func() {
 		jw.ServeWithTimeout(50 * time.Millisecond)
@@ -581,7 +581,7 @@ func TestJaws_ServeWithTimeoutFullSubscriberChannel(t *testing.T) {
 	for i := 0; i <= cap(jw.subCh); i++ {
 		jw.subCh <- subscription{}
 	}
-	jw.bcastCh <- jawswire.Message{What: what.Alert, Data: "x"}
+	jw.bcastCh <- wire.Message{What: what.Alert, Data: "x"}
 
 	waitUntil := time.Now().Add(time.Second)
 	closed := false

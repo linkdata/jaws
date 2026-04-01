@@ -9,10 +9,10 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/jtag"
 	"github.com/linkdata/jaws/what"
+	"github.com/linkdata/jaws/wire"
 )
 
 // An Element is an instance of a *Request, an UI object and a Jid.
@@ -112,7 +112,7 @@ func (e *Element) JawsUpdate() {
 
 func (e *Element) queue(wht what.What, data string) {
 	if !e.deleted.Load() {
-		e.Request.queue(jawswire.WsMsg{
+		e.Request.queue(wire.WsMsg{
 			Data: data,
 			Jid:  e.jid,
 			What: wht,

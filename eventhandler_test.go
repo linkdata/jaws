@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/jtag"
 	"github.com/linkdata/jaws/what"
+	"github.com/linkdata/jaws/wire"
 )
 
 type testJawsEvent struct {
@@ -70,7 +70,7 @@ func Test_JawsEvent_NonClickInvokesJawsEventForDualHandler(t *testing.T) {
 	zomgItem := &testUi{}
 	id := rq.Register(zomgItem, je, "attr1", []string{"attr2"}, template.HTMLAttr("attr3"), []template.HTMLAttr{"attr4"})
 
-	rq.InCh <- jawswire.WsMsg{Data: "typed", Jid: id, What: what.Input}
+	rq.InCh <- wire.WsMsg{Data: "typed", Jid: id, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
@@ -357,7 +357,7 @@ func Test_JawsEvent_ExtraHandler(t *testing.T) {
 	th.NoErr(elem.JawsRender(&sb, []any{je}))
 	th.Equal(sb.String(), "<div id=\"Jid.1\">tjEH</div>")
 
-	rq.InCh <- jawswire.WsMsg{Data: "name", Jid: 1, What: what.Click}
+	rq.InCh <- wire.WsMsg{Data: "name", Jid: 1, What: what.Click}
 	select {
 	case <-th.C:
 		th.Timeout()

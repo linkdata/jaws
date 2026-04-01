@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/jtag"
 	"github.com/linkdata/jaws/what"
+	"github.com/linkdata/jaws/wire"
 )
 
 type testUi struct {
@@ -129,7 +129,7 @@ func TestElement_Queued(t *testing.T) {
 			e.Order([]jid.Jid{1, 2})
 			replaceHTML := template.HTML(fmt.Sprintf("<div id=\"%s\"></div>", e.Jid().String()))
 			e.Replace(replaceHTML)
-			th.Equal(rq.wsQueue, []jawswire.WsMsg{
+			th.Equal(rq.wsQueue, []wire.WsMsg{
 				{
 					Data: "hidden\n",
 					Jid:  e.jid,
@@ -232,7 +232,7 @@ func TestElement_ReplaceMessageTargetsElementHTML(t *testing.T) {
 	// Element.Replace queues directly on the Request, so poke the process loop
 	// once to ensure queued messages are flushed to OutCh in this harness.
 	select {
-	case rq.InCh <- jawswire.WsMsg{}:
+	case rq.InCh <- wire.WsMsg{}:
 	case <-time.After(time.Second):
 		t.Fatal("timeout waking request process loop")
 	}

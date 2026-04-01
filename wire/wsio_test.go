@@ -1,4 +1,4 @@
-package jawswire
+package wire
 
 import (
 	"bufio"

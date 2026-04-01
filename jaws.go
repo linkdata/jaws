@@ -33,12 +33,12 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/assets"
-	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/jid"
 	"github.com/linkdata/jaws/jtag"
 	"github.com/linkdata/jaws/secureheaders"
 	"github.com/linkdata/jaws/staticserve"
 	"github.com/linkdata/jaws/what"
+	"github.com/linkdata/jaws/wire"
 )
 
 const (
@@ -46,7 +46,7 @@ const (
 )
 
 type subscription struct {
-	msgCh chan jawswire.Message
+	msgCh chan wire.Message
 	rq    *Request
 }
 
@@ -69,9 +69,9 @@ type Jaws struct {
 	Debug        bool            // Set to true to enable debug info in generated HTML code
 	MakeAuth     MakeAuthFn      // Optional function to create With.Auth for Templates
 	BaseContext  context.Context // Non-nil base context for Requests, set to context.Background() in New()
-	bcastCh      chan jawswire.Message
+	bcastCh      chan wire.Message
 	subCh        chan subscription
-	unsubCh      chan chan jawswire.Message
+	unsubCh      chan chan wire.Message
 	updateTicker *time.Ticker
 	reqPool      sync.Pool
 	serveJS      *staticserve.StaticServe
@@ -103,9 +103,9 @@ func New() (jw *Jaws, err error) {
 				BaseContext:  context.Background(),
 				serveJS:      serveJS,
 				serveCSS:     serveCSS,
-				bcastCh:      make(chan jawswire.Message, 1),
+				bcastCh:      make(chan wire.Message, 1),
 				subCh:        make(chan subscription, 1),
-				unsubCh:      make(chan chan jawswire.Message, 1),
+				unsubCh:      make(chan chan wire.Message, 1),
 				updateTicker: time.NewTicker(DefaultUpdateInterval),
 				kg:           bufio.NewReader(rand.Reader),
 				requests:     make(map[uint64]*Request),
@@ -493,7 +493,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 // internal broadcast channel fills.
 //
 // All convenience helpers on Jaws that call Broadcast inherit this requirement.
-func (jw *Jaws) Broadcast(msg jawswire.Message) {
+func (jw *Jaws) Broadcast(msg wire.Message) {
 	switch msg.Dest.(type) {
 	case nil: // send to all requests
 	case *Request: // send to that request
@@ -563,14 +563,14 @@ func (jw *Jaws) distributeDirt() int {
 
 // Reload requests all Requests to reload their current page.
 func (jw *Jaws) Reload() {
-	jw.Broadcast(jawswire.Message{
+	jw.Broadcast(wire.Message{
 		What: what.Reload,
 	})
 }
 
 // Redirect requests all Requests to navigate to the given URL.
 func (jw *Jaws) Redirect(url string) {
-	jw.Broadcast(jawswire.Message{
+	jw.Broadcast(wire.Message{
 		What: what.Redirect,
 		Data: url,
 	})
@@ -579,7 +579,7 @@ func (jw *Jaws) Redirect(url string) {
 // Alert sends an alert to all Requests. The lvl argument should be one of Bootstraps alert levels:
 // primary, secondary, success, danger, warning, info, light or dark.
 func (jw *Jaws) Alert(lvl, msg string) {
-	jw.Broadcast(jawswire.Message{
+	jw.Broadcast(wire.Message{
 		What: what.Alert,
 		Data: lvl + "\n" + msg,
 	})
@@ -611,7 +611,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		maintenanceInterval = minInterval
 	}
 
-	subs := map[chan jawswire.Message]*Request{}
+	subs := map[chan wire.Message]*Request{}
 	t := time.NewTicker(maintenanceInterval)
 
 	defer func() {
@@ -622,7 +622,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		}
 	}()
 
-	killSub := func(msgCh chan jawswire.Message) {
+	killSub := func(msgCh chan wire.Message) {
 		if _, ok := subs[msgCh]; ok {
 			delete(subs, msgCh)
 			close(msgCh)
@@ -636,7 +636,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	// would be to drop some messages, but that
 	// could mean nonreproducible and seemingly
 	// random failures in processing logic.
-	mustBroadcast := func(msg jawswire.Message) {
+	mustBroadcast := func(msg wire.Message) {
 		for msgCh, rq := range subs {
 			if msg.Dest == nil || rq.wantMessage(&msg) {
 				select {
@@ -658,7 +658,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			return
 		case <-jw.updateTicker.C:
 			if jw.distributeDirt() > 0 {
-				mustBroadcast(jawswire.Message{What: what.Update})
+				mustBroadcast(wire.Message{What: what.Update})
 			}
 		case <-t.C:
 			jw.maintenance(requestTimeout)
@@ -683,8 +683,8 @@ func (jw *Jaws) Serve() {
 	jw.ServeWithTimeout(time.Second * 10)
 }
 
-func (jw *Jaws) subscribe(rq *Request, size int) chan jawswire.Message {
-	msgCh := make(chan jawswire.Message, size)
+func (jw *Jaws) subscribe(rq *Request, size int) chan wire.Message {
+	msgCh := make(chan wire.Message, size)
 	select {
 	case <-jw.Done():
 		close(msgCh)
@@ -694,7 +694,7 @@ func (jw *Jaws) subscribe(rq *Request, size int) chan jawswire.Message {
 	return msgCh
 }
 
-func (jw *Jaws) unsubscribe(msgCh chan jawswire.Message) {
+func (jw *Jaws) unsubscribe(msgCh chan wire.Message) {
 	select {
 	case <-jw.Done():
 	case jw.unsubCh <- msgCh:
@@ -746,7 +746,7 @@ func maybePanic(err error) {
 // SetInner sends a request to replace the inner HTML of
 // all HTML elements matching target.
 func (jw *Jaws) SetInner(target any, innerHTML template.HTML) {
-	jw.Broadcast(jawswire.Message{
+	jw.Broadcast(wire.Message{
 		Dest: target,
 		What: what.Inner,
 		Data: string(innerHTML),
@@ -756,7 +756,7 @@ func (jw *Jaws) SetInner(target any, innerHTML template.HTML) {
 // SetAttr sends a request to replace the given attribute value in
 // all HTML elements matching target.
 func (jw *Jaws) SetAttr(target any, attr, val string) {
-	jw.Broadcast(jawswire.Message{
+	jw.Broadcast(wire.Message{
 		Dest: target,
 		What: what.SAttr,
 		Data: attr + "\n" + val,
@@ -766,7 +766,7 @@ func (jw *Jaws) SetAttr(target any, attr, val string) {
 // RemoveAttr sends a request to remove the given attribute from
 // all HTML elements matching target.
 func (jw *Jaws) RemoveAttr(target any, attr string) {
-	jw.Broadcast(jawswire.Message{
+	jw.Broadcast(wire.Message{
 		Dest: target,
 		What: what.RAttr,
 		Data: attr,
@@ -776,7 +776,7 @@ func (jw *Jaws) RemoveAttr(target any, attr string) {
 // SetClass sends a request to set the given class in
 // all HTML elements matching target.
 func (jw *Jaws) SetClass(target any, cls string) {
-	jw.Broadcast(jawswire.Message{
+	jw.Broadcast(wire.Message{
 		Dest: target,
 		What: what.SClass,
 		Data: cls,
@@ -786,7 +786,7 @@ func (jw *Jaws) SetClass(target any, cls string) {
 // RemoveClass sends a request to remove the given class from
 // all HTML elements matching target.
 func (jw *Jaws) RemoveClass(target any, cls string) {
-	jw.Broadcast(jawswire.Message{
+	jw.Broadcast(wire.Message{
 		Dest: target,
 		What: what.RClass,
 		Data: cls,
@@ -796,7 +796,7 @@ func (jw *Jaws) RemoveClass(target any, cls string) {
 // SetValue sends a request to set the HTML "value" attribute of
 // all HTML elements matching target.
 func (jw *Jaws) SetValue(target any, val string) {
-	jw.Broadcast(jawswire.Message{
+	jw.Broadcast(wire.Message{
 		Dest: target,
 		What: what.Value,
 		Data: val,
@@ -808,7 +808,7 @@ func (jw *Jaws) SetValue(target any, val string) {
 //
 // The position parameter 'where' may be either a HTML ID, an child index or the text 'null'.
 func (jw *Jaws) Insert(target any, where, html string) {
-	jw.Broadcast(jawswire.Message{
+	jw.Broadcast(wire.Message{
 		Dest: target,
 		What: what.Insert,
 		Data: where + "\n" + html,
@@ -817,7 +817,7 @@ func (jw *Jaws) Insert(target any, where, html string) {
 
 // Replace replaces HTML on all HTML elements matching target.
 func (jw *Jaws) Replace(target any, html string) {
-	jw.Broadcast(jawswire.Message{
+	jw.Broadcast(wire.Message{
 		Dest: target,
 		What: what.Replace,
 		Data: html,
@@ -826,7 +826,7 @@ func (jw *Jaws) Replace(target any, html string) {
 
 // Delete removes the HTML element(s) matching target.
 func (jw *Jaws) Delete(target any) {
-	jw.Broadcast(jawswire.Message{
+	jw.Broadcast(wire.Message{
 		Dest: target,
 		What: what.Delete,
 	})
@@ -834,7 +834,7 @@ func (jw *Jaws) Delete(target any) {
 
 // Append calls the Javascript 'appendChild()' method on all HTML elements matching target.
 func (jw *Jaws) Append(target any, html template.HTML) {
-	jw.Broadcast(jawswire.Message{
+	jw.Broadcast(wire.Message{
 		Dest: target,
 		What: what.Append,
 		Data: string(html),
@@ -857,7 +857,7 @@ var whitespaceRemover = strings.NewReplacer(" ", "", "\n", "", "\t", "")
 // JsCall calls the Javascript function 'jsfunc' with the argument 'jsonstr'
 // on all Requests that have the target UI tag.
 func (jw *Jaws) JsCall(tag any, jsfunc, jsonstr string) {
-	jw.Broadcast(jawswire.Message{
+	jw.Broadcast(wire.Message{
 		Dest: tag,
 		What: what.Call,
 		Data: whitespaceRemover.Replace(jsfunc) + "=" + maybeCompactJSON(jsonstr),

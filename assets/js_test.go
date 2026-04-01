@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/staticserve"
 	"github.com/linkdata/jaws/what"
+	"github.com/linkdata/jaws/wire"
 )
 
 func Test_PreloadHTML(t *testing.T) {
@@ -169,7 +169,7 @@ process.stdout.write(jaws.sent[0] || "");
 		t.Fatal("jawsVar did not emit a websocket frame")
 	}
 
-	msg, ok := jawswire.Parse([]byte(raw))
+	msg, ok := wire.Parse([]byte(raw))
 	if !ok {
 		t.Fatalf("Set frame must be parseable by jawswire.Parse, got %q", raw)
 	}
@@ -205,7 +205,7 @@ process.stdout.write(jaws.sent[0] || "");
 		t.Fatal("jawsRemoving did not emit a websocket frame")
 	}
 
-	if msg, ok := jawswire.Parse([]byte(raw)); ok {
+	if msg, ok := wire.Parse([]byte(raw)); ok {
 		t.Fatalf("expected invalid untrusted Remove frame to be dropped by parser, got %+v from %q", msg, raw)
 	}
 }
@@ -224,7 +224,7 @@ process.stdout.write(jaws.sent[0] || "");
 `)
 
 	if raw != "" {
-		if _, ok := jawswire.Parse([]byte(raw)); !ok {
+		if _, ok := wire.Parse([]byte(raw)); !ok {
 			t.Fatalf("jawsVar should not emit unparseable Set frame when JsVar name is unregistered, got %q", raw)
 		}
 	}

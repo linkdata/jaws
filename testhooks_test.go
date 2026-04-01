@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/what"
+	"github.com/linkdata/jaws/wire"
 )
 
 func TestErrEventUnhandled_Error(t *testing.T) {
@@ -42,7 +42,7 @@ func TestTestHooks_RequestLifecycle(t *testing.T) {
 		t.Fatal("PumpSubscriptionsForTest timed out")
 	}
 
-	tj.Broadcast(jawswire.Message{What: what.Reload, Data: "reloaded"})
+	tj.Broadcast(wire.Message{What: what.Reload, Data: "reloaded"})
 	select {
 	case got := <-msgCh:
 		if got.What != what.Reload || got.Data != "reloaded" {
@@ -52,8 +52,8 @@ func TestTestHooks_RequestLifecycle(t *testing.T) {
 		t.Fatal("timeout waiting for broadcast")
 	}
 
-	incoming := make(chan jawswire.WsMsg)
-	outbound := make(chan jawswire.WsMsg, 1)
+	incoming := make(chan wire.WsMsg)
+	outbound := make(chan wire.WsMsg, 1)
 	processed := make(chan struct{})
 	go func() {
 		rq.ProcessForTest(msgCh, incoming, outbound)

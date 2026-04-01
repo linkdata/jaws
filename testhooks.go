@@ -1,11 +1,11 @@
 package jaws
 
-import "github.com/linkdata/jaws/jawswire"
+import "github.com/linkdata/jaws/wire"
 
 // SubscribeForTest subscribes rq to broadcasts with the given channel size.
 //
 // It is intended for use by test helpers.
-func (jw *Jaws) SubscribeForTest(rq *Request, size int) chan jawswire.Message {
+func (jw *Jaws) SubscribeForTest(rq *Request, size int) chan wire.Message {
 	return jw.subscribe(rq, size)
 }
 
@@ -21,7 +21,7 @@ func (jw *Jaws) PumpSubscriptionsForTest() {
 // ProcessForTest runs the request processing loop with explicit channels.
 //
 // It is intended for use by test helpers.
-func (rq *Request) ProcessForTest(broadcastMsgCh chan jawswire.Message, incomingMsgCh <-chan jawswire.WsMsg, outboundMsgCh chan<- jawswire.WsMsg) {
+func (rq *Request) ProcessForTest(broadcastMsgCh chan wire.Message, incomingMsgCh <-chan wire.WsMsg, outboundMsgCh chan<- wire.WsMsg) {
 	rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh)
 }
 

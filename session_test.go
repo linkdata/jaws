@@ -13,8 +13,8 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/linkdata/jaws/assets"
-	"github.com/linkdata/jaws/jawswire"
 	"github.com/linkdata/jaws/what"
+	"github.com/linkdata/jaws/wire"
 )
 
 func TestSession_Object(t *testing.T) {
@@ -317,7 +317,7 @@ func TestSession_Broadcast(t *testing.T) {
 		t.Fatalf("request 2 session mismatch: %v", got)
 	}
 
-	msg := jawswire.Message{What: what.Alert, Data: "info\nhello"}
+	msg := wire.Message{What: what.Alert, Data: "info\nhello"}
 	done := make(chan struct{})
 	go func() {
 		sess.Broadcast(msg)
@@ -327,7 +327,7 @@ func TestSession_Broadcast(t *testing.T) {
 	msg1 := nextBroadcast(t, jw)
 	msg2 := nextBroadcast(t, jw)
 
-	for i, got := range []jawswire.Message{msg1, msg2} {
+	for i, got := range []wire.Message{msg1, msg2} {
 		if got.What != msg.What || got.Data != msg.Data {
 			t.Fatalf("message %d mismatch: %#v", i+1, got)
 		}
@@ -455,7 +455,7 @@ func TestSession_Delete(t *testing.T) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	msg := jawswire.WsMsg{Jid: jidForTag(ts.rq, byebyeItem), What: what.Input}
+	msg := wire.WsMsg{Jid: jidForTag(ts.rq, byebyeItem), What: what.Input}
 	ctx, cancel := context.WithCancel(ts.ctx)
 	defer cancel()
 
