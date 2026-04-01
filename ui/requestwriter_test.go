@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawsbool"
 	"github.com/linkdata/jaws/jawstags"
+	"github.com/linkdata/jaws/namedbool"
 )
 
 type testRWUpdater struct {
@@ -69,7 +69,7 @@ func TestRequestWriter_MethodsAndWidgetHelpers(t *testing.T) {
 	tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("in"))}}
 	date := time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)
 	sh := &testSelectHandler{
-		testContainer: &testContainer{contents: []jaws.UI{NewOption(jawsbool.NewNamedBool(nil, "x", "X", true))}},
+		testContainer: &testContainer{contents: []jaws.UI{NewOption(namedbool.New(nil, "x", "X", true))}},
 		testSetter:    newTestSetter("x"),
 	}
 

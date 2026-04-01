@@ -1,4 +1,4 @@
-package jawsbool
+package namedbool
 
 import (
 	"io"

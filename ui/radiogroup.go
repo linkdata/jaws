@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawsbool"
+	"github.com/linkdata/jaws/namedbool"
 )
 
 type RadioElement struct {
@@ -14,9 +14,9 @@ type RadioElement struct {
 	nameAttr string
 }
 
-func (rw RequestWriter) RadioGroup(nba *jawsbool.NamedBoolArray) (rel []RadioElement) {
+func (rw RequestWriter) RadioGroup(nba *namedbool.NamedBoolArray) (rel []RadioElement) {
 	nameAttr := `name="` + jaws.MakeID() + `"`
-	nba.ReadLocked(func(nbl []*jawsbool.NamedBool) {
+	nba.ReadLocked(func(nbl []*namedbool.NamedBool) {
 		for _, nb := range nbl {
 			rel = append(rel, RadioElement{
 				radio:    rw.Request.NewElement(NewRadio(nb)),

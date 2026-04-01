@@ -1,4 +1,4 @@
-package jawsbool
+package namedbool
 
 import (
 	"fmt"
@@ -17,7 +17,7 @@ type NamedBool struct {
 	checked bool             // it's state
 }
 
-func NewNamedBool(nba *NamedBoolArray, name string, html template.HTML, checked bool) *NamedBool {
+func New(nba *NamedBoolArray, name string, html template.HTML, checked bool) *NamedBool {
 	return &NamedBool{
 		nba:     nba,
 		name:    name,

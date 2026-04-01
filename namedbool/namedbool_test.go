@@ -1,4 +1,4 @@
-package jawsbool
+package namedbool
 
 import (
 	"html/template"
@@ -8,7 +8,7 @@ import (
 )
 
 func TestNamedBool(t *testing.T) {
-	nba := NewNamedBoolArray(false)
+	nba := NewArray(false)
 	nba.Add("1", "one")
 	nb := nba.data[0]
 

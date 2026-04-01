@@ -1,4 +1,4 @@
-package jawsbool
+package namedbool
 
 import (
 	"errors"
@@ -18,7 +18,7 @@ func (w errWriteHTMLSelectWriter) Write([]byte) (int, error) {
 }
 
 func TestWriteHTMLSelect(t *testing.T) {
-	nba := NewNamedBoolArray(false)
+	nba := NewArray(false)
 	nba.Add("one", "1")
 	nba.Add("two", "2")
 	nba.Set("two", true)
@@ -39,7 +39,7 @@ func TestWriteHTMLSelect(t *testing.T) {
 }
 
 func TestWriteHTMLSelect_Error(t *testing.T) {
-	nba := NewNamedBoolArray(false).Add("one", "1")
+	nba := NewArray(false).Add("one", "1")
 	wantErr := errors.New("boom")
 	err := WriteHTMLSelect(errWriteHTMLSelectWriter{err: wantErr}, jid.Jid(1), nba, nil)
 	if !errors.Is(err, wantErr) {

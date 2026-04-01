@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawsbool"
 	"github.com/linkdata/jaws/jawstags"
+	"github.com/linkdata/jaws/namedbool"
 )
 
 func TestHTMLWidgets_ConstructorsAndRender(t *testing.T) {
@@ -70,8 +70,8 @@ func TestImg_RenderAndUpdate(t *testing.T) {
 
 func TestOption_RenderAndUpdate(t *testing.T) {
 	_, rq := newCoreRequest(t)
-	nba := jawsbool.NewNamedBoolArray(false)
-	nb := jawsbool.NewNamedBool(nba, `escape"me`, "<unescaped>", true)
+	nba := namedbool.NewArray(false)
+	nb := namedbool.New(nba, `escape"me`, "<unescaped>", true)
 	ui := NewOption(nb)
 	elem, got := renderUI(t, rq, ui, "hidden")
 	mustMatch(t, `^<option id="Jid\.[0-9]+" hidden value="escape&#34;me" selected><unescaped></option>$`, got)

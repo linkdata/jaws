@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawsbool"
 	"github.com/linkdata/jaws/jid"
+	"github.com/linkdata/jaws/namedbool"
 	"github.com/linkdata/jaws/what"
 )
 
@@ -227,7 +227,7 @@ type testSelectHandler struct {
 func TestSelectWidget(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	sh := &testSelectHandler{
-		testContainer: &testContainer{contents: []jaws.UI{NewOption(jawsbool.NewNamedBool(nil, "1", "one", true))}},
+		testContainer: &testContainer{contents: []jaws.UI{NewOption(namedbool.New(nil, "1", "one", true))}},
 		testSetter:    newTestSetter("1"),
 	}
 	selectUI := NewSelect(sh)

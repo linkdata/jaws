@@ -8,7 +8,7 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/bind"
-	"github.com/linkdata/jaws/jawsbool"
+	"github.com/linkdata/jaws/namedbool"
 )
 
 func TestConstructors(t *testing.T) {
@@ -25,7 +25,7 @@ func TestConstructors(t *testing.T) {
 
 	htmlGetter := bind.MakeHTMLGetter("x")
 	imgGetter := bind.StringGetterFunc(func(*jaws.Element) string { return "img" })
-	nba := jawsbool.NewNamedBoolArray(false).Add("a", template.HTML("A"))
+	nba := namedbool.NewArray(false).Add("a", template.HTML("A"))
 	tc := testContainer{contents: []jaws.UI{NewSpan(htmlGetter)}}
 
 	all := []jaws.UI{

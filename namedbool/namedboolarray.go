@@ -1,4 +1,4 @@
-package jawsbool
+package namedbool
 
 import (
 	"html/template"
@@ -19,7 +19,7 @@ type NamedBoolArray struct {
 
 var _ SelectHandler = (*NamedBoolArray)(nil)
 
-func NewNamedBoolArray(multi bool) *NamedBoolArray {
+func NewArray(multi bool) *NamedBoolArray {
 	return &NamedBoolArray{multi: multi}
 }
 
@@ -54,7 +54,7 @@ func (nba *NamedBoolArray) JawsContains(e *jaws.Element) (contents []jaws.UI) {
 // since it's allowed in HTML, it's probably not a good idea.
 func (nba *NamedBoolArray) Add(name string, text template.HTML) *NamedBoolArray {
 	nba.mu.Lock()
-	nba.data = append(nba.data, NewNamedBool(nba, name, text, false))
+	nba.data = append(nba.data, New(nba, name, text, false))
 	nba.mu.Unlock()
 	return nba
 }

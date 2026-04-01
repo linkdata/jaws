@@ -1,4 +1,4 @@
-package jawsbool
+package namedbool
 
 import (
 	"html/template"
@@ -10,7 +10,7 @@ import (
 )
 
 func Test_NamedBoolArray(t *testing.T) {
-	nba := NewNamedBoolArray(false)
+	nba := NewArray(false)
 	if len(nba.data) != 0 {
 		t.Fatalf("len(data)=%d want 0", len(nba.data))
 	}
@@ -91,7 +91,7 @@ func Test_NamedBoolArray(t *testing.T) {
 		t.Fatal("unexpected checked state after sort/set")
 	}
 
-	nbaMulti := NewNamedBoolArray(true)
+	nbaMulti := NewArray(true)
 	nbaMulti.Add("1", "one")
 	nbaMulti.Add("2", "two")
 	nbaMulti.Add("2", "also two")
@@ -147,7 +147,7 @@ func TestNamedBoolOption_RenderAndUpdateBranches(t *testing.T) {
 	jaws.NextJid = 0
 	_, rq := newCoreRequest(t)
 
-	nba := NewNamedBoolArray(false).Add("1", "one")
+	nba := NewArray(false).Add("1", "one")
 	nba.Set("1", true)
 	contents := nba.JawsContains(nil)
 	if len(contents) != 1 {

@@ -6,13 +6,13 @@ import (
 	"io"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawsbool"
 	"github.com/linkdata/jaws/jawshtml"
+	"github.com/linkdata/jaws/namedbool"
 )
 
-type Option struct{ *jawsbool.NamedBool }
+type Option struct{ *namedbool.NamedBool }
 
-func NewOption(nb *jawsbool.NamedBool) Option { return Option{NamedBool: nb} }
+func NewOption(nb *namedbool.NamedBool) Option { return Option{NamedBool: nb} }
 func (ui Option) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
 	e.Tag(ui.NamedBool)
 	attrs := e.ApplyParams(params)
