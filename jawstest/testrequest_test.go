@@ -6,7 +6,7 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
-	"github.com/linkdata/jaws/ui"
+	"github.com/linkdata/jaws/lib/ui"
 )
 
 type testRequestUpdater struct {

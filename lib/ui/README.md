@@ -1,4 +1,4 @@
-# `github.com/linkdata/jaws/ui`
+# `github.com/linkdata/jaws/lib/ui`
 
 This package is the home of JaWS widget implementations.
 

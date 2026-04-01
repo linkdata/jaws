@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/lib/ui"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
-	"github.com/linkdata/jaws/ui"
 )
 
 type jsVarValue struct {

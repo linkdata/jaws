@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/ui"
+	"github.com/linkdata/jaws/lib/ui"
 )
 
 func TestTemplate_Missing(t *testing.T) {

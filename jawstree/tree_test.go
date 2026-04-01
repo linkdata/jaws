@@ -12,7 +12,7 @@ import (
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstest"
-	"github.com/linkdata/jaws/ui"
+	"github.com/linkdata/jaws/lib/ui"
 )
 
 func maybeError(t *testing.T, err error) {

@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/ui"
+	"github.com/linkdata/jaws/lib/ui"
 )
 
 var _ jaws.UI = (*Tree)(nil)

@@ -10,8 +10,8 @@ import (
 	"github.com/linkdata/jaws/jawsboot"
 	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/templatereloader"
+	"github.com/linkdata/jaws/lib/ui"
 	"github.com/linkdata/jaws/staticserve"
-	"github.com/linkdata/jaws/ui"
 )
 
 // This example assumes an 'assets' directory:

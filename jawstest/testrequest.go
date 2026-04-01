@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/ui"
+	"github.com/linkdata/jaws/lib/ui"
 )
 
 // TestRequest wraps jaws.TestRequest with ui.RequestWriter helpers.

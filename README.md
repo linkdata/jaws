@@ -39,7 +39,7 @@ go get github.com/linkdata/jaws
 After the dependency is added, your Go module will be able to import
 and use JaWS as demonstrated below.
 
-For widget authoring guidance see `ui/README.md`.
+For widget authoring guidance see `lib/ui/README.md`.
 
 ## Quick start
 
@@ -58,7 +58,7 @@ import (
 	"sync"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/ui"
+	"github.com/linkdata/jaws/lib/ui"
 )
 
 const indexhtml = `
