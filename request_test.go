@@ -893,6 +893,27 @@ func TestRequest_validateWebSocketOrigin_MatchesInitialRequestOrigin(t *testing.
 	}
 }
 
+func TestRequest_Log(t *testing.T) {
+	wantErr := errors.New("request log test")
+
+	if got := (*Request)(nil).Log(wantErr); !errors.Is(got, wantErr) {
+		t.Fatalf("(*Request)(nil).Log() = %v, want %v", got, wantErr)
+	}
+
+	var log bytes.Buffer
+	rq := &Request{
+		Jaws: &Jaws{
+			Logger: slog.New(slog.NewTextHandler(&log, nil)),
+		},
+	}
+	if got := rq.Log(wantErr); !errors.Is(got, wantErr) {
+		t.Fatalf("Request.Log() = %v, want %v", got, wantErr)
+	}
+	if s := log.String(); !strings.Contains(s, wantErr.Error()) {
+		t.Fatalf("Request.Log() did not write error to logger: %q", s)
+	}
+}
+
 func TestRequest_Dirty(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest(t)
