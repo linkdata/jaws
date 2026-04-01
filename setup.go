@@ -32,7 +32,7 @@ func makeAbsPath(prefix string, u *url.URL) *url.URL {
 // Setup configures Jaws with extra functionality and resources.
 //
 // The list of extras can be strings, *url.URL or *staticserve.StaticServe (URL resources)
-// or a setup function matching jaws.JawsSetupFunc like jawsboot.JawsSetup.
+// or a setup function matching SetupFunc such as jawsboot.Setup.
 //
 // It calls GenerateHeadHTML with the final list of URLs, with any
 // relative URL paths prefixed with prefix.

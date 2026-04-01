@@ -58,6 +58,7 @@ import (
 	"sync"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/ui"
 )
 
@@ -86,7 +87,7 @@ func main() {
 	var mu sync.Mutex
 	var f float64
 
-	http.DefaultServeMux.Handle("GET /", ui.Handler(jw, "index", jaws.Bind(&mu, &f)))
+	http.DefaultServeMux.Handle("GET /", ui.Handler(jw, "index", bind.New(&mu, &f)))
 	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 }
 ```
@@ -180,7 +181,7 @@ loop (`Serve()` or `ServeWithTimeout()`):
   `(*Jaws).SessionCount()`, `(*Jaws).Sessions()`, `(*Jaws).Log()`,
   `(*Jaws).MustLog()`.
 * Static/ping JaWS endpoints via `(*Jaws).ServeHTTP()`:
-  `/jaws/.ping`, `/jaws/.jaws.*.js`, `/jaws/.jaws.*.css`.
+  `/jaws/.ping`, `/jaws/.jaws.<hash>.js`, `/jaws/.jaws.<hash>.css`.
 
 Broadcasting APIs are not safe before the processing loop starts. In particular,
 `(*Jaws).Broadcast()` (and helpers that call it), `(*Session).Broadcast()`,
@@ -201,7 +202,7 @@ The middleware snapshots `secureheaders.DefaultHeaders`, replaces
 forwarded HTTPS headers.
 
 ```go
-page := ui.Handler(jw, "index", jaws.Bind(&mu, &f))
+page := ui.Handler(jw, "index", bind.New(&mu, &f))
 http.DefaultServeMux.Handle("GET /", jw.SecureHeadersMiddleware(page))
 ```
 
@@ -212,13 +213,13 @@ endpoints to be registered in whichever router you choose to use. All of
 the endpoints start with "/jaws/", and `Jaws.ServeHTTP()` will handle all
 of them.
 
-* `/jaws/\.jaws\.[0-9a-z]+\.css`
+* `/jaws/.jaws.<hash>.css`
 
   Serves the built-in JaWS stylesheet.
 
   The response should be cached indefinitely.
 
-* `/jaws/\.jaws\.[0-9a-z]+\.js`
+* `/jaws/.jaws.<hash>.js`
 
   Serves the built-in JaWS client-side JavaScript.
 
@@ -227,7 +228,7 @@ of them.
 * `/jaws/[0-9a-z]+` (and `/jaws/[0-9a-z]+/noscript`)
 
   The WebSocket endpoint. The trailing string must be decoded using
-  `jaws.JawsKeyValue()` and then the matching JaWS Request retrieved
+  `assets.JawsKeyValue()` (`github.com/linkdata/jaws/lib/assets`) and then the matching JaWS Request retrieved
   using the JaWS object's `UseRequest()` method.
 
   If the Request is not found, return a **404 Not Found**, otherwise 
@@ -276,27 +277,27 @@ router.GET("/jaws/*", func(c echo.Context) error {
 
 ### HTML rendering
 
-HTML output elements (e.g. `ui.RequestWriter.Div()`) require a `jaws.HTMLGetter` or something that can
-be made into one using `jaws.MakeHTMLGetter()`.
+HTML output elements (e.g. `ui.RequestWriter.Div()`) require a `bind.HTMLGetter` or something that can
+be made into one using `bind.MakeHTMLGetter()`.
 
 In order of precedence, this can be:
-* `jaws.HTMLGetter`: `JawsGetHTML(*Element) template.HTML` to be used as-is.
-* `jaws.Getter[string]`: `JawsGet(*Element) string` that will be escaped using `html.EscapeString`.
-* `jaws.Formatter`: `Format("%v") string` that will be escaped using `html.EscapeString`.
+* `bind.HTMLGetter`: `JawsGetHTML(*Element) template.HTML` to be used as-is.
+* `bind.Getter[string]`: `JawsGet(*Element) string` that will be escaped using `html.EscapeString`.
+* `bind.Formatter`: `Format("%v") string` that will be escaped using `html.EscapeString`.
 * `fmt.Stringer`: `String() string` that will be escaped using `html.EscapeString`.
 * a static `template.HTML` or `string` to be used as-is with no HTML escaping.
 * everything else is rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
 
-You can use `jaws.Bind().FormatHTML()`, `jaws.HTMLGetterFunc()` or `jaws.StringGetterFunc()` to build a custom renderer
+You can use `bind.New(...).FormatHTML()`, `bind.HTMLGetterFunc()` or `bind.StringGetterFunc()` to build a custom renderer
 for trivial rendering tasks, or define a custom type implementing `HTMLGetter`.
 
 ### Data binding
 
 HTML input elements (e.g. `ui.RequestWriter.Range()`) require bi-directional data flow between the server and the browser.
-The first argument to these is usually a `Setter[T]` where `T` is one of `string`, `float64`, `bool` or `time.Time`. It can
-also be a `Getter[T]`, in which case the HTML element should be made read-only.
+The first argument to these is usually a `bind.Setter[T]` where `T` is one of `string`, `float64`, `bool` or `time.Time`. It can
+also be a `bind.Getter[T]`, in which case the HTML element should be made read-only.
 
-Since all data access need to be protected with locks, you will usually use `jaws.Bind()` to create a `jaws.Binder[T]`
+Since all data access need to be protected with locks, you will usually use `bind.New()` to create a `bind.Binder[T]`
 that combines a (RW)Locker and a pointer to a value of type `T`. It also allows you to add chained setters,
 getters and on-success handlers.
 
@@ -324,7 +325,7 @@ session from a new IP will fail.
 
 No data is stored in the client browser except the randomly generated 
 session cookie. You can set the cookie name in `Jaws.CookieName`, the
-default is `jaws`.
+default is derived from the executable name and falls back to `jaws`.
 
 ### A note on the Context
 
@@ -366,7 +367,7 @@ We try to minimize dependencies outside of the standard library.
 
 * Browse the [Go package documentation](https://pkg.go.dev/github.com/linkdata/jaws)
   for an API-by-API overview.
-* Inspect the [`example_test.go`](./example_test.go) file for executable
+* Inspect the [`example_test.go`](./examples/example_test.go) file for executable
   examples that can be run with `go test`.
 * Explore the [demo application](https://github.com/linkdata/jawsdemo)
   to see a more complete, heavily commented project structure.

@@ -9,21 +9,6 @@ This package is the home of JaWS widget implementations.
 - Provide short widget naming (`ui.Span`, `ui.NewSpan`).
 - Expose template context types (`ui.RequestWriter`, `ui.With`).
 
-## Migration
-
-### Type and constructor names
-
-Every legacy `jaws.UiX` / `jaws.NewUiX` maps directly to `ui.X` / `ui.NewX`.
-
-Examples:
-
-- `jaws.UiA` -> `ui.A`
-- `jaws.NewUiA(...)` -> `ui.NewA(...)`
-- `jaws.UiSpan` -> `ui.Span`
-- `jaws.NewUiSpan(...)` -> `ui.NewSpan(...)`
-- `jaws.UiSelect` -> `ui.Select`
-- `jaws.NewUiSelect(...)` -> `ui.NewSelect(...)`
-
 ### RequestWriter helper calls
 
 `ui.RequestWriter` exposes helper methods like `rw.Span(...)`,
@@ -38,7 +23,7 @@ rw.UI(ui.NewX(...), params...)
 Examples:
 
 ```go
-rw.UI(ui.NewDiv(jaws.MakeHTMLGetter("content")))
+rw.UI(ui.NewDiv(bind.MakeHTMLGetter("content")))
 rw.UI(ui.NewCheckbox(myBoolSetter), "disabled")
 rw.UI(ui.NewRange(myFloatSetter))
 ```
@@ -68,7 +53,7 @@ Use `HTMLInner`:
 ```go
 type Article struct{ ui.HTMLInner }
 
-func NewArticle(inner jaws.HTMLGetter) *Article {
+func NewArticle(inner bind.HTMLGetter) *Article {
   return &Article{HTMLInner: ui.HTMLInner{HTMLGetter: inner}}
 }
 
