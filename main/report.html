@@ -5287,12 +5287,13 @@ func (rw RequestWriter) Textarea(value any, params ...any) error <span class="co
 func (ui *Textarea) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) <span class="cov8" title="1">{
         if err = ui.applyGetter(e, ui.Setter); err == nil </span><span class="cov8" title="1">{
                 attrs := e.ApplyParams(params)
-                value := template.HTMLEscapeString(ui.JawsGet(e))
-                err = htmlio.WriteHTMLInner(w, e.Jid(), "textarea", "", template.HTML(value), attrs...) // #nosec G203
+                v := ui.JawsGet(e)
+                ui.Last.Store(v)
+                v = template.HTMLEscapeString(v)
+                err = htmlio.WriteHTMLInner(w, e.Jid(), "textarea", "", template.HTML(v), attrs...) // #nosec G203
         }</span>
         <span class="cov8" title="1">return</span>
 }
-func (ui *Textarea) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{ e.SetValue(ui.JawsGet(e)) }</span>
 </pre>
 		
 		<pre class="file" id="file68" style="display: none">package ui
