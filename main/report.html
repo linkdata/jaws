@@ -61,7 +61,7 @@
 				
 				<option value="file2">github.com/linkdata/jaws/errnowebsocketrequest.go (100.0%)</option>
 				
-				<option value="file3">github.com/linkdata/jaws/errpendingcancelled.go (100.0%)</option>
+				<option value="file3">github.com/linkdata/jaws/errrequestcancelled.go (100.0%)</option>
 				
 				<option value="file4">github.com/linkdata/jaws/eventhandler.go (100.0%)</option>
 				
@@ -611,33 +611,33 @@ import (
         "github.com/linkdata/jaws/lib/assets"
 )
 
-// ErrPendingCancelled indicates a pending Request was cancelled. Use Unwrap() to see the underlying cause.
-var ErrPendingCancelled errPendingCancelled
+// ErrRequestCancelled indicates a Request was cancelled. Use Unwrap() to see the underlying cause.
+var ErrRequestCancelled errRequestCancelled
 
-type errPendingCancelled struct {
+type errRequestCancelled struct {
         JawsKey uint64
         Cause   error
         Initial string
 }
 
-func (e errPendingCancelled) Error() string <span class="cov8" title="1">{
+func (e errRequestCancelled) Error() string <span class="cov8" title="1">{
         return fmt.Sprintf("Request&lt;%s&gt;:%s %v", assets.JawsKeyString(e.JawsKey), e.Initial, e.Cause)
 }</span>
 
-func (e errPendingCancelled) Is(target error) (yes bool) <span class="cov8" title="1">{
-        return target == ErrPendingCancelled
+func (e errRequestCancelled) Is(target error) (yes bool) <span class="cov8" title="1">{
+        return target == ErrRequestCancelled
 }</span>
 
-func (e errPendingCancelled) Unwrap() error <span class="cov8" title="1">{
+func (e errRequestCancelled) Unwrap() error <span class="cov8" title="1">{
         return e.Cause
 }</span>
 
-func newErrPendingCancelledLocked(rq *Request, cause error) (err error) <span class="cov8" title="1">{
+func newErrRequestCancelledLocked(rq *Request, cause error) (err error) <span class="cov8" title="1">{
         var initial string
         if rq.initial != nil </span><span class="cov8" title="1">{
                 initial = fmt.Sprintf(" %s %q:", rq.initial.Method, rq.initial.RequestURI)
         }</span>
-        <span class="cov8" title="1">return errPendingCancelled{
+        <span class="cov8" title="1">return errRequestCancelled{
                 JawsKey: rq.JawsKey,
                 Cause:   cause,
                 Initial: initial,
@@ -6043,11 +6043,8 @@ func (rq *Request) maintenance(now time.Time, requestTimeout time.Duration) bool
 
 func (rq *Request) cancelLocked(err error) <span class="cov8" title="1">{
         if rq.JawsKey != 0 &amp;&amp; rq.ctx.Err() == nil </span><span class="cov8" title="1">{
-                if !rq.running.Load() </span><span class="cov8" title="1">{
-                        err = newErrPendingCancelledLocked(rq, err)
-                }</span>
-                <span class="cov8" title="1">rq.cancelFn(rq.Jaws.Log(err))</span>
-        }
+                rq.cancelFn(rq.Jaws.Log(newErrRequestCancelledLocked(rq, err)))
+        }</span>
 }
 
 func (rq *Request) cancel(err error) <span class="cov8" title="1">{
