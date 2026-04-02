@@ -339,10 +339,7 @@ func (rq *Request) maintenance(now time.Time, requestTimeout time.Duration) bool
 
 func (rq *Request) cancelLocked(err error) {
 	if rq.JawsKey != 0 && rq.ctx.Err() == nil {
-		if !rq.running.Load() {
-			err = newErrPendingCancelledLocked(rq, err)
-		}
-		rq.cancelFn(rq.Jaws.Log(err))
+		rq.cancelFn(rq.Jaws.Log(newErrRequestCancelledLocked(rq, err)))
 	}
 }
 

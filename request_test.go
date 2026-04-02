@@ -1036,13 +1036,13 @@ func TestRequest_CustomErrors(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 	cause := newErrNoWebSocketRequest(rq.Request)
-	err := newErrPendingCancelledLocked(rq.Request, cause)
-	th.True(errors.Is(err, ErrPendingCancelled))
+	err := newErrRequestCancelledLocked(rq.Request, cause)
+	th.True(errors.Is(err, ErrRequestCancelled))
 	th.True(errors.Is(err, ErrNoWebSocketRequest))
-	th.Equal(errors.Is(cause, ErrPendingCancelled), false)
+	th.Equal(errors.Is(cause, ErrRequestCancelled), false)
 	var target1 errNoWebSocketRequest
 	th.True(errors.As(err, &target1))
-	var target2 errPendingCancelled
+	var target2 errRequestCancelled
 	th.Equal(errors.As(cause, &target2), false)
 }
 
