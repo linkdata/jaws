@@ -42,7 +42,9 @@ import (
 )
 
 const (
-	DefaultUpdateInterval = time.Millisecond * 100 // Default browser update interval
+	DefaultUpdateInterval        = time.Millisecond * 100 // Default browser update interval
+	DefaultWebSocketPingInterval = time.Minute            // Default WebSocket keepalive ping interval
+	DefaultWebSocketTimeout      = time.Second * 10       // WebSocket must connect and respond within this interval
 )
 
 type subscription struct {
@@ -64,29 +66,31 @@ type Jid = jid.Jid // convenience alias
 // WebSockets. The zero value is not ready for use; construct instances with
 // New to ensure the helper goroutines and static assets are prepared.
 type Jaws struct {
-	CookieName   string          // Name for session cookies, defaults to "jaws"
-	Logger       Logger          // Optional logger to use
-	Debug        bool            // Set to true to enable debug info in generated HTML code
-	MakeAuth     MakeAuthFn      // Optional function to create With.Auth for Templates
-	BaseContext  context.Context // Non-nil base context for Requests, set to context.Background() in New()
-	bcastCh      chan wire.Message
-	subCh        chan subscription
-	unsubCh      chan chan wire.Message
-	updateTicker *time.Ticker
-	reqPool      sync.Pool
-	serveJS      *staticserve.StaticServe
-	serveCSS     *staticserve.StaticServe
-	mu           deadlock.RWMutex // protects following
-	headPrefix   string
-	faviconURL   string
-	cspHeader    string
-	tmplookers   []TemplateLookuper
-	kg           *bufio.Reader
-	closeCh      chan struct{} // closed when Close() has been called
-	requests     map[uint64]*Request
-	sessions     map[uint64]*Session
-	dirty        map[any]int
-	dirtOrder    int
+	CookieName            string          // Name for session cookies, defaults to "jaws"
+	Logger                Logger          // Optional logger to use
+	Debug                 bool            // Set to true to enable debug info in generated HTML code
+	MakeAuth              MakeAuthFn      // Optional function to create With.Auth for Templates
+	BaseContext           context.Context // Non-nil base context for Requests, set to context.Background() in New()
+	WebSocketPingInterval time.Duration   // Interval between keepalive pings on active WebSocket connections. Defaults to DefaultWebSocketPingInterval. Set <=0 to disable keepalive pings.
+	webSocketTimeout      time.Duration   // timeout duration passed to ServeWith
+	bcastCh               chan wire.Message
+	subCh                 chan subscription
+	unsubCh               chan chan wire.Message
+	updateTicker          *time.Ticker
+	reqPool               sync.Pool
+	serveJS               *staticserve.StaticServe
+	serveCSS              *staticserve.StaticServe
+	mu                    deadlock.RWMutex // protects following
+	headPrefix            string
+	faviconURL            string
+	cspHeader             string
+	tmplookers            []TemplateLookuper
+	kg                    *bufio.Reader
+	closeCh               chan struct{} // closed when Close() has been called
+	requests              map[uint64]*Request
+	sessions              map[uint64]*Session
+	dirty                 map[any]int
+	dirtOrder             int
 }
 
 // New allocates a JaWS instance with the default configuration.
@@ -99,19 +103,21 @@ func New() (jw *Jaws, err error) {
 	if serveJS, err = staticserve.New("/jaws/.jaws.js", assets.JavascriptText); err == nil {
 		if serveCSS, err = staticserve.New("/jaws/.jaws.css", assets.JawsCSS); err == nil {
 			tmp := &Jaws{
-				CookieName:   assets.DefaultCookieName,
-				BaseContext:  context.Background(),
-				serveJS:      serveJS,
-				serveCSS:     serveCSS,
-				bcastCh:      make(chan wire.Message, 1),
-				subCh:        make(chan subscription, 1),
-				unsubCh:      make(chan chan wire.Message, 1),
-				updateTicker: time.NewTicker(DefaultUpdateInterval),
-				kg:           bufio.NewReader(rand.Reader),
-				requests:     make(map[uint64]*Request),
-				sessions:     make(map[uint64]*Session),
-				dirty:        make(map[any]int),
-				closeCh:      make(chan struct{}),
+				CookieName:            assets.DefaultCookieName,
+				BaseContext:           context.Background(),
+				WebSocketPingInterval: DefaultWebSocketPingInterval,
+				webSocketTimeout:      DefaultWebSocketTimeout,
+				serveJS:               serveJS,
+				serveCSS:              serveCSS,
+				bcastCh:               make(chan wire.Message, 1),
+				subCh:                 make(chan subscription, 1),
+				unsubCh:               make(chan chan wire.Message, 1),
+				updateTicker:          time.NewTicker(DefaultUpdateInterval),
+				kg:                    bufio.NewReader(rand.Reader),
+				requests:              make(map[uint64]*Request),
+				sessions:              make(map[uint64]*Session),
+				dirty:                 make(map[any]int),
+				closeCh:               make(chan struct{}),
 			}
 			if err = tmp.GenerateHeadHTML(); err == nil {
 				jw = tmp
@@ -597,6 +603,13 @@ func (jw *Jaws) Pending() (n int) {
 	return
 }
 
+func (jw *Jaws) getWebSocketTimeout() (t time.Duration) {
+	jw.mu.RLock()
+	t = jw.webSocketTimeout
+	jw.mu.RUnlock()
+	return
+}
+
 // ServeWithTimeout begins processing requests with the given timeout.
 // It is intended to run on it's own goroutine.
 // It returns when Close is called.
@@ -613,6 +626,9 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 
 	subs := map[chan wire.Message]*Request{}
 	t := time.NewTicker(maintenanceInterval)
+	jw.mu.Lock()
+	jw.webSocketTimeout = requestTimeout
+	jw.mu.Unlock()
 
 	defer func() {
 		t.Stop()
@@ -676,11 +692,11 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	}
 }
 
-// Serve calls ServeWithTimeout(time.Second * 10).
+// Serve calls ServeWithTimeout(DefaultWebSocketTimeout).
 // It is intended to run on it's own goroutine.
 // It returns when Close is called.
 func (jw *Jaws) Serve() {
-	jw.ServeWithTimeout(time.Second * 10)
+	jw.ServeWithTimeout(DefaultWebSocketTimeout)
 }
 
 func (jw *Jaws) subscribe(rq *Request, size int) chan wire.Message {

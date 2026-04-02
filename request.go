@@ -959,6 +959,8 @@ var headerContentTypeJavaScript = []string{"text/javascript"}
 func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if rq.startServe() {
 		defer rq.stopServe()
+		pingInterval := rq.Jaws.WebSocketPingInterval
+		wsTimeout := rq.Jaws.getWebSocketTimeout()
 		if strings.HasSuffix(r.URL.Path, "/noscript") {
 			w.WriteHeader(http.StatusNoContent)
 			rq.cancel(ErrJavascriptDisabled)
@@ -981,7 +983,8 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				outboundMsgCh := make(chan wire.WsMsg, cap(broadcastMsgCh))
 				go wire.ReadLoop(rq.ctx, rq.cancelFn, rq.Jaws.Done(), incomingMsgCh, ws)  // closes incomingMsgCh
 				go wire.WriteLoop(rq.ctx, rq.cancelFn, rq.Jaws.Done(), outboundMsgCh, ws) // calls ws.Close()
-				rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh)                  // unsubscribes broadcastMsgCh, closes outboundMsgCh
+				go wire.PingLoop(rq.ctx, rq.cancelFn, rq.Jaws.Done(), pingInterval, wsTimeout, ws)
+				rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh) // unsubscribes broadcastMsgCh, closes outboundMsgCh
 			} else {
 				defer ws.Close(websocket.StatusNormalClosure, err.Error())
 				var msg wire.WsMsg

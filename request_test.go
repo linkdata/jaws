@@ -1833,3 +1833,69 @@ func TestWS_NormalExchange(t *testing.T) {
 		t.Error(b)
 	}
 }
+
+func TestWS_PingDisconnectsUnresponsiveClient(t *testing.T) {
+	ts := newTestServer()
+	defer ts.Close()
+	ts.jw.WebSocketPingInterval = 20 * time.Millisecond
+	ts.jw.webSocketTimeout = 10 * time.Millisecond
+
+	conn, resp, err := ts.Dial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseNow()
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Error(resp.StatusCode)
+	}
+
+	select {
+	case <-ts.connectedCh:
+	case <-time.After(testTimeout):
+		t.Fatal("timeout waiting for websocket connect")
+	}
+
+	waitForRequestCount(t, ts.jw, 0, testTimeout)
+}
+
+func TestWS_PingDisabledKeepsIdleConnection(t *testing.T) {
+	ts := newTestServer()
+	defer ts.Close()
+	ts.jw.WebSocketPingInterval = 0
+
+	conn, resp, err := ts.Dial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Error(resp.StatusCode)
+	}
+
+	select {
+	case <-ts.connectedCh:
+	case <-time.After(testTimeout):
+		t.Fatal("timeout waiting for websocket connect")
+	}
+
+	time.Sleep(150 * time.Millisecond)
+	if got := ts.jw.RequestCount(); got != 1 {
+		t.Fatalf("RequestCount() = %d, want 1", got)
+	}
+
+	_ = conn.CloseNow()
+	waitForRequestCount(t, ts.jw, 0, testTimeout)
+}
+
+func waitForRequestCount(t *testing.T, jw *Jaws, want int, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		if got := jw.RequestCount(); got == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("RequestCount() = %d, want %d", jw.RequestCount(), want)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}

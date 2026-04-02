@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"time"
 
 	"github.com/coder/websocket"
 )
@@ -60,6 +61,33 @@ func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan s
 	}
 	if ccf != nil {
 		ccf(err)
+	}
+}
+
+// PingLoop sends periodic websocket pings and reports ping errors through ccf.
+//
+// Returns immediately when interval is non-positive.
+func PingLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, interval, timeout time.Duration, ws *websocket.Conn) {
+	if interval > 0 {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+
+		var err error
+		for err == nil {
+			select {
+			case <-ctx.Done():
+				return
+			case <-doneCh:
+				return
+			case <-t.C:
+				pingctx, cancel := context.WithTimeout(ctx, timeout)
+				err = ws.Ping(pingctx)
+				cancel()
+			}
+		}
+		if ccf != nil {
+			ccf(err)
+		}
 	}
 }
 

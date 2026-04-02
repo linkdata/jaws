@@ -30,6 +30,18 @@ func (testBroadcastTagGetter) JawsGetTag(jtag.Context) any {
 	return jtag.Tag("expanded")
 }
 
+func TestNew_DefaultWebSocketPingInterval(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	if got, want := jw.WebSocketPingInterval, DefaultWebSocketPingInterval; got != want {
+		t.Fatalf("WebSocketPingInterval = %v, want %v", got, want)
+	}
+}
+
 func TestCoverage_GenerateHeadAndConvenienceBroadcasts(t *testing.T) {
 	jw, err := New()
 	if err != nil {

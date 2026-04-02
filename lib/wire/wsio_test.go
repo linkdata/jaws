@@ -304,6 +304,69 @@ func TestReadLoop_ReportsError(t *testing.T) {
 	}
 }
 
+func TestPingLoop_RespectsContextDone(t *testing.T) {
+	jawsDoneCh := make(chan struct{})
+	client, server := pipe()
+	defer client.CloseNow()
+	defer server.CloseNow()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pingDoneCh := make(chan struct{})
+	go func() {
+		defer close(pingDoneCh)
+		PingLoop(ctx, nil, jawsDoneCh, time.Millisecond*10, time.Millisecond*10, server)
+	}()
+
+	cancel()
+	waitDone(t, pingDoneCh, "PingLoop after context cancel")
+}
+
+func TestPingLoop_RespectsDone(t *testing.T) {
+	jawsDoneCh := make(chan struct{})
+	client, server := pipe()
+	defer client.CloseNow()
+	defer server.CloseNow()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	pingDoneCh := make(chan struct{})
+	go func() {
+		defer close(pingDoneCh)
+		PingLoop(ctx, nil, jawsDoneCh, time.Millisecond, time.Millisecond, server)
+	}()
+
+	close(jawsDoneCh)
+	waitDone(t, pingDoneCh, "PingLoop after done close")
+}
+
+func TestPingLoop_ReportsErrorWhenPeerDoesNotPong(t *testing.T) {
+	jawsDoneCh := make(chan struct{})
+	client, server := pipe()
+	defer client.CloseNow()
+	defer server.CloseNow()
+
+	ctx, cancel := context.WithCancelCause(context.Background())
+
+	pingDoneCh := make(chan struct{})
+	go func() {
+		defer close(pingDoneCh)
+		PingLoop(ctx, cancel, jawsDoneCh, 20*time.Millisecond, 20*time.Millisecond, server)
+	}()
+
+	waitDone(t, pingDoneCh, "PingLoop after ping timeout")
+
+	err := context.Cause(ctx)
+	if err == nil {
+		t.Fatal("expected context cause from ping failure")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("%T(%v)", err, err)
+	}
+}
+
 func waitDone(t *testing.T, doneCh <-chan struct{}, what string) {
 	t.Helper()
 	select {

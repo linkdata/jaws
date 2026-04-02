@@ -168,6 +168,15 @@ Request created in the first step. Then call its `ServeHTTP()` method to
 start up the WebSocket and begin processing JavaScript events and DOM
 updates.
 
+### WebSocket keepalive ping
+
+JaWS can periodically ping active WebSocket connections to detect peers
+that disappeared without a close handshake.
+
+Set `Jaws.WebSocketPingInterval` to control this. The default is
+`jaws.DefaultWebSocketPingInterval` (1 minute). Set it to `0` or a
+negative value to disable keepalive pings.
+
 ### Safe to call before `Serve()`
 
 The following APIs are safe to call before starting the JaWS processing
