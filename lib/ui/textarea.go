@@ -19,9 +19,10 @@ func (rw RequestWriter) Textarea(value any, params ...any) error {
 func (ui *Textarea) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) {
 	if err = ui.applyGetter(e, ui.Setter); err == nil {
 		attrs := e.ApplyParams(params)
-		value := template.HTMLEscapeString(ui.JawsGet(e))
-		err = htmlio.WriteHTMLInner(w, e.Jid(), "textarea", "", template.HTML(value), attrs...) // #nosec G203
+		v := ui.JawsGet(e)
+		ui.Last.Store(v)
+		v = template.HTMLEscapeString(v)
+		err = htmlio.WriteHTMLInner(w, e.Jid(), "textarea", "", template.HTML(v), attrs...) // #nosec G203
 	}
 	return
 }
-func (ui *Textarea) JawsUpdate(e *jaws.Element) { e.SetValue(ui.JawsGet(e)) }
