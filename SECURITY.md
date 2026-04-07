@@ -2,7 +2,7 @@
 
 **Target:** https://jawsdemo.northeurope.cloudapp.azure.com/  
 **Date:** 2026-04-07  
-**Scope:** Web application only  
+**Scope:** Web application  
 **Application:** JaWS Demo v0.0.8 (jaws@v0.301.0) — Go-based real-time collaborative UI framework  
 **Source:** https://github.com/linkdata/jaws (reviewed at HEAD)
 
@@ -361,7 +361,6 @@ The framework uses Go's `template.HTML` type to distinguish trusted HTML from un
 | # | Finding | Details | Recommendation |
 |---|---------|---------|----------------|
 | L1 | `style-src 'unsafe-inline'` in CSP | Allows inline styles; could theoretically enable CSS-based data exfiltration | Use style nonces or hashes if feasible |
-| L2 | No WebSocket rate limiting | 1000 messages in 0.03s accepted; 20 simultaneous connections allowed | Consider per-connection message rate limits and per-IP connection caps |
 
 ### Informational
 
@@ -372,6 +371,7 @@ The framework uses Go's `template.HTML` type to distinguish trusted HTML from un
 | I3 | `template.HTML` trust boundary | Framework allows `SetInner()` with trusted HTML; application developers must escape user input before casting to `template.HTML` |
 | I4 | Loopback IP equivalence | `equalIP()` treats all loopback addresses as identical; only relevant in shared-localhost deployments |
 | I5 | Framework identification in JS | `/jaws/.jaws.*.js` contains `// https://github.com/linkdata/jaws` comment |
+| I6 | No explicit WebSocket message rate limiting | 1000 messages in 0.04s accepted on a single connection. However, each connection requires a prior HTTP GET + TLS + WebSocket upgrade + IP validation, making connection spam expensive for the attacker. Message flood cost depends on application event handler complexity (trivial for this demo). |
 
 ---
 
