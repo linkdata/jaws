@@ -2,7 +2,7 @@
 
 **Target:** https://jawsdemo.northeurope.cloudapp.azure.com/  
 **Date:** 2026-04-07  
-**Scope:** Web application only
+**Scope:** Web application only  
 **Application:** JaWS Demo v0.0.8 (jaws@v0.301.0) — Go-based real-time collaborative UI framework  
 **Source:** https://github.com/linkdata/jaws (reviewed at HEAD)
 
