@@ -66,7 +66,7 @@ The CSP is restrictive and well-configured:
 - `connect-src 'self'` limits WebSocket/fetch to same origin
 - `form-action 'self'` prevents form hijacking
 
-**Finding (Low):** `style-src 'unsafe-inline'` is the only relaxation. CSS injection could theoretically leak data via attribute selectors, though exploitation is difficult with this application's structure. Consider using style nonces if feasible.
+`style-src 'unsafe-inline'` is the only relaxation. This is a necessary trade-off: the framework sets inline `style=` attributes on elements during both initial rendering and dynamic updates, and CSP nonces cannot apply to `style=` attributes (only to `<style>` elements). The theoretical risk (CSS-based data exfiltration) requires a prior HTML injection primitive, which was not found.
 
 ---
 
@@ -358,15 +358,14 @@ The framework uses Go's `template.HTML` type to distinguish trusted HTML from un
 
 ### Low Severity
 
-| # | Finding | Details | Recommendation |
-|---|---------|---------|----------------|
-| L1 | `style-src 'unsafe-inline'` in CSP | Allows inline styles; could theoretically enable CSS-based data exfiltration | Use style nonces or hashes if feasible |
+None.
 
 ### Informational
 
 | # | Finding | Details |
 |---|---------|---------|
-| I1 | Cookie not validated on WebSocket upgrade | Auth relies solely on jawsKey; cookie is ignored. Acceptable given key entropy (2^64) and single-use property |
+| I1 | `style-src 'unsafe-inline'` in CSP | Required by the framework's design: widgets set inline `style=` attributes in initial HTML and via `setAttribute('style', ...)` at runtime. CSP nonces cannot apply to `style=` attributes (only `<style>` elements), and eliminating all inline styles would require forbidding arbitrary style params across the framework. The theoretical risk (CSS-based data exfiltration) requires a prior HTML injection primitive, which was not found. This is a pragmatic and acceptable trade-off. |
+| I2 | Cookie not validated on WebSocket upgrade | Auth relies solely on jawsKey; cookie is ignored. Acceptable given key entropy (2^64) and single-use property |
 | I2 | Mouse tracking shared across sessions | `mousetrack.js` sends cursor X/Y to server via JsVar Set; visible to co-viewers by design |
 | I3 | `template.HTML` trust boundary | Framework allows `SetInner()` with trusted HTML; application developers must escape user input before casting to `template.HTML` |
 | I4 | Loopback IP equivalence | `equalIP()` treats all loopback addresses as identical; only relevant in shared-localhost deployments |
