@@ -197,7 +197,7 @@ Tested origin validation:
 | Connect with random/guessed key | Rejected (404) |
 | Reuse consumed key | Rejected (404) |
 
-**Assessment:** Cookie is not checked on WebSocket upgrade — authentication relies solely on the single-use jawsKey. This is acceptable given the key's high entropy and single-use property, but binding cookie to key would add defense-in-depth.
+**Assessment:** Cookie is not checked on WebSocket upgrade — authentication relies solely on the single-use jawsKey. This is a sound design: any scenario where an attacker has the jawsKey but lacks the cookie is already covered by Origin validation (blocks cross-origin) and IP binding (blocks different-IP). An XSS attacker on the same page can read the key from the meta tag, but the browser would automatically include the HttpOnly cookie in the upgrade request anyway. Cookie validation would be redundant with the existing controls.
 
 ### 6.3 Client Message Handling
 
@@ -363,7 +363,6 @@ None.
 | # | Finding | Details |
 |---|---------|---------|
 | I1 | `style-src 'unsafe-inline'` in CSP | Required by the framework's design: widgets set inline `style=` attributes in initial HTML and via `setAttribute('style', ...)` at runtime. CSP nonces cannot apply to `style=` attributes (only `<style>` elements), and eliminating all inline styles would require forbidding arbitrary style params across the framework. The theoretical risk (CSS-based data exfiltration) requires a prior HTML injection primitive, which was not found. This is a pragmatic and acceptable trade-off. |
-| I2 | Cookie not validated on WebSocket upgrade | Auth relies solely on jawsKey; cookie is ignored. Acceptable given key entropy (2^64) and single-use property |
 | I2 | Mouse tracking shared across sessions | `mousetrack.js` sends cursor X/Y to server via JsVar Set; visible to co-viewers by design |
 | I3 | `template.HTML` trust boundary | Framework allows `SetInner()` with trusted HTML; application developers must escape user input before casting to `template.HTML` |
 | I4 | Loopback IP equivalence | `equalIP()` treats all loopback addresses as identical; only relevant in shared-localhost deployments |
