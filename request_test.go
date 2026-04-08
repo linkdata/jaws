@@ -90,8 +90,32 @@ func TestRequest_HeadHTML(t *testing.T) {
 	txt := sb.String()
 	is.Equal(strings.Contains(txt, rq.JawsKeyString()), true)
 	is.Equal(strings.Contains(txt, jw.serveJS.Name), true)
+	is.Equal(strings.Contains(txt, `meta name="jawsDebug"`), false)
 	is.Equal(strings.Count(txt, "<script"), strings.Count(txt, "</script>"))
 	is.Equal(strings.Count(txt, "<style>"), strings.Count(txt, "</style>"))
+}
+
+func TestRequest_HeadHTML_DebugMeta(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.Debug = true
+	if err = jw.GenerateHeadHTML(); err != nil {
+		t.Fatal(err)
+	}
+	rq := jw.NewRequest(nil)
+	defer jw.recycle(rq)
+
+	var sb strings.Builder
+	if err = rq.Writer(&sb).HeadHTML(); err != nil {
+		t.Fatal(err)
+	}
+	txt := sb.String()
+	if !strings.Contains(txt, `meta name="jawsDebug"`) {
+		t.Fatalf("expected debug meta in head html, got %q", txt)
+	}
 }
 
 func TestRequestWriter_TailHTML(t *testing.T) {

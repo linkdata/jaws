@@ -130,7 +130,12 @@ global.window = {
 global.document = {
 	readyState: "loading",
 	addEventListener: function(){},
-	querySelector: function(){ return { content: "123" }; },
+	querySelector: function(selector){
+		if (selector === 'meta[name="jawsKey"]') {
+			return { content: "123" };
+		}
+		return null;
+	},
 	querySelectorAll: function(){ return { forEach: function(){} }; },
 	getElementById: function(){ return null; },
 };
@@ -345,5 +350,220 @@ process.stdout.write(JSON.stringify({ attrWrites: attrWrites, title: elem.attrs.
 	}
 	if got.Title != "changed" {
 		t.Fatalf("title = %q, want %q", got.Title, "changed")
+	}
+}
+
+func TestJawsJS_DebugEnabledWhenMetaTagIsPresent(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+document.querySelector = function(selector) {
+	if (selector === 'meta[name="jawsDebug"]') {
+		return { content: "" };
+	}
+	if (selector === 'meta[name="jawsKey"]') {
+		return { content: "123" };
+	}
+	return null;
+};
+jawsDebug = false;
+function FakeSocket() {}
+FakeSocket.prototype.addEventListener = function() {};
+WebSocket = FakeSocket;
+jawsConnect();
+process.stdout.write(JSON.stringify({ jawsDebug: jawsDebug }));
+`)
+
+	var got struct {
+		JawsDebug bool `json:"jawsDebug"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if !got.JawsDebug {
+		t.Fatal("jawsDebug = false, want true when meta[name=\"jawsDebug\"] is present")
+	}
+}
+
+func TestJawsJS_InnerSkipsComparisonWhenDebugDisabled(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+jawsDebug = false;
+let innerReads = 0;
+let innerWrites = 0;
+const elem = {
+	id: "Jid.1",
+	querySelectorAll: function() { return []; }
+};
+Object.defineProperty(elem, "innerHTML", {
+	get: function() {
+		innerReads++;
+		throw new Error("innerHTML must not be read when jawsDebug=false");
+	},
+	set: function(v) {
+		innerWrites++;
+		this._inner = v;
+	},
+	enumerable: true,
+	configurable: true,
+});
+document.getElementById = function(id) { return id === "Jid.1" ? elem : null; };
+
+jawsPerform("Inner", "Jid.1", JSON.stringify("<b>x</b>"));
+process.stdout.write(JSON.stringify({ innerReads: innerReads, innerWrites: innerWrites, html: elem._inner }));
+`)
+
+	var got struct {
+		InnerReads  int    `json:"innerReads"`
+		InnerWrites int    `json:"innerWrites"`
+		HTML        string `json:"html"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.InnerReads != 0 {
+		t.Fatalf("innerHTML reads = %d, want 0", got.InnerReads)
+	}
+	if got.InnerWrites != 1 {
+		t.Fatalf("innerHTML writes = %d, want 1", got.InnerWrites)
+	}
+	if got.HTML != "<b>x</b>" {
+		t.Fatalf("innerHTML = %q, want %q", got.HTML, "<b>x</b>")
+	}
+}
+
+func TestJawsJS_ReplaceSkipsComparisonWhenDebugDisabled(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+jawsDebug = false;
+let outerReads = 0;
+let replaceCalls = 0;
+const elem = {
+	id: "Jid.1",
+	querySelectorAll: function() { return []; },
+	replaceWith: function() { replaceCalls++; }
+};
+Object.defineProperty(elem, "outerHTML", {
+	get: function() {
+		outerReads++;
+		throw new Error("outerHTML must not be read when jawsDebug=false");
+	},
+	enumerable: true,
+	configurable: true,
+});
+document.getElementById = function(id) { return id === "Jid.1" ? elem : null; };
+document.createElement = function(tag) {
+	if (tag !== "template") throw new Error("unexpected tag " + tag);
+	const template = {
+		content: {
+			querySelectorAll: function() { return []; }
+		}
+	};
+	Object.defineProperty(template, "innerHTML", {
+		get: function() { return this._inner || ""; },
+		set: function(v) { this._inner = v; },
+		enumerable: true,
+		configurable: true,
+	});
+	return template;
+};
+
+jawsPerform("Replace", "Jid.1", JSON.stringify("<div id=\"Jid.1\"></div>"));
+process.stdout.write(JSON.stringify({ outerReads: outerReads, replaceCalls: replaceCalls }));
+`)
+
+	var got struct {
+		OuterReads   int `json:"outerReads"`
+		ReplaceCalls int `json:"replaceCalls"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.OuterReads != 0 {
+		t.Fatalf("outerHTML reads = %d, want 0", got.OuterReads)
+	}
+	if got.ReplaceCalls != 1 {
+		t.Fatalf("replace calls = %d, want 1", got.ReplaceCalls)
+	}
+}
+
+func TestJawsJS_InnerWarnsWhenDebugEnabledAndHTMLUnchanged(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+jawsDebug = true;
+const warnings = [];
+console.warn = function(msg) { warnings.push(msg); };
+const elem = {
+	id: "Jid.1",
+	querySelectorAll: function() { return []; },
+	innerHTML: "<b>x</b>"
+};
+document.getElementById = function(id) { return id === "Jid.1" ? elem : null; };
+
+jawsPerform("Inner", "Jid.1", JSON.stringify("<b>x</b>"));
+process.stdout.write(JSON.stringify({ warnings: warnings, innerHTML: elem.innerHTML }));
+`)
+
+	var got struct {
+		Warnings  []string `json:"warnings"`
+		InnerHTML string   `json:"innerHTML"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if len(got.Warnings) != 1 {
+		t.Fatalf("warnings = %d, want 1", len(got.Warnings))
+	}
+	if !strings.Contains(got.Warnings[0], "marked dirty but it generated the same HTML") {
+		t.Fatalf("unexpected warning text %q", got.Warnings[0])
+	}
+	if got.InnerHTML != "<b>x</b>" {
+		t.Fatalf("innerHTML = %q, want unchanged", got.InnerHTML)
+	}
+}
+
+func TestJawsJS_ReplaceWarnsWhenDebugEnabledAndHTMLUnchanged(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+jawsDebug = true;
+let replaceCalls = 0;
+const warnings = [];
+console.warn = function(msg) { warnings.push(msg); };
+const elem = {
+	id: "Jid.1",
+	querySelectorAll: function() { return []; },
+	outerHTML: "<div id=\"Jid.1\"></div>",
+	replaceWith: function() { replaceCalls++; }
+};
+document.getElementById = function(id) { return id === "Jid.1" ? elem : null; };
+document.createElement = function(tag) {
+	if (tag !== "template") throw new Error("unexpected tag " + tag);
+	const template = {
+		content: {
+			querySelectorAll: function() { return []; }
+		}
+	};
+	Object.defineProperty(template, "innerHTML", {
+		get: function() { return this._inner || ""; },
+		set: function(v) { this._inner = v; },
+		enumerable: true,
+		configurable: true,
+	});
+	return template;
+};
+
+jawsPerform("Replace", "Jid.1", JSON.stringify("<div id=\"Jid.1\"></div>"));
+process.stdout.write(JSON.stringify({ warnings: warnings, replaceCalls: replaceCalls }));
+`)
+
+	var got struct {
+		Warnings     []string `json:"warnings"`
+		ReplaceCalls int      `json:"replaceCalls"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if len(got.Warnings) != 1 {
+		t.Fatalf("warnings = %d, want 1", len(got.Warnings))
+	}
+	if !strings.Contains(got.Warnings[0], "marked dirty but it generated the same HTML") {
+		t.Fatalf("unexpected warning text %q", got.Warnings[0])
+	}
+	if got.ReplaceCalls != 1 {
+		t.Fatalf("replace calls = %d, want 1", got.ReplaceCalls)
 	}
 }
