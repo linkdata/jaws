@@ -2,6 +2,7 @@ package assets
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/url"
 	"os/exec"
 	"path/filepath"
@@ -227,5 +228,122 @@ process.stdout.write(jaws.sent[0] || "");
 		if _, ok := wire.Parse([]byte(raw)); !ok {
 			t.Fatalf("jawsVar should not emit unparseable Set frame when JsVar name is unregistered, got %q", raw)
 		}
+	}
+}
+
+func TestJawsJS_SetSkipsUnchangedJsVarUpdate(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+let setCalls = 0;
+let currentState = 7;
+window.app = {};
+Object.defineProperty(window.app, "state", {
+	get: function() { return currentState; },
+	set: function(v) { setCalls++; currentState = v; },
+	enumerable: true,
+	configurable: true,
+});
+
+const elem = { id: "Jid.1", dataset: { jawsname: "app" } };
+document.getElementById = function(id) { return id === "Jid.1" ? elem : null; };
+
+jawsPerform("Set", "Jid.1", "state=7");
+jawsPerform("Set", "Jid.1", "state=8");
+
+process.stdout.write(JSON.stringify({ setCalls: setCalls, state: window.app.state }));
+`)
+
+	var got struct {
+		SetCalls int `json:"setCalls"`
+		State    int `json:"state"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.SetCalls != 1 {
+		t.Fatalf("Set() writes = %d, want 1", got.SetCalls)
+	}
+	if got.State != 8 {
+		t.Fatalf("state = %d, want 8", got.State)
+	}
+}
+
+func TestJawsJS_ValueSkipsUnchangedCheckboxUpdate(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+let checked = true;
+let checkedWrites = 0;
+const elem = {
+	id: "Jid.1",
+	tagName: "INPUT",
+	getAttribute: function(name) {
+		if (name === "type") return "checkbox";
+		return null;
+	}
+};
+Object.defineProperty(elem, "checked", {
+	get: function() { return checked; },
+	set: function(v) { checkedWrites++; checked = v; },
+	enumerable: true,
+	configurable: true,
+});
+document.getElementById = function(id) { return id === "Jid.1" ? elem : null; };
+
+jawsPerform("Value", "Jid.1", JSON.stringify("true"));
+jawsPerform("Value", "Jid.1", JSON.stringify("false"));
+
+process.stdout.write(JSON.stringify({ checkedWrites: checkedWrites, checked: checked }));
+`)
+
+	var got struct {
+		CheckedWrites int  `json:"checkedWrites"`
+		Checked       bool `json:"checked"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.CheckedWrites != 1 {
+		t.Fatalf("checkbox writes = %d, want 1", got.CheckedWrites)
+	}
+	if got.Checked {
+		t.Fatalf("checkbox final value = %v, want false", got.Checked)
+	}
+}
+
+func TestJawsJS_SetAttrSkipsUnchangedAttributeValue(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+let attrWrites = 0;
+const elem = {
+	id: "Jid.1",
+	attrs: { title: "same" },
+	getAttribute: function(name) {
+		if (Object.prototype.hasOwnProperty.call(this.attrs, name)) {
+			return this.attrs[name];
+		}
+		return null;
+	},
+	setAttribute: function(name, value) {
+		attrWrites++;
+		this.attrs[name] = value;
+	}
+};
+document.getElementById = function(id) { return id === "Jid.1" ? elem : null; };
+
+jawsPerform("SAttr", "Jid.1", JSON.stringify("title\nsame"));
+jawsPerform("SAttr", "Jid.1", JSON.stringify("title\nchanged"));
+
+process.stdout.write(JSON.stringify({ attrWrites: attrWrites, title: elem.attrs.title }));
+`)
+
+	var got struct {
+		AttrWrites int    `json:"attrWrites"`
+		Title      string `json:"title"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.AttrWrites != 1 {
+		t.Fatalf("attribute writes = %d, want 1", got.AttrWrites)
+	}
+	if got.Title != "changed" {
+		t.Fatalf("title = %q, want %q", got.Title, "changed")
 	}
 }
