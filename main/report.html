@@ -1225,7 +1225,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
                         }
                         <span class="cov8" title="1">headPrefix, faviconURL := assets.PreloadHTML(urls...)
                         if jw.Debug </span><span class="cov8" title="1">{
-                                headPrefix += `&lt;meta name="jawsDebug"&gt;`
+                                headPrefix += `&lt;meta name="jawsDebug" content="true"&gt;`
                         }</span>
                         <span class="cov8" title="1">headPrefix += `&lt;meta name="jawsKey" content="`
                         cspHeader, csperr := secureheaders.BuildContentSecurityPolicy(urls)
