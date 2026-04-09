@@ -383,11 +383,14 @@ process.stdout.write(JSON.stringify({ jawsDebug: jawsDebug }));
 	}
 }
 
-func TestJawsJS_InnerSkipsComparisonWhenDebugDisabled(t *testing.T) {
+func TestJawsJS_InnerComparesAndUpdatesWhenDebugDisabled(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 jawsDebug = false;
+const warnings = [];
+console.warn = function(msg) { warnings.push(msg); };
 let innerReads = 0;
 let innerWrites = 0;
+let innerValue = "<i>old</i>";
 const elem = {
 	id: "Jid.1",
 	querySelectorAll: function() { return []; }
@@ -395,11 +398,11 @@ const elem = {
 Object.defineProperty(elem, "innerHTML", {
 	get: function() {
 		innerReads++;
-		throw new Error("innerHTML must not be read when jawsDebug=false");
+		return innerValue;
 	},
 	set: function(v) {
 		innerWrites++;
-		this._inner = v;
+		innerValue = v;
 	},
 	enumerable: true,
 	configurable: true,
@@ -407,19 +410,20 @@ Object.defineProperty(elem, "innerHTML", {
 document.getElementById = function(id) { return id === "Jid.1" ? elem : null; };
 
 jawsPerform("Inner", "Jid.1", JSON.stringify("<b>x</b>"));
-process.stdout.write(JSON.stringify({ innerReads: innerReads, innerWrites: innerWrites, html: elem._inner }));
+process.stdout.write(JSON.stringify({ innerReads: innerReads, innerWrites: innerWrites, html: innerValue, warningCount: warnings.length }));
 `)
 
 	var got struct {
-		InnerReads  int    `json:"innerReads"`
-		InnerWrites int    `json:"innerWrites"`
-		HTML        string `json:"html"`
+		InnerReads   int    `json:"innerReads"`
+		InnerWrites  int    `json:"innerWrites"`
+		HTML         string `json:"html"`
+		WarningCount int    `json:"warningCount"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
 		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
 	}
-	if got.InnerReads != 0 {
-		t.Fatalf("innerHTML reads = %d, want 0", got.InnerReads)
+	if got.InnerReads != 1 {
+		t.Fatalf("innerHTML reads = %d, want 1", got.InnerReads)
 	}
 	if got.InnerWrites != 1 {
 		t.Fatalf("innerHTML writes = %d, want 1", got.InnerWrites)
@@ -427,13 +431,19 @@ process.stdout.write(JSON.stringify({ innerReads: innerReads, innerWrites: inner
 	if got.HTML != "<b>x</b>" {
 		t.Fatalf("innerHTML = %q, want %q", got.HTML, "<b>x</b>")
 	}
+	if got.WarningCount != 0 {
+		t.Fatalf("warnings = %d, want 0", got.WarningCount)
+	}
 }
 
-func TestJawsJS_ReplaceSkipsComparisonWhenDebugDisabled(t *testing.T) {
+func TestJawsJS_ReplaceComparesAndUpdatesWhenDebugDisabled(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 jawsDebug = false;
+const warnings = [];
+console.warn = function(msg) { warnings.push(msg); };
 let outerReads = 0;
 let replaceCalls = 0;
+let outerValue = "<div id=\"Jid.1\"><i>old</i></div>";
 const elem = {
 	id: "Jid.1",
 	querySelectorAll: function() { return []; },
@@ -442,7 +452,7 @@ const elem = {
 Object.defineProperty(elem, "outerHTML", {
 	get: function() {
 		outerReads++;
-		throw new Error("outerHTML must not be read when jawsDebug=false");
+		return outerValue;
 	},
 	enumerable: true,
 	configurable: true,
@@ -465,21 +475,25 @@ document.createElement = function(tag) {
 };
 
 jawsPerform("Replace", "Jid.1", JSON.stringify("<div id=\"Jid.1\"></div>"));
-process.stdout.write(JSON.stringify({ outerReads: outerReads, replaceCalls: replaceCalls }));
+process.stdout.write(JSON.stringify({ outerReads: outerReads, replaceCalls: replaceCalls, warningCount: warnings.length }));
 `)
 
 	var got struct {
 		OuterReads   int `json:"outerReads"`
 		ReplaceCalls int `json:"replaceCalls"`
+		WarningCount int `json:"warningCount"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
 		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
 	}
-	if got.OuterReads != 0 {
-		t.Fatalf("outerHTML reads = %d, want 0", got.OuterReads)
+	if got.OuterReads != 1 {
+		t.Fatalf("outerHTML reads = %d, want 1", got.OuterReads)
 	}
 	if got.ReplaceCalls != 1 {
 		t.Fatalf("replace calls = %d, want 1", got.ReplaceCalls)
+	}
+	if got.WarningCount != 0 {
+		t.Fatalf("warnings = %d, want 0", got.WarningCount)
 	}
 }
 
@@ -563,7 +577,7 @@ process.stdout.write(JSON.stringify({ warnings: warnings, replaceCalls: replaceC
 	if !strings.Contains(got.Warnings[0], "marked dirty but it generated the same HTML") {
 		t.Fatalf("unexpected warning text %q", got.Warnings[0])
 	}
-	if got.ReplaceCalls != 1 {
-		t.Fatalf("replace calls = %d, want 1", got.ReplaceCalls)
+	if got.ReplaceCalls != 0 {
+		t.Fatalf("replace calls = %d, want 0", got.ReplaceCalls)
 	}
 }
