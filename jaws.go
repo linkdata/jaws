@@ -480,7 +480,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 			}
 			headPrefix, faviconURL := assets.PreloadHTML(urls...)
 			if jw.Debug {
-				headPrefix += `<meta name="jawsDebug">`
+				headPrefix += `<meta name="jawsDebug" content="true">`
 			}
 			headPrefix += `<meta name="jawsKey" content="`
 			cspHeader, csperr := secureheaders.BuildContentSecurityPolicy(urls)
