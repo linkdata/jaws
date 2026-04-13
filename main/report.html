@@ -635,15 +635,18 @@ func (e errRequestCancelled) Unwrap() error <span class="cov8" title="1">{
 }</span>
 
 func newErrRequestCancelledLocked(rq *Request, cause error) (err error) <span class="cov8" title="1">{
-        var initial string
-        if rq.initial != nil </span><span class="cov8" title="1">{
-                initial = fmt.Sprintf(" %s %q:", rq.initial.Method, rq.initial.RequestURI)
-        }</span>
-        <span class="cov8" title="1">return errRequestCancelled{
-                JawsKey: rq.JawsKey,
-                Cause:   cause,
-                Initial: initial,
-        }</span>
+        if cause != nil </span><span class="cov8" title="1">{
+                var initial string
+                if rq.initial != nil </span><span class="cov8" title="1">{
+                        initial = fmt.Sprintf(" %s %q:", rq.initial.Method, rq.initial.RequestURI)
+                }</span>
+                <span class="cov8" title="1">err = errRequestCancelled{
+                        JawsKey: rq.JawsKey,
+                        Cause:   cause,
+                        Initial: initial,
+                }</span>
+        }
+        <span class="cov8" title="1">return</span>
 }
 </pre>
 		
