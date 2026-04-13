@@ -28,13 +28,16 @@ func (e errRequestCancelled) Unwrap() error {
 }
 
 func newErrRequestCancelledLocked(rq *Request, cause error) (err error) {
-	var initial string
-	if rq.initial != nil {
-		initial = fmt.Sprintf(" %s %q:", rq.initial.Method, rq.initial.RequestURI)
+	if cause != nil {
+		var initial string
+		if rq.initial != nil {
+			initial = fmt.Sprintf(" %s %q:", rq.initial.Method, rq.initial.RequestURI)
+		}
+		err = errRequestCancelled{
+			JawsKey: rq.JawsKey,
+			Cause:   cause,
+			Initial: initial,
+		}
 	}
-	return errRequestCancelled{
-		JawsKey: rq.JawsKey,
-		Cause:   cause,
-		Initial: initial,
-	}
+	return
 }

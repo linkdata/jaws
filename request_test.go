@@ -1064,6 +1064,9 @@ func TestRequest_CustomErrors(t *testing.T) {
 	th.True(errors.Is(err, ErrRequestCancelled))
 	th.True(errors.Is(err, ErrNoWebSocketRequest))
 	th.Equal(errors.Is(cause, ErrRequestCancelled), false)
+	if errtxt := err.Error(); !strings.Contains(errtxt, cause.Error()) {
+		t.Error(errtxt)
+	}
 	var target1 errNoWebSocketRequest
 	th.True(errors.As(err, &target1))
 	var target2 errRequestCancelled
