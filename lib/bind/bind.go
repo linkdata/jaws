@@ -9,7 +9,7 @@ import (
 // The pointer will be used as the UI tag.
 func New[T comparable](l sync.Locker, p *T) Binder[T] {
 	if rl, ok := l.(RWLocker); ok {
-		return binding[T]{RWLocker: rl, ptr: p}
+		return &binder[T]{RWLocker: rl, ptr: p}
 	}
-	return binding[T]{RWLocker: rwlocker{l}, ptr: p}
+	return &binder[T]{RWLocker: rwlocker{l}, ptr: p}
 }

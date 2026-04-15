@@ -248,6 +248,47 @@ func testBind_Hook_Get[T comparable](t *testing.T, testval T) {
 	}
 }
 
+func TestBind_Hook_SetGet_ReceivePreviousBinder(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	root := New(&mu, &val)
+
+	set1PrevOK := false
+	set2PrevOK := false
+	set1 := root.SetLocked(func(bind Binder[string], elem *jaws.Element, value string) (err error) {
+		set1PrevOK = bind == root
+		return bind.JawsSetLocked(elem, value)
+	})
+	set2 := set1.SetLocked(func(bind Binder[string], elem *jaws.Element, value string) (err error) {
+		set2PrevOK = bind == set1
+		return bind.JawsSetLocked(elem, value)
+	})
+	if err := set2.JawsSet(nil, "foo"); err != nil {
+		t.Fatal(err)
+	}
+	if !set1PrevOK || !set2PrevOK {
+		t.Fatalf("SetLocked previous binder mismatch: set1=%v set2=%v", set1PrevOK, set2PrevOK)
+	}
+
+	get1PrevOK := false
+	get2PrevOK := false
+	get1 := root.GetLocked(func(bind Binder[string], elem *jaws.Element) (value string) {
+		get1PrevOK = bind == root
+		return bind.JawsGetLocked(elem)
+	})
+	get2 := get1.GetLocked(func(bind Binder[string], elem *jaws.Element) (value string) {
+		get2PrevOK = bind == get1
+		return bind.JawsGetLocked(elem)
+	})
+	if got := get2.JawsGet(nil); got != "foo" {
+		t.Fatalf("want foo got %q", got)
+	}
+	if !get1PrevOK || !get2PrevOK {
+		t.Fatalf("GetLocked previous binder mismatch: get1=%v get2=%v", get1PrevOK, get2PrevOK)
+	}
+}
+
 func TestBind_Hook_Clicked_binding(t *testing.T) {
 	var mu deadlock.Mutex
 	var val string
