@@ -1037,7 +1037,7 @@ func TestRequest_IncomingClick(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.InCh <- wire.WsMsg{What: what.Click, Data: "name\t1\t2\tJid.1\tJid.2"}:
+	case rq.InCh <- wire.WsMsg{What: what.Click, Data: "1 2 0 name\tJid.1\tJid.2"}:
 	}
 
 	select {
@@ -1077,7 +1077,7 @@ func TestRequest_IncomingContextMenu(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.InCh <- wire.WsMsg{What: what.ContextMenu, Data: "name\t10\t20\ttrue\tfalse\ttrue\tJid.1\tJid.2"}:
+	case rq.InCh <- wire.WsMsg{What: what.ContextMenu, Data: "10 20 5 name\tJid.1\tJid.2"}:
 	}
 
 	select {
@@ -1485,7 +1485,7 @@ func TestRequest_Template_Event(t *testing.T) {
 	rq.Jaws.Broadcast(wire.Message{
 		Dest: dot,
 		What: what.Click,
-		Data: "foo\t1\t2",
+		Data: "1 2 0 foo",
 	})
 	select {
 	case <-time.NewTimer(testTimeout).C:

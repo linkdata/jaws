@@ -51,20 +51,20 @@ func Test_wsMsg_Append(t *testing.T) {
 		{
 			name: "click data with coordinates and modifiers",
 			fields: fields{
-				Data: "name\t10\t20\ttrue\tfalse\ttrue",
+				Data: "10 20 5 name",
 				Jid:  1,
 				What: what.Click,
 			},
-			want: "Click\tJid.1\t\"name\\t10\\t20\\ttrue\\tfalse\\ttrue\"\n",
+			want: "Click\tJid.1\t\"10 20 5 name\"\n",
 		},
 		{
 			name: "context menu data with coordinates and modifiers",
 			fields: fields{
-				Data: "name\t10\t20\ttrue\tfalse\ttrue",
+				Data: "10 20 5 name",
 				Jid:  1,
 				What: what.ContextMenu,
 			},
-			want: "ContextMenu\tJid.1\t\"name\\t10\\t20\\ttrue\\tfalse\\ttrue\"\n",
+			want: "ContextMenu\tJid.1\t\"10 20 5 name\"\n",
 		},
 		{
 			name: "escaped text data",
@@ -126,7 +126,7 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 		{"shortest", "Update\t\t\n", WsMsg{What: what.Update}},
 		{"unquoted", "Input\tJid.1\ttrue\n", WsMsg{Jid: jid.Jid(1), What: what.Input, Data: "true"}},
 		{"normal", "Input\tJid.2\t\"c\"\n", WsMsg{Jid: jid.Jid(2), What: what.Input, Data: "c"}},
-		{"context menu", "ContextMenu\tJid.2\t\"name\\t1\\t2\\ttrue\\tfalse\\ttrue\"\n", WsMsg{Jid: jid.Jid(2), What: what.ContextMenu, Data: "name\t1\t2\ttrue\tfalse\ttrue"}},
+		{"context menu", "ContextMenu\tJid.2\t\"1 2 5 name\"\n", WsMsg{Jid: jid.Jid(2), What: what.ContextMenu, Data: "1 2 5 name"}},
 		{"newline", "Input\tJid.3\t\"c\\nd\"\n", WsMsg{Jid: jid.Jid(3), What: what.Input, Data: "c\nd"}},
 	}
 	for _, tt := range tests {
@@ -163,8 +163,8 @@ func Test_wsParse_IncompleteFails(t *testing.T) {
 
 func Fuzz_wsParse(f *testing.F) {
 	f.Add([]byte("Update\t\t\"\"\n"))
-	f.Add([]byte("Click\t\t\"name\\t10\\t20\\ttrue\\tfalse\\ttrue\\tJid.1\"\n"))
-	f.Add([]byte("ContextMenu\tJid.1\t\"menu\\t1\\t2\\tfalse\\tfalse\\tfalse\"\n"))
+	f.Add([]byte("Click\t\t\"10 20 5 name\\tJid.1\"\n"))
+	f.Add([]byte("ContextMenu\tJid.1\t\"1 2 0 menu\"\n"))
 	f.Add([]byte("Inner\tJid.1\t\"data\\nline\"\n"))
 	f.Add([]byte("Set\tJid.1\tpath={\"a\":1}\n"))
 	f.Add([]byte("Call\tJid.1\tfn=[1,2]\n"))
@@ -190,8 +190,8 @@ func Fuzz_wsParse(f *testing.F) {
 
 func Fuzz_wsMsgAppendParseRoundTrip(f *testing.F) {
 	f.Add(uint8(what.Input), int32(0), "value")
-	f.Add(uint8(what.Click), int32(1), "name\t1\t2\ttrue\tfalse\ttrue")
-	f.Add(uint8(what.ContextMenu), int32(2), "menu\t3\t4\tfalse\ttrue\tfalse")
+	f.Add(uint8(what.Click), int32(1), "1 2 5 name")
+	f.Add(uint8(what.ContextMenu), int32(2), "3 4 2 menu")
 	f.Add(uint8(what.Set), int32(3), `path={"a":1}`)
 	f.Add(uint8(what.Call), int32(4), `fn=[1,2]`)
 	f.Fuzz(func(t *testing.T, whatv uint8, jidv int32, data string) {

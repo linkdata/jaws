@@ -702,34 +702,20 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err 
 	rq.mu.RLock()
 	if id == 0 {
 		if wht == what.Click || wht == what.ContextMenu {
-			var clk Click
 			var after string
-			var ok bool
-			if clk, after, ok = parseClickData(val); ok {
-				val = clk.String()
-				for _, jidStr := range strings.Split(after, "\t") {
-					if id = jid.ParseString(jidStr); id > 0 {
-						if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() {
-							elems = append(elems, e)
-						}
+			var found bool
+			val, after, found = strings.Cut(val, "\t")
+			for found {
+				var jidStr string
+				jidStr, after, found = strings.Cut(after, "\t")
+				if id = jid.ParseString(jidStr); id > 0 {
+					if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() {
+						elems = append(elems, e)
 					}
 				}
-			} else {
-				rq.mu.RUnlock()
-				return nil
 			}
 		}
 	} else {
-		if wht == what.Click || wht == what.ContextMenu {
-			var clk Click
-			var ok bool
-			if clk, _, ok = parseClickData(val); ok {
-				val = clk.String()
-			} else {
-				rq.mu.RUnlock()
-				return nil
-			}
-		}
 		if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() {
 			elems = append(elems, e)
 		}

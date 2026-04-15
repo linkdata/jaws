@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -15,59 +16,64 @@ type Click struct {
 	Alt     bool
 }
 
-func (clk Click) String() string {
-	var b []byte
-	b = append(b, clk.Name...)
-	b = append(b, '\t')
-	b = strconv.AppendInt(b, int64(clk.X), 10)
-	b = append(b, '\t')
-	b = strconv.AppendInt(b, int64(clk.Y), 10)
-	b = append(b, '\t')
-	b = strconv.AppendBool(b, clk.Shift)
-	b = append(b, '\t')
-	b = strconv.AppendBool(b, clk.Control)
-	b = append(b, '\t')
-	b = strconv.AppendBool(b, clk.Alt)
-	return string(b)
-}
+const (
+	clickKeyShift = (1 << iota)
+	clickKeyControl
+	clickKeyAlt
+)
 
-func parseClickData(val string) (clk Click, after string, ok bool) {
-	parts := strings.Split(val, "\t")
-	if len(parts) < 3 {
-		return
+func (clk Click) keyState() (state int) {
+	if clk.Shift {
+		state |= clickKeyShift
 	}
-	clk.Name = parts[0]
-	if clk.X, ok = parseClickCoord(parts[1]); !ok {
-		return
+	if clk.Control {
+		state |= clickKeyControl
 	}
-	if clk.Y, ok = parseClickCoord(parts[2]); !ok {
-		return
+	if clk.Alt {
+		state |= clickKeyAlt
 	}
-	idx := 3
-	if idx < len(parts) {
-		if v, berr := strconv.ParseBool(parts[idx]); berr == nil {
-			clk.Shift = v
-			idx++
-			if idx < len(parts) {
-				if v, berr = strconv.ParseBool(parts[idx]); berr == nil {
-					clk.Control = v
-					idx++
-					if idx < len(parts) {
-						if v, berr = strconv.ParseBool(parts[idx]); berr == nil {
-							clk.Alt = v
-							idx++
-						}
-					}
-				}
-			}
-		}
-	}
-	after = strings.Join(parts[idx:], "\t")
-	ok = true
 	return
 }
 
-func parseClickCoord(v string) (n int, ok bool) {
+func (clk *Click) setKeyState(state int) {
+	clk.Shift = (state & clickKeyShift) != 0
+	clk.Control = (state & clickKeyControl) != 0
+	clk.Alt = (state & clickKeyAlt) != 0
+}
+
+func (clk Click) String() string {
+	return fmt.Sprintf("%d %d %d %s", clk.X, clk.Y, clk.keyState(), clk.Name)
+}
+
+func parseClickData(val string) (clk Click, after string, ok bool) {
+	var clickPart string
+	clickPart, after, _ = strings.Cut(val, "\t")
+	var n int
+	var kstate int
+	ok = true
+	for field := range strings.FieldsSeq(clickPart) {
+		if ok {
+			switch n {
+			case 0:
+				clk.X, ok = runAtoi(field)
+			case 1:
+				clk.Y, ok = runAtoi(field)
+			case 2:
+				kstate, ok = runAtoi(field)
+				clk.setKeyState(kstate)
+			case 3:
+				clk.Name = field
+			default:
+				clk.Name += " " + field
+			}
+			n++
+		}
+	}
+	ok = ok && n >= 3
+	return
+}
+
+func runAtoi(v string) (n int, ok bool) {
 	var err error
 	n, err = strconv.Atoi(v)
 	ok = err == nil

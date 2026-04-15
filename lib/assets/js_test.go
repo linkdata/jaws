@@ -280,7 +280,59 @@ process.stdout.write(jaws.sent[0] || "");
 	if msg.What != what.Click {
 		t.Fatalf("unexpected what: got %v", msg.What)
 	}
-	if msg.Data != "save\t11\t22\ttrue\tfalse\ttrue\tJid.2\tJid.1" {
+	if msg.Data != "11 22 5 save\tJid.2\tJid.1" {
+		t.Fatalf("unexpected click payload %q", msg.Data)
+	}
+}
+
+func TestJawsJS_ClickHandlesNonElementTarget(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+const parent = {
+	id: "Jid.1",
+	tagName: "DIV",
+	getAttribute: function() { return null; },
+	textContent: "",
+	parentElement: null
+};
+const targetElem = {
+	id: "Jid.2",
+	tagName: "DIV",
+	getAttribute: function(name) { return name === "name" ? "save" : null; },
+	textContent: "",
+	parentElement: parent
+};
+const textNodeLike = {
+	parentElement: targetElem
+};
+const ev = new Event();
+ev.target = textNodeLike;
+ev.clientX = 11;
+ev.clientY = 22;
+ev.shiftKey = false;
+ev.ctrlKey = false;
+ev.altKey = false;
+ev.stopPropagation = function() {};
+
+jawsClickHandler(ev);
+process.stdout.write(jaws.sent[0] || "");
+`)
+
+	if raw == "" {
+		t.Fatal("jawsClickHandler did not emit a websocket frame")
+	}
+	msg, ok := wire.Parse([]byte(raw))
+	if !ok {
+		t.Fatalf("click frame must be parseable by wire.Parse, got %q", raw)
+	}
+	if msg.What != what.Click {
+		t.Fatalf("unexpected what: got %v", msg.What)
+	}
+	if msg.Data != "11 22 0 save\tJid.2\tJid.1" {
 		t.Fatalf("unexpected click payload %q", msg.Data)
 	}
 }
@@ -343,7 +395,7 @@ process.stdout.write(JSON.stringify({ msg: jaws.sent[0] || "", prevented: preven
 	if msg.What != what.ContextMenu {
 		t.Fatalf("unexpected what: got %v", msg.What)
 	}
-	if msg.Data != "menu\t33\t44\tfalse\ttrue\tfalse\tJid.2\tJid.1" {
+	if msg.Data != "33 44 2 menu\tJid.2\tJid.1" {
 		t.Fatalf("unexpected context menu payload %q", msg.Data)
 	}
 }

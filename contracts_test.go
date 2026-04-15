@@ -71,7 +71,7 @@ func Test_clickHandlerWapper_JawsEvent(t *testing.T) {
 	default:
 	}
 
-	rq.InCh <- wire.WsMsg{Data: "adam\t1\t2", Jid: 1, What: what.Click}
+	rq.InCh <- wire.WsMsg{Data: "1 2 0 adam", Jid: 1, What: what.Click}
 	select {
 	case <-th.C:
 		th.Timeout()

@@ -125,10 +125,10 @@ return `ErrEventUnhandled` if it didn't handle the event or wants
 to pass it to the next handler.
 
 * `onclick` invokes `JawsClick` if present, otherwise `JawsEvent` with `what.Click`
-  (`val` as `name<TAB>x<TAB>y<TAB>shift<TAB>control<TAB>alt`)
+  (`val` as `x<SP>y<SP>keystate<SP>name`)
 * `oncontextmenu` invokes `JawsContextMenu` if present, otherwise `JawsEvent`
   with `what.ContextMenu`
-  (`val` as `name<TAB>x<TAB>y<TAB>shift<TAB>control<TAB>alt`)
+  (`val` as `x<SP>y<SP>keystate<SP>name`)
 * `oninput` invokes `JawsEvent` with `what.Input`
 
 ## Technical notes

@@ -14,40 +14,51 @@ func TestParseClickData(t *testing.T) {
 		wantOK  bool
 	}{
 		{
-			name:   "legacy without modifiers",
-			in:     "save\t10\t20",
+			name:   "without modifiers",
+			in:     "10 20 0 save",
 			want:   Click{Name: "save", X: 10, Y: 20},
 			wantOK: true,
 		},
 		{
 			name:    "with modifiers and route",
-			in:      "save\t10\t20\ttrue\tfalse\ttrue\tJid.1\tJid.2",
+			in:      "10 20 5 save\tJid.1\tJid.2",
 			want:    Click{Name: "save", X: 10, Y: 20, Shift: true, Alt: true},
 			wantRem: "Jid.1\tJid.2",
 			wantOK:  true,
 		},
 		{
 			name:    "route without modifiers",
-			in:      "save\t10\t20\tJid.1",
+			in:      "10 20 0 save\tJid.1",
 			want:    Click{Name: "save", X: 10, Y: 20},
 			wantRem: "Jid.1",
 			wantOK:  true,
 		},
 		{
 			name:    "one modifier and route",
-			in:      "save\t10\t20\ttrue\tJid.1",
-			want:    Click{Name: "save", X: 10, Y: 20, Shift: true},
+			in:      "10 20 2 save\tJid.1",
+			want:    Click{Name: "save", X: 10, Y: 20, Control: true},
 			wantRem: "Jid.1",
 			wantOK:  true,
 		},
 		{
+			name:   "name with spaces",
+			in:     "10 20 2 save button",
+			want:   Click{Name: "save button", X: 10, Y: 20, Control: true},
+			wantOK: true,
+		},
+		{
 			name:   "invalid x",
-			in:     "save\tbad\t20",
+			in:     "bad 20 0 save",
 			wantOK: false,
 		},
 		{
 			name:   "invalid y",
-			in:     "save\t10\tbad",
+			in:     "10 bad 0 save",
+			wantOK: false,
+		},
+		{
+			name:   "invalid keystate",
+			in:     "10 20 bad save",
 			wantOK: false,
 		},
 	}
@@ -71,19 +82,19 @@ func TestParseClickData(t *testing.T) {
 }
 
 func TestClickString(t *testing.T) {
-	got := (Click{Name: "x", X: 1, Y: 2, Shift: true, Control: false, Alt: true}).String()
-	want := "x\t1\t2\ttrue\tfalse\ttrue"
+	got := (Click{Name: "x", X: 1, Y: 2, Shift: true, Control: true, Alt: true}).String()
+	want := "1 2 7 x"
 	if got != want {
 		t.Fatalf("String() = %q, want %q", got, want)
 	}
 }
 
 func Fuzz_parseClickData(f *testing.F) {
-	f.Add("name\t1\t2")
-	f.Add("name\t1\t2\ttrue\tfalse\ttrue")
-	f.Add("name\t1\t2\ttrue\tfalse\ttrue\tJid.1\tJid.2")
-	f.Add("name\t1\t2\tJid.1")
-	f.Add("name\tbad\t2")
+	f.Add("1 2 0 name")
+	f.Add("1 2 5 name")
+	f.Add("1 2 5 name\tJid.1\tJid.2")
+	f.Add("1 2 0 name\tJid.1")
+	f.Add("bad 2 0 name")
 	f.Fuzz(func(t *testing.T, in string) {
 		clk, after, ok := parseClickData(in)
 		if !ok {
