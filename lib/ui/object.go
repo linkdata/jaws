@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"html/template"
 
 	"github.com/linkdata/jaws"
@@ -31,30 +32,30 @@ type Object interface {
 var _ Object = &object{}
 
 type object struct {
-	prev    *object
+	next    *object
 	handler any
 }
 
-func (o *object) Clicked(fn ClickedHook) (newobj Object) {
-	return &object{
-		prev:    o,
-		handler: fn,
+func (o *object) addNext(handler any) (first *object) {
+	first = o
+	for o.next != nil {
+		o = o.next
 	}
+	o.next = &object{handler: handler}
+	return first
 }
 
-func (o *object) ContextMenu(fn ContextMenuHook) (newobj Object) {
-	return &object{
-		prev:    o,
-		handler: fn,
-	}
+func (o *object) Clicked(fn ClickedHook) Object {
+	return o.addNext(fn)
+}
+
+func (o *object) ContextMenu(fn ContextMenuHook) Object {
+	return o.addNext(fn)
 }
 
 func (o *object) JawsGetHTML(e *jaws.Element) template.HTML {
-	for o != nil {
-		if h, ok := o.handler.(bind.HTMLGetter); ok {
-			return h.JawsGetHTML(e)
-		}
-		o = o.prev
+	if h, ok := o.handler.(bind.HTMLGetter); ok {
+		return h.JawsGetHTML(e)
 	}
 	return ""
 }
@@ -63,11 +64,11 @@ func (o *object) JawsClick(e *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
 	for o != nil {
 		if fn, ok := o.handler.(ClickedHook); ok {
-			if err = fn(o, e, click); err != jaws.ErrEventUnhandled {
+			if err = fn(o, e, click); !errors.Is(err, jaws.ErrEventUnhandled) {
 				return
 			}
 		}
-		o = o.prev
+		o = o.next
 	}
 	return
 }
@@ -76,24 +77,20 @@ func (o *object) JawsContextMenu(e *jaws.Element, click jaws.Click) (err error) 
 	err = jaws.ErrEventUnhandled
 	for o != nil {
 		if fn, ok := o.handler.(ContextMenuHook); ok {
-			if err = fn(o, e, click); err != jaws.ErrEventUnhandled {
+			if err = fn(o, e, click); !errors.Is(err, jaws.ErrEventUnhandled) {
 				return
 			}
 		}
-		o = o.prev
+		o = o.next
 	}
 	return
 }
 
 func (o *object) JawsGetTag(ctx jtag.Context) any {
-	var tags []any
-	for o != nil {
-		if h, ok := o.handler.(jtag.TagGetter); ok {
-			tags = append(tags, h.JawsGetTag(ctx))
-		}
-		o = o.prev
+	if h, ok := o.handler.(jtag.TagGetter); ok {
+		return h.JawsGetTag(ctx)
 	}
-	return tags
+	return nil
 }
 
 // New returns a new Object that will render HTML.
