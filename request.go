@@ -723,11 +723,11 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err 
 	rq.mu.RUnlock()
 
 	for _, e := range elems {
-		if err = CallEventHandlers(e.Ui(), e, wht, val); err != ErrEventUnhandled {
+		if err = CallEventHandlers(e.Ui(), e, wht, val); !errors.Is(err, ErrEventUnhandled) {
 			return
 		}
 	}
-	if err == ErrEventUnhandled {
+	if errors.Is(err, ErrEventUnhandled) {
 		err = nil
 	}
 	return

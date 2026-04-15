@@ -391,6 +391,43 @@ func TestBind_Hook_Clicked_bindingHook_fallsThroughUnhandled(t *testing.T) {
 	}
 }
 
+func TestBind_Hook_Clicked_bindingHook_fallsThroughWrappedUnhandled(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	order := []int{}
+	clickCalls1 := 0
+	clickCalls2 := 0
+	clickBind2 := New(&mu, &val).
+		Clicked(func(Binder[string], *jaws.Element, jaws.Click) error {
+			clickCalls1++
+			order = append(order, 1)
+			return errors.Join(jaws.ErrEventUnhandled, io.EOF)
+		}).
+		Clicked(func(Binder[string], *jaws.Element, jaws.Click) error {
+			clickCalls2++
+			order = append(order, 2)
+			return nil
+		})
+
+	handler, ok := clickBind2.(jaws.ClickHandler)
+	if !ok {
+		t.Fatalf("%T does not implement ClickHandler", clickBind2)
+	}
+	if err := handler.JawsClick(nil, jaws.Click{Name: "two"}); err != nil {
+		t.Fatal(err)
+	}
+	if clickCalls1 != 1 {
+		t.Error(clickCalls1)
+	}
+	if clickCalls2 != 1 {
+		t.Error(clickCalls2)
+	}
+	if !reflect.DeepEqual(order, []int{1, 2}) {
+		t.Error(order)
+	}
+}
+
 func TestBind_Hook_ContextMenu_binding(t *testing.T) {
 	var mu deadlock.Mutex
 	var val string
@@ -438,6 +475,43 @@ func TestBind_Hook_ContextMenu_bindingHook_fallsThroughUnhandled(t *testing.T) {
 			menuCalls1++
 			order = append(order, 1)
 			return jaws.ErrEventUnhandled
+		}).
+		ContextMenu(func(Binder[string], *jaws.Element, jaws.Click) error {
+			menuCalls2++
+			order = append(order, 2)
+			return nil
+		})
+
+	handler, ok := menuBind2.(jaws.ContextMenuHandler)
+	if !ok {
+		t.Fatalf("%T does not implement ContextMenuHandler", menuBind2)
+	}
+	if err := handler.JawsContextMenu(nil, jaws.Click{Name: "two"}); err != nil {
+		t.Fatal(err)
+	}
+	if menuCalls1 != 1 {
+		t.Error(menuCalls1)
+	}
+	if menuCalls2 != 1 {
+		t.Error(menuCalls2)
+	}
+	if !reflect.DeepEqual(order, []int{1, 2}) {
+		t.Error(order)
+	}
+}
+
+func TestBind_Hook_ContextMenu_bindingHook_fallsThroughWrappedUnhandled(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	order := []int{}
+	menuCalls1 := 0
+	menuCalls2 := 0
+	menuBind2 := New(&mu, &val).
+		ContextMenu(func(Binder[string], *jaws.Element, jaws.Click) error {
+			menuCalls1++
+			order = append(order, 1)
+			return errors.Join(jaws.ErrEventUnhandled, io.EOF)
 		}).
 		ContextMenu(func(Binder[string], *jaws.Element, jaws.Click) error {
 			menuCalls2++

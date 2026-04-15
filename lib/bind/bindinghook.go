@@ -1,6 +1,7 @@
 package bind
 
 import (
+	"errors"
 	"fmt"
 	"html/template"
 
@@ -66,13 +67,13 @@ func callChain[T comparable](binder Binder[T], elem *jaws.Element, kind callChai
 				}
 			}
 		case callChainClicked:
-			if err == jaws.ErrEventUnhandled {
+			if errors.Is(err, jaws.ErrEventUnhandled) {
 				if fn, ok := bh.hook.(BindClickedHook[T]); ok {
 					err = fn(bh, elem, param.(jaws.Click))
 				}
 			}
 		case callChainContextMenu:
-			if err == jaws.ErrEventUnhandled {
+			if errors.Is(err, jaws.ErrEventUnhandled) {
 				if fn, ok := bh.hook.(BindContextMenuHook[T]); ok {
 					err = fn(bh, elem, param.(jaws.Click))
 				}

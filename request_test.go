@@ -1055,6 +1055,46 @@ func TestRequest_IncomingClick(t *testing.T) {
 	}
 }
 
+func TestRequest_IncomingClick_WrappedUnhandled(t *testing.T) {
+	th := newTestHelper(t)
+	NextJid = 0
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	tjc1 := &testJawsClick{
+		clickCh:    make(chan string, 2),
+		testSetter: newTestSetter(""),
+	}
+	tjc1.SetErr(fmt.Errorf("wrapped: %w", ErrEventUnhandled))
+	tjc2 := &testJawsClick{
+		clickCh:    make(chan string, 2),
+		testSetter: newTestSetter(""),
+	}
+
+	rq.UI(testDivWidget{inner: "1"}, tjc1)
+	rq.UI(testDivWidget{inner: "2"}, tjc2)
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case rq.InCh <- wire.WsMsg{What: what.Click, Data: "1 2 0 name\tJid.1\tJid.2"}:
+	}
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case s := <-tjc2.clickCh:
+		if s != "name" {
+			t.Error(s)
+		}
+	}
+	select {
+	case s := <-tjc1.clickCh:
+		t.Errorf("should have been ignored, got %q", s)
+	default:
+	}
+}
+
 func TestRequest_IncomingContextMenu(t *testing.T) {
 	th := newTestHelper(t)
 	NextJid = 0
@@ -1066,6 +1106,46 @@ func TestRequest_IncomingContextMenu(t *testing.T) {
 		testSetter: newTestSetter(Click{}),
 	}
 	tjc1.SetErr(ErrEventUnhandled)
+	tjc2 := &testJawsContextMenu{
+		clickCh:    make(chan Click, 2),
+		testSetter: newTestSetter(Click{}),
+	}
+
+	rq.UI(testDivWidget{inner: "1"}, tjc1)
+	rq.UI(testDivWidget{inner: "2"}, tjc2)
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case rq.InCh <- wire.WsMsg{What: what.ContextMenu, Data: "10 20 5 name\tJid.1\tJid.2"}:
+	}
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case got := <-tjc2.clickCh:
+		if got != (Click{Name: "name", X: 10, Y: 20, Shift: true, Alt: true}) {
+			t.Error(got)
+		}
+	}
+	select {
+	case got := <-tjc1.clickCh:
+		t.Errorf("should have been ignored, got %#v", got)
+	default:
+	}
+}
+
+func TestRequest_IncomingContextMenu_WrappedUnhandled(t *testing.T) {
+	th := newTestHelper(t)
+	NextJid = 0
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	tjc1 := &testJawsContextMenu{
+		clickCh:    make(chan Click, 2),
+		testSetter: newTestSetter(Click{}),
+	}
+	tjc1.SetErr(fmt.Errorf("wrapped: %w", ErrEventUnhandled))
 	tjc2 := &testJawsContextMenu{
 		clickCh:    make(chan Click, 2),
 		testSetter: newTestSetter(Click{}),

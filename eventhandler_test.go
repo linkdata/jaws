@@ -175,6 +175,7 @@ func Test_CallEventHandlers_ClickDispatchCombinations(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 	elem := rq.NewElement(testDivWidget{inner: "x"})
+	wrappedUnhandled := fmt.Errorf("wrapped: %w", ErrEventUnhandled)
 
 	tests := []struct {
 		name       string
@@ -201,6 +202,14 @@ func Test_CallEventHandlers_ClickDispatchCombinations(t *testing.T) {
 			wantEvents: 0,
 		},
 		{
+			name:       "click-only returns wrapped ErrEventUnhandled",
+			make:       func(rec *clickEventComboRecorder) any { return clickOnlyComboHandler{rec: rec} },
+			clickRet:   wrappedUnhandled,
+			wantErr:    ErrEventUnhandled,
+			wantClicks: 1,
+			wantEvents: 0,
+		},
+		{
 			name:       "event-only returns nil",
 			make:       func(rec *clickEventComboRecorder) any { return eventOnlyComboHandler{rec: rec} },
 			wantErr:    nil,
@@ -211,6 +220,14 @@ func Test_CallEventHandlers_ClickDispatchCombinations(t *testing.T) {
 			name:       "event-only returns ErrEventUnhandled",
 			make:       func(rec *clickEventComboRecorder) any { return eventOnlyComboHandler{rec: rec} },
 			eventRet:   ErrEventUnhandled,
+			wantErr:    ErrEventUnhandled,
+			wantClicks: 0,
+			wantEvents: 1,
+		},
+		{
+			name:       "event-only returns wrapped ErrEventUnhandled",
+			make:       func(rec *clickEventComboRecorder) any { return eventOnlyComboHandler{rec: rec} },
+			eventRet:   wrappedUnhandled,
 			wantErr:    ErrEventUnhandled,
 			wantClicks: 0,
 			wantEvents: 1,
@@ -239,10 +256,27 @@ func Test_CallEventHandlers_ClickDispatchCombinations(t *testing.T) {
 			wantEvents: 1,
 		},
 		{
+			name:       "dual returns wrapped ErrEventUnhandled from click and nil from event",
+			make:       func(rec *clickEventComboRecorder) any { return dualComboHandler{rec: rec} },
+			clickRet:   wrappedUnhandled,
+			wantErr:    nil,
+			wantClicks: 1,
+			wantEvents: 1,
+		},
+		{
 			name:       "dual returns ErrEventUnhandled from click and ErrEventUnhandled from event",
 			make:       func(rec *clickEventComboRecorder) any { return dualComboHandler{rec: rec} },
 			clickRet:   ErrEventUnhandled,
 			eventRet:   ErrEventUnhandled,
+			wantErr:    ErrEventUnhandled,
+			wantClicks: 1,
+			wantEvents: 1,
+		},
+		{
+			name:       "dual returns ErrEventUnhandled from click and wrapped ErrEventUnhandled from event",
+			make:       func(rec *clickEventComboRecorder) any { return dualComboHandler{rec: rec} },
+			clickRet:   ErrEventUnhandled,
+			eventRet:   wrappedUnhandled,
 			wantErr:    ErrEventUnhandled,
 			wantClicks: 1,
 			wantEvents: 1,
@@ -258,7 +292,11 @@ func Test_CallEventHandlers_ClickDispatchCombinations(t *testing.T) {
 			handler := tt.make(rec)
 
 			err := CallEventHandlers(handler, elem, what.Click, "1 2 5 name")
-			if err != tt.wantErr {
+			if tt.wantErr == nil {
+				if err != nil {
+					t.Fatalf("err = %v, want nil", err)
+				}
+			} else if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("err = %v, want %v", err, tt.wantErr)
 			}
 			if rec.clickCalls != tt.wantClicks {
