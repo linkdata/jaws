@@ -1,6 +1,9 @@
 package jaws
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseClickData(t *testing.T) {
 	tests := []struct {
@@ -73,4 +76,65 @@ func TestClickString(t *testing.T) {
 	if got != want {
 		t.Fatalf("String() = %q, want %q", got, want)
 	}
+}
+
+func Fuzz_parseClickData(f *testing.F) {
+	f.Add("name\t1\t2")
+	f.Add("name\t1\t2\ttrue\tfalse\ttrue")
+	f.Add("name\t1\t2\ttrue\tfalse\ttrue\tJid.1\tJid.2")
+	f.Add("name\t1\t2\tJid.1")
+	f.Add("name\tbad\t2")
+	f.Fuzz(func(t *testing.T, in string) {
+		clk, after, ok := parseClickData(in)
+		if !ok {
+			return
+		}
+
+		encoded := clk.String()
+		clk2, after2, ok := parseClickData(encoded)
+		if !ok {
+			t.Fatalf("parseClickData(Click.String()) failed: click=%+v encoded=%q", clk, encoded)
+		}
+		if clk2 != clk || after2 != "" {
+			t.Fatalf("parseClickData(Click.String()) mismatch: click=%+v got=%+v after=%q", clk, clk2, after2)
+		}
+
+		roundtripInput := encoded
+		if after != "" {
+			roundtripInput += "\t" + after
+		}
+		clk3, after3, ok := parseClickData(roundtripInput)
+		if !ok {
+			t.Fatalf("parseClickData(roundtrip input) failed: input=%q", roundtripInput)
+		}
+		if clk3 != clk || after3 != after {
+			t.Fatalf("roundtrip mismatch: click=%+v/%+v after=%q/%q", clk, clk3, after, after3)
+		}
+	})
+}
+
+func Fuzz_clickStringRoundTrip(f *testing.F) {
+	f.Add("name", int32(1), int32(2), true, false, true)
+	f.Add("button", int32(-1), int32(999), false, false, false)
+	f.Fuzz(func(t *testing.T, name string, x int32, y int32, shift, control, alt bool) {
+		name = strings.ReplaceAll(name, "\t", " ")
+		clk := Click{
+			Name:    name,
+			X:       int(x),
+			Y:       int(y),
+			Shift:   shift,
+			Control: control,
+			Alt:     alt,
+		}
+		got, after, ok := parseClickData(clk.String())
+		if !ok {
+			t.Fatalf("parseClickData(String()) failed: click=%+v", clk)
+		}
+		if after != "" {
+			t.Fatalf("expected no trailing data, got %q", after)
+		}
+		if got != clk {
+			t.Fatalf("roundtrip mismatch: want=%+v got=%+v", clk, got)
+		}
+	})
 }

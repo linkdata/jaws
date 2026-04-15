@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"bytes"
 	"errors"
 	"reflect"
 	"strings"
@@ -164,18 +163,55 @@ func Test_wsParse_IncompleteFails(t *testing.T) {
 
 func Fuzz_wsParse(f *testing.F) {
 	f.Add([]byte("Update\t\t\"\"\n"))
-	f.Add([]byte("Click\t\t\" \\n\"\n"))
+	f.Add([]byte("Click\t\t\"name\\t10\\t20\\ttrue\\tfalse\\ttrue\\tJid.1\"\n"))
+	f.Add([]byte("ContextMenu\tJid.1\t\"menu\\t1\\t2\\tfalse\\tfalse\\tfalse\"\n"))
 	f.Add([]byte("Inner\tJid.1\t\"data\\nline\"\n"))
+	f.Add([]byte("Set\tJid.1\tpath={\"a\":1}\n"))
+	f.Add([]byte("Call\tJid.1\tfn=[1,2]\n"))
+	f.Add([]byte("invalid\t\t\"\"\n"))
 	f.Fuzz(func(t *testing.T, a []byte) {
-		if msg, ok := Parse(a); ok {
-			b := msg.Append(nil)
-			if !bytes.Equal(a, b) {
-				t.Errorf("%q != %q", string(a), string(b))
-			}
-		} else {
-			if len(a) > 0 && a[0] != '\n' && strings.Count(string(a), "\n") > 1 {
-				t.Errorf("%q => nil", a)
-			}
+		msg, ok := Parse(a)
+		if !ok {
+			return
+		}
+		b := msg.Append(nil)
+		if len(b) == 0 || b[len(b)-1] != '\n' {
+			t.Fatalf("Append did not produce newline-terminated frame: %q", b)
+		}
+		msg2, ok := Parse(b)
+		if !ok {
+			t.Fatalf("Parse(Append(Parse(x))) failed: in=%q appended=%q msg=%+v", a, b, msg)
+		}
+		if msg != msg2 {
+			t.Fatalf("roundtrip mismatch: in=%q parsed=%+v reparsed=%+v", a, msg, msg2)
+		}
+	})
+}
+
+func Fuzz_wsMsgAppendParseRoundTrip(f *testing.F) {
+	f.Add(uint8(what.Input), int32(0), "value")
+	f.Add(uint8(what.Click), int32(1), "name\t1\t2\ttrue\tfalse\ttrue")
+	f.Add(uint8(what.ContextMenu), int32(2), "menu\t3\t4\tfalse\ttrue\tfalse")
+	f.Add(uint8(what.Set), int32(3), `path={"a":1}`)
+	f.Add(uint8(what.Call), int32(4), `fn=[1,2]`)
+	f.Fuzz(func(t *testing.T, whatv uint8, jidv int32, data string) {
+		wht := what.What(whatv)
+		id := jid.Jid(jidv)
+		if !wht.IsValid() || !id.IsValid() || id < 0 {
+			return
+		}
+		msg := WsMsg{
+			Data: data,
+			Jid:  id,
+			What: wht,
+		}
+		b := msg.Append(nil)
+		got, ok := Parse(b)
+		if !ok {
+			t.Fatalf("Parse(Append(msg)) failed: msg=%+v frame=%q", msg, b)
+		}
+		if got != msg {
+			t.Fatalf("Parse(Append(msg)) mismatch: want=%+v got=%+v frame=%q", msg, got, b)
 		}
 	})
 }
