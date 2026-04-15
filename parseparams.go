@@ -38,9 +38,19 @@ func ParseParams(params []any) (tags []any, handlers []EventHandler, attrs []str
 			if h, ok := data.(EventHandler); ok {
 				handlers = append(handlers, h)
 				data = shouldAutoTagHandler(data)
-			} else if h, ok := data.(ClickHandler); ok {
-				handlers = append(handlers, clickHandlerWrapper{h})
-				data = shouldAutoTagHandler(data)
+			} else {
+				hasHandler := false
+				if h, ok := data.(ClickHandler); ok {
+					handlers = append(handlers, clickHandlerWrapper{h})
+					hasHandler = true
+				}
+				if h, ok := data.(ContextMenuHandler); ok {
+					handlers = append(handlers, contextMenuHandlerWrapper{h})
+					hasHandler = true
+				}
+				if hasHandler {
+					data = shouldAutoTagHandler(data)
+				}
 			}
 			tags = append(tags, data)
 		}

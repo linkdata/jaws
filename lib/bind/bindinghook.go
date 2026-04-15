@@ -9,7 +9,7 @@ import (
 
 type bindingHook[T comparable] struct {
 	Binder[T]
-	hook any // one of: BindGetHook[T] BindSetHook[T] BindClickedHook[T] BindSuccessHook
+	hook any // one of: BindGetHook[T] BindSetHook[T] BindClickedHook[T] BindContextMenuHook[T] BindSuccessHook
 }
 
 func (bind bindingHook[T]) JawsBinderPrev() Binder[T] {
@@ -48,12 +48,13 @@ const (
 	callChainInvalid = callChainType(iota)
 	callChainSuccess
 	callChainClicked
+	callChainContextMenu
 )
 
 func callChain[T comparable](binder Binder[T], elem *jaws.Element, kind callChainType, param any) (err error) {
 	if prev := binder.JawsBinderPrev(); prev != nil {
 		err = callChain(prev, elem, kind, param)
-	} else if kind == callChainClicked {
+	} else if kind == callChainClicked || kind == callChainContextMenu {
 		err = jaws.ErrEventUnhandled
 	}
 	if bh, ok := binder.(bindingHook[T]); ok {
@@ -67,7 +68,13 @@ func callChain[T comparable](binder Binder[T], elem *jaws.Element, kind callChai
 		case callChainClicked:
 			if err == jaws.ErrEventUnhandled {
 				if fn, ok := bh.hook.(BindClickedHook[T]); ok {
-					err = fn(bh, elem, param.(string))
+					err = fn(bh, elem, param.(jaws.Click))
+				}
+			}
+		case callChainContextMenu:
+			if err == jaws.ErrEventUnhandled {
+				if fn, ok := bh.hook.(BindContextMenuHook[T]); ok {
+					err = fn(bh, elem, param.(jaws.Click))
 				}
 			}
 		}
@@ -82,8 +89,13 @@ func (bind bindingHook[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 	return
 }
 
-func (bind bindingHook[T]) JawsClick(elem *jaws.Element, name string) (err error) {
-	err = callChain(bind, elem, callChainClicked, name)
+func (bind bindingHook[T]) JawsClick(elem *jaws.Element, click jaws.Click) (err error) {
+	err = callChain(bind, elem, callChainClicked, click)
+	return
+}
+
+func (bind bindingHook[T]) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err error) {
+	err = callChain(bind, elem, callChainContextMenu, click)
 	return
 }
 
@@ -119,6 +131,16 @@ func (bind bindingHook[T]) GetLocked(setFn BindGetHook[T]) Binder[T] {
 //
 // The Binder locks are not held when the function is called.
 func (bind bindingHook[T]) Clicked(fn BindClickedHook[T]) Binder[T] {
+	return bindingHook[T]{
+		Binder: bind,
+		hook:   fn,
+	}
+}
+
+// ContextMenu returns a Binder[T] that will call fn when JawsContextMenu is invoked.
+//
+// The Binder locks are not held when the function is called.
+func (bind bindingHook[T]) ContextMenu(fn BindContextMenuHook[T]) Binder[T] {
 	return bindingHook[T]{
 		Binder: bind,
 		hook:   fn,

@@ -50,13 +50,22 @@ func Test_wsMsg_Append(t *testing.T) {
 			want: "Update\t\t\"\"\n",
 		},
 		{
-			name: "text data",
+			name: "click data with coordinates and modifiers",
 			fields: fields{
-				Data: "name",
+				Data: "name\t10\t20\ttrue\tfalse\ttrue",
 				Jid:  1,
 				What: what.Click,
 			},
-			want: "Click\tJid.1\t\"name\"\n",
+			want: "Click\tJid.1\t\"name\\t10\\t20\\ttrue\\tfalse\\ttrue\"\n",
+		},
+		{
+			name: "context menu data with coordinates and modifiers",
+			fields: fields{
+				Data: "name\t10\t20\ttrue\tfalse\ttrue",
+				Jid:  1,
+				What: what.ContextMenu,
+			},
+			want: "ContextMenu\tJid.1\t\"name\\t10\\t20\\ttrue\\tfalse\\ttrue\"\n",
 		},
 		{
 			name: "escaped text data",
@@ -118,6 +127,7 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 		{"shortest", "Update\t\t\n", WsMsg{What: what.Update}},
 		{"unquoted", "Input\tJid.1\ttrue\n", WsMsg{Jid: jid.Jid(1), What: what.Input, Data: "true"}},
 		{"normal", "Input\tJid.2\t\"c\"\n", WsMsg{Jid: jid.Jid(2), What: what.Input, Data: "c"}},
+		{"context menu", "ContextMenu\tJid.2\t\"name\\t1\\t2\\ttrue\\tfalse\\ttrue\"\n", WsMsg{Jid: jid.Jid(2), What: what.ContextMenu, Data: "name\t1\t2\ttrue\tfalse\ttrue"}},
 		{"newline", "Input\tJid.3\t\"c\\nd\"\n", WsMsg{Jid: jid.Jid(3), What: what.Input, Data: "c\nd"}},
 	}
 	for _, tt := range tests {

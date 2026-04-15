@@ -20,9 +20,9 @@ type testJawsEvent struct {
 	eventerr error
 }
 
-func (t *testJawsEvent) JawsClick(e *Element, name string) (err error) {
+func (t *testJawsEvent) JawsClick(e *Element, name Click) (err error) {
 	if err = t.clickerr; err == nil {
-		t.msgCh <- fmt.Sprintf("JawsClick: %q", name)
+		t.msgCh <- fmt.Sprintf("JawsClick: %q", name.Name)
 	}
 	return
 }
@@ -111,12 +111,27 @@ func (h testPanicEventHandler) JawsEvent(e *Element, wht what.What, val string) 
 type testClickCounter struct {
 	n         int
 	wantName  string
-	lastValue string
+	lastValue Click
 }
 
-func (c *testClickCounter) JawsClick(_ *Element, name string) error {
-	c.lastValue = name
-	if name != c.wantName {
+func (c *testClickCounter) JawsClick(_ *Element, click Click) error {
+	c.lastValue = click
+	if click.Name != c.wantName {
+		return ErrEventUnhandled
+	}
+	c.n++
+	return nil
+}
+
+type testContextMenuCounter struct {
+	n         int
+	wantName  string
+	lastValue Click
+}
+
+func (c *testContextMenuCounter) JawsContextMenu(_ *Element, click Click) error {
+	c.lastValue = click
+	if click.Name != c.wantName {
 		return ErrEventUnhandled
 	}
 	c.n++
@@ -132,7 +147,7 @@ type clickEventComboRecorder struct {
 
 type clickOnlyComboHandler struct{ rec *clickEventComboRecorder }
 
-func (h clickOnlyComboHandler) JawsClick(*Element, string) error {
+func (h clickOnlyComboHandler) JawsClick(*Element, Click) error {
 	h.rec.clickCalls++
 	return h.rec.clickRet
 }
@@ -146,7 +161,7 @@ func (h eventOnlyComboHandler) JawsEvent(*Element, what.What, string) error {
 
 type dualComboHandler struct{ rec *clickEventComboRecorder }
 
-func (h dualComboHandler) JawsClick(*Element, string) error {
+func (h dualComboHandler) JawsClick(*Element, Click) error {
 	h.rec.clickCalls++
 	return h.rec.clickRet
 }
@@ -242,7 +257,7 @@ func Test_CallEventHandlers_ClickDispatchCombinations(t *testing.T) {
 			}
 			handler := tt.make(rec)
 
-			err := CallEventHandlers(handler, elem, what.Click, "name")
+			err := CallEventHandlers(handler, elem, what.Click, "name\t1\t2\ttrue\tfalse\ttrue")
 			if err != tt.wantErr {
 				t.Fatalf("err = %v, want %v", err, tt.wantErr)
 			}
@@ -301,14 +316,14 @@ func Test_CallEventHandlers_ClickOnlyHandlerViaApplyGetter(t *testing.T) {
 		t.Fatalf("ApplyGetter returned error: %v", err)
 	}
 
-	err := CallEventHandlers(elem.Ui(), elem, what.Click, "name")
+	err := CallEventHandlers(elem.Ui(), elem, what.Click, "name\t1\t2\ttrue\tfalse\ttrue")
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 	if clickCounter.n != 1 {
 		t.Fatalf("expected click handler to be called once, got %d", clickCounter.n)
 	}
-	err = CallEventHandlers(elem.Ui(), elem, what.Click, "wrong")
+	err = CallEventHandlers(elem.Ui(), elem, what.Click, "wrong\t1\t2\tfalse\tfalse\tfalse")
 	if err != ErrEventUnhandled {
 		t.Fatalf("expected ErrEventUnhandled for wrong name, got %v", err)
 	}
@@ -325,19 +340,75 @@ func Test_CallEventHandlers_ClickOnlyHandlerViaApplyParams(t *testing.T) {
 	clickCounter := &testClickCounter{wantName: "name"}
 	elem.ApplyParams([]any{clickCounter})
 
-	err := CallEventHandlers(elem.Ui(), elem, what.Click, "name")
+	err := CallEventHandlers(elem.Ui(), elem, what.Click, "name\t1\t2\ttrue\tfalse\ttrue")
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 	if clickCounter.n != 1 {
 		t.Fatalf("expected click handler to be called once, got %d", clickCounter.n)
 	}
-	err = CallEventHandlers(elem.Ui(), elem, what.Click, "wrong")
+	err = CallEventHandlers(elem.Ui(), elem, what.Click, "wrong\t1\t2\tfalse\tfalse\tfalse")
 	if err != ErrEventUnhandled {
 		t.Fatalf("expected ErrEventUnhandled for wrong name, got %v", err)
 	}
 	if clickCounter.n != 1 {
 		t.Fatalf("expected click count to stay 1 for wrong name, got %d", clickCounter.n)
+	}
+}
+
+func Test_CallEventHandlers_ContextMenuOnlyHandlerViaApplyGetter(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	elem := rq.NewElement(testDivWidget{inner: "x"})
+	counter := &testContextMenuCounter{wantName: "name"}
+	if _, err := elem.ApplyGetter(counter); err != nil {
+		t.Fatalf("ApplyGetter returned error: %v", err)
+	}
+
+	err := CallEventHandlers(elem.Ui(), elem, what.ContextMenu, "name\t10\t20\ttrue\tfalse\ttrue")
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if counter.n != 1 {
+		t.Fatalf("expected context menu handler to be called once, got %d", counter.n)
+	}
+	if counter.lastValue != (Click{Name: "name", X: 10, Y: 20, Shift: true, Alt: true}) {
+		t.Fatalf("unexpected click payload %+v", counter.lastValue)
+	}
+	err = CallEventHandlers(elem.Ui(), elem, what.ContextMenu, "wrong\t10\t20\tfalse\tfalse\tfalse")
+	if err != ErrEventUnhandled {
+		t.Fatalf("expected ErrEventUnhandled for wrong name, got %v", err)
+	}
+	if counter.n != 1 {
+		t.Fatalf("expected count to stay 1 for wrong name, got %d", counter.n)
+	}
+}
+
+func Test_CallEventHandlers_ContextMenuOnlyHandlerViaApplyParams(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	elem := rq.NewElement(testDivWidget{inner: "x"})
+	counter := &testContextMenuCounter{wantName: "name"}
+	elem.ApplyParams([]any{counter})
+
+	err := CallEventHandlers(elem.Ui(), elem, what.ContextMenu, "name\t10\t20\ttrue\tfalse\ttrue")
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if counter.n != 1 {
+		t.Fatalf("expected context menu handler to be called once, got %d", counter.n)
+	}
+	if counter.lastValue != (Click{Name: "name", X: 10, Y: 20, Shift: true, Alt: true}) {
+		t.Fatalf("unexpected click payload %+v", counter.lastValue)
+	}
+	err = CallEventHandlers(elem.Ui(), elem, what.ContextMenu, "wrong\t10\t20\tfalse\tfalse\tfalse")
+	if err != ErrEventUnhandled {
+		t.Fatalf("expected ErrEventUnhandled for wrong name, got %v", err)
+	}
+	if counter.n != 1 {
+		t.Fatalf("expected count to stay 1 for wrong name, got %d", counter.n)
 	}
 }
 
@@ -357,11 +428,11 @@ func Test_JawsEvent_ExtraHandler(t *testing.T) {
 	th.NoErr(elem.JawsRender(&sb, []any{je}))
 	th.Equal(sb.String(), "<div id=\"Jid.1\">tjEH</div>")
 
-	rq.InCh <- wire.WsMsg{Data: "name", Jid: 1, What: what.Click}
+	rq.InCh <- wire.WsMsg{Data: "name\t1\t2\ttrue\tfalse\ttrue", Jid: 1, What: what.Click}
 	select {
 	case <-th.C:
 		th.Timeout()
 	case s := <-msgCh:
-		th.Equal(s, "JawsEvent: Click \"name\"")
+		th.Equal(s, "JawsEvent: Click \"name\\t1\\t2\\ttrue\\tfalse\\ttrue\"")
 	}
 }

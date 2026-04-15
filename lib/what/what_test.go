@@ -15,6 +15,7 @@ func TestParse(t *testing.T) {
 		{"blank is Update", "", Update},
 		{"Update", "Update", Update},
 		{"Inner", "Inner", Inner},
+		{"ContextMenu", "ContextMenu", ContextMenu},
 		{"inner", "inner", Inner},
 		{"innerr", "innerr", invalid},
 		{"last", lastWhat.String(), lastWhat},

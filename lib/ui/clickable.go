@@ -8,11 +8,11 @@ import (
 
 type clickable struct {
 	bind.HTMLGetter
-	onclick func(elem *jaws.Element, name string) (err error)
+	onclick func(elem *jaws.Element, click jaws.Click) (err error)
 }
 
-func (c clickable) JawsClick(elem *jaws.Element, name string) (err error) {
-	return c.onclick(elem, name)
+func (c clickable) JawsClick(elem *jaws.Element, click jaws.Click) (err error) {
+	return c.onclick(elem, click)
 }
 
 func (g clickable) JawsGetTag(tc jtag.Context) (tag any) {
@@ -24,6 +24,6 @@ func (g clickable) JawsGetTag(tc jtag.Context) (tag any) {
 
 // Clickable returns an object implementing bind.HTMLGetter, jaws.ClickHandler and jaws.TagGetter.
 // innerHTML is passed to MakeHTMLGetter(), which may or may not provide tags.
-func Clickable(innerHTML any, onclick func(elem *jaws.Element, name string) (err error)) jaws.ClickHandler {
+func Clickable(innerHTML any, onclick func(elem *jaws.Element, click jaws.Click) (err error)) jaws.ClickHandler {
 	return clickable{HTMLGetter: bind.MakeHTMLGetter(innerHTML), onclick: onclick}
 }

@@ -71,7 +71,7 @@ type testApplyGetterAll struct {
 }
 
 func (a testApplyGetterAll) JawsGetTag(jtag.Context) any { return jtag.Tag("tg") }
-func (a testApplyGetterAll) JawsClick(*Element, string) error {
+func (a testApplyGetterAll) JawsClick(*Element, Click) error {
 	return ErrEventUnhandled
 }
 func (a testApplyGetterAll) JawsEvent(*Element, what.What, string) error {
@@ -340,7 +340,7 @@ func TestElement_ApplyGetterDebugBranches(t *testing.T) {
 type testClickHandler struct {
 }
 
-func (tch testClickHandler) JawsClick(e *Element, name string) (err error) {
+func (tch testClickHandler) JawsClick(e *Element, click Click) (err error) {
 	return nil
 }
 
@@ -350,7 +350,7 @@ type testNonComparableClickHandler struct {
 	names []string
 }
 
-func (tch testNonComparableClickHandler) JawsClick(e *Element, name string) error {
+func (tch testNonComparableClickHandler) JawsClick(e *Element, click Click) error {
 	return nil
 }
 
@@ -373,6 +373,24 @@ func (testNonComparableEventHandler) JawsEvent(*Element, what.What, string) erro
 }
 
 var _ EventHandler = testNonComparableEventHandler{}
+
+type testContextMenuHandler struct{}
+
+func (testContextMenuHandler) JawsContextMenu(*Element, Click) error {
+	return nil
+}
+
+var _ ContextMenuHandler = testContextMenuHandler{}
+
+type testNonComparableContextMenuHandler struct {
+	names []string
+}
+
+func (testNonComparableContextMenuHandler) JawsContextMenu(*Element, Click) error {
+	return nil
+}
+
+var _ ContextMenuHandler = testNonComparableContextMenuHandler{}
 
 type testUnhashableUI struct {
 	m map[string]int
@@ -418,7 +436,7 @@ func TestElement_ApplyGetter_NonComparableHandler(t *testing.T) {
 	if got := rq.TagsOf(e); len(got) != 0 {
 		t.Fatalf("expected non-comparable handler to not be auto-tagged, got %v", got)
 	}
-	if err := CallEventHandlers(e.Ui(), e, what.Click, "name"); err != nil {
+	if err := CallEventHandlers(e.Ui(), e, what.Click, "name\t1\t2"); err != nil {
 		t.Fatalf("expected click handler to run, got %v", err)
 	}
 }
@@ -436,7 +454,7 @@ func TestElement_ApplyParams_NonComparableHandler(t *testing.T) {
 	if got := rq.TagsOf(e); len(got) != 0 {
 		t.Fatalf("expected non-comparable handler to not be auto-tagged, got %v", got)
 	}
-	if err := CallEventHandlers(e.Ui(), e, what.Click, "name"); err != nil {
+	if err := CallEventHandlers(e.Ui(), e, what.Click, "name\t1\t2"); err != nil {
 		t.Fatalf("expected click handler to run, got %v", err)
 	}
 }
@@ -461,6 +479,26 @@ func TestElement_ApplyGetter_EventHandlerAutoTag(t *testing.T) {
 	}
 }
 
+func TestElement_ApplyGetter_ContextMenuHandlerAutoTag(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	e := rq.NewElement(testDivWidget{inner: "x"})
+	h := testContextMenuHandler{}
+	if _, err := e.ApplyGetter(h); err != nil {
+		t.Fatalf("ApplyGetter returned error: %v", err)
+	}
+	if len(e.handlers) != 1 {
+		t.Fatalf("expected 1 handler, got %d", len(e.handlers))
+	}
+	if !e.HasTag(h) {
+		t.Fatal("expected comparable context menu handler to be auto-tagged")
+	}
+	if err := CallEventHandlers(e.Ui(), e, what.ContextMenu, "name\t1\t2"); err != nil {
+		t.Fatalf("expected context menu handler to run, got %v", err)
+	}
+}
+
 func TestElement_ApplyGetter_EventHandlerNonComparableNoAutoTag(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
@@ -478,6 +516,26 @@ func TestElement_ApplyGetter_EventHandlerNonComparableNoAutoTag(t *testing.T) {
 	}
 	if err := CallEventHandlers(e.Ui(), e, what.Input, "name"); err != nil {
 		t.Fatalf("expected event handler to run, got %v", err)
+	}
+}
+
+func TestElement_ApplyGetter_ContextMenuHandlerNonComparableNoAutoTag(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	e := rq.NewElement(testDivWidget{inner: "x"})
+	h := testNonComparableContextMenuHandler{names: []string{"name"}}
+	if _, err := e.ApplyGetter(h); err != nil {
+		t.Fatalf("ApplyGetter returned error: %v", err)
+	}
+	if len(e.handlers) != 1 {
+		t.Fatalf("expected 1 handler, got %d", len(e.handlers))
+	}
+	if got := rq.TagsOf(e); len(got) != 0 {
+		t.Fatalf("expected non-comparable context menu handler to not be auto-tagged, got %v", got)
+	}
+	if err := CallEventHandlers(e.Ui(), e, what.ContextMenu, "name\t1\t2"); err != nil {
+		t.Fatalf("expected context menu handler to run, got %v", err)
 	}
 }
 

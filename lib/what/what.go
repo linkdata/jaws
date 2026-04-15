@@ -34,6 +34,7 @@ const (
 	// Element input events
 	Input
 	Click
+	ContextMenu
 	// Testing
 	Hook // Calls event handler synchronously
 )

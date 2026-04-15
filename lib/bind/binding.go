@@ -47,7 +47,11 @@ func (bind binding[T]) JawsGetTag(jtag.Context) any {
 	return bind.ptr
 }
 
-func (bind binding[T]) JawsClick(*jaws.Element, string) error {
+func (bind binding[T]) JawsClick(*jaws.Element, jaws.Click) error {
+	return jaws.ErrEventUnhandled
+}
+
+func (bind binding[T]) JawsContextMenu(*jaws.Element, jaws.Click) error {
 	return jaws.ErrEventUnhandled
 }
 
@@ -83,6 +87,16 @@ func (bind binding[T]) GetLocked(fn BindGetHook[T]) Binder[T] {
 //
 // The Binder locks are not held when the function is called.
 func (bind binding[T]) Clicked(fn BindClickedHook[T]) Binder[T] {
+	return bindingHook[T]{
+		Binder: bind,
+		hook:   fn,
+	}
+}
+
+// ContextMenu returns a Binder[T] that will call fn when JawsContextMenu is invoked.
+//
+// The Binder locks are not held when the function is called.
+func (bind binding[T]) ContextMenu(fn BindContextMenuHook[T]) Binder[T] {
 	return bindingHook[T]{
 		Binder: bind,
 		hook:   fn,

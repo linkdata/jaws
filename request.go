@@ -593,7 +593,7 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 				// incoming event message from the websocket
 				if wsmsg.Jid.IsValid() {
 					switch wsmsg.What {
-					case what.Input, what.Click, what.Set:
+					case what.Input, what.Click, what.ContextMenu, what.Set:
 						rq.queueEvent(eventCallCh, eventFnCall{jid: wsmsg.Jid, wht: wsmsg.What, data: wsmsg.Data})
 					case what.Remove:
 						rq.handleRemove(wsmsg.Jid, wsmsg.Data)
@@ -645,8 +645,8 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 						What: what.Delete,
 					})
 					rq.DeleteElement(elem)
-				case what.Input, what.Click:
-					// Input or Click messages received here are from Request.Send() or broadcasts.
+				case what.Input, what.Click, what.ContextMenu:
+					// Input, Click or ContextMenu messages received here are from Request.Send() or broadcasts.
 					// they won't be sent out on the WebSocket, but will queue up a
 					// call to the event function (if any).
 					// primary usecase is tests.
@@ -701,21 +701,35 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err 
 	var elems []*Element
 	rq.mu.RLock()
 	if id == 0 {
-		if wht == what.Click {
+		if wht == what.Click || wht == what.ContextMenu {
+			var clk Click
 			var after string
-			var found bool
-			val, after, found = strings.Cut(val, "\t")
-			for found {
-				var jidStr string
-				jidStr, after, found = strings.Cut(after, "\t")
-				if id = jid.ParseString(jidStr); id > 0 {
-					if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() {
-						elems = append(elems, e)
+			var ok bool
+			if clk, after, ok = parseClickData(val); ok {
+				val = clk.String()
+				for _, jidStr := range strings.Split(after, "\t") {
+					if id = jid.ParseString(jidStr); id > 0 {
+						if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() {
+							elems = append(elems, e)
+						}
 					}
 				}
+			} else {
+				rq.mu.RUnlock()
+				return nil
 			}
 		}
 	} else {
+		if wht == what.Click || wht == what.ContextMenu {
+			var clk Click
+			var ok bool
+			if clk, _, ok = parseClickData(val); ok {
+				val = clk.String()
+			} else {
+				rq.mu.RUnlock()
+				return nil
+			}
+		}
 		if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() {
 			elems = append(elems, e)
 		}

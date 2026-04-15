@@ -13,14 +13,28 @@ type testJawsClick struct {
 	*testSetter[string]
 }
 
-func (tjc *testJawsClick) JawsClick(e *Element, name string) (err error) {
+func (tjc *testJawsClick) JawsClick(e *Element, click Click) (err error) {
 	if err = tjc.Err(); err == nil {
-		tjc.clickCh <- name
+		tjc.clickCh <- click.Name
 	}
 	return
 }
 
 var _ ClickHandler = (*testJawsClick)(nil)
+
+type testJawsContextMenu struct {
+	clickCh chan Click
+	*testSetter[Click]
+}
+
+func (tjc *testJawsContextMenu) JawsContextMenu(e *Element, click Click) (err error) {
+	if err = tjc.Err(); err == nil {
+		tjc.clickCh <- click
+	}
+	return
+}
+
+var _ ContextMenuHandler = (*testJawsContextMenu)(nil)
 
 func Test_clickHandlerWapper_JawsEvent(t *testing.T) {
 	th := newTestHelper(t)
@@ -49,6 +63,15 @@ func Test_clickHandlerWapper_JawsEvent(t *testing.T) {
 	}
 
 	rq.InCh <- wire.WsMsg{Data: "adam", Jid: 1, What: what.Click}
+	select {
+	case <-th.C:
+		th.Timeout()
+	case name := <-tjc.clickCh:
+		t.Fatalf("malformed click should be ignored, got %q", name)
+	default:
+	}
+
+	rq.InCh <- wire.WsMsg{Data: "adam\t1\t2", Jid: 1, What: what.Click}
 	select {
 	case <-th.C:
 		th.Timeout()

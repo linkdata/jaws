@@ -30,16 +30,18 @@ func _() {
 	_ = x[Value-19]
 	_ = x[Input-20]
 	_ = x[Click-21]
-	_ = x[Hook-22]
+	_ = x[ContextMenu-22]
+	_ = x[Hook-23]
 }
 
-const _What_name = "invalidUpdateReloadRedirectAlertOrderCallSetseparatorInnerDeleteReplaceRemoveInsertAppendSAttrRAttrSClassRClassValueInputClickHook"
+const _What_name = "invalidUpdateReloadRedirectAlertOrderCallSetseparatorInnerDeleteReplaceRemoveInsertAppendSAttrRAttrSClassRClassValueInputClickContextMenuHook"
 
-var _What_index = [...]uint8{0, 7, 13, 19, 27, 32, 37, 41, 44, 53, 58, 64, 71, 77, 83, 89, 94, 99, 105, 111, 116, 121, 126, 130}
+var _What_index = [...]uint8{0, 7, 13, 19, 27, 32, 37, 41, 44, 53, 58, 64, 71, 77, 83, 89, 94, 99, 105, 111, 116, 121, 126, 137, 141}
 
 func (i What) String() string {
-	if i >= What(len(_What_index)-1) {
+	idx := int(i) - 0
+	if i < 0 || idx >= len(_What_index)-1 {
 		return "What(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _What_name[_What_index[i]:_What_index[i+1]]
+	return _What_name[_What_index[idx]:_What_index[idx+1]]
 }

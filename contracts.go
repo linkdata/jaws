@@ -56,14 +56,26 @@ type ClickHandler interface {
 	// JawsClick is called when an Element's HTML element or something within it
 	// is clicked in the browser.
 	//
-	// The name parameter is taken from the first 'name' HTML attribute or HTML
+	// Click.Name is taken from the first 'name' HTML attribute or HTML
 	// 'button' textContent found when traversing the DOM. It may be empty.
-	JawsClick(e *Element, name string) (err error)
+	JawsClick(e *Element, click Click) (err error)
+}
+
+type ContextMenuHandler interface {
+	// JawsContextMenu is called when an Element's HTML element or something
+	// within it receives a context menu event in the browser.
+	JawsContextMenu(e *Element, click Click) (err error)
 }
 
 type clickHandlerWrapper struct{ ClickHandler }
 
 func (chw clickHandlerWrapper) JawsEvent(*Element, what.What, string) error {
+	return ErrEventUnhandled
+}
+
+type contextMenuHandlerWrapper struct{ ContextMenuHandler }
+
+func (cmw contextMenuHandlerWrapper) JawsEvent(*Element, what.What, string) error {
 	return ErrEventUnhandled
 }
 

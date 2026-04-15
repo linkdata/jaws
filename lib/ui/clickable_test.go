@@ -24,11 +24,11 @@ func TestClickable_ForwardsClickAndGetterBehavior(t *testing.T) {
 	wantErr := errors.New("boom")
 
 	var gotElem *jaws.Element
-	var gotName string
+	var gotClick jaws.Click
 
-	handler := Clickable(inner, func(elem *jaws.Element, name string) (err error) {
+	handler := Clickable(inner, func(elem *jaws.Element, click jaws.Click) (err error) {
 		gotElem = elem
-		gotName = name
+		gotClick = click
 		return wantErr
 	})
 
@@ -48,19 +48,19 @@ func TestClickable_ForwardsClickAndGetterBehavior(t *testing.T) {
 		t.Fatalf("want tag %#v got %#v", want, got)
 	}
 
-	if err := handler.JawsClick(elem, "save"); !errors.Is(err, wantErr) {
+	if err := handler.JawsClick(elem, jaws.Click{Name: "save"}); !errors.Is(err, wantErr) {
 		t.Fatalf("want %v got %v", wantErr, err)
 	}
 	if gotElem != elem {
 		t.Fatalf("expected callback element %p got %p", elem, gotElem)
 	}
-	if gotName != "save" {
-		t.Fatalf("want name %q got %q", "save", gotName)
+	if gotClick.Name != "save" {
+		t.Fatalf("want name %q got %q", "save", gotClick.Name)
 	}
 }
 
 func TestClickable_TagIsNilWhenInnerHTMLHasNoTag(t *testing.T) {
-	handler := Clickable("plain", func(*jaws.Element, string) error { return nil })
+	handler := Clickable("plain", func(*jaws.Element, jaws.Click) error { return nil })
 	tagGetter, ok := handler.(jtag.TagGetter)
 	if !ok {
 		t.Fatalf("%T does not implement jtag.TagGetter", handler)

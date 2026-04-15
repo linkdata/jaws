@@ -40,8 +40,8 @@ func (errEventUnhandled) Error() string {
 	return "event unhandled"
 }
 
-// ErrEventUnhandled returned by JawsEvent() or JawsClick() causes the next
-// available handler to be invoked.
+// ErrEventUnhandled returned by JawsEvent(), JawsClick() or
+// JawsContextMenu() causes the next available handler to be invoked.
 var ErrEventUnhandled = errEventUnhandled{}
 
 // EventFn is the signature of a event handling function to be called when JaWS receives
@@ -57,9 +57,20 @@ func (ehf eventFnWrapper) JawsEvent(e *Element, w what.What, v string) (err erro
 var _ EventFn = eventFnWrapper{}.JawsEvent // statically ensure JawsEvent and EventFn are compatible
 
 func callEventHandler(obj any, e *Element, wht what.What, val string) (err error) {
-	if wht == what.Click {
-		if h, ok := obj.(ClickHandler); ok {
-			if err = h.JawsClick(e, val); err != ErrEventUnhandled {
+	if wht == what.Click || wht == what.ContextMenu {
+		var clk Click
+		var ok bool
+		if clk, _, ok = parseClickData(val); !ok {
+			return ErrEventUnhandled
+		}
+		if wht == what.Click {
+			if h, ok := obj.(ClickHandler); ok {
+				if err = h.JawsClick(e, clk); err != ErrEventUnhandled {
+					return
+				}
+			}
+		} else if h, ok := obj.(ContextMenuHandler); ok {
+			if err = h.JawsContextMenu(e, clk); err != ErrEventUnhandled {
 				return
 			}
 		}

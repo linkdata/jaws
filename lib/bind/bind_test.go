@@ -254,12 +254,12 @@ func TestBind_Hook_Clicked_binding(t *testing.T) {
 
 	calls := 0
 	gotElem := &jaws.Element{}
-	gotName := ""
+	gotClick := jaws.Click{}
 	bind := New(&mu, &val).
-		Clicked(func(bind Binder[string], elem *jaws.Element, name string) (err error) {
+		Clicked(func(bind Binder[string], elem *jaws.Element, click jaws.Click) (err error) {
 			calls++
 			gotElem = elem
-			gotName = name
+			gotClick = click
 			return nil
 		})
 
@@ -269,7 +269,7 @@ func TestBind_Hook_Clicked_binding(t *testing.T) {
 	}
 
 	elem := &jaws.Element{}
-	if err := handler.JawsClick(elem, "save"); err != nil {
+	if err := handler.JawsClick(elem, jaws.Click{Name: "save", X: 1, Y: 2}); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 1 {
@@ -278,8 +278,8 @@ func TestBind_Hook_Clicked_binding(t *testing.T) {
 	if gotElem != elem {
 		t.Error(gotElem)
 	}
-	if gotName != "save" {
-		t.Error(gotName)
+	if gotClick.Name != "save" || gotClick.X != 1 || gotClick.Y != 2 {
+		t.Error(gotClick)
 	}
 	tags := jtag.MustTagExpand(nil, bind)
 	if !reflect.DeepEqual(tags, []any{&val}) {
@@ -298,11 +298,11 @@ func TestBind_Hook_Clicked_bindingHook(t *testing.T) {
 
 	clickCalls1 := 0
 	clickCalls2 := 0
-	clickBind1 := bindWithSuccess.Clicked(func(Binder[string], *jaws.Element, string) error {
+	clickBind1 := bindWithSuccess.Clicked(func(Binder[string], *jaws.Element, jaws.Click) error {
 		clickCalls1++
 		return nil
 	})
-	clickBind2 := clickBind1.Clicked(func(Binder[string], *jaws.Element, string) error {
+	clickBind2 := clickBind1.Clicked(func(Binder[string], *jaws.Element, jaws.Click) error {
 		clickCalls2++
 		return nil
 	})
@@ -316,7 +316,7 @@ func TestBind_Hook_Clicked_bindingHook(t *testing.T) {
 		t.Fatalf("%T does not implement ClickHandler", clickBind2)
 	}
 
-	if err := handler1.JawsClick(nil, "one"); err != nil {
+	if err := handler1.JawsClick(nil, jaws.Click{Name: "one"}); err != nil {
 		t.Fatal(err)
 	}
 	if clickCalls1 != 1 {
@@ -326,7 +326,7 @@ func TestBind_Hook_Clicked_bindingHook(t *testing.T) {
 		t.Error(clickCalls2)
 	}
 
-	if err := handler2.JawsClick(nil, "two"); err != nil {
+	if err := handler2.JawsClick(nil, jaws.Click{Name: "two"}); err != nil {
 		t.Fatal(err)
 	}
 	if clickCalls1 != 2 {
@@ -345,7 +345,7 @@ func TestBind_Hook_Clicked_bindingHook(t *testing.T) {
 	if got := clickBind2.JawsGet(nil); got != "foo" {
 		t.Error(got)
 	}
-	if err := bindWithSuccess.(jaws.ClickHandler).JawsClick(nil, "x"); !errors.Is(err, jaws.ErrEventUnhandled) {
+	if err := bindWithSuccess.(jaws.ClickHandler).JawsClick(nil, jaws.Click{Name: "x"}); !errors.Is(err, jaws.ErrEventUnhandled) {
 		t.Fatal(err)
 	}
 	tags := jtag.MustTagExpand(nil, clickBind2)
@@ -362,12 +362,12 @@ func TestBind_Hook_Clicked_bindingHook_fallsThroughUnhandled(t *testing.T) {
 	clickCalls1 := 0
 	clickCalls2 := 0
 	clickBind2 := New(&mu, &val).
-		Clicked(func(Binder[string], *jaws.Element, string) error {
+		Clicked(func(Binder[string], *jaws.Element, jaws.Click) error {
 			clickCalls1++
 			order = append(order, 1)
 			return jaws.ErrEventUnhandled
 		}).
-		Clicked(func(Binder[string], *jaws.Element, string) error {
+		Clicked(func(Binder[string], *jaws.Element, jaws.Click) error {
 			clickCalls2++
 			order = append(order, 2)
 			return nil
@@ -377,7 +377,7 @@ func TestBind_Hook_Clicked_bindingHook_fallsThroughUnhandled(t *testing.T) {
 	if !ok {
 		t.Fatalf("%T does not implement ClickHandler", clickBind2)
 	}
-	if err := handler.JawsClick(nil, "two"); err != nil {
+	if err := handler.JawsClick(nil, jaws.Click{Name: "two"}); err != nil {
 		t.Fatal(err)
 	}
 	if clickCalls1 != 1 {
@@ -385,6 +385,78 @@ func TestBind_Hook_Clicked_bindingHook_fallsThroughUnhandled(t *testing.T) {
 	}
 	if clickCalls2 != 1 {
 		t.Error(clickCalls2)
+	}
+	if !reflect.DeepEqual(order, []int{1, 2}) {
+		t.Error(order)
+	}
+}
+
+func TestBind_Hook_ContextMenu_binding(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	calls := 0
+	gotElem := &jaws.Element{}
+	gotClick := jaws.Click{}
+	bind := New(&mu, &val).
+		ContextMenu(func(bind Binder[string], elem *jaws.Element, click jaws.Click) (err error) {
+			calls++
+			gotElem = elem
+			gotClick = click
+			return nil
+		})
+
+	handler, ok := bind.(jaws.ContextMenuHandler)
+	if !ok {
+		t.Fatalf("%T does not implement ContextMenuHandler", bind)
+	}
+
+	elem := &jaws.Element{}
+	if err := handler.JawsContextMenu(elem, jaws.Click{Name: "save", X: 1, Y: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Error(calls)
+	}
+	if gotElem != elem {
+		t.Error(gotElem)
+	}
+	if gotClick != (jaws.Click{Name: "save", X: 1, Y: 2}) {
+		t.Error(gotClick)
+	}
+}
+
+func TestBind_Hook_ContextMenu_bindingHook_fallsThroughUnhandled(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	order := []int{}
+	menuCalls1 := 0
+	menuCalls2 := 0
+	menuBind2 := New(&mu, &val).
+		ContextMenu(func(Binder[string], *jaws.Element, jaws.Click) error {
+			menuCalls1++
+			order = append(order, 1)
+			return jaws.ErrEventUnhandled
+		}).
+		ContextMenu(func(Binder[string], *jaws.Element, jaws.Click) error {
+			menuCalls2++
+			order = append(order, 2)
+			return nil
+		})
+
+	handler, ok := menuBind2.(jaws.ContextMenuHandler)
+	if !ok {
+		t.Fatalf("%T does not implement ContextMenuHandler", menuBind2)
+	}
+	if err := handler.JawsContextMenu(nil, jaws.Click{Name: "two"}); err != nil {
+		t.Fatal(err)
+	}
+	if menuCalls1 != 1 {
+		t.Error(menuCalls1)
+	}
+	if menuCalls2 != 1 {
+		t.Error(menuCalls2)
 	}
 	if !reflect.DeepEqual(order, []int{1, 2}) {
 		t.Error(order)
@@ -400,7 +472,21 @@ func TestBind_Click_defaultUnhandled(t *testing.T) {
 	if !ok {
 		t.Fatalf("%T does not implement ClickHandler", bind)
 	}
-	if err := handler.JawsClick(nil, "ignored"); !errors.Is(err, jaws.ErrEventUnhandled) {
+	if err := handler.JawsClick(nil, jaws.Click{Name: "ignored"}); !errors.Is(err, jaws.ErrEventUnhandled) {
+		t.Fatal(err)
+	}
+}
+
+func TestBind_ContextMenu_defaultUnhandled(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	bind := New(&mu, &val)
+	handler, ok := bind.(jaws.ContextMenuHandler)
+	if !ok {
+		t.Fatalf("%T does not implement ContextMenuHandler", bind)
+	}
+	if err := handler.JawsContextMenu(nil, jaws.Click{Name: "ignored"}); !errors.Is(err, jaws.ErrEventUnhandled) {
 		t.Fatal(err)
 	}
 }

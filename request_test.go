@@ -1037,7 +1037,7 @@ func TestRequest_IncomingClick(t *testing.T) {
 	select {
 	case <-th.C:
 		th.Timeout()
-	case rq.InCh <- wire.WsMsg{What: what.Click, Data: "name\tJid.1\tJid.2"}:
+	case rq.InCh <- wire.WsMsg{What: what.Click, Data: "name\t1\t2\tJid.1\tJid.2"}:
 	}
 
 	select {
@@ -1051,6 +1051,46 @@ func TestRequest_IncomingClick(t *testing.T) {
 	select {
 	case s := <-tjc1.clickCh:
 		t.Errorf("should have been ignored, got %q", s)
+	default:
+	}
+}
+
+func TestRequest_IncomingContextMenu(t *testing.T) {
+	th := newTestHelper(t)
+	NextJid = 0
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	tjc1 := &testJawsContextMenu{
+		clickCh:    make(chan Click, 2),
+		testSetter: newTestSetter(Click{}),
+	}
+	tjc1.SetErr(ErrEventUnhandled)
+	tjc2 := &testJawsContextMenu{
+		clickCh:    make(chan Click, 2),
+		testSetter: newTestSetter(Click{}),
+	}
+
+	rq.UI(testDivWidget{inner: "1"}, tjc1)
+	rq.UI(testDivWidget{inner: "2"}, tjc2)
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case rq.InCh <- wire.WsMsg{What: what.ContextMenu, Data: "name\t10\t20\ttrue\tfalse\ttrue\tJid.1\tJid.2"}:
+	}
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case got := <-tjc2.clickCh:
+		if got != (Click{Name: "name", X: 10, Y: 20, Shift: true, Alt: true}) {
+			t.Error(got)
+		}
+	}
+	select {
+	case got := <-tjc1.clickCh:
+		t.Errorf("should have been ignored, got %#v", got)
 	default:
 	}
 }
@@ -1424,9 +1464,9 @@ type templateDot struct {
 	gotName   string
 }
 
-func (td *templateDot) JawsClick(e *Element, name string) error {
+func (td *templateDot) JawsClick(e *Element, click Click) error {
 	defer close(td.clickedCh)
-	td.gotName = name
+	td.gotName = click.Name
 	return nil
 }
 
@@ -1445,7 +1485,7 @@ func TestRequest_Template_Event(t *testing.T) {
 	rq.Jaws.Broadcast(wire.Message{
 		Dest: dot,
 		What: what.Click,
-		Data: "foo",
+		Data: "foo\t1\t2",
 	})
 	select {
 	case <-time.NewTimer(testTimeout).C:

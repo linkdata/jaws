@@ -236,6 +236,161 @@ process.stdout.write(jaws.sent[0] || "");
 	}
 }
 
+func TestJawsJS_ClickIncludesCoordinatesAndRoute(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+const parent = {
+	id: "Jid.1",
+	tagName: "DIV",
+	getAttribute: function() { return null; },
+	textContent: "",
+	parentElement: null
+};
+const target = {
+	id: "Jid.2",
+	tagName: "DIV",
+	getAttribute: function(name) { return name === "name" ? "save" : null; },
+	textContent: "",
+	parentElement: parent
+};
+const ev = new Event();
+ev.target = target;
+ev.clientX = 11;
+ev.clientY = 22;
+ev.shiftKey = true;
+ev.ctrlKey = false;
+ev.altKey = true;
+ev.stopPropagation = function() {};
+
+jawsClickHandler(ev);
+process.stdout.write(jaws.sent[0] || "");
+`)
+
+	if raw == "" {
+		t.Fatal("jawsClickHandler did not emit a websocket frame")
+	}
+	msg, ok := wire.Parse([]byte(raw))
+	if !ok {
+		t.Fatalf("click frame must be parseable by wire.Parse, got %q", raw)
+	}
+	if msg.What != what.Click {
+		t.Fatalf("unexpected what: got %v", msg.What)
+	}
+	if msg.Data != "save\t11\t22\ttrue\tfalse\ttrue\tJid.2\tJid.1" {
+		t.Fatalf("unexpected click payload %q", msg.Data)
+	}
+}
+
+func TestJawsJS_ContextMenuIncludesCoordinatesAndSuppressesNativeMenu(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+const parent = {
+	id: "Jid.1",
+	tagName: "DIV",
+	getAttribute: function() { return null; },
+	textContent: "",
+	parentElement: null
+};
+const target = {
+	id: "Jid.2",
+	tagName: "DIV",
+	getAttribute: function(name) { return name === "name" ? "menu" : null; },
+	textContent: "",
+	parentElement: parent
+};
+let prevented = false;
+let stopped = false;
+const ev = new Event();
+ev.target = target;
+ev.clientX = 33;
+ev.clientY = 44;
+ev.shiftKey = false;
+ev.ctrlKey = true;
+ev.altKey = false;
+ev.stopPropagation = function() { stopped = true; };
+ev.preventDefault = function() { prevented = true; };
+
+jawsContextMenuHandler(ev);
+process.stdout.write(JSON.stringify({ msg: jaws.sent[0] || "", prevented: prevented, stopped: stopped }));
+`)
+
+	var got struct {
+		Msg       string `json:"msg"`
+		Prevented bool   `json:"prevented"`
+		Stopped   bool   `json:"stopped"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if !got.Prevented {
+		t.Fatal("expected context menu handler to call preventDefault")
+	}
+	if !got.Stopped {
+		t.Fatal("expected context menu handler to call stopPropagation")
+	}
+	msg, ok := wire.Parse([]byte(got.Msg))
+	if !ok {
+		t.Fatalf("context menu frame must be parseable by wire.Parse, got %q", got.Msg)
+	}
+	if msg.What != what.ContextMenu {
+		t.Fatalf("unexpected what: got %v", msg.What)
+	}
+	if msg.Data != "menu\t33\t44\tfalse\ttrue\tfalse\tJid.2\tJid.1" {
+		t.Fatalf("unexpected context menu payload %q", msg.Data)
+	}
+}
+
+func TestJawsJS_ContextMenuInputOriginIgnored(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+const input = {
+	id: "Jid.9",
+	tagName: "INPUT",
+	getAttribute: function(name) { return name === "name" ? "in" : null; },
+	textContent: "",
+	parentElement: null
+};
+let prevented = false;
+let stopped = false;
+const ev = new Event();
+ev.target = input;
+ev.clientX = 7;
+ev.clientY = 8;
+ev.stopPropagation = function() { stopped = true; };
+ev.preventDefault = function() { prevented = true; };
+
+jawsContextMenuHandler(ev);
+process.stdout.write(JSON.stringify({ msg: jaws.sent[0] || "", prevented: prevented, stopped: stopped }));
+`)
+
+	var got struct {
+		Msg       string `json:"msg"`
+		Prevented bool   `json:"prevented"`
+		Stopped   bool   `json:"stopped"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.Msg != "" {
+		t.Fatalf("expected no frame for input-origin context menu, got %q", got.Msg)
+	}
+	if got.Prevented || got.Stopped {
+		t.Fatalf("input-origin context menu should not be intercepted, got prevented=%v stopped=%v", got.Prevented, got.Stopped)
+	}
+}
+
 func TestJawsJS_SetSkipsUnchangedJsVarUpdate(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 let setCalls = 0;
