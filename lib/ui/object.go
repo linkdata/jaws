@@ -32,65 +32,79 @@ type Object interface {
 var _ Object = &object{}
 
 type object struct {
-	next    *object
+	prev    *object
 	handler any
 }
 
-func (o *object) addNext(handler any) (first *object) {
-	first = o
-	for o.next != nil {
-		o = o.next
+func (o *object) walk(fn func(o *object) bool) bool {
+	if o.prev != nil {
+		if o.prev.walk(fn) {
+			return true
+		}
 	}
-	o.next = &object{handler: handler}
-	return first
+	return fn(o)
 }
 
 func (o *object) Clicked(fn ClickedHook) Object {
-	return o.addNext(fn)
+	return &object{
+		prev:    o,
+		handler: fn,
+	}
 }
 
 func (o *object) ContextMenu(fn ContextMenuHook) Object {
-	return o.addNext(fn)
+	return &object{
+		prev:    o,
+		handler: fn,
+	}
 }
 
-func (o *object) JawsGetHTML(e *jaws.Element) template.HTML {
-	if h, ok := o.handler.(bind.HTMLGetter); ok {
-		return h.JawsGetHTML(e)
-	}
-	return ""
+func (o *object) JawsGetHTML(e *jaws.Element) (retv template.HTML) {
+	o.walk(func(o *object) bool {
+		if h, ok := o.handler.(bind.HTMLGetter); ok {
+			retv = h.JawsGetHTML(e)
+			return true
+		}
+		return false
+	})
+	return
 }
 
 func (o *object) JawsClick(e *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
-	for o != nil {
+	o.walk(func(o *object) bool {
 		if fn, ok := o.handler.(ClickedHook); ok {
 			if err = fn(o, e, click); !errors.Is(err, jaws.ErrEventUnhandled) {
-				return
+				return true
 			}
 		}
-		o = o.next
-	}
+		return false
+	})
 	return
 }
 
 func (o *object) JawsContextMenu(e *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
-	for o != nil {
+	o.walk(func(o *object) bool {
 		if fn, ok := o.handler.(ContextMenuHook); ok {
 			if err = fn(o, e, click); !errors.Is(err, jaws.ErrEventUnhandled) {
-				return
+				return true
 			}
 		}
-		o = o.next
-	}
+		return false
+	})
 	return
 }
 
-func (o *object) JawsGetTag(ctx jtag.Context) any {
-	if h, ok := o.handler.(jtag.TagGetter); ok {
-		return h.JawsGetTag(ctx)
-	}
-	return nil
+func (o *object) JawsGetTag(ctx jtag.Context) (t any) {
+	o.walk(func(o *object) bool {
+		if h, ok := o.handler.(jtag.TagGetter); ok {
+			t = h.JawsGetTag(ctx)
+			return true
+		}
+		return false
+	})
+	return
 }
 
 // New returns a new Object that will render HTML.
