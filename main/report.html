@@ -107,21 +107,21 @@
 				
 				<option value="file25">github.com/linkdata/jaws/lib/jid/jid.go (100.0%)</option>
 				
-				<option value="file26">github.com/linkdata/jaws/lib/jtag/errillegaltagtype.go (100.0%)</option>
+				<option value="file26">github.com/linkdata/jaws/lib/named/namedbool.go (100.0%)</option>
 				
-				<option value="file27">github.com/linkdata/jaws/lib/jtag/errnotcomparable.go (100.0%)</option>
+				<option value="file27">github.com/linkdata/jaws/lib/named/namedboolarray.go (100.0%)</option>
 				
-				<option value="file28">github.com/linkdata/jaws/lib/jtag/errnotusableastag.go (100.0%)</option>
+				<option value="file28">github.com/linkdata/jaws/lib/named/namedbooloption.go (100.0%)</option>
 				
-				<option value="file29">github.com/linkdata/jaws/lib/jtag/tag.go (100.0%)</option>
+				<option value="file29">github.com/linkdata/jaws/lib/named/writehtmlselect.go (100.0%)</option>
 				
-				<option value="file30">github.com/linkdata/jaws/lib/named/namedbool.go (100.0%)</option>
+				<option value="file30">github.com/linkdata/jaws/lib/tag/errillegaltagtype.go (100.0%)</option>
 				
-				<option value="file31">github.com/linkdata/jaws/lib/named/namedboolarray.go (100.0%)</option>
+				<option value="file31">github.com/linkdata/jaws/lib/tag/errnotcomparable.go (100.0%)</option>
 				
-				<option value="file32">github.com/linkdata/jaws/lib/named/namedbooloption.go (100.0%)</option>
+				<option value="file32">github.com/linkdata/jaws/lib/tag/errnotusableastag.go (100.0%)</option>
 				
-				<option value="file33">github.com/linkdata/jaws/lib/named/writehtmlselect.go (100.0%)</option>
+				<option value="file33">github.com/linkdata/jaws/lib/tag/tag.go (100.0%)</option>
 				
 				<option value="file34">github.com/linkdata/jaws/lib/templatereloader/templatereloader.go (100.0%)</option>
 				
@@ -420,7 +420,7 @@ import (
         "sync/atomic"
 
         "github.com/linkdata/jaws/lib/jid"
-        "github.com/linkdata/jaws/lib/jtag"
+        "github.com/linkdata/jaws/lib/tag"
         "github.com/linkdata/jaws/lib/what"
         "github.com/linkdata/jaws/lib/wire"
 )
@@ -454,8 +454,8 @@ func (e *Element) Tag(tags ...any) <span class="cov8" title="1">{
 }
 
 // HasTag returns true if this Element has the given tag.
-func (e *Element) HasTag(tag any) bool <span class="cov8" title="1">{
-        return !e.deleted.Load() &amp;&amp; e.Request.HasTag(e, tag)
+func (e *Element) HasTag(tagValue any) bool <span class="cov8" title="1">{
+        return !e.deleted.Load() &amp;&amp; e.Request.HasTag(e, tagValue)
 }</span>
 
 // Jid returns the JaWS ID for this Element, unique within it's Request.
@@ -468,10 +468,10 @@ func (e *Element) Ui() UI <span class="cov8" title="1">{
         return e.ui
 }</span>
 
-func (e *Element) maybeDirty(tag any, err error) (bool, error) <span class="cov8" title="1">{
+func (e *Element) maybeDirty(tagValue any, err error) (bool, error) <span class="cov8" title="1">{
         switch err </span>{
         case nil:<span class="cov8" title="1">
-                e.Dirty(tag)
+                e.Dirty(tagValue)
                 return true, nil</span>
         case ErrValueUnchanged:<span class="cov8" title="1">
                 return false, nil</span>
@@ -484,11 +484,11 @@ func (e *Element) renderDebug(w io.Writer) <span class="cov8" title="1">{
         _, _ = fmt.Fprintf(&amp;sb, "&lt;!-- id=%q %T tags=[", e.Jid(), e.Ui())
         if e.mu.TryRLock() </span><span class="cov8" title="1">{
                 defer e.mu.RUnlock()
-                for i, tag := range e.tagsOfLocked(e) </span><span class="cov8" title="1">{
+                for i, tagValue := range e.tagsOfLocked(e) </span><span class="cov8" title="1">{
                         if i &gt; 0 </span><span class="cov8" title="1">{
                                 sb.WriteString(", ")
                         }</span>
-                        <span class="cov8" title="1">sb.WriteString(jtag.TagString(tag))</span>
+                        <span class="cov8" title="1">sb.WriteString(tag.TagString(tagValue))</span>
                 }
         } else<span class="cov8" title="1"> {
                 sb.WriteString("n/a")
@@ -653,11 +653,11 @@ func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) <span cla
 //
 // Returns the Tag(s) added, or nil if getter was nil, along with
 // any error returned from JawsInit() if it was called.
-func (e *Element) ApplyGetter(getter any) (tag any, err error) <span class="cov8" title="1">{
+func (e *Element) ApplyGetter(getter any) (tagValue any, err error) <span class="cov8" title="1">{
         if getter != nil </span><span class="cov8" title="1">{
-                tag = getter
-                if tagger, ok := getter.(jtag.TagGetter); ok </span><span class="cov8" title="1">{
-                        tag = tagger.JawsGetTag(e.Request)
+                tagValue = getter
+                if tagger, ok := getter.(tag.TagGetter); ok </span><span class="cov8" title="1">{
+                        tagValue = tagger.JawsGetTag(e.Request)
                 }</span>
                 <span class="cov8" title="1">if eh, ok := getter.(EventHandler); ok </span><span class="cov8" title="1">{
                         e.handlers = append(e.handlers, eh)
@@ -669,7 +669,7 @@ func (e *Element) ApplyGetter(getter any) (tag any, err error) <span class="cov8
                                 e.handlers = append(e.handlers, contextMenuHandlerWrapper{ch})
                         }</span>
                 }
-                <span class="cov8" title="1">e.Tag(tag)
+                <span class="cov8" title="1">e.Tag(tagValue)
                 if initer, ok := getter.(InitHandler); ok </span><span class="cov8" title="1">{
                         err = initer.JawsInit(e)
                 }</span>
@@ -898,7 +898,7 @@ import (
         "github.com/linkdata/deadlock"
         "github.com/linkdata/jaws/lib/assets"
         "github.com/linkdata/jaws/lib/jid"
-        "github.com/linkdata/jaws/lib/jtag"
+        "github.com/linkdata/jaws/lib/tag"
         "github.com/linkdata/jaws/lib/what"
         "github.com/linkdata/jaws/lib/wire"
         "github.com/linkdata/secureheaders"
@@ -1023,7 +1023,7 @@ func (jw *Jaws) Done() &lt;-chan struct{} <span class="cov8" title="1">{
 // strings to *template.Template.
 func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) (err error) <span class="cov8" title="1">{
         if tl != nil </span><span class="cov8" title="1">{
-                if err = jtag.NewErrNotComparable(tl); err == nil </span><span class="cov8" title="1">{
+                if err = tag.NewErrNotComparable(tl); err == nil </span><span class="cov8" title="1">{
                         jw.mu.Lock()
                         if !slices.Contains(jw.tmplookers, tl) </span><span class="cov8" title="1">{
                                 jw.tmplookers = append(jw.tmplookers, tl)
@@ -1038,7 +1038,7 @@ func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) (err error) <span class
 // the list of TemplateLookupers.
 func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) (err error) <span class="cov8" title="1">{
         if tl != nil </span><span class="cov8" title="1">{
-                if err = jtag.NewErrNotComparable(tl); err == nil </span><span class="cov8" title="1">{
+                if err = tag.NewErrNotComparable(tl); err == nil </span><span class="cov8" title="1">{
                         jw.mu.Lock()
                         jw.tmplookers = slices.DeleteFunc(jw.tmplookers, func(x TemplateLookuper) bool </span><span class="cov8" title="1">{ return x == tl }</span>)
                         <span class="cov8" title="1">jw.mu.Unlock()</span>
@@ -1372,7 +1372,7 @@ func (jw *Jaws) Broadcast(msg wire.Message) <span class="cov8" title="1">{
         case *Request:<span class="cov8" title="1"></span> // send to that request
         case string:<span class="cov8" title="1"></span> // HTML id (accepted by all requests)
         default:<span class="cov8" title="1">
-                expanded, err := jtag.TagExpand(nil, msg.Dest)
+                expanded, err := tag.TagExpand(nil, msg.Dest)
                 jw.MustLog(err)
                 switch len(expanded) </span>{
                 case 0:<span class="cov8" title="1">
@@ -1393,9 +1393,9 @@ func (jw *Jaws) Broadcast(msg wire.Message) <span class="cov8" title="1">{
 // setDirty marks all Elements that have one or more of the given tags as dirty.
 func (jw *Jaws) setDirty(tags []any) <span class="cov8" title="1">{
         jw.mu.Lock()
-        for _, tag := range tags </span><span class="cov8" title="1">{
+        for _, tagValue := range tags </span><span class="cov8" title="1">{
                 jw.dirtOrder++
-                jw.dirty[tag] = jw.dirtOrder
+                jw.dirty[tagValue] = jw.dirtOrder
         }</span>
         <span class="cov8" title="1">jw.mu.Unlock()</span>
 }
@@ -1405,7 +1405,7 @@ func (jw *Jaws) setDirty(tags []any) <span class="cov8" title="1">{
 // Note that if any of the tags are a TagGetter, it will be called with a nil Request.
 // Prefer using Request.Dirty() which avoids this.
 func (jw *Jaws) Dirty(dirtyTags ...any) <span class="cov8" title="1">{
-        jw.setDirty(jtag.MustTagExpand(nil, dirtyTags))
+        jw.setDirty(tag.MustTagExpand(nil, dirtyTags))
 }</span>
 
 func (jw *Jaws) distributeDirt() int <span class="cov8" title="1">{
@@ -1739,9 +1739,9 @@ var whitespaceRemover = strings.NewReplacer(" ", "", "\n", "", "\t", "")
 
 // JsCall calls the Javascript function 'jsfunc' with the argument 'jsonstr'
 // on all Requests that have the target UI tag.
-func (jw *Jaws) JsCall(tag any, jsfunc, jsonstr string) <span class="cov8" title="1">{
+func (jw *Jaws) JsCall(tagValue any, jsfunc, jsonstr string) <span class="cov8" title="1">{
         jw.Broadcast(wire.Message{
-                Dest: tag,
+                Dest: tagValue,
                 What: what.Call,
                 Data: whitespaceRemover.Replace(jsfunc) + "=" + maybeCompactJSON(jsonstr),
         })
@@ -2373,7 +2373,7 @@ import (
         "html/template"
 
         "github.com/linkdata/jaws"
-        "github.com/linkdata/jaws/lib/jtag"
+        "github.com/linkdata/jaws/lib/tag"
 )
 
 // SetHook is a function that replaces JawsSetLocked for a Binder.
@@ -2422,7 +2422,7 @@ type SuccessHook func(*jaws.Element) (err error)
 type Binder[T comparable] interface {
         RWLocker
         Setter[T]
-        jtag.TagGetter
+        tag.TagGetter
         jaws.ClickHandler
         jaws.ContextMenuHandler
 
@@ -2568,7 +2568,7 @@ func (bind *binder[T]) JawsSet(elem *jaws.Element, value T) (err error) <span cl
         <span class="cov8" title="1">return</span>
 }
 
-func (bind *binder[T]) JawsGetTag(jtag.Context) any <span class="cov8" title="1">{
+func (bind *binder[T]) JawsGetTag(tag.Context) any <span class="cov8" title="1">{
         return bind.ptr
 }</span>
 
@@ -2716,7 +2716,7 @@ import (
         "fmt"
 
         "github.com/linkdata/jaws"
-        "github.com/linkdata/jaws/lib/jtag"
+        "github.com/linkdata/jaws/lib/tag"
 )
 
 var ErrValueNotSettable = errors.New("value not settable")
@@ -2737,7 +2737,7 @@ func (s getterStatic[T]) JawsGet(*jaws.Element) T <span class="cov8" title="1">{
         return s.v
 }</span>
 
-func (s getterStatic[T]) JawsGetTag(jtag.Context) any <span class="cov8" title="1">{
+func (s getterStatic[T]) JawsGetTag(tag.Context) any <span class="cov8" title="1">{
         return nil
 }</span>
 
@@ -2763,7 +2763,7 @@ import (
         "html/template"
 
         "github.com/linkdata/jaws"
-        "github.com/linkdata/jaws/lib/jtag"
+        "github.com/linkdata/jaws/lib/tag"
 )
 
 type htmlGetterFunc struct {
@@ -2771,13 +2771,13 @@ type htmlGetterFunc struct {
         tags []any
 }
 
-var _ jtag.TagGetter = &amp;htmlGetterFunc{}
+var _ tag.TagGetter = &amp;htmlGetterFunc{}
 
 func (g *htmlGetterFunc) JawsGetHTML(e *jaws.Element) template.HTML <span class="cov8" title="1">{
         return g.fn(e)
 }</span>
 
-func (g *htmlGetterFunc) JawsGetTag(jtag.Context) any <span class="cov8" title="1">{
+func (g *htmlGetterFunc) JawsGetTag(tag.Context) any <span class="cov8" title="1">{
         return g.tags
 }</span>
 
@@ -2795,7 +2795,7 @@ import (
         "html/template"
 
         "github.com/linkdata/jaws"
-        "github.com/linkdata/jaws/lib/jtag"
+        "github.com/linkdata/jaws/lib/tag"
 )
 
 type htmlGetter struct{ v template.HTML }
@@ -2804,7 +2804,7 @@ func (g htmlGetter) JawsGetHTML(e *jaws.Element) template.HTML <span class="cov8
         return g.v
 }</span>
 
-func (g htmlGetter) JawsGetTag(jtag.Context) any <span class="cov8" title="1">{
+func (g htmlGetter) JawsGetTag(tag.Context) any <span class="cov8" title="1">{
         return nil
 }</span>
 
@@ -2814,7 +2814,7 @@ func (g htmlStringerGetter) JawsGetHTML(e *jaws.Element) template.HTML <span cla
         return template.HTML(html.EscapeString(g.sg.String())) // #nosec G203
 }</span>
 
-func (g htmlStringerGetter) JawsGetTag(jtag.Context) any <span class="cov8" title="1">{
+func (g htmlStringerGetter) JawsGetTag(tag.Context) any <span class="cov8" title="1">{
         return g.sg
 }</span>
 
@@ -2830,7 +2830,7 @@ func (g htmlGetterString) JawsGetHTML(e *jaws.Element) template.HTML <span class
         return template.HTML(html.EscapeString(g.sg.JawsGet(e))) // #nosec G203
 }</span>
 
-func (g htmlGetterString) JawsGetTag(jtag.Context) any <span class="cov8" title="1">{
+func (g htmlGetterString) JawsGetTag(tag.Context) any <span class="cov8" title="1">{
         return g.sg
 }</span>
 
@@ -2898,7 +2898,7 @@ import (
         "fmt"
 
         "github.com/linkdata/jaws"
-        "github.com/linkdata/jaws/lib/jtag"
+        "github.com/linkdata/jaws/lib/tag"
 )
 
 type Setter[T comparable] interface {
@@ -2915,7 +2915,7 @@ func (setterReadOnly[T]) JawsSet(*jaws.Element, T) error <span class="cov8" titl
         return ErrValueNotSettable
 }</span>
 
-func (s setterReadOnly[T]) JawsGetTag(jtag.Context) any <span class="cov8" title="1">{
+func (s setterReadOnly[T]) JawsGetTag(tag.Context) any <span class="cov8" title="1">{
         return s.Getter
 }</span>
 
@@ -2931,7 +2931,7 @@ func (s setterStatic[T]) JawsGet(*jaws.Element) T <span class="cov8" title="1">{
         return s.v
 }</span>
 
-func (s setterStatic[T]) JawsGetTag(jtag.Context) any <span class="cov8" title="1">{
+func (s setterStatic[T]) JawsGetTag(tag.Context) any <span class="cov8" title="1">{
         return nil
 }</span>
 
@@ -2955,7 +2955,7 @@ import (
         "fmt"
 
         "github.com/linkdata/jaws"
-        "github.com/linkdata/jaws/lib/jtag"
+        "github.com/linkdata/jaws/lib/tag"
 )
 
 type numeric interface {
@@ -2983,7 +2983,7 @@ func (s setterFloat64[T]) JawsSet(e *jaws.Element, v float64) error <span class=
         return s.Setter.JawsSet(e, T(v))
 }</span>
 
-func (s setterFloat64[T]) JawsGetTag(jtag.Context) any <span class="cov8" title="1">{
+func (s setterFloat64[T]) JawsGetTag(tag.Context) any <span class="cov8" title="1">{
         return s.Setter
 }</span>
 
@@ -3000,7 +3000,7 @@ func (setterFloat64ReadOnly[T]) JawsSet(*jaws.Element, float64) error <span clas
         return ErrValueNotSettable
 }</span>
 
-func (s setterFloat64ReadOnly[T]) JawsGetTag(jtag.Context) any <span class="cov8" title="1">{
+func (s setterFloat64ReadOnly[T]) JawsGetTag(tag.Context) any <span class="cov8" title="1">{
         return s.Getter
 }</span>
 
@@ -3016,7 +3016,7 @@ func (s setterFloat64Static[T]) JawsGet(*jaws.Element) float64 <span class="cov8
         return s.v
 }</span>
 
-func (s setterFloat64Static[T]) JawsGetTag(jtag.Context) any <span class="cov8" title="1">{
+func (s setterFloat64Static[T]) JawsGetTag(tag.Context) any <span class="cov8" title="1">{
         return nil
 }</span>
 
@@ -3068,7 +3068,7 @@ func MakeSetterFloat64(v any) (s Setter[float64]) <span class="cov8" title="1">{
 
 import (
         "github.com/linkdata/jaws"
-        "github.com/linkdata/jaws/lib/jtag"
+        "github.com/linkdata/jaws/lib/tag"
 )
 
 type stringGetterFunc struct {
@@ -3080,7 +3080,7 @@ func (g *stringGetterFunc) JawsGet(e *jaws.Element) string <span class="cov8" ti
         return g.fn(e)
 }</span>
 
-func (g *stringGetterFunc) JawsGetTag(jtag.Context) any <span class="cov8" title="1">{
+func (g *stringGetterFunc) JawsGetTag(tag.Context) any <span class="cov8" title="1">{
         return g.tags
 }</span>
 
@@ -3255,300 +3255,7 @@ func (jid Jid) String() string <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file26" style="display: none">package jtag
-
-import "fmt"
-
-// ErrIllegalTagType is returned when a UI tag type is disallowed.
-var ErrIllegalTagType errIllegalTagType
-
-type errIllegalTagType struct {
-        tag any
-}
-
-func (e errIllegalTagType) Error() string <span class="cov8" title="1">{
-        return fmt.Sprintf("illegal tag type %T", e.tag)
-}</span>
-
-func (errIllegalTagType) Is(other error) bool <span class="cov8" title="1">{
-        return other == ErrIllegalTagType
-}</span>
-</pre>
-		
-		<pre class="file" id="file27" style="display: none">package jtag
-
-import "reflect"
-
-// ErrNotComparable is returned when a UI object or tag is not comparable.
-var ErrNotComparable errNotComparable
-
-type errNotComparable struct {
-        t reflect.Type
-}
-
-func (e errNotComparable) Error() (s string) <span class="cov8" title="1">{
-        if e.t != nil </span><span class="cov8" title="1">{
-                s = e.t.String() + " is "
-        }</span>
-        <span class="cov8" title="1">return s + "not comparable"</span>
-}
-
-func (errNotComparable) Is(target error) bool <span class="cov8" title="1">{
-        return target == ErrNotComparable
-}</span>
-
-// NewErrNotComparable returns ErrNotComparable if x is not comparable.
-func NewErrNotComparable(x any) error <span class="cov8" title="1">{
-        if x != nil </span><span class="cov8" title="1">{
-                if v := reflect.ValueOf(x); !v.Comparable() </span><span class="cov8" title="1">{
-                        return errNotComparable{t: reflect.TypeOf(x)}
-                }</span>
-        }
-        <span class="cov8" title="1">return nil</span>
-}
-</pre>
-		
-		<pre class="file" id="file28" style="display: none">package jtag
-
-import (
-        "fmt"
-        "reflect"
-        "strconv"
-)
-
-// ErrNotUsableAsTag is returned when a value cannot be used as a tag.
-//
-// It is also matchable as ErrNotComparable for backwards compatibility.
-var ErrNotUsableAsTag errNotUsableAsTag
-
-type errNotUsableAsTag struct {
-        t             reflect.Type
-        tagGetterPath string
-        tagGetterType reflect.Type
-}
-
-func (e errNotUsableAsTag) Error() (s string) <span class="cov8" title="1">{
-        if e.t != nil </span><span class="cov8" title="1">{
-                s = e.t.String() + " is "
-        }</span>
-        <span class="cov8" title="1">s += "not usable as tag"
-        if e.tagGetterType != nil </span><span class="cov8" title="1">{
-                return s + fmt.Sprintf("; found nested TagGetter at %s (%s); hint: implement JawsGetTag(jawstags.Context) on this type to delegate to that value, or pass that nested TagGetter directly", e.tagGetterPath, e.tagGetterType)
-        }</span>
-        <span class="cov8" title="1">return s + "; found no nested TagGetter; hint: use a comparable tag value, or implement JawsGetTag(jawstags.Context) and return a comparable tag"</span>
-}
-
-func (errNotUsableAsTag) Is(target error) bool <span class="cov8" title="1">{
-        return target == ErrNotUsableAsTag || target == ErrNotComparable
-}</span>
-
-// NewErrNotUsableAsTag returns ErrNotUsableAsTag if x cannot be used as a tag.
-func NewErrNotUsableAsTag(x any) error <span class="cov8" title="1">{
-        if err := NewErrNotComparable(x); err != nil </span><span class="cov8" title="1">{
-                retErr := errNotUsableAsTag{t: reflect.TypeOf(x)}
-                if path, tgType, ok := FindTagGetter(x); ok </span><span class="cov8" title="1">{
-                        retErr.tagGetterPath = path
-                        retErr.tagGetterType = tgType
-                }</span>
-                <span class="cov8" title="1">return retErr</span>
-        }
-        <span class="cov8" title="1">return nil</span>
-}
-
-var tagGetterType = reflect.TypeFor[TagGetter]()
-
-// FindTagGetter searches x recursively for a nested TagGetter.
-func FindTagGetter(x any) (path string, tgType reflect.Type, found bool) <span class="cov8" title="1">{
-        if x == nil </span><span class="cov8" title="1">{
-                return
-        }</span>
-        <span class="cov8" title="1">type seenPtr struct {
-                t   reflect.Type
-                ptr uintptr
-        }
-        seen := map[seenPtr]struct{}{}
-        var walk func(v reflect.Value, currentPath string, depth int) bool
-        walk = func(v reflect.Value, currentPath string, depth int) bool </span><span class="cov8" title="1">{
-                if !v.IsValid() || depth &gt; 10 </span><span class="cov8" title="1">{
-                        return false
-                }</span>
-                <span class="cov8" title="1">t := v.Type()
-                if t.Implements(tagGetterType) </span><span class="cov8" title="1">{
-                        path = currentPath
-                        if path == "" </span><span class="cov8" title="1">{
-                                path = "&lt;value&gt;"
-                        }</span>
-                        <span class="cov8" title="1">tgType = t
-                        found = true
-                        return true</span>
-                }
-                <span class="cov8" title="1">switch v.Kind() </span>{
-                case reflect.Interface:<span class="cov8" title="1">
-                        if v.IsNil() </span><span class="cov8" title="1">{
-                                return false
-                        }</span>
-                        <span class="cov8" title="1">return walk(v.Elem(), currentPath, depth+1)</span>
-                case reflect.Pointer:<span class="cov8" title="1">
-                        if v.IsNil() </span><span class="cov8" title="1">{
-                                return false
-                        }</span>
-                        <span class="cov8" title="1">p := seenPtr{t: t, ptr: v.Pointer()}
-                        if _, ok := seen[p]; ok </span><span class="cov8" title="1">{
-                                return false
-                        }</span>
-                        <span class="cov8" title="1">seen[p] = struct{}{}
-                        return walk(v.Elem(), currentPath, depth+1)</span>
-                case reflect.Struct:<span class="cov8" title="1">
-                        for i := range t.NumField() </span><span class="cov8" title="1">{
-                                next := t.Field(i).Name
-                                if currentPath != "" </span><span class="cov8" title="1">{
-                                        next = currentPath + "." + next
-                                }</span>
-                                <span class="cov8" title="1">if walk(v.Field(i), next, depth+1) </span><span class="cov8" title="1">{
-                                        return true
-                                }</span>
-                        }
-                case reflect.Array:<span class="cov8" title="1">
-                        n := min(v.Len(), 4)
-                        for i := range n </span><span class="cov8" title="1">{
-                                next := "[" + strconv.Itoa(i) + "]"
-                                if currentPath != "" </span><span class="cov8" title="1">{
-                                        next = currentPath + next
-                                }</span>
-                                <span class="cov8" title="1">if walk(v.Index(i), next, depth+1) </span><span class="cov8" title="1">{
-                                        return true
-                                }</span>
-                        }
-                case reflect.Slice:<span class="cov8" title="1">
-                        if v.IsNil() </span><span class="cov8" title="1">{
-                                return false
-                        }</span>
-                        <span class="cov8" title="1">p := seenPtr{t: t, ptr: v.Pointer()}
-                        if _, ok := seen[p]; ok </span><span class="cov8" title="1">{
-                                return false
-                        }</span>
-                        <span class="cov8" title="1">seen[p] = struct{}{}
-                        n := min(v.Len(), 4)
-                        for i := range n </span><span class="cov8" title="1">{
-                                next := "[" + strconv.Itoa(i) + "]"
-                                if currentPath != "" </span><span class="cov8" title="1">{
-                                        next = currentPath + next
-                                }</span>
-                                <span class="cov8" title="1">if walk(v.Index(i), next, depth+1) </span><span class="cov8" title="1">{
-                                        return true
-                                }</span>
-                        }
-                }
-                <span class="cov8" title="1">return false</span>
-        }
-        <span class="cov8" title="1">walk(reflect.ValueOf(x), path, 0)
-        return</span>
-}
-</pre>
-		
-		<pre class="file" id="file29" style="display: none">package jtag
-
-import (
-        "fmt"
-        "html/template"
-        "reflect"
-)
-
-type Tag string
-
-func TagString(tag any) string <span class="cov8" title="1">{
-        if rv := reflect.ValueOf(tag); rv.IsValid() </span><span class="cov8" title="1">{
-                if rv.Kind() == reflect.Pointer </span><span class="cov8" title="1">{
-                        return fmt.Sprintf("%T(%p)", tag, tag)
-                }</span> else<span class="cov8" title="1"> if stringer, ok := tag.(fmt.Stringer); ok </span><span class="cov8" title="1">{
-                        return fmt.Sprintf("%T(%s)", tag, stringer.String())
-                }</span>
-        }
-        <span class="cov8" title="1">return fmt.Sprintf("%#v", tag)</span>
-}
-
-type errTooManyTags struct{}
-
-func (errTooManyTags) Error() string <span class="cov8" title="1">{
-        return "too many tags"
-}</span>
-
-var ErrTooManyTags = errTooManyTags{}
-
-func tagExpand(l int, ctx Context, tag any, result []any) ([]any, error) <span class="cov8" title="1">{
-        if l &gt; 10 || len(result) &gt; 100 </span><span class="cov8" title="1">{
-                return result, ErrTooManyTags
-        }</span>
-        <span class="cov8" title="1">switch data := tag.(type) </span>{
-        case string:<span class="cov8" title="1"></span>
-        case template.HTML:<span class="cov8" title="1"></span>
-        case template.HTMLAttr:<span class="cov8" title="1"></span>
-        case int:<span class="cov8" title="1"></span>
-        case int8:<span class="cov8" title="1"></span>
-        case int16:<span class="cov8" title="1"></span>
-        case int32:<span class="cov8" title="1"></span>
-        case int64:<span class="cov8" title="1"></span>
-        case uint:<span class="cov8" title="1"></span>
-        case uint8:<span class="cov8" title="1"></span>
-        case uint16:<span class="cov8" title="1"></span>
-        case uint32:<span class="cov8" title="1"></span>
-        case uint64:<span class="cov8" title="1"></span>
-        case float32:<span class="cov8" title="1"></span>
-        case float64:<span class="cov8" title="1"></span>
-        case bool:<span class="cov8" title="1"></span>
-        case nil:<span class="cov8" title="1">
-                return result, nil</span>
-        case []Tag:<span class="cov8" title="1">
-                for _, v := range data </span><span class="cov8" title="1">{
-                        result = append(result, v)
-                }</span>
-                <span class="cov8" title="1">return result, nil</span>
-        case TagGetter:<span class="cov8" title="1">
-                newTag := data.JawsGetTag(ctx)
-                if reflect.TypeOf(data) == reflect.TypeOf(newTag) </span><span class="cov8" title="1">{
-                        if err := NewErrNotUsableAsTag(newTag); err != nil </span><span class="cov8" title="1">{
-                                return result, err
-                        }</span>
-                        <span class="cov8" title="1">if data == newTag </span><span class="cov8" title="1">{
-                                return append(result, data), nil
-                        }</span>
-                }
-                <span class="cov8" title="1">return tagExpand(l+1, ctx, newTag, result)</span>
-        case []any:<span class="cov8" title="1">
-                var err error
-                for _, v := range data </span><span class="cov8" title="1">{
-                        if result, err = tagExpand(l+1, ctx, v, result); err != nil </span><span class="cov8" title="1">{
-                                break</span>
-                        }
-                }
-                <span class="cov8" title="1">return result, err</span>
-        default:<span class="cov8" title="1">
-                if err := NewErrNotUsableAsTag(data); err != nil </span><span class="cov8" title="1">{
-                        return result, err
-                }</span>
-                <span class="cov8" title="1">return append(result, data), nil</span>
-        }
-        <span class="cov8" title="1">return result, errIllegalTagType{tag: tag}</span>
-}
-
-func TagExpand(ctx Context, tag any) ([]any, error) <span class="cov8" title="1">{
-        return tagExpand(0, ctx, tag, nil)
-}</span>
-
-func MustTagExpand(ctx Context, tag any) []any <span class="cov8" title="1">{
-        result, err := TagExpand(ctx, tag)
-        if err != nil </span><span class="cov8" title="1">{
-                if ctx != nil </span><span class="cov8" title="1">{
-                        ctx.MustLog(err)
-                }</span> else<span class="cov8" title="1"> {
-                        panic(err)</span>
-                }
-        }
-        <span class="cov8" title="1">return result</span>
-}
-</pre>
-		
-		<pre class="file" id="file30" style="display: none">package named
+		<pre class="file" id="file26" style="display: none">package named
 
 import (
         "fmt"
@@ -3647,7 +3354,7 @@ func (nb *Bool) String() string <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file31" style="display: none">package named
+		<pre class="file" id="file27" style="display: none">package named
 
 import (
         "html/template"
@@ -3811,7 +3518,7 @@ func (nba *BoolArray) JawsSet(e *jaws.Element, name string) (err error) <span cl
 }
 </pre>
 		
-		<pre class="file" id="file32" style="display: none">package named
+		<pre class="file" id="file28" style="display: none">package named
 
 import (
         "html"
@@ -3848,7 +3555,7 @@ func (ui namedBoolOption) JawsUpdate(e *jaws.Element) <span class="cov8" title="
 }
 </pre>
 		
-		<pre class="file" id="file33" style="display: none">package named
+		<pre class="file" id="file29" style="display: none">package named
 
 import (
         "html/template"
@@ -3879,6 +3586,299 @@ func WriteHTMLSelect(w io.Writer, jid jid.Jid, nba *BoolArray, attrs []template.
                 _, err = w.Write(b)</span>
         }
         <span class="cov8" title="1">return</span>
+}
+</pre>
+		
+		<pre class="file" id="file30" style="display: none">package tag
+
+import "fmt"
+
+// ErrIllegalTagType is returned when a UI tag type is disallowed.
+var ErrIllegalTagType errIllegalTagType
+
+type errIllegalTagType struct {
+        tag any
+}
+
+func (e errIllegalTagType) Error() string <span class="cov8" title="1">{
+        return fmt.Sprintf("illegal tag type %T", e.tag)
+}</span>
+
+func (errIllegalTagType) Is(other error) bool <span class="cov8" title="1">{
+        return other == ErrIllegalTagType
+}</span>
+</pre>
+		
+		<pre class="file" id="file31" style="display: none">package tag
+
+import "reflect"
+
+// ErrNotComparable is returned when a UI object or tag is not comparable.
+var ErrNotComparable errNotComparable
+
+type errNotComparable struct {
+        t reflect.Type
+}
+
+func (e errNotComparable) Error() (s string) <span class="cov8" title="1">{
+        if e.t != nil </span><span class="cov8" title="1">{
+                s = e.t.String() + " is "
+        }</span>
+        <span class="cov8" title="1">return s + "not comparable"</span>
+}
+
+func (errNotComparable) Is(target error) bool <span class="cov8" title="1">{
+        return target == ErrNotComparable
+}</span>
+
+// NewErrNotComparable returns ErrNotComparable if x is not comparable.
+func NewErrNotComparable(x any) error <span class="cov8" title="1">{
+        if x != nil </span><span class="cov8" title="1">{
+                if v := reflect.ValueOf(x); !v.Comparable() </span><span class="cov8" title="1">{
+                        return errNotComparable{t: reflect.TypeOf(x)}
+                }</span>
+        }
+        <span class="cov8" title="1">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file32" style="display: none">package tag
+
+import (
+        "fmt"
+        "reflect"
+        "strconv"
+)
+
+// ErrNotUsableAsTag is returned when a value cannot be used as a tag.
+//
+// It is also matchable as ErrNotComparable for backwards compatibility.
+var ErrNotUsableAsTag errNotUsableAsTag
+
+type errNotUsableAsTag struct {
+        t             reflect.Type
+        tagGetterPath string
+        tagGetterType reflect.Type
+}
+
+func (e errNotUsableAsTag) Error() (s string) <span class="cov8" title="1">{
+        if e.t != nil </span><span class="cov8" title="1">{
+                s = e.t.String() + " is "
+        }</span>
+        <span class="cov8" title="1">s += "not usable as tag"
+        if e.tagGetterType != nil </span><span class="cov8" title="1">{
+                return s + fmt.Sprintf("; found nested TagGetter at %s (%s); hint: implement JawsGetTag(jawstags.Context) on this type to delegate to that value, or pass that nested TagGetter directly", e.tagGetterPath, e.tagGetterType)
+        }</span>
+        <span class="cov8" title="1">return s + "; found no nested TagGetter; hint: use a comparable tag value, or implement JawsGetTag(jawstags.Context) and return a comparable tag"</span>
+}
+
+func (errNotUsableAsTag) Is(target error) bool <span class="cov8" title="1">{
+        return target == ErrNotUsableAsTag || target == ErrNotComparable
+}</span>
+
+// NewErrNotUsableAsTag returns ErrNotUsableAsTag if x cannot be used as a tag.
+func NewErrNotUsableAsTag(x any) error <span class="cov8" title="1">{
+        if err := NewErrNotComparable(x); err != nil </span><span class="cov8" title="1">{
+                retErr := errNotUsableAsTag{t: reflect.TypeOf(x)}
+                if path, tgType, ok := FindTagGetter(x); ok </span><span class="cov8" title="1">{
+                        retErr.tagGetterPath = path
+                        retErr.tagGetterType = tgType
+                }</span>
+                <span class="cov8" title="1">return retErr</span>
+        }
+        <span class="cov8" title="1">return nil</span>
+}
+
+var tagGetterType = reflect.TypeFor[TagGetter]()
+
+// FindTagGetter searches x recursively for a nested TagGetter.
+func FindTagGetter(x any) (path string, tgType reflect.Type, found bool) <span class="cov8" title="1">{
+        if x == nil </span><span class="cov8" title="1">{
+                return
+        }</span>
+        <span class="cov8" title="1">type seenPtr struct {
+                t   reflect.Type
+                ptr uintptr
+        }
+        seen := map[seenPtr]struct{}{}
+        var walk func(v reflect.Value, currentPath string, depth int) bool
+        walk = func(v reflect.Value, currentPath string, depth int) bool </span><span class="cov8" title="1">{
+                if !v.IsValid() || depth &gt; 10 </span><span class="cov8" title="1">{
+                        return false
+                }</span>
+                <span class="cov8" title="1">t := v.Type()
+                if t.Implements(tagGetterType) </span><span class="cov8" title="1">{
+                        path = currentPath
+                        if path == "" </span><span class="cov8" title="1">{
+                                path = "&lt;value&gt;"
+                        }</span>
+                        <span class="cov8" title="1">tgType = t
+                        found = true
+                        return true</span>
+                }
+                <span class="cov8" title="1">switch v.Kind() </span>{
+                case reflect.Interface:<span class="cov8" title="1">
+                        if v.IsNil() </span><span class="cov8" title="1">{
+                                return false
+                        }</span>
+                        <span class="cov8" title="1">return walk(v.Elem(), currentPath, depth+1)</span>
+                case reflect.Pointer:<span class="cov8" title="1">
+                        if v.IsNil() </span><span class="cov8" title="1">{
+                                return false
+                        }</span>
+                        <span class="cov8" title="1">p := seenPtr{t: t, ptr: v.Pointer()}
+                        if _, ok := seen[p]; ok </span><span class="cov8" title="1">{
+                                return false
+                        }</span>
+                        <span class="cov8" title="1">seen[p] = struct{}{}
+                        return walk(v.Elem(), currentPath, depth+1)</span>
+                case reflect.Struct:<span class="cov8" title="1">
+                        for i := range t.NumField() </span><span class="cov8" title="1">{
+                                next := t.Field(i).Name
+                                if currentPath != "" </span><span class="cov8" title="1">{
+                                        next = currentPath + "." + next
+                                }</span>
+                                <span class="cov8" title="1">if walk(v.Field(i), next, depth+1) </span><span class="cov8" title="1">{
+                                        return true
+                                }</span>
+                        }
+                case reflect.Array:<span class="cov8" title="1">
+                        n := min(v.Len(), 4)
+                        for i := range n </span><span class="cov8" title="1">{
+                                next := "[" + strconv.Itoa(i) + "]"
+                                if currentPath != "" </span><span class="cov8" title="1">{
+                                        next = currentPath + next
+                                }</span>
+                                <span class="cov8" title="1">if walk(v.Index(i), next, depth+1) </span><span class="cov8" title="1">{
+                                        return true
+                                }</span>
+                        }
+                case reflect.Slice:<span class="cov8" title="1">
+                        if v.IsNil() </span><span class="cov8" title="1">{
+                                return false
+                        }</span>
+                        <span class="cov8" title="1">p := seenPtr{t: t, ptr: v.Pointer()}
+                        if _, ok := seen[p]; ok </span><span class="cov8" title="1">{
+                                return false
+                        }</span>
+                        <span class="cov8" title="1">seen[p] = struct{}{}
+                        n := min(v.Len(), 4)
+                        for i := range n </span><span class="cov8" title="1">{
+                                next := "[" + strconv.Itoa(i) + "]"
+                                if currentPath != "" </span><span class="cov8" title="1">{
+                                        next = currentPath + next
+                                }</span>
+                                <span class="cov8" title="1">if walk(v.Index(i), next, depth+1) </span><span class="cov8" title="1">{
+                                        return true
+                                }</span>
+                        }
+                }
+                <span class="cov8" title="1">return false</span>
+        }
+        <span class="cov8" title="1">walk(reflect.ValueOf(x), path, 0)
+        return</span>
+}
+</pre>
+		
+		<pre class="file" id="file33" style="display: none">package tag
+
+import (
+        "fmt"
+        "html/template"
+        "reflect"
+)
+
+type Tag string
+
+func TagString(tag any) string <span class="cov8" title="1">{
+        if rv := reflect.ValueOf(tag); rv.IsValid() </span><span class="cov8" title="1">{
+                if rv.Kind() == reflect.Pointer </span><span class="cov8" title="1">{
+                        return fmt.Sprintf("%T(%p)", tag, tag)
+                }</span> else<span class="cov8" title="1"> if stringer, ok := tag.(fmt.Stringer); ok </span><span class="cov8" title="1">{
+                        return fmt.Sprintf("%T(%s)", tag, stringer.String())
+                }</span>
+        }
+        <span class="cov8" title="1">return fmt.Sprintf("%#v", tag)</span>
+}
+
+type errTooManyTags struct{}
+
+func (errTooManyTags) Error() string <span class="cov8" title="1">{
+        return "too many tags"
+}</span>
+
+var ErrTooManyTags = errTooManyTags{}
+
+func tagExpand(l int, ctx Context, tag any, result []any) ([]any, error) <span class="cov8" title="1">{
+        if l &gt; 10 || len(result) &gt; 100 </span><span class="cov8" title="1">{
+                return result, ErrTooManyTags
+        }</span>
+        <span class="cov8" title="1">switch data := tag.(type) </span>{
+        case string:<span class="cov8" title="1"></span>
+        case template.HTML:<span class="cov8" title="1"></span>
+        case template.HTMLAttr:<span class="cov8" title="1"></span>
+        case int:<span class="cov8" title="1"></span>
+        case int8:<span class="cov8" title="1"></span>
+        case int16:<span class="cov8" title="1"></span>
+        case int32:<span class="cov8" title="1"></span>
+        case int64:<span class="cov8" title="1"></span>
+        case uint:<span class="cov8" title="1"></span>
+        case uint8:<span class="cov8" title="1"></span>
+        case uint16:<span class="cov8" title="1"></span>
+        case uint32:<span class="cov8" title="1"></span>
+        case uint64:<span class="cov8" title="1"></span>
+        case float32:<span class="cov8" title="1"></span>
+        case float64:<span class="cov8" title="1"></span>
+        case bool:<span class="cov8" title="1"></span>
+        case nil:<span class="cov8" title="1">
+                return result, nil</span>
+        case []Tag:<span class="cov8" title="1">
+                for _, v := range data </span><span class="cov8" title="1">{
+                        result = append(result, v)
+                }</span>
+                <span class="cov8" title="1">return result, nil</span>
+        case TagGetter:<span class="cov8" title="1">
+                newTag := data.JawsGetTag(ctx)
+                if reflect.TypeOf(data) == reflect.TypeOf(newTag) </span><span class="cov8" title="1">{
+                        if err := NewErrNotUsableAsTag(newTag); err != nil </span><span class="cov8" title="1">{
+                                return result, err
+                        }</span>
+                        <span class="cov8" title="1">if data == newTag </span><span class="cov8" title="1">{
+                                return append(result, data), nil
+                        }</span>
+                }
+                <span class="cov8" title="1">return tagExpand(l+1, ctx, newTag, result)</span>
+        case []any:<span class="cov8" title="1">
+                var err error
+                for _, v := range data </span><span class="cov8" title="1">{
+                        if result, err = tagExpand(l+1, ctx, v, result); err != nil </span><span class="cov8" title="1">{
+                                break</span>
+                        }
+                }
+                <span class="cov8" title="1">return result, err</span>
+        default:<span class="cov8" title="1">
+                if err := NewErrNotUsableAsTag(data); err != nil </span><span class="cov8" title="1">{
+                        return result, err
+                }</span>
+                <span class="cov8" title="1">return append(result, data), nil</span>
+        }
+        <span class="cov8" title="1">return result, errIllegalTagType{tag: tag}</span>
+}
+
+func TagExpand(ctx Context, tag any) ([]any, error) <span class="cov8" title="1">{
+        return tagExpand(0, ctx, tag, nil)
+}</span>
+
+func MustTagExpand(ctx Context, tag any) []any <span class="cov8" title="1">{
+        result, err := TagExpand(ctx, tag)
+        if err != nil </span><span class="cov8" title="1">{
+                if ctx != nil </span><span class="cov8" title="1">{
+                        ctx.MustLog(err)
+                }</span> else<span class="cov8" title="1"> {
+                        panic(err)</span>
+                }
+        }
+        <span class="cov8" title="1">return result</span>
 }
 </pre>
 		
@@ -4584,7 +4584,7 @@ import (
 
         "github.com/linkdata/jaws"
         "github.com/linkdata/jaws/lib/bind"
-        "github.com/linkdata/jaws/lib/jtag"
+        "github.com/linkdata/jaws/lib/tag"
         "github.com/linkdata/jaws/lib/what"
         "github.com/linkdata/jaws/lib/wire"
         "github.com/linkdata/jq"
@@ -4751,7 +4751,7 @@ func (ui *JsVar[T]) JawsRender(e *jaws.Element, w io.Writer, params []any) (err 
         <span class="cov8" title="1">return</span>
 }
 
-func (ui *JsVar[T]) JawsGetTag(jtag.Context) any <span class="cov8" title="1">{
+func (ui *JsVar[T]) JawsGetTag(tag.Context) any <span class="cov8" title="1">{
         return ui.Tag
 }</span>
 
@@ -4890,7 +4890,7 @@ import (
 
         "github.com/linkdata/jaws"
         "github.com/linkdata/jaws/lib/bind"
-        "github.com/linkdata/jaws/lib/jtag"
+        "github.com/linkdata/jaws/lib/tag"
 )
 
 // ClickedHook is a function to call when a click event is received.
@@ -4901,7 +4901,7 @@ type ContextMenuHook func(obj Object, elem *jaws.Element, click jaws.Click) (err
 
 type Object interface {
         bind.HTMLGetter
-        jtag.TagGetter
+        tag.TagGetter
         jaws.ClickHandler
         jaws.ContextMenuHandler
 
@@ -4980,10 +4980,10 @@ func (o *object) JawsContextMenu(e *jaws.Element, click jaws.Click) (err error) 
         <span class="cov8" title="1">return</span>
 }
 
-func (o *object) JawsGetTag(ctx jtag.Context) (t any) <span class="cov8" title="1">{
+func (o *object) JawsGetTag(ctx tag.Context) (t any) <span class="cov8" title="1">{
         o.walk(func(o *object) (ok bool) </span><span class="cov8" title="1">{
-                var h jtag.TagGetter
-                if h, ok = o.handler.(jtag.TagGetter); ok </span><span class="cov8" title="1">{
+                var h tag.TagGetter
+                if h, ok = o.handler.(tag.TagGetter); ok </span><span class="cov8" title="1">{
                         t = h.JawsGetTag(ctx)
                 }</span>
                 <span class="cov8" title="1">return</span>
@@ -5379,7 +5379,7 @@ import (
 
         "github.com/linkdata/deadlock"
         "github.com/linkdata/jaws"
-        "github.com/linkdata/jaws/lib/jtag"
+        "github.com/linkdata/jaws/lib/tag"
         "github.com/linkdata/jaws/lib/what"
 )
 
@@ -5398,7 +5398,7 @@ var _ jaws.UI = Template{}           // statically ensure interface is defined
 var _ jaws.EventHandler = Template{} // statically ensure interface is defined
 
 func (t Template) String() string <span class="cov8" title="1">{
-        return fmt.Sprintf("{%q, %s}", t.Name, jtag.TagString(t.Dot))
+        return fmt.Sprintf("{%q, %s}", t.Name, tag.TagString(t.Dot))
 }</span>
 
 func findJidOrJsOrHTMLNode(node parse.Node) (found bool) <span class="cov8" title="1">{
@@ -5487,7 +5487,7 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) <span class="cov8" titl
 
 func (t Template) JawsRender(e *jaws.Element, wr io.Writer, params []any) (err error) <span class="cov8" title="1">{
         var expandedtags []any
-        if expandedtags, err = jtag.TagExpand(e.Request, t.Dot); err == nil </span><span class="cov8" title="1">{
+        if expandedtags, err = tag.TagExpand(e.Request, t.Dot); err == nil </span><span class="cov8" title="1">{
                 e.Request.TagExpanded(e, expandedtags)
                 tags, handlers, attrs := jaws.ParseParams(params)
                 e.Tag(tags...)
@@ -5958,13 +5958,13 @@ func (m *WsMsg) FillAlert(err error) <span class="cov8" title="1">{
 import (
         "html/template"
 
-        "github.com/linkdata/jaws/lib/jtag"
+        "github.com/linkdata/jaws/lib/tag"
 )
 
 // usableAsTag returns true if it is safe to use as a tag, false otherwise.
 func usableAsTag(t any) (ok bool) <span class="cov8" title="1">{
-        _, ok = t.(jtag.TagGetter)
-        return ok || jtag.NewErrNotComparable(t) == nil
+        _, ok = t.(tag.TagGetter)
+        return ok || tag.NewErrNotComparable(t) == nil
 }</span>
 
 // ParseParams parses the parameters passed to UI() when creating a new Element,
@@ -6030,7 +6030,7 @@ import (
         "github.com/linkdata/deadlock"
         "github.com/linkdata/jaws/lib/assets"
         "github.com/linkdata/jaws/lib/jid"
-        "github.com/linkdata/jaws/lib/jtag"
+        "github.com/linkdata/jaws/lib/tag"
         "github.com/linkdata/jaws/lib/what"
         "github.com/linkdata/jaws/lib/wire"
 )
@@ -6388,10 +6388,10 @@ func (rq *Request) Redirect(url string) <span class="cov8" title="1">{
 }</span>
 
 func (rq *Request) tagsOfLocked(elem *Element) (tags []any) <span class="cov8" title="1">{
-        for tag, elems := range rq.tagMap </span><span class="cov8" title="1">{
+        for tagValue, elems := range rq.tagMap </span><span class="cov8" title="1">{
                 for _, e := range elems </span><span class="cov8" title="1">{
                         if e == elem </span><span class="cov8" title="1">{
-                                tags = append(tags, tag)
+                                tags = append(tags, tagValue)
                                 break</span>
                         }
                 }
@@ -6410,7 +6410,7 @@ func (rq *Request) TagsOf(elem *Element) (tags []any) <span class="cov8" title="
 
 // Dirty marks all Elements that have one or more of the given tags as dirty.
 func (rq *Request) Dirty(dirtyTags ...any) <span class="cov8" title="1">{
-        rq.Jaws.setDirty(jtag.MustTagExpand(rq, dirtyTags))
+        rq.Jaws.setDirty(tag.MustTagExpand(rq, dirtyTags))
 }</span>
 
 // wantMessage returns true if the Request want the message.
@@ -6454,7 +6454,7 @@ func (rq *Request) newElementLocked(ui UI) (elem *Element) <span class="cov8" ti
 // Panics if the build tag "debug" is set and the UI object doesn't satisfy all requirements.
 func (rq *Request) NewElement(ui UI) *Element <span class="cov8" title="1">{
         if deadlock.Debug </span><span class="cov8" title="1">{
-                if err := jtag.NewErrNotComparable(ui); err != nil </span><span class="cov8" title="1">{
+                if err := tag.NewErrNotComparable(ui); err != nil </span><span class="cov8" title="1">{
                         panic(err)</span>
                 }
         }
@@ -6480,8 +6480,8 @@ func (rq *Request) getElementByJidLocked(jid Jid) (elem *Element) <span class="c
         <span class="cov8" title="1">return</span>
 }
 
-func (rq *Request) hasTagLocked(elem *Element, tag any) bool <span class="cov8" title="1">{
-        for _, e := range rq.tagMap[tag] </span><span class="cov8" title="1">{
+func (rq *Request) hasTagLocked(elem *Element, tagValue any) bool <span class="cov8" title="1">{
+        for _, e := range rq.tagMap[tagValue] </span><span class="cov8" title="1">{
                 if elem == e </span><span class="cov8" title="1">{
                         return true
                 }</span>
@@ -6489,9 +6489,9 @@ func (rq *Request) hasTagLocked(elem *Element, tag any) bool <span class="cov8" 
         <span class="cov8" title="1">return false</span>
 }
 
-func (rq *Request) HasTag(elem *Element, tag any) (yes bool) <span class="cov8" title="1">{
+func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) <span class="cov8" title="1">{
         rq.mu.RLock()
-        yes = rq.hasTagLocked(elem, tag)
+        yes = rq.hasTagLocked(elem, tagValue)
         rq.mu.RUnlock()
         return
 }</span>
@@ -6507,9 +6507,9 @@ func (rq *Request) TagExpanded(elem *Element, expandedtags []any) <span class="c
         if elem != nil &amp;&amp; !elem.deleted.Load() &amp;&amp; elem.Request == rq </span><span class="cov8" title="1">{
                 rq.mu.Lock()
                 defer rq.mu.Unlock()
-                for _, tag := range expandedtags </span><span class="cov8" title="1">{
-                        if !rq.hasTagLocked(elem, tag) </span><span class="cov8" title="1">{
-                                rq.tagMap[tag] = append(rq.tagMap[tag], elem)
+                for _, tagValue := range expandedtags </span><span class="cov8" title="1">{
+                        if !rq.hasTagLocked(elem, tagValue) </span><span class="cov8" title="1">{
+                                rq.tagMap[tagValue] = append(rq.tagMap[tagValue], elem)
                         }</span>
                 }
         }
@@ -6518,18 +6518,18 @@ func (rq *Request) TagExpanded(elem *Element, expandedtags []any) <span class="c
 // Tag adds the given tags to the given Element.
 func (rq *Request) Tag(elem *Element, tagItems ...any) <span class="cov8" title="1">{
         if elem != nil &amp;&amp; len(tagItems) &gt; 0 &amp;&amp; elem.Request == rq </span><span class="cov8" title="1">{
-                rq.TagExpanded(elem, jtag.MustTagExpand(elem.Request, tagItems))
+                rq.TagExpanded(elem, tag.MustTagExpand(elem.Request, tagItems))
         }</span>
 }
 
 // GetElements returns a list of the UI elements in the Request that have the given tag(s).
 func (rq *Request) GetElements(tagitem any) (elems []*Element) <span class="cov8" title="1">{
-        expanded := jtag.MustTagExpand(rq, tagitem)
+        expanded := tag.MustTagExpand(rq, tagitem)
         seen := map[*Element]struct{}{}
         rq.mu.RLock()
         defer rq.mu.RUnlock()
-        for _, tag := range expanded </span><span class="cov8" title="1">{
-                if el, ok := rq.tagMap[tag]; ok </span><span class="cov8" title="1">{
+        for _, tagValue := range expanded </span><span class="cov8" title="1">{
+                if el, ok := rq.tagMap[tagValue]; ok </span><span class="cov8" title="1">{
                         for _, e := range el </span><span class="cov8" title="1">{
                                 if _, ok = seen[e]; !ok </span><span class="cov8" title="1">{
                                         seen[e] = struct{}{}
@@ -6836,8 +6836,8 @@ func (rq *Request) DeleteElement(elem *Element) <span class="cov8" title="1">{
 func (rq *Request) makeUpdateList() (todo []*Element) <span class="cov8" title="1">{
         rq.mu.Lock()
         seen := map[*Element]struct{}{}
-        for _, tag := range rq.todoDirt </span><span class="cov8" title="1">{
-                for _, elem := range rq.tagMap[tag] </span><span class="cov8" title="1">{
+        for _, tagValue := range rq.todoDirt </span><span class="cov8" title="1">{
+                for _, elem := range rq.tagMap[tagValue] </span><span class="cov8" title="1">{
                         if _, ok := seen[elem]; !ok </span><span class="cov8" title="1">{
                                 seen[elem] = struct{}{}
                                 todo = append(todo, elem)
