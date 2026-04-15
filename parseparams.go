@@ -6,13 +6,10 @@ import (
 	"github.com/linkdata/jaws/lib/jtag"
 )
 
-// shouldAutoTagHandler returns true if a handler value is safe to use as a tag.
-// Non-comparable handlers are only auto-tagged when they provide an explicit jawstags.TagGetter.
-func shouldAutoTagHandler(handler any) any {
-	if _, ok := handler.(jtag.TagGetter); ok || jtag.NewErrNotComparable(handler) == nil {
-		return handler
-	}
-	return nil
+// usableAsTag returns true if it is safe to use as a tag, false otherwise.
+func usableAsTag(t any) (ok bool) {
+	_, ok = t.(jtag.TagGetter)
+	return ok || jtag.NewErrNotComparable(t) == nil
 }
 
 // ParseParams parses the parameters passed to UI() when creating a new Element,
@@ -37,22 +34,17 @@ func ParseParams(params []any) (tags []any, handlers []EventHandler, attrs []str
 		default:
 			if h, ok := data.(EventHandler); ok {
 				handlers = append(handlers, h)
-				data = shouldAutoTagHandler(data)
 			} else {
-				hasHandler := false
 				if h, ok := data.(ClickHandler); ok {
 					handlers = append(handlers, clickHandlerWrapper{h})
-					hasHandler = true
 				}
 				if h, ok := data.(ContextMenuHandler); ok {
 					handlers = append(handlers, contextMenuHandlerWrapper{h})
-					hasHandler = true
-				}
-				if hasHandler {
-					data = shouldAutoTagHandler(data)
 				}
 			}
-			tags = append(tags, data)
+			if usableAsTag(data) {
+				tags = append(tags, data)
+			}
 		}
 	}
 	return
