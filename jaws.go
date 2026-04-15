@@ -34,7 +34,7 @@ import (
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/lib/assets"
 	"github.com/linkdata/jaws/lib/jid"
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 	"github.com/linkdata/secureheaders"
@@ -159,7 +159,7 @@ func (jw *Jaws) Done() <-chan struct{} {
 // strings to *template.Template.
 func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) (err error) {
 	if tl != nil {
-		if err = jtag.NewErrNotComparable(tl); err == nil {
+		if err = tag.NewErrNotComparable(tl); err == nil {
 			jw.mu.Lock()
 			if !slices.Contains(jw.tmplookers, tl) {
 				jw.tmplookers = append(jw.tmplookers, tl)
@@ -174,7 +174,7 @@ func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) (err error) {
 // the list of TemplateLookupers.
 func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) (err error) {
 	if tl != nil {
-		if err = jtag.NewErrNotComparable(tl); err == nil {
+		if err = tag.NewErrNotComparable(tl); err == nil {
 			jw.mu.Lock()
 			jw.tmplookers = slices.DeleteFunc(jw.tmplookers, func(x TemplateLookuper) bool { return x == tl })
 			jw.mu.Unlock()
@@ -508,7 +508,7 @@ func (jw *Jaws) Broadcast(msg wire.Message) {
 	case *Request: // send to that request
 	case string: // HTML id (accepted by all requests)
 	default:
-		expanded, err := jtag.TagExpand(nil, msg.Dest)
+		expanded, err := tag.TagExpand(nil, msg.Dest)
 		jw.MustLog(err)
 		switch len(expanded) {
 		case 0:
@@ -529,9 +529,9 @@ func (jw *Jaws) Broadcast(msg wire.Message) {
 // setDirty marks all Elements that have one or more of the given tags as dirty.
 func (jw *Jaws) setDirty(tags []any) {
 	jw.mu.Lock()
-	for _, tag := range tags {
+	for _, tagValue := range tags {
 		jw.dirtOrder++
-		jw.dirty[tag] = jw.dirtOrder
+		jw.dirty[tagValue] = jw.dirtOrder
 	}
 	jw.mu.Unlock()
 }
@@ -541,7 +541,7 @@ func (jw *Jaws) setDirty(tags []any) {
 // Note that if any of the tags are a TagGetter, it will be called with a nil Request.
 // Prefer using Request.Dirty() which avoids this.
 func (jw *Jaws) Dirty(dirtyTags ...any) {
-	jw.setDirty(jtag.MustTagExpand(nil, dirtyTags))
+	jw.setDirty(tag.MustTagExpand(nil, dirtyTags))
 }
 
 func (jw *Jaws) distributeDirt() int {
@@ -875,9 +875,9 @@ var whitespaceRemover = strings.NewReplacer(" ", "", "\n", "", "\t", "")
 
 // JsCall calls the Javascript function 'jsfunc' with the argument 'jsonstr'
 // on all Requests that have the target UI tag.
-func (jw *Jaws) JsCall(tag any, jsfunc, jsonstr string) {
+func (jw *Jaws) JsCall(tagValue any, jsfunc, jsonstr string) {
 	jw.Broadcast(wire.Message{
-		Dest: tag,
+		Dest: tagValue,
 		What: what.Call,
 		Data: whitespaceRemover.Replace(jsfunc) + "=" + maybeCompactJSON(jsonstr),
 	})

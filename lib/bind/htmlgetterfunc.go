@@ -4,7 +4,7 @@ import (
 	"html/template"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 )
 
 type htmlGetterFunc struct {
@@ -12,13 +12,13 @@ type htmlGetterFunc struct {
 	tags []any
 }
 
-var _ jtag.TagGetter = &htmlGetterFunc{}
+var _ tag.TagGetter = &htmlGetterFunc{}
 
 func (g *htmlGetterFunc) JawsGetHTML(e *jaws.Element) template.HTML {
 	return g.fn(e)
 }
 
-func (g *htmlGetterFunc) JawsGetTag(jtag.Context) any {
+func (g *htmlGetterFunc) JawsGetTag(tag.Context) any {
 	return g.tags
 }
 

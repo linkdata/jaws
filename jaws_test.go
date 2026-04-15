@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws/lib/assets"
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 	"github.com/linkdata/secureheaders"
@@ -26,8 +26,8 @@ import (
 
 type testBroadcastTagGetter struct{}
 
-func (testBroadcastTagGetter) JawsGetTag(jtag.Context) any {
-	return jtag.Tag("expanded")
+func (testBroadcastTagGetter) JawsGetTag(tag.Context) any {
+	return tag.Tag("expanded")
 }
 
 func TestNew_DefaultWebSocketPingInterval(t *testing.T) {
@@ -133,12 +133,12 @@ func TestBroadcast_ExpandsTagDestBeforeQueue(t *testing.T) {
 	if msg.What != what.Inner || msg.Data != "x" {
 		t.Fatalf("unexpected msg %#v", msg)
 	}
-	if got, ok := msg.Dest.(jtag.Tag); !ok || got != jtag.Tag("expanded") {
+	if got, ok := msg.Dest.(tag.Tag); !ok || got != tag.Tag("expanded") {
 		t.Fatalf("expected expanded Tag destination, got %T(%#v)", msg.Dest, msg.Dest)
 	}
 
 	jw.Broadcast(wire.Message{
-		Dest: []any{tagger, jtag.Tag("extra")},
+		Dest: []any{tagger, tag.Tag("extra")},
 		What: what.Value,
 		Data: "v",
 	})
@@ -150,7 +150,7 @@ func TestBroadcast_ExpandsTagDestBeforeQueue(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected []any destination, got %T(%#v)", msg.Dest, msg.Dest)
 	}
-	if len(dest) != 2 || dest[0] != jtag.Tag("expanded") || dest[1] != jtag.Tag("extra") {
+	if len(dest) != 2 || dest[0] != tag.Tag("expanded") || dest[1] != tag.Tag("extra") {
 		t.Fatalf("unexpected expanded destination %#v", dest)
 	}
 
@@ -375,11 +375,11 @@ func TestJaws_distributeDirt_AscendingOrder(t *testing.T) {
 	rq := &Request{}
 	jw.mu.Lock()
 	jw.requests[1] = rq
-	jw.dirty[jtag.Tag("fourth")] = 4
-	jw.dirty[jtag.Tag("second")] = 2
-	jw.dirty[jtag.Tag("fifth")] = 5
-	jw.dirty[jtag.Tag("first")] = 1
-	jw.dirty[jtag.Tag("third")] = 3
+	jw.dirty[tag.Tag("fourth")] = 4
+	jw.dirty[tag.Tag("second")] = 2
+	jw.dirty[tag.Tag("fifth")] = 5
+	jw.dirty[tag.Tag("first")] = 1
+	jw.dirty[tag.Tag("third")] = 3
 	jw.dirtOrder = 5
 	jw.mu.Unlock()
 
@@ -392,11 +392,11 @@ func TestJaws_distributeDirt_AscendingOrder(t *testing.T) {
 	rq.mu.RUnlock()
 
 	want := []any{
-		jtag.Tag("first"),
-		jtag.Tag("second"),
-		jtag.Tag("third"),
-		jtag.Tag("fourth"),
-		jtag.Tag("fifth"),
+		tag.Tag("first"),
+		tag.Tag("second"),
+		tag.Tag("third"),
+		tag.Tag("fourth"),
+		tag.Tag("fifth"),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("dirty tags = %#v, want %#v", got, want)
@@ -862,7 +862,7 @@ func TestJaws_Session(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 
-	dot := jtag.Tag("123")
+	dot := tag.Tag("123")
 
 	h := rq.Jaws.Session(rq.Jaws.Handler("testtemplate", dot))
 	var buf bytes.Buffer

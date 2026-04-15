@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 )
 
 type testStringer struct{}
@@ -48,67 +48,67 @@ func Test_MakeHTMLGetter(t *testing.T) {
 	getterString := testGetterString{}
 
 	tests := []struct {
-		name string
-		v    any
-		want HTMLGetter
-		out  template.HTML
-		tag  any
+		name    string
+		v       any
+		want    HTMLGetter
+		out     template.HTML
+		wantTag any
 	}{
 		{
-			name: "HTMLGetter",
-			v:    htmlGetter{typedText},
-			want: htmlGetter{typedText},
-			out:  typedText,
-			tag:  nil,
+			name:    "HTMLGetter",
+			v:       htmlGetter{typedText},
+			want:    htmlGetter{typedText},
+			out:     typedText,
+			wantTag: nil,
 		},
 		{
-			name: "Getter[string]",
-			v:    getterString,
-			want: htmlGetterString{getterString},
-			out:  template.HTML(html.EscapeString(getterString.JawsGet(nil))),
-			tag:  getterString,
+			name:    "Getter[string]",
+			v:       getterString,
+			want:    htmlGetterString{getterString},
+			out:     template.HTML(html.EscapeString(getterString.JawsGet(nil))),
+			wantTag: getterString,
 		},
 		{
-			name: "Binder[string]",
-			v:    binderNoHTML,
-			want: htmlBinderString{binderNoHTML},
-			out:  template.HTML(html.EscapeString(binderNoHTML.JawsGet(nil))),
-			tag:  &binderVal,
+			name:    "Binder[string]",
+			v:       binderNoHTML,
+			want:    htmlBinderString{binderNoHTML},
+			out:     template.HTML(html.EscapeString(binderNoHTML.JawsGet(nil))),
+			wantTag: &binderVal,
 		},
 		/*{
 			name: "Getter[any]",
 			v:    getterAny,
 			want: htmlGetterAny{getterAny},
 			out:  escapedTypedText,
-			tag:  getterAny,
+			wantTag:  getterAny,
 		},*/
 		{
-			name: "fmt.Stringer",
-			v:    stringer,
-			want: htmlStringerGetter{stringer},
-			out:  template.HTML(html.EscapeString(stringer.String())),
-			tag:  stringer,
+			name:    "fmt.Stringer",
+			v:       stringer,
+			want:    htmlStringerGetter{stringer},
+			out:     template.HTML(html.EscapeString(stringer.String())),
+			wantTag: stringer,
 		},
 		{
-			name: "template.HTML",
-			v:    typedText,
-			want: htmlGetter{typedText},
-			out:  typedText,
-			tag:  nil,
+			name:    "template.HTML",
+			v:       typedText,
+			want:    htmlGetter{typedText},
+			out:     typedText,
+			wantTag: nil,
 		},
 		{
-			name: "string",
-			v:    untypedText,
-			want: htmlGetter{template.HTML(untypedText)},
-			out:  template.HTML(untypedText),
-			tag:  nil,
+			name:    "string",
+			v:       untypedText,
+			want:    htmlGetter{template.HTML(untypedText)},
+			out:     template.HTML(untypedText),
+			wantTag: nil,
 		},
 		{
-			name: "int",
-			v:    123,
-			want: htmlGetter{template.HTML("123")},
-			out:  template.HTML("123"),
-			tag:  nil,
+			name:    "int",
+			v:       123,
+			want:    htmlGetter{template.HTML("123")},
+			out:     template.HTML("123"),
+			wantTag: nil,
 		},
 	}
 	for _, tt := range tests {
@@ -120,8 +120,8 @@ func Test_MakeHTMLGetter(t *testing.T) {
 			if txt := got.JawsGetHTML(nil); txt != tt.out {
 				t.Errorf("MakeHTMLGetter(%s).JawsGetHTML() = %v, want %v", tt.name, txt, tt.out)
 			}
-			if tag := got.(jtag.TagGetter).JawsGetTag(nil); tag != tt.tag {
-				t.Errorf("MakeHTMLGetter(%s).JawsGetTag() = %v, want %v", tt.name, tag, tt.tag)
+			if gotTag := got.(tag.TagGetter).JawsGetTag(nil); gotTag != tt.wantTag {
+				t.Errorf("MakeHTMLGetter(%s).JawsGetTag() = %v, want %v", tt.name, gotTag, tt.wantTag)
 			}
 		})
 	}

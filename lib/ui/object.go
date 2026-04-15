@@ -6,7 +6,7 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 )
 
 // ClickedHook is a function to call when a click event is received.
@@ -17,7 +17,7 @@ type ContextMenuHook func(obj Object, elem *jaws.Element, click jaws.Click) (err
 
 type Object interface {
 	bind.HTMLGetter
-	jtag.TagGetter
+	tag.TagGetter
 	jaws.ClickHandler
 	jaws.ContextMenuHandler
 
@@ -96,10 +96,10 @@ func (o *object) JawsContextMenu(e *jaws.Element, click jaws.Click) (err error) 
 	return
 }
 
-func (o *object) JawsGetTag(ctx jtag.Context) (t any) {
+func (o *object) JawsGetTag(ctx tag.Context) (t any) {
 	o.walk(func(o *object) (ok bool) {
-		var h jtag.TagGetter
-		if h, ok = o.handler.(jtag.TagGetter); ok {
+		var h tag.TagGetter
+		if h, ok = o.handler.(tag.TagGetter); ok {
 			t = h.JawsGetTag(ctx)
 		}
 		return

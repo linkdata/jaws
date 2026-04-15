@@ -6,7 +6,7 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 )
 
 type testClickableStringer struct {
@@ -40,9 +40,9 @@ func TestClickable_ForwardsClickAndGetterBehavior(t *testing.T) {
 		t.Fatalf("want %q got %q", want, got)
 	}
 
-	tagGetter, ok := handler.(jtag.TagGetter)
+	tagGetter, ok := handler.(tag.TagGetter)
 	if !ok {
-		t.Fatalf("%T does not implement jtag.TagGetter", handler)
+		t.Fatalf("%T does not implement tag.TagGetter", handler)
 	}
 	if got, want := tagGetter.JawsGetTag(rq), any(inner); got != want {
 		t.Fatalf("want tag %#v got %#v", want, got)
@@ -61,11 +61,11 @@ func TestClickable_ForwardsClickAndGetterBehavior(t *testing.T) {
 
 func TestClickable_TagIsNilWhenInnerHTMLHasNoTag(t *testing.T) {
 	handler := Clickable("plain", func(*jaws.Element, jaws.Click) error { return nil })
-	tagGetter, ok := handler.(jtag.TagGetter)
+	tagGetter, ok := handler.(tag.TagGetter)
 	if !ok {
-		t.Fatalf("%T does not implement jtag.TagGetter", handler)
+		t.Fatalf("%T does not implement tag.TagGetter", handler)
 	}
-	if tag := tagGetter.JawsGetTag(nil); tag != nil {
-		t.Fatalf("expected nil tag, got %#v", tag)
+	if gotTag := tagGetter.JawsGetTag(nil); gotTag != nil {
+		t.Fatalf("expected nil tag, got %#v", gotTag)
 	}
 }

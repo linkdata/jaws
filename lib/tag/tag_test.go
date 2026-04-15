@@ -1,4 +1,4 @@
-package jtag
+package tag
 
 import (
 	"context"
@@ -45,7 +45,7 @@ func TestTagString_StringerAndPointer(t *testing.T) {
 	if got := TagString(testStringTag{}); !strings.Contains(got, "testStringTag(str)") {
 		t.Fatalf("TagString(testStringTag{}) = %q, want value stringer representation", got)
 	}
-	if got := TagString(&testStringTag{}); !strings.Contains(got, "*jtag.testStringTag(") {
+	if got := TagString(&testStringTag{}); !strings.Contains(got, "*tag.testStringTag(") {
 		t.Fatalf("TagString(&testStringTag{}) = %q, want pointer representation", got)
 	}
 }

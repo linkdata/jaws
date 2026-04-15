@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 )
 
 type testGetter[T comparable] struct {
@@ -73,7 +73,7 @@ func Test_makeSetterFloat64_int(t *testing.T) {
 	if x := gotS.JawsGet(nil); x != 1 {
 		t.Error(x)
 	}
-	tg := gotS.(jtag.TagGetter)
+	tg := gotS.(tag.TagGetter)
 	if x := tg.JawsGetTag(nil); x != tsint {
 		t.Error(x)
 	}
@@ -89,7 +89,7 @@ func Test_makeSetterFloat64ReadOnly_int(t *testing.T) {
 	if x := gotS.JawsGet(nil); x != 1 {
 		t.Error(x)
 	}
-	tg := gotS.(jtag.TagGetter)
+	tg := gotS.(tag.TagGetter)
 	if x := tg.JawsGetTag(nil); x != tgint {
 		t.Error(x)
 	}
@@ -105,7 +105,7 @@ func Test_makeSetterFloat64Static_int(t *testing.T) {
 	if x := gotS.JawsGet(nil); x != 1 {
 		t.Error(x)
 	}
-	tg := gotS.(jtag.TagGetter)
+	tg := gotS.(tag.TagGetter)
 	if x := tg.JawsGetTag(nil); x != nil {
 		t.Error(x)
 	}

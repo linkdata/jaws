@@ -1,4 +1,4 @@
-package jtag
+package tag
 
 import (
 	"fmt"

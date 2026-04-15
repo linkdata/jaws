@@ -18,7 +18,7 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/lib/htmlio"
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
@@ -177,7 +177,7 @@ type testTemplateUI struct {
 }
 
 func (t testTemplateUI) String() string {
-	return fmt.Sprintf("{%q, %s}", t.Name, jtag.TagString(t.Dot))
+	return fmt.Sprintf("{%q, %s}", t.Name, tag.TagString(t.Dot))
 }
 
 func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
@@ -236,7 +236,7 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
 
 func (t testTemplateUI) JawsRender(e *Element, wr io.Writer, params []any) (err error) {
 	var expandedtags []any
-	if expandedtags, err = jtag.TagExpand(e.Request, t.Dot); err == nil {
+	if expandedtags, err = tag.TagExpand(e.Request, t.Dot); err == nil {
 		e.Request.TagExpanded(e, expandedtags)
 		tags, handlers, attrs := ParseParams(params)
 		e.Tag(tags...)
@@ -291,9 +291,9 @@ func (ui testDivWidget) JawsRender(e *Element, w io.Writer, params []any) error 
 func (testDivWidget) JawsUpdate(*Element) {}
 
 type testTextInputWidget struct {
-	setter testStringSetter
-	tag    any
-	last   string
+	setter   testStringSetter
+	tagValue any
+	last     string
 }
 
 type testStringSetter interface {
@@ -306,7 +306,7 @@ func newTestTextInputWidget(s testStringSetter) *testTextInputWidget {
 }
 
 func (ui *testTextInputWidget) JawsRender(e *Element, w io.Writer, params []any) (err error) {
-	if ui.tag, err = e.ApplyGetter(ui.setter); err == nil {
+	if ui.tagValue, err = e.ApplyGetter(ui.setter); err == nil {
 		attrs := e.ApplyParams(params)
 		v := ui.setter.JawsGet(e)
 		ui.last = v
@@ -325,7 +325,7 @@ func (ui *testTextInputWidget) JawsUpdate(e *Element) {
 func (ui *testTextInputWidget) JawsEvent(e *Element, wht what.What, val string) (err error) {
 	err = ErrEventUnhandled
 	if wht == what.Input {
-		if changed, setErr := e.maybeDirty(ui.tag, ui.setter.JawsSet(e, val)); setErr != nil {
+		if changed, setErr := e.maybeDirty(ui.tagValue, ui.setter.JawsSet(e, val)); setErr != nil {
 			err = setErr
 		} else {
 			err = nil

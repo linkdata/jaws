@@ -3,7 +3,7 @@ package bind
 import (
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 )
 
 type testSetter[T comparable] struct {
@@ -141,6 +141,6 @@ func (ts *testSetter[T]) JawsGetHTML(*jaws.Element) (val T) {
 
 type selfTagger struct{}
 
-func (st *selfTagger) JawsGetTag(jtag.Context) any {
+func (st *selfTagger) JawsGetTag(tag.Context) any {
 	return st
 }

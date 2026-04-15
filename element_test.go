@@ -13,7 +13,7 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/lib/jid"
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
@@ -70,7 +70,7 @@ type testApplyGetterAll struct {
 	initErr error
 }
 
-func (a testApplyGetterAll) JawsGetTag(jtag.Context) any { return jtag.Tag("tg") }
+func (a testApplyGetterAll) JawsGetTag(tag.Context) any { return tag.Tag("tg") }
 func (a testApplyGetterAll) JawsClick(*Element, Click) error {
 	return ErrEventUnhandled
 }
@@ -102,9 +102,9 @@ func TestElement_Tag(t *testing.T) {
 
 	tss := &testUi{}
 	e := rq.NewElement(tss)
-	is.True(!e.HasTag(jtag.Tag("zomg")))
-	e.Tag(jtag.Tag("zomg"))
-	is.True(e.HasTag(jtag.Tag("zomg")))
+	is.True(!e.HasTag(tag.Tag("zomg")))
+	e.Tag(tag.Tag("zomg"))
+	is.True(e.HasTag(tag.Tag("zomg")))
 	s := e.String()
 	if !strings.Contains(s, "zomg") {
 		t.Error(s)
@@ -220,8 +220,8 @@ func TestElement_ReplaceMessageTargetsElementHTML(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 
-	tag := &testUi{}
-	jid := rq.Register(tag)
+	tagValue := &testUi{}
+	jid := rq.Register(tagValue)
 	elem := rq.GetElementByJid(jid)
 	if elem == nil {
 		t.Fatal("missing element")
@@ -261,9 +261,9 @@ func TestElement_maybeDirty(t *testing.T) {
 	th.Equal(changed, false)
 	th.Equal(err, nil)
 
-	changed, err = e.maybeDirty(e, jtag.ErrNotComparable)
+	changed, err = e.maybeDirty(e, tag.ErrNotComparable)
 	th.Equal(changed, false)
-	th.Equal(err, jtag.ErrNotComparable)
+	th.Equal(err, tag.ErrNotComparable)
 }
 
 func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
@@ -283,7 +283,7 @@ func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
 	elem.renderDebug(&sb)
 	rq.mu.Unlock()
 
-	elem.Tag(jtag.Tag("a"), jtag.Tag("b"))
+	elem.Tag(tag.Tag("a"), tag.Tag("b"))
 	sb.Reset()
 	elem.renderDebug(&sb)
 	if !strings.Contains(sb.String(), ", ") {
@@ -310,8 +310,8 @@ func TestElement_ApplyGetterDebugBranches(t *testing.T) {
 	defer rq.Close()
 	elem := rq.NewElement(&testUi{})
 
-	if tag, err := elem.ApplyGetter(nil); tag != nil || err != nil {
-		t.Fatalf("unexpected %v %v", tag, err)
+	if gotTag, err := elem.ApplyGetter(nil); gotTag != nil || err != nil {
+		t.Fatalf("unexpected %v %v", gotTag, err)
 	}
 
 	ag := testApplyGetterAll{}
@@ -319,11 +319,11 @@ func TestElement_ApplyGetterDebugBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error %v", err)
 	}
-	if !elem.HasTag(jtag.Tag("tg")) {
+	if !elem.HasTag(tag.Tag("tg")) {
 		t.Fatalf("missing Tag('tg') in %#v", gotTags)
 	}
-	agErr := testApplyGetterAll{initErr: jtag.ErrNotComparable}
-	if _, err := elem.ApplyGetter(agErr); err != jtag.ErrNotComparable {
+	agErr := testApplyGetterAll{initErr: tag.ErrNotComparable}
+	if _, err := elem.ApplyGetter(agErr); err != tag.ErrNotComparable {
 		t.Fatalf("expected init err, got %v", err)
 	}
 
@@ -408,9 +408,9 @@ func TestElement_ApplyGetter(t *testing.T) {
 	e := rq.NewElement(tss)
 
 	var tch testClickHandler
-	tag, err := e.ApplyGetter(tch)
-	if tag != tch {
-		t.Errorf("tag was %#v", tag)
+	gotTag, err := e.ApplyGetter(tch)
+	if gotTag != tch {
+		t.Errorf("tag was %#v", gotTag)
 	}
 	if err != nil {
 		t.Error(err)
@@ -545,15 +545,15 @@ func TestElement_JawsInit(t *testing.T) {
 	defer rq.Close()
 
 	tss := &testUi{s: "foo"}
-	tss.initError = jtag.ErrNotComparable
+	tss.initError = tag.ErrNotComparable
 	e := rq.NewElement(tss)
 
-	tag, err := e.ApplyGetter(tss)
+	gotTag, err := e.ApplyGetter(tss)
 	is.Equal(atomic.LoadInt32(&tss.initCalled), int32(1))
-	if tag != tss {
-		t.Errorf("tag was %#v", tag)
+	if gotTag != tss {
+		t.Errorf("tag was %#v", gotTag)
 	}
-	if err != jtag.ErrNotComparable {
+	if err != tag.ErrNotComparable {
 		t.Error(err)
 	}
 }

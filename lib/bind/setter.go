@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 )
 
 type Setter[T comparable] interface {
@@ -21,7 +21,7 @@ func (setterReadOnly[T]) JawsSet(*jaws.Element, T) error {
 	return ErrValueNotSettable
 }
 
-func (s setterReadOnly[T]) JawsGetTag(jtag.Context) any {
+func (s setterReadOnly[T]) JawsGetTag(tag.Context) any {
 	return s.Getter
 }
 
@@ -37,7 +37,7 @@ func (s setterStatic[T]) JawsGet(*jaws.Element) T {
 	return s.v
 }
 
-func (s setterStatic[T]) JawsGetTag(jtag.Context) any {
+func (s setterStatic[T]) JawsGetTag(tag.Context) any {
 	return nil
 }
 

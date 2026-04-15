@@ -12,7 +12,7 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 )
 
@@ -59,7 +59,7 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 	var sb bytes.Buffer
 	rw := RequestWriter{Request: rq, Writer: &sb}
 
-	if err := rw.Template("uitempl", jtag.Tag("dot"), "hidden"); err != nil {
+	if err := rw.Template("uitempl", tag.Tag("dot"), "hidden"); err != nil {
 		t.Fatal(err)
 	}
 	got := sb.String()
@@ -87,7 +87,7 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 		t.Fatalf("expected event call count 1, got %d", td.events)
 	}
 
-	if err := rw.Template("warn", jtag.Tag("x")); err != nil {
+	if err := rw.Template("warn", tag.Tag("x")); err != nil {
 		t.Fatal(err)
 	}
 	if deadlock.Debug && log.warns == 0 {
@@ -163,7 +163,7 @@ func TestHandler_HandlerServeHTTP(t *testing.T) {
 	defer jw.Close()
 	jw.AddTemplateLookuper(template.Must(template.New("handler").Parse(`{{with $.Dot}}<div id="{{$.Jid}}">{{.}}</div>{{end}}`)))
 
-	h := Handler(jw, "handler", jtag.Tag("ok"))
+	h := Handler(jw, "handler", tag.Tag("ok"))
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	h.ServeHTTP(rr, req)

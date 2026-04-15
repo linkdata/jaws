@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/jtag"
 	"github.com/linkdata/jaws/lib/named"
+	"github.com/linkdata/jaws/lib/tag"
 )
 
 type testRWUpdater struct {
@@ -26,7 +26,7 @@ type requestWriterFailGetter struct {
 }
 
 func (g requestWriterFailGetter) JawsGetHTML(*jaws.Element) template.HTML { return "x" }
-func (g requestWriterFailGetter) JawsGetTag(jtag.Context) any             { return g }
+func (g requestWriterFailGetter) JawsGetTag(tag.Context) any              { return g }
 func (g requestWriterFailGetter) JawsInit(*jaws.Element) error            { return g.err }
 
 func TestRequestWriter_MethodsAndWidgetHelpers(t *testing.T) {

@@ -3,13 +3,13 @@ package jaws
 import (
 	"html/template"
 
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 )
 
 // usableAsTag returns true if it is safe to use as a tag, false otherwise.
 func usableAsTag(t any) (ok bool) {
-	_, ok = t.(jtag.TagGetter)
-	return ok || jtag.NewErrNotComparable(t) == nil
+	_, ok = t.(tag.TagGetter)
+	return ok || tag.NewErrNotComparable(t) == nil
 }
 
 // ParseParams parses the parameters passed to UI() when creating a new Element,

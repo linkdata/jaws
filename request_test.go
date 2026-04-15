@@ -22,7 +22,7 @@ import (
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/lib/assets"
 	"github.com/linkdata/jaws/lib/jid"
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
@@ -700,27 +700,27 @@ func TestRequest_DeleteByTag(t *testing.T) {
 	ui1 := &testUi{}
 	e11 := rq1.NewElement(ui1)
 	th.Equal(e11.jid, Jid(1))
-	e11.Tag(jtag.Tag("e11"), jtag.Tag("foo"))
+	e11.Tag(tag.Tag("e11"), tag.Tag("foo"))
 	e12 := rq1.NewElement(ui1)
 	th.Equal(e12.jid, Jid(2))
-	e12.Tag(jtag.Tag("e12"))
+	e12.Tag(tag.Tag("e12"))
 	e13 := rq1.NewElement(ui1)
 	th.Equal(e13.jid, Jid(3))
-	e13.Tag(jtag.Tag("e13"), jtag.Tag("bar"))
+	e13.Tag(tag.Tag("e13"), tag.Tag("bar"))
 
 	rq2 := tj.newRequest(nil)
 	ui2 := &testUi{}
 	e21 := rq2.NewElement(ui2)
 	th.Equal(e21.jid, Jid(4))
-	e21.Tag(jtag.Tag("e21"), jtag.Tag("foo"))
+	e21.Tag(tag.Tag("e21"), tag.Tag("foo"))
 	e22 := rq2.NewElement(ui2)
 	th.Equal(e22.jid, Jid(5))
-	e22.Tag(jtag.Tag("e22"))
+	e22.Tag(tag.Tag("e22"))
 	e23 := rq2.NewElement(ui2)
 	th.Equal(e23.jid, Jid(6))
-	e23.Tag(jtag.Tag("e23"))
+	e23.Tag(tag.Tag("e23"))
 
-	tj.Delete([]any{jtag.Tag("foo"), jtag.Tag("bar"), jtag.Tag("nothere"), jtag.Tag("e23")})
+	tj.Delete([]any{tag.Tag("foo"), tag.Tag("bar"), tag.Tag("nothere"), tag.Tag("e23")})
 
 	select {
 	case <-th.C:
@@ -795,8 +795,8 @@ func TestRequest_HTMLIdBroadcast(t *testing.T) {
 	}
 }
 
-func jidForTag(rq *Request, tag any) jid.Jid {
-	if elems := rq.GetElements(tag); len(elems) > 0 {
+func jidForTag(rq *Request, tagValue any) jid.Jid {
+	if elems := rq.GetElements(tagValue); len(elems) > 0 {
 		return elems[0].jid
 	}
 	return 0
@@ -1202,7 +1202,7 @@ func TestRequest_renderDebugLocked(t *testing.T) {
 
 	tss := &testUi{}
 	e := rq.NewElement(tss)
-	e.Tag(jtag.Tag("zomg"))
+	e.Tag(tag.Tag("zomg"))
 
 	var sb strings.Builder
 	e.renderDebug(&sb)
@@ -1493,11 +1493,11 @@ func TestRequest_Template(t *testing.T) {
 			name: "testtemplate-with-tags",
 			args: args{
 				"testtemplate",
-				jtag.Tag("stringtag1"),
-				[]any{`style="display: none"`, jtag.Tag("stringtag2"), "hidden"},
+				tag.Tag("stringtag1"),
+				[]any{`style="display: none"`, tag.Tag("stringtag2"), "hidden"},
 			},
 			want:   `<div id="Jid.1" style="display: none" hidden>stringtag1</div>`,
-			tags:   []any{jtag.Tag("stringtag1"), jtag.Tag("stringtag2")},
+			tags:   []any{tag.Tag("stringtag1"), tag.Tag("stringtag2")},
 			errtxt: "",
 		},
 	}
@@ -1529,8 +1529,8 @@ func TestRequest_Template(t *testing.T) {
 			}
 			gotTags := elem.Request.TagsOf(elem)
 			is.Equal(len(tt.tags), len(gotTags))
-			for _, tag := range tt.tags {
-				is.True(elem.HasTag(tag))
+			for _, tagValue := range tt.tags {
+				is.True(elem.HasTag(tagValue))
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Request.Template() = %v, want %v", got, tt.want)
@@ -1613,11 +1613,11 @@ func TestRequest_ReplaceMessageTargetsElementHTML(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 
-	tag := &testUi{}
-	jid := rq.Register(tag)
+	tagValue := &testUi{}
+	jid := rq.Register(tagValue)
 	html := `<div id="` + jid.String() + `">replaced</div>`
 
-	rq.Jaws.Replace(tag, html)
+	rq.Jaws.Replace(tagValue, html)
 	msg := nextOutboundMsg(t, rq)
 
 	if msg.What != what.Replace {
@@ -1632,8 +1632,8 @@ func TestRequest_JsCallProducesJawsJSFrameSafeWireData(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 
-	tag := &testUi{}
-	rq.Register(tag)
+	tagValue := &testUi{}
+	rq.Register(tagValue)
 
 	tests := []struct {
 		name    string
@@ -1651,7 +1651,7 @@ func TestRequest_JsCallProducesJawsJSFrameSafeWireData(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rq.Jaws.JsCall(tag, "fn", tt.jsonstr)
+			rq.Jaws.JsCall(tagValue, "fn", tt.jsonstr)
 			msg := nextOutboundMsg(t, rq)
 			wire := msg.Format()
 
@@ -1669,8 +1669,8 @@ func TestRequest_JsCallFunctionPathDoesNotBreakWireFraming(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 
-	tag := &testUi{}
-	rq.Register(tag)
+	tagValue := &testUi{}
+	rq.Register(tagValue)
 
 	tests := []struct {
 		name   string
@@ -1688,7 +1688,7 @@ func TestRequest_JsCallFunctionPathDoesNotBreakWireFraming(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rq.Jaws.JsCall(tag, tt.jsfunc, `{"a":1}`)
+			rq.Jaws.JsCall(tagValue, tt.jsfunc, `{"a":1}`)
 			msg := nextOutboundMsg(t, rq)
 			wire := msg.Format()
 

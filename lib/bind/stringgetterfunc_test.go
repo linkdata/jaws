@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 )
 
 func TestStringGetterFunc(t *testing.T) {
@@ -16,7 +16,7 @@ func TestStringGetterFunc(t *testing.T) {
 	if s := sg.JawsGet(nil); s != "foo" {
 		t.Error(s)
 	}
-	if got := jtag.MustTagExpand(nil, sg); !reflect.DeepEqual(got, []any{tt}) {
+	if got := tag.MustTagExpand(nil, sg); !reflect.DeepEqual(got, []any{tt}) {
 		t.Error(got)
 	}
 }

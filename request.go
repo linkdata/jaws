@@ -22,7 +22,7 @@ import (
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/lib/assets"
 	"github.com/linkdata/jaws/lib/jid"
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
@@ -380,10 +380,10 @@ func (rq *Request) Redirect(url string) {
 }
 
 func (rq *Request) tagsOfLocked(elem *Element) (tags []any) {
-	for tag, elems := range rq.tagMap {
+	for tagValue, elems := range rq.tagMap {
 		for _, e := range elems {
 			if e == elem {
-				tags = append(tags, tag)
+				tags = append(tags, tagValue)
 				break
 			}
 		}
@@ -402,7 +402,7 @@ func (rq *Request) TagsOf(elem *Element) (tags []any) {
 
 // Dirty marks all Elements that have one or more of the given tags as dirty.
 func (rq *Request) Dirty(dirtyTags ...any) {
-	rq.Jaws.setDirty(jtag.MustTagExpand(rq, dirtyTags))
+	rq.Jaws.setDirty(tag.MustTagExpand(rq, dirtyTags))
 }
 
 // wantMessage returns true if the Request want the message.
@@ -446,7 +446,7 @@ func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 // Panics if the build tag "debug" is set and the UI object doesn't satisfy all requirements.
 func (rq *Request) NewElement(ui UI) *Element {
 	if deadlock.Debug {
-		if err := jtag.NewErrNotComparable(ui); err != nil {
+		if err := tag.NewErrNotComparable(ui); err != nil {
 			panic(err)
 		}
 	}
@@ -472,8 +472,8 @@ func (rq *Request) getElementByJidLocked(jid Jid) (elem *Element) {
 	return
 }
 
-func (rq *Request) hasTagLocked(elem *Element, tag any) bool {
-	for _, e := range rq.tagMap[tag] {
+func (rq *Request) hasTagLocked(elem *Element, tagValue any) bool {
+	for _, e := range rq.tagMap[tagValue] {
 		if elem == e {
 			return true
 		}
@@ -481,9 +481,9 @@ func (rq *Request) hasTagLocked(elem *Element, tag any) bool {
 	return false
 }
 
-func (rq *Request) HasTag(elem *Element, tag any) (yes bool) {
+func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 	rq.mu.RLock()
-	yes = rq.hasTagLocked(elem, tag)
+	yes = rq.hasTagLocked(elem, tagValue)
 	rq.mu.RUnlock()
 	return
 }
@@ -499,9 +499,9 @@ func (rq *Request) TagExpanded(elem *Element, expandedtags []any) {
 	if elem != nil && !elem.deleted.Load() && elem.Request == rq {
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
-		for _, tag := range expandedtags {
-			if !rq.hasTagLocked(elem, tag) {
-				rq.tagMap[tag] = append(rq.tagMap[tag], elem)
+		for _, tagValue := range expandedtags {
+			if !rq.hasTagLocked(elem, tagValue) {
+				rq.tagMap[tagValue] = append(rq.tagMap[tagValue], elem)
 			}
 		}
 	}
@@ -510,18 +510,18 @@ func (rq *Request) TagExpanded(elem *Element, expandedtags []any) {
 // Tag adds the given tags to the given Element.
 func (rq *Request) Tag(elem *Element, tagItems ...any) {
 	if elem != nil && len(tagItems) > 0 && elem.Request == rq {
-		rq.TagExpanded(elem, jtag.MustTagExpand(elem.Request, tagItems))
+		rq.TagExpanded(elem, tag.MustTagExpand(elem.Request, tagItems))
 	}
 }
 
 // GetElements returns a list of the UI elements in the Request that have the given tag(s).
 func (rq *Request) GetElements(tagitem any) (elems []*Element) {
-	expanded := jtag.MustTagExpand(rq, tagitem)
+	expanded := tag.MustTagExpand(rq, tagitem)
 	seen := map[*Element]struct{}{}
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
-	for _, tag := range expanded {
-		if el, ok := rq.tagMap[tag]; ok {
+	for _, tagValue := range expanded {
+		if el, ok := rq.tagMap[tagValue]; ok {
 			for _, e := range el {
 				if _, ok = seen[e]; !ok {
 					seen[e] = struct{}{}
@@ -828,8 +828,8 @@ func (rq *Request) DeleteElement(elem *Element) {
 func (rq *Request) makeUpdateList() (todo []*Element) {
 	rq.mu.Lock()
 	seen := map[*Element]struct{}{}
-	for _, tag := range rq.todoDirt {
-		for _, elem := range rq.tagMap[tag] {
+	for _, tagValue := range rq.todoDirt {
+		for _, elem := range rq.tagMap[tagValue] {
 			if _, ok := seen[elem]; !ok {
 				seen[elem] = struct{}{}
 				todo = append(todo, elem)

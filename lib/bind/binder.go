@@ -7,7 +7,7 @@ import (
 	"html/template"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 )
 
 // SetHook is a function that replaces JawsSetLocked for a Binder.
@@ -56,7 +56,7 @@ type SuccessHook func(*jaws.Element) (err error)
 type Binder[T comparable] interface {
 	RWLocker
 	Setter[T]
-	jtag.TagGetter
+	tag.TagGetter
 	jaws.ClickHandler
 	jaws.ContextMenuHandler
 
@@ -202,7 +202,7 @@ func (bind *binder[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 	return
 }
 
-func (bind *binder[T]) JawsGetTag(jtag.Context) any {
+func (bind *binder[T]) JawsGetTag(tag.Context) any {
 	return bind.ptr
 }
 

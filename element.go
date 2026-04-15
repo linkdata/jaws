@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/linkdata/jaws/lib/jid"
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
@@ -44,8 +44,8 @@ func (e *Element) Tag(tags ...any) {
 }
 
 // HasTag returns true if this Element has the given tag.
-func (e *Element) HasTag(tag any) bool {
-	return !e.deleted.Load() && e.Request.HasTag(e, tag)
+func (e *Element) HasTag(tagValue any) bool {
+	return !e.deleted.Load() && e.Request.HasTag(e, tagValue)
 }
 
 // Jid returns the JaWS ID for this Element, unique within it's Request.
@@ -58,10 +58,10 @@ func (e *Element) Ui() UI {
 	return e.ui
 }
 
-func (e *Element) maybeDirty(tag any, err error) (bool, error) {
+func (e *Element) maybeDirty(tagValue any, err error) (bool, error) {
 	switch err {
 	case nil:
-		e.Dirty(tag)
+		e.Dirty(tagValue)
 		return true, nil
 	case ErrValueUnchanged:
 		return false, nil
@@ -74,11 +74,11 @@ func (e *Element) renderDebug(w io.Writer) {
 	_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", e.Jid(), e.Ui())
 	if e.mu.TryRLock() {
 		defer e.mu.RUnlock()
-		for i, tag := range e.tagsOfLocked(e) {
+		for i, tagValue := range e.tagsOfLocked(e) {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			sb.WriteString(jtag.TagString(tag))
+			sb.WriteString(tag.TagString(tagValue))
 		}
 	} else {
 		sb.WriteString("n/a")
@@ -243,11 +243,11 @@ func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) {
 //
 // Returns the Tag(s) added, or nil if getter was nil, along with
 // any error returned from JawsInit() if it was called.
-func (e *Element) ApplyGetter(getter any) (tag any, err error) {
+func (e *Element) ApplyGetter(getter any) (tagValue any, err error) {
 	if getter != nil {
-		tag = getter
-		if tagger, ok := getter.(jtag.TagGetter); ok {
-			tag = tagger.JawsGetTag(e.Request)
+		tagValue = getter
+		if tagger, ok := getter.(tag.TagGetter); ok {
+			tagValue = tagger.JawsGetTag(e.Request)
 		}
 		if eh, ok := getter.(EventHandler); ok {
 			e.handlers = append(e.handlers, eh)
@@ -259,7 +259,7 @@ func (e *Element) ApplyGetter(getter any) (tag any, err error) {
 				e.handlers = append(e.handlers, contextMenuHandlerWrapper{ch})
 			}
 		}
-		e.Tag(tag)
+		e.Tag(tagValue)
 		if initer, ok := getter.(InitHandler); ok {
 			err = initer.JawsInit(e)
 		}

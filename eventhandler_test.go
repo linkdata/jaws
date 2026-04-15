@@ -8,14 +8,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
 
 type testJawsEvent struct {
 	msgCh    chan string
-	tag      any
+	tagValue any
 	clickerr error
 	eventerr error
 }
@@ -36,15 +36,15 @@ func (t *testJawsEvent) JawsEvent(e *Element, wht what.What, val string) (err er
 	return
 }
 
-func (t *testJawsEvent) JawsGetTag(jtag.Context) (tag any) {
-	return t.tag
+func (t *testJawsEvent) JawsGetTag(tag.Context) (tagValue any) {
+	return t.tagValue
 }
 
 func (t *testJawsEvent) JawsRender(e *Element, w io.Writer, params []any) (err error) {
-	var tag any
-	if tag, err = e.ApplyGetter(t); err == nil {
+	var tagValue any
+	if tagValue, err = e.ApplyGetter(t); err == nil {
 		w.Write([]byte(fmt.Sprint(params)))
-		t.msgCh <- fmt.Sprintf("JawsRender(%d)%#v", e.jid, tag)
+		t.msgCh <- fmt.Sprintf("JawsRender(%d)%#v", e.jid, tagValue)
 	}
 	return
 }
@@ -55,7 +55,7 @@ func (t *testJawsEvent) JawsUpdate(e *Element) {
 
 var _ ClickHandler = (*testJawsEvent)(nil)
 var _ EventHandler = (*testJawsEvent)(nil)
-var _ jtag.TagGetter = (*testJawsEvent)(nil)
+var _ tag.TagGetter = (*testJawsEvent)(nil)
 var _ UI = (*testJawsEvent)(nil)
 
 func Test_JawsEvent_NonClickInvokesJawsEventForDualHandler(t *testing.T) {

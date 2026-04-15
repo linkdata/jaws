@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/jtag"
 	"github.com/linkdata/jaws/lib/named"
+	"github.com/linkdata/jaws/lib/tag"
 )
 
 func TestHTMLWidgets_ConstructorsAndRender(t *testing.T) {
@@ -55,7 +55,7 @@ type initFailGetter struct {
 }
 
 func (g *initFailGetter) JawsGetHTML(*jaws.Element) template.HTML { return "x" }
-func (g *initFailGetter) JawsGetTag(jtag.Context) any             { return g }
+func (g *initFailGetter) JawsGetTag(tag.Context) any              { return g }
 func (g *initFailGetter) JawsInit(*jaws.Element) error            { return g.err }
 
 func TestImg_RenderAndUpdate(t *testing.T) {

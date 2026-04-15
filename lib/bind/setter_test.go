@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/jtag"
+	"github.com/linkdata/jaws/lib/tag"
 )
 
 const testStringGetterText = "<span>"
@@ -24,8 +24,8 @@ func Test_makeSetter(t *testing.T) {
 	if s := setter1.JawsGet(nil); s != testStringGetterText {
 		t.Error(s)
 	}
-	if tag := setter1.(jtag.TagGetter).JawsGetTag(nil); tag != tsg {
-		t.Error(tag)
+	if gotTag := setter1.(tag.TagGetter).JawsGetTag(nil); gotTag != tsg {
+		t.Error(gotTag)
 	}
 
 	setter2 := MakeSetter[string]("quux")
@@ -35,8 +35,8 @@ func Test_makeSetter(t *testing.T) {
 	if s := setter2.JawsGet(nil); s != "quux" {
 		t.Error(s)
 	}
-	if tag := setter2.(jtag.TagGetter).JawsGetTag(nil); tag != nil {
-		t.Error(tag)
+	if gotTag := setter2.(tag.TagGetter).JawsGetTag(nil); gotTag != nil {
+		t.Error(gotTag)
 	}
 }
 
