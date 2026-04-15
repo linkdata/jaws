@@ -60,49 +60,49 @@ func (o *object) ContextMenu(fn ContextMenuHook) Object {
 }
 
 func (o *object) JawsGetHTML(e *jaws.Element) (retv template.HTML) {
-	o.walk(func(o *object) bool {
-		if h, ok := o.handler.(bind.HTMLGetter); ok {
+	o.walk(func(o *object) (ok bool) {
+		var h bind.HTMLGetter
+		if h, ok = o.handler.(bind.HTMLGetter); ok {
 			retv = h.JawsGetHTML(e)
-			return true
 		}
-		return false
+		return
 	})
 	return
 }
 
 func (o *object) JawsClick(e *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
-	o.walk(func(o *object) bool {
-		if fn, ok := o.handler.(ClickedHook); ok {
-			if err = fn(o, e, click); !errors.Is(err, jaws.ErrEventUnhandled) {
-				return true
-			}
+	o.walk(func(o *object) (ok bool) {
+		var fn ClickedHook
+		if fn, ok = o.handler.(ClickedHook); ok {
+			err = fn(o, e, click)
+			ok = !errors.Is(err, jaws.ErrEventUnhandled)
 		}
-		return false
+		return
 	})
 	return
 }
 
 func (o *object) JawsContextMenu(e *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
-	o.walk(func(o *object) bool {
-		if fn, ok := o.handler.(ContextMenuHook); ok {
-			if err = fn(o, e, click); !errors.Is(err, jaws.ErrEventUnhandled) {
-				return true
-			}
+	o.walk(func(o *object) (ok bool) {
+		var fn ContextMenuHook
+		if fn, ok = o.handler.(ContextMenuHook); ok {
+			err = fn(o, e, click)
+			ok = !errors.Is(err, jaws.ErrEventUnhandled)
 		}
-		return false
+		return
 	})
 	return
 }
 
 func (o *object) JawsGetTag(ctx jtag.Context) (t any) {
-	o.walk(func(o *object) bool {
-		if h, ok := o.handler.(jtag.TagGetter); ok {
+	o.walk(func(o *object) (ok bool) {
+		var h jtag.TagGetter
+		if h, ok = o.handler.(jtag.TagGetter); ok {
 			t = h.JawsGetTag(ctx)
-			return true
 		}
-		return false
+		return
 	})
 	return
 }
