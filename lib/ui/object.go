@@ -15,11 +15,15 @@ type ClickedHook func(obj Object, elem *jaws.Element, click jaws.Click) (err err
 // ContextMenuHook is a function to call when a context menu event is received.
 type ContextMenuHook func(obj Object, elem *jaws.Element, click jaws.Click) (err error)
 
+// InitialHTMLAttrHook is a function to call when an Element is initially rendered.
+type InitialHTMLAttrHook func(obj Object, elem *jaws.Element) (s template.HTMLAttr)
+
 type Object interface {
 	bind.HTMLGetter
 	tag.TagGetter
 	jaws.ClickHandler
 	jaws.ContextMenuHandler
+	jaws.InitialHTMLAttrHandler
 
 	// Clicked returns an Object that will call fn when JawsClick is invoked.
 	Clicked(fn ClickedHook) (newobj Object)
@@ -27,6 +31,10 @@ type Object interface {
 	// ContextMenu returns an Object that will call fn when JawsContextMenu
 	// is invoked.
 	ContextMenu(fn ContextMenuHook) (newobj Object)
+
+	// InitialHTMLAttr returns an Object that will call fn when
+	// JawsInitialHTMLAttr is invoked.
+	InitialHTMLAttr(fn InitialHTMLAttrHook) (newobj Object)
 }
 
 var _ Object = &object{}
@@ -53,6 +61,13 @@ func (o *object) Clicked(fn ClickedHook) Object {
 }
 
 func (o *object) ContextMenu(fn ContextMenuHook) Object {
+	return &object{
+		prev:    o,
+		handler: fn,
+	}
+}
+
+func (o *object) InitialHTMLAttr(fn InitialHTMLAttrHook) Object {
 	return &object{
 		prev:    o,
 		handler: fn,
@@ -90,6 +105,17 @@ func (o *object) JawsContextMenu(e *jaws.Element, click jaws.Click) (err error) 
 		if fn, ok = o.handler.(ContextMenuHook); ok {
 			err = fn(o, e, click)
 			ok = !errors.Is(err, jaws.ErrEventUnhandled)
+		}
+		return
+	})
+	return
+}
+
+func (o *object) JawsInitialHTMLAttr(e *jaws.Element) (retv template.HTMLAttr) {
+	o.walk(func(o *object) (ok bool) {
+		var fn InitialHTMLAttrHook
+		if fn, ok = o.handler.(InitialHTMLAttrHook); ok {
+			retv = fn(o, e)
 		}
 		return
 	})

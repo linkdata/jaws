@@ -1586,6 +1586,22 @@ func nextOutboundMsg(t *testing.T, rq *testRequest) wire.WsMsg {
 	}
 }
 
+func TestRequest_NewElement_DebugComparableCheck(t *testing.T) {
+	if !deadlock.Debug {
+		t.Skip("debug checks not enabled")
+	}
+
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for non-comparable UI when comparable check is enabled")
+		}
+	}()
+	rq.NewElement(testUnhashableUI{m: map[string]int{"x": 1}})
+}
+
 func TestRequest_IncomingRemoveDoesNotDeleteMessageJid(t *testing.T) {
 	NextJid = 0
 	rq := newTestRequest(t)

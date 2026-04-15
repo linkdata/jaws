@@ -44,6 +44,12 @@ type ClickedHook[T comparable] func(bind Binder[T], elem *jaws.Element, click ja
 // The Binder locks are not held when the function is called.
 type ContextMenuHook[T comparable] func(bind Binder[T], elem *jaws.Element, click jaws.Click) (err error)
 
+// InitialHTMLAttrHook is a function to call when an Element is initially rendered.
+//
+// The lock will be held at this point, preferring RLock over Lock, if available.
+// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+type InitialHTMLAttrHook[T comparable] func(bind Binder[T], elem *jaws.Element) (s template.HTMLAttr)
+
 // SuccessHook is a function to call when a call to JawsSet returns with no error.
 //
 // The Binder locks are not held when the function is called.
@@ -59,9 +65,14 @@ type Binder[T comparable] interface {
 	tag.TagGetter
 	jaws.ClickHandler
 	jaws.ContextMenuHandler
+	jaws.InitialHTMLAttrHandler
 
 	JawsGetLocked(elem *jaws.Element) (value T)
 	JawsSetLocked(elem *jaws.Element, value T) (err error)
+
+	// JawsInitialHTMLAttrLocked returns the initial HTML attribute while
+	// the Binder lock is held.
+	JawsInitialHTMLAttrLocked(elem *jaws.Element) (s template.HTMLAttr)
 
 	// SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
 	//
@@ -109,13 +120,21 @@ type Binder[T comparable] interface {
 	//
 	// The Binder locks are not held when the function is called.
 	ContextMenu(fn ContextMenuHook[T]) (newbind Binder[T])
+
+	// InitialHTMLAttr returns a Binder[T] that will call fn when
+	// JawsInitialHTMLAttr is invoked.
+	//
+	// The lock will be held at this point, preferring RLock over Lock, if available.
+	// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+	// To call the previous handler in the chain, call JawsInitialHTMLAttrLocked.
+	InitialHTMLAttr(fn InitialHTMLAttrHook[T]) (newbind Binder[T])
 }
 
 type binder[T comparable] struct {
 	prev *binder[T]
 	RWLocker
 	ptr  *T
-	hook any // one of: SetHook[T] GetHook[T] GetHTMLHook[T] ClickedHook[T] ContextMenuHook[T] SuccessHook
+	hook any // one of: SetHook[T] GetHook[T] GetHTMLHook[T] ClickedHook[T] ContextMenuHook[T] InitialHTMLAttrHook[T] SuccessHook
 }
 
 func (bind *binder[T]) walk(fn func(*binder[T]) bool) bool {
@@ -160,6 +179,22 @@ func (bind *binder[T]) JawsGetHTML(elem *jaws.Element) (s template.HTML) {
 	bind.RWLocker.RLock()
 	defer bind.RWLocker.RUnlock()
 	s = bind.jawsGetHTMLLocked(elem)
+	return
+}
+
+func (bind *binder[T]) JawsInitialHTMLAttrLocked(elem *jaws.Element) (s template.HTMLAttr) {
+	if fn, ok := bind.hook.(InitialHTMLAttrHook[T]); ok {
+		s = fn(bind.prev, elem)
+	} else if bind.prev != nil {
+		s = bind.prev.JawsInitialHTMLAttrLocked(elem)
+	}
+	return
+}
+
+func (bind *binder[T]) JawsInitialHTMLAttr(elem *jaws.Element) (s template.HTMLAttr) {
+	bind.RWLocker.RLock()
+	defer bind.RWLocker.RUnlock()
+	s = bind.JawsInitialHTMLAttrLocked(elem)
 	return
 }
 
@@ -294,6 +329,20 @@ func (bind *binder[T]) Clicked(fn ClickedHook[T]) Binder[T] {
 //
 // The Binder locks are not held when the function is called.
 func (bind *binder[T]) ContextMenu(fn ContextMenuHook[T]) Binder[T] {
+	return &binder[T]{
+		prev:     bind,
+		RWLocker: bind.RWLocker,
+		ptr:      bind.ptr,
+		hook:     fn,
+	}
+}
+
+// InitialHTMLAttr returns a Binder[T] that will call fn when
+// JawsInitialHTMLAttr is invoked.
+//
+// The lock will be held at this point, preferring RLock over Lock, if available.
+// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+func (bind *binder[T]) InitialHTMLAttr(fn InitialHTMLAttrHook[T]) Binder[T] {
 	return &binder[T]{
 		prev:     bind,
 		RWLocker: bind.RWLocker,

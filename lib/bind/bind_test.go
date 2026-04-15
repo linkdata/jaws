@@ -763,3 +763,58 @@ func TestBind_Hook_GetHTML(t *testing.T) {
 		t.Fatal(tags)
 	}
 }
+
+func TestBind_Hook_InitialHTMLAttr(t *testing.T) {
+	var mu deadlock.Mutex
+	val := "v"
+
+	root := New(&mu, &val)
+	if got := root.JawsInitialHTMLAttr(nil); got != "" {
+		t.Fatalf("want empty attr got %q", got)
+	}
+
+	firstPrevOK := false
+	first := root.InitialHTMLAttr(func(bind Binder[string], elem *jaws.Element) (s template.HTMLAttr) {
+		firstPrevOK = bind == root
+		s = `data-first="1"`
+		return
+	})
+	if got := first.JawsInitialHTMLAttr(nil); got != `data-first="1"` {
+		t.Fatalf("want %q got %q", `data-first="1"`, got)
+	}
+	if !firstPrevOK {
+		t.Fatal("InitialHTMLAttr first hook previous binder mismatch")
+	}
+
+	secondPrevOK := false
+	second := first.InitialHTMLAttr(func(bind Binder[string], elem *jaws.Element) (s template.HTMLAttr) {
+		secondPrevOK = bind == first
+		base := bind.JawsInitialHTMLAttrLocked(elem)
+		s = template.HTMLAttr(string(base) + ` data-second="2"`)
+		return
+	})
+	if got := second.JawsInitialHTMLAttr(nil); got != `data-first="1" data-second="2"` {
+		t.Fatalf("want %q got %q", `data-first="1" data-second="2"`, got)
+	}
+	if !secondPrevOK {
+		t.Fatal("InitialHTMLAttr second hook previous binder mismatch")
+	}
+	if tags := tag.MustTagExpand(nil, second); !reflect.DeepEqual(tags, []any{&val}) {
+		t.Fatal(tags)
+	}
+}
+
+func TestBind_Hook_InitialHTMLAttrLocked_TraversesNonAttrHook(t *testing.T) {
+	var mu deadlock.Mutex
+	val := "v"
+
+	root := New(&mu, &val).InitialHTMLAttr(func(Binder[string], *jaws.Element) (s template.HTMLAttr) {
+		s = `data-root="1"`
+		return
+	})
+	withSuccess := root.Success(func() {})
+
+	if got := withSuccess.JawsInitialHTMLAttrLocked(nil); got != `data-root="1"` {
+		t.Fatalf("want %q got %q", `data-root="1"`, got)
+	}
+}

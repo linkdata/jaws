@@ -184,7 +184,9 @@ func (ui *JsVar[T]) JawsGetTag(tag.Context) any {
 	return ui.Tag
 }
 
-func (ui *JsVar[T]) JawsUpdate(e *jaws.Element) {} // no-op for JsVar[T]
+func (ui *JsVar[T]) JawsUpdate(e *jaws.Element) {
+	_ = e // no-op for JsVar[T]
+}
 
 func elideErrValueUnchanged(err error) error {
 	if err == jaws.ErrValueUnchanged {

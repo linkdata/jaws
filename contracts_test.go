@@ -36,6 +36,14 @@ func (tjc *testJawsContextMenu) JawsContextMenu(e *Element, click Click) (err er
 
 var _ ContextMenuHandler = (*testJawsContextMenu)(nil)
 
+type testJawsInitialHTMLAttr struct{}
+
+func (testJawsInitialHTMLAttr) JawsInitialHTMLAttr(*Element) template.HTMLAttr {
+	return `data-test="1"`
+}
+
+var _ InitialHTMLAttrHandler = testJawsInitialHTMLAttr{}
+
 func Test_clickHandlerWapper_JawsEvent(t *testing.T) {
 	th := newTestHelper(t)
 	NextJid = 0
@@ -92,5 +100,12 @@ func Test_defaultAuth(t *testing.T) {
 	}
 	if a.IsAdmin() != true {
 		t.Fatal()
+	}
+}
+
+func Test_initialHTMLAttrHandlerWrapper_JawsEvent(t *testing.T) {
+	w := initialHTMLAttrHandlerWrapper{InitialHTMLAttrHandler: testJawsInitialHTMLAttr{}}
+	if err := w.JawsEvent(nil, what.Click, "ignored"); err != ErrEventUnhandled {
+		t.Fatalf("expected ErrEventUnhandled, got %v", err)
 	}
 }

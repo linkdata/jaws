@@ -2,11 +2,14 @@ package ui
 
 import (
 	"errors"
+	"html/template"
 	"testing"
 	"time"
 
+	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/assets"
+	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/what"
 )
 
@@ -150,4 +153,18 @@ func TestTextarea_RenderEscapesHTML(t *testing.T) {
 
 	_, got := renderUI(t, rq, NewTextarea(ss))
 	mustMatch(t, `^<textarea id="Jid\.[0-9]+">x&lt;/textarea&gt;&lt;script&gt;alert\(&#34;x&#34;\)&lt;/script&gt;</textarea>$`, got)
+}
+
+func TestInputTextWidget_InitialHTMLAttrFromBinder(t *testing.T) {
+	_, rq := newCoreRequest(t)
+
+	var mu deadlock.Mutex
+	val := "foo"
+	b := bind.New(&mu, &val).InitialHTMLAttr(func(bind.Binder[string], *jaws.Element) (s template.HTMLAttr) {
+		s = `data-binder="yes"`
+		return
+	})
+
+	_, got := renderUI(t, rq, NewText(b))
+	mustMatch(t, `^<input id="Jid\.[0-9]+" type="text" value="foo" data-binder="yes">$`, got)
 }

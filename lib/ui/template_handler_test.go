@@ -172,3 +172,16 @@ func TestHandler_HandlerServeHTTP(t *testing.T) {
 		t.Fatalf("unexpected handler output: %q", got)
 	}
 }
+
+func TestTemplate_RenderReturnsTagExpandError(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	jw.AddTemplateLookuper(template.Must(template.New("uitempl").Parse(
+		`{{with $.Dot}}<div id="{{$.Jid}}" {{$.Attrs}}>{{.}}</div>{{end}}`,
+	)))
+
+	var sb bytes.Buffer
+	rw := RequestWriter{Request: rq, Writer: &sb}
+	if err := rw.Template("uitempl", "plain-string-dot"); err == nil {
+		t.Fatal("expected tag expansion error")
+	}
+}

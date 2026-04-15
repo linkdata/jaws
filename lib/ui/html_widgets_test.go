@@ -90,3 +90,14 @@ func TestRegister_Render(t *testing.T) {
 		t.Fatalf("expected empty output got %q", got)
 	}
 }
+
+func TestHTMLInner_RenderInitialHTMLAttrFromObject(t *testing.T) {
+	_, rq := newCoreRequest(t)
+
+	obj := New("inner").InitialHTMLAttr(func(Object, *jaws.Element) (s template.HTMLAttr) {
+		s = `data-object="yes"`
+		return
+	})
+	_, got := renderUI(t, rq, NewDiv(obj))
+	mustMatch(t, `^<div id="Jid\.[0-9]+" data-object="yes">inner</div>$`, got)
+}

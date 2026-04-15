@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"html/template"
 	"testing"
 
 	"github.com/linkdata/jaws"
@@ -147,5 +148,38 @@ func TestObject_EventUnhandledCanBeWrapped(t *testing.T) {
 		t.Fatalf("want ErrEventUnhandled chain got %v", err)
 	} else if err != wrapped {
 		t.Fatalf("want wrapped unhandled got %v", err)
+	}
+}
+
+func TestObject_InitialHTMLAttr_DefaultEmpty(t *testing.T) {
+	obj := New("x")
+	if got := obj.JawsInitialHTMLAttr(nil); got != "" {
+		t.Fatalf("want empty attr got %q", got)
+	}
+}
+
+func TestObject_InitialHTMLAttr_FirstHookWins(t *testing.T) {
+	order := []int{}
+	elem := &jaws.Element{}
+
+	obj := New("x").
+		InitialHTMLAttr(func(got Object, gotElem *jaws.Element) (s template.HTMLAttr) {
+			order = append(order, 1)
+			if gotElem != elem {
+				t.Fatalf("unexpected elem %#v", gotElem)
+			}
+			return `data-first="1"`
+		}).
+		InitialHTMLAttr(func(Object, *jaws.Element) (s template.HTMLAttr) {
+			order = append(order, 2)
+			s = `data-second="2"`
+			return
+		})
+
+	if got := obj.JawsInitialHTMLAttr(elem); got != `data-first="1"` {
+		t.Fatalf("want %q got %q", `data-first="1"`, got)
+	}
+	if len(order) != 1 || order[0] != 1 {
+		t.Fatalf("unexpected order %v", order)
 	}
 }
