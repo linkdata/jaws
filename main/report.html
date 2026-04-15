@@ -381,6 +381,12 @@ type ContextMenuHandler interface {
         JawsContextMenu(e *Element, click Click) (err error)
 }
 
+type InitialHTMLAttrHandler interface {
+        // JawsInitialHTMLAttr is called when an Element is initially rendered,
+        // and may return and initial HTML attribute string to write out.
+        JawsInitialHTMLAttr(e *Element) (s template.HTMLAttr)
+}
+
 type clickHandlerWrapper struct{ ClickHandler }
 
 func (chw clickHandlerWrapper) JawsEvent(*Element, what.What, string) error <span class="cov8" title="1">{
@@ -390,6 +396,12 @@ func (chw clickHandlerWrapper) JawsEvent(*Element, what.What, string) error <spa
 type contextMenuHandlerWrapper struct{ ContextMenuHandler }
 
 func (cmw contextMenuHandlerWrapper) JawsEvent(*Element, what.What, string) error <span class="cov8" title="1">{
+        return ErrEventUnhandled
+}</span>
+
+type initialHTMLAttrHandlerWrapper struct{ InitialHTMLAttrHandler }
+
+func (ahw initialHTMLAttrHandlerWrapper) JawsEvent(*Element, what.What, string) error <span class="cov8" title="1">{
         return ErrEventUnhandled
 }</span>
 
@@ -416,6 +428,7 @@ import (
         "fmt"
         "html/template"
         "io"
+        "slices"
         "strings"
         "sync/atomic"
 
@@ -638,6 +651,15 @@ func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) <span cla
                         attr := template.HTMLAttr(s) // #nosec G203
                         retv = append(retv, attr)
                 }</span>
+                <span class="cov8" title="1">e.handlers = slices.DeleteFunc(e.handlers, func(h EventHandler) bool </span><span class="cov8" title="1">{
+                        if ah, ok := h.(initialHTMLAttrHandlerWrapper); ok </span><span class="cov8" title="1">{
+                                if attr := ah.JawsInitialHTMLAttr(e); attr != "" </span><span class="cov8" title="1">{
+                                        retv = append(retv, attr)
+                                }</span>
+                                <span class="cov8" title="1">return true</span>
+                        }
+                        <span class="cov8" title="1">return false</span>
+                })
         }
         <span class="cov8" title="1">return</span>
 }
@@ -645,8 +667,8 @@ func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) <span cla
 // ApplyGetter examines getter, and if it's not nil, either adds it
 // as a Tag, or, if it is a TagGetter, adds the result of that as a Tag.
 //
-// If getter is an EventHandler, ClickHandler or ContextMenuHandler, it's
-// added to the list of handlers for the Element.
+// If getter is an EventHandler, ClickHandler, ContextMenuHandler or
+// InitialHTMLAttrHandler, it's added to the list of handlers for the Element.
 //
 // Finally, if getter is an InitHandler, it's JawsInit()
 // function is called.
@@ -669,6 +691,9 @@ func (e *Element) ApplyGetter(getter any) (tagValue any, err error) <span class=
                                 e.handlers = append(e.handlers, contextMenuHandlerWrapper{ch})
                         }</span>
                 }
+                <span class="cov8" title="1">if ah, ok := getter.(InitialHTMLAttrHandler); ok </span><span class="cov8" title="1">{
+                        e.handlers = append(e.handlers, initialHTMLAttrHandlerWrapper{ah})
+                }</span>
                 <span class="cov8" title="1">e.Tag(tagValue)
                 if initer, ok := getter.(InitHandler); ok </span><span class="cov8" title="1">{
                         err = initer.JawsInit(e)
@@ -2410,6 +2435,12 @@ type ClickedHook[T comparable] func(bind Binder[T], elem *jaws.Element, click ja
 // The Binder locks are not held when the function is called.
 type ContextMenuHook[T comparable] func(bind Binder[T], elem *jaws.Element, click jaws.Click) (err error)
 
+// InitialHTMLAttrHook is a function to call when an Element is initially rendered.
+//
+// The lock will be held at this point, preferring RLock over Lock, if available.
+// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+type InitialHTMLAttrHook[T comparable] func(bind Binder[T], elem *jaws.Element) (s template.HTMLAttr)
+
 // SuccessHook is a function to call when a call to JawsSet returns with no error.
 //
 // The Binder locks are not held when the function is called.
@@ -2425,9 +2456,14 @@ type Binder[T comparable] interface {
         tag.TagGetter
         jaws.ClickHandler
         jaws.ContextMenuHandler
+        jaws.InitialHTMLAttrHandler
 
         JawsGetLocked(elem *jaws.Element) (value T)
         JawsSetLocked(elem *jaws.Element, value T) (err error)
+
+        // JawsInitialHTMLAttrLocked returns the initial HTML attribute while
+        // the Binder lock is held.
+        JawsInitialHTMLAttrLocked(elem *jaws.Element) (s template.HTMLAttr)
 
         // SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
         //
@@ -2475,13 +2511,21 @@ type Binder[T comparable] interface {
         //
         // The Binder locks are not held when the function is called.
         ContextMenu(fn ContextMenuHook[T]) (newbind Binder[T])
+
+        // InitialHTMLAttr returns a Binder[T] that will call fn when
+        // JawsInitialHTMLAttr is invoked.
+        //
+        // The lock will be held at this point, preferring RLock over Lock, if available.
+        // Do not lock or unlock the Binder within fn. Do not call JawsGet.
+        // To call the previous handler in the chain, call JawsInitialHTMLAttrLocked.
+        InitialHTMLAttr(fn InitialHTMLAttrHook[T]) (newbind Binder[T])
 }
 
 type binder[T comparable] struct {
         prev *binder[T]
         RWLocker
         ptr  *T
-        hook any // one of: SetHook[T] GetHook[T] GetHTMLHook[T] ClickedHook[T] ContextMenuHook[T] SuccessHook
+        hook any // one of: SetHook[T] GetHook[T] GetHTMLHook[T] ClickedHook[T] ContextMenuHook[T] InitialHTMLAttrHook[T] SuccessHook
 }
 
 func (bind *binder[T]) walk(fn func(*binder[T]) bool) bool <span class="cov8" title="1">{
@@ -2526,6 +2570,22 @@ func (bind *binder[T]) JawsGetHTML(elem *jaws.Element) (s template.HTML) <span c
         bind.RWLocker.RLock()
         defer bind.RWLocker.RUnlock()
         s = bind.jawsGetHTMLLocked(elem)
+        return
+}</span>
+
+func (bind *binder[T]) JawsInitialHTMLAttrLocked(elem *jaws.Element) (s template.HTMLAttr) <span class="cov8" title="1">{
+        if fn, ok := bind.hook.(InitialHTMLAttrHook[T]); ok </span><span class="cov8" title="1">{
+                s = fn(bind.prev, elem)
+        }</span> else<span class="cov8" title="1"> if bind.prev != nil </span><span class="cov8" title="1">{
+                s = bind.prev.JawsInitialHTMLAttrLocked(elem)
+        }</span>
+        <span class="cov8" title="1">return</span>
+}
+
+func (bind *binder[T]) JawsInitialHTMLAttr(elem *jaws.Element) (s template.HTMLAttr) <span class="cov8" title="1">{
+        bind.RWLocker.RLock()
+        defer bind.RWLocker.RUnlock()
+        s = bind.JawsInitialHTMLAttrLocked(elem)
         return
 }</span>
 
@@ -2660,6 +2720,20 @@ func (bind *binder[T]) Clicked(fn ClickedHook[T]) Binder[T] <span class="cov8" t
 //
 // The Binder locks are not held when the function is called.
 func (bind *binder[T]) ContextMenu(fn ContextMenuHook[T]) Binder[T] <span class="cov8" title="1">{
+        return &amp;binder[T]{
+                prev:     bind,
+                RWLocker: bind.RWLocker,
+                ptr:      bind.ptr,
+                hook:     fn,
+        }
+}</span>
+
+// InitialHTMLAttr returns a Binder[T] that will call fn when
+// JawsInitialHTMLAttr is invoked.
+//
+// The lock will be held at this point, preferring RLock over Lock, if available.
+// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+func (bind *binder[T]) InitialHTMLAttr(fn InitialHTMLAttrHook[T]) Binder[T] <span class="cov8" title="1">{
         return &amp;binder[T]{
                 prev:     bind,
                 RWLocker: bind.RWLocker,
@@ -4755,7 +4829,9 @@ func (ui *JsVar[T]) JawsGetTag(tag.Context) any <span class="cov8" title="1">{
         return ui.Tag
 }</span>
 
-func (ui *JsVar[T]) JawsUpdate(e *jaws.Element) {<span class="cov8" title="1">}</span> // no-op for JsVar[T]
+func (ui *JsVar[T]) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
+        _ = e // no-op for JsVar[T]
+}</span>
 
 func elideErrValueUnchanged(err error) error <span class="cov8" title="1">{
         if err == jaws.ErrValueUnchanged </span><span class="cov8" title="1">{
@@ -4899,11 +4975,15 @@ type ClickedHook func(obj Object, elem *jaws.Element, click jaws.Click) (err err
 // ContextMenuHook is a function to call when a context menu event is received.
 type ContextMenuHook func(obj Object, elem *jaws.Element, click jaws.Click) (err error)
 
+// InitialHTMLAttrHook is a function to call when an Element is initially rendered.
+type InitialHTMLAttrHook func(obj Object, elem *jaws.Element) (s template.HTMLAttr)
+
 type Object interface {
         bind.HTMLGetter
         tag.TagGetter
         jaws.ClickHandler
         jaws.ContextMenuHandler
+        jaws.InitialHTMLAttrHandler
 
         // Clicked returns an Object that will call fn when JawsClick is invoked.
         Clicked(fn ClickedHook) (newobj Object)
@@ -4911,6 +4991,10 @@ type Object interface {
         // ContextMenu returns an Object that will call fn when JawsContextMenu
         // is invoked.
         ContextMenu(fn ContextMenuHook) (newobj Object)
+
+        // InitialHTMLAttr returns an Object that will call fn when
+        // JawsInitialHTMLAttr is invoked.
+        InitialHTMLAttr(fn InitialHTMLAttrHook) (newobj Object)
 }
 
 var _ Object = &amp;object{}
@@ -4937,6 +5021,13 @@ func (o *object) Clicked(fn ClickedHook) Object <span class="cov8" title="1">{
 }</span>
 
 func (o *object) ContextMenu(fn ContextMenuHook) Object <span class="cov8" title="1">{
+        return &amp;object{
+                prev:    o,
+                handler: fn,
+        }
+}</span>
+
+func (o *object) InitialHTMLAttr(fn InitialHTMLAttrHook) Object <span class="cov8" title="1">{
         return &amp;object{
                 prev:    o,
                 handler: fn,
@@ -4974,6 +5065,17 @@ func (o *object) JawsContextMenu(e *jaws.Element, click jaws.Click) (err error) 
                 if fn, ok = o.handler.(ContextMenuHook); ok </span><span class="cov8" title="1">{
                         err = fn(o, e, click)
                         ok = !errors.Is(err, jaws.ErrEventUnhandled)
+                }</span>
+                <span class="cov8" title="1">return</span>
+        })
+        <span class="cov8" title="1">return</span>
+}
+
+func (o *object) JawsInitialHTMLAttr(e *jaws.Element) (retv template.HTMLAttr) <span class="cov8" title="1">{
+        o.walk(func(o *object) (ok bool) </span><span class="cov8" title="1">{
+                var fn InitialHTMLAttrHook
+                if fn, ok = o.handler.(InitialHTMLAttrHook); ok </span><span class="cov8" title="1">{
+                        retv = fn(o, e)
                 }</span>
                 <span class="cov8" title="1">return</span>
         })
