@@ -296,12 +296,11 @@ be made into one using `bind.MakeHTMLGetter()`.
 In order of precedence, this can be:
 * `bind.HTMLGetter`: `JawsGetHTML(*Element) template.HTML` to be used as-is.
 * `bind.Getter[string]`: `JawsGet(*Element) string` that will be escaped using `html.EscapeString`.
-* `bind.Formatter`: `Format("%v") string` that will be escaped using `html.EscapeString`.
 * `fmt.Stringer`: `String() string` that will be escaped using `html.EscapeString`.
 * a static `template.HTML` or `string` to be used as-is with no HTML escaping.
 * everything else is rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
 
-You can use `bind.New(...).FormatHTML()`, `bind.HTMLGetterFunc()` or `bind.StringGetterFunc()` to build a custom renderer
+You can use `bind.New(...).GetHTML(...)`, `bind.HTMLGetterFunc()` or `bind.StringGetterFunc()` to build a custom renderer
 for trivial rendering tasks, or define a custom type implementing `HTMLGetter`.
 
 ### Data binding

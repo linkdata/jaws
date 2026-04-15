@@ -4,6 +4,7 @@ import (
 	"html"
 	"html/template"
 	"reflect"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -14,6 +15,10 @@ type testStringer struct{}
 
 func (testStringer) String() string {
 	return "<x>"
+}
+
+type testBinderStringNoHTML struct {
+	Binder[string]
 }
 
 /*type testAnySetter struct {
@@ -36,6 +41,9 @@ func Test_MakeHTMLGetter(t *testing.T) {
 	avUntyped.Store(untypedText)
 	avTyped.Store(typedText)
 	stringer := testStringer{}
+	var binderVal = "<b>"
+	var binderMu sync.Mutex
+	binderNoHTML := testBinderStringNoHTML{New(&binderMu, &binderVal)}
 
 	getterString := testGetterString{}
 
@@ -59,6 +67,13 @@ func Test_MakeHTMLGetter(t *testing.T) {
 			want: htmlGetterString{getterString},
 			out:  template.HTML(html.EscapeString(getterString.JawsGet(nil))),
 			tag:  getterString,
+		},
+		{
+			name: "Binder[string]",
+			v:    binderNoHTML,
+			want: htmlBinderString{binderNoHTML},
+			out:  template.HTML(html.EscapeString(binderNoHTML.JawsGet(nil))),
+			tag:  &binderVal,
 		},
 		/*{
 			name: "Getter[any]",

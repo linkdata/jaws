@@ -51,7 +51,6 @@ func (g htmlGetterString) JawsGetTag(jtag.Context) any {
 //
 //   - HTMLGetter: `JawsGetHTML(e *Element) template.HTML` to be used as-is.
 //   - Getter[string]: `JawsGet(elem *Element) string` that will be escaped using `html.EscapeString`.
-//   - Formatter: `Format("%v") string` that will be escaped using `html.EscapeString`.
 //   - fmt.Stringer: `String() string` that will be escaped using `html.EscapeString`.
 //   - a static `template.HTML` or `string` to be used as-is with no HTML escaping.
 //   - everything else is rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
@@ -71,8 +70,6 @@ func MakeHTMLGetter(v any) HTMLGetter {
 		return htmlBinderString{v}
 	case Getter[string]:
 		return htmlGetterString{v}
-	case Formatter:
-		return htmlGetterString{v.Format("%v")}
 	case fmt.Stringer:
 		return htmlStringerGetter{v}
 	case string:

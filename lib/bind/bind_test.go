@@ -2,6 +2,7 @@ package bind
 
 import (
 	"errors"
+	"html/template"
 	"io"
 	"reflect"
 	"testing"
@@ -698,63 +699,67 @@ func TestBindFunc_Time(t *testing.T) {
 	testBind_TimeSetter(t, New(&mu, &val).Success(func() {}))
 }
 
-func TestBindFormat(t *testing.T) {
-	var mu deadlock.Mutex
-	val := 12
-
-	bind := New(&mu, &val)
-	if v := MakeHTMLGetter(bind).JawsGetHTML(nil); v != "12" {
-		t.Errorf("%T %#v", v, v)
+func TestBind_GetHTML_Default(t *testing.T) {
+	var mu1 deadlock.Mutex
+	val1 := 12
+	bind1 := New(&mu1, &val1)
+	if got, want := MakeHTMLGetter(bind1).JawsGetHTML(nil), template.HTML("12"); got != want {
+		t.Fatalf("want %q got %q", want, got)
+	}
+	if tags := jtag.MustTagExpand(nil, bind1); !reflect.DeepEqual(tags, []any{&val1}) {
+		t.Fatal(tags)
 	}
 
-	getter := bind.Format("%3v")
-	if s := getter.JawsGet(nil); s != " 12" {
-		t.Errorf("%q", s)
+	var mu2 deadlock.Mutex
+	val2 := "<span>"
+	bind2 := New(&mu2, &val2)
+	if got, want := MakeHTMLGetter(bind2).JawsGetHTML(nil), template.HTML("&lt;span&gt;"); got != want {
+		t.Fatalf("want %q got %q", want, got)
 	}
-	tags := jtag.MustTagExpand(nil, getter)
-	if !reflect.DeepEqual(tags, []any{&val}) {
-		t.Error(tags)
+	if tags := jtag.MustTagExpand(nil, bind2); !reflect.DeepEqual(tags, []any{&val2}) {
+		t.Fatal(tags)
 	}
-
-	bind2 := bind.Success(func() {})
-	getter = bind2.Format("%3v")
-	if s := getter.JawsGet(nil); s != " 12" {
-		t.Errorf("%q", s)
-	}
-	tags = jtag.MustTagExpand(nil, getter)
-	if !reflect.DeepEqual(tags, []any{&val}) {
-		t.Error(tags)
+	bind3 := bind2.Success(func() {})
+	if got, want := MakeHTMLGetter(bind3).JawsGetHTML(nil), template.HTML("&lt;span&gt;"); got != want {
+		t.Fatalf("want %q got %q", want, got)
 	}
 }
 
-func TestBindFormatHTML(t *testing.T) {
+func TestBind_Hook_GetHTML(t *testing.T) {
 	var mu deadlock.Mutex
 	val := "<span>"
 
-	bind := New(&mu, &val)
-	if s := MakeHTMLGetter(bind).JawsGetHTML(nil); s != "&lt;span&gt;" {
-		t.Errorf("%q", s)
+	root := New(&mu, &val)
+	if got, want := MakeHTMLGetter(root).JawsGetHTML(nil), template.HTML("&lt;span&gt;"); got != want {
+		t.Fatalf("want %q got %q", want, got)
 	}
 
-	getter := bind.FormatHTML("%v")
-	if s := getter.JawsGetHTML(nil); s != "<span>" {
-		t.Errorf("%q", s)
+	getHTML1PrevOK := false
+	getHTML1 := root.GetHTML(func(bind Binder[string], elem *jaws.Element) (s template.HTML) {
+		getHTML1PrevOK = bind == root
+		s = template.HTML(bind.JawsGetLocked(elem))
+		return
+	})
+	if got, want := MakeHTMLGetter(getHTML1).JawsGetHTML(nil), template.HTML("<span>"); got != want {
+		t.Fatalf("want %q got %q", want, got)
 	}
-	tags := jtag.MustTagExpand(nil, getter)
-	if !reflect.DeepEqual(tags, []any{&val}) {
-		t.Error(tags)
+	if !getHTML1PrevOK {
+		t.Fatal("GetHTML first hook previous binder mismatch")
 	}
 
-	bind2 := bind.Success(func() {})
-	if s := bind2.JawsGet(nil); s != "<span>" {
-		t.Errorf("%q", s)
+	getHTML2PrevOK := false
+	getHTML2 := getHTML1.GetHTML(func(bind Binder[string], elem *jaws.Element) (s template.HTML) {
+		getHTML2PrevOK = bind == getHTML1
+		s = template.HTML("<b>" + bind.JawsGetLocked(elem) + "</b>")
+		return
+	})
+	if got, want := MakeHTMLGetter(getHTML2).JawsGetHTML(nil), template.HTML("<b><span></b>"); got != want {
+		t.Fatalf("want %q got %q", want, got)
 	}
-	getter = bind2.FormatHTML("%q")
-	if s := getter.JawsGetHTML(nil); s != "\"<span>\"" {
-		t.Errorf("%q", s)
+	if !getHTML2PrevOK {
+		t.Fatal("GetHTML second hook previous binder mismatch")
 	}
-	tags = jtag.MustTagExpand(nil, getter)
-	if !reflect.DeepEqual(tags, []any{&val}) {
-		t.Error(tags)
+	if tags := jtag.MustTagExpand(nil, getHTML2); !reflect.DeepEqual(tags, []any{&val}) {
+		t.Fatal(tags)
 	}
 }

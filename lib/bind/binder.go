@@ -3,6 +3,7 @@ package bind
 import (
 	"errors"
 	"fmt"
+	"html"
 	"html/template"
 
 	"github.com/linkdata/jaws"
@@ -27,6 +28,12 @@ type SetHook[T comparable] func(bind Binder[T], elem *jaws.Element, value T) (er
 // want to call it's JawsGetLocked first.
 type GetHook[T comparable] func(bind Binder[T], elem *jaws.Element) (value T)
 
+// GetHTMLHook is a function to call when JawsGetHTML() is called.
+//
+// The lock will be held before calling the function, preferring RLock over Lock, if available.
+// Do not lock or unlock the Binder in the function. Do not call JawsGet.
+type GetHTMLHook[T comparable] func(bind Binder[T], elem *jaws.Element) (s template.HTML)
+
 // ClickedHook is a function to call when a click event is received.
 //
 // The Binder locks are not held when the function is called.
@@ -46,16 +53,10 @@ type ContextMenuHook[T comparable] func(bind Binder[T], elem *jaws.Element, clic
 // no more success hooks are called.
 type SuccessHook func(*jaws.Element) (err error)
 
-type Formatter interface {
-	// Format returns a Getter[string] using fmt.Sprintf(f, JawsGet[T](elem))
-	Format(f string) (getter Getter[string])
-}
-
 type Binder[T comparable] interface {
 	RWLocker
 	Setter[T]
 	jtag.TagGetter
-	Formatter
 	jaws.ClickHandler
 	jaws.ContextMenuHandler
 
@@ -91,8 +92,12 @@ type Binder[T comparable] interface {
 	//  * func(*Element) error
 	Success(fn any) (newbind Binder[T])
 
-	// FormatHTML returns a HTMLGetter using fmt.Sprintf(f, JawsGet[T](elem))
-	FormatHTML(f string) (getter HTMLGetter)
+	// GetHTML returns a Binder[T] that will call fn instead of the default
+	// escaped fmt.Sprintf("%v", JawsGetLocked(elem)) HTML rendering.
+	//
+	// The lock will be held at this point, preferring RLock over Lock, if available.
+	// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+	GetHTML(fn GetHTMLHook[T]) (newbind Binder[T])
 
 	// Clicked returns a Binder[T] that will call fn when JawsClick is invoked.
 	//
@@ -110,7 +115,7 @@ type binder[T comparable] struct {
 	prev *binder[T]
 	RWLocker
 	ptr  *T
-	hook any // one of: BindGetHook[T] BindSetHook[T] BindClickedHook[T] BindContextMenuHook[T] BindSuccessHook
+	hook any // one of: SetHook[T] GetHook[T] GetHTMLHook[T] ClickedHook[T] ContextMenuHook[T] SuccessHook
 }
 
 func (bind *binder[T]) walk(fn func(*binder[T]) bool) bool {
@@ -137,6 +142,24 @@ func (bind *binder[T]) JawsGet(elem *jaws.Element) (value T) {
 	bind.RWLocker.RLock()
 	defer bind.RWLocker.RUnlock()
 	value = bind.JawsGetLocked(elem)
+	return
+}
+
+func (bind *binder[T]) jawsGetHTMLLocked(elem *jaws.Element) (s template.HTML) {
+	if fn, ok := bind.hook.(GetHTMLHook[T]); ok {
+		s = fn(bind.prev, elem)
+	} else if bind.prev != nil {
+		s = bind.prev.jawsGetHTMLLocked(elem)
+	} else {
+		s = template.HTML(html.EscapeString(fmt.Sprintf("%v", *bind.ptr))) // #nosec G203
+	}
+	return
+}
+
+func (bind *binder[T]) JawsGetHTML(elem *jaws.Element) (s template.HTML) {
+	bind.RWLocker.RLock()
+	defer bind.RWLocker.RUnlock()
+	s = bind.jawsGetHTMLLocked(elem)
 	return
 }
 
@@ -241,6 +264,20 @@ func (bind *binder[T]) GetLocked(fn GetHook[T]) Binder[T] {
 	}
 }
 
+// GetHTML returns a Binder[T] that will call fn instead of the default escaped
+// fmt.Sprintf("%v", JawsGetLocked(elem)) HTML rendering.
+//
+// The lock will be held at this point, preferring RLock over Lock, if available.
+// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+func (bind *binder[T]) GetHTML(fn GetHTMLHook[T]) Binder[T] {
+	return &binder[T]{
+		prev:     bind,
+		RWLocker: bind.RWLocker,
+		ptr:      bind.ptr,
+		hook:     fn,
+	}
+}
+
 // Clicked returns a Binder[T] that will call fn when JawsClick is invoked.
 //
 // The Binder locks are not held when the function is called.
@@ -281,19 +318,6 @@ func (bind *binder[T]) Success(fn any) Binder[T] {
 		ptr:      bind.ptr,
 		hook:     wrapSuccessHook(fn),
 	}
-}
-
-// Format returns a Getter[string] using fmt.Sprintf(f, JawsGet[T](elem))
-func (bind *binder[T]) Format(f string) (getter Getter[string]) {
-	return StringGetterFunc(func(elem *jaws.Element) (s string) { return fmt.Sprintf(f, bind.JawsGet(elem)) }, bind)
-}
-
-// FormatHTML returns a HTMLGetter using fmt.Sprintf(f, JawsGet[T](elem)).
-// Ensure that the generated string is valid HTML.
-func (bind *binder[T]) FormatHTML(f string) (getter HTMLGetter) {
-	return HTMLGetterFunc(func(elem *jaws.Element) (tmpl template.HTML) {
-		return template.HTML( /*#nosec G203*/ fmt.Sprintf(f, bind.JawsGet(elem)))
-	}, bind)
 }
 
 func wrapSuccessHook(fn any) (hook SuccessHook) {
