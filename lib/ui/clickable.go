@@ -2,28 +2,14 @@ package ui
 
 import (
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/bind"
-	"github.com/linkdata/jaws/lib/jtag"
 )
-
-type clickable struct {
-	bind.HTMLGetter
-	onclick func(elem *jaws.Element, click jaws.Click) (err error)
-}
-
-func (c clickable) JawsClick(elem *jaws.Element, click jaws.Click) (err error) {
-	return c.onclick(elem, click)
-}
-
-func (g clickable) JawsGetTag(tc jtag.Context) (tag any) {
-	if tg, ok := g.HTMLGetter.(jtag.TagGetter); ok {
-		tag = tg.JawsGetTag(tc)
-	}
-	return
-}
 
 // Clickable returns an object implementing bind.HTMLGetter, jaws.ClickHandler and jaws.TagGetter.
 // innerHTML is passed to MakeHTMLGetter(), which may or may not provide tags.
+//
+// Deprecated: use New(innerHTML).Clicked(...) directly.
 func Clickable(innerHTML any, onclick func(elem *jaws.Element, click jaws.Click) (err error)) jaws.ClickHandler {
-	return clickable{HTMLGetter: bind.MakeHTMLGetter(innerHTML), onclick: onclick}
+	return New(innerHTML).Clicked(func(_ Object, elem *jaws.Element, click jaws.Click) (err error) {
+		return onclick(elem, click)
+	})
 }
