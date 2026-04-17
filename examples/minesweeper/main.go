@@ -21,6 +21,28 @@ import (
 //go:embed assets/ui/*.html assets/static/*.css
 var assetsFS embed.FS
 
+var (
+	newJaws                   = jaws.New
+	parseMinesweeperTemplates = func() (*template.Template, error) {
+		return template.ParseFS(assetsFS, "assets/ui/*.html")
+	}
+	addTemplateLookuper = func(jw *jaws.Jaws, tmpl *template.Template) error {
+		return jw.AddTemplateLookuper(tmpl)
+	}
+	generateHeadHTML = func(jw *jaws.Jaws) error {
+		return jw.GenerateHeadHTML("/static/style.css")
+	}
+	subStaticFS = func() (fs.FS, error) {
+		return fs.Sub(assetsFS, "assets/static")
+	}
+	serveJaws = func(jw *jaws.Jaws) {
+		go jw.Serve()
+	}
+	listenAndServe = http.ListenAndServe
+	logPrintln     = func(v ...any) { log.Println(v...) }
+	logFatal       = func(v ...any) { log.Fatal(v...) }
+)
+
 type Cell struct {
 	game     *game
 	row, col int
@@ -425,27 +447,27 @@ func (g *game) calculateAdjacencyLocked() {
 	}
 }
 
-func main() {
-	jw, err := jaws.New()
+func run() error {
+	jw, err := newJaws()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer jw.Close()
 
-	tmpl, err := template.ParseFS(assetsFS, "assets/ui/*.html")
+	tmpl, err := parseMinesweeperTemplates()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	if err = jw.AddTemplateLookuper(tmpl); err != nil {
-		log.Fatal(err)
+	if err = addTemplateLookuper(jw, tmpl); err != nil {
+		return err
 	}
-	if err = jw.GenerateHeadHTML("/static/style.css"); err != nil {
-		log.Fatal(err)
+	if err = generateHeadHTML(jw); err != nil {
+		return err
 	}
 
-	staticFiles, err := fs.Sub(assetsFS, "assets/static")
+	staticFiles, err := subStaticFS()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	board := newGame(10, 10, 15)
@@ -455,7 +477,13 @@ func main() {
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
 	mux.Handle("GET /", jw.Session(jw.SecureHeadersMiddleware(ui.Handler(jw, "index.html", board))))
 
-	go jw.Serve()
-	log.Println("Minesweeper listening on http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", mux)) // #nosec G114
+	serveJaws(jw)
+	logPrintln("Minesweeper listening on http://localhost:8080")
+	return listenAndServe(":8080", mux)
+}
+
+func main() {
+	if err := run(); err != nil {
+		logFatal(err)
+	}
 }

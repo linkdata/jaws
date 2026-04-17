@@ -62,6 +62,18 @@ type testTagExpandNestedTagGetter struct {
 	Vals   []int
 }
 
+type testNonComparableActiveNode struct {
+	Values []int
+}
+
+type testDeepTagGetter struct {
+	next any
+}
+
+func (tt testDeepTagGetter) JawsGetTag(Context) any {
+	return tt.next
+}
+
 func TestTagString_StringerAndPointer(t *testing.T) {
 	if got := TagString(testStringTag{}); !strings.Contains(got, "testStringTag(str)") {
 		t.Fatalf("TagString(testStringTag{}) = %q, want value stringer representation", got)
@@ -383,5 +395,63 @@ func TestMustTagExpand_UsesContextMustLog(t *testing.T) {
 	}
 	if !errors.Is(ctx.err, ErrIllegalTagType) {
 		t.Fatalf("expected ErrIllegalTagType, got %v", ctx.err)
+	}
+}
+
+func TestNewErrNotComparable_ComparableAndNil(t *testing.T) {
+	if err := NewErrNotComparable(Tag("ok")); err != nil {
+		t.Fatalf("NewErrNotComparable(comparable) = %v, want nil", err)
+	}
+	if err := NewErrNotComparable(nil); err != nil {
+		t.Fatalf("NewErrNotComparable(nil) = %v, want nil", err)
+	}
+}
+
+func TestNewErrNotUsableAsTag_ComparableAndNil(t *testing.T) {
+	if err := NewErrNotUsableAsTag(Tag("ok")); err != nil {
+		t.Fatalf("NewErrNotUsableAsTag(comparable) = %v, want nil", err)
+	}
+	if err := NewErrNotUsableAsTag(nil); err != nil {
+		t.Fatalf("NewErrNotUsableAsTag(nil) = %v, want nil", err)
+	}
+}
+
+func TestAppendUniqueTag_Deduplicates(t *testing.T) {
+	got, err := appendUniqueTag([]any{Tag("dup")}, Tag("dup"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertTagSetEqual(t, got, []any{Tag("dup")})
+}
+
+func TestSameActiveNode_NilAndDefaultCases(t *testing.T) {
+	if !sameActiveNode(nil, nil) {
+		t.Fatal("expected nil nodes to match")
+	}
+	if sameActiveNode(nil, Tag("x")) {
+		t.Fatal("expected nil and non-nil nodes not to match")
+	}
+	a := testNonComparableActiveNode{Values: []int{1}}
+	b := testNonComparableActiveNode{Values: []int{1}}
+	if sameActiveNode(a, b) {
+		t.Fatal("expected non-comparable structs to compare by identity, not contents")
+	}
+}
+
+func TestTagExpand_TooDeepAndTooManySliceTags(t *testing.T) {
+	var nested any = Tag("leaf")
+	for range 11 {
+		nested = testDeepTagGetter{next: nested}
+	}
+	if _, err := TagExpand(nil, nested); !errors.Is(err, ErrTooManyTags) {
+		t.Fatalf("TagExpand(deep) = %v, want %v", err, ErrTooManyTags)
+	}
+
+	tags := make([]Tag, 101)
+	for i := range tags {
+		tags[i] = Tag(fmt.Sprintf("t%d", i))
+	}
+	if _, err := TagExpand(nil, tags); !errors.Is(err, ErrTooManyTags) {
+		t.Fatalf("TagExpand([]Tag) = %v, want %v", err, ErrTooManyTags)
 	}
 }
