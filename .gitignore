@@ -17,3 +17,4 @@ coverage*
 .gocache
 AGENTS.md
 .DS_Store
+/examples/minesweeper/minesweeper

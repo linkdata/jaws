@@ -91,6 +91,10 @@ h1 {
 	cursor: pointer;
 }
 
+.cell:has(.cleared) {
+	background: #b8a57a;
+}
+
 .cell .glyph {
 	color: #c11717;
 	font-size: 1.35rem;

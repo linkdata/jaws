@@ -51,9 +51,9 @@ func (c *Cell) HTML() template.HTML {
 			return template.HTML(`<span class="glyph glyph-mine">☠</span>`) // #nosec G203
 		}
 		if c.adjacent > 0 {
-			return template.HTML(strconv.Itoa(c.adjacent)) // #nosec G203
+			return template.HTML(`<span class="cleared">` + strconv.Itoa(c.adjacent) + `</span>`) // #nosec G203
 		}
-		return ""
+		return template.HTML(`<span class="cleared"></span>`) // #nosec G203
 	}
 	if c.flagged {
 		return template.HTML(`<span class="glyph glyph-flag">⚑</span>`) // #nosec G203
