@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/lib/tag"
 )
 
 type testObjectStringer struct {
@@ -15,6 +16,14 @@ type testObjectStringer struct {
 
 func (s testObjectStringer) String() string {
 	return s.s
+}
+
+type testObjectTagGetter struct {
+	v any
+}
+
+func (g testObjectTagGetter) JawsGetTag(tag.Context) any {
+	return g.v
 }
 
 func TestObject_NewForwardsHTMLAndTag(t *testing.T) {
@@ -178,5 +187,26 @@ func TestObject_InitialHTMLAttr(t *testing.T) {
 
 	if got := obj.JawsInitialHTMLAttr(elem); got != `data-second="2" data-first="1"` {
 		t.Fatalf("want %q got %q", `data-second="2" data-first="1"`, got)
+	}
+}
+
+func TestObject_GetTag_MultipleTagsReturnsSlice(t *testing.T) {
+	obj := &object{
+		handler: testObjectTagGetter{v: "top"},
+		prev: &object{
+			handler: testObjectTagGetter{v: "prev"},
+		},
+	}
+
+	got := obj.JawsGetTag(nil)
+	tags, ok := got.([]any)
+	if !ok {
+		t.Fatalf("want []any got %T (%#v)", got, got)
+	}
+	if len(tags) != 2 {
+		t.Fatalf("want 2 tags got %d (%#v)", len(tags), tags)
+	}
+	if tags[0] != "top" || tags[1] != "prev" {
+		t.Fatalf("want [top prev] got %#v", tags)
 	}
 }
