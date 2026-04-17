@@ -317,8 +317,6 @@ func runAtoi(v string) (n int, ok bool) <span class="cov8" title="1">{
 import (
         "html/template"
         "io"
-
-        "github.com/linkdata/jaws/lib/what"
 )
 
 type Container interface {
@@ -387,24 +385,6 @@ type InitialHTMLAttrHandler interface {
         JawsInitialHTMLAttr(e *Element) (s template.HTMLAttr)
 }
 
-type clickHandlerWrapper struct{ ClickHandler }
-
-func (chw clickHandlerWrapper) JawsEvent(*Element, what.What, string) error <span class="cov8" title="1">{
-        return ErrEventUnhandled
-}</span>
-
-type contextMenuHandlerWrapper struct{ ContextMenuHandler }
-
-func (cmw contextMenuHandlerWrapper) JawsEvent(*Element, what.What, string) error <span class="cov8" title="1">{
-        return ErrEventUnhandled
-}</span>
-
-type initialHTMLAttrHandlerWrapper struct{ InitialHTMLAttrHandler }
-
-func (ahw initialHTMLAttrHandlerWrapper) JawsEvent(*Element, what.What, string) error <span class="cov8" title="1">{
-        return ErrEventUnhandled
-}</span>
-
 type Auth interface {
         Data() map[string]any // returns authenticated user data, or nil
         Email() string        // returns authenticated user email, or an empty string
@@ -428,7 +408,6 @@ import (
         "fmt"
         "html/template"
         "io"
-        "slices"
         "strings"
         "sync/atomic"
 
@@ -442,18 +421,18 @@ import (
 type Element struct {
         *Request // (read-only) the Request the Element belongs to
         // internals
-        ui       UI             // the UI object
-        handlers []EventHandler // custom event handlers registered, if any
-        jid      jid.Jid        // JaWS ID, unique to this Element within it's Request
-        deleted  atomic.Bool    // true if deleteElement() has been called for this Element
+        ui       UI          // the UI object
+        handlers []any       // custom handlers registered, if any
+        jid      jid.Jid     // JaWS ID, unique to this Element within it's Request
+        deleted  atomic.Bool // true if deleteElement() has been called for this Element
 }
 
 func (e *Element) String() string <span class="cov8" title="1">{
         return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", e.Ui(), e.Jid(), e.Request.TagsOf(e))
 }</span>
 
-// AddHandler adds the given handlers to the Element.
-func (e *Element) AddHandlers(h ...EventHandler) <span class="cov8" title="1">{
+// AddHandlers adds the given handlers to the Element.
+func (e *Element) AddHandlers(h ...any) <span class="cov8" title="1">{
         if !e.deleted.Load() </span><span class="cov8" title="1">{
                 e.handlers = append(e.handlers, h...)
         }</span>
@@ -651,15 +630,6 @@ func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) <span cla
                         attr := template.HTMLAttr(s) // #nosec G203
                         retv = append(retv, attr)
                 }</span>
-                <span class="cov8" title="1">e.handlers = slices.DeleteFunc(e.handlers, func(h EventHandler) bool </span><span class="cov8" title="1">{
-                        if ah, ok := h.(initialHTMLAttrHandlerWrapper); ok </span><span class="cov8" title="1">{
-                                if attr := ah.JawsInitialHTMLAttr(e); attr != "" </span><span class="cov8" title="1">{
-                                        retv = append(retv, attr)
-                                }</span>
-                                <span class="cov8" title="1">return true</span>
-                        }
-                        <span class="cov8" title="1">return false</span>
-                })
         }
         <span class="cov8" title="1">return</span>
 }
@@ -667,33 +637,33 @@ func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) <span cla
 // ApplyGetter examines getter, and if it's not nil, either adds it
 // as a Tag, or, if it is a TagGetter, adds the result of that as a Tag.
 //
-// If getter is an EventHandler, ClickHandler, ContextMenuHandler or
-// InitialHTMLAttrHandler, it's added to the list of handlers for the Element.
+// If getter is an InputHandler, ClickHandler, ContextMenuHandler or
+// InitialHTMLAttrHandler, relevant values are added to the Element.
 //
 // Finally, if getter is an InitHandler, it's JawsInit()
 // function is called.
 //
-// Returns the Tag(s) added, or nil if getter was nil, along with
-// any error returned from JawsInit() if it was called.
-func (e *Element) ApplyGetter(getter any) (tagValue any, err error) <span class="cov8" title="1">{
+// Returns the Tag(s) added (or nil if getter was nil), any initial HTML attrs
+// provided by InitialHTMLAttrHandler, and any error returned from JawsInit()
+// if it was called.
+func (e *Element) ApplyGetter(getter any) (tagValue any, attrs []template.HTMLAttr, err error) <span class="cov8" title="1">{
         if getter != nil </span><span class="cov8" title="1">{
                 tagValue = getter
                 if tagger, ok := getter.(tag.TagGetter); ok </span><span class="cov8" title="1">{
                         tagValue = tagger.JawsGetTag(e.Request)
                 }</span>
-                <span class="cov8" title="1">if eh, ok := getter.(EventHandler); ok </span><span class="cov8" title="1">{
-                        e.handlers = append(e.handlers, eh)
-                }</span> else<span class="cov8" title="1"> {
-                        if ch, ok := getter.(ClickHandler); ok </span><span class="cov8" title="1">{
-                                e.handlers = append(e.handlers, clickHandlerWrapper{ch})
-                        }</span>
-                        <span class="cov8" title="1">if ch, ok := getter.(ContextMenuHandler); ok </span><span class="cov8" title="1">{
-                                e.handlers = append(e.handlers, contextMenuHandlerWrapper{ch})
+                <span class="cov8" title="1">if _, ok := getter.(InputHandler); ok </span><span class="cov8" title="1">{
+                        e.handlers = append(e.handlers, getter)
+                }</span> else<span class="cov8" title="1"> if _, ok := getter.(ClickHandler); ok </span><span class="cov8" title="1">{
+                        e.handlers = append(e.handlers, getter)
+                }</span> else<span class="cov8" title="1"> if _, ok := getter.(ContextMenuHandler); ok </span><span class="cov8" title="1">{
+                        e.handlers = append(e.handlers, getter)
+                }</span>
+                <span class="cov8" title="1">if ah, ok := getter.(InitialHTMLAttrHandler); ok </span><span class="cov8" title="1">{
+                        if attr := ah.JawsInitialHTMLAttr(e); attr != "" </span><span class="cov8" title="1">{
+                                attrs = append(attrs, attr)
                         }</span>
                 }
-                <span class="cov8" title="1">if ah, ok := getter.(InitialHTMLAttrHandler); ok </span><span class="cov8" title="1">{
-                        e.handlers = append(e.handlers, initialHTMLAttrHandlerWrapper{ah})
-                }</span>
                 <span class="cov8" title="1">e.Tag(tagValue)
                 if initer, ok := getter.(InitHandler); ok </span><span class="cov8" title="1">{
                         err = initer.JawsInit(e)
@@ -810,8 +780,9 @@ func (e errEventHandlerPanic) Unwrap() error <span class="cov8" title="1">{
         <span class="cov8" title="1">return nil</span>
 }
 
-type EventHandler interface {
-        JawsEvent(e *Element, wht what.What, val string) (err error)
+// InputHandler handles input events sent from the browser.
+type InputHandler interface {
+        JawsInput(e *Element, val string) (err error)
 }
 
 type errEventUnhandled struct{}
@@ -820,56 +791,52 @@ func (errEventUnhandled) Error() string <span class="cov8" title="1">{
         return "event unhandled"
 }</span>
 
-// ErrEventUnhandled returned by JawsEvent(), JawsClick() or
+// ErrEventUnhandled returned by JawsInput(), JawsClick() or
 // JawsContextMenu() causes the next available handler to be invoked.
 var ErrEventUnhandled = errEventUnhandled{}
 
-// EventFn is the signature of a event handling function to be called when JaWS receives
-// an event message from the Javascript via the WebSocket connection.
-type EventFn = func(e *Element, wht what.What, val string) (err error)
+// InputFn is the signature of an input handling function to be called when JaWS receives
+// an input, hook or set message from Javascript via the WebSocket connection.
+type InputFn = func(e *Element, val string) (err error)
 
-type eventFnWrapper struct{ EventFn }
-
-func (ehf eventFnWrapper) JawsEvent(e *Element, w what.What, v string) (err error) <span class="cov8" title="1">{
-        return ehf.EventFn(e, w, v)
-}</span>
-
-var _ EventFn = eventFnWrapper{}.JawsEvent // statically ensure JawsEvent and EventFn are compatible
-
-func callEventHandler(obj any, e *Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
-        if wht == what.Click || wht == what.ContextMenu </span><span class="cov8" title="1">{
-                var clk Click
-                var ok bool
-                if clk, _, ok = parseClickData(val); !ok </span><span class="cov8" title="1">{
-                        return ErrEventUnhandled
-                }</span>
-                <span class="cov8" title="1">if wht == what.Click </span><span class="cov8" title="1">{
-                        if h, ok := obj.(ClickHandler); ok </span><span class="cov8" title="1">{
-                                if err = h.JawsClick(e, clk); !errors.Is(err, ErrEventUnhandled) </span><span class="cov8" title="1">{
-                                        return
-                                }</span>
-                        }
-                } else<span class="cov8" title="1"> if h, ok := obj.(ContextMenuHandler); ok </span><span class="cov8" title="1">{
-                        if err = h.JawsContextMenu(e, clk); !errors.Is(err, ErrEventUnhandled) </span><span class="cov8" title="1">{
-                                return
-                        }</span>
-                }
-        }
-        <span class="cov8" title="1">if h, ok := obj.(EventHandler); ok </span><span class="cov8" title="1">{
-                return h.JawsEvent(e, wht, val)
+func callInputHandler(obj any, e *Element, val string) (err error) <span class="cov8" title="1">{
+        if h, ok := obj.(InputHandler); ok </span><span class="cov8" title="1">{
+                return h.JawsInput(e, val)
+        }</span>
+        <span class="cov8" title="1">if fn, ok := obj.(InputFn); ok </span><span class="cov8" title="1">{
+                return fn(e, val)
         }</span>
         <span class="cov8" title="1">return ErrEventUnhandled</span>
 }
 
-func callEventHandlers(ui any, e *Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
-        if err = callEventHandler(ui, e, wht, val); errors.Is(err, ErrEventUnhandled) </span><span class="cov8" title="1">{
-                for _, h := range e.handlers </span><span class="cov8" title="1">{
-                        if err = callEventHandler(h, e, wht, val); !errors.Is(err, ErrEventUnhandled) </span><span class="cov8" title="1">{
-                                return
+func callEventHandler(obj any, e *Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
+        err = ErrEventUnhandled
+        switch wht </span>{
+        case what.Click, what.ContextMenu:<span class="cov8" title="1">
+                var clk Click
+                var ok bool
+                if clk, _, ok = parseClickData(val); ok </span><span class="cov8" title="1">{
+                        if wht == what.Click </span><span class="cov8" title="1">{
+                                if h, ok := obj.(ClickHandler); ok </span><span class="cov8" title="1">{
+                                        err = h.JawsClick(e, clk)
+                                }</span>
+                        } else<span class="cov8" title="1"> if h, ok := obj.(ContextMenuHandler); ok </span><span class="cov8" title="1">{
+                                err = h.JawsContextMenu(e, clk)
                         }</span>
                 }
+        case what.Input, what.Hook, what.Set:<span class="cov8" title="1">
+                err = callInputHandler(obj, e, val)</span>
         }
         <span class="cov8" title="1">return</span>
+}
+
+func callEventHandlers(ui any, e *Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
+        for i := len(e.handlers) - 1; i &gt;= 0; i-- </span><span class="cov8" title="1">{
+                if err = callEventHandler(e.handlers[i], e, wht, val); !errors.Is(err, ErrEventUnhandled) </span><span class="cov8" title="1">{
+                        return
+                }</span>
+        }
+        <span class="cov8" title="1">return callEventHandler(ui, e, wht, val)</span>
 }
 
 // CallEventHandlers calls the event handlers for the given Element.
@@ -4178,8 +4145,9 @@ func NewContainerHelper(c jaws.Container) ContainerHelper <span class="cov8" tit
 }</span>
 
 func (ui *ContainerHelper) RenderContainer(e *jaws.Element, w io.Writer, outerHTMLTag string, params []any) (err error) <span class="cov8" title="1">{
-        if ui.Tag, err = e.ApplyGetter(ui.Container); err == nil </span><span class="cov8" title="1">{
-                attrs := e.ApplyParams(params)
+        var getterAttrs []template.HTMLAttr
+        if ui.Tag, getterAttrs, err = e.ApplyGetter(ui.Container); err == nil </span><span class="cov8" title="1">{
+                attrs := append(e.ApplyParams(params), getterAttrs...)
                 b := e.Jid().AppendStartTagAttr(nil, outerHTMLTag)
                 for _, attr := range attrs </span><span class="cov8" title="1">{
                         b = append(b, ' ')
@@ -4393,6 +4361,7 @@ func Handler(jw *jaws.Jaws, name string, dot any) http.Handler <span class="cov8
 		<pre class="file" id="file47" style="display: none">package ui
 
 import (
+        "html/template"
         "io"
 
         "github.com/linkdata/jaws"
@@ -4406,8 +4375,10 @@ type HTMLInner struct {
 }
 
 func (ui *HTMLInner) renderInner(e *jaws.Element, w io.Writer, htmlTag, htmlType string, params []any) (err error) <span class="cov8" title="1">{
-        if _, err = e.ApplyGetter(ui.HTMLGetter); err == nil </span><span class="cov8" title="1">{
-                err = htmlio.WriteHTMLInner(w, e.Jid(), htmlTag, htmlType, ui.HTMLGetter.JawsGetHTML(e), e.ApplyParams(params)...)
+        var getterAttrs []template.HTMLAttr
+        if _, getterAttrs, err = e.ApplyGetter(ui.HTMLGetter); err == nil </span><span class="cov8" title="1">{
+                attrs := append(e.ApplyParams(params), getterAttrs...)
+                err = htmlio.WriteHTMLInner(w, e.Jid(), htmlTag, htmlType, ui.HTMLGetter.JawsGetHTML(e), attrs...)
         }</span>
         <span class="cov8" title="1">return</span>
 }
@@ -4437,9 +4408,11 @@ func (rw RequestWriter) Img(imageSrc any, params ...any) error <span class="cov8
 }</span>
 
 func (ui *Img) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) <span class="cov8" title="1">{
-        if _, err = e.ApplyGetter(ui.Getter); err == nil </span><span class="cov8" title="1">{
+        var getterAttrs []template.HTMLAttr
+        if _, getterAttrs, err = e.ApplyGetter(ui.Getter); err == nil </span><span class="cov8" title="1">{
                 srcAttr := template.HTMLAttr("src=" + strconv.Quote(ui.JawsGet(e))) // #nosec G203
-                attrs := append(e.ApplyParams(params), srcAttr)
+                attrs := append(e.ApplyParams(params), getterAttrs...)
+                attrs = append(attrs, srcAttr)
                 err = htmlio.WriteHTMLInner(w, e.Jid(), "img", "", "", attrs...)
         }</span>
         <span class="cov8" title="1">return</span>
@@ -4450,6 +4423,7 @@ func (ui *Img) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{ e.SetA
 		<pre class="file" id="file49" style="display: none">package ui
 
 import (
+        "html/template"
         "io"
         "strconv"
         "sync/atomic"
@@ -4459,7 +4433,6 @@ import (
         "github.com/linkdata/jaws/lib/assets"
         "github.com/linkdata/jaws/lib/bind"
         "github.com/linkdata/jaws/lib/htmlio"
-        "github.com/linkdata/jaws/lib/what"
 )
 
 // Input stores common state for interactive input widgets.
@@ -4469,8 +4442,8 @@ type Input struct {
         Last atomic.Value // the last value received from the request
 }
 
-func (ui *Input) applyGetter(e *jaws.Element, getter any) (err error) <span class="cov8" title="1">{
-        ui.Tag, err = e.ApplyGetter(getter)
+func (ui *Input) applyGetterAttrs(e *jaws.Element, getter any) (attrs []template.HTMLAttr, err error) <span class="cov8" title="1">{
+        ui.Tag, attrs, err = e.ApplyGetter(getter)
         return
 }</span>
 
@@ -4485,8 +4458,9 @@ type InputText struct {
 }
 
 func (ui *InputText) renderStringInput(e *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) <span class="cov8" title="1">{
-        if err = ui.applyGetter(e, ui.Setter); err == nil </span><span class="cov8" title="1">{
-                attrs := e.ApplyParams(params)
+        var getterAttrs []template.HTMLAttr
+        if getterAttrs, err = ui.applyGetterAttrs(e, ui.Setter); err == nil </span><span class="cov8" title="1">{
+                attrs := append(e.ApplyParams(params), getterAttrs...)
                 v := ui.JawsGet(e)
                 ui.Last.Store(v)
                 err = htmlio.WriteHTMLInput(w, e.Jid(), htmlType, v, attrs)
@@ -4500,14 +4474,11 @@ func (ui *InputText) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         }</span>
 }
 
-func (ui *InputText) JawsEvent(e *jaws.Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
-        err = jaws.ErrEventUnhandled
-        if wht == what.Input </span><span class="cov8" title="1">{
-                ui.Last.Store(val)
-                err = ui.maybeDirty(e, ui.Setter.JawsSet(e, val))
-        }</span>
-        <span class="cov8" title="1">return</span>
-}
+func (ui *InputText) JawsInput(e *jaws.Element, val string) (err error) <span class="cov8" title="1">{
+        ui.Last.Store(val)
+        err = ui.maybeDirty(e, ui.Setter.JawsSet(e, val))
+        return
+}</span>
 
 type InputBool struct {
         Input
@@ -4515,8 +4486,9 @@ type InputBool struct {
 }
 
 func (ui *InputBool) renderBoolInput(e *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) <span class="cov8" title="1">{
-        if err = ui.applyGetter(e, ui.Setter); err == nil </span><span class="cov8" title="1">{
-                attrs := e.ApplyParams(params)
+        var getterAttrs []template.HTMLAttr
+        if getterAttrs, err = ui.applyGetterAttrs(e, ui.Setter); err == nil </span><span class="cov8" title="1">{
+                attrs := append(e.ApplyParams(params), getterAttrs...)
                 v := ui.JawsGet(e)
                 ui.Last.Store(v)
                 if v </span><span class="cov8" title="1">{
@@ -4538,19 +4510,16 @@ func (ui *InputBool) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         }
 }
 
-func (ui *InputBool) JawsEvent(e *jaws.Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
-        err = jaws.ErrEventUnhandled
-        if wht == what.Input </span><span class="cov8" title="1">{
-                if val == "" </span><span class="cov8" title="1">{
-                        val = "false"
-                }</span>
-                <span class="cov8" title="1">var v bool
-                if v, err = strconv.ParseBool(val); err == nil </span><span class="cov8" title="1">{
-                        err = ui.maybeDirty(e, ui.Setter.JawsSet(e, v))
-                }</span>
-                <span class="cov8" title="1">ui.Last.Store(v)</span>
-        }
-        <span class="cov8" title="1">return</span>
+func (ui *InputBool) JawsInput(e *jaws.Element, val string) (err error) <span class="cov8" title="1">{
+        if val == "" </span><span class="cov8" title="1">{
+                val = "false"
+        }</span>
+        <span class="cov8" title="1">var v bool
+        if v, err = strconv.ParseBool(val); err == nil </span><span class="cov8" title="1">{
+                err = ui.maybeDirty(e, ui.Setter.JawsSet(e, v))
+        }</span>
+        <span class="cov8" title="1">ui.Last.Store(v)
+        return</span>
 }
 
 type InputFloat struct {
@@ -4563,8 +4532,9 @@ func (ui *InputFloat) str(v float64) string <span class="cov8" title="1">{
 }</span>
 
 func (ui *InputFloat) renderFloatInput(e *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) <span class="cov8" title="1">{
-        if err = ui.applyGetter(e, ui.Setter); err == nil </span><span class="cov8" title="1">{
-                attrs := e.ApplyParams(params)
+        var getterAttrs []template.HTMLAttr
+        if getterAttrs, err = ui.applyGetterAttrs(e, ui.Setter); err == nil </span><span class="cov8" title="1">{
+                attrs := append(e.ApplyParams(params), getterAttrs...)
                 v := ui.JawsGet(e)
                 ui.Last.Store(v)
                 err = htmlio.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(v), attrs)
@@ -4579,19 +4549,16 @@ func (ui *InputFloat) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         }</span>
 }
 
-func (ui *InputFloat) JawsEvent(e *jaws.Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
-        err = jaws.ErrEventUnhandled
-        if wht == what.Input </span><span class="cov8" title="1">{
-                if val == "" </span><span class="cov8" title="1">{
-                        val = "0"
-                }</span>
-                <span class="cov8" title="1">var v float64
-                if v, err = strconv.ParseFloat(val, 64); err == nil </span><span class="cov8" title="1">{
-                        err = ui.maybeDirty(e, ui.Setter.JawsSet(e, v))
-                }</span>
-                <span class="cov8" title="1">ui.Last.Store(v)</span>
-        }
-        <span class="cov8" title="1">return</span>
+func (ui *InputFloat) JawsInput(e *jaws.Element, val string) (err error) <span class="cov8" title="1">{
+        if val == "" </span><span class="cov8" title="1">{
+                val = "0"
+        }</span>
+        <span class="cov8" title="1">var v float64
+        if v, err = strconv.ParseFloat(val, 64); err == nil </span><span class="cov8" title="1">{
+                err = ui.maybeDirty(e, ui.Setter.JawsSet(e, v))
+        }</span>
+        <span class="cov8" title="1">ui.Last.Store(v)
+        return</span>
 }
 
 type InputDate struct {
@@ -4604,8 +4571,9 @@ func (ui *InputDate) str(v time.Time) string <span class="cov8" title="1">{
 }</span>
 
 func (ui *InputDate) renderDateInput(e *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) <span class="cov8" title="1">{
-        if err = ui.applyGetter(e, ui.Setter); err == nil </span><span class="cov8" title="1">{
-                attrs := e.ApplyParams(params)
+        var getterAttrs []template.HTMLAttr
+        if getterAttrs, err = ui.applyGetterAttrs(e, ui.Setter); err == nil </span><span class="cov8" title="1">{
+                attrs := append(e.ApplyParams(params), getterAttrs...)
                 v := ui.JawsGet(e)
                 ui.Last.Store(v)
                 err = htmlio.WriteHTMLInput(w, e.Jid(), htmlType, ui.str(v), attrs)
@@ -4620,19 +4588,16 @@ func (ui *InputDate) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         }</span>
 }
 
-func (ui *InputDate) JawsEvent(e *jaws.Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
-        err = jaws.ErrEventUnhandled
-        if wht == what.Input </span><span class="cov8" title="1">{
-                if val == "" </span><span class="cov8" title="1">{
-                        val = "0001-01-01"
-                }</span>
-                <span class="cov8" title="1">var v time.Time
-                if v, err = time.Parse(assets.ISO8601, val); err == nil </span><span class="cov8" title="1">{
-                        err = ui.maybeDirty(e, ui.Setter.JawsSet(e, v))
-                }</span>
-                <span class="cov8" title="1">ui.Last.Store(v)</span>
-        }
-        <span class="cov8" title="1">return</span>
+func (ui *InputDate) JawsInput(e *jaws.Element, val string) (err error) <span class="cov8" title="1">{
+        if val == "" </span><span class="cov8" title="1">{
+                val = "0001-01-01"
+        }</span>
+        <span class="cov8" title="1">var v time.Time
+        if v, err = time.Parse(assets.ISO8601, val); err == nil </span><span class="cov8" title="1">{
+                err = ui.maybeDirty(e, ui.Setter.JawsSet(e, v))
+        }</span>
+        <span class="cov8" title="1">ui.Last.Store(v)
+        return</span>
 }
 </pre>
 		
@@ -4692,7 +4657,7 @@ type SetPather interface {
 type IsJsVar interface {
         bind.RWLocker
         jaws.UI
-        jaws.EventHandler
+        jaws.InputHandler
         PathSetter
 }
 
@@ -4790,7 +4755,9 @@ func appendAttrs(b []byte, attrs []template.HTMLAttr) []byte <span class="cov8" 
 func (ui *JsVar[T]) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) <span class="cov8" title="1">{
         ui.Lock()
         defer ui.Unlock()
-        if ui.Tag, err = e.ApplyGetter(ui.Ptr); err == nil </span><span class="cov8" title="1">{
+        var getterAttrs []template.HTMLAttr
+        if ui.Tag, getterAttrs, err = e.ApplyGetter(ui.Ptr); err == nil </span><span class="cov8" title="1">{
+                e.AddHandlers(ui)
                 var jsvarname string
                 if jsvarname, err = validateJsVarName(params); err == nil </span><span class="cov8" title="1">{
                         var data []byte
@@ -4798,7 +4765,7 @@ func (ui *JsVar[T]) JawsRender(e *jaws.Element, w io.Writer, params []any) (err 
                                 data, err = json.Marshal(ui.Ptr)
                         }</span>
                         <span class="cov8" title="1">if err == nil </span><span class="cov8" title="1">{
-                                attrs := e.ApplyParams(params[1:])
+                                attrs := append(e.ApplyParams(params[1:]), getterAttrs...)
                                 var b []byte
                                 b = append(b, "\n&lt;div id="...)
                                 b = e.Jid().AppendQuote(b)
@@ -4833,15 +4800,13 @@ func elideErrValueUnchanged(err error) error <span class="cov8" title="1">{
         <span class="cov8" title="1">return err</span>
 }
 
-func (ui *JsVar[T]) JawsEvent(e *jaws.Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
+func (ui *JsVar[T]) JawsInput(e *jaws.Element, val string) (err error) <span class="cov8" title="1">{
         err = jaws.ErrEventUnhandled
-        if wht == what.Set </span><span class="cov8" title="1">{
-                if jspath, jsval, found := strings.Cut(val, "="); found </span><span class="cov8" title="1">{
-                        var v any
-                        if err = json.Unmarshal([]byte(jsval), &amp;v); err == nil </span><span class="cov8" title="1">{
-                                err = elideErrValueUnchanged(ui.setPath(e, jspath, v))
-                        }</span>
-                }
+        if jspath, jsval, found := strings.Cut(val, "="); found </span><span class="cov8" title="1">{
+                var v any
+                if err = json.Unmarshal([]byte(jsval), &amp;v); err == nil </span><span class="cov8" title="1">{
+                        err = elideErrValueUnchanged(ui.setPath(e, jspath, v))
+                }</span>
         }
         <span class="cov8" title="1">return</span>
 }
@@ -5360,7 +5325,6 @@ import (
         "github.com/linkdata/jaws"
         "github.com/linkdata/jaws/lib/bind"
         "github.com/linkdata/jaws/lib/named"
-        "github.com/linkdata/jaws/lib/what"
 )
 
 type Select struct {
@@ -5385,13 +5349,10 @@ func (ui *Select) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         ui.UpdateContainer(e)
 }</span>
 
-func (ui *Select) JawsEvent(e *jaws.Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
-        err = jaws.ErrEventUnhandled
-        if wht == what.Input </span><span class="cov8" title="1">{
-                err = applyDirty(ui.Tag, e, ui.ContainerHelper.Container.(bind.Setter[string]).JawsSet(e, val))
-        }</span>
-        <span class="cov8" title="1">return</span>
-}
+func (ui *Select) JawsInput(e *jaws.Element, val string) (err error) <span class="cov8" title="1">{
+        err = applyDirty(ui.Tag, e, ui.ContainerHelper.Container.(bind.Setter[string]).JawsSet(e, val))
+        return
+}</span>
 </pre>
 		
 		<pre class="file" id="file64" style="display: none">package ui
@@ -5478,7 +5439,6 @@ import (
         "github.com/linkdata/deadlock"
         "github.com/linkdata/jaws"
         "github.com/linkdata/jaws/lib/tag"
-        "github.com/linkdata/jaws/lib/what"
 )
 
 // Template references a Go html/template to be rendered through JaWS.
@@ -5492,8 +5452,10 @@ type Template struct {
         Dot  any    // Dot value to place in With structure
 }
 
-var _ jaws.UI = Template{}           // statically ensure interface is defined
-var _ jaws.EventHandler = Template{} // statically ensure interface is defined
+var _ jaws.UI = Template{}                 // statically ensure interface is defined
+var _ jaws.ClickHandler = Template{}       // statically ensure interface is defined
+var _ jaws.ContextMenuHandler = Template{} // statically ensure interface is defined
+var _ jaws.InputHandler = Template{}       // statically ensure interface is defined
 
 func (t Template) String() string <span class="cov8" title="1">{
         return fmt.Sprintf("{%q, %s}", t.Name, tag.TagString(t.Dot))
@@ -5621,9 +5583,29 @@ func (t Template) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         }</span>
 }
 
-func (t Template) JawsEvent(e *jaws.Element, wht what.What, val string) error <span class="cov8" title="1">{
-        return jaws.CallEventHandlers(t.Dot, e, wht, val)
-}</span>
+func (t Template) JawsClick(e *jaws.Element, click jaws.Click) (err error) <span class="cov8" title="1">{
+        err = jaws.ErrEventUnhandled
+        if h, ok := t.Dot.(jaws.ClickHandler); ok </span><span class="cov8" title="1">{
+                err = h.JawsClick(e, click)
+        }</span>
+        <span class="cov8" title="1">return</span>
+}
+
+func (t Template) JawsContextMenu(e *jaws.Element, click jaws.Click) (err error) <span class="cov8" title="1">{
+        err = jaws.ErrEventUnhandled
+        if h, ok := t.Dot.(jaws.ContextMenuHandler); ok </span><span class="cov8" title="1">{
+                err = h.JawsContextMenu(e, click)
+        }</span>
+        <span class="cov8" title="1">return</span>
+}
+
+func (t Template) JawsInput(e *jaws.Element, val string) (err error) <span class="cov8" title="1">{
+        err = jaws.ErrEventUnhandled
+        if h, ok := t.Dot.(jaws.InputHandler); ok </span><span class="cov8" title="1">{
+                err = h.JawsInput(e, val)
+        }</span>
+        <span class="cov8" title="1">return</span>
+}
 
 // NewTemplate constructs a Template with the provided name and data value.
 //
@@ -5682,8 +5664,9 @@ func (rw RequestWriter) Textarea(value any, params ...any) error <span class="co
 }</span>
 
 func (ui *Textarea) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) <span class="cov8" title="1">{
-        if err = ui.applyGetter(e, ui.Setter); err == nil </span><span class="cov8" title="1">{
-                attrs := e.ApplyParams(params)
+        var getterAttrs []template.HTMLAttr
+        if getterAttrs, err = ui.applyGetterAttrs(e, ui.Setter); err == nil </span><span class="cov8" title="1">{
+                attrs := append(e.ApplyParams(params), getterAttrs...)
                 v := ui.JawsGet(e)
                 ui.Last.Store(v)
                 v = template.HTMLEscapeString(v)
@@ -6067,7 +6050,7 @@ func usableAsTag(t any) (ok bool) <span class="cov8" title="1">{
 
 // ParseParams parses the parameters passed to UI() when creating a new Element,
 // returning UI tags, event handlers and HTML attributes.
-func ParseParams(params []any) (tags []any, handlers []EventHandler, attrs []string) <span class="cov8" title="1">{
+func ParseParams(params []any) (tags []any, handlers []any, attrs []string) <span class="cov8" title="1">{
         for i := range params </span><span class="cov8" title="1">{
                 switch data := params[i].(type) </span>{
                 case template.HTMLAttr:<span class="cov8" title="1">
@@ -6080,21 +6063,18 @@ func ParseParams(params []any) (tags []any, handlers []EventHandler, attrs []str
                         attrs = append(attrs, data)</span>
                 case []string:<span class="cov8" title="1">
                         attrs = append(attrs, data...)</span>
-                case EventFn:<span class="cov8" title="1">
+                case InputFn:<span class="cov8" title="1">
                         if data != nil </span><span class="cov8" title="1">{
-                                handlers = append(handlers, eventFnWrapper{data})
+                                handlers = append(handlers, data)
                         }</span>
                 default:<span class="cov8" title="1">
-                        if h, ok := data.(EventHandler); ok </span><span class="cov8" title="1">{
-                                handlers = append(handlers, h)
-                        }</span> else<span class="cov8" title="1"> {
-                                if h, ok := data.(ClickHandler); ok </span><span class="cov8" title="1">{
-                                        handlers = append(handlers, clickHandlerWrapper{h})
-                                }</span>
-                                <span class="cov8" title="1">if h, ok := data.(ContextMenuHandler); ok </span><span class="cov8" title="1">{
-                                        handlers = append(handlers, contextMenuHandlerWrapper{h})
-                                }</span>
-                        }
+                        if _, ok := data.(InputHandler); ok </span><span class="cov8" title="1">{
+                                handlers = append(handlers, data)
+                        }</span> else<span class="cov8" title="1"> if _, ok := data.(ClickHandler); ok </span><span class="cov8" title="1">{
+                                handlers = append(handlers, data)
+                        }</span> else<span class="cov8" title="1"> if _, ok := data.(ContextMenuHandler); ok </span><span class="cov8" title="1">{
+                                handlers = append(handlers, data)
+                        }</span>
                         <span class="cov8" title="1">if usableAsTag(data) </span><span class="cov8" title="1">{
                                 tags = append(tags, data)
                         }</span>
