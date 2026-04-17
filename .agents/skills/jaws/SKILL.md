@@ -26,7 +26,7 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
 ## Practical data/tag alignment
 
 - Model interactive units as first-class objects and keep related behavior on those objects where practical.
-- Prefer direct pointer tags to underlying data (for example `*Item`, `*Node`, `&state.field`) when identity is stable.
+- Prefer direct pointer tags to underlying data (for example `*Item`, `*Node`, `&state.field`) when identity is stable. `bind.New(&mu, &field)` follows this pattern automatically: its tag is always `&field`, unchanged by any chained hooks.
 - Use getter-based values (`bind.StringGetterFunc` / `bind.HTMLGetterFunc`) for UI text/HTML that must reflect changing server state.
 - Dirty only affected dependency tags after mutations, and include any derived-field dependencies that changed.
 - Avoid synthetic tags (coordinates, ad-hoc strings, wrappers) when a stable underlying data pointer exists.
@@ -37,6 +37,38 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
 - Every JaWS `UI` value must be comparable.
 - `Container.JawsContains` must return hashable `UI` items, and the returned slice must not be mutated after return.
 - Treat `*ui.Container` / `*ui.Tbody` / `ContainerHelper` widgets as render-scoped; construct fresh per render, do not cache across requests.
+
+## Constructing UI values: `ui.New` and `bind.New`
+
+These are the two usual building blocks for widget handlers passed to `$.Button`, `$.Span`, `$.A`, `$.Div`, `$.Label`, `$.Input*`, etc. Pick based on what the widget represents: presentational content (`ui.New`) versus editable state backed by a variable (`bind.New`).
+
+### `ui.New(innerHTML any) Object`
+
+- `innerHTML` is routed through `bind.MakeHTMLGetter`, so the same type rules apply: `string` is raw HTML, `template.HTML` is trusted as-is, `Getter[string]` / `Binder[string]` / `fmt.Stringer` are escaped.
+- Returns a chainable `Object`. Each builder — `.Clicked(fn)`, `.ContextMenu(fn)`, `.InitialHTMLAttr(fn)` — wraps the previous object so the chain is a linked list, newest first.
+- Event dispatch walks the chain newest-first and stops at the first link that does not return `jaws.ErrEventUnhandled`. Return `ErrEventUnhandled` from a link to fall through to the next.
+- `JawsInitialHTMLAttr` concatenates attribute strings from every link that defines one.
+- `JawsGetTag` collects non-nil tags from every link; this is the tag set used by `tag.TagExpand` for dirty targeting.
+- Use `ui.New` for buttons, spans, labels, and similar content-plus-behavior widgets where the identity of the underlying state is not the point.
+
+### `bind.New[T comparable](l sync.Locker, p *T) Binder[T]`
+
+- Signature: `func New[T comparable](l sync.Locker, p *T) Binder[T]`. If `l` also satisfies `RWLocker` (has `RLock`/`RUnlock`), the binder takes the read lock for reads; otherwise it upgrades to the write lock.
+- The binder's tag is always `p` (the pointer itself). Chaining never changes tag identity — `bind.New(&mu, &field).Clicked(...).Success(...)` still reports `&field` as its tag, so dirty targeting via `&field` keeps working through refactors.
+- Default `JawsSetLocked` assigns `*p = v` only when the value changed and returns `bind.ErrValueUnchanged` when it did not. This is what lets the input-widget family skip redundant updates.
+- Chain builders return a new `Binder[T]`:
+  - `.SetLocked(fn)` / `.GetLocked(fn)` — override read/write semantics.
+  - `.GetHTML(fn)` — supply a custom `JawsGetHTML` for HTML-rendering widgets (`Span`, `Div`, `A`, `Label`).
+  - `.Success(fn)` — run after a successful set. Accepted signatures: `func()`, `func() error`, `func(*Element)`, `func(*Element) error`. Non-nil errors propagate; a handler can still return `ErrValueUnchanged` to signal no change.
+  - `.Clicked(fn)` / `.ContextMenu(fn)` — attach click/context handlers to the same bound variable.
+  - `.InitialHTMLAttr(fn)` — attach attribute hooks.
+- Use `bind.New` for input widgets and for content whose natural key is the backing variable. Multiple widgets bound to the same pointer share a tag automatically, so `Request.Dirty(&field)` refreshes all of them.
+
+### When to use which
+
+- `ui.New` when the widget is presentational or event-driven and identity flows from the containing object (for example a cell that already has a `*Cell` tag registered as a dep).
+- `bind.New` when the widget reads or writes a specific variable and you want the variable's address to be the stable dirty target.
+- Either form accepts additional tag arguments where the API allows it (`bind.HTMLGetterFunc(fn, deps...)`, `bind.StringGetterFunc(fn, deps...)`) so a single widget can depend on several pieces of state without wrapping types.
 
 ## Template-dot and tag rules
 
