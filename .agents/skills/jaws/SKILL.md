@@ -30,6 +30,7 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
 - Use getter-based values (`bind.StringGetterFunc` / `bind.HTMLGetterFunc`) for UI text/HTML that must reflect changing server state.
 - Dirty only affected dependency tags after mutations, and include any derived-field dependencies that changed.
 - Avoid synthetic tags (coordinates, ad-hoc strings, wrappers) when a stable underlying data pointer exists.
+- For collection elements, register each element with both its item-level tag (the item's pointer) and a shared group tag (for example `&g.items`). Mutations can then dirty a single item, several items, or the whole group from the same tag namespace, without changing what each element listens to.
 
 ## Hard framework constraints
 
@@ -78,8 +79,8 @@ For clickable content rendering:
 ## Rendering and update rules
 
 - Keep HTML structure in templates; avoid manual HTML string assembly in Go.
-- When using HTML getters, keep getter paths pure reads.
-- Use `JawsUpdate` for incremental updates when a custom widget needs it.
+- HTML getter paths must not mutate domain state, but they may call element update methods (`SetClass`, `RemoveClass`, `SetAttr`, `RemoveAttr`, etc.) on the passed-in `*Element` to co-ordinate wrapper class/attribute changes with the inner-HTML refresh. No custom `JawsUpdate` is needed for that case — the queued wrapper updates flush alongside the `SetInner` from `HTMLInner.JawsUpdate`.
+- Use a custom `JawsUpdate` only when the widget's update logic diverges from "render the getter again" — e.g. to compare against a stored last-value and skip the update (as the input widgets do).
 - `Element.SetAttr/RemoveAttr/SetClass/RemoveClass/SetInner/SetValue/Append/Order/Remove/Replace` are update-time operations; call them only from render/update processing.
 - Remember that widgets such as `ui.Button` update inner HTML from the original getter object; if that getter captured a stale static value, dirtying will not refresh the UI.
 
@@ -90,6 +91,7 @@ For clickable content rendering:
 - Dirty only precise tags whose output depends on the changed state.
 - Avoid broad model-level dirty tags when finer-grained element-level tags are practical.
 - For broad refreshes, attach a shared dependency tag to all relevant elements and dirty that shared tag instead of enumerating many element tags.
+- `Request.Dirty` runs the tag list through `tag.TagExpand` with a hard cap of 100 expanded entries (see `lib/tag/tag.go`); exceeding it returns `ErrTooManyTags`. When a mutation might touch more items than that, prefer the shared group tag over enumerating individual item tags.
 - Redundant-update filtering is asymmetric: input widgets (`InputText`, `InputBool`, `InputFloat`, `InputDate`) compare the new getter output against a stored `Last` value and skip `SetValue` when unchanged, but `HTMLInner`-backed widgets (spans, divs, buttons) do not — `JawsUpdate` unconditionally calls `SetInner`. For HTML-inner widgets, ensure dirty scope matches fields that actually changed, otherwise unrelated status/label spans will re-render (and lose selection, transitions, etc.) on every event. Usually the mutation code already knows what it changed and can dirty accordingly; fall back to snapshot-and-diff only when outcomes are hard to predict up front (e.g. flood-fill or win-condition checks) and the snapshot is cheap.
 
 ## HTML safety rules
