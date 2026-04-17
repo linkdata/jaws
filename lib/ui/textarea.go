@@ -17,8 +17,9 @@ func (rw RequestWriter) Textarea(value any, params ...any) error {
 }
 
 func (ui *Textarea) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) {
-	if err = ui.applyGetter(e, ui.Setter); err == nil {
-		attrs := e.ApplyParams(params)
+	var getterAttrs []template.HTMLAttr
+	if getterAttrs, err = ui.applyGetterAttrs(e, ui.Setter); err == nil {
+		attrs := append(e.ApplyParams(params), getterAttrs...)
 		v := ui.JawsGet(e)
 		ui.Last.Store(v)
 		v = template.HTMLEscapeString(v)

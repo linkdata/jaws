@@ -17,7 +17,7 @@ type testJawsEvent struct {
 	msgCh    chan string
 	tagValue any
 	clickerr error
-	eventerr error
+	inputerr error
 }
 
 func (t *testJawsEvent) JawsClick(e *Element, name Click) (err error) {
@@ -27,9 +27,9 @@ func (t *testJawsEvent) JawsClick(e *Element, name Click) (err error) {
 	return
 }
 
-func (t *testJawsEvent) JawsEvent(e *Element, wht what.What, val string) (err error) {
-	if err = t.eventerr; err == nil {
-		t.msgCh <- fmt.Sprintf("JawsEvent: %s %q", wht, val)
+func (t *testJawsEvent) JawsInput(e *Element, val string) (err error) {
+	if err = t.inputerr; err == nil {
+		t.msgCh <- fmt.Sprintf("JawsInput: %q", val)
 	} else {
 		t.msgCh <- err.Error()
 	}
@@ -42,8 +42,8 @@ func (t *testJawsEvent) JawsGetTag(tag.Context) (tagValue any) {
 
 func (t *testJawsEvent) JawsRender(e *Element, w io.Writer, params []any) (err error) {
 	var tagValue any
-	if tagValue, err = e.ApplyGetter(t); err == nil {
-		w.Write([]byte(fmt.Sprint(params)))
+	if tagValue, _, err = e.ApplyGetter(t); err == nil {
+		_, _ = w.Write([]byte(fmt.Sprint(params)))
 		t.msgCh <- fmt.Sprintf("JawsRender(%d)%#v", e.jid, tagValue)
 	}
 	return
@@ -54,11 +54,11 @@ func (t *testJawsEvent) JawsUpdate(e *Element) {
 }
 
 var _ ClickHandler = (*testJawsEvent)(nil)
-var _ EventHandler = (*testJawsEvent)(nil)
+var _ InputHandler = (*testJawsEvent)(nil)
 var _ tag.TagGetter = (*testJawsEvent)(nil)
 var _ UI = (*testJawsEvent)(nil)
 
-func Test_JawsEvent_NonClickInvokesJawsEventForDualHandler(t *testing.T) {
+func Test_JawsInput_InvokesJawsInputForDualHandler(t *testing.T) {
 	th := newTestHelper(t)
 	NextJid = 0
 	rq := newTestRequest(t)
@@ -75,36 +75,36 @@ func Test_JawsEvent_NonClickInvokesJawsEventForDualHandler(t *testing.T) {
 	case <-th.C:
 		th.Timeout()
 	case s := <-msgCh:
-		if s != `JawsEvent: Input "typed"` {
+		if s != `JawsInput: "typed"` {
 			t.Errorf("unexpected handler call: %q", s)
 		}
 	}
 }
 
-type testJawsEventHandler struct {
+type testJawsInputHandler struct {
 	UI
 	msgCh    chan string
-	eventerr error
+	inputerr error
 }
 
-func (t *testJawsEventHandler) JawsGetHTML(e *Element) template.HTML {
-	return "tjEH"
+func (t *testJawsInputHandler) JawsGetHTML(e *Element) template.HTML {
+	return "tjIH"
 }
 
-func (t *testJawsEventHandler) JawsEvent(e *Element, wht what.What, val string) (err error) {
-	if err = t.eventerr; err == nil {
-		t.msgCh <- fmt.Sprintf("JawsEvent: %s %q", wht, val)
+func (t *testJawsInputHandler) JawsInput(e *Element, val string) (err error) {
+	if err = t.inputerr; err == nil {
+		t.msgCh <- fmt.Sprintf("JawsInput: %q", val)
 	} else {
 		t.msgCh <- err.Error()
 	}
 	return
 }
 
-type testPanicEventHandler struct {
+type testPanicInputHandler struct {
 	panicVal any
 }
 
-func (h testPanicEventHandler) JawsEvent(e *Element, wht what.What, val string) error {
+func (h testPanicInputHandler) JawsInput(e *Element, val string) error {
 	panic(h.panicVal)
 }
 
@@ -138,37 +138,37 @@ func (c *testContextMenuCounter) JawsContextMenu(_ *Element, click Click) error 
 	return nil
 }
 
-type clickEventComboRecorder struct {
+type clickInputSetRecorder struct {
 	clickRet   error
-	eventRet   error
+	inputRet   error
 	clickCalls int
-	eventCalls int
+	inputCalls int
 }
 
-type clickOnlyComboHandler struct{ rec *clickEventComboRecorder }
+type clickOnlyComboHandler struct{ rec *clickInputSetRecorder }
 
 func (h clickOnlyComboHandler) JawsClick(*Element, Click) error {
 	h.rec.clickCalls++
 	return h.rec.clickRet
 }
 
-type eventOnlyComboHandler struct{ rec *clickEventComboRecorder }
+type inputOnlyComboHandler struct{ rec *clickInputSetRecorder }
 
-func (h eventOnlyComboHandler) JawsEvent(*Element, what.What, string) error {
-	h.rec.eventCalls++
-	return h.rec.eventRet
+func (h inputOnlyComboHandler) JawsInput(*Element, string) error {
+	h.rec.inputCalls++
+	return h.rec.inputRet
 }
 
-type dualComboHandler struct{ rec *clickEventComboRecorder }
+type dualClickInputComboHandler struct{ rec *clickInputSetRecorder }
 
-func (h dualComboHandler) JawsClick(*Element, Click) error {
+func (h dualClickInputComboHandler) JawsClick(*Element, Click) error {
 	h.rec.clickCalls++
 	return h.rec.clickRet
 }
 
-func (h dualComboHandler) JawsEvent(*Element, what.What, string) error {
-	h.rec.eventCalls++
-	return h.rec.eventRet
+func (h dualClickInputComboHandler) JawsInput(*Element, string) error {
+	h.rec.inputCalls++
+	return h.rec.inputRet
 }
 
 func Test_CallEventHandlers_ClickDispatchCombinations(t *testing.T) {
@@ -179,115 +179,67 @@ func Test_CallEventHandlers_ClickDispatchCombinations(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		make       func(*clickEventComboRecorder) any
+		make       func(*clickInputSetRecorder) any
 		clickRet   error
-		eventRet   error
+		inputRet   error
 		wantErr    error
 		wantClicks int
-		wantEvents int
+		wantInputs int
 	}{
 		{
 			name:       "click-only returns nil",
-			make:       func(rec *clickEventComboRecorder) any { return clickOnlyComboHandler{rec: rec} },
+			make:       func(rec *clickInputSetRecorder) any { return clickOnlyComboHandler{rec: rec} },
 			wantErr:    nil,
 			wantClicks: 1,
-			wantEvents: 0,
+			wantInputs: 0,
 		},
 		{
 			name:       "click-only returns ErrEventUnhandled",
-			make:       func(rec *clickEventComboRecorder) any { return clickOnlyComboHandler{rec: rec} },
+			make:       func(rec *clickInputSetRecorder) any { return clickOnlyComboHandler{rec: rec} },
 			clickRet:   ErrEventUnhandled,
 			wantErr:    ErrEventUnhandled,
 			wantClicks: 1,
-			wantEvents: 0,
+			wantInputs: 0,
 		},
 		{
 			name:       "click-only returns wrapped ErrEventUnhandled",
-			make:       func(rec *clickEventComboRecorder) any { return clickOnlyComboHandler{rec: rec} },
+			make:       func(rec *clickInputSetRecorder) any { return clickOnlyComboHandler{rec: rec} },
 			clickRet:   wrappedUnhandled,
 			wantErr:    ErrEventUnhandled,
 			wantClicks: 1,
-			wantEvents: 0,
+			wantInputs: 0,
 		},
 		{
-			name:       "event-only returns nil",
-			make:       func(rec *clickEventComboRecorder) any { return eventOnlyComboHandler{rec: rec} },
-			wantErr:    nil,
-			wantClicks: 0,
-			wantEvents: 1,
-		},
-		{
-			name:       "event-only returns ErrEventUnhandled",
-			make:       func(rec *clickEventComboRecorder) any { return eventOnlyComboHandler{rec: rec} },
-			eventRet:   ErrEventUnhandled,
+			name:       "input-only is not used for click",
+			make:       func(rec *clickInputSetRecorder) any { return inputOnlyComboHandler{rec: rec} },
+			inputRet:   nil,
 			wantErr:    ErrEventUnhandled,
 			wantClicks: 0,
-			wantEvents: 1,
+			wantInputs: 0,
 		},
 		{
-			name:       "event-only returns wrapped ErrEventUnhandled",
-			make:       func(rec *clickEventComboRecorder) any { return eventOnlyComboHandler{rec: rec} },
-			eventRet:   wrappedUnhandled,
-			wantErr:    ErrEventUnhandled,
-			wantClicks: 0,
-			wantEvents: 1,
-		},
-		{
-			name:       "dual returns nil from click and nil from event",
-			make:       func(rec *clickEventComboRecorder) any { return dualComboHandler{rec: rec} },
+			name:       "dual returns nil from click",
+			make:       func(rec *clickInputSetRecorder) any { return dualClickInputComboHandler{rec: rec} },
 			wantErr:    nil,
 			wantClicks: 1,
-			wantEvents: 0,
+			wantInputs: 0,
 		},
 		{
-			name:       "dual returns nil from click and ErrEventUnhandled from event",
-			make:       func(rec *clickEventComboRecorder) any { return dualComboHandler{rec: rec} },
-			eventRet:   ErrEventUnhandled,
-			wantErr:    nil,
-			wantClicks: 1,
-			wantEvents: 0,
-		},
-		{
-			name:       "dual returns ErrEventUnhandled from click and nil from event",
-			make:       func(rec *clickEventComboRecorder) any { return dualComboHandler{rec: rec} },
+			name:       "dual does not fall back from click to input",
+			make:       func(rec *clickInputSetRecorder) any { return dualClickInputComboHandler{rec: rec} },
 			clickRet:   ErrEventUnhandled,
-			wantErr:    nil,
-			wantClicks: 1,
-			wantEvents: 1,
-		},
-		{
-			name:       "dual returns wrapped ErrEventUnhandled from click and nil from event",
-			make:       func(rec *clickEventComboRecorder) any { return dualComboHandler{rec: rec} },
-			clickRet:   wrappedUnhandled,
-			wantErr:    nil,
-			wantClicks: 1,
-			wantEvents: 1,
-		},
-		{
-			name:       "dual returns ErrEventUnhandled from click and ErrEventUnhandled from event",
-			make:       func(rec *clickEventComboRecorder) any { return dualComboHandler{rec: rec} },
-			clickRet:   ErrEventUnhandled,
-			eventRet:   ErrEventUnhandled,
+			inputRet:   nil,
 			wantErr:    ErrEventUnhandled,
 			wantClicks: 1,
-			wantEvents: 1,
-		},
-		{
-			name:       "dual returns ErrEventUnhandled from click and wrapped ErrEventUnhandled from event",
-			make:       func(rec *clickEventComboRecorder) any { return dualComboHandler{rec: rec} },
-			clickRet:   ErrEventUnhandled,
-			eventRet:   wrappedUnhandled,
-			wantErr:    ErrEventUnhandled,
-			wantClicks: 1,
-			wantEvents: 1,
+			wantInputs: 0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := &clickEventComboRecorder{
+			rec := &clickInputSetRecorder{
 				clickRet: tt.clickRet,
-				eventRet: tt.eventRet,
+				inputRet: tt.inputRet,
 			}
 			handler := tt.make(rec)
 
@@ -302,8 +254,118 @@ func Test_CallEventHandlers_ClickDispatchCombinations(t *testing.T) {
 			if rec.clickCalls != tt.wantClicks {
 				t.Fatalf("click calls = %d, want %d", rec.clickCalls, tt.wantClicks)
 			}
-			if rec.eventCalls != tt.wantEvents {
-				t.Fatalf("event calls = %d, want %d", rec.eventCalls, tt.wantEvents)
+			if rec.inputCalls != tt.wantInputs {
+				t.Fatalf("input calls = %d, want %d", rec.inputCalls, tt.wantInputs)
+			}
+		})
+	}
+}
+
+func Test_CallEventHandlers_InputAndSetDispatchCombinations(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+	elem := rq.NewElement(testDivWidget{inner: "x"})
+	wrappedUnhandled := fmt.Errorf("wrapped: %w", ErrEventUnhandled)
+
+	tests := []struct {
+		name       string
+		wht        what.What
+		make       func(*clickInputSetRecorder) any
+		inputRet   error
+		wantErr    error
+		wantInputs int
+		wantClicks int
+		inputVal   string
+	}{
+		{
+			name:       "input-only handles Input",
+			wht:        what.Input,
+			make:       func(rec *clickInputSetRecorder) any { return inputOnlyComboHandler{rec: rec} },
+			wantErr:    nil,
+			wantInputs: 1,
+			inputVal:   "typed",
+		},
+		{
+			name:       "input-only handles Hook",
+			wht:        what.Hook,
+			make:       func(rec *clickInputSetRecorder) any { return inputOnlyComboHandler{rec: rec} },
+			wantErr:    nil,
+			wantInputs: 1,
+			inputVal:   "sync",
+		},
+		{
+			name:       "input-only returns ErrEventUnhandled",
+			wht:        what.Input,
+			make:       func(rec *clickInputSetRecorder) any { return inputOnlyComboHandler{rec: rec} },
+			inputRet:   ErrEventUnhandled,
+			wantErr:    ErrEventUnhandled,
+			wantInputs: 1,
+			inputVal:   "typed",
+		},
+		{
+			name:       "input-only returns wrapped ErrEventUnhandled",
+			wht:        what.Input,
+			make:       func(rec *clickInputSetRecorder) any { return inputOnlyComboHandler{rec: rec} },
+			inputRet:   wrappedUnhandled,
+			wantErr:    ErrEventUnhandled,
+			wantInputs: 1,
+			inputVal:   "typed",
+		},
+		{
+			name:       "input-only handles Set",
+			wht:        what.Set,
+			make:       func(rec *clickInputSetRecorder) any { return inputOnlyComboHandler{rec: rec} },
+			wantErr:    nil,
+			wantInputs: 1,
+			inputVal:   `x=1`,
+		},
+		{
+			name:       "input-only Set returns ErrEventUnhandled",
+			wht:        what.Set,
+			make:       func(rec *clickInputSetRecorder) any { return inputOnlyComboHandler{rec: rec} },
+			inputRet:   ErrEventUnhandled,
+			wantErr:    ErrEventUnhandled,
+			wantInputs: 1,
+			inputVal:   `x=1`,
+		},
+		{
+			name:       "click-only not used for Set",
+			wht:        what.Set,
+			make:       func(rec *clickInputSetRecorder) any { return clickOnlyComboHandler{rec: rec} },
+			wantErr:    ErrEventUnhandled,
+			wantClicks: 0,
+			inputVal:   `x=1`,
+		},
+		{
+			name:       "click-only not used for Input",
+			wht:        what.Input,
+			make:       func(rec *clickInputSetRecorder) any { return clickOnlyComboHandler{rec: rec} },
+			wantErr:    ErrEventUnhandled,
+			wantClicks: 0,
+			inputVal:   "typed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := &clickInputSetRecorder{
+				inputRet: tt.inputRet,
+			}
+			handler := tt.make(rec)
+
+			err := CallEventHandlers(handler, elem, tt.wht, tt.inputVal)
+			if tt.wantErr == nil {
+				if err != nil {
+					t.Fatalf("err = %v, want nil", err)
+				}
+			} else if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("err = %v, want %v", err, tt.wantErr)
+			}
+			if rec.inputCalls != tt.wantInputs {
+				t.Fatalf("input calls = %d, want %d", rec.inputCalls, tt.wantInputs)
+			}
+			if rec.clickCalls != tt.wantClicks {
+				t.Fatalf("click calls = %d, want %d", rec.clickCalls, tt.wantClicks)
 			}
 		})
 	}
@@ -315,7 +377,7 @@ func Test_CallEventHandlers_PanicError(t *testing.T) {
 
 	elem := rq.NewElement(testDivWidget{inner: "x"})
 	wantErr := fmt.Errorf("boom")
-	err := CallEventHandlers(testPanicEventHandler{panicVal: wantErr}, elem, what.Input, "")
+	err := CallEventHandlers(testPanicInputHandler{panicVal: wantErr}, elem, what.Input, "")
 	if !errors.Is(err, ErrEventHandlerPanic) {
 		t.Errorf("got %v, want ErrEventHandlerPanic", err)
 	}
@@ -332,7 +394,7 @@ func Test_CallEventHandlers_PanicString(t *testing.T) {
 	defer rq.Close()
 
 	elem := rq.NewElement(testDivWidget{inner: "x"})
-	err := CallEventHandlers(testPanicEventHandler{panicVal: "oops"}, elem, what.Input, "")
+	err := CallEventHandlers(testPanicInputHandler{panicVal: "oops"}, elem, what.Input, "")
 	if !errors.Is(err, ErrEventHandlerPanic) {
 		t.Errorf("got %v, want ErrEventHandlerPanic", err)
 	}
@@ -350,7 +412,7 @@ func Test_CallEventHandlers_ClickOnlyHandlerViaApplyGetter(t *testing.T) {
 
 	elem := rq.NewElement(testDivWidget{inner: "x"})
 	clickCounter := &testClickCounter{wantName: "name"}
-	if _, err := elem.ApplyGetter(clickCounter); err != nil {
+	if _, _, err := elem.ApplyGetter(clickCounter); err != nil {
 		t.Fatalf("ApplyGetter returned error: %v", err)
 	}
 
@@ -400,7 +462,7 @@ func Test_CallEventHandlers_ContextMenuOnlyHandlerViaApplyGetter(t *testing.T) {
 
 	elem := rq.NewElement(testDivWidget{inner: "x"})
 	counter := &testContextMenuCounter{wantName: "name"}
-	if _, err := elem.ApplyGetter(counter); err != nil {
+	if _, _, err := elem.ApplyGetter(counter); err != nil {
 		t.Fatalf("ApplyGetter returned error: %v", err)
 	}
 
@@ -450,7 +512,7 @@ func Test_CallEventHandlers_ContextMenuOnlyHandlerViaApplyParams(t *testing.T) {
 	}
 }
 
-func Test_JawsEvent_ExtraHandler(t *testing.T) {
+func Test_JawsInput_ExtraHandler(t *testing.T) {
 	th := newTestHelper(t)
 	NextJid = 0
 	rq := newTestRequest(t)
@@ -459,18 +521,18 @@ func Test_JawsEvent_ExtraHandler(t *testing.T) {
 	msgCh := make(chan string, 1)
 	defer close(msgCh)
 
-	je := &testJawsEventHandler{msgCh: msgCh}
+	ih := &testJawsInputHandler{msgCh: msgCh}
 
 	var sb strings.Builder
-	elem := rq.NewElement(testDivWidget{inner: "tjEH"})
-	th.NoErr(elem.JawsRender(&sb, []any{je}))
-	th.Equal(sb.String(), "<div id=\"Jid.1\">tjEH</div>")
+	elem := rq.NewElement(testDivWidget{inner: "tjIH"})
+	th.NoErr(elem.JawsRender(&sb, []any{ih}))
+	th.Equal(sb.String(), "<div id=\"Jid.1\">tjIH</div>")
 
-	rq.InCh <- wire.WsMsg{Data: "1 2 5 name", Jid: 1, What: what.Click}
+	rq.InCh <- wire.WsMsg{Data: "typed", Jid: 1, What: what.Input}
 	select {
 	case <-th.C:
 		th.Timeout()
 	case s := <-msgCh:
-		th.Equal(s, "JawsEvent: Click \"1 2 5 name\"")
+		th.Equal(s, `JawsInput: "typed"`)
 	}
 }

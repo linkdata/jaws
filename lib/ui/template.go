@@ -11,7 +11,6 @@ import (
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/tag"
-	"github.com/linkdata/jaws/lib/what"
 )
 
 // Template references a Go html/template to be rendered through JaWS.
@@ -25,8 +24,10 @@ type Template struct {
 	Dot  any    // Dot value to place in With structure
 }
 
-var _ jaws.UI = Template{}           // statically ensure interface is defined
-var _ jaws.EventHandler = Template{} // statically ensure interface is defined
+var _ jaws.UI = Template{}                 // statically ensure interface is defined
+var _ jaws.ClickHandler = Template{}       // statically ensure interface is defined
+var _ jaws.ContextMenuHandler = Template{} // statically ensure interface is defined
+var _ jaws.InputHandler = Template{}       // statically ensure interface is defined
 
 func (t Template) String() string {
 	return fmt.Sprintf("{%q, %s}", t.Name, tag.TagString(t.Dot))
@@ -154,8 +155,28 @@ func (t Template) JawsUpdate(e *jaws.Element) {
 	}
 }
 
-func (t Template) JawsEvent(e *jaws.Element, wht what.What, val string) error {
-	return jaws.CallEventHandlers(t.Dot, e, wht, val)
+func (t Template) JawsClick(e *jaws.Element, click jaws.Click) (err error) {
+	err = jaws.ErrEventUnhandled
+	if h, ok := t.Dot.(jaws.ClickHandler); ok {
+		err = h.JawsClick(e, click)
+	}
+	return
+}
+
+func (t Template) JawsContextMenu(e *jaws.Element, click jaws.Click) (err error) {
+	err = jaws.ErrEventUnhandled
+	if h, ok := t.Dot.(jaws.ContextMenuHandler); ok {
+		err = h.JawsContextMenu(e, click)
+	}
+	return
+}
+
+func (t Template) JawsInput(e *jaws.Element, val string) (err error) {
+	err = jaws.ErrEventUnhandled
+	if h, ok := t.Dot.(jaws.InputHandler); ok {
+		err = h.JawsInput(e, val)
+	}
+	return
 }
 
 // NewTemplate constructs a Template with the provided name and data value.

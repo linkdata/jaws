@@ -98,22 +98,22 @@ func TestJsVar_RenderSetAndEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := jsv.JawsEvent(elem, what.Set, `text="evt"`); err != nil {
+	if err := jaws.CallEventHandlers(jsv, elem, what.Set, `text="evt"`); err != nil {
 		t.Fatal(err)
 	}
 	if v.Text != "evt" {
 		t.Fatalf("expected updated value, got %#v", v)
 	}
-	if err := jsv.JawsEvent(elem, what.Set, `text="evt"`); err != nil {
+	if err := jaws.CallEventHandlers(jsv, elem, what.Set, `text="evt"`); err != nil {
 		t.Fatalf("expected unchanged error elided, got %v", err)
 	}
-	if err := jsv.JawsEvent(elem, what.Set, `text=`); err == nil {
+	if err := jaws.CallEventHandlers(jsv, elem, what.Set, `text=`); err == nil {
 		t.Fatal("expected unmarshal error")
 	}
-	if err := jsv.JawsEvent(elem, what.Set, `badpayload`); !errors.Is(err, jaws.ErrEventUnhandled) {
+	if err := jaws.CallEventHandlers(jsv, elem, what.Set, `badpayload`); !errors.Is(err, jaws.ErrEventUnhandled) {
 		t.Fatalf("expected ErrEventUnhandled, got %v", err)
 	}
-	if err := jsv.JawsEvent(elem, what.Click, `text="x"`); !errors.Is(err, jaws.ErrEventUnhandled) {
+	if err := jaws.CallEventHandlers(jsv, elem, what.Click, `1 2 0 x`); !errors.Is(err, jaws.ErrEventUnhandled) {
 		t.Fatalf("expected ErrEventUnhandled, got %v", err)
 	}
 

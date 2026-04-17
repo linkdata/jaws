@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"slices"
 	"strings"
 	"sync/atomic"
 
@@ -20,18 +19,18 @@ import (
 type Element struct {
 	*Request // (read-only) the Request the Element belongs to
 	// internals
-	ui       UI             // the UI object
-	handlers []EventHandler // custom event handlers registered, if any
-	jid      jid.Jid        // JaWS ID, unique to this Element within it's Request
-	deleted  atomic.Bool    // true if deleteElement() has been called for this Element
+	ui       UI          // the UI object
+	handlers []any       // custom handlers registered, if any
+	jid      jid.Jid     // JaWS ID, unique to this Element within it's Request
+	deleted  atomic.Bool // true if deleteElement() has been called for this Element
 }
 
 func (e *Element) String() string {
 	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", e.Ui(), e.Jid(), e.Request.TagsOf(e))
 }
 
-// AddHandler adds the given handlers to the Element.
-func (e *Element) AddHandlers(h ...EventHandler) {
+// AddHandlers adds the given handlers to the Element.
+func (e *Element) AddHandlers(h ...any) {
 	if !e.deleted.Load() {
 		e.handlers = append(e.handlers, h...)
 	}
@@ -229,15 +228,6 @@ func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) {
 			attr := template.HTMLAttr(s) // #nosec G203
 			retv = append(retv, attr)
 		}
-		e.handlers = slices.DeleteFunc(e.handlers, func(h EventHandler) bool {
-			if ah, ok := h.(initialHTMLAttrHandlerWrapper); ok {
-				if attr := ah.JawsInitialHTMLAttr(e); attr != "" {
-					retv = append(retv, attr)
-				}
-				return true
-			}
-			return false
-		})
 	}
 	return
 }
@@ -245,32 +235,32 @@ func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) {
 // ApplyGetter examines getter, and if it's not nil, either adds it
 // as a Tag, or, if it is a TagGetter, adds the result of that as a Tag.
 //
-// If getter is an EventHandler, ClickHandler, ContextMenuHandler or
-// InitialHTMLAttrHandler, it's added to the list of handlers for the Element.
+// If getter is an InputHandler, ClickHandler, ContextMenuHandler or
+// InitialHTMLAttrHandler, relevant values are added to the Element.
 //
 // Finally, if getter is an InitHandler, it's JawsInit()
 // function is called.
 //
-// Returns the Tag(s) added, or nil if getter was nil, along with
-// any error returned from JawsInit() if it was called.
-func (e *Element) ApplyGetter(getter any) (tagValue any, err error) {
+// Returns the Tag(s) added (or nil if getter was nil), any initial HTML attrs
+// provided by InitialHTMLAttrHandler, and any error returned from JawsInit()
+// if it was called.
+func (e *Element) ApplyGetter(getter any) (tagValue any, attrs []template.HTMLAttr, err error) {
 	if getter != nil {
 		tagValue = getter
 		if tagger, ok := getter.(tag.TagGetter); ok {
 			tagValue = tagger.JawsGetTag(e.Request)
 		}
-		if eh, ok := getter.(EventHandler); ok {
-			e.handlers = append(e.handlers, eh)
-		} else {
-			if ch, ok := getter.(ClickHandler); ok {
-				e.handlers = append(e.handlers, clickHandlerWrapper{ch})
-			}
-			if ch, ok := getter.(ContextMenuHandler); ok {
-				e.handlers = append(e.handlers, contextMenuHandlerWrapper{ch})
-			}
+		if _, ok := getter.(InputHandler); ok {
+			e.handlers = append(e.handlers, getter)
+		} else if _, ok := getter.(ClickHandler); ok {
+			e.handlers = append(e.handlers, getter)
+		} else if _, ok := getter.(ContextMenuHandler); ok {
+			e.handlers = append(e.handlers, getter)
 		}
 		if ah, ok := getter.(InitialHTMLAttrHandler); ok {
-			e.handlers = append(e.handlers, initialHTMLAttrHandlerWrapper{ah})
+			if attr := ah.JawsInitialHTMLAttr(e); attr != "" {
+				attrs = append(attrs, attr)
+			}
 		}
 		e.Tag(tagValue)
 		if initer, ok := getter.(InitHandler); ok {

@@ -36,8 +36,9 @@ func NewContainerHelper(c jaws.Container) ContainerHelper {
 }
 
 func (ui *ContainerHelper) RenderContainer(e *jaws.Element, w io.Writer, outerHTMLTag string, params []any) (err error) {
-	if ui.Tag, err = e.ApplyGetter(ui.Container); err == nil {
-		attrs := e.ApplyParams(params)
+	var getterAttrs []template.HTMLAttr
+	if ui.Tag, getterAttrs, err = e.ApplyGetter(ui.Container); err == nil {
+		attrs := append(e.ApplyParams(params), getterAttrs...)
 		b := e.Jid().AppendStartTagAttr(nil, outerHTMLTag)
 		for _, attr := range attrs {
 			b = append(b, ' ')

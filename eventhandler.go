@@ -31,8 +31,9 @@ func (e errEventHandlerPanic) Unwrap() error {
 	return nil
 }
 
-type EventHandler interface {
-	JawsEvent(e *Element, wht what.What, val string) (err error)
+// InputHandler handles input events sent from the browser.
+type InputHandler interface {
+	JawsInput(e *Element, val string) (err error)
 }
 
 type errEventUnhandled struct{}
@@ -41,24 +42,27 @@ func (errEventUnhandled) Error() string {
 	return "event unhandled"
 }
 
-// ErrEventUnhandled returned by JawsEvent(), JawsClick() or
+// ErrEventUnhandled returned by JawsInput(), JawsClick() or
 // JawsContextMenu() causes the next available handler to be invoked.
 var ErrEventUnhandled = errEventUnhandled{}
 
-// EventFn is the signature of a event handling function to be called when JaWS receives
-// an event message from the Javascript via the WebSocket connection.
-type EventFn = func(e *Element, wht what.What, val string) (err error)
+// InputFn is the signature of an input handling function to be called when JaWS receives
+// an input, hook or set message from Javascript via the WebSocket connection.
+type InputFn = func(e *Element, val string) (err error)
 
-type eventFnWrapper struct{ EventFn }
-
-func (ehf eventFnWrapper) JawsEvent(e *Element, w what.What, v string) (err error) {
-	return ehf.EventFn(e, w, v)
+func callInputHandler(obj any, e *Element, val string) (err error) {
+	if h, ok := obj.(InputHandler); ok {
+		return h.JawsInput(e, val)
+	}
+	if fn, ok := obj.(InputFn); ok {
+		return fn(e, val)
+	}
+	return ErrEventUnhandled
 }
 
-var _ EventFn = eventFnWrapper{}.JawsEvent // statically ensure JawsEvent and EventFn are compatible
-
 func callEventHandler(obj any, e *Element, wht what.What, val string) (err error) {
-	if wht == what.Click || wht == what.ContextMenu {
+	switch wht {
+	case what.Click, what.ContextMenu:
 		var clk Click
 		var ok bool
 		if clk, _, ok = parseClickData(val); !ok {
@@ -66,23 +70,26 @@ func callEventHandler(obj any, e *Element, wht what.What, val string) (err error
 		}
 		if wht == what.Click {
 			if h, ok := obj.(ClickHandler); ok {
-				if err = h.JawsClick(e, clk); !errors.Is(err, ErrEventUnhandled) {
-					return
-				}
+				return h.JawsClick(e, clk)
 			}
 		} else if h, ok := obj.(ContextMenuHandler); ok {
-			if err = h.JawsContextMenu(e, clk); !errors.Is(err, ErrEventUnhandled) {
-				return
-			}
+			return h.JawsContextMenu(e, clk)
 		}
-	}
-	if h, ok := obj.(EventHandler); ok {
-		return h.JawsEvent(e, wht, val)
+	case what.Input, what.Hook, what.Set:
+		return callInputHandler(obj, e, val)
 	}
 	return ErrEventUnhandled
 }
 
 func callEventHandlers(ui any, e *Element, wht what.What, val string) (err error) {
+	if wht == what.Set {
+		for _, h := range e.handlers {
+			if err = callInputHandler(h, e, val); !errors.Is(err, ErrEventUnhandled) {
+				return
+			}
+		}
+		return callInputHandler(ui, e, val)
+	}
 	if err = callEventHandler(ui, e, wht, val); errors.Is(err, ErrEventUnhandled) {
 		for _, h := range e.handlers {
 			if err = callEventHandler(h, e, wht, val); !errors.Is(err, ErrEventUnhandled) {

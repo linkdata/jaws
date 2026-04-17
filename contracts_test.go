@@ -44,7 +44,7 @@ func (testJawsInitialHTMLAttr) JawsInitialHTMLAttr(*Element) template.HTMLAttr {
 
 var _ InitialHTMLAttrHandler = testJawsInitialHTMLAttr{}
 
-func Test_clickHandlerWapper_JawsEvent(t *testing.T) {
+func Test_clickHandlerWrapper_Dispatch(t *testing.T) {
 	th := newTestHelper(t)
 	NextJid = 0
 	rq := newTestRequest(t)
@@ -103,9 +103,8 @@ func Test_defaultAuth(t *testing.T) {
 	}
 }
 
-func Test_initialHTMLAttrHandlerWrapper_JawsEvent(t *testing.T) {
-	w := initialHTMLAttrHandlerWrapper{InitialHTMLAttrHandler: testJawsInitialHTMLAttr{}}
-	if err := w.JawsEvent(nil, what.Click, "ignored"); err != ErrEventUnhandled {
+func Test_InitialHTMLAttrHandler_IgnoredByDispatch(t *testing.T) {
+	if err := callEventHandler(testJawsInitialHTMLAttr{}, nil, what.Input, "ignored"); err != ErrEventUnhandled {
 		t.Fatalf("expected ErrEventUnhandled, got %v", err)
 	}
 }

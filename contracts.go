@@ -3,8 +3,6 @@ package jaws
 import (
 	"html/template"
 	"io"
-
-	"github.com/linkdata/jaws/lib/what"
 )
 
 type Container interface {
@@ -71,24 +69,6 @@ type InitialHTMLAttrHandler interface {
 	// JawsInitialHTMLAttr is called when an Element is initially rendered,
 	// and may return and initial HTML attribute string to write out.
 	JawsInitialHTMLAttr(e *Element) (s template.HTMLAttr)
-}
-
-type clickHandlerWrapper struct{ ClickHandler }
-
-func (chw clickHandlerWrapper) JawsEvent(*Element, what.What, string) error {
-	return ErrEventUnhandled
-}
-
-type contextMenuHandlerWrapper struct{ ContextMenuHandler }
-
-func (cmw contextMenuHandlerWrapper) JawsEvent(*Element, what.What, string) error {
-	return ErrEventUnhandled
-}
-
-type initialHTMLAttrHandlerWrapper struct{ InitialHTMLAttrHandler }
-
-func (ahw initialHTMLAttrHandlerWrapper) JawsEvent(*Element, what.What, string) error {
-	return ErrEventUnhandled
 }
 
 type Auth interface {

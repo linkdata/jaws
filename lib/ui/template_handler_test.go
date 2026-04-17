@@ -34,7 +34,7 @@ func (d *templateDot) JawsUpdate(*jaws.Element) {
 	d.updated++
 }
 
-func (d *templateDot) JawsEvent(*jaws.Element, what.What, string) error {
+func (d *templateDot) JawsInput(*jaws.Element, string) error {
 	d.events++
 	return nil
 }
@@ -80,11 +80,14 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 	if td.updated != 1 {
 		t.Fatalf("expected updater called once, got %d", td.updated)
 	}
-	if err := tpl.JawsEvent(elem, what.Input, "x"); err != nil {
+	if err := tpl.JawsInput(elem, "x"); err != nil {
 		t.Fatal(err)
 	}
-	if td.events != 1 {
-		t.Fatalf("expected event call count 1, got %d", td.events)
+	if err := jaws.CallEventHandlers(tpl, elem, what.Set, "path=1"); err != nil {
+		t.Fatal(err)
+	}
+	if td.events != 2 {
+		t.Fatalf("expected event call count 2, got %d", td.events)
 	}
 
 	if err := rw.Template("warn", tag.Tag("x")); err != nil {

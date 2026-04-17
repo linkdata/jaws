@@ -298,7 +298,7 @@ func TestRequest_SetContextCancellationStopsQueuedEvents(t *testing.T) {
 	var calls int32
 
 	item := &testUi{}
-	rq.Register(item, func(e *Element, evt what.What, val string) error {
+	rq.Register(item, func(e *Element, val string) error {
 		if atomic.AddInt32(&calls, 1) == 1 {
 			started <- struct{}{}
 			<-block
@@ -351,7 +351,7 @@ func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 	defer rq.Close()
 	var callCount int32
 	x := &testUi{}
-	rq.Register(x, func(e *Element, evt what.What, val string) error {
+	rq.Register(x, func(e *Element, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		rq.cancel(nil)
 		return errors.New(val)
@@ -384,16 +384,16 @@ func TestRequest_Trigger(t *testing.T) {
 	gotFooCall := make(chan struct{})
 	gotEndCall := make(chan struct{})
 	fooItem := &testUi{}
-	rq.Register(fooItem, func(e *Element, evt what.What, val string) error {
+	rq.Register(fooItem, func(e *Element, val string) error {
 		defer close(gotFooCall)
 		return nil
 	})
 	errItem := &testUi{}
-	rq.Register(errItem, func(e *Element, evt what.What, val string) error {
+	rq.Register(errItem, func(e *Element, val string) error {
 		return errors.New(val)
 	})
 	endItem := &testUi{}
-	rq.Register(endItem, func(e *Element, evt what.What, val string) error {
+	rq.Register(endItem, func(e *Element, val string) error {
 		defer close(gotEndCall)
 		return nil
 	})
@@ -444,7 +444,7 @@ func TestRequest_EventFnQueue(t *testing.T) {
 	var sleepDone int32
 	var callCount int32
 	sleepItem := &testUi{}
-	rq.Register(sleepItem, func(e *Element, evt what.What, val string) error {
+	rq.Register(sleepItem, func(e *Element, val string) error {
 		count := int(atomic.AddInt32(&callCount, 1))
 		if val != strconv.Itoa(count) {
 			t.Logf("val=%s, count=%d, cap=%d", val, count, cap(rq.OutCh))
@@ -503,7 +503,7 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 	var wait int32
 
 	bombItem := &testUi{}
-	rq.Register(bombItem, func(e *Element, evt what.What, val string) error {
+	rq.Register(bombItem, func(e *Element, val string) error {
 		delay := 1 << atomic.AddInt32(&wait, 1)
 		select {
 		case <-t.Context().Done():
@@ -553,7 +553,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	var spewState int32
 	var callCount int32
 	spewItem := &testUi{}
-	rq.Register(spewItem, func(e *Element, evt what.What, val string) error {
+	rq.Register(spewItem, func(e *Element, val string) error {
 		atomic.AddInt32(&callCount, 1)
 		if len(rq.OutCh) < cap(rq.OutCh) {
 			rq.Jaws.Broadcast(wire.Message{Dest: spewItem, What: what.Input})
@@ -1955,7 +1955,7 @@ func TestWS_NormalExchange(t *testing.T) {
 
 	gotCallCh := make(chan struct{})
 	fooItem := &testUi{}
-	testRequestWriter{rq: ts.rq, Writer: httptest.NewRecorder()}.Register(fooItem, func(e *Element, evt what.What, val string) error {
+	testRequestWriter{rq: ts.rq, Writer: httptest.NewRecorder()}.Register(fooItem, func(e *Element, val string) error {
 		close(gotCallCh)
 		return fooError
 	})

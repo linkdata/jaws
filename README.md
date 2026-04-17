@@ -118,20 +118,19 @@ the Element object when the JawsUpdate() method is called.
 Supported Javascript events are sent to the server and
 are handled by the Element's UI type. If that didn't handle the event,
 any extra objects added to the Element are invoked until one handles the
-event. For `onclick` and `oncontextmenu`, handlers are invoked in reverse
-registration order (last added first). For other events, handlers are
-invoked in registration order. If none handle the event, it is ignored.
+event. Extra handlers are checked in registration order. For `what.Set`,
+extra handlers are checked before the UI type. If none handle the event,
+it is ignored.
 
-The generic event handler is `JawsEvent`. An event handler should
-return `ErrEventUnhandled` if it didn't handle the event or wants
-to pass it to the next handler.
+Event handlers should return `ErrEventUnhandled` if they didn't
+handle the event or want to pass it to the next handler.
 
-* `onclick` invokes `JawsClick` if present, otherwise `JawsEvent` with `what.Click`
+* `onclick` invokes `JawsClick`
   (`val` as `x<SP>y<SP>keystate<SP>name`)
-* `oncontextmenu` invokes `JawsContextMenu` if present, otherwise `JawsEvent`
-  with `what.ContextMenu`
+* `oncontextmenu` invokes `JawsContextMenu`
   (`val` as `x<SP>y<SP>keystate<SP>name`)
-* `oninput` invokes `JawsEvent` with `what.Input`
+* `oninput` invokes `JawsInput`
+* `what.Set` events invoke `JawsInput` (`val` as `path=json`)
 
 ## Technical notes
 

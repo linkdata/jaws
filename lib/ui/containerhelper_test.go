@@ -236,17 +236,17 @@ func TestSelectWidget(t *testing.T) {
 
 	selectUI.JawsUpdate(elem)
 
-	if err := selectUI.JawsEvent(elem, what.Click, "noop"); !errors.Is(err, jaws.ErrEventUnhandled) {
+	if err := jaws.CallEventHandlers(selectUI, elem, what.Click, "1 2 0 noop"); !errors.Is(err, jaws.ErrEventUnhandled) {
 		t.Fatalf("want ErrEventUnhandled got %v", err)
 	}
-	if err := selectUI.JawsEvent(elem, what.Input, "2"); err != nil {
+	if err := selectUI.JawsInput(elem, "2"); err != nil {
 		t.Fatal(err)
 	}
 	if sh.Get() != "2" {
 		t.Fatalf("want 2 got %q", sh.Get())
 	}
 	sh.SetErr(errors.New("meh"))
-	if err := selectUI.JawsEvent(elem, what.Input, "3"); err == nil || err.Error() != "meh" {
+	if err := selectUI.JawsInput(elem, "3"); err == nil || err.Error() != "meh" {
 		t.Fatalf("want meh got %v", err)
 	}
 }

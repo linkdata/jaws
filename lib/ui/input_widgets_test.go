@@ -21,17 +21,17 @@ func TestInputTextWidgets(t *testing.T) {
 	elem, got := renderUI(t, rq, text)
 	mustMatch(t, `^<input id="Jid\.[0-9]+" type="text" value="foo">$`, got)
 
-	if err := text.JawsEvent(elem, what.Input, "bar"); err != nil {
+	if err := text.JawsInput(elem, "bar"); err != nil {
 		t.Fatal(err)
 	}
 	if ss.Get() != "bar" {
 		t.Fatalf("want bar got %q", ss.Get())
 	}
-	if err := text.JawsEvent(elem, what.Click, "noop"); !errors.Is(err, jaws.ErrEventUnhandled) {
+	if err := jaws.CallEventHandlers(text, elem, what.Click, "1 2 0 noop"); !errors.Is(err, jaws.ErrEventUnhandled) {
 		t.Fatalf("want ErrEventUnhandled got %v", err)
 	}
 	ss.SetErr(errors.New("meh"))
-	if err := text.JawsEvent(elem, what.Input, "omg"); err == nil || err.Error() != "meh" {
+	if err := text.JawsInput(elem, "omg"); err == nil || err.Error() != "meh" {
 		t.Fatalf("want meh got %v", err)
 	}
 	ss.SetErr(nil)
@@ -55,19 +55,19 @@ func TestInputBoolWidgets(t *testing.T) {
 	checkbox := NewCheckbox(sb)
 	elem, got := renderUI(t, rq, checkbox)
 	mustMatch(t, `^<input id="Jid\.[0-9]+" type="checkbox" checked>$`, got)
-	if err := checkbox.JawsEvent(elem, what.Input, "false"); err != nil {
+	if err := checkbox.JawsInput(elem, "false"); err != nil {
 		t.Fatal(err)
 	}
 	if sb.Get() {
 		t.Fatal("expected false")
 	}
-	if err := checkbox.JawsEvent(elem, what.Input, ""); err != nil {
+	if err := checkbox.JawsInput(elem, ""); err != nil {
 		t.Fatal(err)
 	}
 	if sb.Get() {
 		t.Fatal("expected false for empty input")
 	}
-	if err := checkbox.JawsEvent(elem, what.Input, "bad"); err == nil {
+	if err := checkbox.JawsInput(elem, "bad"); err == nil {
 		t.Fatal("expected parse error")
 	}
 	sb.Set(true)
@@ -85,19 +85,19 @@ func TestInputFloatWidgets(t *testing.T) {
 	number := NewNumber(sf)
 	elem, got := renderUI(t, rq, number)
 	mustMatch(t, `^<input id="Jid\.[0-9]+" type="number" value="1.2">$`, got)
-	if err := number.JawsEvent(elem, what.Input, "2.3"); err != nil {
+	if err := number.JawsInput(elem, "2.3"); err != nil {
 		t.Fatal(err)
 	}
 	if sf.Get() != 2.3 {
 		t.Fatalf("want 2.3 got %v", sf.Get())
 	}
-	if err := number.JawsEvent(elem, what.Input, ""); err != nil {
+	if err := number.JawsInput(elem, ""); err != nil {
 		t.Fatal(err)
 	}
 	if sf.Get() != 0 {
 		t.Fatalf("want 0 got %v", sf.Get())
 	}
-	if err := number.JawsEvent(elem, what.Input, "bad"); err == nil {
+	if err := number.JawsInput(elem, "bad"); err == nil {
 		t.Fatal("expected parse error")
 	}
 	sf.Set(3.4)
@@ -117,19 +117,19 @@ func TestInputDateWidget(t *testing.T) {
 	elem, got := renderUI(t, rq, date, "dateattr")
 	mustMatch(t, `^<input id="Jid\.[0-9]+" type="date" value="2020-01-02" dateattr>$`, got)
 
-	if err := date.JawsEvent(elem, what.Input, "2021-02-03"); err != nil {
+	if err := date.JawsInput(elem, "2021-02-03"); err != nil {
 		t.Fatal(err)
 	}
 	if sd.Get().Format(assets.ISO8601) != "2021-02-03" {
 		t.Fatalf("unexpected date %v", sd.Get())
 	}
-	if err := date.JawsEvent(elem, what.Input, ""); err != nil {
+	if err := date.JawsInput(elem, ""); err != nil {
 		t.Fatal(err)
 	}
 	if !sd.Get().IsZero() {
 		t.Fatalf("expected zero date for empty input, got %v", sd.Get())
 	}
-	if err := date.JawsEvent(elem, what.Input, "bad"); err == nil {
+	if err := date.JawsInput(elem, "bad"); err == nil {
 		t.Fatal("expected parse error")
 	}
 	d1, _ := time.Parse(assets.ISO8601, "2022-03-04")
@@ -142,7 +142,7 @@ func TestInputMaybeDirtyErrValueUnchanged(t *testing.T) {
 	ss := newTestSetter("foo")
 	text := NewText(ss)
 	elem, _ := renderUI(t, rq, text)
-	if err := text.JawsEvent(elem, what.Input, "foo"); err != nil {
+	if err := text.JawsInput(elem, "foo"); err != nil {
 		t.Fatalf("want nil got %v", err)
 	}
 }

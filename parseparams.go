@@ -14,7 +14,7 @@ func usableAsTag(t any) (ok bool) {
 
 // ParseParams parses the parameters passed to UI() when creating a new Element,
 // returning UI tags, event handlers and HTML attributes.
-func ParseParams(params []any) (tags []any, handlers []EventHandler, attrs []string) {
+func ParseParams(params []any) (tags []any, handlers []any, attrs []string) {
 	for i := range params {
 		switch data := params[i].(type) {
 		case template.HTMLAttr:
@@ -27,20 +27,17 @@ func ParseParams(params []any) (tags []any, handlers []EventHandler, attrs []str
 			attrs = append(attrs, data)
 		case []string:
 			attrs = append(attrs, data...)
-		case EventFn:
+		case InputFn:
 			if data != nil {
-				handlers = append(handlers, eventFnWrapper{data})
+				handlers = append(handlers, data)
 			}
 		default:
-			if h, ok := data.(EventHandler); ok {
-				handlers = append(handlers, h)
-			} else {
-				if h, ok := data.(ClickHandler); ok {
-					handlers = append(handlers, clickHandlerWrapper{h})
-				}
-				if h, ok := data.(ContextMenuHandler); ok {
-					handlers = append(handlers, contextMenuHandlerWrapper{h})
-				}
+			if _, ok := data.(InputHandler); ok {
+				handlers = append(handlers, data)
+			} else if _, ok := data.(ClickHandler); ok {
+				handlers = append(handlers, data)
+			} else if _, ok := data.(ContextMenuHandler); ok {
+				handlers = append(handlers, data)
 			}
 			if usableAsTag(data) {
 				tags = append(tags, data)

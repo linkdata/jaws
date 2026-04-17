@@ -6,7 +6,6 @@ import (
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/named"
-	"github.com/linkdata/jaws/lib/what"
 )
 
 type Select struct {
@@ -31,10 +30,7 @@ func (ui *Select) JawsUpdate(e *jaws.Element) {
 	ui.UpdateContainer(e)
 }
 
-func (ui *Select) JawsEvent(e *jaws.Element, wht what.What, val string) (err error) {
-	err = jaws.ErrEventUnhandled
-	if wht == what.Input {
-		err = applyDirty(ui.Tag, e, ui.ContainerHelper.Container.(bind.Setter[string]).JawsSet(e, val))
-	}
+func (ui *Select) JawsInput(e *jaws.Element, val string) (err error) {
+	err = applyDirty(ui.Tag, e, ui.ContainerHelper.Container.(bind.Setter[string]).JawsSet(e, val))
 	return
 }

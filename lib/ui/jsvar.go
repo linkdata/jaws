@@ -54,7 +54,7 @@ type SetPather interface {
 type IsJsVar interface {
 	bind.RWLocker
 	jaws.UI
-	jaws.EventHandler
+	jaws.InputHandler
 	PathSetter
 }
 
@@ -152,7 +152,9 @@ func appendAttrs(b []byte, attrs []template.HTMLAttr) []byte {
 func (ui *JsVar[T]) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) {
 	ui.Lock()
 	defer ui.Unlock()
-	if ui.Tag, err = e.ApplyGetter(ui.Ptr); err == nil {
+	var getterAttrs []template.HTMLAttr
+	if ui.Tag, getterAttrs, err = e.ApplyGetter(ui.Ptr); err == nil {
+		e.AddHandlers(ui)
 		var jsvarname string
 		if jsvarname, err = validateJsVarName(params); err == nil {
 			var data []byte
@@ -160,7 +162,7 @@ func (ui *JsVar[T]) JawsRender(e *jaws.Element, w io.Writer, params []any) (err 
 				data, err = json.Marshal(ui.Ptr)
 			}
 			if err == nil {
-				attrs := e.ApplyParams(params[1:])
+				attrs := append(e.ApplyParams(params[1:]), getterAttrs...)
 				var b []byte
 				b = append(b, "\n<div id="...)
 				b = e.Jid().AppendQuote(b)
@@ -195,14 +197,12 @@ func elideErrValueUnchanged(err error) error {
 	return err
 }
 
-func (ui *JsVar[T]) JawsEvent(e *jaws.Element, wht what.What, val string) (err error) {
+func (ui *JsVar[T]) JawsInput(e *jaws.Element, val string) (err error) {
 	err = jaws.ErrEventUnhandled
-	if wht == what.Set {
-		if jspath, jsval, found := strings.Cut(val, "="); found {
-			var v any
-			if err = json.Unmarshal([]byte(jsval), &v); err == nil {
-				err = elideErrValueUnchanged(ui.setPath(e, jspath, v))
-			}
+	if jspath, jsval, found := strings.Cut(val, "="); found {
+		var v any
+		if err = json.Unmarshal([]byte(jsval), &v); err == nil {
+			err = elideErrValueUnchanged(ui.setPath(e, jspath, v))
 		}
 	}
 	return
