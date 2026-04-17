@@ -117,8 +117,10 @@ the Element object when the JawsUpdate() method is called.
 
 Supported Javascript events are sent to the server and
 are handled by the Element's UI type. If that didn't handle the event,
-any extra objects added to the Element are invoked (in order) until one
-handles the event. If none handle the event, it is ignored.
+any extra objects added to the Element are invoked until one handles the
+event. For `onclick` and `oncontextmenu`, handlers are invoked in reverse
+registration order (last added first). For other events, handlers are
+invoked in registration order. If none handle the event, it is ignored.
 
 The generic event handler is `JawsEvent`. An event handler should
 return `ErrEventUnhandled` if it didn't handle the event or wants

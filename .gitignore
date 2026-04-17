@@ -13,6 +13,7 @@
 coverage*
 *.cover
 .claude
+.codex
 .gocache
 AGENTS.md
 .DS_Store

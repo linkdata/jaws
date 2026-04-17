@@ -44,15 +44,6 @@ type object struct {
 	handler any
 }
 
-func (o *object) walk(fn func(o *object) bool) bool {
-	if o.prev != nil {
-		if o.prev.walk(fn) {
-			return true
-		}
-	}
-	return fn(o)
-}
-
 func (o *object) Clicked(fn ClickedHook) Object {
 	return &object{
 		prev:    o,
@@ -75,62 +66,74 @@ func (o *object) InitialHTMLAttr(fn InitialHTMLAttrHook) Object {
 }
 
 func (o *object) JawsGetHTML(e *jaws.Element) (retv template.HTML) {
-	o.walk(func(o *object) (ok bool) {
-		var h bind.HTMLGetter
-		if h, ok = o.handler.(bind.HTMLGetter); ok {
+	for o != nil {
+		if h, ok := o.handler.(bind.HTMLGetter); ok {
 			retv = h.JawsGetHTML(e)
+			break
 		}
-		return
-	})
+		o = o.prev
+	}
 	return
 }
 
-func (o *object) JawsClick(e *jaws.Element, click jaws.Click) (err error) {
+func (o *object) JawsClick(elem *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
-	o.walk(func(o *object) (ok bool) {
-		var fn ClickedHook
-		if fn, ok = o.handler.(ClickedHook); ok {
-			err = fn(o, e, click)
-			ok = !errors.Is(err, jaws.ErrEventUnhandled)
+	for o != nil {
+		if fn, ok := o.handler.(ClickedHook); ok {
+			if err = fn(o, elem, click); !errors.Is(err, jaws.ErrEventUnhandled) {
+				break
+			}
 		}
-		return
-	})
+		o = o.prev
+	}
 	return
 }
 
-func (o *object) JawsContextMenu(e *jaws.Element, click jaws.Click) (err error) {
+func (o *object) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
-	o.walk(func(o *object) (ok bool) {
-		var fn ContextMenuHook
-		if fn, ok = o.handler.(ContextMenuHook); ok {
-			err = fn(o, e, click)
-			ok = !errors.Is(err, jaws.ErrEventUnhandled)
+	for o != nil {
+		if fn, ok := o.handler.(ContextMenuHook); ok {
+			if err = fn(o, elem, click); !errors.Is(err, jaws.ErrEventUnhandled) {
+				break
+			}
 		}
-		return
-	})
+		o = o.prev
+	}
 	return
 }
 
 func (o *object) JawsInitialHTMLAttr(e *jaws.Element) (retv template.HTMLAttr) {
-	o.walk(func(o *object) (ok bool) {
-		var fn InitialHTMLAttrHook
-		if fn, ok = o.handler.(InitialHTMLAttrHook); ok {
-			retv = fn(o, e)
+	for o != nil {
+		if fn, ok := o.handler.(InitialHTMLAttrHook); ok {
+			if s := fn(o, e); s != "" {
+				if retv != "" {
+					retv += " "
+				}
+				retv += s
+			}
 		}
-		return
-	})
+		o = o.prev
+	}
 	return
 }
 
-func (o *object) JawsGetTag(ctx tag.Context) (t any) {
-	o.walk(func(o *object) (ok bool) {
-		var h tag.TagGetter
-		if h, ok = o.handler.(tag.TagGetter); ok {
-			t = h.JawsGetTag(ctx)
+func (o *object) JawsGetTag(ctx tag.Context) any {
+	var tags []any
+	for o != nil {
+		if h, ok := o.handler.(tag.TagGetter); ok {
+			if t := h.JawsGetTag(ctx); t != nil {
+				tags = append(tags, t)
+			}
 		}
-		return
-	})
-	return
+		o = o.prev
+	}
+	switch len(tags) {
+	case 0:
+		return nil
+	case 1:
+		return tags[0]
+	}
+	return tags
 }
 
 // New returns a new Object that will render HTML.

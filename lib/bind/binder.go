@@ -54,7 +54,7 @@ type InitialHTMLAttrHook[T comparable] func(bind Binder[T], elem *jaws.Element) 
 //
 // The Binder locks are not held when the function is called.
 //
-// Success hooks in a Binder chain are called in the order they were registered.
+// Success hooks in a Binder chain are called in reverse registration order.
 // If one of them returns an error, that error is returned from JawsSet and
 // no more success hooks are called.
 type SuccessHook func(*jaws.Element) (err error)
@@ -137,15 +137,6 @@ type binder[T comparable] struct {
 	hook any // one of: SetHook[T] GetHook[T] GetHTMLHook[T] ClickedHook[T] ContextMenuHook[T] InitialHTMLAttrHook[T] SuccessHook
 }
 
-func (bind *binder[T]) walk(fn func(*binder[T]) bool) bool {
-	if bind.prev != nil {
-		if bind.prev.walk(fn) {
-			return true
-		}
-	}
-	return fn(bind)
-}
-
 func (bind *binder[T]) JawsGetLocked(elem *jaws.Element) (value T) {
 	if fn, ok := bind.hook.(GetHook[T]); ok {
 		value = fn(bind.prev, elem)
@@ -219,14 +210,14 @@ func (bind *binder[T]) jawsSetLocking(elem *jaws.Element, value T) (err error) {
 }
 
 func (bind *binder[T]) callSuccessHooks(elem *jaws.Element) (err error) {
-	bind.walk(func(bind *binder[T]) (done bool) {
-		var fn SuccessHook
-		if fn, done = bind.hook.(SuccessHook); done {
-			err = fn(elem)
-			done = err != nil
+	for bind != nil {
+		if fn, ok := bind.hook.(SuccessHook); ok {
+			if err = fn(elem); err != nil {
+				break
+			}
 		}
-		return
-	})
+		bind = bind.prev
+	}
 	return
 }
 
@@ -243,27 +234,29 @@ func (bind *binder[T]) JawsGetTag(tag.Context) any {
 
 func (bind *binder[T]) JawsClick(elem *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
-	bind.walk(func(bind *binder[T]) (done bool) {
-		var fn ClickedHook[T]
-		if fn, done = bind.hook.(ClickedHook[T]); done {
+	for bind != nil {
+		if fn, ok := bind.hook.(ClickedHook[T]); ok {
 			err = fn(bind, elem, click)
-			done = !errors.Is(err, jaws.ErrEventUnhandled)
+			if !errors.Is(err, jaws.ErrEventUnhandled) {
+				break
+			}
 		}
-		return
-	})
+		bind = bind.prev
+	}
 	return
 }
 
 func (bind *binder[T]) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
-	bind.walk(func(bind *binder[T]) (done bool) {
-		var fn ContextMenuHook[T]
-		if fn, done = bind.hook.(ContextMenuHook[T]); done {
+	for bind != nil {
+		if fn, ok := bind.hook.(ContextMenuHook[T]); ok {
 			err = fn(bind, elem, click)
-			done = !errors.Is(err, jaws.ErrEventUnhandled)
+			if !errors.Is(err, jaws.ErrEventUnhandled) {
+				break
+			}
 		}
-		return
-	})
+		bind = bind.prev
+	}
 	return
 }
 

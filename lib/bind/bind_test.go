@@ -29,31 +29,38 @@ func TestBind_Hook_Success_breaksonerr(t *testing.T) {
 	var mu deadlock.Mutex
 	var val string
 
+	order := []int{}
 	calls1 := 0
 	calls2 := 0
 	calls3 := 0
 	bind1 := New(&mu, &val).
 		Success(func() {
+			order = append(order, 1)
 			calls1++
 		}).
 		Success(func() error {
+			order = append(order, 2)
 			calls2++
 			return io.EOF
 		}).
 		Success(func() {
+			order = append(order, 3)
 			calls3++
 		})
 	if err := bind1.JawsSet(nil, "foo"); err != io.EOF {
 		t.Error(err)
 	}
-	if calls1 != 1 {
+	if calls1 != 0 {
 		t.Error(calls1)
 	}
 	if calls2 != 1 {
 		t.Error(calls2)
 	}
-	if calls3 != 0 {
+	if calls3 != 1 {
 		t.Error(calls3)
+	}
+	if !reflect.DeepEqual(order, []int{3, 2}) {
+		t.Error(order)
 	}
 }
 
@@ -62,19 +69,28 @@ func testBind_Hook_Success[T comparable](t *testing.T, testval T) {
 	var val T
 	var blankval T
 
+	order := []int{}
 	calls1 := 0
 	bind1 := New(&mu, &val).
 		Success(func() {
 			calls1++
+			order = append(order, 1)
 		})
 	if err := bind1.JawsSet(nil, testval); err != nil {
 		t.Error(err)
 	}
+	if !reflect.DeepEqual(order, []int{1}) {
+		t.Error(order)
+	}
+	order = nil
 	if x := bind1.JawsGet(nil); x != testval {
 		t.Error(x)
 	}
 	if err := bind1.JawsSet(nil, testval); err != jaws.ErrValueUnchanged {
 		t.Error(err)
+	}
+	if len(order) != 0 {
+		t.Error(order)
 	}
 	if calls1 != 1 {
 		t.Error(calls1)
@@ -88,14 +104,16 @@ func testBind_Hook_Success[T comparable](t *testing.T, testval T) {
 	bind2 := bind1.
 		Success(func() (err error) {
 			calls2++
-			if calls1 <= calls2 {
-				t.Error(calls1, calls2)
-			}
+			order = append(order, 2)
 			return
 		})
 	if err := bind2.JawsSet(nil, blankval); err != nil {
 		t.Error(err)
 	}
+	if !reflect.DeepEqual(order, []int{2, 1}) {
+		t.Error(order)
+	}
+	order = nil
 	if calls1 != 2 {
 		t.Error(calls1)
 	}
@@ -111,13 +129,15 @@ func testBind_Hook_Success[T comparable](t *testing.T, testval T) {
 	bind3 := bind2.
 		Success(func(*jaws.Element) {
 			calls3++
-			if calls2 <= calls3 {
-				t.Error(calls2, calls3)
-			}
+			order = append(order, 3)
 		})
 	if err := bind3.JawsSet(nil, testval); err != nil {
 		t.Error(err)
 	}
+	if !reflect.DeepEqual(order, []int{3, 2, 1}) {
+		t.Error(order)
+	}
+	order = nil
 	if calls1 != 3 {
 		t.Error(calls1)
 	}
@@ -132,13 +152,14 @@ func testBind_Hook_Success[T comparable](t *testing.T, testval T) {
 	bind4 := bind3.
 		Success(func(*jaws.Element) (err error) {
 			calls4++
-			if calls3 <= calls4 {
-				t.Error(calls3, calls4)
-			}
+			order = append(order, 4)
 			return
 		})
 	if err := bind4.JawsSet(nil, blankval); err != nil {
 		t.Error(err)
+	}
+	if !reflect.DeepEqual(order, []int{4, 3, 2, 1}) {
+		t.Error(order)
 	}
 	if calls1 != 4 {
 		t.Error(calls1)
@@ -371,10 +392,10 @@ func TestBind_Hook_Clicked_bindingHook(t *testing.T) {
 	if err := handler2.JawsClick(nil, jaws.Click{Name: "two"}); err != nil {
 		t.Fatal(err)
 	}
-	if clickCalls1 != 2 {
+	if clickCalls1 != 1 {
 		t.Error(clickCalls1)
 	}
-	if clickCalls2 != 0 {
+	if clickCalls2 != 1 {
 		t.Error(clickCalls2)
 	}
 
@@ -407,12 +428,12 @@ func TestBind_Hook_Clicked_bindingHook_fallsThroughUnhandled(t *testing.T) {
 		Clicked(func(Binder[string], *jaws.Element, jaws.Click) error {
 			clickCalls1++
 			order = append(order, 1)
-			return jaws.ErrEventUnhandled
+			return nil
 		}).
 		Clicked(func(Binder[string], *jaws.Element, jaws.Click) error {
 			clickCalls2++
 			order = append(order, 2)
-			return nil
+			return jaws.ErrEventUnhandled
 		})
 
 	handler, ok := clickBind2.(jaws.ClickHandler)
@@ -428,7 +449,7 @@ func TestBind_Hook_Clicked_bindingHook_fallsThroughUnhandled(t *testing.T) {
 	if clickCalls2 != 1 {
 		t.Error(clickCalls2)
 	}
-	if !reflect.DeepEqual(order, []int{1, 2}) {
+	if !reflect.DeepEqual(order, []int{2, 1}) {
 		t.Error(order)
 	}
 }
@@ -444,12 +465,12 @@ func TestBind_Hook_Clicked_bindingHook_fallsThroughWrappedUnhandled(t *testing.T
 		Clicked(func(Binder[string], *jaws.Element, jaws.Click) error {
 			clickCalls1++
 			order = append(order, 1)
-			return errors.Join(jaws.ErrEventUnhandled, io.EOF)
+			return nil
 		}).
 		Clicked(func(Binder[string], *jaws.Element, jaws.Click) error {
 			clickCalls2++
 			order = append(order, 2)
-			return nil
+			return errors.Join(jaws.ErrEventUnhandled, io.EOF)
 		})
 
 	handler, ok := clickBind2.(jaws.ClickHandler)
@@ -465,7 +486,7 @@ func TestBind_Hook_Clicked_bindingHook_fallsThroughWrappedUnhandled(t *testing.T
 	if clickCalls2 != 1 {
 		t.Error(clickCalls2)
 	}
-	if !reflect.DeepEqual(order, []int{1, 2}) {
+	if !reflect.DeepEqual(order, []int{2, 1}) {
 		t.Error(order)
 	}
 }
@@ -516,12 +537,12 @@ func TestBind_Hook_ContextMenu_bindingHook_fallsThroughUnhandled(t *testing.T) {
 		ContextMenu(func(Binder[string], *jaws.Element, jaws.Click) error {
 			menuCalls1++
 			order = append(order, 1)
-			return jaws.ErrEventUnhandled
+			return nil
 		}).
 		ContextMenu(func(Binder[string], *jaws.Element, jaws.Click) error {
 			menuCalls2++
 			order = append(order, 2)
-			return nil
+			return jaws.ErrEventUnhandled
 		})
 
 	handler, ok := menuBind2.(jaws.ContextMenuHandler)
@@ -537,7 +558,7 @@ func TestBind_Hook_ContextMenu_bindingHook_fallsThroughUnhandled(t *testing.T) {
 	if menuCalls2 != 1 {
 		t.Error(menuCalls2)
 	}
-	if !reflect.DeepEqual(order, []int{1, 2}) {
+	if !reflect.DeepEqual(order, []int{2, 1}) {
 		t.Error(order)
 	}
 }
@@ -553,12 +574,12 @@ func TestBind_Hook_ContextMenu_bindingHook_fallsThroughWrappedUnhandled(t *testi
 		ContextMenu(func(Binder[string], *jaws.Element, jaws.Click) error {
 			menuCalls1++
 			order = append(order, 1)
-			return errors.Join(jaws.ErrEventUnhandled, io.EOF)
+			return nil
 		}).
 		ContextMenu(func(Binder[string], *jaws.Element, jaws.Click) error {
 			menuCalls2++
 			order = append(order, 2)
-			return nil
+			return errors.Join(jaws.ErrEventUnhandled, io.EOF)
 		})
 
 	handler, ok := menuBind2.(jaws.ContextMenuHandler)
@@ -574,7 +595,7 @@ func TestBind_Hook_ContextMenu_bindingHook_fallsThroughWrappedUnhandled(t *testi
 	if menuCalls2 != 1 {
 		t.Error(menuCalls2)
 	}
-	if !reflect.DeepEqual(order, []int{1, 2}) {
+	if !reflect.DeepEqual(order, []int{2, 1}) {
 		t.Error(order)
 	}
 }

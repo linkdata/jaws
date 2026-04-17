@@ -57,13 +57,13 @@ func TestObject_Clicked_FallthroughOrder(t *testing.T) {
 		gotObj = append(gotObj, got)
 		gotElem = append(gotElem, elem)
 		gotClick = append(gotClick, click)
-		return jaws.ErrEventUnhandled
+		return nil
 	}).Clicked(func(got Object, elem *jaws.Element, click jaws.Click) error {
 		order = append(order, 2)
 		gotObj = append(gotObj, got)
 		gotElem = append(gotElem, elem)
 		gotClick = append(gotClick, click)
-		return nil
+		return jaws.ErrEventUnhandled
 	})
 
 	elem := &jaws.Element{}
@@ -71,7 +71,7 @@ func TestObject_Clicked_FallthroughOrder(t *testing.T) {
 	if err := obj.JawsClick(elem, click); err != nil {
 		t.Fatalf("want nil got %v", err)
 	}
-	if len(order) != 2 || order[0] != 1 || order[1] != 2 {
+	if len(order) != 2 || order[0] != 2 || order[1] != 1 {
 		t.Fatalf("unexpected order %v", order)
 	}
 	if gotObj[0] == gotObj[1] {
@@ -101,11 +101,11 @@ func TestObject_Clicked_StopsOnHandled(t *testing.T) {
 	if err := obj.JawsClick(nil, jaws.Click{Name: "save"}); err != nil {
 		t.Fatalf("want nil got %v", err)
 	}
-	if called1 != 1 {
-		t.Fatalf("want first called once, got %d", called1)
+	if called1 != 0 {
+		t.Fatalf("want first not called, got %d", called1)
 	}
-	if called2 != 0 {
-		t.Fatalf("want second not called, got %d", called2)
+	if called2 != 1 {
+		t.Fatalf("want second called once, got %d", called2)
 	}
 }
 
@@ -115,16 +115,16 @@ func TestObject_ContextMenu_FallthroughOrder(t *testing.T) {
 
 	obj = obj.ContextMenu(func(Object, *jaws.Element, jaws.Click) error {
 		order = append(order, 1)
-		return jaws.ErrEventUnhandled
+		return nil
 	}).ContextMenu(func(Object, *jaws.Element, jaws.Click) error {
 		order = append(order, 2)
-		return nil
+		return jaws.ErrEventUnhandled
 	})
 
 	if err := obj.JawsContextMenu(nil, jaws.Click{Name: "menu"}); err != nil {
 		t.Fatalf("want nil got %v", err)
 	}
-	if len(order) != 2 || order[0] != 1 || order[1] != 2 {
+	if len(order) != 2 || order[0] != 2 || order[1] != 1 {
 		t.Fatalf("unexpected order %v", order)
 	}
 }
@@ -158,7 +158,7 @@ func TestObject_InitialHTMLAttr_DefaultEmpty(t *testing.T) {
 	}
 }
 
-func TestObject_InitialHTMLAttr_FirstHookWins(t *testing.T) {
+func TestObject_InitialHTMLAttr(t *testing.T) {
 	order := []int{}
 	elem := &jaws.Element{}
 
@@ -176,10 +176,7 @@ func TestObject_InitialHTMLAttr_FirstHookWins(t *testing.T) {
 			return
 		})
 
-	if got := obj.JawsInitialHTMLAttr(elem); got != `data-first="1"` {
-		t.Fatalf("want %q got %q", `data-first="1"`, got)
-	}
-	if len(order) != 1 || order[0] != 1 {
-		t.Fatalf("unexpected order %v", order)
+	if got := obj.JawsInitialHTMLAttr(elem); got != `data-second="2" data-first="1"` {
+		t.Fatalf("want %q got %q", `data-second="2" data-first="1"`, got)
 	}
 }
