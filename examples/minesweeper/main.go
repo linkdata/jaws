@@ -403,5 +403,5 @@ func main() {
 
 	go jw.Serve()
 	log.Println("Minesweeper listening on http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", mux)) // #nosec G4114
+	log.Fatal(http.ListenAndServe(":8080", mux)) // #nosec G114
 }
