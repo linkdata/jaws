@@ -2445,7 +2445,7 @@ type InitialHTMLAttrHook[T comparable] func(bind Binder[T], elem *jaws.Element) 
 //
 // The Binder locks are not held when the function is called.
 //
-// Success hooks in a Binder chain are called in the order they were registered.
+// Success hooks in a Binder chain are called in reverse registration order.
 // If one of them returns an error, that error is returned from JawsSet and
 // no more success hooks are called.
 type SuccessHook func(*jaws.Element) (err error)
@@ -2528,15 +2528,6 @@ type binder[T comparable] struct {
         hook any // one of: SetHook[T] GetHook[T] GetHTMLHook[T] ClickedHook[T] ContextMenuHook[T] InitialHTMLAttrHook[T] SuccessHook
 }
 
-func (bind *binder[T]) walk(fn func(*binder[T]) bool) bool <span class="cov8" title="1">{
-        if bind.prev != nil </span><span class="cov8" title="1">{
-                if bind.prev.walk(fn) </span><span class="cov8" title="1">{
-                        return true
-                }</span>
-        }
-        <span class="cov8" title="1">return fn(bind)</span>
-}
-
 func (bind *binder[T]) JawsGetLocked(elem *jaws.Element) (value T) <span class="cov8" title="1">{
         if fn, ok := bind.hook.(GetHook[T]); ok </span><span class="cov8" title="1">{
                 value = fn(bind.prev, elem)
@@ -2610,14 +2601,14 @@ func (bind *binder[T]) jawsSetLocking(elem *jaws.Element, value T) (err error) <
 }</span>
 
 func (bind *binder[T]) callSuccessHooks(elem *jaws.Element) (err error) <span class="cov8" title="1">{
-        bind.walk(func(bind *binder[T]) (done bool) </span><span class="cov8" title="1">{
-                var fn SuccessHook
-                if fn, done = bind.hook.(SuccessHook); done </span><span class="cov8" title="1">{
-                        err = fn(elem)
-                        done = err != nil
-                }</span>
-                <span class="cov8" title="1">return</span>
-        })
+        for bind != nil </span><span class="cov8" title="1">{
+                if fn, ok := bind.hook.(SuccessHook); ok </span><span class="cov8" title="1">{
+                        if err = fn(elem); err != nil </span><span class="cov8" title="1">{
+                                break</span>
+                        }
+                }
+                <span class="cov8" title="1">bind = bind.prev</span>
+        }
         <span class="cov8" title="1">return</span>
 }
 
@@ -2634,27 +2625,29 @@ func (bind *binder[T]) JawsGetTag(tag.Context) any <span class="cov8" title="1">
 
 func (bind *binder[T]) JawsClick(elem *jaws.Element, click jaws.Click) (err error) <span class="cov8" title="1">{
         err = jaws.ErrEventUnhandled
-        bind.walk(func(bind *binder[T]) (done bool) </span><span class="cov8" title="1">{
-                var fn ClickedHook[T]
-                if fn, done = bind.hook.(ClickedHook[T]); done </span><span class="cov8" title="1">{
+        for bind != nil </span><span class="cov8" title="1">{
+                if fn, ok := bind.hook.(ClickedHook[T]); ok </span><span class="cov8" title="1">{
                         err = fn(bind, elem, click)
-                        done = !errors.Is(err, jaws.ErrEventUnhandled)
-                }</span>
-                <span class="cov8" title="1">return</span>
-        })
+                        if !errors.Is(err, jaws.ErrEventUnhandled) </span><span class="cov8" title="1">{
+                                break</span>
+                        }
+                }
+                <span class="cov8" title="1">bind = bind.prev</span>
+        }
         <span class="cov8" title="1">return</span>
 }
 
 func (bind *binder[T]) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err error) <span class="cov8" title="1">{
         err = jaws.ErrEventUnhandled
-        bind.walk(func(bind *binder[T]) (done bool) </span><span class="cov8" title="1">{
-                var fn ContextMenuHook[T]
-                if fn, done = bind.hook.(ContextMenuHook[T]); done </span><span class="cov8" title="1">{
+        for bind != nil </span><span class="cov8" title="1">{
+                if fn, ok := bind.hook.(ContextMenuHook[T]); ok </span><span class="cov8" title="1">{
                         err = fn(bind, elem, click)
-                        done = !errors.Is(err, jaws.ErrEventUnhandled)
-                }</span>
-                <span class="cov8" title="1">return</span>
-        })
+                        if !errors.Is(err, jaws.ErrEventUnhandled) </span><span class="cov8" title="1">{
+                                break</span>
+                        }
+                }
+                <span class="cov8" title="1">bind = bind.prev</span>
+        }
         <span class="cov8" title="1">return</span>
 }
 
@@ -5004,15 +4997,6 @@ type object struct {
         handler any
 }
 
-func (o *object) walk(fn func(o *object) bool) bool <span class="cov8" title="1">{
-        if o.prev != nil </span><span class="cov8" title="1">{
-                if o.prev.walk(fn) </span><span class="cov8" title="1">{
-                        return true
-                }</span>
-        }
-        <span class="cov8" title="1">return fn(o)</span>
-}
-
 func (o *object) Clicked(fn ClickedHook) Object <span class="cov8" title="1">{
         return &amp;object{
                 prev:    o,
@@ -5035,62 +5019,74 @@ func (o *object) InitialHTMLAttr(fn InitialHTMLAttrHook) Object <span class="cov
 }</span>
 
 func (o *object) JawsGetHTML(e *jaws.Element) (retv template.HTML) <span class="cov8" title="1">{
-        o.walk(func(o *object) (ok bool) </span><span class="cov8" title="1">{
-                var h bind.HTMLGetter
-                if h, ok = o.handler.(bind.HTMLGetter); ok </span><span class="cov8" title="1">{
+        for o != nil </span><span class="cov8" title="1">{
+                if h, ok := o.handler.(bind.HTMLGetter); ok </span><span class="cov8" title="1">{
                         retv = h.JawsGetHTML(e)
-                }</span>
-                <span class="cov8" title="1">return</span>
-        })
+                        break</span>
+                }
+                <span class="cov8" title="1">o = o.prev</span>
+        }
         <span class="cov8" title="1">return</span>
 }
 
-func (o *object) JawsClick(e *jaws.Element, click jaws.Click) (err error) <span class="cov8" title="1">{
+func (o *object) JawsClick(elem *jaws.Element, click jaws.Click) (err error) <span class="cov8" title="1">{
         err = jaws.ErrEventUnhandled
-        o.walk(func(o *object) (ok bool) </span><span class="cov8" title="1">{
-                var fn ClickedHook
-                if fn, ok = o.handler.(ClickedHook); ok </span><span class="cov8" title="1">{
-                        err = fn(o, e, click)
-                        ok = !errors.Is(err, jaws.ErrEventUnhandled)
-                }</span>
-                <span class="cov8" title="1">return</span>
-        })
+        for o != nil </span><span class="cov8" title="1">{
+                if fn, ok := o.handler.(ClickedHook); ok </span><span class="cov8" title="1">{
+                        if err = fn(o, elem, click); !errors.Is(err, jaws.ErrEventUnhandled) </span><span class="cov8" title="1">{
+                                break</span>
+                        }
+                }
+                <span class="cov8" title="1">o = o.prev</span>
+        }
         <span class="cov8" title="1">return</span>
 }
 
-func (o *object) JawsContextMenu(e *jaws.Element, click jaws.Click) (err error) <span class="cov8" title="1">{
+func (o *object) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err error) <span class="cov8" title="1">{
         err = jaws.ErrEventUnhandled
-        o.walk(func(o *object) (ok bool) </span><span class="cov8" title="1">{
-                var fn ContextMenuHook
-                if fn, ok = o.handler.(ContextMenuHook); ok </span><span class="cov8" title="1">{
-                        err = fn(o, e, click)
-                        ok = !errors.Is(err, jaws.ErrEventUnhandled)
-                }</span>
-                <span class="cov8" title="1">return</span>
-        })
+        for o != nil </span><span class="cov8" title="1">{
+                if fn, ok := o.handler.(ContextMenuHook); ok </span><span class="cov8" title="1">{
+                        if err = fn(o, elem, click); !errors.Is(err, jaws.ErrEventUnhandled) </span><span class="cov8" title="1">{
+                                break</span>
+                        }
+                }
+                <span class="cov8" title="1">o = o.prev</span>
+        }
         <span class="cov8" title="1">return</span>
 }
 
 func (o *object) JawsInitialHTMLAttr(e *jaws.Element) (retv template.HTMLAttr) <span class="cov8" title="1">{
-        o.walk(func(o *object) (ok bool) </span><span class="cov8" title="1">{
-                var fn InitialHTMLAttrHook
-                if fn, ok = o.handler.(InitialHTMLAttrHook); ok </span><span class="cov8" title="1">{
-                        retv = fn(o, e)
-                }</span>
-                <span class="cov8" title="1">return</span>
-        })
+        for o != nil </span><span class="cov8" title="1">{
+                if fn, ok := o.handler.(InitialHTMLAttrHook); ok </span><span class="cov8" title="1">{
+                        if s := fn(o, e); s != "" </span><span class="cov8" title="1">{
+                                if retv != "" </span><span class="cov8" title="1">{
+                                        retv += " "
+                                }</span>
+                                <span class="cov8" title="1">retv += s</span>
+                        }
+                }
+                <span class="cov8" title="1">o = o.prev</span>
+        }
         <span class="cov8" title="1">return</span>
 }
 
-func (o *object) JawsGetTag(ctx tag.Context) (t any) <span class="cov8" title="1">{
-        o.walk(func(o *object) (ok bool) </span><span class="cov8" title="1">{
-                var h tag.TagGetter
-                if h, ok = o.handler.(tag.TagGetter); ok </span><span class="cov8" title="1">{
-                        t = h.JawsGetTag(ctx)
-                }</span>
-                <span class="cov8" title="1">return</span>
-        })
-        <span class="cov8" title="1">return</span>
+func (o *object) JawsGetTag(ctx tag.Context) any <span class="cov8" title="1">{
+        var tags []any
+        for o != nil </span><span class="cov8" title="1">{
+                if h, ok := o.handler.(tag.TagGetter); ok </span><span class="cov8" title="1">{
+                        if t := h.JawsGetTag(ctx); t != nil </span><span class="cov8" title="1">{
+                                tags = append(tags, t)
+                        }</span>
+                }
+                <span class="cov8" title="1">o = o.prev</span>
+        }
+        <span class="cov8" title="1">switch len(tags) </span>{
+        case 0:<span class="cov8" title="1">
+                return nil</span>
+        case 1:<span class="cov8" title="1">
+                return tags[0]</span>
+        }
+        <span class="cov8" title="1">return tags</span>
 }
 
 // New returns a new Object that will render HTML.
