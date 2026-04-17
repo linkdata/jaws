@@ -27,7 +27,9 @@ func (l *templateLogger) Error(string, ...any) { l.errors++ }
 
 type templateDot struct {
 	updated int
-	events  int
+	inputs  int
+	clicks  int
+	menus   int
 }
 
 func (d *templateDot) JawsUpdate(*jaws.Element) {
@@ -35,7 +37,17 @@ func (d *templateDot) JawsUpdate(*jaws.Element) {
 }
 
 func (d *templateDot) JawsInput(*jaws.Element, string) error {
-	d.events++
+	d.inputs++
+	return nil
+}
+
+func (d *templateDot) JawsClick(*jaws.Element, jaws.Click) error {
+	d.clicks++
+	return nil
+}
+
+func (d *templateDot) JawsContextMenu(*jaws.Element, jaws.Click) error {
+	d.menus++
 	return nil
 }
 
@@ -83,11 +95,23 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 	if err := tpl.JawsInput(elem, "x"); err != nil {
 		t.Fatal(err)
 	}
+	if err := tpl.JawsClick(elem, jaws.Click{Name: "btn"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tpl.JawsContextMenu(elem, jaws.Click{Name: "ctx"}); err != nil {
+		t.Fatal(err)
+	}
 	if err := jaws.CallEventHandlers(tpl, elem, what.Set, "path=1"); err != nil {
 		t.Fatal(err)
 	}
-	if td.events != 2 {
-		t.Fatalf("expected event call count 2, got %d", td.events)
+	if td.inputs != 2 {
+		t.Fatalf("expected input call count 2, got %d", td.inputs)
+	}
+	if td.clicks != 1 {
+		t.Fatalf("expected click call count 1, got %d", td.clicks)
+	}
+	if td.menus != 1 {
+		t.Fatalf("expected context-menu call count 1, got %d", td.menus)
 	}
 
 	if err := rw.Template("warn", tag.Tag("x")); err != nil {
