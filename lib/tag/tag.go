@@ -27,82 +27,109 @@ func (errTooManyTags) Error() string {
 
 var ErrTooManyTags = errTooManyTags{}
 
-func sameTagGetterTag(owner TagGetter, tag any) (same bool, err error) {
-	if reflect.TypeOf(owner) != reflect.TypeOf(tag) {
-		return false, nil
+func ensureUsableTag(tag any) error {
+	if tag != nil {
+		if t := reflect.TypeOf(tag); t != nil && t.Comparable() {
+			return nil
+		}
 	}
-	if err = NewErrNotUsableAsTag(tag); err != nil {
-		return false, err
-	}
-	return any(owner) == tag, nil
+	return NewErrNotUsableAsTag(tag)
 }
 
-type visitKey struct {
-	value any
-	t     reflect.Type
-	ptr   uintptr
-}
-
-func makeVisitKey(node any) (key visitKey, ok bool) {
-	if node == nil {
-		return key, false
+func appendUniqueTag(result []any, tag any) ([]any, error) {
+	for _, existing := range result {
+		if existing == tag {
+			return result, nil
+		}
 	}
-	t := reflect.TypeOf(node)
-	if t.Comparable() {
-		return visitKey{value: node}, true
-	}
-	v := reflect.ValueOf(node)
-	switch v.Kind() {
-	case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func, reflect.UnsafePointer:
-		return visitKey{t: t, ptr: v.Pointer()}, true
-	default:
-		return key, false
-	}
-}
-
-func addResult(result map[any]struct{}, tag any) error {
-	result[tag] = struct{}{}
+	result = append(result, tag)
 	if len(result) > 100 {
-		return ErrTooManyTags
+		return result, ErrTooManyTags
 	}
-	return nil
+	return result, nil
 }
 
-func addActiveCycle(result map[any]struct{}, active []any, start int) error {
-	for _, node := range active[start:] {
+func addTag(result []any, tag any) ([]any, error) {
+	if err := ensureUsableTag(tag); err != nil {
+		return result, err
+	}
+	return appendUniqueTag(result, tag)
+}
+
+func sameActiveNode(a, b any) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	ta := reflect.TypeOf(a)
+	if ta != reflect.TypeOf(b) {
+		return false
+	}
+	if ta.Comparable() {
+		return a == b
+	}
+	va := reflect.ValueOf(a)
+	vb := reflect.ValueOf(b)
+	switch va.Kind() {
+	case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func, reflect.UnsafePointer:
+		return va.Pointer() == vb.Pointer()
+	default:
+		return false
+	}
+}
+
+func findActiveIndex(active []any, tag any) int {
+	for i := len(active) - 1; i >= 0; i-- {
+		if sameActiveNode(active[i], tag) {
+			return i
+		}
+	}
+	return -1
+}
+
+func addActiveTags(result []any, active []any) ([]any, error) {
+	var err error
+	for _, node := range active {
 		if _, ok := node.(TagGetter); ok {
-			if err := NewErrNotUsableAsTag(node); err != nil {
-				return err
-			}
-			if err := addResult(result, node); err != nil {
-				return err
+			if result, err = addTag(result, node); err != nil {
+				return result, err
 			}
 		}
 	}
-	return nil
+	return result, nil
 }
 
-func withActive(node any, active []any, activeIndex map[visitKey]int, onCycle func([]any, int) error, fn func([]any) error) error {
-	key, ok := makeVisitKey(node)
-	if !ok {
-		return fn(active)
-	}
-	if idx, ok := activeIndex[key]; ok {
-		return onCycle(active, idx)
-	}
-	activeIndex[key] = len(active)
-	active = append(active, node)
-	defer func() {
-		delete(activeIndex, key)
-	}()
-	return fn(active)
-}
-
-func expand(depth int, ctx Context, tag any, result map[any]struct{}, active []any, activeIndex map[visitKey]int) error {
+func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any, error) {
 	if depth > 10 || len(result) > 100 {
-		return ErrTooManyTags
+		return result, ErrTooManyTags
 	}
 	switch data := tag.(type) {
+	case nil:
+		return result, nil
+	case []Tag:
+		var err error
+		for _, v := range data {
+			if result, err = appendUniqueTag(result, v); err != nil {
+				return result, err
+			}
+		}
+		return result, nil
+	case TagGetter:
+		if idx := findActiveIndex(active, data); idx >= 0 {
+			return addActiveTags(result, active[idx:])
+		}
+		return expand(depth+1, ctx, data.JawsGetTag(ctx), result, append(active, data))
+	case []any:
+		if idx := findActiveIndex(active, data); idx >= 0 {
+			return addActiveTags(result, active[idx:])
+		}
+		active = append(active, data)
+		var err error
+		for _, v := range data {
+			if result, err = expand(depth+1, ctx, v, result, active); err != nil {
+				return result, err
+			}
+		}
+		return result, nil
 	case string:
 	case template.HTML:
 	case template.HTMLAttr:
@@ -119,55 +146,16 @@ func expand(depth int, ctx Context, tag any, result map[any]struct{}, active []a
 	case float32:
 	case float64:
 	case bool:
-	case nil:
-		return nil
-	case []Tag:
-		for _, v := range data {
-			if err := addResult(result, v); err != nil {
-				return err
-			}
-		}
-		return nil
-	case TagGetter:
-		newTag := data.JawsGetTag(ctx)
-		if same, err := sameTagGetterTag(data, newTag); err != nil {
-			return err
-		} else if same {
-			return addResult(result, data)
-		}
-		return withActive(data, active, activeIndex, func(active []any, start int) error {
-			return addActiveCycle(result, active, start)
-		}, func(active []any) error {
-			return expand(depth+1, ctx, newTag, result, active, activeIndex)
-		})
-	case []any:
-		return withActive(data, active, activeIndex, func(active []any, start int) error {
-			return addActiveCycle(result, active, start)
-		}, func(active []any) error {
-			for _, v := range data {
-				if err := expand(depth+1, ctx, v, result, active, activeIndex); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
+		return result, errIllegalTagType{tag: tag}
 	default:
-		if err := NewErrNotUsableAsTag(data); err != nil {
-			return err
-		}
-		return addResult(result, data)
+		return addTag(result, data)
 	}
-	return errIllegalTagType{tag: tag}
+	return result, errIllegalTagType{tag: tag}
 }
 
-func TagExpand(ctx Context, tag any) (result []any, err error) {
-	seen := make(map[any]struct{})
-	if err = expand(0, ctx, tag, seen, nil, map[visitKey]int{}); err == nil {
-		for tagValue := range seen {
-			result = append(result, tagValue)
-		}
-	}
-	return result, err
+func TagExpand(ctx Context, tag any) ([]any, error) {
+	active := make([]any, 0, 12)
+	return expand(0, ctx, tag, nil, active)
 }
 
 func MustTagExpand(ctx Context, tag any) []any {
