@@ -101,7 +101,7 @@ func newGame(rows, cols, mines int) *game {
 		mines:      mines,
 		rowIndexes: make([]int, rows),
 		colIndexes: make([]int, cols),
-		rng:        rand.New(rand.NewSource(time.Now().UnixNano())),
+		rng:        rand.New(rand.NewSource(time.Now().UnixNano())), // #nosec G404
 	}
 	for i := range g.rowIndexes {
 		g.rowIndexes[i] = i
@@ -403,5 +403,5 @@ func main() {
 
 	go jw.Serve()
 	log.Println("Minesweeper listening on http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	log.Fatal(http.ListenAndServe(":8080", mux)) // #nosec G4114
 }
