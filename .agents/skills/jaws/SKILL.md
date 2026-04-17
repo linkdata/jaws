@@ -16,6 +16,21 @@ Apply these rules whenever work involves any of the following:
 
 Keep browser behavior thin and deterministic while preserving server-side truth, stable identity, and predictable rerenders.
 
+## Framework mindset
+
+JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
+- Treat render output as a direct projection of current server state.
+- Keep authoritative state in domain data, not duplicated in UI-specific state layers.
+- Use tags to express data dependencies so rerenders are targeted and deterministic.
+
+## Practical data/tag alignment
+
+- Model interactive units as first-class objects and keep related behavior on those objects where practical.
+- Prefer direct pointer tags to underlying data (for example `*Item`, `*Node`, `&state.field`) when identity is stable.
+- Use getter-based values (`bind.StringGetterFunc` / `bind.HTMLGetterFunc`) for UI text/HTML that must reflect changing server state.
+- Dirty only affected dependency tags after mutations, and include any derived-field dependencies that changed.
+- Avoid synthetic tags (coordinates, ad-hoc strings, wrappers) when a stable underlying data pointer exists.
+
 ## Hard framework constraints
 
 - Every JaWS `UI` value must be comparable.
@@ -41,6 +56,7 @@ Implications:
 - Non-comparable handlers are not auto-tagged unless they implement `TagGetter`.
 - Pass explicit tags when dirty targeting depends on them.
 - Include wrapper markup attributes via `{{$.Attrs}}`.
+- For dynamic button text, avoid passing plain static strings if the value must change after render; use getter-based values so updates reflect new state.
 
 ## Event handling model
 
@@ -65,12 +81,15 @@ For clickable content rendering:
 - When using HTML getters, keep getter paths pure reads.
 - Use `JawsUpdate` for incremental updates when a custom widget needs it.
 - `Element.SetAttr/RemoveAttr/SetClass/RemoveClass/SetInner/SetValue/Append/Order/Remove/Replace` are update-time operations; call them only from render/update processing.
+- Remember that widgets such as `ui.Button` update inner HTML from the original getter object; if that getter captured a stale static value, dirtying will not refresh the UI.
 
 ## Dirtying rules
 
 - Prefer `Request.Dirty(...)` when in request context.
 - Avoid `Jaws.Dirty(...)` unless necessary; its tag expansion runs with nil request context.
 - Dirty only precise tags whose output depends on the changed state.
+- Avoid broad model-level dirty tags when finer-grained element-level tags are practical.
+- For broad refreshes, attach a shared dependency tag to all relevant elements and dirty that shared tag instead of enumerating many element tags.
 
 ## HTML safety rules
 
