@@ -1,0 +1,40 @@
+{{with .Dot}}
+<!doctype html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Minesweeper (JaWS)</title>
+	{{$.HeadHTML}}
+</head>
+
+<body>
+	<main class="layout">
+		<h1>Minesweeper</h1>
+		<p class="subtitle">Server-driven UI with JaWS. No custom client-side JavaScript.</p>
+
+		<div class="controls">
+			{{$.Button .NewGameButton `class="control"`}}
+		</div>
+
+		<div class="status-line">{{$.Span .StatusSpan}}</div>
+		<div class="stats-line">{{$.Span .StatsSpan}}</div>
+
+		<table class="board" aria-label="Minesweeper board">
+			<tbody>
+				{{range $r := .Rows}}
+				<tr>
+					{{range $c := $.Dot.Cols}}
+					<td>{{$.Button ($.Dot.CellButton $r $c) `class="cell"`}}</td>
+					{{end}}
+				</tr>
+				{{end}}
+			</tbody>
+		</table>
+	</main>
+	{{$.TailHTML}}
+</body>
+
+</html>
+{{end}}

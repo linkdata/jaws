@@ -1,0 +1,105 @@
+:root {
+	--bg: #f6f1e5;
+	--ink: #1f2a44;
+	--panel: #fff9ec;
+	--accent: #2b7a78;
+	--accent-ink: #ffffff;
+	--grid: #ded3b9;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	font-family: "Trebuchet MS", "Segoe UI", Tahoma, sans-serif;
+	background: radial-gradient(circle at 10% 10%, #fff7df 0%, var(--bg) 60%);
+	color: var(--ink);
+	min-height: 100vh;
+}
+
+.layout {
+	max-width: 760px;
+	margin: 0 auto;
+	padding: 2rem 1rem 3rem;
+}
+
+h1 {
+	margin: 0;
+	font-size: 2.1rem;
+}
+
+.subtitle {
+	margin: 0.45rem 0 1.2rem;
+	line-height: 1.45;
+}
+
+.controls {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.55rem;
+	margin-bottom: 0.8rem;
+}
+
+.control {
+	border: 0;
+	background: var(--accent);
+	color: var(--accent-ink);
+	padding: 0.52rem 0.9rem;
+	border-radius: 0.5rem;
+	font-size: 0.95rem;
+	cursor: pointer;
+}
+
+.status-line,
+.stats-line {
+	background: var(--panel);
+	border: 1px solid var(--grid);
+	padding: 0.55rem 0.7rem;
+	border-radius: 0.45rem;
+	margin-bottom: 0.5rem;
+}
+
+.board {
+	border-collapse: collapse;
+	margin-top: 0.9rem;
+}
+
+.board td {
+	padding: 0.18rem;
+}
+
+.cell {
+	width: 2.05rem;
+	height: 2.05rem;
+	min-width: 2.05rem;
+	max-width: 2.05rem;
+	min-height: 2.05rem;
+	max-height: 2.05rem;
+	padding: 0;
+	border: 1px solid #344e41;
+	border-radius: 0.3rem;
+	background: #f0e2c7;
+	font-weight: 700;
+	font-size: 1rem;
+	font-family: "Courier New", Courier, monospace;
+	line-height: 1;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+}
+
+.cell .glyph {
+	color: #c11717;
+	font-size: 1.35rem;
+	line-height: 1;
+	display: inline-block;
+}
+
+@media (max-width: 620px) {
+	.layout {
+		padding: 1.25rem 0.75rem 2rem;
+	}
+}
