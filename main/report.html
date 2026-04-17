@@ -67,7 +67,7 @@
 				
 				<option value="file5">github.com/linkdata/jaws/eventhandler.go (100.0%)</option>
 				
-				<option value="file6">github.com/linkdata/jaws/examples/minesweeper/main.go (58.9%)</option>
+				<option value="file6">github.com/linkdata/jaws/examples/minesweeper/main.go (57.5%)</option>
 				
 				<option value="file7">github.com/linkdata/jaws/jaws.go (100.0%)</option>
 				
@@ -1206,7 +1206,7 @@ func (g *game) revealFromLocked(start *Cell) (revealed []*Cell) <span class="cov
                 cell := stack[last]
                 stack = stack[:last]
 
-                if cell.revealed || cell.flagged || cell.mine </span><span class="cov8" title="1">{
+                if cell.revealed || cell.flagged || cell.mine </span><span class="cov0" title="0">{
                         continue</span>
                 }
                 <span class="cov8" title="1">cell.revealed = true
@@ -1215,7 +1215,7 @@ func (g *game) revealFromLocked(start *Cell) (revealed []*Cell) <span class="cov
                 if cell.adjacent != 0 </span><span class="cov8" title="1">{
                         continue</span>
                 }
-                <span class="cov8" title="1">g.forEachNeighborLocked(cell, func(neighbor *Cell) </span><span class="cov8" title="1">{
+                <span class="cov0" title="0">g.forEachNeighborLocked(cell, func(neighbor *Cell) </span><span class="cov0" title="0">{
                         stack = append(stack, neighbor)
                 }</span>)
         }
