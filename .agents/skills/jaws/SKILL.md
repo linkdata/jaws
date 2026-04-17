@@ -90,6 +90,7 @@ For clickable content rendering:
 - Dirty only precise tags whose output depends on the changed state.
 - Avoid broad model-level dirty tags when finer-grained element-level tags are practical.
 - For broad refreshes, attach a shared dependency tag to all relevant elements and dirty that shared tag instead of enumerating many element tags.
+- Redundant-update filtering is asymmetric: input widgets (`InputText`, `InputBool`, `InputFloat`, `InputDate`) compare the new getter output against a stored `Last` value and skip `SetValue` when unchanged, but `HTMLInner`-backed widgets (spans, divs, buttons) do not — `JawsUpdate` unconditionally calls `SetInner`. For HTML-inner widgets, ensure dirty scope matches fields that actually changed, otherwise unrelated status/label spans will re-render (and lose selection, transitions, etc.) on every event. Usually the mutation code already knows what it changed and can dirty accordingly; fall back to snapshot-and-diff only when outcomes are hard to predict up front (e.g. flood-fill or win-condition checks) and the snapshot is cheap.
 
 ## HTML safety rules
 
