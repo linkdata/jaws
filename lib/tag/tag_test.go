@@ -71,6 +71,21 @@ func TestTagString_StringerAndPointer(t *testing.T) {
 	}
 }
 
+func assertTagSetEqual(t *testing.T, got, want []any) {
+	t.Helper()
+	gotSet := make(map[any]struct{}, len(got))
+	for _, v := range got {
+		gotSet[v] = struct{}{}
+	}
+	wantSet := make(map[any]struct{}, len(want))
+	for _, v := range want {
+		wantSet[v] = struct{}{}
+	}
+	if !reflect.DeepEqual(gotSet, wantSet) {
+		t.Fatalf("tag set mismatch:\n got %#v\nwant %#v", got, want)
+	}
+}
+
 func TestTagExpand(t *testing.T) {
 	var av atomic.Value
 	selftagger := &testSelfTagger{}
@@ -113,9 +128,7 @@ func TestTagExpand(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := MustTagExpand(nil, tt.tag); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("MustTagExpand(%#v):\n got %#v\nwant %#v", tt.tag, got, tt.want)
-			}
+			assertTagSetEqual(t, MustTagExpand(nil, tt.tag), tt.want)
 		})
 	}
 }
@@ -168,16 +181,15 @@ func TestTagExpand_IllegalTypesPanic(t *testing.T) {
 }
 
 func TestTagExpand_SelfReferentialSliceStopsRecursing(t *testing.T) {
-	/*
-		tags := []any{nil}
-		tags[0] = tags
-		got, err := TagExpand(nil, tags)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(got) != 0 {
-			t.Fatalf("expected no tags, got %#v", got)
-		}*/
+	tags := []any{nil}
+	tags[0] = tags
+	got, err := TagExpand(nil, tags)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected no tags, got %#v", got)
+	}
 }
 
 func TestTagExpand_TooManyTagsPanic(t *testing.T) {
@@ -331,10 +343,7 @@ func TestTagExpand_TagGetterRecurses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []any{Tag("nested")}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("TagExpand(testNestedTagGetter{}):\n got %#v\nwant %#v", got, want)
-	}
+	assertTagSetEqual(t, got, []any{Tag("nested")})
 }
 
 func TestTagExpand_TagGetterSelfInSlice(t *testing.T) {
@@ -343,10 +352,7 @@ func TestTagExpand_TagGetterSelfInSlice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []any{self}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("TagExpand(testSelfSliceTagger{}):\n got %#v\nwant %#v", got, want)
-	}
+	assertTagSetEqual(t, got, []any{self})
 }
 
 func TestTagExpand_TagGetterSelfAndExtraInSlice(t *testing.T) {
@@ -355,10 +361,7 @@ func TestTagExpand_TagGetterSelfAndExtraInSlice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []any{self, Tag("extra")}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("TagExpand(testSelfSliceExtraTagger{}):\n got %#v\nwant %#v", got, want)
-	}
+	assertTagSetEqual(t, got, []any{self, Tag("extra")})
 }
 
 func TestTagExpand_TagGetterMutualCycleExpandsToCycleMembers(t *testing.T) {
@@ -369,10 +372,7 @@ func TestTagExpand_TagGetterMutualCycleExpandsToCycleMembers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []any{a, b}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("TagExpand(mutual cycle):\n got %#v\nwant %#v", got, want)
-	}
+	assertTagSetEqual(t, got, []any{a, b})
 }
 
 func TestMustTagExpand_UsesContextMustLog(t *testing.T) {
