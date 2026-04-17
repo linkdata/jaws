@@ -67,7 +67,7 @@
 				
 				<option value="file5">github.com/linkdata/jaws/eventhandler.go (100.0%)</option>
 				
-				<option value="file6">github.com/linkdata/jaws/examples/minesweeper/main.go (58.9%)</option>
+				<option value="file6">github.com/linkdata/jaws/examples/minesweeper/main.go (100.0%)</option>
 				
 				<option value="file7">github.com/linkdata/jaws/jaws.go (100.0%)</option>
 				
@@ -119,11 +119,11 @@
 				
 				<option value="file31">github.com/linkdata/jaws/lib/tag/errillegaltagtype.go (100.0%)</option>
 				
-				<option value="file32">github.com/linkdata/jaws/lib/tag/errnotcomparable.go (87.5%)</option>
+				<option value="file32">github.com/linkdata/jaws/lib/tag/errnotcomparable.go (100.0%)</option>
 				
-				<option value="file33">github.com/linkdata/jaws/lib/tag/errnotusableastag.go (98.6%)</option>
+				<option value="file33">github.com/linkdata/jaws/lib/tag/errnotusableastag.go (100.0%)</option>
 				
-				<option value="file34">github.com/linkdata/jaws/lib/tag/tag.go (93.6%)</option>
+				<option value="file34">github.com/linkdata/jaws/lib/tag/tag.go (100.0%)</option>
 				
 				<option value="file35">github.com/linkdata/jaws/lib/templatereloader/templatereloader.go (100.0%)</option>
 				
@@ -879,6 +879,28 @@ import (
 //go:embed assets/ui/*.html assets/static/*.css
 var assetsFS embed.FS
 
+var (
+        newJaws                   = jaws.New
+        parseMinesweeperTemplates = func() (*template.Template, error) <span class="cov8" title="1">{
+                return template.ParseFS(assetsFS, "assets/ui/*.html")
+        }</span>
+        addTemplateLookuper = func(jw *jaws.Jaws, tmpl *template.Template) error <span class="cov8" title="1">{
+                return jw.AddTemplateLookuper(tmpl)
+        }</span>
+        generateHeadHTML = func(jw *jaws.Jaws) error <span class="cov8" title="1">{
+                return jw.GenerateHeadHTML("/static/style.css")
+        }</span>
+        subStaticFS = func() (fs.FS, error) <span class="cov8" title="1">{
+                return fs.Sub(assetsFS, "assets/static")
+        }</span>
+        serveJaws = func(jw *jaws.Jaws) <span class="cov8" title="1">{
+                go jw.Serve()
+        }</span>
+        listenAndServe = http.ListenAndServe
+        logPrintln     = func(v ...any) <span class="cov8" title="1">{ log.Println(v...) }</span>
+        logFatal       = func(v ...any) <span class="cov8" title="1">{ log.Fatal(v...) }</span>
+)
+
 type Cell struct {
         game     *game
         row, col int
@@ -923,16 +945,16 @@ func (c *Cell) snapshotLocked() cellView <span class="cov8" title="1">{
 }</span>
 
 func (v cellView) HTML() template.HTML <span class="cov8" title="1">{
-        if v.revealed </span><span class="cov0" title="0">{
-                if v.mine </span><span class="cov0" title="0">{
+        if v.revealed </span><span class="cov8" title="1">{
+                if v.mine </span><span class="cov8" title="1">{
                         return template.HTML(`&lt;span class="glyph glyph-mine"&gt;☠&lt;/span&gt;`) // #nosec G203
                 }</span>
-                <span class="cov0" title="0">if v.adjacent &gt; 0 </span><span class="cov0" title="0">{
+                <span class="cov8" title="1">if v.adjacent &gt; 0 </span><span class="cov8" title="1">{
                         return template.HTML(`&lt;span class="cleared"&gt;` + strconv.Itoa(v.adjacent) + `&lt;/span&gt;`) // #nosec G203
                 }</span>
-                <span class="cov0" title="0">return template.HTML(`&lt;span class="cleared"&gt;&lt;/span&gt;`)</span> // #nosec G203
+                <span class="cov8" title="1">return template.HTML(`&lt;span class="cleared"&gt;&lt;/span&gt;`)</span> // #nosec G203
         }
-        <span class="cov8" title="1">if v.flagged </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if v.flagged </span><span class="cov8" title="1">{
                 return template.HTML(`&lt;span class="glyph glyph-flag"&gt;⚑&lt;/span&gt;`) // #nosec G203
         }</span>
         <span class="cov8" title="1">return ""</span>
@@ -940,15 +962,15 @@ func (v cellView) HTML() template.HTML <span class="cov8" title="1">{
 
 func (v cellView) label() string <span class="cov8" title="1">{
         switch </span>{
-        case v.revealed &amp;&amp; v.mine:<span class="cov0" title="0">
+        case v.revealed &amp;&amp; v.mine:<span class="cov8" title="1">
                 return "Mine"</span>
-        case v.revealed &amp;&amp; v.adjacent &gt; 0:<span class="cov0" title="0">
+        case v.revealed &amp;&amp; v.adjacent &gt; 0:<span class="cov8" title="1">
                 return fmt.Sprintf("Revealed cell with %d adjacent mines", v.adjacent)</span>
-        case v.revealed:<span class="cov0" title="0">
+        case v.revealed:<span class="cov8" title="1">
                 return "Revealed empty cell"</span>
-        case v.flagged:<span class="cov0" title="0">
+        case v.flagged:<span class="cov8" title="1">
                 return "Flagged hidden cell"</span>
-        case v.gameOver:<span class="cov0" title="0">
+        case v.gameOver:<span class="cov8" title="1">
                 return "Hidden cell, game over"</span>
         default:<span class="cov8" title="1">
                 return "Hidden cell"</span>
@@ -956,25 +978,25 @@ func (v cellView) label() string <span class="cov8" title="1">{
 }
 
 func (c *Cell) syncPresentation(elem *jaws.Element, view cellView) <span class="cov8" title="1">{
-        if elem == nil </span><span class="cov0" title="0">{
+        if elem == nil </span><span class="cov8" title="1">{
                 return
         }</span>
         <span class="cov8" title="1">for _, cls := range []string{"is-hidden", "is-revealed", "is-flagged", "is-mine"} </span><span class="cov8" title="1">{
                 elem.RemoveClass(cls)
         }</span>
-        <span class="cov8" title="1">if view.revealed </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if view.revealed </span><span class="cov8" title="1">{
                 elem.SetClass("is-revealed")
-                if view.mine </span><span class="cov0" title="0">{
+                if view.mine </span><span class="cov8" title="1">{
                         elem.SetClass("is-mine")
                 }</span>
         } else<span class="cov8" title="1"> {
                 elem.SetClass("is-hidden")
-                if view.flagged </span><span class="cov0" title="0">{
+                if view.flagged </span><span class="cov8" title="1">{
                         elem.SetClass("is-flagged")
                 }</span>
         }
         <span class="cov8" title="1">elem.SetAttr("aria-label", view.label())
-        if view.revealed || view.gameOver </span><span class="cov0" title="0">{
+        if view.revealed || view.gameOver </span><span class="cov8" title="1">{
                 elem.SetAttr("disabled", "disabled")
         }</span> else<span class="cov8" title="1"> {
                 elem.RemoveAttr("disabled")
@@ -1020,17 +1042,17 @@ type game struct {
 }
 
 func newGame(rows, cols, mines int) *game <span class="cov8" title="1">{
-        if rows &lt; 2 </span><span class="cov0" title="0">{
+        if rows &lt; 2 </span><span class="cov8" title="1">{
                 rows = 2
         }</span>
-        <span class="cov8" title="1">if cols &lt; 2 </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if cols &lt; 2 </span><span class="cov8" title="1">{
                 cols = 2
         }</span>
         <span class="cov8" title="1">total := rows * cols
-        if mines &gt;= total </span><span class="cov0" title="0">{
+        if mines &gt;= total </span><span class="cov8" title="1">{
                 mines = total - 1
         }</span>
-        <span class="cov8" title="1">if mines &lt; 1 </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if mines &lt; 1 </span><span class="cov8" title="1">{
                 mines = 1
         }</span>
 
@@ -1068,10 +1090,10 @@ func (g *game) changedTags(before gameState) (tags []any) <span class="cov8" tit
         if g.started != before.started </span><span class="cov8" title="1">{
                 tags = append(tags, &amp;g.started)
         }</span>
-        <span class="cov8" title="1">if g.gameOver != before.gameOver </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if g.gameOver != before.gameOver </span><span class="cov8" title="1">{
                 tags = append(tags, &amp;g.gameOver)
         }</span>
-        <span class="cov8" title="1">if g.won != before.won </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if g.won != before.won </span><span class="cov8" title="1">{
                 tags = append(tags, &amp;g.won)
         }</span>
         <span class="cov8" title="1">if g.revealed != before.revealed </span><span class="cov8" title="1">{
@@ -1083,37 +1105,37 @@ func (g *game) changedTags(before gameState) (tags []any) <span class="cov8" tit
         <span class="cov8" title="1">return</span>
 }
 
-func (g *game) Board() [][]*Cell <span class="cov0" title="0">{ return g.cells }</span>
+func (g *game) Board() [][]*Cell <span class="cov8" title="1">{ return g.cells }</span>
 
-func (g *game) StatusSpan() any <span class="cov0" title="0">{
-        return bind.StringGetterFunc(func(*jaws.Element) string </span><span class="cov0" title="0">{
+func (g *game) StatusSpan() any <span class="cov8" title="1">{
+        return bind.StringGetterFunc(func(*jaws.Element) string </span><span class="cov8" title="1">{
                 return g.statusText()
         }</span>, &amp;g.started, &amp;g.gameOver, &amp;g.won)
 }
 
-func (g *game) StatsSpan() any <span class="cov0" title="0">{
-        return bind.StringGetterFunc(func(*jaws.Element) string </span><span class="cov0" title="0">{
+func (g *game) StatsSpan() any <span class="cov8" title="1">{
+        return bind.StringGetterFunc(func(*jaws.Element) string </span><span class="cov8" title="1">{
                 return g.statsText()
         }</span>, &amp;g.revealed, &amp;g.flags)
 }
 
-func (g *game) NewGameButton() ui.Object <span class="cov0" title="0">{
-        return ui.New("New game").Clicked(func(_ ui.Object, elem *jaws.Element, _ jaws.Click) error </span><span class="cov0" title="0">{
+func (g *game) NewGameButton() ui.Object <span class="cov8" title="1">{
+        return ui.New("New game").Clicked(func(_ ui.Object, elem *jaws.Element, _ jaws.Click) error </span><span class="cov8" title="1">{
                 elem.Request.Dirty(g.reset()...)
                 return nil
         }</span>)
 }
 
-func (g *game) reset() []any <span class="cov0" title="0">{
+func (g *game) reset() []any <span class="cov8" title="1">{
         g.mu.Lock()
         defer g.mu.Unlock()
         before := g.snapshot()
         g.resetLocked()
         tags := g.changedTags(before)
-        if len(tags) &gt; 0 </span><span class="cov0" title="0">{
+        if len(tags) &gt; 0 </span><span class="cov8" title="1">{
                 tags = append(tags, &amp;g.cells)
         }</span>
-        <span class="cov0" title="0">return tags</span>
+        <span class="cov8" title="1">return tags</span>
 }
 
 func (g *game) resetLocked() <span class="cov8" title="1">{
@@ -1129,22 +1151,22 @@ func (g *game) resetLocked() <span class="cov8" title="1">{
         g.flags = 0</span>
 }
 
-func (g *game) statusText() string <span class="cov0" title="0">{
+func (g *game) statusText() string <span class="cov8" title="1">{
         g.mu.Lock()
         defer g.mu.Unlock()
         switch </span>{
-        case g.gameOver &amp;&amp; g.won:<span class="cov0" title="0">
+        case g.gameOver &amp;&amp; g.won:<span class="cov8" title="1">
                 return "You cleared the board."</span>
-        case g.gameOver:<span class="cov0" title="0">
+        case g.gameOver:<span class="cov8" title="1">
                 return "Boom. You hit a mine."</span>
-        case !g.started:<span class="cov0" title="0">
+        case !g.started:<span class="cov8" title="1">
                 return "Left-click reveals. Right-click toggles flags. First reveal is guaranteed safe."</span>
-        default:<span class="cov0" title="0">
+        default:<span class="cov8" title="1">
                 return "Left-click reveals. Right-click toggles flags."</span>
         }
 }
 
-func (g *game) statsText() string <span class="cov0" title="0">{
+func (g *game) statsText() string <span class="cov8" title="1">{
         g.mu.Lock()
         defer g.mu.Unlock()
         remaining := g.rows*g.cols - g.mines - g.revealed
@@ -1155,7 +1177,7 @@ func (g *game) clickCell(cell *Cell) []any <span class="cov8" title="1">{
         g.mu.Lock()
         defer g.mu.Unlock()
 
-        if g.gameOver || cell.flagged || cell.revealed </span><span class="cov0" title="0">{
+        if g.gameOver || cell.flagged || cell.revealed </span><span class="cov8" title="1">{
                 return nil
         }</span>
         <span class="cov8" title="1">before := g.snapshot()
@@ -1166,7 +1188,7 @@ func (g *game) clickCell(cell *Cell) []any <span class="cov8" title="1">{
         }</span>
 
         <span class="cov8" title="1">var cellTags []any
-        if cell.mine </span><span class="cov0" title="0">{
+        if cell.mine </span><span class="cov8" title="1">{
                 g.gameOver = true
                 g.revealAllMinesLocked()
                 cellTags = []any{&amp;g.cells} // all mines revealed; refresh board
@@ -1174,7 +1196,7 @@ func (g *game) clickCell(cell *Cell) []any <span class="cov8" title="1">{
                 for _, c := range g.revealFromLocked(cell) </span><span class="cov8" title="1">{
                         cellTags = append(cellTags, c)
                 }</span>
-                <span class="cov8" title="1">if g.revealed == g.rows*g.cols-g.mines </span><span class="cov0" title="0">{
+                <span class="cov8" title="1">if g.revealed == g.rows*g.cols-g.mines </span><span class="cov8" title="1">{
                         g.gameOver = true
                         g.won = true
                         g.revealAllMinesLocked()
@@ -1187,13 +1209,13 @@ func (g *game) clickCell(cell *Cell) []any <span class="cov8" title="1">{
 func (g *game) toggleFlag(cell *Cell) []any <span class="cov8" title="1">{
         g.mu.Lock()
         defer g.mu.Unlock()
-        if g.gameOver || cell.revealed </span><span class="cov0" title="0">{
+        if g.gameOver || cell.revealed </span><span class="cov8" title="1">{
                 return nil
         }</span>
         <span class="cov8" title="1">before := g.snapshot()
         if cell.ToggleFlag() </span><span class="cov8" title="1">{
                 g.flags++
-        }</span> else<span class="cov0" title="0"> {
+        }</span> else<span class="cov8" title="1"> {
                 g.flags--
         }</span>
         <span class="cov8" title="1">return append([]any{cell}, g.changedTags(before)...)</span>
@@ -1222,11 +1244,11 @@ func (g *game) revealFromLocked(start *Cell) (revealed []*Cell) <span class="cov
         <span class="cov8" title="1">return</span>
 }
 
-func (g *game) revealAllMinesLocked() <span class="cov0" title="0">{
-        for row := 0; row &lt; g.rows; row++ </span><span class="cov0" title="0">{
-                for col := 0; col &lt; g.cols; col++ </span><span class="cov0" title="0">{
+func (g *game) revealAllMinesLocked() <span class="cov8" title="1">{
+        for row := 0; row &lt; g.rows; row++ </span><span class="cov8" title="1">{
+                for col := 0; col &lt; g.cols; col++ </span><span class="cov8" title="1">{
                         cell := g.cells[row][col]
-                        if cell.mine </span><span class="cov0" title="0">{
+                        if cell.mine </span><span class="cov8" title="1">{
                                 cell.revealed = true
                         }</span>
                 }
@@ -1256,7 +1278,7 @@ func (g *game) placeMinesLocked(skip *Cell) <span class="cov8" title="1">{
                 if placed &gt;= g.mines </span><span class="cov8" title="1">{
                         break</span>
                 }
-                <span class="cov8" title="1">if idx == skipIdx </span><span class="cov0" title="0">{
+                <span class="cov8" title="1">if idx == skipIdx </span><span class="cov8" title="1">{
                         continue</span>
                 }
                 <span class="cov8" title="1">g.cells[idx/g.cols][idx%g.cols].mine = true
@@ -1283,39 +1305,45 @@ func (g *game) calculateAdjacencyLocked() <span class="cov8" title="1">{
         }
 }
 
-func main() <span class="cov0" title="0">{
-        jw, err := jaws.New()
-        if err != nil </span><span class="cov0" title="0">{
-                log.Fatal(err)
+func run() error <span class="cov8" title="1">{
+        jw, err := newJaws()
+        if err != nil </span><span class="cov8" title="1">{
+                return err
         }</span>
-        <span class="cov0" title="0">defer jw.Close()
+        <span class="cov8" title="1">defer jw.Close()
 
-        tmpl, err := template.ParseFS(assetsFS, "assets/ui/*.html")
-        if err != nil </span><span class="cov0" title="0">{
-                log.Fatal(err)
+        tmpl, err := parseMinesweeperTemplates()
+        if err != nil </span><span class="cov8" title="1">{
+                return err
         }</span>
-        <span class="cov0" title="0">if err = jw.AddTemplateLookuper(tmpl); err != nil </span><span class="cov0" title="0">{
-                log.Fatal(err)
+        <span class="cov8" title="1">if err = addTemplateLookuper(jw, tmpl); err != nil </span><span class="cov8" title="1">{
+                return err
         }</span>
-        <span class="cov0" title="0">if err = jw.GenerateHeadHTML("/static/style.css"); err != nil </span><span class="cov0" title="0">{
-                log.Fatal(err)
-        }</span>
-
-        <span class="cov0" title="0">staticFiles, err := fs.Sub(assetsFS, "assets/static")
-        if err != nil </span><span class="cov0" title="0">{
-                log.Fatal(err)
+        <span class="cov8" title="1">if err = generateHeadHTML(jw); err != nil </span><span class="cov8" title="1">{
+                return err
         }</span>
 
-        <span class="cov0" title="0">board := newGame(10, 10, 15)
+        <span class="cov8" title="1">staticFiles, err := subStaticFS()
+        if err != nil </span><span class="cov8" title="1">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">board := newGame(10, 10, 15)
 
         mux := http.NewServeMux()
         mux.Handle("GET /jaws/", jw)
         mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
         mux.Handle("GET /", jw.Session(jw.SecureHeadersMiddleware(ui.Handler(jw, "index.html", board))))
 
-        go jw.Serve()
-        log.Println("Minesweeper listening on http://localhost:8080")
-        log.Fatal(http.ListenAndServe(":8080", mux))</span> // #nosec G114
+        serveJaws(jw)
+        logPrintln("Minesweeper listening on http://localhost:8080")
+        return listenAndServe(":8080", mux)</span>
+}
+
+func main() <span class="cov8" title="1">{
+        if err := run(); err != nil </span><span class="cov8" title="1">{
+                logFatal(err)
+        }</span>
 }
 </pre>
 		
@@ -4137,7 +4165,7 @@ func NewErrNotComparable(x any) error <span class="cov8" title="1">{
                         return errNotComparable{t: reflect.TypeOf(x)}
                 }</span>
         }
-        <span class="cov0" title="0">return nil</span>
+        <span class="cov8" title="1">return nil</span>
 }
 </pre>
 		
@@ -4185,7 +4213,7 @@ func NewErrNotUsableAsTag(x any) error <span class="cov8" title="1">{
                 }</span>
                 <span class="cov8" title="1">return retErr</span>
         }
-        <span class="cov0" title="0">return nil</span>
+        <span class="cov8" title="1">return nil</span>
 }
 
 var tagGetterType = reflect.TypeFor[TagGetter]()
@@ -4319,7 +4347,7 @@ func ensureUsableTag(tag any) error <span class="cov8" title="1">{
 
 func appendUniqueTag(result []any, tag any) ([]any, error) <span class="cov8" title="1">{
         for _, existing := range result </span><span class="cov8" title="1">{
-                if existing == tag </span><span class="cov0" title="0">{
+                if existing == tag </span><span class="cov8" title="1">{
                         return result, nil
                 }</span>
         }
@@ -4338,7 +4366,7 @@ func addTag(result []any, tag any) ([]any, error) <span class="cov8" title="1">{
 }
 
 func sameActiveNode(a, b any) bool <span class="cov8" title="1">{
-        if a == nil || b == nil </span><span class="cov0" title="0">{
+        if a == nil || b == nil </span><span class="cov8" title="1">{
                 return a == b
         }</span>
         <span class="cov8" title="1">ta := reflect.TypeOf(a)
@@ -4353,7 +4381,7 @@ func sameActiveNode(a, b any) bool <span class="cov8" title="1">{
         switch va.Kind() </span>{
         case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func, reflect.UnsafePointer:<span class="cov8" title="1">
                 return va.Pointer() == vb.Pointer()</span>
-        default:<span class="cov0" title="0">
+        default:<span class="cov8" title="1">
                 return false</span>
         }
 }
@@ -4380,7 +4408,7 @@ func addActiveTags(result []any, active []any) ([]any, error) <span class="cov8"
 }
 
 func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any, error) <span class="cov8" title="1">{
-        if depth &gt; 10 || len(result) &gt; 100 </span><span class="cov0" title="0">{
+        if depth &gt; 10 || len(result) &gt; 100 </span><span class="cov8" title="1">{
                 return result, ErrTooManyTags
         }</span>
         <span class="cov8" title="1">switch data := tag.(type) </span>{
@@ -4394,7 +4422,7 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
                 }</span>
                 <span class="cov8" title="1">var err error
                 for _, v := range data </span><span class="cov8" title="1">{
-                        if result, err = appendUniqueTag(result, v); err != nil </span><span class="cov0" title="0">{
+                        if result, err = appendUniqueTag(result, v); err != nil </span><span class="cov8" title="1">{
                                 return result, err
                         }</span>
                 }
