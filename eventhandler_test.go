@@ -371,6 +371,202 @@ func Test_CallEventHandlers_InputAndSetDispatchCombinations(t *testing.T) {
 	}
 }
 
+func Test_CallEventHandlers_ExtrasOverrideUI_Click(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	t.Run("extra handles before ui", func(t *testing.T) {
+		elem := rq.NewElement(testDivWidget{inner: "x"})
+		extra := &clickInputSetRecorder{}
+		ui := &clickInputSetRecorder{}
+		elem.AddHandlers(clickOnlyComboHandler{rec: extra})
+
+		err := CallEventHandlers(clickOnlyComboHandler{rec: ui}, elem, what.Click, "1 2 5 name")
+		if err != nil {
+			t.Fatalf("err = %v, want nil", err)
+		}
+		if extra.clickCalls != 1 {
+			t.Fatalf("extra click calls = %d, want 1", extra.clickCalls)
+		}
+		if ui.clickCalls != 0 {
+			t.Fatalf("ui click calls = %d, want 0", ui.clickCalls)
+		}
+	})
+
+	t.Run("ui fallback after extra unhandled", func(t *testing.T) {
+		elem := rq.NewElement(testDivWidget{inner: "x"})
+		extra := &clickInputSetRecorder{clickRet: ErrEventUnhandled}
+		ui := &clickInputSetRecorder{}
+		elem.AddHandlers(clickOnlyComboHandler{rec: extra})
+
+		err := CallEventHandlers(clickOnlyComboHandler{rec: ui}, elem, what.Click, "1 2 5 name")
+		if err != nil {
+			t.Fatalf("err = %v, want nil", err)
+		}
+		if extra.clickCalls != 1 {
+			t.Fatalf("extra click calls = %d, want 1", extra.clickCalls)
+		}
+		if ui.clickCalls != 1 {
+			t.Fatalf("ui click calls = %d, want 1", ui.clickCalls)
+		}
+	})
+}
+
+func Test_CallEventHandlers_ExtrasOverrideUI_InputAndSet(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	tests := []struct {
+		name string
+		wht  what.What
+		val  string
+	}{
+		{name: "input", wht: what.Input, val: "typed"},
+		{name: "set", wht: what.Set, val: `x=1`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Run("extra handles before ui", func(t *testing.T) {
+				elem := rq.NewElement(testDivWidget{inner: "x"})
+				extra := &clickInputSetRecorder{}
+				ui := &clickInputSetRecorder{}
+				elem.AddHandlers(inputOnlyComboHandler{rec: extra})
+
+				err := CallEventHandlers(inputOnlyComboHandler{rec: ui}, elem, tt.wht, tt.val)
+				if err != nil {
+					t.Fatalf("err = %v, want nil", err)
+				}
+				if extra.inputCalls != 1 {
+					t.Fatalf("extra input calls = %d, want 1", extra.inputCalls)
+				}
+				if ui.inputCalls != 0 {
+					t.Fatalf("ui input calls = %d, want 0", ui.inputCalls)
+				}
+			})
+
+			t.Run("ui fallback after extra unhandled", func(t *testing.T) {
+				elem := rq.NewElement(testDivWidget{inner: "x"})
+				extra := &clickInputSetRecorder{inputRet: ErrEventUnhandled}
+				ui := &clickInputSetRecorder{}
+				elem.AddHandlers(inputOnlyComboHandler{rec: extra})
+
+				err := CallEventHandlers(inputOnlyComboHandler{rec: ui}, elem, tt.wht, tt.val)
+				if err != nil {
+					t.Fatalf("err = %v, want nil", err)
+				}
+				if extra.inputCalls != 1 {
+					t.Fatalf("extra input calls = %d, want 1", extra.inputCalls)
+				}
+				if ui.inputCalls != 1 {
+					t.Fatalf("ui input calls = %d, want 1", ui.inputCalls)
+				}
+			})
+		})
+	}
+}
+
+func Test_CallEventHandlers_ExtraHandlersAreLIFO_Click(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	elem := rq.NewElement(testDivWidget{inner: "x"})
+	first := &clickInputSetRecorder{}
+	last := &clickInputSetRecorder{}
+	ui := &clickInputSetRecorder{}
+
+	elem.AddHandlers(
+		clickOnlyComboHandler{rec: first},
+		clickOnlyComboHandler{rec: last},
+	)
+
+	err := CallEventHandlers(clickOnlyComboHandler{rec: ui}, elem, what.Click, "1 2 5 name")
+	if err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+	if last.clickCalls != 1 {
+		t.Fatalf("last click calls = %d, want 1", last.clickCalls)
+	}
+	if first.clickCalls != 0 {
+		t.Fatalf("first click calls = %d, want 0", first.clickCalls)
+	}
+	if ui.clickCalls != 0 {
+		t.Fatalf("ui click calls = %d, want 0", ui.clickCalls)
+	}
+
+	last.clickRet = ErrEventUnhandled
+	err = CallEventHandlers(clickOnlyComboHandler{rec: ui}, elem, what.Click, "1 2 5 name")
+	if err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+	if last.clickCalls != 2 {
+		t.Fatalf("last click calls = %d, want 2", last.clickCalls)
+	}
+	if first.clickCalls != 1 {
+		t.Fatalf("first click calls = %d, want 1", first.clickCalls)
+	}
+	if ui.clickCalls != 0 {
+		t.Fatalf("ui click calls = %d, want 0", ui.clickCalls)
+	}
+}
+
+func Test_CallEventHandlers_ExtraHandlersAreLIFO_InputAndSet(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	tests := []struct {
+		name string
+		wht  what.What
+		val  string
+	}{
+		{name: "input", wht: what.Input, val: "typed"},
+		{name: "set", wht: what.Set, val: `x=1`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			elem := rq.NewElement(testDivWidget{inner: "x"})
+			first := &clickInputSetRecorder{}
+			last := &clickInputSetRecorder{}
+			ui := &clickInputSetRecorder{}
+
+			elem.AddHandlers(
+				inputOnlyComboHandler{rec: first},
+				inputOnlyComboHandler{rec: last},
+			)
+
+			err := CallEventHandlers(inputOnlyComboHandler{rec: ui}, elem, tt.wht, tt.val)
+			if err != nil {
+				t.Fatalf("err = %v, want nil", err)
+			}
+			if last.inputCalls != 1 {
+				t.Fatalf("last input calls = %d, want 1", last.inputCalls)
+			}
+			if first.inputCalls != 0 {
+				t.Fatalf("first input calls = %d, want 0", first.inputCalls)
+			}
+			if ui.inputCalls != 0 {
+				t.Fatalf("ui input calls = %d, want 0", ui.inputCalls)
+			}
+
+			last.inputRet = ErrEventUnhandled
+			err = CallEventHandlers(inputOnlyComboHandler{rec: ui}, elem, tt.wht, tt.val)
+			if err != nil {
+				t.Fatalf("err = %v, want nil", err)
+			}
+			if last.inputCalls != 2 {
+				t.Fatalf("last input calls = %d, want 2", last.inputCalls)
+			}
+			if first.inputCalls != 1 {
+				t.Fatalf("first input calls = %d, want 1", first.inputCalls)
+			}
+			if ui.inputCalls != 0 {
+				t.Fatalf("ui input calls = %d, want 0", ui.inputCalls)
+			}
+		})
+	}
+}
+
 func Test_CallEventHandlers_PanicError(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()

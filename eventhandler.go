@@ -61,43 +61,33 @@ func callInputHandler(obj any, e *Element, val string) (err error) {
 }
 
 func callEventHandler(obj any, e *Element, wht what.What, val string) (err error) {
+	err = ErrEventUnhandled
 	switch wht {
 	case what.Click, what.ContextMenu:
 		var clk Click
 		var ok bool
-		if clk, _, ok = parseClickData(val); !ok {
-			return ErrEventUnhandled
-		}
-		if wht == what.Click {
-			if h, ok := obj.(ClickHandler); ok {
-				return h.JawsClick(e, clk)
+		if clk, _, ok = parseClickData(val); ok {
+			if wht == what.Click {
+				if h, ok := obj.(ClickHandler); ok {
+					err = h.JawsClick(e, clk)
+				}
+			} else if h, ok := obj.(ContextMenuHandler); ok {
+				err = h.JawsContextMenu(e, clk)
 			}
-		} else if h, ok := obj.(ContextMenuHandler); ok {
-			return h.JawsContextMenu(e, clk)
 		}
 	case what.Input, what.Hook, what.Set:
-		return callInputHandler(obj, e, val)
+		err = callInputHandler(obj, e, val)
 	}
-	return ErrEventUnhandled
+	return
 }
 
 func callEventHandlers(ui any, e *Element, wht what.What, val string) (err error) {
-	if wht == what.Set {
-		for _, h := range e.handlers {
-			if err = callInputHandler(h, e, val); !errors.Is(err, ErrEventUnhandled) {
-				return
-			}
-		}
-		return callInputHandler(ui, e, val)
-	}
-	if err = callEventHandler(ui, e, wht, val); errors.Is(err, ErrEventUnhandled) {
-		for _, h := range e.handlers {
-			if err = callEventHandler(h, e, wht, val); !errors.Is(err, ErrEventUnhandled) {
-				return
-			}
+	for i := len(e.handlers) - 1; i >= 0; i-- {
+		if err = callEventHandler(e.handlers[i], e, wht, val); !errors.Is(err, ErrEventUnhandled) {
+			return
 		}
 	}
-	return
+	return callEventHandler(ui, e, wht, val)
 }
 
 // CallEventHandlers calls the event handlers for the given Element.

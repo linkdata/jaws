@@ -116,11 +116,9 @@ the Element object when the JawsUpdate() method is called.
 ### Javascript events
 
 Supported Javascript events are sent to the server and
-are handled by the Element's UI type. If that didn't handle the event,
-any extra objects added to the Element are invoked until one handles the
-event. Extra handlers are checked in registration order. For `what.Set`,
-extra handlers are checked before the UI type. If none handle the event,
-it is ignored.
+are first offered to any extra objects added to the Element, in
+reverse registration order (last added first). If none handle the event, the Element's UI type is
+invoked. If none handle the event, it is ignored.
 
 Event handlers should return `ErrEventUnhandled` if they didn't
 handle the event or want to pass it to the next handler.
