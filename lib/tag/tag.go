@@ -105,7 +105,12 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 	switch data := tag.(type) {
 	case nil:
 		return result, nil
+	case Tag:
+		return appendUniqueTag(result, tag)
 	case []Tag:
+		if result == nil && len(data) > 0 {
+			result = make([]any, 0, len(data))
+		}
 		var err error
 		for _, v := range data {
 			if result, err = appendUniqueTag(result, v); err != nil {
@@ -122,6 +127,9 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 		if idx := findActiveIndex(active, data); idx >= 0 {
 			return addActiveTags(result, active[idx:])
 		}
+		if result == nil && len(data) > 0 {
+			result = make([]any, 0, len(data))
+		}
 		active = append(active, data)
 		var err error
 		for _, v := range data {
@@ -130,32 +138,19 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 			}
 		}
 		return result, nil
-	case string:
-	case template.HTML:
-	case template.HTMLAttr:
-	case int:
-	case int8:
-	case int16:
-	case int32:
-	case int64:
-	case uint:
-	case uint8:
-	case uint16:
-	case uint32:
-	case uint64:
-	case float32:
-	case float64:
-	case bool:
+	case string, template.HTML, template.HTMLAttr,
+		int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64,
+		float32, float64, bool:
 		return result, errIllegalTagType{tag: tag}
 	default:
 		return addTag(result, data)
 	}
-	return result, errIllegalTagType{tag: tag}
 }
 
 func TagExpand(ctx Context, tag any) ([]any, error) {
-	active := make([]any, 0, 12)
-	return expand(0, ctx, tag, nil, active)
+	var activeArr [12]any
+	return expand(0, ctx, tag, nil, activeArr[:0])
 }
 
 func MustTagExpand(ctx Context, tag any) []any {
