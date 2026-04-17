@@ -109,7 +109,8 @@ Guideline:
 - Ensure pages include both `HeadHTML` and `TailHTML` in layout flow.
 - `TailHTML` helps apply queued attr/class updates immediately and reduce initial flicker.
 - Register JaWS `/jaws/*` routes correctly and pair request creation with `UseRequest` handling.
-- Session storage is server-side and IP-bound; treat `Request.Get/Set` as session-backed convenience helpers.
+- Session storage is server-side and IP-bound; use `Jaws.Session(...)` middleware when page state should be per-user.
+- For per-session app state, load from `Request.Get(key)` and initialize with `Request.Set(key, value)` during the page request.
 
 ## Runtime/lifecycle cautions
 
@@ -121,6 +122,7 @@ Guideline:
 - Use real JaWS requests/elements for render/click/update tests.
 - Add regression tests for click dispatch when moving handlers between params and dot `JawsClick`.
 - For container regressions, verify identity reuse, append/remove/order behavior, and stale-element cleanup.
+- Add pure domain tests for state transitions (win/loss, reset, bounds checks) independent of JaWS transport.
 - If rerendering fails, inspect tag comparability and dirty-target coverage before broadening dirty scope.
 
 ## Anti-patterns
@@ -130,3 +132,4 @@ Guideline:
 - Hidden mutations in getter paths.
 - Broad `Dirty(...)` calls used to mask incorrect dependency targeting.
 - Passing explicit template click handlers when dot-owned `JawsClick` already covers behavior.
+- Adding custom browser JavaScript for state that can be expressed through JaWS events and server updates.
