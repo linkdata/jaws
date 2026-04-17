@@ -40,21 +40,21 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
 
 ## Template-dot and tag rules
 
-- `ui.Template` expands `Dot` into tags via `jtag.TagExpand`; the root dot is part of identity/tag behavior.
+- `ui.Template` expands `Dot` into tags via `tag.TagExpand` (package `github.com/linkdata/jaws/lib/tag`, imported as `tag`); the root dot is part of identity/tag behavior.
 - Prefer comparable root dots (pointers or small comparable structs).
-- If root dot is non-comparable, implement `JawsGetTag(jtag.Context) any` and return a comparable tag.
-- Do not use plain `string`, numeric, `bool`, `template.HTML`, or `template.HTMLAttr` as tags; these are illegal tag types.
-- If you need string-like semantic tags, use `jtag.Tag("...")` or a comparable typed struct/pointer.
+- If root dot is non-comparable, implement `JawsGetTag(tag.Context) any` and return a comparable tag.
+- Do not use plain `string`, numeric, `bool`, `template.HTML`, or `template.HTMLAttr` as tags; `tag.TagExpand` rejects them.
+- If you need string-like semantic tags, use `tag.Tag("...")` or a comparable typed struct/pointer.
 
 ## `$.Template(...)` parameter semantics
 
 JaWS parses template params as:
 - HTML attrs: `string`, `[]string`, `template.HTMLAttr`, `[]template.HTMLAttr`
-- handlers: `EventFn`, `EventHandler`, `ClickHandler`
-- tags: everything else (plus comparable handlers are auto-tagged)
+- Handlers: `InputFn` (the func alias `func(e *Element, val string) error`), plus anything satisfying `InputHandler`, `ClickHandler`, or `ContextMenuHandler`
+- Tags: everything else (plus comparable handlers are auto-tagged)
 
 Implications:
-- Non-comparable handlers are not auto-tagged unless they implement `TagGetter`.
+- Non-comparable handlers are not auto-tagged unless they implement `tag.TagGetter`.
 - Pass explicit tags when dirty targeting depends on them.
 - Include wrapper markup attributes via `{{$.Attrs}}`.
 - For dynamic button text, avoid passing plain static strings if the value must change after render; use getter-based values so updates reflect new state.
@@ -62,10 +62,10 @@ Implications:
 ## Event handling model
 
 On incoming events, JaWS dispatches in this order:
-1. UI object (`elem.Ui()`), `JawsClick` first for click events, then `JawsEvent`
-2. Additional handlers attached to the element, in registration order
+1. Handlers attached to the element are tried in **reverse registration order** (most recently added first).
+2. If every attached handler returned `ErrEventUnhandled` (or none matched the event kind), the UI object itself (`elem.Ui()`) is called last as the fallback.
 
-Use `jaws.ErrEventUnhandled` to intentionally fall through to the next handler.
+The handler candidate is asked via `JawsClick` / `JawsContextMenu` / `JawsInput`, matched to the event kind; there is no generic `JawsEvent` method. Return `jaws.ErrEventUnhandled` to fall through to the next candidate.
 
 ## Clickable template pattern
 
@@ -91,7 +91,7 @@ For clickable content rendering:
 - Dirty only precise tags whose output depends on the changed state.
 - Avoid broad model-level dirty tags when finer-grained element-level tags are practical.
 - For broad refreshes, attach a shared dependency tag to all relevant elements and dirty that shared tag instead of enumerating many element tags.
-- `Request.Dirty` runs the tag list through `tag.TagExpand` with a hard cap of 100 expanded entries (see `lib/tag/tag.go`); exceeding it returns `ErrTooManyTags`. When a mutation might touch more items than that, prefer the shared group tag over enumerating individual item tags.
+- `Request.Dirty` runs the tag list through `tag.TagExpand`, which has a hard cap of 100 expanded entries and returns `tag.ErrTooManyTags` above that. When a mutation might touch more items than that, prefer the shared group tag over enumerating individual item tags.
 - Redundant-update filtering is asymmetric: input widgets (`InputText`, `InputBool`, `InputFloat`, `InputDate`) compare the new getter output against a stored `Last` value and skip `SetValue` when unchanged, but `HTMLInner`-backed widgets (spans, divs, buttons) do not — `JawsUpdate` unconditionally calls `SetInner`. For HTML-inner widgets, ensure dirty scope matches fields that actually changed, otherwise unrelated status/label spans will re-render (and lose selection, transitions, etc.) on every event. Usually the mutation code already knows what it changed and can dirty accordingly; fall back to snapshot-and-diff only when outcomes are hard to predict up front (e.g. flood-fill or win-condition checks) and the snapshot is cheap.
 
 ## HTML safety rules
