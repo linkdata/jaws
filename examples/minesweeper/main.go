@@ -120,11 +120,10 @@ func newGame(rows, cols, mines int) *game {
 	return g
 }
 
-// gameState captures the scalar state that UI getters depend on. Mutations
-// snapshot it before running and return only the tags whose values actually
-// changed, because JaWS has no server-side diff: dirtying a dep always
-// pushes a fresh innerHTML update to the browser even if the rendered text
-// is identical, which makes the status/stats lines flicker on every click.
+// gameState is a snapshot of the scalar fields that UI getters depend on.
+// Mutations snapshot-before and diff-after so they only dirty scalar deps
+// whose values actually changed — JaWS does not diff HTMLInner updates, so
+// a spurious dirty would re-render the status/stats lines on every click.
 type gameState struct {
 	started, gameOver, won bool
 	revealed, flags        int
@@ -134,10 +133,6 @@ func (g *game) snapshot() gameState {
 	return gameState{g.started, g.gameOver, g.won, g.revealed, g.flags}
 }
 
-// changedTags returns the dep tags whose values differ from before.
-// When any scalar state changed, cell visuals also changed, so &g.cells is
-// included to refresh every cell button in a single tag (well under the
-// 100-tag expansion cap regardless of how many cells were revealed).
 func (g *game) changedTags(before gameState) (tags []any) {
 	if g.started != before.started {
 		tags = append(tags, &g.started)
@@ -153,9 +148,6 @@ func (g *game) changedTags(before gameState) (tags []any) {
 	}
 	if g.flags != before.flags {
 		tags = append(tags, &g.flags)
-	}
-	if len(tags) > 0 {
-		tags = append(tags, &g.cells)
 	}
 	return
 }
@@ -184,11 +176,14 @@ func (g *game) NewGameButton() ui.Object {
 
 func (g *game) CellButton(row, col int) ui.Object {
 	cell := g.cells[row][col]
+	// cell is the cell's own dep tag (used for per-cell dirty after reveals
+	// and flag toggles); &g.cells is a shared board tag used for broad
+	// refreshes on reset and game-end paths.
 	return ui.New(bind.HTMLGetterFunc(func(*jaws.Element) template.HTML {
 		g.mu.Lock()
 		defer g.mu.Unlock()
 		return cell.HTML()
-	}, &g.cells)).Clicked(func(_ ui.Object, elem *jaws.Element, _ jaws.Click) error {
+	}, cell, &g.cells)).Clicked(func(_ ui.Object, elem *jaws.Element, _ jaws.Click) error {
 		elem.Request.Dirty(g.clickCell(cell)...)
 		return nil
 	}).ContextMenu(func(_ ui.Object, elem *jaws.Element, _ jaws.Click) error {
@@ -202,7 +197,11 @@ func (g *game) reset() []any {
 	defer g.mu.Unlock()
 	before := g.snapshot()
 	g.resetLocked()
-	return g.changedTags(before)
+	tags := g.changedTags(before)
+	if len(tags) > 0 {
+		tags = append(tags, &g.cells)
+	}
+	return tags
 }
 
 func (g *game) resetLocked() {
@@ -254,19 +253,23 @@ func (g *game) clickCell(cell *Cell) []any {
 		g.started = true
 	}
 
+	var cellTags []any
 	if cell.mine {
 		g.gameOver = true
 		g.revealAllMinesLocked()
-		return g.changedTags(before)
+		cellTags = []any{&g.cells} // all mines revealed; refresh board
+	} else {
+		for _, c := range g.revealFromLocked(cell) {
+			cellTags = append(cellTags, c)
+		}
+		if g.revealed == g.rows*g.cols-g.mines {
+			g.gameOver = true
+			g.won = true
+			g.revealAllMinesLocked()
+			cellTags = []any{&g.cells} // win reveals remaining mines
+		}
 	}
-
-	g.revealFromLocked(cell)
-	if g.revealed == g.rows*g.cols-g.mines {
-		g.gameOver = true
-		g.won = true
-		g.revealAllMinesLocked()
-	}
-	return g.changedTags(before)
+	return append(cellTags, g.changedTags(before)...)
 }
 
 func (g *game) toggleFlag(cell *Cell) []any {
@@ -281,10 +284,10 @@ func (g *game) toggleFlag(cell *Cell) []any {
 	} else {
 		g.flags--
 	}
-	return g.changedTags(before)
+	return append([]any{cell}, g.changedTags(before)...)
 }
 
-func (g *game) revealFromLocked(start *Cell) {
+func (g *game) revealFromLocked(start *Cell) (revealed []*Cell) {
 	stack := []*Cell{start}
 	for len(stack) > 0 {
 		last := len(stack) - 1
@@ -295,6 +298,7 @@ func (g *game) revealFromLocked(start *Cell) {
 			continue
 		}
 		cell.revealed = true
+		revealed = append(revealed, cell)
 		g.revealed++
 		if cell.adjacent != 0 {
 			continue
@@ -303,6 +307,7 @@ func (g *game) revealFromLocked(start *Cell) {
 			stack = append(stack, neighbor)
 		})
 	}
+	return
 }
 
 func (g *game) revealAllMinesLocked() {
