@@ -89,10 +89,31 @@ h1 {
 	align-items: center;
 	justify-content: center;
 	cursor: pointer;
+	transition: background-color 140ms ease, transform 120ms ease, box-shadow 120ms ease;
 }
 
-.cell:has(.cleared) {
+.cell:hover:not(:disabled) {
+	transform: translateY(-1px);
+	box-shadow: 0 0.18rem 0.45rem rgba(31, 42, 68, 0.16);
+}
+
+.cell.is-revealed {
 	background: #b8a57a;
+	cursor: default;
+	box-shadow: none;
+}
+
+.cell.is-hidden.is-flagged {
+	background: #e8d7b4;
+}
+
+.cell.is-revealed.is-mine {
+	background: #d0745c;
+	border-color: #7a1f1f;
+}
+
+.cell:disabled {
+	cursor: default;
 }
 
 .cell .glyph {

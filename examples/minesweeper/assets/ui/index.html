@@ -23,10 +23,10 @@
 
 		<table class="board" aria-label="Minesweeper board">
 			<tbody>
-				{{range $r := .Rows}}
+				{{range .Board}}
 				<tr>
-					{{range $c := $.Dot.Cols}}
-					<td>{{$.Button ($.Dot.CellButton $r $c) `class="cell"`}}</td>
+					{{range .}}
+					<td>{{$.Button . `class="cell"`}}</td>
 					{{end}}
 				</tr>
 				{{end}}

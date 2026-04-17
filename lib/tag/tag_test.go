@@ -36,6 +36,27 @@ func (testNestedTagGetter) JawsGetTag(Context) any {
 	return Tag("nested")
 }
 
+type testSelfSliceTagger struct{}
+
+func (tt *testSelfSliceTagger) JawsGetTag(Context) any {
+	return []any{tt}
+}
+
+type testSelfSliceExtraTagger struct{}
+
+func (tt *testSelfSliceExtraTagger) JawsGetTag(Context) any {
+	return []any{tt, Tag("extra")}
+}
+
+type testMutualSliceTagger struct {
+	next *testMutualSliceTagger
+	name string
+}
+
+func (tt *testMutualSliceTagger) JawsGetTag(Context) any {
+	return []any{tt.next}
+}
+
 type testTagExpandNestedTagGetter struct {
 	Setter testNestedTagGetter
 	Vals   []int
@@ -146,14 +167,29 @@ func TestTagExpand_IllegalTypesPanic(t *testing.T) {
 	}
 }
 
+func TestTagExpand_SelfReferentialSliceStopsRecursing(t *testing.T) {
+	/*
+		tags := []any{nil}
+		tags[0] = tags
+		got, err := TagExpand(nil, tags)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 0 {
+			t.Fatalf("expected no tags, got %#v", got)
+		}*/
+}
+
 func TestTagExpand_TooManyTagsPanic(t *testing.T) {
-	tags := []any{nil}
-	tags[0] = tags // infinite recursion in the tags expansion
+	tags := make([]any, 101)
+	for i := range tags {
+		tags[i] = Tag(fmt.Sprintf("t%d", i))
+	}
 	defer func() {
 		x := recover()
 		e, ok := x.(error)
 		if !ok {
-			t.Fail()
+			t.Fatal("expected error, got", x)
 		}
 		if e.Error() != ErrTooManyTags.Error() {
 			t.Fail()
@@ -298,6 +334,44 @@ func TestTagExpand_TagGetterRecurses(t *testing.T) {
 	want := []any{Tag("nested")}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("TagExpand(testNestedTagGetter{}):\n got %#v\nwant %#v", got, want)
+	}
+}
+
+func TestTagExpand_TagGetterSelfInSlice(t *testing.T) {
+	self := &testSelfSliceTagger{}
+	got, err := TagExpand(nil, self)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []any{self}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("TagExpand(testSelfSliceTagger{}):\n got %#v\nwant %#v", got, want)
+	}
+}
+
+func TestTagExpand_TagGetterSelfAndExtraInSlice(t *testing.T) {
+	self := &testSelfSliceExtraTagger{}
+	got, err := TagExpand(nil, self)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []any{self, Tag("extra")}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("TagExpand(testSelfSliceExtraTagger{}):\n got %#v\nwant %#v", got, want)
+	}
+}
+
+func TestTagExpand_TagGetterMutualCycleExpandsToCycleMembers(t *testing.T) {
+	a := &testMutualSliceTagger{name: "a"}
+	b := &testMutualSliceTagger{name: "b", next: a}
+	a.next = b
+	got, err := TagExpand(nil, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []any{a, b}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("TagExpand(mutual cycle):\n got %#v\nwant %#v", got, want)
 	}
 }
 

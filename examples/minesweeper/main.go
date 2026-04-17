@@ -14,6 +14,7 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
+	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/ui"
 )
 
@@ -21,16 +22,24 @@ import (
 var assetsFS embed.FS
 
 type Cell struct {
+	game     *game
 	row, col int
-
 	mine     bool
 	revealed bool
 	flagged  bool
 	adjacent int
 }
 
-func newCell(row, col int) *Cell {
-	return &Cell{row: row, col: col}
+type cellView struct {
+	mine     bool
+	revealed bool
+	flagged  bool
+	gameOver bool
+	adjacent int
+}
+
+func newCell(g *game, row, col int) *Cell {
+	return &Cell{game: g, row: row, col: col}
 }
 
 func (c *Cell) Reset() {
@@ -45,20 +54,95 @@ func (c *Cell) ToggleFlag() bool {
 	return c.flagged
 }
 
-func (c *Cell) HTML() template.HTML {
-	if c.revealed {
-		if c.mine {
+func (c *Cell) snapshotLocked() cellView {
+	return cellView{
+		mine:     c.mine,
+		revealed: c.revealed,
+		flagged:  c.flagged,
+		gameOver: c.game.gameOver,
+		adjacent: c.adjacent,
+	}
+}
+
+func (v cellView) HTML() template.HTML {
+	if v.revealed {
+		if v.mine {
 			return template.HTML(`<span class="glyph glyph-mine">☠</span>`) // #nosec G203
 		}
-		if c.adjacent > 0 {
-			return template.HTML(`<span class="cleared">` + strconv.Itoa(c.adjacent) + `</span>`) // #nosec G203
+		if v.adjacent > 0 {
+			return template.HTML(`<span class="cleared">` + strconv.Itoa(v.adjacent) + `</span>`) // #nosec G203
 		}
 		return template.HTML(`<span class="cleared"></span>`) // #nosec G203
 	}
-	if c.flagged {
+	if v.flagged {
 		return template.HTML(`<span class="glyph glyph-flag">⚑</span>`) // #nosec G203
 	}
 	return ""
+}
+
+func (v cellView) label() string {
+	switch {
+	case v.revealed && v.mine:
+		return "Mine"
+	case v.revealed && v.adjacent > 0:
+		return fmt.Sprintf("Revealed cell with %d adjacent mines", v.adjacent)
+	case v.revealed:
+		return "Revealed empty cell"
+	case v.flagged:
+		return "Flagged hidden cell"
+	case v.gameOver:
+		return "Hidden cell, game over"
+	default:
+		return "Hidden cell"
+	}
+}
+
+func (c *Cell) syncPresentation(elem *jaws.Element, view cellView) {
+	if elem == nil {
+		return
+	}
+	for _, cls := range []string{"is-hidden", "is-revealed", "is-flagged", "is-mine"} {
+		elem.RemoveClass(cls)
+	}
+	if view.revealed {
+		elem.SetClass("is-revealed")
+		if view.mine {
+			elem.SetClass("is-mine")
+		}
+	} else {
+		elem.SetClass("is-hidden")
+		if view.flagged {
+			elem.SetClass("is-flagged")
+		}
+	}
+	elem.SetAttr("aria-label", view.label())
+	if view.revealed || view.gameOver {
+		elem.SetAttr("disabled", "disabled")
+	} else {
+		elem.RemoveAttr("disabled")
+	}
+}
+
+func (c *Cell) JawsGetTag(_ tag.Context) any {
+	return []any{c, &c.game.cells}
+}
+
+func (c *Cell) JawsGetHTML(elem *jaws.Element) template.HTML {
+	c.game.mu.Lock()
+	view := c.snapshotLocked()
+	c.game.mu.Unlock()
+	c.syncPresentation(elem, view)
+	return view.HTML()
+}
+
+func (c *Cell) JawsClick(elem *jaws.Element, _ jaws.Click) error {
+	elem.Request.Dirty(c.game.clickCell(c)...)
+	return nil
+}
+
+func (c *Cell) JawsContextMenu(elem *jaws.Element, _ jaws.Click) error {
+	elem.Request.Dirty(c.game.toggleFlag(c)...)
+	return nil
 }
 
 type game struct {
@@ -67,9 +151,6 @@ type game struct {
 	rows  int
 	cols  int
 	mines int
-
-	rowIndexes []int
-	colIndexes []int
 
 	cells    [][]*Cell
 	rng      *rand.Rand
@@ -96,24 +177,16 @@ func newGame(rows, cols, mines int) *game {
 	}
 
 	g := &game{
-		rows:       rows,
-		cols:       cols,
-		mines:      mines,
-		rowIndexes: make([]int, rows),
-		colIndexes: make([]int, cols),
-		rng:        rand.New(rand.NewSource(time.Now().UnixNano())), // #nosec G404
-	}
-	for i := range g.rowIndexes {
-		g.rowIndexes[i] = i
-	}
-	for i := range g.colIndexes {
-		g.colIndexes[i] = i
+		rows:  rows,
+		cols:  cols,
+		mines: mines,
+		rng:   rand.New(rand.NewSource(time.Now().UnixNano())), // #nosec G404
 	}
 	g.cells = make([][]*Cell, rows)
 	for row := 0; row < rows; row++ {
 		g.cells[row] = make([]*Cell, cols)
 		for col := 0; col < cols; col++ {
-			g.cells[row][col] = newCell(row, col)
+			g.cells[row][col] = newCell(g, row, col)
 		}
 	}
 	g.resetLocked()
@@ -152,8 +225,7 @@ func (g *game) changedTags(before gameState) (tags []any) {
 	return
 }
 
-func (g *game) Rows() []int { return g.rowIndexes }
-func (g *game) Cols() []int { return g.colIndexes }
+func (g *game) Board() [][]*Cell { return g.cells }
 
 func (g *game) StatusSpan() any {
 	return bind.StringGetterFunc(func(*jaws.Element) string {
@@ -170,24 +242,6 @@ func (g *game) StatsSpan() any {
 func (g *game) NewGameButton() ui.Object {
 	return ui.New("New game").Clicked(func(_ ui.Object, elem *jaws.Element, _ jaws.Click) error {
 		elem.Request.Dirty(g.reset()...)
-		return nil
-	})
-}
-
-func (g *game) CellButton(row, col int) ui.Object {
-	cell := g.cells[row][col]
-	// cell is the cell's own dep tag (used for per-cell dirty after reveals
-	// and flag toggles); &g.cells is a shared board tag used for broad
-	// refreshes on reset and game-end paths.
-	return ui.New(bind.HTMLGetterFunc(func(*jaws.Element) template.HTML {
-		g.mu.Lock()
-		defer g.mu.Unlock()
-		return cell.HTML()
-	}, cell, &g.cells)).Clicked(func(_ ui.Object, elem *jaws.Element, _ jaws.Click) error {
-		elem.Request.Dirty(g.clickCell(cell)...)
-		return nil
-	}).ContextMenu(func(_ ui.Object, elem *jaws.Element, _ jaws.Click) error {
-		elem.Request.Dirty(g.toggleFlag(cell)...)
 		return nil
 	})
 }
