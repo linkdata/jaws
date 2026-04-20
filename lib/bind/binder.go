@@ -177,7 +177,7 @@ func (bind *binder[T]) jawsGetHTMLLocked(elem *jaws.Element) template.HTML {
 			} else {
 				s = fmt.Sprintf(hook, v)
 			}
-			return template.HTML(html.EscapeString(s))
+			return template.HTML(html.EscapeString(s)) // #nosec G203
 		}
 	}
 	return template.HTML(html.EscapeString(fmt.Sprint(bind.JawsGetLocked(elem)))) // #nosec G203
