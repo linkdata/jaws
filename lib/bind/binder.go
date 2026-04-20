@@ -59,6 +59,10 @@ type InitialHTMLAttrHook[T comparable] func(bind Binder[T], elem *jaws.Element) 
 // no more success hooks are called.
 type SuccessHook func(*jaws.Element) (err error)
 
+type Formatter interface {
+	Format(string) string
+}
+
 type Binder[T comparable] interface {
 	RWLocker
 	Setter[T]
@@ -110,6 +114,11 @@ type Binder[T comparable] interface {
 	// Do not lock or unlock the Binder within fn. Do not call JawsGet.
 	GetHTML(fn GetHTMLHook[T]) (newbind Binder[T])
 
+	// Format returns a Binder[T] that implements HTMLGetter that
+	// calls html.EscapeString on either fmt.Sprintf(format, JawsGetLocked(elem))
+	// or, if T implements bind.Formatter, T.Format(format).
+	Format(format string) (newbind Binder[T])
+
 	// Clicked returns a Binder[T] that will call fn when JawsClick is invoked.
 	//
 	// The Binder locks are not held when the function is called.
@@ -134,7 +143,7 @@ type binder[T comparable] struct {
 	prev *binder[T]
 	RWLocker
 	ptr  *T
-	hook any // one of: SetHook[T] GetHook[T] GetHTMLHook[T] ClickedHook[T] ContextMenuHook[T] InitialHTMLAttrHook[T] SuccessHook
+	hook any
 }
 
 func (bind *binder[T]) JawsGetLocked(elem *jaws.Element) (value T) {
@@ -155,15 +164,23 @@ func (bind *binder[T]) JawsGet(elem *jaws.Element) (value T) {
 	return
 }
 
-func (bind *binder[T]) jawsGetHTMLLocked(elem *jaws.Element) (s template.HTML) {
-	if fn, ok := bind.hook.(GetHTMLHook[T]); ok {
-		s = fn(bind.prev, elem)
-	} else if bind.prev != nil {
-		s = bind.prev.jawsGetHTMLLocked(elem)
-	} else {
-		s = template.HTML(html.EscapeString(fmt.Sprintf("%v", *bind.ptr))) // #nosec G203
+func (bind *binder[T]) jawsGetHTMLLocked(elem *jaws.Element) template.HTML {
+	for bnd := bind; bnd != nil; bnd = bnd.prev {
+		switch hook := (bnd.hook).(type) {
+		case GetHTMLHook[T]:
+			return hook(bnd, elem)
+		case string:
+			var s string
+			v := bind.JawsGetLocked(elem)
+			if fm, ok := any(v).(Formatter); ok {
+				s = fm.Format(hook)
+			} else {
+				s = fmt.Sprintf(hook, v)
+			}
+			return template.HTML(html.EscapeString(s))
+		}
 	}
-	return
+	return template.HTML(html.EscapeString(fmt.Sprint(bind.JawsGetLocked(elem)))) // #nosec G203
 }
 
 func (bind *binder[T]) JawsGetHTML(elem *jaws.Element) (s template.HTML) {
@@ -292,6 +309,18 @@ func (bind *binder[T]) GetLocked(fn GetHook[T]) Binder[T] {
 	}
 }
 
+// Format returns a Binder[T] that implements HTMLGetter that
+// calls html.EscapeString on either fmt.Sprintf(format, JawsGetLocked(elem))
+// or, if T implements bind.Formatter, T.Format(format).
+func (bind *binder[T]) Format(format string) Binder[T] {
+	return &binder[T]{
+		prev:     bind,
+		RWLocker: bind.RWLocker,
+		ptr:      bind.ptr,
+		hook:     format,
+	}
+}
+
 // GetHTML returns a Binder[T] that will call fn instead of the default escaped
 // fmt.Sprintf("%v", JawsGetLocked(elem)) HTML rendering.
 //
@@ -381,5 +410,5 @@ func wrapSuccessHook(fn any) (hook SuccessHook) {
 	case func(*jaws.Element) error:
 		return fn
 	}
-	panic("Binding[T].Success(): function has wrong signature")
+	panic("Binder[T].Success(): function has wrong signature")
 }
