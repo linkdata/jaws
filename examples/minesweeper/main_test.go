@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
@@ -159,9 +160,14 @@ func TestCellButtonUsesCellTagsAndHandlers(t *testing.T) {
 		t.Fatal("expected clicked cell to be revealed")
 	}
 
-	// Drain queued attr/class updates so the request harness is exercised end-to-end.
+	// Drain attr/class updates. The harness process loop may already have
+	// forwarded updates to OutCh before the tail endpoint is fetched.
 	if got := tailScript(t, jw, rq); got == "" {
-		t.Fatal("expected queued tail updates")
+		select {
+		case <-rq.OutCh:
+		case <-time.After(time.Second):
+			t.Fatal("expected queued or forwarded updates")
+		}
 	}
 }
 
