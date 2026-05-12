@@ -41,20 +41,20 @@ and use JaWS as demonstrated below.
 
 For widget authoring guidance see `lib/ui/README.md`.
 
-### Codex skill
+### AI skill
 
-This repository includes a Codex skill under `.agents/skills/jaws/`.
-To install it in your local Codex skills tree, copy both `SKILL.md` and
-`agents/openai.yaml` into `~/.codex/skills/jaws/`.
+This repository includes a AI skill under `.agents/skills/jaws/`.
+To install it in your local AI skills tree, copy both `SKILL.md` and
+`agents/openai.yaml` into `~/.agents/skills/jaws/`.
 
 Using `curl`:
 
 ```bash
-mkdir -p "$HOME/.codex/skills/jaws/agents"
+mkdir -p "$HOME/.agents/skills/jaws/agents"
 curl -fsSL https://raw.githubusercontent.com/linkdata/jaws/main/.agents/skills/jaws/SKILL.md \
-	-o "$HOME/.codex/skills/jaws/SKILL.md"
+	-o "$HOME/.agents/skills/jaws/SKILL.md"
 curl -fsSL https://raw.githubusercontent.com/linkdata/jaws/main/.agents/skills/jaws/agents/openai.yaml \
-	-o "$HOME/.codex/skills/jaws/agents/openai.yaml"
+	-o "$HOME/.agents/skills/jaws/agents/openai.yaml"
 ```
 
 ## Quick start
