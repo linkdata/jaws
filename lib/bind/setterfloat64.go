@@ -13,9 +13,10 @@ type numeric interface {
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
 }
 
+// SetterFloat64 marks numeric setter types that can be adapted to Setter[float64].
 type SetterFloat64[T numeric] interface {
 	Getter[T]
-	// JawsSet may return ErrValueUnchanged to indicate value was already set.
+	// JawsSet may return [jaws.ErrValueUnchanged] to indicate value was already set.
 	JawsSet(elem *jaws.Element, value T) (err error)
 }
 
@@ -84,6 +85,12 @@ func makeSetterFloat64for[T numeric](s *Setter[float64], v any) bool {
 	return false
 }
 
+// MakeSetterFloat64 returns v as a [Setter] for float64 values.
+//
+// v may be a float64 setter/getter/static value or a setter/getter/static value
+// of another supported numeric type. Getter and static adapters are read-only
+// and return [ErrValueNotSettable] from [Setter.JawsSet]. MakeSetterFloat64
+// panics for unsupported types.
 func MakeSetterFloat64(v any) (s Setter[float64]) {
 	switch v := v.(type) {
 	case Setter[float64]:

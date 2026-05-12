@@ -13,15 +13,15 @@ import (
 	"github.com/linkdata/jaws/lib/tag"
 )
 
-// Template references a Go html/template to be rendered through JaWS.
+// Template references a Go [html/template] template to be rendered through JaWS.
 //
 // The Name field identifies the template to execute and Dot contains the data
-// that will be exposed to the template through the With structure constructed
+// that will be exposed to the template through the [With] structure constructed
 // during rendering. Additional tag bindings and event handlers can be supplied
-// at render time through the RequestWriter.Template helper.
+// at render time through the [RequestWriter.Template] helper.
 type Template struct {
-	Name string // Template name to be looked up using Jaws.LookupTemplate()
-	Dot  any    // Dot value to place in With structure
+	Name string // Template name to be looked up using Jaws.LookupTemplate.
+	Dot  any    // Dot value to place in With.
 }
 
 var _ jaws.UI = Template{}                 // statically ensure interface is defined
@@ -29,6 +29,7 @@ var _ jaws.ClickHandler = Template{}       // statically ensure interface is def
 var _ jaws.ContextMenuHandler = Template{} // statically ensure interface is defined
 var _ jaws.InputHandler = Template{}       // statically ensure interface is defined
 
+// String returns a debug representation of t.
 func (t Template) String() string {
 	return fmt.Sprintf("{%q, %s}", t.Name, tag.TagString(t.Dot))
 }
@@ -117,6 +118,7 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
 	return
 }
 
+// JawsRender renders t through the request's configured template lookupers.
 func (t Template) JawsRender(e *jaws.Element, wr io.Writer, params []any) (err error) {
 	var expandedtags []any
 	if expandedtags, err = tag.TagExpand(e.Request, t.Dot); err == nil {
@@ -149,12 +151,14 @@ func (t Template) JawsRender(e *jaws.Element, wr io.Writer, params []any) (err e
 	return
 }
 
+// JawsUpdate delegates updates to t.Dot when it implements [jaws.Updater].
 func (t Template) JawsUpdate(e *jaws.Element) {
 	if dot, ok := t.Dot.(jaws.Updater); ok {
 		dot.JawsUpdate(e)
 	}
 }
 
+// JawsClick delegates click events to t.Dot when it implements [jaws.ClickHandler].
 func (t Template) JawsClick(e *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
 	if h, ok := t.Dot.(jaws.ClickHandler); ok {
@@ -163,6 +167,8 @@ func (t Template) JawsClick(e *jaws.Element, click jaws.Click) (err error) {
 	return
 }
 
+// JawsContextMenu delegates context-menu events to t.Dot when it implements
+// [jaws.ContextMenuHandler].
 func (t Template) JawsContextMenu(e *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
 	if h, ok := t.Dot.(jaws.ContextMenuHandler); ok {
@@ -171,6 +177,7 @@ func (t Template) JawsContextMenu(e *jaws.Element, click jaws.Click) (err error)
 	return
 }
 
+// JawsInput delegates input events to t.Dot when it implements [jaws.InputHandler].
 func (t Template) JawsInput(e *jaws.Element, val string) (err error) {
 	err = jaws.ErrEventUnhandled
 	if h, ok := t.Dot.(jaws.InputHandler); ok {
@@ -187,10 +194,10 @@ func NewTemplate(name string, dot any) Template {
 	return Template{Name: name, Dot: dot}
 }
 
-// Template renders the given template using ui.With as data.
+// Template renders the given template using [With] as data.
 //
-// The Dot field in ui.With is set to dot, and name is resolved to a
-// *template.Template using Jaws.LookupTemplate().
+// The Dot field in [With] is set to dot, and name is resolved to a
+// [template.Template] using [jaws.Jaws.LookupTemplate].
 func (rqw RequestWriter) Template(name string, dot any, params ...any) error {
 	return rqw.UI(NewTemplate(name, dot), params...)
 }

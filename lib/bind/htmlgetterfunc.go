@@ -22,7 +22,9 @@ func (g *htmlGetterFunc) JawsGetTag(tag.Context) any {
 	return g.tags
 }
 
-// HTMLGetterFunc wraps a function and returns a HTMLGetter.
+// HTMLGetterFunc wraps fn as an [HTMLGetter].
+//
+// Optional tags are exposed through [tag.TagGetter].
 func HTMLGetterFunc(fn func(elem *jaws.Element) (tmpl template.HTML), tags ...any) HTMLGetter {
 	return &htmlGetterFunc{fn: fn, tags: tags}
 }

@@ -17,6 +17,7 @@ type WsMsg struct {
 	What what.What // command
 }
 
+// Append appends m in wire format to b and returns the extended buffer.
 func (m *WsMsg) Append(b []byte) []byte {
 	b = append(b, m.What.String()...)
 	b = append(b, '\t')
@@ -38,6 +39,7 @@ func (m *WsMsg) Append(b []byte) []byte {
 	return b
 }
 
+// Format returns m in wire format.
 func (m *WsMsg) Format() string {
 	return string(m.Append(nil))
 }
@@ -72,6 +74,7 @@ func Parse(txt []byte) (WsMsg, bool) {
 	return WsMsg{}, false
 }
 
+// FillAlert replaces m with an escaped danger alert for err.
 func (m *WsMsg) FillAlert(err error) {
 	m.Jid = 0
 	m.What = what.Alert

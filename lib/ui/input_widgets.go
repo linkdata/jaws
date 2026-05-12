@@ -16,7 +16,7 @@ import (
 // Input stores common state for interactive input widgets.
 // There is one of these per request and input widget.
 type Input struct {
-	Tag  any
+	Tag  any          // tag to dirty after accepted input
 	Last atomic.Value // the last value received from the request
 }
 
@@ -30,6 +30,7 @@ func (ui *Input) maybeDirty(e *jaws.Element, inerr error) (err error) {
 	return
 }
 
+// InputText is the reusable base for string input widgets.
 type InputText struct {
 	Input
 	bind.Setter[string]
@@ -46,18 +47,21 @@ func (ui *InputText) renderStringInput(e *jaws.Element, w io.Writer, htmlType st
 	return
 }
 
+// JawsUpdate updates the input value when the bound string value changes.
 func (ui *InputText) JawsUpdate(e *jaws.Element) {
 	if v := ui.JawsGet(e); ui.Last.Swap(v) != v {
 		e.SetValue(v)
 	}
 }
 
+// JawsInput stores a browser-side string input value.
 func (ui *InputText) JawsInput(e *jaws.Element, val string) (err error) {
 	ui.Last.Store(val)
 	err = ui.maybeDirty(e, ui.Setter.JawsSet(e, val))
 	return
 }
 
+// InputBool is the reusable base for boolean input widgets.
 type InputBool struct {
 	Input
 	bind.Setter[bool]
@@ -77,6 +81,7 @@ func (ui *InputBool) renderBoolInput(e *jaws.Element, w io.Writer, htmlType stri
 	return
 }
 
+// JawsUpdate updates the input value when the bound bool value changes.
 func (ui *InputBool) JawsUpdate(e *jaws.Element) {
 	v := ui.JawsGet(e)
 	if ui.Last.Swap(v) != v {
@@ -88,6 +93,7 @@ func (ui *InputBool) JawsUpdate(e *jaws.Element) {
 	}
 }
 
+// JawsInput stores a browser-side bool input value.
 func (ui *InputBool) JawsInput(e *jaws.Element, val string) (err error) {
 	if val == "" {
 		val = "false"
@@ -100,6 +106,7 @@ func (ui *InputBool) JawsInput(e *jaws.Element, val string) (err error) {
 	return
 }
 
+// InputFloat is the reusable base for float64 input widgets.
 type InputFloat struct {
 	Input
 	bind.Setter[float64]
@@ -120,6 +127,7 @@ func (ui *InputFloat) renderFloatInput(e *jaws.Element, w io.Writer, htmlType st
 	return
 }
 
+// JawsUpdate updates the input value when the bound float64 value changes.
 func (ui *InputFloat) JawsUpdate(e *jaws.Element) {
 	v := ui.JawsGet(e)
 	if ui.Last.Swap(v) != v {
@@ -127,6 +135,7 @@ func (ui *InputFloat) JawsUpdate(e *jaws.Element) {
 	}
 }
 
+// JawsInput stores a browser-side float64 input value.
 func (ui *InputFloat) JawsInput(e *jaws.Element, val string) (err error) {
 	if val == "" {
 		val = "0"
@@ -139,6 +148,7 @@ func (ui *InputFloat) JawsInput(e *jaws.Element, val string) (err error) {
 	return
 }
 
+// InputDate is the reusable base for date input widgets.
 type InputDate struct {
 	Input
 	bind.Setter[time.Time]
@@ -159,6 +169,7 @@ func (ui *InputDate) renderDateInput(e *jaws.Element, w io.Writer, htmlType stri
 	return
 }
 
+// JawsUpdate updates the input value when the bound date value changes.
 func (ui *InputDate) JawsUpdate(e *jaws.Element) {
 	v := ui.JawsGet(e)
 	if ui.Last.Swap(v) != v {
@@ -166,6 +177,7 @@ func (ui *InputDate) JawsUpdate(e *jaws.Element) {
 	}
 }
 
+// JawsInput stores a browser-side date input value.
 func (ui *InputDate) JawsInput(e *jaws.Element, val string) (err error) {
 	if val == "" {
 		val = "0001-01-01"

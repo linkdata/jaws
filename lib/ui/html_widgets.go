@@ -11,6 +11,7 @@ import (
 
 // HTMLInner is a reusable base for widgets that render as `<tag>inner</tag>`.
 type HTMLInner struct {
+	// HTMLGetter returns the trusted inner HTML to render and update.
 	HTMLGetter bind.HTMLGetter
 }
 
@@ -23,6 +24,7 @@ func (ui *HTMLInner) renderInner(e *jaws.Element, w io.Writer, htmlTag, htmlType
 	return
 }
 
+// JawsUpdate updates the rendered inner HTML.
 func (ui *HTMLInner) JawsUpdate(e *jaws.Element) {
 	e.SetInner(ui.HTMLGetter.JawsGetHTML(e))
 }

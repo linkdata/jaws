@@ -5,12 +5,13 @@ import (
 	"net/http"
 )
 
+// Context is the request state made available while expanding tags.
 type Context interface {
 	// Initial returns the Request's initial HTTP request, or nil.
 	Initial() (r *http.Request)
-	// Get returns the jaws session value for the key, or nil.
+	// Get returns the JaWS session value for the key, or nil.
 	Get(key string) any
-	// Set sets the jaws session value for the key.
+	// Set sets the JaWS session value for the key.
 	Set(key string, val any)
 	// Context returns the Request's context.
 	Context() (ctx context.Context)

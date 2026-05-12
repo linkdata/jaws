@@ -13,16 +13,17 @@ type Register struct{ jaws.Updater }
 // NewRegister returns an update-only widget that invokes updater during updates.
 func NewRegister(updater jaws.Updater) Register { return Register{Updater: updater} }
 
+// JawsRender renders no HTML for update-only registration.
 func (ui Register) JawsRender(*jaws.Element, io.Writer, []any) error {
 	return nil
 }
 
 // Register creates a new Element with the given Updater as a tag
 // for dynamic updates. Additional tags may be provided in params.
-// The updaters JawsUpdate method will be called immediately to
+// The updater's [jaws.Updater.JawsUpdate] method will be called immediately to
 // ensure the initial rendering is correct.
 //
-// Returns a Jid, suitable for including as a HTML "id" attribute:
+// Returns a [jid.Jid], suitable for including as an HTML id attribute:
 //
 //	<div id="{{$.Register .MyUpdater}}">...</div>
 func (rqw RequestWriter) Register(updater jaws.Updater, params ...any) jid.Jid {

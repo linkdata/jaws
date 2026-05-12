@@ -7,15 +7,18 @@ import (
 	"github.com/linkdata/jaws/lib/bind"
 )
 
+// Number renders an HTML number input bound to a float64 setter.
 type Number struct{ InputFloat }
 
 // NewNumber returns a number input widget bound to g.
 func NewNumber(g bind.Setter[float64]) *Number { return &Number{InputFloat{Setter: g}} }
 
+// JawsRender renders ui as an HTML number input.
 func (ui *Number) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
 	return ui.renderFloatInput(e, w, "number", params...)
 }
 
+// Number renders an HTML number input.
 func (rw RequestWriter) Number(value any, params ...any) error {
 	return rw.UI(NewNumber(bind.MakeSetterFloat64(value)), params...)
 }

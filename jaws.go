@@ -1,9 +1,9 @@
-// package jaws provides a mechanism to create dynamic
-// webpages using Javascript and WebSockets.
+// Package jaws provides a mechanism to create dynamic
+// webpages using JavaScript and WebSockets.
 //
-// It integrates well with Go's html/template package,
+// It integrates well with Go's [html/template] package,
 // but can be used without it. It can be used with any
-// router that supports the standard ServeHTTP interface.
+// router that supports the standard [http.Handler] interface.
 package jaws
 
 import (
@@ -42,9 +42,14 @@ import (
 )
 
 const (
-	DefaultUpdateInterval        = time.Millisecond * 100 // Default browser update interval
-	DefaultWebSocketPingInterval = time.Minute            // Default WebSocket keepalive ping interval
-	DefaultWebSocketTimeout      = time.Second * 10       // WebSocket must connect and respond within this interval
+	// DefaultUpdateInterval is the default browser update interval.
+	DefaultUpdateInterval = time.Millisecond * 100
+
+	// DefaultWebSocketPingInterval is the default WebSocket keepalive ping interval.
+	DefaultWebSocketPingInterval = time.Minute
+
+	// DefaultWebSocketTimeout is the default time allowed for WebSocket connect and ping responses.
+	DefaultWebSocketTimeout = time.Second * 10
 )
 
 type subscription struct {
@@ -64,12 +69,12 @@ type Jid = jid.Jid // convenience alias
 // A single Jaws value coordinates template lookup, session handling and the
 // request lifecycle that keeps the browser and backend synchronized via
 // WebSockets. The zero value is not ready for use; construct instances with
-// New to ensure the helper goroutines and static assets are prepared.
+// [New] to ensure the helper goroutines and static assets are prepared.
 type Jaws struct {
 	CookieName            string          // Name for session cookies, defaults to "jaws"
 	Logger                Logger          // Optional logger to use
 	Debug                 bool            // Set to true to enable debug info in generated HTML code
-	MakeAuth              MakeAuthFn      // Optional function to create With.Auth for Templates
+	MakeAuth              MakeAuthFn      // Optional function to create ui.With.Auth for Templates
 	BaseContext           context.Context // Non-nil base context for Requests, set to context.Background() in New()
 	WebSocketPingInterval time.Duration   // Interval between keepalive pings on active WebSocket connections. Defaults to DefaultWebSocketPingInterval. Set <=0 to disable keepalive pings.
 	webSocketTimeout      time.Duration   // timeout duration passed to ServeWith
@@ -95,9 +100,9 @@ type Jaws struct {
 
 // New allocates a JaWS instance with the default configuration.
 //
-// The returned Jaws value is ready for use: static assets are embedded,
+// The returned [Jaws] value is ready for use: static assets are embedded,
 // internal goroutines are configured and the request pool is primed. Call
-// Close when the instance is no longer needed to free associated resources.
+// [Jaws.Close] when the instance is no longer needed to free associated resources.
 func New() (jw *Jaws, err error) {
 	var serveJS, serveCSS *staticserve.StaticServe
 	if serveJS, err = staticserve.New("/jaws/.jaws.js", assets.JavascriptText); err == nil {
@@ -134,8 +139,8 @@ func New() (jw *Jaws, err error) {
 	return
 }
 
-// Close frees resources associated with the JaWS object, and
-// closes the completion channel if the JaWS was created with New().
+// Close frees resources associated with the [Jaws] object, and
+// closes the completion channel if the [Jaws] was created with [New].
 // Once the completion channel is closed, broadcasts and sends may be discarded.
 // Subsequent calls to Close() have no effect.
 func (jw *Jaws) Close() {
@@ -150,13 +155,15 @@ func (jw *Jaws) Close() {
 	jw.mu.Unlock()
 }
 
-// Done returns the channel that is closed when Close has been called.
+// Done returns the channel that is closed when [Jaws.Close] has been called.
 func (jw *Jaws) Done() <-chan struct{} {
 	return jw.closeCh
 }
 
-// AddTemplateLookuper adds an object that can resolve
-// strings to *template.Template.
+// AddTemplateLookuper adds a [TemplateLookuper].
+//
+// The lookuper must be comparable so it can be removed with
+// [Jaws.RemoveTemplateLookuper].
 func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) (err error) {
 	if tl != nil {
 		if err = tag.NewErrNotComparable(tl); err == nil {
@@ -170,8 +177,7 @@ func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) (err error) {
 	return
 }
 
-// RemoveTemplateLookuper removes the given object from
-// the list of TemplateLookupers.
+// RemoveTemplateLookuper removes the given [TemplateLookuper].
 func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) (err error) {
 	if tl != nil {
 		if err = tag.NewErrNotComparable(tl); err == nil {
@@ -183,7 +189,7 @@ func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) (err error) {
 	return
 }
 
-// LookupTemplate queries the known TemplateLookupers in the order
+// LookupTemplate queries the known [TemplateLookuper] values in the order
 // they were added and returns the first found.
 func (jw *Jaws) LookupTemplate(name string) *template.Template {
 	jw.mu.RLock()
@@ -196,7 +202,7 @@ func (jw *Jaws) LookupTemplate(name string) *template.Template {
 	return nil
 }
 
-// RequestCount returns the number of Requests.
+// RequestCount returns the number of [Request] values.
 //
 // The count includes all Requests, including those being rendered,
 // those waiting for the WebSocket callback and those active.
@@ -207,8 +213,8 @@ func (jw *Jaws) RequestCount() (n int) {
 	return
 }
 
-// Log sends an error to the Logger set in the Jaws.
-// Has no effect if the err is nil or the Logger is nil.
+// Log sends an error to the [Logger] set in the [Jaws].
+// Has no effect if err is nil or the [Logger] is nil.
 // Returns err.
 func (jw *Jaws) Log(err error) error {
 	if err != nil && jw != nil && jw.Logger != nil {
@@ -217,9 +223,9 @@ func (jw *Jaws) Log(err error) error {
 	return err
 }
 
-// MustLog sends an error to the Logger set in the Jaws or
-// panics with the given error if no Logger is set.
-// Has no effect if the err is nil.
+// MustLog sends an error to the [Logger] set in the [Jaws] or
+// panics with the given error if no [Logger] is set.
+// Has no effect if err is nil.
 func (jw *Jaws) MustLog(err error) {
 	if err != nil {
 		if jw != nil && jw.Logger != nil {
@@ -230,7 +236,7 @@ func (jw *Jaws) MustLog(err error) {
 	}
 }
 
-// NextID returns an int64 unique within lifetime of the program.
+// NextID returns an int64 unique within the lifetime of the program.
 func NextID() int64 {
 	return atomic.AddInt64((*int64)(&NextJid), 1)
 }
@@ -240,20 +246,20 @@ func AppendID(b []byte) []byte {
 	return strconv.AppendInt(b, NextID(), 32)
 }
 
-// MakeID returns a string in the form 'jaws.X' where X is a unique string within lifetime of the program.
+// MakeID returns a string in the form "jaws.X" where X is unique within the lifetime of the program.
 func MakeID() string {
 	return string(AppendID([]byte("jaws.")))
 }
 
 // NewRequest returns a new pending JaWS request.
 //
-// Call this as soon as you start processing a HTML request, and store the
-// returned Request pointer so it can be used while constructing the HTML
-// response in order to register the JaWS id's you use in the response, and
-// use it's Key attribute when sending the Javascript portion of the reply.
+// Call this as soon as you start processing an HTML request, and store the
+// returned [Request] pointer so it can be used while constructing the HTML
+// response in order to register the JaWS IDs you use in the response, and
+// use its [Request.JawsKey] when sending the JavaScript portion of the reply.
 //
-// Automatic timeout handling is performed by ServeWithTimeout. The default
-// Serve() helper uses a 10-second timeout.
+// Automatic timeout handling is performed by [Jaws.ServeWithTimeout]. The default
+// [Jaws.Serve] helper uses a 10-second timeout.
 func (jw *Jaws) NewRequest(hr *http.Request) (rq *Request) {
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
@@ -278,15 +284,15 @@ func (jw *Jaws) nonZeroRandomLocked() (val uint64) {
 	return
 }
 
-// UseRequest extracts the JaWS request with the given key from the request
+// UseRequest extracts the JaWS [Request] with the given key from the request
 // map if it exists and the HTTP request remote IP matches.
 //
-// Call it when receiving the WebSocket connection on '/jaws/:key' to get the
-// associated Request, and then call it's ServeHTTP method to process the
+// Call it when receiving the WebSocket connection on "/jaws/:key" to get the
+// associated [Request], and then call its [Request.ServeHTTP] method to process the
 // WebSocket messages.
 //
 // Returns nil if the key was not found or the IP doesn't match, in which
-// case you should return a HTTP "404 Not Found" status.
+// case you should return an HTTP "404 Not Found" status.
 func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) {
 	if jawsKey != 0 {
 		var err error
@@ -366,7 +372,7 @@ func getCookieSessionsIds(h http.Header, wanted string) (cookies []uint64) {
 	return
 }
 
-// GetSession returns the Session associated with the given *http.Request, or nil.
+// GetSession returns the [Session] associated with the given [http.Request], or nil.
 func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
 	if hr != nil {
 		if sessIds := getCookieSessionsIds(hr.Header, jw.CookieName); len(sessIds) > 0 {
@@ -379,14 +385,14 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
 	return
 }
 
-// NewSession creates a new Session.
+// NewSession creates a new [Session].
 //
-// Any pre-existing Session will be cleared and closed.
-// This may call Session.Close() on an existing session and therefore requires
-// the JaWS processing loop (`Serve()` or `ServeWithTimeout()`) to be running.
+// Any pre-existing [Session] will be cleared and closed.
+// This may call [Session.Close] on an existing session and therefore requires
+// the JaWS processing loop ([Jaws.Serve] or [Jaws.ServeWithTimeout]) to be running.
 //
-// Subsequent Requests created with `NewRequest()` that have the cookie set and
-// originates from the same IP will be able to access the Session.
+// Subsequent [Request] values created with [Jaws.NewRequest] that have the
+// cookie set and originate from the same IP will be able to access the [Session].
 func (jw *Jaws) NewSession(w http.ResponseWriter, hr *http.Request) (sess *Session) {
 	if hr != nil {
 		if oldSess := jw.GetSession(hr); oldSess != nil {
@@ -422,6 +428,7 @@ func (jw *Jaws) deleteSession(sessionID uint64) {
 	jw.mu.Unlock()
 }
 
+// FaviconURL returns the favicon URL discovered by [Jaws.GenerateHeadHTML].
 func (jw *Jaws) FaviconURL() (s string) {
 	jw.mu.RLock()
 	s = jw.faviconURL
@@ -441,8 +448,8 @@ func (jw *Jaws) ContentSecurityPolicy() (s string) {
 // current JaWS configuration.
 //
 // It snapshots secureheaders.DefaultHeaders, replacing the
-// Content-Security-Policy value with ContentSecurityPolicy so responses allow
-// the resources configured by GenerateHeadHTML.
+// Content-Security-Policy value with [Jaws.ContentSecurityPolicy] so responses allow
+// the resources configured by [Jaws.GenerateHeadHTML].
 //
 // The returned middleware does not trust forwarded HTTPS headers.
 // The next handler must be non-nil.
@@ -455,10 +462,12 @@ func (jw *Jaws) SecureHeadersMiddleware(next http.Handler) http.Handler {
 	}
 }
 
-// GenerateHeadHTML (re-)generates the HTML code that goes in the HEAD section, ensuring
-// that the provided URL resources in `extra` are loaded, along with the JaWS javascript.
-// If one of the resources is named "favicon", it's URL will be stored and can
-// be retrieved using FaviconURL().
+// GenerateHeadHTML regenerates the HTML code that goes in the HEAD section,
+// ensuring that the provided URL resources in extra are loaded, along with the
+// JaWS JavaScript.
+//
+// If one of the resources is named "favicon", its URL will be stored and can
+// be retrieved using [Jaws.FaviconURL].
 //
 // You only need to call this if you add your own images, scripts and stylesheets.
 func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
@@ -495,13 +504,13 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 	return
 }
 
-// Broadcast sends a message to all Requests.
+// Broadcast sends a message to all [Request] values.
 //
-// It must not be called before the JaWS processing loop (`Serve()` or
-// `ServeWithTimeout()`) is running. Otherwise this call may block once the
+// It must not be called before the JaWS processing loop ([Jaws.Serve] or
+// [Jaws.ServeWithTimeout]) is running. Otherwise this call may block once the
 // internal broadcast channel fills.
 //
-// All convenience helpers on Jaws that call Broadcast inherit this requirement.
+// All convenience helpers on [Jaws] that call Broadcast inherit this requirement.
 func (jw *Jaws) Broadcast(msg wire.Message) {
 	switch msg.Dest.(type) {
 	case nil: // send to all requests
@@ -536,10 +545,10 @@ func (jw *Jaws) setDirty(tags []any) {
 	jw.mu.Unlock()
 }
 
-// Dirty marks all Elements that have one or more of the given tags as dirty.
+// Dirty marks all [Element] values that have one or more of the given tags as dirty.
 //
-// Note that if any of the tags are a TagGetter, it will be called with a nil Request.
-// Prefer using Request.Dirty() which avoids this.
+// Note that if any of the tags implement [tag.TagGetter], it will be called
+// with a nil [Request]. Prefer using [Request.Dirty] which avoids this.
 func (jw *Jaws) Dirty(dirtyTags ...any) {
 	jw.setDirty(tag.MustTagExpand(nil, dirtyTags))
 }
@@ -570,14 +579,14 @@ func (jw *Jaws) distributeDirt() int {
 	return len(dirt)
 }
 
-// Reload requests all Requests to reload their current page.
+// Reload requests all [Request] values to reload their current page.
 func (jw *Jaws) Reload() {
 	jw.Broadcast(wire.Message{
 		What: what.Reload,
 	})
 }
 
-// Redirect requests all Requests to navigate to the given URL.
+// Redirect requests all [Request] values to navigate to the given URL.
 func (jw *Jaws) Redirect(url string) {
 	jw.Broadcast(wire.Message{
 		What: what.Redirect,
@@ -585,7 +594,9 @@ func (jw *Jaws) Redirect(url string) {
 	})
 }
 
-// Alert sends an alert to all Requests. The lvl argument should be one of Bootstraps alert levels:
+// Alert sends an alert to all [Request] values.
+//
+// The lvl argument should be one of Bootstrap's alert levels:
 // primary, secondary, success, danger, warning, info, light or dark.
 func (jw *Jaws) Alert(lvl, msg string) {
 	jw.Broadcast(wire.Message{
@@ -614,8 +625,8 @@ func (jw *Jaws) getWebSocketTimeout() (t time.Duration) {
 }
 
 // ServeWithTimeout begins processing requests with the given timeout.
-// It is intended to run on it's own goroutine.
-// It returns when Close is called.
+// It is intended to run on its own goroutine.
+// It returns when [Jaws.Close] is called.
 func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	const minInterval = time.Millisecond * 10
 	const maxInterval = time.Second
@@ -648,9 +659,9 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		}
 	}
 
-	// it's critical that we keep the broadcast
+	// it is critical that we keep the broadcast
 	// distribution loop running, so any Request
-	// that fails to process it's messages quickly
+	// that fails to process its messages quickly
 	// enough must be terminated. the alternative
 	// would be to drop some messages, but that
 	// could mean nonreproducible and seemingly
@@ -696,8 +707,8 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 }
 
 // Serve calls ServeWithTimeout(DefaultWebSocketTimeout).
-// It is intended to run on it's own goroutine.
-// It returns when Close is called.
+// It is intended to run on its own goroutine.
+// It returns when [Jaws.Close] is called.
 func (jw *Jaws) Serve() {
 	jw.ServeWithTimeout(DefaultWebSocketTimeout)
 }
@@ -822,10 +833,10 @@ func (jw *Jaws) SetValue(target any, val string) {
 	})
 }
 
-// Insert calls the Javascript 'insertBefore()' method on
+// Insert calls the JavaScript 'insertBefore()' method on
 // all HTML elements matching target.
 //
-// The position parameter 'where' may be either a HTML ID, an child index or the text 'null'.
+// The position parameter 'where' may be either an HTML ID, a child index or the text "null".
 func (jw *Jaws) Insert(target any, where, html string) {
 	jw.Broadcast(wire.Message{
 		Dest: target,
@@ -851,7 +862,7 @@ func (jw *Jaws) Delete(target any) {
 	})
 }
 
-// Append calls the Javascript 'appendChild()' method on all HTML elements matching target.
+// Append calls the JavaScript appendChild method on all HTML elements matching target.
 func (jw *Jaws) Append(target any, html template.HTML) {
 	jw.Broadcast(wire.Message{
 		Dest: target,
@@ -873,8 +884,8 @@ func maybeCompactJSON(in string) (out string) {
 
 var whitespaceRemover = strings.NewReplacer(" ", "", "\n", "", "\t", "")
 
-// JsCall calls the Javascript function 'jsfunc' with the argument 'jsonstr'
-// on all Requests that have the target UI tag.
+// JsCall calls the JavaScript function jsfunc with the argument jsonstr
+// on all [Request] values that have the target UI tag.
 func (jw *Jaws) JsCall(tagValue any, jsfunc, jsonstr string) {
 	jw.Broadcast(wire.Message{
 		Dest: tagValue,
@@ -975,7 +986,7 @@ func (sess sessioner) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	sess.h.ServeHTTP(wr, r)
 }
 
-// Session returns a http.Handler that ensures a JaWS Session exists before invoking h.
+// Session returns an [http.Handler] that ensures a JaWS [Session] exists before invoking h.
 func (jw *Jaws) Session(h http.Handler) http.Handler {
 	return sessioner{jw: jw, h: h}
 }

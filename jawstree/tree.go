@@ -11,12 +11,16 @@ import (
 
 var _ jaws.UI = (*Tree)(nil)
 
+// Tree renders and updates a Quercus.js tree bound to a [ui.JsVar].
 type Tree struct {
 	id      string // HTML ID of the tree
 	options Option
 	*ui.JsVar[Node]
 }
 
+// New returns a tree widget with id, jsvar and options.
+//
+// New initializes node IDs and tree back-pointers in jsvar.Ptr.
 func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	t = &Tree{
 		id:    id,
@@ -32,6 +36,7 @@ func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 const newtreeTemplate = `
 <script src=%q></script>`
 
+// JawsRender renders the hidden root data element and tree initialization script.
 func (t *Tree) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) {
 	if err = t.JsVar.JawsRender(e, w, append([]any{"jawstreeroot_" + t.id}, params...)); err == nil {
 		if _, err = fmt.Fprintf(w, newtreeTemplate, initScriptURL(t.id, t.options)); err == nil {
@@ -40,6 +45,7 @@ func (t *Tree) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error
 	return
 }
 
+// JawsUpdate sends the latest tree JSON to the browser.
 func (t *Tree) JawsUpdate(elem *jaws.Element) {
 	var b []byte
 	b = append(b, `{"tree":`...)

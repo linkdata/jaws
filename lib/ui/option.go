@@ -10,11 +10,13 @@ import (
 	"github.com/linkdata/jaws/lib/named"
 )
 
+// Option renders an HTML option element backed by a [named.Bool].
 type Option struct{ *named.Bool }
 
 // NewOption returns an option widget backed by nb.
 func NewOption(nb *named.Bool) Option { return Option{Bool: nb} }
 
+// JawsRender renders ui as an HTML option element.
 func (ui Option) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
 	e.Tag(ui.Bool)
 	attrs := e.ApplyParams(params)
@@ -25,6 +27,8 @@ func (ui Option) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
 	}
 	return htmlio.WriteHTMLInner(w, e.Jid(), "option", "", ui.JawsGetHTML(e), attrs...)
 }
+
+// JawsUpdate updates the selected attribute.
 func (ui Option) JawsUpdate(e *jaws.Element) {
 	if ui.Checked() {
 		e.SetAttr("selected", "")

@@ -43,6 +43,7 @@ var (
 	logFatal       = func(v ...any) { log.Fatal(v...) }
 )
 
+// Cell represents one Minesweeper board cell.
 type Cell struct {
 	game     *game
 	row, col int
@@ -64,6 +65,7 @@ func newCell(g *game, row, col int) *Cell {
 	return &Cell{game: g, row: row, col: col}
 }
 
+// Reset clears the cell to its initial hidden state.
 func (c *Cell) Reset() {
 	c.mine = false
 	c.revealed = false
@@ -71,6 +73,7 @@ func (c *Cell) Reset() {
 	c.adjacent = 0
 }
 
+// ToggleFlag toggles the flagged state and returns the new state.
 func (c *Cell) ToggleFlag() bool {
 	c.flagged = !c.flagged
 	return c.flagged
@@ -145,10 +148,12 @@ func (c *Cell) syncPresentation(elem *jaws.Element, view cellView) {
 	}
 }
 
+// JawsGetTag exposes the cell and board tags used for dirtying.
 func (c *Cell) JawsGetTag(_ tag.Context) any {
 	return []any{c, &c.game.cells}
 }
 
+// JawsGetHTML renders the cell contents.
 func (c *Cell) JawsGetHTML(elem *jaws.Element) template.HTML {
 	c.game.mu.Lock()
 	view := c.snapshotLocked()
@@ -157,11 +162,13 @@ func (c *Cell) JawsGetHTML(elem *jaws.Element) template.HTML {
 	return view.HTML()
 }
 
+// JawsClick reveals the cell.
 func (c *Cell) JawsClick(elem *jaws.Element, _ jaws.Click) error {
 	elem.Request.Dirty(c.game.clickCell(c)...)
 	return nil
 }
 
+// JawsContextMenu toggles the cell flag.
 func (c *Cell) JawsContextMenu(elem *jaws.Element, _ jaws.Click) error {
 	elem.Request.Dirty(c.game.toggleFlag(c)...)
 	return nil
@@ -247,20 +254,24 @@ func (g *game) changedTags(before gameState) (tags []any) {
 	return
 }
 
+// Board returns the current board cells.
 func (g *game) Board() [][]*Cell { return g.cells }
 
+// StatusSpan returns a dynamic status text getter.
 func (g *game) StatusSpan() any {
 	return bind.StringGetterFunc(func(*jaws.Element) string {
 		return g.statusText()
 	}, &g.started, &g.gameOver, &g.won)
 }
 
+// StatsSpan returns a dynamic statistics text getter.
 func (g *game) StatsSpan() any {
 	return bind.StringGetterFunc(func(*jaws.Element) string {
 		return g.statsText()
 	}, &g.revealed, &g.flags)
 }
 
+// NewGameButton returns a button object that starts a new game.
 func (g *game) NewGameButton() ui.Object {
 	return ui.New("New game").Clicked(func(_ ui.Object, elem *jaws.Element, _ jaws.Click) error {
 		elem.Request.Dirty(g.reset()...)

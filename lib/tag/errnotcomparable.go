@@ -20,7 +20,7 @@ func (errNotComparable) Is(target error) bool {
 	return target == ErrNotComparable
 }
 
-// NewErrNotComparable returns ErrNotComparable if x is not comparable.
+// NewErrNotComparable returns [ErrNotComparable] if x is not comparable.
 func NewErrNotComparable(x any) error {
 	if x != nil {
 		if v := reflect.ValueOf(x); !v.Comparable() {

@@ -7,9 +7,10 @@ import (
 	"github.com/linkdata/jaws/lib/tag"
 )
 
+// Setter exposes and updates a value for an [jaws.Element].
 type Setter[T comparable] interface {
 	Getter[T]
-	// JawsSet may return ErrValueUnchanged to indicate value was already set.
+	// JawsSet may return [jaws.ErrValueUnchanged] to indicate value was already set.
 	JawsSet(elem *jaws.Element, value T) (err error)
 }
 
@@ -41,6 +42,12 @@ func (s setterStatic[T]) JawsGetTag(tag.Context) any {
 	return nil
 }
 
+// MakeSetter returns v as a [Setter].
+//
+// v may be a [Setter] of the same type, a [Getter] of the same type or a
+// static value of type T. Getter and static adapters are read-only and return
+// [ErrValueNotSettable] from [Setter.JawsSet]. MakeSetter panics for any other
+// type.
 func MakeSetter[T comparable](v any) Setter[T] {
 	switch v := v.(type) {
 	case Setter[T]:

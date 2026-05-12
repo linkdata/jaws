@@ -42,6 +42,8 @@ func appendAttrs(b []byte, attrs []template.HTMLAttr) []byte {
 	return b
 }
 
+// WriteHTMLTag writes an HTML start tag with optional id, type, value and raw
+// attribute fragments.
 func WriteHTMLTag(w io.Writer, jid jid.Jid, htmlTag, typeAttr, valueAttr string, attrs []template.HTMLAttr) (err error) {
 	b := jid.AppendStartTagAttr(nil, htmlTag)
 	if typeAttr != "" {
@@ -58,10 +60,16 @@ func WriteHTMLTag(w io.Writer, jid jid.Jid, htmlTag, typeAttr, valueAttr string,
 	return
 }
 
+// WriteHTMLInput writes an input start tag with optional id, type, value and
+// raw attribute fragments.
 func WriteHTMLInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs []template.HTMLAttr) (err error) {
 	return WriteHTMLTag(w, jid, "input", typeAttr, valueAttr, attrs)
 }
 
+// WriteHTMLInner writes an HTML element with trusted inner HTML.
+//
+// Singleton tags such as img and input are written without closing tags unless
+// innerHTML is non-empty.
 func WriteHTMLInner(w io.Writer, jid jid.Jid, htmlTag, typeAttr string, innerHTML template.HTML, attrs ...template.HTMLAttr) (err error) {
 	if err = WriteHTMLTag(w, jid, htmlTag, typeAttr, "", attrs); err == nil {
 		if innerHTML != "" || needClosingTag(htmlTag) {

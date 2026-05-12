@@ -68,14 +68,17 @@ func newRequestHarness(jw *Jaws, hr *http.Request) (rh *requestHarness) {
 	return
 }
 
+// Close stops the test request's processing loop.
 func (rh *requestHarness) Close() {
 	close(rh.InCh)
 }
 
+// BodyString returns the recorded response body with surrounding whitespace removed.
 func (rh *requestHarness) BodyString() string {
 	return strings.TrimSpace(rh.Body.String())
 }
 
+// BodyHTML returns the recorded response body as trusted HTML.
 func (rh *requestHarness) BodyHTML() template.HTML {
 	return template.HTML(rh.BodyString()) /* #nosec G203 */
 }

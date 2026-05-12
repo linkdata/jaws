@@ -8,8 +8,8 @@ import (
 	"github.com/linkdata/jaws"
 )
 
-// BoolArray stores the data required to support HTML 'select' elements
-// and sets of HTML radio buttons. It it safe to use from multiple goroutines
+// BoolArray stores the data required to support HTML select elements
+// and sets of HTML radio buttons. It is safe to use from multiple goroutines
 // concurrently.
 type BoolArray struct {
 	multi bool             // allow multiple NamedBools to be true
@@ -19,25 +19,30 @@ type BoolArray struct {
 
 var _ SelectHandler = (*BoolArray)(nil)
 
+// NewBoolArray returns an empty [BoolArray].
+//
+// If multi is false, setting one value clears other names in the array. If
+// multi is true, multiple values may be checked at the same time.
 func NewBoolArray(multi bool) *BoolArray {
 	return &BoolArray{multi: multi}
 }
 
-// ReadLocked calls the given function with the NamedBoolArray locked for reading.
+// ReadLocked calls fn with the [BoolArray] locked for reading.
 func (nba *BoolArray) ReadLocked(fn func(nbl []*Bool)) {
 	nba.mu.RLock()
 	defer nba.mu.RUnlock()
 	fn(nba.data)
 }
 
-// WriteLocked calls the given function with the NamedBoolArray locked for writing and
-// replaces the internal []*NamedBool slice with the return value.
+// WriteLocked calls fn with the [BoolArray] locked for writing and replaces
+// the internal []*Bool slice with the return value.
 func (nba *BoolArray) WriteLocked(fn func(nbl []*Bool) []*Bool) {
 	nba.mu.Lock()
 	defer nba.mu.Unlock()
 	nba.data = fn(nba.data)
 }
 
+// JawsContains returns the option widgets for a select backed by nba.
 func (nba *BoolArray) JawsContains(e *jaws.Element) (contents []jaws.UI) {
 	nba.mu.RLock()
 	for _, nb := range nba.data {
@@ -47,11 +52,11 @@ func (nba *BoolArray) JawsContains(e *jaws.Element) (contents []jaws.UI) {
 	return
 }
 
-// Add adds a NamedBool with the given name and the given text.
+// Add adds a [Bool] with the given name and trusted HTML text.
 // Returns itself.
 //
-// Note that while it's legal to have multiple NamedBool with the same name
-// since it's allowed in HTML, it's probably not a good idea.
+// Note that while it is legal to have multiple [Bool] values with the same
+// name because HTML allows it, it is usually not a good idea.
 func (nba *BoolArray) Add(name string, text template.HTML) *BoolArray {
 	nba.mu.Lock()
 	nba.data = append(nba.data, NewBool(nba, name, text, false))
@@ -59,9 +64,9 @@ func (nba *BoolArray) Add(name string, text template.HTML) *BoolArray {
 	return nba
 }
 
-// Set sets the Checked state for the NamedBool(s) with the given name.
+// Set sets the checked state for [Bool] values with the given name.
 //
-// If the given name doesn't match any NamedBool(s) in single-select
+// If the given name does not match any values in single-select
 // mode, everything will be deselected.
 func (nba *BoolArray) Set(name string, state bool) (changed bool) {
 	nba.mu.Lock()
@@ -75,7 +80,7 @@ func (nba *BoolArray) Set(name string, state bool) (changed bool) {
 	return
 }
 
-// deselectOthersLocked clears all NamedBools whose name differs from
+// deselectOthersLocked clears all Bools whose name differs from
 // the given name when the array is in single-select mode and state is true.
 func (nba *BoolArray) deselectOthersLocked(name string, state bool) (changed bool) {
 	if state && !nba.multi {
@@ -88,13 +93,13 @@ func (nba *BoolArray) deselectOthersLocked(name string, state bool) (changed boo
 	return
 }
 
-// Get returns the name of first NamedBool in the group that
-// has it's Checked value set to true. Returns an empty string
+// Get returns the name of the first [Bool] in the group that
+// has its checked value set to true. Returns an empty string
 // if none are true.
 //
 // In case you can have more than one selected or you need to
 // distinguish between a blank name and the fact that none are
-// set to true, use ReadLocked() to inspect the data directly.
+// set to true, use [BoolArray.ReadLocked] to inspect the data directly.
 func (nba *BoolArray) Get() (name string) {
 	nba.mu.RLock()
 	for _, nb := range nba.data {
@@ -107,7 +112,7 @@ func (nba *BoolArray) Get() (name string) {
 	return
 }
 
-// Count returns the number of NamedBool in the set that have the given name.
+// Count returns the number of [Bool] values in the set that have the given name.
 func (nba *BoolArray) Count(name string) (n int) {
 	nba.mu.RLock()
 	defer nba.mu.RUnlock()
@@ -119,7 +124,7 @@ func (nba *BoolArray) Count(name string) (n int) {
 	return
 }
 
-// IsChecked returns true if any of the NamedBool in the set that have the
+// IsChecked returns true if any [Bool] in the set with the
 // given name are Checked. Returns false if the name is not found.
 func (nba *BoolArray) IsChecked(name string) (state bool) {
 	nba.mu.RLock()
@@ -132,7 +137,7 @@ func (nba *BoolArray) IsChecked(name string) (state bool) {
 	return false
 }
 
-// String returns a string representation of the NamedBoolArray suitable for debugging.
+// String returns a string representation of the [BoolArray] suitable for debugging.
 func (nba *BoolArray) String() string {
 	var sb strings.Builder
 	sb.WriteString("&NamedBoolArray{[")
@@ -148,10 +153,12 @@ func (nba *BoolArray) String() string {
 	return sb.String()
 }
 
+// JawsGet returns the currently selected name.
 func (nba *BoolArray) JawsGet(e *jaws.Element) string {
 	return nba.Get()
 }
 
+// JawsSet selects name and dirties nba if the selection changed.
 func (nba *BoolArray) JawsSet(e *jaws.Element, name string) (err error) {
 	if nba.Set(name, true) {
 		e.Dirty(nba)

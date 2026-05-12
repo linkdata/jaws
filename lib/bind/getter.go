@@ -8,8 +8,11 @@ import (
 	"github.com/linkdata/jaws/lib/tag"
 )
 
+// ErrValueNotSettable is returned by read-only adapters when [Setter.JawsSet]
+// is called.
 var ErrValueNotSettable = errors.New("value not settable")
 
+// Getter exposes a value for an [jaws.Element].
 type Getter[T comparable] interface {
 	JawsGet(elem *jaws.Element) (value T)
 }
@@ -34,6 +37,10 @@ func makeStaticGetter[T comparable](v T) Getter[T] {
 	return getterStatic[T]{v}
 }
 
+// MakeGetter returns v as a [Getter].
+//
+// v may be a [Getter] of the same type or a static value of type T. It panics
+// for any other type.
 func MakeGetter[T comparable](v any) Getter[T] {
 	switch v := v.(type) {
 	case Getter[T]:

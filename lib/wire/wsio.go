@@ -9,7 +9,7 @@ import (
 	"github.com/coder/websocket"
 )
 
-// ReadLoop reads websocket text messages, parses them, and sends parsed
+// ReadLoop reads WebSocket text messages, parses them, and sends parsed
 // messages on incomingMsgCh.
 //
 // Closes incomingMsgCh on exit.
@@ -37,9 +37,9 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 }
 
 // WriteLoop reads messages from outboundMsgCh, formats them, and writes them
-// to the websocket.
+// to the WebSocket.
 //
-// Closes the websocket on exit.
+// Closes the WebSocket on exit.
 func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, outboundMsgCh <-chan WsMsg, ws *websocket.Conn) {
 	defer ws.Close(websocket.StatusNormalClosure, "")
 	var err error
@@ -64,7 +64,7 @@ func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan s
 	}
 }
 
-// PingLoop sends periodic websocket pings and reports ping errors through ccf.
+// PingLoop sends periodic WebSocket pings and reports ping errors through ccf.
 //
 // Returns immediately when interval is non-positive.
 func PingLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, interval, timeout time.Duration, ws *websocket.Conn) {

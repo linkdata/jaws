@@ -5,16 +5,19 @@ import (
 	"io"
 )
 
+// Container is implemented by UI values that render a dynamic list of child
+// [UI] values.
 type Container interface {
-	// JawsContains must return a slice of hashable UI objects. The slice contents must not be modified after returning it.
+	// JawsContains must return a slice of hashable [UI] objects. The slice
+	// contents must not be modified after returning it.
 	JawsContains(e *Element) (contents []UI)
 }
 
 // InitHandler allows initializing UI getters and setters before their use.
 //
 // You can of course initialize them in the call from the template engine,
-// but at that point you don't have access to the Element, Element.Context
-// or Element.Session.
+// but at that point you don't have access to the [Element], [Element.Context]
+// or [Element.Session].
 type InitHandler interface {
 	JawsInit(e *Element) (err error)
 }
@@ -26,9 +29,10 @@ type Logger interface {
 	Error(msg string, args ...any)
 }
 
+// Renderer renders the initial HTML for a [UI] object.
 type Renderer interface {
-	// JawsRender is called once per Element when rendering the initial webpage.
-	// Do not call this yourself unless it's from within another JawsRender implementation.
+	// JawsRender is called once per [Element] when rendering the initial webpage.
+	// Do not call this yourself unless it is from within another JawsRender implementation.
 	JawsRender(e *Element, w io.Writer, params []any) error
 }
 
@@ -44,41 +48,48 @@ type UI interface {
 	Updater
 }
 
+// Updater updates browser-side DOM for a dirty [Element].
 type Updater interface {
-	// JawsUpdate is called for an Element that has been marked dirty to update it's HTML.
-	// Do not call this yourself unless it's from within another JawsUpdate implementation.
+	// JawsUpdate is called for an [Element] that has been marked dirty to update its HTML.
+	// Do not call this yourself unless it is from within another JawsUpdate implementation.
 	JawsUpdate(e *Element)
 }
 
+// ClickHandler handles click events sent from the browser.
 type ClickHandler interface {
-	// JawsClick is called when an Element's HTML element or something within it
+	// JawsClick is called when an [Element]'s HTML element or something within it
 	// is clicked in the browser.
 	//
-	// Click.Name is taken from the first 'name' HTML attribute or HTML
+	// [Click.Name] is taken from the first name HTML attribute or HTML
 	// 'button' textContent found when traversing the DOM. It may be empty.
 	JawsClick(e *Element, click Click) (err error)
 }
 
+// ContextMenuHandler handles context-menu events sent from the browser.
 type ContextMenuHandler interface {
-	// JawsContextMenu is called when an Element's HTML element or something
+	// JawsContextMenu is called when an [Element]'s HTML element or something
 	// within it receives a context menu event in the browser.
 	JawsContextMenu(e *Element, click Click) (err error)
 }
 
+// InitialHTMLAttrHandler can add attributes during initial [Element] rendering.
 type InitialHTMLAttrHandler interface {
-	// JawsInitialHTMLAttr is called when an Element is initially rendered,
-	// and may return and initial HTML attribute string to write out.
+	// JawsInitialHTMLAttr is called when an [Element] is initially rendered,
+	// and may return an initial HTML attribute string to write out.
 	JawsInitialHTMLAttr(e *Element) (s template.HTMLAttr)
 }
 
+// Auth describes authentication data available to templates through ui.With.
 type Auth interface {
 	Data() map[string]any // returns authenticated user data, or nil
 	Email() string        // returns authenticated user email, or an empty string
 	IsAdmin() bool        // return true if admins are defined and current user is one, or if no admins are defined
 }
 
+// MakeAuthFn constructs an [Auth] value for a [Request].
 type MakeAuthFn func(*Request) Auth
 
+// DefaultAuth is the permissive default [Auth] implementation.
 type DefaultAuth struct{}
 
 func (DefaultAuth) Data() map[string]any { return nil }

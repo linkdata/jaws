@@ -8,7 +8,7 @@ import (
 
 // ErrNotUsableAsTag is returned when a value cannot be used as a tag.
 //
-// It is also matchable as ErrNotComparable for backwards compatibility.
+// It is also matchable as [ErrNotComparable] for backwards compatibility.
 var ErrNotUsableAsTag errNotUsableAsTag
 
 type errNotUsableAsTag struct {
@@ -32,7 +32,7 @@ func (errNotUsableAsTag) Is(target error) bool {
 	return target == ErrNotUsableAsTag || target == ErrNotComparable
 }
 
-// NewErrNotUsableAsTag returns ErrNotUsableAsTag if x cannot be used as a tag.
+// NewErrNotUsableAsTag returns [ErrNotUsableAsTag] if x cannot be used as a tag.
 func NewErrNotUsableAsTag(x any) error {
 	if err := NewErrNotComparable(x); err != nil {
 		retErr := errNotUsableAsTag{t: reflect.TypeOf(x)}
@@ -47,7 +47,7 @@ func NewErrNotUsableAsTag(x any) error {
 
 var tagGetterType = reflect.TypeFor[TagGetter]()
 
-// FindTagGetter searches x recursively for a nested TagGetter.
+// FindTagGetter searches x recursively for a nested [TagGetter].
 func FindTagGetter(x any) (path string, tgType reflect.Type, found bool) {
 	if x == nil {
 		return

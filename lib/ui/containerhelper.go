@@ -13,7 +13,7 @@ import (
 // ContainerHelper is a helper for widgets that render dynamic child collections.
 //
 // It tracks previously rendered child elements and performs append/remove/order
-// updates during JawsUpdate.
+// updates during [ContainerHelper.UpdateContainer].
 //
 // A ContainerHelper belongs to a widget instance and is intended for render-scoped
 // widget lifetimes (for example widgets created via RequestWriter helper methods).
@@ -37,6 +37,8 @@ func NewContainerHelper(c jaws.Container) ContainerHelper {
 	return ContainerHelper{Container: c}
 }
 
+// RenderContainer renders outerHTMLTag around the current children from
+// [jaws.Container.JawsContains].
 func (ui *ContainerHelper) RenderContainer(e *jaws.Element, w io.Writer, outerHTMLTag string, params []any) (err error) {
 	var getterAttrs []template.HTMLAttr
 	if ui.Tag, getterAttrs, err = e.ApplyGetter(ui.Container); err == nil {
@@ -78,6 +80,7 @@ func (ui *ContainerHelper) RenderContainer(e *jaws.Element, w io.Writer, outerHT
 	return
 }
 
+// UpdateContainer updates child elements to match [jaws.Container.JawsContains].
 func (ui *ContainerHelper) UpdateContainer(e *jaws.Element) {
 	var toAppend []*jaws.Element
 

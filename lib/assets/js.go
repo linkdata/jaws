@@ -9,11 +9,13 @@ import (
 	"strings"
 )
 
-// JavascriptText is the source code for the client-side JaWS Javascript library.
+// JavascriptText is the source code for the client-side JaWS JavaScript library.
 //
 //go:embed jaws.js
 var JavascriptText []byte
 
+// JawsCSS is the source code for the client-side JaWS stylesheet.
+//
 //go:embed jaws.css
 var JawsCSS []byte
 
@@ -30,7 +32,7 @@ func JawsKeyString(jawsKey uint64) string {
 	return string(JawsKeyAppend(nil, jawsKey))
 }
 
-// JawsKeyValue parses a key string (as returned JawsKeyString) into a uint64.
+// JawsKeyValue parses a key string, as returned by [JawsKeyString], into a uint64.
 func JawsKeyValue(jawsKey string) uint64 {
 	slashIdx := strings.IndexByte(jawsKey, '/')
 	if slashIdx < 0 {
@@ -43,6 +45,10 @@ func JawsKeyValue(jawsKey string) uint64 {
 }
 
 // PreloadHTML returns HTML code to load the given resources efficiently.
+//
+// JavaScript and CSS files are emitted as script and stylesheet tags. Other
+// recognized resources are emitted as preload tags. Favicon image URLs are
+// returned separately.
 func PreloadHTML(urls ...*url.URL) (htmlcode, faviconurl string) {
 	var jsurls, cssurls []string
 	var favicontype string

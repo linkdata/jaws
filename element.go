@@ -15,13 +15,13 @@ import (
 	"github.com/linkdata/jaws/lib/wire"
 )
 
-// An Element is an instance of a *Request, an UI object and a Jid.
+// Element is an instance of a [Request], a [UI] object and a [Jid].
 type Element struct {
 	*Request // (read-only) the Request the Element belongs to
 	// internals
 	ui       UI          // the UI object
 	handlers []any       // custom handlers registered, if any
-	jid      jid.Jid     // JaWS ID, unique to this Element within it's Request
+	jid      jid.Jid     // JaWS ID, unique to this Element within its Request
 	deleted  atomic.Bool // true if deleteElement() has been called for this Element
 }
 
@@ -29,14 +29,14 @@ func (e *Element) String() string {
 	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", e.Ui(), e.Jid(), e.Request.TagsOf(e))
 }
 
-// AddHandlers adds the given handlers to the Element.
+// AddHandlers adds the given handlers to the [Element].
 func (e *Element) AddHandlers(h ...any) {
 	if !e.deleted.Load() {
 		e.handlers = append(e.handlers, h...)
 	}
 }
 
-// Tag adds the given tags to the Element.
+// Tag adds the given tags to the [Element].
 func (e *Element) Tag(tags ...any) {
 	if !e.deleted.Load() {
 		e.Request.Tag(e, tags...)
@@ -48,12 +48,12 @@ func (e *Element) HasTag(tagValue any) bool {
 	return !e.deleted.Load() && e.Request.HasTag(e, tagValue)
 }
 
-// Jid returns the JaWS ID for this Element, unique within it's Request.
+// Jid returns the JaWS ID for this [Element], unique within its [Request].
 func (e *Element) Jid() jid.Jid {
 	return e.jid
 }
 
-// Ui returns the UI object.
+// Ui returns the [UI] object.
 func (e *Element) Ui() UI {
 	return e.ui
 }
@@ -87,9 +87,9 @@ func (e *Element) renderDebug(w io.Writer) {
 	_, _ = w.Write([]byte(strings.ReplaceAll(sb.String(), "-->", "==>") + " -->"))
 }
 
-// JawsRender calls Ui().JawsRender() for this Element.
+// JawsRender calls [Renderer.JawsRender] for this [Element].
 //
-// Do not call this yourself unless it's from within another JawsRender implementation.
+// Do not call this yourself unless it is from within another JawsRender implementation.
 func (e *Element) JawsRender(w io.Writer, params []any) (err error) {
 	if !e.deleted.Load() {
 		if err = e.Ui().JawsRender(e, w, params); err == nil {
@@ -101,9 +101,9 @@ func (e *Element) JawsRender(w io.Writer, params []any) (err error) {
 	return
 }
 
-// JawsUpdate calls Ui().JawsUpdate() for this Element.
+// JawsUpdate calls [Updater.JawsUpdate] for this [Element].
 //
-// Do not call this yourself unless it's from within another JawsUpdate implementation.
+// Do not call this yourself unless it is from within another JawsUpdate implementation.
 func (e *Element) JawsUpdate() {
 	if !e.deleted.Load() {
 		e.Ui().JawsUpdate(e)
@@ -121,7 +121,7 @@ func (e *Element) queue(wht what.What, data string) {
 }
 
 // SetAttr queues sending a new attribute value
-// to the browser for the Element with the given JaWS ID in this Request.
+// to the browser for the [Element] with the given JaWS ID in this [Request].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) SetAttr(attr, val string) {
@@ -129,15 +129,15 @@ func (e *Element) SetAttr(attr, val string) {
 }
 
 // RemoveAttr queues sending a request to remove an attribute
-// to the browser for the Element with the given JaWS ID in this Request.
+// to the browser for the [Element] with the given JaWS ID in this [Request].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) RemoveAttr(attr string) {
 	e.queue(what.RAttr, attr)
 }
 
-// SetClass a queues sending a class
-// to the browser for the Element with the given JaWS ID in this Request.
+// SetClass queues sending a class
+// to the browser for the [Element] with the given JaWS ID in this [Request].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) SetClass(cls string) {
@@ -145,15 +145,15 @@ func (e *Element) SetClass(cls string) {
 }
 
 // RemoveClass queues sending a request to remove a class
-// to the browser for the Element with the given JaWS ID in this Request.
+// to the browser for the [Element] with the given JaWS ID in this [Request].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) RemoveClass(cls string) {
 	e.queue(what.RClass, cls)
 }
 
-// SetInner queues sending a new inner HTML content
-// to the browser for the Element.
+// SetInner queues sending new inner HTML content
+// to the browser for the [Element].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) SetInner(innerHTML template.HTML) {
@@ -161,14 +161,14 @@ func (e *Element) SetInner(innerHTML template.HTML) {
 }
 
 // SetValue queues sending a new current input value in textual form
-// to the browser for the Element with the given JaWS ID in this Request.
+// to the browser for the [Element] with the given JaWS ID in this [Request].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) SetValue(val string) {
 	e.queue(what.Value, val)
 }
 
-// Replace replaces the elements entire HTML DOM node with new HTML code.
+// Replace replaces the [Element]'s entire HTML DOM node with new HTML code.
 // If the HTML code doesn't seem to contain correct HTML ID, it panics.
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
@@ -207,15 +207,15 @@ func (e *Element) Order(jidList []jid.Jid) {
 	}
 }
 
-// Remove requests that the HTML child with the given HTML ID of this Element
-// is removed from the Request and it's HTML element from the browser.
+// Remove requests that the HTML child with the given HTML ID of this [Element]
+// is removed from the [Request] and its HTML element from the browser.
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) Remove(htmlId string) {
 	e.queue(what.Remove, htmlId)
 }
 
-// ApplyParams parses the parameters passed to UI() when creating a new Element,
+// ApplyParams parses the parameters passed to UI() when creating a new [Element],
 // adding UI tags, adding any additional event handlers found.
 //
 // Returns the list of HTML attributes found, if any.
@@ -232,13 +232,13 @@ func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) {
 	return
 }
 
-// ApplyGetter examines getter, and if it's not nil, either adds it
-// as a Tag, or, if it is a TagGetter, adds the result of that as a Tag.
+// ApplyGetter examines getter, and if it is not nil, either adds it
+// as a tag, or, if it is a [tag.TagGetter], adds the result of that as a tag.
 //
-// If getter is an InputHandler, ClickHandler, ContextMenuHandler or
-// InitialHTMLAttrHandler, relevant values are added to the Element.
+// If getter is an [InputHandler], [ClickHandler], [ContextMenuHandler] or
+// [InitialHTMLAttrHandler], relevant values are added to the [Element].
 //
-// Finally, if getter is an InitHandler, it's JawsInit()
+// Finally, if getter is an [InitHandler], its JawsInit
 // function is called.
 //
 // Returns the Tag(s) added (or nil if getter was nil), any initial HTML attrs

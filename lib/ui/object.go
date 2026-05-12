@@ -15,9 +15,11 @@ type ClickedHook func(obj Object, elem *jaws.Element, click jaws.Click) (err err
 // ContextMenuHook is a function to call when a context menu event is received.
 type ContextMenuHook func(obj Object, elem *jaws.Element, click jaws.Click) (err error)
 
-// InitialHTMLAttrHook is a function to call when an Element is initially rendered.
+// InitialHTMLAttrHook is a function to call when an [jaws.Element] is initially rendered.
 type InitialHTMLAttrHook func(obj Object, elem *jaws.Element) (s template.HTMLAttr)
 
+// Object is a chainable UI object that combines HTML rendering, tags and
+// optional event handlers.
 type Object interface {
 	bind.HTMLGetter
 	tag.TagGetter
@@ -25,15 +27,15 @@ type Object interface {
 	jaws.ContextMenuHandler
 	jaws.InitialHTMLAttrHandler
 
-	// Clicked returns an Object that will call fn when JawsClick is invoked.
+	// Clicked returns an [Object] that will call fn when [jaws.ClickHandler.JawsClick] is invoked.
 	Clicked(fn ClickedHook) (newobj Object)
 
-	// ContextMenu returns an Object that will call fn when JawsContextMenu
-	// is invoked.
+	// ContextMenu returns an [Object] that will call fn when
+	// [jaws.ContextMenuHandler.JawsContextMenu] is invoked.
 	ContextMenu(fn ContextMenuHook) (newobj Object)
 
-	// InitialHTMLAttr returns an Object that will call fn when
-	// JawsInitialHTMLAttr is invoked.
+	// InitialHTMLAttr returns an [Object] that will call fn when
+	// [jaws.InitialHTMLAttrHandler.JawsInitialHTMLAttr] is invoked.
 	InitialHTMLAttr(fn InitialHTMLAttrHook) (newobj Object)
 }
 
@@ -136,8 +138,10 @@ func (o *object) JawsGetTag(ctx tag.Context) any {
 	return tags
 }
 
-// New returns a new Object that will render HTML.
-// innerHTML is passed to MakeHTMLGetter(), which may or may not provide tags.
+// New returns a new [Object] that renders innerHTML.
+//
+// innerHTML is passed to [bind.MakeHTMLGetter], which may or may not provide
+// tags. Plain strings are trusted HTML.
 func New(innerHTML any) (obj Object) {
 	return &object{
 		handler: bind.MakeHTMLGetter(innerHTML),

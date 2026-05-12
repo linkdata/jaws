@@ -33,6 +33,7 @@ func (e errEventHandlerPanic) Unwrap() error {
 
 // InputHandler handles input events sent from the browser.
 type InputHandler interface {
+	// JawsInput is called when an [Element] receives a browser input event.
 	JawsInput(e *Element, val string) (err error)
 }
 
@@ -42,12 +43,12 @@ func (errEventUnhandled) Error() string {
 	return "event unhandled"
 }
 
-// ErrEventUnhandled returned by JawsInput(), JawsClick() or
-// JawsContextMenu() causes the next available handler to be invoked.
+// ErrEventUnhandled returned by [InputHandler.JawsInput], [ClickHandler.JawsClick]
+// or [ContextMenuHandler.JawsContextMenu] causes the next available handler to be invoked.
 var ErrEventUnhandled = errEventUnhandled{}
 
 // InputFn is the signature of an input handling function to be called when JaWS receives
-// an input, hook or set message from Javascript via the WebSocket connection.
+// an input, hook or set message from JavaScript via the WebSocket connection.
 type InputFn = func(e *Element, val string) (err error)
 
 func callInputHandler(obj any, e *Element, val string) (err error) {
@@ -90,7 +91,7 @@ func callEventHandlers(ui any, e *Element, wht what.What, val string) (err error
 	return callEventHandler(ui, e, wht, val)
 }
 
-// CallEventHandlers calls the event handlers for the given Element.
+// CallEventHandlers calls the event handlers for the given [Element].
 // Recovers from panics in user-provided handlers, returning them as errors.
 func CallEventHandlers(ui any, e *Element, wht what.What, val string) (err error) {
 	defer func() {

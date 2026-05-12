@@ -7,7 +7,7 @@ import (
 	"path"
 )
 
-// Root builds a root node from a os.Root. If filterfn is not nil, it must return true
+// Root builds a root node from an [os.Root]. If filterfn is not nil, it must return true
 // for a directory entry to be included in the tree.
 func Root(r *os.Root, filterfn func(dirpath string, ent fs.DirEntry) (include bool)) (rootnode *Node, err error) {
 	rootnode = &Node{}

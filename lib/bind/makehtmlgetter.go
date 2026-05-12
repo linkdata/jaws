@@ -45,15 +45,15 @@ func (g htmlGetterString) JawsGetTag(tag.Context) any {
 	return g.sg
 }
 
-// MakeHTMLGetter returns a HTMLGetter for v.
+// MakeHTMLGetter returns an [HTMLGetter] for v.
 //
 // Depending on the type of v, we return:
 //
-//   - HTMLGetter: `JawsGetHTML(e *Element) template.HTML` to be used as-is.
-//   - Getter[string]: `JawsGet(elem *Element) string` that will be escaped using `html.EscapeString`.
-//   - fmt.Stringer: `String() string` that will be escaped using `html.EscapeString`.
-//   - a static `template.HTML` or `string` to be used as-is with no HTML escaping.
-//   - everything else is rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
+//   - [HTMLGetter] is used as-is.
+//   - Binder[string] and Getter[string] values are escaped using [html.EscapeString].
+//   - [fmt.Stringer] values are escaped using [html.EscapeString].
+//   - Static [template.HTML] and string values are used as-is with no HTML escaping.
+//   - Everything else is rendered using [fmt.Sprint] and escaped using [html.EscapeString].
 //
 // WARNING: Plain string values are NOT HTML-escaped. This is intentional so that
 // HTML markup can be passed conveniently from Go templates (e.g. `{{$.Span "<i>text</i>"}}`).

@@ -6,8 +6,8 @@ import (
 )
 
 // ErrNoWebSocketRequest is returned when the WebSocket callback was not received
-// within the timeout period. Most common reason is that client is not using
-// Javascript.
+// within the timeout period. The most common reason is that the client is not
+// using JavaScript.
 var ErrNoWebSocketRequest errNoWebSocketRequest
 
 type errNoWebSocketRequest struct {

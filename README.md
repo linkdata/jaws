@@ -5,7 +5,7 @@
 
 # JaWS
 
-Javascript and WebSockets used to create responsive webpages.
+JavaScript and WebSockets used to create responsive webpages.
 
 JaWS embraces a "server holds the truth" philosophy and keeps the
 complexity of modern browser applications on the backend. The
@@ -107,15 +107,15 @@ HTML code to the web page. Each Element is a unique instance
 of a UI object bound to a specific Request, and will have a
 unique HTML id.
 
-If a HTML entity is not registered in a Request, JaWS will not
+If an HTML entity is not registered in a Request, JaWS will not
 forward events from it, nor perform DOM manipulations for it.
 
 Dynamic updates of HTML entities is done using the different methods on
 the Element object when the JawsUpdate() method is called.
 
-### Javascript events
+### JavaScript events
 
-Supported Javascript events are sent to the server and
+Supported JavaScript events are sent to the server and
 are first offered to any extra objects added to the Element, in
 reverse registration order (last added first). If none handle the event, the Element's UI type is
 invoked. If none handle the event, it is ignored.
@@ -134,14 +134,14 @@ handle the event or want to pass it to the next handler.
 
 ### WebSocket wire format notes
 
-JaWS websocket messages are line-based and field-delimited:
+JaWS WebSocket messages are line-based and field-delimited:
 `What<TAB>Jid<TAB>Data<LF>`. Keep these invariants in mind when changing
 client/server protocol code:
 
 * The browser is not trusted. Incoming frames are validated (`What`, `Jid`,
   framing, quoting) and invalid frames are ignored/dropped.
 * `what.Remove` means remove child element(s). For browser-originated `Remove`
-  messages, the websocket `Jid` must be a valid JaWS element ID for the
+  messages, the WebSocket `Jid` must be a valid JaWS element ID for the
   managed parent/container and `Data` carries removed managed child IDs.
   Remove frames from non-managed containers are expected to be invalid and
   therefore dropped.
@@ -149,7 +149,7 @@ client/server protocol code:
 * `what.Call`/`what.Set` use `path + "=" + json` inside `Data`. Embedded tabs
   or newlines in JSON break message framing; `Jaws.JsCall` compacts valid JSON
   before sending.
-* `jawsVar(name, ...)` resolves properties from `window`, but websocket routing
+* `jawsVar(name, ...)` resolves properties from `window`, but WebSocket routing
   uses the top-level symbol name only. Register JaWS `JsVar` names as top-level
   identifiers (example: `app`), and use dotted suffixes as the JSON path
   (example: `jawsVar("app.state", value)` sends path `state`).
@@ -249,7 +249,7 @@ of them.
 
 * `/jaws/.ping`
 
-  This endpoint is called by the Javascript while waiting for the server to
+  This endpoint is called by the JavaScript while waiting for the server to
   come online. This is done in order to not spam the WebSocket endpoint with
   connection requests, and browsers are better at handling XHR requests failing.
 
@@ -347,13 +347,13 @@ contrary to recommended Go practice.
 
 The reason is that there is no unbroken call chain from the time the Request
 object is created when the initial HTTP request comes in and when it is
-requested during the Javascript WebSocket HTTP request.
+requested during the JavaScript WebSocket HTTP request.
 
 ### Security of the WebSocket callback
 
 Each JaWS request gets a unique 64-bit random value assigned to it when you 
 create the Request object. This value is written to the HTML output so it
-can be read by the Javascript, and used to construct the WebSocket callback
+can be read by the JavaScript, and used to construct the WebSocket callback
 URL.
 
 Once the WebSocket call comes in, the value is consumed by that request,

@@ -31,9 +31,9 @@ func setupJaws(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
 	var tmpl jaws.TemplateLookuper
 	if tmpl, err = templatereloader.New(assetsFS, "assets/ui/*.html", ""); err == nil {
 		jw.AddTemplateLookuper(tmpl)
-		// Initialize jawsboot, we will serve the Javascript and CSS from /static/*.[js|css]
+		// Initialize jawsboot; we will serve the JavaScript and CSS from /static/*.[js|css].
 		// All files under assets/static will be available under /static. Any favicon loaded
-		// this way will have it's URL available using jaws.FaviconURL().
+		// this way will have its URL available using jaws.FaviconURL().
 		if err = jw.Setup(mux.Handle, "/static",
 			jawsboot.Setup,
 			staticserve.MustNewFS(assetsFS, "assets/static", "images/favicon.png"),

@@ -41,6 +41,7 @@ func (clk *Click) setKeyState(state int) {
 	clk.Alt = (state & clickKeyAlt) != 0
 }
 
+// String formats clk for the JaWS wire protocol.
 func (clk Click) String() string {
 	return fmt.Sprintf("%d %d %d %s", clk.X, clk.Y, clk.keyState(), clk.Name)
 }

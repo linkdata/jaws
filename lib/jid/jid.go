@@ -5,13 +5,20 @@ import (
 	"strings"
 )
 
-// Jid is the basis for the HTML `id` attribute for an UI Element within an active Request.
-// It is per-Request, meaning Jid(1) in one Request is not the same as Jid(1) in another.
+// Jid is the basis for the HTML id attribute for a UI element within an active
+// request.
+//
+// It is request-scoped, meaning Jid(1) in one request is not the same element
+// as Jid(1) in another request.
 type Jid int64
 
-const Prefix = "Jid." // String prefixing HTML ID's based on Jid's.
+// Prefix prefixes HTML IDs based on [Jid] values.
+const Prefix = "Jid."
+
+// Invalid is returned by parsers when text does not contain a valid [Jid].
 const Invalid = Jid(-1)
 
+// IsValid reports whether jid can identify an element or the request as a whole.
 func (jid Jid) IsValid() bool {
 	return jid >= 0
 }
@@ -41,7 +48,8 @@ func (jid Jid) AppendQuote(dst []byte) []byte {
 	return dst
 }
 
-// AppendAttr appends `<startTag` followed by the quoted Jid as a HTML id attribute.
+// AppendStartTagAttr appends `<startTag` followed by the quoted [Jid] as an
+// HTML id attribute when jid is non-zero.
 func (jid Jid) AppendStartTagAttr(dst []byte, startTag string) []byte {
 	dst = append(dst, '<')
 	dst = append(dst, startTag...)
@@ -54,7 +62,7 @@ func (jid Jid) AppendStartTagAttr(dst []byte, startTag string) []byte {
 
 // ParseInt parses a Jid integer and returns it as a Jid.
 //
-// Returns jid.Invalid if it's not a valid Jid or an error occurs.
+// Returns [Invalid] if s is not a valid [Jid] integer or an error occurs.
 func ParseInt(s string) Jid {
 	if n, err := strconv.ParseInt(s, 10, 64); err == nil && n >= 0 {
 		return Jid(n)
@@ -62,9 +70,10 @@ func ParseInt(s string) Jid {
 	return Invalid
 }
 
-// ParseString parses an unquoted Jid string (e.g. `Jid.2`) and returns the Jid value (e.g. Jid(2)).
+// ParseString parses an unquoted [Jid] string, such as `Jid.2`, and returns
+// the corresponding value.
 //
-// Returns jid.Invalid if it's not a valid Jid string.
+// Returns [Invalid] if s is not a valid [Jid] string.
 func ParseString(s string) Jid {
 	if s == "" {
 		return 0

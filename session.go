@@ -11,6 +11,11 @@ import (
 	"github.com/linkdata/jaws/lib/wire"
 )
 
+// Session stores server-side per-user state shared by one or more requests.
+//
+// A Session is bound to the remote IP that created it. Its exported methods are
+// safe to call on a nil *Session; those calls return the documented zero value
+// or do nothing.
 type Session struct {
 	jw        *Jaws
 	sessionID uint64
@@ -75,8 +80,8 @@ func (sess *Session) delRequest(rq *Request) {
 	}
 }
 
-// Jaws returns the Jaws instance of the Session, or nil.
-// It is safe to call on a nil Session.
+// Jaws returns the [Jaws] instance of the [Session], or nil.
+// It is safe to call on a nil [Session].
 func (sess *Session) Jaws() (jw *Jaws) {
 	if sess != nil {
 		jw = sess.jw
@@ -85,7 +90,7 @@ func (sess *Session) Jaws() (jw *Jaws) {
 }
 
 // Get returns the value associated with the key, or nil.
-// It is safe to call on a nil Session.
+// It is safe to call on a nil [Session].
 func (sess *Session) Get(key string) (val any) {
 	if sess != nil {
 		sess.mu.RLock()
@@ -97,7 +102,7 @@ func (sess *Session) Get(key string) (val any) {
 
 // Set sets a value to be associated with the key.
 // If value is nil, the key is removed from the session.
-// It is safe to call on a nil Session.
+// It is safe to call on a nil [Session].
 func (sess *Session) Set(key string, val any) {
 	if sess != nil {
 		sess.mu.Lock()
@@ -111,7 +116,7 @@ func (sess *Session) Set(key string, val any) {
 }
 
 // ID returns the session ID, a 64-bit random value.
-// It is safe to call on a nil Session, in which case it returns zero.
+// It is safe to call on a nil [Session], in which case it returns zero.
 func (sess *Session) ID() (id uint64) {
 	if sess != nil {
 		id = sess.sessionID
@@ -120,7 +125,7 @@ func (sess *Session) ID() (id uint64) {
 }
 
 // CookieValue returns the session cookie value.
-// It is safe to call on a nil Session, in which case it returns an empty string.
+// It is safe to call on a nil [Session], in which case it returns an empty string.
 func (sess *Session) CookieValue() (s string) {
 	if sess != nil {
 		s = sess.cookie.Value
@@ -129,7 +134,7 @@ func (sess *Session) CookieValue() (s string) {
 }
 
 // IP returns the remote IP the session is bound to (which may be nil).
-// It is safe to call on a nil Session, in which case it returns nil.
+// It is safe to call on a nil [Session], in which case it returns nil.
 func (sess *Session) IP() (ip netip.Addr) {
 	if sess != nil {
 		ip = sess.remoteIP
@@ -137,8 +142,8 @@ func (sess *Session) IP() (ip netip.Addr) {
 	return
 }
 
-// Cookie returns a cookie for the Session. Returns a delete cookie if the Session is expired.
-// It is safe to call on a nil Session, in which case it returns nil.
+// Cookie returns a cookie for the [Session]. Returns a delete cookie if the [Session] is expired.
+// It is safe to call on a nil [Session], in which case it returns nil.
 func (sess *Session) Cookie() (cookie *http.Cookie) {
 	if sess != nil {
 		cookie = &http.Cookie{}
@@ -152,18 +157,18 @@ func (sess *Session) Cookie() (cookie *http.Cookie) {
 	return
 }
 
-// Close invalidates and expires the Session.
-// Future Requests won't be able to associate with it, and Cookie() will return a deletion cookie.
+// Close invalidates and expires the [Session].
+// Future [Request] values won't be able to associate with it, and [Session.Cookie] will return a deletion cookie.
 //
-// Existing Requests already associated with the Session will ask the browser to reload the pages.
-// Key/value pairs in the Session are left unmodified, you can use `Session.Clear()` to remove all of them.
+// Existing [Request] values already associated with the [Session] will ask the browser to reload the pages.
+// Key/value pairs in the [Session] are left unmodified; use [Session.Clear] to remove all of them.
 //
-// It must not be called before the JaWS processing loop (`Serve()` or
-// `ServeWithTimeout()`) is running, because reload broadcasts may block.
+// It must not be called before the JaWS processing loop ([Jaws.Serve] or
+// [Jaws.ServeWithTimeout]) is running, because reload broadcasts may block.
 //
 // Returns a cookie to be sent to the client browser that will delete the browser cookie.
 // Returns nil if the session was not found.
-// It is safe to call on a nil Session.
+// It is safe to call on a nil [Session].
 func (sess *Session) Close() (cookie *http.Cookie) {
 	if sess != nil {
 		sess.jw.deleteSession(sess.sessionID)
@@ -186,14 +191,14 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 	return
 }
 
-// Reload calls Broadcast with a message asking browsers to reload the page.
-// See Broadcast for the processing-loop requirement.
+// Reload calls [Session.Broadcast] with a message asking browsers to reload the page.
+// See [Session.Broadcast] for the processing-loop requirement.
 func (sess *Session) Reload() {
 	sess.Broadcast(wire.Message{What: what.Reload})
 }
 
 // Clear removes all key/value pairs from the session.
-// It is safe to call on a nil Session.
+// It is safe to call on a nil [Session].
 func (sess *Session) Clear() {
 	if sess != nil {
 		sess.mu.Lock()
@@ -202,8 +207,8 @@ func (sess *Session) Clear() {
 	}
 }
 
-// Requests returns a list of the Requests using this Session.
-// It is safe to call on a nil Session.
+// Requests returns a list of the [Request] values using this [Session].
+// It is safe to call on a nil [Session].
 func (sess *Session) Requests() (rl []*Request) {
 	if sess != nil {
 		sess.mu.RLock()
@@ -213,11 +218,11 @@ func (sess *Session) Requests() (rl []*Request) {
 	return
 }
 
-// Broadcast attempts to send a message to all Requests using this session.
+// Broadcast attempts to send a message to all [Request] values using this session.
 //
-// It must not be called before the JaWS processing loop (`Serve()` or
-// `ServeWithTimeout()`) is running. Otherwise this call may block.
-// It is safe to call on a nil Session.
+// It must not be called before the JaWS processing loop ([Jaws.Serve] or
+// [Jaws.ServeWithTimeout]) is running. Otherwise this call may block.
+// It is safe to call on a nil [Session].
 func (sess *Session) Broadcast(msg wire.Message) {
 	if sess != nil {
 		sess.mu.RLock()

@@ -40,7 +40,7 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
 
 ## Constructing UI values: `ui.New` and `bind.New`
 
-These are the two usual building blocks for widget handlers passed to `$.Button`, `$.Span`, `$.A`, `$.Div`, `$.Label`, `$.Input*`, etc. Pick based on what the widget represents: presentational content (`ui.New`) versus editable state backed by a variable (`bind.New`).
+These are the two usual building blocks for widget handlers passed to `$.Button`, `$.Span`, `$.A`, `$.Div`, `$.Label`, `$.Text`, `$.Range`, etc. Pick based on what the widget represents: presentational content (`ui.New`) versus editable state backed by a variable (`bind.New`).
 
 ### `ui.New(innerHTML any) Object`
 
@@ -55,7 +55,7 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
 
 - Signature: `func New[T comparable](l sync.Locker, p *T) Binder[T]`. If `l` also satisfies `RWLocker` (has `RLock`/`RUnlock`), the binder takes the read lock for reads; otherwise it upgrades to the write lock.
 - The binder's tag is always `p` (the pointer itself). Chaining never changes tag identity — `bind.New(&mu, &field).Clicked(...).Success(...)` still reports `&field` as its tag, so dirty targeting via `&field` keeps working through refactors.
-- Default `JawsSetLocked` assigns `*p = v` only when the value changed and returns `bind.ErrValueUnchanged` when it did not. This is what lets the input-widget family skip redundant updates.
+- Default `JawsSetLocked` assigns `*p = v` only when the value changed and returns `jaws.ErrValueUnchanged` when it did not. This is what lets the input-widget family skip redundant updates.
 - Chain builders return a new `Binder[T]`:
   - `.SetLocked(fn)` / `.GetLocked(fn)` — override read/write semantics.
   - `.GetHTML(fn)` — supply a custom `JawsGetHTML` for HTML-rendering widgets (`Span`, `Div`, `A`, `Label`).
@@ -69,6 +69,12 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
 - `ui.New` when the widget is presentational or event-driven and identity flows from the containing object (for example a cell that already has a `*Cell` tag registered as a dep).
 - `bind.New` when the widget reads or writes a specific variable and you want the variable's address to be the stable dirty target.
 - Either form accepts additional tag arguments where the API allows it (`bind.HTMLGetterFunc(fn, deps...)`, `bind.StringGetterFunc(fn, deps...)`) so a single widget can depend on several pieces of state without wrapping types.
+
+### HTML-inner constructors
+
+- `ui.NewDiv`, `ui.NewSpan`, `ui.NewButton`, `ui.NewA`, `ui.NewLabel`, `ui.NewTd`, `ui.NewTr`, and `ui.NewLi` accept `innerHTML any` and call `bind.MakeHTMLGetter` internally.
+- The matching `RequestWriter` helpers (`$.Div`, `$.Span`, etc.) have the same content conversion rules because they call the constructors.
+- Plain strings are trusted raw HTML at both levels. Use `bind.Getter[string]`, `bind.StringGetterFunc`, `fmt.Stringer`, or explicit escaping for untrusted text.
 
 ## Template-dot and tag rules
 
@@ -140,7 +146,7 @@ Guideline:
 
 - Ensure pages include both `HeadHTML` and `TailHTML` in layout flow.
 - `TailHTML` helps apply queued attr/class updates immediately and reduce initial flicker.
-- Register JaWS `/jaws/*` routes correctly and pair request creation with `UseRequest` handling.
+- Register the JaWS `/jaws/` route prefix correctly and pair request creation with `UseRequest` handling.
 - Session storage is server-side and IP-bound; use `Jaws.Session(...)` middleware when page state should be per-user.
 - For per-session app state, load from `Request.Get(key)` and initialize with `Request.Set(key, value)` during the page request.
 

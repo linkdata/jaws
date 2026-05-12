@@ -6,8 +6,10 @@ import (
 	"reflect"
 )
 
+// Tag is a simple comparable tag value.
 type Tag string
 
+// TagString returns a debug string for tag.
 func TagString(tag any) string {
 	if rv := reflect.ValueOf(tag); rv.IsValid() {
 		if rv.Kind() == reflect.Pointer {
@@ -25,6 +27,8 @@ func (errTooManyTags) Error() string {
 	return "too many tags"
 }
 
+// ErrTooManyTags is returned when tag expansion exceeds the recursion or result
+// limits.
 var ErrTooManyTags = errTooManyTags{}
 
 func ensureUsableTag(tag any) error {
@@ -148,11 +152,20 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 	}
 }
 
+// TagExpand expands tag into a flat list of unique comparable tag values.
+//
+// tag may be nil, a [Tag], a slice of tags, a [TagGetter] or another
+// comparable value. Primitive HTML/value types are rejected with
+// [ErrIllegalTagType] to catch common accidental tags.
 func TagExpand(ctx Context, tag any) ([]any, error) {
 	var activeArr [12]any
 	return expand(0, ctx, tag, nil, activeArr[:0])
 }
 
+// MustTagExpand calls [TagExpand] and either logs or panics if expansion fails.
+//
+// When ctx is non-nil, expansion errors are passed to [Context.MustLog] and
+// the partial result is returned. When ctx is nil, MustTagExpand panics.
 func MustTagExpand(ctx Context, tag any) []any {
 	result, err := TagExpand(ctx, tag)
 	if err != nil {

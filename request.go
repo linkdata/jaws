@@ -27,8 +27,8 @@ import (
 	"github.com/linkdata/jaws/lib/wire"
 )
 
-// ConnectFn can be used to interact with a Request before message processing starts.
-// Returning an error causes the Request to abort, and the WebSocket connection to close.
+// ConnectFn can be used to interact with a [Request] before message processing starts.
+// Returning an error causes the [Request] to abort, and the WebSocket connection to close.
 type ConnectFn = func(rq *Request) error
 
 // Request maintains the state for a JaWS WebSocket connection, and handles processing
@@ -66,13 +66,23 @@ type eventFnCall struct {
 }
 
 var (
-	ErrWebsocketOriginMissing     = errors.New("websocket request missing Origin header")
+	// ErrWebsocketOriginMissing is returned when a WebSocket request has no Origin header.
+	ErrWebsocketOriginMissing = errors.New("websocket request missing Origin header")
+
+	// ErrWebsocketOriginWrongScheme is returned when a WebSocket Origin is not HTTP or HTTPS.
 	ErrWebsocketOriginWrongScheme = errors.New("websocket Origin not http or https")
-	ErrWebsocketOriginWrongHost   = errors.New("websocket Origin host mismatch")
-	ErrRequestAlreadyClaimed      = errors.New("request already claimed")
-	ErrJavascriptDisabled         = errors.New("javascript is disabled")
+
+	// ErrWebsocketOriginWrongHost is returned when a WebSocket Origin host does not match the initial request host.
+	ErrWebsocketOriginWrongHost = errors.New("websocket Origin host mismatch")
+
+	// ErrRequestAlreadyClaimed is returned when [Jaws.UseRequest] is called more than once for a [Request].
+	ErrRequestAlreadyClaimed = errors.New("request already claimed")
+
+	// ErrJavascriptDisabled is returned when the noscript probe indicates JavaScript is disabled.
+	ErrJavascriptDisabled = errors.New("javascript is disabled")
 )
 
+// JawsKeyString returns the request key in the text form used by JaWS URLs.
 func (rq *Request) JawsKeyString() string {
 	jawsKey := uint64(0)
 	if rq != nil {
@@ -239,9 +249,9 @@ func (rq *Request) writeTailScriptResponse(w http.ResponseWriter) (err error) {
 // TailHTML writes optional HTML code at the end of the page's BODY section that
 // will immediately apply HTML attribute and class updates made during initial
 // rendering, which minimizes flicker without having to write the correct
-// value in templates or during JawsRender().
+// value in templates or during [Renderer.JawsRender].
 //
-// It also adds a <noscript> tag that warns of reduces functionality.
+// It also adds a <noscript> tag that warns of reduced functionality.
 func (rq *Request) TailHTML(w io.Writer) (err error) {
 	ks := rq.JawsKeyString()
 	_, err = fmt.Fprintf(w, "\n"+`<noscript>`+
@@ -251,7 +261,8 @@ func (rq *Request) TailHTML(w io.Writer) (err error) {
 	return
 }
 
-// GetConnectFn returns the currently set ConnectFn. That function will be called before starting the WebSocket tunnel if not nil.
+// GetConnectFn returns the currently set [ConnectFn].
+// That function will be called before starting the WebSocket tunnel if not nil.
 func (rq *Request) GetConnectFn() (fn ConnectFn) {
 	rq.mu.RLock()
 	fn = rq.connectFn
@@ -259,7 +270,8 @@ func (rq *Request) GetConnectFn() (fn ConnectFn) {
 	return
 }
 
-// SetConnectFn sets ConnectFn. That function will be called before starting the WebSocket tunnel if not nil.
+// SetConnectFn sets the [ConnectFn].
+// That function will be called before starting the WebSocket tunnel if not nil.
 func (rq *Request) SetConnectFn(fn ConnectFn) {
 	rq.mu.Lock()
 	rq.connectFn = fn
@@ -282,20 +294,20 @@ func (rq *Request) Initial() (r *http.Request) {
 	return
 }
 
-// Get is shorthand for `Session().Get()` and returns the session value associated with the key, or nil.
-// It no session is associated with the Request, returns nil.
+// Get is shorthand for Session().Get and returns the session value associated with the key, or nil.
+// If no session is associated with the [Request], it returns nil.
 func (rq *Request) Get(key string) any {
 	return rq.Session().Get(key)
 }
 
-// Set is shorthand for `Session().Set()` and sets a session value to be associated with the key.
+// Set is shorthand for Session().Set and sets a session value to be associated with the key.
 // If value is nil, the key is removed from the session.
-// Does nothing if there is no session is associated with the Request.
+// Does nothing if no session is associated with the [Request].
 func (rq *Request) Set(key string, val any) {
 	rq.Session().Set(key, val)
 }
 
-// Context returns the Request's Context, which is by default derived from jaws.BaseContext.
+// Context returns the [Request]'s context, which is by default derived from [Jaws.BaseContext].
 func (rq *Request) Context() (ctx context.Context) {
 	rq.mu.RLock()
 	ctx = rq.ctx
@@ -306,7 +318,7 @@ func (rq *Request) Context() (ctx context.Context) {
 // SetContext atomically replaces the Request's context with the function return value.
 // The function is given the current context and must return a non-nil context.
 // The returned context must be derived from oldctx so cancellation and deadlines
-// continue to propagate to Request.Context().
+// continue to propagate to [Request.Context].
 func (rq *Request) SetContext(fn func(oldctx context.Context) (newctx context.Context)) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
@@ -349,11 +361,11 @@ func (rq *Request) cancel(err error) {
 	rq.cancelLocked(err)
 }
 
-// Alert attempts to show an alert message on the current request webpage if it has an HTML element with the id 'jaws-alert'.
-// The lvl argument should be one of Bootstraps alert levels: primary, secondary, success, danger, warning, info, light or dark.
+// Alert attempts to show an alert message on the current request webpage if it has an HTML element with the id "jaws-alert".
+// The lvl argument should be one of Bootstrap's alert levels: primary, secondary, success, danger, warning, info, light or dark.
 //
-// The default JaWS javascript only supports Bootstrap.js dismissable alerts.
-// See Jaws.Broadcast for processing-loop requirements.
+// The default JaWS JavaScript only supports Bootstrap dismissible alerts.
+// See [Jaws.Broadcast] for processing-loop requirements.
 func (rq *Request) Alert(lvl, msg string) {
 	rq.Jaws.Broadcast(wire.Message{
 		Dest: rq,
@@ -362,15 +374,15 @@ func (rq *Request) Alert(lvl, msg string) {
 	})
 }
 
-// AlertError calls Alert if the given error is not nil.
+// AlertError calls [Request.Alert] if the given error is not nil.
 func (rq *Request) AlertError(err error) {
 	if rq.Jaws.Log(err) != nil {
 		rq.Alert("danger", html.EscapeString(err.Error()))
 	}
 }
 
-// Redirect requests the current Request to navigate to the given URL.
-// See Jaws.Broadcast for processing-loop requirements.
+// Redirect requests the current [Request] to navigate to the given URL.
+// See [Jaws.Broadcast] for processing-loop requirements.
 func (rq *Request) Redirect(url string) {
 	rq.Jaws.Broadcast(wire.Message{
 		Dest: rq,
@@ -400,7 +412,7 @@ func (rq *Request) TagsOf(elem *Element) (tags []any) {
 	return
 }
 
-// Dirty marks all Elements that have one or more of the given tags as dirty.
+// Dirty marks all [Element] values that have one or more of the given tags as dirty.
 func (rq *Request) Dirty(dirtyTags ...any) {
 	rq.Jaws.setDirty(tag.MustTagExpand(rq, dirtyTags))
 }
@@ -441,9 +453,9 @@ func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 	return
 }
 
-// NewElement creates a new Element using the given UI object.
+// NewElement creates a new [Element] using the given [UI] object.
 //
-// Panics if the build tag "debug" is set and the UI object doesn't satisfy all requirements.
+// Panics if the build tag "debug" is set and the [UI] object doesn't satisfy all requirements.
 func (rq *Request) NewElement(ui UI) *Element {
 	if deadlock.Debug {
 		if err := tag.NewErrNotComparable(ui); err != nil {
@@ -455,6 +467,7 @@ func (rq *Request) NewElement(ui UI) *Element {
 	return rq.newElementLocked(ui)
 }
 
+// GetElementByJid returns the element with jid, or nil if it is not known.
 func (rq *Request) GetElementByJid(jid Jid) (e *Element) {
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
@@ -481,6 +494,7 @@ func (rq *Request) hasTagLocked(elem *Element, tagValue any) bool {
 	return false
 }
 
+// HasTag reports whether elem has tagValue in rq.
 func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 	rq.mu.RLock()
 	yes = rq.hasTagLocked(elem, tagValue)
@@ -494,7 +508,7 @@ func (rq *Request) appendDirtyTags(tags []any) {
 	rq.mu.Unlock()
 }
 
-// Tag adds the given tags to the given Element.
+// TagExpanded adds already-expanded tags to the given [Element].
 func (rq *Request) TagExpanded(elem *Element, expandedtags []any) {
 	if elem != nil && !elem.deleted.Load() && elem.Request == rq {
 		rq.mu.Lock()
@@ -507,14 +521,14 @@ func (rq *Request) TagExpanded(elem *Element, expandedtags []any) {
 	}
 }
 
-// Tag adds the given tags to the given Element.
+// Tag adds the given tags to the given [Element].
 func (rq *Request) Tag(elem *Element, tagItems ...any) {
 	if elem != nil && len(tagItems) > 0 && elem.Request == rq {
 		rq.TagExpanded(elem, tag.MustTagExpand(elem.Request, tagItems))
 	}
 }
 
-// GetElements returns a list of the UI elements in the Request that have the given tag(s).
+// GetElements returns a list of the UI elements in the [Request] that have the given tags.
 func (rq *Request) GetElements(tagitem any) (elems []*Element) {
 	expanded := tag.MustTagExpand(rq, tagitem)
 	seen := map[*Element]struct{}{}
@@ -590,7 +604,7 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 		case tagmsg, ok = <-broadcastMsgCh:
 		case wsmsg, ok = <-incomingMsgCh:
 			if ok {
-				// incoming event message from the websocket
+				// incoming event message from the WebSocket
 				if wsmsg.Jid.IsValid() {
 					switch wsmsg.What {
 					case what.Input, what.Click, what.ContextMenu, what.Set:
@@ -678,7 +692,7 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 
 func (rq *Request) handleRemove(containerJid Jid, data string) {
 	// For incoming what.Remove from jaws.js, Data is a tab-separated list of
-	// managed descendant IDs that were removed. The websocket Jid identifies the
+	// managed descendant IDs that were removed. The WebSocket Jid identifies the
 	// parent/container in the DOM and must not itself be deleted here.
 	if containerJid > 0 {
 		rq.mu.Lock()
@@ -814,7 +828,7 @@ func (rq *Request) deleteElementLocked(e *Element) {
 	}
 }
 
-// DeleteElement removes elem from the Request element registry.
+// DeleteElement removes elem from the [Request] element registry.
 //
 // This is primarily intended for UI implementations that manage dynamic child
 // element sets and need to drop stale elements after issuing a corresponding
@@ -864,8 +878,8 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 	}
 }
 
-// onConnect calls the Request's ConnectFn if it's not nil, and returns the error from it.
-// Returns nil if ConnectFn is nil.
+// onConnect calls the [Request]'s [ConnectFn] if it is not nil, and returns the error from it.
+// Returns nil if [ConnectFn] is nil.
 func (rq *Request) onConnect() (err error) {
 	rq.mu.RLock()
 	connectFn := rq.connectFn
@@ -917,8 +931,8 @@ func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) {
 	return
 }
 
-// Log sends an error to the Logger set in the Jaws.
-// Has no effect if the err is nil or the Logger is nil.
+// Log sends an error to the [Logger] set in the [Jaws].
+// Has no effect if err is nil or the [Logger] is nil.
 // Returns err.
 func (rq *Request) Log(err error) error {
 	var jw *Jaws
@@ -928,9 +942,9 @@ func (rq *Request) Log(err error) error {
 	return jw.Log(err)
 }
 
-// MustLog sends an error to the Logger set in the Jaws or
-// panics with the given error if no Logger is set.
-// Has no effect if the err is nil.
+// MustLog sends an error to the [Logger] set in the [Jaws] or
+// panics with the given error if no [Logger] is set.
+// Has no effect if err is nil.
 func (rq *Request) MustLog(err error) {
 	var jw *Jaws
 	if rq != nil {
@@ -950,9 +964,9 @@ func (rq *Request) stopServe() {
 
 var headerContentTypeJavaScript = []string{"text/javascript"}
 
-// ServeHTTP implements http.HanderFunc.
+// ServeHTTP implements [http.Handler].
 //
-// Requires UseRequest() have been successfully called for the Request.
+// Requires [Jaws.UseRequest] to have been successfully called for the [Request].
 func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if rq.startServe() {
 		defer rq.stopServe()

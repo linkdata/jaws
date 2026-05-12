@@ -9,7 +9,7 @@ import (
 	"github.com/linkdata/jaws/lib/jid"
 )
 
-// WriteHTMLSelect writes a select tag with options from a NamedBoolArray.
+// WriteHTMLSelect writes a select tag with options from nba.
 func WriteHTMLSelect(w io.Writer, jid jid.Jid, nba *BoolArray, attrs []template.HTMLAttr) (err error) {
 	if err = htmlio.WriteHTMLTag(w, jid, "select", "", "", attrs); err == nil {
 		var b []byte

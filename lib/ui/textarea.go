@@ -9,11 +9,13 @@ import (
 	"github.com/linkdata/jaws/lib/htmlio"
 )
 
+// Textarea renders an HTML textarea bound to a string setter.
 type Textarea struct{ InputText }
 
 // NewTextarea returns a textarea widget bound to g.
 func NewTextarea(g bind.Setter[string]) *Textarea { return &Textarea{InputText{Setter: g}} }
 
+// JawsRender renders ui as an HTML textarea.
 func (ui *Textarea) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) {
 	var getterAttrs []template.HTMLAttr
 	if getterAttrs, err = ui.applyGetterAttrs(e, ui.Setter); err == nil {
@@ -26,6 +28,7 @@ func (ui *Textarea) JawsRender(e *jaws.Element, w io.Writer, params []any) (err 
 	return
 }
 
+// Textarea renders an HTML textarea.
 func (rw RequestWriter) Textarea(value any, params ...any) error {
 	return rw.UI(NewTextarea(bind.MakeSetter[string](value)), params...)
 }

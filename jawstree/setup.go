@@ -16,6 +16,10 @@ var assetsFS embed.FS
 
 // treeview from https://github.com/stefaneichert/quercus.js
 
+// Setup registers embedded jawstree static assets under prefix.
+//
+// It is intended to be passed to [jaws.Jaws.Setup]. Returned URLs should be
+// included in the page head through [jaws.Jaws.GenerateHeadHTML].
 func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.URL, err error) {
 	var files []*staticserve.StaticServe
 	if err = staticserve.WalkDir(assetsFS, "assets", func(filename string, ss *staticserve.StaticServe) (err error) {

@@ -18,7 +18,9 @@ func (g *stringGetterFunc) JawsGetTag(tag.Context) any {
 	return g.tags
 }
 
-// StringGetterFunc wraps a function and returns a Getter[string]
+// StringGetterFunc wraps fn as a [Getter] for string values.
+//
+// Optional tags are exposed through [tag.TagGetter].
 func StringGetterFunc(fn func(elem *jaws.Element) (s string), tags ...any) Getter[string] {
 	return &stringGetterFunc{fn: fn, tags: tags}
 }

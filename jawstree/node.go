@@ -13,14 +13,15 @@ import (
 
 var _ ui.SetPather = (*Node)(nil)
 
+// Node is one tree node rendered by [Tree].
 type Node struct {
-	Tree     *Tree   `json:"-"`
-	Parent   *Node   `json:"-"`
-	Name     string  `json:"name"`
-	ID       string  `json:"id,omitzero"`
-	Selected bool    `json:"selected,omitzero"`
-	Disabled bool    `json:"disabled,omitzero"` // !selectable
-	Children []*Node `json:"children,omitzero"`
+	Tree     *Tree   `json:"-"`                 // owning tree, set by New
+	Parent   *Node   `json:"-"`                 // parent node, nil for root
+	Name     string  `json:"name"`              // display name
+	ID       string  `json:"id,omitzero"`       // JSON path ID, set by New
+	Selected bool    `json:"selected,omitzero"` // selected state
+	Disabled bool    `json:"disabled,omitzero"` // false when selectable
+	Children []*Node `json:"children,omitzero"` // child nodes
 }
 
 func (n *Node) marshalJSON(b []byte) []byte {
@@ -47,6 +48,7 @@ func (n *Node) marshalJSON(b []byte) []byte {
 	return b
 }
 
+// MarshalJSON writes the Quercus.js JSON shape for n.
 func (n *Node) MarshalJSON() (b []byte, err error) {
 	b = n.marshalJSON(nil)
 	return
@@ -54,12 +56,14 @@ func (n *Node) MarshalJSON() (b []byte, err error) {
 
 var _ json.Marshaler = &Node{}
 
+// JawsPathSet mirrors browser-side selected-state changes back into the tree.
 func (n *Node) JawsPathSet(elem *jaws.Element, jspath string, value any) {
 	if jspath, ok := strings.CutSuffix(jspath, ".selected"); ok {
 		elem.Jaws.JsCall(n.Tree.Tag, "jawstreeSetPath", fmt.Sprintf(`{"tree":%q,"id":%q,"set":%v}`, n.Tree.id, jspath, value))
 	}
 }
 
+// Walk calls fn for n and all descendants with their JSON paths.
 func (n *Node) Walk(jspath string, fn func(jspath string, node *Node)) {
 	fn(jspath, n)
 	if jspath != "" {
@@ -70,6 +74,7 @@ func (n *Node) Walk(jspath string, fn func(jspath string, node *Node)) {
 	}
 }
 
+// HasNames reports whether n matches names as a path from the root.
 func (n *Node) HasNames(names []string) (yes bool) {
 	if yes = (n.Parent == nil) && (len(names) == 0); !yes && n.Parent != nil {
 		if len(names) > 0 {
@@ -80,6 +85,7 @@ func (n *Node) HasNames(names []string) (yes bool) {
 	return
 }
 
+// GetNames returns the path of names from the root to n.
 func (n *Node) GetNames() (names []string) {
 	for n.Parent != nil {
 		names = append(names, n.Name)
@@ -89,6 +95,7 @@ func (n *Node) GetNames() (names []string) {
 	return
 }
 
+// GetSelected returns the paths of all selected nodes.
 func (n *Node) GetSelected() (nameslist [][]string) {
 	n.Walk("", func(jspath string, node *Node) {
 		if node.Selected {
@@ -98,6 +105,7 @@ func (n *Node) GetSelected() (nameslist [][]string) {
 	return
 }
 
+// SetSelected applies selected paths and returns nodes that changed.
 func (n *Node) SetSelected(nameslist [][]string) (changed []*Node) {
 	n.Walk("", func(jspath string, node *Node) {
 		for _, names := range nameslist {

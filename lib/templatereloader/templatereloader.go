@@ -10,8 +10,8 @@ import (
 	"github.com/linkdata/jaws"
 )
 
-// A TemplateReloader reloads and reparses templates if more than one second
-// has passed since the last Lookup.
+// TemplateReloader reloads and reparses templates if more than one second
+// has passed since the last [TemplateReloader.Lookup].
 type TemplateReloader struct {
 	Path string // the file path we are loading from
 	mu   deadlock.RWMutex
@@ -19,7 +19,7 @@ type TemplateReloader struct {
 	curr *template.Template
 }
 
-// New returns a jaws.TemplateLookuper.
+// New returns a [jaws.TemplateLookuper].
 //
 // If deadlock.Debug is false, it calls template.New("").ParseFS(fsys, fpath).
 //
@@ -45,6 +45,7 @@ func create(debug bool, fsys fs.FS, fpath, relpath string) (tl jaws.TemplateLook
 	return
 }
 
+// Lookup returns the named template, reloading from disk first when needed.
 func (tr *TemplateReloader) Lookup(name string) *template.Template {
 	tr.mu.RLock()
 	tl := tr.curr

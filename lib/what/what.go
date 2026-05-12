@@ -2,6 +2,8 @@ package what
 
 import "strings"
 
+// What identifies a JaWS wire protocol command or event.
+//
 //go:generate go run golang.org/x/tools/cmd/stringer@latest -type=What
 type What uint8
 
@@ -14,8 +16,8 @@ const (
 	Redirect // Tells browser to load another URL
 	Alert    // Display (if using Bootstrap) an alert message
 	Order    // Re-order a set of elements
-	Call     // Call javascript function
-	Set      // Set javascript variable (JSON path + tab char + JSON data)
+	Call     // Call JavaScript function
+	Set      // Set JavaScript variable (JSON path + tab char + JSON data)
 
 	separator
 
@@ -39,14 +41,20 @@ const (
 	Hook // Calls event handler synchronously
 )
 
+// IsCommand reports whether w is a non-element command.
 func (w What) IsCommand() bool {
 	return w < separator && w.IsValid()
 }
 
+// IsValid reports whether w is a known command or event.
 func (w What) IsValid() bool {
 	return w != invalid && w != separator
 }
 
+// Parse returns the [What] named by s.
+//
+// An empty string is treated as [Update]. Unknown strings return the invalid
+// zero value.
 func Parse(s string) What {
 	if s == "" {
 		return Update

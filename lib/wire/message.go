@@ -8,9 +8,9 @@ import (
 
 // Message contains the elements of a message to be sent to requests.
 type Message struct {
-	Dest any       // destination (tag, html ID or *Element)
-	What what.What // what to change or do
-	Data string    // data (e.g. inner HTML content or slice of tags)
+	Dest any       // destination tag, HTML ID or *jaws.Element
+	What what.What // command to perform
+	Data string    // payload, such as inner HTML content or a slice of tags
 }
 
 // String returns the Message in a form suitable for debug output.

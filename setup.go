@@ -10,12 +10,12 @@ import (
 	"github.com/linkdata/staticserve"
 )
 
-// HandleFunc matches the signature of http.ServeMux.Handle().
+// HandleFunc matches the signature of [http.ServeMux.Handle].
 type HandleFunc = func(pattern string, handler http.Handler)
 
-// SetupFunc is called by Setup and allows setting up addons for JaWS.
+// SetupFunc is called by [Jaws.Setup] and allows setting up addons for JaWS.
 //
-// The urls returned will be used in a call to GenerateHeadHTML.
+// The URLs returned will be used in a call to [Jaws.GenerateHeadHTML].
 type SetupFunc = func(jw *Jaws, handleFn HandleFunc, prefix string) (urls []*url.URL, err error)
 
 // makeAbsPath prepends the prefix to u's path if it is relative.
@@ -29,12 +29,12 @@ func makeAbsPath(prefix string, u *url.URL) *url.URL {
 	return u
 }
 
-// Setup configures Jaws with extra functionality and resources.
+// Setup configures [Jaws] with extra functionality and resources.
 //
-// The list of extras can be strings, *url.URL or *staticserve.StaticServe (URL resources)
-// or a setup function matching SetupFunc such as jawsboot.Setup.
+// The list of extras can be strings, [*url.URL] or [*staticserve.StaticServe]
+// URL resources, or a setup function matching [SetupFunc] such as jawsboot.Setup.
 //
-// It calls GenerateHeadHTML with the final list of URLs, with any
+// It calls [Jaws.GenerateHeadHTML] with the final list of URLs, with any
 // relative URL paths prefixed with prefix.
 func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err error) {
 	var urls []*url.URL

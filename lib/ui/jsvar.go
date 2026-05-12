@@ -38,19 +38,24 @@ func validateJsVarName(v []any) (name string, err error) {
 	return
 }
 
+// PathSetter can set a nested JSON path value.
 type PathSetter interface {
 	// JawsSetPath should set the JSON object member identified by jspath to the given value.
 	//
-	// If the member is already the given value, it should return ErrValueUnchanged.
+	// If the member is already the given value, it should return [jaws.ErrValueUnchanged].
 	JawsSetPath(elem *jaws.Element, jspath string, value any) (err error)
 }
 
+// SetPather is notified after a nested JSON path value has been set and
+// broadcast.
 type SetPather interface {
 	// JawsPathSet notifies that a JSON object member identified by jspath has been set
 	// to the given value and the change has been queued for broadcast.
 	JawsPathSet(elem *jaws.Element, jspath string, value any)
 }
 
+// IsJsVar is implemented by JaWS UI values that bind a Go value to a
+// browser-side JavaScript variable.
 type IsJsVar interface {
 	bind.RWLocker
 	jaws.UI
@@ -58,6 +63,7 @@ type IsJsVar interface {
 	PathSetter
 }
 
+// JsVarMaker creates a request-scoped JavaScript variable binding.
 type JsVarMaker interface {
 	JawsMakeJsVar(rq *jaws.Request) (v IsJsVar, err error)
 }
@@ -67,12 +73,17 @@ var (
 	_ bind.Setter[int] = &JsVar[int]{}
 )
 
+// JsVar binds a Go value to a named JavaScript variable in the browser.
+//
+// It is safe for concurrent use when the locker passed to [NewJsVar] is safe
+// for concurrent use.
 type JsVar[T any] struct {
 	bind.RWLocker
-	Ptr *T
-	Tag any
+	Ptr *T  // bound Go value
+	Tag any // current dirty tag
 }
 
+// JawsGetPath returns the value at jspath, logging lookup errors on elem when possible.
 func (ui *JsVar[T]) JawsGetPath(elem *jaws.Element, jspath string) (value any) {
 	ui.RLock()
 	defer ui.RUnlock()
@@ -84,6 +95,7 @@ func (ui *JsVar[T]) JawsGetPath(elem *jaws.Element, jspath string) (value any) {
 	return
 }
 
+// JawsGet returns the bound value.
 func (ui *JsVar[T]) JawsGet(elem *jaws.Element) (value T) {
 	ui.RLock()
 	defer ui.RUnlock()
@@ -131,10 +143,12 @@ func (ui *JsVar[T]) setPath(elem *jaws.Element, jspath string, value any) (err e
 	return
 }
 
+// JawsSetPath sets the value at jspath and broadcasts the change.
 func (ui *JsVar[T]) JawsSetPath(elem *jaws.Element, jspath string, value any) (err error) {
 	return ui.setPath(elem, jspath, value)
 }
 
+// JawsSet replaces the root value and broadcasts the change.
 func (ui *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 	return ui.JawsSetPath(elem, "", value)
 }
@@ -149,6 +163,7 @@ func appendAttrs(b []byte, attrs []template.HTMLAttr) []byte {
 	return b
 }
 
+// JawsRender writes the hidden element that seeds and routes the JavaScript variable.
 func (ui *JsVar[T]) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) {
 	ui.Lock()
 	defer ui.Unlock()
@@ -182,10 +197,12 @@ func (ui *JsVar[T]) JawsRender(e *jaws.Element, w io.Writer, params []any) (err 
 	return
 }
 
+// JawsGetTag returns the current dirty tag.
 func (ui *JsVar[T]) JawsGetTag(tag.Context) any {
 	return ui.Tag
 }
 
+// JawsUpdate is a no-op because updates are broadcast by path setters.
 func (ui *JsVar[T]) JawsUpdate(e *jaws.Element) {
 	_ = e // no-op for JsVar[T]
 }
@@ -197,6 +214,7 @@ func elideErrValueUnchanged(err error) error {
 	return err
 }
 
+// JawsInput applies a browser-side JavaScript variable update.
 func (ui *JsVar[T]) JawsInput(e *jaws.Element, val string) (err error) {
 	err = jaws.ErrEventUnhandled
 	if jspath, jsval, found := strings.Cut(val, "="); found {
@@ -226,9 +244,9 @@ func isNilUI(ui jaws.UI) (yes bool) {
 	return
 }
 
-// JsVar binds a JsVar[T] to a named Javascript variable.
+// JsVar binds a [JsVar] to a named JavaScript variable.
 //
-// You can also pass a JsVarMaker instead of a JsVar[T].
+// You can also pass a [JsVarMaker] instead of a [JsVar].
 func (rqw RequestWriter) JsVar(jsvarname string, jsvar any, params ...any) (err error) {
 	if _, err = validateJsVarName([]any{jsvarname}); err == nil {
 		if jvm, ok := jsvar.(JsVarMaker); ok {

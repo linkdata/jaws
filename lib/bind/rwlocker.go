@@ -2,6 +2,7 @@ package bind
 
 import "sync"
 
+// RWLocker is the subset of [sync.RWMutex] used by binders.
 type RWLocker interface {
 	sync.Locker
 	RLock()

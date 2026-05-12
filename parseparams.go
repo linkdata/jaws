@@ -12,8 +12,8 @@ func usableAsTag(t any) (ok bool) {
 	return ok || tag.NewErrNotComparable(t) == nil
 }
 
-// ParseParams parses the parameters passed to UI() when creating a new Element,
-// returning UI tags, event handlers and HTML attributes.
+// ParseParams parses the parameters passed to UI helpers when creating a new
+// [Element], returning UI tags, event handlers and HTML attributes.
 func ParseParams(params []any) (tags []any, handlers []any, attrs []string) {
 	for i := range params {
 		switch data := params[i].(type) {

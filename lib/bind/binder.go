@@ -10,59 +10,65 @@ import (
 	"github.com/linkdata/jaws/lib/tag"
 )
 
-// SetHook is a function that replaces JawsSetLocked for a Binder.
+// SetHook is a function that replaces [Binder.JawsSetLocked].
 //
 // The lock will be held before calling the function, preferring RLock over Lock, if available.
-// Do not lock or unlock the Binder in the function. Do not call JawsSet.
+// Do not lock or unlock the [Binder] in the function. Do not call [Binder.JawsSet].
 //
 // The bind argument is the previous Binder in the chain, and you probably
-// want to call it's JawsSetLocked first.
+// want to call its [Binder.JawsSetLocked] first.
 type SetHook[T comparable] func(bind Binder[T], elem *jaws.Element, value T) (err error)
 
-// GetHook is a function that replaces JawsGetLocked for a Binder.
+// GetHook is a function that replaces [Binder.JawsGetLocked].
 //
 // The lock will be held before calling the function, preferring RLock over Lock, if available.
-// Do not lock or unlock the Binder in the function. Do not call JawsGet.
+// Do not lock or unlock the [Binder] in the function. Do not call [Getter.JawsGet].
 //
 // The bind argument is the previous Binder in the chain, and you probably
-// want to call it's JawsGetLocked first.
+// want to call its [Binder.JawsGetLocked] first.
 type GetHook[T comparable] func(bind Binder[T], elem *jaws.Element) (value T)
 
-// GetHTMLHook is a function to call when JawsGetHTML() is called.
+// GetHTMLHook is a function to call when [HTMLGetter.JawsGetHTML] is called.
 //
 // The lock will be held before calling the function, preferring RLock over Lock, if available.
-// Do not lock or unlock the Binder in the function. Do not call JawsGet.
+// Do not lock or unlock the [Binder] in the function. Do not call [Getter.JawsGet].
 type GetHTMLHook[T comparable] func(bind Binder[T], elem *jaws.Element) (s template.HTML)
 
 // ClickedHook is a function to call when a click event is received.
 //
-// The Binder locks are not held when the function is called.
+// The [Binder] locks are not held when the function is called.
 type ClickedHook[T comparable] func(bind Binder[T], elem *jaws.Element, click jaws.Click) (err error)
 
 // ContextMenuHook is a function to call when a context menu event is received.
 //
-// The Binder locks are not held when the function is called.
+// The [Binder] locks are not held when the function is called.
 type ContextMenuHook[T comparable] func(bind Binder[T], elem *jaws.Element, click jaws.Click) (err error)
 
 // InitialHTMLAttrHook is a function to call when an Element is initially rendered.
 //
 // The lock will be held at this point, preferring RLock over Lock, if available.
-// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
 type InitialHTMLAttrHook[T comparable] func(bind Binder[T], elem *jaws.Element) (s template.HTMLAttr)
 
-// SuccessHook is a function to call when a call to JawsSet returns with no error.
+// SuccessHook is a function to call when [Setter.JawsSet] returns with no error.
 //
-// The Binder locks are not held when the function is called.
+// The [Binder] locks are not held when the function is called.
 //
-// Success hooks in a Binder chain are called in reverse registration order.
-// If one of them returns an error, that error is returned from JawsSet and
+// Success hooks in a [Binder] chain are called in reverse registration order.
+// If one of them returns an error, that error is returned from [Setter.JawsSet] and
 // no more success hooks are called.
 type SuccessHook func(*jaws.Element) (err error)
 
+// Formatter customizes [Binder.Format] output for a value.
 type Formatter interface {
 	Format(string) string
 }
 
+// Binder binds a comparable Go value to JaWS getter, setter, tag and event
+// interfaces.
+//
+// Binder methods are safe for concurrent use when the locker passed to [New]
+// is safe for concurrent use.
 type Binder[T comparable] interface {
 	RWLocker
 	Setter[T]
@@ -78,27 +84,27 @@ type Binder[T comparable] interface {
 	// the Binder lock is held.
 	JawsInitialHTMLAttrLocked(elem *jaws.Element) (s template.HTMLAttr)
 
-	// SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
+	// SetLocked returns a [Binder] that will call fn instead of [Binder.JawsSetLocked].
 	//
 	// The lock will be held at this point.
-	// Do not lock or unlock the Binder within fn. Do not call JawsSet.
+	// Do not lock or unlock the [Binder] within fn. Do not call [Setter.JawsSet].
 	//
 	// The bind argument to the function is the previous Binder in the chain,
-	// and you probably want to call it's JawsSetLocked first.
+	// and you probably want to call its [Binder.JawsSetLocked] first.
 	SetLocked(fn SetHook[T]) (newbind Binder[T])
 
-	// GetLocked returns a Binder[T] that will call fn instead of JawsGetLocked.
+	// GetLocked returns a [Binder] that will call fn instead of [Binder.JawsGetLocked].
 	//
 	// The lock will be held at this point, preferring RLock over Lock, if available.
-	// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+	// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
 	//
 	// The bind argument to the function is the previous Binder in the chain,
-	// and you probably want to call it's JawsGetLocked first.
+	// and you probably want to call its [Binder.JawsGetLocked] first.
 	GetLocked(fn GetHook[T]) (newbind Binder[T])
 
-	// Success returns a Binder[T] that will call fn after the value has been set
+	// Success returns a [Binder] that will call fn after the value has been set
 	// with no errors. No locks are held when the function is called.
-	// If the function returns an error, that will be returned from JawsSet.
+	// If the function returns an error, that will be returned from [Setter.JawsSet].
 	//
 	// The function must have one of the following signatures:
 	//  * func()
@@ -107,35 +113,35 @@ type Binder[T comparable] interface {
 	//  * func(*Element) error
 	Success(fn any) (newbind Binder[T])
 
-	// GetHTML returns a Binder[T] that will call fn instead of the default
+	// GetHTML returns a [Binder] that will call fn instead of the default
 	// escaped fmt.Sprintf("%v", JawsGetLocked(elem)) HTML rendering.
 	//
 	// The lock will be held at this point, preferring RLock over Lock, if available.
-	// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+	// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
 	GetHTML(fn GetHTMLHook[T]) (newbind Binder[T])
 
-	// Format returns a Binder[T] that implements HTMLGetter that
+	// Format returns a [Binder] that implements [HTMLGetter] and
 	// calls html.EscapeString on either fmt.Sprintf(format, JawsGetLocked(elem))
-	// or, if T implements bind.Formatter, T.Format(format).
+	// or, if T implements [Formatter], T.Format(format).
 	Format(format string) (newbind Binder[T])
 
-	// Clicked returns a Binder[T] that will call fn when JawsClick is invoked.
+	// Clicked returns a [Binder] that will call fn when [jaws.ClickHandler.JawsClick] is invoked.
 	//
-	// The Binder locks are not held when the function is called.
+	// The [Binder] locks are not held when the function is called.
 	Clicked(fn ClickedHook[T]) (newbind Binder[T])
 
-	// ContextMenu returns a Binder[T] that will call fn when JawsContextMenu
-	// is invoked.
+	// ContextMenu returns a [Binder] that will call fn when
+	// [jaws.ContextMenuHandler.JawsContextMenu] is invoked.
 	//
-	// The Binder locks are not held when the function is called.
+	// The [Binder] locks are not held when the function is called.
 	ContextMenu(fn ContextMenuHook[T]) (newbind Binder[T])
 
-	// InitialHTMLAttr returns a Binder[T] that will call fn when
-	// JawsInitialHTMLAttr is invoked.
+	// InitialHTMLAttr returns a [Binder] that will call fn when
+	// [jaws.InitialHTMLAttrHandler.JawsInitialHTMLAttr] is invoked.
 	//
 	// The lock will be held at this point, preferring RLock over Lock, if available.
-	// Do not lock or unlock the Binder within fn. Do not call JawsGet.
-	// To call the previous handler in the chain, call JawsInitialHTMLAttrLocked.
+	// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
+	// To call the previous handler in the chain, call [Binder.JawsInitialHTMLAttrLocked].
 	InitialHTMLAttr(fn InitialHTMLAttrHook[T]) (newbind Binder[T])
 }
 
@@ -277,13 +283,13 @@ func (bind *binder[T]) JawsContextMenu(elem *jaws.Element, click jaws.Click) (er
 	return
 }
 
-// SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
+// SetLocked returns a [Binder] that will call fn instead of [Binder.JawsSetLocked].
 //
 // The lock will be held at this point.
-// Do not lock or unlock the Binder within fn. Do not call JawsSet.
+// Do not lock or unlock the [Binder] within fn. Do not call [Setter.JawsSet].
 //
 // The bind argument to the function is the previous Binder in the chain,
-// and you probably want to call it's JawsSetLocked first.
+// and you probably want to call its [Binder.JawsSetLocked] first.
 func (bind *binder[T]) SetLocked(fn SetHook[T]) Binder[T] {
 	return &binder[T]{
 		prev:     bind,
@@ -293,13 +299,13 @@ func (bind *binder[T]) SetLocked(fn SetHook[T]) Binder[T] {
 	}
 }
 
-// GetLocked returns a Binder[T] that will call fn instead of JawsGetLocked.
+// GetLocked returns a [Binder] that will call fn instead of [Binder.JawsGetLocked].
 //
 // The lock will be held at this point, preferring RLock over Lock, if available.
-// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
 //
 // The bind argument to the function is the previous Binder in the chain,
-// and you probably want to call it's JawsGetLocked first.
+// and you probably want to call its [Binder.JawsGetLocked] first.
 func (bind *binder[T]) GetLocked(fn GetHook[T]) Binder[T] {
 	return &binder[T]{
 		prev:     bind,
@@ -309,9 +315,9 @@ func (bind *binder[T]) GetLocked(fn GetHook[T]) Binder[T] {
 	}
 }
 
-// Format returns a Binder[T] that implements HTMLGetter that
+// Format returns a [Binder] that implements [HTMLGetter] and
 // calls html.EscapeString on either fmt.Sprintf(format, JawsGetLocked(elem))
-// or, if T implements bind.Formatter, T.Format(format).
+// or, if T implements [Formatter], T.Format(format).
 func (bind *binder[T]) Format(format string) Binder[T] {
 	return &binder[T]{
 		prev:     bind,
@@ -321,11 +327,11 @@ func (bind *binder[T]) Format(format string) Binder[T] {
 	}
 }
 
-// GetHTML returns a Binder[T] that will call fn instead of the default escaped
+// GetHTML returns a [Binder] that will call fn instead of the default escaped
 // fmt.Sprintf("%v", JawsGetLocked(elem)) HTML rendering.
 //
 // The lock will be held at this point, preferring RLock over Lock, if available.
-// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
 func (bind *binder[T]) GetHTML(fn GetHTMLHook[T]) Binder[T] {
 	return &binder[T]{
 		prev:     bind,
@@ -335,9 +341,9 @@ func (bind *binder[T]) GetHTML(fn GetHTMLHook[T]) Binder[T] {
 	}
 }
 
-// Clicked returns a Binder[T] that will call fn when JawsClick is invoked.
+// Clicked returns a [Binder] that will call fn when [jaws.ClickHandler.JawsClick] is invoked.
 //
-// The Binder locks are not held when the function is called.
+// The [Binder] locks are not held when the function is called.
 func (bind *binder[T]) Clicked(fn ClickedHook[T]) Binder[T] {
 	return &binder[T]{
 		prev:     bind,
@@ -347,9 +353,10 @@ func (bind *binder[T]) Clicked(fn ClickedHook[T]) Binder[T] {
 	}
 }
 
-// ContextMenu returns a Binder[T] that will call fn when JawsContextMenu is invoked.
+// ContextMenu returns a [Binder] that will call fn when
+// [jaws.ContextMenuHandler.JawsContextMenu] is invoked.
 //
-// The Binder locks are not held when the function is called.
+// The [Binder] locks are not held when the function is called.
 func (bind *binder[T]) ContextMenu(fn ContextMenuHook[T]) Binder[T] {
 	return &binder[T]{
 		prev:     bind,
@@ -359,11 +366,11 @@ func (bind *binder[T]) ContextMenu(fn ContextMenuHook[T]) Binder[T] {
 	}
 }
 
-// InitialHTMLAttr returns a Binder[T] that will call fn when
-// JawsInitialHTMLAttr is invoked.
+// InitialHTMLAttr returns a [Binder] that will call fn when
+// [jaws.InitialHTMLAttrHandler.JawsInitialHTMLAttr] is invoked.
 //
 // The lock will be held at this point, preferring RLock over Lock, if available.
-// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
 func (bind *binder[T]) InitialHTMLAttr(fn InitialHTMLAttrHook[T]) Binder[T] {
 	return &binder[T]{
 		prev:     bind,
@@ -373,9 +380,9 @@ func (bind *binder[T]) InitialHTMLAttr(fn InitialHTMLAttrHook[T]) Binder[T] {
 	}
 }
 
-// Success returns a Binder[T] that will call fn after the value has been set
+// Success returns a [Binder] that will call fn after the value has been set
 // with no errors. No locks are held when the function is called.
-// If the function returns an error, that will be returned from JawsSet.
+// If the function returns an error, that will be returned from [Setter.JawsSet].
 //
 // The function must have one of the following signatures:
 //   - func()
