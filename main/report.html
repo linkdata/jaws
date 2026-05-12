@@ -4578,13 +4578,16 @@ import (
 
 type A struct{ HTMLInner }
 
-func NewA(innerHTML bind.HTMLGetter) *A <span class="cov8" title="1">{ return &amp;A{HTMLInner{HTMLGetter: innerHTML}} }</span>
-func (rw RequestWriter) A(innerHTML any, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewA(bind.MakeHTMLGetter(innerHTML)), params...)
-}</span>
+// NewA returns an anchor widget whose inner HTML is rendered from innerHTML.
+// innerHTML is passed to bind.MakeHTMLGetter; plain strings are trusted HTML.
+func NewA(innerHTML any) *A <span class="cov8" title="1">{ return &amp;A{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }</span>
 
 func (ui *A) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderInner(e, w, "a", "", params)
+}</span>
+
+func (rw RequestWriter) A(innerHTML any, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewA(innerHTML), params...)
 }</span>
 </pre>
 		
@@ -4599,15 +4602,18 @@ import (
 
 type Button struct{ HTMLInner }
 
-func NewButton(innerHTML bind.HTMLGetter) *Button <span class="cov8" title="1">{
-        return &amp;Button{HTMLInner{HTMLGetter: innerHTML}}
-}</span>
-func (rw RequestWriter) Button(innerHTML any, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewButton(bind.MakeHTMLGetter(innerHTML)), params...)
+// NewButton returns a button widget whose inner HTML is rendered from innerHTML.
+// innerHTML is passed to bind.MakeHTMLGetter; plain strings are trusted HTML.
+func NewButton(innerHTML any) *Button <span class="cov8" title="1">{
+        return &amp;Button{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}}
 }</span>
 
 func (ui *Button) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderInner(e, w, "button", "button", params)
+}</span>
+
+func (rw RequestWriter) Button(innerHTML any, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewButton(innerHTML), params...)
 }</span>
 </pre>
 		
@@ -4622,13 +4628,15 @@ import (
 
 type Checkbox struct{ InputBool }
 
+// NewCheckbox returns a checkbox input widget bound to g.
 func NewCheckbox(g bind.Setter[bool]) *Checkbox <span class="cov8" title="1">{ return &amp;Checkbox{InputBool{Setter: g}} }</span>
-func (rw RequestWriter) Checkbox(value any, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewCheckbox(bind.MakeSetter[bool](value)), params...)
-}</span>
 
 func (ui *Checkbox) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderBoolInput(e, w, "checkbox", params...)
+}</span>
+
+func (rw RequestWriter) Checkbox(value any, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewCheckbox(bind.MakeSetter[bool](value)), params...)
 }</span>
 </pre>
 		
@@ -4675,15 +4683,13 @@ type Container struct {
         ContainerHelper
 }
 
+// NewContainer returns a container widget that renders c inside outerHTMLTag.
+// The returned widget tracks child elements and updates them using ContainerHelper.
 func NewContainer(outerHTMLTag string, c jaws.Container) *Container <span class="cov8" title="1">{
         return &amp;Container{
                 OuterHTMLTag:    outerHTMLTag,
                 ContainerHelper: NewContainerHelper(c),
         }
-}</span>
-
-func (rw RequestWriter) Container(outerHTMLTag string, c jaws.Container, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewContainer(outerHTMLTag, c), params...)
 }</span>
 
 func (ui *Container) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
@@ -4692,6 +4698,10 @@ func (ui *Container) JawsRender(e *jaws.Element, w io.Writer, params []any) erro
 
 func (ui *Container) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         ui.UpdateContainer(e)
+}</span>
+
+func (rw RequestWriter) Container(outerHTMLTag string, c jaws.Container, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewContainer(outerHTMLTag, c), params...)
 }</span>
 </pre>
 		
@@ -4728,6 +4738,8 @@ type ContainerHelper struct {
         contents  []*jaws.Element
 }
 
+// NewContainerHelper returns a ContainerHelper for rendering and updating c.
+// ContainerHelper values are render-scoped and should not be reused across requests.
 func NewContainerHelper(c jaws.Container) ContainerHelper <span class="cov8" title="1">{
         return ContainerHelper{Container: c}
 }</span>
@@ -4836,13 +4848,15 @@ import (
 
 type Date struct{ InputDate }
 
+// NewDate returns a date input widget bound to g.
 func NewDate(g bind.Setter[time.Time]) *Date <span class="cov8" title="1">{ return &amp;Date{InputDate{Setter: g}} }</span>
-func (rw RequestWriter) Date(value any, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewDate(bind.MakeSetter[time.Time](value)), params...)
-}</span>
 
 func (ui *Date) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderDateInput(e, w, "date", params...)
+}</span>
+
+func (rw RequestWriter) Date(value any, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewDate(bind.MakeSetter[time.Time](value)), params...)
 }</span>
 </pre>
 		
@@ -4857,13 +4871,16 @@ import (
 
 type Div struct{ HTMLInner }
 
-func NewDiv(innerHTML bind.HTMLGetter) *Div <span class="cov8" title="1">{ return &amp;Div{HTMLInner{HTMLGetter: innerHTML}} }</span>
-func (rw RequestWriter) Div(innerHTML any, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewDiv(bind.MakeHTMLGetter(innerHTML)), params...)
-}</span>
+// NewDiv returns a div widget whose inner HTML is rendered from innerHTML.
+// innerHTML is passed to bind.MakeHTMLGetter; plain strings are trusted HTML.
+func NewDiv(innerHTML any) *Div <span class="cov8" title="1">{ return &amp;Div{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }</span>
 
 func (ui *Div) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderInner(e, w, "div", "", params)
+}</span>
+
+func (rw RequestWriter) Div(innerHTML any, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewDiv(innerHTML), params...)
 }</span>
 </pre>
 		
@@ -4990,10 +5007,8 @@ import (
 
 type Img struct{ bind.Getter[string] }
 
+// NewImg returns an img widget whose src attribute is read from g.
 func NewImg(g bind.Getter[string]) *Img <span class="cov8" title="1">{ return &amp;Img{Getter: g} }</span>
-func (rw RequestWriter) Img(imageSrc any, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewImg(bind.MakeGetter[string](imageSrc)), params...)
-}</span>
 
 func (ui *Img) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) <span class="cov8" title="1">{
         var getterAttrs []template.HTMLAttr
@@ -5006,6 +5021,10 @@ func (ui *Img) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error
         <span class="cov8" title="1">return</span>
 }
 func (ui *Img) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{ e.SetAttr("src", ui.JawsGet(e)) }</span>
+
+func (rw RequestWriter) Img(imageSrc any, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewImg(bind.MakeGetter[string](imageSrc)), params...)
+}</span>
 </pre>
 		
 		<pre class="file" id="file50" style="display: none">package ui
@@ -5452,13 +5471,18 @@ import (
 
 type Label struct{ HTMLInner }
 
-func NewLabel(innerHTML bind.HTMLGetter) *Label <span class="cov8" title="1">{ return &amp;Label{HTMLInner{HTMLGetter: innerHTML}} }</span>
-func (rw RequestWriter) Label(innerHTML any, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewLabel(bind.MakeHTMLGetter(innerHTML)), params...)
+// NewLabel returns a label widget whose inner HTML is rendered from innerHTML.
+// innerHTML is passed to bind.MakeHTMLGetter; plain strings are trusted HTML.
+func NewLabel(innerHTML any) *Label <span class="cov8" title="1">{
+        return &amp;Label{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}}
 }</span>
 
 func (ui *Label) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderInner(e, w, "label", "", params)
+}</span>
+
+func (rw RequestWriter) Label(innerHTML any, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewLabel(innerHTML), params...)
 }</span>
 </pre>
 		
@@ -5473,13 +5497,16 @@ import (
 
 type Li struct{ HTMLInner }
 
-func NewLi(innerHTML bind.HTMLGetter) *Li <span class="cov8" title="1">{ return &amp;Li{HTMLInner{HTMLGetter: innerHTML}} }</span>
-func (rw RequestWriter) Li(innerHTML any, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewLi(bind.MakeHTMLGetter(innerHTML)), params...)
-}</span>
+// NewLi returns a list item widget whose inner HTML is rendered from innerHTML.
+// innerHTML is passed to bind.MakeHTMLGetter; plain strings are trusted HTML.
+func NewLi(innerHTML any) *Li <span class="cov8" title="1">{ return &amp;Li{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }</span>
 
 func (ui *Li) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderInner(e, w, "li", "", params)
+}</span>
+
+func (rw RequestWriter) Li(innerHTML any, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewLi(innerHTML), params...)
 }</span>
 </pre>
 		
@@ -5494,13 +5521,15 @@ import (
 
 type Number struct{ InputFloat }
 
+// NewNumber returns a number input widget bound to g.
 func NewNumber(g bind.Setter[float64]) *Number <span class="cov8" title="1">{ return &amp;Number{InputFloat{Setter: g}} }</span>
-func (rw RequestWriter) Number(value any, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewNumber(bind.MakeSetterFloat64(value)), params...)
-}</span>
 
 func (ui *Number) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderFloatInput(e, w, "number", params...)
+}</span>
+
+func (rw RequestWriter) Number(value any, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewNumber(bind.MakeSetterFloat64(value)), params...)
 }</span>
 </pre>
 		
@@ -5665,7 +5694,9 @@ import (
 
 type Option struct{ *named.Bool }
 
+// NewOption returns an option widget backed by nb.
 func NewOption(nb *named.Bool) Option <span class="cov8" title="1">{ return Option{Bool: nb} }</span>
+
 func (ui Option) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         e.Tag(ui.Bool)
         attrs := e.ApplyParams(params)
@@ -5696,13 +5727,15 @@ import (
 
 type Password struct{ InputText }
 
+// NewPassword returns a password input widget bound to g.
 func NewPassword(g bind.Setter[string]) *Password <span class="cov8" title="1">{ return &amp;Password{InputText{Setter: g}} }</span>
-func (rw RequestWriter) Password(value any, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewPassword(bind.MakeSetter[string](value)), params...)
-}</span>
 
 func (ui *Password) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderStringInput(e, w, "password", params...)
+}</span>
+
+func (rw RequestWriter) Password(value any, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewPassword(bind.MakeSetter[string](value)), params...)
 }</span>
 </pre>
 		
@@ -5717,13 +5750,15 @@ import (
 
 type Radio struct{ InputBool }
 
+// NewRadio returns a radio input widget bound to vp.
 func NewRadio(vp bind.Setter[bool]) *Radio <span class="cov8" title="1">{ return &amp;Radio{InputBool{Setter: vp}} }</span>
-func (rw RequestWriter) Radio(value any, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewRadio(bind.MakeSetter[bool](value)), params...)
-}</span>
 
 func (ui *Radio) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderBoolInput(e, w, "radio", params...)
+}</span>
+
+func (rw RequestWriter) Radio(value any, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewRadio(bind.MakeSetter[bool](value)), params...)
 }</span>
 </pre>
 		
@@ -5743,21 +5778,6 @@ type RadioElement struct {
         nameAttr string
 }
 
-func (rw RequestWriter) RadioGroup(nba *named.BoolArray) (rel []RadioElement) <span class="cov8" title="1">{
-        nameAttr := `name="` + jaws.MakeID() + `"`
-        nba.ReadLocked(func(nbl []*named.Bool) </span><span class="cov8" title="1">{
-                for _, nb := range nbl </span><span class="cov8" title="1">{
-                        rel = append(rel, RadioElement{
-                                radio:    rw.Request.NewElement(NewRadio(nb)),
-                                label:    rw.Request.NewElement(NewLabel(nb)),
-                                nameAttr: nameAttr,
-                        },
-                        )
-                }</span>
-        })
-        <span class="cov8" title="1">return</span>
-}
-
 // Radio renders a HTML input element of type 'radio'.
 func (re RadioElement) Radio(params ...any) template.HTML <span class="cov8" title="1">{
         var sb strings.Builder
@@ -5772,6 +5792,21 @@ func (re RadioElement) Label(params ...any) template.HTML <span class="cov8" tit
         re.label.Jaws.MustLog(re.label.JawsRender(&amp;sb, append(params, forAttr)))
         return template.HTML(sb.String()) // #nosec G203
 }</span>
+
+func (rw RequestWriter) RadioGroup(nba *named.BoolArray) (rel []RadioElement) <span class="cov8" title="1">{
+        nameAttr := `name="` + jaws.MakeID() + `"`
+        nba.ReadLocked(func(nbl []*named.Bool) </span><span class="cov8" title="1">{
+                for _, nb := range nbl </span><span class="cov8" title="1">{
+                        rel = append(rel, RadioElement{
+                                radio:    rw.Request.NewElement(NewRadio(nb)),
+                                label:    rw.Request.NewElement(NewLabel(nb)),
+                                nameAttr: nameAttr,
+                        },
+                        )
+                }</span>
+        })
+        <span class="cov8" title="1">return</span>
+}
 </pre>
 		
 		<pre class="file" id="file60" style="display: none">package ui
@@ -5785,13 +5820,15 @@ import (
 
 type Range struct{ InputFloat }
 
+// NewRange returns a range input widget bound to g.
 func NewRange(g bind.Setter[float64]) *Range <span class="cov8" title="1">{ return &amp;Range{InputFloat{Setter: g}} }</span>
-func (rw RequestWriter) Range(value any, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewRange(bind.MakeSetterFloat64(value)), params...)
-}</span>
 
 func (ui *Range) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderFloatInput(e, w, "range", params...)
+}</span>
+
+func (rw RequestWriter) Range(value any, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewRange(bind.MakeSetterFloat64(value)), params...)
 }</span>
 </pre>
 		
@@ -5807,7 +5844,9 @@ import (
 // Register creates an element used for update-only registration.
 type Register struct{ jaws.Updater }
 
+// NewRegister returns an update-only widget that invokes updater during updates.
 func NewRegister(updater jaws.Updater) Register <span class="cov8" title="1">{ return Register{Updater: updater} }</span>
+
 func (ui Register) JawsRender(*jaws.Element, io.Writer, []any) error <span class="cov8" title="1">{
         return nil
 }</span>
@@ -5919,12 +5958,9 @@ type Select struct {
         ContainerHelper
 }
 
+// NewSelect returns a select widget backed by sh.
 func NewSelect(sh named.SelectHandler) *Select <span class="cov8" title="1">{
         return &amp;Select{ContainerHelper: NewContainerHelper(sh)}
-}</span>
-
-func (rw RequestWriter) Select(sh named.SelectHandler, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewSelect(sh), params...)
 }</span>
 
 func (ui *Select) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
@@ -5941,6 +5977,10 @@ func (ui *Select) JawsInput(e *jaws.Element, val string) (err error) <span class
         err = applyDirty(ui.Tag, e, ui.ContainerHelper.Container.(bind.Setter[string]).JawsSet(e, val))
         return
 }</span>
+
+func (rw RequestWriter) Select(sh named.SelectHandler, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewSelect(sh), params...)
+}</span>
 </pre>
 		
 		<pre class="file" id="file65" style="display: none">package ui
@@ -5954,13 +5994,18 @@ import (
 
 type Span struct{ HTMLInner }
 
-func NewSpan(innerHTML bind.HTMLGetter) *Span <span class="cov8" title="1">{ return &amp;Span{HTMLInner{HTMLGetter: innerHTML}} }</span>
-func (rw RequestWriter) Span(innerHTML any, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewSpan(bind.MakeHTMLGetter(innerHTML)), params...)
+// NewSpan returns a span widget whose inner HTML is rendered from innerHTML.
+// innerHTML is passed to bind.MakeHTMLGetter; plain strings are trusted HTML.
+func NewSpan(innerHTML any) *Span <span class="cov8" title="1">{
+        return &amp;Span{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}}
 }</span>
 
 func (ui *Span) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderInner(e, w, "span", "", params)
+}</span>
+
+func (rw RequestWriter) Span(innerHTML any, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewSpan(innerHTML), params...)
 }</span>
 </pre>
 		
@@ -5976,12 +6021,9 @@ type Tbody struct {
         ContainerHelper
 }
 
+// NewTbody returns a tbody widget that renders and updates c as table rows.
 func NewTbody(c jaws.Container) *Tbody <span class="cov8" title="1">{
         return &amp;Tbody{ContainerHelper: NewContainerHelper(c)}
-}</span>
-
-func (rw RequestWriter) Tbody(c jaws.Container, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewTbody(c), params...)
 }</span>
 
 func (ui *Tbody) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
@@ -5990,6 +6032,10 @@ func (ui *Tbody) JawsRender(e *jaws.Element, w io.Writer, params []any) error <s
 
 func (ui *Tbody) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         ui.UpdateContainer(e)
+}</span>
+
+func (rw RequestWriter) Tbody(c jaws.Container, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewTbody(c), params...)
 }</span>
 </pre>
 		
@@ -6004,13 +6050,16 @@ import (
 
 type Td struct{ HTMLInner }
 
-func NewTd(innerHTML bind.HTMLGetter) *Td <span class="cov8" title="1">{ return &amp;Td{HTMLInner{HTMLGetter: innerHTML}} }</span>
-func (rw RequestWriter) Td(innerHTML any, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewTd(bind.MakeHTMLGetter(innerHTML)), params...)
-}</span>
+// NewTd returns a table cell widget whose inner HTML is rendered from innerHTML.
+// innerHTML is passed to bind.MakeHTMLGetter; plain strings are trusted HTML.
+func NewTd(innerHTML any) *Td <span class="cov8" title="1">{ return &amp;Td{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }</span>
 
 func (ui *Td) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderInner(e, w, "td", "", params)
+}</span>
+
+func (rw RequestWriter) Td(innerHTML any, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewTd(innerHTML), params...)
 }</span>
 </pre>
 		
@@ -6223,13 +6272,15 @@ import (
 
 type Text struct{ InputText }
 
+// NewText returns a text input widget bound to vp.
 func NewText(vp bind.Setter[string]) *Text <span class="cov8" title="1">{ return &amp;Text{InputText{Setter: vp}} }</span>
-func (rw RequestWriter) Text(value any, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewText(bind.MakeSetter[string](value)), params...)
-}</span>
 
 func (ui *Text) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderStringInput(e, w, "text", params...)
+}</span>
+
+func (rw RequestWriter) Text(value any, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewText(bind.MakeSetter[string](value)), params...)
 }</span>
 </pre>
 		
@@ -6246,10 +6297,8 @@ import (
 
 type Textarea struct{ InputText }
 
+// NewTextarea returns a textarea widget bound to g.
 func NewTextarea(g bind.Setter[string]) *Textarea <span class="cov8" title="1">{ return &amp;Textarea{InputText{Setter: g}} }</span>
-func (rw RequestWriter) Textarea(value any, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewTextarea(bind.MakeSetter[string](value)), params...)
-}</span>
 
 func (ui *Textarea) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) <span class="cov8" title="1">{
         var getterAttrs []template.HTMLAttr
@@ -6262,6 +6311,10 @@ func (ui *Textarea) JawsRender(e *jaws.Element, w io.Writer, params []any) (err 
         }</span>
         <span class="cov8" title="1">return</span>
 }
+
+func (rw RequestWriter) Textarea(value any, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewTextarea(bind.MakeSetter[string](value)), params...)
+}</span>
 </pre>
 		
 		<pre class="file" id="file71" style="display: none">package ui
@@ -6275,13 +6328,16 @@ import (
 
 type Tr struct{ HTMLInner }
 
-func NewTr(innerHTML bind.HTMLGetter) *Tr <span class="cov8" title="1">{ return &amp;Tr{HTMLInner{HTMLGetter: innerHTML}} }</span>
-func (rw RequestWriter) Tr(innerHTML any, params ...any) error <span class="cov8" title="1">{
-        return rw.UI(NewTr(bind.MakeHTMLGetter(innerHTML)), params...)
-}</span>
+// NewTr returns a table row widget whose inner HTML is rendered from innerHTML.
+// innerHTML is passed to bind.MakeHTMLGetter; plain strings are trusted HTML.
+func NewTr(innerHTML any) *Tr <span class="cov8" title="1">{ return &amp;Tr{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }</span>
 
 func (ui *Tr) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderInner(e, w, "tr", "", params)
+}</span>
+
+func (rw RequestWriter) Tr(innerHTML any, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewTr(innerHTML), params...)
 }</span>
 </pre>
 		
