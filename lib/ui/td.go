@@ -15,8 +15,8 @@ type Td struct{ HTMLInner }
 func NewTd(innerHTML any) *Td { return &Td{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }
 
 // JawsRender renders ui as an HTML table cell.
-func (ui *Td) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	return ui.renderInner(e, w, "td", "", params)
+func (u *Td) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
+	return u.renderInner(e, w, "td", "", params)
 }
 
 // Td renders an HTML table cell.

@@ -17,13 +17,13 @@ func NewTbody(c jaws.Container) *Tbody {
 }
 
 // JawsRender renders ui as an HTML tbody element.
-func (ui *Tbody) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	return ui.RenderContainer(e, w, "tbody", params)
+func (u *Tbody) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
+	return u.RenderContainer(e, w, "tbody", params)
 }
 
 // JawsUpdate updates the child rows.
-func (ui *Tbody) JawsUpdate(e *jaws.Element) {
-	ui.UpdateContainer(e)
+func (u *Tbody) JawsUpdate(e *jaws.Element) {
+	u.UpdateContainer(e)
 }
 
 // Tbody renders an HTML tbody element.

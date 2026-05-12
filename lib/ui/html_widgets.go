@@ -15,16 +15,16 @@ type HTMLInner struct {
 	HTMLGetter bind.HTMLGetter
 }
 
-func (ui *HTMLInner) renderInner(e *jaws.Element, w io.Writer, htmlTag, htmlType string, params []any) (err error) {
+func (u *HTMLInner) renderInner(e *jaws.Element, w io.Writer, htmlTag, htmlType string, params []any) (err error) {
 	var getterAttrs []template.HTMLAttr
-	if _, getterAttrs, err = e.ApplyGetter(ui.HTMLGetter); err == nil {
+	if _, getterAttrs, err = e.ApplyGetter(u.HTMLGetter); err == nil {
 		attrs := append(e.ApplyParams(params), getterAttrs...)
-		err = htmlio.WriteHTMLInner(w, e.Jid(), htmlTag, htmlType, ui.HTMLGetter.JawsGetHTML(e), attrs...)
+		err = htmlio.WriteHTMLInner(w, e.Jid(), htmlTag, htmlType, u.HTMLGetter.JawsGetHTML(e), attrs...)
 	}
 	return
 }
 
 // JawsUpdate updates the rendered inner HTML.
-func (ui *HTMLInner) JawsUpdate(e *jaws.Element) {
-	e.SetInner(ui.HTMLGetter.JawsGetHTML(e))
+func (u *HTMLInner) JawsUpdate(e *jaws.Element) {
+	e.SetInner(u.HTMLGetter.JawsGetHTML(e))
 }

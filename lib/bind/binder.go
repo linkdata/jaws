@@ -152,32 +152,32 @@ type binder[T comparable] struct {
 	hook any
 }
 
-func (bind *binder[T]) JawsGetLocked(elem *jaws.Element) (value T) {
-	if fn, ok := bind.hook.(GetHook[T]); ok {
-		value = fn(bind.prev, elem)
-	} else if bind.prev != nil {
-		value = bind.prev.JawsGetLocked(elem)
+func (b *binder[T]) JawsGetLocked(elem *jaws.Element) (value T) {
+	if fn, ok := b.hook.(GetHook[T]); ok {
+		value = fn(b.prev, elem)
+	} else if b.prev != nil {
+		value = b.prev.JawsGetLocked(elem)
 	} else {
-		value = *bind.ptr
+		value = *b.ptr
 	}
 	return
 }
 
-func (bind *binder[T]) JawsGet(elem *jaws.Element) (value T) {
-	bind.RWLocker.RLock()
-	defer bind.RWLocker.RUnlock()
-	value = bind.JawsGetLocked(elem)
+func (b *binder[T]) JawsGet(elem *jaws.Element) (value T) {
+	b.RWLocker.RLock()
+	defer b.RWLocker.RUnlock()
+	value = b.JawsGetLocked(elem)
 	return
 }
 
-func (bind *binder[T]) jawsGetHTMLLocked(elem *jaws.Element) template.HTML {
-	for bnd := bind; bnd != nil; bnd = bnd.prev {
+func (b *binder[T]) jawsGetHTMLLocked(elem *jaws.Element) template.HTML {
+	for bnd := b; bnd != nil; bnd = bnd.prev {
 		switch hook := (bnd.hook).(type) {
 		case GetHTMLHook[T]:
 			return hook(bnd, elem)
 		case string:
 			var s string
-			v := bind.JawsGetLocked(elem)
+			v := b.JawsGetLocked(elem)
 			if fm, ok := any(v).(Formatter); ok {
 				s = fm.Format(hook)
 			} else {
@@ -186,99 +186,99 @@ func (bind *binder[T]) jawsGetHTMLLocked(elem *jaws.Element) template.HTML {
 			return template.HTML(html.EscapeString(s)) // #nosec G203
 		}
 	}
-	return template.HTML(html.EscapeString(fmt.Sprint(bind.JawsGetLocked(elem)))) // #nosec G203
+	return template.HTML(html.EscapeString(fmt.Sprint(b.JawsGetLocked(elem)))) // #nosec G203
 }
 
-func (bind *binder[T]) JawsGetHTML(elem *jaws.Element) (s template.HTML) {
-	bind.RWLocker.RLock()
-	defer bind.RWLocker.RUnlock()
-	s = bind.jawsGetHTMLLocked(elem)
+func (b *binder[T]) JawsGetHTML(elem *jaws.Element) (s template.HTML) {
+	b.RWLocker.RLock()
+	defer b.RWLocker.RUnlock()
+	s = b.jawsGetHTMLLocked(elem)
 	return
 }
 
-func (bind *binder[T]) JawsInitialHTMLAttrLocked(elem *jaws.Element) (s template.HTMLAttr) {
-	if fn, ok := bind.hook.(InitialHTMLAttrHook[T]); ok {
-		s = fn(bind.prev, elem)
-	} else if bind.prev != nil {
-		s = bind.prev.JawsInitialHTMLAttrLocked(elem)
+func (b *binder[T]) JawsInitialHTMLAttrLocked(elem *jaws.Element) (s template.HTMLAttr) {
+	if fn, ok := b.hook.(InitialHTMLAttrHook[T]); ok {
+		s = fn(b.prev, elem)
+	} else if b.prev != nil {
+		s = b.prev.JawsInitialHTMLAttrLocked(elem)
 	}
 	return
 }
 
-func (bind *binder[T]) JawsInitialHTMLAttr(elem *jaws.Element) (s template.HTMLAttr) {
-	bind.RWLocker.RLock()
-	defer bind.RWLocker.RUnlock()
-	s = bind.JawsInitialHTMLAttrLocked(elem)
+func (b *binder[T]) JawsInitialHTMLAttr(elem *jaws.Element) (s template.HTMLAttr) {
+	b.RWLocker.RLock()
+	defer b.RWLocker.RUnlock()
+	s = b.JawsInitialHTMLAttrLocked(elem)
 	return
 }
 
-func (bind *binder[T]) JawsSetLocked(elem *jaws.Element, value T) (err error) {
-	if fn, ok := bind.hook.(SetHook[T]); ok {
-		err = fn(bind.prev, elem, value)
-	} else if bind.prev != nil {
-		err = bind.prev.JawsSetLocked(elem, value)
-	} else if value != *bind.ptr {
-		*bind.ptr = value
+func (b *binder[T]) JawsSetLocked(elem *jaws.Element, value T) (err error) {
+	if fn, ok := b.hook.(SetHook[T]); ok {
+		err = fn(b.prev, elem, value)
+	} else if b.prev != nil {
+		err = b.prev.JawsSetLocked(elem, value)
+	} else if value != *b.ptr {
+		*b.ptr = value
 	} else {
 		err = jaws.ErrValueUnchanged
 	}
 	return
 }
 
-func (bind *binder[T]) jawsSetLocking(elem *jaws.Element, value T) (err error) {
-	bind.RWLocker.Lock()
-	defer bind.RWLocker.Unlock()
-	err = bind.JawsSetLocked(elem, value)
+func (b *binder[T]) jawsSetLocking(elem *jaws.Element, value T) (err error) {
+	b.RWLocker.Lock()
+	defer b.RWLocker.Unlock()
+	err = b.JawsSetLocked(elem, value)
 	return
 }
 
-func (bind *binder[T]) callSuccessHooks(elem *jaws.Element) (err error) {
-	for bind != nil {
-		if fn, ok := bind.hook.(SuccessHook); ok {
+func (b *binder[T]) callSuccessHooks(elem *jaws.Element) (err error) {
+	for b != nil {
+		if fn, ok := b.hook.(SuccessHook); ok {
 			if err = fn(elem); err != nil {
 				break
 			}
 		}
-		bind = bind.prev
+		b = b.prev
 	}
 	return
 }
 
-func (bind *binder[T]) JawsSet(elem *jaws.Element, value T) (err error) {
-	if err = bind.jawsSetLocking(elem, value); err == nil {
-		err = bind.callSuccessHooks(elem)
+func (b *binder[T]) JawsSet(elem *jaws.Element, value T) (err error) {
+	if err = b.jawsSetLocking(elem, value); err == nil {
+		err = b.callSuccessHooks(elem)
 	}
 	return
 }
 
-func (bind *binder[T]) JawsGetTag(tag.Context) any {
-	return bind.ptr
+func (b *binder[T]) JawsGetTag(tag.Context) any {
+	return b.ptr
 }
 
-func (bind *binder[T]) JawsClick(elem *jaws.Element, click jaws.Click) (err error) {
+func (b *binder[T]) JawsClick(elem *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
-	for bind != nil {
-		if fn, ok := bind.hook.(ClickedHook[T]); ok {
-			err = fn(bind, elem, click)
+	for b != nil {
+		if fn, ok := b.hook.(ClickedHook[T]); ok {
+			err = fn(b, elem, click)
 			if !errors.Is(err, jaws.ErrEventUnhandled) {
 				break
 			}
 		}
-		bind = bind.prev
+		b = b.prev
 	}
 	return
 }
 
-func (bind *binder[T]) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err error) {
+func (b *binder[T]) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
-	for bind != nil {
-		if fn, ok := bind.hook.(ContextMenuHook[T]); ok {
-			err = fn(bind, elem, click)
+	for b != nil {
+		if fn, ok := b.hook.(ContextMenuHook[T]); ok {
+			err = fn(b, elem, click)
 			if !errors.Is(err, jaws.ErrEventUnhandled) {
 				break
 			}
 		}
-		bind = bind.prev
+		b = b.prev
 	}
 	return
 }
@@ -290,11 +290,11 @@ func (bind *binder[T]) JawsContextMenu(elem *jaws.Element, click jaws.Click) (er
 //
 // The bind argument to the function is the previous Binder in the chain,
 // and you probably want to call its [Binder.JawsSetLocked] first.
-func (bind *binder[T]) SetLocked(fn SetHook[T]) Binder[T] {
+func (b *binder[T]) SetLocked(fn SetHook[T]) Binder[T] {
 	return &binder[T]{
-		prev:     bind,
-		RWLocker: bind.RWLocker,
-		ptr:      bind.ptr,
+		prev:     b,
+		RWLocker: b.RWLocker,
+		ptr:      b.ptr,
 		hook:     fn,
 	}
 }
@@ -306,11 +306,11 @@ func (bind *binder[T]) SetLocked(fn SetHook[T]) Binder[T] {
 //
 // The bind argument to the function is the previous Binder in the chain,
 // and you probably want to call its [Binder.JawsGetLocked] first.
-func (bind *binder[T]) GetLocked(fn GetHook[T]) Binder[T] {
+func (b *binder[T]) GetLocked(fn GetHook[T]) Binder[T] {
 	return &binder[T]{
-		prev:     bind,
-		RWLocker: bind.RWLocker,
-		ptr:      bind.ptr,
+		prev:     b,
+		RWLocker: b.RWLocker,
+		ptr:      b.ptr,
 		hook:     fn,
 	}
 }
@@ -318,11 +318,11 @@ func (bind *binder[T]) GetLocked(fn GetHook[T]) Binder[T] {
 // Format returns a [Binder] that implements [HTMLGetter] and
 // calls html.EscapeString on either fmt.Sprintf(format, JawsGetLocked(elem))
 // or, if T implements [Formatter], T.Format(format).
-func (bind *binder[T]) Format(format string) Binder[T] {
+func (b *binder[T]) Format(format string) Binder[T] {
 	return &binder[T]{
-		prev:     bind,
-		RWLocker: bind.RWLocker,
-		ptr:      bind.ptr,
+		prev:     b,
+		RWLocker: b.RWLocker,
+		ptr:      b.ptr,
 		hook:     format,
 	}
 }
@@ -332,11 +332,11 @@ func (bind *binder[T]) Format(format string) Binder[T] {
 //
 // The lock will be held at this point, preferring RLock over Lock, if available.
 // Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
-func (bind *binder[T]) GetHTML(fn GetHTMLHook[T]) Binder[T] {
+func (b *binder[T]) GetHTML(fn GetHTMLHook[T]) Binder[T] {
 	return &binder[T]{
-		prev:     bind,
-		RWLocker: bind.RWLocker,
-		ptr:      bind.ptr,
+		prev:     b,
+		RWLocker: b.RWLocker,
+		ptr:      b.ptr,
 		hook:     fn,
 	}
 }
@@ -344,11 +344,11 @@ func (bind *binder[T]) GetHTML(fn GetHTMLHook[T]) Binder[T] {
 // Clicked returns a [Binder] that will call fn when [jaws.ClickHandler.JawsClick] is invoked.
 //
 // The [Binder] locks are not held when the function is called.
-func (bind *binder[T]) Clicked(fn ClickedHook[T]) Binder[T] {
+func (b *binder[T]) Clicked(fn ClickedHook[T]) Binder[T] {
 	return &binder[T]{
-		prev:     bind,
-		RWLocker: bind.RWLocker,
-		ptr:      bind.ptr,
+		prev:     b,
+		RWLocker: b.RWLocker,
+		ptr:      b.ptr,
 		hook:     fn,
 	}
 }
@@ -357,11 +357,11 @@ func (bind *binder[T]) Clicked(fn ClickedHook[T]) Binder[T] {
 // [jaws.ContextMenuHandler.JawsContextMenu] is invoked.
 //
 // The [Binder] locks are not held when the function is called.
-func (bind *binder[T]) ContextMenu(fn ContextMenuHook[T]) Binder[T] {
+func (b *binder[T]) ContextMenu(fn ContextMenuHook[T]) Binder[T] {
 	return &binder[T]{
-		prev:     bind,
-		RWLocker: bind.RWLocker,
-		ptr:      bind.ptr,
+		prev:     b,
+		RWLocker: b.RWLocker,
+		ptr:      b.ptr,
 		hook:     fn,
 	}
 }
@@ -371,11 +371,11 @@ func (bind *binder[T]) ContextMenu(fn ContextMenuHook[T]) Binder[T] {
 //
 // The lock will be held at this point, preferring RLock over Lock, if available.
 // Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
-func (bind *binder[T]) InitialHTMLAttr(fn InitialHTMLAttrHook[T]) Binder[T] {
+func (b *binder[T]) InitialHTMLAttr(fn InitialHTMLAttrHook[T]) Binder[T] {
 	return &binder[T]{
-		prev:     bind,
-		RWLocker: bind.RWLocker,
-		ptr:      bind.ptr,
+		prev:     b,
+		RWLocker: b.RWLocker,
+		ptr:      b.ptr,
 		hook:     fn,
 	}
 }
@@ -389,11 +389,11 @@ func (bind *binder[T]) InitialHTMLAttr(fn InitialHTMLAttrHook[T]) Binder[T] {
 //   - func() error
 //   - func(*Element)
 //   - func(*Element) error
-func (bind *binder[T]) Success(fn any) Binder[T] {
+func (b *binder[T]) Success(fn any) Binder[T] {
 	return &binder[T]{
-		prev:     bind,
-		RWLocker: bind.RWLocker,
-		ptr:      bind.ptr,
+		prev:     b,
+		RWLocker: b.RWLocker,
+		ptr:      b.ptr,
 		hook:     wrapSuccessHook(fn),
 	}
 }

@@ -19,43 +19,43 @@ const Prefix = "Jid."
 const Invalid = Jid(-1)
 
 // IsValid reports whether jid can identify an element or the request as a whole.
-func (jid Jid) IsValid() bool {
-	return jid >= 0
+func (j Jid) IsValid() bool {
+	return j >= 0
 }
 
 // AppendInt appends just the text format of the Jid's numerical value.
-func (jid Jid) AppendInt(dst []byte) []byte {
-	if jid > 0 {
-		dst = strconv.AppendInt(dst, int64(jid), 10)
+func (j Jid) AppendInt(dst []byte) []byte {
+	if j > 0 {
+		dst = strconv.AppendInt(dst, int64(j), 10)
 	}
 	return dst
 }
 
 // Append appends the unquoted string format of the Jid.
-func (jid Jid) Append(dst []byte) []byte {
-	if jid > 0 {
+func (j Jid) Append(dst []byte) []byte {
+	if j > 0 {
 		dst = append(dst, []byte(Prefix)...)
-		dst = jid.AppendInt(dst)
+		dst = j.AppendInt(dst)
 	}
 	return dst
 }
 
 // AppendQuote appends the string format of the Jid surrounded by double quotes.
-func (jid Jid) AppendQuote(dst []byte) []byte {
+func (j Jid) AppendQuote(dst []byte) []byte {
 	dst = append(dst, '"')
-	dst = jid.Append(dst)
+	dst = j.Append(dst)
 	dst = append(dst, '"')
 	return dst
 }
 
 // AppendStartTagAttr appends `<startTag` followed by the quoted [Jid] as an
 // HTML id attribute when jid is non-zero.
-func (jid Jid) AppendStartTagAttr(dst []byte, startTag string) []byte {
+func (j Jid) AppendStartTagAttr(dst []byte, startTag string) []byte {
 	dst = append(dst, '<')
 	dst = append(dst, startTag...)
-	if jid > 0 {
+	if j > 0 {
 		dst = append(dst, ` id=`...)
-		dst = jid.AppendQuote(dst)
+		dst = j.AppendQuote(dst)
 	}
 	return dst
 }
@@ -85,9 +85,9 @@ func ParseString(s string) Jid {
 }
 
 // String returns the unquoted string representation of the Jid.
-func (jid Jid) String() string {
-	if jid > 0 {
-		return string(jid.Append(nil))
+func (j Jid) String() string {
+	if j > 0 {
+		return string(j.Append(nil))
 	}
 	return ""
 }

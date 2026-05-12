@@ -14,8 +14,8 @@ type Radio struct{ InputBool }
 func NewRadio(vp bind.Setter[bool]) *Radio { return &Radio{InputBool{Setter: vp}} }
 
 // JawsRender renders ui as an HTML radio input.
-func (ui *Radio) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	return ui.renderBoolInput(e, w, "radio", params...)
+func (u *Radio) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
+	return u.renderBoolInput(e, w, "radio", params...)
 }
 
 // Radio renders an HTML radio input.

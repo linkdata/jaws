@@ -17,8 +17,8 @@ func NewButton(innerHTML any) *Button {
 }
 
 // JawsRender renders ui as an HTML button element.
-func (ui *Button) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	return ui.renderInner(e, w, "button", "button", params)
+func (u *Button) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
+	return u.renderInner(e, w, "button", "button", params)
 }
 
 // Button renders an HTML button element.

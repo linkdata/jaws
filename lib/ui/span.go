@@ -17,8 +17,8 @@ func NewSpan(innerHTML any) *Span {
 }
 
 // JawsRender renders ui as an HTML span element.
-func (ui *Span) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	return ui.renderInner(e, w, "span", "", params)
+func (u *Span) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
+	return u.renderInner(e, w, "span", "", params)
 }
 
 // Span renders an HTML span element.

@@ -14,8 +14,8 @@ type Number struct{ InputFloat }
 func NewNumber(g bind.Setter[float64]) *Number { return &Number{InputFloat{Setter: g}} }
 
 // JawsRender renders ui as an HTML number input.
-func (ui *Number) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	return ui.renderFloatInput(e, w, "number", params...)
+func (u *Number) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
+	return u.renderFloatInput(e, w, "number", params...)
 }
 
 // Number renders an HTML number input.

@@ -16,12 +16,12 @@ type Textarea struct{ InputText }
 func NewTextarea(g bind.Setter[string]) *Textarea { return &Textarea{InputText{Setter: g}} }
 
 // JawsRender renders ui as an HTML textarea.
-func (ui *Textarea) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) {
+func (u *Textarea) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) {
 	var getterAttrs []template.HTMLAttr
-	if getterAttrs, err = ui.applyGetterAttrs(e, ui.Setter); err == nil {
+	if getterAttrs, err = u.applyGetterAttrs(e, u.Setter); err == nil {
 		attrs := append(e.ApplyParams(params), getterAttrs...)
-		v := ui.JawsGet(e)
-		ui.Last.Store(v)
+		v := u.JawsGet(e)
+		u.Last.Store(v)
 		v = template.HTMLEscapeString(v)
 		err = htmlio.WriteHTMLInner(w, e.Jid(), "textarea", "", template.HTML(v), attrs...) // #nosec G203
 	}

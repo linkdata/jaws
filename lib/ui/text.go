@@ -14,8 +14,8 @@ type Text struct{ InputText }
 func NewText(vp bind.Setter[string]) *Text { return &Text{InputText{Setter: vp}} }
 
 // JawsRender renders ui as an HTML text input.
-func (ui *Text) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	return ui.renderStringInput(e, w, "text", params...)
+func (u *Text) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
+	return u.renderStringInput(e, w, "text", params...)
 }
 
 // Text renders an HTML text input.

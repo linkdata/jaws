@@ -15,8 +15,8 @@ type Div struct{ HTMLInner }
 func NewDiv(innerHTML any) *Div { return &Div{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }
 
 // JawsRender renders ui as an HTML div element.
-func (ui *Div) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	return ui.renderInner(e, w, "div", "", params)
+func (u *Div) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
+	return u.renderInner(e, w, "div", "", params)
 }
 
 // Div renders an HTML div element.

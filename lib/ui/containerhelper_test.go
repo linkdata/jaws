@@ -155,8 +155,8 @@ type testRenderErrorUI struct {
 	err error
 }
 
-func (ui testRenderErrorUI) JawsRender(*jaws.Element, io.Writer, []any) error {
-	return ui.err
+func (u testRenderErrorUI) JawsRender(*jaws.Element, io.Writer, []any) error {
+	return u.err
 }
 
 func (testRenderErrorUI) JawsUpdate(*jaws.Element) {}
@@ -166,9 +166,9 @@ type testRenderErrorCaptureUI struct {
 	jid jaws.Jid
 }
 
-func (ui *testRenderErrorCaptureUI) JawsRender(e *jaws.Element, _ io.Writer, _ []any) error {
-	ui.jid = e.Jid()
-	return ui.err
+func (u *testRenderErrorCaptureUI) JawsRender(e *jaws.Element, _ io.Writer, _ []any) error {
+	u.jid = e.Jid()
+	return u.err
 }
 
 func (*testRenderErrorCaptureUI) JawsUpdate(*jaws.Element) {}

@@ -19,20 +19,20 @@ func NewSelect(sh named.SelectHandler) *Select {
 }
 
 // JawsRender renders ui as an HTML select element.
-func (ui *Select) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	return ui.RenderContainer(e, w, "select", params)
+func (u *Select) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
+	return u.RenderContainer(e, w, "select", params)
 }
 
 // JawsUpdate updates the selected value and child options.
-func (ui *Select) JawsUpdate(e *jaws.Element) {
+func (u *Select) JawsUpdate(e *jaws.Element) {
 	// jawsbind.Setter[T] includes jawsbind.Getter[T]
-	e.SetValue(ui.ContainerHelper.Container.(bind.Setter[string]).JawsGet(e))
-	ui.UpdateContainer(e)
+	e.SetValue(u.ContainerHelper.Container.(bind.Setter[string]).JawsGet(e))
+	u.UpdateContainer(e)
 }
 
 // JawsInput stores a browser-side select value.
-func (ui *Select) JawsInput(e *jaws.Element, val string) (err error) {
-	err = applyDirty(ui.Tag, e, ui.ContainerHelper.Container.(bind.Setter[string]).JawsSet(e, val))
+func (u *Select) JawsInput(e *jaws.Element, val string) (err error) {
+	err = applyDirty(u.Tag, e, u.ContainerHelper.Container.(bind.Setter[string]).JawsSet(e, val))
 	return
 }
 

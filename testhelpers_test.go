@@ -98,7 +98,7 @@ type testRequestWriter struct {
 type testRegisterUI struct{ Updater }
 
 func (testRegisterUI) JawsRender(*Element, io.Writer, []any) error { return nil }
-func (ui testRegisterUI) JawsUpdate(e *Element)                    { ui.Updater.JawsUpdate(e) }
+func (u testRegisterUI) JawsUpdate(e *Element)                     { u.Updater.JawsUpdate(e) }
 
 func (rw testRequestWriter) UI(ui UI, params ...any) error {
 	return rw.rq.NewElement(ui).JawsRender(rw, params)
@@ -302,9 +302,9 @@ type testDivWidget struct {
 	inner template.HTML
 }
 
-func (ui testDivWidget) JawsRender(e *Element, w io.Writer, params []any) error {
+func (u testDivWidget) JawsRender(e *Element, w io.Writer, params []any) error {
 	e.ApplyParams(params)
-	return htmlio.WriteHTMLInner(w, e.Jid(), "div", "", ui.inner)
+	return htmlio.WriteHTMLInner(w, e.Jid(), "div", "", u.inner)
 }
 
 func (testDivWidget) JawsUpdate(*Element) {}
@@ -324,30 +324,30 @@ func newTestTextInputWidget(s testStringSetter) *testTextInputWidget {
 	return &testTextInputWidget{setter: s}
 }
 
-func (ui *testTextInputWidget) JawsRender(e *Element, w io.Writer, params []any) (err error) {
+func (u *testTextInputWidget) JawsRender(e *Element, w io.Writer, params []any) (err error) {
 	var getterAttrs []template.HTMLAttr
-	if ui.tagValue, getterAttrs, err = e.ApplyGetter(ui.setter); err == nil {
+	if u.tagValue, getterAttrs, err = e.ApplyGetter(u.setter); err == nil {
 		attrs := append(e.ApplyParams(params), getterAttrs...)
-		v := ui.setter.JawsGet(e)
-		ui.last = v
+		v := u.setter.JawsGet(e)
+		u.last = v
 		err = htmlio.WriteHTMLInput(w, e.Jid(), "text", v, attrs)
 	}
 	return
 }
 
-func (ui *testTextInputWidget) JawsUpdate(e *Element) {
-	if v := ui.setter.JawsGet(e); v != ui.last {
-		ui.last = v
+func (u *testTextInputWidget) JawsUpdate(e *Element) {
+	if v := u.setter.JawsGet(e); v != u.last {
+		u.last = v
 		e.SetValue(v)
 	}
 }
 
-func (ui *testTextInputWidget) JawsInput(e *Element, val string) (err error) {
-	if changed, setErr := e.maybeDirty(ui.tagValue, ui.setter.JawsSet(e, val)); setErr != nil {
+func (u *testTextInputWidget) JawsInput(e *Element, val string) (err error) {
+	if changed, setErr := e.maybeDirty(u.tagValue, u.setter.JawsSet(e, val)); setErr != nil {
 		err = setErr
 	} else {
 		if changed {
-			ui.last = val
+			u.last = val
 		}
 	}
 	return

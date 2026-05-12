@@ -39,9 +39,9 @@ func NewContainerHelper(c jaws.Container) ContainerHelper {
 
 // RenderContainer renders outerHTMLTag around the current children from
 // [jaws.Container.JawsContains].
-func (ui *ContainerHelper) RenderContainer(e *jaws.Element, w io.Writer, outerHTMLTag string, params []any) (err error) {
+func (u *ContainerHelper) RenderContainer(e *jaws.Element, w io.Writer, outerHTMLTag string, params []any) (err error) {
 	var getterAttrs []template.HTMLAttr
-	if ui.Tag, getterAttrs, err = e.ApplyGetter(ui.Container); err == nil {
+	if u.Tag, getterAttrs, err = e.ApplyGetter(u.Container); err == nil {
 		attrs := append(e.ApplyParams(params), getterAttrs...)
 		b := e.Jid().AppendStartTagAttr(nil, outerHTMLTag)
 		for _, attr := range attrs {
@@ -52,7 +52,7 @@ func (ui *ContainerHelper) RenderContainer(e *jaws.Element, w io.Writer, outerHT
 		_, err = w.Write(b)
 		if err == nil {
 			var contents []*jaws.Element
-			for _, childUI := range ui.Container.JawsContains(e) {
+			for _, childUI := range u.Container.JawsContains(e) {
 				elem := e.Request.NewElement(childUI)
 				contents = append(contents, elem)
 				if err = elem.JawsRender(w, nil); err != nil {
@@ -60,9 +60,9 @@ func (ui *ContainerHelper) RenderContainer(e *jaws.Element, w io.Writer, outerHT
 				}
 			}
 			if err == nil {
-				ui.mu.Lock()
-				ui.contents = contents
-				ui.mu.Unlock()
+				u.mu.Lock()
+				u.contents = contents
+				u.mu.Unlock()
 			} else {
 				for _, elem := range contents {
 					e.Request.DeleteElement(elem)
@@ -81,23 +81,23 @@ func (ui *ContainerHelper) RenderContainer(e *jaws.Element, w io.Writer, outerHT
 }
 
 // UpdateContainer updates child elements to match [jaws.Container.JawsContains].
-func (ui *ContainerHelper) UpdateContainer(e *jaws.Element) {
+func (u *ContainerHelper) UpdateContainer(e *jaws.Element) {
 	var toAppend []*jaws.Element
 
-	wantContents := ui.Container.JawsContains(e)
+	wantContents := u.Container.JawsContains(e)
 	newOrder := make([]jaws.Jid, 0, len(wantContents))
 
-	ui.mu.Lock()
+	u.mu.Lock()
 	// build pool of reusable Elements keyed by UI, preserving duplicates
-	pool := make(map[jaws.UI][]*jaws.Element, len(ui.contents))
-	oldOrder := make([]jaws.Jid, len(ui.contents))
-	for i, elem := range ui.contents {
+	pool := make(map[jaws.UI][]*jaws.Element, len(u.contents))
+	oldOrder := make([]jaws.Jid, len(u.contents))
+	for i, elem := range u.contents {
 		oldOrder[i] = elem.Jid()
 		pool[elem.Ui()] = append(pool[elem.Ui()], elem)
 	}
 
 	// build new contents, reusing pooled Elements where possible
-	ui.contents = ui.contents[:0]
+	u.contents = u.contents[:0]
 	for _, childUI := range wantContents {
 		var elem *jaws.Element
 		if elems := pool[childUI]; len(elems) > 0 {
@@ -107,10 +107,10 @@ func (ui *ContainerHelper) UpdateContainer(e *jaws.Element) {
 			elem = e.Request.NewElement(childUI)
 			toAppend = append(toAppend, elem)
 		}
-		ui.contents = append(ui.contents, elem)
+		u.contents = append(u.contents, elem)
 		newOrder = append(newOrder, elem.Jid())
 	}
-	ui.mu.Unlock()
+	u.mu.Unlock()
 
 	// remove leftover Elements not present in new contents
 	for _, elems := range pool {

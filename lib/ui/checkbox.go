@@ -14,8 +14,8 @@ type Checkbox struct{ InputBool }
 func NewCheckbox(g bind.Setter[bool]) *Checkbox { return &Checkbox{InputBool{Setter: g}} }
 
 // JawsRender renders ui as an HTML checkbox input.
-func (ui *Checkbox) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	return ui.renderBoolInput(e, w, "checkbox", params...)
+func (u *Checkbox) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
+	return u.renderBoolInput(e, w, "checkbox", params...)
 }
 
 // Checkbox renders an HTML checkbox input.
