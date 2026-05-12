@@ -9,9 +9,11 @@ import (
 
 type Span struct{ HTMLInner }
 
-func NewSpan(innerHTML bind.HTMLGetter) *Span { return &Span{HTMLInner{HTMLGetter: innerHTML}} }
+func NewSpan(innerHTML any) *Span {
+	return &Span{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}}
+}
 func (rw RequestWriter) Span(innerHTML any, params ...any) error {
-	return rw.UI(NewSpan(bind.MakeHTMLGetter(innerHTML)), params...)
+	return rw.UI(NewSpan(innerHTML), params...)
 }
 
 func (ui *Span) JawsRender(e *jaws.Element, w io.Writer, params []any) error {

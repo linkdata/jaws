@@ -9,11 +9,11 @@ import (
 
 type Button struct{ HTMLInner }
 
-func NewButton(innerHTML bind.HTMLGetter) *Button {
-	return &Button{HTMLInner{HTMLGetter: innerHTML}}
+func NewButton(innerHTML any) *Button {
+	return &Button{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}}
 }
 func (rw RequestWriter) Button(innerHTML any, params ...any) error {
-	return rw.UI(NewButton(bind.MakeHTMLGetter(innerHTML)), params...)
+	return rw.UI(NewButton(innerHTML), params...)
 }
 
 func (ui *Button) JawsRender(e *jaws.Element, w io.Writer, params []any) error {

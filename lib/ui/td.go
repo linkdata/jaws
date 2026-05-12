@@ -9,9 +9,9 @@ import (
 
 type Td struct{ HTMLInner }
 
-func NewTd(innerHTML bind.HTMLGetter) *Td { return &Td{HTMLInner{HTMLGetter: innerHTML}} }
+func NewTd(innerHTML any) *Td { return &Td{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }
 func (rw RequestWriter) Td(innerHTML any, params ...any) error {
-	return rw.UI(NewTd(bind.MakeHTMLGetter(innerHTML)), params...)
+	return rw.UI(NewTd(innerHTML), params...)
 }
 
 func (ui *Td) JawsRender(e *jaws.Element, w io.Writer, params []any) error {

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/named"
 	"github.com/linkdata/jaws/lib/tag"
 )
@@ -36,6 +37,23 @@ func TestHTMLWidgets_ConstructorsAndRender(t *testing.T) {
 			tt.ui.JawsUpdate(elem)
 		})
 	}
+}
+
+func TestHTMLWidgets_StringInnerHTMLIsRaw(t *testing.T) {
+	_, rq := newCoreRequest(t)
+
+	_, got := renderUI(t, rq, NewDiv("<b>x</b>"))
+	mustMatch(t, `^<div id="Jid\.[0-9]+"><b>x</b></div>$`, got)
+}
+
+func TestHTMLWidgets_StringGetterInnerHTMLIsEscaped(t *testing.T) {
+	_, rq := newCoreRequest(t)
+
+	getter := bind.StringGetterFunc(func(*jaws.Element) string {
+		return "<b>x</b>"
+	})
+	_, got := renderUI(t, rq, NewDiv(getter))
+	mustMatch(t, `^<div id="Jid\.[0-9]+">&lt;b&gt;x&lt;/b&gt;</div>$`, got)
 }
 
 func TestHTMLInner_RenderInnerApplyGetterError(t *testing.T) {

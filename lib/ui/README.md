@@ -23,10 +23,15 @@ rw.UI(ui.NewX(...), params...)
 Examples:
 
 ```go
-rw.UI(ui.NewDiv(bind.MakeHTMLGetter("content")))
+rw.UI(ui.NewDiv("content"))
 rw.UI(ui.NewCheckbox(myBoolSetter), "disabled")
 rw.UI(ui.NewRange(myFloatSetter))
 ```
+
+HTML-inner widgets such as `NewDiv`, `NewSpan`, and `RequestWriter.Div` pass
+their content through `bind.MakeHTMLGetter`. Plain strings are treated as trusted
+HTML and are not escaped; use a `bind.Getter[string]`, `bind.StringGetterFunc`,
+or `fmt.Stringer` for string content that should be escaped.
 
 ## Building blocks
 
@@ -53,8 +58,8 @@ Use `HTMLInner`:
 ```go
 type Article struct{ ui.HTMLInner }
 
-func NewArticle(inner bind.HTMLGetter) *Article {
-  return &Article{HTMLInner: ui.HTMLInner{HTMLGetter: inner}}
+func NewArticle(inner any) *Article {
+  return &Article{HTMLInner: ui.HTMLInner{HTMLGetter: bind.MakeHTMLGetter(inner)}}
 }
 
 func (w *Article) JawsRender(e *jaws.Element, wr io.Writer, params []any) error {

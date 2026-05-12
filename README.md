@@ -289,8 +289,8 @@ router.GET("/jaws/*", func(c echo.Context) error {
 
 ### HTML rendering
 
-HTML output elements (e.g. `ui.RequestWriter.Div()`) require a `bind.HTMLGetter` or something that can
-be made into one using `bind.MakeHTMLGetter()`.
+HTML output elements (e.g. `ui.NewDiv()` and `ui.RequestWriter.Div()`) accept values that can
+be made into a `bind.HTMLGetter` using `bind.MakeHTMLGetter()`.
 
 In order of precedence, this can be:
 * `bind.HTMLGetter`: `JawsGetHTML(*Element) template.HTML` to be used as-is.
@@ -301,6 +301,8 @@ In order of precedence, this can be:
 
 You can use `bind.New(...).GetHTML(...)`, `bind.HTMLGetterFunc()` or `bind.StringGetterFunc()` to build a custom renderer
 for trivial rendering tasks, or define a custom type implementing `HTMLGetter`.
+Plain strings are treated as trusted HTML. Escape untrusted string input yourself, or pass it through
+a `bind.Getter[string]`, `bind.StringGetterFunc()` or `fmt.Stringer` so JaWS escapes it before rendering.
 
 ### Data binding
 
