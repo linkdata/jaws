@@ -5649,10 +5649,10 @@ func isNilUI(ui jaws.UI) (yes bool) <span class="cov8" title="1">{
 // JsVar binds a [JsVar] to a named JavaScript variable.
 //
 // You can also pass a [JsVarMaker] instead of a [JsVar].
-func (rqw RequestWriter) JsVar(jsvarname string, jsvar any, params ...any) (err error) <span class="cov8" title="1">{
+func (rw RequestWriter) JsVar(jsvarname string, jsvar any, params ...any) (err error) <span class="cov8" title="1">{
         if _, err = validateJsVarName([]any{jsvarname}); err == nil </span><span class="cov8" title="1">{
                 if jvm, ok := jsvar.(JsVarMaker); ok </span><span class="cov8" title="1">{
-                        jsvar, err = jvm.JawsMakeJsVar(rqw.Request)
+                        jsvar, err = jvm.JawsMakeJsVar(rw.Request)
                 }</span>
                 <span class="cov8" title="1">if err == nil </span><span class="cov8" title="1">{
                         err = ErrJsVarArgumentType
@@ -5661,7 +5661,7 @@ func (rqw RequestWriter) JsVar(jsvarname string, jsvar any, params ...any) (err 
                                         var newparams []any
                                         newparams = append(newparams, jsvarname)
                                         newparams = append(newparams, params...)
-                                        err = rqw.UI(ui, newparams...)
+                                        err = rw.UI(ui, newparams...)
                                 }</span>
                         }
                 }
@@ -6098,8 +6098,8 @@ func (ui Register) JawsRender(*jaws.Element, io.Writer, []any) error <span class
 // Returns a [jid.Jid], suitable for including as an HTML id attribute:
 //
 //        &lt;div id="{{$.Register .MyUpdater}}"&gt;...&lt;/div&gt;
-func (rqw RequestWriter) Register(updater jaws.Updater, params ...any) jid.Jid <span class="cov8" title="1">{
-        elem := rqw.NewElement(Register{Updater: updater})
+func (rw RequestWriter) Register(updater jaws.Updater, params ...any) jid.Jid <span class="cov8" title="1">{
+        elem := rw.NewElement(Register{Updater: updater})
         elem.Tag(updater)
         elem.ApplyParams(params)
         updater.JawsUpdate(elem)
@@ -6123,49 +6123,49 @@ type RequestWriter struct {
 }
 
 // UI creates an element for ui and renders it to the underlying writer.
-func (rqw RequestWriter) UI(ui jaws.UI, params ...any) (err error) <span class="cov8" title="1">{
-        elem := rqw.NewElement(ui)
-        if err = elem.JawsRender(rqw, params); err != nil </span><span class="cov8" title="1">{
-                rqw.DeleteElement(elem)
+func (rw RequestWriter) UI(ui jaws.UI, params ...any) (err error) <span class="cov8" title="1">{
+        elem := rw.NewElement(ui)
+        if err = elem.JawsRender(rw, params); err != nil </span><span class="cov8" title="1">{
+                rw.DeleteElement(elem)
         }</span>
         <span class="cov8" title="1">return</span>
 }
 
 // Write records that rendering has started, then writes p to the underlying writer.
-func (rqw RequestWriter) Write(p []byte) (n int, err error) <span class="cov8" title="1">{
-        rqw.Rendering.Store(true)
-        return rqw.Writer.Write(p)
+func (rw RequestWriter) Write(p []byte) (n int, err error) <span class="cov8" title="1">{
+        rw.Rendering.Store(true)
+        return rw.Writer.Write(p)
 }</span>
 
 // Initial returns the initial [http.Request].
-func (rqw RequestWriter) Initial() *http.Request <span class="cov8" title="1">{
-        return rqw.Request.Initial()
+func (rw RequestWriter) Initial() *http.Request <span class="cov8" title="1">{
+        return rw.Request.Initial()
 }</span>
 
 // Session returns the request's [jaws.Session], or nil.
-func (rqw RequestWriter) Session() *jaws.Session <span class="cov8" title="1">{
-        return rqw.Request.Session()
+func (rw RequestWriter) Session() *jaws.Session <span class="cov8" title="1">{
+        return rw.Request.Session()
 }</span>
 
 // Get calls [jaws.Request.Get].
-func (rqw RequestWriter) Get(key string) (val any) <span class="cov8" title="1">{
-        return rqw.Request.Get(key)
+func (rw RequestWriter) Get(key string) (val any) <span class="cov8" title="1">{
+        return rw.Request.Get(key)
 }</span>
 
 // Set calls [jaws.Request.Set].
-func (rqw RequestWriter) Set(key string, val any) <span class="cov8" title="1">{
-        rqw.Request.Set(key, val)
+func (rw RequestWriter) Set(key string, val any) <span class="cov8" title="1">{
+        rw.Request.Set(key, val)
 }</span>
 
 // HeadHTML outputs the HTML code needed in the head section.
-func (rqw RequestWriter) HeadHTML() error <span class="cov8" title="1">{
-        return rqw.Request.HeadHTML(rqw)
+func (rw RequestWriter) HeadHTML() error <span class="cov8" title="1">{
+        return rw.Request.HeadHTML(rw)
 }</span>
 
 // TailHTML writes optional HTML code at the end of the page's BODY section that
 // will immediately apply updates made during initial rendering.
-func (rqw RequestWriter) TailHTML() error <span class="cov8" title="1">{
-        return rqw.Request.TailHTML(rqw)
+func (rw RequestWriter) TailHTML() error <span class="cov8" title="1">{
+        return rw.Request.TailHTML(rw)
 }</span>
 </pre>
 		
@@ -6520,8 +6520,8 @@ func NewTemplate(name string, dot any) Template <span class="cov8" title="1">{
 //
 // The Dot field in [With] is set to dot, and name is resolved to a
 // [template.Template] using [jaws.Jaws.LookupTemplate].
-func (rqw RequestWriter) Template(name string, dot any, params ...any) error <span class="cov8" title="1">{
-        return rqw.UI(NewTemplate(name, dot), params...)
+func (rw RequestWriter) Template(name string, dot any, params ...any) error <span class="cov8" title="1">{
+        return rw.UI(NewTemplate(name, dot), params...)
 }</span>
 </pre>
 		
