@@ -41,6 +41,22 @@ and use JaWS as demonstrated below.
 
 For widget authoring guidance see `lib/ui/README.md`.
 
+### Codex skill
+
+This repository includes a Codex skill under `.agents/skills/jaws/`.
+To install it in your local Codex skills tree, copy both `SKILL.md` and
+`agents/openai.yaml` into `~/.codex/skills/jaws/`.
+
+Using `curl`:
+
+```bash
+mkdir -p "$HOME/.codex/skills/jaws/agents"
+curl -fsSL https://raw.githubusercontent.com/linkdata/jaws/main/.agents/skills/jaws/SKILL.md \
+	-o "$HOME/.codex/skills/jaws/SKILL.md"
+curl -fsSL https://raw.githubusercontent.com/linkdata/jaws/main/.agents/skills/jaws/agents/openai.yaml \
+	-o "$HOME/.codex/skills/jaws/agents/openai.yaml"
+```
+
 ## Quick start
 
 The following minimal program renders a single range input whose value
