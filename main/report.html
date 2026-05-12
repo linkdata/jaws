@@ -274,6 +274,7 @@ func (clk *Click) setKeyState(state int) <span class="cov8" title="1">{
         clk.Alt = (state &amp; clickKeyAlt) != 0
 }</span>
 
+// String formats clk for the JaWS wire protocol.
 func (clk Click) String() string <span class="cov8" title="1">{
         return fmt.Sprintf("%d %d %d %s", clk.X, clk.Y, clk.keyState(), clk.Name)
 }</span>
@@ -321,16 +322,19 @@ import (
         "io"
 )
 
+// Container is implemented by UI values that render a dynamic list of child
+// [UI] values.
 type Container interface {
-        // JawsContains must return a slice of hashable UI objects. The slice contents must not be modified after returning it.
+        // JawsContains must return a slice of hashable [UI] objects. The slice
+        // contents must not be modified after returning it.
         JawsContains(e *Element) (contents []UI)
 }
 
 // InitHandler allows initializing UI getters and setters before their use.
 //
 // You can of course initialize them in the call from the template engine,
-// but at that point you don't have access to the Element, Element.Context
-// or Element.Session.
+// but at that point you don't have access to the [Element], [Element.Context]
+// or [Element.Session].
 type InitHandler interface {
         JawsInit(e *Element) (err error)
 }
@@ -342,9 +346,10 @@ type Logger interface {
         Error(msg string, args ...any)
 }
 
+// Renderer renders the initial HTML for a [UI] object.
 type Renderer interface {
-        // JawsRender is called once per Element when rendering the initial webpage.
-        // Do not call this yourself unless it's from within another JawsRender implementation.
+        // JawsRender is called once per [Element] when rendering the initial webpage.
+        // Do not call this yourself unless it is from within another JawsRender implementation.
         JawsRender(e *Element, w io.Writer, params []any) error
 }
 
@@ -360,41 +365,48 @@ type UI interface {
         Updater
 }
 
+// Updater updates browser-side DOM for a dirty [Element].
 type Updater interface {
-        // JawsUpdate is called for an Element that has been marked dirty to update it's HTML.
-        // Do not call this yourself unless it's from within another JawsUpdate implementation.
+        // JawsUpdate is called for an [Element] that has been marked dirty to update its HTML.
+        // Do not call this yourself unless it is from within another JawsUpdate implementation.
         JawsUpdate(e *Element)
 }
 
+// ClickHandler handles click events sent from the browser.
 type ClickHandler interface {
-        // JawsClick is called when an Element's HTML element or something within it
+        // JawsClick is called when an [Element]'s HTML element or something within it
         // is clicked in the browser.
         //
-        // Click.Name is taken from the first 'name' HTML attribute or HTML
+        // [Click.Name] is taken from the first name HTML attribute or HTML
         // 'button' textContent found when traversing the DOM. It may be empty.
         JawsClick(e *Element, click Click) (err error)
 }
 
+// ContextMenuHandler handles context-menu events sent from the browser.
 type ContextMenuHandler interface {
-        // JawsContextMenu is called when an Element's HTML element or something
+        // JawsContextMenu is called when an [Element]'s HTML element or something
         // within it receives a context menu event in the browser.
         JawsContextMenu(e *Element, click Click) (err error)
 }
 
+// InitialHTMLAttrHandler can add attributes during initial [Element] rendering.
 type InitialHTMLAttrHandler interface {
-        // JawsInitialHTMLAttr is called when an Element is initially rendered,
-        // and may return and initial HTML attribute string to write out.
+        // JawsInitialHTMLAttr is called when an [Element] is initially rendered,
+        // and may return an initial HTML attribute string to write out.
         JawsInitialHTMLAttr(e *Element) (s template.HTMLAttr)
 }
 
+// Auth describes authentication data available to templates through ui.With.
 type Auth interface {
         Data() map[string]any // returns authenticated user data, or nil
         Email() string        // returns authenticated user email, or an empty string
         IsAdmin() bool        // return true if admins are defined and current user is one, or if no admins are defined
 }
 
+// MakeAuthFn constructs an [Auth] value for a [Request].
 type MakeAuthFn func(*Request) Auth
 
+// DefaultAuth is the permissive default [Auth] implementation.
 type DefaultAuth struct{}
 
 func (DefaultAuth) Data() map[string]any <span class="cov8" title="1">{ return nil }</span>
@@ -419,13 +431,13 @@ import (
         "github.com/linkdata/jaws/lib/wire"
 )
 
-// An Element is an instance of a *Request, an UI object and a Jid.
+// Element is an instance of a [Request], a [UI] object and a [Jid].
 type Element struct {
         *Request // (read-only) the Request the Element belongs to
         // internals
         ui       UI          // the UI object
         handlers []any       // custom handlers registered, if any
-        jid      jid.Jid     // JaWS ID, unique to this Element within it's Request
+        jid      jid.Jid     // JaWS ID, unique to this Element within its Request
         deleted  atomic.Bool // true if deleteElement() has been called for this Element
 }
 
@@ -433,14 +445,14 @@ func (e *Element) String() string <span class="cov8" title="1">{
         return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", e.Ui(), e.Jid(), e.Request.TagsOf(e))
 }</span>
 
-// AddHandlers adds the given handlers to the Element.
+// AddHandlers adds the given handlers to the [Element].
 func (e *Element) AddHandlers(h ...any) <span class="cov8" title="1">{
         if !e.deleted.Load() </span><span class="cov8" title="1">{
                 e.handlers = append(e.handlers, h...)
         }</span>
 }
 
-// Tag adds the given tags to the Element.
+// Tag adds the given tags to the [Element].
 func (e *Element) Tag(tags ...any) <span class="cov8" title="1">{
         if !e.deleted.Load() </span><span class="cov8" title="1">{
                 e.Request.Tag(e, tags...)
@@ -452,12 +464,12 @@ func (e *Element) HasTag(tagValue any) bool <span class="cov8" title="1">{
         return !e.deleted.Load() &amp;&amp; e.Request.HasTag(e, tagValue)
 }</span>
 
-// Jid returns the JaWS ID for this Element, unique within it's Request.
+// Jid returns the JaWS ID for this [Element], unique within its [Request].
 func (e *Element) Jid() jid.Jid <span class="cov8" title="1">{
         return e.jid
 }</span>
 
-// Ui returns the UI object.
+// Ui returns the [UI] object.
 func (e *Element) Ui() UI <span class="cov8" title="1">{
         return e.ui
 }</span>
@@ -491,9 +503,9 @@ func (e *Element) renderDebug(w io.Writer) <span class="cov8" title="1">{
         _, _ = w.Write([]byte(strings.ReplaceAll(sb.String(), "--&gt;", "==&gt;") + " --&gt;"))</span>
 }
 
-// JawsRender calls Ui().JawsRender() for this Element.
+// JawsRender calls [Renderer.JawsRender] for this [Element].
 //
-// Do not call this yourself unless it's from within another JawsRender implementation.
+// Do not call this yourself unless it is from within another JawsRender implementation.
 func (e *Element) JawsRender(w io.Writer, params []any) (err error) <span class="cov8" title="1">{
         if !e.deleted.Load() </span><span class="cov8" title="1">{
                 if err = e.Ui().JawsRender(e, w, params); err == nil </span><span class="cov8" title="1">{
@@ -505,9 +517,9 @@ func (e *Element) JawsRender(w io.Writer, params []any) (err error) <span class=
         <span class="cov8" title="1">return</span>
 }
 
-// JawsUpdate calls Ui().JawsUpdate() for this Element.
+// JawsUpdate calls [Updater.JawsUpdate] for this [Element].
 //
-// Do not call this yourself unless it's from within another JawsUpdate implementation.
+// Do not call this yourself unless it is from within another JawsUpdate implementation.
 func (e *Element) JawsUpdate() <span class="cov8" title="1">{
         if !e.deleted.Load() </span><span class="cov8" title="1">{
                 e.Ui().JawsUpdate(e)
@@ -525,7 +537,7 @@ func (e *Element) queue(wht what.What, data string) <span class="cov8" title="1"
 }
 
 // SetAttr queues sending a new attribute value
-// to the browser for the Element with the given JaWS ID in this Request.
+// to the browser for the [Element] with the given JaWS ID in this [Request].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) SetAttr(attr, val string) <span class="cov8" title="1">{
@@ -533,15 +545,15 @@ func (e *Element) SetAttr(attr, val string) <span class="cov8" title="1">{
 }</span>
 
 // RemoveAttr queues sending a request to remove an attribute
-// to the browser for the Element with the given JaWS ID in this Request.
+// to the browser for the [Element] with the given JaWS ID in this [Request].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) RemoveAttr(attr string) <span class="cov8" title="1">{
         e.queue(what.RAttr, attr)
 }</span>
 
-// SetClass a queues sending a class
-// to the browser for the Element with the given JaWS ID in this Request.
+// SetClass queues sending a class
+// to the browser for the [Element] with the given JaWS ID in this [Request].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) SetClass(cls string) <span class="cov8" title="1">{
@@ -549,15 +561,15 @@ func (e *Element) SetClass(cls string) <span class="cov8" title="1">{
 }</span>
 
 // RemoveClass queues sending a request to remove a class
-// to the browser for the Element with the given JaWS ID in this Request.
+// to the browser for the [Element] with the given JaWS ID in this [Request].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) RemoveClass(cls string) <span class="cov8" title="1">{
         e.queue(what.RClass, cls)
 }</span>
 
-// SetInner queues sending a new inner HTML content
-// to the browser for the Element.
+// SetInner queues sending new inner HTML content
+// to the browser for the [Element].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) SetInner(innerHTML template.HTML) <span class="cov8" title="1">{
@@ -565,14 +577,14 @@ func (e *Element) SetInner(innerHTML template.HTML) <span class="cov8" title="1"
 }</span>
 
 // SetValue queues sending a new current input value in textual form
-// to the browser for the Element with the given JaWS ID in this Request.
+// to the browser for the [Element] with the given JaWS ID in this [Request].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) SetValue(val string) <span class="cov8" title="1">{
         e.queue(what.Value, val)
 }</span>
 
-// Replace replaces the elements entire HTML DOM node with new HTML code.
+// Replace replaces the [Element]'s entire HTML DOM node with new HTML code.
 // If the HTML code doesn't seem to contain correct HTML ID, it panics.
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
@@ -611,15 +623,15 @@ func (e *Element) Order(jidList []jid.Jid) <span class="cov8" title="1">{
         }
 }
 
-// Remove requests that the HTML child with the given HTML ID of this Element
-// is removed from the Request and it's HTML element from the browser.
+// Remove requests that the HTML child with the given HTML ID of this [Element]
+// is removed from the [Request] and its HTML element from the browser.
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (e *Element) Remove(htmlId string) <span class="cov8" title="1">{
         e.queue(what.Remove, htmlId)
 }</span>
 
-// ApplyParams parses the parameters passed to UI() when creating a new Element,
+// ApplyParams parses the parameters passed to UI() when creating a new [Element],
 // adding UI tags, adding any additional event handlers found.
 //
 // Returns the list of HTML attributes found, if any.
@@ -636,13 +648,13 @@ func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) <span cla
         <span class="cov8" title="1">return</span>
 }
 
-// ApplyGetter examines getter, and if it's not nil, either adds it
-// as a Tag, or, if it is a TagGetter, adds the result of that as a Tag.
+// ApplyGetter examines getter, and if it is not nil, either adds it
+// as a tag, or, if it is a [tag.TagGetter], adds the result of that as a tag.
 //
-// If getter is an InputHandler, ClickHandler, ContextMenuHandler or
-// InitialHTMLAttrHandler, relevant values are added to the Element.
+// If getter is an [InputHandler], [ClickHandler], [ContextMenuHandler] or
+// [InitialHTMLAttrHandler], relevant values are added to the [Element].
 //
-// Finally, if getter is an InitHandler, it's JawsInit()
+// Finally, if getter is an [InitHandler], its JawsInit
 // function is called.
 //
 // Returns the Tag(s) added (or nil if getter was nil), any initial HTML attrs
@@ -683,8 +695,8 @@ import (
 )
 
 // ErrNoWebSocketRequest is returned when the WebSocket callback was not received
-// within the timeout period. Most common reason is that client is not using
-// Javascript.
+// within the timeout period. The most common reason is that the client is not
+// using JavaScript.
 var ErrNoWebSocketRequest errNoWebSocketRequest
 
 type errNoWebSocketRequest struct {
@@ -784,6 +796,7 @@ func (e errEventHandlerPanic) Unwrap() error <span class="cov8" title="1">{
 
 // InputHandler handles input events sent from the browser.
 type InputHandler interface {
+        // JawsInput is called when an [Element] receives a browser input event.
         JawsInput(e *Element, val string) (err error)
 }
 
@@ -793,12 +806,12 @@ func (errEventUnhandled) Error() string <span class="cov8" title="1">{
         return "event unhandled"
 }</span>
 
-// ErrEventUnhandled returned by JawsInput(), JawsClick() or
-// JawsContextMenu() causes the next available handler to be invoked.
+// ErrEventUnhandled returned by [InputHandler.JawsInput], [ClickHandler.JawsClick]
+// or [ContextMenuHandler.JawsContextMenu] causes the next available handler to be invoked.
 var ErrEventUnhandled = errEventUnhandled{}
 
 // InputFn is the signature of an input handling function to be called when JaWS receives
-// an input, hook or set message from Javascript via the WebSocket connection.
+// an input, hook or set message from JavaScript via the WebSocket connection.
 type InputFn = func(e *Element, val string) (err error)
 
 func callInputHandler(obj any, e *Element, val string) (err error) <span class="cov8" title="1">{
@@ -841,7 +854,7 @@ func callEventHandlers(ui any, e *Element, wht what.What, val string) (err error
         <span class="cov8" title="1">return callEventHandler(ui, e, wht, val)</span>
 }
 
-// CallEventHandlers calls the event handlers for the given Element.
+// CallEventHandlers calls the event handlers for the given [Element].
 // Recovers from panics in user-provided handlers, returning them as errors.
 func CallEventHandlers(ui any, e *Element, wht what.What, val string) (err error) <span class="cov8" title="1">{
         defer func() </span><span class="cov8" title="1">{
@@ -901,6 +914,7 @@ var (
         logFatal       = func(v ...any) <span class="cov8" title="1">{ log.Fatal(v...) }</span>
 )
 
+// Cell represents one Minesweeper board cell.
 type Cell struct {
         game     *game
         row, col int
@@ -922,6 +936,7 @@ func newCell(g *game, row, col int) *Cell <span class="cov8" title="1">{
         return &amp;Cell{game: g, row: row, col: col}
 }</span>
 
+// Reset clears the cell to its initial hidden state.
 func (c *Cell) Reset() <span class="cov8" title="1">{
         c.mine = false
         c.revealed = false
@@ -929,6 +944,7 @@ func (c *Cell) Reset() <span class="cov8" title="1">{
         c.adjacent = 0
 }</span>
 
+// ToggleFlag toggles the flagged state and returns the new state.
 func (c *Cell) ToggleFlag() bool <span class="cov8" title="1">{
         c.flagged = !c.flagged
         return c.flagged
@@ -1003,10 +1019,12 @@ func (c *Cell) syncPresentation(elem *jaws.Element, view cellView) <span class="
         }</span>
 }
 
+// JawsGetTag exposes the cell and board tags used for dirtying.
 func (c *Cell) JawsGetTag(_ tag.Context) any <span class="cov8" title="1">{
         return []any{c, &amp;c.game.cells}
 }</span>
 
+// JawsGetHTML renders the cell contents.
 func (c *Cell) JawsGetHTML(elem *jaws.Element) template.HTML <span class="cov8" title="1">{
         c.game.mu.Lock()
         view := c.snapshotLocked()
@@ -1015,11 +1033,13 @@ func (c *Cell) JawsGetHTML(elem *jaws.Element) template.HTML <span class="cov8" 
         return view.HTML()
 }</span>
 
+// JawsClick reveals the cell.
 func (c *Cell) JawsClick(elem *jaws.Element, _ jaws.Click) error <span class="cov8" title="1">{
         elem.Request.Dirty(c.game.clickCell(c)...)
         return nil
 }</span>
 
+// JawsContextMenu toggles the cell flag.
 func (c *Cell) JawsContextMenu(elem *jaws.Element, _ jaws.Click) error <span class="cov8" title="1">{
         elem.Request.Dirty(c.game.toggleFlag(c)...)
         return nil
@@ -1105,20 +1125,24 @@ func (g *game) changedTags(before gameState) (tags []any) <span class="cov8" tit
         <span class="cov8" title="1">return</span>
 }
 
+// Board returns the current board cells.
 func (g *game) Board() [][]*Cell <span class="cov8" title="1">{ return g.cells }</span>
 
+// StatusSpan returns a dynamic status text getter.
 func (g *game) StatusSpan() any <span class="cov8" title="1">{
         return bind.StringGetterFunc(func(*jaws.Element) string </span><span class="cov8" title="1">{
                 return g.statusText()
         }</span>, &amp;g.started, &amp;g.gameOver, &amp;g.won)
 }
 
+// StatsSpan returns a dynamic statistics text getter.
 func (g *game) StatsSpan() any <span class="cov8" title="1">{
         return bind.StringGetterFunc(func(*jaws.Element) string </span><span class="cov8" title="1">{
                 return g.statsText()
         }</span>, &amp;g.revealed, &amp;g.flags)
 }
 
+// NewGameButton returns a button object that starts a new game.
 func (g *game) NewGameButton() ui.Object <span class="cov8" title="1">{
         return ui.New("New game").Clicked(func(_ ui.Object, elem *jaws.Element, _ jaws.Click) error </span><span class="cov8" title="1">{
                 elem.Request.Dirty(g.reset()...)
@@ -1347,12 +1371,12 @@ func main() <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file7" style="display: none">// package jaws provides a mechanism to create dynamic
-// webpages using Javascript and WebSockets.
+		<pre class="file" id="file7" style="display: none">// Package jaws provides a mechanism to create dynamic
+// webpages using JavaScript and WebSockets.
 //
-// It integrates well with Go's html/template package,
+// It integrates well with Go's [html/template] package,
 // but can be used without it. It can be used with any
-// router that supports the standard ServeHTTP interface.
+// router that supports the standard [http.Handler] interface.
 package jaws
 
 import (
@@ -1391,9 +1415,14 @@ import (
 )
 
 const (
-        DefaultUpdateInterval        = time.Millisecond * 100 // Default browser update interval
-        DefaultWebSocketPingInterval = time.Minute            // Default WebSocket keepalive ping interval
-        DefaultWebSocketTimeout      = time.Second * 10       // WebSocket must connect and respond within this interval
+        // DefaultUpdateInterval is the default browser update interval.
+        DefaultUpdateInterval = time.Millisecond * 100
+
+        // DefaultWebSocketPingInterval is the default WebSocket keepalive ping interval.
+        DefaultWebSocketPingInterval = time.Minute
+
+        // DefaultWebSocketTimeout is the default time allowed for WebSocket connect and ping responses.
+        DefaultWebSocketTimeout = time.Second * 10
 )
 
 type subscription struct {
@@ -1413,12 +1442,12 @@ type Jid = jid.Jid // convenience alias
 // A single Jaws value coordinates template lookup, session handling and the
 // request lifecycle that keeps the browser and backend synchronized via
 // WebSockets. The zero value is not ready for use; construct instances with
-// New to ensure the helper goroutines and static assets are prepared.
+// [New] to ensure the helper goroutines and static assets are prepared.
 type Jaws struct {
         CookieName            string          // Name for session cookies, defaults to "jaws"
         Logger                Logger          // Optional logger to use
         Debug                 bool            // Set to true to enable debug info in generated HTML code
-        MakeAuth              MakeAuthFn      // Optional function to create With.Auth for Templates
+        MakeAuth              MakeAuthFn      // Optional function to create ui.With.Auth for Templates
         BaseContext           context.Context // Non-nil base context for Requests, set to context.Background() in New()
         WebSocketPingInterval time.Duration   // Interval between keepalive pings on active WebSocket connections. Defaults to DefaultWebSocketPingInterval. Set &lt;=0 to disable keepalive pings.
         webSocketTimeout      time.Duration   // timeout duration passed to ServeWith
@@ -1444,9 +1473,9 @@ type Jaws struct {
 
 // New allocates a JaWS instance with the default configuration.
 //
-// The returned Jaws value is ready for use: static assets are embedded,
+// The returned [Jaws] value is ready for use: static assets are embedded,
 // internal goroutines are configured and the request pool is primed. Call
-// Close when the instance is no longer needed to free associated resources.
+// [Jaws.Close] when the instance is no longer needed to free associated resources.
 func New() (jw *Jaws, err error) <span class="cov8" title="1">{
         var serveJS, serveCSS *staticserve.StaticServe
         if serveJS, err = staticserve.New("/jaws/.jaws.js", assets.JavascriptText); err == nil </span><span class="cov8" title="1">{
@@ -1483,8 +1512,8 @@ func New() (jw *Jaws, err error) <span class="cov8" title="1">{
         <span class="cov8" title="1">return</span>
 }
 
-// Close frees resources associated with the JaWS object, and
-// closes the completion channel if the JaWS was created with New().
+// Close frees resources associated with the [Jaws] object, and
+// closes the completion channel if the [Jaws] was created with [New].
 // Once the completion channel is closed, broadcasts and sends may be discarded.
 // Subsequent calls to Close() have no effect.
 func (jw *Jaws) Close() <span class="cov8" title="1">{
@@ -1499,13 +1528,15 @@ func (jw *Jaws) Close() <span class="cov8" title="1">{
         jw.mu.Unlock()</span>
 }
 
-// Done returns the channel that is closed when Close has been called.
+// Done returns the channel that is closed when [Jaws.Close] has been called.
 func (jw *Jaws) Done() &lt;-chan struct{} <span class="cov8" title="1">{
         return jw.closeCh
 }</span>
 
-// AddTemplateLookuper adds an object that can resolve
-// strings to *template.Template.
+// AddTemplateLookuper adds a [TemplateLookuper].
+//
+// The lookuper must be comparable so it can be removed with
+// [Jaws.RemoveTemplateLookuper].
 func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) (err error) <span class="cov8" title="1">{
         if tl != nil </span><span class="cov8" title="1">{
                 if err = tag.NewErrNotComparable(tl); err == nil </span><span class="cov8" title="1">{
@@ -1519,8 +1550,7 @@ func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) (err error) <span class
         <span class="cov8" title="1">return</span>
 }
 
-// RemoveTemplateLookuper removes the given object from
-// the list of TemplateLookupers.
+// RemoveTemplateLookuper removes the given [TemplateLookuper].
 func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) (err error) <span class="cov8" title="1">{
         if tl != nil </span><span class="cov8" title="1">{
                 if err = tag.NewErrNotComparable(tl); err == nil </span><span class="cov8" title="1">{
@@ -1532,7 +1562,7 @@ func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) (err error) <span cl
         <span class="cov8" title="1">return</span>
 }
 
-// LookupTemplate queries the known TemplateLookupers in the order
+// LookupTemplate queries the known [TemplateLookuper] values in the order
 // they were added and returns the first found.
 func (jw *Jaws) LookupTemplate(name string) *template.Template <span class="cov8" title="1">{
         jw.mu.RLock()
@@ -1545,7 +1575,7 @@ func (jw *Jaws) LookupTemplate(name string) *template.Template <span class="cov8
         <span class="cov8" title="1">return nil</span>
 }
 
-// RequestCount returns the number of Requests.
+// RequestCount returns the number of [Request] values.
 //
 // The count includes all Requests, including those being rendered,
 // those waiting for the WebSocket callback and those active.
@@ -1556,8 +1586,8 @@ func (jw *Jaws) RequestCount() (n int) <span class="cov8" title="1">{
         return
 }</span>
 
-// Log sends an error to the Logger set in the Jaws.
-// Has no effect if the err is nil or the Logger is nil.
+// Log sends an error to the [Logger] set in the [Jaws].
+// Has no effect if err is nil or the [Logger] is nil.
 // Returns err.
 func (jw *Jaws) Log(err error) error <span class="cov8" title="1">{
         if err != nil &amp;&amp; jw != nil &amp;&amp; jw.Logger != nil </span><span class="cov8" title="1">{
@@ -1566,9 +1596,9 @@ func (jw *Jaws) Log(err error) error <span class="cov8" title="1">{
         <span class="cov8" title="1">return err</span>
 }
 
-// MustLog sends an error to the Logger set in the Jaws or
-// panics with the given error if no Logger is set.
-// Has no effect if the err is nil.
+// MustLog sends an error to the [Logger] set in the [Jaws] or
+// panics with the given error if no [Logger] is set.
+// Has no effect if err is nil.
 func (jw *Jaws) MustLog(err error) <span class="cov8" title="1">{
         if err != nil </span><span class="cov8" title="1">{
                 if jw != nil &amp;&amp; jw.Logger != nil </span><span class="cov8" title="1">{
@@ -1579,7 +1609,7 @@ func (jw *Jaws) MustLog(err error) <span class="cov8" title="1">{
         }
 }
 
-// NextID returns an int64 unique within lifetime of the program.
+// NextID returns an int64 unique within the lifetime of the program.
 func NextID() int64 <span class="cov8" title="1">{
         return atomic.AddInt64((*int64)(&amp;NextJid), 1)
 }</span>
@@ -1589,20 +1619,20 @@ func AppendID(b []byte) []byte <span class="cov8" title="1">{
         return strconv.AppendInt(b, NextID(), 32)
 }</span>
 
-// MakeID returns a string in the form 'jaws.X' where X is a unique string within lifetime of the program.
+// MakeID returns a string in the form "jaws.X" where X is unique within the lifetime of the program.
 func MakeID() string <span class="cov8" title="1">{
         return string(AppendID([]byte("jaws.")))
 }</span>
 
 // NewRequest returns a new pending JaWS request.
 //
-// Call this as soon as you start processing a HTML request, and store the
-// returned Request pointer so it can be used while constructing the HTML
-// response in order to register the JaWS id's you use in the response, and
-// use it's Key attribute when sending the Javascript portion of the reply.
+// Call this as soon as you start processing an HTML request, and store the
+// returned [Request] pointer so it can be used while constructing the HTML
+// response in order to register the JaWS IDs you use in the response, and
+// use its [Request.JawsKey] when sending the JavaScript portion of the reply.
 //
-// Automatic timeout handling is performed by ServeWithTimeout. The default
-// Serve() helper uses a 10-second timeout.
+// Automatic timeout handling is performed by [Jaws.ServeWithTimeout]. The default
+// [Jaws.Serve] helper uses a 10-second timeout.
 func (jw *Jaws) NewRequest(hr *http.Request) (rq *Request) <span class="cov8" title="1">{
         jw.mu.Lock()
         defer jw.mu.Unlock()
@@ -1627,15 +1657,15 @@ func (jw *Jaws) nonZeroRandomLocked() (val uint64) <span class="cov8" title="1">
         <span class="cov8" title="1">return</span>
 }
 
-// UseRequest extracts the JaWS request with the given key from the request
+// UseRequest extracts the JaWS [Request] with the given key from the request
 // map if it exists and the HTTP request remote IP matches.
 //
-// Call it when receiving the WebSocket connection on '/jaws/:key' to get the
-// associated Request, and then call it's ServeHTTP method to process the
+// Call it when receiving the WebSocket connection on "/jaws/:key" to get the
+// associated [Request], and then call its [Request.ServeHTTP] method to process the
 // WebSocket messages.
 //
 // Returns nil if the key was not found or the IP doesn't match, in which
-// case you should return a HTTP "404 Not Found" status.
+// case you should return an HTTP "404 Not Found" status.
 func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) <span class="cov8" title="1">{
         if jawsKey != 0 </span><span class="cov8" title="1">{
                 var err error
@@ -1715,7 +1745,7 @@ func getCookieSessionsIds(h http.Header, wanted string) (cookies []uint64) <span
         <span class="cov8" title="1">return</span>
 }
 
-// GetSession returns the Session associated with the given *http.Request, or nil.
+// GetSession returns the [Session] associated with the given [http.Request], or nil.
 func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) <span class="cov8" title="1">{
         if hr != nil </span><span class="cov8" title="1">{
                 if sessIds := getCookieSessionsIds(hr.Header, jw.CookieName); len(sessIds) &gt; 0 </span><span class="cov8" title="1">{
@@ -1728,14 +1758,14 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) <span class="cov8" 
         <span class="cov8" title="1">return</span>
 }
 
-// NewSession creates a new Session.
+// NewSession creates a new [Session].
 //
-// Any pre-existing Session will be cleared and closed.
-// This may call Session.Close() on an existing session and therefore requires
-// the JaWS processing loop (`Serve()` or `ServeWithTimeout()`) to be running.
+// Any pre-existing [Session] will be cleared and closed.
+// This may call [Session.Close] on an existing session and therefore requires
+// the JaWS processing loop ([Jaws.Serve] or [Jaws.ServeWithTimeout]) to be running.
 //
-// Subsequent Requests created with `NewRequest()` that have the cookie set and
-// originates from the same IP will be able to access the Session.
+// Subsequent [Request] values created with [Jaws.NewRequest] that have the
+// cookie set and originate from the same IP will be able to access the [Session].
 func (jw *Jaws) NewSession(w http.ResponseWriter, hr *http.Request) (sess *Session) <span class="cov8" title="1">{
         if hr != nil </span><span class="cov8" title="1">{
                 if oldSess := jw.GetSession(hr); oldSess != nil </span><span class="cov8" title="1">{
@@ -1771,6 +1801,7 @@ func (jw *Jaws) deleteSession(sessionID uint64) <span class="cov8" title="1">{
         jw.mu.Unlock()
 }</span>
 
+// FaviconURL returns the favicon URL discovered by [Jaws.GenerateHeadHTML].
 func (jw *Jaws) FaviconURL() (s string) <span class="cov8" title="1">{
         jw.mu.RLock()
         s = jw.faviconURL
@@ -1790,8 +1821,8 @@ func (jw *Jaws) ContentSecurityPolicy() (s string) <span class="cov8" title="1">
 // current JaWS configuration.
 //
 // It snapshots secureheaders.DefaultHeaders, replacing the
-// Content-Security-Policy value with ContentSecurityPolicy so responses allow
-// the resources configured by GenerateHeadHTML.
+// Content-Security-Policy value with [Jaws.ContentSecurityPolicy] so responses allow
+// the resources configured by [Jaws.GenerateHeadHTML].
 //
 // The returned middleware does not trust forwarded HTTPS headers.
 // The next handler must be non-nil.
@@ -1804,10 +1835,12 @@ func (jw *Jaws) SecureHeadersMiddleware(next http.Handler) http.Handler <span cl
         }
 }</span>
 
-// GenerateHeadHTML (re-)generates the HTML code that goes in the HEAD section, ensuring
-// that the provided URL resources in `extra` are loaded, along with the JaWS javascript.
-// If one of the resources is named "favicon", it's URL will be stored and can
-// be retrieved using FaviconURL().
+// GenerateHeadHTML regenerates the HTML code that goes in the HEAD section,
+// ensuring that the provided URL resources in extra are loaded, along with the
+// JaWS JavaScript.
+//
+// If one of the resources is named "favicon", its URL will be stored and can
+// be retrieved using [Jaws.FaviconURL].
 //
 // You only need to call this if you add your own images, scripts and stylesheets.
 func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8" title="1">{
@@ -1844,13 +1877,13 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8"
         <span class="cov8" title="1">return</span>
 }
 
-// Broadcast sends a message to all Requests.
+// Broadcast sends a message to all [Request] values.
 //
-// It must not be called before the JaWS processing loop (`Serve()` or
-// `ServeWithTimeout()`) is running. Otherwise this call may block once the
+// It must not be called before the JaWS processing loop ([Jaws.Serve] or
+// [Jaws.ServeWithTimeout]) is running. Otherwise this call may block once the
 // internal broadcast channel fills.
 //
-// All convenience helpers on Jaws that call Broadcast inherit this requirement.
+// All convenience helpers on [Jaws] that call Broadcast inherit this requirement.
 func (jw *Jaws) Broadcast(msg wire.Message) <span class="cov8" title="1">{
         switch msg.Dest.(type) </span>{
         case nil:<span class="cov8" title="1"></span> // send to all requests
@@ -1885,10 +1918,10 @@ func (jw *Jaws) setDirty(tags []any) <span class="cov8" title="1">{
         <span class="cov8" title="1">jw.mu.Unlock()</span>
 }
 
-// Dirty marks all Elements that have one or more of the given tags as dirty.
+// Dirty marks all [Element] values that have one or more of the given tags as dirty.
 //
-// Note that if any of the tags are a TagGetter, it will be called with a nil Request.
-// Prefer using Request.Dirty() which avoids this.
+// Note that if any of the tags implement [tag.TagGetter], it will be called
+// with a nil [Request]. Prefer using [Request.Dirty] which avoids this.
 func (jw *Jaws) Dirty(dirtyTags ...any) <span class="cov8" title="1">{
         jw.setDirty(tag.MustTagExpand(nil, dirtyTags))
 }</span>
@@ -1919,14 +1952,14 @@ func (jw *Jaws) distributeDirt() int <span class="cov8" title="1">{
         <span class="cov8" title="1">return len(dirt)</span>
 }
 
-// Reload requests all Requests to reload their current page.
+// Reload requests all [Request] values to reload their current page.
 func (jw *Jaws) Reload() <span class="cov8" title="1">{
         jw.Broadcast(wire.Message{
                 What: what.Reload,
         })
 }</span>
 
-// Redirect requests all Requests to navigate to the given URL.
+// Redirect requests all [Request] values to navigate to the given URL.
 func (jw *Jaws) Redirect(url string) <span class="cov8" title="1">{
         jw.Broadcast(wire.Message{
                 What: what.Redirect,
@@ -1934,7 +1967,9 @@ func (jw *Jaws) Redirect(url string) <span class="cov8" title="1">{
         })
 }</span>
 
-// Alert sends an alert to all Requests. The lvl argument should be one of Bootstraps alert levels:
+// Alert sends an alert to all [Request] values.
+//
+// The lvl argument should be one of Bootstrap's alert levels:
 // primary, secondary, success, danger, warning, info, light or dark.
 func (jw *Jaws) Alert(lvl, msg string) <span class="cov8" title="1">{
         jw.Broadcast(wire.Message{
@@ -1963,8 +1998,8 @@ func (jw *Jaws) getWebSocketTimeout() (t time.Duration) <span class="cov8" title
 }</span>
 
 // ServeWithTimeout begins processing requests with the given timeout.
-// It is intended to run on it's own goroutine.
-// It returns when Close is called.
+// It is intended to run on its own goroutine.
+// It returns when [Jaws.Close] is called.
 func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) <span class="cov8" title="1">{
         const minInterval = time.Millisecond * 10
         const maxInterval = time.Second
@@ -1997,9 +2032,9 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) <span class="cov8
                 }</span>
         }
 
-        // it's critical that we keep the broadcast
+        // it is critical that we keep the broadcast
         // distribution loop running, so any Request
-        // that fails to process it's messages quickly
+        // that fails to process its messages quickly
         // enough must be terminated. the alternative
         // would be to drop some messages, but that
         // could mean nonreproducible and seemingly
@@ -2045,8 +2080,8 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) <span class="cov8
 }
 
 // Serve calls ServeWithTimeout(DefaultWebSocketTimeout).
-// It is intended to run on it's own goroutine.
-// It returns when Close is called.
+// It is intended to run on its own goroutine.
+// It returns when [Jaws.Close] is called.
 func (jw *Jaws) Serve() <span class="cov8" title="1">{
         jw.ServeWithTimeout(DefaultWebSocketTimeout)
 }</span>
@@ -2171,10 +2206,10 @@ func (jw *Jaws) SetValue(target any, val string) <span class="cov8" title="1">{
         })
 }</span>
 
-// Insert calls the Javascript 'insertBefore()' method on
+// Insert calls the JavaScript 'insertBefore()' method on
 // all HTML elements matching target.
 //
-// The position parameter 'where' may be either a HTML ID, an child index or the text 'null'.
+// The position parameter 'where' may be either an HTML ID, a child index or the text "null".
 func (jw *Jaws) Insert(target any, where, html string) <span class="cov8" title="1">{
         jw.Broadcast(wire.Message{
                 Dest: target,
@@ -2200,7 +2235,7 @@ func (jw *Jaws) Delete(target any) <span class="cov8" title="1">{
         })
 }</span>
 
-// Append calls the Javascript 'appendChild()' method on all HTML elements matching target.
+// Append calls the JavaScript appendChild method on all HTML elements matching target.
 func (jw *Jaws) Append(target any, html template.HTML) <span class="cov8" title="1">{
         jw.Broadcast(wire.Message{
                 Dest: target,
@@ -2222,8 +2257,8 @@ func maybeCompactJSON(in string) (out string) <span class="cov8" title="1">{
 
 var whitespaceRemover = strings.NewReplacer(" ", "", "\n", "", "\t", "")
 
-// JsCall calls the Javascript function 'jsfunc' with the argument 'jsonstr'
-// on all Requests that have the target UI tag.
+// JsCall calls the JavaScript function jsfunc with the argument jsonstr
+// on all [Request] values that have the target UI tag.
 func (jw *Jaws) JsCall(tagValue any, jsfunc, jsonstr string) <span class="cov8" title="1">{
         jw.Broadcast(wire.Message{
                 Dest: tagValue,
@@ -2324,7 +2359,7 @@ func (sess sessioner) ServeHTTP(wr http.ResponseWriter, r *http.Request) <span c
         <span class="cov8" title="1">sess.h.ServeHTTP(wr, r)</span>
 }
 
-// Session returns a http.Handler that ensures a JaWS Session exists before invoking h.
+// Session returns an [http.Handler] that ensures a JaWS [Session] exists before invoking h.
 func (jw *Jaws) Session(h http.Handler) http.Handler <span class="cov8" title="1">{
         return sessioner{jw: jw, h: h}
 }</span>
@@ -2346,6 +2381,10 @@ import (
 //go:embed assets
 var assetsFS embed.FS
 
+// Setup registers embedded Bootstrap static assets under prefix.
+//
+// It is intended to be passed to [jaws.Jaws.Setup]. Returned URLs should be
+// included in the page head through [jaws.Jaws.GenerateHeadHTML].
 func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.URL, err error) <span class="cov8" title="1">{
         var files []*staticserve.StaticServe
         if err = staticserve.WalkDir(assetsFS, "assets/static", func(filename string, ss *staticserve.StaticServe) (err error) </span><span class="cov8" title="1">{
@@ -2449,14 +2488,15 @@ import (
 
 var _ ui.SetPather = (*Node)(nil)
 
+// Node is one tree node rendered by [Tree].
 type Node struct {
-        Tree     *Tree   `json:"-"`
-        Parent   *Node   `json:"-"`
-        Name     string  `json:"name"`
-        ID       string  `json:"id,omitzero"`
-        Selected bool    `json:"selected,omitzero"`
-        Disabled bool    `json:"disabled,omitzero"` // !selectable
-        Children []*Node `json:"children,omitzero"`
+        Tree     *Tree   `json:"-"`                 // owning tree, set by New
+        Parent   *Node   `json:"-"`                 // parent node, nil for root
+        Name     string  `json:"name"`              // display name
+        ID       string  `json:"id,omitzero"`       // JSON path ID, set by New
+        Selected bool    `json:"selected,omitzero"` // selected state
+        Disabled bool    `json:"disabled,omitzero"` // false when selectable
+        Children []*Node `json:"children,omitzero"` // child nodes
 }
 
 func (n *Node) marshalJSON(b []byte) []byte <span class="cov8" title="1">{
@@ -2483,6 +2523,7 @@ func (n *Node) marshalJSON(b []byte) []byte <span class="cov8" title="1">{
         return b</span>
 }
 
+// MarshalJSON writes the Quercus.js JSON shape for n.
 func (n *Node) MarshalJSON() (b []byte, err error) <span class="cov8" title="1">{
         b = n.marshalJSON(nil)
         return
@@ -2490,12 +2531,14 @@ func (n *Node) MarshalJSON() (b []byte, err error) <span class="cov8" title="1">
 
 var _ json.Marshaler = &amp;Node{}
 
+// JawsPathSet mirrors browser-side selected-state changes back into the tree.
 func (n *Node) JawsPathSet(elem *jaws.Element, jspath string, value any) <span class="cov8" title="1">{
         if jspath, ok := strings.CutSuffix(jspath, ".selected"); ok </span><span class="cov8" title="1">{
                 elem.Jaws.JsCall(n.Tree.Tag, "jawstreeSetPath", fmt.Sprintf(`{"tree":%q,"id":%q,"set":%v}`, n.Tree.id, jspath, value))
         }</span>
 }
 
+// Walk calls fn for n and all descendants with their JSON paths.
 func (n *Node) Walk(jspath string, fn func(jspath string, node *Node)) <span class="cov8" title="1">{
         fn(jspath, n)
         if jspath != "" </span><span class="cov8" title="1">{
@@ -2506,6 +2549,7 @@ func (n *Node) Walk(jspath string, fn func(jspath string, node *Node)) <span cla
         }</span>
 }
 
+// HasNames reports whether n matches names as a path from the root.
 func (n *Node) HasNames(names []string) (yes bool) <span class="cov8" title="1">{
         if yes = (n.Parent == nil) &amp;&amp; (len(names) == 0); !yes &amp;&amp; n.Parent != nil </span><span class="cov8" title="1">{
                 if len(names) &gt; 0 </span><span class="cov8" title="1">{
@@ -2516,6 +2560,7 @@ func (n *Node) HasNames(names []string) (yes bool) <span class="cov8" title="1">
         <span class="cov8" title="1">return</span>
 }
 
+// GetNames returns the path of names from the root to n.
 func (n *Node) GetNames() (names []string) <span class="cov8" title="1">{
         for n.Parent != nil </span><span class="cov8" title="1">{
                 names = append(names, n.Name)
@@ -2525,6 +2570,7 @@ func (n *Node) GetNames() (names []string) <span class="cov8" title="1">{
         return</span>
 }
 
+// GetSelected returns the paths of all selected nodes.
 func (n *Node) GetSelected() (nameslist [][]string) <span class="cov8" title="1">{
         n.Walk("", func(jspath string, node *Node) </span><span class="cov8" title="1">{
                 if node.Selected </span><span class="cov8" title="1">{
@@ -2534,6 +2580,7 @@ func (n *Node) GetSelected() (nameslist [][]string) <span class="cov8" title="1"
         <span class="cov8" title="1">return</span>
 }
 
+// SetSelected applies selected paths and returns nodes that changed.
 func (n *Node) SetSelected(nameslist [][]string) (changed []*Node) <span class="cov8" title="1">{
         n.Walk("", func(jspath string, node *Node) </span><span class="cov8" title="1">{
                 for _, names := range nameslist </span><span class="cov8" title="1">{
@@ -2556,7 +2603,7 @@ import (
         "path"
 )
 
-// Root builds a root node from a os.Root. If filterfn is not nil, it must return true
+// Root builds a root node from an [os.Root]. If filterfn is not nil, it must return true
 // for a directory entry to be included in the tree.
 func Root(r *os.Root, filterfn func(dirpath string, ent fs.DirEntry) (include bool)) (rootnode *Node, err error) <span class="cov8" title="1">{
         rootnode = &amp;Node{}
@@ -2608,6 +2655,10 @@ var assetsFS embed.FS
 
 // treeview from https://github.com/stefaneichert/quercus.js
 
+// Setup registers embedded jawstree static assets under prefix.
+//
+// It is intended to be passed to [jaws.Jaws.Setup]. Returned URLs should be
+// included in the page head through [jaws.Jaws.GenerateHeadHTML].
 func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.URL, err error) <span class="cov8" title="1">{
         var files []*staticserve.StaticServe
         if err = staticserve.WalkDir(assetsFS, "assets", func(filename string, ss *staticserve.StaticServe) (err error) </span><span class="cov8" title="1">{
@@ -2642,12 +2693,16 @@ import (
 
 var _ jaws.UI = (*Tree)(nil)
 
+// Tree renders and updates a Quercus.js tree bound to a [ui.JsVar].
 type Tree struct {
         id      string // HTML ID of the tree
         options Option
         *ui.JsVar[Node]
 }
 
+// New returns a tree widget with id, jsvar and options.
+//
+// New initializes node IDs and tree back-pointers in jsvar.Ptr.
 func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) <span class="cov8" title="1">{
         t = &amp;Tree{
                 id:    id,
@@ -2663,6 +2718,7 @@ func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) <span cl
 const newtreeTemplate = `
 &lt;script src=%q&gt;&lt;/script&gt;`
 
+// JawsRender renders the hidden root data element and tree initialization script.
 func (t *Tree) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) <span class="cov8" title="1">{
         if err = t.JsVar.JawsRender(e, w, append([]any{"jawstreeroot_" + t.id}, params...)); err == nil </span><span class="cov8" title="1">{
                 if _, err = fmt.Fprintf(w, newtreeTemplate, initScriptURL(t.id, t.options)); err == nil </span>{<span class="cov8" title="1">
@@ -2671,6 +2727,7 @@ func (t *Tree) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error
         <span class="cov8" title="1">return</span>
 }
 
+// JawsUpdate sends the latest tree JSON to the browser.
 func (t *Tree) JawsUpdate(elem *jaws.Element) <span class="cov8" title="1">{
         var b []byte
         b = append(b, `{"tree":`...)
@@ -2728,11 +2785,13 @@ import (
         "strings"
 )
 
-// JavascriptText is the source code for the client-side JaWS Javascript library.
+// JavascriptText is the source code for the client-side JaWS JavaScript library.
 //
 //go:embed jaws.js
 var JavascriptText []byte
 
+// JawsCSS is the source code for the client-side JaWS stylesheet.
+//
 //go:embed jaws.css
 var JawsCSS []byte
 
@@ -2749,7 +2808,7 @@ func JawsKeyString(jawsKey uint64) string <span class="cov8" title="1">{
         return string(JawsKeyAppend(nil, jawsKey))
 }</span>
 
-// JawsKeyValue parses a key string (as returned JawsKeyString) into a uint64.
+// JawsKeyValue parses a key string, as returned by [JawsKeyString], into a uint64.
 func JawsKeyValue(jawsKey string) uint64 <span class="cov8" title="1">{
         slashIdx := strings.IndexByte(jawsKey, '/')
         if slashIdx &lt; 0 </span><span class="cov8" title="1">{
@@ -2762,6 +2821,10 @@ func JawsKeyValue(jawsKey string) uint64 <span class="cov8" title="1">{
 }
 
 // PreloadHTML returns HTML code to load the given resources efficiently.
+//
+// JavaScript and CSS files are emitted as script and stylesheet tags. Other
+// recognized resources are emitted as preload tags. Favicon image URLs are
+// returned separately.
 func PreloadHTML(urls ...*url.URL) (htmlcode, faviconurl string) <span class="cov8" title="1">{
         var jsurls, cssurls []string
         var favicontype string
@@ -2838,9 +2901,10 @@ import (
         "sync"
 )
 
-// New returns a Binder[T] with the given sync.Locker (or RWLocker) and a pointer to the underlying value of type T.
+// New returns a [Binder] with l protecting the value pointed to by p.
 //
-// The pointer will be used as the UI tag.
+// If l implements [RWLocker], reads use its read lock. Otherwise reads and
+// writes both use l. The pointer p is also exposed as the UI tag.
 func New[T comparable](l sync.Locker, p *T) Binder[T] <span class="cov8" title="1">{
         if rl, ok := l.(RWLocker); ok </span><span class="cov8" title="1">{
                 return &amp;binder[T]{RWLocker: rl, ptr: p}
@@ -2861,59 +2925,65 @@ import (
         "github.com/linkdata/jaws/lib/tag"
 )
 
-// SetHook is a function that replaces JawsSetLocked for a Binder.
+// SetHook is a function that replaces [Binder.JawsSetLocked].
 //
 // The lock will be held before calling the function, preferring RLock over Lock, if available.
-// Do not lock or unlock the Binder in the function. Do not call JawsSet.
+// Do not lock or unlock the [Binder] in the function. Do not call [Binder.JawsSet].
 //
 // The bind argument is the previous Binder in the chain, and you probably
-// want to call it's JawsSetLocked first.
+// want to call its [Binder.JawsSetLocked] first.
 type SetHook[T comparable] func(bind Binder[T], elem *jaws.Element, value T) (err error)
 
-// GetHook is a function that replaces JawsGetLocked for a Binder.
+// GetHook is a function that replaces [Binder.JawsGetLocked].
 //
 // The lock will be held before calling the function, preferring RLock over Lock, if available.
-// Do not lock or unlock the Binder in the function. Do not call JawsGet.
+// Do not lock or unlock the [Binder] in the function. Do not call [Getter.JawsGet].
 //
 // The bind argument is the previous Binder in the chain, and you probably
-// want to call it's JawsGetLocked first.
+// want to call its [Binder.JawsGetLocked] first.
 type GetHook[T comparable] func(bind Binder[T], elem *jaws.Element) (value T)
 
-// GetHTMLHook is a function to call when JawsGetHTML() is called.
+// GetHTMLHook is a function to call when [HTMLGetter.JawsGetHTML] is called.
 //
 // The lock will be held before calling the function, preferring RLock over Lock, if available.
-// Do not lock or unlock the Binder in the function. Do not call JawsGet.
+// Do not lock or unlock the [Binder] in the function. Do not call [Getter.JawsGet].
 type GetHTMLHook[T comparable] func(bind Binder[T], elem *jaws.Element) (s template.HTML)
 
 // ClickedHook is a function to call when a click event is received.
 //
-// The Binder locks are not held when the function is called.
+// The [Binder] locks are not held when the function is called.
 type ClickedHook[T comparable] func(bind Binder[T], elem *jaws.Element, click jaws.Click) (err error)
 
 // ContextMenuHook is a function to call when a context menu event is received.
 //
-// The Binder locks are not held when the function is called.
+// The [Binder] locks are not held when the function is called.
 type ContextMenuHook[T comparable] func(bind Binder[T], elem *jaws.Element, click jaws.Click) (err error)
 
 // InitialHTMLAttrHook is a function to call when an Element is initially rendered.
 //
 // The lock will be held at this point, preferring RLock over Lock, if available.
-// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
 type InitialHTMLAttrHook[T comparable] func(bind Binder[T], elem *jaws.Element) (s template.HTMLAttr)
 
-// SuccessHook is a function to call when a call to JawsSet returns with no error.
+// SuccessHook is a function to call when [Setter.JawsSet] returns with no error.
 //
-// The Binder locks are not held when the function is called.
+// The [Binder] locks are not held when the function is called.
 //
-// Success hooks in a Binder chain are called in reverse registration order.
-// If one of them returns an error, that error is returned from JawsSet and
+// Success hooks in a [Binder] chain are called in reverse registration order.
+// If one of them returns an error, that error is returned from [Setter.JawsSet] and
 // no more success hooks are called.
 type SuccessHook func(*jaws.Element) (err error)
 
+// Formatter customizes [Binder.Format] output for a value.
 type Formatter interface {
         Format(string) string
 }
 
+// Binder binds a comparable Go value to JaWS getter, setter, tag and event
+// interfaces.
+//
+// Binder methods are safe for concurrent use when the locker passed to [New]
+// is safe for concurrent use.
 type Binder[T comparable] interface {
         RWLocker
         Setter[T]
@@ -2929,27 +2999,27 @@ type Binder[T comparable] interface {
         // the Binder lock is held.
         JawsInitialHTMLAttrLocked(elem *jaws.Element) (s template.HTMLAttr)
 
-        // SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
+        // SetLocked returns a [Binder] that will call fn instead of [Binder.JawsSetLocked].
         //
         // The lock will be held at this point.
-        // Do not lock or unlock the Binder within fn. Do not call JawsSet.
+        // Do not lock or unlock the [Binder] within fn. Do not call [Setter.JawsSet].
         //
         // The bind argument to the function is the previous Binder in the chain,
-        // and you probably want to call it's JawsSetLocked first.
+        // and you probably want to call its [Binder.JawsSetLocked] first.
         SetLocked(fn SetHook[T]) (newbind Binder[T])
 
-        // GetLocked returns a Binder[T] that will call fn instead of JawsGetLocked.
+        // GetLocked returns a [Binder] that will call fn instead of [Binder.JawsGetLocked].
         //
         // The lock will be held at this point, preferring RLock over Lock, if available.
-        // Do not lock or unlock the Binder within fn. Do not call JawsGet.
+        // Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
         //
         // The bind argument to the function is the previous Binder in the chain,
-        // and you probably want to call it's JawsGetLocked first.
+        // and you probably want to call its [Binder.JawsGetLocked] first.
         GetLocked(fn GetHook[T]) (newbind Binder[T])
 
-        // Success returns a Binder[T] that will call fn after the value has been set
+        // Success returns a [Binder] that will call fn after the value has been set
         // with no errors. No locks are held when the function is called.
-        // If the function returns an error, that will be returned from JawsSet.
+        // If the function returns an error, that will be returned from [Setter.JawsSet].
         //
         // The function must have one of the following signatures:
         //  * func()
@@ -2958,35 +3028,35 @@ type Binder[T comparable] interface {
         //  * func(*Element) error
         Success(fn any) (newbind Binder[T])
 
-        // GetHTML returns a Binder[T] that will call fn instead of the default
+        // GetHTML returns a [Binder] that will call fn instead of the default
         // escaped fmt.Sprintf("%v", JawsGetLocked(elem)) HTML rendering.
         //
         // The lock will be held at this point, preferring RLock over Lock, if available.
-        // Do not lock or unlock the Binder within fn. Do not call JawsGet.
+        // Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
         GetHTML(fn GetHTMLHook[T]) (newbind Binder[T])
 
-        // Format returns a Binder[T] that implements HTMLGetter that
+        // Format returns a [Binder] that implements [HTMLGetter] and
         // calls html.EscapeString on either fmt.Sprintf(format, JawsGetLocked(elem))
-        // or, if T implements bind.Formatter, T.Format(format).
+        // or, if T implements [Formatter], T.Format(format).
         Format(format string) (newbind Binder[T])
 
-        // Clicked returns a Binder[T] that will call fn when JawsClick is invoked.
+        // Clicked returns a [Binder] that will call fn when [jaws.ClickHandler.JawsClick] is invoked.
         //
-        // The Binder locks are not held when the function is called.
+        // The [Binder] locks are not held when the function is called.
         Clicked(fn ClickedHook[T]) (newbind Binder[T])
 
-        // ContextMenu returns a Binder[T] that will call fn when JawsContextMenu
-        // is invoked.
+        // ContextMenu returns a [Binder] that will call fn when
+        // [jaws.ContextMenuHandler.JawsContextMenu] is invoked.
         //
-        // The Binder locks are not held when the function is called.
+        // The [Binder] locks are not held when the function is called.
         ContextMenu(fn ContextMenuHook[T]) (newbind Binder[T])
 
-        // InitialHTMLAttr returns a Binder[T] that will call fn when
-        // JawsInitialHTMLAttr is invoked.
+        // InitialHTMLAttr returns a [Binder] that will call fn when
+        // [jaws.InitialHTMLAttrHandler.JawsInitialHTMLAttr] is invoked.
         //
         // The lock will be held at this point, preferring RLock over Lock, if available.
-        // Do not lock or unlock the Binder within fn. Do not call JawsGet.
-        // To call the previous handler in the chain, call JawsInitialHTMLAttrLocked.
+        // Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
+        // To call the previous handler in the chain, call [Binder.JawsInitialHTMLAttrLocked].
         InitialHTMLAttr(fn InitialHTMLAttrHook[T]) (newbind Binder[T])
 }
 
@@ -3128,13 +3198,13 @@ func (bind *binder[T]) JawsContextMenu(elem *jaws.Element, click jaws.Click) (er
         <span class="cov8" title="1">return</span>
 }
 
-// SetLocked returns a Binder[T] that will call fn instead of JawsSetLocked.
+// SetLocked returns a [Binder] that will call fn instead of [Binder.JawsSetLocked].
 //
 // The lock will be held at this point.
-// Do not lock or unlock the Binder within fn. Do not call JawsSet.
+// Do not lock or unlock the [Binder] within fn. Do not call [Setter.JawsSet].
 //
 // The bind argument to the function is the previous Binder in the chain,
-// and you probably want to call it's JawsSetLocked first.
+// and you probably want to call its [Binder.JawsSetLocked] first.
 func (bind *binder[T]) SetLocked(fn SetHook[T]) Binder[T] <span class="cov8" title="1">{
         return &amp;binder[T]{
                 prev:     bind,
@@ -3144,13 +3214,13 @@ func (bind *binder[T]) SetLocked(fn SetHook[T]) Binder[T] <span class="cov8" tit
         }
 }</span>
 
-// GetLocked returns a Binder[T] that will call fn instead of JawsGetLocked.
+// GetLocked returns a [Binder] that will call fn instead of [Binder.JawsGetLocked].
 //
 // The lock will be held at this point, preferring RLock over Lock, if available.
-// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
 //
 // The bind argument to the function is the previous Binder in the chain,
-// and you probably want to call it's JawsGetLocked first.
+// and you probably want to call its [Binder.JawsGetLocked] first.
 func (bind *binder[T]) GetLocked(fn GetHook[T]) Binder[T] <span class="cov8" title="1">{
         return &amp;binder[T]{
                 prev:     bind,
@@ -3160,9 +3230,9 @@ func (bind *binder[T]) GetLocked(fn GetHook[T]) Binder[T] <span class="cov8" tit
         }
 }</span>
 
-// Format returns a Binder[T] that implements HTMLGetter that
+// Format returns a [Binder] that implements [HTMLGetter] and
 // calls html.EscapeString on either fmt.Sprintf(format, JawsGetLocked(elem))
-// or, if T implements bind.Formatter, T.Format(format).
+// or, if T implements [Formatter], T.Format(format).
 func (bind *binder[T]) Format(format string) Binder[T] <span class="cov8" title="1">{
         return &amp;binder[T]{
                 prev:     bind,
@@ -3172,11 +3242,11 @@ func (bind *binder[T]) Format(format string) Binder[T] <span class="cov8" title=
         }
 }</span>
 
-// GetHTML returns a Binder[T] that will call fn instead of the default escaped
+// GetHTML returns a [Binder] that will call fn instead of the default escaped
 // fmt.Sprintf("%v", JawsGetLocked(elem)) HTML rendering.
 //
 // The lock will be held at this point, preferring RLock over Lock, if available.
-// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
 func (bind *binder[T]) GetHTML(fn GetHTMLHook[T]) Binder[T] <span class="cov8" title="1">{
         return &amp;binder[T]{
                 prev:     bind,
@@ -3186,9 +3256,9 @@ func (bind *binder[T]) GetHTML(fn GetHTMLHook[T]) Binder[T] <span class="cov8" t
         }
 }</span>
 
-// Clicked returns a Binder[T] that will call fn when JawsClick is invoked.
+// Clicked returns a [Binder] that will call fn when [jaws.ClickHandler.JawsClick] is invoked.
 //
-// The Binder locks are not held when the function is called.
+// The [Binder] locks are not held when the function is called.
 func (bind *binder[T]) Clicked(fn ClickedHook[T]) Binder[T] <span class="cov8" title="1">{
         return &amp;binder[T]{
                 prev:     bind,
@@ -3198,9 +3268,10 @@ func (bind *binder[T]) Clicked(fn ClickedHook[T]) Binder[T] <span class="cov8" t
         }
 }</span>
 
-// ContextMenu returns a Binder[T] that will call fn when JawsContextMenu is invoked.
+// ContextMenu returns a [Binder] that will call fn when
+// [jaws.ContextMenuHandler.JawsContextMenu] is invoked.
 //
-// The Binder locks are not held when the function is called.
+// The [Binder] locks are not held when the function is called.
 func (bind *binder[T]) ContextMenu(fn ContextMenuHook[T]) Binder[T] <span class="cov8" title="1">{
         return &amp;binder[T]{
                 prev:     bind,
@@ -3210,11 +3281,11 @@ func (bind *binder[T]) ContextMenu(fn ContextMenuHook[T]) Binder[T] <span class=
         }
 }</span>
 
-// InitialHTMLAttr returns a Binder[T] that will call fn when
-// JawsInitialHTMLAttr is invoked.
+// InitialHTMLAttr returns a [Binder] that will call fn when
+// [jaws.InitialHTMLAttrHandler.JawsInitialHTMLAttr] is invoked.
 //
 // The lock will be held at this point, preferring RLock over Lock, if available.
-// Do not lock or unlock the Binder within fn. Do not call JawsGet.
+// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
 func (bind *binder[T]) InitialHTMLAttr(fn InitialHTMLAttrHook[T]) Binder[T] <span class="cov8" title="1">{
         return &amp;binder[T]{
                 prev:     bind,
@@ -3224,9 +3295,9 @@ func (bind *binder[T]) InitialHTMLAttr(fn InitialHTMLAttrHook[T]) Binder[T] <spa
         }
 }</span>
 
-// Success returns a Binder[T] that will call fn after the value has been set
+// Success returns a [Binder] that will call fn after the value has been set
 // with no errors. No locks are held when the function is called.
-// If the function returns an error, that will be returned from JawsSet.
+// If the function returns an error, that will be returned from [Setter.JawsSet].
 //
 // The function must have one of the following signatures:
 //   - func()
@@ -3275,8 +3346,11 @@ import (
         "github.com/linkdata/jaws/lib/tag"
 )
 
+// ErrValueNotSettable is returned by read-only adapters when [Setter.JawsSet]
+// is called.
 var ErrValueNotSettable = errors.New("value not settable")
 
+// Getter exposes a value for an [jaws.Element].
 type Getter[T comparable] interface {
         JawsGet(elem *jaws.Element) (value T)
 }
@@ -3301,6 +3375,10 @@ func makeStaticGetter[T comparable](v T) Getter[T] <span class="cov8" title="1">
         return getterStatic[T]{v}
 }</span>
 
+// MakeGetter returns v as a [Getter].
+//
+// v may be a [Getter] of the same type or a static value of type T. It panics
+// for any other type.
 func MakeGetter[T comparable](v any) Getter[T] <span class="cov8" title="1">{
         switch v := v.(type) </span>{
         case Getter[T]:<span class="cov8" title="1">
@@ -3337,7 +3415,9 @@ func (g *htmlGetterFunc) JawsGetTag(tag.Context) any <span class="cov8" title="1
         return g.tags
 }</span>
 
-// HTMLGetterFunc wraps a function and returns a HTMLGetter.
+// HTMLGetterFunc wraps fn as an [HTMLGetter].
+//
+// Optional tags are exposed through [tag.TagGetter].
 func HTMLGetterFunc(fn func(elem *jaws.Element) (tmpl template.HTML), tags ...any) HTMLGetter <span class="cov8" title="1">{
         return &amp;htmlGetterFunc{fn: fn, tags: tags}
 }</span>
@@ -3390,15 +3470,15 @@ func (g htmlGetterString) JawsGetTag(tag.Context) any <span class="cov8" title="
         return g.sg
 }</span>
 
-// MakeHTMLGetter returns a HTMLGetter for v.
+// MakeHTMLGetter returns an [HTMLGetter] for v.
 //
 // Depending on the type of v, we return:
 //
-//   - HTMLGetter: `JawsGetHTML(e *Element) template.HTML` to be used as-is.
-//   - Getter[string]: `JawsGet(elem *Element) string` that will be escaped using `html.EscapeString`.
-//   - fmt.Stringer: `String() string` that will be escaped using `html.EscapeString`.
-//   - a static `template.HTML` or `string` to be used as-is with no HTML escaping.
-//   - everything else is rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
+//   - [HTMLGetter] is used as-is.
+//   - Binder[string] and Getter[string] values are escaped using [html.EscapeString].
+//   - [fmt.Stringer] values are escaped using [html.EscapeString].
+//   - Static [template.HTML] and string values are used as-is with no HTML escaping.
+//   - Everything else is rendered using [fmt.Sprint] and escaped using [html.EscapeString].
 //
 // WARNING: Plain string values are NOT HTML-escaped. This is intentional so that
 // HTML markup can be passed conveniently from Go templates (e.g. `{{$.Span "&lt;i&gt;text&lt;/i&gt;"}}`).
@@ -3429,6 +3509,7 @@ func MakeHTMLGetter(v any) HTMLGetter <span class="cov8" title="1">{
 
 import "sync"
 
+// RWLocker is the subset of [sync.RWMutex] used by binders.
 type RWLocker interface {
         sync.Locker
         RLock()
@@ -3457,9 +3538,10 @@ import (
         "github.com/linkdata/jaws/lib/tag"
 )
 
+// Setter exposes and updates a value for an [jaws.Element].
 type Setter[T comparable] interface {
         Getter[T]
-        // JawsSet may return ErrValueUnchanged to indicate value was already set.
+        // JawsSet may return [jaws.ErrValueUnchanged] to indicate value was already set.
         JawsSet(elem *jaws.Element, value T) (err error)
 }
 
@@ -3491,6 +3573,12 @@ func (s setterStatic[T]) JawsGetTag(tag.Context) any <span class="cov8" title="1
         return nil
 }</span>
 
+// MakeSetter returns v as a [Setter].
+//
+// v may be a [Setter] of the same type, a [Getter] of the same type or a
+// static value of type T. Getter and static adapters are read-only and return
+// [ErrValueNotSettable] from [Setter.JawsSet]. MakeSetter panics for any other
+// type.
 func MakeSetter[T comparable](v any) Setter[T] <span class="cov8" title="1">{
         switch v := v.(type) </span>{
         case Setter[T]:<span class="cov8" title="1">
@@ -3520,9 +3608,10 @@ type numeric interface {
                 ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
 }
 
+// SetterFloat64 marks numeric setter types that can be adapted to Setter[float64].
 type SetterFloat64[T numeric] interface {
         Getter[T]
-        // JawsSet may return ErrValueUnchanged to indicate value was already set.
+        // JawsSet may return [jaws.ErrValueUnchanged] to indicate value was already set.
         JawsSet(elem *jaws.Element, value T) (err error)
 }
 
@@ -3591,6 +3680,12 @@ func makeSetterFloat64for[T numeric](s *Setter[float64], v any) bool <span class
         <span class="cov8" title="1">return false</span>
 }
 
+// MakeSetterFloat64 returns v as a [Setter] for float64 values.
+//
+// v may be a float64 setter/getter/static value or a setter/getter/static value
+// of another supported numeric type. Getter and static adapters are read-only
+// and return [ErrValueNotSettable] from [Setter.JawsSet]. MakeSetterFloat64
+// panics for unsupported types.
 func MakeSetterFloat64(v any) (s Setter[float64]) <span class="cov8" title="1">{
         switch v := v.(type) </span>{
         case Setter[float64]:<span class="cov8" title="1">
@@ -3640,7 +3735,9 @@ func (g *stringGetterFunc) JawsGetTag(tag.Context) any <span class="cov8" title=
         return g.tags
 }</span>
 
-// StringGetterFunc wraps a function and returns a Getter[string]
+// StringGetterFunc wraps fn as a [Getter] for string values.
+//
+// Optional tags are exposed through [tag.TagGetter].
 func StringGetterFunc(fn func(elem *jaws.Element) (s string), tags ...any) Getter[string] <span class="cov8" title="1">{
         return &amp;stringGetterFunc{fn: fn, tags: tags}
 }</span>
@@ -3690,6 +3787,8 @@ func appendAttrs(b []byte, attrs []template.HTMLAttr) []byte <span class="cov8" 
         <span class="cov8" title="1">return b</span>
 }
 
+// WriteHTMLTag writes an HTML start tag with optional id, type, value and raw
+// attribute fragments.
 func WriteHTMLTag(w io.Writer, jid jid.Jid, htmlTag, typeAttr, valueAttr string, attrs []template.HTMLAttr) (err error) <span class="cov8" title="1">{
         b := jid.AppendStartTagAttr(nil, htmlTag)
         if typeAttr != "" </span><span class="cov8" title="1">{
@@ -3706,10 +3805,16 @@ func WriteHTMLTag(w io.Writer, jid jid.Jid, htmlTag, typeAttr, valueAttr string,
         return</span>
 }
 
+// WriteHTMLInput writes an input start tag with optional id, type, value and
+// raw attribute fragments.
 func WriteHTMLInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs []template.HTMLAttr) (err error) <span class="cov8" title="1">{
         return WriteHTMLTag(w, jid, "input", typeAttr, valueAttr, attrs)
 }</span>
 
+// WriteHTMLInner writes an HTML element with trusted inner HTML.
+//
+// Singleton tags such as img and input are written without closing tags unless
+// innerHTML is non-empty.
 func WriteHTMLInner(w io.Writer, jid jid.Jid, htmlTag, typeAttr string, innerHTML template.HTML, attrs ...template.HTMLAttr) (err error) <span class="cov8" title="1">{
         if err = WriteHTMLTag(w, jid, htmlTag, typeAttr, "", attrs); err == nil </span><span class="cov8" title="1">{
                 if innerHTML != "" || needClosingTag(htmlTag) </span><span class="cov8" title="1">{
@@ -3732,13 +3837,20 @@ import (
         "strings"
 )
 
-// Jid is the basis for the HTML `id` attribute for an UI Element within an active Request.
-// It is per-Request, meaning Jid(1) in one Request is not the same as Jid(1) in another.
+// Jid is the basis for the HTML id attribute for a UI element within an active
+// request.
+//
+// It is request-scoped, meaning Jid(1) in one request is not the same element
+// as Jid(1) in another request.
 type Jid int64
 
-const Prefix = "Jid." // String prefixing HTML ID's based on Jid's.
+// Prefix prefixes HTML IDs based on [Jid] values.
+const Prefix = "Jid."
+
+// Invalid is returned by parsers when text does not contain a valid [Jid].
 const Invalid = Jid(-1)
 
+// IsValid reports whether jid can identify an element or the request as a whole.
 func (jid Jid) IsValid() bool <span class="cov8" title="1">{
         return jid &gt;= 0
 }</span>
@@ -3768,7 +3880,8 @@ func (jid Jid) AppendQuote(dst []byte) []byte <span class="cov8" title="1">{
         return dst
 }</span>
 
-// AppendAttr appends `&lt;startTag` followed by the quoted Jid as a HTML id attribute.
+// AppendStartTagAttr appends `&lt;startTag` followed by the quoted [Jid] as an
+// HTML id attribute when jid is non-zero.
 func (jid Jid) AppendStartTagAttr(dst []byte, startTag string) []byte <span class="cov8" title="1">{
         dst = append(dst, '&lt;')
         dst = append(dst, startTag...)
@@ -3781,7 +3894,7 @@ func (jid Jid) AppendStartTagAttr(dst []byte, startTag string) []byte <span clas
 
 // ParseInt parses a Jid integer and returns it as a Jid.
 //
-// Returns jid.Invalid if it's not a valid Jid or an error occurs.
+// Returns [Invalid] if s is not a valid [Jid] integer or an error occurs.
 func ParseInt(s string) Jid <span class="cov8" title="1">{
         if n, err := strconv.ParseInt(s, 10, 64); err == nil &amp;&amp; n &gt;= 0 </span><span class="cov8" title="1">{
                 return Jid(n)
@@ -3789,9 +3902,10 @@ func ParseInt(s string) Jid <span class="cov8" title="1">{
         <span class="cov8" title="1">return Invalid</span>
 }
 
-// ParseString parses an unquoted Jid string (e.g. `Jid.2`) and returns the Jid value (e.g. Jid(2)).
+// ParseString parses an unquoted [Jid] string, such as `Jid.2`, and returns
+// the corresponding value.
 //
-// Returns jid.Invalid if it's not a valid Jid string.
+// Returns [Invalid] if s is not a valid [Jid] string.
 func ParseString(s string) Jid <span class="cov8" title="1">{
         if s == "" </span><span class="cov8" title="1">{
                 return 0
@@ -3821,15 +3935,21 @@ import (
         "github.com/linkdata/jaws"
 )
 
-// Bool stores a named boolen value with a HTML representation.
+// Bool stores a named boolean value with an HTML representation.
+//
+// Bool values are safe for concurrent use.
 type Bool struct {
         nba     *BoolArray       // (read-only) NamedBoolArray that this is part of (may be nil)
         name    string           // (read-only) name within the named bool set
         html    template.HTML    // (read-only) HTML code used in select lists or labels
         mu      deadlock.RWMutex // protects following
-        checked bool             // it's state
+        checked bool             // its state
 }
 
+// NewBool returns a [Bool] with the given name, HTML and checked state.
+//
+// If nba is non-nil, changing the value through [Bool.JawsSet] may dirty the
+// containing [BoolArray] and deselect sibling values in single-select mode.
 func NewBool(nba *BoolArray, name string, html template.HTML, checked bool) *Bool <span class="cov8" title="1">{
         return &amp;Bool{
                 nba:     nba,
@@ -3839,24 +3959,29 @@ func NewBool(nba *BoolArray, name string, html template.HTML, checked bool) *Boo
         }
 }</span>
 
+// Array returns the [BoolArray] that owns nb, or nil.
 func (nb *Bool) Array() *BoolArray <span class="cov8" title="1">{
         return nb.nba
 }</span>
 
+// Name returns the form value name for nb.
 func (nb *Bool) Name() (s string) <span class="cov8" title="1">{
         s = nb.name
         return
 }</span>
 
+// HTML returns the trusted HTML label for nb.
 func (nb *Bool) HTML() (h template.HTML) <span class="cov8" title="1">{
         h = nb.html
         return
 }</span>
 
+// JawsGetHTML returns the trusted HTML label for nb.
 func (nb *Bool) JawsGetHTML(*jaws.Element) (h template.HTML) <span class="cov8" title="1">{
         return nb.HTML()
 }</span>
 
+// JawsGet returns whether nb is checked.
 func (nb *Bool) JawsGet(*jaws.Element) (v bool) <span class="cov8" title="1">{
         nb.mu.RLock()
         v = nb.checked
@@ -3864,6 +3989,7 @@ func (nb *Bool) JawsGet(*jaws.Element) (v bool) <span class="cov8" title="1">{
         return
 }</span>
 
+// JawsSet sets the checked state and dirties the affected element tags.
 func (nb *Bool) JawsSet(e *jaws.Element, checked bool) (err error) <span class="cov8" title="1">{
         err = jaws.ErrValueUnchanged
         nba := nb.nba
@@ -3887,6 +4013,7 @@ func (nb *Bool) JawsSet(e *jaws.Element, checked bool) (err error) <span class="
         <span class="cov8" title="1">return</span>
 }
 
+// Checked reports whether nb is checked.
 func (nb *Bool) Checked() (checked bool) <span class="cov8" title="1">{
         nb.mu.RLock()
         checked = nb.checked
@@ -3894,6 +4021,7 @@ func (nb *Bool) Checked() (checked bool) <span class="cov8" title="1">{
         return
 }</span>
 
+// Set changes the checked state and reports whether it changed.
 func (nb *Bool) Set(checked bool) (changed bool) <span class="cov8" title="1">{
         nb.mu.Lock()
         if nb.checked != checked </span><span class="cov8" title="1">{
@@ -3904,7 +4032,7 @@ func (nb *Bool) Set(checked bool) (changed bool) <span class="cov8" title="1">{
         return</span>
 }
 
-// String returns a string representation of the NamedBool suitable for debugging.
+// String returns a string representation of the [Bool] suitable for debugging.
 func (nb *Bool) String() string <span class="cov8" title="1">{
         return fmt.Sprintf("&amp;{%q,%q,%v}", nb.Name(), nb.HTML(), nb.Checked())
 }</span>
@@ -3920,8 +4048,8 @@ import (
         "github.com/linkdata/jaws"
 )
 
-// BoolArray stores the data required to support HTML 'select' elements
-// and sets of HTML radio buttons. It it safe to use from multiple goroutines
+// BoolArray stores the data required to support HTML select elements
+// and sets of HTML radio buttons. It is safe to use from multiple goroutines
 // concurrently.
 type BoolArray struct {
         multi bool             // allow multiple NamedBools to be true
@@ -3931,25 +4059,30 @@ type BoolArray struct {
 
 var _ SelectHandler = (*BoolArray)(nil)
 
+// NewBoolArray returns an empty [BoolArray].
+//
+// If multi is false, setting one value clears other names in the array. If
+// multi is true, multiple values may be checked at the same time.
 func NewBoolArray(multi bool) *BoolArray <span class="cov8" title="1">{
         return &amp;BoolArray{multi: multi}
 }</span>
 
-// ReadLocked calls the given function with the NamedBoolArray locked for reading.
+// ReadLocked calls fn with the [BoolArray] locked for reading.
 func (nba *BoolArray) ReadLocked(fn func(nbl []*Bool)) <span class="cov8" title="1">{
         nba.mu.RLock()
         defer nba.mu.RUnlock()
         fn(nba.data)
 }</span>
 
-// WriteLocked calls the given function with the NamedBoolArray locked for writing and
-// replaces the internal []*NamedBool slice with the return value.
+// WriteLocked calls fn with the [BoolArray] locked for writing and replaces
+// the internal []*Bool slice with the return value.
 func (nba *BoolArray) WriteLocked(fn func(nbl []*Bool) []*Bool) <span class="cov8" title="1">{
         nba.mu.Lock()
         defer nba.mu.Unlock()
         nba.data = fn(nba.data)
 }</span>
 
+// JawsContains returns the option widgets for a select backed by nba.
 func (nba *BoolArray) JawsContains(e *jaws.Element) (contents []jaws.UI) <span class="cov8" title="1">{
         nba.mu.RLock()
         for _, nb := range nba.data </span><span class="cov8" title="1">{
@@ -3959,11 +4092,11 @@ func (nba *BoolArray) JawsContains(e *jaws.Element) (contents []jaws.UI) <span c
         return</span>
 }
 
-// Add adds a NamedBool with the given name and the given text.
+// Add adds a [Bool] with the given name and trusted HTML text.
 // Returns itself.
 //
-// Note that while it's legal to have multiple NamedBool with the same name
-// since it's allowed in HTML, it's probably not a good idea.
+// Note that while it is legal to have multiple [Bool] values with the same
+// name because HTML allows it, it is usually not a good idea.
 func (nba *BoolArray) Add(name string, text template.HTML) *BoolArray <span class="cov8" title="1">{
         nba.mu.Lock()
         nba.data = append(nba.data, NewBool(nba, name, text, false))
@@ -3971,9 +4104,9 @@ func (nba *BoolArray) Add(name string, text template.HTML) *BoolArray <span clas
         return nba
 }</span>
 
-// Set sets the Checked state for the NamedBool(s) with the given name.
+// Set sets the checked state for [Bool] values with the given name.
 //
-// If the given name doesn't match any NamedBool(s) in single-select
+// If the given name does not match any values in single-select
 // mode, everything will be deselected.
 func (nba *BoolArray) Set(name string, state bool) (changed bool) <span class="cov8" title="1">{
         nba.mu.Lock()
@@ -3987,7 +4120,7 @@ func (nba *BoolArray) Set(name string, state bool) (changed bool) <span class="c
         return</span>
 }
 
-// deselectOthersLocked clears all NamedBools whose name differs from
+// deselectOthersLocked clears all Bools whose name differs from
 // the given name when the array is in single-select mode and state is true.
 func (nba *BoolArray) deselectOthersLocked(name string, state bool) (changed bool) <span class="cov8" title="1">{
         if state &amp;&amp; !nba.multi </span><span class="cov8" title="1">{
@@ -4000,13 +4133,13 @@ func (nba *BoolArray) deselectOthersLocked(name string, state bool) (changed boo
         <span class="cov8" title="1">return</span>
 }
 
-// Get returns the name of first NamedBool in the group that
-// has it's Checked value set to true. Returns an empty string
+// Get returns the name of the first [Bool] in the group that
+// has its checked value set to true. Returns an empty string
 // if none are true.
 //
 // In case you can have more than one selected or you need to
 // distinguish between a blank name and the fact that none are
-// set to true, use ReadLocked() to inspect the data directly.
+// set to true, use [BoolArray.ReadLocked] to inspect the data directly.
 func (nba *BoolArray) Get() (name string) <span class="cov8" title="1">{
         nba.mu.RLock()
         for _, nb := range nba.data </span><span class="cov8" title="1">{
@@ -4019,7 +4152,7 @@ func (nba *BoolArray) Get() (name string) <span class="cov8" title="1">{
         return</span>
 }
 
-// Count returns the number of NamedBool in the set that have the given name.
+// Count returns the number of [Bool] values in the set that have the given name.
 func (nba *BoolArray) Count(name string) (n int) <span class="cov8" title="1">{
         nba.mu.RLock()
         defer nba.mu.RUnlock()
@@ -4031,7 +4164,7 @@ func (nba *BoolArray) Count(name string) (n int) <span class="cov8" title="1">{
         <span class="cov8" title="1">return</span>
 }
 
-// IsChecked returns true if any of the NamedBool in the set that have the
+// IsChecked returns true if any [Bool] in the set with the
 // given name are Checked. Returns false if the name is not found.
 func (nba *BoolArray) IsChecked(name string) (state bool) <span class="cov8" title="1">{
         nba.mu.RLock()
@@ -4044,7 +4177,7 @@ func (nba *BoolArray) IsChecked(name string) (state bool) <span class="cov8" tit
         <span class="cov8" title="1">return false</span>
 }
 
-// String returns a string representation of the NamedBoolArray suitable for debugging.
+// String returns a string representation of the [BoolArray] suitable for debugging.
 func (nba *BoolArray) String() string <span class="cov8" title="1">{
         var sb strings.Builder
         sb.WriteString("&amp;NamedBoolArray{[")
@@ -4060,10 +4193,12 @@ func (nba *BoolArray) String() string <span class="cov8" title="1">{
         return sb.String()</span>
 }
 
+// JawsGet returns the currently selected name.
 func (nba *BoolArray) JawsGet(e *jaws.Element) string <span class="cov8" title="1">{
         return nba.Get()
 }</span>
 
+// JawsSet selects name and dirties nba if the selection changed.
 func (nba *BoolArray) JawsSet(e *jaws.Element, name string) (err error) <span class="cov8" title="1">{
         if nba.Set(name, true) </span><span class="cov8" title="1">{
                 e.Dirty(nba)
@@ -4122,7 +4257,7 @@ import (
         "github.com/linkdata/jaws/lib/jid"
 )
 
-// WriteHTMLSelect writes a select tag with options from a NamedBoolArray.
+// WriteHTMLSelect writes a select tag with options from nba.
 func WriteHTMLSelect(w io.Writer, jid jid.Jid, nba *BoolArray, attrs []template.HTMLAttr) (err error) <span class="cov8" title="1">{
         if err = htmlio.WriteHTMLTag(w, jid, "select", "", "", attrs); err == nil </span><span class="cov8" title="1">{
                 var b []byte
@@ -4187,7 +4322,7 @@ func (errNotComparable) Is(target error) bool <span class="cov8" title="1">{
         return target == ErrNotComparable
 }</span>
 
-// NewErrNotComparable returns ErrNotComparable if x is not comparable.
+// NewErrNotComparable returns [ErrNotComparable] if x is not comparable.
 func NewErrNotComparable(x any) error <span class="cov8" title="1">{
         if x != nil </span><span class="cov8" title="1">{
                 if v := reflect.ValueOf(x); !v.Comparable() </span><span class="cov8" title="1">{
@@ -4208,7 +4343,7 @@ import (
 
 // ErrNotUsableAsTag is returned when a value cannot be used as a tag.
 //
-// It is also matchable as ErrNotComparable for backwards compatibility.
+// It is also matchable as [ErrNotComparable] for backwards compatibility.
 var ErrNotUsableAsTag errNotUsableAsTag
 
 type errNotUsableAsTag struct {
@@ -4232,7 +4367,7 @@ func (errNotUsableAsTag) Is(target error) bool <span class="cov8" title="1">{
         return target == ErrNotUsableAsTag || target == ErrNotComparable
 }</span>
 
-// NewErrNotUsableAsTag returns ErrNotUsableAsTag if x cannot be used as a tag.
+// NewErrNotUsableAsTag returns [ErrNotUsableAsTag] if x cannot be used as a tag.
 func NewErrNotUsableAsTag(x any) error <span class="cov8" title="1">{
         if err := NewErrNotComparable(x); err != nil </span><span class="cov8" title="1">{
                 retErr := errNotUsableAsTag{t: reflect.TypeOf(x)}
@@ -4247,7 +4382,7 @@ func NewErrNotUsableAsTag(x any) error <span class="cov8" title="1">{
 
 var tagGetterType = reflect.TypeFor[TagGetter]()
 
-// FindTagGetter searches x recursively for a nested TagGetter.
+// FindTagGetter searches x recursively for a nested [TagGetter].
 func FindTagGetter(x any) (path string, tgType reflect.Type, found bool) <span class="cov8" title="1">{
         if x == nil </span><span class="cov8" title="1">{
                 return
@@ -4344,8 +4479,10 @@ import (
         "reflect"
 )
 
+// Tag is a simple comparable tag value.
 type Tag string
 
+// TagString returns a debug string for tag.
 func TagString(tag any) string <span class="cov8" title="1">{
         if rv := reflect.ValueOf(tag); rv.IsValid() </span><span class="cov8" title="1">{
                 if rv.Kind() == reflect.Pointer </span><span class="cov8" title="1">{
@@ -4363,6 +4500,8 @@ func (errTooManyTags) Error() string <span class="cov8" title="1">{
         return "too many tags"
 }</span>
 
+// ErrTooManyTags is returned when tag expansion exceeds the recursion or result
+// limits.
 var ErrTooManyTags = errTooManyTags{}
 
 func ensureUsableTag(tag any) error <span class="cov8" title="1">{
@@ -4486,11 +4625,20 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
         }
 }
 
+// TagExpand expands tag into a flat list of unique comparable tag values.
+//
+// tag may be nil, a [Tag], a slice of tags, a [TagGetter] or another
+// comparable value. Primitive HTML/value types are rejected with
+// [ErrIllegalTagType] to catch common accidental tags.
 func TagExpand(ctx Context, tag any) ([]any, error) <span class="cov8" title="1">{
         var activeArr [12]any
         return expand(0, ctx, tag, nil, activeArr[:0])
 }</span>
 
+// MustTagExpand calls [TagExpand] and either logs or panics if expansion fails.
+//
+// When ctx is non-nil, expansion errors are passed to [Context.MustLog] and
+// the partial result is returned. When ctx is nil, MustTagExpand panics.
 func MustTagExpand(ctx Context, tag any) []any <span class="cov8" title="1">{
         result, err := TagExpand(ctx, tag)
         if err != nil </span><span class="cov8" title="1">{
@@ -4516,8 +4664,8 @@ import (
         "github.com/linkdata/jaws"
 )
 
-// A TemplateReloader reloads and reparses templates if more than one second
-// has passed since the last Lookup.
+// TemplateReloader reloads and reparses templates if more than one second
+// has passed since the last [TemplateReloader.Lookup].
 type TemplateReloader struct {
         Path string // the file path we are loading from
         mu   deadlock.RWMutex
@@ -4525,7 +4673,7 @@ type TemplateReloader struct {
         curr *template.Template
 }
 
-// New returns a jaws.TemplateLookuper.
+// New returns a [jaws.TemplateLookuper].
 //
 // If deadlock.Debug is false, it calls template.New("").ParseFS(fsys, fpath).
 //
@@ -4551,6 +4699,7 @@ func create(debug bool, fsys fs.FS, fpath, relpath string) (tl jaws.TemplateLook
         <span class="cov8" title="1">return</span>
 }
 
+// Lookup returns the named template, reloading from disk first when needed.
 func (tr *TemplateReloader) Lookup(name string) *template.Template <span class="cov8" title="1">{
         tr.mu.RLock()
         tl := tr.curr
@@ -4576,16 +4725,19 @@ import (
         "github.com/linkdata/jaws/lib/bind"
 )
 
+// A renders an HTML anchor element with dynamic inner HTML.
 type A struct{ HTMLInner }
 
 // NewA returns an anchor widget whose inner HTML is rendered from innerHTML.
-// innerHTML is passed to bind.MakeHTMLGetter; plain strings are trusted HTML.
+// innerHTML is passed to [bind.MakeHTMLGetter]; plain strings are trusted HTML.
 func NewA(innerHTML any) *A <span class="cov8" title="1">{ return &amp;A{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }</span>
 
+// JawsRender renders ui as an HTML anchor element.
 func (ui *A) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderInner(e, w, "a", "", params)
 }</span>
 
+// A renders an HTML anchor element.
 func (rw RequestWriter) A(innerHTML any, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewA(innerHTML), params...)
 }</span>
@@ -4600,18 +4752,21 @@ import (
         "github.com/linkdata/jaws/lib/bind"
 )
 
+// Button renders an HTML button element with dynamic inner HTML.
 type Button struct{ HTMLInner }
 
 // NewButton returns a button widget whose inner HTML is rendered from innerHTML.
-// innerHTML is passed to bind.MakeHTMLGetter; plain strings are trusted HTML.
+// innerHTML is passed to [bind.MakeHTMLGetter]; plain strings are trusted HTML.
 func NewButton(innerHTML any) *Button <span class="cov8" title="1">{
         return &amp;Button{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}}
 }</span>
 
+// JawsRender renders ui as an HTML button element.
 func (ui *Button) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderInner(e, w, "button", "button", params)
 }</span>
 
+// Button renders an HTML button element.
 func (rw RequestWriter) Button(innerHTML any, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewButton(innerHTML), params...)
 }</span>
@@ -4626,15 +4781,18 @@ import (
         "github.com/linkdata/jaws/lib/bind"
 )
 
+// Checkbox renders an HTML checkbox input bound to a bool setter.
 type Checkbox struct{ InputBool }
 
 // NewCheckbox returns a checkbox input widget bound to g.
 func NewCheckbox(g bind.Setter[bool]) *Checkbox <span class="cov8" title="1">{ return &amp;Checkbox{InputBool{Setter: g}} }</span>
 
+// JawsRender renders ui as an HTML checkbox input.
 func (ui *Checkbox) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderBoolInput(e, w, "checkbox", params...)
 }</span>
 
+// Checkbox renders an HTML checkbox input.
 func (rw RequestWriter) Checkbox(value any, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewCheckbox(bind.MakeSetter[bool](value)), params...)
 }</span>
@@ -4646,8 +4804,10 @@ import (
         "github.com/linkdata/jaws"
 )
 
-// Clickable returns an object implementing bind.HTMLGetter, jaws.ClickHandler and jaws.TagGetter.
-// innerHTML is passed to MakeHTMLGetter(), which may or may not provide tags.
+// Clickable returns an object implementing [bind.HTMLGetter], [jaws.ClickHandler]
+// and tag.TagGetter.
+//
+// innerHTML is passed to [bind.MakeHTMLGetter], which may or may not provide tags.
 //
 // Deprecated: use New(innerHTML).Clicked(...) directly.
 func Clickable(innerHTML any, onclick func(elem *jaws.Element, click jaws.Click) (err error)) jaws.ClickHandler <span class="cov8" title="1">{
@@ -4678,6 +4838,7 @@ import (
         "github.com/linkdata/jaws"
 )
 
+// Container renders an HTML element around a dynamic child collection.
 type Container struct {
         OuterHTMLTag string
         ContainerHelper
@@ -4692,14 +4853,17 @@ func NewContainer(outerHTMLTag string, c jaws.Container) *Container <span class=
         }
 }</span>
 
+// JawsRender renders ui as its configured container element.
 func (ui *Container) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.RenderContainer(e, w, ui.OuterHTMLTag, params)
 }</span>
 
+// JawsUpdate updates the child collection.
 func (ui *Container) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         ui.UpdateContainer(e)
 }</span>
 
+// Container renders c inside outerHTMLTag.
 func (rw RequestWriter) Container(outerHTMLTag string, c jaws.Container, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewContainer(outerHTMLTag, c), params...)
 }</span>
@@ -4720,7 +4884,7 @@ import (
 // ContainerHelper is a helper for widgets that render dynamic child collections.
 //
 // It tracks previously rendered child elements and performs append/remove/order
-// updates during JawsUpdate.
+// updates during [ContainerHelper.UpdateContainer].
 //
 // A ContainerHelper belongs to a widget instance and is intended for render-scoped
 // widget lifetimes (for example widgets created via RequestWriter helper methods).
@@ -4744,6 +4908,8 @@ func NewContainerHelper(c jaws.Container) ContainerHelper <span class="cov8" tit
         return ContainerHelper{Container: c}
 }</span>
 
+// RenderContainer renders outerHTMLTag around the current children from
+// [jaws.Container.JawsContains].
 func (ui *ContainerHelper) RenderContainer(e *jaws.Element, w io.Writer, outerHTMLTag string, params []any) (err error) <span class="cov8" title="1">{
         var getterAttrs []template.HTMLAttr
         if ui.Tag, getterAttrs, err = e.ApplyGetter(ui.Container); err == nil </span><span class="cov8" title="1">{
@@ -4785,6 +4951,7 @@ func (ui *ContainerHelper) RenderContainer(e *jaws.Element, w io.Writer, outerHT
         <span class="cov8" title="1">return</span>
 }
 
+// UpdateContainer updates child elements to match [jaws.Container.JawsContains].
 func (ui *ContainerHelper) UpdateContainer(e *jaws.Element) <span class="cov8" title="1">{
         var toAppend []*jaws.Element
 
@@ -4846,15 +5013,18 @@ import (
         "github.com/linkdata/jaws/lib/bind"
 )
 
+// Date renders an HTML date input bound to a time value setter.
 type Date struct{ InputDate }
 
 // NewDate returns a date input widget bound to g.
 func NewDate(g bind.Setter[time.Time]) *Date <span class="cov8" title="1">{ return &amp;Date{InputDate{Setter: g}} }</span>
 
+// JawsRender renders ui as an HTML date input.
 func (ui *Date) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderDateInput(e, w, "date", params...)
 }</span>
 
+// Date renders an HTML date input.
 func (rw RequestWriter) Date(value any, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewDate(bind.MakeSetter[time.Time](value)), params...)
 }</span>
@@ -4869,16 +5039,19 @@ import (
         "github.com/linkdata/jaws/lib/bind"
 )
 
+// Div renders an HTML div element with dynamic inner HTML.
 type Div struct{ HTMLInner }
 
 // NewDiv returns a div widget whose inner HTML is rendered from innerHTML.
-// innerHTML is passed to bind.MakeHTMLGetter; plain strings are trusted HTML.
+// innerHTML is passed to [bind.MakeHTMLGetter]; plain strings are trusted HTML.
 func NewDiv(innerHTML any) *Div <span class="cov8" title="1">{ return &amp;Div{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }</span>
 
+// JawsRender renders ui as an HTML div element.
 func (ui *Div) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderInner(e, w, "div", "", params)
 }</span>
 
+// Div renders an HTML div element.
 func (rw RequestWriter) Div(innerHTML any, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewDiv(innerHTML), params...)
 }</span>
@@ -4905,8 +5078,8 @@ func (errIllegalJsVarName) Is(target error) bool <span class="cov8" title="1">{
         return target == ErrIllegalJsVarName
 }</span>
 
-// ErrJsVarArgumentType is returned when RequestWriter.JsVar receives an
-// argument that is neither a jaws.UI nor a JsVarMaker.
+// ErrJsVarArgumentType is returned when [RequestWriter.JsVar] receives an
+// argument that is neither a JaWS UI nor a [JsVarMaker].
 var ErrJsVarArgumentType = errors.New("expected jaws.UI or JsVarMaker")
 </pre>
 		
@@ -4976,6 +5149,7 @@ import (
 
 // HTMLInner is a reusable base for widgets that render as `&lt;tag&gt;inner&lt;/tag&gt;`.
 type HTMLInner struct {
+        // HTMLGetter returns the trusted inner HTML to render and update.
         HTMLGetter bind.HTMLGetter
 }
 
@@ -4988,6 +5162,7 @@ func (ui *HTMLInner) renderInner(e *jaws.Element, w io.Writer, htmlTag, htmlType
         <span class="cov8" title="1">return</span>
 }
 
+// JawsUpdate updates the rendered inner HTML.
 func (ui *HTMLInner) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         e.SetInner(ui.HTMLGetter.JawsGetHTML(e))
 }</span>
@@ -5005,11 +5180,13 @@ import (
         "github.com/linkdata/jaws/lib/htmlio"
 )
 
+// Img renders an HTML img element whose src is read from a string getter.
 type Img struct{ bind.Getter[string] }
 
 // NewImg returns an img widget whose src attribute is read from g.
 func NewImg(g bind.Getter[string]) *Img <span class="cov8" title="1">{ return &amp;Img{Getter: g} }</span>
 
+// JawsRender renders ui as an HTML img element.
 func (ui *Img) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) <span class="cov8" title="1">{
         var getterAttrs []template.HTMLAttr
         if _, getterAttrs, err = e.ApplyGetter(ui.Getter); err == nil </span><span class="cov8" title="1">{
@@ -5020,8 +5197,11 @@ func (ui *Img) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error
         }</span>
         <span class="cov8" title="1">return</span>
 }
+
+// JawsUpdate updates the src attribute.
 func (ui *Img) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{ e.SetAttr("src", ui.JawsGet(e)) }</span>
 
+// Img renders an HTML img element.
 func (rw RequestWriter) Img(imageSrc any, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewImg(bind.MakeGetter[string](imageSrc)), params...)
 }</span>
@@ -5045,7 +5225,7 @@ import (
 // Input stores common state for interactive input widgets.
 // There is one of these per request and input widget.
 type Input struct {
-        Tag  any
+        Tag  any          // tag to dirty after accepted input
         Last atomic.Value // the last value received from the request
 }
 
@@ -5059,6 +5239,7 @@ func (ui *Input) maybeDirty(e *jaws.Element, inerr error) (err error) <span clas
         return
 }</span>
 
+// InputText is the reusable base for string input widgets.
 type InputText struct {
         Input
         bind.Setter[string]
@@ -5075,18 +5256,21 @@ func (ui *InputText) renderStringInput(e *jaws.Element, w io.Writer, htmlType st
         <span class="cov8" title="1">return</span>
 }
 
+// JawsUpdate updates the input value when the bound string value changes.
 func (ui *InputText) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         if v := ui.JawsGet(e); ui.Last.Swap(v) != v </span><span class="cov8" title="1">{
                 e.SetValue(v)
         }</span>
 }
 
+// JawsInput stores a browser-side string input value.
 func (ui *InputText) JawsInput(e *jaws.Element, val string) (err error) <span class="cov8" title="1">{
         ui.Last.Store(val)
         err = ui.maybeDirty(e, ui.Setter.JawsSet(e, val))
         return
 }</span>
 
+// InputBool is the reusable base for boolean input widgets.
 type InputBool struct {
         Input
         bind.Setter[bool]
@@ -5106,6 +5290,7 @@ func (ui *InputBool) renderBoolInput(e *jaws.Element, w io.Writer, htmlType stri
         <span class="cov8" title="1">return</span>
 }
 
+// JawsUpdate updates the input value when the bound bool value changes.
 func (ui *InputBool) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         v := ui.JawsGet(e)
         if ui.Last.Swap(v) != v </span><span class="cov8" title="1">{
@@ -5117,6 +5302,7 @@ func (ui *InputBool) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         }
 }
 
+// JawsInput stores a browser-side bool input value.
 func (ui *InputBool) JawsInput(e *jaws.Element, val string) (err error) <span class="cov8" title="1">{
         if val == "" </span><span class="cov8" title="1">{
                 val = "false"
@@ -5129,6 +5315,7 @@ func (ui *InputBool) JawsInput(e *jaws.Element, val string) (err error) <span cl
         return</span>
 }
 
+// InputFloat is the reusable base for float64 input widgets.
 type InputFloat struct {
         Input
         bind.Setter[float64]
@@ -5149,6 +5336,7 @@ func (ui *InputFloat) renderFloatInput(e *jaws.Element, w io.Writer, htmlType st
         <span class="cov8" title="1">return</span>
 }
 
+// JawsUpdate updates the input value when the bound float64 value changes.
 func (ui *InputFloat) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         v := ui.JawsGet(e)
         if ui.Last.Swap(v) != v </span><span class="cov8" title="1">{
@@ -5156,6 +5344,7 @@ func (ui *InputFloat) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         }</span>
 }
 
+// JawsInput stores a browser-side float64 input value.
 func (ui *InputFloat) JawsInput(e *jaws.Element, val string) (err error) <span class="cov8" title="1">{
         if val == "" </span><span class="cov8" title="1">{
                 val = "0"
@@ -5168,6 +5357,7 @@ func (ui *InputFloat) JawsInput(e *jaws.Element, val string) (err error) <span c
         return</span>
 }
 
+// InputDate is the reusable base for date input widgets.
 type InputDate struct {
         Input
         bind.Setter[time.Time]
@@ -5188,6 +5378,7 @@ func (ui *InputDate) renderDateInput(e *jaws.Element, w io.Writer, htmlType stri
         <span class="cov8" title="1">return</span>
 }
 
+// JawsUpdate updates the input value when the bound date value changes.
 func (ui *InputDate) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         v := ui.JawsGet(e)
         if ui.Last.Swap(v) != v </span><span class="cov8" title="1">{
@@ -5195,6 +5386,7 @@ func (ui *InputDate) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         }</span>
 }
 
+// JawsInput stores a browser-side date input value.
 func (ui *InputDate) JawsInput(e *jaws.Element, val string) (err error) <span class="cov8" title="1">{
         if val == "" </span><span class="cov8" title="1">{
                 val = "0001-01-01"
@@ -5248,19 +5440,24 @@ func validateJsVarName(v []any) (name string, err error) <span class="cov8" titl
         <span class="cov8" title="1">return</span>
 }
 
+// PathSetter can set a nested JSON path value.
 type PathSetter interface {
         // JawsSetPath should set the JSON object member identified by jspath to the given value.
         //
-        // If the member is already the given value, it should return ErrValueUnchanged.
+        // If the member is already the given value, it should return [jaws.ErrValueUnchanged].
         JawsSetPath(elem *jaws.Element, jspath string, value any) (err error)
 }
 
+// SetPather is notified after a nested JSON path value has been set and
+// broadcast.
 type SetPather interface {
         // JawsPathSet notifies that a JSON object member identified by jspath has been set
         // to the given value and the change has been queued for broadcast.
         JawsPathSet(elem *jaws.Element, jspath string, value any)
 }
 
+// IsJsVar is implemented by JaWS UI values that bind a Go value to a
+// browser-side JavaScript variable.
 type IsJsVar interface {
         bind.RWLocker
         jaws.UI
@@ -5268,6 +5465,7 @@ type IsJsVar interface {
         PathSetter
 }
 
+// JsVarMaker creates a request-scoped JavaScript variable binding.
 type JsVarMaker interface {
         JawsMakeJsVar(rq *jaws.Request) (v IsJsVar, err error)
 }
@@ -5277,12 +5475,17 @@ var (
         _ bind.Setter[int] = &amp;JsVar[int]{}
 )
 
+// JsVar binds a Go value to a named JavaScript variable in the browser.
+//
+// It is safe for concurrent use when the locker passed to [NewJsVar] is safe
+// for concurrent use.
 type JsVar[T any] struct {
         bind.RWLocker
-        Ptr *T
-        Tag any
+        Ptr *T  // bound Go value
+        Tag any // current dirty tag
 }
 
+// JawsGetPath returns the value at jspath, logging lookup errors on elem when possible.
 func (ui *JsVar[T]) JawsGetPath(elem *jaws.Element, jspath string) (value any) <span class="cov8" title="1">{
         ui.RLock()
         defer ui.RUnlock()
@@ -5294,6 +5497,7 @@ func (ui *JsVar[T]) JawsGetPath(elem *jaws.Element, jspath string) (value any) <
         <span class="cov8" title="1">return</span>
 }
 
+// JawsGet returns the bound value.
 func (ui *JsVar[T]) JawsGet(elem *jaws.Element) (value T) <span class="cov8" title="1">{
         ui.RLock()
         defer ui.RUnlock()
@@ -5341,10 +5545,12 @@ func (ui *JsVar[T]) setPath(elem *jaws.Element, jspath string, value any) (err e
         <span class="cov8" title="1">return</span>
 }
 
+// JawsSetPath sets the value at jspath and broadcasts the change.
 func (ui *JsVar[T]) JawsSetPath(elem *jaws.Element, jspath string, value any) (err error) <span class="cov8" title="1">{
         return ui.setPath(elem, jspath, value)
 }</span>
 
+// JawsSet replaces the root value and broadcasts the change.
 func (ui *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) <span class="cov8" title="1">{
         return ui.JawsSetPath(elem, "", value)
 }</span>
@@ -5359,6 +5565,7 @@ func appendAttrs(b []byte, attrs []template.HTMLAttr) []byte <span class="cov8" 
         <span class="cov8" title="1">return b</span>
 }
 
+// JawsRender writes the hidden element that seeds and routes the JavaScript variable.
 func (ui *JsVar[T]) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) <span class="cov8" title="1">{
         ui.Lock()
         defer ui.Unlock()
@@ -5392,10 +5599,12 @@ func (ui *JsVar[T]) JawsRender(e *jaws.Element, w io.Writer, params []any) (err 
         <span class="cov8" title="1">return</span>
 }
 
+// JawsGetTag returns the current dirty tag.
 func (ui *JsVar[T]) JawsGetTag(tag.Context) any <span class="cov8" title="1">{
         return ui.Tag
 }</span>
 
+// JawsUpdate is a no-op because updates are broadcast by path setters.
 func (ui *JsVar[T]) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         _ = e // no-op for JsVar[T]
 }</span>
@@ -5407,6 +5616,7 @@ func elideErrValueUnchanged(err error) error <span class="cov8" title="1">{
         <span class="cov8" title="1">return err</span>
 }
 
+// JawsInput applies a browser-side JavaScript variable update.
 func (ui *JsVar[T]) JawsInput(e *jaws.Element, val string) (err error) <span class="cov8" title="1">{
         err = jaws.ErrEventUnhandled
         if jspath, jsval, found := strings.Cut(val, "="); found </span><span class="cov8" title="1">{
@@ -5436,9 +5646,9 @@ func isNilUI(ui jaws.UI) (yes bool) <span class="cov8" title="1">{
         <span class="cov8" title="1">return</span>
 }
 
-// JsVar binds a JsVar[T] to a named Javascript variable.
+// JsVar binds a [JsVar] to a named JavaScript variable.
 //
-// You can also pass a JsVarMaker instead of a JsVar[T].
+// You can also pass a [JsVarMaker] instead of a [JsVar].
 func (rqw RequestWriter) JsVar(jsvarname string, jsvar any, params ...any) (err error) <span class="cov8" title="1">{
         if _, err = validateJsVarName([]any{jsvarname}); err == nil </span><span class="cov8" title="1">{
                 if jvm, ok := jsvar.(JsVarMaker); ok </span><span class="cov8" title="1">{
@@ -5469,18 +5679,21 @@ import (
         "github.com/linkdata/jaws/lib/bind"
 )
 
+// Label renders an HTML label element with dynamic inner HTML.
 type Label struct{ HTMLInner }
 
 // NewLabel returns a label widget whose inner HTML is rendered from innerHTML.
-// innerHTML is passed to bind.MakeHTMLGetter; plain strings are trusted HTML.
+// innerHTML is passed to [bind.MakeHTMLGetter]; plain strings are trusted HTML.
 func NewLabel(innerHTML any) *Label <span class="cov8" title="1">{
         return &amp;Label{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}}
 }</span>
 
+// JawsRender renders ui as an HTML label element.
 func (ui *Label) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderInner(e, w, "label", "", params)
 }</span>
 
+// Label renders an HTML label element.
 func (rw RequestWriter) Label(innerHTML any, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewLabel(innerHTML), params...)
 }</span>
@@ -5495,16 +5708,19 @@ import (
         "github.com/linkdata/jaws/lib/bind"
 )
 
+// Li renders an HTML list item with dynamic inner HTML.
 type Li struct{ HTMLInner }
 
 // NewLi returns a list item widget whose inner HTML is rendered from innerHTML.
-// innerHTML is passed to bind.MakeHTMLGetter; plain strings are trusted HTML.
+// innerHTML is passed to [bind.MakeHTMLGetter]; plain strings are trusted HTML.
 func NewLi(innerHTML any) *Li <span class="cov8" title="1">{ return &amp;Li{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }</span>
 
+// JawsRender renders ui as an HTML list item.
 func (ui *Li) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderInner(e, w, "li", "", params)
 }</span>
 
+// Li renders an HTML list item.
 func (rw RequestWriter) Li(innerHTML any, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewLi(innerHTML), params...)
 }</span>
@@ -5519,15 +5735,18 @@ import (
         "github.com/linkdata/jaws/lib/bind"
 )
 
+// Number renders an HTML number input bound to a float64 setter.
 type Number struct{ InputFloat }
 
 // NewNumber returns a number input widget bound to g.
 func NewNumber(g bind.Setter[float64]) *Number <span class="cov8" title="1">{ return &amp;Number{InputFloat{Setter: g}} }</span>
 
+// JawsRender renders ui as an HTML number input.
 func (ui *Number) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderFloatInput(e, w, "number", params...)
 }</span>
 
+// Number renders an HTML number input.
 func (rw RequestWriter) Number(value any, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewNumber(bind.MakeSetterFloat64(value)), params...)
 }</span>
@@ -5550,9 +5769,11 @@ type ClickedHook func(obj Object, elem *jaws.Element, click jaws.Click) (err err
 // ContextMenuHook is a function to call when a context menu event is received.
 type ContextMenuHook func(obj Object, elem *jaws.Element, click jaws.Click) (err error)
 
-// InitialHTMLAttrHook is a function to call when an Element is initially rendered.
+// InitialHTMLAttrHook is a function to call when an [jaws.Element] is initially rendered.
 type InitialHTMLAttrHook func(obj Object, elem *jaws.Element) (s template.HTMLAttr)
 
+// Object is a chainable UI object that combines HTML rendering, tags and
+// optional event handlers.
 type Object interface {
         bind.HTMLGetter
         tag.TagGetter
@@ -5560,15 +5781,15 @@ type Object interface {
         jaws.ContextMenuHandler
         jaws.InitialHTMLAttrHandler
 
-        // Clicked returns an Object that will call fn when JawsClick is invoked.
+        // Clicked returns an [Object] that will call fn when [jaws.ClickHandler.JawsClick] is invoked.
         Clicked(fn ClickedHook) (newobj Object)
 
-        // ContextMenu returns an Object that will call fn when JawsContextMenu
-        // is invoked.
+        // ContextMenu returns an [Object] that will call fn when
+        // [jaws.ContextMenuHandler.JawsContextMenu] is invoked.
         ContextMenu(fn ContextMenuHook) (newobj Object)
 
-        // InitialHTMLAttr returns an Object that will call fn when
-        // JawsInitialHTMLAttr is invoked.
+        // InitialHTMLAttr returns an [Object] that will call fn when
+        // [jaws.InitialHTMLAttrHandler.JawsInitialHTMLAttr] is invoked.
         InitialHTMLAttr(fn InitialHTMLAttrHook) (newobj Object)
 }
 
@@ -5671,8 +5892,10 @@ func (o *object) JawsGetTag(ctx tag.Context) any <span class="cov8" title="1">{
         <span class="cov8" title="1">return tags</span>
 }
 
-// New returns a new Object that will render HTML.
-// innerHTML is passed to MakeHTMLGetter(), which may or may not provide tags.
+// New returns a new [Object] that renders innerHTML.
+//
+// innerHTML is passed to [bind.MakeHTMLGetter], which may or may not provide
+// tags. Plain strings are trusted HTML.
 func New(innerHTML any) (obj Object) <span class="cov8" title="1">{
         return &amp;object{
                 handler: bind.MakeHTMLGetter(innerHTML),
@@ -5692,11 +5915,13 @@ import (
         "github.com/linkdata/jaws/lib/named"
 )
 
+// Option renders an HTML option element backed by a [named.Bool].
 type Option struct{ *named.Bool }
 
 // NewOption returns an option widget backed by nb.
 func NewOption(nb *named.Bool) Option <span class="cov8" title="1">{ return Option{Bool: nb} }</span>
 
+// JawsRender renders ui as an HTML option element.
 func (ui Option) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         e.Tag(ui.Bool)
         attrs := e.ApplyParams(params)
@@ -5707,6 +5932,8 @@ func (ui Option) JawsRender(e *jaws.Element, w io.Writer, params []any) error <s
         }</span>
         <span class="cov8" title="1">return htmlio.WriteHTMLInner(w, e.Jid(), "option", "", ui.JawsGetHTML(e), attrs...)</span>
 }
+
+// JawsUpdate updates the selected attribute.
 func (ui Option) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         if ui.Checked() </span><span class="cov8" title="1">{
                 e.SetAttr("selected", "")
@@ -5725,15 +5952,18 @@ import (
         "github.com/linkdata/jaws/lib/bind"
 )
 
+// Password renders an HTML password input bound to a string setter.
 type Password struct{ InputText }
 
 // NewPassword returns a password input widget bound to g.
 func NewPassword(g bind.Setter[string]) *Password <span class="cov8" title="1">{ return &amp;Password{InputText{Setter: g}} }</span>
 
+// JawsRender renders ui as an HTML password input.
 func (ui *Password) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderStringInput(e, w, "password", params...)
 }</span>
 
+// Password renders an HTML password input.
 func (rw RequestWriter) Password(value any, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewPassword(bind.MakeSetter[string](value)), params...)
 }</span>
@@ -5748,15 +5978,18 @@ import (
         "github.com/linkdata/jaws/lib/bind"
 )
 
+// Radio renders an HTML radio input bound to a bool setter.
 type Radio struct{ InputBool }
 
 // NewRadio returns a radio input widget bound to vp.
 func NewRadio(vp bind.Setter[bool]) *Radio <span class="cov8" title="1">{ return &amp;Radio{InputBool{Setter: vp}} }</span>
 
+// JawsRender renders ui as an HTML radio input.
 func (ui *Radio) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderBoolInput(e, w, "radio", params...)
 }</span>
 
+// Radio renders an HTML radio input.
 func (rw RequestWriter) Radio(value any, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewRadio(bind.MakeSetter[bool](value)), params...)
 }</span>
@@ -5772,20 +6005,21 @@ import (
         "github.com/linkdata/jaws/lib/named"
 )
 
+// RadioElement contains the input and label elements for one radio option.
 type RadioElement struct {
         radio    *jaws.Element
         label    *jaws.Element
         nameAttr string
 }
 
-// Radio renders a HTML input element of type 'radio'.
+// Radio renders an HTML input element of type radio.
 func (re RadioElement) Radio(params ...any) template.HTML <span class="cov8" title="1">{
         var sb strings.Builder
         re.radio.Jaws.MustLog(re.radio.JawsRender(&amp;sb, append(params, re.nameAttr)))
         return template.HTML(sb.String()) // #nosec G203
 }</span>
 
-// Label renders a HTML label element.
+// Label renders an HTML label element.
 func (re RadioElement) Label(params ...any) template.HTML <span class="cov8" title="1">{
         var sb strings.Builder
         forAttr := string(re.radio.Jid().AppendQuote([]byte("for=")))
@@ -5793,6 +6027,7 @@ func (re RadioElement) Label(params ...any) template.HTML <span class="cov8" tit
         return template.HTML(sb.String()) // #nosec G203
 }</span>
 
+// RadioGroup creates radio and label elements for each value in nba.
 func (rw RequestWriter) RadioGroup(nba *named.BoolArray) (rel []RadioElement) <span class="cov8" title="1">{
         nameAttr := `name="` + jaws.MakeID() + `"`
         nba.ReadLocked(func(nbl []*named.Bool) </span><span class="cov8" title="1">{
@@ -5818,15 +6053,18 @@ import (
         "github.com/linkdata/jaws/lib/bind"
 )
 
+// Range renders an HTML range input bound to a float64 setter.
 type Range struct{ InputFloat }
 
 // NewRange returns a range input widget bound to g.
 func NewRange(g bind.Setter[float64]) *Range <span class="cov8" title="1">{ return &amp;Range{InputFloat{Setter: g}} }</span>
 
+// JawsRender renders ui as an HTML range input.
 func (ui *Range) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderFloatInput(e, w, "range", params...)
 }</span>
 
+// Range renders an HTML range input.
 func (rw RequestWriter) Range(value any, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewRange(bind.MakeSetterFloat64(value)), params...)
 }</span>
@@ -5847,16 +6085,17 @@ type Register struct{ jaws.Updater }
 // NewRegister returns an update-only widget that invokes updater during updates.
 func NewRegister(updater jaws.Updater) Register <span class="cov8" title="1">{ return Register{Updater: updater} }</span>
 
+// JawsRender renders no HTML for update-only registration.
 func (ui Register) JawsRender(*jaws.Element, io.Writer, []any) error <span class="cov8" title="1">{
         return nil
 }</span>
 
 // Register creates a new Element with the given Updater as a tag
 // for dynamic updates. Additional tags may be provided in params.
-// The updaters JawsUpdate method will be called immediately to
+// The updater's [jaws.Updater.JawsUpdate] method will be called immediately to
 // ensure the initial rendering is correct.
 //
-// Returns a Jid, suitable for including as a HTML "id" attribute:
+// Returns a [jid.Jid], suitable for including as an HTML id attribute:
 //
 //        &lt;div id="{{$.Register .MyUpdater}}"&gt;...&lt;/div&gt;
 func (rqw RequestWriter) Register(updater jaws.Updater, params ...any) jid.Jid <span class="cov8" title="1">{
@@ -5877,11 +6116,13 @@ import (
         "github.com/linkdata/jaws"
 )
 
+// RequestWriter combines a [jaws.Request] with an [io.Writer] while rendering.
 type RequestWriter struct {
         *jaws.Request
         io.Writer
 }
 
+// UI creates an element for ui and renders it to the underlying writer.
 func (rqw RequestWriter) UI(ui jaws.UI, params ...any) (err error) <span class="cov8" title="1">{
         elem := rqw.NewElement(ui)
         if err = elem.JawsRender(rqw, params); err != nil </span><span class="cov8" title="1">{
@@ -5890,32 +6131,33 @@ func (rqw RequestWriter) UI(ui jaws.UI, params ...any) (err error) <span class="
         <span class="cov8" title="1">return</span>
 }
 
+// Write records that rendering has started, then writes p to the underlying writer.
 func (rqw RequestWriter) Write(p []byte) (n int, err error) <span class="cov8" title="1">{
         rqw.Rendering.Store(true)
         return rqw.Writer.Write(p)
 }</span>
 
-// Initial returns the initial http.Request.
+// Initial returns the initial [http.Request].
 func (rqw RequestWriter) Initial() *http.Request <span class="cov8" title="1">{
         return rqw.Request.Initial()
 }</span>
 
-// Session returns the Requests's Session, or nil.
+// Session returns the request's [jaws.Session], or nil.
 func (rqw RequestWriter) Session() *jaws.Session <span class="cov8" title="1">{
         return rqw.Request.Session()
 }</span>
 
-// Get calls Request().Get()
+// Get calls [jaws.Request.Get].
 func (rqw RequestWriter) Get(key string) (val any) <span class="cov8" title="1">{
         return rqw.Request.Get(key)
 }</span>
 
-// Set calls Request().Set()
+// Set calls [jaws.Request.Set].
 func (rqw RequestWriter) Set(key string, val any) <span class="cov8" title="1">{
         rqw.Request.Set(key, val)
 }</span>
 
-// HeadHTML outputs the HTML code needed in the HEAD section.
+// HeadHTML outputs the HTML code needed in the head section.
 func (rqw RequestWriter) HeadHTML() error <span class="cov8" title="1">{
         return rqw.Request.HeadHTML(rqw)
 }</span>
@@ -5954,6 +6196,7 @@ import (
         "github.com/linkdata/jaws/lib/named"
 )
 
+// Select renders an HTML select element backed by a [named.SelectHandler].
 type Select struct {
         ContainerHelper
 }
@@ -5963,21 +6206,25 @@ func NewSelect(sh named.SelectHandler) *Select <span class="cov8" title="1">{
         return &amp;Select{ContainerHelper: NewContainerHelper(sh)}
 }</span>
 
+// JawsRender renders ui as an HTML select element.
 func (ui *Select) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.RenderContainer(e, w, "select", params)
 }</span>
 
+// JawsUpdate updates the selected value and child options.
 func (ui *Select) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         // jawsbind.Setter[T] includes jawsbind.Getter[T]
         e.SetValue(ui.ContainerHelper.Container.(bind.Setter[string]).JawsGet(e))
         ui.UpdateContainer(e)
 }</span>
 
+// JawsInput stores a browser-side select value.
 func (ui *Select) JawsInput(e *jaws.Element, val string) (err error) <span class="cov8" title="1">{
         err = applyDirty(ui.Tag, e, ui.ContainerHelper.Container.(bind.Setter[string]).JawsSet(e, val))
         return
 }</span>
 
+// Select renders an HTML select element.
 func (rw RequestWriter) Select(sh named.SelectHandler, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewSelect(sh), params...)
 }</span>
@@ -5992,18 +6239,21 @@ import (
         "github.com/linkdata/jaws/lib/bind"
 )
 
+// Span renders an HTML span element with dynamic inner HTML.
 type Span struct{ HTMLInner }
 
 // NewSpan returns a span widget whose inner HTML is rendered from innerHTML.
-// innerHTML is passed to bind.MakeHTMLGetter; plain strings are trusted HTML.
+// innerHTML is passed to [bind.MakeHTMLGetter]; plain strings are trusted HTML.
 func NewSpan(innerHTML any) *Span <span class="cov8" title="1">{
         return &amp;Span{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}}
 }</span>
 
+// JawsRender renders ui as an HTML span element.
 func (ui *Span) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderInner(e, w, "span", "", params)
 }</span>
 
+// Span renders an HTML span element.
 func (rw RequestWriter) Span(innerHTML any, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewSpan(innerHTML), params...)
 }</span>
@@ -6017,6 +6267,7 @@ import (
         "github.com/linkdata/jaws"
 )
 
+// Tbody renders an HTML tbody containing dynamic child rows.
 type Tbody struct {
         ContainerHelper
 }
@@ -6026,14 +6277,17 @@ func NewTbody(c jaws.Container) *Tbody <span class="cov8" title="1">{
         return &amp;Tbody{ContainerHelper: NewContainerHelper(c)}
 }</span>
 
+// JawsRender renders ui as an HTML tbody element.
 func (ui *Tbody) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.RenderContainer(e, w, "tbody", params)
 }</span>
 
+// JawsUpdate updates the child rows.
 func (ui *Tbody) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         ui.UpdateContainer(e)
 }</span>
 
+// Tbody renders an HTML tbody element.
 func (rw RequestWriter) Tbody(c jaws.Container, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewTbody(c), params...)
 }</span>
@@ -6048,16 +6302,19 @@ import (
         "github.com/linkdata/jaws/lib/bind"
 )
 
+// Td renders an HTML table cell with dynamic inner HTML.
 type Td struct{ HTMLInner }
 
 // NewTd returns a table cell widget whose inner HTML is rendered from innerHTML.
-// innerHTML is passed to bind.MakeHTMLGetter; plain strings are trusted HTML.
+// innerHTML is passed to [bind.MakeHTMLGetter]; plain strings are trusted HTML.
 func NewTd(innerHTML any) *Td <span class="cov8" title="1">{ return &amp;Td{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }</span>
 
+// JawsRender renders ui as an HTML table cell.
 func (ui *Td) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderInner(e, w, "td", "", params)
 }</span>
 
+// Td renders an HTML table cell.
 func (rw RequestWriter) Td(innerHTML any, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewTd(innerHTML), params...)
 }</span>
@@ -6078,15 +6335,15 @@ import (
         "github.com/linkdata/jaws/lib/tag"
 )
 
-// Template references a Go html/template to be rendered through JaWS.
+// Template references a Go [html/template] template to be rendered through JaWS.
 //
 // The Name field identifies the template to execute and Dot contains the data
-// that will be exposed to the template through the With structure constructed
+// that will be exposed to the template through the [With] structure constructed
 // during rendering. Additional tag bindings and event handlers can be supplied
-// at render time through the RequestWriter.Template helper.
+// at render time through the [RequestWriter.Template] helper.
 type Template struct {
-        Name string // Template name to be looked up using Jaws.LookupTemplate()
-        Dot  any    // Dot value to place in With structure
+        Name string // Template name to be looked up using Jaws.LookupTemplate.
+        Dot  any    // Dot value to place in With.
 }
 
 var _ jaws.UI = Template{}                 // statically ensure interface is defined
@@ -6094,6 +6351,7 @@ var _ jaws.ClickHandler = Template{}       // statically ensure interface is def
 var _ jaws.ContextMenuHandler = Template{} // statically ensure interface is defined
 var _ jaws.InputHandler = Template{}       // statically ensure interface is defined
 
+// String returns a debug representation of t.
 func (t Template) String() string <span class="cov8" title="1">{
         return fmt.Sprintf("{%q, %s}", t.Name, tag.TagString(t.Dot))
 }</span>
@@ -6182,6 +6440,7 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) <span class="cov8" titl
         <span class="cov8" title="1">return</span>
 }
 
+// JawsRender renders t through the request's configured template lookupers.
 func (t Template) JawsRender(e *jaws.Element, wr io.Writer, params []any) (err error) <span class="cov8" title="1">{
         var expandedtags []any
         if expandedtags, err = tag.TagExpand(e.Request, t.Dot); err == nil </span><span class="cov8" title="1">{
@@ -6214,12 +6473,14 @@ func (t Template) JawsRender(e *jaws.Element, wr io.Writer, params []any) (err e
         <span class="cov8" title="1">return</span>
 }
 
+// JawsUpdate delegates updates to t.Dot when it implements [jaws.Updater].
 func (t Template) JawsUpdate(e *jaws.Element) <span class="cov8" title="1">{
         if dot, ok := t.Dot.(jaws.Updater); ok </span><span class="cov8" title="1">{
                 dot.JawsUpdate(e)
         }</span>
 }
 
+// JawsClick delegates click events to t.Dot when it implements [jaws.ClickHandler].
 func (t Template) JawsClick(e *jaws.Element, click jaws.Click) (err error) <span class="cov8" title="1">{
         err = jaws.ErrEventUnhandled
         if h, ok := t.Dot.(jaws.ClickHandler); ok </span><span class="cov8" title="1">{
@@ -6228,6 +6489,8 @@ func (t Template) JawsClick(e *jaws.Element, click jaws.Click) (err error) <span
         <span class="cov8" title="1">return</span>
 }
 
+// JawsContextMenu delegates context-menu events to t.Dot when it implements
+// [jaws.ContextMenuHandler].
 func (t Template) JawsContextMenu(e *jaws.Element, click jaws.Click) (err error) <span class="cov8" title="1">{
         err = jaws.ErrEventUnhandled
         if h, ok := t.Dot.(jaws.ContextMenuHandler); ok </span><span class="cov8" title="1">{
@@ -6236,6 +6499,7 @@ func (t Template) JawsContextMenu(e *jaws.Element, click jaws.Click) (err error)
         <span class="cov8" title="1">return</span>
 }
 
+// JawsInput delegates input events to t.Dot when it implements [jaws.InputHandler].
 func (t Template) JawsInput(e *jaws.Element, val string) (err error) <span class="cov8" title="1">{
         err = jaws.ErrEventUnhandled
         if h, ok := t.Dot.(jaws.InputHandler); ok </span><span class="cov8" title="1">{
@@ -6252,10 +6516,10 @@ func NewTemplate(name string, dot any) Template <span class="cov8" title="1">{
         return Template{Name: name, Dot: dot}
 }</span>
 
-// Template renders the given template using ui.With as data.
+// Template renders the given template using [With] as data.
 //
-// The Dot field in ui.With is set to dot, and name is resolved to a
-// *template.Template using Jaws.LookupTemplate().
+// The Dot field in [With] is set to dot, and name is resolved to a
+// [template.Template] using [jaws.Jaws.LookupTemplate].
 func (rqw RequestWriter) Template(name string, dot any, params ...any) error <span class="cov8" title="1">{
         return rqw.UI(NewTemplate(name, dot), params...)
 }</span>
@@ -6270,15 +6534,18 @@ import (
         "github.com/linkdata/jaws/lib/bind"
 )
 
+// Text renders an HTML text input bound to a string setter.
 type Text struct{ InputText }
 
 // NewText returns a text input widget bound to vp.
 func NewText(vp bind.Setter[string]) *Text <span class="cov8" title="1">{ return &amp;Text{InputText{Setter: vp}} }</span>
 
+// JawsRender renders ui as an HTML text input.
 func (ui *Text) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderStringInput(e, w, "text", params...)
 }</span>
 
+// Text renders an HTML text input.
 func (rw RequestWriter) Text(value any, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewText(bind.MakeSetter[string](value)), params...)
 }</span>
@@ -6295,11 +6562,13 @@ import (
         "github.com/linkdata/jaws/lib/htmlio"
 )
 
+// Textarea renders an HTML textarea bound to a string setter.
 type Textarea struct{ InputText }
 
 // NewTextarea returns a textarea widget bound to g.
 func NewTextarea(g bind.Setter[string]) *Textarea <span class="cov8" title="1">{ return &amp;Textarea{InputText{Setter: g}} }</span>
 
+// JawsRender renders ui as an HTML textarea.
 func (ui *Textarea) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) <span class="cov8" title="1">{
         var getterAttrs []template.HTMLAttr
         if getterAttrs, err = ui.applyGetterAttrs(e, ui.Setter); err == nil </span><span class="cov8" title="1">{
@@ -6312,6 +6581,7 @@ func (ui *Textarea) JawsRender(e *jaws.Element, w io.Writer, params []any) (err 
         <span class="cov8" title="1">return</span>
 }
 
+// Textarea renders an HTML textarea.
 func (rw RequestWriter) Textarea(value any, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewTextarea(bind.MakeSetter[string](value)), params...)
 }</span>
@@ -6326,16 +6596,19 @@ import (
         "github.com/linkdata/jaws/lib/bind"
 )
 
+// Tr renders an HTML table row with dynamic inner HTML.
 type Tr struct{ HTMLInner }
 
 // NewTr returns a table row widget whose inner HTML is rendered from innerHTML.
-// innerHTML is passed to bind.MakeHTMLGetter; plain strings are trusted HTML.
+// innerHTML is passed to [bind.MakeHTMLGetter]; plain strings are trusted HTML.
 func NewTr(innerHTML any) *Tr <span class="cov8" title="1">{ return &amp;Tr{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }</span>
 
+// JawsRender renders ui as an HTML table row.
 func (ui *Tr) JawsRender(e *jaws.Element, w io.Writer, params []any) error <span class="cov8" title="1">{
         return ui.renderInner(e, w, "tr", "", params)
 }</span>
 
+// Tr renders an HTML table row.
 func (rw RequestWriter) Tr(innerHTML any, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewTr(innerHTML), params...)
 }</span>
@@ -6345,6 +6618,8 @@ func (rw RequestWriter) Tr(innerHTML any, params ...any) error <span class="cov8
 
 import "strings"
 
+// What identifies a JaWS wire protocol command or event.
+//
 //go:generate go run golang.org/x/tools/cmd/stringer@latest -type=What
 type What uint8
 
@@ -6357,8 +6632,8 @@ const (
         Redirect // Tells browser to load another URL
         Alert    // Display (if using Bootstrap) an alert message
         Order    // Re-order a set of elements
-        Call     // Call javascript function
-        Set      // Set javascript variable (JSON path + tab char + JSON data)
+        Call     // Call JavaScript function
+        Set      // Set JavaScript variable (JSON path + tab char + JSON data)
 
         separator
 
@@ -6382,14 +6657,20 @@ const (
         Hook // Calls event handler synchronously
 )
 
+// IsCommand reports whether w is a non-element command.
 func (w What) IsCommand() bool <span class="cov8" title="1">{
         return w &lt; separator &amp;&amp; w.IsValid()
 }</span>
 
+// IsValid reports whether w is a known command or event.
 func (w What) IsValid() bool <span class="cov8" title="1">{
         return w != invalid &amp;&amp; w != separator
 }</span>
 
+// Parse returns the [What] named by s.
+//
+// An empty string is treated as [Update]. Unknown strings return the invalid
+// zero value.
 func Parse(s string) What <span class="cov8" title="1">{
         if s == "" </span><span class="cov8" title="1">{
                 return Update
@@ -6467,9 +6748,9 @@ import (
 
 // Message contains the elements of a message to be sent to requests.
 type Message struct {
-        Dest any       // destination (tag, html ID or *Element)
-        What what.What // what to change or do
-        Data string    // data (e.g. inner HTML content or slice of tags)
+        Dest any       // destination tag, HTML ID or *jaws.Element
+        What what.What // command to perform
+        Data string    // payload, such as inner HTML content or a slice of tags
 }
 
 // String returns the Message in a form suitable for debug output.
@@ -6493,7 +6774,7 @@ import (
         "github.com/coder/websocket"
 )
 
-// ReadLoop reads websocket text messages, parses them, and sends parsed
+// ReadLoop reads WebSocket text messages, parses them, and sends parsed
 // messages on incomingMsgCh.
 //
 // Closes incomingMsgCh on exit.
@@ -6521,9 +6802,9 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh &lt;-chan
 }
 
 // WriteLoop reads messages from outboundMsgCh, formats them, and writes them
-// to the websocket.
+// to the WebSocket.
 //
-// Closes the websocket on exit.
+// Closes the WebSocket on exit.
 func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh &lt;-chan struct{}, outboundMsgCh &lt;-chan WsMsg, ws *websocket.Conn) <span class="cov8" title="1">{
         defer ws.Close(websocket.StatusNormalClosure, "")
         var err error
@@ -6548,7 +6829,7 @@ func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh &lt;-cha
         }</span>
 }
 
-// PingLoop sends periodic websocket pings and reports ping errors through ccf.
+// PingLoop sends periodic WebSocket pings and reports ping errors through ccf.
 //
 // Returns immediately when interval is non-positive.
 func PingLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh &lt;-chan struct{}, interval, timeout time.Duration, ws *websocket.Conn) <span class="cov8" title="1">{
@@ -6616,6 +6897,7 @@ type WsMsg struct {
         What what.What // command
 }
 
+// Append appends m in wire format to b and returns the extended buffer.
 func (m *WsMsg) Append(b []byte) []byte <span class="cov8" title="1">{
         b = append(b, m.What.String()...)
         b = append(b, '\t')
@@ -6637,6 +6919,7 @@ func (m *WsMsg) Append(b []byte) []byte <span class="cov8" title="1">{
         return b</span>
 }
 
+// Format returns m in wire format.
 func (m *WsMsg) Format() string <span class="cov8" title="1">{
         return string(m.Append(nil))
 }</span>
@@ -6671,6 +6954,7 @@ func Parse(txt []byte) (WsMsg, bool) <span class="cov8" title="1">{
         <span class="cov8" title="1">return WsMsg{}, false</span>
 }
 
+// FillAlert replaces m with an escaped danger alert for err.
 func (m *WsMsg) FillAlert(err error) <span class="cov8" title="1">{
         m.Jid = 0
         m.What = what.Alert
@@ -6692,8 +6976,8 @@ func usableAsTag(t any) (ok bool) <span class="cov8" title="1">{
         return ok || tag.NewErrNotComparable(t) == nil
 }</span>
 
-// ParseParams parses the parameters passed to UI() when creating a new Element,
-// returning UI tags, event handlers and HTML attributes.
+// ParseParams parses the parameters passed to UI helpers when creating a new
+// [Element], returning UI tags, event handlers and HTML attributes.
 func ParseParams(params []any) (tags []any, handlers []any, attrs []string) <span class="cov8" title="1">{
         for i := range params </span><span class="cov8" title="1">{
                 switch data := params[i].(type) </span>{
@@ -6757,8 +7041,8 @@ import (
         "github.com/linkdata/jaws/lib/wire"
 )
 
-// ConnectFn can be used to interact with a Request before message processing starts.
-// Returning an error causes the Request to abort, and the WebSocket connection to close.
+// ConnectFn can be used to interact with a [Request] before message processing starts.
+// Returning an error causes the [Request] to abort, and the WebSocket connection to close.
 type ConnectFn = func(rq *Request) error
 
 // Request maintains the state for a JaWS WebSocket connection, and handles processing
@@ -6796,13 +7080,23 @@ type eventFnCall struct {
 }
 
 var (
-        ErrWebsocketOriginMissing     = errors.New("websocket request missing Origin header")
+        // ErrWebsocketOriginMissing is returned when a WebSocket request has no Origin header.
+        ErrWebsocketOriginMissing = errors.New("websocket request missing Origin header")
+
+        // ErrWebsocketOriginWrongScheme is returned when a WebSocket Origin is not HTTP or HTTPS.
         ErrWebsocketOriginWrongScheme = errors.New("websocket Origin not http or https")
-        ErrWebsocketOriginWrongHost   = errors.New("websocket Origin host mismatch")
-        ErrRequestAlreadyClaimed      = errors.New("request already claimed")
-        ErrJavascriptDisabled         = errors.New("javascript is disabled")
+
+        // ErrWebsocketOriginWrongHost is returned when a WebSocket Origin host does not match the initial request host.
+        ErrWebsocketOriginWrongHost = errors.New("websocket Origin host mismatch")
+
+        // ErrRequestAlreadyClaimed is returned when [Jaws.UseRequest] is called more than once for a [Request].
+        ErrRequestAlreadyClaimed = errors.New("request already claimed")
+
+        // ErrJavascriptDisabled is returned when the noscript probe indicates JavaScript is disabled.
+        ErrJavascriptDisabled = errors.New("javascript is disabled")
 )
 
+// JawsKeyString returns the request key in the text form used by JaWS URLs.
 func (rq *Request) JawsKeyString() string <span class="cov8" title="1">{
         jawsKey := uint64(0)
         if rq != nil </span><span class="cov8" title="1">{
@@ -6969,9 +7263,9 @@ func (rq *Request) writeTailScriptResponse(w http.ResponseWriter) (err error) <s
 // TailHTML writes optional HTML code at the end of the page's BODY section that
 // will immediately apply HTML attribute and class updates made during initial
 // rendering, which minimizes flicker without having to write the correct
-// value in templates or during JawsRender().
+// value in templates or during [Renderer.JawsRender].
 //
-// It also adds a &lt;noscript&gt; tag that warns of reduces functionality.
+// It also adds a &lt;noscript&gt; tag that warns of reduced functionality.
 func (rq *Request) TailHTML(w io.Writer) (err error) <span class="cov8" title="1">{
         ks := rq.JawsKeyString()
         _, err = fmt.Fprintf(w, "\n"+`&lt;noscript&gt;`+
@@ -6981,7 +7275,8 @@ func (rq *Request) TailHTML(w io.Writer) (err error) <span class="cov8" title="1
         return
 }</span>
 
-// GetConnectFn returns the currently set ConnectFn. That function will be called before starting the WebSocket tunnel if not nil.
+// GetConnectFn returns the currently set [ConnectFn].
+// That function will be called before starting the WebSocket tunnel if not nil.
 func (rq *Request) GetConnectFn() (fn ConnectFn) <span class="cov8" title="1">{
         rq.mu.RLock()
         fn = rq.connectFn
@@ -6989,7 +7284,8 @@ func (rq *Request) GetConnectFn() (fn ConnectFn) <span class="cov8" title="1">{
         return
 }</span>
 
-// SetConnectFn sets ConnectFn. That function will be called before starting the WebSocket tunnel if not nil.
+// SetConnectFn sets the [ConnectFn].
+// That function will be called before starting the WebSocket tunnel if not nil.
 func (rq *Request) SetConnectFn(fn ConnectFn) <span class="cov8" title="1">{
         rq.mu.Lock()
         rq.connectFn = fn
@@ -7012,20 +7308,20 @@ func (rq *Request) Initial() (r *http.Request) <span class="cov8" title="1">{
         return
 }</span>
 
-// Get is shorthand for `Session().Get()` and returns the session value associated with the key, or nil.
-// It no session is associated with the Request, returns nil.
+// Get is shorthand for Session().Get and returns the session value associated with the key, or nil.
+// If no session is associated with the [Request], it returns nil.
 func (rq *Request) Get(key string) any <span class="cov8" title="1">{
         return rq.Session().Get(key)
 }</span>
 
-// Set is shorthand for `Session().Set()` and sets a session value to be associated with the key.
+// Set is shorthand for Session().Set and sets a session value to be associated with the key.
 // If value is nil, the key is removed from the session.
-// Does nothing if there is no session is associated with the Request.
+// Does nothing if no session is associated with the [Request].
 func (rq *Request) Set(key string, val any) <span class="cov8" title="1">{
         rq.Session().Set(key, val)
 }</span>
 
-// Context returns the Request's Context, which is by default derived from jaws.BaseContext.
+// Context returns the [Request]'s context, which is by default derived from [Jaws.BaseContext].
 func (rq *Request) Context() (ctx context.Context) <span class="cov8" title="1">{
         rq.mu.RLock()
         ctx = rq.ctx
@@ -7036,7 +7332,7 @@ func (rq *Request) Context() (ctx context.Context) <span class="cov8" title="1">
 // SetContext atomically replaces the Request's context with the function return value.
 // The function is given the current context and must return a non-nil context.
 // The returned context must be derived from oldctx so cancellation and deadlines
-// continue to propagate to Request.Context().
+// continue to propagate to [Request.Context].
 func (rq *Request) SetContext(fn func(oldctx context.Context) (newctx context.Context)) <span class="cov8" title="1">{
         rq.mu.Lock()
         defer rq.mu.Unlock()
@@ -7079,11 +7375,11 @@ func (rq *Request) cancel(err error) <span class="cov8" title="1">{
         rq.cancelLocked(err)
 }</span>
 
-// Alert attempts to show an alert message on the current request webpage if it has an HTML element with the id 'jaws-alert'.
-// The lvl argument should be one of Bootstraps alert levels: primary, secondary, success, danger, warning, info, light or dark.
+// Alert attempts to show an alert message on the current request webpage if it has an HTML element with the id "jaws-alert".
+// The lvl argument should be one of Bootstrap's alert levels: primary, secondary, success, danger, warning, info, light or dark.
 //
-// The default JaWS javascript only supports Bootstrap.js dismissable alerts.
-// See Jaws.Broadcast for processing-loop requirements.
+// The default JaWS JavaScript only supports Bootstrap dismissible alerts.
+// See [Jaws.Broadcast] for processing-loop requirements.
 func (rq *Request) Alert(lvl, msg string) <span class="cov8" title="1">{
         rq.Jaws.Broadcast(wire.Message{
                 Dest: rq,
@@ -7092,15 +7388,15 @@ func (rq *Request) Alert(lvl, msg string) <span class="cov8" title="1">{
         })
 }</span>
 
-// AlertError calls Alert if the given error is not nil.
+// AlertError calls [Request.Alert] if the given error is not nil.
 func (rq *Request) AlertError(err error) <span class="cov8" title="1">{
         if rq.Jaws.Log(err) != nil </span><span class="cov8" title="1">{
                 rq.Alert("danger", html.EscapeString(err.Error()))
         }</span>
 }
 
-// Redirect requests the current Request to navigate to the given URL.
-// See Jaws.Broadcast for processing-loop requirements.
+// Redirect requests the current [Request] to navigate to the given URL.
+// See [Jaws.Broadcast] for processing-loop requirements.
 func (rq *Request) Redirect(url string) <span class="cov8" title="1">{
         rq.Jaws.Broadcast(wire.Message{
                 Dest: rq,
@@ -7130,7 +7426,7 @@ func (rq *Request) TagsOf(elem *Element) (tags []any) <span class="cov8" title="
         <span class="cov8" title="1">return</span>
 }
 
-// Dirty marks all Elements that have one or more of the given tags as dirty.
+// Dirty marks all [Element] values that have one or more of the given tags as dirty.
 func (rq *Request) Dirty(dirtyTags ...any) <span class="cov8" title="1">{
         rq.Jaws.setDirty(tag.MustTagExpand(rq, dirtyTags))
 }</span>
@@ -7171,9 +7467,9 @@ func (rq *Request) newElementLocked(ui UI) (elem *Element) <span class="cov8" ti
         return
 }</span>
 
-// NewElement creates a new Element using the given UI object.
+// NewElement creates a new [Element] using the given [UI] object.
 //
-// Panics if the build tag "debug" is set and the UI object doesn't satisfy all requirements.
+// Panics if the build tag "debug" is set and the [UI] object doesn't satisfy all requirements.
 func (rq *Request) NewElement(ui UI) *Element <span class="cov8" title="1">{
         if deadlock.Debug </span><span class="cov8" title="1">{
                 if err := tag.NewErrNotComparable(ui); err != nil </span><span class="cov8" title="1">{
@@ -7185,6 +7481,7 @@ func (rq *Request) NewElement(ui UI) *Element <span class="cov8" title="1">{
         return rq.newElementLocked(ui)</span>
 }
 
+// GetElementByJid returns the element with jid, or nil if it is not known.
 func (rq *Request) GetElementByJid(jid Jid) (e *Element) <span class="cov8" title="1">{
         rq.mu.RLock()
         defer rq.mu.RUnlock()
@@ -7211,6 +7508,7 @@ func (rq *Request) hasTagLocked(elem *Element, tagValue any) bool <span class="c
         <span class="cov8" title="1">return false</span>
 }
 
+// HasTag reports whether elem has tagValue in rq.
 func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) <span class="cov8" title="1">{
         rq.mu.RLock()
         yes = rq.hasTagLocked(elem, tagValue)
@@ -7224,7 +7522,7 @@ func (rq *Request) appendDirtyTags(tags []any) <span class="cov8" title="1">{
         rq.mu.Unlock()
 }</span>
 
-// Tag adds the given tags to the given Element.
+// TagExpanded adds already-expanded tags to the given [Element].
 func (rq *Request) TagExpanded(elem *Element, expandedtags []any) <span class="cov8" title="1">{
         if elem != nil &amp;&amp; !elem.deleted.Load() &amp;&amp; elem.Request == rq </span><span class="cov8" title="1">{
                 rq.mu.Lock()
@@ -7237,14 +7535,14 @@ func (rq *Request) TagExpanded(elem *Element, expandedtags []any) <span class="c
         }
 }
 
-// Tag adds the given tags to the given Element.
+// Tag adds the given tags to the given [Element].
 func (rq *Request) Tag(elem *Element, tagItems ...any) <span class="cov8" title="1">{
         if elem != nil &amp;&amp; len(tagItems) &gt; 0 &amp;&amp; elem.Request == rq </span><span class="cov8" title="1">{
                 rq.TagExpanded(elem, tag.MustTagExpand(elem.Request, tagItems))
         }</span>
 }
 
-// GetElements returns a list of the UI elements in the Request that have the given tag(s).
+// GetElements returns a list of the UI elements in the [Request] that have the given tags.
 func (rq *Request) GetElements(tagitem any) (elems []*Element) <span class="cov8" title="1">{
         expanded := tag.MustTagExpand(rq, tagitem)
         seen := map[*Element]struct{}{}
@@ -7320,7 +7618,7 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh &lt;-
                 case tagmsg, ok = &lt;-broadcastMsgCh:<span class="cov8" title="1"></span>
                 case wsmsg, ok = &lt;-incomingMsgCh:<span class="cov8" title="1">
                         if ok </span><span class="cov8" title="1">{
-                                // incoming event message from the websocket
+                                // incoming event message from the WebSocket
                                 if wsmsg.Jid.IsValid() </span><span class="cov8" title="1">{
                                         switch wsmsg.What </span>{
                                         case what.Input, what.Click, what.ContextMenu, what.Set:<span class="cov8" title="1">
@@ -7408,7 +7706,7 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh &lt;-
 
 func (rq *Request) handleRemove(containerJid Jid, data string) <span class="cov8" title="1">{
         // For incoming what.Remove from jaws.js, Data is a tab-separated list of
-        // managed descendant IDs that were removed. The websocket Jid identifies the
+        // managed descendant IDs that were removed. The WebSocket Jid identifies the
         // parent/container in the DOM and must not itself be deleted here.
         if containerJid &gt; 0 </span><span class="cov8" title="1">{
                 rq.mu.Lock()
@@ -7544,7 +7842,7 @@ func (rq *Request) deleteElementLocked(e *Element) <span class="cov8" title="1">
         }
 }
 
-// DeleteElement removes elem from the Request element registry.
+// DeleteElement removes elem from the [Request] element registry.
 //
 // This is primarily intended for UI implementations that manage dynamic child
 // element sets and need to drop stale elements after issuing a corresponding
@@ -7594,8 +7892,8 @@ func (rq *Request) eventCaller(eventCallCh &lt;-chan eventFnCall, outboundMsgCh 
         }
 }
 
-// onConnect calls the Request's ConnectFn if it's not nil, and returns the error from it.
-// Returns nil if ConnectFn is nil.
+// onConnect calls the [Request]'s [ConnectFn] if it is not nil, and returns the error from it.
+// Returns nil if [ConnectFn] is nil.
 func (rq *Request) onConnect() (err error) <span class="cov8" title="1">{
         rq.mu.RLock()
         connectFn := rq.connectFn
@@ -7647,8 +7945,8 @@ func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) <span cl
         <span class="cov8" title="1">return</span>
 }
 
-// Log sends an error to the Logger set in the Jaws.
-// Has no effect if the err is nil or the Logger is nil.
+// Log sends an error to the [Logger] set in the [Jaws].
+// Has no effect if err is nil or the [Logger] is nil.
 // Returns err.
 func (rq *Request) Log(err error) error <span class="cov8" title="1">{
         var jw *Jaws
@@ -7658,9 +7956,9 @@ func (rq *Request) Log(err error) error <span class="cov8" title="1">{
         <span class="cov8" title="1">return jw.Log(err)</span>
 }
 
-// MustLog sends an error to the Logger set in the Jaws or
-// panics with the given error if no Logger is set.
-// Has no effect if the err is nil.
+// MustLog sends an error to the [Logger] set in the [Jaws] or
+// panics with the given error if no [Logger] is set.
+// Has no effect if err is nil.
 func (rq *Request) MustLog(err error) <span class="cov8" title="1">{
         var jw *Jaws
         if rq != nil </span><span class="cov8" title="1">{
@@ -7680,9 +7978,9 @@ func (rq *Request) stopServe() <span class="cov8" title="1">{
 
 var headerContentTypeJavaScript = []string{"text/javascript"}
 
-// ServeHTTP implements http.HanderFunc.
+// ServeHTTP implements [http.Handler].
 //
-// Requires UseRequest() have been successfully called for the Request.
+// Requires [Jaws.UseRequest] to have been successfully called for the [Request].
 func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
         if rq.startServe() </span><span class="cov8" title="1">{
                 defer rq.stopServe()
@@ -7737,6 +8035,11 @@ import (
         "github.com/linkdata/jaws/lib/wire"
 )
 
+// Session stores server-side per-user state shared by one or more requests.
+//
+// A Session is bound to the remote IP that created it. Its exported methods are
+// safe to call on a nil *Session; those calls return the documented zero value
+// or do nothing.
 type Session struct {
         jw        *Jaws
         sessionID uint64
@@ -7801,8 +8104,8 @@ func (sess *Session) delRequest(rq *Request) <span class="cov8" title="1">{
         }</span>
 }
 
-// Jaws returns the Jaws instance of the Session, or nil.
-// It is safe to call on a nil Session.
+// Jaws returns the [Jaws] instance of the [Session], or nil.
+// It is safe to call on a nil [Session].
 func (sess *Session) Jaws() (jw *Jaws) <span class="cov8" title="1">{
         if sess != nil </span><span class="cov8" title="1">{
                 jw = sess.jw
@@ -7811,7 +8114,7 @@ func (sess *Session) Jaws() (jw *Jaws) <span class="cov8" title="1">{
 }
 
 // Get returns the value associated with the key, or nil.
-// It is safe to call on a nil Session.
+// It is safe to call on a nil [Session].
 func (sess *Session) Get(key string) (val any) <span class="cov8" title="1">{
         if sess != nil </span><span class="cov8" title="1">{
                 sess.mu.RLock()
@@ -7823,7 +8126,7 @@ func (sess *Session) Get(key string) (val any) <span class="cov8" title="1">{
 
 // Set sets a value to be associated with the key.
 // If value is nil, the key is removed from the session.
-// It is safe to call on a nil Session.
+// It is safe to call on a nil [Session].
 func (sess *Session) Set(key string, val any) <span class="cov8" title="1">{
         if sess != nil </span><span class="cov8" title="1">{
                 sess.mu.Lock()
@@ -7837,7 +8140,7 @@ func (sess *Session) Set(key string, val any) <span class="cov8" title="1">{
 }
 
 // ID returns the session ID, a 64-bit random value.
-// It is safe to call on a nil Session, in which case it returns zero.
+// It is safe to call on a nil [Session], in which case it returns zero.
 func (sess *Session) ID() (id uint64) <span class="cov8" title="1">{
         if sess != nil </span><span class="cov8" title="1">{
                 id = sess.sessionID
@@ -7846,7 +8149,7 @@ func (sess *Session) ID() (id uint64) <span class="cov8" title="1">{
 }
 
 // CookieValue returns the session cookie value.
-// It is safe to call on a nil Session, in which case it returns an empty string.
+// It is safe to call on a nil [Session], in which case it returns an empty string.
 func (sess *Session) CookieValue() (s string) <span class="cov8" title="1">{
         if sess != nil </span><span class="cov8" title="1">{
                 s = sess.cookie.Value
@@ -7855,7 +8158,7 @@ func (sess *Session) CookieValue() (s string) <span class="cov8" title="1">{
 }
 
 // IP returns the remote IP the session is bound to (which may be nil).
-// It is safe to call on a nil Session, in which case it returns nil.
+// It is safe to call on a nil [Session], in which case it returns nil.
 func (sess *Session) IP() (ip netip.Addr) <span class="cov8" title="1">{
         if sess != nil </span><span class="cov8" title="1">{
                 ip = sess.remoteIP
@@ -7863,8 +8166,8 @@ func (sess *Session) IP() (ip netip.Addr) <span class="cov8" title="1">{
         <span class="cov8" title="1">return</span>
 }
 
-// Cookie returns a cookie for the Session. Returns a delete cookie if the Session is expired.
-// It is safe to call on a nil Session, in which case it returns nil.
+// Cookie returns a cookie for the [Session]. Returns a delete cookie if the [Session] is expired.
+// It is safe to call on a nil [Session], in which case it returns nil.
 func (sess *Session) Cookie() (cookie *http.Cookie) <span class="cov8" title="1">{
         if sess != nil </span><span class="cov8" title="1">{
                 cookie = &amp;http.Cookie{}
@@ -7878,18 +8181,18 @@ func (sess *Session) Cookie() (cookie *http.Cookie) <span class="cov8" title="1"
         <span class="cov8" title="1">return</span>
 }
 
-// Close invalidates and expires the Session.
-// Future Requests won't be able to associate with it, and Cookie() will return a deletion cookie.
+// Close invalidates and expires the [Session].
+// Future [Request] values won't be able to associate with it, and [Session.Cookie] will return a deletion cookie.
 //
-// Existing Requests already associated with the Session will ask the browser to reload the pages.
-// Key/value pairs in the Session are left unmodified, you can use `Session.Clear()` to remove all of them.
+// Existing [Request] values already associated with the [Session] will ask the browser to reload the pages.
+// Key/value pairs in the [Session] are left unmodified; use [Session.Clear] to remove all of them.
 //
-// It must not be called before the JaWS processing loop (`Serve()` or
-// `ServeWithTimeout()`) is running, because reload broadcasts may block.
+// It must not be called before the JaWS processing loop ([Jaws.Serve] or
+// [Jaws.ServeWithTimeout]) is running, because reload broadcasts may block.
 //
 // Returns a cookie to be sent to the client browser that will delete the browser cookie.
 // Returns nil if the session was not found.
-// It is safe to call on a nil Session.
+// It is safe to call on a nil [Session].
 func (sess *Session) Close() (cookie *http.Cookie) <span class="cov8" title="1">{
         if sess != nil </span><span class="cov8" title="1">{
                 sess.jw.deleteSession(sess.sessionID)
@@ -7912,14 +8215,14 @@ func (sess *Session) Close() (cookie *http.Cookie) <span class="cov8" title="1">
         <span class="cov8" title="1">return</span>
 }
 
-// Reload calls Broadcast with a message asking browsers to reload the page.
-// See Broadcast for the processing-loop requirement.
+// Reload calls [Session.Broadcast] with a message asking browsers to reload the page.
+// See [Session.Broadcast] for the processing-loop requirement.
 func (sess *Session) Reload() <span class="cov8" title="1">{
         sess.Broadcast(wire.Message{What: what.Reload})
 }</span>
 
 // Clear removes all key/value pairs from the session.
-// It is safe to call on a nil Session.
+// It is safe to call on a nil [Session].
 func (sess *Session) Clear() <span class="cov8" title="1">{
         if sess != nil </span><span class="cov8" title="1">{
                 sess.mu.Lock()
@@ -7928,8 +8231,8 @@ func (sess *Session) Clear() <span class="cov8" title="1">{
         }</span>
 }
 
-// Requests returns a list of the Requests using this Session.
-// It is safe to call on a nil Session.
+// Requests returns a list of the [Request] values using this [Session].
+// It is safe to call on a nil [Session].
 func (sess *Session) Requests() (rl []*Request) <span class="cov8" title="1">{
         if sess != nil </span><span class="cov8" title="1">{
                 sess.mu.RLock()
@@ -7939,11 +8242,11 @@ func (sess *Session) Requests() (rl []*Request) <span class="cov8" title="1">{
         <span class="cov8" title="1">return</span>
 }
 
-// Broadcast attempts to send a message to all Requests using this session.
+// Broadcast attempts to send a message to all [Request] values using this session.
 //
-// It must not be called before the JaWS processing loop (`Serve()` or
-// `ServeWithTimeout()`) is running. Otherwise this call may block.
-// It is safe to call on a nil Session.
+// It must not be called before the JaWS processing loop ([Jaws.Serve] or
+// [Jaws.ServeWithTimeout]) is running. Otherwise this call may block.
+// It is safe to call on a nil [Session].
 func (sess *Session) Broadcast(msg wire.Message) <span class="cov8" title="1">{
         if sess != nil </span><span class="cov8" title="1">{
                 sess.mu.RLock()
@@ -7968,12 +8271,12 @@ import (
         "github.com/linkdata/staticserve"
 )
 
-// HandleFunc matches the signature of http.ServeMux.Handle().
+// HandleFunc matches the signature of [http.ServeMux.Handle].
 type HandleFunc = func(pattern string, handler http.Handler)
 
-// SetupFunc is called by Setup and allows setting up addons for JaWS.
+// SetupFunc is called by [Jaws.Setup] and allows setting up addons for JaWS.
 //
-// The urls returned will be used in a call to GenerateHeadHTML.
+// The URLs returned will be used in a call to [Jaws.GenerateHeadHTML].
 type SetupFunc = func(jw *Jaws, handleFn HandleFunc, prefix string) (urls []*url.URL, err error)
 
 // makeAbsPath prepends the prefix to u's path if it is relative.
@@ -7987,12 +8290,12 @@ func makeAbsPath(prefix string, u *url.URL) *url.URL <span class="cov8" title="1
         <span class="cov8" title="1">return u</span>
 }
 
-// Setup configures Jaws with extra functionality and resources.
+// Setup configures [Jaws] with extra functionality and resources.
 //
-// The list of extras can be strings, *url.URL or *staticserve.StaticServe (URL resources)
-// or a setup function matching SetupFunc such as jawsboot.Setup.
+// The list of extras can be strings, [*url.URL] or [*staticserve.StaticServe]
+// URL resources, or a setup function matching [SetupFunc] such as jawsboot.Setup.
 //
-// It calls GenerateHeadHTML with the final list of URLs, with any
+// It calls [Jaws.GenerateHeadHTML] with the final list of URLs, with any
 // relative URL paths prefixed with prefix.
 func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err error) <span class="cov8" title="1">{
         var urls []*url.URL
@@ -8116,14 +8419,17 @@ func newRequestHarness(jw *Jaws, hr *http.Request) (rh *requestHarness) <span cl
         <span class="cov8" title="1">return</span>
 }
 
+// Close stops the test request's processing loop.
 func (rh *requestHarness) Close() <span class="cov8" title="1">{
         close(rh.InCh)
 }</span>
 
+// BodyString returns the recorded response body with surrounding whitespace removed.
 func (rh *requestHarness) BodyString() string <span class="cov8" title="1">{
         return strings.TrimSpace(rh.Body.String())
 }</span>
 
+// BodyHTML returns the recorded response body as trusted HTML.
 func (rh *requestHarness) BodyHTML() template.HTML <span class="cov8" title="1">{
         return template.HTML(rh.BodyString()) /* #nosec G203 */
 }</span>
