@@ -1,0 +1,4 @@
+interface:
+  display_name: "JaWS"
+  short_description: "Build server-driven UIs with JaWS"
+  default_prompt: "Use $jaws to implement or refactor a JaWS server-driven UI change."
