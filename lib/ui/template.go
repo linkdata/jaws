@@ -198,6 +198,6 @@ func NewTemplate(name string, dot any) Template {
 //
 // The Dot field in [With] is set to dot, and name is resolved to a
 // [template.Template] using [jaws.Jaws.LookupTemplate].
-func (rqw RequestWriter) Template(name string, dot any, params ...any) error {
-	return rqw.UI(NewTemplate(name, dot), params...)
+func (rw RequestWriter) Template(name string, dot any, params ...any) error {
+	return rw.UI(NewTemplate(name, dot), params...)
 }

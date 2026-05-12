@@ -247,10 +247,10 @@ func isNilUI(ui jaws.UI) (yes bool) {
 // JsVar binds a [JsVar] to a named JavaScript variable.
 //
 // You can also pass a [JsVarMaker] instead of a [JsVar].
-func (rqw RequestWriter) JsVar(jsvarname string, jsvar any, params ...any) (err error) {
+func (rw RequestWriter) JsVar(jsvarname string, jsvar any, params ...any) (err error) {
 	if _, err = validateJsVarName([]any{jsvarname}); err == nil {
 		if jvm, ok := jsvar.(JsVarMaker); ok {
-			jsvar, err = jvm.JawsMakeJsVar(rqw.Request)
+			jsvar, err = jvm.JawsMakeJsVar(rw.Request)
 		}
 		if err == nil {
 			err = ErrJsVarArgumentType
@@ -259,7 +259,7 @@ func (rqw RequestWriter) JsVar(jsvarname string, jsvar any, params ...any) (err 
 					var newparams []any
 					newparams = append(newparams, jsvarname)
 					newparams = append(newparams, params...)
-					err = rqw.UI(ui, newparams...)
+					err = rw.UI(ui, newparams...)
 				}
 			}
 		}

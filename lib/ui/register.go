@@ -26,8 +26,8 @@ func (ui Register) JawsRender(*jaws.Element, io.Writer, []any) error {
 // Returns a [jid.Jid], suitable for including as an HTML id attribute:
 //
 //	<div id="{{$.Register .MyUpdater}}">...</div>
-func (rqw RequestWriter) Register(updater jaws.Updater, params ...any) jid.Jid {
-	elem := rqw.NewElement(Register{Updater: updater})
+func (rw RequestWriter) Register(updater jaws.Updater, params ...any) jid.Jid {
+	elem := rw.NewElement(Register{Updater: updater})
 	elem.Tag(updater)
 	elem.ApplyParams(params)
 	updater.JawsUpdate(elem)
