@@ -10,7 +10,9 @@ import (
 // Register creates an element used for update-only registration.
 type Register struct{ jaws.Updater }
 
+// NewRegister returns an update-only widget that invokes updater during updates.
 func NewRegister(updater jaws.Updater) Register { return Register{Updater: updater} }
+
 func (ui Register) JawsRender(*jaws.Element, io.Writer, []any) error {
 	return nil
 }

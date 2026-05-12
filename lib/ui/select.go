@@ -12,12 +12,9 @@ type Select struct {
 	ContainerHelper
 }
 
+// NewSelect returns a select widget backed by sh.
 func NewSelect(sh named.SelectHandler) *Select {
 	return &Select{ContainerHelper: NewContainerHelper(sh)}
-}
-
-func (rw RequestWriter) Select(sh named.SelectHandler, params ...any) error {
-	return rw.UI(NewSelect(sh), params...)
 }
 
 func (ui *Select) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
@@ -33,4 +30,8 @@ func (ui *Select) JawsUpdate(e *jaws.Element) {
 func (ui *Select) JawsInput(e *jaws.Element, val string) (err error) {
 	err = applyDirty(ui.Tag, e, ui.ContainerHelper.Container.(bind.Setter[string]).JawsSet(e, val))
 	return
+}
+
+func (rw RequestWriter) Select(sh named.SelectHandler, params ...any) error {
+	return rw.UI(NewSelect(sh), params...)
 }

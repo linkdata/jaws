@@ -12,7 +12,9 @@ import (
 
 type Option struct{ *named.Bool }
 
+// NewOption returns an option widget backed by nb.
 func NewOption(nb *named.Bool) Option { return Option{Bool: nb} }
+
 func (ui Option) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
 	e.Tag(ui.Bool)
 	attrs := e.ApplyParams(params)

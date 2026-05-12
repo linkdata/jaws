@@ -11,10 +11,8 @@ import (
 
 type Textarea struct{ InputText }
 
+// NewTextarea returns a textarea widget bound to g.
 func NewTextarea(g bind.Setter[string]) *Textarea { return &Textarea{InputText{Setter: g}} }
-func (rw RequestWriter) Textarea(value any, params ...any) error {
-	return rw.UI(NewTextarea(bind.MakeSetter[string](value)), params...)
-}
 
 func (ui *Textarea) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) {
 	var getterAttrs []template.HTMLAttr
@@ -26,4 +24,8 @@ func (ui *Textarea) JawsRender(e *jaws.Element, w io.Writer, params []any) (err 
 		err = htmlio.WriteHTMLInner(w, e.Jid(), "textarea", "", template.HTML(v), attrs...) // #nosec G203
 	}
 	return
+}
+
+func (rw RequestWriter) Textarea(value any, params ...any) error {
+	return rw.UI(NewTextarea(bind.MakeSetter[string](value)), params...)
 }

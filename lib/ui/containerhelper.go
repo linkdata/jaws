@@ -31,6 +31,8 @@ type ContainerHelper struct {
 	contents  []*jaws.Element
 }
 
+// NewContainerHelper returns a ContainerHelper for rendering and updating c.
+// ContainerHelper values are render-scoped and should not be reused across requests.
 func NewContainerHelper(c jaws.Container) ContainerHelper {
 	return ContainerHelper{Container: c}
 }
