@@ -5106,21 +5106,33 @@ func (errMissingTemplate) Is(target error) bool <span class="cov8" title="1">{
 		<pre class="file" id="file47" style="display: none">package ui
 
 import (
+        "io"
         "net/http"
 
         "github.com/linkdata/jaws"
 )
 
-// uiHandler is an http.uiHandler that renders a template for every request.
+// uiHandler is an http.Handler that renders a template for every request.
 //
 // It wires the incoming HTTP request through the JaWS rendering pipeline by
-// creating a Request, instantiating the configured Template and streaming the
-// resulting HTML to the caller. Applications typically construct handlers with
-// Handler.
+// creating a Request, instantiating the configured page template and streaming
+// the resulting HTML to the caller. Applications typically construct handlers
+// with Handler.
 type uiHandler struct {
         *jaws.Jaws
+        Template pageTemplate
+}
+
+type pageTemplate struct {
         Template
 }
+
+func (tmpl pageTemplate) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) <span class="cov8" title="1">{
+        err = tmpl.Template.render(elem, w, params, false)
+        return
+}</span>
+
+func (pageTemplate) JawsUpdate(*jaws.Element) {<span class="cov8" title="1">}</span>
 
 func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
         _ = h.Log(h.NewRequest(r).NewElement(h.Template).JawsRender(w, nil))
@@ -5129,10 +5141,10 @@ func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class
 // Handler returns an http.Handler that renders the named template.
 //
 // The returned handler can be registered directly with a router. Each request
-// results in the template being looked up through the configured Template
-// lookupers and rendered with dot as the template data.
+// results in the template being looked up through the configured template
+// lookupers and rendered directly with dot as the template data.
 func Handler(jw *jaws.Jaws, name string, dot any) http.Handler <span class="cov8" title="1">{
-        return uiHandler{Jaws: jw, Template: Template{Name: name, Dot: dot}}
+        return uiHandler{Jaws: jw, Template: pageTemplate{Template: Template{Name: name, Dot: dot}}}
 }</span>
 </pre>
 		
@@ -6323,14 +6335,11 @@ func (rw RequestWriter) Td(innerHTML any, params ...any) error <span class="cov8
 		<pre class="file" id="file68" style="display: none">package ui
 
 import (
-        "bytes"
         "fmt"
         "html/template"
         "io"
         "strings"
-        "text/template/parse"
 
-        "github.com/linkdata/deadlock"
         "github.com/linkdata/jaws"
         "github.com/linkdata/jaws/lib/tag"
 )
@@ -6339,8 +6348,10 @@ import (
 //
 // The Name field identifies the template to execute and Dot contains the data
 // that will be exposed to the template through the [With] structure constructed
-// during rendering. Additional tag bindings and event handlers can be supplied
-// at render time through the [RequestWriter.Template] helper.
+// during rendering. Templates are rendered inside a generated wrapper element
+// that receives the JaWS ID and any HTML attributes supplied at render time
+// through the [RequestWriter.Template] helper. The referenced template must be
+// a partial template, not a full HTML document.
 type Template struct {
         Name string // Template name to be looked up using Jaws.LookupTemplate.
         Dot  any    // Dot value to place in With.
@@ -6351,90 +6362,77 @@ var _ jaws.ClickHandler = Template{}       // statically ensure interface is def
 var _ jaws.ContextMenuHandler = Template{} // statically ensure interface is defined
 var _ jaws.InputHandler = Template{}       // statically ensure interface is defined
 
+type templateRenderMode uint8
+
+const (
+        templateRenderWrapped templateRenderMode = iota
+        templateRenderDirect
+)
+
 // String returns a debug representation of t.
 func (tmpl Template) String() string <span class="cov8" title="1">{
         return fmt.Sprintf("{%q, %s}", tmpl.Name, tag.TagString(tmpl.Dot))
 }</span>
 
-func findJidOrJsOrHTMLNode(node parse.Node) (found bool) <span class="cov8" title="1">{
-        isJidOrJs := func(s string) bool </span><span class="cov8" title="1">{
-                return (s == "Jid") || (s == "JsFunc") || (s == "JsVar")
+func (tmpl Template) lookup(elem *jaws.Element) (lookedUp *template.Template, err error) <span class="cov8" title="1">{
+        err = errMissingTemplate(tmpl.Name)
+        if lookedUp = elem.Request.Jaws.LookupTemplate(tmpl.Name); lookedUp != nil </span><span class="cov8" title="1">{
+                err = nil
         }</span>
-        <span class="cov8" title="1">switch node := node.(type) </span>{
-        case *parse.TextNode:<span class="cov8" title="1">
-                if node != nil </span><span class="cov8" title="1">{
-                        found = found || bytes.Contains(node.Text, []byte("&lt;/html&gt;"))
+        <span class="cov8" title="1">return</span>
+}
+
+func (tmpl Template) auth(elem *jaws.Element) (auth jaws.Auth) <span class="cov8" title="1">{
+        auth = jaws.DefaultAuth{}
+        if f := elem.Request.Jaws.MakeAuth; f != nil </span><span class="cov8" title="1">{
+                auth = f(elem.Request)
+        }</span>
+        <span class="cov8" title="1">return</span>
+}
+
+func (tmpl Template) execute(elem *jaws.Element, w io.Writer, lookedUp *template.Template) (err error) <span class="cov8" title="1">{
+        err = lookedUp.Execute(w, With{
+                Element:       elem,
+                RequestWriter: RequestWriter{Request: elem.Request, Writer: w},
+                Dot:           tmpl.Dot,
+                Auth:          tmpl.auth(elem),
+        })
+        return
+}</span>
+
+func writeTemplateWrapperStart(elem *jaws.Element, w io.Writer, attrs []string) (err error) <span class="cov8" title="1">{
+        b := elem.Jid().AppendStartTagAttr(nil, "div")
+        b = append(b, " data-jawstemplate"...)
+        for _, attr := range attrs </span><span class="cov8" title="1">{
+                if attr != "" </span><span class="cov8" title="1">{
+                        b = append(b, ' ')
+                        b = append(b, attr...)
                 }</span>
-        case *parse.ListNode:<span class="cov8" title="1">
-                if node != nil </span><span class="cov8" title="1">{
-                        for _, n := range node.Nodes </span><span class="cov8" title="1">{
-                                found = found || findJidOrJsOrHTMLNode(n)
+        }
+        <span class="cov8" title="1">b = append(b, '&gt;')
+        _, err = w.Write(b)
+        return</span>
+}
+
+func (tmpl Template) render(elem *jaws.Element, w io.Writer, params []any, wrapped bool) (err error) <span class="cov8" title="1">{
+        var expandedTags []any
+        if expandedTags, err = tag.TagExpand(elem.Request, tmpl.Dot); err == nil </span><span class="cov8" title="1">{
+                elem.Request.TagExpanded(elem, expandedTags)
+                tags, handlers, attrs := jaws.ParseParams(params)
+                elem.Tag(tags...)
+                elem.AddHandlers(handlers...)
+                var lookedUp *template.Template
+                if lookedUp, err = tmpl.lookup(elem); err == nil </span><span class="cov8" title="1">{
+                        if wrapped </span><span class="cov8" title="1">{
+                                err = writeTemplateWrapperStart(elem, w, attrs)
                         }</span>
-                }
-        case *parse.ActionNode:<span class="cov8" title="1">
-                if node != nil </span><span class="cov8" title="1">{
-                        found = findJidOrJsOrHTMLNode(node.Pipe)
-                }</span>
-        case *parse.WithNode:<span class="cov8" title="1">
-                if node != nil </span><span class="cov8" title="1">{
-                        found = findJidOrJsOrHTMLNode(&amp;node.BranchNode)
-                }</span>
-        case *parse.BranchNode:<span class="cov8" title="1">
-                if node != nil </span><span class="cov8" title="1">{
-                        found = findJidOrJsOrHTMLNode(node.Pipe)
-                        found = found || findJidOrJsOrHTMLNode(node.List)
-                        found = found || findJidOrJsOrHTMLNode(node.ElseList)
-                }</span>
-        case *parse.IfNode:<span class="cov8" title="1">
-                if node != nil </span><span class="cov8" title="1">{
-                        found = findJidOrJsOrHTMLNode(node.Pipe)
-                        found = found || findJidOrJsOrHTMLNode(node.List)
-                        found = found || findJidOrJsOrHTMLNode(node.ElseList)
-                }</span>
-        case *parse.RangeNode:<span class="cov8" title="1">
-                if node != nil </span><span class="cov8" title="1">{
-                        found = findJidOrJsOrHTMLNode(node.Pipe)
-                        found = found || findJidOrJsOrHTMLNode(node.List)
-                        found = found || findJidOrJsOrHTMLNode(node.ElseList)
-                }</span>
-        case *parse.TemplateNode:<span class="cov8" title="1">
-                if node != nil </span><span class="cov8" title="1">{
-                        found = findJidOrJsOrHTMLNode(node.Pipe)
-                }</span>
-        case *parse.PipeNode:<span class="cov8" title="1">
-                if node != nil </span><span class="cov8" title="1">{
-                        for _, n := range node.Cmds </span><span class="cov8" title="1">{
-                                found = found || findJidOrJsOrHTMLNode(n)
-                        }</span>
-                }
-        case *parse.CommandNode:<span class="cov8" title="1">
-                if node != nil </span><span class="cov8" title="1">{
-                        for _, n := range node.Args </span><span class="cov8" title="1">{
-                                found = found || findJidOrJsOrHTMLNode(n)
-                        }</span>
-                }
-        case *parse.VariableNode:<span class="cov8" title="1">
-                if node != nil </span><span class="cov8" title="1">{
-                        for _, s := range node.Ident </span><span class="cov8" title="1">{
-                                found = found || isJidOrJs(s)
-                        }</span>
-                }
-        case *parse.FieldNode:<span class="cov8" title="1">
-                if node != nil </span><span class="cov8" title="1">{
-                        for _, s := range node.Ident </span><span class="cov8" title="1">{
-                                found = found || isJidOrJs(s)
-                        }</span>
-                }
-        case *parse.IdentifierNode:<span class="cov8" title="1">
-                if node != nil </span><span class="cov8" title="1">{
-                        found = found || isJidOrJs(node.Ident)
-                }</span>
-        case *parse.ChainNode:<span class="cov8" title="1">
-                if node != nil </span><span class="cov8" title="1">{
-                        found = findJidOrJsOrHTMLNode(node.Node)
-                        for _, s := range node.Field </span><span class="cov8" title="1">{
-                                found = found || isJidOrJs(s)
-                        }</span>
+                        <span class="cov8" title="1">if err == nil </span><span class="cov8" title="1">{
+                                if err = tmpl.execute(elem, w, lookedUp); err == nil </span><span class="cov8" title="1">{
+                                        if wrapped </span><span class="cov8" title="1">{
+                                                _, err = io.WriteString(w, "&lt;/div&gt;")
+                                        }</span>
+                                }
+                        }
                 }
         }
         <span class="cov8" title="1">return</span>
@@ -6442,42 +6440,20 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) <span class="cov8" titl
 
 // JawsRender renders t through the request's configured template lookupers.
 func (tmpl Template) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) <span class="cov8" title="1">{
-        var expandedTags []any
-        if expandedTags, err = tag.TagExpand(elem.Request, tmpl.Dot); err == nil </span><span class="cov8" title="1">{
-                elem.Request.TagExpanded(elem, expandedTags)
-                tags, handlers, attrs := jaws.ParseParams(params)
-                elem.Tag(tags...)
-                elem.AddHandlers(handlers...)
-                attrstr := template.HTMLAttr(strings.Join(attrs, " ")) // #nosec G203
-                var auth jaws.Auth
-                auth = jaws.DefaultAuth{}
-                if f := elem.Request.Jaws.MakeAuth; f != nil </span><span class="cov8" title="1">{
-                        auth = f(elem.Request)
-                }</span>
-                <span class="cov8" title="1">err = errMissingTemplate(tmpl.Name)
-                if lookedUp := elem.Request.Jaws.LookupTemplate(tmpl.Name); lookedUp != nil </span><span class="cov8" title="1">{
-                        err = lookedUp.Execute(w, With{
-                                Element:       elem,
-                                RequestWriter: RequestWriter{Request: elem.Request, Writer: w},
-                                Dot:           tmpl.Dot,
-                                Attrs:         attrstr,
-                                Auth:          auth,
-                        })
-                        if deadlock.Debug &amp;&amp; elem.Jaws.Logger != nil </span><span class="cov8" title="1">{
-                                if !findJidOrJsOrHTMLNode(lookedUp.Tree.Root) </span><span class="cov8" title="1">{
-                                        elem.Jaws.Logger.Warn("jaws: template has no Jid reference", "template", tmpl.Name)
-                                }</span>
-                        }
-                }
-        }
-        <span class="cov8" title="1">return</span>
-}
+        err = tmpl.render(elem, w, params, true)
+        return
+}</span>
 
-// JawsUpdate delegates updates to t.Dot when it implements [jaws.Updater].
+// JawsUpdate re-renders t into the template wrapper.
 func (tmpl Template) JawsUpdate(elem *jaws.Element) <span class="cov8" title="1">{
-        if dot, ok := tmpl.Dot.(jaws.Updater); ok </span><span class="cov8" title="1">{
-                dot.JawsUpdate(elem)
-        }</span>
+        lookedUp, err := tmpl.lookup(elem)
+        if err == nil </span><span class="cov8" title="1">{
+                var sb strings.Builder
+                if err = tmpl.execute(elem, &amp;sb, lookedUp); err == nil </span><span class="cov8" title="1">{
+                        elem.SetInner(template.HTML(sb.String())) // #nosec G203
+                }</span>
+        }
+        <span class="cov8" title="1">elem.Request.MustLog(err)</span>
 }
 
 // JawsClick delegates click events to t.Dot when it implements [jaws.ClickHandler].
@@ -6519,7 +6495,9 @@ func NewTemplate(name string, dot any) Template <span class="cov8" title="1">{
 // Template renders the given template using [With] as data.
 //
 // The Dot field in [With] is set to dot, and name is resolved to a
-// [template.Template] using [jaws.Jaws.LookupTemplate].
+// [template.Template] using [jaws.Jaws.LookupTemplate]. Template output is
+// wrapped in a generated div that owns the JaWS ID and any HTML attrs passed in
+// params. The template must be a partial, not a full HTML document.
 func (rw RequestWriter) Template(name string, dot any, params ...any) error <span class="cov8" title="1">{
         return rw.UI(NewTemplate(name, dot), params...)
 }</span>
