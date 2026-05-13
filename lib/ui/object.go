@@ -15,6 +15,9 @@ type ClickedHook func(obj Object, elem *jaws.Element, click jaws.Click) (err err
 // ContextMenuHook is a function to call when a context menu event is received.
 type ContextMenuHook func(obj Object, elem *jaws.Element, click jaws.Click) (err error)
 
+// PointerHook is a function to call when a pointer event is received.
+type PointerHook func(obj Object, elem *jaws.Element, ptr jaws.Pointer) (err error)
+
 // InitialHTMLAttrHook is a function to call when an [jaws.Element] is initially rendered.
 type InitialHTMLAttrHook func(obj Object, elem *jaws.Element) (s template.HTMLAttr)
 
@@ -25,6 +28,7 @@ type Object interface {
 	tag.TagGetter
 	jaws.ClickHandler
 	jaws.ContextMenuHandler
+	jaws.PointerHandler
 	jaws.InitialHTMLAttrHandler
 
 	// Clicked returns an [Object] that will call fn when [jaws.ClickHandler.JawsClick] is invoked.
@@ -33,6 +37,9 @@ type Object interface {
 	// ContextMenu returns an [Object] that will call fn when
 	// [jaws.ContextMenuHandler.JawsContextMenu] is invoked.
 	ContextMenu(fn ContextMenuHook) (newobj Object)
+
+	// Pointer returns an [Object] that will call fn when [jaws.PointerHandler.JawsPointer] is invoked.
+	Pointer(fn PointerHook) (newobj Object)
 
 	// InitialHTMLAttr returns an [Object] that will call fn when
 	// [jaws.InitialHTMLAttrHandler.JawsInitialHTMLAttr] is invoked.
@@ -54,6 +61,13 @@ func (obj *object) Clicked(fn ClickedHook) Object {
 }
 
 func (obj *object) ContextMenu(fn ContextMenuHook) Object {
+	return &object{
+		prev:    obj,
+		handler: fn,
+	}
+}
+
+func (obj *object) Pointer(fn PointerHook) Object {
 	return &object{
 		prev:    obj,
 		handler: fn,
@@ -96,6 +110,19 @@ func (obj *object) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err er
 	for obj != nil {
 		if fn, ok := obj.handler.(ContextMenuHook); ok {
 			if err = fn(obj, elem, click); !errors.Is(err, jaws.ErrEventUnhandled) {
+				break
+			}
+		}
+		obj = obj.prev
+	}
+	return
+}
+
+func (obj *object) JawsPointer(elem *jaws.Element, ptr jaws.Pointer) (err error) {
+	err = jaws.ErrEventUnhandled
+	for obj != nil {
+		if fn, ok := obj.handler.(PointerHook); ok {
+			if err = fn(obj, elem, ptr); !errors.Is(err, jaws.ErrEventUnhandled) {
 				break
 			}
 		}

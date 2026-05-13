@@ -1175,6 +1175,86 @@ func TestRequest_IncomingContextMenu_WrappedUnhandled(t *testing.T) {
 	}
 }
 
+func TestRequest_IncomingPointer(t *testing.T) {
+	th := newTestHelper(t)
+	NextJid = 0
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	tjp1 := &testJawsPointer{
+		pointerCh:  make(chan Pointer, 2),
+		testSetter: newTestSetter(Pointer{}),
+	}
+	tjp1.SetErr(ErrEventUnhandled)
+	tjp2 := &testJawsPointer{
+		pointerCh:  make(chan Pointer, 2),
+		testSetter: newTestSetter(Pointer{}),
+	}
+
+	rq.UI(testDivWidget{inner: "1"}, tjp1)
+	rq.UI(testDivWidget{inner: "2"}, tjp2)
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case rq.InCh <- wire.WsMsg{What: what.Pointer, Data: "move 10.5 20.25 5 -1 1 name\tJid.1\tJid.2"}:
+	}
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case got := <-tjp2.pointerCh:
+		if got != (Pointer{Name: "name", X: 10.5, Y: 20.25, Kind: PointerMove, Button: -1, Buttons: PointerButtonPrimary, Shift: true, Alt: true}) {
+			t.Error(got)
+		}
+	}
+	select {
+	case got := <-tjp1.pointerCh:
+		t.Errorf("should have been ignored, got %#v", got)
+	default:
+	}
+}
+
+func TestRequest_IncomingPointer_WrappedUnhandled(t *testing.T) {
+	th := newTestHelper(t)
+	NextJid = 0
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	tjp1 := &testJawsPointer{
+		pointerCh:  make(chan Pointer, 2),
+		testSetter: newTestSetter(Pointer{}),
+	}
+	tjp1.SetErr(fmt.Errorf("wrapped: %w", ErrEventUnhandled))
+	tjp2 := &testJawsPointer{
+		pointerCh:  make(chan Pointer, 2),
+		testSetter: newTestSetter(Pointer{}),
+	}
+
+	rq.UI(testDivWidget{inner: "1"}, tjp1)
+	rq.UI(testDivWidget{inner: "2"}, tjp2)
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case rq.InCh <- wire.WsMsg{What: what.Pointer, Data: "move 10.5 20.25 5 -1 1 name\tJid.1\tJid.2"}:
+	}
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case got := <-tjp2.pointerCh:
+		if got != (Pointer{Name: "name", X: 10.5, Y: 20.25, Kind: PointerMove, Button: -1, Buttons: PointerButtonPrimary, Shift: true, Alt: true}) {
+			t.Error(got)
+		}
+	}
+	select {
+	case got := <-tjp1.pointerCh:
+		t.Errorf("should have been ignored, got %#v", got)
+	default:
+	}
+}
+
 func TestRequest_CustomErrors(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest(t)

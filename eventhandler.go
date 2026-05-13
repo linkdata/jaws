@@ -43,8 +43,9 @@ func (errEventUnhandled) Error() string {
 	return "event unhandled"
 }
 
-// ErrEventUnhandled returned by [InputHandler.JawsInput], [ClickHandler.JawsClick]
-// or [ContextMenuHandler.JawsContextMenu] causes the next available handler to be invoked.
+// ErrEventUnhandled returned by [InputHandler.JawsInput], [ClickHandler.JawsClick],
+// [ContextMenuHandler.JawsContextMenu] or [PointerHandler.JawsPointer] causes the
+// next available handler to be invoked.
 var ErrEventUnhandled = errEventUnhandled{}
 
 // InputFn is the signature of an input handling function to be called when JaWS receives
@@ -74,6 +75,14 @@ func callEventHandler(obj any, elem *Element, wht what.What, value string) (err 
 				}
 			} else if h, ok := obj.(ContextMenuHandler); ok {
 				err = h.JawsContextMenu(elem, clk)
+			}
+		}
+	case what.Pointer:
+		var ptr Pointer
+		var ok bool
+		if ptr, _, ok = parsePointerData(value); ok {
+			if h, ok := obj.(PointerHandler); ok {
+				err = h.JawsPointer(elem, ptr)
 			}
 		}
 	case what.Input, what.Hook, what.Set:

@@ -62,14 +62,25 @@ type ClickHandler interface {
 	//
 	// [Click.Name] is taken from the first name HTML attribute or HTML
 	// 'button' textContent found when traversing the DOM. It may be empty.
+	// [Click.X] and [Click.Y] are viewport CSS-pixel coordinates for HTML
+	// events and SVG user-space coordinates for SVG events.
 	JawsClick(elem *Element, click Click) (err error)
 }
 
 // ContextMenuHandler handles context-menu events sent from the browser.
 type ContextMenuHandler interface {
 	// JawsContextMenu is called when an [Element]'s HTML element or something
-	// within it receives a context menu event in the browser.
+	// within it receives a context menu event in the browser. [Click.X] and
+	// [Click.Y] use the same coordinate semantics as [ClickHandler.JawsClick].
 	JawsContextMenu(elem *Element, click Click) (err error)
+}
+
+// PointerHandler handles pointer events sent from the browser.
+type PointerHandler interface {
+	// JawsPointer is called when an [Element]'s HTML element or something
+	// within it receives a pointerdown, button-held pointermove, pointerup or
+	// pointercancel event in the browser.
+	JawsPointer(elem *Element, ptr Pointer) (err error)
 }
 
 // InitialHTMLAttrHandler can add attributes during initial [Element] rendering.

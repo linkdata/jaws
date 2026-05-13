@@ -54,6 +54,13 @@ func TestObject_ContextMenu_DefaultUnhandled(t *testing.T) {
 	}
 }
 
+func TestObject_Pointer_DefaultUnhandled(t *testing.T) {
+	obj := New("x")
+	if err := obj.JawsPointer(nil, jaws.Pointer{Name: "ignored"}); err != jaws.ErrEventUnhandled {
+		t.Fatalf("want ErrEventUnhandled got %v", err)
+	}
+}
+
 func TestObject_Clicked_FallthroughOrder(t *testing.T) {
 	obj := New("x")
 	order := []int{}
@@ -118,6 +125,46 @@ func TestObject_Clicked_StopsOnHandled(t *testing.T) {
 	}
 }
 
+func TestObject_Pointer_FallthroughOrder(t *testing.T) {
+	obj := New("x")
+	order := []int{}
+	gotObj := []Object{}
+	gotElem := []*jaws.Element{}
+	gotPtr := []jaws.Pointer{}
+
+	obj = obj.Pointer(func(got Object, elem *jaws.Element, ptr jaws.Pointer) error {
+		order = append(order, 1)
+		gotObj = append(gotObj, got)
+		gotElem = append(gotElem, elem)
+		gotPtr = append(gotPtr, ptr)
+		return nil
+	}).Pointer(func(got Object, elem *jaws.Element, ptr jaws.Pointer) error {
+		order = append(order, 2)
+		gotObj = append(gotObj, got)
+		gotElem = append(gotElem, elem)
+		gotPtr = append(gotPtr, ptr)
+		return jaws.ErrEventUnhandled
+	})
+
+	elem := &jaws.Element{}
+	ptr := jaws.Pointer{Name: "draw", X: 1.5, Y: 2.25, Kind: jaws.PointerMove, Buttons: jaws.PointerButtonPrimary}
+	if err := obj.JawsPointer(elem, ptr); err != nil {
+		t.Fatalf("want nil got %v", err)
+	}
+	if len(order) != 2 || order[0] != 2 || order[1] != 1 {
+		t.Fatalf("unexpected order %v", order)
+	}
+	if gotObj[0] == gotObj[1] {
+		t.Fatalf("expected distinct hook objects")
+	}
+	if gotElem[0] != elem || gotElem[1] != elem {
+		t.Fatalf("unexpected elem forwarding %#v", gotElem)
+	}
+	if gotPtr[0] != ptr || gotPtr[1] != ptr {
+		t.Fatalf("unexpected pointer forwarding %#v", gotPtr)
+	}
+}
+
 func TestObject_ContextMenu_FallthroughOrder(t *testing.T) {
 	obj := New("x")
 	order := []int{}
@@ -154,6 +201,15 @@ func TestObject_EventUnhandledCanBeWrapped(t *testing.T) {
 		return wrapped
 	})
 	if err := obj.JawsContextMenu(nil, jaws.Click{Name: "menu"}); !errors.Is(err, jaws.ErrEventUnhandled) {
+		t.Fatalf("want ErrEventUnhandled chain got %v", err)
+	} else if err != wrapped {
+		t.Fatalf("want wrapped unhandled got %v", err)
+	}
+
+	obj = New("x").Pointer(func(Object, *jaws.Element, jaws.Pointer) error {
+		return wrapped
+	})
+	if err := obj.JawsPointer(nil, jaws.Pointer{Name: "draw"}); !errors.Is(err, jaws.ErrEventUnhandled) {
 		t.Fatalf("want ErrEventUnhandled chain got %v", err)
 	} else if err != wrapped {
 		t.Fatalf("want wrapped unhandled got %v", err)

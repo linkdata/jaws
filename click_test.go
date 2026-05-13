@@ -47,6 +47,18 @@ func TestParseClickData(t *testing.T) {
 			wantOK: true,
 		},
 		{
+			name:   "decimal coordinates",
+			in:     "10.5 20.25 0 save",
+			want:   Click{Name: "save", X: 10.5, Y: 20.25},
+			wantOK: true,
+		},
+		{
+			name:   "exponent coordinates",
+			in:     "1e2 -2.5e-1 0 save",
+			want:   Click{Name: "save", X: 100, Y: -0.25},
+			wantOK: true,
+		},
+		{
 			name:   "invalid x",
 			in:     "bad 20 0 save",
 			wantOK: false,
@@ -59,6 +71,16 @@ func TestParseClickData(t *testing.T) {
 		{
 			name:   "invalid keystate",
 			in:     "10 20 bad save",
+			wantOK: false,
+		},
+		{
+			name:   "non-finite x",
+			in:     "NaN 20 0 save",
+			wantOK: false,
+		},
+		{
+			name:   "non-finite y",
+			in:     "10 +Inf 0 save",
 			wantOK: false,
 		},
 	}
@@ -82,8 +104,8 @@ func TestParseClickData(t *testing.T) {
 }
 
 func TestClickString(t *testing.T) {
-	got := (Click{Name: "x", X: 1, Y: 2, Shift: true, Control: true, Alt: true}).String()
-	want := "1 2 7 x"
+	got := (Click{Name: "x", X: 1.25, Y: 2.5, Shift: true, Control: true, Alt: true}).String()
+	want := "1.25 2.5 7 x"
 	if got != want {
 		t.Fatalf("String() = %q, want %q", got, want)
 	}
@@ -94,6 +116,8 @@ func Fuzz_parseClickData(f *testing.F) {
 	f.Add("1 2 5 name")
 	f.Add("1 2 5 name\tJid.1\tJid.2")
 	f.Add("1 2 0 name\tJid.1")
+	f.Add("1.5 2.25 0 name")
+	f.Add("1e2 -2.5e-1 0 name")
 	f.Add("bad 2 0 name")
 	f.Fuzz(func(t *testing.T, in string) {
 		clk, after, ok := parseClickData(in)
@@ -131,8 +155,8 @@ func Fuzz_clickStringRoundTrip(f *testing.F) {
 		name = strings.ReplaceAll(name, "\t", " ")
 		clk := Click{
 			Name:    name,
-			X:       int(x),
-			Y:       int(y),
+			X:       float64(x) / 10,
+			Y:       float64(y) / 10,
 			Shift:   shift,
 			Control: control,
 			Alt:     alt,

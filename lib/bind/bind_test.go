@@ -608,6 +608,116 @@ func TestBind_Hook_ContextMenu_bindingHook_fallsThroughWrappedUnhandled(t *testi
 	}
 }
 
+func TestBind_Hook_Pointer_binding(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	calls := 0
+	gotElem := &jaws.Element{}
+	gotPtr := jaws.Pointer{}
+	bind := New(&mu, &val).
+		Pointer(func(bind Binder[string], elem *jaws.Element, ptr jaws.Pointer) (err error) {
+			calls++
+			gotElem = elem
+			gotPtr = ptr
+			return nil
+		})
+
+	handler, ok := bind.(jaws.PointerHandler)
+	if !ok {
+		t.Fatalf("%T does not implement PointerHandler", bind)
+	}
+
+	elem := &jaws.Element{}
+	ptr := jaws.Pointer{Name: "draw", X: 1.5, Y: 2.25, Kind: jaws.PointerMove, Buttons: jaws.PointerButtonPrimary}
+	if err := handler.JawsPointer(elem, ptr); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Error(calls)
+	}
+	if gotElem != elem {
+		t.Error(gotElem)
+	}
+	if gotPtr != ptr {
+		t.Error(gotPtr)
+	}
+}
+
+func TestBind_Hook_Pointer_bindingHook_fallsThroughUnhandled(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	order := []int{}
+	pointerCalls1 := 0
+	pointerCalls2 := 0
+	pointerBind2 := New(&mu, &val).
+		Pointer(func(Binder[string], *jaws.Element, jaws.Pointer) error {
+			pointerCalls1++
+			order = append(order, 1)
+			return nil
+		}).
+		Pointer(func(Binder[string], *jaws.Element, jaws.Pointer) error {
+			pointerCalls2++
+			order = append(order, 2)
+			return jaws.ErrEventUnhandled
+		})
+
+	handler, ok := pointerBind2.(jaws.PointerHandler)
+	if !ok {
+		t.Fatalf("%T does not implement PointerHandler", pointerBind2)
+	}
+	if err := handler.JawsPointer(nil, jaws.Pointer{Name: "two"}); err != nil {
+		t.Fatal(err)
+	}
+	if pointerCalls1 != 1 {
+		t.Error(pointerCalls1)
+	}
+	if pointerCalls2 != 1 {
+		t.Error(pointerCalls2)
+	}
+	if !reflect.DeepEqual(order, []int{2, 1}) {
+		t.Error(order)
+	}
+}
+
+func TestBind_Hook_Pointer_bindingHook_fallsThroughWrappedUnhandled(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	order := []int{}
+	pointerCalls1 := 0
+	pointerCalls2 := 0
+	pointerBind2 := New(&mu, &val).
+		Pointer(func(Binder[string], *jaws.Element, jaws.Pointer) error {
+			pointerCalls1++
+			order = append(order, 1)
+			return nil
+		}).
+		Pointer(func(Binder[string], *jaws.Element, jaws.Pointer) error {
+			pointerCalls2++
+			order = append(order, 2)
+			return errors.Join(jaws.ErrEventUnhandled, io.EOF)
+		})
+
+	handler, ok := pointerBind2.(jaws.PointerHandler)
+	if !ok {
+		t.Fatalf("%T does not implement PointerHandler", pointerBind2)
+	}
+	if err := handler.JawsPointer(nil, jaws.Pointer{Name: "two"}); err != nil {
+		t.Fatal(err)
+	}
+	if pointerCalls1 != 1 {
+		t.Error(pointerCalls1)
+	}
+	if pointerCalls2 != 1 {
+		t.Error(pointerCalls2)
+	}
+	if !reflect.DeepEqual(order, []int{2, 1}) {
+		t.Error(order)
+	}
+}
+
 func TestBind_Click_defaultUnhandled(t *testing.T) {
 	var mu deadlock.Mutex
 	var val string
@@ -632,6 +742,20 @@ func TestBind_ContextMenu_defaultUnhandled(t *testing.T) {
 		t.Fatalf("%T does not implement ContextMenuHandler", bind)
 	}
 	if err := handler.JawsContextMenu(nil, jaws.Click{Name: "ignored"}); !errors.Is(err, jaws.ErrEventUnhandled) {
+		t.Fatal(err)
+	}
+}
+
+func TestBind_Pointer_defaultUnhandled(t *testing.T) {
+	var mu deadlock.Mutex
+	var val string
+
+	bind := New(&mu, &val)
+	handler, ok := bind.(jaws.PointerHandler)
+	if !ok {
+		t.Fatalf("%T does not implement PointerHandler", bind)
+	}
+	if err := handler.JawsPointer(nil, jaws.Pointer{Name: "ignored"}); !errors.Is(err, jaws.ErrEventUnhandled) {
 		t.Fatal(err)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -282,6 +283,268 @@ process.stdout.write(jaws.sent[0] || "");
 	}
 	if msg.Data != "11 22 5 save\tJid.2\tJid.1" {
 		t.Fatalf("unexpected click payload %q", msg.Data)
+	}
+}
+
+func TestJawsJS_ClickPreservesViewportFractionalCoordinates(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+const target = {
+	id: "Jid.1",
+	tagName: "DIV",
+	getAttribute: function(name) { return name === "name" ? "save" : null; },
+	textContent: "",
+	parentElement: null
+};
+const ev = new Event();
+ev.target = target;
+ev.clientX = 11.5;
+ev.clientY = 22.25;
+ev.shiftKey = false;
+ev.ctrlKey = false;
+ev.altKey = false;
+ev.stopPropagation = function() {};
+
+jawsClickHandler(ev);
+process.stdout.write(jaws.sent[0] || "");
+`)
+
+	msg, ok := wire.Parse([]byte(raw))
+	if !ok {
+		t.Fatalf("click frame must be parseable by wire.Parse, got %q", raw)
+	}
+	if msg.Data != "11.5 22.25 0 save\tJid.1" {
+		t.Fatalf("unexpected click payload %q", msg.Data)
+	}
+}
+
+func TestJawsJS_ClickConvertsSVGCoordinates(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+const svg = {
+	id: "Jid.1",
+	tagName: "svg",
+	getAttribute: function() { return null; },
+	textContent: "",
+	parentElement: null,
+	createSVGPoint: function() {
+		return {
+			x: 0,
+			y: 0,
+			matrixTransform: function(m) {
+				return { x: this.x * m.a + m.e, y: this.y * m.d + m.f };
+			}
+		};
+	},
+	getScreenCTM: function() {
+		return {
+			inverse: function() {
+				return { a: 0.5, d: 0.25, e: -10, f: 3 };
+			}
+		};
+	}
+};
+const target = {
+	id: "Jid.2",
+	tagName: "circle",
+	ownerSVGElement: svg,
+	getAttribute: function(name) { return name === "name" ? "dot" : null; },
+	textContent: "",
+	parentElement: svg
+};
+const ev = new Event();
+ev.target = target;
+ev.clientX = 30;
+ev.clientY = 28;
+ev.shiftKey = false;
+ev.ctrlKey = true;
+ev.altKey = false;
+ev.stopPropagation = function() {};
+
+jawsClickHandler(ev);
+process.stdout.write(jaws.sent[0] || "");
+`)
+
+	msg, ok := wire.Parse([]byte(raw))
+	if !ok {
+		t.Fatalf("click frame must be parseable by wire.Parse, got %q", raw)
+	}
+	if msg.Data != "5 10 2 dot\tJid.2\tJid.1" {
+		t.Fatalf("unexpected click payload %q", msg.Data)
+	}
+}
+
+func TestJawsJS_PointerDownIncludesCoordinatesButtonsAndRoute(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+const parent = {
+	id: "Jid.1",
+	tagName: "DIV",
+	getAttribute: function() { return null; },
+	textContent: "",
+	parentElement: null
+};
+const target = {
+	id: "Jid.2",
+	tagName: "DIV",
+	getAttribute: function(name) { return name === "name" ? "draw" : null; },
+	textContent: "",
+	parentElement: parent
+};
+let stopped = false;
+const ev = new Event();
+ev.target = target;
+ev.clientX = 11.5;
+ev.clientY = 22.25;
+ev.shiftKey = true;
+ev.ctrlKey = false;
+ev.altKey = true;
+ev.button = 0;
+ev.buttons = 1;
+ev.stopPropagation = function() { stopped = true; };
+
+jawsPointerDownHandler(ev);
+process.stdout.write(JSON.stringify({ msg: jaws.sent[0] || "", stopped: stopped }));
+`)
+
+	var got struct {
+		Msg     string `json:"msg"`
+		Stopped bool   `json:"stopped"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if !got.Stopped {
+		t.Fatal("expected pointer handler to call stopPropagation")
+	}
+	msg, ok := wire.Parse([]byte(got.Msg))
+	if !ok {
+		t.Fatalf("pointer frame must be parseable by wire.Parse, got %q", got.Msg)
+	}
+	if msg.What != what.Pointer {
+		t.Fatalf("unexpected what: got %v", msg.What)
+	}
+	if msg.Data != "down 11.5 22.25 5 0 1 draw\tJid.2\tJid.1" {
+		t.Fatalf("unexpected pointer payload %q", msg.Data)
+	}
+}
+
+func TestJawsJS_PointerMoveIgnoredWithoutButton(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+const target = {
+	id: "Jid.1",
+	tagName: "DIV",
+	getAttribute: function(name) { return name === "name" ? "draw" : null; },
+	textContent: "",
+	parentElement: null
+};
+let stopped = false;
+const ev = new Event();
+ev.target = target;
+ev.clientX = 11;
+ev.clientY = 22;
+ev.button = -1;
+ev.buttons = 0;
+ev.stopPropagation = function() { stopped = true; };
+
+jawsPointerMoveHandler(ev);
+process.stdout.write(JSON.stringify({ msg: jaws.sent[0] || "", stopped: stopped }));
+`)
+
+	var got struct {
+		Msg     string `json:"msg"`
+		Stopped bool   `json:"stopped"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.Msg != "" {
+		t.Fatalf("expected no frame for button-free pointermove, got %q", got.Msg)
+	}
+	if got.Stopped {
+		t.Fatal("button-free pointermove should not be intercepted")
+	}
+}
+
+func TestJawsJS_PointerMoveConvertsSVGCoordinates(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+const svg = {
+	id: "Jid.1",
+	tagName: "svg",
+	getAttribute: function() { return null; },
+	textContent: "",
+	parentElement: null,
+	createSVGPoint: function() {
+		return {
+			x: 0,
+			y: 0,
+			matrixTransform: function(m) {
+				return { x: this.x * m.a + m.e, y: this.y * m.d + m.f };
+			}
+		};
+	},
+	getScreenCTM: function() {
+		return {
+			inverse: function() {
+				return { a: 0.5, d: 0.25, e: -10, f: 3 };
+			}
+		};
+	}
+};
+const target = {
+	id: "Jid.2",
+	tagName: "circle",
+	ownerSVGElement: svg,
+	getAttribute: function(name) { return name === "name" ? "dot" : null; },
+	textContent: "",
+	parentElement: svg
+};
+const ev = new Event();
+ev.target = target;
+ev.clientX = 30;
+ev.clientY = 28;
+ev.shiftKey = false;
+ev.ctrlKey = true;
+ev.altKey = false;
+ev.button = -1;
+ev.buttons = 1;
+ev.stopPropagation = function() {};
+
+jawsPointerMoveHandler(ev);
+process.stdout.write(jaws.sent[0] || "");
+`)
+
+	msg, ok := wire.Parse([]byte(raw))
+	if !ok {
+		t.Fatalf("pointer frame must be parseable by wire.Parse, got %q", raw)
+	}
+	if msg.What != what.Pointer {
+		t.Fatalf("unexpected what: got %v", msg.What)
+	}
+	if msg.Data != "move 5 10 2 -1 1 dot\tJid.2\tJid.1" {
+		t.Fatalf("unexpected pointer payload %q", msg.Data)
 	}
 }
 
@@ -701,6 +964,68 @@ process.stdout.write(JSON.stringify({ outerReads: outerReads, replaceCalls: repl
 	}
 	if got.WarningCount != 0 {
 		t.Fatalf("warnings = %d, want 0", got.WarningCount)
+	}
+}
+
+func TestJawsJS_FragmentParsingUsesDOMContext(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+const contexts = [];
+const fragments = [];
+document.createRange = function() {
+	return {
+		selectNodeContents: function(elem) { contexts.push(elem.id); },
+		createContextualFragment: function(html) {
+			return {
+				html: html,
+				querySelectorAll: function() { return []; }
+			};
+		}
+	};
+};
+const parent = { id: "parent" };
+const where = new Node();
+where.id = "Jid.where";
+const elem = {
+	id: "Jid.1",
+	tagName: "svg",
+	parentElement: parent,
+	children: [where],
+	outerHTML: "<svg id=\"Jid.1\"></svg>",
+	querySelectorAll: function() { return []; },
+	appendChild: function(fragment) { fragments.push("append:" + fragment.html); },
+	insertBefore: function(fragment, before) { fragments.push("insert:" + fragment.html + ":" + before.id); },
+	replaceWith: function(fragment) { fragments.push("replace:" + fragment.html); }
+};
+document.getElementById = function(id) {
+	if (id === "Jid.1") return elem;
+	if (id === "Jid.where") return where;
+	return null;
+};
+
+jawsPerform("Append", "Jid.1", JSON.stringify("<circle id=\"Jid.2\"></circle>"));
+jawsPerform("Insert", "Jid.1", JSON.stringify("Jid.where\n<rect id=\"Jid.3\"></rect>"));
+jawsPerform("Replace", "Jid.1", JSON.stringify("<svg id=\"Jid.1\"><path></path></svg>"));
+process.stdout.write(JSON.stringify({ contexts: contexts, fragments: fragments }));
+`)
+
+	var got struct {
+		Contexts  []string `json:"contexts"`
+		Fragments []string `json:"fragments"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	wantContexts := []string{"Jid.1", "Jid.1", "parent"}
+	if !reflect.DeepEqual(got.Contexts, wantContexts) {
+		t.Fatalf("contexts = %#v, want %#v", got.Contexts, wantContexts)
+	}
+	wantFragments := []string{
+		`append:<circle id="Jid.2"></circle>`,
+		`insert:<rect id="Jid.3"></rect>:Jid.where`,
+		`replace:<svg id="Jid.1"><path></path></svg>`,
+	}
+	if !reflect.DeepEqual(got.Fragments, wantFragments) {
+		t.Fatalf("fragments = %#v, want %#v", got.Fragments, wantFragments)
 	}
 }
 

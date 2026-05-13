@@ -36,6 +36,20 @@ func (tjc *testJawsContextMenu) JawsContextMenu(elem *Element, click Click) (err
 
 var _ ContextMenuHandler = (*testJawsContextMenu)(nil)
 
+type testJawsPointer struct {
+	pointerCh chan Pointer
+	*testSetter[Pointer]
+}
+
+func (tjp *testJawsPointer) JawsPointer(elem *Element, ptr Pointer) (err error) {
+	if err = tjp.Err(); err == nil {
+		tjp.pointerCh <- ptr
+	}
+	return
+}
+
+var _ PointerHandler = (*testJawsPointer)(nil)
+
 type testJawsInitialHTMLAttr struct{}
 
 func (testJawsInitialHTMLAttr) JawsInitialHTMLAttr(elem *Element) template.HTMLAttr {

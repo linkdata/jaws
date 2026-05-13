@@ -26,6 +26,7 @@ type Template struct {
 var _ jaws.UI = Template{}                 // statically ensure interface is defined
 var _ jaws.ClickHandler = Template{}       // statically ensure interface is defined
 var _ jaws.ContextMenuHandler = Template{} // statically ensure interface is defined
+var _ jaws.PointerHandler = Template{}     // statically ensure interface is defined
 var _ jaws.InputHandler = Template{}       // statically ensure interface is defined
 
 type templateRenderMode uint8
@@ -137,6 +138,16 @@ func (tmpl Template) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err 
 	err = jaws.ErrEventUnhandled
 	if h, ok := tmpl.Dot.(jaws.ContextMenuHandler); ok {
 		err = h.JawsContextMenu(elem, click)
+	}
+	return
+}
+
+// JawsPointer delegates pointer events to t.Dot when it implements
+// [jaws.PointerHandler].
+func (tmpl Template) JawsPointer(elem *jaws.Element, ptr jaws.Pointer) (err error) {
+	err = jaws.ErrEventUnhandled
+	if h, ok := tmpl.Dot.(jaws.PointerHandler); ok {
+		err = h.JawsPointer(elem, ptr)
 	}
 	return
 }

@@ -44,6 +44,11 @@ type ClickedHook[T comparable] func(bind Binder[T], elem *jaws.Element, click ja
 // The [Binder] locks are not held when the function is called.
 type ContextMenuHook[T comparable] func(bind Binder[T], elem *jaws.Element, click jaws.Click) (err error)
 
+// PointerHook is a function to call when a pointer event is received.
+//
+// The [Binder] locks are not held when the function is called.
+type PointerHook[T comparable] func(bind Binder[T], elem *jaws.Element, ptr jaws.Pointer) (err error)
+
 // InitialHTMLAttrHook is a function to call when an Element is initially rendered.
 //
 // The lock will be held at this point, preferring RLock over Lock, if available.
@@ -75,6 +80,7 @@ type Binder[T comparable] interface {
 	tag.TagGetter
 	jaws.ClickHandler
 	jaws.ContextMenuHandler
+	jaws.PointerHandler
 	jaws.InitialHTMLAttrHandler
 
 	JawsGetLocked(elem *jaws.Element) (value T)
@@ -135,6 +141,11 @@ type Binder[T comparable] interface {
 	//
 	// The [Binder] locks are not held when the function is called.
 	ContextMenu(fn ContextMenuHook[T]) (newbind Binder[T])
+
+	// Pointer returns a [Binder] that will call fn when [jaws.PointerHandler.JawsPointer] is invoked.
+	//
+	// The [Binder] locks are not held when the function is called.
+	Pointer(fn PointerHook[T]) (newbind Binder[T])
 
 	// InitialHTMLAttr returns a [Binder] that will call fn when
 	// [jaws.InitialHTMLAttrHandler.JawsInitialHTMLAttr] is invoked.
@@ -283,6 +294,20 @@ func (b *binder[T]) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err e
 	return
 }
 
+func (b *binder[T]) JawsPointer(elem *jaws.Element, ptr jaws.Pointer) (err error) {
+	err = jaws.ErrEventUnhandled
+	for b != nil {
+		if fn, ok := b.hook.(PointerHook[T]); ok {
+			err = fn(b, elem, ptr)
+			if !errors.Is(err, jaws.ErrEventUnhandled) {
+				break
+			}
+		}
+		b = b.prev
+	}
+	return
+}
+
 // SetLocked returns a [Binder] that will call fn instead of [Binder.JawsSetLocked].
 //
 // The lock will be held at this point.
@@ -358,6 +383,18 @@ func (b *binder[T]) Clicked(fn ClickedHook[T]) Binder[T] {
 //
 // The [Binder] locks are not held when the function is called.
 func (b *binder[T]) ContextMenu(fn ContextMenuHook[T]) Binder[T] {
+	return &binder[T]{
+		prev:     b,
+		RWLocker: b.RWLocker,
+		ptr:      b.ptr,
+		hook:     fn,
+	}
+}
+
+// Pointer returns a [Binder] that will call fn when [jaws.PointerHandler.JawsPointer] is invoked.
+//
+// The [Binder] locks are not held when the function is called.
+func (b *binder[T]) Pointer(fn PointerHook[T]) Binder[T] {
 	return &binder[T]{
 		prev:     b,
 		RWLocker: b.RWLocker,

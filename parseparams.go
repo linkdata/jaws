@@ -38,6 +38,8 @@ func ParseParams(params []any) (tags []any, handlers []any, attrs []string) {
 				handlers = append(handlers, data)
 			} else if _, ok := data.(ContextMenuHandler); ok {
 				handlers = append(handlers, data)
+			} else if _, ok := data.(PointerHandler); ok {
+				handlers = append(handlers, data)
 			}
 			if usableAsTag(data) {
 				tags = append(tags, data)

@@ -37,6 +37,7 @@ const (
 	Input
 	Click
 	ContextMenu
+	Pointer
 	// Testing
 	Hook // Calls event handler synchronously
 )

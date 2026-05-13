@@ -41,11 +41,11 @@ or `fmt.Stringer` for string content that should be escaped.
 ## Building blocks
 
 - `HTMLInner`
-  - For tags like `<div>...</div>`, `<span>...</span>`, `<td>...</td>`.
+  - For tags like `<div>...</div>`, `<span>...</span>`, `<td>...</td>`, `<svg>...</svg>`.
 - `Input`, `InputText`, `InputBool`, `InputFloat`, `InputDate`
   - For interactive inputs with typed parse/update behavior.
 - `ContainerHelper`
-  - For widgets that render and maintain dynamic child lists.
+  - For widgets that render and maintain dynamic child lists, including SVG children.
 
 ## Widget lifetime
 

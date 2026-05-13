@@ -17,10 +17,11 @@ import (
 )
 
 type templateDot struct {
-	updated int
-	inputs  int
-	clicks  int
-	menus   int
+	updated  int
+	inputs   int
+	clicks   int
+	menus    int
+	pointers int
 }
 
 func (d *templateDot) JawsUpdate(elem *jaws.Element) {
@@ -39,6 +40,11 @@ func (d *templateDot) JawsClick(elem *jaws.Element, click jaws.Click) error {
 
 func (d *templateDot) JawsContextMenu(elem *jaws.Element, click jaws.Click) error {
 	d.menus++
+	return nil
+}
+
+func (d *templateDot) JawsPointer(elem *jaws.Element, ptr jaws.Pointer) error {
+	d.pointers++
 	return nil
 }
 
@@ -105,6 +111,9 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 	if err := tpl.JawsContextMenu(elem, jaws.Click{Name: "ctx"}); err != nil {
 		t.Fatal(err)
 	}
+	if err := tpl.JawsPointer(elem, jaws.Pointer{Name: "draw", Kind: jaws.PointerMove}); err != nil {
+		t.Fatal(err)
+	}
 	if err := jaws.CallEventHandlers(tpl, elem, what.Set, "path=1"); err != nil {
 		t.Fatal(err)
 	}
@@ -116,6 +125,9 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 	}
 	if td.menus != 1 {
 		t.Fatalf("expected context-menu call count 1, got %d", td.menus)
+	}
+	if td.pointers != 1 {
+		t.Fatalf("expected pointer call count 1, got %d", td.pointers)
 	}
 
 	if err := rw.Template("missingtemplate", nil); !errors.Is(err, ErrMissingTemplate) {

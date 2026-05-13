@@ -31,12 +31,13 @@ func _() {
 	_ = x[Input-20]
 	_ = x[Click-21]
 	_ = x[ContextMenu-22]
-	_ = x[Hook-23]
+	_ = x[Pointer-23]
+	_ = x[Hook-24]
 }
 
-const _What_name = "invalidUpdateReloadRedirectAlertOrderCallSetseparatorInnerDeleteReplaceRemoveInsertAppendSAttrRAttrSClassRClassValueInputClickContextMenuHook"
+const _What_name = "invalidUpdateReloadRedirectAlertOrderCallSetseparatorInnerDeleteReplaceRemoveInsertAppendSAttrRAttrSClassRClassValueInputClickContextMenuPointerHook"
 
-var _What_index = [...]uint8{0, 7, 13, 19, 27, 32, 37, 41, 44, 53, 58, 64, 71, 77, 83, 89, 94, 99, 105, 111, 116, 121, 126, 137, 141}
+var _What_index = [...]uint8{0, 7, 13, 19, 27, 32, 37, 41, 44, 53, 58, 64, 71, 77, 83, 89, 94, 99, 105, 111, 116, 121, 126, 137, 144, 148}
 
 func (i What) String() string {
 	idx := int(i) - 0

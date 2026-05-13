@@ -143,8 +143,15 @@ handle the event or want to pass it to the next handler.
   (`val` as `x<SP>y<SP>keystate<SP>name`)
 * `oncontextmenu` invokes `JawsContextMenu`
   (`val` as `x<SP>y<SP>keystate<SP>name`)
+* `onpointerdown`, button-held `onpointermove`, `onpointerup` and
+  `onpointercancel` invoke `JawsPointer`
+  (`val` as `kind<SP>x<SP>y<SP>keystate<SP>button<SP>buttons<SP>name`)
 * `oninput` invokes `JawsInput`
 * `what.Set` events invoke `JawsInput` (`val` as `path=json`)
+
+For HTML events, click and pointer coordinates are browser viewport CSS pixels.
+For SVG events, JaWS converts them to the nearest owning SVG viewport's user
+coordinate system.
 
 ## Technical notes
 

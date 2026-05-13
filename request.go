@@ -607,7 +607,7 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 				// incoming event message from the WebSocket
 				if wsmsg.Jid.IsValid() {
 					switch wsmsg.What {
-					case what.Input, what.Click, what.ContextMenu, what.Set:
+					case what.Input, what.Click, what.ContextMenu, what.Pointer, what.Set:
 						rq.queueEvent(eventCallCh, eventFnCall{jid: wsmsg.Jid, wht: wsmsg.What, data: wsmsg.Data})
 					case what.Remove:
 						rq.handleRemove(wsmsg.Jid, wsmsg.Data)
@@ -659,8 +659,8 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 						What: what.Delete,
 					})
 					rq.DeleteElement(elem)
-				case what.Input, what.Click, what.ContextMenu:
-					// Input, Click or ContextMenu messages received here are from Request.Send() or broadcasts.
+				case what.Input, what.Click, what.ContextMenu, what.Pointer:
+					// Input, Click, ContextMenu or Pointer messages received here are from Request.Send() or broadcasts.
 					// they won't be sent out on the WebSocket, but will queue up a
 					// call to the event function (if any).
 					// primary usecase is tests.
@@ -715,7 +715,7 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, value string) (er
 	var elems []*Element
 	rq.mu.RLock()
 	if id == 0 {
-		if wht == what.Click || wht == what.ContextMenu {
+		if wht == what.Click || wht == what.ContextMenu || wht == what.Pointer {
 			var after string
 			var found bool
 			value, after, found = strings.Cut(value, "\t")

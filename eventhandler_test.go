@@ -138,11 +138,28 @@ func (c *testContextMenuCounter) JawsContextMenu(elem *Element, click Click) err
 	return nil
 }
 
+type testPointerCounter struct {
+	n         int
+	wantName  string
+	lastValue Pointer
+}
+
+func (c *testPointerCounter) JawsPointer(elem *Element, ptr Pointer) error {
+	c.lastValue = ptr
+	if ptr.Name != c.wantName {
+		return ErrEventUnhandled
+	}
+	c.n++
+	return nil
+}
+
 type clickInputSetRecorder struct {
-	clickRet   error
-	inputRet   error
-	clickCalls int
-	inputCalls int
+	clickRet     error
+	pointerRet   error
+	inputRet     error
+	clickCalls   int
+	pointerCalls int
+	inputCalls   int
 }
 
 type clickOnlyComboHandler struct{ rec *clickInputSetRecorder }
@@ -150,6 +167,13 @@ type clickOnlyComboHandler struct{ rec *clickInputSetRecorder }
 func (h clickOnlyComboHandler) JawsClick(elem *Element, click Click) error {
 	h.rec.clickCalls++
 	return h.rec.clickRet
+}
+
+type pointerOnlyComboHandler struct{ rec *clickInputSetRecorder }
+
+func (h pointerOnlyComboHandler) JawsPointer(elem *Element, ptr Pointer) error {
+	h.rec.pointerCalls++
+	return h.rec.pointerRet
 }
 
 type inputOnlyComboHandler struct{ rec *clickInputSetRecorder }
@@ -253,6 +277,80 @@ func Test_CallEventHandlers_ClickDispatchCombinations(t *testing.T) {
 			}
 			if rec.clickCalls != tt.wantClicks {
 				t.Fatalf("click calls = %d, want %d", rec.clickCalls, tt.wantClicks)
+			}
+			if rec.inputCalls != tt.wantInputs {
+				t.Fatalf("input calls = %d, want %d", rec.inputCalls, tt.wantInputs)
+			}
+		})
+	}
+}
+
+func Test_CallEventHandlers_PointerDispatchCombinations(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+	elem := rq.NewElement(testDivWidget{inner: "x"})
+	wrappedUnhandled := fmt.Errorf("wrapped: %w", ErrEventUnhandled)
+
+	tests := []struct {
+		name         string
+		make         func(*clickInputSetRecorder) any
+		pointerRet   error
+		inputRet     error
+		wantErr      error
+		wantPointers int
+		wantInputs   int
+	}{
+		{
+			name:         "pointer-only returns nil",
+			make:         func(rec *clickInputSetRecorder) any { return pointerOnlyComboHandler{rec: rec} },
+			wantErr:      nil,
+			wantPointers: 1,
+			wantInputs:   0,
+		},
+		{
+			name:         "pointer-only returns ErrEventUnhandled",
+			make:         func(rec *clickInputSetRecorder) any { return pointerOnlyComboHandler{rec: rec} },
+			pointerRet:   ErrEventUnhandled,
+			wantErr:      ErrEventUnhandled,
+			wantPointers: 1,
+			wantInputs:   0,
+		},
+		{
+			name:         "pointer-only returns wrapped ErrEventUnhandled",
+			make:         func(rec *clickInputSetRecorder) any { return pointerOnlyComboHandler{rec: rec} },
+			pointerRet:   wrappedUnhandled,
+			wantErr:      ErrEventUnhandled,
+			wantPointers: 1,
+			wantInputs:   0,
+		},
+		{
+			name:         "input-only is not used for pointer",
+			make:         func(rec *clickInputSetRecorder) any { return inputOnlyComboHandler{rec: rec} },
+			inputRet:     nil,
+			wantErr:      ErrEventUnhandled,
+			wantPointers: 0,
+			wantInputs:   0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := &clickInputSetRecorder{
+				pointerRet: tt.pointerRet,
+				inputRet:   tt.inputRet,
+			}
+			handler := tt.make(rec)
+
+			err := CallEventHandlers(handler, elem, what.Pointer, "move 1.5 2.25 5 -1 1 name")
+			if tt.wantErr == nil {
+				if err != nil {
+					t.Fatalf("err = %v, want nil", err)
+				}
+			} else if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("err = %v, want %v", err, tt.wantErr)
+			}
+			if rec.pointerCalls != tt.wantPointers {
+				t.Fatalf("pointer calls = %d, want %d", rec.pointerCalls, tt.wantPointers)
 			}
 			if rec.inputCalls != tt.wantInputs {
 				t.Fatalf("input calls = %d, want %d", rec.inputCalls, tt.wantInputs)
@@ -412,6 +510,47 @@ func Test_CallEventHandlers_ExtrasOverrideUI_Click(t *testing.T) {
 	})
 }
 
+func Test_CallEventHandlers_ExtrasOverrideUI_Pointer(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	t.Run("extra handles before ui", func(t *testing.T) {
+		elem := rq.NewElement(testDivWidget{inner: "x"})
+		extra := &clickInputSetRecorder{}
+		ui := &clickInputSetRecorder{}
+		elem.AddHandlers(pointerOnlyComboHandler{rec: extra})
+
+		err := CallEventHandlers(pointerOnlyComboHandler{rec: ui}, elem, what.Pointer, "move 1.5 2.25 5 -1 1 name")
+		if err != nil {
+			t.Fatalf("err = %v, want nil", err)
+		}
+		if extra.pointerCalls != 1 {
+			t.Fatalf("extra pointer calls = %d, want 1", extra.pointerCalls)
+		}
+		if ui.pointerCalls != 0 {
+			t.Fatalf("ui pointer calls = %d, want 0", ui.pointerCalls)
+		}
+	})
+
+	t.Run("ui fallback after extra unhandled", func(t *testing.T) {
+		elem := rq.NewElement(testDivWidget{inner: "x"})
+		extra := &clickInputSetRecorder{pointerRet: ErrEventUnhandled}
+		ui := &clickInputSetRecorder{}
+		elem.AddHandlers(pointerOnlyComboHandler{rec: extra})
+
+		err := CallEventHandlers(pointerOnlyComboHandler{rec: ui}, elem, what.Pointer, "move 1.5 2.25 5 -1 1 name")
+		if err != nil {
+			t.Fatalf("err = %v, want nil", err)
+		}
+		if extra.pointerCalls != 1 {
+			t.Fatalf("extra pointer calls = %d, want 1", extra.pointerCalls)
+		}
+		if ui.pointerCalls != 1 {
+			t.Fatalf("ui pointer calls = %d, want 1", ui.pointerCalls)
+		}
+	})
+}
+
 func Test_CallEventHandlers_ExtrasOverrideUI_InputAndSet(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
@@ -507,6 +646,50 @@ func Test_CallEventHandlers_ExtraHandlersAreLIFO_Click(t *testing.T) {
 	}
 	if ui.clickCalls != 0 {
 		t.Fatalf("ui click calls = %d, want 0", ui.clickCalls)
+	}
+}
+
+func Test_CallEventHandlers_ExtraHandlersAreLIFO_Pointer(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	elem := rq.NewElement(testDivWidget{inner: "x"})
+	first := &clickInputSetRecorder{}
+	last := &clickInputSetRecorder{}
+	ui := &clickInputSetRecorder{}
+
+	elem.AddHandlers(
+		pointerOnlyComboHandler{rec: first},
+		pointerOnlyComboHandler{rec: last},
+	)
+
+	err := CallEventHandlers(pointerOnlyComboHandler{rec: ui}, elem, what.Pointer, "move 1.5 2.25 5 -1 1 name")
+	if err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+	if last.pointerCalls != 1 {
+		t.Fatalf("last pointer calls = %d, want 1", last.pointerCalls)
+	}
+	if first.pointerCalls != 0 {
+		t.Fatalf("first pointer calls = %d, want 0", first.pointerCalls)
+	}
+	if ui.pointerCalls != 0 {
+		t.Fatalf("ui pointer calls = %d, want 0", ui.pointerCalls)
+	}
+
+	last.pointerRet = ErrEventUnhandled
+	err = CallEventHandlers(pointerOnlyComboHandler{rec: ui}, elem, what.Pointer, "move 1.5 2.25 5 -1 1 name")
+	if err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+	if last.pointerCalls != 2 {
+		t.Fatalf("last pointer calls = %d, want 2", last.pointerCalls)
+	}
+	if first.pointerCalls != 1 {
+		t.Fatalf("first pointer calls = %d, want 1", first.pointerCalls)
+	}
+	if ui.pointerCalls != 0 {
+		t.Fatalf("ui pointer calls = %d, want 0", ui.pointerCalls)
 	}
 }
 
@@ -700,6 +883,62 @@ func Test_CallEventHandlers_ContextMenuOnlyHandlerViaApplyParams(t *testing.T) {
 		t.Fatalf("unexpected click payload %+v", counter.lastValue)
 	}
 	err = CallEventHandlers(elem.Ui(), elem, what.ContextMenu, "10 20 0 wrong")
+	if err != ErrEventUnhandled {
+		t.Fatalf("expected ErrEventUnhandled for wrong name, got %v", err)
+	}
+	if counter.n != 1 {
+		t.Fatalf("expected count to stay 1 for wrong name, got %d", counter.n)
+	}
+}
+
+func Test_CallEventHandlers_PointerOnlyHandlerViaApplyGetter(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	elem := rq.NewElement(testDivWidget{inner: "x"})
+	counter := &testPointerCounter{wantName: "name"}
+	if _, _, err := elem.ApplyGetter(counter); err != nil {
+		t.Fatalf("ApplyGetter returned error: %v", err)
+	}
+
+	err := CallEventHandlers(elem.Ui(), elem, what.Pointer, "move 10.5 20.25 5 -1 1 name")
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if counter.n != 1 {
+		t.Fatalf("expected pointer handler to be called once, got %d", counter.n)
+	}
+	if counter.lastValue != (Pointer{Name: "name", X: 10.5, Y: 20.25, Kind: PointerMove, Button: -1, Buttons: PointerButtonPrimary, Shift: true, Alt: true}) {
+		t.Fatalf("unexpected pointer payload %+v", counter.lastValue)
+	}
+	err = CallEventHandlers(elem.Ui(), elem, what.Pointer, "move 10 20 0 -1 1 wrong")
+	if err != ErrEventUnhandled {
+		t.Fatalf("expected ErrEventUnhandled for wrong name, got %v", err)
+	}
+	if counter.n != 1 {
+		t.Fatalf("expected count to stay 1 for wrong name, got %d", counter.n)
+	}
+}
+
+func Test_CallEventHandlers_PointerOnlyHandlerViaApplyParams(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	elem := rq.NewElement(testDivWidget{inner: "x"})
+	counter := &testPointerCounter{wantName: "name"}
+	elem.ApplyParams([]any{counter})
+
+	err := CallEventHandlers(elem.Ui(), elem, what.Pointer, "move 10.5 20.25 5 -1 1 name")
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if counter.n != 1 {
+		t.Fatalf("expected pointer handler to be called once, got %d", counter.n)
+	}
+	if counter.lastValue != (Pointer{Name: "name", X: 10.5, Y: 20.25, Kind: PointerMove, Button: -1, Buttons: PointerButtonPrimary, Shift: true, Alt: true}) {
+		t.Fatalf("unexpected pointer payload %+v", counter.lastValue)
+	}
+	err = CallEventHandlers(elem.Ui(), elem, what.Pointer, "move 10 20 0 -1 1 wrong")
 	if err != ErrEventUnhandled {
 		t.Fatalf("expected ErrEventUnhandled for wrong name, got %v", err)
 	}

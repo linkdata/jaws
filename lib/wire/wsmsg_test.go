@@ -67,6 +67,15 @@ func Test_wsMsg_Append(t *testing.T) {
 			want: "ContextMenu\tJid.1\t\"10 20 5 name\"\n",
 		},
 		{
+			name: "pointer data with coordinates, modifiers and buttons",
+			fields: fields{
+				Data: "move 10.5 20.25 5 -1 1 name",
+				Jid:  1,
+				What: what.Pointer,
+			},
+			want: "Pointer\tJid.1\t\"move 10.5 20.25 5 -1 1 name\"\n",
+		},
+		{
 			name: "escaped text data",
 			fields: fields{
 				Data: "double\"quote",
@@ -127,6 +136,7 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 		{"unquoted", "Input\tJid.1\ttrue\n", WsMsg{Jid: jid.Jid(1), What: what.Input, Data: "true"}},
 		{"normal", "Input\tJid.2\t\"c\"\n", WsMsg{Jid: jid.Jid(2), What: what.Input, Data: "c"}},
 		{"context menu", "ContextMenu\tJid.2\t\"1 2 5 name\"\n", WsMsg{Jid: jid.Jid(2), What: what.ContextMenu, Data: "1 2 5 name"}},
+		{"pointer", "Pointer\tJid.2\t\"move 1.5 2.25 5 -1 1 name\"\n", WsMsg{Jid: jid.Jid(2), What: what.Pointer, Data: "move 1.5 2.25 5 -1 1 name"}},
 		{"newline", "Input\tJid.3\t\"c\\nd\"\n", WsMsg{Jid: jid.Jid(3), What: what.Input, Data: "c\nd"}},
 	}
 	for _, tt := range tests {
@@ -165,6 +175,7 @@ func Fuzz_wsParse(f *testing.F) {
 	f.Add([]byte("Update\t\t\"\"\n"))
 	f.Add([]byte("Click\t\t\"10 20 5 name\\tJid.1\"\n"))
 	f.Add([]byte("ContextMenu\tJid.1\t\"1 2 0 menu\"\n"))
+	f.Add([]byte("Pointer\tJid.1\t\"move 1.5 2.25 5 -1 1 draw\"\n"))
 	f.Add([]byte("Inner\tJid.1\t\"data\\nline\"\n"))
 	f.Add([]byte("Set\tJid.1\tpath={\"a\":1}\n"))
 	f.Add([]byte("Call\tJid.1\tfn=[1,2]\n"))
@@ -192,6 +203,7 @@ func Fuzz_wsMsgAppendParseRoundTrip(f *testing.F) {
 	f.Add(uint8(what.Input), int32(0), "value")
 	f.Add(uint8(what.Click), int32(1), "1 2 5 name")
 	f.Add(uint8(what.ContextMenu), int32(2), "3 4 2 menu")
+	f.Add(uint8(what.Pointer), int32(2), "move 1.5 2.25 5 -1 1 draw")
 	f.Add(uint8(what.Set), int32(3), `path={"a":1}`)
 	f.Add(uint8(what.Call), int32(4), `fn=[1,2]`)
 	f.Fuzz(func(t *testing.T, whatv uint8, jidv int32, data string) {

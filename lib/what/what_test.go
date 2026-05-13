@@ -16,6 +16,7 @@ func TestParse(t *testing.T) {
 		{"Update", "Update", Update},
 		{"Inner", "Inner", Inner},
 		{"ContextMenu", "ContextMenu", ContextMenu},
+		{"Pointer", "Pointer", Pointer},
 		{"inner", "inner", Inner},
 		{"innerr", "innerr", invalid},
 		{"last", lastWhat.String(), lastWhat},
