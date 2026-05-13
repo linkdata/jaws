@@ -133,6 +133,11 @@ func TestTagExpand(t *testing.T) {
 			want: []any{Tag("a"), &av},
 		},
 		{
+			name: "[]any nils",
+			tag:  []any{nil, nil},
+			want: nil,
+		},
+		{
 			name: "error",
 			tag:  boom,
 			want: []any{boom},

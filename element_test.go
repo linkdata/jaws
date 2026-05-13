@@ -84,6 +84,10 @@ func (a testApplyGetterAll) JawsInit(elem *Element) error {
 	return a.initErr
 }
 
+type testNilTagGetter struct{}
+
+func (testNilTagGetter) JawsGetTag(tag.Context) any { return nil }
+
 func TestElement_helpers(t *testing.T) {
 	is := newTestHelper(t)
 	rq := newTestRequest(t)
@@ -498,6 +502,31 @@ func TestElement_ApplyGetter_NonComparableHandler(t *testing.T) {
 	}
 	if err := CallEventHandlers(e.Ui(), e, what.Click, "1 2 0 name"); err != nil {
 		t.Fatalf("expected click handler to run, got %v", err)
+	}
+}
+
+func TestElement_ApplyGetter_NilTagGetter(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	e := rq.NewElement(&testUi{s: "foo"})
+	gotTag, attrs, err := e.ApplyGetter(testNilTagGetter{})
+	if gotTag != nil {
+		t.Fatalf("expected nil tag, got %#v", gotTag)
+	}
+	if len(attrs) != 0 {
+		t.Fatalf("expected no attrs, got %#v", attrs)
+	}
+	if err != nil {
+		t.Fatalf("ApplyGetter returned error: %v", err)
+	}
+	if got := rq.TagsOf(e); len(got) != 0 {
+		t.Fatalf("expected nil tag getter to not tag element, got %v", got)
+	}
+
+	e.Tag(nil)
+	if got := rq.TagsOf(e); len(got) != 0 {
+		t.Fatalf("expected explicit nil tag to be ignored, got %v", got)
 	}
 }
 

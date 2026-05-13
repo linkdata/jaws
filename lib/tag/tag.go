@@ -102,6 +102,15 @@ func addActiveTags(result []any, active []any) ([]any, error) {
 	return result, nil
 }
 
+func hasNonNilTag(tags []any) bool {
+	for _, tag := range tags {
+		if tag != nil {
+			return true
+		}
+	}
+	return false
+}
+
 func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any, error) {
 	if depth > 10 || len(result) > 100 {
 		return result, ErrTooManyTags
@@ -128,6 +137,9 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 		}
 		return expand(depth+1, ctx, data.JawsGetTag(ctx), result, append(active, data))
 	case []any:
+		if !hasNonNilTag(data) {
+			return result, nil
+		}
 		if idx := findActiveIndex(active, data); idx >= 0 {
 			return addActiveTags(result, active[idx:])
 		}
