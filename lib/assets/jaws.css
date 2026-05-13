@@ -1,3 +1,7 @@
+[data-jawstemplate]:not([hidden]) {
+    display: contents;
+}
+
 .jaws-lost {
     display: flex;
     position: relative;
@@ -13,4 +17,3 @@
     background-color: red;
     color: white;
 }
-

@@ -13,7 +13,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"text/template/parse"
 	"time"
 
 	"github.com/linkdata/deadlock"
@@ -38,7 +37,7 @@ func newTestJaws() (tj *testJaws) {
 	tj.Jaws.MakeAuth = func(r *Request) Auth {
 		return DefaultAuth{}
 	}
-	tj.testtmpl = template.Must(template.New("testtemplate").Parse(`{{with $.Dot}}<div id="{{$.Jid}}" {{$.Attrs}}>{{.}}</div>{{end}}`))
+	tj.testtmpl = template.Must(template.New("testtemplate").Parse(`{{with $.Dot}}{{.}}{{end}}`))
 	tj.AddTemplateLookuper(tj.testtmpl)
 
 	tj.Jaws.updateTicker = time.NewTicker(time.Millisecond)
@@ -165,9 +164,8 @@ func (jw *Jaws) Handler(name string, dot any) http.Handler {
 type testWith struct {
 	*Element
 	testRequestWriter
-	Dot   any
-	Attrs template.HTMLAttr
-	Auth  Auth
+	Dot  any
+	Auth Auth
 }
 
 type testTemplateUI struct {
@@ -179,57 +177,31 @@ func (t testTemplateUI) String() string {
 	return fmt.Sprintf("{%q, %s}", t.Name, tag.TagString(t.Dot))
 }
 
-func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
-	switch node := node.(type) {
-	case *parse.TextNode:
-		if node != nil {
-			found = found || bytes.Contains(node.Text, []byte("</html>"))
-		}
-	case *parse.ListNode:
-		if node != nil {
-			for _, n := range node.Nodes {
-				found = found || findJidOrJsOrHTMLNode(n)
-			}
-		}
-	case *parse.ActionNode:
-		if node != nil {
-			found = findJidOrJsOrHTMLNode(node.Pipe)
-		}
-	case *parse.WithNode:
-		if node != nil {
-			found = findJidOrJsOrHTMLNode(&node.BranchNode)
-		}
-	case *parse.BranchNode:
-		if node != nil {
-			found = findJidOrJsOrHTMLNode(node.Pipe)
-			found = found || findJidOrJsOrHTMLNode(node.List)
-			found = found || findJidOrJsOrHTMLNode(node.ElseList)
-		}
-	case *parse.IfNode:
-		if node != nil {
-			found = findJidOrJsOrHTMLNode(node.Pipe)
-			found = found || findJidOrJsOrHTMLNode(node.List)
-			found = found || findJidOrJsOrHTMLNode(node.ElseList)
-		}
-	case *parse.PipeNode:
-		if node != nil {
-			for _, n := range node.Cmds {
-				found = found || findJidOrJsOrHTMLNode(n)
-			}
-		}
-	case *parse.CommandNode:
-		if node != nil {
-			for _, n := range node.Args {
-				found = found || findJidOrJsOrHTMLNode(n)
-			}
-		}
-	case *parse.VariableNode:
-		if node != nil {
-			for _, s := range node.Ident {
-				found = found || (s == "Jid") || (s == "JsFunc") || (s == "JsVar")
-			}
+func (t testTemplateUI) execute(elem *Element, w io.Writer, tmpl *template.Template) (err error) {
+	var auth Auth = DefaultAuth{}
+	if f := elem.Request.Jaws.MakeAuth; f != nil {
+		auth = f(elem.Request)
+	}
+	err = tmpl.Execute(w, testWith{
+		Element:           elem,
+		testRequestWriter: testRequestWriter{rq: elem.Request, Writer: w},
+		Dot:               t.Dot,
+		Auth:              auth,
+	})
+	return
+}
+
+func writeTestTemplateWrapperStart(elem *Element, w io.Writer, attrs []string) (err error) {
+	b := elem.Jid().AppendStartTagAttr(nil, "div")
+	b = append(b, " data-jawstemplate"...)
+	for _, attr := range attrs {
+		if attr != "" {
+			b = append(b, ' ')
+			b = append(b, attr...)
 		}
 	}
+	b = append(b, '>')
+	_, err = w.Write(b)
 	return
 }
 
@@ -240,23 +212,11 @@ func (t testTemplateUI) JawsRender(elem *Element, w io.Writer, params []any) (er
 		tags, handlers, attrs := ParseParams(params)
 		elem.Tag(tags...)
 		elem.AddHandlers(handlers...)
-		attrstr := template.HTMLAttr(strings.Join(attrs, " ")) // #nosec G203
-		var auth Auth = DefaultAuth{}
-		if f := elem.Request.Jaws.MakeAuth; f != nil {
-			auth = f(elem.Request)
-		}
 		err = fmt.Errorf("missing template %q", t.Name)
 		if tmpl := elem.Request.Jaws.LookupTemplate(t.Name); tmpl != nil {
-			err = tmpl.Execute(w, testWith{
-				Element:           elem,
-				testRequestWriter: testRequestWriter{rq: elem.Request, Writer: w},
-				Dot:               t.Dot,
-				Attrs:             attrstr,
-				Auth:              auth,
-			})
-			if deadlock.Debug && elem.Jaws.Logger != nil {
-				if !findJidOrJsOrHTMLNode(tmpl.Tree.Root) {
-					elem.Jaws.Logger.Warn("jaws: template has no Jid reference", "template", t.Name)
+			if err = writeTestTemplateWrapperStart(elem, w, attrs); err == nil {
+				if err = t.execute(elem, w, tmpl); err == nil {
+					_, err = io.WriteString(w, "</div>")
 				}
 			}
 		}
@@ -265,8 +225,15 @@ func (t testTemplateUI) JawsRender(elem *Element, w io.Writer, params []any) (er
 }
 
 func (t testTemplateUI) JawsUpdate(elem *Element) {
-	if dot, ok := t.Dot.(Updater); ok {
-		dot.JawsUpdate(elem)
+	if tmpl := elem.Request.Jaws.LookupTemplate(t.Name); tmpl != nil {
+		var sb strings.Builder
+		if err := t.execute(elem, &sb, tmpl); err != nil {
+			elem.Request.MustLog(err)
+		} else {
+			elem.SetInner(template.HTML(sb.String())) // #nosec G203
+		}
+	} else {
+		elem.Request.MustLog(fmt.Errorf("missing template %q", t.Name))
 	}
 }
 

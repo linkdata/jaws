@@ -875,7 +875,7 @@ func TestJaws_Session(t *testing.T) {
 	}
 
 	h.ServeHTTP(&rr, r)
-	if got := buf.String(); got != `<div id="Jid.1" >123</div>` {
+	if got := buf.String(); got != `<div id="Jid.1" data-jawstemplate>123</div>` {
 		t.Error(got)
 	}
 

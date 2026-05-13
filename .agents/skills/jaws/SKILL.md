@@ -79,6 +79,7 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
 ## Template-dot and tag rules
 
 - `ui.Template` expands `Dot` into tags via `tag.TagExpand` (package `github.com/linkdata/jaws/lib/tag`, imported as `tag`); the root dot is part of identity/tag behavior.
+- `ui.Template` is for partial templates only; full document/page templates should be rendered through `ui.Handler`.
 - Prefer comparable root dots (pointers or small comparable structs).
 - If root dot is non-comparable, implement `JawsGetTag(tag.Context) any` and return a comparable tag.
 - Do not use plain `string`, numeric, `bool`, `template.HTML`, or `template.HTMLAttr` as tags; `tag.TagExpand` rejects them.
@@ -94,7 +95,8 @@ JaWS parses template params as:
 Implications:
 - Non-comparable handlers are not auto-tagged unless they implement `tag.TagGetter`.
 - Pass explicit tags when dirty targeting depends on them.
-- Include wrapper markup attributes via `{{$.Attrs}}`.
+- HTML attributes passed to `$.Template(...)` are applied to the generated template wrapper.
+- Template bodies used with `$.Template(...)` must be partials, not full documents.
 - For dynamic button text, avoid passing plain static strings if the value must change after render; use getter-based values so updates reflect new state.
 
 ## Event handling model
@@ -110,13 +112,14 @@ The handler candidate is asked via `JawsClick` / `JawsContextMenu` / `JawsInput`
 For clickable content rendering:
 - Prefer a template dot with `JawsClick` over passing redundant explicit click handlers.
 - Use explicit click handler params only when dot-owned handling is not viable.
-- Wrapper template root should include `id="{{$.Jid}}" {{$.Attrs}}`.
-- Add interaction semantics where needed, for example `role="button" tabindex="0"`.
+- `ui.Template` creates the outer JaWS wrapper; template roots should not declare the JaWS ID or carry forwarded wrapper attributes.
+- Add interaction semantics where needed through Template params, for example `role="button"` and `tabindex="0"`.
 - Keep body partials presentational; attach behavior at wrapper/dot level.
 
 ## Rendering and update rules
 
 - Keep HTML structure in templates; avoid manual HTML string assembly in Go.
+- `ui.Template.JawsUpdate` re-renders the template data into the generated wrapper; custom `Dot.JawsUpdate` methods are not called by Template.
 - HTML getter paths must not mutate domain state, but they may call element update methods (`SetClass`, `RemoveClass`, `SetAttr`, `RemoveAttr`, etc.) on the passed-in `*Element` to co-ordinate wrapper class/attribute changes with the inner-HTML refresh. No custom `JawsUpdate` is needed for that case — the queued wrapper updates flush alongside the `SetInner` from `HTMLInner.JawsUpdate`.
 - Use a custom `JawsUpdate` only when the widget's update logic diverges from "render the getter again" — e.g. to compare against a stored last-value and skip the update (as the input widgets do).
 - `Element.SetAttr/RemoveAttr/SetClass/RemoveClass/SetInner/SetValue/Append/Order/Remove/Replace` are update-time operations; call them only from render/update processing.

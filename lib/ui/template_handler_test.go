@@ -8,22 +8,13 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"text/template/parse"
+	"time"
 
-	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jaws/lib/wire"
 )
-
-type templateLogger struct {
-	warns  int
-	errors int
-}
-
-func (l *templateLogger) Info(msg string, params ...any)  {}
-func (l *templateLogger) Warn(msg string, params ...any)  { l.warns++ }
-func (l *templateLogger) Error(msg string, params ...any) { l.errors++ }
 
 type templateDot struct {
 	updated int
@@ -57,16 +48,29 @@ func (templateAuth) Data() map[string]any { return map[string]any{"k": "v"} }
 func (templateAuth) Email() string        { return "test@example.com" }
 func (templateAuth) IsAdmin() bool        { return true }
 
+type templateLogger struct {
+	errors []error
+}
+
+func (l *templateLogger) Info(string, ...any) {}
+func (l *templateLogger) Warn(string, ...any) {}
+func (l *templateLogger) Error(_ string, args ...any) {
+	for i := 0; i+1 < len(args); i += 2 {
+		if args[i] == "err" {
+			if err, ok := args[i+1].(error); ok {
+				l.errors = append(l.errors, err)
+			}
+		}
+	}
+}
+
 func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 	jw, rq := newCoreRequest(t)
-	log := &templateLogger{}
-	jw.Logger = log
 	jw.MakeAuth = func(*jaws.Request) jaws.Auth { return templateAuth{} }
 
 	jw.AddTemplateLookuper(template.Must(template.New("uitempl").Parse(
-		`{{with $.Dot}}<div id="{{$.Jid}}" {{$.Attrs}} data-auth="{{$.Auth.Email}}">{{.}}</div>{{end}}`,
+		`{{with $.Dot}}<span data-auth="{{$.Auth.Email}}">{{.}}</span>{{end}}`,
 	)))
-	jw.AddTemplateLookuper(template.Must(template.New("warn").Parse(`plain`)))
 
 	var sb bytes.Buffer
 	rw := RequestWriter{Request: rq, Writer: &sb}
@@ -76,9 +80,9 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 	}
 	got := sb.String()
 	if !strings.Contains(got, `<div id="Jid.`) ||
-		!strings.Contains(got, `hidden`) ||
+		!strings.Contains(got, `data-jawstemplate hidden`) ||
 		!strings.Contains(got, `data-auth="test@example.com"`) ||
-		!strings.Contains(got, `>dot</div>`) {
+		!strings.Contains(got, `>dot</span></div>`) {
 		t.Fatalf("unexpected template output: %q", got)
 	}
 
@@ -89,8 +93,8 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 	}
 	elem := rq.NewElement(tpl)
 	tpl.JawsUpdate(elem)
-	if td.updated != 1 {
-		t.Fatalf("expected updater called once, got %d", td.updated)
+	if td.updated != 0 {
+		t.Fatalf("expected dot updater not called, got %d", td.updated)
 	}
 	if err := tpl.JawsInput(elem, "x"); err != nil {
 		t.Fatal(err)
@@ -114,71 +118,8 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 		t.Fatalf("expected context-menu call count 1, got %d", td.menus)
 	}
 
-	if err := rw.Template("warn", tag.Tag("x")); err != nil {
-		t.Fatal(err)
-	}
-	if deadlock.Debug && log.warns == 0 {
-		t.Fatal("expected warning for template without Jid/Js references")
-	}
-
 	if err := rw.Template("missingtemplate", nil); !errors.Is(err, ErrMissingTemplate) {
 		t.Fatalf("expected ErrMissingTemplate, got %v", err)
-	}
-}
-
-func TestTemplate_findJidOrJsOrHTMLNode(t *testing.T) {
-	if findJidOrJsOrHTMLNode(nil) {
-		t.Fatal("nil node should not match")
-	}
-
-	plain := template.Must(template.New("plain").Parse(`plain text`))
-	if findJidOrJsOrHTMLNode(plain.Tree.Root) {
-		t.Fatal("plain text should not match")
-	}
-
-	htmlNode := template.Must(template.New("html").Parse(`</html>`))
-	if !findJidOrJsOrHTMLNode(htmlNode.Tree.Root) {
-		t.Fatal("expected html close marker match")
-	}
-
-	complex := template.Must(template.New("complex").Parse(
-		`{{if .}}{{with .}}{{$.Jid}}{{$.JsVar}}{{$.JsFunc}}{{end}}{{end}}`,
-	))
-	if !findJidOrJsOrHTMLNode(complex.Tree.Root) {
-		t.Fatal("expected Jid/Js node match")
-	}
-
-	rangeNode := template.Must(template.New("range").Parse(`{{range .}}{{$.Jid}}{{end}}`))
-	if !findJidOrJsOrHTMLNode(rangeNode.Tree.Root) {
-		t.Fatal("expected range node Jid match")
-	}
-
-	templateNode := &parse.TemplateNode{
-		Pipe: &parse.PipeNode{
-			Cmds: []*parse.CommandNode{{
-				Args: []parse.Node{
-					&parse.VariableNode{Ident: []string{"$", "Jid"}},
-				},
-			}},
-		},
-	}
-	if !findJidOrJsOrHTMLNode(templateNode) {
-		t.Fatal("expected template node Jid match")
-	}
-
-	if !findJidOrJsOrHTMLNode(&parse.FieldNode{Ident: []string{"Jid"}}) {
-		t.Fatal("expected field node Jid match")
-	}
-
-	if !findJidOrJsOrHTMLNode(&parse.IdentifierNode{Ident: "JsVar"}) {
-		t.Fatal("expected identifier node JsVar match")
-	}
-
-	if !findJidOrJsOrHTMLNode(&parse.ChainNode{
-		Node:  &parse.VariableNode{Ident: []string{"$"}},
-		Field: []string{"JsFunc"},
-	}) {
-		t.Fatal("expected chain node JsFunc match")
 	}
 }
 
@@ -188,27 +129,123 @@ func TestHandler_HandlerServeHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer jw.Close()
-	jw.AddTemplateLookuper(template.Must(template.New("handler").Parse(`{{with $.Dot}}<div id="{{$.Jid}}">{{.}}</div>{{end}}`)))
+	jw.AddTemplateLookuper(template.Must(template.New("handler").Parse(
+		`<html><body>{{with $.Dot}}<span>{{.}}</span>{{end}}</body></html>`,
+	)))
 
 	h := Handler(jw, "handler", tag.Tag("ok"))
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	h.ServeHTTP(rr, req)
 
-	if got := rr.Body.String(); !strings.Contains(got, `<div id="Jid.`) || !strings.Contains(got, `>ok</div>`) {
+	if got := rr.Body.String(); got != `<html><body><span>ok</span></body></html>` {
 		t.Fatalf("unexpected handler output: %q", got)
 	}
+}
+
+func TestTemplate_UpdateLogsMissingTemplate(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	logger := new(templateLogger)
+	jw.Logger = logger
+
+	tpl := NewTemplate("missingtemplate", tag.Tag("dot"))
+	elem := rq.NewElement(tpl)
+	tpl.JawsUpdate(elem)
+
+	if len(logger.errors) != 1 {
+		t.Fatalf("logged errors = %d, want 1", len(logger.errors))
+	}
+	if !errors.Is(logger.errors[0], ErrMissingTemplate) {
+		t.Fatalf("logged error = %v, want %v", logger.errors[0], ErrMissingTemplate)
+	}
+}
+
+func TestTemplate_UpdateLogsExecuteError(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	logger := new(templateLogger)
+	jw.Logger = logger
+	jw.AddTemplateLookuper(template.Must(template.New("badupdate").Parse(
+		`{{$.Dot.MissingField}}`,
+	)))
+
+	tpl := NewTemplate("badupdate", &templateUpdateDot{})
+	elem := rq.NewElement(tpl)
+	tpl.JawsUpdate(elem)
+
+	if len(logger.errors) != 1 {
+		t.Fatalf("logged errors = %d, want 1", len(logger.errors))
+	}
+	if !strings.Contains(logger.errors[0].Error(), "MissingField") {
+		t.Fatalf("logged error = %v, want MissingField error", logger.errors[0])
+	}
+}
+
+func TestPageTemplate_UpdateNoop(t *testing.T) {
+	pageTemplate{}.JawsUpdate(nil)
 }
 
 func TestTemplate_RenderReturnsTagExpandError(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	jw.AddTemplateLookuper(template.Must(template.New("uitempl").Parse(
-		`{{with $.Dot}}<div id="{{$.Jid}}" {{$.Attrs}}>{{.}}</div>{{end}}`,
+		`{{with $.Dot}}<span>{{.}}</span>{{end}}`,
 	)))
 
 	var sb bytes.Buffer
 	rw := RequestWriter{Request: rq, Writer: &sb}
 	if err := rw.Template("uitempl", "plain-string-dot"); err == nil {
 		t.Fatal("expected tag expansion error")
+	}
+}
+
+type templateUpdateDot struct {
+	Text string
+}
+
+func TestTemplate_UpdateRerendersIntoWrapper(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+
+	jw.AddTemplateLookuper(template.Must(template.New("update").Parse(
+		`{{with $.Dot}}<span>{{.Text}}</span>{{end}}`,
+	)))
+
+	go jw.Serve()
+	tr := jaws.NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("expected test request")
+	}
+	defer tr.Close()
+	<-tr.ReadyCh
+
+	dot := &templateUpdateDot{Text: "before"}
+	tpl := NewTemplate("update", dot)
+	elem := tr.NewElement(tpl)
+	var sb strings.Builder
+	if err := elem.JawsRender(&sb, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := sb.String(); !strings.Contains(got, `<span>before</span>`) {
+		t.Fatalf("unexpected initial render: %q", got)
+	}
+
+	dot.Text = "after"
+	tr.BcastCh <- wire.Message{Dest: dot, What: what.Update}
+
+	select {
+	case msg := <-tr.OutCh:
+		if msg.What != what.Inner {
+			t.Fatalf("queued update = %v, want %v", msg.What, what.Inner)
+		}
+		if msg.Jid != elem.Jid() {
+			t.Fatalf("queued jid = %v, want %v", msg.Jid, elem.Jid())
+		}
+		if msg.Data != `<span>after</span>` {
+			t.Fatalf("queued inner HTML = %q, want %q", msg.Data, `<span>after</span>`)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for template update")
 	}
 }

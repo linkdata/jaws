@@ -13,6 +13,11 @@ This package is the home of JaWS widget implementations.
 
 `ui.RequestWriter` exposes helper methods like `rw.Span(...)`,
 `rw.Text(...)`, and `rw.Select(...)` for concise template use.
+`rw.Template(...)` renders partial templates inside a generated JaWS wrapper,
+so template bodies should let that wrapper own JaWS identity and wrapper-level
+attributes. Attribute params passed to `rw.Template(...)` are applied to the
+generated wrapper. Template bodies used with `rw.Template(...)` must be
+partials; full page templates should be rendered through `ui.Handler`.
 
 You can also use explicit constructors through:
 

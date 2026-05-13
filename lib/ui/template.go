@@ -1,14 +1,11 @@
 package ui
 
 import (
-	"bytes"
 	"fmt"
 	"html/template"
 	"io"
 	"strings"
-	"text/template/parse"
 
-	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/tag"
 )
@@ -17,8 +14,10 @@ import (
 //
 // The Name field identifies the template to execute and Dot contains the data
 // that will be exposed to the template through the [With] structure constructed
-// during rendering. Additional tag bindings and event handlers can be supplied
-// at render time through the [RequestWriter.Template] helper.
+// during rendering. Templates are rendered inside a generated wrapper element
+// that receives the JaWS ID and any HTML attributes supplied at render time
+// through the [RequestWriter.Template] helper. The referenced template must be
+// a partial template, not a full HTML document.
 type Template struct {
 	Name string // Template name to be looked up using Jaws.LookupTemplate.
 	Dot  any    // Dot value to place in With.
@@ -29,89 +28,76 @@ var _ jaws.ClickHandler = Template{}       // statically ensure interface is def
 var _ jaws.ContextMenuHandler = Template{} // statically ensure interface is defined
 var _ jaws.InputHandler = Template{}       // statically ensure interface is defined
 
+type templateRenderMode uint8
+
+const (
+	templateRenderWrapped templateRenderMode = iota
+	templateRenderDirect
+)
+
 // String returns a debug representation of t.
 func (tmpl Template) String() string {
 	return fmt.Sprintf("{%q, %s}", tmpl.Name, tag.TagString(tmpl.Dot))
 }
 
-func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
-	isJidOrJs := func(s string) bool {
-		return (s == "Jid") || (s == "JsFunc") || (s == "JsVar")
+func (tmpl Template) lookup(elem *jaws.Element) (lookedUp *template.Template, err error) {
+	err = errMissingTemplate(tmpl.Name)
+	if lookedUp = elem.Request.Jaws.LookupTemplate(tmpl.Name); lookedUp != nil {
+		err = nil
 	}
-	switch node := node.(type) {
-	case *parse.TextNode:
-		if node != nil {
-			found = found || bytes.Contains(node.Text, []byte("</html>"))
+	return
+}
+
+func (tmpl Template) auth(elem *jaws.Element) (auth jaws.Auth) {
+	auth = jaws.DefaultAuth{}
+	if f := elem.Request.Jaws.MakeAuth; f != nil {
+		auth = f(elem.Request)
+	}
+	return
+}
+
+func (tmpl Template) execute(elem *jaws.Element, w io.Writer, lookedUp *template.Template) (err error) {
+	err = lookedUp.Execute(w, With{
+		Element:       elem,
+		RequestWriter: RequestWriter{Request: elem.Request, Writer: w},
+		Dot:           tmpl.Dot,
+		Auth:          tmpl.auth(elem),
+	})
+	return
+}
+
+func writeTemplateWrapperStart(elem *jaws.Element, w io.Writer, attrs []string) (err error) {
+	b := elem.Jid().AppendStartTagAttr(nil, "div")
+	b = append(b, " data-jawstemplate"...)
+	for _, attr := range attrs {
+		if attr != "" {
+			b = append(b, ' ')
+			b = append(b, attr...)
 		}
-	case *parse.ListNode:
-		if node != nil {
-			for _, n := range node.Nodes {
-				found = found || findJidOrJsOrHTMLNode(n)
+	}
+	b = append(b, '>')
+	_, err = w.Write(b)
+	return
+}
+
+func (tmpl Template) render(elem *jaws.Element, w io.Writer, params []any, wrapped bool) (err error) {
+	var expandedTags []any
+	if expandedTags, err = tag.TagExpand(elem.Request, tmpl.Dot); err == nil {
+		elem.Request.TagExpanded(elem, expandedTags)
+		tags, handlers, attrs := jaws.ParseParams(params)
+		elem.Tag(tags...)
+		elem.AddHandlers(handlers...)
+		var lookedUp *template.Template
+		if lookedUp, err = tmpl.lookup(elem); err == nil {
+			if wrapped {
+				err = writeTemplateWrapperStart(elem, w, attrs)
 			}
-		}
-	case *parse.ActionNode:
-		if node != nil {
-			found = findJidOrJsOrHTMLNode(node.Pipe)
-		}
-	case *parse.WithNode:
-		if node != nil {
-			found = findJidOrJsOrHTMLNode(&node.BranchNode)
-		}
-	case *parse.BranchNode:
-		if node != nil {
-			found = findJidOrJsOrHTMLNode(node.Pipe)
-			found = found || findJidOrJsOrHTMLNode(node.List)
-			found = found || findJidOrJsOrHTMLNode(node.ElseList)
-		}
-	case *parse.IfNode:
-		if node != nil {
-			found = findJidOrJsOrHTMLNode(node.Pipe)
-			found = found || findJidOrJsOrHTMLNode(node.List)
-			found = found || findJidOrJsOrHTMLNode(node.ElseList)
-		}
-	case *parse.RangeNode:
-		if node != nil {
-			found = findJidOrJsOrHTMLNode(node.Pipe)
-			found = found || findJidOrJsOrHTMLNode(node.List)
-			found = found || findJidOrJsOrHTMLNode(node.ElseList)
-		}
-	case *parse.TemplateNode:
-		if node != nil {
-			found = findJidOrJsOrHTMLNode(node.Pipe)
-		}
-	case *parse.PipeNode:
-		if node != nil {
-			for _, n := range node.Cmds {
-				found = found || findJidOrJsOrHTMLNode(n)
-			}
-		}
-	case *parse.CommandNode:
-		if node != nil {
-			for _, n := range node.Args {
-				found = found || findJidOrJsOrHTMLNode(n)
-			}
-		}
-	case *parse.VariableNode:
-		if node != nil {
-			for _, s := range node.Ident {
-				found = found || isJidOrJs(s)
-			}
-		}
-	case *parse.FieldNode:
-		if node != nil {
-			for _, s := range node.Ident {
-				found = found || isJidOrJs(s)
-			}
-		}
-	case *parse.IdentifierNode:
-		if node != nil {
-			found = found || isJidOrJs(node.Ident)
-		}
-	case *parse.ChainNode:
-		if node != nil {
-			found = findJidOrJsOrHTMLNode(node.Node)
-			for _, s := range node.Field {
-				found = found || isJidOrJs(s)
+			if err == nil {
+				if err = tmpl.execute(elem, w, lookedUp); err == nil {
+					if wrapped {
+						_, err = io.WriteString(w, "</div>")
+					}
+				}
 			}
 		}
 	}
@@ -120,42 +106,20 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
 
 // JawsRender renders t through the request's configured template lookupers.
 func (tmpl Template) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
-	var expandedTags []any
-	if expandedTags, err = tag.TagExpand(elem.Request, tmpl.Dot); err == nil {
-		elem.Request.TagExpanded(elem, expandedTags)
-		tags, handlers, attrs := jaws.ParseParams(params)
-		elem.Tag(tags...)
-		elem.AddHandlers(handlers...)
-		attrstr := template.HTMLAttr(strings.Join(attrs, " ")) // #nosec G203
-		var auth jaws.Auth
-		auth = jaws.DefaultAuth{}
-		if f := elem.Request.Jaws.MakeAuth; f != nil {
-			auth = f(elem.Request)
-		}
-		err = errMissingTemplate(tmpl.Name)
-		if lookedUp := elem.Request.Jaws.LookupTemplate(tmpl.Name); lookedUp != nil {
-			err = lookedUp.Execute(w, With{
-				Element:       elem,
-				RequestWriter: RequestWriter{Request: elem.Request, Writer: w},
-				Dot:           tmpl.Dot,
-				Attrs:         attrstr,
-				Auth:          auth,
-			})
-			if deadlock.Debug && elem.Jaws.Logger != nil {
-				if !findJidOrJsOrHTMLNode(lookedUp.Tree.Root) {
-					elem.Jaws.Logger.Warn("jaws: template has no Jid reference", "template", tmpl.Name)
-				}
-			}
-		}
-	}
+	err = tmpl.render(elem, w, params, true)
 	return
 }
 
-// JawsUpdate delegates updates to t.Dot when it implements [jaws.Updater].
+// JawsUpdate re-renders t into the template wrapper.
 func (tmpl Template) JawsUpdate(elem *jaws.Element) {
-	if dot, ok := tmpl.Dot.(jaws.Updater); ok {
-		dot.JawsUpdate(elem)
+	lookedUp, err := tmpl.lookup(elem)
+	if err == nil {
+		var sb strings.Builder
+		if err = tmpl.execute(elem, &sb, lookedUp); err == nil {
+			elem.SetInner(template.HTML(sb.String())) // #nosec G203
+		}
 	}
+	elem.Request.MustLog(err)
 }
 
 // JawsClick delegates click events to t.Dot when it implements [jaws.ClickHandler].
@@ -197,7 +161,9 @@ func NewTemplate(name string, dot any) Template {
 // Template renders the given template using [With] as data.
 //
 // The Dot field in [With] is set to dot, and name is resolved to a
-// [template.Template] using [jaws.Jaws.LookupTemplate].
+// [template.Template] using [jaws.Jaws.LookupTemplate]. Template output is
+// wrapped in a generated div that owns the JaWS ID and any HTML attrs passed in
+// params. The template must be a partial, not a full HTML document.
 func (rw RequestWriter) Template(name string, dot any, params ...any) error {
 	return rw.UI(NewTemplate(name, dot), params...)
 }
