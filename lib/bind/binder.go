@@ -57,7 +57,7 @@ type InitialHTMLAttrHook[T comparable] func(bind Binder[T], elem *jaws.Element) 
 // Success hooks in a [Binder] chain are called in reverse registration order.
 // If one of them returns an error, that error is returned from [Setter.JawsSet] and
 // no more success hooks are called.
-type SuccessHook func(*jaws.Element) (err error)
+type SuccessHook func(elem *jaws.Element) (err error)
 
 // Formatter customizes [Binder.Format] output for a value.
 type Formatter interface {

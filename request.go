@@ -95,13 +95,13 @@ func (rq *Request) String() string {
 	return "Request<" + rq.JawsKeyString() + ">"
 }
 
-func (rq *Request) claim(hr *http.Request) error {
+func (rq *Request) claim(r *http.Request) error {
 	if !rq.claimed.Load() {
 		var actualIP netip.Addr
 		var httpDoneCh <-chan struct{}
-		if hr != nil { // can be nil in tests
-			actualIP = parseIP(hr.RemoteAddr)
-			httpDoneCh = hr.Context().Done()
+		if r != nil { // can be nil in tests
+			actualIP = parseIP(r.RemoteAddr)
+			httpDoneCh = r.Context().Done()
 		}
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
@@ -303,8 +303,8 @@ func (rq *Request) Get(key string) any {
 // Set is shorthand for Session().Set and sets a session value to be associated with the key.
 // If value is nil, the key is removed from the session.
 // Does nothing if no session is associated with the [Request].
-func (rq *Request) Set(key string, val any) {
-	rq.Session().Set(key, val)
+func (rq *Request) Set(key string, value any) {
+	rq.Session().Set(key, value)
 }
 
 // Context returns the [Request]'s context, which is by default derived from [Jaws.BaseContext].
@@ -317,9 +317,9 @@ func (rq *Request) Context() (ctx context.Context) {
 
 // SetContext atomically replaces the Request's context with the function return value.
 // The function is given the current context and must return a non-nil context.
-// The returned context must be derived from oldctx so cancellation and deadlines
+// The returned context must be derived from oldCtx so cancellation and deadlines
 // continue to propagate to [Request.Context].
-func (rq *Request) SetContext(fn func(oldctx context.Context) (newctx context.Context)) {
+func (rq *Request) SetContext(fn func(oldCtx context.Context) (newCtx context.Context)) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	if rq.ctx = fn(rq.ctx); rq.ctx == nil {
@@ -366,11 +366,11 @@ func (rq *Request) cancel(err error) {
 //
 // The default JaWS JavaScript only supports Bootstrap dismissible alerts.
 // See [Jaws.Broadcast] for processing-loop requirements.
-func (rq *Request) Alert(lvl, msg string) {
+func (rq *Request) Alert(level, msg string) {
 	rq.Jaws.Broadcast(wire.Message{
 		Dest: rq,
 		What: what.Alert,
-		Data: lvl + "\n" + msg,
+		Data: level + "\n" + msg,
 	})
 }
 
@@ -468,10 +468,10 @@ func (rq *Request) NewElement(ui UI) *Element {
 }
 
 // GetElementByJid returns the element with jid, or nil if it is not known.
-func (rq *Request) GetElementByJid(jid Jid) (e *Element) {
+func (rq *Request) GetElementByJid(jid Jid) (elem *Element) {
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
-	e = rq.getElementByJidLocked(jid)
+	elem = rq.getElementByJidLocked(jid)
 	return
 }
 
@@ -509,11 +509,11 @@ func (rq *Request) appendDirtyTags(tags []any) {
 }
 
 // TagExpanded adds already-expanded tags to the given [Element].
-func (rq *Request) TagExpanded(elem *Element, expandedtags []any) {
+func (rq *Request) TagExpanded(elem *Element, expandedTags []any) {
 	if elem != nil && !elem.deleted.Load() && elem.Request == rq {
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
-		for _, tagValue := range expandedtags {
+		for _, tagValue := range expandedTags {
 			if !rq.hasTagLocked(elem, tagValue) {
 				rq.tagMap[tagValue] = append(rq.tagMap[tagValue], elem)
 			}
@@ -529,8 +529,8 @@ func (rq *Request) Tag(elem *Element, tagItems ...any) {
 }
 
 // GetElements returns a list of the UI elements in the [Request] that have the given tags.
-func (rq *Request) GetElements(tagitem any) (elems []*Element) {
-	expanded := tag.MustTagExpand(rq, tagitem)
+func (rq *Request) GetElements(tagValue any) (elems []*Element) {
+	expanded := tag.MustTagExpand(rq, tagValue)
 	seen := map[*Element]struct{}{}
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
@@ -711,14 +711,14 @@ func (rq *Request) queue(msg wire.WsMsg) {
 	rq.muQueue.Unlock()
 }
 
-func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err error) {
+func (rq *Request) callAllEventHandlers(id Jid, wht what.What, value string) (err error) {
 	var elems []*Element
 	rq.mu.RLock()
 	if id == 0 {
 		if wht == what.Click || wht == what.ContextMenu {
 			var after string
 			var found bool
-			val, after, found = strings.Cut(val, "\t")
+			value, after, found = strings.Cut(value, "\t")
 			for found {
 				var jidStr string
 				jidStr, after, found = strings.Cut(after, "\t")
@@ -737,7 +737,7 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, val string) (err 
 	rq.mu.RUnlock()
 
 	for _, e := range elems {
-		if err = CallEventHandlers(e.Ui(), e, wht, val); !errors.Is(err, ErrEventUnhandled) {
+		if err = CallEventHandlers(e.Ui(), e, wht, value); !errors.Is(err, ErrEventUnhandled) {
 			return
 		}
 	}
@@ -795,13 +795,13 @@ func (rq *Request) sendQueue(outboundMsgCh chan<- wire.WsMsg) {
 	}
 }
 
-func deleteElement(s []*Element, e *Element) []*Element {
+func deleteElement(s []*Element, elem *Element) []*Element {
 	for i, v := range s {
-		if e == v {
+		if elem == v {
 			j := i
 			for i++; i < len(s); i++ {
 				v = s[i]
-				if e != v {
+				if elem != v {
 					s[j] = v
 					j++
 				}
@@ -815,12 +815,12 @@ func deleteElement(s []*Element, e *Element) []*Element {
 	return s
 }
 
-func (rq *Request) deleteElementLocked(e *Element) {
-	if e.Request == rq {
-		e.deleted.Store(true)
-		rq.elems = deleteElement(rq.elems, e)
+func (rq *Request) deleteElementLocked(elem *Element) {
+	if elem.Request == rq {
+		elem.deleted.Store(true)
+		rq.elems = deleteElement(rq.elems, elem)
 		for k := range rq.tagMap {
-			rq.tagMap[k] = deleteElement(rq.tagMap[k], e)
+			rq.tagMap[k] = deleteElement(rq.tagMap[k], elem)
 			if len(rq.tagMap[k]) == 0 {
 				delete(rq.tagMap, k)
 			}

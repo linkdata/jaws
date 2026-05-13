@@ -34,7 +34,7 @@ func (e errEventHandlerPanic) Unwrap() error {
 // InputHandler handles input events sent from the browser.
 type InputHandler interface {
 	// JawsInput is called when an [Element] receives a browser input event.
-	JawsInput(e *Element, val string) (err error)
+	JawsInput(elem *Element, value string) (err error)
 }
 
 type errEventUnhandled struct{}
@@ -49,51 +49,51 @@ var ErrEventUnhandled = errEventUnhandled{}
 
 // InputFn is the signature of an input handling function to be called when JaWS receives
 // an input, hook or set message from JavaScript via the WebSocket connection.
-type InputFn = func(e *Element, val string) (err error)
+type InputFn = func(elem *Element, value string) (err error)
 
-func callInputHandler(obj any, e *Element, val string) (err error) {
+func callInputHandler(obj any, elem *Element, value string) (err error) {
 	if h, ok := obj.(InputHandler); ok {
-		return h.JawsInput(e, val)
+		return h.JawsInput(elem, value)
 	}
 	if fn, ok := obj.(InputFn); ok {
-		return fn(e, val)
+		return fn(elem, value)
 	}
 	return ErrEventUnhandled
 }
 
-func callEventHandler(obj any, e *Element, wht what.What, val string) (err error) {
+func callEventHandler(obj any, elem *Element, wht what.What, value string) (err error) {
 	err = ErrEventUnhandled
 	switch wht {
 	case what.Click, what.ContextMenu:
 		var clk Click
 		var ok bool
-		if clk, _, ok = parseClickData(val); ok {
+		if clk, _, ok = parseClickData(value); ok {
 			if wht == what.Click {
 				if h, ok := obj.(ClickHandler); ok {
-					err = h.JawsClick(e, clk)
+					err = h.JawsClick(elem, clk)
 				}
 			} else if h, ok := obj.(ContextMenuHandler); ok {
-				err = h.JawsContextMenu(e, clk)
+				err = h.JawsContextMenu(elem, clk)
 			}
 		}
 	case what.Input, what.Hook, what.Set:
-		err = callInputHandler(obj, e, val)
+		err = callInputHandler(obj, elem, value)
 	}
 	return
 }
 
-func callEventHandlers(ui any, e *Element, wht what.What, val string) (err error) {
-	for i := len(e.handlers) - 1; i >= 0; i-- {
-		if err = callEventHandler(e.handlers[i], e, wht, val); !errors.Is(err, ErrEventUnhandled) {
+func callEventHandlers(ui any, elem *Element, wht what.What, value string) (err error) {
+	for i := len(elem.handlers) - 1; i >= 0; i-- {
+		if err = callEventHandler(elem.handlers[i], elem, wht, value); !errors.Is(err, ErrEventUnhandled) {
 			return
 		}
 	}
-	return callEventHandler(ui, e, wht, val)
+	return callEventHandler(ui, elem, wht, value)
 }
 
 // CallEventHandlers calls the event handlers for the given [Element].
 // Recovers from panics in user-provided handlers, returning them as errors.
-func CallEventHandlers(ui any, e *Element, wht what.What, val string) (err error) {
+func CallEventHandlers(ui any, elem *Element, wht what.What, value string) (err error) {
 	defer func() {
 		if x := recover(); x != nil {
 			err = errEventHandlerPanic{
@@ -102,5 +102,5 @@ func CallEventHandlers(ui any, e *Element, wht what.What, val string) (err error
 			}
 		}
 	}()
-	return callEventHandlers(ui, e, wht, val)
+	return callEventHandlers(ui, elem, wht, value)
 }

@@ -418,8 +418,8 @@ func TestSession_Delete(t *testing.T) {
 	}
 
 	byebyeItem := &testUi{}
-	testRequestWriter{rq: ts.rq, Writer: httptest.NewRecorder()}.Register(byebyeItem, func(e *Element, val string) error {
-		sess2 := ts.jw.GetSession(e.Request.Initial())
+	testRequestWriter{rq: ts.rq, Writer: httptest.NewRecorder()}.Register(byebyeItem, func(elem *Element, value string) error {
+		sess2 := ts.jw.GetSession(elem.Request.Initial())
 		if x := sess2; x != ts.sess {
 			t.Error(x)
 		}

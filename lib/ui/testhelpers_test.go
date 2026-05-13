@@ -66,7 +66,7 @@ func renderUI(t *testing.T, rq *jaws.Request, ui jaws.UI, params ...any) (*jaws.
 
 type testHTMLGetter string
 
-func (g testHTMLGetter) JawsGetHTML(*jaws.Element) template.HTML {
+func (g testHTMLGetter) JawsGetHTML(elem *jaws.Element) template.HTML {
 	return template.HTML(g)
 }
 
@@ -77,33 +77,33 @@ type testSetter[T comparable] struct {
 	setCount int
 }
 
-func newTestSetter[T comparable](v T) *testSetter[T] {
-	return &testSetter[T]{v: v}
+func newTestSetter[T comparable](value T) *testSetter[T] {
+	return &testSetter[T]{v: value}
 }
 
-func (ts *testSetter[T]) JawsGet(*jaws.Element) T {
+func (ts *testSetter[T]) JawsGet(elem *jaws.Element) T {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	return ts.v
 }
 
-func (ts *testSetter[T]) JawsSet(_ *jaws.Element, v T) error {
+func (ts *testSetter[T]) JawsSet(elem *jaws.Element, value T) error {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	if ts.err != nil {
 		return ts.err
 	}
-	if ts.v == v {
+	if ts.v == value {
 		return jaws.ErrValueUnchanged
 	}
-	ts.v = v
+	ts.v = value
 	ts.setCount++
 	return nil
 }
 
-func (ts *testSetter[T]) Set(v T) {
+func (ts *testSetter[T]) Set(value T) {
 	ts.mu.Lock()
-	ts.v = v
+	ts.v = value
 	ts.mu.Unlock()
 }
 
@@ -123,6 +123,6 @@ type testContainer struct {
 	contents []jaws.UI
 }
 
-func (tc *testContainer) JawsContains(*jaws.Element) []jaws.UI {
+func (tc *testContainer) JawsContains(elem *jaws.Element) []jaws.UI {
 	return tc.contents
 }

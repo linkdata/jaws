@@ -2,10 +2,10 @@ package ui
 
 import "github.com/linkdata/jaws"
 
-func applyDirty(tag any, e *jaws.Element, err error) (retErr error) {
+func applyDirty(tag any, elem *jaws.Element, err error) (retErr error) {
 	if err != jaws.ErrValueUnchanged {
 		retErr = err
-		e.Dirty(tag)
+		elem.Dirty(tag)
 	}
 	return
 }

@@ -22,13 +22,13 @@ func NewContainer(outerHTMLTag string, c jaws.Container) *Container {
 }
 
 // JawsRender renders ui as its configured container element.
-func (u *Container) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	return u.RenderContainer(e, w, u.OuterHTMLTag, params)
+func (u *Container) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
+	return u.RenderContainer(elem, w, u.OuterHTMLTag, params)
 }
 
 // JawsUpdate updates the child collection.
-func (u *Container) JawsUpdate(e *jaws.Element) {
-	u.UpdateContainer(e)
+func (u *Container) JawsUpdate(elem *jaws.Element) {
+	u.UpdateContainer(elem)
 }
 
 // Container renders c inside outerHTMLTag.

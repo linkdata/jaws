@@ -17,8 +17,8 @@ type uiHandler struct {
 	Template
 }
 
-func (h uiHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
-	_ = h.Log(h.NewRequest(r).NewElement(h.Template).JawsRender(wr, nil))
+func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	_ = h.Log(h.NewRequest(r).NewElement(h.Template).JawsRender(w, nil))
 }
 
 // Handler returns an http.Handler that renders the named template.

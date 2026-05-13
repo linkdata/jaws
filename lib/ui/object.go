@@ -46,88 +46,88 @@ type object struct {
 	handler any
 }
 
-func (o *object) Clicked(fn ClickedHook) Object {
+func (obj *object) Clicked(fn ClickedHook) Object {
 	return &object{
-		prev:    o,
+		prev:    obj,
 		handler: fn,
 	}
 }
 
-func (o *object) ContextMenu(fn ContextMenuHook) Object {
+func (obj *object) ContextMenu(fn ContextMenuHook) Object {
 	return &object{
-		prev:    o,
+		prev:    obj,
 		handler: fn,
 	}
 }
 
-func (o *object) InitialHTMLAttr(fn InitialHTMLAttrHook) Object {
+func (obj *object) InitialHTMLAttr(fn InitialHTMLAttrHook) Object {
 	return &object{
-		prev:    o,
+		prev:    obj,
 		handler: fn,
 	}
 }
 
-func (o *object) JawsGetHTML(e *jaws.Element) (retv template.HTML) {
-	for o != nil {
-		if h, ok := o.handler.(bind.HTMLGetter); ok {
-			retv = h.JawsGetHTML(e)
+func (obj *object) JawsGetHTML(elem *jaws.Element) (html template.HTML) {
+	for obj != nil {
+		if h, ok := obj.handler.(bind.HTMLGetter); ok {
+			html = h.JawsGetHTML(elem)
 			break
 		}
-		o = o.prev
+		obj = obj.prev
 	}
 	return
 }
 
-func (o *object) JawsClick(elem *jaws.Element, click jaws.Click) (err error) {
+func (obj *object) JawsClick(elem *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
-	for o != nil {
-		if fn, ok := o.handler.(ClickedHook); ok {
-			if err = fn(o, elem, click); !errors.Is(err, jaws.ErrEventUnhandled) {
+	for obj != nil {
+		if fn, ok := obj.handler.(ClickedHook); ok {
+			if err = fn(obj, elem, click); !errors.Is(err, jaws.ErrEventUnhandled) {
 				break
 			}
 		}
-		o = o.prev
+		obj = obj.prev
 	}
 	return
 }
 
-func (o *object) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err error) {
+func (obj *object) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
-	for o != nil {
-		if fn, ok := o.handler.(ContextMenuHook); ok {
-			if err = fn(o, elem, click); !errors.Is(err, jaws.ErrEventUnhandled) {
+	for obj != nil {
+		if fn, ok := obj.handler.(ContextMenuHook); ok {
+			if err = fn(obj, elem, click); !errors.Is(err, jaws.ErrEventUnhandled) {
 				break
 			}
 		}
-		o = o.prev
+		obj = obj.prev
 	}
 	return
 }
 
-func (o *object) JawsInitialHTMLAttr(e *jaws.Element) (retv template.HTMLAttr) {
-	for o != nil {
-		if fn, ok := o.handler.(InitialHTMLAttrHook); ok {
-			if s := fn(o, e); s != "" {
-				if retv != "" {
-					retv += " "
+func (obj *object) JawsInitialHTMLAttr(elem *jaws.Element) (attr template.HTMLAttr) {
+	for obj != nil {
+		if fn, ok := obj.handler.(InitialHTMLAttrHook); ok {
+			if s := fn(obj, elem); s != "" {
+				if attr != "" {
+					attr += " "
 				}
-				retv += s
+				attr += s
 			}
 		}
-		o = o.prev
+		obj = obj.prev
 	}
 	return
 }
 
-func (o *object) JawsGetTag(ctx tag.Context) any {
+func (obj *object) JawsGetTag(ctx tag.Context) any {
 	var tags []any
-	for o != nil {
-		if h, ok := o.handler.(tag.TagGetter); ok {
+	for obj != nil {
+		if h, ok := obj.handler.(tag.TagGetter); ok {
 			if t := h.JawsGetTag(ctx); t != nil {
 				tags = append(tags, t)
 			}
 		}
-		o = o.prev
+		obj = obj.prev
 	}
 	switch len(tags) {
 	case 0:

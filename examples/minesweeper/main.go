@@ -39,8 +39,8 @@ var (
 		go jw.Serve()
 	}
 	listenAndServe = http.ListenAndServe
-	logPrintln     = func(v ...any) { log.Println(v...) }
-	logFatal       = func(v ...any) { log.Fatal(v...) }
+	logPrintln     = func(value ...any) { log.Println(value...) }
+	logFatal       = func(value ...any) { log.Fatal(value...) }
 )
 
 // Cell represents one Minesweeper board cell.
@@ -163,13 +163,13 @@ func (c *Cell) JawsGetHTML(elem *jaws.Element) template.HTML {
 }
 
 // JawsClick reveals the cell.
-func (c *Cell) JawsClick(elem *jaws.Element, _ jaws.Click) error {
+func (c *Cell) JawsClick(elem *jaws.Element, click jaws.Click) error {
 	elem.Request.Dirty(c.game.clickCell(c)...)
 	return nil
 }
 
 // JawsContextMenu toggles the cell flag.
-func (c *Cell) JawsContextMenu(elem *jaws.Element, _ jaws.Click) error {
+func (c *Cell) JawsContextMenu(elem *jaws.Element, click jaws.Click) error {
 	elem.Request.Dirty(c.game.toggleFlag(c)...)
 	return nil
 }

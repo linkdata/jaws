@@ -328,7 +328,7 @@ func (ctx *mustLogContext) Get(string) any {
 	return nil
 }
 
-func (ctx *mustLogContext) Set(string, any) {}
+func (ctx *mustLogContext) Set(key string, value any) {}
 
 func (ctx *mustLogContext) Context() context.Context {
 	return context.Background()

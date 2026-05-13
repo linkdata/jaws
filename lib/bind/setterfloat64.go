@@ -24,13 +24,13 @@ type setterFloat64[T numeric] struct {
 	Setter[T]
 }
 
-func (s setterFloat64[T]) JawsGet(e *jaws.Element) float64 {
-	v := s.Setter.JawsGet(e)
+func (s setterFloat64[T]) JawsGet(elem *jaws.Element) float64 {
+	v := s.Setter.JawsGet(elem)
 	return float64(v)
 }
 
-func (s setterFloat64[T]) JawsSet(e *jaws.Element, v float64) error {
-	return s.Setter.JawsSet(e, T(v))
+func (s setterFloat64[T]) JawsSet(elem *jaws.Element, value float64) error {
+	return s.Setter.JawsSet(elem, T(value))
 }
 
 func (s setterFloat64[T]) JawsGetTag(tag.Context) any {
@@ -41,12 +41,12 @@ type setterFloat64ReadOnly[T numeric] struct {
 	Getter[T]
 }
 
-func (s setterFloat64ReadOnly[T]) JawsGet(e *jaws.Element) float64 {
-	v := s.Getter.JawsGet(e)
+func (s setterFloat64ReadOnly[T]) JawsGet(elem *jaws.Element) float64 {
+	v := s.Getter.JawsGet(elem)
 	return float64(v)
 }
 
-func (setterFloat64ReadOnly[T]) JawsSet(*jaws.Element, float64) error {
+func (setterFloat64ReadOnly[T]) JawsSet(elem *jaws.Element, value float64) error {
 	return ErrValueNotSettable
 }
 
@@ -58,11 +58,11 @@ type setterFloat64Static[T numeric] struct {
 	v float64
 }
 
-func (setterFloat64Static[T]) JawsSet(*jaws.Element, float64) error {
+func (setterFloat64Static[T]) JawsSet(elem *jaws.Element, value float64) error {
 	return ErrValueNotSettable
 }
 
-func (s setterFloat64Static[T]) JawsGet(*jaws.Element) float64 {
+func (s setterFloat64Static[T]) JawsGet(elem *jaws.Element) float64 {
 	return s.v
 }
 
@@ -70,8 +70,8 @@ func (s setterFloat64Static[T]) JawsGetTag(tag.Context) any {
 	return nil
 }
 
-func makeSetterFloat64for[T numeric](s *Setter[float64], v any) bool {
-	switch v := v.(type) {
+func makeSetterFloat64for[T numeric](s *Setter[float64], value any) bool {
+	switch v := value.(type) {
 	case Setter[T]:
 		*s = setterFloat64[T]{Setter: v}
 		return true
@@ -91,8 +91,8 @@ func makeSetterFloat64for[T numeric](s *Setter[float64], v any) bool {
 // of another supported numeric type. Getter and static adapters are read-only
 // and return [ErrValueNotSettable] from [Setter.JawsSet]. MakeSetterFloat64
 // panics for unsupported types.
-func MakeSetterFloat64(v any) (s Setter[float64]) {
-	switch v := v.(type) {
+func MakeSetterFloat64(value any) (s Setter[float64]) {
+	switch v := value.(type) {
 	case Setter[float64]:
 		return v
 	case Getter[float64]:
@@ -116,5 +116,5 @@ func MakeSetterFloat64(v any) (s Setter[float64]) {
 			return
 		}
 	}
-	panic(fmt.Errorf("expected jaws.Setter[float64], jaws.Getter[float64] or float64 not %T", v))
+	panic(fmt.Errorf("expected jaws.Setter[float64], jaws.Getter[float64] or float64 not %T", value))
 }

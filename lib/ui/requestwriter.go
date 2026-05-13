@@ -39,13 +39,13 @@ func (rw RequestWriter) Session() *jaws.Session {
 }
 
 // Get calls [jaws.Request.Get].
-func (rw RequestWriter) Get(key string) (val any) {
+func (rw RequestWriter) Get(key string) (value any) {
 	return rw.Request.Get(key)
 }
 
 // Set calls [jaws.Request.Set].
-func (rw RequestWriter) Set(key string, val any) {
-	rw.Request.Set(key, val)
+func (rw RequestWriter) Set(key string, value any) {
+	rw.Request.Set(key, value)
 }
 
 // HeadHTML outputs the HTML code needed in the head section.

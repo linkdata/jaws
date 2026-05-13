@@ -39,11 +39,11 @@ func NewContainerHelper(c jaws.Container) ContainerHelper {
 
 // RenderContainer renders outerHTMLTag around the current children from
 // [jaws.Container.JawsContains].
-func (u *ContainerHelper) RenderContainer(e *jaws.Element, w io.Writer, outerHTMLTag string, params []any) (err error) {
+func (u *ContainerHelper) RenderContainer(elem *jaws.Element, w io.Writer, outerHTMLTag string, params []any) (err error) {
 	var getterAttrs []template.HTMLAttr
-	if u.Tag, getterAttrs, err = e.ApplyGetter(u.Container); err == nil {
-		attrs := append(e.ApplyParams(params), getterAttrs...)
-		b := e.Jid().AppendStartTagAttr(nil, outerHTMLTag)
+	if u.Tag, getterAttrs, err = elem.ApplyGetter(u.Container); err == nil {
+		attrs := append(elem.ApplyParams(params), getterAttrs...)
+		b := elem.Jid().AppendStartTagAttr(nil, outerHTMLTag)
 		for _, attr := range attrs {
 			b = append(b, ' ')
 			b = append(b, attr...)
@@ -52,10 +52,10 @@ func (u *ContainerHelper) RenderContainer(e *jaws.Element, w io.Writer, outerHTM
 		_, err = w.Write(b)
 		if err == nil {
 			var contents []*jaws.Element
-			for _, childUI := range u.Container.JawsContains(e) {
-				elem := e.Request.NewElement(childUI)
-				contents = append(contents, elem)
-				if err = elem.JawsRender(w, nil); err != nil {
+			for _, childUI := range u.Container.JawsContains(elem) {
+				childElem := elem.Request.NewElement(childUI)
+				contents = append(contents, childElem)
+				if err = childElem.JawsRender(w, nil); err != nil {
 					break
 				}
 			}
@@ -64,8 +64,8 @@ func (u *ContainerHelper) RenderContainer(e *jaws.Element, w io.Writer, outerHTM
 				u.contents = contents
 				u.mu.Unlock()
 			} else {
-				for _, elem := range contents {
-					e.Request.DeleteElement(elem)
+				for _, childElem := range contents {
+					elem.Request.DeleteElement(childElem)
 				}
 			}
 			b = b[:0]
@@ -81,52 +81,52 @@ func (u *ContainerHelper) RenderContainer(e *jaws.Element, w io.Writer, outerHTM
 }
 
 // UpdateContainer updates child elements to match [jaws.Container.JawsContains].
-func (u *ContainerHelper) UpdateContainer(e *jaws.Element) {
+func (u *ContainerHelper) UpdateContainer(elem *jaws.Element) {
 	var toAppend []*jaws.Element
 
-	wantContents := u.Container.JawsContains(e)
+	wantContents := u.Container.JawsContains(elem)
 	newOrder := make([]jaws.Jid, 0, len(wantContents))
 
 	u.mu.Lock()
 	// build pool of reusable Elements keyed by UI, preserving duplicates
 	pool := make(map[jaws.UI][]*jaws.Element, len(u.contents))
 	oldOrder := make([]jaws.Jid, len(u.contents))
-	for i, elem := range u.contents {
-		oldOrder[i] = elem.Jid()
-		pool[elem.Ui()] = append(pool[elem.Ui()], elem)
+	for i, childElem := range u.contents {
+		oldOrder[i] = childElem.Jid()
+		pool[childElem.Ui()] = append(pool[childElem.Ui()], childElem)
 	}
 
 	// build new contents, reusing pooled Elements where possible
 	u.contents = u.contents[:0]
 	for _, childUI := range wantContents {
-		var elem *jaws.Element
+		var childElem *jaws.Element
 		if elems := pool[childUI]; len(elems) > 0 {
-			elem = elems[0]
+			childElem = elems[0]
 			pool[childUI] = elems[1:]
 		} else {
-			elem = e.Request.NewElement(childUI)
-			toAppend = append(toAppend, elem)
+			childElem = elem.Request.NewElement(childUI)
+			toAppend = append(toAppend, childElem)
 		}
-		u.contents = append(u.contents, elem)
-		newOrder = append(newOrder, elem.Jid())
+		u.contents = append(u.contents, childElem)
+		newOrder = append(newOrder, childElem.Jid())
 	}
 	u.mu.Unlock()
 
 	// remove leftover Elements not present in new contents
 	for _, elems := range pool {
-		for _, elem := range elems {
-			e.Remove(elem.Jid().String())
-			e.Request.DeleteElement(elem)
+		for _, childElem := range elems {
+			elem.Remove(childElem.Jid().String())
+			elem.Request.DeleteElement(childElem)
 		}
 	}
 
-	for _, elem := range toAppend {
+	for _, childElem := range toAppend {
 		var sb strings.Builder
-		e.Jaws.MustLog(elem.JawsRender(&sb, nil))
-		e.Append(template.HTML(sb.String())) // #nosec G203
+		elem.Jaws.MustLog(childElem.JawsRender(&sb, nil))
+		elem.Append(template.HTML(sb.String())) // #nosec G203
 	}
 
 	if !slices.Equal(oldOrder, newOrder) {
-		e.Order(newOrder)
+		elem.Order(newOrder)
 	}
 }

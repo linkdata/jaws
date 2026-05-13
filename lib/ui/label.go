@@ -17,8 +17,8 @@ func NewLabel(innerHTML any) *Label {
 }
 
 // JawsRender renders ui as an HTML label element.
-func (u *Label) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	return u.renderInner(e, w, "label", "", params)
+func (u *Label) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
+	return u.renderInner(elem, w, "label", "", params)
 }
 
 // Label renders an HTML label element.

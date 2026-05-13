@@ -13,7 +13,7 @@ type testJawsClick struct {
 	*testSetter[string]
 }
 
-func (tjc *testJawsClick) JawsClick(e *Element, click Click) (err error) {
+func (tjc *testJawsClick) JawsClick(elem *Element, click Click) (err error) {
 	if err = tjc.Err(); err == nil {
 		tjc.clickCh <- click.Name
 	}
@@ -27,7 +27,7 @@ type testJawsContextMenu struct {
 	*testSetter[Click]
 }
 
-func (tjc *testJawsContextMenu) JawsContextMenu(e *Element, click Click) (err error) {
+func (tjc *testJawsContextMenu) JawsContextMenu(elem *Element, click Click) (err error) {
 	if err = tjc.Err(); err == nil {
 		tjc.clickCh <- click
 	}
@@ -38,7 +38,7 @@ var _ ContextMenuHandler = (*testJawsContextMenu)(nil)
 
 type testJawsInitialHTMLAttr struct{}
 
-func (testJawsInitialHTMLAttr) JawsInitialHTMLAttr(*Element) template.HTMLAttr {
+func (testJawsInitialHTMLAttr) JawsInitialHTMLAttr(elem *Element) template.HTMLAttr {
 	return `data-test="1"`
 }
 

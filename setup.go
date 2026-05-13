@@ -41,8 +41,8 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 
 	handleStaticServe := func(ss *staticserve.StaticServe) {
 		if ss != nil {
-			u, uerr := url.Parse(ss.Name)
-			err = errors.Join(err, uerr)
+			u, urlErr := url.Parse(ss.Name)
+			err = errors.Join(err, urlErr)
 			if u != nil {
 				u = makeAbsPath(prefix, u)
 				urls = append(urls, u)
@@ -60,17 +60,17 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 				handleStaticServe(ss)
 			}
 		case string:
-			u, uerr := url.Parse(extra)
-			err = errors.Join(err, uerr)
+			u, urlErr := url.Parse(extra)
+			err = errors.Join(err, urlErr)
 			urls = append(urls, makeAbsPath(prefix, u))
 		case *url.URL:
 			urls = append(urls, makeAbsPath(prefix, extra))
 		case *staticserve.StaticServe:
 			handleStaticServe(extra)
 		case SetupFunc:
-			setupurls, setuperr := extra(jw, handleFn, prefix)
-			err = errors.Join(err, setuperr)
-			for _, u := range setupurls {
+			setupURLs, setupErr := extra(jw, handleFn, prefix)
+			err = errors.Join(err, setupErr)
+			for _, u := range setupURLs {
 				urls = append(urls, makeAbsPath(prefix, u))
 			}
 		default:

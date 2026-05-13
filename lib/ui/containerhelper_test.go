@@ -155,23 +155,23 @@ type testRenderErrorUI struct {
 	err error
 }
 
-func (u testRenderErrorUI) JawsRender(*jaws.Element, io.Writer, []any) error {
+func (u testRenderErrorUI) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
 	return u.err
 }
 
-func (testRenderErrorUI) JawsUpdate(*jaws.Element) {}
+func (testRenderErrorUI) JawsUpdate(elem *jaws.Element) {}
 
 type testRenderErrorCaptureUI struct {
 	err error
 	jid jaws.Jid
 }
 
-func (u *testRenderErrorCaptureUI) JawsRender(e *jaws.Element, _ io.Writer, _ []any) error {
-	u.jid = e.Jid()
+func (u *testRenderErrorCaptureUI) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
+	u.jid = elem.Jid()
 	return u.err
 }
 
-func (*testRenderErrorCaptureUI) JawsUpdate(*jaws.Element) {}
+func (*testRenderErrorCaptureUI) JawsUpdate(elem *jaws.Element) {}
 
 func TestContainerHelperRenderErrorDoesNotLeakFailedChildElement(t *testing.T) {
 	jaws.NextJid = 0

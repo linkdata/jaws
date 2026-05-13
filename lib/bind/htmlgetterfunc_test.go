@@ -11,7 +11,7 @@ import (
 
 func TestHTMLGetterFunc(t *testing.T) {
 	tt := &selfTagger{}
-	hg := HTMLGetterFunc(func(e *jaws.Element) template.HTML {
+	hg := HTMLGetterFunc(func(elem *jaws.Element) template.HTML {
 		return "foo"
 	}, tt)
 	if s := hg.JawsGetHTML(nil); s != "foo" {

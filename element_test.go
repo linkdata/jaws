@@ -26,12 +26,12 @@ type testUi struct {
 	initCalled   int32
 	initError    error
 	s            string
-	renderFn     func(e *Element, w io.Writer, params []any) error
-	updateFn     func(e *Element)
+	renderFn     func(elem *Element, w io.Writer, params []any) error
+	updateFn     func(elem *Element)
 }
 
 // JawsInit implements InitHandler.
-func (tss *testUi) JawsInit(e *Element) (err error) {
+func (tss *testUi) JawsInit(elem *Element) (err error) {
 	atomic.AddInt32(&tss.initCalled, 1)
 	return tss.initError
 }
@@ -39,30 +39,30 @@ func (tss *testUi) JawsInit(e *Element) (err error) {
 var _ UI = (*testUi)(nil)
 var _ InitHandler = (*testUi)(nil)
 
-func (tss *testUi) JawsGet(e *Element) string {
+func (tss *testUi) JawsGet(elem *Element) string {
 	atomic.AddInt32(&tss.getCalled, 1)
 	return tss.s
 }
 
-func (tss *testUi) JawsSet(e *Element, s string) error {
+func (tss *testUi) JawsSet(elem *Element, value string) error {
 	atomic.AddInt32(&tss.setCalled, 1)
-	tss.s = s
+	tss.s = value
 	return nil
 }
 
-func (tss *testUi) JawsRender(e *Element, w io.Writer, params []any) (err error) {
-	e.Tag(tss)
+func (tss *testUi) JawsRender(elem *Element, w io.Writer, params []any) (err error) {
+	elem.Tag(tss)
 	atomic.AddInt32(&tss.renderCalled, 1)
 	if tss.renderFn != nil {
-		err = tss.renderFn(e, w, params)
+		err = tss.renderFn(elem, w, params)
 	}
 	return
 }
 
-func (tss *testUi) JawsUpdate(e *Element) {
+func (tss *testUi) JawsUpdate(elem *Element) {
 	atomic.AddInt32(&tss.updateCalled, 1)
 	if tss.updateFn != nil {
-		tss.updateFn(e)
+		tss.updateFn(elem)
 	}
 }
 
@@ -71,16 +71,16 @@ type testApplyGetterAll struct {
 }
 
 func (a testApplyGetterAll) JawsGetTag(tag.Context) any { return tag.Tag("tg") }
-func (a testApplyGetterAll) JawsClick(*Element, Click) error {
+func (a testApplyGetterAll) JawsClick(elem *Element, click Click) error {
 	return ErrEventUnhandled
 }
-func (a testApplyGetterAll) JawsInput(*Element, string) error {
+func (a testApplyGetterAll) JawsInput(elem *Element, value string) error {
 	return ErrEventUnhandled
 }
-func (a testApplyGetterAll) JawsSet(*Element, string) error {
+func (a testApplyGetterAll) JawsSet(elem *Element, value string) error {
 	return ErrEventUnhandled
 }
-func (a testApplyGetterAll) JawsInit(*Element) error {
+func (a testApplyGetterAll) JawsInit(elem *Element) error {
 	return a.initErr
 }
 
@@ -120,67 +120,67 @@ func TestElement_Queued(t *testing.T) {
 	defer rq.Close()
 
 	tss := &testUi{
-		updateFn: func(e *Element) {
-			e.SetAttr("hidden", "")
-			e.RemoveAttr("hidden")
-			e.SetClass("bah")
-			e.RemoveClass("bah")
-			e.SetValue("foo")
-			e.SetInner("meh")
-			e.Append("<div></div>")
-			e.Remove("some-id")
-			e.Order([]jid.Jid{1, 2})
-			replaceHTML := template.HTML(fmt.Sprintf("<div id=\"%s\"></div>", e.Jid().String()))
-			e.Replace(replaceHTML)
+		updateFn: func(elem *Element) {
+			elem.SetAttr("hidden", "")
+			elem.RemoveAttr("hidden")
+			elem.SetClass("bah")
+			elem.RemoveClass("bah")
+			elem.SetValue("foo")
+			elem.SetInner("meh")
+			elem.Append("<div></div>")
+			elem.Remove("some-id")
+			elem.Order([]jid.Jid{1, 2})
+			replaceHTML := template.HTML(fmt.Sprintf("<div id=\"%s\"></div>", elem.Jid().String()))
+			elem.Replace(replaceHTML)
 			th.Equal(rq.wsQueue, []wire.WsMsg{
 				{
 					Data: "hidden\n",
-					Jid:  e.jid,
+					Jid:  elem.jid,
 					What: what.SAttr,
 				},
 				{
 					Data: "hidden",
-					Jid:  e.jid,
+					Jid:  elem.jid,
 					What: what.RAttr,
 				},
 				{
 					Data: "bah",
-					Jid:  e.jid,
+					Jid:  elem.jid,
 					What: what.SClass,
 				},
 				{
 					Data: "bah",
-					Jid:  e.jid,
+					Jid:  elem.jid,
 					What: what.RClass,
 				},
 				{
 					Data: "foo",
-					Jid:  e.jid,
+					Jid:  elem.jid,
 					What: what.Value,
 				},
 				{
 					Data: "meh",
-					Jid:  e.jid,
+					Jid:  elem.jid,
 					What: what.Inner,
 				},
 				{
 					Data: "<div></div>",
-					Jid:  e.jid,
+					Jid:  elem.jid,
 					What: what.Append,
 				},
 				{
 					Data: "some-id",
-					Jid:  e.jid,
+					Jid:  elem.jid,
 					What: what.Remove,
 				},
 				{
 					Data: fmt.Sprintf("%s %s", Jid(1).String(), Jid(2).String()),
-					Jid:  e.jid,
+					Jid:  elem.jid,
 					What: what.Order,
 				},
 				{
 					Data: string(replaceHTML),
-					Jid:  e.jid,
+					Jid:  elem.jid,
 					What: what.Replace,
 				},
 			})
@@ -346,7 +346,7 @@ func TestElement_ApplyGetterDebugBranches(t *testing.T) {
 type testClickHandler struct {
 }
 
-func (tch testClickHandler) JawsClick(e *Element, click Click) (err error) {
+func (tch testClickHandler) JawsClick(elem *Element, click Click) (err error) {
 	return nil
 }
 
@@ -356,7 +356,7 @@ type testNonComparableClickHandler struct {
 	names []string
 }
 
-func (tch testNonComparableClickHandler) JawsClick(e *Element, click Click) error {
+func (tch testNonComparableClickHandler) JawsClick(elem *Element, click Click) error {
 	return nil
 }
 
@@ -364,7 +364,7 @@ var _ ClickHandler = testNonComparableClickHandler{}
 
 type testEventHandler struct{}
 
-func (testEventHandler) JawsInput(*Element, string) error {
+func (testEventHandler) JawsInput(elem *Element, value string) error {
 	return nil
 }
 
@@ -374,7 +374,7 @@ type testNonComparableEventHandler struct {
 	names []string
 }
 
-func (testNonComparableEventHandler) JawsInput(*Element, string) error {
+func (testNonComparableEventHandler) JawsInput(elem *Element, value string) error {
 	return nil
 }
 
@@ -382,7 +382,7 @@ var _ InputHandler = testNonComparableEventHandler{}
 
 type testContextMenuHandler struct{}
 
-func (testContextMenuHandler) JawsContextMenu(*Element, Click) error {
+func (testContextMenuHandler) JawsContextMenu(elem *Element, click Click) error {
 	return nil
 }
 
@@ -392,7 +392,7 @@ type testNonComparableContextMenuHandler struct {
 	names []string
 }
 
-func (testNonComparableContextMenuHandler) JawsContextMenu(*Element, Click) error {
+func (testNonComparableContextMenuHandler) JawsContextMenu(elem *Element, click Click) error {
 	return nil
 }
 
@@ -402,7 +402,7 @@ type testInitialHTMLAttrHandler struct {
 	attr template.HTMLAttr
 }
 
-func (h testInitialHTMLAttrHandler) JawsInitialHTMLAttr(*Element) (s template.HTMLAttr) {
+func (h testInitialHTMLAttrHandler) JawsInitialHTMLAttr(elem *Element) (s template.HTMLAttr) {
 	s = h.attr
 	return
 }
@@ -414,18 +414,18 @@ type testStringSetterWithInitialHTMLAttr struct {
 	attr template.HTMLAttr
 }
 
-func (s *testStringSetterWithInitialHTMLAttr) JawsGet(*Element) (retv string) {
-	retv = s.s
+func (s *testStringSetterWithInitialHTMLAttr) JawsGet(elem *Element) (value string) {
+	value = s.s
 	return
 }
 
-func (s *testStringSetterWithInitialHTMLAttr) JawsSet(_ *Element, next string) (err error) {
-	s.s = next
+func (s *testStringSetterWithInitialHTMLAttr) JawsSet(elem *Element, value string) (err error) {
+	s.s = value
 	return
 }
 
-func (s *testStringSetterWithInitialHTMLAttr) JawsInitialHTMLAttr(*Element) (retv template.HTMLAttr) {
-	retv = s.attr
+func (s *testStringSetterWithInitialHTMLAttr) JawsInitialHTMLAttr(elem *Element) (attr template.HTMLAttr) {
+	attr = s.attr
 	return
 }
 
@@ -434,15 +434,15 @@ type testClickAndInitialHTMLAttr struct {
 	attr   template.HTMLAttr
 }
 
-func (h testClickAndInitialHTMLAttr) JawsClick(*Element, Click) error {
+func (h testClickAndInitialHTMLAttr) JawsClick(elem *Element, click Click) error {
 	if h.called != nil {
 		*h.called = true
 	}
 	return nil
 }
 
-func (h testClickAndInitialHTMLAttr) JawsInitialHTMLAttr(*Element) (retv template.HTMLAttr) {
-	retv = h.attr
+func (h testClickAndInitialHTMLAttr) JawsInitialHTMLAttr(elem *Element) (attr template.HTMLAttr) {
+	attr = h.attr
 	return
 }
 
@@ -453,8 +453,8 @@ type testUnhashableUI struct {
 	m map[string]int
 }
 
-func (testUnhashableUI) JawsRender(*Element, io.Writer, []any) error { return nil }
-func (testUnhashableUI) JawsUpdate(*Element)                         {}
+func (testUnhashableUI) JawsRender(elem *Element, w io.Writer, params []any) error { return nil }
+func (testUnhashableUI) JawsUpdate(elem *Element)                                  {}
 
 func TestElement_ApplyGetter(t *testing.T) {
 	is := newTestHelper(t)

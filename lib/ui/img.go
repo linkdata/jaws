@@ -17,19 +17,19 @@ type Img struct{ bind.Getter[string] }
 func NewImg(g bind.Getter[string]) *Img { return &Img{Getter: g} }
 
 // JawsRender renders ui as an HTML img element.
-func (u *Img) JawsRender(e *jaws.Element, w io.Writer, params []any) (err error) {
+func (u *Img) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	var getterAttrs []template.HTMLAttr
-	if _, getterAttrs, err = e.ApplyGetter(u.Getter); err == nil {
-		srcAttr := template.HTMLAttr("src=" + strconv.Quote(u.JawsGet(e))) // #nosec G203
-		attrs := append(e.ApplyParams(params), getterAttrs...)
+	if _, getterAttrs, err = elem.ApplyGetter(u.Getter); err == nil {
+		srcAttr := template.HTMLAttr("src=" + strconv.Quote(u.JawsGet(elem))) // #nosec G203
+		attrs := append(elem.ApplyParams(params), getterAttrs...)
 		attrs = append(attrs, srcAttr)
-		err = htmlio.WriteHTMLInner(w, e.Jid(), "img", "", "", attrs...)
+		err = htmlio.WriteHTMLInner(w, elem.Jid(), "img", "", "", attrs...)
 	}
 	return
 }
 
 // JawsUpdate updates the src attribute.
-func (u *Img) JawsUpdate(e *jaws.Element) { e.SetAttr("src", u.JawsGet(e)) }
+func (u *Img) JawsUpdate(elem *jaws.Element) { elem.SetAttr("src", u.JawsGet(elem)) }
 
 // Img renders an HTML img element.
 func (rw RequestWriter) Img(imageSrc any, params ...any) error {

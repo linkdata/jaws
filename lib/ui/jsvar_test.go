@@ -28,8 +28,8 @@ type jsVarPathHooks struct {
 	pathSetCall int
 }
 
-func (d *jsVarPathHooks) JawsSetPath(_ *jaws.Element, _ string, v any) error {
-	s := fmt.Sprint(v)
+func (d *jsVarPathHooks) JawsSetPath(elem *jaws.Element, _ string, value any) error {
+	s := fmt.Sprint(value)
 	if d.Value == s {
 		return jaws.ErrValueUnchanged
 	}
@@ -38,13 +38,13 @@ func (d *jsVarPathHooks) JawsSetPath(_ *jaws.Element, _ string, v any) error {
 	return nil
 }
 
-func (d *jsVarPathHooks) JawsPathSet(*jaws.Element, string, any) {
+func (d *jsVarPathHooks) JawsPathSet(elem *jaws.Element, jsPath string, value any) {
 	d.pathSetCall++
 }
 
 type testJsVarMaker struct{}
 
-func (testJsVarMaker) JawsMakeJsVar(*jaws.Request) (IsJsVar, error) {
+func (testJsVarMaker) JawsMakeJsVar(rq *jaws.Request) (IsJsVar, error) {
 	var mu sync.Mutex
 	v := jsVarData{Text: "maker", Num: 1}
 	return NewJsVar(&mu, &v), nil
@@ -52,7 +52,7 @@ func (testJsVarMaker) JawsMakeJsVar(*jaws.Request) (IsJsVar, error) {
 
 type errorJsVarMaker struct{}
 
-func (errorJsVarMaker) JawsMakeJsVar(*jaws.Request) (IsJsVar, error) {
+func (errorJsVarMaker) JawsMakeJsVar(rq *jaws.Request) (IsJsVar, error) {
 	return nil, errors.New("maker error")
 }
 

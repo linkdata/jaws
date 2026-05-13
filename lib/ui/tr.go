@@ -15,8 +15,8 @@ type Tr struct{ HTMLInner }
 func NewTr(innerHTML any) *Tr { return &Tr{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }
 
 // JawsRender renders ui as an HTML table row.
-func (u *Tr) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	return u.renderInner(e, w, "tr", "", params)
+func (u *Tr) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
+	return u.renderInner(elem, w, "tr", "", params)
 }
 
 // Tr renders an HTML table row.

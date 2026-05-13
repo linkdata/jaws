@@ -18,7 +18,7 @@ type setterReadOnly[T comparable] struct {
 	Getter[T]
 }
 
-func (setterReadOnly[T]) JawsSet(*jaws.Element, T) error {
+func (setterReadOnly[T]) JawsSet(elem *jaws.Element, value T) error {
 	return ErrValueNotSettable
 }
 
@@ -30,11 +30,11 @@ type setterStatic[T comparable] struct {
 	v T
 }
 
-func (setterStatic[T]) JawsSet(*jaws.Element, T) error {
+func (setterStatic[T]) JawsSet(elem *jaws.Element, value T) error {
 	return ErrValueNotSettable
 }
 
-func (s setterStatic[T]) JawsGet(*jaws.Element) T {
+func (s setterStatic[T]) JawsGet(elem *jaws.Element) T {
 	return s.v
 }
 
@@ -48,8 +48,8 @@ func (s setterStatic[T]) JawsGetTag(tag.Context) any {
 // static value of type T. Getter and static adapters are read-only and return
 // [ErrValueNotSettable] from [Setter.JawsSet]. MakeSetter panics for any other
 // type.
-func MakeSetter[T comparable](v any) Setter[T] {
-	switch v := v.(type) {
+func MakeSetter[T comparable](value any) Setter[T] {
+	switch v := value.(type) {
 	case Setter[T]:
 		return v
 	case Getter[T]:
@@ -58,5 +58,5 @@ func MakeSetter[T comparable](v any) Setter[T] {
 		return setterStatic[T]{v}
 	}
 	var blank T
-	panic(fmt.Errorf("expected jaws.Setter[%T], jaws.Getter[%T] or %T not %T", blank, blank, blank, v))
+	panic(fmt.Errorf("expected jaws.Setter[%T], jaws.Getter[%T] or %T not %T", blank, blank, blank, value))
 }

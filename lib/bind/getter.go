@@ -21,11 +21,11 @@ type getterStatic[T comparable] struct {
 	v T
 }
 
-func (getterStatic[T]) JawsSet(*jaws.Element, T) error {
+func (getterStatic[T]) JawsSet(elem *jaws.Element, value T) error {
 	return ErrValueNotSettable
 }
 
-func (s getterStatic[T]) JawsGet(*jaws.Element) T {
+func (s getterStatic[T]) JawsGet(elem *jaws.Element) T {
 	return s.v
 }
 
@@ -33,21 +33,21 @@ func (s getterStatic[T]) JawsGetTag(tag.Context) any {
 	return nil
 }
 
-func makeStaticGetter[T comparable](v T) Getter[T] {
-	return getterStatic[T]{v}
+func makeStaticGetter[T comparable](value T) Getter[T] {
+	return getterStatic[T]{value}
 }
 
 // MakeGetter returns v as a [Getter].
 //
 // v may be a [Getter] of the same type or a static value of type T. It panics
 // for any other type.
-func MakeGetter[T comparable](v any) Getter[T] {
-	switch v := v.(type) {
+func MakeGetter[T comparable](value any) Getter[T] {
+	switch v := value.(type) {
 	case Getter[T]:
 		return v
 	case T:
 		return makeStaticGetter(v)
 	}
 	var blank T
-	panic(fmt.Errorf("expected jaws.Getter[%T] or %T not %T", blank, blank, v))
+	panic(fmt.Errorf("expected jaws.Getter[%T] or %T not %T", blank, blank, value))
 }

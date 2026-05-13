@@ -8,14 +8,14 @@ import (
 )
 
 type htmlGetterFunc struct {
-	fn   func(*jaws.Element) template.HTML
+	fn   func(elem *jaws.Element) template.HTML
 	tags []any
 }
 
 var _ tag.TagGetter = &htmlGetterFunc{}
 
-func (g *htmlGetterFunc) JawsGetHTML(e *jaws.Element) template.HTML {
-	return g.fn(e)
+func (g *htmlGetterFunc) JawsGetHTML(elem *jaws.Element) template.HTML {
+	return g.fn(elem)
 }
 
 func (g *htmlGetterFunc) JawsGetTag(tag.Context) any {

@@ -10,7 +10,7 @@ import (
 
 func TestStringGetterFunc(t *testing.T) {
 	tt := &selfTagger{}
-	sg := StringGetterFunc(func(e *jaws.Element) string {
+	sg := StringGetterFunc(func(elem *jaws.Element) string {
 		return "foo"
 	}, tt)
 	if s := sg.JawsGet(nil); s != "foo" {

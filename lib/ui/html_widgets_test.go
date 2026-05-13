@@ -72,9 +72,9 @@ type initFailGetter struct {
 	err error
 }
 
-func (g *initFailGetter) JawsGetHTML(*jaws.Element) template.HTML { return "x" }
-func (g *initFailGetter) JawsGetTag(tag.Context) any              { return g }
-func (g *initFailGetter) JawsInit(*jaws.Element) error            { return g.err }
+func (g *initFailGetter) JawsGetHTML(elem *jaws.Element) template.HTML { return "x" }
+func (g *initFailGetter) JawsGetTag(tag.Context) any                   { return g }
+func (g *initFailGetter) JawsInit(elem *jaws.Element) error            { return g.err }
 
 func TestImg_RenderAndUpdate(t *testing.T) {
 	_, rq := newCoreRequest(t)

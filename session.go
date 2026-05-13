@@ -91,10 +91,10 @@ func (sess *Session) Jaws() (jw *Jaws) {
 
 // Get returns the value associated with the key, or nil.
 // It is safe to call on a nil [Session].
-func (sess *Session) Get(key string) (val any) {
+func (sess *Session) Get(key string) (value any) {
 	if sess != nil {
 		sess.mu.RLock()
-		val = sess.data[key]
+		value = sess.data[key]
 		sess.mu.RUnlock()
 	}
 	return
@@ -103,13 +103,13 @@ func (sess *Session) Get(key string) (val any) {
 // Set sets a value to be associated with the key.
 // If value is nil, the key is removed from the session.
 // It is safe to call on a nil [Session].
-func (sess *Session) Set(key string, val any) {
+func (sess *Session) Set(key string, value any) {
 	if sess != nil {
 		sess.mu.Lock()
-		if val == nil {
+		if value == nil {
 			delete(sess.data, key)
 		} else {
-			sess.data[key] = val
+			sess.data[key] = value
 		}
 		sess.mu.Unlock()
 	}
@@ -209,10 +209,10 @@ func (sess *Session) Clear() {
 
 // Requests returns a list of the [Request] values using this [Session].
 // It is safe to call on a nil [Session].
-func (sess *Session) Requests() (rl []*Request) {
+func (sess *Session) Requests() (requests []*Request) {
 	if sess != nil {
 		sess.mu.RLock()
-		rl = append(rl, sess.requests...)
+		requests = append(requests, sess.requests...)
 		sess.mu.RUnlock()
 	}
 	return

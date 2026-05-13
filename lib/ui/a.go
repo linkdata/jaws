@@ -15,8 +15,8 @@ type A struct{ HTMLInner }
 func NewA(innerHTML any) *A { return &A{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }
 
 // JawsRender renders ui as an HTML anchor element.
-func (u *A) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	return u.renderInner(e, w, "a", "", params)
+func (u *A) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
+	return u.renderInner(elem, w, "a", "", params)
 }
 
 // A renders an HTML anchor element.

@@ -260,26 +260,26 @@ func MakeID() string {
 //
 // Automatic timeout handling is performed by [Jaws.ServeWithTimeout]. The default
 // [Jaws.Serve] helper uses a 10-second timeout.
-func (jw *Jaws) NewRequest(hr *http.Request) (rq *Request) {
+func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	for rq == nil {
 		jawsKey := jw.nonZeroRandomLocked()
 		if _, ok := jw.requests[jawsKey]; !ok {
-			rq = jw.getRequestLocked(jawsKey, hr)
+			rq = jw.getRequestLocked(jawsKey, r)
 			jw.requests[jawsKey] = rq
 		}
 	}
 	return
 }
 
-func (jw *Jaws) nonZeroRandomLocked() (val uint64) {
+func (jw *Jaws) nonZeroRandomLocked() (value uint64) {
 	random := make([]byte, 8)
-	for val == 0 {
+	for value == 0 {
 		if _, err := io.ReadFull(jw.kg, random); err != nil {
 			panic(err)
 		}
-		val = binary.LittleEndian.Uint64(random)
+		value = binary.LittleEndian.Uint64(random)
 	}
 	return
 }
@@ -293,12 +293,12 @@ func (jw *Jaws) nonZeroRandomLocked() (val uint64) {
 //
 // Returns nil if the key was not found or the IP doesn't match, in which
 // case you should return an HTTP "404 Not Found" status.
-func (jw *Jaws) UseRequest(jawsKey uint64, hr *http.Request) (rq *Request) {
+func (jw *Jaws) UseRequest(jawsKey uint64, r *http.Request) (rq *Request) {
 	if jawsKey != 0 {
 		var err error
 		jw.mu.Lock()
 		if waitingRq, ok := jw.requests[jawsKey]; ok {
-			if err = waitingRq.claim(hr); err == nil {
+			if err = waitingRq.claim(r); err == nil {
 				rq = waitingRq
 			}
 		}
@@ -317,21 +317,21 @@ func (jw *Jaws) SessionCount() (n int) {
 }
 
 // Sessions returns a list of all active sessions, which may be nil.
-func (jw *Jaws) Sessions() (sl []*Session) {
+func (jw *Jaws) Sessions() (sessions []*Session) {
 	jw.mu.RLock()
 	if n := len(jw.sessions); n > 0 {
-		sl = make([]*Session, 0, n)
+		sessions = make([]*Session, 0, n)
 		for _, sess := range jw.sessions {
-			sl = append(sl, sess)
+			sessions = append(sessions, sess)
 		}
 	}
 	jw.mu.RUnlock()
 	return
 }
 
-func (jw *Jaws) getSessionLocked(sessIds []uint64, remoteIP netip.Addr) *Session {
-	for _, sessId := range sessIds {
-		if sess, ok := jw.sessions[sessId]; ok && equalIP(remoteIP, sess.remoteIP) {
+func (jw *Jaws) getSessionLocked(sessionIDs []uint64, remoteIP netip.Addr) *Session {
+	for _, sessionID := range sessionIDs {
+		if sess, ok := jw.sessions[sessionID]; ok && equalIP(remoteIP, sess.remoteIP) {
 			if !sess.isDead() {
 				return sess
 			}
@@ -361,8 +361,8 @@ func getCookieSessionsIds(h http.Header, wanted string) (cookies []uint64) {
 						if len(val) > 1 && val[0] == '"' && val[len(val)-1] == '"' {
 							val = val[1 : len(val)-1]
 						}
-						if sessId := assets.JawsKeyValue(val); sessId != 0 {
-							cookies = append(cookies, sessId)
+						if sessionID := assets.JawsKeyValue(val); sessionID != 0 {
+							cookies = append(cookies, sessionID)
 						}
 					}
 				}
@@ -373,12 +373,12 @@ func getCookieSessionsIds(h http.Header, wanted string) (cookies []uint64) {
 }
 
 // GetSession returns the [Session] associated with the given [http.Request], or nil.
-func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
-	if hr != nil {
-		if sessIds := getCookieSessionsIds(hr.Header, jw.CookieName); len(sessIds) > 0 {
-			remoteIP := parseIP(hr.RemoteAddr)
+func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
+	if r != nil {
+		if sessionIDs := getCookieSessionsIds(r.Header, jw.CookieName); len(sessionIDs) > 0 {
+			remoteIP := parseIP(r.RemoteAddr)
 			jw.mu.RLock()
-			sess = jw.getSessionLocked(sessIds, remoteIP)
+			sess = jw.getSessionLocked(sessionIDs, remoteIP)
 			jw.mu.RUnlock()
 		}
 	}
@@ -393,30 +393,30 @@ func (jw *Jaws) GetSession(hr *http.Request) (sess *Session) {
 //
 // Subsequent [Request] values created with [Jaws.NewRequest] that have the
 // cookie set and originate from the same IP will be able to access the [Session].
-func (jw *Jaws) NewSession(w http.ResponseWriter, hr *http.Request) (sess *Session) {
-	if hr != nil {
-		if oldSess := jw.GetSession(hr); oldSess != nil {
+func (jw *Jaws) NewSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
+	if r != nil {
+		if oldSess := jw.GetSession(r); oldSess != nil {
 			oldSess.Clear()
 			oldSess.Close()
 		}
-		sess = jw.newSession(w, hr)
+		sess = jw.newSession(w, r)
 	}
 	return
 }
 
-func (jw *Jaws) newSession(w http.ResponseWriter, hr *http.Request) (sess *Session) {
-	secure := requestIsSecure(hr)
+func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
+	secure := requestIsSecure(r)
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	for sess == nil {
 		sessionID := jw.nonZeroRandomLocked()
 		if _, ok := jw.sessions[sessionID]; !ok {
-			sess = newSession(jw, sessionID, parseIP(hr.RemoteAddr), secure)
+			sess = newSession(jw, sessionID, parseIP(r.RemoteAddr), secure)
 			jw.sessions[sessionID] = sess
 			if w != nil {
 				http.SetCookie(w, &sess.cookie)
 			}
-			hr.AddCookie(&sess.cookie)
+			r.AddCookie(&sess.cookie)
 		}
 	}
 	return
@@ -598,10 +598,10 @@ func (jw *Jaws) Redirect(url string) {
 //
 // The lvl argument should be one of Bootstrap's alert levels:
 // primary, secondary, success, danger, warning, info, light or dark.
-func (jw *Jaws) Alert(lvl, msg string) {
+func (jw *Jaws) Alert(level, msg string) {
 	jw.Broadcast(wire.Message{
 		What: what.Alert,
-		Data: lvl + "\n" + msg,
+		Data: level + "\n" + msg,
 	})
 }
 
@@ -762,8 +762,8 @@ func parseIP(remoteAddr string) (ip netip.Addr) {
 	return
 }
 
-func requestIsSecure(hr *http.Request) (yes bool) {
-	yes = secureheaders.RequestIsSecure(hr, true)
+func requestIsSecure(r *http.Request) (yes bool) {
+	yes = secureheaders.RequestIsSecure(r, true)
 	return
 }
 
@@ -785,11 +785,11 @@ func (jw *Jaws) SetInner(target any, innerHTML template.HTML) {
 
 // SetAttr sends a request to replace the given attribute value in
 // all HTML elements matching target.
-func (jw *Jaws) SetAttr(target any, attr, val string) {
+func (jw *Jaws) SetAttr(target any, attr, value string) {
 	jw.Broadcast(wire.Message{
 		Dest: target,
 		What: what.SAttr,
-		Data: attr + "\n" + val,
+		Data: attr + "\n" + value,
 	})
 }
 
@@ -825,11 +825,11 @@ func (jw *Jaws) RemoveClass(target any, cls string) {
 
 // SetValue sends a request to set the HTML "value" attribute of
 // all HTML elements matching target.
-func (jw *Jaws) SetValue(target any, val string) {
+func (jw *Jaws) SetValue(target any, value string) {
 	jw.Broadcast(wire.Message{
 		Dest: target,
 		What: what.Value,
-		Data: val,
+		Data: value,
 	})
 }
 
@@ -894,15 +894,15 @@ func (jw *Jaws) JsCall(tagValue any, jsfunc, jsonstr string) {
 	})
 }
 
-func (jw *Jaws) getRequestLocked(jawsKey uint64, hr *http.Request) (rq *Request) {
+func (jw *Jaws) getRequestLocked(jawsKey uint64, r *http.Request) (rq *Request) {
 	rq = jw.reqPool.Get().(*Request)
 	rq.JawsKey = jawsKey
 	rq.lastWrite = time.Now()
-	rq.initial = hr
+	rq.initial = r
 	rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
-	if hr != nil {
-		rq.remoteIP = parseIP(hr.RemoteAddr)
-		if sess := jw.getSessionLocked(getCookieSessionsIds(hr.Header, jw.CookieName), rq.remoteIP); sess != nil {
+	if r != nil {
+		rq.remoteIP = parseIP(r.RemoteAddr)
+		if sess := jw.getSessionLocked(getCookieSessionsIds(r.Header, jw.CookieName), rq.remoteIP); sess != nil {
 			sess.addRequest(rq)
 			rq.session = sess
 		}
@@ -979,11 +979,11 @@ type sessioner struct {
 	h  http.Handler
 }
 
-func (sess sessioner) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
+func (sess sessioner) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if sess.jw.GetSession(r) == nil {
-		sess.jw.newSession(wr, r)
+		sess.jw.newSession(w, r)
 	}
-	sess.h.ServeHTTP(wr, r)
+	sess.h.ServeHTTP(w, r)
 }
 
 // Session returns an [http.Handler] that ensures a JaWS [Session] exists before invoking h.

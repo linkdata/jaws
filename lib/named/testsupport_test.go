@@ -25,6 +25,6 @@ func newCoreRequest(t *testing.T) (*jaws.Jaws, *jaws.Request) {
 
 type noopUI struct{}
 
-func (noopUI) JawsRender(*jaws.Element, io.Writer, []any) error { return nil }
+func (noopUI) JawsRender(elem *jaws.Element, w io.Writer, params []any) error { return nil }
 
-func (noopUI) JawsUpdate(*jaws.Element) {}
+func (noopUI) JawsUpdate(elem *jaws.Element) {}

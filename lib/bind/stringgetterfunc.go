@@ -6,12 +6,12 @@ import (
 )
 
 type stringGetterFunc struct {
-	fn   func(*jaws.Element) string
+	fn   func(elem *jaws.Element) string
 	tags []any
 }
 
-func (g *stringGetterFunc) JawsGet(e *jaws.Element) string {
-	return g.fn(e)
+func (g *stringGetterFunc) JawsGet(elem *jaws.Element) string {
+	return g.fn(elem)
 }
 
 func (g *stringGetterFunc) JawsGetTag(tag.Context) any {

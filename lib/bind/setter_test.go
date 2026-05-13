@@ -11,7 +11,7 @@ const testStringGetterText = "<span>"
 
 type testGetterString struct{}
 
-func (testGetterString) JawsGet(*jaws.Element) string {
+func (testGetterString) JawsGet(elem *jaws.Element) string {
 	return testStringGetterText
 }
 

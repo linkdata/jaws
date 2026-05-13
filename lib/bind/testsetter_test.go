@@ -16,24 +16,24 @@ type testSetter[T comparable] struct {
 	getCalled chan struct{}
 }
 
-func newTestSetter[T comparable](val T) *testSetter[T] {
+func newTestSetter[T comparable](value T) *testSetter[T] {
 	return &testSetter[T]{
-		val:       val,
+		val:       value,
 		setCalled: make(chan struct{}),
 		getCalled: make(chan struct{}),
 	}
 }
 
-func (ts *testSetter[T]) Get() (val T) {
+func (ts *testSetter[T]) Get() (value T) {
 	ts.mu.Lock()
-	val = ts.val
+	value = ts.val
 	ts.mu.Unlock()
 	return
 }
 
-func (ts *testSetter[T]) Set(val T) {
+func (ts *testSetter[T]) Set(value T) {
 	ts.mu.Lock()
-	ts.val = val
+	ts.val = value
 	ts.mu.Unlock()
 }
 
@@ -63,18 +63,18 @@ func (ts *testSetter[T]) GetCount() (n int) {
 	return
 }
 
-func (ts *testSetter[T]) JawsGet(*jaws.Element) (val T) {
+func (ts *testSetter[T]) JawsGet(elem *jaws.Element) (value T) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.getCount++
 	if ts.getCount == 1 {
 		close(ts.getCalled)
 	}
-	val = ts.val
+	value = ts.val
 	return
 }
 
-func (ts *testSetter[T]) JawsSet(_ *jaws.Element, val T) (err error) {
+func (ts *testSetter[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.setCount++
@@ -82,37 +82,37 @@ func (ts *testSetter[T]) JawsSet(_ *jaws.Element, val T) (err error) {
 		close(ts.setCalled)
 	}
 	if err = ts.err; err == nil {
-		if ts.val == val {
+		if ts.val == value {
 			err = jaws.ErrValueUnchanged
 		}
-		ts.val = val
+		ts.val = value
 	}
 	return
 }
 
-func (ts *testSetter[string]) JawsGetString(*jaws.Element) (val string) {
+func (ts *testSetter[string]) JawsGetString(elem *jaws.Element) (value string) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.getCount++
 	if ts.getCount == 1 {
 		close(ts.getCalled)
 	}
-	val = ts.val
+	value = ts.val
 	return
 }
 
-func (ts *testSetter[any]) JawsGetAny(*jaws.Element) (val any) {
+func (ts *testSetter[any]) JawsGetAny(elem *jaws.Element) (value any) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.getCount++
 	if ts.getCount == 1 {
 		close(ts.getCalled)
 	}
-	val = ts.val
+	value = ts.val
 	return
 }
 
-func (ts *testSetter[any]) JawsSetAny(_ *jaws.Element, val any) (err error) {
+func (ts *testSetter[any]) JawsSetAny(elem *jaws.Element, value any) (err error) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.setCount++
@@ -120,22 +120,22 @@ func (ts *testSetter[any]) JawsSetAny(_ *jaws.Element, val any) (err error) {
 		close(ts.setCalled)
 	}
 	if err = ts.err; err == nil {
-		if ts.val == val {
+		if ts.val == value {
 			err = jaws.ErrValueUnchanged
 		}
-		ts.val = val
+		ts.val = value
 	}
 	return
 }
 
-func (ts *testSetter[T]) JawsGetHTML(*jaws.Element) (val T) {
+func (ts *testSetter[T]) JawsGetHTML(elem *jaws.Element) (value T) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.getCount++
 	if ts.getCount == 1 {
 		close(ts.getCalled)
 	}
-	val = ts.val
+	value = ts.val
 	return
 }
 

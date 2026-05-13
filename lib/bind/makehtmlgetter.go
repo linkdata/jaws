@@ -11,7 +11,7 @@ import (
 
 type htmlGetter struct{ v template.HTML }
 
-func (g htmlGetter) JawsGetHTML(e *jaws.Element) template.HTML {
+func (g htmlGetter) JawsGetHTML(elem *jaws.Element) template.HTML {
 	return g.v
 }
 
@@ -21,7 +21,7 @@ func (g htmlGetter) JawsGetTag(tag.Context) any {
 
 type htmlStringerGetter struct{ sg fmt.Stringer }
 
-func (g htmlStringerGetter) JawsGetHTML(e *jaws.Element) template.HTML {
+func (g htmlStringerGetter) JawsGetHTML(elem *jaws.Element) template.HTML {
 	return template.HTML(html.EscapeString(g.sg.String())) // #nosec G203
 }
 
@@ -31,14 +31,14 @@ func (g htmlStringerGetter) JawsGetTag(tag.Context) any {
 
 type htmlBinderString struct{ Binder[string] }
 
-func (g htmlBinderString) JawsGetHTML(e *jaws.Element) template.HTML {
-	return template.HTML(html.EscapeString(g.Binder.JawsGet(e))) // #nosec G203
+func (g htmlBinderString) JawsGetHTML(elem *jaws.Element) template.HTML {
+	return template.HTML(html.EscapeString(g.Binder.JawsGet(elem))) // #nosec G203
 }
 
 type htmlGetterString struct{ sg Getter[string] }
 
-func (g htmlGetterString) JawsGetHTML(e *jaws.Element) template.HTML {
-	return template.HTML(html.EscapeString(g.sg.JawsGet(e))) // #nosec G203
+func (g htmlGetterString) JawsGetHTML(elem *jaws.Element) template.HTML {
+	return template.HTML(html.EscapeString(g.sg.JawsGet(elem))) // #nosec G203
 }
 
 func (g htmlGetterString) JawsGetTag(tag.Context) any {
@@ -60,8 +60,8 @@ func (g htmlGetterString) JawsGetTag(tag.Context) any {
 // Never pass untrusted user input as a plain string; use [template.HTML] to signal
 // that the content is trusted, or wrap user input in a [Getter] or [fmt.Stringer]
 // so it will be escaped automatically.
-func MakeHTMLGetter(v any) HTMLGetter {
-	switch v := v.(type) {
+func MakeHTMLGetter(value any) HTMLGetter {
+	switch v := value.(type) {
 	case HTMLGetter:
 		return v
 	case template.HTML:

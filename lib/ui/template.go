@@ -30,8 +30,8 @@ var _ jaws.ContextMenuHandler = Template{} // statically ensure interface is def
 var _ jaws.InputHandler = Template{}       // statically ensure interface is defined
 
 // String returns a debug representation of t.
-func (t Template) String() string {
-	return fmt.Sprintf("{%q, %s}", t.Name, tag.TagString(t.Dot))
+func (tmpl Template) String() string {
+	return fmt.Sprintf("{%q, %s}", tmpl.Name, tag.TagString(tmpl.Dot))
 }
 
 func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
@@ -119,31 +119,31 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
 }
 
 // JawsRender renders t through the request's configured template lookupers.
-func (t Template) JawsRender(e *jaws.Element, wr io.Writer, params []any) (err error) {
-	var expandedtags []any
-	if expandedtags, err = tag.TagExpand(e.Request, t.Dot); err == nil {
-		e.Request.TagExpanded(e, expandedtags)
+func (tmpl Template) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
+	var expandedTags []any
+	if expandedTags, err = tag.TagExpand(elem.Request, tmpl.Dot); err == nil {
+		elem.Request.TagExpanded(elem, expandedTags)
 		tags, handlers, attrs := jaws.ParseParams(params)
-		e.Tag(tags...)
-		e.AddHandlers(handlers...)
+		elem.Tag(tags...)
+		elem.AddHandlers(handlers...)
 		attrstr := template.HTMLAttr(strings.Join(attrs, " ")) // #nosec G203
 		var auth jaws.Auth
 		auth = jaws.DefaultAuth{}
-		if f := e.Request.Jaws.MakeAuth; f != nil {
-			auth = f(e.Request)
+		if f := elem.Request.Jaws.MakeAuth; f != nil {
+			auth = f(elem.Request)
 		}
-		err = errMissingTemplate(t.Name)
-		if tmpl := e.Request.Jaws.LookupTemplate(t.Name); tmpl != nil {
-			err = tmpl.Execute(wr, With{
-				Element:       e,
-				RequestWriter: RequestWriter{Request: e.Request, Writer: wr},
-				Dot:           t.Dot,
+		err = errMissingTemplate(tmpl.Name)
+		if lookedUp := elem.Request.Jaws.LookupTemplate(tmpl.Name); lookedUp != nil {
+			err = lookedUp.Execute(w, With{
+				Element:       elem,
+				RequestWriter: RequestWriter{Request: elem.Request, Writer: w},
+				Dot:           tmpl.Dot,
 				Attrs:         attrstr,
 				Auth:          auth,
 			})
-			if deadlock.Debug && e.Jaws.Logger != nil {
-				if !findJidOrJsOrHTMLNode(tmpl.Tree.Root) {
-					e.Jaws.Logger.Warn("jaws: template has no Jid reference", "template", t.Name)
+			if deadlock.Debug && elem.Jaws.Logger != nil {
+				if !findJidOrJsOrHTMLNode(lookedUp.Tree.Root) {
+					elem.Jaws.Logger.Warn("jaws: template has no Jid reference", "template", tmpl.Name)
 				}
 			}
 		}
@@ -152,36 +152,36 @@ func (t Template) JawsRender(e *jaws.Element, wr io.Writer, params []any) (err e
 }
 
 // JawsUpdate delegates updates to t.Dot when it implements [jaws.Updater].
-func (t Template) JawsUpdate(e *jaws.Element) {
-	if dot, ok := t.Dot.(jaws.Updater); ok {
-		dot.JawsUpdate(e)
+func (tmpl Template) JawsUpdate(elem *jaws.Element) {
+	if dot, ok := tmpl.Dot.(jaws.Updater); ok {
+		dot.JawsUpdate(elem)
 	}
 }
 
 // JawsClick delegates click events to t.Dot when it implements [jaws.ClickHandler].
-func (t Template) JawsClick(e *jaws.Element, click jaws.Click) (err error) {
+func (tmpl Template) JawsClick(elem *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
-	if h, ok := t.Dot.(jaws.ClickHandler); ok {
-		err = h.JawsClick(e, click)
+	if h, ok := tmpl.Dot.(jaws.ClickHandler); ok {
+		err = h.JawsClick(elem, click)
 	}
 	return
 }
 
 // JawsContextMenu delegates context-menu events to t.Dot when it implements
 // [jaws.ContextMenuHandler].
-func (t Template) JawsContextMenu(e *jaws.Element, click jaws.Click) (err error) {
+func (tmpl Template) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
-	if h, ok := t.Dot.(jaws.ContextMenuHandler); ok {
-		err = h.JawsContextMenu(e, click)
+	if h, ok := tmpl.Dot.(jaws.ContextMenuHandler); ok {
+		err = h.JawsContextMenu(elem, click)
 	}
 	return
 }
 
 // JawsInput delegates input events to t.Dot when it implements [jaws.InputHandler].
-func (t Template) JawsInput(e *jaws.Element, val string) (err error) {
+func (tmpl Template) JawsInput(elem *jaws.Element, value string) (err error) {
 	err = jaws.ErrEventUnhandled
-	if h, ok := t.Dot.(jaws.InputHandler); ok {
-		err = h.JawsInput(e, val)
+	if h, ok := tmpl.Dot.(jaws.InputHandler); ok {
+		err = h.JawsInput(elem, value)
 	}
 	return
 }

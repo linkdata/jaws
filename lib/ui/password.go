@@ -14,8 +14,8 @@ type Password struct{ InputText }
 func NewPassword(g bind.Setter[string]) *Password { return &Password{InputText{Setter: g}} }
 
 // JawsRender renders ui as an HTML password input.
-func (u *Password) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	return u.renderStringInput(e, w, "password", params...)
+func (u *Password) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
+	return u.renderStringInput(elem, w, "password", params...)
 }
 
 // Password renders an HTML password input.

@@ -25,43 +25,43 @@ type Element struct {
 	deleted  atomic.Bool // true if deleteElement() has been called for this Element
 }
 
-func (e *Element) String() string {
-	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", e.Ui(), e.Jid(), e.Request.TagsOf(e))
+func (elem *Element) String() string {
+	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", elem.Ui(), elem.Jid(), elem.Request.TagsOf(elem))
 }
 
 // AddHandlers adds the given handlers to the [Element].
-func (e *Element) AddHandlers(h ...any) {
-	if !e.deleted.Load() {
-		e.handlers = append(e.handlers, h...)
+func (elem *Element) AddHandlers(h ...any) {
+	if !elem.deleted.Load() {
+		elem.handlers = append(elem.handlers, h...)
 	}
 }
 
 // Tag adds the given tags to the [Element].
-func (e *Element) Tag(tags ...any) {
-	if !e.deleted.Load() {
-		e.Request.Tag(e, tags...)
+func (elem *Element) Tag(tags ...any) {
+	if !elem.deleted.Load() {
+		elem.Request.Tag(elem, tags...)
 	}
 }
 
 // HasTag returns true if this Element has the given tag.
-func (e *Element) HasTag(tagValue any) bool {
-	return !e.deleted.Load() && e.Request.HasTag(e, tagValue)
+func (elem *Element) HasTag(tagValue any) bool {
+	return !elem.deleted.Load() && elem.Request.HasTag(elem, tagValue)
 }
 
 // Jid returns the JaWS ID for this [Element], unique within its [Request].
-func (e *Element) Jid() jid.Jid {
-	return e.jid
+func (elem *Element) Jid() jid.Jid {
+	return elem.jid
 }
 
 // Ui returns the [UI] object.
-func (e *Element) Ui() UI {
-	return e.ui
+func (elem *Element) Ui() UI {
+	return elem.ui
 }
 
-func (e *Element) maybeDirty(tagValue any, err error) (bool, error) {
+func (elem *Element) maybeDirty(tagValue any, err error) (bool, error) {
 	switch err {
 	case nil:
-		e.Dirty(tagValue)
+		elem.Dirty(tagValue)
 		return true, nil
 	case ErrValueUnchanged:
 		return false, nil
@@ -69,12 +69,12 @@ func (e *Element) maybeDirty(tagValue any, err error) (bool, error) {
 	return false, err
 }
 
-func (e *Element) renderDebug(w io.Writer) {
+func (elem *Element) renderDebug(w io.Writer) {
 	var sb strings.Builder
-	_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", e.Jid(), e.Ui())
-	if e.mu.TryRLock() {
-		defer e.mu.RUnlock()
-		for i, tagValue := range e.tagsOfLocked(e) {
+	_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", elem.Jid(), elem.Ui())
+	if elem.mu.TryRLock() {
+		defer elem.mu.RUnlock()
+		for i, tagValue := range elem.tagsOfLocked(elem) {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
@@ -90,11 +90,11 @@ func (e *Element) renderDebug(w io.Writer) {
 // JawsRender calls [Renderer.JawsRender] for this [Element].
 //
 // Do not call this yourself unless it is from within another JawsRender implementation.
-func (e *Element) JawsRender(w io.Writer, params []any) (err error) {
-	if !e.deleted.Load() {
-		if err = e.Ui().JawsRender(e, w, params); err == nil {
-			if e.Jaws.Debug {
-				e.renderDebug(w)
+func (elem *Element) JawsRender(w io.Writer, params []any) (err error) {
+	if !elem.deleted.Load() {
+		if err = elem.Ui().JawsRender(elem, w, params); err == nil {
+			if elem.Jaws.Debug {
+				elem.renderDebug(w)
 			}
 		}
 	}
@@ -104,17 +104,17 @@ func (e *Element) JawsRender(w io.Writer, params []any) (err error) {
 // JawsUpdate calls [Updater.JawsUpdate] for this [Element].
 //
 // Do not call this yourself unless it is from within another JawsUpdate implementation.
-func (e *Element) JawsUpdate() {
-	if !e.deleted.Load() {
-		e.Ui().JawsUpdate(e)
+func (elem *Element) JawsUpdate() {
+	if !elem.deleted.Load() {
+		elem.Ui().JawsUpdate(elem)
 	}
 }
 
-func (e *Element) queue(wht what.What, data string) {
-	if !e.deleted.Load() {
-		e.Request.queue(wire.WsMsg{
+func (elem *Element) queue(wht what.What, data string) {
+	if !elem.deleted.Load() {
+		elem.Request.queue(wire.WsMsg{
 			Data: data,
-			Jid:  e.jid,
+			Jid:  elem.jid,
 			What: wht,
 		})
 	}
@@ -124,78 +124,78 @@ func (e *Element) queue(wht what.What, data string) {
 // to the browser for the [Element] with the given JaWS ID in this [Request].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
-func (e *Element) SetAttr(attr, val string) {
-	e.queue(what.SAttr, attr+"\n"+val)
+func (elem *Element) SetAttr(attr, value string) {
+	elem.queue(what.SAttr, attr+"\n"+value)
 }
 
 // RemoveAttr queues sending a request to remove an attribute
 // to the browser for the [Element] with the given JaWS ID in this [Request].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
-func (e *Element) RemoveAttr(attr string) {
-	e.queue(what.RAttr, attr)
+func (elem *Element) RemoveAttr(attr string) {
+	elem.queue(what.RAttr, attr)
 }
 
 // SetClass queues sending a class
 // to the browser for the [Element] with the given JaWS ID in this [Request].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
-func (e *Element) SetClass(cls string) {
-	e.queue(what.SClass, cls)
+func (elem *Element) SetClass(cls string) {
+	elem.queue(what.SClass, cls)
 }
 
 // RemoveClass queues sending a request to remove a class
 // to the browser for the [Element] with the given JaWS ID in this [Request].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
-func (e *Element) RemoveClass(cls string) {
-	e.queue(what.RClass, cls)
+func (elem *Element) RemoveClass(cls string) {
+	elem.queue(what.RClass, cls)
 }
 
 // SetInner queues sending new inner HTML content
 // to the browser for the [Element].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
-func (e *Element) SetInner(innerHTML template.HTML) {
-	e.queue(what.Inner, string(innerHTML))
+func (elem *Element) SetInner(innerHTML template.HTML) {
+	elem.queue(what.Inner, string(innerHTML))
 }
 
 // SetValue queues sending a new current input value in textual form
 // to the browser for the [Element] with the given JaWS ID in this [Request].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
-func (e *Element) SetValue(val string) {
-	e.queue(what.Value, val)
+func (elem *Element) SetValue(value string) {
+	elem.queue(what.Value, value)
 }
 
 // Replace replaces the [Element]'s entire HTML DOM node with new HTML code.
 // If the HTML code doesn't seem to contain correct HTML ID, it panics.
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
-func (e *Element) Replace(htmlCode template.HTML) {
-	if !e.deleted.Load() {
+func (elem *Element) Replace(htmlCode template.HTML) {
+	if !elem.deleted.Load() {
 		var b []byte
 		b = append(b, "id="...)
-		b = e.Jid().AppendQuote(b)
+		b = elem.Jid().AppendQuote(b)
 		if !bytes.Contains([]byte(htmlCode), b) {
 			panic(errors.New("jaws: Element.Replace(): expected HTML " + string(b)))
 		}
-		e.queue(what.Replace, string(htmlCode))
+		elem.queue(what.Replace, string(htmlCode))
 	}
 }
 
 // Append appends a new HTML element as a child to the current one.
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
-func (e *Element) Append(htmlCode template.HTML) {
-	e.queue(what.Append, string(htmlCode))
+func (elem *Element) Append(htmlCode template.HTML) {
+	elem.queue(what.Append, string(htmlCode))
 }
 
 // Order reorders the HTML elements.
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
-func (e *Element) Order(jidList []jid.Jid) {
-	if !e.deleted.Load() && len(jidList) > 0 {
+func (elem *Element) Order(jidList []jid.Jid) {
+	if !elem.deleted.Load() && len(jidList) > 0 {
 		var b []byte
 		for i, jid := range jidList {
 			if i > 0 {
@@ -203,7 +203,7 @@ func (e *Element) Order(jidList []jid.Jid) {
 			}
 			b = jid.Append(b)
 		}
-		e.queue(what.Order, string(b))
+		elem.queue(what.Order, string(b))
 	}
 }
 
@@ -211,22 +211,22 @@ func (e *Element) Order(jidList []jid.Jid) {
 // is removed from the [Request] and its HTML element from the browser.
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
-func (e *Element) Remove(htmlId string) {
-	e.queue(what.Remove, htmlId)
+func (elem *Element) Remove(htmlID string) {
+	elem.queue(what.Remove, htmlID)
 }
 
 // ApplyParams parses the parameters passed to UI() when creating a new [Element],
 // adding UI tags, adding any additional event handlers found.
 //
 // Returns the list of HTML attributes found, if any.
-func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) {
-	tags, handlers, attrs := ParseParams(params)
-	if !e.deleted.Load() {
-		e.handlers = append(e.handlers, handlers...)
-		e.Tag(tags...)
-		for _, s := range attrs {
+func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
+	tags, handlers, rawAttrs := ParseParams(params)
+	if !elem.deleted.Load() {
+		elem.handlers = append(elem.handlers, handlers...)
+		elem.Tag(tags...)
+		for _, s := range rawAttrs {
 			attr := template.HTMLAttr(s) // #nosec G203
-			retv = append(retv, attr)
+			attrs = append(attrs, attr)
 		}
 	}
 	return
@@ -244,27 +244,27 @@ func (e *Element) ApplyParams(params []any) (retv []template.HTMLAttr) {
 // Returns the Tag(s) added (or nil if getter was nil), any initial HTML attrs
 // provided by InitialHTMLAttrHandler, and any error returned from JawsInit()
 // if it was called.
-func (e *Element) ApplyGetter(getter any) (tagValue any, attrs []template.HTMLAttr, err error) {
+func (elem *Element) ApplyGetter(getter any) (tagValue any, attrs []template.HTMLAttr, err error) {
 	if getter != nil {
 		tagValue = getter
 		if tagger, ok := getter.(tag.TagGetter); ok {
-			tagValue = tagger.JawsGetTag(e.Request)
+			tagValue = tagger.JawsGetTag(elem.Request)
 		}
 		if _, ok := getter.(InputHandler); ok {
-			e.handlers = append(e.handlers, getter)
+			elem.handlers = append(elem.handlers, getter)
 		} else if _, ok := getter.(ClickHandler); ok {
-			e.handlers = append(e.handlers, getter)
+			elem.handlers = append(elem.handlers, getter)
 		} else if _, ok := getter.(ContextMenuHandler); ok {
-			e.handlers = append(e.handlers, getter)
+			elem.handlers = append(elem.handlers, getter)
 		}
 		if ah, ok := getter.(InitialHTMLAttrHandler); ok {
-			if attr := ah.JawsInitialHTMLAttr(e); attr != "" {
+			if attr := ah.JawsInitialHTMLAttr(elem); attr != "" {
 				attrs = append(attrs, attr)
 			}
 		}
-		e.Tag(tagValue)
+		elem.Tag(tagValue)
 		if initer, ok := getter.(InitHandler); ok {
-			err = initer.JawsInit(e)
+			err = initer.JawsInit(elem)
 		}
 	}
 	return

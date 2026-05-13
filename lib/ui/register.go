@@ -14,7 +14,7 @@ type Register struct{ jaws.Updater }
 func NewRegister(updater jaws.Updater) Register { return Register{Updater: updater} }
 
 // JawsRender renders no HTML for update-only registration.
-func (u Register) JawsRender(*jaws.Element, io.Writer, []any) error {
+func (u Register) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
 	return nil
 }
 

@@ -20,13 +20,13 @@ type Input struct {
 	Last atomic.Value // the last value received from the request
 }
 
-func (u *Input) applyGetterAttrs(e *jaws.Element, getter any) (attrs []template.HTMLAttr, err error) {
-	u.Tag, attrs, err = e.ApplyGetter(getter)
+func (u *Input) applyGetterAttrs(elem *jaws.Element, getter any) (attrs []template.HTMLAttr, err error) {
+	u.Tag, attrs, err = elem.ApplyGetter(getter)
 	return
 }
 
-func (u *Input) maybeDirty(e *jaws.Element, inerr error) (err error) {
-	err = applyDirty(u.Tag, e, inerr)
+func (u *Input) maybeDirty(elem *jaws.Element, inErr error) (err error) {
+	err = applyDirty(u.Tag, elem, inErr)
 	return
 }
 
@@ -36,28 +36,28 @@ type InputText struct {
 	bind.Setter[string]
 }
 
-func (u *InputText) renderStringInput(e *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
+func (u *InputText) renderStringInput(elem *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
 	var getterAttrs []template.HTMLAttr
-	if getterAttrs, err = u.applyGetterAttrs(e, u.Setter); err == nil {
-		attrs := append(e.ApplyParams(params), getterAttrs...)
-		v := u.JawsGet(e)
+	if getterAttrs, err = u.applyGetterAttrs(elem, u.Setter); err == nil {
+		attrs := append(elem.ApplyParams(params), getterAttrs...)
+		v := u.JawsGet(elem)
 		u.Last.Store(v)
-		err = htmlio.WriteHTMLInput(w, e.Jid(), htmlType, v, attrs)
+		err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, v, attrs)
 	}
 	return
 }
 
 // JawsUpdate updates the input value when the bound string value changes.
-func (u *InputText) JawsUpdate(e *jaws.Element) {
-	if v := u.JawsGet(e); u.Last.Swap(v) != v {
-		e.SetValue(v)
+func (u *InputText) JawsUpdate(elem *jaws.Element) {
+	if v := u.JawsGet(elem); u.Last.Swap(v) != v {
+		elem.SetValue(v)
 	}
 }
 
 // JawsInput stores a browser-side string input value.
-func (u *InputText) JawsInput(e *jaws.Element, val string) (err error) {
-	u.Last.Store(val)
-	err = u.maybeDirty(e, u.Setter.JawsSet(e, val))
+func (u *InputText) JawsInput(elem *jaws.Element, value string) (err error) {
+	u.Last.Store(value)
+	err = u.maybeDirty(elem, u.Setter.JawsSet(elem, value))
 	return
 }
 
@@ -67,40 +67,40 @@ type InputBool struct {
 	bind.Setter[bool]
 }
 
-func (u *InputBool) renderBoolInput(e *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
+func (u *InputBool) renderBoolInput(elem *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
 	var getterAttrs []template.HTMLAttr
-	if getterAttrs, err = u.applyGetterAttrs(e, u.Setter); err == nil {
-		attrs := append(e.ApplyParams(params), getterAttrs...)
-		v := u.JawsGet(e)
+	if getterAttrs, err = u.applyGetterAttrs(elem, u.Setter); err == nil {
+		attrs := append(elem.ApplyParams(params), getterAttrs...)
+		v := u.JawsGet(elem)
 		u.Last.Store(v)
 		if v {
 			attrs = append(attrs, "checked")
 		}
-		err = htmlio.WriteHTMLInput(w, e.Jid(), htmlType, "", attrs)
+		err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, "", attrs)
 	}
 	return
 }
 
 // JawsUpdate updates the input value when the bound bool value changes.
-func (u *InputBool) JawsUpdate(e *jaws.Element) {
-	v := u.JawsGet(e)
+func (u *InputBool) JawsUpdate(elem *jaws.Element) {
+	v := u.JawsGet(elem)
 	if u.Last.Swap(v) != v {
 		txt := "false"
 		if v {
 			txt = "true"
 		}
-		e.SetValue(txt)
+		elem.SetValue(txt)
 	}
 }
 
 // JawsInput stores a browser-side bool input value.
-func (u *InputBool) JawsInput(e *jaws.Element, val string) (err error) {
-	if val == "" {
-		val = "false"
+func (u *InputBool) JawsInput(elem *jaws.Element, value string) (err error) {
+	if value == "" {
+		value = "false"
 	}
 	var v bool
-	if v, err = strconv.ParseBool(val); err == nil {
-		err = u.maybeDirty(e, u.Setter.JawsSet(e, v))
+	if v, err = strconv.ParseBool(value); err == nil {
+		err = u.maybeDirty(elem, u.Setter.JawsSet(elem, v))
 	}
 	u.Last.Store(v)
 	return
@@ -112,37 +112,37 @@ type InputFloat struct {
 	bind.Setter[float64]
 }
 
-func (u *InputFloat) str(v float64) string {
-	return strconv.FormatFloat(v, 'f', -1, 64)
+func (u *InputFloat) str(value float64) string {
+	return strconv.FormatFloat(value, 'f', -1, 64)
 }
 
-func (u *InputFloat) renderFloatInput(e *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
+func (u *InputFloat) renderFloatInput(elem *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
 	var getterAttrs []template.HTMLAttr
-	if getterAttrs, err = u.applyGetterAttrs(e, u.Setter); err == nil {
-		attrs := append(e.ApplyParams(params), getterAttrs...)
-		v := u.JawsGet(e)
+	if getterAttrs, err = u.applyGetterAttrs(elem, u.Setter); err == nil {
+		attrs := append(elem.ApplyParams(params), getterAttrs...)
+		v := u.JawsGet(elem)
 		u.Last.Store(v)
-		err = htmlio.WriteHTMLInput(w, e.Jid(), htmlType, u.str(v), attrs)
+		err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, u.str(v), attrs)
 	}
 	return
 }
 
 // JawsUpdate updates the input value when the bound float64 value changes.
-func (u *InputFloat) JawsUpdate(e *jaws.Element) {
-	v := u.JawsGet(e)
+func (u *InputFloat) JawsUpdate(elem *jaws.Element) {
+	v := u.JawsGet(elem)
 	if u.Last.Swap(v) != v {
-		e.SetValue(u.str(v))
+		elem.SetValue(u.str(v))
 	}
 }
 
 // JawsInput stores a browser-side float64 input value.
-func (u *InputFloat) JawsInput(e *jaws.Element, val string) (err error) {
-	if val == "" {
-		val = "0"
+func (u *InputFloat) JawsInput(elem *jaws.Element, value string) (err error) {
+	if value == "" {
+		value = "0"
 	}
 	var v float64
-	if v, err = strconv.ParseFloat(val, 64); err == nil {
-		err = u.maybeDirty(e, u.Setter.JawsSet(e, v))
+	if v, err = strconv.ParseFloat(value, 64); err == nil {
+		err = u.maybeDirty(elem, u.Setter.JawsSet(elem, v))
 	}
 	u.Last.Store(v)
 	return
@@ -158,33 +158,33 @@ func (u *InputDate) str(v time.Time) string {
 	return v.Format(assets.ISO8601)
 }
 
-func (u *InputDate) renderDateInput(e *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
+func (u *InputDate) renderDateInput(elem *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
 	var getterAttrs []template.HTMLAttr
-	if getterAttrs, err = u.applyGetterAttrs(e, u.Setter); err == nil {
-		attrs := append(e.ApplyParams(params), getterAttrs...)
-		v := u.JawsGet(e)
+	if getterAttrs, err = u.applyGetterAttrs(elem, u.Setter); err == nil {
+		attrs := append(elem.ApplyParams(params), getterAttrs...)
+		v := u.JawsGet(elem)
 		u.Last.Store(v)
-		err = htmlio.WriteHTMLInput(w, e.Jid(), htmlType, u.str(v), attrs)
+		err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, u.str(v), attrs)
 	}
 	return
 }
 
 // JawsUpdate updates the input value when the bound date value changes.
-func (u *InputDate) JawsUpdate(e *jaws.Element) {
-	v := u.JawsGet(e)
+func (u *InputDate) JawsUpdate(elem *jaws.Element) {
+	v := u.JawsGet(elem)
 	if u.Last.Swap(v) != v {
-		e.SetValue(u.str(v))
+		elem.SetValue(u.str(v))
 	}
 }
 
 // JawsInput stores a browser-side date input value.
-func (u *InputDate) JawsInput(e *jaws.Element, val string) (err error) {
-	if val == "" {
-		val = "0001-01-01"
+func (u *InputDate) JawsInput(elem *jaws.Element, value string) (err error) {
+	if value == "" {
+		value = "0001-01-01"
 	}
 	var v time.Time
-	if v, err = time.Parse(assets.ISO8601, val); err == nil {
-		err = u.maybeDirty(e, u.Setter.JawsSet(e, v))
+	if v, err = time.Parse(assets.ISO8601, value); err == nil {
+		err = u.maybeDirty(elem, u.Setter.JawsSet(elem, v))
 	}
 	u.Last.Store(v)
 	return

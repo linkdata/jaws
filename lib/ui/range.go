@@ -14,8 +14,8 @@ type Range struct{ InputFloat }
 func NewRange(g bind.Setter[float64]) *Range { return &Range{InputFloat{Setter: g}} }
 
 // JawsRender renders ui as an HTML range input.
-func (u *Range) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	return u.renderFloatInput(e, w, "range", params...)
+func (u *Range) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
+	return u.renderFloatInput(elem, w, "range", params...)
 }
 
 // Range renders an HTML range input.

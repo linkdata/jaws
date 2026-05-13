@@ -15,8 +15,8 @@ type Li struct{ HTMLInner }
 func NewLi(innerHTML any) *Li { return &Li{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }
 
 // JawsRender renders ui as an HTML list item.
-func (u *Li) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	return u.renderInner(e, w, "li", "", params)
+func (u *Li) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
+	return u.renderInner(elem, w, "li", "", params)
 }
 
 // Li renders an HTML list item.

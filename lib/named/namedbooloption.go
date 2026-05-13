@@ -15,21 +15,21 @@ type namedBoolOption struct {
 	*Bool
 }
 
-func (opt namedBoolOption) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	e.Tag(opt.Bool)
-	attrs := e.ApplyParams(params)
+func (opt namedBoolOption) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
+	elem.Tag(opt.Bool)
+	attrs := elem.ApplyParams(params)
 	valattr := template.HTMLAttr(`value="` + html.EscapeString(opt.Name()) + `"`) // #nosec G203
 	attrs = append(attrs, valattr)
 	if opt.Checked() {
 		attrs = append(attrs, "selected")
 	}
-	return htmlio.WriteHTMLInner(w, e.Jid(), "option", "", opt.JawsGetHTML(e), attrs...)
+	return htmlio.WriteHTMLInner(w, elem.Jid(), "option", "", opt.JawsGetHTML(elem), attrs...)
 }
 
-func (opt namedBoolOption) JawsUpdate(e *jaws.Element) {
+func (opt namedBoolOption) JawsUpdate(elem *jaws.Element) {
 	if opt.Checked() {
-		e.SetAttr("selected", "")
+		elem.SetAttr("selected", "")
 	} else {
-		e.RemoveAttr("selected")
+		elem.RemoveAttr("selected")
 	}
 }

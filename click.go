@@ -46,9 +46,9 @@ func (clk Click) String() string {
 	return fmt.Sprintf("%d %d %d %s", clk.X, clk.Y, clk.keyState(), clk.Name)
 }
 
-func parseClickData(val string) (clk Click, after string, ok bool) {
+func parseClickData(value string) (clk Click, after string, ok bool) {
 	var clickPart string
-	clickPart, after, _ = strings.Cut(val, "\t")
+	clickPart, after, _ = strings.Cut(value, "\t")
 	var n int
 	var kstate int
 	ok = true
@@ -74,9 +74,9 @@ func parseClickData(val string) (clk Click, after string, ok bool) {
 	return
 }
 
-func runAtoi(v string) (n int, ok bool) {
+func runAtoi(value string) (n int, ok bool) {
 	var err error
-	n, err = strconv.Atoi(v)
+	n, err = strconv.Atoi(value)
 	ok = err == nil
 	return
 }

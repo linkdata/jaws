@@ -29,14 +29,14 @@ type requestHarness struct {
 	PanicVal    any
 }
 
-func newRequestHarness(jw *Jaws, hr *http.Request) (rh *requestHarness) {
-	if hr == nil {
-		hr = httptest.NewRequest(http.MethodGet, "/", nil)
+func newRequestHarness(jw *Jaws, r *http.Request) (rh *requestHarness) {
+	if r == nil {
+		r = httptest.NewRequest(http.MethodGet, "/", nil)
 	}
 	rr := httptest.NewRecorder()
 	rr.Body = &bytes.Buffer{}
-	rq := jw.NewRequest(hr)
-	if rq == nil || jw.UseRequest(rq.JawsKey, hr) != rq {
+	rq := jw.NewRequest(r)
+	if rq == nil || jw.UseRequest(rq.JawsKey, r) != rq {
 		return nil
 	}
 	bcastCh := jw.subscribe(rq, 64)
@@ -85,8 +85,8 @@ func (rh *requestHarness) BodyHTML() template.HTML {
 
 // NewTestRequest creates a TestRequest for use when testing.
 // Passing nil for hr creates a GET / request with no body.
-func NewTestRequest(jw *Jaws, hr *http.Request) (tr *TestRequest) {
-	rh := newRequestHarness(jw, hr)
+func NewTestRequest(jw *Jaws, r *http.Request) (tr *TestRequest) {
+	rh := newRequestHarness(jw, r)
 	if rh != nil {
 		tr = &TestRequest{
 			Request:        rh.Req,

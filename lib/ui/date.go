@@ -15,8 +15,8 @@ type Date struct{ InputDate }
 func NewDate(g bind.Setter[time.Time]) *Date { return &Date{InputDate{Setter: g}} }
 
 // JawsRender renders ui as an HTML date input.
-func (u *Date) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
-	return u.renderDateInput(e, w, "date", params...)
+func (u *Date) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
+	return u.renderDateInput(elem, w, "date", params...)
 }
 
 // Date renders an HTML date input.

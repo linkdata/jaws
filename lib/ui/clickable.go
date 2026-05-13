@@ -10,8 +10,8 @@ import (
 // innerHTML is passed to [bind.MakeHTMLGetter], which may or may not provide tags.
 //
 // Deprecated: use New(innerHTML).Clicked(...) directly.
-func Clickable(innerHTML any, onclick func(elem *jaws.Element, click jaws.Click) (err error)) jaws.ClickHandler {
+func Clickable(innerHTML any, onClick func(elem *jaws.Element, click jaws.Click) (err error)) jaws.ClickHandler {
 	return New(innerHTML).Clicked(func(_ Object, elem *jaws.Element, click jaws.Click) (err error) {
-		return onclick(elem, click)
+		return onClick(elem, click)
 	})
 }

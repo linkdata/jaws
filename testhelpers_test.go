@@ -46,8 +46,8 @@ func newTestJaws() (tj *testJaws) {
 	return
 }
 
-func (tj *testJaws) newRequest(hr *http.Request) (tr *TestRequest) {
-	return NewTestRequest(tj.Jaws, hr)
+func (tj *testJaws) newRequest(r *http.Request) (tr *TestRequest) {
+	return NewTestRequest(tj.Jaws, r)
 }
 
 func newTestRequest(t *testing.T) (tr *testRequest) {
@@ -64,8 +64,8 @@ type testRequest struct {
 	rw testRequestWriter
 }
 
-func newWrappedTestRequest(jw *Jaws, hr *http.Request) *testRequest {
-	tr := NewTestRequest(jw, hr)
+func newWrappedTestRequest(jw *Jaws, r *http.Request) *testRequest {
+	tr := NewTestRequest(jw, r)
 	if tr == nil {
 		return nil
 	}
@@ -83,8 +83,8 @@ func (tr *testRequest) Initial() *http.Request           { return tr.rw.Initial(
 func (tr *testRequest) HeadHTML() error                  { return tr.rw.HeadHTML() }
 func (tr *testRequest) TailHTML() error                  { return tr.rw.TailHTML() }
 func (tr *testRequest) Session() *Session                { return tr.rw.Session() }
-func (tr *testRequest) Get(key string) (val any)         { return tr.rw.Get(key) }
-func (tr *testRequest) Set(key string, val any)          { tr.rw.Set(key, val) }
+func (tr *testRequest) Get(key string) (value any)       { return tr.rw.Get(key) }
+func (tr *testRequest) Set(key string, value any)        { tr.rw.Set(key, value) }
 func (tr *testRequest) Register(u Updater, p ...any) Jid { return tr.rw.Register(u, p...) }
 func (tr *testRequest) Template(name string, dot any, params ...any) error {
 	return tr.rw.Template(name, dot, params...)
@@ -97,8 +97,8 @@ type testRequestWriter struct {
 
 type testRegisterUI struct{ Updater }
 
-func (testRegisterUI) JawsRender(*Element, io.Writer, []any) error { return nil }
-func (u testRegisterUI) JawsUpdate(e *Element)                     { u.Updater.JawsUpdate(e) }
+func (testRegisterUI) JawsRender(elem *Element, w io.Writer, params []any) error { return nil }
+func (u testRegisterUI) JawsUpdate(elem *Element)                                { u.Updater.JawsUpdate(elem) }
 
 func (rw testRequestWriter) UI(ui UI, params ...any) error {
 	return rw.rq.NewElement(ui).JawsRender(rw, params)
@@ -129,12 +129,12 @@ func (rw testRequestWriter) Session() *Session {
 	return rw.rq.Session()
 }
 
-func (rw testRequestWriter) Get(key string) (val any) {
+func (rw testRequestWriter) Get(key string) (value any) {
 	return rw.rq.Get(key)
 }
 
-func (rw testRequestWriter) Set(key string, val any) {
-	rw.rq.Set(key, val)
+func (rw testRequestWriter) Set(key string, value any) {
+	rw.rq.Set(key, value)
 }
 
 func (rw testRequestWriter) Register(updater Updater, params ...any) Jid {
@@ -154,8 +154,8 @@ type testHandler struct {
 	Template testTemplateUI
 }
 
-func (h testHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
-	_ = h.Log(h.NewRequest(r).NewElement(h.Template).JawsRender(wr, nil))
+func (h testHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	_ = h.Log(h.NewRequest(r).NewElement(h.Template).JawsRender(w, nil))
 }
 
 func (jw *Jaws) Handler(name string, dot any) http.Handler {
@@ -233,30 +233,30 @@ func findJidOrJsOrHTMLNode(node parse.Node) (found bool) {
 	return
 }
 
-func (t testTemplateUI) JawsRender(e *Element, wr io.Writer, params []any) (err error) {
-	var expandedtags []any
-	if expandedtags, err = tag.TagExpand(e.Request, t.Dot); err == nil {
-		e.Request.TagExpanded(e, expandedtags)
+func (t testTemplateUI) JawsRender(elem *Element, w io.Writer, params []any) (err error) {
+	var expandedTags []any
+	if expandedTags, err = tag.TagExpand(elem.Request, t.Dot); err == nil {
+		elem.Request.TagExpanded(elem, expandedTags)
 		tags, handlers, attrs := ParseParams(params)
-		e.Tag(tags...)
-		e.AddHandlers(handlers...)
+		elem.Tag(tags...)
+		elem.AddHandlers(handlers...)
 		attrstr := template.HTMLAttr(strings.Join(attrs, " ")) // #nosec G203
 		var auth Auth = DefaultAuth{}
-		if f := e.Request.Jaws.MakeAuth; f != nil {
-			auth = f(e.Request)
+		if f := elem.Request.Jaws.MakeAuth; f != nil {
+			auth = f(elem.Request)
 		}
 		err = fmt.Errorf("missing template %q", t.Name)
-		if tmpl := e.Request.Jaws.LookupTemplate(t.Name); tmpl != nil {
-			err = tmpl.Execute(wr, testWith{
-				Element:           e,
-				testRequestWriter: testRequestWriter{rq: e.Request, Writer: wr},
+		if tmpl := elem.Request.Jaws.LookupTemplate(t.Name); tmpl != nil {
+			err = tmpl.Execute(w, testWith{
+				Element:           elem,
+				testRequestWriter: testRequestWriter{rq: elem.Request, Writer: w},
 				Dot:               t.Dot,
 				Attrs:             attrstr,
 				Auth:              auth,
 			})
-			if deadlock.Debug && e.Jaws.Logger != nil {
+			if deadlock.Debug && elem.Jaws.Logger != nil {
 				if !findJidOrJsOrHTMLNode(tmpl.Tree.Root) {
-					e.Jaws.Logger.Warn("jaws: template has no Jid reference", "template", t.Name)
+					elem.Jaws.Logger.Warn("jaws: template has no Jid reference", "template", t.Name)
 				}
 			}
 		}
@@ -264,32 +264,32 @@ func (t testTemplateUI) JawsRender(e *Element, wr io.Writer, params []any) (err 
 	return
 }
 
-func (t testTemplateUI) JawsUpdate(e *Element) {
+func (t testTemplateUI) JawsUpdate(elem *Element) {
 	if dot, ok := t.Dot.(Updater); ok {
-		dot.JawsUpdate(e)
+		dot.JawsUpdate(elem)
 	}
 }
 
-func (t testTemplateUI) JawsClick(e *Element, click Click) (err error) {
+func (t testTemplateUI) JawsClick(elem *Element, click Click) (err error) {
 	err = ErrEventUnhandled
 	if h, ok := t.Dot.(ClickHandler); ok {
-		err = h.JawsClick(e, click)
+		err = h.JawsClick(elem, click)
 	}
 	return
 }
 
-func (t testTemplateUI) JawsContextMenu(e *Element, click Click) (err error) {
+func (t testTemplateUI) JawsContextMenu(elem *Element, click Click) (err error) {
 	err = ErrEventUnhandled
 	if h, ok := t.Dot.(ContextMenuHandler); ok {
-		err = h.JawsContextMenu(e, click)
+		err = h.JawsContextMenu(elem, click)
 	}
 	return
 }
 
-func (t testTemplateUI) JawsInput(e *Element, val string) (err error) {
+func (t testTemplateUI) JawsInput(elem *Element, value string) (err error) {
 	err = ErrEventUnhandled
 	if h, ok := t.Dot.(InputHandler); ok {
-		err = h.JawsInput(e, val)
+		err = h.JawsInput(elem, value)
 	}
 	return
 }
@@ -302,12 +302,12 @@ type testDivWidget struct {
 	inner template.HTML
 }
 
-func (u testDivWidget) JawsRender(e *Element, w io.Writer, params []any) error {
-	e.ApplyParams(params)
-	return htmlio.WriteHTMLInner(w, e.Jid(), "div", "", u.inner)
+func (u testDivWidget) JawsRender(elem *Element, w io.Writer, params []any) error {
+	elem.ApplyParams(params)
+	return htmlio.WriteHTMLInner(w, elem.Jid(), "div", "", u.inner)
 }
 
-func (testDivWidget) JawsUpdate(*Element) {}
+func (testDivWidget) JawsUpdate(elem *Element) {}
 
 type testTextInputWidget struct {
 	setter   testStringSetter
@@ -316,38 +316,38 @@ type testTextInputWidget struct {
 }
 
 type testStringSetter interface {
-	JawsGet(*Element) string
-	JawsSet(*Element, string) error
+	JawsGet(elem *Element) string
+	JawsSet(elem *Element, value string) error
 }
 
 func newTestTextInputWidget(s testStringSetter) *testTextInputWidget {
 	return &testTextInputWidget{setter: s}
 }
 
-func (u *testTextInputWidget) JawsRender(e *Element, w io.Writer, params []any) (err error) {
+func (u *testTextInputWidget) JawsRender(elem *Element, w io.Writer, params []any) (err error) {
 	var getterAttrs []template.HTMLAttr
-	if u.tagValue, getterAttrs, err = e.ApplyGetter(u.setter); err == nil {
-		attrs := append(e.ApplyParams(params), getterAttrs...)
-		v := u.setter.JawsGet(e)
+	if u.tagValue, getterAttrs, err = elem.ApplyGetter(u.setter); err == nil {
+		attrs := append(elem.ApplyParams(params), getterAttrs...)
+		v := u.setter.JawsGet(elem)
 		u.last = v
-		err = htmlio.WriteHTMLInput(w, e.Jid(), "text", v, attrs)
+		err = htmlio.WriteHTMLInput(w, elem.Jid(), "text", v, attrs)
 	}
 	return
 }
 
-func (u *testTextInputWidget) JawsUpdate(e *Element) {
-	if v := u.setter.JawsGet(e); v != u.last {
+func (u *testTextInputWidget) JawsUpdate(elem *Element) {
+	if v := u.setter.JawsGet(elem); v != u.last {
 		u.last = v
-		e.SetValue(v)
+		elem.SetValue(v)
 	}
 }
 
-func (u *testTextInputWidget) JawsInput(e *Element, val string) (err error) {
-	if changed, setErr := e.maybeDirty(u.tagValue, u.setter.JawsSet(e, val)); setErr != nil {
+func (u *testTextInputWidget) JawsInput(elem *Element, value string) (err error) {
+	if changed, setErr := elem.maybeDirty(u.tagValue, u.setter.JawsSet(elem, value)); setErr != nil {
 		err = setErr
 	} else {
 		if changed {
-			u.last = val
+			u.last = value
 		}
 	}
 	return
@@ -514,24 +514,24 @@ type testSetter[T comparable] struct {
 	getCalled chan struct{}
 }
 
-func newTestSetter[T comparable](val T) *testSetter[T] {
+func newTestSetter[T comparable](value T) *testSetter[T] {
 	return &testSetter[T]{
-		val:       val,
+		val:       value,
 		setCalled: make(chan struct{}),
 		getCalled: make(chan struct{}),
 	}
 }
 
-func (ts *testSetter[T]) Get() (val T) {
+func (ts *testSetter[T]) Get() (value T) {
 	ts.mu.Lock()
-	val = ts.val
+	value = ts.val
 	ts.mu.Unlock()
 	return
 }
 
-func (ts *testSetter[T]) Set(val T) {
+func (ts *testSetter[T]) Set(value T) {
 	ts.mu.Lock()
-	ts.val = val
+	ts.val = value
 	ts.mu.Unlock()
 }
 
@@ -561,18 +561,18 @@ func (ts *testSetter[T]) GetCount() (n int) {
 	return
 }
 
-func (ts *testSetter[T]) JawsGet(*Element) (val T) {
+func (ts *testSetter[T]) JawsGet(elem *Element) (value T) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.getCount++
 	if ts.getCount == 1 {
 		close(ts.getCalled)
 	}
-	val = ts.val
+	value = ts.val
 	return
 }
 
-func (ts *testSetter[T]) JawsSet(_ *Element, val T) (err error) {
+func (ts *testSetter[T]) JawsSet(elem *Element, value T) (err error) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.setCount++
@@ -580,37 +580,37 @@ func (ts *testSetter[T]) JawsSet(_ *Element, val T) (err error) {
 		close(ts.setCalled)
 	}
 	if err = ts.err; err == nil {
-		if ts.val == val {
+		if ts.val == value {
 			err = ErrValueUnchanged
 		}
-		ts.val = val
+		ts.val = value
 	}
 	return
 }
 
-func (ts *testSetter[string]) JawsGetString(*Element) (val string) {
+func (ts *testSetter[string]) JawsGetString(elem *Element) (value string) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.getCount++
 	if ts.getCount == 1 {
 		close(ts.getCalled)
 	}
-	val = ts.val
+	value = ts.val
 	return
 }
 
-func (ts *testSetter[any]) JawsGetAny(*Element) (val any) {
+func (ts *testSetter[any]) JawsGetAny(elem *Element) (value any) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.getCount++
 	if ts.getCount == 1 {
 		close(ts.getCalled)
 	}
-	val = ts.val
+	value = ts.val
 	return
 }
 
-func (ts *testSetter[any]) JawsSetAny(_ *Element, val any) (err error) {
+func (ts *testSetter[any]) JawsSetAny(elem *Element, value any) (err error) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.setCount++
@@ -618,21 +618,21 @@ func (ts *testSetter[any]) JawsSetAny(_ *Element, val any) (err error) {
 		close(ts.setCalled)
 	}
 	if err = ts.err; err == nil {
-		if ts.val == val {
+		if ts.val == value {
 			err = ErrValueUnchanged
 		}
-		ts.val = val
+		ts.val = value
 	}
 	return
 }
 
-func (ts *testSetter[T]) JawsGetHTML(*Element) (val T) {
+func (ts *testSetter[T]) JawsGetHTML(elem *Element) (value T) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.getCount++
 	if ts.getCount == 1 {
 		close(ts.getCalled)
 	}
-	val = ts.val
+	value = ts.val
 	return
 }

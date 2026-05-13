@@ -21,9 +21,9 @@ type templateLogger struct {
 	errors int
 }
 
-func (l *templateLogger) Info(string, ...any)  {}
-func (l *templateLogger) Warn(string, ...any)  { l.warns++ }
-func (l *templateLogger) Error(string, ...any) { l.errors++ }
+func (l *templateLogger) Info(msg string, params ...any)  {}
+func (l *templateLogger) Warn(msg string, params ...any)  { l.warns++ }
+func (l *templateLogger) Error(msg string, params ...any) { l.errors++ }
 
 type templateDot struct {
 	updated int
@@ -32,21 +32,21 @@ type templateDot struct {
 	menus   int
 }
 
-func (d *templateDot) JawsUpdate(*jaws.Element) {
+func (d *templateDot) JawsUpdate(elem *jaws.Element) {
 	d.updated++
 }
 
-func (d *templateDot) JawsInput(*jaws.Element, string) error {
+func (d *templateDot) JawsInput(elem *jaws.Element, value string) error {
 	d.inputs++
 	return nil
 }
 
-func (d *templateDot) JawsClick(*jaws.Element, jaws.Click) error {
+func (d *templateDot) JawsClick(elem *jaws.Element, click jaws.Click) error {
 	d.clicks++
 	return nil
 }
 
-func (d *templateDot) JawsContextMenu(*jaws.Element, jaws.Click) error {
+func (d *templateDot) JawsContextMenu(elem *jaws.Element, click jaws.Click) error {
 	d.menus++
 	return nil
 }

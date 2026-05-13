@@ -91,7 +91,7 @@ func TestTree(t *testing.T) {
 	}
 
 	numnodes := 0
-	rootnode.Walk("", func(jspath string, node *Node) {
+	rootnode.Walk("", func(jsPath string, node *Node) {
 		b, err := json.Marshal(node)
 		maybeError(t, err)
 		if !strings.Contains(sb.String(), string(b)) {

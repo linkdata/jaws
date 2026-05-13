@@ -20,16 +20,16 @@ type testJawsEvent struct {
 	inputerr error
 }
 
-func (t *testJawsEvent) JawsClick(e *Element, name Click) (err error) {
+func (t *testJawsEvent) JawsClick(elem *Element, click Click) (err error) {
 	if err = t.clickerr; err == nil {
-		t.msgCh <- fmt.Sprintf("JawsClick: %q", name.Name)
+		t.msgCh <- fmt.Sprintf("JawsClick: %q", click.Name)
 	}
 	return
 }
 
-func (t *testJawsEvent) JawsInput(e *Element, val string) (err error) {
+func (t *testJawsEvent) JawsInput(elem *Element, value string) (err error) {
 	if err = t.inputerr; err == nil {
-		t.msgCh <- fmt.Sprintf("JawsInput: %q", val)
+		t.msgCh <- fmt.Sprintf("JawsInput: %q", value)
 	} else {
 		t.msgCh <- err.Error()
 	}
@@ -40,17 +40,17 @@ func (t *testJawsEvent) JawsGetTag(tag.Context) (tagValue any) {
 	return t.tagValue
 }
 
-func (t *testJawsEvent) JawsRender(e *Element, w io.Writer, params []any) (err error) {
+func (t *testJawsEvent) JawsRender(elem *Element, w io.Writer, params []any) (err error) {
 	var tagValue any
-	if tagValue, _, err = e.ApplyGetter(t); err == nil {
+	if tagValue, _, err = elem.ApplyGetter(t); err == nil {
 		_, _ = w.Write([]byte(fmt.Sprint(params)))
-		t.msgCh <- fmt.Sprintf("JawsRender(%d)%#v", e.jid, tagValue)
+		t.msgCh <- fmt.Sprintf("JawsRender(%d)%#v", elem.jid, tagValue)
 	}
 	return
 }
 
-func (t *testJawsEvent) JawsUpdate(e *Element) {
-	t.msgCh <- fmt.Sprintf("JawsUpdate(%d)", e.jid)
+func (t *testJawsEvent) JawsUpdate(elem *Element) {
+	t.msgCh <- fmt.Sprintf("JawsUpdate(%d)", elem.jid)
 }
 
 var _ ClickHandler = (*testJawsEvent)(nil)
@@ -87,13 +87,13 @@ type testJawsInputHandler struct {
 	inputerr error
 }
 
-func (t *testJawsInputHandler) JawsGetHTML(e *Element) template.HTML {
+func (t *testJawsInputHandler) JawsGetHTML(elem *Element) template.HTML {
 	return "tjIH"
 }
 
-func (t *testJawsInputHandler) JawsInput(e *Element, val string) (err error) {
+func (t *testJawsInputHandler) JawsInput(elem *Element, value string) (err error) {
 	if err = t.inputerr; err == nil {
-		t.msgCh <- fmt.Sprintf("JawsInput: %q", val)
+		t.msgCh <- fmt.Sprintf("JawsInput: %q", value)
 	} else {
 		t.msgCh <- err.Error()
 	}
@@ -104,7 +104,7 @@ type testPanicInputHandler struct {
 	panicVal any
 }
 
-func (h testPanicInputHandler) JawsInput(e *Element, val string) error {
+func (h testPanicInputHandler) JawsInput(elem *Element, value string) error {
 	panic(h.panicVal)
 }
 
@@ -114,7 +114,7 @@ type testClickCounter struct {
 	lastValue Click
 }
 
-func (c *testClickCounter) JawsClick(_ *Element, click Click) error {
+func (c *testClickCounter) JawsClick(elem *Element, click Click) error {
 	c.lastValue = click
 	if click.Name != c.wantName {
 		return ErrEventUnhandled
@@ -129,7 +129,7 @@ type testContextMenuCounter struct {
 	lastValue Click
 }
 
-func (c *testContextMenuCounter) JawsContextMenu(_ *Element, click Click) error {
+func (c *testContextMenuCounter) JawsContextMenu(elem *Element, click Click) error {
 	c.lastValue = click
 	if click.Name != c.wantName {
 		return ErrEventUnhandled
@@ -147,26 +147,26 @@ type clickInputSetRecorder struct {
 
 type clickOnlyComboHandler struct{ rec *clickInputSetRecorder }
 
-func (h clickOnlyComboHandler) JawsClick(*Element, Click) error {
+func (h clickOnlyComboHandler) JawsClick(elem *Element, click Click) error {
 	h.rec.clickCalls++
 	return h.rec.clickRet
 }
 
 type inputOnlyComboHandler struct{ rec *clickInputSetRecorder }
 
-func (h inputOnlyComboHandler) JawsInput(*Element, string) error {
+func (h inputOnlyComboHandler) JawsInput(elem *Element, value string) error {
 	h.rec.inputCalls++
 	return h.rec.inputRet
 }
 
 type dualClickInputComboHandler struct{ rec *clickInputSetRecorder }
 
-func (h dualClickInputComboHandler) JawsClick(*Element, Click) error {
+func (h dualClickInputComboHandler) JawsClick(elem *Element, click Click) error {
 	h.rec.clickCalls++
 	return h.rec.clickRet
 }
 
-func (h dualClickInputComboHandler) JawsInput(*Element, string) error {
+func (h dualClickInputComboHandler) JawsInput(elem *Element, value string) error {
 	h.rec.inputCalls++
 	return h.rec.inputRet
 }

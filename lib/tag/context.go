@@ -12,7 +12,7 @@ type Context interface {
 	// Get returns the JaWS session value for the key, or nil.
 	Get(key string) any
 	// Set sets the JaWS session value for the key.
-	Set(key string, val any)
+	Set(key string, value any)
 	// Context returns the Request's context.
 	Context() (ctx context.Context)
 	// Log sends an error to the Logger set in the Jaws.

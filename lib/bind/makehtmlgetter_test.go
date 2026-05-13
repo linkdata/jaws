@@ -29,8 +29,8 @@ func (ag *testAnySetter) JawsGetAny(*Element) any {
 	return ag.Value
 }
 
-func (ag *testAnySetter) JawsSetAny(e *Element, v any) error {
-	ag.Value = v
+func (ag *testAnySetter) JawsSetAny(elem *Element, value any) error {
+	ag.Value = value
 	return nil
 }*/
 

@@ -49,7 +49,7 @@ func JawsKeyValue(jawsKey string) uint64 {
 // JavaScript and CSS files are emitted as script and stylesheet tags. Other
 // recognized resources are emitted as preload tags. Favicon image URLs are
 // returned separately.
-func PreloadHTML(urls ...*url.URL) (htmlcode, faviconurl string) {
+func PreloadHTML(urls ...*url.URL) (htmlCode, faviconURL string) {
 	var jsurls, cssurls []string
 	var favicontype string
 	var buf []byte
@@ -74,7 +74,7 @@ func PreloadHTML(urls ...*url.URL) (htmlcode, faviconurl string) {
 					asattr = "image"
 					if strings.HasPrefix(filepath.Base(u.Path), "favicon") {
 						favicontype = mimetype
-						faviconurl = urlstr
+						faviconURL = urlstr
 						continue
 					}
 				} else if strings.HasPrefix(mimetype, "font") {
@@ -102,11 +102,11 @@ func PreloadHTML(urls ...*url.URL) (htmlcode, faviconurl string) {
 		buf = append(buf, urlstr...)
 		buf = append(buf, "\">\n"...)
 	}
-	if faviconurl != "" {
+	if faviconURL != "" {
 		buf = append(buf, `<link rel="icon" type="`...)
 		buf = append(buf, favicontype...)
 		buf = append(buf, `" href="`...)
-		buf = append(buf, faviconurl...)
+		buf = append(buf, faviconURL...)
 		buf = append(buf, "\">\n"...)
 	}
 	for _, urlstr := range jsurls {
@@ -114,6 +114,6 @@ func PreloadHTML(urls ...*url.URL) (htmlcode, faviconurl string) {
 		buf = append(buf, []byte(urlstr)...)
 		buf = append(buf, "\"></script>\n"...)
 	}
-	htmlcode = string(buf)
+	htmlCode = string(buf)
 	return
 }

@@ -43,7 +43,7 @@ func (nba *BoolArray) WriteLocked(fn func(nbl []*Bool) []*Bool) {
 }
 
 // JawsContains returns the option widgets for a select backed by nba.
-func (nba *BoolArray) JawsContains(e *jaws.Element) (contents []jaws.UI) {
+func (nba *BoolArray) JawsContains(elem *jaws.Element) (contents []jaws.UI) {
 	nba.mu.RLock()
 	for _, nb := range nba.data {
 		contents = append(contents, namedBoolOption{nb})
@@ -154,14 +154,14 @@ func (nba *BoolArray) String() string {
 }
 
 // JawsGet returns the currently selected name.
-func (nba *BoolArray) JawsGet(e *jaws.Element) string {
+func (nba *BoolArray) JawsGet(elem *jaws.Element) string {
 	return nba.Get()
 }
 
 // JawsSet selects name and dirties nba if the selection changed.
-func (nba *BoolArray) JawsSet(e *jaws.Element, name string) (err error) {
+func (nba *BoolArray) JawsSet(elem *jaws.Element, name string) (err error) {
 	if nba.Set(name, true) {
-		e.Dirty(nba)
+		elem.Dirty(nba)
 	} else {
 		err = jaws.ErrValueUnchanged
 	}

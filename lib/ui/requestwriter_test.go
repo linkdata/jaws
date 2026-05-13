@@ -17,7 +17,7 @@ type testRWUpdater struct {
 	called int
 }
 
-func (u *testRWUpdater) JawsUpdate(*jaws.Element) {
+func (u *testRWUpdater) JawsUpdate(elem *jaws.Element) {
 	u.called++
 }
 
@@ -25,9 +25,9 @@ type requestWriterFailGetter struct {
 	err error
 }
 
-func (g requestWriterFailGetter) JawsGetHTML(*jaws.Element) template.HTML { return "x" }
-func (g requestWriterFailGetter) JawsGetTag(tag.Context) any              { return g }
-func (g requestWriterFailGetter) JawsInit(*jaws.Element) error            { return g.err }
+func (g requestWriterFailGetter) JawsGetHTML(elem *jaws.Element) template.HTML { return "x" }
+func (g requestWriterFailGetter) JawsGetTag(tag.Context) any                   { return g }
+func (g requestWriterFailGetter) JawsInit(elem *jaws.Element) error            { return g.err }
 
 func TestRequestWriter_MethodsAndWidgetHelpers(t *testing.T) {
 	jw, rq := newCoreSessionBoundRequest(t)

@@ -50,20 +50,20 @@ func (nb *Bool) HTML() (h template.HTML) {
 }
 
 // JawsGetHTML returns the trusted HTML label for nb.
-func (nb *Bool) JawsGetHTML(*jaws.Element) (h template.HTML) {
+func (nb *Bool) JawsGetHTML(elem *jaws.Element) (h template.HTML) {
 	return nb.HTML()
 }
 
 // JawsGet returns whether nb is checked.
-func (nb *Bool) JawsGet(*jaws.Element) (v bool) {
+func (nb *Bool) JawsGet(elem *jaws.Element) (yes bool) {
 	nb.mu.RLock()
-	v = nb.checked
+	yes = nb.checked
 	nb.mu.RUnlock()
 	return
 }
 
 // JawsSet sets the checked state and dirties the affected element tags.
-func (nb *Bool) JawsSet(e *jaws.Element, checked bool) (err error) {
+func (nb *Bool) JawsSet(elem *jaws.Element, checked bool) (err error) {
 	err = jaws.ErrValueUnchanged
 	nba := nb.nba
 	if nba != nil {
@@ -77,10 +77,10 @@ func (nb *Bool) JawsSet(e *jaws.Element, checked bool) (err error) {
 	}
 	nb.mu.Unlock()
 	if err == nil {
-		e.Dirty(nb)
+		elem.Dirty(nb)
 		if nba != nil {
 			nba.deselectOthersLocked(nb.name, checked)
-			e.Dirty(nba)
+			elem.Dirty(nba)
 		}
 	}
 	return
