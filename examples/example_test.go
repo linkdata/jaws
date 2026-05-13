@@ -16,8 +16,7 @@ const indexhtml = `
   <head>{{$.HeadHTML}}</head>
   <body>{{with .Dot}}
     {{$.Range .}}
-    {{$.TailHTML}}
-  {{end}}</body>
+  {{end}}{{$.TailHTML}}</body>
 </html>
 `
 

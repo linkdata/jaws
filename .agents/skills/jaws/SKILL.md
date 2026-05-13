@@ -119,7 +119,7 @@ For clickable content rendering:
 ## Rendering and update rules
 
 - Keep HTML structure in templates; avoid manual HTML string assembly in Go.
-- `ui.Template.JawsUpdate` re-renders the template data into the generated wrapper; custom `Dot.JawsUpdate` methods are not called by Template.
+- `ui.Template.JawsUpdate` re-renders the template data into the generated wrapper.
 - HTML getter paths must not mutate domain state, but they may call element update methods (`SetClass`, `RemoveClass`, `SetAttr`, `RemoveAttr`, etc.) on the passed-in `*Element` to co-ordinate wrapper class/attribute changes with the inner-HTML refresh. No custom `JawsUpdate` is needed for that case — the queued wrapper updates flush alongside the `SetInner` from `HTMLInner.JawsUpdate`.
 - Use a custom `JawsUpdate` only when the widget's update logic diverges from "render the getter again" — e.g. to compare against a stored last-value and skip the update (as the input widgets do).
 - `Element.SetAttr/RemoveAttr/SetClass/RemoveClass/SetInner/SetValue/Append/Order/Remove/Replace` are update-time operations; call them only from render/update processing.

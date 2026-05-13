@@ -43,7 +43,7 @@ For widget authoring guidance see `lib/ui/README.md`.
 
 ### AI skill
 
-This repository includes a AI skill under `.agents/skills/jaws/`.
+This repository includes an AI skill under `.agents/skills/jaws/`.
 To install it in your local AI skills tree, copy both `SKILL.md` and
 `agents/openai.yaml` into `~/.agents/skills/jaws/`.
 
@@ -81,7 +81,7 @@ import (
 const indexhtml = `
 <html>
 <head>{{$.HeadHTML}}</head>
-<body>{{$.Range .Dot}}</body>
+<body>{{$.Range .Dot}}{{$.TailHTML}}</body>
 </html>
 `
 
@@ -173,9 +173,9 @@ client/server protocol code:
 ### HTTP request flow and associating the WebSocket
 
 When a new HTTP request is received, create a JaWS Request using the
-JaWS object's `NewRequest()` method, and then use the Request's
-`HeadHTML()` method to get the HTML code needed in the `<head>` section
-of the HTML page.
+JaWS object's `NewRequest()` method, then use the Request's `HeadHTML()`
+method in the `<head>` section and `TailHTML()` before the closing
+`</body>` tag.
 
 When the client has finished loading the document and parsed the
 scripts, the JaWS JavaScript will request a WebSocket connection on
@@ -372,8 +372,8 @@ create the Request object. This value is written to the HTML output so it
 can be read by the JavaScript, and used to construct the WebSocket callback
 URL.
 
-Once the WebSocket call comes in, the value is consumed by that request,
-and is no longer valid until, theoretically, another Request gets the same
+Once the WebSocket call comes in, the value is consumed by that request.
+The same value can only be used again if a later Request receives the same
 random value. And that's fine, since JaWS guarantees that no two Requests
 waiting for WebSocket calls can have the same value at the same time.
 

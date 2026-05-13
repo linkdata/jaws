@@ -70,3 +70,6 @@ assets
     ├── otherpage.html
     └── index.html
 ```
+
+Page templates rendered through `ui.Handler` should include `{{$.HeadHTML}}`
+inside `<head>` and `{{$.TailHTML}}` before the closing `</body>` tag.
