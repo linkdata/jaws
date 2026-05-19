@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/linkdata/jaws/lib/htmlio"
 )
 
 // JavascriptText is the source code for the client-side JaWS JavaScript library.
@@ -81,38 +83,32 @@ func PreloadHTML(urls ...*url.URL) (htmlCode, faviconURL string) {
 					asattr = "font"
 				}
 			}
-			buf = append(buf, `<link rel="preload" href="`...)
-			buf = append(buf, urlstr...)
-			buf = append(buf, '"')
+			buf = append(buf, `<link rel="preload"`...)
+			buf = htmlio.AppendAttr(buf, "href", urlstr)
 			if asattr != "" {
-				buf = append(buf, ` as="`...)
-				buf = append(buf, asattr...)
-				buf = append(buf, '"')
+				buf = htmlio.AppendAttr(buf, "as", asattr)
 			}
 			if mimetype != "" {
-				buf = append(buf, ` type="`...)
-				buf = append(buf, mimetype...)
-				buf = append(buf, '"')
+				buf = htmlio.AppendAttr(buf, "type", mimetype)
 			}
 			buf = append(buf, ">\n"...)
 		}
 	}
 	for _, urlstr := range cssurls {
-		buf = append(buf, `<link rel="stylesheet" href="`...)
-		buf = append(buf, urlstr...)
-		buf = append(buf, "\">\n"...)
+		buf = append(buf, `<link rel="stylesheet"`...)
+		buf = htmlio.AppendAttr(buf, "href", urlstr)
+		buf = append(buf, ">\n"...)
 	}
 	if faviconURL != "" {
-		buf = append(buf, `<link rel="icon" type="`...)
-		buf = append(buf, favicontype...)
-		buf = append(buf, `" href="`...)
-		buf = append(buf, faviconURL...)
-		buf = append(buf, "\">\n"...)
+		buf = append(buf, `<link rel="icon"`...)
+		buf = htmlio.AppendAttr(buf, "type", favicontype)
+		buf = htmlio.AppendAttr(buf, "href", faviconURL)
+		buf = append(buf, ">\n"...)
 	}
 	for _, urlstr := range jsurls {
-		buf = append(buf, `<script defer src="`...)
-		buf = append(buf, []byte(urlstr)...)
-		buf = append(buf, "\"></script>\n"...)
+		buf = append(buf, `<script defer`...)
+		buf = htmlio.AppendAttr(buf, "src", urlstr)
+		buf = append(buf, "></script>\n"...)
 	}
 	htmlCode = string(buf)
 	return

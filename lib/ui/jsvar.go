@@ -1,18 +1,17 @@
 package ui
 
 import (
-	"bytes"
 	"encoding/json"
 	"html/template"
 	"io"
 	"reflect"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
+	"github.com/linkdata/jaws/lib/htmlio"
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
@@ -181,12 +180,9 @@ func (jsvar *JsVar[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any)
 				var b []byte
 				b = append(b, "\n<div id="...)
 				b = elem.Jid().AppendQuote(b)
-				b = append(b, ` data-jawsname=`...)
-				b = strconv.AppendQuote(b, jsvarName)
+				b = htmlio.AppendAttr(b, "data-jawsname", jsvarName)
 				if data != nil {
-					b = append(b, ` data-jawsdata='`...)
-					b = append(b, bytes.ReplaceAll(data, []byte(`'`), []byte(`\u0027`))...)
-					b = append(b, "'"...)
+					b = htmlio.AppendAttr(b, "data-jawsdata", string(data))
 				}
 				b = appendAttrs(b, attrs)
 				b = append(b, " hidden></div>"...)

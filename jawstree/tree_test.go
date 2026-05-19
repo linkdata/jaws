@@ -2,6 +2,7 @@ package jawstree
 
 import (
 	"encoding/json"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -91,10 +92,11 @@ func TestTree(t *testing.T) {
 	}
 
 	numnodes := 0
+	rendered := html.UnescapeString(sb.String())
 	rootnode.Walk("", func(jsPath string, node *Node) {
 		b, err := json.Marshal(node)
 		maybeError(t, err)
-		if !strings.Contains(sb.String(), string(b)) {
+		if !strings.Contains(rendered, string(b)) {
 			t.Error(node.Name)
 		}
 		numnodes++

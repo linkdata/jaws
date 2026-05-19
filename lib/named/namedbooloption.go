@@ -1,8 +1,6 @@
 package named
 
 import (
-	"html"
-	"html/template"
 	"io"
 
 	"github.com/linkdata/jaws"
@@ -18,7 +16,7 @@ type namedBoolOption struct {
 func (opt namedBoolOption) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
 	elem.Tag(opt.Bool)
 	attrs := elem.ApplyParams(params)
-	valattr := template.HTMLAttr(`value="` + html.EscapeString(opt.Name()) + `"`) // #nosec G203
+	valattr := htmlio.Attr("value", opt.Name())
 	attrs = append(attrs, valattr)
 	if opt.Checked() {
 		attrs = append(attrs, "selected")

@@ -1,9 +1,9 @@
 package htmlio
 
 import (
+	"html"
 	"html/template"
 	"io"
-	"strconv"
 
 	"github.com/linkdata/jaws/lib/jid"
 )
@@ -44,15 +44,35 @@ func appendAttrs(b []byte, attrs []template.HTMLAttr) []byte {
 	return b
 }
 
+// AppendAttrValue appends value as a double-quoted HTML attribute value.
+func AppendAttrValue(b []byte, value string) []byte {
+	b = append(b, '"')
+	b = append(b, html.EscapeString(value)...)
+	b = append(b, '"')
+	return b
+}
+
+// AppendAttr appends a trusted attribute name with an escaped value.
+func AppendAttr(b []byte, name, value string) []byte {
+	b = append(b, ' ')
+	b = append(b, name...)
+	b = append(b, '=')
+	b = AppendAttrValue(b, value)
+	return b
+}
+
+// Attr returns a trusted attribute name with an escaped value.
+func Attr(name, value string) template.HTMLAttr {
+	return template.HTMLAttr(AppendAttr(nil, name, value)[1:]) // #nosec G203
+}
+
 func appendHTMLTag(b []byte, jid jid.Jid, htmlTag, typeAttr, valueAttr string, attrs []template.HTMLAttr) []byte {
 	b = jid.AppendStartTagAttr(b, htmlTag)
 	if typeAttr != "" {
-		b = append(b, ` type=`...)
-		b = strconv.AppendQuote(b, typeAttr)
+		b = AppendAttr(b, "type", typeAttr)
 	}
 	if valueAttr != "" {
-		b = append(b, ` value=`...)
-		b = strconv.AppendQuote(b, valueAttr)
+		b = AppendAttr(b, "value", valueAttr)
 	}
 	b = appendAttrs(b, attrs)
 	b = append(b, '>')

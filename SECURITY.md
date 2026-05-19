@@ -311,7 +311,7 @@ The framework uses Go's `template.HTML` type to distinguish trusted HTML from un
 - **Input widgets** (Text, Checkbox, Range, etc.) use `SetValue()` → sends `Value` command → client sets `elem.value` (safe, no HTML parsing)
 - **Display widgets** (Span, Div, Label, etc.) use `SetInner()` → sends `Inner` command → client sets `elem.innerHTML`
 - `SetInner()` accepts `template.HTML`, meaning the developer has explicitly marked the content as trusted
-- Initial HTML rendering escapes attribute values via `strconv.AppendQuote()` (`writehtml.go:48-53`)
+- Initial HTML rendering escapes generated attribute values with HTML entities (`htmlio.AppendAttrValue`)
 
 **Implication:** The framework itself does not create XSS vulnerabilities. However, an application developer who passes unescaped user input as `template.HTML` to `SetInner()` would create a stored XSS condition. The CSP `script-src 'self'` mitigates this by blocking inline script execution.
 

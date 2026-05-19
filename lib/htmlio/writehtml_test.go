@@ -118,6 +118,15 @@ func Test_WriteHTMLInput(t *testing.T) {
 			},
 			want: `<input id="Jid.4" type="input_type2" value="initial_val2" some_attr1 some_attr2>`,
 		},
+		{
+			name: "HTMLInput escapes generated attr values",
+			args: args{
+				jid: 5,
+				typ: `"&<>'\` + "\n",
+				val: `"&<>'\` + "\n",
+			},
+			want: "<input id=\"Jid.5\" type=\"&#34;&amp;&lt;&gt;&#39;\\\n\" value=\"&#34;&amp;&lt;&gt;&#39;\\\n\">",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -129,5 +138,17 @@ func Test_WriteHTMLInput(t *testing.T) {
 				t.Errorf("HTMLInput() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestAppendAttr(t *testing.T) {
+	value := `"&<>'\` + "\n"
+	got := string(htmlio.AppendAttr(nil, "data-x", value))
+	want := " data-x=\"&#34;&amp;&lt;&gt;&#39;\\\n\""
+	if got != want {
+		t.Fatalf("AppendAttr() = %q, want %q", got, want)
+	}
+	if strings.Contains(got, `\"`) || strings.Contains(got, `\n`) {
+		t.Fatalf("AppendAttr() used Go/JavaScript-style escapes: %q", got)
 	}
 }

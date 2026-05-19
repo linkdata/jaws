@@ -86,13 +86,27 @@ func TestImg_RenderAndUpdate(t *testing.T) {
 	ui.JawsUpdate(elem)
 }
 
+func TestImg_RenderEscapesSrcAttr(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	src := newTestSetter(`image"&copy=<x>'\` + "\n")
+
+	_, got := renderUI(t, rq, NewImg(src))
+	want := "src=\"image&#34;&amp;copy=&lt;x&gt;&#39;\\\n\""
+	if !strings.Contains(got, want) {
+		t.Fatalf("rendered image missing escaped src attr %q in %q", want, got)
+	}
+	if strings.Contains(got, `\"`) || strings.Contains(got, `\n`) {
+		t.Fatalf("rendered image used Go/JavaScript-style escapes: %q", got)
+	}
+}
+
 func TestOption_RenderAndUpdate(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	nba := named.NewBoolArray(false)
-	nb := named.NewBool(nba, `escape"me`, "<unescaped>", true)
+	nb := named.NewBool(nba, `escape"&copy=<me>'`, "<unescaped>", true)
 	ui := NewOption(nb)
 	elem, got := renderUI(t, rq, ui, "hidden")
-	mustMatch(t, `^<option id="Jid\.[0-9]+" hidden value="escape&#34;me" selected><unescaped></option>$`, got)
+	mustMatch(t, `^<option id="Jid\.[0-9]+" hidden value="escape&#34;&amp;copy=&lt;me&gt;&#39;" selected><unescaped></option>$`, got)
 
 	nb.Set(false)
 	ui.JawsUpdate(elem)

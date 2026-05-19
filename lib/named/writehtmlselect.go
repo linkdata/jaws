@@ -3,7 +3,6 @@ package named
 import (
 	"html/template"
 	"io"
-	"strconv"
 
 	"github.com/linkdata/jaws/lib/htmlio"
 	"github.com/linkdata/jaws/lib/jid"
@@ -15,8 +14,8 @@ func WriteHTMLSelect(w io.Writer, jid jid.Jid, nba *BoolArray, attrs []template.
 		var b []byte
 		nba.ReadLocked(func(nba []*Bool) {
 			for _, nb := range nba {
-				b = append(b, "\n<option value="...)
-				b = strconv.AppendQuote(b, nb.Name())
+				b = append(b, "\n<option"...)
+				b = htmlio.AppendAttr(b, "value", nb.Name())
 				if nb.Checked() {
 					b = append(b, ` selected`...)
 				}

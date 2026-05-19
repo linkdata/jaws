@@ -17,9 +17,11 @@ import (
 
 func Test_PreloadHTML(t *testing.T) {
 	const extraScript = "someExtraScript.js"
+	const extraScriptWithQuery = "someExtraQuery.js?x=1&copy=2"
 	const extraStyle = "someExtraStyle.css"
 	const extraImage = "favicon.png"
 	const extraFont = "someExtraFont.woff2"
+	const extraFontWithQuery = "someExtraFontQuery.woff2?x=1&copy=2"
 
 	serveJS, err := staticserve.New("/jaws/.jaws.js", JavascriptText)
 	if err != nil {
@@ -48,9 +50,11 @@ func Test_PreloadHTML(t *testing.T) {
 	txt, fav = PreloadHTML(
 		mustParseURL(serveJS.Name),
 		mustParseURL(extraScript),
+		mustParseURL(extraScriptWithQuery),
 		mustParseURL(extraStyle),
 		mustParseURL(extraImage),
 		mustParseURL(extraFont),
+		mustParseURL(extraFontWithQuery),
 	)
 	if !strings.Contains(txt, serveJS.Name) {
 		t.Fatalf("missing %q in preload output: %q", serveJS.Name, txt)
@@ -66,6 +70,15 @@ func Test_PreloadHTML(t *testing.T) {
 	}
 	if !strings.Contains(txt, extraFont) {
 		t.Fatalf("missing %q in preload output: %q", extraFont, txt)
+	}
+	if strings.Contains(txt, extraScriptWithQuery) || strings.Contains(txt, extraFontWithQuery) {
+		t.Fatalf("preload output contains unescaped query ampersand: %q", txt)
+	}
+	if !strings.Contains(txt, `src="someExtraQuery.js?x=1&amp;copy=2"`) {
+		t.Fatalf("missing escaped script query in preload output: %q", txt)
+	}
+	if !strings.Contains(txt, `href="someExtraFontQuery.woff2?x=1&amp;copy=2"`) {
+		t.Fatalf("missing escaped font query in preload output: %q", txt)
 	}
 	if strings.Count(txt, "<script") != strings.Count(txt, "</script>") {
 		t.Fatalf("script tags are unbalanced: %q", txt)

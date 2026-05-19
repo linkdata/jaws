@@ -2,8 +2,10 @@ package ui
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"html/template"
 	"strings"
 	"sync"
@@ -56,12 +58,25 @@ func (errorJsVarMaker) JawsMakeJsVar(rq *jaws.Request) (IsJsVar, error) {
 	return nil, errors.New("maker error")
 }
 
+func htmlAttrValue(t *testing.T, htmlText, name string) string {
+	t.Helper()
+	_, after, ok := strings.Cut(htmlText, name+`="`)
+	if !ok {
+		t.Fatalf("missing %s attr in %q", name, htmlText)
+	}
+	value, _, ok := strings.Cut(after, `"`)
+	if !ok {
+		t.Fatalf("unterminated %s attr in %q", name, htmlText)
+	}
+	return html.UnescapeString(value)
+}
+
 func TestJsVar_RenderSetAndEvent(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	go jw.Serve()
 
 	var mu sync.Mutex
-	v := jsVarData{Text: "quote(')", Num: 1}
+	v := jsVarData{Text: `quote(') "& <script>`, Num: 1}
 	jsv := NewJsVar(&mu, &v)
 	elem := rq.NewElement(jsv)
 
@@ -71,18 +86,27 @@ func TestJsVar_RenderSetAndEvent(t *testing.T) {
 	}
 	got := sb.String()
 	if !strings.Contains(got, `data-jawsname="myjsvar"`) ||
-		!strings.Contains(got, `\u0027`) ||
 		!strings.Contains(got, `data-x="1"`) {
 		t.Fatalf("unexpected jsvar render: %q", got)
+	}
+	if strings.Contains(got, `data-jawsdata='`) {
+		t.Fatalf("jsvar render used single-quoted data attr: %q", got)
+	}
+	var gotData jsVarData
+	if err := json.Unmarshal([]byte(htmlAttrValue(t, got, "data-jawsdata")), &gotData); err != nil {
+		t.Fatalf("data-jawsdata is not JSON: %v", err)
+	}
+	if gotData != v {
+		t.Fatalf("data-jawsdata = %#v, want %#v", gotData, v)
 	}
 
 	if jsv.JawsGetTag(rq) == nil {
 		t.Fatal("expected non-nil tag after render")
 	}
-	if gotV := jsv.JawsGet(nil); gotV.Text != "quote(')" || gotV.Num != 1 {
+	if gotV := jsv.JawsGet(nil); gotV.Text != v.Text || gotV.Num != 1 {
 		t.Fatalf("unexpected value %#v", gotV)
 	}
-	if gotPath := jsv.JawsGetPath(nil, "text"); gotPath != "quote(')" {
+	if gotPath := jsv.JawsGetPath(nil, "text"); gotPath != v.Text {
 		t.Fatalf("unexpected path value %#v", gotPath)
 	}
 	_ = jsv.JawsGetPath(elem, "[")
@@ -306,7 +330,7 @@ func TestJsVar_RenderIncludesZeroValueData(t *testing.T) {
 	if err := jsv.JawsRender(elem, &sb, []any{"zerovar"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := sb.String(); !strings.Contains(got, `data-jawsdata='`) {
+	if got := sb.String(); !strings.Contains(got, `data-jawsdata="`) {
 		t.Fatalf("expected data-jawsdata for zero value, got %q", got)
 	}
 }

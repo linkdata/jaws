@@ -1,11 +1,11 @@
 package jawstree
 
 import (
-	"fmt"
 	"io"
 	"strconv"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/lib/htmlio"
 	"github.com/linkdata/jaws/lib/ui"
 )
 
@@ -33,14 +33,14 @@ func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	return
 }
 
-const newtreeTemplate = `
-<script src=%q></script>`
-
 // JawsRender renders the hidden root data element and tree initialization script.
 func (tree *Tree) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	if err = tree.JsVar.JawsRender(elem, w, append([]any{"jawstreeroot_" + tree.id}, params...)); err == nil {
-		if _, err = fmt.Fprintf(w, newtreeTemplate, initScriptURL(tree.id, tree.options)); err == nil {
-		}
+		var b []byte
+		b = append(b, "\n<script"...)
+		b = htmlio.AppendAttr(b, "src", initScriptURL(tree.id, tree.options))
+		b = append(b, "></script>"...)
+		_, err = w.Write(b)
 	}
 	return
 }

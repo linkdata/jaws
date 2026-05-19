@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"html"
-	"html/template"
 	"io"
 
 	"github.com/linkdata/jaws"
@@ -20,7 +18,7 @@ func NewOption(nb *named.Bool) Option { return Option{Bool: nb} }
 func (u Option) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
 	elem.Tag(u.Bool)
 	attrs := elem.ApplyParams(params)
-	valAttr := template.HTMLAttr(`value="` + html.EscapeString(u.Name()) + `"`) // #nosec G203
+	valAttr := htmlio.Attr("value", u.Name())
 	attrs = append(attrs, valAttr)
 	if u.Checked() {
 		attrs = append(attrs, "selected")

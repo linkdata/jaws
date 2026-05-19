@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"html/template"
+	"strings"
 	"testing"
 	"time"
 
@@ -153,6 +154,21 @@ func TestTextarea_RenderEscapesHTML(t *testing.T) {
 
 	_, got := renderUI(t, rq, NewTextarea(ss))
 	mustMatch(t, `^<textarea id="Jid\.[0-9]+">x&lt;/textarea&gt;&lt;script&gt;alert\(&#34;x&#34;\)&lt;/script&gt;</textarea>$`, got)
+}
+
+func TestInputTextWidget_RenderEscapesValueAttr(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	value := `"&<>'\` + "\n"
+	ss := newTestSetter(value)
+
+	_, got := renderUI(t, rq, NewText(ss))
+	want := "value=\"&#34;&amp;&lt;&gt;&#39;\\\n\""
+	if !strings.Contains(got, want) {
+		t.Fatalf("rendered input missing escaped value attr %q in %q", want, got)
+	}
+	if strings.Contains(got, `\"`) || strings.Contains(got, `\n`) {
+		t.Fatalf("rendered input used Go/JavaScript-style escapes: %q", got)
+	}
 }
 
 func TestInputTextWidget_InitialHTMLAttrFromBinder(t *testing.T) {

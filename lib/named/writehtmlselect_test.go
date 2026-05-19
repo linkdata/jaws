@@ -66,6 +66,16 @@ func Test_WriteHTMLSelect(t *testing.T) {
 <option value="three">2</option>
 </select>`,
 		},
+		{
+			name: "HTMLSelect escapes option values",
+			args: args{
+				jid: 4,
+				val: NewBoolArray(false).Add(`escape"&copy=<one>'`, "special"),
+			},
+			want: `<select id="Jid.4">
+<option value="escape&#34;&amp;copy=&lt;one&gt;&#39;">special</option>
+</select>`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
