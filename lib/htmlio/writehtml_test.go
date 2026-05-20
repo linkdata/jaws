@@ -152,3 +152,19 @@ func TestAppendAttr(t *testing.T) {
 		t.Fatalf("AppendAttr() used Go/JavaScript-style escapes: %q", got)
 	}
 }
+
+func TestAttr(t *testing.T) {
+	value := `"&<>'\` + "\n"
+	var attr template.HTMLAttr = htmlio.Attr("data-x", value)
+	got := string(attr)
+	want := "data-x=\"&#34;&amp;&lt;&gt;&#39;\\\n\""
+	if got != want {
+		t.Fatalf("Attr() = %q, want %q", got, want)
+	}
+	if strings.HasPrefix(got, " ") {
+		t.Fatalf("Attr() returned a leading space: %q", got)
+	}
+	if strings.Contains(got, `\"`) || strings.Contains(got, `\n`) {
+		t.Fatalf("Attr() used Go/JavaScript-style escapes: %q", got)
+	}
+}
