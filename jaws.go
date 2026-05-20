@@ -50,6 +50,10 @@ const (
 
 	// DefaultWebSocketTimeout is the default time allowed for WebSocket connect and ping responses.
 	DefaultWebSocketTimeout = time.Second * 10
+
+	// DefaultMaxPendingRequestsPerIP is the default maximum number of unclaimed
+	// Requests allowed for each client IP.
+	DefaultMaxPendingRequestsPerIP = 100
 )
 
 type subscription struct {
@@ -71,31 +75,33 @@ type Jid = jid.Jid // convenience alias
 // WebSockets. The zero value is not ready for use; construct instances with
 // [New] to ensure the helper goroutines and static assets are prepared.
 type Jaws struct {
-	CookieName            string          // Name for session cookies, defaults to "jaws"
-	Logger                Logger          // Optional logger to use
-	Debug                 bool            // Set to true to enable debug info in generated HTML code
-	MakeAuth              MakeAuthFn      // Optional function to create ui.With.Auth for Templates
-	BaseContext           context.Context // Non-nil base context for Requests, set to context.Background() in New()
-	WebSocketPingInterval time.Duration   // Interval between keepalive pings on active WebSocket connections. Defaults to DefaultWebSocketPingInterval. Set <=0 to disable keepalive pings.
-	webSocketTimeout      time.Duration   // timeout duration passed to ServeWith
-	bcastCh               chan wire.Message
-	subCh                 chan subscription
-	unsubCh               chan chan wire.Message
-	updateTicker          *time.Ticker
-	reqPool               sync.Pool
-	serveJS               *staticserve.StaticServe
-	serveCSS              *staticserve.StaticServe
-	mu                    deadlock.RWMutex // protects following
-	headPrefix            string
-	faviconURL            string
-	cspHeader             string
-	tmplookers            []TemplateLookuper
-	kg                    *bufio.Reader
-	closeCh               chan struct{} // closed when Close() has been called
-	requests              map[uint64]*Request
-	sessions              map[uint64]*Session
-	dirty                 map[any]int
-	dirtOrder             int
+	CookieName              string          // Name for session cookies, defaults to "jaws"
+	Logger                  Logger          // Optional logger to use
+	Debug                   bool            // Set to true to enable debug info in generated HTML code
+	MakeAuth                MakeAuthFn      // Optional function to create ui.With.Auth for Templates
+	BaseContext             context.Context // Non-nil base context for Requests, set to context.Background() in New()
+	WebSocketPingInterval   time.Duration   // Interval between keepalive pings on active WebSocket connections. Defaults to DefaultWebSocketPingInterval. Set <=0 to disable keepalive pings.
+	MaxPendingRequestsPerIP int             // Maximum number of unclaimed Requests per client IP. Defaults to DefaultMaxPendingRequestsPerIP. Set <=0 to disable the cap.
+	webSocketTimeout        time.Duration   // timeout duration passed to ServeWith
+	bcastCh                 chan wire.Message
+	subCh                   chan subscription
+	unsubCh                 chan chan wire.Message
+	updateTicker            *time.Ticker
+	reqPool                 sync.Pool
+	serveJS                 *staticserve.StaticServe
+	serveCSS                *staticserve.StaticServe
+	mu                      deadlock.RWMutex // protects following
+	headPrefix              string
+	faviconURL              string
+	cspHeader               string
+	tmplookers              []TemplateLookuper
+	kg                      *bufio.Reader
+	closeCh                 chan struct{} // closed when Close() has been called
+	requests                map[uint64]*Request
+	pending                 map[netip.Addr][]*Request
+	sessions                map[uint64]*Session
+	dirty                   map[any]int
+	dirtOrder               int
 }
 
 // New allocates a JaWS instance with the default configuration.
@@ -108,21 +114,23 @@ func New() (jw *Jaws, err error) {
 	if serveJS, err = staticserve.New("/jaws/.jaws.js", assets.JavascriptText); err == nil {
 		if serveCSS, err = staticserve.New("/jaws/.jaws.css", assets.JawsCSS); err == nil {
 			tmp := &Jaws{
-				CookieName:            assets.DefaultCookieName,
-				BaseContext:           context.Background(),
-				WebSocketPingInterval: DefaultWebSocketPingInterval,
-				webSocketTimeout:      DefaultWebSocketTimeout,
-				serveJS:               serveJS,
-				serveCSS:              serveCSS,
-				bcastCh:               make(chan wire.Message, 1),
-				subCh:                 make(chan subscription, 1),
-				unsubCh:               make(chan chan wire.Message, 1),
-				updateTicker:          time.NewTicker(DefaultUpdateInterval),
-				kg:                    bufio.NewReader(rand.Reader),
-				requests:              make(map[uint64]*Request),
-				sessions:              make(map[uint64]*Session),
-				dirty:                 make(map[any]int),
-				closeCh:               make(chan struct{}),
+				CookieName:              assets.DefaultCookieName,
+				BaseContext:             context.Background(),
+				WebSocketPingInterval:   DefaultWebSocketPingInterval,
+				MaxPendingRequestsPerIP: DefaultMaxPendingRequestsPerIP,
+				webSocketTimeout:        DefaultWebSocketTimeout,
+				serveJS:                 serveJS,
+				serveCSS:                serveCSS,
+				bcastCh:                 make(chan wire.Message, 1),
+				subCh:                   make(chan subscription, 1),
+				unsubCh:                 make(chan chan wire.Message, 1),
+				updateTicker:            time.NewTicker(DefaultUpdateInterval),
+				kg:                      bufio.NewReader(rand.Reader),
+				requests:                make(map[uint64]*Request),
+				pending:                 make(map[netip.Addr][]*Request),
+				sessions:                make(map[uint64]*Session),
+				dirty:                   make(map[any]int),
+				closeCh:                 make(chan struct{}),
 			}
 			if err = tmp.GenerateHeadHTML(); err == nil {
 				jw = tmp
@@ -278,16 +286,45 @@ func MakeID() string {
 // Automatic timeout handling is performed by [Jaws.ServeWithTimeout]. The default
 // [Jaws.Serve] helper uses a 10-second timeout.
 func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
+	var remoteIP netip.Addr
+	if r != nil {
+		remoteIP = parseIP(r.RemoteAddr)
+	}
+
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
+	jw.limitPendingRequestsLocked(remoteIP)
 	for rq == nil {
 		jawsKey := jw.nonZeroRandomLocked()
 		if _, ok := jw.requests[jawsKey]; !ok {
 			rq = jw.getRequestLocked(jawsKey, r)
 			jw.requests[jawsKey] = rq
+			jw.pending[rq.remoteIP] = append(jw.pending[rq.remoteIP], rq)
 		}
 	}
 	return
+}
+
+func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) {
+	limit := jw.MaxPendingRequestsPerIP
+	if limit > 0 {
+		for len(jw.pending[remoteIP]) >= limit {
+			oldest := jw.pending[remoteIP][0]
+			jw.recycleLockedWithCause(oldest, newErrTooManyPendingRequests(remoteIP, limit))
+		}
+	}
+}
+
+func (jw *Jaws) removePendingRequestLocked(rq *Request) {
+	pending := jw.pending[rq.remoteIP]
+	if i := slices.Index(pending, rq); i >= 0 {
+		pending = slices.Delete(pending, i, i+1)
+		if len(pending) == 0 {
+			delete(jw.pending, rq.remoteIP)
+		} else {
+			jw.pending[rq.remoteIP] = pending
+		}
+	}
 }
 
 func (jw *Jaws) nonZeroRandomLocked() (value uint64) {
@@ -317,6 +354,7 @@ func (jw *Jaws) UseRequest(jawsKey uint64, r *http.Request) (rq *Request) {
 		if waitingRq, ok := jw.requests[jawsKey]; ok {
 			if err = waitingRq.claim(r); err == nil {
 				rq = waitingRq
+				jw.removePendingRequestLocked(rq)
 			}
 		}
 		jw.mu.Unlock()
@@ -626,10 +664,8 @@ func (jw *Jaws) Alert(level, msg string) {
 func (jw *Jaws) Pending() (n int) {
 	jw.mu.RLock()
 	defer jw.mu.RUnlock()
-	for _, rq := range jw.requests {
-		if !rq.claimed.Load() {
-			n++
-		}
+	for _, pending := range jw.pending {
+		n += len(pending)
 	}
 	return
 }
@@ -930,14 +966,22 @@ func (jw *Jaws) getRequestLocked(jawsKey uint64, r *http.Request) (rq *Request) 
 	return rq
 }
 
-func (jw *Jaws) recycleLocked(rq *Request) {
+func (jw *Jaws) recycleLockedWithCause(rq *Request, err error) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	if rq.JawsKey != 0 {
+		if err != nil {
+			rq.cancelLocked(err)
+		}
+		jw.removePendingRequestLocked(rq)
 		delete(jw.requests, rq.JawsKey)
 		rq.clearLocked()
 		jw.reqPool.Put(rq)
 	}
+}
+
+func (jw *Jaws) recycleLocked(rq *Request) {
+	jw.recycleLockedWithCause(rq, nil)
 }
 
 func (jw *Jaws) recycle(rq *Request) {

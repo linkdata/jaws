@@ -380,6 +380,12 @@ In addition to this, Requests that are not claimed by a WebSocket call get
 cleaned up at regular intervals. By default an unclaimed Request is 
 removed after 10 seconds.
 
+JaWS also limits unclaimed Requests per client IP. The default
+`Jaws.MaxPendingRequestsPerIP` value is 100; setting it to zero or a negative
+value disables this cap. When the cap is reached, creating a new Request evicts
+the oldest pending Request from the same IP, so its old WebSocket key can no
+longer be claimed. The cap uses the IP parsed from `http.Request.RemoteAddr`.
+
 In order to guess (and thus hijack) a WebSocket you'd have to make on the
 order of 2^63 requests before the genuine request comes in, or 10 seconds
 pass assuming you can reliably prevent the genuine WebSocket request.

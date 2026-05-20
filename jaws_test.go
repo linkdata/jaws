@@ -30,6 +30,22 @@ func (testBroadcastTagGetter) JawsGetTag(tag.Context) any {
 	return tag.Tag("expanded")
 }
 
+type captureErrorLogger struct {
+	err error
+}
+
+func (l *captureErrorLogger) Info(string, ...any) {}
+func (l *captureErrorLogger) Warn(string, ...any) {}
+func (l *captureErrorLogger) Error(_ string, args ...any) {
+	for i := 0; i+1 < len(args); i += 2 {
+		if args[i] == "err" {
+			if err, ok := args[i+1].(error); ok {
+				l.err = err
+			}
+		}
+	}
+}
+
 func TestNew_DefaultWebSocketPingInterval(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -40,6 +56,227 @@ func TestNew_DefaultWebSocketPingInterval(t *testing.T) {
 	if got, want := jw.WebSocketPingInterval, DefaultWebSocketPingInterval; got != want {
 		t.Fatalf("WebSocketPingInterval = %v, want %v", got, want)
 	}
+	if got, want := jw.MaxPendingRequestsPerIP, DefaultMaxPendingRequestsPerIP; got != want {
+		t.Fatalf("MaxPendingRequestsPerIP = %v, want %v", got, want)
+	}
+}
+
+func TestJaws_MaxPendingRequestsPerIPDisabled(t *testing.T) {
+	for _, limit := range []int{0, -1} {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer jw.Close()
+		jw.MaxPendingRequestsPerIP = limit
+
+		jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
+		jw.NewRequest(newPendingLimitRequest("192.0.2.1:1001"))
+		jw.NewRequest(newPendingLimitRequest("192.0.2.1:1002"))
+
+		if got := jw.Pending(); got != 3 {
+			t.Fatalf("Pending() with limit %d = %d, want 3", limit, got)
+		}
+		if got := jw.RequestCount(); got != 3 {
+			t.Fatalf("RequestCount() with limit %d = %d, want 3", limit, got)
+		}
+	}
+}
+
+func TestJaws_MaxPendingRequestsPerIPEvictsOldestPending(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.MaxPendingRequestsPerIP = 2
+
+	oldReq := newPendingLimitRequest("192.0.2.1:1000")
+	oldRq := jw.NewRequest(oldReq)
+	oldKey := oldRq.JawsKey
+	setPendingLimitLastWrite(t, oldRq, time.Now().Add(-2*time.Hour))
+
+	midReq := newPendingLimitRequest("192.0.2.1:1001")
+	midRq := jw.NewRequest(midReq)
+	midKey := midRq.JawsKey
+	setPendingLimitLastWrite(t, midRq, time.Now().Add(-time.Hour))
+
+	newReq := newPendingLimitRequest("192.0.2.1:1002")
+	newRq := jw.NewRequest(newReq)
+	newKey := newRq.JawsKey
+
+	if got := jw.Pending(); got != 2 {
+		t.Fatalf("Pending() = %d, want 2", got)
+	}
+	if got := jw.RequestCount(); got != 2 {
+		t.Fatalf("RequestCount() = %d, want 2", got)
+	}
+	if claimed := jw.UseRequest(oldKey, oldReq); claimed != nil {
+		t.Fatalf("evicted request claimed as %v", claimed)
+	}
+	if claimed := jw.UseRequest(midKey, midReq); claimed != midRq {
+		t.Fatalf("middle request claim = %v, want %v", claimed, midRq)
+	}
+	if claimed := jw.UseRequest(newKey, newReq); claimed != newRq {
+		t.Fatalf("new request claim = %v, want %v", claimed, newRq)
+	}
+}
+
+func TestJaws_MaxPendingRequestsPerIPKeepsDifferentIPs(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.MaxPendingRequestsPerIP = 1
+
+	reqA := newPendingLimitRequest("192.0.2.1:1000")
+	rqA := jw.NewRequest(reqA)
+	reqB := newPendingLimitRequest("198.51.100.1:1000")
+	rqB := jw.NewRequest(reqB)
+
+	if got := jw.Pending(); got != 2 {
+		t.Fatalf("Pending() = %d, want 2", got)
+	}
+	if claimed := jw.UseRequest(rqA.JawsKey, reqA); claimed != rqA {
+		t.Fatalf("request A claim = %v, want %v", claimed, rqA)
+	}
+	if claimed := jw.UseRequest(rqB.JawsKey, reqB); claimed != rqB {
+		t.Fatalf("request B claim = %v, want %v", claimed, rqB)
+	}
+}
+
+func TestJaws_MaxPendingRequestsPerIPIgnoresClaimedRequests(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.MaxPendingRequestsPerIP = 1
+
+	claimedReq := newPendingLimitRequest("192.0.2.1:1000")
+	claimedRq := jw.NewRequest(claimedReq)
+	if claimed := jw.UseRequest(claimedRq.JawsKey, claimedReq); claimed != claimedRq {
+		t.Fatalf("claimed request claim = %v, want %v", claimed, claimedRq)
+	}
+	if got := jw.Pending(); got != 0 {
+		t.Fatalf("Pending() after claim = %d, want 0", got)
+	}
+
+	pendingReq := newPendingLimitRequest("192.0.2.1:1001")
+	pendingRq := jw.NewRequest(pendingReq)
+
+	total, active := jw.RequestCounts()
+	if total != 2 || active != 0 {
+		t.Fatalf("RequestCounts() = %d, %d, want 2, 0", total, active)
+	}
+	if got := jw.Pending(); got != 1 {
+		t.Fatalf("Pending() = %d, want 1", got)
+	}
+	jw.mu.RLock()
+	stillPresent := jw.requests[claimedRq.JawsKey] == claimedRq
+	jw.mu.RUnlock()
+	if !stillPresent {
+		t.Fatal("claimed request was evicted")
+	}
+	if claimed := jw.UseRequest(pendingRq.JawsKey, pendingReq); claimed != pendingRq {
+		t.Fatalf("pending request claim = %v, want %v", claimed, pendingRq)
+	}
+}
+
+func TestJaws_MaxPendingRequestsPerIPKeepsLoopbackAddressesSeparate(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.MaxPendingRequestsPerIP = 1
+
+	oldReq := newPendingLimitRequest("127.0.0.1:1000")
+	oldRq := jw.NewRequest(oldReq)
+	setPendingLimitLastWrite(t, oldRq, time.Now().Add(-time.Hour))
+
+	newReq := newPendingLimitRequest("[::1]:1000")
+	newRq := jw.NewRequest(newReq)
+
+	if got := jw.Pending(); got != 2 {
+		t.Fatalf("Pending() = %d, want 2", got)
+	}
+	if claimed := jw.UseRequest(oldRq.JawsKey, oldReq); claimed != oldRq {
+		t.Fatalf("first loopback request claim = %v, want %v", claimed, oldRq)
+	}
+	if claimed := jw.UseRequest(newRq.JawsKey, newReq); claimed != newRq {
+		t.Fatalf("new loopback request claim = %v, want %v", claimed, newRq)
+	}
+}
+
+func TestJaws_MaxPendingRequestsPerIPEvictionCause(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	logger := &captureErrorLogger{}
+	jw.Logger = logger
+	jw.MaxPendingRequestsPerIP = 1
+
+	oldReq := newPendingLimitRequest("192.0.2.1:1000")
+	oldRq := jw.NewRequest(oldReq)
+	setPendingLimitLastWrite(t, oldRq, time.Now().Add(-time.Hour))
+	jw.NewRequest(newPendingLimitRequest("192.0.2.1:1001"))
+
+	if logger.err == nil {
+		t.Fatal("expected eviction error to be logged")
+	}
+	if !errors.Is(logger.err, ErrRequestCancelled) {
+		t.Fatalf("logged error = %v, want ErrRequestCancelled", logger.err)
+	}
+	if !errors.Is(logger.err, ErrTooManyPendingRequests) {
+		t.Fatalf("logged error = %v, want ErrTooManyPendingRequests", logger.err)
+	}
+	var limitErr errTooManyPendingRequests
+	if !errors.As(logger.err, &limitErr) {
+		t.Fatalf("logged error = %T, want errTooManyPendingRequests", logger.err)
+	}
+	if limitErr.Limit != 1 || limitErr.Addr.Compare(parseIP(oldReq.RemoteAddr)) != 0 {
+		t.Fatalf("eviction detail = %#v, want limit 1 and IP %v", limitErr, parseIP(oldReq.RemoteAddr))
+	}
+	if got, want := limitErr.Error(), "too many pending requests from 192.0.2.1 (limit 1)"; got != want {
+		t.Fatalf("Error() = %q, want %q", got, want)
+	}
+}
+
+func TestJaws_MaxPendingRequestsPerIPMaintenanceRemovesPendingIndex(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.MaxPendingRequestsPerIP = 1
+
+	rq := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
+	setPendingLimitLastWrite(t, rq, time.Now().Add(-time.Hour))
+	jw.maintenance(time.Second)
+
+	if got := jw.Pending(); got != 0 {
+		t.Fatalf("Pending() after maintenance = %d, want 0", got)
+	}
+	if got := jw.RequestCount(); got != 0 {
+		t.Fatalf("RequestCount() after maintenance = %d, want 0", got)
+	}
+}
+
+func newPendingLimitRequest(remoteAddr string) *http.Request {
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.RemoteAddr = remoteAddr
+	return r
+}
+
+func setPendingLimitLastWrite(t *testing.T, rq *Request, lastWrite time.Time) {
+	t.Helper()
+	rq.mu.Lock()
+	rq.lastWrite = lastWrite
+	rq.mu.Unlock()
 }
 
 func TestCoverage_GenerateHeadAndConvenienceBroadcasts(t *testing.T) {
