@@ -33,7 +33,7 @@ func newSession(jw *Jaws, sessionID uint64, remoteIP netip.Addr, secure bool) *S
 		sessionID: sessionID,
 		remoteIP:  remoteIP,
 		deadline:  time.Now().Add(time.Minute),
-		cookie: http.Cookie{
+		cookie: http.Cookie{ // #nosec G124 -- Secure is set from the request scheme, and HttpOnly/SameSite are set below.
 			Name:     jw.CookieName,
 			Path:     "/",
 			Value:    assets.JawsKeyString(sessionID),
@@ -146,7 +146,7 @@ func (sess *Session) IP() (ip netip.Addr) {
 // It is safe to call on a nil [Session], in which case it returns nil.
 func (sess *Session) Cookie() (cookie *http.Cookie) {
 	if sess != nil {
-		cookie = &http.Cookie{}
+		cookie = &http.Cookie{} // #nosec G124 -- copied from sess.cookie before returning.
 		sess.mu.RLock()
 		*cookie = sess.cookie
 		if sess.isDeadLocked() {
@@ -174,7 +174,7 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 		sess.jw.deleteSession(sess.sessionID)
 
 		sess.mu.Lock()
-		sess.cookie.MaxAge = -1
+		sess.cookie.MaxAge = -1 // #nosec G124 -- marks the already initialized session cookie for deletion.
 		requests := sess.requests
 		sess.requests = nil
 		cookie = new(http.Cookie)
