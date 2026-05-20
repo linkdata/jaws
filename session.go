@@ -76,7 +76,11 @@ func (sess *Session) delRequest(rq *Request) {
 		}
 	}
 	if len(sess.requests) == 0 {
-		sess.deadline = time.Now().Add(time.Minute)
+		var deadline time.Time
+		if rq.claimed.Load() {
+			deadline = time.Now().Add(time.Minute)
+		}
+		sess.deadline = deadline
 	}
 }
 
