@@ -45,6 +45,9 @@ func appendAttrs(b []byte, attrs []template.HTMLAttr) []byte {
 }
 
 // AppendAttrValue appends value as a double-quoted HTML attribute value.
+//
+// The value parameter must be the unescaped logical attribute value. It is
+// escaped for HTML source output by this function.
 func AppendAttrValue(b []byte, value string) []byte {
 	b = append(b, '"')
 	b = append(b, html.EscapeString(value)...)
@@ -53,6 +56,10 @@ func AppendAttrValue(b []byte, value string) []byte {
 }
 
 // AppendAttr appends a trusted attribute name with an escaped value.
+//
+// The name parameter must be a trusted attribute name. The value parameter must
+// be the unescaped logical attribute value; it is escaped for HTML source output
+// by this function.
 func AppendAttr(b []byte, name, value string) []byte {
 	b = append(b, ' ')
 	b = append(b, name...)
@@ -62,6 +69,10 @@ func AppendAttr(b []byte, name, value string) []byte {
 }
 
 // Attr returns a trusted attribute name with an escaped value.
+//
+// The name parameter must be a trusted attribute name. The value parameter must
+// be the unescaped logical attribute value; it is escaped for HTML source output
+// by this function.
 func Attr(name, value string) template.HTMLAttr {
 	return template.HTMLAttr(AppendAttr(nil, name, value)[1:]) // #nosec G203
 }
@@ -81,6 +92,10 @@ func appendHTMLTag(b []byte, jid jid.Jid, htmlTag, typeAttr, valueAttr string, a
 
 // WriteHTMLTag writes an HTML start tag with optional id, type, value and raw
 // attribute fragments.
+//
+// The typeAttr and valueAttr parameters must be unescaped logical values; they
+// are escaped for HTML source output. The attrs parameter contains trusted raw
+// attribute fragments and is written as-is.
 func WriteHTMLTag(w io.Writer, jid jid.Jid, htmlTag, typeAttr, valueAttr string, attrs []template.HTMLAttr) (err error) {
 	var buf [htmlBufferSize]byte
 	b := appendHTMLTag(buf[:0], jid, htmlTag, typeAttr, valueAttr, attrs)
@@ -90,6 +105,10 @@ func WriteHTMLTag(w io.Writer, jid jid.Jid, htmlTag, typeAttr, valueAttr string,
 
 // WriteHTMLInput writes an input start tag with optional id, type, value and
 // raw attribute fragments.
+//
+// The typeAttr and valueAttr parameters must be unescaped logical values; they
+// are escaped for HTML source output. The attrs parameter contains trusted raw
+// attribute fragments and is written as-is.
 func WriteHTMLInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs []template.HTMLAttr) (err error) {
 	return WriteHTMLTag(w, jid, "input", typeAttr, valueAttr, attrs)
 }

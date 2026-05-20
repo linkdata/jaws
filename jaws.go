@@ -785,6 +785,9 @@ func (jw *Jaws) SetInner(target any, innerHTML template.HTML) {
 
 // SetAttr sends a request to replace the given attribute value in
 // all HTML elements matching target.
+//
+// The value parameter must be the unescaped logical attribute value. It is sent
+// to the browser DOM and used as the value argument to setAttribute().
 func (jw *Jaws) SetAttr(target any, attr, value string) {
 	jw.Broadcast(wire.Message{
 		Dest: target,

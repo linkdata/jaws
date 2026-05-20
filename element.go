@@ -123,6 +123,9 @@ func (elem *Element) queue(wht what.What, data string) {
 // SetAttr queues sending a new attribute value
 // to the browser for the [Element] with the given JaWS ID in this [Request].
 //
+// The value parameter must be the unescaped logical attribute value. It is sent
+// to the browser DOM and used as the value argument to setAttribute().
+//
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (elem *Element) SetAttr(attr, value string) {
 	elem.queue(what.SAttr, attr+"\n"+value)
