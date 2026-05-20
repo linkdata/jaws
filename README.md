@@ -204,9 +204,9 @@ loop (`Serve()` or `ServeWithTimeout()`):
 * Configuration: `(*Jaws).AddTemplateLookuper()`, `(*Jaws).RemoveTemplateLookuper()`,
   `(*Jaws).LookupTemplate()`, `(*Jaws).GenerateHeadHTML()`, `(*Jaws).Setup()`,
   `(*Jaws).FaviconURL()`.
-* Inspection and logging helpers: `(*Jaws).RequestCount()`, `(*Jaws).Pending()`,
-  `(*Jaws).SessionCount()`, `(*Jaws).Sessions()`, `(*Jaws).Log()`,
-  `(*Jaws).MustLog()`.
+* Inspection and logging helpers: `(*Jaws).RequestCount()`, `(*Jaws).RequestCounts()`,
+  `(*Jaws).Pending()`, `(*Jaws).SessionCount()`, `(*Jaws).Sessions()`,
+  `(*Jaws).Log()`, `(*Jaws).MustLog()`.
 * Static/ping JaWS endpoints via `(*Jaws).ServeHTTP()`:
   `/jaws/.ping`, `/jaws/.jaws.<hash>.js`, `/jaws/.jaws.<hash>.css`.
 

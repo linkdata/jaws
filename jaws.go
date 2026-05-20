@@ -202,14 +202,29 @@ func (jw *Jaws) LookupTemplate(name string) *template.Template {
 	return nil
 }
 
+// RequestCounts returns the number of [Request] values.
+//
+// The total count includes all Requests, including those being rendered,
+// those waiting for the WebSocket callback and those active. The active count
+// includes Requests whose WebSocket [Request.ServeHTTP] loop is running.
+func (jw *Jaws) RequestCounts() (total, active int) {
+	jw.mu.RLock()
+	defer jw.mu.RUnlock()
+	total = len(jw.requests)
+	for _, rq := range jw.requests {
+		if rq.running.Load() {
+			active++
+		}
+	}
+	return
+}
+
 // RequestCount returns the number of [Request] values.
 //
 // The count includes all Requests, including those being rendered,
 // those waiting for the WebSocket callback and those active.
 func (jw *Jaws) RequestCount() (n int) {
-	jw.mu.RLock()
-	n = len(jw.requests)
-	jw.mu.RUnlock()
+	n, _ = jw.RequestCounts()
 	return
 }
 

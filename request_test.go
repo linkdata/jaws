@@ -1292,11 +1292,22 @@ func TestCoverage_PendingSubscribeMaintenanceAndParse(t *testing.T) {
 
 	hr := httptest.NewRequest("GET", "/", nil)
 	rq := jw.NewRequest(hr)
+	total, active := jw.RequestCounts()
+	if total != 1 || active != 0 {
+		t.Fatalf("RequestCounts() = %d, %d, want 1, 0", total, active)
+	}
+	if got := jw.RequestCount(); got != total {
+		t.Fatalf("RequestCount() = %d, want %d", got, total)
+	}
 	if got := jw.Pending(); got != 1 {
 		t.Fatalf("expected one pending request, got %d", got)
 	}
 	if claimed := jw.UseRequest(rq.JawsKey, hr); claimed != rq {
 		t.Fatal("expected request claim")
+	}
+	total, active = jw.RequestCounts()
+	if total != 1 || active != 0 {
+		t.Fatalf("RequestCounts() = %d, %d, want 1, 0", total, active)
 	}
 	if got := jw.Pending(); got != 0 {
 		t.Fatalf("expected zero pending requests, got %d", got)
@@ -2042,12 +2053,16 @@ func TestWS_PingDisabledKeepsIdleConnection(t *testing.T) {
 	}
 
 	time.Sleep(150 * time.Millisecond)
-	if got := ts.jw.RequestCount(); got != 1 {
-		t.Fatalf("RequestCount() = %d, want 1", got)
+	total, active := ts.jw.RequestCounts()
+	if total != 1 || active != 1 {
+		t.Fatalf("RequestCounts() = %d, %d, want 1, 1", total, active)
+	}
+	if got := ts.jw.RequestCount(); got != total {
+		t.Fatalf("RequestCount() = %d, want %d", got, total)
 	}
 
 	_ = conn.CloseNow()
-	waitForRequestCount(t, ts.jw, 0, testTimeout)
+	waitForRequestCounts(t, ts.jw, 0, 0, testTimeout)
 }
 
 func waitForRequestCount(t *testing.T, jw *Jaws, want int, timeout time.Duration) {
@@ -2059,6 +2074,22 @@ func waitForRequestCount(t *testing.T, jw *Jaws, want int, timeout time.Duration
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("RequestCount() = %d, want %d", jw.RequestCount(), want)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func waitForRequestCounts(t *testing.T, jw *Jaws, wantTotal, wantActive int, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		total, active := jw.RequestCounts()
+		if total == wantTotal && active == wantActive {
+			return
+		}
+		if time.Now().After(deadline) {
+			total, active = jw.RequestCounts()
+			t.Fatalf("RequestCounts() = %d, %d, want %d, %d", total, active, wantTotal, wantActive)
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
