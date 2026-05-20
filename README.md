@@ -338,6 +338,13 @@ Use one of these patterns:
 
 * Wrap page handlers with `Jaws.Session(handler)` to ensure a session exists.
 * Call `Jaws.NewSession(w, r)` explicitly to create and attach a fresh session cookie.
+* Set `Jaws.AutoSession` to lazily create an anonymous session during a
+  successful WebSocket upgrade when a Request has none.
+
+Manual session creation is still the primary pattern when the initial render
+depends on session data. This is especially important for authentication:
+authenticate the user, create or retrieve the session, and populate it before
+calling `NewRequest()` and rendering the page.
 
 When subsequent Requests are created with `NewRequest()`, if the
 HTTP request has the cookie set and comes from the correct IP,

@@ -1766,11 +1766,22 @@ type testServer struct {
 }
 
 func newTestServer() (ts *testServer) {
+	return newTestServerWithSession(true)
+}
+
+func newTestServerNoSession() (ts *testServer) {
+	return newTestServerWithSession(false)
+}
+
+func newTestServerWithSession(withSession bool) (ts *testServer) {
 	jw, _ := New()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	rr := httptest.NewRecorder()
 	hr := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
-	sess := jw.NewSession(rr, hr)
+	var sess *Session
+	if withSession {
+		sess = jw.NewSession(rr, hr)
+	}
 	rq := jw.NewRequest(hr)
 	if rq != jw.UseRequest(rq.JawsKey, hr) {
 		panic("UseRequest failed")
@@ -1868,6 +1879,16 @@ func (ts *testServer) Close() {
 	ts.jw.Close()
 }
 
+func waitForConnectSession(t *testing.T, ch <-chan *Session) (sess *Session) {
+	t.Helper()
+	select {
+	case sess = <-ch:
+	case <-time.After(testTimeout):
+		t.Fatal("timeout waiting for websocket connect")
+	}
+	return
+}
+
 func TestWS_UpgradeRequired(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
@@ -1927,6 +1948,150 @@ func TestWS_RejectsCrossOrigin(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("status %d", resp.StatusCode)
+	}
+}
+
+func TestWS_AutoSessionDefaultDoesNotCreateSession(t *testing.T) {
+	ts := newTestServerNoSession()
+	defer ts.Close()
+
+	sessCh := make(chan *Session, 1)
+	ts.rq.SetConnectFn(func(rq *Request) error {
+		sessCh <- rq.Session()
+		return nil
+	})
+
+	conn, resp, err := ts.Dial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conn != nil {
+		defer conn.Close(websocket.StatusNormalClosure, "")
+	}
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Error(resp.StatusCode)
+	}
+	if sess := waitForConnectSession(t, sessCh); sess != nil {
+		t.Fatalf("expected no session, got %v", sess)
+	}
+	if cookies := resp.Cookies(); len(cookies) != 0 {
+		t.Fatalf("expected no cookies, got %v", cookies)
+	}
+	if got := ts.jw.SessionCount(); got != 0 {
+		t.Fatalf("expected no sessions, got %d", got)
+	}
+}
+
+func TestWS_AutoSessionCreatesSession(t *testing.T) {
+	ts := newTestServerNoSession()
+	defer ts.Close()
+	ts.jw.AutoSession = true
+
+	sessCh := make(chan *Session, 1)
+	ts.rq.SetConnectFn(func(rq *Request) error {
+		sessCh <- rq.Session()
+		return nil
+	})
+
+	conn, resp, err := ts.Dial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conn != nil {
+		defer conn.Close(websocket.StatusNormalClosure, "")
+	}
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Error(resp.StatusCode)
+	}
+
+	sess := waitForConnectSession(t, sessCh)
+	if sess == nil {
+		t.Fatal("expected session")
+	}
+	cookies := resp.Cookies()
+	if len(cookies) != 1 {
+		t.Fatalf("expected one cookie, got %v", cookies)
+	}
+	if cookies[0].Name != ts.jw.CookieName {
+		t.Fatalf("cookie name %q, want %q", cookies[0].Name, ts.jw.CookieName)
+	}
+	if cookies[0].Value != sess.CookieValue() {
+		t.Fatalf("cookie value %q, want %q", cookies[0].Value, sess.CookieValue())
+	}
+
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	hr.RemoteAddr = sess.IP().String()
+	hr.AddCookie(cookies[0])
+	if got := ts.jw.GetSession(hr); got != sess {
+		t.Fatalf("GetSession() = %v, want %v", got, sess)
+	}
+}
+
+func TestWS_AutoSessionKeepsExistingSession(t *testing.T) {
+	ts := newTestServer()
+	defer ts.Close()
+	ts.jw.AutoSession = true
+
+	sessCh := make(chan *Session, 1)
+	ts.rq.SetConnectFn(func(rq *Request) error {
+		sessCh <- rq.Session()
+		return nil
+	})
+
+	conn, resp, err := ts.Dial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conn != nil {
+		defer conn.Close(websocket.StatusNormalClosure, "")
+	}
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Error(resp.StatusCode)
+	}
+	if sess := waitForConnectSession(t, sessCh); sess != ts.sess {
+		t.Fatalf("Session() = %v, want %v", sess, ts.sess)
+	}
+	if cookies := resp.Cookies(); len(cookies) != 0 {
+		t.Fatalf("expected no new cookies, got %v", cookies)
+	}
+	requests := ts.sess.Requests()
+	if len(requests) != 1 || requests[0] != ts.rq {
+		t.Fatalf("expected one attached request, got %v", requests)
+	}
+}
+
+func TestWS_AutoSessionRejectDoesNotCreateSession(t *testing.T) {
+	ts := newTestServerNoSession()
+	defer ts.Close()
+	ts.jw.AutoSession = true
+
+	hdr := http.Header{}
+	hdr.Set("Origin", "https://evil.invalid")
+	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), &websocket.DialOptions{HTTPHeader: hdr})
+	if conn != nil {
+		conn.Close(websocket.StatusNormalClosure, "")
+		t.Fatal("expected handshake to be rejected")
+	}
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if resp == nil {
+		t.Fatal("expected response")
+	}
+	if resp.Body != nil {
+		resp.Body.Close()
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("status %d", resp.StatusCode)
+	}
+	if cookies := resp.Cookies(); len(cookies) != 0 {
+		t.Fatalf("expected no cookies, got %v", cookies)
+	}
+	if got := ts.jw.SessionCount(); got != 0 {
+		t.Fatalf("expected no sessions, got %d", got)
+	}
+	if sess := ts.rq.Session(); sess != nil {
+		t.Fatalf("expected request session to remain nil, got %v", sess)
 	}
 }
 

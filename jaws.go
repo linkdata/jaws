@@ -76,6 +76,7 @@ type Jid = jid.Jid // convenience alias
 // [New] to ensure the helper goroutines and static assets are prepared.
 type Jaws struct {
 	CookieName              string          // Name for session cookies, defaults to "jaws"
+	AutoSession             bool            // Create a session during WebSocket upgrade when a Request has none. Defaults to false.
 	Logger                  Logger          // Optional logger to use
 	Debug                   bool            // Set to true to enable debug info in generated HTML code
 	MakeAuth                MakeAuthFn      // Optional function to create ui.With.Auth for Templates

@@ -139,6 +139,18 @@ func (rq *Request) deadSession(sess *Session) {
 	rq.mu.Unlock()
 }
 
+func (rq *Request) ensureAutoSession(w http.ResponseWriter, r *http.Request) {
+	if rq.Jaws.AutoSession && rq.Session() == nil {
+		sess := rq.Jaws.newSession(w, r)
+		rq.mu.Lock()
+		if rq.session == nil {
+			rq.session = sess
+			sess.addRequest(rq)
+		}
+		rq.mu.Unlock()
+	}
+}
+
 func (rq *Request) clearLocked() *Request {
 	rq.JawsKey = 0
 	rq.lastJid = 0
@@ -989,6 +1001,7 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				rq.cancel(err)
 				return
 			}
+			rq.ensureAutoSession(w, r)
 		}
 		var ws *websocket.Conn
 		ws, err = websocket.Accept(w, r, nil)
