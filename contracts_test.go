@@ -46,7 +46,6 @@ var _ InitialHTMLAttrHandler = testJawsInitialHTMLAttr{}
 
 func Test_clickHandlerWrapper_Dispatch(t *testing.T) {
 	th := newTestHelper(t)
-	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 

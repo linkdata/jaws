@@ -60,7 +60,6 @@ var _ UI = (*testJawsEvent)(nil)
 
 func Test_JawsInput_InvokesJawsInputForDualHandler(t *testing.T) {
 	th := newTestHelper(t)
-	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 
@@ -710,7 +709,6 @@ func Test_CallEventHandlers_ContextMenuOnlyHandlerViaApplyParams(t *testing.T) {
 
 func Test_JawsInput_ExtraHandler(t *testing.T) {
 	th := newTestHelper(t)
-	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 

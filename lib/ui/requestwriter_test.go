@@ -134,7 +134,6 @@ func TestErrMissingTemplateAndRWLocker(t *testing.T) {
 }
 
 func TestRequestWriterUI_RenderErrorDoesNotLeakElement(t *testing.T) {
-	jaws.NextJid = 0
 	_, rq := newCoreRequest(t)
 	var buf bytes.Buffer
 	rw := RequestWriter{Request: rq, Writer: &buf}

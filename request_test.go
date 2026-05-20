@@ -40,7 +40,6 @@ func fillWsCh(ch chan wire.WsMsg) {
 }
 
 func TestRequest_MiscBranches(t *testing.T) {
-	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 
@@ -120,7 +119,6 @@ func TestRequest_HeadHTML_DebugMeta(t *testing.T) {
 
 func TestRequestWriter_TailHTML(t *testing.T) {
 	th := newTestHelper(t)
-	NextJid = 0
 	jw, _ := New()
 	defer jw.Close()
 	rq := jw.NewRequest(nil)
@@ -154,7 +152,6 @@ func TestRequestWriter_TailHTML(t *testing.T) {
 
 func TestRequest_writeTailScript_EscapesScriptClose(t *testing.T) {
 	th := newTestHelper(t)
-	NextJid = 0
 	jw, _ := New()
 	defer jw.Close()
 	rq := jw.NewRequest(nil)
@@ -176,7 +173,6 @@ func TestRequest_writeTailScript_EscapesScriptClose(t *testing.T) {
 
 func TestRequest_writeTailScript_PreservesNonAttrMessages(t *testing.T) {
 	th := newTestHelper(t)
-	NextJid = 0
 	jw, _ := New()
 	defer jw.Close()
 	rq := jw.NewRequest(nil)
@@ -209,7 +205,6 @@ func TestRequest_writeTailScript_PreservesNonAttrMessages(t *testing.T) {
 
 func TestRequest_writeTailScript_RemoveAttrAndClass(t *testing.T) {
 	th := newTestHelper(t)
-	NextJid = 0
 	jw, _ := New()
 	defer jw.Close()
 	rq := jw.NewRequest(nil)
@@ -695,7 +690,6 @@ func TestRequest_DeleteByTag(t *testing.T) {
 	th := newTestHelper(t)
 	tj := newTestJaws()
 	defer tj.Close()
-	NextJid = 0
 	rq1 := tj.newRequest(nil)
 	ui1 := &testUi{}
 	e11 := rq1.NewElement(ui1)
@@ -711,13 +705,13 @@ func TestRequest_DeleteByTag(t *testing.T) {
 	rq2 := tj.newRequest(nil)
 	ui2 := &testUi{}
 	e21 := rq2.NewElement(ui2)
-	th.Equal(e21.jid, Jid(4))
+	th.Equal(e21.jid, Jid(1))
 	e21.Tag(tag.Tag("e21"), tag.Tag("foo"))
 	e22 := rq2.NewElement(ui2)
-	th.Equal(e22.jid, Jid(5))
+	th.Equal(e22.jid, Jid(2))
 	e22.Tag(tag.Tag("e22"))
 	e23 := rq2.NewElement(ui2)
-	th.Equal(e23.jid, Jid(6))
+	th.Equal(e23.jid, Jid(3))
 	e23.Tag(tag.Tag("e23"))
 
 	tj.Delete([]any{tag.Tag("foo"), tag.Tag("bar"), tag.Tag("nothere"), tag.Tag("e23")})
@@ -747,7 +741,7 @@ func TestRequest_DeleteByTag(t *testing.T) {
 		th.Timeout()
 	case msg := <-rq2.OutCh:
 		s := msg.Format()
-		if s != "Delete\tJid.4\t\"\"\n" {
+		if s != "Delete\tJid.1\t\"\"\n" {
 			t.Errorf("%q", s)
 		}
 	}
@@ -757,9 +751,83 @@ func TestRequest_DeleteByTag(t *testing.T) {
 		th.Timeout()
 	case msg := <-rq2.OutCh:
 		s := msg.Format()
-		if s != "Delete\tJid.6\t\"\"\n" {
+		if s != "Delete\tJid.3\t\"\"\n" {
 			t.Errorf("%q", s)
 		}
+	}
+}
+
+func TestRequest_JidsAreRequestScoped(t *testing.T) {
+	tj := newTestJaws()
+	defer tj.Close()
+
+	rq1 := tj.newRequest(nil)
+	rq2 := tj.newRequest(nil)
+
+	e11 := rq1.NewElement(&testUi{})
+	e12 := rq1.NewElement(&testUi{})
+	e21 := rq2.NewElement(&testUi{})
+	e22 := rq2.NewElement(&testUi{})
+
+	if e11.Jid() != 1 || e12.Jid() != 2 {
+		t.Fatalf("request 1 Jids = %v, %v; want 1, 2", e11.Jid(), e12.Jid())
+	}
+	if e21.Jid() != 1 || e22.Jid() != 2 {
+		t.Fatalf("request 2 Jids = %v, %v; want 1, 2", e21.Jid(), e22.Jid())
+	}
+}
+
+func TestRequest_JidsAreNotReusedAfterDelete(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	e1 := rq.NewElement(&testUi{})
+	rq.DeleteElement(e1)
+	e2 := rq.NewElement(&testUi{})
+
+	if e1.Jid() != 1 || e2.Jid() != 2 {
+		t.Fatalf("Jids = %v, %v; want deleted id 1 and new id 2", e1.Jid(), e2.Jid())
+	}
+}
+
+func TestRequest_RequestScopedEventIsolation(t *testing.T) {
+	th := newTestHelper(t)
+	tj := newTestJaws()
+	defer tj.Close()
+
+	rq1 := tj.newRequest(nil)
+	rq2 := tj.newRequest(nil)
+
+	tjc1 := &testJawsClick{
+		clickCh:    make(chan string, 1),
+		testSetter: newTestSetter(""),
+	}
+	tjc2 := &testJawsClick{
+		clickCh:    make(chan string, 1),
+		testSetter: newTestSetter(""),
+	}
+
+	rq1.NewElement(testDivWidget{inner: "one"}).AddHandlers(tjc1)
+	rq2.NewElement(testDivWidget{inner: "two"}).AddHandlers(tjc2)
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case rq2.InCh <- wire.WsMsg{What: what.Click, Jid: 1, Data: "1 2 0 scoped"}:
+	}
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case name := <-tjc2.clickCh:
+		if name != "scoped" {
+			t.Fatalf("unexpected request 2 click name %q", name)
+		}
+	}
+	select {
+	case name := <-tjc1.clickCh:
+		t.Fatalf("request 1 received request 2 event %q", name)
+	default:
 	}
 }
 
@@ -966,7 +1034,6 @@ func TestRequest_Dirty(t *testing.T) {
 
 func TestRequest_UpdatePanicLogs(t *testing.T) {
 	th := newTestHelper(t)
-	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 	var log bytes.Buffer
@@ -990,7 +1057,6 @@ func TestRequest_UpdatePanicLogs(t *testing.T) {
 
 func TestRequest_IncomingRemove(t *testing.T) {
 	th := newTestHelper(t)
-	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 
@@ -1017,7 +1083,6 @@ func TestRequest_IncomingRemove(t *testing.T) {
 
 func TestRequest_IncomingClick(t *testing.T) {
 	th := newTestHelper(t)
-	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 
@@ -1057,7 +1122,6 @@ func TestRequest_IncomingClick(t *testing.T) {
 
 func TestRequest_IncomingClick_WrappedUnhandled(t *testing.T) {
 	th := newTestHelper(t)
-	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 
@@ -1097,7 +1161,6 @@ func TestRequest_IncomingClick_WrappedUnhandled(t *testing.T) {
 
 func TestRequest_IncomingContextMenu(t *testing.T) {
 	th := newTestHelper(t)
-	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 
@@ -1137,7 +1200,6 @@ func TestRequest_IncomingContextMenu(t *testing.T) {
 
 func TestRequest_IncomingContextMenu_WrappedUnhandled(t *testing.T) {
 	th := newTestHelper(t)
-	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 
@@ -1446,7 +1508,6 @@ func TestRequest_Template(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			NextJid = 0
 			rq := newTestRequest(t)
 			defer rq.Close()
 			if tt.errtxt != "" {
@@ -1545,7 +1606,6 @@ func TestRequest_NewElement_DebugComparableCheck(t *testing.T) {
 }
 
 func TestRequest_IncomingRemoveDoesNotDeleteMessageJid(t *testing.T) {
-	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 
@@ -1661,7 +1721,6 @@ func TestRequest_JsCallFunctionPathDoesNotBreakWireFraming(t *testing.T) {
 }
 
 func TestRequest_IncomingRemoveWithZeroContainerJidIsIgnored(t *testing.T) {
-	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 

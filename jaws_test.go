@@ -452,7 +452,6 @@ func TestJaws_GenerateHeadHTMLConcurrentWithHeadHTML(t *testing.T) {
 }
 
 func TestCoverage_IDAndLookupHelpers(t *testing.T) {
-	NextJid = 0
 	if a, b := NextID(), NextID(); b <= a {
 		t.Fatalf("expected increasing ids, got %d then %d", a, b)
 	}
@@ -786,7 +785,6 @@ func TestServeHTTP_Noscript(t *testing.T) {
 
 func TestServeHTTP_TailScript(t *testing.T) {
 	is := newTestHelper(t)
-	NextJid = 0
 	jw, _ := New()
 	go jw.Serve()
 	defer jw.Close()
@@ -858,7 +856,6 @@ func TestServeHTTP_TailScript_WriteError(t *testing.T) {
 }
 
 func TestJaws_Session(t *testing.T) {
-	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 

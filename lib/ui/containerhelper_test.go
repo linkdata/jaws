@@ -121,7 +121,6 @@ func TestContainerHelperUpdateContainerDuplicates(t *testing.T) {
 }
 
 func TestContainerHelperRenderErrorPaths(t *testing.T) {
-	jaws.NextJid = 0
 	_, rq := newCoreRequest(t)
 	renderErr := errors.New("render error")
 	errChild := testRenderErrorUI{err: renderErr}
@@ -174,7 +173,6 @@ func (u *testRenderErrorCaptureUI) JawsRender(elem *jaws.Element, w io.Writer, p
 func (*testRenderErrorCaptureUI) JawsUpdate(elem *jaws.Element) {}
 
 func TestContainerHelperRenderErrorDoesNotLeakFailedChildElement(t *testing.T) {
-	jaws.NextJid = 0
 	_, rq := newCoreRequest(t)
 
 	renderErr := errors.New("render error")
@@ -197,7 +195,6 @@ func TestContainerHelperRenderErrorDoesNotLeakFailedChildElement(t *testing.T) {
 }
 
 func TestRequestWriterUI_ContainerRenderErrorDoesNotLeakSuccessfulChildren(t *testing.T) {
-	jaws.NextJid = 0
 	_, rq := newCoreRequest(t)
 	var sb strings.Builder
 	rw := RequestWriter{Request: rq, Writer: &sb}

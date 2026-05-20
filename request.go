@@ -44,6 +44,7 @@ type Request struct {
 	running    atomic.Bool             // if ServeHTTP() is running
 	claimed    atomic.Bool             // if UseRequest() has been called for it
 	mu         deadlock.RWMutex        // protects following
+	lastJid    Jid                     // last element Jid allocated within this Request
 	lastWrite  time.Time               // when the initial HTML was last written to, used for automatic cleanup
 	initial    *http.Request           // initial HTTP request passed to Jaws.NewRequest
 	session    *Session                // session, if established
@@ -140,6 +141,7 @@ func (rq *Request) deadSession(sess *Session) {
 
 func (rq *Request) clearLocked() *Request {
 	rq.JawsKey = 0
+	rq.lastJid = 0
 	rq.connectFn = nil
 	rq.lastWrite = time.Time{}
 	rq.initial = nil
@@ -440,12 +442,10 @@ func (rq *Request) wantMessage(msg *wire.Message) (yes bool) {
 	return
 }
 
-// NextJid is the next Jid that should be used. Used when testing. Do not modify it outside of tests.
-var NextJid Jid
-
 func (rq *Request) newElementLocked(ui UI) (elem *Element) {
+	rq.lastJid++
 	elem = &Element{
-		jid:     Jid(atomic.AddInt64((*int64)(&NextJid), 1)),
+		jid:     rq.lastJid,
 		ui:      ui,
 		Request: rq,
 	}
@@ -694,6 +694,11 @@ func (rq *Request) handleRemove(containerJid Jid, data string) {
 	// For incoming what.Remove from jaws.js, Data is a tab-separated list of
 	// managed descendant IDs that were removed. The WebSocket Jid identifies the
 	// parent/container in the DOM and must not itself be deleted here.
+	//
+	// The client is already trusted only within its own request: a malicious client
+	// can fully control the DOM and UI it presents to its user. Treating arbitrary
+	// child removals as request-local state cleanup is therefore not a server-side
+	// privilege boundary; IDs are only looked up in this Request.
 	if containerJid > 0 {
 		rq.mu.Lock()
 		defer rq.mu.Unlock()

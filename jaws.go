@@ -236,9 +236,11 @@ func (jw *Jaws) MustLog(err error) {
 	}
 }
 
+var nextID int64
+
 // NextID returns an int64 unique within the lifetime of the program.
 func NextID() int64 {
-	return atomic.AddInt64((*int64)(&NextJid), 1)
+	return atomic.AddInt64(&nextID, 1)
 }
 
 // AppendID appends the result of NextID() in text form to the given slice.

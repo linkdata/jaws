@@ -274,7 +274,6 @@ func TestElement_maybeDirty(t *testing.T) {
 }
 
 func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
-	NextJid = 0
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -312,7 +311,6 @@ func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
 }
 
 func TestElement_ApplyGetterDebugBranches(t *testing.T) {
-	NextJid = 0
 	rq := newTestRequest(t)
 	defer rq.Close()
 	elem := rq.NewElement(&testUi{})

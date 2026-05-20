@@ -157,10 +157,9 @@ client/server protocol code:
 * The browser is not trusted. Incoming frames are validated (`What`, `Jid`,
   framing, quoting) and invalid frames are ignored/dropped.
 * `what.Remove` means remove child element(s). For browser-originated `Remove`
-  messages, the WebSocket `Jid` must be a valid JaWS element ID for the
-  managed parent/container and `Data` carries removed managed child IDs.
-  Remove frames from non-managed containers are expected to be invalid and
-  therefore dropped.
+  messages, the WebSocket `Jid` identifies the parent/container in the DOM and
+  `Data` carries removed managed child IDs. The server only removes child IDs
+  that are known in the current request.
 * `what.Replace` replaces the target element HTML and carries plain HTML in `Data`.
 * `what.Call`/`what.Set` use `path + "=" + json` inside `Data`. Embedded tabs
   or newlines in JSON break message framing; `Jaws.JsCall` compacts valid JSON

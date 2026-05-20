@@ -144,7 +144,6 @@ func Test_NamedBoolArray(t *testing.T) {
 }
 
 func TestNamedBoolOption_RenderAndUpdateBranches(t *testing.T) {
-	jaws.NextJid = 0
 	_, rq := newCoreRequest(t)
 
 	nba := NewBoolArray(false).Add("1", "one")

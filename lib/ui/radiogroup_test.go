@@ -4,12 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/named"
 )
 
 func TestRequest_RadioGroup(t *testing.T) {
-	jaws.NextJid = 0
 	_, rq := newCoreRequest(t)
 	var sb strings.Builder
 	rw := RequestWriter{Request: rq, Writer: &sb}
@@ -18,13 +16,12 @@ func TestRequest_RadioGroup(t *testing.T) {
 	nba.Add("1", "one")
 	rel := rw.RadioGroup(nba)
 
-	wantHTML := "<input id=\"Jid.2\" type=\"radio\" radioattr name=\"jaws.1\">"
 	gotHTML := string(rel[0].Radio("radioattr"))
-	if gotHTML != wantHTML {
-		t.Errorf("got %q, want %q", gotHTML, wantHTML)
+	if !strings.HasPrefix(gotHTML, "<input id=\"Jid.1\" type=\"radio\" radioattr name=\"jaws.") || !strings.HasSuffix(gotHTML, "\">") {
+		t.Errorf("unexpected radio HTML %q", gotHTML)
 	}
 
-	wantHTML = "<label id=\"Jid.3\" labelattr for=\"Jid.2\">one</label>"
+	wantHTML := "<label id=\"Jid.2\" labelattr for=\"Jid.1\">one</label>"
 	gotHTML = string(rel[0].Label("labelattr"))
 	if gotHTML != wantHTML {
 		t.Errorf("got %q, want %q", gotHTML, wantHTML)
