@@ -28,13 +28,6 @@ var _ jaws.ClickHandler = Template{}       // statically ensure interface is def
 var _ jaws.ContextMenuHandler = Template{} // statically ensure interface is defined
 var _ jaws.InputHandler = Template{}       // statically ensure interface is defined
 
-type templateRenderMode uint8
-
-const (
-	templateRenderWrapped templateRenderMode = iota
-	templateRenderDirect
-)
-
 // String returns a debug representation of t.
 func (tmpl Template) String() string {
 	return fmt.Sprintf("{%q, %s}", tmpl.Name, tag.TagString(tmpl.Dot))
