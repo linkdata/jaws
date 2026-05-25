@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -9,8 +10,8 @@ import (
 // Click identifies a browser click-like event, pointer location and modifier state.
 type Click struct {
 	Name    string
-	X       int
-	Y       int
+	X       float64 // X is the browser clientX coordinate in CSS pixels.
+	Y       float64 // Y is the browser clientY coordinate in CSS pixels.
 	Shift   bool
 	Control bool
 	Alt     bool
@@ -43,7 +44,7 @@ func (clk *Click) setKeyState(state int) {
 
 // String formats clk for the JaWS wire protocol.
 func (clk Click) String() string {
-	return fmt.Sprintf("%d %d %d %s", clk.X, clk.Y, clk.keyState(), clk.Name)
+	return fmt.Sprintf("%s %s %d %s", runFormatFloat(clk.X), runFormatFloat(clk.Y), clk.keyState(), clk.Name)
 }
 
 func parseClickData(value string) (clk Click, after string, ok bool) {
@@ -56,9 +57,9 @@ func parseClickData(value string) (clk Click, after string, ok bool) {
 		if ok {
 			switch n {
 			case 0:
-				clk.X, ok = runAtoi(field)
+				clk.X, ok = runAtof(field)
 			case 1:
-				clk.Y, ok = runAtoi(field)
+				clk.Y, ok = runAtof(field)
 			case 2:
 				kstate, ok = runAtoi(field)
 				clk.setKeyState(kstate)
@@ -71,6 +72,17 @@ func parseClickData(value string) (clk Click, after string, ok bool) {
 		}
 	}
 	ok = ok && n >= 3
+	return
+}
+
+func runFormatFloat(value float64) string {
+	return strconv.FormatFloat(value, 'g', -1, 64)
+}
+
+func runAtof(value string) (n float64, ok bool) {
+	var err error
+	n, err = strconv.ParseFloat(value, 64)
+	ok = err == nil && !math.IsInf(n, 0) && !math.IsNaN(n)
 	return
 }
 

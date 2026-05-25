@@ -272,8 +272,8 @@ const target = {
 };
 const ev = new Event();
 ev.target = target;
-ev.clientX = 11;
-ev.clientY = 22;
+ev.clientX = 11.25;
+ev.clientY = 22.5;
 ev.shiftKey = true;
 ev.ctrlKey = false;
 ev.altKey = true;
@@ -293,8 +293,32 @@ process.stdout.write(jaws.sent[0] || "");
 	if msg.What != what.Click {
 		t.Fatalf("unexpected what: got %v", msg.What)
 	}
-	if msg.Data != "11 22 5 save\tJid.2\tJid.1" {
+	if msg.Data != "11.25 22.5 5 save\tJid.2\tJid.1" {
 		t.Fatalf("unexpected click payload %q", msg.Data)
+	}
+}
+
+func TestJawsJS_ClickLeavesNonFiniteCoordinatesForServerValidation(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+const target = {
+	id: "Jid.2",
+	tagName: "DIV",
+	getAttribute: function(name) { return name === "name" ? "save" : null; },
+	textContent: "",
+	parentElement: null
+};
+const ev = new Event();
+ev.clientX = Infinity;
+ev.clientY = NaN;
+ev.shiftKey = false;
+ev.ctrlKey = false;
+ev.altKey = false;
+
+process.stdout.write(jawsBuildClickData(target, ev));
+`)
+
+	if raw != "Infinity NaN 0 save\tJid.2" {
+		t.Fatalf("unexpected click payload %q", raw)
 	}
 }
 
@@ -375,8 +399,8 @@ let prevented = false;
 let stopped = false;
 const ev = new Event();
 ev.target = target;
-ev.clientX = 33;
-ev.clientY = 44;
+ev.clientX = 33.25;
+ev.clientY = 44.5;
 ev.shiftKey = false;
 ev.ctrlKey = true;
 ev.altKey = false;
@@ -408,7 +432,7 @@ process.stdout.write(JSON.stringify({ msg: jaws.sent[0] || "", prevented: preven
 	if msg.What != what.ContextMenu {
 		t.Fatalf("unexpected what: got %v", msg.What)
 	}
-	if msg.Data != "33 44 2 menu\tJid.2\tJid.1" {
+	if msg.Data != "33.25 44.5 2 menu\tJid.2\tJid.1" {
 		t.Fatalf("unexpected context menu payload %q", msg.Data)
 	}
 }

@@ -20,6 +20,12 @@ func TestParseClickData(t *testing.T) {
 			wantOK: true,
 		},
 		{
+			name:   "fractional coordinates",
+			in:     "10.25 20.5 0 save",
+			want:   Click{Name: "save", X: 10.25, Y: 20.5},
+			wantOK: true,
+		},
+		{
 			name:    "with modifiers and route",
 			in:      "10 20 5 save\tJid.1\tJid.2",
 			want:    Click{Name: "save", X: 10, Y: 20, Shift: true, Alt: true},
@@ -52,8 +58,28 @@ func TestParseClickData(t *testing.T) {
 			wantOK: false,
 		},
 		{
+			name:   "nan x",
+			in:     "NaN 20 0 save",
+			wantOK: false,
+		},
+		{
+			name:   "infinite x",
+			in:     "+Inf 20 0 save",
+			wantOK: false,
+		},
+		{
 			name:   "invalid y",
 			in:     "10 bad 0 save",
+			wantOK: false,
+		},
+		{
+			name:   "nan y",
+			in:     "10 NaN 0 save",
+			wantOK: false,
+		},
+		{
+			name:   "infinite y",
+			in:     "10 -Inf 0 save",
 			wantOK: false,
 		},
 		{
@@ -82,8 +108,8 @@ func TestParseClickData(t *testing.T) {
 }
 
 func TestClickString(t *testing.T) {
-	got := (Click{Name: "x", X: 1, Y: 2, Shift: true, Control: true, Alt: true}).String()
-	want := "1 2 7 x"
+	got := (Click{Name: "x", X: 1.25, Y: 2.5, Shift: true, Control: true, Alt: true}).String()
+	want := "1.25 2.5 7 x"
 	if got != want {
 		t.Fatalf("String() = %q, want %q", got, want)
 	}
@@ -131,8 +157,8 @@ func Fuzz_clickStringRoundTrip(f *testing.F) {
 		name = strings.ReplaceAll(name, "\t", " ")
 		clk := Click{
 			Name:    name,
-			X:       int(x),
-			Y:       int(y),
+			X:       float64(x),
+			Y:       float64(y),
 			Shift:   shift,
 			Control: control,
 			Alt:     alt,
