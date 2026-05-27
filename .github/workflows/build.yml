@@ -1,7 +1,7 @@
 name: build
 
 permissions:
-  contents: write
+  contents: read
 
 on:
   push:
@@ -10,34 +10,21 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  audit:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        go:
-          - "1.25"
-          - "stable"
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: ${{ matrix.go }}
-
-      - name: Install stringer
-        run: go install golang.org/x/tools/cmd/stringer@latest
+          go-version: stable
 
       - name: Generate
         run: go generate ./...
 
-      - name: Build
-        run: go build -v ./...
-
-      - name: Test
-        run: go test -tags debug -bench=. -coverprofile=coverage.out ./...
-      
       - name: Run Gosec Security Scanner
         uses: securego/gosec@v2.23.0
         with:
@@ -47,6 +34,27 @@ jobs:
         uses: creekorful/goreportcard-action@v1.0
         continue-on-error: true
 
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: stable
+
+      - name: Generate
+        run: go generate ./...
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Test
+        run: go test -tags debug -bench=. -coverprofile=coverage.out ./...
+
       - name: Calculate code coverage
         id: coverage
         run: |
@@ -54,7 +62,7 @@ jobs:
           go tool cover -html=coverage.out -o=coveragereport.html.out
 
       - name: Publish code coverage badge (and optional report)
-        uses: linkdata/gitcoverage@v7
+        uses: linkdata/gitcoverage@v8
         with:
           coverage: ${{ steps.coverage.outputs.coverage }}
           report:   "coveragereport.html.out"
