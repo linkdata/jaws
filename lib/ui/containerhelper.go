@@ -81,6 +81,9 @@ func (u *ContainerHelper) RenderContainer(elem *jaws.Element, w io.Writer, outer
 }
 
 // UpdateContainer updates child elements to match [jaws.Container.JawsContains].
+//
+// Render errors for newly appended children are reported through
+// [jaws.Jaws.MustLog], which may panic when no [jaws.Jaws.Logger] is configured.
 func (u *ContainerHelper) UpdateContainer(elem *jaws.Element) {
 	var toAppend []*jaws.Element
 

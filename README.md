@@ -186,6 +186,22 @@ Request created in the first step. Then call its `ServeHTTP()` method to
 start up the WebSocket and begin processing JavaScript events and DOM
 updates.
 
+### Configuration lifecycle
+
+Set exported `Jaws` configuration fields immediately after `jaws.New()` and
+before exposing handlers, creating Requests, or starting `Serve()` /
+`ServeWithTimeout()`. These fields are ordinary Go fields, not synchronized
+live configuration knobs.
+
+If you change fields that affect generated page metadata, such as `Debug` or
+the resource list passed to `GenerateHeadHTML()`, call `GenerateHeadHTML()`
+before rendering new pages so `Request.HeadHTML()` sees the updated data.
+
+Configure `Jaws.Logger` in long-running applications. Initial render errors are
+returned to the caller, but update-time paths such as template refreshes and
+dynamic child appends cannot return errors to browser event handlers; they are
+reported through `MustLog()`, which panics when no logger is configured.
+
 ### WebSocket keepalive ping
 
 JaWS can periodically ping active WebSocket connections to detect peers
@@ -318,6 +334,11 @@ You can use `bind.New(...).GetHTML(...)`, `bind.HTMLGetterFunc()` or `bind.Strin
 for trivial rendering tasks, or define a custom type implementing `HTMLGetter`.
 Plain strings are treated as trusted HTML. Escape untrusted string input yourself, or pass it through
 a `bind.Getter[string]`, `bind.StringGetterFunc()` or `fmt.Stringer` so JaWS escapes it before rendering.
+
+Initial HTML rendering returns errors directly. Later updates run from the
+request processing loop, so custom `JawsUpdate` implementations should keep
+their work deterministic and report unrecoverable failures through
+`Element.Request.MustLog()` or `Element.Jaws.MustLog()`.
 
 ### Data binding
 

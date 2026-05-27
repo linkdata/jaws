@@ -953,6 +953,10 @@ func (rq *Request) Log(err error) error {
 // MustLog sends an error to the [Logger] set in the [Jaws] or
 // panics with the given error if no [Logger] is set.
 // Has no effect if err is nil.
+//
+// Some update-time paths cannot return errors to their caller and report them
+// through MustLog. Set [Jaws.Logger] when those errors should be logged instead
+// of treated as fatal programming errors.
 func (rq *Request) MustLog(err error) {
 	var jw *Jaws
 	if rq != nil {

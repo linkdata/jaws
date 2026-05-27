@@ -74,11 +74,16 @@ type Jid = jid.Jid // convenience alias
 // request lifecycle that keeps the browser and backend synchronized via
 // WebSockets. The zero value is not ready for use; construct instances with
 // [New] to ensure the helper goroutines and static assets are prepared.
+//
+// The exported configuration fields are ordinary fields, not live synchronized
+// settings. Set them before exposing handlers, creating Requests, or starting
+// [Jaws.Serve] / [Jaws.ServeWithTimeout]. Methods document their own
+// concurrency behavior and may be called concurrently when stated.
 type Jaws struct {
 	CookieName              string          // Name for session cookies, defaults to "jaws"
 	AutoSession             bool            // Create a session during WebSocket upgrade when a Request has none. Defaults to false.
 	Logger                  Logger          // Optional logger to use
-	Debug                   bool            // Set to true to enable debug info in generated HTML code
+	Debug                   bool            // Set to true to enable debug info in generated HTML code. Call GenerateHeadHTML after changing it.
 	MakeAuth                MakeAuthFn      // Optional function to create ui.With.Auth for Templates
 	BaseContext             context.Context // Non-nil base context for Requests, set to context.Background() in New()
 	WebSocketPingInterval   time.Duration   // Interval between keepalive pings on active WebSocket connections. Defaults to DefaultWebSocketPingInterval. Set <=0 to disable keepalive pings.
@@ -250,6 +255,10 @@ func (jw *Jaws) Log(err error) error {
 // MustLog sends an error to the [Logger] set in the [Jaws] or
 // panics with the given error if no [Logger] is set.
 // Has no effect if err is nil.
+//
+// Some update-time paths cannot return errors to their caller and report them
+// through MustLog. Set [Jaws.Logger] when those errors should be logged instead
+// of treated as fatal programming errors.
 func (jw *Jaws) MustLog(err error) {
 	if err != nil {
 		if jw != nil && jw.Logger != nil {

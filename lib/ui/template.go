@@ -104,6 +104,9 @@ func (tmpl Template) JawsRender(elem *jaws.Element, w io.Writer, params []any) (
 }
 
 // JawsUpdate re-renders t into the template wrapper.
+//
+// Lookup or execution errors are reported through [jaws.Request.MustLog],
+// which may panic when no [jaws.Jaws.Logger] is configured.
 func (tmpl Template) JawsUpdate(elem *jaws.Element) {
 	lookedUp, err := tmpl.lookup(elem)
 	if err == nil {
