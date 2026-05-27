@@ -9,6 +9,7 @@ package jaws
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/binary"
@@ -24,7 +25,6 @@ import (
 	"net/textproto"
 	"net/url"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -260,11 +260,11 @@ func (jw *Jaws) MustLog(err error) {
 	}
 }
 
-var nextID int64
+var nextID atomic.Int64
 
 // NextID returns an int64 unique within the lifetime of the program.
 func NextID() int64 {
-	return atomic.AddInt64(&nextID, 1)
+	return nextID.Add(1)
 }
 
 // AppendID appends the result of NextID() in text form to the given slice.
@@ -403,7 +403,7 @@ func cutString(s string, sep byte) (before, after string) {
 	return s, ""
 }
 
-func getCookieSessionsIds(h http.Header, wanted string) (cookies []uint64) {
+func getCookieSessionsIDs(h http.Header, wanted string) (cookies []uint64) {
 	for _, line := range h["Cookie"] {
 		if strings.Contains(line, wanted) {
 			var part string
@@ -431,7 +431,7 @@ func getCookieSessionsIds(h http.Header, wanted string) (cookies []uint64) {
 // GetSession returns the [Session] associated with the given [http.Request], or nil.
 func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 	if r != nil {
-		if sessionIDs := getCookieSessionsIds(r.Header, jw.CookieName); len(sessionIDs) > 0 {
+		if sessionIDs := getCookieSessionsIDs(r.Header, jw.CookieName); len(sessionIDs) > 0 {
 			remoteIP := parseIP(r.RemoteAddr)
 			jw.mu.RLock()
 			sess = jw.getSessionLocked(sessionIDs, remoteIP)
@@ -619,7 +619,7 @@ func (jw *Jaws) distributeDirt() int {
 		for k := range jw.dirty {
 			dirt = append(dirt, k)
 		}
-		sort.Slice(dirt, func(i, j int) bool { return jw.dirty[dirt[i]] < jw.dirty[dirt[j]] })
+		slices.SortFunc(dirt, func(a, b any) int { return cmp.Compare(jw.dirty[a], jw.dirty[b]) })
 		clear(jw.dirty)
 		jw.dirtOrder = 0
 		reqs = make([]*Request, 0, len(jw.requests))
@@ -684,13 +684,8 @@ func (jw *Jaws) getWebSocketTimeout() (t time.Duration) {
 func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	const minInterval = time.Millisecond * 10
 	const maxInterval = time.Second
-	maintenanceInterval := requestTimeout / 2
-	if maintenanceInterval > maxInterval {
-		maintenanceInterval = maxInterval
-	}
-	if maintenanceInterval < minInterval {
-		maintenanceInterval = minInterval
-	}
+	maintenanceInterval := min(requestTimeout/2, maxInterval)
+	maintenanceInterval = max(maintenanceInterval, minInterval)
 
 	subs := map[chan wire.Message]*Request{}
 	t := time.NewTicker(maintenanceInterval)
@@ -959,7 +954,7 @@ func (jw *Jaws) getRequestLocked(jawsKey uint64, r *http.Request) (rq *Request) 
 	rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
 	if r != nil {
 		rq.remoteIP = parseIP(r.RemoteAddr)
-		if sess := jw.getSessionLocked(getCookieSessionsIds(r.Header, jw.CookieName), rq.remoteIP); sess != nil {
+		if sess := jw.getSessionLocked(getCookieSessionsIDs(r.Header, jw.CookieName), rq.remoteIP); sess != nil {
 			sess.addRequest(rq)
 			rq.session = sess
 		}

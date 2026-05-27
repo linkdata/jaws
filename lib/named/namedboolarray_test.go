@@ -1,8 +1,9 @@
 package named
 
 import (
+	"cmp"
 	"html/template"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -65,8 +66,8 @@ func Test_NamedBoolArray(t *testing.T) {
 	}
 
 	nba.WriteLocked(func(nba []*Bool) []*Bool {
-		sort.Slice(nba, func(i, j int) bool {
-			return nba[i].Name() > nba[j].Name()
+		slices.SortFunc(nba, func(a, b *Bool) int {
+			return cmp.Compare(b.Name(), a.Name())
 		})
 		return nba
 	})
@@ -96,8 +97,8 @@ func Test_NamedBoolArray(t *testing.T) {
 	nbaMulti.Add("2", "two")
 	nbaMulti.Add("2", "also two")
 	nbaMulti.WriteLocked(func(nba []*Bool) []*Bool {
-		sort.Slice(nba, func(i, j int) bool {
-			return nba[i].Name() > nba[j].Name()
+		slices.SortFunc(nba, func(a, b *Bool) int {
+			return cmp.Compare(b.Name(), a.Name())
 		})
 		return nba
 	})

@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
 	"html/template"
 	"io"
@@ -10,7 +11,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -366,8 +367,8 @@ func printGoroutineOrigins(t *testing.T) {
 		}
 	}
 
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].count > items[j].count
+	slices.SortFunc(items, func(a, b pair) int {
+		return cmp.Compare(b.count, a.count)
 	})
 
 	for _, item := range items {

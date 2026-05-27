@@ -12,7 +12,6 @@ import (
 	"net/netip"
 	"net/url"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -407,11 +406,8 @@ func (rq *Request) Redirect(url string) {
 
 func (rq *Request) tagsOfLocked(elem *Element) (tags []any) {
 	for tagValue, elems := range rq.tagMap {
-		for _, e := range elems {
-			if e == elem {
-				tags = append(tags, tagValue)
-				break
-			}
+		if slices.Contains(elems, elem) {
+			tags = append(tags, tagValue)
 		}
 	}
 	return
@@ -498,12 +494,7 @@ func (rq *Request) getElementByJidLocked(jid Jid) (elem *Element) {
 }
 
 func (rq *Request) hasTagLocked(elem *Element, tagValue any) bool {
-	for _, e := range rq.tagMap[tagValue] {
-		if elem == e {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(rq.tagMap[tagValue], elem)
 }
 
 // HasTag reports whether elem has tagValue in rq.
@@ -714,7 +705,7 @@ func (rq *Request) handleRemove(containerJid Jid, data string) {
 	if containerJid > 0 {
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
-		for _, jidstr := range strings.Split(data, "\t") {
+		for jidstr := range strings.SplitSeq(data, "\t") {
 			if e := rq.getElementByJidLocked(jid.ParseString(jidstr)); e != nil {
 				rq.deleteElementLocked(e)
 			}
@@ -870,7 +861,7 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 	clear(rq.todoDirt)
 	rq.todoDirt = rq.todoDirt[:0]
 	rq.mu.Unlock()
-	sort.Slice(todo, func(i, j int) bool { return todo[i].Jid() < todo[j].Jid() })
+	slices.SortFunc(todo, func(a, b *Element) int { return cmp.Compare(a.Jid(), b.Jid()) })
 	return
 }
 

@@ -736,7 +736,7 @@ func TestCoverage_CookieParseAndIP(t *testing.T) {
 	h.Add("Cookie", `jaws="`+assets.JawsKeyString(12)+`"`)
 	h.Add("Cookie", `jaws=not-a-key`)
 
-	ids := getCookieSessionsIds(h, "jaws")
+	ids := getCookieSessionsIDs(h, "jaws")
 	if len(ids) != 2 || ids[0] != 11 || ids[1] != 12 {
 		t.Fatalf("unexpected cookie ids %#v", ids)
 	}
