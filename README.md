@@ -240,7 +240,7 @@ resources currently configured for JaWS.
 The baseline headers come from
 [`github.com/linkdata/secureheaders`](https://github.com/linkdata/secureheaders).
 
-The middleware snapshots `secureheaders.DefaultHeaders`, replaces
+The middleware starts from `secureheaders.DefaultHeaders()`, replaces
 `Content-Security-Policy` with `jw.ContentSecurityPolicy()`, and does not trust
 forwarded HTTPS headers.
 

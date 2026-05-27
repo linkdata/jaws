@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"errors"
 	"html/template"
+	"io"
 	"mime"
 	"net/http"
 	"net/http/httptest"
@@ -487,10 +488,7 @@ func TestJaws_GenerateHeadHTML_StoresCSPBuiltBySecureHeaders(t *testing.T) {
 		urls = append(urls, mustParseURL(t, extra))
 	}
 
-	wantCSP, err := secureheaders.BuildContentSecurityPolicy(urls)
-	if err != nil {
-		t.Fatal(err)
-	}
+	wantCSP := secureheaders.BuildContentSecurityPolicy(urls)
 	if got := jw.ContentSecurityPolicy(); got != wantCSP {
 		t.Fatalf("unexpected CSP:\nwant: %q\ngot:  %q", wantCSP, got)
 	}
@@ -548,17 +546,13 @@ func TestJaws_SecureHeadersMiddleware_UsesJawsCSP(t *testing.T) {
 	if got := hdr.Get("Content-Security-Policy"); got != wantCSP {
 		t.Fatalf("expected CSP %q, got %q", wantCSP, got)
 	}
-	if got := hdr.Get("Strict-Transport-Security"); got != secureheaders.DefaultHeaders.Get("Strict-Transport-Security") {
-		t.Fatalf("expected HSTS %q, got %q", secureheaders.DefaultHeaders.Get("Strict-Transport-Security"), got)
+	defaultHeaders := secureheaders.DefaultHeaders()
+	if got := hdr.Get("Strict-Transport-Security"); got != defaultHeaders.Get("Strict-Transport-Security") {
+		t.Fatalf("expected HSTS %q, got %q", defaultHeaders.Get("Strict-Transport-Security"), got)
 	}
 }
 
-func TestJaws_SecureHeadersMiddleware_ClonesDefaultHeaders(t *testing.T) {
-	orig := secureheaders.DefaultHeaders.Clone()
-	defer func() {
-		secureheaders.DefaultHeaders = orig
-	}()
-
+func TestJaws_SecureHeadersMiddleware_DoesNotModifyDefaultHeaders(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -566,20 +560,18 @@ func TestJaws_SecureHeadersMiddleware_ClonesDefaultHeaders(t *testing.T) {
 	defer jw.Close()
 
 	wantCSP := jw.ContentSecurityPolicy()
+	defaultCSP := secureheaders.DefaultHeaders().Get("Content-Security-Policy")
 	mw := jw.SecureHeadersMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-
-	secureheaders.DefaultHeaders.Set("X-Frame-Options", "SAMEORIGIN")
-	secureheaders.DefaultHeaders.Set("Content-Security-Policy", "default-src 'none'")
 
 	rr := httptest.NewRecorder()
 	mw.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "http://example.test/", nil))
 	hdr := rr.Result().Header
 
-	if got := hdr.Get("X-Frame-Options"); got != orig.Get("X-Frame-Options") {
-		t.Fatalf("expected X-Frame-Options %q, got %q", orig.Get("X-Frame-Options"), got)
-	}
 	if got := hdr.Get("Content-Security-Policy"); got != wantCSP {
 		t.Fatalf("expected CSP %q, got %q", wantCSP, got)
+	}
+	if got := secureheaders.DefaultHeaders().Get("Content-Security-Policy"); got != defaultCSP {
+		t.Fatalf("expected default CSP %q, got %q", defaultCSP, got)
 	}
 }
 
@@ -911,9 +903,7 @@ func TestServeHTTP_GetJavascript(t *testing.T) {
 
 	gr, err := gzip.NewReader(w.Body)
 	is.NoErr(err)
-	b := make([]byte, len(assets.JavascriptText)+32)
-	n, err := gr.Read(b)
-	b = b[:n]
+	b, err := io.ReadAll(gr)
 	is.NoErr(err)
 	is.NoErr(gr.Close())
 	is.Equal(len(assets.JavascriptText), len(b))

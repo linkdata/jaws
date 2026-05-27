@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"maps"
 	"net"
 	"net/http"
 	"net/netip"
@@ -512,14 +511,14 @@ func (jw *Jaws) ContentSecurityPolicy() (s string) {
 // SecureHeadersMiddleware wraps next with security headers that match the
 // current JaWS configuration.
 //
-// It snapshots secureheaders.DefaultHeaders, replacing the
+// It clones secureheaders.DefaultHeaders(), replacing the
 // Content-Security-Policy value with [Jaws.ContentSecurityPolicy] so responses allow
 // the resources configured by [Jaws.GenerateHeadHTML].
 //
 // The returned middleware does not trust forwarded HTTPS headers.
 // The next handler must be non-nil.
 func (jw *Jaws) SecureHeadersMiddleware(next http.Handler) http.Handler {
-	hdrs := maps.Clone(secureheaders.DefaultHeaders)
+	hdrs := secureheaders.DefaultHeaders()
 	hdrs["Content-Security-Policy"] = []string{jw.ContentSecurityPolicy()}
 	return secureheaders.Middleware{
 		Handler: next,
@@ -557,8 +556,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 				headPrefix += `<meta name="jawsDebug" content="true">`
 			}
 			headPrefix += `<meta name="jawsKey" content="`
-			cspHeader, csperr := secureheaders.BuildContentSecurityPolicy(urls)
-			err = errors.Join(err, csperr)
+			cspHeader := secureheaders.BuildContentSecurityPolicy(urls)
 			jw.mu.Lock()
 			jw.headPrefix = headPrefix
 			jw.faviconURL = faviconURL
