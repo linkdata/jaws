@@ -23,7 +23,7 @@ type pageTemplate struct {
 }
 
 func (tmpl pageTemplate) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
-	err = tmpl.Template.render(elem, w, params, false)
+	err = tmpl.Template.render(elem, w, params)
 	return
 }
 

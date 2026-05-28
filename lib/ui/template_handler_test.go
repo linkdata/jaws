@@ -75,20 +75,20 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 	var sb bytes.Buffer
 	rw := RequestWriter{Request: rq, Writer: &sb}
 
-	if err := rw.Template("uitempl", tag.Tag("dot"), "hidden"); err != nil {
+	if err := rw.Template("div", "uitempl", tag.Tag("dot"), "hidden"); err != nil {
 		t.Fatal(err)
 	}
 	got := sb.String()
 	if !strings.Contains(got, `<div id="Jid.`) ||
-		!strings.Contains(got, `data-jawstemplate hidden`) ||
+		!strings.Contains(got, ` hidden>`) ||
 		!strings.Contains(got, `data-auth="test@example.com"`) ||
 		!strings.Contains(got, `>dot</span></div>`) {
 		t.Fatalf("unexpected template output: %q", got)
 	}
 
 	td := &templateDot{}
-	tpl := NewTemplate("uitempl", td)
-	if got := tpl.String(); !strings.Contains(got, `{"uitempl", *ui.templateDot(`) {
+	tpl := NewTemplate("div", "uitempl", td)
+	if got := tpl.String(); !strings.Contains(got, `{"div", "uitempl", *ui.templateDot(`) {
 		t.Fatalf("unexpected template string %q", got)
 	}
 	elem := rq.NewElement(tpl)
@@ -118,8 +118,47 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 		t.Fatalf("expected context-menu call count 1, got %d", td.menus)
 	}
 
-	if err := rw.Template("missingtemplate", nil); !errors.Is(err, ErrMissingTemplate) {
+	if err := rw.Template("div", "missingtemplate", nil); !errors.Is(err, ErrMissingTemplate) {
 		t.Fatalf("expected ErrMissingTemplate, got %v", err)
+	}
+}
+
+func TestTemplate_RenderWithTableRowWrapper(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	jw.AddTemplateLookuper(template.Must(template.New("row").Parse(
+		`<td>{{.Dot}}</td>`,
+	)))
+
+	var sb bytes.Buffer
+	rw := RequestWriter{Request: rq, Writer: &sb}
+	if err := rw.Template("tr", "row", tag.Tag("cell"), `class="selected"`); err != nil {
+		t.Fatal(err)
+	}
+	got := sb.String()
+	if !strings.HasPrefix(got, `<tr id="Jid.`) ||
+		!strings.Contains(got, ` class="selected"`) ||
+		!strings.HasSuffix(got, `<td>cell</td></tr>`) {
+		t.Fatalf("unexpected table row template output: %q", got)
+	}
+}
+
+func TestTemplate_RenderWithoutWrapper(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	jw.AddTemplateLookuper(template.Must(template.New("bare").Parse(
+		`<td>{{.Dot}}</td>`,
+	)))
+
+	var sb bytes.Buffer
+	rw := RequestWriter{Request: rq, Writer: &sb}
+	if err := rw.Template("", "bare", tag.Tag("cell"), `class="ignored"`); err != nil {
+		t.Fatal(err)
+	}
+	got := sb.String()
+	if got != `<td>cell</td>` {
+		t.Fatalf("unexpected unwrapped template output: %q", got)
+	}
+	if strings.Contains(got, "Jid.") {
+		t.Fatalf("unwrapped template should not contain generated wrapper markers: %q", got)
 	}
 }
 
@@ -148,7 +187,7 @@ func TestTemplate_UpdateLogsMissingTemplate(t *testing.T) {
 	logger := new(templateLogger)
 	jw.Logger = logger
 
-	tpl := NewTemplate("missingtemplate", tag.Tag("dot"))
+	tpl := NewTemplate("div", "missingtemplate", tag.Tag("dot"))
 	elem := rq.NewElement(tpl)
 	tpl.JawsUpdate(elem)
 
@@ -160,6 +199,20 @@ func TestTemplate_UpdateLogsMissingTemplate(t *testing.T) {
 	}
 }
 
+func TestTemplate_UpdateWithoutWrapperNoop(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	logger := new(templateLogger)
+	jw.Logger = logger
+
+	tpl := NewTemplate("", "missingtemplate", tag.Tag("dot"))
+	elem := rq.NewElement(tpl)
+	tpl.JawsUpdate(elem)
+
+	if len(logger.errors) != 0 {
+		t.Fatalf("logged errors = %d, want 0", len(logger.errors))
+	}
+}
+
 func TestTemplate_UpdateLogsExecuteError(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	logger := new(templateLogger)
@@ -168,7 +221,7 @@ func TestTemplate_UpdateLogsExecuteError(t *testing.T) {
 		`{{$.Dot.MissingField}}`,
 	)))
 
-	tpl := NewTemplate("badupdate", &templateUpdateDot{})
+	tpl := NewTemplate("div", "badupdate", &templateUpdateDot{})
 	elem := rq.NewElement(tpl)
 	tpl.JawsUpdate(elem)
 
@@ -192,7 +245,7 @@ func TestTemplate_RenderReturnsTagExpandError(t *testing.T) {
 
 	var sb bytes.Buffer
 	rw := RequestWriter{Request: rq, Writer: &sb}
-	if err := rw.Template("uitempl", "plain-string-dot"); err == nil {
+	if err := rw.Template("div", "uitempl", "plain-string-dot"); err == nil {
 		t.Fatal("expected tag expansion error")
 	}
 }
@@ -221,7 +274,7 @@ func TestTemplate_UpdateRerendersIntoWrapper(t *testing.T) {
 	<-tr.ReadyCh
 
 	dot := &templateUpdateDot{Text: "before"}
-	tpl := NewTemplate("update", dot)
+	tpl := NewTemplate("div", "update", dot)
 	elem := tr.NewElement(tpl)
 	var sb strings.Builder
 	if err := elem.JawsRender(&sb, nil); err != nil {

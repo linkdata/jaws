@@ -86,8 +86,8 @@ func (tr *testRequest) Session() *Session                { return tr.rw.Session(
 func (tr *testRequest) Get(key string) (value any)       { return tr.rw.Get(key) }
 func (tr *testRequest) Set(key string, value any)        { tr.rw.Set(key, value) }
 func (tr *testRequest) Register(u Updater, p ...any) Jid { return tr.rw.Register(u, p...) }
-func (tr *testRequest) Template(name string, dot any, params ...any) error {
-	return tr.rw.Template(name, dot, params...)
+func (tr *testRequest) Template(outerHTMLTag, name string, dot any, params ...any) error {
+	return tr.rw.Template(outerHTMLTag, name, dot, params...)
 }
 
 type testRequestWriter struct {
@@ -158,8 +158,8 @@ func (h testHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = h.Log(h.NewRequest(r).NewElement(h.Template).JawsRender(w, nil))
 }
 
-func (jw *Jaws) Handler(name string, dot any) http.Handler {
-	return testHandler{Jaws: jw, Template: testTemplateUI{Name: name, Dot: dot}}
+func (jw *Jaws) Handler(outerHTMLTag, name string, dot any) http.Handler {
+	return testHandler{Jaws: jw, Template: testTemplateUI{OuterHTMLTag: outerHTMLTag, Name: name, Dot: dot}}
 }
 
 type testWith struct {
@@ -170,12 +170,13 @@ type testWith struct {
 }
 
 type testTemplateUI struct {
-	Name string
-	Dot  any
+	OuterHTMLTag string
+	Name         string
+	Dot          any
 }
 
 func (t testTemplateUI) String() string {
-	return fmt.Sprintf("{%q, %s}", t.Name, tag.TagString(t.Dot))
+	return fmt.Sprintf("{%q, %q, %s}", t.OuterHTMLTag, t.Name, tag.TagString(t.Dot))
 }
 
 func (t testTemplateUI) execute(elem *Element, w io.Writer, tmpl *template.Template) (err error) {
@@ -192,9 +193,8 @@ func (t testTemplateUI) execute(elem *Element, w io.Writer, tmpl *template.Templ
 	return
 }
 
-func writeTestTemplateWrapperStart(elem *Element, w io.Writer, attrs []string) (err error) {
-	b := elem.Jid().AppendStartTagAttr(nil, "div")
-	b = append(b, " data-jawstemplate"...)
+func writeTestTemplateWrapperStart(elem *Element, w io.Writer, outerHTMLTag string, attrs []string) (err error) {
+	b := elem.Jid().AppendStartTagAttr(nil, outerHTMLTag)
 	for _, attr := range attrs {
 		if attr != "" {
 			b = append(b, ' ')
@@ -207,6 +207,7 @@ func writeTestTemplateWrapperStart(elem *Element, w io.Writer, attrs []string) (
 }
 
 func (t testTemplateUI) JawsRender(elem *Element, w io.Writer, params []any) (err error) {
+	doWrap := t.OuterHTMLTag != ""
 	var expandedTags []any
 	if expandedTags, err = tag.TagExpand(elem.Request, t.Dot); err == nil {
 		elem.Request.TagExpanded(elem, expandedTags)
@@ -215,9 +216,14 @@ func (t testTemplateUI) JawsRender(elem *Element, w io.Writer, params []any) (er
 		elem.AddHandlers(handlers...)
 		err = fmt.Errorf("missing template %q", t.Name)
 		if tmpl := elem.Request.Jaws.LookupTemplate(t.Name); tmpl != nil {
-			if err = writeTestTemplateWrapperStart(elem, w, attrs); err == nil {
+			if doWrap {
+				err = writeTestTemplateWrapperStart(elem, w, t.OuterHTMLTag, attrs)
+			}
+			if err == nil {
 				if err = t.execute(elem, w, tmpl); err == nil {
-					_, err = io.WriteString(w, "</div>")
+					if doWrap {
+						_, err = io.WriteString(w, "</"+t.OuterHTMLTag+">")
+					}
 				}
 			}
 		}
@@ -226,15 +232,17 @@ func (t testTemplateUI) JawsRender(elem *Element, w io.Writer, params []any) (er
 }
 
 func (t testTemplateUI) JawsUpdate(elem *Element) {
-	if tmpl := elem.Request.Jaws.LookupTemplate(t.Name); tmpl != nil {
-		var sb strings.Builder
-		if err := t.execute(elem, &sb, tmpl); err != nil {
-			elem.Request.MustLog(err)
+	if t.OuterHTMLTag != "" {
+		if tmpl := elem.Request.Jaws.LookupTemplate(t.Name); tmpl != nil {
+			var sb strings.Builder
+			if err := t.execute(elem, &sb, tmpl); err != nil {
+				elem.Request.MustLog(err)
+			} else {
+				elem.SetInner(template.HTML(sb.String())) // #nosec G203
+			}
 		} else {
-			elem.SetInner(template.HTML(sb.String())) // #nosec G203
+			elem.Request.MustLog(fmt.Errorf("missing template %q", t.Name))
 		}
-	} else {
-		elem.Request.MustLog(fmt.Errorf("missing template %q", t.Name))
 	}
 }
 
@@ -262,8 +270,8 @@ func (t testTemplateUI) JawsInput(elem *Element, value string) (err error) {
 	return
 }
 
-func (rw testRequestWriter) Template(name string, dot any, params ...any) error {
-	return rw.UI(testTemplateUI{Name: name, Dot: dot}, params...)
+func (rw testRequestWriter) Template(outerHTMLTag, name string, dot any, params ...any) error {
+	return rw.UI(testTemplateUI{OuterHTMLTag: outerHTMLTag, Name: name, Dot: dot}, params...)
 }
 
 type testDivWidget struct {

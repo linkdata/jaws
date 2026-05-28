@@ -1483,6 +1483,7 @@ func TestRequest_Template(t *testing.T) {
 	type intTag int
 
 	type args struct {
+		outer  string
 		templ  string
 		dot    any
 		params []any
@@ -1497,22 +1498,24 @@ func TestRequest_Template(t *testing.T) {
 		{
 			name: "testtemplate",
 			args: args{
+				"div",
 				"testtemplate",
 				intTag(1234),
 				[]any{"hidden"},
 			},
-			want:   `<div id="Jid.1" data-jawstemplate hidden>1234</div>`,
+			want:   `<div id="Jid.1" hidden>1234</div>`,
 			tags:   []any{intTag(1234)},
 			errtxt: "",
 		},
 		{
 			name: "testtemplate-with-tags",
 			args: args{
+				"div",
 				"testtemplate",
 				tag.Tag("stringtag1"),
 				[]any{`style="display: none"`, tag.Tag("stringtag2"), "hidden"},
 			},
-			want:   `<div id="Jid.1" data-jawstemplate style="display: none" hidden>stringtag1</div>`,
+			want:   `<div id="Jid.1" style="display: none" hidden>stringtag1</div>`,
 			tags:   []any{tag.Tag("stringtag1"), tag.Tag("stringtag2")},
 			errtxt: "",
 		},
@@ -1532,7 +1535,7 @@ func TestRequest_Template(t *testing.T) {
 					t.Fail()
 				}()
 			}
-			if e := rq.Template(tt.args.templ, tt.args.dot, tt.args.params...); e != nil {
+			if e := rq.Template(tt.args.outer, tt.args.templ, tt.args.dot, tt.args.params...); e != nil {
 				t.Error(e)
 			}
 			got := rq.BodyHTML()
@@ -1571,7 +1574,7 @@ func TestRequest_Template_Event(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 	dot := &templateDot{clickedCh: make(chan struct{})}
-	rq.Template("testtemplate", dot)
+	rq.Template("div", "testtemplate", dot)
 	rq.Jaws.Broadcast(wire.Message{
 		Dest: dot,
 		What: what.Update,

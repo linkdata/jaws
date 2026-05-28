@@ -178,7 +178,7 @@ func newBenchmarkInputsAndTemplatesHandler(b *testing.B, jw *jaws.Jaws) http.Han
 <body>
 	<main>
 		<h1>{{$.Span .Dot.TitleBinder}}</h1>
-		{{$.Template "benchmarkInputSummary" .Dot "class=\"summary\""}}
+		{{$.Template "div" "benchmarkInputSummary" .Dot "class=\"summary\""}}
 		<form>
 			<label>Name {{$.Text .Dot.NameBinder}}</label>
 			<label>Enabled {{$.Checkbox .Dot.EnabledBinder}}</label>
@@ -186,7 +186,7 @@ func newBenchmarkInputsAndTemplatesHandler(b *testing.B, jw *jaws.Jaws) http.Han
 		</form>
 		<section>
 			{{range .Dot.Cards}}
-				{{$.Template "benchmarkInputCard" . "class=\"card\""}}
+				{{$.Template "div" "benchmarkInputCard" . "class=\"card\""}}
 			{{end}}
 		</section>
 	</main>

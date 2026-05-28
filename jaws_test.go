@@ -1088,7 +1088,7 @@ func TestJaws_Session(t *testing.T) {
 
 	dot := tag.Tag("123")
 
-	h := rq.Jaws.Session(rq.Jaws.Handler("testtemplate", dot))
+	h := rq.Jaws.Session(rq.Jaws.Handler("div", "testtemplate", dot))
 	var buf bytes.Buffer
 	var rr httptest.ResponseRecorder
 	rr.Body = &buf
@@ -1099,7 +1099,7 @@ func TestJaws_Session(t *testing.T) {
 	}
 
 	h.ServeHTTP(&rr, r)
-	if got := buf.String(); got != `<div id="Jid.1" data-jawstemplate>123</div>` {
+	if got := buf.String(); got != `<div id="Jid.1">123</div>` {
 		t.Error(got)
 	}
 

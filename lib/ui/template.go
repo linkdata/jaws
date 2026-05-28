@@ -12,15 +12,18 @@ import (
 
 // Template references a Go [html/template] template to be rendered through JaWS.
 //
-// The Name field identifies the template to execute and Dot contains the data
-// that will be exposed to the template through the [With] structure constructed
-// during rendering. Templates are rendered inside a generated wrapper element
-// that receives the JaWS ID and any HTML attributes supplied at render time
-// through the [RequestWriter.Template] helper. The referenced template must be
-// a partial template, not a full HTML document.
+// The OuterHTMLTag field identifies the generated wrapper element used for
+// partial templates. If OuterHTMLTag is empty, the template is rendered without
+// a generated wrapper. Name identifies the template to execute and Dot contains
+// the data exposed to the template through the [With] structure constructed
+// during rendering. Wrapped templates receive the JaWS ID and any HTML
+// attributes supplied at render time through the [RequestWriter.Template]
+// helper. The referenced template must be a partial template, not a full HTML
+// document.
 type Template struct {
-	Name string // Template name to be looked up using Jaws.LookupTemplate.
-	Dot  any    // Dot value to place in With.
+	OuterHTMLTag string // Optional wrapper tag for partial templates, for example "div" or "tr"; empty renders unwrapped.
+	Name         string // Template name to be looked up using Jaws.LookupTemplate.
+	Dot          any    // Dot value to place in With.
 }
 
 var _ jaws.UI = Template{}                 // statically ensure interface is defined
@@ -30,7 +33,7 @@ var _ jaws.InputHandler = Template{}       // statically ensure interface is def
 
 // String returns a debug representation of t.
 func (tmpl Template) String() string {
-	return fmt.Sprintf("{%q, %s}", tmpl.Name, tag.TagString(tmpl.Dot))
+	return fmt.Sprintf("{%q, %q, %s}", tmpl.OuterHTMLTag, tmpl.Name, tag.TagString(tmpl.Dot))
 }
 
 func (tmpl Template) lookup(elem *jaws.Element) (lookedUp *template.Template, err error) {
@@ -59,9 +62,8 @@ func (tmpl Template) execute(elem *jaws.Element, w io.Writer, lookedUp *template
 	return
 }
 
-func writeTemplateWrapperStart(elem *jaws.Element, w io.Writer, attrs []string) (err error) {
-	b := elem.Jid().AppendStartTagAttr(nil, "div")
-	b = append(b, " data-jawstemplate"...)
+func writeTemplateWrapperStart(elem *jaws.Element, w io.Writer, outerHTMLTag string, attrs []string) (err error) {
+	b := elem.Jid().AppendStartTagAttr(nil, outerHTMLTag)
 	for _, attr := range attrs {
 		if attr != "" {
 			b = append(b, ' ')
@@ -73,7 +75,8 @@ func writeTemplateWrapperStart(elem *jaws.Element, w io.Writer, attrs []string) 
 	return
 }
 
-func (tmpl Template) render(elem *jaws.Element, w io.Writer, params []any, wrapped bool) (err error) {
+func (tmpl Template) render(elem *jaws.Element, w io.Writer, params []any) (err error) {
+	doWrap := tmpl.OuterHTMLTag != ""
 	var expandedTags []any
 	if expandedTags, err = tag.TagExpand(elem.Request, tmpl.Dot); err == nil {
 		elem.Request.TagExpanded(elem, expandedTags)
@@ -82,13 +85,13 @@ func (tmpl Template) render(elem *jaws.Element, w io.Writer, params []any, wrapp
 		elem.AddHandlers(handlers...)
 		var lookedUp *template.Template
 		if lookedUp, err = tmpl.lookup(elem); err == nil {
-			if wrapped {
-				err = writeTemplateWrapperStart(elem, w, attrs)
+			if doWrap {
+				err = writeTemplateWrapperStart(elem, w, tmpl.OuterHTMLTag, attrs)
 			}
 			if err == nil {
 				if err = tmpl.execute(elem, w, lookedUp); err == nil {
-					if wrapped {
-						_, err = io.WriteString(w, "</div>")
+					if doWrap {
+						_, err = io.WriteString(w, "</"+tmpl.OuterHTMLTag+">")
 					}
 				}
 			}
@@ -99,23 +102,29 @@ func (tmpl Template) render(elem *jaws.Element, w io.Writer, params []any, wrapp
 
 // JawsRender renders t through the request's configured template lookupers.
 func (tmpl Template) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
-	err = tmpl.render(elem, w, params, true)
+	err = tmpl.render(elem, w, params)
 	return
 }
 
 // JawsUpdate re-renders t into the template wrapper.
 //
+// Unwrapped templates have no generated DOM element to update, so updates are
+// ignored. Nested JaWS UI rendered by the template can still update through its
+// own elements.
+//
 // Lookup or execution errors are reported through [jaws.Request.MustLog],
 // which may panic when no [jaws.Jaws.Logger] is configured.
 func (tmpl Template) JawsUpdate(elem *jaws.Element) {
-	lookedUp, err := tmpl.lookup(elem)
-	if err == nil {
-		var sb strings.Builder
-		if err = tmpl.execute(elem, &sb, lookedUp); err == nil {
-			elem.SetInner(template.HTML(sb.String())) // #nosec G203
+	if tmpl.OuterHTMLTag != "" {
+		lookedUp, err := tmpl.lookup(elem)
+		if err == nil {
+			var sb strings.Builder
+			if err = tmpl.execute(elem, &sb, lookedUp); err == nil {
+				elem.SetInner(template.HTML(sb.String())) // #nosec G203
+			}
 		}
+		elem.Request.MustLog(err)
 	}
-	elem.Request.MustLog(err)
 }
 
 // JawsClick delegates click events to t.Dot when it implements [jaws.ClickHandler].
@@ -146,20 +155,22 @@ func (tmpl Template) JawsInput(elem *jaws.Element, value string) (err error) {
 	return
 }
 
-// NewTemplate constructs a Template with the provided name and data value.
+// NewTemplate constructs a Template with the provided wrapper tag, name and data value.
 //
 // It is a small helper that makes it convenient to use Template values with
 // other JaWS helpers without having to fill the struct fields manually.
-func NewTemplate(name string, dot any) Template {
-	return Template{Name: name, Dot: dot}
+func NewTemplate(outerHTMLTag, name string, dot any) Template {
+	return Template{OuterHTMLTag: outerHTMLTag, Name: name, Dot: dot}
 }
 
 // Template renders the given template using [With] as data.
 //
 // The Dot field in [With] is set to dot, and name is resolved to a
 // [template.Template] using [jaws.Jaws.LookupTemplate]. Template output is
-// wrapped in a generated div that owns the JaWS ID and any HTML attrs passed in
-// params. The template must be a partial, not a full HTML document.
-func (rw RequestWriter) Template(name string, dot any, params ...any) error {
-	return rw.UI(NewTemplate(name, dot), params...)
+// wrapped in a generated outerHTMLTag element that owns the JaWS ID and any
+// HTML attrs passed in params. If outerHTMLTag is empty, no wrapper is emitted
+// and HTML attr params have no generated element to apply to. The template must
+// be a partial, not a full HTML document.
+func (rw RequestWriter) Template(outerHTMLTag, name string, dot any, params ...any) error {
+	return rw.UI(NewTemplate(outerHTMLTag, name, dot), params...)
 }

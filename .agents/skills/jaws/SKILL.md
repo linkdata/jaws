@@ -85,7 +85,18 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
 - Do not use plain `string`, numeric, `bool`, `template.HTML`, or `template.HTMLAttr` as tags; `tag.TagExpand` rejects them.
 - If you need string-like semantic tags, use `tag.Tag("...")` or a comparable typed struct/pointer.
 
-## `$.Template(...)` parameter semantics
+## `$.Template(...)` signature and parameter semantics
+
+`$.Template(...)` takes the wrapper tag first:
+
+```gotemplate
+{{$.Template "div" "partialName" .Dot "class=\"panel\""}}
+{{$.Template "tr" "rowPartial" . "class=\"selected\""}}
+{{$.Template "" "barePartial" .Dot}}
+```
+
+The outer tag should match the DOM context where the generated JaWS wrapper will
+be inserted. An empty outer tag renders the template without a generated wrapper.
 
 JaWS parses template params as:
 - HTML attrs: `string`, `[]string`, `template.HTMLAttr`, `[]template.HTMLAttr`
@@ -95,8 +106,9 @@ JaWS parses template params as:
 Implications:
 - Non-comparable handlers are not auto-tagged unless they implement `tag.TagGetter`.
 - Pass explicit tags when dirty targeting depends on them.
-- HTML attributes passed to `$.Template(...)` are applied to the generated template wrapper.
+- HTML attributes passed to `$.Template(...)` are applied to the generated template wrapper, if one exists.
 - Template bodies used with `$.Template(...)` must be partials, not full documents.
+- Unwrapped templates have no wrapper-owned DOM element for direct template updates; use nested JaWS UI for dynamic regions.
 - For dynamic button text, avoid passing plain static strings if the value must change after render; use getter-based values so updates reflect new state.
 
 ## Event handling model
