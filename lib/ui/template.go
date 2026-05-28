@@ -155,10 +155,19 @@ func (tmpl Template) JawsInput(elem *jaws.Element, value string) (err error) {
 	return
 }
 
-// NewTemplate constructs a Template with the provided wrapper tag, name and data value.
+// NewTemplate returns a Template UI value for rendering the named partial
+// template with dot available as [With.Dot].
 //
-// It is a small helper that makes it convenient to use Template values with
-// other JaWS helpers without having to fill the struct fields manually.
+// The template name is resolved when the value is rendered or updated, using
+// the request's [jaws.Jaws.LookupTemplate]. If outerHTMLTag is non-empty,
+// rendering wraps the template output in that generated element; the wrapper
+// owns the JaWS ID and render-time HTML attributes. If outerHTMLTag is empty,
+// rendering emits only the template output and [Template.JawsUpdate] has no
+// wrapper to update.
+//
+// Dot participates in tag expansion for dirty targeting and receives delegated
+// click, context-menu, and input events when it implements the corresponding
+// JaWS handler interfaces.
 func NewTemplate(outerHTMLTag, name string, dot any) Template {
 	return Template{OuterHTMLTag: outerHTMLTag, Name: name, Dot: dot}
 }
