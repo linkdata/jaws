@@ -9,6 +9,10 @@ import (
 	"github.com/coder/websocket"
 )
 
+// writeBatchLimit is the maximum number of bytes WriteLoop coalesces into a
+// single outbound WebSocket text frame before flushing.
+const writeBatchLimit = 32 * 1024
+
 // ReadLoop reads WebSocket text messages, parses them, and sends parsed
 // messages on incomingMsgCh.
 //
@@ -19,7 +23,9 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 	var err error
 	defer close(incomingMsgCh)
 	for err == nil {
-		if typ, txt, err = ws.Read(ctx); typ == websocket.MessageText {
+		// Only parse on a successful read; on error ws.Read returns no usable
+		// payload and the loop exits because the for condition fails.
+		if typ, txt, err = ws.Read(ctx); err == nil && typ == websocket.MessageText {
 			if msg, ok := Parse(txt); ok {
 				select {
 				case <-ctx.Done():
@@ -93,10 +99,10 @@ func PingLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 
 func writeData(wc io.WriteCloser, firstMsg WsMsg, outboundMsgCh <-chan WsMsg) (err error) {
 	b := firstMsg.Append(nil)
-	// accumulate data to send as long as more messages
-	// are available until it exceeds 32K
+	// accumulate data to send as long as more messages are available until it
+	// exceeds writeBatchLimit
 batchloop:
-	for len(b) < 32*1024 {
+	for len(b) < writeBatchLimit {
 		select {
 		case msg, ok := <-outboundMsgCh:
 			if !ok {
