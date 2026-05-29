@@ -21,19 +21,6 @@ type testBinderStringNoHTML struct {
 	Binder[string]
 }
 
-/*type testAnySetter struct {
-	Value any
-}
-
-func (ag *testAnySetter) JawsGetAny(*Element) any {
-	return ag.Value
-}
-
-func (ag *testAnySetter) JawsSetAny(elem *Element, value any) error {
-	ag.Value = value
-	return nil
-}*/
-
 func Test_MakeHTMLGetter(t *testing.T) {
 	untypedText := "<span>"
 	typedText := template.HTML(untypedText)
