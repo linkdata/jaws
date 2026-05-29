@@ -41,7 +41,7 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 //
 // Closes the WebSocket on exit.
 func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, outboundMsgCh <-chan WsMsg, ws *websocket.Conn) {
-	defer ws.Close(websocket.StatusNormalClosure, "")
+	defer func() { _ = ws.Close(websocket.StatusNormalClosure, "") }()
 	var err error
 	for err == nil {
 		select {
