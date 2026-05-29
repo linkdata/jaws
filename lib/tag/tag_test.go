@@ -220,8 +220,11 @@ func TestTagExpand_TooManyTagsPanic(t *testing.T) {
 		if !ok {
 			t.Fatal("expected error, got", x)
 		}
-		if e.Error() != ErrTooManyTags.Error() {
-			t.Fail()
+		if !errors.Is(e, ErrTooManyTags) {
+			t.Errorf("recovered error = %v, want %v", e, ErrTooManyTags)
+		}
+		if e.Error() != "too many tags" {
+			t.Errorf("ErrTooManyTags.Error() = %q", e.Error())
 		}
 	}()
 	MustTagExpand(nil, tags)

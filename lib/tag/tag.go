@@ -21,15 +21,15 @@ func TagString(tag any) string {
 	return fmt.Sprintf("%#v", tag)
 }
 
-type errTooManyTags struct{}
-
-func (errTooManyTags) Error() string {
-	return "too many tags"
-}
-
-// ErrTooManyTags is returned when tag expansion exceeds the recursion or result
-// limits.
-var ErrTooManyTags = errTooManyTags{}
+// Expansion limits guarding against runaway recursion or pathological input.
+const (
+	// maxTagDepth is the maximum [TagGetter]/slice nesting depth that tag
+	// expansion (and the [FindTagGetter] hint search) will follow.
+	maxTagDepth = 10
+	// maxTagCount is the maximum number of unique tags a single expansion may
+	// produce before returning [ErrTooManyTags].
+	maxTagCount = 100
+)
 
 func ensureUsableTag(tag any) error {
 	if tag != nil {
@@ -47,7 +47,7 @@ func appendUniqueTag(result []any, tag any) ([]any, error) {
 		}
 	}
 	result = append(result, tag)
-	if len(result) > 100 {
+	if len(result) > maxTagCount {
 		return result, ErrTooManyTags
 	}
 	return result, nil
@@ -112,7 +112,7 @@ func hasNonNilTag(tags []any) bool {
 }
 
 func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any, error) {
-	if depth > 10 || len(result) > 100 {
+	if depth > maxTagDepth || len(result) > maxTagCount {
 		return result, ErrTooManyTags
 	}
 	switch data := tag.(type) {
