@@ -16,17 +16,21 @@ import (
 // Input stores common state for interactive input widgets.
 // There is one of these per request and input widget.
 type Input struct {
-	Tag  any          // tag to dirty after accepted input
+	// tag is the dirty tag, written once during render and read on the event
+	// goroutine (JawsInput). The render-completes-before-events lifecycle makes
+	// the unsynchronized access safe; it is unexported so external code cannot
+	// mutate it.
+	tag  any
 	Last atomic.Value // the last value received from the request
 }
 
 func (u *Input) applyGetterAttrs(elem *jaws.Element, getter any) (attrs []template.HTMLAttr, err error) {
-	u.Tag, attrs, err = elem.ApplyGetter(getter)
+	u.tag, attrs, err = elem.ApplyGetter(getter)
 	return
 }
 
 func (u *Input) maybeDirty(elem *jaws.Element, inErr error) (err error) {
-	err = applyDirty(u.Tag, elem, inErr)
+	err = applyDirty(u.tag, elem, inErr)
 	return
 }
 
@@ -100,9 +104,9 @@ func (u *InputBool) JawsInput(elem *jaws.Element, value string) (err error) {
 	}
 	var v bool
 	if v, err = strconv.ParseBool(value); err == nil {
+		u.Last.Store(v)
 		err = u.maybeDirty(elem, u.Setter.JawsSet(elem, v))
 	}
-	u.Last.Store(v)
 	return
 }
 
@@ -142,9 +146,9 @@ func (u *InputFloat) JawsInput(elem *jaws.Element, value string) (err error) {
 	}
 	var v float64
 	if v, err = strconv.ParseFloat(value, 64); err == nil {
+		u.Last.Store(v)
 		err = u.maybeDirty(elem, u.Setter.JawsSet(elem, v))
 	}
-	u.Last.Store(v)
 	return
 }
 
@@ -163,7 +167,10 @@ func (u *InputDate) renderDateInput(elem *jaws.Element, w io.Writer, htmlType st
 	if getterAttrs, err = u.applyGetterAttrs(elem, u.Setter); err == nil {
 		attrs := append(elem.ApplyParams(params), getterAttrs...)
 		v := u.JawsGet(elem)
-		u.Last.Store(v)
+		// Dedup on the rendered ISO8601 string, not the raw time.Time: comparing
+		// time.Time with == also compares the monotonic reading and *Location, so
+		// equal calendar dates can compare unequal. The string is what we send.
+		u.Last.Store(u.str(v))
 		err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, u.str(v), attrs)
 	}
 	return
@@ -171,9 +178,8 @@ func (u *InputDate) renderDateInput(elem *jaws.Element, w io.Writer, htmlType st
 
 // JawsUpdate updates the input value when the bound date value changes.
 func (u *InputDate) JawsUpdate(elem *jaws.Element) {
-	v := u.JawsGet(elem)
-	if u.Last.Swap(v) != v {
-		elem.SetValue(u.str(v))
+	if s := u.str(u.JawsGet(elem)); u.Last.Swap(s) != s {
+		elem.SetValue(s)
 	}
 }
 
@@ -184,8 +190,8 @@ func (u *InputDate) JawsInput(elem *jaws.Element, value string) (err error) {
 	}
 	var v time.Time
 	if v, err = time.Parse(assets.ISO8601, value); err == nil {
+		u.Last.Store(u.str(v))
 		err = u.maybeDirty(elem, u.Setter.JawsSet(elem, v))
 	}
-	u.Last.Store(v)
 	return
 }

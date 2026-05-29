@@ -12,6 +12,7 @@ import (
 	"github.com/linkdata/jaws/lib/assets"
 	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jaws/lib/wire"
 )
 
 func TestInputTextWidgets(t *testing.T) {
@@ -136,6 +137,57 @@ func TestInputDateWidget(t *testing.T) {
 	d1, _ := time.Parse(assets.ISO8601, "2022-03-04")
 	sd.Set(d1)
 	date.JawsUpdate(elem)
+}
+
+// TestInputDate_NoSpuriousUpdateOnEqualDate guards the dedup fix: two time.Time
+// values for the same calendar date but with different *Location pointers compare
+// unequal under ==, yet render to the same ISO8601 string. JawsUpdate must dedup
+// on the string, so the same-date update emits nothing and the next genuinely
+// different date is the first thing the browser sees.
+func TestInputDate_NoSpuriousUpdateOnEqualDate(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+
+	go jw.Serve()
+	tr := jaws.NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("expected test request")
+	}
+	defer tr.Close()
+	<-tr.ReadyCh
+
+	// Same wall-clock date, different *Location pointer -> d0 != dSame under ==,
+	// but both Format to "2020-01-02".
+	d0 := time.Date(2020, 1, 2, 0, 0, 0, 0, time.UTC)
+	dSame := time.Date(2020, 1, 2, 0, 0, 0, 0, time.FixedZone("UTC", 0))
+	if d0 == dSame {
+		t.Fatal("test precondition failed: values should be unequal under ==")
+	}
+	sd := newTestSetter(d0)
+
+	date := NewDate(sd)
+	elem := tr.NewElement(date)
+	var sb strings.Builder
+	if err := elem.JawsRender(&sb, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	sd.Set(dSame)
+	tr.BcastCh <- wire.Message{Dest: sd, What: what.Update} // must NOT emit
+	sd.Set(time.Date(2099, 12, 31, 0, 0, 0, 0, time.UTC))
+	tr.BcastCh <- wire.Message{Dest: sd, What: what.Update} // must emit "2099-12-31"
+
+	select {
+	case <-t.Context().Done():
+		t.Fatal("no update received")
+	case msg := <-tr.OutCh:
+		if msg.What != what.Value || msg.Data != "2099-12-31" {
+			t.Fatalf("first update = {%v %q}, want a single {Value \"2099-12-31\"} (a spurious same-date update leaked)", msg.What, msg.Data)
+		}
+	}
 }
 
 func TestInputMaybeDirtyErrValueUnchanged(t *testing.T) {
