@@ -179,10 +179,6 @@ func TestJsVar_PathHooksAndRequestWriter(t *testing.T) {
 		t.Fatalf("expected ErrValueUnchanged, got %v", err)
 	}
 
-	if got := string(appendAttrs(nil, []template.HTMLAttr{"x", "", "y"})); got != " x y" {
-		t.Fatalf("unexpected attrs %q", got)
-	}
-
 	var rwmu sync.RWMutex
 	jsvRW := NewJsVar(&rwmu, &v)
 	if _, ok := jsvRW.RWLocker.(*sync.RWMutex); !ok {

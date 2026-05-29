@@ -105,6 +105,7 @@ func (jsvar *JsVar[T]) JawsGet(elem *jaws.Element) (value T) {
 	return
 }
 
+// setPathLocked applies the mutation and must be called with the write lock held.
 func (jsvar *JsVar[T]) setPathLocked(elem *jaws.Element, jsPath string, value any) (err error) {
 	if ps, ok := ((any)(jsvar.Ptr).(PathSetter)); ok {
 		err = ps.JawsSetPath(elem, jsPath, value)
@@ -114,23 +115,30 @@ func (jsvar *JsVar[T]) setPathLocked(elem *jaws.Element, jsPath string, value an
 			err = jaws.ErrValueUnchanged
 		}
 	}
-	if err == nil && elem != nil {
-		var data []byte
-		if data, err = json.Marshal(value); err == nil {
-			elem.Jaws.Broadcast(wire.Message{
-				Dest: jsvar.dirtyTag,
-				What: what.Set,
-				Data: jsPath + "=" + string(data),
-			})
-		}
-	}
 	return
 }
 
 func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any) (err error) {
 	jsvar.Lock()
-	defer jsvar.Unlock()
 	err = jsvar.setPathLocked(elem, jsPath, value)
+	dirtyTag := jsvar.dirtyTag
+	jsvar.Unlock()
+	// Marshal and broadcast outside the lock: value is the caller-owned argument
+	// (not read from Ptr), and jaws.Broadcast can block on the broadcast channel
+	// under backpressure. Holding the lock across that send would needlessly
+	// serialize concurrent setters and stall any code sharing the locker. This
+	// mirrors bind.binder, which mutates under the lock and runs side effects
+	// after releasing it.
+	if err == nil && elem != nil {
+		var data []byte
+		if data, err = json.Marshal(value); err == nil {
+			elem.Jaws.Broadcast(wire.Message{
+				Dest: dirtyTag,
+				What: what.Set,
+				Data: jsPath + "=" + string(data),
+			})
+		}
+	}
 	return
 }
 
@@ -153,17 +161,13 @@ func (jsvar *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 	return jsvar.JawsSetPath(elem, "", value)
 }
 
-func appendAttrs(b []byte, attrs []template.HTMLAttr) []byte {
-	for _, s := range attrs {
-		if s != "" {
-			b = append(b, ' ')
-			b = append(b, s...)
-		}
-	}
-	return b
-}
-
 // JawsRender writes the hidden element that seeds and routes the JavaScript variable.
+//
+// The write lock is held for the whole render so the marshaled Ptr is consistent
+// with the dirty tag stored from it. As a consequence the bound value's
+// [tag.TagGetter.JawsGetTag] and [jaws.InitHandler.JawsInit] run while the lock
+// is held: those callbacks must not re-enter this JsVar (e.g. call JawsGet or
+// JawsSet on it), which would self-deadlock the non-reentrant lock.
 func (jsvar *JsVar[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	jsvar.Lock()
 	defer jsvar.Unlock()
@@ -185,7 +189,7 @@ func (jsvar *JsVar[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any)
 				if data != nil {
 					b = htmlio.AppendAttr(b, "data-jawsdata", string(data))
 				}
-				b = appendAttrs(b, attrs)
+				b = htmlio.AppendAttrs(b, attrs)
 				b = append(b, " hidden></div>"...)
 				_, err = w.Write(b)
 			}
