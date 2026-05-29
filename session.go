@@ -229,9 +229,11 @@ func (sess *Session) Requests() (requests []*Request) {
 // It is safe to call on a nil [Session].
 func (sess *Session) Broadcast(msg wire.Message) {
 	if sess != nil {
-		sess.mu.RLock()
-		defer sess.mu.RUnlock()
-		for _, rq := range sess.requests {
+		// Snapshot the requests under the lock (via Requests), then broadcast
+		// outside it: jw.Broadcast can block on the broadcast channel under
+		// backpressure, and holding sess.mu across that send would stall every
+		// other session reader and writer. This mirrors Session.Close.
+		for _, rq := range sess.Requests() {
 			msg.Dest = rq
 			sess.jw.Broadcast(msg)
 		}
