@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/linkdata/deadlock"
@@ -206,4 +207,106 @@ func TestTree(t *testing.T) {
 			t.Errorf("unexpected data: %q", msg.Data)
 		}
 	}
+}
+
+// TestTree_JawsPathSetIgnoresNonSelectedPath covers the early-return branch of
+// JawsPathSet: only a ".selected" path broadcasts; any other path is ignored.
+func TestTree_JawsPathSetIgnoresNonSelectedPath(t *testing.T) {
+	jw, err := jaws.New()
+	maybeError(t, err)
+	defer jw.Close()
+
+	go jw.Serve()
+	rq := jaws.NewTestRequest(jw, nil)
+	if rq == nil {
+		t.Fatal("nil test request")
+	}
+	defer rq.Close()
+
+	rootnode := &Node{Name: "root", Children: []*Node{{Name: "child"}}}
+	var mu deadlock.RWMutex
+	tree := New("tree", ui.NewJsVar(&mu, rootnode))
+	elem := rq.NewElement(tree)
+	var sb strings.Builder
+	maybeError(t, tree.JawsRender(elem, &sb, nil))
+
+	child := rootnode.Children[0]
+	// A non-".selected" path must be ignored (no broadcast)...
+	child.JawsPathSet(elem, child.ID+".name", "renamed")
+	// ...so the ".selected" broadcast is the first message on OutCh.
+	child.JawsPathSet(elem, child.ID+".selected", "true")
+
+	select {
+	case <-t.Context().Done():
+		t.Fatal("expected a jawstreeSetPath message")
+	case msg := <-rq.OutCh:
+		if !strings.Contains(msg.Data, "jawstreeSetPath") || !strings.Contains(msg.Data, `"set":true`) {
+			t.Fatalf("first message should be the .selected broadcast, got %q (a non-.selected path leaked a broadcast)", msg.Data)
+		}
+	}
+}
+
+// TestTree_ConcurrentUpdateAndInput exercises the data race fixed in JawsUpdate:
+// JawsUpdate reads the shared node tree (via marshalJSON) while another goroutine
+// mutates a node under the JsVar write lock, exactly as JsVar.JawsInput does.
+// Run with -race; it fails before JawsUpdate takes the read lock.
+func TestTree_ConcurrentUpdateAndInput(t *testing.T) {
+	jw, err := jaws.New()
+	maybeError(t, err)
+	defer jw.Close()
+
+	go jw.Serve()
+	rq := jaws.NewTestRequest(jw, nil)
+	if rq == nil {
+		t.Fatal("nil test request")
+	}
+	defer rq.Close()
+
+	root, err := os.OpenRoot(".")
+	maybeError(t, err)
+	defer func() { _ = root.Close() }()
+
+	rootnode, err := Root(root, nil)
+	maybeError(t, err)
+
+	var rootmu deadlock.RWMutex
+	tree := New("tree", ui.NewJsVar(&rootmu, rootnode))
+	elem := rq.NewElement(tree)
+
+	var sb strings.Builder
+	maybeError(t, tree.JawsRender(elem, &sb, nil))
+
+	// Drain broadcast traffic so JawsUpdate's JsCall never blocks or cancels.
+	stop := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			case <-rq.OutCh:
+			}
+		}
+	}()
+
+	const iterations = 200
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for range iterations {
+			tree.JawsUpdate(elem)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		// Mutate node fields under the write lock, mirroring setPathLocked's jq.Set.
+		for range iterations {
+			tree.Lock()
+			rootnode.Selected = !rootnode.Selected
+			rootnode.Disabled = !rootnode.Disabled
+			tree.Unlock()
+		}
+	}()
+	wg.Wait()
+	close(stop)
 }

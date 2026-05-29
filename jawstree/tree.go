@@ -58,7 +58,12 @@ func (tree *Tree) JawsUpdate(elem *jaws.Element) {
 	b = append(b, `{"tree":`...)
 	b = strconv.AppendQuote(b, tree.id)
 	b = append(b, `,"data":`...)
+	// marshalJSON walks the shared Node tree, which a concurrent JawsInput on
+	// another Request can mutate under the JsVar write lock. Read it under the
+	// JsVar read lock so the two never race; JawsRender is likewise locked.
+	tree.RLock()
 	b = tree.JsVar.Ptr.marshalJSON(b)
+	tree.RUnlock()
 	b = append(b, `}`...)
 	elem.Jaws.JsCall(tree.JawsGetTag(nil), "jawstreeSet", string(b))
 }
