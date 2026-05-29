@@ -186,6 +186,23 @@ Request created in the first step. Then call its `ServeHTTP()` method to
 start up the WebSocket and begin processing JavaScript events and DOM
 updates.
 
+### Request lifecycle invariants
+
+`NewRequest` creates a pending request owned by the `Jaws` instance. `UseRequest`
+is the only operation that claims that pending request for a WebSocket, and it
+also removes the request from the pending set. A request is recycled after its
+WebSocket processing exits or after maintenance cancels an unclaimed request.
+
+Dirtying is two-stage: `Request.Dirty` and `Jaws.Dirty` expand tags and record
+them on the `Jaws` instance, then the serving loop distributes those tags to
+matching active requests and schedules `JawsUpdate` calls. Broadcast helpers
+share that same serving loop, so start `Serve` or `ServeWithTimeout` before
+calling APIs that broadcast, reload, close sessions, or rely on dirty updates.
+
+Cancellation flows from the request context, the initial HTTP/WebSocket request,
+and `Jaws.Close`. Update paths that cannot return errors report them through
+`MustLog`, so long-running applications should configure `Jaws.Logger`.
+
 ### Configuration lifecycle
 
 Set exported `Jaws` configuration fields immediately after `jaws.New()` and
