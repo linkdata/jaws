@@ -4,6 +4,11 @@
 // It integrates well with Go's [html/template] package,
 // but can be used without it. It can be used with any
 // router that supports the standard [http.Handler] interface.
+//
+// This package holds the core engine and the [UI] interfaces. The standard
+// widgets (Span, Button, Select, Text, and so on) and the RequestWriter helper
+// methods live in [github.com/linkdata/jaws/lib/ui], and value binding lives in
+// [github.com/linkdata/jaws/lib/bind].
 package jaws
 
 import (
@@ -232,10 +237,8 @@ func (jw *Jaws) RequestCounts() (total, active int) {
 	return
 }
 
-// RequestCount returns the number of [Request] values.
-//
-// The count includes all Requests, including those being rendered,
-// those waiting for the WebSocket callback and those active.
+// RequestCount returns the total number of [Request] values, equal to the total
+// returned by [Jaws.RequestCounts] (see it for what the count includes).
 func (jw *Jaws) RequestCount() (n int) {
 	n, _ = jw.RequestCounts()
 	return
@@ -821,12 +824,6 @@ func parseIP(remoteAddr string) (ip netip.Addr) {
 func requestIsSecure(r *http.Request) (yes bool) {
 	yes = secureheaders.RequestIsSecure(r, true)
 	return
-}
-
-func maybePanic(err error) {
-	if err != nil {
-		panic(err)
-	}
 }
 
 // SetInner sends a request to replace the inner HTML of
