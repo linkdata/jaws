@@ -2,6 +2,7 @@ package htmlio_test
 
 import (
 	"html/template"
+	"io"
 	"strings"
 	"testing"
 
@@ -52,6 +53,15 @@ func Test_WriteHTMLInner(t *testing.T) {
 				attrs: []template.HTMLAttr{"some_attr1", "some_attr2", ""},
 			},
 			want: `<tag1 id="Jid.3" type="typ1" some_attr1 some_attr2>inner_text</tag1>`,
+		},
+		{
+			name: "HTMLInner void tag drops inner content",
+			args: args{
+				jid:   4,
+				tag:   "img",
+				inner: "ignored",
+			},
+			want: `<img id="Jid.4">`,
 		},
 	}
 	for _, tt := range tests {
@@ -166,5 +176,54 @@ func TestAttr(t *testing.T) {
 	}
 	if strings.Contains(got, `\"`) || strings.Contains(got, `\n`) {
 		t.Fatalf("Attr() used Go/JavaScript-style escapes: %q", got)
+	}
+}
+
+func TestWriteHTMLTag(t *testing.T) {
+	var sb strings.Builder
+	attrs := []template.HTMLAttr{"some_attr", "", "other"}
+	if err := htmlio.WriteHTMLTag(&sb, jid.Jid(7), "div", "typ", "val", attrs); err != nil {
+		t.Fatal(err)
+	}
+	// htmlTag and attrs are written verbatim; type/value are escaped.
+	want := `<div id="Jid.7" type="typ" value="val" some_attr other>`
+	if got := sb.String(); got != want {
+		t.Fatalf("WriteHTMLTag() = %q, want %q", got, want)
+	}
+}
+
+func TestAppendAttrValue(t *testing.T) {
+	value := `"&<>'`
+	got := string(htmlio.AppendAttrValue(nil, value))
+	want := `"&#34;&amp;&lt;&gt;&#39;"`
+	if got != want {
+		t.Fatalf("AppendAttrValue() = %q, want %q", got, want)
+	}
+}
+
+func TestAppendAttrs(t *testing.T) {
+	got := string(htmlio.AppendAttrs(nil, []template.HTMLAttr{"x", "", "y"}))
+	if want := " x y"; got != want {
+		t.Fatalf("AppendAttrs() = %q, want %q (empty fragments must be skipped)", got, want)
+	}
+	if got := string(htmlio.AppendAttrs(nil, nil)); got != "" {
+		t.Fatalf("AppendAttrs(nil) = %q, want empty", got)
+	}
+}
+
+// errWriter is an io.Writer that always fails, to verify error propagation.
+type errWriter struct{}
+
+func (errWriter) Write([]byte) (int, error) { return 0, io.ErrShortWrite }
+
+func TestWriteHTML_WriterErrorPropagates(t *testing.T) {
+	if err := htmlio.WriteHTMLTag(errWriter{}, jid.Jid(1), "div", "", "", nil); err != io.ErrShortWrite {
+		t.Errorf("WriteHTMLTag error = %v, want %v", err, io.ErrShortWrite)
+	}
+	if err := htmlio.WriteHTMLInput(errWriter{}, jid.Jid(1), "text", "v", nil); err != io.ErrShortWrite {
+		t.Errorf("WriteHTMLInput error = %v, want %v", err, io.ErrShortWrite)
+	}
+	if err := htmlio.WriteHTMLInner(errWriter{}, jid.Jid(1), "span", "", "x"); err != io.ErrShortWrite {
+		t.Errorf("WriteHTMLInner error = %v, want %v", err, io.ErrShortWrite)
 	}
 }

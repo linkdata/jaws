@@ -34,7 +34,13 @@ func needClosingTag(tag string) bool {
 	return !ok
 }
 
-func appendAttrs(b []byte, attrs []template.HTMLAttr) []byte {
+// AppendAttrs appends each non-empty attribute fragment in attrs to b, separated
+// by a leading space.
+//
+// The attrs are trusted raw HTML attribute fragments written verbatim with no
+// escaping; they MUST NOT contain untrusted data. Use [Attr] or [AppendAttr] to
+// build attribute fragments with an escaped value.
+func AppendAttrs(b []byte, attrs []template.HTMLAttr) []byte {
 	for _, s := range attrs {
 		if s != "" {
 			b = append(b, ' ')
@@ -87,7 +93,7 @@ func appendHTMLTag(b []byte, jid jid.Jid, htmlTag, typeAttr, valueAttr string, a
 	if valueAttr != "" {
 		b = AppendAttr(b, "value", valueAttr)
 	}
-	b = appendAttrs(b, attrs)
+	b = AppendAttrs(b, attrs)
 	b = append(b, '>')
 	return b
 }
@@ -95,11 +101,13 @@ func appendHTMLTag(b []byte, jid jid.Jid, htmlTag, typeAttr, valueAttr string, a
 // WriteHTMLTag writes an HTML start tag with optional id, type, value and raw
 // attribute fragments.
 //
-// The typeAttr and valueAttr parameters must be unescaped logical values; they
-// are escaped for HTML source output. The attrs parameter contains trusted raw
-// attribute fragments and is written verbatim with no escaping; it MUST NOT
-// contain untrusted data. Use [Attr] or [AppendAttr] to build attribute
-// fragments with an escaped value.
+// The htmlTag parameter is trusted and written verbatim with no escaping or
+// validation; it MUST NOT be derived from untrusted data. The typeAttr and
+// valueAttr parameters must be unescaped logical values; they are escaped for
+// HTML source output. The attrs parameter contains trusted raw attribute
+// fragments and is written verbatim with no escaping; it MUST NOT contain
+// untrusted data. Use [Attr] or [AppendAttr] to build attribute fragments with
+// an escaped value.
 func WriteHTMLTag(w io.Writer, jid jid.Jid, htmlTag, typeAttr, valueAttr string, attrs []template.HTMLAttr) (err error) {
 	var buf [htmlBufferSize]byte
 	b := appendHTMLTag(buf[:0], jid, htmlTag, typeAttr, valueAttr, attrs)
@@ -113,24 +121,27 @@ func WriteHTMLTag(w io.Writer, jid jid.Jid, htmlTag, typeAttr, valueAttr string,
 // The typeAttr and valueAttr parameters must be unescaped logical values; they
 // are escaped for HTML source output. The attrs parameter contains trusted raw
 // attribute fragments and is written verbatim with no escaping; it MUST NOT
-// contain untrusted data. Use [Attr] or [AppendAttr] to build attribute
-// fragments with an escaped value.
+// contain untrusted data, nor must typeAttr be derived from untrusted data. Use
+// [Attr] or [AppendAttr] to build attribute fragments with an escaped value.
 func WriteHTMLInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs []template.HTMLAttr) (err error) {
 	return WriteHTMLTag(w, jid, "input", typeAttr, valueAttr, attrs)
 }
 
 // WriteHTMLInner writes an HTML element with trusted inner HTML.
 //
-// Singleton tags such as img and input are written without closing tags unless
-// innerHTML is non-empty.
+// Void/singleton tags such as img and input are written without a closing tag,
+// and any innerHTML passed for them is ignored, since a void element cannot
+// contain content (emitting "<img>...</img>" would be invalid HTML).
 //
-// The attrs parameter contains trusted raw attribute fragments and is written
-// verbatim with no escaping; it MUST NOT contain untrusted data. Use [Attr] or
-// [AppendAttr] to build attribute fragments with an escaped value.
+// The htmlTag and typeAttr parameters are trusted and written verbatim; they
+// MUST NOT be derived from untrusted data. The attrs parameter contains trusted
+// raw attribute fragments and is written verbatim with no escaping; it MUST NOT
+// contain untrusted data. Use [Attr] or [AppendAttr] to build attribute
+// fragments with an escaped value.
 func WriteHTMLInner(w io.Writer, jid jid.Jid, htmlTag, typeAttr string, innerHTML template.HTML, attrs ...template.HTMLAttr) (err error) {
 	var buf [htmlBufferSize]byte
 	b := appendHTMLTag(buf[:0], jid, htmlTag, typeAttr, "", attrs)
-	if innerHTML != "" || needClosingTag(htmlTag) {
+	if needClosingTag(htmlTag) {
 		b = append(b, innerHTML...)
 		b = append(b, "</"...)
 		b = append(b, htmlTag...)
