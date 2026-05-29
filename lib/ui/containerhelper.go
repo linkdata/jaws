@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/lib/htmlio"
 )
 
 // ContainerHelper is a helper for widgets that render dynamic child collections.
@@ -26,9 +27,13 @@ import (
 // updated and therefore inconsistent until the next full render/reload.
 type ContainerHelper struct {
 	Container jaws.Container
-	Tag       any
-	mu        sync.Mutex
-	contents  []*jaws.Element
+	// tag is the dirty tag, written once during RenderContainer and read on the
+	// event goroutine (JawsInput). The render-completes-before-events lifecycle
+	// makes the unsynchronized access safe; it is unexported so external code
+	// cannot mutate it.
+	tag      any
+	mu       sync.Mutex
+	contents []*jaws.Element
 }
 
 // NewContainerHelper returns a ContainerHelper for rendering and updating c.
@@ -41,13 +46,10 @@ func NewContainerHelper(c jaws.Container) ContainerHelper {
 // [jaws.Container.JawsContains].
 func (u *ContainerHelper) RenderContainer(elem *jaws.Element, w io.Writer, outerHTMLTag string, params []any) (err error) {
 	var getterAttrs []template.HTMLAttr
-	if u.Tag, getterAttrs, err = elem.ApplyGetter(u.Container); err == nil {
+	if u.tag, getterAttrs, err = elem.ApplyGetter(u.Container); err == nil {
 		attrs := append(elem.ApplyParams(params), getterAttrs...)
 		b := elem.Jid().AppendStartTagAttr(nil, outerHTMLTag)
-		for _, attr := range attrs {
-			b = append(b, ' ')
-			b = append(b, attr...)
-		}
+		b = htmlio.AppendAttrs(b, attrs)
 		b = append(b, '>')
 		_, err = w.Write(b)
 		if err == nil {
@@ -68,6 +70,10 @@ func (u *ContainerHelper) RenderContainer(elem *jaws.Element, w io.Writer, outer
 					elem.Request.DeleteElement(childElem)
 				}
 			}
+			// Always emit the closing tag, even on a child-render error, to balance
+			// the start tag already written above; leaving it unclosed would be
+			// worse for any partial output. The original err is preserved (err2 is
+			// only adopted when err is nil).
 			b = b[:0]
 			b = append(b, "</"...)
 			b = append(b, outerHTMLTag...)
