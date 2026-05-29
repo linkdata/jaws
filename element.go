@@ -19,8 +19,13 @@ import (
 type Element struct {
 	*Request // (read-only) the Request the Element belongs to
 	// internals
-	ui       UI          // the UI object
-	handlers []any       // custom handlers registered, if any
+	ui UI // the UI object
+	// handlers is appended to only during initial render/init (AddHandlers,
+	// ApplyParams, ApplyGetter) and read later on the event goroutine without a
+	// lock. This is safe solely because rendering an Element fully populates its
+	// handlers before any event for it can be processed; handlers must not be
+	// mutated once events may fire.
+	handlers []any
 	jid      jid.Jid     // JaWS ID, unique to this Element within its Request
 	deleted  atomic.Bool // true if deleteElement() has been called for this Element
 }
