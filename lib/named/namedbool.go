@@ -63,6 +63,11 @@ func (nb *Bool) JawsGet(elem *jaws.Element) (yes bool) {
 }
 
 // JawsSet sets the checked state and dirties the affected element tags.
+//
+// Lock ordering invariant: when both locks are needed, the owning BoolArray's
+// mutex is always acquired before the Bool's mutex (as done here and by the
+// BoolArray methods, which lock nba.mu then call into Bool). Any new method must
+// preserve this array-before-bool order to avoid deadlocks.
 func (nb *Bool) JawsSet(elem *jaws.Element, checked bool) (err error) {
 	err = jaws.ErrValueUnchanged
 	nba := nb.nba
