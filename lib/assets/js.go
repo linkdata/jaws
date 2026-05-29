@@ -64,9 +64,7 @@ func PreloadHTML(urls ...*url.URL) (htmlCode, faviconURL string) {
 			var asattr string
 			ext := strings.ToLower(filepath.Ext(u.Path))
 			mimetype := mime.TypeByExtension(ext)
-			if semi := strings.IndexByte(mimetype, ';'); semi > 0 {
-				mimetype = mimetype[:semi]
-			}
+			mimetype, _, _ = strings.Cut(mimetype, ";")
 			urlstr := u.String()
 			switch ext {
 			case ".js":
