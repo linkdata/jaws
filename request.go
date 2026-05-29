@@ -109,7 +109,20 @@ func (rq *Request) claim(r *http.Request) error {
 			return fmt.Errorf("/jaws/%s: expected IP %q, got %q", rq.JawsKeyString(), rq.remoteIP.String(), actualIP.String())
 		}
 		if rq.claimed.CompareAndSwap(false, true) {
+			// Layer a fresh cancelable context over the current one (which may
+			// have been customized via SetContext) so the claim has its own
+			// cancel handle. The previous cancelFn must still be invoked on
+			// cleanup, otherwise the context it created leaks in the parent
+			// (typically Jaws.BaseContext) until that parent is cancelled.
+			prevCancel := rq.cancelFn
 			rq.ctx, rq.cancelFn = context.WithCancelCause(rq.ctx)
+			if prevCancel != nil {
+				newCancel := rq.cancelFn
+				rq.cancelFn = func(cause error) {
+					newCancel(cause)
+					prevCancel(cause)
+				}
+			}
 			rq.httpDoneCh = httpDoneCh
 			return nil
 		}
@@ -1010,7 +1023,8 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				go wire.PingLoop(rq.ctx, rq.cancelFn, rq.Jaws.Done(), pingInterval, wsTimeout, ws)
 				rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh) // unsubscribes broadcastMsgCh, closes outboundMsgCh
 			} else {
-				defer ws.Close(websocket.StatusNormalClosure, err.Error())
+				reason := err.Error()
+				defer func() { _ = ws.Close(websocket.StatusNormalClosure, reason) }()
 				var msg wire.WsMsg
 				msg.FillAlert(rq.Jaws.Log(err))
 				_ = ws.Write(r.Context(), websocket.MessageText, msg.Append(nil))
