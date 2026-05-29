@@ -40,7 +40,7 @@ func (u *Select) JawsUpdate(elem *jaws.Element) {
 // [bind.Setter] of string.
 func (u *Select) JawsInput(elem *jaws.Element, value string) (err error) {
 	if setter, ok := u.ContainerHelper.Container.(bind.Setter[string]); ok {
-		err = applyDirty(u.Tag, elem, setter.JawsSet(elem, value))
+		err = applyDirty(u.tag, elem, setter.JawsSet(elem, value))
 	}
 	return
 }
