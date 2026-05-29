@@ -13,13 +13,6 @@ type numeric interface {
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
 }
 
-// SetterFloat64 marks numeric setter types that can be adapted to Setter[float64].
-type SetterFloat64[T numeric] interface {
-	Getter[T]
-	// JawsSet may return [jaws.ErrValueUnchanged] to indicate value was already set.
-	JawsSet(elem *jaws.Element, value T) (err error)
-}
-
 type setterFloat64[T numeric] struct {
 	Setter[T]
 }
