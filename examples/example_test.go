@@ -41,3 +41,26 @@ func Example() {
 	http.DefaultServeMux.Handle("GET /", ui.Handler(jw, "index", bind.New(&mu, &f)))
 	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 }
+
+func Example_secureSession() {
+	jw, err := jaws.New()
+	if err != nil {
+		panic(err)
+	}
+	defer jw.Close()
+	jw.Logger = slog.Default()
+
+	templates := template.Must(template.New("index").Parse(indexhtml))
+	jw.AddTemplateLookuper(templates)
+
+	go jw.Serve()
+	mux := http.NewServeMux()
+	mux.Handle("GET /jaws/", jw)
+
+	var mu sync.Mutex
+	var f float64
+
+	page := ui.Handler(jw, "index", bind.New(&mu, &f))
+	mux.Handle("GET /", jw.Session(jw.SecureHeadersMiddleware(page)))
+	slog.Error(http.ListenAndServe("localhost:8080", mux).Error())
+}
