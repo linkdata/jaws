@@ -12,7 +12,7 @@ import (
 
 // SetHook is a function that replaces [Binder.JawsSetLocked].
 //
-// The lock will be held before calling the function, preferring RLock over Lock, if available.
+// The Binder write lock will be held before calling the function.
 // Do not lock or unlock the [Binder] in the function. Do not call [Binder.JawsSet].
 //
 // The bind argument is the previous Binder in the chain, and you probably

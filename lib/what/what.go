@@ -15,7 +15,7 @@ const (
 	Alert    // Display (if using Bootstrap) an alert message
 	Order    // Re-order a set of elements
 	Call     // Call JavaScript function
-	Set      // Set JavaScript variable (JSON path + tab char + JSON data)
+	Set      // Set JavaScript variable (path=json)
 
 	separator
 
