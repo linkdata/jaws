@@ -22,6 +22,13 @@ import (
 	"github.com/linkdata/jaws/lib/wire"
 )
 
+// maybePanic panics if err is non-nil. Test-only helper.
+func maybePanic(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
 type testJaws struct {
 	*Jaws
 	testtmpl *template.Template
