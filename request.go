@@ -1036,6 +1036,8 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				defer func() { _ = ws.Close(websocket.StatusNormalClosure, reason) }()
 				var msg wire.WsMsg
 				msg.FillAlert(rq.Jaws.Log(err))
+				// Best-effort alert on a connection we're about to close; the
+				// underlying error was already logged above via rq.Jaws.Log.
 				_ = ws.Write(r.Context(), websocket.MessageText, msg.Append(nil))
 			}
 		}
