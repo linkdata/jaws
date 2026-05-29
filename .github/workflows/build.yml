@@ -26,7 +26,7 @@ jobs:
         run: go generate ./...
 
       - name: Run Gosec Security Scanner
-        uses: securego/gosec@v2.23.0
+        uses: securego/gosec@v2.26.1
         with:
           args: ./...
 
