@@ -61,6 +61,29 @@ func Test_create_debug_and_lookup(t *testing.T) {
 	}
 }
 
+func Test_Lookup_reload_error_retains_last_good(t *testing.T) {
+	tl, err := create(true, assetsFS, "assets/*.html", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr, ok := tl.(*TemplateReloader)
+	if !ok {
+		t.Fatalf("expected *TemplateReloader, got %T", tl)
+	}
+	if tmpl := tr.Lookup("test.html"); tmpl == nil {
+		t.Fatal("expected template from first lookup")
+	}
+
+	// Point at a glob that matches no files so the next reload fails to parse,
+	// then force a reload. Lookup must not panic and must keep serving the
+	// last successfully parsed template.
+	tr.Path = "assets/this-matches-nothing-*.html"
+	tr.when = tr.when.Add(-2 * time.Second)
+	if tmpl := tr.Lookup("test.html"); tmpl == nil {
+		t.Fatal("expected last-good template to be retained after a reload parse error")
+	}
+}
+
 func Test_create_debug_parse_error(t *testing.T) {
 	tl, err := create(true, assetsFS, "assets/missing-*.html", "")
 	if err == nil {

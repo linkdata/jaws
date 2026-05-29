@@ -45,18 +45,30 @@ func create(debug bool, fsys fs.FS, fpath, relpath string) (tl jaws.TemplateLook
 	return
 }
 
-// Lookup returns the named template, reloading from disk first when needed.
+// Lookup returns the named template, reparsing the templates from disk first
+// when more than one second has passed since the last reload.
+//
+// If a reload fails to parse (for example while a template file is being
+// edited), the last successfully parsed templates are retained and used, so a
+// transient parse error does not take down a running server. Lookup never
+// panics on a reload error.
 func (tr *TemplateReloader) Lookup(name string) *template.Template {
 	tr.mu.RLock()
-	tl := tr.curr
+	curr := tr.curr
 	d := time.Since(tr.when)
 	tr.mu.RUnlock()
 	if d > time.Second {
 		tr.mu.Lock()
-		defer tr.mu.Unlock()
-		tr.curr = template.Must(template.New("").ParseGlob(tr.Path))
-		tr.when = tr.when.Add(d)
-		tl = tr.curr
+		// Re-check under the write lock so concurrent callers that all
+		// observed a stale time do not each reparse from disk.
+		if time.Since(tr.when) > time.Second {
+			if reloaded, err := template.New("").ParseGlob(tr.Path); err == nil {
+				tr.curr = reloaded
+			}
+			tr.when = time.Now()
+		}
+		curr = tr.curr
+		tr.mu.Unlock()
 	}
-	return tl.Lookup(name)
+	return curr.Lookup(name)
 }
