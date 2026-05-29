@@ -14,6 +14,11 @@ import (
 // Root returns the tree built from the readable entries together with a non-nil
 // error joining every read failure (see [errors.Join]). A subdirectory that
 // fails to read is omitted from its parent, but its readable siblings are kept.
+//
+// The returned nodes have a nil Tree and unset path IDs; both are populated by
+// [New]. The node tree must therefore be passed to New (as the JsVar value)
+// before rendering or any path operation, which otherwise dereference the nil
+// Tree and panic.
 func Root(r *os.Root, filterFn func(dirpath string, ent fs.DirEntry) (include bool)) (rootnode *Node, err error) {
 	rootnode = &Node{}
 	err = getNodes(r.FS(), rootnode, ".", filterFn)

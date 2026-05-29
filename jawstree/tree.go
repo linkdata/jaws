@@ -60,5 +60,5 @@ func (tree *Tree) JawsUpdate(elem *jaws.Element) {
 	b = append(b, `,"data":`...)
 	b = tree.JsVar.Ptr.marshalJSON(b)
 	b = append(b, `}`...)
-	elem.Jaws.JsCall(tree.Tag, "jawstreeSet", string(b))
+	elem.Jaws.JsCall(tree.JawsGetTag(nil), "jawstreeSet", string(b))
 }

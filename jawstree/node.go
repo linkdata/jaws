@@ -59,7 +59,7 @@ var _ json.Marshaler = &Node{}
 // JawsPathSet mirrors browser-side selected-state changes back into the tree.
 func (node *Node) JawsPathSet(elem *jaws.Element, jsPath string, value any) {
 	if nodePath, ok := strings.CutSuffix(jsPath, ".selected"); ok {
-		elem.Jaws.JsCall(node.Tree.Tag, "jawstreeSetPath", fmt.Sprintf(`{"tree":%q,"id":%q,"set":%v}`, node.Tree.id, nodePath, value))
+		elem.Jaws.JsCall(node.Tree.JawsGetTag(nil), "jawstreeSetPath", fmt.Sprintf(`{"tree":%q,"id":%q,"set":%v}`, node.Tree.id, nodePath, value))
 	}
 }
 
