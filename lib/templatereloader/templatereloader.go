@@ -13,10 +13,11 @@ import (
 // TemplateReloader reloads and reparses templates if more than one second
 // has passed since the last [TemplateReloader.Lookup].
 type TemplateReloader struct {
-	Path string // the file path we are loading from
-	mu   deadlock.RWMutex
-	when time.Time
-	curr *template.Template
+	Path    string // the file path we are loading from
+	mu      deadlock.RWMutex
+	when    time.Time
+	curr    *template.Template
+	lastErr error
 }
 
 // New returns a [jaws.TemplateLookuper].
@@ -64,6 +65,9 @@ func (tr *TemplateReloader) Lookup(name string) *template.Template {
 		if time.Since(tr.when) > time.Second {
 			if reloaded, err := template.New("").ParseGlob(tr.Path); err == nil {
 				tr.curr = reloaded
+				tr.lastErr = nil
+			} else {
+				tr.lastErr = err
 			}
 			tr.when = time.Now()
 		}
@@ -71,4 +75,16 @@ func (tr *TemplateReloader) Lookup(name string) *template.Template {
 		tr.mu.Unlock()
 	}
 	return curr.Lookup(name)
+}
+
+// LastError returns the last reload parse error, or nil after a successful reload.
+//
+// It is safe to call on a nil *TemplateReloader.
+func (tr *TemplateReloader) LastError() (err error) {
+	if tr != nil {
+		tr.mu.RLock()
+		err = tr.lastErr
+		tr.mu.RUnlock()
+	}
+	return
 }

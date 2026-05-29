@@ -82,6 +82,25 @@ func Test_Lookup_reload_error_retains_last_good(t *testing.T) {
 	if tmpl := tr.Lookup("test.html"); tmpl == nil {
 		t.Fatal("expected last-good template to be retained after a reload parse error")
 	}
+	if err := tr.LastError(); err == nil {
+		t.Fatal("expected LastError after reload parse error")
+	}
+
+	tr.Path = "assets/*.html"
+	tr.when = tr.when.Add(-2 * time.Second)
+	if tmpl := tr.Lookup("test.html"); tmpl == nil {
+		t.Fatal("expected template after successful reload")
+	}
+	if err := tr.LastError(); err != nil {
+		t.Fatalf("LastError after successful reload = %v, want nil", err)
+	}
+}
+
+func TestTemplateReloader_LastErrorNilReceiver(t *testing.T) {
+	var tr *TemplateReloader
+	if err := tr.LastError(); err != nil {
+		t.Fatalf("nil LastError = %v, want nil", err)
+	}
 }
 
 func Test_create_debug_parse_error(t *testing.T) {
