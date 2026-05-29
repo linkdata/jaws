@@ -21,7 +21,14 @@ type Tree struct {
 // New returns a tree widget with id, jsvar and options.
 //
 // New initializes node IDs and tree back-pointers in jsvar.Ptr.
+// It panics if jsvar or jsvar.Ptr is nil.
 func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
+	if jsvar == nil {
+		panic("jawstree.New: jsvar must not be nil")
+	}
+	if jsvar.Ptr == nil {
+		panic("jawstree.New: jsvar.Ptr must not be nil")
+	}
 	t = &Tree{
 		id:    id,
 		JsVar: jsvar,

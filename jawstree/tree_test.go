@@ -22,6 +22,70 @@ func maybeError(t *testing.T, err error) {
 	}
 }
 
+func assertPanics(t *testing.T, fn func()) {
+	t.Helper()
+	defer func() {
+		if x := recover(); x == nil {
+			t.Fatal("expected panic")
+		}
+	}()
+	fn()
+}
+
+func TestNewPanicsOnNilJsVar(t *testing.T) {
+	assertPanics(t, func() {
+		New("tree", nil)
+	})
+
+	var mu deadlock.RWMutex
+	assertPanics(t, func() {
+		New("tree", ui.NewJsVar(&mu, (*Node)(nil)))
+	})
+}
+
+func TestNode_SetSelectedMultiplePaths(t *testing.T) {
+	root := &Node{}
+	a := &Node{Name: "a", Parent: root}
+	b := &Node{Name: "b", Parent: root}
+	a1 := &Node{Name: "one", Parent: a}
+	a2 := &Node{Name: "two", Parent: a}
+	b1 := &Node{Name: "one", Parent: b}
+	b2 := &Node{Name: "two", Parent: b}
+	root.Children = []*Node{a, b}
+	a.Children = []*Node{a1, a2}
+	b.Children = []*Node{b1, b2}
+
+	selected := [][]string{{"a", "one"}, {"b", "two"}}
+	changed := root.SetSelected(selected)
+	if !reflect.DeepEqual(changed, []*Node{a1, b2}) {
+		t.Fatalf("changed = %#v, want %#v", changed, []*Node{a1, b2})
+	}
+	if got := root.GetSelected(); !reflect.DeepEqual(got, selected) {
+		t.Fatalf("selected = %#v, want %#v", got, selected)
+	}
+
+	if changed = root.SetSelected(selected); len(changed) != 0 {
+		t.Fatalf("changed after no-op = %#v, want none", changed)
+	}
+
+	selected = [][]string{{"a", "two"}}
+	changed = root.SetSelected(selected)
+	if !reflect.DeepEqual(changed, []*Node{a1, a2, b2}) {
+		t.Fatalf("changed = %#v, want %#v", changed, []*Node{a1, a2, b2})
+	}
+	if got := root.GetSelected(); !reflect.DeepEqual(got, selected) {
+		t.Fatalf("selected = %#v, want %#v", got, selected)
+	}
+
+	changed = root.SetSelected(nil)
+	if !reflect.DeepEqual(changed, []*Node{a2}) {
+		t.Fatalf("changed clearing selection = %#v, want %#v", changed, []*Node{a2})
+	}
+	if got := root.GetSelected(); len(got) != 0 {
+		t.Fatalf("selected after clear = %#v, want none", got)
+	}
+}
+
 func TestTree(t *testing.T) {
 	jw, err := jaws.New()
 	maybeError(t, err)

@@ -108,11 +108,15 @@ func (node *Node) GetSelected() (nameLists [][]string) {
 // SetSelected applies selected paths and returns nodes that changed.
 func (node *Node) SetSelected(nameLists [][]string) (changed []*Node) {
 	node.Walk("", func(jsPath string, node *Node) {
+		selected := false
 		for _, names := range nameLists {
-			if selected := node.HasNames(names); selected != node.Selected {
-				node.Selected = selected
-				changed = append(changed, node)
+			if selected = node.HasNames(names); selected {
+				break
 			}
+		}
+		if selected != node.Selected {
+			node.Selected = selected
+			changed = append(changed, node)
 		}
 	})
 	return
