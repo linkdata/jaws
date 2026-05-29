@@ -74,6 +74,8 @@ func AppendAttr(b []byte, name, value string) []byte {
 // be the unescaped logical attribute value; it is escaped for HTML source output
 // by this function.
 func Attr(name, value string) template.HTMLAttr {
+	// AppendAttr writes a leading space (it is meant for joining onto a tag);
+	// [1:] drops that space since Attr returns the attribute on its own.
 	return template.HTMLAttr(AppendAttr(nil, name, value)[1:]) // #nosec G203
 }
 
