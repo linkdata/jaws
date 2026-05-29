@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/json"
+	"errors"
 	"html/template"
 	"io"
 	"reflect"
@@ -204,7 +205,7 @@ func (jsvar *JsVar[T]) JawsUpdate(elem *jaws.Element) {
 }
 
 func elideErrValueUnchanged(err error) error {
-	if err == jaws.ErrValueUnchanged {
+	if errors.Is(err, jaws.ErrValueUnchanged) {
 		return nil
 	}
 	return err
