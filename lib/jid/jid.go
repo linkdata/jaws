@@ -73,7 +73,8 @@ func ParseInt(s string) Jid {
 // ParseString parses an unquoted [Jid] string, such as `Jid.2`, and returns
 // the corresponding value.
 //
-// Returns [Invalid] if s is not a valid [Jid] string.
+// An empty string parses to Jid(0), the whole-request id. Returns [Invalid] if
+// s is non-empty and not a valid [Jid] string.
 func ParseString(s string) Jid {
 	if s == "" {
 		return 0
