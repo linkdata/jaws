@@ -9,6 +9,17 @@ type RWLocker interface {
 	RUnlock()
 }
 
+// AsRWLocker returns an [RWLocker] backed by l.
+//
+// If l already implements [RWLocker] it is returned unchanged; otherwise its
+// Lock and Unlock are used for both read and write locking.
+func AsRWLocker(l sync.Locker) RWLocker {
+	if rl, ok := l.(RWLocker); ok {
+		return rl
+	}
+	return rwlocker{l}
+}
+
 type rwlocker struct {
 	sync.Locker
 }

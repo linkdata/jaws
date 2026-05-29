@@ -227,10 +227,7 @@ func (jsvar *JsVar[T]) JawsInput(elem *jaws.Element, value string) (err error) {
 //
 // The locker l must be non-nil and must remain valid for the lifetime of the JsVar.
 func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
-	if rl, ok := l.(bind.RWLocker); ok {
-		return &JsVar[T]{RWLocker: rl, Ptr: v}
-	}
-	return &JsVar[T]{RWLocker: rwlocker{l}, Ptr: v}
+	return &JsVar[T]{RWLocker: bind.AsRWLocker(l), Ptr: v}
 }
 
 func isNilUI(ui jaws.UI) (yes bool) {

@@ -190,9 +190,11 @@ func TestJsVar_PathHooksAndRequestWriter(t *testing.T) {
 	}
 	var plainMu sync.Mutex
 	jsvPlain := NewJsVar(&plainMu, &v)
-	if _, ok := jsvPlain.RWLocker.(rwlocker); !ok {
-		t.Fatalf("expected rwlocker wrapper, got %T", jsvPlain.RWLocker)
-	}
+	// A plain sync.Mutex does not implement bind.RWLocker, so it must have been
+	// wrapped; exercise the read lock to confirm the wrapper is functional.
+	jsvPlain.RWLocker.RLock()
+	_ = *jsvPlain.Ptr
+	jsvPlain.RWLocker.RUnlock()
 
 	rw := RequestWriter{Request: rq, Writer: &sb}
 	if err := rw.JsVar("direct", jsv); err != nil {
