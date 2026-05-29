@@ -10,6 +10,9 @@ import (
 	"github.com/linkdata/jaws"
 )
 
+// reloadInterval is the minimum time between disk reparses in debug mode.
+const reloadInterval = time.Second
+
 // TemplateReloader reloads and reparses templates if more than one second
 // has passed since the last [TemplateReloader.Lookup].
 type TemplateReloader struct {
@@ -58,11 +61,11 @@ func (tr *TemplateReloader) Lookup(name string) *template.Template {
 	curr := tr.curr
 	d := time.Since(tr.when)
 	tr.mu.RUnlock()
-	if d > time.Second {
+	if d > reloadInterval {
 		tr.mu.Lock()
 		// Re-check under the write lock so concurrent callers that all
 		// observed a stale time do not each reparse from disk.
-		if time.Since(tr.when) > time.Second {
+		if time.Since(tr.when) > reloadInterval {
 			if reloaded, err := template.New("").ParseGlob(tr.Path); err == nil {
 				tr.curr = reloaded
 				tr.lastErr = nil
