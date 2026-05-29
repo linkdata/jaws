@@ -2,6 +2,7 @@ package templatereloader
 
 import (
 	"embed"
+	"sync"
 	"testing"
 	"time"
 
@@ -100,6 +101,41 @@ func TestTemplateReloader_LastErrorNilReceiver(t *testing.T) {
 	var tr *TemplateReloader
 	if err := tr.LastError(); err != nil {
 		t.Fatalf("nil LastError = %v, want nil", err)
+	}
+}
+
+// TestTemplateReloader_ConcurrentLookup runs many Lookups concurrently after
+// forcing a reload window, exercising the double-checked locking under
+// contention. Run with -race to validate the locking.
+func TestTemplateReloader_ConcurrentLookup(t *testing.T) {
+	tl, err := create(true, assetsFS, "assets/*.html", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr := tl.(*TemplateReloader)
+
+	// Force the reload window so all goroutines hit the reparse path together;
+	// the re-check under the write lock must let only one of them reparse.
+	tr.mu.Lock()
+	tr.when = tr.when.Add(-2 * time.Second)
+	tr.mu.Unlock()
+
+	const goroutines = 16
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			for range 50 {
+				if tmpl := tr.Lookup("test.html"); tmpl == nil {
+					t.Error("expected template from concurrent lookup")
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	if err := tr.LastError(); err != nil {
+		t.Fatalf("unexpected reload error: %v", err)
 	}
 }
 
