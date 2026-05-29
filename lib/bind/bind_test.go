@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"io"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +13,30 @@ import (
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/tag"
 )
+
+// TestBinder_ConcurrentAccess backs the concurrency-safety documented on
+// Binder: many goroutines reading and writing through the same Binder must be
+// race-free. Run with -race to exercise the RWLocker read/write paths.
+func TestBinder_ConcurrentAccess(t *testing.T) {
+	var mu deadlock.RWMutex
+	var val int
+	b := New(&mu, &val)
+
+	const workers = 8
+	const iters = 500
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for w := range workers {
+		go func(w int) {
+			defer wg.Done()
+			for i := range iters {
+				_ = b.JawsGet(nil)
+				_ = b.JawsSet(nil, w*iters+i)
+			}
+		}(w)
+	}
+	wg.Wait()
+}
 
 type testBindFormatterValue struct {
 	value string
@@ -688,16 +713,6 @@ func testBind_BoolSetter(t *testing.T, v Setter[bool]) {
 	if x := v.JawsGet(nil); x != val {
 		t.Error(x)
 	}
-	/*as := v.(AnySetter)
-	if x := as.JawsGetAny(nil); x != val {
-		t.Error(x)
-	}
-	if err := as.JawsSetAny(nil, !val); err != nil {
-		t.Error(err)
-	}
-	if x := as.JawsGetAny(nil); x != !val {
-		t.Error(x)
-	}*/
 }
 
 func TestBindFunc_Bool(t *testing.T) {
