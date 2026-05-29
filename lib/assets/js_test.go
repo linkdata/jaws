@@ -32,7 +32,9 @@ func Test_PreloadHTML(t *testing.T) {
 	if strings.Contains(txt, serveJS.Name) {
 		t.Fatalf("unexpected preload output contains %q: %q", serveJS.Name, txt)
 	}
-	if strings.Count(txt, "<script>") != strings.Count(txt, "</script>") {
+	// Count "<script" (the opening tag is emitted as "<script defer src=...>",
+	// so the literal "<script>" never appears) to actually validate balance.
+	if strings.Count(txt, "<script") != strings.Count(txt, "</script>") {
 		t.Fatalf("script tags are unbalanced: %q", txt)
 	}
 	if fav != "" {
