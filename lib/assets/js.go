@@ -21,7 +21,9 @@ var JavascriptText []byte
 //go:embed jaws.css
 var JawsCSS []byte
 
-// JawsKeyAppend appends the JaWS key as a string to the buffer.
+// JawsKeyAppend appends the JaWS key as a base-32 string to the buffer.
+//
+// A zero key appends nothing. The encoding pairs with [JawsKeyValue].
 func JawsKeyAppend(b []byte, jawsKey uint64) []byte {
 	if jawsKey != 0 {
 		b = strconv.AppendUint(b, jawsKey, 32)
@@ -34,7 +36,9 @@ func JawsKeyString(jawsKey uint64) string {
 	return string(JawsKeyAppend(nil, jawsKey))
 }
 
-// JawsKeyValue parses a key string, as returned by [JawsKeyString], into a uint64.
+// JawsKeyValue parses a base-32 key string, as returned by [JawsKeyString], into
+// a uint64. Any trailing "/..." path suffix is ignored. Returns 0 if the key
+// cannot be parsed.
 func JawsKeyValue(jawsKey string) uint64 {
 	slashIdx := strings.IndexByte(jawsKey, '/')
 	if slashIdx < 0 {
