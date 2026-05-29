@@ -16,10 +16,13 @@ func TestParse(t *testing.T) {
 		{"Update", "Update", Update},
 		{"Inner", "Inner", Inner},
 		{"ContextMenu", "ContextMenu", ContextMenu},
-		{"inner", "inner", Inner},
+		{"lowercase is not matched", "inner", invalid},
 		{"innerr", "innerr", invalid},
 		{"last", lastWhat.String(), lastWhat},
 		{"newline", "\n", invalid},
+		{"invalid marker name", "invalid", invalid},
+		{"separator marker name", "separator", invalid},
+		{"separator case-insensitive", "SEPARATOR", invalid},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

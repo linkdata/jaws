@@ -1,7 +1,5 @@
 package what
 
-import "strings"
-
 // What identifies a JaWS wire protocol command or event.
 //
 //go:generate go run golang.org/x/tools/cmd/stringer@latest -type=What
@@ -53,20 +51,18 @@ func (w What) IsValid() bool {
 
 // Parse returns the [What] named by s.
 //
-// An empty string is treated as [Update]. Unknown strings return the invalid
-// zero value.
+// Matching is exact and case-sensitive: s must equal a command or event name as
+// produced by [What.String], matching what the JaWS client sends on the wire. An
+// empty string is treated as [Update]. Unknown strings, as well as the names of
+// the internal boundary markers (which are not valid commands or events), return
+// the invalid zero value.
 func Parse(s string) What {
 	if s == "" {
 		return Update
 	}
-	for i := 0; i < len(_What_index)-1; i++ {
-		if s == _What_name[_What_index[i]:_What_index[i+1]] {
-			return What(i) // #nosec G115
-		}
-	}
-	for i := 0; i < len(_What_index)-1; i++ {
-		if strings.EqualFold(s, _What_name[_What_index[i]:_What_index[i+1]]) {
-			return What(i) // #nosec G115
+	for i := range len(_What_index) - 1 {
+		if w := What(i); w.IsValid() && s == _What_name[_What_index[i]:_What_index[i+1]] { // #nosec G115
+			return w
 		}
 	}
 	return invalid
