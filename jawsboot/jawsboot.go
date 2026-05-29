@@ -17,7 +17,9 @@ var assetsFS embed.FS
 // Setup registers embedded Bootstrap static assets under prefix.
 //
 // It is intended to be passed to [jaws.Jaws.Setup]. Returned URLs should be
-// included in the page head through [jaws.Jaws.GenerateHeadHTML].
+// included in the page head through [jaws.Jaws.GenerateHeadHTML]. The prefix may
+// be absolute ("/static"), relative ("static") or empty; the registered handler
+// paths and the returned URLs are kept identical in all cases.
 func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.URL, err error) {
 	var files []*staticserve.StaticServe
 	if err = staticserve.WalkDir(assetsFS, "assets/static", func(filename string, ss *staticserve.StaticServe) (err error) {
@@ -25,15 +27,21 @@ func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.
 		return
 	}); err == nil {
 		for _, ss := range files {
-			u, e := url.Parse(path.Join(prefix, ss.Name))
+			// Build an absolute path so jaws.Setup's makeAbsPath leaves the
+			// returned URL unchanged; otherwise a relative prefix would be applied
+			// twice and the head URL would diverge from the handler path.
+			abspath := staticserve.EnsurePrefixSlash(path.Join(prefix, ss.Name))
+			u, e := url.Parse(abspath)
 			if e == nil {
 				urls = append(urls, u)
-				handleFn(http.MethodGet+" "+u.String(), ss)
+				handleFn(staticserve.NormalizeGET(abspath), ss)
 			}
 			err = errors.Join(err, e)
 		}
-		handleFn(http.MethodGet+" "+path.Join(prefix, "bootstrap.bundle.min.js.map"), http.NotFoundHandler())
-		handleFn(http.MethodGet+" "+path.Join(prefix, "bootstrap.min.css.map"), http.NotFoundHandler())
+		// Quietly 404 the predictable devtools source-map probes for the bundled
+		// assets; they are served only at their exact content-hashed paths.
+		handleFn(staticserve.NormalizeGET(path.Join(prefix, "bootstrap.bundle.min.js.map")), http.NotFoundHandler())
+		handleFn(staticserve.NormalizeGET(path.Join(prefix, "bootstrap.min.css.map")), http.NotFoundHandler())
 	}
 	return
 }

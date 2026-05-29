@@ -147,3 +147,43 @@ func TestJawsBoot_Setup(t *testing.T) {
 		}
 	}
 }
+
+// TestJawsBoot_SetupPrefixVariants guards against the double-prefix bug: for any
+// prefix form (absolute, relative or empty) every asset URL emitted into the head
+// HTML must resolve to a registered handler. A relative prefix previously made
+// jaws.Setup apply the prefix twice, so the head URL 404'd.
+func TestJawsBoot_SetupPrefixVariants(t *testing.T) {
+	assets := expectedStaticAssets(t, testAssetsFS, "assets/static", "")
+	for _, prefix := range []string{"/static", "static", ""} {
+		t.Run("prefix="+strconv.Quote(prefix), func(t *testing.T) {
+			mux := http.NewServeMux()
+			jw, err := jaws.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer jw.Close()
+			if err := jw.Setup(mux.Handle, prefix, jawsboot.Setup); err != nil {
+				t.Fatal(err)
+			}
+
+			rq := jw.NewRequest(nil)
+			var sb strings.Builder
+			if err := (ui.RequestWriter{Request: rq, Writer: &sb}).HeadHTML(); err != nil {
+				t.Fatal(err)
+			}
+			head := sb.String()
+
+			for _, exp := range assets {
+				wantURI := staticserve.EnsurePrefixSlash(path.Join(prefix, exp.ss.Name))
+				if !strings.Contains(head, `"`+wantURI+`"`) {
+					t.Errorf("head html missing %q", wantURI)
+				}
+				rr := httptest.NewRecorder()
+				mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, wantURI, nil))
+				if rr.Code != http.StatusOK {
+					t.Errorf("GET %q (prefix %q) = %d, want 200 (head URL must match a registered handler)", wantURI, prefix, rr.Code)
+				}
+			}
+		})
+	}
+}
