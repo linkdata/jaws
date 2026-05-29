@@ -40,6 +40,10 @@ func newRequestHarness(jw *Jaws, r *http.Request) (rh *requestHarness) {
 		return nil
 	}
 	bcastCh := jw.subscribe(rq, 64)
+	// Flush the subscribe channel so the running Serve loop is guaranteed to have
+	// processed our subscription above before the harness returns: send cap+1
+	// no-op subscriptions, which can only all be consumed once Serve has drained
+	// the channel. Requires Serve/ServeWithTimeout to be running, or this blocks.
 	for i := 0; i <= cap(jw.subCh); i++ {
 		jw.subCh <- subscription{}
 	}
