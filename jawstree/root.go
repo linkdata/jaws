@@ -9,6 +9,11 @@ import (
 
 // Root builds a root node from an [os.Root]. If filterFn is not nil, it must return true
 // for a directory entry to be included in the tree.
+//
+// Building the tree is best-effort: if one or more directories cannot be read,
+// Root returns the tree built from the readable entries together with a non-nil
+// error joining every read failure (see [errors.Join]). A subdirectory that
+// fails to read is omitted from its parent, but its readable siblings are kept.
 func Root(r *os.Root, filterFn func(dirpath string, ent fs.DirEntry) (include bool)) (rootnode *Node, err error) {
 	rootnode = &Node{}
 	err = getNodes(r.FS(), rootnode, ".", filterFn)
@@ -19,7 +24,6 @@ func getNodes(rootfs fs.FS, parent *Node, dirpath string, filterFn func(dirpath 
 	var ents []fs.DirEntry
 	if ents, err = fs.ReadDir(rootfs, dirpath); err == nil {
 		for _, ent := range ents {
-			ent.Name()
 			if filterFn == nil || filterFn(dirpath, ent) {
 				child := &Node{
 					Tree:   parent.Tree,
@@ -30,8 +34,13 @@ func getNodes(rootfs fs.FS, parent *Node, dirpath string, filterFn func(dirpath 
 				if ent.Type().IsRegular() {
 					parent.Children = append(parent.Children, child)
 				} else if ent.IsDir() {
-					if err = errors.Join(err, getNodes(rootfs, child, path.Join(dirpath, ent.Name()), filterFn)); err == nil {
+					// Append the directory only if its own subtree read
+					// succeeded; accumulate any failure without letting it
+					// suppress readable sibling directories.
+					if cerr := getNodes(rootfs, child, path.Join(dirpath, ent.Name()), filterFn); cerr == nil {
 						parent.Children = append(parent.Children, child)
+					} else {
+						err = errors.Join(err, cerr)
 					}
 				}
 			}
