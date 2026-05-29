@@ -47,6 +47,9 @@ func appendUniqueTag(result []any, tag any) ([]any, error) {
 		}
 	}
 	result = append(result, tag)
+	// maxTagCount is an inclusive soft cap: the over-limit tag is appended before
+	// the check, so the partial result returned alongside ErrTooManyTags may hold
+	// one element more than maxTagCount. Callers either log or panic on the error.
 	if len(result) > maxTagCount {
 		return result, ErrTooManyTags
 	}
@@ -75,6 +78,11 @@ func sameActiveNode(a, b any) bool {
 	vb := reflect.ValueOf(b)
 	switch va.Kind() {
 	case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func, reflect.UnsafePointer:
+		// For slices, Pointer() is the address of the first element, so two
+		// distinct slices aliasing the same backing array at the same start
+		// compare equal here. That can only over-detect a cycle and truncate
+		// expansion early, which maxTagCount/maxTagDepth already bound; real tag
+		// data does not take that shape.
 		return va.Pointer() == vb.Pointer()
 	default:
 		return false
@@ -90,6 +98,11 @@ func findActiveIndex(active []any, tag any) int {
 	return -1
 }
 
+// addActiveTags closes a detected expansion cycle by re-emitting the TagGetter
+// members of the active chain from the revisited node onward. Slice frames in
+// the chain are intentionally skipped: a slice is not itself a tag, only its
+// elements are. So a cyclic TagGetter graph (e.g. mutual a<->b taggers) resolves
+// to the set of taggers participating in the cycle.
 func addActiveTags(result []any, active []any) ([]any, error) {
 	var err error
 	for _, node := range active {

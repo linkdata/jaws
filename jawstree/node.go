@@ -14,13 +14,17 @@ import (
 var _ ui.SetPather = (*Node)(nil)
 
 // Node is one tree node rendered by [Tree].
+//
+// marshalJSON is the single source of truth for the wire shape sent to
+// Quercus.js; MarshalJSON delegates to it, so the struct json tags below are not
+// actually used for encoding and must be kept in sync with marshalJSON by hand.
 type Node struct {
 	Tree     *Tree   `json:"-"`                 // owning tree, set by New
 	Parent   *Node   `json:"-"`                 // parent node, nil for root
 	Name     string  `json:"name"`              // display name
 	ID       string  `json:"id,omitzero"`       // JSON path ID, set by New
 	Selected bool    `json:"selected,omitzero"` // selected state
-	Disabled bool    `json:"disabled,omitzero"` // false when selectable
+	Disabled bool    `json:"disabled,omitzero"` // emitted as "selectable":false (inverted) on the wire
 	Children []*Node `json:"children,omitzero"` // child nodes
 }
 
@@ -35,6 +39,7 @@ func (node *Node) marshalJSON(b []byte) []byte {
 		b = append(b, `,"selected":true`...)
 	}
 	if node.Disabled {
+		// Quercus.js expects "selectable"; the server tracks the inverse (Disabled).
 		b = append(b, `,"selectable":false`...)
 	}
 	b = append(b, `,"children":[`...)
@@ -48,7 +53,8 @@ func (node *Node) marshalJSON(b []byte) []byte {
 	return b
 }
 
-// MarshalJSON writes the Quercus.js JSON shape for n.
+// MarshalJSON writes the Quercus.js JSON shape for node (delegating to the
+// canonical marshalJSON encoder).
 func (node *Node) MarshalJSON() (b []byte, err error) {
 	b = node.marshalJSON(nil)
 	return
@@ -63,7 +69,7 @@ func (node *Node) JawsPathSet(elem *jaws.Element, jsPath string, value any) {
 	}
 }
 
-// Walk calls fn for n and all descendants with their JSON paths.
+// Walk calls fn for node and all descendants with their JSON paths.
 func (node *Node) Walk(jsPath string, fn func(jsPath string, node *Node)) {
 	fn(jsPath, node)
 	if jsPath != "" {
@@ -74,7 +80,7 @@ func (node *Node) Walk(jsPath string, fn func(jsPath string, node *Node)) {
 	}
 }
 
-// HasNames reports whether n matches names as a path from the root.
+// HasNames reports whether node matches names as a path from the root.
 func (node *Node) HasNames(names []string) (yes bool) {
 	if yes = (node.Parent == nil) && (len(names) == 0); !yes && node.Parent != nil {
 		if len(names) > 0 {
@@ -85,7 +91,7 @@ func (node *Node) HasNames(names []string) (yes bool) {
 	return
 }
 
-// GetNames returns the path of names from the root to n.
+// GetNames returns the path of names from the root to node.
 func (node *Node) GetNames() (names []string) {
 	for node.Parent != nil {
 		names = append(names, node.Name)

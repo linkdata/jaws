@@ -31,7 +31,13 @@ type GetHook[T comparable] func(bind Binder[T], elem *jaws.Element) (value T)
 // GetHTMLHook is a function to call when [HTMLGetter.JawsGetHTML] is called.
 //
 // The lock will be held before calling the function, preferring RLock over Lock, if available.
-// Do not lock or unlock the [Binder] in the function. Do not call [Getter.JawsGet].
+// Do not lock or unlock the [Binder] in the function. Do not call [Getter.JawsGet]
+// or [HTMLGetter.JawsGetHTML] (either would deadlock or recurse).
+//
+// Unlike [GetHook] and [SetHook], the bind argument is the current Binder (the
+// one whose hook is being invoked), not the previous one. Read the bound value
+// with bind.JawsGetLocked(elem) to render it; that skips this hook and so does
+// not recurse.
 type GetHTMLHook[T comparable] func(bind Binder[T], elem *jaws.Element) (s template.HTML)
 
 // ClickedHook is a function to call when a click event is received.
@@ -118,6 +124,10 @@ type Binder[T comparable] interface {
 	//
 	// The lock will be held at this point, preferring RLock over Lock, if available.
 	// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
+	//
+	// Unlike [Binder.GetLocked] and [Binder.SetLocked], the bind argument to fn is
+	// the current Binder, not the previous one; read the value with its
+	// JawsGetLocked to render it. See [GetHTMLHook].
 	GetHTML(fn GetHTMLHook[T]) (newbind Binder[T])
 
 	// Format returns a [Binder] that implements [HTMLGetter] and
@@ -332,6 +342,10 @@ func (b *binder[T]) Format(format string) Binder[T] {
 //
 // The lock will be held at this point, preferring RLock over Lock, if available.
 // Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
+//
+// Unlike [binder.GetLocked] and [binder.SetLocked], the bind argument to fn is
+// the current Binder, not the previous one; read the value with its
+// JawsGetLocked to render it. See [GetHTMLHook].
 func (b *binder[T]) GetHTML(fn GetHTMLHook[T]) Binder[T] {
 	return &binder[T]{
 		prev:     b,

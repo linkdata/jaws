@@ -102,6 +102,11 @@ func (nb *Bool) Checked() (checked bool) {
 }
 
 // Set changes the checked state and reports whether it changed.
+//
+// Unlike [Bool.JawsSet], Set does not dirty any elements and does not deselect
+// siblings in single-select mode; it only changes this value. Single-select
+// consistency (at most one checked value) is an invariant maintained by going
+// through JawsSet, so prefer JawsSet for widget-driven updates.
 func (nb *Bool) Set(checked bool) (changed bool) {
 	nb.mu.Lock()
 	if nb.checked != checked {

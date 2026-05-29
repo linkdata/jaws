@@ -15,7 +15,12 @@ type Jid int64
 // Prefix prefixes HTML IDs based on [Jid] values.
 const Prefix = "Jid."
 
-// Invalid is returned by parsers when text does not contain a valid [Jid].
+// Invalid is the canonical invalid [Jid] returned by the parsers when text does
+// not contain a valid [Jid].
+//
+// Invalid is exactly Jid(-1); the parsers never return any other negative value.
+// [Jid.IsValid] accepts the broader range j >= 0, so any other negative Jid is
+// reported invalid by IsValid but is not equal to Invalid.
 const Invalid = Jid(-1)
 
 // IsValid reports whether jid can identify an element or the request as a whole.
@@ -23,7 +28,10 @@ func (j Jid) IsValid() bool {
 	return j >= 0
 }
 
-// AppendInt appends just the text format of the Jid's numerical value.
+// AppendInt appends the text format of the Jid's numerical value.
+//
+// The value is appended only for positive Jids; Jid(0) (the whole-request id)
+// and negative/invalid Jids append nothing.
 func (j Jid) AppendInt(dst []byte) []byte {
 	if j > 0 {
 		dst = strconv.AppendInt(dst, int64(j), 10)
@@ -50,6 +58,11 @@ func (j Jid) AppendQuote(dst []byte) []byte {
 
 // AppendStartTagAttr appends `<startTag` followed by the quoted [Jid] as an
 // HTML id attribute when jid is non-zero.
+//
+// startTag must be a trusted, syntactically valid HTML tag name: it is written
+// verbatim with no escaping or validation and MUST NOT be derived from untrusted
+// user data, or it becomes an HTML-injection primitive. The numeric Jid itself
+// is always safe.
 func (j Jid) AppendStartTagAttr(dst []byte, startTag string) []byte {
 	dst = append(dst, '<')
 	dst = append(dst, startTag...)

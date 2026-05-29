@@ -14,6 +14,12 @@ func usableAsTag(t any) (ok bool) {
 
 // ParseParams parses the parameters passed to UI helpers when creating a new
 // [Element], returning UI tags, event handlers and HTML attributes.
+//
+// Unlike [Element.ApplyGetter], which is given the primary getter, ParseParams
+// only recognizes InputFn, [InputHandler], [ClickHandler] and
+// [ContextMenuHandler]. A param implementing [InitHandler] or
+// [InitialHTMLAttrHandler] is treated only as a tag here; its JawsInit /
+// JawsInitialHTMLAttr are intentionally invoked only for the primary getter.
 func ParseParams(params []any) (tags []any, handlers []any, attrs []string) {
 	for i := range params {
 		switch data := params[i].(type) {

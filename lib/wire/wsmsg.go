@@ -46,11 +46,12 @@ func (m *WsMsg) Format() string {
 
 // Parse parses an incoming text buffer into a message.
 //
-// The wire format mirrors [WsMsg.Append]: for commands other than [what.Set] and
-// [what.Call], the Data field must be a Go-quoted string (as written by
-// [strconv.AppendQuote]). The leading-quote check is therefore the protocol
-// contract, not a guess; data that fails to unquote is rejected. Set and Call
-// data is taken verbatim.
+// The wire format mirrors [WsMsg.Append]. For commands other than [what.Set] and
+// [what.Call], if the Data field begins with a double quote it is decoded with
+// [strconv.Unquote] and the message is rejected if that fails; data that does not
+// begin with a double quote is taken verbatim. Set and Call data is always taken
+// verbatim. In all cases the resulting data is sanitized with
+// [strings.ToValidUTF8].
 func Parse(txt []byte) (WsMsg, bool) {
 	if len(txt) > 2 && txt[len(txt)-1] == '\n' {
 		if nl1 := bytes.IndexByte(txt, '\t'); nl1 >= 0 {
