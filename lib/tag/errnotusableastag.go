@@ -23,9 +23,9 @@ func (e errNotUsableAsTag) Error() (s string) {
 	}
 	s += "not usable as tag"
 	if e.tagGetterType != nil {
-		return s + fmt.Sprintf("; found nested TagGetter at %s (%s); hint: implement JawsGetTag(jawstags.Context) on this type to delegate to that value, or pass that nested TagGetter directly", e.tagGetterPath, e.tagGetterType)
+		return s + fmt.Sprintf("; found nested TagGetter at %s (%s); hint: implement JawsGetTag(tag.Context) on this type to delegate to that value, or pass that nested TagGetter directly", e.tagGetterPath, e.tagGetterType)
 	}
-	return s + "; found no nested TagGetter; hint: use a comparable tag value, or implement JawsGetTag(jawstags.Context) and return a comparable tag"
+	return s + "; found no nested TagGetter; hint: use a comparable tag value, or implement JawsGetTag(tag.Context) and return a comparable tag"
 }
 
 func (errNotUsableAsTag) Is(target error) bool {
