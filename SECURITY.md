@@ -172,7 +172,7 @@ Tested via WebSocket `Input` and `Click` messages with payloads including:
 
 | Control | Implementation | Verified |
 |---------|---------------|----------|
-| **jawsKey** | 64-bit `crypto/rand` (2^64 keyspace), encoded as 13-char base36 | Code + empirical |
+| **jawsKey** | 64-bit `crypto/rand` (2^64 keyspace), encoded as base-32 (up to 13 chars) | Code + empirical |
 | **Single-use keys** | Key removed from map on first WebSocket connection | Empirical: second connection returns 404 |
 | **IP binding** | `claim()` verifies WebSocket remote IP matches original HTTP request IP | Code review (`request.go:88-108`) |
 | **Origin validation** | Scheme + host must match initial request; cross-origin returns 403 | Empirical: evil.com, null, file:// all rejected |
@@ -224,7 +224,7 @@ Tested empirically — server-only commands sent from client:
 | `Replace` (replace HTML) | Silently ignored |
 | `SAttr` (set attribute) | Silently ignored |
 
-Also tested case-insensitive bypass attempts (`inner`, `INNER`, `redirect`, `alert`): all silently ignored despite `what.Parse` accepting them case-insensitively. The whitelist in the process loop is the authoritative gate.
+Also tested case-variant bypass attempts (`inner`, `INNER`, `redirect`, `alert`): all rejected. `what.Parse` matches command names exactly and case-sensitively, so case-variant payloads return the invalid zero value at parse time; the whitelist in the process loop is a second, authoritative gate.
 
 ### 6.4 Protocol Robustness
 
