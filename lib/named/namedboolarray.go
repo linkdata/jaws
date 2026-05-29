@@ -76,17 +76,19 @@ func (nba *BoolArray) Set(name string, state bool) (changed bool) {
 			changed = nb.Set(state) || changed
 		}
 	}
-	changed = nba.deselectOthersLocked(name, state) || changed
+	changed = len(nba.deselectOthersLocked(name, state)) > 0 || changed
 	return
 }
 
 // deselectOthersLocked clears all Bools whose name differs from
 // the given name when the array is in single-select mode and state is true.
-func (nba *BoolArray) deselectOthersLocked(name string, state bool) (changed bool) {
+func (nba *BoolArray) deselectOthersLocked(name string, state bool) (changed []*Bool) {
 	if state && !nba.multi {
 		for _, nb := range nba.data {
 			if nb.Name() != name {
-				changed = nb.Set(false) || changed
+				if nb.Set(false) {
+					changed = append(changed, nb)
+				}
 			}
 		}
 	}

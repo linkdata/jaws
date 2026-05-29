@@ -84,7 +84,9 @@ func (nb *Bool) JawsSet(elem *jaws.Element, checked bool) (err error) {
 	if err == nil {
 		elem.Dirty(nb)
 		if nba != nil {
-			nba.deselectOthersLocked(nb.name, checked)
+			for _, changed := range nba.deselectOthersLocked(nb.name, checked) {
+				elem.Dirty(changed)
+			}
 			elem.Dirty(nba)
 		}
 	}

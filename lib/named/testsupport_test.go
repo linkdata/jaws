@@ -23,6 +23,26 @@ func newCoreRequest(t *testing.T) (*jaws.Jaws, *jaws.Request) {
 	return jw, rq
 }
 
+func newTestRequest(t *testing.T) (*jaws.Jaws, *jaws.TestRequest) {
+	t.Helper()
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go jw.Serve()
+	rq := jaws.NewTestRequest(jw, nil)
+	if rq == nil {
+		jw.Close()
+		t.Fatal("nil test request")
+	}
+	t.Cleanup(func() {
+		rq.Close()
+		jw.Close()
+	})
+	<-rq.ReadyCh
+	return jw, rq
+}
+
 type noopUI struct{}
 
 func (noopUI) JawsRender(elem *jaws.Element, w io.Writer, params []any) error { return nil }
