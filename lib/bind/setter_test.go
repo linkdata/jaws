@@ -1,6 +1,7 @@
 package bind
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/linkdata/jaws"
@@ -43,7 +44,9 @@ func Test_makeSetter(t *testing.T) {
 func Test_makeSetter_panic(t *testing.T) {
 	defer func() {
 		if x := recover(); x == nil {
-			t.Fail()
+			t.Fatal("expected panic")
+		} else if !strings.Contains(x.(error).Error(), "bind.Setter") {
+			t.Fatalf("panic = %v, want bind.Setter", x)
 		}
 	}()
 	setter2 := MakeSetter[string](123)

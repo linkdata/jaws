@@ -49,5 +49,5 @@ func MakeGetter[T comparable](value any) Getter[T] {
 		return makeStaticGetter(v)
 	}
 	var blank T
-	panic(fmt.Errorf("expected jaws.Getter[%T] or %T not %T", blank, blank, value))
+	panic(fmt.Errorf("expected bind.Getter[%T] or %T not %T", blank, blank, value))
 }

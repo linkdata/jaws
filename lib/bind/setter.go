@@ -58,5 +58,5 @@ func MakeSetter[T comparable](value any) Setter[T] {
 		return setterStatic[T]{v}
 	}
 	var blank T
-	panic(fmt.Errorf("expected jaws.Setter[%T], jaws.Getter[%T] or %T not %T", blank, blank, blank, value))
+	panic(fmt.Errorf("expected bind.Setter[%T], bind.Getter[%T] or %T not %T", blank, blank, blank, value))
 }

@@ -116,5 +116,5 @@ func MakeSetterFloat64(value any) (s Setter[float64]) {
 			return
 		}
 	}
-	panic(fmt.Errorf("expected jaws.Setter[float64], jaws.Getter[float64] or float64 not %T", value))
+	panic(fmt.Errorf("expected bind.Setter[float64], bind.Getter[float64] or float64 not %T", value))
 }

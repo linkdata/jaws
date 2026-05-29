@@ -2,6 +2,7 @@ package bind
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/linkdata/jaws"
@@ -115,6 +116,8 @@ func Test_makeSetterFloat64_panic(t *testing.T) {
 	defer func() {
 		if x := recover(); x == nil {
 			t.Error("expected panic")
+		} else if !strings.Contains(x.(error).Error(), "bind.Setter") {
+			t.Fatalf("panic = %v, want bind.Setter", x)
 		}
 	}()
 
