@@ -1018,12 +1018,15 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			if err = rq.onConnect(); err == nil {
 				incomingMsgCh := make(chan wire.WsMsg)
-				broadcastMsgCh := rq.Jaws.subscribe(rq, 4+len(rq.elems)*4)
-				outboundMsgCh := make(chan wire.WsMsg, cap(broadcastMsgCh))
+				// Snapshot ctx, cancelFn and the element count together under the
+				// lock; every other access to rq.elems is also guarded by rq.mu.
 				rq.mu.RLock()
 				ctx := rq.ctx
 				cancelFn := rq.cancelFn
+				numElems := len(rq.elems)
 				rq.mu.RUnlock()
+				broadcastMsgCh := rq.Jaws.subscribe(rq, 4+numElems*4)
+				outboundMsgCh := make(chan wire.WsMsg, cap(broadcastMsgCh))
 				go wire.ReadLoop(ctx, cancelFn, rq.Jaws.Done(), incomingMsgCh, ws)  // closes incomingMsgCh
 				go wire.WriteLoop(ctx, cancelFn, rq.Jaws.Done(), outboundMsgCh, ws) // calls ws.Close()
 				go wire.PingLoop(ctx, cancelFn, rq.Jaws.Done(), pingInterval, wsTimeout, ws)
