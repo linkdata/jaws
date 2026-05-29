@@ -85,7 +85,7 @@ func TestRequest_HeadHTML(t *testing.T) {
 	defer jw.recycle(rq)
 
 	var sb strings.Builder
-	rq.Writer(&sb).HeadHTML()
+	is.NoErr(rq.Writer(&sb).HeadHTML())
 	txt := sb.String()
 	is.Equal(strings.Contains(txt, rq.JawsKeyString()), true)
 	is.Equal(strings.Contains(txt, jw.serveJS.Name), true)
@@ -136,7 +136,7 @@ func TestRequestWriter_TailHTML(t *testing.T) {
 	th.Equal(num, 4)
 
 	var buf bytes.Buffer
-	rq.Writer(&buf).TailHTML()
+	th.NoErr(rq.Writer(&buf).TailHTML())
 	want := fmt.Sprintf(`
 <noscript><div class="jaws-alert">This site requires Javascript for full functionality.</div><img src="/jaws/%s/noscript" alt="noscript"></noscript>
 <script src="/jaws/.tail/%s"></script>
@@ -1013,8 +1013,8 @@ func TestRequest_Dirty(t *testing.T) {
 
 	tss1 := &testUi{s: "foo1"}
 	tss2 := &testUi{s: "foo2"}
-	rq.UI(newTestTextInputWidget(tss1))
-	rq.UI(newTestTextInputWidget(tss2))
+	th.NoErr(rq.UI(newTestTextInputWidget(tss1)))
+	th.NoErr(rq.UI(newTestTextInputWidget(tss2)))
 	th.Equal(tss1.getCalled, int32(1))
 	th.Equal(tss2.getCalled, int32(1))
 	th.True(strings.Contains(string(rq.BodyString()), "foo1"))
@@ -1043,7 +1043,7 @@ func TestRequest_UpdatePanicLogs(t *testing.T) {
 		updateFn: func(elem *Element) {
 			panic("wildpanic")
 		}}
-	rq.UI(tss)
+	th.NoErr(rq.UI(tss))
 	rq.Dirty(tss)
 	select {
 	case <-th.C:
@@ -1061,7 +1061,7 @@ func TestRequest_IncomingRemove(t *testing.T) {
 	defer rq.Close()
 
 	tss := newTestSetter("")
-	rq.UI(newTestTextInputWidget(tss))
+	th.NoErr(rq.UI(newTestTextInputWidget(tss)))
 
 	select {
 	case <-th.C:
@@ -1096,8 +1096,8 @@ func TestRequest_IncomingClick(t *testing.T) {
 		testSetter: newTestSetter(""),
 	}
 
-	rq.UI(testDivWidget{inner: "1"}, tjc1)
-	rq.UI(testDivWidget{inner: "2"}, tjc2)
+	th.NoErr(rq.UI(testDivWidget{inner: "1"}, tjc1))
+	th.NoErr(rq.UI(testDivWidget{inner: "2"}, tjc2))
 
 	select {
 	case <-th.C:
@@ -1135,8 +1135,8 @@ func TestRequest_IncomingClick_WrappedUnhandled(t *testing.T) {
 		testSetter: newTestSetter(""),
 	}
 
-	rq.UI(testDivWidget{inner: "1"}, tjc1)
-	rq.UI(testDivWidget{inner: "2"}, tjc2)
+	th.NoErr(rq.UI(testDivWidget{inner: "1"}, tjc1))
+	th.NoErr(rq.UI(testDivWidget{inner: "2"}, tjc2))
 
 	select {
 	case <-th.C:
@@ -1174,8 +1174,8 @@ func TestRequest_IncomingContextMenu(t *testing.T) {
 		testSetter: newTestSetter(Click{}),
 	}
 
-	rq.UI(testDivWidget{inner: "1"}, tjc1)
-	rq.UI(testDivWidget{inner: "2"}, tjc2)
+	th.NoErr(rq.UI(testDivWidget{inner: "1"}, tjc1))
+	th.NoErr(rq.UI(testDivWidget{inner: "2"}, tjc2))
 
 	select {
 	case <-th.C:
@@ -1213,8 +1213,8 @@ func TestRequest_IncomingContextMenu_WrappedUnhandled(t *testing.T) {
 		testSetter: newTestSetter(Click{}),
 	}
 
-	rq.UI(testDivWidget{inner: "1"}, tjc1)
-	rq.UI(testDivWidget{inner: "2"}, tjc2)
+	th.NoErr(rq.UI(testDivWidget{inner: "1"}, tjc1))
+	th.NoErr(rq.UI(testDivWidget{inner: "2"}, tjc2))
 
 	select {
 	case <-th.C:
@@ -1574,7 +1574,7 @@ func TestRequest_Template_Event(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 	dot := &templateDot{clickedCh: make(chan struct{})}
-	rq.Template("div", "testtemplate", dot)
+	is.NoErr(rq.Template("div", "testtemplate", dot))
 	rq.Jaws.Broadcast(wire.Message{
 		Dest: dot,
 		What: what.Update,
@@ -1912,7 +1912,7 @@ func TestWS_RejectsMissingOrigin(t *testing.T) {
 
 	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), nil)
 	if conn != nil {
-		conn.Close(websocket.StatusNormalClosure, "")
+		_ = conn.Close(websocket.StatusNormalClosure, "")
 		t.Fatal("expected handshake to be rejected")
 	}
 	if err == nil {
@@ -1922,7 +1922,7 @@ func TestWS_RejectsMissingOrigin(t *testing.T) {
 		t.Fatal("expected response")
 	}
 	if resp.Body != nil {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("status %d", resp.StatusCode)
@@ -1937,7 +1937,7 @@ func TestWS_RejectsCrossOrigin(t *testing.T) {
 	hdr.Set("Origin", "https://evil.invalid")
 	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), &websocket.DialOptions{HTTPHeader: hdr})
 	if conn != nil {
-		conn.Close(websocket.StatusNormalClosure, "")
+		_ = conn.Close(websocket.StatusNormalClosure, "")
 		t.Fatal("expected handshake to be rejected")
 	}
 	if err == nil {
@@ -1947,7 +1947,7 @@ func TestWS_RejectsCrossOrigin(t *testing.T) {
 		t.Fatal("expected response")
 	}
 	if resp.Body != nil {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("status %d", resp.StatusCode)
@@ -1969,7 +1969,7 @@ func TestWS_AutoSessionDefaultDoesNotCreateSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	if conn != nil {
-		defer conn.Close(websocket.StatusNormalClosure, "")
+		defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
 	}
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		t.Error(resp.StatusCode)
@@ -2001,7 +2001,7 @@ func TestWS_AutoSessionCreatesSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	if conn != nil {
-		defer conn.Close(websocket.StatusNormalClosure, "")
+		defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
 	}
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		t.Error(resp.StatusCode)
@@ -2046,7 +2046,7 @@ func TestWS_AutoSessionKeepsExistingSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	if conn != nil {
-		defer conn.Close(websocket.StatusNormalClosure, "")
+		defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
 	}
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		t.Error(resp.StatusCode)
@@ -2072,7 +2072,7 @@ func TestWS_AutoSessionRejectDoesNotCreateSession(t *testing.T) {
 	hdr.Set("Origin", "https://evil.invalid")
 	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), &websocket.DialOptions{HTTPHeader: hdr})
 	if conn != nil {
-		conn.Close(websocket.StatusNormalClosure, "")
+		_ = conn.Close(websocket.StatusNormalClosure, "")
 		t.Fatal("expected handshake to be rejected")
 	}
 	if err == nil {
@@ -2082,7 +2082,7 @@ func TestWS_AutoSessionRejectDoesNotCreateSession(t *testing.T) {
 		t.Fatal("expected response")
 	}
 	if resp.Body != nil {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("status %d", resp.StatusCode)
@@ -2109,7 +2109,7 @@ func TestWS_ConnectFnFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	if conn != nil {
-		defer conn.Close(websocket.StatusNormalClosure, "")
+		defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
 	}
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		t.Error(resp.StatusCode)
@@ -2147,7 +2147,7 @@ func TestWS_NormalExchange(t *testing.T) {
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		t.Error(resp.StatusCode)
 	}
-	defer conn.Close(websocket.StatusNormalClosure, "")
+	defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
 
 	msg := wire.WsMsg{Jid: jidForTag(ts.rq, fooItem), What: what.Input}
 	ctx, cancel := context.WithTimeout(ts.ctx, testTimeout)
@@ -2187,7 +2187,7 @@ func TestWS_PingDisconnectsUnresponsiveClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.CloseNow()
+	defer func() { _ = conn.CloseNow() }()
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		t.Error(resp.StatusCode)
 	}

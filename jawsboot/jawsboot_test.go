@@ -35,7 +35,9 @@ func TestJawsBoot_Setup(t *testing.T) {
 
 	rq := jw.NewRequest(nil)
 	var sb strings.Builder
-	ui.RequestWriter{Request: rq, Writer: &sb}.HeadHTML()
+	if err = (ui.RequestWriter{Request: rq, Writer: &sb}).HeadHTML(); err != nil {
+		t.Fatal(err)
+	}
 	txt := sb.String()
 	if !strings.Contains(txt, rq.JawsKeyString()) {
 		t.Error(txt)

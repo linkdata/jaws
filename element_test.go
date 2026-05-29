@@ -192,9 +192,9 @@ func TestElement_Queued(t *testing.T) {
 	}
 
 	pendingRq := rq.Jaws.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
-	testRequestWriter{rq: pendingRq, Writer: httptest.NewRecorder()}.UI(tss)
+	th.NoErr(testRequestWriter{rq: pendingRq, Writer: httptest.NewRecorder()}.UI(tss))
 
-	rq.UI(tss)
+	th.NoErr(rq.UI(tss))
 	rq.Jaws.Dirty(tss)
 	rq.Dirty(tss)
 	for atomic.LoadInt32(&tss.updateCalled) < 1 {

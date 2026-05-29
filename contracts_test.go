@@ -55,7 +55,7 @@ func Test_clickHandlerWrapper_Dispatch(t *testing.T) {
 	}
 
 	want := `<div id="Jid.1">inner</div>`
-	rq.UI(testDivWidget{inner: template.HTML("inner")}, tjc)
+	th.NoErr(rq.UI(testDivWidget{inner: template.HTML("inner")}, tjc))
 	if got := rq.BodyString(); got != want {
 		t.Errorf("Request.UI(NewDiv()) = %q, want %q", got, want)
 	}

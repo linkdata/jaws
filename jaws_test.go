@@ -698,15 +698,15 @@ func TestCoverage_IDAndLookupHelpers(t *testing.T) {
 	defer jw.Close()
 
 	tmpl := template.Must(template.New("it").Parse(`ok`))
-	jw.AddTemplateLookuper(tmpl)
+	_ = jw.AddTemplateLookuper(tmpl)
 	if got := jw.LookupTemplate("it"); got == nil {
 		t.Fatal("expected found template")
 	}
 	if got := jw.LookupTemplate("missing"); got != nil {
 		t.Fatal("expected missing template")
 	}
-	jw.RemoveTemplateLookuper(nil)
-	jw.RemoveTemplateLookuper(tmpl)
+	_ = jw.RemoveTemplateLookuper(nil)
+	_ = jw.RemoveTemplateLookuper(tmpl)
 
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
 	rq := jw.NewRequest(hr)

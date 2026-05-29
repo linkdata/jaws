@@ -45,7 +45,9 @@ func TestJaws_Setup(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
 	mux := &testMux{}
-	jw.Setup(mux.Handle, prefix, extraStyle, ss1, u, ts.JawsSetupFunc, []*staticserve.StaticServe{ss2, ss3})
+	if err := jw.Setup(mux.Handle, prefix, extraStyle, ss1, u, ts.JawsSetupFunc, []*staticserve.StaticServe{ss2, ss3}); err != nil {
+		t.Fatal(err)
+	}
 	if len(mux.m) != 4 {
 		t.Log(len(mux.m))
 		t.Error(mux.m)

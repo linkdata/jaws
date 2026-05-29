@@ -20,8 +20,8 @@ func TestReadLoop_RespectsContextDone(t *testing.T) {
 	inCh := make(chan WsMsg)
 	jawsDoneCh := make(chan struct{})
 	client, server := pipe()
-	defer client.CloseNow()
-	defer server.CloseNow()
+	defer func() { _ = client.CloseNow() }()
+	defer func() { _ = server.CloseNow() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -54,8 +54,8 @@ func TestReadLoop_RespectsDone(t *testing.T) {
 	inCh := make(chan WsMsg)
 	jawsDoneCh := make(chan struct{})
 	client, server := pipe()
-	defer client.CloseNow()
-	defer server.CloseNow()
+	defer func() { _ = client.CloseNow() }()
+	defer func() { _ = server.CloseNow() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -77,8 +77,8 @@ func TestWriteLoop_SendsThePayload(t *testing.T) {
 	outCh := make(chan WsMsg)
 	jawsDoneCh := make(chan struct{})
 	client, server := pipe()
-	defer client.CloseNow()
-	defer server.CloseNow()
+	defer func() { _ = client.CloseNow() }()
+	defer func() { _ = server.CloseNow() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -127,8 +127,8 @@ func TestWriteLoop_ConcatenatesMessages(t *testing.T) {
 	outCh := make(chan WsMsg, 2)
 	jawsDoneCh := make(chan struct{})
 	client, server := pipe()
-	defer client.CloseNow()
-	defer server.CloseNow()
+	defer func() { _ = client.CloseNow() }()
+	defer func() { _ = server.CloseNow() }()
 
 	msg := WsMsg{Jid: jid.Jid(1234)}
 	outCh <- msg
@@ -163,8 +163,8 @@ func TestWriteLoop_ConcatenatesMessagesClosedChannel(t *testing.T) {
 	outCh := make(chan WsMsg, 2)
 	jawsDoneCh := make(chan struct{})
 	client, server := pipe()
-	defer client.CloseNow()
-	defer server.CloseNow()
+	defer func() { _ = client.CloseNow() }()
+	defer func() { _ = server.CloseNow() }()
 
 	msg := WsMsg{Jid: jid.Jid(1234)}
 	outCh <- msg
@@ -198,8 +198,8 @@ func TestWriteLoop_RespectsContext(t *testing.T) {
 	outCh := make(chan WsMsg)
 	jawsDoneCh := make(chan struct{})
 	client, server := pipe()
-	defer client.CloseNow()
-	defer server.CloseNow()
+	defer func() { _ = client.CloseNow() }()
+	defer func() { _ = server.CloseNow() }()
 	client.CloseRead(context.Background())
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -217,8 +217,8 @@ func TestWriteLoop_RespectsDone(t *testing.T) {
 	outCh := make(chan WsMsg)
 	jawsDoneCh := make(chan struct{})
 	client, server := pipe()
-	defer client.CloseNow()
-	defer server.CloseNow()
+	defer func() { _ = client.CloseNow() }()
+	defer func() { _ = server.CloseNow() }()
 	client.CloseRead(context.Background())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -238,8 +238,8 @@ func TestWriteLoop_RespectsOutboundClosed(t *testing.T) {
 	outCh := make(chan WsMsg)
 	jawsDoneCh := make(chan struct{})
 	client, server := pipe()
-	defer client.CloseNow()
-	defer server.CloseNow()
+	defer func() { _ = client.CloseNow() }()
+	defer func() { _ = server.CloseNow() }()
 	client.CloseRead(context.Background())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -259,10 +259,10 @@ func TestWriteLoop_ReportsError(t *testing.T) {
 	outCh := make(chan WsMsg, 1)
 	jawsDoneCh := make(chan struct{})
 	client, server := pipe()
-	defer client.CloseNow()
-	defer server.CloseNow()
+	defer func() { _ = client.CloseNow() }()
+	defer func() { _ = server.CloseNow() }()
 	client.CloseRead(context.Background())
-	server.CloseNow()
+	_ = server.CloseNow()
 
 	ctx, cancel := context.WithCancelCause(context.Background())
 	writeDoneCh := make(chan struct{})
@@ -284,10 +284,10 @@ func TestReadLoop_ReportsError(t *testing.T) {
 	inCh := make(chan WsMsg)
 	jawsDoneCh := make(chan struct{})
 	client, server := pipe()
-	defer client.CloseNow()
-	defer server.CloseNow()
+	defer func() { _ = client.CloseNow() }()
+	defer func() { _ = server.CloseNow() }()
 	client.CloseRead(context.Background())
-	server.CloseNow()
+	_ = server.CloseNow()
 
 	ctx, cancel := context.WithCancelCause(context.Background())
 	readDoneCh := make(chan struct{})
@@ -307,8 +307,8 @@ func TestReadLoop_ReportsError(t *testing.T) {
 func TestPingLoop_RespectsContextDone(t *testing.T) {
 	jawsDoneCh := make(chan struct{})
 	client, server := pipe()
-	defer client.CloseNow()
-	defer server.CloseNow()
+	defer func() { _ = client.CloseNow() }()
+	defer func() { _ = server.CloseNow() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -326,8 +326,8 @@ func TestPingLoop_RespectsContextDone(t *testing.T) {
 func TestPingLoop_RespectsDone(t *testing.T) {
 	jawsDoneCh := make(chan struct{})
 	client, server := pipe()
-	defer client.CloseNow()
-	defer server.CloseNow()
+	defer func() { _ = client.CloseNow() }()
+	defer func() { _ = server.CloseNow() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -345,8 +345,8 @@ func TestPingLoop_RespectsDone(t *testing.T) {
 func TestPingLoop_ReportsErrorWhenPeerDoesNotPong(t *testing.T) {
 	jawsDoneCh := make(chan struct{})
 	client, server := pipe()
-	defer client.CloseNow()
-	defer server.CloseNow()
+	defer func() { _ = client.CloseNow() }()
+	defer func() { _ = server.CloseNow() }()
 
 	ctx, cancel := context.WithCancelCause(context.Background())
 

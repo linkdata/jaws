@@ -39,7 +39,7 @@ func newTestJaws() (tj *testJaws) {
 		return DefaultAuth{}
 	}
 	tj.testtmpl = template.Must(template.New("testtemplate").Parse(`{{with $.Dot}}{{.}}{{end}}`))
-	tj.AddTemplateLookuper(tj.testtmpl)
+	_ = tj.AddTemplateLookuper(tj.testtmpl)
 
 	tj.Jaws.updateTicker = time.NewTicker(time.Millisecond)
 	go tj.Serve()

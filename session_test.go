@@ -453,7 +453,7 @@ func TestSession_Delete(t *testing.T) {
 	if x := resp.StatusCode; x != http.StatusSwitchingProtocols {
 		t.Error(x)
 	}
-	defer conn.Close(websocket.StatusNormalClosure, "")
+	defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
 
 	msg := wire.WsMsg{Jid: jidForTag(ts.rq, byebyeItem), What: what.Input}
 	ctx, cancel := context.WithCancel(ts.ctx)

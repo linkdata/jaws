@@ -104,7 +104,7 @@ func TestTree(t *testing.T) {
 
 	root, err := os.OpenRoot(".")
 	maybeError(t, err)
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 
 	rootnode, err := Root(root, nil)
 	maybeError(t, err)

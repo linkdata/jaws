@@ -68,7 +68,7 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	jw.MakeAuth = func(*jaws.Request) jaws.Auth { return templateAuth{} }
 
-	jw.AddTemplateLookuper(template.Must(template.New("uitempl").Parse(
+	_ = jw.AddTemplateLookuper(template.Must(template.New("uitempl").Parse(
 		`{{with $.Dot}}<span data-auth="{{$.Auth.Email}}">{{.}}</span>{{end}}`,
 	)))
 
@@ -125,7 +125,7 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 
 func TestTemplate_RenderWithTableRowWrapper(t *testing.T) {
 	jw, rq := newCoreRequest(t)
-	jw.AddTemplateLookuper(template.Must(template.New("row").Parse(
+	_ = jw.AddTemplateLookuper(template.Must(template.New("row").Parse(
 		`<td>{{.Dot}}</td>`,
 	)))
 
@@ -144,7 +144,7 @@ func TestTemplate_RenderWithTableRowWrapper(t *testing.T) {
 
 func TestTemplate_RenderWithoutWrapper(t *testing.T) {
 	jw, rq := newCoreRequest(t)
-	jw.AddTemplateLookuper(template.Must(template.New("bare").Parse(
+	_ = jw.AddTemplateLookuper(template.Must(template.New("bare").Parse(
 		`<td>{{.Dot}}</td>`,
 	)))
 
@@ -168,7 +168,7 @@ func TestHandler_HandlerServeHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer jw.Close()
-	jw.AddTemplateLookuper(template.Must(template.New("handler").Parse(
+	_ = jw.AddTemplateLookuper(template.Must(template.New("handler").Parse(
 		`<html><body>{{with $.Dot}}<span>{{.}}</span>{{end}}</body></html>`,
 	)))
 
@@ -217,7 +217,7 @@ func TestTemplate_UpdateLogsExecuteError(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	logger := new(templateLogger)
 	jw.Logger = logger
-	jw.AddTemplateLookuper(template.Must(template.New("badupdate").Parse(
+	_ = jw.AddTemplateLookuper(template.Must(template.New("badupdate").Parse(
 		`{{$.Dot.MissingField}}`,
 	)))
 
@@ -239,7 +239,7 @@ func TestPageTemplate_UpdateNoop(t *testing.T) {
 
 func TestTemplate_RenderReturnsTagExpandError(t *testing.T) {
 	jw, rq := newCoreRequest(t)
-	jw.AddTemplateLookuper(template.Must(template.New("uitempl").Parse(
+	_ = jw.AddTemplateLookuper(template.Must(template.New("uitempl").Parse(
 		`{{with $.Dot}}<span>{{.}}</span>{{end}}`,
 	)))
 
@@ -261,7 +261,7 @@ func TestTemplate_UpdateRerendersIntoWrapper(t *testing.T) {
 	}
 	t.Cleanup(jw.Close)
 
-	jw.AddTemplateLookuper(template.Must(template.New("update").Parse(
+	_ = jw.AddTemplateLookuper(template.Must(template.New("update").Parse(
 		`{{with $.Dot}}<span>{{.Text}}</span>{{end}}`,
 	)))
 
