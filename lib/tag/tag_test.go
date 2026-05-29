@@ -259,7 +259,7 @@ func TestTagExpand_NotUsableAsTag_WithNestedTagGetterHint(t *testing.T) {
 	if !strings.Contains(err.Error(), "found nested TagGetter at Setter") {
 		t.Fatalf("expected nested TagGetter search result in error text, got %q", err.Error())
 	}
-	if !strings.Contains(err.Error(), "implement JawsGetTag(jawstags.Context)") {
+	if !strings.Contains(err.Error(), "implement JawsGetTag(tag.Context)") {
 		t.Fatalf("expected remediation hint in error text, got %q", err.Error())
 	}
 }
