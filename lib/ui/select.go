@@ -24,15 +24,24 @@ func (u *Select) JawsRender(elem *jaws.Element, w io.Writer, params []any) error
 }
 
 // JawsUpdate updates the selected value and child options.
+//
+// The selected value is only updated when the Container is a [bind.Setter] of
+// string; the child options are always updated.
 func (u *Select) JawsUpdate(elem *jaws.Element) {
-	// jawsbind.Setter[T] includes jawsbind.Getter[T]
-	elem.SetValue(u.ContainerHelper.Container.(bind.Setter[string]).JawsGet(elem))
+	if setter, ok := u.ContainerHelper.Container.(bind.Setter[string]); ok {
+		elem.SetValue(setter.JawsGet(elem))
+	}
 	u.UpdateContainer(elem)
 }
 
 // JawsInput stores a browser-side select value.
+//
+// The input is ignored (returning a nil error) when the Container is not a
+// [bind.Setter] of string.
 func (u *Select) JawsInput(elem *jaws.Element, value string) (err error) {
-	err = applyDirty(u.Tag, elem, u.ContainerHelper.Container.(bind.Setter[string]).JawsSet(elem, value))
+	if setter, ok := u.ContainerHelper.Container.(bind.Setter[string]); ok {
+		err = applyDirty(u.Tag, elem, setter.JawsSet(elem, value))
+	}
 	return
 }
 
