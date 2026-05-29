@@ -47,7 +47,18 @@ func NewErrNotUsableAsTag(x any) error {
 
 var tagGetterType = reflect.TypeFor[TagGetter]()
 
+// maxHintScan is how many leading elements of an array or slice the
+// [FindTagGetter] hint search inspects. It is intentionally small: the search
+// only produces a human-readable diagnostic hint, so a nested TagGetter past
+// this index simply will not be mentioned in the error message.
+const maxHintScan = 4
+
 // FindTagGetter searches x recursively for a nested [TagGetter].
+//
+// The search is bounded: it follows at most [maxTagDepth] levels of nesting and
+// scans only the first [maxHintScan] elements of any array or slice. It is used
+// only to enrich the [ErrNotUsableAsTag] diagnostic, so these bounds trade
+// completeness for a cheap, terminating search.
 func FindTagGetter(x any) (path string, tgType reflect.Type, found bool) {
 	if x == nil {
 		return
@@ -59,7 +70,7 @@ func FindTagGetter(x any) (path string, tgType reflect.Type, found bool) {
 	seen := map[seenPtr]struct{}{}
 	var walk func(v reflect.Value, currentPath string, depth int) bool
 	walk = func(v reflect.Value, currentPath string, depth int) bool {
-		if !v.IsValid() || depth > 10 {
+		if !v.IsValid() || depth > maxTagDepth {
 			return false
 		}
 		t := v.Type()
@@ -99,7 +110,7 @@ func FindTagGetter(x any) (path string, tgType reflect.Type, found bool) {
 				}
 			}
 		case reflect.Array:
-			n := min(v.Len(), 4)
+			n := min(v.Len(), maxHintScan)
 			for i := range n {
 				next := "[" + strconv.Itoa(i) + "]"
 				if currentPath != "" {
@@ -118,7 +129,7 @@ func FindTagGetter(x any) (path string, tgType reflect.Type, found bool) {
 				return false
 			}
 			seen[p] = struct{}{}
-			n := min(v.Len(), 4)
+			n := min(v.Len(), maxHintScan)
 			for i := range n {
 				next := "[" + strconv.Itoa(i) + "]"
 				if currentPath != "" {
