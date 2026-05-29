@@ -97,7 +97,9 @@ func appendHTMLTag(b []byte, jid jid.Jid, htmlTag, typeAttr, valueAttr string, a
 //
 // The typeAttr and valueAttr parameters must be unescaped logical values; they
 // are escaped for HTML source output. The attrs parameter contains trusted raw
-// attribute fragments and is written as-is.
+// attribute fragments and is written verbatim with no escaping; it MUST NOT
+// contain untrusted data. Use [Attr] or [AppendAttr] to build attribute
+// fragments with an escaped value.
 func WriteHTMLTag(w io.Writer, jid jid.Jid, htmlTag, typeAttr, valueAttr string, attrs []template.HTMLAttr) (err error) {
 	var buf [htmlBufferSize]byte
 	b := appendHTMLTag(buf[:0], jid, htmlTag, typeAttr, valueAttr, attrs)
@@ -110,7 +112,9 @@ func WriteHTMLTag(w io.Writer, jid jid.Jid, htmlTag, typeAttr, valueAttr string,
 //
 // The typeAttr and valueAttr parameters must be unescaped logical values; they
 // are escaped for HTML source output. The attrs parameter contains trusted raw
-// attribute fragments and is written as-is.
+// attribute fragments and is written verbatim with no escaping; it MUST NOT
+// contain untrusted data. Use [Attr] or [AppendAttr] to build attribute
+// fragments with an escaped value.
 func WriteHTMLInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs []template.HTMLAttr) (err error) {
 	return WriteHTMLTag(w, jid, "input", typeAttr, valueAttr, attrs)
 }
@@ -119,6 +123,10 @@ func WriteHTMLInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs 
 //
 // Singleton tags such as img and input are written without closing tags unless
 // innerHTML is non-empty.
+//
+// The attrs parameter contains trusted raw attribute fragments and is written
+// verbatim with no escaping; it MUST NOT contain untrusted data. Use [Attr] or
+// [AppendAttr] to build attribute fragments with an escaped value.
 func WriteHTMLInner(w io.Writer, jid jid.Jid, htmlTag, typeAttr string, innerHTML template.HTML, attrs ...template.HTMLAttr) (err error) {
 	var buf [htmlBufferSize]byte
 	b := appendHTMLTag(buf[:0], jid, htmlTag, typeAttr, "", attrs)
