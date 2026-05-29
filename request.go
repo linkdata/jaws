@@ -566,7 +566,9 @@ func (rq *Request) GetElements(tagValue any) (elems []*Element) {
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
 func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-chan wire.WsMsg, outboundMsgCh chan<- wire.WsMsg) {
 	jawsDoneCh := rq.Jaws.Done()
+	rq.mu.RLock()
 	httpDoneCh := rq.httpDoneCh
+	rq.mu.RUnlock()
 	eventDoneCh := make(chan struct{})
 	eventCallCh := make(chan eventFnCall, cap(outboundMsgCh))
 	go rq.eventCaller(eventCallCh, outboundMsgCh, eventDoneCh)
@@ -1018,9 +1020,13 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				incomingMsgCh := make(chan wire.WsMsg)
 				broadcastMsgCh := rq.Jaws.subscribe(rq, 4+len(rq.elems)*4)
 				outboundMsgCh := make(chan wire.WsMsg, cap(broadcastMsgCh))
-				go wire.ReadLoop(rq.ctx, rq.cancelFn, rq.Jaws.Done(), incomingMsgCh, ws)  // closes incomingMsgCh
-				go wire.WriteLoop(rq.ctx, rq.cancelFn, rq.Jaws.Done(), outboundMsgCh, ws) // calls ws.Close()
-				go wire.PingLoop(rq.ctx, rq.cancelFn, rq.Jaws.Done(), pingInterval, wsTimeout, ws)
+				rq.mu.RLock()
+				ctx := rq.ctx
+				cancelFn := rq.cancelFn
+				rq.mu.RUnlock()
+				go wire.ReadLoop(ctx, cancelFn, rq.Jaws.Done(), incomingMsgCh, ws)  // closes incomingMsgCh
+				go wire.WriteLoop(ctx, cancelFn, rq.Jaws.Done(), outboundMsgCh, ws) // calls ws.Close()
+				go wire.PingLoop(ctx, cancelFn, rq.Jaws.Done(), pingInterval, wsTimeout, ws)
 				rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh) // unsubscribes broadcastMsgCh, closes outboundMsgCh
 			} else {
 				reason := err.Error()
