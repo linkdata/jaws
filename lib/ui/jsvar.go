@@ -79,8 +79,8 @@ var (
 // for concurrent use.
 type JsVar[T any] struct {
 	bind.RWLocker
-	Ptr *T  // bound Go value
-	Tag any // current dirty tag
+	Ptr      *T  // bound Go value
+	dirtyTag any // current dirty tag, set during render; read via JawsGetTag
 }
 
 // JawsGetPath returns the value at jsPath, logging lookup errors on elem when possible.
@@ -118,7 +118,7 @@ func (jsvar *JsVar[T]) setPathLocked(elem *jaws.Element, jsPath string, value an
 		var data []byte
 		if data, err = json.Marshal(value); err == nil {
 			elem.Jaws.Broadcast(wire.Message{
-				Dest: jsvar.Tag,
+				Dest: jsvar.dirtyTag,
 				What: what.Set,
 				Data: jsPath + "=" + string(data),
 			})
@@ -168,7 +168,7 @@ func (jsvar *JsVar[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any)
 	jsvar.Lock()
 	defer jsvar.Unlock()
 	var getterAttrs []template.HTMLAttr
-	if jsvar.Tag, getterAttrs, err = elem.ApplyGetter(jsvar.Ptr); err == nil {
+	if jsvar.dirtyTag, getterAttrs, err = elem.ApplyGetter(jsvar.Ptr); err == nil {
 		elem.AddHandlers(jsvar)
 		var jsvarName string
 		if jsvarName, err = validateJsVarName(params); err == nil {
@@ -195,8 +195,12 @@ func (jsvar *JsVar[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any)
 }
 
 // JawsGetTag returns the current dirty tag.
+//
+// It is safe for concurrent use. The tag.Context argument is ignored and may be nil.
 func (jsvar *JsVar[T]) JawsGetTag(tag.Context) any {
-	return jsvar.Tag
+	jsvar.RLock()
+	defer jsvar.RUnlock()
+	return jsvar.dirtyTag
 }
 
 // JawsUpdate is a no-op because updates are broadcast by path setters.
