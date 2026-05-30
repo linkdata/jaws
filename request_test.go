@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/coder/websocket"
@@ -328,6 +329,10 @@ func TestRequest_SetContextCancellationStopsQueuedEvents(t *testing.T) {
 	})
 	close(block)
 
+	// Negative assertion: confirm the queued second event never fires after the
+	// context is replaced and cancelled. This proves absence over elapsed time, so
+	// it intentionally waits on the real clock rather than running in a synctest
+	// bubble.
 	deadline := time.Now().Add(200 * time.Millisecond)
 	for time.Now().Before(deadline) {
 		if atomic.LoadInt32(&calls) > 1 {
@@ -429,6 +434,10 @@ func TestRequest_Trigger(t *testing.T) {
 	}
 }
 
+// TestRequest_EventFnQueue uses an event handler that deliberately blocks
+// (busy-waiting on sleepDone) to fill the event queue. That busy-wait is the
+// device under test and keeps re-arming the clock, so this test is not suited to
+// a synctest bubble; it stays on the real clock with deadline-bounded waits.
 func TestRequest_EventFnQueue(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest(t)
@@ -533,6 +542,11 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 	}
 }
 
+// TestRequest_IgnoresIncomingMsgsDuringShutdown uses an event handler that
+// deliberately blocks (busy-waiting on spewState) while the request shuts down.
+// That busy-wait is the device under test and keeps re-arming the clock, so this
+// test is not suited to a synctest bubble; it stays on the real clock with
+// deadline-bounded waits.
 func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest(t)
@@ -1035,29 +1049,30 @@ func TestRequest_Log(t *testing.T) {
 }
 
 func TestRequest_Dirty(t *testing.T) {
-	th := newTestHelper(t)
-	rq := newTestRequest(t)
-	defer rq.Close()
+	synctest.Test(t, func(t *testing.T) {
+		th := newTestHelper(t)
+		rq := newTestRequest(t)
+		defer closeRequestInBubble(rq)
 
-	tss1 := &testUi{s: "foo1"}
-	tss2 := &testUi{s: "foo2"}
-	th.NoErr(rq.UI(newTestTextInputWidget(tss1)))
-	th.NoErr(rq.UI(newTestTextInputWidget(tss2)))
-	th.Equal(tss1.getCalled, int32(1))
-	th.Equal(tss2.getCalled, int32(1))
-	th.True(strings.Contains(string(rq.BodyString()), "foo1"))
-	th.True(strings.Contains(string(rq.BodyString()), "foo2"))
+		tss1 := &testUi{s: "foo1"}
+		tss2 := &testUi{s: "foo2"}
+		th.NoErr(rq.UI(newTestTextInputWidget(tss1)))
+		th.NoErr(rq.UI(newTestTextInputWidget(tss2)))
+		th.Equal(tss1.getCalled, int32(1))
+		th.Equal(tss2.getCalled, int32(1))
+		th.True(strings.Contains(string(rq.BodyString()), "foo1"))
+		th.True(strings.Contains(string(rq.BodyString()), "foo2"))
 
-	rq.Dirty(tss1)
-	rq.Dirty(tss2)
-	for atomic.LoadInt32(&tss1.getCalled) < 2 && atomic.LoadInt32(&tss2.getCalled) < 2 {
-		select {
-		case <-th.C:
-			th.Timeout()
-		default:
-			time.Sleep(time.Millisecond)
-		}
-	}
+		rq.Dirty(tss1)
+		rq.Dirty(tss2)
+		// Dirtying marks the elements; the Serve loop broadcasts what.Update only
+		// when its updateTicker fires (1ms in tests). Advance the fake clock past
+		// it, then let the process loop re-render both elements (JawsGet again).
+		time.Sleep(2 * time.Millisecond)
+		synctest.Wait()
+		th.True(atomic.LoadInt32(&tss1.getCalled) >= 2)
+		th.True(atomic.LoadInt32(&tss2.getCalled) >= 2)
+	})
 }
 
 func TestRequest_UpdatePanicLogs(t *testing.T) {
@@ -1084,29 +1099,20 @@ func TestRequest_UpdatePanicLogs(t *testing.T) {
 }
 
 func TestRequest_IncomingRemove(t *testing.T) {
-	th := newTestHelper(t)
-	rq := newTestRequest(t)
-	defer rq.Close()
+	synctest.Test(t, func(t *testing.T) {
+		th := newTestHelper(t)
+		rq := newTestRequest(t)
+		defer closeRequestInBubble(rq)
 
-	tss := newTestSetter("")
-	th.NoErr(rq.UI(newTestTextInputWidget(tss)))
+		tss := newTestSetter("")
+		th.NoErr(rq.UI(newTestTextInputWidget(tss)))
 
-	select {
-	case <-th.C:
-		th.Timeout()
-	case rq.InCh <- wire.WsMsg{What: what.Remove, Jid: 1, Data: "Jid.1"}:
-	}
-
-	elem := rq.GetElementByJid(1)
-	for elem != nil {
-		select {
-		case <-th.C:
-			th.Timeout()
-		default:
-			time.Sleep(time.Millisecond)
-			elem = rq.GetElementByJid(1)
-		}
-	}
+		// Send the incoming Remove and let the process loop handle it; the
+		// element is gone once every bubbled goroutine is durably blocked again.
+		rq.InCh <- wire.WsMsg{What: what.Remove, Jid: 1, Data: "Jid.1"}
+		synctest.Wait()
+		th.Equal(rq.GetElementByJid(1), (*Element)(nil))
+	})
 }
 
 func TestRequest_IncomingClick(t *testing.T) {
@@ -2265,6 +2271,9 @@ func TestWS_PingDisabledKeepsIdleConnection(t *testing.T) {
 		t.Fatal("timeout waiting for websocket connect")
 	}
 
+	// This test drives a real WebSocket connection (real network I/O), so it runs
+	// on the real clock and cannot use a synctest bubble. Give the connection a
+	// moment to settle, then confirm the request counts are stable.
 	time.Sleep(150 * time.Millisecond)
 	total, active := ts.jw.RequestCounts()
 	if total != 1 || active != 1 {
@@ -2278,6 +2287,8 @@ func TestWS_PingDisabledKeepsIdleConnection(t *testing.T) {
 	waitForRequestCounts(t, ts.jw, 0, 0, testTimeout)
 }
 
+// waitForRequestCount polls a Jaws served over a real WebSocket connection, so
+// it runs on the real clock (deadline-bounded) rather than in a synctest bubble.
 func waitForRequestCount(t *testing.T, jw *Jaws, want int, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

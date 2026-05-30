@@ -5,6 +5,7 @@ import (
 	"io"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/linkdata/jaws"
@@ -64,48 +65,48 @@ func registerDirtyProbe(rq *jawstest.TestRequest, tag any, hits *atomic.Int32) {
 	elem.Tag(tag)
 }
 
+// waitForDirtyProbes advances the bubble's fake clock past the Serve loop's
+// updateTicker (DefaultUpdateInterval, 100ms) so queued dirt is distributed and
+// broadcast, lets the request process loop run the resulting JawsUpdate calls,
+// then asserts the probes fired. It must be called from within a synctest bubble.
 func waitForDirtyProbes(t *testing.T, done func() bool) {
 	t.Helper()
-	timer := time.NewTimer(time.Second)
-	defer timer.Stop()
-	for !done() {
-		select {
-		case <-t.Context().Done():
-			t.Fatal(t.Context().Err())
-		case <-timer.C:
-			t.Fatal("timed out waiting for dirty probes")
-		default:
-			time.Sleep(time.Millisecond)
-		}
+	time.Sleep(200 * time.Millisecond)
+	synctest.Wait()
+	if !done() {
+		t.Fatal("timed out waiting for dirty probes")
 	}
 }
 
 func TestNamedBool_JawsSetDirtiesDeselectedSiblings(t *testing.T) {
-	_, rq := newTestRequest(t)
+	synctest.Test(t, func(t *testing.T) {
+		jw, rq := newTestRequest(t)
+		defer closeBubbleRequest(jw, rq)
 
-	nba := NewBoolArray(false).Add("one", "one").Add("two", "two")
-	one := nba.data[0]
-	two := nba.data[1]
-	nba.Set("one", true)
+		nba := NewBoolArray(false).Add("one", "one").Add("two", "two")
+		one := nba.data[0]
+		two := nba.data[1]
+		nba.Set("one", true)
 
-	var oneHits, twoHits, groupHits atomic.Int32
-	registerDirtyProbe(rq, one, &oneHits)
-	registerDirtyProbe(rq, two, &twoHits)
-	registerDirtyProbe(rq, nba, &groupHits)
+		var oneHits, twoHits, groupHits atomic.Int32
+		registerDirtyProbe(rq, one, &oneHits)
+		registerDirtyProbe(rq, two, &twoHits)
+		registerDirtyProbe(rq, nba, &groupHits)
 
-	trigger := rq.NewElement(noopUI{})
-	if err := two.JawsSet(trigger, true); err != nil {
-		t.Fatal(err)
-	}
-	if one.Checked() {
-		t.Fatal("expected first bool to be deselected")
-	}
-	if !two.Checked() {
-		t.Fatal("expected second bool to be selected")
-	}
+		trigger := rq.NewElement(noopUI{})
+		if err := two.JawsSet(trigger, true); err != nil {
+			t.Fatal(err)
+		}
+		if one.Checked() {
+			t.Fatal("expected first bool to be deselected")
+		}
+		if !two.Checked() {
+			t.Fatal("expected second bool to be selected")
+		}
 
-	waitForDirtyProbes(t, func() bool {
-		return oneHits.Load() > 0 && twoHits.Load() > 0 && groupHits.Load() > 0
+		waitForDirtyProbes(t, func() bool {
+			return oneHits.Load() > 0 && twoHits.Load() > 0 && groupHits.Load() > 0
+		})
 	})
 }
 
@@ -114,35 +115,38 @@ func TestNamedBool_JawsSetDirtiesDeselectedSiblings(t *testing.T) {
 // the array tag (mirroring Bool.JawsSet), not just the array tag. Before the fix
 // only the array was dirtied, so consumers binding individual Bools never updated.
 func TestNamedBoolArray_JawsSetDirtiesChangedBoolsAndArray(t *testing.T) {
-	_, rq := newTestRequest(t)
+	synctest.Test(t, func(t *testing.T) {
+		jw, rq := newTestRequest(t)
+		defer closeBubbleRequest(jw, rq)
 
-	nba := NewBoolArray(false).Add("one", "one").Add("two", "two")
-	one := nba.data[0]
-	two := nba.data[1]
-	nba.Set("one", true) // start with "one" selected
+		nba := NewBoolArray(false).Add("one", "one").Add("two", "two")
+		one := nba.data[0]
+		two := nba.data[1]
+		nba.Set("one", true) // start with "one" selected
 
-	var oneHits, twoHits, groupHits atomic.Int32
-	registerDirtyProbe(rq, one, &oneHits)
-	registerDirtyProbe(rq, two, &twoHits)
-	registerDirtyProbe(rq, nba, &groupHits)
+		var oneHits, twoHits, groupHits atomic.Int32
+		registerDirtyProbe(rq, one, &oneHits)
+		registerDirtyProbe(rq, two, &twoHits)
+		registerDirtyProbe(rq, nba, &groupHits)
 
-	trigger := rq.NewElement(noopUI{})
-	if err := nba.JawsSet(trigger, "two"); err != nil {
-		t.Fatal(err)
-	}
-	if one.Checked() {
-		t.Fatal("expected first bool to be deselected")
-	}
-	if !two.Checked() {
-		t.Fatal("expected second bool to be selected")
-	}
+		trigger := rq.NewElement(noopUI{})
+		if err := nba.JawsSet(trigger, "two"); err != nil {
+			t.Fatal(err)
+		}
+		if one.Checked() {
+			t.Fatal("expected first bool to be deselected")
+		}
+		if !two.Checked() {
+			t.Fatal("expected second bool to be selected")
+		}
 
-	waitForDirtyProbes(t, func() bool {
-		return oneHits.Load() > 0 && twoHits.Load() > 0 && groupHits.Load() > 0
+		waitForDirtyProbes(t, func() bool {
+			return oneHits.Load() > 0 && twoHits.Load() > 0 && groupHits.Load() > 0
+		})
+
+		// Setting the same selection again is a no-op and must report ErrValueUnchanged.
+		if err := nba.JawsSet(trigger, "two"); err != jaws.ErrValueUnchanged {
+			t.Fatalf("re-set error = %v, want ErrValueUnchanged", err)
+		}
 	})
-
-	// Setting the same selection again is a no-op and must report ErrValueUnchanged.
-	if err := nba.JawsSet(trigger, "two"); err != jaws.ErrValueUnchanged {
-		t.Fatalf("re-set error = %v, want ErrValueUnchanged", err)
-	}
 }

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/coder/websocket"
@@ -492,47 +493,52 @@ func TestSession_Delete(t *testing.T) {
 }
 
 func TestSession_Cleanup(t *testing.T) {
-	jw, _ := New()
-	defer jw.Close()
+	synctest.Test(t, func(t *testing.T) {
+		jw, _ := New()
+		defer func() {
+			jw.Close()
+			synctest.Wait()
+		}()
 
-	rr := httptest.NewRecorder()
-	hr := httptest.NewRequest("GET", "/", nil)
+		rr := httptest.NewRecorder()
+		hr := httptest.NewRequest("GET", "/", nil)
 
-	sess := jw.NewSession(rr, hr)
-	if x := sess; x == nil || x != jw.GetSession(hr) {
-		t.Fatal(x)
-	}
-	if x := len(rr.Result().Cookies()); x != 1 {
-		t.Fatal(x)
-	}
+		sess := jw.NewSession(rr, hr)
+		if x := sess; x == nil || x != jw.GetSession(hr) {
+			t.Fatal(x)
+		}
+		if x := len(rr.Result().Cookies()); x != 1 {
+			t.Fatal(x)
+		}
 
-	r1 := jw.NewRequest(hr)
-	if x := sess; x != r1.Session() {
-		t.Error(x)
-	}
-	if x := len(sess.requests); x != 1 {
-		t.Error(x)
-	}
-	if x := sess.requests[0]; x != r1 {
-		t.Error(x)
-	}
+		r1 := jw.NewRequest(hr)
+		if x := sess; x != r1.Session() {
+			t.Error(x)
+		}
+		if x := len(sess.requests); x != 1 {
+			t.Error(x)
+		}
+		if x := sess.requests[0]; x != r1 {
+			t.Error(x)
+		}
 
-	jw.recycle(r1)
-	r1 = nil
-	sess.deadline = time.Now()
-	if x := jw.SessionCount(); x != 1 {
-		t.Error(x)
-	}
+		jw.recycle(r1)
+		r1 = nil
+		sess.deadline = time.Now()
+		if x := jw.SessionCount(); x != 1 {
+			t.Error(x)
+		}
 
-	go jw.ServeWithTimeout(time.Millisecond)
-	waited := 0
-	for waited < 100 && jw.SessionCount() > 0 {
-		waited++
-		time.Sleep(time.Millisecond)
-	}
-	if x := jw.SessionCount(); x != 0 {
-		t.Error(x)
-	}
+		go jw.ServeWithTimeout(time.Millisecond)
+		// The maintenance ticker reaps the expired session; it floors at 10ms for
+		// a 1ms timeout, so advancing the fake clock a full second guarantees
+		// several reap cycles, then we let the Serve loop settle.
+		time.Sleep(time.Second)
+		synctest.Wait()
+		if x := jw.SessionCount(); x != 0 {
+			t.Error(x)
+		}
+	})
 }
 
 func TestSession_GetSessionExpiredBeforeCleanup(t *testing.T) {

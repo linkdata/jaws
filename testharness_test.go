@@ -6,9 +6,21 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"testing/synctest"
 
 	"github.com/linkdata/jaws/lib/wire"
 )
+
+// closeRequestInBubble shuts a test request and its Jaws down from inside a
+// synctest bubble, then waits for every bubbled goroutine (the request process
+// loop, its event caller, and the Jaws Serve loop) to exit. synctest.Test
+// requires the bubble to be free of live goroutines before it returns, so the
+// usual t.Cleanup-based teardown (which runs outside the bubble) is too late.
+func closeRequestInBubble(rq *testRequest) {
+	rq.Close()
+	rq.Jaws.Close()
+	synctest.Wait()
+}
 
 // TestRequest is a request harness intended for the jaws package's own tests.
 // The importable harness for other packages lives in

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/linkdata/jaws/lib/assets"
@@ -691,6 +692,9 @@ func TestJaws_GenerateHeadHTMLConcurrentWithHeadHTML(t *testing.T) {
 		}
 	}()
 
+	// Let the two goroutines hammer the shared state concurrently for a fixed
+	// window so the race detector can observe genuine parallel access; a synctest
+	// bubble would serialize them and defeat the purpose.
 	time.Sleep(50 * time.Millisecond)
 	close(stop)
 	wg.Wait()
@@ -876,45 +880,40 @@ func TestJaws_ServeWithTimeoutBounds(t *testing.T) {
 }
 
 func TestJaws_ServeWithTimeoutFullSubscriberChannel(t *testing.T) {
-	jw, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer jw.Close()
-	rq := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
-	msgCh := make(chan wire.Message) // unbuffered: always full when nobody receives
-	done := make(chan struct{})
-	go func() {
-		jw.ServeWithTimeout(50 * time.Millisecond)
-		close(done)
-	}()
-	jw.subCh <- subscription{msgCh: msgCh, rq: rq}
-	// Ensure ServeWithTimeout has consumed the subscription before broadcast.
-	for i := 0; i <= cap(jw.subCh); i++ {
-		jw.subCh <- subscription{}
-	}
-	jw.bcastCh <- wire.Message{What: what.Alert, Data: "x"}
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		rq := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
+		msgCh := make(chan wire.Message) // unbuffered: always full when nobody receives
+		done := make(chan struct{})
+		go func() {
+			jw.ServeWithTimeout(50 * time.Millisecond)
+			close(done)
+		}()
+		jw.subCh <- subscription{msgCh: msgCh, rq: rq}
+		// Ensure ServeWithTimeout has consumed the subscription before broadcast.
+		for i := 0; i <= cap(jw.subCh); i++ {
+			jw.subCh <- subscription{}
+		}
+		jw.bcastCh <- wire.Message{What: what.Alert, Data: "x"}
 
-	waitUntil := time.Now().Add(time.Second)
-	closed := false
-	for !closed && time.Now().Before(waitUntil) {
+		// Once the Serve loop is durably blocked again it has processed the
+		// broadcast, found msgCh full, and killed (closed) the subscription.
+		synctest.Wait()
 		select {
 		case _, ok := <-msgCh:
-			closed = !ok
+			if ok {
+				t.Fatal("expected subscriber channel to be closed when full")
+			}
 		default:
-			time.Sleep(time.Millisecond)
+			t.Fatal("expected subscriber channel to be closed when full")
 		}
-	}
-	if !closed {
-		t.Fatal("expected subscriber channel to be closed when full")
-	}
 
-	jw.Close()
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for ServeWithTimeout exit")
-	}
+		jw.Close()
+		<-done
+	})
 }
 
 var headerContentGZip = []string{"gzip"}

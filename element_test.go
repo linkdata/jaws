@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/linkdata/deadlock"
@@ -119,93 +120,93 @@ func TestElement_Tag(t *testing.T) {
 }
 
 func TestElement_Queued(t *testing.T) {
-	th := newTestHelper(t)
-	rq := newTestRequest(t)
-	defer rq.Close()
+	synctest.Test(t, func(t *testing.T) {
+		th := newTestHelper(t)
+		rq := newTestRequest(t)
+		defer closeRequestInBubble(rq)
 
-	tss := &testUi{
-		updateFn: func(elem *Element) {
-			elem.SetAttr("hidden", "")
-			elem.RemoveAttr("hidden")
-			elem.SetClass("bah")
-			elem.RemoveClass("bah")
-			elem.SetValue("foo")
-			elem.SetInner("meh")
-			elem.Append("<div></div>")
-			elem.Remove("some-id")
-			elem.Order([]jid.Jid{1, 2})
-			replaceHTML := template.HTML(fmt.Sprintf("<div id=\"%s\"></div>", elem.Jid().String()))
-			elem.Replace(replaceHTML)
-			th.Equal(rq.wsQueue, []wire.WsMsg{
-				{
-					Data: "hidden\n",
-					Jid:  elem.jid,
-					What: what.SAttr,
-				},
-				{
-					Data: "hidden",
-					Jid:  elem.jid,
-					What: what.RAttr,
-				},
-				{
-					Data: "bah",
-					Jid:  elem.jid,
-					What: what.SClass,
-				},
-				{
-					Data: "bah",
-					Jid:  elem.jid,
-					What: what.RClass,
-				},
-				{
-					Data: "foo",
-					Jid:  elem.jid,
-					What: what.Value,
-				},
-				{
-					Data: "meh",
-					Jid:  elem.jid,
-					What: what.Inner,
-				},
-				{
-					Data: "<div></div>",
-					Jid:  elem.jid,
-					What: what.Append,
-				},
-				{
-					Data: "some-id",
-					Jid:  elem.jid,
-					What: what.Remove,
-				},
-				{
-					Data: fmt.Sprintf("%s %s", Jid(1).String(), Jid(2).String()),
-					Jid:  elem.jid,
-					What: what.Order,
-				},
-				{
-					Data: string(replaceHTML),
-					Jid:  elem.jid,
-					What: what.Replace,
-				},
-			})
-		},
-	}
-
-	pendingRq := rq.Jaws.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
-	th.NoErr(testRequestWriter{rq: pendingRq, Writer: httptest.NewRecorder()}.UI(tss))
-
-	th.NoErr(rq.UI(tss))
-	rq.Jaws.Dirty(tss)
-	rq.Dirty(tss)
-	for atomic.LoadInt32(&tss.updateCalled) < 1 {
-		select {
-		case <-th.C:
-			th.Timeout()
-		default:
-			time.Sleep(time.Millisecond)
+		tss := &testUi{
+			updateFn: func(elem *Element) {
+				elem.SetAttr("hidden", "")
+				elem.RemoveAttr("hidden")
+				elem.SetClass("bah")
+				elem.RemoveClass("bah")
+				elem.SetValue("foo")
+				elem.SetInner("meh")
+				elem.Append("<div></div>")
+				elem.Remove("some-id")
+				elem.Order([]jid.Jid{1, 2})
+				replaceHTML := template.HTML(fmt.Sprintf("<div id=\"%s\"></div>", elem.Jid().String()))
+				elem.Replace(replaceHTML)
+				th.Equal(rq.wsQueue, []wire.WsMsg{
+					{
+						Data: "hidden\n",
+						Jid:  elem.jid,
+						What: what.SAttr,
+					},
+					{
+						Data: "hidden",
+						Jid:  elem.jid,
+						What: what.RAttr,
+					},
+					{
+						Data: "bah",
+						Jid:  elem.jid,
+						What: what.SClass,
+					},
+					{
+						Data: "bah",
+						Jid:  elem.jid,
+						What: what.RClass,
+					},
+					{
+						Data: "foo",
+						Jid:  elem.jid,
+						What: what.Value,
+					},
+					{
+						Data: "meh",
+						Jid:  elem.jid,
+						What: what.Inner,
+					},
+					{
+						Data: "<div></div>",
+						Jid:  elem.jid,
+						What: what.Append,
+					},
+					{
+						Data: "some-id",
+						Jid:  elem.jid,
+						What: what.Remove,
+					},
+					{
+						Data: fmt.Sprintf("%s %s", Jid(1).String(), Jid(2).String()),
+						Jid:  elem.jid,
+						What: what.Order,
+					},
+					{
+						Data: string(replaceHTML),
+						Jid:  elem.jid,
+						What: what.Replace,
+					},
+				})
+			},
 		}
-	}
-	th.Equal(tss.renderCalled, int32(2))
+
+		pendingRq := rq.Jaws.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		th.NoErr(testRequestWriter{rq: pendingRq, Writer: httptest.NewRecorder()}.UI(tss))
+
+		th.NoErr(rq.UI(tss))
+		rq.Jaws.Dirty(tss)
+		rq.Dirty(tss)
+		// The Serve loop only broadcasts what.Update when its updateTicker fires
+		// (1ms in tests). Advance the fake clock past it, then let the process
+		// loop drain the update and invoke JawsUpdate.
+		time.Sleep(2 * time.Millisecond)
+		synctest.Wait()
+		th.True(atomic.LoadInt32(&tss.updateCalled) >= 1)
+		th.Equal(tss.renderCalled, int32(2))
+	})
 }
 
 func TestElement_ReplacePanicsOnMissingId(t *testing.T) {
