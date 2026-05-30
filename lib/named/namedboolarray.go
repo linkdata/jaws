@@ -71,12 +71,21 @@ func (nba *BoolArray) Add(name string, text template.HTML) *BoolArray {
 func (nba *BoolArray) Set(name string, state bool) (changed bool) {
 	nba.mu.Lock()
 	defer nba.mu.Unlock()
+	return len(nba.setChangedLocked(name, state)) > 0
+}
+
+// setChangedLocked sets the [Bool] values with the given name to state, applies
+// single-select deselection, and returns every [Bool] whose state changed. The
+// BoolArray must be locked for writing.
+func (nba *BoolArray) setChangedLocked(name string, state bool) (changed []*Bool) {
 	for _, nb := range nba.data {
 		if nb.Name() == name {
-			changed = nb.Set(state) || changed
+			if nb.Set(state) {
+				changed = append(changed, nb)
+			}
 		}
 	}
-	changed = len(nba.deselectOthersLocked(name, state)) > 0 || changed
+	changed = append(changed, nba.deselectOthersLocked(name, state)...)
 	return
 }
 
@@ -160,12 +169,22 @@ func (nba *BoolArray) JawsGet(elem *jaws.Element) string {
 	return nba.Get()
 }
 
-// JawsSet selects name and dirties nba if the selection changed.
+// JawsSet selects name and dirties the changed [Bool] values and nba itself.
+//
+// This mirrors [Bool.JawsSet]: every Bool whose checked state changes is dirtied
+// in addition to the array tag, so consumers that bind individual Bools (such as
+// radio buttons) update, not only the cascading [Select] widget that re-renders
+// from the array tag.
 func (nba *BoolArray) JawsSet(elem *jaws.Element, name string) (err error) {
-	if nba.Set(name, true) {
-		elem.Dirty(nba)
-	} else {
-		err = jaws.ErrValueUnchanged
+	nba.mu.Lock()
+	changed := nba.setChangedLocked(name, true)
+	nba.mu.Unlock()
+	if len(changed) == 0 {
+		return jaws.ErrValueUnchanged
 	}
+	for _, nb := range changed {
+		elem.Dirty(nb)
+	}
+	elem.Dirty(nba)
 	return
 }
