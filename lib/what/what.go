@@ -61,7 +61,7 @@ func Parse(s string) What {
 		return Update
 	}
 	for i := range len(_What_index) - 1 {
-		if w := What(i); w.IsValid() && s == _What_name[_What_index[i]:_What_index[i+1]] { // #nosec G115
+		if w := What(i); w.IsValid() && s == _What_name[_What_index[i]:_What_index[i+1]] { // #nosec G115 -- i ranges over [0, len(_What_index)-1), always within What's value range
 			return w
 		}
 	}
