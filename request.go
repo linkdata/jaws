@@ -102,6 +102,11 @@ func (rq *Request) String() string {
 	return "Request<" + rq.JawsKeyString() + ">"
 }
 
+// claim binds this request to the HTTP request making the WebSocket call. It
+// verifies the client IP matches, then atomically marks the request claimed and
+// layers a fresh cancelable context over the current one (preserving any context
+// installed via SetContext, whose cancelFn is still chained so it runs on
+// cleanup). Returns ErrRequestAlreadyClaimed if it was already claimed.
 func (rq *Request) claim(r *http.Request) error {
 	if !rq.claimed.Load() {
 		var actualIP netip.Addr
@@ -170,6 +175,11 @@ func (rq *Request) ensureAutoSession(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// clearLocked resets every field of rq to its zero state so it can be reused
+// from the Jaws request pool: it cancels any live context, drops queued dirt and
+// messages, detaches all elements and tags, and kills any attached session. It
+// runs when rq is freshly allocated or being recycled, so the caller must ensure
+// no other goroutine is using rq.
 func (rq *Request) clearLocked() *Request {
 	rq.JawsKey = 0
 	rq.lastJid = 0
@@ -360,6 +370,10 @@ func (rq *Request) SetContext(fn func(oldCtx context.Context) (newCtx context.Co
 	}
 }
 
+// maintenance reports whether rq has expired and should be recycled. For a
+// request that never went live it cancels and reports expiry once it has been
+// idle longer than requestTimeout, or immediately if its context is already
+// done. Called from the Serve loop's maintenance pass while jw.mu is held.
 func (rq *Request) maintenance(now time.Time, requestTimeout time.Duration) bool {
 	if !rq.running.Load() {
 		if rq.Rendering.Swap(false) {
@@ -382,12 +396,16 @@ func (rq *Request) maintenance(now time.Time, requestTimeout time.Duration) bool
 	return false
 }
 
+// cancelLocked cancels the request's context with a wrapped cause, but only for a
+// live request (non-zero key) whose context has not already been cancelled.
+// Caller must hold rq.mu.
 func (rq *Request) cancelLocked(err error) {
 	if rq.JawsKey != 0 && rq.ctx.Err() == nil {
 		rq.cancelFn(rq.Jaws.Log(newErrRequestCancelledLocked(rq, err)))
 	}
 }
 
+// cancel locks rq.mu and calls cancelLocked.
 func (rq *Request) cancel(err error) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
@@ -441,6 +459,8 @@ func (rq *Request) Redirect(url string) {
 	})
 }
 
+// tagsOfLocked returns the tags currently associated with elem. Caller must hold
+// rq.mu (read or write).
 func (rq *Request) tagsOfLocked(elem *Element) (tags []any) {
 	for tagValue, elems := range rq.tagMap {
 		if slices.Contains(elems, elem) {
@@ -489,6 +509,8 @@ func (rq *Request) wantMessage(msg *wire.Message) (yes bool) {
 	return
 }
 
+// newElementLocked allocates an [Element] wrapping ui, assigning it the next Jid
+// and appending it to the request's element list. Caller must hold rq.mu.
 func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 	rq.lastJid++
 	elem = &Element{
@@ -522,6 +544,8 @@ func (rq *Request) GetElementByJid(jid Jid) (elem *Element) {
 	return
 }
 
+// getElementByJidLocked returns the element with jid, or nil. Caller must hold
+// rq.mu (read or write).
 func (rq *Request) getElementByJidLocked(jid Jid) (elem *Element) {
 	for _, e := range rq.elems {
 		if e.Jid() == jid {
@@ -532,6 +556,8 @@ func (rq *Request) getElementByJidLocked(jid Jid) (elem *Element) {
 	return
 }
 
+// hasTagLocked reports whether elem is registered under tagValue. Caller must
+// hold rq.mu (read or write).
 func (rq *Request) hasTagLocked(elem *Element, tagValue any) bool {
 	return slices.Contains(rq.tagMap[tagValue], elem)
 }
@@ -544,6 +570,9 @@ func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 	return
 }
 
+// appendDirtyTags queues already-expanded tags onto this request's pending-dirt
+// list. The Serve loop's update tick later drains the list (see makeUpdateList)
+// and re-renders the affected elements. Takes rq.mu.
 func (rq *Request) appendDirtyTags(tags []any) {
 	rq.mu.Lock()
 	rq.todoDirt = append(rq.todoDirt, tags...)
@@ -767,12 +796,21 @@ func (rq *Request) handleRemove(containerJid Jid, data string) {
 	}
 }
 
+// queue appends a single outbound message to the request's pending wsQueue under
+// muQueue, the leaf lock that orders writes independently of rq.mu. The Serve
+// loop later drains it via getSendMsgs.
 func (rq *Request) queue(msg wire.WsMsg) {
 	rq.muQueue.Lock()
 	rq.wsQueue = append(rq.wsQueue, msg)
 	rq.muQueue.Unlock()
 }
 
+// callAllEventHandlers dispatches a single incoming event to the target
+// element(s) and returns the first result that is not ErrEventUnhandled. A zero
+// id with a Click or ContextMenu carries a tab-separated list of bubbled element
+// jids, which are resolved and tried in order; any other id resolves to a single
+// element. ErrEventUnhandled is normalized to nil. rq.mu is held only for the
+// element lookups; the handlers themselves run unlocked.
 func (rq *Request) callAllEventHandlers(id Jid, wht what.What, value string) (err error) {
 	var elems []*Element
 	rq.mu.RLock()
@@ -809,6 +847,10 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, value string) (er
 	return
 }
 
+// queueEvent hands a resolved event-function call to the eventCaller goroutine
+// over eventCallCh. That channel is buffered to the outbound capacity; if it is
+// full the request has fallen too far behind, so the overflow is reported through
+// MustLog (which panics unless a logger is set) and the call is dropped.
 func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
 	select {
 	case eventCallCh <- call:
@@ -818,6 +860,10 @@ func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
 	}
 }
 
+// getSendMsgs drains the pending wsQueue, dropping messages addressed to elements
+// that no longer exist (non-element messages and Delete are always kept), and
+// returns the survivors sorted by Jid. It takes rq.mu (read) then muQueue, the
+// order required by the lock hierarchy documented in jaws.go.
 func (rq *Request) getSendMsgs() (toSend []wire.WsMsg) {
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
@@ -848,6 +894,8 @@ func (rq *Request) getSendMsgs() (toSend []wire.WsMsg) {
 	return
 }
 
+// sendQueue writes the drained outbound queue to outboundMsgCh, abandoning a send
+// if the request context is cancelled.
 func (rq *Request) sendQueue(outboundMsgCh chan<- wire.WsMsg) {
 	for _, msg := range rq.getSendMsgs() {
 		select {
@@ -877,6 +925,9 @@ func deleteElement(s []*Element, elem *Element) []*Element {
 	return s
 }
 
+// deleteElementLocked removes elem from the request's element list and from every
+// tag entry, marking it deleted; it is a no-op if elem belongs to another request.
+// Caller must hold rq.mu.
 func (rq *Request) deleteElementLocked(elem *Element) {
 	if elem.Request == rq {
 		elem.deleted.Store(true)
@@ -901,6 +952,9 @@ func (rq *Request) DeleteElement(elem *Element) {
 	rq.deleteElementLocked(elem)
 }
 
+// makeUpdateList drains the pending-dirt tag list, resolves it to the distinct
+// elements needing an update, clears the list, and returns those elements sorted
+// by Jid. It takes rq.mu. The Serve loop calls JawsUpdate on each returned element.
 func (rq *Request) makeUpdateList() (todo []*Element) {
 	rq.mu.Lock()
 	seen := map[*Element]struct{}{}
@@ -952,6 +1006,13 @@ func (rq *Request) onConnect() (err error) {
 	return
 }
 
+// validateWebSocketOrigin checks the WebSocket upgrade's Origin header against the
+// page that served the initial request, defending against cross-origin WebSocket
+// hijacking. It requires the Origin to be present, to use a scheme matching the
+// initial request's security (http when plain, https when secure), and to have a
+// host equal to the initial host (case-insensitive, default port stripped). It
+// returns a specific ErrWebsocketOrigin* error on each failure mode and nil only
+// on a full match.
 func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) {
 	err = ErrWebsocketOriginMissing
 	if origin := r.Header.Get("Origin"); origin != "" {

@@ -151,6 +151,9 @@ func (elem *Element) JawsUpdate() {
 	}
 }
 
+// queue enqueues a wire message of the given type and data for this element on
+// its Request, tagged with the element's Jid. It is a no-op once the element has
+// been deleted. Call only during JawsRender or JawsUpdate processing.
 func (elem *Element) queue(wht what.What, data string) {
 	if !elem.deleted.Load() {
 		elem.Request.queue(wire.WsMsg{
