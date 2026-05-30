@@ -87,6 +87,31 @@ func TestNode_SetSelectedMultiplePaths(t *testing.T) {
 	}
 }
 
+func TestNode_SelectedDuplicateSiblingNamesCollapse(t *testing.T) {
+	// Siblings sharing a name have identical name-paths, so selection by
+	// name-path cannot tell them apart: selecting the shared path selects every
+	// sibling, and GetSelected reports a name-path per selected node (duplicates).
+	root := &Node{}
+	dup1 := &Node{Name: "dup", Parent: root}
+	dup2 := &Node{Name: "dup", Parent: root}
+	uniq := &Node{Name: "uniq", Parent: root}
+	root.Children = []*Node{dup1, dup2, uniq}
+
+	changed := root.SetSelected([][]string{{"dup"}})
+	if !reflect.DeepEqual(changed, []*Node{dup1, dup2}) {
+		t.Fatalf("changed = %#v, want both same-named siblings %#v", changed, []*Node{dup1, dup2})
+	}
+	if got := root.GetSelected(); !reflect.DeepEqual(got, [][]string{{"dup"}, {"dup"}}) {
+		t.Fatalf("selected = %#v, want two identical name-paths", got)
+	}
+
+	// Deselecting the shared path likewise clears every sibling that shares it.
+	changed = root.SetSelected(nil)
+	if !reflect.DeepEqual(changed, []*Node{dup1, dup2}) {
+		t.Fatalf("changed clearing = %#v, want %#v", changed, []*Node{dup1, dup2})
+	}
+}
+
 func TestTree(t *testing.T) {
 	jw, err := jaws.New()
 	maybeError(t, err)
