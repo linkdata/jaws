@@ -9,25 +9,21 @@ import (
 )
 
 var singletonTags = map[string]struct{}{
-	"area":    {},
-	"base":    {},
-	"br":      {},
-	"col":     {},
-	"command": {},
-	"embed":   {},
-	"hr":      {},
-	"img":     {},
-	"input":   {},
-	"keygen":  {},
-	"link":    {},
-	"meta":    {},
-	"param":   {},
-	"source":  {},
-	"track":   {},
-	"wbr":     {},
+	"area":   {},
+	"base":   {},
+	"br":     {},
+	"col":    {},
+	"embed":  {},
+	"hr":     {},
+	"img":    {},
+	"input":  {},
+	"link":   {},
+	"meta":   {},
+	"param":  {},
+	"source": {},
+	"track":  {},
+	"wbr":    {},
 }
-
-const htmlBufferSize = 128
 
 func needClosingTag(tag string) bool {
 	_, ok := singletonTags[tag]
@@ -109,8 +105,7 @@ func appendHTMLTag(b []byte, jid jid.Jid, htmlTag, typeAttr, valueAttr string, a
 // untrusted data. Use [Attr] or [AppendAttr] to build attribute fragments with
 // an escaped value.
 func WriteHTMLTag(w io.Writer, jid jid.Jid, htmlTag, typeAttr, valueAttr string, attrs []template.HTMLAttr) (err error) {
-	var buf [htmlBufferSize]byte
-	b := appendHTMLTag(buf[:0], jid, htmlTag, typeAttr, valueAttr, attrs)
+	b := appendHTMLTag(nil, jid, htmlTag, typeAttr, valueAttr, attrs)
 	_, err = w.Write(b)
 	return
 }
@@ -139,8 +134,7 @@ func WriteHTMLInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs 
 // contain untrusted data. Use [Attr] or [AppendAttr] to build attribute
 // fragments with an escaped value.
 func WriteHTMLInner(w io.Writer, jid jid.Jid, htmlTag, typeAttr string, innerHTML template.HTML, attrs ...template.HTMLAttr) (err error) {
-	var buf [htmlBufferSize]byte
-	b := appendHTMLTag(buf[:0], jid, htmlTag, typeAttr, "", attrs)
+	b := appendHTMLTag(nil, jid, htmlTag, typeAttr, "", attrs)
 	if needClosingTag(htmlTag) {
 		b = append(b, innerHTML...)
 		b = append(b, "</"...)

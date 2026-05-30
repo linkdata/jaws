@@ -9,6 +9,24 @@
 // widgets (Span, Button, Select, Text, and so on) and the RequestWriter helper
 // methods live in [github.com/linkdata/jaws/lib/ui], and value binding lives in
 // [github.com/linkdata/jaws/lib/bind].
+//
+// # Locking
+//
+// The package uses a single, acyclic lock hierarchy. When more than one of these
+// locks is held at once they must be acquired in this order, outermost first:
+//
+//	Jaws.mu  ->  Request.mu  ->  Session.mu
+//
+// Request.muQueue and per-[Element] state are leaf locks taken below all of the
+// above. Blocking work (channel sends, user callbacks) is always performed after
+// snapshotting the needed state and releasing the relevant lock; see
+// [Session.Broadcast] and [Session.Close] for the canonical pattern.
+//
+// [Element] handlers are an intentional exception to the locking rules: they are
+// populated only while an Element is rendered and are then read without a lock on
+// the event goroutine. This is safe solely because rendering completes before any
+// event for that Element can be processed, so handlers must not be added after
+// [Element.JawsRender] returns. Debug builds enforce this in [Element.AddHandlers].
 package jaws
 
 import (
@@ -408,22 +426,15 @@ func (jw *Jaws) getSessionLocked(sessionIDs []uint64, remoteIP netip.Addr) *Sess
 	return nil
 }
 
-func cutString(s string, sep byte) (before, after string) {
-	if i := strings.IndexByte(s, sep); i >= 0 {
-		return s[:i], s[i+1:]
-	}
-	return s, ""
-}
-
 func getCookieSessionsIDs(h http.Header, wanted string) (cookies []uint64) {
 	for _, line := range h["Cookie"] {
 		if strings.Contains(line, wanted) {
 			var part string
 			line = textproto.TrimString(line)
 			for len(line) > 0 {
-				part, line = cutString(line, ';')
+				part, line, _ = strings.Cut(line, ";")
 				if part = textproto.TrimString(part); part != "" {
-					name, val := cutString(part, '=')
+					name, val, _ := strings.Cut(part, "=")
 					name = textproto.TrimString(name)
 					if name == wanted {
 						if len(val) > 1 && val[0] == '"' && val[len(val)-1] == '"' {

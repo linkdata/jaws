@@ -791,7 +791,7 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, value string) (er
 	rq.mu.RUnlock()
 
 	for _, e := range elems {
-		if err = CallEventHandlers(e.Ui(), e, wht, value); !errors.Is(err, ErrEventUnhandled) {
+		if err = CallEventHandlers(e.UI(), e, wht, value); !errors.Is(err, ErrEventUnhandled) {
 			return
 		}
 	}

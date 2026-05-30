@@ -200,6 +200,50 @@ func TestInputMaybeDirtyErrValueUnchanged(t *testing.T) {
 	}
 }
 
+// TestInputDirtyOnSetError asserts the revert-to-truth side effect of applyDirty:
+// when JawsSet rejects an input with a real error, the input is both reported as
+// an error AND marked dirty, so the next update pushes the server's value back to
+// correct the client's optimistic display.
+func TestInputDirtyOnSetError(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+
+	tr := jaws.NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("expected test request")
+	}
+	defer tr.Close()
+	<-tr.ReadyCh
+
+	ss := newTestSetter("server")
+	text := NewText(ss)
+	elem := tr.NewElement(text)
+	var sb strings.Builder
+	if err := elem.JawsRender(&sb, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	wantErr := errors.New("rejected")
+	ss.SetErr(wantErr)
+	if err := text.JawsInput(elem, "client-typed"); !errors.Is(err, wantErr) {
+		t.Fatalf("JawsInput error = %v, want %v", err, wantErr)
+	}
+
+	// The dirty mark must drive a corrective update carrying the server's truth.
+	select {
+	case <-t.Context().Done():
+		t.Fatal("no corrective update received; input error did not mark the element dirty")
+	case msg := <-tr.OutCh:
+		if msg.What != what.Value || msg.Data != "server" {
+			t.Fatalf("update = {%v %q}, want {Value \"server\"}", msg.What, msg.Data)
+		}
+	}
+}
+
 func TestTextarea_RenderEscapesHTML(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	ss := newTestSetter(`x</textarea><script>alert("x")</script>`)

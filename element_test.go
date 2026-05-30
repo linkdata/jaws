@@ -253,24 +253,31 @@ func TestElement_ReplaceMessageTargetsElementHTML(t *testing.T) {
 	}
 }
 
-func TestElement_maybeDirty(t *testing.T) {
-	th := newTestHelper(t)
+func TestElement_AddHandlersAfterRenderPanics(t *testing.T) {
+	if !deadlock.Debug {
+		t.Skip("AddHandlers assertion is only active in debug builds")
+	}
 	rq := newTestRequest(t)
 	defer rq.Close()
-	tss := &testUi{s: "foo"}
-	e := rq.NewElement(tss)
+	e := rq.NewElement(&testUi{})
+	if err := e.JawsRender(io.Discard, nil); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic adding handlers after JawsRender returned")
+		}
+	}()
+	e.AddHandlers(struct{}{})
+}
 
-	changed, err := e.maybeDirty(e, nil)
-	th.True(changed)
-	th.NoErr(err)
-
-	changed, err = e.maybeDirty(e, ErrValueUnchanged)
-	th.Equal(changed, false)
-	th.Equal(err, nil)
-
-	changed, err = e.maybeDirty(e, tag.ErrNotComparable)
-	th.Equal(changed, false)
-	th.Equal(err, tag.ErrNotComparable)
+func TestElement_UiDeprecatedForwarder(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+	e := rq.NewElement(&testUi{})
+	if e.Ui() != e.UI() { //nolint:staticcheck // exercising the deprecated Ui forwarder
+		t.Fatal("deprecated Ui() must forward to UI()")
+	}
 }
 
 func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
@@ -498,7 +505,7 @@ func TestElement_ApplyGetter_NonComparableHandler(t *testing.T) {
 	if got := rq.TagsOf(e); len(got) != 0 {
 		t.Fatalf("expected non-comparable handler to not be auto-tagged, got %v", got)
 	}
-	if err := CallEventHandlers(e.Ui(), e, what.Click, "1 2 0 name"); err != nil {
+	if err := CallEventHandlers(e.UI(), e, what.Click, "1 2 0 name"); err != nil {
 		t.Fatalf("expected click handler to run, got %v", err)
 	}
 }
@@ -541,7 +548,7 @@ func TestElement_ApplyParams_NonComparableHandler(t *testing.T) {
 	if got := rq.TagsOf(e); len(got) != 0 {
 		t.Fatalf("expected non-comparable handler to not be auto-tagged, got %v", got)
 	}
-	if err := CallEventHandlers(e.Ui(), e, what.Click, "1 2 0 name"); err != nil {
+	if err := CallEventHandlers(e.UI(), e, what.Click, "1 2 0 name"); err != nil {
 		t.Fatalf("expected click handler to run, got %v", err)
 	}
 }
@@ -584,7 +591,7 @@ func TestElement_ApplyParams_IgnoreInitialHTMLAttrOnCombinedParamHandler(t *test
 	if len(e.handlers) != 1 {
 		t.Fatalf("expected click handler to be registered, got %d handlers", len(e.handlers))
 	}
-	if err := CallEventHandlers(e.Ui(), e, what.Click, "1 2 0 x"); err != nil {
+	if err := CallEventHandlers(e.UI(), e, what.Click, "1 2 0 x"); err != nil {
 		t.Fatalf("expected click handler to run, got %v", err)
 	}
 	if !called {
@@ -645,7 +652,7 @@ func TestElement_ApplyGetter_InitialHTMLAttrAndClickHandler(t *testing.T) {
 	if len(e.handlers) != 1 {
 		t.Fatalf("expected click handler to remain after ApplyParams, got %d handlers", len(e.handlers))
 	}
-	if err := CallEventHandlers(e.Ui(), e, what.Click, "1 2 0 x"); err != nil {
+	if err := CallEventHandlers(e.UI(), e, what.Click, "1 2 0 x"); err != nil {
 		t.Fatalf("expected click handler to run, got %v", err)
 	}
 	if !called {
@@ -668,7 +675,7 @@ func TestElement_ApplyGetter_InputHandlerAutoTag(t *testing.T) {
 	if !e.HasTag(h) {
 		t.Fatal("expected comparable input handler to be auto-tagged")
 	}
-	if err := CallEventHandlers(e.Ui(), e, what.Input, "name"); err != nil {
+	if err := CallEventHandlers(e.UI(), e, what.Input, "name"); err != nil {
 		t.Fatalf("expected input handler to run, got %v", err)
 	}
 }
@@ -688,7 +695,7 @@ func TestElement_ApplyGetter_ContextMenuHandlerAutoTag(t *testing.T) {
 	if !e.HasTag(h) {
 		t.Fatal("expected comparable context menu handler to be auto-tagged")
 	}
-	if err := CallEventHandlers(e.Ui(), e, what.ContextMenu, "1 2 0 name"); err != nil {
+	if err := CallEventHandlers(e.UI(), e, what.ContextMenu, "1 2 0 name"); err != nil {
 		t.Fatalf("expected context menu handler to run, got %v", err)
 	}
 }
@@ -708,7 +715,7 @@ func TestElement_ApplyGetter_InputHandlerNonComparableNoAutoTag(t *testing.T) {
 	if got := rq.TagsOf(e); len(got) != 0 {
 		t.Fatalf("expected non-comparable input handler to not be auto-tagged, got %v", got)
 	}
-	if err := CallEventHandlers(e.Ui(), e, what.Input, "name"); err != nil {
+	if err := CallEventHandlers(e.UI(), e, what.Input, "name"); err != nil {
 		t.Fatalf("expected input handler to run, got %v", err)
 	}
 }
@@ -728,7 +735,7 @@ func TestElement_ApplyGetter_ContextMenuHandlerNonComparableNoAutoTag(t *testing
 	if got := rq.TagsOf(e); len(got) != 0 {
 		t.Fatalf("expected non-comparable context menu handler to not be auto-tagged, got %v", got)
 	}
-	if err := CallEventHandlers(e.Ui(), e, what.ContextMenu, "1 2 0 name"); err != nil {
+	if err := CallEventHandlers(e.UI(), e, what.ContextMenu, "1 2 0 name"); err != nil {
 		t.Fatalf("expected context menu handler to run, got %v", err)
 	}
 }
