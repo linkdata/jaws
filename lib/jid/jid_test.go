@@ -128,6 +128,64 @@ func TestParseInt_NonCanonical(t *testing.T) {
 	}
 }
 
+func FuzzParseJid(f *testing.F) {
+	f.Add("")
+	f.Add("0")
+	f.Add("1")
+	f.Add("+1")
+	f.Add("01")
+	f.Add("-0")
+	f.Add("-1")
+	f.Add(" 1")
+	f.Add("1 ")
+	f.Add("1\n")
+	f.Add("0x1")
+	f.Add("1_000")
+	f.Add("99999999999999999999999")
+	f.Add(Prefix)
+	f.Add(Prefix + "0")
+	f.Add(Prefix + "1")
+	f.Add(Prefix + "-1")
+	f.Add(fmt.Sprint(uint64(math.MaxInt64 + 1)))
+	f.Fuzz(func(t *testing.T, s string) {
+		if len(s) > 256 {
+			s = s[:256]
+		}
+
+		gotInt := ParseInt(s)
+		assertParsedJid(t, "ParseInt", s, gotInt)
+
+		gotPrefixed := ParseString(Prefix + s)
+		assertParsedJid(t, "ParseString(Prefix+input)", Prefix+s, gotPrefixed)
+		if gotPrefixed != gotInt {
+			t.Fatalf("ParseString(%q) = %v, want ParseInt(%q) = %v", Prefix+s, gotPrefixed, s, gotInt)
+		}
+
+		gotString := ParseString(s)
+		assertParsedJid(t, "ParseString", s, gotString)
+
+		assertJidRoundTrip(t, "ParseInt", s, gotInt)
+		assertJidRoundTrip(t, "ParseString", s, gotString)
+	})
+}
+
+func assertParsedJid(t *testing.T, parser, input string, got Jid) {
+	t.Helper()
+	if got != Invalid && !got.IsValid() {
+		t.Fatalf("%s(%q) returned non-canonical invalid Jid %v", parser, input, got)
+	}
+}
+
+func assertJidRoundTrip(t *testing.T, parser, input string, got Jid) {
+	t.Helper()
+	if !got.IsValid() {
+		return
+	}
+	if reparsed := ParseString(got.String()); reparsed != got {
+		t.Fatalf("%s(%q) = %v, but ParseString(%q) = %v", parser, input, got, got.String(), reparsed)
+	}
+}
+
 func TestJid_AppendStartTagAttr(t *testing.T) {
 	tests := []struct {
 		name string

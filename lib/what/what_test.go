@@ -2,6 +2,7 @@ package what
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -74,4 +75,45 @@ func TestString(t *testing.T) {
 			}
 		})
 	}
+}
+
+func FuzzParse(f *testing.F) {
+	f.Add("")
+	for i := range len(_What_index) - 1 {
+		name := What(i).String()
+		f.Add(name)
+		f.Add(strings.ToLower(name))
+		f.Add(strings.ToUpper(name))
+	}
+	f.Add("innerr")
+	f.Add("\n")
+	f.Add(" Update")
+	f.Add("Update ")
+	f.Add("ContextMenu\n")
+
+	f.Fuzz(func(t *testing.T, s string) {
+		if len(s) > 128 {
+			s = s[:128]
+		}
+
+		got := Parse(s)
+		if s == "" {
+			if got != Update {
+				t.Fatalf("Parse(%q) = %v, want %v", s, got, Update)
+			}
+			return
+		}
+		if got != invalid && !got.IsValid() {
+			t.Fatalf("Parse(%q) returned invalid non-zero command %v", s, got)
+		}
+		if !got.IsValid() {
+			return
+		}
+		if got.String() != s {
+			t.Fatalf("Parse(%q) = %v, but valid commands must match %q exactly", s, got, got.String())
+		}
+		if reparsed := Parse(got.String()); reparsed != got {
+			t.Fatalf("Parse(%q) = %v, but Parse(%q) = %v", s, got, got.String(), reparsed)
+		}
+	})
 }
