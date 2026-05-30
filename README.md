@@ -64,8 +64,6 @@ is kept on the server. Copy the snippet into a new module, run `go
 mod tidy`, and start it with `go run .`. Visiting
 http://localhost:8080/ demonstrates the full request lifecycle.
 
-## Usage
-
 ```go
 import (
 	"html/template"
@@ -402,7 +400,7 @@ default is derived from the executable name and falls back to `jaws`.
 
 ### A note on the Context
 
-The Request object embeds a context.Context inside its struct,
+The Request object stores a context.Context in one of its fields,
 contrary to recommended Go practice.
 
 The reason is that there is no unbroken call chain from the time the Request
@@ -446,7 +444,8 @@ We try to minimize dependencies outside of the standard library.
 
 * Browse the [Go package documentation](https://pkg.go.dev/github.com/linkdata/jaws)
   for an API-by-API overview.
-* Inspect the [`example_test.go`](./examples/example_test.go) file for executable
-  examples that can be run with `go test`.
+* Inspect the [`example_test.go`](./examples/example_test.go) file for
+  compile-checked example programs to copy and adapt. They start a blocking HTTP
+  server, so they are illustrations rather than examples executed by `go test`.
 * Explore the [demo application](https://github.com/linkdata/jawsdemo)
   to see a more complete, heavily commented project structure.

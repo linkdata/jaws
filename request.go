@@ -24,6 +24,7 @@ import (
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
+	"github.com/linkdata/secureheaders"
 )
 
 // ConnectFn can be used to interact with a [Request] before message processing starts.
@@ -387,8 +388,18 @@ func (rq *Request) cancel(err error) {
 	rq.cancelLocked(err)
 }
 
+// alertData builds the wire payload for an Alert message, HTML-escaping both the
+// level and the message. Callers may therefore pass untrusted text safely; this
+// mirrors the escaping done by the internal [wire.WsMsg.FillAlert] path.
+func alertData(level, msg string) string {
+	return html.EscapeString(level) + "\n" + html.EscapeString(msg)
+}
+
 // Alert attempts to show an alert message on the current request webpage if it has an HTML element with the id "jaws-alert".
 // The lvl argument should be one of Bootstrap's alert levels: primary, secondary, success, danger, warning, info, light or dark.
+//
+// The level and msg are HTML-escaped before being sent, so it is safe to pass
+// untrusted text; do not pre-escape it.
 //
 // The default JaWS JavaScript only supports Bootstrap dismissible alerts.
 // See [Jaws.Broadcast] for processing-loop requirements.
@@ -396,20 +407,27 @@ func (rq *Request) Alert(level, msg string) {
 	rq.Jaws.Broadcast(wire.Message{
 		Dest: rq,
 		What: what.Alert,
-		Data: level + "\n" + msg,
+		Data: alertData(level, msg),
 	})
 }
 
 // AlertError calls [Request.Alert] if the given error is not nil.
 func (rq *Request) AlertError(err error) {
 	if rq.Jaws.Log(err) != nil {
-		rq.Alert("danger", html.EscapeString(err.Error()))
+		rq.Alert("danger", err.Error())
 	}
 }
 
 // Redirect requests the current [Request] to navigate to the given URL.
+//
+// The URL is validated to be relative or http/https; a script-bearing scheme
+// such as javascript: is refused and logged rather than sent to the browser.
 // See [Jaws.Broadcast] for processing-loop requirements.
 func (rq *Request) Redirect(url string) {
+	if !isSafeRedirect(url) {
+		_ = rq.Jaws.Log(fmt.Errorf("jaws: refusing unsafe redirect to %q", url))
+		return
+	}
 	rq.Jaws.Broadcast(wire.Message{
 		Dest: rq,
 		What: what.Redirect,
@@ -623,14 +641,7 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 		case wsmsg, ok = <-incomingMsgCh:
 			if ok {
 				// incoming event message from the WebSocket
-				if wsmsg.Jid.IsValid() {
-					switch wsmsg.What {
-					case what.Input, what.Click, what.ContextMenu, what.Set:
-						rq.queueEvent(eventCallCh, eventFnCall{jid: wsmsg.Jid, wht: wsmsg.What, data: wsmsg.Data})
-					case what.Remove:
-						rq.handleRemove(wsmsg.Jid, wsmsg.Data)
-					}
-				}
+				rq.handleIncoming(wsmsg, eventCallCh)
 				continue
 			}
 		}
@@ -640,69 +651,89 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 			return
 		}
 
-		// collect all elements marked with the tag in the message
-		var todo []*Element
-		switch v := tagmsg.Dest.(type) {
-		case nil:
-			// matches no elements
-		case *Request:
-		case string:
-			// target is a regular HTML ID
-			data := tagmsg.Data
-			if tagmsg.What != what.Set && tagmsg.What != what.Call {
-				data = strconv.Quote(data)
-			}
-			rq.queue(wire.WsMsg{
-				Data: v + "\t" + data,
-				What: tagmsg.What,
-				Jid:  -1,
-			})
-		default:
-			todo = rq.GetElements(v)
-		}
+		rq.handleBroadcast(tagmsg, eventCallCh)
+	}
+}
 
-		switch tagmsg.What {
-		case what.Reload, what.Redirect, what.Order, what.Alert:
-			rq.queue(wire.WsMsg{
-				Jid:  0,
-				Data: tagmsg.Data,
-				What: tagmsg.What,
-			})
-		default:
-			for _, elem := range todo {
-				switch tagmsg.What {
-				case what.Delete:
-					rq.queue(wire.WsMsg{
-						Jid:  elem.Jid(),
-						What: what.Delete,
-					})
-					rq.DeleteElement(elem)
-				case what.Input, what.Click, what.ContextMenu:
-					// Input, Click or ContextMenu messages received here are from Request.Send() or broadcasts.
-					// they won't be sent out on the WebSocket, but will queue up a
-					// call to the event function (if any).
-					// primary usecase is tests.
-					rq.queueEvent(eventCallCh, eventFnCall{jid: elem.Jid(), wht: tagmsg.What, data: tagmsg.Data})
-				case what.Hook:
-					// "hook" messages are used to synchronously call an event function.
-					// the function must not send any messages itself, but may return
-					// an error to be sent out as an alert message.
-					// primary usecase is tests.
-					if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.Jid(), tagmsg.What, tagmsg.Data)); err != nil {
-						var m wire.WsMsg
-						m.FillAlert(err)
-						m.Jid = elem.Jid()
-						rq.queue(m)
-					}
-				case what.Update:
-					elem.JawsUpdate()
-				default:
-					rq.queue(wire.WsMsg{
-						Data: tagmsg.Data,
-						Jid:  elem.Jid(),
-						What: tagmsg.What,
-					})
+// handleIncoming processes a single incoming WebSocket event message, queuing an
+// event-function call or handling a child removal. Called only from process.
+func (rq *Request) handleIncoming(wsmsg wire.WsMsg, eventCallCh chan eventFnCall) {
+	if wsmsg.Jid.IsValid() {
+		switch wsmsg.What {
+		case what.Input, what.Click, what.ContextMenu, what.Set:
+			rq.queueEvent(eventCallCh, eventFnCall{jid: wsmsg.Jid, wht: wsmsg.What, data: wsmsg.Data})
+		case what.Remove:
+			rq.handleRemove(wsmsg.Jid, wsmsg.Data)
+		}
+	}
+}
+
+// handleBroadcast processes a single broadcast (tag) message: it resolves the
+// message destination to the affected elements and dispatches by command. Called
+// only from process.
+func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFnCall) {
+	// collect all elements marked with the tag in the message
+	var todo []*Element
+	switch v := tagmsg.Dest.(type) {
+	case nil:
+		// matches no elements
+	case *Request:
+	case string:
+		// target is a regular HTML ID
+		data := tagmsg.Data
+		if tagmsg.What != what.Set && tagmsg.What != what.Call {
+			data = strconv.Quote(data)
+		}
+		rq.queue(wire.WsMsg{
+			Data: v + "\t" + data,
+			What: tagmsg.What,
+			Jid:  -1,
+		})
+	default:
+		todo = rq.GetElements(v)
+	}
+
+	switch tagmsg.What {
+	case what.Reload, what.Redirect, what.Order, what.Alert:
+		rq.queue(wire.WsMsg{
+			Jid:  0,
+			Data: tagmsg.Data,
+			What: tagmsg.What,
+		})
+	default:
+		for _, elem := range todo {
+			switch tagmsg.What {
+			case what.Delete:
+				rq.queue(wire.WsMsg{
+					Jid:  elem.Jid(),
+					What: what.Delete,
+				})
+				rq.DeleteElement(elem)
+			case what.Input, what.Click, what.ContextMenu:
+				// Input, Click or ContextMenu messages received here are from Request.Send() or broadcasts.
+				// they won't be sent out on the WebSocket, but will queue up a
+				// call to the event function (if any).
+				// primary usecase is tests.
+				rq.queueEvent(eventCallCh, eventFnCall{jid: elem.Jid(), wht: tagmsg.What, data: tagmsg.Data})
+			case what.Hook:
+				// "hook" messages are used to synchronously call an event function.
+				// the function must not send any messages itself, but may return
+				// an error to be sent out as an alert message.
+				// primary usecase is tests.
+				if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.Jid(), tagmsg.What, tagmsg.Data)); err != nil {
+					var m wire.WsMsg
+					m.FillAlert(err)
+					m.Jid = elem.Jid()
+					rq.queue(m)
 				}
+			case what.Update:
+				elem.JawsUpdate()
+			default:
+				rq.queue(wire.WsMsg{
+					Data: tagmsg.Data,
+					Jid:  elem.Jid(),
+					What: tagmsg.What,
+				})
 			}
 		}
 	}
@@ -760,7 +791,7 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, value string) (er
 	rq.mu.RUnlock()
 
 	for _, e := range elems {
-		if err = CallEventHandlers(e.Ui(), e, wht, value); !errors.Is(err, ErrEventUnhandled) {
+		if err = CallEventHandlers(e.UI(), e, wht, value); !errors.Is(err, ErrEventUnhandled) {
 			return
 		}
 	}
@@ -919,7 +950,7 @@ func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) {
 		var u *url.URL
 		if u, err = url.Parse(origin); err == nil {
 			if initial := rq.Initial(); initial != nil {
-				secure := requestIsSecure(initial)
+				secure := secureheaders.RequestIsSecure(initial, rq.Jaws.TrustForwardedHeaders)
 				port := ""
 				uhost := u.Host
 				ihost := initial.Host

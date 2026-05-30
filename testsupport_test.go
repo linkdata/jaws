@@ -35,6 +35,20 @@ func TestNewRequestHarness_ReturnsNilOnClaimFailure(t *testing.T) {
 	}
 }
 
+func TestNewTestRequest_PanicsWhenJawsClosed(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	jw.Close()
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic when the Jaws instance is closed")
+		}
+	}()
+	NewTestRequest(jw, nil)
+}
+
 func TestNewTestRequest_SuccessPathAndClose(t *testing.T) {
 	jw, err := New()
 	if err != nil {

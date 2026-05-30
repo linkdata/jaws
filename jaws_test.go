@@ -353,6 +353,21 @@ func TestCoverage_GenerateHeadAndConvenienceBroadcasts(t *testing.T) {
 	}
 }
 
+func TestJaws_Redirect_unsafeRefused(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	logger := &captureErrorLogger{}
+	jw.Logger = logger
+	// A script-bearing scheme must be refused and logged, never broadcast.
+	jw.Redirect("javascript:alert(1)")
+	if logger.err == nil || !strings.Contains(logger.err.Error(), "refusing unsafe redirect") {
+		t.Fatalf("expected unsafe redirect to be logged and skipped, got %v", logger.err)
+	}
+}
+
 func TestBroadcast_ExpandsTagDestBeforeQueue(t *testing.T) {
 	jw, err := New()
 	if err != nil {

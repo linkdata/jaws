@@ -80,10 +80,18 @@ func makeSetterFloat64for[T numeric](s *Setter[float64], value any) bool {
 
 // MakeSetterFloat64 returns v as a [Setter] for float64 values.
 //
-// v may be a float64 setter/getter/static value or a setter/getter/static value
-// of another supported numeric type. Getter and static adapters are read-only
-// and return [ErrValueNotSettable] from [Setter.JawsSet]. MakeSetterFloat64
-// panics for unsupported types.
+// v may be a float64 setter/getter/static value, or a setter/getter/static value
+// of another supported numeric type (the predeclared signed and unsigned integer
+// types and float32), which is bridged to float64 by ordinary Go conversion. That
+// bridge can lose precision: int64/uint64 magnitudes beyond 2^53 are not exactly
+// representable as float64.
+//
+// Only the predeclared numeric types are matched, by their exact type. Named
+// (defined) types whose underlying type is numeric, such as "type Celsius
+// float64", are NOT matched and cause a panic; bind such a value through its own
+// Setter[T] instead. Getter and static adapters are read-only and return
+// [ErrValueNotSettable] from [Setter.JawsSet]. MakeSetterFloat64 panics for
+// unsupported types.
 func MakeSetterFloat64(value any) (s Setter[float64]) {
 	switch v := value.(type) {
 	case Setter[float64]:

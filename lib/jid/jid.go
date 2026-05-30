@@ -42,7 +42,7 @@ func (j Jid) AppendInt(dst []byte) []byte {
 // Append appends the unquoted string format of the Jid.
 func (j Jid) Append(dst []byte) []byte {
 	if j > 0 {
-		dst = append(dst, []byte(Prefix)...)
+		dst = append(dst, Prefix...)
 		dst = j.AppendInt(dst)
 	}
 	return dst

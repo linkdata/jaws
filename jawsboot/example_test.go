@@ -47,6 +47,9 @@ func setupJaws(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
 	return
 }
 
+// Example wires jawsboot into an HTTP server. It is a compile-checked
+// illustration only: it starts a blocking server, so it has no testable Output
+// and is not executed by "go test".
 func Example() {
 	jw, err := jaws.New()
 	if err == nil {

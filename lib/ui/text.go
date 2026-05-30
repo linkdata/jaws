@@ -10,8 +10,8 @@ import (
 // Text renders an HTML text input bound to a string setter.
 type Text struct{ InputText }
 
-// NewText returns a text input widget bound to vp.
-func NewText(vp bind.Setter[string]) *Text { return &Text{InputText{Setter: vp}} }
+// NewText returns a text input widget bound to g.
+func NewText(g bind.Setter[string]) *Text { return &Text{InputText{Setter: g}} }
 
 // JawsRender renders ui as an HTML text input.
 func (u *Text) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {

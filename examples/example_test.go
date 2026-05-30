@@ -20,6 +20,9 @@ const indexhtml = `
 </html>
 `
 
+// Example is a compile-checked illustration of a minimal JaWS application. It
+// starts a blocking HTTP server, so it has no testable Output and is not
+// executed by "go test".
 func Example() {
 	jw, err := jaws.New() // create a default JaWS instance
 	if err != nil {
@@ -42,6 +45,9 @@ func Example() {
 	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 }
 
+// Example_secureSession is a compile-checked illustration of adding sessions and
+// secure headers. Like Example it starts a blocking server, so it has no
+// testable Output and is not executed by "go test".
 func Example_secureSession() {
 	jw, err := jaws.New()
 	if err != nil {

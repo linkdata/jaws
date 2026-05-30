@@ -15,6 +15,15 @@ var _ ui.SetPather = (*Node)(nil)
 
 // Node is one tree node rendered by [Tree].
 //
+// Concurrency: once the owning [Tree] has been rendered, its Node tree is shared
+// with the JaWS event goroutines, which access it under the Tree's lock (the
+// embedded [ui.JsVar] is an RWLocker). The exported Node accessors below are not
+// internally synchronized, so callers must hold that lock when using them on a
+// rendered Tree: the Tree's read lock (RLock) for the read-only helpers ([Node.Walk],
+// [Node.HasNames], [Node.GetNames], [Node.GetSelected]) and its write lock (Lock)
+// for the mutating [Node.SetSelected]. No locking is needed before the Tree is
+// rendered (for example while building it in [New]).
+//
 // marshalJSON is the single source of truth for the wire shape sent to
 // Quercus.js; MarshalJSON delegates to it, so the struct json tags below are not
 // actually used for encoding and must be kept in sync with marshalJSON by hand.
@@ -112,6 +121,9 @@ func (node *Node) GetSelected() (nameLists [][]string) {
 }
 
 // SetSelected applies selected paths and returns nodes that changed.
+//
+// It mutates the shared Node tree; on a rendered [Tree], hold the Tree's write
+// lock while calling it (see the [Node] concurrency note).
 func (node *Node) SetSelected(nameLists [][]string) (changed []*Node) {
 	node.Walk("", func(jsPath string, node *Node) {
 		selected := false

@@ -611,14 +611,14 @@ func Test_CallEventHandlers_ClickOnlyHandlerViaApplyGetter(t *testing.T) {
 		t.Fatalf("ApplyGetter returned error: %v", err)
 	}
 
-	err := CallEventHandlers(elem.Ui(), elem, what.Click, "1 2 5 name")
+	err := CallEventHandlers(elem.UI(), elem, what.Click, "1 2 5 name")
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 	if clickCounter.n != 1 {
 		t.Fatalf("expected click handler to be called once, got %d", clickCounter.n)
 	}
-	err = CallEventHandlers(elem.Ui(), elem, what.Click, "1 2 0 wrong")
+	err = CallEventHandlers(elem.UI(), elem, what.Click, "1 2 0 wrong")
 	if err != ErrEventUnhandled {
 		t.Fatalf("expected ErrEventUnhandled for wrong name, got %v", err)
 	}
@@ -635,14 +635,14 @@ func Test_CallEventHandlers_ClickOnlyHandlerViaApplyParams(t *testing.T) {
 	clickCounter := &testClickCounter{wantName: "name"}
 	elem.ApplyParams([]any{clickCounter})
 
-	err := CallEventHandlers(elem.Ui(), elem, what.Click, "1 2 5 name")
+	err := CallEventHandlers(elem.UI(), elem, what.Click, "1 2 5 name")
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 	if clickCounter.n != 1 {
 		t.Fatalf("expected click handler to be called once, got %d", clickCounter.n)
 	}
-	err = CallEventHandlers(elem.Ui(), elem, what.Click, "1 2 0 wrong")
+	err = CallEventHandlers(elem.UI(), elem, what.Click, "1 2 0 wrong")
 	if err != ErrEventUnhandled {
 		t.Fatalf("expected ErrEventUnhandled for wrong name, got %v", err)
 	}
@@ -661,7 +661,7 @@ func Test_CallEventHandlers_ContextMenuOnlyHandlerViaApplyGetter(t *testing.T) {
 		t.Fatalf("ApplyGetter returned error: %v", err)
 	}
 
-	err := CallEventHandlers(elem.Ui(), elem, what.ContextMenu, "10 20 5 name")
+	err := CallEventHandlers(elem.UI(), elem, what.ContextMenu, "10 20 5 name")
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -671,7 +671,7 @@ func Test_CallEventHandlers_ContextMenuOnlyHandlerViaApplyGetter(t *testing.T) {
 	if counter.lastValue != (Click{Name: "name", X: 10, Y: 20, Shift: true, Alt: true}) {
 		t.Fatalf("unexpected click payload %+v", counter.lastValue)
 	}
-	err = CallEventHandlers(elem.Ui(), elem, what.ContextMenu, "10 20 0 wrong")
+	err = CallEventHandlers(elem.UI(), elem, what.ContextMenu, "10 20 0 wrong")
 	if err != ErrEventUnhandled {
 		t.Fatalf("expected ErrEventUnhandled for wrong name, got %v", err)
 	}
@@ -688,7 +688,7 @@ func Test_CallEventHandlers_ContextMenuOnlyHandlerViaApplyParams(t *testing.T) {
 	counter := &testContextMenuCounter{wantName: "name"}
 	elem.ApplyParams([]any{counter})
 
-	err := CallEventHandlers(elem.Ui(), elem, what.ContextMenu, "10 20 5 name")
+	err := CallEventHandlers(elem.UI(), elem, what.ContextMenu, "10 20 5 name")
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -698,7 +698,7 @@ func Test_CallEventHandlers_ContextMenuOnlyHandlerViaApplyParams(t *testing.T) {
 	if counter.lastValue != (Click{Name: "name", X: 10, Y: 20, Shift: true, Alt: true}) {
 		t.Fatalf("unexpected click payload %+v", counter.lastValue)
 	}
-	err = CallEventHandlers(elem.Ui(), elem, what.ContextMenu, "10 20 0 wrong")
+	err = CallEventHandlers(elem.UI(), elem, what.ContextMenu, "10 20 0 wrong")
 	if err != ErrEventUnhandled {
 		t.Fatalf("expected ErrEventUnhandled for wrong name, got %v", err)
 	}

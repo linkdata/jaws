@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/lib/jid"
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
@@ -24,18 +25,27 @@ type Element struct {
 	// ApplyParams, ApplyGetter) and read later on the event goroutine without a
 	// lock. This is safe solely because rendering an Element fully populates its
 	// handlers before any event for it can be processed; handlers must not be
-	// mutated once events may fire.
+	// mutated once events may fire. Debug builds enforce this in AddHandlers via
+	// the rendered flag below.
 	handlers []any
 	jid      jid.Jid     // JaWS ID, unique to this Element within its Request
 	deleted  atomic.Bool // true if deleteElement() has been called for this Element
+	rendered atomic.Bool // debug-only: set when JawsRender returns; guards AddHandlers
 }
 
 func (elem *Element) String() string {
-	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", elem.Ui(), elem.Jid(), elem.Request.TagsOf(elem))
+	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", elem.UI(), elem.Jid(), elem.Request.TagsOf(elem))
 }
 
 // AddHandlers adds the given handlers to the [Element].
+//
+// It must be called while the [Element] is being rendered, before any event can
+// be processed for it; see the package "Locking" documentation. Debug builds
+// panic if it is called after [Element.JawsRender] has returned.
 func (elem *Element) AddHandlers(h ...any) {
+	if deadlock.Debug && elem.rendered.Load() {
+		panic("jaws: Element.AddHandlers called after JawsRender returned; handlers must be added during rendering, before events can fire")
+	}
 	if !elem.deleted.Load() {
 		elem.handlers = append(elem.handlers, h...)
 	}
@@ -58,25 +68,21 @@ func (elem *Element) Jid() jid.Jid {
 	return elem.jid
 }
 
-// Ui returns the [UI] object.
-func (elem *Element) Ui() UI {
+// UI returns the [UI] object.
+func (elem *Element) UI() UI {
 	return elem.ui
 }
 
-func (elem *Element) maybeDirty(tagValue any, err error) (bool, error) {
-	switch err {
-	case nil:
-		elem.Dirty(tagValue)
-		return true, nil
-	case ErrValueUnchanged:
-		return false, nil
-	}
-	return false, err
+// Ui returns the [UI] object.
+//
+// Deprecated: use [Element.UI]; Ui violates Go's initialism naming convention.
+func (elem *Element) Ui() UI {
+	return elem.UI()
 }
 
 func (elem *Element) renderDebug(w io.Writer) {
 	var sb strings.Builder
-	_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", elem.Jid(), elem.Ui())
+	_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", elem.Jid(), elem.UI())
 	if elem.mu.TryRLock() {
 		defer elem.mu.RUnlock()
 		for i, tagValue := range elem.tagsOfLocked(elem) {
@@ -97,11 +103,16 @@ func (elem *Element) renderDebug(w io.Writer) {
 // Do not call this yourself unless it is from within another JawsRender implementation.
 func (elem *Element) JawsRender(w io.Writer, params []any) (err error) {
 	if !elem.deleted.Load() {
-		if err = elem.Ui().JawsRender(elem, w, params); err == nil {
+		if err = elem.UI().JawsRender(elem, w, params); err == nil {
 			if elem.Jaws.Debug {
 				elem.renderDebug(w)
 			}
 		}
+	}
+	if deadlock.Debug {
+		// Render is complete: handlers are now frozen and read lock-free on the
+		// event goroutine. Any later AddHandlers is a bug (see AddHandlers).
+		elem.rendered.Store(true)
 	}
 	return
 }
@@ -111,7 +122,7 @@ func (elem *Element) JawsRender(w io.Writer, params []any) (err error) {
 // Do not call this yourself unless it is from within another JawsUpdate implementation.
 func (elem *Element) JawsUpdate() {
 	if !elem.deleted.Load() {
-		elem.Ui().JawsUpdate(elem)
+		elem.UI().JawsUpdate(elem)
 	}
 }
 

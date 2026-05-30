@@ -78,7 +78,7 @@ The CSP is restrictive and well-configured:
 | SameSite | Lax | CSRF protection |
 | Path | `/` | Standard |
 
-**Source code confirmed** (`session.go:31-38`): Cookie flags are set correctly in code, not relying on framework defaults.
+**Source code confirmed** (`session.go`, `newSession`): Cookie flags are set correctly in code, not relying on framework defaults.
 
 ---
 
@@ -156,13 +156,13 @@ Tested via WebSocket `Input` and `Click` messages with payloads including:
 - Client-side `jawsSetValue()` uses `elem.value` / `elem.textContent` (not `innerHTML`)
 - HTML-rendering `Inner` commands only carry server-generated content, never user input
 - CSP `script-src 'self'` provides defense-in-depth against inline script execution
-- **Source confirmed** (`input_widgets.go:48-52`): `JawsUpdate()` calls `e.SetValue(v)`, not `e.SetInner()`
+- **Source confirmed** (`input_widgets.go`, `InputText.JawsUpdate`): `JawsUpdate()` calls `e.SetValue(v)`, not `e.SetInner()`
 
 ### 5.3 Cross-Site Request Forgery (CSRF)
 
 **Tool:** Nmap `http-csrf` script
 
-**Result:** No CSRF vulnerabilities found. WebSocket Origin validation (`request.go:879-918`) and SameSite=Lax cookies provide protection.
+**Result:** No CSRF vulnerabilities found. WebSocket Origin validation (`request.go`, `Request.validateWebSocketOrigin`) and SameSite=Lax cookies provide protection.
 
 ---
 
@@ -174,7 +174,7 @@ Tested via WebSocket `Input` and `Click` messages with payloads including:
 |---------|---------------|----------|
 | **jawsKey** | 64-bit `crypto/rand` (2^64 keyspace), encoded as base-32 (up to 13 chars) | Code + empirical |
 | **Single-use keys** | Key removed from map on first WebSocket connection | Empirical: second connection returns 404 |
-| **IP binding** | `claim()` verifies WebSocket remote IP matches original HTTP request IP | Code review (`request.go:88-108`) |
+| **IP binding** | `claim()` verifies WebSocket remote IP matches original HTTP request IP | Code review (`request.go`, `Request.claim`) |
 | **Origin validation** | Scheme + host must match initial request; cross-origin returns 403 | Empirical: evil.com, null, file:// all rejected |
 
 Tested origin validation:
@@ -201,7 +201,7 @@ Tested origin validation:
 
 ### 6.3 Client Message Handling
 
-**Source code** (`request.go:594-601`) confirms only four message types are processed from clients:
+**Source code** (`request.go`, `Request.handleIncoming`) confirms only these message types are processed from clients:
 
 ```go
 case what.Input, what.Click, what.Set:
@@ -235,7 +235,7 @@ Also tested case-variant bypass attempts (`inner`, `INNER`, `redirect`, `alert`)
 | Tab-only messages | Silently dropped |
 | Null bytes in messages | Silently dropped |
 | Unknown command types (Foo, Eval) | Silently dropped |
-| Invalid UTF-8 sequences | Stripped via `strings.ToValidUTF8()` (`wsmsg.go:63`) |
+| Invalid UTF-8 sequences | Stripped via `strings.ToValidUTF8()` (`wsmsg.go`, `Parse`) |
 | Oversized payload (1MB) | Accepted, no crash |
 | Message flood (1000 msgs in 0.03s) | Connection survived |
 | 20 simultaneous connections | All accepted |
@@ -245,7 +245,7 @@ Also tested case-variant bypass attempts (`inner`, `INNER`, `redirect`, `alert`)
 
 The `Set` message type allows clients to modify server-side JsVar state (this is the mechanism behind mouse-position sharing).
 
-**Source code** (`jsvar.go:196-207`): Client sends `Set\tJid\tpath=jsonvalue` → server calls `jq.Set()` on Go struct → broadcasts change.
+**Source code** (`jsvar.go`, `JsVar.JawsSetPath`): Client sends `Set\tJid\tpath=jsonvalue` → server calls `jq.Set()` on Go struct → broadcasts change.
 
 Tested attack payloads:
 
@@ -300,8 +300,8 @@ Source repository: https://github.com/linkdata/jaws
 
 ### 9.1 Key Generation
 
-- `jaws.go:116-118`: Uses `crypto/rand.Reader` wrapped in `bufio.Reader`
-- `jaws.go:270-278`: `nonZeroRandomLocked()` reads 8 bytes → `uint64`, retries on zero
+- `jaws.go` (`New`): Uses `crypto/rand.Reader` wrapped in `bufio.Reader`
+- `jaws.go` (`Jaws.nonZeroRandomLocked`): reads 8 bytes → `uint64`, retries on zero
 - Keys are cryptographically random, non-zero, and unique within the request map
 
 ### 9.2 HTML Escaping Model
@@ -317,7 +317,7 @@ The framework uses Go's `template.HTML` type to distinguish trusted HTML from un
 
 ### 9.3 WebSocket Message Parsing
 
-- `wsmsg.go:46-73`: `Parse()` validates message structure (requires two tabs, trailing newline)
+- `wsmsg.go` (`Parse`): validates message structure (requires two tabs, trailing newline)
 - Validates `what.What` type via `what.Parse()`
 - Validates JID via `jid.ParseString()`
 - JSON-unquotes data field (rejects malformed strings)
@@ -325,12 +325,12 @@ The framework uses Go's `template.HTML` type to distinguish trusted HTML from un
 
 ### 9.4 Event Handler Safety
 
-- `eventhandler.go:86-95`: `CallEventHandlers()` wraps handler calls in `defer recover()`, preventing panics from crashing the server
+- `eventhandler.go` (`CallEventHandlers`): wraps handler calls in `defer recover()`, preventing panics from crashing the server
 - Event handlers receive typed Go values, not raw HTML
 
 ### 9.5 Loopback IP Equivalence
 
-- `jaws.go:736-738`: `equalIP()` treats `127.0.0.1` and `::1` as equivalent
+- `jaws.go` (`equalIP`): treats `127.0.0.1` and `::1` as equivalent
 - Relevant only in shared-localhost deployments (containers, dev environments)
 - Not exploitable in the demo's Azure VM deployment
 

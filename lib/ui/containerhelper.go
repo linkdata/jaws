@@ -102,7 +102,7 @@ func (u *ContainerHelper) UpdateContainer(elem *jaws.Element) {
 	oldOrder := make([]jaws.Jid, len(u.contents))
 	for i, childElem := range u.contents {
 		oldOrder[i] = childElem.Jid()
-		pool[childElem.Ui()] = append(pool[childElem.Ui()], childElem)
+		pool[childElem.UI()] = append(pool[childElem.UI()], childElem)
 	}
 
 	// build new contents, reusing pooled Elements where possible

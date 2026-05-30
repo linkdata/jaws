@@ -628,13 +628,13 @@ func TestRequest_Alert(t *testing.T) {
 	rq1 := tj.newRequest(nil)
 	rq2 := tj.newRequest(nil)
 
-	rq1.Alert("info", "<html>\nnot\tescaped")
+	rq1.Alert("info", "<html>\nis\tescaped")
 	select {
 	case <-th.C:
 		th.Timeout()
 	case msg := <-rq1.OutCh:
 		s := msg.Format()
-		if s != "Alert\t\t\"info\\n<html>\\nnot\\tescaped\"\n" {
+		if s != "Alert\t\t\"info\\n&lt;html&gt;\\nis\\tescaped\"\n" {
 			t.Errorf("%q", s)
 		}
 	}
@@ -666,6 +666,34 @@ func TestRequest_Redirect(t *testing.T) {
 	case s := <-rq2.OutCh:
 		t.Errorf("%q", s)
 	default:
+	}
+}
+
+func Test_isSafeRedirect(t *testing.T) {
+	for _, s := range []string{"", "/", "/next", "some-url", "http://example.test/x", "https://example.test/x", "HTTPS://EX/x", "//host/path"} {
+		if !isSafeRedirect(s) {
+			t.Errorf("expected safe redirect: %q", s)
+		}
+	}
+	for _, s := range []string{"javascript:alert(1)", "JavaScript:alert(1)", "data:text/html,<script>x</script>", "vbscript:msgbox(1)"} {
+		if isSafeRedirect(s) {
+			t.Errorf("expected unsafe redirect: %q", s)
+		}
+	}
+}
+
+func TestRequest_Redirect_unsafeRefused(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	logger := &captureErrorLogger{}
+	jw.Logger = logger
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq.Redirect("javascript:alert(1)")
+	if logger.err == nil || !strings.Contains(logger.err.Error(), "refusing unsafe redirect") {
+		t.Fatalf("expected unsafe redirect to be logged and skipped, got %v", logger.err)
 	}
 }
 
@@ -1647,7 +1675,7 @@ func TestRequest_ReplaceMessageTargetsElementHTML(t *testing.T) {
 
 	tagValue := &testUi{}
 	jid := rq.Register(tagValue)
-	html := `<div id="` + jid.String() + `">replaced</div>`
+	html := template.HTML(`<div id="` + jid.String() + `">replaced</div>`)
 
 	rq.Jaws.Replace(tagValue, html)
 	msg := nextOutboundMsg(t, rq)
@@ -1655,7 +1683,7 @@ func TestRequest_ReplaceMessageTargetsElementHTML(t *testing.T) {
 	if msg.What != what.Replace {
 		t.Fatalf("unexpected message type %v", msg.What)
 	}
-	if msg.Data != html {
+	if msg.Data != string(html) {
 		t.Fatalf("replace payload mismatch: got %q want %q", msg.Data, html)
 	}
 }

@@ -3,6 +3,7 @@ package jaws
 import (
 	"bytes"
 	"cmp"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -326,10 +327,13 @@ func (u *testTextInputWidget) JawsUpdate(elem *Element) {
 }
 
 func (u *testTextInputWidget) JawsInput(elem *Element, value string) (err error) {
-	if changed, setErr := elem.maybeDirty(u.tagValue, u.setter.JawsSet(elem, value)); setErr != nil {
+	// Mirrors the canonical lib/ui applyDirty semantics: mark dirty unless the
+	// set was a no-op (ErrValueUnchanged), propagate a real error, and only
+	// record the new value as last-sent on success.
+	if setErr := u.setter.JawsSet(elem, value); !errors.Is(setErr, ErrValueUnchanged) {
 		err = setErr
-	} else {
-		if changed {
+		elem.Dirty(u.tagValue)
+		if err == nil {
 			u.last = value
 		}
 	}

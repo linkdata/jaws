@@ -6,22 +6,17 @@ import (
 	"github.com/linkdata/jaws/lib/tag"
 )
 
+// testSetter is a minimal getter/setter fixture for the bind tests. It only
+// tracks a value guarded by a mutex; the previous error-injection, call counters
+// and "called" signal channels were removed because no test asserted them.
+// Error propagation is exercised through a SetHook in TestBind_Hook_Set instead.
 type testSetter[T comparable] struct {
-	mu        deadlock.Mutex
-	val       T
-	err       error
-	setCount  int
-	getCount  int
-	setCalled chan struct{}
-	getCalled chan struct{}
+	mu  deadlock.Mutex
+	val T
 }
 
 func newTestSetter[T comparable](value T) *testSetter[T] {
-	return &testSetter[T]{
-		val:       value,
-		setCalled: make(chan struct{}),
-		getCalled: make(chan struct{}),
-	}
+	return &testSetter[T]{val: value}
 }
 
 func (ts *testSetter[T]) Get() (value T) {
@@ -37,106 +32,48 @@ func (ts *testSetter[T]) Set(value T) {
 	ts.mu.Unlock()
 }
 
-func (ts *testSetter[T]) Err() error {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	return ts.err
-}
-
-func (ts *testSetter[T]) SetErr(err error) {
-	ts.mu.Lock()
-	ts.err = err
-	ts.mu.Unlock()
-}
-
-func (ts *testSetter[T]) SetCount() (n int) {
-	ts.mu.Lock()
-	n = ts.setCount
-	ts.mu.Unlock()
-	return
-}
-
-func (ts *testSetter[T]) GetCount() (n int) {
-	ts.mu.Lock()
-	n = ts.getCount
-	ts.mu.Unlock()
-	return
-}
-
 func (ts *testSetter[T]) JawsGet(elem *jaws.Element) (value T) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
-	ts.getCount++
-	if ts.getCount == 1 {
-		close(ts.getCalled)
-	}
-	value = ts.val
-	return
+	return ts.val
 }
 
 func (ts *testSetter[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
-	ts.setCount++
-	if ts.setCount == 1 {
-		close(ts.setCalled)
+	if ts.val == value {
+		return jaws.ErrValueUnchanged
 	}
-	if err = ts.err; err == nil {
-		if ts.val == value {
-			err = jaws.ErrValueUnchanged
-		}
-		ts.val = value
-	}
-	return
+	ts.val = value
+	return nil
 }
 
 func (ts *testSetter[string]) JawsGetString(elem *jaws.Element) (value string) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
-	ts.getCount++
-	if ts.getCount == 1 {
-		close(ts.getCalled)
-	}
-	value = ts.val
-	return
+	return ts.val
 }
 
 func (ts *testSetter[any]) JawsGetAny(elem *jaws.Element) (value any) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
-	ts.getCount++
-	if ts.getCount == 1 {
-		close(ts.getCalled)
-	}
-	value = ts.val
-	return
+	return ts.val
 }
 
 func (ts *testSetter[any]) JawsSetAny(elem *jaws.Element, value any) (err error) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
-	ts.setCount++
-	if ts.setCount == 1 {
-		close(ts.setCalled)
+	if ts.val == value {
+		return jaws.ErrValueUnchanged
 	}
-	if err = ts.err; err == nil {
-		if ts.val == value {
-			err = jaws.ErrValueUnchanged
-		}
-		ts.val = value
-	}
-	return
+	ts.val = value
+	return nil
 }
 
 func (ts *testSetter[T]) JawsGetHTML(elem *jaws.Element) (value T) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
-	ts.getCount++
-	if ts.getCount == 1 {
-		close(ts.getCalled)
-	}
-	value = ts.val
-	return
+	return ts.val
 }
 
 type selfTagger struct{}

@@ -10,8 +10,8 @@ import (
 // Radio renders an HTML radio input bound to a bool setter.
 type Radio struct{ InputBool }
 
-// NewRadio returns a radio input widget bound to vp.
-func NewRadio(vp bind.Setter[bool]) *Radio { return &Radio{InputBool{Setter: vp}} }
+// NewRadio returns a radio input widget bound to g.
+func NewRadio(g bind.Setter[bool]) *Radio { return &Radio{InputBool{Setter: g}} }
 
 // JawsRender renders ui as an HTML radio input.
 func (u *Radio) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {

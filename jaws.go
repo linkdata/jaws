@@ -9,6 +9,24 @@
 // widgets (Span, Button, Select, Text, and so on) and the RequestWriter helper
 // methods live in [github.com/linkdata/jaws/lib/ui], and value binding lives in
 // [github.com/linkdata/jaws/lib/bind].
+//
+// # Locking
+//
+// The package uses a single, acyclic lock hierarchy. When more than one of these
+// locks is held at once they must be acquired in this order, outermost first:
+//
+//	Jaws.mu  ->  Request.mu  ->  Session.mu
+//
+// Request.muQueue and per-[Element] state are leaf locks taken below all of the
+// above. Blocking work (channel sends, user callbacks) is always performed after
+// snapshotting the needed state and releasing the relevant lock; see
+// [Session.Broadcast] and [Session.Close] for the canonical pattern.
+//
+// [Element] handlers are an intentional exception to the locking rules: they are
+// populated only while an Element is rendered and are then read without a lock on
+// the event goroutine. This is safe solely because rendering completes before any
+// event for that Element can be processed, so handlers must not be added after
+// [Element.JawsRender] returns. Debug builds enforce this in [Element.AddHandlers].
 package jaws
 
 import (
@@ -86,6 +104,7 @@ type Jid = jid.Jid // convenience alias
 type Jaws struct {
 	CookieName              string          // Name for session cookies, defaults to "jaws"
 	AutoSession             bool            // Create a session during WebSocket upgrade when a Request has none. Defaults to false.
+	TrustForwardedHeaders   bool            // Trust X-Forwarded-Proto and related headers when deciding if a request is secure (used for the session cookie Secure flag). Defaults to false; only enable behind a reverse proxy you control that sets these headers.
 	Logger                  Logger          // Optional logger to use
 	Debug                   bool            // Set to true to enable debug info in generated HTML code. Call GenerateHeadHTML after changing it.
 	MakeAuth                MakeAuthFn      // Optional function to create ui.With.Auth for Templates
@@ -407,22 +426,15 @@ func (jw *Jaws) getSessionLocked(sessionIDs []uint64, remoteIP netip.Addr) *Sess
 	return nil
 }
 
-func cutString(s string, sep byte) (before, after string) {
-	if i := strings.IndexByte(s, sep); i >= 0 {
-		return s[:i], s[i+1:]
-	}
-	return s, ""
-}
-
 func getCookieSessionsIDs(h http.Header, wanted string) (cookies []uint64) {
 	for _, line := range h["Cookie"] {
 		if strings.Contains(line, wanted) {
 			var part string
 			line = textproto.TrimString(line)
 			for len(line) > 0 {
-				part, line = cutString(line, ';')
+				part, line, _ = strings.Cut(line, ";")
 				if part = textproto.TrimString(part); part != "" {
-					name, val := cutString(part, '=')
+					name, val, _ := strings.Cut(part, "=")
 					name = textproto.TrimString(name)
 					if name == wanted {
 						if len(val) > 1 && val[0] == '"' && val[len(val)-1] == '"' {
@@ -472,7 +484,7 @@ func (jw *Jaws) NewSession(w http.ResponseWriter, r *http.Request) (sess *Sessio
 }
 
 func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
-	secure := requestIsSecure(r)
+	secure := secureheaders.RequestIsSecure(r, jw.TrustForwardedHeaders)
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	for sess == nil {
@@ -518,7 +530,9 @@ func (jw *Jaws) ContentSecurityPolicy() (s string) {
 // Content-Security-Policy value with [Jaws.ContentSecurityPolicy] so responses allow
 // the resources configured by [Jaws.GenerateHeadHTML].
 //
-// The returned middleware does not trust forwarded HTTPS headers.
+// The returned middleware does not trust forwarded HTTPS headers. Note that the
+// session cookie Secure flag is governed separately by [Jaws.TrustForwardedHeaders]
+// (also false by default), so the two stay consistent unless you opt in.
 // The next handler must be non-nil.
 func (jw *Jaws) SecureHeadersMiddleware(next http.Handler) http.Handler {
 	hdrs := secureheaders.DefaultHeaders()
@@ -652,8 +666,29 @@ func (jw *Jaws) Reload() {
 	})
 }
 
+// isSafeRedirect reports whether rawurl is safe to hand to the browser's
+// location.assign. Only relative URLs (empty scheme) and the http and https
+// schemes are permitted; this blocks script-bearing schemes such as javascript:
+// and data:.
+func isSafeRedirect(rawurl string) bool {
+	if u, err := url.Parse(rawurl); err == nil {
+		switch strings.ToLower(u.Scheme) {
+		case "", "http", "https":
+			return true
+		}
+	}
+	return false
+}
+
 // Redirect requests all [Request] values to navigate to the given URL.
+//
+// The URL is validated to be relative or http/https; a script-bearing scheme
+// such as javascript: is refused and logged rather than sent to the browser.
 func (jw *Jaws) Redirect(url string) {
+	if !isSafeRedirect(url) {
+		_ = jw.Log(fmt.Errorf("jaws: refusing unsafe redirect to %q", url))
+		return
+	}
 	jw.Broadcast(wire.Message{
 		What: what.Redirect,
 		Data: url,
@@ -664,10 +699,13 @@ func (jw *Jaws) Redirect(url string) {
 //
 // The lvl argument should be one of Bootstrap's alert levels:
 // primary, secondary, success, danger, warning, info, light or dark.
+//
+// The level and msg are HTML-escaped before being sent, so it is safe to pass
+// untrusted text; do not pre-escape it.
 func (jw *Jaws) Alert(level, msg string) {
 	jw.Broadcast(wire.Message{
 		What: what.Alert,
-		Data: level + "\n" + msg,
+		Data: alertData(level, msg),
 	})
 }
 
@@ -821,11 +859,6 @@ func parseIP(remoteAddr string) (ip netip.Addr) {
 	return
 }
 
-func requestIsSecure(r *http.Request) (yes bool) {
-	yes = secureheaders.RequestIsSecure(r, true)
-	return
-}
-
 // SetInner sends a request to replace the inner HTML of
 // all HTML elements matching target.
 func (jw *Jaws) SetInner(target any, innerHTML template.HTML) {
@@ -893,20 +926,23 @@ func (jw *Jaws) SetValue(target any, value string) {
 // all HTML elements matching target.
 //
 // The position parameter 'where' may be either an HTML ID, a child index or the text "null".
-func (jw *Jaws) Insert(target any, where, html string) {
+// html is trusted HTML, matching [Jaws.SetInner] and [Jaws.Append].
+func (jw *Jaws) Insert(target any, where string, html template.HTML) {
 	jw.Broadcast(wire.Message{
 		Dest: target,
 		What: what.Insert,
-		Data: where + "\n" + html,
+		Data: where + "\n" + string(html),
 	})
 }
 
 // Replace replaces HTML on all HTML elements matching target.
-func (jw *Jaws) Replace(target any, html string) {
+//
+// html is trusted HTML, matching [Jaws.SetInner] and [Jaws.Append].
+func (jw *Jaws) Replace(target any, html template.HTML) {
 	jw.Broadcast(wire.Message{
 		Dest: target,
 		What: what.Replace,
-		Data: html,
+		Data: string(html),
 	})
 }
 
@@ -942,9 +978,9 @@ var whitespaceRemover = strings.NewReplacer(" ", "", "\n", "", "\t", "")
 
 // JsCall calls the JavaScript function jsfunc with the argument jsonstr
 // on all [Request] values that have the target UI tag.
-func (jw *Jaws) JsCall(tagValue any, jsfunc, jsonstr string) {
+func (jw *Jaws) JsCall(target any, jsfunc, jsonstr string) {
 	jw.Broadcast(wire.Message{
-		Dest: tagValue,
+		Dest: target,
 		What: what.Call,
 		Data: whitespaceRemover.Replace(jsfunc) + "=" + maybeCompactJSON(jsonstr),
 	})
