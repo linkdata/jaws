@@ -144,6 +144,31 @@ func Test_NamedBoolArray(t *testing.T) {
 	}
 }
 
+func TestBoolArray_SingleSelectDuplicateNames(t *testing.T) {
+	// Single-select matches by name: same-named values toggle together and the
+	// at-most-one-checked invariant is per distinct name, not per Bool.
+	nba := NewBoolArray(false)
+	nba.Add("a", "A1")
+	nba.Add("a", "A2")
+	nba.Add("b", "B")
+
+	if !nba.Set("a", true) {
+		t.Fatal("Set(a,true) reported no change")
+	}
+	if !nba.data[0].Checked() || !nba.data[1].Checked() || nba.data[2].Checked() {
+		t.Fatal("both same-named values should be checked together, b unchecked")
+	}
+
+	// Selecting a different name deselects every value with a different name,
+	// which clears both "a" values at once.
+	if !nba.Set("b", true) {
+		t.Fatal("Set(b,true) reported no change")
+	}
+	if nba.data[0].Checked() || nba.data[1].Checked() || !nba.data[2].Checked() {
+		t.Fatal("selecting b should deselect both a values and check b")
+	}
+}
+
 func TestNamedBoolOption_RenderAndUpdateBranches(t *testing.T) {
 	_, rq := newCoreRequest(t)
 
