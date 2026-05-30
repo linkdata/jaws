@@ -77,6 +77,17 @@ var (
 //
 // It is safe for concurrent use when the locker passed to [NewJsVar] is safe
 // for concurrent use.
+//
+// SECURITY: a JsVar is client-writable. Incoming browser "set" messages are
+// applied by path to the bound value. If the bound value implements [PathSetter]
+// its JawsSetPath validates and applies the change; otherwise the change is
+// applied by the generic path setter ([github.com/linkdata/jq.Set]), which will
+// set any json-tagged field and append to slices one element per message with no
+// length cap and no per-message rate limit. Therefore, when binding a mutable or
+// unbounded collection (or anything where only some fields/paths should be
+// client-writable) to a JsVar that browsers can write, implement [PathSetter] on
+// the bound value to allow-list paths and bound lengths. See jawstree's Node for
+// an example that restricts client writes to a single boolean field.
 type JsVar[T any] struct {
 	bind.RWLocker
 	Ptr      *T  // bound Go value
@@ -129,6 +140,12 @@ func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any)
 	// serialize concurrent setters and stall any code sharing the locker. This
 	// mirrors bind.binder, which mutates under the lock and runs side effects
 	// after releasing it.
+	//
+	// Note that the broadcast carries the caller's requested value, not the value
+	// actually stored. If a PathSetter coerces or rejects the input (e.g. clamps a
+	// number), the stored server state and the value seen by peers can differ; the
+	// authoritative state is what JawsGet returns. Re-broadcast from Ptr inside a
+	// PathSetter if peers must observe the coerced value.
 	if err == nil && elem != nil {
 		var data []byte
 		if data, err = json.Marshal(value); err == nil {
