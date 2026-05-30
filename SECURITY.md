@@ -204,7 +204,7 @@ Tested origin validation:
 **Source code** (`request.go`, `Request.handleIncoming`) confirms only these message types are processed from clients:
 
 ```go
-case what.Input, what.Click, what.Set:
+case what.Input, what.Click, what.ContextMenu, what.Set:
     rq.queueEvent(eventCallCh, ...)
 case what.Remove:
     rq.handleRemove(wsmsg.Jid, wsmsg.Data)
@@ -259,6 +259,8 @@ Tested attack payloads:
 | `X={"__proto__":{"polluted":true}}` | Rejected (type mismatch) |
 
 Go's type system prevents prototype pollution — `jq.Set()` validates paths against actual struct fields and enforces type compatibility.
+
+**Trust boundary (application responsibility):** the generic `jq.Set()` path will set *any* `json`-tagged field of the bound value and will append to a slice one element per `Set` message, with no length cap and (see I6) no per-message rate limit. A `Set` message is therefore only as constrained as the bound type. When binding a value where only some fields should be client-writable, or which contains a mutable/unbounded collection, the bound type must implement `ui.PathSetter` (`JawsSetPath`) to allow-list paths and bound lengths; the framework then routes client writes through it instead of `jq.Set()`. `jawstree.Node` is an example: it implements `JawsSetPath` to reject every path except the per-node `.selected` boolean, so a browser cannot rename nodes, mutate ids, or grow the `children` slice.
 
 ---
 
@@ -346,9 +348,10 @@ this by blocking inline script execution.
 
 ### 9.5 Loopback IP Equivalence
 
-- `jaws.go` (`equalIP`): treats `127.0.0.1` and `::1` as equivalent
-- Relevant only in shared-localhost deployments (containers, dev environments)
-- Not exploitable in the demo's Azure VM deployment
+- `jaws.go` (`equalIP`): treats all loopback addresses as equivalent so a reverse proxy connecting to the backend over loopback does not break session/request-key IP binding.
+- Consequence: in any deployment where the backend sees only loopback peers — the common reverse-proxy topology (nginx/Caddy/load balancer → backend over `127.0.0.1`/`::1`), and shared-localhost/container/dev environments — IP binding is effectively a no-op, since every client presents the same loopback address. IP binding is defense-in-depth that supplements the single-use request key and session cookie.
+- Mitigation: set `Jaws.TrustForwardedHeaders` to bind on the proxy-supplied client IP (`X-Forwarded-For` leftmost / `X-Real-IP`) instead of the loopback transport peer. Only enable this behind a single reverse proxy you control that sets these headers.
+- Not exploitable in the demo's Azure VM deployment (direct client connections; no shared loopback).
 
 ---
 
@@ -381,7 +384,7 @@ None.
 | I1 | `style-src 'unsafe-inline'` in CSP | Required by the framework's design: widgets set inline `style=` attributes in initial HTML and via `setAttribute('style', ...)` at runtime. CSP nonces cannot apply to `style=` attributes (only `<style>` elements), and eliminating all inline styles would require forbidding arbitrary style params across the framework. The theoretical risk (CSS-based data exfiltration) requires a prior HTML injection primitive, which was not found. This is a pragmatic and acceptable trade-off. |
 | I2 | Mouse tracking shared across sessions | `mousetrack.js` sends cursor X/Y to server via JsVar Set; visible to co-viewers by design |
 | I3 | `template.HTML` / plain-string trust boundary | Framework allows `SetInner()` with trusted HTML, and HTML-inner widgets (`Span`, `Div`, …) treat a plain `string` as trusted HTML without a cast; application developers must escape user input before casting to `template.HTML` or passing it as a plain string. See §9.2. |
-| I4 | Loopback IP equivalence | `equalIP()` treats all loopback addresses as identical; only relevant in shared-localhost deployments |
+| I4 | Loopback IP equivalence | `equalIP()` treats all loopback addresses as identical, so session/request IP binding is a no-op whenever the backend sees only loopback peers — including the common reverse-proxy topology, not just shared-localhost. Set `Jaws.TrustForwardedHeaders` to bind on the forwarded client IP instead. See §9.5. |
 | I5 | Framework identification in JS | `/jaws/.jaws.*.js` contains `// https://github.com/linkdata/jaws` comment |
 | I6 | No explicit WebSocket message rate limiting | 1000 messages in 0.04s accepted on a single connection. However, each connection requires a prior HTTP GET + TLS + WebSocket upgrade + IP validation, making connection spam expensive for the attacker. Message flood cost depends on application event handler complexity (trivial for this demo). |
 

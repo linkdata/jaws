@@ -10,6 +10,7 @@ import (
 	"mime"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"reflect"
 	"strings"
@@ -756,6 +757,62 @@ func TestCoverage_CookieParseAndIP(t *testing.T) {
 	}
 	if got := parseIP(""); got.IsValid() {
 		t.Fatalf("expected invalid ip for empty remote addr, got %v", got)
+	}
+}
+
+func TestJaws_clientIP(t *testing.T) {
+	mustIP := func(s string) netip.Addr {
+		t.Helper()
+		ip, err := netip.ParseAddr(s)
+		if err != nil {
+			t.Fatalf("bad test ip %q: %v", s, err)
+		}
+		return ip
+	}
+
+	// A nil request yields an invalid address.
+	if got := (&Jaws{}).clientIP(nil); got.IsValid() {
+		t.Errorf("clientIP(nil) = %v, want invalid", got)
+	}
+
+	newReq := func(remoteAddr string, hdrs map[string]string) *http.Request {
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.RemoteAddr = remoteAddr
+		for k, v := range hdrs {
+			r.Header.Set(k, v)
+		}
+		return r
+	}
+
+	tests := []struct {
+		name  string
+		trust bool
+		addr  string
+		hdrs  map[string]string
+		want  netip.Addr
+	}{
+		{"untrusted ignores forwarded headers", false, "203.0.113.9:443",
+			map[string]string{"X-Forwarded-For": "198.51.100.7"}, mustIP("203.0.113.9")},
+		{"trusted uses leftmost X-Forwarded-For", true, "127.0.0.1:1234",
+			map[string]string{"X-Forwarded-For": "198.51.100.7, 70.41.3.18, 127.0.0.1"}, mustIP("198.51.100.7")},
+		{"trusted falls back to X-Real-IP", true, "127.0.0.1:1234",
+			map[string]string{"X-Real-Ip": "198.51.100.23"}, mustIP("198.51.100.23")},
+		{"trusted falls back to RemoteAddr when headers invalid", true, "203.0.113.9:443",
+			map[string]string{"X-Forwarded-For": "not-an-ip", "X-Real-Ip": "garbage"}, mustIP("203.0.113.9")},
+		{"trusted with no forwarded headers uses RemoteAddr", true, "203.0.113.9:443", nil, mustIP("203.0.113.9")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jw := &Jaws{TrustForwardedHeaders: tt.trust}
+			if got := jw.clientIP(newReq(tt.addr, tt.hdrs)); got.Compare(tt.want) != 0 {
+				t.Errorf("clientIP = %v, want %v", got, tt.want)
+			}
+		})
+	}
+
+	// forwardedClientIP reports ok=false when neither header carries a valid IP.
+	if _, ok := forwardedClientIP(http.Header{}); ok {
+		t.Error("forwardedClientIP with no headers should report ok=false")
 	}
 }
 

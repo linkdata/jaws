@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawstest"
 )
 
 func newCoreRequest(t *testing.T) (*jaws.Jaws, *jaws.Request) {
@@ -23,14 +24,14 @@ func newCoreRequest(t *testing.T) (*jaws.Jaws, *jaws.Request) {
 	return jw, rq
 }
 
-func newTestRequest(t *testing.T) (*jaws.Jaws, *jaws.TestRequest) {
+func newTestRequest(t *testing.T) (*jaws.Jaws, *jawstest.TestRequest) {
 	t.Helper()
 	jw, err := jaws.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	go jw.Serve()
-	rq := jaws.NewTestRequest(jw, nil)
+	rq := jawstest.NewTestRequest(jw, nil)
 	if rq == nil {
 		jw.Close()
 		t.Fatal("nil test request")

@@ -4,7 +4,7 @@ import (
 	_ "embed"
 	"mime"
 	"net/url"
-	"path/filepath"
+	"path"
 	"strconv"
 	"strings"
 
@@ -62,7 +62,7 @@ func PreloadHTML(urls ...*url.URL) (htmlCode, faviconURL string) {
 	for _, u := range urls {
 		if u != nil {
 			var asattr string
-			ext := strings.ToLower(filepath.Ext(u.Path))
+			ext := strings.ToLower(path.Ext(u.Path))
 			mimetype := mime.TypeByExtension(ext)
 			mimetype, _, _ = strings.Cut(mimetype, ";")
 			urlstr := u.String()
@@ -76,7 +76,7 @@ func PreloadHTML(urls ...*url.URL) (htmlCode, faviconURL string) {
 			default:
 				if strings.HasPrefix(mimetype, "image") {
 					asattr = "image"
-					if strings.HasPrefix(filepath.Base(u.Path), "favicon") {
+					if strings.HasPrefix(strings.ToLower(path.Base(u.Path)), "favicon") {
 						favicontype = mimetype
 						faviconURL = urlstr
 						continue

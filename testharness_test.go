@@ -6,12 +6,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"time"
 
 	"github.com/linkdata/jaws/lib/wire"
 )
 
-// TestRequest is a request harness intended for tests.
+// TestRequest is a request harness intended for the jaws package's own tests.
+// The importable harness for other packages lives in
+// github.com/linkdata/jaws/jawstest.
 type TestRequest struct {
 	*Request
 	*requestHarness
@@ -40,44 +41,25 @@ func newRequestHarness(jw *Jaws, r *http.Request) (rh *requestHarness) {
 	if rq == nil || jw.UseRequest(rq.JawsKey, r) != rq {
 		return nil
 	}
-	bcastCh := jw.subscribe(rq, 64)
-	// Flush the subscribe channel so the running Serve loop is guaranteed to have
-	// processed our subscription above before the harness returns: send cap+1
-	// no-op subscriptions, which can only all be consumed once Serve has drained
-	// the channel. This requires Serve/ServeWithTimeout to be running; if it is
-	// not, the sends would block forever, so fail loudly with a clear message
-	// instead (this is a test helper, so panicking surfaces the misuse).
-	for i := 0; i <= cap(jw.subCh); i++ {
-		select {
-		case jw.subCh <- subscription{}:
-		case <-jw.Done():
-			panic("jaws: NewTestRequest: the Jaws instance is closed")
-		case <-time.After(5 * time.Second):
-			panic("jaws: NewTestRequest timed out subscribing; the Jaws processing loop (Serve or ServeWithTimeout) must be running")
-		}
-	}
 	rh = &requestHarness{
 		Req:              rq,
 		ResponseRecorder: rr,
-		ReadyCh:          make(chan struct{}),
-		DoneCh:           make(chan struct{}),
-		InCh:             make(chan wire.WsMsg),
-		OutCh:            make(chan wire.WsMsg, cap(bcastCh)),
-		BcastCh:          bcastCh,
 	}
-	go func() {
-		defer func() {
-			if rh.ExpectPanic {
-				if rh.PanicVal = recover(); rh.PanicVal != nil {
-					rh.Panicked = true
-				}
-			}
-			close(rh.DoneCh)
-		}()
-		close(rh.ReadyCh)
-		rq.process(rh.BcastCh, rh.InCh, rh.OutCh)
-		jw.recycle(rq)
-	}()
+	// The subscribe/process/recycle dance lives in jw.TestServe. The onPanic
+	// callback adds this harness's panic-expectation support: an expected panic is
+	// captured for inspection while an unexpected one is re-raised exactly as
+	// before. It reads ExpectPanic lazily so tests may set it after construction.
+	rh.InCh, rh.OutCh, rh.BcastCh, rh.ReadyCh, rh.DoneCh = jw.TestServe(rq, func(recovered any) {
+		if recovered == nil {
+			return
+		}
+		if rh.ExpectPanic {
+			rh.PanicVal = recovered
+			rh.Panicked = true
+			return
+		}
+		panic(recovered)
+	})
 	return
 }
 
@@ -97,7 +79,7 @@ func (rh *requestHarness) BodyHTML() template.HTML {
 }
 
 // NewTestRequest creates a TestRequest for use when testing.
-// Passing nil for hr creates a GET / request with no body.
+// Passing nil for r creates a GET / request with no body.
 func NewTestRequest(jw *Jaws, r *http.Request) (tr *TestRequest) {
 	rh := newRequestHarness(jw, r)
 	if rh != nil {

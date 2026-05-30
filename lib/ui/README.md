@@ -60,7 +60,9 @@ created fresh for each render.
 
 ## Adding a simple static widget
 
-Use `HTMLInner`:
+Embed `HTMLInner` for the update behavior and render with the exported
+`htmlio.WriteHTMLInner` (the package-internal widgets use an equivalent private
+helper, which is not accessible from outside `package ui`):
 
 ```go
 type Article struct{ ui.HTMLInner }
@@ -70,8 +72,15 @@ func NewArticle(inner any) *Article {
 }
 
 func (w *Article) JawsRender(e *jaws.Element, wr io.Writer, params []any) error {
-  return w.renderInner(e, wr, "article", "", params)
+  _, getterAttrs, err := e.ApplyGetter(w.HTMLGetter)
+  if err != nil {
+    return err
+  }
+  attrs := append(e.ApplyParams(params), getterAttrs...)
+  return htmlio.WriteHTMLInner(wr, e.Jid(), "article", "", w.HTMLGetter.JawsGetHTML(e), attrs...)
 }
+
+// JawsUpdate is inherited from the embedded ui.HTMLInner.
 ```
 
 ## Adding an interactive input widget

@@ -9,6 +9,7 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawstest"
 	"github.com/linkdata/jaws/lib/assets"
 	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/what"
@@ -152,7 +153,7 @@ func TestInputDate_NoSpuriousUpdateOnEqualDate(t *testing.T) {
 	t.Cleanup(jw.Close)
 
 	go jw.Serve()
-	tr := jaws.NewTestRequest(jw, nil)
+	tr := jawstest.NewTestRequest(jw, nil)
 	if tr == nil {
 		t.Fatal("expected test request")
 	}
@@ -212,7 +213,7 @@ func TestInputDirtyOnSetError(t *testing.T) {
 	t.Cleanup(jw.Close)
 	go jw.Serve()
 
-	tr := jaws.NewTestRequest(jw, nil)
+	tr := jawstest.NewTestRequest(jw, nil)
 	if tr == nil {
 		t.Fatal("expected test request")
 	}

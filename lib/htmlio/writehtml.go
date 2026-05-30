@@ -128,11 +128,12 @@ func WriteHTMLInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs 
 // and any innerHTML passed for them is ignored, since a void element cannot
 // contain content (emitting "<img>...</img>" would be invalid HTML).
 //
-// The htmlTag and typeAttr parameters are trusted and written verbatim; they
-// MUST NOT be derived from untrusted data. The attrs parameter contains trusted
-// raw attribute fragments and is written verbatim with no escaping; it MUST NOT
-// contain untrusted data. Use [Attr] or [AppendAttr] to build attribute
-// fragments with an escaped value.
+// The htmlTag parameter is trusted and written verbatim with no escaping or
+// validation; it MUST NOT be derived from untrusted data. The typeAttr parameter
+// must be an unescaped logical value; it is escaped for HTML source output. The
+// attrs parameter contains trusted raw attribute fragments and is written
+// verbatim with no escaping; it MUST NOT contain untrusted data. Use [Attr] or
+// [AppendAttr] to build attribute fragments with an escaped value.
 func WriteHTMLInner(w io.Writer, jid jid.Jid, htmlTag, typeAttr string, innerHTML template.HTML, attrs ...template.HTMLAttr) (err error) {
 	b := appendHTMLTag(nil, jid, htmlTag, typeAttr, "", attrs)
 	if needClosingTag(htmlTag) {

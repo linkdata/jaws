@@ -18,13 +18,15 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawstest"
 	"github.com/linkdata/jaws/lib/bind"
 	jawstag "github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/ui"
 	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jaws/lib/wire"
 )
 
-func newExampleRequest(t *testing.T) (*jaws.Jaws, *jaws.TestRequest) {
+func newExampleRequest(t *testing.T) (*jaws.Jaws, *jawstest.TestRequest) {
 	t.Helper()
 	jw, err := jaws.New()
 	if err != nil {
@@ -32,7 +34,7 @@ func newExampleRequest(t *testing.T) (*jaws.Jaws, *jaws.TestRequest) {
 	}
 	go jw.Serve()
 
-	rq := jaws.NewTestRequest(jw, httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jawstest.NewTestRequest(jw, httptest.NewRequest(http.MethodGet, "/", nil))
 	if rq == nil {
 		jw.Close()
 		t.Fatal("expected test request")
@@ -44,7 +46,7 @@ func newExampleRequest(t *testing.T) (*jaws.Jaws, *jaws.TestRequest) {
 	return jw, rq
 }
 
-func tailScript(t *testing.T, jw *jaws.Jaws, rq *jaws.TestRequest) string {
+func tailScript(t *testing.T, jw *jaws.Jaws, rq *jawstest.TestRequest) string {
 	t.Helper()
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString(), nil)
@@ -232,14 +234,64 @@ func TestCellSyncPresentationQueuesExpectedUpdates(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			jw, rq := newExampleRequest(t)
+			_, rq := newExampleRequest(t)
 			g := newGame(2, 2, 1)
 			elem := rq.NewElement(ui.NewButton(bind.MakeHTMLGetter("cell")))
 
+			// A nil element is a no-op and must not emit anything.
 			g.cells[0][0].syncPresentation(nil, tt.view)
 			g.cells[0][0].syncPresentation(elem, tt.view)
 
-			_ = tailScript(t, jw, rq)
+			// Wake the harness process loop so it flushes the queued DOM ops to
+			// OutCh: an empty (invalid-Jid) incoming message is ignored by
+			// handleIncoming but still drives one loop iteration calling sendQueue.
+			rq.InCh <- wire.WsMsg{}
+
+			// The expected wire output mirrors syncPresentation: clear the four
+			// state classes, set the classes for this view, set aria-label, and
+			// set/clear the disabled attribute. Asserting the exact ops pins the
+			// browser-visible behavior the cell presentation depends on.
+			j := elem.Jid()
+			var want []wire.WsMsg
+			for _, cls := range []string{"is-hidden", "is-revealed", "is-flagged", "is-mine"} {
+				want = append(want, wire.WsMsg{Data: cls, Jid: j, What: what.RClass})
+			}
+			if tt.view.revealed {
+				want = append(want, wire.WsMsg{Data: "is-revealed", Jid: j, What: what.SClass})
+				if tt.view.mine {
+					want = append(want, wire.WsMsg{Data: "is-mine", Jid: j, What: what.SClass})
+				}
+			} else {
+				want = append(want, wire.WsMsg{Data: "is-hidden", Jid: j, What: what.SClass})
+				if tt.view.flagged {
+					want = append(want, wire.WsMsg{Data: "is-flagged", Jid: j, What: what.SClass})
+				}
+			}
+			want = append(want, wire.WsMsg{Data: "aria-label\n" + tt.view.label(), Jid: j, What: what.SAttr})
+			if tt.view.revealed || tt.view.gameOver {
+				want = append(want, wire.WsMsg{Data: "disabled\ndisabled", Jid: j, What: what.SAttr})
+			} else {
+				want = append(want, wire.WsMsg{Data: "disabled", Jid: j, What: what.RAttr})
+			}
+
+			got := make([]wire.WsMsg, 0, len(want))
+			for i := 0; i < len(want); i++ {
+				select {
+				case msg := <-rq.OutCh:
+					got = append(got, msg)
+				case <-time.After(2 * time.Second):
+					t.Fatalf("timed out after %d/%d messages; got %+v", i, len(want), got)
+				}
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("queued updates mismatch:\n got %+v\nwant %+v", got, want)
+			}
+			// No further updates should be queued.
+			select {
+			case extra := <-rq.OutCh:
+				t.Fatalf("unexpected extra update: %+v", extra)
+			case <-time.After(100 * time.Millisecond):
+			}
 		})
 	}
 }

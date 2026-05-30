@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawstest"
 	"github.com/linkdata/jaws/lib/what"
 )
 
@@ -147,6 +148,48 @@ func TestJsVar_RenderSetAndEvent(t *testing.T) {
 	other := errors.New("other")
 	if err := elideErrValueUnchanged(other); !errors.Is(err, other) {
 		t.Fatalf("expected passthrough error, got %v", err)
+	}
+}
+
+// TestJsVar_SetBroadcastsWirePayload pins the wire payload broadcast when a
+// JsVar path is set: subscribed peers receive a what.Set carrying "path=<json
+// value>". This guards the documented "broadcast carries the caller's JSON
+// value" contract, which line coverage alone would not catch.
+func TestJsVar_SetBroadcastsWirePayload(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+
+	tr := jawstest.NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("expected test request")
+	}
+	defer tr.Close()
+	<-tr.ReadyCh
+
+	var mu sync.Mutex
+	v := jsVarData{Text: "old"}
+	jsv := NewJsVar(&mu, &v)
+	elem := tr.NewElement(jsv)
+	var sb strings.Builder
+	if err := jsv.JawsRender(elem, &sb, []any{"v"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := jsv.JawsSetPath(elem, "text", "new"); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-t.Context().Done():
+		t.Fatal("no Set broadcast received")
+	case msg := <-tr.OutCh:
+		if msg.What != what.Set || msg.Data != `text="new"` {
+			t.Fatalf("broadcast = {%v %q}, want {Set `text=\"new\"`}", msg.What, msg.Data)
+		}
 	}
 }
 

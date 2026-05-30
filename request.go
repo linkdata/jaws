@@ -107,7 +107,7 @@ func (rq *Request) claim(r *http.Request) error {
 		var actualIP netip.Addr
 		var httpDoneCh <-chan struct{}
 		if r != nil { // can be nil in tests
-			actualIP = parseIP(r.RemoteAddr)
+			actualIP = rq.Jaws.clientIP(r)
 			httpDoneCh = r.Context().Done()
 		}
 		rq.mu.Lock()
@@ -450,6 +450,8 @@ func (rq *Request) tagsOfLocked(elem *Element) (tags []any) {
 	return
 }
 
+// TagsOf returns the tags currently associated with elem in this Request, or nil
+// if elem is nil. The returned slice is a snapshot and must not be modified.
 func (rq *Request) TagsOf(elem *Element) (tags []any) {
 	if elem != nil {
 		rq.mu.RLock()

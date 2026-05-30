@@ -9,9 +9,13 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/ui"
+	"github.com/linkdata/jq"
 )
 
-var _ ui.SetPather = (*Node)(nil)
+var (
+	_ ui.SetPather  = (*Node)(nil)
+	_ ui.PathSetter = (*Node)(nil)
+)
 
 // Node is one tree node rendered by [Tree].
 //
@@ -37,12 +41,21 @@ type Node struct {
 	Children []*Node `json:"children,omitzero"` // child nodes
 }
 
+// appendJSONString appends s as a JSON string literal. Unlike
+// [strconv.AppendQuote] it always produces valid JSON: invalid UTF-8 is replaced
+// with U+FFFD rather than emitted as a Go-only \xNN escape (which would break
+// JSON.parse on the client). Marshaling a string never returns an error.
+func appendJSONString(b []byte, s string) []byte {
+	enc, _ := json.Marshal(s)
+	return append(b, enc...)
+}
+
 func (node *Node) marshalJSON(b []byte) []byte {
 	b = append(b, `{"name":`...)
-	b = strconv.AppendQuote(b, node.Name)
+	b = appendJSONString(b, node.Name)
 	if node.ID != "" {
 		b = append(b, `,"id":`...)
-		b = strconv.AppendQuote(b, node.ID)
+		b = appendJSONString(b, node.ID)
 	}
 	if node.Selected {
 		b = append(b, `,"selected":true`...)
@@ -71,10 +84,35 @@ func (node *Node) MarshalJSON() (b []byte, err error) {
 
 var _ json.Marshaler = &Node{}
 
+// JawsSetPath restricts browser-initiated mutations to the per-node "selected"
+// flag. Any other path, or a non-bool value, is rejected without mutating the
+// tree, so a WebSocket client cannot change node names, ids, the children slice,
+// or any other [Node] field by path. This is the server-side enforcement of the
+// "server holds the truth" contract for [Tree]; without it the generic JsVar
+// path-setter ([github.com/linkdata/jq.Set]) would mutate any json-tagged field.
+func (node *Node) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err error) {
+	if !strings.HasSuffix(jsPath, ".selected") {
+		return fmt.Errorf("jawstree: refusing client path-set of %q: only the .selected flag is client-writable", jsPath)
+	}
+	if _, ok := value.(bool); !ok {
+		return fmt.Errorf("jawstree: refusing client path-set of %q: expected a bool, got %T", jsPath, value)
+	}
+	var changed bool
+	if changed, err = jq.Set(node, jsPath, value); err == nil && !changed {
+		err = jaws.ErrValueUnchanged
+	}
+	return
+}
+
 // JawsPathSet mirrors browser-side selected-state changes back into the tree.
 func (node *Node) JawsPathSet(elem *jaws.Element, jsPath string, value any) {
 	if nodePath, ok := strings.CutSuffix(jsPath, ".selected"); ok {
-		elem.Jaws.JsCall(node.Tree.JawsGetTag(nil), "jawstreeSetPath", fmt.Sprintf(`{"tree":%q,"id":%q,"set":%v}`, node.Tree.id, nodePath, value))
+		payload, _ := json.Marshal(struct {
+			Tree string `json:"tree"`
+			ID   string `json:"id"`
+			Set  any    `json:"set"`
+		}{node.Tree.id, nodePath, value})
+		elem.Jaws.JsCall(node.Tree.JawsGetTag(nil), "jawstreeSetPath", string(payload))
 	}
 }
 

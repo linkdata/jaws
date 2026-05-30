@@ -87,9 +87,21 @@ type Auth interface {
 }
 
 // MakeAuthFn constructs an [Auth] value for a [Request].
+//
+// Set [Jaws.MakeAuth] to your implementation to enforce real authorization. If
+// [Jaws.MakeAuth] is left nil, templates receive [DefaultAuth], which is
+// fail-open: see its documentation.
 type MakeAuthFn func(rq *Request) Auth
 
-// DefaultAuth is the permissive default [Auth] implementation.
+// DefaultAuth is the permissive default [Auth] implementation used for templates
+// when [Jaws.MakeAuth] is nil.
+//
+// SECURITY: DefaultAuth.IsAdmin always returns true. Because it is substituted
+// whenever [Jaws.MakeAuth] is unset, a template that gates privileged UI on
+// {{if .Auth.IsAdmin}} will render that UI to EVERY visitor on any instance that
+// forgot to set [Jaws.MakeAuth]. Data and Email are fail-safe (nil / empty); only
+// IsAdmin is fail-open. Always set [Jaws.MakeAuth] in production, and treat a nil
+// MakeAuth as "no authorization configured", not "deny".
 type DefaultAuth struct{}
 
 func (DefaultAuth) Data() map[string]any { return nil }

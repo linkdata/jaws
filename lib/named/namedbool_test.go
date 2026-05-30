@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawstest"
 )
 
 func TestNamedBool(t *testing.T) {
@@ -58,7 +59,7 @@ func (probe *dirtyProbe) JawsUpdate(elem *jaws.Element) {
 	probe.hits.Add(1)
 }
 
-func registerDirtyProbe(rq *jaws.TestRequest, tag any, hits *atomic.Int32) {
+func registerDirtyProbe(rq *jawstest.TestRequest, tag any, hits *atomic.Int32) {
 	elem := rq.NewElement(&dirtyProbe{hits: hits})
 	elem.Tag(tag)
 }

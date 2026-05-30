@@ -13,6 +13,7 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawstest"
 	"github.com/linkdata/jaws/lib/ui"
 )
 
@@ -122,7 +123,7 @@ func TestTree(t *testing.T) {
 	maybeError(t, err)
 
 	go jw.Serve()
-	rq := jaws.NewTestRequest(jw, nil)
+	rq := jawstest.NewTestRequest(jw, nil)
 	if rq == nil {
 		t.Fatal("nil test request")
 	}
@@ -224,7 +225,9 @@ func TestTree(t *testing.T) {
 		}
 	}
 
-	rootnode.JawsPathSet(elem, changed[0].ID+".selected", "false")
+	// The value is a bool at runtime (JsVar unmarshals the wire value and the
+	// JawsSetPath gate requires a bool), so pass one here rather than a string.
+	rootnode.JawsPathSet(elem, changed[0].ID+".selected", false)
 	select {
 	case <-t.Context().Done():
 	case msg := <-rq.OutCh:
@@ -242,7 +245,7 @@ func TestTree_JawsPathSetIgnoresNonSelectedPath(t *testing.T) {
 	defer jw.Close()
 
 	go jw.Serve()
-	rq := jaws.NewTestRequest(jw, nil)
+	rq := jawstest.NewTestRequest(jw, nil)
 	if rq == nil {
 		t.Fatal("nil test request")
 	}
@@ -258,8 +261,9 @@ func TestTree_JawsPathSetIgnoresNonSelectedPath(t *testing.T) {
 	child := rootnode.Children[0]
 	// A non-".selected" path must be ignored (no broadcast)...
 	child.JawsPathSet(elem, child.ID+".name", "renamed")
-	// ...so the ".selected" broadcast is the first message on OutCh.
-	child.JawsPathSet(elem, child.ID+".selected", "true")
+	// ...so the ".selected" broadcast is the first message on OutCh. The value is
+	// a bool at runtime, so pass one rather than a string.
+	child.JawsPathSet(elem, child.ID+".selected", true)
 
 	select {
 	case <-t.Context().Done():
@@ -281,7 +285,7 @@ func TestTree_ConcurrentUpdateAndInput(t *testing.T) {
 	defer jw.Close()
 
 	go jw.Serve()
-	rq := jaws.NewTestRequest(jw, nil)
+	rq := jawstest.NewTestRequest(jw, nil)
 	if rq == nil {
 		t.Fatal("nil test request")
 	}
