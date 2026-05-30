@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawstest"
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
@@ -266,7 +267,7 @@ func TestTemplate_UpdateRerendersIntoWrapper(t *testing.T) {
 	)))
 
 	go jw.Serve()
-	tr := jaws.NewTestRequest(jw, nil)
+	tr := jawstest.NewTestRequest(jw, nil)
 	if tr == nil {
 		t.Fatal("expected test request")
 	}

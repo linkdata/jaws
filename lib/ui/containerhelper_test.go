@@ -5,11 +5,14 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawstest"
 	"github.com/linkdata/jaws/lib/jid"
 	"github.com/linkdata/jaws/lib/named"
 	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jaws/lib/wire"
 )
 
 func TestContainerAndTbodyRender(t *testing.T) {
@@ -60,6 +63,63 @@ func TestContainerHelperUpdateContainer(t *testing.T) {
 	container.JawsUpdate(elem)
 	if len(container.contents) != 2 {
 		t.Fatalf("want 2 contents got %d", len(container.contents))
+	}
+}
+
+// TestContainerHelper_UpdateEmitsWireOps pins the browser-visible wire output of
+// UpdateContainer: appending a child must emit an Append carrying that child's
+// rendered HTML and an Order reflecting the new sequence. Asserting the ops (not
+// just the in-memory contents slice) catches regressions that line coverage misses.
+func TestContainerHelper_UpdateEmitsWireOps(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+
+	tr := jawstest.NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("expected test request")
+	}
+	defer tr.Close()
+	<-tr.ReadyCh
+
+	span1 := NewSpan(testHTMLGetter("span1"))
+	span2 := NewSpan(testHTMLGetter("span2"))
+	tc := &testContainer{contents: []jaws.UI{span1}}
+	container := NewContainer("div", tc)
+	elem := tr.NewElement(container)
+	var sb strings.Builder
+	if err := elem.JawsRender(&sb, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	tc.contents = []jaws.UI{span1, span2}
+	container.JawsUpdate(elem)
+	// Wake the harness loop so the queued ops flush to OutCh.
+	tr.InCh <- wire.WsMsg{}
+
+	var sawAppend, sawOrder bool
+collect:
+	for {
+		select {
+		case msg := <-tr.OutCh:
+			switch msg.What {
+			case what.Append:
+				sawAppend = true
+				if !strings.Contains(msg.Data, "span2") {
+					t.Errorf("Append data %q does not contain the new child's HTML", msg.Data)
+				}
+			case what.Order:
+				sawOrder = true
+			}
+		case <-time.After(300 * time.Millisecond):
+			break collect
+		}
+	}
+	if !sawAppend || !sawOrder {
+		t.Fatalf("want both Append and Order ops, got append=%v order=%v", sawAppend, sawOrder)
 	}
 }
 

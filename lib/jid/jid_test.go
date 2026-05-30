@@ -57,6 +57,77 @@ func TestJid_String(t *testing.T) {
 	}
 }
 
+func TestJid_AppendVariants(t *testing.T) {
+	tests := []struct {
+		name       string
+		jid        Jid
+		wantInt    string
+		wantAppend string
+		wantQuote  string
+	}{
+		{"negative", -1, "", "", `""`},
+		{"zero", 0, "", "", `""`},
+		{"positive", 42, "42", Prefix + "42", `"` + Prefix + `42"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := string(tt.jid.AppendInt(nil)); got != tt.wantInt {
+				t.Errorf("AppendInt() = %q, want %q", got, tt.wantInt)
+			}
+			if got := string(tt.jid.Append(nil)); got != tt.wantAppend {
+				t.Errorf("Append() = %q, want %q", got, tt.wantAppend)
+			}
+			if got := string(tt.jid.AppendQuote(nil)); got != tt.wantQuote {
+				t.Errorf("AppendQuote() = %q, want %q", got, tt.wantQuote)
+			}
+			// Every Append* variant must append to dst, never replace it.
+			if got := string(tt.jid.Append([]byte("x"))); got != "x"+tt.wantAppend {
+				t.Errorf("Append() did not preserve dst prefix: %q", got)
+			}
+			if got := string(tt.jid.AppendQuote([]byte("x"))); got != "x"+tt.wantQuote {
+				t.Errorf("AppendQuote() did not preserve dst prefix: %q", got)
+			}
+		})
+	}
+}
+
+// TestParseInt_NonCanonical pins how the parsers treat non-canonical integer
+// text. strconv.ParseInt is lenient about a leading '+' and leading zeros, so
+// those forms are accepted and normalized to the canonical Jid; everything else
+// non-numeric is rejected as Invalid. This characterizes current behavior so a
+// future parser change is noticed.
+func TestParseInt_NonCanonical(t *testing.T) {
+	tests := []struct {
+		arg  string
+		want Jid
+	}{
+		{"1", 1},
+		{"+1", 1}, // leading plus accepted, normalizes to Jid(1)
+		{"01", 1}, // leading zero accepted, normalizes to Jid(1)
+		{"0", 0},  // the whole-request id
+		{"-0", 0}, // negative zero is zero
+		{"-1", Invalid},
+		{"", Invalid},
+		{" 1", Invalid}, // surrounding space rejected
+		{"1 ", Invalid},
+		{"1\n", Invalid}, // trailing newline rejected
+		{"0x1", Invalid}, // base-10 only
+		{"1_000", Invalid},
+		{"99999999999999999999999", Invalid}, // overflow
+	}
+	for _, tt := range tests {
+		t.Run(tt.arg, func(t *testing.T) {
+			if got := ParseInt(tt.arg); got != tt.want {
+				t.Errorf("ParseInt(%q) = %v, want %v", tt.arg, got, tt.want)
+			}
+			// ParseString prepends the prefix and must agree for these payloads.
+			if got := ParseString(Prefix + tt.arg); got != tt.want {
+				t.Errorf("ParseString(%q) = %v, want %v", Prefix+tt.arg, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestJid_AppendStartTagAttr(t *testing.T) {
 	tests := []struct {
 		name string
