@@ -52,9 +52,10 @@ func (elem *Element) appendHandlers(h ...any) {
 		if deadlock.Debug {
 			panic("jaws: Element handlers mutated after JawsRender returned; handlers must be added during rendering, before events can fire")
 		}
-		return
-	}
-	if !elem.deleted.Load() {
+		// Production builds drop late mutations rather than racing the lock-free
+		// read; there is intentionally no separate return statement here, so the
+		// debug-only panic above is the sole extra branch under "-tags debug".
+	} else if !elem.deleted.Load() {
 		elem.handlers = append(elem.handlers, h...)
 	}
 }
