@@ -4,7 +4,6 @@ import (
 	"io"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/htmlio"
 	"github.com/linkdata/jaws/lib/named"
 )
 
@@ -14,23 +13,14 @@ type Option struct{ *named.Bool }
 // NewOption returns an option widget backed by nb.
 func NewOption(nb *named.Bool) Option { return Option{Bool: nb} }
 
-// JawsRender renders ui as an HTML option element.
+// JawsRender renders ui as an HTML option element. The markup is produced by
+// [named.RenderBoolOption], the single source of <option> markup, so it cannot
+// diverge from the options NamedBoolArray renders.
 func (u Option) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
-	elem.Tag(u.Bool)
-	attrs := elem.ApplyParams(params)
-	valAttr := htmlio.Attr("value", u.Name())
-	attrs = append(attrs, valAttr)
-	if u.Checked() {
-		attrs = append(attrs, "selected")
-	}
-	return htmlio.WriteHTMLInner(w, elem.Jid(), "option", "", u.JawsGetHTML(elem), attrs...)
+	return named.RenderBoolOption(elem, w, u.Bool, params)
 }
 
 // JawsUpdate updates the selected attribute.
 func (u Option) JawsUpdate(elem *jaws.Element) {
-	if u.Checked() {
-		elem.SetAttr("selected", "")
-	} else {
-		elem.RemoveAttr("selected")
-	}
+	named.UpdateBoolOption(elem, u.Bool)
 }

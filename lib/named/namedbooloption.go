@@ -7,6 +7,29 @@ import (
 	"github.com/linkdata/jaws/lib/htmlio"
 )
 
+// RenderBoolOption renders nb as an HTML <option> element into w. It is the
+// single source of <option> markup shared by NamedBoolArray's options and by
+// ui.Option, so attribute/escaping behavior cannot drift between them.
+func RenderBoolOption(elem *jaws.Element, w io.Writer, nb *Bool, params []any) error {
+	elem.Tag(nb)
+	attrs := elem.ApplyParams(params)
+	attrs = append(attrs, htmlio.Attr("value", nb.Name()))
+	if nb.Checked() {
+		attrs = append(attrs, "selected")
+	}
+	return htmlio.WriteHTMLInner(w, elem.Jid(), "option", "", nb.JawsGetHTML(elem), attrs...)
+}
+
+// UpdateBoolOption updates a rendered <option>'s selected attribute to match nb.
+// It is the single source of the option's update behavior.
+func UpdateBoolOption(elem *jaws.Element, nb *Bool) {
+	if nb.Checked() {
+		elem.SetAttr("selected", "")
+	} else {
+		elem.RemoveAttr("selected")
+	}
+}
+
 // namedBoolOption is an internal UI wrapper used by NamedBoolArray.JawsContains.
 // It intentionally stays unexported; public option widgets live in package ui.
 type namedBoolOption struct {
@@ -14,20 +37,9 @@ type namedBoolOption struct {
 }
 
 func (opt namedBoolOption) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
-	elem.Tag(opt.Bool)
-	attrs := elem.ApplyParams(params)
-	valattr := htmlio.Attr("value", opt.Name())
-	attrs = append(attrs, valattr)
-	if opt.Checked() {
-		attrs = append(attrs, "selected")
-	}
-	return htmlio.WriteHTMLInner(w, elem.Jid(), "option", "", opt.JawsGetHTML(elem), attrs...)
+	return RenderBoolOption(elem, w, opt.Bool, params)
 }
 
 func (opt namedBoolOption) JawsUpdate(elem *jaws.Element) {
-	if opt.Checked() {
-		elem.SetAttr("selected", "")
-	} else {
-		elem.RemoveAttr("selected")
-	}
+	UpdateBoolOption(elem, opt.Bool)
 }
