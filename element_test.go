@@ -271,6 +271,94 @@ func TestElement_AddHandlersAfterRenderPanics(t *testing.T) {
 	e.AddHandlers(struct{}{})
 }
 
+// assertHandlerMutationFrozen verifies that fn (a handler-adding call on a frozen
+// Element) is rejected: debug builds panic, production builds silently drop the
+// handler so the lock-free read on the event goroutine is never raced.
+func assertHandlerMutationFrozen(t *testing.T, e *Element, fn func()) {
+	t.Helper()
+	before := len(e.handlers)
+	if deadlock.Debug {
+		defer func() {
+			if recover() == nil {
+				t.Error("expected panic when mutating handlers after freeze")
+			}
+		}()
+		fn()
+		return
+	}
+	fn()
+	if got := len(e.handlers); got != before {
+		t.Errorf("late handler not dropped: len(handlers) = %d, want %d", got, before)
+	}
+}
+
+func TestElement_HandlersFrozenAfterRender(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+	e := rq.NewElement(&testUi{})
+	if err := e.JawsRender(io.Discard, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !e.frozen.Load() {
+		t.Fatal("Element must be frozen after JawsRender returns")
+	}
+	assertHandlerMutationFrozen(t, e, func() { e.AddHandlers(testClickHandler{}) })
+	assertHandlerMutationFrozen(t, e, func() { e.ApplyParams([]any{testEventHandler{}}) })
+	assertHandlerMutationFrozen(t, e, func() { _, _, _ = e.ApplyGetter(testClickHandler{}) })
+}
+
+func TestElement_FreezeSealsHandlers(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+	e := rq.NewElement(&testUi{})
+	e.Freeze()
+	if !e.frozen.Load() {
+		t.Fatal("Freeze must set the frozen flag")
+	}
+	assertHandlerMutationFrozen(t, e, func() { e.AddHandlers(testClickHandler{}) })
+}
+
+func TestElement_ApplyParamsAfterFreezeKeepsAttrs(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+	e := rq.NewElement(&testUi{})
+	if err := e.JawsRender(io.Discard, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Parsing attributes adds no handler, so it must not trip the freeze guard
+	// in any build; the raw HTML attribute is still returned.
+	attrs := e.ApplyParams([]any{template.HTMLAttr("hidden")})
+	if len(attrs) != 1 || attrs[0] != template.HTMLAttr("hidden") {
+		t.Fatalf("ApplyParams dropped attributes after freeze: %v", attrs)
+	}
+	if len(e.handlers) != 0 {
+		t.Fatalf("expected no handlers, got %d", len(e.handlers))
+	}
+}
+
+func TestElement_UnrenderedAcceptsHandlers(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+	e := rq.NewElement(&testUi{})
+	// An Element that has not been rendered (or frozen) still accepts handlers
+	// from all three entry points; several event-dispatch tests rely on this.
+	click := &testClickCounter{wantName: "name"}
+	e.AddHandlers(testEventHandler{})
+	e.ApplyParams([]any{testContextMenuHandler{}})
+	if _, _, err := e.ApplyGetter(click); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(e.handlers); got != 3 {
+		t.Fatalf("expected 3 handlers, got %d", got)
+	}
+	if err := CallEventHandlers(e.UI(), e, what.Click, "1 2 5 name"); err != nil {
+		t.Fatalf("click dispatch failed: %v", err)
+	}
+	if click.n != 1 {
+		t.Fatalf("expected click handler to fire once, got %d", click.n)
+	}
+}
+
 func TestElement_UiDeprecatedForwarder(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()

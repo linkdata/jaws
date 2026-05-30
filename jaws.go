@@ -44,7 +44,10 @@
 // populated only while an Element is rendered and are then read without a lock on
 // the event goroutine. This is safe solely because rendering completes before any
 // event for that Element can be processed, so handlers must not be added after
-// [Element.JawsRender] returns. Debug builds enforce this in [Element.AddHandlers].
+// [Element.JawsRender] returns (or after [Element.Freeze] for update-only
+// registrations). All builds enforce this: every handler mutator funnels through
+// an internal chokepoint guarded by a lockless atomic flag that drops late
+// additions; debug builds panic instead.
 package jaws
 
 import (

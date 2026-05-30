@@ -31,5 +31,6 @@ func (rw RequestWriter) Register(updater jaws.Updater, params ...any) jid.Jid {
 	elem.Tag(updater)
 	elem.ApplyParams(params)
 	updater.JawsUpdate(elem)
+	elem.Freeze()
 	return elem.Jid()
 }

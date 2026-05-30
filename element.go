@@ -22,33 +22,59 @@ type Element struct {
 	// internals
 	ui UI // the UI object
 	// handlers is appended to only during initial render/init (AddHandlers,
-	// ApplyParams, ApplyGetter) and read later on the event goroutine without a
-	// lock. This is safe solely because rendering an Element fully populates its
-	// handlers before any event for it can be processed; handlers must not be
-	// mutated once events may fire. Debug builds enforce this in AddHandlers via
-	// the rendered flag below.
+	// ApplyParams, ApplyGetter, all routed through appendHandlers) and read later
+	// on the event goroutine without a lock. This is safe solely because rendering
+	// an Element fully populates its handlers before any event for it can be
+	// processed; handlers must not be mutated once events may fire. All builds
+	// enforce this: once the frozen flag below is set, appendHandlers drops late
+	// mutations (debug builds panic).
 	handlers []any
 	jid      jid.Jid     // JaWS ID, unique to this Element within its Request
 	deleted  atomic.Bool // true if deleteElement() has been called for this Element
-	rendered atomic.Bool // debug-only: set when JawsRender returns; guards AddHandlers
+	frozen   atomic.Bool // set when handlers are sealed (JawsRender returns or Freeze called); guards handler mutators in all builds
 }
 
 func (elem *Element) String() string {
 	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", elem.UI(), elem.Jid(), elem.Request.TagsOf(elem))
 }
 
-// AddHandlers adds the given handlers to the [Element].
+// appendHandlers is the single internal chokepoint for mutating elem.handlers.
 //
-// It must be called while the [Element] is being rendered, before any event can
-// be processed for it; see the package "Locking" documentation. Debug builds
-// panic if it is called after [Element.JawsRender] has returned.
-func (elem *Element) AddHandlers(h ...any) {
-	if deadlock.Debug && elem.rendered.Load() {
-		panic("jaws: Element.AddHandlers called after JawsRender returned; handlers must be added during rendering, before events can fire")
+// handlers is read lock-free on the event goroutine (see callEventHandlers), so
+// it must only be appended to while the Element is being rendered, before any
+// event for it can fire. Once frozen, late mutations are a bug; debug builds
+// panic, production builds drop them rather than racing the lock-free read.
+func (elem *Element) appendHandlers(h ...any) {
+	if len(h) == 0 {
+		return
+	}
+	if elem.frozen.Load() {
+		if deadlock.Debug {
+			panic("jaws: Element handlers mutated after JawsRender returned; handlers must be added during rendering, before events can fire")
+		}
+		return
 	}
 	if !elem.deleted.Load() {
 		elem.handlers = append(elem.handlers, h...)
 	}
+}
+
+// Freeze marks the [Element]'s handlers as final, as [Element.JawsRender] does on
+// return. After Freeze, the handler-mutating methods (AddHandlers, ApplyParams,
+// ApplyGetter) no longer add handlers (debug builds panic). Use this for elements
+// registered for updates without being rendered.
+func (elem *Element) Freeze() {
+	elem.frozen.Store(true)
+}
+
+// AddHandlers adds the given handlers to the [Element].
+//
+// It must be called while the [Element] is being rendered, before any event can
+// be processed for it; see the package "Locking" documentation. Handlers added
+// after [Element.JawsRender] has returned (or [Element.Freeze] has been called)
+// are dropped; debug builds panic.
+func (elem *Element) AddHandlers(h ...any) {
+	elem.appendHandlers(h...)
 }
 
 // Tag adds the given tags to the [Element].
@@ -109,11 +135,10 @@ func (elem *Element) JawsRender(w io.Writer, params []any) (err error) {
 			}
 		}
 	}
-	if deadlock.Debug {
-		// Render is complete: handlers are now frozen and read lock-free on the
-		// event goroutine. Any later AddHandlers is a bug (see AddHandlers).
-		elem.rendered.Store(true)
-	}
+	// Render is complete: handlers are now frozen and read lock-free on the
+	// event goroutine. Any later handler mutation is a bug and is dropped
+	// (see appendHandlers).
+	elem.frozen.Store(true)
 	return
 }
 
@@ -238,10 +263,15 @@ func (elem *Element) Remove(htmlID string) {
 // adding UI tags, adding any additional event handlers found.
 //
 // Returns the list of HTML attributes found, if any.
+//
+// Handlers found in params are added only while the [Element] is mutable; after
+// it is frozen ([Element.JawsRender] returning or [Element.Freeze]) they are
+// dropped (debug builds panic), though tags and HTML attributes are still
+// processed.
 func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
 	tags, handlers, rawAttrs := ParseParams(params)
 	if !elem.deleted.Load() {
-		elem.handlers = append(elem.handlers, handlers...)
+		elem.appendHandlers(handlers...)
 		elem.Tag(tags...)
 		for _, s := range rawAttrs {
 			attr := template.HTMLAttr(s) // #nosec G203
@@ -263,6 +293,9 @@ func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
 // Returns the Tag(s) added (or nil if getter was nil), any initial HTML attrs
 // provided by InitialHTMLAttrHandler, and any error returned from JawsInit()
 // if it was called.
+//
+// If the [Element] is already frozen, an event-handler getter is not added to
+// the handler list (debug builds panic); tag and init processing still occur.
 func (elem *Element) ApplyGetter(getter any) (tagValue any, attrs []template.HTMLAttr, err error) {
 	if getter != nil {
 		tagValue = getter
@@ -270,11 +303,11 @@ func (elem *Element) ApplyGetter(getter any) (tagValue any, attrs []template.HTM
 			tagValue = tagger.JawsGetTag(elem.Request)
 		}
 		if _, ok := getter.(InputHandler); ok {
-			elem.handlers = append(elem.handlers, getter)
+			elem.appendHandlers(getter)
 		} else if _, ok := getter.(ClickHandler); ok {
-			elem.handlers = append(elem.handlers, getter)
+			elem.appendHandlers(getter)
 		} else if _, ok := getter.(ContextMenuHandler); ok {
-			elem.handlers = append(elem.handlers, getter)
+			elem.appendHandlers(getter)
 		}
 		if ah, ok := getter.(InitialHTMLAttrHandler); ok {
 			if attr := ah.JawsInitialHTMLAttr(elem); attr != "" {

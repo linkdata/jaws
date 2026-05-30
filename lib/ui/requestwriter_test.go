@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/named"
 	"github.com/linkdata/jaws/lib/tag"
@@ -146,4 +147,35 @@ func TestRequestWriterUI_RenderErrorDoesNotLeakElement(t *testing.T) {
 	if leaked := rq.GetElementByJid(1); leaked != nil {
 		t.Fatalf("expected failed render element to be removed from request registry: %v", leaked.Jid())
 	}
+}
+
+func TestRequestWriter_RegisterFreezesElement(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	var buf bytes.Buffer
+	rw := RequestWriter{Request: rq, Writer: &buf}
+
+	up := &testRWUpdater{}
+	id := rw.Register(up)
+	if up.called != 1 {
+		t.Fatalf("expected updater called once, got %d", up.called)
+	}
+	elem := rq.GetElementByJid(id)
+	if elem == nil {
+		t.Fatal("expected registered element to be retained")
+	}
+
+	// Register freezes the element after its initial setup, so adding handlers
+	// afterwards is rejected: debug panics, production silently drops. (Without
+	// the Freeze, a never-rendered element would never trip the guard.)
+	if deadlock.Debug {
+		defer func() {
+			if recover() == nil {
+				t.Error("expected panic adding handlers to a frozen registered element")
+			}
+		}()
+		elem.AddHandlers(struct{}{})
+		t.Error("expected panic adding handlers to a frozen registered element")
+		return
+	}
+	elem.AddHandlers(struct{}{}) // must not panic in production builds
 }
