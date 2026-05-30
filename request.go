@@ -27,6 +27,12 @@ import (
 	"github.com/linkdata/secureheaders"
 )
 
+// webSocketReadLimit bounds the size of a single inbound WebSocket message. It
+// matches the current coder/websocket default (32 KiB); larger messages fail the
+// read and close the connection. We set it explicitly so the cap is part of jaws'
+// own contract and cannot change silently if the library default does.
+const webSocketReadLimit = 32 * 1024
+
 // ConnectFn can be used to interact with a [Request] before message processing starts.
 // Returning an error causes the [Request] to abort, and the WebSocket connection to close.
 type ConnectFn = func(rq *Request) error
@@ -1047,6 +1053,7 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var ws *websocket.Conn
 		ws, err = websocket.Accept(w, r, nil)
 		if err == nil {
+			ws.SetReadLimit(webSocketReadLimit)
 			if err = rq.onConnect(); err == nil {
 				incomingMsgCh := make(chan wire.WsMsg)
 				// Snapshot ctx, cancelFn and the element count together under the
@@ -1073,5 +1080,10 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		rq.cancel(err)
+	} else {
+		// The Request was never claimed (UseRequest not called) or is already
+		// being served; either way its single-use token is no longer valid, so
+		// surface an explicit error rather than returning an empty 200 OK.
+		http.Error(w, http.StatusText(http.StatusGone), http.StatusGone)
 	}
 }
