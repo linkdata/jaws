@@ -35,7 +35,15 @@ func New(fsys fs.FS, fpath, relpath string) (jtl jaws.TemplateLookuper, err erro
 
 func create(debug bool, fsys fs.FS, fpath, relpath string) (tl jaws.TemplateLookuper, err error) {
 	if !debug {
-		return template.New("").ParseFS(fsys, fpath)
+		// Assign through a concrete local and only set the interface on success.
+		// Returning template.New("").ParseFS(...) directly would, on a parse
+		// error, yield a non-nil jaws.TemplateLookuper wrapping a nil
+		// *template.Template, panicking any caller that checks tl != nil.
+		var tmpl *template.Template
+		if tmpl, err = template.New("").ParseFS(fsys, fpath); err == nil {
+			tl = tmpl
+		}
+		return
 	}
 	var tmpl *template.Template
 	fpath = path.Join(relpath, fpath)

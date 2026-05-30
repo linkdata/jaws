@@ -5,8 +5,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/linkdata/deadlock"
 )
 
 //go:embed assets
@@ -149,16 +147,26 @@ func Test_create_debug_parse_error(t *testing.T) {
 	}
 }
 
-func TestNew_parse_error_passthrough(t *testing.T) {
+func Test_create_no_debug_parse_error(t *testing.T) {
+	tl, err := create(false, assetsFS, "assets/missing-*.html", "")
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+	// The non-debug path must return a true nil interface on error, not a
+	// non-nil jaws.TemplateLookuper wrapping a nil *template.Template.
+	if tl != nil {
+		t.Fatalf("expected nil lookuper on error, got %T", tl)
+	}
+}
+
+func TestNew_parse_error_returns_nil_lookuper(t *testing.T) {
 	tl, err := New(assetsFS, "assets/missing-*.html", "")
 	if err == nil {
 		t.Fatal("expected parse error")
 	}
-	if deadlock.Debug {
-		if tl != nil {
-			t.Fatalf("expected nil lookuper from debug-mode ParseGlob, got %T", tl)
-		}
-	} else if tl == nil {
-		t.Fatal("expected non-nil lookuper from ParseFS, got nil")
+	// On a parse error the returned interface must be a true nil in both debug
+	// and non-debug modes, so callers can rely on tl != nil meaning success.
+	if tl != nil {
+		t.Fatalf("expected nil lookuper on parse error, got %T", tl)
 	}
 }
