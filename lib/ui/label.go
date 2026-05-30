@@ -22,6 +22,9 @@ func (u *Label) JawsRender(elem *jaws.Element, w io.Writer, params []any) error 
 }
 
 // Label renders an HTML label element.
+//
+// A plain string innerHTML is trusted HTML and is not escaped; see [NewLabel]
+// and [bind.MakeHTMLGetter] for how to pass untrusted user input safely.
 func (rw RequestWriter) Label(innerHTML any, params ...any) error {
 	return rw.UI(NewLabel(innerHTML), params...)
 }

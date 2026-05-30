@@ -22,6 +22,24 @@
 // snapshotting the needed state and releasing the relevant lock; see
 // [Session.Broadcast] and [Session.Close] for the canonical pattern.
 //
+// UI value and widget types in the subpackages carry their own leaf locks that
+// guard the bound value: the binders in [github.com/linkdata/jaws/lib/bind], the
+// JsVar in [github.com/linkdata/jaws/lib/ui] and the named values in
+// [github.com/linkdata/jaws/lib/named]. These are leaves with respect to each
+// other, acquired containing-before-contained (for example a named BoolArray's
+// mutex is taken before a member Bool's). They sit below the three core locks
+// above, but with one deliberate reverse edge: marking an [Element] dirty or
+// broadcasting a change ultimately takes the outermost Jaws.mu, and a value type
+// may run that side effect while still holding its own value lock (lib/named does
+// this; lib/bind and lib/ui release the value lock first). That is the reverse of
+// the "outermost first" rule and is safe only because the edge never closes a
+// cycle: no code path holding Jaws.mu, Request.mu or Session.mu ever calls into a
+// UI value's Get/Set/Dirty methods, which are the only callers that take a value
+// lock. Code holding any of the three core locks must therefore never invoke a UI
+// value method. New value types should prefer the lib/bind / lib/ui pattern
+// (mutate under the value lock, release it, then mark dirty) so they do not depend
+// on this invariant.
+//
 // [Element] handlers are an intentional exception to the locking rules: they are
 // populated only while an Element is rendered and are then read without a lock on
 // the event goroutine. This is safe solely because rendering completes before any

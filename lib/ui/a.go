@@ -20,6 +20,9 @@ func (u *A) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
 }
 
 // A renders an HTML anchor element.
+//
+// A plain string innerHTML is trusted HTML and is not escaped; see [NewA] and
+// [bind.MakeHTMLGetter] for how to pass untrusted user input safely.
 func (rw RequestWriter) A(innerHTML any, params ...any) error {
 	return rw.UI(NewA(innerHTML), params...)
 }

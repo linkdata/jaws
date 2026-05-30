@@ -35,8 +35,9 @@ const (
 	Input
 	Click
 	ContextMenu
-	// Testing
-	Hook // Calls event handler synchronously
+	// Synchronous event-handler invocation. A real protocol command (used by
+	// broadcasts as well as tests), not a test-only artifact.
+	Hook // Calls the matching event handler synchronously
 )
 
 // IsCommand reports whether w is a non-element command.

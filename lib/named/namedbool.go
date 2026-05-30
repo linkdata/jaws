@@ -21,6 +21,10 @@ type Bool struct {
 
 // NewBool returns a [Bool] with the given name, HTML and checked state.
 //
+// The html argument is rendered as trusted HTML (it is the label shown in select
+// lists and checkboxes) and is not escaped. When it is derived from untrusted
+// user input it must be pre-escaped, e.g. template.HTML(template.HTMLEscapeString(s)).
+//
 // If nba is non-nil, changing the value through [Bool.JawsSet] may dirty the
 // containing [BoolArray] and deselect sibling values in single-select mode.
 func NewBool(nba *BoolArray, name string, html template.HTML, checked bool) *Bool {
@@ -68,6 +72,12 @@ func (nb *Bool) JawsGet(elem *jaws.Element) (yes bool) {
 // mutex is always acquired before the Bool's mutex (as done here and by the
 // BoolArray methods, which lock nba.mu then call into Bool). Any new method must
 // preserve this array-before-bool order to avoid deadlocks.
+//
+// Note that the elem.Dirty calls below run while nba.mu is still held (via the
+// deferred Unlock); Dirty takes the outermost jaws Jaws.mu. This is the
+// deliberate value-tier reverse edge documented in the jaws package "Locking"
+// section, and is safe only because no holder of Jaws.mu ever calls back into
+// these methods.
 func (nb *Bool) JawsSet(elem *jaws.Element, checked bool) (err error) {
 	err = jaws.ErrValueUnchanged
 	nba := nb.nba

@@ -110,7 +110,13 @@ func (node *Node) GetNames() (names []string) {
 	return
 }
 
-// GetSelected returns the paths of all selected nodes.
+// GetSelected returns the name-paths (root-to-node name lists) of all selected nodes.
+//
+// Selection is reported and matched by name-path, not by the unique node identity
+// used on the wire. If sibling nodes share the same name their name-paths are
+// identical, so the round-trip is lossy: [Node.SetSelected] cannot tell them apart
+// and will select every sibling sharing a selected name-path. Give siblings
+// distinct names if they must be addressed independently through this API.
 func (node *Node) GetSelected() (nameLists [][]string) {
 	node.Walk("", func(jsPath string, node *Node) {
 		if node.Selected {
@@ -120,7 +126,11 @@ func (node *Node) GetSelected() (nameLists [][]string) {
 	return
 }
 
-// SetSelected applies selected paths and returns nodes that changed.
+// SetSelected applies the given selected name-paths and returns the nodes that changed.
+//
+// Nodes are matched by name-path (see [Node.GetSelected]); when sibling nodes
+// share a name they are selected or deselected together, since their name-paths
+// are indistinguishable.
 //
 // It mutates the shared Node tree; on a rendered [Tree], hold the Tree's write
 // lock while calling it (see the [Node] concurrency note).

@@ -20,6 +20,9 @@ func (u *Div) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
 }
 
 // Div renders an HTML div element.
+//
+// A plain string innerHTML is trusted HTML and is not escaped; see [NewDiv] and
+// [bind.MakeHTMLGetter] for how to pass untrusted user input safely.
 func (rw RequestWriter) Div(innerHTML any, params ...any) error {
 	return rw.UI(NewDiv(innerHTML), params...)
 }

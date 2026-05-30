@@ -1934,6 +1934,23 @@ func TestWS_UpgradeRequired(t *testing.T) {
 	}
 }
 
+func TestWS_UnclaimedRequestIsGone(t *testing.T) {
+	jw, _ := New()
+	defer jw.Close()
+	w := httptest.NewRecorder()
+	hr := httptest.NewRequest("", "/", nil)
+	rq := jw.NewRequest(hr)
+	defer jw.recycle(rq)
+	// UseRequest is deliberately not called, so the Request stays unclaimed and
+	// startServe() returns false; ServeHTTP must surface an explicit error
+	// status instead of an empty 200 OK.
+	req := httptest.NewRequest("", "/jaws/"+rq.JawsKeyString(), nil)
+	rq.ServeHTTP(w, req)
+	if w.Code != http.StatusGone {
+		t.Errorf("got %d, want %d", w.Code, http.StatusGone)
+	}
+}
+
 func TestWS_RejectsMissingOrigin(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()

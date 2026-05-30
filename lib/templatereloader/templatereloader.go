@@ -16,7 +16,10 @@ const reloadInterval = time.Second
 // TemplateReloader reloads and reparses templates if more than one second
 // has passed since the last [TemplateReloader.Lookup].
 type TemplateReloader struct {
-	Path    string // the file path we are loading from
+	// Path is the file path templates are loaded from. It is set once by [New]
+	// and is read-only afterwards: it is read under mu during a reload, so
+	// mutating it after construction would race with [TemplateReloader.Lookup].
+	Path    string
 	mu      deadlock.RWMutex
 	when    time.Time
 	curr    *template.Template

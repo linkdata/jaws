@@ -120,7 +120,7 @@ type Binder[T comparable] interface {
 	Success(fn any) (newbind Binder[T])
 
 	// GetHTML returns a [Binder] that will call fn instead of the default
-	// escaped fmt.Sprintf("%v", JawsGetLocked(elem)) HTML rendering.
+	// escaped fmt.Sprint(JawsGetLocked(elem)) HTML rendering.
 	//
 	// The lock will be held at this point, preferring RLock over Lock, if available.
 	// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
@@ -338,7 +338,7 @@ func (b *binder[T]) Format(format string) Binder[T] {
 }
 
 // GetHTML returns a [Binder] that will call fn instead of the default escaped
-// fmt.Sprintf("%v", JawsGetLocked(elem)) HTML rendering.
+// fmt.Sprint(JawsGetLocked(elem)) HTML rendering.
 //
 // The lock will be held at this point, preferring RLock over Lock, if available.
 // Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].

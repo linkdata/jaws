@@ -22,6 +22,9 @@ func (u *Span) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
 }
 
 // Span renders an HTML span element.
+//
+// A plain string innerHTML is trusted HTML and is not escaped; see [NewSpan] and
+// [bind.MakeHTMLGetter] for how to pass untrusted user input safely.
 func (rw RequestWriter) Span(innerHTML any, params ...any) error {
 	return rw.UI(NewSpan(innerHTML), params...)
 }
