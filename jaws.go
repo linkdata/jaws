@@ -125,10 +125,10 @@ type Jid = jid.Jid // convenience alias
 type Jaws struct {
 	CookieName              string          // Name for session cookies, defaults to "jaws"
 	AutoSession             bool            // Create a session during WebSocket upgrade when a Request has none. Defaults to false.
-	TrustForwardedHeaders   bool            // Trust X-Forwarded-Proto and related headers when deciding if a request is secure (used for the session cookie Secure flag). Defaults to false; only enable behind a reverse proxy you control that sets these headers.
+	TrustForwardedHeaders   bool            // Trust X-Forwarded-* headers: governs the session cookie Secure flag (X-Forwarded-Proto) and the client IP used for session/request binding (X-Forwarded-For/X-Real-IP). Defaults to false; only enable behind a single reverse proxy you control that sets these headers.
 	Logger                  Logger          // Optional logger to use
 	Debug                   bool            // Set to true to enable debug info in generated HTML code. Call GenerateHeadHTML after changing it.
-	MakeAuth                MakeAuthFn      // Optional function to create ui.With.Auth for Templates
+	MakeAuth                MakeAuthFn      // Function to create ui.With.Auth for Templates. If nil, templates get the fail-open DefaultAuth (IsAdmin()==true for everyone); set it to enforce authorization. See DefaultAuth.
 	BaseContext             context.Context // Non-nil base context for Requests, set to context.Background() in New()
 	WebSocketPingInterval   time.Duration   // Interval between keepalive pings on active WebSocket connections. Defaults to DefaultWebSocketPingInterval. Set <=0 to disable keepalive pings.
 	MaxPendingRequestsPerIP int             // Maximum number of unclaimed Requests per client IP. Defaults to DefaultMaxPendingRequestsPerIP. Set <=0 to disable the cap.
@@ -338,10 +338,7 @@ func MakeID() string {
 // Automatic timeout handling is performed by [Jaws.ServeWithTimeout]. The default
 // [Jaws.Serve] helper uses a 10-second timeout.
 func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
-	var remoteIP netip.Addr
-	if r != nil {
-		remoteIP = parseIP(r.RemoteAddr)
-	}
+	remoteIP := jw.clientIP(r)
 
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
@@ -473,10 +470,15 @@ func getCookieSessionsIDs(h http.Header, wanted string) (cookies []uint64) {
 }
 
 // GetSession returns the [Session] associated with the given [http.Request], or nil.
+//
+// Sessions are bound to the client IP (see [Jaws.clientIP]). Behind a reverse
+// proxy that connects over loopback, every request appears to come from loopback
+// and IP binding is effectively disabled unless [Jaws.TrustForwardedHeaders] is
+// enabled so the forwarded client IP is used instead.
 func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 	if r != nil {
 		if sessionIDs := getCookieSessionsIDs(r.Header, jw.CookieName); len(sessionIDs) > 0 {
-			remoteIP := parseIP(r.RemoteAddr)
+			remoteIP := jw.clientIP(r)
 			jw.mu.RLock()
 			sess = jw.getSessionLocked(sessionIDs, remoteIP)
 			jw.mu.RUnlock()
@@ -493,6 +495,9 @@ func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 //
 // Subsequent [Request] values created with [Jaws.NewRequest] that have the
 // cookie set and originate from the same IP will be able to access the [Session].
+// The IP comparison is the same loopback-aware, optionally forwarded-header-based
+// match used everywhere else; see [Jaws.GetSession] and [Jaws.TrustForwardedHeaders]
+// for the reverse-proxy caveat.
 func (jw *Jaws) NewSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
 	if r != nil {
 		if oldSess := jw.GetSession(r); oldSess != nil {
@@ -511,7 +516,7 @@ func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Sessio
 	for sess == nil {
 		sessionID := jw.nonZeroRandomLocked()
 		if _, ok := jw.sessions[sessionID]; !ok {
-			sess = newSession(jw, sessionID, parseIP(r.RemoteAddr), secure)
+			sess = newSession(jw, sessionID, jw.clientIP(r), secure)
 			jw.sessions[sessionID] = sess
 			if w != nil {
 				http.SetCookie(w, &sess.cookie)
@@ -865,6 +870,13 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	}
 }
 
+// equalIP reports whether a and b identify the same client for the purpose of
+// session and request-key binding. Two loopback addresses always compare equal
+// so that a reverse proxy connecting to the backend over loopback does not break
+// binding; the consequence is that when every request arrives from loopback (the
+// typical proxied deployment without forwarded-IP binding) IP binding is a no-op.
+// Enable [Jaws.TrustForwardedHeaders] to bind on the forwarded client IP instead
+// (see [Jaws.clientIP]).
 func equalIP(a, b netip.Addr) bool {
 	return a.Compare(b) == 0 || (a.IsLoopback() && b.IsLoopback())
 }
@@ -878,6 +890,43 @@ func parseIP(remoteAddr string) (ip netip.Addr) {
 		}
 	}
 	return
+}
+
+// clientIP returns the address used to bind sessions and request keys to a
+// client. When [Jaws.TrustForwardedHeaders] is set it prefers the client IP from
+// the proxy-supplied forwarded headers, so binding keeps working behind a reverse
+// proxy that connects over loopback; otherwise (and as a fallback) it uses the
+// transport peer address. TrustForwardedHeaders must only be enabled behind a
+// single reverse proxy you control that sets these headers (see the field doc).
+func (jw *Jaws) clientIP(r *http.Request) (ip netip.Addr) {
+	if r != nil {
+		if jw.TrustForwardedHeaders {
+			if fip, ok := forwardedClientIP(r.Header); ok {
+				return fip
+			}
+		}
+		ip = parseIP(r.RemoteAddr)
+	}
+	return
+}
+
+// forwardedClientIP extracts the client IP from proxy-supplied headers. It uses
+// the leftmost X-Forwarded-For entry (the original client as seen by a single
+// trusted proxy), falling back to X-Real-IP. Callers must only trust these
+// headers when behind a controlled proxy (see [Jaws.TrustForwardedHeaders]).
+func forwardedClientIP(h http.Header) (netip.Addr, bool) {
+	if xff := h.Get("X-Forwarded-For"); xff != "" {
+		first, _, _ := strings.Cut(xff, ",")
+		if ip, err := netip.ParseAddr(textproto.TrimString(first)); err == nil {
+			return ip, true
+		}
+	}
+	if xrip := textproto.TrimString(h.Get("X-Real-Ip")); xrip != "" {
+		if ip, err := netip.ParseAddr(xrip); err == nil {
+			return ip, true
+		}
+	}
+	return netip.Addr{}, false
 }
 
 // SetInner sends a request to replace the inner HTML of
@@ -1014,7 +1063,7 @@ func (jw *Jaws) getRequestLocked(jawsKey uint64, r *http.Request) (rq *Request) 
 	rq.initial = r
 	rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
 	if r != nil {
-		rq.remoteIP = parseIP(r.RemoteAddr)
+		rq.remoteIP = jw.clientIP(r)
 		if sess := jw.getSessionLocked(getCookieSessionsIDs(r.Header, jw.CookieName), rq.remoteIP); sess != nil {
 			sess.addRequest(rq)
 			rq.session = sess
