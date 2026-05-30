@@ -67,43 +67,28 @@ func assertTagSetEqual(t *testing.T, got []any, want ...any) {
 	}
 }
 
-func saveRunHooks(t *testing.T) {
+// saveMainDeps snapshots mainDeps and restores it after the test, so tests that
+// drive main() can substitute parts of it without leaking into other tests.
+func saveMainDeps(t *testing.T) {
 	t.Helper()
-	oldNewJaws := newJaws
-	oldParseTemplates := parseMinesweeperTemplates
-	oldAddTemplateLookuper := addTemplateLookuper
-	oldGenerateHeadHTML := generateHeadHTML
-	oldSubStaticFS := subStaticFS
-	oldServeJaws := serveJaws
-	oldListenAndServe := listenAndServe
-	oldLogPrintln := logPrintln
-	oldLogFatal := logFatal
-	t.Cleanup(func() {
-		newJaws = oldNewJaws
-		parseMinesweeperTemplates = oldParseTemplates
-		addTemplateLookuper = oldAddTemplateLookuper
-		generateHeadHTML = oldGenerateHeadHTML
-		subStaticFS = oldSubStaticFS
-		serveJaws = oldServeJaws
-		listenAndServe = oldListenAndServe
-		logPrintln = oldLogPrintln
-		logFatal = oldLogFatal
-	})
+	old := mainDeps
+	t.Cleanup(func() { mainDeps = old })
 }
 
-func stubSuccessfulRunDeps(t *testing.T) {
-	t.Helper()
-	saveRunHooks(t)
-	parseMinesweeperTemplates = func() (*template.Template, error) {
-		return template.New("index.html"), nil
-	}
-	addTemplateLookuper = func(*jaws.Jaws, *template.Template) error { return nil }
-	generateHeadHTML = func(*jaws.Jaws) error { return nil }
-	subStaticFS = func() (fs.FS, error) { return fstest.MapFS{}, nil }
-	serveJaws = func(*jaws.Jaws) {}
-	listenAndServe = func(string, http.Handler) error { return nil }
-	logPrintln = func(...any) {}
-	logFatal = func(...any) {}
+// successfulRunDeps returns a runDeps whose external calls all succeed without
+// touching the network, the embedded templates or stdout, for exercising run's
+// happy path. newJaws is left as the real jaws.New so a real instance is built.
+func successfulRunDeps() runDeps {
+	d := newRunDeps()
+	d.parseTemplates = func() (*template.Template, error) { return template.New("index.html"), nil }
+	d.addLookuper = func(*jaws.Jaws, *template.Template) error { return nil }
+	d.generateHead = func(*jaws.Jaws) error { return nil }
+	d.subStaticFS = func() (fs.FS, error) { return fstest.MapFS{}, nil }
+	d.serve = func(*jaws.Jaws) {}
+	d.listenAndServe = func(string, http.Handler) error { return nil }
+	d.logPrintln = func(...any) {}
+	d.logFatal = func(...any) {}
+	return d
 }
 
 func findSeedWithSkipFirst(t *testing.T, total, skipIdx int) int64 {
@@ -135,7 +120,7 @@ func TestCellButtonUsesCellTagsAndHandlers(t *testing.T) {
 		t.Fatal("expected shared board tag to be registered")
 	}
 
-	if err := jaws.CallEventHandlers(elem.Ui(), elem, what.ContextMenu, "0 0 0 flag"); err != nil {
+	if err := jaws.CallEventHandlers(elem.UI(), elem, what.ContextMenu, "0 0 0 flag"); err != nil {
 		t.Fatalf("context menu error: %v", err)
 	}
 	if !cell.flagged {
@@ -150,7 +135,7 @@ func TestCellButtonUsesCellTagsAndHandlers(t *testing.T) {
 	if err := otherElem.JawsRender(&body, []any{`class="cell"`}); err != nil {
 		t.Fatal(err)
 	}
-	if err := jaws.CallEventHandlers(otherElem.Ui(), otherElem, what.Click, "0 0 0 reveal"); err != nil {
+	if err := jaws.CallEventHandlers(otherElem.UI(), otherElem, what.Click, "0 0 0 reveal"); err != nil {
 		t.Fatalf("click error: %v", err)
 	}
 	if !g.started {
@@ -426,7 +411,7 @@ func TestNewGameButtonResetsBoard(t *testing.T) {
 	if !strings.Contains(body.String(), "New game") {
 		t.Fatalf("expected rendered button text, got %q", body.String())
 	}
-	if err := jaws.CallEventHandlers(elem.Ui(), elem, what.Click, "0 0 0 new"); err != nil {
+	if err := jaws.CallEventHandlers(elem.UI(), elem, what.Click, "0 0 0 new"); err != nil {
 		t.Fatal(err)
 	}
 	if g.started || g.gameOver || g.won || g.revealed != 0 || g.flags != 0 {
@@ -604,27 +589,28 @@ func TestDefaultRunHooks(t *testing.T) {
 	log.SetOutput(&logBuf)
 	t.Cleanup(func() { log.SetOutput(oldWriter) })
 
-	jw, err := newJaws()
+	d := newRunDeps()
+	jw, err := d.newJaws()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer jw.Close()
 
-	tmpl, err := parseMinesweeperTemplates()
+	tmpl, err := d.parseTemplates()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if tmpl.Lookup("index.html") == nil {
 		t.Fatal("expected embedded index.html template")
 	}
-	if err := addTemplateLookuper(jw, tmpl); err != nil {
+	if err := d.addLookuper(jw, tmpl); err != nil {
 		t.Fatal(err)
 	}
-	if err := generateHeadHTML(jw); err != nil {
+	if err := d.generateHead(jw); err != nil {
 		t.Fatal(err)
 	}
 
-	staticFiles, err := subStaticFS()
+	staticFiles, err := d.subStaticFS()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -636,8 +622,8 @@ func TestDefaultRunHooks(t *testing.T) {
 		t.Fatal("expected embedded static files")
 	}
 
-	serveJaws(jw)
-	logPrintln("hook smoke test")
+	d.serve(jw)
+	d.logPrintln("hook smoke test")
 	if !strings.Contains(logBuf.String(), "hook smoke test") {
 		t.Fatalf("expected log output, got %q", logBuf.String())
 	}
@@ -645,7 +631,7 @@ func TestDefaultRunHooks(t *testing.T) {
 
 func TestDefaultLogFatal(t *testing.T) {
 	if os.Getenv("JAWS_TEST_DEFAULT_LOG_FATAL") == "1" {
-		logFatal(errors.New("boom"))
+		newRunDeps().logFatal(errors.New("boom"))
 		return
 	}
 
@@ -666,50 +652,50 @@ func TestDefaultLogFatal(t *testing.T) {
 func TestRunPropagatesDependencyErrors(t *testing.T) {
 	tests := []struct {
 		name  string
-		patch func(error)
+		patch func(*runDeps, error)
 	}{
 		{
 			name: "new jaws",
-			patch: func(want error) {
-				newJaws = func() (*jaws.Jaws, error) { return nil, want }
+			patch: func(d *runDeps, want error) {
+				d.newJaws = func() (*jaws.Jaws, error) { return nil, want }
 			},
 		},
 		{
 			name: "parse templates",
-			patch: func(want error) {
-				parseMinesweeperTemplates = func() (*template.Template, error) { return nil, want }
+			patch: func(d *runDeps, want error) {
+				d.parseTemplates = func() (*template.Template, error) { return nil, want }
 			},
 		},
 		{
 			name: "add template lookuper",
-			patch: func(want error) {
-				addTemplateLookuper = func(*jaws.Jaws, *template.Template) error { return want }
+			patch: func(d *runDeps, want error) {
+				d.addLookuper = func(*jaws.Jaws, *template.Template) error { return want }
 			},
 		},
 		{
 			name: "generate head html",
-			patch: func(want error) {
-				generateHeadHTML = func(*jaws.Jaws) error { return want }
+			patch: func(d *runDeps, want error) {
+				d.generateHead = func(*jaws.Jaws) error { return want }
 			},
 		},
 		{
 			name: "sub static fs",
-			patch: func(want error) {
-				subStaticFS = func() (fs.FS, error) { return nil, want }
+			patch: func(d *runDeps, want error) {
+				d.subStaticFS = func() (fs.FS, error) { return nil, want }
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			stubSuccessfulRunDeps(t)
+			d := successfulRunDeps()
 			want := errors.New(tt.name)
-			serveJaws = func(*jaws.Jaws) { t.Fatal("serveJaws should not run on startup error") }
-			listenAndServe = func(string, http.Handler) error {
+			d.serve = func(*jaws.Jaws) { t.Fatal("serve should not run on startup error") }
+			d.listenAndServe = func(string, http.Handler) error {
 				t.Fatal("listenAndServe should not run on startup error")
 				return nil
 			}
-			tt.patch(want)
-			if err := run(); !errors.Is(err, want) {
+			tt.patch(&d, want)
+			if err := run(d); !errors.Is(err, want) {
 				t.Fatalf("run() error = %v, want %v", err, want)
 			}
 		})
@@ -717,26 +703,26 @@ func TestRunPropagatesDependencyErrors(t *testing.T) {
 }
 
 func TestRunBuildsServerAndReturnsListenError(t *testing.T) {
-	stubSuccessfulRunDeps(t)
+	d := successfulRunDeps()
 	want := errors.New("listen")
 	var served bool
 	var printed bool
 	var gotAddr string
 	var gotHandler http.Handler
 
-	serveJaws = func(*jaws.Jaws) { served = true }
-	logPrintln = func(...any) { printed = true }
-	listenAndServe = func(addr string, handler http.Handler) error {
+	d.serve = func(*jaws.Jaws) { served = true }
+	d.logPrintln = func(...any) { printed = true }
+	d.listenAndServe = func(addr string, handler http.Handler) error {
 		gotAddr = addr
 		gotHandler = handler
 		return want
 	}
 
-	if err := run(); !errors.Is(err, want) {
+	if err := run(d); !errors.Is(err, want) {
 		t.Fatalf("run() error = %v, want %v", err, want)
 	}
 	if !served {
-		t.Fatal("expected serveJaws to run")
+		t.Fatal("expected serve to run")
 	}
 	if !printed {
 		t.Fatal("expected startup log line")
@@ -751,10 +737,11 @@ func TestRunBuildsServerAndReturnsListenError(t *testing.T) {
 
 func TestMainFatalBehavior(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		stubSuccessfulRunDeps(t)
+		saveMainDeps(t)
+		mainDeps = successfulRunDeps()
 		fatalCalled := false
-		logFatal = func(...any) { fatalCalled = true }
-		listenAndServe = func(string, http.Handler) error { return nil }
+		mainDeps.logFatal = func(...any) { fatalCalled = true }
+		mainDeps.listenAndServe = func(string, http.Handler) error { return nil }
 
 		main()
 
@@ -764,10 +751,11 @@ func TestMainFatalBehavior(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
-		stubSuccessfulRunDeps(t)
+		saveMainDeps(t)
+		mainDeps = successfulRunDeps()
 		want := errors.New("listen")
 		var got error
-		logFatal = func(v ...any) {
+		mainDeps.logFatal = func(v ...any) {
 			if len(v) != 1 {
 				t.Fatalf("logFatal args = %#v, want single error", v)
 			}
@@ -777,7 +765,7 @@ func TestMainFatalBehavior(t *testing.T) {
 				t.Fatalf("logFatal arg type = %T, want error", v[0])
 			}
 		}
-		listenAndServe = func(string, http.Handler) error { return want }
+		mainDeps.listenAndServe = func(string, http.Handler) error { return want }
 
 		main()
 

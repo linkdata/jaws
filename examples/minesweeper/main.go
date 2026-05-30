@@ -21,27 +21,39 @@ import (
 //go:embed assets/ui/*.html assets/static/*.css
 var assetsFS embed.FS
 
-var (
-	newJaws                   = jaws.New
-	parseMinesweeperTemplates = func() (*template.Template, error) {
-		return template.ParseFS(assetsFS, "assets/ui/*.html")
+// runDeps groups the external dependencies of [run] so tests can substitute any
+// of them. Production wiring is built by [newRunDeps]; passing the dependencies
+// in explicitly keeps them out of package-level mutable state.
+type runDeps struct {
+	newJaws        func() (*jaws.Jaws, error)
+	parseTemplates func() (*template.Template, error)
+	addLookuper    func(*jaws.Jaws, *template.Template) error
+	generateHead   func(*jaws.Jaws) error
+	subStaticFS    func() (fs.FS, error)
+	serve          func(*jaws.Jaws)
+	listenAndServe func(string, http.Handler) error
+	logPrintln     func(...any)
+	logFatal       func(...any)
+}
+
+// newRunDeps returns the production dependency set for [run].
+func newRunDeps() runDeps {
+	return runDeps{
+		newJaws:        jaws.New,
+		parseTemplates: func() (*template.Template, error) { return template.ParseFS(assetsFS, "assets/ui/*.html") },
+		addLookuper:    func(jw *jaws.Jaws, tmpl *template.Template) error { return jw.AddTemplateLookuper(tmpl) },
+		generateHead:   func(jw *jaws.Jaws) error { return jw.GenerateHeadHTML("/static/style.css") },
+		subStaticFS:    func() (fs.FS, error) { return fs.Sub(assetsFS, "assets/static") },
+		serve:          func(jw *jaws.Jaws) { go jw.Serve() },
+		listenAndServe: http.ListenAndServe,
+		logPrintln:     func(value ...any) { log.Println(value...) },
+		logFatal:       func(value ...any) { log.Fatal(value...) },
 	}
-	addTemplateLookuper = func(jw *jaws.Jaws, tmpl *template.Template) error {
-		return jw.AddTemplateLookuper(tmpl)
-	}
-	generateHeadHTML = func(jw *jaws.Jaws) error {
-		return jw.GenerateHeadHTML("/static/style.css")
-	}
-	subStaticFS = func() (fs.FS, error) {
-		return fs.Sub(assetsFS, "assets/static")
-	}
-	serveJaws = func(jw *jaws.Jaws) {
-		go jw.Serve()
-	}
-	listenAndServe = http.ListenAndServe
-	logPrintln     = func(value ...any) { log.Println(value...) }
-	logFatal       = func(value ...any) { log.Fatal(value...) }
-)
+}
+
+// mainDeps is the dependency set used by [main]. It is a package variable solely
+// so tests can replace parts of it; production code never reassigns it.
+var mainDeps = newRunDeps()
 
 // Cell represents one Minesweeper board cell.
 type Cell struct {
@@ -458,29 +470,34 @@ func (g *game) calculateAdjacencyLocked() {
 	}
 }
 
-func run() error {
-	jw, err := newJaws()
+func run(d runDeps) error {
+	jw, err := d.newJaws()
 	if err != nil {
 		return err
 	}
 	defer jw.Close()
 
-	tmpl, err := parseMinesweeperTemplates()
+	tmpl, err := d.parseTemplates()
 	if err != nil {
 		return err
 	}
-	if err = addTemplateLookuper(jw, tmpl); err != nil {
+	if err = d.addLookuper(jw, tmpl); err != nil {
 		return err
 	}
-	if err = generateHeadHTML(jw); err != nil {
+	if err = d.generateHead(jw); err != nil {
 		return err
 	}
 
-	staticFiles, err := subStaticFS()
+	staticFiles, err := d.subStaticFS()
 	if err != nil {
 		return err
 	}
 
+	// One board is shared by every visitor: this is a single, collaborative
+	// game that all connected browsers see and play simultaneously. That is a
+	// deliberate choice for this demo. For per-user state instead, create the
+	// game inside the handler (or in a JawsInit) keyed off the request/session,
+	// e.g. via jw.Session, rather than binding one board for the whole server.
 	board := newGame(10, 10, 15)
 
 	mux := http.NewServeMux()
@@ -488,13 +505,13 @@ func run() error {
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
 	mux.Handle("GET /", jw.Session(jw.SecureHeadersMiddleware(ui.Handler(jw, "index.html", board))))
 
-	serveJaws(jw)
-	logPrintln("Minesweeper listening on http://localhost:8080")
-	return listenAndServe(":8080", mux)
+	d.serve(jw)
+	d.logPrintln("Minesweeper listening on http://localhost:8080")
+	return d.listenAndServe(":8080", mux)
 }
 
 func main() {
-	if err := run(); err != nil {
-		logFatal(err)
+	if err := run(mainDeps); err != nil {
+		mainDeps.logFatal(err)
 	}
 }
