@@ -36,6 +36,8 @@ func (clk Click) keyState() (state int) {
 	return
 }
 
+// setKeyState sets the Shift, Control and Alt fields from the bitmask produced by
+// keyState, used when parsing an incoming click off the wire.
 func (clk *Click) setKeyState(state int) {
 	clk.Shift = (state & clickKeyShift) != 0
 	clk.Control = (state & clickKeyControl) != 0
