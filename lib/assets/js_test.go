@@ -3,6 +3,7 @@ package assets
 import (
 	"bytes"
 	"encoding/json"
+	"mime"
 	"net/url"
 	"os/exec"
 	"path/filepath"
@@ -85,6 +86,28 @@ func Test_PreloadHTML(t *testing.T) {
 	if strings.Count(txt, "<script") != strings.Count(txt, "</script>") {
 		t.Fatalf("script tags are unbalanced: %q", txt)
 	}
+
+	// Assert the full as/type structure, not just substring presence. Compute the
+	// expected MIME types the same way PreloadHTML does so the test stays correct
+	// regardless of the platform's MIME table.
+	fontMime, _, _ := strings.Cut(mime.TypeByExtension(".woff2"), ";")
+	var wantFontLink string
+	if strings.HasPrefix(fontMime, "font") {
+		wantFontLink = `<link rel="preload" href="someExtraFont.woff2" as="font" type="` + fontMime + `">`
+	} else {
+		// No font/* MIME on this platform: still a preload link, but no as/type.
+		wantFontLink = `<link rel="preload" href="someExtraFont.woff2">`
+	}
+	if !strings.Contains(txt, wantFontLink) {
+		t.Fatalf("missing structured font preload %q in %q", wantFontLink, txt)
+	}
+
+	pngMime, _, _ := strings.Cut(mime.TypeByExtension(".png"), ";")
+	wantFaviconLink := `<link rel="icon" type="` + pngMime + `" href="favicon.png">`
+	if !strings.Contains(txt, wantFaviconLink) {
+		t.Fatalf("missing structured favicon link %q in %q", wantFaviconLink, txt)
+	}
+
 	if fav != extraImage {
 		t.Fatalf("favicon = %q, want %q", fav, extraImage)
 	}

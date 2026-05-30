@@ -303,6 +303,27 @@ func testBind_Hook_Get[T comparable](t *testing.T, testval T) {
 	}
 }
 
+// TestBind_SetHook_ErrorPropagation asserts that a custom error returned by a
+// SetHook propagates out of JawsSet and that the bound value is left unchanged.
+func TestBind_SetHook_ErrorPropagation(t *testing.T) {
+	var mu deadlock.Mutex
+	val := "initial"
+	wantErr := errors.New("hook rejected the value")
+	b := New(&mu, &val).SetLocked(func(bind Binder[string], elem *jaws.Element, value string) error {
+		// Reject without delegating to bind.JawsSetLocked, so val stays put.
+		return wantErr
+	})
+	if err := b.JawsSet(nil, "changed"); !errors.Is(err, wantErr) {
+		t.Fatalf("JawsSet error = %v, want %v", err, wantErr)
+	}
+	if val != "initial" {
+		t.Fatalf("value mutated despite hook error: %q", val)
+	}
+	if got := b.JawsGet(nil); got != "initial" {
+		t.Fatalf("JawsGet = %q, want %q", got, "initial")
+	}
+}
+
 func TestBind_Hook_SetGet_ReceivePreviousBinder(t *testing.T) {
 	var mu deadlock.Mutex
 	var val string

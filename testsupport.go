@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"time"
 
 	"github.com/linkdata/jaws/lib/wire"
 )
@@ -43,9 +44,17 @@ func newRequestHarness(jw *Jaws, r *http.Request) (rh *requestHarness) {
 	// Flush the subscribe channel so the running Serve loop is guaranteed to have
 	// processed our subscription above before the harness returns: send cap+1
 	// no-op subscriptions, which can only all be consumed once Serve has drained
-	// the channel. Requires Serve/ServeWithTimeout to be running, or this blocks.
+	// the channel. This requires Serve/ServeWithTimeout to be running; if it is
+	// not, the sends would block forever, so fail loudly with a clear message
+	// instead (this is a test helper, so panicking surfaces the misuse).
 	for i := 0; i <= cap(jw.subCh); i++ {
-		jw.subCh <- subscription{}
+		select {
+		case jw.subCh <- subscription{}:
+		case <-jw.Done():
+			panic("jaws: NewTestRequest: the Jaws instance is closed")
+		case <-time.After(5 * time.Second):
+			panic("jaws: NewTestRequest timed out subscribing; the Jaws processing loop (Serve or ServeWithTimeout) must be running")
+		}
 	}
 	rh = &requestHarness{
 		Req:              rq,
