@@ -1126,6 +1126,13 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				cancelFn := rq.cancelFn
 				numElems := len(rq.elems)
 				rq.mu.RUnlock()
+				// Size the broadcast buffer with headroom that scales with the
+				// page's element count. mustBroadcast (see Jaws.Serve) sends here
+				// non-blocking and, for any non-Update message, kills the
+				// subscription and cancels this request if the send would block.
+				// A larger page can be the target of more concurrent broadcasts
+				// between drains, so the buffer grows per element (4) over a small
+				// fixed base (4) to avoid spuriously cancelling a slow request.
 				broadcastMsgCh := rq.Jaws.subscribe(rq, 4+numElems*4)
 				outboundMsgCh := make(chan wire.WsMsg, cap(broadcastMsgCh))
 				go wire.ReadLoop(ctx, cancelFn, rq.Jaws.Done(), incomingMsgCh, ws)  // closes incomingMsgCh
