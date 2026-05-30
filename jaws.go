@@ -915,20 +915,23 @@ func (jw *Jaws) SetValue(target any, value string) {
 // all HTML elements matching target.
 //
 // The position parameter 'where' may be either an HTML ID, a child index or the text "null".
-func (jw *Jaws) Insert(target any, where, html string) {
+// html is trusted HTML, matching [Jaws.SetInner] and [Jaws.Append].
+func (jw *Jaws) Insert(target any, where string, html template.HTML) {
 	jw.Broadcast(wire.Message{
 		Dest: target,
 		What: what.Insert,
-		Data: where + "\n" + html,
+		Data: where + "\n" + string(html),
 	})
 }
 
 // Replace replaces HTML on all HTML elements matching target.
-func (jw *Jaws) Replace(target any, html string) {
+//
+// html is trusted HTML, matching [Jaws.SetInner] and [Jaws.Append].
+func (jw *Jaws) Replace(target any, html template.HTML) {
 	jw.Broadcast(wire.Message{
 		Dest: target,
 		What: what.Replace,
-		Data: html,
+		Data: string(html),
 	})
 }
 
@@ -964,9 +967,9 @@ var whitespaceRemover = strings.NewReplacer(" ", "", "\n", "", "\t", "")
 
 // JsCall calls the JavaScript function jsfunc with the argument jsonstr
 // on all [Request] values that have the target UI tag.
-func (jw *Jaws) JsCall(tagValue any, jsfunc, jsonstr string) {
+func (jw *Jaws) JsCall(target any, jsfunc, jsonstr string) {
 	jw.Broadcast(wire.Message{
-		Dest: tagValue,
+		Dest: target,
 		What: what.Call,
 		Data: whitespaceRemover.Replace(jsfunc) + "=" + maybeCompactJSON(jsonstr),
 	})

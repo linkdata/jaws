@@ -1675,7 +1675,7 @@ func TestRequest_ReplaceMessageTargetsElementHTML(t *testing.T) {
 
 	tagValue := &testUi{}
 	jid := rq.Register(tagValue)
-	html := `<div id="` + jid.String() + `">replaced</div>`
+	html := template.HTML(`<div id="` + jid.String() + `">replaced</div>`)
 
 	rq.Jaws.Replace(tagValue, html)
 	msg := nextOutboundMsg(t, rq)
@@ -1683,7 +1683,7 @@ func TestRequest_ReplaceMessageTargetsElementHTML(t *testing.T) {
 	if msg.What != what.Replace {
 		t.Fatalf("unexpected message type %v", msg.What)
 	}
-	if msg.Data != html {
+	if msg.Data != string(html) {
 		t.Fatalf("replace payload mismatch: got %q want %q", msg.Data, html)
 	}
 }
