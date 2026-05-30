@@ -62,49 +62,6 @@ func TestSession_Object(t *testing.T) {
 	sess.Reload()
 }
 
-func TestRequestIsSecure(t *testing.T) {
-	t.Run("http", func(t *testing.T) {
-		hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
-		if requestIsSecure(hr) {
-			t.Fatal("expected insecure request")
-		}
-	})
-	t.Run("https", func(t *testing.T) {
-		hr := httptest.NewRequest(http.MethodGet, "https://example.test/", nil)
-		if !requestIsSecure(hr) {
-			t.Fatal("expected secure request")
-		}
-	})
-	t.Run("forwarded proto", func(t *testing.T) {
-		hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
-		hr.Header.Set("X-Forwarded-Proto", "https")
-		if !requestIsSecure(hr) {
-			t.Fatal("expected secure request")
-		}
-	})
-	t.Run("forwarded proto first hop wins", func(t *testing.T) {
-		hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
-		hr.Header.Set("X-Forwarded-Proto", "http, https")
-		if requestIsSecure(hr) {
-			t.Fatal("expected insecure request")
-		}
-	})
-	t.Run("forwarded ssl", func(t *testing.T) {
-		hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
-		hr.Header.Set("X-Forwarded-Ssl", "on")
-		if !requestIsSecure(hr) {
-			t.Fatal("expected secure request")
-		}
-	})
-	t.Run("forwarded standard header", func(t *testing.T) {
-		hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
-		hr.Header.Set("Forwarded", "for=192.0.2.1;proto=https;by=203.0.113.9")
-		if !requestIsSecure(hr) {
-			t.Fatal("expected secure request")
-		}
-	})
-}
-
 func TestSession_CookieSecureMatchesRequest(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
@@ -125,14 +82,30 @@ func TestSession_CookieSecureMatchesRequest(t *testing.T) {
 		t.Fatal("expected secure cookie for https request")
 	}
 
+	// By default forwarded headers are not trusted, so a forwarded-as-https
+	// request over plain HTTP must still yield an insecure cookie.
 	hrForwarded := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
 	hrForwarded.Header.Set("X-Forwarded-Proto", "https")
 	sForwarded := jw.NewSession(httptest.NewRecorder(), hrForwarded)
 	if sForwarded == nil {
 		t.Fatal("expected session")
 	}
-	if sForwarded.Cookie() == nil || !sForwarded.Cookie().Secure {
-		t.Fatal("expected secure cookie when request is forwarded as https")
+	if sForwarded.Cookie() == nil || sForwarded.Cookie().Secure {
+		t.Fatal("expected insecure cookie when forwarded headers are not trusted")
+	}
+
+	// With TrustForwardedHeaders enabled, the same request yields a secure cookie.
+	jwTrust, _ := New()
+	defer jwTrust.Close()
+	jwTrust.TrustForwardedHeaders = true
+	hrTrusted := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	hrTrusted.Header.Set("X-Forwarded-Proto", "https")
+	sTrusted := jwTrust.NewSession(httptest.NewRecorder(), hrTrusted)
+	if sTrusted == nil {
+		t.Fatal("expected session")
+	}
+	if sTrusted.Cookie() == nil || !sTrusted.Cookie().Secure {
+		t.Fatal("expected secure cookie when forwarded headers are trusted")
 	}
 }
 

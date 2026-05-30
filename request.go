@@ -24,6 +24,7 @@ import (
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
+	"github.com/linkdata/secureheaders"
 )
 
 // ConnectFn can be used to interact with a [Request] before message processing starts.
@@ -387,8 +388,18 @@ func (rq *Request) cancel(err error) {
 	rq.cancelLocked(err)
 }
 
+// alertData builds the wire payload for an Alert message, HTML-escaping both the
+// level and the message. Callers may therefore pass untrusted text safely; this
+// mirrors the escaping done by the internal [wire.WsMsg.FillAlert] path.
+func alertData(level, msg string) string {
+	return html.EscapeString(level) + "\n" + html.EscapeString(msg)
+}
+
 // Alert attempts to show an alert message on the current request webpage if it has an HTML element with the id "jaws-alert".
 // The lvl argument should be one of Bootstrap's alert levels: primary, secondary, success, danger, warning, info, light or dark.
+//
+// The level and msg are HTML-escaped before being sent, so it is safe to pass
+// untrusted text; do not pre-escape it.
 //
 // The default JaWS JavaScript only supports Bootstrap dismissible alerts.
 // See [Jaws.Broadcast] for processing-loop requirements.
@@ -396,20 +407,27 @@ func (rq *Request) Alert(level, msg string) {
 	rq.Jaws.Broadcast(wire.Message{
 		Dest: rq,
 		What: what.Alert,
-		Data: level + "\n" + msg,
+		Data: alertData(level, msg),
 	})
 }
 
 // AlertError calls [Request.Alert] if the given error is not nil.
 func (rq *Request) AlertError(err error) {
 	if rq.Jaws.Log(err) != nil {
-		rq.Alert("danger", html.EscapeString(err.Error()))
+		rq.Alert("danger", err.Error())
 	}
 }
 
 // Redirect requests the current [Request] to navigate to the given URL.
+//
+// The URL is validated to be relative or http/https; a script-bearing scheme
+// such as javascript: is refused and logged rather than sent to the browser.
 // See [Jaws.Broadcast] for processing-loop requirements.
 func (rq *Request) Redirect(url string) {
+	if !isSafeRedirect(url) {
+		_ = rq.Jaws.Log(fmt.Errorf("jaws: refusing unsafe redirect to %q", url))
+		return
+	}
 	rq.Jaws.Broadcast(wire.Message{
 		Dest: rq,
 		What: what.Redirect,
@@ -919,7 +937,7 @@ func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) {
 		var u *url.URL
 		if u, err = url.Parse(origin); err == nil {
 			if initial := rq.Initial(); initial != nil {
-				secure := requestIsSecure(initial)
+				secure := secureheaders.RequestIsSecure(initial, rq.Jaws.TrustForwardedHeaders)
 				port := ""
 				uhost := u.Host
 				ihost := initial.Host
