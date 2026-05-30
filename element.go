@@ -35,7 +35,13 @@ type Element struct {
 }
 
 func (elem *Element) String() string {
-	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", elem.UI(), elem.Jid(), elem.Request.TagsOf(elem))
+	// Guard elem.Request like Request.String()/JawsKeyString guard a nil
+	// receiver, so String() stays safe on a not-fully-constructed Element.
+	var tags []any
+	if elem.Request != nil {
+		tags = elem.Request.TagsOf(elem)
+	}
+	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", elem.UI(), elem.Jid(), tags)
 }
 
 // appendHandlers is the single internal chokepoint for mutating elem.handlers.
