@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"fmt"
 	"net/http"
 	"net/url"
 	"path"
@@ -137,19 +136,15 @@ func TestJaws_SetupSetupFuncBarePathIsUnchanged(t *testing.T) {
 	}
 }
 
-func TestJaws_SetupPanics(t *testing.T) {
-	defer func() {
-		x := recover()
-		if x != nil {
-			if y := fmt.Sprint(x); strings.HasPrefix(y, "expected ") {
-				return
-			}
-		}
-		t.Error(x)
-	}()
+func TestJaws_SetupRejectsUnknownExtra(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
 	mux := http.NewServeMux()
-	_ = jw.Setup(mux.Handle, "", 1)
-	t.Fail()
+	err := jw.Setup(mux.Handle, "", 1)
+	if err == nil {
+		t.Fatal("expected an error for an unsupported extra type")
+	}
+	if !strings.Contains(err.Error(), "not int") {
+		t.Errorf("unexpected error: %v", err)
+	}
 }

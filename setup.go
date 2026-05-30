@@ -74,7 +74,7 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 				urls = append(urls, makeAbsPath(prefix, u))
 			}
 		default:
-			panic(fmt.Sprintf("expected a string, *url.URL, *staticserve.StaticServe or jaws.SetupFunc, not %T", extra))
+			err = errors.Join(err, fmt.Errorf("jaws.Setup: expected a string, *url.URL, *staticserve.StaticServe or jaws.SetupFunc, not %T", extra))
 		}
 	}
 	var extraFiles []string
