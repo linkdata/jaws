@@ -35,6 +35,21 @@ type TestRequest struct {
 	BcastCh  chan wire.Message
 }
 
+// newRequest constructs the pending [jaws.Request] that NewTestRequest then
+// claims and serves. It is a package variable so tests can substitute a
+// constructor returning an already-claimed request, exercising the
+// claim-failure path in NewTestRequest.
+var newRequest = (*jaws.Jaws).NewRequest
+
+// repanic re-raises a panic value recovered from the request's processing loop.
+// A nil value means the loop exited normally and is ignored; any other value is
+// re-raised so an unexpected loop panic surfaces instead of being swallowed.
+func repanic(recovered any) {
+	if recovered != nil {
+		panic(recovered)
+	}
+}
+
 // NewTestRequest creates a TestRequest for use when testing. Passing nil for r
 // creates a GET / request with no body. It requires the Jaws processing loop
 // ([jaws.Jaws.Serve] or ServeWithTimeout) to be running, and returns nil if the
@@ -45,7 +60,7 @@ func NewTestRequest(jw *jaws.Jaws, r *http.Request) *TestRequest {
 	}
 	rr := httptest.NewRecorder()
 	rr.Body = &bytes.Buffer{}
-	rq := jw.NewRequest(r)
+	rq := newRequest(jw, r)
 	if rq == nil || jw.UseRequest(rq.JawsKey, r) != rq {
 		return nil
 	}
@@ -55,11 +70,7 @@ func NewTestRequest(jw *jaws.Jaws, r *http.Request) *TestRequest {
 	}
 	// This harness does not expect loop panics, so re-raise any so they surface
 	// instead of being silently swallowed.
-	tr.InCh, tr.OutCh, tr.BcastCh, tr.ReadyCh, tr.DoneCh = jw.TestServe(rq, func(recovered any) {
-		if recovered != nil {
-			panic(recovered)
-		}
-	})
+	tr.InCh, tr.OutCh, tr.BcastCh, tr.ReadyCh, tr.DoneCh = jw.TestServe(rq, repanic)
 	return tr
 }
 
