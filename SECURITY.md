@@ -236,7 +236,7 @@ Also tested case-variant bypass attempts (`inner`, `INNER`, `redirect`, `alert`)
 | Null bytes in messages | Silently dropped |
 | Unknown command types (Foo, Eval) | Silently dropped |
 | Invalid UTF-8 sequences | Stripped via `strings.ToValidUTF8()` (`wsmsg.go`, `Parse`) |
-| Oversized payload (1MB) | Accepted, no crash |
+| Oversized payload (>32 KiB) | Rejected: inbound messages are capped at 32 KiB (`webSocketReadLimit`, set via `ws.SetReadLimit` in `request.go`); a larger message fails the read and closes the connection |
 | Message flood (1000 msgs in 0.03s) | Connection survived |
 | 20 simultaneous connections | All accepted |
 | Rapid connect/disconnect (20 cycles) | Handled gracefully |
@@ -313,7 +313,23 @@ The framework uses Go's `template.HTML` type to distinguish trusted HTML from un
 - `SetInner()` accepts `template.HTML`, meaning the developer has explicitly marked the content as trusted
 - Initial HTML rendering escapes generated attribute values with HTML entities (`htmlio.AppendAttrValue`)
 
-**Implication:** The framework itself does not create XSS vulnerabilities. However, an application developer who passes unescaped user input as `template.HTML` to `SetInner()` would create a stored XSS condition. The CSP `script-src 'self'` mitigates this by blocking inline script execution.
+**Convenience path — plain strings are trusted too.** The HTML-inner widget
+constructors and `RequestWriter` helpers (`NewSpan`/`Span`, `NewDiv`/`Div`, `A`,
+`Label`, `Li`, `Td`, `Tr`, `Button`, and `Object`) accept an `any` and route it
+through `bind.MakeHTMLGetter`. A **plain `string`** taken by that path is treated as
+**trusted HTML and is *not* escaped** — no explicit `template.HTML` cast is
+required — so that markup can be passed conveniently from templates
+(e.g. `{{$.Span "<i>text</i>"}}`). Values wrapped in a `bind.Getter[string]`,
+`bind.Binder[string]`, or `fmt.Stringer` *are* escaped. The same trust applies to
+the `named.NewBool`/`BoolArray.Add` HTML labels (typed `template.HTML`).
+
+**Implication:** The framework itself does not create XSS vulnerabilities, but its
+XSS safety is **contingent on the application developer never passing untrusted
+data either as a plain `string` to an HTML-inner widget or as `template.HTML` to
+`SetInner()`** — doing so would create a stored XSS condition. Wrap user input in a
+`Getter`/`Stringer` (auto-escaped) or pre-escape it with
+`template.HTMLEscapeString` before casting. The CSP `script-src 'self'` mitigates
+this by blocking inline script execution.
 
 ### 9.3 WebSocket Message Parsing
 
@@ -364,7 +380,7 @@ None.
 |---|---------|---------|
 | I1 | `style-src 'unsafe-inline'` in CSP | Required by the framework's design: widgets set inline `style=` attributes in initial HTML and via `setAttribute('style', ...)` at runtime. CSP nonces cannot apply to `style=` attributes (only `<style>` elements), and eliminating all inline styles would require forbidding arbitrary style params across the framework. The theoretical risk (CSS-based data exfiltration) requires a prior HTML injection primitive, which was not found. This is a pragmatic and acceptable trade-off. |
 | I2 | Mouse tracking shared across sessions | `mousetrack.js` sends cursor X/Y to server via JsVar Set; visible to co-viewers by design |
-| I3 | `template.HTML` trust boundary | Framework allows `SetInner()` with trusted HTML; application developers must escape user input before casting to `template.HTML` |
+| I3 | `template.HTML` / plain-string trust boundary | Framework allows `SetInner()` with trusted HTML, and HTML-inner widgets (`Span`, `Div`, …) treat a plain `string` as trusted HTML without a cast; application developers must escape user input before casting to `template.HTML` or passing it as a plain string. See §9.2. |
 | I4 | Loopback IP equivalence | `equalIP()` treats all loopback addresses as identical; only relevant in shared-localhost deployments |
 | I5 | Framework identification in JS | `/jaws/.jaws.*.js` contains `// https://github.com/linkdata/jaws` comment |
 | I6 | No explicit WebSocket message rate limiting | 1000 messages in 0.04s accepted on a single connection. However, each connection requires a prior HTTP GET + TLS + WebSocket upgrade + IP validation, making connection spam expensive for the attacker. Message flood cost depends on application event handler complexity (trivial for this demo). |

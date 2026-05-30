@@ -28,6 +28,11 @@ func NewBoolArray(multi bool) *BoolArray {
 }
 
 // ReadLocked calls fn with the [BoolArray] locked for reading.
+//
+// fn must not call other [BoolArray] methods, which would re-acquire the same
+// non-reentrant lock and deadlock; operate only on the provided slice. Calling
+// methods on the *[Bool] elements is safe because they use a separate mutex taken
+// in array-before-bool order.
 func (nba *BoolArray) ReadLocked(fn func(nbl []*Bool)) {
 	nba.mu.RLock()
 	defer nba.mu.RUnlock()
@@ -36,6 +41,9 @@ func (nba *BoolArray) ReadLocked(fn func(nbl []*Bool)) {
 
 // WriteLocked calls fn with the [BoolArray] locked for writing and replaces
 // the internal []*Bool slice with the return value.
+//
+// As with [BoolArray.ReadLocked], fn must not call other [BoolArray] methods (it
+// would deadlock); operate only on the provided slice and its *[Bool] elements.
 func (nba *BoolArray) WriteLocked(fn func(nbl []*Bool) []*Bool) {
 	nba.mu.Lock()
 	defer nba.mu.Unlock()
@@ -55,6 +63,10 @@ func (nba *BoolArray) JawsContains(elem *jaws.Element) (contents []jaws.UI) {
 // Add adds a [Bool] with the given name and trusted HTML text.
 // Returns itself.
 //
+// The text argument is rendered as trusted HTML and is not escaped; pre-escape it
+// (e.g. template.HTML(template.HTMLEscapeString(s))) when it is derived from
+// untrusted user input. See [NewBool].
+//
 // Note that while it is legal to have multiple [Bool] values with the same
 // name because HTML allows it, it is usually not a good idea.
 func (nba *BoolArray) Add(name string, text template.HTML) *BoolArray {
@@ -66,8 +78,12 @@ func (nba *BoolArray) Add(name string, text template.HTML) *BoolArray {
 
 // Set sets the checked state for [Bool] values with the given name.
 //
-// If the given name does not match any values in single-select
-// mode, everything will be deselected.
+// Matching is by name, so values are addressed as logical options rather than
+// individually: every [Bool] sharing the name is set together, and in
+// single-select mode the at-most-one-checked invariant holds per distinct name
+// (selecting a name deselects all values with a different name, but leaves
+// same-named siblings checked). If the given name matches no values in
+// single-select mode, everything will be deselected.
 func (nba *BoolArray) Set(name string, state bool) (changed bool) {
 	nba.mu.Lock()
 	defer nba.mu.Unlock()

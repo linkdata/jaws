@@ -57,7 +57,8 @@ func (j Jid) AppendQuote(dst []byte) []byte {
 }
 
 // AppendStartTagAttr appends `<startTag` followed by the quoted [Jid] as an
-// HTML id attribute when jid is non-zero.
+// HTML id attribute when jid is positive (Jid(0) and negative/invalid Jids append
+// only the start tag, matching [Jid.AppendInt]).
 //
 // startTag must be a trusted, syntactically valid HTML tag name: it is written
 // verbatim with no escaping or validation and MUST NOT be derived from untrusted
