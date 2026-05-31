@@ -169,3 +169,63 @@ func BenchmarkAppendJSQuote(b *testing.B) {
 		})
 	}
 }
+
+// benchSink consumes drained messages so the outbound loop is not eliminated.
+var benchSink wire.WsMsg
+
+// BenchmarkSendQueue measures one outbound drain cycle: K element messages are
+// queued, then Request.sendQueue drains them through getSendMsgs into the
+// WebSocket send channel, which the benchmark then empties. It guards the per-drain
+// cost the process loop pays (twice per loop iteration) on the outbound path. rq
+// comes from jw.NewRequest(nil) for a live, never-cancelled ctx, and the channel is
+// buffered to K so sends never block.
+func BenchmarkSendQueue(b *testing.B) {
+	for _, k := range []int{8, 64, 512} {
+		b.Run("msgs="+strconv.Itoa(k), func(b *testing.B) {
+			jw, err := New()
+			if err != nil {
+				b.Fatal(err)
+			}
+			b.Cleanup(func() { jw.Close() })
+			rq := jw.NewRequest(nil)
+			msgs := make([]wire.WsMsg, k)
+			for i := range msgs {
+				msgs[i] = wire.WsMsg{Jid: 0, Data: "x"}
+			}
+			ch := make(chan wire.WsMsg, k)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for n := 0; n < b.N; n++ {
+				rq.muQueue.Lock()
+				rq.wsQueue = append(rq.wsQueue[:0], msgs...)
+				rq.muQueue.Unlock()
+				rq.sendQueue(ch)
+				for len(ch) > 0 {
+					benchSink = <-ch
+				}
+			}
+		})
+	}
+}
+
+// benchDirtSink consumes the sorted []any so the work is not eliminated.
+var benchDirtSink []any
+
+// BenchmarkDistributeDirtSort measures sortedDirtTags, the dirty-set ordering
+// distributeDirt performs under jw.mu, isolated from the per-request fan-out that
+// dominates (and hides it in) BenchmarkDistributeDirt. The cost grows with the
+// number of distinct dirty tags marked between update ticks.
+func BenchmarkDistributeDirtSort(b *testing.B) {
+	for _, n := range []int{10, 100, 1000} {
+		m := make(map[any]int, n)
+		for i := 0; i < n; i++ {
+			m[tag.Tag(strconv.Itoa(i))] = i
+		}
+		b.Run("tags="+strconv.Itoa(n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				benchDirtSink = sortedDirtTags(m)
+			}
+		})
+	}
+}
