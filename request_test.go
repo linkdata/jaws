@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -227,6 +228,38 @@ func TestRequest_writeTailScript_RemoveAttrAndClass(t *testing.T) {
 	rq.muQueue.Lock()
 	th.Equal(len(rq.wsQueue), 0)
 	rq.muQueue.Unlock()
+}
+
+// TestRequest_TailScriptConcurrentWithRecycle exercises a /jaws/.tail fetch
+// racing recycle of the same still-pending request. clearLocked resets
+// wsQueue/tailsent, which writeTailScript reads under muQueue, and takes muQueue
+// for that reset so the two cannot race; without that guard this is a data race
+// the single-goroutine tail tests never hit. Run with -race.
+func TestRequest_TailScriptConcurrentWithRecycle(t *testing.T) {
+	jw, _ := New()
+	defer jw.Close()
+
+	// Fetch the tail script via the public endpoint while recycling the same
+	// request, repeated enough to overlap under the race detector.
+	const n = 300
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		rq := jw.NewRequest(nil)
+		e := rq.NewElement(&testUi{})
+		e.SetAttr("hidden", "yes")
+		e.SetClass("cls")
+		tailURL := "/jaws/.tail/" + rq.JawsKeyString()
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			jw.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, tailURL, nil))
+		}()
+		go func() {
+			defer wg.Done()
+			jw.recycle(rq)
+		}()
+	}
+	wg.Wait()
 }
 
 func TestRequest_SendArrivesOk(t *testing.T) {

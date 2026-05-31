@@ -198,7 +198,6 @@ func (rq *Request) clearLocked() *Request {
 	rq.running.Store(false)
 	rq.claimed.Store(false)
 	rq.Rendering.Store(false)
-	rq.tailsent = false
 	if rq.cancelFn != nil {
 		rq.cancelFn(nil)
 	}
@@ -214,7 +213,15 @@ func (rq *Request) clearLocked() *Request {
 	}
 	clear(rq.elems)
 	rq.elems = rq.elems[:0]
+	// wsQueue and tailsent are guarded by muQueue, not rq.mu. A /jaws/.tail/<key>
+	// fetch (writeTailScript) on a still-pending request runs on a separate HTTP
+	// goroutine holding only muQueue, so take muQueue here to serialize the reset
+	// with it; the documented rq.mu -> muQueue lock order is preserved since we
+	// already hold rq.mu.
+	rq.muQueue.Lock()
+	rq.tailsent = false
 	rq.wsQueue = rq.wsQueue[:0]
+	rq.muQueue.Unlock()
 	clear(rq.tagMap)
 	rq.killSessionLocked()
 	return rq
@@ -250,6 +257,19 @@ func appendJSQuote(b []byte, s string) []byte {
 func (rq *Request) writeTailScript(w io.Writer) (sent bool, err error) {
 	rq.muQueue.Lock()
 	defer rq.muQueue.Unlock()
+	// We deliberately do not guard against the pooled Request being recycled and
+	// reused for a different connection between the /jaws/.tail lookup and this
+	// drain. Triggering that would require a pending Request recycled inside the
+	// microsecond window of its own in-flight tail fetch, this goroutine stalled
+	// across a full recycle+reuse, and the pool returning that same object to a new
+	// render that re-queued tail messages. The worst case is cosmetic and
+	// self-healing — the stale tab briefly applies another request's attribute/class
+	// updates to same-numbered jids, and the reused tab loses its initial
+	// flicker-prevention — with no server-side state or security impact, since jids
+	// are per-Request, the client already controls its own DOM, and the WebSocket
+	// re-applies the authoritative state on connect. (The data race on
+	// wsQueue/tailsent itself is still prevented: clearLocked takes muQueue to reset
+	// them.)
 	if !rq.tailsent {
 		rq.tailsent = true
 		sent = true
@@ -982,9 +1002,19 @@ func (rq *Request) getSendMsgs() (toSend []wire.WsMsg) {
 // sendQueue writes the drained outbound queue to outboundMsgCh, abandoning a send
 // if the request context is cancelled.
 func (rq *Request) sendQueue(outboundMsgCh chan<- wire.WsMsg) {
-	for _, msg := range rq.getSendMsgs() {
+	msgs := rq.getSendMsgs()
+	if len(msgs) == 0 {
+		return
+	}
+	// Snapshot the done channel once for the whole batch. getSendMsgs already
+	// froze the batch under a single lock, and rq.Context() takes rq.mu.RLock on
+	// every call, so reading it per message would re-lock rq.mu K times during a
+	// drain burst. A SetContext mid-drain is already unsynchronized relative to an
+	// in-flight send, so capturing once changes no guaranteed behavior.
+	done := rq.Context().Done()
+	for _, msg := range msgs {
 		select {
-		case <-rq.Context().Done():
+		case <-done:
 		case outboundMsgCh <- msg:
 		}
 	}
