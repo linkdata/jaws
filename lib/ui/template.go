@@ -45,9 +45,10 @@ func (tmpl Template) lookup(elem *jaws.Element) (lookedUp *template.Template, er
 }
 
 func (tmpl Template) auth(elem *jaws.Element) (auth jaws.Auth) {
-	auth = jaws.DefaultAuth{}
 	if f := elem.Request.Jaws.MakeAuth; f != nil {
 		auth = f(elem.Request)
+	} else {
+		auth = &jaws.DefaultAuth{Logger: elem.Request.Jaws.Logger}
 	}
 	return
 }
