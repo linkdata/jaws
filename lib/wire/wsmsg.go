@@ -57,6 +57,16 @@ func appendJSONQuote(b []byte, s string) []byte {
 	return append(b, '"')
 }
 
+// AppendJSONQuote appends s to b as a double-quoted JSON string literal that the
+// browser's JSON.parse accepts. Use it instead of strconv.AppendQuote when the
+// quoted data is written into a WebSocket frame: strconv emits Go-only escapes
+// (\xNN, \UXXXXXXXX) for control bytes, DEL and invalid UTF-8 that JSON.parse
+// rejects. See appendJSONQuote for the exact behavior, which is pinned by
+// Fuzz_appendJSONQuote.
+func AppendJSONQuote(b []byte, s string) []byte {
+	return appendJSONQuote(b, s)
+}
+
 // WsMsg is a message sent to or from a WebSocket.
 type WsMsg struct {
 	Data string    // data to send
