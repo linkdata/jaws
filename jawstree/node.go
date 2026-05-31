@@ -88,11 +88,12 @@ func (node *Node) MarshalJSON() (b []byte, err error) {
 
 var _ json.Marshaler = &Node{}
 
-// JawsSetPath restricts browser-initiated mutations to the per-node "selected"
-// flag. Any other path, a non-bool value, or an out-of-range child index is
-// rejected without mutating the tree, so a WebSocket client cannot change node
-// names, ids, the children slice, or any other [Node] field by path. This is the
-// server-side enforcement of the "server holds the truth" contract for [Tree].
+// JawsSetPath restricts browser-initiated mutations to the per-node "selected" flag.
+//
+// Any other path, a non-bool value, or an out-of-range child index is rejected
+// without mutating the tree, so a WebSocket client cannot change node names, ids,
+// the children slice, or any other [Node] field by path. This is the server-side
+// enforcement of the "server holds the truth" contract for [Tree].
 //
 // The path is resolved by navigating the Children slice ourselves with strict
 // in-range index bounds rather than delegating to the generic JsVar path-setter
