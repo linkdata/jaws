@@ -364,15 +364,6 @@ func TestElement_UnrenderedAcceptsHandlers(t *testing.T) {
 	}
 }
 
-func TestElement_UiDeprecatedForwarder(t *testing.T) {
-	rq := newTestRequest(t)
-	defer rq.Close()
-	e := rq.NewElement(&testUi{})
-	if e.Ui() != e.UI() { //nolint:staticcheck // exercising the deprecated Ui forwarder
-		t.Fatal("deprecated Ui() must forward to UI()")
-	}
-}
-
 func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
 	jw, err := New()
 	if err != nil {

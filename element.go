@@ -101,13 +101,6 @@ func (elem *Element) UI() UI {
 	return elem.ui
 }
 
-// Ui returns the [UI] object.
-//
-// Deprecated: use [Element.UI]; Ui violates Go's initialism naming convention.
-func (elem *Element) Ui() UI {
-	return elem.UI()
-}
-
 func (elem *Element) renderDebug(w io.Writer) {
 	var sb strings.Builder
 	_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", elem.Jid(), elem.UI())
