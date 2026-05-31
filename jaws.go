@@ -705,17 +705,37 @@ func (jw *Jaws) Dirty(dirtyTags ...any) {
 	jw.setDirty(expanded)
 }
 
+// dirtPair pairs a dirty tag with its insertion-order rank, used by sortedDirtTags
+// to order tags without re-reading the order from the map on every comparison.
+type dirtPair struct {
+	tag any
+	ord int
+}
+
+// sortedDirtTags returns the keys of dirty ordered by their (insertion-order) int
+// value. It materializes {tag,ord} pairs and sorts on the int, rather than sorting
+// a []any with a comparator that does two map lookups per comparison: the latter is
+// ~2*N*log2(N) hashed any-map lookups, and this runs under the exclusive jw.mu.
+func sortedDirtTags(dirty map[any]int) []any {
+	pairs := make([]dirtPair, 0, len(dirty))
+	for k, ord := range dirty {
+		pairs = append(pairs, dirtPair{tag: k, ord: ord})
+	}
+	slices.SortFunc(pairs, func(a, b dirtPair) int { return cmp.Compare(a.ord, b.ord) })
+	dirt := make([]any, len(pairs))
+	for i := range pairs {
+		dirt[i] = pairs[i].tag
+	}
+	return dirt
+}
+
 func (jw *Jaws) distributeDirt() int {
 	var reqs []*Request
 	var dirt []any
 
 	jw.mu.Lock()
 	if len(jw.dirty) > 0 {
-		dirt = make([]any, 0, len(jw.dirty))
-		for k := range jw.dirty {
-			dirt = append(dirt, k)
-		}
-		slices.SortFunc(dirt, func(a, b any) int { return cmp.Compare(jw.dirty[a], jw.dirty[b]) })
+		dirt = sortedDirtTags(jw.dirty)
 		clear(jw.dirty)
 		jw.dirtOrder = 0
 		reqs = make([]*Request, 0, len(jw.requests))
