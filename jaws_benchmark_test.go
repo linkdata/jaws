@@ -1,0 +1,171 @@
+package jaws
+
+import (
+	"io"
+	"strconv"
+	"testing"
+
+	"github.com/linkdata/jaws/lib/tag"
+	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jaws/lib/wire"
+)
+
+// benchUI is a minimal comparable UI used to populate a Request with Elements.
+// It is self-contained so the benchmarks compile unchanged against older tags.
+type benchUI struct{ n int }
+
+func (benchUI) JawsRender(*Element, io.Writer, []any) error { return nil }
+func (benchUI) JawsUpdate(*Element)                         {}
+
+// newBenchRequest returns a Request seeded with n Elements (Jids 1..n, ascending).
+func newBenchRequest(b *testing.B, n int) *Request {
+	b.Helper()
+	jw, err := New()
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(func() { jw.Close() })
+	rq := &Request{Jaws: jw}
+	for i := 0; i < n; i++ {
+		rq.NewElement(benchUI{n: i})
+	}
+	return rq
+}
+
+// BenchmarkDistributeDirt guards the per-updateTicker fan-out path: under jw.mu it
+// snapshots and order-sorts the dirty tag set and appends it to every active
+// Request. The benchmark exists to catch an accidental O(n^2) or per-call
+// allocation regression as request and dirty-tag counts grow. The per-iteration
+// setDirty repopulation and todoDirt reset are excluded from the timer so only
+// distributeDirt is measured.
+func BenchmarkDistributeDirt(b *testing.B) {
+	for _, c := range []struct{ reqs, tags int }{
+		{10, 10}, {100, 100}, {1000, 100}, {100, 1000},
+	} {
+		b.Run("reqs="+strconv.Itoa(c.reqs)+"/tags="+strconv.Itoa(c.tags), func(b *testing.B) {
+			jw, err := New()
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer jw.Close()
+
+			reqs := make([]*Request, c.reqs)
+			jw.mu.Lock()
+			for i := range reqs {
+				rq := &Request{Jaws: jw}
+				reqs[i] = rq
+				jw.requests[uint64(i+1)] = rq
+			}
+			jw.mu.Unlock()
+
+			tags := make([]any, c.tags)
+			for i := range tags {
+				tags[i] = tag.Tag(strconv.Itoa(i))
+			}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for n := 0; n < b.N; n++ {
+				b.StopTimer()
+				jw.setDirty(tags)
+				for _, rq := range reqs {
+					rq.todoDirt = rq.todoDirt[:0]
+				}
+				b.StartTimer()
+				jw.distributeDirt()
+			}
+		})
+	}
+}
+
+// BenchmarkRequestWantMessage guards the per-subscriber cost mustBroadcast pays on
+// every broadcast: matching a message destination against a Request's tag map.
+// wantMessage is invoked once per subscribed Request per broadcast.
+func BenchmarkRequestWantMessage(b *testing.B) {
+	const ntags = 100
+	jw, err := New()
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer jw.Close()
+
+	rq := &Request{Jaws: jw, tagMap: map[any][]*Element{}}
+	for i := 0; i < ntags; i++ {
+		rq.tagMap[tag.Tag(strconv.Itoa(i))] = nil
+	}
+	hit := tag.Tag(strconv.Itoa(ntags - 1))
+
+	b.Run("single-tag", func(b *testing.B) {
+		msg := wire.Message{Dest: hit, What: what.Update}
+		b.ReportAllocs()
+		for n := 0; n < b.N; n++ {
+			_ = rq.wantMessage(&msg)
+		}
+	})
+	b.Run("multi-tag", func(b *testing.B) {
+		msg := wire.Message{Dest: []any{tag.Tag("nope"), hit}, What: what.Update}
+		b.ReportAllocs()
+		for n := 0; n < b.N; n++ {
+			_ = rq.wantMessage(&msg)
+		}
+	})
+}
+
+// BenchmarkGetSendMsgs measures the process loop's outbound-queue drain, which it
+// invokes at least twice per iteration. The common case is an idle drain (empty
+// wsQueue) on a page with many Elements: building the valid-Jid set only when the
+// queue actually holds element-targeted messages should allocate nothing here.
+func BenchmarkGetSendMsgs(b *testing.B) {
+	for _, n := range []int{10, 100, 1000} {
+		b.Run("idle/elems="+strconv.Itoa(n), func(b *testing.B) {
+			rq := newBenchRequest(b, n)
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				_ = rq.getSendMsgs()
+			}
+		})
+	}
+}
+
+// BenchmarkGetElementByJid measures resolving a Jid against rq.elems, done per
+// inbound event and per removed child id. rq.elems is sorted ascending by Jid, so
+// this should scale sub-linearly with element count. "last" looks up the final
+// element (the linear-scan worst case); "miss" looks up an absent Jid.
+func BenchmarkGetElementByJid(b *testing.B) {
+	for _, n := range []int{10, 100, 1000} {
+		rq := newBenchRequest(b, n)
+		last := Jid(n)
+		miss := Jid(n + 1)
+		b.Run("last/elems="+strconv.Itoa(n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				_ = rq.getElementByJidLocked(last)
+			}
+		})
+		b.Run("miss/elems="+strconv.Itoa(n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				_ = rq.getElementByJidLocked(miss)
+			}
+		})
+	}
+}
+
+// BenchmarkAppendJSQuote measures the tail-script attribute/value quoter. "plain"
+// (no '<') is the common case and should append straight into the reused buffer
+// with no allocation; "with-bracket" still needs the script-breakout escape.
+func BenchmarkAppendJSQuote(b *testing.B) {
+	for _, c := range []struct{ name, s string }{
+		{"plain", "max-width: 100%; color: rebeccapurple"},
+		{"with-bracket", "a < b && c > d </script>"},
+	} {
+		b.Run(c.name, func(b *testing.B) {
+			buf := make([]byte, 0, 256)
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				buf = appendJSQuote(buf[:0], c.s)
+			}
+			_ = buf
+		})
+	}
+}
