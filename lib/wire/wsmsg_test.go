@@ -344,6 +344,39 @@ func Fuzz_appendJSONQuote(f *testing.F) {
 	})
 }
 
+// Test_AppendJSONQuote covers the exported wrapper: it must delegate to
+// appendJSONQuote (whose exact behavior Fuzz_appendJSONQuote pins) and honor the
+// append contract by extending the supplied buffer rather than replacing it.
+func Test_AppendJSONQuote(t *testing.T) {
+	for _, s := range []string{
+		"",
+		"plain",
+		"<script>&amp;</script>",
+		"tab\tnl\nret\r ctrl\x00\x1f del\x7f",
+		"quote\" backslash\\ astral \U0001F600",
+		string([]byte{0xff, 0xfe, 0x41}), // invalid UTF-8
+	} {
+		prefix := []byte("PFX")
+		got := AppendJSONQuote(prefix, s)
+
+		// The exported wrapper must append to the buffer, preserving its prefix.
+		if !bytes.HasPrefix(got, prefix) {
+			t.Errorf("AppendJSONQuote dropped the buffer prefix for %q: %q", s, got)
+		}
+		quoted := got[len(prefix):]
+
+		// It must produce exactly what the unexported implementation it wraps does.
+		if want := appendJSONQuote(nil, s); !bytes.Equal(quoted, want) {
+			t.Errorf("AppendJSONQuote(%q) = %q, want %q", s, quoted, want)
+		}
+
+		// And that output must be valid JSON the browser's JSON.parse accepts.
+		if !json.Valid(quoted) {
+			t.Errorf("AppendJSONQuote(%q) is not valid JSON: %q", s, quoted)
+		}
+	}
+}
+
 func Test_wsMsg_FillAlert(t *testing.T) {
 	fooError := errors.New("<\"")
 	tests := []struct {
