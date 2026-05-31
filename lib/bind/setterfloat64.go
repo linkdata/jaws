@@ -10,14 +10,16 @@ import (
 )
 
 var (
-	// ErrFloatNotFinite is returned when a float value (typically from the
-	// untrusted browser) is NaN or infinite. Such values corrupt the bound value
-	// and NaN in particular defeats the equality-based update dedup (NaN != NaN),
-	// so they are rejected at the binding boundary.
+	// ErrFloatNotFinite reports that a float value is NaN or infinite.
+	//
+	// Such values, typically from the untrusted browser, corrupt the bound value;
+	// NaN in particular defeats the equality-based update dedup (NaN != NaN). They
+	// are rejected at the binding boundary.
 	ErrFloatNotFinite = errors.New("float value is not finite")
-	// ErrFloatOutOfRange is returned when a finite float value cannot be converted
-	// to the bound integer type without overflow. The float->int conversion of an
-	// out-of-range value is otherwise implementation-defined and silently wraps.
+	// ErrFloatOutOfRange reports that a finite float does not fit the target type.
+	//
+	// The float-to-int conversion of an out-of-range value is implementation-defined
+	// and silently wraps, so it is rejected rather than performed.
 	ErrFloatOutOfRange = errors.New("float value out of range for target type")
 )
 
