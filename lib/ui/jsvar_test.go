@@ -193,6 +193,77 @@ func TestJsVar_SetBroadcastsWirePayload(t *testing.T) {
 	}
 }
 
+// TestJsVar_RejectsFramingBytesInPath verifies that a JsVar path containing a
+// byte significant to the WebSocket wire framing (tab, newline or carriage
+// return) is rejected before it is applied or broadcast. The path is written
+// verbatim into a what.Set frame (only the value is JSON-encoded) and the
+// client splits frames on '\n' and fields on '\t', so an unsanitized path is a
+// cross-connection wire-frame injection vector. A map-backed JsVar is used so
+// that, absent the guard, the framing-byte key would set and broadcast
+// successfully — proving the guard is load-bearing, not incidentally masked by
+// a path lookup that would fail anyway (as it would for a struct field).
+func TestJsVar_RejectsFramingBytesInPath(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+
+	tr := jawstest.NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("expected test request")
+	}
+	defer tr.Close()
+	<-tr.ReadyCh
+
+	var mu sync.Mutex
+	// Pre-populate the keys so jq.Set would find and change them absent the guard
+	// (jq does not create missing map keys), making the guard demonstrably
+	// load-bearing rather than incidentally masked by a lookup that fails anyway.
+	v := map[string]int{"a\tb": 1, "a\nx": 1, "a\rb": 1, "ok": 0}
+	jsv := NewJsVar(&mu, &v)
+	elem := tr.NewElement(jsv)
+	var sb strings.Builder
+	if err := jsv.JawsRender(elem, &sb, []any{"m"}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, bad := range []string{"a\tb", "a\nx", "a\rb"} {
+		if err := jsv.JawsSetPath(elem, bad, 99); !errors.Is(err, ErrIllegalJsVarPath) {
+			t.Fatalf("JawsSetPath(%q): expected ErrIllegalJsVarPath, got %v", bad, err)
+		}
+		// Rejected before apply: the pre-existing value is untouched.
+		mu.Lock()
+		got := v[bad]
+		mu.Unlock()
+		if got != 1 {
+			t.Fatalf("JawsSetPath(%q): value changed to %d, expected rejection before apply", bad, got)
+		}
+	}
+
+	// The incoming-browser path (JawsInput via what.Set) is likewise rejected.
+	if err := jaws.CallEventHandlers(jsv, elem, what.Set, "a\tb=99"); !errors.Is(err, ErrIllegalJsVarPath) {
+		t.Fatalf("JawsInput with tab path: expected ErrIllegalJsVarPath, got %v", err)
+	}
+
+	// A legitimate path still sets and broadcasts a well-formed frame.
+	if err := jsv.JawsSetPath(elem, "ok", 7); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-t.Context().Done():
+		t.Fatal("no Set broadcast received for the legal path")
+	case msg := <-tr.OutCh:
+		if msg.What != what.Set || msg.Data != `ok=7` {
+			t.Fatalf("broadcast = {%v %q}, want {Set `ok=7`}", msg.What, msg.Data)
+		}
+		if strings.ContainsAny(msg.Data, "\t\n\r") {
+			t.Fatalf("broadcast Data contains framing bytes: %q", msg.Data)
+		}
+	}
+}
+
 // TestJsVar_RenderSizeCapAbortsRequest verifies the "after the fact" check: a
 // non-PathSetter JsVar that is already larger than MaxClientJsVarBytes aborts the
 // request when it is rendered, reusing the marshal JawsRender already performs.

@@ -29,3 +29,14 @@ var ErrJsVarArgumentType = errors.New("expected jaws.UI or JsVarMaker")
 // not implement [PathSetter] exceeds the cap; the [Request] is aborted. See the
 // [JsVar] SECURITY note.
 var ErrJsVarTooLarge = errors.New("jsvar: serialized value exceeds MaxClientJsVarBytes")
+
+// ErrIllegalJsVarPath reports that a JsVar path contained a byte significant to
+// the WebSocket wire framing (a tab, newline or carriage return).
+//
+// A JsVar path is written verbatim into a what.Set frame (only the value side is
+// JSON-encoded), and the client splits frames on '\n' and fields on '\t'. A path
+// carrying those bytes could corrupt the frame or inject fabricated orders into
+// peer browsers sharing the JsVar, so [JsVar.JawsSetPath] (and incoming browser
+// writes via [JsVar.JawsInput]) reject it before applying or broadcasting. The
+// raw path is deliberately not echoed in the message to avoid log injection.
+var ErrIllegalJsVarPath = errors.New("jsvar: path contains illegal framing byte (tab, newline or carriage return)")
