@@ -1167,8 +1167,20 @@ func TestRequest_Dirty(t *testing.T) {
 		// it, then let the process loop re-render both elements (JawsGet again).
 		time.Sleep(2 * time.Millisecond)
 		synctest.Wait()
-		th.True(atomic.LoadInt32(&tss1.getCalled) >= 2)
-		th.True(atomic.LoadInt32(&tss2.getCalled) >= 2)
+		n1 := atomic.LoadInt32(&tss1.getCalled)
+		n2 := atomic.LoadInt32(&tss2.getCalled)
+		// The lower bound is intentional: synctest scheduling can collapse or split
+		// the two Dirty calls across one or two 1ms updateTicker fires, so the exact
+		// JawsGet count is 2 or 3 and an == assertion would be flaky.
+		th.True(n1 >= 2)
+		th.True(n2 >= 2)
+		// Pin an upper bound by proving the system quiesces: with jw.dirty now empty,
+		// distributeDirt returns 0, no further what.Update is broadcast, so getCalled
+		// must not increase. This catches a runaway re-render/re-broadcast regression.
+		time.Sleep(2 * time.Millisecond)
+		synctest.Wait()
+		th.Equal(atomic.LoadInt32(&tss1.getCalled), n1)
+		th.Equal(atomic.LoadInt32(&tss2.getCalled), n2)
 	})
 }
 
@@ -1829,6 +1841,34 @@ func TestRequest_StringIdBroadcastDataIsJSONParseable(t *testing.T) {
 	}
 }
 
+func TestRequest_StringTargetedPageGlobalEmitsSingleFrame(t *testing.T) {
+	// Reload, Redirect, Order and Alert are page-global commands: combining one
+	// with a string (HTML id) Dest must emit only the single Jid:0 page-global
+	// frame, not an additional contradictory element-targeted Jid:-1 frame.
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	tagValue := &testUi{}
+	rq.Register(tagValue)
+
+	rq.Jaws.Broadcast(wire.Message{Dest: "some-id", What: what.Reload})
+
+	// The page-global frame is Jid:0. Before the fix the element-targeted Jid:-1
+	// frame was queued first, so observing a non-zero Jid here fails.
+	first := nextOutboundMsg(t, rq)
+	if first.Jid != 0 || first.What != what.Reload {
+		t.Fatalf("expected single page-global Jid:0 Reload frame, got %+v", first)
+	}
+
+	// A single process goroutine handles broadcasts in order, so the next frame
+	// must be this Replace; a stray frame from the Reload would arrive here instead.
+	rq.Jaws.Replace(tagValue, template.HTML("<p>x</p>")) // #nosec G203
+	second := nextOutboundMsg(t, rq)
+	if second.What != what.Replace {
+		t.Fatalf("expected Replace frame after Reload, got %+v (stray frame from string-targeted Reload leaked)", second)
+	}
+}
+
 func TestRequest_JsCallProducesJawsJSFrameSafeWireData(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
@@ -1847,6 +1887,16 @@ func TestRequest_JsCallProducesJawsJSFrameSafeWireData(t *testing.T) {
 		{
 			name:    "pretty json with tab",
 			jsonstr: "{\t\"a\":1}",
+		},
+		{
+			// Raw control bytes inside a string value make json.Compact fail;
+			// they must be escaped, not passed through, or they break framing.
+			name:    "raw tab inside string value",
+			jsonstr: "{\"a\":\"x\ty\"}",
+		},
+		{
+			name:    "raw newline inside string value",
+			jsonstr: "{\"a\":\"x\ny\"}",
 		},
 	}
 

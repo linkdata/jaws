@@ -203,6 +203,7 @@ func (rq *Request) clearLocked() *Request {
 		rq.cancelFn(nil)
 	}
 	rq.httpDoneCh = nil
+	clear(rq.todoDirt) // release tag references before pooling; mirrors makeUpdateList
 	rq.todoDirt = rq.todoDirt[:0]
 	rq.remoteIP = netip.Addr{}
 	for _, e := range rq.elems {
@@ -234,8 +235,16 @@ func (rq *Request) HeadHTML(w io.Writer) (err error) {
 // appendJSQuote is like strconv.AppendQuote but also escapes '<' as '\x3c'
 // to prevent '</script>' from closing the script block when embedded in HTML.
 func appendJSQuote(b []byte, s string) []byte {
-	quoted := strconv.AppendQuote(nil, s)
-	return append(b, bytes.ReplaceAll(quoted, []byte("<"), []byte(`\x3c`))...)
+	start := len(b)
+	b = strconv.AppendQuote(b, s)
+	// strconv.AppendQuote never emits '<' as part of an escape sequence, so every
+	// '<' in the appended region came from s. Most attribute/class fragments
+	// contain none, so the common path appends straight into b with no copy.
+	if bytes.IndexByte(b[start:], '<') < 0 {
+		return b
+	}
+	rest := bytes.ReplaceAll(b[start:], []byte("<"), []byte(`\x3c`))
+	return append(b[:start], rest...)
 }
 
 func (rq *Request) writeTailScript(w io.Writer) (sent bool, err error) {
@@ -568,11 +577,14 @@ func (rq *Request) GetElementByJid(jid Jid) (elem *Element) {
 // getElementByJidLocked returns the element with jid, or nil. Caller must hold
 // rq.mu (read or write).
 func (rq *Request) getElementByJidLocked(jid Jid) (elem *Element) {
-	for _, e := range rq.elems {
-		if e.Jid() == jid {
-			elem = e
-			break
-		}
+	// rq.elems is kept sorted ascending by Jid (newElementLocked appends after
+	// incrementing lastJid; deletes preserve order), so binary search resolves a
+	// Jid in O(log n). Jids are not dense (deletes leave gaps) so we cannot index
+	// rq.elems by Jid directly.
+	if i, ok := slices.BinarySearchFunc(rq.elems, jid, func(e *Element, target Jid) int {
+		return cmp.Compare(e.Jid(), target)
+	}); ok {
+		elem = rq.elems[i]
 	}
 	return
 }
@@ -648,8 +660,13 @@ func (rq *Request) GetElements(tagValue any) (elems []*Element) {
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
 func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-chan wire.WsMsg, outboundMsgCh chan<- wire.WsMsg) {
 	jawsDoneCh := rq.Jaws.Done()
+	// Snapshot cancelFn under rq.mu, the same way ServeHTTP does: its only writers
+	// (claim, getRequestLocked, clearLocked) run strictly before or after process,
+	// so the captured value is stable for the loop's lifetime and the cleanup defer
+	// avoids a lock-free field read.
 	rq.mu.RLock()
 	httpDoneCh := rq.httpDoneCh
+	cancelFn := rq.cancelFn
 	rq.mu.RUnlock()
 	eventDoneCh := make(chan struct{})
 	eventCallCh := make(chan eventFnCall, cap(outboundMsgCh))
@@ -658,7 +675,7 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 	defer func() {
 		rq.Jaws.unsubscribe(broadcastMsgCh)
 		rq.killSession()
-		rq.cancelFn(nil)
+		cancelFn(nil)
 		close(eventCallCh)
 		for {
 			select {
@@ -739,6 +756,21 @@ func (rq *Request) handleIncoming(wsmsg wire.WsMsg, eventCallCh chan eventFnCall
 // message destination to the affected elements and dispatches by command. Called
 // only from process.
 func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFnCall) {
+	// Reload, Redirect, Order and Alert are page-global commands: they apply to
+	// the whole document and ignore element/string targeting, so emit the single
+	// Jid:0 frame and return before resolving Dest. Without this early return a
+	// string (HTML id) Dest would also queue a second, contradictory
+	// element-targeted Jid:-1 frame for these commands.
+	switch tagmsg.What {
+	case what.Reload, what.Redirect, what.Order, what.Alert:
+		rq.queue(wire.WsMsg{
+			Jid:  0,
+			Data: tagmsg.Data,
+			What: tagmsg.What,
+		})
+		return
+	}
+
 	// collect all elements marked with the tag in the message
 	var todo []*Element
 	switch v := tagmsg.Dest.(type) {
@@ -764,49 +796,40 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 		todo = rq.GetElements(v)
 	}
 
-	switch tagmsg.What {
-	case what.Reload, what.Redirect, what.Order, what.Alert:
-		rq.queue(wire.WsMsg{
-			Jid:  0,
-			Data: tagmsg.Data,
-			What: tagmsg.What,
-		})
-	default:
-		for _, elem := range todo {
-			switch tagmsg.What {
-			case what.Delete:
-				rq.queue(wire.WsMsg{
-					Jid:  elem.Jid(),
-					What: what.Delete,
-				})
-				rq.DeleteElement(elem)
-			case what.Input, what.Click, what.ContextMenu:
-				// Input, Click or ContextMenu messages received here come from broadcasts;
-				// primarily used in tests by injecting a wire.WsMsg on the inbound channel.
-				// they won't be sent out on the WebSocket, but will queue up a
-				// call to the event function (if any).
-				// primary usecase is tests.
-				rq.queueEvent(eventCallCh, eventFnCall{jid: elem.Jid(), wht: tagmsg.What, data: tagmsg.Data})
-			case what.Hook:
-				// "hook" messages are used to synchronously call an event function.
-				// the function must not send any messages itself, but may return
-				// an error to be sent out as an alert message.
-				// primary usecase is tests.
-				if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.Jid(), tagmsg.What, tagmsg.Data)); err != nil {
-					var m wire.WsMsg
-					m.FillAlert(err)
-					m.Jid = elem.Jid()
-					rq.queue(m)
-				}
-			case what.Update:
-				elem.JawsUpdate()
-			default:
-				rq.queue(wire.WsMsg{
-					Data: tagmsg.Data,
-					Jid:  elem.Jid(),
-					What: tagmsg.What,
-				})
+	for _, elem := range todo {
+		switch tagmsg.What {
+		case what.Delete:
+			rq.queue(wire.WsMsg{
+				Jid:  elem.Jid(),
+				What: what.Delete,
+			})
+			rq.DeleteElement(elem)
+		case what.Input, what.Click, what.ContextMenu:
+			// Input, Click or ContextMenu messages received here come from broadcasts;
+			// primarily used in tests by injecting a wire.WsMsg on the inbound channel.
+			// they won't be sent out on the WebSocket, but will queue up a
+			// call to the event function (if any).
+			// primary usecase is tests.
+			rq.queueEvent(eventCallCh, eventFnCall{jid: elem.Jid(), wht: tagmsg.What, data: tagmsg.Data})
+		case what.Hook:
+			// "hook" messages are used to synchronously call an event function.
+			// the function must not send any messages itself, but may return
+			// an error to be sent out as an alert message.
+			// primary usecase is tests.
+			if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.Jid(), tagmsg.What, tagmsg.Data)); err != nil {
+				var m wire.WsMsg
+				m.FillAlert(err)
+				m.Jid = elem.Jid()
+				rq.queue(m)
 			}
+		case what.Update:
+			elem.JawsUpdate()
+		default:
+			rq.queue(wire.WsMsg{
+				Data: tagmsg.Data,
+				Jid:  elem.Jid(),
+				What: tagmsg.What,
+			})
 		}
 	}
 }
@@ -823,9 +846,28 @@ func (rq *Request) handleRemove(containerJid Jid, data string) {
 	if containerJid > 0 {
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
+		// Collect the requested child elements, then delete them in a single pass
+		// over rq.elems and rq.tagMap, rather than an O(N) scan plus O(N) compaction
+		// per id (the id count is client-controlled, bounded by the read limit).
+		var victims map[Jid]struct{}
 		for jidstr := range strings.SplitSeq(data, "\t") {
 			if e := rq.getElementByJidLocked(jid.ParseString(jidstr)); e != nil {
-				rq.deleteElementLocked(e)
+				if victims == nil {
+					victims = map[Jid]struct{}{}
+				}
+				e.deleted.Store(true)
+				victims[e.Jid()] = struct{}{}
+			}
+		}
+		if len(victims) == 0 {
+			return
+		}
+		isVictim := func(e *Element) bool { _, ok := victims[e.Jid()]; return ok }
+		rq.elems = slices.DeleteFunc(rq.elems, isVictim)
+		for k := range rq.tagMap {
+			rq.tagMap[k] = slices.DeleteFunc(rq.tagMap[k], isVictim)
+			if len(rq.tagMap[k]) == 0 {
+				delete(rq.tagMap, k)
 			}
 		}
 	}
@@ -905,19 +947,25 @@ func (rq *Request) getSendMsgs() (toSend []wire.WsMsg) {
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
 
-	validJids := map[Jid]struct{}{}
-	for _, elem := range rq.elems {
-		if !elem.deleted.Load() {
-			validJids[elem.Jid()] = struct{}{}
-		}
-	}
-
 	rq.muQueue.Lock()
 	defer rq.muQueue.Unlock()
 	if len(rq.wsQueue) > 0 {
+		// validJids is built lazily and at most once: only messages addressed to a
+		// specific element (Jid >= 1, not Delete) need it, so an idle drain — the
+		// common case on the process loop's hot path — allocates nothing. Holding
+		// rq.mu (read) keeps rq.elems stable while the map is built.
+		var validJids map[Jid]struct{}
 		for i := range rq.wsQueue {
 			ok := rq.wsQueue[i].Jid < 1 || rq.wsQueue[i].What == what.Delete
 			if !ok {
+				if validJids == nil {
+					validJids = make(map[Jid]struct{}, len(rq.elems))
+					for _, elem := range rq.elems {
+						if !elem.deleted.Load() {
+							validJids[elem.Jid()] = struct{}{}
+						}
+					}
+				}
 				_, ok = validJids[rq.wsQueue[i].Jid]
 			}
 			if ok {
@@ -942,35 +990,18 @@ func (rq *Request) sendQueue(outboundMsgCh chan<- wire.WsMsg) {
 	}
 }
 
-func deleteElement(s []*Element, elem *Element) []*Element {
-	for i, v := range s {
-		if elem == v {
-			j := i
-			for i++; i < len(s); i++ {
-				v = s[i]
-				if elem != v {
-					s[j] = v
-					j++
-				}
-			}
-			for i := j; i < len(s); i++ {
-				s[i] = nil
-			}
-			return s[:j]
-		}
-	}
-	return s
-}
-
 // deleteElementLocked removes elem from the request's element list and from every
 // tag entry, marking it deleted; it is a no-op if elem belongs to another request.
 // Caller must hold rq.mu.
 func (rq *Request) deleteElementLocked(elem *Element) {
 	if elem.Request == rq {
 		elem.deleted.Store(true)
-		rq.elems = deleteElement(rq.elems, elem)
+		// slices.DeleteFunc removes every match and zeros the freed tail slots, so
+		// the dropped *Element pointers do not linger in the backing array.
+		isElem := func(e *Element) bool { return e == elem }
+		rq.elems = slices.DeleteFunc(rq.elems, isElem)
 		for k := range rq.tagMap {
-			rq.tagMap[k] = deleteElement(rq.tagMap[k], elem)
+			rq.tagMap[k] = slices.DeleteFunc(rq.tagMap[k], isElem)
 			if len(rq.tagMap[k]) == 0 {
 				delete(rq.tagMap, k)
 			}
