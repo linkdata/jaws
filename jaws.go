@@ -644,11 +644,17 @@ func (jw *Jaws) Broadcast(msg wire.Message) {
 // setDirty marks all Elements that have one or more of the given tags as dirty.
 func (jw *Jaws) setDirty(tags []any) {
 	jw.mu.Lock()
+	// Release the instance-wide lock with defer so it is freed even if a map
+	// insert panics. A tag that passed the static comparability check in
+	// ensureUsableTag can still be non-comparable at runtime (a comparable struct
+	// holding e.g. a func in an interface field) and panic when used as a map key
+	// here; without the defer that panic would unwind with jw.mu held and
+	// permanently deadlock the whole Jaws instance.
+	defer jw.mu.Unlock()
 	for _, tagValue := range tags {
 		jw.dirtOrder++
 		jw.dirty[tagValue] = jw.dirtOrder
 	}
-	jw.mu.Unlock()
 }
 
 // Dirty marks all [Element] values that have one or more of the given tags as dirty.
@@ -693,13 +699,18 @@ func (jw *Jaws) Reload() {
 }
 
 // isSafeRedirect reports whether rawurl is safe to hand to the browser's
-// location.assign. Only relative URLs (empty scheme) and the http and https
+// location.assign. Only same-document/relative paths and the http and https
 // schemes are permitted; this blocks script-bearing schemes such as javascript:
-// and data:.
+// and data:, and protocol-relative URLs ("//host/path") that would navigate to an
+// arbitrary external origin.
 func isSafeRedirect(rawurl string) bool {
 	if u, err := url.Parse(rawurl); err == nil {
 		switch strings.ToLower(u.Scheme) {
-		case "", "http", "https":
+		case "":
+			if u.Host == "" {
+				return true
+			}
+		case "http", "https":
 			return true
 		}
 	}
@@ -708,8 +719,9 @@ func isSafeRedirect(rawurl string) bool {
 
 // Redirect requests all [Request] values to navigate to the given URL.
 //
-// The URL is validated to be relative or http/https; a script-bearing scheme
-// such as javascript: is refused and logged rather than sent to the browser.
+// The URL is validated to be a relative path or an http/https URL; script-bearing
+// schemes such as javascript: and protocol-relative ("//host") URLs are refused
+// and logged rather than sent to the browser.
 func (jw *Jaws) Redirect(url string) {
 	if !isSafeRedirect(url) {
 		_ = jw.Log(fmt.Errorf("jaws: refusing unsafe redirect to %q", url))
