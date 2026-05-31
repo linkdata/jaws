@@ -44,7 +44,7 @@ func newTestJaws() (tj *testJaws) {
 	tj = &testJaws{Jaws: jw}
 	tj.Jaws.Logger = slog.New(slog.NewTextHandler(&tj.log, nil))
 	tj.Jaws.MakeAuth = func(r *Request) Auth {
-		return DefaultAuth{}
+		return &DefaultAuth{Logger: tj.Logger}
 	}
 	tj.testtmpl = template.Must(template.New("testtemplate").Parse(`{{with $.Dot}}{{.}}{{end}}`))
 	_ = tj.AddTemplateLookuper(tj.testtmpl)
@@ -188,7 +188,7 @@ func (t testTemplateUI) String() string {
 }
 
 func (t testTemplateUI) execute(elem *Element, w io.Writer, tmpl *template.Template) (err error) {
-	var auth Auth = DefaultAuth{}
+	var auth Auth = &DefaultAuth{Logger: elem.Jaws.Logger}
 	if f := elem.Request.Jaws.MakeAuth; f != nil {
 		auth = f(elem.Request)
 	}
