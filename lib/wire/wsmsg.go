@@ -5,10 +5,57 @@ import (
 	"html"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/linkdata/jaws/lib/jid"
 	"github.com/linkdata/jaws/lib/what"
 )
+
+const hexDigits = "0123456789abcdef"
+
+// appendJSONQuote appends s to b as a double-quoted JSON string literal.
+//
+// Unlike strconv.AppendQuote (Go string-literal grammar) it emits only escapes
+// that the browser's JSON.parse accepts: it never produces \a, \v, \xNN or
+// \UXXXXXXXX. Control bytes use \uXXXX, " and \ are escaped, and everything else
+// (including '<', '>', '&' and astral runes) is written as literal UTF-8 to keep
+// payloads compact. Invalid UTF-8 is replaced with U+FFFD so the result is always
+// valid JSON and a valid WebSocket text frame. The output remains decodable by
+// strconv.Unquote, so the server-side Append->Parse round trip is preserved.
+//
+// PROVISIONAL: this hand-rolled quoter exists only because the stable standard
+// library has no zero-allocation "append a non-HTML-escaped JSON string to a
+// []byte" primitive: encoding/json.Marshal HTML-escapes '<', '>' and '&' (which
+// bloats the HTML payloads this protocol carries), and json.Encoder with
+// SetEscapeHTML(false) needs a buffer and is not an append API. The exact
+// primitive, jsontext.AppendQuote (encoding/json/v2), is gated behind
+// GOEXPERIMENT=jsonv2 as of Go 1.26. Replace this with jsontext.AppendQuote once
+// that package builds without the experiment; Fuzz_appendJSONQuote pins the
+// behavior to the standard library until then.
+func appendJSONQuote(b []byte, s string) []byte {
+	b = append(b, '"')
+	for _, r := range s {
+		switch r {
+		case '"':
+			b = append(b, '\\', '"')
+		case '\\':
+			b = append(b, '\\', '\\')
+		case '\n':
+			b = append(b, '\\', 'n')
+		case '\r':
+			b = append(b, '\\', 'r')
+		case '\t':
+			b = append(b, '\\', 't')
+		default:
+			if r < 0x20 {
+				b = append(b, '\\', 'u', '0', '0', hexDigits[byte(r)>>4], hexDigits[byte(r)&0x0f])
+			} else {
+				b = utf8.AppendRune(b, r)
+			}
+		}
+	}
+	return append(b, '"')
+}
 
 // WsMsg is a message sent to or from a WebSocket.
 type WsMsg struct {
@@ -30,7 +77,7 @@ func (m *WsMsg) Append(b []byte) []byte {
 		case what.Set, what.Call:
 			b = append(b, m.Data...)
 		default:
-			b = strconv.AppendQuote(b, m.Data)
+			b = appendJSONQuote(b, m.Data)
 		}
 	} else {
 		b = append(b, m.Data...)

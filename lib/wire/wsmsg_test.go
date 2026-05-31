@@ -1,10 +1,14 @@
 package wire
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/linkdata/jaws/lib/jid"
 	"github.com/linkdata/jaws/lib/what"
@@ -200,6 +204,24 @@ func Fuzz_wsMsgAppendParseRoundTrip(f *testing.F) {
 		if !wht.IsValid() || !id.IsValid() || id < 0 {
 			return
 		}
+		// Append encodes the command via wht.String() and Parse decodes it via
+		// what.Parse; only real named commands round-trip. IsValid merely excludes
+		// the two boundary markers, so also require String/Parse to round-trip,
+		// which is always the case for What values that actually occur on the wire.
+		if what.Parse(wht.String()) != wht {
+			return
+		}
+		// Append/Parse deliberately normalize data to valid UTF-8 (Parse runs
+		// strings.ToValidUTF8 and appendJSONQuote replaces invalid runes with
+		// U+FFFD), so the round-trip identity only holds for already-valid UTF-8.
+		if !utf8.ValidString(data) {
+			return
+		}
+		// Set/Call data is written verbatim, so it must not contain the tab/newline
+		// framing delimiters; for other commands appendJSONQuote escapes them.
+		if (wht == what.Set || wht == what.Call) && strings.ContainsAny(data, "\t\n") {
+			return
+		}
 		msg := WsMsg{
 			Data: data,
 			Jid:  id,
@@ -212,6 +234,112 @@ func Fuzz_wsMsgAppendParseRoundTrip(f *testing.F) {
 		}
 		if got != msg {
 			t.Fatalf("Parse(Append(msg)) mismatch: want=%+v got=%+v frame=%q", msg, got, b)
+		}
+	})
+}
+
+// Test_wsMsg_AppendDataIsValidJSON guards the wire contract that Append's quoted
+// data field is valid JSON, so the browser's JSON.parse can decode it. It
+// exercises bytes that Go's strconv.AppendQuote would emit as \a, \v, \xNN or
+// \UXXXXXXXX escapes, which JSON.parse rejects.
+func Test_wsMsg_AppendDataIsValidJSON(t *testing.T) {
+	for _, data := range []string{
+		"plain",
+		"tab\tnewline\nreturn\r",
+		"bell\x07 vtab\x0b del\x7f",
+		"ctrl\x00\x01\x1f",
+		"astral \U0001F600 and <b>&amp;</b>",
+		"quote\" backslash\\",
+		string([]byte{0xff, 0xfe}), // invalid UTF-8
+	} {
+		m := WsMsg{What: what.Inner, Jid: 1, Data: data}
+		b := m.Append(nil)
+		parts := bytes.SplitN(b[:len(b)-1], []byte{'\t'}, 3) // What \t Jid \t data
+		if len(parts) != 3 {
+			t.Fatalf("unexpected frame %q", b)
+		}
+		if !utf8.Valid(parts[2]) {
+			t.Errorf("data field for %q is not valid UTF-8: %q", data, parts[2])
+		}
+		var s string
+		if err := json.Unmarshal(parts[2], &s); err != nil {
+			t.Errorf("data field for %q is not valid JSON: %v (frame %q)", data, err, b)
+		}
+	}
+}
+
+// Test_wsParse_SanitizesInvalidUTF8InVerbatimData covers Parse's ToValidUTF8
+// sanitization of the verbatim Set/Call data path: invalid UTF-8 from the browser
+// must be stripped so downstream consumers never see it.
+func Test_wsParse_SanitizesInvalidUTF8InVerbatimData(t *testing.T) {
+	raw := append([]byte("Set\tJid.1\tx="), 0xff, 0xfe, 'y', '\n')
+	msg, ok := Parse(raw)
+	if !ok {
+		t.Fatal("expected Parse to succeed")
+	}
+	if !utf8.ValidString(msg.Data) {
+		t.Fatalf("Parse left invalid UTF-8 in data: %q", msg.Data)
+	}
+	if msg.Data != "x=y" {
+		t.Errorf("got %q, want %q", msg.Data, "x=y")
+	}
+}
+
+// stdlibJSONQuote is the standard-library reference for appendJSONQuote: an
+// encoder with HTML escaping disabled, which is the behavior the hand-rolled
+// quoter mimics (and which jsontext.AppendQuote would provide directly once
+// encoding/json/v2 is no longer behind GOEXPERIMENT=jsonv2).
+func stdlibJSONQuote(s string) []byte {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(s); err != nil { // marshaling a string never fails
+		panic(err)
+	}
+	b := buf.Bytes()
+	return b[:len(b)-1] // drop the trailing newline Encode appends
+}
+
+// Fuzz_appendJSONQuote pins the PROVISIONAL hand-rolled appendJSONQuote to the
+// standard library so it can be replaced confidently when jsontext.AppendQuote
+// becomes available. For any input it must (1) produce valid JSON the browser's
+// JSON.parse accepts, (2) decode to exactly what the stdlib non-HTML-escaping
+// encoder decodes to (cosmetic escape differences are allowed, semantic ones are
+// not), and (3) stay decodable by strconv.Unquote so the server-side Append->Parse
+// round trip is preserved.
+func Fuzz_appendJSONQuote(f *testing.F) {
+	for _, s := range []string{
+		"",
+		"plain",
+		"<div>&amp;</div>",
+		"a\tb\nc\rd",
+		"bell\x07 vtab\x0b back\x08 form\x0c ctrl\x00\x1f",
+		"astral \U0001F600 sep    del\x7f",
+		"quote\" backslash\\",
+		string([]byte{0xff, 0xfe, 0x41}),
+	} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		out := appendJSONQuote(nil, s)
+
+		if !json.Valid(out) {
+			t.Fatalf("output is not valid JSON: in=%q out=%q", s, out)
+		}
+
+		var got, want string
+		if err := json.Unmarshal(out, &got); err != nil {
+			t.Fatalf("output does not Unmarshal: in=%q out=%q err=%v", s, out, err)
+		}
+		if err := json.Unmarshal(stdlibJSONQuote(s), &want); err != nil {
+			t.Fatalf("reference does not Unmarshal: in=%q err=%v", s, err)
+		}
+		if got != want {
+			t.Fatalf("decode mismatch vs stdlib: in=%q got=%q want=%q out=%q", s, got, want, out)
+		}
+
+		if _, err := strconv.Unquote(string(out)); err != nil {
+			t.Fatalf("strconv.Unquote rejects output (Parse would too): in=%q out=%q err=%v", s, out, err)
 		}
 	})
 }
