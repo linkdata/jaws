@@ -58,6 +58,16 @@
 // registrations). All builds enforce this: every handler mutator funnels through
 // an internal chokepoint guarded by a lockless atomic flag that drops late
 // additions; debug builds panic instead.
+//
+// # Testing
+//
+// Always run the tests with the -race flag (or -tags debug). Both set
+// deadlock.Debug, which enables the debug-gated runtime invariant checks: the
+// lock-order verification described above, the late-handler panic, and the
+// tag-comparability check in [github.com/linkdata/jaws/lib/tag]. Those branches
+// are compile-time dead in normal builds, so a plain "go test" neither
+// exercises them nor reports their statement coverage. CI builds with
+// -tags debug -race.
 package jaws
 
 import (
