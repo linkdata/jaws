@@ -48,7 +48,7 @@ func appendJSONQuote(b []byte, s string) []byte {
 			b = append(b, '\\', 't')
 		default:
 			if r < 0x20 {
-				b = append(b, '\\', 'u', '0', '0', hexDigits[byte(r)>>4], hexDigits[byte(r)&0x0f])
+				b = append(b, '\\', 'u', '0', '0', hexDigits[r>>4], hexDigits[r&0x0f])
 			} else {
 				b = utf8.AppendRune(b, r)
 			}
