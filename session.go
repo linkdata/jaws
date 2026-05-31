@@ -82,11 +82,9 @@ func (sess *Session) delRequest(rq *Request) {
 			sess.deadline = time.Now().Add(time.Minute)
 		}
 		// For an unclaimed request (its bootstrap render was recycled before the
-		// WebSocket connected) leave the existing deadline intact instead of
-		// stomping it to the zero time, which would immediately kill a freshly
-		// issued session the moment a slightly-slow client's first request is
-		// recycled. The creation-time grace window (see newSession) still bounds
-		// the session's lifetime.
+		// WebSocket connected) leave the existing deadline intact: the creation-time
+		// grace window (see newSession) governs the session's lifetime until a
+		// WebSocket attaches.
 	}
 }
 

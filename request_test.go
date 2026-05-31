@@ -497,12 +497,10 @@ func TestRequest_EventFnQueue(t *testing.T) {
 	th.Equal(atomic.LoadInt32(&callCount), int32(cap(rq.OutCh)))
 }
 
-// TestRequest_EventFnQueueOverflowCancelsRequest verifies that when a client
-// floods events faster than a slow handler can drain them, the request is
-// cancelled (terminated) rather than silently dropping events and limping on with
-// inconsistent state — and that this never panics, even with no Logger configured
-// (the default). Previously the overflow path called MustLog, which panicked with
-// a nil Logger and then re-panicked inside the process recover.
+// TestRequest_EventFnQueueOverflowCancelsRequest verifies that when a client floods
+// events faster than a slow handler can drain them, the request is cancelled rather
+// than silently dropping events and limping on with inconsistent state, and that it
+// does not panic even with no Logger configured (the default).
 func TestRequest_EventFnQueueOverflowCancelsRequest(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest(t)
@@ -541,12 +539,11 @@ func TestRequest_EventFnQueueOverflowCancelsRequest(t *testing.T) {
 	}
 }
 
-// TestRequest_ClaimRefreshesLastWriteAndStartServeGuards is a regression test for
-// the pool-reuse TOCTOU between maintenance recycle and startServe. claim() must
-// refresh lastWrite so a request claimed long after its initial render is not
-// treated as idle and recycled in the window before ServeHTTP sets running; and
-// startServe() must refuse a request that was nonetheless recycled (clearLocked
-// resets claimed), rather than driving a dead, pooled *Request.
+// TestRequest_ClaimRefreshesLastWriteAndStartServeGuards verifies that claim()
+// refreshes lastWrite so a request claimed long after its initial render is not
+// treated as idle and recycled before ServeHTTP sets running, and that startServe()
+// refuses a request that was recycled (clearLocked resets claimed) rather than
+// driving a dead, pooled *Request.
 func TestRequest_ClaimRefreshesLastWriteAndStartServeGuards(t *testing.T) {
 	jw, err := New()
 	if err != nil {

@@ -136,11 +136,9 @@ func (rq *Request) claim(r *http.Request) error {
 				}
 			}
 			rq.httpDoneCh = httpDoneCh
-			// Refresh lastWrite so a request that is claimed long after its initial
-			// render (a throttled or backgrounded tab) is not seen as idle and
-			// recycled in the brief window before ServeHTTP sets running. The
-			// claimed guard in maintenance is the primary protection; this keeps the
-			// idle clock honest for any future lastWrite reader.
+			// Refresh lastWrite so a request claimed long after its initial render
+			// (a throttled or backgrounded tab) is not treated as idle and recycled
+			// in the window before ServeHTTP sets running.
 			rq.lastWrite = time.Now()
 			return nil
 		}
@@ -665,11 +663,9 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 					if err, ok = x.(error); !ok {
 						err = fmt.Errorf("jaws: %v panic: %v", rq, x)
 					}
-					// Log non-fatally, never MustLog: this runs inside the cleanup
-					// defer with no surrounding recover, so a MustLog panic (when no
-					// Logger is set) would escape and abort the connection abruptly.
-					// The recover has already contained the panic and the request is
-					// being torn down regardless.
+					// Log non-fatally rather than MustLog: this runs in the cleanup
+					// defer with no surrounding recover, and the panic is already
+					// contained, so the request is torn down regardless.
 					_ = rq.Jaws.Log(err)
 				}
 				return
@@ -870,15 +866,13 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, value string) (er
 	return
 }
 
-// queueEvent hands a resolved event-function call to the eventCaller goroutine
-// over eventCallCh. That channel is buffered to the outbound capacity; if it is
-// full the request has fallen too far behind to stay consistent (the event would
-// be lost), so the request is cancelled rather than dropping the event and
-// limping on with stale state. The overflow is logged non-fatally via [Jaws.Log]
-// (a nil Logger must never turn back-pressure from an untrusted client into a
-// panic) and cancelled, mirroring the broadcast back-pressure path in
-// [Jaws.ServeWithTimeout]. cancel takes rq.mu, which the process loop does not
-// hold when calling this.
+// queueEvent hands a resolved event-function call to the eventCaller goroutine.
+//
+// eventCallCh is buffered to the outbound capacity; if it is full the request has
+// fallen too far behind to stay consistent (an event would be lost), so it is
+// cancelled rather than dropping the event, mirroring the broadcast back-pressure
+// path in [Jaws.ServeWithTimeout]. cancel takes rq.mu, which the process loop does
+// not hold when calling this.
 func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
 	select {
 	case eventCallCh <- call:
@@ -1107,15 +1101,12 @@ func (rq *Request) MustLog(err error) {
 	jw.MustLog(err)
 }
 
-// startServe transitions a claimed request to running. It takes jw.mu so the
-// running transition cannot interleave with the maintenance pass (which also
-// holds jw.mu and decides whether to recycle a not-running request): without this
-// serialization, maintenance could read running==false and recycle the request
-// back into the pool in the brief window before ServeHTTP set running, while this
-// same goroutine then drove the recycled *Request through process() — corrupting
-// two unrelated connections (a TOCTOU). If maintenance recycled the request first,
-// clearLocked has reset claimed, so the CAS guard below fails and ServeHTTP
-// returns Gone instead of driving a dead request.
+// startServe transitions a claimed request to running.
+//
+// It takes jw.mu so the running transition is serialized with the maintenance
+// pass, which also holds jw.mu when deciding whether to recycle a not-running
+// request. If the request was recycled first, clearLocked has reset claimed, so the
+// CAS below fails and ServeHTTP returns Gone instead of driving a dead request.
 func (rq *Request) startServe() (ok bool) {
 	rq.Jaws.mu.Lock()
 	defer rq.Jaws.mu.Unlock()

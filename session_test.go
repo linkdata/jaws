@@ -541,10 +541,10 @@ func TestSession_Cleanup(t *testing.T) {
 	})
 }
 
-// TestSession_UnclaimedRequestRecycleKeepsGraceDeadline is a regression test for
-// the deadline stomp: recycling the bootstrap render Request (unclaimed, because
-// its WebSocket has not connected yet) must not immediately expire the freshly
-// issued session, or a slightly-slow client loses the session it was just given.
+// TestSession_UnclaimedRequestRecycleKeepsGraceDeadline verifies that recycling the
+// bootstrap render Request (unclaimed, because its WebSocket has not connected yet)
+// does not immediately expire the freshly issued session, so a slightly-slow client
+// keeps the session it was just given.
 func TestSession_UnclaimedRequestRecycleKeepsGraceDeadline(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()

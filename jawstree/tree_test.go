@@ -275,10 +275,9 @@ func TestTree_JawsPathSetIgnoresNonSelectedPath(t *testing.T) {
 	}
 }
 
-// TestTree_ConcurrentUpdateAndInput exercises the data race fixed in JawsUpdate:
-// JawsUpdate reads the shared node tree (via marshalJSON) while another goroutine
-// mutates a node under the JsVar write lock, exactly as JsVar.JawsInput does.
-// Run with -race; it fails before JawsUpdate takes the read lock.
+// TestTree_ConcurrentUpdateAndInput exercises JawsUpdate reading the shared node
+// tree (via marshalJSON) under the JsVar read lock while another goroutine mutates
+// a node under the write lock, exactly as JsVar.JawsInput does. Run with -race.
 func TestTree_ConcurrentUpdateAndInput(t *testing.T) {
 	jw, err := jaws.New()
 	maybeError(t, err)

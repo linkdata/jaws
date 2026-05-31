@@ -97,10 +97,8 @@ var _ json.Marshaler = &Node{}
 //
 // The path is resolved by navigating the Children slice ourselves with strict
 // in-range index bounds rather than delegating to the generic JsVar path-setter
-// ([github.com/linkdata/jq.Set]): that setter not only mutates any json-tagged
-// field, it also grows a slice by one when asked to set index == len, which would
-// let a client append a nil *Node and crash every subsequent render of a shared
-// tree.
+// ([github.com/linkdata/jq.Set]), which sets arbitrary json-tagged fields and grows
+// a slice by one when asked to set index == len.
 func (node *Node) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err error) {
 	nodePath, ok := strings.CutSuffix(jsPath, ".selected")
 	if !ok {

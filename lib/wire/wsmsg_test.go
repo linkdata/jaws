@@ -239,9 +239,9 @@ func Fuzz_wsMsgAppendParseRoundTrip(f *testing.F) {
 }
 
 // Test_wsMsg_AppendDataIsValidJSON guards the wire contract that Append's quoted
-// data field is valid JSON, so the browser's JSON.parse can decode it. It
-// exercises bytes that Go's strconv.AppendQuote would emit as \a, \v, \xNN or
-// \UXXXXXXXX escapes, which JSON.parse rejects.
+// data field is valid JSON, so the browser's JSON.parse can decode it. It exercises
+// control bytes and astral runes that must be emitted as JSON-compatible escapes
+// (never the Go-only \a, \v, \xNN or \UXXXXXXXX forms that JSON.parse rejects).
 func Test_wsMsg_AppendDataIsValidJSON(t *testing.T) {
 	for _, data := range []string{
 		"plain",

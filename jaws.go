@@ -644,12 +644,10 @@ func (jw *Jaws) Broadcast(msg wire.Message) {
 // setDirty marks all Elements that have one or more of the given tags as dirty.
 func (jw *Jaws) setDirty(tags []any) {
 	jw.mu.Lock()
-	// Release the instance-wide lock with defer so it is freed even if a map
-	// insert panics. A tag that passed the static comparability check in
-	// ensureUsableTag can still be non-comparable at runtime (a comparable struct
-	// holding e.g. a func in an interface field) and panic when used as a map key
-	// here; without the defer that panic would unwind with jw.mu held and
-	// permanently deadlock the whole Jaws instance.
+	// Release the lock with defer so it is freed even if a map insert panics: a tag
+	// that passed the static comparability check in ensureUsableTag can still be
+	// non-comparable at runtime (a comparable struct holding e.g. a func in an
+	// interface field) and panic when used as a map key here.
 	defer jw.mu.Unlock()
 	for _, tagValue := range tags {
 		jw.dirtOrder++

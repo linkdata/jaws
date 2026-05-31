@@ -148,10 +148,9 @@ func TestJawsBoot_Setup(t *testing.T) {
 	}
 }
 
-// TestJawsBoot_SetupPrefixVariants guards against the double-prefix bug: for any
-// prefix form (absolute, relative or empty) every asset URL emitted into the head
-// HTML must resolve to a registered handler. A relative prefix previously made
-// jaws.Setup apply the prefix twice, so the head URL 404'd.
+// TestJawsBoot_SetupPrefixVariants verifies that for any prefix form (absolute,
+// relative or empty) every asset URL emitted into the head HTML resolves to a
+// registered handler.
 func TestJawsBoot_SetupPrefixVariants(t *testing.T) {
 	assets := expectedStaticAssets(t, testAssetsFS, "assets/static", "")
 	for _, prefix := range []string{"/static", "static", ""} {

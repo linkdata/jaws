@@ -34,9 +34,8 @@ func TestNode_MarshalJSON(t *testing.T) {
 
 // TestNode_MarshalJSON_AdversarialNames ensures node names that are not clean
 // ASCII (invalid UTF-8 from a raw filesystem entry, embedded quotes/newlines)
-// still produce valid JSON. strconv.AppendQuote emitted Go-only \xNN escapes for
-// invalid UTF-8, which broke JSON.parse on the client and stopped the tree from
-// updating; appendJSONString must round-trip cleanly instead.
+// still produce valid JSON that the browser's JSON.parse accepts: appendJSONString
+// must emit JSON-compatible escapes, never Go-only forms such as \xNN.
 func TestNode_MarshalJSON_AdversarialNames(t *testing.T) {
 	for _, name := range []string{
 		string([]byte{0xff, 0xfe, 0x41}), // invalid UTF-8 bytes
@@ -100,9 +99,8 @@ func TestNode_JawsSetPath_Gate(t *testing.T) {
 		}
 	})
 
-	// Regression for the slice-growth bypass: a client Set with an out-of-range
-	// child index (index == len) must be rejected without growing Children with a
-	// nil node (which would crash every subsequent marshalJSON of a shared tree).
+	// A client Set with an out-of-range child index (index == len) must be rejected
+	// without growing Children with a nil node.
 	t.Run("rejects out-of-range child index without growing the slice", func(t *testing.T) {
 		for _, path := range []string{
 			"children.1.selected",            // index == len(Children)

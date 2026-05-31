@@ -111,9 +111,9 @@ func TestNamedBool_JawsSetDirtiesDeselectedSiblings(t *testing.T) {
 }
 
 // TestNamedBoolArray_JawsSetDirtiesChangedBoolsAndArray asserts that selecting
-// through the array dirties the newly-checked Bool, the deselected sibling, AND
-// the array tag (mirroring Bool.JawsSet), not just the array tag. Before the fix
-// only the array was dirtied, so consumers binding individual Bools never updated.
+// through the array dirties the newly-checked Bool, the deselected sibling, AND the
+// array tag (mirroring Bool.JawsSet), so consumers binding individual Bools update,
+// not only those binding the array.
 func TestNamedBoolArray_JawsSetDirtiesChangedBoolsAndArray(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		jw, rq := newTestRequest(t)
