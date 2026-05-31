@@ -1,10 +1,24 @@
 package bind
 
 import (
+	"errors"
 	"fmt"
+	"math"
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/tag"
+)
+
+var (
+	// ErrFloatNotFinite is returned when a float value (typically from the
+	// untrusted browser) is NaN or infinite. Such values corrupt the bound value
+	// and NaN in particular defeats the equality-based update dedup (NaN != NaN),
+	// so they are rejected at the binding boundary.
+	ErrFloatNotFinite = errors.New("float value is not finite")
+	// ErrFloatOutOfRange is returned when a finite float value cannot be converted
+	// to the bound integer type without overflow. The float->int conversion of an
+	// out-of-range value is otherwise implementation-defined and silently wraps.
+	ErrFloatOutOfRange = errors.New("float value out of range for target type")
 )
 
 type numeric interface {
@@ -17,13 +31,52 @@ type setterFloat64[T numeric] struct {
 	Setter[T]
 }
 
+// sanitizeFloatForT validates value before it is converted to T. It rejects
+// non-finite values for every numeric T, and for integer T also rejects values
+// outside the type's representable range. Bounds use an exclusive upper limit
+// expressed as a power of two to avoid the float64 rounding pitfall at the top of
+// the 64-bit ranges (float64(MaxInt64) rounds up to 2^63).
+func sanitizeFloatForT[T numeric](value float64) error {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return ErrFloatNotFinite
+	}
+	var lo, hiExcl float64
+	switch any(T(0)).(type) {
+	case int8:
+		lo, hiExcl = math.MinInt8, math.MaxInt8+1
+	case int16:
+		lo, hiExcl = math.MinInt16, math.MaxInt16+1
+	case int32:
+		lo, hiExcl = math.MinInt32, math.MaxInt32+1
+	case int, int64: // int is 64-bit on all supported platforms
+		lo, hiExcl = math.MinInt64, -float64(math.MinInt64) // [-2^63, 2^63)
+	case uint8:
+		lo, hiExcl = 0, math.MaxUint8+1
+	case uint16:
+		lo, hiExcl = 0, math.MaxUint16+1
+	case uint32:
+		lo, hiExcl = 0, math.MaxUint32+1
+	case uint, uint64: // uint is 64-bit on all supported platforms
+		lo, hiExcl = 0, -2*float64(math.MinInt64) // [0, 2^64)
+	default: // float32, float64: only finiteness matters, already checked
+		return nil
+	}
+	if value < lo || value >= hiExcl {
+		return ErrFloatOutOfRange
+	}
+	return nil
+}
+
 func (s setterFloat64[T]) JawsGet(elem *jaws.Element) float64 {
 	v := s.Setter.JawsGet(elem)
 	return float64(v)
 }
 
-func (s setterFloat64[T]) JawsSet(elem *jaws.Element, value float64) error {
-	return s.Setter.JawsSet(elem, T(value))
+func (s setterFloat64[T]) JawsSet(elem *jaws.Element, value float64) (err error) {
+	if err = sanitizeFloatForT[T](value); err == nil {
+		err = s.Setter.JawsSet(elem, T(value))
+	}
+	return
 }
 
 func (s setterFloat64[T]) JawsGetTag(tag.Context) any {

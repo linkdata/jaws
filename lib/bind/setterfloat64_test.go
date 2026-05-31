@@ -1,6 +1,8 @@
 package bind
 
 import (
+	"errors"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -78,6 +80,58 @@ func Test_makeSetterFloat64_int(t *testing.T) {
 	if x := tg.JawsGetTag(nil); x != tsint {
 		t.Error(x)
 	}
+}
+
+// Test_setterFloat64_sanitizesUntrustedInput covers the float-from-client guard:
+// non-finite values are rejected for every numeric type and out-of-range values
+// are rejected before the (otherwise wrapping) float->int conversion. The bound
+// value must be left unchanged on rejection.
+func Test_setterFloat64_sanitizesUntrustedInput(t *testing.T) {
+	t.Run("rejects NaN and Inf", func(t *testing.T) {
+		ts := newTestSetter(int8(5))
+		s := MakeSetterFloat64(ts)
+		for _, bad := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+			if err := s.JawsSet(nil, bad); !errors.Is(err, ErrFloatNotFinite) {
+				t.Errorf("JawsSet(%v): expected ErrFloatNotFinite, got %v", bad, err)
+			}
+		}
+		if ts.Get() != 5 {
+			t.Errorf("bound value mutated to %v", ts.Get())
+		}
+	})
+
+	t.Run("rejects out-of-range integer conversions", func(t *testing.T) {
+		ts := newTestSetter(int8(5))
+		s := MakeSetterFloat64(ts)
+		for _, bad := range []float64{128, -129, 1e9} { // int8 range is [-128, 127]
+			if err := s.JawsSet(nil, bad); !errors.Is(err, ErrFloatOutOfRange) {
+				t.Errorf("JawsSet(%v): expected ErrFloatOutOfRange, got %v", bad, err)
+			}
+		}
+		if ts.Get() != 5 {
+			t.Errorf("bound value mutated to %v", ts.Get())
+		}
+		if err := s.JawsSet(nil, 100); err != nil { // in range
+			t.Fatalf("JawsSet(100): %v", err)
+		}
+		if ts.Get() != 100 {
+			t.Errorf("want 100 got %v", ts.Get())
+		}
+	})
+
+	t.Run("rejects 2^63 overflow for int without float64 rounding false-positive", func(t *testing.T) {
+		ts := newTestSetter(int(7))
+		s := MakeSetterFloat64(ts)
+		if err := s.JawsSet(nil, 9223372036854775808.0); !errors.Is(err, ErrFloatOutOfRange) { // 2^63
+			t.Errorf("expected ErrFloatOutOfRange, got %v", err)
+		}
+		if ts.Get() != 7 {
+			t.Errorf("bound value mutated to %v", ts.Get())
+		}
+		if err := s.JawsSet(nil, 1<<62); err != nil { // safely in range
+			t.Fatalf("JawsSet(2^62): %v", err)
+		}
+	})
 }
 
 func Test_makeSetterFloat64ReadOnly_int(t *testing.T) {
