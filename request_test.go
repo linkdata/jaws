@@ -497,12 +497,16 @@ func TestRequest_EventFnQueue(t *testing.T) {
 	th.Equal(atomic.LoadInt32(&callCount), int32(cap(rq.OutCh)))
 }
 
-func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
+// TestRequest_EventFnQueueOverflowCancelsRequest verifies that when a client
+// floods events faster than a slow handler can drain them, the request is
+// cancelled (terminated) rather than silently dropping events and limping on with
+// inconsistent state — and that this never panics, even with no Logger configured
+// (the default). Previously the overflow path called MustLog, which panicked with
+// a nil Logger and then re-panicked inside the process recover.
+func TestRequest_EventFnQueueOverflowCancelsRequest(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest(t)
 	defer rq.Close()
-	var log bytes.Buffer
-	rq.Jaws.Logger = slog.New(slog.NewTextHandler(&log, nil))
 
 	var wait int32
 
@@ -516,29 +520,59 @@ func TestRequest_EventFnQueueOverflowPanicsWithNoLogger(t *testing.T) {
 		return nil
 	})
 
-	rq.ExpectPanic = true
+	// No Logger configured (the default): the overflow back-pressure must cancel
+	// the request without panicking. ExpectPanic stays false, so any panic that
+	// does escape is re-raised by the harness and fails the test.
 	rq.Jaws.Logger = nil
 	jid := jidForTag(rq.Request, bombItem)
 
 	for {
 		select {
 		case <-rq.DoneCh:
-			if t.Context().Err() == nil {
-				th.True(rq.Panicked)
-				txt := fmt.Sprint(rq.PanicVal)
-				if !strings.Contains(txt, "eventCallCh is full sending") {
-					t.Log(log.String())
-					t.Errorf("unexpected panic value %q", txt)
-				}
-			} else {
-				t.Log(log.String())
+			if t.Context().Err() != nil {
 				t.Error("test timed out before event channel full")
 			}
+			th.True(!rq.Panicked)
 			return
 		case <-th.C:
 			th.Timeout()
 		case rq.InCh <- wire.WsMsg{Jid: jid, What: what.Input}:
 		}
+	}
+}
+
+// TestRequest_ClaimRefreshesLastWriteAndStartServeGuards is a regression test for
+// the pool-reuse TOCTOU between maintenance recycle and startServe. claim() must
+// refresh lastWrite so a request claimed long after its initial render is not
+// treated as idle and recycled in the window before ServeHTTP sets running; and
+// startServe() must refuse a request that was nonetheless recycled (clearLocked
+// resets claimed), rather than driving a dead, pooled *Request.
+func TestRequest_ClaimRefreshesLastWriteAndStartServeGuards(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	rq := jw.NewRequest(hr)
+
+	// Simulate a page that rendered long ago (idle) before its WebSocket connects.
+	rq.mu.Lock()
+	rq.lastWrite = time.Now().Add(-time.Hour)
+	rq.mu.Unlock()
+
+	if jw.UseRequest(rq.JawsKey, hr) != rq {
+		t.Fatal("expected claim to succeed")
+	}
+	// claim refreshed lastWrite, so the just-claimed request is not idle-eligible.
+	if rq.maintenance(time.Now(), time.Second) {
+		t.Fatal("a freshly claimed request must not be treated as idle by maintenance")
+	}
+
+	// If a request is recycled anyway, startServe must refuse to drive it.
+	jw.recycle(rq)
+	if rq.startServe() {
+		t.Fatal("startServe must refuse a recycled request")
 	}
 }
 
@@ -684,12 +718,14 @@ func TestRequest_Redirect(t *testing.T) {
 }
 
 func Test_isSafeRedirect(t *testing.T) {
-	for _, s := range []string{"", "/", "/next", "some-url", "http://example.test/x", "https://example.test/x", "HTTPS://EX/x", "//host/path"} {
+	for _, s := range []string{"", "/", "/next", "some-url", "http://example.test/x", "https://example.test/x", "HTTPS://EX/x"} {
 		if !isSafeRedirect(s) {
 			t.Errorf("expected safe redirect: %q", s)
 		}
 	}
-	for _, s := range []string{"javascript:alert(1)", "JavaScript:alert(1)", "data:text/html,<script>x</script>", "vbscript:msgbox(1)"} {
+	// Protocol-relative URLs reach an arbitrary external origin and must be unsafe,
+	// alongside script-bearing schemes.
+	for _, s := range []string{"//host/path", "//evil.com", "javascript:alert(1)", "JavaScript:alert(1)", "data:text/html,<script>x</script>", "vbscript:msgbox(1)"} {
 		if isSafeRedirect(s) {
 			t.Errorf("expected unsafe redirect: %q", s)
 		}
