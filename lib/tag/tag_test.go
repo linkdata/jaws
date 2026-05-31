@@ -244,6 +244,22 @@ func TestTagExpand_TagGetterNonComparable(t *testing.T) {
 	}
 }
 
+// TestTagExpand_RuntimeNonComparable covers the gap between static and runtime
+// comparability: a struct whose static type is comparable but that holds a
+// non-comparable value in an interface field (here a func) passes
+// reflect.Type.Comparable() yet panics on == / as a map key. In debug builds tag
+// expansion must reject it with ErrNotUsableAsTag rather than accepting it and
+// deferring a panic to jw.dirty / rq.tagMap on the event goroutine. The runtime
+// check is debug-gated for performance, so this only asserts under deadlock.Debug.
+func TestTagExpand_RuntimeNonComparable(t *testing.T) {
+	if !deadlock.Debug {
+		t.Skip("runtime comparability check only runs under deadlock.Debug")
+	}
+	if _, err := TagExpand(nil, testRuntimeNonComparable{v: func() {}}); !errors.Is(err, ErrNotUsableAsTag) {
+		t.Fatalf("expected ErrNotUsableAsTag, got %v", err)
+	}
+}
+
 func TestTagExpand_NotUsableAsTag_WithNestedTagGetterHint(t *testing.T) {
 	tag := testTagExpandNestedTagGetter{
 		Setter: testNestedTagGetter{},

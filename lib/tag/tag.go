@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"html/template"
 	"reflect"
+
+	"github.com/linkdata/deadlock"
 )
 
 // Tag is a simple comparable tag value.
@@ -34,6 +36,17 @@ const (
 func ensureUsableTag(tag any) error {
 	if tag != nil {
 		if t := reflect.TypeOf(tag); t != nil && t.Comparable() {
+			// reflect.Type.Comparable reports STATIC comparability: a comparable
+			// struct or array can still hold a non-comparable value in an interface
+			// field and panic on == or when used as a map key (jw.dirty / rq.tagMap).
+			// In debug builds also run the (more expensive) runtime value check via
+			// NewErrNotComparable so such tags are rejected here, at expansion time,
+			// rather than panicking later on the event goroutine. Production keeps
+			// only the cheap static check; setDirty (see jaws.go) releases its lock
+			// with defer so a residual runtime panic cannot deadlock the instance.
+			if deadlock.Debug && NewErrNotComparable(tag) != nil {
+				return NewErrNotUsableAsTag(tag)
+			}
 			return nil
 		}
 	}
