@@ -271,12 +271,13 @@ func TestRequest_SetContext_NilPanics(t *testing.T) {
 	rq := jw.NewRequest(nil)
 	defer jw.recycle(rq)
 
+	// No Logger is configured, so reportMisuse panics in both debug and production.
 	defer func() {
 		x := recover()
 		if x == nil {
 			t.Fatal("expected panic")
 		}
-		if got := fmt.Sprint(x); got != "context must not be nil" {
+		if got := fmt.Sprint(x); !strings.Contains(got, "SetContext function returned a nil context") {
 			t.Fatalf("unexpected panic %q", got)
 		}
 	}()

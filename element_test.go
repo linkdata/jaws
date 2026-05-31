@@ -209,19 +209,23 @@ func TestElement_Queued(t *testing.T) {
 	})
 }
 
-func TestElement_ReplacePanicsOnMissingId(t *testing.T) {
-	is := newTestHelper(t)
+func TestElement_ReplaceRejectsMissingId(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
-	defer func() {
-		if x := recover(); x == nil {
-			is.Fail()
-		}
-	}()
-	tss := &testUi{s: "foo"}
-	e := rq.NewElement(tss)
-	e.Replace(template.HTML("<div id=\"wrong\"></div>"))
-	is.Fail()
+	e := rq.NewElement(&testUi{s: "foo"})
+	if deadlock.Debug {
+		// Debug builds fail fast with a panic.
+		defer func() {
+			if recover() == nil {
+				t.Fatal("expected panic in debug build")
+			}
+		}()
+	}
+	e.Replace(template.HTML(`<div id="wrong"></div>`))
+	if deadlock.Debug {
+		t.Fatal("Replace should have panicked in debug build")
+	}
+	// Production builds (with a Logger) report it via MustLog and skip the replace.
 }
 
 func TestElement_ReplaceMessageTargetsElementHTML(t *testing.T) {
@@ -273,8 +277,8 @@ func TestElement_AddHandlersAfterRenderPanics(t *testing.T) {
 }
 
 // assertHandlerMutationFrozen verifies that fn (a handler-adding call on a frozen
-// Element) is rejected: debug builds panic, production builds silently drop the
-// handler so the lock-free read on the event goroutine is never raced.
+// Element) is rejected: debug builds panic, production builds report it via MustLog
+// and drop the handler so the lock-free read on the event goroutine is never raced.
 func assertHandlerMutationFrozen(t *testing.T, e *Element, fn func()) {
 	t.Helper()
 	before := len(e.handlers)

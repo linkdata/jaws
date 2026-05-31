@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"html/template"
+	"io"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -151,6 +153,9 @@ func TestRequestWriterUI_RenderErrorDoesNotLeakElement(t *testing.T) {
 
 func TestRequestWriter_RegisterFreezesElement(t *testing.T) {
 	_, rq := newCoreRequest(t)
+	// A production server has a Logger configured; with one, the rejected late
+	// handler is reported via MustLog instead of panicking.
+	rq.Jaws.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	var buf bytes.Buffer
 	rw := RequestWriter{Request: rq, Writer: &buf}
 
@@ -165,8 +170,8 @@ func TestRequestWriter_RegisterFreezesElement(t *testing.T) {
 	}
 
 	// Register freezes the element after its initial setup, so adding handlers
-	// afterwards is rejected: debug panics, production silently drops. (Without
-	// the Freeze, a never-rendered element would never trip the guard.)
+	// afterwards is rejected: debug panics, production reports via MustLog and drops.
+	// (Without the Freeze, a never-rendered element would never trip the guard.)
 	if deadlock.Debug {
 		defer func() {
 			if recover() == nil {
@@ -177,5 +182,5 @@ func TestRequestWriter_RegisterFreezesElement(t *testing.T) {
 		t.Error("expected panic adding handlers to a frozen registered element")
 		return
 	}
-	elem.AddHandlers(struct{}{}) // must not panic in production builds
+	elem.AddHandlers(struct{}{}) // production logs and drops, must not panic
 }

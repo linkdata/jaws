@@ -311,6 +311,20 @@ func (jw *Jaws) MustLog(err error) {
 	}
 }
 
+// reportMisuse reports a violated API contract (a programming error).
+//
+// It reports err through [Jaws.MustLog] (which logs it, or panics if no Logger is
+// set) and, in debug builds, additionally panics to fail fast. So in production
+// with a Logger configured the mistake is logged and the caller continues without
+// applying the offending operation, while debug builds and unconfigured servers
+// still stop on it.
+func (jw *Jaws) reportMisuse(err error) {
+	jw.MustLog(err)
+	if deadlock.Debug {
+		panic(err)
+	}
+}
+
 var nextID atomic.Int64
 
 // NextID returns an int64 unique within the lifetime of the program.

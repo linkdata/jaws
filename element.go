@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/lib/jid"
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
@@ -48,19 +47,15 @@ func (elem *Element) String() string {
 //
 // handlers is read lock-free on the event goroutine (see callEventHandlers), so
 // it must only be appended to while the Element is being rendered, before any
-// event for it can fire. Once frozen, late mutations are a bug; debug builds
-// panic, production builds drop them rather than racing the lock-free read.
+// event for it can fire. Once frozen, late mutations are a bug: reportMisuse
+// panics in debug builds and logs in production, and the mutation is dropped
+// rather than racing the lock-free read.
 func (elem *Element) appendHandlers(h ...any) {
 	if len(h) == 0 {
 		return
 	}
 	if elem.frozen.Load() {
-		if deadlock.Debug {
-			panic("jaws: Element handlers mutated after JawsRender returned; handlers must be added during rendering, before events can fire")
-		}
-		// Production builds drop late mutations rather than racing the lock-free
-		// read; there is intentionally no separate return statement here, so the
-		// debug-only panic above is the sole extra branch under "-tags debug".
+		elem.Jaws.reportMisuse(errors.New("jaws: Element handlers mutated after JawsRender returned; handlers must be added during rendering, before events can fire"))
 	} else if !elem.deleted.Load() {
 		elem.handlers = append(elem.handlers, h...)
 	}
@@ -223,7 +218,10 @@ func (elem *Element) SetValue(value string) {
 }
 
 // Replace replaces the [Element]'s entire HTML DOM node with new HTML code.
-// If the HTML code doesn't seem to contain correct HTML ID, it panics.
+//
+// The HTML code must contain the element's own HTML id; if it does not, the call
+// is a programming error: debug builds panic and production builds report it via
+// [Jaws.MustLog] and skip the replacement.
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (elem *Element) Replace(htmlCode template.HTML) {
@@ -232,7 +230,8 @@ func (elem *Element) Replace(htmlCode template.HTML) {
 		b = append(b, "id="...)
 		b = elem.Jid().AppendQuote(b)
 		if !bytes.Contains([]byte(htmlCode), b) {
-			panic(errors.New("jaws: Element.Replace(): expected HTML " + string(b)))
+			elem.Jaws.reportMisuse(errors.New("jaws: Element.Replace(): expected HTML " + string(b)))
+			return
 		}
 		elem.queue(what.Replace, string(htmlCode))
 	}

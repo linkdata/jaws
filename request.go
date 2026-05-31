@@ -366,11 +366,16 @@ func (rq *Request) Context() (ctx context.Context) {
 // The function is given the current context and must return a non-nil context.
 // The returned context must be derived from oldCtx so cancellation and deadlines
 // continue to propagate to [Request.Context].
+//
+// Returning a nil context is a programming error: debug builds panic and production
+// builds report it via [Jaws.MustLog] and keep the existing context.
 func (rq *Request) SetContext(fn func(oldCtx context.Context) (newCtx context.Context)) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	if rq.ctx = fn(rq.ctx); rq.ctx == nil {
-		panic("context must not be nil")
+	if newCtx := fn(rq.ctx); newCtx != nil {
+		rq.ctx = newCtx
+	} else {
+		rq.Jaws.reportMisuse(errors.New("jaws: SetContext function returned a nil context"))
 	}
 }
 
