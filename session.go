@@ -3,6 +3,7 @@ package jaws
 import (
 	"net/http"
 	"net/netip"
+	"slices"
 	"time"
 
 	"github.com/linkdata/deadlock"
@@ -220,7 +221,7 @@ func (sess *Session) Clear() {
 func (sess *Session) Requests() (requests []*Request) {
 	if sess != nil {
 		sess.mu.RLock()
-		requests = append(requests, sess.requests...)
+		requests = slices.Clone(sess.requests)
 		sess.mu.RUnlock()
 	}
 	return
