@@ -156,7 +156,7 @@ Tested via WebSocket `Input` and `Click` messages with payloads including:
 - Client-side `jawsSetValue()` uses `elem.value` / `elem.textContent` (not `innerHTML`)
 - HTML-rendering `Inner` commands only carry server-generated content, never user input
 - CSP `script-src 'self'` provides defense-in-depth against inline script execution
-- **Source confirmed** (`input_widgets.go`, `InputText.JawsUpdate`): `JawsUpdate()` calls `e.SetValue(v)`, not `e.SetInner()`
+- **Source confirmed** (`lib/ui/input_widgets.go`, `InputText.JawsUpdate`): `JawsUpdate()` calls `e.SetValue(v)`, not `e.SetInner()`
 
 ### 5.3 Cross-Site Request Forgery (CSRF)
 
@@ -235,7 +235,7 @@ Also tested case-variant bypass attempts (`inner`, `INNER`, `redirect`, `alert`)
 | Tab-only messages | Silently dropped |
 | Null bytes in messages | Silently dropped |
 | Unknown command types (Foo, Eval) | Silently dropped |
-| Invalid UTF-8 sequences | Stripped via `strings.ToValidUTF8()` (`wsmsg.go`, `Parse`) |
+| Invalid UTF-8 sequences | Stripped via `strings.ToValidUTF8()` (`lib/wire/wsmsg.go`, `Parse`) |
 | Oversized payload (>32 KiB) | Rejected: inbound messages are capped at 32 KiB (`webSocketReadLimit`, set via `ws.SetReadLimit` in `request.go`); a larger message fails the read and closes the connection |
 | Message flood (1000 msgs in 0.03s) | Connection survived |
 | 20 simultaneous connections | All accepted |
@@ -245,7 +245,7 @@ Also tested case-variant bypass attempts (`inner`, `INNER`, `redirect`, `alert`)
 
 The `Set` message type allows clients to modify server-side JsVar state (this is the mechanism behind mouse-position sharing).
 
-**Source code** (`jsvar.go`, `JsVar.JawsSetPath`): Client sends `Set\tJid\tpath=jsonvalue` → server calls `jq.Set()` on Go struct → broadcasts change.
+**Source code** (`lib/ui/jsvar.go`, `JsVar.JawsSetPath`): Client sends `Set\tJid\tpath=jsonvalue` → server calls `jq.Set()` on Go struct → broadcasts change.
 
 Tested attack payloads:
 
@@ -335,7 +335,7 @@ this by blocking inline script execution.
 
 ### 9.3 WebSocket Message Parsing
 
-- `wsmsg.go` (`Parse`): validates message structure (requires two tabs, trailing newline)
+- `lib/wire/wsmsg.go` (`Parse`): validates message structure (requires two tabs, trailing newline)
 - Validates `what.What` type via `what.Parse()`
 - Validates JID via `jid.ParseString()`
 - JSON-unquotes data field (rejects malformed strings)

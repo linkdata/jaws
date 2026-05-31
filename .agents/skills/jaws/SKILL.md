@@ -115,7 +115,7 @@ Implications:
 
 On incoming events, JaWS dispatches in this order:
 1. Handlers attached to the element are tried in **reverse registration order** (most recently added first).
-2. If every attached handler returned `ErrEventUnhandled` (or none matched the event kind), the UI object itself (`elem.Ui()`) is called last as the fallback.
+2. If every attached handler returned `ErrEventUnhandled` (or none matched the event kind), the UI object itself (`elem.UI()`) is called last as the fallback.
 
 The handler candidate is asked via `JawsClick` / `JawsContextMenu` / `JawsInput`, matched to the event kind; there is no generic `JawsEvent` method. Return `jaws.ErrEventUnhandled` to fall through to the next candidate.
 

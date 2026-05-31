@@ -204,8 +204,16 @@ func TestElement_Queued(t *testing.T) {
 		// loop drain the update and invoke JawsUpdate.
 		time.Sleep(2 * time.Millisecond)
 		synctest.Wait()
-		th.True(atomic.LoadInt32(&tss.updateCalled) >= 1)
+		n := atomic.LoadInt32(&tss.updateCalled)
+		// Lower bound: synctest scheduling can collapse the two Dirty calls into a
+		// single updateTicker fire or split them across two, so the count is 1 or 2.
+		th.True(n >= 1)
 		th.Equal(tss.renderCalled, int32(2))
+		// Upper bound: with jw.dirty now empty the system quiesces, so no further
+		// JawsUpdate occurs (this catches a runaway re-update regression).
+		time.Sleep(2 * time.Millisecond)
+		synctest.Wait()
+		th.Equal(atomic.LoadInt32(&tss.updateCalled), n)
 	})
 }
 

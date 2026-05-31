@@ -58,3 +58,33 @@ func TestRequest_RadioGroup_LazyCreation(t *testing.T) {
 		t.Fatal("an unrendered option must not register any Element")
 	}
 }
+
+// TestRequest_RadioGroup_LabelBeforeRadio verifies the radioElem() invariant: the
+// radio Element is created (and so receives the lower Jid) before the label even
+// when a template renders Label before Radio, so the label's for= attribute always
+// references the radio's Jid. The other RadioGroup tests render Radio first, so
+// this Label-first path would otherwise be uncovered.
+func TestRequest_RadioGroup_LabelBeforeRadio(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	var sb strings.Builder
+	rw := RequestWriter{Request: rq, Writer: &sb}
+
+	nba := named.NewBoolArray(false)
+	nba.Add("1", "one")
+	rel := rw.RadioGroup(nba)
+
+	// Render Label before Radio. The radio must already exist at the lower Jid so
+	// the label gets the next Jid and points its for= at the radio.
+	wantLabel := "<label id=\"Jid.2\" for=\"Jid.1\">one</label>"
+	if gotLabel := string(rel[0].Label()); gotLabel != wantLabel {
+		t.Errorf("Label-first: got %q, want %q", gotLabel, wantLabel)
+	}
+	if rq.GetElementByJid(1) == nil {
+		t.Fatal("radio Element (Jid.1) must be created when Label is rendered first")
+	}
+
+	// Rendering Radio afterwards reuses the same Jid.1 element.
+	if gotRadio := string(rel[0].Radio()); !strings.HasPrefix(gotRadio, "<input id=\"Jid.1\" type=\"radio\" name=\"jaws.") {
+		t.Errorf("radio should render at Jid.1, got %q", gotRadio)
+	}
+}

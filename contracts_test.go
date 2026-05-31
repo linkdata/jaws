@@ -3,6 +3,7 @@ package jaws
 import (
 	"html/template"
 	"testing"
+	"testing/synctest"
 
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
@@ -45,48 +46,57 @@ func (testJawsInitialHTMLAttr) JawsInitialHTMLAttr(elem *Element) template.HTMLA
 var _ InitialHTMLAttrHandler = testJawsInitialHTMLAttr{}
 
 func Test_clickHandlerWrapper_Dispatch(t *testing.T) {
-	th := newTestHelper(t)
-	rq := newTestRequest(t)
-	defer rq.Close()
+	synctest.Test(t, func(t *testing.T) {
+		rq := newTestRequest(t)
+		defer closeRequestInBubble(rq)
 
-	tjc := &testJawsClick{
-		clickCh:    make(chan string),
-		testSetter: newTestSetter(""),
-	}
-
-	want := `<div id="Jid.1">inner</div>`
-	th.NoErr(rq.UI(testDivWidget{inner: template.HTML("inner")}, tjc))
-	if got := rq.BodyString(); got != want {
-		t.Errorf("Request.UI(NewDiv()) = %q, want %q", got, want)
-	}
-
-	rq.InCh <- wire.WsMsg{Data: "text", Jid: 1, What: what.Input}
-	select {
-	case <-th.C:
-		th.Timeout()
-	case s := <-rq.OutCh:
-		t.Errorf("%q", s)
-	default:
-	}
-
-	rq.InCh <- wire.WsMsg{Data: "adam", Jid: 1, What: what.Click}
-	select {
-	case <-th.C:
-		th.Timeout()
-	case name := <-tjc.clickCh:
-		t.Fatalf("malformed click should be ignored, got %q", name)
-	default:
-	}
-
-	rq.InCh <- wire.WsMsg{Data: "1 2 0 adam", Jid: 1, What: what.Click}
-	select {
-	case <-th.C:
-		th.Timeout()
-	case name := <-tjc.clickCh:
-		if name != "adam" {
-			t.Error(name)
+		tjc := &testJawsClick{
+			clickCh:    make(chan string),
+			testSetter: newTestSetter(""),
 		}
-	}
+
+		want := `<div id="Jid.1">inner</div>`
+		if err := rq.UI(testDivWidget{inner: template.HTML("inner")}, tjc); err != nil {
+			t.Fatal(err)
+		}
+		if got := rq.BodyString(); got != want {
+			t.Errorf("Request.UI(NewDiv()) = %q, want %q", got, want)
+		}
+
+		// An Input message to a div (which has no input handler) must produce no
+		// output. synctest.Wait blocks until the process loop has fully handled the
+		// message, so the negative assertion is not vacuous: a bare default: select
+		// would short-circuit before the async process goroutine could react.
+		rq.InCh <- wire.WsMsg{Data: "text", Jid: 1, What: what.Input}
+		synctest.Wait()
+		select {
+		case s := <-rq.OutCh:
+			t.Errorf("unexpected output for Input: %q", s.Format())
+		default:
+		}
+
+		// A malformed click ("adam", missing coordinates) must be ignored before the
+		// handler is invoked.
+		rq.InCh <- wire.WsMsg{Data: "adam", Jid: 1, What: what.Click}
+		synctest.Wait()
+		select {
+		case name := <-tjc.clickCh:
+			t.Fatalf("malformed click should be ignored, got %q", name)
+		default:
+		}
+
+		// A well-formed click dispatches to the handler.
+		rq.InCh <- wire.WsMsg{Data: "1 2 0 adam", Jid: 1, What: what.Click}
+		synctest.Wait()
+		select {
+		case name := <-tjc.clickCh:
+			if name != "adam" {
+				t.Error(name)
+			}
+		default:
+			t.Fatal("expected click to dispatch to handler")
+		}
+	})
 }
 
 func Test_defaultAuth(t *testing.T) {

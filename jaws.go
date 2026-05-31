@@ -40,6 +40,16 @@
 // (mutate under the value lock, release it, then mark dirty) so they do not depend
 // on this invariant.
 //
+// A second deliberate reverse edge lives in [github.com/linkdata/jaws/lib/ui]:
+// ContainerHelper.reconcile holds its own widget mutex while calling
+// [Request.NewElement], which takes Request.mu — again leaf-before-core. It is safe
+// for the same reason: no code path holding any of the three core locks ever
+// invokes a widget's render or update method (the Serve loop calls JawsRender and
+// JawsUpdate only after releasing Request.mu). Code holding Jaws.mu, Request.mu or
+// Session.mu must therefore never call a container's render/update entry points.
+// Note the widget mutex is a plain sync.Mutex, so deadlock.Debug cannot observe
+// this inversion; the invariant is maintained by convention.
+//
 // [Element] handlers are an intentional exception to the locking rules: they are
 // populated only while an Element is rendered and are then read without a lock on
 // the event goroutine. This is safe solely because rendering completes before any
@@ -1066,16 +1076,29 @@ func (jw *Jaws) Append(target any, html template.HTML) {
 	jw.broadcastTo(target, what.Append, string(html))
 }
 
-func maybeCompactJSON(in string) (out string) {
-	out = in
+// maybeCompactJSON returns in made safe to embed verbatim in a what.Call wire
+// frame, which the client splits on '\n' (frames) and '\t' (order fields). For
+// valid JSON, json.Compact strips all insignificant whitespace, including any
+// framing-significant tabs and newlines between tokens. When in is not valid JSON
+// (for example a caller embedded a raw control byte inside a string literal, which
+// is illegal unescaped in JSON), json.Compact fails; rather than passing the raw
+// bytes through and corrupting the frame, escape the framing-significant control
+// bytes so the payload is always frame-safe (and, as a side effect, valid JSON).
+func maybeCompactJSON(in string) string {
 	if strings.ContainsAny(in, "\n\t") {
 		var b bytes.Buffer
 		if err := json.Compact(&b, []byte(in)); err == nil {
-			out = b.String()
+			return b.String()
 		}
+		return jsonControlEscaper.Replace(in)
 	}
-	return
+	return in
 }
+
+// jsonControlEscaper turns the raw control bytes that would break WebSocket frame
+// and order framing into their JSON escape sequences. These bytes are illegal
+// unescaped inside a JSON string literal, so escaping them also yields valid JSON.
+var jsonControlEscaper = strings.NewReplacer("\t", `\t`, "\n", `\n`, "\r", `\r`)
 
 var whitespaceRemover = strings.NewReplacer(" ", "", "\n", "", "\t", "")
 

@@ -13,7 +13,10 @@ import (
 // The underlying [jaws.Element] values are created lazily on the first call to
 // [RadioElement.Radio] or [RadioElement.Label], so options that a template never
 // renders register no elements on the [jaws.Request]. Call each of Radio and
-// Label at most once.
+// Label at most once. Render Label only when Radio is also rendered: Label emits a
+// for="..." referencing the radio's id, so a Label without its Radio points at an
+// input that is absent from the document (and leaves an unrendered radio Element
+// registered on the Request for the request's lifetime).
 type RadioElement struct {
 	st *radioState
 }
