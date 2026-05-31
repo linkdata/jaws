@@ -213,9 +213,9 @@ func (jsvar *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 // JawsRender writes the hidden element that seeds and routes the JavaScript variable.
 //
 // The write lock is held only while deriving the dirty tag from the bound value
-// (via [Element.ApplyGetter]) and marshaling it, so the marshaled Ptr stays
+// (via [jaws.Element.ApplyGetter]) and marshaling it, so the marshaled Ptr stays
 // consistent with that tag even if another request sharing this JsVar sets it
-// concurrently. The lock is released before [Element.ApplyParams] and, crucially,
+// concurrently. The lock is released before [jaws.Element.ApplyParams] and, crucially,
 // before writing to w: holding the value lock across a network write would let a
 // slow client stall every goroutine sharing the locker. While the lock is held the
 // bound value's [tag.TagGetter.JawsGetTag] and [jaws.InitHandler.JawsInit]

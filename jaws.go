@@ -284,8 +284,8 @@ func (jw *Jaws) RequestCount() (n int) {
 	return
 }
 
-// Log sends an error to the [Logger] set in the [Jaws].
-// Has no effect if err is nil or the [Logger] is nil.
+// Log sends an error to the [Jaws.Logger] if set.
+// Has no effect if err is nil or the Logger is nil.
 // Returns err.
 func (jw *Jaws) Log(err error) error {
 	if err != nil && jw != nil && jw.Logger != nil {
@@ -294,8 +294,8 @@ func (jw *Jaws) Log(err error) error {
 	return err
 }
 
-// MustLog sends an error to the [Logger] set in the [Jaws] or
-// panics with the given error if no [Logger] is set.
+// MustLog sends an error to the [Jaws.Logger] if set, or
+// panics with the given error if the Logger is nil.
 // Has no effect if err is nil.
 //
 // Some update-time paths cannot return errors to their caller and report them
@@ -485,7 +485,7 @@ func getCookieSessionsIDs(h http.Header, wanted string) (cookies []uint64) {
 
 // GetSession returns the [Session] associated with the given [http.Request], or nil.
 //
-// Sessions are bound to the client IP (see [Jaws.clientIP]). Behind a reverse
+// Sessions are bound to the client IP (see the clientIP method). Behind a reverse
 // proxy that connects over loopback, every request appears to come from loopback
 // and IP binding is effectively disabled unless [Jaws.TrustForwardedHeaders] is
 // enabled so the forwarded client IP is used instead.
@@ -900,7 +900,7 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 // binding; the consequence is that when every request arrives from loopback (the
 // typical proxied deployment without forwarded-IP binding) IP binding is a no-op.
 // Enable [Jaws.TrustForwardedHeaders] to bind on the forwarded client IP instead
-// (see [Jaws.clientIP]).
+// (see the clientIP method).
 func equalIP(a, b netip.Addr) bool {
 	return a.Compare(b) == 0 || (a.IsLoopback() && b.IsLoopback())
 }

@@ -29,7 +29,7 @@ func Test_NamedBoolArray(t *testing.T) {
 	if nba.data[0].Checked() {
 		t.Fatal("expected unchecked")
 	}
-	if got := nba.String(); got != `&NamedBoolArray{[&{"1","one",false}]}` {
+	if got := nba.String(); got != `&BoolArray{[&{"1","one",false}]}` {
 		t.Fatalf("string mismatch: got %q", got)
 	}
 	if got := nba.Get(); got != "" {
@@ -61,7 +61,7 @@ func Test_NamedBoolArray(t *testing.T) {
 	if len(nba.data) != 3 {
 		t.Fatalf("len(data)=%d want 3", len(nba.data))
 	}
-	if got := nba.String(); got != `&NamedBoolArray{[&{"1","one",true},&{"2","two",false},&{"2","also two",false}]}` {
+	if got := nba.String(); got != `&BoolArray{[&{"1","one",true},&{"2","two",false},&{"2","also two",false}]}` {
 		t.Fatalf("string mismatch: got %q", got)
 	}
 

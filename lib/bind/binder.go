@@ -343,7 +343,7 @@ func (b *binder[T]) Format(format string) Binder[T] {
 // The lock will be held at this point, preferring RLock over Lock, if available.
 // Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
 //
-// Unlike [binder.GetLocked] and [binder.SetLocked], the bind argument to fn is
+// Unlike [Binder.GetLocked] and [Binder.SetLocked], the bind argument to fn is
 // the current Binder, not the previous one; read the value with its
 // JawsGetLocked to render it. See [GetHTMLHook].
 func (b *binder[T]) GetHTML(fn GetHTMLHook[T]) Binder[T] {
@@ -385,6 +385,7 @@ func (b *binder[T]) ContextMenu(fn ContextMenuHook[T]) Binder[T] {
 //
 // The lock will be held at this point, preferring RLock over Lock, if available.
 // Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
+// To call the previous handler in the chain, call [Binder.JawsInitialHTMLAttrLocked].
 func (b *binder[T]) InitialHTMLAttr(fn InitialHTMLAttrHook[T]) Binder[T] {
 	return &binder[T]{
 		prev:     b,

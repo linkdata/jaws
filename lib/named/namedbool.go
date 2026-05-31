@@ -12,7 +12,7 @@ import (
 //
 // Bool values are safe for concurrent use.
 type Bool struct {
-	nba     *BoolArray       // (read-only) NamedBoolArray that this is part of (may be nil)
+	nba     *BoolArray       // (read-only) BoolArray that this is part of (may be nil)
 	name    string           // (read-only) name within the named bool set
 	html    template.HTML    // (read-only) HTML code used in select lists or labels
 	mu      deadlock.RWMutex // protects following

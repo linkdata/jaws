@@ -55,8 +55,8 @@ const maxHintScan = 4
 
 // FindTagGetter searches x recursively for a nested [TagGetter].
 //
-// The search is bounded: it follows at most [maxTagDepth] levels of nesting and
-// scans only the first [maxHintScan] elements of any array or slice. It is used
+// The search is bounded: it follows at most maxTagDepth levels of nesting and
+// scans only the first maxHintScan elements of any array or slice. It is used
 // only to enrich the [ErrNotUsableAsTag] diagnostic, so these bounds trade
 // completeness for a cheap, terminating search.
 func FindTagGetter(x any) (path string, tgType reflect.Type, found bool) {

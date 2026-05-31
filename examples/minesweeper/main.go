@@ -21,8 +21,8 @@ import (
 //go:embed assets/ui/*.html assets/static/*.css
 var assetsFS embed.FS
 
-// runDeps groups the external dependencies of [run] so tests can substitute any
-// of them. Production wiring is built by [newRunDeps]; passing the dependencies
+// runDeps groups the external dependencies of run so tests can substitute any
+// of them. Production wiring is built by newRunDeps; passing the dependencies
 // in explicitly keeps them out of package-level mutable state.
 type runDeps struct {
 	newJaws        func() (*jaws.Jaws, error)
@@ -36,7 +36,7 @@ type runDeps struct {
 	logFatal       func(...any)
 }
 
-// newRunDeps returns the production dependency set for [run].
+// newRunDeps returns the production dependency set for run.
 func newRunDeps() runDeps {
 	return runDeps{
 		newJaws:        jaws.New,
@@ -51,7 +51,7 @@ func newRunDeps() runDeps {
 	}
 }
 
-// mainDeps is the dependency set used by [main]. It is a package variable solely
+// mainDeps is the dependency set used by main. It is a package variable solely
 // so tests can replace parts of it; production code never reassigns it.
 var mainDeps = newRunDeps()
 

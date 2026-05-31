@@ -12,7 +12,7 @@ import (
 // and sets of HTML radio buttons. It is safe to use from multiple goroutines
 // concurrently.
 type BoolArray struct {
-	multi bool             // allow multiple NamedBools to be true
+	multi bool             // allow multiple Bools to be true
 	mu    deadlock.RWMutex // protects following
 	data  []*Bool
 }
@@ -167,7 +167,7 @@ func (nba *BoolArray) IsChecked(name string) (state bool) {
 // String returns a string representation of the [BoolArray] suitable for debugging.
 func (nba *BoolArray) String() string {
 	var sb strings.Builder
-	sb.WriteString("&NamedBoolArray{[")
+	sb.WriteString("&BoolArray{[")
 	nba.mu.RLock()
 	for i, nb := range nba.data {
 		if i > 0 {

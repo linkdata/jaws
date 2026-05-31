@@ -8,7 +8,7 @@ import (
 )
 
 // RenderBoolOption renders nb as an HTML <option> element into w. It is the
-// single source of <option> markup shared by NamedBoolArray's options and by
+// single source of <option> markup shared by BoolArray's options and by
 // ui.Option, so attribute/escaping behavior cannot drift between them.
 func RenderBoolOption(elem *jaws.Element, w io.Writer, nb *Bool, params []any) error {
 	elem.Tag(nb)
@@ -30,7 +30,7 @@ func UpdateBoolOption(elem *jaws.Element, nb *Bool) {
 	}
 }
 
-// namedBoolOption is an internal UI wrapper used by NamedBoolArray.JawsContains.
+// namedBoolOption is an internal UI wrapper used by BoolArray.JawsContains.
 // It intentionally stays unexported; public option widgets live in package ui.
 type namedBoolOption struct {
 	*Bool

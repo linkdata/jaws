@@ -1080,8 +1080,8 @@ func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) {
 	return
 }
 
-// Log sends an error to the [Logger] set in the [Jaws].
-// Has no effect if err is nil or the [Logger] is nil.
+// Log sends an error to the [Jaws.Logger] if set.
+// Has no effect if err is nil or the Logger is nil.
 // Returns err.
 func (rq *Request) Log(err error) error {
 	var jw *Jaws
@@ -1091,8 +1091,8 @@ func (rq *Request) Log(err error) error {
 	return jw.Log(err)
 }
 
-// MustLog sends an error to the [Logger] set in the [Jaws] or
-// panics with the given error if no [Logger] is set.
+// MustLog sends an error to the [Jaws.Logger] if set, or
+// panics with the given error if the Logger is nil.
 // Has no effect if err is nil.
 //
 // Some update-time paths cannot return errors to their caller and report them

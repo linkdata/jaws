@@ -141,8 +141,8 @@ func (sess *Session) CookieValue() (s string) {
 	return
 }
 
-// IP returns the remote IP the session is bound to (which may be nil).
-// It is safe to call on a nil [Session], in which case it returns nil.
+// IP returns the remote IP the session is bound to, or the zero [netip.Addr] if unset.
+// It is safe to call on a nil [Session], in which case it returns the zero [netip.Addr].
 func (sess *Session) IP() (ip netip.Addr) {
 	if sess != nil {
 		ip = sess.remoteIP

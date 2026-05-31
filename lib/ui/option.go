@@ -15,7 +15,7 @@ func NewOption(nb *named.Bool) Option { return Option{Bool: nb} }
 
 // JawsRender renders ui as an HTML option element. The markup is produced by
 // [named.RenderBoolOption], the single source of <option> markup, so it cannot
-// diverge from the options NamedBoolArray renders.
+// diverge from the options [named.BoolArray] renders.
 func (u Option) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
 	return named.RenderBoolOption(elem, w, u.Bool, params)
 }
