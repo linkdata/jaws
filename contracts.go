@@ -9,8 +9,8 @@ import (
 // Container is implemented by UI values that render a dynamic list of child
 // [UI] values.
 type Container interface {
-	// JawsContains must return a slice of hashable [UI] objects. The slice
-	// contents must not be modified after returning it.
+	// JawsContains must return a slice of comparable [UI] objects (they are used
+	// as map keys). The slice contents must not be modified after returning it.
 	JawsContains(elem *Element) (contents []UI)
 }
 
@@ -23,7 +23,7 @@ type InitHandler interface {
 	JawsInit(elem *Element) (err error)
 }
 
-// Logger matches the log/slog.Logger interface.
+// Logger is satisfied by a [*log/slog.Logger] via its Info, Warn and Error methods.
 type Logger interface {
 	Info(msg string, args ...any)
 	Warn(msg string, args ...any)
