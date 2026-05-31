@@ -126,22 +126,22 @@ func (node *Node) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err
 // index must be within the current Children range; out-of-range, malformed, or
 // nil-targeting segments are rejected, so a client can neither grow the slice nor
 // address a node that does not exist.
-func (node *Node) resolveChildPath(nodePath string) (cur *Node, err error) {
-	cur = node
-	for nodePath != "" && err == nil {
+func (node *Node) resolveChildPath(nodePath string) (*Node, error) {
+	cur := node
+	for nodePath != "" {
 		var seg, idxStr string
 		seg, nodePath, _ = strings.Cut(nodePath, ".")
 		if seg != "children" {
 			return nil, fmt.Errorf("jawstree: refusing client path-set: unexpected path segment %q", seg)
 		}
 		idxStr, nodePath, _ = strings.Cut(nodePath, ".")
-		idx, converr := strconv.Atoi(idxStr)
-		if converr != nil || idx < 0 || idx >= len(cur.Children) || cur.Children[idx] == nil {
+		idx, err := strconv.Atoi(idxStr)
+		if err != nil || idx < 0 || idx >= len(cur.Children) || cur.Children[idx] == nil {
 			return nil, fmt.Errorf("jawstree: refusing client path-set: child index %q out of range", idxStr)
 		}
 		cur = cur.Children[idx]
 	}
-	return
+	return cur, nil
 }
 
 // JawsPathSet mirrors browser-side selected-state changes back into the tree.
