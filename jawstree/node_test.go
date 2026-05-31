@@ -41,7 +41,7 @@ func TestNode_MarshalJSON_AdversarialNames(t *testing.T) {
 	for _, name := range []string{
 		string([]byte{0xff, 0xfe, 0x41}), // invalid UTF-8 bytes
 		"weird\"name\nwith\tcontrol",     // quote, newline, tab
-		"a<b>& ",                         // HTML-ish and a JS line separator
+		"a<b>&",                          // HTML-ish and a JS line separator
 	} {
 		rootnode := &jawstree.Node{
 			Name:     name,
@@ -97,6 +97,37 @@ func TestNode_JawsSetPath_Gate(t *testing.T) {
 		// Setting the same value again reports it as unchanged.
 		if err := root.JawsSetPath(nil, "children.0.selected", true); !errors.Is(err, jaws.ErrValueUnchanged) {
 			t.Errorf("expected ErrValueUnchanged, got %v", err)
+		}
+	})
+
+	// Regression for the slice-growth bypass: a client Set with an out-of-range
+	// child index (index == len) must be rejected without growing Children with a
+	// nil node (which would crash every subsequent marshalJSON of a shared tree).
+	t.Run("rejects out-of-range child index without growing the slice", func(t *testing.T) {
+		for _, path := range []string{
+			"children.1.selected",            // index == len(Children)
+			"children.99.selected",           // far out of range
+			"children.-1.selected",           // negative
+			"children.x.selected",            // non-numeric
+			"children.0.children.0.selected", // child has no children
+		} {
+			root := newTree()
+			before := len(root.Children)
+			if err := root.JawsSetPath(nil, path, true); err == nil {
+				t.Errorf("path %q: expected an error, got nil", path)
+			}
+			if got := len(root.Children); got != before {
+				t.Errorf("path %q: Children grew from %d to %d", path, before, got)
+			}
+			for i, c := range root.Children {
+				if c == nil {
+					t.Fatalf("path %q: Children[%d] is nil after rejected set", path, i)
+				}
+			}
+			// Rendering the tree after a rejected set must not panic.
+			if _, err := root.MarshalJSON(); err != nil {
+				t.Errorf("path %q: MarshalJSON after rejected set: %v", path, err)
+			}
 		}
 	})
 }

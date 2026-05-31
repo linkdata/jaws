@@ -9,6 +9,7 @@ function jawstreeForEachNode(path, node, fn) {
 }
 
 function jawstreeSet(arg) {
+    window["jawstreeroot_"+arg.tree] = arg.data;
     window["jawstree_"+arg.tree].setData(arg.data.children);
 }
 
@@ -41,7 +42,7 @@ function jawstreeNew(treename, rootnode, options) {
         checkboxSelectionEnabled: options & (1<<8),
         /*jslint bitwise: false */
         onSelectionChange: function(selectedNodesData) {
-            jawstreeForEachNode("jawstreeroot_"+treename, rootnode, function(path, node) {
+            jawstreeForEachNode("jawstreeroot_"+treename, window["jawstreeroot_"+treename], function(path, node) {
                 var selected = false;
                 selectedNodesData.forEach(function(element) {
                     if (element.id == node.id) {

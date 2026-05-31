@@ -37,7 +37,10 @@ func initScriptURL(tree string, options Option) string {
 }
 
 func appendInitScript(b []byte, tree string, options Option) []byte {
-	b = append(b, `document.addEventListener("DOMContentLoaded",function(){window["jawstree_"+`...)
+	// Run the initializer immediately if the document is already parsed (the tree
+	// was inserted via a WebSocket update after load) and otherwise defer it to
+	// DOMContentLoaded.
+	b = append(b, `(function(){var i=function(){window["jawstree_"+`...)
 	b = strconv.AppendQuote(b, tree)
 	b = append(b, `]=jawstreeNew(`...)
 	b = strconv.AppendQuote(b, tree)
@@ -45,7 +48,7 @@ func appendInitScript(b []byte, tree string, options Option) []byte {
 	b = strconv.AppendQuote(b, tree)
 	b = append(b, "],"...)
 	b = strconv.AppendInt(b, int64(options), 10)
-	b = append(b, `);});`...)
+	b = append(b, `);};if(document.readyState==="complete"||document.readyState==="interactive"){i();}else{document.addEventListener("DOMContentLoaded",i);}})();`...)
 	return b
 }
 

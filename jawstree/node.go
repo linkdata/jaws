@@ -9,7 +9,6 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/ui"
-	"github.com/linkdata/jq"
 )
 
 var (
@@ -65,10 +64,15 @@ func (node *Node) marshalJSON(b []byte) []byte {
 		b = append(b, `,"selectable":false`...)
 	}
 	b = append(b, `,"children":[`...)
-	for i, c := range node.Children {
-		if i > 0 {
+	first := true
+	for _, c := range node.Children {
+		if c == nil { // defensive: the gate in JawsSetPath prevents nil children
+			continue
+		}
+		if !first {
 			b = append(b, ',')
 		}
+		first = false
 		b = c.marshalJSON(b)
 	}
 	b = append(b, "]}"...)
@@ -85,21 +89,56 @@ func (node *Node) MarshalJSON() (b []byte, err error) {
 var _ json.Marshaler = &Node{}
 
 // JawsSetPath restricts browser-initiated mutations to the per-node "selected"
-// flag. Any other path, or a non-bool value, is rejected without mutating the
-// tree, so a WebSocket client cannot change node names, ids, the children slice,
-// or any other [Node] field by path. This is the server-side enforcement of the
-// "server holds the truth" contract for [Tree]; without it the generic JsVar
-// path-setter ([github.com/linkdata/jq.Set]) would mutate any json-tagged field.
+// flag. Any other path, a non-bool value, or an out-of-range child index is
+// rejected without mutating the tree, so a WebSocket client cannot change node
+// names, ids, the children slice, or any other [Node] field by path. This is the
+// server-side enforcement of the "server holds the truth" contract for [Tree].
+//
+// The path is resolved by navigating the Children slice ourselves with strict
+// in-range index bounds rather than delegating to the generic JsVar path-setter
+// ([github.com/linkdata/jq.Set]): that setter not only mutates any json-tagged
+// field, it also grows a slice by one when asked to set index == len, which would
+// let a client append a nil *Node and crash every subsequent render of a shared
+// tree.
 func (node *Node) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err error) {
-	if !strings.HasSuffix(jsPath, ".selected") {
+	nodePath, ok := strings.CutSuffix(jsPath, ".selected")
+	if !ok {
 		return fmt.Errorf("jawstree: refusing client path-set of %q: only the .selected flag is client-writable", jsPath)
 	}
-	if _, ok := value.(bool); !ok {
+	selected, ok := value.(bool)
+	if !ok {
 		return fmt.Errorf("jawstree: refusing client path-set of %q: expected a bool, got %T", jsPath, value)
 	}
-	var changed bool
-	if changed, err = jq.Set(node, jsPath, value); err == nil && !changed {
-		err = jaws.ErrValueUnchanged
+	var target *Node
+	if target, err = node.resolveChildPath(nodePath); err == nil {
+		if target.Selected == selected {
+			err = jaws.ErrValueUnchanged
+		} else {
+			target.Selected = selected
+		}
+	}
+	return
+}
+
+// resolveChildPath navigates from node following a path of the form
+// "children.<i>.children.<j>..." (an empty path resolves to node itself). Every
+// index must be within the current Children range; out-of-range, malformed, or
+// nil-targeting segments are rejected, so a client can neither grow the slice nor
+// address a node that does not exist.
+func (node *Node) resolveChildPath(nodePath string) (cur *Node, err error) {
+	cur = node
+	for nodePath != "" && err == nil {
+		var seg, idxStr string
+		seg, nodePath, _ = strings.Cut(nodePath, ".")
+		if seg != "children" {
+			return nil, fmt.Errorf("jawstree: refusing client path-set: unexpected path segment %q", seg)
+		}
+		idxStr, nodePath, _ = strings.Cut(nodePath, ".")
+		idx, converr := strconv.Atoi(idxStr)
+		if converr != nil || idx < 0 || idx >= len(cur.Children) || cur.Children[idx] == nil {
+			return nil, fmt.Errorf("jawstree: refusing client path-set: child index %q out of range", idxStr)
+		}
+		cur = cur.Children[idx]
 	}
 	return
 }
@@ -123,6 +162,9 @@ func (node *Node) Walk(jsPath string, fn func(jsPath string, node *Node)) {
 		jsPath += "."
 	}
 	for i, child := range node.Children {
+		if child == nil { // defensive: the gate in JawsSetPath prevents nil children
+			continue
+		}
 		child.Walk(jsPath+"children."+strconv.Itoa(i), fn)
 	}
 }
