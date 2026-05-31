@@ -7,6 +7,7 @@ import (
 	"errors"
 	"html/template"
 	"io"
+	"log/slog"
 	"mime"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +20,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/lib/assets"
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
@@ -466,6 +468,48 @@ func TestBroadcast_NoneDestination(t *testing.T) {
 	case msg := <-jw.bcastCh:
 		t.Fatalf("expected no pending broadcast, got %T(%#v)", msg.Dest, msg.Dest)
 	default:
+	}
+}
+
+func TestBroadcast_RejectsUnhashableTagDest(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	var logbuf bytes.Buffer
+	jw.Logger = slog.New(slog.NewTextHandler(&logbuf, nil))
+
+	// A statically comparable struct holding a func in an interface field panics
+	// when used as a map key. Such a Dest must be rejected before it reaches the
+	// Serve loop, where wantMessage's tagMap lookup would panic and tear the loop
+	// down. In debug builds tag.TagExpand rejects it; in non-debug (production)
+	// builds TagExpand is lenient and the hashableTag check in Broadcast catches
+	// it. Either way, Broadcast must not panic and must not queue the message.
+	type ifaceHolder struct{ any }
+	var panicked bool
+	func() {
+		defer func() {
+			if recover() != nil {
+				panicked = true
+			}
+		}()
+		jw.Broadcast(wire.Message{What: what.Reload, Dest: ifaceHolder{any: func() {}}})
+	}()
+
+	if panicked {
+		t.Error("Broadcast must not let an unhashable tag panic the caller")
+	}
+	select {
+	case msg := <-jw.bcastCh:
+		t.Fatalf("unhashable Dest was queued for the Serve loop: %T(%#v)", msg.Dest, msg.Dest)
+	default:
+	}
+	if logbuf.Len() == 0 {
+		t.Error("expected the rejected broadcast tag to be logged")
+	}
+	if !deadlock.Debug && !strings.Contains(logbuf.String(), "not comparable") {
+		t.Errorf("non-debug build should reject the non-comparable tag, got %q", logbuf.String())
 	}
 }
 

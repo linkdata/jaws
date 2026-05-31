@@ -91,21 +91,46 @@ func (u *ContainerHelper) RenderContainer(elem *jaws.Element, w io.Writer, outer
 // Render errors for newly appended children are reported through
 // [jaws.Jaws.MustLog], which may panic when no [jaws.Jaws.Logger] is configured.
 func (u *ContainerHelper) UpdateContainer(elem *jaws.Element) {
-	var toAppend []*jaws.Element
-
 	wantContents := u.Container.JawsContains(elem)
-	newOrder := make([]jaws.Jid, 0, len(wantContents))
+	toAppend, toRemove, oldOrder, newOrder := u.reconcile(elem, wantContents)
 
+	// remove leftover Elements not present in new contents
+	for _, childElem := range toRemove {
+		elem.Remove(childElem.Jid().String())
+		elem.Request.DeleteElement(childElem)
+	}
+
+	for _, childElem := range toAppend {
+		var sb strings.Builder
+		elem.Jaws.MustLog(childElem.JawsRender(&sb, nil))
+		elem.Append(template.HTML(sb.String())) // #nosec G203
+	}
+
+	if !slices.Equal(oldOrder, newOrder) {
+		elem.Order(newOrder)
+	}
+}
+
+// reconcile matches u.contents to wantContents under u.mu and returns the
+// Elements to append, the leftover Elements to remove, and the old and new Jid
+// orders. The lock is released with defer so that using a child UI as a map key
+// cannot leave u.mu held if it panics: a UI that passes the static comparability
+// check can still be non-comparable at runtime (a comparable struct holding e.g.
+// a func in an interface field). This mirrors the defense in jaws.setDirty.
+func (u *ContainerHelper) reconcile(elem *jaws.Element, wantContents []jaws.UI) (toAppend, toRemove []*jaws.Element, oldOrder, newOrder []jaws.Jid) {
 	u.mu.Lock()
+	defer u.mu.Unlock()
+
 	// build pool of reusable Elements keyed by UI, preserving duplicates
 	pool := make(map[jaws.UI][]*jaws.Element, len(u.contents))
-	oldOrder := make([]jaws.Jid, len(u.contents))
+	oldOrder = make([]jaws.Jid, len(u.contents))
 	for i, childElem := range u.contents {
 		oldOrder[i] = childElem.Jid()
 		pool[childElem.UI()] = append(pool[childElem.UI()], childElem)
 	}
 
 	// build new contents, reusing pooled Elements where possible
+	newOrder = make([]jaws.Jid, 0, len(wantContents))
 	u.contents = u.contents[:0]
 	for _, childUI := range wantContents {
 		var childElem *jaws.Element
@@ -119,23 +144,9 @@ func (u *ContainerHelper) UpdateContainer(elem *jaws.Element) {
 		u.contents = append(u.contents, childElem)
 		newOrder = append(newOrder, childElem.Jid())
 	}
-	u.mu.Unlock()
 
-	// remove leftover Elements not present in new contents
 	for _, elems := range pool {
-		for _, childElem := range elems {
-			elem.Remove(childElem.Jid().String())
-			elem.Request.DeleteElement(childElem)
-		}
+		toRemove = append(toRemove, elems...)
 	}
-
-	for _, childElem := range toAppend {
-		var sb strings.Builder
-		elem.Jaws.MustLog(childElem.JawsRender(&sb, nil))
-		elem.Append(template.HTML(sb.String())) // #nosec G203
-	}
-
-	if !slices.Equal(oldOrder, newOrder) {
-		elem.Order(newOrder)
-	}
+	return
 }

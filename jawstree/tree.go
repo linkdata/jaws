@@ -20,14 +20,23 @@ type Tree struct {
 
 // New returns a tree widget with id, jsvar and options.
 //
+// The id is used both as a JavaScript variable name and as a URL path segment
+// for the init script, so it must be non-empty and contain only the characters
+// [A-Za-z0-9_$]; otherwise New panics. Validating here turns what would
+// otherwise be a confusing render-time "illegal jsvar name" error and a 400 on
+// the init-script route into an immediate, clear failure.
+//
 // New initializes node IDs and tree back-pointers in jsvar.Ptr.
-// It panics if jsvar or jsvar.Ptr is nil.
+// It panics if jsvar or jsvar.Ptr is nil, or if id is not a valid name.
 func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	if jsvar == nil {
 		panic("jawstree.New: jsvar must not be nil")
 	}
 	if jsvar.Ptr == nil {
 		panic("jawstree.New: jsvar.Ptr must not be nil")
+	}
+	if !isSafeTreeName(id) {
+		panic("jawstree.New: id must be non-empty and contain only [A-Za-z0-9_$]")
 	}
 	t = &Tree{
 		id:    id,

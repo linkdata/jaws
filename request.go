@@ -524,8 +524,8 @@ func (rq *Request) wantMessage(msg *wire.Message) (yes bool) {
 		}
 	default:
 		rq.mu.RLock()
+		defer rq.mu.RUnlock()
 		_, yes = rq.tagMap[msg.Dest]
-		rq.mu.RUnlock()
 	}
 	return
 }

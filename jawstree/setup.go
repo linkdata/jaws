@@ -27,15 +27,21 @@ func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.
 		return
 	}); err == nil {
 		for _, ss := range files {
-			u, e := url.Parse(path.Join(prefix, ss.Name))
+			// Build an absolute path so jaws.Setup's makeAbsPath leaves the returned
+			// URL unchanged and the registered handler pattern stays valid for any
+			// prefix form (absolute, relative or empty). Registering the raw
+			// path.Join result would panic on an empty prefix and double-apply a
+			// relative one; mirror jawsboot.Setup, which documents this.
+			abspath := staticserve.EnsurePrefixSlash(path.Join(prefix, ss.Name))
+			u, e := url.Parse(abspath)
 			if e == nil {
 				urls = append(urls, u)
-				handleFn(http.MethodGet+" "+u.String(), ss)
+				handleFn(staticserve.NormalizeGET(abspath), ss)
 			}
 			err = errors.Join(err, e)
 		}
 		handleFn(http.MethodGet+" "+initScriptPattern, http.HandlerFunc(serveInitScript))
-		handleFn(http.MethodGet+" "+path.Join(prefix, "treeview.js.map"), http.NotFoundHandler())
+		handleFn(staticserve.NormalizeGET(path.Join(prefix, "treeview.js.map")), http.NotFoundHandler())
 	}
 	return
 }

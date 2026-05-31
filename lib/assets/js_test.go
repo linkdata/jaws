@@ -705,6 +705,61 @@ process.stdout.write(JSON.stringify({ innerReads: innerReads, innerWrites: inner
 	}
 }
 
+func TestJawsJS_BatchedFrameIsolatesThrowingOrder(t *testing.T) {
+	// The server coalesces independent element updates into one frame. A single
+	// failing order (here a middle Inner targeting a missing element, which makes
+	// jawsPerform throw "element not found") must not abandon the orders after it.
+	raw := runJawsJSSnippet(t, `
+jawsDebug = false;
+var errors = [];
+console.error = function(msg) { errors.push(msg); };
+
+function makeElem(id) {
+	var e = { id: id, _inner: "", querySelectorAll: function(){ return []; } };
+	Object.defineProperty(e, "innerHTML", {
+		get: function(){ return this._inner; },
+		set: function(v){ this._inner = v; },
+		enumerable: true, configurable: true,
+	});
+	return e;
+}
+var one = makeElem("Jid.1");
+var two = makeElem("Jid.2");
+document.getElementById = function(id) {
+	if (id === "Jid.1") return one;
+	if (id === "Jid.2") return two;
+	return null; // Jid.9 is missing -> jawsPerform throws for that order only
+};
+
+var frame = [
+	"Inner\tJid.1\t" + JSON.stringify("<b>one</b>"),
+	"Inner\tJid.9\t" + JSON.stringify("<b>boom</b>"),
+	"Inner\tJid.2\t" + JSON.stringify("<b>two</b>")
+].join("\n");
+jawsMessage({ data: frame });
+
+process.stdout.write(JSON.stringify({ one: one.innerHTML, two: two.innerHTML, errorCount: errors.length }));
+`)
+
+	var got struct {
+		One        string `json:"one"`
+		Two        string `json:"two"`
+		ErrorCount int    `json:"errorCount"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.One != "<b>one</b>" {
+		t.Errorf("order before the throwing one was not applied: one=%q", got.One)
+	}
+	if got.Two != "<b>two</b>" {
+		t.Errorf("order after the throwing one was dropped: two=%q", got.Two)
+	}
+	if got.ErrorCount != 1 {
+		t.Errorf("expected exactly one console.error for the failing order, got %d", got.ErrorCount)
+	}
+}
+
 func TestJawsJS_ReplaceComparesAndUpdatesWhenDebugDisabled(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 jawsDebug = false;
