@@ -3,6 +3,7 @@ package ui
 import (
 	"html/template"
 	"io"
+	"math"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -146,6 +147,14 @@ func (u *InputFloat) JawsInput(elem *jaws.Element, value string) (err error) {
 	}
 	var v float64
 	if v, err = strconv.ParseFloat(value, 64); err == nil {
+		// The browser is untrusted and strconv.ParseFloat accepts "NaN"/"Inf".
+		// Reject non-finite input here (mirroring click.go's runAtof) so it never
+		// reaches the bound value or u.Last. NaN is especially harmful: it defeats
+		// the Last.Swap(v) != v dedup in JawsUpdate (NaN != NaN), which would
+		// re-emit a SetValue on every update cycle.
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return bind.ErrFloatNotFinite
+		}
 		u.Last.Store(v)
 		err = u.maybeDirty(elem, u.Setter.JawsSet(elem, v))
 	}
