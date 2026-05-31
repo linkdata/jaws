@@ -28,7 +28,7 @@ type Element struct {
 	// mutations (debug builds panic).
 	handlers []any
 	jid      jid.Jid     // JaWS ID, unique to this Element within its Request
-	deleted  atomic.Bool // true if deleteElement() has been called for this Element
+	deleted  atomic.Bool // true once the Element has been removed from its Request
 	frozen   atomic.Bool // set when handlers are sealed (JawsRender returns or Freeze called); guards handler mutators in all builds
 }
 
@@ -159,7 +159,7 @@ func (elem *Element) queue(wht what.What, data string) {
 }
 
 // SetAttr queues sending a new attribute value
-// to the browser for the [Element] with the given JaWS ID in this [Request].
+// to the browser for the [Element].
 //
 // The value parameter must be the unescaped logical attribute value. It is sent
 // to the browser DOM and used as the value argument to setAttribute().
@@ -170,7 +170,7 @@ func (elem *Element) SetAttr(attr, value string) {
 }
 
 // RemoveAttr queues sending a request to remove an attribute
-// to the browser for the [Element] with the given JaWS ID in this [Request].
+// to the browser for the [Element].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (elem *Element) RemoveAttr(attr string) {
@@ -178,7 +178,7 @@ func (elem *Element) RemoveAttr(attr string) {
 }
 
 // SetClass queues sending a class
-// to the browser for the [Element] with the given JaWS ID in this [Request].
+// to the browser for the [Element].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (elem *Element) SetClass(cls string) {
@@ -186,7 +186,7 @@ func (elem *Element) SetClass(cls string) {
 }
 
 // RemoveClass queues sending a request to remove a class
-// to the browser for the [Element] with the given JaWS ID in this [Request].
+// to the browser for the [Element].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (elem *Element) RemoveClass(cls string) {
@@ -202,7 +202,7 @@ func (elem *Element) SetInner(innerHTML template.HTML) {
 }
 
 // SetValue queues sending a new current input value in textual form
-// to the browser for the [Element] with the given JaWS ID in this [Request].
+// to the browser for the [Element].
 //
 // Call this only during JawsRender() or JawsUpdate() processing.
 func (elem *Element) SetValue(value string) {
