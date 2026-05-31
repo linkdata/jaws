@@ -1,7 +1,6 @@
 package jaws
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"html/template"
@@ -222,7 +221,9 @@ func (elem *Element) Replace(htmlCode template.HTML) {
 		var b []byte
 		b = append(b, "id="...)
 		b = elem.Jid().AppendQuote(b)
-		if !bytes.Contains([]byte(htmlCode), b) {
+		// string(htmlCode) is a no-op cast (template.HTML is a string), so this
+		// avoids copying the whole payload into a fresh []byte just to search it.
+		if !strings.Contains(string(htmlCode), string(b)) {
 			elem.Jaws.reportMisuse(errors.New("jaws: Element.Replace(): expected HTML " + string(b)))
 			return
 		}

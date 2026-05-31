@@ -210,11 +210,18 @@ func TestElement_Queued(t *testing.T) {
 }
 
 func TestElement_ReplaceRejectsMissingId(t *testing.T) {
-	rq := newTestRequest(t)
-	defer rq.Close()
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	logger := &captureErrorLogger{}
+	jw.Logger = logger
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	e := rq.NewElement(&testUi{s: "foo"})
+
 	if deadlock.Debug {
-		// Debug builds fail fast with a panic.
+		// Debug builds fail fast with a panic (after logging the misuse).
 		defer func() {
 			if recover() == nil {
 				t.Fatal("expected panic in debug build")
@@ -225,7 +232,19 @@ func TestElement_ReplaceRejectsMissingId(t *testing.T) {
 	if deadlock.Debug {
 		t.Fatal("Replace should have panicked in debug build")
 	}
+
 	// Production builds (with a Logger) report it via MustLog and skip the replace.
+	if logger.err == nil || !strings.Contains(logger.err.Error(), "expected HTML") {
+		t.Fatalf("expected misuse logged containing %q, got %v", "expected HTML", logger.err)
+	}
+	// The malformed replacement must not have been enqueued.
+	rq.muQueue.Lock()
+	defer rq.muQueue.Unlock()
+	for _, msg := range rq.wsQueue {
+		if msg.What == what.Replace {
+			t.Fatalf("rejected Replace was enqueued: %+v", msg)
+		}
+	}
 }
 
 func TestElement_ReplaceMessageTargetsElementHTML(t *testing.T) {
