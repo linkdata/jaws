@@ -3,6 +3,7 @@ package jaws
 import (
 	"html/template"
 	"io"
+	"sync"
 )
 
 // Container is implemented by UI values that render a dynamic list of child
@@ -102,8 +103,21 @@ type MakeAuthFn func(rq *Request) Auth
 // forgot to set [Jaws.MakeAuth]. Data and Email are fail-safe (nil / empty); only
 // IsAdmin is fail-open. Always set [Jaws.MakeAuth] in production, and treat a nil
 // MakeAuth as "no authorization configured", not "deny".
-type DefaultAuth struct{}
+type DefaultAuth struct {
+	sync.Once
+	Logger
+}
 
-func (DefaultAuth) Data() map[string]any { return nil }
-func (DefaultAuth) Email() string        { return "" }
-func (DefaultAuth) IsAdmin() bool        { return true }
+func (*DefaultAuth) Data() map[string]any { return nil }
+func (*DefaultAuth) Email() string        { return "" }
+func (da *DefaultAuth) IsAdmin() bool {
+	// Warn loudly about the fail-open authorization default. When MakeAuth is nil
+	// templates receive DefaultAuth, IsAdmin() returns true for everyone, so
+	// any {{if .Auth.IsAdmin}}-gated UI is shown to all visitors.
+	da.Once.Do(func() {
+		if da.Logger != nil {
+			da.Logger.Warn("jaws: no MakeAuth; DefaultAuth.IsAdmin returns true")
+		}
+	})
+	return true
+}
