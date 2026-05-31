@@ -10,7 +10,8 @@ import (
 // [UI] values.
 type Container interface {
 	// JawsContains must return a slice of comparable [UI] objects (they are used
-	// as map keys). The slice contents must not be modified after returning it.
+	// as map keys; see [UI] for the comparability requirement). The slice contents
+	// must not be modified after returning it.
 	JawsContains(elem *Element) (contents []UI)
 }
 
@@ -43,7 +44,9 @@ type TemplateLookuper interface {
 }
 
 // UI defines the required methods on JaWS UI objects.
+//
 // In addition, all UI objects must be comparable so they can be used as map keys.
+// This is enforced at runtime (see [Request.NewElement] and [Container.JawsContains]).
 type UI interface {
 	Renderer
 	Updater
@@ -92,7 +95,10 @@ type Auth interface {
 // Set [Jaws.MakeAuth] to your implementation to enforce real authorization. If
 // [Jaws.MakeAuth] is left nil, templates receive [DefaultAuth], which is
 // fail-open: see its documentation.
-type MakeAuthFn func(rq *Request) Auth
+//
+// It is a type alias so a bare func value can be assigned without conversion,
+// matching the sibling callback types [ConnectFn], [InputFn] and [HandleFunc].
+type MakeAuthFn = func(rq *Request) Auth
 
 // DefaultAuth is the permissive default [Auth] implementation used for templates
 // when [Jaws.MakeAuth] is nil.
