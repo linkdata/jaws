@@ -110,6 +110,7 @@ func TestNode_JawsSetPath_Gate(t *testing.T) {
 			"children.-1.selected",           // negative
 			"children.x.selected",            // non-numeric
 			"children.0.children.0.selected", // child has no children
+			"bogus.selected",                 // path segment is not "children"
 		} {
 			root := newTree()
 			before := len(root.Children)
@@ -130,4 +131,26 @@ func TestNode_JawsSetPath_Gate(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestNode_NilChildGuards exercises the defensive nil-child guards in marshalJSON
+// and Walk. A nil child should never occur (the JawsSetPath gate prevents it), but
+// both must skip it rather than dereference it.
+func TestNode_NilChildGuards(t *testing.T) {
+	root := &jawstree.Node{Name: "root", Children: []*jawstree.Node{nil, {Name: "real"}}}
+
+	b, err := root.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var v any
+	if err := json.Unmarshal(b, &v); err != nil {
+		t.Fatalf("marshalJSON with a nil child produced invalid JSON: %v\n%s", err, b)
+	}
+
+	var names []string
+	root.Walk("", func(_ string, n *jawstree.Node) { names = append(names, n.Name) })
+	if len(names) != 2 || names[0] != "root" || names[1] != "real" {
+		t.Errorf("Walk did not skip the nil child: %v", names)
+	}
 }

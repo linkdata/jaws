@@ -717,6 +717,38 @@ func TestRequest_Redirect(t *testing.T) {
 	}
 }
 
+func TestRequest_Cancel(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq.Cancel(errors.New("abort"))
+	if rq.Context().Err() == nil {
+		t.Error("expected context to be cancelled after Cancel")
+	}
+}
+
+func TestDefaultAuth_IsAdminWarnsOnceWithLogger(t *testing.T) {
+	var buf bytes.Buffer
+	da := &DefaultAuth{Logger: slog.New(slog.NewTextHandler(&buf, nil))}
+	if !da.IsAdmin() {
+		t.Error("DefaultAuth.IsAdmin must return true")
+	}
+	if !strings.Contains(buf.String(), "DefaultAuth.IsAdmin returns true") {
+		t.Errorf("expected the fail-open warning, got %q", buf.String())
+	}
+	// The warning fires at most once (sync.Once).
+	buf.Reset()
+	if !da.IsAdmin() {
+		t.Error("DefaultAuth.IsAdmin must still return true")
+	}
+	if buf.Len() != 0 {
+		t.Errorf("warning should fire only once, got %q", buf.String())
+	}
+}
+
 func Test_isSafeRedirect(t *testing.T) {
 	for _, s := range []string{"", "/", "/next", "some-url", "http://example.test/x", "https://example.test/x", "HTTPS://EX/x"} {
 		if !isSafeRedirect(s) {

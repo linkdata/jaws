@@ -111,6 +111,23 @@ func TestInputFloatWidgets(t *testing.T) {
 	mustMatch(t, `^<input id="Jid\.[0-9]+" type="range" value="3.4">$`, got)
 }
 
+// TestInputFloat_RejectsNonFinite verifies that NaN/Inf from the untrusted browser
+// (which strconv.ParseFloat accepts) is rejected and never reaches the bound value.
+func TestInputFloat_RejectsNonFinite(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	sf := newTestSetter(7.5)
+	number := NewNumber(sf)
+	elem, _ := renderUI(t, rq, number)
+	for _, bad := range []string{"NaN", "Inf", "-Inf", "+Inf"} {
+		if err := number.JawsInput(elem, bad); !errors.Is(err, bind.ErrFloatNotFinite) {
+			t.Fatalf("JawsInput(%q): expected ErrFloatNotFinite, got %v", bad, err)
+		}
+		if sf.Get() != 7.5 {
+			t.Fatalf("JawsInput(%q) mutated bound value to %v", bad, sf.Get())
+		}
+	}
+}
+
 func TestInputDateWidget(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	d0, _ := time.Parse(assets.ISO8601, "2020-01-02")

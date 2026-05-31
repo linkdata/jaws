@@ -49,6 +49,20 @@ func (l *captureErrorLogger) Error(_ string, args ...any) {
 	}
 }
 
+func TestMustLog_PanicsWithoutLogger(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	defer func() {
+		if recover() == nil {
+			t.Error("MustLog with no Logger must panic")
+		}
+	}()
+	jw.MustLog(errors.New("boom"))
+}
+
 func TestNew_DefaultWebSocketPingInterval(t *testing.T) {
 	jw, err := New()
 	if err != nil {

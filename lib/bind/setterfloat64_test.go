@@ -134,6 +134,49 @@ func Test_setterFloat64_sanitizesUntrustedInput(t *testing.T) {
 	})
 }
 
+// assertIntTypeGuard exercises sanitizeFloatForT's per-type branch for an integer
+// type T: NaN/Inf is rejected, an out-of-range value overflows, and an in-range
+// value is accepted.
+func assertIntTypeGuard[T numeric](t *testing.T, name string, inRange, tooBig float64) {
+	t.Helper()
+	s := MakeSetterFloat64(newTestSetter(T(0)))
+	if err := s.JawsSet(nil, math.Inf(1)); !errors.Is(err, ErrFloatNotFinite) {
+		t.Errorf("%s: Inf: got %v, want ErrFloatNotFinite", name, err)
+	}
+	if err := s.JawsSet(nil, tooBig); !errors.Is(err, ErrFloatOutOfRange) {
+		t.Errorf("%s: %v: got %v, want ErrFloatOutOfRange", name, tooBig, err)
+	}
+	if err := s.JawsSet(nil, inRange); err != nil {
+		t.Errorf("%s: %v: got %v, want nil", name, inRange, err)
+	}
+}
+
+// Test_setterFloat64_coversNumericTypes exercises every case of the type switch in
+// sanitizeFloatForT: each integer type rejects out-of-range values, and float32
+// takes the finiteness-only default case.
+func Test_setterFloat64_coversNumericTypes(t *testing.T) {
+	assertIntTypeGuard[int8](t, "int8", 1, 128)
+	assertIntTypeGuard[int16](t, "int16", 1, 32768)
+	assertIntTypeGuard[int32](t, "int32", 1, 2147483648)
+	assertIntTypeGuard[int64](t, "int64", 1, 9223372036854775808.0) // 2^63
+	assertIntTypeGuard[int](t, "int", 1, 9223372036854775808.0)     // 2^63
+	assertIntTypeGuard[uint8](t, "uint8", 1, 256)
+	assertIntTypeGuard[uint16](t, "uint16", 1, 65536)
+	assertIntTypeGuard[uint32](t, "uint32", 1, 4294967296)             // 2^32
+	assertIntTypeGuard[uint64](t, "uint64", 1, 18446744073709551616.0) // 2^64
+	assertIntTypeGuard[uint](t, "uint", 1, 18446744073709551616.0)     // 2^64
+
+	// float32 hits the default switch case: only finiteness is checked, so a large
+	// finite value is accepted.
+	fs := MakeSetterFloat64(newTestSetter(float32(0)))
+	if err := fs.JawsSet(nil, math.Inf(1)); !errors.Is(err, ErrFloatNotFinite) {
+		t.Errorf("float32 Inf: got %v, want ErrFloatNotFinite", err)
+	}
+	if err := fs.JawsSet(nil, 1e30); err != nil {
+		t.Errorf("float32 1e30: got %v, want nil", err)
+	}
+}
+
 func Test_makeSetterFloat64ReadOnly_int(t *testing.T) {
 	tgint := testGetter[int]{1}
 	gotS := MakeSetterFloat64(tgint)
