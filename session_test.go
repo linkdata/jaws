@@ -541,6 +541,37 @@ func TestSession_Cleanup(t *testing.T) {
 	})
 }
 
+// TestSession_UnclaimedRequestRecycleKeepsGraceDeadline is a regression test for
+// the deadline stomp: recycling the bootstrap render Request (unclaimed, because
+// its WebSocket has not connected yet) must not immediately expire the freshly
+// issued session, or a slightly-slow client loses the session it was just given.
+func TestSession_UnclaimedRequestRecycleKeepsGraceDeadline(t *testing.T) {
+	jw, _ := New()
+	defer jw.Close()
+
+	rr := httptest.NewRecorder()
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	sess := jw.NewSession(rr, hr)
+	if sess == nil {
+		t.Fatal("expected session")
+	}
+	r1 := jw.NewRequest(hr)
+	if r1.Session() != sess {
+		t.Fatal("expected request bound to session")
+	}
+
+	// Recycle the unclaimed bootstrap request (its WebSocket never connected).
+	jw.recycle(r1)
+
+	if sess.isDead() {
+		t.Fatal("session expired when an unclaimed bootstrap request was recycled")
+	}
+	if got := jw.GetSession(hr); got != sess {
+		t.Fatalf("expected session still retrievable within its grace window, got %v", got)
+	}
+}
+
 func TestSession_GetSessionExpiredBeforeCleanup(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
