@@ -193,6 +193,30 @@ func TestJsVar_SetBroadcastsWirePayload(t *testing.T) {
 	}
 }
 
+// TestJsVar_RenderSizeCapAbortsRequest verifies the "after the fact" check: a
+// non-PathSetter JsVar that is already larger than MaxClientJsVarBytes aborts the
+// request when it is rendered, reusing the marshal JawsRender already performs.
+func TestJsVar_RenderSizeCapAbortsRequest(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	go jw.Serve()
+
+	old := MaxClientJsVarBytes
+	MaxClientJsVarBytes = 16
+	defer func() { MaxClientJsVarBytes = old }()
+
+	var mu sync.Mutex
+	v := jsVarData{Text: strings.Repeat("z", 100)} // serializes well past the cap
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+	var sb strings.Builder
+	if err := jsv.JawsRender(elem, &sb, []any{"v"}); !errors.Is(err, ErrJsVarTooLarge) {
+		t.Fatalf("expected ErrJsVarTooLarge from render, got %v", err)
+	}
+	if rq.Context().Err() == nil {
+		t.Fatal("expected the request to be aborted by render")
+	}
+}
+
 func TestJsVar_PathHooksAndRequestWriter(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	go jw.Serve()
