@@ -418,6 +418,17 @@ func (rq *Request) cancel(err error) {
 	rq.cancelLocked(err)
 }
 
+// Cancel aborts the Request.
+//
+// It cancels the Request's context with the given cause (logged via [Jaws.Logger])
+// and tears down its WebSocket processing loop. It is safe to call from UI code, for
+// example to terminate a connection that violates a server-side limit. A nil err
+// cancels without a specific cause, and calling Cancel on an already-finished or
+// already-cancelled Request has no effect.
+func (rq *Request) Cancel(err error) {
+	rq.cancel(err)
+}
+
 // alertData builds the wire payload for an Alert message, HTML-escaping both the
 // level and the message. Callers may therefore pass untrusted text safely; this
 // mirrors the escaping done by the internal [wire.WsMsg.FillAlert] path.
