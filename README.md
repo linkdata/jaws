@@ -433,6 +433,23 @@ In order to guess (and thus hijack) a WebSocket you'd have to make on the
 order of 2^63 requests before the genuine request comes in, or 10 seconds
 pass assuming you can reliably prevent the genuine WebSocket request.
 
+### Authorization and templates (`Auth`)
+
+Templates rendered through `ui.With` receive an `Auth` value exposing `Data()`,
+`Email()` and `IsAdmin()`, letting templates gate UI such as
+`{{if .Auth.IsAdmin}}`.
+
+You provide the implementation by setting `Jaws.MakeAuth`. **If you leave
+`Jaws.MakeAuth` nil, templates receive the built-in `DefaultAuth`, which is
+fail-open: `DefaultAuth.IsAdmin()` returns `true` for every visitor** (`Data()`
+and `Email()` are fail-safe — nil and empty). A page that gates privileged UI on
+`{{if .Auth.IsAdmin}}` will therefore show it to everyone on an instance that
+forgot to set `MakeAuth`.
+
+Always set `Jaws.MakeAuth` in production and treat a nil `MakeAuth` as "no
+authorization configured", not "deny". As a safety net, JaWS logs a warning when
+`Serve()` starts with `MakeAuth` nil if a `Jaws.Logger` is configured.
+
 ### Dependencies
 
 We try to minimize dependencies outside of the standard library.
