@@ -46,7 +46,13 @@ type TemplateLookuper interface {
 // UI defines the required methods on JaWS UI objects.
 //
 // In addition, all UI objects must be comparable so they can be used as map keys.
-// This is enforced at runtime (see [Request.NewElement] and [Container.JawsContains]).
+// The compile-time type must be comparable; debug builds additionally perform a
+// runtime value-level check in [Request.NewElement] and panic on a value that is
+// statically comparable but not comparable at runtime (for example a comparable
+// struct holding a func in an interface field). Production builds rely on the
+// static check alone, so such a value is accepted and instead panics when first
+// used as a map key; callers must therefore ensure UI values are genuinely
+// comparable.
 type UI interface {
 	Renderer
 	Updater
