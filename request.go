@@ -45,7 +45,7 @@ type ConnectFn = func(rq *Request) error
 type Request struct {
 	Jaws       *Jaws                   // (read-only) the JaWS instance the Request belongs to
 	JawsKey    uint64                  // (read-only) a random number used in the WebSocket URI to identify this Request
-	remoteIP   netip.Addr              // (read-only) remote IP, or nil
+	remoteIP   netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
 	Rendering  atomic.Bool             // set to true by RequestWriter.Write()
 	running    atomic.Bool             // if ServeHTTP() is running
 	claimed    atomic.Bool             // if UseRequest() has been called for it
@@ -81,6 +81,11 @@ var (
 
 	// ErrWebsocketOriginWrongHost is returned when a WebSocket Origin host does not match the initial request host.
 	ErrWebsocketOriginWrongHost = errors.New("websocket Origin host mismatch")
+
+	// ErrWebsocketOriginNoInitial is returned when origin validation cannot run
+	// because the [Request] has no initial HTTP request to compare against. The
+	// check fails closed rather than accepting an unverified Origin.
+	ErrWebsocketOriginNoInitial = errors.New("websocket Origin cannot be validated: no initial request")
 
 	// ErrRequestAlreadyClaimed is returned when [Jaws.UseRequest] is called more than once for a [Request].
 	ErrRequestAlreadyClaimed = errors.New("request already claimed")
@@ -469,15 +474,10 @@ func (rq *Request) AlertError(err error) {
 // and logged rather than sent to the browser.
 // See [Jaws.Broadcast] for processing-loop requirements.
 func (rq *Request) Redirect(url string) {
-	if !isSafeRedirect(url) {
-		_ = rq.Jaws.Log(fmt.Errorf("jaws: refusing unsafe redirect to %q", url))
-		return
+	if msg, ok := rq.Jaws.redirectMessage(url); ok {
+		msg.Dest = rq
+		rq.Jaws.Broadcast(msg)
 	}
-	rq.Jaws.Broadcast(wire.Message{
-		Dest: rq,
-		What: what.Redirect,
-		Data: url,
-	})
 }
 
 // tagsOfLocked returns the tags currently associated with elem. Caller must hold
@@ -623,9 +623,15 @@ func (rq *Request) Tag(elem *Element, tagItems ...any) {
 // GetElements returns a list of the UI elements in the [Request] that have the given tags.
 func (rq *Request) GetElements(tagValue any) (elems []*Element) {
 	expanded := tag.MustTagExpand(rq, tagValue)
-	seen := map[*Element]struct{}{}
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
+	if len(expanded) == 1 {
+		// The common single-tag case needs no de-duplication: rq.tagMap[tag] is
+		// already duplicate-free. Clone it (callers like handleBroadcast mutate
+		// tagMap after the lock is released, so we must not alias it).
+		return slices.Clone(rq.tagMap[expanded[0]])
+	}
+	seen := map[*Element]struct{}{}
 	for _, tagValue := range expanded {
 		if el, ok := rq.tagMap[tagValue]; ok {
 			for _, e := range el {
@@ -743,7 +749,11 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 		// target is a regular HTML ID
 		data := tagmsg.Data
 		if tagmsg.What != what.Set && tagmsg.What != what.Call {
-			data = strconv.Quote(data)
+			// Quote the same JSON-safe way element-targeted messages are quoted
+			// (WsMsg.Append writes Jid<0 data verbatim, so this is the wire
+			// quoting). strconv.Quote would emit \xNN / \UXXXXXXXX escapes that
+			// the browser's JSON.parse rejects, dropping the whole frame.
+			data = string(wire.AppendJSONQuote(nil, data))
 		}
 		rq.queue(wire.WsMsg{
 			Data: v + "\t" + data,
@@ -771,7 +781,8 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 				})
 				rq.DeleteElement(elem)
 			case what.Input, what.Click, what.ContextMenu:
-				// Input, Click or ContextMenu messages received here are from Request.Send() or broadcasts.
+				// Input, Click or ContextMenu messages received here come from broadcasts;
+				// primarily used in tests by injecting a wire.WsMsg on the inbound channel.
 				// they won't be sent out on the WebSocket, but will queue up a
 				// call to the event function (if any).
 				// primary usecase is tests.
@@ -1038,12 +1049,17 @@ func (rq *Request) onConnect() (err error) {
 // initial request's security (http when plain, https when secure), and to have a
 // host equal to the initial host (case-insensitive, default port stripped). It
 // returns a specific ErrWebsocketOrigin* error on each failure mode and nil only
-// on a full match.
+// on a full match. If there is no initial request to compare against, it fails
+// closed with ErrWebsocketOriginNoInitial rather than accepting the Origin.
 func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) {
 	err = ErrWebsocketOriginMissing
 	if origin := r.Header.Get("Origin"); origin != "" {
 		var u *url.URL
 		if u, err = url.Parse(origin); err == nil {
+			// Fail closed if the parse succeeded but there is nothing to compare
+			// the Origin against; otherwise the nil err from url.Parse would
+			// silently accept any Origin.
+			err = ErrWebsocketOriginNoInitial
 			if initial := rq.Initial(); initial != nil {
 				secure := secureheaders.RequestIsSecure(initial, rq.Jaws.TrustForwardedHeaders)
 				port := ""

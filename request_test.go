@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -749,16 +750,27 @@ func TestDefaultAuth_IsAdminWarnsOnceWithLogger(t *testing.T) {
 
 func Test_isSafeRedirect(t *testing.T) {
 	for _, s := range []string{"", "/", "/next", "some-url", "http://example.test/x", "https://example.test/x", "HTTPS://EX/x"} {
-		if !isSafeRedirect(s) {
+		if _, ok := isSafeRedirect(s); !ok {
 			t.Errorf("expected safe redirect: %q", s)
 		}
 	}
 	// Protocol-relative URLs reach an arbitrary external origin and must be unsafe,
-	// alongside script-bearing schemes.
-	for _, s := range []string{"//host/path", "//evil.com", "javascript:alert(1)", "JavaScript:alert(1)", "data:text/html,<script>x</script>", "vbscript:msgbox(1)"} {
-		if isSafeRedirect(s) {
+	// alongside script-bearing schemes. Browsers strip leading/trailing whitespace
+	// and treat '\' as '/', so whitespace- and backslash-prefixed protocol-relative
+	// URLs are bypasses that must also be rejected.
+	for _, s := range []string{
+		"//host/path", "//evil.com", "javascript:alert(1)", "JavaScript:alert(1)",
+		"data:text/html,<script>x</script>", "vbscript:msgbox(1)",
+		" //evil.com", "  \t //evil.com  ", "///evil.com",
+		"/\\evil.com", "\\/\\/evil.com", "/\\/evil.com",
+	} {
+		if _, ok := isSafeRedirect(s); ok {
 			t.Errorf("expected unsafe redirect: %q", s)
 		}
+	}
+	// Leading/trailing whitespace is trimmed from the value that is sent.
+	if safe, ok := isSafeRedirect("  /trim/me  "); !ok || safe != "/trim/me" {
+		t.Errorf("expected trimmed safe redirect %q, got %q ok=%v", "/trim/me", safe, ok)
 	}
 }
 
@@ -1090,6 +1102,25 @@ func TestRequest_validateWebSocketOrigin_MatchesInitialRequestOrigin(t *testing.
 				t.Fatalf("validateWebSocketOrigin() error = %v, want %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestRequest_validateWebSocketOrigin_NoInitialFailsClosed(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	// A Request can be constructed without an initial HTTP request (NewRequest(nil)).
+	// Origin validation must then fail closed rather than accepting any Origin.
+	rq := jw.NewRequest(nil)
+	defer jw.recycle(rq)
+
+	wsReq := httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString(), nil)
+	wsReq.Header.Set("Origin", "https://example.test")
+	if err := rq.validateWebSocketOrigin(wsReq); !errors.Is(err, ErrWebsocketOriginNoInitial) {
+		t.Fatalf("validateWebSocketOrigin() with nil initial = %v, want %v", err, ErrWebsocketOriginNoInitial)
 	}
 }
 
@@ -1720,25 +1751,22 @@ func TestRequest_NewElement_DebugComparableCheck(t *testing.T) {
 }
 
 func TestRequest_IncomingRemoveDoesNotDeleteMessageJid(t *testing.T) {
-	rq := newTestRequest(t)
-	defer rq.Close()
+	synctest.Test(t, func(t *testing.T) {
+		rq := newTestRequest(t)
+		defer closeRequestInBubble(rq)
 
-	elem := rq.NewElement(&testUi{})
+		elem := rq.NewElement(&testUi{})
 
-	select {
-	case rq.InCh <- wire.WsMsg{What: what.Remove, Jid: elem.Jid(), Data: ""}:
-	case <-time.After(time.Second):
-		t.Fatal("timeout sending incoming Remove message")
-	}
-
-	select {
-	case <-time.After(20 * time.Millisecond):
-	case <-rq.DoneCh:
-		t.Fatal("request shut down unexpectedly")
-	}
-	if got := rq.GetElementByJid(elem.Jid()); got == nil {
-		t.Fatalf("element %s should still exist after Remove with empty data", elem.Jid())
-	}
+		// A Remove whose WebSocket Jid is the message's own element (with empty
+		// data, i.e. no child IDs) must not delete that element. synctest.Wait
+		// blocks until the process loop has actually handled the message, so the
+		// survival assertion is not vacuous.
+		rq.InCh <- wire.WsMsg{What: what.Remove, Jid: elem.Jid(), Data: ""}
+		synctest.Wait()
+		if got := rq.GetElementByJid(elem.Jid()); got == nil {
+			t.Fatalf("element %s should still exist after Remove with empty data", elem.Jid())
+		}
+	})
 }
 
 func TestRequest_ReplaceMessageTargetsElementHTML(t *testing.T) {
@@ -1757,6 +1785,47 @@ func TestRequest_ReplaceMessageTargetsElementHTML(t *testing.T) {
 	}
 	if msg.Data != string(html) {
 		t.Fatalf("replace payload mismatch: got %q want %q", msg.Data, html)
+	}
+}
+
+func TestRequest_StringIdBroadcastDataIsJSONParseable(t *testing.T) {
+	// A broadcast to a plain HTML-id string must be quoted JSON-safely. strconv.Quote
+	// emits \xNN / \UXXXXXXXX escapes (for control bytes, DEL and invalid UTF-8) that
+	// the browser's JSON.parse rejects, which would drop every coalesced update in the
+	// same WebSocket frame.
+	tests := []struct {
+		name string
+		data string
+		want string // expected decoded value; "" means only require that it parses
+	}{
+		{"control byte", "before\x01after", "before\x01after"},
+		{"DEL byte", "before\x7fafter", "before\x7fafter"},
+		{"angle brackets", "<script>x</script>", "<script>x</script>"},
+		{"invalid utf8", "before\xff\xfeafter", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rq := newTestRequest(t)
+			defer rq.Close()
+
+			rq.Jaws.SetInner("some-id", template.HTML(tt.data)) // #nosec G203
+			msg := nextOutboundMsg(t, rq)
+			if msg.What != what.Inner {
+				t.Fatalf("unexpected message type %v", msg.What)
+			}
+			// Wire data for a string-id message is "id\t<json-quoted-data>".
+			_, jsonPart, ok := strings.Cut(msg.Data, "\t")
+			if !ok {
+				t.Fatalf("expected id\\tdata, got %q", msg.Data)
+			}
+			var got string
+			if err := json.Unmarshal([]byte(jsonPart), &got); err != nil {
+				t.Fatalf("data not JSON-parseable (%v): %q", err, jsonPart)
+			}
+			if tt.want != "" && got != tt.want {
+				t.Errorf("round-trip mismatch: got %q want %q", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -1835,25 +1904,21 @@ func TestRequest_JsCallFunctionPathDoesNotBreakWireFraming(t *testing.T) {
 }
 
 func TestRequest_IncomingRemoveWithZeroContainerJidIsIgnored(t *testing.T) {
-	rq := newTestRequest(t)
-	defer rq.Close()
+	synctest.Test(t, func(t *testing.T) {
+		rq := newTestRequest(t)
+		defer closeRequestInBubble(rq)
 
-	elem := rq.NewElement(&testUi{})
+		elem := rq.NewElement(&testUi{})
 
-	select {
-	case rq.InCh <- wire.WsMsg{What: what.Remove, Jid: 0, Data: elem.Jid().String()}:
-	case <-time.After(time.Second):
-		t.Fatal("timeout sending incoming Remove message")
-	}
-
-	select {
-	case <-time.After(20 * time.Millisecond):
-	case <-rq.DoneCh:
-		t.Fatal("request shut down unexpectedly")
-	}
-	if got := rq.GetElementByJid(elem.Jid()); got == nil {
-		t.Fatalf("element %s should not be deletable through zero-container Remove", elem.Jid())
-	}
+		// handleRemove only acts when the container Jid is > 0, so a Remove with a
+		// zero Jid must be ignored. synctest.Wait blocks until the process loop has
+		// handled the message, so the survival assertion is not vacuous.
+		rq.InCh <- wire.WsMsg{What: what.Remove, Jid: 0, Data: elem.Jid().String()}
+		synctest.Wait()
+		if got := rq.GetElementByJid(elem.Jid()); got == nil {
+			t.Fatalf("element %s should not be deletable through zero-container Remove", elem.Jid())
+		}
+	})
 }
 
 type testServer struct {
