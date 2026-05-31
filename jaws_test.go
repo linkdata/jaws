@@ -384,6 +384,22 @@ func TestJaws_Redirect_unsafeRefused(t *testing.T) {
 	}
 }
 
+func TestJaws_DirtyIllegalTagLogsNotPanics(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	logger := &captureErrorLogger{}
+	jw.Logger = logger
+	// An illegal tag (a bare int) must be logged and skipped, like Request.Dirty
+	// and the broadcast helpers, rather than panicking in production.
+	jw.Dirty(42)
+	if logger.err == nil || !errors.Is(logger.err, tag.ErrIllegalTagType) {
+		t.Fatalf("expected illegal tag to be logged, got %v", logger.err)
+	}
+}
+
 func TestBroadcast_ExpandsTagDestBeforeQueue(t *testing.T) {
 	jw, err := New()
 	if err != nil {

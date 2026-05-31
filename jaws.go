@@ -674,7 +674,12 @@ func (jw *Jaws) setDirty(tags []any) {
 // Note that if any of the tags implement [tag.TagGetter], it will be called
 // with a nil [Request]. Prefer using [Request.Dirty] which avoids this.
 func (jw *Jaws) Dirty(dirtyTags ...any) {
-	jw.setDirty(tag.MustTagExpand(nil, dirtyTags))
+	// Use TagExpand+MustLog rather than MustTagExpand: with a nil Context the
+	// latter panics on an illegal tag even in production, unlike the sibling
+	// Request.Dirty and Jaws.Broadcast. Log and continue with the partial result.
+	expanded, err := tag.TagExpand(nil, dirtyTags)
+	jw.MustLog(err)
+	jw.setDirty(expanded)
 }
 
 func (jw *Jaws) distributeDirt() int {
@@ -711,22 +716,45 @@ func (jw *Jaws) Reload() {
 }
 
 // isSafeRedirect reports whether rawurl is safe to hand to the browser's
-// location.assign. Only same-document/relative paths and the http and https
-// schemes are permitted; this blocks script-bearing schemes such as javascript:
-// and data:, and protocol-relative URLs ("//host/path") that would navigate to an
+// location.assign, and returns the normalized value to actually send.
+//
+// Leading and trailing ASCII whitespace and control characters are trimmed, as
+// browsers strip them before navigating. Only same-document/relative paths and
+// the http and https schemes are permitted; this blocks script-bearing schemes
+// such as javascript: and data:, backslashes (which browsers treat as '/'), and
+// protocol-relative URLs ("//host/path", "/\host") that would navigate to an
 // arbitrary external origin.
-func isSafeRedirect(rawurl string) bool {
-	if u, err := url.Parse(rawurl); err == nil {
+func isSafeRedirect(rawurl string) (safe string, ok bool) {
+	safe = strings.TrimFunc(rawurl, func(r rune) bool { return r <= ' ' })
+	if strings.ContainsRune(safe, '\\') {
+		return safe, false
+	}
+	if u, err := url.Parse(safe); err == nil {
 		switch strings.ToLower(u.Scheme) {
 		case "":
-			if u.Host == "" {
-				return true
+			if u.Host == "" && !strings.HasPrefix(safe, "//") {
+				ok = true
 			}
 		case "http", "https":
-			return true
+			ok = true
 		}
 	}
-	return false
+	return
+}
+
+// redirectMessage validates url for the browser's location.assign and returns
+// the wire.Message to broadcast (Data set to the normalized value); the caller
+// sets msg.Dest. If url is unsafe it logs the refusal and returns ok=false. It
+// is the single point where the redirect policy and rejection message live, so
+// Jaws.Redirect and Request.Redirect cannot drift.
+func (jw *Jaws) redirectMessage(url string) (msg wire.Message, ok bool) {
+	var safe string
+	if safe, ok = isSafeRedirect(url); ok {
+		msg = wire.Message{What: what.Redirect, Data: safe}
+	} else {
+		_ = jw.Log(fmt.Errorf("jaws: refusing unsafe redirect to %q", url))
+	}
+	return
 }
 
 // Redirect requests all [Request] values to navigate to the given URL.
@@ -735,14 +763,9 @@ func isSafeRedirect(rawurl string) bool {
 // schemes such as javascript: and protocol-relative ("//host") URLs are refused
 // and logged rather than sent to the browser.
 func (jw *Jaws) Redirect(url string) {
-	if !isSafeRedirect(url) {
-		_ = jw.Log(fmt.Errorf("jaws: refusing unsafe redirect to %q", url))
-		return
+	if msg, ok := jw.redirectMessage(url); ok {
+		jw.Broadcast(msg)
 	}
-	jw.Broadcast(wire.Message{
-		What: what.Redirect,
-		Data: url,
-	})
 }
 
 // Alert sends an alert to all [Request] values.
@@ -953,14 +976,21 @@ func forwardedClientIP(h http.Header) (netip.Addr, bool) {
 	return netip.Addr{}, false
 }
 
+// broadcastTo broadcasts a single wire command to all HTML elements matching
+// target. It is the shared body of the public broadcast helpers below, which
+// differ only in the What command and how they assemble data.
+func (jw *Jaws) broadcastTo(target any, w what.What, data string) {
+	jw.Broadcast(wire.Message{
+		Dest: target,
+		What: w,
+		Data: data,
+	})
+}
+
 // SetInner sends a request to replace the inner HTML of
 // all HTML elements matching target.
 func (jw *Jaws) SetInner(target any, innerHTML template.HTML) {
-	jw.Broadcast(wire.Message{
-		Dest: target,
-		What: what.Inner,
-		Data: string(innerHTML),
-	})
+	jw.broadcastTo(target, what.Inner, string(innerHTML))
 }
 
 // SetAttr sends a request to replace the given attribute value in
@@ -969,51 +999,32 @@ func (jw *Jaws) SetInner(target any, innerHTML template.HTML) {
 // The value parameter must be the unescaped logical attribute value. It is sent
 // to the browser DOM and used as the value argument to setAttribute().
 func (jw *Jaws) SetAttr(target any, attr, value string) {
-	jw.Broadcast(wire.Message{
-		Dest: target,
-		What: what.SAttr,
-		Data: attr + "\n" + value,
-	})
+	jw.broadcastTo(target, what.SAttr, attr+"\n"+value)
 }
 
 // RemoveAttr sends a request to remove the given attribute from
 // all HTML elements matching target.
 func (jw *Jaws) RemoveAttr(target any, attr string) {
-	jw.Broadcast(wire.Message{
-		Dest: target,
-		What: what.RAttr,
-		Data: attr,
-	})
+	jw.broadcastTo(target, what.RAttr, attr)
 }
 
 // SetClass sends a request to set the given class in
 // all HTML elements matching target.
 func (jw *Jaws) SetClass(target any, cls string) {
-	jw.Broadcast(wire.Message{
-		Dest: target,
-		What: what.SClass,
-		Data: cls,
-	})
+	jw.broadcastTo(target, what.SClass, cls)
 }
 
 // RemoveClass sends a request to remove the given class from
 // all HTML elements matching target.
 func (jw *Jaws) RemoveClass(target any, cls string) {
-	jw.Broadcast(wire.Message{
-		Dest: target,
-		What: what.RClass,
-		Data: cls,
-	})
+	jw.broadcastTo(target, what.RClass, cls)
 }
 
-// SetValue sends a request to set the HTML "value" attribute of
-// all HTML elements matching target.
+// SetValue sends a request to set the current input value (in textual form) of
+// all HTML elements matching target. It sets the live DOM value/state, not the
+// HTML "value" attribute.
 func (jw *Jaws) SetValue(target any, value string) {
-	jw.Broadcast(wire.Message{
-		Dest: target,
-		What: what.Value,
-		Data: value,
-	})
+	jw.broadcastTo(target, what.Value, value)
 }
 
 // Insert calls the JavaScript 'insertBefore()' method on
@@ -1022,39 +1033,24 @@ func (jw *Jaws) SetValue(target any, value string) {
 // The position parameter 'where' may be either an HTML ID, a child index or the text "null".
 // html is trusted HTML, matching [Jaws.SetInner] and [Jaws.Append].
 func (jw *Jaws) Insert(target any, where string, html template.HTML) {
-	jw.Broadcast(wire.Message{
-		Dest: target,
-		What: what.Insert,
-		Data: where + "\n" + string(html),
-	})
+	jw.broadcastTo(target, what.Insert, where+"\n"+string(html))
 }
 
 // Replace replaces HTML on all HTML elements matching target.
 //
 // html is trusted HTML, matching [Jaws.SetInner] and [Jaws.Append].
 func (jw *Jaws) Replace(target any, html template.HTML) {
-	jw.Broadcast(wire.Message{
-		Dest: target,
-		What: what.Replace,
-		Data: string(html),
-	})
+	jw.broadcastTo(target, what.Replace, string(html))
 }
 
 // Delete removes the HTML element(s) matching target.
 func (jw *Jaws) Delete(target any) {
-	jw.Broadcast(wire.Message{
-		Dest: target,
-		What: what.Delete,
-	})
+	jw.broadcastTo(target, what.Delete, "")
 }
 
 // Append calls the JavaScript appendChild method on all HTML elements matching target.
 func (jw *Jaws) Append(target any, html template.HTML) {
-	jw.Broadcast(wire.Message{
-		Dest: target,
-		What: what.Append,
-		Data: string(html),
-	})
+	jw.broadcastTo(target, what.Append, string(html))
 }
 
 func maybeCompactJSON(in string) (out string) {
@@ -1071,13 +1067,9 @@ func maybeCompactJSON(in string) (out string) {
 var whitespaceRemover = strings.NewReplacer(" ", "", "\n", "", "\t", "")
 
 // JsCall calls the JavaScript function jsfunc with the argument jsonstr
-// on all [Request] values that have the target UI tag.
+// on all HTML elements matching target.
 func (jw *Jaws) JsCall(target any, jsfunc, jsonstr string) {
-	jw.Broadcast(wire.Message{
-		Dest: target,
-		What: what.Call,
-		Data: whitespaceRemover.Replace(jsfunc) + "=" + maybeCompactJSON(jsonstr),
-	})
+	jw.broadcastTo(target, what.Call, whitespaceRemover.Replace(jsfunc)+"="+maybeCompactJSON(jsonstr))
 }
 
 func (jw *Jaws) getRequestLocked(jawsKey uint64, r *http.Request) (rq *Request) {
