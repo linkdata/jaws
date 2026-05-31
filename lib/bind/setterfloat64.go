@@ -142,9 +142,12 @@ func makeSetterFloat64for[T numeric](s *Setter[float64], value any) bool {
 // representable as float64.
 //
 // Only the predeclared numeric types are matched, by their exact type. Named
-// (defined) types whose underlying type is numeric, such as "type Celsius
-// float64", are NOT matched and cause a panic; bind such a value through its own
-// Setter[T] instead. Getter and static adapters are read-only and return
+// (defined) numeric types such as "type Celsius float64" are NOT matched:
+// neither the value itself nor a Setter[Celsius]/Getter[Celsius] over it is
+// accepted (Setter[Celsius] is not a Setter[float64]), and passing one causes a
+// panic. To bind such a value, expose it as a Setter[float64] / Getter[float64]
+// (or a plain float64) — for example with a small adapter that converts to and
+// from float64. Getter and static adapters are read-only and return
 // [ErrValueNotSettable] from [Setter.JawsSet]. MakeSetterFloat64 panics for
 // unsupported types.
 func MakeSetterFloat64(value any) (s Setter[float64]) {
