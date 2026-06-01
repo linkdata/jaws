@@ -20,5 +20,5 @@ func (u *Checkbox) JawsRender(elem *jaws.Element, w io.Writer, params []any) err
 
 // Checkbox renders an HTML checkbox input.
 func (rw RequestWriter) Checkbox(value any, params ...any) error {
-	return rw.UI(NewCheckbox(bind.MakeSetter[bool](value)), params...)
+	return rw.NewUI(NewCheckbox(bind.MakeSetter[bool](value)), params...)
 }

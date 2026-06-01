@@ -20,5 +20,5 @@ func (u *Radio) JawsRender(elem *jaws.Element, w io.Writer, params []any) error 
 
 // Radio renders an HTML radio input.
 func (rw RequestWriter) Radio(value any, params ...any) error {
-	return rw.UI(NewRadio(bind.MakeSetter[bool](value)), params...)
+	return rw.NewUI(NewRadio(bind.MakeSetter[bool](value)), params...)
 }

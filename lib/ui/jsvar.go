@@ -340,7 +340,7 @@ func (rw RequestWriter) JsVar(jsvarName string, jsvar any, params ...any) (err e
 					var newparams []any
 					newparams = append(newparams, jsvarName)
 					newparams = append(newparams, params...)
-					err = rw.UI(ui, newparams...)
+					err = rw.NewUI(ui, newparams...)
 				}
 			}
 		}

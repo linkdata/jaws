@@ -264,7 +264,7 @@ func TestRequestWriterUI_ContainerRenderErrorDoesNotLeakSuccessfulChildren(t *te
 	failChild := &testRenderErrorCaptureUI{err: renderErr}
 	tc := &testContainer{contents: []jaws.UI{okChild, failChild}}
 
-	if err := rw.UI(NewContainer("div", tc)); !errors.Is(err, renderErr) {
+	if err := rw.NewUI(NewContainer("div", tc)); !errors.Is(err, renderErr) {
 		t.Fatalf("want %v got %v", renderErr, err)
 	}
 

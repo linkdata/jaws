@@ -47,5 +47,5 @@ func (u *Select) JawsInput(elem *jaws.Element, value string) (err error) {
 
 // Select renders an HTML select element.
 func (rw RequestWriter) Select(sh named.SelectHandler, params ...any) error {
-	return rw.UI(NewSelect(sh), params...)
+	return rw.NewUI(NewSelect(sh), params...)
 }

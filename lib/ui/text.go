@@ -20,5 +20,5 @@ func (u *Text) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
 
 // Text renders an HTML text input.
 func (rw RequestWriter) Text(value any, params ...any) error {
-	return rw.UI(NewText(bind.MakeSetter[string](value)), params...)
+	return rw.NewUI(NewText(bind.MakeSetter[string](value)), params...)
 }

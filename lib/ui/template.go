@@ -182,5 +182,5 @@ func NewTemplate(outerHTMLTag, name string, dot any) Template {
 // and HTML attr params have no generated element to apply to. The template must
 // be a partial, not a full HTML document.
 func (rw RequestWriter) Template(outerHTMLTag, name string, dot any, params ...any) error {
-	return rw.UI(NewTemplate(outerHTMLTag, name, dot), params...)
+	return rw.NewUI(NewTemplate(outerHTMLTag, name, dot), params...)
 }

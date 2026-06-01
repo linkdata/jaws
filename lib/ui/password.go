@@ -20,5 +20,5 @@ func (u *Password) JawsRender(elem *jaws.Element, w io.Writer, params []any) err
 
 // Password renders an HTML password input.
 func (rw RequestWriter) Password(value any, params ...any) error {
-	return rw.UI(NewPassword(bind.MakeSetter[string](value)), params...)
+	return rw.NewUI(NewPassword(bind.MakeSetter[string](value)), params...)
 }

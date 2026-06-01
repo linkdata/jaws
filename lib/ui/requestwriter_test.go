@@ -65,7 +65,7 @@ func TestRequestWriter_MethodsAndWidgetHelpers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := rw.UI(NewSpan(testHTMLGetter("ui"))); err != nil {
+	if err := rw.NewUI(NewSpan(testHTMLGetter("ui"))); err != nil {
 		t.Fatal(err)
 	}
 
@@ -142,7 +142,7 @@ func TestRequestWriterUI_RenderErrorDoesNotLeakElement(t *testing.T) {
 	rw := RequestWriter{Request: rq, Writer: &buf}
 
 	renderErr := errors.New("render failed")
-	if err := rw.UI(NewA(requestWriterFailGetter{err: renderErr})); !errors.Is(err, renderErr) {
+	if err := rw.NewUI(NewA(requestWriterFailGetter{err: renderErr})); !errors.Is(err, renderErr) {
 		t.Fatalf("want %v got %v", renderErr, err)
 	}
 

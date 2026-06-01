@@ -33,5 +33,5 @@ func (u *Container) JawsUpdate(elem *jaws.Element) {
 
 // Container renders c inside outerHTMLTag.
 func (rw RequestWriter) Container(outerHTMLTag string, c jaws.Container, params ...any) error {
-	return rw.UI(NewContainer(outerHTMLTag, c), params...)
+	return rw.NewUI(NewContainer(outerHTMLTag, c), params...)
 }

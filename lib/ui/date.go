@@ -21,5 +21,5 @@ func (u *Date) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
 
 // Date renders an HTML date input.
 func (rw RequestWriter) Date(value any, params ...any) error {
-	return rw.UI(NewDate(bind.MakeSetter[time.Time](value)), params...)
+	return rw.NewUI(NewDate(bind.MakeSetter[time.Time](value)), params...)
 }

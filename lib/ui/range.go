@@ -20,5 +20,5 @@ func (u *Range) JawsRender(elem *jaws.Element, w io.Writer, params []any) error 
 
 // Range renders an HTML range input.
 func (rw RequestWriter) Range(value any, params ...any) error {
-	return rw.UI(NewRange(bind.MakeSetterFloat64(value)), params...)
+	return rw.NewUI(NewRange(bind.MakeSetterFloat64(value)), params...)
 }

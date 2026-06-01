@@ -20,5 +20,5 @@ func (u *Number) JawsRender(elem *jaws.Element, w io.Writer, params []any) error
 
 // Number renders an HTML number input.
 func (rw RequestWriter) Number(value any, params ...any) error {
-	return rw.UI(NewNumber(bind.MakeSetterFloat64(value)), params...)
+	return rw.NewUI(NewNumber(bind.MakeSetterFloat64(value)), params...)
 }

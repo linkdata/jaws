@@ -32,5 +32,5 @@ func (u *Img) JawsUpdate(elem *jaws.Element) { elem.SetAttr("src", u.JawsGet(ele
 
 // Img renders an HTML img element.
 func (rw RequestWriter) Img(imageSrc any, params ...any) error {
-	return rw.UI(NewImg(bind.MakeGetter[string](imageSrc)), params...)
+	return rw.NewUI(NewImg(bind.MakeGetter[string](imageSrc)), params...)
 }

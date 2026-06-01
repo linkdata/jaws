@@ -28,5 +28,5 @@ func (u *Tbody) JawsUpdate(elem *jaws.Element) {
 
 // Tbody renders an HTML tbody element.
 func (rw RequestWriter) Tbody(c jaws.Container, params ...any) error {
-	return rw.UI(NewTbody(c), params...)
+	return rw.NewUI(NewTbody(c), params...)
 }

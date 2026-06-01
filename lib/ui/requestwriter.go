@@ -13,8 +13,8 @@ type RequestWriter struct {
 	io.Writer
 }
 
-// UI creates an element for ui and renders it to the underlying writer.
-func (rw RequestWriter) UI(ui jaws.UI, params ...any) (err error) {
+// NewUI creates an element for ui and renders it to the underlying writer.
+func (rw RequestWriter) NewUI(ui jaws.UI, params ...any) (err error) {
 	elem := rw.NewElement(ui)
 	if err = elem.JawsRender(rw, params); err != nil {
 		rw.DeleteElement(elem)

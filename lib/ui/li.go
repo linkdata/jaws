@@ -24,5 +24,5 @@ func (u *Li) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
 // A plain string innerHTML is trusted HTML and is not escaped; see [NewLi] and
 // [bind.MakeHTMLGetter] for how to pass untrusted user input safely.
 func (rw RequestWriter) Li(innerHTML any, params ...any) error {
-	return rw.UI(NewLi(innerHTML), params...)
+	return rw.NewUI(NewLi(innerHTML), params...)
 }

@@ -30,5 +30,5 @@ func (u *Textarea) JawsRender(elem *jaws.Element, w io.Writer, params []any) (er
 
 // Textarea renders an HTML textarea.
 func (rw RequestWriter) Textarea(value any, params ...any) error {
-	return rw.UI(NewTextarea(bind.MakeSetter[string](value)), params...)
+	return rw.NewUI(NewTextarea(bind.MakeSetter[string](value)), params...)
 }
