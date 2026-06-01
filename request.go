@@ -474,7 +474,7 @@ func alertData(level, msg string) string {
 }
 
 // Alert attempts to show an alert message on the current request webpage if it has an HTML element with the id "jaws-alert".
-// The lvl argument should be one of Bootstrap's alert levels: primary, secondary, success, danger, warning, info, light or dark.
+// The level argument should be one of Bootstrap's alert levels: primary, secondary, success, danger, warning, info, light or dark.
 //
 // The level and msg are HTML-escaped before being sent, so it is safe to pass
 // untrusted text; do not pre-escape it.
