@@ -24,15 +24,15 @@ templates should be rendered through `ui.Handler`.
 You can also use explicit constructors through:
 
 ```go
-rw.UI(ui.NewX(...), params...)
+rw.NewUI(ui.NewX(...), params...)
 ```
 
 Examples:
 
 ```go
-rw.UI(ui.NewDiv("content"))
-rw.UI(ui.NewCheckbox(myBoolSetter), "disabled")
-rw.UI(ui.NewRange(myFloatSetter))
+rw.NewUI(ui.NewDiv("content"))
+rw.NewUI(ui.NewCheckbox(myBoolSetter), "disabled")
+rw.NewUI(ui.NewRange(myFloatSetter))
 ```
 
 HTML-inner widgets such as `NewDiv`, `NewSpan`, and `RequestWriter.Div` pass
