@@ -176,8 +176,10 @@ type Jaws struct {
 
 // New allocates a JaWS instance with the default configuration.
 //
-// The returned [Jaws] value is ready for use: static assets are embedded,
-// internal goroutines are configured and the request pool is primed. Call
+// The returned [Jaws] value is ready for use: static assets are embedded, the
+// broadcast channels and update ticker are allocated and the request pool is
+// primed. You must still start the processing loop with [Jaws.Serve] or
+// [Jaws.ServeWithTimeout] on its own goroutine before broadcasting. Call
 // [Jaws.Close] when the instance is no longer needed to free associated resources.
 func New() (jw *Jaws, err error) {
 	var serveJS, serveCSS *staticserve.StaticServe
@@ -380,7 +382,7 @@ func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 	for rq == nil {
 		jawsKey := jw.nonZeroRandomLocked()
 		if _, ok := jw.requests[jawsKey]; !ok {
-			rq = jw.getRequestLocked(jawsKey, r)
+			rq = jw.getRequestLocked(jawsKey, r, remoteIP)
 			jw.requests[jawsKey] = rq
 			jw.pending[rq.remoteIP] = append(jw.pending[rq.remoteIP], rq)
 		}
@@ -823,7 +825,7 @@ func (jw *Jaws) Redirect(url string) {
 
 // Alert sends an alert to all [Request] values.
 //
-// The lvl argument should be one of Bootstrap's alert levels:
+// The level argument should be one of Bootstrap's alert levels:
 // primary, secondary, success, danger, warning, info, light or dark.
 //
 // The level and msg are HTML-escaped before being sent, so it is safe to pass
@@ -1138,14 +1140,17 @@ func (jw *Jaws) JsCall(target any, jsfunc, jsonstr string) {
 	jw.broadcastTo(target, what.Call, whitespaceRemover.Replace(jsfunc)+"="+maybeCompactJSON(jsonstr))
 }
 
-func (jw *Jaws) getRequestLocked(jawsKey uint64, r *http.Request) (rq *Request) {
+// getRequestLocked allocates a Request from the pool for jawsKey. remoteIP is the
+// already-resolved client IP for r (see NewRequest, the sole caller), passed in to
+// avoid recomputing jw.clientIP(r). Caller must hold jw.mu.
+func (jw *Jaws) getRequestLocked(jawsKey uint64, r *http.Request, remoteIP netip.Addr) (rq *Request) {
 	rq = jw.reqPool.Get().(*Request)
 	rq.JawsKey = jawsKey
 	rq.lastWrite = time.Now()
 	rq.initial = r
+	rq.remoteIP = remoteIP
 	rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
 	if r != nil {
-		rq.remoteIP = jw.clientIP(r)
 		if sess := jw.getSessionLocked(getCookieSessionsIDs(r.Header, jw.CookieName), rq.remoteIP); sess != nil {
 			sess.addRequest(rq)
 			rq.session = sess
