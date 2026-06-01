@@ -8,7 +8,6 @@
 package jawstest
 
 import (
-	"bytes"
 	"html/template"
 	"net/http"
 	"net/http/httptest"
@@ -59,7 +58,6 @@ func NewTestRequest(jw *jaws.Jaws, r *http.Request) *TestRequest {
 		r = httptest.NewRequest(http.MethodGet, "/", nil)
 	}
 	rr := httptest.NewRecorder()
-	rr.Body = &bytes.Buffer{}
 	rq := newRequest(jw, r)
 	if rq == nil || jw.UseRequest(rq.JawsKey, r) != rq {
 		return nil
