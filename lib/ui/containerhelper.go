@@ -27,9 +27,10 @@ import (
 // updated and therefore inconsistent until the next full render/reload.
 type ContainerHelper struct {
 	Container jaws.Container
-	// tag holds the value returned by ApplyGetter during RenderContainer. It is
-	// written once during render and currently has no event-time reader; it is
-	// unexported so external code cannot mutate it.
+	// tag is the dirty tag, written once during RenderContainer and read on the
+	// event goroutine (Select.JawsInput). The render-completes-before-events
+	// lifecycle makes the unsynchronized access safe; it is unexported so external
+	// code cannot mutate it.
 	tag      any
 	mu       sync.Mutex
 	contents []*jaws.Element
