@@ -90,9 +90,14 @@ func (tmpl Template) render(elem *jaws.Element, w io.Writer, params []any) (err 
 				err = writeTemplateWrapperStart(elem, w, tmpl.OuterHTMLTag, attrs)
 			}
 			if err == nil {
-				if err = tmpl.execute(elem, w, lookedUp); err == nil {
-					if doWrap {
-						_, err = io.WriteString(w, "</"+tmpl.OuterHTMLTag+">")
+				err = tmpl.execute(elem, w, lookedUp)
+				if doWrap {
+					// Always emit the closing tag, even when execute failed, to balance
+					// the start tag already written above (mirrors
+					// ContainerHelper.RenderContainer). The original execute error is
+					// preserved; the close-write error is adopted only when err is nil.
+					if _, werr := io.WriteString(w, "</"+tmpl.OuterHTMLTag+">"); err == nil {
+						err = werr
 					}
 				}
 			}

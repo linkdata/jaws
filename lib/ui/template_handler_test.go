@@ -251,6 +251,32 @@ func TestTemplate_RenderReturnsTagExpandError(t *testing.T) {
 	}
 }
 
+func TestTemplate_RenderClosesWrapperOnExecuteError(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	_ = jw.AddTemplateLookuper(template.Must(template.New("badrender").Parse(
+		`<span>{{$.Dot.MissingField}}</span>`,
+	)))
+
+	var sb bytes.Buffer
+	rw := RequestWriter{Request: rq, Writer: &sb}
+	err := rw.Template("div", "badrender", &templateUpdateDot{})
+	if err == nil {
+		t.Fatal("expected execute error")
+	}
+	if !strings.Contains(err.Error(), "MissingField") {
+		t.Fatalf("err = %v, want MissingField error", err)
+	}
+	// The wrapper start tag is flushed before execute runs; on execute failure the
+	// closing tag must still be emitted so the streamed output stays balanced.
+	out := sb.String()
+	if !strings.HasPrefix(out, "<div") {
+		t.Fatalf("output missing wrapper start tag: %q", out)
+	}
+	if !strings.HasSuffix(out, "</div>") {
+		t.Fatalf("wrapper not closed on execute error: %q", out)
+	}
+}
+
 type templateUpdateDot struct {
 	Text string
 }
