@@ -1,0 +1,16 @@
+version: "2"
+# JaWS deliberately uses explicit embedded-field access for readability (e.g.
+# da.Once.Do, b.RWLocker.RLock, elem.Request.TagsOf), so staticcheck's QF1008
+# "could remove embedded field" is not an improvement here. The remaining QF/ST
+# style suggestions are all in tests and guard deliberate, commented
+# preconditions. Exclude those specific checks rather than churning correct code.
+# These are additive exclusion rules so golangci-lint's default check set (which
+# already disables noisy naming checks like ST1003) is left intact.
+linters:
+  exclusions:
+    rules:
+      - linters: [staticcheck]
+        text: "QF1008"
+      - linters: [staticcheck]
+        path: _test\.go
+        text: "QF1001|QF1009|QF1011|QF1012|ST1023"
