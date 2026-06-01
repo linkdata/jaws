@@ -1886,8 +1886,7 @@ func TestRequest_StringTargetedPageGlobalEmitsSingleFrame(t *testing.T) {
 
 	rq.Jaws.Broadcast(wire.Message{Dest: "some-id", What: what.Reload})
 
-	// The page-global frame is Jid:0. Before the fix the element-targeted Jid:-1
-	// frame was queued first, so observing a non-zero Jid here fails.
+	// The page-global frame is Jid:0.
 	first := nextOutboundMsg(t, rq)
 	if first.Jid != 0 || first.What != what.Reload {
 		t.Fatalf("expected single page-global Jid:0 Reload frame, got %+v", first)

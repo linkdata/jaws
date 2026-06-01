@@ -37,7 +37,8 @@ func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //
 // The returned handler can be registered directly with a router. Each request
 // results in the template being looked up through the configured template
-// lookupers and rendered directly with dot as the template data.
+// lookupers and rendered with a [With] value as the template data, exposing
+// dot through its Dot field.
 func Handler(jw *jaws.Jaws, name string, dot any) http.Handler {
 	return uiHandler{Jaws: jw, Template: pageTemplate{Template: Template{Name: name, Dot: dot}}}
 }

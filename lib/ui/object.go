@@ -18,7 +18,7 @@ type ObjectClickedHook func(obj Object, elem *jaws.Element, click jaws.Click) (e
 // ObjectContextMenuHook is a function to call when a context menu event is received.
 type ObjectContextMenuHook func(obj Object, elem *jaws.Element, click jaws.Click) (err error)
 
-// ObjectInitialHTMLAttrHook is a function to call when an [jaws.Element] is initially rendered.
+// ObjectInitialHTMLAttrHook is a function to call when a [jaws.Element] is initially rendered.
 type ObjectInitialHTMLAttrHook func(obj Object, elem *jaws.Element) (s template.HTMLAttr)
 
 // Object is a chainable UI object that combines HTML rendering, tags and

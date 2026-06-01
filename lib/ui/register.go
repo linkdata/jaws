@@ -7,7 +7,8 @@ import (
 	"github.com/linkdata/jaws/lib/jid"
 )
 
-// Register creates an element used for update-only registration.
+// Register is an update-only widget that renders no HTML; it exists so its
+// embedded [jaws.Updater] receives dynamic updates.
 type Register struct{ jaws.Updater }
 
 // NewRegister returns an update-only widget that invokes updater during updates.

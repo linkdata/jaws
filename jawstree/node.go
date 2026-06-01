@@ -142,7 +142,9 @@ func (node *Node) resolveChildPath(nodePath string) (*Node, error) {
 	return cur, nil
 }
 
-// JawsPathSet mirrors browser-side selected-state changes back into the tree.
+// JawsPathSet runs after a node's selected flag has been set on the server-side
+// tree; it broadcasts a jawstreeSetPath JsCall so the change is reflected in the
+// rendered tree of every client sharing this Tree.
 func (node *Node) JawsPathSet(elem *jaws.Element, jsPath string, value any) {
 	if nodePath, ok := strings.CutSuffix(jsPath, ".selected"); ok {
 		payload, _ := json.Marshal(struct {

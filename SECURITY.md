@@ -245,7 +245,7 @@ Also tested case-variant bypass attempts (`inner`, `INNER`, `redirect`, `alert`)
 
 The `Set` message type allows clients to modify server-side JsVar state (this is the mechanism behind mouse-position sharing).
 
-**Source code** (`lib/ui/jsvar.go`, `JsVar.JawsSetPath`): Client sends `Set\tJid\tpath=jsonvalue` → server calls `jq.Set()` on Go struct → broadcasts change.
+**Source code** (`lib/ui/jsvar.go`, `JsVar.JawsInput`): Client sends `Set\tJid\tpath=jsonvalue` → server unmarshals the value and applies it by path (`jq.Set()` for a non-`PathSetter` bound value) → broadcasts change.
 
 Tested attack payloads:
 
@@ -260,7 +260,7 @@ Tested attack payloads:
 
 Go's type system prevents prototype pollution — `jq.Set()` validates paths against actual struct fields and enforces type compatibility.
 
-**Trust boundary (application responsibility):** the generic `jq.Set()` path will set *any* `json`-tagged field of the bound value and will append to a slice one element per `Set` message, with no length cap and (see I6) no per-message rate limit. A `Set` message is therefore only as constrained as the bound type. When binding a value where only some fields should be client-writable, or which contains a mutable/unbounded collection, the bound type must implement `ui.PathSetter` (`JawsSetPath`) to allow-list paths and bound lengths; the framework then routes client writes through it instead of `jq.Set()`. `jawstree.Node` is an example: it implements `JawsSetPath` to reject every path except the per-node `.selected` boolean, so a browser cannot rename nodes, mutate ids, or grow the `children` slice.
+**Trust boundary (application responsibility):** the generic `jq.Set()` path will set *any* `json`-tagged field of the bound value and will append to a slice one element per `Set` message. The per-write size is bounded by the 32 KiB WebSocket read limit, and accumulated state is bounded by `ui.MaxClientJsVarBytes` (default 1 MiB) for non-`PathSetter` values — exceeding it aborts the `Request` with `ErrJsVarTooLarge` on the next render. There is (see I6) no per-message rate limit. A `Set` message is therefore only as constrained as the bound type. When binding a value where only some fields should be client-writable, or which contains a mutable/unbounded collection, the bound type must implement `ui.PathSetter` (`JawsSetPath`) to allow-list paths and bound lengths; the framework then routes client writes through it instead of `jq.Set()`. `jawstree.Node` is an example: it implements `JawsSetPath` to reject every path except the per-node `.selected` boolean, so a browser cannot rename nodes, mutate ids, or grow the `children` slice.
 
 ---
 
@@ -317,8 +317,9 @@ The framework uses Go's `template.HTML` type to distinguish trusted HTML from un
 
 **Convenience path — plain strings are trusted too.** The HTML-inner widget
 constructors and `RequestWriter` helpers (`NewSpan`/`Span`, `NewDiv`/`Div`, `A`,
-`Label`, `Li`, `Td`, `Tr`, `Button`, and `Object`) accept an `any` and route it
-through `bind.MakeHTMLGetter`. A **plain `string`** taken by that path is treated as
+`Label`, `Li`, `Td`, `Tr`, and `Button`) accept an `any` and route it
+through `bind.MakeHTMLGetter`; the `Object` widget (constructed via `ui.New`)
+routes its innerHTML the same way. A **plain `string`** taken by that path is treated as
 **trusted HTML and is *not* escaped** — no explicit `template.HTML` cast is
 required — so that markup can be passed conveniently from templates
 (e.g. `{{$.Span "<i>text</i>"}}`). Values wrapped in a `bind.Getter[string]`,

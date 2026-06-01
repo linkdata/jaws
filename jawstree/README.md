@@ -79,8 +79,6 @@ assets
 │   └── images
 │       └── favicon.png
 └── ui
-    ├── somepage.html
-    ├── otherpage.html
     └── index.html
 ```
 

@@ -12,7 +12,7 @@ import (
 // is called.
 var ErrValueNotSettable = errors.New("value not settable")
 
-// Getter exposes a value for an [jaws.Element].
+// Getter exposes a value for a [jaws.Element].
 type Getter[T comparable] interface {
 	JawsGet(elem *jaws.Element) (value T)
 }

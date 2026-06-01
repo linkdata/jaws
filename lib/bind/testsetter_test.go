@@ -7,9 +7,8 @@ import (
 )
 
 // testSetter is a minimal getter/setter fixture for the bind tests. It only
-// tracks a value guarded by a mutex; the previous error-injection, call counters
-// and "called" signal channels were removed because no test asserted them.
-// Error propagation is exercised through a SetHook in TestBind_Hook_Set instead.
+// tracks a value guarded by a mutex. Error propagation is exercised through a
+// SetHook in TestBind_SetHook_ErrorPropagation instead.
 type testSetter[T comparable] struct {
 	mu  deadlock.Mutex
 	val T

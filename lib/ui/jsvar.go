@@ -87,7 +87,7 @@ var (
 // of any single client write is bounded by the WebSocket read limit; to also stop a
 // hostile client growing server state without bound across many writes, a
 // non-[PathSetter] value whose serialized size exceeds [MaxClientJsVarBytes] aborts
-// the [Request] when it is next rendered ([ErrJsVarTooLarge]). The cap does not
+// the [jaws.Request] when it is next rendered ([ErrJsVarTooLarge]). The cap does not
 // prevent a client from setting individual json-tagged fields, so when only some
 // fields/paths should be client-writable, implement [PathSetter] on the bound value
 // to allow-list paths and bound lengths. See jawstree's Node for an example that
@@ -108,7 +108,7 @@ type JsVar[T any] struct {
 // use to grow server-side state without bound across many writes (each individual
 // write is already bounded by the WebSocket read limit). When the value is
 // serialized for the browser in [JsVar.JawsRender], a value larger than this many
-// bytes aborts the [Request] ([ErrJsVarTooLarge]); the bound value is never
+// bytes aborts the [jaws.Request] ([ErrJsVarTooLarge]); the bound value is never
 // marshaled solely to measure it, which would turn an append flood into O(n^2) work.
 var MaxClientJsVarBytes = 1 << 20 // 1 MiB
 

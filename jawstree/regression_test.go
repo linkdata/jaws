@@ -16,8 +16,7 @@ import (
 
 // TestSetup_PrefixVariants verifies that for any prefix form (absolute, relative
 // or empty) Setup neither panics nor diverges: every emitted asset URL appears in
-// the head HTML and resolves to a registered handler. An empty prefix previously
-// panicked because the handler pattern was registered without a leading slash.
+// the head HTML and resolves to a registered handler.
 func TestSetup_PrefixVariants(t *testing.T) {
 	var names []string
 	if err := staticserve.WalkDir(assetsFS, "assets", func(_ string, ss *staticserve.StaticServe) error {

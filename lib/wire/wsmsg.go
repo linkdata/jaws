@@ -17,7 +17,8 @@ const hexDigits = "0123456789abcdef"
 //
 // Unlike strconv.AppendQuote (Go string-literal grammar) it emits only escapes
 // that the browser's JSON.parse accepts: it never produces \a, \v, \xNN or
-// \UXXXXXXXX. Control bytes use \uXXXX, " and \ are escaped, and everything else
+// \UXXXXXXXX. Control bytes use \uXXXX, except \n, \r and \t which use their short
+// escapes; " and \ are escaped, and everything else
 // (including '<', '>', '&' and astral runes) is written as literal UTF-8 to keep
 // payloads compact. Invalid UTF-8 is replaced with U+FFFD so the result is always
 // valid JSON and a valid WebSocket text frame. The output remains decodable by

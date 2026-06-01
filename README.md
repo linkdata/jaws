@@ -470,6 +470,9 @@ unavailable.
 We try to minimize dependencies outside of the standard library.
 
 * Depends on https://github.com/coder/websocket for WebSocket functionality.
+* Depends on https://github.com/linkdata/staticserve for serving hashed static assets.
+* Depends on https://github.com/linkdata/jq for JSON path get/set on JsVar values.
+* Depends on https://github.com/linkdata/secureheaders for `SecureHeadersMiddleware`.
 * Depends on https://github.com/linkdata/deadlock if race detection is enabled.
 
 ## Learn more

@@ -115,8 +115,8 @@ type Binder[T comparable] interface {
 	// The function must have one of the following signatures:
 	//  * func()
 	//  * func() error
-	//  * func(*Element)
-	//  * func(*Element) error
+	//  * func(*jaws.Element)
+	//  * func(*jaws.Element) error
 	Success(fn any) (newbind Binder[T])
 
 	// GetHTML returns a [Binder] that will call fn instead of the default
@@ -402,8 +402,8 @@ func (b *binder[T]) InitialHTMLAttr(fn InitialHTMLAttrHook[T]) Binder[T] {
 // The function must have one of the following signatures:
 //   - func()
 //   - func() error
-//   - func(*Element)
-//   - func(*Element) error
+//   - func(*jaws.Element)
+//   - func(*jaws.Element) error
 func (b *binder[T]) Success(fn any) Binder[T] {
 	return &binder[T]{
 		prev:     b,

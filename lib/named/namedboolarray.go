@@ -152,7 +152,7 @@ func (nba *BoolArray) Count(name string) (n int) {
 }
 
 // IsChecked returns true if any [Bool] in the set with the
-// given name are Checked. Returns false if the name is not found.
+// given name is checked. Returns false if the name is not found.
 func (nba *BoolArray) IsChecked(name string) (state bool) {
 	nba.mu.RLock()
 	defer nba.mu.RUnlock()
@@ -189,7 +189,7 @@ func (nba *BoolArray) JawsGet(elem *jaws.Element) string {
 //
 // This mirrors [Bool.JawsSet]: every Bool whose checked state changes is dirtied
 // in addition to the array tag, so consumers that bind individual Bools (such as
-// radio buttons) update, not only the cascading [Select] widget that re-renders
+// radio buttons) update, not only the cascading [github.com/linkdata/jaws/lib/ui.Select] widget that re-renders
 // from the array tag.
 func (nba *BoolArray) JawsSet(elem *jaws.Element, name string) (err error) {
 	nba.mu.Lock()

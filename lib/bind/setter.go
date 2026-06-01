@@ -7,7 +7,7 @@ import (
 	"github.com/linkdata/jaws/lib/tag"
 )
 
-// Setter exposes and updates a value for an [jaws.Element].
+// Setter exposes and updates a value for a [jaws.Element].
 type Setter[T comparable] interface {
 	Getter[T]
 	// JawsSet may return [jaws.ErrValueUnchanged] to indicate value was already set.

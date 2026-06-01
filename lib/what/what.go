@@ -32,9 +32,9 @@ const (
 	RClass  // Remove element class
 	Value   // Set element value
 	// Element input events
-	Input
-	Click
-	ContextMenu
+	Input       // Element value or input changed
+	Click       // Element clicked
+	ContextMenu // Context menu requested on element
 	// Synchronous event-handler invocation. A real protocol command (used by
 	// broadcasts as well as tests), not a test-only artifact.
 	Hook // Calls the matching event handler synchronously
