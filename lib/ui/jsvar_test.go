@@ -288,6 +288,32 @@ func TestJsVar_RenderSizeCapAbortsRequest(t *testing.T) {
 	}
 }
 
+// TestJsVar_RenderSizeCapExemptsPathSetter verifies the documented exemption: a
+// JsVar whose bound value implements PathSetter enforces its own bounds and is
+// exempt from MaxClientJsVarBytes, so rendering an over-cap value succeeds without
+// aborting the request. This pins the outcome of exceedsClientJsVarCap's PathSetter
+// branch, which TestJsVar_RenderSizeCapAbortsRequest (a non-PathSetter value) does
+// not exercise.
+func TestJsVar_RenderSizeCapExemptsPathSetter(t *testing.T) {
+	_, rq := newCoreRequest(t)
+
+	old := MaxClientJsVarBytes
+	MaxClientJsVarBytes = 16
+	defer func() { MaxClientJsVarBytes = old }()
+
+	var mu sync.Mutex
+	v := jsVarPathHooks{Value: strings.Repeat("z", 100)} // serializes well past the cap
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+	var sb strings.Builder
+	if err := jsv.JawsRender(elem, &sb, []any{"v"}); err != nil {
+		t.Fatalf("PathSetter JsVar should be exempt from the cap, got %v", err)
+	}
+	if rq.Context().Err() != nil {
+		t.Fatalf("request must not be aborted for a PathSetter JsVar, got %v", rq.Context().Err())
+	}
+}
+
 func TestJsVar_PathHooksAndRequestWriter(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	go jw.Serve()
