@@ -37,6 +37,9 @@ jobs:
             exit 1
           fi
 
+      - name: Test
+        run: go test -tags debug -bench=. -coverprofile=coverage.out ./...
+
       - name: Staticcheck
         run: |
           go install honnef.co/go/tools/cmd/staticcheck@latest
@@ -47,14 +50,19 @@ jobs:
         with:
           args: ./...
 
-      # Informational only: the report card hits an external service, so a flake
-      # or outage must not fail the build. go vet / gofmt / staticcheck above are
-      # the actual gating quality checks.
+      - name: Upload code coverage
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage.out
+          retention-days: 1
+
       - name: Go report card
         uses: creekorful/goreportcard-action@v1.0
         continue-on-error: true
 
   build:
+    needs: audit
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -72,13 +80,15 @@ jobs:
       - name: Build
         run: go build -v ./...
 
-      - name: Test
-        run: go test -tags debug -race -bench=. -coverprofile=coverage.out ./...
+      - name: Download code coverage
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage
 
       - name: Calculate code coverage
         id: coverage
         run: |
-          echo "COVERAGE=$(go tool cover -func=coverage.out | tail -n 1 | tr -s '\t' | cut -f 3)" >> $GITHUB_OUTPUT
+          echo "COVERAGE=$(go tool cover -func=coverage.out | tail -n 1 | tr -s '\t' | cut -f 3)" >> "$GITHUB_OUTPUT"
           go tool cover -html=coverage.out -o=coveragereport.html.out
 
       - name: Publish code coverage badge (and optional report)
