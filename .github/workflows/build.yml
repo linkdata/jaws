@@ -81,7 +81,7 @@ jobs:
         run: go build -v ./...
 
       - name: Download code coverage
-        uses: actions/download-artifact@v9
+        uses: actions/download-artifact@v8
         with:
           name: coverage
 
@@ -92,7 +92,7 @@ jobs:
           go tool cover -html=coverage.out -o=coveragereport.html.out
 
       - name: Publish code coverage badge (and optional report)
-        uses: linkdata/gitcoverage@v8
+        uses: linkdata/gitcoverage@v9
         with:
           coverage: ${{ steps.coverage.outputs.coverage }}
           report:   "coveragereport.html.out"
