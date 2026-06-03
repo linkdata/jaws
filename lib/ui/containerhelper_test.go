@@ -307,3 +307,21 @@ func TestSelectWidget(t *testing.T) {
 		t.Fatalf("want meh got %v", err)
 	}
 }
+
+// TestSelectWidget_NonSetterContainer exercises Select's defensive guard. NewSelect
+// always supplies a named.SelectHandler (a bind.Setter[string]), so the false branch
+// in JawsUpdate/JawsInput is reachable only by reassigning the embedded Container
+// field to a plain jaws.Container. JawsUpdate must then update only the child options
+// (no value set, no panic) and JawsInput must be a no-op returning nil.
+func TestSelectWidget_NonSetterContainer(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	c := &testContainer{contents: []jaws.UI{NewOption(named.NewBool(nil, "1", "one", true))}}
+	selectUI := &Select{ContainerHelper: NewContainerHelper(c)}
+	elem, _ := renderUI(t, rq, selectUI)
+
+	selectUI.JawsUpdate(elem)
+
+	if err := selectUI.JawsInput(elem, "x"); err != nil {
+		t.Fatalf("JawsInput on non-Setter container: want nil, got %v", err)
+	}
+}
