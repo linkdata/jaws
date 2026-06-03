@@ -293,6 +293,15 @@ of them.
   call the Request `ServeHTTP()` method to start the WebSocket and begin
   processing events and updates.
 
+* `/jaws/.tail/<key>`
+
+  Serves the deferred "tail" script for a Request, emitted by `TailHTML()` at the
+  end of the page body. The `<key>` identifies the Request; `Jaws.ServeHTTP()`
+  looks it up and writes the script. Handled automatically when you register
+  `GET /jaws/`.
+
+  The response should not be cached.
+
 * `/jaws/.ping`
 
   This endpoint is called by the JavaScript while waiting for the server to
@@ -340,7 +349,7 @@ be made into a `bind.HTMLGetter` using `bind.MakeHTMLGetter()`.
 
 In order of precedence, this can be:
 * `bind.HTMLGetter`: `JawsGetHTML(*Element) template.HTML` to be used as-is.
-* `bind.Getter[string]`: `JawsGet(*Element) string` that will be escaped using `html.EscapeString`.
+* `bind.Binder[string]` or `bind.Getter[string]`: `JawsGet(*Element) string` that will be escaped using `html.EscapeString`.
 * `fmt.Stringer`: `String() string` that will be escaped using `html.EscapeString`.
 * a static `template.HTML` or `string` to be used as-is with no HTML escaping.
 * everything else is rendered using `fmt.Sprint()` and escaped using `html.EscapeString`.
