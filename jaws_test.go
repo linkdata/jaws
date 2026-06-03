@@ -265,6 +265,29 @@ func TestJaws_MaxPendingRequestsPerIPEvictionCause(t *testing.T) {
 	}
 }
 
+// TestJaws_BroadcastMultiRuntimeNonComparable verifies that broadcasting to a Dest
+// slice of two same-typed runtime-non-comparable values is rejected and logged
+// rather than panicking the caller. Such values pass tag expansion's static
+// comparability check but panic on ==; TagExpand's recover converts that to
+// ErrNotUsableAsTag, which Broadcast logs before returning with no tags to send.
+func TestJaws_BroadcastMultiRuntimeNonComparable(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	logger := &captureErrorLogger{}
+	jw.Logger = logger
+
+	type box struct{ v any }
+	dest := []any{box{v: func() {}}, box{v: func() {}}}
+	jw.Broadcast(wire.Message{Dest: dest}) // must not panic
+
+	if !errors.Is(logger.err, tag.ErrNotUsableAsTag) {
+		t.Fatalf("logged error = %v, want ErrNotUsableAsTag", logger.err)
+	}
+}
+
 func TestJaws_MaxPendingRequestsPerIPMaintenanceRemovesPendingIndex(t *testing.T) {
 	jw, err := New()
 	if err != nil {
