@@ -73,32 +73,35 @@ func (nb *Bool) JawsGet(elem *jaws.Element) (yes bool) {
 // BoolArray methods, which lock nba.mu then call into Bool). Any new method must
 // preserve this array-before-bool order to avoid deadlocks.
 //
-// Note that the elem.Dirty calls below run while nba.mu is still held (via the
-// deferred Unlock); Dirty takes the outermost jaws Jaws.mu. This is the
-// deliberate value-tier reverse edge documented in the jaws package "Locking"
-// section, and is safe only because no holder of Jaws.mu ever calls back into
-// these methods.
+// Dirtying happens after the value locks have been released, matching
+// [BoolArray.JawsSet] and avoiding value-lock-to-Jaws-lock inversion.
 func (nb *Bool) JawsSet(elem *jaws.Element, checked bool) (err error) {
 	err = jaws.ErrValueUnchanged
 	nba := nb.nba
 	if nba != nil {
 		nba.mu.Lock()
-		defer nba.mu.Unlock()
 	}
+	var changed []*Bool
 	nb.mu.Lock()
 	if nb.checked != checked {
 		nb.checked = checked
 		err = nil
+		changed = append(changed, nb)
 	}
 	nb.mu.Unlock()
 	if err == nil {
-		elem.Dirty(nb)
 		if nba != nil {
-			for _, changed := range nba.deselectOthersLocked(nb.name, checked) {
-				elem.Dirty(changed)
-			}
-			elem.Dirty(nba)
+			changed = append(changed, nba.deselectOthersLocked(nb.name, checked)...)
 		}
+	}
+	if nba != nil {
+		nba.mu.Unlock()
+	}
+	for _, nb := range changed {
+		elem.Dirty(nb)
+	}
+	if err == nil && nba != nil {
+		elem.Dirty(nba)
 	}
 	return
 }
