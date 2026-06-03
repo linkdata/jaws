@@ -199,24 +199,31 @@ func TagExpand(ctx Context, tag any) (result []any, err error) {
 	// A value can pass the static comparability check in ensureUsableTag yet be
 	// non-comparable at runtime (a comparable struct holding e.g. a func in an
 	// interface field). Two such same-typed values reach appendUniqueTag's dedup,
-	// where existing == tag panics. Recover from that specific runtime panic and
-	// report it as [ErrNotUsableAsTag], matching the rejection debug builds perform
-	// at expansion; re-panic anything else (e.g. a [TagGetter] callback) untouched.
+	// where existing == tag panics. recoverComparabilityPanic turns that specific
+	// runtime panic into [ErrNotUsableAsTag] and re-raises anything else. (Debug
+	// builds reject such tags in ensureUsableTag, so this fires only in production.)
 	defer func() {
 		if r := recover(); r != nil {
-			if re, ok := r.(runtime.Error); ok && strings.Contains(re.Error(), "comparing uncomparable type") {
-				if err = NewErrNotUsableAsTag(tag); err == nil {
-					// The top-level tag is comparable; a nested element panicked.
-					err = ErrNotUsableAsTag
-				}
-				result = nil
-				return
-			}
-			panic(r)
+			result, err = recoverComparabilityPanic(r, tag)
 		}
 	}()
 	var activeArr [12]any
 	return expand(0, ctx, tag, nil, activeArr[:0])
+}
+
+// recoverComparabilityPanic maps a panic recovered from tag expansion to a
+// [TagExpand] result. A "comparing uncomparable type" runtime error — a value that
+// passed the static comparability check but is not comparable at runtime — becomes
+// [ErrNotUsableAsTag] with a nil result; any other panic value is re-raised.
+func recoverComparabilityPanic(r any, tag any) (result []any, err error) {
+	if re, ok := r.(runtime.Error); ok && strings.Contains(re.Error(), "comparing uncomparable type") {
+		if err = NewErrNotUsableAsTag(tag); err == nil {
+			// The top-level tag is comparable; a nested element panicked.
+			err = ErrNotUsableAsTag
+		}
+		return nil, err
+	}
+	panic(r)
 }
 
 // MustTagExpand calls [TagExpand] and either logs or panics if expansion fails.

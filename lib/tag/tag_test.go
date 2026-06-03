@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"net/http"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -300,6 +301,46 @@ func TestTagExpand_RepanicsOtherPanics(t *testing.T) {
 type testPanicTagGetter struct{}
 
 func (testPanicTagGetter) JawsGetTag(Context) any { panic("boom") }
+
+// uncomparablePanic returns a real "comparing uncomparable type" runtime panic
+// value by comparing two non-comparable interface values.
+func uncomparablePanic() (r any) {
+	defer func() { r = recover() }()
+	var a, b any = []int{1}, []int{1}
+	_ = a == b
+	return
+}
+
+// Test_recoverComparabilityPanic exercises the recovery helper directly, since the
+// comparability panic it handles only occurs in production builds (debug builds
+// reject such tags in ensureUsableTag before the dedup compares them).
+func Test_recoverComparabilityPanic(t *testing.T) {
+	rerr := uncomparablePanic()
+	if _, ok := rerr.(runtime.Error); !ok {
+		t.Fatalf("expected a runtime.Error, got %T (%v)", rerr, rerr)
+	}
+
+	// Non-comparable top-level tag: NewErrNotUsableAsTag returns a non-nil error.
+	if result, err := recoverComparabilityPanic(rerr, []int{1}); result != nil || !errors.Is(err, ErrNotUsableAsTag) {
+		t.Fatalf("non-comparable tag: result=%v err=%v", result, err)
+	}
+
+	// Comparable top-level tag (a nested element panicked): falls back to the
+	// ErrNotUsableAsTag sentinel.
+	if result, err := recoverComparabilityPanic(rerr, Tag("x")); result != nil || !errors.Is(err, ErrNotUsableAsTag) {
+		t.Fatalf("comparable tag: result=%v err=%v", result, err)
+	}
+
+	// Any other panic value is re-raised unchanged.
+	func() {
+		defer func() {
+			if r := recover(); r != "boom" {
+				t.Fatalf("expected re-raised \"boom\", got %v", r)
+			}
+		}()
+		_, _ = recoverComparabilityPanic("boom", nil)
+	}()
+}
 
 func TestTagExpand_NotUsableAsTag_WithNestedTagGetterHint(t *testing.T) {
 	tag := testTagExpandNestedTagGetter{
