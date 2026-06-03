@@ -297,8 +297,12 @@ func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
 // provided by InitialHTMLAttrHandler, and any error returned from JawsInit()
 // if it was called.
 //
-// If the [Element] is already frozen, an event-handler getter is not added to
-// the handler list (debug builds panic); tag and init processing still occur.
+// If the [Element] is already frozen and getter is an event handler, the handler
+// is not added: in production with a [Jaws.Logger] configured this is logged and
+// tag and init processing still occur, while debug builds and servers without a
+// Logger panic via reportMisuse, aborting before tag and init processing. A
+// non-event-handler getter never calls reportMisuse, so its tag and init
+// processing always occur.
 func (elem *Element) ApplyGetter(getter any) (tagValue any, attrs []template.HTMLAttr, err error) {
 	if getter != nil {
 		tagValue = getter
