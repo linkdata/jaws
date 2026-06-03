@@ -203,6 +203,10 @@ type game struct {
 }
 
 func newGame(rows, cols, mines int) *game {
+	return newGameWithRand(rows, cols, mines, rand.New(rand.NewSource(time.Now().UnixNano()))) // #nosec G404
+}
+
+func newGameWithRand(rows, cols, mines int, rng *rand.Rand) *game {
 	if rows < 2 {
 		rows = 2
 	}
@@ -216,12 +220,15 @@ func newGame(rows, cols, mines int) *game {
 	if mines < 1 {
 		mines = 1
 	}
+	if rng == nil {
+		rng = rand.New(rand.NewSource(time.Now().UnixNano())) // #nosec G404
+	}
 
 	g := &game{
 		rows:  rows,
 		cols:  cols,
 		mines: mines,
-		rng:   rand.New(rand.NewSource(time.Now().UnixNano())), // #nosec G404
+		rng:   rng,
 	}
 	g.cells = make([][]*Cell, rows)
 	for row := 0; row < rows; row++ {

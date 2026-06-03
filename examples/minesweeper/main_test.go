@@ -319,6 +319,11 @@ func TestNewGameClampsAndExposesBoard(t *testing.T) {
 	if g.mines != 3 {
 		t.Fatalf("mines = %d, want 3", g.mines)
 	}
+
+	g = newGameWithRand(2, 2, 1, nil)
+	if g.rng == nil {
+		t.Fatal("expected nil rng to be replaced")
+	}
 }
 
 func TestGameStatusAndStatsHelpers(t *testing.T) {
@@ -612,10 +617,9 @@ func TestRevealFromLockedAndRevealAllMines(t *testing.T) {
 }
 
 func TestPlaceMinesLockedSkipsInitialCell(t *testing.T) {
-	g := newGame(2, 2, 1)
+	seed := findSeedWithSkipFirst(t, 2*2, 0)
+	g := newGameWithRand(2, 2, 1, rand.New(rand.NewSource(seed)))
 	skip := g.cells[0][0]
-	seed := findSeedWithSkipFirst(t, g.rows*g.cols, 0)
-	g.rng = rand.New(rand.NewSource(seed))
 
 	g.placeMinesLocked(skip)
 
