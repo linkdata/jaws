@@ -56,6 +56,16 @@ func TestIsCommandAndValid(t *testing.T) {
 	if !Redirect.IsCommand() {
 		t.Fail()
 	}
+	// Boundary cases around the separator that the interior cases above do not pin.
+	if !Set.IsCommand() { // last command, just below separator
+		t.Fail()
+	}
+	if separator.IsCommand() {
+		t.Fail()
+	}
+	if Inner.IsCommand() { // first element value, just above separator
+		t.Fail()
+	}
 }
 
 func TestString(t *testing.T) {
