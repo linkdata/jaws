@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"html/template"
 	"reflect"
+	"runtime"
+	"strings"
 
 	"github.com/linkdata/deadlock"
 )
@@ -193,7 +195,26 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 // tag may be nil, a [Tag], a slice of tags, a [TagGetter] or another
 // comparable value. Primitive HTML/value types are rejected with
 // [ErrIllegalTagType] to catch common accidental tags.
-func TagExpand(ctx Context, tag any) ([]any, error) {
+func TagExpand(ctx Context, tag any) (result []any, err error) {
+	// A value can pass the static comparability check in ensureUsableTag yet be
+	// non-comparable at runtime (a comparable struct holding e.g. a func in an
+	// interface field). Two such same-typed values reach appendUniqueTag's dedup,
+	// where existing == tag panics. Recover from that specific runtime panic and
+	// report it as [ErrNotUsableAsTag], matching the rejection debug builds perform
+	// at expansion; re-panic anything else (e.g. a [TagGetter] callback) untouched.
+	defer func() {
+		if r := recover(); r != nil {
+			if re, ok := r.(runtime.Error); ok && strings.Contains(re.Error(), "comparing uncomparable type") {
+				if err = NewErrNotUsableAsTag(tag); err == nil {
+					// The top-level tag is comparable; a nested element panicked.
+					err = ErrNotUsableAsTag
+				}
+				result = nil
+				return
+			}
+			panic(r)
+		}
+	}()
 	var activeArr [12]any
 	return expand(0, ctx, tag, nil, activeArr[:0])
 }

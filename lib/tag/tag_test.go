@@ -260,6 +260,47 @@ func TestTagExpand_RuntimeNonComparable(t *testing.T) {
 	}
 }
 
+// TestTagExpand_MultiRuntimeNonComparable covers the multi-element case in all
+// builds: two same-typed runtime-non-comparable values in one expansion. In debug
+// builds ensureUsableTag rejects the first one; in production builds the dedup
+// existing == tag in appendUniqueTag panics, and TagExpand's recover converts it
+// to ErrNotUsableAsTag rather than crashing the caller. Either way it must not
+// panic and must report ErrNotUsableAsTag with no tags.
+func TestTagExpand_MultiRuntimeNonComparable(t *testing.T) {
+	a := testRuntimeNonComparable{v: func() {}}
+	b := testRuntimeNonComparable{v: func() {}}
+	result, err := TagExpand(nil, []any{a, b})
+	if !errors.Is(err, ErrNotUsableAsTag) {
+		t.Fatalf("expected ErrNotUsableAsTag, got %v", err)
+	}
+	if len(result) != 0 {
+		t.Fatalf("expected no tags, got %v", result)
+	}
+}
+
+// TestTagExpand_RepanicsOtherPanics ensures TagExpand's recover only intercepts the
+// comparability panic: a panic from a [TagGetter] callback must propagate untouched
+// so unrelated bugs are not masked.
+func TestTagExpand_RepanicsOtherPanics(t *testing.T) {
+	defer func() {
+		switch r := recover().(type) {
+		case nil:
+			t.Fatal("expected panic to propagate")
+		case string:
+			if r != "boom" {
+				t.Fatalf("unexpected panic value %v", r)
+			}
+		default:
+			t.Fatalf("unexpected panic value %v", r)
+		}
+	}()
+	_, _ = TagExpand(nil, testPanicTagGetter{})
+}
+
+type testPanicTagGetter struct{}
+
+func (testPanicTagGetter) JawsGetTag(Context) any { panic("boom") }
+
 func TestTagExpand_NotUsableAsTag_WithNestedTagGetterHint(t *testing.T) {
 	tag := testTagExpandNestedTagGetter{
 		Setter: testNestedTagGetter{},
