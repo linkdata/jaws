@@ -210,6 +210,7 @@ func (rq *Request) clearLocked() *Request {
 		if e != nil {
 			e.handlers = nil
 			e.ui = nil
+			e.deleted.Store(true)
 		}
 	}
 	clear(rq.elems)
