@@ -154,7 +154,10 @@ func Fuzz_clickStringRoundTrip(f *testing.F) {
 	f.Add("name", int32(1), int32(2), true, false, true)
 	f.Add("button", int32(-1), int32(999), false, false, false)
 	f.Fuzz(func(t *testing.T, name string, x int32, y int32, shift, control, alt bool) {
-		name = strings.ReplaceAll(name, "\t", " ")
+		// parseClickData rebuilds Name by joining strings.FieldsSeq tokens with single
+		// spaces, so it trims and collapses whitespace. Normalize the seed the same way
+		// so the round trip is exact (see Click.Name); String is not lossless otherwise.
+		name = strings.Join(strings.Fields(name), " ")
 		clk := Click{
 			Name:    name,
 			X:       float64(x),
