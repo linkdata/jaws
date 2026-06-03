@@ -16,7 +16,7 @@ func usableAsTag(t any) (ok bool) {
 // [Element], returning UI tags, event handlers and HTML attributes.
 //
 // Unlike [Element.ApplyGetter], which is given the primary getter, ParseParams
-// only recognizes InputFn, [InputHandler], [ClickHandler] and
+// only recognizes [InputFn], [InputHandler], [ClickHandler] and
 // [ContextMenuHandler]. A param implementing [InitHandler] or
 // [InitialHTMLAttrHandler] is treated only as a tag here; its JawsInit /
 // JawsInitialHTMLAttr are intentionally invoked only for the primary getter.
