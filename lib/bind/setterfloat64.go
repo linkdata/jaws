@@ -60,15 +60,14 @@ func sanitizeFloatForT[T numeric](value float64) error {
 		lo, hiExcl = 0, math.MaxUint32+1
 	case uint, uint64: // uint is 64-bit on all supported platforms
 		lo, hiExcl = 0, -2*float64(math.MinInt64) // [0, 2^64)
-	case float32:
-		// A finite float64 beyond the float32 range converts to ±Inf and silently
-		// corrupts the bound value, reachable from browser input via NewNumber and
-		// NewRange. Reject exactly the values whose conversion overflows.
-		if math.IsInf(float64(float32(value)), 0) {
+	default:
+		// float32 or float64: reject a finite value that overflows the target type.
+		// A float64 that exceeds the float32 range converts to ±Inf and silently
+		// corrupts the bound value (reachable from browser input via NewNumber and
+		// NewRange); float64 never overflows here, so this is a no-op for it.
+		if math.IsInf(float64(T(value)), 0) {
 			return ErrFloatOutOfRange
 		}
-		return nil
-	default: // float64: only finiteness matters, already checked
 		return nil
 	}
 	if value < lo || value >= hiExcl {
