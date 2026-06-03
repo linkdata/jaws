@@ -273,8 +273,9 @@ func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) (err error) {
 // they were added and returns the first found.
 func (jw *Jaws) LookupTemplate(name string) *template.Template {
 	jw.mu.RLock()
-	defer jw.mu.RUnlock()
-	for _, tl := range jw.tmplookers {
+	tmplookers := slices.Clone(jw.tmplookers)
+	jw.mu.RUnlock()
+	for _, tl := range tmplookers {
 		if t := tl.Lookup(name); t != nil {
 			return t
 		}

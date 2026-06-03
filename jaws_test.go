@@ -35,6 +35,21 @@ func (testBroadcastTagGetter) JawsGetTag(tag.Context) any {
 	return tag.Tag("expanded")
 }
 
+type mutatingTemplateLookuper struct {
+	jw *Jaws
+}
+
+func (tl mutatingTemplateLookuper) Lookup(string) *template.Template {
+	_ = tl.jw.AddTemplateLookuper(testTemplateLookuper{})
+	return nil
+}
+
+type testTemplateLookuper struct{}
+
+func (testTemplateLookuper) Lookup(string) *template.Template {
+	return nil
+}
+
 type captureErrorLogger struct {
 	err error
 }
@@ -226,6 +241,34 @@ func TestJaws_MaxPendingRequestsPerIPKeepsLoopbackAddressesSeparate(t *testing.T
 	}
 	if claimed := jw.UseRequest(newRq.JawsKey, newReq); claimed != newRq {
 		t.Fatalf("new loopback request claim = %v, want %v", claimed, newRq)
+	}
+}
+
+func TestJaws_LookupTemplateDoesNotHoldJawsLockDuringLookup(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = jw.AddTemplateLookuper(mutatingTemplateLookuper{jw: jw}); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan any, 1)
+	go func() {
+		defer func() {
+			done <- recover()
+		}()
+		_ = jw.LookupTemplate("test")
+	}()
+
+	select {
+	case recovered := <-done:
+		if recovered != nil {
+			t.Fatalf("LookupTemplate panicked while a lookuper mutated template lookupers: %v", recovered)
+		}
+		jw.Close()
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("LookupTemplate deadlocked while a lookuper mutated template lookupers")
 	}
 }
 
