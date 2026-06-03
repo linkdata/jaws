@@ -288,6 +288,48 @@ func TestJaws_BroadcastMultiRuntimeNonComparable(t *testing.T) {
 	}
 }
 
+// TestJaws_dropNonComparableTags exercises the Broadcast comparability guard
+// directly. Broadcast cannot reach it through tag.TagExpand under deadlock.Debug
+// (the -race build) because ensureUsableTag rejects non-comparable tags first, so
+// the guard is tested with a synthetic tag slice.
+func TestJaws_dropNonComparableTags(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.Logger = &captureErrorLogger{}
+
+	// Comparable tags pass through unchanged.
+	in := []any{tag.Tag("a"), tag.Tag("b")}
+	if got := jw.dropNonComparableTags(in); len(got) != len(in) {
+		t.Fatalf("comparable tags dropped: got %v, want %v", got, in)
+	}
+
+	// A runtime-non-comparable tag is reported via reportMisuse, which logs and then
+	// panics under deadlock.Debug; in production it logs and returns nil.
+	bad := []any{[]int{1}}
+	if deadlock.Debug {
+		func() {
+			defer func() {
+				switch e := recover().(type) {
+				case nil:
+					t.Fatal("expected reportMisuse to panic under deadlock.Debug")
+				case error:
+					if !errors.Is(e, tag.ErrNotComparable) {
+						t.Fatalf("panic = %v, want ErrNotComparable", e)
+					}
+				default:
+					t.Fatalf("panic = %v, want error", e)
+				}
+			}()
+			jw.dropNonComparableTags(bad)
+		}()
+	} else if got := jw.dropNonComparableTags(bad); got != nil {
+		t.Fatalf("non-comparable tag: got %v, want nil", got)
+	}
+}
+
 func TestJaws_MaxPendingRequestsPerIPMaintenanceRemovesPendingIndex(t *testing.T) {
 	jw, err := New()
 	if err != nil {

@@ -661,19 +661,7 @@ func (jw *Jaws) Broadcast(msg wire.Message) {
 	default:
 		expanded, err := tag.TagExpand(nil, msg.Dest)
 		jw.MustLog(err)
-		for _, tagValue := range expanded {
-			// Expanded tags become map keys in the processing loop (wantMessage's
-			// lookup in Request.tagMap). A value can pass tag expansion's static
-			// comparability check yet be non-comparable at runtime (a comparable
-			// struct holding e.g. a func in an interface field), which panics when
-			// hashed. NewErrNotComparable runs the runtime value check that
-			// ensureUsableTag only performs in debug builds; doing it here rejects a
-			// bad Dest before it can panic the Serve goroutine and crash the process.
-			if cmperr := tag.NewErrNotComparable(tagValue); cmperr != nil {
-				jw.reportMisuse(fmt.Errorf("jaws: Broadcast: %w", cmperr))
-				return
-			}
-		}
+		expanded = jw.dropNonComparableTags(expanded)
 		switch len(expanded) {
 		case 0:
 			// no tags, so no requests will match
@@ -688,6 +676,25 @@ func (jw *Jaws) Broadcast(msg wire.Message) {
 	case <-jw.Done():
 	case jw.bcastCh <- msg:
 	}
+}
+
+// dropNonComparableTags returns tags unchanged, or nil after reporting misuse via
+// [Jaws.reportMisuse], if any tag is not comparable at runtime.
+//
+// Expanded tags become map keys in the processing loop (wantMessage's lookup in
+// Request.tagMap). A value can pass tag expansion's static comparability check yet
+// be non-comparable at runtime (a comparable struct holding e.g. a func in an
+// interface field), which panics when hashed. [tag.NewErrNotComparable] runs the
+// runtime value check that ensureUsableTag only performs in debug builds, so this
+// rejects a bad Dest before it can panic the Serve goroutine and crash the process.
+func (jw *Jaws) dropNonComparableTags(tags []any) []any {
+	for _, tagValue := range tags {
+		if cmperr := tag.NewErrNotComparable(tagValue); cmperr != nil {
+			jw.reportMisuse(fmt.Errorf("jaws: Broadcast: %w", cmperr))
+			return nil
+		}
+	}
+	return tags
 }
 
 // setDirty marks all Elements that have one or more of the given tags as dirty.
