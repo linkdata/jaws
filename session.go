@@ -176,8 +176,8 @@ func (sess *Session) Cookie() (cookie *http.Cookie) {
 // [Jaws.ServeWithTimeout]) is running, because reload broadcasts may block.
 //
 // Returns a cookie to be sent to the client browser that will delete the browser cookie.
-// Returns nil if the session was not found.
-// It is safe to call on a nil [Session].
+// It is safe to call on a nil [Session], in which case it returns nil; for any
+// non-nil [Session] it returns a non-nil deletion cookie.
 func (sess *Session) Close() (cookie *http.Cookie) {
 	if sess != nil {
 		sess.jw.deleteSession(sess.sessionID)
