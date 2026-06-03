@@ -152,8 +152,9 @@ func assertIntTypeGuard[T numeric](t *testing.T, name string, inRange, tooBig fl
 }
 
 // Test_setterFloat64_coversNumericTypes exercises every case of the type switch in
-// sanitizeFloatForT: each integer type rejects out-of-range values, and float32
-// takes the finiteness-only default case.
+// sanitizeFloatForT: each integer type rejects out-of-range values, float32 rejects
+// non-finite and finite-but-overflowing values, and float64 takes the
+// finiteness-only default case.
 func Test_setterFloat64_coversNumericTypes(t *testing.T) {
 	assertIntTypeGuard[int8](t, "int8", 1, 128)
 	assertIntTypeGuard[int16](t, "int16", 1, 32768)
@@ -166,14 +167,20 @@ func Test_setterFloat64_coversNumericTypes(t *testing.T) {
 	assertIntTypeGuard[uint64](t, "uint64", 1, 18446744073709551616.0) // 2^64
 	assertIntTypeGuard[uint](t, "uint", 1, 18446744073709551616.0)     // 2^64
 
-	// float32 hits the default switch case: only finiteness is checked, so a large
-	// finite value is accepted.
+	// float32 rejects non-finite values and finite values that overflow the float32
+	// range (they would otherwise convert to ±Inf); an in-range value is accepted.
 	fs := MakeSetterFloat64(newTestSetter(float32(0)))
 	if err := fs.JawsSet(nil, math.Inf(1)); !errors.Is(err, ErrFloatNotFinite) {
 		t.Errorf("float32 Inf: got %v, want ErrFloatNotFinite", err)
 	}
 	if err := fs.JawsSet(nil, 1e30); err != nil {
 		t.Errorf("float32 1e30: got %v, want nil", err)
+	}
+	if err := fs.JawsSet(nil, 1e40); !errors.Is(err, ErrFloatOutOfRange) {
+		t.Errorf("float32 1e40: got %v, want ErrFloatOutOfRange", err)
+	}
+	if err := fs.JawsSet(nil, -1e40); !errors.Is(err, ErrFloatOutOfRange) {
+		t.Errorf("float32 -1e40: got %v, want ErrFloatOutOfRange", err)
 	}
 }
 
