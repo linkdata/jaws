@@ -228,8 +228,10 @@ func recoverComparabilityPanic(r any, tag any) (result []any, err error) {
 
 // MustTagExpand calls [TagExpand] and either logs or panics if expansion fails.
 //
-// When ctx is non-nil, expansion errors are passed to [Context.MustLog] and
-// the partial result is returned. When ctx is nil, MustTagExpand panics.
+// When ctx is non-nil, expansion errors are passed to [Context.MustLog], which
+// logs the error and returns the partial result, or panics if no Logger is set.
+// When ctx is nil, MustTagExpand panics. So a non-nil ctx does not by itself
+// guarantee a return.
 func MustTagExpand(ctx Context, tag any) []any {
 	result, err := TagExpand(ctx, tag)
 	if err != nil {
