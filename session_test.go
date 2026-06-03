@@ -329,7 +329,7 @@ func TestSession_Broadcast(t *testing.T) {
 
 func TestSession_Delete(t *testing.T) {
 	th := newTestHelper(t)
-	ts := newTestServer()
+	ts := newTestServer(t)
 	defer ts.Close()
 	go ts.jw.ServeWithTimeout(time.Second)
 

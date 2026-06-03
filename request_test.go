@@ -1608,7 +1608,7 @@ func TestCoverage_RequestProcessHTTPDoneAndBroadcastDone(t *testing.T) {
 	}
 	defer jw.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	hr := httptest.NewRequest("GET", "/", nil).WithContext(ctx)
 	rq := jw.NewRequest(hr)
@@ -2015,17 +2015,20 @@ type testServer struct {
 	connectedCh chan struct{}
 }
 
-func newTestServer() (ts *testServer) {
-	return newTestServerWithSession(true)
+func newTestServer(t *testing.T) (ts *testServer) {
+	t.Helper()
+	return newTestServerWithSession(t, true)
 }
 
-func newTestServerNoSession() (ts *testServer) {
-	return newTestServerWithSession(false)
+func newTestServerNoSession(t *testing.T) (ts *testServer) {
+	t.Helper()
+	return newTestServerWithSession(t, false)
 }
 
-func newTestServerWithSession(withSession bool) (ts *testServer) {
+func newTestServerWithSession(t *testing.T, withSession bool) (ts *testServer) {
+	t.Helper()
 	jw, _ := New()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Hour)
 	rr := httptest.NewRecorder()
 	hr := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
 	var sess *Session
@@ -2171,7 +2174,7 @@ func TestWS_UnclaimedRequestIsGone(t *testing.T) {
 }
 
 func TestWS_RejectsMissingOrigin(t *testing.T) {
-	ts := newTestServer()
+	ts := newTestServer(t)
 	defer ts.Close()
 
 	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), nil)
@@ -2194,7 +2197,7 @@ func TestWS_RejectsMissingOrigin(t *testing.T) {
 }
 
 func TestWS_RejectsCrossOrigin(t *testing.T) {
-	ts := newTestServer()
+	ts := newTestServer(t)
 	defer ts.Close()
 
 	hdr := http.Header{}
@@ -2219,7 +2222,7 @@ func TestWS_RejectsCrossOrigin(t *testing.T) {
 }
 
 func TestWS_AutoSessionDefaultDoesNotCreateSession(t *testing.T) {
-	ts := newTestServerNoSession()
+	ts := newTestServerNoSession(t)
 	defer ts.Close()
 
 	sessCh := make(chan *Session, 1)
@@ -2250,7 +2253,7 @@ func TestWS_AutoSessionDefaultDoesNotCreateSession(t *testing.T) {
 }
 
 func TestWS_AutoSessionCreatesSession(t *testing.T) {
-	ts := newTestServerNoSession()
+	ts := newTestServerNoSession(t)
 	defer ts.Close()
 	ts.jw.AutoSession = true
 
@@ -2295,7 +2298,7 @@ func TestWS_AutoSessionCreatesSession(t *testing.T) {
 }
 
 func TestWS_AutoSessionKeepsExistingSession(t *testing.T) {
-	ts := newTestServer()
+	ts := newTestServer(t)
 	defer ts.Close()
 	ts.jw.AutoSession = true
 
@@ -2328,7 +2331,7 @@ func TestWS_AutoSessionKeepsExistingSession(t *testing.T) {
 }
 
 func TestWS_AutoSessionRejectDoesNotCreateSession(t *testing.T) {
-	ts := newTestServerNoSession()
+	ts := newTestServerNoSession(t)
 	defer ts.Close()
 	ts.jw.AutoSession = true
 
@@ -2364,7 +2367,7 @@ func TestWS_AutoSessionRejectDoesNotCreateSession(t *testing.T) {
 
 func TestWS_ConnectFnFails(t *testing.T) {
 	const nope = "nope"
-	ts := newTestServer()
+	ts := newTestServer(t)
 	defer ts.Close()
 	ts.rq.SetConnectFn(func(_ *Request) error { return errors.New(nope) })
 
@@ -2392,7 +2395,7 @@ func TestWS_ConnectFnFails(t *testing.T) {
 
 func TestWS_NormalExchange(t *testing.T) {
 	th := newTestHelper(t)
-	ts := newTestServer()
+	ts := newTestServer(t)
 	defer ts.Close()
 
 	fooError := errors.New("this foo failed")
@@ -2442,7 +2445,7 @@ func TestWS_NormalExchange(t *testing.T) {
 }
 
 func TestWS_PingDisconnectsUnresponsiveClient(t *testing.T) {
-	ts := newTestServer()
+	ts := newTestServer(t)
 	defer ts.Close()
 	ts.jw.WebSocketPingInterval = 20 * time.Millisecond
 	ts.jw.webSocketTimeout = 10 * time.Millisecond
@@ -2466,7 +2469,7 @@ func TestWS_PingDisconnectsUnresponsiveClient(t *testing.T) {
 }
 
 func TestWS_PingDisabledKeepsIdleConnection(t *testing.T) {
-	ts := newTestServer()
+	ts := newTestServer(t)
 	defer ts.Close()
 	ts.jw.WebSocketPingInterval = 0
 

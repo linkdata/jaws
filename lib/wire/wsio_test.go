@@ -19,11 +19,11 @@ func TestReadLoop_RespectsContextDone(t *testing.T) {
 	msg := WsMsg{Jid: jid.Jid(1234), What: what.Input}
 	inCh := make(chan WsMsg)
 	jawsDoneCh := make(chan struct{})
-	client, server := pipe()
+	client, server := pipe(t)
 	defer func() { _ = client.CloseNow() }()
 	defer func() { _ = server.CloseNow() }()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	readDoneCh := make(chan struct{})
@@ -32,7 +32,7 @@ func TestReadLoop_RespectsContextDone(t *testing.T) {
 		ReadLoop(ctx, nil, jawsDoneCh, inCh, server)
 	}()
 
-	writeCtx, writeCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	writeCtx, writeCancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer writeCancel()
 	if err := client.Write(writeCtx, websocket.MessageText, []byte(msg.Format())); err != nil {
 		t.Fatal(err)
@@ -53,11 +53,11 @@ func TestReadLoop_RespectsDone(t *testing.T) {
 	msg := WsMsg{Jid: jid.Jid(1234), What: what.Input}
 	inCh := make(chan WsMsg)
 	jawsDoneCh := make(chan struct{})
-	client, server := pipe()
+	client, server := pipe(t)
 	defer func() { _ = client.CloseNow() }()
 	defer func() { _ = server.CloseNow() }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
 
 	readDoneCh := make(chan struct{})
@@ -76,11 +76,11 @@ func TestReadLoop_RespectsDone(t *testing.T) {
 func TestWriteLoop_SendsThePayload(t *testing.T) {
 	outCh := make(chan WsMsg)
 	jawsDoneCh := make(chan struct{})
-	client, server := pipe()
+	client, server := pipe(t)
 	defer func() { _ = client.CloseNow() }()
 	defer func() { _ = server.CloseNow() }()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	writeDoneCh := make(chan struct{})
@@ -95,7 +95,7 @@ func TestWriteLoop_SendsThePayload(t *testing.T) {
 	readDoneCh := make(chan struct{})
 	go func() {
 		defer close(readDoneCh)
-		readCtx, readCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		readCtx, readCancel := context.WithTimeout(t.Context(), 3*time.Second)
 		defer readCancel()
 		mt, b, err = client.Read(readCtx)
 	}()
@@ -126,7 +126,7 @@ func TestWriteLoop_SendsThePayload(t *testing.T) {
 func TestWriteLoop_ConcatenatesMessages(t *testing.T) {
 	outCh := make(chan WsMsg, 2)
 	jawsDoneCh := make(chan struct{})
-	client, server := pipe()
+	client, server := pipe(t)
 	defer func() { _ = client.CloseNow() }()
 	defer func() { _ = server.CloseNow() }()
 
@@ -135,7 +135,7 @@ func TestWriteLoop_ConcatenatesMessages(t *testing.T) {
 	outCh <- msg
 	close(outCh)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
 
 	writeDoneCh := make(chan struct{})
@@ -162,7 +162,7 @@ func TestWriteLoop_ConcatenatesMessages(t *testing.T) {
 func TestWriteLoop_ConcatenatesMessagesClosedChannel(t *testing.T) {
 	outCh := make(chan WsMsg, 2)
 	jawsDoneCh := make(chan struct{})
-	client, server := pipe()
+	client, server := pipe(t)
 	defer func() { _ = client.CloseNow() }()
 	defer func() { _ = server.CloseNow() }()
 
@@ -170,7 +170,7 @@ func TestWriteLoop_ConcatenatesMessagesClosedChannel(t *testing.T) {
 	outCh <- msg
 	close(outCh)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
 
 	writeDoneCh := make(chan struct{})
@@ -197,12 +197,12 @@ func TestWriteLoop_ConcatenatesMessagesClosedChannel(t *testing.T) {
 func TestWriteLoop_RespectsContext(t *testing.T) {
 	outCh := make(chan WsMsg)
 	jawsDoneCh := make(chan struct{})
-	client, server := pipe()
+	client, server := pipe(t)
 	defer func() { _ = client.CloseNow() }()
 	defer func() { _ = server.CloseNow() }()
-	client.CloseRead(context.Background())
+	client.CloseRead(t.Context())
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	writeDoneCh := make(chan struct{})
 	go func() {
 		defer close(writeDoneCh)
@@ -216,12 +216,12 @@ func TestWriteLoop_RespectsContext(t *testing.T) {
 func TestWriteLoop_RespectsDone(t *testing.T) {
 	outCh := make(chan WsMsg)
 	jawsDoneCh := make(chan struct{})
-	client, server := pipe()
+	client, server := pipe(t)
 	defer func() { _ = client.CloseNow() }()
 	defer func() { _ = server.CloseNow() }()
-	client.CloseRead(context.Background())
+	client.CloseRead(t.Context())
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
 
 	writeDoneCh := make(chan struct{})
@@ -237,12 +237,12 @@ func TestWriteLoop_RespectsDone(t *testing.T) {
 func TestWriteLoop_RespectsOutboundClosed(t *testing.T) {
 	outCh := make(chan WsMsg)
 	jawsDoneCh := make(chan struct{})
-	client, server := pipe()
+	client, server := pipe(t)
 	defer func() { _ = client.CloseNow() }()
 	defer func() { _ = server.CloseNow() }()
-	client.CloseRead(context.Background())
+	client.CloseRead(t.Context())
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
 
 	writeDoneCh := make(chan struct{})
@@ -258,13 +258,13 @@ func TestWriteLoop_RespectsOutboundClosed(t *testing.T) {
 func TestWriteLoop_ReportsError(t *testing.T) {
 	outCh := make(chan WsMsg, 1)
 	jawsDoneCh := make(chan struct{})
-	client, server := pipe()
+	client, server := pipe(t)
 	defer func() { _ = client.CloseNow() }()
 	defer func() { _ = server.CloseNow() }()
-	client.CloseRead(context.Background())
+	client.CloseRead(t.Context())
 	_ = server.CloseNow()
 
-	ctx, cancel := context.WithCancelCause(context.Background())
+	ctx, cancel := context.WithCancelCause(t.Context())
 	writeDoneCh := make(chan struct{})
 	go func() {
 		defer close(writeDoneCh)
@@ -283,13 +283,13 @@ func TestWriteLoop_ReportsError(t *testing.T) {
 func TestReadLoop_ReportsError(t *testing.T) {
 	inCh := make(chan WsMsg)
 	jawsDoneCh := make(chan struct{})
-	client, server := pipe()
+	client, server := pipe(t)
 	defer func() { _ = client.CloseNow() }()
 	defer func() { _ = server.CloseNow() }()
-	client.CloseRead(context.Background())
+	client.CloseRead(t.Context())
 	_ = server.CloseNow()
 
-	ctx, cancel := context.WithCancelCause(context.Background())
+	ctx, cancel := context.WithCancelCause(t.Context())
 	readDoneCh := make(chan struct{})
 	go func() {
 		defer close(readDoneCh)
@@ -306,11 +306,11 @@ func TestReadLoop_ReportsError(t *testing.T) {
 
 func TestPingLoop_RespectsContextDone(t *testing.T) {
 	jawsDoneCh := make(chan struct{})
-	client, server := pipe()
+	client, server := pipe(t)
 	defer func() { _ = client.CloseNow() }()
 	defer func() { _ = server.CloseNow() }()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	pingDoneCh := make(chan struct{})
@@ -325,11 +325,11 @@ func TestPingLoop_RespectsContextDone(t *testing.T) {
 
 func TestPingLoop_RespectsDone(t *testing.T) {
 	jawsDoneCh := make(chan struct{})
-	client, server := pipe()
+	client, server := pipe(t)
 	defer func() { _ = client.CloseNow() }()
 	defer func() { _ = server.CloseNow() }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
 
 	pingDoneCh := make(chan struct{})
@@ -344,11 +344,11 @@ func TestPingLoop_RespectsDone(t *testing.T) {
 
 func TestPingLoop_ReportsErrorWhenPeerDoesNotPong(t *testing.T) {
 	jawsDoneCh := make(chan struct{})
-	client, server := pipe()
+	client, server := pipe(t)
 	defer func() { _ = client.CloseNow() }()
 	defer func() { _ = server.CloseNow() }()
 
-	ctx, cancel := context.WithCancelCause(context.Background())
+	ctx, cancel := context.WithCancelCause(t.Context())
 
 	pingDoneCh := make(chan struct{})
 	go func() {
@@ -377,7 +377,8 @@ func waitDone(t *testing.T, doneCh <-chan struct{}, what string) {
 }
 
 // adapted from nhooyr.io/websocket/internal/test/wstest.Pipe
-func pipe() (clientConn, serverConn *websocket.Conn) {
+func pipe(t *testing.T) (clientConn, serverConn *websocket.Conn) {
+	t.Helper()
 	dialOpts := &websocket.DialOptions{
 		HTTPClient: &http.Client{
 			Transport: fakeTransport{
@@ -387,7 +388,7 @@ func pipe() (clientConn, serverConn *websocket.Conn) {
 			},
 		},
 	}
-	clientConn, _, _ = websocket.Dial(context.Background(), "ws://localhost", dialOpts)
+	clientConn, _, _ = websocket.Dial(t.Context(), "ws://localhost", dialOpts)
 	return clientConn, serverConn
 }
 

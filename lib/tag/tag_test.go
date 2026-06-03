@@ -423,6 +423,7 @@ func TestTagExpand_IllegalTypesAsErrors(t *testing.T) {
 }
 
 type mustLogContext struct {
+	ctx context.Context
 	err error
 }
 
@@ -437,7 +438,7 @@ func (ctx *mustLogContext) Get(string) any {
 func (ctx *mustLogContext) Set(key string, value any) {}
 
 func (ctx *mustLogContext) Context() context.Context {
-	return context.Background()
+	return ctx.ctx
 }
 
 func (ctx *mustLogContext) Log(err error) error {
@@ -494,7 +495,7 @@ func TestTagExpand_TagGetterMutualCycleExpandsToCycleMembers(t *testing.T) {
 }
 
 func TestMustTagExpand_UsesContextMustLog(t *testing.T) {
-	ctx := &mustLogContext{}
+	ctx := &mustLogContext{ctx: t.Context()}
 	got := MustTagExpand(ctx, "plain-string")
 	if got != nil {
 		t.Fatalf("MustTagExpand returned %#v, want nil", got)
