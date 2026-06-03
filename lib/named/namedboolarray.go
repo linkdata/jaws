@@ -29,10 +29,11 @@ func NewBoolArray(multi bool) *BoolArray {
 
 // ReadLocked calls fn with the [BoolArray] locked for reading.
 //
-// fn must not call other [BoolArray] methods, which would re-acquire the same
-// non-reentrant lock and deadlock; operate only on the provided slice. Calling
-// methods on the *[Bool] elements is safe because they use a separate mutex taken
-// in array-before-bool order.
+// fn must not call other [BoolArray] methods or [Bool.JawsSet]: those re-acquire
+// the same non-reentrant nba mutex and deadlock. Operate only on the provided
+// slice and the read-only *[Bool] methods ([Bool.Name], [Bool.HTML],
+// [Bool.JawsGet], [Bool.Checked], [Bool.Set], [Bool.String] and similar), which
+// take only the Bool's own mutex.
 func (nba *BoolArray) ReadLocked(fn func(nbl []*Bool)) {
 	nba.mu.RLock()
 	defer nba.mu.RUnlock()
@@ -42,8 +43,9 @@ func (nba *BoolArray) ReadLocked(fn func(nbl []*Bool)) {
 // WriteLocked calls fn with the [BoolArray] locked for writing and replaces
 // the internal []*Bool slice with the return value.
 //
-// As with [BoolArray.ReadLocked], fn must not call other [BoolArray] methods (it
-// would deadlock); operate only on the provided slice and its *[Bool] elements.
+// As with [BoolArray.ReadLocked], fn must not call other [BoolArray] methods or
+// [Bool.JawsSet] (they re-acquire the same non-reentrant nba mutex and deadlock);
+// operate only on the provided slice and the read-only *[Bool] methods.
 func (nba *BoolArray) WriteLocked(fn func(nbl []*Bool) []*Bool) {
 	nba.mu.Lock()
 	defer nba.mu.Unlock()
@@ -191,6 +193,11 @@ func (nba *BoolArray) JawsGet(elem *jaws.Element) string {
 // in addition to the array tag, so consumers that bind individual Bools (such as
 // radio buttons) update, not only the cascading [github.com/linkdata/jaws/lib/ui.Select] widget that re-renders
 // from the array tag.
+//
+// In single-select mode a name matching no [Bool] still succeeds (returns nil) by
+// deselecting the current selection, as documented for [BoolArray.Set], leaving
+// the selected name empty. A nil return therefore means "the selection changed",
+// not "name is now selected".
 func (nba *BoolArray) JawsSet(elem *jaws.Element, name string) (err error) {
 	nba.mu.Lock()
 	changed := nba.setChangedLocked(name, true)
