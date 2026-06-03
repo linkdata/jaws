@@ -8,7 +8,8 @@ import (
 
 // ErrNotUsableAsTag is returned when a value cannot be used as a tag.
 //
-// It is also matchable as [ErrNotComparable] for backwards compatibility.
+// It also matches [ErrNotComparable] via [errors.Is], because a non-comparable
+// value is one reason a value cannot be used as a tag.
 var ErrNotUsableAsTag errNotUsableAsTag
 
 type errNotUsableAsTag struct {
