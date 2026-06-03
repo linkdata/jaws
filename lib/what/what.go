@@ -9,35 +9,63 @@ const (
 	invalid What = iota
 
 	// Commands not associated with an Element
-	Update   // Used for update scheduling
-	Reload   // Tells browser to reload the current URL
-	Redirect // Tells browser to load another URL
-	Alert    // Display (if using Bootstrap) an alert message
-	Order    // Re-order a set of elements
-	Call     // Call JavaScript function
-	Set      // Set JavaScript variable (path=json)
+
+	// Update schedules dirty element processing.
+	Update
+	// Reload tells the browser to reload the current URL.
+	Reload
+	// Redirect tells the browser to load another URL.
+	Redirect
+	// Alert displays an alert message when the client UI supports it.
+	Alert
+	// Order reorders a set of elements.
+	Order
+	// Call calls a JavaScript function.
+	Call
+	// Set sets a JavaScript variable as path=json.
+	Set
 
 	separator
 
 	// Element manipulation
-	Inner   // Set the elements inner HTML
-	Delete  // Delete the element
-	Replace // Replace the element with new HTML
-	Remove  // Remove child element (Data identifies child; Jid identifies parent)
-	Insert  // Insert child element
-	Append  // Append child element
-	SAttr   // Set element attribute
-	RAttr   // Remove element attribute
-	SClass  // Set element class
-	RClass  // Remove element class
-	Value   // Set element value
+
+	// Inner sets the element's inner HTML.
+	Inner
+	// Delete deletes the element.
+	Delete
+	// Replace replaces the element with new HTML.
+	Replace
+	// Remove removes a child element; Data identifies child and Jid identifies parent.
+	Remove
+	// Insert inserts a child element.
+	Insert
+	// Append appends a child element.
+	Append
+	// SAttr sets an element attribute.
+	SAttr
+	// RAttr removes an element attribute.
+	RAttr
+	// SClass sets an element class.
+	SClass
+	// RClass removes an element class.
+	RClass
+	// Value sets an element value.
+	Value
+
 	// Element input events
-	Input       // Element value or input changed
-	Click       // Element clicked
-	ContextMenu // Context menu requested on element
+
+	// Input reports that an element value or input changed.
+	Input
+	// Click reports that an element was clicked.
+	Click
+	// ContextMenu reports that a context menu was requested on an element.
+	ContextMenu
+
 	// Synchronous event-handler invocation. A real protocol command (used by
 	// broadcasts as well as tests), not a test-only artifact.
-	Hook // Calls the matching event handler synchronously
+
+	// Hook calls the matching event handler synchronously.
+	Hook
 )
 
 // IsCommand reports whether w is a non-element command.

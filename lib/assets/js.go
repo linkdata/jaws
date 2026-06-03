@@ -1,7 +1,7 @@
 package assets
 
 import (
-	_ "embed"
+	_ "embed" // enable go:embed directives
 	"mime"
 	"net/url"
 	"path"

@@ -91,9 +91,12 @@ type InitialHTMLAttrHandler interface {
 
 // Auth describes authentication data available to templates through ui.With.
 type Auth interface {
-	Data() map[string]any // returns authenticated user data, or nil
-	Email() string        // returns authenticated user email, or an empty string
-	IsAdmin() bool        // return true if admins are defined and current user is one, or if no admins are defined
+	// Data returns authenticated user data, or nil.
+	Data() map[string]any
+	// Email returns the authenticated user email, or an empty string.
+	Email() string
+	// IsAdmin reports whether the authenticated user has administrator access.
+	IsAdmin() bool
 }
 
 // MakeAuthFn constructs an [Auth] value for a [Request].
@@ -120,8 +123,16 @@ type DefaultAuth struct {
 	Logger
 }
 
+// Data returns no authenticated user data.
 func (*DefaultAuth) Data() map[string]any { return nil }
-func (*DefaultAuth) Email() string        { return "" }
+
+// Email returns an empty authenticated user email.
+func (*DefaultAuth) Email() string { return "" }
+
+// IsAdmin returns true for every caller.
+//
+// If Logger is set, it logs a one-time warning that [Jaws.MakeAuth] is unset
+// and authorization is fail-open.
 func (da *DefaultAuth) IsAdmin() bool {
 	// Warn loudly about the fail-open authorization default. When MakeAuth is nil
 	// templates receive DefaultAuth, IsAdmin() returns true for everyone, so

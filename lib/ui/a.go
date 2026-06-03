@@ -7,7 +7,7 @@ import (
 	"github.com/linkdata/jaws/lib/bind"
 )
 
-// A renders an HTML anchor element with dynamic inner HTML.
+// An A renders an HTML anchor element with dynamic inner HTML.
 type A struct{ HTMLInner }
 
 // NewA returns an anchor widget whose inner HTML is rendered from innerHTML.
