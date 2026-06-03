@@ -3105,10 +3105,10 @@ func (node *Node) marshalJSON(b []byte) []byte <span class="cov9" title="3944">{
                 b = append(b, `,"id":`...)
                 b = appendJSONString(b, node.ID)
         }</span>
-        <span class="cov9" title="3944">if node.Selected </span><span class="cov3" title="14">{
+        <span class="cov9" title="3944">if node.Selected </span><span class="cov4" title="40">{
                 b = append(b, `,"selected":true`...)
         }</span>
-        <span class="cov9" title="3944">if node.Disabled </span><span class="cov3" title="14">{
+        <span class="cov9" title="3944">if node.Disabled </span><span class="cov4" title="40">{
                 // Quercus.js expects "selectable"; the server tracks the inverse (Disabled).
                 b = append(b, `,"selectable":false`...)
         }</span>
@@ -3159,9 +3159,9 @@ func (node *Node) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err
         }</span>
         <span class="cov6" title="208">var target *Node
         if target, err = node.resolveChildPath(nodePath); err == nil </span><span class="cov6" title="202">{
-                if target.Selected == selected </span><span class="cov4" title="20">{
+                if target.Selected == selected </span><span class="cov4" title="26">{
                         err = jaws.ErrValueUnchanged
-                }</span> else<span class="cov6" title="182"> {
+                }</span> else<span class="cov6" title="176"> {
                         target.Selected = selected
                 }</span>
         }
@@ -3194,8 +3194,8 @@ func (node *Node) resolveChildPath(nodePath string) (*Node, error) <span class="
 // JawsPathSet runs after a node's selected flag has been set on the server-side
 // tree; it broadcasts a jawstreeSetPath JsCall so the change is reflected in the
 // rendered tree of every client sharing this Tree.
-func (node *Node) JawsPathSet(elem *jaws.Element, jsPath string, value any) <span class="cov6" title="184">{
-        if nodePath, ok := strings.CutSuffix(jsPath, ".selected"); ok </span><span class="cov6" title="183">{
+func (node *Node) JawsPathSet(elem *jaws.Element, jsPath string, value any) <span class="cov6" title="178">{
+        if nodePath, ok := strings.CutSuffix(jsPath, ".selected"); ok </span><span class="cov6" title="177">{
                 payload, _ := json.Marshal(struct {
                         Tree string `json:"tree"`
                         ID   string `json:"id"`
@@ -3272,7 +3272,7 @@ func (node *Node) SetSelected(nameLists [][]string) (changed []*Node) <span clas
                                 break</span>
                         }
                 }
-                <span class="cov7" title="858">if selected != node.Selected </span><span class="cov4" title="31">{
+                <span class="cov7" title="858">if selected != node.Selected </span><span class="cov4" title="37">{
                         node.Selected = selected
                         changed = append(changed, node)
                 }</span>
