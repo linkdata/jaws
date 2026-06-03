@@ -228,3 +228,29 @@ func Test_makeSetterFloat64_panic(t *testing.T) {
 	_ = MakeSetterFloat64("x")
 	t.Fatal("expected panic")
 }
+
+// Test_makeSetterFloat64_panicNamedNumeric pins the documented contract that
+// named (defined) numeric types are matched by exact type only: neither a value
+// of such a type nor a Setter over it bridges to float64, and passing one panics.
+// This guards against a future switch to underlying-type (~) matching that would
+// silently accept them.
+func Test_makeSetterFloat64_panicNamedNumeric(t *testing.T) {
+	type Celsius float64
+
+	assertPanics := func(name string, v any) {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if x := recover(); x == nil {
+					t.Error("expected panic")
+				} else if !strings.Contains(x.(error).Error(), "bind.Setter") {
+					t.Fatalf("panic = %v, want bind.Setter", x)
+				}
+			}()
+			_ = MakeSetterFloat64(v)
+			t.Fatal("expected panic")
+		})
+	}
+
+	assertPanics("value", Celsius(20))
+	assertPanics("setter", newTestSetter[Celsius](20))
+}
