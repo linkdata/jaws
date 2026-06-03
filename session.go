@@ -202,6 +202,7 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 
 // Reload calls [Session.Broadcast] with a message asking browsers to reload the page.
 // See [Session.Broadcast] for the processing-loop requirement.
+// It is safe to call on a nil [Session].
 func (sess *Session) Reload() {
 	sess.Broadcast(wire.Message{What: what.Reload})
 }
