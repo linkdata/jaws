@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"io"
 	"net/http"
 
 	"github.com/linkdata/jaws"
@@ -20,11 +19,6 @@ type uiHandler struct {
 
 type pageTemplate struct {
 	Template
-}
-
-func (tmpl pageTemplate) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
-	err = tmpl.Template.render(elem, w, params)
-	return
 }
 
 func (pageTemplate) JawsUpdate(*jaws.Element) {}
