@@ -132,6 +132,11 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 		{"normal", "Input\tJid.2\t\"c\"\n", WsMsg{Jid: jid.Jid(2), What: what.Input, Data: "c"}},
 		{"context menu", "ContextMenu\tJid.2\t\"1 2 5 name\"\n", WsMsg{Jid: jid.Jid(2), What: what.ContextMenu, Data: "1 2 5 name"}},
 		{"newline", "Input\tJid.3\t\"c\\nd\"\n", WsMsg{Jid: jid.Jid(3), What: what.Input, Data: "c\nd"}},
+		// Set and Call data is taken verbatim even when it begins with a double
+		// quote: it must not be run through strconv.Unquote (Parse excludes Set/Call
+		// from unquoting). Pins that guard against accidental removal.
+		{"set quote-prefixed verbatim", "Set\tJid.4\t\"x\"=1\n", WsMsg{Jid: jid.Jid(4), What: what.Set, Data: "\"x\"=1"}},
+		{"call quote-prefixed verbatim", "Call\tJid.5\t\"x\"=1\n", WsMsg{Jid: jid.Jid(5), What: what.Call, Data: "\"x\"=1"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
