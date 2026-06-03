@@ -447,8 +447,11 @@ and `Email()` are fail-safe — nil and empty). A page that gates privileged UI 
 forgot to set `MakeAuth`.
 
 Always set `Jaws.MakeAuth` in production and treat a nil `MakeAuth` as "no
-authorization configured", not "deny". As a safety net, JaWS logs a warning when
-`Serve()` starts with `MakeAuth` nil if a `Jaws.Logger` is configured.
+authorization configured", not "deny". As a safety net, when `MakeAuth` is nil and
+a `Jaws.Logger` is configured, JaWS logs a one-time warning the first time a
+template evaluates `.Auth.IsAdmin`. Note this is lazy: a page that never gates on
+`.Auth.IsAdmin` never logs it, so absence of the warning does not prove `MakeAuth`
+is set.
 
 ### Testing
 
