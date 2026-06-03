@@ -2393,6 +2393,35 @@ func TestWS_ConnectFnFails(t *testing.T) {
 	}
 }
 
+func TestWS_ConnectFnFailureRefreshesClaimedSessionGrace(t *testing.T) {
+	const nope = "nope"
+	ts := newTestServer(t)
+	defer ts.Close()
+	ts.rq.SetConnectFn(func(_ *Request) error { return errors.New(nope) })
+
+	ts.sess.mu.Lock()
+	ts.sess.deadline = time.Now().Add(-time.Second)
+	ts.sess.mu.Unlock()
+	if ts.sess.isDead() {
+		t.Fatal("attached session should not be dead before the claimed request ends")
+	}
+
+	conn, _, err := ts.Dial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conn != nil {
+		defer func() { _ = conn.CloseNow() }()
+	}
+	_, _, _ = conn.Read(ts.ctx)
+	_ = conn.Close(websocket.StatusNormalClosure, "")
+	waitForRequestCount(t, ts.jw, 0, testTimeout)
+
+	if got := ts.jw.GetSession(ts.hr); got != ts.sess {
+		t.Fatalf("claimed request should refresh session grace on early WebSocket failure, got %v", got)
+	}
+}
+
 func TestWS_NormalExchange(t *testing.T) {
 	th := newTestHelper(t)
 	ts := newTestServer(t)

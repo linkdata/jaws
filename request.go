@@ -195,6 +195,7 @@ func (rq *Request) clearLocked() *Request {
 	rq.connectFn = nil
 	rq.lastWrite = time.Time{}
 	rq.initial = nil
+	rq.killSessionLocked()
 	rq.running.Store(false)
 	rq.claimed.Store(false)
 	rq.Rendering.Store(false)
@@ -223,7 +224,6 @@ func (rq *Request) clearLocked() *Request {
 	rq.wsQueue = rq.wsQueue[:0]
 	rq.muQueue.Unlock()
 	clear(rq.tagMap)
-	rq.killSessionLocked()
 	return rq
 }
 
