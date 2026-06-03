@@ -62,8 +62,8 @@ func (elem *Element) appendHandlers(h ...any) {
 
 // Freeze marks the [Element]'s handlers as final, as [Element.JawsRender] does on
 // return. After Freeze, the handler-mutating methods (AddHandlers, ApplyParams,
-// ApplyGetter) no longer add handlers (debug builds panic). Use this for elements
-// registered for updates without being rendered.
+// ApplyGetter) drop handlers; debug builds panic. Use this for elements registered
+// for updates without being rendered.
 func (elem *Element) Freeze() {
 	elem.frozen.Store(true)
 }

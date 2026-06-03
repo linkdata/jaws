@@ -292,8 +292,8 @@ func Test_wsParse_SanitizesInvalidUTF8InVerbatimData(t *testing.T) {
 
 // stdlibJSONQuote is the standard-library reference for appendJSONQuote: an
 // encoder with HTML escaping disabled, which is the behavior the hand-rolled
-// quoter mimics (and which jsontext.AppendQuote would provide directly once
-// encoding/json/v2 is no longer behind GOEXPERIMENT=jsonv2).
+// quoter mimics (and which jsontext.AppendQuote would provide directly when
+// encoding/json/v2 builds without GOEXPERIMENT=jsonv2).
 func stdlibJSONQuote(s string) []byte {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)

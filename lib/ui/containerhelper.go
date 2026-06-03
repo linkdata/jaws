@@ -13,7 +13,7 @@ import (
 
 // ContainerHelper is a helper for widgets that render dynamic child collections.
 //
-// It tracks previously rendered child elements and performs append/remove/order
+// It tracks already-rendered child elements and performs append/remove/order
 // updates during [ContainerHelper.UpdateContainer].
 //
 // A ContainerHelper belongs to a widget instance and is intended for render-scoped

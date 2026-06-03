@@ -5,7 +5,7 @@
 
 # JaWS
 
-JavaScript and WebSockets used to create responsive webpages.
+JavaScript and WebSockets for creating responsive webpages.
 
 JaWS embraces a "server holds the truth" philosophy and keeps the
 complexity of modern browser applications on the backend. The
@@ -418,10 +418,9 @@ requested during the JavaScript WebSocket HTTP request.
 
 ### Security of the WebSocket callback
 
-Each JaWS request gets a unique 64-bit random value assigned to it when you 
-create the Request object. This value is written to the HTML output so it
-can be read by the JavaScript, and used to construct the WebSocket callback
-URL.
+Each JaWS request gets a unique 64-bit random value assigned to it when you
+create the Request object. This value is written to the HTML output so the
+JavaScript can construct the WebSocket callback URL.
 
 Once the WebSocket call comes in, the value is consumed by that request.
 The same value can only be used again if a later Request receives the same

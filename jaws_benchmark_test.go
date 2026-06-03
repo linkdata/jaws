@@ -10,8 +10,8 @@ import (
 	"github.com/linkdata/jaws/lib/wire"
 )
 
-// benchUI is a minimal comparable UI used to populate a Request with Elements.
-// It is self-contained so the benchmarks compile unchanged against older tags.
+// benchUI is a minimal comparable UI for populating a Request with Elements.
+// It is self-contained so the benchmarks compile unchanged against released tags.
 type benchUI struct{ n int }
 
 func (benchUI) JawsRender(*Element, io.Writer, []any) error { return nil }

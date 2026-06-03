@@ -960,7 +960,7 @@ func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
 }
 
 // getSendMsgs drains the pending wsQueue, dropping messages addressed to elements
-// that no longer exist (non-element messages and Delete are always kept), and
+// that are not present (non-element messages and Delete are always kept), and
 // returns the survivors sorted by Jid. It takes rq.mu (read) then muQueue, the
 // order required by the lock hierarchy documented in jaws.go.
 func (rq *Request) getSendMsgs() (toSend []wire.WsMsg) {
@@ -1263,7 +1263,7 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		rq.cancel(err)
 	} else {
 		// The Request was never claimed (UseRequest not called) or is already
-		// being served; either way its single-use token is no longer valid, so
+		// being served; either way its single-use token is invalid, so
 		// surface an explicit error rather than returning an empty 200 OK.
 		http.Error(w, http.StatusText(http.StatusGone), http.StatusGone)
 	}

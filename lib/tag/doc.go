@@ -1,4 +1,4 @@
-// Package tag expands JaWS tag values into the comparable keys used to find
+// Package tag expands JaWS tag values into comparable keys that identify
 // elements during dirtying, broadcasts and event routing.
 //
 // The runtime tag-comparability check in [TagExpand] is gated on

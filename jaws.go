@@ -180,7 +180,7 @@ type Jaws struct {
 // broadcast channels and update ticker are allocated and the request pool is
 // primed. You must still start the processing loop with [Jaws.Serve] or
 // [Jaws.ServeWithTimeout] on its own goroutine before broadcasting. Call
-// [Jaws.Close] when the instance is no longer needed to free associated resources.
+// [Jaws.Close] when finished with the instance to free associated resources.
 func New() (jw *Jaws, err error) {
 	var serveJS, serveCSS *staticserve.StaticServe
 	if serveJS, err = staticserve.New("/jaws/.jaws.js", assets.JavascriptText); err == nil {
