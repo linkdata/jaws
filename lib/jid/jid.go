@@ -40,6 +40,9 @@ func (j Jid) AppendInt(dst []byte) []byte {
 }
 
 // Append appends the unquoted string format of the Jid.
+//
+// Only positive Jids are appended; Jid(0) (the whole-request id) and
+// negative/invalid Jids append nothing, matching [Jid.AppendInt].
 func (j Jid) Append(dst []byte) []byte {
 	if j > 0 {
 		dst = append(dst, Prefix...)
@@ -49,6 +52,9 @@ func (j Jid) Append(dst []byte) []byte {
 }
 
 // AppendQuote appends the string format of the Jid surrounded by double quotes.
+//
+// Only positive Jids have content between the quotes; Jid(0) (the whole-request
+// id) and negative/invalid Jids yield an empty quoted string ("").
 func (j Jid) AppendQuote(dst []byte) []byte {
 	dst = append(dst, '"')
 	dst = j.Append(dst)
@@ -100,6 +106,9 @@ func ParseString(s string) Jid {
 }
 
 // String returns the unquoted string representation of the Jid.
+//
+// Only positive Jids have a representation; Jid(0) (the whole-request id) and
+// negative/invalid Jids return the empty string.
 func (j Jid) String() string {
 	if j > 0 {
 		return string(j.Append(nil))
