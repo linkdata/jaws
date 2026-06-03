@@ -1,6 +1,7 @@
 [![build](https://github.com/linkdata/jaws/actions/workflows/build.yml/badge.svg)](https://github.com/linkdata/jaws/actions/workflows/build.yml)
 [![coverage](https://github.com/linkdata/jaws/blob/gitcoverage/main/badge.svg)](https://html-preview.github.io/?url=https://github.com/linkdata/jaws/blob/gitcoverage/main/report.html)
 [![goreport](https://goreportcard.com/badge/github.com/linkdata/jaws)](https://goreportcard.com/report/github.com/linkdata/jaws)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/linkdata/jaws/badge)](https://scorecard.dev/viewer/?uri=github.com/linkdata/jaws)
 [![Docs](https://godoc.org/github.com/linkdata/jaws?status.svg)](https://godoc.org/github.com/linkdata/jaws)
 
 # JaWS
