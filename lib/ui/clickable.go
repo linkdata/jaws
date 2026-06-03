@@ -5,7 +5,7 @@ import (
 )
 
 // Clickable returns an object implementing [bind.HTMLGetter], [jaws.ClickHandler]
-// and tag.TagGetter.
+// and [tag.TagGetter].
 //
 // innerHTML is passed to [bind.MakeHTMLGetter], which may or may not provide tags.
 //
