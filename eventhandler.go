@@ -92,6 +92,7 @@ func callEventHandlers(ui any, elem *Element, wht what.What, value string) (err 
 }
 
 // CallEventHandlers calls the event handlers for the given [Element].
+//
 // Recovers from panics in user-provided handlers, returning them as errors.
 func CallEventHandlers(ui any, elem *Element, wht what.What, value string) (err error) {
 	defer func() {
