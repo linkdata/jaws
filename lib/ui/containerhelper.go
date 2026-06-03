@@ -23,8 +23,11 @@ import (
 // Child render/update failures are treated as application bugs. Initial-render
 // errors are returned to the caller, and update-time append render errors are
 // reported through MustLog (which may panic when no logger is configured).
-// After such failures, DOM and request-tracked element state may be partially
-// updated and therefore inconsistent until the next full render/reload.
+// Update-time child reconciliation is intentionally not transactional: queued
+// browser updates cannot be made atomic, and a rollback path would add hot-path
+// bookkeeping for a user-code render failure without providing a strong
+// correctness guarantee. Treat such failures as application bugs and reload or
+// recover at the application level if needed.
 type ContainerHelper struct {
 	Container jaws.Container
 	// tag is the dirty tag, written once during RenderContainer and read on the

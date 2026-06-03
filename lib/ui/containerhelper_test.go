@@ -3,6 +3,8 @@ package ui
 import (
 	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -231,6 +233,94 @@ func (u *testRenderErrorCaptureUI) JawsRender(elem *jaws.Element, w io.Writer, p
 }
 
 func (*testRenderErrorCaptureUI) JawsUpdate(elem *jaws.Element) {}
+
+type benchContainer struct {
+	contents []jaws.UI
+}
+
+func (bc *benchContainer) JawsContains(elem *jaws.Element) []jaws.UI {
+	return bc.contents
+}
+
+type benchChild struct {
+	id int
+}
+
+func (child benchChild) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
+	_, err := io.WriteString(w, `<span>child</span>`)
+	return err
+}
+
+func (benchChild) JawsUpdate(elem *jaws.Element) {}
+
+func benchRequest(b *testing.B) (*jaws.Jaws, *jaws.Request) {
+	b.Helper()
+	jw, err := jaws.New()
+	if err != nil {
+		b.Fatal(err)
+	}
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	if rq == nil {
+		jw.Close()
+		b.Fatal("nil request")
+	}
+	return jw, rq
+}
+
+func benchChildren(start, count int) []jaws.UI {
+	contents := make([]jaws.UI, count)
+	for i := range contents {
+		contents[i] = benchChild{id: start + i}
+	}
+	return contents
+}
+
+func BenchmarkContainerHelperUpdateAppendHeavy(b *testing.B) {
+	b.ReportAllocs()
+	const size = 1000
+	for range b.N {
+		b.StopTimer()
+		jw, rq := benchRequest(b)
+		bc := &benchContainer{}
+		container := NewContainer("div", bc)
+		elem := rq.NewElement(container)
+		if err := elem.JawsRender(io.Discard, nil); err != nil {
+			b.Fatal(err)
+		}
+		bc.contents = benchChildren(0, size)
+		b.StartTimer()
+		container.JawsUpdate(elem)
+		b.StopTimer()
+		jw.Close()
+	}
+}
+
+func BenchmarkContainerHelperUpdateMixed(b *testing.B) {
+	b.ReportAllocs()
+	const size = 1000
+	for range b.N {
+		b.StopTimer()
+		jw, rq := benchRequest(b)
+		bc := &benchContainer{contents: benchChildren(0, size)}
+		container := NewContainer("div", bc)
+		elem := rq.NewElement(container)
+		if err := elem.JawsRender(io.Discard, nil); err != nil {
+			b.Fatal(err)
+		}
+		next := make([]jaws.UI, 0, size)
+		for i := size / 2; i < size; i++ {
+			next = append(next, benchChild{id: i})
+		}
+		for i := size; i < size+size/2; i++ {
+			next = append(next, benchChild{id: i})
+		}
+		bc.contents = next
+		b.StartTimer()
+		container.JawsUpdate(elem)
+		b.StopTimer()
+		jw.Close()
+	}
+}
 
 func TestContainerHelperRenderErrorDoesNotLeakFailedChildElement(t *testing.T) {
 	_, rq := newCoreRequest(t)
