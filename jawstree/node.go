@@ -28,8 +28,11 @@ var (
 // rendered (for example while building it in [New]).
 //
 // marshalJSON is the single source of truth for the wire shape sent to
-// Quercus.js; MarshalJSON delegates to it, so the struct json tags below are not
-// actually used for encoding and must be kept in sync with marshalJSON by hand.
+// Quercus.js; MarshalJSON delegates to it and there is no UnmarshalJSON, so the
+// struct json tags below are documentation only and unused for both encoding and
+// decoding. They cannot all mirror the wire shape: Disabled is tagged "disabled"
+// but is emitted inverted as "selectable":false, so treat marshalJSON as
+// authoritative rather than the tags.
 type Node struct {
 	Tree     *Tree   `json:"-"`                 // owning tree, set by New
 	Parent   *Node   `json:"-"`                 // parent node, nil for root
