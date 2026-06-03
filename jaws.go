@@ -143,7 +143,7 @@ type Jid = jid.Jid // convenience alias
 // [Jaws.Serve] / [Jaws.ServeWithTimeout]. Methods document their own
 // concurrency behavior and may be called concurrently when stated.
 type Jaws struct {
-	CookieName              string          // Name for session cookies, defaults to "jaws"
+	CookieName              string          // Name for session cookies; defaults to a name derived from the executable ([assets.DefaultCookieName]), falling back to "jaws"
 	AutoSession             bool            // Create a session during WebSocket upgrade when a Request has none. Defaults to false.
 	TrustForwardedHeaders   bool            // Trust X-Forwarded-* headers: governs the session cookie Secure flag (X-Forwarded-Proto) and the client IP used for session/request binding (X-Forwarded-For/X-Real-IP). Defaults to false; only enable behind a single reverse proxy you control that sets these headers.
 	Logger                  Logger          // Optional logger to use
@@ -715,6 +715,15 @@ func (jw *Jaws) setDirty(tags []any) {
 //
 // Note that if any of the tags implement [tag.TagGetter], it will be called
 // with a nil [Request]. Prefer using [Request.Dirty] which avoids this.
+//
+// A tag that is comparable statically but not at runtime (a comparable struct
+// holding e.g. a func in an interface field) panics the calling goroutine when
+// hashed as a map key, in non-debug builds where the expansion check is skipped.
+// The panic is contained to the caller (the lock is released and the [Jaws.Serve]
+// loop is unaffected); it is not logged-and-dropped the way [Jaws.Broadcast]
+// handles such a [wire.Message.Dest], because that hashing happens in the Serve
+// goroutine where a panic would crash the process. [Request.Dirty] behaves the
+// same as Dirty here.
 func (jw *Jaws) Dirty(dirtyTags ...any) {
 	// Use TagExpand+MustLog rather than MustTagExpand: with a nil Context the
 	// latter panics on an illegal tag even in production, unlike the sibling
@@ -1134,9 +1143,11 @@ func maybeCompactJSON(in string) string {
 	return in
 }
 
-// jsonControlEscaper turns the raw control bytes that would break WebSocket frame
-// and order framing into their JSON escape sequences. These bytes are illegal
-// unescaped inside a JSON string literal, so escaping them also yields valid JSON.
+// jsonControlEscaper turns control bytes into their JSON escape sequences for the
+// fallback path. \n (frame terminator) and \t (field separator) are the only
+// framing-significant bytes, matching maybeCompactJSON's detection set; \r is
+// escaped solely because a bare \r is illegal inside a JSON string literal, so the
+// fallback output stays valid JSON.
 var jsonControlEscaper = strings.NewReplacer("\t", `\t`, "\n", `\n`, "\r", `\r`)
 
 var whitespaceRemover = strings.NewReplacer(" ", "", "\n", "", "\t", "")

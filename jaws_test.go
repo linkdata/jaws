@@ -330,6 +330,37 @@ func TestJaws_dropNonComparableTags(t *testing.T) {
 	}
 }
 
+// TestJaws_setDirtyPanicReleasesLock verifies the documented defer-unlock in
+// setDirty: a tag comparable statically but not at runtime panics when used as a
+// map key, yet jw.mu is still released so the instance stays usable. The public
+// Dirty path cannot reach this under deadlock.Debug (the -race build), where
+// ensureUsableTag rejects such tags during expansion, so setDirty is exercised
+// directly with a synthetic tag.
+func TestJaws_setDirtyPanicReleasesLock(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	// funcTag is statically comparable (a struct with an interface field) but panics
+	// when hashed because the field holds a func.
+	type funcTag struct{ fn any }
+
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("expected setDirty to panic on a runtime-non-comparable tag")
+			}
+		}()
+		jw.setDirty([]any{funcTag{fn: func() {}}})
+	}()
+
+	// If the deferred Unlock did not run, this second setDirty would deadlock
+	// re-acquiring jw.mu; completing proves the lock was released.
+	jw.setDirty([]any{tag.Tag("ok")})
+}
+
 func TestJaws_MaxPendingRequestsPerIPMaintenanceRemovesPendingIndex(t *testing.T) {
 	jw, err := New()
 	if err != nil {
