@@ -76,3 +76,28 @@ func (tree *Tree) JawsUpdate(elem *jaws.Element) {
 	b = append(b, `}`...)
 	elem.Jaws.JsCall(tree.JawsGetTag(nil), "jawstreeSet", string(b))
 }
+
+// Walk calls fn for the tree root and all descendants while holding the tree read lock.
+//
+// The callback must not call methods that acquire the same tree lock.
+func (tree *Tree) Walk(fn func(jsPath string, node *Node)) {
+	tree.RLock()
+	defer tree.RUnlock()
+	tree.Ptr.Walk("", fn)
+}
+
+// GetSelected returns selected name-paths while holding the tree read lock.
+func (tree *Tree) GetSelected() (nameLists [][]string) {
+	tree.RLock()
+	defer tree.RUnlock()
+	nameLists = tree.Ptr.GetSelected()
+	return
+}
+
+// SetSelected applies selected name-paths while holding the tree write lock.
+func (tree *Tree) SetSelected(nameLists [][]string) (changed []*Node) {
+	tree.Lock()
+	defer tree.Unlock()
+	changed = tree.Ptr.SetSelected(nameLists)
+	return
+}

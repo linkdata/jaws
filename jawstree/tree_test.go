@@ -113,6 +113,90 @@ func TestNode_SelectedDuplicateSiblingNamesCollapse(t *testing.T) {
 	}
 }
 
+func TestTreeSelectionMethods(t *testing.T) {
+	root := &Node{}
+	a := &Node{Name: "a", Parent: root}
+	b := &Node{Name: "b", Parent: root}
+	root.Children = []*Node{a, b}
+
+	var mu deadlock.RWMutex
+	tree := New("tree", ui.NewJsVar(&mu, root))
+
+	changed := tree.SetSelected([][]string{{"b"}})
+	if !reflect.DeepEqual(changed, []*Node{b}) {
+		t.Fatalf("changed = %#v, want %#v", changed, []*Node{b})
+	}
+	if got := tree.GetSelected(); !reflect.DeepEqual(got, [][]string{{"b"}}) {
+		t.Fatalf("selected = %#v, want b", got)
+	}
+
+	var walked []string
+	tree.Walk(func(jsPath string, node *Node) {
+		walked = append(walked, jsPath+":"+node.Name)
+	})
+	if !reflect.DeepEqual(walked, []string{":", "children.0:a", "children.1:b"}) {
+		t.Fatalf("walked = %#v", walked)
+	}
+}
+
+func TestTreeSelectionMethodsConcurrentWithInput(t *testing.T) {
+	jw, err := jaws.New()
+	maybeError(t, err)
+	defer jw.Close()
+
+	go jw.Serve()
+	rq := jawstest.NewTestRequest(jw, nil)
+	if rq == nil {
+		t.Fatal("nil test request")
+	}
+	defer rq.Close()
+
+	root := &Node{Name: "root", Children: []*Node{{Name: "child"}}}
+	var mu deadlock.RWMutex
+	tree := New("tree", ui.NewJsVar(&mu, root))
+	elem := rq.NewElement(tree)
+	var sb strings.Builder
+	maybeError(t, tree.JawsRender(elem, &sb, nil))
+
+	stop := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			case <-rq.OutCh:
+			}
+		}
+	}()
+
+	const iterations = 200
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := range iterations {
+			value := "false"
+			if i%2 == 0 {
+				value = "true"
+			}
+			if err := tree.JawsInput(elem, "children.0.selected="+value); err != nil {
+				t.Errorf("JawsInput: %v", err)
+				return
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range iterations {
+			_ = tree.GetSelected()
+			tree.SetSelected([][]string{{"child"}})
+			tree.SetSelected(nil)
+		}
+	}()
+	wg.Wait()
+	close(stop)
+}
+
 func TestTree(t *testing.T) {
 	jw, err := jaws.New()
 	maybeError(t, err)
