@@ -18,6 +18,8 @@ jobs:
       coverage: ${{ steps.coverage.outputs.coverage }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
@@ -82,6 +84,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Download code coverage
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -89,7 +93,8 @@ jobs:
           name: coverage
 
       - name: Publish code coverage badge (and optional report)
-        uses: linkdata/gitcoverage@06c1ca0d1213b0d95bcdd40059d6b30eab34fcbf # v9
+        uses: linkdata/gitcoverage@1bf12b64aa2ccd19490823de7434cc543dcc13c8 # v10
         with:
           coverage: ${{ needs.build.outputs.coverage }}
           report:   "coveragereport.html.out"
+          token:    ${{ github.token }}
