@@ -17,10 +17,10 @@ jobs:
     outputs:
       coverage: ${{ steps.coverage.outputs.coverage }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: stable
 
@@ -45,7 +45,7 @@ jobs:
           staticcheck ./...
 
       - name: Run Gosec Security Scanner
-        uses: securego/gosec@v2.26.1
+        uses: securego/gosec@4a3bd8af174872c778439083ded7adbf3747e770 # v2.26.1
         with:
           args: ./...
 
@@ -59,14 +59,14 @@ jobs:
           go tool cover -html=coverage.out -o=coveragereport.html.out
 
       - name: Upload code coverage
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: coverage
           path: coveragereport.html.out
           retention-days: 1
 
       - name: Go report card
-        uses: creekorful/goreportcard-action@v1.0
+        uses: creekorful/goreportcard-action@1f35ced8cdac2cba28c9a2f2288a16aacfd507f9 # v1.0
         continue-on-error: true
 
       - name: Build
@@ -78,15 +78,15 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Download code coverage
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: coverage
 
       - name: Publish code coverage badge (and optional report)
-        uses: linkdata/gitcoverage@v9
+        uses: linkdata/gitcoverage@06c1ca0d1213b0d95bcdd40059d6b30eab34fcbf # v9
         with:
           coverage: ${{ needs.build.outputs.coverage }}
           report:   "coveragereport.html.out"
