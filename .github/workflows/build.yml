@@ -93,7 +93,7 @@ jobs:
           name: coverage
 
       - name: Publish code coverage badge (and optional report)
-        uses: linkdata/gitcoverage@1bf12b64aa2ccd19490823de7434cc543dcc13c8 # v10
+        uses: linkdata/gitcoverage@03383ad3a6ff45e117a50d29d21c3a95c2d5d12a # v11
         with:
           coverage: ${{ needs.build.outputs.coverage }}
           report:   "coveragereport.html.out"
