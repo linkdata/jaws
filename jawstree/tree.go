@@ -26,7 +26,9 @@ type Tree struct {
 // otherwise be a confusing render-time "illegal jsvar name" error and a 400 on
 // the init-script route into an immediate, clear failure.
 //
-// New initializes node IDs and tree back-pointers in jsvar.Ptr.
+// New initializes node IDs, tree back-pointers and parent back-pointers in
+// jsvar.Ptr; the name-path API ([Node.HasNames], [Node.GetNames],
+// [Tree.GetSelected], [Tree.SetSelected]) requires the parent back-pointers.
 // It panics if jsvar or jsvar.Ptr is nil, or if id is not a valid name.
 func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	if jsvar == nil {
@@ -45,7 +47,15 @@ func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	for _, opt := range options {
 		t.options |= opt
 	}
-	jsvar.Ptr.Walk("", func(jsPath string, node *Node) { node.ID = jsPath; node.Tree = t })
+	jsvar.Ptr.Walk("", func(jsPath string, node *Node) {
+		node.ID = jsPath
+		node.Tree = t
+		for _, child := range node.Children {
+			if child != nil { // defensive: the gate in JawsSetPath prevents nil children
+				child.Parent = node
+			}
+		}
+	})
 	return
 }
 

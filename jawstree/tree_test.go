@@ -139,6 +139,32 @@ func TestTreeSelectionMethods(t *testing.T) {
 	}
 }
 
+func TestNewSetsParentPointers(t *testing.T) {
+	// A hand-built tree has no Parent back-pointers; New must establish them,
+	// since the name-path API matches nothing without them.
+	root := &Node{Name: "root", Children: []*Node{
+		{Name: "a", Children: []*Node{{Name: "one"}, nil, {Name: "two"}}},
+		{Name: "b"},
+	}}
+	var mu deadlock.RWMutex
+	tree := New("tree", ui.NewJsVar(&mu, root))
+
+	aOne := root.Children[0].Children[0]
+	if got := aOne.GetNames(); !reflect.DeepEqual(got, []string{"a", "one"}) {
+		t.Fatalf("GetNames = %#v, want [a one]", got)
+	}
+	if !aOne.HasNames([]string{"a", "one"}) {
+		t.Fatal("HasNames false for [a one]")
+	}
+	changed := tree.SetSelected([][]string{{"a", "one"}})
+	if !reflect.DeepEqual(changed, []*Node{aOne}) {
+		t.Fatalf("changed = %#v, want %#v", changed, []*Node{aOne})
+	}
+	if got := tree.GetSelected(); !reflect.DeepEqual(got, [][]string{{"a", "one"}}) {
+		t.Fatalf("selected = %#v, want [[a one]]", got)
+	}
+}
+
 func TestTreeSelectionMethodsConcurrentWithInput(t *testing.T) {
 	jw, err := jaws.New()
 	maybeError(t, err)
@@ -185,16 +211,23 @@ func TestTreeSelectionMethodsConcurrentWithInput(t *testing.T) {
 			}
 		}
 	}()
+	var totalChanged int
 	go func() {
 		defer wg.Done()
 		for range iterations {
 			_ = tree.GetSelected()
-			tree.SetSelected([][]string{{"child"}})
+			totalChanged += len(tree.SetSelected([][]string{{"child"}}))
 			tree.SetSelected(nil)
 		}
 	}()
 	wg.Wait()
 	close(stop)
+	// The racing JawsInput goroutine has only iterations/2 "true" writes, so it
+	// cannot pre-select the child ahead of every SetSelected call; if the write
+	// half matches nothing this test passes vacuously, which this catches.
+	if totalChanged == 0 {
+		t.Error("SetSelected changed no nodes")
+	}
 }
 
 func TestTree(t *testing.T) {
