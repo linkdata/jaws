@@ -94,9 +94,17 @@ var _ json.Marshaler = &Node{}
 // JawsSetPath restricts browser-initiated mutations to the per-node "selected" flag.
 //
 // Any other path, a non-bool value, or an out-of-range child index is rejected
-// without mutating the tree, so a WebSocket client cannot change node names, ids,
-// the children slice, or any other [Node] field by path. This is the server-side
-// enforcement of the "server holds the truth" contract for [Tree].
+// with an error matching [ErrPathRejected], without mutating the tree, so a
+// WebSocket client cannot change node names, ids, the children slice, or any
+// other [Node] field by path. This is the server-side enforcement of the
+// "server holds the truth" contract for [Tree].
+//
+// The bare path ".selected" addresses node itself. The standard client never
+// produces it for the root: Quercus.js displays only the root's children, and
+// the client-side variable stripping turns the root's own path into "selected"
+// without the dot, which the gate rejects. The root's Selected flag is
+// therefore server-only; avoid rendering the root selected, since clients
+// cannot change it back through the protocol.
 //
 // The path is resolved by navigating the Children slice ourselves with strict
 // in-range index bounds rather than delegating to the generic JsVar path-setter
@@ -105,11 +113,11 @@ var _ json.Marshaler = &Node{}
 func (node *Node) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err error) {
 	nodePath, ok := strings.CutSuffix(jsPath, ".selected")
 	if !ok {
-		return fmt.Errorf("jawstree: refusing client path-set of %q: only the .selected flag is client-writable", jsPath)
+		return fmt.Errorf("%w of %q: only the .selected flag is client-writable", ErrPathRejected, jsPath)
 	}
 	selected, ok := value.(bool)
 	if !ok {
-		return fmt.Errorf("jawstree: refusing client path-set of %q: expected a bool, got %T", jsPath, value)
+		return fmt.Errorf("%w of %q: expected a bool, got %T", ErrPathRejected, jsPath, value)
 	}
 	var target *Node
 	if target, err = node.resolveChildPath(nodePath); err == nil {
@@ -133,12 +141,12 @@ func (node *Node) resolveChildPath(nodePath string) (*Node, error) {
 		var seg, idxStr string
 		seg, nodePath, _ = strings.Cut(nodePath, ".")
 		if seg != "children" {
-			return nil, fmt.Errorf("jawstree: refusing client path-set: unexpected path segment %q", seg)
+			return nil, fmt.Errorf("%w: unexpected path segment %q", ErrPathRejected, seg)
 		}
 		idxStr, nodePath, _ = strings.Cut(nodePath, ".")
 		idx, err := strconv.Atoi(idxStr)
 		if err != nil || idx < 0 || idx >= len(cur.Children) || cur.Children[idx] == nil {
-			return nil, fmt.Errorf("jawstree: refusing client path-set: child index %q out of range", idxStr)
+			return nil, fmt.Errorf("%w: child index %q out of range", ErrPathRejected, idxStr)
 		}
 		cur = cur.Children[idx]
 	}

@@ -67,8 +67,8 @@ func TestNode_JawsSetPath_Gate(t *testing.T) {
 
 	t.Run("rejects non-selected path", func(t *testing.T) {
 		root := newTree()
-		if err := root.JawsSetPath(nil, "children.0.name", "renamed"); err == nil {
-			t.Error("expected an error for a non-.selected path")
+		if err := root.JawsSetPath(nil, "children.0.name", "renamed"); !errors.Is(err, jawstree.ErrPathRejected) {
+			t.Errorf("expected ErrPathRejected for a non-.selected path, got %v", err)
 		}
 		if got := root.Children[0].Name; got != "child" {
 			t.Errorf("name was mutated to %q", got)
@@ -77,11 +77,28 @@ func TestNode_JawsSetPath_Gate(t *testing.T) {
 
 	t.Run("rejects non-bool value", func(t *testing.T) {
 		root := newTree()
-		if err := root.JawsSetPath(nil, "children.0.selected", "true"); err == nil {
-			t.Error("expected an error for a non-bool .selected value")
+		if err := root.JawsSetPath(nil, "children.0.selected", "true"); !errors.Is(err, jawstree.ErrPathRejected) {
+			t.Errorf("expected ErrPathRejected for a non-bool .selected value, got %v", err)
 		}
 		if root.Children[0].Selected {
 			t.Error("selected was mutated by a non-bool value")
+		}
+	})
+
+	// The bare ".selected" path resolves to the receiving node itself (the
+	// root). The standard client never produces it (it sends "selected"
+	// without the dot for the root, which the gate rejects), but the gate
+	// accepts it from a hand-crafted frame.
+	t.Run("bare .selected path addresses the root", func(t *testing.T) {
+		root := newTree()
+		if err := root.JawsSetPath(nil, ".selected", true); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !root.Selected {
+			t.Error("root selected was not set")
+		}
+		if err := root.JawsSetPath(nil, "selected", true); !errors.Is(err, jawstree.ErrPathRejected) {
+			t.Errorf("expected ErrPathRejected for the dotless root path, got %v", err)
 		}
 	})
 
@@ -112,8 +129,8 @@ func TestNode_JawsSetPath_Gate(t *testing.T) {
 		} {
 			root := newTree()
 			before := len(root.Children)
-			if err := root.JawsSetPath(nil, path, true); err == nil {
-				t.Errorf("path %q: expected an error, got nil", path)
+			if err := root.JawsSetPath(nil, path, true); !errors.Is(err, jawstree.ErrPathRejected) {
+				t.Errorf("path %q: expected ErrPathRejected, got %v", path, err)
 			}
 			if got := len(root.Children); got != before {
 				t.Errorf("path %q: Children grew from %d to %d", path, before, got)
