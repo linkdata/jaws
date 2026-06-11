@@ -84,3 +84,47 @@ assets
 
 Page templates rendered through `ui.Handler` should include `{{$.HeadHTML}}`
 inside `<head>` and `{{$.TailHTML}}` before the closing `</body>` tag.
+
+## Using the tree widget
+
+Build a `Node` tree (by hand, or from a directory with `Root`), wrap its root
+in a `ui.JsVar`, and pass that to `New`. `New` initializes node IDs and the
+tree and parent back-pointers, so it must be called before rendering or using
+the name-path selection API:
+
+```go
+var mu sync.RWMutex
+root := &jawstree.Node{Children: []*jawstree.Node{
+	{Name: "Documents", Children: []*jawstree.Node{{Name: "report.pdf"}}},
+	{Name: "Pictures"},
+}}
+tree := jawstree.New("mytree", ui.NewJsVar(&mu, root), jawstree.InitiallyExpanded)
+mux.Handle("GET /", ui.Handler(jw, "index.html", tree))
+```
+
+In the page template, render the tree (it emits a hidden data element and the
+init script) and provide a container element whose HTML id equals the tree id;
+Quercus.js renders the tree into that container, and without it the tree
+silently fails to appear:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>{{$.HeadHTML}}</head>
+<body>
+  {{$.NewUI .Dot}}
+  <div id="mytree"></div>
+  {{$.TailHTML}}
+</body>
+</html>
+```
+
+Selections made in the browser are applied to the `Node` tree under the
+`ui.JsVar` lock; read them with `Tree.GetSelected` or change them with
+`Tree.SetSelected`. After mutating the tree server-side, push the new state to
+all clients by dirtying the JsVar's bound pointer:
+
+```go
+tree.SetSelected([][]string{{"Documents", "report.pdf"}})
+jw.Dirty(root)
+```

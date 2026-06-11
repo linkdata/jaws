@@ -12,7 +12,8 @@ type RWLocker interface {
 // AsRWLocker returns an [RWLocker] backed by l.
 //
 // If l already implements [RWLocker] it is returned unchanged; otherwise its
-// Lock and Unlock are used for both read and write locking.
+// Lock and Unlock are used for both read and write locking. A nil l yields an
+// RWLocker that panics when locked.
 func AsRWLocker(l sync.Locker) RWLocker {
 	if rl, ok := l.(RWLocker); ok {
 		return rl

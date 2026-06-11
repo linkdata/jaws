@@ -44,6 +44,11 @@ type PathSetter interface {
 	// JawsSetPath should set the JSON object member identified by jsPath to the given value.
 	//
 	// If the member is already the given value, it should return [jaws.ErrValueUnchanged].
+	//
+	// When a [JsVar]'s bound value (Ptr) implements PathSetter, the JsVar
+	// delegates to it while holding the JsVar write lock. Such an
+	// implementation must not lock or unlock the JsVar, nor call its locked
+	// accessors such as [JsVar.JawsGet] or [JsVar.JawsSet].
 	JawsSetPath(elem *jaws.Element, jsPath string, value any) (err error)
 }
 
@@ -52,6 +57,10 @@ type PathSetter interface {
 type SetPather interface {
 	// JawsPathSet notifies that a JSON object member identified by jsPath has been set
 	// to the given value and the change has been queued for broadcast.
+	//
+	// Unlike [PathSetter.JawsSetPath], a [JsVar] calls this after releasing
+	// its lock, so locking the JsVar or calling its locked accessors is
+	// allowed here.
 	JawsPathSet(elem *jaws.Element, jsPath string, value any)
 }
 

@@ -431,8 +431,9 @@ func (jw *Jaws) nonZeroRandomLocked() (value uint64) {
 // associated [Request], and then call its [Request.ServeHTTP] method to process the
 // WebSocket messages.
 //
-// Returns nil if the key was not found or the IP doesn't match, in which
-// case you should return an HTTP "404 Not Found" status.
+// Returns nil if the key was not found, the request was already claimed by an
+// earlier WebSocket callback, or the IP doesn't match, in which case you
+// should return an HTTP "404 Not Found" status.
 func (jw *Jaws) UseRequest(jawsKey uint64, r *http.Request) (rq *Request) {
 	if jawsKey != 0 {
 		var err error
@@ -535,6 +536,10 @@ func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 // The IP comparison is the same loopback-aware, optionally forwarded-header-based
 // match used everywhere else; see [Jaws.GetSession] and [Jaws.TrustForwardedHeaders]
 // for the reverse-proxy caveat.
+//
+// As a side effect, the session cookie is also added to r itself, so the new
+// [Session] is visible to [Jaws.GetSession] and [Jaws.NewRequest] for the
+// remainder of the same HTTP request.
 func (jw *Jaws) NewSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
 	if r != nil {
 		if oldSess := jw.GetSession(r); oldSess != nil {
@@ -613,6 +618,10 @@ func (jw *Jaws) SecureHeadersMiddleware(next http.Handler) http.Handler {
 // If one of the resources is named "favicon", its URL will be stored and can
 // be retrieved using [Jaws.FaviconURL].
 //
+// If one or more URLs in extra fail to parse, GenerateHeadHTML still installs
+// the regenerated head HTML and Content-Security-Policy with the failing
+// resources omitted, and returns the joined parse errors.
+//
 // You only need to call this if you add your own images, scripts and stylesheets.
 func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 	var jawsurl *url.URL
@@ -654,6 +663,11 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 // internal broadcast channel fills.
 //
 // All convenience helpers on [Jaws] that call Broadcast inherit this requirement.
+//
+// A [wire.Message.Dest] that cannot be expanded into tags (an illegal tag type)
+// is reported through [Jaws.MustLog], which panics when no [Jaws.Logger] is
+// set; with a Logger the error is logged and the message is sent to the
+// destinations that did expand.
 func (jw *Jaws) Broadcast(msg wire.Message) {
 	switch msg.Dest.(type) {
 	case nil: // send to all requests

@@ -24,6 +24,13 @@ import (
 // WebSocket messages on InCh, read outbound messages from OutCh, and inject
 // broadcasts on BcastCh. ReadyCh is closed once the loop is running and DoneCh
 // once it has stopped.
+//
+// OutCh is buffered but must be drained: a test that produces more outbound
+// messages than the buffer holds without reading OutCh stalls the loop, and a
+// wait on DoneCh after [TestRequest.Close] then never completes.
+//
+// Recorder is a sink for the test's own rendering, for example as the Writer
+// of a ui.RequestWriter; nothing in the harness writes to it.
 type TestRequest struct {
 	*jaws.Request
 	Recorder *httptest.ResponseRecorder
@@ -72,7 +79,10 @@ func NewTestRequest(jw *jaws.Jaws, r *http.Request) *TestRequest {
 	return tr
 }
 
-// Close stops the test request's processing loop.
+// Close stops the test request's processing loop by closing InCh.
+//
+// It does not wait for the loop to stop; wait on DoneCh for that. Calling
+// Close more than once panics.
 func (tr *TestRequest) Close() {
 	close(tr.InCh)
 }

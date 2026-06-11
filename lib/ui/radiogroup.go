@@ -44,6 +44,9 @@ func (st *radioState) radioElem() *jaws.Element {
 }
 
 // Radio renders an HTML input element of type radio.
+//
+// Render errors are reported through [jaws.Jaws.MustLog], which panics when
+// no [jaws.Jaws.Logger] is configured.
 func (re RadioElement) Radio(params ...any) template.HTML {
 	radio := re.st.radioElem()
 	var sb strings.Builder
@@ -52,6 +55,9 @@ func (re RadioElement) Radio(params ...any) template.HTML {
 }
 
 // Label renders an HTML label element.
+//
+// Render errors are reported through [jaws.Jaws.MustLog], which panics when
+// no [jaws.Jaws.Logger] is configured.
 func (re RadioElement) Label(params ...any) template.HTML {
 	radio := re.st.radioElem()
 	if re.st.label == nil {

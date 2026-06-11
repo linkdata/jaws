@@ -184,11 +184,13 @@ func (rq *Request) ensureAutoSession(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// clearLocked resets every field of rq to its zero state so it can be reused
-// from the Jaws request pool: it cancels any live context, drops queued dirt and
-// messages, detaches all elements and tags, and kills any attached session. It
-// runs when rq is freshly allocated or being recycled, so the caller must ensure
-// no other goroutine is using rq.
+// clearLocked resets rq so it can be reused from the Jaws request pool: it
+// cancels any live context, drops queued dirt and messages, detaches all
+// elements and tags, and kills any attached session. Every field is reset to
+// its zero state except ctx and cancelFn, which keep their (cancelled) values
+// until getRequestLocked replaces them on reuse. It runs when rq is freshly
+// allocated or being recycled, so the caller must ensure no other goroutine is
+// using rq.
 func (rq *Request) clearLocked() *Request {
 	rq.JawsKey = 0
 	rq.lastJid = 0

@@ -3,6 +3,9 @@ package jawstree
 // Option configures a [Tree].
 type Option int
 
+// The bit positions below are wired one-to-one to the literal bit tests in
+// jawstreeNew (assets/jawstree.js); do not reorder or insert constants
+// mid-block without updating that script.
 const (
 	// SearchEnabled enables tree search controls.
 	SearchEnabled Option = (1 << iota)

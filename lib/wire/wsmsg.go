@@ -76,6 +76,10 @@ type WsMsg struct {
 }
 
 // Append appends m in wire format to b and returns the extended buffer.
+//
+// For [what.Set] and [what.Call] messages, and whenever Jid is negative, Data
+// is written verbatim: the caller must ensure it contains no tab or newline
+// bytes, which would corrupt the frame. All other Data is JSON-quoted.
 func (m *WsMsg) Append(b []byte) []byte {
 	b = append(b, m.What.String()...)
 	b = append(b, '\t')

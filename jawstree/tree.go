@@ -30,6 +30,11 @@ type Tree struct {
 // jsvar.Ptr; the name-path API ([Node.HasNames], [Node.GetNames],
 // [Tree.GetSelected], [Tree.SetSelected]) requires the parent back-pointers.
 // It panics if jsvar or jsvar.Ptr is nil, or if id is not a valid name.
+//
+// The rendered page must contain an element whose HTML id equals id (for
+// example <div id="mytree"></div>): Quercus.js renders the tree into that
+// container. If it is missing, the tree silently fails to appear; the only
+// signal is a browser console error, with nothing reported server-side.
 func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	if jsvar == nil {
 		panic("jawstree.New: jsvar must not be nil")

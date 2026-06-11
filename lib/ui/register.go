@@ -14,7 +14,9 @@ type Register struct{ jaws.Updater }
 // NewRegister returns an update-only widget that invokes updater during updates.
 func NewRegister(updater jaws.Updater) Register { return Register{Updater: updater} }
 
-// JawsRender renders no HTML for update-only registration.
+// JawsRender renders no HTML for update-only registration. It ignores params;
+// to attach extra tags or event handlers, use [RequestWriter.Register], which
+// applies them before the element is frozen.
 func (u Register) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
 	return nil
 }

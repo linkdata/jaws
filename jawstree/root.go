@@ -8,7 +8,9 @@ import (
 )
 
 // Root builds a root node from an [os.Root]. If filterFn is not nil, it must return true
-// for a directory entry to be included in the tree.
+// for a directory entry to be included in the tree. Entries that are neither
+// regular files nor directories (such as symbolic links) are always excluded,
+// regardless of filterFn.
 //
 // Building the tree is best-effort: if one or more directories cannot be read,
 // Root returns the tree built from the readable entries together with a non-nil
