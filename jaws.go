@@ -1204,6 +1204,21 @@ func (jw *Jaws) recycle(rq *Request) {
 	jw.recycleLocked(rq)
 }
 
+// cancelIfCurrent cancels rq only if it is still the [Request] registered for
+// jawsKey. A caller that looks up a Request and later cancels it without holding
+// jw.mu in between (the /jaws/.tail write-error path in [Jaws.ServeHTTP]) holds
+// a pointer that may have been recycled and reused for a different connection,
+// and cancelling such a stale pointer would kill the unrelated new request.
+// Holding jw.mu across the cancel keeps the identity check valid, since
+// recycling requires the jw.mu write lock.
+func (jw *Jaws) cancelIfCurrent(jawsKey uint64, rq *Request, err error) {
+	jw.mu.RLock()
+	defer jw.mu.RUnlock()
+	if jw.requests[jawsKey] == rq {
+		rq.cancel(err)
+	}
+}
+
 var headerCacheControlNoStore = []string{"no-store"}
 
 // ServeHTTP can handle the required JaWS endpoints, which all start with "/jaws/".
@@ -1238,7 +1253,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					jw.mu.RUnlock()
 					if rq != nil {
 						if err := rq.writeTailScriptResponse(w); err != nil {
-							rq.cancel(err)
+							jw.cancelIfCurrent(jawsKey, rq, err)
 						}
 						return
 					}

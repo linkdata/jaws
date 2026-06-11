@@ -270,7 +270,10 @@ func (rq *Request) writeTailScript(w io.Writer) (sent bool, err error) {
 	// are per-Request, the client already controls its own DOM, and the WebSocket
 	// re-applies the authoritative state on connect. (The data race on
 	// wsQueue/tailsent itself is still prevented: clearLocked takes muQueue to reset
-	// them.)
+	// them.) The write-error path, by contrast, is guarded: Jaws.ServeHTTP cancels
+	// through Jaws.cancelIfCurrent, since cancelling a stale pointer would have
+	// real server-side impact — it would kill the unrelated connection that
+	// reused the pooled Request.
 	if !rq.tailsent {
 		rq.tailsent = true
 		sent = true

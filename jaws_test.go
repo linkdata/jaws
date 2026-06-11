@@ -1364,6 +1364,30 @@ func TestServeHTTP_TailScript_WriteError(t *testing.T) {
 	is.Equal(w.Header()["Content-Type"], headerContentTypeJavaScript)
 	is.Equal(w.Header()["Cache-Control"], headerCacheControlNoStore)
 	is.Equal(jw.RequestCount(), 1)
+	is.Equal(rq.Context().Err() != nil, true)
+}
+
+func TestJaws_cancelIfCurrent_IgnoresStaleRequest(t *testing.T) {
+	is := newTestHelper(t)
+	jw, _ := New()
+	go jw.Serve()
+	defer jw.Close()
+
+	stale := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	jawsKey := stale.JawsKey
+
+	// The /jaws/.tail handler snapshots the Request before writing the response;
+	// recycle the snapshot and create a new request so the pool can hand the
+	// stale pointer to a different connection, as can happen before a write
+	// error triggers a cancel.
+	jw.recycle(stale)
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+
+	jw.cancelIfCurrent(jawsKey, stale, errors.New("write failed"))
+
+	// Whether or not the pool reused the object for rq (it normally does here,
+	// which is exactly the stale-cancel scenario), rq must stay live.
+	is.NoErr(rq.Context().Err())
 }
 
 func TestJaws_Session(t *testing.T) {
