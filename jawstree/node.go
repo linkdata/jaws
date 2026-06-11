@@ -35,7 +35,7 @@ var (
 // authoritative rather than the tags.
 type Node struct {
 	Tree     *Tree   `json:"-"`                 // owning tree, set by New
-	Parent   *Node   `json:"-"`                 // parent node, nil for root
+	Parent   *Node   `json:"-"`                 // parent node, set by New, nil for root
 	Name     string  `json:"name"`              // display name
 	ID       string  `json:"id,omitzero"`       // JSON path ID, set by New
 	Selected bool    `json:"selected,omitzero"` // selected state
