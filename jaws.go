@@ -1164,6 +1164,8 @@ func (jw *Jaws) JsCall(target any, jsfunc, jsonstr string) {
 // avoid recomputing jw.clientIP(r). Caller must hold jw.mu.
 func (jw *Jaws) getRequestLocked(jawsKey uint64, r *http.Request, remoteIP netip.Addr) (rq *Request) {
 	rq = jw.reqPool.Get().(*Request)
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
 	rq.JawsKey = jawsKey
 	rq.lastWrite = time.Now()
 	rq.initial = r
