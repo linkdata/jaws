@@ -1551,8 +1551,10 @@ func TestCoverage_RequestMaintenanceClaimAndErrors(t *testing.T) {
 	rqA := jw.NewRequest(hrA)
 	hrB := httptest.NewRequest("GET", "/", nil)
 	hrB.RemoteAddr = "2.2.2.2:4321"
-	if err := rqA.claim(hrB); err == nil {
-		t.Fatal("expected ip mismatch error")
+	if err := rqA.claim(hrB); !errors.Is(err, ErrWebSocketIPMismatch) {
+		t.Fatalf("expected ErrWebSocketIPMismatch, got %v", err)
+	} else if !strings.Contains(err.Error(), `expected IP "1.2.3.4", got "2.2.2.2"`) {
+		t.Fatalf("unexpected error text: %v", err)
 	}
 
 	now := time.Now()

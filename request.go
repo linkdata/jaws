@@ -111,7 +111,8 @@ func (rq *Request) String() string {
 // verifies the client IP matches, then atomically marks the request claimed and
 // layers a fresh cancelable context over the current one (preserving any context
 // installed via SetContext, whose cancelFn is still chained so it runs on
-// cleanup). Returns ErrRequestAlreadyClaimed if it was already claimed.
+// cleanup). Returns [ErrWebSocketIPMismatch] if the client IP does not match,
+// or [ErrRequestAlreadyClaimed] if it was already claimed.
 func (rq *Request) claim(r *http.Request) error {
 	if !rq.claimed.Load() {
 		var actualIP netip.Addr
@@ -123,7 +124,7 @@ func (rq *Request) claim(r *http.Request) error {
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
 		if !equalIP(rq.remoteIP, actualIP) {
-			return fmt.Errorf("/jaws/%s: expected IP %q, got %q", rq.JawsKeyString(), rq.remoteIP.String(), actualIP.String())
+			return newErrWebSocketIPMismatchLocked(rq, actualIP)
 		}
 		if rq.claimed.CompareAndSwap(false, true) {
 			// Layer a fresh cancelable context over the current one (which may
