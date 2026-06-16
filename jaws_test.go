@@ -1092,6 +1092,73 @@ func TestJaws_ServeWithTimeoutBounds(t *testing.T) {
 	}
 }
 
+func waitForServeLoop(t *testing.T, jw *Jaws) {
+	t.Helper()
+	for i := 0; i <= cap(jw.subCh); i++ {
+		select {
+		case jw.subCh <- subscription{}:
+		case <-jw.Done():
+			t.Fatal("jaws closed before serve loop was ready")
+		case <-time.After(time.Second):
+			t.Fatal("timeout waiting for serve loop to drain subscriptions")
+		}
+	}
+}
+
+func TestJaws_ServeWithTimeoutRejectsDuplicateLoop(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	const firstTimeout = time.Hour
+	firstDone := make(chan struct{})
+	go func() {
+		jw.ServeWithTimeout(firstTimeout)
+		close(firstDone)
+	}()
+	waitForServeLoop(t, jw)
+
+	logger := &captureErrorLogger{}
+	jw.Logger = logger
+	secondDone := make(chan any, 1)
+	go func() {
+		defer func() {
+			secondDone <- recover()
+		}()
+		jw.ServeWithTimeout(time.Nanosecond)
+	}()
+
+	select {
+	case recovered := <-secondDone:
+		if deadlock.Debug {
+			err, ok := recovered.(error)
+			if !ok || !errors.Is(err, ErrServeAlreadyRunning) {
+				t.Fatalf("duplicate ServeWithTimeout panic = %v, want ErrServeAlreadyRunning", recovered)
+			}
+		} else if recovered != nil {
+			t.Fatalf("duplicate ServeWithTimeout panicked in production mode: %v", recovered)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("duplicate ServeWithTimeout did not return promptly")
+	}
+
+	if !errors.Is(logger.err, ErrServeAlreadyRunning) {
+		t.Fatalf("logged error = %v, want ErrServeAlreadyRunning", logger.err)
+	}
+	if got := jw.getWebSocketTimeout(); got != firstTimeout {
+		t.Fatalf("webSocketTimeout = %v, want %v", got, firstTimeout)
+	}
+
+	jw.Close()
+	select {
+	case <-firstDone:
+	case <-time.After(time.Second):
+		t.Fatal("first ServeWithTimeout did not stop after Close")
+	}
+}
+
 func TestJaws_ServeWithTimeoutFullSubscriberChannel(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		jw, err := New()

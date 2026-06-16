@@ -20,7 +20,10 @@
 // Request.muQueue and per-[Element] state are leaf locks taken below all of the
 // above. Blocking work (channel sends, user callbacks) is always performed after
 // snapshotting the needed state and releasing the relevant lock; see
-// [Session.Broadcast] and [Session.Close] for the canonical pattern.
+// [Session.Broadcast] and [Session.Close] for the canonical pattern. The
+// [Request.SetContext] transform is the deliberate exception: it runs while
+// holding Request.mu so the read-modify-write is atomic, and therefore must not
+// call back into the same Request or block.
 //
 // UI value and widget types in the subpackages carry their own leaf locks that
 // guard the bound value: the binders in [github.com/linkdata/jaws/lib/bind], the
@@ -157,6 +160,7 @@ type Jaws struct {
 	subCh                   chan subscription
 	unsubCh                 chan chan wire.Message
 	updateTicker            *time.Ticker
+	serving                 atomic.Bool
 	reqPool                 sync.Pool
 	serveJS                 *staticserve.StaticServe
 	serveCSS                *staticserve.StaticServe
@@ -889,6 +893,12 @@ func (jw *Jaws) getWebSocketTimeout() (t time.Duration) {
 // It is intended to run on its own goroutine.
 // It returns when [Jaws.Close] is called.
 func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
+	if !jw.serving.CompareAndSwap(false, true) {
+		jw.reportMisuse(ErrServeAlreadyRunning)
+		return
+	}
+	defer jw.serving.Store(false)
+
 	const minInterval = time.Millisecond * 10
 	const maxInterval = time.Second
 	maintenanceInterval := min(requestTimeout/2, maxInterval)
