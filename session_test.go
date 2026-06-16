@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/linkdata/jaws/lib/key"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
@@ -21,7 +22,7 @@ func TestSession_Object(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
 
-	sessionId := Key(0x12345)
+	sessionId := key.Key(0x12345)
 	var sess *Session
 	// Set/Get on nil Session is ignored
 	sess.Set("foo", "bar")
@@ -259,7 +260,7 @@ func TestSession_Requests(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
 
-	sessionId := Key(0x12345)
+	sessionId := key.Key(0x12345)
 	sess := newSession(jw, sessionId, netip.Addr{}, false)
 	if x := sess.Requests(); x != nil {
 		t.Error(x)

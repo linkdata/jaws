@@ -22,6 +22,7 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/lib/assets"
+	"github.com/linkdata/jaws/lib/key"
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
@@ -957,8 +958,8 @@ func TestCoverage_IDAndLookupHelpers(t *testing.T) {
 
 func TestCoverage_CookieParseAndIP(t *testing.T) {
 	h := http.Header{}
-	h.Add("Cookie", `a=1; jaws=`+Key(11).String()+`; x=2`)
-	h.Add("Cookie", `jaws="`+Key(12).String()+`"`)
+	h.Add("Cookie", `a=1; jaws=`+key.Key(11).String()+`; x=2`)
+	h.Add("Cookie", `jaws="`+key.Key(12).String()+`"`)
 	h.Add("Cookie", `jaws=not-a-key`)
 
 	ids := getCookieSessionsIDs(h, "jaws")

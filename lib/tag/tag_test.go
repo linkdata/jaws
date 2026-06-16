@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/lib/key"
 )
 
 type testSelfTagger struct{}
@@ -170,6 +171,7 @@ func TestTagExpand_IllegalTypesPanic(t *testing.T) {
 		uint16(8),
 		uint32(9),
 		uint64(10),
+		key.Key(11),
 		float32(11),
 		float64(12),
 		bool(true),
@@ -406,6 +408,7 @@ func TestTagExpand_IllegalTypesAsErrors(t *testing.T) {
 		{name: "uint16", tag: uint16(8), wantErr: ErrIllegalTagType},
 		{name: "uint32", tag: uint32(9), wantErr: ErrIllegalTagType},
 		{name: "uint64", tag: uint64(10), wantErr: ErrIllegalTagType},
+		{name: "key.Key", tag: key.Key(11), wantErr: ErrIllegalTagType},
 		{name: "float32", tag: float32(1), wantErr: ErrIllegalTagType},
 		{name: "float64", tag: float64(2), wantErr: ErrIllegalTagType},
 		{name: "bool", tag: true, wantErr: ErrIllegalTagType},

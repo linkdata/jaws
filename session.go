@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/lib/key"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
@@ -18,7 +19,7 @@ import (
 // or do nothing.
 type Session struct {
 	jw        *Jaws
-	sessionID Key
+	sessionID key.Key
 	remoteIP  netip.Addr
 	mu        deadlock.RWMutex // protects following
 	requests  []*Request
@@ -27,7 +28,7 @@ type Session struct {
 	data      map[string]any
 }
 
-func newSession(jw *Jaws, sessionID Key, remoteIP netip.Addr, secure bool) *Session {
+func newSession(jw *Jaws, sessionID key.Key, remoteIP netip.Addr, secure bool) *Session {
 	return &Session{
 		jw:        jw,
 		sessionID: sessionID,

@@ -1,10 +1,9 @@
-package jaws
+// Package key implements JaWS key encoding.
+package key
 
 import (
 	"strconv"
 	"strings"
-
-	"github.com/linkdata/jaws/lib/tag"
 )
 
 // Key identifies a JaWS request or session.
@@ -15,14 +14,14 @@ type Key uint64
 
 // String returns key in the text form used by JaWS.
 func (key Key) String() string {
-	return string(appendKey(nil, key))
+	return string(Append(nil, key))
 }
 
-// ParseKey parses a JaWS key from its text form.
+// Parse parses a JaWS key from its text form.
 //
 // Any trailing "/..." path suffix is ignored. It returns zero if s does not
 // contain a valid base-32 key.
-func ParseKey(s string) Key {
+func Parse(s string) Key {
 	slashIdx := strings.IndexByte(s, '/')
 	if slashIdx < 0 {
 		slashIdx = len(s)
@@ -33,12 +32,8 @@ func ParseKey(s string) Key {
 	return 0
 }
 
-// JawsGetTag prevents a Key from being used as an application tag.
-func (key Key) JawsGetTag(tag.Context) any {
-	return uint64(key)
-}
-
-func appendKey(b []byte, key Key) []byte {
+// Append appends key in the text form used by JaWS to b.
+func Append(b []byte, key Key) []byte {
 	if key != 0 {
 		b = strconv.AppendUint(b, uint64(key), 32)
 	}

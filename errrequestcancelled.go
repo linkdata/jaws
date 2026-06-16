@@ -1,12 +1,16 @@
 package jaws
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/linkdata/jaws/lib/key"
+)
 
 // ErrRequestCancelled indicates a Request was cancelled. Use Unwrap() to see the underlying cause.
 var ErrRequestCancelled errRequestCancelled
 
 type errRequestCancelled struct {
-	JawsKey Key
+	JawsKey key.Key
 	Cause   error
 	Initial string
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/lib/key"
 )
 
 // Tag is a simple comparable tag value.
@@ -182,7 +183,7 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 		return result, nil
 	case string, template.HTML, template.HTMLAttr,
 		int, int8, int16, int32, int64,
-		uint, uint8, uint16, uint32, uint64,
+		uint, uint8, uint16, uint32, uint64, key.Key,
 		float32, float64, bool:
 		return result, errIllegalTagType{tag: tag}
 	default:

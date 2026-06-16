@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/linkdata/jaws/lib/key"
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
@@ -160,7 +161,7 @@ func BenchmarkDistributeDirt(b *testing.B) {
 			for i := range reqs {
 				rq := &Request{Jaws: jw}
 				reqs[i] = rq
-				jw.requests[Key(i+1)] = rq
+				jw.requests[key.Key(i+1)] = rq
 			}
 			jw.mu.Unlock()
 
