@@ -160,7 +160,7 @@ func BenchmarkDistributeDirt(b *testing.B) {
 			for i := range reqs {
 				rq := &Request{Jaws: jw}
 				reqs[i] = rq
-				jw.requests[uint64(i+1)] = rq
+				jw.requests[Key(i+1)] = rq
 			}
 			jw.mu.Unlock()
 

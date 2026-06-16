@@ -5,7 +5,6 @@ import (
 	"mime"
 	"net/url"
 	"path"
-	"strconv"
 	"strings"
 
 	"github.com/linkdata/jaws/lib/htmlio"
@@ -20,35 +19,6 @@ var JavascriptText []byte
 //
 //go:embed jaws.css
 var JawsCSS []byte
-
-// JawsKeyAppend appends the JaWS key as a base-32 string to the buffer.
-//
-// A zero key appends nothing. The encoding pairs with [JawsKeyValue].
-func JawsKeyAppend(b []byte, jawsKey uint64) []byte {
-	if jawsKey != 0 {
-		b = strconv.AppendUint(b, jawsKey, 32)
-	}
-	return b
-}
-
-// JawsKeyString returns the string to be used for the given JaWS key.
-func JawsKeyString(jawsKey uint64) string {
-	return string(JawsKeyAppend(nil, jawsKey))
-}
-
-// JawsKeyValue parses a base-32 key string, as returned by [JawsKeyString], into
-// a uint64. Any trailing "/..." path suffix is ignored. Returns 0 if the key
-// cannot be parsed.
-func JawsKeyValue(jawsKey string) uint64 {
-	slashIdx := strings.IndexByte(jawsKey, '/')
-	if slashIdx < 0 {
-		slashIdx = len(jawsKey)
-	}
-	if val, err := strconv.ParseUint(jawsKey[:slashIdx], 32, 64); err == nil {
-		return val
-	}
-	return 0
-}
 
 // PreloadHTML returns HTML code to load the given resources efficiently.
 //

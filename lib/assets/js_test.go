@@ -113,35 +113,6 @@ func Test_PreloadHTML(t *testing.T) {
 	}
 }
 
-func TestJawsKeyString(t *testing.T) {
-	if got := JawsKeyString(0); got != "" {
-		t.Fatalf("JawsKeyString(0) = %q, want empty", got)
-	}
-	if got := JawsKeyString(1); got != "1" {
-		t.Fatalf("JawsKeyString(1) = %q, want %q", got, "1")
-	}
-}
-
-func TestJawsKeyValue(t *testing.T) {
-	tests := []struct {
-		name    string
-		jawsKey string
-		want    uint64
-	}{
-		{name: "blank", jawsKey: "", want: 0},
-		{name: "1", jawsKey: "1", want: 1},
-		{name: "-1", jawsKey: "-1", want: 0},
-		{name: "2/", jawsKey: "2/", want: 2},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := JawsKeyValue(tt.jawsKey); got != tt.want {
-				t.Errorf("JawsKeyValue() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func runJawsJSSnippet(t *testing.T, snippet string) string {
 	t.Helper()
 

@@ -957,8 +957,8 @@ func TestCoverage_IDAndLookupHelpers(t *testing.T) {
 
 func TestCoverage_CookieParseAndIP(t *testing.T) {
 	h := http.Header{}
-	h.Add("Cookie", `a=1; jaws=`+assets.JawsKeyString(11)+`; x=2`)
-	h.Add("Cookie", `jaws="`+assets.JawsKeyString(12)+`"`)
+	h.Add("Cookie", `a=1; jaws=`+Key(11).String()+`; x=2`)
+	h.Add("Cookie", `jaws="`+Key(12).String()+`"`)
 	h.Add("Cookie", `jaws=not-a-key`)
 
 	ids := getCookieSessionsIDs(h, "jaws")

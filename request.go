@@ -19,7 +19,6 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/lib/assets"
 	"github.com/linkdata/jaws/lib/jid"
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
@@ -44,7 +43,7 @@ type ConnectFn = func(rq *Request) error
 // between the Request being created and it being used once the WebSocket is created.
 type Request struct {
 	Jaws       *Jaws                   // (read-only) the JaWS instance the Request belongs to
-	JawsKey    uint64                  // (read-only) a random number used in the WebSocket URI to identify this Request
+	JawsKey    Key                     // (read-only) a random key used in the WebSocket URI to identify this Request
 	remoteIP   netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
 	Rendering  atomic.Bool             // set to true by RequestWriter.Write()
 	running    atomic.Bool             // if ServeHTTP() is running
@@ -96,11 +95,11 @@ var (
 
 // JawsKeyString returns the request key in the text form used by JaWS URLs.
 func (rq *Request) JawsKeyString() string {
-	jawsKey := uint64(0)
+	jawsKey := Key(0)
 	if rq != nil {
 		jawsKey = rq.JawsKey
 	}
-	return assets.JawsKeyString(jawsKey)
+	return jawsKey.String()
 }
 
 func (rq *Request) String() string {
@@ -237,7 +236,7 @@ func (rq *Request) HeadHTML(w io.Writer) (err error) {
 	rq.Jaws.mu.RLock()
 	b = append(b, rq.Jaws.headPrefix...)
 	rq.Jaws.mu.RUnlock()
-	b = assets.JawsKeyAppend(b, rq.JawsKey)
+	b = appendKey(b, rq.JawsKey)
 	b = append(b, `">`...)
 	_, err = w.Write(b)
 	return

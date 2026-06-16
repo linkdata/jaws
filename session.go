@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/lib/assets"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
@@ -19,7 +18,7 @@ import (
 // or do nothing.
 type Session struct {
 	jw        *Jaws
-	sessionID uint64
+	sessionID Key
 	remoteIP  netip.Addr
 	mu        deadlock.RWMutex // protects following
 	requests  []*Request
@@ -28,7 +27,7 @@ type Session struct {
 	data      map[string]any
 }
 
-func newSession(jw *Jaws, sessionID uint64, remoteIP netip.Addr, secure bool) *Session {
+func newSession(jw *Jaws, sessionID Key, remoteIP netip.Addr, secure bool) *Session {
 	return &Session{
 		jw:        jw,
 		sessionID: sessionID,
@@ -37,7 +36,7 @@ func newSession(jw *Jaws, sessionID uint64, remoteIP netip.Addr, secure bool) *S
 		cookie: http.Cookie{ // #nosec G124 -- Secure is set from the request scheme, and HttpOnly/SameSite are set below.
 			Name:     jw.CookieName,
 			Path:     "/",
-			Value:    assets.JawsKeyString(sessionID),
+			Value:    sessionID.String(),
 			Secure:   secure,
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
@@ -128,7 +127,7 @@ func (sess *Session) Set(key string, value any) {
 // It is safe to call on a nil [Session], in which case it returns zero.
 func (sess *Session) ID() (id uint64) {
 	if sess != nil {
-		id = sess.sessionID
+		id = uint64(sess.sessionID)
 	}
 	return
 }

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/linkdata/jaws/lib/assets"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
@@ -22,7 +21,7 @@ func TestSession_Object(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
 
-	sessionId := uint64(0x12345)
+	sessionId := Key(0x12345)
 	var sess *Session
 	// Set/Get on nil Session is ignored
 	sess.Set("foo", "bar")
@@ -51,10 +50,10 @@ func TestSession_Object(t *testing.T) {
 	if jw.CookieName != cookie.Name {
 		t.Error(cookie.Name)
 	}
-	if assets.JawsKeyString(sessionId) != cookie.Value {
+	if sessionId.String() != cookie.Value {
 		t.Error(cookie.Value)
 	}
-	if sessionId != sess.ID() {
+	if uint64(sessionId) != sess.ID() {
 		t.Error(sess.ID())
 	}
 	if sess.IP().IsValid() {
@@ -260,7 +259,7 @@ func TestSession_Requests(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
 
-	sessionId := uint64(0x12345)
+	sessionId := Key(0x12345)
 	sess := newSession(jw, sessionId, netip.Addr{}, false)
 	if x := sess.Requests(); x != nil {
 		t.Error(x)

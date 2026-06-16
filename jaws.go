@@ -171,9 +171,9 @@ type Jaws struct {
 	tmplookers              []TemplateLookuper
 	kg                      *bufio.Reader
 	closeCh                 chan struct{} // closed when Close() has been called
-	requests                map[uint64]*Request
+	requests                map[Key]*Request
 	pending                 map[netip.Addr][]*Request
-	sessions                map[uint64]*Session
+	sessions                map[Key]*Session
 	dirty                   map[any]int
 	dirtOrder               int
 }
@@ -202,9 +202,9 @@ func New() (jw *Jaws, err error) {
 				unsubCh:                 make(chan chan wire.Message, 1),
 				updateTicker:            time.NewTicker(DefaultUpdateInterval),
 				kg:                      bufio.NewReader(rand.Reader),
-				requests:                make(map[uint64]*Request),
+				requests:                make(map[Key]*Request),
 				pending:                 make(map[netip.Addr][]*Request),
-				sessions:                make(map[uint64]*Session),
+				sessions:                make(map[Key]*Session),
 				dirty:                   make(map[any]int),
 				closeCh:                 make(chan struct{}),
 			}
@@ -417,7 +417,7 @@ func (jw *Jaws) removePendingRequestLocked(rq *Request) {
 	}
 }
 
-func (jw *Jaws) nonZeroRandomLocked() (value uint64) {
+func (jw *Jaws) nonZeroRandomUint64Locked() (value uint64) {
 	random := make([]byte, 8)
 	for value == 0 {
 		if _, err := io.ReadFull(jw.kg, random); err != nil {
@@ -426,6 +426,10 @@ func (jw *Jaws) nonZeroRandomLocked() (value uint64) {
 		value = binary.LittleEndian.Uint64(random)
 	}
 	return
+}
+
+func (jw *Jaws) nonZeroRandomLocked() Key {
+	return Key(jw.nonZeroRandomUint64Locked())
 }
 
 // UseRequest extracts the JaWS [Request] with the given key from the request
@@ -438,7 +442,7 @@ func (jw *Jaws) nonZeroRandomLocked() (value uint64) {
 // Returns nil if the key was not found, the request was already claimed by an
 // earlier WebSocket callback, or the IP doesn't match, in which case you
 // should return an HTTP "404 Not Found" status.
-func (jw *Jaws) UseRequest(jawsKey uint64, r *http.Request) (rq *Request) {
+func (jw *Jaws) UseRequest(jawsKey Key, r *http.Request) (rq *Request) {
 	if jawsKey != 0 {
 		var err error
 		jw.mu.Lock()
@@ -475,7 +479,7 @@ func (jw *Jaws) Sessions() (sessions []*Session) {
 	return
 }
 
-func (jw *Jaws) getSessionLocked(sessionIDs []uint64, remoteIP netip.Addr) *Session {
+func (jw *Jaws) getSessionLocked(sessionIDs []Key, remoteIP netip.Addr) *Session {
 	for _, sessionID := range sessionIDs {
 		if sess, ok := jw.sessions[sessionID]; ok && equalIP(remoteIP, sess.remoteIP) {
 			if !sess.isDead() {
@@ -486,7 +490,7 @@ func (jw *Jaws) getSessionLocked(sessionIDs []uint64, remoteIP netip.Addr) *Sess
 	return nil
 }
 
-func getCookieSessionsIDs(h http.Header, wanted string) (cookies []uint64) {
+func getCookieSessionsIDs(h http.Header, wanted string) (cookies []Key) {
 	for _, line := range h["Cookie"] {
 		if strings.Contains(line, wanted) {
 			var part string
@@ -500,7 +504,7 @@ func getCookieSessionsIDs(h http.Header, wanted string) (cookies []uint64) {
 						if len(val) > 1 && val[0] == '"' && val[len(val)-1] == '"' {
 							val = val[1 : len(val)-1]
 						}
-						if sessionID := assets.JawsKeyValue(val); sessionID != 0 {
+						if sessionID := ParseKey(val); sessionID != 0 {
 							cookies = append(cookies, sessionID)
 						}
 					}
@@ -573,7 +577,7 @@ func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Sessio
 	return
 }
 
-func (jw *Jaws) deleteSession(sessionID uint64) {
+func (jw *Jaws) deleteSession(sessionID Key) {
 	jw.mu.Lock()
 	delete(jw.sessions, sessionID)
 	jw.mu.Unlock()
@@ -1186,7 +1190,7 @@ func (jw *Jaws) JsCall(target any, jsfunc, jsonstr string) {
 // getRequestLocked allocates a Request from the pool for jawsKey. remoteIP is the
 // already-resolved client IP for r (see NewRequest, the sole caller), passed in to
 // avoid recomputing jw.clientIP(r). Caller must hold jw.mu.
-func (jw *Jaws) getRequestLocked(jawsKey uint64, r *http.Request, remoteIP netip.Addr) (rq *Request) {
+func (jw *Jaws) getRequestLocked(jawsKey Key, r *http.Request, remoteIP netip.Addr) (rq *Request) {
 	rq = jw.reqPool.Get().(*Request)
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
@@ -1235,7 +1239,7 @@ func (jw *Jaws) recycle(rq *Request) {
 // and cancelling such a stale pointer would kill the unrelated new request.
 // Holding jw.mu across the cancel keeps the identity check valid, since
 // recycling requires the jw.mu write lock.
-func (jw *Jaws) cancelIfCurrent(jawsKey uint64, rq *Request, err error) {
+func (jw *Jaws) cancelIfCurrent(jawsKey Key, rq *Request, err error) {
 	jw.mu.RLock()
 	defer jw.mu.RUnlock()
 	if jw.requests[jawsKey] == rq {
@@ -1271,7 +1275,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			default:
 				if jawsKeyString, ok := strings.CutPrefix(r.URL.Path, "/jaws/.tail/"); ok {
-					jawsKey := assets.JawsKeyValue(jawsKeyString)
+					jawsKey := ParseKey(jawsKeyString)
 					jw.mu.RLock()
 					rq := jw.requests[jawsKey]
 					jw.mu.RUnlock()
@@ -1283,7 +1287,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			}
-		} else if rq := jw.UseRequest(assets.JawsKeyValue(r.URL.Path[6:]), r); rq != nil {
+		} else if rq := jw.UseRequest(ParseKey(r.URL.Path[6:]), r); rq != nil {
 			rq.ServeHTTP(w, r)
 			return
 		}
