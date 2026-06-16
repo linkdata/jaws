@@ -9,7 +9,7 @@
 //
 // Usage:
 //   node scripts/exercise-request-dest-reuse.mjs
-//   ATTEMPTS=2000 PER_ATTEMPT_MS=10 node scripts/exercise-request-dest-reuse.mjs
+//   ATTEMPTS=2000 PER_ATTEMPT_MS=10 ALERTS=256 node scripts/exercise-request-dest-reuse.mjs
 //
 // Exit status is zero when the stress run does not observe the network-level
 // race. If it reproduces, the script prints the old and new jawsKey values and
@@ -27,6 +27,7 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
 const attempts = Number.parseInt(process.env.ATTEMPTS || "500", 10);
 const perAttemptMs = Number.parseInt(process.env.PER_ATTEMPT_MS || "40", 10);
+const alerts = Math.max(1, Number.parseInt(process.env.ALERTS || "64", 10));
 
 const serverSource = String.raw`package main
 
@@ -45,6 +46,8 @@ import (
 
 var triggerCount atomic.Uint64
 
+const alertBurst uint64 = __ALERT_BURST__
+
 type triggerUI struct{}
 
 func (triggerUI) JawsRender(elem *jaws.Element, w io.Writer, _ []any) error {
@@ -56,7 +59,9 @@ func (triggerUI) JawsUpdate(*jaws.Element) {}
 
 func (triggerUI) JawsClick(elem *jaws.Element, _ jaws.Click) error {
 	triggerCount.Add(1)
-	elem.Alert("warning", "stale request-targeted message from "+elem.JawsKeyString())
+	for i := uint64(0); i < alertBurst; i++ {
+		elem.Alert("warning", fmt.Sprintf("stale request-targeted message from %s #%d", elem.JawsKeyString(), i))
+	}
 	elem.Cancel(errors.New("intentional close after request-targeted broadcast"))
 	return nil
 }
@@ -102,7 +107,7 @@ func main() {
 	fmt.Println("LISTEN http://" + ln.Addr().String())
 	log.Fatal(http.Serve(ln, mux))
 }
-`;
+`.replace("__ALERT_BURST__", String(alerts));
 
 class RawWebSocket {
 	constructor(socket, buffer) {
@@ -320,11 +325,13 @@ function waitForServer(proc) {
 async function attempt(baseURL, n) {
 	const key1 = await fetchPage(baseURL);
 	const ws1 = await openRawWebSocket(baseURL, key1);
+	const t0 = process.hrtime.bigint();
 	ws1.sendText("Click\tJid.1\t1 2 0 trigger\n");
 	ws1.end();
 
 	const key2 = await fetchPage(baseURL);
 	const ws2 = await openRawWebSocket(baseURL, key2);
+	const connectedNs = process.hrtime.bigint() - t0;
 
 	let reproduced = false;
 	const deadline = Date.now() + perAttemptMs;
@@ -343,7 +350,23 @@ async function attempt(baseURL, n) {
 
 	ws1.destroy();
 	ws2.destroy();
-	return reproduced;
+	return { reproduced, connectedNs };
+}
+
+function formatDuration(ns) {
+	const value = Number(ns) / 1e6;
+	if (value < 1) {
+		return `${(Number(ns) / 1e3).toFixed(1)}us`;
+	}
+	return `${value.toFixed(3)}ms`;
+}
+
+function percentile(sorted, pct) {
+	if (sorted.length === 0) {
+		return 0n;
+	}
+	const idx = Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * pct));
+	return sorted[idx];
 }
 
 async function main() {
@@ -383,16 +406,25 @@ replace github.com/linkdata/jaws => ${repoRoot}
 		});
 		const baseURL = await waitForServer(server);
 		console.log(`server: ${baseURL}`);
-		console.log(`attempts: ${attempts}, per-attempt read window: ${perAttemptMs}ms`);
+		console.log(`attempts: ${attempts}, alerts per trigger: ${alerts}, per-attempt read window: ${perAttemptMs}ms`);
 
+		const connectTimes = [];
 		for (let i = 1; i <= attempts; i++) {
-			if (await attempt(baseURL, i)) {
+			const result = await attempt(baseURL, i);
+			connectTimes.push(result.connectedNs);
+			if (result.reproduced) {
+				connectTimes.sort((a, b) => Number(a - b));
+				console.log(`fastest old-click-to-new-websocket time: ${formatDuration(connectTimes[0])}`);
 				process.exitCode = 1;
 				return;
 			}
 			if (i % 50 === 0) {
 				console.log(`attempted ${i}...`);
 			}
+		}
+		connectTimes.sort((a, b) => Number(a - b));
+		if (connectTimes.length > 0) {
+			console.log(`old-click-to-new-websocket timing: min=${formatDuration(connectTimes[0])}, p50=${formatDuration(percentile(connectTimes, 0.50))}, p95=${formatDuration(percentile(connectTimes, 0.95))}`);
 		}
 		const hits = await fetch(baseURL + "/hits").then((res) => res.text());
 		console.log(`triggered events observed by server: ${hits.trim()}`);
