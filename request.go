@@ -408,6 +408,10 @@ func (rq *Request) Context() (ctx context.Context) {
 // The returned context must be derived from oldCtx so cancellation and deadlines
 // continue to propagate to [Request.Context].
 //
+// The function runs while the Request lock is held so the transform is atomic.
+// It must not call methods on the same Request, call code that may do so, or
+// block on work that needs the same Request.
+//
 // Returning a nil context is a programming error: debug builds panic and production
 // builds report it via [Jaws.MustLog] and keep the existing context.
 func (rq *Request) SetContext(fn func(oldCtx context.Context) (newCtx context.Context)) {
