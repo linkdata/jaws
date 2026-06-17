@@ -50,7 +50,9 @@ func (tmpl Template) auth(elem *jaws.Element) (auth jaws.Auth) {
 	if f := elem.Request.Jaws.MakeAuth; f != nil {
 		auth = f(elem.Request)
 	} else {
-		auth = &jaws.DefaultAuth{Logger: elem.Request.Jaws.Logger}
+		// Reuse the instance's shared DefaultAuth so its one-time fail-open warning
+		// is logged once per Jaws, not once per render.
+		auth = elem.Request.Jaws.DefaultAuth()
 	}
 	return
 }
