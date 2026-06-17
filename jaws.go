@@ -162,6 +162,8 @@ type Jaws struct {
 	unsubCh                 chan chan wire.Message
 	updateTicker            *time.Ticker
 	serving                 atomic.Bool
+	defaultAuthOnce         sync.Once    // guards lazy creation of defaultAuthVal
+	defaultAuthVal          *DefaultAuth // shared fail-open Auth; see [Jaws.DefaultAuth]
 	reqPool                 sync.Pool
 	serveJS                 *staticserve.StaticServe
 	serveCSS                *staticserve.StaticServe

@@ -144,3 +144,16 @@ func (da *DefaultAuth) IsAdmin() bool {
 	})
 	return true
 }
+
+// DefaultAuth returns the shared fail-open [DefaultAuth] used for templates when
+// [Jaws.MakeAuth] is nil.
+//
+// It is created on first use and reused, so the embedded [sync.Once] warning in
+// [DefaultAuth.IsAdmin] fires at most once per [Jaws] rather than once per
+// template render. The value of [Jaws.Logger] in effect at first use is captured.
+func (jw *Jaws) DefaultAuth() *DefaultAuth {
+	jw.defaultAuthOnce.Do(func() {
+		jw.defaultAuthVal = &DefaultAuth{Logger: jw.Logger}
+	})
+	return jw.defaultAuthVal
+}
