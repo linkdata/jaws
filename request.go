@@ -447,42 +447,50 @@ func (rq *Request) SetContext(fn func(oldCtx context.Context) (newCtx context.Co
 // request that never went live it cancels and reports expiry once it has been
 // idle longer than requestTimeout, or immediately if its context is already
 // done. Called from the Serve loop's maintenance pass while jw.mu is held.
-func (rq *Request) maintenance(now time.Time, requestTimeout time.Duration) bool {
+//
+// It returns the cancellation cause (or nil) rather than logging it, so the caller
+// can log it after releasing jw.mu — logging runs the user [Jaws.Logger], which
+// must not be invoked under a lock.
+func (rq *Request) maintenance(now time.Time, requestTimeout time.Duration) (expired bool, cause error) {
 	if !rq.running.Load() {
+		rq.mu.Lock()
 		if rq.Rendering.Swap(false) {
-			rq.mu.Lock()
 			rq.lastWrite = now
-			rq.mu.Unlock()
 		}
-		rq.mu.RLock()
-		err := rq.ctx.Err()
-		since := now.Sub(rq.lastWrite)
-		rq.mu.RUnlock()
-		if err != nil {
-			return true
+		if rq.ctx.Err() != nil {
+			expired = true
+		} else if now.Sub(rq.lastWrite) > requestTimeout {
+			cause = rq.cancelLocked(newErrNoWebSocketRequest(rq))
+			expired = true
 		}
-		if since > requestTimeout {
-			rq.cancel(newErrNoWebSocketRequest(rq))
-			return true
-		}
+		rq.mu.Unlock()
 	}
-	return false
+	return
 }
 
 // cancelLocked cancels the request's context with a wrapped cause, but only for a
 // live request (non-zero key) whose context has not already been cancelled.
-// Caller must hold rq.mu.
-func (rq *Request) cancelLocked(err error) {
+//
+// It does NOT log. It returns the cancellation cause (already set on the context)
+// so the caller can pass it to [Jaws.Log] AFTER releasing rq.mu and any outer lock;
+// the cause is nil whenever there is nothing to log (no live request to cancel, or
+// a nil err). Logging invokes the user-supplied [Jaws.Logger], which the package
+// locking contract forbids running under a lock. Caller must hold rq.mu.
+func (rq *Request) cancelLocked(err error) (cause error) {
 	if rq.JawsKey != 0 && rq.ctx.Err() == nil {
-		rq.cancelFn(rq.Jaws.Log(newErrRequestCancelledLocked(rq, err)))
+		cause = newErrRequestCancelledLocked(rq, err)
+		rq.cancelFn(cause)
 	}
+	return
 }
 
-// cancel locks rq.mu and calls cancelLocked.
+// cancel locks rq.mu, cancels the context, then logs the cancellation cause after
+// releasing the lock ([Jaws.Log] is a no-op on a nil cause).
 func (rq *Request) cancel(err error) {
 	rq.mu.Lock()
-	defer rq.mu.Unlock()
-	rq.cancelLocked(err)
+	cause := rq.cancelLocked(err)
+	rq.mu.Unlock()
+	_ = rq.Jaws.Log(cause)
 }
 
 // Cancel aborts the Request.

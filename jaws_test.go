@@ -157,6 +157,139 @@ func TestJaws_MaxPendingRequestsPerIPEvictsOldestPending(t *testing.T) {
 	}
 }
 
+// reentrantLogger re-enters the Jaws instance while logging (via RequestCount,
+// which takes jw.mu.RLock), and records the logged error. If the framework ever
+// invokes the logger while holding jw.mu, this deadlocks.
+type reentrantLogger struct {
+	jw     *Jaws
+	logged chan error
+}
+
+func (l reentrantLogger) Info(string, ...any) {}
+func (l reentrantLogger) Warn(string, ...any) {}
+func (l reentrantLogger) Error(_ string, args ...any) {
+	_ = l.jw.RequestCount() // re-enter Jaws under jw.mu.RLock
+	for i := 0; i+1 < len(args); i += 2 {
+		if args[i] == "err" {
+			if err, ok := args[i+1].(error); ok {
+				select {
+				case l.logged <- err:
+				default:
+				}
+			}
+		}
+	}
+}
+
+// TestJaws_MaintenanceLogsCancelOutsideLock verifies the maintenance pass logs a
+// request-cancellation cause AFTER releasing jw.mu, so a user Logger that re-enters
+// the Jaws instance does not deadlock the Serve loop. Before the fix the logger ran
+// while jw.mu was held for writing, which would deadlock on any re-entrant lock.
+func TestJaws_MaintenanceLogsCancelOutsideLock(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	logged := make(chan error, 1)
+	jw.Logger = reentrantLogger{jw: jw, logged: logged}
+
+	// A pending request idle long enough for the maintenance pass to recycle it.
+	rq := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
+	setPendingLimitLastWrite(t, rq, time.Now().Add(-time.Hour))
+
+	done := make(chan struct{})
+	go func() {
+		jw.maintenance(time.Second)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("maintenance deadlocked: user Logger re-entered Jaws while jw.mu was held")
+	}
+	select {
+	case e := <-logged:
+		if !errors.Is(e, ErrNoWebSocketRequest) {
+			t.Fatalf("logged cause = %v, want ErrNoWebSocketRequest", e)
+		}
+	default:
+		t.Fatal("expected the cancellation cause to be logged")
+	}
+}
+
+// TestJaws_MaxPendingRequestsPerIPSparesRenderingRequest verifies that the pending
+// cap does not evict a Request that is still rendering its initial HTML. The oldest
+// pending Request would normally be evicted first, but evicting one whose render is
+// in flight on another goroutine would recycle it underneath that goroutine,
+// contaminating a later reuse and leaking its key. The cap must instead evict the
+// next-oldest idle Request, leaving the rendering one claimable.
+func TestJaws_MaxPendingRequestsPerIPSparesRenderingRequest(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.MaxPendingRequestsPerIP = 2
+
+	renderingReq := newPendingLimitRequest("192.0.2.1:1000")
+	renderingRq := jw.NewRequest(renderingReq)
+	renderingKey := renderingRq.JawsKey
+	// Simulate an in-flight initial render on the oldest pending Request.
+	renderingRq.Rendering.Store(true)
+
+	idleReq := newPendingLimitRequest("192.0.2.1:1001")
+	idleRq := jw.NewRequest(idleReq)
+	idleKey := idleRq.JawsKey
+
+	// Creating a third same-IP Request trips the cap (pending == 2).
+	newReq := newPendingLimitRequest("192.0.2.1:1002")
+	newRq := jw.NewRequest(newReq)
+	newKey := newRq.JawsKey
+
+	// The rendering Request must survive; the idle one is the one evicted.
+	if claimed := jw.UseRequest(renderingKey, renderingReq); claimed != renderingRq {
+		t.Fatalf("rendering request claim = %v, want it to survive eviction", claimed)
+	}
+	if claimed := jw.UseRequest(idleKey, idleReq); claimed != nil {
+		t.Fatalf("idle request should have been evicted, got %v", claimed)
+	}
+	if claimed := jw.UseRequest(newKey, newReq); claimed != newRq {
+		t.Fatalf("new request claim = %v, want %v", claimed, newRq)
+	}
+}
+
+// TestJaws_MaxPendingRequestsPerIPOvershootsWhenAllRendering verifies that when
+// every pending request for an IP is mid-render, the cap is not enforced by
+// recycling one of them: oldestEvictablePendingLocked finds no idle victim, so the
+// cap is allowed a brief, self-correcting overshoot rather than corrupting an
+// in-flight render.
+func TestJaws_MaxPendingRequestsPerIPOvershootsWhenAllRendering(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.MaxPendingRequestsPerIP = 1
+
+	rq1 := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
+	rq1Key := rq1.JawsKey
+	rq1.Rendering.Store(true)
+
+	// A second same-IP request trips the cap, but the only pending request is
+	// rendering, so nothing is evicted and the cap overshoots to 2.
+	rq2 := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1001"))
+	if rq2 == nil {
+		t.Fatal("expected the new request to be created despite the cap")
+	}
+	if got := jw.Pending(); got != 2 {
+		t.Fatalf("Pending() = %d, want 2 (cap overshoots while all pending render)", got)
+	}
+	if rq1.JawsKey == 0 || rq1.JawsKey != rq1Key {
+		t.Fatal("the rendering request must not be recycled by the cap")
+	}
+}
+
 func TestJaws_MaxPendingRequestsPerIPKeepsDifferentIPs(t *testing.T) {
 	jw, err := New()
 	if err != nil {

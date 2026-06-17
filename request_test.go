@@ -684,7 +684,7 @@ func TestRequest_ClaimRefreshesLastWriteAndStartServeGuards(t *testing.T) {
 		t.Fatal("expected claim to succeed")
 	}
 	// claim refreshed lastWrite, so the just-claimed request is not idle-eligible.
-	if rq.maintenance(time.Now(), time.Second) {
+	if expired, _ := rq.maintenance(time.Now(), time.Second); expired {
 		t.Fatal("a freshly claimed request must not be treated as idle by maintenance")
 	}
 
@@ -1710,13 +1710,13 @@ func TestCoverage_RequestMaintenanceClaimAndErrors(t *testing.T) {
 	now := time.Now()
 	rqM := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
 	rqM.lastWrite = now.Add(-time.Hour)
-	if !rqM.maintenance(now, time.Second) {
+	if expired, _ := rqM.maintenance(now, time.Second); !expired {
 		t.Fatal("expected maintenance timeout")
 	}
 	rqR := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
 	nowR := time.Now()
 	rqR.Rendering.Store(true)
-	if rqR.maintenance(nowR, time.Hour) {
+	if expired, _ := rqR.maintenance(nowR, time.Hour); expired {
 		t.Fatal("expected maintenance continue")
 	}
 	rqR.mu.RLock()
@@ -1727,12 +1727,12 @@ func TestCoverage_RequestMaintenanceClaimAndErrors(t *testing.T) {
 	}
 	rqC := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
 	rqC.cancel(errors.New("cancelled"))
-	if !rqC.maintenance(time.Now(), time.Hour) {
+	if expired, _ := rqC.maintenance(time.Now(), time.Hour); !expired {
 		t.Fatal("expected maintenance cancellation")
 	}
 	rqOK := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
 	rqOK.lastWrite = time.Now()
-	if rqOK.maintenance(time.Now(), time.Hour) {
+	if expired, _ := rqOK.maintenance(time.Now(), time.Hour); expired {
 		t.Fatal("expected maintenance keepalive")
 	}
 
