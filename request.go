@@ -44,7 +44,7 @@ type ConnectFn = func(rq *Request) error
 // between the Request being created and it being used once the WebSocket is created.
 type Request struct {
 	Jaws       *Jaws                   // (read-only) the JaWS instance the Request belongs to
-	JawsKey    key.Key                 // (read-only) random key identifying this Request in the WebSocket URI and the broadcast/tail target; the identity check (destKey, wantMessage) reads it under mu
+	JawsKey    key.Key                 // (read-only) random key identifying this Request in the WebSocket URI and the broadcast/tail target; read under mu by the identity check (destKey, wantMessage) and the render path (JawsKeyString, HeadHTML)
 	remoteIP   netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
 	Rendering  atomic.Bool             // set to true by RequestWriter.Write()
 	running    atomic.Bool             // if ServeHTTP() is running
@@ -98,7 +98,9 @@ var (
 func (rq *Request) JawsKeyString() string {
 	jawsKey := key.Key(0)
 	if rq != nil {
+		rq.mu.RLock()
 		jawsKey = rq.JawsKey
+		rq.mu.RUnlock()
 	}
 	return jawsKey.String()
 }
@@ -245,11 +247,14 @@ func (rq *Request) clearLocked() *Request {
 
 // HeadHTML writes the HTML code needed in the HTML page's HEAD section.
 func (rq *Request) HeadHTML(w io.Writer) (err error) {
+	rq.mu.RLock()
+	jawsKey := rq.JawsKey
+	rq.mu.RUnlock()
 	var b []byte
 	rq.Jaws.mu.RLock()
 	b = append(b, rq.Jaws.headPrefix...)
 	rq.Jaws.mu.RUnlock()
-	b = key.Append(b, rq.JawsKey)
+	b = key.Append(b, jawsKey)
 	b = append(b, `">`...)
 	_, err = w.Write(b)
 	return
