@@ -21,8 +21,7 @@ func (tm *testMux) Handle(uri string, handler http.Handler) {
 	tm.m[uri] = handler
 }
 
-type testSetupper struct {
-}
+type testSetupper struct{}
 
 func (ts *testSetupper) JawsSetupFunc(jw *Jaws, handleFn HandleFunc, prefix string) (urls []*url.URL, err error) {
 	ss, _ := staticserve.New("foo.txt", []byte("foo"))

@@ -1368,7 +1368,8 @@ func TestRequest_UpdatePanicLogs(t *testing.T) {
 	tss := &testUi{
 		updateFn: func(elem *Element) {
 			panic("wildpanic")
-		}}
+		},
+	}
 	th.NoErr(rq.UI(tss))
 	rq.Dirty(tss)
 	select {

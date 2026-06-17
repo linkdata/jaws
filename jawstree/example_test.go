@@ -35,7 +35,8 @@ func setupJaws(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
 		// Initialize jawsboot; we will serve the JavaScript and CSS from /static/*.[js|css].
 		// All files under assets/static will be available under /static. Any favicon loaded
 		// this way will have its URL available using jaws.FaviconURL().
-		if err = jw.Setup(mux.Handle, "/static",
+		if err = jw.Setup(
+			mux.Handle, "/static",
 			jawsboot.Setup,
 			jawstree.Setup,
 			staticserve.MustNewFS(assetsFS, "assets/static", "images/favicon.png"),

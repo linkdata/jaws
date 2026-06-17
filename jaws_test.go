@@ -1009,14 +1009,26 @@ func TestJaws_clientIP(t *testing.T) {
 		hdrs  map[string]string
 		want  netip.Addr
 	}{
-		{"untrusted ignores forwarded headers", false, "203.0.113.9:443",
-			map[string]string{"X-Forwarded-For": "198.51.100.7"}, mustIP("203.0.113.9")},
-		{"trusted uses leftmost X-Forwarded-For", true, "127.0.0.1:1234",
-			map[string]string{"X-Forwarded-For": "198.51.100.7, 70.41.3.18, 127.0.0.1"}, mustIP("198.51.100.7")},
-		{"trusted falls back to X-Real-IP", true, "127.0.0.1:1234",
-			map[string]string{"X-Real-Ip": "198.51.100.23"}, mustIP("198.51.100.23")},
-		{"trusted falls back to RemoteAddr when headers invalid", true, "203.0.113.9:443",
-			map[string]string{"X-Forwarded-For": "not-an-ip", "X-Real-Ip": "garbage"}, mustIP("203.0.113.9")},
+		{
+			"untrusted ignores forwarded headers", false, "203.0.113.9:443",
+			map[string]string{"X-Forwarded-For": "198.51.100.7"},
+			mustIP("203.0.113.9"),
+		},
+		{
+			"trusted uses leftmost X-Forwarded-For", true, "127.0.0.1:1234",
+			map[string]string{"X-Forwarded-For": "198.51.100.7, 70.41.3.18, 127.0.0.1"},
+			mustIP("198.51.100.7"),
+		},
+		{
+			"trusted falls back to X-Real-IP", true, "127.0.0.1:1234",
+			map[string]string{"X-Real-Ip": "198.51.100.23"},
+			mustIP("198.51.100.23"),
+		},
+		{
+			"trusted falls back to RemoteAddr when headers invalid", true, "203.0.113.9:443",
+			map[string]string{"X-Forwarded-For": "not-an-ip", "X-Real-Ip": "garbage"},
+			mustIP("203.0.113.9"),
+		},
 		{"trusted with no forwarded headers uses RemoteAddr", true, "203.0.113.9:443", nil, mustIP("203.0.113.9")},
 	}
 	for _, tt := range tests {
