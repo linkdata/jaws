@@ -1407,6 +1407,14 @@ func TestServeHTTP_TailScript_EndpointIsPerRequest(t *testing.T) {
 	is.Equal(w.Code, http.StatusNoContent)
 }
 
+// TestServeHTTP_TailScript_RejectsRecycledKey covers the recycled-request behavior
+// of the /jaws/.tail endpoint: recycling deletes the key from jw.requests, so a tail
+// fetch for the old key misses the map and returns 404, while the reused pooled
+// object drains only its own freshly queued content (its queue was reset by
+// clearLocked), never the recycled request's. This exercises the map-deletion 404
+// and content isolation; the concurrent drain-under-lock guarantee (holding jw.mu
+// across drainTailScript) is exercised separately, under the race detector, by
+// TestRequest_TailScriptConcurrentWithRecycle.
 func TestServeHTTP_TailScript_RejectsRecycledKey(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()
@@ -1418,9 +1426,10 @@ func TestServeHTTP_TailScript_RejectsRecycledKey(t *testing.T) {
 	stale.NewElement(&testUi{}).SetClass("stale")
 	staleKey := stale.JawsKeyString()
 
-	// Recycle the request and create a new one; the pool hands the same struct to
-	// the new connection under a fresh key. A /jaws/.tail fetch for the old key must
-	// not drain the reused request's queue.
+	// Recycle the request and create a new one under a fresh key. The pool typically
+	// hands back the same struct, so the content check below also guards that a
+	// reused object carries none of the recycled request's queued content; it holds
+	// whether or not the pool reused the struct.
 	jw.recycle(stale)
 	rq := jw.NewRequest(hr)
 	rq.NewElement(&testUi{}).SetClass("fresh")

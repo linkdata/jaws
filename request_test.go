@@ -104,26 +104,37 @@ func TestRequest_wantMessage_KeyDest(t *testing.T) {
 	}
 }
 
-// TestRequest_wantMessage_RejectsRecycledKey is the core broadcast regression: a
-// message aimed at a request's key must not be delivered to the reused pooled
-// object that now carries a different key, even when the pool hands back the same
-// *Request pointer (the previous dest == rq pointer match would have matched here).
+// TestRequest_wantMessage_RejectsRecycledKey is the core broadcast regression:
+// matching on the identity key rather than the *Request pointer lets the loop
+// reject a message aimed at a request that was recycled and reused under a new key,
+// even when it is the very same pooled object. A dest==*Request match could not
+// tell the reused object from the original; a key match can.
 func TestRequest_wantMessage_RejectsRecycledKey(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()
 	go jw.Serve()
 	defer jw.Close()
 
-	stale := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
-	staleKey := stale.JawsKey
-	is.True(stale.wantMessage(&wire.Message{Dest: staleKey}))
-
-	// Recycle and reuse the pooled object under a new key.
-	jw.recycle(stale)
 	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	staleKey := rq.JawsKey
+	is.True(rq.wantMessage(&wire.Message{Dest: staleKey}))
 
+	// Recycle zeroes the key, so the same object no longer matches the old key.
+	jw.recycle(rq)
 	is.Equal(rq.wantMessage(&wire.Message{Dest: staleKey}), false)
-	is.True(rq.wantMessage(&wire.Message{Dest: rq.JawsKey}))
+
+	// Reuse the same object under a fresh key, as the pool handing it back to a new
+	// connection would. Re-key directly under rq.mu (the lock destKey/wantMessage
+	// use) so the aliasing is deterministic rather than dependent on the pool
+	// returning this struct. A message still aimed at the old key must be rejected
+	// even though rq is the same object it once identified; one aimed at the new
+	// key is accepted.
+	newKey := staleKey + 1
+	rq.mu.Lock()
+	rq.JawsKey = newKey
+	rq.mu.Unlock()
+	is.Equal(rq.wantMessage(&wire.Message{Dest: staleKey}), false)
+	is.True(rq.wantMessage(&wire.Message{Dest: newKey}))
 }
 
 func TestRequest_HeadHTML(t *testing.T) {
@@ -852,6 +863,31 @@ func TestBroadcast_ZeroKeyDestDropped(t *testing.T) {
 	default:
 	}
 	th.Equal(strings.Contains(tj.log.String(), "jaws: Broadcast"), false)
+}
+
+// TestRequest_ProducersSkipRecycled covers the destKey()==0 branch in Request.Alert
+// and Request.Redirect. Once a Request is recycled it carries the zero key, so both
+// take the skip branch and never call Broadcast. A zero-key broadcast would be
+// dropped by Jaws.Broadcast anyway (see TestBroadcast_ZeroKeyDestDropped); the guard
+// avoids the round-trip, and exercising it is the only coverage of the branch.
+func TestRequest_ProducersSkipRecycled(t *testing.T) {
+	th := newTestHelper(t)
+	jw, _ := New()
+	defer jw.Close()
+
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	jw.recycle(rq)
+	th.Equal(rq.destKey(), key.Key(0))
+
+	// No Serve loop drains bcastCh, so any stray broadcast would be observable.
+	rq.Alert("info", "ignored")
+	rq.Redirect("/ignored")
+
+	select {
+	case msg := <-jw.bcastCh:
+		t.Fatalf("recycled request must not broadcast, got %#v", msg)
+	default:
+	}
 }
 
 func TestRequest_Cancel(t *testing.T) {
