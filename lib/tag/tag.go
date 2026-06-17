@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/lib/key"
 )
 
@@ -41,17 +40,35 @@ func ensureUsableTag(tag any) error {
 		if t := reflect.TypeOf(tag); t != nil && t.Comparable() {
 			// reflect.Type.Comparable reports STATIC comparability: a comparable
 			// struct or array can still hold a non-comparable value in an interface
-			// field and not be comparable at runtime. In debug builds also run the
-			// (more expensive) runtime value check via NewErrNotComparable so such
-			// tags are rejected at expansion time; production keeps only the cheap
-			// static check.
-			if deadlock.Debug && NewErrNotComparable(tag) != nil {
-				return NewErrNotUsableAsTag(tag)
+			// field, making it panic when compared or used as an rq.tagMap key. Only
+			// struct and array values can differ between static and runtime
+			// comparability (scalars, strings, pointers and channels are always
+			// comparable when their type is), so probe just those kinds with
+			// comparableAtRuntime and reject such tags here, rather than deferring a
+			// panic to appendUniqueTag's dedup or to rq.tagMap on the event goroutine.
+			switch t.Kind() {
+			case reflect.Struct, reflect.Array:
+				if !comparableAtRuntime(tag) {
+					return NewErrNotUsableAsTag(tag)
+				}
 			}
 			return nil
 		}
 	}
 	return NewErrNotUsableAsTag(tag)
+}
+
+// comparableAtRuntime reports whether tag can be compared with == without
+// panicking.
+//
+// A statically comparable struct or array can still hold a non-comparable value
+// (for example a func in an interface field); comparing such a value panics with
+// "comparing uncomparable type". This probe is allocation-free, unlike
+// [reflect.Value.Comparable], which allocates while walking the value.
+func comparableAtRuntime(tag any) (ok bool) {
+	defer func() { _ = recover() }()
+	other := tag
+	return tag == other
 }
 
 func appendUniqueTag(result []any, tag any) ([]any, error) {
@@ -197,12 +214,12 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 // comparable value. Primitive HTML/value types are rejected with
 // [ErrIllegalTagType] to catch common accidental tags.
 func TagExpand(ctx Context, tag any) (result []any, err error) {
-	// A value can pass the static comparability check in ensureUsableTag yet be
-	// non-comparable at runtime (a comparable struct holding e.g. a func in an
-	// interface field). Two such same-typed values reach appendUniqueTag's dedup,
-	// where existing == tag panics. recoverComparabilityPanic turns that specific
-	// runtime panic into [ErrNotUsableAsTag] and re-raises anything else. (Debug
-	// builds reject such tags in ensureUsableTag, so this fires only in production.)
+	// ensureUsableTag rejects tags that are not comparable at runtime, so the
+	// existing == tag dedup in appendUniqueTag does not panic on them. recover
+	// stays as a defense-in-depth net: should a non-comparable value ever reach
+	// that comparison, recoverComparabilityPanic turns the specific "comparing
+	// uncomparable type" runtime panic into [ErrNotUsableAsTag] and re-raises
+	// anything else.
 	defer func() {
 		if r := recover(); r != nil {
 			result, err = recoverComparabilityPanic(r, tag)

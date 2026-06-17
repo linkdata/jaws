@@ -250,25 +250,22 @@ func TestTagExpand_TagGetterNonComparable(t *testing.T) {
 // TestTagExpand_RuntimeNonComparable covers the gap between static and runtime
 // comparability: a struct whose static type is comparable but that holds a
 // non-comparable value in an interface field (here a func) passes
-// reflect.Type.Comparable() yet panics on == / as a map key. In debug builds tag
-// expansion must reject it with ErrNotUsableAsTag rather than accepting it and
-// deferring a panic to jw.dirty / rq.tagMap on the event goroutine. The runtime
-// check is debug-gated for performance, so this only asserts under deadlock.Debug.
+// reflect.Type.Comparable() yet panics on == / as a map key. ensureUsableTag runs
+// the runtime comparability check for struct and array kinds in all builds, so tag
+// expansion must reject even a single such tag with ErrNotUsableAsTag rather than
+// accepting it and deferring a panic to jw.dirty / rq.tagMap on the event
+// goroutine.
 func TestTagExpand_RuntimeNonComparable(t *testing.T) {
-	if !deadlock.Debug {
-		t.Skip("runtime comparability check only runs under deadlock.Debug")
-	}
 	if _, err := TagExpand(nil, testRuntimeNonComparable{v: func() {}}); !errors.Is(err, ErrNotUsableAsTag) {
 		t.Fatalf("expected ErrNotUsableAsTag, got %v", err)
 	}
 }
 
-// TestTagExpand_MultiRuntimeNonComparable covers the multi-element case in all
-// builds: two same-typed runtime-non-comparable values in one expansion. In debug
-// builds ensureUsableTag rejects the first one; in production builds the dedup
-// existing == tag in appendUniqueTag panics, and TagExpand's recover converts it
-// to ErrNotUsableAsTag rather than crashing the caller. Either way it must not
-// panic and must report ErrNotUsableAsTag with no tags.
+// TestTagExpand_MultiRuntimeNonComparable covers the multi-element case: two
+// same-typed runtime-non-comparable values in one expansion. ensureUsableTag
+// rejects the first one with ErrNotUsableAsTag before the dedup existing == tag in
+// appendUniqueTag ever compares them; it must not panic and must report
+// ErrNotUsableAsTag with no tags.
 func TestTagExpand_MultiRuntimeNonComparable(t *testing.T) {
 	a := testRuntimeNonComparable{v: func() {}}
 	b := testRuntimeNonComparable{v: func() {}}
