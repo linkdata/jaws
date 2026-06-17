@@ -176,6 +176,22 @@ func (node *Node) JawsPathSet(elem *jaws.Element, jsPath string, value any) {
 	}
 }
 
+// stripNilChildren removes any nil entries from node.Children and every
+// descendant's Children, in place.
+//
+// [New] calls this before assigning node IDs so the slice index used for an ID
+// ([Node.Walk]) matches the position the compacted wire array gives a child
+// ([Node.marshalJSON] skips nil children). Without it, a single nil child shifts
+// every following sibling's wire position relative to its ID, so a client click —
+// whose path is built from the wire-array position — would resolve to the wrong
+// node (or a rejected nil slot) in [Node.resolveChildPath].
+func (node *Node) stripNilChildren() {
+	node.Children = slices.DeleteFunc(node.Children, func(c *Node) bool { return c == nil })
+	for _, child := range node.Children {
+		child.stripNilChildren()
+	}
+}
+
 // Walk calls fn for node and all descendants with their JSON paths.
 func (node *Node) Walk(jsPath string, fn func(jsPath string, node *Node)) {
 	fn(jsPath, node)

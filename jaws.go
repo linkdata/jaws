@@ -30,20 +30,20 @@
 // JsVar in [github.com/linkdata/jaws/lib/ui] and the named values in
 // [github.com/linkdata/jaws/lib/named]. These are leaves with respect to each
 // other, acquired containing-before-contained (for example a named BoolArray's
-// mutex is taken before a member Bool's). They sit below the three core locks
-// above, but with one deliberate reverse edge: marking an [Element] dirty or
-// broadcasting a change ultimately takes the outermost Jaws.mu, and a value type
-// may run that side effect while still holding its own value lock (lib/named does
-// this; lib/bind and lib/ui release the value lock first). That is the reverse of
-// the "outermost first" rule and is safe only because the edge never closes a
-// cycle: no code path holding Jaws.mu, Request.mu or Session.mu ever calls into a
-// UI value's Get/Set/Dirty methods, which are the only callers that take a value
-// lock. Code holding any of the three core locks must therefore never invoke a UI
-// value method. New value types should prefer the lib/bind / lib/ui pattern
-// (mutate under the value lock, release it, then mark dirty) so they do not depend
-// on this invariant.
+// mutex is taken before a member Bool's). They sit strictly below the three core
+// locks: every value type mutates the bound value under its value lock, releases
+// it, and only then marks the [Element] dirty or broadcasts the change (which
+// ultimately takes the outermost Jaws.mu), so a value lock is never held while a
+// core lock is acquired. lib/bind, lib/ui and lib/named all follow this
+// mutate-release-then-dirty pattern, and new value types must too. The safety of
+// this rests on an invariant the deadlock detector cannot enforce (value locks are
+// leaves distinct from Jaws.mu): no code path holding Jaws.mu, Request.mu or
+// Session.mu ever calls into a UI value's Get/Set/Dirty methods, which are the only
+// callers that take a value lock — were it otherwise, the later dirty step's Jaws.mu
+// acquisition would invert the core lock order. Code holding any of the three core
+// locks must therefore never invoke a UI value method.
 //
-// A second deliberate reverse edge lives in [github.com/linkdata/jaws/lib/ui]:
+// A deliberate reverse edge lives in [github.com/linkdata/jaws/lib/ui]:
 // ContainerHelper.reconcile holds its own widget mutex while calling
 // [Request.NewElement], which takes Request.mu — again leaf-before-core. It is safe
 // for the same reason: no code path holding any of the three core locks ever
@@ -384,28 +384,69 @@ func MakeID() string {
 func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 	remoteIP := jw.clientIP(r)
 
-	jw.mu.Lock()
-	defer jw.mu.Unlock()
-	jw.limitPendingRequestsLocked(remoteIP)
-	for rq == nil {
-		jawsKey := jw.nonZeroRandomLocked()
-		if _, ok := jw.requests[jawsKey]; !ok {
-			rq = jw.getRequestLocked(jawsKey, r, remoteIP)
-			jw.requests[jawsKey] = rq
-			jw.pending[rq.remoteIP] = append(jw.pending[rq.remoteIP], rq)
+	var toLog []error
+	func() {
+		jw.mu.Lock()
+		defer jw.mu.Unlock()
+		toLog = jw.limitPendingRequestsLocked(remoteIP)
+		for rq == nil {
+			jawsKey := jw.nonZeroRandomLocked()
+			if _, ok := jw.requests[jawsKey]; !ok {
+				rq = jw.getRequestLocked(jawsKey, r, remoteIP)
+				jw.requests[jawsKey] = rq
+				jw.pending[rq.remoteIP] = append(jw.pending[rq.remoteIP], rq)
+			}
+		}
+	}()
+	// Log eviction causes after releasing jw.mu: Jaws.Log calls the user-supplied
+	// Logger, which must never run under a core lock.
+	for _, cause := range toLog {
+		_ = jw.Log(cause)
+	}
+	return
+}
+
+// limitPendingRequestsLocked evicts pending Requests for remoteIP until the cap is
+// satisfied, returning the eviction causes for the caller to log after releasing
+// jw.mu (see the package locking contract). Caller must hold jw.mu.
+func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) {
+	limit := jw.MaxPendingRequestsPerIP
+	if limit > 0 {
+		for len(jw.pending[remoteIP]) >= limit {
+			victim := jw.oldestEvictablePendingLocked(remoteIP)
+			if victim == nil {
+				// Every pending Request for this IP is mid-render. Evicting one would
+				// recycle a Request whose initial HTML is still being assembled on an
+				// HTTP goroutine that holds no jw.mu, letting a later NewRequest reuse
+				// the pooled pointer under a new key while that goroutine keeps
+				// appending elements (contaminating the new Request and leaking its
+				// key). Prefer a brief, self-correcting overshoot of the cap: the
+				// renders finish and connect (or time out and get recycled by the
+				// maintenance pass) shortly.
+				return
+			}
+			if cause := jw.recycleLockedWithCause(victim, newErrTooManyPendingRequests(remoteIP, limit)); cause != nil {
+				toLog = append(toLog, cause)
+			}
 		}
 	}
 	return
 }
 
-func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) {
-	limit := jw.MaxPendingRequestsPerIP
-	if limit > 0 {
-		for len(jw.pending[remoteIP]) >= limit {
-			oldest := jw.pending[remoteIP][0]
-			jw.recycleLockedWithCause(oldest, newErrTooManyPendingRequests(remoteIP, limit))
+// oldestEvictablePendingLocked returns the oldest pending [Request] for remoteIP
+// that is not currently being rendered, or nil if every one of them is.
+//
+// A Request whose Rendering flag is set has been written to by [RequestWriter] and
+// may still be assembling its initial HTML; recycling it would corrupt that
+// in-flight render (see [Jaws.limitPendingRequestsLocked]). This mirrors the
+// Rendering reprieve the maintenance-timeout path honors in [Request.maintenance].
+func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr) *Request {
+	for _, rq := range jw.pending[remoteIP] {
+		if !rq.Rendering.Load() {
+			return rq
 		}
 	}
+	return nil
 }
 
 func (jw *Jaws) removePendingRequestLocked(rq *Request) {
@@ -1015,11 +1056,14 @@ func (jw *Jaws) unsubscribe(msgCh chan wire.Message) {
 }
 
 func (jw *Jaws) maintenance(requestTimeout time.Duration) {
+	var toLog []error
 	jw.mu.Lock()
-	defer jw.mu.Unlock()
 	now := time.Now()
 	for _, rq := range jw.requests {
-		if rq.maintenance(now, requestTimeout) {
+		if expired, cause := rq.maintenance(now, requestTimeout); expired {
+			if cause != nil {
+				toLog = append(toLog, cause)
+			}
 			jw.recycleLocked(rq)
 		}
 	}
@@ -1027,6 +1071,12 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 		if sess.isDead() {
 			delete(jw.sessions, k)
 		}
+	}
+	jw.mu.Unlock()
+	// Log cancellation causes after releasing jw.mu: Jaws.Log calls the
+	// user-supplied Logger, which must never run under a core lock.
+	for _, cause := range toLog {
+		_ = jw.Log(cause)
 	}
 }
 
@@ -1221,22 +1271,27 @@ func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP neti
 	return rq
 }
 
-func (jw *Jaws) recycleLockedWithCause(rq *Request, err error) {
+// recycleLockedWithCause recycles rq, optionally cancelling its context with err.
+// It returns the cancellation cause (or nil) instead of logging it, so the caller
+// can log it after releasing jw.mu (see the package locking contract). Caller must
+// hold jw.mu.
+func (jw *Jaws) recycleLockedWithCause(rq *Request, err error) (cause error) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	if rq.JawsKey != 0 {
 		if err != nil {
-			rq.cancelLocked(err)
+			cause = rq.cancelLocked(err)
 		}
 		jw.removePendingRequestLocked(rq)
 		delete(jw.requests, rq.JawsKey)
 		rq.clearLocked()
 		jw.reqPool.Put(rq)
 	}
+	return
 }
 
 func (jw *Jaws) recycleLocked(rq *Request) {
-	jw.recycleLockedWithCause(rq, nil)
+	_ = jw.recycleLockedWithCause(rq, nil) // nil err yields a nil cause; nothing to log
 }
 
 func (jw *Jaws) recycle(rq *Request) {
@@ -1253,11 +1308,17 @@ func (jw *Jaws) recycle(rq *Request) {
 // Holding jw.mu across the cancel keeps the identity check valid, since
 // recycling requires the jw.mu write lock.
 func (jw *Jaws) cancelIfCurrent(jawsKey key.Key, rq *Request, err error) {
+	var cause error
 	jw.mu.RLock()
-	defer jw.mu.RUnlock()
 	if jw.requests[jawsKey] == rq {
-		rq.cancel(err)
+		rq.mu.Lock()
+		cause = rq.cancelLocked(err)
+		rq.mu.Unlock()
 	}
+	jw.mu.RUnlock()
+	// Log after releasing both locks: Jaws.Log calls the user-supplied Logger,
+	// which must never run under a core lock (this path holds jw.mu read).
+	_ = jw.Log(cause)
 }
 
 var headerCacheControlNoStore = []string{"no-store"}
