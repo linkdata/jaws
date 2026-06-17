@@ -335,22 +335,13 @@ func (*Request) writeTailResponse(w http.ResponseWriter, b []byte, sent bool) (e
 	hdr := w.Header()
 	hdr["Cache-Control"] = headerCacheControlNoStore
 	hdr["Content-Type"] = headerContentTypeJavaScript
-	if sent {
-		err = writeTailScriptBody(w, b)
-	} else {
+	if !sent {
 		w.WriteHeader(http.StatusNoContent)
-	}
-	return
-}
-
-// writeTailScriptBody writes the drained tail script bytes to w. The bytes come
-// from drainTailScript, which JS-escapes every attribute and class value through
-// appendJSQuote (see TestRequest_writeTailScript_EscapesScriptClose), so they are
-// safe to write verbatim. Writing through an io.Writer keeps the call off the
-// http.ResponseWriter sink that gosec's XSS taint analysis (G705) flags.
-func writeTailScriptBody(w io.Writer, b []byte) (err error) {
-	if len(b) > 0 {
-		_, err = w.Write(b)
+	} else if len(b) > 0 {
+		// b is built by drainTailScript, which JS-escapes every attribute and class
+		// value via appendJSQuote (see TestRequest_writeTailScript_EscapesScriptClose),
+		// so writing it verbatim to the response is safe.
+		_, err = w.Write(b) // #nosec G705 -- tail bytes are JS-escaped by drainTailScript via appendJSQuote
 	}
 	return
 }
