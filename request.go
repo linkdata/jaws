@@ -44,7 +44,7 @@ type ConnectFn = func(rq *Request) error
 // between the Request being created and it being used once the WebSocket is created.
 type Request struct {
 	Jaws       *Jaws                   // (read-only) the JaWS instance the Request belongs to
-	JawsKey    key.Key                 // (read-only) random key identifying this Request in the WebSocket URI; also the broadcast/tail target, read under mu
+	JawsKey    key.Key                 // (read-only) random key identifying this Request in the WebSocket URI and the broadcast/tail target; the identity check (destKey, wantMessage) reads it under mu
 	remoteIP   netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
 	Rendering  atomic.Bool             // set to true by RequestWriter.Write()
 	running    atomic.Bool             // if ServeHTTP() is running
@@ -233,7 +233,7 @@ func (rq *Request) clearLocked() *Request {
 	clear(rq.elems)
 	rq.elems = rq.elems[:0]
 	// wsQueue and tailsent are guarded by muQueue, not rq.mu. A /jaws/.tail/<key>
-	// fetch (writeTailScript) on a still-pending request runs on a separate HTTP
+	// fetch (drainTailScript) on a still-pending request runs on a separate HTTP
 	// goroutine holding only muQueue, so take muQueue here to serialize the reset
 	// with it; the documented rq.mu -> muQueue lock order is preserved since we
 	// already hold rq.mu.
@@ -334,8 +334,10 @@ func (rq *Request) drainTailScript() (b []byte, sent bool) {
 
 // writeTailResponse writes the tail script response built by drainTailScript. It
 // holds no locks, so the network write cannot stall recycling or the Serve loop.
-// A sent=false drain (the tail was already fetched, or there was nothing queued
-// to send) responds 204 No Content.
+//
+// A sent=false drain (the tail was already fetched on an earlier request) responds
+// 204 No Content. A first drain finding nothing queued reports sent=true with empty
+// bytes and writes an empty 200 body.
 func (*Request) writeTailResponse(w http.ResponseWriter, b []byte, sent bool) (err error) {
 	hdr := w.Header()
 	hdr["Cache-Control"] = headerCacheControlNoStore
@@ -508,7 +510,9 @@ func alertData(level, msg string) string {
 // untrusted text; do not pre-escape it.
 //
 // The default JaWS JavaScript only supports Bootstrap dismissible alerts.
-// See [Jaws.Broadcast] for processing-loop requirements.
+//
+// It does nothing if the Request has already been recycled, since it then has no
+// live target. See [Jaws.Broadcast] for processing-loop requirements.
 func (rq *Request) Alert(level, msg string) {
 	if k := rq.destKey(); k != 0 {
 		rq.Jaws.Broadcast(wire.Message{
@@ -531,7 +535,9 @@ func (rq *Request) AlertError(err error) {
 // The URL is validated to be a relative path or an http/https URL; script-bearing
 // schemes such as javascript: and protocol-relative ("//host") URLs are refused
 // and logged rather than sent to the browser.
-// See [Jaws.Broadcast] for processing-loop requirements.
+//
+// It does nothing if the Request has already been recycled, since it then has no
+// live target. See [Jaws.Broadcast] for processing-loop requirements.
 func (rq *Request) Redirect(url string) {
 	if msg, ok := rq.Jaws.redirectMessage(url); ok {
 		if k := rq.destKey(); k != 0 {

@@ -182,7 +182,7 @@ func (b *binder[T]) JawsGet(elem *jaws.Element) (value T) {
 
 func (b *binder[T]) jawsGetHTMLLocked(elem *jaws.Element) template.HTML {
 	for bnd := b; bnd != nil; bnd = bnd.prev {
-		switch hook := (bnd.hook).(type) {
+		switch hook := bnd.hook.(type) {
 		case GetHTMLHook[T]:
 			return hook(bnd, elem)
 		case string:
