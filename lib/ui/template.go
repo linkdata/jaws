@@ -26,10 +26,12 @@ type Template struct {
 	Dot          any    // Dot value to place in With.
 }
 
-var _ jaws.UI = Template{}                 // statically ensure interface is defined
-var _ jaws.ClickHandler = Template{}       // statically ensure interface is defined
-var _ jaws.ContextMenuHandler = Template{} // statically ensure interface is defined
-var _ jaws.InputHandler = Template{}       // statically ensure interface is defined
+var (
+	_ jaws.UI                 = Template{} // statically ensure interface is defined
+	_ jaws.ClickHandler       = Template{} // statically ensure interface is defined
+	_ jaws.ContextMenuHandler = Template{} // statically ensure interface is defined
+	_ jaws.InputHandler       = Template{} // statically ensure interface is defined
+)
 
 // String returns a debug representation of t.
 func (tmpl Template) String() string {

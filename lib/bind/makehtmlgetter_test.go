@@ -28,7 +28,7 @@ func Test_MakeHTMLGetter(t *testing.T) {
 	avUntyped.Store(untypedText)
 	avTyped.Store(typedText)
 	stringer := testStringer{}
-	var binderVal = "<b>"
+	binderVal := "<b>"
 	var binderMu sync.Mutex
 	binderNoHTML := testBinderStringNoHTML{New(&binderMu, &binderVal)}
 

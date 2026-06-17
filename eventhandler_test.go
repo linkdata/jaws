@@ -53,10 +53,12 @@ func (t *testJawsEvent) JawsUpdate(elem *Element) {
 	t.msgCh <- fmt.Sprintf("JawsUpdate(%d)", elem.jid)
 }
 
-var _ ClickHandler = (*testJawsEvent)(nil)
-var _ InputHandler = (*testJawsEvent)(nil)
-var _ tag.TagGetter = (*testJawsEvent)(nil)
-var _ UI = (*testJawsEvent)(nil)
+var (
+	_ ClickHandler  = (*testJawsEvent)(nil)
+	_ InputHandler  = (*testJawsEvent)(nil)
+	_ tag.TagGetter = (*testJawsEvent)(nil)
+	_ UI            = (*testJawsEvent)(nil)
+)
 
 func Test_JawsInput_InvokesJawsInputForDualHandler(t *testing.T) {
 	th := newTestHelper(t)
