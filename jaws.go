@@ -30,20 +30,20 @@
 // JsVar in [github.com/linkdata/jaws/lib/ui] and the named values in
 // [github.com/linkdata/jaws/lib/named]. These are leaves with respect to each
 // other, acquired containing-before-contained (for example a named BoolArray's
-// mutex is taken before a member Bool's). They sit below the three core locks
-// above, but with one deliberate reverse edge: marking an [Element] dirty or
-// broadcasting a change ultimately takes the outermost Jaws.mu, and a value type
-// may run that side effect while still holding its own value lock (lib/named does
-// this; lib/bind and lib/ui release the value lock first). That is the reverse of
-// the "outermost first" rule and is safe only because the edge never closes a
-// cycle: no code path holding Jaws.mu, Request.mu or Session.mu ever calls into a
-// UI value's Get/Set/Dirty methods, which are the only callers that take a value
-// lock. Code holding any of the three core locks must therefore never invoke a UI
-// value method. New value types should prefer the lib/bind / lib/ui pattern
-// (mutate under the value lock, release it, then mark dirty) so they do not depend
-// on this invariant.
+// mutex is taken before a member Bool's). They sit strictly below the three core
+// locks: every value type mutates the bound value under its value lock, releases
+// it, and only then marks the [Element] dirty or broadcasts the change (which
+// ultimately takes the outermost Jaws.mu), so a value lock is never held while a
+// core lock is acquired. lib/bind, lib/ui and lib/named all follow this
+// mutate-release-then-dirty pattern, and new value types must too. The safety of
+// this rests on an invariant the deadlock detector cannot enforce (value locks are
+// leaves distinct from Jaws.mu): no code path holding Jaws.mu, Request.mu or
+// Session.mu ever calls into a UI value's Get/Set/Dirty methods, which are the only
+// callers that take a value lock — were it otherwise, the later dirty step's Jaws.mu
+// acquisition would invert the core lock order. Code holding any of the three core
+// locks must therefore never invoke a UI value method.
 //
-// A second deliberate reverse edge lives in [github.com/linkdata/jaws/lib/ui]:
+// A deliberate reverse edge lives in [github.com/linkdata/jaws/lib/ui]:
 // ContainerHelper.reconcile holds its own widget mutex while calling
 // [Request.NewElement], which takes Request.mu — again leaf-before-core. It is safe
 // for the same reason: no code path holding any of the three core locks ever
