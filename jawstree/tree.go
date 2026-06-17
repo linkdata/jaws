@@ -52,13 +52,16 @@ func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	for _, opt := range options {
 		t.options |= opt
 	}
+	// Normalize away any nil children before assigning IDs so a node's slice
+	// index (its ID) always matches its position in the compacted wire array
+	// emitted by marshalJSON; otherwise a nil child desyncs the two and client
+	// path resolution targets the wrong node. See [Node.stripNilChildren].
+	jsvar.Ptr.stripNilChildren()
 	jsvar.Ptr.Walk("", func(jsPath string, node *Node) {
 		node.ID = jsPath
 		node.Tree = t
 		for _, child := range node.Children {
-			if child != nil { // defensive: the gate in JawsSetPath prevents nil children
-				child.Parent = node
-			}
+			child.Parent = node // stripNilChildren guarantees no nil entries here
 		}
 	})
 	return

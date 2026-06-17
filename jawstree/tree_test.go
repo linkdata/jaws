@@ -165,6 +165,42 @@ func TestNewSetsParentPointers(t *testing.T) {
 	}
 }
 
+func TestNewStripsNilChildrenKeepingPathIndexConsistent(t *testing.T) {
+	// A hand-built tree may contain a nil child. Before this was normalized, New
+	// assigned IDs from the raw slice index while the wire array (marshalJSON)
+	// compacted nils away, so the client's position-based path resolved to the
+	// wrong node. After New, indices must be dense and a position-based path must
+	// hit the matching node.
+	a := &Node{Name: "a"}
+	b := &Node{Name: "b"}
+	root := &Node{Name: "root", Children: []*Node{nil, a, b}}
+	var mu deadlock.RWMutex
+	New("tree", ui.NewJsVar(&mu, root))
+
+	if len(root.Children) != 2 || root.Children[0] != a || root.Children[1] != b {
+		t.Fatalf("New did not strip the nil child: %#v", root.Children)
+	}
+	if a.ID != "children.0" || b.ID != "children.1" {
+		t.Fatalf("dense IDs expected, got a=%q b=%q", a.ID, b.ID)
+	}
+
+	// The browser builds the path from the compacted wire-array position. Position
+	// 1 is b; it must toggle b, not a, and must not be rejected.
+	if err := root.JawsSetPath(nil, "children.1.selected", true); err != nil {
+		t.Fatalf("JawsSetPath children.1: %v", err)
+	}
+	if !b.Selected || a.Selected {
+		t.Fatalf("children.1 should select b only: a=%v b=%v", a.Selected, b.Selected)
+	}
+	// Position 0 is a; it must resolve rather than hit a (formerly nil) slot.
+	if err := root.JawsSetPath(nil, "children.0.selected", true); err != nil {
+		t.Fatalf("JawsSetPath children.0: %v", err)
+	}
+	if !a.Selected {
+		t.Fatal("children.0 should select a")
+	}
+}
+
 func TestTreeSelectionMethodsConcurrentWithInput(t *testing.T) {
 	jw, err := jaws.New()
 	maybeError(t, err)
