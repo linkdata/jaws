@@ -1407,6 +1407,42 @@ func TestServeHTTP_TailScript_EndpointIsPerRequest(t *testing.T) {
 	is.Equal(w.Code, http.StatusNoContent)
 }
 
+func TestServeHTTP_TailScript_RejectsRecycledKey(t *testing.T) {
+	is := newTestHelper(t)
+	jw, _ := New()
+	go jw.Serve()
+	defer jw.Close()
+
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	stale := jw.NewRequest(hr)
+	stale.NewElement(&testUi{}).SetClass("stale")
+	staleKey := stale.JawsKeyString()
+
+	// Recycle the request and create a new one; the pool hands the same struct to
+	// the new connection under a fresh key. A /jaws/.tail fetch for the old key must
+	// not drain the reused request's queue.
+	jw.recycle(stale)
+	rq := jw.NewRequest(hr)
+	rq.NewElement(&testUi{}).SetClass("fresh")
+
+	// Old key was deleted from jw.requests on recycle, so the lookup misses and
+	// nothing is drained.
+	req := httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+staleKey, nil)
+	req.RemoteAddr = hr.RemoteAddr
+	w := httptest.NewRecorder()
+	jw.ServeHTTP(w, req)
+	is.Equal(w.Code, http.StatusNotFound)
+
+	// The reused request's own tail fetch still returns its own content.
+	req = httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString(), nil)
+	req.RemoteAddr = hr.RemoteAddr
+	w = httptest.NewRecorder()
+	jw.ServeHTTP(w, req)
+	is.Equal(w.Code, http.StatusOK)
+	is.Equal(strings.Contains(w.Body.String(), `classList?.add("fresh");`), true)
+	is.Equal(strings.Contains(w.Body.String(), "stale"), false)
+}
+
 func TestServeHTTP_TailScript_WriteError(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()

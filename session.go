@@ -193,8 +193,10 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 		msg := wire.Message{What: what.Reload}
 		for _, rq := range requests {
 			rq.deadSession(sess)
-			msg.Dest = rq
-			sess.jw.Broadcast(msg)
+			if k := rq.destKey(); k != 0 {
+				msg.Dest = k
+				sess.jw.Broadcast(msg)
+			}
 		}
 	}
 	return
@@ -240,8 +242,10 @@ func (sess *Session) Broadcast(msg wire.Message) {
 		// backpressure, and holding sess.mu across that send would stall every
 		// other session reader and writer. This mirrors Session.Close.
 		for _, rq := range sess.Requests() {
-			msg.Dest = rq
-			sess.jw.Broadcast(msg)
+			if k := rq.destKey(); k != 0 {
+				msg.Dest = k
+				sess.jw.Broadcast(msg)
+			}
 		}
 	}
 }

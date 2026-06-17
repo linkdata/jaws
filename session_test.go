@@ -305,15 +305,17 @@ func TestSession_Broadcast(t *testing.T) {
 		if got.What != msg.What || got.Data != msg.Data {
 			t.Fatalf("message %d mismatch: %#v", i+1, got)
 		}
-		if _, ok := got.Dest.(*Request); !ok {
+		// Session.Broadcast targets each request by its key identity, not the
+		// reusable *Request pointer.
+		if _, ok := got.Dest.(key.Key); !ok {
 			t.Fatalf("message %d destination type: %T", i+1, got.Dest)
 		}
 	}
 
-	seen := map[*Request]bool{}
-	seen[msg1.Dest.(*Request)] = true
-	seen[msg2.Dest.(*Request)] = true
-	if !seen[rq1] || !seen[rq2] || len(seen) != 2 {
+	seen := map[key.Key]bool{}
+	seen[msg1.Dest.(key.Key)] = true
+	seen[msg2.Dest.(key.Key)] = true
+	if !seen[rq1.JawsKey] || !seen[rq2.JawsKey] || len(seen) != 2 {
 		t.Fatalf("expected broadcasts for both requests, got %#v", seen)
 	}
 

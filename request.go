@@ -44,7 +44,7 @@ type ConnectFn = func(rq *Request) error
 // between the Request being created and it being used once the WebSocket is created.
 type Request struct {
 	Jaws       *Jaws                   // (read-only) the JaWS instance the Request belongs to
-	JawsKey    key.Key                 // (read-only) a random key used in the WebSocket URI to identify this Request
+	JawsKey    key.Key                 // (read-only) random key identifying this Request in the WebSocket URI; also the broadcast/tail target, read under mu
 	remoteIP   netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
 	Rendering  atomic.Bool             // set to true by RequestWriter.Write()
 	running    atomic.Bool             // if ServeHTTP() is running
@@ -105,6 +105,18 @@ func (rq *Request) JawsKeyString() string {
 
 func (rq *Request) String() string {
 	return "Request<" + rq.JawsKeyString() + ">"
+}
+
+// destKey returns the Request's current identity key, read under rq.mu, for use as
+// a broadcast destination. Targeting the key value rather than the *Request pointer
+// lets the Serve loop reject a message aimed at a request that was recycled and
+// reused before delivery, since the pooled pointer is reused but its key is not. A
+// zero return means the Request has already been recycled and is not a valid target.
+func (rq *Request) destKey() (k key.Key) {
+	rq.mu.RLock()
+	k = rq.JawsKey
+	rq.mu.RUnlock()
+	return
 }
 
 // claim binds this request to the HTTP request making the WebSocket call. It
@@ -258,29 +270,24 @@ func appendJSQuote(b []byte, s string) []byte {
 	return append(b[:start], rest...)
 }
 
-func (rq *Request) writeTailScript(w io.Writer) (sent bool, err error) {
+// drainTailScript builds the tail <script> body from the attribute and class
+// messages queued during initial rendering, reporting sent=true the first time it
+// runs for this Request (subsequent calls return sent=false so the response is 204).
+//
+// It takes only muQueue and never touches the network. Jaws.ServeHTTP calls it
+// while holding jw.mu (read), which blocks recycling (recycling needs the jw.mu
+// write lock), so this Request cannot be recycled and reused under a different key
+// mid-drain: the bytes returned always belong to the identity the handler looked
+// up. The (potentially slow) network write happens afterwards in writeTailResponse
+// with no lock held, so a stalled client cannot block recycling or the Serve loop.
+// The data race on wsQueue/tailsent is prevented because clearLocked also takes
+// muQueue to reset them.
+func (rq *Request) drainTailScript() (b []byte, sent bool) {
 	rq.muQueue.Lock()
 	defer rq.muQueue.Unlock()
-	// We deliberately do not guard against the pooled Request being recycled and
-	// reused for a different connection between the /jaws/.tail lookup and this
-	// drain. Triggering that would require a pending Request recycled inside the
-	// microsecond window of its own in-flight tail fetch, this goroutine stalled
-	// across a full recycle+reuse, and the pool returning that same object to a new
-	// render that re-queued tail messages. The worst case is cosmetic and
-	// self-healing — the stale tab briefly applies another request's attribute/class
-	// updates to same-numbered jids, and the reused tab loses its initial
-	// flicker-prevention — with no server-side state or security impact, since jids
-	// are per-Request, the client already controls its own DOM, and the WebSocket
-	// re-applies the authoritative state on connect. (The data race on
-	// wsQueue/tailsent itself is still prevented: clearLocked takes muQueue to reset
-	// them.) The write-error path, by contrast, is guarded: Jaws.ServeHTTP cancels
-	// through Jaws.cancelIfCurrent, since cancelling a stale pointer would have
-	// real server-side impact — it would kill the unrelated connection that
-	// reused the pooled Request.
 	if !rq.tailsent {
 		rq.tailsent = true
 		sent = true
-		var b []byte
 		n := 0
 		for _, msg := range rq.wsQueue {
 			var fn string
@@ -316,20 +323,22 @@ func (rq *Request) writeTailScript(w io.Writer) (sent bool, err error) {
 			rq.wsQueue[i] = wire.WsMsg{}
 		}
 		rq.wsQueue = rq.wsQueue[:n]
-		if len(b) > 0 {
-			_, err = w.Write(b)
-		}
 	}
 	return
 }
 
-func (rq *Request) writeTailScriptResponse(w http.ResponseWriter) (err error) {
+// writeTailResponse writes the tail script response built by drainTailScript. It
+// holds no locks, so the network write cannot stall recycling or the Serve loop.
+// A sent=false drain (the tail was already fetched, or there was nothing queued
+// to send) responds 204 No Content.
+func (*Request) writeTailResponse(w http.ResponseWriter, b []byte, sent bool) (err error) {
 	hdr := w.Header()
 	hdr["Cache-Control"] = headerCacheControlNoStore
 	hdr["Content-Type"] = headerContentTypeJavaScript
-	var sent bool
-	if sent, err = rq.writeTailScript(w); !sent {
+	if !sent {
 		w.WriteHeader(http.StatusNoContent)
+	} else if len(b) > 0 {
+		_, err = w.Write(b)
 	}
 	return
 }
@@ -493,11 +502,13 @@ func alertData(level, msg string) string {
 // The default JaWS JavaScript only supports Bootstrap dismissible alerts.
 // See [Jaws.Broadcast] for processing-loop requirements.
 func (rq *Request) Alert(level, msg string) {
-	rq.Jaws.Broadcast(wire.Message{
-		Dest: rq,
-		What: what.Alert,
-		Data: alertData(level, msg),
-	})
+	if k := rq.destKey(); k != 0 {
+		rq.Jaws.Broadcast(wire.Message{
+			Dest: k,
+			What: what.Alert,
+			Data: alertData(level, msg),
+		})
+	}
 }
 
 // AlertError calls [Request.Alert] if the given error is not nil.
@@ -515,8 +526,10 @@ func (rq *Request) AlertError(err error) {
 // See [Jaws.Broadcast] for processing-loop requirements.
 func (rq *Request) Redirect(url string) {
 	if msg, ok := rq.Jaws.redirectMessage(url); ok {
-		msg.Dest = rq
-		rq.Jaws.Broadcast(msg)
+		if k := rq.destKey(); k != 0 {
+			msg.Dest = k
+			rq.Jaws.Broadcast(msg)
+		}
 	}
 }
 
@@ -550,8 +563,10 @@ func (rq *Request) Dirty(dirtyTags ...any) {
 // wantMessage returns true if the Request want the message.
 func (rq *Request) wantMessage(msg *wire.Message) (yes bool) {
 	switch dest := msg.Dest.(type) {
-	case *Request:
-		return dest == rq
+	case key.Key: // the request with this identity key
+		rq.mu.RLock()
+		defer rq.mu.RUnlock()
+		return rq.JawsKey == dest
 	case string: // HTML id
 		return true
 	case []any: // more than one tag
@@ -807,7 +822,9 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 	switch v := tagmsg.Dest.(type) {
 	case nil:
 		// matches no elements
-	case *Request:
+	case key.Key:
+		// request-targeted; page-global What values (Reload/Redirect/Order/Alert)
+		// already returned above, so there are no elements to resolve here
 	case string:
 		// target is a regular HTML ID
 		data := tagmsg.Data
