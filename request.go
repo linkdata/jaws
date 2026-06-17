@@ -44,7 +44,7 @@ type ConnectFn = func(rq *Request) error
 // between the Request being created and it being used once the WebSocket is created.
 type Request struct {
 	Jaws       *Jaws                   // (read-only) the JaWS instance the Request belongs to
-	JawsKey    key.Key                 // (read-only) random key identifying this Request in the WebSocket URI and the broadcast/tail target; the identity check (destKey, wantMessage) reads it under mu
+	JawsKey    key.Key                 // (read-only) random key identifying this Request in the WebSocket URI and the broadcast/tail target; read under mu by the identity check (destKey, wantMessage) and the render path (JawsKeyString, HeadHTML)
 	remoteIP   netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
 	Rendering  atomic.Bool             // set to true by RequestWriter.Write()
 	running    atomic.Bool             // if ServeHTTP() is running
