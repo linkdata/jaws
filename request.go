@@ -98,7 +98,9 @@ var (
 func (rq *Request) JawsKeyString() string {
 	jawsKey := key.Key(0)
 	if rq != nil {
+		rq.mu.RLock()
 		jawsKey = rq.JawsKey
+		rq.mu.RUnlock()
 	}
 	return jawsKey.String()
 }
@@ -245,11 +247,14 @@ func (rq *Request) clearLocked() *Request {
 
 // HeadHTML writes the HTML code needed in the HTML page's HEAD section.
 func (rq *Request) HeadHTML(w io.Writer) (err error) {
+	rq.mu.RLock()
+	jawsKey := rq.JawsKey
+	rq.mu.RUnlock()
 	var b []byte
 	rq.Jaws.mu.RLock()
 	b = append(b, rq.Jaws.headPrefix...)
 	rq.Jaws.mu.RUnlock()
-	b = key.Append(b, rq.JawsKey)
+	b = key.Append(b, jawsKey)
 	b = append(b, `">`...)
 	_, err = w.Write(b)
 	return
