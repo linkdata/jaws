@@ -678,9 +678,15 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 // set; with a Logger the error is logged and the message is sent to the
 // destinations that did expand.
 func (jw *Jaws) Broadcast(msg wire.Message) {
-	switch msg.Dest.(type) {
+	switch dest := msg.Dest.(type) {
 	case nil: // send to all requests
-	case *Request: // send to that request
+	case key.Key: // send to the request with this identity key
+		if dest == 0 {
+			// A recycled producer captured a zeroed key; no live request can match
+			// (keys are always non-zero), so drop it rather than fall through to
+			// tag expansion.
+			return
+		}
 	case string: // HTML id (accepted by all requests)
 	default:
 		expanded, err := tag.TagExpand(nil, msg.Dest)
@@ -1277,11 +1283,22 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			default:
 				if jawsKeyString, ok := strings.CutPrefix(r.URL.Path, "/jaws/.tail/"); ok {
 					jawsKey := key.Parse(jawsKeyString)
+					// Hold jw.mu (read) across both the lookup and the drain: recycling
+					// needs the jw.mu write lock, so rq cannot be recycled and reused
+					// under a different key while we drain its queue. A stale key either
+					// misses the map (404) or drains its own genuine content. The network
+					// write is done after releasing jw.mu so a slow client cannot stall
+					// recycling or the Serve loop.
 					jw.mu.RLock()
 					rq := jw.requests[jawsKey]
+					var b []byte
+					var sent bool
+					if rq != nil {
+						b, sent = rq.drainTailScript()
+					}
 					jw.mu.RUnlock()
 					if rq != nil {
-						if err := rq.writeTailScriptResponse(w); err != nil {
+						if err := rq.writeTailResponse(w, b, sent); err != nil {
 							jw.cancelIfCurrent(jawsKey, rq, err)
 						}
 						return

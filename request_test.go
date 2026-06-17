@@ -80,6 +80,52 @@ func TestRequest_Registrations(t *testing.T) {
 	is.Equal(rq.wantMessage(&wire.Message{Dest: x}), true)
 }
 
+func TestRequest_wantMessage_KeyDest(t *testing.T) {
+	is := newTestHelper(t)
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	liveKey := rq.JawsKey
+	is.True(liveKey != 0)
+
+	tests := []struct {
+		name string
+		dest key.Key
+		want bool
+	}{
+		{"matching key", liveKey, true},
+		{"other key", liveKey + 1, false},
+		{"zero key", 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			newTestHelper(t).Equal(rq.wantMessage(&wire.Message{Dest: tt.dest}), tt.want)
+		})
+	}
+}
+
+// TestRequest_wantMessage_RejectsRecycledKey is the core broadcast regression: a
+// message aimed at a request's key must not be delivered to the reused pooled
+// object that now carries a different key, even when the pool hands back the same
+// *Request pointer (the previous dest == rq pointer match would have matched here).
+func TestRequest_wantMessage_RejectsRecycledKey(t *testing.T) {
+	is := newTestHelper(t)
+	jw, _ := New()
+	go jw.Serve()
+	defer jw.Close()
+
+	stale := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	staleKey := stale.JawsKey
+	is.True(stale.wantMessage(&wire.Message{Dest: staleKey}))
+
+	// Recycle and reuse the pooled object under a new key.
+	jw.recycle(stale)
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+
+	is.Equal(rq.wantMessage(&wire.Message{Dest: staleKey}), false)
+	is.True(rq.wantMessage(&wire.Message{Dest: rq.JawsKey}))
+}
+
 func TestRequest_HeadHTML(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()
@@ -164,7 +210,8 @@ func TestRequest_writeTailScript_EscapesScriptClose(t *testing.T) {
 	e.SetAttr("title", "</script><img onerror=alert(1) src=x>")
 
 	w := httptest.NewRecorder()
-	if err := rq.writeTailScriptResponse(w); err != nil {
+	b, sent := rq.drainTailScript()
+	if err := rq.writeTailResponse(w, b, sent); err != nil {
 		t.Fatal(err)
 	}
 	s := w.Body.String()
@@ -194,7 +241,8 @@ func TestRequest_writeTailScript_PreservesNonAttrMessages(t *testing.T) {
 	rq.muQueue.Unlock()
 
 	w := httptest.NewRecorder()
-	if err := rq.writeTailScriptResponse(w); err != nil {
+	b, sent := rq.drainTailScript()
+	if err := rq.writeTailResponse(w, b, sent); err != nil {
 		t.Fatal(err)
 	}
 
@@ -218,7 +266,8 @@ func TestRequest_writeTailScript_RemoveAttrAndClass(t *testing.T) {
 	e.RemoveClass("cls")
 
 	w := httptest.NewRecorder()
-	if err := rq.writeTailScriptResponse(w); err != nil {
+	b, sent := rq.drainTailScript()
+	if err := rq.writeTailResponse(w, b, sent); err != nil {
 		t.Fatal(err)
 	}
 	s := w.Body.String()
@@ -231,10 +280,11 @@ func TestRequest_writeTailScript_RemoveAttrAndClass(t *testing.T) {
 }
 
 // TestRequest_TailScriptConcurrentWithRecycle exercises a /jaws/.tail fetch
-// racing recycle of the same still-pending request. clearLocked resets
-// wsQueue/tailsent, which writeTailScript reads under muQueue, and takes muQueue
-// for that reset so the two cannot race; without that guard this is a data race
-// the single-goroutine tail tests never hit. Run with -race.
+// racing recycle of the same still-pending request. The handler holds jw.mu (read)
+// across the drainTailScript call and recycle needs the jw.mu write lock, so the
+// drain and recycle are serialized: the fetch can never drain a recycled+reused
+// request. clearLocked also takes muQueue to reset wsQueue/tailsent, the lock
+// drainTailScript holds, so that reset cannot race the drain either. Run with -race.
 func TestRequest_TailScriptConcurrentWithRecycle(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
@@ -253,6 +303,32 @@ func TestRequest_TailScriptConcurrentWithRecycle(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			jw.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, tailURL, nil))
+		}()
+		go func() {
+			defer wg.Done()
+			jw.recycle(rq)
+		}()
+	}
+	wg.Wait()
+}
+
+// TestRequest_wantMessageConcurrentWithRecycle stresses the broadcast identity
+// check: wantMessage reads rq.JawsKey under rq.mu while recycle zeroes it under the
+// same lock. The read and write must be serialized so there is no data race on the
+// key. Run with -race.
+func TestRequest_wantMessageConcurrentWithRecycle(t *testing.T) {
+	jw, _ := New()
+	defer jw.Close()
+
+	const n = 300
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		rq := jw.NewRequest(nil)
+		staleKey := rq.JawsKey
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			rq.wantMessage(&wire.Message{Dest: staleKey})
 		}()
 		go func() {
 			defer wg.Done()
@@ -673,7 +749,7 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 		case <-th.C:
 			th.Timeout()
 		default:
-			rq.Jaws.Broadcast(wire.Message{Dest: rq})
+			rq.Jaws.Broadcast(wire.Message{Dest: rq.JawsKey})
 		}
 		select {
 		case rq.InCh <- wire.WsMsg{}:
@@ -747,6 +823,35 @@ func TestRequest_Redirect(t *testing.T) {
 		t.Errorf("%q", s)
 	default:
 	}
+}
+
+func TestBroadcast_ZeroKeyDestDropped(t *testing.T) {
+	th := newTestHelper(t)
+	tj := newTestJaws()
+	defer tj.Close()
+	rq := tj.newRequest(nil)
+
+	// A zero key (captured from an already-recycled request) targets no live
+	// request: Broadcast drops it before it reaches the Serve loop rather than
+	// treating it as a tag. A real follow-up still arrives, proving only the
+	// zero-key message was dropped, and no bad-destination misuse is logged.
+	rq.Jaws.Broadcast(wire.Message{Dest: key.Key(0), What: what.Alert, Data: alertData("info", "dropped")})
+	rq.Alert("info", "kept")
+
+	select {
+	case <-th.C:
+		th.Timeout()
+	case msg := <-rq.OutCh:
+		s := msg.Format()
+		th.True(strings.Contains(s, "kept"))
+		th.Equal(strings.Contains(s, "dropped"), false)
+	}
+	select {
+	case s := <-rq.OutCh:
+		t.Errorf("unexpected second delivery: %q", s)
+	default:
+	}
+	th.Equal(strings.Contains(tj.log.String(), "jaws: Broadcast"), false)
 }
 
 func TestRequest_Cancel(t *testing.T) {
