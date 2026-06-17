@@ -182,6 +182,50 @@ func TestContainerHelperUpdateContainerDuplicates(t *testing.T) {
 	}
 }
 
+// TestContainerHelper_ReconcileDiscardsOutOfBandDeletedChild verifies that a child
+// Element deleted out-of-band (e.g. by a what.Delete broadcast on a shared tag, or a
+// browser what.Remove) is not reused from the reconcile pool. A deleted Element is
+// inert, so reusing it would leave the still-wanted child permanently unrendered and
+// put a phantom Jid in the Order; reconcile must create a fresh Element instead.
+func TestContainerHelper_ReconcileDiscardsOutOfBandDeletedChild(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	span1 := NewSpan(testHTMLGetter("span1"))
+	span2 := NewSpan(testHTMLGetter("span2"))
+	tc := &testContainer{contents: []jaws.UI{span1, span2}}
+	container := NewContainer("div", tc)
+	elem, _ := renderUI(t, rq, container)
+
+	if len(container.contents) != 2 {
+		t.Fatalf("want 2 contents got %d", len(container.contents))
+	}
+	deletedChild := container.contents[1]
+	deletedJid := deletedChild.Jid()
+
+	// Delete span2's Element out-of-band while the container still wants it.
+	rq.DeleteElement(deletedChild)
+	if !deletedChild.Deleted() {
+		t.Fatal("expected child to be marked deleted")
+	}
+
+	// tc.contents is unchanged (still wants span1 and span2), so reconcile must not
+	// reuse the deleted Element for span2.
+	container.JawsUpdate(elem)
+
+	if len(container.contents) != 2 {
+		t.Fatalf("want 2 contents after update got %d", len(container.contents))
+	}
+	fresh := container.contents[1]
+	if fresh == deletedChild || fresh.Jid() == deletedJid {
+		t.Fatal("reconcile reused the deleted Element instead of creating a fresh one")
+	}
+	if fresh.Deleted() {
+		t.Fatal("replacement child must not be deleted")
+	}
+	if rq.GetElementByJid(fresh.Jid()) == nil {
+		t.Fatal("replacement child must be registered in the request")
+	}
+}
+
 func TestContainerHelperRenderErrorPaths(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	renderErr := errors.New("render error")

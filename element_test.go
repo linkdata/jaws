@@ -426,7 +426,13 @@ func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
 	}
 	rq.Jaws.Debug = false
 
+	if elem.Deleted() {
+		t.Fatal("element must not report Deleted before DeleteElement")
+	}
 	rq.DeleteElement(elem)
+	if !elem.Deleted() {
+		t.Fatal("element must report Deleted after DeleteElement")
+	}
 	if err := elem.JawsRender(&sb, nil); err != nil {
 		t.Fatal(err)
 	}

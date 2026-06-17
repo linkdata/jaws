@@ -137,10 +137,19 @@ func (u *ContainerHelper) reconcile(elem *jaws.Element, wantContents []jaws.UI) 
 	u.contents = u.contents[:0]
 	for _, childUI := range wantContents {
 		var childElem *jaws.Element
-		if elems := pool[childUI]; len(elems) > 0 {
-			childElem = elems[0]
+		// Reuse a pooled Element, discarding any that were deleted out-of-band (a
+		// what.Delete broadcast targeting a tag the child registered, or a browser
+		// what.Remove). A deleted Element is inert, so reusing it would leave the
+		// child permanently unrendered and put a phantom Jid in the Order; falling
+		// through to NewElement re-creates it so the container self-heals.
+		for elems := pool[childUI]; len(elems) > 0 && childElem == nil; elems = pool[childUI] {
+			candidate := elems[0]
 			pool[childUI] = elems[1:]
-		} else {
+			if !candidate.Deleted() {
+				childElem = candidate
+			}
+		}
+		if childElem == nil {
 			childElem = elem.Request.NewElement(childUI)
 			toAppend = append(toAppend, childElem)
 		}

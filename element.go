@@ -100,6 +100,19 @@ func (elem *Element) UI() UI {
 	return elem.ui
 }
 
+// Deleted reports whether the [Element] has been removed from its [Request].
+//
+// A deleted Element is inert: [Element.JawsRender], [Element.JawsUpdate] and the
+// queue helpers are all no-ops on it. Widgets that retain *Element references
+// across renders (for example a container helper that pools child elements for
+// reuse) can use this to detect and discard an element that was deleted
+// out-of-band — via a [Jaws.Delete] broadcast on a shared tag or a browser
+// removal — before reusing it, which would otherwise leave the child silently
+// unrendered.
+func (elem *Element) Deleted() bool {
+	return elem.deleted.Load()
+}
+
 func (elem *Element) renderDebug(w io.Writer) {
 	var sb strings.Builder
 	_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", elem.Jid(), elem.UI())
