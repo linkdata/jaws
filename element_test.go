@@ -37,8 +37,10 @@ func (tss *testUi) JawsInit(elem *Element) (err error) {
 	return tss.initError
 }
 
-var _ UI = (*testUi)(nil)
-var _ InitHandler = (*testUi)(nil)
+var (
+	_ UI          = (*testUi)(nil)
+	_ InitHandler = (*testUi)(nil)
+)
 
 func (tss *testUi) JawsGet(elem *Element) string {
 	atomic.AddInt32(&tss.getCalled, 1)
@@ -75,12 +77,15 @@ func (a testApplyGetterAll) JawsGetTag(tag.Context) any { return tag.Tag("tg") }
 func (a testApplyGetterAll) JawsClick(elem *Element, click Click) error {
 	return ErrEventUnhandled
 }
+
 func (a testApplyGetterAll) JawsInput(elem *Element, value string) error {
 	return ErrEventUnhandled
 }
+
 func (a testApplyGetterAll) JawsSet(elem *Element, value string) error {
 	return ErrEventUnhandled
 }
+
 func (a testApplyGetterAll) JawsInit(elem *Element) error {
 	return a.initErr
 }
@@ -463,8 +468,7 @@ func TestElement_ApplyGetterDebugBranches(t *testing.T) {
 	}
 }
 
-type testClickHandler struct {
-}
+type testClickHandler struct{}
 
 func (tch testClickHandler) JawsClick(elem *Element, click Click) (err error) {
 	return nil
@@ -566,8 +570,10 @@ func (h testClickAndInitialHTMLAttr) JawsInitialHTMLAttr(elem *Element) (attr te
 	return
 }
 
-var _ ClickHandler = testClickAndInitialHTMLAttr{}
-var _ InitialHTMLAttrHandler = testClickAndInitialHTMLAttr{}
+var (
+	_ ClickHandler           = testClickAndInitialHTMLAttr{}
+	_ InitialHTMLAttrHandler = testClickAndInitialHTMLAttr{}
+)
 
 type testUnhashableUI struct {
 	m map[string]int

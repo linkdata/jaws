@@ -122,7 +122,7 @@ func Test_NamedBoolArray(t *testing.T) {
 	if nba.IsChecked("2") {
 		t.Fatal("expected IsChecked(2)=false")
 	}
-	(nba.data)[1].Set(true)
+	nba.data[1].Set(true)
 	if !nba.IsChecked("2") {
 		t.Fatal("expected IsChecked(2)=true")
 	}
