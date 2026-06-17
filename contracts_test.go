@@ -112,6 +112,23 @@ func Test_defaultAuth(t *testing.T) {
 	}
 }
 
+func TestJaws_DefaultAuthReturnsSharedInstance(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	// A shared instance keeps the embedded sync.Once effective across renders so
+	// the fail-open warning is logged once per Jaws, not once per template render.
+	a := jw.DefaultAuth()
+	if a == nil {
+		t.Fatal("DefaultAuth returned nil")
+	}
+	if jw.DefaultAuth() != a {
+		t.Fatal("DefaultAuth must return the same shared instance")
+	}
+}
+
 func Test_InitialHTMLAttrHandler_IgnoredByDispatch(t *testing.T) {
 	if err := callEventHandler(testJawsInitialHTMLAttr{}, nil, what.Input, "ignored"); err != ErrEventUnhandled {
 		t.Fatalf("expected ErrEventUnhandled, got %v", err)

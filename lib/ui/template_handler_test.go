@@ -65,6 +65,48 @@ func (l *templateLogger) Error(_ string, args ...any) {
 	}
 }
 
+// warnCountLogger counts Warn calls whose message contains substr.
+type warnCountLogger struct {
+	substr string
+	count  int
+}
+
+func (l *warnCountLogger) Info(string, ...any) {}
+func (l *warnCountLogger) Warn(msg string, _ ...any) {
+	if strings.Contains(msg, l.substr) {
+		l.count++
+	}
+}
+func (l *warnCountLogger) Error(string, ...any) {}
+
+// TestTemplate_DefaultAuthWarnsOncePerJawsAcrossRenders verifies that with
+// MakeAuth unset, rendering a template that consults .Auth.IsAdmin logs the
+// fail-open warning only once per Jaws instance across many renders. The reused
+// jaws.Jaws.DefaultAuth keeps its sync.Once effective; a fresh DefaultAuth
+// allocated per render (the previous behavior) re-warns on every render.
+func TestTemplate_DefaultAuthWarnsOncePerJawsAcrossRenders(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	logger := &warnCountLogger{substr: "DefaultAuth.IsAdmin returns true"}
+	jw.Logger = logger
+	// MakeAuth is deliberately left nil so templates receive the DefaultAuth.
+
+	_ = jw.AddTemplateLookuper(template.Must(template.New("authtmpl").Parse(
+		`{{if $.Auth.IsAdmin}}<span>admin</span>{{end}}`,
+	)))
+
+	for range 3 {
+		var sb bytes.Buffer
+		rw := RequestWriter{Request: rq, Writer: &sb}
+		if err := rw.Template("div", "authtmpl", tag.Tag("dot")); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if logger.count != 1 {
+		t.Fatalf("fail-open warning logged %d times across 3 renders, want 1", logger.count)
+	}
+}
+
 func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	jw.MakeAuth = func(*jaws.Request) jaws.Auth { return templateAuth{} }

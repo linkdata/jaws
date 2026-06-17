@@ -24,6 +24,9 @@ func (e errWebSocketIPMismatch) Is(target error) bool {
 }
 
 // newErrWebSocketIPMismatchLocked reads rq fields; caller must hold rq.mu.
+//
+// It reads rq.JawsKey directly rather than via [Request.JawsKeyString], which
+// takes rq.mu and would deadlock here since the caller already holds it.
 func newErrWebSocketIPMismatchLocked(rq *Request, actual netip.Addr) error {
-	return errWebSocketIPMismatch{JawsKey: rq.JawsKeyString(), Expected: rq.remoteIP, Actual: actual}
+	return errWebSocketIPMismatch{JawsKey: rq.JawsKey.String(), Expected: rq.remoteIP, Actual: actual}
 }
