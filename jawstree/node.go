@@ -135,6 +135,12 @@ func (node *Node) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err
 // index must be within the current Children range; out-of-range, malformed, or
 // nil-targeting segments are rejected, so a client can neither grow the slice nor
 // address a node that does not exist.
+//
+// Indices must be in canonical decimal form (no leading '+', '-' or zeros) so the
+// index a client sends round-trips to the same string [Node.Walk] emits as the
+// node ID. A non-canonical but in-range index would mutate the server node yet be
+// echoed verbatim as the [Node.JawsPathSet] broadcast "id", which no peer's
+// rendered node matches, diverging peer state from the server.
 func (node *Node) resolveChildPath(nodePath string) (*Node, error) {
 	cur := node
 	for nodePath != "" {
@@ -147,6 +153,9 @@ func (node *Node) resolveChildPath(nodePath string) (*Node, error) {
 		idx, err := strconv.Atoi(idxStr)
 		if err != nil || idx < 0 || idx >= len(cur.Children) || cur.Children[idx] == nil {
 			return nil, fmt.Errorf("%w: child index %q out of range", ErrPathRejected, idxStr)
+		}
+		if strconv.Itoa(idx) != idxStr {
+			return nil, fmt.Errorf("%w: non-canonical child index %q", ErrPathRejected, idxStr)
 		}
 		cur = cur.Children[idx]
 	}

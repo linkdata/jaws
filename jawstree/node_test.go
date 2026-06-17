@@ -124,6 +124,8 @@ func TestNode_JawsSetPath_Gate(t *testing.T) {
 			"children.99.selected",           // far out of range
 			"children.-1.selected",           // negative
 			"children.x.selected",            // non-numeric
+			"children.+0.selected",           // non-canonical: leading '+' (Atoi accepts it)
+			"children.00.selected",           // non-canonical: leading zero
 			"children.0.children.0.selected", // child has no children
 			"bogus.selected",                 // path segment is not "children"
 		} {
