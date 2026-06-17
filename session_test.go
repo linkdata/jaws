@@ -329,6 +329,79 @@ func TestSession_Broadcast(t *testing.T) {
 	jw.recycle(rq2)
 }
 
+// TestSession_ProducersSkipRecycled covers the destKey()==0 branch in
+// Session.Broadcast and Session.Close. A request can still be listed in the session
+// while a concurrent recycle has already zeroed its key; both producers must skip it
+// and target only the live requests. The state is reproduced here by zeroing one
+// request's key while it remains in the session list. (A zero-key message would also
+// be dropped by Jaws.Broadcast, so the guard just avoids the wasted round-trip and
+// is the only coverage of the branch.)
+func TestSession_ProducersSkipRecycled(t *testing.T) {
+	th := newTestHelper(t)
+	jw, _ := New()
+	defer jw.Close()
+
+	rr := httptest.NewRecorder()
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	sess := jw.NewSession(rr, hr)
+	th.True(sess != nil)
+
+	live := jw.NewRequest(hr)
+	hr2 := httptest.NewRequest(http.MethodGet, "/2", nil)
+	hr2.RemoteAddr = hr.RemoteAddr
+	hr2.AddCookie(sess.Cookie())
+	recycled := jw.NewRequest(hr2)
+	th.True(live.Session() == sess)
+	th.True(recycled.Session() == sess)
+
+	// Simulate a recycle that has zeroed the key but not yet removed the request
+	// from the session list. Write under rq.mu to match destKey/wantMessage.
+	recycled.mu.Lock()
+	recycled.JawsKey = 0
+	recycled.mu.Unlock()
+
+	// Session.Broadcast targets only the live request.
+	done := make(chan struct{})
+	go func() {
+		sess.Broadcast(wire.Message{What: what.Alert, Data: "info\nhi"})
+		close(done)
+	}()
+	got := nextBroadcast(t, jw)
+	th.Equal(got.Dest, live.JawsKey)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for Session.Broadcast")
+	}
+	select {
+	case extra := <-jw.bcastCh:
+		t.Fatalf("recycled request must not broadcast, got %#v", extra)
+	default:
+	}
+
+	// Session.Close reloads only the live request.
+	closeDone := make(chan struct{})
+	go func() {
+		sess.Close()
+		close(closeDone)
+	}()
+	got = nextBroadcast(t, jw)
+	th.Equal(got.What, what.Reload)
+	th.Equal(got.Dest, live.JawsKey)
+	select {
+	case <-closeDone:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for Session.Close")
+	}
+	select {
+	case extra := <-jw.bcastCh:
+		t.Fatalf("recycled request must not broadcast, got %#v", extra)
+	default:
+	}
+
+	jw.recycle(live)
+}
+
 func TestSession_Delete(t *testing.T) {
 	th := newTestHelper(t)
 	ts := newTestServer(t)

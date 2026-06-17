@@ -157,7 +157,7 @@ func (jsvar *JsVar[T]) exceedsClientJsVarCap(n int) bool {
 
 // setPathLocked applies the mutation and must be called with the write lock held.
 func (jsvar *JsVar[T]) setPathLocked(elem *jaws.Element, jsPath string, value any) (err error) {
-	if ps, ok := ((any)(jsvar.Ptr).(PathSetter)); ok {
+	if ps, ok := any(jsvar.Ptr).(PathSetter); ok {
 		err = ps.JawsSetPath(elem, jsPath, value)
 	} else {
 		var changed bool
@@ -211,7 +211,7 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any) (er
 		return ErrIllegalJsVarPath
 	}
 	if err = jsvar.setPathLock(elem, jsPath, value); err == nil {
-		if sp, ok := ((any)(jsvar.Ptr).(SetPather)); ok {
+		if sp, ok := any(jsvar.Ptr).(SetPather); ok {
 			sp.JawsPathSet(elem, jsPath, value)
 		}
 	}
