@@ -139,6 +139,75 @@ func BenchmarkRequestLifecyclePooling(b *testing.B) {
 	}
 }
 
+func benchmarkSyncSubscription(b *testing.B, jw *Jaws) {
+	b.Helper()
+	for i := 0; i <= cap(jw.subCh); i++ {
+		select {
+		case jw.subCh <- subscription{}:
+		case <-jw.Done():
+			b.Fatal("jaws closed before subscription barrier")
+		}
+	}
+}
+
+func benchmarkWaitClosedSubscription(b *testing.B, jw *Jaws, msgCh chan wire.Message) {
+	b.Helper()
+	select {
+	case _, ok := <-msgCh:
+		if ok {
+			b.Fatal("subscription channel received a message instead of closing")
+		}
+	case <-jw.Done():
+		b.Fatal("jaws closed before subscription channel")
+	}
+}
+
+// BenchmarkSubscriptionChannels compares the real subscribe/unsubscribe
+// lifecycle using unbuffered production channels against the former one-element
+// buffered channels.
+func BenchmarkSubscriptionChannels(b *testing.B) {
+	for _, c := range []struct {
+		name string
+		size int
+	}{
+		{"unbuffered", 0},
+		{"buffered=1", 1},
+	} {
+		b.Run(c.name, func(b *testing.B) {
+			jw, err := New()
+			if err != nil {
+				b.Fatal(err)
+			}
+			jw.subCh = make(chan subscription, c.size)
+			jw.unsubCh = make(chan chan wire.Message, c.size)
+			doneCh := make(chan struct{})
+			go func() {
+				jw.ServeWithTimeout(time.Hour)
+				close(doneCh)
+			}()
+			benchmarkSyncSubscription(b, jw)
+			defer func() {
+				jw.Close()
+				<-doneCh
+			}()
+
+			rq := jw.NewRequest(nil)
+			defer jw.recycle(rq)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				msgCh := jw.subscribe(rq, 1)
+				if msgCh == nil {
+					b.Fatal("subscribe returned nil")
+				}
+				benchmarkSyncSubscription(b, jw)
+				jw.unsubscribe(msgCh)
+				benchmarkWaitClosedSubscription(b, jw, msgCh)
+			}
+		})
+	}
+}
+
 // BenchmarkDistributeDirt guards the per-updateTicker fan-out path: under jw.mu it
 // snapshots and order-sorts the dirty tag set and appends it to every active
 // Request. The benchmark exists to catch an accidental O(n^2) or per-call

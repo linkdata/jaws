@@ -1095,14 +1095,12 @@ func TestJaws_ServeWithTimeoutBounds(t *testing.T) {
 
 func waitForServeLoop(t *testing.T, jw *Jaws) {
 	t.Helper()
-	for i := 0; i <= cap(jw.subCh); i++ {
-		select {
-		case jw.subCh <- subscription{}:
-		case <-jw.Done():
-			t.Fatal("jaws closed before serve loop was ready")
-		case <-time.After(time.Second):
-			t.Fatal("timeout waiting for serve loop to drain subscriptions")
-		}
+	select {
+	case jw.subCh <- subscription{}:
+	case <-jw.Done():
+		t.Fatal("jaws closed before serve loop was ready")
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for serve loop to receive subscription rendezvous")
 	}
 }
 
@@ -1174,10 +1172,7 @@ func TestJaws_ServeWithTimeoutFullSubscriberChannel(t *testing.T) {
 			close(done)
 		}()
 		jw.subCh <- subscription{msgCh: msgCh, rq: rq}
-		// Ensure ServeWithTimeout has consumed the subscription before broadcast.
-		for i := 0; i <= cap(jw.subCh); i++ {
-			jw.subCh <- subscription{}
-		}
+		waitForServeLoop(t, jw)
 		jw.bcastCh <- wire.Message{What: what.Alert, Data: "x"}
 
 		// Once the Serve loop is durably blocked again it has processed the

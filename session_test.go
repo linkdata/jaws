@@ -331,7 +331,6 @@ func TestSession_Delete(t *testing.T) {
 	th := newTestHelper(t)
 	ts := newTestServer(t)
 	defer ts.Close()
-	go ts.jw.ServeWithTimeout(time.Second)
 
 	// the test session is there
 	sl := ts.jw.Sessions()

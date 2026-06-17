@@ -1216,6 +1216,8 @@ var headerContentTypeJavaScript = []string{"text/javascript"}
 // ServeHTTP implements [http.Handler].
 //
 // Requires [Jaws.UseRequest] to have been successfully called for the [Request].
+// The JaWS processing loop ([Jaws.Serve] or [Jaws.ServeWithTimeout]) must also
+// be running so the request can subscribe to broadcasts and unsubscribe on exit.
 func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if rq.startServe() {
 		defer rq.stopServe()

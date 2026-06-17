@@ -1489,17 +1489,27 @@ func TestCoverage_PendingSubscribeMaintenanceAndParse(t *testing.T) {
 		t.Fatalf("expected zero pending requests, got %d", got)
 	}
 
-	msgCh := jw.subscribe(rq, 1)
+	subDone := make(chan chan wire.Message)
+	go func() {
+		subDone <- jw.subscribe(rq, 1)
+	}()
+	sub := <-jw.subCh
+	msgCh := <-subDone
 	if msgCh == nil {
 		t.Fatal("expected non-nil subscription channel")
 	}
-	if sub := <-jw.subCh; sub.msgCh != msgCh {
+	if sub.msgCh != msgCh {
 		t.Fatal("unexpected subscription")
 	}
-	jw.unsubscribe(msgCh)
+	unsubDone := make(chan struct{})
+	go func() {
+		jw.unsubscribe(msgCh)
+		close(unsubDone)
+	}()
 	if got := <-jw.unsubCh; got != msgCh {
 		t.Fatal("unexpected unsubscribe channel")
 	}
+	<-unsubDone
 
 	// Request timeout path.
 	rq.mu.Lock()
@@ -1521,8 +1531,6 @@ func TestCoverage_PendingSubscribeMaintenanceAndParse(t *testing.T) {
 	}
 
 	// done-channel branch in subscribe and unsubscribe.
-	jw.subCh <- subscription{} // fill channel so send case is not selectable
-	jw.unsubCh <- make(chan wire.Message)
 	jw.Close()
 	if ch := jw.subscribe(nil, 1); ch != nil {
 		t.Fatalf("expected nil subscription after close, got %v", ch)
@@ -1621,6 +1629,10 @@ func TestCoverage_RequestProcessHTTPDoneAndBroadcastDone(t *testing.T) {
 	inCh := make(chan wire.WsMsg)
 	outCh := make(chan wire.WsMsg, 1)
 	done := make(chan struct{})
+	unsubDone := make(chan chan wire.Message, 1)
+	go func() {
+		unsubDone <- <-jw.unsubCh
+	}()
 	go func() {
 		rq.process(bcastCh, inCh, outCh)
 		close(done)
@@ -1630,6 +1642,9 @@ func TestCoverage_RequestProcessHTTPDoneAndBroadcastDone(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for process exit on httpDone")
+	}
+	if got := <-unsubDone; got != bcastCh {
+		t.Fatalf("unexpected unsubscribe channel %p, want %p", got, bcastCh)
 	}
 
 	jw.Close()
@@ -2041,6 +2056,8 @@ func newTestServerWithSession(t *testing.T, withSession bool) (ts *testServer) {
 	if rq != jw.UseRequest(rq.JawsKey, hr) {
 		panic("UseRequest failed")
 	}
+	go jw.Serve()
+	waitForServeLoop(t, jw)
 	ts = &testServer{
 		jw:          jw,
 		ctx:         ctx,

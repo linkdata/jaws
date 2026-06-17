@@ -53,9 +53,9 @@ func TestNewTestRequest_PanicsWhenJawsClosed(t *testing.T) {
 
 func TestTestServe_TimesOutWhenServeNotRunning(t *testing.T) {
 	// Without a running Serve/ServeWithTimeout loop nothing drains subCh, so the
-	// subscribe flush in TestServe can neither complete nor see Done, and it must
-	// panic after its 5s timeout. Run in a synctest bubble so that timeout elapses
-	// in fake time rather than stalling the test for five real seconds.
+	// subscription rendezvous in TestServe can neither complete nor see Done, and
+	// it must panic after its 5s timeout. Run in a synctest bubble so that timeout
+	// elapses in fake time rather than stalling the test for five real seconds.
 	synctest.Test(t, func(t *testing.T) {
 		jw, err := New()
 		if err != nil {
@@ -63,6 +63,60 @@ func TestTestServe_TimesOutWhenServeNotRunning(t *testing.T) {
 		}
 		defer jw.Close()
 		rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		defer func() {
+			s, ok := recover().(string)
+			if !ok || !strings.Contains(s, "timed out subscribing") {
+				t.Fatalf("expected timeout panic, got %v", s)
+			}
+		}()
+		jw.TestServe(rq, func(any) {})
+		t.Fatal("expected TestServe to panic")
+	})
+}
+
+func TestTestServe_PanicsWhenClosedAfterSubscribing(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	subCh := make(chan subscription)
+	jw.subCh = subCh
+	readyCh := make(chan struct{})
+	go func() {
+		close(readyCh)
+		<-subCh
+		jw.Close()
+	}()
+	<-readyCh
+
+	defer func() {
+		s, ok := recover().(string)
+		if !ok || !strings.Contains(s, "Jaws instance is closed") {
+			t.Fatalf("expected closed panic, got %v", s)
+		}
+	}()
+	jw.TestServe(rq, func(any) {})
+	t.Fatal("expected TestServe to panic")
+}
+
+func TestTestServe_TimesOutAfterSubscribing(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer jw.Close()
+		rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		subCh := make(chan subscription)
+		jw.subCh = subCh
+		readyCh := make(chan struct{})
+		go func() {
+			close(readyCh)
+			<-subCh
+		}()
+		<-readyCh
+
 		defer func() {
 			s, ok := recover().(string)
 			if !ok || !strings.Contains(s, "timed out subscribing") {
