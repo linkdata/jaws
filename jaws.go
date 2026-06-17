@@ -673,6 +673,10 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 //
 // All convenience helpers on [Jaws] that call Broadcast inherit this requirement.
 //
+// A nil [wire.Message.Dest] targets every Request; a [key.Key] Dest targets the
+// single Request with that identity key, and a zero key is dropped; a string Dest
+// is an HTML id accepted by all Requests. Any other Dest is expanded into tags.
+//
 // A [wire.Message.Dest] that cannot be expanded into tags (an illegal tag type)
 // is reported through [Jaws.MustLog], which panics when no [Jaws.Logger] is
 // set; with a Logger the error is logged and the message is sent to the
