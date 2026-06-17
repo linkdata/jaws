@@ -84,6 +84,10 @@ func BenchmarkTagExpand(b *testing.B) {
 		tag  any
 	}{
 		{name: "SingleTag", tag: Tag("single")},
+		// StructTag exercises the struct-kind runtime comparability check that
+		// ensureUsableTag runs (scalar/pointer tags skip it); benchID is a small
+		// comparable struct value, not a pointer.
+		{name: "StructTag", tag: benchID{n: 1}},
 		{name: "FlatTags8", tag: flatTags8},
 		{name: "FlatAny16", tag: flatAny},
 		{name: "NestedAnyTree", tag: nestedAny},
