@@ -7,7 +7,6 @@ import (
 	"errors"
 	"html/template"
 	"io"
-	"log/slog"
 	"mime"
 	"net/http"
 	"net/http/httptest"
@@ -466,9 +465,8 @@ func TestJaws_BroadcastMultiRuntimeNonComparable(t *testing.T) {
 }
 
 // TestJaws_dropNonComparableTags exercises the Broadcast comparability guard
-// directly. Broadcast cannot reach it through tag.TagExpand under deadlock.Debug
-// (the -race build) because ensureUsableTag rejects non-comparable tags first, so
-// the guard is tested with a synthetic tag slice.
+// directly. TagExpand rejects runtime-non-comparable struct/array tags before
+// Broadcast reaches this guard, so the guard is tested with a synthetic tag slice.
 func TestJaws_dropNonComparableTags(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -509,10 +507,9 @@ func TestJaws_dropNonComparableTags(t *testing.T) {
 
 // TestJaws_setDirtyPanicReleasesLock verifies the documented defer-unlock in
 // setDirty: a tag comparable statically but not at runtime panics when used as a
-// map key, yet jw.mu is still released so the instance stays usable. The public
-// Dirty path cannot reach this under deadlock.Debug (the -race build), where
-// ensureUsableTag rejects such tags during expansion, so setDirty is exercised
-// directly with a synthetic tag.
+// map key, yet jw.mu is still released so the instance stays usable. Public Dirty
+// rejects this tag during expansion, so setDirty is exercised directly with a
+// synthetic tag.
 func TestJaws_setDirtyPanicReleasesLock(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -750,15 +747,13 @@ func TestBroadcast_RejectsUnhashableTagDest(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer jw.Close()
-	var logbuf bytes.Buffer
-	jw.Logger = slog.New(slog.NewTextHandler(&logbuf, nil))
+	logger := &captureErrorLogger{}
+	jw.Logger = logger
 
 	// A statically comparable struct holding a func in an interface field panics
 	// when used as a map key. Such a Dest must be rejected before it reaches the
 	// Serve loop, where wantMessage's tagMap lookup would panic and tear the loop
-	// down. In debug builds tag.TagExpand rejects it; in non-debug (production)
-	// builds TagExpand is lenient and the hashableTag check in Broadcast catches
-	// it. Either way, Broadcast must not panic and must not queue the message.
+	// down. Broadcast must not panic and must not queue the message in any build.
 	type ifaceHolder struct{ any }
 	var panicked bool
 	func() {
@@ -778,11 +773,11 @@ func TestBroadcast_RejectsUnhashableTagDest(t *testing.T) {
 		t.Fatalf("unhashable Dest was queued for the Serve loop: %T(%#v)", msg.Dest, msg.Dest)
 	default:
 	}
-	if logbuf.Len() == 0 {
-		t.Error("expected the rejected broadcast tag to be logged")
+	if !errors.Is(logger.err, tag.ErrNotUsableAsTag) {
+		t.Errorf("logged error = %v, want ErrNotUsableAsTag", logger.err)
 	}
-	if !deadlock.Debug && !strings.Contains(logbuf.String(), "not comparable") {
-		t.Errorf("non-debug build should reject the non-comparable tag, got %q", logbuf.String())
+	if !errors.Is(logger.err, tag.ErrNotComparable) {
+		t.Errorf("logged error = %v, want ErrNotComparable", logger.err)
 	}
 }
 

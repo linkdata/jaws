@@ -66,10 +66,10 @@
 //
 // Always run the tests with the -race flag (or -tags debug). Both set
 // deadlock.Debug, which enables the debug-gated runtime invariant checks: the
-// lock-order verification described above, the late-handler panic, and the
-// tag-comparability check in [github.com/linkdata/jaws/lib/tag]. Those branches
-// are compile-time dead in normal builds, so a plain "go test" neither
-// exercises them nor reports their statement coverage. CI builds with
+// lock-order verification described above and the late-handler panic. Those
+// branches are compile-time dead in normal builds, so a plain "go test" neither
+// exercises them nor reports their statement coverage. Runtime tag-comparability
+// checks in [github.com/linkdata/jaws/lib/tag] run in every build. CI builds with
 // -tags debug -race.
 package jaws
 
@@ -759,11 +759,9 @@ func (jw *Jaws) Broadcast(msg wire.Message) {
 // [Jaws.reportMisuse], if any tag is not comparable at runtime.
 //
 // Expanded tags become map keys in the processing loop (wantMessage's lookup in
-// Request.tagMap). A value can pass tag expansion's static comparability check yet
-// be non-comparable at runtime (a comparable struct holding e.g. a func in an
-// interface field), which panics when hashed. [tag.NewErrNotComparable] runs the
-// runtime value check that ensureUsableTag only performs in debug builds, so this
-// rejects a bad Dest before it can panic the Serve goroutine and crash the process.
+// Request.tagMap). TagExpand rejects the known runtime-non-comparable
+// struct/array case, and this guard remains as a final defense before a bad Dest
+// can panic the Serve goroutine and crash the process.
 func (jw *Jaws) dropNonComparableTags(tags []any) []any {
 	for _, tagValue := range tags {
 		if cmperr := tag.NewErrNotComparable(tagValue); cmperr != nil {
@@ -793,14 +791,13 @@ func (jw *Jaws) setDirty(tags []any) {
 // Note that if any of the tags implement [tag.TagGetter], it will be called
 // with a nil [Request]. Prefer using [Request.Dirty] which avoids this.
 //
-// A tag that is comparable statically but not at runtime (a comparable struct
-// holding e.g. a func in an interface field) panics the calling goroutine when
-// hashed as a map key, in non-debug builds where the expansion check is skipped.
-// The panic is contained to the caller (the lock is released and the [Jaws.Serve]
-// loop is unaffected); it is not logged-and-dropped the way [Jaws.Broadcast]
-// handles such a [wire.Message.Dest], because that hashing happens in the Serve
-// goroutine where a panic would crash the process. [Request.Dirty] behaves the
-// same as Dirty here.
+// A tag that somehow passes expansion but is still not hashable panics the
+// calling goroutine when hashed as a map key. The panic is contained to the
+// caller (the lock is released and the [Jaws.Serve] loop is unaffected); it is
+// not logged-and-dropped the way [Jaws.Broadcast] handles such a
+// [wire.Message.Dest], because that hashing happens in the Serve goroutine where
+// a panic would crash the process. [Request.Dirty] behaves the same as Dirty
+// here.
 func (jw *Jaws) Dirty(dirtyTags ...any) {
 	// Use TagExpand+MustLog rather than MustTagExpand: with a nil Context the
 	// latter panics on an illegal tag even in production, unlike the sibling
