@@ -11,6 +11,7 @@ import (
 type Td struct{ HTMLInner }
 
 // NewTd returns a table cell widget whose inner HTML is rendered from innerHTML.
+//
 // innerHTML is passed to [bind.MakeHTMLGetter]; plain strings are trusted HTML.
 func NewTd(innerHTML any) *Td { return &Td{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }
 
