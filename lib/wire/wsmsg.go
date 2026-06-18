@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"encoding/json"
 	"html"
 	"strconv"
 	"strings"
@@ -109,11 +110,13 @@ func (m *WsMsg) Format() string {
 // Parse parses an incoming text buffer into a message.
 //
 // The wire format mirrors [WsMsg.Append]. For commands other than [what.Set] and
-// [what.Call], if the Data field begins with a double quote it is decoded with
-// [strconv.Unquote] and the message is rejected if that fails; data that does not
-// begin with a double quote is taken verbatim. Set and Call data is always taken
-// verbatim. In all cases the resulting data is sanitized with
-// [strings.ToValidUTF8].
+// [what.Call], if the Data field begins with a double quote it is decoded as a JSON
+// string: [strconv.Unquote] handles the common case, with a fallback to a JSON
+// string decode for inputs it rejects but the browser's JSON.stringify can produce
+// (notably a lone UTF-16 surrogate, which the fallback maps to U+FFFD). The message
+// is rejected only if both decoders fail. Data that does not begin with a double
+// quote is taken verbatim, as is all Set and Call data. In all cases the resulting
+// data is sanitized with [strings.ToValidUTF8].
 func Parse(txt []byte) (WsMsg, bool) {
 	if len(txt) > 2 && txt[len(txt)-1] == '\n' {
 		if nl1 := bytes.IndexByte(txt, '\t'); nl1 >= 0 {
@@ -125,8 +128,21 @@ func Parse(txt []byte) (WsMsg, bool) {
 					if id := jid.ParseString(string(txt[nl1+1 : nl2])); id.IsValid() {
 						data := string(txt[nl2+1 : len(txt)-1])
 						if txt[nl2+1] == '"' && wht != what.Set && wht != what.Call {
-							var err error
-							if data, err = strconv.Unquote(data); err != nil {
+							// The browser encodes this data with JSON.stringify.
+							// strconv.Unquote decodes the common case cheaply and
+							// allocation-free, but its grammar is not a superset of
+							// JSON: it rejects the "\udXXX" lone-surrogate escapes
+							// JSON.stringify can emit. Fall back to a JSON string
+							// decode (which maps a lone surrogate to U+FFFD) so a
+							// legitimate event is decoded rather than silently dropped;
+							// the ToValidUTF8 below still sanitizes whatever survives.
+							// The fallback lives in jsonUnquoteString so the address it
+							// takes does not force data to the heap on every call.
+							if unq, err := strconv.Unquote(data); err == nil {
+								data = unq
+							} else if unq, ok := jsonUnquoteString(data); ok {
+								data = unq
+							} else {
 								return WsMsg{}, false
 							}
 						}
@@ -141,6 +157,15 @@ func Parse(txt []byte) (WsMsg, bool) {
 		}
 	}
 	return WsMsg{}, false
+}
+
+// jsonUnquoteString decodes s as a JSON string literal, returning ok=false if it
+// is not one. It exists as a separate function so that the address it must take of
+// its decode target does not force [Parse]'s data local to escape to the heap on
+// every call; see the fallback in Parse.
+func jsonUnquoteString(s string) (out string, ok bool) {
+	ok = json.Unmarshal([]byte(s), &out) == nil
+	return
 }
 
 // FillAlert replaces m with an escaped danger alert for err.
