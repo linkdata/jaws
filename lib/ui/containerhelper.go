@@ -26,8 +26,10 @@ import (
 // Update-time child reconciliation is intentionally not transactional: queued
 // browser updates cannot be made atomic, and a rollback path would add hot-path
 // bookkeeping for a user-code render failure without providing a strong
-// correctness guarantee. Treat such failures as application bugs and reload or
-// recover at the application level if needed.
+// correctness guarantee. A newly appended child that fails to render is removed
+// from the request and omitted from the browser append/order batch, so a later
+// update can retry it from fresh state. Treat such failures as application bugs
+// and reload or recover at the application level if needed.
 type ContainerHelper struct {
 	Container jaws.Container
 	// tag is the dirty tag, written once during RenderContainer and read on the
@@ -105,13 +107,25 @@ func (u *ContainerHelper) UpdateContainer(elem *jaws.Element) {
 
 	for _, childElem := range toAppend {
 		var sb strings.Builder
-		elem.Jaws.MustLog(childElem.JawsRender(&sb, nil))
+		if err := childElem.JawsRender(&sb, nil); err != nil {
+			elem.Request.DeleteElement(childElem)
+			u.deleteContent(childElem)
+			newOrder = slices.DeleteFunc(newOrder, func(id jaws.Jid) bool { return id == childElem.Jid() })
+			elem.Jaws.MustLog(err)
+			continue
+		}
 		elem.Append(template.HTML(sb.String())) // #nosec G203
 	}
 
 	if !slices.Equal(oldOrder, newOrder) {
 		elem.Order(newOrder)
 	}
+}
+
+func (u *ContainerHelper) deleteContent(elem *jaws.Element) {
+	u.mu.Lock()
+	u.contents = slices.DeleteFunc(u.contents, func(childElem *jaws.Element) bool { return childElem == elem })
+	u.mu.Unlock()
 }
 
 // reconcile matches u.contents to wantContents under u.mu and returns the

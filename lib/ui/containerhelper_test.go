@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -254,6 +255,52 @@ func TestContainerHelperRenderErrorPaths(t *testing.T) {
 		}
 	}()
 	container2.JawsUpdate(elem2)
+}
+
+func TestContainerHelperUpdateRenderErrorDoesNotAppendFailedChild(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	jw.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	go jw.Serve()
+
+	tr := jawstest.NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("expected test request")
+	}
+	defer tr.Close()
+	<-tr.ReadyCh
+
+	tc := &testContainer{}
+	container := NewContainer("div", tc)
+	elem := tr.NewElement(container)
+	var sb strings.Builder
+	if err := elem.JawsRender(&sb, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	renderErr := errors.New("append render failed")
+	failingChild := &testRenderErrorCaptureUI{err: renderErr}
+	tc.contents = []jaws.UI{failingChild}
+	container.JawsUpdate(elem)
+
+	if !failingChild.jid.IsValid() {
+		t.Fatal("expected failing child jid to be captured")
+	}
+	if leaked := tr.GetElementByJid(failingChild.jid); leaked != nil {
+		t.Fatalf("failed append child %v leaked into the request registry", failingChild.jid)
+	}
+
+	tr.InCh <- wire.WsMsg{}
+	select {
+	case msg := <-tr.OutCh:
+		if msg.What == what.Append || msg.What == what.Order {
+			t.Fatalf("failed append render emitted browser mutation: %+v", msg)
+		}
+	case <-time.After(300 * time.Millisecond):
+	}
 }
 
 type testRenderErrorUI struct {

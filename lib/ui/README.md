@@ -126,5 +126,6 @@ func (w *UList) JawsUpdate(e *jaws.Element) {
 - During initial render, child render failures are returned as errors.
 - During updates, append render failures are reported through `MustLog` (and
   may panic if no logger is configured).
-- After such failures, partial DOM/request state updates are expected; state may
-  remain inconsistent until a subsequent full render/reload.
+- A newly appended child that fails to render is dropped from request state and
+  not appended to the browser DOM, so later updates can retry it from fresh
+  state. Other already-queued update steps are not rolled back.
