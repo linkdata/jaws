@@ -418,7 +418,9 @@ func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 // reading the clock. Deriving from [time.Since] on a monotonic [time.Time] keeps the
 // counter immune to wall-clock and NTP adjustments.
 func (jw *Jaws) refreshRuntimeSeconds() {
-	jw.runtimeSeconds.Store(uint32(time.Since(jw.created) / time.Second))
+	// time.Since on a monotonic base is never negative, and whole seconds of uptime
+	// fit in uint32 for ~136 years, so the narrowing conversion cannot overflow.
+	jw.runtimeSeconds.Store(uint32(time.Since(jw.created) / time.Second)) //#nosec G115 -- bounded by process uptime
 }
 
 // limitPendingRequestsLocked evicts pending Requests for remoteIP until the cap is
@@ -479,12 +481,15 @@ func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr, nowSeconds uin
 	if interval <= 0 {
 		interval = DefaultUpdateInterval
 	}
-	spareSeconds := uint32(2 * interval / time.Second)
-	if spareSeconds == 0 {
-		spareSeconds = 1
+	spareWindow := 2 * interval
+	if spareWindow < time.Second {
+		spareWindow = time.Second // floor: the seconds counter advances at most once per second
 	}
 	for _, rq := range jw.pending[remoteIP] {
-		if nowSeconds-rq.lastWriteSeconds.Load() <= spareSeconds {
+		// Compare as durations (elapsed whole seconds vs the window) to avoid a
+		// lossy time.Duration->uint32 conversion; the uint32 subtraction is the
+		// elapsed seconds and widening it to time.Duration is always safe.
+		if time.Duration(nowSeconds-rq.lastWriteSeconds.Load())*time.Second <= spareWindow {
 			continue
 		}
 		return rq
