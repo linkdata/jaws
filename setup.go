@@ -15,6 +15,9 @@ type HandleFunc = func(pattern string, handler http.Handler)
 
 // SetupFunc is called by [Jaws.Setup] and allows setting up addons for JaWS.
 //
+// When [Jaws.Setup] is called with a nil [HandleFunc], setup functions receive
+// a no-op handler registration function.
+//
 // The URLs returned will be used in a call to [Jaws.GenerateHeadHTML].
 type SetupFunc = func(jw *Jaws, handleFn HandleFunc, prefix string) (urls []*url.URL, err error)
 
@@ -38,8 +41,15 @@ func makeAbsPath(prefix string, u *url.URL) *url.URL {
 //
 // It calls [Jaws.GenerateHeadHTML] with the final list of URLs, with any
 // relative URL paths prefixed with prefix.
+//
+// If handleFn is nil, Setup generates head HTML from the configured resources
+// without registering any handlers.
 func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err error) {
 	var urls []*url.URL
+	setupHandleFn := handleFn
+	if setupHandleFn == nil {
+		setupHandleFn = func(string, http.Handler) {}
+	}
 
 	handleStaticServe := func(ss *staticserve.StaticServe) {
 		if ss != nil {
@@ -49,7 +59,7 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 				u = makeAbsPath(prefix, u)
 				urls = append(urls, u)
 				if handleFn != nil {
-					handleFn(staticserve.NormalizeGET(u.String()), ss)
+					setupHandleFn(staticserve.NormalizeGET(u.String()), ss)
 				}
 			}
 		}
@@ -70,7 +80,7 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 		case *staticserve.StaticServe:
 			handleStaticServe(extra)
 		case SetupFunc:
-			setupURLs, setupErr := extra(jw, handleFn, prefix)
+			setupURLs, setupErr := extra(jw, setupHandleFn, prefix)
 			err = errors.Join(err, setupErr)
 			for _, u := range setupURLs {
 				urls = append(urls, makeAbsPath(prefix, u))
