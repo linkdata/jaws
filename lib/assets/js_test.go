@@ -1022,6 +1022,41 @@ process.stdout.write(JSON.stringify({ inserted: inserted, error: error }));
 	}
 }
 
+func TestJawsJS_OrderPreservesApplicationDataset(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+const parent = { appended: [], appendChild: function(elem) { this.appended.push(elem.id); } };
+const one = { id: "Jid.1", dataset: { jidsort: "application-one" }, parentElement: parent };
+const two = { id: "Jid.2", dataset: { jidsort: "application-two" }, parentElement: parent };
+document.getElementById = function(id) {
+	if (id === "Jid.1") return one;
+	if (id === "Jid.2") return two;
+	return null;
+};
+
+jawsPerform("Order", "", JSON.stringify("Jid.2 Jid.1"));
+process.stdout.write(JSON.stringify({
+	appended: parent.appended,
+	oneSort: one.dataset.jidsort || "",
+	twoSort: two.dataset.jidsort || ""
+}));
+`)
+
+	var got struct {
+		Appended []string `json:"appended"`
+		OneSort  string   `json:"oneSort"`
+		TwoSort  string   `json:"twoSort"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if strings.Join(got.Appended, " ") != "Jid.2 Jid.1" {
+		t.Fatalf("unexpected append order: %#v", got.Appended)
+	}
+	if got.OneSort != "application-one" || got.TwoSort != "application-two" {
+		t.Fatalf("jawsOrder clobbered application data-jidsort: got %q and %q", got.OneSort, got.TwoSort)
+	}
+}
+
 func TestJawsJS_ReplaceComparesAndUpdatesWhenDebugDisabled(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 jawsDebug = false;
