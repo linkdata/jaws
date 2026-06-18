@@ -21,6 +21,18 @@ template without a generated wrapper. Attribute params passed to
 Template bodies used with `rw.Template(...)` must be partials; full page
 templates should be rendered through `ui.Handler`.
 
+Template execution is best-effort rather than transactional. Nested UI helpers
+such as `{{$.Span ...}}` register elements as the template runs, and custom
+template actions may queue updates or mutate application state. If execution
+later returns an error, JaWS returns or logs that error and preserves whatever
+already happened; it does not roll back partial output, nested elements, queued
+messages, or application side effects. On updates, the wrapper's `SetInner` is
+queued only after a complete successful render, so a failed update leaves the
+browser DOM unchanged while earlier server-side side effects from that attempted
+render may remain. Treat template execution errors as application bugs: validate
+data before rendering and keep template actions infallible once they start
+emitting output or nested UI.
+
 You can also use explicit constructors through:
 
 ```go
