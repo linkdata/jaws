@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"html/template"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstest"
+	"github.com/linkdata/jaws/lib/htmlio"
 	"github.com/linkdata/jaws/lib/jid"
 	"github.com/linkdata/jaws/lib/named"
 	"github.com/linkdata/jaws/lib/what"
@@ -462,6 +464,18 @@ type testSelectHandler struct {
 	*testSetter[string]
 }
 
+type plainSelectOption struct {
+	value string
+	label string
+}
+
+func (opt plainSelectOption) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
+	attrs := append(elem.ApplyParams(params), htmlio.Attr("value", opt.value))
+	return htmlio.WriteHTMLInner(w, elem.Jid(), "option", "", template.HTML(template.HTMLEscapeString(opt.label)), attrs...)
+}
+
+func (plainSelectOption) JawsUpdate(elem *jaws.Element) {}
+
 func TestSelectWidget(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	sh := &testSelectHandler{
@@ -486,6 +500,61 @@ func TestSelectWidget(t *testing.T) {
 	sh.SetErr(errors.New("meh"))
 	if err := selectUI.JawsInput(elem, "3"); err == nil || err.Error() != "meh" {
 		t.Fatalf("want meh got %v", err)
+	}
+}
+
+func TestSelectWidget_AppendsOptionBeforeSettingNewValue(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+
+	tr := jawstest.NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("expected test request")
+	}
+	defer tr.Close()
+	<-tr.ReadyCh
+
+	opt1 := plainSelectOption{value: "1", label: "one"}
+	opt2 := plainSelectOption{value: "2", label: "two"}
+	sh := &testSelectHandler{
+		testContainer: &testContainer{contents: []jaws.UI{opt1}},
+		testSetter:    newTestSetter("1"),
+	}
+	selectUI := NewSelect(sh)
+	elem := tr.NewElement(selectUI)
+	var sb strings.Builder
+	if err := elem.JawsRender(&sb, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	sh.Set("2")
+	sh.contents = []jaws.UI{opt1, opt2}
+	selectUI.JawsUpdate(elem)
+	tr.InCh <- wire.WsMsg{}
+
+	sawAppend := false
+	for {
+		select {
+		case <-t.Context().Done():
+			t.Fatal("no select value update received")
+		case msg := <-tr.OutCh:
+			switch msg.What {
+			case what.Append:
+				sawAppend = true
+			case what.Value:
+				if !sawAppend {
+					t.Fatalf("select Value %q was queued before appending the option it selects", msg.Data)
+				}
+				if msg.Data != "2" {
+					t.Fatalf("select Value = %q, want %q", msg.Data, "2")
+				}
+				return
+			}
+		}
 	}
 }
 
