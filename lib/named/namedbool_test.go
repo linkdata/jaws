@@ -48,6 +48,26 @@ func TestNamedBool(t *testing.T) {
 	}
 }
 
+func TestNamedBool_JawsSetCheckedValueDeselectsCheckedSibling(t *testing.T) {
+	nba := NewBoolArray(false).Add("one", "one").Add("two", "two")
+	one := nba.data[0]
+	two := nba.data[1]
+	one.Set(true)
+	two.Set(true)
+
+	_, rq := newCoreRequest(t)
+	elem := rq.NewElement(noopUI{})
+	if err := one.JawsSet(elem, true); err != nil {
+		t.Fatalf("JawsSet returned %v, want nil because sibling state changed", err)
+	}
+	if !one.Checked() {
+		t.Fatal("target should remain checked")
+	}
+	if two.Checked() {
+		t.Fatal("single-select sibling should be deselected")
+	}
+}
+
 type dirtyProbe struct {
 	hits *atomic.Int32
 }
