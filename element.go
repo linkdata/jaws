@@ -301,8 +301,16 @@ func (elem *Element) Order(jidList []jid.Jid) {
 	}
 }
 
-// Remove requests that the HTML child with the given HTML ID of this [Element]
-// is removed from the [Request] and its HTML element from the browser.
+// Remove queues a browser-side removal of a child DOM node.
+//
+// The child is identified by its HTML ID. Remove only sends the browser command;
+// it does not unregister a known child [Element] from the [Request]. If htmlID
+// belongs to an Element tracked by this Request, the caller must also call
+// [Request.DeleteElement] for that child as part of the same update.
+//
+// The browser sends cleanup acknowledgements for managed descendants removed while
+// applying server commands, but that acknowledgement does not delete the target
+// child Element itself.
 //
 // Call this while the [Element] is rendering or updating. The change is queued and
 // sent on the next processing pass; to change the [Element] in response to a browser
