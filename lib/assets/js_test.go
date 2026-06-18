@@ -841,6 +841,50 @@ process.stdout.write(JSON.stringify({ one: one.innerHTML, two: two.innerHTML, er
 	}
 }
 
+func TestJawsJS_InsertNullPositionAppends(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+let inserted = false;
+const child = {
+	id: "new-child",
+	querySelectorAll: function() { return { forEach: function() {} }; }
+};
+const elem = {
+	id: "Jid.1",
+	children: [],
+	insertBefore: function(node, where) {
+		inserted = node === child && where === null;
+	}
+};
+document.getElementById = function(id) {
+	if (id === "Jid.1") return elem;
+	return null;
+};
+document.createElement = function(tag) {
+	if (tag !== "template") throw new Error("unexpected tag " + tag);
+	const template = {};
+	Object.defineProperty(template, "innerHTML", {
+		set: function() { this.content = child; },
+		enumerable: true,
+		configurable: true,
+	});
+	return template;
+};
+
+jawsPerform("Insert", "Jid.1", JSON.stringify("null\n<span id=\"new-child\"></span>"));
+process.stdout.write(JSON.stringify({ inserted: inserted }));
+`)
+
+	var got struct {
+		Inserted bool `json:"inserted"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if !got.Inserted {
+		t.Fatal(`Insert with position "null" should append by calling insertBefore(node, null)`)
+	}
+}
+
 func TestJawsJS_ReplaceComparesAndUpdatesWhenDebugDisabled(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 jawsDebug = false;
