@@ -43,11 +43,17 @@ type GetHTMLHook[T comparable] func(bind Binder[T], elem *jaws.Element) (s templ
 // ClickedHook is a function to call when a click event is received.
 //
 // The [Binder] locks are not held when the function is called.
+//
+// Like [GetHTMLHook] and unlike [GetHook] and [SetHook], the bind argument is the
+// current Binder (the one whose hook is being invoked), not the previous one.
 type ClickedHook[T comparable] func(bind Binder[T], elem *jaws.Element, click jaws.Click) (err error)
 
 // ContextMenuHook is a function to call when a context menu event is received.
 //
 // The [Binder] locks are not held when the function is called.
+//
+// Like [GetHTMLHook] and unlike [GetHook] and [SetHook], the bind argument is the
+// current Binder (the one whose hook is being invoked), not the previous one.
 type ContextMenuHook[T comparable] func(bind Binder[T], elem *jaws.Element, click jaws.Click) (err error)
 
 // InitialHTMLAttrHook is a function to call when an Element is initially rendered.
