@@ -11,6 +11,7 @@ import (
 type A struct{ HTMLInner }
 
 // NewA returns an anchor widget whose inner HTML is rendered from innerHTML.
+//
 // innerHTML is passed to [bind.MakeHTMLGetter]; plain strings are trusted HTML.
 func NewA(innerHTML any) *A { return &A{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }
 
