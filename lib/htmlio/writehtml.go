@@ -4,6 +4,7 @@ import (
 	"html"
 	"html/template"
 	"io"
+	"strings"
 
 	"github.com/linkdata/jaws/lib/jid"
 )
@@ -26,7 +27,7 @@ var singletonTags = map[string]struct{}{
 }
 
 func needClosingTag(tag string) bool {
-	_, ok := singletonTags[tag]
+	_, ok := singletonTags[strings.ToLower(tag)]
 	return !ok
 }
 

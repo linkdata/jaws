@@ -63,6 +63,15 @@ func Test_WriteHTMLInner(t *testing.T) {
 			},
 			want: `<img id="Jid.4">`,
 		},
+		{
+			name: "HTMLInner uppercase void tag drops inner content",
+			args: args{
+				jid:   5,
+				tag:   "IMG",
+				inner: "ignored",
+			},
+			want: `<IMG id="Jid.5">`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
