@@ -11,6 +11,7 @@ import (
 type Label struct{ HTMLInner }
 
 // NewLabel returns a label widget whose inner HTML is rendered from innerHTML.
+//
 // innerHTML is passed to [bind.MakeHTMLGetter]; plain strings are trusted HTML.
 func NewLabel(innerHTML any) *Label {
 	return &Label{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}}
