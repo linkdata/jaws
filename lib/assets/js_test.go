@@ -885,6 +885,69 @@ process.stdout.write(JSON.stringify({ inserted: inserted }));
 	}
 }
 
+func TestJawsJS_InsertNumericPositionIgnoresUnrelatedSameID(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+let inserted = false;
+let error = "";
+const newChild = {
+	id: "new-child",
+	querySelectorAll: function() { return { forEach: function() {} }; }
+};
+const existingChild = { id: "existing-child" };
+const unrelated = { id: "0", parentElement: null };
+Object.setPrototypeOf(newChild, Node.prototype);
+Object.setPrototypeOf(existingChild, Node.prototype);
+Object.setPrototypeOf(unrelated, Node.prototype);
+const elem = {
+	id: "Jid.1",
+	children: [existingChild],
+	insertBefore: function(node, where) {
+		if (where !== existingChild) {
+			throw new Error("wrong reference " + ((where && where.id) || where));
+		}
+		inserted = node === newChild;
+	}
+};
+existingChild.parentElement = elem;
+document.getElementById = function(id) {
+	if (id === "Jid.1") return elem;
+	if (id === "0") return unrelated;
+	return null;
+};
+document.createElement = function(tag) {
+	if (tag !== "template") throw new Error("unexpected tag " + tag);
+	const template = {};
+	Object.defineProperty(template, "innerHTML", {
+		set: function() { this.content = newChild; },
+		enumerable: true,
+		configurable: true,
+	});
+	return template;
+};
+
+try {
+	jawsPerform("Insert", "Jid.1", JSON.stringify("0\n<span id=\"new-child\"></span>"));
+} catch (err) {
+	error = String((err && err.message) || err);
+}
+process.stdout.write(JSON.stringify({ inserted: inserted, error: error }));
+`)
+
+	var got struct {
+		Inserted bool   `json:"inserted"`
+		Error    string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.Error != "" {
+		t.Fatalf("Insert with child index 0 used an unrelated id=\"0\" node: %s", got.Error)
+	}
+	if !got.Inserted {
+		t.Fatal("Insert with child index 0 should insert before the first child")
+	}
+}
+
 func TestJawsJS_ReplaceComparesAndUpdatesWhenDebugDisabled(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 jawsDebug = false;
