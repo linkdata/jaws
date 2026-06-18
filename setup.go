@@ -31,8 +31,9 @@ func makeAbsPath(prefix string, u *url.URL) *url.URL {
 
 // Setup configures [Jaws] with extra functionality and resources.
 //
-// The list of extras can be strings, [*url.URL] or [*staticserve.StaticServe]
-// URL resources, or a setup function matching [SetupFunc] such as jawsboot.Setup.
+// The list of extras can be strings, [*url.URL], [*staticserve.StaticServe] or
+// []*staticserve.StaticServe URL resources, or a setup function matching
+// [SetupFunc] such as jawsboot.Setup.
 //
 // It calls [Jaws.GenerateHeadHTML] with the final list of URLs, with any
 // relative URL paths prefixed with prefix.
@@ -74,7 +75,7 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 				urls = append(urls, makeAbsPath(prefix, u))
 			}
 		default:
-			err = errors.Join(err, fmt.Errorf("jaws.Setup: expected a string, *url.URL, *staticserve.StaticServe or jaws.SetupFunc, not %T", extra))
+			err = errors.Join(err, fmt.Errorf("jaws.Setup: expected a string, *url.URL, *staticserve.StaticServe, []*staticserve.StaticServe or jaws.SetupFunc, not %T", extra))
 		}
 	}
 	var extraFiles []string
