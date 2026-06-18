@@ -168,8 +168,8 @@ eval(src);
 
 func TestJawsJS_JsVarNestedPathUsesTopLevelNameRouting(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
-function FakeSocket() { this.readyState = 1; this.sent = []; }
-FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+	function FakeSocket() { this.readyState = 1; this.sent = []; }
+	FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
 WebSocket = FakeSocket;
 
 window.app = { state: 0 };
@@ -199,10 +199,53 @@ process.stdout.write(jaws.sent[0] || "");
 	}
 }
 
+func TestJawsJS_JsVarNestedPathHandlesShadowedHasOwnProperty(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+	function FakeSocket() { this.readyState = 1; this.sent = []; }
+	FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+	WebSocket = FakeSocket;
+
+	window.app = { hasOwnProperty: 1, state: { value: 0 } };
+	window.jawsNames["app"] = "Jid.9";
+	jaws = new FakeSocket();
+
+	jawsVar("app.state.value", 42);
+	process.stdout.write(JSON.stringify({
+		value: window.app.state.value,
+		frame: jaws.sent[0] || ""
+	}));
+	`)
+
+	var got struct {
+		Value int    `json:"value"`
+		Frame string `json:"frame"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+	if got.Value != 42 {
+		t.Fatalf("jawsVar did not update shadowed object path: got %d", got.Value)
+	}
+
+	msg, ok := wire.Parse([]byte(got.Frame))
+	if !ok {
+		t.Fatalf("Set frame must be parseable by jawswire.Parse, got %q", got.Frame)
+	}
+	if msg.What != what.Set {
+		t.Fatalf("unexpected what: got %v", msg.What)
+	}
+	if msg.Jid != 9 {
+		t.Fatalf("nested JsVar path should route through top-level name registration, got %v in %q", msg.Jid, got.Frame)
+	}
+	if msg.Data != "state.value=42" {
+		t.Fatalf("unexpected Set payload %q", msg.Data)
+	}
+}
+
 func TestJawsJS_RemoveFromNonManagedContainerIsInvalidAndDroppedByParser(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
-function FakeSocket() { this.readyState = 1; this.sent = []; }
-FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+	function FakeSocket() { this.readyState = 1; this.sent = []; }
+	FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
 WebSocket = FakeSocket;
 jaws = new FakeSocket();
 
