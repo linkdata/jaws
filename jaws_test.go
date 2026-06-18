@@ -1626,6 +1626,73 @@ func TestServeHTTP_Noscript(t *testing.T) {
 	is.Equal(w.Code, http.StatusNoContent)
 }
 
+func TestServeHTTP_UnknownKeySuffixDoesNotClaimRequest(t *testing.T) {
+	jw, _ := New()
+	go jw.Serve()
+	defer jw.Close()
+
+	for _, tt := range []struct {
+		name string
+		path func(string) string
+	}{
+		{
+			name: "trailing slash",
+			path: func(k string) string { return "/jaws/" + k + "/" },
+		},
+		{
+			name: "unknown suffix",
+			path: func(k string) string { return "/jaws/" + k + "/unknown" },
+		},
+		{
+			name: "unknown suffix before noscript",
+			path: func(k string) string { return "/jaws/" + k + "/unknown/noscript" },
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			is := newTestHelper(t)
+			hr := httptest.NewRequest(http.MethodGet, "/", nil)
+			rq := jw.NewRequest(hr)
+			key := rq.JawsKeyString()
+
+			req := httptest.NewRequest(http.MethodGet, tt.path(key), nil)
+			req.RemoteAddr = hr.RemoteAddr
+			w := httptest.NewRecorder()
+			jw.ServeHTTP(w, req)
+			is.Equal(w.Code, http.StatusNotFound)
+
+			req = httptest.NewRequest(http.MethodGet, "/jaws/"+key, nil)
+			req.RemoteAddr = hr.RemoteAddr
+			w = httptest.NewRecorder()
+			jw.ServeHTTP(w, req)
+			is.Equal(w.Code, http.StatusUpgradeRequired)
+		})
+	}
+}
+
+func TestServeHTTP_TailScript_UnknownSuffixDoesNotDrain(t *testing.T) {
+	is := newTestHelper(t)
+	jw, _ := New()
+	go jw.Serve()
+	defer jw.Close()
+
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	rq := jw.NewRequest(hr)
+	rq.NewElement(&testUi{}).SetClass("cls")
+
+	req := httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString()+"/unknown", nil)
+	req.RemoteAddr = hr.RemoteAddr
+	w := httptest.NewRecorder()
+	jw.ServeHTTP(w, req)
+	is.Equal(w.Code, http.StatusNotFound)
+
+	req = httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString(), nil)
+	req.RemoteAddr = hr.RemoteAddr
+	w = httptest.NewRecorder()
+	jw.ServeHTTP(w, req)
+	is.Equal(w.Code, http.StatusOK)
+	is.Equal(strings.Contains(w.Body.String(), `classList?.add("cls");`), true)
+}
+
 func TestServeHTTP_TailScript(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()
