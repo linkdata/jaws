@@ -8,6 +8,9 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawstest"
+	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jaws/lib/wire"
 )
 
 func Test_NamedBoolArray(t *testing.T) {
@@ -189,4 +192,47 @@ func TestNamedBoolOption_RenderAndUpdateBranches(t *testing.T) {
 	contents[0].JawsUpdate(elem)
 	nba.Set("1", false)
 	contents[0].JawsUpdate(elem)
+}
+
+func TestNamedBoolOption_UpdateQueuesLiveSelectedValue(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+
+	go jw.Serve()
+	tr := jawstest.NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("expected test request")
+	}
+	defer tr.Close()
+	<-tr.ReadyCh
+
+	nb := NewBool(nil, "1", "one", false)
+	elem := tr.NewElement(namedBoolOption{Bool: nb})
+	var sb strings.Builder
+	if err := elem.JawsRender(&sb, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tt := range []struct {
+		checked bool
+		want    string
+	}{
+		{checked: true, want: "true"},
+		{checked: false, want: "false"},
+	} {
+		nb.Set(tt.checked)
+		tr.BcastCh <- wire.Message{Dest: nb, What: what.Update}
+
+		select {
+		case <-t.Context().Done():
+			t.Fatal("no update received")
+		case msg := <-tr.OutCh:
+			if msg.Jid != elem.Jid() || msg.What != what.Value || msg.Data != tt.want {
+				t.Fatalf("option update = {%v %v %q}, want {%v %v %q}", msg.Jid, msg.What, msg.Data, elem.Jid(), what.Value, tt.want)
+			}
+		}
+	}
 }
