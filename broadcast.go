@@ -139,6 +139,22 @@ func sortedDirtTags(dirty map[any]int) []any {
 	return dirt
 }
 
+// distributeDirt drains the accumulated dirty tags and appends them to every live
+// Request's pending-dirt list for the next update pass.
+//
+// It snapshots the Request set under jw.mu, releases it, then appends to each Request
+// without holding jw.mu. Two consequences are deliberate and harmless:
+//
+//   - The snapshot includes pending (not-yet-running) Requests whose process loop has
+//     not started, so their todoDirt buffers until they connect or are recycled
+//     (bounded by the request timeout). This is intentional: a value mutated in the
+//     render-to-connect window is then reflected on the first update pass.
+//   - A Request can be recycled and reused for a different connection between the
+//     snapshot and the append. appendDirtyTags and clearLocked both take rq.mu, so
+//     there is no data race, and stale tags landing in a reborn Request resolve to
+//     nothing in [Request.makeUpdateList] against its freshly emptied tagMap (at worst
+//     a redundant re-render). Unlike destKey/cancelIfCurrent this path needs no
+//     key-identity guard because applying dirt is idempotent.
 func (jw *Jaws) distributeDirt() int {
 	var reqs []*Request
 	var dirt []any

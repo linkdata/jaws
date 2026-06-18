@@ -344,6 +344,9 @@ func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 // As a side effect, the session cookie is also added to r itself, so the new
 // [Session] is visible to [Jaws.GetSession] and [Jaws.NewRequest] for the
 // remainder of the same HTTP request.
+//
+// It panics if the system CSPRNG ([crypto/rand]) fails while generating the session
+// ID, which does not happen on supported platforms.
 func (jw *Jaws) NewSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
 	if r != nil {
 		if oldSess := jw.GetSession(r); oldSess != nil {

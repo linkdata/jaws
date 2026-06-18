@@ -378,6 +378,9 @@ func MakeID() string {
 //
 // Automatic timeout handling is performed by [Jaws.ServeWithTimeout]. The default
 // [Jaws.Serve] helper uses a 10-second timeout.
+//
+// It panics if the system CSPRNG ([crypto/rand]) fails while generating the request
+// key, which does not happen on supported platforms.
 func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 	remoteIP := jw.clientIP(r)
 
