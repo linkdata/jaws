@@ -20,13 +20,13 @@ func RenderBoolOption(elem *jaws.Element, w io.Writer, nb *Bool, params []any) e
 	return htmlio.WriteHTMLInner(w, elem.Jid(), "option", "", nb.JawsGetHTML(elem), attrs...)
 }
 
-// UpdateBoolOption updates a rendered <option>'s selected attribute to match nb.
+// UpdateBoolOption updates a rendered <option>'s live selected state to match nb.
 // It is the single source of the option's update behavior.
 func UpdateBoolOption(elem *jaws.Element, nb *Bool) {
 	if nb.Checked() {
-		elem.SetAttr("selected", "")
+		elem.SetValue("true")
 	} else {
-		elem.RemoveAttr("selected")
+		elem.SetValue("false")
 	}
 }
 
