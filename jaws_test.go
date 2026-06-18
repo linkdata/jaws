@@ -1040,6 +1040,34 @@ func TestJaws_SecureHeadersMiddleware_UsesJawsCSP(t *testing.T) {
 	}
 }
 
+func TestJaws_SecureHeadersMiddleware_UsesUpdatedJawsCSP(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	oldCSP := jw.ContentSecurityPolicy()
+	mw := jw.SecureHeadersMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	if err = jw.GenerateHeadHTML("https://cdn.example.test/app.js"); err != nil {
+		t.Fatal(err)
+	}
+	wantCSP := jw.ContentSecurityPolicy()
+	if wantCSP == oldCSP {
+		t.Fatal("expected GenerateHeadHTML to change the CSP")
+	}
+
+	rr := httptest.NewRecorder()
+	mw.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "https://example.test/", nil))
+
+	if got := rr.Result().Header.Get("Content-Security-Policy"); got != wantCSP {
+		t.Fatalf("expected updated CSP %q, got %q", wantCSP, got)
+	}
+}
+
 func TestJaws_SecureHeadersMiddleware_DoesNotModifyDefaultHeaders(t *testing.T) {
 	jw, err := New()
 	if err != nil {
