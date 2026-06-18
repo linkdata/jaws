@@ -55,7 +55,7 @@ type Request struct {
 	remoteIP         netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
 	running          atomic.Bool             // if ServeHTTP() is running
 	claimed          atomic.Bool             // if UseRequest() has been called for it
-	lastWriteSeconds atomic.Uint32           // [Jaws.runtimeSeconds] value at the most recent RequestWriter write; lock-free, drives pending-eviction recency (oldestEvictablePendingLocked) and idle expiry (maintenance)
+	lastWriteSeconds atomic.Int32            // [Jaws.runtimeSeconds] value at the most recent RequestWriter write; lock-free, drives pending-eviction recency (oldestEvictablePendingLocked) and idle expiry (maintenance)
 	mu               deadlock.RWMutex        // protects following
 	lastJid          Jid                     // last element Jid allocated within this Request
 	initial          *http.Request           // initial HTTP request passed to Jaws.NewRequest
@@ -484,14 +484,17 @@ func (rq *Request) SetContext(fn func(oldCtx context.Context) (newCtx context.Co
 // It returns the cancellation cause (or nil) rather than logging it, so the caller
 // can log it after releasing jw.mu — logging runs the user [Jaws.Logger], which
 // must not be invoked under a lock.
-func (rq *Request) maintenance(nowSeconds uint32, requestTimeout time.Duration) (expired bool, cause error) {
+func (rq *Request) maintenance(nowSeconds int32, requestTimeout time.Duration) (expired bool, cause error) {
 	if !rq.running.Load() {
 		rq.mu.Lock()
 		if rq.ctx.Err() != nil {
 			expired = true
-		} else if time.Duration(nowSeconds-rq.lastWriteSeconds.Load())*time.Second > requestTimeout {
-			cause = rq.cancelLocked(newErrNoWebSocketRequest(rq))
-			expired = true
+		} else {
+			elapsedSeconds := nowSeconds - rq.lastWriteSeconds.Load()
+			if elapsedSeconds > 0 && time.Duration(elapsedSeconds)*time.Second > requestTimeout {
+				cause = rq.cancelLocked(newErrNoWebSocketRequest(rq))
+				expired = true
+			}
 		}
 		rq.mu.Unlock()
 	}
