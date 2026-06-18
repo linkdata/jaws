@@ -22,9 +22,10 @@ func (rw RequestWriter) NewUI(ui jaws.UI, params ...any) (err error) {
 	return
 }
 
-// Write records that rendering has started, then writes p to the underlying writer.
+// Write records the write instant (see [jaws.Request.MarkWritten]), then writes p
+// to the underlying writer.
 func (rw RequestWriter) Write(p []byte) (n int, err error) {
-	rw.Rendering.Store(true)
+	rw.MarkWritten()
 	return rw.Writer.Write(p)
 }
 
