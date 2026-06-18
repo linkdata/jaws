@@ -31,10 +31,12 @@ func (u *Select) JawsRender(elem *jaws.Element, w io.Writer, params []any) error
 // and in [Select.JawsInput]) only takes effect if Container is later reassigned
 // to a plain [jaws.Container].
 func (u *Select) JawsUpdate(elem *jaws.Element) {
+	u.UpdateContainer(elem)
 	if setter, ok := u.ContainerHelper.Container.(bind.Setter[string]); ok {
+		// Set the live value after reconciling options, so a newly selected
+		// option exists in the browser before the select value is assigned.
 		elem.SetValue(setter.JawsGet(elem))
 	}
-	u.UpdateContainer(elem)
 }
 
 // JawsInput stores a browser-side select value.
