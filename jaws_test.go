@@ -853,6 +853,31 @@ func TestJaws_GenerateHeadHTML_StoresCSPBuiltBySecureHeaders(t *testing.T) {
 	}
 }
 
+// TestJaws_GenerateHeadHTML_DeduplicatesBuiltinResources verifies that re-listing the
+// built-in JaWS JS and CSS resources as extras is a no-op: both are already prepended,
+// so the regenerated head HTML and CSP must be identical to the built-ins-only output
+// produced by New. This guards the symmetric dedup of both built-in paths.
+func TestJaws_GenerateHeadHTML_DeduplicatesBuiltinResources(t *testing.T) {
+	jw, err := New() // New calls GenerateHeadHTML() with no extras: built-ins only.
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	baseHead := jw.headPrefix
+	baseCSP := jw.ContentSecurityPolicy()
+
+	if err = jw.GenerateHeadHTML(jw.serveJS.Name, jw.serveCSS.Name); err != nil {
+		t.Fatal(err)
+	}
+	if got := jw.headPrefix; got != baseHead {
+		t.Fatalf("re-listing built-ins changed head HTML:\nbase: %q\ngot:  %q", baseHead, got)
+	}
+	if got := jw.ContentSecurityPolicy(); got != baseCSP {
+		t.Fatalf("re-listing built-ins changed CSP:\nbase: %q\ngot:  %q", baseCSP, got)
+	}
+}
+
 func TestJaws_GenerateHeadHTML_PropagatesResourceParseErrors(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -1590,6 +1615,39 @@ func TestServeHTTP_TailScript_RejectsRecycledKey(t *testing.T) {
 	is.Equal(w.Code, http.StatusOK)
 	is.Equal(strings.Contains(w.Body.String(), `classList?.add("fresh");`), true)
 	is.Equal(strings.Contains(w.Body.String(), "stale"), false)
+}
+
+// TestServeHTTP_TailScript_IPMismatch verifies that a /jaws/.tail fetch from a
+// different client IP than the initial request is rejected (404) and does not drain
+// the one-shot tail, so the legitimate client can still fetch its own content. This
+// mirrors the IP binding the WebSocket claim path enforces.
+func TestServeHTTP_TailScript_IPMismatch(t *testing.T) {
+	is := newTestHelper(t)
+	jw, _ := New()
+	go jw.Serve()
+	defer jw.Close()
+
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	hr.RemoteAddr = "203.0.113.1:1111"
+	rq := jw.NewRequest(hr)
+	rq.NewElement(&testUi{}).SetClass("cls")
+
+	// A fetch from a different (non-loopback) IP is rejected and must not consume the
+	// one-shot tail.
+	req := httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString(), nil)
+	req.RemoteAddr = "203.0.113.2:2222"
+	w := httptest.NewRecorder()
+	jw.ServeHTTP(w, req)
+	is.Equal(w.Code, http.StatusNotFound)
+
+	// The legitimate client (same IP, any port) still gets its content: the mismatched
+	// fetch above did not set tailsent.
+	req = httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString(), nil)
+	req.RemoteAddr = "203.0.113.1:3333"
+	w = httptest.NewRecorder()
+	jw.ServeHTTP(w, req)
+	is.Equal(w.Code, http.StatusOK)
+	is.Equal(strings.Contains(w.Body.String(), `classList?.add("cls");`), true)
 }
 
 func TestServeHTTP_TailScript_WriteError(t *testing.T) {

@@ -603,6 +603,27 @@ func Test_CallEventHandlers_PanicString(t *testing.T) {
 	}
 }
 
+// Test_CallEventHandlers_PanicNonComparable guards that a handler panicking with a
+// non-comparable value (here a map) flows through errors.Is against the exported
+// sentinel without panicking. ErrEventHandlerPanic carries a nil Value, so comparing
+// the wrapped error against it never reaches a map-to-map comparison; this locks in
+// that the reachable matching path stays panic-safe.
+func Test_CallEventHandlers_PanicNonComparable(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	elem := rq.NewElement(testDivWidget{inner: "x"})
+	err := CallEventHandlers(testPanicInputHandler{panicVal: map[int]int{1: 1}}, elem, what.Input, "")
+	if !errors.Is(err, ErrEventHandlerPanic) {
+		t.Errorf("got %v, want ErrEventHandlerPanic", err)
+	}
+	// The non-comparable value is not an error, so Unwrap yields nil rather than
+	// exposing the map.
+	if errors.Unwrap(err) != nil {
+		t.Errorf("Unwrap: got %v, want nil", errors.Unwrap(err))
+	}
+}
+
 func Test_CallEventHandlers_ClickOnlyHandlerViaApplyGetter(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()

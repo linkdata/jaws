@@ -849,7 +849,16 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 		// request-targeted; page-global What values (Reload/Redirect/Order/Alert)
 		// already returned above, so there are no elements to resolve here
 	case string:
-		// target is a regular HTML ID
+		// target is a regular HTML ID. With Jid < 0, wire.WsMsg.Append writes Data
+		// verbatim and the browser splits the frame on '\t' (fields) and '\n' (frames),
+		// so an id carrying either byte corrupts the frame (a '\n' splits it in two).
+		// The data half below is JSON-quoted, but the id is concatenated raw, so guard
+		// it: a valid HTML id never contains ASCII whitespace, so reject rather than
+		// escape, mirroring how Element.Replace rejects an id-less payload.
+		if strings.ContainsAny(v, "\t\n") {
+			rq.Jaws.reportMisuse(fmt.Errorf("jaws: Broadcast: HTML id %q contains a tab or newline", v))
+			return
+		}
 		data := tagmsg.Data
 		if tagmsg.What != what.Set && tagmsg.What != what.Call {
 			// Quote the same JSON-safe way element-targeted messages are quoted
@@ -933,14 +942,7 @@ func (rq *Request) handleRemove(containerJid Jid, data string) {
 		if len(victims) == 0 {
 			return
 		}
-		isVictim := func(e *Element) bool { _, ok := victims[e.Jid()]; return ok }
-		rq.elems = slices.DeleteFunc(rq.elems, isVictim)
-		for k := range rq.tagMap {
-			rq.tagMap[k] = slices.DeleteFunc(rq.tagMap[k], isVictim)
-			if len(rq.tagMap[k]) == 0 {
-				delete(rq.tagMap, k)
-			}
-		}
+		rq.removeElementsLocked(func(e *Element) bool { _, ok := victims[e.Jid()]; return ok })
 	}
 }
 
@@ -1006,7 +1008,7 @@ func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
 	select {
 	case eventCallCh <- call:
 	default:
-		rq.cancel(fmt.Errorf("jaws: %v: eventCallCh is full sending %v", rq, call))
+		rq.cancel(fmt.Errorf("%w: %v: eventCallCh full sending %v", ErrRequestOverloaded, rq, call))
 	}
 }
 
@@ -1071,22 +1073,29 @@ func (rq *Request) sendQueue(outboundMsgCh chan<- wire.WsMsg) {
 	}
 }
 
+// removeElementsLocked drops every element matching pred from the request's element
+// list and from every tag entry, deleting tag entries that become empty.
+//
+// slices.DeleteFunc zeros the freed tail slots, so the dropped *Element pointers do
+// not linger in the backing arrays. Caller must hold rq.mu and is responsible for
+// marking the matched elements deleted.
+func (rq *Request) removeElementsLocked(pred func(*Element) bool) {
+	rq.elems = slices.DeleteFunc(rq.elems, pred)
+	for k := range rq.tagMap {
+		rq.tagMap[k] = slices.DeleteFunc(rq.tagMap[k], pred)
+		if len(rq.tagMap[k]) == 0 {
+			delete(rq.tagMap, k)
+		}
+	}
+}
+
 // deleteElementLocked removes elem from the request's element list and from every
 // tag entry, marking it deleted; it is a no-op if elem belongs to another request.
 // Caller must hold rq.mu.
 func (rq *Request) deleteElementLocked(elem *Element) {
 	if elem.Request == rq {
 		elem.deleted.Store(true)
-		// slices.DeleteFunc removes every match and zeros the freed tail slots, so
-		// the dropped *Element pointers do not linger in the backing array.
-		isElem := func(e *Element) bool { return e == elem }
-		rq.elems = slices.DeleteFunc(rq.elems, isElem)
-		for k := range rq.tagMap {
-			rq.tagMap[k] = slices.DeleteFunc(rq.tagMap[k], isElem)
-			if len(rq.tagMap[k]) == 0 {
-				delete(rq.tagMap, k)
-			}
-		}
+		rq.removeElementsLocked(func(e *Element) bool { return e == elem })
 	}
 }
 

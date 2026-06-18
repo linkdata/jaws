@@ -685,7 +685,10 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 			urls = append(urls, jawsurl)
 			for _, urlstr := range extra {
 				if u, e := url.Parse(urlstr); e == nil {
-					if !strings.HasSuffix(u.Path, jawsurl.Path) {
+					// Skip an extra that re-lists either built-in resource (both cssurl
+					// and jawsurl were prepended above) so it is not preloaded or added
+					// to the Content-Security-Policy twice.
+					if !strings.HasSuffix(u.Path, jawsurl.Path) && !strings.HasSuffix(u.Path, cssurl.Path) {
 						urls = append(urls, u)
 					}
 				} else {
@@ -996,7 +999,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 					// the exception is Update messages, more will follow eventually
 					if msg.What != what.Update {
 						killSub(msgCh)
-						rq.cancel(fmt.Errorf("%v: broadcast channel full sending %s", rq, msg.String()))
+						rq.cancel(fmt.Errorf("%w: %v: broadcast channel full sending %s", ErrRequestOverloaded, rq, msg.String()))
 					}
 				}
 			}
@@ -1347,6 +1350,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			default:
 				if jawsKeyString, ok := strings.CutPrefix(r.URL.Path, "/jaws/.tail/"); ok {
 					jawsKey := key.Parse(jawsKeyString)
+					remoteIP := jw.clientIP(r)
 					// Hold jw.mu (read) across both the lookup and the drain: recycling
 					// needs the jw.mu write lock, so rq cannot be recycled and reused
 					// under a different key while we drain its queue. A stale key either
@@ -1355,6 +1359,18 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					// recycling or the Serve loop.
 					jw.mu.RLock()
 					rq := jw.requests[jawsKey]
+					// Bind the tail fetch to the client like the WebSocket claim path
+					// (Request.claim): the one-shot tail is drained only when the fetch
+					// comes from the same client IP that the initial request was issued
+					// to (loopback-aware, see equalIP). rq.remoteIP is stable here because
+					// recycling requires the jw.mu write lock. A mismatch is treated as not
+					// found, so a leaked key cannot drain (and thereby deny) another
+					// client's tail. The WebSocket carries all live data, so this only
+					// closes the cross-IP read of the already-rendered attribute/class
+					// fragments and the cross-IP one-shot race.
+					if rq != nil && !equalIP(remoteIP, rq.remoteIP) {
+						rq = nil
+					}
 					var b []byte
 					var sent bool
 					if rq != nil {
