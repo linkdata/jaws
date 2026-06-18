@@ -249,9 +249,12 @@ func (elem *Element) SetValue(value string) {
 
 // Replace replaces the [Element]'s entire HTML DOM node with new HTML code.
 //
-// The HTML code must contain the element's own HTML id; if it does not, the call
-// is a programming error: debug builds panic and production builds report it via
-// [Jaws.MustLog] and skip the replacement.
+// The trusted HTML should preserve the element identity by putting the element's
+// own JaWS id on the replacement root element, normally as id="Jid.N". Replace is
+// not an HTML validator: it performs only a lightweight textual guard for that
+// expected id attribute. If the guard does not find it, the call is a programming
+// error: debug builds panic and production builds report it via [Jaws.MustLog]
+// and skip the replacement.
 //
 // Call this while the [Element] is rendering or updating. The change is queued and
 // sent on the next processing pass; to change the [Element] in response to a browser
