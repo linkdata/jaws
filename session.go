@@ -300,7 +300,7 @@ func getCookieSessionsIDs(h http.Header, wanted string) (cookies []key.Key) {
 						if len(val) > 1 && val[0] == '"' && val[len(val)-1] == '"' {
 							val = val[1 : len(val)-1]
 						}
-						if sessionID, _ := key.Parse(val); sessionID != 0 {
+						if sessionID, tail := key.Parse(val); sessionID != 0 && tail == "" {
 							cookies = append(cookies, sessionID)
 						}
 					}
