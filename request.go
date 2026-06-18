@@ -928,10 +928,11 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 			// primary usecase is tests.
 			rq.queueEvent(eventCallCh, eventFnCall{jid: elem.Jid(), wht: tagmsg.What, data: tagmsg.Data})
 		case what.Hook:
-			// "hook" messages are used to synchronously call an event function.
-			// the function must not send any messages itself, but may return
-			// an error to be sent out as an alert message.
-			// primary usecase is tests.
+			// Hook messages synchronously invoke the element's event handler; see
+			// [what.Hook]. They exist for testing: the JaWS client never sends Hook,
+			// so they only arrive here via Broadcast. The handler must not send any
+			// messages itself, but may return an error, which is sent back to the
+			// client as an alert message.
 			if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.Jid(), tagmsg.What, tagmsg.Data)); err != nil {
 				var m wire.WsMsg
 				m.FillAlert(err)
