@@ -24,6 +24,7 @@ const (
 	clickKeyShift = (1 << iota)
 	clickKeyControl
 	clickKeyAlt
+	clickKeyMask = clickKeyShift | clickKeyControl | clickKeyAlt
 )
 
 func (clk Click) keyState() (state int) {
@@ -71,7 +72,12 @@ func parseClickData(value string) (clk Click, after string, ok bool) {
 				clk.Y, ok = runAtof(field)
 			case 2:
 				kstate, ok = runAtoi(field)
-				clk.setKeyState(kstate)
+				if ok {
+					ok = kstate >= 0 && kstate&^clickKeyMask == 0
+				}
+				if ok {
+					clk.setKeyState(kstate)
+				}
 			case 3:
 				clk.Name = field
 			default:

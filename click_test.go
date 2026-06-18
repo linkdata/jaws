@@ -87,6 +87,16 @@ func TestParseClickData(t *testing.T) {
 			in:     "10 20 bad save",
 			wantOK: false,
 		},
+		{
+			name:   "unknown keystate bit",
+			in:     "10 20 8 save",
+			wantOK: false,
+		},
+		{
+			name:   "negative keystate",
+			in:     "10 20 -1 save",
+			wantOK: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
