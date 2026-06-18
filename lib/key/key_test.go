@@ -25,16 +25,19 @@ func TestParse(t *testing.T) {
 		name string
 		in   string
 		want Key
+		tail string
 	}{
 		{name: "blank", in: "", want: 0},
 		{name: "one", in: "1", want: 1},
 		{name: "invalid", in: "-1", want: 0},
-		{name: "trailing-path", in: "2/noscript", want: 2},
+		{name: "trailing-path", in: "2/noscript", want: 2, tail: "/noscript"},
+		{name: "empty-trailing-path", in: "2/", want: 2, tail: "/"},
 		{name: "base32", in: "10", want: 32},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := Parse(tt.in); got != tt.want {
-				t.Fatalf("Parse(%q) = %v, want %v", tt.in, got, tt.want)
+			got, tail := Parse(tt.in)
+			if got != tt.want || tail != tt.tail {
+				t.Fatalf("Parse(%q) = %v, %q want %v, %q", tt.in, got, tail, tt.want, tt.tail)
 			}
 		})
 	}

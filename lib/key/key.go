@@ -17,19 +17,21 @@ func (key Key) String() string {
 	return string(Append(nil, key))
 }
 
-// Parse parses a JaWS key from its text form.
+// Parse parses a JaWS key prefix from its text form.
 //
-// Any trailing "/..." path suffix is ignored. It returns zero if s does not
-// contain a valid base-32 key.
-func Parse(s string) Key {
+// If s contains a slash, tail is the slash and everything after it. The returned
+// key is zero if the prefix before tail is not a valid base-32 key.
+func Parse(s string) (key Key, tail string) {
 	slashIdx := strings.IndexByte(s, '/')
-	if slashIdx < 0 {
-		slashIdx = len(s)
+	keystr := s
+	if slashIdx >= 0 {
+		keystr = s[:slashIdx]
+		tail = s[slashIdx:]
 	}
-	if val, err := strconv.ParseUint(s[:slashIdx], 32, 64); err == nil {
-		return Key(val)
+	if val, err := strconv.ParseUint(keystr, 32, 64); err == nil {
+		key = Key(val)
 	}
-	return 0
+	return
 }
 
 // Append appends key in the text form used by JaWS to b.
