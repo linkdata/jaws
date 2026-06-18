@@ -18,11 +18,12 @@ type HandleFunc = func(pattern string, handler http.Handler)
 // The URLs returned will be used in a call to [Jaws.GenerateHeadHTML].
 type SetupFunc = func(jw *Jaws, handleFn HandleFunc, prefix string) (urls []*url.URL, err error)
 
-// makeAbsPath prepends the prefix to u's path if it is relative.
-// Returns the (possibly modified) u.
+// makeAbsPath returns a copy of u with prefix prepended to relative paths.
 func makeAbsPath(prefix string, u *url.URL) *url.URL {
-	if prefix != "" && u != nil {
-		if !path.IsAbs(u.Path) {
+	if u != nil {
+		copied := *u
+		u = &copied
+		if prefix != "" && !path.IsAbs(u.Path) {
 			u.Path = path.Join(prefix, u.Path)
 		}
 	}
