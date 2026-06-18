@@ -14,6 +14,7 @@ import (
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/named"
 	"github.com/linkdata/jaws/lib/tag"
+	"github.com/linkdata/jaws/lib/what"
 )
 
 type testRWUpdater struct {
@@ -22,6 +23,16 @@ type testRWUpdater struct {
 
 func (u *testRWUpdater) JawsUpdate(elem *jaws.Element) {
 	u.called++
+}
+
+type registerClickUpdater struct {
+	testRWUpdater
+	clicks int
+}
+
+func (u *registerClickUpdater) JawsClick(elem *jaws.Element, click jaws.Click) error {
+	u.clicks++
+	return nil
 }
 
 type requestWriterFailGetter struct {
@@ -182,4 +193,24 @@ func TestRequestWriter_RegisterFreezesElement(t *testing.T) {
 		return
 	}
 	elem.AddHandlers(struct{}{}) // production logs and drops, must not panic
+}
+
+func TestRequestWriter_RegisterUsesUpdaterEventHandler(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	var buf bytes.Buffer
+	rw := RequestWriter{Request: rq, Writer: &buf}
+
+	up := &registerClickUpdater{}
+	id := rw.Register(up)
+	elem := rq.GetElementByJid(id)
+	if elem == nil {
+		t.Fatal("expected registered element to be retained")
+	}
+
+	if err := jaws.CallEventHandlers(elem.UI(), elem, what.Click, "1 2 0 registered"); err != nil {
+		t.Fatal(err)
+	}
+	if up.clicks != 1 {
+		t.Fatalf("expected updater click handler to be called once, got %d", up.clicks)
+	}
 }
