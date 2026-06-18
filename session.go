@@ -3,13 +3,16 @@ package jaws
 import (
 	"net/http"
 	"net/netip"
+	"net/textproto"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/lib/key"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
+	"github.com/linkdata/secureheaders"
 )
 
 // Session stores server-side per-user state shared by one or more requests.
@@ -249,4 +252,146 @@ func (sess *Session) Broadcast(msg wire.Message) {
 			}
 		}
 	}
+}
+
+// SessionCount returns the number of active sessions.
+func (jw *Jaws) SessionCount() (n int) {
+	jw.mu.RLock()
+	n = len(jw.sessions)
+	jw.mu.RUnlock()
+	return
+}
+
+// Sessions returns a list of all active sessions, which may be nil.
+func (jw *Jaws) Sessions() (sessions []*Session) {
+	jw.mu.RLock()
+	if n := len(jw.sessions); n > 0 {
+		sessions = make([]*Session, 0, n)
+		for _, sess := range jw.sessions {
+			sessions = append(sessions, sess)
+		}
+	}
+	jw.mu.RUnlock()
+	return
+}
+
+func (jw *Jaws) getSessionLocked(sessionIDs []key.Key, remoteIP netip.Addr) *Session {
+	for _, sessionID := range sessionIDs {
+		if sess, ok := jw.sessions[sessionID]; ok && equalIP(remoteIP, sess.remoteIP) {
+			if !sess.isDead() {
+				return sess
+			}
+		}
+	}
+	return nil
+}
+
+func getCookieSessionsIDs(h http.Header, wanted string) (cookies []key.Key) {
+	for _, line := range h["Cookie"] {
+		if strings.Contains(line, wanted) {
+			var part string
+			line = textproto.TrimString(line)
+			for len(line) > 0 {
+				part, line, _ = strings.Cut(line, ";")
+				if part = textproto.TrimString(part); part != "" {
+					name, val, _ := strings.Cut(part, "=")
+					name = textproto.TrimString(name)
+					if name == wanted {
+						if len(val) > 1 && val[0] == '"' && val[len(val)-1] == '"' {
+							val = val[1 : len(val)-1]
+						}
+						if sessionID := key.Parse(val); sessionID != 0 {
+							cookies = append(cookies, sessionID)
+						}
+					}
+				}
+			}
+		}
+	}
+	return
+}
+
+// GetSession returns the [Session] associated with the given [http.Request], or nil.
+//
+// Sessions are bound to the client IP (see the clientIP method). Behind a reverse
+// proxy that connects over loopback, every request appears to come from loopback
+// and IP binding is effectively disabled unless [Jaws.TrustForwardedHeaders] is
+// enabled so the forwarded client IP is used instead.
+func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
+	if r != nil {
+		if sessionIDs := getCookieSessionsIDs(r.Header, jw.CookieName); len(sessionIDs) > 0 {
+			remoteIP := jw.clientIP(r)
+			jw.mu.RLock()
+			sess = jw.getSessionLocked(sessionIDs, remoteIP)
+			jw.mu.RUnlock()
+		}
+	}
+	return
+}
+
+// NewSession creates a new [Session].
+//
+// Any pre-existing [Session] will be cleared and closed.
+// This may call [Session.Close] on an existing session and therefore requires
+// the JaWS processing loop ([Jaws.Serve] or [Jaws.ServeWithTimeout]) to be running.
+//
+// Subsequent [Request] values created with [Jaws.NewRequest] that have the
+// cookie set and originate from the same IP will be able to access the [Session].
+// The IP comparison is the same loopback-aware, optionally forwarded-header-based
+// match used everywhere else; see [Jaws.GetSession] and [Jaws.TrustForwardedHeaders]
+// for the reverse-proxy caveat.
+//
+// As a side effect, the session cookie is also added to r itself, so the new
+// [Session] is visible to [Jaws.GetSession] and [Jaws.NewRequest] for the
+// remainder of the same HTTP request.
+func (jw *Jaws) NewSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
+	if r != nil {
+		if oldSess := jw.GetSession(r); oldSess != nil {
+			oldSess.Clear()
+			oldSess.Close()
+		}
+		sess = jw.newSession(w, r)
+	}
+	return
+}
+
+func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
+	secure := secureheaders.RequestIsSecure(r, jw.TrustForwardedHeaders)
+	jw.mu.Lock()
+	defer jw.mu.Unlock()
+	for sess == nil {
+		sessionID := jw.nonZeroRandomLocked()
+		if _, ok := jw.sessions[sessionID]; !ok {
+			sess = newSession(jw, sessionID, jw.clientIP(r), secure)
+			jw.sessions[sessionID] = sess
+			if w != nil {
+				http.SetCookie(w, &sess.cookie)
+			}
+			r.AddCookie(&sess.cookie)
+		}
+	}
+	return
+}
+
+func (jw *Jaws) deleteSession(sessionID key.Key) {
+	jw.mu.Lock()
+	delete(jw.sessions, sessionID)
+	jw.mu.Unlock()
+}
+
+type sessioner struct {
+	jw *Jaws
+	h  http.Handler
+}
+
+func (sess sessioner) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if sess.jw.GetSession(r) == nil {
+		sess.jw.newSession(w, r)
+	}
+	sess.h.ServeHTTP(w, r)
+}
+
+// Session returns an [http.Handler] that ensures a JaWS [Session] exists before invoking h.
+func (jw *Jaws) Session(h http.Handler) http.Handler {
+	return sessioner{jw: jw, h: h}
 }
