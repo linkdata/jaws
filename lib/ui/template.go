@@ -20,6 +20,13 @@ import (
 // attributes supplied at render time through the [RequestWriter.Template]
 // helper. The referenced template must be a partial template, not a full HTML
 // document.
+//
+// Template execution is best-effort rather than transactional. Template actions
+// and nested JaWS helpers run as the template executes, so an execution error
+// after partial output can leave already-written HTML, registered nested
+// elements, queued messages, domain mutations or other side effects in place.
+// Treat such errors as application bugs: validate data before rendering and keep
+// template actions infallible once they start emitting output or nested UI.
 type Template struct {
 	OuterHTMLTag string // Optional wrapper tag for partial templates, for example "div" or "tr"; empty renders unwrapped.
 	Name         string // Template name to be looked up using Jaws.LookupTemplate.
@@ -111,6 +118,11 @@ func (tmpl Template) render(elem *jaws.Element, w io.Writer, params []any) (err 
 }
 
 // JawsRender renders t through the request's configured template lookupers.
+//
+// Rendering streams output directly to w. If template execution fails after a
+// wrapped start tag has been written, JaWS still writes the closing wrapper tag
+// when possible, but it does not roll back nested elements or other side effects
+// produced before the error.
 func (tmpl Template) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	err = tmpl.render(elem, w, params)
 	return
@@ -121,6 +133,11 @@ func (tmpl Template) JawsRender(elem *jaws.Element, w io.Writer, params []any) (
 // Unwrapped templates have no generated DOM element to update, so updates are
 // ignored. Nested JaWS UI rendered by the template can still update through its
 // own elements.
+//
+// The wrapper's SetInner message is queued only after template execution
+// succeeds. If execution fails after creating nested UI or performing other
+// template-side effects, the browser wrapper remains unchanged and those
+// side effects are not rolled back.
 //
 // Lookup or execution errors are reported through [jaws.Request.MustLog],
 // which may panic when no [jaws.Jaws.Logger] is configured.
@@ -177,7 +194,8 @@ func (tmpl Template) JawsInput(elem *jaws.Element, value string) (err error) {
 //
 // Dot participates in tag expansion for dirty targeting and receives delegated
 // click, context-menu, and input events when it implements the corresponding
-// JaWS handler interfaces.
+// JaWS handler interfaces. Template execution has the best-effort error
+// behavior described on [Template].
 func NewTemplate(outerHTMLTag, name string, dot any) Template {
 	return Template{OuterHTMLTag: outerHTMLTag, Name: name, Dot: dot}
 }
@@ -189,7 +207,8 @@ func NewTemplate(outerHTMLTag, name string, dot any) Template {
 // wrapped in a generated outerHTMLTag element that owns the JaWS ID and any
 // HTML attrs passed in params. If outerHTMLTag is empty, no wrapper is emitted
 // and HTML attr params have no generated element to apply to. The template must
-// be a partial, not a full HTML document.
+// be a partial, not a full HTML document. Template execution has the
+// best-effort error behavior described on [Template].
 func (rw RequestWriter) Template(outerHTMLTag, name string, dot any, params ...any) error {
 	return rw.NewUI(NewTemplate(outerHTMLTag, name, dot), params...)
 }
