@@ -2158,6 +2158,10 @@ func TestRequest_JsCallProducesJawsJSFrameSafeWireData(t *testing.T) {
 			name:    "raw newline inside string value",
 			jsonstr: "{\"a\":\"x\ny\"}",
 		},
+		{
+			name:    "raw carriage return inside string value",
+			jsonstr: "{\"a\":\"x\ry\"}",
+		},
 	}
 
 	for _, tt := range tests {
@@ -2171,6 +2175,9 @@ func TestRequest_JsCallProducesJawsJSFrameSafeWireData(t *testing.T) {
 			}
 			if got := strings.Count(wire, "\t"); got != 2 {
 				t.Fatalf("wire message contains embedded tab separators (%d): %q", got, wire)
+			}
+			if strings.Contains(wire, "\r") {
+				t.Fatalf("wire message contains embedded carriage return: %q", wire)
 			}
 		})
 	}
@@ -2195,6 +2202,14 @@ func TestRequest_JsCallFunctionPathDoesNotBreakWireFraming(t *testing.T) {
 			name:   "newline in function path",
 			jsfunc: "fn\npart",
 		},
+		{
+			name:   "carriage return in function path",
+			jsfunc: "fn\rpart",
+		},
+		{
+			name:   "equals in function path",
+			jsfunc: "fn=part",
+		},
 	}
 
 	for _, tt := range tests {
@@ -2208,6 +2223,12 @@ func TestRequest_JsCallFunctionPathDoesNotBreakWireFraming(t *testing.T) {
 			}
 			if got := strings.Count(wire, "\t"); got != 2 {
 				t.Fatalf("wire message contains embedded tab separators (%d): %q", got, wire)
+			}
+			if strings.Contains(wire, "\r") {
+				t.Fatalf("wire message contains embedded carriage return: %q", wire)
+			}
+			if msg.Data != `fnpart={"a":1}` {
+				t.Fatalf("Call payload = %q, want %q", msg.Data, `fnpart={"a":1}`)
 			}
 		})
 	}

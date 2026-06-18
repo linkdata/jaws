@@ -7,6 +7,7 @@
 // grammars of JSON and strconv.Unquote merely overlap rather than nest, but
 // appendJSONQuote stays inside their intersection. The Set and Call commands carry
 // path/function payloads directly, so callers must keep those payloads free of raw
-// tabs and newlines; jaws.JsCall compacts JSON for that reason before it enters the
-// wire layer.
+// tabs and newlines. The path/function side also uses '=' as its separator from
+// the JSON value; jaws.JsCall normalizes its function path and compacts or escapes
+// JSON before the payload enters the wire layer.
 package wire

@@ -328,16 +328,17 @@ func (jw *Jaws) Append(target any, html template.HTML) {
 	jw.broadcastTo(target, what.Append, string(html))
 }
 
-// maybeCompactJSON returns in made safe to embed verbatim in a what.Call wire
-// frame, which the client splits on '\n' (frames) and '\t' (order fields). For
-// valid JSON, json.Compact strips all insignificant whitespace, including any
-// framing-significant tabs and newlines between tokens. When in is not valid JSON
-// (for example a caller embedded a raw control byte inside a string literal, which
-// is illegal unescaped in JSON), json.Compact fails; rather than passing the raw
-// bytes through and corrupting the frame, escape the framing-significant control
-// bytes so the payload is always frame-safe (and, as a side effect, valid JSON).
+// maybeCompactJSON returns its input after making it safe to embed verbatim in a
+// what.Call wire frame, which the client splits on '\n' (frames) and '\t'
+// (order fields). For valid JSON, json.Compact strips all insignificant
+// whitespace, including any tabs, newlines and carriage returns between tokens.
+// When the input is not valid JSON
+// (for example a caller embedded a raw control byte inside a string literal),
+// json.Compact fails; rather than passing the raw bytes through and corrupting or
+// invalidating the frame, escape those control bytes so the payload is always
+// frame-safe and valid JSON.
 func maybeCompactJSON(in string) string {
-	if strings.ContainsAny(in, "\n\t") {
+	if strings.ContainsAny(in, "\n\t\r") {
 		var b bytes.Buffer
 		if err := json.Compact(&b, []byte(in)); err == nil {
 			return b.String()
@@ -348,16 +349,17 @@ func maybeCompactJSON(in string) string {
 }
 
 // jsonControlEscaper turns control bytes into their JSON escape sequences for the
-// fallback path. \n (frame terminator) and \t (field separator) are the only
-// framing-significant bytes, matching maybeCompactJSON's detection set; \r is
-// escaped solely because a bare \r is illegal inside a JSON string literal, so the
-// fallback output stays valid JSON.
+// fallback path. \n (frame terminator) and \t (field separator) are
+// framing-significant; \r is escaped because a bare \r is illegal inside a JSON
+// string literal, so the fallback output stays valid JSON.
 var jsonControlEscaper = strings.NewReplacer("\t", `\t`, "\n", `\n`, "\r", `\r`)
 
-var whitespaceRemover = strings.NewReplacer(" ", "", "\n", "", "\t", "")
+// jsCallPathByteRemover strips bytes that would make the path=json Call payload
+// ambiguous or invalid before it reaches jaws.js.
+var jsCallPathByteRemover = strings.NewReplacer(" ", "", "\t", "", "\n", "", "\r", "", "=", "")
 
 // JsCall calls the JavaScript function jsfunc with the argument jsonstr
 // on all HTML elements matching target.
 func (jw *Jaws) JsCall(target any, jsfunc, jsonstr string) {
-	jw.broadcastTo(target, what.Call, whitespaceRemover.Replace(jsfunc)+"="+maybeCompactJSON(jsonstr))
+	jw.broadcastTo(target, what.Call, jsCallPathByteRemover.Replace(jsfunc)+"="+maybeCompactJSON(jsonstr))
 }
