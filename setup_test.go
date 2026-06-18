@@ -76,6 +76,38 @@ func TestJaws_Setup(t *testing.T) {
 	}
 }
 
+func TestJaws_SetupURLExtraCanBeReusedWithDifferentPrefixes(t *testing.T) {
+	u, err := url.Parse("app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	jw1, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw1.Close()
+	if err = jw1.Setup(nil, "/one", u); err != nil {
+		t.Fatal(err)
+	}
+
+	jw2, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw2.Close()
+	if err = jw2.Setup(nil, "/two", u); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := jw2.headPrefix; !strings.Contains(got, `/two/app.js`) {
+		t.Fatalf("second Setup head = %q, want reused URL extra under /two", got)
+	}
+	if got := u.String(); got != "app.js" {
+		t.Fatalf("Setup mutated URL extra: got %q, want %q", got, "app.js")
+	}
+}
+
 func TestJaws_SetupEmptyPrefix(t *testing.T) {
 	ss := staticserve.Must("favicon.png", []byte("Hello"))
 
