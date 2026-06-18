@@ -45,9 +45,10 @@ type ConnectFn = func(rq *Request) error
 //
 // Unlike [Session], whose methods are nil-safe, Request methods are not safe to call on a
 // nil *Request: a Request is always obtained from [Jaws.NewRequest] or [Jaws.UseRequest]
-// and is never legitimately nil. The nil-receiver guards on [Request.Log] and
-// [Request.MustLog] exist only so a nil Request can be rendered into error text, not as a
-// public nil-safe contract.
+// and is never legitimately nil. The nil-receiver guard on [Request.JawsKeyString] (and
+// thus [Request.String]) lets a nil Request render into error text, while those on
+// [Request.Log] and [Request.MustLog] let it forward to the logger; both exist only for
+// that diagnostic use, not as a public nil-safe contract.
 type Request struct {
 	Jaws       *Jaws                   // (read-only) the JaWS instance the Request belongs to
 	JawsKey    key.Key                 // (read-only) random key identifying this Request in the WebSocket URI and the broadcast/tail target; read under mu by the identity check (destKey, wantMessage) and the render path (JawsKeyString, HeadHTML)
