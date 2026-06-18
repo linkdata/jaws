@@ -258,6 +258,64 @@ func TestJaws_MaxPendingRequestsPerIPSparesRenderingRequest(t *testing.T) {
 	}
 }
 
+// TestJaws_MaxPendingRequestsPerIPSparesRecentlyRenderedRequest verifies that the
+// pending cap does not evict a Request whose initial render is still in flight even
+// after a maintenance pass has cleared its Rendering flag. [Request.maintenance]
+// clears Rendering once per interval, so between that clear and the render goroutine's
+// next write the flag reads false while the HTML is still being assembled; keying
+// eviction on the flag alone would recycle the live render. oldestEvictablePendingLocked
+// therefore also spares a Request that rendered within 2*maintenanceInterval and falls
+// through to evict a genuinely idle one instead.
+func TestJaws_MaxPendingRequestsPerIPSparesRecentlyRenderedRequest(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.MaxPendingRequestsPerIP = 2
+	// Pretend the Serve loop is running with a one-minute maintenance interval so the
+	// recency window is active (it is zero until ServeWithTimeout sets it).
+	jw.mu.Lock()
+	jw.maintenanceInterval = time.Minute
+	jw.mu.Unlock()
+
+	// The oldest pending Request is mid-render...
+	renderingReq := newPendingLimitRequest("192.0.2.1:1000")
+	renderingRq := jw.NewRequest(renderingReq)
+	renderingKey := renderingRq.JawsKey
+	renderingRq.Rendering.Store(true)
+
+	// ...and a maintenance pass clears its Rendering flag (refreshing lastWrite) while
+	// the render is still in flight on its HTTP goroutine.
+	jw.maintenance(time.Hour)
+	if renderingRq.Rendering.Load() {
+		t.Fatal("maintenance did not clear Rendering")
+	}
+
+	// A genuinely idle Request that rendered long ago is the correct eviction victim.
+	idleReq := newPendingLimitRequest("192.0.2.1:1001")
+	idleRq := jw.NewRequest(idleReq)
+	idleKey := idleRq.JawsKey
+	setPendingLimitLastWrite(t, idleRq, time.Now().Add(-time.Hour))
+
+	// A third same-IP Request trips the cap (pending == 2).
+	newReq := newPendingLimitRequest("192.0.2.1:1002")
+	newRq := jw.NewRequest(newReq)
+	newKey := newRq.JawsKey
+
+	// The recently-rendered Request must survive despite its cleared flag; the idle one
+	// is evicted instead.
+	if claimed := jw.UseRequest(renderingKey, renderingReq); claimed != renderingRq {
+		t.Fatalf("recently-rendered request claim = %v, want it to survive eviction", claimed)
+	}
+	if claimed := jw.UseRequest(idleKey, idleReq); claimed != nil {
+		t.Fatalf("idle request should have been evicted, got %v", claimed)
+	}
+	if claimed := jw.UseRequest(newKey, newReq); claimed != newRq {
+		t.Fatalf("new request claim = %v, want %v", claimed, newRq)
+	}
+}
+
 // TestJaws_MaxPendingRequestsPerIPOvershootsWhenAllRendering verifies that when
 // every pending request for an IP is mid-render, the cap is not enforced by
 // recycling one of them: oldestEvictablePendingLocked finds no idle victim, so the

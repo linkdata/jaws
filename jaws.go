@@ -154,6 +154,7 @@ type Jaws struct {
 	WebSocketPingInterval   time.Duration   // Interval between keepalive pings on active WebSocket connections. Defaults to DefaultWebSocketPingInterval. Set <=0 to disable keepalive pings.
 	MaxPendingRequestsPerIP int             // Maximum number of unclaimed Requests per client IP. Defaults to DefaultMaxPendingRequestsPerIP. Set <=0 to disable the cap.
 	webSocketTimeout        time.Duration   // timeout duration passed to ServeWith
+	maintenanceInterval     time.Duration   // Serve maintenance tick interval; set by ServeWithTimeout and read under mu, zero until Serve starts
 	bcastCh                 chan wire.Message
 	subCh                   chan subscription
 	unsubCh                 chan chan wire.Message
@@ -412,10 +413,12 @@ func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) {
 	limit := jw.MaxPendingRequestsPerIP
 	if limit > 0 {
+		now := time.Now()
 		for len(jw.pending[remoteIP]) >= limit {
-			victim := jw.oldestEvictablePendingLocked(remoteIP)
+			victim := jw.oldestEvictablePendingLocked(remoteIP, now)
 			if victim == nil {
-				// Every pending Request for this IP is mid-render. Evicting one would
+				// Every pending Request for this IP is rendering or rendered too
+				// recently to evict safely. Recycling a still-rendering one would
 				// recycle a Request whose initial HTML is still being assembled on an
 				// HTTP goroutine that holds no jw.mu, letting a later NewRequest reuse
 				// the pooled pointer under a new key while that goroutine keeps
@@ -434,17 +437,39 @@ func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) 
 }
 
 // oldestEvictablePendingLocked returns the oldest pending [Request] for remoteIP
-// that is not currently being rendered, or nil if every one of them is.
+// that is safe to recycle, or nil if every one of them might still be rendering.
+// now is the reference time for the recency check; the caller passes a single value
+// so all candidates are judged against the same instant. Caller must hold jw.mu.
 //
-// A Request whose Rendering flag is set has been written to by [RequestWriter] and
-// may still be assembling its initial HTML; recycling it would corrupt that
-// in-flight render (see [Jaws.limitPendingRequestsLocked]). This mirrors the
-// Rendering reprieve the maintenance-timeout path honors in [Request.maintenance].
-func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr) *Request {
+// A Request is spared when its Rendering flag is set (it has been written to by
+// [RequestWriter] and may still be assembling its initial HTML, which recycling would
+// corrupt — see [Jaws.limitPendingRequestsLocked]), OR when it last rendered within
+// 2*maintenanceInterval. The recency check is required because [Request.maintenance]
+// clears Rendering once per maintenance interval: between that clear and the render
+// goroutine's next write the flag reads false even though the HTML is still in flight,
+// so keying eviction on the flag alone would recycle a live render. lastWrite is
+// refreshed by that same maintenance pass while rendering is active, so a Request that
+// wrote within the last two intervals is treated as possibly-rendering and spared,
+// while one idle longer than that has finished and is evictable. Reading lastWrite
+// takes rq.mu beneath jw.mu, the order documented in the package "Locking" section.
+//
+// maintenanceInterval is zero until [Jaws.ServeWithTimeout] starts. With no maintenance
+// pass running nothing clears Rendering, so the flag alone is authoritative and the
+// recency window is correctly skipped.
+func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr, now time.Time) *Request {
 	for _, rq := range jw.pending[remoteIP] {
-		if !rq.Rendering.Load() {
-			return rq
+		if rq.Rendering.Load() {
+			continue
 		}
+		if jw.maintenanceInterval > 0 {
+			rq.mu.RLock()
+			recentlyRendered := now.Sub(rq.lastWrite) <= 2*jw.maintenanceInterval
+			rq.mu.RUnlock()
+			if recentlyRendered {
+				continue
+			}
+		}
+		return rq
 	}
 	return nil
 }
@@ -622,6 +647,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	t := time.NewTicker(maintenanceInterval)
 	jw.mu.Lock()
 	jw.webSocketTimeout = requestTimeout
+	jw.maintenanceInterval = maintenanceInterval
 	jw.mu.Unlock()
 
 	defer func() {
