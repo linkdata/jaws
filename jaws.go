@@ -443,15 +443,19 @@ func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) 
 //
 // A Request is spared when its Rendering flag is set (it has been written to by
 // [RequestWriter] and may still be assembling its initial HTML, which recycling would
-// corrupt — see [Jaws.limitPendingRequestsLocked]), OR when it last rendered within
+// corrupt — see [Jaws.limitPendingRequestsLocked]), OR when it last wrote within
 // 2*maintenanceInterval. The recency check is required because [Request.maintenance]
 // clears Rendering once per maintenance interval: between that clear and the render
 // goroutine's next write the flag reads false even though the HTML is still in flight,
-// so keying eviction on the flag alone would recycle a live render. lastWrite is
-// refreshed by that same maintenance pass while rendering is active, so a Request that
-// wrote within the last two intervals is treated as possibly-rendering and spared,
-// while one idle longer than that has finished and is evictable. Reading lastWrite
-// takes rq.mu beneath jw.mu, the order documented in the package "Locking" section.
+// so keying eviction on the flag alone would recycle a live render.
+//
+// lastWrite tracks write activity, not render duration. Each [RequestWriter] write
+// re-arms Rendering, and the next [Request.maintenance] pass that observes it set
+// advances lastWrite to that pass's time. A render that keeps writing therefore keeps
+// refreshing lastWrite and stays spared; a render that produces no write for more than
+// two maintenance intervals — whether it has finished or has merely stalled between
+// writes — falls outside the window and becomes evictable. Reading lastWrite takes
+// rq.mu beneath jw.mu, the order documented in the package "Locking" section.
 //
 // maintenanceInterval is zero until [Jaws.ServeWithTimeout] starts. With no maintenance
 // pass running nothing clears Rendering, so the flag alone is authoritative and the
