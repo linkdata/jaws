@@ -663,6 +663,80 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
+func TestJawsJS_ValueKeepsSelectionInRangeWhenPrefixRemoved(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+let value = "prefix body";
+let selectionStart = 0;
+let selectionEnd = 0;
+let error = "";
+const elem = {
+	id: "Jid.1",
+	tagName: "TEXTAREA",
+	getAttribute: function() { return null; }
+};
+Object.defineProperty(elem, "value", {
+	get: function() { return value; },
+	set: function(v) { value = v; },
+	enumerable: true,
+	configurable: true,
+});
+Object.defineProperty(elem, "selectionStart", {
+	get: function() { return selectionStart; },
+	set: function(v) {
+		if (v < 0 || v > value.length) {
+			throw new Error("selectionStart out of range: " + v + " for " + value.length);
+		}
+		selectionStart = v;
+	},
+	enumerable: true,
+	configurable: true,
+});
+Object.defineProperty(elem, "selectionEnd", {
+	get: function() { return selectionEnd; },
+	set: function(v) {
+		if (v < 0 || v > value.length) {
+			throw new Error("selectionEnd out of range: " + v + " for " + value.length);
+		}
+		selectionEnd = v;
+	},
+	enumerable: true,
+	configurable: true,
+});
+document.getElementById = function(id) { return id === "Jid.1" ? elem : null; };
+
+try {
+	jawsPerform("Value", "Jid.1", JSON.stringify("body"));
+} catch (err) {
+	error = String((err && err.message) || err);
+}
+process.stdout.write(JSON.stringify({
+	value: value,
+	selectionStart: selectionStart,
+	selectionEnd: selectionEnd,
+	error: error
+}));
+`)
+
+	var got struct {
+		Value          string `json:"value"`
+		SelectionStart int    `json:"selectionStart"`
+		SelectionEnd   int    `json:"selectionEnd"`
+		Error          string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.Error != "" {
+		t.Fatalf("Value update assigned an out-of-range textarea selection: %s", got.Error)
+	}
+	if got.Value != "body" {
+		t.Fatalf("textarea value = %q, want %q", got.Value, "body")
+	}
+	if got.SelectionStart != 0 || got.SelectionEnd != 0 {
+		t.Fatalf("textarea selection = %d:%d, want 0:0", got.SelectionStart, got.SelectionEnd)
+	}
+}
+
 func TestJawsJS_SetAttrSkipsUnchangedAttributeValue(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 let attrWrites = 0;
