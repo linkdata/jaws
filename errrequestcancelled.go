@@ -6,7 +6,11 @@ import (
 	"github.com/linkdata/jaws/lib/key"
 )
 
-// ErrRequestCancelled indicates a Request was cancelled. Use Unwrap() to see the underlying cause.
+// ErrRequestCancelled indicates a [Request] was cancelled.
+//
+// The concrete error reachable via [context.Cause] on [Request.Context] wraps the
+// underlying cancellation cause, so it can be matched with [errors.Is] and its cause
+// retrieved with Unwrap. The exported sentinel itself carries no cause.
 var ErrRequestCancelled errRequestCancelled
 
 type errRequestCancelled struct {
