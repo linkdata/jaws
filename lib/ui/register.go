@@ -23,6 +23,8 @@ func (u Register) JawsRender(elem *jaws.Element, w io.Writer, params []any) erro
 
 // Register creates a new Element with the given Updater as a tag
 // for dynamic updates. Additional tags may be provided in params.
+// If updater also implements an event handler interface, it receives matching
+// events after handlers provided in params have had a chance to handle them.
 // The updater's [jaws.Updater.JawsUpdate] method will be called immediately to
 // ensure the initial rendering is correct.
 //
@@ -32,6 +34,10 @@ func (u Register) JawsRender(elem *jaws.Element, w io.Writer, params []any) erro
 func (rw RequestWriter) Register(updater jaws.Updater, params ...any) jid.Jid {
 	elem := rw.NewElement(Register{Updater: updater})
 	elem.Tag(updater)
+	switch updater.(type) {
+	case jaws.InputHandler, jaws.ClickHandler, jaws.ContextMenuHandler:
+		elem.AddHandlers(updater)
+	}
 	elem.ApplyParams(params)
 	updater.JawsUpdate(elem)
 	elem.Freeze()
