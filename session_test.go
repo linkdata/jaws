@@ -674,6 +674,28 @@ func TestSession_GetSessionExpiredBeforeCleanup(t *testing.T) {
 	}
 }
 
+func TestSession_GetSessionRejectsCookieValueWithTail(t *testing.T) {
+	jw, _ := New()
+	defer jw.Close()
+
+	rr := httptest.NewRecorder()
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	sess := jw.NewSession(rr, hr)
+	if sess == nil {
+		t.Fatal("expected session")
+	}
+
+	malformed := httptest.NewRequest(http.MethodGet, "/", nil)
+	malformed.RemoteAddr = hr.RemoteAddr
+	malformed.AddCookie(&http.Cookie{
+		Name:  jw.CookieName,
+		Value: sess.CookieValue() + "/junk",
+	})
+	if got := jw.GetSession(malformed); got != nil {
+		t.Fatalf("GetSession accepted a cookie value with trailing data: got %v", got)
+	}
+}
+
 func TestSession_CloseDetachesRequestSession(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
