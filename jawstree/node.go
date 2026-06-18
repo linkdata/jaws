@@ -136,26 +136,35 @@ func (node *Node) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err
 // nil-targeting segments are rejected, so a client can neither grow the slice nor
 // address a node that does not exist.
 //
-// Indices must be in canonical decimal form (no leading '+', '-' or zeros) so the
-// index a client sends round-trips to the same string [Node.Walk] emits as the
-// node ID. A non-canonical but in-range index would mutate the server node yet be
-// echoed verbatim as the [Node.JawsPathSet] broadcast "id", which no peer's
-// rendered node matches, diverging peer state from the server.
+// The whole path must be in canonical form so that it round-trips to the exact
+// string [Node.Walk] emits as the node ID: segments strictly alternate "children"
+// and a canonical decimal index (no leading '+', '-' or zeros), joined by single
+// dots with no empty segment from a leading, trailing or doubled '.'. A path that
+// resolves to a valid in-range node but is not canonical — for example a trailing
+// dot ("children.0.") or a non-canonical index ("children.+0") — would mutate the
+// server node yet be echoed verbatim as the [Node.JawsPathSet] broadcast "id",
+// which no peer's rendered node matches, diverging peer state from the server.
+//
+// Each index is checked against its canonical form (strconv.Itoa is allocation-free
+// for indices below 100). The trailing-dot case is the one a per-index check alone
+// misses: it leaves an empty final segment the pair-wise loop never visits, so we
+// reject when Cut reports a separator was consumed ('more') but nothing follows it.
 func (node *Node) resolveChildPath(nodePath string) (*Node, error) {
 	cur := node
-	for nodePath != "" {
+	for rest := nodePath; rest != ""; {
 		var seg, idxStr string
-		seg, nodePath, _ = strings.Cut(nodePath, ".")
+		var more bool
+		seg, rest, _ = strings.Cut(rest, ".")
 		if seg != "children" {
 			return nil, fmt.Errorf("%w: unexpected path segment %q", ErrPathRejected, seg)
 		}
-		idxStr, nodePath, _ = strings.Cut(nodePath, ".")
+		idxStr, rest, more = strings.Cut(rest, ".")
 		idx, err := strconv.Atoi(idxStr)
 		if err != nil || idx < 0 || idx >= len(cur.Children) || cur.Children[idx] == nil {
 			return nil, fmt.Errorf("%w: child index %q out of range", ErrPathRejected, idxStr)
 		}
-		if strconv.Itoa(idx) != idxStr {
-			return nil, fmt.Errorf("%w: non-canonical child index %q", ErrPathRejected, idxStr)
+		if strconv.Itoa(idx) != idxStr || (more && rest == "") {
+			return nil, fmt.Errorf("%w: non-canonical path %q", ErrPathRejected, nodePath)
 		}
 		cur = cur.Children[idx]
 	}

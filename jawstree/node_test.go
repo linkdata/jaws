@@ -148,6 +148,49 @@ func TestNode_JawsSetPath_Gate(t *testing.T) {
 			}
 		}
 	})
+
+	// A non-canonical path that still resolves to a valid in-range node (an empty
+	// trailing/leading/embedded segment) must be rejected. Such a path otherwise
+	// mutates the server node while JawsPathSet echoes the non-canonical path
+	// verbatim as the broadcast id, which no peer's rendered (canonical) node id
+	// matches, silently desyncing peer selection. "children.0..selected" is the
+	// regression: it resolves to Children[0] yet is not the canonical
+	// "children.0.selected" that Node.Walk emits.
+	t.Run("rejects non-canonical paths resolving to a valid node", func(t *testing.T) {
+		for _, path := range []string{
+			"children.0..selected", // trailing dot -> nodePath "children.0."
+			".children.0.selected", // leading empty segment
+			"children..0.selected", // embedded empty segment
+		} {
+			root := newTree()
+			if err := root.JawsSetPath(nil, path, true); !errors.Is(err, jawstree.ErrPathRejected) {
+				t.Errorf("path %q: expected ErrPathRejected, got %v", path, err)
+			}
+			if root.Children[0].Selected {
+				t.Errorf("path %q: Children[0].Selected was mutated despite rejection", path)
+			}
+		}
+	})
+
+	// The fix must not reject legitimate canonical paths, including nested ones.
+	t.Run("accepts canonical paths including nested", func(t *testing.T) {
+		root := &jawstree.Node{Name: "root", Children: []*jawstree.Node{
+			{Name: "a", Children: []*jawstree.Node{{Name: "a0"}, {Name: "a1"}}},
+			{Name: "b"},
+		}}
+		if err := root.JawsSetPath(nil, "children.0.children.1.selected", true); err != nil {
+			t.Fatalf("nested canonical path: %v", err)
+		}
+		if !root.Children[0].Children[1].Selected {
+			t.Error("nested node was not selected")
+		}
+		if err := root.JawsSetPath(nil, "children.1.selected", true); err != nil {
+			t.Fatalf("canonical path: %v", err)
+		}
+		if !root.Children[1].Selected {
+			t.Error("node was not selected")
+		}
+	})
 }
 
 // TestNode_NilChildGuards exercises the defensive nil-child guards in marshalJSON
