@@ -11,6 +11,7 @@ import (
 type Div struct{ HTMLInner }
 
 // NewDiv returns a div widget whose inner HTML is rendered from innerHTML.
+//
 // innerHTML is passed to [bind.MakeHTMLGetter]; plain strings are trusted HTML.
 func NewDiv(innerHTML any) *Div { return &Div{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }
 
