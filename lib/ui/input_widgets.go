@@ -148,6 +148,10 @@ func (u *InputFloat) JawsUpdate(elem *jaws.Element) {
 // JawsInput stores a browser-side float64 input value.
 func (u *InputFloat) JawsInput(elem *jaws.Element, value string) (err error) {
 	if value == "" {
+		// Empty is a normal in-progress edit state for number/range controls:
+		// a user replacing "0" with "1" first clears the field. Treat it as zero
+		// for the bound value, but do not force an immediate corrective SetValue
+		// when the setter reports unchanged; that would race ordinary typing.
 		value = "0"
 	}
 	var v float64
