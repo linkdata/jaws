@@ -200,14 +200,11 @@ func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any)
 
 func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any) (err error) {
 	// jsPath is written verbatim into a what.Set wire frame (only the value side
-	// is JSON-encoded). The client splits frames on '\n' and fields on '\t', so a
-	// path containing a tab, newline or carriage return could corrupt the frame or
-	// inject fabricated orders into every peer browser sharing this JsVar. Reject
-	// such a path before applying or broadcasting it: these bytes never occur in
-	// the trusted client's own dotted-identifier sender and have no valid meaning
-	// in a jq path. This mirrors the framing defense jaws.JsCall applies to the
-	// sibling verbatim what.Call payload.
-	if strings.ContainsAny(jsPath, "\t\n\r") {
+	// is JSON-encoded). The client splits frames on '\n', fields on '\t', and the
+	// JsVar payload at the first '='. Reject any path carrying those protocol
+	// bytes before applying or broadcasting it: they either corrupt the frame or
+	// make peers parse the value as invalid JSON.
+	if strings.ContainsAny(jsPath, "\t\n\r=") {
 		return ErrIllegalJsVarPath
 	}
 	if err = jsvar.setPathLock(elem, jsPath, value); err == nil {

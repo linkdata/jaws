@@ -193,16 +193,15 @@ func TestJsVar_SetBroadcastsWirePayload(t *testing.T) {
 	}
 }
 
-// TestJsVar_RejectsFramingBytesInPath verifies that a JsVar path containing a
-// byte significant to the WebSocket wire framing (tab, newline or carriage
-// return) is rejected before it is applied or broadcast. The path is written
-// verbatim into a what.Set frame (only the value is JSON-encoded) and the
-// client splits frames on '\n' and fields on '\t', so an unsanitized path is a
-// cross-connection wire-frame injection vector. A map-backed JsVar is used so
-// that, absent the guard, the framing-byte key would set and broadcast
-// successfully — proving the guard is load-bearing, not incidentally masked by
-// a path lookup that would fail anyway (as it would for a struct field).
-func TestJsVar_RejectsFramingBytesInPath(t *testing.T) {
+// TestJsVar_RejectsProtocolBytesInPath verifies that a JsVar path containing a
+// byte significant to the browser protocol is rejected before it is applied or
+// broadcast. The path is written verbatim into a what.Set frame (only the value
+// is JSON-encoded) and the client splits frames on '\n', fields on '\t', and the
+// JsVar payload at the first '='. A map-backed JsVar is used so that, absent the
+// guard, the reserved-byte key would set and broadcast successfully, proving the
+// guard is load-bearing, not incidentally masked by a path lookup that would fail
+// anyway (as it would for a struct field).
+func TestJsVar_RejectsProtocolBytesInPath(t *testing.T) {
 	jw, err := jaws.New()
 	if err != nil {
 		t.Fatal(err)
@@ -221,7 +220,7 @@ func TestJsVar_RejectsFramingBytesInPath(t *testing.T) {
 	// Pre-populate the keys so jq.Set would find and change them absent the guard
 	// (jq does not create missing map keys), making the guard demonstrably
 	// load-bearing rather than incidentally masked by a lookup that fails anyway.
-	v := map[string]int{"a\tb": 1, "a\nx": 1, "a\rb": 1, "ok": 0}
+	v := map[string]int{"a\tb": 1, "a\nx": 1, "a\rb": 1, "a=b": 1, "ok": 0}
 	jsv := NewJsVar(&mu, &v)
 	elem := tr.NewElement(jsv)
 	var sb strings.Builder
@@ -229,7 +228,7 @@ func TestJsVar_RejectsFramingBytesInPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, bad := range []string{"a\tb", "a\nx", "a\rb"} {
+	for _, bad := range []string{"a\tb", "a\nx", "a\rb", "a=b"} {
 		if err := jsv.JawsSetPath(elem, bad, 99); !errors.Is(err, ErrIllegalJsVarPath) {
 			t.Fatalf("JawsSetPath(%q): expected ErrIllegalJsVarPath, got %v", bad, err)
 		}
@@ -258,8 +257,8 @@ func TestJsVar_RejectsFramingBytesInPath(t *testing.T) {
 		if msg.What != what.Set || msg.Data != `ok=7` {
 			t.Fatalf("broadcast = {%v %q}, want {Set `ok=7`}", msg.What, msg.Data)
 		}
-		if strings.ContainsAny(msg.Data, "\t\n\r") {
-			t.Fatalf("broadcast Data contains framing bytes: %q", msg.Data)
+		if strings.ContainsAny(msg.Data, "\t\n\r") || strings.Count(msg.Data, "=") != 1 {
+			t.Fatalf("broadcast Data contains illegal protocol bytes: %q", msg.Data)
 		}
 	}
 }

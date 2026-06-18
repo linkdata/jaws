@@ -160,9 +160,9 @@ client/server protocol code:
   `Data` carries removed managed child IDs. The server only removes child IDs
   that are known in the current request.
 * `what.Replace` replaces the target element HTML and carries plain HTML in `Data`.
-* `what.Call`/`what.Set` use `path + "=" + json` inside `Data`. Embedded tabs
-  or newlines in JSON break message framing; `Jaws.JsCall` compacts valid JSON
-  before sending.
+* `what.Call`/`what.Set` use `path + "=" + json` inside `Data`. Paths may not
+  contain tabs, newlines, carriage returns, or `=`. Embedded tabs or newlines in
+  JSON break message framing; `Jaws.JsCall` compacts valid JSON before sending.
 * `jawsVar(name, ...)` resolves properties from `window`, but WebSocket routing
   uses the top-level symbol name only. Register JaWS `JsVar` names as top-level
   identifiers (example: `app`), and use dotted suffixes as the JSON path
