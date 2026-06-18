@@ -24,7 +24,9 @@ type pageTemplate struct {
 func (pageTemplate) JawsUpdate(*jaws.Element) {}
 
 func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	_ = h.Log(h.NewRequest(r).NewElement(h.Template).JawsRender(w, nil))
+	rq := h.NewRequest(r)
+	rw := RequestWriter{Request: rq, Writer: w}
+	_ = h.Log(rq.NewElement(h.Template).JawsRender(rw, nil))
 }
 
 // Handler returns an http.Handler that renders the named template.
