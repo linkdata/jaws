@@ -8,8 +8,15 @@ import (
 
 // usableAsTag returns true if it is safe to use as a tag, false otherwise.
 func usableAsTag(t any) (ok bool) {
-	_, ok = t.(tag.TagGetter)
-	return ok || tag.NewErrNotComparable(t) == nil
+	if _, ok = t.(tag.TagGetter); ok {
+		return true
+	}
+	switch t.(type) {
+	case []any, []tag.Tag:
+		return true
+	default:
+		return tag.NewErrNotComparable(t) == nil
+	}
 }
 
 // ParseParams parses the parameters passed to UI helpers when creating a new
