@@ -111,8 +111,11 @@ func TestCellButtonUsesCellTagsAndHandlers(t *testing.T) {
 	cell := g.cells[0][0]
 	elem := rq.NewElement(ui.NewButton(cell))
 
+	// Mirror the template, which passes the shared board tag alongside the cell
+	// (see index.html: {{$.Button . .BoardTag ...}}). The cell's own JawsGetTag
+	// returns only the cell, so the board tag must be supplied as a render param.
 	var body bytes.Buffer
-	if err := elem.JawsRender(&body, []any{`class="cell"`}); err != nil {
+	if err := elem.JawsRender(&body, []any{cell.BoardTag(), `class="cell"`}); err != nil {
 		t.Fatal(err)
 	}
 	if !elem.HasTag(cell) {
@@ -582,6 +585,47 @@ func TestGameClickCellPaths(t *testing.T) {
 		t.Fatal("expected remaining mine to be revealed on win")
 	}
 	assertTagSetEqual(t, winTags, &g.cells, &g.gameOver, &g.won, &g.revealed)
+}
+
+func containsTag(tags []any, want any) bool {
+	for _, tg := range tags {
+		if tg == want {
+			return true
+		}
+	}
+	return false
+}
+
+// TestSingleCellDirtyStaysScopedToOneCell guards the per-cell dirty contract after
+// tag EXPANSION (what Request.Dirty actually does), not just the raw returned slice.
+// A single-cell action (flag toggle) must not expand to the shared &g.cells board
+// tag — otherwise every cell re-renders — while a board-wide refresh (reset) must.
+// *Cell is a tag.TagGetter, so a board tag returned from Cell.JawsGetTag would be
+// pulled in by expanding any single cell; this test fails if that regresses.
+func TestSingleCellDirtyStaysScopedToOneCell(t *testing.T) {
+	g := newGame(3, 3, 1)
+	cell := g.cells[0][0]
+
+	flagTags, err := jawstag.TagExpand(nil, g.toggleFlag(cell))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Expanded dirty set for a flag toggle is exactly the cell and the changed
+	// flag counter — no board tag.
+	assertTagSetEqual(t, flagTags, cell, &g.flags)
+
+	// A board-wide refresh must still expand to the shared board tag so every cell
+	// re-renders. Start the game first (the first click is guaranteed safe) so reset
+	// reports changed scalars and appends &g.cells.
+	g2 := newGame(3, 3, 1)
+	_ = g2.clickCell(g2.cells[0][0])
+	resetTags, err := jawstag.TagExpand(nil, g2.reset())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsTag(resetTags, &g2.cells) {
+		t.Fatalf("board reset did not target the shared board tag &g.cells: %#v", resetTags)
+	}
 }
 
 func TestRevealFromLockedAndRevealAllMines(t *testing.T) {

@@ -31,6 +31,7 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
 - Dirty only affected dependency tags after mutations, and include any derived-field dependencies that changed.
 - Avoid synthetic tags (coordinates, ad-hoc strings, wrappers) when a stable underlying data pointer exists.
 - For collection elements, register each element with both its item-level tag (the item's pointer) and a shared group tag (for example `&g.items`). Mutations can then dirty a single item, several items, or the whole group from the same tag namespace, without changing what each element listens to.
+- Keep an item's own `JawsGetTag` scoped to the item, never returning the shared group tag. Element *registration* (what an element listens to) and dirty-target *expansion* (what `Request.Dirty(x)` resolves to) are different things. If an item type implements `tag.TagGetter` and its `JawsGetTag` returns `[]any{item, &group}`, then `Request.Dirty(item)` tag-expands to include `&group` and re-renders **every** element registered under it — silently defeating per-item dirtying even though you passed a single item. Return only the item's own identity from `JawsGetTag`, and attach the shared group tag separately at construction (for example pass `&group` as an extra tag param to the item's widget). The element then listens to both, but `Dirty(item)` stays scoped to that one item while `Dirty(&group)` still refreshes the whole group.
 
 ## Hard framework constraints
 
@@ -184,5 +185,6 @@ Guideline:
 - Fake binders or fake tags created only to satisfy an API shape.
 - Hidden mutations in getter paths.
 - Broad `Dirty(...)` calls used to mask incorrect dependency targeting.
+- Returning a shared/group tag from an item's `JawsGetTag` (bundling it into the item's own dirty identity), which makes a single-item `Dirty` fan out to the whole group.
 - Passing explicit template click handlers when dot-owned `JawsClick` already covers behavior.
 - Adding custom browser JavaScript for state that can be expressed through JaWS events and server updates.

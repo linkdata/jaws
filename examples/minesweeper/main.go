@@ -160,9 +160,24 @@ func (c *Cell) syncPresentation(elem *jaws.Element, view cellView) {
 	}
 }
 
-// JawsGetTag exposes the cell and board tags used for dirtying.
+// JawsGetTag returns the cell's per-cell dirty identity.
+//
+// It deliberately returns ONLY the cell, not the shared board tag. Because *Cell
+// is a [tag.TagGetter], returning the board tag here would make Request.Dirty(c)
+// tag-expand to include it, so dirtying one cell would re-render every cell. The
+// shared board tag is registered separately via [Cell.BoardTag] (passed to the
+// cell's Button), so the element listens to both while a single-cell dirty stays
+// scoped to just that cell. Board-wide refreshes dirty &g.cells directly.
 func (c *Cell) JawsGetTag(_ tag.Context) any {
-	return []any{c, &c.game.cells}
+	return c
+}
+
+// BoardTag returns the shared board dirty tag registered on every cell element, so
+// board-wide refreshes (reset, loss, win) can re-render the whole board at once. It
+// is kept separate from [Cell.JawsGetTag] so per-cell dirtying stays scoped; see it
+// for why.
+func (c *Cell) BoardTag() any {
+	return &c.game.cells
 }
 
 // JawsGetHTML renders the cell contents.
