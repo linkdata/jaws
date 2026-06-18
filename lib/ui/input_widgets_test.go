@@ -46,9 +46,9 @@ func TestInputTextWidgets(t *testing.T) {
 	mustMatch(t, `^<input id="Jid\.[0-9]+" type="password" value="quux">$`, got)
 
 	textarea := NewTextarea(ss)
-	_, got = renderUI(t, rq, textarea)
+	textareaElem, got := renderUI(t, rq, textarea)
 	mustMatch(t, `^<textarea id="Jid\.[0-9]+">quux</textarea>$`, got)
-	textarea.JawsUpdate(elem)
+	textarea.JawsUpdate(textareaElem)
 }
 
 func TestInputBoolWidgets(t *testing.T) {

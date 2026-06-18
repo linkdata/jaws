@@ -553,6 +553,73 @@ process.stdout.write(JSON.stringify({ checkedWrites: checkedWrites, checked: che
 	}
 }
 
+func TestJawsJS_ValueUpdatesTextareaLiveValue(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+let value = "world";
+let textContent = "default";
+let valueWrites = 0;
+let textContentWrites = 0;
+const elem = {
+	id: "Jid.1",
+	tagName: "TEXTAREA",
+	selectionStart: 5,
+	selectionEnd: 5,
+	getAttribute: function() { return null; }
+};
+Object.defineProperty(elem, "value", {
+	get: function() { return value; },
+	set: function(v) { valueWrites++; value = v; },
+	enumerable: true,
+	configurable: true,
+});
+Object.defineProperty(elem, "textContent", {
+	get: function() { return textContent; },
+	set: function(v) { textContentWrites++; textContent = v; },
+	enumerable: true,
+	configurable: true,
+});
+document.getElementById = function(id) { return id === "Jid.1" ? elem : null; };
+
+jawsPerform("Value", "Jid.1", JSON.stringify("hello world"));
+
+process.stdout.write(JSON.stringify({
+	value: value,
+	textContent: textContent,
+	valueWrites: valueWrites,
+	textContentWrites: textContentWrites,
+	selectionStart: elem.selectionStart,
+	selectionEnd: elem.selectionEnd
+}));
+`)
+
+	var got struct {
+		Value             string `json:"value"`
+		TextContent       string `json:"textContent"`
+		ValueWrites       int    `json:"valueWrites"`
+		TextContentWrites int    `json:"textContentWrites"`
+		SelectionStart    int    `json:"selectionStart"`
+		SelectionEnd      int    `json:"selectionEnd"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.Value != "hello world" {
+		t.Fatalf("textarea value = %q, want %q", got.Value, "hello world")
+	}
+	if got.TextContent != "default" {
+		t.Fatalf("textarea textContent = %q, want untouched default", got.TextContent)
+	}
+	if got.ValueWrites != 1 {
+		t.Fatalf("textarea value writes = %d, want 1", got.ValueWrites)
+	}
+	if got.TextContentWrites != 0 {
+		t.Fatalf("textarea textContent writes = %d, want 0", got.TextContentWrites)
+	}
+	if got.SelectionStart != 11 || got.SelectionEnd != 11 {
+		t.Fatalf("textarea selection = %d:%d, want 11:11", got.SelectionStart, got.SelectionEnd)
+	}
+}
+
 func TestJawsJS_SetAttrSkipsUnchangedAttributeValue(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 let attrWrites = 0;
