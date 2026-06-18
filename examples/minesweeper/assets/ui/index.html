@@ -26,7 +26,7 @@
 				{{range .Board}}
 				<tr>
 					{{range .}}
-					<td>{{$.Button . `class="cell"`}}</td>
+					<td>{{$.Button . .BoardTag `class="cell"`}}</td>
 					{{end}}
 				</tr>
 				{{end}}
