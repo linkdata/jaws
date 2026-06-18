@@ -278,6 +278,18 @@ func TestTagExpand_MultiRuntimeNonComparable(t *testing.T) {
 	}
 }
 
+// TestTagExpand_RuntimeNonComparableArray pins the reflect.Array arm of
+// ensureUsableTag independently of the struct arm. An array whose static type is
+// comparable ([1]any) but whose element holds a non-comparable value (a func)
+// passes reflect.Type.Comparable() yet panics on ==; expansion must reject it with
+// ErrNotUsableAsTag. Without an actual array value the arm is only statement-covered
+// via the case label it shares with reflect.Struct.
+func TestTagExpand_RuntimeNonComparableArray(t *testing.T) {
+	if _, err := TagExpand(nil, [1]any{func() {}}); !errors.Is(err, ErrNotUsableAsTag) {
+		t.Fatalf("expected ErrNotUsableAsTag, got %v", err)
+	}
+}
+
 // TestTagExpand_RepanicsOtherPanics ensures TagExpand's recover only intercepts the
 // comparability panic: a panic from a [TagGetter] callback must propagate untouched
 // so unrelated bugs are not masked.
