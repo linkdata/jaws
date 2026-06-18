@@ -202,6 +202,13 @@ func (node *Node) stripNilChildren() {
 }
 
 // Walk calls fn for node and all descendants with their JSON paths.
+//
+// node is visited with the supplied jsPath; callers pass "" for the root. Each
+// descendant is visited with "children.<i>" appended to its parent's path, where i
+// is the child's index in node.Children. A nil child is skipped while i keeps the
+// raw slice index, so on a Tree built by [New] — where [Node.stripNilChildren] has
+// already removed nil entries — these indices stay dense and match the wire
+// positions emitted by [Node.marshalJSON].
 func (node *Node) Walk(jsPath string, fn func(jsPath string, node *Node)) {
 	fn(jsPath, node)
 	if jsPath != "" {
