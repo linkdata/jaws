@@ -286,9 +286,11 @@ of them.
 
 * `/jaws/[0-9a-z]+` (and `/jaws/[0-9a-z]+/noscript`)
 
-  The WebSocket endpoint. The trailing string must be decoded using
-  `assets.JawsKeyValue()` (`github.com/linkdata/jaws/lib/assets`) and then the matching JaWS Request retrieved
-  using the JaWS object's `UseRequest()` method.
+  The WebSocket endpoint. When you register `Jaws.ServeHTTP()` for
+  `GET /jaws/`, this is handled automatically. Custom routers that dispatch
+  the endpoint themselves should parse the trailing string with
+  `key.Parse()` (`github.com/linkdata/jaws/lib/key`) and then retrieve the
+  matching JaWS Request with the JaWS object's `UseRequest()` method.
 
   If the Request is not found, return a **404 Not Found**, otherwise 
   call the Request `ServeHTTP()` method to start the WebSocket and begin
