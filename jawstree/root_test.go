@@ -121,3 +121,39 @@ func TestGetNodes_readDirError(t *testing.T) {
 		t.Fatalf("expected no children on root read error, got %v", childNames(parent))
 	}
 }
+
+func TestGetNodes_excludesIrregularEntries(t *testing.T) {
+	// Entries that are neither regular files nor directories (symlinks, named
+	// pipes, devices, ...) are always excluded, even when filterFn accepts them: a
+	// symlink could otherwise reference a path outside the os.Root sandbox.
+	fsys := fakeFS{
+		dirs: map[string][]fs.DirEntry{
+			".": {
+				fakeEntry{name: "file.txt"},
+				fakeEntry{name: "dir", mode: fs.ModeDir},
+				fakeEntry{name: "link", mode: fs.ModeSymlink},
+				fakeEntry{name: "pipe", mode: fs.ModeNamedPipe},
+			},
+			"dir": {},
+		},
+	}
+
+	parent := &Node{}
+	acceptAll := func(string, fs.DirEntry) bool { return true }
+	if err := getNodes(fsys, parent, ".", acceptAll); err != nil {
+		t.Fatal(err)
+	}
+
+	// Only the regular file and the directory survive; the symlink and the named
+	// pipe are dropped regardless of the accept-all filter.
+	got := childNames(parent)
+	want := []string{"file.txt", "dir"}
+	if len(got) != len(want) {
+		t.Fatalf("children = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("children = %v, want %v", got, want)
+		}
+	}
+}
