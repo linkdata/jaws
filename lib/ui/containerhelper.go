@@ -97,7 +97,7 @@ func (u *ContainerHelper) UpdateContainer(elem *jaws.Element) {
 	wantContents := u.Container.JawsContains(elem)
 	toAppend, toRemove, oldOrder, newOrder := u.reconcile(elem, wantContents)
 
-	// remove leftover Elements not present in new contents
+	// Remove leftover Elements from both the browser DOM and the Request registry.
 	for _, childElem := range toRemove {
 		elem.Remove(childElem.Jid().String())
 		elem.Request.DeleteElement(childElem)
