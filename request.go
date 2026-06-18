@@ -112,6 +112,12 @@ func (rq *Request) JawsKeyString() string {
 	return jawsKey.String()
 }
 
+// String returns the Request in the form "Request<key>", using [Request.JawsKeyString]
+// to encode the key.
+//
+// Like JawsKeyString, String tolerates a nil receiver so a nil or not-fully-constructed
+// Request can still render into diagnostics; as the [Request] type documentation notes,
+// that nil tolerance is for diagnostics only and is not a public nil-safe contract.
 func (rq *Request) String() string {
 	return "Request<" + rq.JawsKeyString() + ">"
 }
@@ -512,11 +518,12 @@ func (rq *Request) cancel(err error) {
 
 // Cancel aborts the Request.
 //
-// It cancels the Request's context with the given cause (logged via [Jaws.Logger])
-// and tears down its WebSocket processing loop. It is safe to call from UI code, for
-// example to terminate a connection that violates a server-side limit. A nil err
-// cancels without a specific cause, and calling Cancel on an already-finished or
-// already-cancelled Request has no effect.
+// It cancels the Request's context with the given cause (logged via [Jaws.Logger]);
+// the WebSocket processing loop and its goroutines observe the cancelled context and
+// shut down asynchronously. Cancel returns immediately and does not wait for teardown.
+// It is safe to call from UI code, for example to terminate a connection that violates
+// a server-side limit. A nil err cancels without a specific cause, and calling Cancel
+// on an already-finished or already-cancelled Request has no effect.
 func (rq *Request) Cancel(err error) {
 	rq.cancel(err)
 }
@@ -585,7 +592,8 @@ func (rq *Request) tagsOfLocked(elem *Element) (tags []any) {
 }
 
 // TagsOf returns the tags currently associated with elem in this Request, or nil
-// if elem is nil. The returned slice is a snapshot and must not be modified.
+// if elem is nil. The returned slice is a newly allocated snapshot and may be
+// retained and modified by the caller.
 func (rq *Request) TagsOf(elem *Element) (tags []any) {
 	if elem != nil {
 		rq.mu.RLock()
