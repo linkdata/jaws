@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -192,6 +193,71 @@ func TestWriteLoop_ConcatenatesMessagesClosedChannel(t *testing.T) {
 	}
 	_ = client.CloseNow()
 	waitDone(t, writeDoneCh, "WriteLoop after closed outbound")
+}
+
+func TestWriteLoop_SplitsAtBatchLimit(t *testing.T) {
+	// Drive the outbound backlog well past writeBatchLimit so writeData must split
+	// it across more than one frame. The channel is buffered, pre-filled and closed,
+	// so the coalescing loop is deterministic: it stops only on reaching the batch
+	// limit or draining the (closed) channel, never on a transient empty read.
+	msg := WsMsg{Jid: jid.Jid(1234), What: what.Inner, Data: strings.Repeat("x", 4096)}
+	frame := msg.Format()
+	count := (2*writeBatchLimit)/len(frame) + 2
+
+	outCh := make(chan WsMsg, count)
+	for i := 0; i < count; i++ {
+		outCh <- msg
+	}
+	close(outCh)
+
+	jawsDoneCh := make(chan struct{})
+	client, server := pipe(t)
+	defer func() { _ = client.CloseNow() }()
+	defer func() { _ = server.CloseNow() }()
+	// Frames at the batch limit exceed coder/websocket's default 32 KB per-message
+	// read limit; in production the browser (not a Go reader) consumes them, so
+	// lift the limit here to read the server's large outbound frames.
+	client.SetReadLimit(-1)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	writeDoneCh := make(chan struct{})
+	go func() {
+		defer close(writeDoneCh)
+		WriteLoop(ctx, nil, jawsDoneCh, outCh, server)
+	}()
+
+	var frames [][]byte
+	var total []byte
+	for {
+		mt, b, err := client.Read(ctx)
+		if err != nil {
+			break
+		}
+		if mt != websocket.MessageText {
+			t.Fatalf("frame type = %v, want MessageText", mt)
+		}
+		frames = append(frames, append([]byte(nil), b...))
+		total = append(total, b...)
+	}
+
+	waitDone(t, writeDoneCh, "WriteLoop after backlog drained")
+
+	if len(frames) < 2 {
+		t.Fatalf("got %d frame(s), want the backlog split across more than one", len(frames))
+	}
+	// Nothing is dropped, duplicated or reordered: the concatenation of every frame
+	// equals the concatenation of every queued message.
+	if want := strings.Repeat(frame, count); string(total) != want {
+		t.Fatalf("reassembled %d bytes across %d frames, want %d bytes", len(total), len(frames), len(want))
+	}
+	// Every frame except the last coalesces up to the batch limit before flushing.
+	for i, f := range frames[:len(frames)-1] {
+		if len(f) < writeBatchLimit {
+			t.Fatalf("frame %d is %d bytes, want >= writeBatchLimit (%d)", i, len(f), writeBatchLimit)
+		}
+	}
 }
 
 func TestWriteLoop_RespectsContext(t *testing.T) {
