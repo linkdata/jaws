@@ -55,8 +55,10 @@ func (errEventUnhandled) Error() string {
 // or [ContextMenuHandler.JawsContextMenu] causes the next available handler to be invoked.
 var ErrEventUnhandled = errEventUnhandled{}
 
-// InputFn is the signature of an input handling function to be called when JaWS receives
-// an input, hook or set message from JavaScript via the WebSocket connection.
+// InputFn is the signature of an input handling function. JaWS calls it for an
+// input or set message received from JavaScript over the WebSocket connection,
+// and for a hook message, which tests use to invoke the handler synchronously
+// (see [what.Hook]).
 type InputFn = func(elem *Element, value string) (err error)
 
 func callInputHandler(obj any, elem *Element, value string) (err error) {
