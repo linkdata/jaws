@@ -23,7 +23,7 @@ func (e errRequestCancelled) Error() string {
 	return fmt.Sprintf("Request<%s>:%s %v", e.JawsKey, e.Initial, e.Cause)
 }
 
-func (e errRequestCancelled) Is(target error) (yes bool) {
+func (e errRequestCancelled) Is(target error) bool {
 	return target == ErrRequestCancelled
 }
 
