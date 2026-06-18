@@ -104,6 +104,8 @@ func (u *InputBool) JawsInput(elem *jaws.Element, value string) (err error) {
 		value = "false"
 	}
 	var v bool
+	// Parse errors are malformed client frames: jaws.js sends boolean values
+	// for checkable inputs. Leave Last as the last accepted value.
 	if v, err = strconv.ParseBool(value); err == nil {
 		u.Last.Store(v)
 		err = u.maybeDirty(elem, u.Setter.JawsSet(elem, v))
@@ -149,6 +151,8 @@ func (u *InputFloat) JawsInput(elem *jaws.Element, value string) (err error) {
 		value = "0"
 	}
 	var v float64
+	// Parse errors are malformed client frames: jaws.js reads elem.value from
+	// browser number/range controls. Leave Last as the last accepted value.
 	if v, err = strconv.ParseFloat(value, 64); err == nil {
 		// The browser is untrusted and strconv.ParseFloat accepts "NaN"/"Inf".
 		// Reject non-finite input here (mirroring click.go's runAtof) so it never
@@ -201,6 +205,8 @@ func (u *InputDate) JawsInput(elem *jaws.Element, value string) (err error) {
 		value = "0001-01-01"
 	}
 	var v time.Time
+	// Parse errors are malformed client frames: jaws.js reads elem.value from
+	// browser date controls. Leave Last as the last accepted value.
 	if v, err = time.Parse(assets.ISO8601, value); err == nil {
 		u.Last.Store(u.str(v))
 		err = u.maybeDirty(elem, u.Setter.JawsSet(elem, v))
