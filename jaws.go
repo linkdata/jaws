@@ -156,7 +156,7 @@ type Jaws struct {
 	webSocketTimeout        time.Duration   // timeout duration passed to ServeWith
 	maintenanceInterval     time.Duration   // Serve maintenance tick interval; set by ServeWithTimeout and read under mu, zero until Serve starts
 	created                 time.Time       // monotonic base captured in New(); read-only after construction, basis for runtimeSeconds
-	runtimeSeconds          atomic.Uint32   // whole seconds since created; refreshed by the Serve loop, read lock-free by MarkWritten and the eviction/idle checks
+	runtimeSeconds          atomic.Int32    // whole seconds since created; refreshed by the Serve loop, read lock-free by MarkWritten and the eviction/idle checks
 	bcastCh                 chan wire.Message
 	subCh                   chan subscription
 	unsubCh                 chan chan wire.Message
@@ -418,9 +418,10 @@ func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 // reading the clock. Deriving from [time.Since] on a monotonic [time.Time] keeps the
 // counter immune to wall-clock and NTP adjustments.
 func (jw *Jaws) refreshRuntimeSeconds() {
-	// time.Since on a monotonic base is never negative, and whole seconds of uptime
-	// fit in uint32 for ~136 years, so the narrowing conversion cannot overflow.
-	jw.runtimeSeconds.Store(uint32(time.Since(jw.created) / time.Second)) //#nosec G115 -- bounded by process uptime
+	// time.Since on a monotonic base is never negative. The int32 conversion is
+	// intentionally modulo-style: recency checks compare nearby samples, and their
+	// windows are far smaller than 2^31 seconds.
+	jw.runtimeSeconds.Store(int32(time.Since(jw.created) / time.Second)) // #nosec G115 -- intentional relative-time counter
 }
 
 // limitPendingRequestsLocked evicts pending Requests for remoteIP until the cap is
@@ -470,13 +471,13 @@ func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) 
 // writing render stays fresh while one that has produced no write for the window —
 // whether finished or merely stalled between writes — becomes evictable. lastWriteSeconds
 // is read lock-free, so this scan takes no Request lock; the coarse second granularity
-// is harmless because both operands derive from runtimeSeconds, so any refresh lag
-// cancels in the difference.
+// is harmless. If a render records a write using a newer runtimeSeconds tick than
+// nowSeconds, the negative elapsed value is treated as fresh rather than evictable.
 //
 // maintenanceInterval is zero until [Jaws.ServeWithTimeout] starts; the window then
 // falls back to [DefaultUpdateInterval] so an in-flight render is still protected
 // before the maintenance pass begins running.
-func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr, nowSeconds uint32) *Request {
+func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr, nowSeconds int32) *Request {
 	interval := jw.maintenanceInterval
 	if interval <= 0 {
 		interval = DefaultUpdateInterval
@@ -487,9 +488,11 @@ func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr, nowSeconds uin
 	}
 	for _, rq := range jw.pending[remoteIP] {
 		// Compare as durations (elapsed whole seconds vs the window) to avoid a
-		// lossy time.Duration->uint32 conversion; the uint32 subtraction is the
-		// elapsed seconds and widening it to time.Duration is always safe.
-		if time.Duration(nowSeconds-rq.lastWriteSeconds.Load())*time.Second <= spareWindow {
+		// lossy time.Duration conversion. A write timestamp newer than this scan's
+		// nowSeconds is fresh; that can happen when a render records a write while
+		// the Serve loop's runtimeSeconds snapshot is briefly stale.
+		elapsedSeconds := nowSeconds - rq.lastWriteSeconds.Load()
+		if elapsedSeconds <= 0 || time.Duration(elapsedSeconds)*time.Second <= spareWindow {
 			continue
 		}
 		return rq

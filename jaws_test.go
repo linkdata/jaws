@@ -359,6 +359,35 @@ func TestJaws_MaxPendingRequestsPerIPSparesStalledLiveRender(t *testing.T) {
 	}
 }
 
+func TestJaws_MaxPendingRequestsPerIPSparesFutureWriteTimestamp(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.MaxPendingRequestsPerIP = 1
+
+	renderingReq := newPendingLimitRequest("192.0.2.1:1000")
+	renderingRq := jw.NewRequest(renderingReq)
+	renderingKey := renderingRq.JawsKey
+	nowSeconds := jw.runtimeSeconds.Load()
+	renderingRq.lastWriteSeconds.Store(nowSeconds + 1)
+
+	newReq := newPendingLimitRequest("192.0.2.1:1001")
+	newRq := jw.NewRequest(newReq)
+	newKey := newRq.JawsKey
+
+	if got := jw.Pending(); got != 2 {
+		t.Fatalf("Pending() = %d, want 2 (cap overshoots while render timestamp is newer than scan timestamp)", got)
+	}
+	if claimed := jw.UseRequest(renderingKey, renderingReq); claimed != renderingRq {
+		t.Fatalf("future-written render claim = %v, want it to survive eviction", claimed)
+	}
+	if claimed := jw.UseRequest(newKey, newReq); claimed != newRq {
+		t.Fatalf("new request claim = %v, want %v", claimed, newRq)
+	}
+}
+
 // TestJaws_MaxPendingRequestsPerIPOvershootsWhenAllRendering verifies that when
 // every pending request for an IP is mid-render, the cap is not enforced by
 // recycling one of them: oldestEvictablePendingLocked finds no idle victim, so the
@@ -662,13 +691,12 @@ func newPendingLimitRequest(remoteAddr string) *http.Request {
 	return r
 }
 
-func setPendingLimitLastWrite(t *testing.T, rq *Request, secondsAgo uint32) {
+func setPendingLimitLastWrite(t *testing.T, rq *Request, secondsAgo int32) {
 	t.Helper()
 	// lastWriteSeconds holds the Jaws.runtimeSeconds value at the last write. Store
 	// runtimeSeconds-secondsAgo so the eviction/idle check (runtimeSeconds-lastWrite)
-	// reads back as secondsAgo. Unsigned wraparound makes this exact even when the
-	// counter is still zero (Serve not running in these tests), since both sides use
-	// the same runtimeSeconds value.
+	// reads back as secondsAgo. In tests where Serve has not started, runtimeSeconds
+	// is often zero, so old timestamps are represented as negative seconds.
 	rq.lastWriteSeconds.Store(rq.Jaws.runtimeSeconds.Load() - secondsAgo)
 }
 
