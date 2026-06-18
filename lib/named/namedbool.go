@@ -76,7 +76,6 @@ func (nb *Bool) JawsGet(elem *jaws.Element) (yes bool) {
 // Dirtying happens after the value locks have been released, matching
 // [BoolArray.JawsSet] and avoiding value-lock-to-Jaws-lock inversion.
 func (nb *Bool) JawsSet(elem *jaws.Element, checked bool) (err error) {
-	err = jaws.ErrValueUnchanged
 	nba := nb.nba
 	if nba != nil {
 		nba.mu.Lock()
@@ -85,22 +84,23 @@ func (nb *Bool) JawsSet(elem *jaws.Element, checked bool) (err error) {
 	nb.mu.Lock()
 	if nb.checked != checked {
 		nb.checked = checked
-		err = nil
 		changed = append(changed, nb)
 	}
 	nb.mu.Unlock()
-	if err == nil {
-		if nba != nil {
-			changed = append(changed, nba.deselectOthersLocked(nb.name, checked)...)
-		}
+	if nba != nil {
+		changed = append(changed, nba.deselectOthersLocked(nb.name, checked)...)
 	}
 	if nba != nil {
 		nba.mu.Unlock()
 	}
+	if len(changed) == 0 {
+		err = jaws.ErrValueUnchanged
+		return
+	}
 	for _, nb := range changed {
 		elem.Dirty(nb)
 	}
-	if err == nil && nba != nil {
+	if nba != nil {
 		elem.Dirty(nba)
 	}
 	return
