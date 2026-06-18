@@ -75,12 +75,9 @@ package jaws
 
 import (
 	"bufio"
-	"bytes"
-	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -502,131 +499,6 @@ func (jw *Jaws) UseRequest(jawsKey key.Key, r *http.Request) (rq *Request) {
 	return
 }
 
-// SessionCount returns the number of active sessions.
-func (jw *Jaws) SessionCount() (n int) {
-	jw.mu.RLock()
-	n = len(jw.sessions)
-	jw.mu.RUnlock()
-	return
-}
-
-// Sessions returns a list of all active sessions, which may be nil.
-func (jw *Jaws) Sessions() (sessions []*Session) {
-	jw.mu.RLock()
-	if n := len(jw.sessions); n > 0 {
-		sessions = make([]*Session, 0, n)
-		for _, sess := range jw.sessions {
-			sessions = append(sessions, sess)
-		}
-	}
-	jw.mu.RUnlock()
-	return
-}
-
-func (jw *Jaws) getSessionLocked(sessionIDs []key.Key, remoteIP netip.Addr) *Session {
-	for _, sessionID := range sessionIDs {
-		if sess, ok := jw.sessions[sessionID]; ok && equalIP(remoteIP, sess.remoteIP) {
-			if !sess.isDead() {
-				return sess
-			}
-		}
-	}
-	return nil
-}
-
-func getCookieSessionsIDs(h http.Header, wanted string) (cookies []key.Key) {
-	for _, line := range h["Cookie"] {
-		if strings.Contains(line, wanted) {
-			var part string
-			line = textproto.TrimString(line)
-			for len(line) > 0 {
-				part, line, _ = strings.Cut(line, ";")
-				if part = textproto.TrimString(part); part != "" {
-					name, val, _ := strings.Cut(part, "=")
-					name = textproto.TrimString(name)
-					if name == wanted {
-						if len(val) > 1 && val[0] == '"' && val[len(val)-1] == '"' {
-							val = val[1 : len(val)-1]
-						}
-						if sessionID := key.Parse(val); sessionID != 0 {
-							cookies = append(cookies, sessionID)
-						}
-					}
-				}
-			}
-		}
-	}
-	return
-}
-
-// GetSession returns the [Session] associated with the given [http.Request], or nil.
-//
-// Sessions are bound to the client IP (see the clientIP method). Behind a reverse
-// proxy that connects over loopback, every request appears to come from loopback
-// and IP binding is effectively disabled unless [Jaws.TrustForwardedHeaders] is
-// enabled so the forwarded client IP is used instead.
-func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
-	if r != nil {
-		if sessionIDs := getCookieSessionsIDs(r.Header, jw.CookieName); len(sessionIDs) > 0 {
-			remoteIP := jw.clientIP(r)
-			jw.mu.RLock()
-			sess = jw.getSessionLocked(sessionIDs, remoteIP)
-			jw.mu.RUnlock()
-		}
-	}
-	return
-}
-
-// NewSession creates a new [Session].
-//
-// Any pre-existing [Session] will be cleared and closed.
-// This may call [Session.Close] on an existing session and therefore requires
-// the JaWS processing loop ([Jaws.Serve] or [Jaws.ServeWithTimeout]) to be running.
-//
-// Subsequent [Request] values created with [Jaws.NewRequest] that have the
-// cookie set and originate from the same IP will be able to access the [Session].
-// The IP comparison is the same loopback-aware, optionally forwarded-header-based
-// match used everywhere else; see [Jaws.GetSession] and [Jaws.TrustForwardedHeaders]
-// for the reverse-proxy caveat.
-//
-// As a side effect, the session cookie is also added to r itself, so the new
-// [Session] is visible to [Jaws.GetSession] and [Jaws.NewRequest] for the
-// remainder of the same HTTP request.
-func (jw *Jaws) NewSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
-	if r != nil {
-		if oldSess := jw.GetSession(r); oldSess != nil {
-			oldSess.Clear()
-			oldSess.Close()
-		}
-		sess = jw.newSession(w, r)
-	}
-	return
-}
-
-func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
-	secure := secureheaders.RequestIsSecure(r, jw.TrustForwardedHeaders)
-	jw.mu.Lock()
-	defer jw.mu.Unlock()
-	for sess == nil {
-		sessionID := jw.nonZeroRandomLocked()
-		if _, ok := jw.sessions[sessionID]; !ok {
-			sess = newSession(jw, sessionID, jw.clientIP(r), secure)
-			jw.sessions[sessionID] = sess
-			if w != nil {
-				http.SetCookie(w, &sess.cookie)
-			}
-			r.AddCookie(&sess.cookie)
-		}
-	}
-	return
-}
-
-func (jw *Jaws) deleteSession(sessionID key.Key) {
-	jw.mu.Lock()
-	delete(jw.sessions, sessionID)
-	jw.mu.Unlock()
-}
-
 // FaviconURL returns the favicon URL discovered by [Jaws.GenerateHeadHTML].
 func (jw *Jaws) FaviconURL() (s string) {
 	jw.mu.RLock()
@@ -685,7 +557,10 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 			urls = append(urls, jawsurl)
 			for _, urlstr := range extra {
 				if u, e := url.Parse(urlstr); e == nil {
-					if !strings.HasSuffix(u.Path, jawsurl.Path) {
+					// Skip an extra that re-lists either built-in resource (both cssurl
+					// and jawsurl were prepended above) so it is not preloaded or added
+					// to the Content-Security-Policy twice.
+					if !strings.HasSuffix(u.Path, jawsurl.Path) && !strings.HasSuffix(u.Path, cssurl.Path) {
 						urls = append(urls, u)
 					}
 				} else {
@@ -706,225 +581,6 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 		}
 	}
 	return
-}
-
-// Broadcast sends a message to all [Request] values.
-//
-// It must not be called before the JaWS processing loop ([Jaws.Serve] or
-// [Jaws.ServeWithTimeout]) is running. Otherwise this call may block once the
-// internal broadcast channel fills.
-//
-// All convenience helpers on [Jaws] that call Broadcast inherit this requirement.
-//
-// A nil [wire.Message.Dest] targets every Request; a [key.Key] Dest targets the
-// single Request with that identity key, and a zero key is dropped; a string Dest
-// is an HTML id accepted by all Requests. Any other Dest is expanded into tags.
-//
-// A [wire.Message.Dest] that cannot be expanded into tags (an illegal tag type)
-// is reported through [Jaws.MustLog], which panics when no [Jaws.Logger] is
-// set; with a Logger the error is logged and the message is sent to the
-// destinations that did expand.
-func (jw *Jaws) Broadcast(msg wire.Message) {
-	switch dest := msg.Dest.(type) {
-	case nil: // send to all requests
-	case key.Key: // send to the request with this identity key
-		if dest == 0 {
-			// A recycled producer captured a zeroed key; no live request can match
-			// (keys are always non-zero), so drop it rather than fall through to
-			// tag expansion.
-			return
-		}
-	case string: // HTML id (accepted by all requests)
-	default:
-		expanded, err := tag.TagExpand(nil, msg.Dest)
-		jw.MustLog(err)
-		expanded = jw.dropNonComparableTags(expanded)
-		switch len(expanded) {
-		case 0:
-			// no tags, so no requests will match
-			return
-		case 1:
-			msg.Dest = expanded[0]
-		default:
-			msg.Dest = expanded
-		}
-	}
-	select {
-	case <-jw.Done():
-	case jw.bcastCh <- msg:
-	}
-}
-
-// dropNonComparableTags returns tags unchanged, or nil after reporting misuse via
-// [Jaws.reportMisuse], if any tag is not comparable at runtime.
-//
-// Expanded tags become map keys in the processing loop (wantMessage's lookup in
-// Request.tagMap). TagExpand rejects the known runtime-non-comparable
-// struct/array case, and this guard remains as a final defense before a bad Dest
-// can panic the Serve goroutine and crash the process.
-func (jw *Jaws) dropNonComparableTags(tags []any) []any {
-	for _, tagValue := range tags {
-		if cmperr := tag.NewErrNotComparable(tagValue); cmperr != nil {
-			jw.reportMisuse(fmt.Errorf("jaws: Broadcast: %w", cmperr))
-			return nil
-		}
-	}
-	return tags
-}
-
-// setDirty marks all Elements that have one or more of the given tags as dirty.
-func (jw *Jaws) setDirty(tags []any) {
-	jw.mu.Lock()
-	// Release the lock with defer so it is freed even if a map insert panics: a tag
-	// that passed the static comparability check in ensureUsableTag can still be
-	// non-comparable at runtime (a comparable struct holding e.g. a func in an
-	// interface field) and panic when used as a map key here.
-	defer jw.mu.Unlock()
-	for _, tagValue := range tags {
-		jw.dirtOrder++
-		jw.dirty[tagValue] = jw.dirtOrder
-	}
-}
-
-// Dirty marks all [Element] values that have one or more of the given tags as dirty.
-//
-// Note that if any of the tags implement [tag.TagGetter], it will be called
-// with a nil [Request]. Prefer using [Request.Dirty] which avoids this.
-//
-// A tag that somehow passes expansion but is still not hashable panics the
-// calling goroutine when hashed as a map key. The panic is contained to the
-// caller (the lock is released and the [Jaws.Serve] loop is unaffected); it is
-// not logged-and-dropped the way [Jaws.Broadcast] handles such a
-// [wire.Message.Dest], because that hashing happens in the Serve goroutine where
-// a panic would crash the process. [Request.Dirty] behaves the same as Dirty
-// here.
-func (jw *Jaws) Dirty(dirtyTags ...any) {
-	// Use TagExpand+MustLog rather than MustTagExpand: with a nil Context the
-	// latter panics on an illegal tag even in production, unlike the sibling
-	// Request.Dirty and Jaws.Broadcast. Log and continue with the partial result.
-	expanded, err := tag.TagExpand(nil, dirtyTags)
-	jw.MustLog(err)
-	jw.setDirty(expanded)
-}
-
-// dirtPair pairs a dirty tag with its insertion-order rank, used by sortedDirtTags
-// to order tags without re-reading the order from the map on every comparison.
-type dirtPair struct {
-	tag any
-	ord int
-}
-
-// sortedDirtTags returns the keys of dirty ordered by their (insertion-order) int
-// value. It materializes {tag,ord} pairs and sorts on the int, rather than sorting
-// a []any with a comparator that does two map lookups per comparison: the latter is
-// ~2*N*log2(N) hashed any-map lookups, and this runs under the exclusive jw.mu.
-func sortedDirtTags(dirty map[any]int) []any {
-	pairs := make([]dirtPair, 0, len(dirty))
-	for k, ord := range dirty {
-		pairs = append(pairs, dirtPair{tag: k, ord: ord})
-	}
-	slices.SortFunc(pairs, func(a, b dirtPair) int { return cmp.Compare(a.ord, b.ord) })
-	dirt := make([]any, len(pairs))
-	for i := range pairs {
-		dirt[i] = pairs[i].tag
-	}
-	return dirt
-}
-
-func (jw *Jaws) distributeDirt() int {
-	var reqs []*Request
-	var dirt []any
-
-	jw.mu.Lock()
-	if len(jw.dirty) > 0 {
-		dirt = sortedDirtTags(jw.dirty)
-		clear(jw.dirty)
-		jw.dirtOrder = 0
-		reqs = make([]*Request, 0, len(jw.requests))
-		for _, rq := range jw.requests {
-			reqs = append(reqs, rq)
-		}
-	}
-	jw.mu.Unlock()
-
-	for _, rq := range reqs {
-		rq.appendDirtyTags(dirt)
-	}
-	return len(dirt)
-}
-
-// Reload requests all [Request] values to reload their current page.
-func (jw *Jaws) Reload() {
-	jw.Broadcast(wire.Message{
-		What: what.Reload,
-	})
-}
-
-// isSafeRedirect reports whether rawurl is safe to hand to the browser's
-// location.assign, and returns the normalized value to actually send.
-//
-// Leading and trailing ASCII whitespace and control characters are trimmed, as
-// browsers strip them before navigating. Only same-document/relative paths and
-// the http and https schemes are permitted; this blocks script-bearing schemes
-// such as javascript: and data:, backslashes (which browsers treat as '/'), and
-// protocol-relative URLs ("//host/path", "/\host") that would navigate to an
-// arbitrary external origin.
-func isSafeRedirect(rawurl string) (safe string, ok bool) {
-	safe = strings.TrimFunc(rawurl, func(r rune) bool { return r <= ' ' })
-	if strings.ContainsRune(safe, '\\') {
-		return safe, false
-	}
-	if u, err := url.Parse(safe); err == nil {
-		switch strings.ToLower(u.Scheme) {
-		case "":
-			if u.Host == "" && !strings.HasPrefix(safe, "//") {
-				ok = true
-			}
-		case "http", "https":
-			ok = true
-		}
-	}
-	return
-}
-
-// redirectMessage validates url for the browser's location.assign and returns
-// the wire.Message to broadcast (Data set to the normalized value); the caller
-// sets msg.Dest. If url is unsafe it logs the refusal and returns ok=false. It
-// is the single point where the redirect policy and rejection message live, so
-// Jaws.Redirect and Request.Redirect cannot drift.
-func (jw *Jaws) redirectMessage(url string) (msg wire.Message, ok bool) {
-	var safe string
-	if safe, ok = isSafeRedirect(url); ok {
-		msg = wire.Message{What: what.Redirect, Data: safe}
-	} else {
-		_ = jw.Log(fmt.Errorf("jaws: refusing unsafe redirect to %q", url))
-	}
-	return
-}
-
-// Redirect requests all [Request] values to navigate to the given URL.
-//
-// The URL is validated to be a relative path or an http/https URL; script-bearing
-// schemes such as javascript: and protocol-relative ("//host") URLs are refused
-// and logged rather than sent to the browser.
-func (jw *Jaws) Redirect(url string) {
-	if msg, ok := jw.redirectMessage(url); ok {
-		jw.Broadcast(msg)
-	}
-}
-
-// Alert sends an alert to all [Request] values.
-//
-// The level argument should be one of Bootstrap's alert levels:
-// primary, secondary, success, danger, warning, info, light or dark.
-//
-// The level and msg are HTML-escaped before being sent, so it is safe to pass
-// untrusted text; do not pre-escape it.
-func (jw *Jaws) Alert(level, msg string) {
-	jw.Broadcast(wire.Message{
-		What: what.Alert,
-		Data: alertData(level, msg),
-	})
 }
 
 // Pending returns the number of requests waiting for their WebSocket callbacks.
@@ -996,7 +652,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 					// the exception is Update messages, more will follow eventually
 					if msg.What != what.Update {
 						killSub(msgCh)
-						rq.cancel(fmt.Errorf("%v: broadcast channel full sending %s", rq, msg.String()))
+						rq.cancel(fmt.Errorf("%w: %v: broadcast channel full sending %s", ErrRequestOverloaded, rq, msg.String()))
 					}
 				}
 			}
@@ -1136,117 +792,6 @@ func forwardedClientIP(h http.Header) (netip.Addr, bool) {
 	return netip.Addr{}, false
 }
 
-// broadcastTo broadcasts a single wire command to all HTML elements matching
-// target. It is the shared body of the public broadcast helpers below, which
-// differ only in the What command and how they assemble data.
-func (jw *Jaws) broadcastTo(target any, w what.What, data string) {
-	jw.Broadcast(wire.Message{
-		Dest: target,
-		What: w,
-		Data: data,
-	})
-}
-
-// SetInner sends a request to replace the inner HTML of
-// all HTML elements matching target.
-func (jw *Jaws) SetInner(target any, innerHTML template.HTML) {
-	jw.broadcastTo(target, what.Inner, string(innerHTML))
-}
-
-// SetAttr sends a request to replace the given attribute value in
-// all HTML elements matching target.
-//
-// The value parameter must be the unescaped logical attribute value. It is sent
-// to the browser DOM and used as the value argument to setAttribute().
-func (jw *Jaws) SetAttr(target any, attr, value string) {
-	jw.broadcastTo(target, what.SAttr, attr+"\n"+value)
-}
-
-// RemoveAttr sends a request to remove the given attribute from
-// all HTML elements matching target.
-func (jw *Jaws) RemoveAttr(target any, attr string) {
-	jw.broadcastTo(target, what.RAttr, attr)
-}
-
-// SetClass sends a request to set the given class in
-// all HTML elements matching target.
-func (jw *Jaws) SetClass(target any, cls string) {
-	jw.broadcastTo(target, what.SClass, cls)
-}
-
-// RemoveClass sends a request to remove the given class from
-// all HTML elements matching target.
-func (jw *Jaws) RemoveClass(target any, cls string) {
-	jw.broadcastTo(target, what.RClass, cls)
-}
-
-// SetValue sends a request to set the current input value (in textual form) of
-// all HTML elements matching target. It sets the live DOM value/state, not the
-// HTML "value" attribute.
-func (jw *Jaws) SetValue(target any, value string) {
-	jw.broadcastTo(target, what.Value, value)
-}
-
-// Insert calls the JavaScript 'insertBefore()' method on
-// all HTML elements matching target.
-//
-// The position parameter 'where' may be either an HTML ID, a child index or the text "null".
-// html is trusted HTML, matching [Jaws.SetInner] and [Jaws.Append].
-func (jw *Jaws) Insert(target any, where string, html template.HTML) {
-	jw.broadcastTo(target, what.Insert, where+"\n"+string(html))
-}
-
-// Replace replaces HTML on all HTML elements matching target.
-//
-// html is trusted HTML, matching [Jaws.SetInner] and [Jaws.Append].
-func (jw *Jaws) Replace(target any, html template.HTML) {
-	jw.broadcastTo(target, what.Replace, string(html))
-}
-
-// Delete removes the HTML element(s) matching target.
-func (jw *Jaws) Delete(target any) {
-	jw.broadcastTo(target, what.Delete, "")
-}
-
-// Append calls the JavaScript appendChild method on all HTML elements matching target.
-func (jw *Jaws) Append(target any, html template.HTML) {
-	jw.broadcastTo(target, what.Append, string(html))
-}
-
-// maybeCompactJSON returns in made safe to embed verbatim in a what.Call wire
-// frame, which the client splits on '\n' (frames) and '\t' (order fields). For
-// valid JSON, json.Compact strips all insignificant whitespace, including any
-// framing-significant tabs and newlines between tokens. When in is not valid JSON
-// (for example a caller embedded a raw control byte inside a string literal, which
-// is illegal unescaped in JSON), json.Compact fails; rather than passing the raw
-// bytes through and corrupting the frame, escape the framing-significant control
-// bytes so the payload is always frame-safe (and, as a side effect, valid JSON).
-func maybeCompactJSON(in string) string {
-	if strings.ContainsAny(in, "\n\t") {
-		var b bytes.Buffer
-		if err := json.Compact(&b, []byte(in)); err == nil {
-			return b.String()
-		}
-		return jsonControlEscaper.Replace(in)
-	}
-	return in
-}
-
-// jsonControlEscaper turns control bytes into their JSON escape sequences for the
-// fallback path. \n (frame terminator) and \t (field separator) are the only
-// framing-significant bytes, matching maybeCompactJSON's detection set; \r is
-// escaped solely because a bare \r is illegal inside a JSON string literal, so the
-// fallback output stays valid JSON.
-var jsonControlEscaper = strings.NewReplacer("\t", `\t`, "\n", `\n`, "\r", `\r`)
-
-var whitespaceRemover = strings.NewReplacer(" ", "", "\n", "", "\t", "")
-
-// JsCall calls the JavaScript function jsfunc with the argument jsonstr
-// on all HTML elements matching target.
-func (jw *Jaws) JsCall(target any, jsfunc, jsonstr string) {
-	jw.broadcastTo(target, what.Call, whitespaceRemover.Replace(jsfunc)+"="+maybeCompactJSON(jsonstr))
-}
-
 // getRequestLocked allocates a Request from the pool for jawsKey. remoteIP is the
 // already-resolved client IP for r (see NewRequest, the sole caller), passed in to
 // avoid recomputing jw.clientIP(r). Caller must hold jw.mu.
@@ -1347,6 +892,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			default:
 				if jawsKeyString, ok := strings.CutPrefix(r.URL.Path, "/jaws/.tail/"); ok {
 					jawsKey := key.Parse(jawsKeyString)
+					remoteIP := jw.clientIP(r)
 					// Hold jw.mu (read) across both the lookup and the drain: recycling
 					// needs the jw.mu write lock, so rq cannot be recycled and reused
 					// under a different key while we drain its queue. A stale key either
@@ -1355,6 +901,18 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					// recycling or the Serve loop.
 					jw.mu.RLock()
 					rq := jw.requests[jawsKey]
+					// Bind the tail fetch to the client like the WebSocket claim path
+					// (Request.claim): the one-shot tail is drained only when the fetch
+					// comes from the same client IP that the initial request was issued
+					// to (loopback-aware, see equalIP). rq.remoteIP is stable here because
+					// recycling requires the jw.mu write lock. A mismatch is treated as not
+					// found, so a leaked key cannot drain (and thereby deny) another
+					// client's tail. The WebSocket carries all live data, so this only
+					// closes the cross-IP read of the already-rendered attribute/class
+					// fragments and the cross-IP one-shot race.
+					if rq != nil && !equalIP(remoteIP, rq.remoteIP) {
+						rq = nil
+					}
 					var b []byte
 					var sent bool
 					if rq != nil {
@@ -1375,21 +933,4 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(http.StatusNotFound)
-}
-
-type sessioner struct {
-	jw *Jaws
-	h  http.Handler
-}
-
-func (sess sessioner) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if sess.jw.GetSession(r) == nil {
-		sess.jw.newSession(w, r)
-	}
-	sess.h.ServeHTTP(w, r)
-}
-
-// Session returns an [http.Handler] that ensures a JaWS [Session] exists before invoking h.
-func (jw *Jaws) Session(h http.Handler) http.Handler {
-	return sessioner{jw: jw, h: h}
 }

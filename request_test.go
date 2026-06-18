@@ -1573,6 +1573,85 @@ func TestRequest_CustomErrors(t *testing.T) {
 	th.Equal(errors.As(cause, &target2), false)
 }
 
+// TestRequest_handleBroadcastRejectsWhitespaceID verifies that a string (HTML id)
+// broadcast target containing a tab or newline is rejected rather than written
+// verbatim into a wire frame, where it would corrupt framing. reportMisuse logs and
+// then panics under deadlock.Debug; in production it logs and drops the frame.
+func TestRequest_handleBroadcastRejectsWhitespaceID(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	logger := &captureErrorLogger{}
+	jw.Logger = logger
+	rq := jw.NewRequest(nil)
+	defer jw.recycle(rq)
+
+	eventCallCh := make(chan eventFnCall, 1)
+
+	// A clean id queues a single verbatim (Jid -1) frame.
+	rq.handleBroadcast(wire.Message{Dest: "good-id", What: what.Inner, Data: "<p>"}, eventCallCh)
+	if got := rq.getSendMsgs(); len(got) != 1 {
+		t.Fatalf("clean id: queued %d messages, want 1", len(got))
+	}
+
+	for _, badID := range []string{"a\tb", "a\nb"} {
+		logger.err = nil
+		bad := wire.Message{Dest: badID, What: what.Inner, Data: "<p>"}
+		if deadlock.Debug {
+			func() {
+				defer func() {
+					switch e := recover().(type) {
+					case nil:
+						t.Fatalf("id %q: expected reportMisuse to panic under deadlock.Debug", badID)
+					case error:
+						if !strings.Contains(e.Error(), "tab or newline") {
+							t.Fatalf("id %q: panic = %v, want tab-or-newline message", badID, e)
+						}
+					default:
+						t.Fatalf("id %q: panic = %v, want error", badID, e)
+					}
+				}()
+				rq.handleBroadcast(bad, eventCallCh)
+			}()
+			continue
+		}
+		rq.handleBroadcast(bad, eventCallCh)
+		if got := rq.getSendMsgs(); len(got) != 0 {
+			t.Fatalf("id %q: queued %d messages, want 0 (dropped)", badID, len(got))
+		}
+		if logger.err == nil || !strings.Contains(logger.err.Error(), "tab or newline") {
+			t.Fatalf("id %q: logged err = %v, want tab-or-newline message", badID, logger.err)
+		}
+	}
+}
+
+// TestRequest_queueEventOverloadCancels verifies that when the event-call channel is
+// full, the Request is cancelled with a cause that wraps ErrRequestOverloaded (and is
+// still matchable as ErrRequestCancelled). It drives queueEvent with an unbuffered
+// channel that has no receiver, so the non-blocking send fails immediately.
+func TestRequest_queueEventOverloadCancels(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	rq := jw.NewRequest(nil)
+	defer jw.recycle(rq)
+
+	full := make(chan eventFnCall) // unbuffered, no receiver: send fails at once
+	rq.queueEvent(full, eventFnCall{jid: 1, wht: what.Input, data: "x"})
+
+	cause := context.Cause(rq.Context())
+	if !errors.Is(cause, ErrRequestOverloaded) {
+		t.Fatalf("cause = %v, want it to wrap ErrRequestOverloaded", cause)
+	}
+	if !errors.Is(cause, ErrRequestCancelled) {
+		t.Fatalf("cause = %v, want it to wrap ErrRequestCancelled", cause)
+	}
+}
+
 func TestRequest_renderDebugLocked(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()
