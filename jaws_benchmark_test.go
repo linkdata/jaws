@@ -51,7 +51,7 @@ func newUnpooledBenchRequest(jw *Jaws) (rq *Request) {
 			}
 			rq.mu.Lock()
 			rq.JawsKey = jawsKey
-			rq.lastWriteNano.Store(jw.nowNano())
+			rq.lastWriteSeconds.Store(jw.runtimeSeconds.Load())
 			rq.remoteIP = remoteIP
 			rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
 			rq.mu.Unlock()

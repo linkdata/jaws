@@ -128,12 +128,12 @@ func TestJaws_MaxPendingRequestsPerIPEvictsOldestPending(t *testing.T) {
 	oldReq := newPendingLimitRequest("192.0.2.1:1000")
 	oldRq := jw.NewRequest(oldReq)
 	oldKey := oldRq.JawsKey
-	setPendingLimitLastWrite(t, oldRq, time.Now().Add(-2*time.Hour))
+	setPendingLimitLastWrite(t, oldRq, 7200)
 
 	midReq := newPendingLimitRequest("192.0.2.1:1001")
 	midRq := jw.NewRequest(midReq)
 	midKey := midRq.JawsKey
-	setPendingLimitLastWrite(t, midRq, time.Now().Add(-time.Hour))
+	setPendingLimitLastWrite(t, midRq, 3600)
 
 	newReq := newPendingLimitRequest("192.0.2.1:1002")
 	newRq := jw.NewRequest(newReq)
@@ -195,7 +195,7 @@ func TestJaws_MaintenanceLogsCancelOutsideLock(t *testing.T) {
 
 	// A pending request idle long enough for the maintenance pass to recycle it.
 	rq := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
-	setPendingLimitLastWrite(t, rq, time.Now().Add(-time.Hour))
+	setPendingLimitLastWrite(t, rq, 3600)
 
 	done := make(chan struct{})
 	go func() {
@@ -243,7 +243,7 @@ func TestJaws_MaxPendingRequestsPerIPSparesRenderingRequest(t *testing.T) {
 	idleRq := jw.NewRequest(idleReq)
 	idleKey := idleRq.JawsKey
 	// Age the idle Request well past the spare window so it is the eviction victim.
-	setPendingLimitLastWrite(t, idleRq, time.Now().Add(-time.Hour))
+	setPendingLimitLastWrite(t, idleRq, 3600)
 
 	// Creating a third same-IP Request trips the cap (pending == 2).
 	newReq := newPendingLimitRequest("192.0.2.1:1002")
@@ -290,7 +290,7 @@ func TestJaws_MaxPendingRequestsPerIPSparesRecentlyRenderedRequest(t *testing.T)
 	idleReq := newPendingLimitRequest("192.0.2.1:1001")
 	idleRq := jw.NewRequest(idleReq)
 	idleKey := idleRq.JawsKey
-	setPendingLimitLastWrite(t, idleRq, time.Now().Add(-time.Hour))
+	setPendingLimitLastWrite(t, idleRq, 3600)
 
 	// A third same-IP Request trips the cap (pending == 2).
 	newReq := newPendingLimitRequest("192.0.2.1:1002")
@@ -341,7 +341,7 @@ func TestJaws_MaxPendingRequestsPerIPSparesStalledLiveRender(t *testing.T) {
 	idleReq := newPendingLimitRequest("192.0.2.1:1001")
 	idleRq := jw.NewRequest(idleReq)
 	idleKey := idleRq.JawsKey
-	setPendingLimitLastWrite(t, idleRq, time.Now().Add(-time.Hour))
+	setPendingLimitLastWrite(t, idleRq, 3600)
 
 	// A third same-IP Request trips the cap (pending == 2).
 	newReq := newPendingLimitRequest("192.0.2.1:1002")
@@ -462,7 +462,7 @@ func TestJaws_MaxPendingRequestsPerIPKeepsLoopbackAddressesSeparate(t *testing.T
 
 	oldReq := newPendingLimitRequest("127.0.0.1:1000")
 	oldRq := jw.NewRequest(oldReq)
-	setPendingLimitLastWrite(t, oldRq, time.Now().Add(-time.Hour))
+	setPendingLimitLastWrite(t, oldRq, 3600)
 
 	newReq := newPendingLimitRequest("[::1]:1000")
 	newRq := jw.NewRequest(newReq)
@@ -518,7 +518,7 @@ func TestJaws_MaxPendingRequestsPerIPEvictionCause(t *testing.T) {
 
 	oldReq := newPendingLimitRequest("192.0.2.1:1000")
 	oldRq := jw.NewRequest(oldReq)
-	setPendingLimitLastWrite(t, oldRq, time.Now().Add(-time.Hour))
+	setPendingLimitLastWrite(t, oldRq, 3600)
 	jw.NewRequest(newPendingLimitRequest("192.0.2.1:1001"))
 
 	if logger.err == nil {
@@ -645,7 +645,7 @@ func TestJaws_MaxPendingRequestsPerIPMaintenanceRemovesPendingIndex(t *testing.T
 	jw.MaxPendingRequestsPerIP = 1
 
 	rq := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
-	setPendingLimitLastWrite(t, rq, time.Now().Add(-time.Hour))
+	setPendingLimitLastWrite(t, rq, 3600)
 	jw.maintenance(time.Second)
 
 	if got := jw.Pending(); got != 0 {
@@ -662,13 +662,14 @@ func newPendingLimitRequest(remoteAddr string) *http.Request {
 	return r
 }
 
-func setPendingLimitLastWrite(t *testing.T, rq *Request, lastWrite time.Time) {
+func setPendingLimitLastWrite(t *testing.T, rq *Request, secondsAgo uint32) {
 	t.Helper()
-	// lastWriteNano holds monotonic nanos since rq.Jaws.created; convert the wall
-	// time the test wants relative to that base. A past instant yields a negative
-	// value, which reads as far older than any spare/idle window — exactly what an
-	// "aged" request should look like.
-	rq.lastWriteNano.Store(int64(lastWrite.Sub(rq.Jaws.created)))
+	// lastWriteSeconds holds the Jaws.runtimeSeconds value at the last write. Store
+	// runtimeSeconds-secondsAgo so the eviction/idle check (runtimeSeconds-lastWrite)
+	// reads back as secondsAgo. Unsigned wraparound makes this exact even when the
+	// counter is still zero (Serve not running in these tests), since both sides use
+	// the same runtimeSeconds value.
+	rq.lastWriteSeconds.Store(rq.Jaws.runtimeSeconds.Load() - secondsAgo)
 }
 
 func TestCoverage_GenerateHeadAndConvenienceBroadcasts(t *testing.T) {
