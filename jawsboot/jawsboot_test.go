@@ -148,6 +148,38 @@ func TestJawsBoot_Setup(t *testing.T) {
 	}
 }
 
+func TestJawsBoot_SetupNilHandleFuncGeneratesHead(t *testing.T) {
+	const prefix = "/static"
+	expected := expectedStaticAssets(t, testAssetsFS, "assets/static", prefix)
+
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			t.Fatalf("Setup with nil HandleFunc panicked: %v", recovered)
+		}
+	}()
+
+	if err := jw.Setup(nil, prefix, jawsboot.Setup); err != nil {
+		t.Fatal(err)
+	}
+
+	rq := jw.NewRequest(nil)
+	var sb strings.Builder
+	if err := (ui.RequestWriter{Request: rq, Writer: &sb}).HeadHTML(); err != nil {
+		t.Fatal(err)
+	}
+	head := sb.String()
+	for _, exp := range expected {
+		if !strings.Contains(head, `"`+exp.uri+`"`) {
+			t.Errorf("expected head html to include %q", exp.uri)
+		}
+	}
+}
+
 // TestJawsBoot_SetupPrefixVariants verifies that for any prefix form (absolute,
 // relative or empty) every asset URL emitted into the head HTML resolves to a
 // registered handler.
