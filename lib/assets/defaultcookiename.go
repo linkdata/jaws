@@ -16,6 +16,10 @@ func init() {
 }
 
 // MakeCookieName creates a cookie-safe name from an executable path.
+//
+// It uses the path's base name with its last file extension removed, then keeps
+// only ASCII letters and digits. If no usable characters remain (including for an
+// empty path), it returns "jaws", the fallback recorded in [DefaultCookieName].
 func MakeCookieName(exename string) (cookie string) {
 	cookie = "jaws"
 	exename = filepath.Base(exename)
