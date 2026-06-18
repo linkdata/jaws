@@ -61,10 +61,14 @@ const (
 	// ContextMenu reports that a context menu was requested on an element.
 	ContextMenu
 
-	// Synchronous event-handler invocation. A real protocol command (used by
-	// broadcasts as well as tests), not a test-only artifact.
-
-	// Hook calls the matching event handler synchronously.
+	// Hook synchronously invokes the matching event handler.
+	//
+	// Hook is a testing facility rather than part of the browser wire protocol:
+	// the JaWS client never sends it, and inbound client messages are never
+	// dispatched as Hook. Broadcasting a Hook message lets a test drive an
+	// element's event handler synchronously, without round-tripping through the
+	// client. The handler must not send messages of its own; any error it
+	// returns is delivered to the client as an [Alert].
 	Hook
 )
 
