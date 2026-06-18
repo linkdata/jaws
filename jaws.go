@@ -155,7 +155,8 @@ type Jaws struct {
 	MaxPendingRequestsPerIP int             // Maximum number of unclaimed Requests per client IP. Defaults to DefaultMaxPendingRequestsPerIP. Set <=0 to disable the cap.
 	webSocketTimeout        time.Duration   // timeout duration passed to ServeWith
 	maintenanceInterval     time.Duration   // Serve maintenance tick interval; set by ServeWithTimeout and read under mu, zero until Serve starts
-	created                 time.Time       // monotonic base captured in New(); read-only after construction, basis for nowNano
+	created                 time.Time       // monotonic base captured in New(); read-only after construction, basis for runtimeSeconds
+	runtimeSeconds          atomic.Uint32   // whole seconds since created; refreshed by the Serve loop, read lock-free by MarkWritten and the eviction/idle checks
 	bcastCh                 chan wire.Message
 	subCh                   chan subscription
 	unsubCh                 chan chan wire.Message
@@ -409,13 +410,15 @@ func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 	return
 }
 
-// nowNano returns monotonic nanoseconds elapsed since the [Jaws] was created.
+// refreshRuntimeSeconds updates runtimeSeconds to the whole seconds elapsed since
+// the [Jaws] was created.
 //
-// It is the basis for [Request.MarkWritten] and the pending-eviction recency check.
-// Because it derives from [time.Since] on a [time.Time] carrying the monotonic clock,
-// the value is immune to wall-clock and NTP adjustments.
-func (jw *Jaws) nowNano() int64 {
-	return int64(time.Since(jw.created))
+// It is called by the Serve loop (seeded once at start, then on every maintenance
+// tick), so the per-write [Request.MarkWritten] only does an atomic load rather than
+// reading the clock. Deriving from [time.Since] on a monotonic [time.Time] keeps the
+// counter immune to wall-clock and NTP adjustments.
+func (jw *Jaws) refreshRuntimeSeconds() {
+	jw.runtimeSeconds.Store(uint32(time.Since(jw.created) / time.Second))
 }
 
 // limitPendingRequestsLocked evicts pending Requests for remoteIP until the cap is
@@ -424,9 +427,9 @@ func (jw *Jaws) nowNano() int64 {
 func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) {
 	limit := jw.MaxPendingRequestsPerIP
 	if limit > 0 {
-		nowNano := jw.nowNano()
+		nowSeconds := jw.runtimeSeconds.Load()
 		for len(jw.pending[remoteIP]) >= limit {
-			victim := jw.oldestEvictablePendingLocked(remoteIP, nowNano)
+			victim := jw.oldestEvictablePendingLocked(remoteIP, nowSeconds)
 			if victim == nil {
 				// Every pending Request for this IP is rendering or rendered too
 				// recently to evict safely. Recycling a still-rendering one would
@@ -449,34 +452,39 @@ func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) 
 
 // oldestEvictablePendingLocked returns the oldest pending [Request] for remoteIP
 // that is safe to recycle, or nil if every one of them was written too recently to
-// evict safely. nowNano is the reference instant (see [Jaws.nowNano]); the caller
-// passes a single value so all candidates are judged against the same instant.
+// evict safely. nowSeconds is the reference instant ([Jaws.runtimeSeconds]); the
+// caller passes a single value so all candidates are judged against the same instant.
 // Caller must hold jw.mu.
 //
 // A Request is spared while its initial HTML may still be in flight. Recycling a
 // Request whose render goroutine is still writing would let a later [Jaws.NewRequest]
 // reuse the pooled pointer under a new key while that goroutine keeps appending
-// elements (see [Jaws.limitPendingRequestsLocked]). [RequestWriter.Write] stamps the
-// write instant on every write via [Request.MarkWritten], so a Request is treated as
-// possibly-rendering, and spared, while its last write is within 2*maintenanceInterval.
+// elements (see [Jaws.limitPendingRequestsLocked]). [RequestWriter.Write] records the
+// current second on every write via [Request.MarkWritten], so a Request is treated as
+// possibly-rendering, and spared, while its last write is within 2*maintenanceInterval
+// (rounded to whole seconds, with a one-second floor).
 //
-// The timestamp is the exact instant of the last write, not a value sampled once per
-// maintenance pass, so an actively writing render is always fresh and only a render
-// that has produced no write for two intervals — whether finished or merely stalled
-// between writes — becomes evictable. lastWriteNano is read lock-free, so this scan
-// takes no Request lock.
+// The recorded second advances only when the Request keeps writing, so an actively
+// writing render stays fresh while one that has produced no write for the window —
+// whether finished or merely stalled between writes — becomes evictable. lastWriteSeconds
+// is read lock-free, so this scan takes no Request lock; the coarse second granularity
+// is harmless because both operands derive from runtimeSeconds, so any refresh lag
+// cancels in the difference.
 //
 // maintenanceInterval is zero until [Jaws.ServeWithTimeout] starts; the window then
 // falls back to [DefaultUpdateInterval] so an in-flight render is still protected
 // before the maintenance pass begins running.
-func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr, nowNano int64) *Request {
+func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr, nowSeconds uint32) *Request {
 	interval := jw.maintenanceInterval
 	if interval <= 0 {
 		interval = DefaultUpdateInterval
 	}
-	spareWindow := int64(2 * interval)
+	spareSeconds := uint32(2 * interval / time.Second)
+	if spareSeconds == 0 {
+		spareSeconds = 1
+	}
 	for _, rq := range jw.pending[remoteIP] {
-		if nowNano-rq.lastWriteNano.Load() <= spareWindow {
+		if nowSeconds-rq.lastWriteSeconds.Load() <= spareSeconds {
 			continue
 		}
 		return rq
@@ -659,6 +667,9 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	jw.webSocketTimeout = requestTimeout
 	jw.maintenanceInterval = maintenanceInterval
 	jw.mu.Unlock()
+	// Seed the seconds counter so it is accurate from the first request, then keep
+	// it fresh on every maintenance tick (see the case below).
+	jw.refreshRuntimeSeconds()
 
 	defer func() {
 		t.Stop()
@@ -707,6 +718,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 				mustBroadcast(wire.Message{What: what.Update})
 			}
 		case <-t.C:
+			jw.refreshRuntimeSeconds()
 			jw.maintenance(requestTimeout)
 		case sub := <-jw.subCh:
 			if sub.msgCh != nil {
@@ -750,9 +762,9 @@ func (jw *Jaws) unsubscribe(msgCh chan wire.Message) {
 func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	var toLog []error
 	jw.mu.Lock()
-	nowNano := jw.nowNano()
+	nowSeconds := jw.runtimeSeconds.Load()
 	for _, rq := range jw.requests {
-		if expired, cause := rq.maintenance(nowNano, requestTimeout); expired {
+		if expired, cause := rq.maintenance(nowSeconds, requestTimeout); expired {
 			if cause != nil {
 				toLog = append(toLog, cause)
 			}
@@ -839,7 +851,7 @@ func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP neti
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	rq.JawsKey = jawsKey
-	rq.lastWriteNano.Store(jw.nowNano())
+	rq.lastWriteSeconds.Store(jw.runtimeSeconds.Load())
 	rq.initial = r
 	rq.remoteIP = remoteIP
 	rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
