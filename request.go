@@ -489,7 +489,7 @@ func (rq *Request) maintenance(nowSeconds uint32, requestTimeout time.Duration) 
 		rq.mu.Lock()
 		if rq.ctx.Err() != nil {
 			expired = true
-		} else if nowSeconds-rq.lastWriteSeconds.Load() > uint32(requestTimeout/time.Second) {
+		} else if time.Duration(nowSeconds-rq.lastWriteSeconds.Load())*time.Second > requestTimeout {
 			cause = rq.cancelLocked(newErrNoWebSocketRequest(rq))
 			expired = true
 		}
