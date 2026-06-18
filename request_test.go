@@ -2337,7 +2337,7 @@ func (ts *testServer) connected(rq *Request) error {
 
 func (ts *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/jaws/") {
-		jawsKey := key.Parse(strings.TrimPrefix(r.URL.Path, "/jaws/"))
+		jawsKey, _ := key.Parse(strings.TrimPrefix(r.URL.Path, "/jaws/"))
 		if rq := ts.jw.UseRequest(jawsKey, r); rq != nil {
 			rq.ServeHTTP(w, r)
 			return
