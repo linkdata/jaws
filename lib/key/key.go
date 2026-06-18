@@ -33,6 +33,9 @@ func Parse(s string) Key {
 }
 
 // Append appends key in the text form used by JaWS to b.
+//
+// A zero Key (the invalid key) appends nothing and returns b unchanged, matching
+// [Key.String], which encodes a zero Key as the empty string.
 func Append(b []byte, key Key) []byte {
 	if key != 0 {
 		b = strconv.AppendUint(b, uint64(key), 32)
