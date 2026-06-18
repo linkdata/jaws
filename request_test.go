@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -676,15 +677,13 @@ func TestRequest_ClaimRefreshesLastWriteAndStartServeGuards(t *testing.T) {
 	rq := jw.NewRequest(hr)
 
 	// Simulate a page that rendered long ago (idle) before its WebSocket connects.
-	rq.mu.Lock()
-	rq.lastWrite = time.Now().Add(-time.Hour)
-	rq.mu.Unlock()
+	rq.lastWriteNano.Store(jw.nowNano() - int64(time.Hour))
 
 	if jw.UseRequest(rq.JawsKey, hr) != rq {
 		t.Fatal("expected claim to succeed")
 	}
-	// claim refreshed lastWrite, so the just-claimed request is not idle-eligible.
-	if expired, _ := rq.maintenance(time.Now(), time.Second); expired {
+	// claim refreshed the write timestamp, so the just-claimed request is not idle.
+	if expired, _ := rq.maintenance(jw.nowNano(), time.Second); expired {
 		t.Fatal("a freshly claimed request must not be treated as idle by maintenance")
 	}
 
@@ -1733,9 +1732,7 @@ func TestCoverage_PendingSubscribeMaintenanceAndParse(t *testing.T) {
 	<-unsubDone
 
 	// Request timeout path.
-	rq.mu.Lock()
-	rq.lastWrite = time.Now().Add(-time.Hour)
-	rq.mu.Unlock()
+	rq.lastWriteNano.Store(jw.nowNano() - int64(time.Hour))
 	jw.maintenance(time.Second)
 	if got := jw.RequestCount(); got != 0 {
 		t.Fatalf("expected request recycled, got %d", got)
@@ -1786,32 +1783,25 @@ func TestCoverage_RequestMaintenanceClaimAndErrors(t *testing.T) {
 		t.Fatalf("unexpected error text: %v", err)
 	}
 
-	now := time.Now()
+	nowNano := jw.nowNano()
 	rqM := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
-	rqM.lastWrite = now.Add(-time.Hour)
-	if expired, _ := rqM.maintenance(now, time.Second); !expired {
+	rqM.lastWriteNano.Store(nowNano - int64(time.Hour))
+	if expired, _ := rqM.maintenance(nowNano, time.Second); !expired {
 		t.Fatal("expected maintenance timeout")
 	}
 	rqR := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
-	nowR := time.Now()
-	rqR.Rendering.Store(true)
-	if expired, _ := rqR.maintenance(nowR, time.Hour); expired {
-		t.Fatal("expected maintenance continue")
-	}
-	rqR.mu.RLock()
-	lastWrite := rqR.lastWrite
-	rqR.mu.RUnlock()
-	if lastWrite != nowR {
-		t.Fatalf("expected lastWrite updated to now, got %v want %v", lastWrite, nowR)
+	rqR.MarkWritten()
+	if expired, _ := rqR.maintenance(jw.nowNano(), time.Hour); expired {
+		t.Fatal("a freshly written request must not be idle-expired")
 	}
 	rqC := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
 	rqC.cancel(errors.New("cancelled"))
-	if expired, _ := rqC.maintenance(time.Now(), time.Hour); !expired {
+	if expired, _ := rqC.maintenance(jw.nowNano(), time.Hour); !expired {
 		t.Fatal("expected maintenance cancellation")
 	}
 	rqOK := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
-	rqOK.lastWrite = time.Now()
-	if expired, _ := rqOK.maintenance(time.Now(), time.Hour); expired {
+	rqOK.MarkWritten()
+	if expired, _ := rqOK.maintenance(jw.nowNano(), time.Hour); expired {
 		t.Fatal("expected maintenance keepalive")
 	}
 
@@ -2861,4 +2851,88 @@ func TestDelRequestNilsVacatedSlot(t *testing.T) {
 			t.Errorf("vacated slot not nilled after removing last element: %p", got)
 		}
 	})
+}
+
+// TestRequest_JawsKeyReadsAreLockedDuringRecycle verifies that the request-key
+// readers used while the application renders the initial HTML page
+// (JawsKeyString, String, HeadHTML and TailHTML) read rq.JawsKey under rq.mu, so
+// they do not race the rq.mu-guarded writes to rq.JawsKey that clearLocked and
+// getRequestLocked perform when a still-pending request is recycled (for example
+// by limitPendingRequestsLocked evicting it). Run with -race.
+func TestRequest_JawsKeyReadsAreLockedDuringRecycle(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+
+	const iterations = 2000
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Writer: mimic clearLocked / getRequestLocked, which assign rq.JawsKey while
+	// holding rq.mu.
+	go func() {
+		defer wg.Done()
+		for i := range iterations {
+			rq.mu.Lock()
+			rq.JawsKey = key.Key(uint64(i) + 1)
+			rq.mu.Unlock()
+		}
+	}()
+
+	// Reader: the lock-free render-path readers that previously read rq.JawsKey
+	// without holding rq.mu.
+	go func() {
+		defer wg.Done()
+		for range iterations {
+			_ = rq.JawsKeyString()
+			_ = rq.String()
+			_ = rq.HeadHTML(io.Discard)
+			_ = rq.TailHTML(io.Discard)
+		}
+	}()
+
+	wg.Wait()
+}
+
+// TestServe_MarksRequestRunningSoMaintenanceSkips verifies that TestServe marks
+// the request running before driving rq.process, mirroring ServeHTTP/startServe.
+// The maintenance pass recycles only not-running requests (clearing their
+// elements via clearLocked), so a request whose process loop is live must report
+// running and must survive a maintenance pass that would otherwise expire it.
+func TestServe_MarksRequestRunningSoMaintenanceSkips(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+
+	go jw.Serve()
+
+	tr := NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("expected test request")
+	}
+	defer func() {
+		tr.Close()
+		<-tr.DoneCh
+	}()
+
+	<-tr.ReadyCh
+	if !tr.running.Load() {
+		t.Fatal("TestServe must mark the request running so maintenance cannot recycle it mid-process")
+	}
+
+	// Make the request look long-idle, then run a maintenance pass directly. A
+	// running request must not be recycled; before the fix it would be removed
+	// from jw.requests and its elements cleared while process is still using them.
+	tr.lastWriteNano.Store(jw.nowNano() - int64(time.Hour))
+	jw.maintenance(time.Millisecond)
+
+	if got := jw.RequestCount(); got != 1 {
+		t.Fatalf("running request was recycled by maintenance: RequestCount() = %d, want 1", got)
+	}
 }
