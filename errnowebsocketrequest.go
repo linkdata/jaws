@@ -11,7 +11,7 @@ import (
 var ErrNoWebSocketRequest errNoWebSocketRequest
 
 type errNoWebSocketRequest struct {
-	netip.Addr
+	Addr netip.Addr
 }
 
 func (e errNoWebSocketRequest) Error() string {
