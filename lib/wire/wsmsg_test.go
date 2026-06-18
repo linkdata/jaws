@@ -170,6 +170,29 @@ func Test_wsParse_IncompleteFails(t *testing.T) {
 	}
 }
 
+// Test_wsParse_InboundLoneSurrogate covers an inbound frame whose JSON-quoted data
+// holds a lone UTF-16 surrogate. The browser's JSON.stringify emits such a value as
+// the literal escape "\udXXX" for Input/Click/ContextMenu/Remove payloads (it does
+// not throw on lone surrogates), but strconv.Unquote rejects "\udXXX", which would
+// silently drop the whole event frame before the ToValidUTF8 sanitizer runs. Parse
+// must instead decode it, replacing the surrogate with U+FFFD, and deliver the event.
+func Test_wsParse_InboundLoneSurrogate(t *testing.T) {
+	frame := "Input\tJid.1\t\"\\ud800\"\n" // data field is the 8-byte JSON string "\ud800"
+	msg, ok := Parse([]byte(frame))
+	if !ok {
+		t.Fatalf("Parse dropped a frame with a lone surrogate: %q", frame)
+	}
+	if msg.What != what.Input || msg.Jid != jid.Jid(1) {
+		t.Errorf("unexpected header: %+v", msg)
+	}
+	if !utf8.ValidString(msg.Data) {
+		t.Errorf("Data is not valid UTF-8: %q", msg.Data)
+	}
+	if msg.Data != "�" {
+		t.Errorf("got Data %q, want the replacement char %q", msg.Data, "�")
+	}
+}
+
 func Fuzz_wsParse(f *testing.F) {
 	f.Add([]byte("Update\t\t\"\"\n"))
 	f.Add([]byte("Click\t\t\"10 20 5 name\\tJid.1\"\n"))
