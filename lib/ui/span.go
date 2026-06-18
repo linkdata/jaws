@@ -11,6 +11,7 @@ import (
 type Span struct{ HTMLInner }
 
 // NewSpan returns a span widget whose inner HTML is rendered from innerHTML.
+//
 // innerHTML is passed to [bind.MakeHTMLGetter]; plain strings are trusted HTML.
 func NewSpan(innerHTML any) *Span {
 	return &Span{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}}
