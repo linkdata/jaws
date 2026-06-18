@@ -570,8 +570,8 @@ func (jw *Jaws) ContentSecurityPolicy() (s string) {
 // current JaWS configuration.
 //
 // It clones secureheaders.DefaultHeaders(), replacing the
-// Content-Security-Policy value with [Jaws.ContentSecurityPolicy] so responses allow
-// the resources configured by [Jaws.GenerateHeadHTML].
+// Content-Security-Policy value with [Jaws.ContentSecurityPolicy] for each
+// request so responses allow the resources configured by [Jaws.GenerateHeadHTML].
 //
 // The returned middleware does not trust forwarded HTTPS headers. Note that the
 // session cookie Secure flag is governed separately by [Jaws.TrustForwardedHeaders]
@@ -579,11 +579,20 @@ func (jw *Jaws) ContentSecurityPolicy() (s string) {
 // The next handler must be non-nil.
 func (jw *Jaws) SecureHeadersMiddleware(next http.Handler) http.Handler {
 	hdrs := secureheaders.DefaultHeaders()
-	hdrs["Content-Security-Policy"] = []string{jw.ContentSecurityPolicy()}
-	return secureheaders.Middleware{
-		Handler: next,
-		Header:  hdrs,
-	}
+	delete(hdrs, "Content-Security-Policy")
+	return secureHeadersMiddleware{Jaws: jw, Handler: next, Header: hdrs}
+}
+
+type secureHeadersMiddleware struct {
+	*Jaws
+	http.Handler
+	Header http.Header
+}
+
+func (m secureHeadersMiddleware) ServeHTTP(hw http.ResponseWriter, hr *http.Request) {
+	secureheaders.SetHeaders(m.Header, hw, secureheaders.RequestIsSecure(hr, false))
+	hw.Header()["Content-Security-Policy"] = []string{m.ContentSecurityPolicy()}
+	m.Handler.ServeHTTP(hw, hr)
 }
 
 // GenerateHeadHTML regenerates the HTML code that goes in the HEAD section,
