@@ -9,12 +9,14 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"regexp"
 	"runtime"
 	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/linkdata/deadlock"
@@ -113,7 +115,7 @@ func (rw testRequestWriter) UI(ui UI, params ...any) error {
 }
 
 func (rw testRequestWriter) Write(p []byte) (n int, err error) {
-	rw.rq.Rendering.Store(true)
+	rw.rq.MarkWritten()
 	return rw.Writer.Write(p)
 }
 
@@ -622,4 +624,241 @@ func (ts *testSetter[T]) JawsGetHTML(elem *Element) (value T) {
 	}
 	value = ts.val
 	return
+}
+
+// closeRequestInBubble shuts a test request and its Jaws down from inside a
+// synctest bubble, then waits for every bubbled goroutine (the request process
+// loop, its event caller, and the Jaws Serve loop) to exit. synctest.Test
+// requires the bubble to be free of live goroutines before it returns, so the
+// usual t.Cleanup-based teardown (which runs outside the bubble) is too late.
+func closeRequestInBubble(rq *testRequest) {
+	rq.Close()
+	rq.Jaws.Close()
+	synctest.Wait()
+}
+
+// TestRequest is a request harness intended for the jaws package's own tests.
+// The importable harness for other packages lives in
+// github.com/linkdata/jaws/jawstest.
+type TestRequest struct {
+	*Request
+	*requestHarness
+}
+
+type requestHarness struct {
+	Req *Request
+	*httptest.ResponseRecorder
+	ReadyCh     chan struct{}
+	DoneCh      chan struct{}
+	InCh        chan wire.WsMsg
+	OutCh       chan wire.WsMsg
+	BcastCh     chan wire.Message
+	ExpectPanic bool
+	Panicked    bool
+	PanicVal    any
+}
+
+func newRequestHarness(jw *Jaws, r *http.Request) (rh *requestHarness) {
+	if r == nil {
+		r = httptest.NewRequest(http.MethodGet, "/", nil)
+	}
+	rr := httptest.NewRecorder()
+	rr.Body = &bytes.Buffer{}
+	rq := jw.NewRequest(r)
+	if rq == nil || jw.UseRequest(rq.JawsKey, r) != rq {
+		return nil
+	}
+	rh = &requestHarness{
+		Req:              rq,
+		ResponseRecorder: rr,
+	}
+	// The subscribe/process/recycle dance lives in jw.TestServe. The onPanic
+	// callback adds this harness's panic-expectation support: an expected panic is
+	// captured for inspection while an unexpected one is re-raised exactly as
+	// before. It reads ExpectPanic lazily so tests may set it after construction.
+	rh.InCh, rh.OutCh, rh.BcastCh, rh.ReadyCh, rh.DoneCh = jw.TestServe(rq, func(recovered any) {
+		if recovered == nil {
+			return
+		}
+		if rh.ExpectPanic {
+			rh.PanicVal = recovered
+			rh.Panicked = true
+			return
+		}
+		panic(recovered)
+	})
+	return
+}
+
+// Close stops the test request's processing loop.
+func (rh *requestHarness) Close() {
+	close(rh.InCh)
+}
+
+// BodyString returns the recorded response body with surrounding whitespace removed.
+func (rh *requestHarness) BodyString() string {
+	return strings.TrimSpace(rh.Body.String())
+}
+
+// BodyHTML returns the recorded response body as trusted HTML.
+func (rh *requestHarness) BodyHTML() template.HTML {
+	return template.HTML(rh.BodyString()) /* #nosec G203 */
+}
+
+// NewTestRequest creates a TestRequest for use when testing.
+// Passing nil for r creates a GET / request with no body.
+func NewTestRequest(jw *Jaws, r *http.Request) (tr *TestRequest) {
+	rh := newRequestHarness(jw, r)
+	if rh != nil {
+		tr = &TestRequest{
+			Request:        rh.Req,
+			requestHarness: rh,
+		}
+	}
+	return
+}
+
+func TestErrEventUnhandled_Error(t *testing.T) {
+	if got := ErrEventUnhandled.Error(); got != "event unhandled" {
+		t.Fatalf("ErrEventUnhandled.Error() = %q, want %q", got, "event unhandled")
+	}
+}
+
+func TestNewRequestHarness_ReturnsNilOnClaimFailure(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+
+	jw.reqPool.New = func() any {
+		rq := (&Request{
+			Jaws:   jw,
+			tagMap: make(map[any][]*Element),
+		}).clearLocked()
+		rq.claimed.Store(true)
+		return rq
+	}
+
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	if rh := newRequestHarness(jw, hr); rh != nil {
+		t.Fatal("expected nil harness when claim fails")
+	}
+}
+
+func TestNewTestRequest_PanicsWhenJawsClosed(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	jw.Close()
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic when the Jaws instance is closed")
+		}
+	}()
+	NewTestRequest(jw, nil)
+}
+
+func TestTestServe_TimesOutWhenServeNotRunning(t *testing.T) {
+	// Without a running Serve/ServeWithTimeout loop nothing drains subCh, so the
+	// subscription rendezvous in TestServe can neither complete nor see Done, and
+	// it must panic after its 5s timeout. Run in a synctest bubble so that timeout
+	// elapses in fake time rather than stalling the test for five real seconds.
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer jw.Close()
+		rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		defer func() {
+			s, ok := recover().(string)
+			if !ok || !strings.Contains(s, "timed out subscribing") {
+				t.Fatalf("expected timeout panic, got %v", s)
+			}
+		}()
+		jw.TestServe(rq, func(any) {})
+		t.Fatal("expected TestServe to panic")
+	})
+}
+
+func TestTestServe_PanicsWhenClosedAfterSubscribing(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	subCh := make(chan subscription)
+	jw.subCh = subCh
+	readyCh := make(chan struct{})
+	go func() {
+		close(readyCh)
+		<-subCh
+		jw.Close()
+	}()
+	<-readyCh
+
+	defer func() {
+		s, ok := recover().(string)
+		if !ok || !strings.Contains(s, "Jaws instance is closed") {
+			t.Fatalf("expected closed panic, got %v", s)
+		}
+	}()
+	jw.TestServe(rq, func(any) {})
+	t.Fatal("expected TestServe to panic")
+}
+
+func TestTestServe_TimesOutAfterSubscribing(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer jw.Close()
+		rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		subCh := make(chan subscription)
+		jw.subCh = subCh
+		readyCh := make(chan struct{})
+		go func() {
+			close(readyCh)
+			<-subCh
+		}()
+		<-readyCh
+
+		defer func() {
+			s, ok := recover().(string)
+			if !ok || !strings.Contains(s, "timed out subscribing") {
+				t.Fatalf("expected timeout panic, got %v", s)
+			}
+		}()
+		jw.TestServe(rq, func(any) {})
+		t.Fatal("expected TestServe to panic")
+	})
+}
+
+func TestNewTestRequest_SuccessPathAndClose(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+
+	go jw.Serve()
+
+	tr := NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("expected test request")
+	}
+
+	if tr.Initial() == nil {
+		t.Fatal("expected initial request")
+	}
+
+	tr.Close()
+	select {
+	case <-tr.DoneCh:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for test request shutdown")
+	}
 }
