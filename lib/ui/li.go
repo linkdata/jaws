@@ -11,6 +11,7 @@ import (
 type Li struct{ HTMLInner }
 
 // NewLi returns a list item widget whose inner HTML is rendered from innerHTML.
+//
 // innerHTML is passed to [bind.MakeHTMLGetter]; plain strings are trusted HTML.
 func NewLi(innerHTML any) *Li { return &Li{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}} }
 
