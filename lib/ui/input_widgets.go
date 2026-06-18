@@ -135,6 +135,9 @@ func (u *InputFloat) renderFloatInput(elem *jaws.Element, w io.Writer, htmlType 
 // JawsUpdate updates the input value when the bound float64 value changes.
 func (u *InputFloat) JawsUpdate(elem *jaws.Element) {
 	v := u.JawsGet(elem)
+	// This intentionally compares raw float64 values, not rendered strings. That
+	// can skip rare cosmetic changes such as -0 -> 0, but avoids formatting on the
+	// common unchanged path.
 	if u.Last.Swap(v) != v {
 		elem.SetValue(u.str(v))
 	}
