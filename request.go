@@ -951,9 +951,11 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 }
 
 func (rq *Request) handleRemove(containerJid Jid, data string) {
-	// For incoming what.Remove from jaws.js, Data is a tab-separated list of
-	// managed descendant IDs that were removed. The WebSocket Jid identifies the
-	// parent/container in the DOM and must not itself be deleted here.
+	// Incoming what.Remove messages from jaws.js are cleanup acknowledgements sent
+	// while applying server-driven DOM mutation commands (Inner, Replace, Delete or
+	// Remove). Data is a tab-separated list of managed descendant IDs that were
+	// removed from the DOM. The WebSocket Jid identifies the parent/container being
+	// mutated and must not itself be deleted here.
 	//
 	// The client is already trusted only within its own request: a malicious client
 	// can fully control the DOM and UI it presents to its user. Treating arbitrary
