@@ -51,7 +51,7 @@ func newUnpooledBenchRequest(jw *Jaws) (rq *Request) {
 			}
 			rq.mu.Lock()
 			rq.JawsKey = jawsKey
-			rq.lastWrite = time.Now()
+			rq.lastWriteNano.Store(jw.nowNano())
 			rq.remoteIP = remoteIP
 			rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
 			rq.mu.Unlock()
@@ -404,4 +404,23 @@ func BenchmarkDistributeDirtSort(b *testing.B) {
 			}
 		})
 	}
+}
+
+// BenchmarkRequestMarkWritten measures the per-write cost of recording the write
+// instant, which RequestWriter.Write incurs on every write during initial render.
+// It runs in parallel because the realistic load is many Requests rendering at
+// once; the operation must stay cheap and allocation-free under contention.
+func BenchmarkRequestMarkWritten(b *testing.B) {
+	jw, err := New()
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(func() { jw.Close() })
+	rq := &Request{Jaws: jw}
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			rq.MarkWritten()
+		}
+	})
 }

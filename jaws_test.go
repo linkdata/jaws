@@ -234,12 +234,16 @@ func TestJaws_MaxPendingRequestsPerIPSparesRenderingRequest(t *testing.T) {
 	renderingReq := newPendingLimitRequest("192.0.2.1:1000")
 	renderingRq := jw.NewRequest(renderingReq)
 	renderingKey := renderingRq.JawsKey
-	// Simulate an in-flight initial render on the oldest pending Request.
-	renderingRq.Rendering.Store(true)
+	// Simulate an in-flight initial render on the oldest pending Request: a fresh
+	// write timestamp. maintenanceInterval is zero here, so the spare window uses
+	// the DefaultUpdateInterval floor.
+	renderingRq.MarkWritten()
 
 	idleReq := newPendingLimitRequest("192.0.2.1:1001")
 	idleRq := jw.NewRequest(idleReq)
 	idleKey := idleRq.JawsKey
+	// Age the idle Request well past the spare window so it is the eviction victim.
+	setPendingLimitLastWrite(t, idleRq, time.Now().Add(-time.Hour))
 
 	// Creating a third same-IP Request trips the cap (pending == 2).
 	newReq := newPendingLimitRequest("192.0.2.1:1002")
@@ -258,14 +262,10 @@ func TestJaws_MaxPendingRequestsPerIPSparesRenderingRequest(t *testing.T) {
 	}
 }
 
-// TestJaws_MaxPendingRequestsPerIPSparesRecentlyRenderedRequest verifies that the
-// pending cap does not evict a Request whose initial render is still in flight even
-// after a maintenance pass has cleared its Rendering flag. [Request.maintenance]
-// clears Rendering once per interval, so between that clear and the render goroutine's
-// next write the flag reads false while the HTML is still being assembled; keying
-// eviction on the flag alone would recycle the live render. oldestEvictablePendingLocked
-// therefore also spares a Request that rendered within 2*maintenanceInterval and falls
-// through to evict a genuinely idle one instead.
+// TestJaws_MaxPendingRequestsPerIPSparesRecentlyRenderedRequest verifies that with a
+// configured maintenanceInterval the pending cap spares a Request written within the
+// 2*maintenanceInterval recency window and falls through to evict a genuinely idle one
+// instead.
 func TestJaws_MaxPendingRequestsPerIPSparesRecentlyRenderedRequest(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -274,23 +274,17 @@ func TestJaws_MaxPendingRequestsPerIPSparesRecentlyRenderedRequest(t *testing.T)
 	defer jw.Close()
 	jw.MaxPendingRequestsPerIP = 2
 	// Pretend the Serve loop is running with a one-minute maintenance interval so the
-	// recency window is active (it is zero until ServeWithTimeout sets it).
+	// recency window is 2*maintenanceInterval (it falls back to DefaultUpdateInterval
+	// until ServeWithTimeout sets it).
 	jw.mu.Lock()
 	jw.maintenanceInterval = time.Minute
 	jw.mu.Unlock()
 
-	// The oldest pending Request is mid-render...
+	// The oldest pending Request wrote recently (its render is still in flight).
 	renderingReq := newPendingLimitRequest("192.0.2.1:1000")
 	renderingRq := jw.NewRequest(renderingReq)
 	renderingKey := renderingRq.JawsKey
-	renderingRq.Rendering.Store(true)
-
-	// ...and a maintenance pass clears its Rendering flag (refreshing lastWrite) while
-	// the render is still in flight on its HTTP goroutine.
-	jw.maintenance(time.Hour)
-	if renderingRq.Rendering.Load() {
-		t.Fatal("maintenance did not clear Rendering")
-	}
+	renderingRq.MarkWritten()
 
 	// A genuinely idle Request that rendered long ago is the correct eviction victim.
 	idleReq := newPendingLimitRequest("192.0.2.1:1001")
@@ -316,6 +310,55 @@ func TestJaws_MaxPendingRequestsPerIPSparesRecentlyRenderedRequest(t *testing.T)
 	}
 }
 
+// TestJaws_MaxPendingRequestsPerIPSparesStalledLiveRender proves the eviction decision
+// tracks the actual last write, not a value sampled by the maintenance pass: a render
+// that wrote once and then stalled (no further writes) is still spared while that write
+// is within 2*maintenanceInterval, even across a maintenance pass — closing the gap
+// where clearing a flag on a tick could expose a live render to recycling.
+func TestJaws_MaxPendingRequestsPerIPSparesStalledLiveRender(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.MaxPendingRequestsPerIP = 2
+	jw.mu.Lock()
+	jw.maintenanceInterval = time.Minute
+	jw.mu.Unlock()
+
+	// Oldest pending: a single write, then silence. Its timestamp stays fresh.
+	stalledReq := newPendingLimitRequest("192.0.2.1:1000")
+	stalledRq := jw.NewRequest(stalledReq)
+	stalledKey := stalledRq.JawsKey
+	stalledRq.MarkWritten()
+
+	// A maintenance pass must not disturb the write timestamp (generous timeout so the
+	// stalled render is not idle-expired). Under a flag-cleared-by-tick scheme this is
+	// where protection could be lost.
+	jw.maintenance(time.Hour)
+
+	// A genuinely idle sibling is the correct victim.
+	idleReq := newPendingLimitRequest("192.0.2.1:1001")
+	idleRq := jw.NewRequest(idleReq)
+	idleKey := idleRq.JawsKey
+	setPendingLimitLastWrite(t, idleRq, time.Now().Add(-time.Hour))
+
+	// A third same-IP Request trips the cap (pending == 2).
+	newReq := newPendingLimitRequest("192.0.2.1:1002")
+	newRq := jw.NewRequest(newReq)
+	newKey := newRq.JawsKey
+
+	if claimed := jw.UseRequest(stalledKey, stalledReq); claimed != stalledRq {
+		t.Fatalf("stalled-but-recently-written render claim = %v, want it to survive eviction", claimed)
+	}
+	if claimed := jw.UseRequest(idleKey, idleReq); claimed != nil {
+		t.Fatalf("idle request should have been evicted, got %v", claimed)
+	}
+	if claimed := jw.UseRequest(newKey, newReq); claimed != newRq {
+		t.Fatalf("new request claim = %v, want %v", claimed, newRq)
+	}
+}
+
 // TestJaws_MaxPendingRequestsPerIPOvershootsWhenAllRendering verifies that when
 // every pending request for an IP is mid-render, the cap is not enforced by
 // recycling one of them: oldestEvictablePendingLocked finds no idle victim, so the
@@ -331,7 +374,7 @@ func TestJaws_MaxPendingRequestsPerIPOvershootsWhenAllRendering(t *testing.T) {
 
 	rq1 := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
 	rq1Key := rq1.JawsKey
-	rq1.Rendering.Store(true)
+	rq1.MarkWritten()
 
 	// A second same-IP request trips the cap, but the only pending request is
 	// rendering, so nothing is evicted and the cap overshoots to 2.
@@ -621,9 +664,11 @@ func newPendingLimitRequest(remoteAddr string) *http.Request {
 
 func setPendingLimitLastWrite(t *testing.T, rq *Request, lastWrite time.Time) {
 	t.Helper()
-	rq.mu.Lock()
-	rq.lastWrite = lastWrite
-	rq.mu.Unlock()
+	// lastWriteNano holds monotonic nanos since rq.Jaws.created; convert the wall
+	// time the test wants relative to that base. A past instant yields a negative
+	// value, which reads as far older than any spare/idle window — exactly what an
+	// "aged" request should look like.
+	rq.lastWriteNano.Store(int64(lastWrite.Sub(rq.Jaws.created)))
 }
 
 func TestCoverage_GenerateHeadAndConvenienceBroadcasts(t *testing.T) {
