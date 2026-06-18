@@ -20,11 +20,11 @@ type Tree struct {
 
 // New returns a tree widget with id, jsvar and options.
 //
-// The id is used both as a JavaScript variable name and as a URL path segment
-// for the init script, so it must be non-empty and contain only the characters
-// [A-Za-z0-9_$]; otherwise New panics. Validating here turns what would
-// otherwise be a confusing render-time "illegal jsvar name" error and a 400 on
-// the init-script route into an immediate, clear failure.
+// The id is a URL path segment for the init-script route and the key the browser
+// uses to bracket-index the tree's globals (window["jawstree_"+id] and
+// window["jawstreeroot_"+id]), so it must be non-empty and contain only the
+// characters [A-Za-z0-9_$]; otherwise New panics. Validating here turns what would
+// otherwise be a 400 on the init-script route into an immediate, clear failure.
 //
 // New initializes node IDs, tree back-pointers and parent back-pointers in
 // jsvar.Ptr; the name-path API ([Node.HasNames], [Node.GetNames],
