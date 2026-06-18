@@ -72,6 +72,7 @@ func (sess *Session) delRequest(rq *Request) {
 			if l > 1 {
 				sess.requests[i] = sess.requests[l-1]
 			}
+			sess.requests[l-1] = nil // release the freed tail slot so it doesn't pin a recycled *Request
 			sess.requests = sess.requests[:l-1]
 			break
 		}

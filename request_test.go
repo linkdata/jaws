@@ -2724,3 +2724,62 @@ func waitForRequestCounts(t *testing.T, jw *Jaws, wantTotal, wantActive int, tim
 		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+// TestClearLockedZeroesWsQueue verifies clearLocked releases the queued wire
+// message payloads before the Request is pooled, mirroring its clear() of todoDirt
+// and elems. A bare [:0] reslice would leave the WsMsg values (including Data,
+// which holds full Inner/Replace/Append HTML payloads) live in the backing array
+// for the pooled Request's idle lifetime.
+func TestClearLockedZeroesWsQueue(t *testing.T) {
+	rq := &Request{tagMap: map[any][]*Element{}}
+	rq.wsQueue = append(
+		rq.wsQueue,
+		wire.WsMsg{Data: "payload-a", Jid: 1, What: what.Inner},
+		wire.WsMsg{Data: "payload-b", Jid: 2, What: what.Inner},
+	)
+
+	rq.clearLocked()
+
+	if len(rq.wsQueue) != 0 {
+		t.Fatalf("wsQueue len = %d, want 0", len(rq.wsQueue))
+	}
+	for i, m := range rq.wsQueue[:cap(rq.wsQueue)] {
+		if m != (wire.WsMsg{}) {
+			t.Errorf("wsQueue backing slot %d retained data after clearLocked: %+v", i, m)
+		}
+	}
+}
+
+// TestDelRequestNilsVacatedSlot verifies delRequest clears the freed tail slot so a
+// session does not pin an otherwise-recyclable *Request in the slice backing array.
+func TestDelRequestNilsVacatedSlot(t *testing.T) {
+	t.Run("swap remove", func(t *testing.T) {
+		sess := &Session{}
+		rq1, rq2 := &Request{}, &Request{}
+		sess.requests = []*Request{rq1, rq2}
+
+		sess.delRequest(rq1)
+
+		if len(sess.requests) != 1 || sess.requests[0] != rq2 {
+			t.Fatalf("requests = %v, want [rq2]", sess.requests)
+		}
+		if got := sess.requests[:cap(sess.requests)][1]; got != nil {
+			t.Errorf("vacated slot not nilled after swap-remove: %p", got)
+		}
+	})
+
+	t.Run("last element", func(t *testing.T) {
+		sess := &Session{}
+		rq1 := &Request{}
+		sess.requests = []*Request{rq1}
+
+		sess.delRequest(rq1)
+
+		if len(sess.requests) != 0 {
+			t.Fatalf("requests len = %d, want 0", len(sess.requests))
+		}
+		if got := sess.requests[:cap(sess.requests)][0]; got != nil {
+			t.Errorf("vacated slot not nilled after removing last element: %p", got)
+		}
+	})
+}

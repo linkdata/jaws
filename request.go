@@ -239,6 +239,7 @@ func (rq *Request) clearLocked() *Request {
 	// already hold rq.mu.
 	rq.muQueue.Lock()
 	rq.tailsent = false
+	clear(rq.wsQueue) // release queued message payloads before pooling; mirrors todoDirt/elems above
 	rq.wsQueue = rq.wsQueue[:0]
 	rq.muQueue.Unlock()
 	clear(rq.tagMap)
