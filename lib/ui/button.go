@@ -11,6 +11,7 @@ import (
 type Button struct{ HTMLInner }
 
 // NewButton returns a button widget whose inner HTML is rendered from innerHTML.
+//
 // innerHTML is passed to [bind.MakeHTMLGetter]; plain strings are trusted HTML.
 func NewButton(innerHTML any) *Button {
 	return &Button{HTMLInner{HTMLGetter: bind.MakeHTMLGetter(innerHTML)}}
