@@ -8,12 +8,20 @@ import (
 	"github.com/linkdata/jaws/lib/what"
 )
 
-// ErrEventHandlerPanic is returned when an event handler panics.
+// ErrEventHandlerPanic is returned by [CallEventHandlers] when a user event handler
+// panics.
+//
+// Match it with [errors.Is]. When the recovered panic value is itself an error it is
+// available via Unwrap (and thus [errors.As] / [errors.Is]); a non-error panic value
+// appears only in the formatted message.
 var ErrEventHandlerPanic errEventHandlerPanic
 
 type errEventHandlerPanic struct {
+	// Type is the [Element]'s UI object type. Handlers registered on the Element are
+	// tried before the UI object, so the type that actually panicked may differ from
+	// this when a registered handler is the culprit.
 	Type  reflect.Type
-	Value any
+	Value any // the recovered panic value
 }
 
 func (e errEventHandlerPanic) Error() string {

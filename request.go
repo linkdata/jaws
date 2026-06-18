@@ -42,6 +42,12 @@ type ConnectFn = func(rq *Request) error
 //
 // Note that we have to store the context inside the struct because there is no call chain
 // between the Request being created and it being used once the WebSocket is created.
+//
+// Unlike [Session], whose methods are nil-safe, Request methods are not safe to call on a
+// nil *Request: a Request is always obtained from [Jaws.NewRequest] or [Jaws.UseRequest]
+// and is never legitimately nil. The nil-receiver guards on [Request.Log] and
+// [Request.MustLog] exist only so a nil Request can be rendered into error text, not as a
+// public nil-safe contract.
 type Request struct {
 	Jaws       *Jaws                   // (read-only) the JaWS instance the Request belongs to
 	JawsKey    key.Key                 // (read-only) random key identifying this Request in the WebSocket URI and the broadcast/tail target; read under mu by the identity check (destKey, wantMessage) and the render path (JawsKeyString, HeadHTML)
@@ -225,6 +231,12 @@ func (rq *Request) clearLocked() *Request {
 	rq.remoteIP = netip.Addr{}
 	for _, e := range rq.elems {
 		if e != nil {
+			// Nil the GC-reachable fields and set the deleted guard, which makes any
+			// retained *Element inert (see [Element.Deleted]). The Request back-pointer
+			// and frozen flag are deliberately left as-is: Elements are allocated fresh
+			// per newElementLocked and never pooled, so a stale frozen value can never
+			// be observed by a reused Element. Any future move to pool Elements must
+			// also reset frozen, since it gates the lock-free handler read.
 			e.handlers = nil
 			e.ui = nil
 			e.deleted.Store(true)
@@ -402,15 +414,18 @@ func (rq *Request) Initial() (r *http.Request) {
 	return
 }
 
-// Get is shorthand for Session().Get and returns the session value associated with the key, or nil.
-// If no session is associated with the [Request], it returns nil.
+// Get is shorthand for [Session.Get].
+//
+// It returns the session value associated with key, or nil if no session is associated
+// with the [Request].
 func (rq *Request) Get(key string) any {
 	return rq.Session().Get(key)
 }
 
-// Set is shorthand for Session().Set and sets a session value to be associated with the key.
-// If value is nil, the key is removed from the session.
-// Does nothing if no session is associated with the [Request].
+// Set is shorthand for [Session.Set].
+//
+// It associates value with key in the session; a nil value removes the key. It does
+// nothing if no session is associated with the [Request].
 func (rq *Request) Set(key string, value any) {
 	rq.Session().Set(key, value)
 }
@@ -532,7 +547,8 @@ func (rq *Request) Alert(level, msg string) {
 	}
 }
 
-// AlertError calls [Request.Alert] if the given error is not nil.
+// AlertError logs err via [Jaws.Log] and, if it is non-nil, also shows it to the
+// current request as a danger-level [Request.Alert].
 func (rq *Request) AlertError(err error) {
 	if rq.Jaws.Log(err) != nil {
 		rq.Alert("danger", err.Error())
@@ -675,6 +691,10 @@ func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 // appendDirtyTags queues already-expanded tags onto this request's pending-dirt
 // list. The Serve loop's update tick later drains the list (see makeUpdateList)
 // and re-renders the affected elements. Takes rq.mu.
+//
+// It may run on a Request that was recycled and reused after the caller's dirt
+// snapshot was taken; that is race-free (clearLocked also takes rq.mu) and harmless,
+// as explained on distributeDirt.
 func (rq *Request) appendDirtyTags(tags []any) {
 	rq.mu.Lock()
 	rq.todoDirt = append(rq.todoDirt, tags...)

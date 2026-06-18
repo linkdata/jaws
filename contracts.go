@@ -9,17 +9,19 @@ import (
 // Container is implemented by UI values that render a dynamic list of child
 // [UI] values.
 type Container interface {
-	// JawsContains must return a slice of comparable [UI] objects (they are used
-	// as map keys; see [UI] for the comparability requirement). The slice contents
-	// must not be modified after returning it.
+	// JawsContains returns the current child [UI] values contained by elem.
+	//
+	// The returned [UI] values must be comparable, since they are used as map keys
+	// (see [UI] for the comparability requirement), and the slice contents must not
+	// be modified after returning it.
 	JawsContains(elem *Element) (contents []UI)
 }
 
 // InitHandler allows initializing UI getters and setters before their use.
 //
 // You can of course initialize them in the call from the template engine,
-// but at that point you don't have access to the [Element], [Element.Context]
-// or [Element.Session].
+// but at that point you don't have access to the [Element], [Request.Context]
+// or [Request.Session].
 type InitHandler interface {
 	JawsInit(elem *Element) (err error)
 }
@@ -35,6 +37,7 @@ type Logger interface {
 type Renderer interface {
 	// JawsRender is called once per [Element] when rendering the initial webpage.
 	// Do not call this yourself unless it is from within another JawsRender implementation.
+	// The engine does not invoke this once the [Element] is deleted (see [Element.Deleted]).
 	JawsRender(elem *Element, w io.Writer, params []any) error
 }
 
@@ -62,6 +65,7 @@ type UI interface {
 type Updater interface {
 	// JawsUpdate is called for an [Element] that has been marked dirty to update its HTML.
 	// Do not call this yourself unless it is from within another JawsUpdate implementation.
+	// The engine does not invoke this once the [Element] is deleted (see [Element.Deleted]).
 	JawsUpdate(elem *Element)
 }
 
