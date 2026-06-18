@@ -676,6 +676,31 @@ func TestElement_ApplyParams_NonComparableHandler(t *testing.T) {
 	}
 }
 
+func TestElement_ApplyParams_SliceTags(t *testing.T) {
+	tests := []struct {
+		name  string
+		param any
+	}{
+		{name: "any slice", param: []any{tag.Tag("a"), tag.Tag("b")}},
+		{name: "tag slice", param: []tag.Tag{"a", "b"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rq := newTestRequest(t)
+			defer rq.Close()
+
+			e := rq.NewElement(testDivWidget{inner: "x"})
+			e.ApplyParams([]any{tt.param})
+
+			for _, tagValue := range []tag.Tag{"a", "b"} {
+				if !e.HasTag(tagValue) {
+					t.Fatalf("expected element to be tagged with %q; got %v", tagValue, rq.TagsOf(e))
+				}
+			}
+		})
+	}
+}
+
 func TestElement_ApplyParams_InitialHTMLAttrHandler(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
