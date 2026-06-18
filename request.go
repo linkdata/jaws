@@ -969,12 +969,14 @@ func (rq *Request) handleRemove(containerJid Jid, data string) {
 		// per id (the id count is client-controlled, bounded by the read limit).
 		var victims map[Jid]struct{}
 		for jidstr := range strings.SplitSeq(data, "\t") {
-			if e := rq.getElementByJidLocked(jid.ParseString(jidstr)); e != nil {
-				if victims == nil {
-					victims = map[Jid]struct{}{}
+			if id := jid.ParseString(jidstr); id != containerJid {
+				if e := rq.getElementByJidLocked(id); e != nil {
+					if victims == nil {
+						victims = map[Jid]struct{}{}
+					}
+					e.deleted.Store(true)
+					victims[e.Jid()] = struct{}{}
 				}
-				e.deleted.Store(true)
-				victims[e.Jid()] = struct{}{}
 			}
 		}
 		if len(victims) == 0 {

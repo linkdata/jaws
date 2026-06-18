@@ -1383,18 +1383,22 @@ func TestRequest_UpdatePanicLogs(t *testing.T) {
 
 func TestRequest_IncomingRemove(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		th := newTestHelper(t)
 		rq := newTestRequest(t)
 		defer closeRequestInBubble(rq)
 
-		tss := newTestSetter("")
-		th.NoErr(rq.UI(newTestTextInputWidget(tss)))
+		container := rq.NewElement(&testUi{})
+		child := rq.NewElement(&testUi{})
 
 		// Send the incoming Remove and let the process loop handle it; the
 		// element is gone once every bubbled goroutine is durably blocked again.
-		rq.InCh <- wire.WsMsg{What: what.Remove, Jid: 1, Data: "Jid.1"}
+		rq.InCh <- wire.WsMsg{What: what.Remove, Jid: container.Jid(), Data: child.Jid().String()}
 		synctest.Wait()
-		th.Equal(rq.GetElementByJid(1), (*Element)(nil))
+		if got := rq.GetElementByJid(child.Jid()); got != nil {
+			t.Fatalf("child element %s should be removed, got %+v", child.Jid(), got)
+		}
+		if got := rq.GetElementByJid(container.Jid()); got == nil {
+			t.Fatalf("container element %s should still exist", container.Jid())
+		}
 	})
 }
 
@@ -2038,6 +2042,24 @@ func TestRequest_IncomingRemoveDoesNotDeleteMessageJid(t *testing.T) {
 		synctest.Wait()
 		if got := rq.GetElementByJid(elem.Jid()); got == nil {
 			t.Fatalf("element %s should still exist after Remove with empty data", elem.Jid())
+		}
+	})
+}
+
+func TestRequest_IncomingRemoveDoesNotDeleteMessageJidListedInData(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rq := newTestRequest(t)
+		defer closeRequestInBubble(rq)
+
+		elem := rq.NewElement(&testUi{})
+
+		// Data is supposed to contain removed child IDs. If a malformed client
+		// names the container itself, the cleanup acknowledgement must still leave
+		// the container registered.
+		rq.InCh <- wire.WsMsg{What: what.Remove, Jid: elem.Jid(), Data: elem.Jid().String()}
+		synctest.Wait()
+		if got := rq.GetElementByJid(elem.Jid()); got == nil {
+			t.Fatalf("element %s should still exist after Remove data names the container", elem.Jid())
 		}
 	})
 }
