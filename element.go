@@ -164,10 +164,14 @@ func (elem *Element) JawsUpdate() {
 // been deleted.
 //
 // It is intended to be called while the element is rendering or updating; the
-// message is appended to the Request's muQueue-guarded outbound queue and flushed on
-// the next processing-loop pass. Calling it from an event handler is safe but defers
-// delivery to that pass, so the event-driven path is to mark the element dirty (see
-// [Request.Dirty]), which schedules a [Updater.JawsUpdate].
+// message is appended to the Request's muQueue-guarded outbound queue and flushed
+// the next time the processing loop runs a send pass. During rendering and updating
+// that pass is imminent. Called from an event handler, however, the message is
+// flushed only when the loop is next woken — by a broadcast, an incoming event, or a
+// dirty-driven update — which on an otherwise-idle request is not guaranteed to
+// happen promptly. The reliable event-driven path is therefore to mark the element
+// dirty (see [Request.Dirty]), which schedules a [Updater.JawsUpdate] and the wakeup
+// that delivers it.
 func (elem *Element) queue(wht what.What, data string) {
 	if !elem.deleted.Load() {
 		elem.Request.queue(wire.WsMsg{
@@ -184,10 +188,11 @@ func (elem *Element) queue(wht what.What, data string) {
 // The value parameter must be the unescaped logical attribute value. It is sent
 // to the browser DOM and used as the value argument to setAttribute().
 //
-// Call this while the [Element] is rendering or updating. The change is queued and
-// sent on the next processing pass; to change the [Element] in response to a browser
-// event, mark it dirty with [Request.Dirty] instead, since calling this from an event
-// handler only defers the change to the next pass.
+// Call this while the [Element] is rendering or updating, when a send pass is
+// imminent. To change the [Element] in response to a browser event, mark it dirty
+// with [Request.Dirty] instead: a change queued directly from an event handler is
+// flushed only when the processing loop is next woken, which on an otherwise-idle
+// request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) SetAttr(attr, value string) {
 	elem.queue(what.SAttr, attr+"\n"+value)
 }
@@ -195,10 +200,11 @@ func (elem *Element) SetAttr(attr, value string) {
 // RemoveAttr queues sending a request to remove an attribute
 // to the browser for the [Element].
 //
-// Call this while the [Element] is rendering or updating. The change is queued and
-// sent on the next processing pass; to change the [Element] in response to a browser
-// event, mark it dirty with [Request.Dirty] instead, since calling this from an event
-// handler only defers the change to the next pass.
+// Call this while the [Element] is rendering or updating, when a send pass is
+// imminent. To change the [Element] in response to a browser event, mark it dirty
+// with [Request.Dirty] instead: a change queued directly from an event handler is
+// flushed only when the processing loop is next woken, which on an otherwise-idle
+// request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) RemoveAttr(attr string) {
 	elem.queue(what.RAttr, attr)
 }
@@ -206,10 +212,11 @@ func (elem *Element) RemoveAttr(attr string) {
 // SetClass queues sending a class
 // to the browser for the [Element].
 //
-// Call this while the [Element] is rendering or updating. The change is queued and
-// sent on the next processing pass; to change the [Element] in response to a browser
-// event, mark it dirty with [Request.Dirty] instead, since calling this from an event
-// handler only defers the change to the next pass.
+// Call this while the [Element] is rendering or updating, when a send pass is
+// imminent. To change the [Element] in response to a browser event, mark it dirty
+// with [Request.Dirty] instead: a change queued directly from an event handler is
+// flushed only when the processing loop is next woken, which on an otherwise-idle
+// request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) SetClass(cls string) {
 	elem.queue(what.SClass, cls)
 }
@@ -217,10 +224,11 @@ func (elem *Element) SetClass(cls string) {
 // RemoveClass queues sending a request to remove a class
 // to the browser for the [Element].
 //
-// Call this while the [Element] is rendering or updating. The change is queued and
-// sent on the next processing pass; to change the [Element] in response to a browser
-// event, mark it dirty with [Request.Dirty] instead, since calling this from an event
-// handler only defers the change to the next pass.
+// Call this while the [Element] is rendering or updating, when a send pass is
+// imminent. To change the [Element] in response to a browser event, mark it dirty
+// with [Request.Dirty] instead: a change queued directly from an event handler is
+// flushed only when the processing loop is next woken, which on an otherwise-idle
+// request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) RemoveClass(cls string) {
 	elem.queue(what.RClass, cls)
 }
@@ -228,10 +236,11 @@ func (elem *Element) RemoveClass(cls string) {
 // SetInner queues sending new inner HTML content
 // to the browser for the [Element].
 //
-// Call this while the [Element] is rendering or updating. The change is queued and
-// sent on the next processing pass; to change the [Element] in response to a browser
-// event, mark it dirty with [Request.Dirty] instead, since calling this from an event
-// handler only defers the change to the next pass.
+// Call this while the [Element] is rendering or updating, when a send pass is
+// imminent. To change the [Element] in response to a browser event, mark it dirty
+// with [Request.Dirty] instead: a change queued directly from an event handler is
+// flushed only when the processing loop is next woken, which on an otherwise-idle
+// request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) SetInner(innerHTML template.HTML) {
 	elem.queue(what.Inner, string(innerHTML))
 }
@@ -239,10 +248,11 @@ func (elem *Element) SetInner(innerHTML template.HTML) {
 // SetValue queues sending a new current input value in textual form
 // to the browser for the [Element].
 //
-// Call this while the [Element] is rendering or updating. The change is queued and
-// sent on the next processing pass; to change the [Element] in response to a browser
-// event, mark it dirty with [Request.Dirty] instead, since calling this from an event
-// handler only defers the change to the next pass.
+// Call this while the [Element] is rendering or updating, when a send pass is
+// imminent. To change the [Element] in response to a browser event, mark it dirty
+// with [Request.Dirty] instead: a change queued directly from an event handler is
+// flushed only when the processing loop is next woken, which on an otherwise-idle
+// request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) SetValue(value string) {
 	elem.queue(what.Value, value)
 }
@@ -252,9 +262,10 @@ func (elem *Element) SetValue(value string) {
 // In the receiving browser, jsfunc is resolved as a path from window and called
 // with JSON.parse(jsonstr); the Element is not passed as this or as an argument.
 //
-// Call this while the [Element] is rendering or updating. The change is queued and
-// sent on the next processing pass; to call JavaScript for every element matching
-// a tag or id, use [Jaws.JsCall].
+// Call this while the [Element] is rendering or updating, when a send pass is
+// imminent; a call queued directly from an event handler is only flushed when the
+// processing loop is next woken (see [Element.queue]). To call JavaScript for every
+// element matching a tag or id, use [Jaws.JsCall].
 func (elem *Element) JsCall(jsfunc, jsonstr string) {
 	elem.queue(what.Call, jsCallData(jsfunc, jsonstr))
 }
@@ -268,10 +279,11 @@ func (elem *Element) JsCall(jsfunc, jsonstr string) {
 // error: debug builds panic and production builds report it via [Jaws.MustLog]
 // and skip the replacement.
 //
-// Call this while the [Element] is rendering or updating. The change is queued and
-// sent on the next processing pass; to change the [Element] in response to a browser
-// event, mark it dirty with [Request.Dirty] instead, since calling this from an event
-// handler only defers the change to the next pass.
+// Call this while the [Element] is rendering or updating, when a send pass is
+// imminent. To change the [Element] in response to a browser event, mark it dirty
+// with [Request.Dirty] instead: a change queued directly from an event handler is
+// flushed only when the processing loop is next woken, which on an otherwise-idle
+// request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) Replace(htmlCode template.HTML) {
 	if !elem.deleted.Load() {
 		var b []byte
@@ -289,20 +301,22 @@ func (elem *Element) Replace(htmlCode template.HTML) {
 
 // Append appends a new HTML element as a child to the current one.
 //
-// Call this while the [Element] is rendering or updating. The change is queued and
-// sent on the next processing pass; to change the [Element] in response to a browser
-// event, mark it dirty with [Request.Dirty] instead, since calling this from an event
-// handler only defers the change to the next pass.
+// Call this while the [Element] is rendering or updating, when a send pass is
+// imminent. To change the [Element] in response to a browser event, mark it dirty
+// with [Request.Dirty] instead: a change queued directly from an event handler is
+// flushed only when the processing loop is next woken, which on an otherwise-idle
+// request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) Append(htmlCode template.HTML) {
 	elem.queue(what.Append, string(htmlCode))
 }
 
 // Order reorders the HTML elements.
 //
-// Call this while the [Element] is rendering or updating. The change is queued and
-// sent on the next processing pass; to change the [Element] in response to a browser
-// event, mark it dirty with [Request.Dirty] instead, since calling this from an event
-// handler only defers the change to the next pass.
+// Call this while the [Element] is rendering or updating, when a send pass is
+// imminent. To change the [Element] in response to a browser event, mark it dirty
+// with [Request.Dirty] instead: a change queued directly from an event handler is
+// flushed only when the processing loop is next woken, which on an otherwise-idle
+// request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) Order(jidList []jid.Jid) {
 	if !elem.deleted.Load() && len(jidList) > 0 {
 		var b []byte
@@ -327,10 +341,11 @@ func (elem *Element) Order(jidList []jid.Jid) {
 // applying server commands, but that acknowledgement does not delete the target
 // child Element itself.
 //
-// Call this while the [Element] is rendering or updating. The change is queued and
-// sent on the next processing pass; to change the [Element] in response to a browser
-// event, mark it dirty with [Request.Dirty] instead, since calling this from an event
-// handler only defers the change to the next pass.
+// Call this while the [Element] is rendering or updating, when a send pass is
+// imminent. To change the [Element] in response to a browser event, mark it dirty
+// with [Request.Dirty] instead: a change queued directly from an event handler is
+// flushed only when the processing loop is next woken, which on an otherwise-idle
+// request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) Remove(htmlID string) {
 	elem.queue(what.Remove, htmlID)
 }
