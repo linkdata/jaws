@@ -92,15 +92,17 @@ var (
 // applied by path to the bound value. If the bound value implements [PathSetter]
 // its JawsSetPath validates and applies the change; otherwise the change is
 // applied by the generic path setter ([github.com/linkdata/jq.Set]), which will
-// set any json-tagged field and append to slices one element per message. The size
-// of any single client write is bounded by the WebSocket read limit; to also stop a
-// hostile client growing server state without bound across many writes, a
-// non-[PathSetter] value whose serialized size exceeds [MaxClientJsVarBytes] aborts
-// the [jaws.Request] when it is next rendered ([ErrJsVarTooLarge]). The cap does not
-// prevent a client from setting individual json-tagged fields, so when only some
-// fields/paths should be client-writable, implement [PathSetter] on the bound value
-// to allow-list paths and bound lengths. See jawstree's Node for an example that
-// restricts client writes to a single boolean field.
+// set any exported field — matched by its json tag, or by the Go field name when it
+// has no json tag (a json:"-" tag is never writable) — and append to slices one
+// element per message. The size of any single client write is bounded by the
+// WebSocket read limit; to also stop a hostile client growing server state without
+// bound across many writes, a non-[PathSetter] value whose serialized size exceeds
+// [MaxClientJsVarBytes] aborts the [jaws.Request] when it is next rendered
+// ([ErrJsVarTooLarge]). The cap does not prevent a client from setting individual
+// exported fields, so when only some fields/paths should be client-writable,
+// implement [PathSetter] on the bound value to allow-list paths and bound lengths.
+// See jawstree's Node for an example that restricts client writes to a single
+// boolean field.
 type JsVar[T any] struct {
 	bind.RWLocker
 	Ptr      *T  // bound Go value
