@@ -99,7 +99,7 @@ func (tree *Tree) JawsUpdate(elem *jaws.Element) {
 	b = tree.JsVar.Ptr.marshalJSON(b)
 	tree.RUnlock()
 	b = append(b, `}`...)
-	elem.Jaws.JsCall(tree.JawsGetTag(nil), "jawstreeSet", string(b))
+	elem.JsCall("jawstreeSet", string(b))
 }
 
 // Walk calls fn for the tree root and all descendants while holding the tree read lock.
