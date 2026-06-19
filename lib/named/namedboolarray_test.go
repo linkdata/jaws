@@ -172,6 +172,51 @@ func TestBoolArray_SingleSelectDuplicateNames(t *testing.T) {
 	}
 }
 
+func TestBoolArray_SingleSelectAbsentNameDeselects(t *testing.T) {
+	// Single-select: setting a name that matches no Bool still succeeds by
+	// deselecting the current selection, leaving Get() empty. Per the Set/JawsSet
+	// docs a "change" return means the selection changed, not that the name is now
+	// selected.
+	nba := NewBoolArray(false)
+	nba.Add("a", "A")
+	nba.Add("b", "B")
+
+	if !nba.Set("a", true) {
+		t.Fatal("Set(a,true) reported no change")
+	}
+	if got := nba.Get(); got != "a" {
+		t.Fatalf("Get=%q want a", got)
+	}
+	// An absent name deselects the current selection and reports a change.
+	if !nba.Set("does-not-exist", true) {
+		t.Fatal("Set(absent,true) should report a change by deselecting the current selection")
+	}
+	if got := nba.Get(); got != "" {
+		t.Fatalf("Get=%q want empty after deselect", got)
+	}
+	// With nothing selected, a further absent-name set changes nothing.
+	if nba.Set("does-not-exist", true) {
+		t.Fatal("Set(absent,true) on an empty selection should report no change")
+	}
+
+	// JawsSet path: re-select, then JawsSet an absent name to deselect. A nil error
+	// means the selection changed; Get() is empty afterward. A repeat is unchanged.
+	_, rq := newCoreRequest(t)
+	e := rq.NewElement(noopUI{})
+	if !nba.Set("b", true) {
+		t.Fatal("Set(b,true) reported no change")
+	}
+	if err := nba.JawsSet(e, ""); err != nil {
+		t.Fatalf("JawsSet(absent) should succeed by deselecting, got %v", err)
+	}
+	if got := nba.Get(); got != "" {
+		t.Fatalf("Get=%q want empty after JawsSet deselect", got)
+	}
+	if err := nba.JawsSet(e, ""); err != jaws.ErrValueUnchanged {
+		t.Fatalf("JawsSet(absent) on empty selection: got %v want ErrValueUnchanged", err)
+	}
+}
+
 func TestNamedBoolOption_RenderAndUpdateBranches(t *testing.T) {
 	_, rq := newCoreRequest(t)
 
