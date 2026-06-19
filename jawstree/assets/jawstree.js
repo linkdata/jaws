@@ -8,9 +8,45 @@ function jawstreeForEachNode(path, node, fn) {
     }
 }
 
+function jawstreeTopSelectedChildren(children, parentSelected) {
+    var result = [];
+    for (var i = 0; i < children.length; i++) {
+        var node = children[i];
+        var copy = {};
+        for (var key in node) {
+            if (Object.hasOwn(node, key) && key != 'children') {
+                copy[key] = node[key];
+            }
+        }
+        if (parentSelected) {
+            delete copy.selected;
+        }
+        if (node.children) {
+            copy.children = jawstreeTopSelectedChildren(node.children, parentSelected || Boolean(node.selected));
+        }
+        result.push(copy);
+    }
+    return result;
+}
+
+function jawstreeSetData(t, data) {
+    var children = data.children || [];
+    if (!t.options.multiSelectEnabled && t.options.cascadeSelectChildren) {
+        children = jawstreeTopSelectedChildren(children, false);
+    }
+    t.setData(children);
+}
+
 function jawstreeSet(arg) {
+    var t = window["jawstree_"+arg.tree];
+    var wasApplyingSet = t.jawsApplyingSet;
     window["jawstreeroot_"+arg.tree] = arg.data;
-    window["jawstree_"+arg.tree].setData(arg.data.children);
+    t.jawsApplyingSet = true;
+    try {
+        jawstreeSetData(t, arg.data);
+    } finally {
+        t.jawsApplyingSet = wasApplyingSet;
+    }
 }
 
 function jawstreeSetPath(arg) {
@@ -43,6 +79,9 @@ function jawstreeNew(treename, rootnode, options) {
         checkboxSelectionEnabled: options & (1<<8),
         /*jslint bitwise: false */
         onSelectionChange: function(selectedNodesData) {
+            if (window["jawstree_"+treename].jawsApplyingSet) {
+                return;
+            }
             jawstreeForEachNode("jawstreeroot_"+treename, window["jawstreeroot_"+treename], function(path, node) {
                 var selected = false;
                 selectedNodesData.forEach(function(element) {
