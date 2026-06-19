@@ -90,6 +90,60 @@ func TestGetNodes_partialTreeOnError(t *testing.T) {
 	}
 }
 
+func TestRootPanicsOnNilRoot(t *testing.T) {
+	assertPanics(t, func() {
+		_, _ = Root(nil, nil)
+	})
+}
+
+func TestGetNodes_keepsReadableDirWithFailingDescendant(t *testing.T) {
+	// A directory whose own read succeeds must be kept even when a directory
+	// nested below it fails to read; only the unreadable directory is omitted,
+	// and the failure is still reported. This is the multi-level case the
+	// single-level TestGetNodes_partialTreeOnError does not exercise.
+	errBad := errors.New("boom")
+	fsys := fakeFS{
+		dirs: map[string][]fs.DirEntry{
+			".": {
+				fakeEntry{name: "sibling.txt"},
+				fakeEntry{name: "good", mode: fs.ModeDir},
+			},
+			"good": {
+				fakeEntry{name: "leaf.txt"},
+				fakeEntry{name: "bad", mode: fs.ModeDir},
+			},
+		},
+		errs: map[string]error{"good/bad": errBad},
+	}
+
+	parent := &Node{}
+	err := getNodes(fsys, parent, ".", nil)
+	if !errors.Is(err, errBad) {
+		t.Fatalf("getNodes err = %v, want to wrap %v", err, errBad)
+	}
+
+	// The readable "good" directory survives the failure of its child "bad".
+	got := childNames(parent)
+	want := []string{"sibling.txt", "good"}
+	if len(got) != len(want) {
+		t.Fatalf("children = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("children = %v, want %v", got, want)
+		}
+	}
+
+	// "good" keeps its readable file; only the unreadable "bad" is omitted.
+	for _, c := range parent.Children {
+		if c.Name == "good" {
+			if names := childNames(c); len(names) != 1 || names[0] != "leaf.txt" {
+				t.Fatalf("good children = %v, want [leaf.txt]", names)
+			}
+		}
+	}
+}
+
 func TestGetNodes_filterFn(t *testing.T) {
 	fsys := fakeFS{
 		dirs: map[string][]fs.DirEntry{

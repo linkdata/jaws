@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strconv"
 	"testing"
 )
 
@@ -244,7 +245,7 @@ function collectDescendantIDs(node, ids) {
 	}]};
 
 	window["jawstreeroot_tree"] = root;
-	window["jawstree_tree"] = jawstreeNew("tree", root, 1 << 7);
+	window["jawstree_tree"] = jawstreeNew("tree", root, `+strconv.Itoa(int(CascadeSelectChildren))+`);
 
 	process.stdout.write(JSON.stringify({
 		selected: window["jawstree_tree"].selected,
@@ -355,7 +356,7 @@ var root = { children: [{
 	}]
 }]};
 
-window["jawstree_tree"] = jawstreeNew("tree", root, 1 << 7);
+window["jawstree_tree"] = jawstreeNew("tree", root, `+strconv.Itoa(int(CascadeSelectChildren))+`);
 jawstreeSet({ tree: "tree", data: root });
 
 process.stdout.write(JSON.stringify({

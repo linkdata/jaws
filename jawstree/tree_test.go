@@ -2,11 +2,13 @@ package jawstree
 
 import (
 	"encoding/json"
+	"errors"
 	"html"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -44,6 +46,13 @@ func TestNewPanicsOnNilJsVar(t *testing.T) {
 	var mu deadlock.RWMutex
 	assertPanics(t, func() {
 		New("tree", ui.NewJsVar(&mu, (*Node)(nil)))
+	})
+}
+
+func TestNewPanicsOnNegativeOptions(t *testing.T) {
+	var mu deadlock.RWMutex
+	assertPanics(t, func() {
+		New("tree", ui.NewJsVar(&mu, &Node{}), Option(-1))
 	})
 }
 
@@ -338,6 +347,15 @@ func TestTree(t *testing.T) {
 		t.Fatalf("bad init script tree status code = %d", w.Code)
 	}
 
+	// A valid tree name with a syntactically valid but negative options value is the
+	// only input where the opt>=0 guard is the deciding rejection.
+	badReq = httptest.NewRequest(http.MethodGet, "/jaws/.jawstree/tree/-1", nil)
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, badReq)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("negative options status code = %d, want 400", w.Code)
+	}
+
 	numnodes := 0
 	rendered := html.UnescapeString(sb.String())
 	rootnode.Walk("", func(jsPath string, node *Node) {
@@ -393,8 +411,55 @@ func TestTree(t *testing.T) {
 	select {
 	case <-t.Context().Done():
 	case msg := <-rq.OutCh:
-		if s := "jawstreeSetPath={\"tree\":\"tree\",\"id\":\"children.1.children.1\",\"set\":false}"; msg.Data != s {
-			t.Errorf("unexpected data: %q", msg.Data)
+		// The broadcast id is the node's own ID; derive the expectation from it
+		// rather than a literal, which is fragile to the package directory listing.
+		want := `jawstreeSetPath={"tree":"tree","id":` + strconv.Quote(changed[0].ID) + `,"set":false}`
+		if msg.Data != want {
+			t.Errorf("unexpected data: %q, want %q", msg.Data, want)
+		}
+	}
+}
+
+// errWrite is the sentinel returned by failWriter.
+var errWrite = errors.New("write failed")
+
+// failWriter fails the failOn-th Write call (1-based) and succeeds on every other.
+type failWriter struct {
+	failOn int
+	n      int
+}
+
+func (fw *failWriter) Write(p []byte) (int, error) {
+	fw.n++
+	if fw.n == fw.failOn {
+		return 0, errWrite
+	}
+	return len(p), nil
+}
+
+// TestTree_JawsRenderWriteError verifies Tree.JawsRender propagates a write error from
+// both the inner JsVar payload write (the hidden data <div>, write 1) and the trailing
+// init-script <script> tag write (write 2).
+func TestTree_JawsRenderWriteError(t *testing.T) {
+	jw, err := jaws.New()
+	maybeError(t, err)
+	defer jw.Close()
+
+	go jw.Serve()
+	rq := jawstest.NewTestRequest(jw, nil)
+	if rq == nil {
+		t.Fatal("nil test request")
+	}
+	defer rq.Close()
+
+	rootnode := &Node{Name: "root", Children: []*Node{{Name: "child"}}}
+	var mu deadlock.RWMutex
+	tree := New("tree", ui.NewJsVar(&mu, rootnode))
+
+	for _, failOn := range []int{1, 2} {
+		elem := rq.NewElement(tree)
+		if err := tree.JawsRender(elem, &failWriter{failOn: failOn}, nil); !errors.Is(err, errWrite) {
+			t.Errorf("failOn=%d: JawsRender err = %v, want %v", failOn, err, errWrite)
 		}
 	}
 }
@@ -524,8 +589,9 @@ func collectJawstreeSetMessages(t *testing.T, ch <-chan wire.WsMsg) (msgs []wire
 }
 
 // TestTree_ConcurrentUpdateAndInput exercises JawsUpdate reading the shared node
-// tree (via marshalJSON) under the JsVar read lock while another goroutine mutates
-// a node under the write lock, exactly as JsVar.JawsInput does. Run with -race.
+// tree (via marshalJSON) under the JsVar read lock while another goroutine mutates a
+// node under the write lock — the same RWMutex discipline JsVar uses when dispatching
+// an inbound JawsInput. Run with -race.
 func TestTree_ConcurrentUpdateAndInput(t *testing.T) {
 	jw, err := jaws.New()
 	maybeError(t, err)
@@ -575,7 +641,9 @@ func TestTree_ConcurrentUpdateAndInput(t *testing.T) {
 	}()
 	go func() {
 		defer wg.Done()
-		// Mutate node fields under the write lock, mirroring setPathLocked's jq.Set.
+		// Mutate node fields under the write lock JsVar holds while dispatching to
+		// Node.JawsSetPath (the real path only writes Selected; this toggles more to
+		// stress the lock, not to mirror the exact field set).
 		for range iterations {
 			tree.Lock()
 			rootnode.Selected = !rootnode.Selected

@@ -23,9 +23,9 @@ var (
 // embedded [ui.JsVar] is an RWLocker). The exported Node accessors below are not
 // internally synchronized, so callers must hold that lock when using them on a
 // rendered Tree: the Tree's read lock (RLock) for the read-only helpers ([Node.Walk],
-// [Node.HasNames], [Node.GetNames], [Node.GetSelected]) and its write lock (Lock)
-// for the mutating [Node.SetSelected]. No locking is needed before the Tree is
-// rendered (for example while building it in [New]).
+// [Node.HasNames], [Node.GetNames], [Node.GetSelected], [Node.MarshalJSON]) and its
+// write lock (Lock) for the mutating [Node.SetSelected]. No locking is needed before the
+// Tree is rendered (for example while building it in [New]).
 //
 // marshalJSON is the single source of truth for the wire shape sent to
 // Quercus.js; MarshalJSON delegates to it and there is no UnmarshalJSON, so the
@@ -84,12 +84,18 @@ func (node *Node) marshalJSON(b []byte) []byte {
 
 // MarshalJSON writes the Quercus.js JSON shape for node (delegating to the
 // canonical marshalJSON encoder).
-func (node *Node) MarshalJSON() (b []byte, err error) {
+func (node Node) MarshalJSON() (b []byte, err error) {
+	// The receiver is a value, not a pointer, so json.Marshal routes both a Node and a
+	// *Node here; a pointer receiver would let a non-addressable Node value fall back to
+	// the struct tags and emit a different shape ("disabled":true, not "selectable":false).
 	b = node.marshalJSON(nil)
 	return
 }
 
-var _ json.Marshaler = &Node{}
+var (
+	_ json.Marshaler = Node{}
+	_ json.Marshaler = (*Node)(nil)
+)
 
 // JawsSetPath restricts browser-initiated mutations to the per-node "selected" flag.
 //

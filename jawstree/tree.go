@@ -17,6 +17,11 @@ var _ jaws.UI = (*Tree)(nil)
 // a [ui.JsVar], which provides the lock and browser communication for the backing
 // [Node] tree. Read or mutate that Node tree through Tree methods, or while
 // holding the Tree lock.
+//
+// The tree is structurally fixed once [New] returns: it assigns each node's ID from its
+// position, which must match the node's wire position. Mutating node fields (e.g. via
+// [Tree.SetSelected]) under the lock is safe, but adding, removing, or reordering Children
+// afterward breaks that mapping and is unsupported on a rendered Tree.
 type Tree struct {
 	id      string // HTML ID of the tree
 	options Option
@@ -25,9 +30,9 @@ type Tree struct {
 
 // New returns a tree widget for jsvar, identified by id.
 //
-// id must be non-empty and contain only the characters [A-Za-z0-9_$], and both
-// jsvar and jsvar.Ptr must be non-nil; New panics otherwise. Call New before
-// serving or rendering the Tree.
+// id must be non-empty and contain only the characters [A-Za-z0-9_$], both jsvar
+// and jsvar.Ptr must be non-nil, and the combined options must be non-negative;
+// New panics otherwise. Call New before serving or rendering the Tree.
 //
 // The rendered page must contain an element whose HTML id equals id (for example
 // <div id="mytree"></div>): Quercus.js renders the tree into that container. If it
@@ -54,11 +59,21 @@ func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	for _, opt := range options {
 		t.options |= opt
 	}
+	// options is serialized verbatim into the init-script route, which rejects a
+	// negative value (see serveInitScript). Panic here so a bad Option surfaces as a
+	// clear construction error rather than a silent 400 and a tree that never renders.
+	if t.options < 0 {
+		panic("jawstree.New: options must be non-negative")
+	}
 	// Normalize away any nil children before assigning IDs so a node's slice
 	// index (its ID) always matches its position in the compacted wire array
 	// emitted by marshalJSON; otherwise a nil child desyncs the two and client
 	// path resolution targets the wrong node. See [Node.stripNilChildren].
 	jsvar.Ptr.stripNilChildren()
+	// The root is identified throughout the name-path API by a nil Parent; the Walk
+	// below only sets descendants' Parent, so enforce the invariant for the root here
+	// (a node reused as a new root could otherwise carry a stale Parent).
+	jsvar.Ptr.Parent = nil
 	// Assign each node's JSON-path ID and its owning-Tree and parent back-pointers.
 	// The name-path API (Node.HasNames, Node.GetNames, Tree.GetSelected,
 	// Tree.SetSelected) requires the parent back-pointers.

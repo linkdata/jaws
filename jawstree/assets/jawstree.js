@@ -63,7 +63,19 @@ function jawstreeSetPath(arg) {
         return;
     }
     if (arg.set || t.options.multiSelectEnabled || isSelected) {
-        t.selectNodeById(arg.id,arg.set);
+        // selectNodeById fires Treeview's onSelectionChange synchronously. Suppress it
+        // the same way jawstreeNew and jawstreeSet do, so reflecting a peer's selection
+        // never re-enters onSelectionChange and echoes a jawsVar write back to the
+        // server. The shadow model has already been patched by the preceding what.Set
+        // broadcast; guarding here makes that correctness independent of Set-before-Call
+        // delivery ordering rather than relying on it.
+        var wasApplyingSet = t.jawsApplyingSet;
+        t.jawsApplyingSet = true;
+        try {
+            t.selectNodeById(arg.id,arg.set);
+        } finally {
+            t.jawsApplyingSet = wasApplyingSet;
+        }
     }
 }
 

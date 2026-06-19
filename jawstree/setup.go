@@ -18,6 +18,9 @@ var assetsFS embed.FS
 
 // Setup registers embedded jawstree static assets under prefix.
 //
+// The prefix may be absolute ("/static"), relative ("static") or empty; the registered
+// handler paths and the returned URLs are kept identical in all cases.
+//
 // It is intended to be passed to [jaws.Jaws.Setup]. Returned URLs should be
 // included in the page head through [jaws.Jaws.GenerateHeadHTML].
 func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.URL, err error) {
@@ -28,10 +31,11 @@ func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.
 	}); err == nil {
 		for _, ss := range files {
 			// Build an absolute path so jaws.Setup's makeAbsPath leaves the returned
-			// URL unchanged and the registered handler pattern stays valid for any
-			// prefix form (absolute, relative or empty). Registering the raw
-			// path.Join result would panic on an empty prefix and double-apply a
-			// relative one; mirror jawsboot.Setup, which documents this.
+			// URL unchanged and it matches the handler pattern for any prefix form
+			// (absolute, relative or empty). Returning the raw path.Join result would
+			// let makeAbsPath re-apply a relative or empty prefix, diverging the head
+			// URL from the registered handler path; mirror jawsboot.Setup, which
+			// documents this.
 			abspath := staticserve.EnsurePrefixSlash(path.Join(prefix, ss.Name))
 			u, e := url.Parse(abspath)
 			if e == nil {

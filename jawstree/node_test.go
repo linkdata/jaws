@@ -30,6 +30,19 @@ func TestNode_MarshalJSON(t *testing.T) {
 	if string(b) != want {
 		t.Errorf("\n got %s\nwant %s\n", string(b), want)
 	}
+
+	// MarshalJSON's value receiver makes json.Marshal route both a *Node and a Node
+	// value through the canonical encoder; a pointer receiver would let a value fall
+	// back to the struct tags and emit "disabled":true instead of "selectable":false.
+	for _, v := range []any{rootnode, *rootnode} {
+		got, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("json.Marshal(%T): %v", v, err)
+		}
+		if string(got) != want {
+			t.Errorf("json.Marshal(%T):\n got %s\nwant %s\n", v, got, want)
+		}
+	}
 }
 
 // TestNode_MarshalJSON_AdversarialNames ensures node names that are not clean
