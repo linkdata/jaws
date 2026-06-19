@@ -153,7 +153,7 @@ Tested via WebSocket `Input` and `Click` messages with payloads including:
 **Result:** No XSS vulnerabilities.
 
 - User input sent via `Input` messages is reflected to other clients only via `Value` commands
-- Client-side `jawsSetValue()` uses `elem.value` / `elem.textContent` (not `innerHTML`)
+- Client-side `jawsSetValue()` updates live form state (`value`, `checked`, or `selected`, depending on the element), not `innerHTML`
 - HTML-rendering `Inner` commands only carry server-generated content, never user input
 - CSP `script-src 'self'` provides defense-in-depth against inline script execution
 - **Source confirmed** (`lib/ui/input_widgets.go`, `InputText.JawsUpdate`): `JawsUpdate()` calls `e.SetValue(v)`, not `e.SetInner()`
@@ -310,7 +310,7 @@ Source repository: https://github.com/linkdata/jaws
 
 The framework uses Go's `template.HTML` type to distinguish trusted HTML from untrusted strings:
 
-- **Input widgets** (Text, Checkbox, Range, etc.) use `SetValue()` → sends `Value` command → client sets `elem.value` (safe, no HTML parsing)
+- **Input widgets** (Text, Textarea, Checkbox, Range, etc.) use `SetValue()` → sends `Value` command → client updates live form state (`value`, `checked`, or `selected`, depending on the element), not HTML
 - **Display widgets** (Span, Div, Label, etc.) use `SetInner()` → sends `Inner` command → client sets `elem.innerHTML`
 - `SetInner()` accepts `template.HTML`, meaning the developer has explicitly marked the content as trusted
 - Initial HTML rendering escapes generated attribute values with HTML entities (`htmlio.AppendAttrValue`)
