@@ -408,8 +408,12 @@ Session key-value pairs can be accessed using `Request.Set()` and
 do this if there is no session; `Get()` will return nil, and `Set()`
 will be a no-op.
 
-Sessions are bound to the client IP. Attempting to access an existing 
-session from a new IP will fail.
+Sessions are bound to the client IP JaWS sees. Attempting to access an
+existing session from a different non-loopback IP will fail. Loopback
+addresses are treated as the same client so a reverse proxy connecting to the
+backend over loopback does not break binding; in deployments where every
+request reaches JaWS from loopback, IP binding is effectively disabled unless
+`Jaws.TrustForwardedHeaders` is enabled behind a single trusted reverse proxy.
 
 No data is stored in the client browser except the randomly generated 
 session cookie. You can set the cookie name in `Jaws.CookieName`, the
