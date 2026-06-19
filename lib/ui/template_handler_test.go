@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/linkdata/jaws"
@@ -227,99 +228,102 @@ func TestHandler_HandlerServeHTTP(t *testing.T) {
 }
 
 func TestHandler_TemplateWritesKeepPendingRequestFresh(t *testing.T) {
-	jw, err := jaws.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer jw.Close()
-	jw.MaxPendingRequestsPerIP = 1
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := jaws.New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		jw.MaxPendingRequestsPerIP = 1
 
-	captured := make(chan *jaws.Request, 1)
-	waitingMiddle := make(chan struct{})
-	waitMiddle := make(chan struct{})
-	middleWritten := make(chan struct{})
-	unblock := make(chan struct{})
-	var closeWaitMiddle sync.Once
-	var closeUnblock sync.Once
-	defer func() {
+		captured := make(chan *jaws.Request, 1)
+		waitingMiddle := make(chan struct{})
+		waitMiddle := make(chan struct{})
+		middleWritten := make(chan struct{})
+		unblock := make(chan struct{})
+		var closeWaitMiddle sync.Once
+		var closeUnblock sync.Once
+		defer func() {
+			closeWaitMiddle.Do(func() {
+				close(waitMiddle)
+			})
+			closeUnblock.Do(func() {
+				close(unblock)
+			})
+			jw.Close()
+			synctest.Wait()
+		}()
+
+		_ = jw.AddTemplateLookuper(template.Must(template.New("slowhandler").Funcs(template.FuncMap{
+			"capture": func(w With) string {
+				captured <- w.RequestWriter.Request
+				return ""
+			},
+			"waitMiddle": func() string {
+				close(waitingMiddle)
+				<-waitMiddle
+				return ""
+			},
+			"pause": func() string {
+				close(middleWritten)
+				<-unblock
+				return ""
+			},
+		}).Parse(`{{capture $}}prefix{{waitMiddle}}middle{{pause}}suffix`)))
+
+		h := Handler(jw, "slowhandler", tag.Tag("ok"))
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = "10.0.0.1:1234"
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			h.ServeHTTP(rr, req)
+		}()
+
+		var first *jaws.Request
+		select {
+		case first = <-captured:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for handler request")
+		}
+		select {
+		case <-waitingMiddle:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for handler template to pause")
+		}
+
+		firstKey := first.JawsKeyString()
+		time.Sleep(2200 * time.Millisecond)
+		go jw.ServeWithTimeout(time.Second)
+		synctest.Wait()
 		closeWaitMiddle.Do(func() {
 			close(waitMiddle)
 		})
+		select {
+		case <-middleWritten:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for handler template write")
+		}
+
+		secondReq := httptest.NewRequest(http.MethodGet, "/second", nil)
+		secondReq.RemoteAddr = req.RemoteAddr
+		_ = jw.NewRequest(secondReq)
+		gotKey := first.JawsKeyString()
+		gotInitial := first.Initial()
+
 		closeUnblock.Do(func() {
 			close(unblock)
 		})
-	}()
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for handler to finish")
+		}
 
-	_ = jw.AddTemplateLookuper(template.Must(template.New("slowhandler").Funcs(template.FuncMap{
-		"capture": func(w With) string {
-			captured <- w.RequestWriter.Request
-			return ""
-		},
-		"waitMiddle": func() string {
-			close(waitingMiddle)
-			<-waitMiddle
-			return ""
-		},
-		"pause": func() string {
-			close(middleWritten)
-			<-unblock
-			return ""
-		},
-	}).Parse(`{{capture $}}prefix{{waitMiddle}}middle{{pause}}suffix`)))
-
-	h := Handler(jw, "slowhandler", tag.Tag("ok"))
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.RemoteAddr = "10.0.0.1:1234"
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		h.ServeHTTP(rr, req)
-	}()
-
-	var first *jaws.Request
-	select {
-	case first = <-captured:
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for handler request")
-	}
-	select {
-	case <-waitingMiddle:
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for handler template to pause")
-	}
-
-	firstKey := first.JawsKeyString()
-	time.Sleep(2200 * time.Millisecond)
-	go jw.ServeWithTimeout(time.Second)
-	time.Sleep(50 * time.Millisecond)
-	closeWaitMiddle.Do(func() {
-		close(waitMiddle)
+		if gotKey != firstKey || gotInitial != req {
+			t.Fatalf("in-flight handler request was recycled after template write: key %q initial %p, want key %q initial %p", gotKey, gotInitial, firstKey, req)
+		}
 	})
-	select {
-	case <-middleWritten:
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for handler template write")
-	}
-
-	secondReq := httptest.NewRequest(http.MethodGet, "/second", nil)
-	secondReq.RemoteAddr = req.RemoteAddr
-	_ = jw.NewRequest(secondReq)
-	gotKey := first.JawsKeyString()
-	gotInitial := first.Initial()
-
-	closeUnblock.Do(func() {
-		close(unblock)
-	})
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for handler to finish")
-	}
-
-	if gotKey != firstKey || gotInitial != req {
-		t.Fatalf("in-flight handler request was recycled after template write: key %q initial %p, want key %q initial %p", gotKey, gotInitial, firstKey, req)
-	}
 }
 
 func TestTemplate_UpdateLogsMissingTemplate(t *testing.T) {
