@@ -23,25 +23,16 @@ type Tree struct {
 	*ui.JsVar[Node]
 }
 
-// New returns a tree widget with id, jsvar and options.
+// New returns a tree widget for jsvar, identified by id.
 //
-// The id is a URL path segment for the init-script route and the key the browser
-// uses to bracket-index the tree's globals (window["jawstree_"+id] and
-// window["jawstreeroot_"+id]), so it must be non-empty and contain only the
-// characters [A-Za-z0-9_$]; otherwise New panics. Validating here turns what would
-// otherwise be a 400 on the init-script route into an immediate, clear failure.
+// id must be non-empty and contain only the characters [A-Za-z0-9_$], and both
+// jsvar and jsvar.Ptr must be non-nil; New panics otherwise. Call New before
+// serving or rendering the Tree.
 //
-// New initializes node IDs, the owning Tree back-pointer and parent
-// back-pointers in jsvar.Ptr; the name-path API ([Node.HasNames],
-// [Node.GetNames], [Tree.GetSelected], [Tree.SetSelected]) requires the parent
-// back-pointers.
-// It panics if jsvar or jsvar.Ptr is nil, or if id is not a valid name.
-// Call New before serving or rendering the Tree.
-//
-// The rendered page must contain an element whose HTML id equals id (for
-// example <div id="mytree"></div>): Quercus.js renders the tree into that
-// container. If it is missing, the tree silently fails to appear; the only
-// signal is a browser console error, with nothing reported server-side.
+// The rendered page must contain an element whose HTML id equals id (for example
+// <div id="mytree"></div>): Quercus.js renders the tree into that container. If it
+// is missing, the tree silently fails to appear; the only signal is a browser
+// console error, with nothing reported server-side.
 func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	if jsvar == nil {
 		panic("jawstree.New: jsvar must not be nil")
@@ -49,6 +40,10 @@ func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	if jsvar.Ptr == nil {
 		panic("jawstree.New: jsvar.Ptr must not be nil")
 	}
+	// id is a URL path segment for the init-script route and the key the browser
+	// uses to bracket-index the tree's globals (window["jawstree_"+id] and
+	// window["jawstreeroot_"+id]). Validating it here turns what would otherwise be
+	// a 400 on the init-script route into an immediate, clear panic.
 	if !isSafeTreeName(id) {
 		panic("jawstree.New: id must be non-empty and contain only [A-Za-z0-9_$]")
 	}
@@ -64,6 +59,9 @@ func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	// emitted by marshalJSON; otherwise a nil child desyncs the two and client
 	// path resolution targets the wrong node. See [Node.stripNilChildren].
 	jsvar.Ptr.stripNilChildren()
+	// Assign each node's JSON-path ID and its owning-Tree and parent back-pointers.
+	// The name-path API (Node.HasNames, Node.GetNames, Tree.GetSelected,
+	// Tree.SetSelected) requires the parent back-pointers.
 	jsvar.Ptr.Walk("", func(jsPath string, node *Node) {
 		node.ID = jsPath
 		node.Tree = t

@@ -93,24 +93,20 @@ var _ json.Marshaler = &Node{}
 
 // JawsSetPath restricts browser-initiated mutations to the per-node "selected" flag.
 //
-// Any other path, a non-bool value, or an out-of-range child index is rejected
-// with an error matching [ErrPathRejected], without mutating the tree, so a
-// WebSocket client cannot change node names, ids, the children slice, or any
-// other [Node] field by path. This is the server-side enforcement of the
-// "server holds the truth" contract for [Tree].
+// Any other path, a non-bool value, or an out-of-range child index is rejected with
+// an error matching [ErrPathRejected] without mutating the tree, so a WebSocket
+// client cannot change node names, ids, the children slice, or any other [Node]
+// field by path. This is the server-side enforcement of the "server holds the truth"
+// contract for [Tree].
 //
-// The bare path ".selected" addresses node itself. The standard client never
-// produces it for the root: Quercus.js displays only the root's children, and
-// the client-side variable stripping turns the root's own path into "selected"
-// without the dot, which the gate rejects. The root's Selected flag is
-// therefore server-only; avoid rendering the root selected, since clients
-// cannot change it back through the protocol.
-//
-// The path is resolved by navigating the Children slice ourselves with strict
-// in-range index bounds rather than delegating to the generic JsVar path-setter
-// ([github.com/linkdata/jq.Set]), which sets arbitrary json-tagged fields and grows
-// a slice by one when asked to set index == len.
+// The root's Selected flag is effectively server-only: the standard client cannot
+// produce the path that addresses the root itself, so avoid rendering the root
+// selected, since clients cannot change it back through the protocol.
 func (node *Node) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err error) {
+	// The bare path ".selected" addresses node itself. The standard client never
+	// produces it for the root: Quercus.js displays only the root's children, and
+	// client-side variable stripping turns the root's own path into "selected"
+	// without the dot, which this gate rejects.
 	nodePath, ok := strings.CutSuffix(jsPath, ".selected")
 	if !ok {
 		return fmt.Errorf("%w of %q: only the .selected flag is client-writable", ErrPathRejected, jsPath)
@@ -119,6 +115,10 @@ func (node *Node) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err
 	if !ok {
 		return fmt.Errorf("%w of %q: expected a bool, got %T", ErrPathRejected, jsPath, value)
 	}
+	// Resolve the path ourselves with strict in-range index bounds rather than
+	// delegating to the generic JsVar path-setter (jq.Set), which would set
+	// arbitrary json-tagged fields and grow a slice by one when asked to set
+	// index == len.
 	var target *Node
 	if target, err = node.resolveChildPath(nodePath); err == nil {
 		if target.Selected == selected {
@@ -130,26 +130,21 @@ func (node *Node) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err
 	return
 }
 
-// resolveChildPath navigates from node following a path of the form
-// "children.<i>.children.<j>..." (an empty path resolves to node itself). Every
-// index must be within the current Children range; out-of-range, malformed, or
-// nil-targeting segments are rejected, so a client can neither grow the slice nor
+// resolveChildPath navigates from node following a canonical path of the form
+// "children.<i>.children.<j>..."; an empty path resolves to node itself.
+//
+// Every index must be within the current Children range and the whole path must be
+// canonical; out-of-range, malformed, non-canonical or nil-targeting segments are
+// rejected with [ErrPathRejected], so a client can neither grow the slice nor
 // address a node that does not exist.
-//
-// The whole path must be in canonical form so that it round-trips to the exact
-// string [Node.Walk] emits as the node ID: segments strictly alternate "children"
-// and a canonical decimal index (no leading '+', '-' or zeros), joined by single
-// dots with no empty segment from a leading, trailing or doubled '.'. A path that
-// resolves to a valid in-range node but is not canonical — for example a trailing
-// dot ("children.0.") or a non-canonical index ("children.+0") — would mutate the
-// server node yet be echoed verbatim as the [Node.JawsPathSet] broadcast "id",
-// which no peer's rendered node matches, diverging peer state from the server.
-//
-// Each index is checked against its canonical form (strconv.Itoa is allocation-free
-// for indices below 100). The trailing-dot case is the one a per-index check alone
-// misses: it leaves an empty final segment the pair-wise loop never visits, so we
-// reject when Cut reports a separator was consumed ('more') but nothing follows it.
 func (node *Node) resolveChildPath(nodePath string) (*Node, error) {
+	// The path must be canonical so it round-trips to the exact string Node.Walk
+	// emits as the node ID: segments strictly alternate "children" and a canonical
+	// decimal index (no leading '+', '-' or zeros), joined by single dots with no
+	// empty segment from a leading, trailing or doubled '.'. A non-canonical path
+	// that still resolved to a valid in-range node ("children.0.", "children.+0")
+	// would mutate the server node yet be echoed verbatim as the Node.JawsPathSet
+	// broadcast "id", which no peer's rendered node matches, diverging peer state.
 	cur := node
 	for rest := nodePath; rest != ""; {
 		var seg, idxStr string
@@ -163,6 +158,10 @@ func (node *Node) resolveChildPath(nodePath string) (*Node, error) {
 		if err != nil || idx < 0 || idx >= len(cur.Children) || cur.Children[idx] == nil {
 			return nil, fmt.Errorf("%w: child index %q out of range", ErrPathRejected, idxStr)
 		}
+		// strconv.Itoa is allocation-free for indices below 100. The trailing-dot
+		// case ("children.0.") is the one a per-index check alone misses: it leaves
+		// an empty final segment the loop never visits, so reject when Cut reported
+		// a separator was consumed ('more') but nothing follows it.
 		if strconv.Itoa(idx) != idxStr || (more && rest == "") {
 			return nil, fmt.Errorf("%w: non-canonical path %q", ErrPathRejected, nodePath)
 		}
@@ -188,12 +187,8 @@ func (node *Node) JawsPathSet(elem *jaws.Element, jsPath string, value any) {
 // stripNilChildren removes any nil entries from node.Children and every
 // descendant's Children, in place.
 //
-// [New] calls this before assigning node IDs so the slice index used for an ID
-// ([Node.Walk]) matches the position the compacted wire array gives a child
-// ([Node.marshalJSON] skips nil children). Without it, a single nil child shifts
-// every following sibling's wire position relative to its ID, so a client click —
-// whose path is built from the wire-array position — would resolve to the wrong
-// node (or a rejected nil slot) in [Node.resolveChildPath].
+// [New] calls it before assigning IDs so each node's slice index (its ID) matches
+// its position in the compacted wire array; see the rationale at the call site.
 func (node *Node) stripNilChildren() {
 	node.Children = slices.DeleteFunc(node.Children, func(c *Node) bool { return c == nil })
 	for _, child := range node.Children {
