@@ -358,8 +358,12 @@ var jsonControlEscaper = strings.NewReplacer("\t", `\t`, "\n", `\n`, "\r", `\r`)
 // ambiguous or invalid before it reaches jaws.js.
 var jsCallPathByteRemover = strings.NewReplacer(" ", "", "\t", "", "\n", "", "\r", "", "=", "")
 
+func jsCallData(jsfunc, jsonstr string) string {
+	return jsCallPathByteRemover.Replace(jsfunc) + "=" + maybeCompactJSON(jsonstr)
+}
+
 // JsCall calls the JavaScript function jsfunc with the argument jsonstr
 // on all HTML elements matching target.
 func (jw *Jaws) JsCall(target any, jsfunc, jsonstr string) {
-	jw.broadcastTo(target, what.Call, jsCallPathByteRemover.Replace(jsfunc)+"="+maybeCompactJSON(jsonstr))
+	jw.broadcastTo(target, what.Call, jsCallData(jsfunc, jsonstr))
 }

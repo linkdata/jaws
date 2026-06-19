@@ -247,6 +247,16 @@ func (elem *Element) SetValue(value string) {
 	elem.queue(what.Value, value)
 }
 
+// JsCall queues calling the JavaScript function jsfunc with the argument jsonstr
+// for the [Element].
+//
+// Call this while the [Element] is rendering or updating. The change is queued and
+// sent on the next processing pass; to call JavaScript for every element matching
+// a tag or id, use [Jaws.JsCall].
+func (elem *Element) JsCall(jsfunc, jsonstr string) {
+	elem.queue(what.Call, jsCallData(jsfunc, jsonstr))
+}
+
 // Replace replaces the [Element]'s entire HTML DOM node with new HTML code.
 //
 // The trusted HTML should preserve the element identity by putting the element's
