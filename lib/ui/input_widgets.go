@@ -90,6 +90,8 @@ func (u *InputBool) renderBoolInput(elem *jaws.Element, w io.Writer, htmlType st
 func (u *InputBool) JawsUpdate(elem *jaws.Element) {
 	v := u.JawsGet(elem)
 	if u.Last.Swap(v) != v {
+		// jaws.js applies a what.Value of "true"/"false" to a checkable input's
+		// checked state, so send the boolean as that literal text.
 		txt := "false"
 		if v {
 			txt = "true"

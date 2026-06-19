@@ -39,3 +39,36 @@ func BenchmarkResolveChildPath(b *testing.B) {
 		})
 	}
 }
+
+// TestResolveChildPathZeroAllocs gates [Node.resolveChildPath] at zero allocations
+// on the accepted shallow and deep paths, guarding the comment in node.go that
+// strconv.Itoa is allocation-free for indices below 100.
+func TestResolveChildPathZeroAllocs(t *testing.T) {
+	leaf := func(n string) *Node { return &Node{Name: n} }
+	root := &Node{Name: "root", Children: []*Node{
+		{Name: "a", Children: []*Node{
+			leaf("a0"),
+			{Name: "a1", Children: []*Node{leaf("a1.0"), leaf("a1.1"), leaf("a1.2")}},
+		}},
+		leaf("b"),
+	}}
+
+	cases := []struct {
+		name string
+		path string
+	}{
+		{"shallow", "children.1"},
+		{"deep", "children.0.children.1.children.2"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			allocs := testing.AllocsPerRun(100, func() {
+				resolveChildPathBenchSink, _ = root.resolveChildPath(c.path)
+			})
+			if allocs != 0 {
+				t.Errorf("resolveChildPath(%q) allocated %g times, want 0", c.path, allocs)
+			}
+		})
+	}
+}

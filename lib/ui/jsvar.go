@@ -187,7 +187,12 @@ func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any)
 	// number), the stored server state and the value seen by peers can differ; the
 	// authoritative state is what JawsGet returns. Re-broadcast from Ptr inside a
 	// PathSetter if peers must observe the coerced value.
-	if err == nil && elem != nil {
+	//
+	// dirtyTag is assigned only in JawsRender, so a set before the first render
+	// leaves it nil. Skip the broadcast in that case: a what.Set with a nil Dest
+	// would target every element, and there is nothing to update yet because the
+	// initial render carries the value in its data-jawsdata attribute.
+	if err == nil && elem != nil && dirtyTag != nil {
 		var data []byte
 		if data, err = json.Marshal(value); err == nil {
 			elem.Jaws.Broadcast(wire.Message{
@@ -220,11 +225,19 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any) (er
 // JawsSetPath sets the value at jsPath and broadcasts the change. It is a
 // programmatic (server-side, trusted) write and is not size-capped at the write
 // boundary; see [MaxClientJsVarBytes] for the browser-write cap.
+//
+// A set before the element has been rendered produces no broadcast: the dirty
+// tag does not exist yet and the initial render seeds the value via its
+// data-jawsdata attribute.
 func (jsvar *JsVar[T]) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err error) {
 	return jsvar.setPath(elem, jsPath, value)
 }
 
 // JawsSet replaces the root value and broadcasts the change.
+//
+// A set before the element has been rendered produces no broadcast: the dirty
+// tag does not exist yet and the initial render seeds the value via its
+// data-jawsdata attribute.
 func (jsvar *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 	return jsvar.JawsSetPath(elem, "", value)
 }

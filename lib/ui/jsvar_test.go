@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstest"
@@ -190,6 +191,61 @@ func TestJsVar_SetBroadcastsWirePayload(t *testing.T) {
 		if msg.What != what.Set || msg.Data != `text="new"` {
 			t.Fatalf("broadcast = {%v %q}, want {Set `text=\"new\"`}", msg.What, msg.Data)
 		}
+	}
+}
+
+// TestJsVar_SetBeforeRenderDoesNotBroadcast verifies that a JawsSet/JawsSetPath
+// on a JsVar that has not yet been rendered produces no broadcast. Before the
+// first render the dirty tag is nil, and a what.Set with a nil Dest would target
+// every live element; the guard suppresses it. A second JsVar is rendered first
+// so there is a live subscription that would receive such a stray nil-Dest frame,
+// proving the guard is load-bearing rather than masked by an empty request.
+func TestJsVar_SetBeforeRenderDoesNotBroadcast(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+
+	tr := jawstest.NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("expected test request")
+	}
+	defer tr.Close()
+	<-tr.ReadyCh
+
+	// A rendered JsVar provides a live element that a stray nil-Dest frame reaches.
+	var watchedMu sync.Mutex
+	watched := jsVarData{Text: "watched"}
+	jsvWatched := NewJsVar(&watchedMu, &watched)
+	elemWatched := tr.NewElement(jsvWatched)
+	var sb strings.Builder
+	if err := jsvWatched.JawsRender(elemWatched, &sb, []any{"watched"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// This JsVar is never rendered, so its dirty tag stays nil.
+	var mu sync.Mutex
+	v := jsVarData{Text: "old"}
+	jsv := NewJsVar(&mu, &v)
+	elem := tr.NewElement(jsv)
+
+	if err := jsv.JawsSetPath(elem, "text", "new"); err != nil {
+		t.Fatal(err)
+	}
+	if err := jsv.JawsSet(elem, jsVarData{Text: "root"}); err != nil {
+		t.Fatal(err)
+	}
+	// The set must still mutate the bound value, just not broadcast.
+	if jsv.JawsGet(elem).Text != "root" {
+		t.Fatalf("pre-render set did not apply, got %#v", jsv.JawsGet(elem))
+	}
+
+	select {
+	case msg := <-tr.OutCh:
+		t.Fatalf("pre-render set broadcast a frame %#v, want none", msg)
+	case <-time.After(100 * time.Millisecond):
 	}
 }
 

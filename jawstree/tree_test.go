@@ -200,6 +200,22 @@ func TestNewSetsParentPointers(t *testing.T) {
 	if !aOne.HasNames([]string{"a", "one"}) {
 		t.Fatal("HasNames false for [a one]")
 	}
+	for _, tc := range []struct {
+		name  string
+		node  *Node
+		names []string
+		want  bool
+	}{
+		{"root empty matches", root, nil, true},
+		{"root non-empty rejected", root, []string{"a"}, false},
+		{"non-root empty rejected", aOne, nil, false},
+		{"name mismatch rejected", aOne, []string{"a", "two"}, false},
+		{"prefix mismatch rejected", aOne, []string{"b", "one"}, false},
+	} {
+		if got := tc.node.HasNames(tc.names); got != tc.want {
+			t.Errorf("%s: HasNames(%#v) = %v, want %v", tc.name, tc.names, got, tc.want)
+		}
+	}
 	changed := tree.SetSelected([][]string{{"a", "one"}})
 	if !reflect.DeepEqual(changed, []*Node{aOne}) {
 		t.Fatalf("changed = %#v, want %#v", changed, []*Node{aOne})

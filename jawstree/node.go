@@ -229,14 +229,19 @@ func (node *Node) Walk(jsPath string, fn func(jsPath string, node *Node)) {
 }
 
 // HasNames reports whether node matches names as a path from the root.
+//
+// The root (nil Parent) matches only an empty names slice. The match walks the
+// parent chain, comparing each name against the corresponding ancestor, so a call
+// is O(len(names)); resolving large selections over deep trees is therefore
+// O(nodes x depth x paths).
 func (node *Node) HasNames(names []string) (yes bool) {
-	if yes = (node.Parent == nil) && (len(names) == 0); !yes && node.Parent != nil {
-		if len(names) > 0 {
-			yes = node.Parent.HasNames(names[:len(names)-1])
-			yes = yes && node.Name == names[len(names)-1]
-		}
+	if node.Parent == nil {
+		return len(names) == 0
 	}
-	return
+	if len(names) == 0 {
+		return false
+	}
+	return node.Name == names[len(names)-1] && node.Parent.HasNames(names[:len(names)-1])
 }
 
 // GetNames returns the path of names from the root to node.

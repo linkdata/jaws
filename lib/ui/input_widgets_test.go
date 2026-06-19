@@ -82,6 +82,72 @@ func TestInputBoolWidgets(t *testing.T) {
 	mustMatch(t, `^<input id="Jid\.[0-9]+" type="radio" checked>$`, got)
 }
 
+// TestInputBool_JawsUpdateEmitsCheckedState verifies that InputBool.JawsUpdate
+// emits a SetValue carrying "true"/"false" on a genuine transition and nothing
+// when the bound value is unchanged (exercising the u.Last.Swap dedup). jaws.js
+// applies that literal text to the input's checked state.
+func TestInputBool_JawsUpdateEmitsCheckedState(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+
+	tr := jawstest.NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("expected test request")
+	}
+	defer tr.Close()
+	<-tr.ReadyCh
+
+	sb := newTestSetter(false)
+	checkbox := NewCheckbox(sb)
+	elem := tr.NewElement(checkbox)
+	var buf strings.Builder
+	if err := elem.JawsRender(&buf, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	waitValue := func() (string, bool) {
+		deadline := time.After(300 * time.Millisecond)
+		for {
+			select {
+			case msg := <-tr.OutCh:
+				if msg.What == what.Value {
+					return msg.Data, true
+				}
+			case <-deadline:
+				return "", false
+			}
+		}
+	}
+
+	// false -> true emits "true".
+	sb.Set(true)
+	checkbox.JawsUpdate(elem)
+	tr.InCh <- wire.WsMsg{} // wake the loop so the queued op flushes to OutCh
+	if v, ok := waitValue(); !ok || v != "true" {
+		t.Fatalf("expected SetValue %q on false->true, got ok=%v v=%q", "true", ok, v)
+	}
+
+	// true -> false emits "false".
+	sb.Set(false)
+	checkbox.JawsUpdate(elem)
+	tr.InCh <- wire.WsMsg{}
+	if v, ok := waitValue(); !ok || v != "false" {
+		t.Fatalf("expected SetValue %q on true->false, got ok=%v v=%q", "false", ok, v)
+	}
+
+	// Unchanged value emits nothing (Last.Swap dedup).
+	checkbox.JawsUpdate(elem)
+	checkbox.JawsUpdate(elem)
+	tr.InCh <- wire.WsMsg{}
+	if v, ok := waitValue(); ok {
+		t.Fatalf("unchanged bool value re-emitted SetValue %q", v)
+	}
+}
+
 func TestInputFloatWidgets(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	sf := newTestSetter(1.2)
