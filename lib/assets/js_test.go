@@ -337,6 +337,53 @@ process.stdout.write(jaws.sent[0] || "");
 	}
 }
 
+func TestJawsJS_ClickInputOriginIgnored(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+const parent = {
+	id: "Jid.1",
+	tagName: "DIV",
+	getAttribute: function() { return null; },
+	textContent: "",
+	parentElement: null
+};
+const input = {
+	id: "Jid.9",
+	tagName: "INPUT",
+	getAttribute: function(name) { return name === "name" ? "in" : null; },
+	textContent: "",
+	parentElement: parent
+};
+let stopped = false;
+const ev = new Event();
+ev.target = input;
+ev.clientX = 7;
+ev.clientY = 8;
+ev.stopPropagation = function() { stopped = true; };
+
+jawsClickHandler(ev);
+process.stdout.write(JSON.stringify({ msg: jaws.sent[0] || "", stopped: stopped }));
+`)
+
+	var got struct {
+		Msg     string `json:"msg"`
+		Stopped bool   `json:"stopped"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.Msg != "" {
+		t.Fatalf("expected no frame for input-origin click, got %q", got.Msg)
+	}
+	if got.Stopped {
+		t.Fatal("input-origin click should not be intercepted")
+	}
+}
+
 func TestJawsJS_ClickLeavesNonFiniteCoordinatesForServerValidation(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 const target = {
