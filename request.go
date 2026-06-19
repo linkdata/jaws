@@ -74,28 +74,6 @@ type eventFnCall struct {
 	data string
 }
 
-var (
-	// ErrWebsocketOriginMissing is returned when a WebSocket request has no Origin header.
-	ErrWebsocketOriginMissing = errors.New("websocket request missing Origin header")
-
-	// ErrWebsocketOriginWrongScheme is returned when a WebSocket Origin is not HTTP or HTTPS.
-	ErrWebsocketOriginWrongScheme = errors.New("websocket Origin not http or https")
-
-	// ErrWebsocketOriginWrongHost is returned when a WebSocket Origin host does not match the initial request host.
-	ErrWebsocketOriginWrongHost = errors.New("websocket Origin host mismatch")
-
-	// ErrWebsocketOriginNoInitial is returned when origin validation cannot run
-	// because the [Request] has no initial HTTP request to compare against. The
-	// check fails closed rather than accepting an unverified Origin.
-	ErrWebsocketOriginNoInitial = errors.New("websocket Origin cannot be validated: no initial request")
-
-	// ErrRequestAlreadyClaimed is returned when [Jaws.UseRequest] is called more than once for a [Request].
-	ErrRequestAlreadyClaimed = errors.New("request already claimed")
-
-	// ErrJavascriptDisabled is returned when the noscript probe indicates JavaScript is disabled.
-	ErrJavascriptDisabled = errors.New("javascript is disabled")
-)
-
 // JawsKeyString returns the request key in the text form used by JaWS URLs.
 func (rq *Request) JawsKeyString() string {
 	jawsKey := key.Key(0)
@@ -903,6 +881,9 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 		// The data half below is JSON-quoted, but the id is concatenated raw, so guard
 		// it: a valid HTML id never contains ASCII whitespace, so reject rather than
 		// escape, mirroring how Element.Replace rejects an id-less payload.
+		// Page/HTML-id-targeted commands (including Delete) only emit a DOM frame and
+		// never mutate the server-side Element/tag registry, unlike element/tag-targeted
+		// Delete which also removes the Element via DeleteElement below.
 		if strings.ContainsAny(v, "\t\n") {
 			rq.Jaws.reportMisuse(fmt.Errorf("jaws: Broadcast: HTML id %q contains a tab or newline", v))
 			return

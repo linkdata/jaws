@@ -1117,6 +1117,49 @@ func TestRequest_JidsAreNotReusedAfterDelete(t *testing.T) {
 	}
 }
 
+func TestRequest_ElemsStayAscendingAfterDeletes(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	const n = 50
+	elems := make([]*Element, n)
+	for i := range elems {
+		elems[i] = rq.NewElement(&testUi{})
+	}
+
+	// Delete an arbitrary, non-contiguous subset.
+	deleted := map[Jid]bool{}
+	for i, e := range elems {
+		if i%3 == 0 || i%7 == 0 {
+			rq.DeleteElement(e)
+			deleted[e.Jid()] = true
+		}
+	}
+
+	// (a) GetElementByJid resolves every surviving jid and returns nil for deleted ones.
+	for _, e := range elems {
+		got := rq.GetElementByJid(e.Jid())
+		if deleted[e.Jid()] {
+			if got != nil {
+				t.Fatalf("jid %s was deleted but GetElementByJid returned %+v", e.Jid(), got)
+			}
+			continue
+		}
+		if got != e {
+			t.Fatalf("jid %s: GetElementByJid = %+v, want %+v", e.Jid(), got, e)
+		}
+	}
+
+	// (b) the surviving rq.elems jids are strictly ascending.
+	rq.mu.RLock()
+	defer rq.mu.RUnlock()
+	for i := 1; i < len(rq.elems); i++ {
+		if prev, cur := rq.elems[i-1].Jid(), rq.elems[i].Jid(); prev >= cur {
+			t.Fatalf("rq.elems not strictly ascending at index %d: %s >= %s", i, prev, cur)
+		}
+	}
+}
+
 func TestRequest_RequestScopedEventIsolation(t *testing.T) {
 	th := newTestHelper(t)
 	tj := newTestJaws()
@@ -1608,6 +1651,18 @@ func TestRequest_CustomErrors(t *testing.T) {
 	th.True(errors.As(err, &target1))
 	var target2 errRequestCancelled
 	th.Equal(errors.As(cause, &target2), false)
+
+	// With an initial request the message carries its method and URI.
+	if !errors.As(err, &target2) {
+		t.Fatal("expected err to be an errRequestCancelled")
+	}
+	wantWithInitial := fmt.Sprintf("Request<%s>: %s %q: %v",
+		target2.JawsKey, target2.Method, target2.RequestURI, cause)
+	th.Equal(target2.Error(), wantWithInitial)
+
+	// Without an initial request the method/URI fragment is omitted entirely.
+	noInitial := errRequestCancelled{JawsKey: target2.JawsKey, Cause: cause}
+	th.Equal(noInitial.Error(), fmt.Sprintf("Request<%s>: %v", target2.JawsKey, cause))
 }
 
 // TestRequest_handleBroadcastRejectsWhitespaceID verifies that a string (HTML id)

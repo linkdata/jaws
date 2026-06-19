@@ -2,58 +2,16 @@ package jaws
 
 import (
 	"errors"
-	"fmt"
 	"reflect"
 
 	"github.com/linkdata/jaws/lib/what"
 )
-
-// ErrEventHandlerPanic is returned by [CallEventHandlers] when a user event handler
-// panics.
-//
-// Match it with [errors.Is]. When the recovered panic value is itself an error it is
-// available via Unwrap (and thus [errors.As] / [errors.Is]); a non-error panic value
-// appears only in the formatted message.
-var ErrEventHandlerPanic errEventHandlerPanic
-
-type errEventHandlerPanic struct {
-	// Type is the [Element]'s UI object type. Handlers registered on the Element are
-	// tried before the UI object, so the type that actually panicked may differ from
-	// this when a registered handler is the culprit.
-	Type  reflect.Type
-	Value any // the recovered panic value
-}
-
-func (e errEventHandlerPanic) Error() string {
-	return fmt.Sprintf("jaws: %v panic: %v", e.Type, e.Value)
-}
-
-func (errEventHandlerPanic) Is(target error) bool {
-	return target == ErrEventHandlerPanic
-}
-
-func (e errEventHandlerPanic) Unwrap() error {
-	if err, ok := e.Value.(error); ok {
-		return err
-	}
-	return nil
-}
 
 // InputHandler handles input events sent from the browser.
 type InputHandler interface {
 	// JawsInput is called when an [Element] receives a browser input event.
 	JawsInput(elem *Element, value string) (err error)
 }
-
-type errEventUnhandled struct{}
-
-func (errEventUnhandled) Error() string {
-	return "event unhandled"
-}
-
-// ErrEventUnhandled returned by [InputHandler.JawsInput], [ClickHandler.JawsClick]
-// or [ContextMenuHandler.JawsContextMenu] causes the next available handler to be invoked.
-var ErrEventUnhandled = errEventUnhandled{}
 
 // InputFn is the signature of an input handling function. JaWS calls it for an
 // input or set message received from JavaScript over the WebSocket connection,
