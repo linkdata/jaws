@@ -15,13 +15,16 @@ function jawstreeSet(arg) {
 
 function jawstreeSetPath(arg) {
     var t = window["jawstree_"+arg.tree];
+    var selectedNodes = t.getSelectedNodes();
+    var isSelected = selectedNodes.some(function(element) {
+        return element.id == arg.id;
+    });
     if (!t.options.multiSelectEnabled && !t.options.cascadeSelectChildren && arg.set) {
-        var selectedNodes = t.getSelectedNodes();
-        if (selectedNodes.length == 1 && selectedNodes[0].id == arg.id) {
+        if (selectedNodes.length == 1 && isSelected) {
             return;
         }
     }
-    if (arg.set || t.options.multiSelectEnabled) {
+    if (arg.set || t.options.multiSelectEnabled || isSelected) {
         t.selectNodeById(arg.id,arg.set);
     }
 }
