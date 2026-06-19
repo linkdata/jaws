@@ -29,12 +29,16 @@ function jawstreeTopSelectedChildren(children, parentSelected) {
     return result;
 }
 
-function jawstreeSetData(t, data) {
+function jawstreeViewChildren(data, multiSelectEnabled, cascadeSelectChildren) {
     var children = data.children || [];
-    if (!t.options.multiSelectEnabled && t.options.cascadeSelectChildren) {
-        children = jawstreeTopSelectedChildren(children, false);
+    if (!multiSelectEnabled && cascadeSelectChildren) {
+        return jawstreeTopSelectedChildren(children, false);
     }
-    t.setData(children);
+    return children;
+}
+
+function jawstreeSetData(t, data) {
+    t.setData(jawstreeViewChildren(data, t.options.multiSelectEnabled, t.options.cascadeSelectChildren));
 }
 
 function jawstreeSet(arg) {
@@ -64,36 +68,48 @@ function jawstreeSetPath(arg) {
 }
 
 function jawstreeNew(treename, rootnode, options) {
-    return new Treeview({
-        containerId: treename,
-        data: rootnode.children,
-        /*jslint bitwise: true */
-        searchEnabled: options & (1<<0),
-        initiallyExpanded: options & (1<<1),
-        multiSelectEnabled: options & (1<<2),
-        showSelectAllButton: options & (1<<3),
-        showInvertSelectionButton: options & (1<<4),
-        showExpandCollapseAllButtons: options & (1<<5),
-        nodeSelectionEnabled: !(options & (1<<6)),
-        cascadeSelectChildren: options & (1<<7),
-        checkboxSelectionEnabled: options & (1<<8),
-        /*jslint bitwise: false */
-        onSelectionChange: function(selectedNodesData) {
-            if (window["jawstree_"+treename].jawsApplyingSet) {
-                return;
-            }
-            jawstreeForEachNode("jawstreeroot_"+treename, window["jawstreeroot_"+treename], function(path, node) {
-                var selected = false;
-                selectedNodesData.forEach(function(element) {
-                    if (element.id == node.id) {
-                        selected = true;
+    /*jslint bitwise: true */
+    var multiSelectEnabled = options & (1<<2);
+    var cascadeSelectChildren = options & (1<<7);
+    /*jslint bitwise: false */
+    var applyingSet = true;
+    var tree;
+    try {
+        tree = new Treeview({
+            containerId: treename,
+            data: jawstreeViewChildren(rootnode, multiSelectEnabled, cascadeSelectChildren),
+            /*jslint bitwise: true */
+            searchEnabled: options & (1<<0),
+            initiallyExpanded: options & (1<<1),
+            multiSelectEnabled: multiSelectEnabled,
+            showSelectAllButton: options & (1<<3),
+            showInvertSelectionButton: options & (1<<4),
+            showExpandCollapseAllButtons: options & (1<<5),
+            nodeSelectionEnabled: !(options & (1<<6)),
+            cascadeSelectChildren: cascadeSelectChildren,
+            checkboxSelectionEnabled: options & (1<<8),
+            /*jslint bitwise: false */
+            onSelectionChange: function(selectedNodesData) {
+                var tree = window["jawstree_"+treename];
+                if (applyingSet || (tree && tree.jawsApplyingSet)) {
+                    return;
+                }
+                jawstreeForEachNode("jawstreeroot_"+treename, window["jawstreeroot_"+treename], function(path, node) {
+                    var selected = false;
+                    selectedNodesData.forEach(function(element) {
+                        if (element.id == node.id) {
+                            selected = true;
+                        }
+                    });
+                    if (Boolean(node.selected) != selected) {
+                        node.selected = selected;
+                        jawsVar(path + ".selected", selected);
                     }
                 });
-                if (Boolean(node.selected) != selected) {
-                    node.selected = selected;
-                    jawsVar(path + ".selected", selected);
-                }
-            });
-        }
-    });
+            }
+        });
+    } finally {
+        applyingSet = false;
+    }
+    return tree;
 }

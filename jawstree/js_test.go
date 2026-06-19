@@ -162,6 +162,119 @@ process.stdout.write(JSON.stringify(window["jawstree_tree"].selected));
 	}
 }
 
+func TestJawstreeJS_NewSingleSelectCascadeSnapshot(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, `
+function collectDescendantIDs(node, ids) {
+		if (node.children) {
+			node.children.forEach(function(child) {
+				ids.push(child.id);
+				collectDescendantIDs(child, ids);
+			});
+		}
+	}
+
+	function Treeview(options) {
+		this.options = options;
+		this.nodes = {};
+		this.selected = [];
+		this.setData(options.data);
+	}
+
+	Treeview.prototype.getSelectedNodes = function() {
+		return this.selected.map(function(id) { return { id: id }; });
+	};
+
+	Treeview.prototype.selectNodeById = function(id, set) {
+		var node = this.nodes[id];
+		if (!node) {
+			return;
+		}
+		if (set && this.options.cascadeSelectChildren && !this.options.multiSelectEnabled) {
+			var ids = [id];
+			collectDescendantIDs(node, ids);
+			this.selected = ids;
+			return;
+		}
+		if (set) {
+			if (this.selected.indexOf(id) == -1) {
+				this.selected.push(id);
+			}
+			return;
+		}
+		this.selected = this.selected.filter(function(selectedID) { return selectedID != id; });
+	};
+
+	Treeview.prototype.setData = function(data) {
+		var selectedIDs = [];
+		var self = this;
+		this.nodes = {};
+		this.selected = [];
+		function walk(node) {
+			self.nodes[node.id] = node;
+			if (node.selected) {
+				selectedIDs.push(node.id);
+			}
+			if (node.children) {
+				node.children.forEach(walk);
+			}
+		}
+		data.forEach(walk);
+		selectedIDs.forEach(function(id) {
+			self.selectNodeById(id, true);
+			self.options.onSelectionChange(self.getSelectedNodes());
+		});
+	};
+
+	global.Treeview = Treeview;
+	var calls = [];
+	global.jawsVar = function(path, value) {
+		calls.push({ path: path, value: value });
+	};
+
+	var root = { children: [{
+		id: "parent",
+		name: "parent",
+		selected: true,
+		children: [{
+			id: "child",
+			name: "child",
+			selected: true,
+			children: []
+		}]
+	}]};
+
+	window["jawstreeroot_tree"] = root;
+	window["jawstree_tree"] = jawstreeNew("tree", root, 1 << 7);
+
+	process.stdout.write(JSON.stringify({
+		selected: window["jawstree_tree"].selected,
+		parentSelected: window["jawstreeroot_tree"].children[0].selected,
+		childSelected: window["jawstreeroot_tree"].children[0].children[0].selected,
+		calls: calls
+	}));
+	`)
+
+	var got struct {
+		Selected       []string    `json:"selected"`
+		ParentSelected bool        `json:"parentSelected"`
+		ChildSelected  bool        `json:"childSelected"`
+		Calls          []jsVarCall `json:"calls"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+	want := []string{"parent", "child"}
+	if !reflect.DeepEqual(got.Selected, want) {
+		t.Fatalf("selected = %#v, want %#v", got.Selected, want)
+	}
+	if !got.ParentSelected || !got.ChildSelected {
+		t.Fatalf("root selection changed: parent=%v child=%v, want both true", got.ParentSelected, got.ChildSelected)
+	}
+	if len(got.Calls) != 0 {
+		t.Fatalf("jawsVar calls during jawstreeNew = %#v, want none", got.Calls)
+	}
+}
+
 func TestJawstreeJS_SetSingleSelectCascadeSnapshot(t *testing.T) {
 	raw := runJawstreeJSSnippet(t, `
 function collectDescendantIDs(node, ids) {
