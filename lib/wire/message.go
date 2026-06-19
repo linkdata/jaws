@@ -8,7 +8,7 @@ import (
 
 // Message contains the elements of a message to be sent to requests.
 type Message struct {
-	Dest any       // destination tag, HTML ID or *jaws.Element
+	Dest any       // destination: nil, request key, HTML ID string, or tag/tag list
 	What what.What // command to perform
 	Data string    // payload, such as inner HTML content or a slice of tags
 }
