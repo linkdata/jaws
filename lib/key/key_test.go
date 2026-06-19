@@ -37,6 +37,10 @@ func TestParseCaseInsensitive(t *testing.T) {
 	if got := upper.String(); got != "1a" {
 		t.Fatalf("Parse(%q).String() = %q, want lowercase %q", "1A", got, "1a")
 	}
+	withTail, tail := Parse("1A/x")
+	if withTail != lower || tail != "/x" {
+		t.Fatalf("Parse(%q) = %d, %q; want %d, %q", "1A/x", uint64(withTail), tail, uint64(lower), "/x")
+	}
 }
 
 func TestKeyString(t *testing.T) {
@@ -73,6 +77,7 @@ func TestParse(t *testing.T) {
 		{name: "trailing-path", in: "2/noscript", want: 2, tail: "/noscript"},
 		{name: "empty-trailing-path", in: "2/", want: 2, tail: "/"},
 		{name: "base32", in: "10", want: 32},
+		{name: "empty-prefix", in: "/noscript", want: 0, tail: "/noscript"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			got, tail := Parse(tt.in)

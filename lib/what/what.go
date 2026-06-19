@@ -73,13 +73,16 @@ const (
 )
 
 // IsCommand reports whether w is a non-element command.
+//
+// Commands are protocol directives not tied to a specific element (Update,
+// Reload, Redirect, Alert, Order, Call, Set).
 func (w What) IsCommand() bool {
 	return w < separator && w.IsValid()
 }
 
 // IsValid reports whether w is a known command or event.
 func (w What) IsValid() bool {
-	return w != invalid && w != separator && w <= Hook
+	return w != invalid && w != separator && int(w) < len(_What_index)-1
 }
 
 // Parse returns the [What] named by s.

@@ -116,6 +116,10 @@ func (m *WsMsg) Format() string {
 // is rejected only if both decoders fail. Data that does not begin with a double
 // quote is taken verbatim, as is all Set and Call data. In all cases the resulting
 // data is sanitized with [strings.ToValidUTF8].
+//
+// Inbound [what.Set] and [what.Call] data is taken verbatim at the field
+// boundaries and is best-effort: the field ends at the first tab, so a tab
+// inside an inbound Set or Call payload truncates the field.
 func Parse(txt []byte) (WsMsg, bool) {
 	if len(txt) > 2 && txt[len(txt)-1] == '\n' {
 		if nl1 := bytes.IndexByte(txt, '\t'); nl1 >= 0 {

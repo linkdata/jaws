@@ -128,6 +128,9 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 		want WsMsg
 	}{
 		{"shortest", "Update\t\t\n", WsMsg{What: what.Update}},
+		// An empty What field parses as what.Update, because what.Parse("") returns
+		// Update. Pins that empty-command frames are accepted, not rejected.
+		{"empty What is Update", "\t\t\n", WsMsg{What: what.Update}},
 		{"unquoted", "Input\tJid.1\ttrue\n", WsMsg{Jid: jid.Jid(1), What: what.Input, Data: "true"}},
 		{"normal", "Input\tJid.2\t\"c\"\n", WsMsg{Jid: jid.Jid(2), What: what.Input, Data: "c"}},
 		{"context menu", "ContextMenu\tJid.2\t\"1 2 5 name\"\n", WsMsg{Jid: jid.Jid(2), What: what.ContextMenu, Data: "1 2 5 name"}},

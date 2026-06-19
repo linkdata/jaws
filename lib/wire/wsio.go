@@ -17,6 +17,8 @@ const writeBatchLimit = 32 * 1024
 // messages on incomingMsgCh.
 //
 // Closes incomingMsgCh on exit.
+//
+// ccf may be nil, in which case errors are not reported and only the loop exits.
 func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, incomingMsgCh chan<- WsMsg, ws *websocket.Conn) {
 	var typ websocket.MessageType
 	var txt []byte
@@ -46,6 +48,8 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 // to the WebSocket.
 //
 // Closes the WebSocket on exit.
+//
+// ccf may be nil, in which case errors are not reported and only the loop exits.
 func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, outboundMsgCh <-chan WsMsg, ws *websocket.Conn) {
 	defer func() { _ = ws.Close(websocket.StatusNormalClosure, "") }()
 	var err error
@@ -73,6 +77,8 @@ func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan s
 // PingLoop sends periodic WebSocket pings and reports ping errors through ccf.
 //
 // Returns immediately when interval is non-positive.
+//
+// ccf may be nil, in which case errors are not reported and only the loop exits.
 func PingLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, interval, timeout time.Duration, ws *websocket.Conn) {
 	if interval > 0 {
 		t := time.NewTicker(interval)

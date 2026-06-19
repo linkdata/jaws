@@ -12,10 +12,16 @@ import (
 
 // JavascriptText is the source code for the client-side JaWS JavaScript library.
 //
+// It holds the embedded asset bytes and must be treated as read-only: the slice
+// is shared process-wide, so it must not be mutated in place.
+//
 //go:embed jaws.js
 var JavascriptText []byte
 
 // JawsCSS is the source code for the client-side JaWS stylesheet.
+//
+// It holds the embedded asset bytes and must be treated as read-only: the slice
+// is shared process-wide, so it must not be mutated in place.
 //
 //go:embed jaws.css
 var JawsCSS []byte
@@ -37,41 +43,42 @@ func PreloadHTML(urls ...*url.URL) (htmlCode, faviconURL string) {
 	var favicontype string
 	var buf []byte
 	for _, u := range urls {
-		if u != nil {
-			var asattr string
-			ext := strings.ToLower(path.Ext(u.Path))
-			mimetype := mime.TypeByExtension(ext)
-			mimetype, _, _ = strings.Cut(mimetype, ";")
-			urlstr := u.String()
-			switch ext {
-			case ".js":
-				jsurls = append(jsurls, urlstr)
-				continue
-			case ".css":
-				cssurls = append(cssurls, urlstr)
-				continue
-			default:
-				if strings.HasPrefix(mimetype, "image") {
-					asattr = "image"
-					if strings.HasPrefix(strings.ToLower(path.Base(u.Path)), "favicon") {
-						favicontype = mimetype
-						faviconURL = urlstr
-						continue
-					}
-				} else if strings.HasPrefix(mimetype, "font") {
-					asattr = "font"
-				}
-			}
-			buf = append(buf, `<link rel="preload"`...)
-			buf = htmlio.AppendAttr(buf, "href", urlstr)
-			if asattr != "" {
-				buf = htmlio.AppendAttr(buf, "as", asattr)
-			}
-			if mimetype != "" {
-				buf = htmlio.AppendAttr(buf, "type", mimetype)
-			}
-			buf = append(buf, ">\n"...)
+		if u == nil {
+			continue
 		}
+		var asattr string
+		ext := strings.ToLower(path.Ext(u.Path))
+		mimetype := mime.TypeByExtension(ext)
+		mimetype, _, _ = strings.Cut(mimetype, ";")
+		urlstr := u.String()
+		switch ext {
+		case ".js":
+			jsurls = append(jsurls, urlstr)
+			continue
+		case ".css":
+			cssurls = append(cssurls, urlstr)
+			continue
+		default:
+			if strings.HasPrefix(mimetype, "image") {
+				asattr = "image"
+				if strings.HasPrefix(strings.ToLower(path.Base(u.Path)), "favicon") {
+					favicontype = mimetype
+					faviconURL = urlstr
+					continue
+				}
+			} else if strings.HasPrefix(mimetype, "font") {
+				asattr = "font"
+			}
+		}
+		buf = append(buf, `<link rel="preload"`...)
+		buf = htmlio.AppendAttr(buf, "href", urlstr)
+		if asattr != "" {
+			buf = htmlio.AppendAttr(buf, "as", asattr)
+		}
+		if mimetype != "" {
+			buf = htmlio.AppendAttr(buf, "type", mimetype)
+		}
+		buf = append(buf, ">\n"...)
 	}
 	for _, urlstr := range cssurls {
 		buf = append(buf, `<link rel="stylesheet"`...)

@@ -26,6 +26,8 @@ func Test_PreloadHTML(t *testing.T) {
 	const extraScriptWithQuery = "someExtraQuery.js?x=1&copy=2"
 	const extraStyle = "someExtraStyle.css"
 	const extraImage = "favicon.png"
+	const extraLogo = "logo.png"
+	const extraBinary = "data"
 	const extraFont = "someExtraFont.woff2"
 	const extraFontWithQuery = "someExtraFontQuery.woff2?x=1&copy=2"
 
@@ -56,11 +58,14 @@ func Test_PreloadHTML(t *testing.T) {
 	}
 
 	txt, fav = PreloadHTML(
+		nil, // a nil URL argument is skipped
 		mustParseURL(serveJS.Name),
 		mustParseURL(extraScript),
 		mustParseURL(extraScriptWithQuery),
 		mustParseURL(extraStyle),
 		mustParseURL(extraImage),
+		mustParseURL(extraLogo),
+		mustParseURL(extraBinary),
 		mustParseURL(extraFont),
 		mustParseURL(extraFontWithQuery),
 	)
@@ -111,6 +116,20 @@ func Test_PreloadHTML(t *testing.T) {
 	wantFaviconLink := `<link rel="icon" type="` + pngMime + `" href="favicon.png">`
 	if !strings.Contains(txt, wantFaviconLink) {
 		t.Fatalf("missing structured favicon link %q in %q", wantFaviconLink, txt)
+	}
+
+	// A non-favicon image is emitted as an ordinary preload link carrying both
+	// as="image" and the resolved image/png type, mirroring the font assertion.
+	wantLogoLink := `<link rel="preload" href="logo.png" as="image" type="` + pngMime + `">`
+	if !strings.Contains(txt, wantLogoLink) {
+		t.Fatalf("missing structured image preload %q in %q", wantLogoLink, txt)
+	}
+
+	// An extensionless / unknown-MIME resource yields the bare preload form with
+	// neither as= nor type=.
+	wantBinaryLink := `<link rel="preload" href="data">`
+	if !strings.Contains(txt, wantBinaryLink) {
+		t.Fatalf("missing bare preload link %q in %q", wantBinaryLink, txt)
 	}
 
 	if fav != extraImage {

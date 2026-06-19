@@ -3,7 +3,6 @@ package jid
 import (
 	"fmt"
 	"math"
-	"reflect"
 	"testing"
 )
 
@@ -73,6 +72,9 @@ func TestJid_AppendVariants(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := string(tt.jid.AppendInt(nil)); got != tt.wantInt {
 				t.Errorf("AppendInt() = %q, want %q", got, tt.wantInt)
+			}
+			if got := string(tt.jid.AppendInt([]byte("x"))); got != "x"+tt.wantInt {
+				t.Errorf("AppendInt() did not preserve dst prefix: %q", got)
 			}
 			if got := string(tt.jid.Append(nil)); got != tt.wantAppend {
 				t.Errorf("Append() = %q, want %q", got, tt.wantAppend)
@@ -198,8 +200,11 @@ func TestJid_AppendStartTagAttr(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := string(tt.jid.AppendStartTagAttr(nil, tt.name)); !reflect.DeepEqual(got, tt.want) {
+			if got := string(tt.jid.AppendStartTagAttr(nil, tt.name)); got != tt.want {
 				t.Errorf("Jid.AppendStartTagAttr() = %q, want %q", got, tt.want)
+			}
+			if got := string(tt.jid.AppendStartTagAttr([]byte("x"), tt.name)); got != "x"+tt.want {
+				t.Errorf("Jid.AppendStartTagAttr() did not preserve dst prefix: %q", got)
 			}
 		})
 	}
