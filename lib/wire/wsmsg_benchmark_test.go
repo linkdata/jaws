@@ -5,9 +5,10 @@ import "testing"
 var parseBenchSink WsMsg
 
 // BenchmarkParse guards the inbound parse hot path (run on every WebSocket frame)
-// across the common command shapes, including the previously-dropped lone surrogate
-// that now decodes via the JSON fallback. The common quoted and unquoted paths must
-// stay allocation-light; only the rare surrogate case pays the JSON-decode cost.
+// across the common command shapes, including the lone-surrogate case that decodes
+// via the JSON fallback rather than being dropped. The common quoted and unquoted
+// paths must stay allocation-light; only the rare surrogate case pays the
+// JSON-decode cost.
 func BenchmarkParse(b *testing.B) {
 	frames := []struct {
 		name  string

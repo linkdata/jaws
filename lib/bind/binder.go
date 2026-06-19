@@ -299,13 +299,7 @@ func (b *binder[T]) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err e
 	return
 }
 
-// SetLocked returns a [Binder] that will call fn instead of [Binder.JawsSetLocked].
-//
-// The lock will be held at this point.
-// Do not lock or unlock the [Binder] within fn. Do not call [Setter.JawsSet].
-//
-// The bind argument to the function is the previous Binder in the chain,
-// and you probably want to call its [Binder.JawsSetLocked] first.
+// SetLocked implements [Binder.SetLocked].
 func (b *binder[T]) SetLocked(fn SetHook[T]) Binder[T] {
 	return &binder[T]{
 		prev:     b,
@@ -315,13 +309,7 @@ func (b *binder[T]) SetLocked(fn SetHook[T]) Binder[T] {
 	}
 }
 
-// GetLocked returns a [Binder] that will call fn instead of [Binder.JawsGetLocked].
-//
-// The lock will be held at this point, preferring RLock over Lock, if available.
-// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
-//
-// The bind argument to the function is the previous Binder in the chain,
-// and you probably want to call its [Binder.JawsGetLocked] first.
+// GetLocked implements [Binder.GetLocked].
 func (b *binder[T]) GetLocked(fn GetHook[T]) Binder[T] {
 	return &binder[T]{
 		prev:     b,
@@ -331,9 +319,7 @@ func (b *binder[T]) GetLocked(fn GetHook[T]) Binder[T] {
 	}
 }
 
-// Format returns a [Binder] that implements [HTMLGetter] and
-// calls html.EscapeString on either fmt.Sprintf(format, JawsGetLocked(elem))
-// or, if T implements [Formatter], T.Format(format).
+// Format implements [Binder.Format].
 func (b *binder[T]) Format(format string) Binder[T] {
 	return &binder[T]{
 		prev:     b,
@@ -343,15 +329,7 @@ func (b *binder[T]) Format(format string) Binder[T] {
 	}
 }
 
-// GetHTML returns a [Binder] that will call fn instead of the default escaped
-// fmt.Sprint(JawsGetLocked(elem)) HTML rendering.
-//
-// The lock will be held at this point, preferring RLock over Lock, if available.
-// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
-//
-// Unlike [Binder.GetLocked] and [Binder.SetLocked], the bind argument to fn is
-// the current Binder, not the previous one; read the value with its
-// JawsGetLocked to render it. See [GetHTMLHook].
+// GetHTML implements [Binder.GetHTML].
 func (b *binder[T]) GetHTML(fn GetHTMLHook[T]) Binder[T] {
 	return &binder[T]{
 		prev:     b,
@@ -361,9 +339,7 @@ func (b *binder[T]) GetHTML(fn GetHTMLHook[T]) Binder[T] {
 	}
 }
 
-// Clicked returns a [Binder] that will call fn when [jaws.ClickHandler.JawsClick] is invoked.
-//
-// The [Binder] locks are not held when the function is called.
+// Clicked implements [Binder.Clicked].
 func (b *binder[T]) Clicked(fn ClickedHook[T]) Binder[T] {
 	return &binder[T]{
 		prev:     b,
@@ -373,10 +349,7 @@ func (b *binder[T]) Clicked(fn ClickedHook[T]) Binder[T] {
 	}
 }
 
-// ContextMenu returns a [Binder] that will call fn when
-// [jaws.ContextMenuHandler.JawsContextMenu] is invoked.
-//
-// The [Binder] locks are not held when the function is called.
+// ContextMenu implements [Binder.ContextMenu].
 func (b *binder[T]) ContextMenu(fn ContextMenuHook[T]) Binder[T] {
 	return &binder[T]{
 		prev:     b,
@@ -386,12 +359,7 @@ func (b *binder[T]) ContextMenu(fn ContextMenuHook[T]) Binder[T] {
 	}
 }
 
-// InitialHTMLAttr returns a [Binder] that will call fn when
-// [jaws.InitialHTMLAttrHandler.JawsInitialHTMLAttr] is invoked.
-//
-// The lock will be held at this point, preferring RLock over Lock, if available.
-// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
-// To call the previous handler in the chain, call [Binder.JawsInitialHTMLAttrLocked].
+// InitialHTMLAttr implements [Binder.InitialHTMLAttr].
 func (b *binder[T]) InitialHTMLAttr(fn InitialHTMLAttrHook[T]) Binder[T] {
 	return &binder[T]{
 		prev:     b,
@@ -401,15 +369,7 @@ func (b *binder[T]) InitialHTMLAttr(fn InitialHTMLAttrHook[T]) Binder[T] {
 	}
 }
 
-// Success returns a [Binder] that will call fn after the value has been set
-// with no errors. No locks are held when the function is called.
-// If the function returns an error, that will be returned from [Setter.JawsSet].
-//
-// The function must have one of the following signatures:
-//   - func()
-//   - func() error
-//   - func(*jaws.Element)
-//   - func(*jaws.Element) error
+// Success implements [Binder.Success].
 func (b *binder[T]) Success(fn any) Binder[T] {
 	return &binder[T]{
 		prev:     b,

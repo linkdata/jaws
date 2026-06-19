@@ -28,8 +28,8 @@ type TemplateReloader struct {
 
 // New returns a [jaws.TemplateLookuper] for the templates matched by fpath.
 //
-// In normal builds the templates are parsed once from fsys. In debug builds
-// (deadlock.Debug, set by -race or -tags debug) it instead returns a
+// In normal builds the templates are parsed once from fsys. When
+// [deadlock.Debug] is set (race or debug builds) it instead returns a
 // [TemplateReloader] that reparses from disk under relpath, so template edits take
 // effect without a restart; fsys is then unused.
 //
