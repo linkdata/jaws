@@ -362,8 +362,12 @@ func jsCallData(jsfunc, jsonstr string) string {
 	return jsCallPathByteRemover.Replace(jsfunc) + "=" + maybeCompactJSON(jsonstr)
 }
 
-// JsCall calls the JavaScript function jsfunc with the argument jsonstr
-// on all HTML elements matching target.
+// JsCall calls a browser JavaScript function path for matching targets.
+//
+// target selects which requests or elements receive the Call message. In each
+// receiving browser, jsfunc is resolved as a path from window and called with
+// JSON.parse(jsonstr); the matched element is not passed as this or as an
+// argument.
 func (jw *Jaws) JsCall(target any, jsfunc, jsonstr string) {
 	jw.broadcastTo(target, what.Call, jsCallData(jsfunc, jsonstr))
 }

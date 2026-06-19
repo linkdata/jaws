@@ -247,8 +247,10 @@ func (elem *Element) SetValue(value string) {
 	elem.queue(what.Value, value)
 }
 
-// JsCall queues calling the JavaScript function jsfunc with the argument jsonstr
-// for the [Element].
+// JsCall queues a browser JavaScript function path call for the [Element].
+//
+// In the receiving browser, jsfunc is resolved as a path from window and called
+// with JSON.parse(jsonstr); the Element is not passed as this or as an argument.
 //
 // Call this while the [Element] is rendering or updating. The change is queued and
 // sent on the next processing pass; to call JavaScript for every element matching
