@@ -15,9 +15,9 @@ type Click struct {
 	Name    string
 	X       float64 // X is the browser clientX coordinate in CSS pixels.
 	Y       float64 // Y is the browser clientY coordinate in CSS pixels.
-	Shift   bool
-	Control bool
-	Alt     bool
+	Shift   bool    // Shift reports whether the Shift key was held during the event.
+	Control bool    // Control reports whether the Control key was held during the event.
+	Alt     bool    // Alt reports whether the Alt key was held during the event.
 }
 
 const (

@@ -140,8 +140,11 @@ type Jid = jid.Jid // convenience alias
 // [New] to ensure the helper goroutines and static assets are prepared.
 //
 // The exported configuration fields are ordinary fields, not live synchronized
-// settings. Set them before exposing handlers, creating Requests, or starting
-// [Jaws.Serve] / [Jaws.ServeWithTimeout]. Methods document their own
+// settings. Several are consulted on each connection or request (for example
+// MaxPendingRequestsPerIP and WebSocketPingInterval), so set them all before
+// exposing handlers, creating Requests, or starting [Jaws.Serve] /
+// [Jaws.ServeWithTimeout]; mutating one after serving has begun is an
+// unsynchronized write and is not supported. Methods document their own
 // concurrency behavior and may be called concurrently when stated.
 type Jaws struct {
 	CookieName              string          // Name for session cookies; defaults to a name derived from the executable ([assets.DefaultCookieName]), falling back to "jaws"

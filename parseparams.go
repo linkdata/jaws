@@ -27,6 +27,10 @@ func usableAsTag(t any) (ok bool) {
 // [ContextMenuHandler]. A param implementing [InitHandler] or
 // [InitialHTMLAttrHandler] is treated only as a tag here; its JawsInit /
 // JawsInitialHTMLAttr are intentionally invoked only for the primary getter.
+//
+// A param recognized as an event handler is appended to handlers, and if it is
+// also usable as a tag (comparable, per usableAsTag) it is additionally appended
+// to tags, so a comparable handler is returned in both slices.
 func ParseParams(params []any) (tags []any, handlers []any, attrs []string) {
 	for i := range params {
 		switch data := params[i].(type) {

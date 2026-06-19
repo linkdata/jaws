@@ -1184,7 +1184,12 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 	return
 }
 
-// eventCaller calls event functions
+// eventCaller calls event functions.
+//
+// Once the Request context is cancelled it stops invoking handlers and drains the
+// remaining queued calls as no-ops. This cannot strand events on a still-live
+// Request: process selects on the same rq.Context().Done() and returns, then closes
+// eventCallCh, so the no-op drain is always part of teardown.
 func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh chan<- wire.WsMsg, eventDoneCh chan<- struct{}) {
 	defer close(eventDoneCh)
 	for call := range eventCallCh {
