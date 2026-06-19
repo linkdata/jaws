@@ -40,9 +40,6 @@ type ConnectFn = func(rq *Request) error
 // Request maintains the state for a JaWS WebSocket connection, and handles processing
 // of events and broadcasts.
 //
-// Note that we have to store the context inside the struct because there is no call chain
-// between the Request being created and it being used once the WebSocket is created.
-//
 // Unlike [Session], whose methods are nil-safe, Request methods are not safe to call on a
 // nil *Request: a Request is always obtained from [Jaws.NewRequest] or [Jaws.UseRequest]
 // and is never legitimately nil. The nil-receiver guard on [Request.JawsKeyString] (and
@@ -61,7 +58,7 @@ type Request struct {
 	initial          *http.Request           // initial HTTP request passed to Jaws.NewRequest
 	session          *Session                // session, if established
 	todoDirt         []any                   // dirty tags
-	ctx              context.Context         // current context, derived from either Jaws or WS HTTP req
+	ctx              context.Context         // current context, derived from either Jaws or WS HTTP req; stored in the struct because there is no call chain between Request creation and its use once the WebSocket exists
 	httpDoneCh       <-chan struct{}         // once claimed, set to http.Request.Context().Done()
 	cancelFn         context.CancelCauseFunc // cancel function
 	connectFn        ConnectFn               // a ConnectFn to call before starting message processing for the Request
@@ -112,11 +109,8 @@ func (rq *Request) JawsKeyString() string {
 }
 
 // String returns the Request in the form "Request<key>", using [Request.JawsKeyString]
-// to encode the key.
-//
-// Like JawsKeyString, String tolerates a nil receiver so a nil or not-fully-constructed
-// Request can still render into diagnostics; as the [Request] type documentation notes,
-// that nil tolerance is for diagnostics only and is not a public nil-safe contract.
+// to encode the key. Like JawsKeyString it tolerates a nil receiver for diagnostics
+// only; see the [Request] type documentation.
 func (rq *Request) String() string {
 	return "Request<" + rq.JawsKeyString() + ">"
 }
@@ -126,9 +120,9 @@ func (rq *Request) String() string {
 //
 // [RequestWriter.Write] calls it on every write; the recorded second drives the
 // recency window in [Jaws.oldestEvictablePendingLocked] and the idle expiry in
-// [Request.maintenance]. It is a single atomic store of [Jaws.runtimeSeconds]
-// (no clock read), lock-free and safe to call concurrently.
+// [Request.maintenance]. It is lock-free and safe to call concurrently.
 func (rq *Request) MarkWritten() {
+	// A single atomic store of the cached runtimeSeconds; no clock read.
 	rq.lastWriteSeconds.Store(rq.Jaws.runtimeSeconds.Load())
 }
 
@@ -222,13 +216,10 @@ func (rq *Request) ensureAutoSession(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// clearLocked resets rq so it can be reused from the Jaws request pool: it
-// cancels any live context, drops queued dirt and messages, detaches all
-// elements and tags, and kills any attached session. Every field is reset to
-// its zero state except ctx and cancelFn, which keep their (cancelled) values
-// until getRequestLocked replaces them on reuse. It runs when rq is freshly
-// allocated or being recycled, so the caller must ensure no other goroutine is
-// using rq.
+// clearLocked resets rq so it can be reused from the [Jaws] request pool: it cancels
+// any live context, drops queued dirt and messages, detaches all elements and tags,
+// and kills any attached session. The caller must ensure no other goroutine is using
+// rq (it runs when rq is freshly allocated or being recycled).
 func (rq *Request) clearLocked() *Request {
 	rq.JawsKey = 0
 	rq.lastJid = 0
@@ -238,6 +229,8 @@ func (rq *Request) clearLocked() *Request {
 	rq.killSessionLocked()
 	rq.running.Store(false)
 	rq.claimed.Store(false)
+	// Every field is reset to its zero state except ctx and cancelFn, which keep their
+	// (cancelled) values until getRequestLocked replaces them on reuse.
 	if rq.cancelFn != nil {
 		rq.cancelFn(nil)
 	}
@@ -304,19 +297,17 @@ func appendJSQuote(b []byte, s string) []byte {
 	return append(b[:start], rest...)
 }
 
-// drainTailScript builds the tail <script> body from the attribute and class
-// messages queued during initial rendering, reporting sent=true the first time it
-// runs for this Request (subsequent calls return sent=false so the response is 204).
-//
-// It takes only muQueue and never touches the network. Jaws.ServeHTTP calls it
-// while holding jw.mu (read), which blocks recycling (recycling needs the jw.mu
-// write lock), so this Request cannot be recycled and reused under a different key
-// mid-drain: the bytes returned always belong to the identity the handler looked
-// up. The (potentially slow) network write happens afterwards in writeTailResponse
-// with no lock held, so a stalled client cannot block recycling or the Serve loop.
-// The data race on wsQueue/tailsent is prevented because clearLocked also takes
-// muQueue to reset them.
+// drainTailScript builds the tail <script> body from the attribute and class messages
+// queued during initial rendering, reporting sent=true the first time it runs for this
+// Request (subsequent calls return sent=false so the response is 204).
 func (rq *Request) drainTailScript() (b []byte, sent bool) {
+	// Takes only muQueue and never touches the network. Jaws.ServeHTTP calls it while
+	// holding jw.mu (read), which blocks recycling (which needs the jw.mu write lock),
+	// so this Request cannot be recycled and reused under a different key mid-drain: the
+	// bytes returned always belong to the identity the handler looked up. The slow
+	// network write happens afterwards in writeTailResponse with no lock held, so a
+	// stalled client cannot block recycling or the Serve loop. The data race on
+	// wsQueue/tailsent is prevented because clearLocked also takes muQueue to reset them.
 	rq.muQueue.Lock()
 	defer rq.muQueue.Unlock()
 	if !rq.tailsent {

@@ -65,12 +65,11 @@ func (jw *Jaws) Broadcast(msg wire.Message) {
 
 // dropNonComparableTags returns tags unchanged, or nil after reporting misuse via
 // [Jaws.reportMisuse], if any tag is not comparable at runtime.
-//
-// Expanded tags become map keys in the processing loop (wantMessage's lookup in
-// Request.tagMap). TagExpand rejects the known runtime-non-comparable
-// struct/array case, and this guard remains as a final defense before a bad Dest
-// can panic the Serve goroutine and crash the process.
 func (jw *Jaws) dropNonComparableTags(tags []any) []any {
+	// Expanded tags become map keys in the processing loop (wantMessage's lookup in
+	// Request.tagMap). TagExpand rejects the known runtime-non-comparable struct/array
+	// case; this guard remains as a final defense before a bad Dest can panic the
+	// Serve goroutine and crash the process.
 	for _, tagValue := range tags {
 		if cmperr := tag.NewErrNotComparable(tagValue); cmperr != nil {
 			jw.reportMisuse(fmt.Errorf("jaws: Broadcast: %w", cmperr))
@@ -122,11 +121,11 @@ type dirtPair struct {
 	ord int
 }
 
-// sortedDirtTags returns the keys of dirty ordered by their (insertion-order) int
-// value. It materializes {tag,ord} pairs and sorts on the int, rather than sorting
-// a []any with a comparator that does two map lookups per comparison: the latter is
-// ~2*N*log2(N) hashed any-map lookups, and this runs under the exclusive jw.mu.
+// sortedDirtTags returns the keys of dirty ordered by their insertion-order int value.
 func sortedDirtTags(dirty map[any]int) []any {
+	// Materialize {tag,ord} pairs and sort on the int, rather than sorting a []any
+	// with a comparator that does two map lookups per comparison (~2*N*log2(N) hashed
+	// any-map lookups); this runs under the exclusive jw.mu.
 	pairs := make([]dirtPair, 0, len(dirty))
 	for k, ord := range dirty {
 		pairs = append(pairs, dirtPair{tag: k, ord: ord})
@@ -140,25 +139,13 @@ func sortedDirtTags(dirty map[any]int) []any {
 }
 
 // distributeDirt drains the accumulated dirty tags and appends them to every live
-// Request's pending-dirt list for the next update pass.
-//
-// It snapshots the Request set under jw.mu, releases it, then appends to each Request
-// without holding jw.mu. Two consequences are deliberate and harmless:
-//
-//   - The snapshot includes pending (not-yet-running) Requests whose process loop has
-//     not started, so their todoDirt buffers until they connect or are recycled
-//     (bounded by the request timeout). This is intentional: a value mutated in the
-//     render-to-connect window is then reflected on the first update pass.
-//   - A Request can be recycled and reused for a different connection between the
-//     snapshot and the append. appendDirtyTags and clearLocked both take rq.mu, so
-//     there is no data race, and stale tags landing in a reborn Request resolve to
-//     nothing in [Request.makeUpdateList] against its freshly emptied tagMap (at worst
-//     a redundant re-render). Unlike destKey/cancelIfCurrent this path needs no
-//     key-identity guard because applying dirt is idempotent.
+// Request's pending-dirt list for the next update pass, returning the number of
+// dirty tags distributed.
 func (jw *Jaws) distributeDirt() int {
 	var reqs []*Request
 	var dirt []any
 
+	// Snapshot the Request set under jw.mu, then append to each Request without it.
 	jw.mu.Lock()
 	if len(jw.dirty) > 0 {
 		dirt = sortedDirtTags(jw.dirty)
@@ -171,6 +158,17 @@ func (jw *Jaws) distributeDirt() int {
 	}
 	jw.mu.Unlock()
 
+	// Appending outside jw.mu is deliberately safe:
+	//   - The snapshot includes pending (not-yet-running) Requests; their todoDirt
+	//     buffers until they connect or are recycled (bounded by the request timeout),
+	//     so a value mutated in the render-to-connect window is reflected on the first
+	//     update pass.
+	//   - A Request can be recycled between snapshot and append. appendDirtyTags and
+	//     clearLocked both take rq.mu, so there is no data race, and stale tags in a
+	//     reborn Request resolve to nothing in Request.makeUpdateList against its
+	//     freshly emptied tagMap (at worst a redundant re-render). Applying dirt is
+	//     idempotent, so unlike destKey/cancelIfCurrent this path needs no
+	//     key-identity guard.
 	for _, rq := range reqs {
 		rq.appendDirtyTags(dirt)
 	}
@@ -328,17 +326,16 @@ func (jw *Jaws) Append(target any, html template.HTML) {
 	jw.broadcastTo(target, what.Append, string(html))
 }
 
-// maybeCompactJSON returns its input after making it safe to embed verbatim in a
-// what.Call wire frame, which the client splits on '\n' (frames) and '\t'
-// (order fields). For valid JSON, json.Compact strips all insignificant
-// whitespace, including any tabs, newlines and carriage returns between tokens.
-// When the input is not valid JSON
-// (for example a caller embedded a raw control byte inside a string literal),
-// json.Compact fails; rather than passing the raw bytes through and corrupting or
-// invalidating the frame, escape those control bytes so the payload is always
-// frame-safe and valid JSON.
+// maybeCompactJSON returns its input made safe to embed verbatim in a [what.Call]
+// wire frame, which the client splits on '\n' (frames) and '\t' (order fields).
 func maybeCompactJSON(in string) string {
 	if strings.ContainsAny(in, "\n\t\r") {
+		// For valid JSON, json.Compact strips all insignificant whitespace, including
+		// any tabs, newlines and carriage returns between tokens. When the input is
+		// not valid JSON (for example a raw control byte inside a string literal),
+		// Compact fails; escape those control bytes rather than pass the raw bytes
+		// through and corrupt the frame, so the payload is always frame-safe and
+		// valid JSON.
 		var b bytes.Buffer
 		if err := json.Compact(&b, []byte(in)); err == nil {
 			return b.String()

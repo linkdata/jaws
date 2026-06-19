@@ -413,14 +413,14 @@ func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 // refreshRuntimeSeconds updates runtimeSeconds to the whole seconds elapsed since
 // the [Jaws] was created.
 //
-// It is called by the Serve loop (seeded once at start, then on every maintenance
-// tick), so the per-write [Request.MarkWritten] only does an atomic load rather than
-// reading the clock. Deriving from [time.Since] on a monotonic [time.Time] keeps the
-// counter immune to wall-clock and NTP adjustments.
+// The Serve loop calls it (seeded once at start, then on every maintenance tick), so
+// the per-write [Request.MarkWritten] only does an atomic load rather than reading
+// the clock.
 func (jw *Jaws) refreshRuntimeSeconds() {
-	// time.Since on a monotonic base is never negative. The int32 conversion is
-	// intentionally modulo-style: recency checks compare nearby samples, and their
-	// windows are far smaller than 2^31 seconds.
+	// time.Since on a monotonic base is never negative and keeps the counter immune to
+	// wall-clock and NTP adjustments. The int32 conversion is intentionally
+	// modulo-style: recency checks compare nearby samples, and their windows are far
+	// smaller than 2^31 seconds.
 	jw.runtimeSeconds.Store(int32(time.Since(jw.created) / time.Second)) // #nosec G115 -- intentional relative-time counter
 }
 
@@ -453,31 +453,24 @@ func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) 
 	return
 }
 
-// oldestEvictablePendingLocked returns the oldest pending [Request] for remoteIP
-// that is safe to recycle, or nil if every one of them was written too recently to
-// evict safely. nowSeconds is the reference instant ([Jaws.runtimeSeconds]); the
-// caller passes a single value so all candidates are judged against the same instant.
-// Caller must hold jw.mu.
-//
-// A Request is spared while its initial HTML may still be in flight. Recycling a
-// Request whose render goroutine is still writing would let a later [Jaws.NewRequest]
-// reuse the pooled pointer under a new key while that goroutine keeps appending
-// elements (see [Jaws.limitPendingRequestsLocked]). [RequestWriter.Write] records the
-// current second on every write via [Request.MarkWritten], so a Request is treated as
-// possibly-rendering, and spared, while its last write is within 2*maintenanceInterval
-// (rounded to whole seconds, with a one-second floor).
-//
-// The recorded second advances only when the Request keeps writing, so an actively
-// writing render stays fresh while one that has produced no write for the window —
-// whether finished or merely stalled between writes — becomes evictable. lastWriteSeconds
-// is read lock-free, so this scan takes no Request lock; the coarse second granularity
-// is harmless. If a render records a write using a newer runtimeSeconds tick than
-// nowSeconds, the negative elapsed value is treated as fresh rather than evictable.
-//
-// maintenanceInterval is zero until [Jaws.ServeWithTimeout] starts; the window then
-// falls back to [DefaultUpdateInterval] so an in-flight render is still protected
-// before the maintenance pass begins running.
+// oldestEvictablePendingLocked returns the oldest pending [Request] for remoteIP that
+// is safe to recycle, or nil if every one of them was written too recently to evict.
+// nowSeconds is the reference instant ([Jaws.runtimeSeconds]), passed in so all
+// candidates are judged against the same instant. Caller must hold jw.mu.
 func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr, nowSeconds int32) *Request {
+	// A Request is spared while its initial HTML may still be in flight: recycling one
+	// whose render goroutine is still writing would let a later NewRequest reuse the
+	// pooled pointer under a new key while that goroutine keeps appending elements (see
+	// limitPendingRequestsLocked). RequestWriter.Write records the current second on
+	// every write via Request.MarkWritten, so a Request is treated as possibly-rendering,
+	// and spared, while its last write is within 2*maintenanceInterval (rounded to whole
+	// seconds, with a one-second floor). The recorded second advances only while the
+	// Request keeps writing, so an actively writing render stays fresh while one idle for
+	// the window — finished or merely stalled between writes — becomes evictable.
+	//
+	// maintenanceInterval is zero until ServeWithTimeout starts; fall back to
+	// DefaultUpdateInterval so an in-flight render is still protected before the
+	// maintenance pass begins running.
 	interval := jw.maintenanceInterval
 	if interval <= 0 {
 		interval = DefaultUpdateInterval
