@@ -219,6 +219,15 @@ func TestJawsBoot_SetupPrefixVariants(t *testing.T) {
 					t.Errorf("GET %q (prefix %q) = %d, want 200 (head URL must match a registered handler)", wantURI, prefix, rr.Code)
 				}
 			}
+
+			for _, name := range []string{"bootstrap.bundle.min.js.map", "bootstrap.min.css.map"} {
+				mapURI := staticserve.EnsurePrefixSlash(path.Join(prefix, name))
+				rr := httptest.NewRecorder()
+				mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, mapURI, nil))
+				if rr.Code != http.StatusNotFound {
+					t.Errorf("GET %q (prefix %q) = %d, want 404 (sourcemap probe must be 404)", mapURI, prefix, rr.Code)
+				}
+			}
 		})
 	}
 }

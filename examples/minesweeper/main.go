@@ -43,16 +43,16 @@ func newCell(g *game, row, col int) *Cell {
 	return &Cell{game: g, row: row, col: col}
 }
 
-// Reset clears the cell to its initial hidden state.
-func (c *Cell) Reset() {
+// reset clears the cell to its initial hidden state.
+func (c *Cell) reset() {
 	c.mine = false
 	c.revealed = false
 	c.flagged = false
 	c.adjacent = 0
 }
 
-// ToggleFlag toggles the flagged state and returns the new state.
-func (c *Cell) ToggleFlag() bool {
+// toggleFlag toggles the flagged state and returns the new state.
+func (c *Cell) toggleFlag() bool {
 	c.flagged = !c.flagged
 	return c.flagged
 }
@@ -184,7 +184,7 @@ type game struct {
 }
 
 func newGame(rows, cols, mines int) *game {
-	return newGameWithRand(rows, cols, mines, rand.New(rand.NewSource(time.Now().UnixNano()))) // #nosec G404
+	return newGameWithRand(rows, cols, mines, nil)
 }
 
 func newGameWithRand(rows, cols, mines int, rng *rand.Rand) *game {
@@ -294,7 +294,7 @@ func (g *game) reset() []any {
 func (g *game) resetLocked() {
 	for row := 0; row < g.rows; row++ {
 		for col := 0; col < g.cols; col++ {
-			g.cells[row][col].Reset()
+			g.cells[row][col].reset()
 		}
 	}
 	g.started = false
@@ -368,7 +368,7 @@ func (g *game) toggleFlag(cell *Cell) []any {
 		return nil
 	}
 	before := g.snapshot()
-	if cell.ToggleFlag() {
+	if cell.toggleFlag() {
 		g.flags++
 	} else {
 		g.flags--

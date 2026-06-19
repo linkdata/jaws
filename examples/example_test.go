@@ -33,7 +33,9 @@ func Example() {
 
 	// parse our template and inform JaWS about it
 	templates := template.Must(template.New("index").Parse(indexhtml))
-	_ = jw.AddTemplateLookuper(templates)
+	if err := jw.AddTemplateLookuper(templates); err != nil {
+		panic(err)
+	}
 
 	go jw.Serve()                                 // start the JaWS processing loop
 	http.DefaultServeMux.Handle("GET /jaws/", jw) // ensure the JaWS routes are handled
@@ -57,7 +59,9 @@ func Example_secureSession() {
 	jw.Logger = slog.Default()
 
 	templates := template.Must(template.New("index").Parse(indexhtml))
-	_ = jw.AddTemplateLookuper(templates)
+	if err := jw.AddTemplateLookuper(templates); err != nil {
+		panic(err)
+	}
 
 	go jw.Serve()
 	mux := http.NewServeMux()

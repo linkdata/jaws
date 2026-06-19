@@ -23,6 +23,10 @@ var assetsFS embed.FS
 // included in the page head through [jaws.Jaws.GenerateHeadHTML]. The prefix may
 // be absolute ("/static"), relative ("static") or empty; the registered handler
 // paths and the returned URLs are kept identical in all cases.
+//
+// Setup also registers [http.NotFoundHandler] (404) routes under prefix for the
+// bundled bootstrap *.map sourcemap paths, quietly answering devtools probes for
+// "bootstrap.bundle.min.js.map" and "bootstrap.min.css.map".
 func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.URL, err error) {
 	var files []*staticserve.StaticServe
 	if err = staticserve.WalkDir(assetsFS, "assets/static", func(filename string, ss *staticserve.StaticServe) (err error) {
