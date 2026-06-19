@@ -15,7 +15,6 @@ import (
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawsboot"
 	"github.com/linkdata/jaws/jawstree"
-	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/templatereloader"
 	"github.com/linkdata/jaws/lib/ui"
 	"github.com/linkdata/staticserve"
@@ -46,10 +45,13 @@ func setupJaws(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
 			jawstree.Setup,
 			staticserve.MustNewFS(assetsFS, "assets/static", "images/favicon.png"),
 		); err == nil {
-			// Add a route to our index template with a bound variable accessible as '.Dot' in the template
-			var mu sync.Mutex
-			var f float64
-			mux.Handle("GET /", ui.Handler(jw, "index.html", bind.New(&mu, &f)))
+			var mu sync.RWMutex
+			root := &jawstree.Node{Children: []*jawstree.Node{
+				{Name: "Documents", Children: []*jawstree.Node{{Name: "report.pdf"}}},
+				{Name: "Pictures"},
+			}}
+			tree := jawstree.New("mytree", ui.NewJsVar(&mu, root), jawstree.InitiallyExpanded)
+			mux.Handle("GET /", ui.Handler(jw, "index.html", tree))
 		}
 	}
 	return
@@ -87,10 +89,15 @@ inside `<head>` and `{{$.TailHTML}}` before the closing `</body>` tag.
 
 ## Using the tree widget
 
+A `Tree` is shared UI state. Build it once before serving or rendering it, then
+reuse that `*Tree` for every request that should show the same tree. The embedded
+`ui.JsVar` is the backing store, lock, and browser communication channel for the
+`Node` tree.
+
 Build a `Node` tree (by hand, or from a directory with `Root`), wrap its root
-in a `ui.JsVar`, and pass that to `New`. `New` initializes node IDs and the
-tree and parent back-pointers, so it must be called before rendering or using
-the name-path selection API:
+in a `ui.JsVar`, and pass it to `New`. `New` initializes node IDs plus the tree
+and parent back-pointers, so it must run before rendering or using the name-path
+selection API:
 
 ```go
 var mu sync.RWMutex
@@ -122,7 +129,7 @@ silently fails to appear:
 Selections made in the browser are applied to the `Node` tree under the
 `ui.JsVar` lock; read them with `Tree.GetSelected` or change them with
 `Tree.SetSelected`. After mutating the tree server-side, push the new state to
-all clients by dirtying the JsVar's bound pointer:
+all rendered clients by dirtying the JsVar's bound pointer:
 
 ```go
 tree.SetSelected([][]string{{"Documents", "report.pdf"}})
