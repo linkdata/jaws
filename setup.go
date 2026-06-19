@@ -22,12 +22,18 @@ type HandleFunc = func(pattern string, handler http.Handler)
 type SetupFunc = func(jw *Jaws, handleFn HandleFunc, prefix string) (urls []*url.URL, err error)
 
 // makeAbsPath returns a copy of u with prefix prepended to relative paths.
+//
+// When a non-empty prefix is applied the result is made absolute (a leading slash is
+// ensured), so the head URL matches the always-absolute handler pattern that
+// [staticserve.NormalizeGET] registers for a [staticserve.StaticServe] extra. A
+// relative prefix would otherwise leave the URL relative, which a browser resolves
+// against the current page and so fails to load on any non-root page.
 func makeAbsPath(prefix string, u *url.URL) *url.URL {
 	if u != nil {
 		copied := *u
 		u = &copied
 		if prefix != "" && !path.IsAbs(u.Path) {
-			u.Path = path.Join(prefix, u.Path)
+			u.Path = staticserve.EnsurePrefixSlash(path.Join(prefix, u.Path))
 		}
 	}
 	return u

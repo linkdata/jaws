@@ -108,6 +108,34 @@ func TestJaws_SetupURLExtraCanBeReusedWithDifferentPrefixes(t *testing.T) {
 	}
 }
 
+func TestJaws_SetupRelativePrefixYieldsAbsoluteURL(t *testing.T) {
+	// A relative, non-empty prefix must still produce a head URL that matches the
+	// always-absolute handler pattern; a relative URL would resolve against the
+	// current page and 404 on any non-root page.
+	ss := staticserve.Must("favicon.png", []byte("Hello"))
+
+	jw, _ := New()
+	defer jw.Close()
+	mux := &testMux{}
+	if err := jw.Setup(mux.Handle, "static", ss); err != nil {
+		t.Fatal(err)
+	}
+	if len(mux.m) != 1 {
+		t.Fatalf("expected 1 handler, got %d", len(mux.m))
+	}
+	var pattern string
+	for p := range mux.m {
+		pattern = p
+	}
+	headURL := jw.FaviconURL()
+	if !strings.HasPrefix(headURL, "/static/favicon.") {
+		t.Errorf("head URL is not absolute: %q", headURL)
+	}
+	if want := "GET " + headURL; pattern != want {
+		t.Errorf("handler pattern %q does not match head URL: want %q", pattern, want)
+	}
+}
+
 func TestJaws_SetupEmptyPrefix(t *testing.T) {
 	ss := staticserve.Must("favicon.png", []byte("Hello"))
 
