@@ -79,7 +79,7 @@ func (w What) IsCommand() bool {
 
 // IsValid reports whether w is a known command or event.
 func (w What) IsValid() bool {
-	return w != invalid && w != separator
+	return w != invalid && w != separator && w <= Hook
 }
 
 // Parse returns the [What] named by s.

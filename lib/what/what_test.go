@@ -41,6 +41,18 @@ func TestIsCommandAndValid(t *testing.T) {
 	if !Update.IsValid() {
 		t.Fail()
 	}
+	if separator.IsValid() {
+		t.Fail()
+	}
+	if !Hook.IsValid() { // last defined value, must stay valid
+		t.Fail()
+	}
+	if What(Hook + 1).IsValid() { // first undefined value above Hook
+		t.Fail()
+	}
+	if What(255).IsValid() { // top of the uint8 range, undefined
+		t.Fail()
+	}
 	if invalid.IsCommand() {
 		t.Fail()
 	}
