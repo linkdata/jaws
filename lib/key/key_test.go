@@ -1,6 +1,43 @@
 package key
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
+
+// TestRoundTrip asserts the inverse relationship the package guarantees:
+// Parse(Key(k).String()) recovers k with an empty tail across the full uint64
+// domain (keys come from a CSPRNG, so large values near math.MaxUint64 are
+// realistic), and that String and Append produce identical text.
+func TestRoundTrip(t *testing.T) {
+	for _, k := range []Key{0, 1, 32, 0x0123456789abcdef, math.MaxUint64} {
+		s := k.String()
+		if got := string(Append(nil, k)); got != s {
+			t.Fatalf("Append(%d) = %q, String() = %q; want equal", uint64(k), got, s)
+		}
+		got, tail := Parse(s)
+		if got != k || tail != "" {
+			t.Fatalf("Parse(%q) = %d, %q; want %d, %q", s, uint64(got), tail, uint64(k), "")
+		}
+	}
+}
+
+// TestParseCaseInsensitive pins the documented asymmetry: Parse decodes base-32
+// case-insensitively while String emits only lowercase, so an uppercase prefix
+// parses but does not round-trip to its own text.
+func TestParseCaseInsensitive(t *testing.T) {
+	upper, tail := Parse("1A")
+	if tail != "" {
+		t.Fatalf("Parse(%q) tail = %q, want empty", "1A", tail)
+	}
+	lower, _ := Parse("1a")
+	if upper != lower {
+		t.Fatalf("Parse(%q) = %d, Parse(%q) = %d; want equal", "1A", uint64(upper), "1a", uint64(lower))
+	}
+	if got := upper.String(); got != "1a" {
+		t.Fatalf("Parse(%q).String() = %q, want lowercase %q", "1A", got, "1a")
+	}
+}
 
 func TestKeyString(t *testing.T) {
 	for _, tt := range []struct {

@@ -21,6 +21,10 @@ func (key Key) String() string {
 //
 // If s contains a slash, tail is the slash and everything after it. The returned
 // key is zero if the prefix before tail is not a valid base-32 key.
+//
+// Decoding is case-insensitive (base-32 'A' and 'a' both decode to 10), while
+// [Key.String] and [Append] always emit lowercase, so a parsed uppercase prefix
+// does not re-encode to its own text.
 func Parse(s string) (key Key, tail string) {
 	slashIdx := strings.IndexByte(s, '/')
 	keystr := s
