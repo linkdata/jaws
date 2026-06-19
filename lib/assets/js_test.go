@@ -384,6 +384,95 @@ process.stdout.write(JSON.stringify({ msg: jaws.sent[0] || "", stopped: stopped 
 	}
 }
 
+func TestJawsJS_EventHandlersIgnoreConnectingSocket(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 0; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { throw new Error("send while connecting: " + msg); };
+WebSocket = FakeSocket;
+
+function run(handler, ev) {
+	jaws = new FakeSocket();
+	let prevented = false;
+	let stopped = false;
+	ev.preventDefault = function() { prevented = true; };
+	ev.stopPropagation = function() { stopped = true; };
+	handler(ev);
+	return { sent: jaws.sent.length, prevented: prevented, stopped: stopped };
+}
+
+const target = {
+	id: "Jid.1",
+	tagName: "DIV",
+	getAttribute: function(name) { return name === "name" ? "go" : null; },
+	textContent: "",
+	parentElement: null
+};
+const input = {
+	id: "Jid.2",
+	tagName: "INPUT",
+	getAttribute: function(name) { return name === "type" ? "text" : null; },
+	value: "typed",
+	checked: false,
+	selected: false,
+	parentElement: null
+};
+const clickEv = new Event();
+clickEv.target = target;
+clickEv.clientX = 1;
+clickEv.clientY = 2;
+clickEv.shiftKey = false;
+clickEv.ctrlKey = false;
+clickEv.altKey = false;
+
+const inputEv = new Event();
+inputEv.currentTarget = input;
+
+const contextEv = new Event();
+contextEv.target = target;
+contextEv.clientX = 3;
+contextEv.clientY = 4;
+contextEv.shiftKey = false;
+contextEv.ctrlKey = false;
+contextEv.altKey = false;
+
+process.stdout.write(JSON.stringify({
+	click: run(jawsClickHandler, clickEv),
+	input: run(jawsInputHandler, inputEv),
+	context: run(jawsContextMenuHandler, contextEv)
+}));
+`)
+
+	var got struct {
+		Click struct {
+			Sent      int  `json:"sent"`
+			Prevented bool `json:"prevented"`
+			Stopped   bool `json:"stopped"`
+		} `json:"click"`
+		Input struct {
+			Sent      int  `json:"sent"`
+			Prevented bool `json:"prevented"`
+			Stopped   bool `json:"stopped"`
+		} `json:"input"`
+		Context struct {
+			Sent      int  `json:"sent"`
+			Prevented bool `json:"prevented"`
+			Stopped   bool `json:"stopped"`
+		} `json:"context"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.Click.Sent != 0 || got.Click.Prevented || got.Click.Stopped {
+		t.Fatalf("connecting click handler should be inert, got %+v", got.Click)
+	}
+	if got.Input.Sent != 0 || got.Input.Prevented || got.Input.Stopped {
+		t.Fatalf("connecting input handler should be inert, got %+v", got.Input)
+	}
+	if got.Context.Sent != 0 || got.Context.Prevented || got.Context.Stopped {
+		t.Fatalf("connecting context menu handler should be inert, got %+v", got.Context)
+	}
+}
+
 func TestJawsJS_ClickLeavesNonFiniteCoordinatesForServerValidation(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 const target = {
