@@ -938,7 +938,7 @@ func TestRequest_Cancel(t *testing.T) {
 
 func TestDefaultAuth_IsAdminWarnsOnceWithLogger(t *testing.T) {
 	var buf bytes.Buffer
-	da := &DefaultAuth{Logger: slog.New(slog.NewTextHandler(&buf, nil))}
+	da := &DefaultAuth{logger: slog.New(slog.NewTextHandler(&buf, nil))}
 	if !da.IsAdmin() {
 		t.Error("DefaultAuth.IsAdmin must return true")
 	}

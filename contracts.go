@@ -132,9 +132,13 @@ type MakeAuthFn = func(rq *Request) Auth
 // forgot to set [Jaws.MakeAuth]. Data and Email are fail-safe (nil / empty); only
 // IsAdmin is fail-open. Always set [Jaws.MakeAuth] in production, and treat a nil
 // MakeAuth as "no authorization configured", not "deny".
+//
+// The once and logger fields are unexported so the type's public method set is
+// exactly the [Auth] interface; it does not promote sync.Once.Do or the Logger
+// methods onto this security-sensitive type.
 type DefaultAuth struct {
-	sync.Once
-	Logger
+	once   sync.Once
+	logger Logger
 }
 
 // Data returns no authenticated user data.
@@ -145,15 +149,15 @@ func (*DefaultAuth) Email() string { return "" }
 
 // IsAdmin returns true for every caller.
 //
-// If Logger is set, it logs a one-time warning that [Jaws.MakeAuth] is unset
-// and authorization is fail-open.
+// If a logger was supplied at construction, it logs a one-time warning that
+// [Jaws.MakeAuth] is unset and authorization is fail-open.
 func (da *DefaultAuth) IsAdmin() bool {
 	// Warn loudly about the fail-open authorization default. When MakeAuth is nil
 	// templates receive DefaultAuth, IsAdmin() returns true for everyone, so
 	// any {{if .Auth.IsAdmin}}-gated UI is shown to all visitors.
-	da.Once.Do(func() {
-		if da.Logger != nil {
-			da.Logger.Warn("jaws: no MakeAuth; DefaultAuth.IsAdmin returns true")
+	da.once.Do(func() {
+		if da.logger != nil {
+			da.logger.Warn("jaws: no MakeAuth; DefaultAuth.IsAdmin returns true")
 		}
 	})
 	return true
@@ -162,12 +166,12 @@ func (da *DefaultAuth) IsAdmin() bool {
 // DefaultAuth returns the shared fail-open [DefaultAuth] used for templates when
 // [Jaws.MakeAuth] is nil.
 //
-// It is created on first use and reused, so the embedded [sync.Once] warning in
+// It is created on first use and reused, so the [sync.Once] warning in
 // [DefaultAuth.IsAdmin] fires at most once per [Jaws] rather than once per
 // template render. The value of [Jaws.Logger] in effect at first use is captured.
 func (jw *Jaws) DefaultAuth() *DefaultAuth {
 	jw.defaultAuthOnce.Do(func() {
-		jw.defaultAuthVal = &DefaultAuth{Logger: jw.Logger}
+		jw.defaultAuthVal = &DefaultAuth{logger: jw.Logger}
 	})
 	return jw.defaultAuthVal
 }
