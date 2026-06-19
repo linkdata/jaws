@@ -79,8 +79,10 @@ import (
 
 const indexhtml = `
 <html>
-<head>{{$.HeadHTML}}</head>
-<body>{{$.Range .Dot}}{{$.TailHTML}}</body>
+  <head>{{$.HeadHTML}}</head>
+  <body>{{with .Dot}}
+    {{$.Range .}}
+  {{end}}{{$.TailHTML}}</body>
 </html>
 `
 
@@ -94,9 +96,9 @@ func main() {
 
 	// parse our template and inform JaWS about it
 	templates := template.Must(template.New("index").Parse(indexhtml))
-	jw.AddTemplateLookuper(templates)
+	_ = jw.AddTemplateLookuper(templates)
 
-	go jw.Serve()                             // start the JaWS processing loop
+	go jw.Serve()                                 // start the JaWS processing loop
 	http.DefaultServeMux.Handle("GET /jaws/", jw) // ensure the JaWS routes are handled
 
 	var mu sync.Mutex
