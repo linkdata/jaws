@@ -78,8 +78,10 @@ type ClickHandler interface {
 	// select, textarea or option element, or inside one, are left to native
 	// input handling and do not invoke JawsClick on an ancestor.
 	//
-	// [Click.Name] is taken from the first name HTML attribute or HTML
-	// 'button' textContent found when traversing the DOM. It may be empty.
+	// [Click.Name] is the first name HTML attribute or 'button' textContent
+	// found while walking from the event target up through its ancestors. If none
+	// is found it falls back to the event target's HTML id, so it is empty only
+	// when the target has no id either.
 	JawsClick(elem *Element, click Click) (err error)
 }
 
