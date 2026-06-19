@@ -108,6 +108,36 @@ func TestElement_helpers(t *testing.T) {
 	is.Equal(e.Get("foo"), nil)
 }
 
+func TestElement_JsCallQueuesElementScopedCall(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	if rq == nil {
+		t.Fatal("NewRequest returned nil")
+	}
+
+	elem := rq.NewElement(&testUi{})
+	elem.JsCall("fn\tpart", "{\n\"a\":1\n}")
+	rq.muQueue.Lock()
+	defer rq.muQueue.Unlock()
+	if len(rq.wsQueue) != 1 {
+		t.Fatalf("queued messages = %d, want 1", len(rq.wsQueue))
+	}
+	msg := rq.wsQueue[0]
+	if msg.Jid != elem.Jid() {
+		t.Fatalf("Jid = %v, want %v", msg.Jid, elem.Jid())
+	}
+	if msg.What != what.Call {
+		t.Fatalf("What = %v, want %v", msg.What, what.Call)
+	}
+	if msg.Data != `fnpart={"a":1}` {
+		t.Fatalf("Data = %q, want %q", msg.Data, `fnpart={"a":1}`)
+	}
+}
+
 func TestElement_Tag(t *testing.T) {
 	is := newTestHelper(t)
 	rq := newTestRequest(t)
