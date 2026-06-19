@@ -13,10 +13,10 @@ type Option struct{ *named.Bool }
 // NewOption returns an option widget backed by nb.
 func NewOption(nb *named.Bool) Option { return Option{Bool: nb} }
 
-// JawsRender renders ui as an HTML option element. The markup is produced by
-// [named.RenderBoolOption], the single source of <option> markup, so it cannot
-// diverge from the options [named.BoolArray] renders.
+// JawsRender renders ui as an HTML option element.
 func (u Option) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
+	// named.RenderBoolOption is the single source of <option> markup, so this cannot
+	// diverge from the options a named.BoolArray renders.
 	return named.RenderBoolOption(elem, w, u.Bool, params)
 }
 

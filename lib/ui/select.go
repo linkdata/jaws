@@ -24,14 +24,13 @@ func (u *Select) JawsRender(elem *jaws.Element, w io.Writer, params []any) error
 }
 
 // JawsUpdate updates the selected value and child options.
-//
-// The selected value is only updated when the Container is a [bind.Setter] of
-// string; the child options are always updated. [NewSelect] always supplies a
-// [named.SelectHandler], which is a [bind.Setter] of string, so the guard (here
-// and in [Select.JawsInput]) only takes effect if Container is later reassigned
-// to a plain [jaws.Container].
 func (u *Select) JawsUpdate(elem *jaws.Element) {
 	u.UpdateContainer(elem)
+	// The selected value is only set when the Container is a bind.Setter of string;
+	// the child options are always updated. NewSelect always supplies a
+	// named.SelectHandler (a bind.Setter of string), so this guard (and the one in
+	// JawsInput) only takes effect if Container is later reassigned to a plain
+	// jaws.Container.
 	if setter, ok := u.ContainerHelper.Container.(bind.Setter[string]); ok {
 		// Set the live value after reconciling options, so a newly selected
 		// option exists in the browser before the select value is assigned.

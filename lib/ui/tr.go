@@ -20,10 +20,8 @@ func (u *Tr) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
 	return u.renderInner(elem, w, "tr", "", params)
 }
 
-// Tr renders an HTML table row.
-//
-// A plain string innerHTML is trusted HTML and is not escaped; see [NewTr] and
-// [bind.MakeHTMLGetter] for how to pass untrusted user input safely.
+// Tr renders an HTML table row. A plain string innerHTML is trusted HTML;
+// see [NewTr] and [bind.MakeHTMLGetter] to pass untrusted input safely.
 func (rw RequestWriter) Tr(innerHTML any, params ...any) error {
 	return rw.NewUI(NewTr(innerHTML), params...)
 }
