@@ -11,7 +11,12 @@ import (
 
 var _ jaws.UI = (*Tree)(nil)
 
-// Tree renders and updates a Quercus.js tree bound to a [ui.JsVar].
+// Tree renders and updates a shared Quercus.js tree bound to a [ui.JsVar].
+//
+// A Tree is shared UI state that may be rendered by multiple requests. It embeds
+// a [ui.JsVar], which provides the lock and browser communication for the backing
+// [Node] tree. Read or mutate that Node tree through Tree methods, or while
+// holding the Tree lock.
 type Tree struct {
 	id      string // HTML ID of the tree
 	options Option
@@ -26,10 +31,12 @@ type Tree struct {
 // characters [A-Za-z0-9_$]; otherwise New panics. Validating here turns what would
 // otherwise be a 400 on the init-script route into an immediate, clear failure.
 //
-// New initializes node IDs, tree back-pointers and parent back-pointers in
-// jsvar.Ptr; the name-path API ([Node.HasNames], [Node.GetNames],
-// [Tree.GetSelected], [Tree.SetSelected]) requires the parent back-pointers.
+// New initializes node IDs, the owning Tree back-pointer and parent
+// back-pointers in jsvar.Ptr; the name-path API ([Node.HasNames],
+// [Node.GetNames], [Tree.GetSelected], [Tree.SetSelected]) requires the parent
+// back-pointers.
 // It panics if jsvar or jsvar.Ptr is nil, or if id is not a valid name.
+// Call New before serving or rendering the Tree.
 //
 // The rendered page must contain an element whose HTML id equals id (for
 // example <div id="mytree"></div>): Quercus.js renders the tree into that
