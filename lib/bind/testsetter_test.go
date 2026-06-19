@@ -47,34 +47,6 @@ func (ts *testSetter[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 	return nil
 }
 
-func (ts *testSetter[string]) JawsGetString(elem *jaws.Element) (value string) {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	return ts.val
-}
-
-func (ts *testSetter[any]) JawsGetAny(elem *jaws.Element) (value any) {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	return ts.val
-}
-
-func (ts *testSetter[any]) JawsSetAny(elem *jaws.Element, value any) (err error) {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	if ts.val == value {
-		return jaws.ErrValueUnchanged
-	}
-	ts.val = value
-	return nil
-}
-
-func (ts *testSetter[T]) JawsGetHTML(elem *jaws.Element) (value T) {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	return ts.val
-}
-
 type selfTagger struct{}
 
 func (st *selfTagger) JawsGetTag(tag.Context) any {
