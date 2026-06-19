@@ -213,7 +213,8 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 // tag may be nil, a [Tag], a slice of tags, a [TagGetter] or another comparable
 // value. Primitive HTML/value types are rejected with [ErrIllegalTagType] to catch
 // common accidental tags, and a value that is not comparable at runtime is rejected
-// with [ErrNotUsableAsTag].
+// with [ErrNotUsableAsTag]. Expansion that exceeds the nesting-depth or total-count
+// limits is rejected with [ErrTooManyTags].
 func TagExpand(ctx Context, tag any) (result []any, err error) {
 	// ensureUsableTag rejects tags that are not comparable at runtime, so the
 	// existing == tag dedup in appendUniqueTag does not panic on them. recover
@@ -247,9 +248,9 @@ func recoverComparabilityPanic(r any, tag any) (result []any, err error) {
 
 // MustTagExpand calls [TagExpand] and either logs or panics if expansion fails.
 //
-// On a non-nil ctx, expansion errors are passed to [Context.MustLog], which logs and
-// returns the partial result or, if no Logger is set, panics. A nil ctx always panics
-// on error.
+// On a non-nil ctx, expansion errors are passed to [Context.MustLog] (which logs
+// them, or panics if no Logger is set); MustTagExpand then returns the partial
+// result from [TagExpand]. A nil ctx always panics on error.
 func MustTagExpand(ctx Context, tag any) []any {
 	result, err := TagExpand(ctx, tag)
 	if err != nil {
