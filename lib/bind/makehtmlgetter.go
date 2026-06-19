@@ -55,6 +55,12 @@ func (g htmlGetterString) JawsGetTag(tag.Context) any {
 //   - Static [template.HTML] and string values are used as-is with no HTML escaping.
 //   - Everything else is rendered using [fmt.Sprint] and escaped using [html.EscapeString].
 //
+// The Binder[string] and Getter[string] cases escape the raw [Getter.JawsGet]
+// value and so bypass any Format or GetHTML hook in the chain. The package's own
+// [Binder] (a *binder) implements [HTMLGetter] and is matched by the first case
+// above, which does honor those hooks; the Binder[string] case is reached only by
+// a hand-rolled Binder[string] that does not implement [HTMLGetter].
+//
 // WARNING: Plain string values are NOT HTML-escaped. This is intentional so that
 // HTML markup can be passed conveniently from Go templates (e.g. `{{$.Span "<i>text</i>"}}`).
 // Never pass untrusted user input as a plain string; use [template.HTML] to signal
