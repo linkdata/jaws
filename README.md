@@ -138,12 +138,16 @@ invoked. If none handle the event, it is ignored.
 Event handlers should return `ErrEventUnhandled` if they didn't
 handle the event or want to pass it to the next handler.
 
-* `onclick` invokes `JawsClick`
+* `onclick` invokes `JawsClick` for non-input-origin events
   (`val` as `x<SP>y<SP>keystate<SP>name`)
-* `oncontextmenu` invokes `JawsContextMenu`
+* `oncontextmenu` invokes `JawsContextMenu` for non-input-origin events
   (`val` as `x<SP>y<SP>keystate<SP>name`)
 * `oninput` invokes `JawsInput`
 * `what.Set` events invoke `JawsInput` (`val` as `path=json`)
+
+Click and context-menu events whose target is an `input`, `select`,
+`textarea` or `option` element, or inside one, are left to native input
+handling and do not invoke ancestor click/context handlers.
 
 ## Technical notes
 

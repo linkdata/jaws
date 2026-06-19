@@ -71,8 +71,12 @@ type Updater interface {
 
 // ClickHandler handles click events sent from the browser.
 type ClickHandler interface {
-	// JawsClick is called when an [Element]'s HTML element or something within it
-	// is clicked in the browser.
+	// JawsClick is called for non-input-origin browser clicks.
+	//
+	// The client sends clicks from an [Element]'s HTML element and from
+	// non-form-control descendants. Clicks whose event target is an input,
+	// select, textarea or option element, or inside one, are left to native
+	// input handling and do not invoke JawsClick on an ancestor.
 	//
 	// [Click.Name] is taken from the first name HTML attribute or HTML
 	// 'button' textContent found when traversing the DOM. It may be empty.
@@ -81,8 +85,12 @@ type ClickHandler interface {
 
 // ContextMenuHandler handles context-menu events sent from the browser.
 type ContextMenuHandler interface {
-	// JawsContextMenu is called when an [Element]'s HTML element or something
-	// within it receives a context menu event in the browser.
+	// JawsContextMenu is called for non-input-origin browser context menus.
+	//
+	// The client sends context-menu events from an [Element]'s HTML element and
+	// from non-form-control descendants. Events whose target is an input, select,
+	// textarea or option element, or inside one, are left to native browser
+	// handling and do not invoke JawsContextMenu on an ancestor.
 	JawsContextMenu(elem *Element, click Click) (err error)
 }
 
