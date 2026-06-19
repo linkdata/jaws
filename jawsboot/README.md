@@ -1,6 +1,6 @@
 # jawsboot
 
-Provides a statically served and embedded version of [Bootstrap](https://getbootstrap.com/).
+Provides a statically served and embedded version of [Bootstrap](https://getbootstrap.com/) (v5.3.8).
 
 Example usage that loads your templates, favicon and Bootstrap. Also uses a `templatereloader`
 so that when running with `-tags debug` or `-race` templates are reloaded from disk as needed.
