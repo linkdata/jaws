@@ -2,6 +2,9 @@ package templatereloader
 
 import (
 	"embed"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -89,6 +92,58 @@ func Test_Lookup_reload_error_retains_last_good(t *testing.T) {
 	tr.when = tr.when.Add(-2 * time.Second)
 	if tmpl := tr.Lookup("test.html"); tmpl == nil {
 		t.Fatal("expected template after successful reload")
+	}
+	if err := tr.LastError(); err != nil {
+		t.Fatalf("LastError after successful reload = %v, want nil", err)
+	}
+}
+
+// TestTemplateReloader_ReloadPicksUpEditedContent verifies the package's headline
+// behavior: after a template file is edited on disk and the reload window passes,
+// Lookup serves the new content. It parses from a real temp dir (the embedded
+// assets/test.html never changes, so it cannot exercise this), renders, rewrites
+// the file with different content, forces the reload window, and asserts the
+// rendered output changed — which fails if Lookup kept serving the stale tr.curr.
+func TestTemplateReloader_ReloadPicksUpEditedContent(t *testing.T) {
+	dir := t.TempDir()
+	tmplPath := filepath.Join(dir, "test.html")
+	if err := os.WriteFile(tmplPath, []byte("v1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tl, err := create(true, assetsFS, "*.html", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr, ok := tl.(*TemplateReloader)
+	if !ok {
+		t.Fatalf("expected *TemplateReloader, got %T", tl)
+	}
+
+	render := func() string {
+		t.Helper()
+		tmpl := tr.Lookup("test.html")
+		if tmpl == nil {
+			t.Fatal("expected template from lookup")
+		}
+		var sb strings.Builder
+		if err := tmpl.Execute(&sb, nil); err != nil {
+			t.Fatal(err)
+		}
+		return sb.String()
+	}
+
+	if got := render(); got != "v1" {
+		t.Fatalf("initial render = %q, want %q", got, "v1")
+	}
+
+	if err := os.WriteFile(tmplPath, []byte("v2-edited"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Force the reload window so the next Lookup reparses from disk.
+	tr.when = tr.when.Add(-2 * reloadInterval)
+	if got := render(); got != "v2-edited" {
+		t.Fatalf("post-edit render = %q, want %q", got, "v2-edited")
 	}
 	if err := tr.LastError(); err != nil {
 		t.Fatalf("LastError after successful reload = %v, want nil", err)

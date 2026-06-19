@@ -32,6 +32,11 @@ type TemplateReloader struct {
 // (deadlock.Debug, set by -race or -tags debug) it instead returns a
 // [TemplateReloader] that reparses from disk under relpath, so template edits take
 // effect without a restart; fsys is then unused.
+//
+// The debug-build concrete type is observable via a type assertion to
+// [*TemplateReloader], whose [TemplateReloader.LastError] and
+// [TemplateReloader.Path] expose reload diagnostics; in normal builds the value is
+// a plain *[html/template.Template] and there are no reload diagnostics to report.
 func New(fsys fs.FS, fpath, relpath string) (jtl jaws.TemplateLookuper, err error) {
 	return create(deadlock.Debug, fsys, fpath, relpath)
 }
