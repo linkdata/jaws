@@ -2,6 +2,18 @@
 
 Provides a statically served and embedded version of [Bootstrap](https://getbootstrap.com/) (v5.3.8).
 
+## Asset provenance
+
+The embedded files are vendored from Bootstrap v5.3.8 and stored gzip-compressed
+under `assets/static`.
+
+| File | Upstream | SHA-256 |
+| --- | --- | --- |
+| `assets/static/bootstrap.bundle.min.js.gz` | `bootstrap.bundle.min.js` from https://getbootstrap.com/ | `4d0ae6252e765ecd243be3904526dd15605f14d100a38ba438622c5cb0de06c7` |
+| `assets/static/bootstrap.min.css.gz` | `bootstrap.min.css` from https://getbootstrap.com/ | `1ad6a4582202314026750ae78bdb719b096ebf3fd9bf018df081ed5e41234595` |
+
+When bumping Bootstrap, update this table and `doc.go` in the same change.
+
 Example usage that loads your templates, favicon and Bootstrap. Also uses a `templatereloader`
 so that when running with `-tags debug` or `-race` templates are reloaded from disk as needed.
 

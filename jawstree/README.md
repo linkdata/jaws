@@ -3,6 +3,19 @@
 Provides a statically served and embedded version of [Quercus.js](https://github.com/stefaneichert/quercus.js),
 a lightweight and customizable JavaScript treeview library with no dependencies.
 
+## Asset provenance
+
+The embedded third-party files are vendored Quercus.js tree assets from
+https://github.com/stefaneichert/quercus.js. The `assets/jawstree.*` files are
+local adapter source in this repository and are covered by normal code review.
+
+| File | Source | SHA-256 |
+| --- | --- | --- |
+| `assets/treeview.js` | Quercus.js from https://github.com/stefaneichert/quercus.js | `517d153feabc0741fd0956f5d29630a4a17d7fb28766e23dca1a615d1cc212c7` |
+| `assets/treeview.css` | Quercus.js styles from https://github.com/stefaneichert/quercus.js | `1ee353863aaba1208d3c22911d926acc335e599951bd6f3cc87ea53b99aaa2ad` |
+
+When bumping the vendored Quercus files, update this table in the same change.
+
 ```go
 package main
 
@@ -93,6 +106,11 @@ A `Tree` is shared UI state. Build it once before serving or rendering it, then
 reuse that `*Tree` for every request that should show the same tree. The embedded
 `ui.JsVar` is the backing store, lock, and browser communication channel for the
 `Node` tree.
+
+`New` fixes the tree structure by assigning node IDs from each node's position.
+After a tree has been rendered, mutate selection state through `Tree.SetSelected`
+or browser selection events, but do not add, remove or reorder `Children`; that
+breaks the ID-to-wire-position mapping used by Quercus.js.
 
 Build a `Node` tree (by hand, or from a directory with `Root`), wrap its root
 in a `ui.JsVar`, and pass it to `New`. `New` initializes node IDs plus the tree

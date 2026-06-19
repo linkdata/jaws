@@ -5,6 +5,11 @@
 // net/http/httptest stays out of the production build of consumers that import
 // github.com/linkdata/jaws. It reaches the request loop through the exported
 // [jaws.Jaws.TestServe] hook.
+//
+// Harness channels are intentionally low-level. Tests that drive output must
+// drain [TestRequest.OutCh], and after [TestRequest.Close] should wait for
+// [TestRequest.DoneCh] before returning. Close is a single-use operation because
+// it closes the inbound channel directly.
 package jawstest
 
 import (

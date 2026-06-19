@@ -475,6 +475,26 @@ template evaluates `.Auth.IsAdmin`. Note this is lazy: a page that never gates o
 `.Auth.IsAdmin` never logs it, so absence of the warning does not prove `MakeAuth`
 is set.
 
+### Production hardening checklist
+
+Before serving a JaWS application outside a local development loop, check these
+items explicitly:
+
+* Configure `Jaws.Logger`. Update-time errors and API misuse are reported through
+  `MustLog()`, which panics when no logger is configured.
+* Configure `Jaws.MakeAuth` whenever templates read `.Auth`, especially
+  `.Auth.IsAdmin`. Leaving it nil installs the fail-open `DefaultAuth` described
+  above.
+* Treat plain `string` values passed to HTML-inner widgets as trusted HTML. Route
+  user-controlled text through `bind.Getter[string]`, `bind.StringGetterFunc()`,
+  `fmt.Stringer` or template escaping before rendering.
+* Implement `ui.PathSetter` on any `ui.JsVar` value whose browser-writable paths
+  must be allow-listed or size-bounded beyond the default serialized-size cap.
+* Enable `Jaws.TrustForwardedHeaders` only behind a single trusted reverse proxy
+  that overwrites `X-Forwarded-For`, `X-Real-IP` and `X-Forwarded-Proto`.
+* Run the test suite with `-race` or `-tags debug` before release so the
+  debug-gated lock-order and late-handler checks are exercised.
+
 ### Testing
 
 Always run the test suite with the `-race` flag:

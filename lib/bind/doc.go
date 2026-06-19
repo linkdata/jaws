@@ -10,5 +10,7 @@
 //
 // The remaining constructors accept either existing bind interfaces or
 // static values and return small adapters that can be used by package ui
-// widgets.
+// widgets. They panic when called with a value whose dynamic type does not match
+// the requested adapter type, so use them at trusted construction points rather
+// than on unvalidated external input.
 package bind

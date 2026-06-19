@@ -52,6 +52,12 @@ their content through `bind.MakeHTMLGetter`. Plain strings are treated as truste
 HTML and are not escaped; use a `bind.Getter[string]`, `bind.StringGetterFunc`,
 or `fmt.Stringer` for string content that should be escaped.
 
+`JsVar` values are client-writable. If a browser must only write selected fields
+or bounded collections, make the bound value implement `PathSetter` and validate
+allowed paths there. The generic path setter is convenient for trusted demos, but
+it can write exported JSON fields and append to slices until the serialized
+`MaxClientJsVarBytes` cap is hit on render.
+
 ## Building blocks
 
 - `HTMLInner`
