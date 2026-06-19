@@ -346,14 +346,16 @@ func (g *game) clickCell(cell *Cell) []any {
 		g.revealAllMinesLocked()
 		cellTags = []any{&g.cells} // all mines revealed; refresh board
 	} else {
-		for _, c := range g.revealFromLocked(cell) {
-			cellTags = append(cellTags, c)
-		}
+		revealed := g.revealFromLocked(cell)
 		if g.revealed == g.rows*g.cols-g.mines {
 			g.gameOver = true
 			g.won = true
 			g.revealAllMinesLocked()
 			cellTags = []any{&g.cells} // win reveals remaining mines
+		} else {
+			for _, c := range revealed {
+				cellTags = append(cellTags, c)
+			}
 		}
 	}
 	return append(cellTags, g.changedTags(before)...)

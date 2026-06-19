@@ -18,7 +18,8 @@ func TagString(tag any) string {
 	if rv := reflect.ValueOf(tag); rv.IsValid() {
 		if rv.Kind() == reflect.Pointer {
 			return fmt.Sprintf("%T(%p)", tag, tag)
-		} else if stringer, ok := tag.(fmt.Stringer); ok {
+		}
+		if stringer, ok := tag.(fmt.Stringer); ok {
 			return fmt.Sprintf("%T(%s)", tag, stringer.String())
 		}
 	}

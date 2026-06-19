@@ -181,12 +181,17 @@ func (node *Node) resolveChildPath(nodePath string) (*Node, error) {
 // rendered tree of every client sharing this Tree.
 func (node *Node) JawsPathSet(elem *jaws.Element, jsPath string, value any) {
 	if nodePath, ok := strings.CutSuffix(jsPath, ".selected"); ok {
-		payload, _ := json.Marshal(struct {
+		// The marshaled struct holds two strings plus value, which JawsSetPath has
+		// already verified to be a bool, so marshaling cannot fail in practice; guard
+		// the error anyway so a future change that lets a non-marshalable value reach
+		// here skips the JsCall rather than broadcasting a broken payload.
+		if payload, err := json.Marshal(struct {
 			Tree string `json:"tree"`
 			ID   string `json:"id"`
 			Set  any    `json:"set"`
-		}{node.Tree.id, nodePath, value})
-		elem.Jaws.JsCall(node.Tree.JawsGetTag(nil), "jawstreeSetPath", string(payload))
+		}{node.Tree.id, nodePath, value}); err == nil {
+			elem.Jaws.JsCall(node.Tree.JawsGetTag(nil), "jawstreeSetPath", string(payload))
+		}
 	}
 }
 

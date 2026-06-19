@@ -48,7 +48,6 @@ func addEntries(rootfs fs.FS, parent *Node, dirpath string, ents []fs.DirEntry, 
 	for _, ent := range ents {
 		if filterFn == nil || filterFn(dirpath, ent) {
 			child := &Node{
-				Tree:   parent.Tree,
 				Parent: parent,
 				ID:     path.Join(parent.ID, ent.Name()),
 				Name:   ent.Name(),

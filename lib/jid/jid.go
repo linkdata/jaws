@@ -110,8 +110,5 @@ func ParseString(s string) Jid {
 // Only positive Jids have a representation; Jid(0) (the whole-request id) and
 // negative/invalid Jids return the empty string.
 func (j Jid) String() string {
-	if j > 0 {
-		return string(j.Append(nil))
-	}
-	return ""
+	return string(j.Append(nil))
 }

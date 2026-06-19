@@ -89,8 +89,6 @@ func (nb *Bool) JawsSet(elem *jaws.Element, checked bool) (err error) {
 	nb.mu.Unlock()
 	if nba != nil {
 		changed = append(changed, nba.deselectOthersLocked(nb.name, checked)...)
-	}
-	if nba != nil {
 		nba.mu.Unlock()
 	}
 	if len(changed) == 0 {
