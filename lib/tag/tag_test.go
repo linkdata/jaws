@@ -87,6 +87,12 @@ func TestTagString_StringerAndPointer(t *testing.T) {
 
 func assertTagSetEqual(t *testing.T, got, want []any) {
 	t.Helper()
+	// Compare as sets so iteration order is not asserted, but also require equal
+	// lengths so a duplicate in got cannot be silently collapsed into the set.
+	// Every want passed here is duplicate-free, so equal length plus equal set
+	// means got is a duplicate-free permutation of want. The length check is what
+	// makes deduplication (the package's core guarantee) actually testable:
+	// without it, a broken expansion emitting [dup, dup] would still pass.
 	gotSet := make(map[any]struct{}, len(got))
 	for _, v := range got {
 		gotSet[v] = struct{}{}
@@ -95,8 +101,8 @@ func assertTagSetEqual(t *testing.T, got, want []any) {
 	for _, v := range want {
 		wantSet[v] = struct{}{}
 	}
-	if !reflect.DeepEqual(gotSet, wantSet) {
-		t.Fatalf("tag set mismatch:\n got %#v\nwant %#v", got, want)
+	if len(got) != len(want) || !reflect.DeepEqual(gotSet, wantSet) {
+		t.Fatalf("tag set mismatch:\n got %#v (len %d)\nwant %#v (len %d)", got, len(got), want, len(want))
 	}
 }
 
