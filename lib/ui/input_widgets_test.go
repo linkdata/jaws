@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"html/template"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -125,6 +126,63 @@ func TestInputFloat_RejectsNonFinite(t *testing.T) {
 		if sf.Get() != 7.5 {
 			t.Fatalf("JawsInput(%q) mutated bound value to %v", bad, sf.Get())
 		}
+	}
+}
+
+// TestInputFloat_NaNBoundValueDoesNotReemit verifies that a server-bound NaN value
+// is sent once on transition but not re-emitted on every subsequent update. NaN != NaN
+// would otherwise defeat the JawsUpdate dedup and re-send SetValue each cycle.
+func TestInputFloat_NaNBoundValueDoesNotReemit(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+
+	tr := jawstest.NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("expected test request")
+	}
+	defer tr.Close()
+	<-tr.ReadyCh
+
+	sf := newTestSetter(1.5)
+	number := NewNumber(sf)
+	elem := tr.NewElement(number)
+	var sb strings.Builder
+	if err := elem.JawsRender(&sb, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	waitValue := func() (string, bool) {
+		deadline := time.After(300 * time.Millisecond)
+		for {
+			select {
+			case msg := <-tr.OutCh:
+				if msg.What == what.Value {
+					return msg.Data, true
+				}
+			case <-deadline:
+				return "", false
+			}
+		}
+	}
+
+	// A real transition to NaN is sent once.
+	sf.Set(math.NaN())
+	number.JawsUpdate(elem)
+	tr.InCh <- wire.WsMsg{} // wake the loop so the queued op flushes to OutCh
+	if v, ok := waitValue(); !ok || v != "NaN" {
+		t.Fatalf("expected one SetValue %q on transition to NaN, got ok=%v v=%q", "NaN", ok, v)
+	}
+
+	// The value is still NaN: further updates must not re-emit.
+	number.JawsUpdate(elem)
+	number.JawsUpdate(elem)
+	tr.InCh <- wire.WsMsg{} // wake the loop
+	if v, ok := waitValue(); ok {
+		t.Fatalf("NaN bound value re-emitted SetValue %q", v)
 	}
 }
 

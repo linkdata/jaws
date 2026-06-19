@@ -137,10 +137,13 @@ func (u *InputFloat) renderFloatInput(elem *jaws.Element, w io.Writer, htmlType 
 // JawsUpdate updates the input value when the bound float64 value changes.
 func (u *InputFloat) JawsUpdate(elem *jaws.Element) {
 	v := u.JawsGet(elem)
-	// This intentionally compares raw float64 values, not rendered strings. That
-	// can skip rare cosmetic changes such as -0 -> 0, but avoids formatting on the
-	// common unchanged path.
-	if u.Last.Swap(v) != v {
+	prev, _ := u.Last.Swap(v).(float64)
+	// Compare raw float64 values, not rendered strings: this can skip rare cosmetic
+	// changes such as -0 -> 0, but avoids formatting on the common unchanged path.
+	// NaN != NaN, so a plain compare would re-send a NaN bound value on every update
+	// cycle (JawsInput rejects NaN from the browser, but the server can bind one);
+	// treat NaN -> NaN as unchanged. A real transition into or out of NaN still sends.
+	if prev != v && !(math.IsNaN(prev) && math.IsNaN(v)) {
 		elem.SetValue(u.str(v))
 	}
 }
