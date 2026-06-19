@@ -86,6 +86,58 @@ func Test_WriteHTMLInner(t *testing.T) {
 	}
 }
 
+func Test_WriteHTMLInner_ClosingTag(t *testing.T) {
+	// Void/singleton tags must never get a closing tag (and their inner
+	// content is dropped); ordinary tags must always be closed.
+	voidTags := []string{
+		"area", "base", "br", "col", "embed", "hr", "img", "input",
+		"link", "meta", "param", "source", "track", "wbr",
+	}
+	nonVoidTags := []string{"div", "span", "section", "p"}
+
+	for _, tag := range voidTags {
+		t.Run("void/"+tag, func(t *testing.T) {
+			var sb strings.Builder
+			if err := htmlio.WriteHTMLInner(&sb, jid.Jid(1), tag, "", "inner"); err != nil {
+				t.Fatal(err)
+			}
+			if got, closing := sb.String(), "</"+tag+">"; strings.Contains(got, closing) {
+				t.Errorf("WriteHTMLInner(%q) = %q, must not contain closing tag %q", tag, got, closing)
+			}
+		})
+	}
+
+	for _, tag := range nonVoidTags {
+		t.Run("nonvoid/"+tag, func(t *testing.T) {
+			var sb strings.Builder
+			if err := htmlio.WriteHTMLInner(&sb, jid.Jid(1), tag, "", "inner"); err != nil {
+				t.Fatal(err)
+			}
+			if got, closing := sb.String(), "</"+tag+">"; !strings.Contains(got, closing) {
+				t.Errorf("WriteHTMLInner(%q) = %q, must contain closing tag %q", tag, got, closing)
+			}
+		})
+	}
+}
+
+// FuzzAppendAttrValue guards the escaping invariant: for arbitrary input, the
+// bytes between the bounding double quotes must contain no raw '"' or '<' that
+// could break out of the attribute value or open a new tag.
+func FuzzAppendAttrValue(f *testing.F) {
+	for _, seed := range []string{"", `"`, "<", `"&<>'`, "plain", "<script>"} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, value string) {
+		got := string(htmlio.AppendAttrValue(nil, value))
+		if len(got) < 2 || got[0] != '"' || got[len(got)-1] != '"' {
+			t.Fatalf("AppendAttrValue(%q) = %q, want double-quoted", value, got)
+		}
+		if inner := got[1 : len(got)-1]; strings.ContainsAny(inner, "\"<") {
+			t.Fatalf("AppendAttrValue(%q) inner value %q contains raw '\"' or '<'", value, inner)
+		}
+	})
+}
+
 func Test_WriteHTMLInput(t *testing.T) {
 	type args struct {
 		jid   jid.Jid

@@ -60,9 +60,10 @@ func AppendAttrValue(b []byte, value string) []byte {
 
 // AppendAttr appends a trusted attribute name with an escaped value.
 //
-// The name parameter must be a trusted attribute name. The value parameter must
-// be the unescaped logical attribute value; it is escaped for HTML source output
-// by this function.
+// The name parameter is written verbatim with no escaping or validation and
+// MUST NOT be derived from untrusted data, or it becomes an HTML-injection
+// primitive. The value parameter must be the unescaped logical attribute value;
+// it is escaped for HTML source output by this function.
 func AppendAttr(b []byte, name, value string) []byte {
 	b = append(b, ' ')
 	b = append(b, name...)
@@ -73,9 +74,10 @@ func AppendAttr(b []byte, name, value string) []byte {
 
 // Attr returns a trusted attribute name with an escaped value.
 //
-// The name parameter must be a trusted attribute name. The value parameter must
-// be the unescaped logical attribute value; it is escaped for HTML source output
-// by this function.
+// The name parameter is written verbatim with no escaping or validation and
+// MUST NOT be derived from untrusted data, or it becomes an HTML-injection
+// primitive. The value parameter must be the unescaped logical attribute value;
+// it is escaped for HTML source output by this function.
 func Attr(name, value string) template.HTMLAttr {
 	// AppendAttr writes a leading space (it is meant for joining onto a tag);
 	// [1:] drops that space since Attr returns the attribute on its own.

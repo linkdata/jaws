@@ -38,6 +38,33 @@ func TestBinder_ConcurrentAccess(t *testing.T) {
 	wg.Wait()
 }
 
+// TestNew_panicsOnFirstUse pins the documented contract that a Binder created by
+// New with a nil locker or a nil pointer panics on first use rather than at
+// construction time.
+func TestNew_panicsOnFirstUse(t *testing.T) {
+	assertPanics := func(name string, fn func()) {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Error("expected panic")
+				}
+			}()
+			fn()
+			t.Fatal("expected panic")
+		})
+	}
+
+	assertPanics("nil locker", func() {
+		b := New[int](nil, new(int))
+		_ = b.JawsGet(nil)
+	})
+	assertPanics("nil pointer", func() {
+		var mu sync.RWMutex
+		b := New[int](&mu, nil)
+		_ = b.JawsGet(nil)
+	})
+}
+
 type testBindFormatterValue struct {
 	value string
 }

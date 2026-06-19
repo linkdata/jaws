@@ -60,6 +60,10 @@ const maxHintScan = 4
 // scans only the first maxHintScan elements of any array or slice. It is used
 // only to enrich the [ErrNotUsableAsTag] diagnostic, so these bounds trade
 // completeness for a cheap, terminating search.
+//
+// It is a best-effort diagnostic aid: the maxHintScan and maxTagDepth bounds may
+// change, and a negative result is not authoritative, so callers should not rely
+// on it for non-diagnostic purposes.
 func FindTagGetter(x any) (path string, tgType reflect.Type, found bool) {
 	if x == nil {
 		return

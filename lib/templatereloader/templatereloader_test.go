@@ -98,6 +98,53 @@ func Test_Lookup_reload_error_retains_last_good(t *testing.T) {
 	}
 }
 
+// Test_Lookup_failed_reload_backoff verifies the documented backoff: after a
+// failed reload advances tr.when, a fix made within the interval window is not
+// picked up until the window reopens.
+func Test_Lookup_failed_reload_backoff(t *testing.T) {
+	tl, err := create(true, assetsFS, "assets/*.html", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr, ok := tl.(*TemplateReloader)
+	if !ok {
+		t.Fatalf("expected *TemplateReloader, got %T", tl)
+	}
+	if tmpl := tr.Lookup("test.html"); tmpl == nil {
+		t.Fatal("expected template from first lookup")
+	}
+
+	// Point at a glob matching nothing and force a reload so it fails, which
+	// advances tr.when to now.
+	tr.Path = "assets/this-matches-nothing-*.html"
+	tr.when = tr.when.Add(-2 * time.Second)
+	if tmpl := tr.Lookup("test.html"); tmpl == nil {
+		t.Fatal("expected last-good template after failed reload")
+	}
+	if err := tr.LastError(); err == nil {
+		t.Fatal("expected LastError after failed reload")
+	}
+
+	// "Fix" the path but do not reopen the window. The next Lookup must not
+	// reparse, so LastError stays set from the failed reload.
+	tr.Path = "assets/*.html"
+	if tmpl := tr.Lookup("test.html"); tmpl == nil {
+		t.Fatal("expected last-good template within the backoff window")
+	}
+	if err := tr.LastError(); err == nil {
+		t.Fatal("reload should be deferred within the backoff window; LastError must remain set")
+	}
+
+	// Reopen the window: now the fix is picked up and LastError clears.
+	tr.when = tr.when.Add(-2 * time.Second)
+	if tmpl := tr.Lookup("test.html"); tmpl == nil {
+		t.Fatal("expected template after the window reopened")
+	}
+	if err := tr.LastError(); err != nil {
+		t.Fatalf("LastError after successful reload = %v, want nil", err)
+	}
+}
+
 // TestTemplateReloader_ReloadPicksUpEditedContent verifies the package's headline
 // behavior: after a template file is edited on disk and the reload window passes,
 // Lookup serves the new content. It parses from a real temp dir (the embedded

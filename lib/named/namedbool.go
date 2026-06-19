@@ -42,15 +42,13 @@ func (nb *Bool) Array() *BoolArray {
 }
 
 // Name returns the form value name for nb.
-func (nb *Bool) Name() (s string) {
-	s = nb.name
-	return
+func (nb *Bool) Name() string {
+	return nb.name
 }
 
 // HTML returns the trusted HTML label for nb.
-func (nb *Bool) HTML() (h template.HTML) {
-	h = nb.html
-	return
+func (nb *Bool) HTML() template.HTML {
+	return nb.html
 }
 
 // JawsGetHTML returns the trusted HTML label for nb.

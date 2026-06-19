@@ -65,15 +65,15 @@ func (nba *BoolArray) JawsContains(elem *jaws.Element) (contents []jaws.UI) {
 // Add adds a [Bool] with the given name and trusted HTML text.
 // Returns itself.
 //
-// The text argument is rendered as trusted HTML and is not escaped; pre-escape it
+// The html argument is rendered as trusted HTML and is not escaped; pre-escape it
 // (e.g. template.HTML(template.HTMLEscapeString(s))) when it is derived from
 // untrusted user input. See [NewBool].
 //
 // Note that while it is legal to have multiple [Bool] values with the same
 // name because HTML allows it, it is usually not a good idea.
-func (nba *BoolArray) Add(name string, text template.HTML) *BoolArray {
+func (nba *BoolArray) Add(name string, html template.HTML) *BoolArray {
 	nba.mu.Lock()
-	nba.data = append(nba.data, NewBool(nba, name, text, false))
+	nba.data = append(nba.data, NewBool(nba, name, html, false))
 	nba.mu.Unlock()
 	return nba
 }

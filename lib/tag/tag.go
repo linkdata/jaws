@@ -216,6 +216,10 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 // common accidental tags, and a value that is not comparable at runtime is rejected
 // with [ErrNotUsableAsTag]. Expansion that exceeds the nesting-depth or total-count
 // limits is rejected with [ErrTooManyTags].
+//
+// Expansion reads tag and any values returned by [TagGetter.JawsGetTag] by
+// reference, so tag and those values must not be mutated concurrently with the
+// call.
 func TagExpand(ctx Context, tag any) (result []any, err error) {
 	// ensureUsableTag rejects tags that are not comparable at runtime, so the
 	// existing == tag dedup in appendUniqueTag does not panic on them. recover

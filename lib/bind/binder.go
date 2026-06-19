@@ -89,7 +89,20 @@ type Binder[T comparable] interface {
 	jaws.ContextMenuHandler
 	jaws.InitialHTMLAttrHandler
 
+	// JawsGetLocked returns the bound value while the Binder lock is held.
+	//
+	// Callers must already hold the lock, preferring the read lock if available;
+	// the method does not lock or unlock. It applies this chain's [GetHook]s but
+	// skips this Binder's own [GetHTMLHook], so calling it from within a
+	// GetHTMLHook to render the value does not recurse.
 	JawsGetLocked(elem *jaws.Element) (value T)
+
+	// JawsSetLocked stores value while the Binder write lock is held.
+	//
+	// Callers must already hold the write lock; the method does not lock or
+	// unlock and must not be called (nor [Setter.JawsSet] called) from within a
+	// hook. It applies this chain's [SetHook]s and returns
+	// [jaws.ErrValueUnchanged] when the stored value already equals value.
 	JawsSetLocked(elem *jaws.Element, value T) (err error)
 
 	// JawsInitialHTMLAttrLocked returns the initial HTML attribute while

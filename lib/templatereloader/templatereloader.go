@@ -37,6 +37,12 @@ type TemplateReloader struct {
 // [*TemplateReloader], whose [TemplateReloader.LastError] and
 // [TemplateReloader.Path] expose reload diagnostics; in normal builds the value is
 // a plain *[html/template.Template] and there are no reload diagnostics to report.
+//
+// Because the two builds resolve templates differently, fpath must be a valid
+// pattern under both [io/fs.Glob] (used against fsys in normal builds) and
+// [path/filepath.Glob] (used against the on-disk tree in debug builds), and
+// relpath must point at the on-disk root that mirrors the embedded fsys layout
+// so that path.Join(relpath, fpath) matches the same templates on disk.
 func New(fsys fs.FS, fpath, relpath string) (jtl jaws.TemplateLookuper, err error) {
 	return create(deadlock.Debug, fsys, fpath, relpath)
 }
@@ -72,6 +78,11 @@ func create(debug bool, fsys fs.FS, fpath, relpath string) (tl jaws.TemplateLook
 // edited), the last successfully parsed templates are retained and used, so a
 // transient parse error does not take down a running server. Lookup never
 // panics on a reload error.
+//
+// A failed reload still advances the reload timestamp, so the next reparse is
+// deferred until the interval elapses again; the last-good templates keep being
+// served meanwhile, and a fix made within that window is not picked up until the
+// window reopens.
 func (tr *TemplateReloader) Lookup(name string) *template.Template {
 	tr.mu.RLock()
 	curr := tr.curr

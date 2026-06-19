@@ -38,6 +38,11 @@ type setterFloat64[T numeric] struct {
 // outside the type's representable range. Bounds use an exclusive upper limit
 // expressed as a power of two to avoid the float64 rounding pitfall at the top of
 // the 64-bit ranges (float64(MaxInt64) rounds up to 2^63).
+//
+// The type switch matches predeclared types by exact type, so callers must
+// instantiate T only with the predeclared numeric types. A named (defined) type
+// such as "type Celsius float64" falls through to the float default branch and is
+// range-checked as if it were its predeclared underlying type.
 func sanitizeFloatForT[T numeric](value float64) error {
 	if math.IsNaN(value) || math.IsInf(value, 0) {
 		return ErrFloatNotFinite
