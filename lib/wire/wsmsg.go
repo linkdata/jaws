@@ -24,17 +24,16 @@ const hexDigits = "0123456789abcdef"
 // payloads compact. Invalid UTF-8 is replaced with U+FFFD so the result is always
 // valid JSON and a valid WebSocket text frame. The output remains decodable by
 // strconv.Unquote, so the server-side Append->Parse round trip is preserved.
-//
-// PROVISIONAL: this hand-rolled quoter exists only because the stable standard
-// library has no zero-allocation "append a non-HTML-escaped JSON string to a
-// []byte" primitive: encoding/json.Marshal HTML-escapes '<', '>' and '&' (which
-// bloats the HTML payloads this protocol carries), and json.Encoder with
-// SetEscapeHTML(false) needs a buffer and is not an append API. The exact
-// primitive, jsontext.AppendQuote (encoding/json/v2), is gated behind
-// GOEXPERIMENT=jsonv2 as of Go 1.26. Replace this with jsontext.AppendQuote once
-// that package builds without the experiment; Fuzz_appendJSONQuote pins the
-// behavior to the standard library until then.
 func appendJSONQuote(b []byte, s string) []byte {
+	// PROVISIONAL: this hand-rolled quoter exists only because the stable standard
+	// library has no zero-allocation "append a non-HTML-escaped JSON string to a
+	// []byte" primitive: encoding/json.Marshal HTML-escapes '<', '>' and '&' (which
+	// bloats the HTML payloads this protocol carries), and json.Encoder with
+	// SetEscapeHTML(false) needs a buffer and is not an append API. The exact
+	// primitive, jsontext.AppendQuote (encoding/json/v2), is gated behind
+	// GOEXPERIMENT=jsonv2 as of Go 1.26. Replace this with jsontext.AppendQuote once
+	// that package builds without the experiment; Fuzz_appendJSONQuote pins the
+	// behavior to the standard library until then.
 	b = append(b, '"')
 	for _, r := range s {
 		switch r {
