@@ -9,7 +9,6 @@ import (
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawsboot"
 	"github.com/linkdata/jaws/jawstree"
-	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/templatereloader"
 	"github.com/linkdata/jaws/lib/ui"
 	"github.com/linkdata/staticserve"
@@ -41,10 +40,13 @@ func setupJaws(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
 			jawstree.Setup,
 			staticserve.MustNewFS(assetsFS, "assets/static", "images/favicon.png"),
 		); err == nil {
-			// Add a route to our index template with a bound variable accessible as '.Dot' in the template
-			var mu sync.Mutex
-			var f float64
-			mux.Handle("GET /", ui.Handler(jw, "index.html", bind.New(&mu, &f)))
+			var mu sync.RWMutex
+			root := &jawstree.Node{Children: []*jawstree.Node{
+				{Name: "Documents", Children: []*jawstree.Node{{Name: "report.pdf"}}},
+				{Name: "Pictures"},
+			}}
+			tree := jawstree.New("mytree", ui.NewJsVar(&mu, root), jawstree.InitiallyExpanded)
+			mux.Handle("GET /", ui.Handler(jw, "index.html", tree))
 		}
 	}
 	return
