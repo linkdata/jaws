@@ -25,6 +25,11 @@ var JawsCSS []byte
 // JavaScript and CSS files are emitted as script and stylesheet tags. Other
 // recognized resources are emitted as preload tags. Favicon image URLs are
 // returned separately.
+//
+// Nil URL arguments are skipped. A resource is returned as faviconURL only when
+// its base name begins with "favicon" and its MIME type (resolved from the file
+// extension) is image/*; a favicon whose extension has no image MIME mapping is
+// emitted as an ordinary preload link instead.
 func PreloadHTML(urls ...*url.URL) (htmlCode, faviconURL string) {
 	var jsurls, cssurls []string
 	var favicontype string
