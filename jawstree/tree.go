@@ -133,6 +133,12 @@ func (tree *Tree) GetSelected() (nameLists [][]string) {
 }
 
 // SetSelected applies selected name-paths while holding the tree write lock.
+//
+// The returned [Node] pointers reference the lock-protected shared tree and the
+// write lock is released on return, so on a rendered Tree they must only be read
+// under the tree read lock (RLock) and mutated under the write lock (Lock), per
+// the [Node] concurrency note. Dereferencing them without re-taking the lock
+// races the JaWS event goroutines.
 func (tree *Tree) SetSelected(nameLists [][]string) (changed []*Node) {
 	tree.Lock()
 	defer tree.Unlock()
