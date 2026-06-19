@@ -219,6 +219,24 @@ If you change fields that affect generated page metadata, such as `Debug` or
 the resource list passed to `GenerateHeadHTML()`, call `GenerateHeadHTML()`
 before rendering new pages so `Request.HeadHTML()` sees the updated data.
 
+### Maintainer checklist
+
+When changing core request, session, broadcast, or WebSocket code, re-check
+these invariants before relying on a green build alone:
+
+* Lock order stays `Jaws.mu -> Request.mu -> Session.mu`, with `Request.muQueue`
+  and element/widget/value locks remaining leaf locks.
+* Request pooling clears keys, elements, tags, sessions, queues, cancellation
+  state, and pending/request maps before a pointer can be reused.
+* Dirty dispatch expands tags once, targets only elements registered for those
+  tags, and does not let one request's queued update reach a recycled request
+  with a different key.
+* Session grace windows remain deliberate for unclaimed, claimed, failed-upgrade,
+  and closed-WebSocket requests.
+* WebSocket upgrades keep the single-use key, client-IP binding, and Origin
+  host/scheme checks together; changes to trusted forwarded headers must preserve
+  the same fail-closed behavior.
+
 Configure `Jaws.Logger` in long-running applications. Initial render errors are
 returned to the caller, but update-time paths such as template refreshes and
 dynamic child appends cannot return errors to browser event handlers; they are
