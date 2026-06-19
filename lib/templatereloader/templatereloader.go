@@ -26,12 +26,12 @@ type TemplateReloader struct {
 	lastErr error
 }
 
-// New returns a [jaws.TemplateLookuper].
+// New returns a [jaws.TemplateLookuper] for the templates matched by fpath.
 //
-// If deadlock.Debug is false, it calls template.New("").ParseFS(fsys, fpath).
-//
-// If deadlock.Debug is true, fsys is ignored and it returns a TemplateReloader
-// that loads the templates using ParseGlob(relpath/fpath).
+// In normal builds the templates are parsed once from fsys. In debug builds
+// (deadlock.Debug, set by -race or -tags debug) it instead returns a
+// [TemplateReloader] that reparses from disk under relpath, so template edits take
+// effect without a restart; fsys is then unused.
 func New(fsys fs.FS, fpath, relpath string) (jtl jaws.TemplateLookuper, err error) {
 	return create(deadlock.Debug, fsys, fpath, relpath)
 }
