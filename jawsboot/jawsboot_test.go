@@ -218,3 +218,40 @@ func TestJawsBoot_SetupPrefixVariants(t *testing.T) {
 		})
 	}
 }
+
+// TestJawsBoot_SetupReturnedURLs pins jawsboot.Setup's exported (urls, err) contract
+// directly, independently of jaws.Setup's wrapping: every returned URL is absolute
+// and resolves to a handler registered via the supplied HandleFunc, for absolute,
+// relative and empty prefixes.
+func TestJawsBoot_SetupReturnedURLs(t *testing.T) {
+	for _, prefix := range []string{"/static", "static", ""} {
+		t.Run("prefix="+strconv.Quote(prefix), func(t *testing.T) {
+			jw, err := jaws.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer jw.Close()
+
+			registered := map[string]bool{}
+			handleFn := func(pattern string, _ http.Handler) {
+				registered[pattern] = true
+			}
+
+			urls, err := jawsboot.Setup(jw, handleFn, prefix)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(urls) == 0 {
+				t.Fatal("Setup returned no URLs")
+			}
+			for _, u := range urls {
+				if !strings.HasPrefix(u.String(), "/") {
+					t.Errorf("returned URL %q is not absolute", u.String())
+				}
+				if !registered[staticserve.NormalizeGET(u.String())] {
+					t.Errorf("returned URL %q has no matching registered handler", u.String())
+				}
+			}
+		})
+	}
+}

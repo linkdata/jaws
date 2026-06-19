@@ -65,6 +65,9 @@ func TestParse(t *testing.T) {
 		tail string
 	}{
 		{name: "blank", in: "", want: 0},
+		// "0" is a valid base-32 literal but decodes to Key(0), the invalid key, so
+		// it conflates with empty/invalid input and re-encodes to "" rather than "0".
+		{name: "zero-literal", in: "0", want: 0},
 		{name: "one", in: "1", want: 1},
 		{name: "invalid", in: "-1", want: 0},
 		{name: "trailing-path", in: "2/noscript", want: 2, tail: "/noscript"},

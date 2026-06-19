@@ -113,6 +113,33 @@ func Test_PreloadHTML(t *testing.T) {
 	}
 }
 
+// Test_PreloadHTML_MultipleFaviconsLastWins pins the documented contract that when
+// several resources qualify as favicons, only the last is honored (returned as
+// faviconURL and emitted as the rel="icon" link) and the earlier ones are discarded
+// entirely rather than emitted as preload links.
+func Test_PreloadHTML_MultipleFaviconsLastWins(t *testing.T) {
+	mustParseURL := func(urlstr string) *url.URL {
+		u, err := url.Parse(urlstr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u
+	}
+	txt, fav := PreloadHTML(
+		mustParseURL("favicon.png"),
+		mustParseURL("favicon-dark.png"),
+	)
+	if fav != "favicon-dark.png" {
+		t.Errorf("favicon = %q, want last-wins %q", fav, "favicon-dark.png")
+	}
+	if !strings.Contains(txt, `href="favicon-dark.png"`) {
+		t.Errorf("winning favicon should be emitted as the icon link; got %q", txt)
+	}
+	if strings.Contains(txt, "favicon.png") {
+		t.Errorf("earlier favicon should be discarded, not emitted anywhere; got %q", txt)
+	}
+}
+
 func runJawsJSSnippet(t *testing.T, snippet string) string {
 	t.Helper()
 
