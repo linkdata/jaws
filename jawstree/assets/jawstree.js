@@ -19,10 +19,8 @@ function jawstreeSetPath(arg) {
     var isSelected = selectedNodes.some(function(element) {
         return element.id == arg.id;
     });
-    if (!t.options.multiSelectEnabled && !t.options.cascadeSelectChildren && arg.set) {
-        if (selectedNodes.length == 1 && isSelected) {
-            return;
-        }
+    if (!t.options.multiSelectEnabled && arg.set && isSelected) {
+        return;
     }
     if (arg.set || t.options.multiSelectEnabled || isSelected) {
         t.selectNodeById(arg.id,arg.set);

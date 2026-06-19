@@ -120,3 +120,39 @@ process.stdout.write(JSON.stringify({
 		t.Fatalf("cascadeDeselectSelected = %#v, want %#v", got.CascadeDeselectSel, wantDeselect)
 	}
 }
+
+func TestJawstreeJS_SetPathSingleSelectCascadeReplay(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, `
+window["jawstree_tree"] = {
+	options: { multiSelectEnabled: false, cascadeSelectChildren: true },
+	selected: [],
+	descendants: { "parent": ["child"] },
+	getSelectedNodes: function() {
+		return this.selected.map(function(id) { return { id: id }; });
+	},
+	selectNodeById: function(id, set) {
+		if (set) {
+			this.selected = [id].concat(this.descendants[id] || []);
+			return;
+		}
+		var remove = [id].concat(this.descendants[id] || []);
+		this.selected = this.selected.filter(function(selectedID) {
+			return remove.indexOf(selectedID) == -1;
+		});
+	}
+};
+
+jawstreeSetPath({ tree: "tree", id: "parent", set: true });
+jawstreeSetPath({ tree: "tree", id: "child", set: true });
+process.stdout.write(JSON.stringify(window["jawstree_tree"].selected));
+`)
+
+	var got []string
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+	want := []string{"parent", "child"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("selected = %#v, want %#v", got, want)
+	}
+}
