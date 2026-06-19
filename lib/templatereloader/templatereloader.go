@@ -14,7 +14,7 @@ import (
 const reloadInterval = time.Second
 
 // TemplateReloader reloads and reparses templates if more than one second
-// has passed since the last [TemplateReloader.Lookup].
+// has passed since the last reload.
 type TemplateReloader struct {
 	// Path is the file path templates are loaded from. It is set once by [New]
 	// and is read-only afterwards: it is read under mu during a reload, so
