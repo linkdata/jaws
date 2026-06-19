@@ -3,18 +3,12 @@ package main
 import (
 	"bytes"
 	"errors"
-	"html/template"
-	"io/fs"
-	"log"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"os/exec"
 	"reflect"
 	"strings"
 	"testing"
-	"testing/fstest"
 	"time"
 
 	"github.com/linkdata/jaws"
@@ -67,30 +61,6 @@ func assertTagSetEqual(t *testing.T, got []any, want ...any) {
 	if !reflect.DeepEqual(gotSet, wantSet) {
 		t.Fatalf("tag set mismatch:\n got %#v\nwant %#v", got, want)
 	}
-}
-
-// saveMainDeps snapshots mainDeps and restores it after the test, so tests that
-// drive main() can substitute parts of it without leaking into other tests.
-func saveMainDeps(t *testing.T) {
-	t.Helper()
-	old := mainDeps
-	t.Cleanup(func() { mainDeps = old })
-}
-
-// successfulRunDeps returns a runDeps whose external calls all succeed without
-// touching the network, the embedded templates or stdout, for exercising run's
-// happy path. newJaws is left as the real jaws.New so a real instance is built.
-func successfulRunDeps() runDeps {
-	d := newRunDeps()
-	d.parseTemplates = func() (*template.Template, error) { return template.New("index.html"), nil }
-	d.addLookuper = func(*jaws.Jaws, *template.Template) error { return nil }
-	d.generateHead = func(*jaws.Jaws) error { return nil }
-	d.subStaticFS = func() (fs.FS, error) { return fstest.MapFS{}, nil }
-	d.serve = func(*jaws.Jaws) {}
-	d.listenAndServe = func(string, http.Handler) error { return nil }
-	d.logPrintln = func(...any) {}
-	d.logFatal = func(...any) {}
-	return d
 }
 
 func findSeedWithSkipFirst(t *testing.T, total, skipIdx int) int64 {
@@ -683,194 +653,39 @@ func TestPlaceMinesLockedSkipsInitialCell(t *testing.T) {
 	}
 }
 
-func TestDefaultRunHooks(t *testing.T) {
-	var logBuf bytes.Buffer
-	oldWriter := log.Writer()
-	log.SetOutput(&logBuf)
-	t.Cleanup(func() { log.SetOutput(oldWriter) })
-
-	d := newRunDeps()
-	jw, err := d.newJaws()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer jw.Close()
-
-	tmpl, err := d.parseTemplates()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tmpl.Lookup("index.html") == nil {
-		t.Fatal("expected embedded index.html template")
-	}
-	if err := d.addLookuper(jw, tmpl); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.generateHead(jw); err != nil {
-		t.Fatal(err)
-	}
-
-	staticFiles, err := d.subStaticFS()
-	if err != nil {
-		t.Fatal(err)
-	}
-	entries, err := fs.ReadDir(staticFiles, ".")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) == 0 {
-		t.Fatal("expected embedded static files")
-	}
-
-	d.serve(jw)
-	d.logPrintln("hook smoke test")
-	if !strings.Contains(logBuf.String(), "hook smoke test") {
-		t.Fatalf("expected log output, got %q", logBuf.String())
-	}
-}
-
-func TestDefaultLogFatal(t *testing.T) {
-	if os.Getenv("JAWS_TEST_DEFAULT_LOG_FATAL") == "1" {
-		newRunDeps().logFatal(errors.New("boom"))
-		return
-	}
-
-	cmd := exec.Command(os.Args[0], "-test.run=TestDefaultLogFatal")
-	cmd.Env = append(os.Environ(), "JAWS_TEST_DEFAULT_LOG_FATAL=1")
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	var exitErr *exec.ExitError
-	if !errors.As(err, &exitErr) {
-		t.Fatalf("expected subprocess failure, got %v", err)
-	}
-	if !strings.Contains(stderr.String(), "boom") {
-		t.Fatalf("expected fatal log output, got %q", stderr.String())
-	}
-}
-
-func TestRunPropagatesDependencyErrors(t *testing.T) {
-	tests := []struct {
-		name  string
-		patch func(*runDeps, error)
-	}{
-		{
-			name: "new jaws",
-			patch: func(d *runDeps, want error) {
-				d.newJaws = func() (*jaws.Jaws, error) { return nil, want }
-			},
-		},
-		{
-			name: "parse templates",
-			patch: func(d *runDeps, want error) {
-				d.parseTemplates = func() (*template.Template, error) { return nil, want }
-			},
-		},
-		{
-			name: "add template lookuper",
-			patch: func(d *runDeps, want error) {
-				d.addLookuper = func(*jaws.Jaws, *template.Template) error { return want }
-			},
-		},
-		{
-			name: "generate head html",
-			patch: func(d *runDeps, want error) {
-				d.generateHead = func(*jaws.Jaws) error { return want }
-			},
-		},
-		{
-			name: "sub static fs",
-			patch: func(d *runDeps, want error) {
-				d.subStaticFS = func() (fs.FS, error) { return nil, want }
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			d := successfulRunDeps()
-			want := errors.New(tt.name)
-			d.serve = func(*jaws.Jaws) { t.Fatal("serve should not run on startup error") }
-			d.listenAndServe = func(string, http.Handler) error {
-				t.Fatal("listenAndServe should not run on startup error")
-				return nil
-			}
-			tt.patch(&d, want)
-			if err := run(d); !errors.Is(err, want) {
-				t.Fatalf("run() error = %v, want %v", err, want)
-			}
-		})
-	}
-}
-
-func TestRunBuildsServerAndReturnsListenError(t *testing.T) {
-	d := successfulRunDeps()
-	want := errors.New("listen")
-	var served bool
-	var printed bool
+func TestRunServesIndex(t *testing.T) {
+	// Exercise the real production wiring of run end to end: inject only
+	// listenAndServe so the test drives the assembled handler without binding a
+	// port. The stub runs while the Jaws instance is still live (run has not
+	// returned), issues a GET / through the fully wired handler, asserts the
+	// rendered index page came back, then returns a sentinel run must propagate.
+	want := errors.New("stop listening")
 	var gotAddr string
-	var gotHandler http.Handler
-
-	d.serve = func(*jaws.Jaws) { served = true }
-	d.logPrintln = func(...any) { printed = true }
-	d.listenAndServe = func(addr string, handler http.Handler) error {
+	listen := func(addr string, handler http.Handler) error {
 		gotAddr = addr
-		gotHandler = handler
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		if rec.Code != http.StatusOK {
+			t.Errorf("GET / status = %d, want %d", rec.Code, http.StatusOK)
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, "Minesweeper") {
+			t.Errorf("GET / body missing page title, got %q", body)
+		}
+		// GenerateHeadHTML wiring: the jawsKey meta is always emitted, and our
+		// extra stylesheet must be preloaded.
+		if !strings.Contains(body, `name="jawsKey"`) {
+			t.Errorf("GET / body missing JaWS head wiring, got %q", body)
+		}
+		if !strings.Contains(body, "/static/style.css") {
+			t.Errorf("GET / body missing static stylesheet wiring, got %q", body)
+		}
 		return want
 	}
-
-	if err := run(d); !errors.Is(err, want) {
-		t.Fatalf("run() error = %v, want %v", err, want)
-	}
-	if !served {
-		t.Fatal("expected serve to run")
-	}
-	if !printed {
-		t.Fatal("expected startup log line")
+	if err := run(listen); !errors.Is(err, want) {
+		t.Fatalf("run() = %v, want %v", err, want)
 	}
 	if gotAddr != ":8080" {
-		t.Fatalf("listen address = %q, want %q", gotAddr, ":8080")
+		t.Errorf("listen addr = %q, want %q", gotAddr, ":8080")
 	}
-	if gotHandler == nil {
-		t.Fatal("expected a mux handler")
-	}
-}
-
-func TestMainFatalBehavior(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
-		saveMainDeps(t)
-		mainDeps = successfulRunDeps()
-		fatalCalled := false
-		mainDeps.logFatal = func(...any) { fatalCalled = true }
-		mainDeps.listenAndServe = func(string, http.Handler) error { return nil }
-
-		main()
-
-		if fatalCalled {
-			t.Fatal("logFatal should not run when run() succeeds")
-		}
-	})
-
-	t.Run("error", func(t *testing.T) {
-		saveMainDeps(t)
-		mainDeps = successfulRunDeps()
-		want := errors.New("listen")
-		var got error
-		mainDeps.logFatal = func(v ...any) {
-			if len(v) != 1 {
-				t.Fatalf("logFatal args = %#v, want single error", v)
-			}
-			var ok bool
-			got, ok = v[0].(error)
-			if !ok {
-				t.Fatalf("logFatal arg type = %T, want error", v[0])
-			}
-		}
-		mainDeps.listenAndServe = func(string, http.Handler) error { return want }
-
-		main()
-
-		if !errors.Is(got, want) {
-			t.Fatalf("logFatal error = %v, want %v", got, want)
-		}
-	})
 }

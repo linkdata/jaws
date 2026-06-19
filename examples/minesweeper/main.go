@@ -21,40 +21,6 @@ import (
 //go:embed assets/ui/*.html assets/static/*.css
 var assetsFS embed.FS
 
-// runDeps groups the external dependencies of run so tests can substitute any
-// of them. Production wiring is built by newRunDeps; passing the dependencies
-// in explicitly keeps them out of package-level mutable state.
-type runDeps struct {
-	newJaws        func() (*jaws.Jaws, error)
-	parseTemplates func() (*template.Template, error)
-	addLookuper    func(*jaws.Jaws, *template.Template) error
-	generateHead   func(*jaws.Jaws) error
-	subStaticFS    func() (fs.FS, error)
-	serve          func(*jaws.Jaws)
-	listenAndServe func(string, http.Handler) error
-	logPrintln     func(...any)
-	logFatal       func(...any)
-}
-
-// newRunDeps returns the production dependency set for run.
-func newRunDeps() runDeps {
-	return runDeps{
-		newJaws:        jaws.New,
-		parseTemplates: func() (*template.Template, error) { return template.ParseFS(assetsFS, "assets/ui/*.html") },
-		addLookuper:    func(jw *jaws.Jaws, tmpl *template.Template) error { return jw.AddTemplateLookuper(tmpl) },
-		generateHead:   func(jw *jaws.Jaws) error { return jw.GenerateHeadHTML("/static/style.css") },
-		subStaticFS:    func() (fs.FS, error) { return fs.Sub(assetsFS, "assets/static") },
-		serve:          func(jw *jaws.Jaws) { go jw.Serve() },
-		listenAndServe: http.ListenAndServe,
-		logPrintln:     func(value ...any) { log.Println(value...) },
-		logFatal:       func(value ...any) { log.Fatal(value...) },
-	}
-}
-
-// mainDeps is the dependency set used by main. It is a package variable solely
-// so tests can replace parts of it; production code never reassigns it.
-var mainDeps = newRunDeps()
-
 // Cell represents one Minesweeper board cell.
 type Cell struct {
 	game     *game
@@ -492,25 +458,31 @@ func (g *game) calculateAdjacencyLocked() {
 	}
 }
 
-func run(d runDeps) error {
-	jw, err := d.newJaws()
+// run wires up the JaWS Minesweeper demo and serves it.
+//
+// listenAndServe is the only injected dependency: production passes
+// [http.ListenAndServe], while tests pass a stub so they can drive the wired
+// handler without binding a real port. Everything else is constructed inline so
+// the function reads as a copyable "how to wire up JaWS" template.
+func run(listenAndServe func(addr string, handler http.Handler) error) error {
+	jw, err := jaws.New()
 	if err != nil {
 		return err
 	}
 	defer jw.Close()
 
-	tmpl, err := d.parseTemplates()
+	tmpl, err := template.ParseFS(assetsFS, "assets/ui/*.html")
 	if err != nil {
 		return err
 	}
-	if err = d.addLookuper(jw, tmpl); err != nil {
+	if err = jw.AddTemplateLookuper(tmpl); err != nil {
 		return err
 	}
-	if err = d.generateHead(jw); err != nil {
+	if err = jw.GenerateHeadHTML("/static/style.css"); err != nil {
 		return err
 	}
 
-	staticFiles, err := d.subStaticFS()
+	staticFiles, err := fs.Sub(assetsFS, "assets/static")
 	if err != nil {
 		return err
 	}
@@ -527,13 +499,13 @@ func run(d runDeps) error {
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
 	mux.Handle("GET /", jw.Session(jw.SecureHeadersMiddleware(ui.Handler(jw, "index.html", board))))
 
-	d.serve(jw)
-	d.logPrintln("Minesweeper listening on http://localhost:8080")
-	return d.listenAndServe(":8080", mux)
+	go jw.Serve()
+	log.Println("Minesweeper listening on http://localhost:8080")
+	return listenAndServe(":8080", mux)
 }
 
 func main() {
-	if err := run(mainDeps); err != nil {
-		mainDeps.logFatal(err)
+	if err := run(http.ListenAndServe); err != nil {
+		log.Fatal(err)
 	}
 }
