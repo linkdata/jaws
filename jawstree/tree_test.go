@@ -410,6 +410,7 @@ func TestTree(t *testing.T) {
 	rootnode.JawsPathSet(elem, changed[0].ID+".selected", false)
 	select {
 	case <-t.Context().Done():
+		t.Fatal("expected a jawstreeSetPath broadcast")
 	case msg := <-rq.OutCh:
 		// The broadcast id is the node's own ID; derive the expectation from it
 		// rather than a literal, which is fragile to the package directory listing.
