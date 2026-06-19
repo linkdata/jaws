@@ -288,11 +288,12 @@ of them.
 
   The response should be cached indefinitely.
 
-* `/jaws/[0-9a-z]+` (and `/jaws/[0-9a-z]+/noscript`)
+* `/jaws/[0-9a-v]+` (and `/jaws/[0-9a-v]+/noscript`)
 
-  The WebSocket endpoint. When you register `Jaws.ServeHTTP()` for
-  `GET /jaws/`, this is handled automatically. Custom routers that dispatch
-  the endpoint themselves should parse the trailing string with
+  The WebSocket endpoint, where the path component is the generated lowercase
+  base-32 request key. When you register `Jaws.ServeHTTP()` for `GET /jaws/`,
+  this is handled automatically. Custom routers that dispatch the endpoint
+  themselves should parse the trailing string with
   `key.Parse()` (`github.com/linkdata/jaws/lib/key`) and then retrieve the
   matching JaWS Request with the JaWS object's `UseRequest()` method.
 
