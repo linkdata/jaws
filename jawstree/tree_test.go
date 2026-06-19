@@ -1,6 +1,7 @@
 package jawstree
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"html"
@@ -147,6 +148,38 @@ func TestTreeSelectionMethods(t *testing.T) {
 	})
 	if !reflect.DeepEqual(walked, []string{":", "children.0:a", "children.1:b"}) {
 		t.Fatalf("walked = %#v", walked)
+	}
+}
+
+func TestTreeRenderEmitsRootDataAndInitScriptForPageContainer(t *testing.T) {
+	jw, err := jaws.New()
+	maybeError(t, err)
+	defer jw.Close()
+
+	rq := jw.NewRequest(nil)
+	var mu deadlock.RWMutex
+	root := &Node{Children: []*Node{{Name: "Documents"}}}
+	tree := New("mytree", ui.NewJsVar(&mu, root), InitiallyExpanded)
+	elem := rq.NewElement(tree)
+
+	var body bytes.Buffer
+	if err := tree.JawsRender(elem, &body, nil); err != nil {
+		t.Fatal(err)
+	}
+	rendered := body.String()
+	page := rendered + `<div id="mytree"></div>`
+
+	if !strings.Contains(rendered, `data-jawsname="jawstreeroot_mytree"`) {
+		t.Fatalf("rendered tree is missing root JsVar wiring: %q", rendered)
+	}
+	if !strings.Contains(rendered, `data-jawsdata=`) || !strings.Contains(rendered, "Documents") {
+		t.Fatalf("rendered tree is missing serialized root data: %q", rendered)
+	}
+	if want := initScriptURL("mytree", InitiallyExpanded); !strings.Contains(rendered, `src="`+want+`"`) {
+		t.Fatalf("rendered tree is missing init script %q: %q", want, rendered)
+	}
+	if !strings.Contains(page, `<div id="mytree"></div>`) {
+		t.Fatalf("page is missing the Quercus container: %q", page)
 	}
 }
 

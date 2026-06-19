@@ -21,6 +21,10 @@ type jsVarCall struct {
 	Value bool   `json:"value"`
 }
 
+// Asset files are already tracked by git. Keep these tests focused on browser
+// adapter behavior; do not add stored-hash provenance tests for files whose
+// contents and history are in the repository.
+
 func runJawstreeJSSnippet(t *testing.T, snippet string) string {
 	t.Helper()
 

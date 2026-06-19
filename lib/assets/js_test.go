@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -15,6 +16,10 @@ import (
 	"github.com/linkdata/jaws/lib/wire"
 	"github.com/linkdata/staticserve"
 )
+
+// Asset files are already tracked by git. Keep these tests focused on generated
+// HTML and browser behavior; do not add stored-hash provenance tests for files
+// whose contents and history are in the repository.
 
 func Test_PreloadHTML(t *testing.T) {
 	const extraScript = "someExtraScript.js"
@@ -497,6 +502,181 @@ process.stdout.write(JSON.stringify({
 	}
 	if got.Context.Sent != 0 || got.Context.Prevented || got.Context.Stopped {
 		t.Fatalf("connecting context menu handler should be inert, got %+v", got.Context)
+	}
+}
+
+func TestJawsJS_SetValuePreservesTextSelection(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+const input = {
+	tagName: "INPUT",
+	value: "hello",
+	selectionStart: 1,
+	selectionEnd: 5,
+	getAttribute: function(name) { return name === "type" ? "text" : null; }
+};
+
+jawsSetValue(input, "say hello!");
+process.stdout.write(JSON.stringify({
+	value: input.value,
+	start: input.selectionStart,
+	end: input.selectionEnd
+}));
+`)
+
+	var got struct {
+		Value string `json:"value"`
+		Start int    `json:"start"`
+		End   int    `json:"end"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.Value != "say hello!" || got.Start != 5 || got.End != 9 {
+		t.Fatalf("unexpected text value/selection: %+v", got)
+	}
+}
+
+func TestJawsJS_PerformRemoveAndReplaceMutateDOMAndReportRemovals(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+const nodes = {};
+function makeNode(id, tagName) {
+	const node = new Node();
+	node.id = id;
+	node.tagName = tagName || "DIV";
+	node.children = [];
+	node.parentElement = null;
+	node.querySelectorAll = function(selector) {
+		if (selector === '[id^="' + jawsIdPrefix + '"]') {
+			return this.children.filter(function(child) { return String(child.id || "").startsWith(jawsIdPrefix); });
+		}
+		return [];
+	};
+	node.removeChild = function(child) {
+		this.children = this.children.filter(function(candidate) { return candidate !== child; });
+		child.parentElement = null;
+		delete nodes[child.id];
+	};
+	node.replaceWith = function(newNode) {
+		const parent = this.parentElement;
+		const idx = parent.children.indexOf(this);
+		parent.children[idx] = newNode;
+		newNode.parentElement = parent;
+		delete nodes[this.id];
+		nodes[newNode.id] = newNode;
+	};
+	nodes[id] = node;
+	return node;
+}
+
+const parent = makeNode("Jid.1");
+const child = makeNode("Jid.2");
+const grandchild = makeNode("Jid.3");
+child.children.push(grandchild);
+grandchild.parentElement = child;
+parent.children.push(child);
+child.parentElement = parent;
+
+const replaceParent = makeNode("parent");
+const oldNode = makeNode("Jid.4");
+replaceParent.children.push(oldNode);
+oldNode.parentElement = replaceParent;
+
+document.getElementById = function(id) { return nodes[id] || null; };
+jawsElement = function(html) { return makeNode("Jid.5"); };
+jawsAttachChildren = function(node) { return node; };
+
+jawsPerform("Remove", "Jid.1", JSON.stringify("Jid.2"));
+jawsPerform("Replace", "Jid.4", JSON.stringify('<div id="Jid.5"></div>'));
+
+process.stdout.write(JSON.stringify({
+	parentChildren: parent.children.map(function(child) { return child.id; }),
+	replacedChildren: replaceParent.children.map(function(child) { return child.id; }),
+	removeFrame: jaws.sent[0] || "",
+	childStillRegistered: Boolean(nodes["Jid.2"]),
+	oldStillRegistered: Boolean(nodes["Jid.4"])
+}));
+`)
+
+	var got struct {
+		ParentChildren       []string `json:"parentChildren"`
+		ReplacedChildren     []string `json:"replacedChildren"`
+		RemoveFrame          string   `json:"removeFrame"`
+		ChildStillRegistered bool     `json:"childStillRegistered"`
+		OldStillRegistered   bool     `json:"oldStillRegistered"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if len(got.ParentChildren) != 0 {
+		t.Fatalf("Remove left children behind: %+v", got.ParentChildren)
+	}
+	if !reflect.DeepEqual(got.ReplacedChildren, []string{"Jid.5"}) {
+		t.Fatalf("Replace children = %+v, want [Jid.5]", got.ReplacedChildren)
+	}
+	if got.ChildStillRegistered || got.OldStillRegistered {
+		t.Fatalf("removed/replaced nodes still registered: %+v", got)
+	}
+	msg, ok := wire.Parse([]byte(got.RemoveFrame))
+	if !ok {
+		t.Fatalf("Remove frame must be parseable by wire.Parse, got %q", got.RemoveFrame)
+	}
+	if msg.What != what.Remove || msg.Jid != 2 || msg.Data != "Jid.3" {
+		t.Fatalf("unexpected removal frame: %+v", msg)
+	}
+}
+
+func TestJawsJS_FailedSocketPingsAndReloadsOnReconnect(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() {}
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+let reloaded = 0;
+window.location.reload = function() { reloaded++; };
+
+function FakeXHR() {
+	this.readyState = 0;
+	this.status = 0;
+	this.cb = null;
+}
+FakeXHR.prototype.open = function(method, url, async) {
+	this.method = method;
+	this.url = url;
+	this.async = async;
+};
+FakeXHR.prototype.addEventListener = function(name, cb) {
+	if (name === "readystatechange") {
+		this.cb = cb;
+	}
+};
+FakeXHR.prototype.send = function() {
+	this.readyState = 4;
+	this.status = 204;
+	this.cb({ currentTarget: this });
+};
+XMLHttpRequest = FakeXHR;
+
+jawsFailed();
+process.stdout.write(JSON.stringify({
+	jawsIsDate: jaws instanceof Date,
+	reloaded: reloaded
+}));
+`)
+
+	var got struct {
+		JawsIsDate bool `json:"jawsIsDate"`
+		Reloaded   int  `json:"reloaded"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if !got.JawsIsDate || got.Reloaded != 1 {
+		t.Fatalf("unexpected reconnect behavior: %+v", got)
 	}
 }
 
