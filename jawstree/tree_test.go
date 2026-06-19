@@ -10,11 +10,13 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstest"
 	"github.com/linkdata/jaws/lib/ui"
+	"github.com/linkdata/jaws/lib/wire"
 )
 
 func maybeError(t *testing.T, err error) {
@@ -281,6 +283,7 @@ func TestTree(t *testing.T) {
 		t.Fatal("nil test request")
 	}
 	defer rq.Close()
+	<-rq.ReadyCh
 
 	root, err := os.OpenRoot(".")
 	maybeError(t, err)
@@ -367,7 +370,13 @@ func TestTree(t *testing.T) {
 	changed[0].Disabled = true
 	tree.JawsUpdate(elem)
 	select {
-	case <-t.Context().Done():
+	case rq.InCh <- wire.WsMsg{}:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waking request loop")
+	}
+	select {
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for jawstreeSet message")
 	case msg := <-rq.OutCh:
 		if s := string(rootnode.marshalJSON(nil)); !strings.Contains(msg.Data, s) {
 			t.Log(msg.Data)
@@ -428,6 +437,92 @@ func TestTree_JawsPathSetIgnoresNonSelectedPath(t *testing.T) {
 	}
 }
 
+func TestTree_DirtySharedTreeSendsOneUpdatePerRequest(t *testing.T) {
+	jw, err := jaws.New()
+	maybeError(t, err)
+	defer jw.Close()
+
+	go jw.Serve()
+	rq1 := jawstest.NewTestRequest(jw, nil)
+	if rq1 == nil {
+		t.Fatal("nil test request 1")
+	}
+	defer rq1.Close()
+	rq2 := jawstest.NewTestRequest(jw, nil)
+	if rq2 == nil {
+		t.Fatal("nil test request 2")
+	}
+	defer rq2.Close()
+	<-rq1.ReadyCh
+	<-rq2.ReadyCh
+
+	rootnode := &Node{Name: "root", Children: []*Node{{Name: "child"}}}
+	var mu deadlock.RWMutex
+	tree := New("tree", ui.NewJsVar(&mu, rootnode))
+
+	elem1 := rq1.NewElement(tree)
+	var sb1 strings.Builder
+	maybeError(t, elem1.JawsRender(&sb1, nil))
+
+	elem2 := rq2.NewElement(tree)
+	var sb2 strings.Builder
+	maybeError(t, elem2.JawsRender(&sb2, nil))
+
+	tree.Lock()
+	rootnode.Children[0].Disabled = true
+	tree.Unlock()
+	jw.Dirty(rootnode)
+
+	msgs1 := collectJawstreeSetMessages(t, rq1.OutCh)
+	msgs2 := collectJawstreeSetMessages(t, rq2.OutCh)
+	if len(msgs1) != 1 {
+		t.Fatalf("request 1 got %d jawstreeSet calls, want 1: %#v", len(msgs1), msgs1)
+	}
+	if len(msgs2) != 1 {
+		t.Fatalf("request 2 got %d jawstreeSet calls, want 1: %#v", len(msgs2), msgs2)
+	}
+}
+
+func collectJawstreeSetMessages(t *testing.T, ch <-chan wire.WsMsg) (msgs []wire.WsMsg) {
+	t.Helper()
+	deadline := time.NewTimer(2 * time.Second)
+	defer deadline.Stop()
+	idle := time.NewTimer(time.Hour)
+	if !idle.Stop() {
+		<-idle.C
+	}
+	defer idle.Stop()
+
+	for {
+		var idleC <-chan time.Time
+		if len(msgs) > 0 {
+			idleC = idle.C
+		}
+		select {
+		case <-t.Context().Done():
+			t.Fatal("test context expired while waiting for jawstreeSet messages")
+		case <-deadline.C:
+			if len(msgs) == 0 {
+				t.Fatal("timed out waiting for jawstreeSet message")
+			}
+			return msgs
+		case <-idleC:
+			return msgs
+		case msg := <-ch:
+			if strings.Contains(msg.Data, "jawstreeSet=") {
+				msgs = append(msgs, msg)
+				if !idle.Stop() {
+					select {
+					case <-idle.C:
+					default:
+					}
+				}
+				idle.Reset(250 * time.Millisecond)
+			}
+		}
+	}
+}
+
 // TestTree_ConcurrentUpdateAndInput exercises JawsUpdate reading the shared node
 // tree (via marshalJSON) under the JsVar read lock while another goroutine mutates
 // a node under the write lock, exactly as JsVar.JawsInput does. Run with -race.
@@ -457,7 +552,7 @@ func TestTree_ConcurrentUpdateAndInput(t *testing.T) {
 	var sb strings.Builder
 	maybeError(t, tree.JawsRender(elem, &sb, nil))
 
-	// Drain broadcast traffic so JawsUpdate's JsCall never blocks or cancels.
+	// Drain any update traffic the request loop flushes while this race test runs.
 	stop := make(chan struct{})
 	go func() {
 		for {
