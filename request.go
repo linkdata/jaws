@@ -12,7 +12,6 @@ import (
 	"net/netip"
 	"net/url"
 	"slices"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -282,20 +281,39 @@ func (rq *Request) HeadHTML(w io.Writer) (err error) {
 	return
 }
 
-// appendJSQuote is like strconv.AppendQuote but also escapes '<' as '\x3c'
-// to prevent '</script>' from closing the script block when embedded in HTML.
+// appendJSQuote appends s as a JavaScript string literal safe to embed in an inline
+// <script>.
+//
+// It JSON-quotes s with [wire.AppendJSONQuote] (whose output is valid JavaScript)
+// and then escapes the characters JSON leaves literal that are hazardous inside a
+// <script> element: '<' as '\x3c' (so '</script>' cannot close the block) and the
+// U+2028/U+2029 line separators (illegal in a pre-ES2019 string literal). It is used
+// instead of [strconv.AppendQuote], whose Go-only \UXXXXXXXX escapes for
+// non-printable astral runes JavaScript silently mis-decodes (dropping the
+// backslash and keeping the letters), corrupting the value.
 func appendJSQuote(b []byte, s string) []byte {
 	start := len(b)
-	b = strconv.AppendQuote(b, s)
-	// strconv.AppendQuote never emits '<' as part of an escape sequence, so every
-	// '<' in the appended region came from s. Most attribute/class fragments
-	// contain none, so the common path appends straight into b with no copy.
-	if bytes.IndexByte(b[start:], '<') < 0 {
+	b = wire.AppendJSONQuote(b, s)
+	// None of '<', U+2028 or U+2029 can appear inside an escape AppendJSONQuote
+	// produces, so any occurrence in the appended region came from s. Most
+	// attribute/class fragments contain none, so the common path returns with no copy.
+	if !bytes.ContainsAny(b[start:], "<\u2028\u2029") {
 		return b
 	}
-	rest := bytes.ReplaceAll(b[start:], []byte("<"), []byte(`\x3c`))
+	rest := jsInlineScriptEscaper.Replace(string(b[start:]))
 	return append(b[:start], rest...)
 }
+
+// jsInlineScriptEscaper escapes, in a JSON string that is already a valid JavaScript
+// string literal, the characters that remain unsafe inside an inline <script>: '<'
+// (so '</script>' cannot terminate the block) and the U+2028/U+2029 line separators
+// (line terminators that break a pre-ES2019 string literal). The replacements are
+// themselves valid JavaScript escapes.
+var jsInlineScriptEscaper = strings.NewReplacer(
+	"<", `\x3c`,
+	"\u2028", `\u2028`,
+	"\u2029", `\u2029`,
+)
 
 // drainTailScript builds the tail <script> body from the attribute and class messages
 // queued during initial rendering, reporting sent=true the first time it runs for this

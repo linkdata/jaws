@@ -233,6 +233,40 @@ func TestRequest_writeTailScript_EscapesScriptClose(t *testing.T) {
 	th.True(strings.Contains(s, `\x3c/script>`))
 }
 
+func TestRequest_writeTailScript_QuotesAstralAndLineSeparators(t *testing.T) {
+	th := newTestHelper(t)
+	jw, _ := New()
+	defer jw.Close()
+	rq := jw.NewRequest(nil)
+	defer jw.recycle(rq)
+	item := &testUi{}
+	e := rq.NewElement(item)
+	// U+1FFFE is a non-printable astral code point: strconv.Quote would emit it as the
+	// Go-only escape \U0001fffe, which JavaScript silently mis-decodes to the literal
+	// text "U0001fffe", so the value must instead survive as literal UTF-8. U+2028 is a
+	// JavaScript line separator that must be escaped so it cannot break the inline
+	// <script> string literal.
+	e.SetAttr("data-x", "a\U0001FFFEb\u2028c")
+
+	w := httptest.NewRecorder()
+	b, sent := rq.drainTailScript()
+	if err := rq.writeTailResponse(w, b, sent); err != nil {
+		t.Fatal(err)
+	}
+	s := w.Body.String()
+	// No Go-only \U escape: JavaScript drops the backslash and keeps the letters.
+	if strings.Contains(s, `\U`) {
+		t.Fatalf("tail script contains a Go-only \\U escape JavaScript cannot decode: %s", s)
+	}
+	// The astral rune survives verbatim as literal UTF-8.
+	th.True(strings.Contains(s, "\U0001FFFE"))
+	// The line separator is escaped, not emitted literally.
+	th.True(strings.Contains(s, `\u2028`))
+	if strings.ContainsRune(s, '\u2028') {
+		t.Fatalf("tail script contains a literal U+2028 line separator: %q", s)
+	}
+}
+
 func TestRequest_writeTailScript_PreservesNonAttrMessages(t *testing.T) {
 	th := newTestHelper(t)
 	jw, _ := New()
