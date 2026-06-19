@@ -17,10 +17,14 @@ type uiHandler struct {
 	Template pageTemplate
 }
 
+// pageTemplate wraps a [Template] used as a whole-page document template.
 type pageTemplate struct {
 	Template
 }
 
+// JawsUpdate is a no-op because a page-level template is render-only: the
+// embedded [Template.JawsUpdate] would re-render the entire document into itself
+// when OuterHTMLTag is set, so it is deliberately silenced here.
 func (pageTemplate) JawsUpdate(*jaws.Element) {}
 
 func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
