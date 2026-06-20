@@ -146,7 +146,7 @@ func testBind_Hook_Success[T comparable](t *testing.T, testval T) {
 	if x := bind1.JawsGet(nil); x != testval {
 		t.Error(x)
 	}
-	if err := bind1.JawsSet(nil, testval); err != jaws.ErrValueUnchanged {
+	if err := bind1.JawsSet(nil, testval); !errors.Is(err, jaws.ErrValueUnchanged) {
 		t.Error(err)
 	}
 	if len(order) != 0 {
@@ -251,7 +251,7 @@ func testBind_Hook_Set[T comparable](t *testing.T, testval T) {
 	if x := bind1.JawsGet(nil); x != testval {
 		t.Error(x)
 	}
-	if err := bind1.JawsSet(nil, testval); err != jaws.ErrValueUnchanged {
+	if err := bind1.JawsSet(nil, testval); !errors.Is(err, jaws.ErrValueUnchanged) {
 		t.Error(err)
 	}
 	if calls1 != 2 {
@@ -297,7 +297,7 @@ func testBind_Hook_Get[T comparable](t *testing.T, testval T) {
 	if x := bind1.JawsGet(nil); x != testval {
 		t.Error(x)
 	}
-	if err := bind1.JawsSet(nil, testval); err != jaws.ErrValueUnchanged {
+	if err := bind1.JawsSet(nil, testval); !errors.Is(err, jaws.ErrValueUnchanged) {
 		t.Error(err)
 	}
 	if calls1 != 1 {

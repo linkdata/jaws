@@ -312,84 +312,52 @@ func (b *binder[T]) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err e
 	return
 }
 
+// with returns a new [Binder] chained onto b that applies hook.
+//
+// Every chain constructor shares this single allocation point, so the new binder
+// always reuses b's [RWLocker] and ptr and only varies the hook.
+func (b *binder[T]) with(hook any) Binder[T] {
+	return &binder[T]{prev: b, RWLocker: b.RWLocker, ptr: b.ptr, hook: hook}
+}
+
 // SetLocked implements [Binder.SetLocked].
 func (b *binder[T]) SetLocked(fn SetHook[T]) Binder[T] {
-	return &binder[T]{
-		prev:     b,
-		RWLocker: b.RWLocker,
-		ptr:      b.ptr,
-		hook:     fn,
-	}
+	return b.with(fn)
 }
 
 // GetLocked implements [Binder.GetLocked].
 func (b *binder[T]) GetLocked(fn GetHook[T]) Binder[T] {
-	return &binder[T]{
-		prev:     b,
-		RWLocker: b.RWLocker,
-		ptr:      b.ptr,
-		hook:     fn,
-	}
+	return b.with(fn)
 }
 
 // Format implements [Binder.Format].
 func (b *binder[T]) Format(format string) Binder[T] {
-	return &binder[T]{
-		prev:     b,
-		RWLocker: b.RWLocker,
-		ptr:      b.ptr,
-		hook:     format,
-	}
+	return b.with(format)
 }
 
 // GetHTML implements [Binder.GetHTML].
 func (b *binder[T]) GetHTML(fn GetHTMLHook[T]) Binder[T] {
-	return &binder[T]{
-		prev:     b,
-		RWLocker: b.RWLocker,
-		ptr:      b.ptr,
-		hook:     fn,
-	}
+	return b.with(fn)
 }
 
 // Clicked implements [Binder.Clicked].
 func (b *binder[T]) Clicked(fn ClickedHook[T]) Binder[T] {
-	return &binder[T]{
-		prev:     b,
-		RWLocker: b.RWLocker,
-		ptr:      b.ptr,
-		hook:     fn,
-	}
+	return b.with(fn)
 }
 
 // ContextMenu implements [Binder.ContextMenu].
 func (b *binder[T]) ContextMenu(fn ContextMenuHook[T]) Binder[T] {
-	return &binder[T]{
-		prev:     b,
-		RWLocker: b.RWLocker,
-		ptr:      b.ptr,
-		hook:     fn,
-	}
+	return b.with(fn)
 }
 
 // InitialHTMLAttr implements [Binder.InitialHTMLAttr].
 func (b *binder[T]) InitialHTMLAttr(fn InitialHTMLAttrHook[T]) Binder[T] {
-	return &binder[T]{
-		prev:     b,
-		RWLocker: b.RWLocker,
-		ptr:      b.ptr,
-		hook:     fn,
-	}
+	return b.with(fn)
 }
 
 // Success implements [Binder.Success].
 func (b *binder[T]) Success(fn any) Binder[T] {
-	return &binder[T]{
-		prev:     b,
-		RWLocker: b.RWLocker,
-		ptr:      b.ptr,
-		hook:     wrapSuccessHook(fn),
-	}
+	return b.with(wrapSuccessHook(fn))
 }
 
 func wrapSuccessHook(fn any) (hook SuccessHook) {

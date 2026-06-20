@@ -1,6 +1,7 @@
 package bind
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -19,7 +20,7 @@ func (testGetterString) JawsGet(elem *jaws.Element) string {
 func Test_makeSetter(t *testing.T) {
 	tsg := testGetterString{}
 	setter1 := MakeSetter[string](tsg)
-	if err := setter1.JawsSet(nil, "foo"); err != ErrValueNotSettable {
+	if err := setter1.JawsSet(nil, "foo"); !errors.Is(err, ErrValueNotSettable) {
 		t.Error(err)
 	}
 	if s := setter1.JawsGet(nil); s != testStringGetterText {
@@ -30,7 +31,7 @@ func Test_makeSetter(t *testing.T) {
 	}
 
 	setter2 := MakeSetter[string]("quux")
-	if err := setter2.JawsSet(nil, "foo"); err != ErrValueNotSettable {
+	if err := setter2.JawsSet(nil, "foo"); !errors.Is(err, ErrValueNotSettable) {
 		t.Error(err)
 	}
 	if s := setter2.JawsGet(nil); s != "quux" {
@@ -58,7 +59,7 @@ func TestMakeSetter_SetterPassThrough(t *testing.T) {
 	if got := s.JawsGet(nil); got != "x" {
 		t.Fatalf("unexpected setter getter value %q", got)
 	}
-	if err := s.JawsSet(nil, "x"); err != ErrValueNotSettable {
+	if err := s.JawsSet(nil, "x"); !errors.Is(err, ErrValueNotSettable) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 

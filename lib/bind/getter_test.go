@@ -1,6 +1,7 @@
 package bind
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -21,7 +22,7 @@ func Test_makeGetter_panic(t *testing.T) {
 
 func Test_makeGetter(t *testing.T) {
 	setter := MakeGetter[string]("foo")
-	if err := setter.(Setter[string]).JawsSet(nil, "bar"); err != ErrValueNotSettable {
+	if err := setter.(Setter[string]).JawsSet(nil, "bar"); !errors.Is(err, ErrValueNotSettable) {
 		t.Error(err)
 	}
 }

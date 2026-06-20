@@ -171,8 +171,7 @@ func MakeSetterFloat64(value any) (s Setter[float64]) {
 	case float64:
 		return setterStatic[float64]{v}
 	default:
-		var ok bool
-		ok = ok || makeSetterFloat64for[int64](&s, v)
+		ok := makeSetterFloat64for[int64](&s, v)
 		ok = ok || makeSetterFloat64for[uint64](&s, v)
 		ok = ok || makeSetterFloat64for[int](&s, v)
 		ok = ok || makeSetterFloat64for[uint](&s, v)
