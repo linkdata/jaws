@@ -409,7 +409,7 @@ be persisted across restarts and must have an expiry time.
 
 Use one of these patterns:
 
-* Wrap page handlers with `Jaws.Session(handler)` to ensure a session exists.
+* Wrap page handlers with `Jaws.SessionMiddleware(handler)` to ensure a session exists.
 * Call `Jaws.NewSession(w, r)` explicitly to create and attach a fresh session cookie.
 * Set `Jaws.AutoSession` to lazily create an anonymous session during a
   successful WebSocket upgrade when a Request has none.
