@@ -61,6 +61,9 @@ func (u *InputText) JawsUpdate(elem *jaws.Element) {
 
 // JawsInput stores a browser-side string input value.
 func (u *InputText) JawsInput(elem *jaws.Element, value string) (err error) {
+	// A string has no parse step that can fail, so Last is stored unconditionally,
+	// unlike the typed inputs (InputBool/InputFloat/InputDate) which store Last only
+	// after a successful parse to keep the last accepted value on a malformed frame.
 	u.Last.Store(value)
 	err = u.maybeDirty(elem, u.Setter.JawsSet(elem, value))
 	return

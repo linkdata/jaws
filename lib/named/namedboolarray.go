@@ -30,10 +30,12 @@ func NewBoolArray(multi bool) *BoolArray {
 // ReadLocked calls fn with the [BoolArray] locked for reading.
 //
 // fn must not call other [BoolArray] methods or [Bool.JawsSet]: those re-acquire
-// the same non-reentrant nba mutex and deadlock. Operate only on the provided
-// slice and the read-only *[Bool] methods ([Bool.Name], [Bool.HTML],
-// [Bool.JawsGet], [Bool.Checked], [Bool.Set], [Bool.String] and similar), which
-// take only the Bool's own mutex.
+// the same non-reentrant nba mutex and deadlock. It may operate on the provided
+// slice and call the *[Bool] methods that take only the Bool's own mutex — the
+// reads [Bool.Name], [Bool.HTML], [Bool.JawsGet], [Bool.Checked], [Bool.String]
+// (and similar) and the write [Bool.Set]. [Bool.Set] mutates the Bool under the
+// Bool's own mutex, which the nba read lock held here does not serialize, so
+// concurrent callers must coordinate any such writes themselves.
 func (nba *BoolArray) ReadLocked(fn func(nbl []*Bool)) {
 	nba.mu.RLock()
 	defer nba.mu.RUnlock()
@@ -45,7 +47,9 @@ func (nba *BoolArray) ReadLocked(fn func(nbl []*Bool)) {
 //
 // As with [BoolArray.ReadLocked], fn must not call other [BoolArray] methods or
 // [Bool.JawsSet] (they re-acquire the same non-reentrant nba mutex and deadlock);
-// operate only on the provided slice and the read-only *[Bool] methods.
+// operate only on the provided slice and the *[Bool] methods that take just the
+// Bool's own mutex (see [BoolArray.ReadLocked]). The exclusive lock held here
+// serializes [Bool.Set] across concurrent WriteLocked calls.
 func (nba *BoolArray) WriteLocked(fn func(nbl []*Bool) []*Bool) {
 	nba.mu.Lock()
 	defer nba.mu.Unlock()

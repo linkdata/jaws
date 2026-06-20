@@ -10,7 +10,8 @@ import (
 	"github.com/linkdata/jaws"
 )
 
-// reloadInterval is the minimum time between disk reparses in debug mode.
+// reloadInterval is the minimum time between disk reparses in
+// [TemplateReloader.Lookup].
 const reloadInterval = time.Second
 
 // TemplateReloader reloads and reparses templates if more than one second

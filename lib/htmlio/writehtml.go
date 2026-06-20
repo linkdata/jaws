@@ -31,8 +31,9 @@ func needClosingTag(tag string) bool {
 	return !ok
 }
 
-// AppendAttrs appends each non-empty attribute fragment in attrs to b, separated
-// by a leading space.
+// AppendAttrs appends each non-empty attribute fragment in attrs to b, each
+// prefixed with a single space so the result can be concatenated directly after a
+// tag name.
 //
 // The attrs are trusted raw HTML attribute fragments written verbatim with no
 // escaping; they MUST NOT contain untrusted data. Use [Attr] or [AppendAttr] to
@@ -130,6 +131,9 @@ func WriteHTMLInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs 
 // Void/singleton tags such as img and input are written without a closing tag,
 // and any innerHTML passed for them is ignored, since a void element cannot
 // contain content (emitting "<img>...</img>" would be invalid HTML).
+//
+// Unlike [WriteHTMLTag] it emits no value attribute; pass one via attrs (for
+// example Attr("value", v)) when a value="..." is needed.
 //
 // The htmlTag parameter is trusted and written verbatim with no escaping or
 // validation; it MUST NOT be derived from untrusted data. The typeAttr parameter

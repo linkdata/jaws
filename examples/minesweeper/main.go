@@ -31,6 +31,8 @@ type Cell struct {
 	adjacent int
 }
 
+// cellView is an immutable snapshot of a Cell's display state, taken under the
+// game lock so rendering can run without holding it.
 type cellView struct {
 	mine     bool
 	revealed bool
@@ -235,6 +237,8 @@ func (g *game) snapshot() gameState {
 	return gameState{g.started, g.gameOver, g.won, g.revealed, g.flags}
 }
 
+// changedTags returns the tags whose bound game state differs from the before
+// snapshot, so only the elements that actually changed are marked dirty.
 func (g *game) changedTags(before gameState) (tags []any) {
 	if g.started != before.started {
 		tags = append(tags, &g.started)
