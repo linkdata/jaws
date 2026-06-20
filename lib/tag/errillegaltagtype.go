@@ -10,6 +10,9 @@ type errIllegalTagType struct {
 }
 
 func (e errIllegalTagType) Error() string {
+	if e.tag == nil {
+		return "illegal tag type"
+	}
 	return fmt.Sprintf("illegal tag type %T", e.tag)
 }
 

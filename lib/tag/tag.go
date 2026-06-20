@@ -215,8 +215,9 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 // tag may be nil, a [Tag], a slice of tags, a [TagGetter] or another comparable
 // value. Primitive HTML/value types are rejected with [ErrIllegalTagType] to catch
 // common accidental tags, and a value that is not comparable at runtime is rejected
-// with [ErrNotUsableAsTag]. Expansion that exceeds the nesting-depth or total-count
-// limits is rejected with [ErrTooManyTags].
+// with [ErrNotUsableAsTag] (which also matches [ErrNotComparable] via [errors.Is]).
+// Expansion that exceeds the nesting-depth or total-count limits is rejected with
+// [ErrTooManyTags].
 //
 // On error, result holds the tags expanded before the failure; the exception is a
 // value that is not comparable at runtime, for which [ErrNotUsableAsTag] is returned
