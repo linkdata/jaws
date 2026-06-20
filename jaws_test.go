@@ -1756,6 +1756,29 @@ func TestServeHTTP_HeadKeyDoesNotClaimRequest(t *testing.T) {
 	is.Equal(w.Code, http.StatusUpgradeRequired)
 }
 
+func TestServeHTTP_NonCanonicalKeyDoesNotClaimRequest(t *testing.T) {
+	is := newTestHelper(t)
+	jw, _ := New()
+	go jw.Serve()
+	defer jw.Close()
+
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	rq := jw.NewRequest(hr)
+	key := rq.JawsKeyString()
+
+	req := httptest.NewRequest(http.MethodGet, "/jaws/0"+key, nil)
+	req.RemoteAddr = hr.RemoteAddr
+	w := httptest.NewRecorder()
+	jw.ServeHTTP(w, req)
+	is.Equal(w.Code, http.StatusNotFound)
+
+	req = httptest.NewRequest(http.MethodGet, "/jaws/"+key, nil)
+	req.RemoteAddr = hr.RemoteAddr
+	w = httptest.NewRecorder()
+	jw.ServeHTTP(w, req)
+	is.Equal(w.Code, http.StatusUpgradeRequired)
+}
+
 func TestServeHTTP_Noscript(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()

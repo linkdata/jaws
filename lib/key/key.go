@@ -23,8 +23,8 @@ func (key Key) String() string {
 // key is zero if the prefix before tail is not a valid base-32 key.
 //
 // Decoding is case-insensitive (base-32 'A' and 'a' both decode to 10), while
-// [Key.String] and [Append] always emit lowercase, so a parsed uppercase prefix
-// does not re-encode to its own text.
+// [Key.String] and [Append] always emit lowercase. Apart from letter case, the
+// prefix must match the canonical text emitted by [Key.String].
 func Parse(s string) (key Key, tail string) {
 	slashIdx := strings.IndexByte(s, '/')
 	keystr := s
@@ -32,7 +32,11 @@ func Parse(s string) (key Key, tail string) {
 		keystr = s[:slashIdx]
 		tail = s[slashIdx:]
 	}
-	if val, err := strconv.ParseUint(keystr, 32, 64); err == nil {
+	// A leading '0' is non-canonical: [Key.String] never emits one, and the only
+	// value whose text starts with '0' is the all-zero text of the invalid zero Key,
+	// so rejecting it also rejects Key(0). keystr is non-empty when err is nil, so
+	// indexing it is safe.
+	if val, err := strconv.ParseUint(keystr, 32, 64); err == nil && keystr[0] != '0' {
 		key = Key(val)
 	}
 	return
