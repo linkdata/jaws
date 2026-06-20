@@ -394,7 +394,12 @@ func (sess sessioner) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sess.h.ServeHTTP(w, r)
 }
 
-// Session returns an [http.Handler] that ensures a JaWS [Session] exists before invoking h.
-func (jw *Jaws) Session(h http.Handler) http.Handler {
+// SessionMiddleware returns an [http.Handler] that ensures a JaWS [Session]
+// exists before invoking h, creating one if the request has none.
+//
+// It is the session-ensuring middleware, distinct from the session accessors:
+// [Jaws.GetSession] and [Request.Session] look up an existing [Session], while
+// this wraps a handler. It composes with [Jaws.SecureHeadersMiddleware].
+func (jw *Jaws) SessionMiddleware(h http.Handler) http.Handler {
 	return sessioner{jw: jw, h: h}
 }

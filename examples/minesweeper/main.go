@@ -495,7 +495,7 @@ func run(listenAndServe func(addr string, handler http.Handler) error) error {
 						mux := http.NewServeMux()
 						mux.Handle("GET /jaws/", jw)
 						mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
-						mux.Handle("GET /", jw.Session(jw.SecureHeadersMiddleware(ui.Handler(jw, "index.html", board))))
+						mux.Handle("GET /", jw.SessionMiddleware(jw.SecureHeadersMiddleware(ui.Handler(jw, "index.html", board))))
 
 						go jw.Serve()
 						log.Println("Minesweeper listening on http://localhost:8080")
