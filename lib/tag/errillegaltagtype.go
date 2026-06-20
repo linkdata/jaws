@@ -13,6 +13,6 @@ func (e errIllegalTagType) Error() string {
 	return fmt.Sprintf("illegal tag type %T", e.tag)
 }
 
-func (errIllegalTagType) Is(other error) bool {
-	return other == ErrIllegalTagType
+func (errIllegalTagType) Is(target error) bool {
+	return target == ErrIllegalTagType
 }
