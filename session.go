@@ -80,17 +80,18 @@ func (sess *Session) delRequest(rq *Request) {
 			break
 		}
 	}
-	if len(sess.requests) == 0 {
-		if rq.claimed.Load() {
-			// A claimed request's WebSocket has ended; grant a fresh grace window so
-			// other tabs or a reconnect can re-attach before the session expires.
-			sess.deadline = time.Now().Add(time.Minute)
-		}
-		// For an unclaimed request (its bootstrap render was recycled before the
-		// WebSocket connected) leave the existing deadline intact: the creation-time
-		// grace window (see newSession) governs the session's lifetime until a
-		// WebSocket attaches.
+	if rq.claimed.Load() {
+		// A claimed request's WebSocket has ended; grant a fresh grace window so
+		// other tabs or a reconnect can re-attach before the session expires. This
+		// must fire even when other requests remain attached, otherwise an aged
+		// session whose last departing request is an unclaimed bootstrap render
+		// would be reaped with its stale deadline despite recent live activity.
+		sess.deadline = time.Now().Add(time.Minute)
 	}
+	// For an unclaimed request (its bootstrap render was recycled before the
+	// WebSocket connected) leave the existing deadline intact: the creation-time
+	// grace window (see newSession), or the window left by a claimed request that
+	// departed earlier, governs the session's lifetime until a WebSocket attaches.
 }
 
 // Jaws returns the [Jaws] instance of the [Session], or nil.
