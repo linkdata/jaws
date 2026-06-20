@@ -41,6 +41,7 @@ type cellView struct {
 	adjacent int
 }
 
+// newCell returns a hidden Cell at row, col belonging to g.
 func newCell(g *game, row, col int) *Cell {
 	return &Cell{game: g, row: row, col: col}
 }
@@ -59,6 +60,7 @@ func (c *Cell) toggleFlag() bool {
 	return c.flagged
 }
 
+// snapshotLocked captures the cell's render state; the caller must hold g.mu.
 func (c *Cell) snapshotLocked() cellView {
 	return cellView{
 		mine:     c.mine,
@@ -69,6 +71,9 @@ func (c *Cell) snapshotLocked() cellView {
 	}
 }
 
+// HTML returns the cell's inner markup. The fragments are static trusted HTML and
+// the only interpolated value is the adjacent-mine count (an int), so the
+// template.HTML conversions need no escaping (#nosec G203).
 func (v cellView) HTML() template.HTML {
 	if v.revealed {
 		if v.mine {
@@ -102,6 +107,8 @@ func (v cellView) label() string {
 	}
 }
 
+// syncPresentation queues the cell's class and attribute DOM updates. It is safe
+// to call during JawsGetHTML rendering and is a no-op when elem is nil.
 func (c *Cell) syncPresentation(elem *jaws.Element, view cellView) {
 	if elem == nil {
 		return
@@ -294,16 +301,17 @@ func (g *game) NewGameButton() ui.Object {
 	})
 }
 
-func (g *game) reset() []any {
+// reset starts a new game and returns the dirty tags to pass to [jaws.Request.Dirty].
+func (g *game) reset() (tags []any) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	before := g.snapshot()
 	g.resetLocked()
-	tags := g.changedTags(before)
+	tags = g.changedTags(before)
 	if len(tags) > 0 {
 		tags = append(tags, &g.cells)
 	}
-	return tags
+	return
 }
 
 func (g *game) resetLocked() {
@@ -341,12 +349,14 @@ func (g *game) statsText() string {
 	return fmt.Sprintf("Mines: %d | Flags: %d | Safe cells left: %d", g.mines, g.flags, remaining)
 }
 
-func (g *game) clickCell(cell *Cell) []any {
+// clickCell reveals cell and returns the dirty tags for the elements affected by
+// the move (empty if the move is a no-op).
+func (g *game) clickCell(cell *Cell) (tags []any) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	if g.gameOver || cell.flagged || cell.revealed {
-		return nil
+		return
 	}
 	before := g.snapshot()
 
@@ -355,33 +365,35 @@ func (g *game) clickCell(cell *Cell) []any {
 		g.started = true
 	}
 
-	var cellTags []any
 	if cell.mine {
 		g.gameOver = true
 		g.revealAllMinesLocked()
-		cellTags = []any{&g.cells} // all mines revealed; refresh board
+		tags = []any{&g.cells} // all mines revealed; refresh board
 	} else {
 		revealed := g.revealFromLocked(cell)
 		if g.revealed == g.rows*g.cols-g.mines {
 			g.gameOver = true
 			g.won = true
 			g.revealAllMinesLocked()
-			cellTags = []any{&g.cells} // win reveals remaining mines
+			tags = []any{&g.cells} // win reveals remaining mines
 		} else {
 			// []*Cell does not assign to []any, so copy element-wise.
 			for _, c := range revealed {
-				cellTags = append(cellTags, c)
+				tags = append(tags, c)
 			}
 		}
 	}
-	return append(cellTags, g.changedTags(before)...)
+	tags = append(tags, g.changedTags(before)...)
+	return
 }
 
-func (g *game) toggleFlag(cell *Cell) []any {
+// toggleFlag flips cell's flag and returns the dirty tags for the affected
+// elements (empty if the move is a no-op).
+func (g *game) toggleFlag(cell *Cell) (tags []any) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.gameOver || cell.revealed {
-		return nil
+		return
 	}
 	before := g.snapshot()
 	if cell.toggleFlag() {
@@ -389,7 +401,8 @@ func (g *game) toggleFlag(cell *Cell) []any {
 	} else {
 		g.flags--
 	}
-	return append([]any{cell}, g.changedTags(before)...)
+	tags = append([]any{cell}, g.changedTags(before)...)
+	return
 }
 
 func (g *game) revealFromLocked(start *Cell) (revealed []*Cell) {
