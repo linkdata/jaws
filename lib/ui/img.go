@@ -28,6 +28,10 @@ func (u *Img) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err err
 }
 
 // JawsUpdate updates the src attribute.
+//
+// Like the other display widgets and unlike the typed inputs, Img keeps no
+// last-rendered value and re-sends src on every update; mark the [jaws.Element]
+// dirty only when src has actually changed.
 func (u *Img) JawsUpdate(elem *jaws.Element) { elem.SetAttr("src", u.JawsGet(elem)) }
 
 // Img renders an HTML img element.

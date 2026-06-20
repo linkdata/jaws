@@ -61,10 +61,13 @@ func repanic(recovered any) {
 	}
 }
 
-// NewTestRequest creates a TestRequest for use when testing. Passing nil for r
-// creates a GET / request with no body. It requires the Jaws processing loop
-// ([jaws.Jaws.Serve] or [jaws.Jaws.ServeWithTimeout]) to be running, and returns nil if the
-// request cannot be created or claimed.
+// NewTestRequest creates and serves a [TestRequest] for jw.
+//
+// Passing nil for r uses a GET / request with no body.
+//
+// It requires the Jaws processing loop ([jaws.Jaws.Serve] or
+// [jaws.Jaws.ServeWithTimeout]) to be running, and returns nil if the request
+// cannot be created or claimed.
 func NewTestRequest(jw *jaws.Jaws, r *http.Request) *TestRequest {
 	if r == nil {
 		r = httptest.NewRequest(http.MethodGet, "/", nil)

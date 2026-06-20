@@ -217,6 +217,10 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 // with [ErrNotUsableAsTag]. Expansion that exceeds the nesting-depth or total-count
 // limits is rejected with [ErrTooManyTags].
 //
+// On error, result holds the tags expanded before the failure; the exception is a
+// value that is not comparable at runtime, for which [ErrNotUsableAsTag] is returned
+// with a nil result.
+//
 // Expansion reads tag and any values returned by [TagGetter.JawsGetTag] by
 // reference, so tag and those values must not be mutated concurrently with the
 // call.
