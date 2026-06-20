@@ -119,16 +119,19 @@ func (tree *Tree) JawsUpdate(elem *jaws.Element) {
 	elem.JsCall("jawstreeSet", string(b))
 }
 
-// Walk calls fn for the tree root and all descendants while holding the tree read lock.
+// Walk calls fn for the tree root and all descendants.
 //
-// The callback must not call methods that acquire the same tree lock.
+// It is called with the tree read lock held, so the callback must not call
+// methods that acquire the same tree lock.
 func (tree *Tree) Walk(fn func(jsPath string, node *Node)) {
 	tree.RLock()
 	defer tree.RUnlock()
 	tree.Ptr.Walk("", fn)
 }
 
-// GetSelected returns selected name-paths while holding the tree read lock.
+// GetSelected returns the selected name-paths.
+//
+// It reads under the tree read lock.
 func (tree *Tree) GetSelected() (nameLists [][]string) {
 	tree.RLock()
 	defer tree.RUnlock()
@@ -136,9 +139,10 @@ func (tree *Tree) GetSelected() (nameLists [][]string) {
 	return
 }
 
-// SetSelected applies selected name-paths while holding the tree write lock.
+// SetSelected applies the selected name-paths and returns the changed [Node] values.
 //
-// The returned [Node] pointers reference the lock-protected shared tree and the
+// It runs under the tree write lock. The returned [Node] pointers reference the
+// lock-protected shared tree and the
 // write lock is released on return, so on a rendered Tree they must only be read
 // under the tree read lock (RLock) and mutated under the write lock (Lock), per
 // the [Node] concurrency note. Dereferencing them without re-taking the lock
