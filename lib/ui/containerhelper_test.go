@@ -327,6 +327,40 @@ func (u *testRenderErrorCaptureUI) JawsRender(elem *jaws.Element, w io.Writer, p
 
 func (*testRenderErrorCaptureUI) JawsUpdate(elem *jaws.Element) {}
 
+type failNthWrite struct {
+	n   int
+	err error
+}
+
+func (w *failNthWrite) Write(p []byte) (int, error) {
+	w.n--
+	if w.n == 0 {
+		return 0, w.err
+	}
+	return len(p), nil
+}
+
+func TestRequestWriterUI_ContainerClosingWriteErrorDoesNotLeakChildren(t *testing.T) {
+	_, rq := newCoreRequest(t)
+
+	writeErr := errors.New("closing write failed")
+	child := &testRenderErrorCaptureUI{}
+	tc := &testContainer{contents: []jaws.UI{child}}
+	writer := &failNthWrite{n: 2, err: writeErr}
+	rw := RequestWriter{Request: rq, Writer: writer}
+
+	if err := rw.NewUI(NewContainer("div", tc)); !errors.Is(err, writeErr) {
+		t.Fatalf("want %v got %v", writeErr, err)
+	}
+
+	if !child.jid.IsValid() {
+		t.Fatal("expected child jid to be captured")
+	}
+	if leaked := rq.GetElementByJid(child.jid); leaked != nil {
+		t.Fatalf("expected child %v to be removed when parent closing write fails", child.jid)
+	}
+}
+
 type benchContainer struct {
 	contents []jaws.UI
 }

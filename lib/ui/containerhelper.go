@@ -66,15 +66,6 @@ func (u *ContainerHelper) RenderContainer(elem *jaws.Element, w io.Writer, outer
 					break
 				}
 			}
-			if err == nil {
-				u.mu.Lock()
-				u.contents = contents
-				u.mu.Unlock()
-			} else {
-				for _, childElem := range contents {
-					elem.Request.DeleteElement(childElem)
-				}
-			}
 			// Always emit the closing tag, even on a child-render error, to balance
 			// the start tag already written above; leaving it unclosed would be
 			// worse for any partial output. The original err is preserved (err2 is
@@ -85,6 +76,20 @@ func (u *ContainerHelper) RenderContainer(elem *jaws.Element, w io.Writer, outer
 			b = append(b, '>')
 			if _, err2 := w.Write(b); err == nil {
 				err = err2
+			}
+			// Commit the rendered children only on full success. Any failure — a
+			// child render or the closing-tag write above — deletes the child
+			// Elements created during this render; otherwise they leak in the
+			// Request registry, since RequestWriter.NewUI deletes only the parent
+			// Element on a failed render.
+			if err == nil {
+				u.mu.Lock()
+				u.contents = contents
+				u.mu.Unlock()
+			} else {
+				for _, childElem := range contents {
+					elem.Request.DeleteElement(childElem)
+				}
 			}
 		}
 	}
