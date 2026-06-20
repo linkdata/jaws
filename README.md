@@ -514,8 +514,9 @@ items explicitly:
   must be allow-listed or size-bounded beyond the default serialized-size cap.
 * Enable `Jaws.TrustForwardedHeaders` only behind a single trusted reverse proxy
   that overwrites `X-Forwarded-For`, `X-Real-IP` and `X-Forwarded-Proto`.
-* Run the test suite with `-race` or `-tags debug` before release so the
-  debug-gated lock-order and late-handler checks are exercised.
+* Run the test suite with `-race` before release so the deadlock lock-order
+  detector and JaWS debug-gated checks are exercised. If the race detector is
+  unavailable, use `-tags "debug deadlock"`.
 
 ### Testing
 
@@ -523,13 +524,14 @@ Always run the test suite with the `-race` flag:
 
     go test -race ./...
 
-Race detection sets `deadlock.Debug = true` (see [Dependencies](#dependencies)),
-which enables the debug-gated runtime invariant checks throughout the codebase:
-the lock-order verification, the late-handler panic, and the runtime
-tag-comparability check in [`lib/tag`](./lib/tag). These branches are
-compile-time dead in normal builds, so a plain `go test` neither exercises nor
-reports coverage for them. CI builds with `-race`. The `debug` tag enables the
-same checks without the race detector for environments where it is unavailable.
+Race detection sets `deadlock.Debug = true` and `deadlock.Enabled = true` (see
+[Dependencies](#dependencies)), which exercises the deadlock lock-order detector
+and JaWS debug-gated checks such as the late-handler panic. The tag
+comparability checks in [`lib/tag`](./lib/tag) run in normal code paths too.
+Plain `go test` does not exercise the debug-only branches or the deadlock
+detector. CI builds with `-race`. If the race detector is unavailable, use
+`go test -tags "debug deadlock" ./...`; the `debug` tag alone sets
+`deadlock.Debug`, but does not enable the deadlock detector.
 
 ### Dependencies
 
