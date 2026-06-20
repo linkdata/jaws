@@ -40,7 +40,8 @@ func makeStaticGetter[T comparable](value T) Getter[T] {
 // MakeGetter returns v as a [Getter].
 //
 // v may be a [Getter] of the same type or a static value of type T. It panics
-// for any other type.
+// for any other type. A static value becomes a read-only adapter that also
+// satisfies [Setter] and returns [ErrValueNotSettable] from [Setter.JawsSet].
 func MakeGetter[T comparable](value any) Getter[T] {
 	switch v := value.(type) {
 	case Getter[T]:

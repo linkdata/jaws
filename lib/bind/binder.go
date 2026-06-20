@@ -186,6 +186,8 @@ type binder[T comparable] struct {
 	hook any
 }
 
+var _ Binder[int] = (*binder[int])(nil)
+
 func (b *binder[T]) JawsGetLocked(elem *jaws.Element) (value T) {
 	if fn, ok := b.hook.(GetHook[T]); ok {
 		value = fn(b.prev, elem)
