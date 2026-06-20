@@ -9,10 +9,10 @@ The embedded third-party files are vendored Quercus.js tree assets from
 https://github.com/stefaneichert/quercus.js. The `assets/jawstree.*` files are
 local adapter source in this repository and are covered by normal code review.
 
-| File | Source | SHA-256 |
-| --- | --- | --- |
-| `assets/treeview.js` | Quercus.js from https://github.com/stefaneichert/quercus.js | `517d153feabc0741fd0956f5d29630a4a17d7fb28766e23dca1a615d1cc212c7` |
-| `assets/treeview.css` | Quercus.js styles from https://github.com/stefaneichert/quercus.js | `1ee353863aaba1208d3c22911d926acc335e599951bd6f3cc87ea53b99aaa2ad` |
+| File | Source |
+| --- | --- |
+| `assets/treeview.js` | Quercus.js from https://github.com/stefaneichert/quercus.js |
+| `assets/treeview.css` | Quercus.js styles from https://github.com/stefaneichert/quercus.js |
 
 When bumping the vendored Quercus files, update this table in the same change.
 
