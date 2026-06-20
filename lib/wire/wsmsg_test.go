@@ -14,17 +14,6 @@ import (
 	"github.com/linkdata/jaws/lib/what"
 )
 
-func Benchmark_wsMsg_AppendAlert(b *testing.B) {
-	m := WsMsg{
-		Data: "name",
-		Jid:  1,
-		What: what.Alert,
-	}
-	for i := 0; i < b.N; i++ {
-		m.Append(nil)
-	}
-}
-
 func Test_wsMsg_Append(t *testing.T) {
 	type fields struct {
 		Data string

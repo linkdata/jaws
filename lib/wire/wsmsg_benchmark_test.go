@@ -1,8 +1,29 @@
 package wire
 
-import "testing"
+import (
+	"testing"
 
-var parseBenchSink WsMsg
+	"github.com/linkdata/jaws/lib/what"
+)
+
+var (
+	parseBenchSink  WsMsg
+	appendBenchSink []byte
+)
+
+// BenchmarkAppend guards the outbound frame-encoding hot path; it must stay
+// allocation-light.
+func BenchmarkAppend(b *testing.B) {
+	m := WsMsg{
+		Data: "name",
+		Jid:  1,
+		What: what.Alert,
+	}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		appendBenchSink = m.Append(nil)
+	}
+}
 
 // BenchmarkParse guards the inbound parse hot path (run on every WebSocket frame)
 // across the common command shapes, including the lone-surrogate case that decodes
