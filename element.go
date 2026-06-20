@@ -46,10 +46,9 @@ func (elem *Element) String() string {
 //
 // handlers is read lock-free on the event goroutine (via [CallEventHandlers], which
 // calls the internal callEventHandlers), so it must only be appended to while the
-// Element is being rendered, before any
-// event for it can fire. Once frozen, late mutations are a bug: reportMisuse
-// panics in debug builds and logs in production, and the mutation is dropped
-// rather than racing the lock-free read.
+// Element is being rendered, before any event for it can fire. Once frozen, late
+// mutations are a bug: reportMisuse panics in debug builds and logs in production,
+// and the mutation is dropped rather than racing the lock-free read.
 func (elem *Element) appendHandlers(h ...any) {
 	if len(h) == 0 {
 		return
