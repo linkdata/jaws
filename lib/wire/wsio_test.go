@@ -370,6 +370,17 @@ func TestReadLoop_ReportsError(t *testing.T) {
 	}
 }
 
+func TestPingLoop_NonPositiveIntervalReturns(t *testing.T) {
+	client, server := pipe(t)
+	defer func() { _ = client.CloseNow() }()
+	defer func() { _ = server.CloseNow() }()
+
+	// A non-positive interval must return immediately without starting a ticker or
+	// invoking ccf; calling PingLoop directly (not in a goroutine) proves it does
+	// not block, and a non-nil ccf would panic if it were called.
+	PingLoop(t.Context(), nil, make(chan struct{}), 0, time.Millisecond, server)
+}
+
 func TestPingLoop_RespectsContextDone(t *testing.T) {
 	jawsDoneCh := make(chan struct{})
 	client, server := pipe(t)

@@ -80,26 +80,27 @@ func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan s
 //
 // ccf may be nil, in which case errors are not reported and only the loop exits.
 func PingLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, interval, timeout time.Duration, ws *websocket.Conn) {
-	if interval > 0 {
-		t := time.NewTicker(interval)
-		defer t.Stop()
+	if interval <= 0 {
+		return
+	}
+	t := time.NewTicker(interval)
+	defer t.Stop()
 
-		var err error
-		for err == nil {
-			select {
-			case <-ctx.Done():
-				return
-			case <-doneCh:
-				return
-			case <-t.C:
-				pingctx, cancel := context.WithTimeout(ctx, timeout)
-				err = ws.Ping(pingctx)
-				cancel()
-			}
+	var err error
+	for err == nil {
+		select {
+		case <-ctx.Done():
+			return
+		case <-doneCh:
+			return
+		case <-t.C:
+			pingctx, cancel := context.WithTimeout(ctx, timeout)
+			err = ws.Ping(pingctx)
+			cancel()
 		}
-		if ccf != nil {
-			ccf(err)
-		}
+	}
+	if ccf != nil {
+		ccf(err)
 	}
 }
 
