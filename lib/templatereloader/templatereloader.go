@@ -17,10 +17,11 @@ const reloadInterval = time.Second
 // TemplateReloader reloads and reparses templates if more than one second
 // has passed since the last reload.
 type TemplateReloader struct {
-	// Path is the file path templates are loaded from. It is set once by [New]
-	// and is read-only afterwards: it is read under mu during a reload, so
-	// mutating it after construction would race with [TemplateReloader.Lookup].
-	Path    string
+	// path is the glob templates are reparsed from. It is set once by create and
+	// read under mu during a reload; [TemplateReloader.Path] exposes it read-only.
+	// Keeping it unexported prevents callers from mutating it, which would race
+	// with [TemplateReloader.Lookup].
+	path    string
 	mu      deadlock.RWMutex
 	when    time.Time
 	curr    *template.Template
@@ -64,7 +65,7 @@ func create(debug bool, fsys fs.FS, fpath, relpath string) (tl jaws.TemplateLook
 	fpath = path.Join(relpath, fpath)
 	if tmpl, err = template.New("").ParseGlob(fpath); err == nil {
 		tl = &TemplateReloader{
-			Path: fpath,
+			path: fpath,
 			when: time.Now(),
 			curr: tmpl,
 		}
@@ -94,7 +95,7 @@ func (tr *TemplateReloader) Lookup(name string) *template.Template {
 		// Re-check under the write lock so concurrent callers that all
 		// observed a stale time do not each reparse from disk.
 		if time.Since(tr.when) > reloadInterval {
-			if reloaded, err := template.New("").ParseGlob(tr.Path); err == nil {
+			if reloaded, err := template.New("").ParseGlob(tr.path); err == nil {
 				tr.curr = reloaded
 				tr.lastErr = nil
 			} else {
@@ -115,6 +116,18 @@ func (tr *TemplateReloader) LastError() (err error) {
 	if tr != nil {
 		tr.mu.RLock()
 		err = tr.lastErr
+		tr.mu.RUnlock()
+	}
+	return
+}
+
+// Path returns the glob pattern templates are reparsed from.
+//
+// It is safe to call on a nil *TemplateReloader, in which case it returns "".
+func (tr *TemplateReloader) Path() (s string) {
+	if tr != nil {
+		tr.mu.RLock()
+		s = tr.path
 		tr.mu.RUnlock()
 	}
 	return
