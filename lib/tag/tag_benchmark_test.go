@@ -1,6 +1,9 @@
 package tag
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 type benchSelfTagger struct{}
 
@@ -101,4 +104,35 @@ func BenchmarkTagExpand(b *testing.B) {
 			benchmarkTagExpandCase(b, bm.tag)
 		})
 	}
+}
+
+// benchComparableField is a statically comparable struct whose comparability
+// genuinely has to be resolved at runtime through an interface field, which is the
+// case ensureUsableTag's probe defends against.
+type benchComparableField struct {
+	v any
+}
+
+var comparableProbeSink bool
+
+// BenchmarkComparableAtRuntime guards the comparableAtRuntime doc claim that the
+// recover-based == probe is allocation-free, unlike [reflect.Value.Comparable],
+// which allocates while walking the value. Run with -benchmem; the Probe case
+// must report 0 allocs/op and the ReflectComparable case is the contrast.
+func BenchmarkComparableAtRuntime(b *testing.B) {
+	tag := any(benchComparableField{v: 42})
+
+	b.Run("Probe", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			comparableProbeSink = comparableAtRuntime(tag)
+		}
+	})
+
+	b.Run("ReflectComparable", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			comparableProbeSink = reflect.ValueOf(tag).Comparable()
+		}
+	})
 }

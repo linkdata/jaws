@@ -65,7 +65,8 @@ func ensureUsableTag(tag any) error {
 // A statically comparable struct or array can still hold a non-comparable value
 // (for example a func in an interface field); comparing such a value panics with
 // "comparing uncomparable type". This probe is allocation-free, unlike
-// [reflect.Value.Comparable], which allocates while walking the value.
+// [reflect.Value.Comparable], which allocates while walking the value;
+// BenchmarkComparableAtRuntime guards that difference.
 func comparableAtRuntime(tag any) (ok bool) {
 	defer func() { _ = recover() }()
 	other := tag
