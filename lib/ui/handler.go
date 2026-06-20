@@ -30,7 +30,7 @@ func (pageTemplate) JawsUpdate(*jaws.Element) {}
 func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rq := h.NewRequest(r)
 	rw := RequestWriter{Request: rq, Writer: w}
-	_ = h.Log(rq.NewElement(h.Template).JawsRender(rw, nil))
+	_ = h.Log(rw.NewUI(h.Template))
 }
 
 // Handler returns an http.Handler that renders the named template.

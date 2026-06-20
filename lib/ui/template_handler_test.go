@@ -227,6 +227,43 @@ func TestHandler_HandlerServeHTTP(t *testing.T) {
 	}
 }
 
+func TestHandler_RenderErrorDoesNotLeakElement(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	logger := new(templateLogger)
+	jw.Logger = logger
+
+	renderErr := errors.New("render failed")
+	var captured *jaws.Request
+	_ = jw.AddTemplateLookuper(template.Must(template.New("handlerfail").Funcs(template.FuncMap{
+		"capture": func(w With) string {
+			captured = w.RequestWriter.Request
+			return ""
+		},
+		"fail": func() (string, error) {
+			return "", renderErr
+		},
+	}).Parse(`{{capture $}}{{fail}}`)))
+
+	h := Handler(jw, "handlerfail", tag.Tag("ok"))
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	h.ServeHTTP(rr, req)
+
+	if len(logger.errors) != 1 || !errors.Is(logger.errors[0], renderErr) {
+		t.Fatalf("logged errors = %#v, want %v", logger.errors, renderErr)
+	}
+	if captured == nil {
+		t.Fatal("handler template did not expose its request")
+	}
+	if leaked := captured.GetElementByJid(1); leaked != nil {
+		t.Fatalf("expected failed render element to be removed from request registry: %v", leaked.Jid())
+	}
+}
+
 func TestHandler_TemplateWritesKeepPendingRequestFresh(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		jw, err := jaws.New()
