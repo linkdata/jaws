@@ -45,7 +45,7 @@ type TemplateReloader struct {
 // [path/filepath.Glob] (used against the on-disk tree in debug builds), and
 // relpath must point at the on-disk root that mirrors the embedded fsys layout
 // so that path.Join(relpath, fpath) matches the same templates on disk.
-func New(fsys fs.FS, fpath, relpath string) (jtl jaws.TemplateLookuper, err error) {
+func New(fsys fs.FS, fpath, relpath string) (jaws.TemplateLookuper, error) {
 	return create(deadlock.Debug, fsys, fpath, relpath)
 }
 
@@ -95,11 +95,10 @@ func (tr *TemplateReloader) Lookup(name string) *template.Template {
 		// Re-check under the write lock so concurrent callers that all
 		// observed a stale time do not each reparse from disk.
 		if time.Since(tr.when) > reloadInterval {
-			if reloaded, err := template.New("").ParseGlob(tr.path); err == nil {
+			reloaded, err := template.New("").ParseGlob(tr.path)
+			tr.lastErr = err
+			if err == nil {
 				tr.curr = reloaded
-				tr.lastErr = nil
-			} else {
-				tr.lastErr = err
 			}
 			tr.when = time.Now()
 		}
