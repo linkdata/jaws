@@ -140,10 +140,11 @@ func (c *Cell) JawsGetTag(_ tag.Context) any {
 	return c
 }
 
-// BoardTag returns the shared board dirty tag registered on every cell element, so
-// board-wide refreshes (reset, loss, win) can re-render the whole board at once. It
-// is kept separate from [Cell.JawsGetTag] so per-cell dirtying stays scoped; see it
-// for why.
+// BoardTag returns the shared board dirty tag registered on every cell element.
+//
+// Board-wide refreshes (reset, loss, win) dirty this tag to re-render the whole
+// board at once. It is kept separate from [Cell.JawsGetTag] so per-cell dirtying
+// stays scoped; see that method for why.
 func (c *Cell) BoardTag() any {
 	return &c.game.cells
 }
@@ -234,7 +235,13 @@ type gameState struct {
 }
 
 func (g *game) snapshot() gameState {
-	return gameState{g.started, g.gameOver, g.won, g.revealed, g.flags}
+	return gameState{
+		started:  g.started,
+		gameOver: g.gameOver,
+		won:      g.won,
+		revealed: g.revealed,
+		flags:    g.flags,
+	}
 }
 
 // changedTags returns the tags whose bound game state differs from the before
