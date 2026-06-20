@@ -38,12 +38,12 @@ import (
 // of a ui.RequestWriter; nothing in the harness writes to it.
 type TestRequest struct {
 	*jaws.Request
-	Recorder *httptest.ResponseRecorder
-	ReadyCh  chan struct{}
-	DoneCh   chan struct{}
-	InCh     chan wire.WsMsg
-	OutCh    chan wire.WsMsg
-	BcastCh  chan wire.Message
+	Recorder *httptest.ResponseRecorder // sink for the test's own rendering; the harness never writes to it
+	ReadyCh  chan struct{}              // closed once the processing loop is running
+	DoneCh   chan struct{}              // closed once the processing loop has stopped
+	InCh     chan wire.WsMsg            // send inbound WebSocket messages here
+	OutCh    chan wire.WsMsg            // outbound messages; buffered but must be drained or the loop stalls
+	BcastCh  chan wire.Message          // inject broadcasts here
 }
 
 // newRequest constructs the pending [jaws.Request] that NewTestRequest then
