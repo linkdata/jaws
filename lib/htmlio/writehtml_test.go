@@ -72,6 +72,16 @@ func Test_WriteHTMLInner(t *testing.T) {
 			},
 			want: `<IMG id="Jid.5">`,
 		},
+		{
+			name: "HTMLInner non-positive jid omits id attribute",
+			args: args{
+				jid:   0,
+				tag:   "tag1",
+				typ:   "typ1",
+				inner: "inner_text",
+			},
+			want: `<tag1 type="typ1">inner_text</tag1>`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

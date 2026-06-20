@@ -9,7 +9,9 @@ import (
 	"github.com/linkdata/jaws/lib/jid"
 )
 
-var singletonTags = map[string]struct{}{
+// voidElements are the HTML void elements, which take no closing tag and cannot
+// contain content.
+var voidElements = map[string]struct{}{
 	"area":   {},
 	"base":   {},
 	"br":     {},
@@ -26,8 +28,10 @@ var singletonTags = map[string]struct{}{
 	"wbr":    {},
 }
 
+// needClosingTag reports whether tag is not an HTML void element (case-insensitive),
+// and so takes a closing tag.
 func needClosingTag(tag string) bool {
-	_, ok := singletonTags[strings.ToLower(tag)]
+	_, ok := voidElements[strings.ToLower(tag)]
 	return !ok
 }
 
@@ -51,7 +55,8 @@ func AppendAttrs(b []byte, attrs []template.HTMLAttr) []byte {
 // AppendAttrValue appends value as a double-quoted HTML attribute value.
 //
 // The value parameter must be the unescaped logical attribute value. It is
-// escaped for HTML source output by this function.
+// escaped for HTML source output by this function. Use [Attr] or [AppendAttr]
+// to build a complete name=value fragment.
 func AppendAttrValue(b []byte, value string) []byte {
 	b = append(b, '"')
 	b = append(b, html.EscapeString(value)...)
@@ -115,7 +120,8 @@ func WriteHTMLTag(w io.Writer, jid jid.Jid, htmlTag, typeAttr, valueAttr string,
 }
 
 // WriteHTMLInput writes an input start tag with optional id, type, value and
-// raw attribute fragments.
+// raw attribute fragments. The id attribute is emitted only for a positive
+// [jid.Jid].
 //
 // The typeAttr and valueAttr parameters must be unescaped logical values; they
 // are escaped for HTML source output. The attrs parameter contains trusted raw
@@ -128,9 +134,9 @@ func WriteHTMLInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs 
 
 // WriteHTMLInner writes an HTML element with trusted inner HTML.
 //
-// Void/singleton tags such as img and input are written without a closing tag,
-// and any innerHTML passed for them is ignored, since a void element cannot
-// contain content (emitting "<img>...</img>" would be invalid HTML).
+// Void elements such as img and input are written without a closing tag, and any
+// innerHTML passed for them is ignored, since a void element cannot contain
+// content (emitting "<img>...</img>" would be invalid HTML).
 //
 // Unlike [WriteHTMLTag] it emits no value attribute; pass one via attrs (for
 // example Attr("value", v)) when a value="..." is needed.
