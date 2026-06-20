@@ -152,11 +152,19 @@ type Binder[T comparable] interface {
 	// Unlike [Binder.GetLocked] and [Binder.SetLocked], the bind argument to fn is
 	// the current Binder, not the previous one; read the value with its
 	// JawsGetLocked to render it. See [GetHTMLHook].
+	//
+	// GetHTML and [Binder.Format] are both HTML-rendering overrides resolved
+	// head-first, so when a chain has more than one the most recently added wins
+	// and shadows any earlier one.
 	GetHTML(fn GetHTMLHook[T]) (newbind Binder[T])
 
 	// Format returns a [Binder] that implements [HTMLGetter] and
 	// calls html.EscapeString on either fmt.Sprintf(format, JawsGetLocked(elem))
 	// or, if T implements [Formatter], T.Format(format).
+	//
+	// Format and [Binder.GetHTML] are both HTML-rendering overrides resolved
+	// head-first, so when a chain has more than one the most recently added wins
+	// and shadows any earlier one.
 	Format(format string) (newbind Binder[T])
 
 	// Clicked returns a [Binder] that will call fn when [jaws.ClickHandler.JawsClick] is invoked.

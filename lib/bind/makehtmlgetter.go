@@ -45,9 +45,9 @@ func (g htmlGetterString) JawsGetTag(tag.Context) any {
 	return g.sg
 }
 
-// MakeHTMLGetter returns an [HTMLGetter] for v.
+// MakeHTMLGetter returns an [HTMLGetter] for value.
 //
-// Depending on the type of v, we return:
+// Depending on the type of value, we return:
 //
 //   - [HTMLGetter] is used as-is.
 //   - Binder[string] and Getter[string] values are escaped using [html.EscapeString].

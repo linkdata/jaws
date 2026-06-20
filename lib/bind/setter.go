@@ -42,9 +42,9 @@ func (s setterStatic[T]) JawsGetTag(tag.Context) any {
 	return nil
 }
 
-// MakeSetter returns v as a [Setter].
+// MakeSetter returns value as a [Setter].
 //
-// v may be a [Setter] of the same type, a [Getter] of the same type or a
+// value may be a [Setter] of the same type, a [Getter] of the same type or a
 // static value of type T. Getter and static adapters are read-only and return
 // [ErrValueNotSettable] from [Setter.JawsSet]. MakeSetter panics for any other
 // type.
