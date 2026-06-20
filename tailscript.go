@@ -89,7 +89,13 @@ func (rq *Request) drainTailScript() (b []byte, sent bool) {
 				fn = "classList?.remove"
 			}
 			if fn != "" {
-				b = append(b, "document.getElementById("...)
+				// Wrap each fixup so one that throws at runtime (an invalid class token
+				// or attribute name reaches the throwing DOM call past the ?. element
+				// guard) does not abandon the fixups that follow. The drain removes these
+				// messages from wsQueue, making the tail script their sole applier, so an
+				// unisolated throw would lose the rest permanently; this mirrors the
+				// per-order isolation the WebSocket client applies in jawsMessage.
+				b = append(b, "try{document.getElementById("...)
 				b = msg.Jid.AppendQuote(b)
 				b = append(b, ")?."...)
 				b = append(b, fn...)
@@ -100,7 +106,7 @@ func (rq *Request) drainTailScript() (b []byte, sent bool) {
 					b = append(b, ',')
 					b = appendJSQuote(b, val)
 				}
-				b = append(b, ");\n"...)
+				b = append(b, ");}catch(e){console.error(e);}\n"...)
 			} else {
 				rq.wsQueue[n] = msg
 				n++

@@ -325,6 +325,41 @@ func TestRequest_writeTailScript_RemoveAttrAndClass(t *testing.T) {
 	rq.muQueue.Unlock()
 }
 
+// TestRequest_writeTailScript_IsolatesEachFixup verifies each attribute/class fixup
+// is wrapped in its own try/catch, so a fixup that throws at runtime (e.g. a class
+// token containing whitespace, which the ?. element guard does not catch) cannot
+// abandon the fixups that follow it. The drain removes these messages from wsQueue,
+// making the tail script their sole applier, so the isolation mirrors the per-order
+// isolation the WebSocket client applies in jawsMessage.
+func TestRequest_writeTailScript_IsolatesEachFixup(t *testing.T) {
+	th := newTestHelper(t)
+	jw, _ := New()
+	defer jw.Close()
+	rq := jw.NewRequest(nil)
+	defer jw.recycle(rq)
+	e1 := rq.NewElement(&testUi{})
+	e2 := rq.NewElement(&testUi{})
+	e3 := rq.NewElement(&testUi{})
+	// A valid fixup, then one whose class token throws in the browser (whitespace is
+	// not a valid classList token), then another valid fixup.
+	e1.SetClass("ok-first")
+	e2.SetClass("btn primary")
+	e3.SetClass("ok-last")
+
+	w := httptest.NewRecorder()
+	b, sent := rq.drainTailScript()
+	if err := rq.writeTailResponse(w, b, sent); err != nil {
+		t.Fatal(err)
+	}
+	s := w.Body.String()
+	// One try and one catch per fixup.
+	th.Equal(strings.Count(s, "try{document.getElementById("), 3)
+	th.Equal(strings.Count(s, "}catch(e){console.error(e);}"), 3)
+	// The fixup after the throwing one lives in its own isolated statement, so the
+	// throwing one cannot prevent it from running.
+	th.True(strings.Contains(s, `classList?.add("ok-last");}catch(e){console.error(e);}`))
+}
+
 // TestRequest_TailScriptConcurrentWithRecycle exercises a /jaws/.tail fetch
 // racing recycle of the same still-pending request. The handler holds jw.mu (read)
 // across the drainTailScript call and recycle needs the jw.mu write lock, so the
