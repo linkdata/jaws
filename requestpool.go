@@ -192,6 +192,20 @@ func (jw *Jaws) UseRequest(jawsKey key.Key, r *http.Request) (rq *Request) {
 	return
 }
 
+func (jw *Jaws) hasPendingRequest(jawsKey key.Key, r *http.Request) (ok bool) {
+	if jawsKey != 0 {
+		actualIP := jw.clientIP(r)
+		jw.mu.RLock()
+		if rq := jw.requests[jawsKey]; rq != nil && !rq.claimed.Load() {
+			rq.mu.RLock()
+			ok = equalIP(rq.remoteIP, actualIP)
+			rq.mu.RUnlock()
+		}
+		jw.mu.RUnlock()
+	}
+	return
+}
+
 // getRequestLocked allocates a Request from the pool for jawsKey. remoteIP is the
 // already-resolved client IP for r (see NewRequest, the sole caller), passed in to
 // avoid recomputing jw.clientIP(r). Caller must hold jw.mu.

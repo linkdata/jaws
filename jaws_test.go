@@ -1756,6 +1756,29 @@ func TestServeHTTP_HeadKeyDoesNotClaimRequest(t *testing.T) {
 	is.Equal(w.Code, http.StatusUpgradeRequired)
 }
 
+func TestServeHTTP_NonUpgradeGetDoesNotClaimRequest(t *testing.T) {
+	is := newTestHelper(t)
+	jw, _ := New()
+	go jw.Serve()
+	defer jw.Close()
+
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	rq := jw.NewRequest(hr)
+	jawsKey := rq.JawsKey
+	keyString := rq.JawsKeyString()
+
+	req := httptest.NewRequest(http.MethodGet, "/jaws/"+keyString, nil)
+	req.RemoteAddr = hr.RemoteAddr
+	w := httptest.NewRecorder()
+	jw.ServeHTTP(w, req)
+	is.Equal(w.Code, http.StatusUpgradeRequired)
+
+	if claimed := jw.UseRequest(jawsKey, hr); claimed != rq {
+		t.Fatalf("non-upgrade GET claimed request for key %s: got %p, want %p", keyString, claimed, rq)
+	}
+	jw.recycle(rq)
+}
+
 func TestServeHTTP_NonCanonicalKeyDoesNotClaimRequest(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()

@@ -91,6 +91,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/lib/assets"
 	"github.com/linkdata/jaws/lib/jid"
@@ -469,6 +470,22 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 
 var headerCacheControlNoStore = []string{"no-store"}
 
+func headerContainsToken(h http.Header, name, token string) bool {
+	for _, value := range h.Values(name) {
+		for part := range strings.SplitSeq(value, ",") {
+			if strings.EqualFold(strings.TrimSpace(part), token) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func webSocketUpgradeRequest(r *http.Request) bool {
+	return headerContainsToken(r.Header, "Connection", "Upgrade") &&
+		headerContainsToken(r.Header, "Upgrade", "websocket")
+}
+
 // ServeHTTP can handle the required JaWS endpoints, which all start with "/jaws/".
 func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -501,6 +518,14 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else if r.Method == http.MethodGet {
 			jawsKey, tail := key.Parse(r.URL.Path[6:])
 			if jawsKey != 0 && (tail == "" || tail == "/noscript") {
+				if tail == "" && !webSocketUpgradeRequest(r) {
+					if jw.hasPendingRequest(jawsKey, r) {
+						_, _ = websocket.Accept(w, r, nil)
+						return
+					}
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
 				if rq := jw.UseRequest(jawsKey, r); rq != nil {
 					rq.ServeHTTP(w, r)
 					return
