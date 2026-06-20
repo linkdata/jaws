@@ -5,12 +5,14 @@ Provides a statically served and embedded version of [Bootstrap](https://getboot
 ## Asset provenance
 
 The embedded files are vendored from Bootstrap v5.3.8 and stored gzip-compressed
-under `assets/static`.
+under `assets/static`. The "gzipped blob" hash verifies the committed `.gz` file;
+the "uncompressed" hash matches a direct download of the artifact from
+https://getbootstrap.com/ (compare with `gzip -dc file.gz | sha256sum`).
 
-| File | Upstream | SHA-256 |
-| --- | --- | --- |
-| `assets/static/bootstrap.bundle.min.js.gz` | `bootstrap.bundle.min.js` from https://getbootstrap.com/ | `4d0ae6252e765ecd243be3904526dd15605f14d100a38ba438622c5cb0de06c7` |
-| `assets/static/bootstrap.min.css.gz` | `bootstrap.min.css` from https://getbootstrap.com/ | `1ad6a4582202314026750ae78bdb719b096ebf3fd9bf018df081ed5e41234595` |
+| File | Upstream artifact | SHA-256 (gzipped blob) | SHA-256 (uncompressed) |
+| --- | --- | --- | --- |
+| `assets/static/bootstrap.bundle.min.js.gz` | `bootstrap.bundle.min.js` | `4d0ae6252e765ecd243be3904526dd15605f14d100a38ba438622c5cb0de06c7` | `e4fd49181388c48ec5040bd3fe66f57c29c8e67fcd8502b3354b96ec7ab47cc7` |
+| `assets/static/bootstrap.min.css.gz` | `bootstrap.min.css` | `1ad6a4582202314026750ae78bdb719b096ebf3fd9bf018df081ed5e41234595` | `d85327d99c7a3ee1f9b5d0500d1370acea3ad2db39c163c2f51f232baedbdede` |
 
 When bumping Bootstrap, update this table and `doc.go` in the same change.
 
