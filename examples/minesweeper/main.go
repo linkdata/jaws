@@ -258,7 +258,11 @@ func (g *game) changedTags(before gameState) (tags []any) {
 	return
 }
 
-// Board returns the current board cells.
+// Board returns the board cells for template iteration.
+//
+// The grid shape is fixed after newGame; only per-cell fields mutate, always
+// under g.mu, and each cell is re-read under the same lock while rendering, so
+// concurrent template iteration is safe.
 func (g *game) Board() [][]*Cell { return g.cells }
 
 // StatusSpan returns a dynamic status text getter.
@@ -357,6 +361,7 @@ func (g *game) clickCell(cell *Cell) []any {
 			g.revealAllMinesLocked()
 			cellTags = []any{&g.cells} // win reveals remaining mines
 		} else {
+			// []*Cell does not assign to []any, so copy element-wise.
 			for _, c := range revealed {
 				cellTags = append(cellTags, c)
 			}
