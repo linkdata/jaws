@@ -95,20 +95,20 @@ func (jw *Jaws) setDirty(tags []any) {
 
 // Dirty marks all [Element] values that have one or more of the given tags as dirty.
 //
-// Note that if any of the tags implement [tag.TagGetter], it will be called
-// with a nil [Request]. Prefer using [Request.Dirty] which avoids this.
-//
-// A tag that somehow passes expansion but is still not hashable panics the
-// calling goroutine when hashed as a map key. The panic is contained to the
-// caller (the lock is released and the [Jaws.Serve] loop is unaffected); it is
-// not logged-and-dropped the way [Jaws.Broadcast] handles such a
-// [wire.Message.Dest], because that hashing happens in the Serve goroutine where
-// a panic would crash the process. [Request.Dirty] behaves the same as Dirty
-// here.
+// If any tag implements [tag.TagGetter] it is called with a nil [Request]; prefer
+// [Request.Dirty], which avoids this. A tag that is not hashable panics the calling
+// goroutine, but the panic is contained there and the [Jaws.Serve] loop is
+// unaffected. [Request.Dirty] behaves the same here.
 func (jw *Jaws) Dirty(dirtyTags ...any) {
-	// Use TagExpand+MustLog rather than MustTagExpand: with a nil Context the
-	// latter panics on an illegal tag even in production, unlike the sibling
-	// Request.Dirty and Jaws.Broadcast. Log and continue with the partial result.
+	// A non-hashable tag panics here in the caller's goroutine rather than being
+	// logged-and-dropped the way Broadcast handles a bad wire.Message.Dest: Broadcast
+	// hashes the destination in the Serve goroutine, where a panic would crash the
+	// process, whereas this hashing happens in setDirty under the caller's goroutine
+	// with the lock released on panic via defer, so Serve is unaffected.
+	//
+	// Use TagExpand+MustLog rather than MustTagExpand: with a nil Context the latter
+	// panics on an illegal tag even in production, unlike Request.Dirty and Broadcast.
+	// Log and continue with the partial result.
 	expanded, err := tag.TagExpand(nil, dirtyTags)
 	jw.MustLog(err)
 	jw.setDirty(expanded)
