@@ -195,6 +195,36 @@ func TestInputFloat_RejectsNonFinite(t *testing.T) {
 	}
 }
 
+func TestInputFloat_RegisterSendsInitialZeroValue(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+
+	tr := jawstest.NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("expected test request")
+	}
+	defer tr.Close()
+	<-tr.ReadyCh
+
+	sf := newTestSetter(0.0)
+	rw := RequestWriter{Request: tr.Request, Writer: tr.Recorder}
+	id := rw.Register(NewNumber(sf))
+
+	tr.InCh <- wire.WsMsg{} // wake the loop so the queued initial update can flush
+	select {
+	case <-time.After(300 * time.Millisecond):
+		t.Fatal("no initial update received")
+	case msg := <-tr.OutCh:
+		if msg.What != what.Value || msg.Jid != id || msg.Data != "0" {
+			t.Fatalf("initial update = {%v %v %q}, want {%v %v %q}", msg.What, msg.Jid, msg.Data, what.Value, id, "0")
+		}
+	}
+}
+
 // TestInputFloat_NaNBoundValueDoesNotReemit verifies that a server-bound NaN value
 // is sent once on transition but not re-emitted on every subsequent update. NaN != NaN
 // would otherwise defeat the JawsUpdate dedup and re-send SetValue each cycle.
