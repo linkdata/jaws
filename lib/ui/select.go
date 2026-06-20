@@ -24,6 +24,10 @@ func (u *Select) JawsRender(elem *jaws.Element, w io.Writer, params []any) error
 }
 
 // JawsUpdate updates the selected value and child options.
+//
+// Unlike the typed inputs, it re-sends the select value on every update with no
+// dedup against a last value, so mark the element dirty only when the value or
+// options actually changed.
 func (u *Select) JawsUpdate(elem *jaws.Element) {
 	u.UpdateContainer(elem)
 	// The selected value is only set when the Container is a bind.Setter of string;
