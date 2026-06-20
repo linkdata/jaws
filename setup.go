@@ -32,7 +32,7 @@ func makeAbsPath(prefix string, u *url.URL) *url.URL {
 	if u != nil {
 		copied := *u
 		u = &copied
-		if prefix != "" && !path.IsAbs(u.Path) {
+		if prefix != "" && u.Scheme == "" && u.Host == "" && !path.IsAbs(u.Path) {
 			u.Path = staticserve.EnsurePrefixSlash(path.Join(prefix, u.Path))
 		}
 	}

@@ -136,6 +136,49 @@ func TestJaws_SetupRelativePrefixYieldsAbsoluteURL(t *testing.T) {
 	}
 }
 
+func TestJaws_SetupDoesNotPrefixExternalOriginURL(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	const rawURL = "https://cdn.example.test"
+	if err = jw.Setup(nil, "/static", rawURL); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := jw.headPrefix; strings.Contains(got, rawURL+"/static") {
+		t.Fatalf("Setup prefixed external origin URL: %q", got)
+	}
+	if got := jw.headPrefix; !strings.Contains(got, `href="`+rawURL+`"`) {
+		t.Fatalf("Setup head HTML = %q, want unmodified external URL %q", got, rawURL)
+	}
+}
+
+// TestJaws_SetupDoesNotPrefixProtocolRelativeURL guards the Host=="" clause of
+// makeAbsPath specifically: a protocol-relative URL carries a host but no scheme,
+// so a scheme-only check (such as url.URL.IsAbs) would still prefix and corrupt it.
+func TestJaws_SetupDoesNotPrefixProtocolRelativeURL(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	const rawURL = "//cdn.example.test"
+	if err = jw.Setup(nil, "/static", rawURL); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := jw.headPrefix; strings.Contains(got, rawURL+"/static") {
+		t.Fatalf("Setup prefixed protocol-relative URL: %q", got)
+	}
+	if got := jw.headPrefix; !strings.Contains(got, `href="`+rawURL+`"`) {
+		t.Fatalf("Setup head HTML = %q, want unmodified protocol-relative URL %q", got, rawURL)
+	}
+}
+
 func TestJaws_SetupEmptyPrefix(t *testing.T) {
 	ss := staticserve.Must("favicon.png", []byte("Hello"))
 
