@@ -1010,6 +1010,25 @@ func TestJaws_GenerateHeadHTML_DeduplicatesBuiltinResources(t *testing.T) {
 	}
 }
 
+func TestJaws_GenerateHeadHTML_KeepsExternalResourceWithBuiltinPath(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	external := "https://cdn.example.test" + jw.serveJS.Name
+	if err = jw.GenerateHeadHTML(external); err != nil {
+		t.Fatal(err)
+	}
+	if got := jw.headPrefix; !strings.Contains(got, external) {
+		t.Fatalf("head HTML missing external resource with built-in path %q:\n%s", external, got)
+	}
+	if got := jw.ContentSecurityPolicy(); !strings.Contains(got, "cdn.example.test") {
+		t.Fatalf("CSP missing external resource host for %q:\n%s", external, got)
+	}
+}
+
 func TestJaws_GenerateHeadHTML_PropagatesResourceParseErrors(t *testing.T) {
 	jw, err := New()
 	if err != nil {

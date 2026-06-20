@@ -441,11 +441,10 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 				if u, e := url.Parse(urlstr); e == nil {
 					// Skip an extra that re-lists either built-in resource (both cssurl
 					// and jawsurl were prepended above) so it is not preloaded or added
-					// to the Content-Security-Policy twice. Match on the exact path: the
-					// built-ins are prepended with their exact known paths, and a suffix
-					// match would wrongly drop a distinct user resource whose path merely
-					// ends with the built-in name (for example a proxied /cdn/jaws/.jaws.js).
-					if u.Path != jawsurl.Path && u.Path != cssurl.Path {
+					// to the Content-Security-Policy twice. Match the complete URL: a
+					// resource on another origin, or with a distinct query string, is a
+					// separate resource even when it uses the same path as a built-in.
+					if u.String() != jawsurl.String() && u.String() != cssurl.String() {
 						urls = append(urls, u)
 					}
 				} else {
