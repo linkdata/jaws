@@ -19,10 +19,11 @@ var dirtyFanoutSink int
 // both their per-cell tag and the shared board tag), then resolves the dirty tags
 // the way the framework's update step does (expand, then look up elements per tag).
 //
-// A single-cell action must resolve to exactly one element re-render; were
+// A single-cell action resolves to exactly one element re-render (the correctness
+// of that scoping is asserted by TestSingleCellDirtyStaysScopedToOneCell); were
 // Cell.JawsGetTag to expand to the shared board tag it would resolve to all 100
-// cells instead. This benchmark guards that scoping; run with -benchmem and track
-// regressions with benchstat.
+// cells instead. This benchmark measures the cost of that per-event resolution;
+// run with -benchmem and track regressions with benchstat.
 func BenchmarkSingleCellDirtyFanout(b *testing.B) {
 	jw, err := jaws.New()
 	if err != nil {
