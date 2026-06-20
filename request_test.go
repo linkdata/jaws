@@ -2125,6 +2125,22 @@ func TestRequest_NewElement_DebugComparableCheck(t *testing.T) {
 	rq.NewElement(testUnhashableUI{m: map[string]int{"x": 1}})
 }
 
+func TestRequest_getElementByJidLocked_DebugUnsortedPanics(t *testing.T) {
+	if !deadlock.Debug {
+		t.Skip("debug checks not enabled")
+	}
+
+	// rq.elems must stay sorted ascending by Jid for the binary search; a debug
+	// build asserts it rather than silently returning wrong lookups.
+	rq := &Request{elems: []*Element{{jid: 2}, {jid: 1}}}
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic when rq.elems is not sorted by Jid")
+		}
+	}()
+	rq.getElementByJidLocked(1)
+}
+
 func TestRequest_IncomingRemoveDoesNotDeleteMessageJid(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rq := newTestRequest(t)
