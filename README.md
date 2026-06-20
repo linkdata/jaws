@@ -66,6 +66,8 @@ mod tidy`, and start it with `go run .`. Visiting
 http://localhost:8080/ demonstrates the full request lifecycle.
 
 ```go
+package main
+
 import (
 	"html/template"
 	"log/slog"
