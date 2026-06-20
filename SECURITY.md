@@ -201,7 +201,7 @@ Tested origin validation:
 
 ### 6.3 Client Message Handling
 
-**Source code** (`request.go`, `Request.handleIncoming`) confirms only these message types are processed from clients:
+**Source code** (`requestloop.go`, `Request.handleIncoming`) confirms only these message types are processed from clients:
 
 ```go
 case what.Input, what.Click, what.ContextMenu, what.Set:
