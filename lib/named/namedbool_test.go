@@ -1,6 +1,7 @@
 package named
 
 import (
+	"errors"
 	"html/template"
 	"io"
 	"sync/atomic"
@@ -43,7 +44,7 @@ func TestNamedBool(t *testing.T) {
 	if got := nb.JawsGet(nil); got != nb.Checked() {
 		t.Fatalf("JawsGet mismatch: got %v want %v", got, nb.Checked())
 	}
-	if err := nb.JawsSet(e, true); err != jaws.ErrValueUnchanged {
+	if err := nb.JawsSet(e, true); !errors.Is(err, jaws.ErrValueUnchanged) {
 		t.Fatalf("expected ErrValueUnchanged, got %v", err)
 	}
 }
@@ -165,7 +166,7 @@ func TestNamedBoolArray_JawsSetDirtiesChangedBoolsAndArray(t *testing.T) {
 		})
 
 		// Setting the same selection again is a no-op and must report ErrValueUnchanged.
-		if err := nba.JawsSet(trigger, "two"); err != jaws.ErrValueUnchanged {
+		if err := nba.JawsSet(trigger, "two"); !errors.Is(err, jaws.ErrValueUnchanged) {
 			t.Fatalf("re-set error = %v, want ErrValueUnchanged", err)
 		}
 	})

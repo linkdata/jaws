@@ -128,5 +128,5 @@ func (nb *Bool) Set(checked bool) (changed bool) {
 
 // String returns a string representation of the [Bool] suitable for debugging.
 func (nb *Bool) String() string {
-	return fmt.Sprintf("&{%q,%q,%v}", nb.Name(), nb.HTML(), nb.Checked())
+	return fmt.Sprintf("&Bool{%q,%q,%v}", nb.Name(), nb.HTML(), nb.Checked())
 }
