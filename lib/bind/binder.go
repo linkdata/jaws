@@ -105,8 +105,13 @@ type Binder[T comparable] interface {
 	// [jaws.ErrValueUnchanged] when the stored value already equals value.
 	JawsSetLocked(elem *jaws.Element, value T) (err error)
 
-	// JawsInitialHTMLAttrLocked returns the initial HTML attribute while
-	// the Binder lock is held.
+	// JawsInitialHTMLAttrLocked returns the initial HTML attribute while the
+	// Binder lock is held.
+	//
+	// Callers must already hold the lock, preferring the read lock if available;
+	// the method does not lock or unlock. It applies this chain's
+	// [InitialHTMLAttrHook]s and returns an empty [html/template.HTMLAttr] when no
+	// such hook is present anywhere in the chain.
 	JawsInitialHTMLAttrLocked(elem *jaws.Element) (s template.HTMLAttr)
 
 	// SetLocked returns a [Binder] that will call fn instead of [Binder.JawsSetLocked].

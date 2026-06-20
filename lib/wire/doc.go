@@ -1,6 +1,11 @@
 // Package wire formats and parses the line-based JaWS WebSocket protocol.
 //
-// Each message is encoded as What<TAB>Jid<TAB>Data<LF>. Data for most commands is
+// The package has two message types. [Message] is the in-process dispatch
+// record: a command plus payload routed to a destination ([Message.Dest]).
+// [WsMsg] is the serialized frame produced by [WsMsg.Append] and recovered by
+// [Parse] — the bytes that actually travel over the WebSocket.
+//
+// Each frame is encoded as What<TAB>Jid<TAB>Data<LF>. Data for most commands is
 // written by [WsMsg.Append] as a JSON-compatible quoted string so the browser can
 // decode it with JSON.parse. [Parse] decodes quoted inbound data with
 // strconv.Unquote for the common case, falls back to JSON string decoding for

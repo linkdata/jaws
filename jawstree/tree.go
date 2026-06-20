@@ -100,6 +100,10 @@ func (tree *Tree) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err
 }
 
 // JawsUpdate sends the latest tree JSON to the browser.
+//
+// It reads the shared Node tree under the Tree read lock, so it is safe to call
+// concurrently with the JaWS event goroutines that mutate the tree under the
+// write lock.
 func (tree *Tree) JawsUpdate(elem *jaws.Element) {
 	var b []byte
 	b = append(b, `{"tree":`...)

@@ -6,8 +6,10 @@ import (
 	"strings"
 )
 
-// DefaultCookieName holds the default JaWS cookie name.
-// It will be generated from the executable name, or "jaws" if that fails.
+// DefaultCookieName is the default JaWS cookie name, derived from the
+// executable's base name (ASCII letters and digits only) and falling back to
+// "jaws". It is computed once during package initialization, so it is safe to
+// read concurrently; callers needing a different name supply their own.
 var DefaultCookieName string
 
 func init() {

@@ -77,9 +77,16 @@ type WsMsg struct {
 
 // Append appends m in wire format to b and returns the extended buffer.
 //
-// For [what.Set] and [what.Call] messages, and whenever Jid is negative, Data
-// is written verbatim: the caller must ensure it contains no tab or newline
-// bytes, which would corrupt the frame. All other Data is JSON-quoted.
+// When Jid is non-negative the frame is What<TAB>Jid<TAB>Data<LF>, where the Jid
+// field is empty if Jid is zero. The Data field is written verbatim for
+// [what.Set] and [what.Call] and JSON-quoted for every other command.
+//
+// When Jid is negative the frame is What<TAB>Data<LF> (a single tab): Data is
+// written verbatim and is expected to already contain the Jid and any remaining
+// fields, as noted on the [WsMsg.Jid] field.
+//
+// Verbatim Data must contain no tab or newline bytes, which would corrupt the
+// frame; ensuring that is the caller's responsibility.
 func (m *WsMsg) Append(b []byte) []byte {
 	b = append(b, m.What.String()...)
 	b = append(b, '\t')

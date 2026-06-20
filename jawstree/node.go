@@ -179,6 +179,9 @@ func (node *Node) resolveChildPath(nodePath string) (*Node, error) {
 // JawsPathSet runs after a node's selected flag has been set on the server-side
 // tree; it broadcasts a jawstreeSetPath JsCall so the change is reflected in the
 // rendered tree of every client sharing this Tree.
+//
+// It requires node.Tree to be set — that is, the node must have been passed to
+// [New] — and panics otherwise, since a bare [Root] node has a nil Tree.
 func (node *Node) JawsPathSet(elem *jaws.Element, jsPath string, value any) {
 	if nodePath, ok := strings.CutSuffix(jsPath, ".selected"); ok {
 		// The marshaled struct holds two strings plus value, which JawsSetPath has

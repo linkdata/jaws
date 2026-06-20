@@ -24,6 +24,10 @@ const Prefix = "Jid."
 const Invalid = Jid(-1)
 
 // IsValid reports whether jid can identify an element or the request as a whole.
+//
+// Jid(0) is valid — it is the whole-request id — yet [Jid.String] and the append
+// helpers render it as empty, so a valid Jid does not always produce a non-empty
+// id string.
 func (j Jid) IsValid() bool {
 	return j >= 0
 }

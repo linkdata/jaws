@@ -103,7 +103,11 @@ func (tr *TestRequest) BodyString() string {
 	return strings.TrimSpace(tr.Recorder.Body.String())
 }
 
-// BodyHTML returns the recorded response body as trusted HTML.
+// BodyHTML returns the recorded response body as trusted [html/template.HTML].
+//
+// The body is whatever the test itself rendered into [TestRequest.Recorder], so
+// it is treated as trusted; do not feed untrusted input through Recorder when the
+// result is rendered as HTML.
 func (tr *TestRequest) BodyHTML() template.HTML {
-	return template.HTML(tr.BodyString()) /* #nosec G203 */
+	return template.HTML(tr.BodyString()) // #nosec G203 -- body is content the test rendered into Recorder
 }

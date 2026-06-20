@@ -2,5 +2,9 @@ package tag
 
 // TagGetter exposes dynamic tags during [TagExpand].
 type TagGetter interface {
-	JawsGetTag(ctx Context) any // Note that the Context may be nil
+	// JawsGetTag returns the dynamic tag or tags for the implementing object.
+	//
+	// ctx may be nil — [TagExpand] is routinely called with a nil [Context] — so
+	// implementations must not dereference it unconditionally.
+	JawsGetTag(ctx Context) any
 }
