@@ -11,6 +11,9 @@ import (
 // BoolArray stores the data required to support HTML select elements
 // and sets of HTML radio buttons. It is safe to use from multiple goroutines
 // concurrently.
+//
+// The zero value is a ready-to-use empty single-select array; use [NewBoolArray]
+// to choose multi-select.
 type BoolArray struct {
 	multi bool             // allow multiple Bools to be true
 	mu    deadlock.RWMutex // protects following
@@ -90,6 +93,10 @@ func (nba *BoolArray) Add(name string, html template.HTML) *BoolArray {
 // (selecting a name deselects all values with a different name, but leaves
 // same-named siblings checked). If the given name matches no values in
 // single-select mode, everything will be deselected.
+//
+// The result reports whether the selection changed, not that name became checked:
+// a non-matching name in single-select mode deselects all and returns true. Use
+// [BoolArray.IsChecked] or [BoolArray.Get] to read the resulting state.
 func (nba *BoolArray) Set(name string, state bool) (changed bool) {
 	nba.mu.Lock()
 	defer nba.mu.Unlock()
