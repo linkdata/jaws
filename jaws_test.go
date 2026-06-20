@@ -1579,7 +1579,7 @@ func TestServeHTTP_GetJavascript(t *testing.T) {
 	is.NoErr(err)
 	is.NoErr(gr.Close())
 	is.Equal(len(assets.JavascriptText), len(b))
-	is.Equal(string(assets.JavascriptText), string(b))
+	is.Equal(assets.JavascriptText, string(b))
 }
 
 func TestServeHTTP_GetCSS(t *testing.T) {

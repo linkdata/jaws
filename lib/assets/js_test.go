@@ -32,7 +32,7 @@ func Test_PreloadHTML(t *testing.T) {
 	const extraFont = "someExtraFont.woff2"
 	const extraFontWithQuery = "someExtraFontQuery.woff2?x=1&copy=2"
 
-	serveJS, err := staticserve.New("/jaws/.jaws.js", JavascriptText)
+	serveJS, err := staticserve.New("/jaws/.jaws.js", []byte(JavascriptText))
 	if err != nil {
 		t.Fatal(err)
 	}

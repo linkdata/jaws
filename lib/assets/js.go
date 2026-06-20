@@ -12,19 +12,17 @@ import (
 
 // JavascriptText is the source code for the client-side JaWS JavaScript library.
 //
-// It holds the embedded asset bytes and must be treated as read-only: the slice
-// is shared process-wide, so it must not be mutated in place.
+// It holds the embedded asset as an immutable string shared process-wide.
 //
 //go:embed jaws.js
-var JavascriptText []byte
+var JavascriptText string
 
 // JawsCSS is the source code for the client-side JaWS stylesheet.
 //
-// It holds the embedded asset bytes and must be treated as read-only: the slice
-// is shared process-wide, so it must not be mutated in place.
+// It holds the embedded asset as an immutable string shared process-wide.
 //
 //go:embed jaws.css
-var JawsCSS []byte
+var JawsCSS string
 
 // PreloadHTML returns HTML code to load the given resources efficiently.
 //

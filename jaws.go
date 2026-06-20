@@ -193,8 +193,8 @@ type Jaws struct {
 // [Jaws.Close] when finished with the instance to free associated resources.
 func New() (jw *Jaws, err error) {
 	var serveJS, serveCSS *staticserve.StaticServe
-	if serveJS, err = staticserve.New("/jaws/.jaws.js", assets.JavascriptText); err == nil {
-		if serveCSS, err = staticserve.New("/jaws/.jaws.css", assets.JawsCSS); err == nil {
+	if serveJS, err = staticserve.New("/jaws/.jaws.js", []byte(assets.JavascriptText)); err == nil {
+		if serveCSS, err = staticserve.New("/jaws/.jaws.css", []byte(assets.JawsCSS)); err == nil {
 			tmp := &Jaws{
 				CookieName:              assets.DefaultCookieName,
 				BaseContext:             context.Background(),
