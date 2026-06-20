@@ -468,42 +468,35 @@ func (g *game) calculateAdjacencyLocked() {
 // the function reads as a copyable "how to wire up JaWS" template.
 func run(listenAndServe func(addr string, handler http.Handler) error) error {
 	jw, err := jaws.New()
-	if err != nil {
-		return err
-	}
-	defer jw.Close()
+	if err == nil {
+		defer jw.Close()
+		var tmpl *template.Template
+		if tmpl, err = template.ParseFS(assetsFS, "assets/ui/*.html"); err == nil {
+			if err = jw.AddTemplateLookuper(tmpl); err == nil {
+				if err = jw.GenerateHeadHTML("/static/style.css"); err == nil {
+					var staticFiles fs.FS
+					if staticFiles, err = fs.Sub(assetsFS, "assets/static"); err == nil {
+						// One board is shared by every visitor: this is a single, collaborative
+						// game that all connected browsers see and play simultaneously. That is a
+						// deliberate choice for this demo. For per-user state instead, create the
+						// game inside the handler (or in a JawsInit) keyed off the request/session,
+						// e.g. via jw.Session, rather than binding one board for the whole server.
+						board := newGame(10, 10, 15)
 
-	tmpl, err := template.ParseFS(assetsFS, "assets/ui/*.html")
-	if err != nil {
-		return err
-	}
-	if err = jw.AddTemplateLookuper(tmpl); err != nil {
-		return err
-	}
-	if err = jw.GenerateHeadHTML("/static/style.css"); err != nil {
-		return err
-	}
+						mux := http.NewServeMux()
+						mux.Handle("GET /jaws/", jw)
+						mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
+						mux.Handle("GET /", jw.Session(jw.SecureHeadersMiddleware(ui.Handler(jw, "index.html", board))))
 
-	staticFiles, err := fs.Sub(assetsFS, "assets/static")
-	if err != nil {
-		return err
+						go jw.Serve()
+						log.Println("Minesweeper listening on http://localhost:8080")
+						err = listenAndServe(":8080", mux)
+					}
+				}
+			}
+		}
 	}
-
-	// One board is shared by every visitor: this is a single, collaborative
-	// game that all connected browsers see and play simultaneously. That is a
-	// deliberate choice for this demo. For per-user state instead, create the
-	// game inside the handler (or in a JawsInit) keyed off the request/session,
-	// e.g. via jw.Session, rather than binding one board for the whole server.
-	board := newGame(10, 10, 15)
-
-	mux := http.NewServeMux()
-	mux.Handle("GET /jaws/", jw)
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
-	mux.Handle("GET /", jw.Session(jw.SecureHeadersMiddleware(ui.Handler(jw, "index.html", board))))
-
-	go jw.Serve()
-	log.Println("Minesweeper listening on http://localhost:8080")
-	return listenAndServe(":8080", mux)
+	return err
 }
 
 func main() {
