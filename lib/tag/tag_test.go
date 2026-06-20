@@ -580,3 +580,26 @@ func TestTagExpand_TooDeepAndTooManySliceTags(t *testing.T) {
 		t.Fatalf("TagExpand([]Tag) = %v, want %v", err, ErrTooManyTags)
 	}
 }
+
+// TestTagExpand_PartialResultOnCountLimit pins the documented contract that on
+// the count-limit path TagExpand returns the tags expanded before the failure.
+// The cap is inclusive (the over-limit tag is appended before the check), so the
+// partial result holds maxTagCount+1 elements in input order.
+func TestTagExpand_PartialResultOnCountLimit(t *testing.T) {
+	tags := make([]Tag, maxTagCount+1)
+	for i := range tags {
+		tags[i] = Tag(fmt.Sprintf("t%d", i))
+	}
+	result, err := TagExpand(nil, tags)
+	if !errors.Is(err, ErrTooManyTags) {
+		t.Fatalf("TagExpand([]Tag) error = %v, want %v", err, ErrTooManyTags)
+	}
+	if len(result) != maxTagCount+1 {
+		t.Fatalf("partial result len = %d, want %d", len(result), maxTagCount+1)
+	}
+	for i, got := range result {
+		if want := Tag(fmt.Sprintf("t%d", i)); got != want {
+			t.Errorf("result[%d] = %v, want %v", i, got, want)
+		}
+	}
+}

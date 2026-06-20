@@ -35,48 +35,33 @@ func TestParse(t *testing.T) {
 }
 
 func TestIsCommandAndValid(t *testing.T) {
-	if invalid.IsValid() {
-		t.Fail()
+	tests := []struct {
+		name        string
+		arg         What
+		wantValid   bool
+		wantCommand bool
+	}{
+		{"invalid", invalid, false, false},
+		{"Update", Update, true, true},
+		{"Reload", Reload, true, true},
+		{"Redirect", Redirect, true, true},
+		{"Alert", Alert, true, true},
+		{"Set", Set, true, true},               // last command, just below separator
+		{"separator", separator, false, false}, // internal boundary marker, not a command or event
+		{"Inner", Inner, true, false},          // first element value, just above separator
+		{"Hook", Hook, true, false},            // last defined value, must stay valid
+		{"above Hook", Hook + 1, false, false}, // first undefined value above Hook
+		{"max uint8", What(255), false, false}, // top of the uint8 range, undefined
 	}
-	if !Update.IsValid() {
-		t.Fail()
-	}
-	if separator.IsValid() {
-		t.Fail()
-	}
-	if !Hook.IsValid() { // last defined value, must stay valid
-		t.Fail()
-	}
-	if What(Hook + 1).IsValid() { // first undefined value above Hook
-		t.Fail()
-	}
-	if What(255).IsValid() { // top of the uint8 range, undefined
-		t.Fail()
-	}
-	if invalid.IsCommand() {
-		t.Fail()
-	}
-	if What(255).IsCommand() {
-		t.Fail()
-	}
-	if !Alert.IsCommand() {
-		t.Fail()
-	}
-	if !Reload.IsCommand() {
-		t.Fail()
-	}
-	if !Redirect.IsCommand() {
-		t.Fail()
-	}
-	// Boundary cases around the separator that the interior cases above do not pin.
-	if !Set.IsCommand() { // last command, just below separator
-		t.Fail()
-	}
-	if separator.IsCommand() {
-		t.Fail()
-	}
-	if Inner.IsCommand() { // first element value, just above separator
-		t.Fail()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.arg.IsValid(); got != tt.wantValid {
+				t.Errorf("%v.IsValid() = %v, want %v", tt.arg, got, tt.wantValid)
+			}
+			if got := tt.arg.IsCommand(); got != tt.wantCommand {
+				t.Errorf("%v.IsCommand() = %v, want %v", tt.arg, got, tt.wantCommand)
+			}
+		})
 	}
 }
 
