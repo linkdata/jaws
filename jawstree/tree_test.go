@@ -436,6 +436,11 @@ func TestTree(t *testing.T) {
 
 	changed[0].Disabled = true
 	tree.JawsUpdate(elem)
+	// This test drives a live request loop through the jawstest harness with the
+	// Serve loop running in its own goroutine (go jw.Serve() above), so it cannot run
+	// under testing/synctest, whose bubble requires every goroutine to be created and
+	// durably block within it. The time.After guards are failure deadlines only, not
+	// the happy path.
 	select {
 	case rq.InCh <- wire.WsMsg{}:
 	case <-time.After(2 * time.Second):

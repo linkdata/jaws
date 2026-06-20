@@ -11,6 +11,11 @@ import (
 	"github.com/linkdata/jaws/lib/named"
 )
 
+// TestConstructors is a smoke test that every exported widget constructor is
+// wired up and returns a usable non-nil [jaws.UI]. The rendered output of each
+// widget is pinned by the dedicated render tests (html_widgets_test.go,
+// input_widgets_test.go and the per-widget tests), so this test deliberately
+// asserts only non-nil rather than re-checking markup.
 func TestConstructors(t *testing.T) {
 	var mu sync.Mutex
 	txt := ""

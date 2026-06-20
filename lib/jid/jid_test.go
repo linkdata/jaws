@@ -28,10 +28,10 @@ func TestParseJid(t *testing.T) {
 				t.Errorf("ParseJid() = %v, want %v", got, tt.want)
 			}
 			if got.IsValid() && got == Invalid {
-				t.Fail()
+				t.Errorf("ParseString(%q) = %v: IsValid() true but equals Invalid", tt.arg, got)
 			}
 			if !got.IsValid() && got != Invalid {
-				t.Fail()
+				t.Errorf("ParseString(%q) = %v: not valid but not equal to Invalid", tt.arg, got)
 			}
 		})
 	}

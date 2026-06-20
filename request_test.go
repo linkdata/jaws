@@ -1311,6 +1311,15 @@ func TestRequest_validateWebSocketOrigin_MatchesInitialRequestOrigin(t *testing.
 			origin:     "ws://example.test",
 			wantErr:    ErrWebsocketOriginWrongScheme,
 		},
+		{
+			// An origin like "http:///" parses to an empty Host; the uhost != ""
+			// guard must reject it rather than let an empty origin host match an
+			// (also empty) initial host.
+			name:       "empty origin host rejected",
+			initialURL: "http://example.test/page",
+			origin:     "http:///",
+			wantErr:    ErrWebsocketOriginWrongHost,
+		},
 	}
 
 	for _, tt := range tests {

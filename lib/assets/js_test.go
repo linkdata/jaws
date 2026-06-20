@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"mime"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
@@ -169,6 +170,13 @@ func runJawsJSSnippet(t *testing.T, snippet string) string {
 
 	node, err := exec.LookPath("node")
 	if err != nil {
+		// The node-driven JS behavior tests are the strongest guarantees in this
+		// package, so a host without node must not let them silently no-op. When
+		// JAWS_REQUIRE_NODE is set (CI does) a missing node fails loudly; otherwise
+		// it is a skip so a local "go test" on a node-less machine still passes.
+		if os.Getenv("JAWS_REQUIRE_NODE") != "" {
+			t.Fatal("node executable not available but JAWS_REQUIRE_NODE is set")
+		}
 		t.Skip("node executable not available")
 	}
 

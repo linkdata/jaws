@@ -55,6 +55,10 @@ jobs:
           args: ./...
 
       - name: Test
+        env:
+          # Fail rather than skip the node-driven JS behavior tests; the runner
+          # has node installed, so a missing node here is a CI misconfiguration.
+          JAWS_REQUIRE_NODE: "1"
         run: go test -race -coverprofile=coverage.out ./...
 
       - name: Calculate code coverage
