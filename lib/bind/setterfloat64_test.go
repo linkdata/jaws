@@ -184,6 +184,56 @@ func Test_setterFloat64_coversNumericTypes(t *testing.T) {
 	}
 }
 
+// Test_setterFloat64_truncationBoundarySymmetry covers the lower-bound truncation
+// tolerance: a fractional value just past MinIntN (e.g. -128.5 for int8) truncates
+// toward zero to the valid MinIntN and must be accepted, exactly as the mirror-image
+// value just past MaxIntN (e.g. 127.5 -> 127) already is. A whole value one below
+// MinIntN must still be rejected, and MinInt64 itself must remain acceptable.
+func Test_setterFloat64_truncationBoundarySymmetry(t *testing.T) {
+	assertSym := func(t *testing.T, name string, errHi, errLo error) {
+		t.Helper()
+		if errHi != nil {
+			t.Errorf("%s: high boundary rejected: %v", name, errHi)
+		}
+		if errLo != nil {
+			t.Errorf("%s: low boundary rejected (truncates to a valid value): %v", name, errLo)
+		}
+	}
+	assertSym(t, "int8", sanitizeFloatForT[int8](math.MaxInt8+0.5), sanitizeFloatForT[int8](math.MinInt8-0.5))
+	assertSym(t, "int16", sanitizeFloatForT[int16](math.MaxInt16+0.5), sanitizeFloatForT[int16](math.MinInt16-0.5))
+	assertSym(t, "int32", sanitizeFloatForT[int32](math.MaxInt32+0.5), sanitizeFloatForT[int32](math.MinInt32-0.5))
+
+	// A whole value one below MinIntN truncates out of range and must be rejected.
+	if err := sanitizeFloatForT[int8](math.MinInt8 - 1); !errors.Is(err, ErrFloatOutOfRange) {
+		t.Errorf("int8 %v: got %v, want ErrFloatOutOfRange", math.MinInt8-1, err)
+	}
+	// MinInt64 is exactly representable and in range; it must remain acceptable, while
+	// the next float64 below it (2048 lower) is out of range.
+	if err := sanitizeFloatForT[int64](math.MinInt64); err != nil {
+		t.Errorf("int64 MinInt64: got %v, want nil", err)
+	}
+	if err := sanitizeFloatForT[int64](math.Nextafter(math.MinInt64, math.Inf(-1))); !errors.Is(err, ErrFloatOutOfRange) {
+		t.Errorf("int64 below MinInt64: got %v, want ErrFloatOutOfRange", err)
+	}
+
+	// The fix is observable through the public JawsSet path: -128.5 now stores -128
+	// instead of being rejected, matching how 127.5 stores 127.
+	ts := newTestSetter(int8(5))
+	s := MakeSetterFloat64(ts)
+	if err := s.JawsSet(nil, -128.5); err != nil {
+		t.Fatalf("JawsSet(-128.5): %v", err)
+	}
+	if ts.Get() != -128 {
+		t.Errorf("JawsSet(-128.5) stored %d, want -128", ts.Get())
+	}
+	if err := s.JawsSet(nil, 127.5); err != nil {
+		t.Fatalf("JawsSet(127.5): %v", err)
+	}
+	if ts.Get() != 127 {
+		t.Errorf("JawsSet(127.5) stored %d, want 127", ts.Get())
+	}
+}
+
 func Test_makeSetterFloat64ReadOnly_int(t *testing.T) {
 	tgint := testGetter[int]{1}
 	gotS := MakeSetterFloat64(tgint)

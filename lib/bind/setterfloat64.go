@@ -35,9 +35,15 @@ type setterFloat64[T numeric] struct {
 
 // sanitizeFloatForT validates value before it is converted to T. It rejects
 // non-finite values for every numeric T, and for integer T also rejects values
-// outside the type's representable range. Bounds use an exclusive upper limit
-// expressed as a power of two to avoid the float64 rounding pitfall at the top of
-// the 64-bit ranges (float64(MaxInt64) rounds up to 2^63).
+// whose truncation toward zero falls outside the type's representable range.
+//
+// The conversion T(value) truncates toward zero, so the lower bound is compared
+// against math.Trunc(value): a fractional value like -128.5 truncates to the valid
+// int8 -128 and is accepted, mirroring the high end where 127.5 truncates to 127.
+// The upper bound stays an exclusive power of two to avoid the float64 rounding
+// pitfall at the top of the 64-bit ranges (float64(MaxInt64) rounds up to 2^63),
+// where truncation cannot be used; the low bound MinIntN is exactly representable
+// for every width, so comparing the truncated value there is safe.
 //
 // The type switch matches predeclared types by exact type, so callers must
 // instantiate T only with the predeclared numeric types. A named (defined) type
@@ -75,7 +81,7 @@ func sanitizeFloatForT[T numeric](value float64) error {
 		}
 		return nil
 	}
-	if value < lo || value >= hiExcl {
+	if math.Trunc(value) < lo || value >= hiExcl {
 		return ErrFloatOutOfRange
 	}
 	return nil
