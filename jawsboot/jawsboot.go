@@ -2,7 +2,6 @@ package jawsboot
 
 import (
 	"embed"
-	"errors"
 	"net/http"
 	"net/url"
 	"path"
@@ -32,9 +31,9 @@ var assetsFS embed.FS
 // handleFn must not be nil when calling Setup directly; it is invoked once per
 // asset. Reaching it through [jaws.Jaws.Setup] is always safe, since that
 // substitutes a no-op handler when its own handleFn is nil (see [jaws.SetupFunc]).
-// If a returned URL fails to parse, Setup joins the error into err but still
-// registers the remaining assets, so a non-nil err may accompany a partially
-// populated urls.
+// The returned URLs are always valid: they are built from clean, slash-rooted
+// paths over content-hashed embedded asset names, so err only ever reflects a
+// failure to walk the embedded filesystem.
 func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.URL, err error) {
 	var files []*staticserve.StaticServe
 	if err = staticserve.WalkDir(assetsFS, "assets/static", func(filename string, ss *staticserve.StaticServe) (err error) {
@@ -44,14 +43,13 @@ func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.
 		for _, ss := range files {
 			// Build an absolute path so jaws.Setup's makeAbsPath leaves the
 			// returned URL unchanged; otherwise a relative prefix would be applied
-			// twice and the head URL would diverge from the handler path.
+			// twice and the head URL would diverge from the handler path. abspath is
+			// a clean, slash-rooted path over a content-hashed embedded asset name,
+			// so it is always a valid URL path; construct the URL directly rather
+			// than via the fallible url.Parse.
 			abspath := staticserve.EnsurePrefixSlash(path.Join(prefix, ss.Name))
-			u, e := url.Parse(abspath)
-			if e == nil {
-				urls = append(urls, u)
-				handleFn(staticserve.NormalizeGET(abspath), ss)
-			}
-			err = errors.Join(err, e)
+			urls = append(urls, &url.URL{Path: abspath})
+			handleFn(staticserve.NormalizeGET(abspath), ss)
 		}
 		// Quietly 404 the predictable devtools source-map probes for the bundled
 		// assets; they are served only at their exact content-hashed paths.
