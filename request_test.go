@@ -1728,6 +1728,59 @@ func TestRequest_handleBroadcastRejectsWhitespaceID(t *testing.T) {
 	}
 }
 
+// TestRequest_getSendMsgsKeepsOrderFromDeletedElement verifies that a page-global
+// what.Order command survives the getSendMsgs drain even when the element that
+// issued it has been deleted: the browser ignores the Jid for Order, and the
+// referenced elements may still be present.
+func TestRequest_getSendMsgsKeepsOrderFromDeletedElement(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+
+	childA := rq.NewElement(&testUi{})
+	childB := rq.NewElement(&testUi{})
+	ctrl := rq.NewElement(&testUi{})
+
+	// The control reorders two live siblings, then removes itself in the same pass.
+	ctrl.Order([]jid.Jid{childA.Jid(), childB.Jid()})
+	rq.DeleteElement(ctrl)
+
+	var sawOrder bool
+	for _, m := range rq.getSendMsgs() {
+		if m.What == what.Order {
+			sawOrder = true
+		}
+	}
+	if !sawOrder {
+		t.Fatal("page-global Order referencing live children was dropped because the issuing element was deleted")
+	}
+}
+
+// TestRequest_getSendMsgsDropsCallFromDeletedElement verifies the complementary
+// case: an element-targeted what.Call must still be dropped when its element is
+// gone, since the browser resolves it via getElementById and would otherwise throw.
+func TestRequest_getSendMsgsDropsCallFromDeletedElement(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+
+	elem := rq.NewElement(&testUi{})
+	elem.JsCall("fn", "{}")
+	rq.DeleteElement(elem)
+
+	for _, m := range rq.getSendMsgs() {
+		if m.What == what.Call {
+			t.Fatal("element-targeted Call for a deleted element must be dropped")
+		}
+	}
+}
+
 // TestRequest_queueEventOverloadCancels verifies that when the event-call channel is
 // full, the Request is cancelled with a cause that wraps ErrRequestOverloaded (and is
 // still matchable as ErrRequestCancelled). It drives queueEvent with an unbuffered

@@ -320,6 +320,11 @@ func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
 // that are not present (non-element messages and Delete are always kept), and
 // returns the survivors sorted by Jid. It takes rq.mu (read) then muQueue, the
 // order required by the lock hierarchy documented in jaws.go.
+//
+// what.Order is page-global (the browser ignores its Jid; see jawsPerform), but
+// Element.Order queues it carrying the issuing element's Jid so the stable Jid sort
+// places it after that element's own Append frames. It is therefore kept regardless
+// of whether the issuer is still present, like the other page-global commands.
 func (rq *Request) getSendMsgs() (toSend []wire.WsMsg) {
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
@@ -333,7 +338,7 @@ func (rq *Request) getSendMsgs() (toSend []wire.WsMsg) {
 		// rq.mu (read) keeps rq.elems stable while the map is built.
 		var validJids map[Jid]struct{}
 		for i := range rq.wsQueue {
-			ok := rq.wsQueue[i].Jid < 1 || rq.wsQueue[i].What == what.Delete
+			ok := rq.wsQueue[i].Jid < 1 || rq.wsQueue[i].What == what.Delete || rq.wsQueue[i].What == what.Order
 			if !ok {
 				if validJids == nil {
 					validJids = make(map[Jid]struct{}, len(rq.elems))
