@@ -30,6 +30,8 @@ func (u *Input) applyGetterAttrs(elem *jaws.Element, getter any) (attrs []templa
 	return
 }
 
+// maybeDirty applies the dirty state for this widget's bound tag (u.tag),
+// forwarding inErr to [applyDirty].
 func (u *Input) maybeDirty(elem *jaws.Element, inErr error) (err error) {
 	err = applyDirty(u.tag, elem, inErr)
 	return
