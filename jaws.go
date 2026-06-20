@@ -64,13 +64,15 @@
 //
 // # Testing
 //
-// Always run the tests with the -race flag (or -tags debug). Both set
-// deadlock.Debug, which enables the debug-gated runtime invariant checks: the
-// lock-order verification described above and the late-handler panic. Those
-// branches are compile-time dead in normal builds, so a plain "go test" neither
-// exercises them nor reports their statement coverage. Runtime tag-comparability
-// checks in [github.com/linkdata/jaws/lib/tag] run in every build. CI builds with
-// -tags debug -race.
+// Always run the tests with the -race flag. Race builds set deadlock.Debug and
+// deadlock.Enabled, exercising the deadlock lock-order detector described above
+// and JaWS debug-gated runtime checks such as the late-handler panic. If the race
+// detector is unavailable, use -tags "debug deadlock" so both categories stay
+// active: the debug tag sets deadlock.Debug, while the deadlock tag enables the
+// detector. Those JaWS debug branches are compile-time dead in normal builds, so
+// a plain "go test" neither exercises them nor reports their statement coverage.
+// Runtime tag-comparability checks in [github.com/linkdata/jaws/lib/tag] run in
+// every build. CI builds with -race.
 package jaws
 
 import (
