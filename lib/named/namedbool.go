@@ -66,15 +66,17 @@ func (nb *Bool) JawsGet(elem *jaws.Element) (yes bool) {
 
 // JawsSet sets the checked state and dirties the affected element tags.
 //
-// Lock ordering invariant: when both locks are needed, the owning BoolArray's
-// mutex is always acquired before the Bool's mutex (as done here and by the
-// BoolArray methods, which lock nba.mu then call into Bool). Any new method must
-// preserve this array-before-bool order to avoid deadlocks.
-//
-// Dirtying happens after the value locks have been released, matching
-// [BoolArray.JawsSet] and avoiding value-lock-to-Jaws-lock inversion.
+// It returns [jaws.ErrValueUnchanged] if checked already matched the current
+// state. Affected tags are dirtied after the value locks have been released,
+// matching [BoolArray.JawsSet].
 func (nb *Bool) JawsSet(elem *jaws.Element, checked bool) (err error) {
 	nba := nb.nba
+	// Lock ordering invariant: when both locks are needed, the owning BoolArray's
+	// mutex is always acquired before the Bool's mutex (as done here and by the
+	// BoolArray methods, which lock nba.mu then call into Bool). Any new method
+	// must preserve this array-before-bool order to avoid deadlocks. Dirtying is
+	// deferred until after the value locks are released to avoid a
+	// value-lock-to-Jaws-lock inversion.
 	if nba != nil {
 		nba.mu.Lock()
 	}
