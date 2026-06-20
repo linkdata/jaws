@@ -13,6 +13,7 @@ import (
 var DefaultCookieName string
 
 func init() {
+	// On error exename is empty and MakeCookieName falls back to "jaws".
 	exename, _ := os.Executable()
 	DefaultCookieName = MakeCookieName(exename)
 }
@@ -29,7 +30,7 @@ func MakeCookieName(exename string) (cookie string) {
 	var b []byte
 	for _, ch := range exename {
 		if ('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z') || ('0' <= ch && ch <= '9') {
-			b = append(b, byte(ch)) //#nosec G115
+			b = append(b, byte(ch)) //#nosec G115 -- ch is ASCII [A-Za-z0-9] per the guard above, so it fits in a byte
 		}
 	}
 	if len(b) > 0 {
