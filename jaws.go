@@ -471,7 +471,7 @@ var headerCacheControlNoStore = []string{"no-store"}
 
 // ServeHTTP can handle the required JaWS endpoints, which all start with "/jaws/".
 func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
@@ -494,11 +494,11 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 				return
 			default:
-				if jw.serveTailScript(w, r) {
+				if r.Method == http.MethodGet && jw.serveTailScript(w, r) {
 					return
 				}
 			}
-		} else {
+		} else if r.Method == http.MethodGet {
 			jawsKey, tail := key.Parse(r.URL.Path[6:])
 			if jawsKey != 0 && (tail == "" || tail == "/noscript") {
 				if rq := jw.UseRequest(jawsKey, r); rq != nil {

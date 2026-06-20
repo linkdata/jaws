@@ -1646,6 +1646,26 @@ func TestServeHTTP_GetCSS(t *testing.T) {
 	is.Equal(w.Header()["Content-Type"], []string{mime.TypeByExtension(".css")})
 }
 
+func TestServeHTTP_HeadJavascript(t *testing.T) {
+	jw, _ := New()
+	go jw.Serve()
+	defer jw.Close()
+
+	is := newTestHelper(t)
+
+	mux := http.NewServeMux()
+	mux.Handle("GET /jaws/", jw)
+
+	req := httptest.NewRequest(http.MethodHead, jw.serveJS.Name, nil)
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, req)
+	is.Equal(w.Code, http.StatusOK)
+	is.Equal(w.Body.Len(), 0)
+	is.Equal(w.Header()["Cache-Control"], staticserve.HeaderCacheControl)
+	is.Equal(w.Header()["Content-Type"], []string{mime.TypeByExtension(".js")})
+}
+
 func TestServeHTTP_GetPing(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()
@@ -1711,6 +1731,29 @@ func TestServeHTTP_GetKey(t *testing.T) {
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusUpgradeRequired)
 	is.Equal(w.Header()["Cache-Control"], nil)
+}
+
+func TestServeHTTP_HeadKeyDoesNotClaimRequest(t *testing.T) {
+	is := newTestHelper(t)
+	jw, _ := New()
+	go jw.Serve()
+	defer jw.Close()
+
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	rq := jw.NewRequest(hr)
+	key := rq.JawsKeyString()
+
+	req := httptest.NewRequest(http.MethodHead, "/jaws/"+key, nil)
+	req.RemoteAddr = hr.RemoteAddr
+	w := httptest.NewRecorder()
+	jw.ServeHTTP(w, req)
+	is.Equal(w.Code, http.StatusNotFound)
+
+	req = httptest.NewRequest(http.MethodGet, "/jaws/"+key, nil)
+	req.RemoteAddr = hr.RemoteAddr
+	w = httptest.NewRecorder()
+	jw.ServeHTTP(w, req)
+	is.Equal(w.Code, http.StatusUpgradeRequired)
 }
 
 func TestServeHTTP_Noscript(t *testing.T) {
@@ -1785,6 +1828,37 @@ func TestServeHTTP_TailScript_UnknownSuffixDoesNotDrain(t *testing.T) {
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusNotFound)
 
+	req = httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString(), nil)
+	req.RemoteAddr = hr.RemoteAddr
+	w = httptest.NewRecorder()
+	jw.ServeHTTP(w, req)
+	is.Equal(w.Code, http.StatusOK)
+	is.Equal(strings.Contains(w.Body.String(), `classList?.add("cls");`), true)
+}
+
+// TestServeHTTP_HeadTailScriptDoesNotDrain verifies that a HEAD request to the
+// /jaws/.tail endpoint does not drain the one-shot tail script: draining is a
+// GET-only side effect, so a HEAD probe (CDN, prefetch, scanner) must not consume
+// it and leave the legitimate client's GET with nothing. Mirrors the request-claim
+// guard covered by TestServeHTTP_HeadKeyDoesNotClaimRequest.
+func TestServeHTTP_HeadTailScriptDoesNotDrain(t *testing.T) {
+	is := newTestHelper(t)
+	jw, _ := New()
+	go jw.Serve()
+	defer jw.Close()
+
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	rq := jw.NewRequest(hr)
+	rq.NewElement(&testUi{}).SetClass("cls")
+
+	// A HEAD fetch must not drain the one-shot tail.
+	req := httptest.NewRequest(http.MethodHead, "/jaws/.tail/"+rq.JawsKeyString(), nil)
+	req.RemoteAddr = hr.RemoteAddr
+	w := httptest.NewRecorder()
+	jw.ServeHTTP(w, req)
+	is.Equal(w.Code, http.StatusNotFound)
+
+	// The legitimate client's GET still returns the undrained content.
 	req = httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString(), nil)
 	req.RemoteAddr = hr.RemoteAddr
 	w = httptest.NewRecorder()
