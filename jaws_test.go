@@ -1359,6 +1359,31 @@ func TestJaws_clientIP(t *testing.T) {
 	}
 }
 
+// TestJaws_equalIPUnmapsV4MappedV6 covers equalIP treating an IPv4-mapped IPv6
+// address (as a proxy may write into a forwarded header) as the same client as its
+// plain IPv4 form, while still distinguishing genuinely different addresses and
+// preserving the loopback equivalence.
+func TestJaws_equalIPUnmapsV4MappedV6(t *testing.T) {
+	tests := []struct {
+		a, b string
+		want bool
+	}{
+		{"::ffff:203.0.113.5", "203.0.113.5", true},  // mapped vs plain: same client
+		{"203.0.113.5", "::ffff:203.0.113.5", true},  // order independent
+		{"::ffff:127.0.0.1", "127.0.0.1", true},      // mapped loopback vs plain loopback
+		{"::ffff:127.0.0.1", "::1", true},            // loopback equivalence preserved
+		{"::ffff:203.0.113.5", "203.0.113.6", false}, // different clients still differ
+		{"::ffff:203.0.113.5", "::1", false},         // mapped non-loopback vs loopback
+	}
+	for _, tt := range tests {
+		a := netip.MustParseAddr(tt.a)
+		b := netip.MustParseAddr(tt.b)
+		if got := equalIP(a, b); got != tt.want {
+			t.Errorf("equalIP(%v, %v) = %v, want %v", a, b, got, tt.want)
+		}
+	}
+}
+
 func TestCoverage_NonZeroRandomAndPanic(t *testing.T) {
 	jw, err := New()
 	if err != nil {

@@ -13,13 +13,16 @@ import (
 )
 
 // equalIP reports whether a and b identify the same client for the purpose of
-// session and request-key binding. Two loopback addresses always compare equal
+// session and request-key binding. Addresses are unmapped first so an
+// IPv4-mapped IPv6 address (::ffff:a.b.c.d, as a proxy may write into a forwarded
+// header) matches its plain IPv4 form. Two loopback addresses always compare equal
 // so that a reverse proxy connecting to the backend over loopback does not break
 // binding; the consequence is that when every request arrives from loopback (the
 // typical proxied deployment without forwarded-IP binding) IP binding is a no-op.
 // Enable [Jaws.TrustForwardedHeaders] to bind on the forwarded client IP instead
 // (see the clientIP method).
 func equalIP(a, b netip.Addr) bool {
+	a, b = a.Unmap(), b.Unmap()
 	return a.Compare(b) == 0 || (a.IsLoopback() && b.IsLoopback())
 }
 
