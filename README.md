@@ -526,9 +526,8 @@ which enables the debug-gated runtime invariant checks throughout the codebase:
 the lock-order verification, the late-handler panic, and the runtime
 tag-comparability check in [`lib/tag`](./lib/tag). These branches are
 compile-time dead in normal builds, so a plain `go test` neither exercises nor
-reports coverage for them. CI builds with `-tags debug -race`; the `debug` tag
-enables the same checks without the race detector for environments where it is
-unavailable.
+reports coverage for them. CI builds with `-race`. The `debug` tag enables the
+same checks without the race detector for environments where it is unavailable.
 
 ### Dependencies
 
