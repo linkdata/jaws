@@ -170,7 +170,7 @@ func (jsvar *JsVar[T]) setPathLocked(elem *jaws.Element, jsPath string, value an
 	return
 }
 
-func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any) (err error) {
+func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any) (broadcasted bool, err error) {
 	jsvar.Lock()
 	err = jsvar.setPathLocked(elem, jsPath, value)
 	dirtyTag := jsvar.dirtyTag
@@ -200,6 +200,7 @@ func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any)
 				What: what.Set,
 				Data: jsPath + "=" + string(data),
 			})
+			broadcasted = true
 		}
 	}
 	return
@@ -214,7 +215,8 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any) (er
 	if strings.ContainsAny(jsPath, "\t\n\r=") {
 		return ErrIllegalJsVarPath
 	}
-	if err = jsvar.setPathLock(elem, jsPath, value); err == nil {
+	var broadcasted bool
+	if broadcasted, err = jsvar.setPathLock(elem, jsPath, value); err == nil && broadcasted {
 		if sp, ok := any(jsvar.Ptr).(SetPather); ok {
 			sp.JawsPathSet(elem, jsPath, value)
 		}

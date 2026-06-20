@@ -249,6 +249,25 @@ func TestJsVar_SetBeforeRenderDoesNotBroadcast(t *testing.T) {
 	}
 }
 
+func TestJsVar_SetBeforeRenderDoesNotNotifySetPather(t *testing.T) {
+	_, rq := newCoreRequest(t)
+
+	var mu sync.Mutex
+	v := jsVarPathHooks{Value: "old"}
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+
+	if err := jsv.JawsSetPath(elem, "value", "new"); err != nil {
+		t.Fatal(err)
+	}
+	if v.Value != "new" {
+		t.Fatalf("pre-render set did not apply, got %#v", v)
+	}
+	if v.pathSetCall != 0 {
+		t.Fatalf("pre-render set called JawsPathSet %d times, want 0 because no broadcast was queued", v.pathSetCall)
+	}
+}
+
 // TestJsVar_RejectsProtocolBytesInPath verifies that a JsVar path containing a
 // byte significant to the browser protocol is rejected before it is applied or
 // broadcast. The path is written verbatim into a what.Set frame (only the value
@@ -382,7 +401,7 @@ func TestJsVar_PathHooksAndRequestWriter(t *testing.T) {
 	if err := jsv.JawsRender(elem, &sb, []any{"pvar"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := jsv.setPathLock(elem, "value", "b"); err != nil {
+	if _, err := jsv.setPathLock(elem, "value", "b"); err != nil {
 		t.Fatal(err)
 	}
 	if v.Value != "b" || v.setCalls == 0 {
