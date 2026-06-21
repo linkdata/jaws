@@ -77,10 +77,7 @@ func NewTestRequest(jw *jaws.Jaws, r *http.Request) *TestRequest {
 	// [jaws.Jaws.NewRequest] never returns nil in production (it loops until a key is
 	// allocated); the rq == nil guard is defensive against the newRequest seam, while
 	// the claim check is the disjunct that fails in practice.
-	if rq == nil {
-		return nil
-	}
-	if claimed, _ := jw.UseRequest(rq.JawsKey, r); claimed != rq {
+	if rq == nil || jw.UseRequest(rq.JawsKey, r) != rq {
 		return nil
 	}
 	tr := &TestRequest{

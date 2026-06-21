@@ -665,10 +665,7 @@ func newRequestHarness(jw *Jaws, r *http.Request) (rh *requestHarness) {
 	rr := httptest.NewRecorder()
 	rr.Body = &bytes.Buffer{}
 	rq := jw.NewRequest(r)
-	if rq == nil {
-		return nil
-	}
-	if claimed, _ := jw.UseRequest(rq.JawsKey, r); claimed != rq {
+	if rq == nil || jw.UseRequest(rq.JawsKey, r) != rq {
 		return nil
 	}
 	rh = &requestHarness{

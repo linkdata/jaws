@@ -52,23 +52,6 @@ var ErrWebsocketOriginWrongHost = errors.New("websocket Origin host mismatch")
 // check fails closed rather than accepting an unverified Origin.
 var ErrWebsocketOriginNoInitial = errors.New("websocket Origin cannot be validated: no initial request")
 
-type errWebSocketOriginValidation struct {
-	err error
-}
-
-func (e errWebSocketOriginValidation) Error() string {
-	return e.err.Error()
-}
-
-func (e errWebSocketOriginValidation) Unwrap() error {
-	return e.err
-}
-
-func isWebSocketOriginValidation(err error) (yes bool) {
-	var target errWebSocketOriginValidation
-	return errors.As(err, &target)
-}
-
 // ErrRequestCancelled indicates a [Request] was cancelled.
 //
 // The concrete error reachable via [context.Cause] on [Request.Context] wraps the

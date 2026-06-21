@@ -173,41 +173,21 @@ func (jw *Jaws) nonZeroRandomLocked() key.Key {
 // associated [Request], and then call its [Request.ServeHTTP] method to process the
 // WebSocket messages.
 //
-// On success it returns the claimed [Request] and a nil error. It returns a nil
-// [Request] and nil error when the key was not found, and a nil [Request] with a
-// non-nil error when a matching request could not be claimed: it was already
-// claimed by an earlier WebSocket callback ([ErrRequestAlreadyClaimed]), the client
-// IP did not match ([ErrWebSocketIPMismatch]), or the WebSocket Origin check failed
-// (an ErrWebsocketOrigin* error). Respond with HTTP "404 Not Found" whenever the
-// returned [Request] is nil.
-func (jw *Jaws) UseRequest(jawsKey key.Key, r *http.Request) (rq *Request, err error) {
+// Returns nil if the key was not found, the request was already claimed by an
+// earlier WebSocket callback, or the IP doesn't match, in which case you
+// should return an HTTP "404 Not Found" status.
+func (jw *Jaws) UseRequest(jawsKey key.Key, r *http.Request) (rq *Request) {
 	if jawsKey != 0 {
+		var err error
 		jw.mu.Lock()
 		if waitingRq, ok := jw.requests[jawsKey]; ok {
-			if err = waitingRq.validateClaimOrigin(r); err == nil {
-				err = waitingRq.claim(r)
-			}
-			if err == nil {
+			if err = waitingRq.claim(r); err == nil {
 				rq = waitingRq
 				jw.removePendingRequestLocked(rq)
 			}
 		}
 		jw.mu.Unlock()
 		_ = jw.Log(err)
-	}
-	return
-}
-
-func (jw *Jaws) hasPendingRequest(jawsKey key.Key, r *http.Request) (ok bool) {
-	if jawsKey != 0 {
-		actualIP := jw.clientIP(r)
-		jw.mu.RLock()
-		if rq := jw.requests[jawsKey]; rq != nil && !rq.claimed.Load() {
-			rq.mu.RLock()
-			ok = equalIP(rq.remoteIP, actualIP)
-			rq.mu.RUnlock()
-		}
-		jw.mu.RUnlock()
 	}
 	return
 }

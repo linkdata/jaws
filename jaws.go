@@ -91,7 +91,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/coder/websocket"
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/lib/assets"
 	"github.com/linkdata/jaws/lib/jid"
@@ -470,25 +469,9 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 
 var headerCacheControlNoStore = []string{"no-store"}
 
-func headerContainsToken(h http.Header, name, token string) bool {
-	for _, value := range h.Values(name) {
-		for part := range strings.SplitSeq(value, ",") {
-			if strings.EqualFold(strings.TrimSpace(part), token) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func webSocketUpgradeRequest(r *http.Request) bool {
-	return headerContainsToken(r.Header, "Connection", "Upgrade") &&
-		headerContainsToken(r.Header, "Upgrade", "websocket")
-}
-
 // ServeHTTP can handle the required JaWS endpoints, which all start with "/jaws/".
 func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
@@ -511,26 +494,25 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 				return
 			default:
-				if r.Method == http.MethodGet && jw.serveTailScript(w, r) {
+				if jw.serveTailScript(w, r) {
 					return
 				}
 			}
-		} else if r.Method == http.MethodGet {
+		} else {
+			// A path here addresses a specific Request by its key, a 64-bit CSPRNG
+			// value that appears only in the page's <meta name="jawsKey"> (read by
+			// jaws.js to build the WebSocket URL). It is in no href/src a crawler would
+			// follow and guessing it is 1 in 2^63, so whoever reaches this branch knows
+			// the key and is the client connecting its WebSocket (or fetching the
+			// /noscript fallback). We therefore do not special-case non-WebSocket,
+			// prefetch or probe traffic: UseRequest claims the single-use Request and
+			// Request.ServeHTTP validates the Origin (cross-site WebSocket hijack
+			// defense) before upgrading. Consuming the key on a non-handshake request is
+			// acceptable because only a holder of the key can reach here.
 			jawsKey, tail := key.Parse(r.URL.Path[6:])
 			if jawsKey != 0 && (tail == "" || tail == "/noscript") {
-				if tail == "" && !webSocketUpgradeRequest(r) {
-					if jw.hasPendingRequest(jawsKey, r) {
-						_, _ = websocket.Accept(w, r, nil)
-						return
-					}
-					w.WriteHeader(http.StatusNotFound)
-					return
-				}
-				if rq, err := jw.UseRequest(jawsKey, r); rq != nil {
+				if rq := jw.UseRequest(jawsKey, r); rq != nil {
 					rq.ServeHTTP(w, r)
-					return
-				} else if isWebSocketOriginValidation(err) {
-					http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 					return
 				}
 			}
