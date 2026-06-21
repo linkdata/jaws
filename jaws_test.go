@@ -145,13 +145,13 @@ func TestJaws_MaxPendingRequestsPerIPEvictsOldestPending(t *testing.T) {
 	if got := jw.RequestCount(); got != 2 {
 		t.Fatalf("RequestCount() = %d, want 2", got)
 	}
-	if claimed := jw.UseRequest(oldKey, oldReq); claimed != nil {
+	if claimed, _ := jw.UseRequest(oldKey, oldReq); claimed != nil {
 		t.Fatalf("evicted request claimed as %v", claimed)
 	}
-	if claimed := jw.UseRequest(midKey, midReq); claimed != midRq {
+	if claimed, _ := jw.UseRequest(midKey, midReq); claimed != midRq {
 		t.Fatalf("middle request claim = %v, want %v", claimed, midRq)
 	}
-	if claimed := jw.UseRequest(newKey, newReq); claimed != newRq {
+	if claimed, _ := jw.UseRequest(newKey, newReq); claimed != newRq {
 		t.Fatalf("new request claim = %v, want %v", claimed, newRq)
 	}
 }
@@ -251,13 +251,13 @@ func TestJaws_MaxPendingRequestsPerIPSparesRenderingRequest(t *testing.T) {
 	newKey := newRq.JawsKey
 
 	// The rendering Request must survive; the idle one is the one evicted.
-	if claimed := jw.UseRequest(renderingKey, renderingReq); claimed != renderingRq {
+	if claimed, _ := jw.UseRequest(renderingKey, renderingReq); claimed != renderingRq {
 		t.Fatalf("rendering request claim = %v, want it to survive eviction", claimed)
 	}
-	if claimed := jw.UseRequest(idleKey, idleReq); claimed != nil {
+	if claimed, _ := jw.UseRequest(idleKey, idleReq); claimed != nil {
 		t.Fatalf("idle request should have been evicted, got %v", claimed)
 	}
-	if claimed := jw.UseRequest(newKey, newReq); claimed != newRq {
+	if claimed, _ := jw.UseRequest(newKey, newReq); claimed != newRq {
 		t.Fatalf("new request claim = %v, want %v", claimed, newRq)
 	}
 }
@@ -299,13 +299,13 @@ func TestJaws_MaxPendingRequestsPerIPSparesRecentlyRenderedRequest(t *testing.T)
 
 	// The recently-rendered Request must survive despite its cleared flag; the idle one
 	// is evicted instead.
-	if claimed := jw.UseRequest(renderingKey, renderingReq); claimed != renderingRq {
+	if claimed, _ := jw.UseRequest(renderingKey, renderingReq); claimed != renderingRq {
 		t.Fatalf("recently-rendered request claim = %v, want it to survive eviction", claimed)
 	}
-	if claimed := jw.UseRequest(idleKey, idleReq); claimed != nil {
+	if claimed, _ := jw.UseRequest(idleKey, idleReq); claimed != nil {
 		t.Fatalf("idle request should have been evicted, got %v", claimed)
 	}
-	if claimed := jw.UseRequest(newKey, newReq); claimed != newRq {
+	if claimed, _ := jw.UseRequest(newKey, newReq); claimed != newRq {
 		t.Fatalf("new request claim = %v, want %v", claimed, newRq)
 	}
 }
@@ -348,13 +348,13 @@ func TestJaws_MaxPendingRequestsPerIPSparesStalledLiveRender(t *testing.T) {
 	newRq := jw.NewRequest(newReq)
 	newKey := newRq.JawsKey
 
-	if claimed := jw.UseRequest(stalledKey, stalledReq); claimed != stalledRq {
+	if claimed, _ := jw.UseRequest(stalledKey, stalledReq); claimed != stalledRq {
 		t.Fatalf("stalled-but-recently-written render claim = %v, want it to survive eviction", claimed)
 	}
-	if claimed := jw.UseRequest(idleKey, idleReq); claimed != nil {
+	if claimed, _ := jw.UseRequest(idleKey, idleReq); claimed != nil {
 		t.Fatalf("idle request should have been evicted, got %v", claimed)
 	}
-	if claimed := jw.UseRequest(newKey, newReq); claimed != newRq {
+	if claimed, _ := jw.UseRequest(newKey, newReq); claimed != newRq {
 		t.Fatalf("new request claim = %v, want %v", claimed, newRq)
 	}
 }
@@ -380,10 +380,10 @@ func TestJaws_MaxPendingRequestsPerIPSparesFutureWriteTimestamp(t *testing.T) {
 	if got := jw.Pending(); got != 2 {
 		t.Fatalf("Pending() = %d, want 2 (cap overshoots while render timestamp is newer than scan timestamp)", got)
 	}
-	if claimed := jw.UseRequest(renderingKey, renderingReq); claimed != renderingRq {
+	if claimed, _ := jw.UseRequest(renderingKey, renderingReq); claimed != renderingRq {
 		t.Fatalf("future-written render claim = %v, want it to survive eviction", claimed)
 	}
-	if claimed := jw.UseRequest(newKey, newReq); claimed != newRq {
+	if claimed, _ := jw.UseRequest(newKey, newReq); claimed != newRq {
 		t.Fatalf("new request claim = %v, want %v", claimed, newRq)
 	}
 }
@@ -435,10 +435,10 @@ func TestJaws_MaxPendingRequestsPerIPKeepsDifferentIPs(t *testing.T) {
 	if got := jw.Pending(); got != 2 {
 		t.Fatalf("Pending() = %d, want 2", got)
 	}
-	if claimed := jw.UseRequest(rqA.JawsKey, reqA); claimed != rqA {
+	if claimed, _ := jw.UseRequest(rqA.JawsKey, reqA); claimed != rqA {
 		t.Fatalf("request A claim = %v, want %v", claimed, rqA)
 	}
-	if claimed := jw.UseRequest(rqB.JawsKey, reqB); claimed != rqB {
+	if claimed, _ := jw.UseRequest(rqB.JawsKey, reqB); claimed != rqB {
 		t.Fatalf("request B claim = %v, want %v", claimed, rqB)
 	}
 }
@@ -453,7 +453,7 @@ func TestJaws_MaxPendingRequestsPerIPIgnoresClaimedRequests(t *testing.T) {
 
 	claimedReq := newPendingLimitRequest("192.0.2.1:1000")
 	claimedRq := jw.NewRequest(claimedReq)
-	if claimed := jw.UseRequest(claimedRq.JawsKey, claimedReq); claimed != claimedRq {
+	if claimed, _ := jw.UseRequest(claimedRq.JawsKey, claimedReq); claimed != claimedRq {
 		t.Fatalf("claimed request claim = %v, want %v", claimed, claimedRq)
 	}
 	if got := jw.Pending(); got != 0 {
@@ -476,7 +476,7 @@ func TestJaws_MaxPendingRequestsPerIPIgnoresClaimedRequests(t *testing.T) {
 	if !stillPresent {
 		t.Fatal("claimed request was evicted")
 	}
-	if claimed := jw.UseRequest(pendingRq.JawsKey, pendingReq); claimed != pendingRq {
+	if claimed, _ := jw.UseRequest(pendingRq.JawsKey, pendingReq); claimed != pendingRq {
 		t.Fatalf("pending request claim = %v, want %v", claimed, pendingRq)
 	}
 }
@@ -499,10 +499,10 @@ func TestJaws_MaxPendingRequestsPerIPKeepsLoopbackAddressesSeparate(t *testing.T
 	if got := jw.Pending(); got != 2 {
 		t.Fatalf("Pending() = %d, want 2", got)
 	}
-	if claimed := jw.UseRequest(oldRq.JawsKey, oldReq); claimed != oldRq {
+	if claimed, _ := jw.UseRequest(oldRq.JawsKey, oldReq); claimed != oldRq {
 		t.Fatalf("first loopback request claim = %v, want %v", claimed, oldRq)
 	}
-	if claimed := jw.UseRequest(newRq.JawsKey, newReq); claimed != newRq {
+	if claimed, _ := jw.UseRequest(newRq.JawsKey, newReq); claimed != newRq {
 		t.Fatalf("new loopback request claim = %v, want %v", claimed, newRq)
 	}
 }
@@ -1773,7 +1773,7 @@ func TestServeHTTP_NonUpgradeGetDoesNotClaimRequest(t *testing.T) {
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusUpgradeRequired)
 
-	if claimed := jw.UseRequest(jawsKey, hr); claimed != rq {
+	if claimed, _ := jw.UseRequest(jawsKey, hr); claimed != rq {
 		t.Fatalf("non-upgrade GET claimed request for key %s: got %p, want %p", keyString, claimed, rq)
 	}
 	jw.recycle(rq)

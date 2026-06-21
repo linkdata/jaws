@@ -526,8 +526,11 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusNotFound)
 					return
 				}
-				if rq := jw.UseRequest(jawsKey, r); rq != nil {
+				if rq, err := jw.UseRequest(jawsKey, r); rq != nil {
 					rq.ServeHTTP(w, r)
+					return
+				} else if isWebSocketOriginValidation(err) {
+					http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 					return
 				}
 			}

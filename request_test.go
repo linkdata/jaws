@@ -748,7 +748,7 @@ func TestRequest_ClaimRefreshesLastWriteAndStartServeGuards(t *testing.T) {
 	// Simulate a page that rendered long ago (idle) before its WebSocket connects.
 	rq.lastWriteSeconds.Store(jw.runtimeSeconds.Load() - 3600)
 
-	if jw.UseRequest(rq.JawsKey, hr) != rq {
+	if got, _ := jw.UseRequest(rq.JawsKey, hr); got != rq {
 		t.Fatal("expected claim to succeed")
 	}
 	// claim refreshed the write second, so the just-claimed request is not idle.
@@ -1888,7 +1888,7 @@ func TestCoverage_PendingSubscribeMaintenanceAndParse(t *testing.T) {
 	if got := jw.Pending(); got != 1 {
 		t.Fatalf("expected one pending request, got %d", got)
 	}
-	if claimed := jw.UseRequest(rq.JawsKey, hr); claimed != rq {
+	if claimed, _ := jw.UseRequest(rq.JawsKey, hr); claimed != rq {
 		t.Fatal("expected request claim")
 	}
 	total, active = jw.RequestCounts()
@@ -2509,7 +2509,7 @@ func newTestServerWithSession(t *testing.T, withSession bool) (ts *testServer) {
 		sess = jw.NewSession(rr, hr)
 	}
 	rq := jw.NewRequest(hr)
-	if rq != jw.UseRequest(rq.JawsKey, hr) {
+	if got, _ := jw.UseRequest(rq.JawsKey, hr); rq != got {
 		panic("UseRequest failed")
 	}
 	go jw.Serve()
@@ -2540,7 +2540,7 @@ func (ts *testServer) connected(rq *Request) error {
 func (ts *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/jaws/") {
 		jawsKey, _ := key.Parse(strings.TrimPrefix(r.URL.Path, "/jaws/"))
-		if rq := ts.jw.UseRequest(jawsKey, r); rq != nil {
+		if rq, _ := ts.jw.UseRequest(jawsKey, r); rq != nil {
 			rq.ServeHTTP(w, r)
 			return
 		}
@@ -2693,6 +2693,60 @@ func TestWS_RejectsCrossOrigin(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("status %d", resp.StatusCode)
+	}
+}
+
+func TestServeHTTP_RejectedCrossOriginDoesNotConsumePendingRequest(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+	waitForServeLoop(t, jw)
+
+	srv := httptest.NewServer(jw)
+	t.Cleanup(srv.Close)
+
+	initial := httptest.NewRequest(http.MethodGet, srv.URL+"/page", nil)
+	initial.RemoteAddr = "127.0.0.1:1234"
+	rq := jw.NewRequest(initial)
+	url := srv.URL + "/jaws/" + rq.JawsKeyString()
+
+	badHdr := http.Header{}
+	badHdr.Set("Origin", "https://evil.invalid")
+	conn, resp, err := websocket.Dial(t.Context(), url, &websocket.DialOptions{HTTPHeader: badHdr})
+	if conn != nil {
+		_ = conn.Close(websocket.StatusNormalClosure, "")
+		t.Fatal("expected cross-origin handshake to be rejected")
+	}
+	if err == nil {
+		t.Fatal("expected cross-origin handshake error")
+	}
+	if resp == nil {
+		t.Fatal("expected cross-origin response")
+	}
+	if resp.Body != nil {
+		_ = resp.Body.Close()
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("cross-origin status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+
+	goodHdr := http.Header{}
+	goodHdr.Set("Origin", srv.URL)
+	conn, resp, err = websocket.Dial(t.Context(), url, &websocket.DialOptions{HTTPHeader: goodHdr})
+	if err != nil {
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+		t.Fatalf("same-origin handshake after rejected Origin failed: resp=%v err=%v", resp, err)
+	}
+	if conn != nil {
+		defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
+	}
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("same-origin status = %d, want %d", resp.StatusCode, http.StatusSwitchingProtocols)
 	}
 }
 

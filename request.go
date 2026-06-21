@@ -157,6 +157,23 @@ func (rq *Request) claim(r *http.Request) error {
 	return ErrRequestAlreadyClaimed
 }
 
+// validateClaimOrigin rejects a cross-origin WebSocket handshake before
+// [Request.claim] consumes the single-use request, so a rejected handshake leaves
+// the request available for the legitimate client. It is a no-op for a
+// non-handshake request (no Sec-WebSocket-Key) or a nil r (tests); the
+// already-claimed and client-IP checks are left to claim.
+//
+// It must run outside rq.mu: validateWebSocketOrigin reads [Request.Initial],
+// which read-locks rq.mu, so calling it under claim's write lock would deadlock.
+func (rq *Request) validateClaimOrigin(r *http.Request) error {
+	if r != nil && r.Header.Get("Sec-WebSocket-Key") != "" {
+		if err := rq.validateWebSocketOrigin(r); err != nil {
+			return errWebSocketOriginValidation{err: err}
+		}
+	}
+	return nil
+}
+
 func (rq *Request) killSessionLocked() {
 	if rq.session != nil {
 		rq.session.delRequest(rq)
