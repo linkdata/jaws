@@ -469,9 +469,16 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 
 var headerCacheControlNoStore = []string{"no-store"}
 
+func (jw *Jaws) headAssetRequest(r *http.Request) bool {
+	return r.URL.Path == jw.serveCSS.Name || r.URL.Path == jw.serveJS.Name
+}
+
 // ServeHTTP can handle the required JaWS endpoints, which all start with "/jaws/".
 func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	switch {
+	case r.Method == http.MethodGet:
+	case r.Method == http.MethodHead && jw.headAssetRequest(r):
+	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}

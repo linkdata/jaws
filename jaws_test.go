@@ -1646,6 +1646,36 @@ func TestServeHTTP_GetCSS(t *testing.T) {
 	is.Equal(w.Header()["Content-Type"], []string{mime.TypeByExtension(".css")})
 }
 
+func TestServeHTTP_HeadAssets(t *testing.T) {
+	jw, _ := New()
+	go jw.Serve()
+	defer jw.Close()
+
+	mux := http.NewServeMux()
+	mux.Handle("GET /jaws/", jw)
+
+	for _, tt := range []struct {
+		name        string
+		path        string
+		contentType string
+	}{
+		{name: "javascript", path: jw.serveJS.Name, contentType: mime.TypeByExtension(".js")},
+		{name: "css", path: jw.serveCSS.Name, contentType: mime.TypeByExtension(".css")},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			is := newTestHelper(t)
+			req := httptest.NewRequest(http.MethodHead, tt.path, nil)
+			w := httptest.NewRecorder()
+
+			mux.ServeHTTP(w, req)
+			is.Equal(w.Code, http.StatusOK)
+			is.Equal(w.Body.Len(), 0)
+			is.Equal(w.Header()["Cache-Control"], staticserve.HeaderCacheControl)
+			is.Equal(w.Header()["Content-Type"], []string{tt.contentType})
+		})
+	}
+}
+
 func TestServeHTTP_GetPing(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()
