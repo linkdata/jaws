@@ -1717,6 +1717,33 @@ func TestServeHTTP_GetPing(t *testing.T) {
 	is.Equal(w.Header()["Cache-Control"], headerCacheControlNoStore)
 }
 
+func TestServeHTTP_HeadPing(t *testing.T) {
+	is := newTestHelper(t)
+	jw, _ := New()
+	go jw.Serve()
+	defer jw.Close()
+
+	mux := http.NewServeMux()
+	mux.Handle("GET /jaws/", jw)
+
+	req := httptest.NewRequest(http.MethodHead, "/jaws/.ping", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	is.Equal(w.Header()["Cache-Control"], headerCacheControlNoStore)
+	is.Equal(w.Body.Len(), 0)
+	is.Equal(w.Header()["Content-Length"], nil)
+	is.Equal(w.Code, http.StatusNoContent)
+
+	jw.Close()
+
+	req = httptest.NewRequest(http.MethodHead, "/jaws/.ping", nil)
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	is.Equal(w.Header()["Cache-Control"], headerCacheControlNoStore)
+	is.Equal(w.Body.Len(), 0)
+	is.Equal(w.Code, http.StatusServiceUnavailable)
+}
+
 func TestServeHTTP_GetKey(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()

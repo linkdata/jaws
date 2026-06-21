@@ -469,15 +469,19 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 
 var headerCacheControlNoStore = []string{"no-store"}
 
-func (jw *Jaws) headAssetRequest(r *http.Request) bool {
-	return r.URL.Path == jw.serveCSS.Name || r.URL.Path == jw.serveJS.Name
+func (jw *Jaws) headEndpointRequest(r *http.Request) bool {
+	switch r.URL.Path {
+	case jw.serveCSS.Name, jw.serveJS.Name, "/jaws/.ping":
+		return true
+	}
+	return false
 }
 
 // ServeHTTP can handle the required JaWS endpoints, which all start with "/jaws/".
 func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet:
-	case r.Method == http.MethodHead && jw.headAssetRequest(r):
+	case r.Method == http.MethodHead && jw.headEndpointRequest(r):
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
