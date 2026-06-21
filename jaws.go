@@ -467,49 +467,63 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 	return
 }
 
-var headerCacheControlNoStore = []string{"no-store"}
+var (
+	headerAllowGetHead        = []string{http.MethodGet + ", " + http.MethodHead}
+	headerCacheControlNoStore = []string{"no-store"}
+)
 
-func (jw *Jaws) headEndpointRequest(r *http.Request) bool {
-	switch r.URL.Path {
-	case jw.serveCSS.Name, jw.serveJS.Name, "/jaws/.ping":
+// methodAllowedGetHead reports whether r may proceed to a GET/HEAD endpoint. When
+// the method is neither it writes a 405 with the Allow header and returns false.
+// Checking the method per matched endpoint (rather than up front) keeps the 405 to
+// genuinely matched endpoints; everything else falls through to 404.
+func methodAllowedGetHead(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead {
 		return true
 	}
+	w.Header()["Allow"] = headerAllowGetHead
+	w.WriteHeader(http.StatusMethodNotAllowed)
 	return false
 }
 
 // ServeHTTP can handle the required JaWS endpoints, which all start with "/jaws/".
+//
+// The method is checked per matched endpoint, not up front: the static asset and
+// .ping endpoints answer GET and HEAD (any other method gets 405 with an Allow
+// header), while the per-Request key and tail-script endpoints are GET-only
+// capability URLs that fall through to 404 on any other method. An unknown path or
+// a wrong method on a capability URL therefore 404s rather than 405s, and never
+// reveals whether a key is valid.
 func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	switch {
-	case r.Method == http.MethodGet:
-	case r.Method == http.MethodHead && jw.headEndpointRequest(r):
-	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
 	if len(r.URL.Path) > 6 && strings.HasPrefix(r.URL.Path, "/jaws/") {
 		if r.URL.Path[6] == '.' {
 			switch r.URL.Path {
 			case jw.serveCSS.Name:
-				jw.serveCSS.ServeHTTP(w, r)
+				if methodAllowedGetHead(w, r) {
+					jw.serveCSS.ServeHTTP(w, r)
+				}
 				return
 			case jw.serveJS.Name:
-				jw.serveJS.ServeHTTP(w, r)
+				if methodAllowedGetHead(w, r) {
+					jw.serveJS.ServeHTTP(w, r)
+				}
 				return
 			case "/jaws/.ping":
-				w.Header()["Cache-Control"] = headerCacheControlNoStore
-				select {
-				case <-jw.Done():
-					w.WriteHeader(http.StatusServiceUnavailable)
-				default:
-					w.WriteHeader(http.StatusNoContent)
+				if methodAllowedGetHead(w, r) {
+					w.Header()["Cache-Control"] = headerCacheControlNoStore
+					select {
+					case <-jw.Done():
+						w.WriteHeader(http.StatusServiceUnavailable)
+					default:
+						w.WriteHeader(http.StatusNoContent)
+					}
 				}
 				return
 			default:
-				if jw.serveTailScript(w, r) {
+				if r.Method == http.MethodGet && jw.serveTailScript(w, r) {
 					return
 				}
 			}
-		} else {
+		} else if r.Method == http.MethodGet {
 			// A path here addresses a specific Request by its key, a 64-bit CSPRNG
 			// value that appears only in the page's <meta name="jawsKey"> (read by
 			// jaws.js to build the WebSocket URL). It is in no href/src a crawler would

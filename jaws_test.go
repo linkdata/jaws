@@ -1717,6 +1717,39 @@ func TestServeHTTP_GetPing(t *testing.T) {
 	is.Equal(w.Header()["Cache-Control"], headerCacheControlNoStore)
 }
 
+func TestServeHTTP_DisallowedMethods(t *testing.T) {
+	is := newTestHelper(t)
+	jw, _ := New()
+	defer jw.Close()
+
+	for _, tt := range []struct {
+		name      string
+		path      string
+		wantCode  int
+		wantAllow string
+	}{
+		// Static GET/HEAD endpoints: a wrong method is 405 with an Allow header.
+		{name: "asset", path: jw.serveJS.Name, wantCode: http.StatusMethodNotAllowed, wantAllow: "GET, HEAD"},
+		{name: "ping", path: "/jaws/.ping", wantCode: http.StatusMethodNotAllowed, wantAllow: "GET, HEAD"},
+		// Capability and unknown paths: a wrong method is 404, exposing no Allow
+		// header and no oracle for whether a key is valid.
+		{name: "key", path: "/jaws/1", wantCode: http.StatusNotFound, wantAllow: ""},
+		{name: "tail", path: "/jaws/.tail/1", wantCode: http.StatusNotFound, wantAllow: ""},
+		{name: "unknown jaws path", path: "/jaws/nope", wantCode: http.StatusNotFound, wantAllow: ""},
+		{name: "non-jaws path", path: "/something_else", wantCode: http.StatusNotFound, wantAllow: ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, tt.path, nil)
+			w := httptest.NewRecorder()
+
+			jw.ServeHTTP(w, req)
+
+			is.Equal(w.Code, tt.wantCode)
+			is.Equal(w.Header().Get("Allow"), tt.wantAllow)
+		})
+	}
+}
+
 func TestServeHTTP_HeadPing(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()
