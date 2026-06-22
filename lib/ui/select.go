@@ -8,12 +8,18 @@ import (
 	"github.com/linkdata/jaws/lib/named"
 )
 
-// Select renders an HTML select element backed by a [named.SelectHandler].
+// Select renders a single-selection HTML select element.
+//
+// The widget stores one selected option name through a [named.SelectHandler].
+// Render params are written as supplied, but a multiple select is not
+// supported by the JaWS select value contract.
 type Select struct {
 	ContainerHelper
 }
 
-// NewSelect returns a select widget backed by sh.
+// NewSelect returns a single-selection select widget backed by sh.
+//
+// The widget reads and writes one selected option name through sh.
 func NewSelect(sh named.SelectHandler) *Select {
 	return &Select{ContainerHelper: NewContainerHelper(sh)}
 }
@@ -42,7 +48,7 @@ func (u *Select) JawsUpdate(elem *jaws.Element) {
 	}
 }
 
-// JawsInput stores a browser-side select value.
+// JawsInput stores one browser-side selected option name.
 //
 // The input is ignored (returning a nil error) when the Container is not a
 // [bind.Setter] of string.
@@ -53,7 +59,10 @@ func (u *Select) JawsInput(elem *jaws.Element, value string) (err error) {
 	return
 }
 
-// Select renders an HTML select element.
+// Select renders a single-selection HTML select element.
+//
+// Params are rendered as supplied. Passing a multiple attribute is unsupported
+// because the widget stores one selected option name.
 func (rw RequestWriter) Select(sh named.SelectHandler, params ...any) error {
 	return rw.NewUI(NewSelect(sh), params...)
 }
