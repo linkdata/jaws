@@ -312,8 +312,8 @@ func (jw *Jaws) Broadcast(msg wire.Message) <span class="cov10" title="318">{
                 }
         }
         <span class="cov9" title="314">select </span>{
-        case &lt;-jw.Done():<span class="cov1" title="1"></span>
-        case jw.bcastCh &lt;- msg:<span class="cov9" title="313"></span>
+        case &lt;-jw.Done():<span class="cov2" title="2"></span>
+        case jw.bcastCh &lt;- msg:<span class="cov9" title="312"></span>
         }
 }
 
@@ -395,7 +395,7 @@ func sortedDirtTags(dirty map[any]int) []any <span class="cov3" title="4">{
 // distributeDirt drains the accumulated dirty tags and appends them to every live
 // Request's pending-dirt list for the next update pass, returning the number of
 // dirty tags distributed.
-func (jw *Jaws) distributeDirt() int <span class="cov9" title="237">{
+func (jw *Jaws) distributeDirt() int <span class="cov9" title="234">{
         var reqs []*Request
         var dirt []any
 
@@ -410,7 +410,7 @@ func (jw *Jaws) distributeDirt() int <span class="cov9" title="237">{
                         reqs = append(reqs, rq)
                 }</span>
         }
-        <span class="cov9" title="237">jw.mu.Unlock()
+        <span class="cov9" title="234">jw.mu.Unlock()
 
         // Appending outside jw.mu is deliberately safe:
         //   - The snapshot includes pending (not-yet-running) Requests; their todoDirt
@@ -426,7 +426,7 @@ func (jw *Jaws) distributeDirt() int <span class="cov9" title="237">{
         for _, rq := range reqs </span><span class="cov3" title="5">{
                 rq.appendDirtyTags(dirt)
         }</span>
-        <span class="cov9" title="237">return len(dirt)</span>
+        <span class="cov9" title="234">return len(dirt)</span>
 }
 
 // Reload requests all [Request] values to reload their current page.
@@ -758,20 +758,20 @@ import (
 // typical proxied deployment without forwarded-IP binding) IP binding is a no-op.
 // Enable [Jaws.TrustForwardedHeaders] to bind on the forwarded client IP instead
 // (see the clientIP method).
-func equalIP(a, b netip.Addr) bool <span class="cov8" title="442">{
+func equalIP(a, b netip.Addr) bool <span class="cov8" title="448">{
         a, b = a.Unmap(), b.Unmap()
         return a.Compare(b) == 0 || (a.IsLoopback() &amp;&amp; b.IsLoopback())
 }</span>
 
-func parseIP(remoteAddr string) (ip netip.Addr) <span class="cov9" title="1350">{
-        if remoteAddr != "" </span><span class="cov9" title="1349">{
-                if host, _, err := net.SplitHostPort(remoteAddr); err == nil </span><span class="cov9" title="1347">{
+func parseIP(remoteAddr string) (ip netip.Addr) <span class="cov9" title="1409">{
+        if remoteAddr != "" </span><span class="cov9" title="1408">{
+                if host, _, err := net.SplitHostPort(remoteAddr); err == nil </span><span class="cov9" title="1406">{
                         ip, _ = netip.ParseAddr(host)
                 }</span> else<span class="cov1" title="2"> {
                         ip, _ = netip.ParseAddr(remoteAddr)
                 }</span>
         }
-        <span class="cov9" title="1350">return</span>
+        <span class="cov9" title="1409">return</span>
 }
 
 // clientIP returns the address used to bind sessions and request keys to a
@@ -780,16 +780,16 @@ func parseIP(remoteAddr string) (ip netip.Addr) <span class="cov9" title="1350">
 // proxy that connects over loopback; otherwise (and as a fallback) it uses the
 // transport peer address. TrustForwardedHeaders must only be enabled behind a
 // single reverse proxy you control that sets these headers (see the field doc).
-func (jw *Jaws) clientIP(r *http.Request) (ip netip.Addr) <span class="cov10" title="1962">{
-        if r != nil </span><span class="cov9" title="1348">{
+func (jw *Jaws) clientIP(r *http.Request) (ip netip.Addr) <span class="cov10" title="2021">{
+        if r != nil </span><span class="cov9" title="1407">{
                 if jw.TrustForwardedHeaders </span><span class="cov2" title="5">{
                         if fip, ok := forwardedClientIP(r.Header); ok </span><span class="cov1" title="2">{
                                 return fip
                         }</span>
                 }
-                <span class="cov9" title="1346">ip = parseIP(r.RemoteAddr)</span>
+                <span class="cov9" title="1405">ip = parseIP(r.RemoteAddr)</span>
         }
-        <span class="cov9" title="1960">return</span>
+        <span class="cov9" title="2019">return</span>
 }
 
 // forwardedClientIP extracts the client IP from proxy-supplied headers. It uses
@@ -1494,7 +1494,7 @@ func (e errRequestCancelled) Unwrap() error <span class="cov4" title="6">{
         return e.Cause
 }</span>
 
-func newErrRequestCancelledLocked(rq *Request, cause error) (err error) <span class="cov10" title="70">{
+func newErrRequestCancelledLocked(rq *Request, cause error) (err error) <span class="cov10" title="73">{
         if cause != nil </span><span class="cov7" title="27">{
                 ec := errRequestCancelled{
                         JawsKey: rq.JawsKey,
@@ -1507,7 +1507,7 @@ func newErrRequestCancelledLocked(rq *Request, cause error) (err error) <span cl
                 }</span>
                 <span class="cov7" title="27">err = ec</span>
         }
-        <span class="cov10" title="70">return</span>
+        <span class="cov10" title="73">return</span>
 }
 
 // ErrWebSocketIPMismatch is returned when the WebSocket callback for a
@@ -1741,7 +1741,7 @@ type cellView struct {
 }
 
 // newCell returns a hidden Cell at row, col belonging to g.
-func newCell(g *game, row, col int) *Cell <span class="cov8" title="215">{
+func newCell(g *game, row, col int) *Cell <span class="cov9" title="215">{
         return &amp;Cell{game: g, row: row, col: col}
 }</span>
 
@@ -1812,7 +1812,7 @@ func (c *Cell) syncPresentation(elem *jaws.Element, view cellView) <span class="
         if elem == nil </span><span class="cov2" title="3">{
                 return
         }</span>
-        <span class="cov7" title="105">for _, cls := range []string{"is-hidden", "is-revealed", "is-flagged", "is-mine"} </span><span class="cov9" title="420">{
+        <span class="cov7" title="105">for _, cls := range []string{"is-hidden", "is-revealed", "is-flagged", "is-mine"} </span><span class="cov10" title="420">{
                 elem.RemoveClass(cls)
         }</span>
         <span class="cov7" title="105">if view.revealed </span><span class="cov1" title="1">{
@@ -1842,7 +1842,7 @@ func (c *Cell) syncPresentation(elem *jaws.Element, view cellView) <span class="
 // shared board tag is registered separately via [Cell.BoardTag] (passed to the
 // cell's Button), so the element listens to both while a single-cell dirty stays
 // scoped to just that cell. Board-wide refreshes dirty &amp;g.cells directly.
-func (c *Cell) JawsGetTag(_ tag.Context) any <span class="cov8" title="213">{
+func (c *Cell) JawsGetTag(_ tag.Context) any <span class="cov8" title="207">{
         return c
 }</span>
 
@@ -1923,7 +1923,7 @@ func newGameWithRand(rows, cols, mines int, rng *rand.Rand) *game <span class="c
         g.cells = make([][]*Cell, rows)
         for row := 0; row &lt; rows; row++ </span><span class="cov7" title="59">{
                 g.cells[row] = make([]*Cell, cols)
-                for col := 0; col &lt; cols; col++ </span><span class="cov8" title="215">{
+                for col := 0; col &lt; cols; col++ </span><span class="cov9" title="215">{
                         g.cells[row][col] = newCell(g, row, col)
                 }</span>
         }
@@ -1956,10 +1956,10 @@ func (g *game) changedTags(before gameState) (tags []any) <span class="cov5" tit
         if g.started != before.started </span><span class="cov3" title="7">{
                 tags = append(tags, &amp;g.started)
         }</span>
-        <span class="cov5" title="17">if g.gameOver != before.gameOver </span><span class="cov3" title="7">{
+        <span class="cov5" title="17">if g.gameOver != before.gameOver </span><span class="cov3" title="5">{
                 tags = append(tags, &amp;g.gameOver)
         }</span>
-        <span class="cov5" title="17">if g.won != before.won </span><span class="cov3" title="6">{
+        <span class="cov5" title="17">if g.won != before.won </span><span class="cov3" title="4">{
                 tags = append(tags, &amp;g.won)
         }</span>
         <span class="cov5" title="17">if g.revealed != before.revealed </span><span class="cov4" title="10">{
@@ -2070,12 +2070,12 @@ func (g *game) clickCell(cell *Cell) (tags []any) <span class="cov4" title="10">
                 tags = []any{&amp;g.cells} // all mines revealed; refresh board
         }</span> else<span class="cov3" title="6"> {
                 revealed := g.revealFromLocked(cell)
-                if g.revealed == g.rows*g.cols-g.mines </span><span class="cov2" title="2">{
+                if g.revealed == g.rows*g.cols-g.mines </span><span class="cov1" title="1">{
                         g.gameOver = true
                         g.won = true
                         g.revealAllMinesLocked()
                         tags = []any{&amp;g.cells} // win reveals remaining mines
-                }</span> else<span class="cov3" title="4"> {
+                }</span> else<span class="cov3" title="5"> {
                         // []*Cell does not assign to []any, so copy element-wise.
                         for _, c := range revealed </span><span class="cov4" title="10">{
                                 tags = append(tags, c)
@@ -2106,50 +2106,50 @@ func (g *game) toggleFlag(cell *Cell) (tags []any) <span class="cov3" title="6">
 
 func (g *game) revealFromLocked(start *Cell) (revealed []*Cell) <span class="cov3" title="7">{
         stack := []*Cell{start}
-        for len(stack) &gt; 0 </span><span class="cov6" title="45">{
+        for len(stack) &gt; 0 </span><span class="cov5" title="21">{
                 last := len(stack) - 1
                 cell := stack[last]
                 stack = stack[:last]
 
-                if cell.revealed || cell.flagged || cell.mine </span><span class="cov5" title="23">{
+                if cell.revealed || cell.flagged || cell.mine </span><span class="cov3" title="7">{
                         continue</span>
                 }
-                <span class="cov5" title="22">cell.revealed = true
+                <span class="cov4" title="14">cell.revealed = true
                 revealed = append(revealed, cell)
                 g.revealed++
-                if cell.adjacent != 0 </span><span class="cov4" title="12">{
+                if cell.adjacent != 0 </span><span class="cov4" title="10">{
                         continue</span>
                 }
-                <span class="cov4" title="10">g.forEachNeighborLocked(cell, func(neighbor *Cell) </span><span class="cov6" title="38">{
+                <span class="cov3" title="4">g.forEachNeighborLocked(cell, func(neighbor *Cell) </span><span class="cov4" title="14">{
                         stack = append(stack, neighbor)
                 }</span>)
         }
         <span class="cov3" title="7">return</span>
 }
 
-func (g *game) revealAllMinesLocked() <span class="cov3" title="4">{
-        for row := 0; row &lt; g.rows; row++ </span><span class="cov4" title="10">{
-                for col := 0; col &lt; g.cols; col++ </span><span class="cov5" title="26">{
+func (g *game) revealAllMinesLocked() <span class="cov2" title="3">{
+        for row := 0; row &lt; g.rows; row++ </span><span class="cov3" title="7">{
+                for col := 0; col &lt; g.cols; col++ </span><span class="cov5" title="17">{
                         cell := g.cells[row][col]
-                        if cell.mine </span><span class="cov3" title="5">{
+                        if cell.mine </span><span class="cov3" title="4">{
                                 cell.revealed = true
                         }</span>
                 }
         }
 }
 
-func (g *game) forEachNeighborLocked(cell *Cell, fn func(*Cell)) <span class="cov6" title="49">{
-        for dr := -1; dr &lt;= 1; dr++ </span><span class="cov8" title="147">{
-                for dc := -1; dc &lt;= 1; dc++ </span><span class="cov10" title="441">{
-                        if dr == 0 &amp;&amp; dc == 0 </span><span class="cov6" title="49">{
+func (g *game) forEachNeighborLocked(cell *Cell, fn func(*Cell)) <span class="cov6" title="43">{
+        for dr := -1; dr &lt;= 1; dr++ </span><span class="cov8" title="129">{
+                for dc := -1; dc &lt;= 1; dc++ </span><span class="cov9" title="387">{
+                        if dr == 0 &amp;&amp; dc == 0 </span><span class="cov6" title="43">{
                                 continue</span>
                         }
-                        <span class="cov9" title="392">row := cell.row + dr
+                        <span class="cov9" title="344">row := cell.row + dr
                         col := cell.col + dc
-                        if row &lt; 0 || row &gt;= g.rows || col &lt; 0 || col &gt;= g.cols </span><span class="cov8" title="187">{
+                        if row &lt; 0 || row &gt;= g.rows || col &lt; 0 || col &gt;= g.cols </span><span class="cov8" title="168">{
                                 continue</span>
                         }
-                        <span class="cov8" title="205">fn(g.cells[row][col])</span>
+                        <span class="cov8" title="176">fn(g.cells[row][col])</span>
                 }
         }
 }
@@ -2157,11 +2157,11 @@ func (g *game) forEachNeighborLocked(cell *Cell, fn func(*Cell)) <span class="co
 func (g *game) placeMinesLocked(skip *Cell) <span class="cov3" title="4">{
         skipIdx := skip.row*g.cols + skip.col
         placed := 0
-        for _, idx := range g.rng.Perm(g.rows * g.cols) </span><span class="cov4" title="10">{
+        for _, idx := range g.rng.Perm(g.rows * g.cols) </span><span class="cov4" title="12">{
                 if placed &gt;= g.mines </span><span class="cov3" title="4">{
                         break</span>
                 }
-                <span class="cov3" title="6">if idx == skipIdx </span><span class="cov1" title="1">{
+                <span class="cov4" title="8">if idx == skipIdx </span><span class="cov2" title="3">{
                         continue</span>
                 }
                 <span class="cov3" title="5">g.cells[idx/g.cols][idx%g.cols].mine = true
@@ -2178,8 +2178,8 @@ func (g *game) calculateAdjacencyLocked() <span class="cov3" title="7">{
                                 continue</span>
                         }
                         <span class="cov6" title="39">count := 0
-                        g.forEachNeighborLocked(cell, func(neighbor *Cell) </span><span class="cov8" title="167">{
-                                if neighbor.mine </span><span class="cov5" title="29">{
+                        g.forEachNeighborLocked(cell, func(neighbor *Cell) </span><span class="cov8" title="162">{
+                                if neighbor.mine </span><span class="cov6" title="34">{
                                         count++
                                 }</span>
                         })
@@ -2449,7 +2449,7 @@ func New() (jw *Jaws, err error) <span class="cov7" title="231">{
                         }
                         if err = tmp.GenerateHeadHTML(); err == nil </span><span class="cov7" title="231">{
                                 jw = tmp
-                                jw.reqPool.New = func() any </span><span class="cov8" title="571">{
+                                jw.reqPool.New = func() any </span><span class="cov8" title="558">{
                                         return (&amp;Request{
                                                 Jaws:   jw,
                                                 tagMap: make(map[any][]*Element),
@@ -2479,7 +2479,7 @@ func (jw *Jaws) Close() <span class="cov7" title="244">{
 }
 
 // Done returns the channel that is closed when [Jaws.Close] has been called.
-func (jw *Jaws) Done() &lt;-chan struct{} <span class="cov10" title="1768">{
+func (jw *Jaws) Done() &lt;-chan struct{} <span class="cov10" title="1758">{
         return jw.closeCh
 }</span>
 
@@ -2531,21 +2531,21 @@ func (jw *Jaws) LookupTemplate(name string) *template.Template <span class="cov3
 // The total count includes all Requests, including those being rendered,
 // those waiting for the WebSocket callback and those active. The active count
 // includes Requests whose WebSocket [Request.ServeHTTP] loop is running.
-func (jw *Jaws) RequestCounts() (total, active int) <span class="cov5" title="28">{
+func (jw *Jaws) RequestCounts() (total, active int) <span class="cov5" title="29">{
         jw.mu.RLock()
         defer jw.mu.RUnlock()
         total = len(jw.requests)
-        for _, rq := range jw.requests </span><span class="cov4" title="27">{
-                if rq.running.Load() </span><span class="cov3" title="11">{
+        for _, rq := range jw.requests </span><span class="cov5" title="28">{
+                if rq.running.Load() </span><span class="cov3" title="12">{
                         active++
                 }</span>
         }
-        <span class="cov5" title="28">return</span>
+        <span class="cov5" title="29">return</span>
 }
 
 // RequestCount returns the total number of [Request] values, equal to the total
 // returned by [Jaws.RequestCounts] (see it for what the count includes).
-func (jw *Jaws) RequestCount() (n int) <span class="cov4" title="22">{
+func (jw *Jaws) RequestCount() (n int) <span class="cov4" title="23">{
         n, _ = jw.RequestCounts()
         return
 }</span>
@@ -2553,11 +2553,11 @@ func (jw *Jaws) RequestCount() (n int) <span class="cov4" title="22">{
 // Log sends an error to the [Jaws.Logger] if set.
 // Has no effect if err is nil or the Logger is nil.
 // Returns err.
-func (jw *Jaws) Log(err error) error <span class="cov7" title="286">{
+func (jw *Jaws) Log(err error) error <span class="cov7" title="293">{
         if err != nil &amp;&amp; jw != nil &amp;&amp; jw.Logger != nil </span><span class="cov3" title="9">{
                 jw.Logger.Error("jaws", "err", err)
         }</span>
-        <span class="cov7" title="286">return err</span>
+        <span class="cov7" title="293">return err</span>
 }
 
 // MustLog sends an error to the [Jaws.Logger] if set, or
@@ -2665,33 +2665,33 @@ func (m secureHeadersMiddleware) ServeHTTP(hw http.ResponseWriter, hr *http.Requ
 // resources omitted, and returns the joined parse errors.
 //
 // You only need to call this if you add your own images, scripts and stylesheets.
-func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov9" title="795">{
+func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov8" title="751">{
         var jawsurl *url.URL
-        if jawsurl, err = url.Parse(jw.serveJS.Name); err == nil </span><span class="cov9" title="795">{
+        if jawsurl, err = url.Parse(jw.serveJS.Name); err == nil </span><span class="cov8" title="751">{
                 var cssurl *url.URL
-                if cssurl, err = url.Parse(jw.serveCSS.Name); err == nil </span><span class="cov9" title="795">{
+                if cssurl, err = url.Parse(jw.serveCSS.Name); err == nil </span><span class="cov8" title="751">{
                         var urls []*url.URL
                         urls = append(urls, cssurl)
                         urls = append(urls, jawsurl)
-                        for _, urlstr := range extra </span><span class="cov9" title="1115">{
-                                if u, e := url.Parse(urlstr); e == nil </span><span class="cov9" title="1113">{
+                        for _, urlstr := range extra </span><span class="cov9" title="1027">{
+                                if u, e := url.Parse(urlstr); e == nil </span><span class="cov9" title="1025">{
                                         // Skip an extra that re-lists either built-in resource (both cssurl
                                         // and jawsurl were prepended above) so it is not preloaded or added
                                         // to the Content-Security-Policy twice. Match the complete URL: a
                                         // resource on another origin, or with a distinct query string, is a
                                         // separate resource even when it uses the same path as a built-in.
-                                        if u.String() != jawsurl.String() &amp;&amp; u.String() != cssurl.String() </span><span class="cov9" title="1111">{
+                                        if u.String() != jawsurl.String() &amp;&amp; u.String() != cssurl.String() </span><span class="cov9" title="1023">{
                                                 urls = append(urls, u)
                                         }</span>
                                 } else<span class="cov1" title="2"> {
                                         err = errors.Join(err, e)
                                 }</span>
                         }
-                        <span class="cov9" title="795">headPrefix, faviconURL := assets.PreloadHTML(urls...)
+                        <span class="cov8" title="751">headPrefix, faviconURL := assets.PreloadHTML(urls...)
                         if jw.Debug </span><span class="cov1" title="1">{
                                 headPrefix += `&lt;meta name="jawsDebug" content="true"&gt;`
                         }</span>
-                        <span class="cov9" title="795">headPrefix += `&lt;meta name="jawsKey" content="`
+                        <span class="cov8" title="751">headPrefix += `&lt;meta name="jawsKey" content="`
                         cspHeader := secureheaders.BuildContentSecurityPolicy(urls)
                         jw.mu.Lock()
                         jw.headPrefix = headPrefix
@@ -2700,7 +2700,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) <span class="cov9"
                         jw.mu.Unlock()</span>
                 }
         }
-        <span class="cov9" title="795">return</span>
+        <span class="cov8" title="751">return</span>
 }
 
 var (
@@ -3091,10 +3091,10 @@ func (node *Node) marshalJSON(b []byte) []byte <span class="cov9" title="4998">{
                 b = append(b, `,"id":`...)
                 b = appendJSONString(b, node.ID)
         }</span>
-        <span class="cov9" title="4998">if node.Selected </span><span class="cov2" title="5">{
+        <span class="cov9" title="4998">if node.Selected </span><span class="cov4" title="22">{
                 b = append(b, `,"selected":true`...)
         }</span>
-        <span class="cov9" title="4998">if node.Disabled </span><span class="cov2" title="7">{
+        <span class="cov9" title="4998">if node.Disabled </span><span class="cov4" title="24">{
                 // Quercus.js expects "selectable"; the server tracks the inverse (Disabled).
                 b = append(b, `,"selectable":false`...)
         }</span>
@@ -3159,9 +3159,9 @@ func (node *Node) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err
         // index == len.
         <span class="cov6" title="218">var target *Node
         if target, err = node.resolveChildPath(nodePath); err == nil </span><span class="cov6" title="207">{
-                if target.Selected == selected </span><span class="cov5" title="72">{
+                if target.Selected == selected </span><span class="cov3" title="15">{
                         err = jaws.ErrValueUnchanged
-                }</span> else<span class="cov5" title="135"> {
+                }</span> else<span class="cov6" title="192"> {
                         target.Selected = selected
                 }</span>
         }
@@ -3214,8 +3214,8 @@ func (node *Node) resolveChildPath(nodePath string) (*Node, error) <span class="
 //
 // It requires node.Tree to be set — that is, the node must have been passed to
 // [New] — and panics otherwise, since a bare [Root] node has a nil Tree.
-func (node *Node) JawsPathSet(elem *jaws.Element, jsPath string, value any) <span class="cov5" title="132">{
-        if nodePath, ok := strings.CutSuffix(jsPath, ".selected"); ok </span><span class="cov5" title="131">{
+func (node *Node) JawsPathSet(elem *jaws.Element, jsPath string, value any) <span class="cov6" title="189">{
+        if nodePath, ok := strings.CutSuffix(jsPath, ".selected"); ok </span><span class="cov6" title="188">{
                 // The marshaled struct holds two strings plus value, which JawsSetPath has
                 // already verified to be a bool, so marshaling cannot fail in practice; guard
                 // the error anyway so a future change that lets a non-marshalable value reach
@@ -3224,7 +3224,7 @@ func (node *Node) JawsPathSet(elem *jaws.Element, jsPath string, value any) <spa
                         Tree string `json:"tree"`
                         ID   string `json:"id"`
                         Set  any    `json:"set"`
-                }{node.Tree.id, nodePath, value}); err == nil </span><span class="cov5" title="131">{
+                }{node.Tree.id, nodePath, value}); err == nil </span><span class="cov6" title="188">{
                         elem.Jaws.JsCall(node.Tree.JawsGetTag(nil), "jawstreeSetPath", string(payload))
                 }</span>
         }
@@ -3280,12 +3280,12 @@ func (node *Node) HasNames(names []string) (yes bool) <span class="cov7" title="
 }
 
 // GetNames returns the path of names from the root to node.
-func (node *Node) GetNames() (names []string) <span class="cov4" title="39">{
-        for node.Parent != nil </span><span class="cov4" title="49">{
+func (node *Node) GetNames() (names []string) <span class="cov3" title="20">{
+        for node.Parent != nil </span><span class="cov4" title="30">{
                 names = append(names, node.Name)
                 node = node.Parent
         }</span>
-        <span class="cov4" title="39">slices.Reverse(names)
+        <span class="cov3" title="20">slices.Reverse(names)
         return</span>
 }
 
@@ -3298,7 +3298,7 @@ func (node *Node) GetNames() (names []string) <span class="cov4" title="39">{
 // distinct names if they must be addressed independently through this API.
 func (node *Node) GetSelected() (nameLists [][]string) <span class="cov6" title="211">{
         node.Walk("", func(jsPath string, node *Node) </span><span class="cov7" title="481">{
-                if node.Selected </span><span class="cov4" title="38">{
+                if node.Selected </span><span class="cov3" title="19">{
                         nameLists = append(nameLists, node.GetNames())
                 }</span>
         })
@@ -3321,7 +3321,7 @@ func (node *Node) SetSelected(nameLists [][]string) (changed []*Node) <span clas
                                 break</span>
                         }
                 }
-                <span class="cov7" title="916">if selected != node.Selected </span><span class="cov6" title="352">{
+                <span class="cov7" title="916">if selected != node.Selected </span><span class="cov6" title="411">{
                         node.Selected = selected
                         changed = append(changed, node)
                 }</span>
@@ -4038,9 +4038,9 @@ func (b *binder[T]) JawsSetLocked(elem *jaws.Element, value T) (err error) <span
                 err = fn(b.prev, elem, value)
         }</span> else<span class="cov9" title="4125"> if b.prev != nil </span><span class="cov5" title="73">{
                 err = b.prev.JawsSetLocked(elem, value)
-        }</span> else<span class="cov9" title="4052"> if value != *b.ptr </span><span class="cov9" title="4040">{
+        }</span> else<span class="cov9" title="4052"> if value != *b.ptr </span><span class="cov9" title="4039">{
                 *b.ptr = value
-        }</span> else<span class="cov3" title="12"> {
+        }</span> else<span class="cov3" title="13"> {
                 err = jaws.ErrValueUnchanged
         }</span>
         <span class="cov10" title="4137">return</span>
@@ -4053,20 +4053,20 @@ func (b *binder[T]) jawsSetLocking(elem *jaws.Element, value T) (err error) <spa
         return
 }</span>
 
-func (b *binder[T]) callSuccessHooks(elem *jaws.Element) (err error) <span class="cov9" title="4040">{
-        for b != nil </span><span class="cov9" title="4110">{
+func (b *binder[T]) callSuccessHooks(elem *jaws.Element) (err error) <span class="cov9" title="4039">{
+        for b != nil </span><span class="cov9" title="4109">{
                 if fn, ok := b.hook.(SuccessHook); ok </span><span class="cov5" title="49">{
                         if err = fn(elem); err != nil </span><span class="cov1" title="1">{
                                 break</span>
                         }
                 }
-                <span class="cov9" title="4109">b = b.prev</span>
+                <span class="cov9" title="4108">b = b.prev</span>
         }
-        <span class="cov9" title="4040">return</span>
+        <span class="cov9" title="4039">return</span>
 }
 
 func (b *binder[T]) JawsSet(elem *jaws.Element, value T) (err error) <span class="cov9" title="4053">{
-        if err = b.jawsSetLocking(elem, value); err == nil </span><span class="cov9" title="4040">{
+        if err = b.jawsSetLocking(elem, value); err == nil </span><span class="cov9" title="4039">{
                 err = b.callSuccessHooks(elem)
         }</span>
         <span class="cov9" title="4053">return</span>
@@ -6844,7 +6844,7 @@ type InputDate struct {
         bind.Setter[time.Time]
 }
 
-func (u *InputDate) str(v time.Time) string <span class="cov7" title="11">{
+func (u *InputDate) str(v time.Time) string <span class="cov7" title="10">{
         return v.Format(assets.ISO8601)
 }</span>
 
@@ -6863,7 +6863,7 @@ func (u *InputDate) renderDateInput(elem *jaws.Element, w io.Writer, htmlType st
 }
 
 // JawsUpdate updates the input value when the bound date value changes.
-func (u *InputDate) JawsUpdate(elem *jaws.Element) <span class="cov3" title="3">{
+func (u *InputDate) JawsUpdate(elem *jaws.Element) <span class="cov2" title="2">{
         if s := u.str(u.JawsGet(elem)); u.Last.Swap(s) != s </span><span class="cov2" title="2">{
                 elem.SetValue(s)
         }</span>
@@ -7812,12 +7812,18 @@ import (
         "github.com/linkdata/jaws/lib/named"
 )
 
-// Select renders an HTML select element backed by a [named.SelectHandler].
+// Select renders a single-selection HTML select element.
+//
+// The widget stores one selected option name through a [named.SelectHandler].
+// Render params are written as supplied, but a multiple select is not
+// supported by the JaWS select value contract.
 type Select struct {
         ContainerHelper
 }
 
-// NewSelect returns a select widget backed by sh.
+// NewSelect returns a single-selection select widget backed by sh.
+//
+// The widget reads and writes one selected option name through sh.
 func NewSelect(sh named.SelectHandler) *Select <span class="cov10" title="4">{
         return &amp;Select{ContainerHelper: NewContainerHelper(sh)}
 }</span>
@@ -7846,7 +7852,7 @@ func (u *Select) JawsUpdate(elem *jaws.Element) <span class="cov8" title="3">{
         }</span>
 }
 
-// JawsInput stores a browser-side select value.
+// JawsInput stores one browser-side selected option name.
 //
 // The input is ignored (returning a nil error) when the Container is not a
 // [bind.Setter] of string.
@@ -7857,7 +7863,10 @@ func (u *Select) JawsInput(elem *jaws.Element, value string) (err error) <span c
         <span class="cov8" title="3">return</span>
 }
 
-// Select renders an HTML select element.
+// Select renders a single-selection HTML select element.
+//
+// Params are rendered as supplied. Passing a multiple attribute is unsupported
+// because the widget stores one selected option name.
 func (rw RequestWriter) Select(sh named.SelectHandler, params ...any) error <span class="cov1" title="1">{
         return rw.NewUI(NewSelect(sh), params...)
 }</span>
@@ -8958,7 +8967,7 @@ func (rq *Request) claim(r *http.Request) error <span class="cov6" title="153">{
                         rq.ctx, rq.cancelFn = context.WithCancelCause(rq.ctx)
                         if prevCancel != nil </span><span class="cov6" title="138">{
                                 newCancel := rq.cancelFn
-                                rq.cancelFn = func(cause error) </span><span class="cov6" title="282">{
+                                rq.cancelFn = func(cause error) </span><span class="cov6" title="285">{
                                         newCancel(cause)
                                         prevCancel(cause)
                                 }</span>
@@ -8974,7 +8983,7 @@ func (rq *Request) claim(r *http.Request) error <span class="cov6" title="153">{
         <span class="cov3" title="14">return ErrRequestAlreadyClaimed</span>
 }
 
-func (rq *Request) killSessionLocked() <span class="cov8" title="2073">{
+func (rq *Request) killSessionLocked() <span class="cov8" title="2119">{
         if rq.session != nil </span><span class="cov3" title="16">{
                 rq.session.delRequest(rq)
                 rq.session = nil
@@ -9011,7 +9020,7 @@ func (rq *Request) ensureAutoSession(w http.ResponseWriter, r *http.Request) <sp
 // any live context, drops queued dirt and messages, detaches all elements and tags,
 // and kills any attached session. The caller must ensure no other goroutine is using
 // rq (it runs when rq is freshly allocated or being recycled).
-func (rq *Request) clearLocked() *Request <span class="cov8" title="1968">{
+func (rq *Request) clearLocked() *Request <span class="cov8" title="2014">{
         rq.JawsKey = 0
         rq.lastJid = 0
         rq.connectFn = nil
@@ -9022,10 +9031,10 @@ func (rq *Request) clearLocked() *Request <span class="cov8" title="1968">{
         rq.claimed.Store(false)
         // Every field is reset to its zero state except ctx and cancelFn, which keep their
         // (cancelled) values until getRequestLocked replaces them on reuse.
-        if rq.cancelFn != nil </span><span class="cov8" title="1395">{
+        if rq.cancelFn != nil </span><span class="cov8" title="1454">{
                 rq.cancelFn(nil)
         }</span>
-        <span class="cov8" title="1968">rq.httpDoneCh = nil
+        <span class="cov8" title="2014">rq.httpDoneCh = nil
         clear(rq.todoDirt) // release tag references before pooling; mirrors makeUpdateList
         rq.todoDirt = rq.todoDirt[:0]
         rq.remoteIP = netip.Addr{}
@@ -9042,7 +9051,7 @@ func (rq *Request) clearLocked() *Request <span class="cov8" title="1968">{
                         e.deleted.Store(true)
                 }</span>
         }
-        <span class="cov8" title="1968">clear(rq.elems)
+        <span class="cov8" title="2014">clear(rq.elems)
         rq.elems = rq.elems[:0]
         // wsQueue and tailsent are guarded by muQueue, not rq.mu. A /jaws/.tail/&lt;key&gt;
         // fetch (drainTailScript) on a still-pending request runs on a separate HTTP
@@ -9059,7 +9068,7 @@ func (rq *Request) clearLocked() *Request <span class="cov8" title="1968">{
 }
 
 // HeadHTML writes the HTML code needed in the HTML page's HEAD section.
-func (rq *Request) HeadHTML(w io.Writer) (err error) <span class="cov9" title="2639">{
+func (rq *Request) HeadHTML(w io.Writer) (err error) <span class="cov9" title="2698">{
         rq.mu.RLock()
         jawsKey := rq.JawsKey
         rq.mu.RUnlock()
@@ -9185,17 +9194,17 @@ func (rq *Request) maintenance(nowSeconds int32, requestTimeout time.Duration) (
 // the cause is nil whenever there is nothing to log (no live request to cancel, or
 // a nil err). Logging invokes the user-supplied [Jaws.Logger], which the package
 // locking contract forbids running under a lock. Caller must hold rq.mu.
-func (rq *Request) cancelLocked(err error) (cause error) <span class="cov5" title="121">{
-        if rq.JawsKey != 0 &amp;&amp; rq.ctx.Err() == nil </span><span class="cov5" title="69">{
+func (rq *Request) cancelLocked(err error) (cause error) <span class="cov5" title="128">{
+        if rq.JawsKey != 0 &amp;&amp; rq.ctx.Err() == nil </span><span class="cov5" title="72">{
                 cause = newErrRequestCancelledLocked(rq, err)
                 rq.cancelFn(cause)
         }</span>
-        <span class="cov5" title="121">return</span>
+        <span class="cov5" title="128">return</span>
 }
 
 // cancel locks rq.mu, cancels the context, then logs the cancellation cause after
 // releasing the lock ([Jaws.Log] is a no-op on a nil cause).
-func (rq *Request) cancel(err error) <span class="cov5" title="111">{
+func (rq *Request) cancel(err error) <span class="cov5" title="118">{
         rq.mu.Lock()
         cause := rq.cancelLocked(err)
         rq.mu.Unlock()
@@ -9295,9 +9304,9 @@ func (rq *Request) Dirty(dirtyTags ...any) <span class="cov2" title="4">{
 }</span>
 
 // wantMessage returns true if the Request want the message.
-func (rq *Request) wantMessage(msg *wire.Message) (yes bool) <span class="cov7" title="473">{
+func (rq *Request) wantMessage(msg *wire.Message) (yes bool) <span class="cov7" title="474">{
         switch dest := msg.Dest.(type) </span>{
-        case key.Key:<span class="cov6" title="315"> // the request with this identity key
+        case key.Key:<span class="cov6" title="316"> // the request with this identity key
                 rq.mu.RLock()
                 defer rq.mu.RUnlock()
                 return rq.JawsKey == dest</span>
@@ -9659,10 +9668,10 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh &lt;-
                 rq.killSession()
                 cancelFn(nil)
                 close(eventCallCh)
-                for </span><span class="cov10" title="3214">{
+                for </span><span class="cov10" title="2497">{
                         select </span>{
-                        case _, ok := &lt;-incomingMsgCh:<span class="cov9" title="3111">
-                                if !ok </span><span class="cov5" title="83">{
+                        case _, ok := &lt;-incomingMsgCh:<span class="cov9" title="2394">
+                                if !ok </span><span class="cov6" title="82">{
                                         incomingMsgCh = nil
                                 }</span>
                         case &lt;-eventDoneCh:<span class="cov6" title="103">
@@ -9700,12 +9709,12 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh &lt;-
                 <span class="cov7" title="353">rq.sendQueue(outboundMsgCh)
 
                 select </span>{
-                case &lt;-jawsDoneCh:<span class="cov4" title="27"></span>
+                case &lt;-jawsDoneCh:<span class="cov4" title="20"></span>
                 case &lt;-httpDoneCh:<span class="cov1" title="1"></span>
-                case &lt;-rq.Context().Done():<span class="cov4" title="15"></span>
-                case tagmsg, ok = &lt;-broadcastMsgCh:<span class="cov6" title="166"></span>
-                case wsmsg, ok = &lt;-incomingMsgCh:<span class="cov6" title="144">
-                        if ok </span><span class="cov5" title="87">{
+                case &lt;-rq.Context().Done():<span class="cov4" title="17"></span>
+                case tagmsg, ok = &lt;-broadcastMsgCh:<span class="cov6" title="169"></span>
+                case wsmsg, ok = &lt;-incomingMsgCh:<span class="cov6" title="146">
+                        if ok </span><span class="cov6" title="87">{
                                 // incoming event message from the WebSocket
                                 rq.handleIncoming(wsmsg, eventCallCh)
                                 continue</span>
@@ -9723,10 +9732,10 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh &lt;-
 
 // handleIncoming processes a single incoming WebSocket event message, queuing an
 // event-function call or handling a child removal. Called only from process.
-func (rq *Request) handleIncoming(wsmsg wire.WsMsg, eventCallCh chan eventFnCall) <span class="cov5" title="87">{
-        if wsmsg.Jid.IsValid() </span><span class="cov5" title="87">{
+func (rq *Request) handleIncoming(wsmsg wire.WsMsg, eventCallCh chan eventFnCall) <span class="cov6" title="87">{
+        if wsmsg.Jid.IsValid() </span><span class="cov6" title="87">{
                 switch wsmsg.What </span>{
-                case what.Input, what.Click, what.ContextMenu, what.Set:<span class="cov5" title="82">
+                case what.Input, what.Click, what.ContextMenu, what.Set:<span class="cov6" title="82">
                         rq.queueEvent(eventCallCh, eventFnCall{jid: wsmsg.Jid, wht: wsmsg.What, data: wsmsg.Data})</span>
                 case what.Remove:<span class="cov2" title="4">
                         rq.handleRemove(wsmsg.Jid, wsmsg.Data)</span>
@@ -9744,7 +9753,7 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
         // string (HTML id) Dest would also queue a second, contradictory
         // element-targeted Jid:-1 frame for these commands.
         switch tagmsg.What </span>{
-        case what.Reload, what.Redirect, what.Order, what.Alert:<span class="cov2" title="6">
+        case what.Reload, what.Redirect, what.Order, what.Alert:<span class="cov3" title="6">
                 rq.queue(wire.WsMsg{
                         Jid:  0,
                         Data: tagmsg.Data,
@@ -9925,9 +9934,9 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, value string) (er
 // cancelled rather than dropping the event, mirroring the broadcast back-pressure
 // path in [Jaws.ServeWithTimeout]. cancel takes rq.mu, which the process loop does
 // not hold when calling this.
-func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) <span class="cov6" title="216">{
+func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) <span class="cov7" title="216">{
         select </span>{
-        case eventCallCh &lt;- call:<span class="cov6" title="213"></span>
+        case eventCallCh &lt;- call:<span class="cov7" title="213"></span>
         default:<span class="cov2" title="3">
                 rq.cancel(fmt.Errorf("%w: %v: eventCallCh full sending %v", ErrRequestOverloaded, rq, call))</span>
         }
@@ -9948,7 +9957,7 @@ func (rq *Request) getSendMsgs() (toSend []wire.WsMsg) <span class="cov8" title=
 
         rq.muQueue.Lock()
         defer rq.muQueue.Unlock()
-        if len(rq.wsQueue) &gt; 0 </span><span class="cov4" title="33">{
+        if len(rq.wsQueue) &gt; 0 </span><span class="cov5" title="33">{
                 // validJids is built lazily and at most once: only messages addressed to a
                 // specific element (Jid &gt;= 1, not Delete) need it, so an idle drain — the
                 // common case on the process loop's hot path — allocates nothing. Holding
@@ -9971,7 +9980,7 @@ func (rq *Request) getSendMsgs() (toSend []wire.WsMsg) <span class="cov8" title=
                                 toSend = append(toSend, rq.wsQueue[i])
                         }</span>
                 }
-                <span class="cov4" title="33">rq.wsQueue = rq.wsQueue[:0]</span>
+                <span class="cov5" title="33">rq.wsQueue = rq.wsQueue[:0]</span>
         }
 
         <span class="cov8" title="710">slices.SortStableFunc(toSend, func(a, b wire.WsMsg) int </span><span class="cov3" title="11">{ return cmp.Compare(a.Jid, b.Jid) }</span>)
@@ -10065,7 +10074,7 @@ func (rq *Request) makeUpdateList() (todo []*Element) <span class="cov7" title="
 // eventCallCh, so the no-op drain is always part of teardown.
 func (rq *Request) eventCaller(eventCallCh &lt;-chan eventFnCall, outboundMsgCh chan&lt;- wire.WsMsg, eventDoneCh chan&lt;- struct{}) <span class="cov6" title="103">{
         defer close(eventDoneCh)
-        for call := range eventCallCh </span><span class="cov6" title="213">{
+        for call := range eventCallCh </span><span class="cov7" title="213">{
                 select </span>{
                 case &lt;-rq.Context().Done():<span class="cov5" title="65">
                         continue</span>
@@ -10133,17 +10142,17 @@ import (
 //
 // It panics if the system CSPRNG ([crypto/rand]) fails while generating the request
 // key, which does not happen on supported platforms.
-func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) <span class="cov9" title="1460">{
+func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) <span class="cov9" title="1519">{
         remoteIP := jw.clientIP(r)
 
         var toLog []error
-        func() </span><span class="cov9" title="1460">{
+        func() </span><span class="cov9" title="1519">{
                 jw.mu.Lock()
                 defer jw.mu.Unlock()
                 toLog = jw.limitPendingRequestsLocked(remoteIP)
-                for rq == nil </span><span class="cov9" title="1460">{
+                for rq == nil </span><span class="cov9" title="1519">{
                         jawsKey := jw.nonZeroRandomLocked()
-                        if _, ok := jw.requests[jawsKey]; !ok </span><span class="cov9" title="1460">{
+                        if _, ok := jw.requests[jawsKey]; !ok </span><span class="cov9" title="1519">{
                                 rq = jw.getRequestLocked(jawsKey, r, remoteIP)
                                 jw.requests[jawsKey] = rq
                                 jw.pending[rq.remoteIP] = append(jw.pending[rq.remoteIP], rq)
@@ -10152,10 +10161,10 @@ func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) <span class="cov9" tit
         }()
         // Log eviction causes after releasing jw.mu: Jaws.Log calls the user-supplied
         // Logger, which must never run under a core lock.
-        <span class="cov9" title="1460">for _, cause := range toLog </span><span class="cov2" title="5">{
+        <span class="cov9" title="1519">for _, cause := range toLog </span><span class="cov2" title="5">{
                 _ = jw.Log(cause)
         }</span>
-        <span class="cov9" title="1460">return</span>
+        <span class="cov9" title="1519">return</span>
 }
 
 // refreshRuntimeSeconds updates runtimeSeconds to the whole seconds elapsed since
@@ -10175,9 +10184,9 @@ func (jw *Jaws) refreshRuntimeSeconds() <span class="cov7" title="225">{
 // limitPendingRequestsLocked evicts pending Requests for remoteIP until the cap is
 // satisfied, returning the eviction causes for the caller to log after releasing
 // jw.mu (see the package locking contract). Caller must hold jw.mu.
-func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) <span class="cov9" title="1460">{
+func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) <span class="cov9" title="1519">{
         limit := jw.MaxPendingRequestsPerIP
-        if limit &gt; 0 </span><span class="cov9" title="1454">{
+        if limit &gt; 0 </span><span class="cov9" title="1513">{
                 nowSeconds := jw.runtimeSeconds.Load()
                 for len(jw.pending[remoteIP]) &gt;= limit </span><span class="cov3" title="7">{
                         victim := jw.oldestEvictablePendingLocked(remoteIP, nowSeconds)
@@ -10198,7 +10207,7 @@ func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) 
                         }</span>
                 }
         }
-        <span class="cov9" title="1458">return</span>
+        <span class="cov9" title="1517">return</span>
 }
 
 // oldestEvictablePendingLocked returns the oldest pending [Request] for remoteIP that
@@ -10243,30 +10252,30 @@ func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr, nowSeconds int
         <span class="cov1" title="2">return nil</span>
 }
 
-func (jw *Jaws) removePendingRequestLocked(rq *Request) <span class="cov10" title="1531">{
+func (jw *Jaws) removePendingRequestLocked(rq *Request) <span class="cov10" title="1590">{
         pending := jw.pending[rq.remoteIP]
-        if i := slices.Index(pending, rq); i &gt;= 0 </span><span class="cov9" title="1416">{
+        if i := slices.Index(pending, rq); i &gt;= 0 </span><span class="cov9" title="1475">{
                 pending = slices.Delete(pending, i, i+1)
-                if len(pending) == 0 </span><span class="cov9" title="846">{
+                if len(pending) == 0 </span><span class="cov9" title="882">{
                         delete(jw.pending, rq.remoteIP)
-                }</span> else<span class="cov8" title="570"> {
+                }</span> else<span class="cov8" title="593"> {
                         jw.pending[rq.remoteIP] = pending
                 }</span>
         }
 }
 
-func (jw *Jaws) nonZeroRandomUint64Locked() (value uint64) <span class="cov9" title="1490">{
+func (jw *Jaws) nonZeroRandomUint64Locked() (value uint64) <span class="cov9" title="1549">{
         random := make([]byte, 8)
-        for value == 0 </span><span class="cov9" title="1491">{
+        for value == 0 </span><span class="cov9" title="1550">{
                 if _, err := io.ReadFull(jw.kg, random); err != nil </span><span class="cov1" title="1">{
                         panic(err)</span>
                 }
-                <span class="cov9" title="1490">value = binary.LittleEndian.Uint64(random)</span>
+                <span class="cov9" title="1549">value = binary.LittleEndian.Uint64(random)</span>
         }
-        <span class="cov9" title="1489">return</span>
+        <span class="cov9" title="1548">return</span>
 }
 
-func (jw *Jaws) nonZeroRandomLocked() key.Key <span class="cov9" title="1490">{
+func (jw *Jaws) nonZeroRandomLocked() key.Key <span class="cov9" title="1549">{
         return key.Key(jw.nonZeroRandomUint64Locked())
 }</span>
 
@@ -10285,7 +10294,7 @@ func (jw *Jaws) UseRequest(jawsKey key.Key, r *http.Request) (rq *Request) <span
                 var err error
                 jw.mu.Lock()
                 if waitingRq, ok := jw.requests[jawsKey]; ok </span><span class="cov7" title="149">{
-                        if err = waitingRq.claim(r); err == nil </span><span class="cov7" title="136">{
+                        if err = waitingRq.claim(r); err == nil </span><span class="cov6" title="136">{
                                 rq = waitingRq
                                 jw.removePendingRequestLocked(rq)
                         }</span>
@@ -10299,7 +10308,7 @@ func (jw *Jaws) UseRequest(jawsKey key.Key, r *http.Request) (rq *Request) <span
 // getRequestLocked allocates a Request from the pool for jawsKey. remoteIP is the
 // already-resolved client IP for r (see NewRequest, the sole caller), passed in to
 // avoid recomputing jw.clientIP(r). Caller must hold jw.mu.
-func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP netip.Addr) (rq *Request) <span class="cov9" title="1460">{
+func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP netip.Addr) (rq *Request) <span class="cov9" title="1519">{
         rq = jw.reqPool.Get().(*Request)
         rq.mu.Lock()
         defer rq.mu.Unlock()
@@ -10308,39 +10317,39 @@ func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP neti
         rq.initial = r
         rq.remoteIP = remoteIP
         rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
-        if r != nil </span><span class="cov9" title="847">{
+        if r != nil </span><span class="cov9" title="906">{
                 if sess := jw.getSessionLocked(getCookieSessionsIDs(r.Header, jw.CookieName), rq.remoteIP); sess != nil </span><span class="cov4" title="25">{
                         sess.addRequest(rq)
                         rq.session = sess
                 }</span>
         }
-        <span class="cov9" title="1460">return rq</span>
+        <span class="cov9" title="1519">return rq</span>
 }
 
 // recycleLockedWithCause recycles rq, optionally cancelling its context with err.
 // It returns the cancellation cause (or nil) instead of logging it, so the caller
 // can log it after releasing jw.mu (see the package locking contract). Caller must
 // hold jw.mu.
-func (jw *Jaws) recycleLockedWithCause(rq *Request, err error) (cause error) <span class="cov9" title="1395">{
+func (jw *Jaws) recycleLockedWithCause(rq *Request, err error) (cause error) <span class="cov9" title="1454">{
         rq.mu.Lock()
         defer rq.mu.Unlock()
-        if rq.JawsKey != 0 </span><span class="cov9" title="1395">{
+        if rq.JawsKey != 0 </span><span class="cov9" title="1454">{
                 if err != nil </span><span class="cov2" title="5">{
                         cause = rq.cancelLocked(err)
                 }</span>
-                <span class="cov9" title="1395">jw.removePendingRequestLocked(rq)
+                <span class="cov9" title="1454">jw.removePendingRequestLocked(rq)
                 delete(jw.requests, rq.JawsKey)
                 rq.clearLocked()
                 jw.reqPool.Put(rq)</span>
         }
-        <span class="cov9" title="1395">return</span>
+        <span class="cov9" title="1454">return</span>
 }
 
-func (jw *Jaws) recycleLocked(rq *Request) <span class="cov9" title="1390">{
+func (jw *Jaws) recycleLocked(rq *Request) <span class="cov9" title="1449">{
         _ = jw.recycleLockedWithCause(rq, nil) // nil err yields a nil cause; nothing to log
 }</span>
 
-func (jw *Jaws) recycle(rq *Request) <span class="cov9" title="1387">{
+func (jw *Jaws) recycle(rq *Request) <span class="cov9" title="1446">{
         jw.mu.Lock()
         defer jw.mu.Unlock()
         jw.recycleLocked(rq)
@@ -10426,14 +10435,14 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) <span class="cov7
 
         defer func() </span><span class="cov7" title="125">{
                 t.Stop()
-                for ch, rq := range subs </span><span class="cov6" title="67">{
+                for ch, rq := range subs </span><span class="cov6" title="74">{
                         rq.cancel(nil)
                         close(ch)
                 }</span>
         }()
 
-        <span class="cov7" title="125">killSub := func(msgCh chan wire.Message) </span><span class="cov5" title="36">{
-                if _, ok := subs[msgCh]; ok </span><span class="cov5" title="36">{
+        <span class="cov7" title="125">killSub := func(msgCh chan wire.Message) </span><span class="cov5" title="29">{
+                if _, ok := subs[msgCh]; ok </span><span class="cov5" title="29">{
                         delete(subs, msgCh)
                         close(msgCh)
                 }</span>
@@ -10447,10 +10456,10 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) <span class="cov7
         // could mean nonreproducible and seemingly
         // random failures in processing logic.
         <span class="cov7" title="125">mustBroadcast := func(msg wire.Message) </span><span class="cov8" title="294">{
-                for msgCh, rq := range subs </span><span class="cov7" title="168">{
-                        if msg.Dest == nil || rq.wantMessage(&amp;msg) </span><span class="cov7" title="165">{
+                for msgCh, rq := range subs </span><span class="cov7" title="169">{
+                        if msg.Dest == nil || rq.wantMessage(&amp;msg) </span><span class="cov7" title="166">{
                                 select </span>{
-                                case msgCh &lt;- msg:<span class="cov7" title="164"></span>
+                                case msgCh &lt;- msg:<span class="cov7" title="165"></span>
                                 default:<span class="cov1" title="1">
                                         // the exception is Update messages, more will follow eventually
                                         if msg.What != what.Update </span><span class="cov1" title="1">{
@@ -10462,11 +10471,11 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) <span class="cov7
                 }
         }
 
-        <span class="cov7" title="125">for </span><span class="cov10" title="999">{
+        <span class="cov7" title="125">for </span><span class="cov10" title="989">{
                 select </span>{
                 case &lt;-jw.Done():<span class="cov7" title="125">
                         return</span>
-                case &lt;-jw.updateTicker.C:<span class="cov8" title="236">
+                case &lt;-jw.updateTicker.C:<span class="cov8" title="233">
                         if jw.distributeDirt() &gt; 0 </span><span class="cov2" title="3">{
                                 mustBroadcast(wire.Message{What: what.Update})
                         }</span>
@@ -10477,7 +10486,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) <span class="cov7
                         if sub.msgCh != nil </span><span class="cov7" title="103">{
                                 subs[sub.msgCh] = sub.rq
                         }</span>
-                case msgCh := &lt;-jw.unsubCh:<span class="cov5" title="35">
+                case msgCh := &lt;-jw.unsubCh:<span class="cov5" title="28">
                         killSub(msgCh)</span>
                 case msg, ok := &lt;-jw.bcastCh:<span class="cov8" title="291">
                         if ok </span><span class="cov8" title="291">{
@@ -10507,8 +10516,8 @@ func (jw *Jaws) subscribe(rq *Request, size int) chan wire.Message <span class="
 
 func (jw *Jaws) unsubscribe(msgCh chan wire.Message) <span class="cov7" title="105">{
         select </span>{
-        case &lt;-jw.Done():<span class="cov6" title="68"></span>
-        case jw.unsubCh &lt;- msgCh:<span class="cov5" title="37"></span>
+        case &lt;-jw.Done():<span class="cov6" title="75"></span>
+        case jw.unsubCh &lt;- msgCh:<span class="cov5" title="30"></span>
         }
 }
 
@@ -10816,7 +10825,7 @@ func (jw *Jaws) Sessions() (sessions []*Session) <span class="cov1" title="1">{
         return</span>
 }
 
-func (jw *Jaws) getSessionLocked(sessionIDs []key.Key, remoteIP netip.Addr) *Session <span class="cov9" title="867">{
+func (jw *Jaws) getSessionLocked(sessionIDs []key.Key, remoteIP netip.Addr) *Session <span class="cov9" title="926">{
         for _, sessionID := range sessionIDs </span><span class="cov6" title="47">{
                 if sess, ok := jw.sessions[sessionID]; ok &amp;&amp; equalIP(remoteIP, sess.remoteIP) </span><span class="cov5" title="42">{
                         if !sess.isDead() </span><span class="cov5" title="41">{
@@ -10824,10 +10833,10 @@ func (jw *Jaws) getSessionLocked(sessionIDs []key.Key, remoteIP netip.Addr) *Ses
                         }</span>
                 }
         }
-        <span class="cov9" title="826">return nil</span>
+        <span class="cov9" title="885">return nil</span>
 }
 
-func getCookieSessionsIDs(h http.Header, wanted string) (cookies []key.Key) <span class="cov10" title="896">{
+func getCookieSessionsIDs(h http.Header, wanted string) (cookies []key.Key) <span class="cov10" title="955">{
         for _, line := range h["Cookie"] </span><span class="cov6" title="50">{
                 if strings.Contains(line, wanted) </span><span class="cov6" title="50">{
                         var part string
@@ -10849,7 +10858,7 @@ func getCookieSessionsIDs(h http.Header, wanted string) (cookies []key.Key) <spa
                         }
                 }
         }
-        <span class="cov10" title="896">return</span>
+        <span class="cov10" title="955">return</span>
 }
 
 // GetSession returns the [Session] associated with the given [http.Request], or nil.
@@ -11235,7 +11244,7 @@ func (jw *Jaws) serveTailScript(w http.ResponseWriter, r *http.Request) (handled
                         // (and thereby deny) another client's tail. The WebSocket carries all live
                         // data, so this only closes the cross-IP read of the already-rendered
                         // attribute/class fragments and the cross-IP one-shot race.
-                        if rq != nil &amp;&amp; !equalIP(remoteIP, rq.remoteIP) </span><span class="cov7" title="245">{
+                        if rq != nil &amp;&amp; !equalIP(remoteIP, rq.remoteIP) </span><span class="cov7" title="251">{
                                 rq = nil
                         }</span>
                         <span class="cov7" title="309">var b []byte
