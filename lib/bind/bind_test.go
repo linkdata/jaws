@@ -55,7 +55,7 @@ func TestNew_panicsOnFirstUse(t *testing.T) {
 	}
 
 	assertPanics("nil locker", func() {
-		b := New[int](nil, new(int))
+		b := New(nil, new(int))
 		_ = b.JawsGet(nil)
 	})
 	assertPanics("nil pointer", func() {
