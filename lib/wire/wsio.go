@@ -81,6 +81,9 @@ func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan s
 // ccf may be nil, in which case errors are not reported and only the loop exits.
 func PingLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, interval, timeout time.Duration, ws *websocket.Conn) {
 	if interval <= 0 {
+		// A non-positive interval disables pinging: return without calling ccf, since
+		// there is no ping error to report and cancelling the connection would be wrong
+		// (the ctx.Done and doneCh cases below likewise return without ccf).
 		return
 	}
 	t := time.NewTicker(interval)
