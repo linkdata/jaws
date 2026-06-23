@@ -204,6 +204,23 @@ func TestTemplateReloader_LastErrorNilReceiver(t *testing.T) {
 	}
 }
 
+// TestTemplateReloader_ZeroValueLookupReturnsNil verifies the exported zero value
+// is safe to use: it has never parsed any templates, so Lookup returns nil rather
+// than dereferencing a nil *template.Template and panicking.
+func TestTemplateReloader_ZeroValueLookupReturnsNil(t *testing.T) {
+	tr := &TemplateReloader{}
+	// The first call enters the reload path (tr.when is the zero time), fails to
+	// parse the empty glob, and must return nil from the curr == nil guard.
+	if tmpl := tr.Lookup("test.html"); tmpl != nil {
+		t.Fatalf("zero-value Lookup = %v, want nil", tmpl)
+	}
+	// The first call advanced tr.when, so the second skips the reload and exercises
+	// the curr == nil guard on the no-reload path; it must also return nil.
+	if tmpl := tr.Lookup("test.html"); tmpl != nil {
+		t.Fatalf("second zero-value Lookup = %v, want nil", tmpl)
+	}
+}
+
 func TestTemplateReloader_Path(t *testing.T) {
 	tl, err := create(true, assetsFS, "assets/*.html", "")
 	if err != nil {

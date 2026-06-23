@@ -85,6 +85,10 @@ func create(debug bool, fsys fs.FS, fpath, relpath string) (tl jaws.TemplateLook
 // deferred until the interval elapses again; the last-good templates keep being
 // served meanwhile, and a fix made within that window is not picked up until the
 // window reopens.
+//
+// On the zero value (&TemplateReloader{}), which has never parsed any templates,
+// Lookup returns nil, keeping the zero value as safe to call as [TemplateReloader.LastError]
+// and [TemplateReloader.Path].
 func (tr *TemplateReloader) Lookup(name string) *template.Template {
 	tr.mu.RLock()
 	curr := tr.curr
@@ -105,6 +109,12 @@ func (tr *TemplateReloader) Lookup(name string) *template.Template {
 		curr = tr.curr
 		tr.mu.Unlock()
 	}
+	if curr == nil {
+		// The zero value has no parsed templates (and an empty path never parses
+		// any), so there is nothing to look up; return nil rather than dereferencing
+		// a nil *template.Template.
+		return nil
+	}
 	return curr.Lookup(name)
 }
 
@@ -112,6 +122,10 @@ func (tr *TemplateReloader) Lookup(name string) *template.Template {
 //
 // It is safe to call on a nil *TemplateReloader.
 func (tr *TemplateReloader) LastError() (err error) {
+	// lastErr is the raw parse error and is non-nil only after a failed reload, so
+	// LastError() != nil is itself the "did the last reload fail" predicate. There is
+	// no other error source to tell apart, so the error needs no wrapping sentinel to
+	// match against; returning it unwrapped keeps the parse detail intact.
 	if tr != nil {
 		tr.mu.RLock()
 		err = tr.lastErr
