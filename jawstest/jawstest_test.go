@@ -108,10 +108,9 @@ func TestNewTestRequest_WithExplicitRequest(t *testing.T) {
 	<-tr.ReadyCh
 }
 
-// TestClose_SecondCallPanics pins the documented contract that calling
-// [jawstest.TestRequest.Close] more than once panics (it closes the already-closed
-// InCh).
-func TestClose_SecondCallPanics(t *testing.T) {
+// TestClose_SecondCallIsSafe pins that [jawstest.TestRequest.Close] is idempotent:
+// a second call is a no-op rather than panicking on the already-closed InCh.
+func TestClose_SecondCallIsSafe(t *testing.T) {
 	jw, err := jaws.New()
 	if err != nil {
 		t.Fatal(err)
@@ -120,9 +119,6 @@ func TestClose_SecondCallPanics(t *testing.T) {
 	go jw.Serve()
 
 	tr := jawstest.NewTestRequest(jw, nil)
-	if tr == nil {
-		t.Fatal("expected test request")
-	}
 	<-tr.ReadyCh
 
 	tr.Close()
@@ -132,10 +128,6 @@ func TestClose_SecondCallPanics(t *testing.T) {
 		t.Fatal("timeout waiting for the loop to stop after Close")
 	}
 
-	defer func() {
-		if recover() == nil {
-			t.Error("expected a second Close to panic")
-		}
-	}()
+	// A second Close must not panic on the already-closed InCh.
 	tr.Close()
 }

@@ -2,6 +2,7 @@ package jawstest
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/linkdata/jaws"
@@ -21,10 +22,10 @@ func TestRepanic(t *testing.T) {
 	t.Fatal("repanic did not panic on a non-nil value")
 }
 
-// TestNewTestRequest_NilWhenClaimFails drives the claim-failure path. The
+// TestNewTestRequest_PanicsWhenClaimFails drives the claim-failure path. The
 // request cannot be claimed twice, so substituting a constructor that claims it
-// up front makes NewTestRequest's own claim attempt fail, returning nil.
-func TestNewTestRequest_NilWhenClaimFails(t *testing.T) {
+// up front makes NewTestRequest's own claim attempt fail, which panics.
+func TestNewTestRequest_PanicsWhenClaimFails(t *testing.T) {
 	jw, err := jaws.New()
 	if err != nil {
 		t.Fatal(err)
@@ -39,7 +40,18 @@ func TestNewTestRequest_NilWhenClaimFails(t *testing.T) {
 		return rq
 	}
 
-	if tr := NewTestRequest(jw, nil); tr != nil {
-		t.Fatal("expected nil when the request cannot be claimed")
-	}
+	defer func() {
+		switch r := recover().(type) {
+		case nil:
+			t.Fatal("expected a panic when the request cannot be claimed")
+		case string:
+			if !strings.Contains(r, "could not be claimed") {
+				t.Fatalf("recovered %q, want a 'could not be claimed' panic", r)
+			}
+		default:
+			t.Fatalf("recovered %v (%T), want a string panic", r, r)
+		}
+	}()
+	NewTestRequest(jw, nil)
+	t.Fatal("NewTestRequest returned instead of panicking")
 }

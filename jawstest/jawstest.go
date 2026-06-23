@@ -8,8 +8,8 @@
 //
 // Harness channels are intentionally low-level. Tests that drive output must
 // drain [TestRequest.OutCh], and after [TestRequest.Close] should wait for
-// [TestRequest.DoneCh] before returning. Close is a single-use operation because
-// it closes the inbound channel directly.
+// [TestRequest.DoneCh] before returning. Close closes the inbound channel and is
+// safe to call more than once.
 package jawstest
 
 import (
@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/wire"
@@ -44,6 +45,8 @@ type TestRequest struct {
 	InCh     chan wire.WsMsg            // send inbound WebSocket messages here
 	OutCh    chan wire.WsMsg            // outbound messages; buffered but must be drained or the loop stalls
 	BcastCh  chan wire.Message          // inject broadcasts here
+
+	closeOnce sync.Once // guards InCh so Close is idempotent
 }
 
 // newRequest constructs the pending [jaws.Request] that NewTestRequest then
@@ -65,20 +68,25 @@ func repanic(recovered any) {
 //
 // Passing nil for r uses a GET / request with no body.
 //
-// It requires the Jaws processing loop ([jaws.Jaws.Serve] or
-// [jaws.Jaws.ServeWithTimeout]) to be running, and returns nil if the request
-// cannot be created or claimed.
+// It panics if the request cannot be created or claimed. That is unreachable for
+// real callers — [jaws.Jaws.NewRequest] never returns nil and a freshly created
+// request always claims — and in practice only fires when the request's key is
+// already claimed, which the newRequest test seam can arrange. It requires the Jaws
+// processing loop ([jaws.Jaws.Serve] or [jaws.Jaws.ServeWithTimeout]) to be running;
+// if it is not, the underlying [jaws.Jaws.TestServe] panics.
 func NewTestRequest(jw *jaws.Jaws, r *http.Request) *TestRequest {
 	if r == nil {
 		r = httptest.NewRequest(http.MethodGet, "/", nil)
 	}
 	rr := httptest.NewRecorder()
 	rq := newRequest(jw, r)
-	// [jaws.Jaws.NewRequest] never returns nil in production (it loops until a key is
-	// allocated); the rq == nil guard is defensive against the newRequest seam, while
-	// the claim check is the disjunct that fails in practice.
+	// The rq == nil guard is defensive against the newRequest seam (NewRequest loops
+	// until a key is allocated and never returns nil in production); the claim check is
+	// the disjunct that fails in practice. Panic rather than returning nil so the
+	// failure surfaces at the call site instead of as a later nil dereference, matching
+	// how TestServe fails on a stopped loop.
 	if rq == nil || jw.UseRequest(rq.JawsKey, r) != rq {
-		return nil
+		panic("jawstest: request could not be claimed; another claim is already active")
 	}
 	tr := &TestRequest{
 		Request:  rq,
@@ -92,10 +100,10 @@ func NewTestRequest(jw *jaws.Jaws, r *http.Request) *TestRequest {
 
 // Close stops the test request's processing loop by closing InCh.
 //
-// It does not wait for the loop to stop; wait on DoneCh for that. Calling
-// Close more than once panics.
+// It does not wait for the loop to stop; wait on DoneCh for that. Close is
+// idempotent: calling it more than once is safe and closes InCh only once.
 func (tr *TestRequest) Close() {
-	close(tr.InCh)
+	tr.closeOnce.Do(func() { close(tr.InCh) })
 }
 
 // BodyString returns the recorded response body with surrounding whitespace removed.
