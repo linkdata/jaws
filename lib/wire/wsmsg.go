@@ -128,6 +128,14 @@ func (m *WsMsg) Format() string {
 // boundaries and is best-effort: the field ends at the first tab, so a tab
 // inside an inbound Set or Call payload truncates the field.
 func Parse(txt []byte) (WsMsg, bool) {
+	// Parse reports success with ok rather than an error: the only failure is "txt is
+	// not a valid frame", with no sub-cause any caller branches on, and the sole caller
+	// (ReadLoop) drops an unparseable frame without inspecting why — so a single
+	// always-equal error would carry nothing the bool does not.
+	//
+	// The len(txt) > 2 floor keeps the trailing-newline check and the two tab scans
+	// below from indexing out of range; a structurally minimal frame is What\t\t\n, and
+	// any shorter or otherwise malformed input is rejected by the tab-field checks.
 	if len(txt) > 2 && txt[len(txt)-1] == '\n' {
 		if nl1 := bytes.IndexByte(txt, '\t'); nl1 >= 0 {
 			if nl2 := bytes.IndexByte(txt[nl1+1:], '\t'); nl2 >= 0 {
