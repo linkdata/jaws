@@ -136,6 +136,11 @@ func Parse(txt []byte) (WsMsg, bool) {
 	// The len(txt) > 2 floor keeps the trailing-newline check and the two tab scans
 	// below from indexing out of range; a structurally minimal frame is What\t\t\n, and
 	// any shorter or otherwise malformed input is rejected by the tab-field checks.
+	//
+	// Parse handles inbound (client->server) frames, where Jid is always non-negative,
+	// so it requires the two-tab What\tJid\tData form. The single-tab What\tData form
+	// Append emits for a negative Jid is outbound-only (the client already has the Jid in
+	// Data) and is not accepted here, so Append and Parse are not inverses for a negative Jid.
 	if len(txt) > 2 && txt[len(txt)-1] == '\n' {
 		if nl1 := bytes.IndexByte(txt, '\t'); nl1 >= 0 {
 			if nl2 := bytes.IndexByte(txt[nl1+1:], '\t'); nl2 >= 0 {
