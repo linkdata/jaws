@@ -77,9 +77,10 @@ const (
 
 // IsCommand reports whether w is a non-element command.
 //
-// Commands are the protocol directives declared before the internal separator
-// marker; they are not tied to a specific element. See also [What.IsValid].
+// Commands are the protocol directives that are not tied to a specific element.
+// See also [What.IsValid].
 func (w What) IsCommand() bool {
+	// Commands are the values declared before the internal separator marker.
 	return w < separator && w.IsValid()
 }
 
