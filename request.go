@@ -92,11 +92,12 @@ func (rq *Request) String() string {
 // MarkWritten records that the Request's initial HTML is being written, so the
 // pending-eviction logic spares it while a render is in flight.
 //
-// [RequestWriter.Write] calls it on every write; the recorded second drives the
-// recency window in [Jaws.oldestEvictablePendingLocked] and the idle expiry in
-// [Request.maintenance]. It is lock-free and safe to call concurrently.
+// [RequestWriter.Write] calls it on every write. It is lock-free and safe to call
+// concurrently.
 func (rq *Request) MarkWritten() {
-	// A single atomic store of the cached runtimeSeconds; no clock read.
+	// A single atomic store of the cached runtimeSeconds; no clock read. The recorded
+	// second drives the recency window in oldestEvictablePendingLocked and the idle
+	// expiry in maintenance.
 	rq.lastWriteSeconds.Store(rq.Jaws.runtimeSeconds.Load())
 }
 

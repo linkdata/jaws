@@ -132,11 +132,10 @@ type MakeAuthFn = func(rq *Request) Auth
 // forgot to set [Jaws.MakeAuth]. Data and Email are fail-safe (nil / empty); only
 // IsAdmin is fail-open. Always set [Jaws.MakeAuth] in production, and treat a nil
 // MakeAuth as "no authorization configured", not "deny".
-//
-// The once and logger fields are unexported so the type's public method set is
-// exactly the [Auth] interface; it does not promote sync.Once.Do or the Logger
-// methods onto this security-sensitive type.
 type DefaultAuth struct {
+	// once and logger are unexported so the type's public method set is exactly the
+	// [Auth] interface, without promoting sync.Once.Do or the Logger methods onto this
+	// security-sensitive type.
 	once   sync.Once
 	logger Logger
 }
