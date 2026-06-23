@@ -11,15 +11,8 @@ import (
 
 var (
 	// ErrFloatNotFinite reports that a float value is NaN or infinite.
-	//
-	// Such values, typically from the untrusted browser, corrupt the bound value;
-	// NaN in particular defeats the equality-based update dedup (NaN != NaN). They
-	// are rejected at the binding boundary.
 	ErrFloatNotFinite = errors.New("float value is not finite")
 	// ErrFloatOutOfRange reports that a finite float does not fit the target type.
-	//
-	// The float-to-int conversion of an out-of-range value is implementation-defined
-	// and silently wraps, so it is rejected rather than performed.
 	ErrFloatOutOfRange = errors.New("float value out of range for target type")
 )
 
@@ -50,6 +43,8 @@ type setterFloat64[T numeric] struct {
 // such as "type Celsius float64" falls through to the float default branch and is
 // range-checked as if it were its predeclared underlying type.
 func sanitizeFloatForT[T numeric](value float64) error {
+	// Non-finite values, typically from the untrusted browser, corrupt the bound value;
+	// NaN in particular defeats the equality-based update dedup (NaN != NaN). Reject them.
 	if math.IsNaN(value) || math.IsInf(value, 0) {
 		return ErrFloatNotFinite
 	}
@@ -81,6 +76,8 @@ func sanitizeFloatForT[T numeric](value float64) error {
 		}
 		return nil
 	}
+	// The float-to-int conversion of an out-of-range value is implementation-defined and
+	// silently wraps, so reject it rather than perform it.
 	if math.Trunc(value) < lo || value >= hiExcl {
 		return ErrFloatOutOfRange
 	}
