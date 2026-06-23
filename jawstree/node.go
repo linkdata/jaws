@@ -82,12 +82,12 @@ func (node *Node) marshalJSON(b []byte) []byte {
 	return b
 }
 
-// MarshalJSON writes the Quercus.js JSON shape for node (delegating to the
-// canonical marshalJSON encoder).
+// MarshalJSON writes the Quercus.js JSON shape for node.
 func (node Node) MarshalJSON() (b []byte, err error) {
 	// The receiver is a value, not a pointer, so json.Marshal routes both a Node and a
 	// *Node here; a pointer receiver would let a non-addressable Node value fall back to
 	// the struct tags and emit a different shape ("disabled":true, not "selectable":false).
+	// marshalJSON is the canonical encoder; MarshalJSON just delegates to it.
 	b = node.marshalJSON(nil)
 	return
 }
