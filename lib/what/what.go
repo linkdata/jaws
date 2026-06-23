@@ -6,7 +6,10 @@ package what
 type What uint8
 
 const (
-	invalid What = iota
+	// Invalid is the zero [What], returned by [Parse] for unrecognized input.
+	//
+	// It is neither a command nor an event, so [What.IsValid] reports false for it.
+	Invalid What = iota
 
 	// Commands not associated with an Element
 
@@ -84,7 +87,7 @@ func (w What) IsCommand() bool {
 //
 // See also [What.IsCommand] and [What.String].
 func (w What) IsValid() bool {
-	return w != invalid && w != separator && int(w) < len(_What_index)-1
+	return w != Invalid && w != separator && int(w) < len(_What_index)-1
 }
 
 // Parse returns the [What] named by s.
@@ -93,7 +96,7 @@ func (w What) IsValid() bool {
 // produced by [What.String], matching what the JaWS client sends on the wire. An
 // empty string is treated as [Update]. Unknown strings, as well as the names of
 // the internal boundary markers (which are not valid commands or events), return
-// the invalid zero value.
+// the [Invalid] zero value.
 func Parse(s string) What {
 	if s == "" {
 		return Update
@@ -103,5 +106,5 @@ func Parse(s string) What {
 			return w
 		}
 	}
-	return invalid
+	return Invalid
 }

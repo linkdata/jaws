@@ -17,13 +17,13 @@ func TestParse(t *testing.T) {
 		{"Update", "Update", Update},
 		{"Inner", "Inner", Inner},
 		{"ContextMenu", "ContextMenu", ContextMenu},
-		{"lowercase is not matched", "inner", invalid},
-		{"innerr", "innerr", invalid},
+		{"lowercase is not matched", "inner", Invalid},
+		{"innerr", "innerr", Invalid},
 		{"last", lastWhat.String(), lastWhat},
-		{"newline", "\n", invalid},
-		{"invalid marker name", "invalid", invalid},
-		{"separator marker name", "separator", invalid},
-		{"separator case-insensitive", "SEPARATOR", invalid},
+		{"newline", "\n", Invalid},
+		{"Invalid marker name", "Invalid", Invalid},
+		{"separator marker name", "separator", Invalid},
+		{"separator case-insensitive", "SEPARATOR", Invalid},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -34,6 +34,18 @@ func TestParse(t *testing.T) {
 	}
 }
 
+// TestInvalidIsZero pins Invalid to the zero value, so a plain var What defaults
+// to it and callers can compare Parse's result against Invalid.
+func TestInvalidIsZero(t *testing.T) {
+	if Invalid != 0 {
+		t.Fatalf("Invalid = %d, want 0 (must remain the zero value)", Invalid)
+	}
+	var zero What
+	if zero != Invalid {
+		t.Fatalf("zero What = %v, want Invalid", zero)
+	}
+}
+
 func TestIsCommandAndValid(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -41,7 +53,7 @@ func TestIsCommandAndValid(t *testing.T) {
 		wantValid   bool
 		wantCommand bool
 	}{
-		{"invalid", invalid, false, false},
+		{"Invalid", Invalid, false, false},
 		{"Update", Update, true, true},
 		{"Reload", Reload, true, true},
 		{"Redirect", Redirect, true, true},
@@ -71,7 +83,7 @@ func TestString(t *testing.T) {
 		arg  What
 		want string
 	}{
-		{"invalid", invalid, "invalid"},
+		{"Invalid", Invalid, "Invalid"},
 		{"Inner", Inner, "Inner"},
 		{"unknown", ^What(0), fmt.Sprintf("What(%d)", ^What(0))},
 	}
@@ -110,7 +122,7 @@ func FuzzParse(f *testing.F) {
 			}
 			return
 		}
-		if got != invalid && !got.IsValid() {
+		if got != Invalid && !got.IsValid() {
 			t.Fatalf("Parse(%q) returned invalid non-zero command %v", s, got)
 		}
 		if !got.IsValid() {

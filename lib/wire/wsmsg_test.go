@@ -29,7 +29,7 @@ func Test_wsMsg_Append(t *testing.T) {
 		{
 			name:    "empty",
 			fields:  fields{},
-			want:    "invalid\t\t\"\"\n",
+			want:    "Invalid\t\t\"\"\n",
 			noparse: true,
 		},
 		{
