@@ -7,10 +7,10 @@ import (
 	"github.com/linkdata/jaws/lib/htmlio"
 )
 
-// RenderBoolOption renders nb as an HTML <option> element into w. It is the
-// single source of <option> markup shared by BoolArray's options and by
-// ui.Option, so attribute/escaping behavior cannot drift between them.
+// RenderBoolOption renders nb as an HTML <option> element into w.
 func RenderBoolOption(elem *jaws.Element, w io.Writer, nb *Bool, params []any) error {
+	// Single source of <option> markup, shared by BoolArray's options and by ui.Option,
+	// so attribute/escaping behavior cannot drift between them.
 	elem.Tag(nb)
 	attrs := elem.ApplyParams(params)
 	attrs = append(attrs, htmlio.Attr("value", nb.Name()))
@@ -21,8 +21,8 @@ func RenderBoolOption(elem *jaws.Element, w io.Writer, nb *Bool, params []any) e
 }
 
 // UpdateBoolOption updates a rendered <option>'s live selected state to match nb.
-// It is the single source of the option's update behavior.
 func UpdateBoolOption(elem *jaws.Element, nb *Bool) {
+	// Single source of the option's update behavior, shared with ui.Option.
 	if nb.Checked() {
 		elem.SetValue("true")
 	} else {

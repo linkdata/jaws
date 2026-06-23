@@ -67,8 +67,7 @@ func (nb *Bool) JawsGet(elem *jaws.Element) (yes bool) {
 // JawsSet sets the checked state and dirties the affected element tags.
 //
 // It returns [jaws.ErrValueUnchanged] if checked already matched the current
-// state. Affected tags are dirtied after the value locks have been released,
-// matching [BoolArray.JawsSet].
+// state.
 func (nb *Bool) JawsSet(elem *jaws.Element, checked bool) (err error) {
 	nba := nb.nba
 	// Lock ordering invariant: when both locks are needed, the owning BoolArray's
