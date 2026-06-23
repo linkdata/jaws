@@ -68,10 +68,7 @@ func repanic(recovered any) {
 //
 // Passing nil for r uses a GET / request with no body.
 //
-// It panics if the request cannot be created or claimed. That is unreachable for
-// real callers — [jaws.Jaws.NewRequest] never returns nil and a freshly created
-// request always claims — and in practice only fires when the request's key is
-// already claimed, which the newRequest test seam can arrange. It requires the Jaws
+// It panics if the request cannot be created or claimed. It requires the Jaws
 // processing loop ([jaws.Jaws.Serve] or [jaws.Jaws.ServeWithTimeout]) to be running;
 // if it is not, the underlying [jaws.Jaws.TestServe] panics.
 func NewTestRequest(jw *jaws.Jaws, r *http.Request) *TestRequest {
