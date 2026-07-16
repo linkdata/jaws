@@ -88,7 +88,7 @@ func (rq *Request) drainTailScript() (b []byte, sent bool) {
 			case what.RClass:
 				fn = "classList?.remove"
 			}
-			if fn != "" {
+			if fn != "" && msg.Jid > 0 {
 				// Wrap each fixup so one that throws at runtime (an invalid class token
 				// or attribute name reaches the throwing DOM call past the ?. element
 				// guard) does not abandon the fixups that follow. The drain removes these

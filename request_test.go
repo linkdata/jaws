@@ -325,6 +325,39 @@ func TestRequest_writeTailScript_RemoveAttrAndClass(t *testing.T) {
 	rq.muQueue.Unlock()
 }
 
+// TestRequest_writeTailScript_RetainsHTMLIdMessages verifies HTML-id-targeted
+// messages (Jid == -1), whose Data is the "id<TAB>JSON" wire form rather than an
+// attribute name, are left in wsQueue for the WebSocket instead of being consumed
+// into a garbled getElementById("") no-op by the attribute/class fixup path.
+func TestRequest_writeTailScript_RetainsHTMLIdMessages(t *testing.T) {
+	th := newTestHelper(t)
+	jw, _ := New()
+	defer jw.Close()
+	rq := jw.NewRequest(nil)
+	defer jw.recycle(rq)
+
+	rq.muQueue.Lock()
+	rq.wsQueue = append(rq.wsQueue, wire.WsMsg{Jid: -1, What: what.SAttr, Data: "someid\t\"v\""})
+	rq.muQueue.Unlock()
+
+	w := httptest.NewRecorder()
+	b, sent := rq.drainTailScript()
+	if err := rq.writeTailResponse(w, b, sent); err != nil {
+		t.Fatal(err)
+	}
+	s := w.Body.String()
+	if strings.Contains(s, `getElementById("")`) {
+		t.Fatalf("tail script emitted a garbled HTML-id fixup: %s", s)
+	}
+
+	// The message stays queued for delivery over the WebSocket.
+	rq.muQueue.Lock()
+	th.Equal(len(rq.wsQueue), 1)
+	th.Equal(rq.wsQueue[0].Jid, jid.Jid(-1))
+	th.Equal(rq.wsQueue[0].What, what.SAttr)
+	rq.muQueue.Unlock()
+}
+
 // TestRequest_writeTailScript_IsolatesEachFixup verifies each attribute/class fixup
 // is wrapped in its own try/catch, so a fixup that throws at runtime (e.g. a class
 // token containing whitespace, which the ?. element guard does not catch) cannot
