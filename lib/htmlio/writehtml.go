@@ -35,6 +35,17 @@ func needClosingTag(tag string) bool {
 	return !ok
 }
 
+// isNewlineSensitive reports whether tag (case-insensitive) is a textarea or pre
+// element, for which the HTML parser strips one newline immediately following the
+// start tag.
+func isNewlineSensitive(tag string) bool {
+	switch strings.ToLower(tag) {
+	case "textarea", "pre":
+		return true
+	}
+	return false
+}
+
 // AppendAttrs appends each non-empty attribute fragment in attrs to b, each
 // prefixed with a single space so the result can be concatenated directly after a
 // tag name.
@@ -150,6 +161,12 @@ func WriteHTMLInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs 
 func WriteHTMLInner(w io.Writer, jid jid.Jid, htmlTag, typeAttr string, innerHTML template.HTML, attrs ...template.HTMLAttr) (err error) {
 	b := appendHTMLTag(nil, jid, htmlTag, typeAttr, "", attrs)
 	if needClosingTag(htmlTag) {
+		// The HTML parser strips one newline right after a textarea/pre start
+		// tag, so inject a matching one to preserve a value that begins with a
+		// newline (the browser then discards the injected one).
+		if isNewlineSensitive(htmlTag) && len(innerHTML) > 0 && (innerHTML[0] == '\n' || innerHTML[0] == '\r') {
+			b = append(b, '\n')
+		}
 		b = append(b, innerHTML...)
 		b = append(b, "</"...)
 		b = append(b, htmlTag...)

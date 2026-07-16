@@ -424,6 +424,16 @@ func TestTextarea_RenderEscapesHTML(t *testing.T) {
 	mustMatch(t, `^<textarea id="Jid\.[0-9]+">x&lt;/textarea&gt;&lt;script&gt;alert\(&#34;x&#34;\)&lt;/script&gt;</textarea>$`, got)
 }
 
+func TestTextarea_RenderPreservesLeadingNewline(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	ss := newTestSetter("\nhello")
+
+	_, got := renderUI(t, rq, NewTextarea(ss))
+	if want := "<textarea id=\"Jid.1\">\n\nhello</textarea>"; got != want {
+		t.Fatalf("rendered textarea = %q, want %q", got, want)
+	}
+}
+
 func TestInputTextWidget_RenderEscapesValueAttr(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	value := `"&<>'\` + "\n"
