@@ -19,13 +19,15 @@ type Element struct {
 	*Request // (read-only) the Request the Element belongs to
 	// internals
 	ui UI // the UI object
-	// handlers is appended to only during initial render/init (AddHandlers,
+	// handlers is appended to only during render/registration (AddHandlers,
 	// ApplyParams, ApplyGetter, all routed through appendHandlers) and read later
-	// on the event goroutine without a lock. This is safe solely because rendering
-	// an Element fully populates its handlers before any event for it can be
-	// processed; handlers must not be mutated once events may fire. All builds
-	// enforce this: once the frozen flag below is set, appendHandlers drops late
-	// mutations (debug builds panic).
+	// on the event goroutine without a lock. Request event dispatch reads handlers
+	// only after frozen reports true. The frozen store after rendering publishes
+	// the completed handler slice to that read, including for child Elements
+	// rendered after the WebSocket connects; a preemptive event for an Element
+	// still being rendered is ignored. Handlers must not be mutated once frozen.
+	// All builds enforce this: appendHandlers drops late mutations (debug builds
+	// panic).
 	handlers []any
 	jid      jid.Jid     // JaWS ID, unique to this Element within its Request
 	deleted  atomic.Bool // true once the Element has been removed from its Request
@@ -46,9 +48,10 @@ func (elem *Element) String() string {
 //
 // handlers is read lock-free on the event goroutine (via [CallEventHandlers], which
 // calls the internal callEventHandlers), so it must only be appended to while the
-// Element is being rendered, before any event for it can fire. Once frozen, late
-// mutations are a bug: reportMisuse panics in debug builds and logs in production,
-// and the mutation is dropped rather than racing the lock-free read.
+// Element is being rendered. Request event dispatch ignores the Element until
+// frozen reports true; that atomic publication makes the completed slice visible
+// before the lock-free read. Once frozen, late mutations are a bug: reportMisuse
+// panics in debug builds and logs in production, and the mutation is dropped.
 func (elem *Element) appendHandlers(h ...any) {
 	if len(h) == 0 {
 		return

@@ -62,6 +62,10 @@ func callEventHandlers(ui any, elem *Element, wht what.What, value string) (err 
 // CallEventHandlers calls the event handlers for the given [Element].
 //
 // Recovers from panics in user-provided handlers, returning them as errors.
+//
+// Request event dispatch calls this only after the Element is frozen, publishing
+// the completed handler slice before its lock-free read. A direct caller must not
+// run it concurrently with rendering or handler registration.
 func CallEventHandlers(ui any, elem *Element, wht what.What, value string) (err error) {
 	defer func() {
 		if x := recover(); x != nil {

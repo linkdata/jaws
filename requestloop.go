@@ -263,8 +263,10 @@ func (rq *Request) queue(msg wire.WsMsg) {
 // element(s) and returns the first result that is not ErrEventUnhandled. A zero
 // id with a Click or ContextMenu carries a tab-separated list of bubbled element
 // jids, which are resolved and tried in order; any other id resolves to a single
-// element. ErrEventUnhandled is normalized to nil. rq.mu is held only for the
-// element lookups; the handlers themselves run unlocked.
+// element. Only frozen Elements are selected, so the atomic frozen load publishes
+// the completed handler slice before it is read without a lock. ErrEventUnhandled
+// is normalized to nil. rq.mu is held only for the element lookups; the handlers
+// themselves run unlocked.
 func (rq *Request) callAllEventHandlers(id Jid, wht what.What, value string) (err error) {
 	var elems []*Element
 	rq.mu.RLock()
@@ -277,14 +279,14 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, value string) (er
 				var jidStr string
 				jidStr, after, found = strings.Cut(after, "\t")
 				if id = jid.ParseString(jidStr); id > 0 {
-					if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() {
+					if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() && e.frozen.Load() {
 						elems = append(elems, e)
 					}
 				}
 			}
 		}
 	} else {
-		if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() {
+		if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() && e.frozen.Load() {
 			elems = append(elems, e)
 		}
 	}

@@ -152,6 +152,7 @@ func (rw testRequestWriter) Register(updater Updater, params ...any) Jid {
 	elem.Tag(updater)
 	elem.ApplyParams(params)
 	updater.JawsUpdate(elem)
+	elem.Freeze()
 	return elem.Jid()
 }
 

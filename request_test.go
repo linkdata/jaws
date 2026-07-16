@@ -1245,8 +1245,12 @@ func TestRequest_RequestScopedEventIsolation(t *testing.T) {
 		testSetter: newTestSetter(""),
 	}
 
-	rq1.NewElement(testDivWidget{inner: "one"}).AddHandlers(tjc1)
-	rq2.NewElement(testDivWidget{inner: "two"}).AddHandlers(tjc2)
+	elem1 := rq1.NewElement(testDivWidget{inner: "one"})
+	elem1.AddHandlers(tjc1)
+	elem1.Freeze()
+	elem2 := rq2.NewElement(testDivWidget{inner: "two"})
+	elem2.AddHandlers(tjc2)
+	elem2.Freeze()
 
 	select {
 	case <-th.C:
