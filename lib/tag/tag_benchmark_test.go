@@ -24,6 +24,20 @@ func (t *benchSliceTagger) JawsGetTag(Context) any {
 	return t.tags
 }
 
+type benchFunctionTagger func(Context) any
+
+func (fn benchFunctionTagger) JawsGetTag(ctx Context) any {
+	return fn(ctx)
+}
+
+func benchFunctionLeaf(Context) any {
+	return Tag("leaf")
+}
+
+func benchFunctionRoot(Context) any {
+	return benchFunctionTagger(benchFunctionLeaf)
+}
+
 type benchID struct {
 	n int
 }
@@ -94,6 +108,7 @@ func BenchmarkTagExpand(b *testing.B) {
 		{name: "SelfTagger", tag: &benchSelfTagger{}},
 		{name: "SliceTagger4", tag: sliceTagger},
 		{name: "ChainTaggers8", tag: chainRoot},
+		{name: "FunctionTaggers2", tag: benchFunctionTagger(benchFunctionRoot)},
 	}
 
 	for _, bm := range cases {

@@ -92,7 +92,11 @@ func sameActiveNode(a, b any) bool {
 	va := reflect.ValueOf(a)
 	vb := reflect.ValueOf(b)
 	switch va.Kind() {
-	case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func, reflect.UnsafePointer:
+	case reflect.Func:
+		// Value.Pointer identifies shared function code, not closure identity, so it
+		// cannot detect cycles. maxTagDepth still bounds recursive function getters.
+		return false
+	case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Chan, reflect.UnsafePointer:
 		// For slices, Pointer() is the address of the first element, so two
 		// distinct slices aliasing the same backing array at the same start
 		// compare equal here. That can only over-detect a cycle and truncate
