@@ -87,6 +87,7 @@ var (
 //
 // It is safe for concurrent use when the locker passed to [NewJsVar] is safe
 // for concurrent use.
+// A JsVar must not be copied after first use.
 //
 // SECURITY: a JsVar is client-writable. Incoming browser "set" messages are
 // applied by path to the bound value. If the bound value implements [PathSetter]
@@ -105,8 +106,9 @@ var (
 // boolean field.
 type JsVar[T any] struct {
 	bind.RWLocker
-	Ptr      *T  // bound Go value
-	dirtyTag any // current dirty tag, set during render; read via JawsGetTag
+	Ptr      *T         // bound Go value
+	setMu    sync.Mutex // serializes each mutation with its broadcast
+	dirtyTag any        // current dirty tag, set during render; read via JawsGetTag
 }
 
 // MaxClientJsVarBytes bounds the JSON-serialized size of a client-writable [JsVar]
@@ -171,16 +173,18 @@ func (jsvar *JsVar[T]) setPathLocked(elem *jaws.Element, jsPath string, value an
 }
 
 func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any) (broadcasted bool, err error) {
+	jsvar.setMu.Lock()
+	defer jsvar.setMu.Unlock()
 	jsvar.Lock()
 	err = jsvar.setPathLocked(elem, jsPath, value)
 	dirtyTag := jsvar.dirtyTag
 	jsvar.Unlock()
-	// Marshal and broadcast outside the lock: value is the caller-owned argument
-	// (not read from Ptr), and jaws.Broadcast can block on the broadcast channel
-	// under backpressure. Holding the lock across that send would needlessly
-	// serialize concurrent setters and stall any code sharing the locker. This
-	// mirrors bind.binder, which mutates under the lock and runs side effects
-	// after releasing it.
+	// Marshal and broadcast outside the caller-provided lock: value is the
+	// caller-owned argument (not read from Ptr), and jaws.Broadcast can block on
+	// the broadcast channel under backpressure. The private setMu remains held so
+	// concurrent setters cannot apply a later mutation before this broadcast is
+	// queued. Code sharing the caller-provided locker is therefore not stalled by
+	// transport backpressure.
 	//
 	// Note that the broadcast carries the caller's requested value, not the value
 	// actually stored. If a PathSetter coerces or rejects the input (e.g. clamps a
@@ -231,6 +235,9 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any) (er
 // A set before the element has been rendered produces no broadcast: the dirty
 // tag does not exist yet and the initial render seeds the value via its
 // data-jawsdata attribute.
+//
+// Concurrent successful calls are serialized through mutation, JSON encoding,
+// and broadcast queueing, so peers observe changes in mutation order.
 func (jsvar *JsVar[T]) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err error) {
 	return jsvar.setPath(elem, jsPath, value)
 }
