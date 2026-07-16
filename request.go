@@ -342,44 +342,41 @@ func (rq *Request) Context() (ctx context.Context) {
 //
 // The function runs while the Request lock is held so the transform is atomic.
 // It must not call methods on the same Request, call code that may do so, or
-// block on work that needs the same Request.
+// block on work that needs the same Request. If the function panics, SetContext
+// releases the lock before the panic continues.
 //
 // Returning a nil context is a programming error: debug builds panic and production
 // builds report it via [Jaws.MustLog] and keep the existing context.
 func (rq *Request) SetContext(fn func(oldCtx context.Context) (newCtx context.Context)) {
-	rq.mu.Lock()
-	locked := true
-	defer func() {
-		// Keep the Request usable if the caller's transform panics.
-		if locked {
-			rq.mu.Unlock()
-		}
-	}()
-	oldCtx := rq.ctx
-	newCtx := fn(oldCtx)
+	oldCtx, newCtx, cancelFn := rq.replaceContext(fn)
 	if newCtx == nil {
-		rq.mu.Unlock()
-		locked = false
 		rq.Jaws.reportMisuse(errors.New("jaws: SetContext function returned a nil context"))
 		return
 	}
-	rq.ctx = newCtx
-	cancelFn := rq.cancelFn
-	rq.mu.Unlock()
-	locked = false
-	if newCtx.Done() != oldCtx.Done() {
-		// process may already be blocked selecting on oldCtx.Done. When a
-		// replacement has its own cancellation channel, bridge that cancellation
-		// into the allocation's stable cancel function so the old select wakes.
-		// Capture only contexts and the cancel closure: capturing rq would let a
-		// delayed callback cancel an unrelated Request after pool reuse.
-		//
-		// Register after releasing rq.mu. context.AfterFunc synchronously invokes
-		// a custom context's registration hook, which may legitimately re-enter rq.
-		context.AfterFunc(newCtx, func() {
-			cancelFn(context.Cause(newCtx))
-		})
+	if newCtx.Done() == oldCtx.Done() {
+		return
 	}
+	// The request loop may already be blocked selecting on oldCtx.Done. Bridge a
+	// replacement's cancellation into the allocation's stable cancel function so
+	// that old select wakes. Register outside rq.mu because context.AfterFunc may
+	// synchronously invoke a custom context hook that re-enters the Request.
+	//
+	// Capture only the context and cancel closure: capturing rq would let a delayed
+	// callback cancel an unrelated Request after pool reuse.
+	context.AfterFunc(newCtx, func() {
+		cancelFn(context.Cause(newCtx))
+	})
+}
+
+func (rq *Request) replaceContext(fn func(oldCtx context.Context) (newCtx context.Context)) (oldCtx, newCtx context.Context, cancelFn context.CancelCauseFunc) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	oldCtx = rq.ctx
+	if newCtx = fn(oldCtx); newCtx != nil {
+		rq.ctx = newCtx
+		cancelFn = rq.cancelFn
+	}
+	return
 }
 
 // maintenance reports whether rq has expired and should be retired. For a
