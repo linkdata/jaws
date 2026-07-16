@@ -44,7 +44,7 @@ type ConnectFn = func(rq *Request) error
 // that diagnostic use, not as a public nil-safe contract.
 type Request struct {
 	Jaws             *Jaws                   // (read-only) the JaWS instance the Request belongs to
-	JawsKey          key.Key                 // (read-only) random key identifying this Request in the WebSocket URI and the broadcast/tail target; read under mu by the identity check (destKey, wantMessage) and the render path (JawsKeyString, HeadHTML)
+	JawsKey          key.Key                 // (read-only) random key assigned to this Request; routes JaWS URLs and request-targeted broadcasts only while registered
 	remoteIP         netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
 	running          atomic.Bool             // if ServeHTTP() is running
 	claimed          atomic.Bool             // if UseRequest() has been called for it
@@ -256,7 +256,7 @@ func (rq *Request) clearLocked() *Request {
 	return rq
 }
 
-// HeadHTML writes the HTML code needed in the HTML page's HEAD section.
+// HeadHTML writes the configured resources and Request key metadata for the page head.
 func (rq *Request) HeadHTML(w io.Writer) (err error) {
 	rq.mu.RLock()
 	jawsKey := rq.JawsKey

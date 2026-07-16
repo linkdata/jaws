@@ -160,8 +160,10 @@ Guideline:
 
 ## Request/session integration rules
 
-- Ensure pages include both `HeadHTML` and `TailHTML` in layout flow.
-- `TailHTML` helps apply queued attr/class updates immediately and reduce initial flicker.
+- Ensure pages provide the configured JaWS resources and Request key metadata;
+  `HeadHTML` is the usual way to emit them.
+- `TailHTML` is optional; it applies queued attr/class updates before the
+  WebSocket connects and can reduce initial flicker.
 - Register the JaWS `/jaws/` route prefix correctly and pair request creation with `UseRequest` handling.
 - Session storage is server-side and IP-bound; use `Jaws.SessionMiddleware(...)` when page state should be per-user.
 - For per-session app state, load from `Request.Get(key)` and initialize with `Request.Set(key, value)` during the page request.

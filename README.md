@@ -178,10 +178,13 @@ client/server protocol code:
 
 ### HTTP request flow and associating the WebSocket
 
-When a new HTTP request is received, create a JaWS Request using the
-JaWS object's `NewRequest()` method, then use the Request's `HeadHTML()`
-method in the `<head>` section and `TailHTML()` before the closing
-`</body>` tag.
+When a new HTTP request is received, create a JaWS Request using the JaWS
+object's `NewRequest()` method. `HeadHTML()` is the usual way to emit the
+configured resources and Request key metadata in the page's `<head>` section.
+`TailHTML()` is optional; placing it before the closing `</body>` tag applies
+updates queued during initial rendering before the WebSocket connects, which can
+reduce flicker. Applications that provide equivalent resources and metadata do
+not need to call either helper.
 
 When the client has finished loading the document and parsed the
 scripts, the JaWS JavaScript will request a WebSocket connection on
@@ -197,13 +200,14 @@ updates.
 
 `NewRequest` creates a pending request owned by the `Jaws` instance. `UseRequest`
 is the only operation that claims that pending request for a WebSocket, and it
-also removes the request from the pending set. A request is retired after its
-WebSocket processing exits. Maintenance or the per-IP limit can instead retire
-an unclaimed request: its context is canceled, its key becomes unclaimable, and
-it is excluded from `Pending` and `RequestCount`. Retirement does not change the
-identity of a Request or its Elements while an initial HTTP handler still holds
-them. Its key cannot be assigned to another Request while the retired Request
-remains reachable; no deadline is guaranteed for later reuse.
+also removes the request from the pending set. A claimed Request is removed after
+its WebSocket processing exits. Maintenance or the per-IP limit can instead
+retire an unclaimed Request: its context is canceled, its key becomes
+unclaimable, and it is excluded from `Pending` and `RequestCount`. Retiring an
+unclaimed Request does not change its identity or Elements while an initial HTTP
+handler still holds them. Its key cannot be assigned to another Request while
+the retired Request remains reachable; no deadline is guaranteed for later
+reuse.
 
 Dirtying is two-stage: `Request.Dirty` and `Jaws.Dirty` expand tags and record
 them on the `Jaws` instance, then the serving loop distributes those tags to
@@ -461,10 +465,10 @@ Each JaWS request gets a non-zero random 64-bit key not currently in use. This
 value is written to the HTML output so the JavaScript can construct the WebSocket
 callback URL.
 
-The callback key is single-use and cannot be claimed by another WebSocket. JaWS
-does not assign keys belonging to registered Requests or still-reachable retired
-Requests. A retired key may become eligible for reuse after its Request becomes
-unreachable, but reuse timing is unspecified.
+While assigned to a Request, its callback key can claim that Request at most
+once. JaWS does not assign keys belonging to registered Requests or
+still-reachable retired Requests. A retired key may become eligible for reuse
+after its Request becomes unreachable, but reuse timing is unspecified.
 
 In addition to this, Requests that are not claimed by a WebSocket call are
 retired at regular intervals. By default an unclaimed Request is retired after
@@ -478,9 +482,10 @@ longer be claimed. The cap uses the same client IP resolver as request/session
 binding: trusted forwarded headers when `Jaws.TrustForwardedHeaders` is enabled,
 otherwise the IP parsed from `http.Request.RemoteAddr`.
 
-In order to guess (and thus hijack) a WebSocket you'd have to make on the
-order of 2^63 requests before the genuine request comes in, or 10 seconds
-pass assuming you can reliably prevent the genuine WebSocket request.
+To guess and hijack a pending WebSocket callback, an attacker must find its key
+before the genuine WebSocket claims it or JaWS retires the Request. Finding a
+uniformly random 64-bit key takes on the order of 2^63 distinct guesses on
+average within that window.
 
 ### Authorization and templates (`Auth`)
 
