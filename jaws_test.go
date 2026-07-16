@@ -2881,30 +2881,6 @@ func BenchmarkGetElementByJid(b *testing.B) {
 	}
 }
 
-// BenchmarkRequestHandleRemoveUnknownChildren measures validating a browser
-// cleanup acknowledgement whose child IDs are not registered in the Request.
-// Both managed and ordinary/static containers use this path.
-func BenchmarkRequestHandleRemoveUnknownChildren(b *testing.B) {
-	const elemCount = 1000
-	data := "Jid.1001\tJid.1002\tJid.1003\tJid.1004\tJid.1005\tJid.1006\tJid.1007\tJid.1008"
-	for _, tc := range []struct {
-		name         string
-		containerJid Jid
-	}{
-		{name: "managed-container", containerJid: 1},
-		{name: "static-container", containerJid: 0},
-	} {
-		b.Run(tc.name, func(b *testing.B) {
-			rq := newBenchRequest(b, elemCount)
-			b.ReportAllocs()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				rq.handleRemove(tc.containerJid, data)
-			}
-		})
-	}
-}
-
 // BenchmarkRequestHandleBroadcastCall measures dispatching request-scoped and
 // existing element-scoped JavaScript Call destinations.
 func BenchmarkRequestHandleBroadcastCall(b *testing.B) {

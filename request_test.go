@@ -2663,28 +2663,20 @@ func TestRequest_JsCallFunctionPathDoesNotBreakWireFraming(t *testing.T) {
 	}
 }
 
-func TestRequest_IncomingRemoveWithZeroContainerJidCleansManagedDescendants(t *testing.T) {
+func TestRequest_IncomingRemoveWithZeroContainerJidIsIgnored(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rq := newTestRequest(t)
 		defer closeRequestInBubble(rq)
 
 		elem := rq.NewElement(&testUi{})
-		tagValue := tag.Tag("removed-from-static-container")
-		rq.Tag(elem, tagValue)
 
-		// A zero Jid represents a non-managed DOM container in this request. The
-		// browser still reports the managed descendants removed from that container.
-		// synctest.Wait makes the deletion assertions wait for the process loop.
+		// handleRemove only acts when the container Jid is > 0, so a Remove with a
+		// zero Jid must be ignored. synctest.Wait blocks until the process loop has
+		// handled the message, so the survival assertion is not vacuous.
 		rq.InCh <- wire.WsMsg{What: what.Remove, Jid: 0, Data: elem.Jid().String()}
 		synctest.Wait()
-		if got := rq.GetElementByJid(elem.Jid()); got != nil {
-			t.Fatalf("removed descendant %s remains registered", elem.Jid())
-		}
-		if !elem.Deleted() {
-			t.Fatalf("removed descendant %s is not marked deleted", elem.Jid())
-		}
-		if got := rq.GetElements(tagValue); len(got) != 0 {
-			t.Fatalf("removed descendant %s remains registered under its tag: %+v", elem.Jid(), got)
+		if got := rq.GetElementByJid(elem.Jid()); got == nil {
+			t.Fatalf("element %s should not be deletable through zero-container Remove", elem.Jid())
 		}
 	})
 }

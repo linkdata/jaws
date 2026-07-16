@@ -355,7 +355,7 @@ func TestJawsJS_JsVarNestedPathHandlesShadowedHasOwnProperty(t *testing.T) {
 	}
 }
 
-func TestJawsJS_RemoveFromNonManagedContainerProducesCleanupFrame(t *testing.T) {
+func TestJawsJS_RemoveFromNonManagedContainerIsInvalidAndDroppedByParser(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 	function FakeSocket() { this.readyState = 1; this.sent = []; }
 	FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
@@ -363,9 +363,7 @@ WebSocket = FakeSocket;
 jaws = new FakeSocket();
 
 const topElem = {
-	// An application ID may share the reserved-looking prefix without having the
-	// positive decimal form of a server-managed Jid.
-	id: "Jid.static",
+	id: "container",
 	querySelectorAll: function() {
 		return [{ id: "Jid.1" }, { id: "Jid.2" }];
 	}
@@ -378,18 +376,8 @@ process.stdout.write(jaws.sent[0] || "");
 		t.Fatal("jawsRemoving did not emit a websocket frame")
 	}
 
-	msg, ok := wire.Parse([]byte(raw))
-	if !ok {
-		t.Fatalf("Remove cleanup frame must be parseable by wire.Parse, got %q", raw)
-	}
-	if msg.What != what.Remove {
-		t.Fatalf("unexpected what: got %v", msg.What)
-	}
-	if msg.Jid != 0 {
-		t.Fatalf("non-managed container cleanup Jid = %v, want request-scoped Jid 0", msg.Jid)
-	}
-	if msg.Data != "Jid.1\tJid.2" {
-		t.Fatalf("unexpected cleanup ids %q", msg.Data)
+	if msg, ok := wire.Parse([]byte(raw)); ok {
+		t.Fatalf("expected invalid untrusted Remove frame to be dropped by parser, got %+v from %q", msg, raw)
 	}
 }
 
