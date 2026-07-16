@@ -83,5 +83,8 @@ assets
     └── index.html
 ```
 
-Page templates rendered through `ui.Handler` should include `{{$.HeadHTML}}`
-inside `<head>` and `{{$.TailHTML}}` before the closing `</body>` tag.
+The examples use `{{$.HeadHTML}}` inside `<head>` to emit the configured
+resources and Request key metadata. Applications that provide equivalent markup
+may omit it. `{{$.TailHTML}}` is optional; placing it before the closing
+`</body>` tag applies updates queued during initial rendering before the
+WebSocket connects.
