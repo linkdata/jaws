@@ -8,8 +8,8 @@ import (
 
 // ErrNotUsableAsTag is returned when a value cannot be used as a tag.
 //
-// It also matches [ErrNotComparable] via [errors.Is], because a non-comparable
-// value is one reason a value cannot be used as a tag.
+// A tag must be comparable and equal to itself so that it remains reachable as a
+// map key. This error also matches [ErrNotComparable] via [errors.Is].
 var ErrNotUsableAsTag errNotUsableAsTag
 
 type errNotUsableAsTag struct {
@@ -26,7 +26,7 @@ func (e errNotUsableAsTag) Error() (s string) {
 	if e.tagGetterType != nil {
 		return s + fmt.Sprintf("; found nested TagGetter at %s (%s); hint: implement JawsGetTag(tag.Context) on this type to delegate to that value, or pass that nested TagGetter directly", e.tagGetterPath, e.tagGetterType)
 	}
-	return s + "; found no nested TagGetter; hint: use a comparable tag value, or implement JawsGetTag(tag.Context) and return a comparable tag"
+	return s + "; found no nested TagGetter; hint: use a comparable tag value that equals itself, or implement JawsGetTag(tag.Context) and return one"
 }
 
 func (errNotUsableAsTag) Is(target error) bool {
@@ -34,16 +34,24 @@ func (errNotUsableAsTag) Is(target error) bool {
 }
 
 // NewErrNotUsableAsTag returns [ErrNotUsableAsTag] if x cannot be used as a tag.
+//
+// Nil, comparable and reflexive values return nil. Primitive values that
+// [TagExpand] classifies as [ErrIllegalTagType] are otherwise outside this
+// constructor's validation.
 func NewErrNotUsableAsTag(x any) error {
-	if err := NewErrNotComparable(x); err != nil {
-		retErr := errNotUsableAsTag{t: reflect.TypeOf(x)}
-		if path, tgType, ok := FindTagGetter(x); ok {
-			retErr.tagGetterPath = path
-			retErr.tagGetterType = tgType
-		}
-		return retErr
+	if x == nil || usableAsTag(x) {
+		return nil
 	}
-	return nil
+	return newErrNotUsableAsTag(x)
+}
+
+func newErrNotUsableAsTag(x any) (err error) {
+	retErr := errNotUsableAsTag{t: reflect.TypeOf(x)}
+	if path, tgType, ok := FindTagGetter(x); ok {
+		retErr.tagGetterPath = path
+		retErr.tagGetterType = tgType
+	}
+	return retErr
 }
 
 var tagGetterType = reflect.TypeFor[TagGetter]()

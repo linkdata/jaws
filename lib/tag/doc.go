@@ -2,5 +2,6 @@
 // elements during dirtying, broadcasts and event routing.
 //
 // [TagExpand] rejects values that are not usable as hashable tag keys, including
-// values whose static type is comparable but whose runtime contents are not.
+// values whose static type is comparable but whose runtime contents are not and
+// values such as NaN that do not equal themselves.
 package tag

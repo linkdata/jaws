@@ -37,36 +37,45 @@ const (
 )
 
 func ensureUsableTag(tag any) error {
-	if tag != nil {
-		if t := reflect.TypeOf(tag); t != nil && t.Comparable() {
-			// reflect.Type.Comparable reports STATIC comparability: a comparable
-			// struct or array can still hold a non-comparable value in an interface
-			// field, making it panic when compared or used as an rq.tagMap key. Only
-			// struct and array values can differ between static and runtime
-			// comparability (scalars, strings, pointers and channels are always
-			// comparable when their type is), so probe just those kinds with
-			// comparableAtRuntime and reject such tags here, rather than deferring a
-			// panic to appendUniqueTag's dedup or to rq.tagMap on the event goroutine.
-			switch t.Kind() {
-			case reflect.Struct, reflect.Array:
-				if !comparableAtRuntime(tag) {
-					return NewErrNotUsableAsTag(tag)
-				}
-			}
-			return nil
-		}
+	if usableAsTag(tag) {
+		return nil
 	}
-	return NewErrNotUsableAsTag(tag)
+	return newErrNotUsableAsTag(tag)
 }
 
-// comparableAtRuntime reports whether tag can be compared with == without
-// panicking.
+func usableAsTag(tag any) bool {
+	if tag == nil {
+		return false
+	}
+	t := reflect.TypeOf(tag)
+	if !t.Comparable() {
+		return false
+	}
+	// reflect.Type.Comparable reports static comparability. Struct and array
+	// values can still hold a non-comparable value in an interface field, while
+	// floats, complex values and composites containing them can be non-reflexive.
+	// Either property makes a map entry unreachable or unsafe, so probe just the
+	// kinds that can have one of those properties. Pointers, channels and ordinary
+	// scalar values always compare equal to themselves.
+	switch t.Kind() {
+	case reflect.Float32, reflect.Float64,
+		reflect.Complex64, reflect.Complex128:
+		other := tag
+		return tag == other
+	case reflect.Struct, reflect.Array:
+		return comparableAtRuntime(tag)
+	}
+	return true
+}
+
+// comparableAtRuntime reports whether tag is comparable and equals itself.
 //
 // A statically comparable struct or array can still hold a non-comparable value
 // (for example a func in an interface field); comparing such a value panics with
-// "comparing uncomparable type". This probe is allocation-free, unlike
-// [reflect.Value.Comparable], which allocates while walking the value;
-// BenchmarkComparableAtRuntime guards that difference.
+// "comparing uncomparable type". A float, complex value or composite containing
+// one can also compare unequal to itself when it contains NaN, making its map key
+// unreachable. This probe handles both cases and is guarded by
+// BenchmarkComparableAtRuntime.
 func comparableAtRuntime(tag any) (ok bool) {
 	defer func() { _ = recover() }()
 	other := tag
@@ -214,13 +223,14 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 //
 // tag may be nil, a [Tag], a slice of tags, a [TagGetter] or another comparable
 // value. Primitive HTML/value types are rejected with [ErrIllegalTagType] to catch
-// common accidental tags, and a value that is not comparable at runtime is rejected
-// with [ErrNotUsableAsTag] (which also matches [ErrNotComparable] via [errors.Is]).
+// common accidental tags. A value that is not comparable at runtime or does not
+// equal itself is rejected with [ErrNotUsableAsTag] (which also matches
+// [ErrNotComparable] via [errors.Is]).
 // Expansion that exceeds the nesting-depth or total-count limits is rejected with
 // [ErrTooManyTags].
 //
 // On error, result holds the tags expanded before the failure; the exception is a
-// value that is not comparable at runtime, for which [ErrNotUsableAsTag] is returned
+// value that is not usable as a map key, for which [ErrNotUsableAsTag] is returned
 // with a nil result.
 //
 // Expansion reads tag and any values returned by [TagGetter.JawsGetTag] by

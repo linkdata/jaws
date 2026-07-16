@@ -31,6 +31,8 @@ type benchID struct {
 	n int
 }
 
+type benchFloatTag float64
+
 var tagExpandBenchSink []any
 
 func benchmarkTagExpandCase(b *testing.B, tag any) {
@@ -91,6 +93,7 @@ func BenchmarkTagExpand(b *testing.B) {
 		// ensureUsableTag runs (scalar/pointer tags skip it); benchID is a small
 		// comparable struct value, not a pointer.
 		{name: "StructTag", tag: benchID{n: 1}},
+		{name: "NamedFloatTag", tag: benchFloatTag(1.25)},
 		{name: "FlatTags8", tag: flatTags8},
 		{name: "FlatAny16", tag: flatAny},
 		{name: "NestedAnyTree", tag: nestedAny},
@@ -115,10 +118,9 @@ type benchComparableField struct {
 
 var comparableProbeSink bool
 
-// BenchmarkComparableAtRuntime guards the comparableAtRuntime doc claim that the
-// recover-based == probe is allocation-free, unlike [reflect.Value.Comparable],
-// which allocates while walking the value. Run with -benchmem; the Probe case
-// must report 0 allocs/op and the ReflectComparable case is the contrast.
+// BenchmarkComparableAtRuntime guards the cost of the runtime comparability and
+// reflexivity probe. ReflectComparable is retained as a reference point for the
+// static comparability check alone.
 func BenchmarkComparableAtRuntime(b *testing.B) {
 	tag := any(benchComparableField{v: 42})
 
