@@ -1,9 +1,6 @@
 package tag
 
-import (
-	"reflect"
-	"testing"
-)
+import "testing"
 
 type benchSelfTagger struct{}
 
@@ -30,6 +27,8 @@ func (t *benchSliceTagger) JawsGetTag(Context) any {
 type benchID struct {
 	n int
 }
+
+type benchFloatTag float64
 
 var tagExpandBenchSink []any
 
@@ -87,10 +86,8 @@ func BenchmarkTagExpand(b *testing.B) {
 		tag  any
 	}{
 		{name: "SingleTag", tag: Tag("single")},
-		// StructTag exercises the struct-kind runtime comparability check that
-		// ensureUsableTag runs (scalar/pointer tags skip it); benchID is a small
-		// comparable struct value, not a pointer.
 		{name: "StructTag", tag: benchID{n: 1}},
+		{name: "NamedFloatTag", tag: benchFloatTag(1.25)},
 		{name: "FlatTags8", tag: flatTags8},
 		{name: "FlatAny16", tag: flatAny},
 		{name: "NestedAnyTree", tag: nestedAny},
@@ -104,35 +101,4 @@ func BenchmarkTagExpand(b *testing.B) {
 			benchmarkTagExpandCase(b, bm.tag)
 		})
 	}
-}
-
-// benchComparableField is a statically comparable struct whose comparability
-// genuinely has to be resolved at runtime through an interface field, which is the
-// case ensureUsableTag's probe defends against.
-type benchComparableField struct {
-	v any
-}
-
-var comparableProbeSink bool
-
-// BenchmarkComparableAtRuntime guards the comparableAtRuntime doc claim that the
-// recover-based == probe is allocation-free, unlike [reflect.Value.Comparable],
-// which allocates while walking the value. Run with -benchmem; the Probe case
-// must report 0 allocs/op and the ReflectComparable case is the contrast.
-func BenchmarkComparableAtRuntime(b *testing.B) {
-	tag := any(benchComparableField{v: 42})
-
-	b.Run("Probe", func(b *testing.B) {
-		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
-			comparableProbeSink = comparableAtRuntime(tag)
-		}
-	})
-
-	b.Run("ReflectComparable", func(b *testing.B) {
-		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
-			comparableProbeSink = reflect.ValueOf(tag).Comparable()
-		}
-	})
 }

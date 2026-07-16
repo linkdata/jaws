@@ -8,8 +8,9 @@ import (
 
 // ErrNotUsableAsTag is returned when a value cannot be used as a tag.
 //
-// It also matches [ErrNotComparable] via [errors.Is], because a non-comparable
-// value is one reason a value cannot be used as a tag.
+// A tag key must be comparable at runtime and equal to itself so later dirtying,
+// broadcasts and event routing can match it reliably. This error also matches
+// [ErrNotComparable] via [errors.Is].
 var ErrNotUsableAsTag errNotUsableAsTag
 
 type errNotUsableAsTag struct {
@@ -26,24 +27,33 @@ func (e errNotUsableAsTag) Error() (s string) {
 	if e.tagGetterType != nil {
 		return s + fmt.Sprintf("; found nested TagGetter at %s (%s); hint: implement JawsGetTag(tag.Context) on this type to delegate to that value, or pass that nested TagGetter directly", e.tagGetterPath, e.tagGetterType)
 	}
-	return s + "; found no nested TagGetter; hint: use a comparable tag value, or implement JawsGetTag(tag.Context) and return a comparable tag"
+	return s + "; found no nested TagGetter; hint: use a comparable tag value that equals itself, or implement JawsGetTag(tag.Context) and return one"
 }
 
 func (errNotUsableAsTag) Is(target error) bool {
 	return target == ErrNotUsableAsTag || target == ErrNotComparable
 }
 
-// NewErrNotUsableAsTag returns [ErrNotUsableAsTag] if x cannot be used as a tag.
+// NewErrNotUsableAsTag returns [ErrNotUsableAsTag] for an unusable tag key.
+//
+// It returns nil for nil and for values that are comparable at runtime and equal
+// to themselves. It only validates key usability; it does not apply [TagExpand]'s
+// tag-type policy, so a value may pass this check and still be rejected with
+// [ErrIllegalTagType].
 func NewErrNotUsableAsTag(x any) error {
-	if err := NewErrNotComparable(x); err != nil {
-		retErr := errNotUsableAsTag{t: reflect.TypeOf(x)}
-		if path, tgType, ok := FindTagGetter(x); ok {
-			retErr.tagGetterPath = path
-			retErr.tagGetterType = tgType
-		}
-		return retErr
+	if x == nil || usableAsTag(x) {
+		return nil
 	}
-	return nil
+	return newErrNotUsableAsTag(x)
+}
+
+func newErrNotUsableAsTag(x any) (err error) {
+	retErr := errNotUsableAsTag{t: reflect.TypeOf(x)}
+	if path, tgType, ok := FindTagGetter(x); ok {
+		retErr.tagGetterPath = path
+		retErr.tagGetterType = tgType
+	}
+	return retErr
 }
 
 var tagGetterType = reflect.TypeFor[TagGetter]()

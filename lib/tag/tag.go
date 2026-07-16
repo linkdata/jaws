@@ -37,40 +37,22 @@ const (
 )
 
 func ensureUsableTag(tag any) error {
-	if tag != nil {
-		if t := reflect.TypeOf(tag); t != nil && t.Comparable() {
-			// reflect.Type.Comparable reports STATIC comparability: a comparable
-			// struct or array can still hold a non-comparable value in an interface
-			// field, making it panic when compared or used as an rq.tagMap key. Only
-			// struct and array values can differ between static and runtime
-			// comparability (scalars, strings, pointers and channels are always
-			// comparable when their type is), so probe just those kinds with
-			// comparableAtRuntime and reject such tags here, rather than deferring a
-			// panic to appendUniqueTag's dedup or to rq.tagMap on the event goroutine.
-			switch t.Kind() {
-			case reflect.Struct, reflect.Array:
-				if !comparableAtRuntime(tag) {
-					return NewErrNotUsableAsTag(tag)
-				}
-			}
-			return nil
-		}
+	if usableAsTag(tag) {
+		return nil
 	}
-	return NewErrNotUsableAsTag(tag)
+	return newErrNotUsableAsTag(tag)
 }
 
-// comparableAtRuntime reports whether tag can be compared with == without
-// panicking.
-//
-// A statically comparable struct or array can still hold a non-comparable value
-// (for example a func in an interface field); comparing such a value panics with
-// "comparing uncomparable type". This probe is allocation-free, unlike
-// [reflect.Value.Comparable], which allocates while walking the value;
-// BenchmarkComparableAtRuntime guards that difference.
-func comparableAtRuntime(tag any) (ok bool) {
-	defer func() { _ = recover() }()
-	other := tag
-	return tag == other
+// usableAsTag reports whether tag is non-nil, comparable, and equal to itself.
+func usableAsTag(tag any) (ok bool) {
+	if tag != nil {
+		// Interface equality panics when the dynamic value is not comparable. If it
+		// does, recover leaves the named result at its false zero value.
+		defer func() { _ = recover() }()
+		other := tag
+		ok = tag == other
+	}
+	return
 }
 
 func appendUniqueTag(result []any, tag any) ([]any, error) {
@@ -210,18 +192,21 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 	}
 }
 
-// TagExpand expands tag into a flat list of unique comparable tag values.
+// TagExpand expands tag into a flat list of unique, usable tag keys.
 //
-// tag may be nil, a [Tag], a slice of tags, a [TagGetter] or another comparable
-// value. Primitive HTML/value types are rejected with [ErrIllegalTagType] to catch
-// common accidental tags, and a value that is not comparable at runtime is rejected
-// with [ErrNotUsableAsTag] (which also matches [ErrNotComparable] via [errors.Is]).
+// tag may be nil, a [Tag], a slice of tags, a [TagGetter] or another value that is
+// comparable at runtime and equals itself. The predeclared string, bool, signed
+// integer, unsigned integer other than uintptr, and floating-point types are
+// rejected with [ErrIllegalTagType], as are [template.HTML], [template.HTMLAttr]
+// and [key.Key]. This catches common accidental tags. An expanded key value that
+// is not comparable at runtime or does not equal itself is rejected with
+// [ErrNotUsableAsTag] (which also matches [ErrNotComparable] via [errors.Is]).
 // Expansion that exceeds the nesting-depth or total-count limits is rejected with
 // [ErrTooManyTags].
 //
-// On error, result holds the tags expanded before the failure; the exception is a
-// value that is not comparable at runtime, for which [ErrNotUsableAsTag] is returned
-// with a nil result.
+// On error, result contains the tags expanded before the failure. If an expanded
+// value is not usable as a tag key, result is nil and err matches
+// [ErrNotUsableAsTag].
 //
 // Expansion reads tag and any values returned by [TagGetter.JawsGetTag] by
 // reference, so tag and those values must not be mutated concurrently with the
@@ -243,8 +228,7 @@ func TagExpand(ctx Context, tag any) (result []any, err error) {
 }
 
 // recoverComparabilityPanic maps a panic recovered from tag expansion to a
-// [TagExpand] result. A "comparing uncomparable type" runtime error — a value that
-// passed the static comparability check but is not comparable at runtime — becomes
+// [TagExpand] result. A "comparing uncomparable type" runtime error becomes
 // [ErrNotUsableAsTag] with a nil result; any other panic value is re-raised.
 func recoverComparabilityPanic(r any, tag any) (result []any, err error) {
 	if re, ok := r.(runtime.Error); ok && strings.Contains(re.Error(), "comparing uncomparable type") {
