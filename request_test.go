@@ -3178,8 +3178,8 @@ func TestDelRequestNilsVacatedSlot(t *testing.T) {
 // readers used while the application renders the initial HTML page
 // (JawsKeyString, String, HeadHTML and TailHTML) read rq.JawsKey under rq.mu, so
 // they do not race the rq.mu-guarded writes to rq.JawsKey that clearLocked and
-// getRequestLocked perform when a still-pending request is recycled (for example
-// by limitPendingRequestsLocked evicting it). Run with -race.
+// getRequestLocked perform when a Request completes and its pooled storage is
+// reused. Run with -race.
 func TestRequest_JawsKeyReadsAreLockedDuringRecycle(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -3221,9 +3221,9 @@ func TestRequest_JawsKeyReadsAreLockedDuringRecycle(t *testing.T) {
 
 // TestServe_MarksRequestRunningSoMaintenanceSkips verifies that TestServe marks
 // the request running before driving rq.process, mirroring ServeHTTP/startServe.
-// The maintenance pass recycles only not-running requests (clearing their
-// elements via clearLocked), so a request whose process loop is live must report
-// running and must survive a maintenance pass that would otherwise expire it.
+// The maintenance pass retires only not-running requests, so a request whose
+// process loop is live must report running and survive a pass that would
+// otherwise expire it.
 func TestServe_MarksRequestRunningSoMaintenanceSkips(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -3244,16 +3244,15 @@ func TestServe_MarksRequestRunningSoMaintenanceSkips(t *testing.T) {
 
 	<-tr.ReadyCh
 	if !tr.running.Load() {
-		t.Fatal("TestServe must mark the request running so maintenance cannot recycle it mid-process")
+		t.Fatal("TestServe must mark the request running so maintenance cannot retire it mid-process")
 	}
 
 	// Make the request look long-idle, then run a maintenance pass directly. A
-	// running request must not be recycled; before the fix it would be removed
-	// from jw.requests and its elements cleared while process is still using them.
+	// running request must remain registered while process is using it.
 	tr.lastWriteSeconds.Store(jw.runtimeSeconds.Load() - 3600)
 	jw.maintenance(time.Millisecond)
 
 	if got := jw.RequestCount(); got != 1 {
-		t.Fatalf("running request was recycled by maintenance: RequestCount() = %d, want 1", got)
+		t.Fatalf("running request was retired by maintenance: RequestCount() = %d, want 1", got)
 	}
 }

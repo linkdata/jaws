@@ -62,10 +62,10 @@ func (jw *Jaws) TestServe(rq *Request, onPanic func(recovered any)) (inCh chan w
 			close(doneCh)
 		}()
 		// Mark the request running before driving rq.process, mirroring how
-		// ServeHTTP gates process with startServe. The maintenance pass recycles
-		// (and clears the elements of) only not-running requests, so leaving the
-		// request not-running while process iterates its elements would let an idle
-		// or context-cancelled request be recycled mid-loop. Take jw.mu so the
+		// ServeHTTP gates process with startServe. The maintenance pass retires
+		// only not-running requests, so leaving the request not-running while
+		// process iterates its elements would let an idle or context-cancelled
+		// request be canceled and unregistered mid-loop. Take jw.mu so the
 		// transition is serialized with the maintenance pass, which reads running
 		// under jw.mu; the final recycle resets running via clearLocked.
 		jw.mu.Lock()

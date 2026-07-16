@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/binary"
 	"errors"
 	"html/template"
 	"io"
@@ -14,12 +15,14 @@ import (
 	"net/netip"
 	"net/url"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
+	"weak"
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/lib/assets"
@@ -225,7 +228,7 @@ func TestJaws_MaintenanceLogsCancelOutsideLock(t *testing.T) {
 	logged := make(chan error, 1)
 	jw.Logger = reentrantLogger{jw: jw, logged: logged}
 
-	// A pending request idle long enough for the maintenance pass to recycle it.
+	// A pending request idle long enough for the maintenance pass to retire it.
 	rq := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
 	setPendingLimitLastWrite(t, rq, 3600)
 
@@ -249,12 +252,233 @@ func TestJaws_MaintenanceLogsCancelOutsideLock(t *testing.T) {
 	}
 }
 
+// TestJaws_RetiredPendingRequestRemainsOwnedByInitialHTTPHandler exercises the
+// production HTTP lifecycle without HeadHTML or TailHTML. A handler can retain
+// its Request while a later request hits the per-IP cap or maintenance expires
+// it; retirement must revoke the WebSocket key without clearing or reusing the
+// object underneath that handler.
+func TestJaws_RetiredPendingRequestRemainsOwnedByInitialHTTPHandler(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		maintenance bool
+		wantCause   error
+	}{
+		{
+			name:      "pending cap",
+			wantCause: ErrTooManyPendingRequests,
+		},
+		{
+			name:        "maintenance",
+			maintenance: true,
+			wantCause:   ErrNoWebSocketRequest,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer jw.Close()
+			if !tc.maintenance {
+				jw.MaxPendingRequestsPerIP = 1
+			}
+
+			type initialRender struct {
+				rq   *Request
+				elem *Element
+			}
+			started := make(chan initialRender, 1)
+			resumed := make(chan *Element, 1)
+			next := make(chan *Request, 1)
+			release := make(chan struct{})
+
+			mux := http.NewServeMux()
+			mux.HandleFunc("/blocked", func(w http.ResponseWriter, r *http.Request) {
+				rq := jw.NewRequest(r)
+				started <- initialRender{rq: rq, elem: rq.NewElement(&testUi{})}
+				<-release
+				resumed <- rq.NewElement(&testUi{})
+				w.WriteHeader(http.StatusNoContent)
+			})
+			mux.HandleFunc("/next", func(w http.ResponseWriter, r *http.Request) {
+				next <- jw.NewRequest(r)
+				w.WriteHeader(http.StatusNoContent)
+			})
+			server := httptest.NewServer(mux)
+			t.Cleanup(server.Close)
+			var releaseOnce sync.Once
+			t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
+
+			firstHTTPDone := make(chan error, 1)
+			go func() {
+				res, getErr := server.Client().Get(server.URL + "/blocked")
+				if getErr == nil {
+					getErr = res.Body.Close()
+				}
+				firstHTTPDone <- getErr
+			}()
+
+			first := <-started
+			firstKey := first.rq.JawsKey
+			setPendingLimitLastWrite(t, first.rq, 3600)
+			if tc.maintenance {
+				// This is the callback the production Serve loop runs on every
+				// maintenance tick; the old timestamp only avoids a wall-clock wait.
+				jw.maintenance(time.Second)
+			}
+			res, err := server.Client().Get(server.URL + "/next")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = res.Body.Close(); err != nil {
+				t.Fatal(err)
+			}
+			second := <-next
+
+			if second == first.rq {
+				t.Fatal("retired Request pointer was reused while its HTTP handler still owned it")
+			}
+			if got := first.rq.JawsKey; got != firstKey {
+				t.Fatalf("retired Request key = %v, want preserved key %v", got, firstKey)
+			}
+			if first.elem.Deleted() {
+				t.Fatal("retirement deleted an Element still owned by the initial HTTP handler")
+			}
+			if claimed := jw.UseRequest(firstKey, first.rq.Initial()); claimed != nil {
+				t.Fatalf("retired Request remained claimable as %v", claimed)
+			}
+			if got := jw.Pending(); got != 1 {
+				t.Fatalf("Pending() = %d, want only the replacement Request", got)
+			}
+			if got := jw.RequestCount(); got != 1 {
+				t.Fatalf("RequestCount() = %d, want only the replacement Request", got)
+			}
+			select {
+			case <-first.rq.Context().Done():
+				if cause := context.Cause(first.rq.Context()); !errors.Is(cause, tc.wantCause) {
+					t.Fatalf("retired Request cause = %v, want %v", cause, tc.wantCause)
+				}
+			default:
+				t.Fatal("retired Request context is not canceled")
+			}
+
+			releaseOnce.Do(func() { close(release) })
+			lateElem := <-resumed
+			if lateElem.Deleted() {
+				t.Fatal("initial HTTP handler created a deleted Element after retirement")
+			}
+			if got, want := lateElem.Jid(), first.elem.Jid()+1; got != want {
+				t.Fatalf("Element Jid after retirement = %v, want %v", got, want)
+			}
+			second.mu.RLock()
+			secondElements := len(second.elems)
+			second.mu.RUnlock()
+			if secondElements != 0 {
+				t.Fatalf("replacement Request has %d Elements from the retired handler, want 0", secondElements)
+			}
+			if err = <-firstHTTPDone; err != nil {
+				t.Fatal(err)
+			}
+			jw.recycle(second)
+		})
+	}
+}
+
+func TestJaws_RetiredRequestKeyRemainsReserved(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.MaxPendingRequestsPerIP = 1
+
+	const (
+		retiredKey     = key.Key(1)
+		replacementKey = key.Key(2)
+	)
+	setRandomKeys(t, jw, retiredKey, retiredKey, replacementKey)
+
+	retiredHTTP := newPendingLimitRequest("192.0.2.1:1000")
+	retired := jw.NewRequest(retiredHTTP)
+	if retired.JawsKey != retiredKey {
+		t.Fatalf("first key = %v, want %v", retired.JawsKey, retiredKey)
+	}
+	setPendingLimitLastWrite(t, retired, 3600)
+
+	replacement := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1001"))
+	if replacement.JawsKey != replacementKey {
+		t.Fatalf("replacement key = %v, want %v after rejecting retired key", replacement.JawsKey, replacementKey)
+	}
+	if claimed := jw.UseRequest(retiredKey, retiredHTTP); claimed != nil {
+		t.Fatalf("retired key remained claimable as %v", claimed)
+	}
+	jw.mu.RLock()
+	tombstone, reserved := jw.requests[retiredKey]
+	jw.mu.RUnlock()
+	if !reserved || tombstone != nil {
+		t.Fatalf("retired key map entry = %v, %t, want nil tombstone", tombstone, reserved)
+	}
+	if total, active := jw.RequestCounts(); total != 1 || active != 0 {
+		t.Fatalf("RequestCounts() = %d, %d, want 1, 0", total, active)
+	}
+
+	// Exercise the production scans while the retired-key tombstone is present.
+	jw.setDirty([]any{tag.Tag("retired-key-test")})
+	if got := jw.distributeDirt(); got != 1 {
+		t.Fatalf("distributeDirt() = %d, want 1", got)
+	}
+	jw.maintenance(time.Hour)
+
+	jw.recycle(replacement)
+	runtime.KeepAlive(retired)
+}
+
+func TestReleaseRetiredRequestKey(t *testing.T) {
+	const retiredKey = key.Key(1)
+
+	t.Run("releases tombstone", func(t *testing.T) {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer jw.Close()
+		jw.requests[retiredKey] = nil
+
+		releaseRetiredRequestKey(retiredRequestKey{jw: weak.Make(jw), jawsKey: retiredKey})
+		if _, reserved := jw.requests[retiredKey]; reserved {
+			t.Fatal("retired key remains reserved after cleanup")
+		}
+
+		setRandomKeys(t, jw, retiredKey)
+		rq := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
+		if rq.JawsKey != retiredKey {
+			t.Fatalf("reused key = %v, want %v", rq.JawsKey, retiredKey)
+		}
+		jw.recycle(rq)
+	})
+
+	t.Run("preserves current request", func(t *testing.T) {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer jw.Close()
+		setRandomKeys(t, jw, retiredKey)
+		rq := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
+
+		releaseRetiredRequestKey(retiredRequestKey{jw: weak.Make(jw), jawsKey: retiredKey})
+		if got := jw.requests[retiredKey]; got != rq {
+			t.Fatalf("current request = %v, want %v", got, rq)
+		}
+		jw.recycle(rq)
+	})
+}
+
 // TestJaws_MaxPendingRequestsPerIPSparesRenderingRequest verifies that the pending
 // cap does not evict a Request that is still rendering its initial HTML. The oldest
 // pending Request would normally be evicted first, but evicting one whose render is
-// in flight on another goroutine would recycle it underneath that goroutine,
-// contaminating a later reuse and leaking its key. The cap must instead evict the
-// next-oldest idle Request, leaving the rendering one claimable.
+// in flight would invalidate the page before its WebSocket can connect. The cap
+// instead evicts the next-oldest idle Request, leaving the rendering one claimable.
 func TestJaws_MaxPendingRequestsPerIPSparesRenderingRequest(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -345,8 +569,7 @@ func TestJaws_MaxPendingRequestsPerIPSparesRecentlyRenderedRequest(t *testing.T)
 // TestJaws_MaxPendingRequestsPerIPSparesStalledLiveRender proves the eviction decision
 // tracks the actual last write, not a value sampled by the maintenance pass: a render
 // that wrote once and then stalled (no further writes) is still spared while that write
-// is within 2*maintenanceInterval, even across a maintenance pass — closing the gap
-// where clearing a flag on a tick could expose a live render to recycling.
+// is within 2*maintenanceInterval, even across a maintenance pass.
 func TestJaws_MaxPendingRequestsPerIPSparesStalledLiveRender(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -422,9 +645,9 @@ func TestJaws_MaxPendingRequestsPerIPSparesFutureWriteTimestamp(t *testing.T) {
 
 // TestJaws_MaxPendingRequestsPerIPOvershootsWhenAllRendering verifies that when
 // every pending request for an IP is mid-render, the cap is not enforced by
-// recycling one of them: oldestEvictablePendingLocked finds no idle victim, so the
-// cap is allowed a brief, self-correcting overshoot rather than corrupting an
-// in-flight render.
+// retiring one of them: oldestEvictablePendingLocked finds no idle victim, so the
+// cap allows a brief, self-correcting overshoot rather than invalidating a page
+// before its WebSocket can connect.
 func TestJaws_MaxPendingRequestsPerIPOvershootsWhenAllRendering(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -447,7 +670,7 @@ func TestJaws_MaxPendingRequestsPerIPOvershootsWhenAllRendering(t *testing.T) {
 		t.Fatalf("Pending() = %d, want 2 (cap overshoots while all pending render)", got)
 	}
 	if rq1.JawsKey == 0 || rq1.JawsKey != rq1Key {
-		t.Fatal("the rendering request must not be recycled by the cap")
+		t.Fatal("the rendering request must not be retired by the cap")
 	}
 }
 
@@ -730,6 +953,15 @@ func setPendingLimitLastWrite(t *testing.T, rq *Request, secondsAgo int32) {
 	// reads back as secondsAgo. In tests where Serve has not started, runtimeSeconds
 	// is often zero, so old timestamps are represented as negative seconds.
 	rq.lastWriteSeconds.Store(rq.Jaws.runtimeSeconds.Load() - secondsAgo)
+}
+
+func setRandomKeys(t *testing.T, jw *Jaws, keys ...key.Key) {
+	t.Helper()
+	random := make([]byte, 8*len(keys))
+	for i, jawsKey := range keys {
+		binary.LittleEndian.PutUint64(random[i*8:], uint64(jawsKey))
+	}
+	jw.kg = bufio.NewReader(bytes.NewReader(random))
 }
 
 func TestCoverage_GenerateHeadAndConvenienceBroadcasts(t *testing.T) {
@@ -1199,6 +1431,7 @@ func TestJaws_distributeDirt_AscendingOrder(t *testing.T) {
 	rq := &Request{}
 	jw.mu.Lock()
 	jw.requests[1] = rq
+	jw.requestCount++
 	jw.dirty[tag.Tag("fourth")] = 4
 	jw.dirty[tag.Tag("second")] = 2
 	jw.dirty[tag.Tag("fifth")] = 5
@@ -2169,6 +2402,7 @@ func newUnpooledBenchRequest(jw *Jaws) (rq *Request) {
 			rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
 			rq.mu.Unlock()
 			jw.requests[jawsKey] = rq
+			jw.requestCount++
 			jw.pending[rq.remoteIP] = append(jw.pending[rq.remoteIP], rq)
 		}
 	}
@@ -2183,6 +2417,7 @@ func recycleUnpooledBenchRequest(jw *Jaws, rq *Request) {
 	if rq.JawsKey != 0 {
 		jw.removePendingRequestLocked(rq)
 		delete(jw.requests, rq.JawsKey)
+		jw.requestCount--
 		rq.clearLocked()
 	}
 }
@@ -2324,14 +2559,25 @@ func BenchmarkSubscriptionChannels(b *testing.B) {
 // BenchmarkDistributeDirt guards the per-updateTicker fan-out path: under jw.mu it
 // snapshots and order-sorts the dirty tag set and appends it to every active
 // Request. The benchmark exists to catch an accidental O(n^2) or per-call
-// allocation regression as request and dirty-tag counts grow. The per-iteration
-// setDirty repopulation and todoDirt reset are excluded from the timer so only
-// distributeDirt is measured.
+// allocation regression as request, retired-key and dirty-tag counts grow. The
+// retired-key cases ensure tombstones affect scan time but not snapshot capacity.
+// The per-iteration setDirty repopulation and todoDirt reset are excluded from
+// the timer so only distributeDirt is measured.
 func BenchmarkDistributeDirt(b *testing.B) {
-	for _, c := range []struct{ reqs, tags int }{
-		{10, 10}, {100, 100}, {1000, 100}, {100, 1000},
+	for _, c := range []struct{ reqs, retired, tags int }{
+		{reqs: 10, tags: 10},
+		{reqs: 100, tags: 100},
+		{reqs: 1000, tags: 100},
+		{reqs: 100, tags: 1000},
+		{reqs: 100, retired: 100, tags: 100},
+		{reqs: 100, retired: 1000, tags: 100},
+		{reqs: 1, retired: 10000, tags: 10},
 	} {
-		b.Run("reqs="+strconv.Itoa(c.reqs)+"/tags="+strconv.Itoa(c.tags), func(b *testing.B) {
+		name := "reqs=" + strconv.Itoa(c.reqs) + "/tags=" + strconv.Itoa(c.tags)
+		if c.retired > 0 {
+			name += "/retired=" + strconv.Itoa(c.retired)
+		}
+		b.Run(name, func(b *testing.B) {
 			jw, err := New()
 			if err != nil {
 				b.Fatal(err)
@@ -2344,6 +2590,10 @@ func BenchmarkDistributeDirt(b *testing.B) {
 				rq := &Request{Jaws: jw}
 				reqs[i] = rq
 				jw.requests[key.Key(i+1)] = rq
+			}
+			jw.requestCount = len(reqs)
+			for i := range c.retired {
+				jw.requests[key.Key(c.reqs+i+1)] = nil
 			}
 			jw.mu.Unlock()
 
@@ -2589,4 +2839,39 @@ func BenchmarkRequestMarkWritten(b *testing.B) {
 			rq.MarkWritten()
 		}
 	})
+}
+
+// BenchmarkRetirePendingRequests guards the exceptional lifecycle used when
+// maintenance or the per-IP cap revokes Requests whose initial handlers may
+// still own them. It measures both a single timeout and a full default-cap batch.
+func BenchmarkRetirePendingRequests(b *testing.B) {
+	for _, n := range []int{1, DefaultMaxPendingRequestsPerIP} {
+		b.Run("requests="+strconv.Itoa(n), func(b *testing.B) {
+			jw, err := New()
+			if err != nil {
+				b.Fatal(err)
+			}
+			b.Cleanup(func() { jw.Close() })
+			r := newPendingLimitRequest("192.0.2.1:1000")
+			requests := make([]*Request, n)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				for i := range requests {
+					requests[i] = jw.NewRequest(r)
+				}
+				jw.mu.Lock()
+				var retireCause error
+				for _, rq := range requests {
+					if cause := jw.retireNonRunningRequestLocked(rq, nil); cause != nil && retireCause == nil {
+						retireCause = cause
+					}
+				}
+				jw.mu.Unlock()
+				if retireCause != nil {
+					b.Fatal(retireCause)
+				}
+			}
+		})
+	}
 }

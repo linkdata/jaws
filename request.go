@@ -44,7 +44,7 @@ type ConnectFn = func(rq *Request) error
 // that diagnostic use, not as a public nil-safe contract.
 type Request struct {
 	Jaws             *Jaws                   // (read-only) the JaWS instance the Request belongs to
-	JawsKey          key.Key                 // (read-only) random key identifying this Request in the WebSocket URI and the broadcast/tail target; read under mu by the identity check (destKey, wantMessage) and the render path (JawsKeyString, HeadHTML)
+	JawsKey          key.Key                 // (read-only) random key assigned to this Request; routes JaWS URLs and request-targeted broadcasts only while registered
 	remoteIP         netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
 	running          atomic.Bool             // if ServeHTTP() is running
 	claimed          atomic.Bool             // if UseRequest() has been called for it
@@ -256,7 +256,7 @@ func (rq *Request) clearLocked() *Request {
 	return rq
 }
 
-// HeadHTML writes the HTML code needed in the HTML page's HEAD section.
+// HeadHTML writes the configured resources and Request key metadata for the page head.
 func (rq *Request) HeadHTML(w io.Writer) (err error) {
 	rq.mu.RLock()
 	jawsKey := rq.JawsKey
@@ -349,7 +349,7 @@ func (rq *Request) SetContext(fn func(oldCtx context.Context) (newCtx context.Co
 	}
 }
 
-// maintenance reports whether rq has expired and should be recycled. For a
+// maintenance reports whether rq has expired and should be retired. For a
 // request that never went live it cancels and reports expiry once it has been
 // idle (no [RequestWriter] write) longer than requestTimeout, or immediately if its
 // context is already done. nowSeconds is the reference instant ([Jaws.runtimeSeconds]).
@@ -729,13 +729,16 @@ func (rq *Request) MustLog(err error) {
 // startServe transitions a claimed request to running.
 //
 // It takes jw.mu so the running transition is serialized with the maintenance
-// pass, which also holds jw.mu when deciding whether to recycle a not-running
-// request. If the request was recycled first, clearLocked has reset claimed, so the
-// CAS below fails and ServeHTTP returns Gone instead of driving a dead request.
+// pass, which also holds jw.mu when deciding whether to retire a not-running
+// request. The map identity check keeps a retired Request from starting even
+// though its fields remain intact for an initial HTTP handler that still owns it.
 func (rq *Request) startServe() (ok bool) {
 	rq.Jaws.mu.Lock()
 	defer rq.Jaws.mu.Unlock()
-	return rq.claimed.Load() && rq.running.CompareAndSwap(false, true)
+	rq.mu.RLock()
+	registered := rq.Jaws.requests[rq.JawsKey] == rq
+	rq.mu.RUnlock()
+	return registered && rq.claimed.Load() && rq.running.CompareAndSwap(false, true)
 }
 
 func (rq *Request) stopServe() {

@@ -49,7 +49,7 @@ func (rw RequestWriter) Set(key string, value any) {
 	rw.Request.Set(key, value)
 }
 
-// HeadHTML outputs the HTML code needed in the head section.
+// HeadHTML calls [jaws.Request.HeadHTML].
 func (rw RequestWriter) HeadHTML() error {
 	return rw.Request.HeadHTML(rw)
 }

@@ -151,9 +151,11 @@ func (jw *Jaws) distributeDirt() int {
 		dirt = sortedDirtTags(jw.dirty)
 		clear(jw.dirty)
 		jw.dirtOrder = 0
-		reqs = make([]*Request, 0, len(jw.requests))
+		reqs = make([]*Request, 0, jw.requestCount)
 		for _, rq := range jw.requests {
-			reqs = append(reqs, rq)
+			if rq != nil {
+				reqs = append(reqs, rq)
+			}
 		}
 	}
 	jw.mu.Unlock()

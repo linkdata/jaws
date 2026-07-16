@@ -147,11 +147,16 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	jw.mu.Lock()
 	nowSeconds := jw.runtimeSeconds.Load()
 	for _, rq := range jw.requests {
+		if rq == nil {
+			continue
+		}
 		if expired, cause := rq.maintenance(nowSeconds, requestTimeout); expired {
 			if cause != nil {
 				toLog = append(toLog, cause)
 			}
-			jw.recycleLocked(rq)
+			if retireCause := jw.retireNonRunningRequestLocked(rq, nil); retireCause != nil {
+				toLog = append(toLog, retireCause)
+			}
 		}
 	}
 	for k, sess := range jw.sessions {

@@ -2,8 +2,8 @@ package jaws
 
 // This file manages the server-side Request pool: NewRequest creates a pending
 // Request, UseRequest claims it when the WebSocket connects, the per-IP pending
-// limit evicts the oldest unclaimed Request, the random helpers mint identity
-// keys, and recycle/cancelIfCurrent tear Requests down and return them to the pool.
+// limit retires the oldest unclaimed Request, the random helpers mint identity
+// keys, and recycle/cancelIfCurrent tear completed Requests down.
 
 import (
 	"context"
@@ -11,8 +11,10 @@ import (
 	"io"
 	"net/http"
 	"net/netip"
+	"runtime"
 	"slices"
 	"time"
+	"weak"
 
 	"github.com/linkdata/jaws/lib/key"
 )
@@ -27,8 +29,13 @@ import (
 // Automatic timeout handling is performed by [Jaws.ServeWithTimeout]. The default
 // [Jaws.Serve] helper uses a 10-second timeout.
 //
-// It panics if the system CSPRNG ([crypto/rand]) fails while generating the request
-// key, which does not happen on supported platforms.
+// When timeout maintenance or the per-IP pending limit retires an unclaimed
+// Request, its key becomes unclaimable. The key also remains unavailable for
+// assignment to another Request while the retired Request is reachable; no
+// deadline is guaranteed for later reuse.
+//
+// NewRequest panics if the system CSPRNG ([crypto/rand]) fails while generating
+// the request key, which does not happen on supported platforms.
 func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 	remoteIP := jw.clientIP(r)
 
@@ -47,6 +54,7 @@ func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 			if _, ok := jw.requests[jawsKey]; !ok {
 				rq = jw.getRequestLocked(jawsKey, r, remoteIP)
 				jw.requests[jawsKey] = rq
+				jw.requestCount++
 				jw.pending[rq.remoteIP] = append(jw.pending[rq.remoteIP], rq)
 			}
 		}
@@ -84,18 +92,12 @@ func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) 
 		for len(jw.pending[remoteIP]) >= limit {
 			victim := jw.oldestEvictablePendingLocked(remoteIP, nowSeconds)
 			if victim == nil {
-				// Every pending Request for this IP is rendering or rendered too
-				// recently to evict safely. Recycling a still-rendering one would
-				// recycle a Request whose initial HTML is still being assembled on an
-				// HTTP goroutine that holds no jw.mu, letting a later NewRequest reuse
-				// the pooled pointer under a new key while that goroutine keeps
-				// appending elements (contaminating the new Request and leaking its
-				// key). Prefer a brief, self-correcting overshoot of the cap: the
-				// renders finish and connect (or time out and get recycled by the
-				// maintenance pass) shortly.
+				// Every pending Request for this IP was written recently. Prefer a
+				// brief, self-correcting overshoot of the cap to invalidating a page
+				// that is likely still rendering or about to connect.
 				return
 			}
-			if cause := jw.recycleLockedWithCause(victim, newErrTooManyPendingRequests(remoteIP, limit)); cause != nil {
+			if cause := jw.retireNonRunningRequestLocked(victim, newErrTooManyPendingRequests(remoteIP, limit)); cause != nil {
 				toLog = append(toLog, cause)
 			}
 		}
@@ -103,20 +105,18 @@ func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) 
 	return
 }
 
-// oldestEvictablePendingLocked returns the oldest pending [Request] for remoteIP that
-// is safe to recycle, or nil if every one of them was written too recently to evict.
+// oldestEvictablePendingLocked returns the oldest pending [Request] for remoteIP
+// eligible for eviction, or nil if every one was written too recently to evict.
 // nowSeconds is the reference instant ([Jaws.runtimeSeconds]), passed in so all
 // candidates are judged against the same instant. Caller must hold jw.mu.
 func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr, nowSeconds int32) *Request {
-	// A Request is spared while its initial HTML may still be in flight: recycling one
-	// whose render goroutine is still writing would let a later NewRequest reuse the
-	// pooled pointer under a new key while that goroutine keeps appending elements (see
-	// limitPendingRequestsLocked). RequestWriter.Write records the current second on
-	// every write via Request.MarkWritten, so a Request is treated as possibly-rendering,
-	// and spared, while its last write is within 2*maintenanceInterval (rounded to whole
-	// seconds, with a one-second floor). The recorded second advances only while the
-	// Request keeps writing, so an actively writing render stays fresh while one idle for
-	// the window — finished or merely stalled between writes — becomes evictable.
+	// A Request is spared while its initial HTML may still be in flight.
+	// RequestWriter.Write records the current second on every write via
+	// Request.MarkWritten, so a Request is treated as possibly rendering while its
+	// last write is within 2*maintenanceInterval (rounded to whole seconds, with a
+	// one-second floor). The recorded second advances only while the Request keeps
+	// writing, so an actively writing render stays fresh while one idle for the
+	// window becomes evictable.
 	//
 	// maintenanceInterval is zero until ServeWithTimeout starts; fall back to
 	// DefaultUpdateInterval so an in-flight render is still protected before the
@@ -186,7 +186,7 @@ func (jw *Jaws) UseRequest(jawsKey key.Key, r *http.Request) (rq *Request) {
 	if jawsKey != 0 {
 		var err error
 		jw.mu.Lock()
-		if waitingRq, ok := jw.requests[jawsKey]; ok {
+		if waitingRq, ok := jw.requests[jawsKey]; ok && waitingRq != nil {
 			if err = waitingRq.claim(r); err == nil {
 				rq = waitingRq
 				jw.removePendingRequestLocked(rq)
@@ -219,6 +219,50 @@ func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP neti
 	return rq
 }
 
+type retiredRequestKey struct {
+	jw      weak.Pointer[Jaws]
+	jawsKey key.Key
+}
+
+func releaseRetiredRequestKey(retired retiredRequestKey) {
+	if jw := retired.jw.Value(); jw != nil {
+		jw.mu.Lock()
+		if rq, ok := jw.requests[retired.jawsKey]; ok && rq == nil {
+			delete(jw.requests, retired.jawsKey)
+		}
+		jw.mu.Unlock()
+		runtime.KeepAlive(jw)
+	}
+}
+
+// retireNonRunningRequestLocked cancels and unregisters rq without clearing or
+// pooling it. A nil entry keeps its key reserved until a runtime cleanup runs
+// after the Request becomes unreachable. Caller must hold jw.mu, and rq must not
+// be running.
+func (jw *Jaws) retireNonRunningRequestLocked(rq *Request, err error) (cause error) {
+	rq.mu.Lock()
+	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq && !rq.running.Load() {
+		jawsKey := rq.JawsKey
+		if err != nil {
+			cause = rq.cancelLocked(err)
+		} else if rq.ctx.Err() == nil {
+			rq.cancelFn(nil)
+		}
+		jw.removePendingRequestLocked(rq)
+		jw.requests[jawsKey] = nil
+		jw.requestCount--
+		// Preserve the claimed state until session removal observes it. A claimed
+		// WebSocket that never reached ServeHTTP still earns the session grace
+		// period granted by Session.delRequest.
+		rq.killSessionLocked()
+		rq.claimed.Store(false)
+		runtime.AddCleanup(rq, releaseRetiredRequestKey, retiredRequestKey{jw: weak.Make(jw), jawsKey: jawsKey})
+	}
+	rq.mu.Unlock()
+	runtime.KeepAlive(rq)
+	return
+}
+
 // recycleLockedWithCause recycles rq, optionally cancelling its context with err.
 // It returns the cancellation cause (or nil) instead of logging it, so the caller
 // can log it after releasing jw.mu (see the package locking contract). Caller must
@@ -226,12 +270,13 @@ func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP neti
 func (jw *Jaws) recycleLockedWithCause(rq *Request, err error) (cause error) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	if rq.JawsKey != 0 {
+	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq {
 		if err != nil {
 			cause = rq.cancelLocked(err)
 		}
 		jw.removePendingRequestLocked(rq)
 		delete(jw.requests, rq.JawsKey)
+		jw.requestCount--
 		rq.clearLocked()
 		jw.reqPool.Put(rq)
 	}
