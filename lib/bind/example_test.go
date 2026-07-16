@@ -24,10 +24,10 @@ func ExampleBinder_hooks() {
 			return template.HTML(fmt.Sprintf("<strong>%d</strong>", cur.JawsGetLocked(elem))) // #nosec G203
 		}).
 		Success(func() {
-			calls = append(calls, "success-newest")
+			calls = append(calls, "success-oldest")
 		}).
 		Success(func() {
-			calls = append(calls, "success-oldest")
+			calls = append(calls, "success-newest")
 		})
 
 	if err := b.JawsSet(nil, 2); err != nil {
@@ -41,5 +41,5 @@ func ExampleBinder_hooks() {
 	// Output:
 	// 2
 	// <strong>2</strong>
-	// [set-locked success-oldest success-newest get-html]
+	// [set-locked success-newest success-oldest get-html]
 }
