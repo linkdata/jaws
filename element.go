@@ -128,8 +128,12 @@ func (elem *Element) renderDebug(w io.Writer) {
 		sb.WriteString("n/a")
 	}
 	sb.WriteByte(']')
-	_, _ = w.Write([]byte(strings.ReplaceAll(sb.String(), "-->", "==>") + " -->"))
+	_, _ = w.Write([]byte(debugCommentSanitizer.Replace(sb.String()) + " -->"))
 }
+
+// debugCommentSanitizer neutralizes both the standard "-->" and the HTML5
+// "--!>" comment-close sequences so tag text cannot escape the debug comment.
+var debugCommentSanitizer = strings.NewReplacer("-->", "==>", "--!>", "==>")
 
 // JawsRender calls [Renderer.JawsRender] for this [Element].
 //
