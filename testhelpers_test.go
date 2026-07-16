@@ -226,6 +226,7 @@ func (t testTemplateUI) JawsRender(elem *Element, w io.Writer, params []any) (er
 		elem.AddHandlers(handlers...)
 		err = fmt.Errorf("missing template %q", t.Name)
 		if tmpl := elem.Request.Jaws.LookupTemplate(t.Name); tmpl != nil {
+			err = nil
 			if doWrap {
 				err = writeTestTemplateWrapperStart(elem, w, t.OuterHTMLTag, attrs)
 			}

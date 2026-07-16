@@ -2150,6 +2150,20 @@ func TestRequest_Template(t *testing.T) {
 	}
 }
 
+func TestRequest_Template_Unwrapped(t *testing.T) {
+	is := newTestHelper(t)
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	if err := rq.Template("", "testtemplate", tag.Tag("dot")); err != nil {
+		t.Fatal(err)
+	}
+	is.Equal(len(rq.elems), 1)
+	if got := rq.BodyHTML(); !strings.Contains(string(got), "dot") {
+		t.Errorf("Request.Template() = %q, want it to contain %q", got, "dot")
+	}
+}
+
 type templateDot struct {
 	clickedCh chan struct{}
 	gotName   string
