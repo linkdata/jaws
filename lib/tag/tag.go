@@ -91,7 +91,7 @@ func appendUniqueTag(result []any, tag any) ([]any, error) {
 
 func addTag(result []any, tag any) ([]any, error) {
 	if err := ensureUsableTag(tag); err != nil {
-		return result, err
+		return nil, err
 	}
 	return appendUniqueTag(result, tag)
 }

@@ -284,6 +284,20 @@ func TestTagExpand_MultiRuntimeNonComparable(t *testing.T) {
 	}
 }
 
+// TestTagExpand_ValidThenRuntimeNonComparable covers a valid tag preceding a
+// runtime-non-comparable one: TagExpand must honor its nil-result contract for
+// ErrNotUsableAsTag and not leak the partial result accumulated before the
+// rejection.
+func TestTagExpand_ValidThenRuntimeNonComparable(t *testing.T) {
+	result, err := TagExpand(nil, []any{Tag("a"), testRuntimeNonComparable{v: func() {}}})
+	if !errors.Is(err, ErrNotUsableAsTag) {
+		t.Fatalf("expected ErrNotUsableAsTag, got %v", err)
+	}
+	if result != nil {
+		t.Fatalf("expected nil result, got %v", result)
+	}
+}
+
 // TestTagExpand_RuntimeNonComparableArray pins the reflect.Array arm of
 // ensureUsableTag independently of the struct arm. An array whose static type is
 // comparable ([1]any) but whose element holds a non-comparable value (a func)
