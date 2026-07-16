@@ -43,43 +43,16 @@ func ensureUsableTag(tag any) error {
 	return newErrNotUsableAsTag(tag)
 }
 
-func usableAsTag(tag any) bool {
-	if tag == nil {
-		return false
-	}
-	t := reflect.TypeOf(tag)
-	if !t.Comparable() {
-		return false
-	}
-	// reflect.Type.Comparable reports static comparability. Struct and array
-	// values can still hold a non-comparable value in an interface field, while
-	// floats, complex values and composites containing them can be non-reflexive.
-	// Either property makes a map entry unreachable or unsafe, so probe just the
-	// kinds that can have one of those properties. Pointers, channels and ordinary
-	// scalar values always compare equal to themselves.
-	switch t.Kind() {
-	case reflect.Float32, reflect.Float64,
-		reflect.Complex64, reflect.Complex128:
+// usableAsTag reports whether tag is non-nil, comparable, and equal to itself.
+func usableAsTag(tag any) (ok bool) {
+	if tag != nil {
+		// Interface equality panics when the dynamic value is not comparable. If it
+		// does, recover leaves the named result at its false zero value.
+		defer func() { _ = recover() }()
 		other := tag
-		return tag == other
-	case reflect.Struct, reflect.Array:
-		return comparableAtRuntime(tag)
+		ok = tag == other
 	}
-	return true
-}
-
-// comparableAtRuntime reports whether tag is comparable and equals itself.
-//
-// A statically comparable struct or array can still hold a non-comparable value
-// (for example a func in an interface field); comparing such a value panics with
-// "comparing uncomparable type". A float, complex value or composite containing
-// one can also compare unequal to itself when it contains NaN, making its map key
-// unreachable. This probe handles both cases and is guarded by
-// BenchmarkComparableAtRuntime.
-func comparableAtRuntime(tag any) (ok bool) {
-	defer func() { _ = recover() }()
-	other := tag
-	return tag == other
+	return
 }
 
 func appendUniqueTag(result []any, tag any) ([]any, error) {

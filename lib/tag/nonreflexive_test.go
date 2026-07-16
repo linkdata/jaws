@@ -6,10 +6,12 @@ import (
 	"testing"
 )
 
-type testFloat32Tag float32
-type testFloat64Tag float64
-type testComplex64Tag complex64
-type testComplex128Tag complex128
+type (
+	testFloat32Tag    float32
+	testFloat64Tag    float64
+	testComplex64Tag  complex64
+	testComplex128Tag complex128
+)
 
 func TestTagExpandRejectsNonReflexiveTags(t *testing.T) {
 	tests := []struct {

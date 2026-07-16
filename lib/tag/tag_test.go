@@ -255,12 +255,9 @@ func TestTagExpand_TagGetterNonComparable(t *testing.T) {
 
 // TestTagExpand_RuntimeNonComparable covers the gap between static and runtime
 // comparability: a struct whose static type is comparable but that holds a
-// non-comparable value in an interface field (here a func) passes
-// reflect.Type.Comparable() yet panics on == / as a map key. ensureUsableTag runs
-// the runtime comparability check for struct and array kinds in all builds, so tag
-// expansion must reject even a single such tag with ErrNotUsableAsTag rather than
-// accepting it and deferring a panic to jw.dirty / rq.tagMap on the event
-// goroutine.
+// non-comparable value in an interface field (here a func) panics on == or as a
+// map key. Tag expansion must reject even a single such tag with
+// ErrNotUsableAsTag rather than deferring that panic to jw.dirty or rq.tagMap.
 func TestTagExpand_RuntimeNonComparable(t *testing.T) {
 	if _, err := TagExpand(nil, testRuntimeNonComparable{v: func() {}}); !errors.Is(err, ErrNotUsableAsTag) {
 		t.Fatalf("expected ErrNotUsableAsTag, got %v", err)
@@ -298,12 +295,9 @@ func TestTagExpand_ValidThenRuntimeNonComparable(t *testing.T) {
 	}
 }
 
-// TestTagExpand_RuntimeNonComparableArray pins the reflect.Array arm of
-// ensureUsableTag independently of the struct arm. An array whose static type is
-// comparable ([1]any) but whose element holds a non-comparable value (a func)
-// passes reflect.Type.Comparable() yet panics on ==; expansion must reject it with
-// ErrNotUsableAsTag. Without an actual array value the arm is only statement-covered
-// via the case label it shares with reflect.Struct.
+// TestTagExpand_RuntimeNonComparableArray covers an array whose static type is
+// comparable ([1]any) but whose element holds a non-comparable value (a func).
+// Comparing it panics, so expansion must reject it with ErrNotUsableAsTag.
 func TestTagExpand_RuntimeNonComparableArray(t *testing.T) {
 	if _, err := TagExpand(nil, [1]any{func() {}}); !errors.Is(err, ErrNotUsableAsTag) {
 		t.Fatalf("expected ErrNotUsableAsTag, got %v", err)
