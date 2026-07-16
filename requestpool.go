@@ -2,8 +2,8 @@ package jaws
 
 // This file manages the server-side Request pool: NewRequest creates a pending
 // Request, UseRequest claims it when the WebSocket connects, the per-IP pending
-// limit evicts the oldest unclaimed Request, the random helpers mint identity
-// keys, and recycle/cancelIfCurrent tear Requests down and return them to the pool.
+// limit retires the oldest unclaimed Request, the random helpers mint identity
+// keys, and recycle/cancelIfCurrent tear completed Requests down.
 
 import (
 	"context"
@@ -84,18 +84,12 @@ func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) 
 		for len(jw.pending[remoteIP]) >= limit {
 			victim := jw.oldestEvictablePendingLocked(remoteIP, nowSeconds)
 			if victim == nil {
-				// Every pending Request for this IP is rendering or rendered too
-				// recently to evict safely. Recycling a still-rendering one would
-				// recycle a Request whose initial HTML is still being assembled on an
-				// HTTP goroutine that holds no jw.mu, letting a later NewRequest reuse
-				// the pooled pointer under a new key while that goroutine keeps
-				// appending elements (contaminating the new Request and leaking its
-				// key). Prefer a brief, self-correcting overshoot of the cap: the
-				// renders finish and connect (or time out and get recycled by the
-				// maintenance pass) shortly.
+				// Every pending Request for this IP was written recently. Prefer a
+				// brief, self-correcting overshoot of the cap to invalidating a page
+				// that is likely still rendering or about to connect.
 				return
 			}
-			if cause := jw.recycleLockedWithCause(victim, newErrTooManyPendingRequests(remoteIP, limit)); cause != nil {
+			if cause := jw.retireNonRunningRequestLocked(victim, newErrTooManyPendingRequests(remoteIP, limit)); cause != nil {
 				toLog = append(toLog, cause)
 			}
 		}
@@ -103,24 +97,18 @@ func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) 
 	return
 }
 
-// oldestEvictablePendingLocked returns the oldest pending [Request] for remoteIP that
-// is safe to recycle, or nil if every one of them was written too recently to evict.
+// oldestEvictablePendingLocked returns the oldest pending [Request] for remoteIP
+// eligible for eviction, or nil if every one was written too recently to evict.
 // nowSeconds is the reference instant ([Jaws.runtimeSeconds]), passed in so all
 // candidates are judged against the same instant. Caller must hold jw.mu.
 func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr, nowSeconds int32) *Request {
-	// An explicit initial-render lease always wins over timestamp-based eviction.
-	// The timestamp remains a fallback for renderers that write without using the
-	// HeadHTML/TailHTML flow and do not hold an application lease.
-	//
-	// A Request is also spared while its initial HTML may still be in flight: recycling one
-	// whose render goroutine is still writing would let a later NewRequest reuse the
-	// pooled pointer under a new key while that goroutine keeps appending elements (see
-	// limitPendingRequestsLocked). RequestWriter.Write records the current second on
-	// every write via Request.MarkWritten, so a Request is treated as possibly-rendering,
-	// and spared, while its last write is within 2*maintenanceInterval (rounded to whole
-	// seconds, with a one-second floor). The recorded second advances only while the
-	// Request keeps writing, so an actively writing render stays fresh while one idle for
-	// the window — finished or merely stalled between writes — becomes evictable.
+	// A Request is spared while its initial HTML may still be in flight.
+	// RequestWriter.Write records the current second on every write via
+	// Request.MarkWritten, so a Request is treated as possibly rendering while its
+	// last write is within 2*maintenanceInterval (rounded to whole seconds, with a
+	// one-second floor). The recorded second advances only while the Request keeps
+	// writing, so an actively writing render stays fresh while one idle for the
+	// window becomes evictable.
 	//
 	// maintenanceInterval is zero until ServeWithTimeout starts; fall back to
 	// DefaultUpdateInterval so an in-flight render is still protected before the
@@ -136,9 +124,6 @@ func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr, nowSeconds int
 		spareWindow = time.Second // floor: the seconds counter advances at most once per second
 	}
 	for _, rq := range jw.pending[remoteIP] {
-		if rq.initialRendering.Load() {
-			continue
-		}
 		// Compare as durations (elapsed whole seconds vs the window) to avoid a
 		// lossy time.Duration conversion. A write timestamp newer than this scan's
 		// nowSeconds is fresh; that can happen when a render records a write while
@@ -226,6 +211,30 @@ func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP neti
 	return rq
 }
 
+// retireNonRunningRequestLocked cancels and unregisters rq without clearing or
+// pooling it. The initial HTTP handler may still own the Request after its
+// WebSocket key expires, so garbage collection is the only safe reclamation.
+// Caller must hold jw.mu, and rq must not be running.
+func (jw *Jaws) retireNonRunningRequestLocked(rq *Request, err error) (cause error) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq && !rq.running.Load() {
+		if err != nil {
+			cause = rq.cancelLocked(err)
+		} else if rq.ctx.Err() == nil {
+			rq.cancelFn(nil)
+		}
+		jw.removePendingRequestLocked(rq)
+		delete(jw.requests, rq.JawsKey)
+		// Preserve the claimed state until session removal observes it. A claimed
+		// WebSocket that never reached ServeHTTP still earns the session grace
+		// period granted by Session.delRequest.
+		rq.killSessionLocked()
+		rq.claimed.Store(false)
+	}
+	return
+}
+
 // recycleLockedWithCause recycles rq, optionally cancelling its context with err.
 // It returns the cancellation cause (or nil) instead of logging it, so the caller
 // can log it after releasing jw.mu (see the package locking contract). Caller must
@@ -238,29 +247,11 @@ func (jw *Jaws) recycleLockedWithCause(rq *Request, err error) (cause error) {
 			cause = rq.cancelLocked(err)
 		}
 		jw.removePendingRequestLocked(rq)
-		if rq.initialRendering.Load() {
-			rq.recyclePending = true
-		} else {
-			delete(jw.requests, rq.JawsKey)
-			rq.clearLocked()
-			jw.reqPool.Put(rq)
-		}
-	}
-	return
-}
-
-// finishDeferredRecycle pools rq after its render lease has finished. A render
-// lease carries a generation so a delayed Finish cannot affect a reused Request.
-func (jw *Jaws) finishDeferredRecycle(rq *Request, generation uint64) {
-	jw.mu.Lock()
-	rq.mu.Lock()
-	if rq.recyclePending && !rq.initialRendering.Load() && rq.renderGeneration == generation {
 		delete(jw.requests, rq.JawsKey)
 		rq.clearLocked()
 		jw.reqPool.Put(rq)
 	}
-	rq.mu.Unlock()
-	jw.mu.Unlock()
+	return
 }
 
 func (jw *Jaws) recycleLocked(rq *Request) {

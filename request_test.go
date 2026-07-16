@@ -155,37 +155,6 @@ func TestRequest_HeadHTML(t *testing.T) {
 	is.Equal(strings.Count(txt, "<style>"), strings.Count(txt, "</style>"))
 }
 
-func TestInitialRenderLease_DelayedFinishDoesNotAffectReusedRequest(t *testing.T) {
-	jw, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer jw.Close()
-
-	first := jw.NewRequest(nil)
-	staleLease := first.BeginInitialRender()
-	staleLease.Finish()
-	jw.recycle(first)
-
-	poolNew := jw.reqPool.New
-	jw.reqPool.New = func() any { return first }
-	defer func() { jw.reqPool.New = poolNew }()
-	second := jw.NewRequest(nil)
-	if second != first {
-		t.Fatal("request pool did not reuse the Request")
-	}
-	currentLease := second.BeginInitialRender()
-	staleLease.Finish()
-	if !second.initialRendering.Load() {
-		t.Fatal("delayed stale Finish ended the reused Request's render lease")
-	}
-	currentLease.Finish()
-	if second.initialRendering.Load() {
-		t.Fatal("current Finish did not end the render lease")
-	}
-	jw.recycle(second)
-}
-
 func TestRequest_HeadHTML_DebugMeta(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -3209,8 +3178,8 @@ func TestDelRequestNilsVacatedSlot(t *testing.T) {
 // readers used while the application renders the initial HTML page
 // (JawsKeyString, String, HeadHTML and TailHTML) read rq.JawsKey under rq.mu, so
 // they do not race the rq.mu-guarded writes to rq.JawsKey that clearLocked and
-// getRequestLocked perform when a still-pending request is recycled (for example
-// by limitPendingRequestsLocked evicting it). Run with -race.
+// getRequestLocked perform when a Request completes and its pooled storage is
+// reused. Run with -race.
 func TestRequest_JawsKeyReadsAreLockedDuringRecycle(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -3252,9 +3221,9 @@ func TestRequest_JawsKeyReadsAreLockedDuringRecycle(t *testing.T) {
 
 // TestServe_MarksRequestRunningSoMaintenanceSkips verifies that TestServe marks
 // the request running before driving rq.process, mirroring ServeHTTP/startServe.
-// The maintenance pass recycles only not-running requests (clearing their
-// elements via clearLocked), so a request whose process loop is live must report
-// running and must survive a maintenance pass that would otherwise expire it.
+// The maintenance pass retires only not-running requests, so a request whose
+// process loop is live must report running and survive a pass that would
+// otherwise expire it.
 func TestServe_MarksRequestRunningSoMaintenanceSkips(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -3275,16 +3244,15 @@ func TestServe_MarksRequestRunningSoMaintenanceSkips(t *testing.T) {
 
 	<-tr.ReadyCh
 	if !tr.running.Load() {
-		t.Fatal("TestServe must mark the request running so maintenance cannot recycle it mid-process")
+		t.Fatal("TestServe must mark the request running so maintenance cannot retire it mid-process")
 	}
 
 	// Make the request look long-idle, then run a maintenance pass directly. A
-	// running request must not be recycled; before the fix it would be removed
-	// from jw.requests and its elements cleared while process is still using them.
+	// running request must remain registered while process is using it.
 	tr.lastWriteSeconds.Store(jw.runtimeSeconds.Load() - 3600)
 	jw.maintenance(time.Millisecond)
 
 	if got := jw.RequestCount(); got != 1 {
-		t.Fatalf("running request was recycled by maintenance: RequestCount() = %d, want 1", got)
+		t.Fatalf("running request was retired by maintenance: RequestCount() = %d, want 1", got)
 	}
 }

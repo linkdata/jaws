@@ -264,48 +264,7 @@ func TestHandler_RenderErrorDoesNotLeakElement(t *testing.T) {
 	}
 }
 
-// TestHandler_RenderErrorReleasesInitialRenderLease drives the public Handler
-// path through a template execution error. Its deferred application lease must
-// finish even though the page never reaches TailHTML, allowing maintenance to
-// recycle the pending Request normally.
-func TestHandler_RenderErrorReleasesInitialRenderLease(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		jw, err := jaws.New()
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer jw.Close()
-		jw.Logger = new(templateLogger)
-		go jw.ServeWithTimeout(time.Second)
-		synctest.Wait()
-
-		var captured *jaws.Request
-		_ = jw.AddTemplateLookuper(template.Must(template.New("handlerleasefail").Funcs(template.FuncMap{
-			"capture": func(w With) string {
-				captured = w.RequestWriter.Request
-				return ""
-			},
-			"fail": func() (string, error) {
-				return "", errors.New("render failed")
-			},
-		}).Parse(`{{capture $}}{{$.HeadHTML}}{{fail}}`)))
-
-		Handler(jw, "handlerleasefail", tag.Tag("ok")).ServeHTTP(
-			httptest.NewRecorder(),
-			httptest.NewRequest(http.MethodGet, "/", nil),
-		)
-		if captured == nil {
-			t.Fatal("handler did not expose its Request")
-		}
-		time.Sleep(2 * time.Second)
-		synctest.Wait()
-		if jw.RequestCount() != 0 || captured.JawsKey != 0 {
-			t.Fatalf("render error kept Request leased: key %v, requests %d", captured.JawsKey, jw.RequestCount())
-		}
-	})
-}
-
-func TestHandler_RenderLeaseProtectsBlockedTemplate(t *testing.T) {
+func TestHandler_TemplateWritesKeepPendingRequestFresh(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		jw, err := jaws.New()
 		if err != nil {
@@ -382,11 +341,6 @@ func TestHandler_RenderLeaseProtectsBlockedTemplate(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatal("timed out waiting for handler template write")
 		}
-		// The template is now blocked after its most recent write. Advance beyond
-		// both the maintenance timeout and timestamp spare window so only the
-		// handler's real initial-render lease can protect the Request.
-		time.Sleep(2200 * time.Millisecond)
-		synctest.Wait()
 
 		secondReq := httptest.NewRequest(http.MethodGet, "/second", nil)
 		secondReq.RemoteAddr = req.RemoteAddr
@@ -404,7 +358,7 @@ func TestHandler_RenderLeaseProtectsBlockedTemplate(t *testing.T) {
 		}
 
 		if gotKey != firstKey || gotInitial != req {
-			t.Fatalf("in-flight handler request was recycled while its template was blocked: key %q initial %p, want key %q initial %p", gotKey, gotInitial, firstKey, req)
+			t.Fatalf("in-flight handler request was recycled after template write: key %q initial %p, want key %q initial %p", gotKey, gotInitial, firstKey, req)
 		}
 	})
 }

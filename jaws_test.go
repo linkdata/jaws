@@ -188,220 +188,6 @@ func TestJaws_MaxPendingRequestsPerIPUsesLiveElapsedBeforeServe(t *testing.T) {
 	}
 }
 
-// TestJaws_BlockedInitialHTTPRenderIsNotRecycled drives the documented custom
-// handler flow through net/http: NewRequest, HeadHTML, application rendering,
-// then TailHTML. A slow render must keep its Request identity even after both the
-// pending cap and maintenance timeout would otherwise recycle it.
-func TestJaws_BlockedInitialHTTPRenderIsNotRecycled(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		jw, err := New()
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer jw.Close()
-		jw.MaxPendingRequestsPerIP = 1
-		go jw.ServeWithTimeout(time.Second)
-		waitForServeLoop(t, jw)
-
-		rendering := make(chan *Request, 1)
-		headWritten := make(chan struct{})
-		finishRender := make(chan struct{})
-		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rq := jw.NewRequest(r)
-			rendering <- rq
-			if err := rq.HeadHTML(w); err != nil {
-				t.Errorf("HeadHTML: %v", err)
-				return
-			}
-			close(headWritten)
-			<-finishRender
-			if err := rq.TailHTML(w); err != nil {
-				t.Errorf("TailHTML: %v", err)
-			}
-		})
-
-		request := newPendingLimitRequest("192.0.2.1:1000")
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			handler.ServeHTTP(httptest.NewRecorder(), request)
-		}()
-		first := <-rendering
-		<-headWritten
-		firstKey := first.JawsKey
-
-		// Advance beyond the maintenance timeout without touching private Request
-		// state. The handler is genuinely blocked between HeadHTML and TailHTML.
-		time.Sleep(3 * time.Second)
-		synctest.Wait()
-		secondRequest := newPendingLimitRequest("192.0.2.1:1001")
-		second := jw.NewRequest(secondRequest)
-		if first.JawsKey != firstKey || first == second {
-			t.Fatalf("blocked HTTP render was recycled: first key %v, now %v; second pointer %p", firstKey, first.JawsKey, second)
-		}
-		if claimed := jw.UseRequest(firstKey, request); claimed != first {
-			t.Fatalf("blocked HTTP render became unclaimable: got %p, want %p", claimed, first)
-		}
-
-		close(finishRender)
-		<-done
-	})
-}
-
-// TestJaws_WebSocketTeardownWaitsForInitialHTTPRender proves an early WebSocket
-// failure cannot pool a Request while its HTTP handler is still rendering. This
-// can occur in production because HeadHTML streams the connection key before the
-// remainder of the page has finished rendering.
-func TestJaws_WebSocketTeardownWaitsForInitialHTTPRender(t *testing.T) {
-	jw, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer jw.Close()
-	go jw.Serve()
-	waitForServeLoop(t, jw)
-
-	rendering := make(chan *Request, 1)
-	headWritten := make(chan struct{})
-	finishRender := make(chan struct{})
-	renderDone := make(chan struct{})
-	request := newPendingLimitRequest("192.0.2.1:1000")
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer close(renderDone)
-		rq := jw.NewRequest(r)
-		rendering <- rq
-		if err := rq.HeadHTML(w); err != nil {
-			t.Errorf("HeadHTML: %v", err)
-			return
-		}
-		close(headWritten)
-		<-finishRender
-		if err := rq.TailHTML(w); err != nil {
-			t.Errorf("TailHTML: %v", err)
-		}
-	})
-	go handler.ServeHTTP(httptest.NewRecorder(), request)
-	rq := <-rendering
-	<-headWritten
-	requestKey := rq.JawsKey
-
-	wsRequest := httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString(), nil)
-	wsRequest.RemoteAddr = request.RemoteAddr
-	claimed := jw.UseRequest(requestKey, wsRequest)
-	if claimed != rq {
-		t.Fatalf("UseRequest() = %p, want %p", claimed, rq)
-	}
-	// Missing WebSocket headers make the real ServeHTTP upgrade fail and drive
-	// stopServe/recycle while the original HTTP handler remains blocked.
-	claimed.ServeHTTP(httptest.NewRecorder(), wsRequest)
-	if rq.JawsKey != requestKey || jw.RequestCount() != 1 {
-		t.Fatalf("WebSocket teardown recycled live render: key %v, requests %d", rq.JawsKey, jw.RequestCount())
-	}
-
-	close(finishRender)
-	<-renderDone
-	if rq.JawsKey != 0 || jw.RequestCount() != 0 {
-		t.Fatalf("finished render did not complete deferred recycle: key %v, requests %d", rq.JawsKey, jw.RequestCount())
-	}
-}
-
-type failSecondHTTPWriter struct {
-	header http.Header
-	err    error
-	writes int
-}
-
-func (w *failSecondHTTPWriter) Header() http.Header {
-	if w.header == nil {
-		w.header = make(http.Header)
-	}
-	return w.header
-}
-
-func (*failSecondHTTPWriter) WriteHeader(int) {}
-
-func (w *failSecondHTTPWriter) Write(p []byte) (n int, err error) {
-	w.writes++
-	if w.writes == 2 {
-		return 0, w.err
-	}
-	return len(p), nil
-}
-
-// TestJaws_HeadWriteErrorReleasesInitialRender drives a real HTTP handler whose
-// first HeadHTML write fails. The automatic lease must abort on that error so
-// normal maintenance can recycle the abandoned pending Request.
-func TestJaws_HeadWriteErrorReleasesInitialRender(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		jw, err := New()
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer jw.Close()
-		go jw.ServeWithTimeout(time.Second)
-		waitForServeLoop(t, jw)
-
-		writeErr := errors.New("head write failed")
-		var rendered *Request
-		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rendered = jw.NewRequest(r)
-			if err := rendered.HeadHTML(w); !errors.Is(err, writeErr) {
-				t.Errorf("HeadHTML error = %v, want %v", err, writeErr)
-			}
-		})
-		writer := &errResponseWriter{writeErr: writeErr}
-		handler.ServeHTTP(writer, newPendingLimitRequest("192.0.2.1:1000"))
-		if writer.writeCall != 1 || rendered == nil {
-			t.Fatalf("handler writes = %d, request = %p", writer.writeCall, rendered)
-		}
-
-		time.Sleep(2 * time.Second)
-		synctest.Wait()
-		if jw.RequestCount() != 0 || rendered.JawsKey != 0 {
-			t.Fatalf("head error kept Request leased: key %v, requests %d", rendered.JawsKey, jw.RequestCount())
-		}
-	})
-}
-
-// TestJaws_TailWriteErrorReleasesInitialRender drives a real HTTP handler whose
-// head succeeds and tail write fails. The automatic lease must still finish so
-// normal maintenance can recycle the abandoned pending Request.
-func TestJaws_TailWriteErrorReleasesInitialRender(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		jw, err := New()
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer jw.Close()
-		go jw.ServeWithTimeout(time.Second)
-		waitForServeLoop(t, jw)
-
-		writeErr := errors.New("tail write failed")
-		var rendered *Request
-		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rendered = jw.NewRequest(r)
-			if err := rendered.HeadHTML(w); err != nil {
-				t.Errorf("HeadHTML: %v", err)
-				return
-			}
-			if err := rendered.TailHTML(w); !errors.Is(err, writeErr) {
-				t.Errorf("TailHTML error = %v, want %v", err, writeErr)
-			}
-		})
-		writer := &failSecondHTTPWriter{err: writeErr}
-		handler.ServeHTTP(writer, newPendingLimitRequest("192.0.2.1:1000"))
-		if writer.writes != 2 || rendered == nil {
-			t.Fatalf("handler writes = %d, request = %p", writer.writes, rendered)
-		}
-
-		time.Sleep(2 * time.Second)
-		synctest.Wait()
-		if jw.RequestCount() != 0 || rendered.JawsKey != 0 {
-			t.Fatalf("tail error kept Request leased: key %v, requests %d", rendered.JawsKey, jw.RequestCount())
-		}
-	})
-}
-
 // reentrantLogger re-enters the Jaws instance while logging (via RequestCount,
 // which takes jw.mu.RLock), and records the logged error. If the framework ever
 // invokes the logger while holding jw.mu, this deadlocks.
@@ -439,7 +225,7 @@ func TestJaws_MaintenanceLogsCancelOutsideLock(t *testing.T) {
 	logged := make(chan error, 1)
 	jw.Logger = reentrantLogger{jw: jw, logged: logged}
 
-	// A pending request idle long enough for the maintenance pass to recycle it.
+	// A pending request idle long enough for the maintenance pass to retire it.
 	rq := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
 	setPendingLimitLastWrite(t, rq, 3600)
 
@@ -463,12 +249,143 @@ func TestJaws_MaintenanceLogsCancelOutsideLock(t *testing.T) {
 	}
 }
 
+// TestJaws_RetiredPendingRequestRemainsOwnedByInitialHTTPHandler exercises the
+// production HTTP lifecycle without HeadHTML or TailHTML. A handler can retain
+// its Request while a later request hits the per-IP cap or maintenance expires
+// it; retirement must revoke the WebSocket key without clearing or reusing the
+// object underneath that handler.
+func TestJaws_RetiredPendingRequestRemainsOwnedByInitialHTTPHandler(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		maintenance bool
+		wantCause   error
+	}{
+		{
+			name:      "pending cap",
+			wantCause: ErrTooManyPendingRequests,
+		},
+		{
+			name:        "maintenance",
+			maintenance: true,
+			wantCause:   ErrNoWebSocketRequest,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer jw.Close()
+			if !tc.maintenance {
+				jw.MaxPendingRequestsPerIP = 1
+			}
+
+			type initialRender struct {
+				rq   *Request
+				elem *Element
+			}
+			started := make(chan initialRender, 1)
+			resumed := make(chan *Element, 1)
+			next := make(chan *Request, 1)
+			release := make(chan struct{})
+
+			mux := http.NewServeMux()
+			mux.HandleFunc("/blocked", func(w http.ResponseWriter, r *http.Request) {
+				rq := jw.NewRequest(r)
+				started <- initialRender{rq: rq, elem: rq.NewElement(&testUi{})}
+				<-release
+				resumed <- rq.NewElement(&testUi{})
+				w.WriteHeader(http.StatusNoContent)
+			})
+			mux.HandleFunc("/next", func(w http.ResponseWriter, r *http.Request) {
+				next <- jw.NewRequest(r)
+				w.WriteHeader(http.StatusNoContent)
+			})
+			server := httptest.NewServer(mux)
+			t.Cleanup(server.Close)
+			var releaseOnce sync.Once
+			t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
+
+			firstHTTPDone := make(chan error, 1)
+			go func() {
+				res, getErr := server.Client().Get(server.URL + "/blocked")
+				if getErr == nil {
+					getErr = res.Body.Close()
+				}
+				firstHTTPDone <- getErr
+			}()
+
+			first := <-started
+			firstKey := first.rq.JawsKey
+			setPendingLimitLastWrite(t, first.rq, 3600)
+			if tc.maintenance {
+				// This is the callback the production Serve loop runs on every
+				// maintenance tick; the old timestamp only avoids a wall-clock wait.
+				jw.maintenance(time.Second)
+			}
+			res, err := server.Client().Get(server.URL + "/next")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = res.Body.Close(); err != nil {
+				t.Fatal(err)
+			}
+			second := <-next
+
+			if second == first.rq {
+				t.Fatal("retired Request pointer was reused while its HTTP handler still owned it")
+			}
+			if got := first.rq.JawsKey; got != firstKey {
+				t.Fatalf("retired Request key = %v, want preserved key %v", got, firstKey)
+			}
+			if first.elem.Deleted() {
+				t.Fatal("retirement deleted an Element still owned by the initial HTTP handler")
+			}
+			if claimed := jw.UseRequest(firstKey, first.rq.Initial()); claimed != nil {
+				t.Fatalf("retired Request remained claimable as %v", claimed)
+			}
+			if got := jw.Pending(); got != 1 {
+				t.Fatalf("Pending() = %d, want only the replacement Request", got)
+			}
+			if got := jw.RequestCount(); got != 1 {
+				t.Fatalf("RequestCount() = %d, want only the replacement Request", got)
+			}
+			select {
+			case <-first.rq.Context().Done():
+				if cause := context.Cause(first.rq.Context()); !errors.Is(cause, tc.wantCause) {
+					t.Fatalf("retired Request cause = %v, want %v", cause, tc.wantCause)
+				}
+			default:
+				t.Fatal("retired Request context is not canceled")
+			}
+
+			releaseOnce.Do(func() { close(release) })
+			lateElem := <-resumed
+			if lateElem.Deleted() {
+				t.Fatal("initial HTTP handler created a deleted Element after retirement")
+			}
+			if got, want := lateElem.Jid(), first.elem.Jid()+1; got != want {
+				t.Fatalf("Element Jid after retirement = %v, want %v", got, want)
+			}
+			second.mu.RLock()
+			secondElements := len(second.elems)
+			second.mu.RUnlock()
+			if secondElements != 0 {
+				t.Fatalf("replacement Request has %d Elements from the retired handler, want 0", secondElements)
+			}
+			if err = <-firstHTTPDone; err != nil {
+				t.Fatal(err)
+			}
+			jw.recycle(second)
+		})
+	}
+}
+
 // TestJaws_MaxPendingRequestsPerIPSparesRenderingRequest verifies that the pending
 // cap does not evict a Request that is still rendering its initial HTML. The oldest
 // pending Request would normally be evicted first, but evicting one whose render is
-// in flight on another goroutine would recycle it underneath that goroutine,
-// contaminating a later reuse and leaking its key. The cap must instead evict the
-// next-oldest idle Request, leaving the rendering one claimable.
+// in flight would invalidate the page before its WebSocket can connect. The cap
+// instead evicts the next-oldest idle Request, leaving the rendering one claimable.
 func TestJaws_MaxPendingRequestsPerIPSparesRenderingRequest(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -559,8 +476,7 @@ func TestJaws_MaxPendingRequestsPerIPSparesRecentlyRenderedRequest(t *testing.T)
 // TestJaws_MaxPendingRequestsPerIPSparesStalledLiveRender proves the eviction decision
 // tracks the actual last write, not a value sampled by the maintenance pass: a render
 // that wrote once and then stalled (no further writes) is still spared while that write
-// is within 2*maintenanceInterval, even across a maintenance pass — closing the gap
-// where clearing a flag on a tick could expose a live render to recycling.
+// is within 2*maintenanceInterval, even across a maintenance pass.
 func TestJaws_MaxPendingRequestsPerIPSparesStalledLiveRender(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -636,9 +552,9 @@ func TestJaws_MaxPendingRequestsPerIPSparesFutureWriteTimestamp(t *testing.T) {
 
 // TestJaws_MaxPendingRequestsPerIPOvershootsWhenAllRendering verifies that when
 // every pending request for an IP is mid-render, the cap is not enforced by
-// recycling one of them: oldestEvictablePendingLocked finds no idle victim, so the
-// cap is allowed a brief, self-correcting overshoot rather than corrupting an
-// in-flight render.
+// retiring one of them: oldestEvictablePendingLocked finds no idle victim, so the
+// cap allows a brief, self-correcting overshoot rather than invalidating a page
+// before its WebSocket can connect.
 func TestJaws_MaxPendingRequestsPerIPOvershootsWhenAllRendering(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -661,7 +577,7 @@ func TestJaws_MaxPendingRequestsPerIPOvershootsWhenAllRendering(t *testing.T) {
 		t.Fatalf("Pending() = %d, want 2 (cap overshoots while all pending render)", got)
 	}
 	if rq1.JawsKey == 0 || rq1.JawsKey != rq1Key {
-		t.Fatal("the rendering request must not be recycled by the cap")
+		t.Fatal("the rendering request must not be retired by the cap")
 	}
 }
 
@@ -2803,4 +2719,33 @@ func BenchmarkRequestMarkWritten(b *testing.B) {
 			rq.MarkWritten()
 		}
 	})
+}
+
+// BenchmarkRetirePendingRequests guards the exceptional lifecycle used when
+// maintenance or the per-IP cap revokes Requests whose initial handlers may
+// still own them. It measures both a single timeout and a full default-cap batch.
+func BenchmarkRetirePendingRequests(b *testing.B) {
+	for _, n := range []int{1, DefaultMaxPendingRequestsPerIP} {
+		b.Run("requests="+strconv.Itoa(n), func(b *testing.B) {
+			jw, err := New()
+			if err != nil {
+				b.Fatal(err)
+			}
+			b.Cleanup(func() { jw.Close() })
+			r := newPendingLimitRequest("192.0.2.1:1000")
+			requests := make([]*Request, n)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				for i := range requests {
+					requests[i] = jw.NewRequest(r)
+				}
+				jw.mu.Lock()
+				for _, rq := range requests {
+					jw.retireNonRunningRequestLocked(rq, nil)
+				}
+				jw.mu.Unlock()
+			}
+		})
+	}
 }

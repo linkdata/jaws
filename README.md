@@ -183,22 +183,6 @@ JaWS object's `NewRequest()` method, then use the Request's `HeadHTML()`
 method in the `<head>` section and `TailHTML()` before the closing
 `</body>` tag.
 
-`HeadHTML` starts an initial-render lease and `TailHTML` finishes it. This
-prevents pending-request limits, maintenance, or an early WebSocket teardown
-from reusing the `Request` pointer while the HTTP handler is still constructing
-the page. Custom handlers that may return before reaching `TailHTML` should hold
-an application lease across every exit path:
-
-```go
-rq := jw.NewRequest(r)
-lease := rq.BeginInitialRender()
-defer lease.Finish()
-```
-
-`ui.Handler` manages that application lease automatically. A completed render
-lease is idempotent and does not affect a later request that reuses the pooled
-pointer.
-
 When the client has finished loading the document and parsed the
 scripts, the JaWS JavaScript will request a WebSocket connection on
 `/jaws/*`, with the `*` being the encoded `Request.JawsKey` value.
@@ -213,10 +197,11 @@ updates.
 
 `NewRequest` creates a pending request owned by the `Jaws` instance. `UseRequest`
 is the only operation that claims that pending request for a WebSocket, and it
-also removes the request from the pending set. A request is recycled after its
-WebSocket processing exits or after maintenance cancels an unclaimed request.
-Recycling waits for active initial-render leases to finish, although cancellation
-and removal from pending use may happen earlier.
+also removes the request from the pending set. A request is cleared and returned
+to the pool after its WebSocket processing exits. Maintenance and the per-IP cap
+instead cancel and unregister a pending request without clearing it: the initial
+HTTP handler may still own the pointer, so garbage collection reclaims it after
+that handler releases it.
 
 Dirtying is two-stage: `Request.Dirty` and `Jaws.Dirty` expand tags and record
 them on the `Jaws` instance, then the serving loop distributes those tags to
