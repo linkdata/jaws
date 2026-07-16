@@ -19,7 +19,10 @@ import (
 	"github.com/linkdata/jaws/lib/key"
 )
 
-// NewRequest returns a new pending JaWS request.
+// NewRequest returns a new JaWS Request.
+//
+// While the [Jaws] instance is open, the returned Request is pending until it is
+// claimed or retired.
 //
 // Call this as soon as you start processing an HTML request, and store the
 // returned [Request] pointer so it can be used while constructing the HTML

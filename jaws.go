@@ -228,16 +228,18 @@ func New() (jw *Jaws, err error) {
 	return
 }
 
-// Close cancels requests and frees resources associated with the Jaws object.
+// Close initiates shutdown of the [Jaws] instance.
 //
-// Before Close returns, every current [Request.Context] is canceled, including
-// pending Requests whose WebSocket never connected. Non-running Requests are
-// unregistered before Close returns but are not pooled while an initial HTTP
-// handler may still hold them; a detached Request becomes garbage-collectable when
-// its owner releases it. Active WebSocket handlers observe cancellation and finish
-// asynchronously. Requests created after Close start canceled and cannot be
-// claimed with [Jaws.UseRequest]. Once the completion channel is closed, broadcasts
-// and sends may be discarded. Subsequent calls to Close have no effect.
+// [Jaws.Done] is closed as shutdown begins. Before Close returns, the context
+// returned by [Request.Context] for every current Request is canceled, including
+// pending Requests whose WebSocket never connected. Non-running Requests become
+// unclaimable but retain their identity while callers hold them. Active WebSocket
+// handlers observe cancellation and finish asynchronously.
+//
+// Calls to [Jaws.NewRequest] after shutdown begins return Requests with
+// already-canceled contexts that [Jaws.UseRequest] cannot claim. Broadcasts and
+// sends may be discarded after Done closes. Subsequent calls to Close have no
+// effect.
 func (jw *Jaws) Close() {
 	var toLog []error
 	jw.mu.Lock()
@@ -271,7 +273,7 @@ func (jw *Jaws) Close() {
 	}
 }
 
-// Done returns the channel that is closed when [Jaws.Close] has been called.
+// Done returns a channel closed when [Jaws.Close] begins shutdown.
 func (jw *Jaws) Done() <-chan struct{} {
 	return jw.closeCh
 }
