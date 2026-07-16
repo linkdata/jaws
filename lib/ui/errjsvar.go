@@ -2,8 +2,12 @@ package ui
 
 import "errors"
 
-// ErrIllegalJsVarName is returned when a JsVar name is missing, not a string,
-// or does not follow valid top-level identifier syntax.
+// ErrIllegalJsVarName is returned when a JsVar name is missing, is not a
+// string, has invalid syntax, or is reserved.
+//
+// Valid names begin with an ASCII letter, underscore, or dollar sign, and
+// contain only ASCII letters, digits, underscores, and dollar signs. The exact
+// name "__proto__" is reserved.
 var ErrIllegalJsVarName errIllegalJsVarName
 
 type errIllegalJsVarName string

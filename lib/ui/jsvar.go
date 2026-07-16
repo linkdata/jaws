@@ -31,6 +31,12 @@ func validateJsVarName(value []any) (name string, err error) {
 		}
 		if !jsVarNameRx.MatchString(name) {
 			err = errIllegalJsVarName("illegal syntax")
+			return
+		}
+		// jaws.js stores top-level routes on a plain object. Assigning "__proto__"
+		// changes its prototype rather than creating an own route.
+		if name == "__proto__" {
+			err = errIllegalJsVarName("reserved")
 		}
 	}
 	if name == "" {
@@ -261,6 +267,9 @@ func (jsvar *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 
 // JawsRender writes the hidden element that seeds and routes the JavaScript variable.
 //
+// params[0] must be a valid JsVar name. Otherwise, JawsRender returns
+// [ErrIllegalJsVarName] without writing markup.
+//
 // The bound value's [tag.TagGetter.JawsGetTag] and [jaws.InitHandler.JawsInit]
 // callbacks run while the JsVar write lock is held, so they must not re-enter this
 // JsVar (for example call JawsGet or JawsSet on it), which would self-deadlock the
@@ -362,6 +371,8 @@ func isNilUI(ui jaws.UI) (yes bool) {
 }
 
 // JsVar binds a [JsVar] to a named JavaScript variable.
+//
+// It returns [ErrIllegalJsVarName] if jsvarName is invalid or reserved.
 //
 // You can also pass a [JsVarMaker] instead of a [JsVar].
 func (rw RequestWriter) JsVar(jsvarName string, jsvar any, params ...any) (err error) {

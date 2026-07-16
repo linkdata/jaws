@@ -258,6 +258,60 @@ process.stdout.write(jaws.sent[0] || "");
 	}
 }
 
+func TestJawsJS_PrototypeNameCannotFormJsVarRoute(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+function jsVarElement(name, id) {
+	return {
+		id: id,
+		dataset: { jawsname: name },
+		hasAttribute: function(attr) { return attr === "data-jawsname"; },
+	};
+}
+
+jawsAttach(jsVarElement("__proto__", "Jid.9"));
+jawsAttach(jsVarElement("__proto", "Jid.10"));
+jawsVar("__proto__");
+jawsVar("__proto", 42);
+
+process.stdout.write(JSON.stringify({
+	prototypeOwnRoute: Object.hasOwn(window.jawsNames, "__proto__"),
+	prototypeRouteType: typeof window.jawsNames["__proto__"],
+	nearOwnRoute: Object.hasOwn(window.jawsNames, "__proto"),
+	nearRoute: window.jawsNames["__proto"],
+	frames: jaws.sent,
+}));
+`)
+
+	var got struct {
+		PrototypeOwnRoute  bool     `json:"prototypeOwnRoute"`
+		PrototypeRouteType string   `json:"prototypeRouteType"`
+		NearOwnRoute       bool     `json:"nearOwnRoute"`
+		NearRoute          string   `json:"nearRoute"`
+		Frames             []string `json:"frames"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+	if got.PrototypeOwnRoute || got.PrototypeRouteType == "string" {
+		t.Fatalf("__proto__ unexpectedly formed an own string route: %+v", got)
+	}
+	if !got.NearOwnRoute || got.NearRoute != "Jid.10" {
+		t.Fatalf("nearby identifier route = own %t, %q; want own Jid.10", got.NearOwnRoute, got.NearRoute)
+	}
+	if len(got.Frames) != 1 {
+		t.Fatalf("JsVar frames = %q, want only the nearby identifier frame", got.Frames)
+	}
+	msg, ok := wire.Parse([]byte(got.Frames[0]))
+	if !ok || msg.What != what.Set || msg.Jid != 10 || msg.Data != "=42" {
+		t.Fatalf("nearby identifier frame = %+v, parseable %t; want Set Jid.10 =42", msg, ok)
+	}
+}
+
 func TestJawsJS_JsVarNestedPathHandlesShadowedHasOwnProperty(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 	function FakeSocket() { this.readyState = 1; this.sent = []; }
