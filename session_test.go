@@ -329,13 +329,9 @@ func TestSession_Broadcast(t *testing.T) {
 	jw.recycle(rq2)
 }
 
-// TestSession_ProducersSkipRecycled covers the destKey()==0 branch in
-// Session.Broadcast and Session.Close. A request can still be listed in the session
-// while a concurrent recycle has already zeroed its key; both producers must skip it
-// and target only the live requests. The state is reproduced here by zeroing one
-// request's key while it remains in the session list. (A zero-key message would also
-// be dropped by Jaws.Broadcast, so the guard just avoids the wasted round-trip and
-// is the only coverage of the branch.)
+// TestSession_ProducersSkipRecycled covers stale Request pointers retained by a
+// Session snapshot while the Request is recycled or rebound. Both producers must
+// target only Requests that still belong to the Session.
 func TestSession_ProducersSkipRecycled(t *testing.T) {
 	th := newTestHelper(t)
 	jw, _ := New()
@@ -347,20 +343,18 @@ func TestSession_ProducersSkipRecycled(t *testing.T) {
 	th.True(sess != nil)
 
 	live := jw.NewRequest(hr)
-	hr2 := httptest.NewRequest(http.MethodGet, "/2", nil)
-	hr2.RemoteAddr = hr.RemoteAddr
-	hr2.AddCookie(sess.Cookie())
-	recycled := jw.NewRequest(hr2)
 	th.True(live.Session() == sess)
-	th.True(recycled.Session() == sess)
 
-	// Simulate a recycle that has zeroed the key but not yet removed the request
-	// from the session list. Write under rq.mu to match destKey/wantMessage.
-	recycled.mu.Lock()
-	recycled.JawsKey = 0
-	recycled.mu.Unlock()
+	// Session methods operate on a snapshot after releasing sess.mu. These entries
+	// model pointers that were recycled after that snapshot: one has been cleared,
+	// and one has already acquired an unrelated nonzero identity.
+	cleared := &Request{Jaws: jw}
+	rebound := &Request{Jaws: jw, JawsKey: key.Key(0x9876)}
+	sess.mu.Lock()
+	sess.requests = append(sess.requests, cleared, rebound)
+	sess.mu.Unlock()
 
-	// Session.Broadcast targets only the live request.
+	// Session.Broadcast targets only the live request, never the rebound identity.
 	done := make(chan struct{})
 	go func() {
 		sess.Broadcast(wire.Message{What: what.Alert, Data: "info\nhi"})
@@ -379,7 +373,7 @@ func TestSession_ProducersSkipRecycled(t *testing.T) {
 	default:
 	}
 
-	// Session.Close reloads only the live request.
+	// Session.Close reloads only the live request, never the rebound identity.
 	closeDone := make(chan struct{})
 	go func() {
 		sess.Close()
@@ -400,6 +394,176 @@ func TestSession_ProducersSkipRecycled(t *testing.T) {
 	}
 
 	jw.recycle(live)
+}
+
+// TestSessionCloseRejectsReusedRequest covers the race between Session.Close's
+// Request snapshot and Request pooling. A pointer removed from the Session may be
+// recycled for another client before Close detaches it; that new identity must not
+// receive the old Session's reload.
+func TestSessionCloseRejectsReusedRequest(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	go jw.Serve()
+	waitForServeLoop(t, jw)
+
+	sessionHTTP := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	sess := jw.NewSession(httptest.NewRecorder(), sessionHTTP)
+	first := jw.NewRequest(sessionHTTP)
+	stale := jw.NewRequest(sessionHTTP)
+	if first.Session() != sess || stale.Session() != sess {
+		t.Fatal("test requests did not attach to the session")
+	}
+
+	// Close snapshots [first, stale], clears sess.requests, then blocks trying
+	// to detach first. Observing the cleared Session proves stale is already in
+	// Close's private snapshot before it is recycled.
+	firstLocked := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	firstReleased := make(chan struct{})
+	go func() {
+		first.mu.Lock()
+		close(firstLocked)
+		<-releaseFirst
+		first.mu.Unlock()
+		close(firstReleased)
+	}()
+	<-firstLocked
+	releasedFirst := false
+	defer func() {
+		if !releasedFirst {
+			close(releaseFirst)
+			<-firstReleased
+		}
+	}()
+	closeDone := make(chan struct{})
+	go func() {
+		_ = sess.Close()
+		close(closeDone)
+	}()
+	deadline := time.Now().Add(time.Second)
+	for {
+		sess.mu.RLock()
+		snapshotted := sess.cookie.MaxAge < 0 && len(sess.requests) == 0
+		sess.mu.RUnlock()
+		if snapshotted {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("Session.Close did not reach its Request snapshot")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	// sync.Pool may discard entries at any time. Keep the production reuse path
+	// deterministic by using stale as the allocation fallback as well.
+	poolNew := jw.reqPool.New
+	jw.reqPool.New = func() any { return stale }
+	defer func() { jw.reqPool.New = poolNew }()
+
+	// Drive the stale Request through the real capability endpoint. The missing
+	// WebSocket upgrade headers make ServeHTTP fail the upgrade and execute its
+	// normal stopServe/recycle path, placing stale in the production Request pool.
+	staleEndpoint := httptest.NewRequest(http.MethodGet, "/jaws/"+stale.JawsKeyString(), nil)
+	staleEndpoint.RemoteAddr = sessionHTTP.RemoteAddr
+	jw.ServeHTTP(httptest.NewRecorder(), staleEndpoint)
+	if stale.JawsKey != 0 {
+		t.Fatalf("failed WebSocket upgrade did not recycle stale Request: key %v", stale.JawsKey)
+	}
+
+	server := httptest.NewServer(jw)
+	defer server.Close()
+	unrelatedHTTP := httptest.NewRequest(http.MethodGet, server.URL+"/unrelated", nil)
+	unrelatedHTTP.RemoteAddr = "127.0.0.1:2000"
+	unrelated := jw.NewRequest(unrelatedHTTP)
+	if unrelated != stale {
+		t.Fatal("request pool did not reuse stale pointer")
+	}
+	if unrelated.Session() != nil {
+		t.Fatal("reused Request retained old Session")
+	}
+	unrelatedKey := unrelated.JawsKey
+	connected := make(chan struct{})
+	unrelated.SetConnectFn(func(*Request) error {
+		close(connected)
+		return nil
+	})
+	hdr := http.Header{}
+	hdr.Set("Origin", server.URL)
+	conn, response, err := websocket.Dial(t.Context(), server.URL+"/jaws/"+unrelatedKey.String(), &websocket.DialOptions{HTTPHeader: hdr})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.CloseNow() }()
+	if response.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("WebSocket status = %d, want %d", response.StatusCode, http.StatusSwitchingProtocols)
+	}
+	select {
+	case <-connected:
+	case <-time.After(time.Second):
+		t.Fatal("unrelated reused Request did not start its WebSocket")
+	}
+
+	close(releaseFirst)
+	<-firstReleased
+	releasedFirst = true
+	select {
+	case <-closeDone:
+	case <-time.After(time.Second):
+		t.Fatal("Session.Close did not finish")
+	}
+
+	const marker = "post-close marker"
+	jw.Broadcast(wire.Message{Dest: unrelatedKey, What: what.Alert, Data: marker})
+	readCtx, cancelRead := context.WithTimeout(t.Context(), time.Second)
+	defer cancelRead()
+	_, data, err := conn.Read(readCtx)
+	if err != nil {
+		t.Fatalf("reading marker from unrelated Request: %v", err)
+	}
+	if strings.Contains(string(data), what.Reload.String()+"\t") {
+		t.Fatalf("old Session close reached unrelated reused Request: %q", data)
+	}
+	if !strings.Contains(string(data), marker) {
+		t.Fatalf("WebSocket message = %q, want marker %q", data, marker)
+	}
+}
+
+func BenchmarkSessionBroadcast(b *testing.B) {
+	jw, err := New()
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(jw.Close)
+	sess := newSession(jw, key.Key(1), netip.Addr{}, false)
+	rq := &Request{Jaws: jw, JawsKey: key.Key(2), session: sess}
+	sess.requests = []*Request{rq}
+	drainDone := make(chan struct{})
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		for {
+			select {
+			case <-jw.bcastCh:
+			case <-drainDone:
+				return
+			}
+		}
+	}()
+	b.Cleanup(func() {
+		close(drainDone)
+		<-drained
+	})
+	msg := wire.Message{What: what.Reload}
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			sess.Broadcast(msg)
+		}
+	})
 }
 
 func TestSession_Delete(t *testing.T) {
