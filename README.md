@@ -165,8 +165,9 @@ client/server protocol code:
   framing, quoting) and invalid frames are ignored/dropped.
 * `what.Remove` means remove child element(s). For browser-originated `Remove`
   messages, the WebSocket `Jid` identifies the parent/container in the DOM and
-  `Data` carries removed managed child IDs. The server only removes child IDs
-  that are known in the current request.
+  `Data` carries removed managed child IDs. A zero Jid identifies an ordinary
+  HTML-id container that is not managed by JaWS. The server only removes child
+  IDs that are known in the current request.
 * `what.Replace` replaces the target element HTML and carries plain HTML in `Data`.
 * `what.Call`/`what.Set` use `path + "=" + json` inside `Data`. Paths may not
   contain tabs, newlines, carriage returns, or `=`. Embedded tabs or newlines in
