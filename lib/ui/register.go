@@ -30,6 +30,8 @@ func registerGetterTag(elem *jaws.Element, getter any) (tagValue any) {
 	default:
 		if tag.NewErrNotComparable(tagValue) == nil {
 			elem.Tag(tagValue)
+		} else {
+			tagValue = nil
 		}
 	}
 	return

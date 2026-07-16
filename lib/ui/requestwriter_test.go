@@ -51,6 +51,20 @@ func (u *registerRendererUpdater) JawsUpdate(elem *jaws.Element) {
 	u.sawParam = elem.HasTag(u.param)
 }
 
+type nonComparableStringSetter []string
+
+func (s nonComparableStringSetter) JawsGet(*jaws.Element) string {
+	return s[0]
+}
+
+func (s nonComparableStringSetter) JawsSet(_ *jaws.Element, value string) error {
+	if s[0] == value {
+		return jaws.ErrValueUnchanged
+	}
+	s[0] = value
+	return nil
+}
+
 func (u *registerClickUpdater) JawsClick(elem *jaws.Element, click jaws.Click) error {
 	u.clicks++
 	return nil
@@ -302,6 +316,28 @@ func TestRequestWriter_RegisterInitializesStandardDirtyTags(t *testing.T) {
 				t.Fatalf("registered Element missing dirty tag %#v", tt.wantTag)
 			}
 		})
+	}
+}
+
+func TestRequestWriter_RegisterDeclinesNonComparableDirtyTag(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	rw := RequestWriter{Request: rq, Writer: io.Discard}
+	setter := nonComparableStringSetter{"before"}
+	input := NewText(setter)
+
+	id := rw.Register(input)
+	if input.tag != nil {
+		t.Fatalf("dirty tag = %#v, want nil", input.tag)
+	}
+	elem := rq.GetElementByJid(id)
+	if elem == nil {
+		t.Fatal("Register did not retain its Element")
+	}
+	if err := jaws.CallEventHandlers(elem.UI(), elem, what.Input, "after"); err != nil {
+		t.Fatalf("registered input event returned %v", err)
+	}
+	if got := setter[0]; got != "after" {
+		t.Fatalf("setter value = %q, want %q", got, "after")
 	}
 }
 
