@@ -86,7 +86,10 @@ var (
 // JsVar binds a Go value to a named JavaScript variable in the browser.
 //
 // It is safe for concurrent use when the locker passed to [NewJsVar] is safe
-// for concurrent use.
+// for concurrent use. Concurrent writes are applied one at a time. Any
+// broadcasts they produce preserve the order in which the writes modify the
+// bound value.
+//
 // A JsVar must not be copied after first use.
 //
 // SECURITY: a JsVar is client-writable. Incoming browser "set" messages are
@@ -235,9 +238,6 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any) (er
 // A set before the element has been rendered produces no broadcast: the dirty
 // tag does not exist yet and the initial render seeds the value via its
 // data-jawsdata attribute.
-//
-// Concurrent successful calls are serialized through mutation, JSON encoding,
-// and broadcast queueing, so peers observe changes in mutation order.
 func (jsvar *JsVar[T]) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err error) {
 	return jsvar.setPath(elem, jsPath, value)
 }
