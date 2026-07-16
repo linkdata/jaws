@@ -49,6 +49,9 @@ type PathSetter interface {
 	// delegates to it while holding the JsVar write lock. Such an
 	// implementation must not lock or unlock the JsVar, nor call its locked
 	// accessors such as [JsVar.JawsGet] or [JsVar.JawsSet].
+	//
+	// If an implementation panics, the calling JsVar releases its write lock
+	// before propagating the panic.
 	JawsSetPath(elem *jaws.Element, jsPath string, value any) (err error)
 }
 
