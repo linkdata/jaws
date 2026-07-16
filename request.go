@@ -171,12 +171,26 @@ func (rq *Request) killSession() {
 	rq.mu.Unlock()
 }
 
-func (rq *Request) deadSession(sess *Session) {
+// deadSession detaches sess and returns the Request identity that belonged to it.
+// A zero return means rq was already recycled or rebound to another Session.
+func (rq *Request) deadSession(sess *Session) (k key.Key) {
 	rq.mu.Lock()
 	if rq.session == sess {
 		rq.session = nil
+		k = rq.JawsKey
 	}
 	rq.mu.Unlock()
+	return
+}
+
+// sessionDestKey returns rq's identity only while it still belongs to sess.
+func (rq *Request) sessionDestKey(sess *Session) (k key.Key) {
+	rq.mu.RLock()
+	if rq.session == sess {
+		k = rq.JawsKey
+	}
+	rq.mu.RUnlock()
+	return
 }
 
 func (rq *Request) ensureAutoSession(w http.ResponseWriter, r *http.Request) {
