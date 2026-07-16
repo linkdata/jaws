@@ -29,10 +29,10 @@ import (
 // Automatic timeout handling is performed by [Jaws.ServeWithTimeout]. The default
 // [Jaws.Serve] helper uses a 10-second timeout.
 //
-// A pending Request's key remains reserved if the Request is retired while its
-// initial HTTP handler may still own it. The reservation is released when the
-// runtime cleanup runs after the Request becomes unreachable; cleanup timing is
-// not guaranteed.
+// When timeout maintenance or the per-IP pending limit retires an unclaimed
+// Request, its key becomes unclaimable. The key also remains unavailable for
+// assignment to another Request while the retired Request is reachable; no
+// deadline is guaranteed for later reuse.
 //
 // NewRequest panics if the system CSPRNG ([crypto/rand]) fails while generating
 // the request key, which does not happen on supported platforms.

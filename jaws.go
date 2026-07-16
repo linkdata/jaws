@@ -292,12 +292,11 @@ func (jw *Jaws) LookupTemplate(name string) *template.Template {
 	return nil
 }
 
-// RequestCounts returns the number of [Request] values.
+// RequestCounts returns the total and active Request counts.
 //
-// The total count includes all registered Requests, including those being
-// rendered, those waiting for the WebSocket callback and those active. It
-// excludes retired-request key reservations. The active count includes Requests
-// whose WebSocket [Request.ServeHTTP] loop is running.
+// The total includes pending, claimed, and active [Request] values. It excludes
+// retired Requests, even if an initial HTTP handler still holds them. The active
+// count includes Requests whose [Request.ServeHTTP] loop is running.
 func (jw *Jaws) RequestCounts() (total, active int) {
 	jw.mu.RLock()
 	defer jw.mu.RUnlock()
@@ -312,8 +311,9 @@ func (jw *Jaws) RequestCounts() (total, active int) {
 	return
 }
 
-// RequestCount returns the total number of [Request] values, equal to the total
-// returned by [Jaws.RequestCounts] (see it for what the count includes).
+// RequestCount returns the total Request count.
+//
+// It equals the total returned by [Jaws.RequestCounts].
 func (jw *Jaws) RequestCount() (n int) {
 	jw.mu.RLock()
 	n = jw.requestCount

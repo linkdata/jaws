@@ -197,14 +197,13 @@ updates.
 
 `NewRequest` creates a pending request owned by the `Jaws` instance. `UseRequest`
 is the only operation that claims that pending request for a WebSocket, and it
-also removes the request from the pending set. A request is cleared and returned
-to the pool after its WebSocket processing exits. Maintenance and the per-IP cap
-instead cancel and unregister a pending request without clearing it: the initial
-HTTP handler may still own the pointer, so it becomes garbage-collectable only
-after its last owner releases it. The retired WebSocket key remains reserved
-until its runtime cleanup runs after the Request becomes unreachable, so a later
-request cannot receive the key while an old handler or Element can still refer
-to it. Cleanup timing is not guaranteed.
+also removes the request from the pending set. A request is retired after its
+WebSocket processing exits. Maintenance or the per-IP limit can instead retire
+an unclaimed request: its context is canceled, its key becomes unclaimable, and
+it is excluded from `Pending` and `RequestCount`. Retirement does not change the
+identity of a Request or its Elements while an initial HTTP handler still holds
+them. Its key cannot be assigned to another Request while the retired Request
+remains reachable; no deadline is guaranteed for later reuse.
 
 Dirtying is two-stage: `Request.Dirty` and `Jaws.Dirty` expand tags and record
 them on the `Jaws` instance, then the serving loop distributes those tags to
@@ -458,19 +457,14 @@ requested during the JavaScript WebSocket HTTP request.
 
 ### Security of the WebSocket callback
 
-Each JaWS request gets a unique 64-bit random value assigned to it when you
-create the Request object. This value is written to the HTML output so the
-JavaScript can construct the WebSocket callback URL.
+Each JaWS request gets a non-zero random 64-bit key not currently in use. This
+value is written to the HTML output so the JavaScript can construct the WebSocket
+callback URL.
 
-Once the WebSocket call comes in, the value is consumed by that request. A later
-Request can receive the same random value only after the original map entry has
-been removed. JaWS rejects generated values already held by registered Requests
-and values reserved by retired Requests.
-
-A retired Request keeps a nil reservation in the request map until its runtime
-cleanup runs after the Request becomes unreachable. The cleanup may be delayed
-arbitrarily and is not guaranteed to run before process exit; until it runs, that
-numeric key is unavailable for reuse.
+The callback key is single-use and cannot be claimed by another WebSocket. JaWS
+does not assign keys belonging to registered Requests or still-reachable retired
+Requests. A retired key may become eligible for reuse after its Request becomes
+unreachable, but reuse timing is unspecified.
 
 In addition to this, Requests that are not claimed by a WebSocket call are
 retired at regular intervals. By default an unclaimed Request is retired after
