@@ -331,22 +331,21 @@ func (rq *Request) Context() (ctx context.Context) {
 	return
 }
 
-// SetContext atomically replaces the Request's context with the function return value.
-// The function is given the current context and must return a non-nil context.
-// The returned context must be derived from oldCtx so cancellation and deadlines
-// continue to propagate to [Request.Context].
+// SetContext atomically transforms the Request's context.
 //
-// Cancellation of a replacement context wakes an idle live Request immediately;
-// it does not wait for another WebSocket event or broadcast. Value-only contexts
-// that retain oldCtx's Done channel require no additional cancellation bridge.
+// fn receives the current context and must return a non-nil context derived from
+// it so cancellation and deadlines continue to propagate. Cancellation or
+// deadline expiration of the returned context wakes a running
+// [Request.ServeHTTP] loop promptly, even while it is idle; no WebSocket event or
+// broadcast is required.
 //
-// The function runs while the Request lock is held so the transform is atomic.
-// It must not call methods on the same Request, call code that may do so, or
-// block on work that needs the same Request. If the function panics, SetContext
-// releases the lock before the panic continues.
+// fn runs while the Request lock is held. It must not call methods on the same
+// Request, call code that may do so, or block on work that needs the same
+// Request. SetContext panics if fn is nil. If fn panics, SetContext releases the
+// lock and propagates the panic.
 //
 // Returning a nil context is a programming error: debug builds panic and production
-// builds report it via [Jaws.MustLog] and keep the existing context.
+// builds report it through [Jaws.MustLog] and retain the current context.
 func (rq *Request) SetContext(fn func(oldCtx context.Context) (newCtx context.Context)) {
 	oldCtx, newCtx, cancelFn := rq.replaceContext(fn)
 	if newCtx == nil {
@@ -354,6 +353,8 @@ func (rq *Request) SetContext(fn func(oldCtx context.Context) (newCtx context.Co
 		return
 	}
 	if newCtx.Done() == oldCtx.Done() {
+		// The request loop already observes this Done channel, so no cancellation
+		// bridge is needed.
 		return
 	}
 	// The request loop may already be blocked selecting on oldCtx.Done. Bridge a
