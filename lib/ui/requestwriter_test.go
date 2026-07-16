@@ -7,18 +7,14 @@ import (
 	"io"
 	"log/slog"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/jawstest"
-	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/named"
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
-	"github.com/linkdata/jaws/lib/wire"
 )
 
 type testRWUpdater struct {
@@ -49,20 +45,6 @@ func (u *registerRendererUpdater) JawsRender(*jaws.Element, io.Writer, []any) er
 func (u *registerRendererUpdater) JawsUpdate(elem *jaws.Element) {
 	u.updated = true
 	u.sawParam = elem.HasTag(u.param)
-}
-
-type nonComparableStringSetter []string
-
-func (s nonComparableStringSetter) JawsGet(*jaws.Element) string {
-	return s[0]
-}
-
-func (s nonComparableStringSetter) JawsSet(_ *jaws.Element, value string) error {
-	if s[0] == value {
-		return jaws.ErrValueUnchanged
-	}
-	s[0] = value
-	return nil
 }
 
 func (u *registerClickUpdater) JawsClick(elem *jaws.Element, click jaws.Click) error {
@@ -267,126 +249,5 @@ func TestRequestWriter_RegisterDoesNotRenderUpdater(t *testing.T) {
 	}
 	if up.rendered {
 		t.Fatal("Register rendered an update-only updater")
-	}
-}
-
-func TestRequestWriter_RegisterInitializesStandardDirtyTags(t *testing.T) {
-	_, rq := newCoreRequest(t)
-	rw := RequestWriter{Request: rq, Writer: io.Discard}
-
-	var textMu sync.Mutex
-	textValue := "text"
-	text := NewText(bind.New(&textMu, &textValue))
-	boolSetter := newTestSetter(true)
-	checkbox := NewCheckbox(boolSetter)
-	floatSetter := newTestSetter(1.5)
-	number := NewNumber(floatSetter)
-	dateSetter := newTestSetter(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC))
-	date := NewDate(dateSetter)
-	selectHandler := &testSelectHandler{
-		testContainer: &testContainer{},
-		testSetter:    newTestSetter(""),
-	}
-	selectUI := NewSelect(selectHandler)
-
-	tests := []struct {
-		name    string
-		updater jaws.Updater
-		gotTag  func() any
-		wantTag any
-	}{
-		{name: "text", updater: text, gotTag: func() any { return text.tag }, wantTag: &textValue},
-		{name: "checkbox", updater: checkbox, gotTag: func() any { return checkbox.tag }, wantTag: boolSetter},
-		{name: "number", updater: number, gotTag: func() any { return number.tag }, wantTag: floatSetter},
-		{name: "date", updater: date, gotTag: func() any { return date.tag }, wantTag: dateSetter},
-		{name: "select", updater: selectUI, gotTag: func() any { return selectUI.tag }, wantTag: selectHandler},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			id := rw.Register(tt.updater)
-			elem := rq.GetElementByJid(id)
-			if elem == nil {
-				t.Fatalf("Register(%s) did not retain its Element", tt.name)
-			}
-			if got := tt.gotTag(); got != tt.wantTag {
-				t.Fatalf("dirty tag = %#v, want %#v", got, tt.wantTag)
-			}
-			if !elem.HasTag(tt.wantTag) {
-				t.Fatalf("registered Element missing dirty tag %#v", tt.wantTag)
-			}
-		})
-	}
-}
-
-func TestRequestWriter_RegisterDeclinesNonComparableDirtyTag(t *testing.T) {
-	_, rq := newCoreRequest(t)
-	rw := RequestWriter{Request: rq, Writer: io.Discard}
-	setter := nonComparableStringSetter{"before"}
-	input := NewText(setter)
-
-	id := rw.Register(input)
-	if input.tag != nil {
-		t.Fatalf("dirty tag = %#v, want nil", input.tag)
-	}
-	elem := rq.GetElementByJid(id)
-	if elem == nil {
-		t.Fatal("Register did not retain its Element")
-	}
-	if err := jaws.CallEventHandlers(elem.UI(), elem, what.Input, "after"); err != nil {
-		t.Fatalf("registered input event returned %v", err)
-	}
-	if got := setter[0]; got != "after" {
-		t.Fatalf("setter value = %q, want %q", got, "after")
-	}
-}
-
-// TestRequestWriter_RegisterInputDirtiesSharedTag binds one setter to two views:
-// a normally rendered input (A) and a Register'd input (B). An Input event to B
-// must dirty the shared bound tag so A, which shares the setter, receives a
-// corrective Value update. Without assigning B's dirty tag during Register, B's
-// tag stays nil, the dirty mark expands to nothing and A never updates.
-func TestRequestWriter_RegisterInputDirtiesSharedTag(t *testing.T) {
-	jw, err := jaws.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(jw.Close)
-	go jw.Serve()
-
-	tr := jawstest.NewTestRequest(jw, nil)
-	if tr == nil {
-		t.Fatal("expected test request")
-	}
-	defer tr.Close()
-	<-tr.ReadyCh
-
-	ss := newTestSetter("start")
-
-	// View A: a normally rendered text input bound to ss.
-	viewA := NewText(ss)
-	elemA := tr.NewElement(viewA)
-	var buf strings.Builder
-	if err := elemA.JawsRender(&buf, nil); err != nil {
-		t.Fatal(err)
-	}
-
-	// View B: the same setter registered as an update-only input widget.
-	rw := RequestWriter{Request: tr.Request, Writer: tr.Recorder}
-	idB := rw.Register(NewText(ss))
-
-	// Deliver an Input event to B; it must dirty the shared bound tag.
-	tr.InCh <- wire.WsMsg{Jid: idB, What: what.Input, Data: "typed"}
-
-	deadline := time.After(time.Second)
-	for {
-		select {
-		case msg := <-tr.OutCh:
-			if msg.What == what.Value && msg.Jid == elemA.Jid() && msg.Data == "typed" {
-				return
-			}
-		case <-deadline:
-			t.Fatal("view A never received the corrective Value update; B's input did not dirty the shared tag")
-		}
 	}
 }

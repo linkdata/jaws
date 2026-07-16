@@ -5,7 +5,6 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/jid"
-	"github.com/linkdata/jaws/lib/tag"
 )
 
 // Register is an update-only widget that renders no HTML; it exists so its
@@ -14,48 +13,6 @@ type Register struct{ jaws.Updater }
 
 // NewRegister returns an update-only widget that invokes updater during updates.
 func NewRegister(updater jaws.Updater) Register { return Register{Updater: updater} }
-
-type registerDirtyTagger interface {
-	registerDirtyTag(*jaws.Element)
-}
-
-func registerGetterTag(elem *jaws.Element, getter any) (tagValue any) {
-	tagValue = getter
-	if tagger, ok := getter.(tag.TagGetter); ok {
-		tagValue = tagger.JawsGetTag(elem.Request)
-	}
-	switch tagValue.(type) {
-	case tag.TagGetter, []any, []tag.Tag:
-		elem.Tag(tagValue)
-	default:
-		if tag.NewErrNotComparable(tagValue) == nil {
-			elem.Tag(tagValue)
-		} else {
-			tagValue = nil
-		}
-	}
-	return
-}
-
-func (u *InputText) registerDirtyTag(elem *jaws.Element) {
-	u.tag = registerGetterTag(elem, u.Setter)
-}
-
-func (u *InputBool) registerDirtyTag(elem *jaws.Element) {
-	u.tag = registerGetterTag(elem, u.Setter)
-}
-
-func (u *InputFloat) registerDirtyTag(elem *jaws.Element) {
-	u.tag = registerGetterTag(elem, u.Setter)
-}
-
-func (u *InputDate) registerDirtyTag(elem *jaws.Element) {
-	u.tag = registerGetterTag(elem, u.Setter)
-}
-
-func (u *Select) registerDirtyTag(elem *jaws.Element) {
-	u.tag = registerGetterTag(elem, u.Container)
-}
 
 // JawsRender renders no HTML for update-only registration.
 //
@@ -70,9 +27,13 @@ func (u Register) JawsRender(elem *jaws.Element, w io.Writer, params []any) erro
 // If updater also implements an event handler interface, it receives matching
 // events after handlers provided in params have had a chance to handle them.
 // The updater's [jaws.Updater.JawsUpdate] method will be called immediately to
-// ensure the initial rendering is correct. Standard input widgets also register
-// their resolved backing tag, when usable, so an input event dirties every bound
-// view; Register does not call their [jaws.Renderer.JawsRender] method.
+// ensure the initial rendering is correct.
+//
+// Register does not call [jaws.Renderer.JawsRender]. The updater must therefore
+// be ready for JawsUpdate and event handling without render-time initialization.
+// In particular, the standard input widgets and [Select] initialize their dirty
+// targets while rendering; register them with [RequestWriter.NewUI] or their
+// RequestWriter helper when they need to handle input events.
 //
 // Returns a [jid.Jid], suitable for including as an HTML id attribute:
 //
@@ -87,9 +48,6 @@ func (rw RequestWriter) Register(updater jaws.Updater, params ...any) jid.Jid {
 		elem.AddHandlers(updater)
 	}
 	elem.ApplyParams(params)
-	if tagger, ok := updater.(registerDirtyTagger); ok {
-		tagger.registerDirtyTag(elem)
-	}
 	updater.JawsUpdate(elem)
 	elem.Freeze()
 	return elem.Jid()

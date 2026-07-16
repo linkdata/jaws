@@ -32,9 +32,9 @@ import (
 // and reload or recover at the application level if needed.
 type ContainerHelper struct {
 	Container jaws.Container
-	// tag is the dirty tag, written once during RenderContainer or Select
-	// registration and read on the event goroutine (Select.JawsInput). Initial
-	// setup completes before events are dispatched; it is unexported so external
+	// tag is the dirty tag, written once during RenderContainer and read on the
+	// event goroutine (Select.JawsInput). The render-completes-before-events
+	// lifecycle makes the unsynchronized access safe; it is unexported so external
 	// code cannot mutate it.
 	tag      any
 	mu       sync.Mutex
