@@ -748,18 +748,15 @@ func TestNewRequestHarness_ReturnsNilOnClaimFailure(t *testing.T) {
 	}
 }
 
-func TestNewTestRequest_PanicsWhenJawsClosed(t *testing.T) {
+func TestNewTestRequest_ReturnsNilWhenJawsClosed(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	jw.Close()
-	defer func() {
-		if recover() == nil {
-			t.Fatal("expected panic when the Jaws instance is closed")
-		}
-	}()
-	NewTestRequest(jw, nil)
+	if tr := NewTestRequest(jw, nil); tr != nil {
+		t.Fatalf("NewTestRequest after Jaws.Close = %p, want nil", tr)
+	}
 }
 
 func TestTestServe_TimesOutWhenServeNotRunning(t *testing.T) {

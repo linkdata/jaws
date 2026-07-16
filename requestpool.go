@@ -29,6 +29,9 @@ import (
 // Automatic timeout handling is performed by [Jaws.ServeWithTimeout]. The default
 // [Jaws.Serve] helper uses a 10-second timeout.
 //
+// A Request created after [Jaws.Close] has an already-canceled context and cannot
+// be claimed by [Jaws.UseRequest].
+//
 // When timeout maintenance or the per-IP pending limit retires an unclaimed
 // Request, its key becomes unclaimable. The key also remains unavailable for
 // assignment to another Request while the retired Request is reachable; no
@@ -48,14 +51,24 @@ func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 		// the counter, so a stale value could otherwise make an old pending Request
 		// look freshly written and briefly overshoot the cap.
 		jw.refreshRuntimeSeconds()
-		toLog = jw.limitPendingRequestsLocked(remoteIP)
+		closed := false
+		select {
+		case <-jw.closeCh:
+			closed = true
+		default:
+			toLog = jw.limitPendingRequestsLocked(remoteIP)
+		}
 		for rq == nil {
 			jawsKey := jw.nonZeroRandomLocked()
 			if _, ok := jw.requests[jawsKey]; !ok {
-				rq = jw.getRequestLocked(jawsKey, r, remoteIP)
-				jw.requests[jawsKey] = rq
-				jw.requestCount++
-				jw.pending[rq.remoteIP] = append(jw.pending[rq.remoteIP], rq)
+				rq = jw.getRequestLocked(jawsKey, r, remoteIP, !closed)
+				if closed {
+					rq.cancelFn(nil)
+				} else {
+					jw.requests[jawsKey] = rq
+					jw.requestCount++
+					jw.pending[rq.remoteIP] = append(jw.pending[rq.remoteIP], rq)
+				}
 			}
 		}
 	}()
@@ -200,8 +213,9 @@ func (jw *Jaws) UseRequest(jawsKey key.Key, r *http.Request) (rq *Request) {
 
 // getRequestLocked allocates a Request from the pool for jawsKey. remoteIP is the
 // already-resolved client IP for r (see NewRequest, the sole caller), passed in to
-// avoid recomputing jw.clientIP(r). Caller must hold jw.mu.
-func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP netip.Addr) (rq *Request) {
+// avoid recomputing jw.clientIP(r). attachSession is false after Jaws.Close, when
+// the canceled Request is returned without registration. Caller must hold jw.mu.
+func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP netip.Addr, attachSession bool) (rq *Request) {
 	rq = jw.reqPool.Get().(*Request)
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
@@ -210,7 +224,7 @@ func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP neti
 	rq.initial = r
 	rq.remoteIP = remoteIP
 	rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
-	if r != nil {
+	if attachSession && r != nil {
 		if sess := jw.getSessionLocked(getCookieSessionsIDs(r.Header, jw.CookieName), rq.remoteIP); sess != nil {
 			sess.addRequest(rq)
 			rq.session = sess
@@ -263,7 +277,9 @@ func (jw *Jaws) retireNonRunningRequestLocked(rq *Request, err error) (cause err
 	return
 }
 
-// recycleLockedWithCause recycles rq, optionally cancelling its context with err.
+// recycleLockedWithCause cancels and recycles rq.
+//
+// It uses err as the cancellation cause when non-nil.
 // It returns the cancellation cause (or nil) instead of logging it, so the caller
 // can log it after releasing jw.mu (see the package locking contract). Caller must
 // hold jw.mu.
@@ -271,9 +287,7 @@ func (jw *Jaws) recycleLockedWithCause(rq *Request, err error) (cause error) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq {
-		if err != nil {
-			cause = rq.cancelLocked(err)
-		}
+		cause = rq.cancelLocked(err)
 		jw.removePendingRequestLocked(rq)
 		delete(jw.requests, rq.JawsKey)
 		jw.requestCount--

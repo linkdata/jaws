@@ -228,20 +228,47 @@ func New() (jw *Jaws, err error) {
 	return
 }
 
-// Close frees resources associated with the [Jaws] object, and
-// closes the completion channel if the [Jaws] was created with [New].
-// Once the completion channel is closed, broadcasts and sends may be discarded.
-// Subsequent calls to Close() have no effect.
+// Close cancels requests and frees resources associated with the Jaws object.
+//
+// Before Close returns, every current [Request.Context] is canceled, including
+// pending Requests whose WebSocket never connected. Non-running Requests are
+// unregistered before Close returns but are not pooled while an initial HTTP
+// handler may still hold them; a detached Request becomes garbage-collectable when
+// its owner releases it. Active WebSocket handlers observe cancellation and finish
+// asynchronously. Requests created after Close start canceled and cannot be
+// claimed with [Jaws.UseRequest]. Once the completion channel is closed, broadcasts
+// and sends may be discarded. Subsequent calls to Close have no effect.
 func (jw *Jaws) Close() {
+	var toLog []error
 	jw.mu.Lock()
 	select {
 	case <-jw.closeCh:
-		// already closed
+		jw.mu.Unlock()
+		return
 	default:
 		close(jw.closeCh)
 	}
 	jw.updateTicker.Stop()
+	for _, rq := range jw.requests {
+		if rq == nil {
+			continue
+		}
+		if rq.running.Load() {
+			rq.mu.Lock()
+			if cause := rq.cancelLocked(nil); cause != nil {
+				toLog = append(toLog, cause)
+			}
+			rq.mu.Unlock()
+		} else {
+			if cause := jw.retireNonRunningRequestLocked(rq, nil); cause != nil {
+				toLog = append(toLog, cause)
+			}
+		}
+	}
 	jw.mu.Unlock()
+	for _, cause := range toLog {
+		_ = jw.Log(cause)
+	}
 }
 
 // Done returns the channel that is closed when [Jaws.Close] has been called.
