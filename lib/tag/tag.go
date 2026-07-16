@@ -93,10 +93,8 @@ func sameActiveNode(a, b any) bool {
 	vb := reflect.ValueOf(b)
 	switch va.Kind() {
 	case reflect.Func:
-		// Value.Pointer identifies function code, not a closure and its captured
-		// state. Function values therefore have no usable identity here. Recursive
-		// function TagGetters terminate through maxTagDepth instead of cycle
-		// detection.
+		// Value.Pointer identifies shared function code, not closure identity, so it
+		// cannot detect cycles. maxTagDepth still bounds recursive function getters.
 		return false
 	case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Chan, reflect.UnsafePointer:
 		// For slices, Pointer() is the address of the first element, so two
