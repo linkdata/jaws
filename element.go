@@ -371,8 +371,13 @@ func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
 	return
 }
 
-// ApplyGetter examines getter, and if it is not nil, either adds it
-// as a tag, or, if it is a [tag.TagGetter], adds the result of that as a tag.
+// ApplyGetter examines getter and resolves its tag candidate.
+//
+// If getter implements [tag.TagGetter], the candidate is its returned value;
+// otherwise the candidate is getter itself. TagGetter values, supported tag
+// slices and runtime-comparable candidates are passed to [Element.Tag] for normal
+// validation. Other non-comparable candidates are not automatically tagged,
+// matching [ParseParams].
 //
 // If getter is an [InputHandler], [ClickHandler], [ContextMenuHandler] or
 // [InitialHTMLAttrHandler], relevant values are added to the [Element].
@@ -380,9 +385,10 @@ func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
 // Finally, if getter is an [InitHandler], its JawsInit
 // function is called.
 //
-// Returns the Tag(s) added (or nil if getter was nil), any initial HTML attrs
-// provided by InitialHTMLAttrHandler, and any error returned from JawsInit()
-// if it was called.
+// Returns the tag that was added (nil if none was added, whether because getter
+// was nil or its candidate was not usable as a tag), any initial HTML attrs
+// provided by InitialHTMLAttrHandler, and any error returned from JawsInit() if it
+// was called.
 //
 // If the [Element] is already frozen and getter is an event handler, the handler
 // is not added: in production with a [Jaws.Logger] configured this is logged and
@@ -408,7 +414,11 @@ func (elem *Element) ApplyGetter(getter any) (tagValue any, attrs []template.HTM
 				attrs = append(attrs, attr)
 			}
 		}
-		elem.Tag(tagValue)
+		if usableAsTag(tagValue) {
+			elem.Tag(tagValue)
+		} else {
+			tagValue = nil
+		}
 		if initer, ok := getter.(InitHandler); ok {
 			err = initer.JawsInit(elem)
 		}
