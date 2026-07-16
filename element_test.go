@@ -469,6 +469,26 @@ func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
 	elem.JawsUpdate()
 }
 
+func TestElement_RenderDebugSanitizesHTML5CommentClose(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq.Jaws.Debug = true
+
+	tu := &testUi{renderFn: func(*Element, io.Writer, []any) error { return nil }}
+	elem := rq.NewElement(tu)
+	elem.Tag(tag.Tag("x--!>y"))
+
+	var sb strings.Builder
+	elem.renderDebug(&sb)
+	if strings.Contains(sb.String(), "--!>") {
+		t.Fatalf("HTML5 comment close escaped the debug comment: %q", sb.String())
+	}
+}
+
 func TestElement_ApplyGetterDebugBranches(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
