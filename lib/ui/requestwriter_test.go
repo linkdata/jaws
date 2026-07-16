@@ -30,6 +30,23 @@ type registerClickUpdater struct {
 	clicks int
 }
 
+type registerRendererUpdater struct {
+	param    tag.Tag
+	rendered bool
+	updated  bool
+	sawParam bool
+}
+
+func (u *registerRendererUpdater) JawsRender(*jaws.Element, io.Writer, []any) error {
+	u.rendered = true
+	return errors.New("register must not render its updater")
+}
+
+func (u *registerRendererUpdater) JawsUpdate(elem *jaws.Element) {
+	u.updated = true
+	u.sawParam = elem.HasTag(u.param)
+}
+
 func (u *registerClickUpdater) JawsClick(elem *jaws.Element, click jaws.Click) error {
 	u.clicks++
 	return nil
@@ -212,5 +229,25 @@ func TestRequestWriter_RegisterUsesUpdaterEventHandler(t *testing.T) {
 	}
 	if up.clicks != 1 {
 		t.Fatalf("expected updater click handler to be called once, got %d", up.clicks)
+	}
+}
+
+func TestRequestWriter_RegisterDoesNotRenderUpdater(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	rw := RequestWriter{Request: rq, Writer: io.Discard}
+	up := &registerRendererUpdater{param: tag.Tag("param")}
+
+	id := rw.Register(up, up.param)
+	if !id.IsValid() {
+		t.Fatalf("Register returned invalid id %v", id)
+	}
+	if !up.updated {
+		t.Fatal("expected Register to run the initial update")
+	}
+	if !up.sawParam {
+		t.Fatal("initial update did not observe the parameter tag")
+	}
+	if up.rendered {
+		t.Fatal("Register rendered an update-only updater")
 	}
 }

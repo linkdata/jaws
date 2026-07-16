@@ -29,12 +29,20 @@ func (u Register) JawsRender(elem *jaws.Element, w io.Writer, params []any) erro
 // The updater's [jaws.Updater.JawsUpdate] method will be called immediately to
 // ensure the initial rendering is correct.
 //
+// Register does not call [jaws.Renderer.JawsRender]. The updater must therefore
+// be ready for JawsUpdate and event handling without render-time initialization.
+// In particular, the standard input widgets and [Select] initialize their dirty
+// targets while rendering; register them with [RequestWriter.NewUI] or their
+// RequestWriter helper when they need to handle input events.
+//
 // Returns a [jid.Jid], suitable for including as an HTML id attribute:
 //
 //	<div id="{{$.Register .MyUpdater}}">...</div>
 func (rw RequestWriter) Register(updater jaws.Updater, params ...any) jid.Jid {
 	elem := rw.NewElement(Register{Updater: updater})
 	elem.Tag(updater)
+	// The wrapping Register element's UI is not the updater, so events reach the
+	// updater only through the element's handler list, not the elem.UI() fallback.
 	switch updater.(type) {
 	case jaws.InputHandler, jaws.ClickHandler, jaws.ContextMenuHandler:
 		elem.AddHandlers(updater)
