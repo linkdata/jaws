@@ -175,13 +175,18 @@ func (jsvar *JsVar[T]) setPathLocked(elem *jaws.Element, jsPath string, value an
 	return
 }
 
+func (jsvar *JsVar[T]) setPathAndGetTag(elem *jaws.Element, jsPath string, value any) (dirtyTag any, err error) {
+	jsvar.Lock()
+	defer jsvar.Unlock()
+	err = jsvar.setPathLocked(elem, jsPath, value)
+	dirtyTag = jsvar.dirtyTag
+	return
+}
+
 func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any) (broadcasted bool, err error) {
 	jsvar.setMu.Lock()
 	defer jsvar.setMu.Unlock()
-	jsvar.Lock()
-	err = jsvar.setPathLocked(elem, jsPath, value)
-	dirtyTag := jsvar.dirtyTag
-	jsvar.Unlock()
+	dirtyTag, err := jsvar.setPathAndGetTag(elem, jsPath, value)
 	// Marshal and broadcast outside the caller-provided lock: value is the
 	// caller-owned argument (not read from Ptr), and jaws.Broadcast can block on
 	// the broadcast channel under backpressure. The private setMu remains held so
