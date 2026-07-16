@@ -234,7 +234,7 @@ func (sess *Session) Requests() (requests []*Request) {
 	return
 }
 
-// Broadcast attempts to send a message to all [Request] values using this session.
+// Broadcast attempts to send a message to all active [Request] values using this session.
 //
 // It must not be called before the JaWS processing loop ([Jaws.Serve] or
 // [Jaws.ServeWithTimeout]) is running. Otherwise this call may block.

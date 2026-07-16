@@ -37,8 +37,8 @@ import (
 // destinations that did expand.
 func (jw *Jaws) Broadcast(msg wire.Message) {
 	switch dest := msg.Dest.(type) {
-	case nil: // send to all requests
-	case key.Key: // send to the request with this identity key
+	case nil: // send to all active requests
+	case key.Key: // send to the active request with this identity key
 		if dest == 0 {
 			// A recycled producer captured a zeroed key; no live request can match
 			// (keys are always non-zero), so drop it rather than fall through to
@@ -48,7 +48,7 @@ func (jw *Jaws) Broadcast(msg wire.Message) {
 	case string: // HTML id (accepted by all requests)
 		if msg.What == what.Call && dest == "" {
 			// An empty outbound Jid encodes a request-scoped Call. Reject an empty
-			// HTML-id destination rather than silently widening it to every Request.
+			// HTML-id destination rather than silently widening it to every active Request.
 			jw.reportMisuse(fmt.Errorf("jaws: Broadcast: %w", ErrEmptyCallTarget))
 			return
 		}
@@ -186,7 +186,7 @@ func (jw *Jaws) distributeDirt() int {
 	return len(dirt)
 }
 
-// Reload requests all [Request] values to reload their current page.
+// Reload requests all active [Request] values to reload their current page.
 func (jw *Jaws) Reload() {
 	jw.Broadcast(wire.Message{
 		What: what.Reload,
@@ -235,7 +235,7 @@ func (jw *Jaws) redirectMessage(url string) (msg wire.Message, ok bool) {
 	return
 }
 
-// Redirect requests all [Request] values to navigate to the given URL.
+// Redirect requests all active [Request] values to navigate to the given URL.
 //
 // The URL is validated to be a relative path or an http/https URL; script-bearing
 // schemes such as javascript: and protocol-relative ("//host") URLs are refused
@@ -246,7 +246,7 @@ func (jw *Jaws) Redirect(url string) {
 	}
 }
 
-// Alert sends an alert to all [Request] values.
+// Alert sends an alert to all active [Request] values.
 //
 // The level argument should be one of Bootstrap's alert levels:
 // primary, secondary, success, danger, warning, info, light or dark.

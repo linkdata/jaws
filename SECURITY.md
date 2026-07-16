@@ -173,7 +173,7 @@ Tested via WebSocket `Input` and `Click` messages with payloads including:
 | Control | Implementation | Verified |
 |---------|---------------|----------|
 | **jawsKey** | 64-bit `crypto/rand` (2^64 keyspace), encoded as base-32 (up to 13 chars) | Code + empirical |
-| **Single-use keys** | Key removed from map on first WebSocket connection | Empirical: second connection returns 404 |
+| **Single-claim keys** | The first successful WebSocket callback marks its Request claimed; later callbacks for that key are rejected | Empirical: second connection returns 404 |
 | **IP binding** | `claim()` verifies WebSocket remote IP matches original HTTP request IP | Code review (`request.go`, `Request.claim`) |
 | **Origin validation** | Scheme + host must match initial request; cross-origin returns 403 | Empirical: evil.com, null, file:// all rejected |
 
