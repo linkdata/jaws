@@ -196,15 +196,15 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 //
 // tag may be nil, a [Tag], a slice of tags, a [TagGetter] or another comparable
 // value. Primitive HTML/value types are rejected with [ErrIllegalTagType] to catch
-// common accidental tags. A value that is not comparable at runtime or does not
-// equal itself is rejected with [ErrNotUsableAsTag] (which also matches
+// common accidental tags. An expanded key value that is not comparable at runtime
+// or does not equal itself is rejected with [ErrNotUsableAsTag] (which also matches
 // [ErrNotComparable] via [errors.Is]).
 // Expansion that exceeds the nesting-depth or total-count limits is rejected with
 // [ErrTooManyTags].
 //
 // On error, result holds the tags expanded before the failure; the exception is a
-// value that is not usable as a map key, for which [ErrNotUsableAsTag] is returned
-// with a nil result.
+// expanded key value that is not usable as a map key, for which
+// [ErrNotUsableAsTag] is returned with a nil result.
 //
 // Expansion reads tag and any values returned by [TagGetter.JawsGetTag] by
 // reference, so tag and those values must not be mutated concurrently with the
@@ -226,8 +226,7 @@ func TagExpand(ctx Context, tag any) (result []any, err error) {
 }
 
 // recoverComparabilityPanic maps a panic recovered from tag expansion to a
-// [TagExpand] result. A "comparing uncomparable type" runtime error — a value that
-// passed the static comparability check but is not comparable at runtime — becomes
+// [TagExpand] result. A "comparing uncomparable type" runtime error becomes
 // [ErrNotUsableAsTag] with a nil result; any other panic value is re-raised.
 func recoverComparabilityPanic(r any, tag any) (result []any, err error) {
 	if re, ok := r.(runtime.Error); ok && strings.Contains(re.Error(), "comparing uncomparable type") {
