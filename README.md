@@ -175,8 +175,8 @@ client/server protocol code:
   uses the top-level symbol name only. Register JaWS `JsVar` names as top-level
   identifiers (example: `app`), and use dotted suffixes as the JSON path
   (example: `jawsVar("app.state", value)` sends path `state`). The exact
-  top-level name `__proto__` is reserved because it cannot be used as a browser
-  routing key.
+  top-level name `__proto__` is reserved; rendering it as a `JsVar` returns
+  `ui.ErrIllegalJsVarName`.
 
 ### HTTP request flow and associating the WebSocket
 
