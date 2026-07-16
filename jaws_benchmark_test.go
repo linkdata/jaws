@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +20,16 @@ type benchUI struct{ n int }
 
 func (benchUI) JawsRender(*Element, io.Writer, []any) error { return nil }
 func (benchUI) JawsUpdate(*Element)                         {}
+
+type benchInputHandler struct{}
+
+func (benchInputHandler) JawsInput(*Element, string) error { return nil }
+
+type benchUnhandledClickHandler struct{}
+
+func (benchUnhandledClickHandler) JawsClick(*Element, Click) error {
+	return ErrEventUnhandled
+}
 
 var benchRequestSink *Request
 
@@ -325,6 +336,59 @@ func BenchmarkGetElementByJid(b *testing.B) {
 			}
 		})
 	}
+}
+
+// BenchmarkRequestEventDispatch measures the request-level event path that
+// resolves Jids and reads a frozen Element's handlers. The bubbled case exercises
+// the per-candidate eligibility checks before every handler returns unhandled.
+func BenchmarkRequestEventDispatch(b *testing.B) {
+	for _, n := range []int{1, 1000} {
+		b.Run("direct/elems="+strconv.Itoa(n), func(b *testing.B) {
+			rq := newBenchRequest(b, n)
+			elem := rq.GetElementByJid(Jid(n))
+			elem.AddHandlers(benchInputHandler{})
+			elem.Freeze()
+
+			var err error
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				err = rq.callAllEventHandlers(elem.Jid(), what.Input, "value")
+			}
+			if err != nil {
+				b.Fatal(err)
+			}
+		})
+	}
+
+	const (
+		elemCount      = 1000
+		candidateCount = 8
+	)
+	b.Run("bubbled/candidates=8/elems=1000", func(b *testing.B) {
+		rq := newBenchRequest(b, elemCount)
+		var value strings.Builder
+		value.WriteString("1 2 5 name")
+		for id := elemCount - candidateCount + 1; id <= elemCount; id++ {
+			elem := rq.GetElementByJid(Jid(id))
+			elem.AddHandlers(benchUnhandledClickHandler{})
+			elem.Freeze()
+			value.WriteByte('\t')
+			value.WriteString(elem.Jid().String())
+		}
+		value.WriteByte('\t')
+		clickValue := value.String()
+
+		var err error
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			err = rq.callAllEventHandlers(0, what.Click, clickValue)
+		}
+		if err != nil {
+			b.Fatal(err)
+		}
+	})
 }
 
 // BenchmarkAppendJSQuote measures the tail-script attribute/value quoter. "plain"

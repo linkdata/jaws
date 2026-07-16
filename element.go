@@ -23,13 +23,15 @@ type Element struct {
 	// ApplyParams, ApplyGetter, all routed through appendHandlers) and read later
 	// on the event goroutine without a lock. Safety comes from the Element
 	// lifecycle, not a lock: an Element is fully rendered (or explicitly frozen)
-	// before any event for it can be dispatched. An initial-page Element is frozen
-	// before the WebSocket that carries events can exist; a child created after the
-	// socket connects is rendered and frozen on the request's process goroutine
-	// before its Jid reaches the client, and that same goroutine dispatches its
-	// events, so the append happens-before the read. Handlers must not be mutated
-	// once events may fire. All builds enforce this: once the frozen flag below is
-	// set, appendHandlers drops late mutations (debug builds panic).
+	// before any protocol-conforming event for it can be dispatched. An initial-page
+	// Element is frozen before the WebSocket that carries events can exist. A child
+	// created after the socket connects is rendered and frozen on the request's
+	// process goroutine before its Jid reaches the client. For a protocol-conforming
+	// event from that client-visible DOM, the handler append precedes the process
+	// goroutine's later eventCallCh send; the corresponding receive on the eventCaller
+	// goroutine happens-before its lock-free read. Handlers must not be mutated once
+	// events may fire. All builds enforce this: once the frozen flag below is set,
+	// appendHandlers drops late mutations (debug builds panic).
 	handlers []any
 	jid      jid.Jid     // JaWS ID, unique to this Element within its Request
 	deleted  atomic.Bool // true once the Element has been removed from its Request
@@ -50,11 +52,12 @@ func (elem *Element) String() string {
 //
 // handlers is read lock-free on the event goroutine (via [CallEventHandlers], which
 // calls the internal callEventHandlers), so it must only be appended to while the
-// Element is being rendered, before any event for it can fire. The Element
-// lifecycle guarantees this: an Element is frozen before events for it are
-// dispatched (see the handlers field). Once frozen, late mutations are a bug:
-// reportMisuse panics in debug builds and logs in production, and the mutation is
-// dropped rather than racing the lock-free read.
+// Element is being rendered, before any protocol-conforming event for it can fire.
+// The Element lifecycle and the process-to-eventCaller channel handoff guarantee
+// this ordering for events from client-visible Elements; see the handlers field.
+// Once frozen, late mutations are a bug: reportMisuse panics in debug builds and
+// logs in production, and the mutation is dropped rather than racing the lock-free
+// read.
 func (elem *Element) appendHandlers(h ...any) {
 	if len(h) == 0 {
 		return
