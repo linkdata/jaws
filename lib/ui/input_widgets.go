@@ -17,10 +17,9 @@ import (
 // Input stores common state for interactive input widgets.
 // There is one of these per request and input widget.
 type Input struct {
-	// tag is the dirty tag, written once during render and read on the event
-	// goroutine (JawsInput). The render-completes-before-events lifecycle makes
-	// the unsynchronized access safe; it is unexported so external code cannot
-	// mutate it.
+	// tag is the dirty tag, written once during render or RequestWriter.Register
+	// and read on the event goroutine (JawsInput). Initial setup completes before
+	// events are dispatched; it is unexported so external code cannot mutate it.
 	tag  any
 	Last atomic.Value // the last value received from the request
 }

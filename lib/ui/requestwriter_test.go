@@ -7,12 +7,14 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstest"
+	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/named"
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
@@ -30,6 +32,23 @@ func (u *testRWUpdater) JawsUpdate(elem *jaws.Element) {
 type registerClickUpdater struct {
 	testRWUpdater
 	clicks int
+}
+
+type registerRendererUpdater struct {
+	param    tag.Tag
+	rendered bool
+	updated  bool
+	sawParam bool
+}
+
+func (u *registerRendererUpdater) JawsRender(*jaws.Element, io.Writer, []any) error {
+	u.rendered = true
+	return errors.New("register must not render its updater")
+}
+
+func (u *registerRendererUpdater) JawsUpdate(elem *jaws.Element) {
+	u.updated = true
+	u.sawParam = elem.HasTag(u.param)
 }
 
 func (u *registerClickUpdater) JawsClick(elem *jaws.Element, click jaws.Click) error {
@@ -214,6 +233,75 @@ func TestRequestWriter_RegisterUsesUpdaterEventHandler(t *testing.T) {
 	}
 	if up.clicks != 1 {
 		t.Fatalf("expected updater click handler to be called once, got %d", up.clicks)
+	}
+}
+
+func TestRequestWriter_RegisterDoesNotRenderUpdater(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	rw := RequestWriter{Request: rq, Writer: io.Discard}
+	up := &registerRendererUpdater{param: tag.Tag("param")}
+
+	id := rw.Register(up, up.param)
+	if !id.IsValid() {
+		t.Fatalf("Register returned invalid id %v", id)
+	}
+	if !up.updated {
+		t.Fatal("expected Register to run the initial update")
+	}
+	if !up.sawParam {
+		t.Fatal("initial update did not observe the parameter tag")
+	}
+	if up.rendered {
+		t.Fatal("Register rendered an update-only updater")
+	}
+}
+
+func TestRequestWriter_RegisterInitializesStandardDirtyTags(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	rw := RequestWriter{Request: rq, Writer: io.Discard}
+
+	var textMu sync.Mutex
+	textValue := "text"
+	text := NewText(bind.New(&textMu, &textValue))
+	boolSetter := newTestSetter(true)
+	checkbox := NewCheckbox(boolSetter)
+	floatSetter := newTestSetter(1.5)
+	number := NewNumber(floatSetter)
+	dateSetter := newTestSetter(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC))
+	date := NewDate(dateSetter)
+	selectHandler := &testSelectHandler{
+		testContainer: &testContainer{},
+		testSetter:    newTestSetter(""),
+	}
+	selectUI := NewSelect(selectHandler)
+
+	tests := []struct {
+		name    string
+		updater jaws.Updater
+		gotTag  func() any
+		wantTag any
+	}{
+		{name: "text", updater: text, gotTag: func() any { return text.tag }, wantTag: &textValue},
+		{name: "checkbox", updater: checkbox, gotTag: func() any { return checkbox.tag }, wantTag: boolSetter},
+		{name: "number", updater: number, gotTag: func() any { return number.tag }, wantTag: floatSetter},
+		{name: "date", updater: date, gotTag: func() any { return date.tag }, wantTag: dateSetter},
+		{name: "select", updater: selectUI, gotTag: func() any { return selectUI.tag }, wantTag: selectHandler},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id := rw.Register(tt.updater)
+			elem := rq.GetElementByJid(id)
+			if elem == nil {
+				t.Fatalf("Register(%s) did not retain its Element", tt.name)
+			}
+			if got := tt.gotTag(); got != tt.wantTag {
+				t.Fatalf("dirty tag = %#v, want %#v", got, tt.wantTag)
+			}
+			if !elem.HasTag(tt.wantTag) {
+				t.Fatalf("registered Element missing dirty tag %#v", tt.wantTag)
+			}
+		})
 	}
 }
 
