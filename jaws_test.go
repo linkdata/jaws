@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/binary"
 	"errors"
 	"html/template"
 	"io"
@@ -14,12 +15,14 @@ import (
 	"net/netip"
 	"net/url"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
+	"weak"
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/lib/assets"
@@ -379,6 +382,96 @@ func TestJaws_RetiredPendingRequestRemainsOwnedByInitialHTTPHandler(t *testing.T
 			jw.recycle(second)
 		})
 	}
+}
+
+func TestJaws_RetiredRequestKeyRemainsReserved(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.MaxPendingRequestsPerIP = 1
+
+	const (
+		retiredKey     = key.Key(1)
+		replacementKey = key.Key(2)
+	)
+	setRandomKeys(t, jw, retiredKey, retiredKey, replacementKey)
+
+	retiredHTTP := newPendingLimitRequest("192.0.2.1:1000")
+	retired := jw.NewRequest(retiredHTTP)
+	if retired.JawsKey != retiredKey {
+		t.Fatalf("first key = %v, want %v", retired.JawsKey, retiredKey)
+	}
+	setPendingLimitLastWrite(t, retired, 3600)
+
+	replacement := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1001"))
+	if replacement.JawsKey != replacementKey {
+		t.Fatalf("replacement key = %v, want %v after rejecting retired key", replacement.JawsKey, replacementKey)
+	}
+	if claimed := jw.UseRequest(retiredKey, retiredHTTP); claimed != nil {
+		t.Fatalf("retired key remained claimable as %v", claimed)
+	}
+	jw.mu.RLock()
+	tombstone, reserved := jw.requests[retiredKey]
+	jw.mu.RUnlock()
+	if !reserved || tombstone != nil {
+		t.Fatalf("retired key map entry = %v, %t, want nil tombstone", tombstone, reserved)
+	}
+	if total, active := jw.RequestCounts(); total != 1 || active != 0 {
+		t.Fatalf("RequestCounts() = %d, %d, want 1, 0", total, active)
+	}
+
+	// Exercise the production scans while the retired-key tombstone is present.
+	jw.setDirty([]any{tag.Tag("retired-key-test")})
+	if got := jw.distributeDirt(); got != 1 {
+		t.Fatalf("distributeDirt() = %d, want 1", got)
+	}
+	jw.maintenance(time.Hour)
+
+	jw.recycle(replacement)
+	runtime.KeepAlive(retired)
+}
+
+func TestReleaseRetiredRequestKey(t *testing.T) {
+	const retiredKey = key.Key(1)
+
+	t.Run("releases tombstone", func(t *testing.T) {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer jw.Close()
+		jw.requests[retiredKey] = nil
+
+		releaseRetiredRequestKey(retiredRequestKey{jw: weak.Make(jw), jawsKey: retiredKey})
+		if _, reserved := jw.requests[retiredKey]; reserved {
+			t.Fatal("retired key remains reserved after cleanup")
+		}
+
+		setRandomKeys(t, jw, retiredKey)
+		rq := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
+		if rq.JawsKey != retiredKey {
+			t.Fatalf("reused key = %v, want %v", rq.JawsKey, retiredKey)
+		}
+		jw.recycle(rq)
+	})
+
+	t.Run("preserves current request", func(t *testing.T) {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer jw.Close()
+		setRandomKeys(t, jw, retiredKey)
+		rq := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
+
+		releaseRetiredRequestKey(retiredRequestKey{jw: weak.Make(jw), jawsKey: retiredKey})
+		if got := jw.requests[retiredKey]; got != rq {
+			t.Fatalf("current request = %v, want %v", got, rq)
+		}
+		jw.recycle(rq)
+	})
 }
 
 // TestJaws_MaxPendingRequestsPerIPSparesRenderingRequest verifies that the pending
@@ -862,6 +955,15 @@ func setPendingLimitLastWrite(t *testing.T, rq *Request, secondsAgo int32) {
 	rq.lastWriteSeconds.Store(rq.Jaws.runtimeSeconds.Load() - secondsAgo)
 }
 
+func setRandomKeys(t *testing.T, jw *Jaws, keys ...key.Key) {
+	t.Helper()
+	random := make([]byte, 8*len(keys))
+	for i, jawsKey := range keys {
+		binary.LittleEndian.PutUint64(random[i*8:], uint64(jawsKey))
+	}
+	jw.kg = bufio.NewReader(bytes.NewReader(random))
+}
+
 func TestCoverage_GenerateHeadAndConvenienceBroadcasts(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -1329,6 +1431,7 @@ func TestJaws_distributeDirt_AscendingOrder(t *testing.T) {
 	rq := &Request{}
 	jw.mu.Lock()
 	jw.requests[1] = rq
+	jw.requestCount++
 	jw.dirty[tag.Tag("fourth")] = 4
 	jw.dirty[tag.Tag("second")] = 2
 	jw.dirty[tag.Tag("fifth")] = 5
@@ -2299,6 +2402,7 @@ func newUnpooledBenchRequest(jw *Jaws) (rq *Request) {
 			rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
 			rq.mu.Unlock()
 			jw.requests[jawsKey] = rq
+			jw.requestCount++
 			jw.pending[rq.remoteIP] = append(jw.pending[rq.remoteIP], rq)
 		}
 	}
@@ -2313,6 +2417,7 @@ func recycleUnpooledBenchRequest(jw *Jaws, rq *Request) {
 	if rq.JawsKey != 0 {
 		jw.removePendingRequestLocked(rq)
 		delete(jw.requests, rq.JawsKey)
+		jw.requestCount--
 		rq.clearLocked()
 	}
 }
@@ -2454,14 +2559,25 @@ func BenchmarkSubscriptionChannels(b *testing.B) {
 // BenchmarkDistributeDirt guards the per-updateTicker fan-out path: under jw.mu it
 // snapshots and order-sorts the dirty tag set and appends it to every active
 // Request. The benchmark exists to catch an accidental O(n^2) or per-call
-// allocation regression as request and dirty-tag counts grow. The per-iteration
-// setDirty repopulation and todoDirt reset are excluded from the timer so only
-// distributeDirt is measured.
+// allocation regression as request, retired-key and dirty-tag counts grow. The
+// retired-key cases ensure tombstones affect scan time but not snapshot capacity.
+// The per-iteration setDirty repopulation and todoDirt reset are excluded from
+// the timer so only distributeDirt is measured.
 func BenchmarkDistributeDirt(b *testing.B) {
-	for _, c := range []struct{ reqs, tags int }{
-		{10, 10}, {100, 100}, {1000, 100}, {100, 1000},
+	for _, c := range []struct{ reqs, retired, tags int }{
+		{reqs: 10, tags: 10},
+		{reqs: 100, tags: 100},
+		{reqs: 1000, tags: 100},
+		{reqs: 100, tags: 1000},
+		{reqs: 100, retired: 100, tags: 100},
+		{reqs: 100, retired: 1000, tags: 100},
+		{reqs: 1, retired: 10000, tags: 10},
 	} {
-		b.Run("reqs="+strconv.Itoa(c.reqs)+"/tags="+strconv.Itoa(c.tags), func(b *testing.B) {
+		name := "reqs=" + strconv.Itoa(c.reqs) + "/tags=" + strconv.Itoa(c.tags)
+		if c.retired > 0 {
+			name += "/retired=" + strconv.Itoa(c.retired)
+		}
+		b.Run(name, func(b *testing.B) {
 			jw, err := New()
 			if err != nil {
 				b.Fatal(err)
@@ -2474,6 +2590,10 @@ func BenchmarkDistributeDirt(b *testing.B) {
 				rq := &Request{Jaws: jw}
 				reqs[i] = rq
 				jw.requests[key.Key(i+1)] = rq
+			}
+			jw.requestCount = len(reqs)
+			for i := range c.retired {
+				jw.requests[key.Key(c.reqs+i+1)] = nil
 			}
 			jw.mu.Unlock()
 

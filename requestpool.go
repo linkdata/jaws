@@ -11,8 +11,10 @@ import (
 	"io"
 	"net/http"
 	"net/netip"
+	"runtime"
 	"slices"
 	"time"
+	"weak"
 
 	"github.com/linkdata/jaws/lib/key"
 )
@@ -27,8 +29,13 @@ import (
 // Automatic timeout handling is performed by [Jaws.ServeWithTimeout]. The default
 // [Jaws.Serve] helper uses a 10-second timeout.
 //
-// It panics if the system CSPRNG ([crypto/rand]) fails while generating the request
-// key, which does not happen on supported platforms.
+// A pending Request's key remains reserved if the Request is retired while its
+// initial HTTP handler may still own it. The reservation is released when the
+// runtime cleanup runs after the Request becomes unreachable; cleanup timing is
+// not guaranteed.
+//
+// NewRequest panics if the system CSPRNG ([crypto/rand]) fails while generating
+// the request key, which does not happen on supported platforms.
 func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 	remoteIP := jw.clientIP(r)
 
@@ -47,6 +54,7 @@ func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 			if _, ok := jw.requests[jawsKey]; !ok {
 				rq = jw.getRequestLocked(jawsKey, r, remoteIP)
 				jw.requests[jawsKey] = rq
+				jw.requestCount++
 				jw.pending[rq.remoteIP] = append(jw.pending[rq.remoteIP], rq)
 			}
 		}
@@ -178,7 +186,7 @@ func (jw *Jaws) UseRequest(jawsKey key.Key, r *http.Request) (rq *Request) {
 	if jawsKey != 0 {
 		var err error
 		jw.mu.Lock()
-		if waitingRq, ok := jw.requests[jawsKey]; ok {
+		if waitingRq, ok := jw.requests[jawsKey]; ok && waitingRq != nil {
 			if err = waitingRq.claim(r); err == nil {
 				rq = waitingRq
 				jw.removePendingRequestLocked(rq)
@@ -211,27 +219,47 @@ func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP neti
 	return rq
 }
 
+type retiredRequestKey struct {
+	jw      weak.Pointer[Jaws]
+	jawsKey key.Key
+}
+
+func releaseRetiredRequestKey(retired retiredRequestKey) {
+	if jw := retired.jw.Value(); jw != nil {
+		jw.mu.Lock()
+		if rq, ok := jw.requests[retired.jawsKey]; ok && rq == nil {
+			delete(jw.requests, retired.jawsKey)
+		}
+		jw.mu.Unlock()
+		runtime.KeepAlive(jw)
+	}
+}
+
 // retireNonRunningRequestLocked cancels and unregisters rq without clearing or
-// pooling it. The initial HTTP handler may still own the Request after its
-// WebSocket key expires, so garbage collection is the only safe reclamation.
-// Caller must hold jw.mu, and rq must not be running.
+// pooling it. A nil entry keeps its key reserved until a runtime cleanup runs
+// after the Request becomes unreachable. Caller must hold jw.mu, and rq must not
+// be running.
 func (jw *Jaws) retireNonRunningRequestLocked(rq *Request, err error) (cause error) {
 	rq.mu.Lock()
-	defer rq.mu.Unlock()
 	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq && !rq.running.Load() {
+		jawsKey := rq.JawsKey
 		if err != nil {
 			cause = rq.cancelLocked(err)
 		} else if rq.ctx.Err() == nil {
 			rq.cancelFn(nil)
 		}
 		jw.removePendingRequestLocked(rq)
-		delete(jw.requests, rq.JawsKey)
+		jw.requests[jawsKey] = nil
+		jw.requestCount--
 		// Preserve the claimed state until session removal observes it. A claimed
 		// WebSocket that never reached ServeHTTP still earns the session grace
 		// period granted by Session.delRequest.
 		rq.killSessionLocked()
 		rq.claimed.Store(false)
+		runtime.AddCleanup(rq, releaseRetiredRequestKey, retiredRequestKey{jw: weak.Make(jw), jawsKey: jawsKey})
 	}
+	rq.mu.Unlock()
+	runtime.KeepAlive(rq)
 	return
 }
 
@@ -242,12 +270,13 @@ func (jw *Jaws) retireNonRunningRequestLocked(rq *Request, err error) (cause err
 func (jw *Jaws) recycleLockedWithCause(rq *Request, err error) (cause error) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	if rq.JawsKey != 0 {
+	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq {
 		if err != nil {
 			cause = rq.cancelLocked(err)
 		}
 		jw.removePendingRequestLocked(rq)
 		delete(jw.requests, rq.JawsKey)
+		jw.requestCount--
 		rq.clearLocked()
 		jw.reqPool.Put(rq)
 	}

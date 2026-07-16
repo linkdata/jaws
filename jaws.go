@@ -173,8 +173,9 @@ type Jaws struct {
 	cspHeader               string
 	tmplookers              []TemplateLookuper
 	kg                      *bufio.Reader
-	closeCh                 chan struct{} // closed when Close() has been called
-	requests                map[key.Key]*Request
+	closeCh                 chan struct{}        // closed when Close() has been called
+	requests                map[key.Key]*Request // nil entries reserve retired keys until cleanup
+	requestCount            int                  // number of non-nil entries in requests
 	pending                 map[netip.Addr][]*Request
 	sessions                map[key.Key]*Session
 	dirty                   map[any]int
@@ -293,16 +294,19 @@ func (jw *Jaws) LookupTemplate(name string) *template.Template {
 
 // RequestCounts returns the number of [Request] values.
 //
-// The total count includes all Requests, including those being rendered,
-// those waiting for the WebSocket callback and those active. The active count
-// includes Requests whose WebSocket [Request.ServeHTTP] loop is running.
+// The total count includes all registered Requests, including those being
+// rendered, those waiting for the WebSocket callback and those active. It
+// excludes retired-request key reservations. The active count includes Requests
+// whose WebSocket [Request.ServeHTTP] loop is running.
 func (jw *Jaws) RequestCounts() (total, active int) {
 	jw.mu.RLock()
 	defer jw.mu.RUnlock()
-	total = len(jw.requests)
+	total = jw.requestCount
 	for _, rq := range jw.requests {
-		if rq.running.Load() {
-			active++
+		if rq != nil {
+			if rq.running.Load() {
+				active++
+			}
 		}
 	}
 	return
@@ -311,7 +315,9 @@ func (jw *Jaws) RequestCounts() (total, active int) {
 // RequestCount returns the total number of [Request] values, equal to the total
 // returned by [Jaws.RequestCounts] (see it for what the count includes).
 func (jw *Jaws) RequestCount() (n int) {
-	n, _ = jw.RequestCounts()
+	jw.mu.RLock()
+	n = jw.requestCount
+	jw.mu.RUnlock()
 	return
 }
 
