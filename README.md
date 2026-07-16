@@ -198,16 +198,16 @@ updates.
 
 ### Request lifecycle invariants
 
-`NewRequest` creates a pending request owned by the `Jaws` instance. `UseRequest`
-is the only operation that claims that pending request for a WebSocket, and it
-also removes the request from the pending set. A claimed Request is removed after
-its WebSocket processing exits. Maintenance or the per-IP limit can instead
-retire an unclaimed Request: its context is canceled, its key becomes
-unclaimable, and it is excluded from `Pending` and `RequestCount`. Retiring an
-unclaimed Request does not change its identity or Elements while an initial HTTP
-handler still holds them. Its key cannot be assigned to another Request while
-the retired Request remains reachable; no deadline is guaranteed for later
-reuse.
+While the `Jaws` instance is open, `NewRequest` creates a pending request owned
+by it. `UseRequest` is the only operation that claims that pending request for a
+WebSocket, and it also removes the request from the pending set. A claimed
+Request is removed after its WebSocket processing exits. Maintenance or the
+per-IP limit can instead retire an unclaimed Request: its context is canceled,
+its key becomes unclaimable, and it is excluded from `Pending` and
+`RequestCount`. Retiring an unclaimed Request does not change its identity or
+Elements while an initial HTTP handler still holds them. Its key cannot be
+assigned to another Request while the retired Request remains reachable; no
+deadline is guaranteed for later reuse.
 
 Dirtying is two-stage: `Request.Dirty` and `Jaws.Dirty` expand tags and record
 them on the `Jaws` instance, then the serving loop distributes those tags to
@@ -461,9 +461,9 @@ requested during the JavaScript WebSocket HTTP request.
 
 ### Security of the WebSocket callback
 
-Each JaWS request gets a non-zero random 64-bit key not currently in use. This
-value is written to the HTML output so the JavaScript can construct the WebSocket
-callback URL.
+While the `Jaws` instance is open, each Request gets a non-zero random 64-bit key
+not currently in use. This value is written to the HTML output so the JavaScript
+can construct the WebSocket callback URL.
 
 While assigned to a Request, its callback key can claim that Request at most
 once. JaWS does not assign keys belonging to registered Requests or

@@ -100,6 +100,170 @@ func TestNew_DefaultWebSocketPingInterval(t *testing.T) {
 	}
 }
 
+// TestJaws_CloseCancelsPendingHTTPWork drives a normal HTTP handler that starts
+// request-scoped work before the WebSocket connects. Close must synchronously
+// cancel that pending Request so the handler's work can stop.
+func TestJaws_CloseCancelsPendingHTTPWork(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type startedRequest struct {
+		rq       *Request
+		sentinel *Element
+	}
+	requestStarted := make(chan startedRequest, 1)
+	handlerDone := make(chan *Element, 1)
+	handler := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		rq := jw.NewRequest(r)
+		requestStarted <- startedRequest{rq: rq, sentinel: rq.NewElement(&testUi{})}
+		<-rq.Context().Done()
+		// A normal HTTP owner may still run cleanup after observing cancellation.
+		// Close must not have cleared or pooled its Request underneath it.
+		handlerDone <- rq.NewElement(&testUi{})
+	})
+	go handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	started := <-requestStarted
+	rq := started.rq
+
+	jw.Close()
+	select {
+	case <-rq.Context().Done():
+	default:
+		t.Fatal("Close returned with pending Request context still live")
+	}
+	if cause := context.Cause(rq.Context()); !errors.Is(cause, context.Canceled) {
+		t.Fatalf("Close cancellation cause = %v, want context.Canceled", cause)
+	}
+	if jw.RequestCount() != 0 || jw.Pending() != 0 {
+		t.Fatalf("Close retained pending Request: key %v, requests %d, pending %d", rq.JawsKey, jw.RequestCount(), jw.Pending())
+	}
+	if rq.JawsKey == 0 || started.sentinel.Deleted() {
+		t.Fatalf("Close cleared or pooled an HTTP-owned Request: key %v, sentinel deleted %t", rq.JawsKey, started.sentinel.Deleted())
+	}
+	select {
+	case elem := <-handlerDone:
+		if elem == nil || elem.Deleted() {
+			t.Fatal("Close cleared the Request while its HTTP owner was still using it")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("request-scoped HTTP work did not observe Close cancellation")
+	}
+}
+
+func TestJaws_CloseRejectsClaimedRequestBeforeServe(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	initial.RemoteAddr = "192.0.2.1:1000"
+	rq := jw.NewRequest(initial)
+	sentinel := rq.NewElement(&testUi{})
+	key := rq.JawsKey
+	websocketRequest := httptest.NewRequest(http.MethodGet, "http://example.test/jaws/"+key.String(), nil)
+	websocketRequest.RemoteAddr = initial.RemoteAddr
+	if claimed := jw.UseRequest(key, websocketRequest); claimed != rq {
+		t.Fatalf("UseRequest() = %p, want %p", claimed, rq)
+	}
+
+	jw.Close()
+	recorder := httptest.NewRecorder()
+	rq.ServeHTTP(recorder, websocketRequest)
+	if recorder.Code != http.StatusGone {
+		t.Fatalf("ServeHTTP after Close status = %d, want %d", recorder.Code, http.StatusGone)
+	}
+	if rq.JawsKey == 0 {
+		t.Fatal("Close cleared a Request that its initial HTTP handler may still own")
+	}
+	if sentinel.Deleted() {
+		t.Fatal("Close deleted an Element that its initial HTTP handler may still own")
+	}
+	if got := jw.RequestCount(); got != 0 {
+		t.Fatalf("RequestCount() after Close = %d, want 0", got)
+	}
+}
+
+func TestJaws_CloseHandlesRetiredKeyReservation(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	jw.MaxPendingRequestsPerIP = 1
+
+	retired := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
+	setPendingLimitLastWrite(t, retired, 3600)
+	replacement := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1001"))
+
+	jw.Close()
+	if got := jw.RequestCount(); got != 0 {
+		t.Fatalf("RequestCount() after Close = %d, want 0", got)
+	}
+	for name, rq := range map[string]*Request{"retired": retired, "replacement": replacement} {
+		select {
+		case <-rq.Context().Done():
+		default:
+			t.Fatalf("%s Request context remains live after Close", name)
+		}
+		jw.mu.RLock()
+		tombstone, reserved := jw.requests[rq.JawsKey]
+		jw.mu.RUnlock()
+		if !reserved || tombstone != nil {
+			t.Fatalf("%s key map entry = %v, %t, want nil tombstone", name, tombstone, reserved)
+		}
+	}
+	runtime.KeepAlive(retired)
+	runtime.KeepAlive(replacement)
+}
+
+func TestJaws_NewRequestRacingCloseStartsCanceled(t *testing.T) {
+	for range 20 {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		start := make(chan struct{})
+		requestCh := make(chan *Request, 1)
+		closed := make(chan struct{})
+		request := httptest.NewRequest(http.MethodGet, "/", nil)
+		go func() {
+			<-start
+			requestCh <- jw.NewRequest(request)
+		}()
+		go func() {
+			<-start
+			jw.Close()
+			close(closed)
+		}()
+		close(start)
+		rq := <-requestCh
+		<-closed
+		select {
+		case <-rq.Context().Done():
+		default:
+			t.Fatal("Request racing Close retained a live context")
+		}
+		if claimed := jw.UseRequest(rq.JawsKey, request); claimed != nil {
+			t.Fatalf("UseRequest after Close = %p, want nil", claimed)
+		}
+		requestsBefore := jw.RequestCount()
+		pendingBefore := jw.Pending()
+		postClose := jw.NewRequest(request)
+		select {
+		case <-postClose.Context().Done():
+		default:
+			t.Fatal("Request created after Close retained a live context")
+		}
+		if jw.RequestCount() != requestsBefore || jw.Pending() != pendingBefore {
+			t.Fatalf("post-Close Request was registered: requests %d -> %d, pending %d -> %d", requestsBefore, jw.RequestCount(), pendingBefore, jw.Pending())
+		}
+		// The documented repeated Close no-op remains safe after post-close
+		// allocation.
+		jw.Close()
+	}
+}
+
 func TestJaws_MaxPendingRequestsPerIPDisabled(t *testing.T) {
 	for _, limit := range []int{0, -1} {
 		jw, err := New()
@@ -2367,6 +2531,33 @@ func (benchUnhandledClickHandler) JawsClick(*Element, Click) error {
 }
 
 var benchRequestSink *Request
+
+func BenchmarkJawsClosePendingRequests(b *testing.B) {
+	for _, pending := range []int{0, 1, 100} {
+		b.Run("pending="+strconv.Itoa(pending), func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				jw := &Jaws{
+					closeCh:      make(chan struct{}),
+					updateTicker: time.NewTicker(time.Hour),
+					requests:     make(map[key.Key]*Request, pending),
+					requestCount: pending,
+				}
+				for i := range pending {
+					jawsKey := key.Key(i + 1)
+					ctx, cancel := context.WithCancelCause(b.Context())
+					jw.requests[jawsKey] = &Request{
+						Jaws:     jw,
+						JawsKey:  jawsKey,
+						ctx:      ctx,
+						cancelFn: cancel,
+					}
+				}
+				jw.Close()
+			}
+		})
+	}
+}
 
 // newBenchRequest returns a Request seeded with n Elements (Jids 1..n, ascending).
 func newBenchRequest(b *testing.B, n int) *Request {

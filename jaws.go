@@ -228,23 +228,52 @@ func New() (jw *Jaws, err error) {
 	return
 }
 
-// Close frees resources associated with the [Jaws] object, and
-// closes the completion channel if the [Jaws] was created with [New].
-// Once the completion channel is closed, broadcasts and sends may be discarded.
-// Subsequent calls to Close() have no effect.
+// Close initiates shutdown of the [Jaws] instance.
+//
+// [Jaws.Done] is closed as shutdown begins. Before Close returns, the context
+// returned by [Request.Context] for every current Request is canceled, including
+// pending Requests whose WebSocket never connected. Non-running Requests become
+// unclaimable but retain their identity while callers hold them. Active WebSocket
+// handlers observe cancellation and finish asynchronously.
+//
+// Calls to [Jaws.NewRequest] after shutdown begins return Requests with
+// already-canceled contexts that [Jaws.UseRequest] cannot claim. Broadcasts and
+// sends may be discarded after Done closes. Subsequent calls to Close have no
+// effect.
 func (jw *Jaws) Close() {
+	var toLog []error
 	jw.mu.Lock()
 	select {
 	case <-jw.closeCh:
-		// already closed
+		jw.mu.Unlock()
+		return
 	default:
 		close(jw.closeCh)
 	}
 	jw.updateTicker.Stop()
+	for _, rq := range jw.requests {
+		if rq == nil {
+			continue
+		}
+		if rq.running.Load() {
+			rq.mu.Lock()
+			if cause := rq.cancelLocked(nil); cause != nil {
+				toLog = append(toLog, cause)
+			}
+			rq.mu.Unlock()
+		} else {
+			if cause := jw.retireNonRunningRequestLocked(rq, nil); cause != nil {
+				toLog = append(toLog, cause)
+			}
+		}
+	}
 	jw.mu.Unlock()
+	for _, cause := range toLog {
+		_ = jw.Log(cause)
+	}
 }
 
-// Done returns the channel that is closed when [Jaws.Close] has been called.
+// Done returns a channel closed when [Jaws.Close] begins shutdown.
 func (jw *Jaws) Done() <-chan struct{} {
 	return jw.closeCh
 }

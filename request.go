@@ -132,6 +132,9 @@ func (rq *Request) claim(r *http.Request) error {
 		if !equalIP(rq.remoteIP, actualIP) {
 			return newErrWebSocketIPMismatchLocked(rq, actualIP)
 		}
+		if rq.ctx.Err() != nil {
+			return context.Cause(rq.ctx)
+		}
 		if rq.claimed.CompareAndSwap(false, true) {
 			// Layer a fresh cancelable context over the current one (which may
 			// have been customized via SetContext) so the claim has its own
@@ -735,10 +738,16 @@ func (rq *Request) MustLog(err error) {
 func (rq *Request) startServe() (ok bool) {
 	rq.Jaws.mu.Lock()
 	defer rq.Jaws.mu.Unlock()
+	select {
+	case <-rq.Jaws.closeCh:
+		return false
+	default:
+	}
 	rq.mu.RLock()
 	registered := rq.Jaws.requests[rq.JawsKey] == rq
+	contextLive := rq.ctx != nil && rq.ctx.Err() == nil
 	rq.mu.RUnlock()
-	return registered && rq.claimed.Load() && rq.running.CompareAndSwap(false, true)
+	return registered && contextLive && rq.claimed.Load() && rq.running.CompareAndSwap(false, true)
 }
 
 func (rq *Request) stopServe() {
