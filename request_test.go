@@ -155,6 +155,37 @@ func TestRequest_HeadHTML(t *testing.T) {
 	is.Equal(strings.Count(txt, "<style>"), strings.Count(txt, "</style>"))
 }
 
+func TestInitialRenderLease_DelayedFinishDoesNotAffectReusedRequest(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	first := jw.NewRequest(nil)
+	staleLease := first.BeginInitialRender()
+	staleLease.Finish()
+	jw.recycle(first)
+
+	poolNew := jw.reqPool.New
+	jw.reqPool.New = func() any { return first }
+	defer func() { jw.reqPool.New = poolNew }()
+	second := jw.NewRequest(nil)
+	if second != first {
+		t.Fatal("request pool did not reuse the Request")
+	}
+	currentLease := second.BeginInitialRender()
+	staleLease.Finish()
+	if !second.initialRendering.Load() {
+		t.Fatal("delayed stale Finish ended the reused Request's render lease")
+	}
+	currentLease.Finish()
+	if second.initialRendering.Load() {
+		t.Fatal("current Finish did not end the render lease")
+	}
+	jw.recycle(second)
+}
+
 func TestRequest_HeadHTML_DebugMeta(t *testing.T) {
 	jw, err := New()
 	if err != nil {

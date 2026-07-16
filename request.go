@@ -49,7 +49,12 @@ type Request struct {
 	running          atomic.Bool             // if ServeHTTP() is running
 	claimed          atomic.Bool             // if UseRequest() has been called for it
 	lastWriteSeconds atomic.Int32            // [Jaws.runtimeSeconds] value at the most recent RequestWriter write; lock-free, drives pending-eviction recency (oldestEvictablePendingLocked) and idle expiry (maintenance)
+	initialRendering atomic.Bool             // an initial-render lease is active; lock-free eviction/maintenance guard, transitions under mu
 	mu               deadlock.RWMutex        // protects following
+	renderGeneration uint64                  // generation shared by the active application/head render leases; monotonically increases across pool reuse
+	appRenderLease   bool                    // application-held [InitialRenderLease] is active
+	headRenderLease  bool                    // automatic lease begun by HeadHTML and ended by TailHTML
+	recyclePending   bool                    // recycling removed this Request from pending use and waits for both render leases to finish
 	lastJid          Jid                     // last element Jid allocated within this Request
 	initial          *http.Request           // initial HTTP request passed to Jaws.NewRequest
 	session          *Session                // session, if established
@@ -69,6 +74,30 @@ type eventFnCall struct {
 	jid  Jid
 	wht  what.What
 	data string
+}
+
+// InitialRenderLease prevents a Request from being recycled during page rendering.
+//
+// Custom HTTP handlers should obtain a lease immediately after [Jaws.NewRequest]
+// and defer [InitialRenderLease.Finish]. [Request.HeadHTML] and [Request.TailHTML]
+// manage a separate automatic lease for the usual direct rendering flow, while
+// [github.com/linkdata/jaws/lib/ui.Handler] holds an application lease so errors
+// and templates without a tail still release safely. The zero value is inert.
+type InitialRenderLease struct {
+	rq         *Request
+	generation uint64
+}
+
+// Finish releases the initial-render lease.
+//
+// Finish also abandons an automatic [Request.HeadHTML] lease from the same render
+// generation when rendering returned before [Request.TailHTML]. It is idempotent,
+// safe to call after TailHTML, and safe if the Request has since been recycled and
+// reused.
+func (lease InitialRenderLease) Finish() {
+	if lease.rq != nil && lease.generation != 0 {
+		lease.rq.finishAppRender(lease.generation)
+	}
 }
 
 // JawsKeyString returns the request key in the text form used by JaWS URLs.
@@ -99,6 +128,105 @@ func (rq *Request) MarkWritten() {
 	// second drives the recency window in oldestEvictablePendingLocked and the idle
 	// expiry in maintenance.
 	rq.lastWriteSeconds.Store(rq.Jaws.runtimeSeconds.Load())
+}
+
+// BeginInitialRender protects rq from recycling until the returned lease is finished.
+//
+// Call this immediately after [Jaws.NewRequest] in custom HTTP handlers and defer
+// [InitialRenderLease.Finish]. Repeated calls before the active application lease
+// finishes return equivalent leases rather than nesting additional leases.
+func (rq *Request) BeginInitialRender() (lease InitialRenderLease) {
+	rq.Jaws.mu.RLock()
+	rq.mu.Lock()
+	if rq.JawsKey != 0 {
+		if !rq.appRenderLease {
+			rq.beginInitialRenderLocked()
+			rq.appRenderLease = true
+		}
+		lease.rq = rq
+		lease.generation = rq.renderGeneration
+	}
+	rq.mu.Unlock()
+	rq.Jaws.mu.RUnlock()
+	return
+}
+
+// beginInitialRenderLocked starts a new render generation if none is active.
+// Caller must hold rq.mu.
+func (rq *Request) beginInitialRenderLocked() {
+	if !rq.initialRendering.Load() {
+		rq.renderGeneration++
+		if rq.renderGeneration == 0 {
+			rq.renderGeneration++
+		}
+		rq.initialRendering.Store(true)
+	}
+}
+
+// beginHeadRenderLocked starts the automatic HeadHTML/TailHTML lease and returns
+// the Request key and render generation from the same locked identity. Caller
+// must hold rq.mu while holding rq.Jaws.mu for reading or writing.
+func (rq *Request) beginHeadRenderLocked() (jawsKey key.Key, generation uint64) {
+	if rq.JawsKey != 0 {
+		if !rq.headRenderLease {
+			rq.beginInitialRenderLocked()
+			rq.headRenderLease = true
+		}
+		jawsKey = rq.JawsKey
+		generation = rq.renderGeneration
+	}
+	return
+}
+
+func (rq *Request) beginHeadRender() (jawsKey key.Key, generation uint64) {
+	rq.Jaws.mu.RLock()
+	rq.mu.Lock()
+	jawsKey, generation = rq.beginHeadRenderLocked()
+	rq.mu.Unlock()
+	rq.Jaws.mu.RUnlock()
+	return
+}
+
+// finishInitialRenderLocked completes a render generation when both leases are
+// gone. It returns whether recycling was deferred. Caller must hold rq.mu.
+func (rq *Request) finishInitialRenderLocked(generation uint64) (recycle bool) {
+	if rq.renderGeneration == generation && !rq.appRenderLease && !rq.headRenderLease && rq.initialRendering.Load() {
+		rq.initialRendering.Store(false)
+		// Refresh from the monotonic clock here rather than relying on the Serve
+		// loop's cached second: initial rendering is also supported before Serve.
+		rq.Jaws.refreshRuntimeSeconds()
+		rq.lastWriteSeconds.Store(rq.Jaws.runtimeSeconds.Load())
+		recycle = rq.recyclePending
+	}
+	return
+}
+
+func (rq *Request) finishAppRender(generation uint64) {
+	rq.mu.Lock()
+	if rq.renderGeneration == generation {
+		rq.appRenderLease = false
+		// The application lease scopes the complete render. Its deferred cleanup
+		// must abandon a successful HeadHTML whose template returned before
+		// TailHTML, otherwise the automatic lease would keep the Request forever.
+		rq.headRenderLease = false
+	}
+	recycle := rq.finishInitialRenderLocked(generation)
+	rq.mu.Unlock()
+	if recycle {
+		rq.Jaws.finishDeferredRecycle(rq, generation)
+	}
+}
+
+func (rq *Request) finishHeadRender(generation uint64) {
+	rq.mu.Lock()
+	if rq.renderGeneration == generation && rq.headRenderLease {
+		rq.headRenderLease = false
+	}
+	recycle := rq.finishInitialRenderLocked(generation)
+	rq.mu.Unlock()
+	if recycle {
+		rq.Jaws.finishDeferredRecycle(rq, generation)
+	}
 }
 
 // destKey returns the Request's current identity key, read under rq.mu, for use as
@@ -218,6 +346,10 @@ func (rq *Request) clearLocked() *Request {
 	rq.killSessionLocked()
 	rq.running.Store(false)
 	rq.claimed.Store(false)
+	rq.initialRendering.Store(false)
+	rq.appRenderLease = false
+	rq.headRenderLease = false
+	rq.recyclePending = false
 	// Every field is reset to its zero state except ctx and cancelFn, which keep their
 	// (cancelled) values until getRequestLocked replaces them on reuse.
 	if rq.cancelFn != nil {
@@ -257,17 +389,24 @@ func (rq *Request) clearLocked() *Request {
 }
 
 // HeadHTML writes the HTML code needed in the HTML page's HEAD section.
+//
+// It begins an automatic initial-render lease that [Request.TailHTML] finishes.
+// Custom handlers that can return before TailHTML should also use
+// [Request.BeginInitialRender] with a deferred [InitialRenderLease.Finish].
 func (rq *Request) HeadHTML(w io.Writer) (err error) {
-	rq.mu.RLock()
-	jawsKey := rq.JawsKey
-	rq.mu.RUnlock()
 	var b []byte
 	rq.Jaws.mu.RLock()
+	rq.mu.Lock()
+	jawsKey, generation := rq.beginHeadRenderLocked()
 	b = append(b, rq.Jaws.headPrefix...)
+	rq.mu.Unlock()
 	rq.Jaws.mu.RUnlock()
 	b = key.Append(b, jawsKey)
 	b = append(b, `">`...)
 	_, err = w.Write(b)
+	if err != nil {
+		rq.finishHeadRender(generation)
+	}
 	return
 }
 
@@ -359,9 +498,13 @@ func (rq *Request) SetContext(fn func(oldCtx context.Context) (newCtx context.Co
 // can log it after releasing jw.mu — logging runs the user [Jaws.Logger], which
 // must not be invoked under a lock.
 func (rq *Request) maintenance(nowSeconds int32, requestTimeout time.Duration) (expired bool, cause error) {
-	if !rq.running.Load() {
+	if !rq.running.Load() && !rq.initialRendering.Load() {
 		rq.mu.Lock()
-		if rq.ctx.Err() != nil {
+		if rq.initialRendering.Load() {
+			// BeginInitialRender raced the lock-free fast-path check. Its Jaws read
+			// lock normally excludes this maintenance pass, but keep the decision
+			// correct if another internal caller already holds the outer lock.
+		} else if rq.ctx.Err() != nil {
 			expired = true
 		} else {
 			elapsedSeconds := nowSeconds - rq.lastWriteSeconds.Load()

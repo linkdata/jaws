@@ -29,6 +29,8 @@ func (pageTemplate) JawsUpdate(*jaws.Element) {}
 
 func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rq := h.NewRequest(r)
+	lease := rq.BeginInitialRender()
+	defer lease.Finish()
 	rw := RequestWriter{Request: rq, Writer: w}
 	_ = h.Log(rw.NewUI(h.Template))
 }

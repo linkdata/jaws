@@ -108,7 +108,11 @@ func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) 
 // nowSeconds is the reference instant ([Jaws.runtimeSeconds]), passed in so all
 // candidates are judged against the same instant. Caller must hold jw.mu.
 func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr, nowSeconds int32) *Request {
-	// A Request is spared while its initial HTML may still be in flight: recycling one
+	// An explicit initial-render lease always wins over timestamp-based eviction.
+	// The timestamp remains a fallback for renderers that write without using the
+	// HeadHTML/TailHTML flow and do not hold an application lease.
+	//
+	// A Request is also spared while its initial HTML may still be in flight: recycling one
 	// whose render goroutine is still writing would let a later NewRequest reuse the
 	// pooled pointer under a new key while that goroutine keeps appending elements (see
 	// limitPendingRequestsLocked). RequestWriter.Write records the current second on
@@ -132,6 +136,9 @@ func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr, nowSeconds int
 		spareWindow = time.Second // floor: the seconds counter advances at most once per second
 	}
 	for _, rq := range jw.pending[remoteIP] {
+		if rq.initialRendering.Load() {
+			continue
+		}
 		// Compare as durations (elapsed whole seconds vs the window) to avoid a
 		// lossy time.Duration conversion. A write timestamp newer than this scan's
 		// nowSeconds is fresh; that can happen when a render records a write while
@@ -231,11 +238,29 @@ func (jw *Jaws) recycleLockedWithCause(rq *Request, err error) (cause error) {
 			cause = rq.cancelLocked(err)
 		}
 		jw.removePendingRequestLocked(rq)
+		if rq.initialRendering.Load() {
+			rq.recyclePending = true
+		} else {
+			delete(jw.requests, rq.JawsKey)
+			rq.clearLocked()
+			jw.reqPool.Put(rq)
+		}
+	}
+	return
+}
+
+// finishDeferredRecycle pools rq after its render lease has finished. A render
+// lease carries a generation so a delayed Finish cannot affect a reused Request.
+func (jw *Jaws) finishDeferredRecycle(rq *Request, generation uint64) {
+	jw.mu.Lock()
+	rq.mu.Lock()
+	if rq.recyclePending && !rq.initialRendering.Load() && rq.renderGeneration == generation {
 		delete(jw.requests, rq.JawsKey)
 		rq.clearLocked()
 		jw.reqPool.Put(rq)
 	}
-	return
+	rq.mu.Unlock()
+	jw.mu.Unlock()
 }
 
 func (jw *Jaws) recycleLocked(rq *Request) {

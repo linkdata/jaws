@@ -147,8 +147,12 @@ func (*Request) writeTailResponse(w http.ResponseWriter, b []byte, sent bool) (e
 // value in templates or during [Renderer.JawsRender].
 //
 // It also adds a <noscript> tag that warns of reduced functionality.
+// TailHTML finishes the automatic initial-render lease begun by
+// [Request.HeadHTML], including when writing the tail returns an error.
 func (rq *Request) TailHTML(w io.Writer) (err error) {
-	ks := rq.JawsKeyString()
+	jawsKey, generation := rq.beginHeadRender()
+	defer rq.finishHeadRender(generation)
+	ks := jawsKey.String()
 	_, err = fmt.Fprintf(w, "\n"+`<noscript>`+
 		`<div class="jaws-alert">This site requires Javascript for full functionality.</div>`+
 		`<img src="/jaws/%s/noscript" alt="noscript"></noscript>`+"\n"+
