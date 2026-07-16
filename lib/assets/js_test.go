@@ -189,10 +189,18 @@ func runJawsJSSnippet(t *testing.T, snippet string) string {
 	script := `
 const fs = require("fs");
 const src = fs.readFileSync(process.argv[1], "utf8");
+const windowListeners = {};
 
 global.window = {
 	location: { protocol: "http:", host: "example.test", reload: function(){}, assign: function(){} },
-	addEventListener: function(){},
+	addEventListener: function(name, fn){
+		(windowListeners[name] ||= []).push(fn);
+	},
+	removeEventListener: function(name, fn){
+		windowListeners[name] = (windowListeners[name] || []).filter(function(other) {
+			return other !== fn;
+		});
+	},
 	jawsNames: {},
 };
 global.document = {
@@ -211,6 +219,9 @@ global.XMLHttpRequest = function(){};
 global.Event = function(){};
 global.Node = function(){};
 global.WebSocket = function(){};
+global.jawsDispatchWindowEvent = function(name) {
+	(windowListeners[name] || []).slice().forEach(function(fn) { fn({ type: name }); });
+};
 
 eval(src);
 ` + snippet
@@ -223,6 +234,51 @@ eval(src);
 		t.Fatalf("node failed: %v\n%s", err, out.String())
 	}
 	return out.String()
+}
+
+func TestJawsJS_ConnectsAfterDeferredAssets(t *testing.T) {
+	for _, readyEvent := range []string{"DOMContentLoaded", "load"} {
+		t.Run(readyEvent, func(t *testing.T) {
+			raw := runJawsJSSnippet(t, `
+let socketCount = 0;
+let connectedAfterAssets = false;
+function FakeSocket() {
+	this.readyState = 1;
+	socketCount++;
+	connectedAfterAssets =
+		typeof window.jawstreeInit === "function" &&
+		typeof window.Treeview === "function";
+}
+FakeSocket.prototype.addEventListener = function() {};
+WebSocket = FakeSocket;
+
+const before = socketCount;
+window.jawstreeInit = function() {};
+window.Treeview = function() {};
+jawsDispatchWindowEvent("`+readyEvent+`");
+jawsDispatchWindowEvent("DOMContentLoaded");
+jawsDispatchWindowEvent("load");
+
+process.stdout.write(JSON.stringify({
+	before: before,
+	after: socketCount,
+	connectedAfterAssets: connectedAfterAssets
+}));
+`)
+
+			var got struct {
+				Before               int  `json:"before"`
+				After                int  `json:"after"`
+				ConnectedAfterAssets bool `json:"connectedAfterAssets"`
+			}
+			if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+				t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+			}
+			if got.Before != 0 || got.After != 1 || !got.ConnectedAfterAssets {
+				t.Fatalf("connection state = %+v, want one connection after deferred assets", got)
+			}
+		})
+	}
 }
 
 func TestJawsJS_JsVarNestedPathUsesTopLevelNameRouting(t *testing.T) {

@@ -5,7 +5,6 @@ import (
 	"strconv"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/htmlio"
 	"github.com/linkdata/jaws/lib/ui"
 )
 
@@ -23,8 +22,10 @@ var _ jaws.UI = (*Tree)(nil)
 // [Tree.SetSelected]) under the lock is safe, but adding, removing, or reordering Children
 // afterward breaks that mapping and is unsupported on a rendered Tree.
 type Tree struct {
-	id      string // HTML ID of the tree
-	options Option
+	id           string // HTML ID of the tree
+	options      Option
+	renderParams [1]any
+	initCallData string
 	*ui.JsVar[Node]
 }
 
@@ -45,10 +46,10 @@ func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	if jsvar.Ptr == nil {
 		panic("jawstree.New: jsvar.Ptr must not be nil")
 	}
-	// id is a URL path segment for the init-script route and the key the browser
-	// uses to bracket-index the tree's globals (window["jawstree_"+id] and
-	// window["jawstreeroot_"+id]). Validating it here turns what would otherwise be
-	// a 400 on the init-script route into an immediate, clear panic.
+	// id is the key the browser uses to bracket-index the tree's globals
+	// (window["jawstree_"+id] and window["jawstreeroot_"+id]), and is also accepted
+	// by the initializer route. Validate it at construction so an invalid browser
+	// identity fails immediately.
 	if !isSafeTreeName(id) {
 		panic("jawstree.New: id must be non-empty and contain only [A-Za-z0-9_$]")
 	}
@@ -59,12 +60,14 @@ func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	for _, opt := range options {
 		t.options |= opt
 	}
-	// options is serialized verbatim into the init-script route, which rejects a
-	// negative value (see serveInitScript). Panic here so a bad Option surfaces as a
-	// clear construction error rather than a silent 400 and a tree that never renders.
+	// options is serialized verbatim into the browser initializer. Panic here so a
+	// bad Option surfaces as a clear construction error rather than a tree that
+	// never renders.
 	if t.options < 0 {
 		panic("jawstree.New: options must be non-negative")
 	}
+	t.renderParams[0] = "jawstreeroot_" + t.id
+	t.initCallData = `{"tree":` + strconv.Quote(t.id) + `,"options":` + strconv.FormatInt(int64(t.options), 10) + `}`
 	// Normalize away any nil children before assigning IDs so a node's slice
 	// index (its ID) always matches its position in the compacted wire array
 	// emitted by marshalJSON; otherwise a nil child desyncs the two and client
@@ -87,14 +90,15 @@ func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	return
 }
 
-// JawsRender renders the hidden root data element and tree initialization script.
+// JawsRender renders the tree state and schedules browser initialization.
 func (tree *Tree) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
-	if err = tree.JsVar.JawsRender(elem, w, append([]any{"jawstreeroot_" + tree.id}, params...)); err == nil {
-		var b []byte
-		b = append(b, "\n<script"...)
-		b = htmlio.AppendAttr(b, "src", initScriptURL(tree.id, tree.options))
-		b = append(b, "></script>"...)
-		_, err = w.Write(b)
+	if len(params) == 0 {
+		params = tree.renderParams[:]
+	} else {
+		params = append([]any{tree.renderParams[0]}, params...)
+	}
+	if err = tree.JsVar.JawsRender(elem, w, params); err == nil {
+		elem.JsCall("jawstreeInit", tree.initCallData)
 	}
 	return
 }

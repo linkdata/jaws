@@ -97,8 +97,11 @@ assets
     └── index.html
 ```
 
-Page templates rendered through `ui.Handler` should include `{{$.HeadHTML}}`
-inside `<head>` and `{{$.TailHTML}}` before the closing `</body>` tag.
+The examples use `{{$.HeadHTML}}` inside `<head>` to emit the configured
+resources and Request key metadata. Applications that provide equivalent markup
+may omit it. `{{$.TailHTML}}` is optional; placing it before the closing
+`</body>` tag applies updates queued during initial rendering before the
+WebSocket connects.
 
 ## Using the tree widget
 
@@ -127,10 +130,11 @@ tree := jawstree.New("mytree", ui.NewJsVar(&mu, root), jawstree.InitiallyExpande
 mux.Handle("GET /", ui.Handler(jw, "index.html", tree))
 ```
 
-In the page template, render the tree (it emits a hidden data element and the
-init script) and provide a container element whose HTML id equals the tree id;
-Quercus.js renders the tree into that container, and without it the tree
-silently fails to appear:
+In the page template, render the tree and provide a container element whose HTML
+id equals the tree id. The tree initializes after deferred page assets are ready,
+including when a JaWS container or template inserts it through a live DOM update.
+Quercus.js renders the tree into that container, and without it the tree silently
+fails to appear:
 
 ```html
 <!DOCTYPE html>

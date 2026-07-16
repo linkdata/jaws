@@ -41,6 +41,14 @@ function jawstreeSetData(t, data) {
     t.setData(jawstreeViewChildren(data, t.options.multiSelectEnabled, t.options.cascadeSelectChildren));
 }
 
+function jawstreeInit(arg) {
+    window["jawstree_"+arg.tree] = jawstreeNew(
+        arg.tree,
+        window["jawstreeroot_"+arg.tree],
+        arg.options
+    );
+}
+
 function jawstreeSet(arg) {
     var t = window["jawstree_"+arg.tree];
     var wasApplyingSet = t.jawsApplyingSet;

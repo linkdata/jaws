@@ -56,6 +56,47 @@ eval(src);
 	return out.String()
 }
 
+func TestJawstreeJS_InitUsesPreloadedRoot(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, `
+const root = { children: [{ id: "children.0", name: "Documents" }] };
+let got = null;
+const initialized = { ready: true };
+window["jawstreeroot_dynamic"] = root;
+jawstreeNew = function(tree, data, options) {
+	got = { tree: tree, data: data, options: options };
+	return initialized;
+};
+
+jawstreeInit({ tree: "dynamic", options: 3 });
+process.stdout.write(JSON.stringify({
+	got: got,
+	usesRoot: got.data === root,
+	stored: window["jawstree_dynamic"] === initialized
+}));
+`)
+
+	var got struct {
+		Got struct {
+			Tree    string `json:"tree"`
+			Options int    `json:"options"`
+		} `json:"got"`
+		UsesRoot bool `json:"usesRoot"`
+		Stored   bool `json:"stored"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+	if got.Got.Tree != "dynamic" || got.Got.Options != 3 {
+		t.Fatalf("initializer arguments = %+v, want tree=dynamic options=3", got.Got)
+	}
+	if !got.UsesRoot {
+		t.Fatal("initializer did not use the root seeded by the hidden JsVar")
+	}
+	if !got.Stored {
+		t.Fatal("initializer did not store the constructed tree on window")
+	}
+}
+
 func TestJawstreeJS_SetPathSingleSelectDeselect(t *testing.T) {
 	raw := runJawstreeJSSnippet(t, `
 function run(options, selected, arg) {

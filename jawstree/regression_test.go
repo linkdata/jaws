@@ -61,9 +61,8 @@ func TestSetup_PrefixVariants(t *testing.T) {
 	}
 }
 
-// TestNew_RejectsInvalidID verifies that New panics on ids that would otherwise
-// fail far downstream (a render-time "illegal jsvar name" and a 400 on the
-// init-script route), while accepting a valid one.
+// TestNew_RejectsInvalidID verifies that New rejects ids that cannot identify the
+// browser-side root variable and tree instance, while accepting a valid one.
 func TestNew_RejectsInvalidID(t *testing.T) {
 	var mu deadlock.RWMutex
 	for _, id := range []string{"", "my-tree", "tree.1", "a b", "with/slash"} {
