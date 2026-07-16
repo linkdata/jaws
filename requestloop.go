@@ -134,6 +134,19 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 			What: tagmsg.What,
 		})
 		return
+	case what.Call:
+		// A nil or request-key destination selects the Request itself rather than
+		// an Element. Serve has already filtered key-targeted messages, so the
+		// empty Jid field tells the browser to perform one request-scoped call.
+		switch tagmsg.Dest.(type) {
+		case nil, key.Key:
+			rq.queue(wire.WsMsg{
+				Jid:  0,
+				Data: tagmsg.Data,
+				What: tagmsg.What,
+			})
+			return
+		}
 	}
 
 	// collect all elements marked with the tag in the message
@@ -142,8 +155,8 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 	case nil:
 		// matches no elements
 	case key.Key:
-		// request-targeted; page-global What values (Reload/Redirect/Order/Alert)
-		// already returned above, so there are no elements to resolve here
+		// request-targeted; page-global What values and Call already returned
+		// above, so there are no elements to resolve here
 	case string:
 		// target is a regular HTML ID. With Jid < 0, wire.WsMsg.Append writes Data
 		// verbatim and the browser splits the frame on '\t' (fields) and '\n' (frames),

@@ -26,7 +26,10 @@ import (
 //
 // A nil [wire.Message.Dest] targets every Request; a [key.Key] Dest targets the
 // single Request with that identity key, and a zero key is dropped; a string Dest
-// is an HTML id accepted by all Requests. Any other Dest is expanded into tags.
+// is an HTML id accepted by all Requests. An empty string Call destination is
+// reported as [ErrEmptyCallTarget] through [Jaws.MustLog] (logged when a Logger is
+// configured, otherwise panicking); debug builds additionally panic. Any other
+// Dest is expanded into tags.
 //
 // A [wire.Message.Dest] that cannot be expanded into tags (an illegal tag type)
 // is reported through [Jaws.MustLog], which panics when no [Jaws.Logger] is
@@ -43,6 +46,12 @@ func (jw *Jaws) Broadcast(msg wire.Message) {
 			return
 		}
 	case string: // HTML id (accepted by all requests)
+		if msg.What == what.Call && dest == "" {
+			// An empty outbound Jid encodes a request-scoped Call. Reject an empty
+			// HTML-id destination rather than silently widening it to every Request.
+			jw.reportMisuse(fmt.Errorf("jaws: Broadcast: %w", ErrEmptyCallTarget))
+			return
+		}
 	default:
 		expanded, err := tag.TagExpand(nil, msg.Dest)
 		jw.MustLog(err)
@@ -366,7 +375,11 @@ func jsCallData(jsfunc, jsonstr string) string {
 // target selects which requests or elements receive the Call message. In each
 // receiving browser, jsfunc is resolved as a path from window and called with
 // JSON.parse(jsonstr); the matched element is not passed as this or as an
-// argument.
+// argument. A nil target calls every Request once, and a request key calls that
+// Request once without requiring a matching DOM element. An empty string target
+// is rejected because the empty wire Jid represents a request-scoped call;
+// [ErrEmptyCallTarget] is reported through [Jaws.MustLog] (logged when a Logger is
+// configured, otherwise panicking), and debug builds additionally panic.
 func (jw *Jaws) JsCall(target any, jsfunc, jsonstr string) {
 	jw.broadcastTo(target, what.Call, jsCallData(jsfunc, jsonstr))
 }

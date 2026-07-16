@@ -35,6 +35,13 @@ var ErrRequestOverloaded = errors.New("request overloaded")
 // ErrRequestAlreadyClaimed is returned when [Jaws.UseRequest] is called more than once for a [Request].
 var ErrRequestAlreadyClaimed = errors.New("request already claimed")
 
+// ErrEmptyCallTarget indicates a Call message used an empty HTML id target.
+//
+// An empty wire id identifies a request-scoped JavaScript call, so accepting an
+// empty HTML id in [Jaws.JsCall] or [Jaws.Broadcast] would silently widen the
+// call to every selected Request.
+var ErrEmptyCallTarget = errors.New("empty HTML id cannot target Call")
+
 // ErrJavascriptDisabled is returned when the noscript probe indicates JavaScript is disabled.
 var ErrJavascriptDisabled = errors.New("javascript is disabled")
 

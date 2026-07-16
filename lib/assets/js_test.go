@@ -393,6 +393,89 @@ process.stdout.write(jaws.sent[0] || "");
 	}
 }
 
+func TestJawsJS_RequestScopedCallDoesNotRequireElement(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+let called = null;
+let lookedUp = false;
+window.app = {
+	refresh: function(value) { called = value; }
+};
+document.getElementById = function() {
+	lookedUp = true;
+	return null;
+};
+
+let thrown = "";
+try {
+	jawsPerform("Call", "", 'app.refresh={"source":"server"}');
+} catch (err) {
+	thrown = String(err);
+}
+process.stdout.write(JSON.stringify({ called: called, lookedUp: lookedUp, thrown: thrown }));
+`)
+
+	var got struct {
+		Called struct {
+			Source string `json:"source"`
+		} `json:"called"`
+		LookedUp bool   `json:"lookedUp"`
+		Thrown   string `json:"thrown"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+	if got.Thrown != "" {
+		t.Fatalf("request-scoped Call failed before invocation: %s", got.Thrown)
+	}
+	if got.LookedUp {
+		t.Fatal("request-scoped Call attempted an element lookup")
+	}
+	if got.Called.Source != "server" {
+		t.Fatalf("request-scoped Call argument = %+v, want source=server", got.Called)
+	}
+}
+
+func TestJawsJS_ElementScopedCallStillRequiresElement(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+let calls = 0;
+let lookups = [];
+window.app = {
+	refresh: function() { calls++; }
+};
+document.getElementById = function(id) {
+	lookups.push(id);
+	return id === "Jid.1" ? { id: id } : null;
+};
+
+jawsPerform("Call", "Jid.1", 'app.refresh={}');
+let missingError = "";
+try {
+	jawsPerform("Call", "Jid.2", 'app.refresh={}');
+} catch (err) {
+	missingError = String(err);
+}
+process.stdout.write(JSON.stringify({ calls: calls, lookups: lookups, missingError: missingError }));
+`)
+
+	var got struct {
+		Calls        int      `json:"calls"`
+		Lookups      []string `json:"lookups"`
+		MissingError string   `json:"missingError"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+	if got.Calls != 1 {
+		t.Fatalf("element-scoped calls = %d, want 1", got.Calls)
+	}
+	if !reflect.DeepEqual(got.Lookups, []string{"Jid.1", "Jid.2"}) {
+		t.Fatalf("element lookups = %#v, want both targeted IDs", got.Lookups)
+	}
+	if !strings.Contains(got.MissingError, "element not found: Jid.2") {
+		t.Fatalf("missing element error = %q", got.MissingError)
+	}
+}
+
 func TestJawsJS_JsVarWithoutRegisteredTopLevelNameDoesNotEmitInvalidFrame(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 function FakeSocket() { this.readyState = 1; this.sent = []; }

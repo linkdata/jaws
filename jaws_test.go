@@ -2905,6 +2905,70 @@ func BenchmarkRequestHandleRemoveUnknownChildren(b *testing.B) {
 	}
 }
 
+// BenchmarkRequestHandleBroadcastCall measures dispatching request-scoped and
+// existing element-scoped JavaScript Call destinations.
+func BenchmarkRequestHandleBroadcastCall(b *testing.B) {
+	for _, tc := range []struct {
+		name    string
+		dest    any
+		tagDest bool
+	}{
+		{name: "all-requests"},
+		{name: "request-key", dest: key.Key(1)},
+		{name: "html-id", dest: "target"},
+		{name: "tag", dest: tag.Tag("target"), tagDest: true},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			rq := newBenchRequest(b, 1)
+			if tc.tagDest {
+				rq.tagMap = make(map[any][]*Element)
+				rq.Tag(rq.elems[0], tc.dest)
+			}
+			msg := wire.Message{Dest: tc.dest, What: what.Call, Data: `app.refresh={"source":"server"}`}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				rq.handleBroadcast(msg, nil)
+				rq.muQueue.Lock()
+				rq.wsQueue = rq.wsQueue[:0]
+				rq.muQueue.Unlock()
+			}
+		})
+	}
+}
+
+// BenchmarkJawsBroadcastCallHTMLID guards the Call validation cost on the
+// existing non-empty HTML-id broadcast path.
+func BenchmarkJawsBroadcastCallHTMLID(b *testing.B) {
+	jw, err := New()
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(jw.Close)
+	drainDone := make(chan struct{})
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		for {
+			select {
+			case <-jw.bcastCh:
+			case <-drainDone:
+				return
+			}
+		}
+	}()
+	b.Cleanup(func() {
+		close(drainDone)
+		<-drained
+	})
+	msg := wire.Message{Dest: "target", What: what.Call, Data: `app.refresh={"source":"server"}`}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		jw.Broadcast(msg)
+	}
+}
+
 // BenchmarkRequestEventDispatch measures the request-level event path that
 // resolves Jids and reads a frozen Element's handlers. The bubbled case exercises
 // the per-candidate eligibility checks before every handler returns unhandled.
