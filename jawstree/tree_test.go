@@ -19,6 +19,7 @@ import (
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstest"
 	"github.com/linkdata/jaws/lib/ui"
+	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
 
@@ -151,19 +152,21 @@ func TestTreeSelectionMethods(t *testing.T) {
 	}
 }
 
-func TestTreeRenderEmitsRootDataAndInitScriptForPageContainer(t *testing.T) {
+func TestTreeRenderEmitsRootDataAndQueuesInitializerForPageContainer(t *testing.T) {
 	jw, err := jaws.New()
 	maybeError(t, err)
 	defer jw.Close()
 
-	rq := jw.NewRequest(nil)
+	httpRequest := httptest.NewRequest(http.MethodGet, "/", nil)
+	rq := jw.NewRequest(httpRequest)
+
 	var mu deadlock.RWMutex
 	root := &Node{Children: []*Node{{Name: "Documents"}}}
 	tree := New("mytree", ui.NewJsVar(&mu, root), InitiallyExpanded)
 	elem := rq.NewElement(tree)
 
 	var body bytes.Buffer
-	if err := tree.JawsRender(elem, &body, nil); err != nil {
+	if err := elem.JawsRender(&body, nil); err != nil {
 		t.Fatal(err)
 	}
 	rendered := body.String()
@@ -175,11 +178,40 @@ func TestTreeRenderEmitsRootDataAndInitScriptForPageContainer(t *testing.T) {
 	if !strings.Contains(rendered, `data-jawsdata=`) || !strings.Contains(rendered, "Documents") {
 		t.Fatalf("rendered tree is missing serialized root data: %q", rendered)
 	}
-	if want := initScriptURL("mytree", InitiallyExpanded); !strings.Contains(rendered, `src="`+want+`"`) {
-		t.Fatalf("rendered tree is missing init script %q: %q", want, rendered)
+	if strings.Contains(rendered, "<script") {
+		t.Fatalf("rendered tree contains a per-render script: %q", rendered)
 	}
 	if !strings.Contains(page, `<div id="mytree"></div>`) {
 		t.Fatalf("page is missing the Quercus container: %q", page)
+	}
+
+	// Match the production lifecycle: initial rendering queues the Call before the
+	// browser claims the Request and starts its WebSocket processing loop.
+	if claimed := jw.UseRequest(rq.JawsKey, httpRequest); claimed != rq {
+		t.Fatal("failed to claim rendered request")
+	}
+	go jw.Serve()
+	inCh, outCh, _, readyCh, doneCh := jw.TestServe(rq, func(recovered any) {
+		if recovered != nil {
+			panic(recovered)
+		}
+	})
+	defer func() {
+		close(inCh)
+		<-doneCh
+	}()
+	<-readyCh
+
+	select {
+	case msg := <-outCh:
+		if msg.What != what.Call || msg.Jid != elem.Jid() {
+			t.Fatalf("initializer message = %+v, want element-scoped Call for %s", msg, elem.Jid())
+		}
+		if want := `jawsCallWhenReady={"id":` + strconv.Quote(elem.Jid().String()) + `,"path":"jawstreeInit","data":{"tree":"mytree","options":2}}`; msg.Data != want {
+			t.Fatalf("initializer data = %q, want %q", msg.Data, want)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for initial tree initializer")
 	}
 }
 
@@ -355,18 +387,28 @@ func TestTree(t *testing.T) {
 	elem := rq.NewElement(tree)
 
 	var sb strings.Builder
-	err = tree.JawsRender(elem, &sb, nil)
+	err = elem.JawsRender(&sb, nil)
 	maybeError(t, err)
 
-	if strings.Contains(sb.String(), "DOMContentLoaded") {
-		t.Error("unexpected inline script")
+	if strings.Contains(sb.String(), "<script") {
+		t.Error("unexpected per-render script")
 	}
 
+	// The initial render queues one element-scoped initializer. Wake the request
+	// loop and drain it before testing later tree updates.
+	rq.InCh <- wire.WsMsg{}
+	select {
+	case msg := <-rq.OutCh:
+		if msg.What != what.Call || msg.Jid != elem.Jid() || msg.Data != `jawsCallWhenReady={"id":`+strconv.Quote(elem.Jid().String())+`,"path":"jawstreeInit","data":{"tree":"tree","options":1}}` {
+			t.Fatalf("unexpected initial tree message: %+v", msg)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for initial tree initializer")
+	}
+
+	// The generated route remains available to pages that request it directly,
+	// although Tree rendering initializes through the preloaded adapter.
 	initURL := initScriptURL("tree", SearchEnabled)
-	if !strings.Contains(sb.String(), `<script src="`+initURL+`"></script>`) {
-		t.Errorf("missing init script URL: %q", initURL)
-	}
-
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, initURL, nil))
 	if w.Code != http.StatusOK {
@@ -492,9 +534,8 @@ func (fw *failWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// TestTree_JawsRenderWriteError verifies Tree.JawsRender propagates a write error from
-// both the inner JsVar payload write (the hidden data <div>, write 1) and the trailing
-// init-script <script> tag write (write 2).
+// TestTree_JawsRenderWriteError verifies Tree.JawsRender propagates a write error
+// from the hidden JsVar data element.
 func TestTree_JawsRenderWriteError(t *testing.T) {
 	jw, err := jaws.New()
 	maybeError(t, err)
@@ -511,11 +552,9 @@ func TestTree_JawsRenderWriteError(t *testing.T) {
 	var mu deadlock.RWMutex
 	tree := New("tree", ui.NewJsVar(&mu, rootnode))
 
-	for _, failOn := range []int{1, 2} {
-		elem := rq.NewElement(tree)
-		if err := tree.JawsRender(elem, &failWriter{failOn: failOn}, nil); !errors.Is(err, errWrite) {
-			t.Errorf("failOn=%d: JawsRender err = %v, want %v", failOn, err, errWrite)
-		}
+	elem := rq.NewElement(tree)
+	if err := tree.JawsRender(elem, &failWriter{failOn: 1}, nil); !errors.Is(err, errWrite) {
+		t.Errorf("JawsRender err = %v, want %v", err, errWrite)
 	}
 }
 
@@ -532,13 +571,26 @@ func TestTree_JawsPathSetIgnoresNonSelectedPath(t *testing.T) {
 		t.Fatal("nil test request")
 	}
 	defer rq.Close()
+	<-rq.ReadyCh
 
 	rootnode := &Node{Name: "root", Children: []*Node{{Name: "child"}}}
 	var mu deadlock.RWMutex
 	tree := New("tree", ui.NewJsVar(&mu, rootnode))
 	elem := rq.NewElement(tree)
 	var sb strings.Builder
-	maybeError(t, tree.JawsRender(elem, &sb, nil))
+	maybeError(t, elem.JawsRender(&sb, nil))
+
+	// Flush the initializer queued by rendering so the assertion below isolates
+	// the messages produced by JawsPathSet.
+	rq.InCh <- wire.WsMsg{}
+	select {
+	case <-t.Context().Done():
+		t.Fatal("expected a jawstreeInit message")
+	case msg := <-rq.OutCh:
+		if msg.What != what.Call || msg.Jid != elem.Jid() || msg.Data != `jawsCallWhenReady={"id":`+strconv.Quote(elem.Jid().String())+`,"path":"jawstreeInit","data":{"tree":"tree","options":0}}` {
+			t.Fatalf("unexpected initial tree message: %+v", msg)
+		}
+	}
 
 	child := rootnode.Children[0]
 	// A non-".selected" path must be ignored (no broadcast)...
