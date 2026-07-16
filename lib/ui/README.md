@@ -58,6 +58,10 @@ allowed paths there. The generic path setter is convenient for trusted demos, bu
 it can write exported JSON fields and append to slices until the serialized
 `MaxClientJsVarBytes` cap is hit on render.
 
+Concurrent writes to one `JsVar` are applied one at a time, and any broadcasts
+they produce preserve that order. Transport backpressure can delay later writes,
+but it does not keep the locker passed to `NewJsVar` held.
+
 ## Building blocks
 
 - `HTMLInner`
