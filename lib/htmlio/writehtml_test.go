@@ -130,6 +130,68 @@ func Test_WriteHTMLInner_ClosingTag(t *testing.T) {
 	}
 }
 
+func Test_WriteHTMLInner_NewlineSensitivePrefix(t *testing.T) {
+	tests := []struct {
+		name  string
+		tag   string
+		inner template.HTML
+		want  string
+	}{
+		{
+			name:  "textarea leading LF is preserved after prefix",
+			tag:   "textarea",
+			inner: "\nhello",
+			want:  "<textarea id=\"Jid.1\">\n\nhello</textarea>",
+		},
+		{
+			name:  "textarea leading CR is prefixed with LF",
+			tag:   "textarea",
+			inner: "\rhello",
+			want:  "<textarea id=\"Jid.1\">\n\rhello</textarea>",
+		},
+		{
+			name:  "uppercase TEXTAREA is newline-sensitive",
+			tag:   "TEXTAREA",
+			inner: "\nhello",
+			want:  "<TEXTAREA id=\"Jid.1\">\n\nhello</TEXTAREA>",
+		},
+		{
+			name:  "pre leading LF is preserved after prefix",
+			tag:   "pre",
+			inner: "\nhello",
+			want:  "<pre id=\"Jid.1\">\n\nhello</pre>",
+		},
+		{
+			name:  "textarea ordinary content gets parser prefix",
+			tag:   "textarea",
+			inner: "hello",
+			want:  "<textarea id=\"Jid.1\">\nhello</textarea>",
+		},
+		{
+			name: "empty textarea gets parser prefix",
+			tag:  "textarea",
+			want: "<textarea id=\"Jid.1\">\n</textarea>",
+		},
+		{
+			name:  "div leading newline is unchanged",
+			tag:   "div",
+			inner: "\nx",
+			want:  "<div id=\"Jid.1\">\nx</div>",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var sb strings.Builder
+			if err := htmlio.WriteHTMLInner(&sb, jid.Jid(1), tt.tag, "", tt.inner); err != nil {
+				t.Fatal(err)
+			}
+			if got := sb.String(); got != tt.want {
+				t.Errorf("WriteHTMLInner() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // FuzzAppendAttrValue guards the escaping invariant: for arbitrary input, the
 // bytes between the bounding double quotes must contain no raw '"' or '<' that
 // could break out of the attribute value or open a new tag.

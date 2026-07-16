@@ -48,7 +48,7 @@ func TestInputTextWidgets(t *testing.T) {
 
 	textarea := NewTextarea(ss)
 	textareaElem, got := renderUI(t, rq, textarea)
-	mustMatch(t, `^<textarea id="Jid\.[0-9]+">quux</textarea>$`, got)
+	mustMatch(t, `^<textarea id="Jid\.[0-9]+">\nquux</textarea>$`, got)
 	textarea.JawsUpdate(textareaElem)
 }
 
@@ -421,7 +421,17 @@ func TestTextarea_RenderEscapesHTML(t *testing.T) {
 	ss := newTestSetter(`x</textarea><script>alert("x")</script>`)
 
 	_, got := renderUI(t, rq, NewTextarea(ss))
-	mustMatch(t, `^<textarea id="Jid\.[0-9]+">x&lt;/textarea&gt;&lt;script&gt;alert\(&#34;x&#34;\)&lt;/script&gt;</textarea>$`, got)
+	mustMatch(t, `^<textarea id="Jid\.[0-9]+">\nx&lt;/textarea&gt;&lt;script&gt;alert\(&#34;x&#34;\)&lt;/script&gt;</textarea>$`, got)
+}
+
+func TestTextarea_RenderPreservesLeadingNewline(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	ss := newTestSetter("\nhello")
+
+	_, got := renderUI(t, rq, NewTextarea(ss))
+	if want := "<textarea id=\"Jid.1\">\n\nhello</textarea>"; got != want {
+		t.Fatalf("rendered textarea = %q, want %q", got, want)
+	}
 }
 
 func TestInputTextWidget_RenderEscapesValueAttr(t *testing.T) {
