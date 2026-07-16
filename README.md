@@ -171,6 +171,10 @@ client/server protocol code:
 * `what.Call`/`what.Set` use `path + "=" + json` inside `Data`. Paths may not
   contain tabs, newlines, carriage returns, or `=`. Embedded tabs or newlines in
   JSON break message framing; `Jaws.JsCall` compacts valid JSON before sending.
+  A `Call` selected by a nil destination or nonzero request key uses a zero Jid
+  and does not require a DOM element; a zero request key is dropped. HTML-id and
+  tag destinations remain element-scoped. An empty HTML-id destination is
+  rejected because it has the same wire encoding as the zero Jid.
 * `jawsVar(name, ...)` resolves properties from `window`, but WebSocket routing
   uses the top-level symbol name only. Register JaWS `JsVar` names as top-level
   identifiers (example: `app`), and use dotted suffixes as the JSON path

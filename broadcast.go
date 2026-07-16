@@ -16,17 +16,20 @@ import (
 	"github.com/linkdata/jaws/lib/wire"
 )
 
-// Broadcast sends a message to all [Request] values.
+// Broadcast sends msg to the active [Request] and [Element] values selected by
+// [wire.Message.Dest].
 //
 // It must not be called before the JaWS processing loop ([Jaws.Serve] or
-// [Jaws.ServeWithTimeout]) is running. Otherwise this call may block once the
-// internal broadcast channel fills.
+// [Jaws.ServeWithTimeout]) is running. Otherwise this call may block.
 //
 // All convenience helpers on [Jaws] that call Broadcast inherit this requirement.
 //
-// A nil [wire.Message.Dest] targets every Request; a [key.Key] Dest targets the
-// single Request with that identity key, and a zero key is dropped; a string Dest
-// is an HTML id accepted by all Requests. Any other Dest is expanded into tags.
+// A nil [wire.Message.Dest] targets every active Request; a [key.Key] Dest targets
+// the active Request with that identity key, and a zero key is dropped; a string
+// Dest is an HTML id accepted by all active Requests. An empty string Call
+// destination is reported as [ErrEmptyCallTarget] and the message is not sent.
+// With a [Jaws.Logger] configured, production builds log the error; otherwise,
+// and in debug builds, Broadcast panics. Any other Dest is expanded into tags.
 //
 // A [wire.Message.Dest] that cannot be expanded into tags (an illegal tag type)
 // is reported through [Jaws.MustLog], which panics when no [Jaws.Logger] is
@@ -43,6 +46,12 @@ func (jw *Jaws) Broadcast(msg wire.Message) {
 			return
 		}
 	case string: // HTML id (accepted by all requests)
+		if msg.What == what.Call && dest == "" {
+			// An empty outbound Jid encodes a request-scoped Call. Reject an empty
+			// HTML-id destination rather than silently widening it to every Request.
+			jw.reportMisuse(fmt.Errorf("jaws: Broadcast: %w", ErrEmptyCallTarget))
+			return
+		}
 	default:
 		expanded, err := tag.TagExpand(nil, msg.Dest)
 		jw.MustLog(err)
@@ -366,7 +375,11 @@ func jsCallData(jsfunc, jsonstr string) string {
 // target selects which requests or elements receive the Call message. In each
 // receiving browser, jsfunc is resolved as a path from window and called with
 // JSON.parse(jsonstr); the matched element is not passed as this or as an
-// argument.
+// argument. A nil target calls each active Request once. A nonzero [key.Key]
+// target calls the matching active Request once without requiring a matching DOM
+// element; a zero key is ignored. An empty string target reports
+// [ErrEmptyCallTarget] and sends no call. With [Jaws.Logger] configured,
+// production builds log the error; otherwise, and in debug builds, JsCall panics.
 func (jw *Jaws) JsCall(target any, jsfunc, jsonstr string) {
 	jw.broadcastTo(target, what.Call, jsCallData(jsfunc, jsonstr))
 }
