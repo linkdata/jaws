@@ -37,7 +37,7 @@ func (errNotUsableAsTag) Is(target error) bool {
 // NewErrNotUsableAsTag returns [ErrNotUsableAsTag] for an unusable tag key.
 //
 // It returns nil for nil and for values that are comparable at runtime and equal
-// themselves. It only validates key usability; it does not apply [TagExpand]'s
+// to themselves. It only validates key usability; it does not apply [TagExpand]'s
 // tag-type policy, so a value may pass this check and still be rejected with
 // [ErrIllegalTagType].
 func NewErrNotUsableAsTag(x any) error {
