@@ -100,3 +100,14 @@ func BenchmarkJsVarPathSetterMutation(b *testing.B) {
 		})
 	})
 }
+
+func BenchmarkValidateJsVarName(b *testing.B) {
+	params := []any{"state"}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		name, err := validateJsVarName(params)
+		if err != nil || name != "state" {
+			b.Fatalf("validateJsVarName() = %q, %v", name, err)
+		}
+	}
+}

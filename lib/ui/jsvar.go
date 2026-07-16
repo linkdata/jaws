@@ -31,6 +31,10 @@ func validateJsVarName(value []any) (name string, err error) {
 		}
 		if !jsVarNameRx.MatchString(name) {
 			err = errIllegalJsVarName("illegal syntax")
+			return
+		}
+		if name == "__proto__" {
+			err = errIllegalJsVarName("reserved")
 		}
 	}
 	if name == "" {

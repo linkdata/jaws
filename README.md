@@ -174,7 +174,9 @@ client/server protocol code:
 * `jawsVar(name, ...)` resolves properties from `window`, but WebSocket routing
   uses the top-level symbol name only. Register JaWS `JsVar` names as top-level
   identifiers (example: `app`), and use dotted suffixes as the JSON path
-  (example: `jawsVar("app.state", value)` sends path `state`).
+  (example: `jawsVar("app.state", value)` sends path `state`). The exact
+  top-level name `__proto__` is reserved because it cannot be used as a browser
+  routing key.
 
 ### HTTP request flow and associating the WebSocket
 
