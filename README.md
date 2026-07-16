@@ -461,9 +461,9 @@ requested during the JavaScript WebSocket HTTP request.
 
 ### Security of the WebSocket callback
 
-Each JaWS request gets a non-zero random 64-bit key not currently in use. This
-value is written to the HTML output so the JavaScript can construct the WebSocket
-callback URL.
+While the `Jaws` instance is open, each Request gets a non-zero random 64-bit key
+not currently in use. This value is written to the HTML output so the JavaScript
+can construct the WebSocket callback URL.
 
 While assigned to a Request, its callback key can claim that Request at most
 once. JaWS does not assign keys belonging to registered Requests or
