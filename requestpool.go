@@ -200,6 +200,11 @@ func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP neti
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	rq.JawsKey = jawsKey
+	// Freshen the shared counter first so the seed reflects true elapsed time even
+	// before the Serve loop starts advancing runtimeSeconds; otherwise a request
+	// created pre-Serve would seed 0 and be idle-expired by the first maintenance
+	// pass once Serve seeds runtimeSeconds to the real elapsed value.
+	jw.refreshRuntimeSeconds()
 	rq.lastWriteSeconds.Store(jw.runtimeSeconds.Load())
 	rq.initial = r
 	rq.remoteIP = remoteIP

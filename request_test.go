@@ -2012,6 +2012,31 @@ func TestCoverage_RequestMaintenanceClaimAndErrors(t *testing.T) {
 	maybePanic(errors.New("boom"))
 }
 
+func TestNewRequest_SeedsLastWriteFromLiveElapsed(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	// Simulate an hour of startup before Serve runs. Serve is deliberately not
+	// started, so runtimeSeconds is never advanced by its maintenance loop.
+	jw.created = time.Now().Add(-time.Hour)
+
+	rq := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
+
+	// The seed must reflect true elapsed time (~3600s), not the stale zero that
+	// runtimeSeconds still holds before Serve seeds it.
+	if got := rq.lastWriteSeconds.Load(); got < 3595 || got > 3605 {
+		t.Fatalf("expected lastWriteSeconds seeded to ~3600, got %d", got)
+	}
+
+	// A brand-new request must not be idle-expired by the first maintenance pass.
+	if expired, _ := rq.maintenance(jw.runtimeSeconds.Load(), time.Hour); expired {
+		t.Fatal("a brand-new pre-Serve request must not be idle-expired")
+	}
+}
+
 func TestCoverage_RequestProcessHTTPDoneAndBroadcastDone(t *testing.T) {
 	jw, err := New()
 	if err != nil {
