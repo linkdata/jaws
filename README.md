@@ -459,6 +459,11 @@ The reason is that there is no unbroken call chain from the time the Request
 object is created when the initial HTTP request comes in and when it is
 requested during the JavaScript WebSocket HTTP request.
 
+`Request.SetContext` must return a context derived from the supplied parent.
+If that replacement context is canceled or reaches its deadline, an idle live
+request wakes and shuts down immediately; it does not need an unrelated browser
+event or broadcast to notice the cancellation.
+
 ### Security of the WebSocket callback
 
 While the `Jaws` instance is open, each Request gets a non-zero random 64-bit key

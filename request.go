@@ -336,6 +336,10 @@ func (rq *Request) Context() (ctx context.Context) {
 // The returned context must be derived from oldCtx so cancellation and deadlines
 // continue to propagate to [Request.Context].
 //
+// Cancellation of a replacement context wakes an idle live Request immediately;
+// it does not wait for another WebSocket event or broadcast. Value-only contexts
+// that retain oldCtx's Done channel require no additional cancellation bridge.
+//
 // The function runs while the Request lock is held so the transform is atomic.
 // It must not call methods on the same Request, call code that may do so, or
 // block on work that needs the same Request.
@@ -344,11 +348,37 @@ func (rq *Request) Context() (ctx context.Context) {
 // builds report it via [Jaws.MustLog] and keep the existing context.
 func (rq *Request) SetContext(fn func(oldCtx context.Context) (newCtx context.Context)) {
 	rq.mu.Lock()
-	defer rq.mu.Unlock()
-	if newCtx := fn(rq.ctx); newCtx != nil {
-		rq.ctx = newCtx
-	} else {
+	locked := true
+	defer func() {
+		// Keep the Request usable if the caller's transform panics.
+		if locked {
+			rq.mu.Unlock()
+		}
+	}()
+	oldCtx := rq.ctx
+	newCtx := fn(oldCtx)
+	if newCtx == nil {
+		rq.mu.Unlock()
+		locked = false
 		rq.Jaws.reportMisuse(errors.New("jaws: SetContext function returned a nil context"))
+		return
+	}
+	rq.ctx = newCtx
+	cancelFn := rq.cancelFn
+	rq.mu.Unlock()
+	locked = false
+	if newCtx.Done() != oldCtx.Done() {
+		// process may already be blocked selecting on oldCtx.Done. When a
+		// replacement has its own cancellation channel, bridge that cancellation
+		// into the allocation's stable cancel function so the old select wakes.
+		// Capture only contexts and the cancel closure: capturing rq would let a
+		// delayed callback cancel an unrelated Request after pool reuse.
+		//
+		// Register after releasing rq.mu. context.AfterFunc synchronously invokes
+		// a custom context's registration hook, which may legitimately re-enter rq.
+		context.AfterFunc(newCtx, func() {
+			cancelFn(context.Cause(newCtx))
+		})
 	}
 }
 

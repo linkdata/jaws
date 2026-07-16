@@ -3032,6 +3032,34 @@ func BenchmarkRequestMarkWritten(b *testing.B) {
 	})
 }
 
+type benchmarkRequestContextKey struct{}
+
+// BenchmarkRequestSetContextValue guards the common value-only customization
+// path. Its Done channel is unchanged, so SetContext must avoid installing a
+// cancellation bridge or adding allocations beyond context.WithValue itself.
+func BenchmarkRequestSetContextValue(b *testing.B) {
+	jw, err := New()
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(jw.Close)
+	base, cancel := context.WithCancelCause(b.Context())
+	b.Cleanup(func() { cancel(nil) })
+	rq := &Request{Jaws: jw, JawsKey: key.Key(1), ctx: base, cancelFn: cancel}
+	b.ReportAllocs()
+	for b.Loop() {
+		rq.SetContext(func(old context.Context) context.Context {
+			return context.WithValue(old, benchmarkRequestContextKey{}, 1)
+		})
+		// Reset the benchmark fixture so value contexts do not form an ever-growing
+		// chain. SetContext itself still receives and derives from the real current
+		// context on every measured operation.
+		rq.mu.Lock()
+		rq.ctx = base
+		rq.mu.Unlock()
+	}
+}
+
 // BenchmarkRetirePendingRequests guards the exceptional lifecycle used when
 // maintenance or the per-IP cap revokes Requests whose initial handlers may
 // still own them. It measures both a single timeout and a full default-cap batch.
