@@ -1,9 +1,11 @@
 package jaws
 
 import (
+	"bytes"
 	"fmt"
 	"html/template"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -680,6 +682,57 @@ func TestElement_ApplyGetter_NonComparableHandler(t *testing.T) {
 	}
 	if err := CallEventHandlers(e.UI(), e, what.Click, "1 2 0 name"); err != nil {
 		t.Fatalf("expected click handler to run, got %v", err)
+	}
+}
+
+func TestElement_ApplyGetter_NonComparableHandler_NilLogger(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	if jw.Logger != nil {
+		t.Fatal("expected nil Logger by default")
+	}
+
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	e := rq.NewElement(&testUi{s: "x"})
+	tch := testNonComparableClickHandler{names: []string{"name"}}
+	gotTag, _, err := e.ApplyGetter(tch)
+	if err != nil {
+		t.Fatalf("ApplyGetter returned error: %v", err)
+	}
+	if gotTag != nil {
+		t.Fatalf("expected declined non-comparable candidate to return a nil tag, got %#v", gotTag)
+	}
+	if len(e.handlers) != 1 {
+		t.Fatalf("expected 1 handler, got %d", len(e.handlers))
+	}
+	if got := rq.TagsOf(e); len(got) != 0 {
+		t.Fatalf("expected non-comparable handler to not be auto-tagged, got %v", got)
+	}
+	// The returned tag is what a widget stores and later dirties. A nil tag must
+	// not reach MustLog (which panics with a nil Logger); a non-comparable one would.
+	e.Dirty(gotTag)
+}
+
+func TestElement_ApplyGetter_NonComparableHandler_NoLog(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	var buf bytes.Buffer
+	jw.Logger = slog.New(slog.NewTextHandler(&buf, nil))
+
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	e := rq.NewElement(&testUi{s: "x"})
+	tch := testNonComparableClickHandler{names: []string{"name"}}
+	if _, _, err := e.ApplyGetter(tch); err != nil {
+		t.Fatalf("ApplyGetter returned error: %v", err)
+	}
+	if strings.Contains(buf.String(), "not usable as tag") {
+		t.Fatalf("expected no not-usable-as-tag log, got %q", buf.String())
 	}
 }
 
