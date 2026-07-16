@@ -12,9 +12,11 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawstest"
 	"github.com/linkdata/jaws/lib/named"
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jaws/lib/wire"
 )
 
 type testRWUpdater struct {
@@ -212,5 +214,55 @@ func TestRequestWriter_RegisterUsesUpdaterEventHandler(t *testing.T) {
 	}
 	if up.clicks != 1 {
 		t.Fatalf("expected updater click handler to be called once, got %d", up.clicks)
+	}
+}
+
+// TestRequestWriter_RegisterInputDirtiesSharedTag binds one setter to two views:
+// a normally rendered input (A) and a Register'd input (B). An Input event to B
+// must dirty the shared bound tag so A, which shares the setter, receives a
+// corrective Value update. Without assigning B's dirty tag during Register, B's
+// tag stays nil, the dirty mark expands to nothing and A never updates.
+func TestRequestWriter_RegisterInputDirtiesSharedTag(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+
+	tr := jawstest.NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("expected test request")
+	}
+	defer tr.Close()
+	<-tr.ReadyCh
+
+	ss := newTestSetter("start")
+
+	// View A: a normally rendered text input bound to ss.
+	viewA := NewText(ss)
+	elemA := tr.NewElement(viewA)
+	var buf strings.Builder
+	if err := elemA.JawsRender(&buf, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// View B: the same setter registered as an update-only input widget.
+	rw := RequestWriter{Request: tr.Request, Writer: tr.Recorder}
+	idB := rw.Register(NewText(ss))
+
+	// Deliver an Input event to B; it must dirty the shared bound tag.
+	tr.InCh <- wire.WsMsg{Jid: idB, What: what.Input, Data: "typed"}
+
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case msg := <-tr.OutCh:
+			if msg.What == what.Value && msg.Jid == elemA.Jid() && msg.Data == "typed" {
+				return
+			}
+		case <-deadline:
+			t.Fatal("view A never received the corrective Value update; B's input did not dirty the shared tag")
+		}
 	}
 }

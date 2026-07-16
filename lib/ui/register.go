@@ -35,12 +35,27 @@ func (u Register) JawsRender(elem *jaws.Element, w io.Writer, params []any) erro
 func (rw RequestWriter) Register(updater jaws.Updater, params ...any) jid.Jid {
 	elem := rw.NewElement(Register{Updater: updater})
 	elem.Tag(updater)
+	// The wrapping Register element's UI is not the updater, so events reach the
+	// updater only through the element's handler list, not the elem.UI() fallback.
 	switch updater.(type) {
 	case jaws.InputHandler, jaws.ClickHandler, jaws.ContextMenuHandler:
 		elem.AddHandlers(updater)
 	}
-	elem.ApplyParams(params)
-	updater.JawsUpdate(elem)
+	if r, ok := updater.(jaws.Renderer); ok {
+		// Emit the initial update before rendering: the render path stores the
+		// widget's last value and an input widget's JawsUpdate only emits on a
+		// change, so the unconditional first update must run while the stored
+		// value is still empty.
+		updater.JawsUpdate(elem)
+		// Run the real render with output discarded to assign the widget's dirty
+		// tag (an input widget's tag is set only by [jaws.Element.ApplyGetter]
+		// during render), so later input events dirty the bound tag. ApplyParams
+		// runs inside JawsRender, so it is not repeated here.
+		_ = r.JawsRender(elem, io.Discard, params)
+	} else {
+		elem.ApplyParams(params)
+		updater.JawsUpdate(elem)
+	}
 	elem.Freeze()
 	return elem.Jid()
 }
