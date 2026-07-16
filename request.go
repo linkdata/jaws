@@ -331,25 +331,53 @@ func (rq *Request) Context() (ctx context.Context) {
 	return
 }
 
-// SetContext atomically replaces the Request's context with the function return value.
-// The function is given the current context and must return a non-nil context.
-// The returned context must be derived from oldCtx so cancellation and deadlines
-// continue to propagate to [Request.Context].
+// SetContext atomically transforms the Request's context.
 //
-// The function runs while the Request lock is held so the transform is atomic.
-// It must not call methods on the same Request, call code that may do so, or
-// block on work that needs the same Request.
+// fn receives the current context and must return a non-nil context derived from
+// it so cancellation and deadlines continue to propagate. Cancellation or
+// deadline expiration of the returned context wakes a running
+// [Request.ServeHTTP] loop promptly, even while it is idle; no WebSocket event or
+// broadcast is required.
+//
+// fn runs while the Request lock is held. It must not call methods on the same
+// Request, call code that may do so, or block on work that needs the same
+// Request. SetContext panics if fn is nil. If fn panics, SetContext releases the
+// lock and propagates the panic.
 //
 // Returning a nil context is a programming error: debug builds panic and production
-// builds report it via [Jaws.MustLog] and keep the existing context.
+// builds report it through [Jaws.MustLog] and retain the current context.
 func (rq *Request) SetContext(fn func(oldCtx context.Context) (newCtx context.Context)) {
+	oldCtx, newCtx, cancelFn := rq.replaceContext(fn)
+	if newCtx == nil {
+		rq.Jaws.reportMisuse(errors.New("jaws: SetContext function returned a nil context"))
+		return
+	}
+	if newCtx.Done() == oldCtx.Done() {
+		// The request loop already observes this Done channel, so no cancellation
+		// bridge is needed.
+		return
+	}
+	// The request loop may already be blocked selecting on oldCtx.Done. Bridge a
+	// replacement's cancellation into the allocation's stable cancel function so
+	// that old select wakes. Register outside rq.mu because context.AfterFunc may
+	// synchronously invoke a custom context hook that re-enters the Request.
+	//
+	// Capture only the context and cancel closure: capturing rq would let a delayed
+	// callback cancel an unrelated Request after pool reuse.
+	context.AfterFunc(newCtx, func() {
+		cancelFn(context.Cause(newCtx))
+	})
+}
+
+func (rq *Request) replaceContext(fn func(oldCtx context.Context) (newCtx context.Context)) (oldCtx, newCtx context.Context, cancelFn context.CancelCauseFunc) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	if newCtx := fn(rq.ctx); newCtx != nil {
+	oldCtx = rq.ctx
+	if newCtx = fn(oldCtx); newCtx != nil {
 		rq.ctx = newCtx
-	} else {
-		rq.Jaws.reportMisuse(errors.New("jaws: SetContext function returned a nil context"))
+		cancelFn = rq.cancelFn
 	}
+	return
 }
 
 // maintenance reports whether rq has expired and should be retired. For a

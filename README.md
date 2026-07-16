@@ -459,6 +459,11 @@ The reason is that there is no unbroken call chain from the time the Request
 object is created when the initial HTTP request comes in and when it is
 requested during the JavaScript WebSocket HTTP request.
 
+`Request.SetContext` must return a non-nil context derived from the current
+context passed to it. If the returned context is canceled or its deadline
+expires, a running Request's WebSocket loop wakes promptly even while idle; no
+browser event or broadcast is needed.
+
 ### Security of the WebSocket callback
 
 While the `Jaws` instance is open, each Request gets a non-zero random 64-bit key

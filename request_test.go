@@ -570,6 +570,135 @@ func TestRequest_SetContextCancellationStopsQueuedEvents(t *testing.T) {
 	}
 }
 
+type deferredAfterContext struct {
+	context.Context
+	mu       sync.Mutex
+	done     chan struct{}
+	err      error
+	callback func()
+	onAfter  func()
+}
+
+func (ctx *deferredAfterContext) Done() <-chan struct{} { return ctx.done }
+
+func (ctx *deferredAfterContext) Err() error {
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+	return ctx.err
+}
+
+func (ctx *deferredAfterContext) AfterFunc(fn func()) func() bool {
+	if ctx.onAfter != nil {
+		ctx.onAfter()
+	}
+	ctx.mu.Lock()
+	ctx.callback = fn
+	ctx.mu.Unlock()
+	return func() bool { return false }
+}
+
+func TestRequest_SetContextRegistersAfterFuncOutsideLock(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rq := jw.NewRequest(nil)
+	observed := make(chan context.Context, 1)
+	custom := &deferredAfterContext{
+		Context: rq.Context(),
+		done:    make(chan struct{}),
+		onAfter: func() {
+			observed <- rq.Context()
+		},
+	}
+	setDone := make(chan struct{})
+	go func() {
+		rq.SetContext(func(context.Context) context.Context { return custom })
+		close(setDone)
+	}()
+
+	select {
+	case <-setDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("SetContext deadlocked while a custom AfterFunc hook re-entered Request.Context")
+	}
+	select {
+	case got := <-observed:
+		if got != custom {
+			t.Fatalf("AfterFunc hook observed context %T, want replacement context", got)
+		}
+	default:
+		t.Fatal("replacement context's AfterFunc hook was not registered")
+	}
+	jw.Close()
+}
+
+func (ctx *deferredAfterContext) cancel() {
+	ctx.mu.Lock()
+	ctx.err = context.Canceled
+	close(ctx.done)
+	ctx.mu.Unlock()
+}
+
+func (ctx *deferredAfterContext) fire() {
+	ctx.mu.Lock()
+	fn := ctx.callback
+	ctx.mu.Unlock()
+	if fn != nil {
+		fn()
+	}
+}
+
+func TestRequest_SetContextDelayedCallbackDoesNotCancelReusedRequest(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	first := jw.NewRequest(nil)
+	callbackCalled := make(chan struct{}, 1)
+	var callbackArmed atomic.Bool
+	first.mu.Lock()
+	firstCancel := first.cancelFn
+	first.cancelFn = func(cause error) {
+		firstCancel(cause)
+		if callbackArmed.Load() {
+			callbackCalled <- struct{}{}
+		}
+	}
+	first.mu.Unlock()
+	deferred := &deferredAfterContext{done: make(chan struct{})}
+	first.SetContext(func(old context.Context) context.Context {
+		deferred.Context = old
+		return deferred
+	})
+	deferred.cancel()
+	jw.recycle(first)
+
+	poolNew := jw.reqPool.New
+	jw.reqPool.New = func() any { return first }
+	defer func() { jw.reqPool.New = poolNew }()
+	second := jw.NewRequest(nil)
+	if second != first {
+		t.Fatal("request pool did not reuse the Request")
+	}
+	secondCtx := second.Context()
+	callbackArmed.Store(true)
+	deferred.fire()
+	select {
+	case <-callbackCalled:
+	case <-time.After(testTimeout):
+		t.Fatal("delayed SetContext callback did not run")
+	}
+	select {
+	case <-secondCtx.Done():
+		t.Fatal("delayed SetContext callback canceled the reused Request")
+	default:
+	}
+	jw.recycle(second)
+}
+
 func TestRequest_OutboundRespectsContextDone(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest(t)
@@ -2564,6 +2693,20 @@ type testServer struct {
 	connectedCh chan struct{}
 }
 
+type observedDoneContext struct {
+	context.Context
+	armed    atomic.Bool
+	once     sync.Once
+	observed chan struct{}
+}
+
+func (ctx *observedDoneContext) Done() <-chan struct{} {
+	if ctx.armed.Load() {
+		ctx.once.Do(func() { close(ctx.observed) })
+	}
+	return ctx.Context.Done()
+}
+
 func newTestServer(t *testing.T) (ts *testServer) {
 	t.Helper()
 	return newTestServerWithSession(t, true)
@@ -3081,6 +3224,73 @@ func TestWS_PingDisabledKeepsIdleConnection(t *testing.T) {
 
 	_ = conn.CloseNow()
 	waitForRequestCounts(t, ts.jw, 0, 0, testTimeout)
+}
+
+// TestWS_SetContextCancellationClosesIdleConnection proves production
+// reachability through a real WebSocket. The observed context confirms the
+// request loop is already blocked on the old Done channel before SetContext
+// installs and cancels a child context; the client must then observe the server
+// close without sending any unrelated wake-up message.
+func TestWS_SetContextCancellationClosesIdleConnection(t *testing.T) {
+	ts := newTestServerNoSession(t)
+	defer ts.Close()
+	ts.jw.WebSocketPingInterval = 0
+
+	observed := &observedDoneContext{
+		Context:  ts.rq.Context(),
+		observed: make(chan struct{}),
+	}
+	ts.rq.SetContext(func(context.Context) context.Context { return observed })
+
+	conn, resp, err := ts.Dial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.CloseNow() }()
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusSwitchingProtocols)
+	}
+	select {
+	case <-ts.connectedCh:
+	case <-time.After(testTimeout):
+		t.Fatal("timeout waiting for websocket connect")
+	}
+
+	// Wake the loop once through a supported request-targeted broadcast. After it
+	// sends the alert it re-enters select and observes the old context's Done.
+	observed.armed.Store(true)
+	ts.rq.Alert("info", "prime idle select")
+	primeCtx, cancelPrime := context.WithTimeout(t.Context(), testTimeout)
+	defer cancelPrime()
+	if _, _, err = conn.Read(primeCtx); err != nil {
+		t.Fatalf("reading priming alert: %v", err)
+	}
+	select {
+	case <-observed.observed:
+	case <-time.After(testTimeout):
+		t.Fatal("request loop did not select on the old context")
+	}
+
+	ts.rq.SetContext(func(old context.Context) context.Context {
+		ctx, cancel := context.WithCancel(old)
+		cancel()
+		return ctx
+	})
+
+	readCtx, cancelRead := context.WithTimeout(t.Context(), testTimeout)
+	defer cancelRead()
+	for readCtx.Err() == nil {
+		if _, _, err = conn.Read(readCtx); err != nil {
+			break
+		}
+	}
+	if err == nil {
+		t.Fatal("WebSocket remained open after replacement context cancellation")
+	}
+	if readCtx.Err() != nil {
+		t.Fatalf("idle WebSocket closed only when the client read timed out: %v", err)
+	}
+	waitForRequestCount(t, ts.jw, 0, testTimeout)
 }
 
 // waitForRequestCount polls a Jaws served over a real WebSocket connection, so
