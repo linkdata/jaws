@@ -20,17 +20,16 @@ import (
 // [wire.Message.Dest].
 //
 // It must not be called before the JaWS processing loop ([Jaws.Serve] or
-// [Jaws.ServeWithTimeout]) is running. Otherwise this call may block once the
-// internal broadcast channel fills.
+// [Jaws.ServeWithTimeout]) is running. Otherwise this call may block.
 //
 // All convenience helpers on [Jaws] that call Broadcast inherit this requirement.
 //
-// A nil [wire.Message.Dest] targets every Request; a [key.Key] Dest targets the
-// single Request with that identity key, and a zero key is dropped; a string Dest
-// is an HTML id accepted by all Requests. An empty string Call destination is
-// reported as [ErrEmptyCallTarget] and the message is not sent. With a
-// [Jaws.Logger] configured, production builds log the error; otherwise, and in
-// debug builds, Broadcast panics. Any other Dest is expanded into tags.
+// A nil [wire.Message.Dest] targets every active Request; a [key.Key] Dest targets
+// the active Request with that identity key, and a zero key is dropped; a string
+// Dest is an HTML id accepted by all active Requests. An empty string Call
+// destination is reported as [ErrEmptyCallTarget] and the message is not sent.
+// With a [Jaws.Logger] configured, production builds log the error; otherwise,
+// and in debug builds, Broadcast panics. Any other Dest is expanded into tags.
 //
 // A [wire.Message.Dest] that cannot be expanded into tags (an illegal tag type)
 // is reported through [Jaws.MustLog], which panics when no [Jaws.Logger] is
