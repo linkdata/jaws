@@ -130,7 +130,7 @@ func Test_WriteHTMLInner_ClosingTag(t *testing.T) {
 	}
 }
 
-func Test_WriteHTMLInner_LeadingNewline(t *testing.T) {
+func Test_WriteHTMLInner_NewlineSensitivePrefix(t *testing.T) {
 	tests := []struct {
 		name  string
 		tag   string
@@ -138,7 +138,7 @@ func Test_WriteHTMLInner_LeadingNewline(t *testing.T) {
 		want  string
 	}{
 		{
-			name:  "textarea leading newline is doubled",
+			name:  "textarea leading LF is preserved after prefix",
 			tag:   "textarea",
 			inner: "\nhello",
 			want:  "<textarea id=\"Jid.1\">\n\nhello</textarea>",
@@ -156,16 +156,21 @@ func Test_WriteHTMLInner_LeadingNewline(t *testing.T) {
 			want:  "<TEXTAREA id=\"Jid.1\">\n\nhello</TEXTAREA>",
 		},
 		{
-			name:  "pre leading newline is doubled",
+			name:  "pre leading LF is preserved after prefix",
 			tag:   "pre",
 			inner: "\nhello",
 			want:  "<pre id=\"Jid.1\">\n\nhello</pre>",
 		},
 		{
-			name:  "textarea without leading newline is unchanged",
+			name:  "textarea ordinary content gets parser prefix",
 			tag:   "textarea",
 			inner: "hello",
-			want:  "<textarea id=\"Jid.1\">hello</textarea>",
+			want:  "<textarea id=\"Jid.1\">\nhello</textarea>",
+		},
+		{
+			name: "empty textarea gets parser prefix",
+			tag:  "textarea",
+			want: "<textarea id=\"Jid.1\">\n</textarea>",
 		},
 		{
 			name:  "div leading newline is unchanged",

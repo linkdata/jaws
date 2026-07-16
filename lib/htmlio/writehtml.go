@@ -152,9 +152,9 @@ func WriteHTMLInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs 
 // Unlike [WriteHTMLTag] it emits no value attribute; pass one via attrs (for
 // example Attr("value", v)) when a value="..." is needed.
 //
-// For a textarea or pre element whose innerHTML begins with LF or CR, the HTML
-// source includes one additional LF immediately after the start tag. The parser
-// consumes that prefix, preserving the content's leading newline in the DOM.
+// For textarea and pre elements, the HTML source includes one LF immediately
+// after the start tag. The parser consumes that prefix, so it adds no DOM content
+// while preserving a leading LF or CR from innerHTML.
 //
 // The htmlTag parameter is trusted and written verbatim with no escaping or
 // validation; it MUST NOT be derived from untrusted data. The typeAttr parameter
@@ -165,10 +165,10 @@ func WriteHTMLInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs 
 func WriteHTMLInner(w io.Writer, jid jid.Jid, htmlTag, typeAttr string, innerHTML template.HTML, attrs ...template.HTMLAttr) (err error) {
 	b := appendHTMLTag(nil, jid, htmlTag, typeAttr, "", attrs)
 	if needClosingTag(htmlTag) {
-		// The HTML parser strips one newline right after a textarea/pre start
-		// tag, so prefix one LF to preserve content that begins with LF or CR.
-		// The browser consumes the prefix during parsing.
-		if isNewlineSensitive(htmlTag) && len(innerHTML) > 0 && (innerHTML[0] == '\n' || innerHTML[0] == '\r') {
+		// The HTML parser strips one LF right after a textarea/pre start tag.
+		// Always provide that parser-consumed prefix so innerHTML is preserved
+		// regardless of whether its first character is LF, CR, or ordinary text.
+		if isNewlineSensitive(htmlTag) {
 			b = append(b, '\n')
 		}
 		b = append(b, innerHTML...)
