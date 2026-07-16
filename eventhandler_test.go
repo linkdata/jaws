@@ -172,6 +172,54 @@ func (h dualClickInputComboHandler) JawsInput(elem *Element, value string) error
 	return h.rec.inputRet
 }
 
+func TestRequest_CallAllEventHandlersRequiresFrozenElement(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	t.Run("direct", func(t *testing.T) {
+		rec := &clickInputSetRecorder{}
+		elem := rq.NewElement(testDivWidget{inner: "x"})
+		elem.AddHandlers(inputOnlyComboHandler{rec: rec})
+
+		if err := rq.callAllEventHandlers(elem.Jid(), what.Input, "before"); err != nil {
+			t.Fatal(err)
+		}
+		if rec.inputCalls != 0 {
+			t.Fatalf("input calls before Freeze = %d, want 0", rec.inputCalls)
+		}
+
+		elem.Freeze()
+		if err := rq.callAllEventHandlers(elem.Jid(), what.Input, "after"); err != nil {
+			t.Fatal(err)
+		}
+		if rec.inputCalls != 1 {
+			t.Fatalf("input calls after Freeze = %d, want 1", rec.inputCalls)
+		}
+	})
+
+	t.Run("bubbled", func(t *testing.T) {
+		rec := &clickInputSetRecorder{}
+		elem := rq.NewElement(testDivWidget{inner: "x"})
+		elem.AddHandlers(clickOnlyComboHandler{rec: rec})
+		value := "1 2 0 name\t" + elem.Jid().String() + "\t"
+
+		if err := rq.callAllEventHandlers(0, what.Click, value); err != nil {
+			t.Fatal(err)
+		}
+		if rec.clickCalls != 0 {
+			t.Fatalf("click calls before Freeze = %d, want 0", rec.clickCalls)
+		}
+
+		elem.Freeze()
+		if err := rq.callAllEventHandlers(0, what.Click, value); err != nil {
+			t.Fatal(err)
+		}
+		if rec.clickCalls != 1 {
+			t.Fatalf("click calls after Freeze = %d, want 1", rec.clickCalls)
+		}
+	})
+}
+
 func Test_CallEventHandlers_ClickDispatchCombinations(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()

@@ -55,18 +55,13 @@
 //
 // [Element] handlers are an intentional exception to the locking rules: they are
 // populated only while an Element is rendered and are then read without a lock on
-// the event goroutine. This is safe because of the Element lifecycle rather than a
-// lock: an Element is fully rendered — or explicitly frozen via [Element.Freeze]
-// for update-only registrations — before any protocol-conforming event for it can
-// be dispatched. An initial Element freezes before the event-carrying WebSocket can
-// exist; a child rendered after the socket connects is frozen on the request's
-// process goroutine before its Jid reaches the client. For a protocol-conforming
-// event from that client-visible DOM, the handler append precedes the process
-// goroutine's later eventCallCh send, whose corresponding receive on the eventCaller
-// goroutine happens-before the handler read. Handlers must not be added after
-// [Element.JawsRender] returns (or after Freeze). All builds enforce this: every
-// handler mutator funnels through an internal chokepoint guarded by a lockless
-// atomic flag that drops late additions; debug builds panic instead.
+// the event goroutine. [Element.JawsRender] and [Element.Freeze] publish the final
+// handler slice through the Element's atomic frozen flag; request event dispatch
+// reads handlers only after observing that flag. This also covers child Elements
+// rendered after a WebSocket connects: a preemptive event for a still-rendering
+// Element is ignored. Handlers must not be added after JawsRender returns or Freeze
+// is called. All builds enforce this through an internal chokepoint that drops late
+// additions; debug builds panic instead.
 //
 // # Testing
 //
