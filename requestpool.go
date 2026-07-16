@@ -36,6 +36,11 @@ func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 	func() {
 		jw.mu.Lock()
 		defer jw.mu.Unlock()
+		// Refresh before enforcing the pending cap as well as before seeding the
+		// new Request. Before Serve starts there is no maintenance loop to advance
+		// the counter, so a stale value could otherwise make an old pending Request
+		// look freshly written and briefly overshoot the cap.
+		jw.refreshRuntimeSeconds()
 		toLog = jw.limitPendingRequestsLocked(remoteIP)
 		for rq == nil {
 			jawsKey := jw.nonZeroRandomLocked()
@@ -57,9 +62,10 @@ func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 // refreshRuntimeSeconds updates runtimeSeconds to the whole seconds elapsed since
 // the [Jaws] was created.
 //
-// The Serve loop calls it (seeded once at start, then on every maintenance tick), so
-// the per-write [Request.MarkWritten] only does an atomic load rather than reading
-// the clock.
+// Request allocation calls it before pending-request eviction and timestamp
+// seeding. The Serve loop also calls it once at start and on every maintenance
+// tick, so per-write [Request.MarkWritten] only does an atomic load rather than
+// reading the clock.
 func (jw *Jaws) refreshRuntimeSeconds() {
 	// time.Since on a monotonic base is never negative and keeps the counter immune to
 	// wall-clock and NTP adjustments. The int32 conversion is intentionally
@@ -200,11 +206,6 @@ func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP neti
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	rq.JawsKey = jawsKey
-	// Freshen the shared counter first so the seed reflects true elapsed time even
-	// before the Serve loop starts advancing runtimeSeconds; otherwise a request
-	// created pre-Serve would seed 0 and be idle-expired by the first maintenance
-	// pass once Serve seeds runtimeSeconds to the real elapsed value.
-	jw.refreshRuntimeSeconds()
 	rq.lastWriteSeconds.Store(jw.runtimeSeconds.Load())
 	rq.initial = r
 	rq.remoteIP = remoteIP

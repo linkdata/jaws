@@ -156,6 +156,36 @@ func TestJaws_MaxPendingRequestsPerIPEvictsOldestPending(t *testing.T) {
 	}
 }
 
+func TestJaws_MaxPendingRequestsPerIPUsesLiveElapsedBeforeServe(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.MaxPendingRequestsPerIP = 1
+
+	oldReq := newPendingLimitRequest("192.0.2.1:1000")
+	oldRq := jw.NewRequest(oldReq)
+	oldKey := oldRq.JawsKey
+
+	// Simulate an hour passing before Serve starts. runtimeSeconds still holds
+	// the value used for oldRq, so NewRequest must refresh it before deciding
+	// whether the pending cap may evict oldRq.
+	jw.created = time.Now().Add(-time.Hour)
+	newReq := newPendingLimitRequest("192.0.2.1:1001")
+	newRq := jw.NewRequest(newReq)
+
+	if got := jw.Pending(); got != 1 {
+		t.Fatalf("Pending() = %d, want 1", got)
+	}
+	if claimed := jw.UseRequest(oldKey, oldReq); claimed != nil {
+		t.Fatalf("old request claimed as %v after live elapsed eviction", claimed)
+	}
+	if claimed := jw.UseRequest(newRq.JawsKey, newReq); claimed != newRq {
+		t.Fatalf("new request claim = %v, want %v", claimed, newRq)
+	}
+}
+
 // reentrantLogger re-enters the Jaws instance while logging (via RequestCount,
 // which takes jw.mu.RLock), and records the logged error. If the framework ever
 // invokes the logger while holding jw.mu, this deadlocks.
