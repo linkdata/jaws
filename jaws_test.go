@@ -2741,10 +2741,16 @@ func BenchmarkRetirePendingRequests(b *testing.B) {
 					requests[i] = jw.NewRequest(r)
 				}
 				jw.mu.Lock()
+				var retireCause error
 				for _, rq := range requests {
-					jw.retireNonRunningRequestLocked(rq, nil)
+					if cause := jw.retireNonRunningRequestLocked(rq, nil); cause != nil && retireCause == nil {
+						retireCause = cause
+					}
 				}
 				jw.mu.Unlock()
+				if retireCause != nil {
+					b.Fatal(retireCause)
+				}
 			}
 		})
 	}
