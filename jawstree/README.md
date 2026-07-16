@@ -127,13 +127,11 @@ tree := jawstree.New("mytree", ui.NewJsVar(&mu, root), jawstree.InitiallyExpande
 mux.Handle("GET /", ui.Handler(jw, "index.html", tree))
 ```
 
-In the page template, render the tree (it emits a hidden data element and queues
-an initializer through the preloaded browser adapter) and provide a container
-element whose HTML id equals the tree id. JaWS opens the WebSocket after the
-deferred page assets are ready, so the same initialization works when a JaWS
-container or template inserts the tree through a live DOM update. Quercus.js
-renders the tree into that container, and without it the tree silently fails to
-appear:
+In the page template, render the tree and provide a container element whose HTML
+id equals the tree id. The tree initializes after deferred page assets are ready,
+including when a JaWS container or template inserts it through a live DOM update.
+Quercus.js renders the tree into that container, and without it the tree silently
+fails to appear:
 
 ```html
 <!DOCTYPE html>

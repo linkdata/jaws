@@ -90,7 +90,7 @@ func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	return
 }
 
-// JawsRender renders the hidden root data element and queues tree initialization.
+// JawsRender renders the tree state and schedules browser initialization.
 func (tree *Tree) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	if len(params) == 0 {
 		params = tree.renderParams[:]
