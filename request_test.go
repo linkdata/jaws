@@ -892,6 +892,33 @@ func TestRequest_ClaimRefreshesLastWriteAndStartServeGuards(t *testing.T) {
 	}
 }
 
+func TestRequest_ClaimRejectsCanceledRequest(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	rq := jw.NewRequest(hr)
+	wantCause := errors.New("cancel before claim")
+	rq.Cancel(wantCause)
+
+	err = rq.claim(hr)
+	if !errors.Is(err, ErrRequestCancelled) {
+		t.Fatalf("claim error = %v, want ErrRequestCancelled", err)
+	}
+	if !errors.Is(err, wantCause) {
+		t.Fatalf("claim error = %v, want cause %v", err, wantCause)
+	}
+	if rq.claimed.Load() {
+		t.Fatal("canceled request was marked claimed")
+	}
+	if rq.httpDoneCh != nil {
+		t.Fatal("canceled request retained the claiming HTTP context")
+	}
+}
+
 // TestRequest_IgnoresIncomingMsgsDuringShutdown uses an event handler that
 // deliberately blocks (busy-waiting on spewState) while the request shuts down.
 // That busy-wait is the device under test and keeps re-arming the clock, so this

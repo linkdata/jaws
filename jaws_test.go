@@ -218,6 +218,75 @@ func TestJaws_CloseHandlesRetiredKeyReservation(t *testing.T) {
 	runtime.KeepAlive(replacement)
 }
 
+func TestJaws_CloseCancelsMixedRequestsWithoutLogging(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	logged := make(chan error, 1)
+	jw.Logger = reentrantLogger{jw: jw, logged: logged}
+	serveDone := make(chan struct{})
+	go func() {
+		jw.Serve()
+		close(serveDone)
+	}()
+
+	pending := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/pending", nil))
+	active := NewTestRequest(jw, httptest.NewRequest(http.MethodGet, "/active", nil))
+	if active == nil {
+		t.Fatal("NewTestRequest returned nil")
+	}
+	select {
+	case <-active.ReadyCh:
+	case <-time.After(time.Second):
+		t.Fatal("active Request did not become ready")
+	}
+	if pending.running.Load() {
+		t.Fatal("pending Request unexpectedly marked running")
+	}
+	if !active.running.Load() {
+		t.Fatal("active Request not marked running")
+	}
+
+	pendingCtx := pending.Context()
+	activeCtx := active.Context()
+	jw.Close()
+
+	for name, ctx := range map[string]context.Context{
+		"active":  activeCtx,
+		"pending": pendingCtx,
+	} {
+		select {
+		case <-ctx.Done():
+		default:
+			t.Fatalf("%s Request context remains live after Close", name)
+		}
+		if cause := context.Cause(ctx); !errors.Is(cause, context.Canceled) {
+			t.Fatalf("%s Request cause = %v, want context.Canceled", name, cause)
+		}
+	}
+	select {
+	case <-active.DoneCh:
+	case <-time.After(time.Second):
+		t.Fatal("active Request did not finish after Close")
+	}
+	select {
+	case <-serveDone:
+	case <-time.After(time.Second):
+		t.Fatal("Serve did not finish after Close")
+	}
+	active.Close()
+
+	// Repeated shutdown remains silent and has no effect.
+	jw.Close()
+	select {
+	case err := <-logged:
+		t.Fatalf("Close logged normal shutdown: %v", err)
+	default:
+	}
+}
+
 func TestJaws_NewRequestRacingCloseStartsCanceled(t *testing.T) {
 	for range 20 {
 		jw, err := New()
@@ -3185,16 +3254,10 @@ func BenchmarkRetirePendingRequests(b *testing.B) {
 					requests[i] = jw.NewRequest(r)
 				}
 				jw.mu.Lock()
-				var retireCause error
 				for _, rq := range requests {
-					if cause := jw.retireNonRunningRequestLocked(rq, nil); cause != nil && retireCause == nil {
-						retireCause = cause
-					}
+					jw.retireNonRunningRequestLocked(rq)
 				}
 				jw.mu.Unlock()
-				if retireCause != nil {
-					b.Fatal(retireCause)
-				}
 			}
 		})
 	}

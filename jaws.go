@@ -240,7 +240,6 @@ func New() (jw *Jaws, err error) {
 // sends may be discarded after Done closes. Subsequent calls to Close have no
 // effect.
 func (jw *Jaws) Close() {
-	var toLog []error
 	jw.mu.Lock()
 	select {
 	case <-jw.closeCh:
@@ -256,20 +255,15 @@ func (jw *Jaws) Close() {
 		}
 		if rq.running.Load() {
 			rq.mu.Lock()
-			if cause := rq.cancelLocked(nil); cause != nil {
-				toLog = append(toLog, cause)
-			}
+			// Shutdown has no error cause. CancelCauseFunc is idempotent, so it
+			// also safely handles a Request whose context is already done.
+			rq.cancelFn(nil)
 			rq.mu.Unlock()
 		} else {
-			if cause := jw.retireNonRunningRequestLocked(rq, nil); cause != nil {
-				toLog = append(toLog, cause)
-			}
+			jw.retireNonRunningRequestLocked(rq)
 		}
 	}
 	jw.mu.Unlock()
-	for _, cause := range toLog {
-		_ = jw.Log(cause)
-	}
 }
 
 // Done returns a channel closed when [Jaws.Close] begins shutdown.

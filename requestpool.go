@@ -113,7 +113,7 @@ func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) 
 				// that is likely still rendering or about to connect.
 				return
 			}
-			if cause := jw.retireNonRunningRequestLocked(victim, newErrTooManyPendingRequests(remoteIP, limit)); cause != nil {
+			if cause := jw.retireNonRunningRequestWithCauseLocked(victim, newErrTooManyPendingRequests(remoteIP, limit)); cause != nil {
 				toLog = append(toLog, cause)
 			}
 		}
@@ -252,28 +252,51 @@ func releaseRetiredRequestKey(retired retiredRequestKey) {
 	}
 }
 
-// retireNonRunningRequestLocked cancels and unregisters rq without clearing or
-// pooling it. A nil entry keeps its key reserved until a runtime cleanup runs
-// after the Request becomes unreachable. Caller must hold jw.mu, and rq must not
-// be running.
-func (jw *Jaws) retireNonRunningRequestLocked(rq *Request, err error) (cause error) {
+// canRetireNonRunningRequestLocked reports whether rq is the current registered,
+// non-running Request. Caller must hold both jw.mu and rq.mu.
+func (jw *Jaws) canRetireNonRunningRequestLocked(rq *Request) bool {
+	return rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq && !rq.running.Load()
+}
+
+// finishRetireNonRunningRequestLocked unregisters rq without clearing or pooling
+// it. Caller must hold both jw.mu and rq.mu and must have canceled rq first.
+func (jw *Jaws) finishRetireNonRunningRequestLocked(rq *Request) {
+	jawsKey := rq.JawsKey
+	jw.removePendingRequestLocked(rq)
+	jw.requests[jawsKey] = nil
+	jw.requestCount--
+	// Preserve the claimed state until session removal observes it. A claimed
+	// WebSocket that never reached ServeHTTP still earns the session grace
+	// period granted by Session.delRequest.
+	rq.killSessionLocked()
+	rq.claimed.Store(false)
+	runtime.AddCleanup(rq, releaseRetiredRequestKey, retiredRequestKey{jw: weak.Make(jw), jawsKey: jawsKey})
+}
+
+// retireNonRunningRequestLocked cancels and unregisters rq without an error
+// cause, clearing, or pooling it. A nil entry keeps its key reserved until a
+// runtime cleanup runs after the Request becomes unreachable. Caller must hold
+// jw.mu, and rq must not be running.
+func (jw *Jaws) retireNonRunningRequestLocked(rq *Request) {
 	rq.mu.Lock()
-	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq && !rq.running.Load() {
-		jawsKey := rq.JawsKey
-		if err != nil {
-			cause = rq.cancelLocked(err)
-		} else if rq.ctx.Err() == nil {
+	if jw.canRetireNonRunningRequestLocked(rq) {
+		if rq.ctx.Err() == nil {
 			rq.cancelFn(nil)
 		}
-		jw.removePendingRequestLocked(rq)
-		jw.requests[jawsKey] = nil
-		jw.requestCount--
-		// Preserve the claimed state until session removal observes it. A claimed
-		// WebSocket that never reached ServeHTTP still earns the session grace
-		// period granted by Session.delRequest.
-		rq.killSessionLocked()
-		rq.claimed.Store(false)
-		runtime.AddCleanup(rq, releaseRetiredRequestKey, retiredRequestKey{jw: weak.Make(jw), jawsKey: jawsKey})
+		jw.finishRetireNonRunningRequestLocked(rq)
+	}
+	rq.mu.Unlock()
+	runtime.KeepAlive(rq)
+}
+
+// retireNonRunningRequestWithCauseLocked cancels and unregisters rq with err
+// without clearing or pooling it. Caller must hold jw.mu, rq must not be running,
+// and err must be non-nil.
+func (jw *Jaws) retireNonRunningRequestWithCauseLocked(rq *Request, err error) (cause error) {
+	rq.mu.Lock()
+	if jw.canRetireNonRunningRequestLocked(rq) {
+		cause = rq.cancelLocked(err)
+		jw.finishRetireNonRunningRequestLocked(rq)
 	}
 	rq.mu.Unlock()
 	runtime.KeepAlive(rq)
