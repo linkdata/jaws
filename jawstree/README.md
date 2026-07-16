@@ -63,7 +63,7 @@ func setupJaws(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
 				{Name: "Documents", Children: []*jawstree.Node{{Name: "report.pdf"}}},
 				{Name: "Pictures"},
 			}}
-			tree := jawstree.New("mytree", ui.NewJsVar(&mu, root), jawstree.InitiallyExpanded)
+			tree := jawstree.New(ui.NewJsVar(&mu, root), jawstree.InitiallyExpanded)
 			mux.Handle("GET /", ui.Handler(jw, "index.html", tree))
 		}
 	}
@@ -118,7 +118,7 @@ breaks the ID-to-wire-position mapping used by Quercus.js.
 Build a `Node` tree (by hand, or from a directory with `Root`), wrap its root
 in a `ui.JsVar`, and pass it to `New`. `New` initializes node IDs plus the tree
 and parent back-pointers, so it must run before rendering or using the name-path
-selection API:
+selection API. Browser correlation keys and HTML ids are managed internally:
 
 ```go
 var mu sync.RWMutex
@@ -126,15 +126,14 @@ root := &jawstree.Node{Children: []*jawstree.Node{
 	{Name: "Documents", Children: []*jawstree.Node{{Name: "report.pdf"}}},
 	{Name: "Pictures"},
 }}
-tree := jawstree.New("mytree", ui.NewJsVar(&mu, root), jawstree.InitiallyExpanded)
+tree := jawstree.New(ui.NewJsVar(&mu, root), jawstree.InitiallyExpanded)
 mux.Handle("GET /", ui.Handler(jw, "index.html", tree))
 ```
 
-In the page template, render the tree and provide a container element whose HTML
-id equals the tree id. The tree initializes after deferred page assets are ready,
-including when a JaWS container or template inserts it through a live DOM update.
-Quercus.js renders the tree into that container, and without it the tree silently
-fails to appear:
+In the page template, render the tree directly. Its JaWS-managed `Jid.N` element
+is also the Quercus.js container; the browser initializer unhides it after the
+deferred page assets are ready. The same initialization works when a JaWS
+container or template inserts the Tree through a live DOM update:
 
 ```html
 <!DOCTYPE html>
@@ -142,7 +141,6 @@ fails to appear:
 <head>{{$.HeadHTML}}</head>
 <body>
   {{$.NewUI .Dot}}
-  <div id="mytree"></div>
   {{$.TailHTML}}
 </body>
 </html>

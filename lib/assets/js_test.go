@@ -236,6 +236,147 @@ eval(src);
 	return out.String()
 }
 
+func TestJawsJS_CanonicalJidPredicate(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+const values = [
+	"Jid.1",
+	"Jid.9",
+	"Jid.10",
+	"Jid.9223372036854775807",
+	"",
+	"id",
+	"Jid.",
+	"Jid.0",
+	"Jid.00",
+	"Jid.01",
+	"Jid.-1",
+	"Jid.+1",
+	"Jid.1x",
+	"Jid.9223372036854775808",
+	"Jid.999999999999999999999999",
+	1,
+	null
+];
+process.stdout.write(JSON.stringify(values.map(jawsIsJid)));
+`)
+
+	var got []bool
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	want := []bool{true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("jawsIsJid results = %v, want %v", got, want)
+	}
+}
+
+func TestJawsJS_AttachRejectsNoncanonicalJids(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function makeElem(id) {
+	return {
+		id: id,
+		tagName: "DIV",
+		listeners: [],
+		hasAttribute: function() { return false; },
+		addEventListener: function(name) { this.listeners.push(name); }
+	};
+}
+
+const valid = makeElem("Jid.1");
+const zero = makeElem("Jid.0");
+const leadingZero = makeElem("Jid.01");
+const arbitrary = makeElem("application-id");
+jawsAttach(valid);
+jawsAttach(zero);
+jawsAttach(leadingZero);
+jawsAttach(arbitrary);
+process.stdout.write(JSON.stringify({
+	valid: valid.listeners,
+	zero: zero.listeners,
+	leadingZero: leadingZero.listeners,
+	arbitrary: arbitrary.listeners
+}));
+`)
+
+	var got struct {
+		Valid       []string `json:"valid"`
+		Zero        []string `json:"zero"`
+		LeadingZero []string `json:"leadingZero"`
+		Arbitrary   []string `json:"arbitrary"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if !reflect.DeepEqual(got.Valid, []string{"click", "contextmenu"}) {
+		t.Fatalf("canonical Jid listeners = %v", got.Valid)
+	}
+	if len(got.Zero) != 0 || len(got.LeadingZero) != 0 || len(got.Arbitrary) != 0 {
+		t.Fatalf("noncanonical elements were attached: %+v", got)
+	}
+}
+
+func TestJawsJS_ClickAndInputRoutesRejectNoncanonicalJids(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+const parent = {
+	id: "Jid.1",
+	tagName: "DIV",
+	getAttribute: function() { return null; },
+	textContent: "",
+	parentElement: null
+};
+const target = {
+	id: "Jid.02",
+	tagName: "DIV",
+	getAttribute: function() { return null; },
+	textContent: "",
+	parentElement: parent
+};
+const input = {
+	id: "application-input",
+	tagName: "INPUT",
+	getAttribute: function() { return "text"; },
+	value: "typed"
+};
+const inputEvent = new Event();
+inputEvent.currentTarget = input;
+let stopped = false;
+inputEvent.stopPropagation = function() { stopped = true; };
+jawsInputHandler(inputEvent);
+
+const clickEvent = new Event();
+clickEvent.clientX = 1;
+clickEvent.clientY = 2;
+clickEvent.shiftKey = false;
+clickEvent.ctrlKey = false;
+clickEvent.altKey = false;
+process.stdout.write(JSON.stringify({
+	clickData: jawsBuildClickData(target, clickEvent),
+	inputFrames: jaws.sent,
+	inputStopped: stopped
+}));
+`)
+
+	var got struct {
+		ClickData    string   `json:"clickData"`
+		InputFrames  []string `json:"inputFrames"`
+		InputStopped bool     `json:"inputStopped"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.ClickData != "1 2 0 Jid.02\tJid.1" {
+		t.Fatalf("click data = %q, want only the canonical ancestor route", got.ClickData)
+	}
+	if len(got.InputFrames) != 0 || got.InputStopped {
+		t.Fatalf("noncanonical input route was handled: %+v", got)
+	}
+}
+
 func TestJawsJS_ConnectsAfterDeferredAssets(t *testing.T) {
 	for _, readyEvent := range []string{"DOMContentLoaded", "load"} {
 		t.Run(readyEvent, func(t *testing.T) {
@@ -411,7 +552,7 @@ func TestJawsJS_JsVarNestedPathHandlesShadowedHasOwnProperty(t *testing.T) {
 	}
 }
 
-func TestJawsJS_RemoveFromNonManagedContainerIsInvalidAndDroppedByParser(t *testing.T) {
+func TestJawsJS_RemoveFromNonManagedContainerIsRejected(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 	function FakeSocket() { this.readyState = 1; this.sent = []; }
 	FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
@@ -421,19 +562,47 @@ jaws = new FakeSocket();
 const topElem = {
 	id: "container",
 	querySelectorAll: function() {
-		return [{ id: "Jid.1" }, { id: "Jid.2" }];
+		throw new Error("non-managed container was queried");
+	}
+};
+jawsRemoving(topElem);
+process.stdout.write(JSON.stringify(jaws.sent));
+`)
+
+	if raw != "[]" {
+		t.Fatalf("jawsRemoving sent a frame for a non-managed container: %q", raw)
+	}
+}
+
+func TestJawsJS_RemovingReportsOnlyCanonicalDescendantJids(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+const topElem = {
+	id: "Jid.1",
+	querySelectorAll: function() {
+		return [
+			{ id: "Jid.2" },
+			{ id: "Jid.03" },
+			{ id: "application-id" },
+			{ id: "Jid.0" },
+			{ id: "Jid.4" }
+		];
 	}
 };
 jawsRemoving(topElem);
 process.stdout.write(jaws.sent[0] || "");
 `)
 
-	if raw == "" {
-		t.Fatal("jawsRemoving did not emit a websocket frame")
+	msg, ok := wire.Parse([]byte(raw))
+	if !ok {
+		t.Fatalf("Remove frame must be parseable by wire.Parse, got %q", raw)
 	}
-
-	if msg, ok := wire.Parse([]byte(raw)); ok {
-		t.Fatalf("expected invalid untrusted Remove frame to be dropped by parser, got %+v from %q", msg, raw)
+	if msg.What != what.Remove || msg.Jid != 1 || msg.Data != "Jid.2\tJid.4" {
+		t.Fatalf("unexpected removal frame: %+v", msg)
 	}
 }
 
@@ -520,6 +689,56 @@ process.stdout.write(JSON.stringify({ calls: calls, lookups: lookups, missingErr
 	}
 }
 
+func TestJawsJS_PerformRejectsNoncanonicalTargetsBeforeLookup(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+const lookups = [];
+const elem = {
+	id: "Jid.1",
+	innerHTML: "",
+	querySelectorAll: function() { return []; }
+};
+document.getElementById = function(id) {
+	lookups.push(id);
+	return id === "Jid.1" ? elem : null;
+};
+
+const ids = ["application-id", "Jid.0", "Jid.01", "Jid.-1", ""];
+const errors = [];
+ids.forEach(function(id) {
+	try {
+		jawsPerform("Inner", id, JSON.stringify("bad"));
+	} catch (err) {
+		errors.push(String(err));
+	}
+});
+jawsPerform("Inner", "Jid.1", JSON.stringify("good"));
+process.stdout.write(JSON.stringify({ lookups: lookups, errors: errors, html: elem.innerHTML }));
+`)
+
+	var got struct {
+		Lookups []string `json:"lookups"`
+		Errors  []string `json:"errors"`
+		HTML    string   `json:"html"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if !reflect.DeepEqual(got.Lookups, []string{"Jid.1"}) {
+		t.Fatalf("element lookups = %v, want only the canonical Jid", got.Lookups)
+	}
+	if len(got.Errors) != 5 {
+		t.Fatalf("noncanonical target errors = %v", got.Errors)
+	}
+	for _, errstr := range got.Errors {
+		if !strings.Contains(errstr, "invalid Jid") {
+			t.Fatalf("unexpected target error %q", errstr)
+		}
+	}
+	if got.HTML != "good" {
+		t.Fatalf("canonical target update = %q", got.HTML)
+	}
+}
+
 func TestJawsJS_JsVarWithoutRegisteredTopLevelNameDoesNotEmitInvalidFrame(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 function FakeSocket() { this.readyState = 1; this.sent = []; }
@@ -537,6 +756,35 @@ process.stdout.write(jaws.sent[0] || "");
 		if _, ok := wire.Parse([]byte(raw)); !ok {
 			t.Fatalf("jawsVar should not emit unparseable Set frame when JsVar name is unregistered, got %q", raw)
 		}
+	}
+}
+
+func TestJawsJS_JsVarSendsOnlyToCanonicalJid(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+window.app = { state: 0 };
+
+const routes = ["application-id", "Jid.0", "Jid.01", "Jid.-1", "Jid.7"];
+routes.forEach(function(id, i) {
+	window.jawsNames.app = id;
+	jawsVar("app.state", i + 1);
+});
+process.stdout.write(JSON.stringify(jaws.sent));
+`)
+
+	var frames []string
+	if err := json.Unmarshal([]byte(raw), &frames); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if len(frames) != 1 {
+		t.Fatalf("JsVar frames = %q, want one canonical route", frames)
+	}
+	msg, ok := wire.Parse([]byte(frames[0]))
+	if !ok || msg.What != what.Set || msg.Jid != 7 || msg.Data != "state=5" {
+		t.Fatalf("unexpected JsVar frame: %+v, parseable %t", msg, ok)
 	}
 }
 
@@ -847,6 +1095,94 @@ process.stdout.write(JSON.stringify({
 	}
 	if msg.What != what.Remove || msg.Jid != 2 || msg.Data != "Jid.3" {
 		t.Fatalf("unexpected removal frame: %+v", msg)
+	}
+}
+
+func TestJawsJS_AlertUsesDataAttributeHook(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+global.bootstrap = {};
+const selectors = [];
+const appended = [];
+const alertsElem = {
+	append: function(elem) { appended.push(elem.innerHTML); }
+};
+document.querySelector = function(selector) {
+	selectors.push(selector);
+	return selector === "[data-jaws-alerts]" ? alertsElem : null;
+};
+document.getElementById = function(id) {
+	throw new Error("unexpected id lookup: " + id);
+};
+document.createElement = function() { return { innerHTML: "" }; };
+
+jawsAlert("success\nSaved");
+process.stdout.write(JSON.stringify({ selectors: selectors, appended: appended }));
+`)
+
+	var got struct {
+		Selectors []string `json:"selectors"`
+		Appended  []string `json:"appended"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if !reflect.DeepEqual(got.Selectors, []string{"[data-jaws-alerts]"}) {
+		t.Fatalf("alert selectors = %v", got.Selectors)
+	}
+	if len(got.Appended) != 1 || !strings.Contains(got.Appended[0], "Saved") {
+		t.Fatalf("appended alerts = %v", got.Appended)
+	}
+}
+
+func TestJawsJS_LostUsesDataAttributeHook(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+const selectors = [];
+let existing = null;
+let created = "";
+let prepended = 0;
+document.querySelector = function(selector) {
+	selectors.push(selector);
+	return selector === "[data-jaws-lost]" ? existing : null;
+};
+document.body = {
+	scrollTop: 10,
+	prepend: function() { prepended++; }
+};
+document.documentElement = { scrollTop: 10 };
+jawsElement = function(html) {
+	created = html;
+	return {};
+};
+setTimeout = function() {};
+
+jawsLost();
+existing = { innerHTML: "old" };
+jawsLost();
+process.stdout.write(JSON.stringify({
+	selectors: selectors,
+	created: created,
+	prepended: prepended,
+	existingHTML: existing.innerHTML
+}));
+`)
+
+	var got struct {
+		Selectors    []string `json:"selectors"`
+		Created      string   `json:"created"`
+		Prepended    int      `json:"prepended"`
+		ExistingHTML string   `json:"existingHTML"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if !reflect.DeepEqual(got.Selectors, []string{"[data-jaws-lost]", "[data-jaws-lost]"}) {
+		t.Fatalf("lost selectors = %v", got.Selectors)
+	}
+	if got.Prepended != 1 || !strings.Contains(got.Created, "data-jaws-lost") || strings.Contains(got.Created, `id="jaws-lost"`) {
+		t.Fatalf("lost indicator creation = %+v", got)
+	}
+	if !strings.Contains(got.ExistingHTML, "Server connection lost") {
+		t.Fatalf("existing lost indicator was not updated: %q", got.ExistingHTML)
 	}
 }
 
@@ -1478,8 +1814,111 @@ process.stdout.write(JSON.stringify({ one: one.innerHTML, two: two.innerHTML, er
 	}
 }
 
-func TestJawsJS_InsertNullPositionAppends(t *testing.T) {
+func TestJawsJS_RemovePositionRequiresDirectChildJid(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
+console.log = function() {};
+const childLookups = [];
+const removed = [];
+const parent = new Node();
+parent.id = "Jid.1";
+parent.children = [];
+parent.removeChild = function(child) {
+	removed.push(child.id);
+	child.parentElement = null;
+};
+
+function makeChild(id, owner) {
+	const child = new Node();
+	child.id = id;
+	child.parentElement = owner;
+	child.querySelectorAll = function() { return []; };
+	return child;
+}
+
+const canonical = makeChild("Jid.2", parent);
+const arbitrary = makeChild("application-id", parent);
+const noncanonical = makeChild("Jid.03", parent);
+const unrelated = makeChild("Jid.4", {});
+parent.children = [canonical, arbitrary, noncanonical];
+const nodes = {
+	"Jid.1": parent,
+	"Jid.2": canonical,
+	"application-id": arbitrary,
+	"Jid.03": noncanonical,
+	"Jid.4": unrelated
+};
+document.getElementById = function(id) {
+	if (id !== "Jid.1") childLookups.push(id);
+	return nodes[id] || null;
+};
+
+["0", "null", "application-id", "Jid.03", "Jid.4", "Jid.2"].forEach(function(pos) {
+	jawsPerform("Remove", "Jid.1", JSON.stringify(pos));
+});
+process.stdout.write(JSON.stringify({ childLookups: childLookups, removed: removed }));
+`)
+
+	var got struct {
+		ChildLookups []string `json:"childLookups"`
+		Removed      []string `json:"removed"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if !reflect.DeepEqual(got.ChildLookups, []string{"Jid.4", "Jid.2"}) {
+		t.Fatalf("Remove child lookups = %v", got.ChildLookups)
+	}
+	if !reflect.DeepEqual(got.Removed, []string{"Jid.2"}) {
+		t.Fatalf("removed children = %v", got.Removed)
+	}
+}
+
+func TestJawsJS_InsertPositionRequiresDirectChildJidOrIndex(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+console.log = function() {};
+const lookups = [];
+const parent = { id: "Jid.1", children: [] };
+const child = new Node();
+child.id = "Jid.2";
+child.parentElement = parent;
+const unrelated = new Node();
+unrelated.id = "Jid.3";
+unrelated.parentElement = {};
+parent.children = [child];
+document.getElementById = function(id) {
+	lookups.push(id);
+	if (id === "Jid.2") return child;
+	if (id === "Jid.3") return unrelated;
+	return null;
+};
+
+const positions = ["Jid.2", "0", "Jid.3", "null", "-1", "Jid.02", "application-id"];
+const resolved = positions.map(function(pos) {
+	const elem = jawsInsertWhere(parent, pos);
+	return elem ? elem.id : "";
+});
+process.stdout.write(JSON.stringify({ lookups: lookups, resolved: resolved }));
+`)
+
+	var got struct {
+		Lookups  []string `json:"lookups"`
+		Resolved []string `json:"resolved"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if !reflect.DeepEqual(got.Lookups, []string{"Jid.2", "Jid.3"}) {
+		t.Fatalf("Insert child lookups = %v", got.Lookups)
+	}
+	want := []string{"Jid.2", "Jid.2", "", "", "", "", ""}
+	if !reflect.DeepEqual(got.Resolved, want) {
+		t.Fatalf("Insert position results = %v, want %v", got.Resolved, want)
+	}
+}
+
+func TestJawsJS_InsertNullPositionIsRejected(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+console.log = function() {};
 let inserted = false;
 const child = {
 	id: "new-child",
@@ -1517,8 +1956,8 @@ process.stdout.write(JSON.stringify({ inserted: inserted }));
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
 		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
 	}
-	if !got.Inserted {
-		t.Fatal(`Insert with position "null" should append by calling insertBefore(node, null)`)
+	if got.Inserted {
+		t.Fatal(`Insert with position "null" should be rejected; callers use Append for end insertion`)
 	}
 }
 
@@ -1585,7 +2024,7 @@ process.stdout.write(JSON.stringify({ inserted: inserted, error: error }));
 	}
 }
 
-func TestJawsJS_InsertLeadingDigitIDIsNotNumericPosition(t *testing.T) {
+func TestJawsJS_InsertArbitraryIDIsRejected(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 console.log = function() {};
 let inserted = false;
@@ -1630,7 +2069,7 @@ process.stdout.write(JSON.stringify({ inserted: inserted }));
 		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
 	}
 	if got.Inserted {
-		t.Fatal(`Insert position "0-panel" should be treated as an unresolved HTML id, not child index 0`)
+		t.Fatal(`Insert position "0-panel" should be rejected, not treated as child index 0`)
 	}
 }
 
@@ -1639,15 +2078,18 @@ func TestJawsJS_OrderPreservesApplicationDataset(t *testing.T) {
 const parent = { appended: [], appendChild: function(elem) { this.appended.push(elem.id); } };
 const one = { id: "Jid.1", dataset: { jidsort: "application-one" }, parentElement: parent };
 const two = { id: "Jid.2", dataset: { jidsort: "application-two" }, parentElement: parent };
+const lookups = [];
 document.getElementById = function(id) {
+	lookups.push(id);
 	if (id === "Jid.1") return one;
 	if (id === "Jid.2") return two;
 	return null;
 };
 
-jawsPerform("Order", "", JSON.stringify("Jid.2 Jid.1"));
+jawsPerform("Order", "", JSON.stringify("Jid.2 application-id Jid.01 Jid.0 Jid.1"));
 process.stdout.write(JSON.stringify({
 	appended: parent.appended,
+	lookups: lookups,
 	oneSort: one.dataset.jidsort || "",
 	twoSort: two.dataset.jidsort || ""
 }));
@@ -1655,6 +2097,7 @@ process.stdout.write(JSON.stringify({
 
 	var got struct {
 		Appended []string `json:"appended"`
+		Lookups  []string `json:"lookups"`
 		OneSort  string   `json:"oneSort"`
 		TwoSort  string   `json:"twoSort"`
 	}
@@ -1663,6 +2106,9 @@ process.stdout.write(JSON.stringify({
 	}
 	if strings.Join(got.Appended, " ") != "Jid.2 Jid.1" {
 		t.Fatalf("unexpected append order: %#v", got.Appended)
+	}
+	if !reflect.DeepEqual(got.Lookups, []string{"Jid.2", "Jid.1"}) {
+		t.Fatalf("order lookups = %v, want only canonical Jids", got.Lookups)
 	}
 	if got.OneSort != "application-one" || got.TwoSort != "application-two" {
 		t.Fatalf("jawsOrder clobbered application data-jidsort: got %q and %q", got.OneSort, got.TwoSort)

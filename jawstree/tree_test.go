@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"html"
+	"html/template"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -42,19 +43,19 @@ func assertPanics(t *testing.T, fn func()) {
 
 func TestNewPanicsOnNilJsVar(t *testing.T) {
 	assertPanics(t, func() {
-		New("tree", nil)
+		New(nil)
 	})
 
 	var mu deadlock.RWMutex
 	assertPanics(t, func() {
-		New("tree", ui.NewJsVar(&mu, (*Node)(nil)))
+		New(ui.NewJsVar(&mu, (*Node)(nil)))
 	})
 }
 
 func TestNewPanicsOnNegativeOptions(t *testing.T) {
 	var mu deadlock.RWMutex
 	assertPanics(t, func() {
-		New("tree", ui.NewJsVar(&mu, &Node{}), Option(-1))
+		New(ui.NewJsVar(&mu, &Node{}), Option(-1))
 	})
 }
 
@@ -133,7 +134,7 @@ func TestTreeSelectionMethods(t *testing.T) {
 	root.Children = []*Node{a, b}
 
 	var mu deadlock.RWMutex
-	tree := New("tree", ui.NewJsVar(&mu, root))
+	tree := New(ui.NewJsVar(&mu, root))
 
 	changed := tree.SetSelected([][]string{{"b"}})
 	if !reflect.DeepEqual(changed, []*Node{b}) {
@@ -152,7 +153,7 @@ func TestTreeSelectionMethods(t *testing.T) {
 	}
 }
 
-func TestTreeRenderEmitsRootDataAndQueuesInitializerForPageContainer(t *testing.T) {
+func TestTreeRenderEmitsSelfContainedRootAndQueuesInitializer(t *testing.T) {
 	jw, err := jaws.New()
 	maybeError(t, err)
 	defer jw.Close()
@@ -162,7 +163,7 @@ func TestTreeRenderEmitsRootDataAndQueuesInitializerForPageContainer(t *testing.
 
 	var mu deadlock.RWMutex
 	root := &Node{Children: []*Node{{Name: "Documents"}}}
-	tree := New("mytree", ui.NewJsVar(&mu, root), InitiallyExpanded)
+	tree := New(ui.NewJsVar(&mu, root), InitiallyExpanded)
 	elem := rq.NewElement(tree)
 
 	var body bytes.Buffer
@@ -170,9 +171,8 @@ func TestTreeRenderEmitsRootDataAndQueuesInitializerForPageContainer(t *testing.
 		t.Fatal(err)
 	}
 	rendered := body.String()
-	page := rendered + `<div id="mytree"></div>`
 
-	if !strings.Contains(rendered, `data-jawsname="jawstreeroot_mytree"`) {
+	if !strings.Contains(rendered, `data-jawsname="`+tree.renderParams[0].(string)+`"`) {
 		t.Fatalf("rendered tree is missing root JsVar wiring: %q", rendered)
 	}
 	if !strings.Contains(rendered, `data-jawsdata=`) || !strings.Contains(rendered, "Documents") {
@@ -181,8 +181,8 @@ func TestTreeRenderEmitsRootDataAndQueuesInitializerForPageContainer(t *testing.
 	if strings.Contains(rendered, "<script") {
 		t.Fatalf("rendered tree contains a per-render script: %q", rendered)
 	}
-	if !strings.Contains(page, `<div id="mytree"></div>`) {
-		t.Fatalf("page is missing the Quercus container: %q", page)
+	if !strings.Contains(rendered, `id="`+elem.Jid().String()+`"`) || !strings.Contains(rendered, " hidden></div>") {
+		t.Fatalf("rendered tree is missing its managed Jid container: %q", rendered)
 	}
 
 	// Match the production lifecycle: initial rendering queues the Call before the
@@ -207,11 +207,69 @@ func TestTreeRenderEmitsRootDataAndQueuesInitializerForPageContainer(t *testing.
 		if msg.What != what.Call || msg.Jid != elem.Jid() {
 			t.Fatalf("initializer message = %+v, want element-scoped Call for %s", msg, elem.Jid())
 		}
-		if want := `jawstreeInit={"tree":"mytree","options":2}`; msg.Data != want {
+		if want := "jawstreeInit=" + string(tree.appendInitCallData(nil, elem.Jid())); msg.Data != want {
 			t.Fatalf("initializer data = %q, want %q", msg.Data, want)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for initial tree initializer")
+	}
+}
+
+func TestTreeRenderPreservesCallerParams(t *testing.T) {
+	jw, err := jaws.New()
+	maybeError(t, err)
+	defer jw.Close()
+	rq := jw.NewRequest(nil)
+
+	var mu deadlock.RWMutex
+	tree := New(ui.NewJsVar(&mu, &Node{}))
+	elem := rq.NewElement(tree)
+	var body strings.Builder
+	maybeError(t, elem.JawsRender(&body, []any{template.HTMLAttr(`class="tree"`)}))
+
+	rendered := body.String()
+	if !strings.Contains(rendered, `data-jawsname="`+tree.renderParams[0].(string)+`"`) {
+		t.Fatalf("rendered Tree lost its private root name: %q", rendered)
+	}
+	if !strings.Contains(rendered, `class="tree"`) {
+		t.Fatalf("rendered Tree lost caller attributes: %q", rendered)
+	}
+}
+
+func TestTreeRenderMultipleTreesUseDistinctManagedIdentities(t *testing.T) {
+	jw, err := jaws.New()
+	maybeError(t, err)
+	defer jw.Close()
+	rq := jw.NewRequest(nil)
+
+	var mu1, mu2 deadlock.RWMutex
+	tree1 := New(ui.NewJsVar(&mu1, &Node{Children: []*Node{{Name: "one"}}}))
+	tree2 := New(ui.NewJsVar(&mu2, &Node{Children: []*Node{{Name: "two"}}}))
+	elem1 := rq.NewElement(tree1)
+	elem2 := rq.NewElement(tree2)
+	var body1, body2 strings.Builder
+	maybeError(t, elem1.JawsRender(&body1, nil))
+	maybeError(t, elem2.JawsRender(&body2, nil))
+
+	if tree1.key == tree2.key {
+		t.Fatalf("trees share generated key %q", tree1.key)
+	}
+	if elem1.Jid() == elem2.Jid() {
+		t.Fatalf("trees share managed container Jid %s", elem1.Jid())
+	}
+	for _, tc := range []struct {
+		name string
+		tree *Tree
+		elem *jaws.Element
+		body string
+	}{
+		{"first", tree1, elem1, body1.String()},
+		{"second", tree2, elem2, body2.String()},
+	} {
+		if !strings.Contains(tc.body, `id="`+tc.elem.Jid().String()+`"`) ||
+			!strings.Contains(tc.body, `data-jawsname="jawstreeroot_`+tc.tree.key+`"`) {
+			t.Errorf("%s Tree markup has the wrong managed identity: %q", tc.name, tc.body)
+		}
 	}
 }
 
@@ -223,7 +281,7 @@ func TestNewSetsParentPointers(t *testing.T) {
 		{Name: "b"},
 	}}
 	var mu deadlock.RWMutex
-	tree := New("tree", ui.NewJsVar(&mu, root))
+	tree := New(ui.NewJsVar(&mu, root))
 
 	aOne := root.Children[0].Children[0]
 	if got := aOne.GetNames(); !reflect.DeepEqual(got, []string{"a", "one"}) {
@@ -267,7 +325,7 @@ func TestNewStripsNilChildrenKeepingPathIndexConsistent(t *testing.T) {
 	b := &Node{Name: "b"}
 	root := &Node{Name: "root", Children: []*Node{nil, a, b}}
 	var mu deadlock.RWMutex
-	New("tree", ui.NewJsVar(&mu, root))
+	New(ui.NewJsVar(&mu, root))
 
 	if len(root.Children) != 2 || root.Children[0] != a || root.Children[1] != b {
 		t.Fatalf("New did not strip the nil child: %#v", root.Children)
@@ -307,7 +365,7 @@ func TestTreeSelectionMethodsConcurrentWithInput(t *testing.T) {
 
 	root := &Node{Name: "root", Children: []*Node{{Name: "child"}}}
 	var mu deadlock.RWMutex
-	tree := New("tree", ui.NewJsVar(&mu, root))
+	tree := New(ui.NewJsVar(&mu, root))
 	elem := rq.NewElement(tree)
 	var sb strings.Builder
 	maybeError(t, tree.JawsRender(elem, &sb, nil))
@@ -383,7 +441,7 @@ func TestTree(t *testing.T) {
 	maybeError(t, err)
 
 	var rootmu deadlock.RWMutex
-	tree := New("tree", ui.NewJsVar(&rootmu, rootnode), SearchEnabled)
+	tree := New(ui.NewJsVar(&rootmu, rootnode), SearchEnabled)
 	elem := rq.NewElement(tree)
 
 	var sb strings.Builder
@@ -398,52 +456,19 @@ func TestTree(t *testing.T) {
 	rq.InCh <- wire.WsMsg{}
 	select {
 	case msg := <-rq.OutCh:
-		if msg.What != what.Call || msg.Jid != elem.Jid() || msg.Data != `jawstreeInit={"tree":"tree","options":1}` {
+		if msg.What != what.Call || msg.Jid != elem.Jid() || msg.Data != "jawstreeInit="+string(tree.appendInitCallData(nil, elem.Jid())) {
 			t.Fatalf("unexpected initial tree message: %+v", msg)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timeout waiting for initial tree initializer")
 	}
 
-	// The generated route remains available to pages that request it directly,
-	// although Tree rendering initializes through the preloaded adapter.
-	initURL := initScriptURL("tree", SearchEnabled)
+	// Tree initialization is carried by the element-scoped call above; there is no
+	// separate initializer endpoint.
 	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, initURL, nil))
-	if w.Code != http.StatusOK {
-		t.Fatalf("init script status code = %d", w.Code)
-	}
-	if ct := w.Header().Get("Content-Type"); ct != headerContentTypeJavaScript[0] {
-		t.Errorf("unexpected Content-Type: %q", ct)
-	}
-	if cc := w.Header().Get("Cache-Control"); cc != headerCacheControlNoStore[0] {
-		t.Errorf("unexpected Cache-Control: %q", cc)
-	}
-	if got, want := w.Body.String(), string(appendInitScript(nil, "tree", SearchEnabled)); got != want {
-		t.Errorf("unexpected init script:\n got %s\nwant %s\n", got, want)
-	}
-
-	badReq := httptest.NewRequest(http.MethodGet, "/jaws/.jawstree/tree/not-a-number", nil)
-	w = httptest.NewRecorder()
-	mux.ServeHTTP(w, badReq)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("bad init script status code = %d", w.Code)
-	}
-
-	badReq = httptest.NewRequest(http.MethodGet, "/jaws/.jawstree/tree-1/1", nil)
-	w = httptest.NewRecorder()
-	mux.ServeHTTP(w, badReq)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("bad init script tree status code = %d", w.Code)
-	}
-
-	// A valid tree name with a syntactically valid but negative options value is the
-	// only input where the opt>=0 guard is the deciding rejection.
-	badReq = httptest.NewRequest(http.MethodGet, "/jaws/.jawstree/tree/-1", nil)
-	w = httptest.NewRecorder()
-	mux.ServeHTTP(w, badReq)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("negative options status code = %d, want 400", w.Code)
+	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/jaws/.jawstree/tree/1", nil))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("obsolete init script status code = %d, want 404", w.Code)
 	}
 
 	numnodes := 0
@@ -509,7 +534,7 @@ func TestTree(t *testing.T) {
 	case msg := <-rq.OutCh:
 		// The broadcast id is the node's own ID; derive the expectation from it
 		// rather than a literal, which is fragile to the package directory listing.
-		want := `jawstreeSetPath={"tree":"tree","id":` + strconv.Quote(changed[0].ID) + `,"set":false}`
+		want := `jawstreeSetPath={"key":` + strconv.Quote(tree.key) + `,"id":` + strconv.Quote(changed[0].ID) + `,"set":false}`
 		if msg.Data != want {
 			t.Errorf("unexpected data: %q, want %q", msg.Data, want)
 		}
@@ -549,7 +574,7 @@ func TestTree_JawsRenderWriteError(t *testing.T) {
 
 	rootnode := &Node{Name: "root", Children: []*Node{{Name: "child"}}}
 	var mu deadlock.RWMutex
-	tree := New("tree", ui.NewJsVar(&mu, rootnode))
+	tree := New(ui.NewJsVar(&mu, rootnode))
 
 	elem := rq.NewElement(tree)
 	if err := tree.JawsRender(elem, &failWriter{failOn: 1}, nil); !errors.Is(err, errWrite) {
@@ -574,7 +599,7 @@ func TestTree_JawsPathSetIgnoresNonSelectedPath(t *testing.T) {
 
 	rootnode := &Node{Name: "root", Children: []*Node{{Name: "child"}}}
 	var mu deadlock.RWMutex
-	tree := New("tree", ui.NewJsVar(&mu, rootnode))
+	tree := New(ui.NewJsVar(&mu, rootnode))
 	elem := rq.NewElement(tree)
 	var sb strings.Builder
 	maybeError(t, elem.JawsRender(&sb, nil))
@@ -586,7 +611,7 @@ func TestTree_JawsPathSetIgnoresNonSelectedPath(t *testing.T) {
 	case <-t.Context().Done():
 		t.Fatal("expected a jawstreeInit message")
 	case msg := <-rq.OutCh:
-		if msg.What != what.Call || msg.Jid != elem.Jid() || msg.Data != `jawstreeInit={"tree":"tree","options":0}` {
+		if msg.What != what.Call || msg.Jid != elem.Jid() || msg.Data != "jawstreeInit="+string(tree.appendInitCallData(nil, elem.Jid())) {
 			t.Fatalf("unexpected initial tree message: %+v", msg)
 		}
 	}
@@ -629,15 +654,39 @@ func TestTree_DirtySharedTreeSendsOneUpdatePerRequest(t *testing.T) {
 
 	rootnode := &Node{Name: "root", Children: []*Node{{Name: "child"}}}
 	var mu deadlock.RWMutex
-	tree := New("tree", ui.NewJsVar(&mu, rootnode))
+	tree := New(ui.NewJsVar(&mu, rootnode))
 
 	elem1 := rq1.NewElement(tree)
 	var sb1 strings.Builder
 	maybeError(t, elem1.JawsRender(&sb1, nil))
 
+	// Make the second request's Tree use a different request-local Jid so the
+	// initializer assertions prove the container identity is derived per render.
+	_ = rq2.NewElement(ui.NewDiv("placeholder"))
 	elem2 := rq2.NewElement(tree)
 	var sb2 strings.Builder
 	maybeError(t, elem2.JawsRender(&sb2, nil))
+	if elem1.Jid() == elem2.Jid() {
+		t.Fatalf("test setup produced identical per-request Jids: %s", elem1.Jid())
+	}
+	for _, tc := range []struct {
+		rq   *jawstest.TestRequest
+		elem *jaws.Element
+	}{
+		{rq1, elem1},
+		{rq2, elem2},
+	} {
+		tc.rq.InCh <- wire.WsMsg{}
+		select {
+		case msg := <-tc.rq.OutCh:
+			want := "jawstreeInit=" + string(tree.appendInitCallData(nil, tc.elem.Jid()))
+			if msg.What != what.Call || msg.Jid != tc.elem.Jid() || msg.Data != want {
+				t.Fatalf("request initializer = %+v, want Jid %s data %q", msg, tc.elem.Jid(), want)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for per-request initializer")
+		}
+	}
 
 	tree.Lock()
 	rootnode.Children[0].Disabled = true
@@ -651,6 +700,11 @@ func TestTree_DirtySharedTreeSendsOneUpdatePerRequest(t *testing.T) {
 	}
 	if len(msgs2) != 1 {
 		t.Fatalf("request 2 got %d jawstreeSet calls, want 1: %#v", len(msgs2), msgs2)
+	}
+	for _, msg := range append(msgs1, msgs2...) {
+		if !strings.Contains(msg.Data, `jawstreeSet={"key":`+strconv.Quote(tree.key)) {
+			t.Errorf("cross-request update is missing tree key %q: %q", tree.key, msg.Data)
+		}
 	}
 }
 
@@ -718,7 +772,7 @@ func TestTree_ConcurrentUpdateAndInput(t *testing.T) {
 	maybeError(t, err)
 
 	var rootmu deadlock.RWMutex
-	tree := New("tree", ui.NewJsVar(&rootmu, rootnode))
+	tree := New(ui.NewJsVar(&rootmu, rootnode))
 	elem := rq.NewElement(tree)
 
 	var sb strings.Builder

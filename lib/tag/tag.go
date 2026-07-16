@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/linkdata/jaws/lib/jid"
 	"github.com/linkdata/jaws/lib/key"
 )
 
@@ -186,7 +187,7 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 			}
 		}
 		return result, nil
-	case string, template.HTML, template.HTMLAttr,
+	case string, template.HTML, template.HTMLAttr, jid.Jid,
 		int, int8, int16, int32, int64,
 		uint, uint8, uint16, uint32, uint64, key.Key,
 		float32, float64, bool:
@@ -201,9 +202,9 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 // tag may be nil, a [Tag], a slice of tags, a [TagGetter] or another value that is
 // comparable at runtime and equals itself. The predeclared string, bool, signed
 // integer, unsigned integer other than uintptr, and floating-point types are
-// rejected with [ErrIllegalTagType], as are [template.HTML], [template.HTMLAttr]
-// and [key.Key]. This catches common accidental tags. An expanded key value that
-// is not comparable at runtime or does not equal itself is rejected with
+// rejected with [ErrIllegalTagType], as are [template.HTML], [template.HTMLAttr],
+// [jid.Jid] and [key.Key]. This catches common accidental tags. An expanded key
+// value that is not comparable at runtime or does not equal itself is rejected with
 // [ErrNotUsableAsTag] (which also matches [ErrNotComparable] via [errors.Is]).
 // Expansion that exceeds the nesting-depth or total-count limits is rejected with
 // [ErrTooManyTags].

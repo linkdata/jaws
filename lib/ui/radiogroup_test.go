@@ -17,7 +17,7 @@ func TestRequest_RadioGroup(t *testing.T) {
 	rel := rw.RadioGroup(nba)
 
 	gotHTML := string(rel[0].Radio("radioattr"))
-	if !strings.HasPrefix(gotHTML, "<input id=\"Jid.1\" type=\"radio\" radioattr name=\"jaws.") || !strings.HasSuffix(gotHTML, "\">") {
+	if gotHTML != `<input id="Jid.1" type="radio" radioattr name="Jid.1">` {
 		t.Errorf("unexpected radio HTML %q", gotHTML)
 	}
 
@@ -84,7 +84,31 @@ func TestRequest_RadioGroup_LabelBeforeRadio(t *testing.T) {
 	}
 
 	// Rendering Radio afterwards reuses the same Jid.1 element.
-	if gotRadio := string(rel[0].Radio()); !strings.HasPrefix(gotRadio, "<input id=\"Jid.1\" type=\"radio\" name=\"jaws.") {
+	if gotRadio := string(rel[0].Radio()); gotRadio != `<input id="Jid.1" type="radio" name="Jid.1">` {
 		t.Errorf("radio should render at Jid.1, got %q", gotRadio)
+	}
+}
+
+func TestRequest_RadioGroup_NameUsesFirstRadioJid(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	rw := RequestWriter{Request: rq, Writer: &strings.Builder{}}
+
+	nba := named.NewBoolArray(false)
+	nba.Add("1", "one")
+	nba.Add("2", "two")
+	rel := rw.RadioGroup(nba)
+
+	// Rendering the second option first makes its Jid the group name. Every later
+	// option in the same group must reuse that request-scoped identity.
+	if got := string(rel[1].Radio()); got != `<input id="Jid.1" type="radio" name="Jid.1">` {
+		t.Fatalf("first rendered option = %q", got)
+	}
+	if got := string(rel[0].Radio()); got != `<input id="Jid.2" type="radio" name="Jid.1">` {
+		t.Fatalf("second rendered option = %q", got)
+	}
+
+	other := rw.RadioGroup(nba)
+	if got := string(other[0].Radio()); got != `<input id="Jid.3" type="radio" name="Jid.3">` {
+		t.Fatalf("separate group = %q", got)
 	}
 }

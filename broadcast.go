@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/linkdata/jaws/lib/key"
@@ -25,11 +26,9 @@ import (
 // All convenience helpers on [Jaws] that call Broadcast inherit this requirement.
 //
 // A nil [wire.Message.Dest] targets every active Request; a [key.Key] Dest targets
-// the active Request with that identity key, and a zero key is dropped; a string
-// Dest is an HTML id accepted by all active Requests. An empty string Call
-// destination is reported as [ErrEmptyCallTarget] and the message is not sent.
-// With a [Jaws.Logger] configured, production builds log the error; otherwise,
-// and in debug builds, Broadcast panics. Any other Dest is expanded into tags.
+// the active Request with that identity key, and a zero key is dropped. Any other
+// Dest is expanded into tags. Plain strings and [Jid] values are illegal tag
+// types; use [tag.Tag], a domain tag, or an [Element] method instead.
 //
 // A [wire.Message.Dest] that cannot be expanded into tags (an illegal tag type)
 // is reported through [Jaws.MustLog], which panics when no [Jaws.Logger] is
@@ -43,13 +42,6 @@ func (jw *Jaws) Broadcast(msg wire.Message) {
 			// A recycled producer captured a zeroed key; no live request can match
 			// (keys are always non-zero), so drop it rather than fall through to
 			// tag expansion.
-			return
-		}
-	case string: // HTML id (accepted by all requests)
-		if msg.What == what.Call && dest == "" {
-			// An empty outbound Jid encodes a request-scoped Call. Reject an empty
-			// HTML-id destination rather than silently widening it to every active Request.
-			jw.reportMisuse(fmt.Errorf("jaws: Broadcast: %w", ErrEmptyCallTarget))
 			return
 		}
 	default:
@@ -311,13 +303,21 @@ func (jw *Jaws) SetValue(target any, value string) {
 	jw.broadcastTo(target, what.Value, value)
 }
 
-// Insert calls the JavaScript 'insertBefore()' method on
-// all HTML elements matching target.
+// Insert inserts html before the child at childIndex in every element matching
+// target.
 //
-// The position parameter 'where' may be either an HTML ID, a child index or the text "null".
-// html is trusted HTML, matching [Jaws.SetInner] and [Jaws.Append].
-func (jw *Jaws) Insert(target any, where string, html template.HTML) {
-	jw.broadcastTo(target, what.Insert, where+"\n"+string(html))
+// target follows [Jaws.Broadcast]'s tag rules. For request-local insertion before
+// a known child, use [Element.InsertBefore].
+//
+// A negative childIndex is reported as [ErrInvalidChildIndex] and no message is
+// sent. Use [Jaws.Append] to insert at the end. html is trusted HTML, matching
+// [Jaws.SetInner] and [Jaws.Append].
+func (jw *Jaws) Insert(target any, childIndex int, html template.HTML) {
+	if childIndex < 0 {
+		jw.reportMisuse(fmt.Errorf("jaws: Insert: child index %d: %w", childIndex, ErrInvalidChildIndex))
+		return
+	}
+	jw.broadcastTo(target, what.Insert, strconv.Itoa(childIndex)+"\n"+string(html))
 }
 
 // Replace replaces HTML on all HTML elements matching target.
@@ -377,9 +377,8 @@ func jsCallData(jsfunc, jsonstr string) string {
 // JSON.parse(jsonstr); the matched element is not passed as this or as an
 // argument. A nil target calls each active Request once. A nonzero [key.Key]
 // target calls the matching active Request once without requiring a matching DOM
-// element; a zero key is ignored. An empty string target reports
-// [ErrEmptyCallTarget] and sends no call. With [Jaws.Logger] configured,
-// production builds log the error; otherwise, and in debug builds, JsCall panics.
+// element; a zero key is ignored. Other targets follow [Jaws.Broadcast]'s tag
+// rules.
 func (jw *Jaws) JsCall(target any, jsfunc, jsonstr string) {
 	jw.broadcastTo(target, what.Call, jsCallData(jsfunc, jsonstr))
 }

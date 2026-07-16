@@ -123,7 +123,7 @@ When JawsRender() is called for a UI object, it can call
 NewElement() to create new Elements while writing their initial
 HTML code to the web page. Each Element is a unique instance
 of a UI object bound to a specific Request, and will have a
-unique HTML id.
+unique Jid-based HTML id such as `Jid.7`.
 
 If an HTML entity is not registered in a Request, JaWS will not
 forward events from it, nor perform DOM manipulations for it.
@@ -171,9 +171,10 @@ client/server protocol code:
   contain tabs, newlines, carriage returns, or `=`. Embedded tabs or newlines in
   JSON break message framing; `Jaws.JsCall` compacts valid JSON before sending.
   A `Call` selected by a nil destination or nonzero request key uses a zero Jid
-  and does not require a DOM element; a zero request key is dropped. HTML-id and
-  tag destinations remain element-scoped. An empty HTML-id destination is
-  rejected because it has the same wire encoding as the zero Jid.
+  and does not require a DOM element; a zero request key is dropped. Tag
+  destinations remain element-scoped. Built-in strings and bare `Jid` values are
+  not destinations: use `tag.Tag` or a domain tag for broadcasts, and `Element`
+  methods for request-local operations.
 * `jawsVar(name, ...)` resolves properties from `window`, but WebSocket routing
   uses the top-level symbol name only. Register JaWS `JsVar` names as top-level
   identifiers (example: `app`), and use dotted suffixes as the JSON path

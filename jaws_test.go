@@ -26,6 +26,7 @@ import (
 
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/lib/assets"
+	"github.com/linkdata/jaws/lib/jid"
 	"github.com/linkdata/jaws/lib/key"
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
@@ -1155,47 +1156,48 @@ func TestCoverage_GenerateHeadAndConvenienceBroadcasts(t *testing.T) {
 		t.Fatalf("unexpected alert msg %#v", msg)
 	}
 
-	jw.SetInner("t", template.HTML("<b>x</b>"))
+	target := tag.Tag("t")
+	jw.SetInner(target, template.HTML("<b>x</b>"))
 	if msg := nextBroadcast(t, jw); msg.What != what.Inner || msg.Data != "<b>x</b>" {
 		t.Fatalf("unexpected set inner msg %#v", msg)
 	}
-	jw.SetAttr("t", "k", "v")
+	jw.SetAttr(target, "k", "v")
 	if msg := nextBroadcast(t, jw); msg.What != what.SAttr || msg.Data != "k\nv" {
 		t.Fatalf("unexpected set attr msg %#v", msg)
 	}
-	jw.RemoveAttr("t", "k")
+	jw.RemoveAttr(target, "k")
 	if msg := nextBroadcast(t, jw); msg.What != what.RAttr || msg.Data != "k" {
 		t.Fatalf("unexpected remove attr msg %#v", msg)
 	}
-	jw.SetClass("t", "c")
+	jw.SetClass(target, "c")
 	if msg := nextBroadcast(t, jw); msg.What != what.SClass || msg.Data != "c" {
 		t.Fatalf("unexpected set class msg %#v", msg)
 	}
-	jw.RemoveClass("t", "c")
+	jw.RemoveClass(target, "c")
 	if msg := nextBroadcast(t, jw); msg.What != what.RClass || msg.Data != "c" {
 		t.Fatalf("unexpected remove class msg %#v", msg)
 	}
-	jw.SetValue("t", "v")
+	jw.SetValue(target, "v")
 	if msg := nextBroadcast(t, jw); msg.What != what.Value || msg.Data != "v" {
 		t.Fatalf("unexpected set value msg %#v", msg)
 	}
-	jw.Insert("t", "0", "<i>a</i>")
+	jw.Insert(target, 0, "<i>a</i>")
 	if msg := nextBroadcast(t, jw); msg.What != what.Insert || msg.Data != "0\n<i>a</i>" {
 		t.Fatalf("unexpected insert msg %#v", msg)
 	}
-	jw.Replace("t", "<i>b</i>")
+	jw.Replace(target, "<i>b</i>")
 	if msg := nextBroadcast(t, jw); msg.What != what.Replace || msg.Data != "<i>b</i>" {
 		t.Fatalf("unexpected replace msg %#v", msg)
 	}
-	jw.Delete("t")
+	jw.Delete(target)
 	if msg := nextBroadcast(t, jw); msg.What != what.Delete {
 		t.Fatalf("unexpected delete msg %#v", msg)
 	}
-	jw.Append("t", "<em>c</em>")
+	jw.Append(target, "<em>c</em>")
 	if msg := nextBroadcast(t, jw); msg.What != what.Append || msg.Data != "<em>c</em>" {
 		t.Fatalf("unexpected append msg %#v", msg)
 	}
-	jw.JsCall("t", "fn", `{"a":1}`)
+	jw.JsCall(target, "fn", `{"a":1}`)
 	if msg := nextBroadcast(t, jw); msg.What != what.Call || msg.Data != `fn={"a":1}` {
 		t.Fatalf("unexpected jscall msg %#v", msg)
 	}
@@ -1270,14 +1272,65 @@ func TestBroadcast_ExpandsTagDestBeforeQueue(t *testing.T) {
 	if len(dest) != 2 || dest[0] != tag.Tag("expanded") || dest[1] != tag.Tag("extra") {
 		t.Fatalf("unexpected expanded destination %#v", dest)
 	}
+}
 
-	jw.Broadcast(wire.Message{
-		Dest: "html-id",
-		What: what.Delete,
-	})
-	msg = nextBroadcast(t, jw)
-	if got, ok := msg.Dest.(string); !ok || got != "html-id" {
-		t.Fatalf("expected raw html-id destination, got %T(%#v)", msg.Dest, msg.Dest)
+func TestBroadcast_RejectsStringAndJidDestinations(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	logger := &captureErrorLogger{}
+	jw.Logger = logger
+
+	for _, dest := range []any{"", "html-id", "Jid.1", jid.Jid(1)} {
+		logger.err = nil
+		jw.Broadcast(wire.Message{Dest: dest, What: what.Delete})
+		if !errors.Is(logger.err, tag.ErrIllegalTagType) {
+			t.Errorf("destination %T(%v): error = %v, want ErrIllegalTagType", dest, dest, logger.err)
+		}
+		select {
+		case msg := <-jw.bcastCh:
+			t.Fatalf("destination %T(%v) queued broadcast %#v", dest, dest, msg)
+		default:
+		}
+	}
+
+	jw.Broadcast(wire.Message{Dest: tag.Tag("managed"), What: what.Delete})
+	if msg := nextBroadcast(t, jw); msg.Dest != tag.Tag("managed") {
+		t.Fatalf("tag destination = %T(%v), want tag.Tag", msg.Dest, msg.Dest)
+	}
+}
+
+func TestJaws_InsertRejectsNegativeIndex(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	logger := &captureErrorLogger{}
+	jw.Logger = logger
+
+	call := func() { jw.Insert(tag.Tag("managed"), -1, "<p>x</p>") }
+	if deadlock.Debug {
+		func() {
+			defer func() {
+				if recovered := recover(); recovered == nil {
+					t.Fatal("negative child index did not panic in a debug build")
+				}
+			}()
+			call()
+		}()
+	} else {
+		call()
+	}
+	if !errors.Is(logger.err, ErrInvalidChildIndex) {
+		t.Fatalf("Insert error = %v, want ErrInvalidChildIndex", logger.err)
+	}
+	select {
+	case msg := <-jw.bcastCh:
+		t.Fatalf("negative child index queued broadcast %#v", msg)
+	default:
 	}
 }
 
@@ -1676,16 +1729,6 @@ func TestJaws_GenerateHeadHTMLConcurrentWithHeadHTML(t *testing.T) {
 }
 
 func TestCoverage_IDAndLookupHelpers(t *testing.T) {
-	if a, b := NextID(), NextID(); b <= a {
-		t.Fatalf("expected increasing ids, got %d then %d", a, b)
-	}
-	if got := string(AppendID([]byte("x"))); !strings.HasPrefix(got, "x") || len(got) <= 1 {
-		t.Fatalf("unexpected append id result %q", got)
-	}
-	if got := MakeID(); !strings.HasPrefix(got, "jaws.") {
-		t.Fatalf("unexpected id %q", got)
-	}
-
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -2891,7 +2934,6 @@ func BenchmarkRequestHandleBroadcastCall(b *testing.B) {
 	}{
 		{name: "all-requests"},
 		{name: "request-key", dest: key.Key(1)},
-		{name: "html-id", dest: "target"},
 		{name: "tag", dest: tag.Tag("target"), tagDest: true},
 	} {
 		b.Run(tc.name, func(b *testing.B) {
@@ -2913,9 +2955,8 @@ func BenchmarkRequestHandleBroadcastCall(b *testing.B) {
 	}
 }
 
-// BenchmarkJawsBroadcastCallHTMLID guards the Call validation cost on the
-// existing non-empty HTML-id broadcast path.
-func BenchmarkJawsBroadcastCallHTMLID(b *testing.B) {
+// BenchmarkJawsBroadcastCallTag measures tag validation and broadcast queueing.
+func BenchmarkJawsBroadcastCallTag(b *testing.B) {
 	jw, err := New()
 	if err != nil {
 		b.Fatal(err)
@@ -2937,7 +2978,7 @@ func BenchmarkJawsBroadcastCallHTMLID(b *testing.B) {
 		close(drainDone)
 		<-drained
 	})
-	msg := wire.Message{Dest: "target", What: what.Call, Data: `app.refresh={"source":"server"}`}
+	msg := wire.Message{Dest: tag.Tag("target"), What: what.Call, Data: `app.refresh={"source":"server"}`}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {

@@ -33,7 +33,7 @@ func BenchmarkTreeJawsRender(b *testing.B) {
 
 	root := &Node{Children: []*Node{{Name: "Documents"}}}
 	var mu deadlock.RWMutex
-	tree := New("benchmark_tree", ui.NewJsVar(&mu, root), InitiallyExpanded|SearchEnabled)
+	tree := New(ui.NewJsVar(&mu, root), InitiallyExpanded|SearchEnabled)
 
 	b.ReportAllocs()
 	b.ResetTimer()

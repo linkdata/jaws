@@ -86,7 +86,6 @@ import (
 	"net/netip"
 	"net/url"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -389,23 +388,6 @@ func (jw *Jaws) reportMisuse(err error) {
 	if deadlock.Debug {
 		panic(err)
 	}
-}
-
-var nextID atomic.Int64
-
-// NextID returns an int64 unique within the lifetime of the program.
-func NextID() int64 {
-	return nextID.Add(1)
-}
-
-// AppendID appends the result of NextID() in text form to the given slice.
-func AppendID(b []byte) []byte {
-	return strconv.AppendInt(b, NextID(), 32)
-}
-
-// MakeID returns a string in the form "jaws.X" where X is unique within the lifetime of the program.
-func MakeID() string {
-	return string(AppendID([]byte("jaws.")))
 }
 
 // FaviconURL returns the favicon URL discovered by [Jaws.GenerateHeadHTML].

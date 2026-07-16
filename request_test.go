@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -79,6 +78,7 @@ func TestRequest_Registrations(t *testing.T) {
 	jid := rq.Register(x)
 	is.True(jid.IsValid())
 	is.Equal(rq.wantMessage(&wire.Message{Dest: x}), true)
+	is.Equal(rq.wantMessage(&wire.Message{Dest: "Jid.1"}), false)
 }
 
 func TestRequest_wantMessage_KeyDest(t *testing.T) {
@@ -322,39 +322,6 @@ func TestRequest_writeTailScript_RemoveAttrAndClass(t *testing.T) {
 
 	rq.muQueue.Lock()
 	th.Equal(len(rq.wsQueue), 0)
-	rq.muQueue.Unlock()
-}
-
-// TestRequest_writeTailScript_RetainsHTMLIdMessages verifies HTML-id-targeted
-// messages (Jid == -1), whose Data is the "id<TAB>JSON" wire form rather than an
-// attribute name, are left in wsQueue for the WebSocket instead of being consumed
-// into a garbled getElementById("") no-op by the attribute/class fixup path.
-func TestRequest_writeTailScript_RetainsHTMLIdMessages(t *testing.T) {
-	th := newTestHelper(t)
-	jw, _ := New()
-	defer jw.Close()
-	rq := jw.NewRequest(nil)
-	defer jw.recycle(rq)
-
-	rq.muQueue.Lock()
-	rq.wsQueue = append(rq.wsQueue, wire.WsMsg{Jid: -1, What: what.SAttr, Data: "someid\t\"v\""})
-	rq.muQueue.Unlock()
-
-	w := httptest.NewRecorder()
-	b, sent := rq.drainTailScript()
-	if err := rq.writeTailResponse(w, b, sent); err != nil {
-		t.Fatal(err)
-	}
-	s := w.Body.String()
-	if strings.Contains(s, `getElementById("")`) {
-		t.Fatalf("tail script emitted a garbled HTML-id fixup: %s", s)
-	}
-
-	// The message stays queued for delivery over the WebSocket.
-	rq.muQueue.Lock()
-	th.Equal(len(rq.wsQueue), 1)
-	th.Equal(rq.wsQueue[0].Jid, jid.Jid(-1))
-	th.Equal(rq.wsQueue[0].What, what.SAttr)
 	rq.muQueue.Unlock()
 }
 
@@ -1402,38 +1369,6 @@ func TestRequest_RequestScopedEventIsolation(t *testing.T) {
 	}
 }
 
-func TestRequest_HTMLIdBroadcast(t *testing.T) {
-	th := newTestHelper(t)
-	tj := newTestJaws()
-	defer tj.Close()
-	rq1 := tj.newRequest(nil)
-	rq2 := tj.newRequest(nil)
-
-	tj.Broadcast(wire.Message{
-		Dest: "fooId",
-		What: what.Inner,
-		Data: "inner",
-	})
-	select {
-	case <-th.C:
-		th.Timeout()
-	case msg := <-rq1.OutCh:
-		s := msg.Format()
-		if s != "Inner\tfooId\t\"inner\"\n" {
-			t.Errorf("%q", s)
-		}
-	}
-	select {
-	case <-th.C:
-		th.Timeout()
-	case msg := <-rq2.OutCh:
-		s := msg.Format()
-		if s != "Inner\tfooId\t\"inner\"\n" {
-			t.Errorf("%q", s)
-		}
-	}
-}
-
 func jidForTag(rq *Request, tagValue any) jid.Jid {
 	if elems := rq.GetElements(tagValue); len(elems) > 0 {
 		return elems[0].jid
@@ -1873,60 +1808,6 @@ func TestRequest_CustomErrors(t *testing.T) {
 	// Without an initial request the method/URI fragment is omitted entirely.
 	noInitial := errRequestCancelled{JawsKey: target2.JawsKey, Cause: cause}
 	th.Equal(noInitial.Error(), fmt.Sprintf("Request<%s>: %v", target2.JawsKey, cause))
-}
-
-// TestRequest_handleBroadcastRejectsWhitespaceID verifies that a string (HTML id)
-// broadcast target containing a tab or newline is rejected rather than written
-// verbatim into a wire frame, where it would corrupt framing. reportMisuse logs and
-// then panics under deadlock.Debug; in production it logs and drops the frame.
-func TestRequest_handleBroadcastRejectsWhitespaceID(t *testing.T) {
-	jw, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer jw.Close()
-	logger := &captureErrorLogger{}
-	jw.Logger = logger
-	rq := jw.NewRequest(nil)
-	defer jw.recycle(rq)
-
-	eventCallCh := make(chan eventFnCall, 1)
-
-	// A clean id queues a single verbatim (Jid -1) frame.
-	rq.handleBroadcast(wire.Message{Dest: "good-id", What: what.Inner, Data: "<p>"}, eventCallCh)
-	if got := rq.getSendMsgs(); len(got) != 1 {
-		t.Fatalf("clean id: queued %d messages, want 1", len(got))
-	}
-
-	for _, badID := range []string{"a\tb", "a\nb"} {
-		logger.err = nil
-		bad := wire.Message{Dest: badID, What: what.Inner, Data: "<p>"}
-		if deadlock.Debug {
-			func() {
-				defer func() {
-					switch e := recover().(type) {
-					case nil:
-						t.Fatalf("id %q: expected reportMisuse to panic under deadlock.Debug", badID)
-					case error:
-						if !strings.Contains(e.Error(), "tab or newline") {
-							t.Fatalf("id %q: panic = %v, want tab-or-newline message", badID, e)
-						}
-					default:
-						t.Fatalf("id %q: panic = %v, want error", badID, e)
-					}
-				}()
-				rq.handleBroadcast(bad, eventCallCh)
-			}()
-			continue
-		}
-		rq.handleBroadcast(bad, eventCallCh)
-		if got := rq.getSendMsgs(); len(got) != 0 {
-			t.Fatalf("id %q: queued %d messages, want 0 (dropped)", badID, len(got))
-		}
-		if logger.err == nil || !strings.Contains(logger.err.Error(), "tab or newline") {
-			t.Fatalf("id %q: logged err = %v, want tab-or-newline message", badID, logger.err)
-		}
-	}
 }
 
 // TestRequest_getSendMsgsKeepsOrderFromDeletedElement verifies that a page-global
@@ -2487,74 +2368,6 @@ func TestRequest_ReplaceMessageTargetsElementHTML(t *testing.T) {
 	}
 	if msg.Data != string(html) {
 		t.Fatalf("replace payload mismatch: got %q want %q", msg.Data, html)
-	}
-}
-
-func TestRequest_StringIdBroadcastDataIsJSONParseable(t *testing.T) {
-	// A broadcast to a plain HTML-id string must be quoted JSON-safely. strconv.Quote
-	// emits \xNN / \UXXXXXXXX escapes (for control bytes, DEL and invalid UTF-8) that
-	// the browser's JSON.parse rejects, which would drop every coalesced update in the
-	// same WebSocket frame.
-	tests := []struct {
-		name string
-		data string
-		want string // expected decoded value; "" means only require that it parses
-	}{
-		{"control byte", "before\x01after", "before\x01after"},
-		{"DEL byte", "before\x7fafter", "before\x7fafter"},
-		{"angle brackets", "<script>x</script>", "<script>x</script>"},
-		{"invalid utf8", "before\xff\xfeafter", ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rq := newTestRequest(t)
-			defer rq.Close()
-
-			rq.Jaws.SetInner("some-id", template.HTML(tt.data)) // #nosec G203
-			msg := nextOutboundMsg(t, rq)
-			if msg.What != what.Inner {
-				t.Fatalf("unexpected message type %v", msg.What)
-			}
-			// Wire data for a string-id message is "id\t<json-quoted-data>".
-			_, jsonPart, ok := strings.Cut(msg.Data, "\t")
-			if !ok {
-				t.Fatalf("expected id\\tdata, got %q", msg.Data)
-			}
-			var got string
-			if err := json.Unmarshal([]byte(jsonPart), &got); err != nil {
-				t.Fatalf("data not JSON-parseable (%v): %q", err, jsonPart)
-			}
-			if tt.want != "" && got != tt.want {
-				t.Errorf("round-trip mismatch: got %q want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestRequest_StringTargetedPageGlobalEmitsSingleFrame(t *testing.T) {
-	// Reload, Redirect, Order and Alert are page-global commands: combining one
-	// with a string (HTML id) Dest must emit only the single Jid:0 page-global
-	// frame, not an additional contradictory element-targeted Jid:-1 frame.
-	rq := newTestRequest(t)
-	defer rq.Close()
-
-	tagValue := &testUi{}
-	rq.Register(tagValue)
-
-	rq.Jaws.Broadcast(wire.Message{Dest: "some-id", What: what.Reload})
-
-	// The page-global frame is Jid:0.
-	first := nextOutboundMsg(t, rq)
-	if first.Jid != 0 || first.What != what.Reload {
-		t.Fatalf("expected single page-global Jid:0 Reload frame, got %+v", first)
-	}
-
-	// A single process goroutine handles broadcasts in order, so the next frame
-	// must be this Replace; a stray frame from the Reload would arrive here instead.
-	rq.Jaws.Replace(tagValue, template.HTML("<p>x</p>")) // #nosec G203
-	second := nextOutboundMsg(t, rq)
-	if second.What != what.Replace {
-		t.Fatalf("expected Replace frame after Reload, got %+v (stray frame from string-targeted Reload leaked)", second)
 	}
 }
 

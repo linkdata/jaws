@@ -45,7 +45,7 @@ func setupJaws(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
 				{Name: "Documents", Children: []*jawstree.Node{{Name: "report.pdf"}}},
 				{Name: "Pictures"},
 			}}
-			tree := jawstree.New("mytree", ui.NewJsVar(&mu, root), jawstree.InitiallyExpanded)
+			tree := jawstree.New(ui.NewJsVar(&mu, root), jawstree.InitiallyExpanded)
 			mux.Handle("GET /", ui.Handler(jw, "index.html", tree))
 		}
 	}

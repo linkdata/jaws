@@ -12,8 +12,11 @@ func TestParseJid(t *testing.T) {
 		arg  string
 		want Jid
 	}{
-		{"zero", Prefix + "0", 0},
+		{"zero", Prefix + "0", Invalid},
 		{"one", Prefix + "1", 1},
+		{"leading zero", Prefix + "01", Invalid},
+		{"leading plus", Prefix + "+1", Invalid},
+		{"negative zero", Prefix + "-0", Invalid},
 		{"negative", Prefix + "-1", Invalid},
 		{"empty string", "", 0},
 		{"random text", "hello, world!", Invalid},
@@ -93,11 +96,8 @@ func TestJid_AppendVariants(t *testing.T) {
 	}
 }
 
-// TestParseInt_NonCanonical pins how the parsers treat non-canonical integer
-// text. strconv.ParseInt is lenient about a leading '+' and leading zeros, so
-// those forms are accepted and normalized to the canonical Jid; everything else
-// non-numeric is rejected as Invalid. This characterizes current behavior so a
-// future parser change is noticed.
+// TestParseInt_NonCanonical pins how the numeric parser treats non-canonical
+// integer text. ParseString independently accepts only canonical HTML IDs.
 func TestParseInt_NonCanonical(t *testing.T) {
 	tests := []struct {
 		arg  string
@@ -122,9 +122,31 @@ func TestParseInt_NonCanonical(t *testing.T) {
 			if got := ParseInt(tt.arg); got != tt.want {
 				t.Errorf("ParseInt(%q) = %v, want %v", tt.arg, got, tt.want)
 			}
-			// ParseString prepends the prefix and must agree for these payloads.
-			if got := ParseString(Prefix + tt.arg); got != tt.want {
-				t.Errorf("ParseString(%q) = %v, want %v", Prefix+tt.arg, got, tt.want)
+		})
+	}
+}
+
+func TestParseString_Canonical(t *testing.T) {
+	tests := []struct {
+		arg  string
+		want Jid
+	}{
+		{"", 0},
+		{Prefix + "1", 1},
+		{Prefix + "10", 10},
+		{Prefix + fmt.Sprint(int64(math.MaxInt64)), Jid(math.MaxInt64)},
+		{Prefix + "0", Invalid},
+		{Prefix + "01", Invalid},
+		{Prefix + "+1", Invalid},
+		{Prefix + "-0", Invalid},
+		{Prefix + "-1", Invalid},
+		{Prefix, Invalid},
+		{"1", Invalid},
+	}
+	for _, tt := range tests {
+		t.Run(tt.arg, func(t *testing.T) {
+			if got := ParseString(tt.arg); got != tt.want {
+				t.Fatalf("ParseString(%q) = %v, want %v", tt.arg, got, tt.want)
 			}
 		})
 	}
@@ -159,8 +181,8 @@ func FuzzParseJid(f *testing.F) {
 
 		gotPrefixed := ParseString(Prefix + s)
 		assertParsedJid(t, "ParseString(Prefix+input)", Prefix+s, gotPrefixed)
-		if gotPrefixed != gotInt {
-			t.Fatalf("ParseString(%q) = %v, want ParseInt(%q) = %v", Prefix+s, gotPrefixed, s, gotInt)
+		if gotPrefixed.IsValid() && (gotPrefixed < 1 || gotPrefixed.String() != Prefix+s) {
+			t.Fatalf("ParseString(%q) returned non-canonical %v", Prefix+s, gotPrefixed)
 		}
 
 		gotString := ParseString(s)

@@ -94,17 +94,28 @@ func ParseInt(s string) Jid {
 	return Invalid
 }
 
-// ParseString parses an unquoted [Jid] string, such as `Jid.2`, and returns
-// the corresponding value.
+// ParseString parses a canonical unquoted [Jid] string.
 //
-// An empty string parses to Jid(0), the whole-request id. Returns [Invalid] if
-// s is non-empty and not a valid [Jid] string.
+// For example, `Jid.2` returns Jid(2). An empty string parses to Jid(0), the
+// whole-request id. Non-empty input must contain Prefix followed by a positive
+// base-10 integer with no sign or leading zero. All other input returns
+// [Invalid].
 func ParseString(s string) Jid {
 	if s == "" {
 		return 0
 	}
 	if strings.HasPrefix(s, Prefix) {
-		return ParseInt(s[len(Prefix):])
+		digits := s[len(Prefix):]
+		if len(digits) > 0 && digits[0] >= '1' && digits[0] <= '9' {
+			for i := 1; i < len(digits); i++ {
+				if digits[i] < '0' || digits[i] > '9' {
+					return Invalid
+				}
+			}
+			if id := ParseInt(digits); id > 0 {
+				return id
+			}
+		}
 	}
 	return Invalid
 }
