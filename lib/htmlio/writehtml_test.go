@@ -144,7 +144,7 @@ func Test_WriteHTMLInner_LeadingNewline(t *testing.T) {
 			want:  "<textarea id=\"Jid.1\">\n\nhello</textarea>",
 		},
 		{
-			name:  "textarea leading CR is doubled",
+			name:  "textarea leading CR is prefixed with LF",
 			tag:   "textarea",
 			inner: "\rhello",
 			want:  "<textarea id=\"Jid.1\">\n\rhello</textarea>",
