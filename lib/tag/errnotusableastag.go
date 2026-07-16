@@ -8,8 +8,9 @@ import (
 
 // ErrNotUsableAsTag is returned when a value cannot be used as a tag.
 //
-// A tag must be comparable and equal to itself so that it remains reachable as a
-// map key. This error also matches [ErrNotComparable] via [errors.Is].
+// A tag key must be comparable at runtime and equal to itself so later dirtying,
+// broadcasts and event routing can match it reliably. This error also matches
+// [ErrNotComparable] via [errors.Is].
 var ErrNotUsableAsTag errNotUsableAsTag
 
 type errNotUsableAsTag struct {

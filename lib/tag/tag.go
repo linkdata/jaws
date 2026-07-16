@@ -195,15 +195,17 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 // TagExpand expands tag into a flat list of unique, usable tag keys.
 //
 // tag may be nil, a [Tag], a slice of tags, a [TagGetter] or another value that is
-// comparable at runtime and equals itself. Primitive HTML/value types are
-// rejected with [ErrIllegalTagType] to catch common accidental tags. An expanded
-// key value that is not comparable at runtime or does not equal itself is rejected
-// with [ErrNotUsableAsTag] (which also matches [ErrNotComparable] via [errors.Is]).
+// comparable at runtime and equals itself. The predeclared string, bool, signed
+// integer, unsigned integer other than uintptr, and floating-point types are
+// rejected with [ErrIllegalTagType], as are [template.HTML], [template.HTMLAttr]
+// and [key.Key]. This catches common accidental tags. An expanded key value that
+// is not comparable at runtime or does not equal itself is rejected with
+// [ErrNotUsableAsTag] (which also matches [ErrNotComparable] via [errors.Is]).
 // Expansion that exceeds the nesting-depth or total-count limits is rejected with
 // [ErrTooManyTags].
 //
 // On error, result contains the tags expanded before the failure. If an expanded
-// key is not usable as a map key, result is nil and err matches
+// value is not usable as a tag key, result is nil and err matches
 // [ErrNotUsableAsTag].
 //
 // Expansion reads tag and any values returned by [TagGetter.JawsGetTag] by
