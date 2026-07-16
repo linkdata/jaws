@@ -22,8 +22,10 @@ var _ jaws.UI = (*Tree)(nil)
 // [Tree.SetSelected]) under the lock is safe, but adding, removing, or reordering Children
 // afterward breaks that mapping and is unsupported on a rendered Tree.
 type Tree struct {
-	id      string // HTML ID of the tree
-	options Option
+	id           string // HTML ID of the tree
+	options      Option
+	renderParams [1]any
+	initCallData string
 	*ui.JsVar[Node]
 }
 
@@ -64,6 +66,8 @@ func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	if t.options < 0 {
 		panic("jawstree.New: options must be non-negative")
 	}
+	t.renderParams[0] = "jawstreeroot_" + t.id
+	t.initCallData = `{"tree":` + strconv.Quote(t.id) + `,"options":` + strconv.FormatInt(int64(t.options), 10) + `}`
 	// Normalize away any nil children before assigning IDs so a node's slice
 	// index (its ID) always matches its position in the compacted wire array
 	// emitted by marshalJSON; otherwise a nil child desyncs the two and client
@@ -88,11 +92,13 @@ func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 
 // JawsRender renders the hidden root data element and queues tree initialization.
 func (tree *Tree) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
-	if err = tree.JsVar.JawsRender(elem, w, append([]any{"jawstreeroot_" + tree.id}, params...)); err == nil {
-		// Dynamic renderers allocate nested Elements after their existing parent.
-		// The Request send queue orders messages by Jid, so the parent's DOM mutation
-		// reaches the browser before this element-scoped initializer Call.
-		elem.JsCall("jawsCallWhenReady", string(appendReadyInitCallData(nil, elem.Jid(), tree.id, tree.options)))
+	if len(params) == 0 {
+		params = tree.renderParams[:]
+	} else {
+		params = append([]any{tree.renderParams[0]}, params...)
+	}
+	if err = tree.JsVar.JawsRender(elem, w, params); err == nil {
+		elem.JsCall("jawstreeInit", tree.initCallData)
 	}
 	return
 }

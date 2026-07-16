@@ -207,7 +207,7 @@ func TestTreeRenderEmitsRootDataAndQueuesInitializerForPageContainer(t *testing.
 		if msg.What != what.Call || msg.Jid != elem.Jid() {
 			t.Fatalf("initializer message = %+v, want element-scoped Call for %s", msg, elem.Jid())
 		}
-		if want := `jawsCallWhenReady={"id":` + strconv.Quote(elem.Jid().String()) + `,"path":"jawstreeInit","data":{"tree":"mytree","options":2}}`; msg.Data != want {
+		if want := `jawstreeInit={"tree":"mytree","options":2}`; msg.Data != want {
 			t.Fatalf("initializer data = %q, want %q", msg.Data, want)
 		}
 	case <-time.After(time.Second):
@@ -394,12 +394,11 @@ func TestTree(t *testing.T) {
 		t.Error("unexpected per-render script")
 	}
 
-	// The initial render queues one element-scoped initializer. Wake the request
-	// loop and drain it before testing later tree updates.
+	// Drain the initializer so later assertions isolate update messages.
 	rq.InCh <- wire.WsMsg{}
 	select {
 	case msg := <-rq.OutCh:
-		if msg.What != what.Call || msg.Jid != elem.Jid() || msg.Data != `jawsCallWhenReady={"id":`+strconv.Quote(elem.Jid().String())+`,"path":"jawstreeInit","data":{"tree":"tree","options":1}}` {
+		if msg.What != what.Call || msg.Jid != elem.Jid() || msg.Data != `jawstreeInit={"tree":"tree","options":1}` {
 			t.Fatalf("unexpected initial tree message: %+v", msg)
 		}
 	case <-time.After(2 * time.Second):
@@ -580,14 +579,14 @@ func TestTree_JawsPathSetIgnoresNonSelectedPath(t *testing.T) {
 	var sb strings.Builder
 	maybeError(t, elem.JawsRender(&sb, nil))
 
-	// Flush the initializer queued by rendering so the assertion below isolates
+	// Drain the initializer queued by rendering so the assertion below isolates
 	// the messages produced by JawsPathSet.
 	rq.InCh <- wire.WsMsg{}
 	select {
 	case <-t.Context().Done():
 		t.Fatal("expected a jawstreeInit message")
 	case msg := <-rq.OutCh:
-		if msg.What != what.Call || msg.Jid != elem.Jid() || msg.Data != `jawsCallWhenReady={"id":`+strconv.Quote(elem.Jid().String())+`,"path":"jawstreeInit","data":{"tree":"tree","options":0}}` {
+		if msg.What != what.Call || msg.Jid != elem.Jid() || msg.Data != `jawstreeInit={"tree":"tree","options":0}` {
 			t.Fatalf("unexpected initial tree message: %+v", msg)
 		}
 	}

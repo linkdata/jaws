@@ -55,9 +55,9 @@ func BenchmarkTreeJawsRender(b *testing.B) {
 		}
 
 		b.StopTimer()
-		// Queue a same-element marker after any initializer and wake the live
-		// Request loop. Draining through that marker leaves the real queue empty for
-		// the next measured render on both the script and Call implementations.
+		// Queue a same-element marker and wake the live Request loop. Draining
+		// through that marker leaves the real queue empty for the next measured
+		// render, including if rendering later gains another queued operation.
 		elems[len(elems)-1].SetValue("benchmark-drain")
 		tr.InCh <- wire.WsMsg{}
 		for {

@@ -196,6 +196,11 @@ global.window = {
 	addEventListener: function(name, fn){
 		(windowListeners[name] ||= []).push(fn);
 	},
+	removeEventListener: function(name, fn){
+		windowListeners[name] = (windowListeners[name] || []).filter(function(other) {
+			return other !== fn;
+		});
+	},
 	jawsNames: {},
 };
 global.document = {
@@ -231,105 +236,48 @@ eval(src);
 	return out.String()
 }
 
-func TestJawsJS_CallWhenReadyRetainsCallUntilDependencyLoads(t *testing.T) {
-	raw := runJawsJSSnippet(t, `
-const elem = { id: "Jid.1" };
-document.getElementById = function(id) { return id === elem.id ? elem : null; };
-// The Node harness keeps window separate from the eval scope; classic browser
-// scripts expose top-level function declarations on window.
-window.jawsCallWhenReady = jawsCallWhenReady;
-
-jawsPerform(
-	"Call",
-	"Jid.1",
-	'jawsCallWhenReady={"id":"Jid.1","path":"late.init","data":{"value":42}}'
-);
-const before = window.late;
-window.late = {
-	init: function(arg) { window.readyValue = arg.value; }
-};
-WebSocket = function() {
-	this.addEventListener = function() {};
-};
-jawsDispatchWindowEvent("DOMContentLoaded");
-
-process.stdout.write(JSON.stringify({ before: before, after: window.readyValue }));
-`)
-
-	var got struct {
-		Before any `json:"before"`
-		After  int `json:"after"`
-	}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
-		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
-	}
-	if got.Before != nil {
-		t.Fatalf("deferred dependency existed before it loaded: %#v", got.Before)
-	}
-	if got.After != 42 {
-		t.Fatalf("deferred call value = %d, want 42", got.After)
-	}
+func TestJawsJS_ConnectsAfterDeferredAssets(t *testing.T) {
+	for _, readyEvent := range []string{"DOMContentLoaded", "load"} {
+		t.Run(readyEvent, func(t *testing.T) {
+			raw := runJawsJSSnippet(t, `
+let socketCount = 0;
+let connectedAfterAssets = false;
+function FakeSocket() {
+	this.readyState = 1;
+	socketCount++;
+	connectedAfterAssets =
+		typeof window.jawstreeInit === "function" &&
+		typeof window.Treeview === "function";
 }
+FakeSocket.prototype.addEventListener = function() {};
+WebSocket = FakeSocket;
 
-func TestJawsJS_CallWhenReadySkipsRemovedElement(t *testing.T) {
-	raw := runJawsJSSnippet(t, `
-const elements = {};
-const parent = new Node();
-parent.id = "Jid.10";
-parent.removeChild = function(elem) { delete elements[elem.id]; };
-elements[parent.id] = parent;
-function testElement(id, parentElement) {
-	const elem = new Node();
-	elem.id = id;
-	elem.parentElement = parentElement;
-	elem.querySelectorAll = function() { return []; };
-	elements[id] = elem;
-	return elem;
-}
-testElement("Jid.1", parent);
-testElement("Jid.2", parent);
-document.getElementById = function(id) { return elements[id] || null; };
-window.jawsCallWhenReady = jawsCallWhenReady;
-
-jawsPerform(
-	"Call",
-	"Jid.1",
-	'jawsCallWhenReady={"id":"Jid.1","path":"late.removed","data":{"value":42}}'
-);
-jawsPerform(
-	"Call",
-	"Jid.2",
-	'jawsCallWhenReady={"id":"Jid.2","path":"late.retained","data":{"value":84}}'
-);
-jawsPerform("Remove", parent.id, '"Jid.1"');
-
-window.late = {
-	removed: function(arg) { window.removedValue = arg.value; },
-	retained: function(arg) { window.retainedValue = arg.value; }
-};
-WebSocket = function() {
-	this.addEventListener = function() {};
-};
+const before = socketCount;
+window.jawstreeInit = function() {};
+window.Treeview = function() {};
+jawsDispatchWindowEvent("`+readyEvent+`");
 jawsDispatchWindowEvent("DOMContentLoaded");
+jawsDispatchWindowEvent("load");
 
 process.stdout.write(JSON.stringify({
-	removed: window.removedValue,
-	retained: window.retainedValue
+	before: before,
+	after: socketCount,
+	connectedAfterAssets: connectedAfterAssets
 }));
 `)
 
-	var got struct {
-		Removed  any `json:"removed"`
-		Retained int `json:"retained"`
-	}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
-		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
-	}
-	if got.Removed != nil {
-		t.Fatalf("removed element's deferred call ran: %#v", got.Removed)
-	}
-	if got.Retained != 84 {
-		t.Fatalf("retained element's deferred call value = %d, want 84", got.Retained)
+			var got struct {
+				Before               int  `json:"before"`
+				After                int  `json:"after"`
+				ConnectedAfterAssets bool `json:"connectedAfterAssets"`
+			}
+			if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+				t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+			}
+			if got.Before != 0 || got.After != 1 || !got.ConnectedAfterAssets {
+				t.Fatalf("connection state = %+v, want one connection after deferred assets", got)
+			}
+		})
 	}
 }
 

@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -49,7 +48,7 @@ func jawstreeFirefoxPath(t *testing.T) string {
 	return ""
 }
 
-func TestTreeInitialAndDynamicInitializationWithClientAssets(t *testing.T) {
+func TestTreeDynamicInitializationWithClientAssets(t *testing.T) {
 	jw, err := jaws.New()
 	if err != nil {
 		t.Fatal(err)
@@ -58,35 +57,17 @@ func TestTreeInitialAndDynamicInitializationWithClientAssets(t *testing.T) {
 	go jw.Serve()
 
 	tr := jawstest.NewTestRequest(jw, nil)
-	if tr == nil {
-		t.Fatal("nil test request")
-	}
 	defer func() {
 		tr.Close()
 		<-tr.DoneCh
 	}()
 	<-tr.ReadyCh
 
-	// Render an initial Tree and its documented target before the WebSocket queue
-	// is flushed. Its Call will exercise dependency readiness in the browser.
-	initialTarget := ui.NewDiv(template.HTML(`<div id="initial"></div>`))
-	initialTargetElem := tr.NewElement(initialTarget)
-	var initial strings.Builder
-	if err := initialTargetElem.JawsRender(&initial, nil); err != nil {
-		t.Fatal(err)
-	}
-	initialRoot := &Node{Children: []*Node{{Name: "Before assets"}}}
-	var initialMu deadlock.RWMutex
-	initialTree := New("initial", ui.NewJsVar(&initialMu, initialRoot))
-	initialTreeElem := tr.NewElement(initialTree)
-	if err := initialTreeElem.JawsRender(&initial, nil); err != nil {
-		t.Fatal(err)
-	}
-
-	// Render the dynamic Tree's documented target through the normal UI path,
-	// then render the initially empty dynamic Container alongside it.
+	// Render the documented target and an initially empty live Container. The Tree
+	// itself enters the page only through the subsequent Container update.
 	target := ui.NewDiv(template.HTML(`<div id="dynamic"></div>`))
 	targetElem := tr.NewElement(target)
+	var initial strings.Builder
 	if err := targetElem.JawsRender(&initial, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -97,158 +78,60 @@ func TestTreeInitialAndDynamicInitializationWithClientAssets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Render a second target and empty live Container for the remove-before-ready
-	// lifecycle. Its Tree will be appended and removed entirely through updates.
-	staleTarget := ui.NewDiv(template.HTML(`<div id="stale"></div>`))
-	staleTargetElem := tr.NewElement(staleTarget)
-	if err := staleTargetElem.JawsRender(&initial, nil); err != nil {
-		t.Fatal(err)
-	}
-	staleContents := &dynamicTreeContainer{}
-	staleContainer := ui.NewContainer("div", staleContents)
-	staleContainerElem := tr.NewElement(staleContainer)
-	if err := staleContainerElem.JawsRender(&initial, nil); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(initial.String(), `<div id="initial"></div>`) ||
-		!strings.Contains(initial.String(), `<div id="dynamic"></div>`) ||
-		!strings.Contains(initial.String(), `<div id="stale"></div>`) {
-		t.Fatalf("initial page is missing a documented Tree target: %q", initial.String())
-	}
-
-	tr.InCh <- wire.WsMsg{}
-	var initialCall wire.WsMsg
-	select {
-	case initialCall = <-tr.OutCh:
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for initial Tree initializer")
-	}
-	if initialCall.What != what.Call || initialCall.Jid != initialTreeElem.Jid() {
-		t.Fatalf("initial Tree message = %+v, want element-scoped Call for %s", initialCall, initialTreeElem.Jid())
-	}
-	if want := `jawsCallWhenReady={"id":` + strconv.Quote(initialTreeElem.Jid().String()) + `,"path":"jawstreeInit","data":{"tree":"initial","options":0}}`; initialCall.Data != want {
-		t.Fatalf("initial Tree data = %q, want %q", initialCall.Data, want)
-	}
-
 	root := &Node{Children: []*Node{{Name: "Documents"}}}
 	var mu deadlock.RWMutex
 	tree := New("dynamic", ui.NewJsVar(&mu, root), InitiallyExpanded)
 	contents.contents = []jaws.UI{tree}
-
-	// This is the supported production path: dirtying the Container's source lets
-	// the Request process loop render the new Tree and send its DOM and Call frames.
 	tr.Dirty(contents)
 
-	got := make([]wire.WsMsg, 0, 3)
-	for len(got) < 3 {
+	frames := make([]wire.WsMsg, 0, 4)
+	for len(frames) < 3 {
 		select {
 		case msg := <-tr.OutCh:
-			got = append(got, msg)
+			frames = append(frames, msg)
 		case <-time.After(time.Second):
-			t.Fatalf("timed out waiting for dynamic tree messages; got %+v", got)
+			t.Fatalf("timed out waiting for dynamic Tree messages; got %+v", frames)
 		}
 	}
-
-	if got[0].What != what.Append || got[0].Jid != containerElem.Jid() {
-		t.Fatalf("first dynamic message = %+v, want parent Append", got[0])
+	if frames[0].What != what.Append || frames[0].Jid != containerElem.Jid() {
+		t.Fatalf("first dynamic message = %+v, want parent Append", frames[0])
 	}
-	if strings.Contains(got[0].Data, "<script") {
-		t.Fatalf("dynamic Tree HTML contains an inert script: %q", got[0].Data)
+	if frames[1].What != what.Order || frames[1].Jid != containerElem.Jid() {
+		t.Fatalf("second dynamic message = %+v, want parent Order", frames[1])
 	}
-	if !strings.Contains(got[0].Data, `data-jawsname="jawstreeroot_dynamic"`) {
-		t.Fatalf("dynamic Tree HTML is missing root data: %q", got[0].Data)
+	if frames[2].What != what.Call || frames[2].Jid <= containerElem.Jid() ||
+		frames[2].Data != `jawstreeInit={"tree":"dynamic","options":2}` {
+		t.Fatalf("third dynamic message = %+v, want child initializer Call", frames[2])
 	}
-	if got[1].What != what.Order || got[1].Jid != containerElem.Jid() {
-		t.Fatalf("second dynamic message = %+v, want parent Order", got[1])
-	}
-	if got[2].What != what.Call || got[2].Jid <= containerElem.Jid() {
-		t.Fatalf("third dynamic message = %+v, want child initializer Call", got[2])
-	}
-	if !strings.Contains(got[0].Data, `id="`+got[2].Jid.String()+`"`) {
-		t.Fatalf("Append HTML does not contain initializer target %s: %q", got[2].Jid, got[0].Data)
-	}
-	if want := `jawsCallWhenReady={"id":` + strconv.Quote(got[2].Jid.String()) + `,"path":"jawstreeInit","data":{"tree":"dynamic","options":2}}`; got[2].Data != want {
-		t.Fatalf("initializer data = %q, want %q", got[2].Data, want)
+	if strings.Contains(frames[0].Data, "<script") ||
+		!strings.Contains(frames[0].Data, `data-jawsname="jawstreeroot_dynamic"`) ||
+		!strings.Contains(frames[0].Data, `id="`+frames[2].Jid.String()+`"`) {
+		t.Fatalf("dynamic Tree Append has unexpected HTML: %q", frames[0].Data)
 	}
 
-	staleRoot := &Node{Children: []*Node{{Name: "Must not appear"}}}
-	var staleMu deadlock.RWMutex
-	staleTree := New("stale", ui.NewJsVar(&staleMu, staleRoot))
-	staleContents.contents = []jaws.UI{staleTree}
-	tr.Dirty(staleContents)
-
-	staleAdd := make([]wire.WsMsg, 0, 3)
-	for len(staleAdd) < 3 {
-		select {
-		case msg := <-tr.OutCh:
-			staleAdd = append(staleAdd, msg)
-		case <-time.After(time.Second):
-			t.Fatalf("timed out waiting for stale Tree append messages; got %+v", staleAdd)
-		}
-	}
-	if staleAdd[0].What != what.Append || staleAdd[0].Jid != staleContainerElem.Jid() {
-		t.Fatalf("first stale Tree message = %+v, want parent Append", staleAdd[0])
-	}
-	if strings.Contains(staleAdd[0].Data, "<script") ||
-		!strings.Contains(staleAdd[0].Data, `data-jawsname="jawstreeroot_stale"`) {
-		t.Fatalf("stale Tree Append has unexpected HTML: %q", staleAdd[0].Data)
-	}
-	if staleAdd[1].What != what.Order || staleAdd[1].Jid != staleContainerElem.Jid() {
-		t.Fatalf("second stale Tree message = %+v, want parent Order", staleAdd[1])
-	}
-	if staleAdd[2].What != what.Call || staleAdd[2].Jid <= staleContainerElem.Jid() {
-		t.Fatalf("third stale Tree message = %+v, want child initializer Call", staleAdd[2])
-	}
-	if !strings.Contains(staleAdd[0].Data, `id="`+staleAdd[2].Jid.String()+`"`) {
-		t.Fatalf("stale Append HTML does not contain initializer target %s: %q", staleAdd[2].Jid, staleAdd[0].Data)
-	}
-	if want := `jawsCallWhenReady={"id":` + strconv.Quote(staleAdd[2].Jid.String()) + `,"path":"jawstreeInit","data":{"tree":"stale","options":0}}`; staleAdd[2].Data != want {
-		t.Fatalf("stale initializer data = %q, want %q", staleAdd[2].Data, want)
-	}
-
-	// Remove the Tree before browser readiness. The queued Call remains in the
-	// already-sent frame, so the client must use its originating Jid to suppress it.
-	staleContents.contents = nil
-	tr.Dirty(staleContents)
-	var staleRemove wire.WsMsg
+	// Queue an ordinary dirty update immediately after insertion. The production
+	// writer may coalesce it with the Append/Order/initializer messages above, so
+	// the browser regression replays all four in one WebSocket frame.
+	tree.Lock()
+	root.Children[0].Name = "Updated"
+	tree.Unlock()
+	jw.Dirty(root)
 	select {
-	case staleRemove = <-tr.OutCh:
+	case msg := <-tr.OutCh:
+		frames = append(frames, msg)
 	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for stale Tree removal")
+		t.Fatalf("timed out waiting for dynamic Tree update; got %+v", frames)
 	}
-	if staleRemove.What != what.Remove || staleRemove.Jid != staleContainerElem.Jid() ||
-		staleRemove.Data != staleAdd[2].Jid.String() {
-		t.Fatalf("stale Tree removal = %+v, want parent Remove of %s", staleRemove, staleAdd[2].Jid)
+	if frames[3].What != what.Call || frames[3].Jid != frames[2].Jid ||
+		!strings.Contains(frames[3].Data, `"name":"Updated"`) {
+		t.Fatalf("fourth dynamic message = %+v, want child jawstreeSet Call", frames[3])
 	}
 
-	// Replay the initial Call after jaws.js has loaded but before jawstree.js and
-	// treeview.js. The readiness queue must retain it until both dependencies exist.
-	initialFrameJSON, err := json.Marshal(string(initialCall.Append(nil)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Replay the live Container frames after DOMContentLoaded, matching the normal
-	// dynamic-update path after all shipped assets are ready.
 	var dynamicFrame []byte
-	for i := range got {
-		dynamicFrame = got[i].Append(dynamicFrame)
+	for i := range frames {
+		dynamicFrame = frames[i].Append(dynamicFrame)
 	}
 	dynamicFrameJSON, err := json.Marshal(string(dynamicFrame))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Replay both update passes before readiness: the Append queues initialization,
-	// then the Remove deletes its originating element while the static target stays.
-	var staleLifecycleFrame []byte
-	for i := range staleAdd {
-		staleLifecycleFrame = staleAdd[i].Append(staleLifecycleFrame)
-	}
-	staleLifecycleFrame = staleRemove.Append(staleLifecycleFrame)
-	staleLifecycleFrameJSON, err := json.Marshal(string(staleLifecycleFrame))
-	if err != nil {
-		t.Fatal(err)
-	}
-	jawstreeJS, err := assetsFS.ReadFile("assets/jawstree.js")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,61 +139,72 @@ func TestTreeInitialAndDynamicInitializationWithClientAssets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	dir := t.TempDir()
-	htmlPath := filepath.Join(dir, "dynamic-tree.html")
-	screenshotPath := filepath.Join(dir, "dynamic-tree.png")
-	profilePath := filepath.Join(dir, "firefox-profile")
-	if err := os.Mkdir(profilePath, 0o700); err != nil {
+	jawstreeJS, err := assetsFS.ReadFile("assets/jawstree.js")
+	if err != nil {
 		t.Fatal(err)
+	}
+
+	// Recreate the generated defer lifecycle with actual external scripts. The fake
+	// WebSocket records whether core JaWS waits for the later deferred dependencies
+	// before connecting, then delivers the genuine server frame.
+	dir := t.TempDir()
+	for name, data := range map[string][]byte{
+		"jaws.js":     []byte(jawsassets.JavascriptText),
+		"jawstree.js": jawstreeJS,
+		"treeview.js": treeviewJS,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	htmlText := `<!doctype html><html><head>
 <meta name="jawsKey" content="1">
 <style>#result{position:fixed;inset:0;z-index:9999;background:rgb(255,0,0)}</style>
-</head><body>` + initial.String() + `<div id="result"></div>
 <script>
+window.dynamicFrame = ` + string(dynamicFrameJSON) + `;
 window.WebSocket = class {
-	constructor() { this.readyState = 1; }
-	addEventListener() {}
+	constructor() {
+		this.readyState = 1;
+		window.connectedAfterAssets =
+			typeof window.jawstreeInit === "function" &&
+			typeof window.Treeview === "function";
+	}
+	addEventListener(name, fn) {
+		if (name === "message") {
+			queueMicrotask(function() {
+				fn({data: window.dynamicFrame});
+			});
+		}
+	}
 	send() {}
 };
 </script>
-<script>` + jawsassets.JavascriptText + `</script>
-<script>
-jawsMessage({data:` + string(initialFrameJSON) + `});
-jawsMessage({data:` + string(staleLifecycleFrameJSON) + `});
-window.jawstreeInitializerWasPending = (window.jawstree_initial === undefined);
-window.jawstreeRemovedBeforeReady =
-	(document.getElementById(` + strconv.Quote(staleAdd[2].Jid.String()) + `) === null);
-</script>
-<script>` + string(jawstreeJS) + `</script>
-<script>` + string(treeviewJS) + `</script>
+<script defer src="jaws.js"></script>
+<script defer src="jawstree.js"></script>
+<script defer src="treeview.js"></script>
+</head><body>` + initial.String() + `<div id="result"></div>
 <script>
 window.addEventListener("DOMContentLoaded", function() {
-	const initialTarget = document.getElementById("initial");
-	const initialText = initialTarget && initialTarget.querySelector(".treeview-node-text");
-	const initialTree = window.jawstree_initial;
-	jawsMessage({data:` + string(dynamicFrameJSON) + `});
-	const dynamicTarget = document.getElementById("dynamic");
-	const dynamicText = dynamicTarget && dynamicTarget.querySelector(".treeview-node-text");
-	const dynamicTree = window.jawstree_dynamic;
-	const staleTarget = document.getElementById("stale");
-	if (window.jawstreeInitializerWasPending &&
-		window.jawstreeRemovedBeforeReady &&
-		initialTree instanceof window.Treeview &&
-		initialText && initialText.textContent === "Before assets" &&
-		initialTarget.querySelector("ul") &&
-		dynamicTree instanceof window.Treeview &&
-		dynamicText && dynamicText.textContent === "Documents" &&
-		dynamicTarget.querySelector("ul") &&
-		window.jawstree_stale === undefined &&
-		staleTarget && !staleTarget.querySelector("ul")) {
-		document.getElementById("result").style.background = "rgb(0,255,0)";
-	}
+	setTimeout(function() {
+		const target = document.getElementById("dynamic");
+		const text = target && target.querySelector(".treeview-node-text");
+		if (window.connectedAfterAssets &&
+			window.jawstree_dynamic instanceof window.Treeview &&
+			text && text.textContent === "Updated" && target.querySelector("ul")) {
+			document.getElementById("result").style.background = "rgb(0,255,0)";
+		}
+	}, 0);
 });
 </script>
 </body></html>`
+
+	htmlPath := filepath.Join(dir, "dynamic-tree.html")
+	screenshotPath := filepath.Join(dir, "dynamic-tree.png")
+	profilePath := filepath.Join(dir, "firefox-profile")
 	if err := os.WriteFile(htmlPath, []byte(htmlText), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(profilePath, 0o700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -336,6 +230,6 @@ window.addEventListener("DOMContentLoaded", function() {
 	}
 	pixel := color.RGBAModel.Convert(img.At(32, 32)).(color.RGBA)
 	if pixel.R > 32 || pixel.G < 224 || pixel.B > 32 {
-		t.Fatalf("Tree readiness lifecycle failed through the shipped client assets; center pixel = %#v, want green", pixel)
+		t.Fatalf("dynamic Tree did not initialize through shipped assets; center pixel = %#v, want green", pixel)
 	}
 }
