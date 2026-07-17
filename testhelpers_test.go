@@ -3,6 +3,7 @@ package jaws
 import (
 	"bytes"
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -733,14 +734,9 @@ func TestNewRequestHarness_ReturnsNilOnClaimFailure(t *testing.T) {
 	}
 	t.Cleanup(jw.Close)
 
-	jw.reqPool.New = func() any {
-		rq := (&Request{
-			Jaws:   jw,
-			tagMap: make(map[any][]*Element),
-		}).clearLocked()
-		rq.claimed.Store(true)
-		return rq
-	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	jw.BaseContext = ctx
 
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
 	if rh := newRequestHarness(jw, hr); rh != nil {

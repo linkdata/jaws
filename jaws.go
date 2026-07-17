@@ -163,7 +163,7 @@ type Jaws struct {
 	serving                 atomic.Bool
 	defaultAuthOnce         sync.Once    // guards lazy creation of defaultAuthVal
 	defaultAuthVal          *DefaultAuth // shared fail-open Auth; see [Jaws.DefaultAuth]
-	reqPool                 sync.Pool
+	requestBufferPool       sync.Pool
 	serveJS                 *staticserve.StaticServe
 	serveCSS                *staticserve.StaticServe
 	mu                      deadlock.RWMutex // protects following
@@ -184,10 +184,11 @@ type Jaws struct {
 // New allocates a JaWS instance with the default configuration.
 //
 // The returned [Jaws] value is ready for use: static assets are embedded, the
-// broadcast channels and update ticker are allocated and the request pool is
-// primed. You must still start the processing loop with [Jaws.Serve] or
-// [Jaws.ServeWithTimeout] on its own goroutine before broadcasting. Call
-// [Jaws.Close] when finished with the instance to free associated resources.
+// broadcast channels and update ticker are allocated and the reusable request
+// buffer pool is primed. You must still start the processing loop with
+// [Jaws.Serve] or [Jaws.ServeWithTimeout] on its own goroutine before
+// broadcasting. Call [Jaws.Close] when finished with the instance to free
+// associated resources.
 func New() (jw *Jaws, err error) {
 	var serveJS, serveCSS *staticserve.StaticServe
 	if serveJS, err = staticserve.New("/jaws/.jaws.js", []byte(assets.JavascriptText)); err == nil {
@@ -214,11 +215,8 @@ func New() (jw *Jaws, err error) {
 			}
 			if err = tmp.GenerateHeadHTML(); err == nil {
 				jw = tmp
-				jw.reqPool.New = func() any {
-					return (&Request{
-						Jaws:   jw,
-						tagMap: make(map[any][]*Element),
-					}).clearLocked()
+				jw.requestBufferPool.New = func() any {
+					return &requestBuffers{tagMap: make(map[any][]*Element)}
 				}
 			}
 		}

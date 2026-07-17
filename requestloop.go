@@ -25,10 +25,9 @@ import (
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
 func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-chan wire.WsMsg, outboundMsgCh chan<- wire.WsMsg) {
 	jawsDoneCh := rq.Jaws.Done()
-	// Snapshot cancelFn under rq.mu, the same way ServeHTTP does: its only writers
-	// (claim, getRequestLocked, clearLocked) run strictly before or after process,
-	// so the captured value is stable for the loop's lifetime and the cleanup defer
-	// avoids a lock-free field read.
+	// Snapshot cancelFn under rq.mu, the same way ServeHTTP does. Initialization and
+	// claim run before process, so the captured value is stable for the loop's
+	// lifetime and the cleanup defer avoids a lock-free field read.
 	rq.mu.RLock()
 	httpDoneCh := rq.httpDoneCh
 	cancelFn := rq.cancelFn
