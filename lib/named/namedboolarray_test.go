@@ -178,30 +178,40 @@ func TestBoolArray_SingleSelectAbsentNameDeselects(t *testing.T) {
 	// deselecting the current selection, leaving Get() empty. Per the Set/JawsSet
 	// docs a "change" return means the selection changed, not that the name is now
 	// selected.
-	nba := NewBoolArray(false)
-	nba.Add("a", "A")
-	nba.Add("b", "B")
+	for _, tt := range []struct {
+		name  string
+		state bool
+	}{
+		{name: "true", state: true},
+		{name: "false", state: false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			nba := NewBoolArray(false).Add("a", "A").Add("b", "B")
 
-	if !nba.Set("a", true) {
-		t.Fatal("Set(a,true) reported no change")
-	}
-	if got := nba.Get(); got != "a" {
-		t.Fatalf("Get=%q want a", got)
-	}
-	// An absent name deselects the current selection and reports a change.
-	if !nba.Set("does-not-exist", true) {
-		t.Fatal("Set(absent,true) should report a change by deselecting the current selection")
-	}
-	if got := nba.Get(); got != "" {
-		t.Fatalf("Get=%q want empty after deselect", got)
-	}
-	// With nothing selected, a further absent-name set changes nothing.
-	if nba.Set("does-not-exist", true) {
-		t.Fatal("Set(absent,true) on an empty selection should report no change")
+			if !nba.Set("a", true) {
+				t.Fatal("Set(a,true) reported no change")
+			}
+			if got := nba.Get(); got != "a" {
+				t.Fatalf("Get=%q want a", got)
+			}
+			// An absent name deselects the current selection and reports a change,
+			// regardless of the requested state.
+			if !nba.Set("does-not-exist", tt.state) {
+				t.Fatalf("Set(absent,%t) should report a change by deselecting the current selection", tt.state)
+			}
+			if got := nba.Get(); got != "" {
+				t.Fatalf("Get=%q want empty after deselect", got)
+			}
+			// With nothing selected, a further absent-name set changes nothing.
+			if nba.Set("does-not-exist", tt.state) {
+				t.Fatalf("Set(absent,%t) on an empty selection should report no change", tt.state)
+			}
+		})
 	}
 
 	// JawsSet path: re-select, then JawsSet an absent name to deselect. A nil error
 	// means the selection changed; Get() is empty afterward. A repeat is unchanged.
+	nba := NewBoolArray(false).Add("a", "A").Add("b", "B")
 	_, rq := newCoreRequest(t)
 	e := rq.NewElement(noopUI{})
 	if !nba.Set("b", true) {
@@ -215,6 +225,18 @@ func TestBoolArray_SingleSelectAbsentNameDeselects(t *testing.T) {
 	}
 	if err := nba.JawsSet(e, ""); !errors.Is(err, jaws.ErrValueUnchanged) {
 		t.Fatalf("JawsSet(absent) on empty selection: got %v want ErrValueUnchanged", err)
+	}
+}
+
+func TestBoolArray_SingleSelectMatchedFalsePreservesOtherSelection(t *testing.T) {
+	nba := NewBoolArray(false).Add("a", "A").Add("b", "B")
+	nba.Set("b", true)
+
+	if nba.Set("a", false) {
+		t.Fatal("Set(a,false) should not change anything")
+	}
+	if got := nba.Get(); got != "b" {
+		t.Fatalf("Get=%q want b preserved", got)
 	}
 }
 
