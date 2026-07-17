@@ -272,6 +272,18 @@ Elements while an initial HTTP handler still holds them. Its key cannot be
 assigned to another Request while the retired Request remains reachable; no
 deadline is guaranteed for later reuse.
 
+`*Request` values are borrowed lifecycle objects. Do not store them in
+application state or pass them to background goroutines; copy the required
+application data and retain the Request context instead.
+
+An `*Element` belongs to its owning Request and embeds a pointer to it.
+Render-scoped widgets may retain child Elements they create between render and
+update calls within that Request lifecycle, as container helpers do, but should
+access them only from those calls. Do not let an Element escape the Request
+lifecycle or pass it to background work: when a Request that entered
+`ServeHTTP` returns, it may be placed in an internal pool, and the Element's
+embedded Request pointer may later represent an unrelated connection.
+
 Dirtying is two-stage: `Request.Dirty` and `Jaws.Dirty` expand tags and record
 them on the `Jaws` instance, then the serving loop distributes those tags to
 matching active requests and schedules `JawsUpdate` calls. Broadcast helpers
@@ -526,6 +538,23 @@ requested during the JavaScript WebSocket HTTP request.
 context passed to it. If the returned context is canceled or its deadline
 expires, a running Request's WebSocket loop wakes promptly even while idle; no
 browser event or broadcast is needed.
+
+Background work that must cancel the Request should retain its own derived
+context and cancellation function, not the Request pointer:
+
+```go
+var workCtx context.Context
+var cancel context.CancelCauseFunc
+rq.SetContext(func(parent context.Context) context.Context {
+	workCtx, cancel = context.WithCancelCause(parent)
+	return workCtx
+})
+go func() {
+	if err := run(workCtx); err != nil {
+		cancel(err)
+	}
+}()
+```
 
 ### Security of the WebSocket callback
 
