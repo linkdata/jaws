@@ -32,6 +32,33 @@ import (
 
 const testTimeout = time.Second * 3
 
+type eventErrorLogger struct {
+	mu   sync.Mutex
+	errs []error
+}
+
+func (*eventErrorLogger) Info(string, ...any) {}
+func (*eventErrorLogger) Warn(string, ...any) {}
+
+func (l *eventErrorLogger) Error(_ string, args ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := 0; i+1 < len(args); i += 2 {
+		if args[i] == "err" {
+			if err, ok := args[i+1].(error); ok {
+				l.errs = append(l.errs, err)
+			}
+		}
+	}
+}
+
+func (l *eventErrorLogger) loggedErrors() (errs []error) {
+	l.mu.Lock()
+	errs = append(errs, l.errs...)
+	l.mu.Unlock()
+	return
+}
+
 func fillWsCh(ch chan wire.WsMsg) {
 	for {
 		select {
@@ -2549,17 +2576,23 @@ func (ctx *observedDoneContext) Done() <-chan struct{} {
 
 func newTestServer(t *testing.T) (ts *testServer) {
 	t.Helper()
-	return newTestServerWithSession(t, true)
+	return newTestServerWithSession(t, true, nil)
+}
+
+func newTestServerWithLogger(t *testing.T, logger Logger) (ts *testServer) {
+	t.Helper()
+	return newTestServerWithSession(t, true, logger)
 }
 
 func newTestServerNoSession(t *testing.T) (ts *testServer) {
 	t.Helper()
-	return newTestServerWithSession(t, false)
+	return newTestServerWithSession(t, false, nil)
 }
 
-func newTestServerWithSession(t *testing.T, withSession bool) (ts *testServer) {
+func newTestServerWithSession(t *testing.T, withSession bool, logger Logger) (ts *testServer) {
 	t.Helper()
 	jw, _ := New()
+	jw.Logger = logger
 	ctx, cancel := context.WithTimeout(t.Context(), time.Hour)
 	rr := httptest.NewRecorder()
 	hr := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
@@ -2958,7 +2991,8 @@ func TestWS_ConnectFnFailureRefreshesClaimedSessionGrace(t *testing.T) {
 
 func TestWS_NormalExchange(t *testing.T) {
 	th := newTestHelper(t)
-	ts := newTestServer(t)
+	logger := &eventErrorLogger{}
+	ts := newTestServerWithLogger(t, logger)
 	defer ts.Close()
 
 	fooError := errors.New("this foo failed")
@@ -2978,6 +3012,7 @@ func TestWS_NormalExchange(t *testing.T) {
 		t.Error(resp.StatusCode)
 	}
 	defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
+	loggedBeforeEvent := len(logger.loggedErrors())
 
 	msg := wire.WsMsg{Jid: jidForTag(ts.rq, fooItem), What: what.Input}
 	ctx, cancel := context.WithTimeout(ts.ctx, testTimeout)
@@ -3004,6 +3039,14 @@ func TestWS_NormalExchange(t *testing.T) {
 	m2.FillAlert(fooError)
 	if !bytes.Equal(b, m2.Append(nil)) {
 		t.Error(b)
+	}
+
+	logged := logger.loggedErrors()
+	if len(logged) != loggedBeforeEvent+1 {
+		t.Fatalf("new logged errors = %v, want only the handler error", logged[loggedBeforeEvent:])
+	}
+	if !errors.Is(logged[loggedBeforeEvent], fooError) {
+		t.Fatalf("logged error = %v, want %v", logged[loggedBeforeEvent], fooError)
 	}
 }
 
