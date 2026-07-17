@@ -919,6 +919,31 @@ func TestRequest_ClaimRefreshesLastWriteAndStartServeGuards(t *testing.T) {
 	}
 }
 
+func TestRequest_AdvanceLastWriteSeconds(t *testing.T) {
+	tests := []struct {
+		name     string
+		previous int32
+		now      int32
+		want     int32
+	}{
+		{name: "forward", previous: 1, now: 2, want: 2},
+		{name: "backward", previous: 2, now: 1, want: 2},
+		{name: "equal", previous: 2, now: 2, want: 2},
+		{name: "wrap forward", previous: 1<<31 - 1, now: -1 << 31, want: -1 << 31},
+		{name: "wrap backward", previous: -1 << 31, now: 1<<31 - 1, want: -1 << 31},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rq := &Request{}
+			rq.lastWriteSeconds.Store(tt.previous)
+			rq.advanceLastWriteSeconds(tt.now)
+			if got := rq.lastWriteSeconds.Load(); got != tt.want {
+				t.Fatalf("lastWriteSeconds = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRequest_ClaimRejectsCanceledRequest(t *testing.T) {
 	jw, err := New()
 	if err != nil {

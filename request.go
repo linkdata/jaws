@@ -101,12 +101,23 @@ func (rq *Request) String() string {
 // pending-eviction logic spares it while a render is in flight.
 //
 // [RequestWriter.Write] calls it on every write. It is lock-free and safe to call
-// concurrently.
+// concurrently. Concurrent calls never move the recorded second backward.
 func (rq *Request) MarkWritten() {
-	// A single atomic store of the cached runtimeSeconds; no clock read. The recorded
-	// second drives the recency window in oldestEvictablePendingLocked and the idle
-	// expiry in maintenance.
-	rq.lastWriteSeconds.Store(rq.Jaws.runtimeSeconds.Load())
+	// A cached runtime sample avoids a clock read. The recorded second drives the
+	// recency window in oldestEvictablePendingLocked and the idle expiry in
+	// maintenance.
+	rq.advanceLastWriteSeconds(rq.Jaws.runtimeSeconds.Load())
+}
+
+func (rq *Request) advanceLastWriteSeconds(now int32) {
+	// A concurrent caller may already have stored a newer runtime sample while this
+	// caller was preempted after sampling it. Compare by signed modular difference,
+	// matching the elapsed-second calculations when the int32 counter wraps.
+	for previous := rq.lastWriteSeconds.Load(); now-previous > 0; previous = rq.lastWriteSeconds.Load() {
+		if rq.lastWriteSeconds.CompareAndSwap(previous, now) {
+			return
+		}
+	}
 }
 
 // destKey returns the Request's current identity key, read under rq.mu, for use as
@@ -162,7 +173,7 @@ func (rq *Request) claim(r *http.Request) error {
 			// Refresh the write second so a request claimed long after its initial
 			// render (a throttled or backgrounded tab) is not treated as idle and
 			// recycled in the window before ServeHTTP sets running.
-			rq.lastWriteSeconds.Store(rq.Jaws.runtimeSeconds.Load())
+			rq.advanceLastWriteSeconds(rq.Jaws.runtimeSeconds.Load())
 			return nil
 		}
 	}
