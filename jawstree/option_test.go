@@ -3,9 +3,10 @@ package jawstree
 import "testing"
 
 // TestOptionBitPositions pins each Option constant to the exact bit position that
-// jawstreeNew in assets/jawstree.js tests with a literal (1<<n). The two sides are a
-// hard cross-file coupling (see the comment in option.go); reordering or inserting a
-// constant would silently mis-wire the script, so this test fails if the mapping drifts.
+// jawstreeDecodeOptions in assets/jawstree.js tests with a literal (1<<n). The two
+// sides are a hard cross-file coupling (see the comment in option.go); reordering or
+// inserting a constant would silently mis-wire the script, so this test fails if the
+// mapping drifts.
 func TestOptionBitPositions(t *testing.T) {
 	for _, tc := range []struct {
 		name string

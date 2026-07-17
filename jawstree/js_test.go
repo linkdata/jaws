@@ -7,23 +7,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"strconv"
 	"testing"
 )
-
-type jsSetPathCall struct {
-	ID  string `json:"id"`
-	Set bool   `json:"set"`
-}
-
-type jsVarCall struct {
-	Path  string `json:"path"`
-	Value bool   `json:"value"`
-}
-
-// Asset files are already tracked by git. Keep these tests focused on browser
-// adapter behavior; do not add stored-hash provenance tests for files whose
-// contents and history are in the repository.
 
 func runJawstreeJSSnippet(t *testing.T, snippet string) string {
 	t.Helper()
@@ -56,446 +41,366 @@ eval(src);
 	return out.String()
 }
 
-func TestJawstreeJS_InitUsesPreloadedRoot(t *testing.T) {
-	raw := runJawstreeJSSnippet(t, `
-const root = { children: [{ id: "children.0", name: "Documents" }] };
-let got = null;
-const initialized = { ready: true };
-const container = { hidden: true };
-global.document = {
-	getElementById: function(id) {
-		return id === "Jid.7" ? container : null;
-	}
-};
-window["jawstreeroot_private"] = root;
-jawstreeNew = function(key, jid, data, options) {
-	got = { key: key, jid: jid, data: data, options: options };
-	return initialized;
-};
-
-jawstreeInit({ key: "private", jid: "Jid.7", options: 3 });
-process.stdout.write(JSON.stringify({
-	got: got,
-	usesRoot: got.data === root,
-	stored: window["jawstree_private"] === initialized,
-	visible: !container.hidden
-}));
-`)
-
-	var got struct {
-		Got struct {
-			Key     string `json:"key"`
-			Jid     string `json:"jid"`
-			Options int    `json:"options"`
-		} `json:"got"`
-		UsesRoot bool `json:"usesRoot"`
-		Stored   bool `json:"stored"`
-		Visible  bool `json:"visible"`
-	}
-	if err := json.Unmarshal([]byte(raw), &got); err != nil {
-		t.Fatalf("unexpected JSON output %q: %v", raw, err)
-	}
-	if got.Got.Key != "private" || got.Got.Jid != "Jid.7" || got.Got.Options != 3 {
-		t.Fatalf("initializer arguments = %+v, want key=private jid=Jid.7 options=3", got.Got)
-	}
-	if !got.UsesRoot {
-		t.Fatal("initializer did not use the root seeded by the hidden JsVar")
-	}
-	if !got.Stored {
-		t.Fatal("initializer did not store the constructed tree on window")
-	}
-	if !got.Visible {
-		t.Fatal("initializer did not unhide the managed Jid container")
-	}
-}
-
-func TestJawstreeJS_SetPathSingleSelectDeselect(t *testing.T) {
-	raw := runJawstreeJSSnippet(t, `
-function run(options, selected, arg) {
-	window["jawstree_tree"] = {
-		options: options,
-		calls: [],
-		getSelectedNodes: function() {
-			return selected.map(function(id) { return { id: id }; });
-		},
-		selectNodeById: function(id, set) {
-			this.calls.push({ id: id, set: set });
-		}
-	};
-	jawstreeSetPath(arg);
-	return window["jawstree_tree"].calls;
-}
-
-process.stdout.write(JSON.stringify({
-	deselectSelected: run(
-		{ multiSelectEnabled: false, cascadeSelectChildren: false },
-		["children.0"],
-		{ key: "tree", id: "children.0", set: false }
-	),
-	deselectUnselected: run(
-		{ multiSelectEnabled: false, cascadeSelectChildren: false },
-		["children.1"],
-		{ key: "tree", id: "children.0", set: false }
-	),
-	selectAlreadySelected: run(
-		{ multiSelectEnabled: false, cascadeSelectChildren: false },
-		["children.0"],
-		{ key: "tree", id: "children.0", set: true }
-	),
-	multiDeselectUnselected: run(
-		{ multiSelectEnabled: true, cascadeSelectChildren: false },
-		[],
-		{ key: "tree", id: "children.0", set: false }
-	),
-	cascadeDeselectSelected: run(
-		{ multiSelectEnabled: false, cascadeSelectChildren: true },
-		["children.0"],
-		{ key: "tree", id: "children.0", set: false }
-	)
-}));
-`)
-
-	var got struct {
-		DeselectSelected      []jsSetPathCall `json:"deselectSelected"`
-		DeselectUnselected    []jsSetPathCall `json:"deselectUnselected"`
-		SelectAlreadySelected []jsSetPathCall `json:"selectAlreadySelected"`
-		MultiDeselectUnsel    []jsSetPathCall `json:"multiDeselectUnselected"`
-		CascadeDeselectSel    []jsSetPathCall `json:"cascadeDeselectSelected"`
-	}
-	if err := json.Unmarshal([]byte(raw), &got); err != nil {
-		t.Fatalf("unexpected JSON output %q: %v", raw, err)
-	}
-
-	wantDeselect := []jsSetPathCall{{ID: "children.0", Set: false}}
-	if !reflect.DeepEqual(got.DeselectSelected, wantDeselect) {
-		t.Fatalf("deselectSelected = %#v, want %#v", got.DeselectSelected, wantDeselect)
-	}
-	if len(got.DeselectUnselected) != 0 {
-		t.Fatalf("deselectUnselected = %#v, want no call", got.DeselectUnselected)
-	}
-	if len(got.SelectAlreadySelected) != 0 {
-		t.Fatalf("selectAlreadySelected = %#v, want no call", got.SelectAlreadySelected)
-	}
-	if !reflect.DeepEqual(got.MultiDeselectUnsel, wantDeselect) {
-		t.Fatalf("multiDeselectUnselected = %#v, want %#v", got.MultiDeselectUnsel, wantDeselect)
-	}
-	if !reflect.DeepEqual(got.CascadeDeselectSel, wantDeselect) {
-		t.Fatalf("cascadeDeselectSelected = %#v, want %#v", got.CascadeDeselectSel, wantDeselect)
-	}
-}
-
-func TestJawstreeJS_SetPathSingleSelectCascadeReplay(t *testing.T) {
-	raw := runJawstreeJSSnippet(t, `
-window["jawstree_tree"] = {
-	options: { multiSelectEnabled: false, cascadeSelectChildren: true },
-	selected: [],
-	descendants: { "parent": ["child"] },
-	getSelectedNodes: function() {
-		return this.selected.map(function(id) { return { id: id }; });
-	},
-	selectNodeById: function(id, set) {
-		if (set) {
-			this.selected = [id].concat(this.descendants[id] || []);
-			return;
-		}
-		var remove = [id].concat(this.descendants[id] || []);
-		this.selected = this.selected.filter(function(selectedID) {
-			return remove.indexOf(selectedID) == -1;
-		});
-	}
-};
-
-jawstreeSetPath({ key: "tree", id: "parent", set: true });
-jawstreeSetPath({ key: "tree", id: "child", set: true });
-process.stdout.write(JSON.stringify(window["jawstree_tree"].selected));
-`)
-
-	var got []string
-	if err := json.Unmarshal([]byte(raw), &got); err != nil {
-		t.Fatalf("unexpected JSON output %q: %v", raw, err)
-	}
-	want := []string{"parent", "child"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("selected = %#v, want %#v", got, want)
-	}
-}
-
-func TestJawstreeJS_UpdatesAreScopedByKey(t *testing.T) {
-	raw := runJawstreeJSSnippet(t, `
-function makeTree() {
-	return {
-		options: { multiSelectEnabled: true, cascadeSelectChildren: false },
-		sets: [],
-		selects: [],
-		jawsApplyingSet: false,
-		setData: function(data) { this.sets.push(data.length); },
-		getSelectedNodes: function() { return []; },
-		selectNodeById: function(id, set) { this.selects.push({ id: id, set: set }); }
-	};
-}
-
-window["jawstreeroot_one"] = { marker: "old-one" };
-window["jawstreeroot_two"] = { marker: "old-two" };
-window["jawstree_one"] = makeTree();
-window["jawstree_two"] = makeTree();
-
-const next = { marker: "new-one" };
-jawstreeSet({ key: "one", data: next });
-jawstreeSetPath({ key: "two", id: "children.0", set: false });
-
-process.stdout.write(JSON.stringify({
-	oneSets: window["jawstree_one"].sets,
-	oneSelects: window["jawstree_one"].selects,
-	twoSets: window["jawstree_two"].sets,
-	twoSelects: window["jawstree_two"].selects,
-	oneRoot: window["jawstreeroot_one"],
-	twoRoot: window["jawstreeroot_two"]
-}));
-`)
-
-	var got struct {
-		OneSets    []int             `json:"oneSets"`
-		OneSelects []jsSetPathCall   `json:"oneSelects"`
-		TwoSets    []int             `json:"twoSets"`
-		TwoSelects []jsSetPathCall   `json:"twoSelects"`
-		OneRoot    map[string]string `json:"oneRoot"`
-		TwoRoot    map[string]string `json:"twoRoot"`
-	}
-	if err := json.Unmarshal([]byte(raw), &got); err != nil {
-		t.Fatalf("unexpected JSON output %q: %v", raw, err)
-	}
-	if !reflect.DeepEqual(got.OneSets, []int{0}) || len(got.OneSelects) != 0 {
-		t.Fatalf("first tree calls = sets %#v selects %#v", got.OneSets, got.OneSelects)
-	}
-	if len(got.TwoSets) != 0 || !reflect.DeepEqual(got.TwoSelects, []jsSetPathCall{{ID: "children.0", Set: false}}) {
-		t.Fatalf("second tree calls = sets %#v selects %#v", got.TwoSets, got.TwoSelects)
-	}
-	if got.OneRoot["marker"] != "new-one" || got.TwoRoot["marker"] != "old-two" {
-		t.Fatalf("roots crossed keys: one=%#v two=%#v", got.OneRoot, got.TwoRoot)
-	}
-}
-
-func TestJawstreeJS_NewSingleSelectCascadeSnapshot(t *testing.T) {
-	raw := runJawstreeJSSnippet(t, `
-function collectDescendantIDs(node, ids) {
-		if (node.children) {
-			node.children.forEach(function(child) {
-				ids.push(child.id);
-				collectDescendantIDs(child, ids);
-			});
-		}
-	}
-
-	function Treeview(options) {
-		this.options = options;
-		this.nodes = {};
-		this.selected = [];
-		this.setData(options.data);
-	}
-
-	Treeview.prototype.getSelectedNodes = function() {
-		return this.selected.map(function(id) { return { id: id }; });
-	};
-
-	Treeview.prototype.selectNodeById = function(id, set) {
-		var node = this.nodes[id];
-		if (!node) {
-			return;
-		}
-		if (set && this.options.cascadeSelectChildren && !this.options.multiSelectEnabled) {
-			var ids = [id];
-			collectDescendantIDs(node, ids);
-			this.selected = ids;
-			return;
-		}
-		if (set) {
-			if (this.selected.indexOf(id) == -1) {
-				this.selected.push(id);
-			}
-			return;
-		}
-		this.selected = this.selected.filter(function(selectedID) { return selectedID != id; });
-	};
-
-	Treeview.prototype.setData = function(data) {
-		var selectedIDs = [];
-		var self = this;
-		this.nodes = {};
-		this.selected = [];
-		function walk(node) {
-			self.nodes[node.id] = node;
-			if (node.selected) {
-				selectedIDs.push(node.id);
-			}
-			if (node.children) {
-				node.children.forEach(walk);
-			}
-		}
-		data.forEach(walk);
-		selectedIDs.forEach(function(id) {
-			self.selectNodeById(id, true);
-			self.options.onSelectionChange(self.getSelectedNodes());
-		});
-	};
-
-	global.Treeview = Treeview;
-	var calls = [];
-	global.jawsVar = function(path, value) {
-		calls.push({ path: path, value: value });
-	};
-
-	var root = { children: [{
-		id: "parent",
-		name: "parent",
-		selected: true,
-		children: [{
-			id: "child",
-			name: "child",
-			selected: true,
-			children: []
-		}]
-	}]};
-
-	window["jawstreeroot_tree"] = root;
-	window["jawstree_tree"] = jawstreeNew("tree", "Jid.1", root, `+strconv.Itoa(int(CascadeSelectChildren))+`);
-
-	process.stdout.write(JSON.stringify({
-		selected: window["jawstree_tree"].selected,
-		parentSelected: window["jawstreeroot_tree"].children[0].selected,
-		childSelected: window["jawstreeroot_tree"].children[0].children[0].selected,
-		calls: calls
-	}));
-	`)
-
-	var got struct {
-		Selected       []string    `json:"selected"`
-		ParentSelected bool        `json:"parentSelected"`
-		ChildSelected  bool        `json:"childSelected"`
-		Calls          []jsVarCall `json:"calls"`
-	}
-	if err := json.Unmarshal([]byte(raw), &got); err != nil {
-		t.Fatalf("unexpected JSON output %q: %v", raw, err)
-	}
-	want := []string{"parent", "child"}
-	if !reflect.DeepEqual(got.Selected, want) {
-		t.Fatalf("selected = %#v, want %#v", got.Selected, want)
-	}
-	if !got.ParentSelected || !got.ChildSelected {
-		t.Fatalf("root selection changed: parent=%v child=%v, want both true", got.ParentSelected, got.ChildSelected)
-	}
-	if len(got.Calls) != 0 {
-		t.Fatalf("jawsVar calls during jawstreeNew = %#v, want none", got.Calls)
-	}
-}
-
-func TestJawstreeJS_SetSingleSelectCascadeSnapshot(t *testing.T) {
-	raw := runJawstreeJSSnippet(t, `
-function collectDescendantIDs(node, ids) {
-	if (node.children) {
-		node.children.forEach(function(child) {
-			ids.push(child.id);
-			collectDescendantIDs(child, ids);
-		});
-	}
-}
+// jsMock installs a faithful stand-in for the vendored Quercus Treeview, plus document
+// and jaws stubs. selectNodeById replicates the real _selectNode (treeview.js:503-628)
+// exactly, including its collateral effects the adapter must survive: a single-select
+// deselect clears the WHOLE selection, and a cascade select/deselect toggles every
+// descendant. It also fires onSelectionChange on every selectNodeById, like the real
+// widget, so the adapter's echo guard is exercised. A mock that omitted these quirks is
+// what let earlier reconcile bugs pass; keep it in lockstep with _selectNode.
+const jsMock = `
+var sends = [];
+global.jaws = { readyState: 1, send: function (s) { sends.push(s); } };
+var container = { hidden: true };
+global.document = { getElementById: function () { return container; } };
 
 function Treeview(options) {
 	this.options = options;
-	this.nodes = {};
-	this.selected = [];
-}
-
-Treeview.prototype.getSelectedNodes = function() {
-	return this.selected.map(function(id) { return { id: id }; });
-};
-
-Treeview.prototype.selectNodeById = function(id, set) {
-	var node = this.nodes[id];
-	if (!node) {
-		return;
-	}
-	if (set && this.options.cascadeSelectChildren && !this.options.multiSelectEnabled) {
-		var ids = [id];
-		collectDescendantIDs(node, ids);
-		this.selected = ids;
-		return;
-	}
-	if (set) {
-		if (this.selected.indexOf(id) == -1) {
-			this.selected.push(id);
-		}
-		return;
-	}
-	this.selected = this.selected.filter(function(selectedID) { return selectedID != id; });
-};
-
-Treeview.prototype.setData = function(data) {
-	var selectedIDs = [];
+	this.selected = new Set();
+	this._nodes = {};
 	var self = this;
-	this.nodes = {};
-	this.selected = [];
-	function walk(node) {
-		self.nodes[node.id] = node;
-		if (node.selected) {
-			selectedIDs.push(node.id);
+	(function index(nodes) {
+		if (!nodes) { return; }
+		nodes.forEach(function (n) {
+			self._nodes[n.id] = { selectable: n.selectable, childIds: (n.children || []).map(function (c) { return c.id; }) };
+			index(n.children);
+		});
+	})(options.data);
+	(function apply(nodes) {
+		if (!nodes) { return; }
+		nodes.forEach(function (n) { if (n.selected) { self.selectNodeById(n.id, true); } apply(n.children); });
+	})(options.data);
+}
+Treeview.prototype._descendants = function (id) {
+	var out = [];
+	var self = this;
+	(function rec(cid) {
+		var node = self._nodes[cid];
+		if (!node) { return; }
+		node.childIds.forEach(function (k) { out.push(k); rec(k); });
+	})(id);
+	return out;
+};
+Treeview.prototype.getSelectedNodes = function () {
+	return Array.from(this.selected).map(function (id) { return { id: id }; });
+};
+Treeview.prototype._fire = function () {
+	if (this.options.onSelectionChange) { this.options.onSelectionChange(this.getSelectedNodes()); }
+};
+Treeview.prototype.selectNodeById = function (id, shouldSelect) {
+	var node = this._nodes[id];
+	if (!node) { return; }
+	if (node.selectable === false && shouldSelect) { return; }
+	var opt = this.options;
+	var self = this;
+	if (opt.cascadeSelectChildren) {
+		var chain = [id].concat(this._descendants(id));
+		if (shouldSelect) {
+			if (!opt.multiSelectEnabled) { this.selected.clear(); }
+			chain.forEach(function (k) { if (self._nodes[k].selectable !== false) { self.selected.add(k); } });
+		} else {
+			chain.forEach(function (k) { self.selected.delete(k); });
 		}
-		if (node.children) {
-			node.children.forEach(walk);
-		}
+	} else if (opt.multiSelectEnabled) {
+		if (shouldSelect) { this.selected.add(id); } else { this.selected.delete(id); }
+	} else {
+		var wasSole = this.selected.has(id) && this.selected.size === 1;
+		this.selected.clear();
+		if (shouldSelect && !wasSole) { this.selected.add(id); }
 	}
-	data.forEach(walk);
-	selectedIDs.forEach(function(id) {
-		self.selectNodeById(id, true);
-		self.options.onSelectionChange(self.getSelectedNodes());
-	});
+	this._fire();
 };
-
+Treeview.prototype.setData = function (data) {
+	this.selected = new Set();
+	this.options.data = data;
+	this._nodes = {};
+	var self = this;
+	(function index(nodes) {
+		if (!nodes) { return; }
+		nodes.forEach(function (n) { self._nodes[n.id] = { selectable: n.selectable, childIds: (n.children || []).map(function (c) { return c.id; }) }; index(n.children); });
+	})(data);
+	(function apply(nodes) {
+		if (!nodes) { return; }
+		nodes.forEach(function (n) { if (n.selected) { self.selectNodeById(n.id, true); } apply(n.children); });
+	})(data);
+};
 global.Treeview = Treeview;
-var calls = [];
-global.jawsVar = function(path, value) {
-	calls.push({ path: path, value: value });
-};
 
-var root = { children: [{
-	id: "parent",
-	name: "parent",
-	selected: true,
-	children: [{
-		id: "child",
-		name: "child",
-		selected: true,
-		children: []
-	}]
-}]};
+function selectedIds(t) {
+	return t.getSelectedNodes().map(function (n) { return n.id; }).sort();
+}
+`
 
-window["jawstree_tree"] = jawstreeNew("tree", "Jid.1", root, `+strconv.Itoa(int(CascadeSelectChildren))+`);
-jawstreeSet({ key: "tree", data: root });
-
+func TestJawstreeJS_DecodeOptions(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, `
 process.stdout.write(JSON.stringify({
-	selected: window["jawstree_tree"].selected,
-	parentSelected: window["jawstreeroot_tree"].children[0].selected,
-	childSelected: window["jawstreeroot_tree"].children[0].children[0].selected,
-	calls: calls
+	mixed: jawstreeDecodeOptions((1<<0)|(1<<2)|(1<<8)),
+	disabled: jawstreeDecodeOptions(1<<6)
 }));
 `)
-
 	var got struct {
-		Selected       []string    `json:"selected"`
-		ParentSelected bool        `json:"parentSelected"`
-		ChildSelected  bool        `json:"childSelected"`
-		Calls          []jsVarCall `json:"calls"`
+		Mixed    map[string]bool `json:"mixed"`
+		Disabled map[string]bool `json:"disabled"`
 	}
 	if err := json.Unmarshal([]byte(raw), &got); err != nil {
-		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+		t.Fatalf("unexpected JSON %q: %v", raw, err)
 	}
-	want := []string{"parent", "child"}
-	if !reflect.DeepEqual(got.Selected, want) {
-		t.Fatalf("selected = %#v, want %#v", got.Selected, want)
+	if !got.Mixed["searchEnabled"] || !got.Mixed["multiSelectEnabled"] || !got.Mixed["checkboxSelectionEnabled"] {
+		t.Fatalf("mixed decode = %#v", got.Mixed)
 	}
-	if !got.ParentSelected || !got.ChildSelected {
-		t.Fatalf("root selection changed: parent=%v child=%v, want both true", got.ParentSelected, got.ChildSelected)
+	if !got.Mixed["nodeSelectionEnabled"] {
+		t.Fatalf("nodeSelectionEnabled should default true: %#v", got.Mixed)
 	}
-	if len(got.Calls) != 0 {
-		t.Fatalf("jawsVar calls during jawstreeSet = %#v, want none", got.Calls)
+	if got.Disabled["nodeSelectionEnabled"] {
+		t.Fatalf("NodeSelectionDisabled bit must clear nodeSelectionEnabled: %#v", got.Disabled)
+	}
+}
+
+func TestJawstreeJS_BitmapRoundTrip(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, `
+var b = jawstreeEncodeBitmap(new Set([1, 3]), 5);
+var back = Array.from(jawstreeDecodeBitmap(b, 5)).sort(function (a, b) { return a - b; });
+process.stdout.write(JSON.stringify({ b: b, back: back }));
+`)
+	var got struct {
+		B    string `json:"b"`
+		Back []int  `json:"back"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON %q: %v", raw, err)
+	}
+	if got.B != "Cg==" {
+		t.Fatalf("bitmap = %q, want Cg==", got.B)
+	}
+	if !reflect.DeepEqual(got.Back, []int{1, 3}) {
+		t.Fatalf("decoded = %v, want [1 3]", got.Back)
+	}
+}
+
+func TestJawstreeJS_InitBuildsFromData(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, jsMock+`
+var data = { children: [
+	{ id: "children.0", name: "a" },
+	{ id: "children.1", name: "b", selected: true }
+] };
+jawstreeInit({ key: "k", jid: "Jid.1", options: (1<<2), data: data });
+var t = window["jawstree_k"];
+process.stdout.write(JSON.stringify({
+	visible: !container.hidden,
+	isTreeview: t instanceof Treeview,
+	byJid: window["jawstree_Jid.1"] === t,
+	selected: selectedIds(t),
+	lastServerSet: Array.from(t.lastServerSet),
+	count: t.jawsNodeCount,
+	sends: sends
+}));
+`)
+	var got struct {
+		Visible       bool     `json:"visible"`
+		IsTreeview    bool     `json:"isTreeview"`
+		ByJid         bool     `json:"byJid"`
+		Selected      []string `json:"selected"`
+		LastServerSet []int    `json:"lastServerSet"`
+		Count         int      `json:"count"`
+		Sends         []string `json:"sends"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON %q: %v", raw, err)
+	}
+	if !got.Visible || !got.IsTreeview || !got.ByJid {
+		t.Fatalf("init did not unhide/build/register: %+v", got)
+	}
+	if !reflect.DeepEqual(got.Selected, []string{"children.1"}) {
+		t.Fatalf("initial selection = %v, want [children.1]", got.Selected)
+	}
+	if !reflect.DeepEqual(got.LastServerSet, []int{2}) {
+		t.Fatalf("lastServerSet = %v, want [2]", got.LastServerSet)
+	}
+	if got.Count != 3 {
+		t.Fatalf("node count = %d, want 3 (root + 2)", got.Count)
+	}
+	if len(got.Sends) != 0 {
+		t.Fatalf("init leaked outbound frames: %v", got.Sends)
+	}
+}
+
+// TestJawstreeJS_SelectionReconcile drives the reconcile against the faithful mock in
+// the two modes whose collateral effects broke the naive one-pass reconcile: a
+// single-select switch must leave only the new node (not clear everything), and a
+// cascade parent-deselect must keep the still-desired children.
+func TestJawstreeJS_SelectionReconcile(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, jsMock+`
+var flat = { children: [{ id: "children.0", name: "A" }, { id: "children.1", name: "B" }] };
+jawstreeInit({ key: "s", jid: "Jid.1", options: 0, data: flat }); // single-select
+var s = window["jawstree_Jid.1"];
+jawstreeSelection({ key: "s", jid: "Jid.1", s: [1] });
+var afterA = selectedIds(s);
+jawstreeSelection({ key: "s", jid: "Jid.1", s: [2] }); // switch A -> B
+var afterSwitch = selectedIds(s);
+jawstreeSelection({ key: "s", jid: "Jid.1", s: [] });
+var afterClear = selectedIds(s);
+
+var tree = { children: [{ id: "children.0", name: "P", children: [
+	{ id: "children.0.children.0", name: "c1" },
+	{ id: "children.0.children.1", name: "c2" }
+] }] };
+jawstreeInit({ key: "c", jid: "Jid.2", options: (1<<2)|(1<<7), data: tree }); // multi + cascade
+var c = window["jawstree_Jid.2"];
+jawstreeSelection({ key: "c", jid: "Jid.2", s: [1, 2, 3] });
+var afterAll = selectedIds(c);
+jawstreeSelection({ key: "c", jid: "Jid.2", s: [2, 3] }); // parent deselected server-side
+var afterParentDrop = selectedIds(c);
+
+process.stdout.write(JSON.stringify({
+	afterA: afterA, afterSwitch: afterSwitch, afterClear: afterClear,
+	afterAll: afterAll, afterParentDrop: afterParentDrop, sends: sends
+}));
+`)
+	var got struct {
+		AfterA          []string `json:"afterA"`
+		AfterSwitch     []string `json:"afterSwitch"`
+		AfterClear      []string `json:"afterClear"`
+		AfterAll        []string `json:"afterAll"`
+		AfterParentDrop []string `json:"afterParentDrop"`
+		Sends           []string `json:"sends"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON %q: %v", raw, err)
+	}
+	if !reflect.DeepEqual(got.AfterA, []string{"children.0"}) {
+		t.Fatalf("select A = %v, want [children.0]", got.AfterA)
+	}
+	if !reflect.DeepEqual(got.AfterSwitch, []string{"children.1"}) {
+		t.Fatalf("single-select switch A->B = %v, want [children.1] only (blocker 1)", got.AfterSwitch)
+	}
+	if len(got.AfterClear) != 0 {
+		t.Fatalf("clear = %v, want empty", got.AfterClear)
+	}
+	if !reflect.DeepEqual(got.AfterAll, []string{"children.0", "children.0.children.0", "children.0.children.1"}) {
+		t.Fatalf("cascade select-all = %v", got.AfterAll)
+	}
+	if !reflect.DeepEqual(got.AfterParentDrop, []string{"children.0.children.0", "children.0.children.1"}) {
+		t.Fatalf("cascade parent-drop = %v, want the two children kept (blocker 2)", got.AfterParentDrop)
+	}
+	if len(got.Sends) != 0 {
+		t.Fatalf("reconcile produced %d outbound frames, want 0 (echo guard)", len(got.Sends))
+	}
+}
+
+func TestJawstreeJS_OnSelectionChangeSendsDelta(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, jsMock+`
+var data = { children: [{ id: "children.0", name: "a" }, { id: "children.1", name: "b" }] };
+jawstreeInit({ key: "k", jid: "Jid.1", options: (1<<2), data: data });
+var t = window["jawstree_Jid.1"];
+// A user selecting children.0 (index 1): the widget mutates and fires onSelectionChange.
+t.selectNodeById("children.0", true);
+process.stdout.write(JSON.stringify({ sends: sends, baseline: Array.from(t.lastServerSet) }));
+`)
+	var got struct {
+		Sends    []string `json:"sends"`
+		Baseline []int    `json:"baseline"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON %q: %v", raw, err)
+	}
+	if len(got.Sends) != 1 {
+		t.Fatalf("outbound frames = %v, want exactly one", got.Sends)
+	}
+	want := "Input\tJid.1\t{\"d\":{\"add\":[1],\"remove\":[]}}\n"
+	if got.Sends[0] != want {
+		t.Fatalf("outbound frame = %q, want %q", got.Sends[0], want)
+	}
+	if !reflect.DeepEqual(got.Baseline, []int{1}) {
+		t.Fatalf("baseline advanced to %v on successful send, want [1]", got.Baseline)
+	}
+}
+
+// TestJawstreeJS_DroppedSendDoesNotAdvanceBaseline verifies that when the socket is
+// not open the outgoing delta is not lost: the baseline is not advanced, so the next
+// gesture re-diffs from it and carries the earlier change.
+func TestJawstreeJS_DroppedSendDoesNotAdvanceBaseline(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, jsMock+`
+var data = { children: [{ id: "children.0", name: "a" }, { id: "children.1", name: "b" }] };
+jawstreeInit({ key: "k", jid: "Jid.1", options: (1<<2), data: data });
+var t = window["jawstree_Jid.1"];
+global.jawsCanSend = function () { return false; }; // socket not open
+t.selectNodeById("children.0", true); // dropped
+var afterDrop = { sends: sends.length, baseline: Array.from(t.lastServerSet) };
+global.jawsCanSend = function () { return true; }; // socket opens
+t.selectNodeById("children.1", true); // now sends both selections
+var afterOpen = { sends: sends.slice(), baseline: Array.from(t.lastServerSet).sort() };
+process.stdout.write(JSON.stringify({ afterDrop: afterDrop, afterOpen: afterOpen }));
+`)
+	var got struct {
+		AfterDrop struct {
+			Sends    int   `json:"sends"`
+			Baseline []int `json:"baseline"`
+		} `json:"afterDrop"`
+		AfterOpen struct {
+			Sends    []string `json:"sends"`
+			Baseline []int    `json:"baseline"`
+		} `json:"afterOpen"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON %q: %v", raw, err)
+	}
+	if got.AfterDrop.Sends != 0 || len(got.AfterDrop.Baseline) != 0 {
+		t.Fatalf("dropped send: sends=%d baseline=%v, want 0 sends and empty baseline", got.AfterDrop.Sends, got.AfterDrop.Baseline)
+	}
+	// multi-select adds both children; the re-diff after the socket opens carries both.
+	if len(got.AfterOpen.Sends) != 1 {
+		t.Fatalf("after open: %d frames, want one carrying both changes", len(got.AfterOpen.Sends))
+	}
+	if got.AfterOpen.Sends[0] != "Input\tJid.1\t{\"d\":{\"add\":[1,2],\"remove\":[]}}\n" {
+		t.Fatalf("after open frame = %q, want add [1,2]", got.AfterOpen.Sends[0])
+	}
+	if !reflect.DeepEqual(got.AfterOpen.Baseline, []int{1, 2}) {
+		t.Fatalf("baseline after open = %v, want [1 2]", got.AfterOpen.Baseline)
+	}
+}
+
+// TestJawstreeJS_ScopedByJid covers one Tree rendered by two elements on a page: each
+// jid has its own widget, and a selection update addresses exactly one of them.
+func TestJawstreeJS_ScopedByJid(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, jsMock+`
+var data = { children: [{ id: "children.0", name: "a" }] };
+// Same key, distinct jids — two renders of one shared Tree.
+jawstreeInit({ key: "k", jid: "Jid.1", options: (1<<2), data: data });
+jawstreeInit({ key: "k", jid: "Jid.2", options: (1<<2), data: data });
+var one = window["jawstree_Jid.1"], two = window["jawstree_Jid.2"];
+jawstreeSelection({ key: "k", jid: "Jid.1", s: [1] });
+var afterOne = { one: selectedIds(one), two: selectedIds(two) };
+jawstreeSelection({ key: "k", jid: "Jid.2", s: [1] });
+var afterTwo = { one: selectedIds(one), two: selectedIds(two) };
+process.stdout.write(JSON.stringify({
+	distinct: one !== two,
+	aliasIsTreeview: window["jawstree_k"] instanceof Treeview,
+	afterOne: afterOne, afterTwo: afterTwo
+}));
+`)
+	var got struct {
+		Distinct        bool `json:"distinct"`
+		AliasIsTreeview bool `json:"aliasIsTreeview"`
+		AfterOne        struct {
+			One []string `json:"one"`
+			Two []string `json:"two"`
+		} `json:"afterOne"`
+		AfterTwo struct {
+			One []string `json:"one"`
+			Two []string `json:"two"`
+		} `json:"afterTwo"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON %q: %v", raw, err)
+	}
+	if !got.Distinct || !got.AliasIsTreeview {
+		t.Fatalf("expected two distinct widgets and a Treeview key alias: %+v", got)
+	}
+	// Updating Jid.1 must not touch Jid.2, and vice-versa.
+	if !reflect.DeepEqual(got.AfterOne.One, []string{"children.0"}) || len(got.AfterOne.Two) != 0 {
+		t.Fatalf("update to Jid.1 leaked: one=%v two=%v", got.AfterOne.One, got.AfterOne.Two)
+	}
+	if !reflect.DeepEqual(got.AfterTwo.Two, []string{"children.0"}) {
+		t.Fatalf("update to Jid.2 did not apply: %v", got.AfterTwo.Two)
 	}
 }

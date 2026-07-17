@@ -26,3 +26,10 @@ const (
 	// CheckboxSelectionEnabled renders checkbox selection controls.
 	CheckboxSelectionEnabled
 )
+
+// allOptions is the OR of every defined [Option] bit. [New] rejects any bit outside
+// it so an unknown flag surfaces as [ErrInvalidTree] rather than a tree that renders
+// with a garbled options value.
+const allOptions = SearchEnabled | InitiallyExpanded | MultiSelectEnabled |
+	ShowSelectAllButton | ShowInvertSelectionButton | ShowExpandCollapseAllButtons |
+	NodeSelectionDisabled | CascadeSelectChildren | CheckboxSelectionEnabled

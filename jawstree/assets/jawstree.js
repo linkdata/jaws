@@ -1,12 +1,23 @@
-function jawstreeForEachNode(path, node, fn) {
-    fn(path, node);
-    if (node.children) {
-        var i;
-        for (i = 0; i < node.children.length; i++) {
-            jawstreeForEachNode(path+'.children.'+i, node.children[i], fn);
-        }
-    }
-}
+// jawstree.js is the local JaWS adapter for the vendored Quercus.js treeview
+// (treeview.js). It builds one Quercus Treeview per rendered TreeView element and
+// keeps its selection in sync with the server-authoritative jawstree.Tree.
+//
+// Server -> client uses two verbs, both element-scoped JsCalls:
+//   jawstreeInit({key, jid, options, data})   build the widget once
+//   jawstreeSelection({key, s:[idx...] | b:"<base64 bitmap>"})   absolute selection
+// Client -> server sends one Input frame per interaction carrying either a delta
+// {"d":{"add":[idx...],"remove":[idx...]}} of preorder node indices, or, when that
+// would be large, an absolute bitmap {"b":"<base64>"}.
+//
+// Selection is reconciled with the public selectNodeById only; the widget is never
+// rebuilt for a selection change, so the client's local expansion state survives.
+// Node identity on the wire is the preorder index; the DOM data-id stays the
+// positional path Quercus renders.
+
+// jawstreeDeltaThreshold is the encoded-delta size (bytes) above which the adapter
+// sends an absolute bitmap instead, keeping every frame within the jaws 32 KiB
+// inbound WebSocket limit even for a select-all over a very large tree.
+var jawstreeDeltaThreshold = 24 * 1024;
 
 function jawstreeTopSelectedChildren(children, parentSelected) {
     var result = [];
@@ -37,8 +48,210 @@ function jawstreeViewChildren(data, multiSelectEnabled, cascadeSelectChildren) {
     return children;
 }
 
-function jawstreeSetData(t, data) {
-    t.setData(jawstreeViewChildren(data, t.options.multiSelectEnabled, t.options.cascadeSelectChildren));
+function jawstreeDecodeOptions(options) {
+    /*jslint bitwise: true */
+    return {
+        searchEnabled: Boolean(options & (1 << 0)),
+        initiallyExpanded: Boolean(options & (1 << 1)),
+        multiSelectEnabled: Boolean(options & (1 << 2)),
+        showSelectAllButton: Boolean(options & (1 << 3)),
+        showInvertSelectionButton: Boolean(options & (1 << 4)),
+        showExpandCollapseAllButtons: Boolean(options & (1 << 5)),
+        nodeSelectionEnabled: !(options & (1 << 6)),
+        cascadeSelectChildren: Boolean(options & (1 << 7)),
+        checkboxSelectionEnabled: Boolean(options & (1 << 8))
+    };
+    /*jslint bitwise: false */
+}
+
+// jawstreeBuildIndex walks the wire tree in the same preorder the server uses,
+// numbering root as 0 and each descendant in order, and returns the index<->id maps
+// plus the total node count. The root carries no id and is never selectable.
+function jawstreeBuildIndex(root) {
+    var idByIndex = [];
+    var indexById = {};
+    var next = 0;
+    (function walk(node) {
+        idByIndex[next] = node.id;
+        if (node.id !== undefined) {
+            indexById[node.id] = next;
+        }
+        next++;
+        if (node.children) {
+            for (var i = 0; i < node.children.length; i++) {
+                walk(node.children[i]);
+            }
+        }
+    })(root);
+    return { idByIndex: idByIndex, indexById: indexById, count: next };
+}
+
+// jawstreeSelectedIndexSet returns the currently selected nodes of t as a Set of
+// preorder indices.
+function jawstreeSelectedIndexSet(t) {
+    var set = new Set();
+    var nodes = t.getSelectedNodes();
+    for (var i = 0; i < nodes.length; i++) {
+        var idx = t.jawsIndexById[nodes[i].id];
+        if (idx !== undefined) {
+            set.add(idx);
+        }
+    }
+    return set;
+}
+
+function jawstreeSetsEqual(a, b) {
+    if (a.size !== b.size) {
+        return false;
+    }
+    var equal = true;
+    a.forEach(function (x) {
+        if (!b.has(x)) {
+            equal = false;
+        }
+    });
+    return equal;
+}
+
+function jawstreeBase64Encode(bytes) {
+    var s = '';
+    for (var i = 0; i < bytes.length; i++) {
+        s += String.fromCharCode(bytes[i]);
+    }
+    return btoa(s);
+}
+
+function jawstreeEncodeBitmap(indexSet, count) {
+    /*jslint bitwise: true */
+    var bytes = new Uint8Array((count + 7) >> 3);
+    indexSet.forEach(function (idx) {
+        if (idx >= 0 && idx < count) {
+            bytes[idx >> 3] |= (1 << (idx & 7));
+        }
+    });
+    /*jslint bitwise: false */
+    return jawstreeBase64Encode(bytes);
+}
+
+function jawstreeDecodeBitmap(b64, count) {
+    /*jslint bitwise: true */
+    var bin = atob(b64);
+    var set = new Set();
+    for (var i = 0; i < count; i++) {
+        var byteIndex = i >> 3;
+        var code = byteIndex < bin.length ? bin.charCodeAt(byteIndex) : 0;
+        if (code & (1 << (i & 7))) {
+            set.add(i);
+        }
+    }
+    /*jslint bitwise: false */
+    return set;
+}
+
+// jawstreeSend delivers one Input frame to the server, returning whether it was
+// actually sent (false when the socket is not open, e.g. before it connects).
+function jawstreeSend(jid, data) {
+    if (typeof jaws === 'undefined' || !jaws) {
+        return false;
+    }
+    if (typeof jawsCanSend === 'function' && !jawsCanSend()) {
+        return false;
+    }
+    jaws.send("Input\t" + jid + "\t" + data + "\n");
+    return true;
+}
+
+// jawstreeReconcile drives the widget's DOM selection to the desired preorder-index
+// Set using the public selectNodeById only. It re-reads the live selection before
+// every step, because the vendored widget's selectNodeById has collateral effects a
+// one-pass diff cannot predict: a single-select deselect clears the whole set, and a
+// cascade select or deselect toggles every descendant. Each step therefore fixes one
+// mismatch against the current DOM; the loop is bounded and stops as soon as it
+// converges or a step makes no progress (e.g. a node the widget refuses to select).
+// t.jawsReconciling is set so the resulting onSelectionChange callbacks do not echo
+// back to the server.
+function jawstreeReconcile(t, desired) {
+    if (jawstreeSetsEqual(jawstreeSelectedIndexSet(t), desired)) {
+        t.lastServerSet = desired;
+        return;
+    }
+    t.jawsReconciling = true;
+    try {
+        var bound = 2 * t.jawsNodeCount + 2;
+        for (var iter = 0; iter < bound; iter++) {
+            var current = jawstreeSelectedIndexSet(t);
+            var pick = -1;
+            var select = false;
+            // Prefer selecting a desired-but-missing node; otherwise deselect an
+            // unwanted one. Re-reading current each pass accounts for the collateral.
+            desired.forEach(function (idx) {
+                if (pick < 0 && !current.has(idx)) {
+                    pick = idx;
+                    select = true;
+                }
+            });
+            if (pick < 0) {
+                current.forEach(function (idx) {
+                    if (pick < 0 && !desired.has(idx)) {
+                        pick = idx;
+                    }
+                });
+            }
+            if (pick < 0) {
+                break; // converged
+            }
+            var id = t.jawsIdByIndex[pick];
+            if (id === undefined) {
+                break; // unmappable index (should not happen)
+            }
+            t.selectNodeById(id, select);
+            if (jawstreeSetsEqual(current, jawstreeSelectedIndexSet(t))) {
+                break; // no progress; avoid spinning on an unreachable target
+            }
+        }
+    } finally {
+        t.jawsReconciling = false;
+        t.lastServerSet = desired;
+    }
+}
+
+// jawstreeOnSelectionChange reports a user selection change to the server as the
+// delta versus the last applied server state, falling back to an absolute bitmap
+// when the delta would be large.
+function jawstreeOnSelectionChange(t, selectedNodesData) {
+    var newSet = new Set();
+    for (var i = 0; i < selectedNodesData.length; i++) {
+        var idx = t.jawsIndexById[selectedNodesData[i].id];
+        if (idx !== undefined) {
+            newSet.add(idx);
+        }
+    }
+    var add = [];
+    var remove = [];
+    newSet.forEach(function (idx) {
+        if (!t.lastServerSet.has(idx)) {
+            add.push(idx);
+        }
+    });
+    t.lastServerSet.forEach(function (idx) {
+        if (!newSet.has(idx)) {
+            remove.push(idx);
+        }
+    });
+    if (add.length === 0 && remove.length === 0) {
+        t.lastServerSet = newSet;
+        return;
+    }
+    var encoded = JSON.stringify({ d: { add: add, remove: remove } });
+    if (encoded.length > jawstreeDeltaThreshold) {
+        encoded = JSON.stringify({ b: jawstreeEncodeBitmap(newSet, t.jawsNodeCount) });
+    }
+    // Advance the baseline only when the frame was actually sent. If the socket is
+    // not open yet the change is not lost: the next gesture re-diffs from the same
+    // baseline and carries it, and a server push still reconciles the DOM.
+    if (jawstreeSend(t.jawsJid, encoded)) {
+        t.lastServerSet = newSet;
+    }
 }
 
 function jawstreeInit(arg) {
@@ -46,95 +259,64 @@ function jawstreeInit(arg) {
     if (container) {
         container.hidden = false;
     }
-    window["jawstree_"+arg.key] = jawstreeNew(
-        arg.key,
-        arg.jid,
-        window["jawstreeroot_"+arg.key],
-        arg.options
-    );
-}
-
-function jawstreeSet(arg) {
-    var t = window["jawstree_"+arg.key];
-    var wasApplyingSet = t.jawsApplyingSet;
-    window["jawstreeroot_"+arg.key] = arg.data;
-    t.jawsApplyingSet = true;
-    try {
-        jawstreeSetData(t, arg.data);
-    } finally {
-        t.jawsApplyingSet = wasApplyingSet;
-    }
-}
-
-function jawstreeSetPath(arg) {
-    var t = window["jawstree_"+arg.key];
-    var selectedNodes = t.getSelectedNodes();
-    var isSelected = selectedNodes.some(function(element) {
-        return element.id == arg.id;
+    var modes = jawstreeDecodeOptions(arg.options);
+    var index = jawstreeBuildIndex(arg.data);
+    // applying suppresses the onSelectionChange that Quercus fires while applying the
+    // initial selection from arg.data during construction, before window[...] is set.
+    var applying = true;
+    var t = new Treeview({
+        containerId: arg.jid,
+        data: jawstreeViewChildren(arg.data, modes.multiSelectEnabled, modes.cascadeSelectChildren),
+        searchEnabled: modes.searchEnabled,
+        initiallyExpanded: modes.initiallyExpanded,
+        multiSelectEnabled: modes.multiSelectEnabled,
+        showSelectAllButton: modes.showSelectAllButton,
+        showInvertSelectionButton: modes.showInvertSelectionButton,
+        showExpandCollapseAllButtons: modes.showExpandCollapseAllButtons,
+        nodeSelectionEnabled: modes.nodeSelectionEnabled,
+        cascadeSelectChildren: modes.cascadeSelectChildren,
+        checkboxSelectionEnabled: modes.checkboxSelectionEnabled,
+        onSelectionChange: function (selectedNodesData) {
+            // Look up by jid, not key: one Tree may be rendered by several elements on
+            // a page, each its own widget, so the callback must find its own instance.
+            var tt = window["jawstree_" + arg.jid];
+            if (applying || !tt || tt.jawsReconciling) {
+                return;
+            }
+            jawstreeOnSelectionChange(tt, selectedNodesData);
+        }
     });
-    if (!t.options.multiSelectEnabled && arg.set && isSelected) {
+    t.jawsKey = arg.key;
+    t.jawsJid = arg.jid;
+    t.jawsModes = modes;
+    t.jawsIdByIndex = index.idByIndex;
+    t.jawsIndexById = index.indexById;
+    t.jawsNodeCount = index.count;
+    t.jawsReconciling = false;
+    // Register per element (jid) so several renders of one Tree on a page each get
+    // their own widget. Keep the per-key alias too so single-render code and the
+    // "instanceof Treeview" regression can find the widget by key.
+    window["jawstree_" + arg.jid] = t;
+    window["jawstree_" + arg.key] = t;
+    // Baseline the outgoing-delta reference to the selection Quercus applied from
+    // arg.data, then re-enable the callback for genuine user actions.
+    t.lastServerSet = jawstreeSelectedIndexSet(t);
+    applying = false;
+    return t;
+}
+
+function jawstreeSelection(arg) {
+    // Address the widget by jid so an update reaches the right element when one Tree
+    // is rendered by several elements on a page.
+    var t = window["jawstree_" + arg.jid];
+    if (!t) {
         return;
     }
-    if (arg.set || t.options.multiSelectEnabled || isSelected) {
-        // selectNodeById fires Treeview's onSelectionChange synchronously. Suppress it
-        // the same way jawstreeNew and jawstreeSet do, so reflecting a peer's selection
-        // never re-enters onSelectionChange and echoes a jawsVar write back to the
-        // server. The shadow model has already been patched by the preceding what.Set
-        // broadcast; guarding here makes that correctness independent of Set-before-Call
-        // delivery ordering rather than relying on it.
-        var wasApplyingSet = t.jawsApplyingSet;
-        t.jawsApplyingSet = true;
-        try {
-            t.selectNodeById(arg.id,arg.set);
-        } finally {
-            t.jawsApplyingSet = wasApplyingSet;
-        }
+    var desired;
+    if (arg.b !== undefined) {
+        desired = jawstreeDecodeBitmap(arg.b, t.jawsNodeCount);
+    } else {
+        desired = new Set(arg.s || []);
     }
-}
-
-function jawstreeNew(key, containerJid, rootnode, options) {
-    /*jslint bitwise: true */
-    var multiSelectEnabled = options & (1<<2);
-    var cascadeSelectChildren = options & (1<<7);
-    /*jslint bitwise: false */
-    var applyingSet = true;
-    var tree;
-    try {
-        tree = new Treeview({
-            containerId: containerJid,
-            data: jawstreeViewChildren(rootnode, multiSelectEnabled, cascadeSelectChildren),
-            /*jslint bitwise: true */
-            searchEnabled: options & (1<<0),
-            initiallyExpanded: options & (1<<1),
-            multiSelectEnabled: multiSelectEnabled,
-            showSelectAllButton: options & (1<<3),
-            showInvertSelectionButton: options & (1<<4),
-            showExpandCollapseAllButtons: options & (1<<5),
-            nodeSelectionEnabled: !(options & (1<<6)),
-            cascadeSelectChildren: cascadeSelectChildren,
-            checkboxSelectionEnabled: options & (1<<8),
-            /*jslint bitwise: false */
-            onSelectionChange: function(selectedNodesData) {
-                var tree = window["jawstree_"+key];
-                if (applyingSet || (tree && tree.jawsApplyingSet)) {
-                    return;
-                }
-                jawstreeForEachNode("jawstreeroot_"+key, window["jawstreeroot_"+key], function(path, node) {
-                    var selected = false;
-                    selectedNodesData.forEach(function(element) {
-                        if (element.id == node.id) {
-                            selected = true;
-                        }
-                    });
-                    if (Boolean(node.selected) != selected) {
-                        node.selected = selected;
-                        jawsVar(path + ".selected", selected);
-                    }
-                });
-            }
-        });
-    } finally {
-        applyingSet = false;
-    }
-    return tree;
+    jawstreeReconcile(t, desired);
 }
