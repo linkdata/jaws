@@ -228,6 +228,18 @@ func TestBoolArray_SingleSelectAbsentNameDeselects(t *testing.T) {
 	}
 }
 
+func TestBoolArray_SingleSelectMatchedFalsePreservesOtherSelection(t *testing.T) {
+	nba := NewBoolArray(false).Add("a", "A").Add("b", "B")
+	nba.Set("b", true)
+
+	if nba.Set("a", false) {
+		t.Fatal("Set(a,false) should not change anything")
+	}
+	if got := nba.Get(); got != "b" {
+		t.Fatalf("Get=%q want b preserved", got)
+	}
+}
+
 func TestNamedBoolOption_RenderAndUpdateBranches(t *testing.T) {
 	_, rq := newCoreRequest(t)
 
