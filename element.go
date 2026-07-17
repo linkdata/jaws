@@ -15,6 +15,10 @@ import (
 )
 
 // Element is an instance of a [Request], a [UI] object and a [Jid].
+//
+// An Element pointer passed to a render, update or event handler is borrowed for
+// that call. Do not retain it in application state or use it from a background
+// goroutine. Its embedded Request may later be pooled and reused.
 type Element struct {
 	*Request // (read-only) the Request the Element belongs to
 	// internals
@@ -106,12 +110,8 @@ func (elem *Element) UI() UI {
 // Deleted reports whether the [Element] has been removed from its [Request].
 //
 // A deleted Element is inert: [Element.JawsRender], [Element.JawsUpdate] and the
-// queue helpers are all no-ops on it. Widgets that retain *Element references
-// across renders (for example a container helper that pools child elements for
-// reuse) can use this to detect and discard an element that was deleted
-// out-of-band — via a [Jaws.Delete] broadcast on a shared tag or a browser
-// removal — before reusing it, which would otherwise leave the child silently
-// unrendered.
+// queue helpers are all no-ops on it. Deleted does not make a retained pointer
+// safe to use outside the callback that supplied it.
 func (elem *Element) Deleted() bool {
 	return elem.deleted.Load()
 }

@@ -215,6 +215,13 @@ Elements while an initial HTTP handler still holds them. Its key cannot be
 assigned to another Request while the retired Request remains reachable; no
 deadline is guaranteed for later reuse.
 
+`*Request` and `*Element` values are borrowed lifecycle objects. Use them only
+within the synchronous HTTP handler or JaWS callback where they were obtained;
+do not store them in application state or pass them to background goroutines.
+Requests that enter `ServeHTTP` may be returned to an internal pool when it
+returns, so a retained pointer may later represent an unrelated connection.
+Copy the required application data and retain the Request context instead.
+
 Dirtying is two-stage: `Request.Dirty` and `Jaws.Dirty` expand tags and record
 them on the `Jaws` instance, then the serving loop distributes those tags to
 matching active requests and schedules `JawsUpdate` calls. Broadcast helpers
@@ -469,6 +476,23 @@ requested during the JavaScript WebSocket HTTP request.
 context passed to it. If the returned context is canceled or its deadline
 expires, a running Request's WebSocket loop wakes promptly even while idle; no
 browser event or broadcast is needed.
+
+Background work that must cancel the Request should retain its own derived
+context and cancellation function, not the Request pointer:
+
+```go
+var workCtx context.Context
+var cancel context.CancelCauseFunc
+rq.SetContext(func(parent context.Context) context.Context {
+	workCtx, cancel = context.WithCancelCause(parent)
+	return workCtx
+})
+go func() {
+	if err := run(workCtx); err != nil {
+		cancel(err)
+	}
+}()
+```
 
 ### Security of the WebSocket callback
 

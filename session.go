@@ -224,6 +224,8 @@ func (sess *Session) Clear() {
 }
 
 // Requests returns a list of the [Request] values using this [Session].
+//
+// The returned pointers are borrowed for immediate synchronous use; see [Request].
 // It is safe to call on a nil [Session].
 func (sess *Session) Requests() (requests []*Request) {
 	if sess != nil {
