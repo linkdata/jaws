@@ -10,7 +10,7 @@
 //
 // Naming follows short widget names (`Span`, `NewSpan`).
 //
-// Every widget that implements [github.com/linkdata/jaws.UI] is request-scoped.
+// Every widget that implements [jaws.UI] is request-scoped.
 // Construct a fresh widget for each request, normally by calling a
 // [RequestWriter] helper while rendering, and never cache a widget for use by
 // multiple requests. Widgets for different requests may refer to the same
