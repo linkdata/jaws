@@ -855,13 +855,13 @@ func TestRequest_ClaimRefreshesLastWriteAndStartServeGuards(t *testing.T) {
 	rq := jw.NewRequest(hr)
 
 	// Simulate a page that rendered long ago (idle) before its WebSocket connects.
-	rq.lastWriteNanos.Store(jw.runtimeNanos.Load() - time.Hour.Nanoseconds())
+	rq.lastWriteSeconds.Store(jw.runtimeSeconds.Load() - 3600)
 
 	if jw.UseRequest(rq.JawsKey, hr) != rq {
 		t.Fatal("expected claim to succeed")
 	}
-	// claim refreshed the write instant, so the just-claimed request is not idle.
-	if expired, _ := rq.maintenance(jw.runtimeNanos.Load(), time.Second); expired {
+	// claim refreshed the write second, so the just-claimed request is not idle.
+	if expired, _ := rq.maintenance(jw.runtimeSeconds.Load(), time.Second); expired {
 		t.Fatal("a freshly claimed request must not be treated as idle by maintenance")
 	}
 
@@ -1976,7 +1976,7 @@ func TestCoverage_PendingSubscribeMaintenanceAndParse(t *testing.T) {
 	<-unsubDone
 
 	// Request timeout path.
-	rq.lastWriteNanos.Store(jw.runtimeNanos.Load() - time.Hour.Nanoseconds())
+	rq.lastWriteSeconds.Store(jw.runtimeSeconds.Load() - 3600)
 	jw.maintenance(time.Second)
 	if got := jw.RequestCount(); got != 0 {
 		t.Fatalf("expected request recycled, got %d", got)
@@ -2027,25 +2027,25 @@ func TestCoverage_RequestMaintenanceClaimAndErrors(t *testing.T) {
 		t.Fatalf("unexpected error text: %v", err)
 	}
 
-	nowNanos := jw.runtimeNanos.Load()
+	nowSeconds := jw.runtimeSeconds.Load()
 	rqM := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
-	rqM.lastWriteNanos.Store(nowNanos - time.Hour.Nanoseconds())
-	if expired, _ := rqM.maintenance(nowNanos, time.Second); !expired {
+	rqM.lastWriteSeconds.Store(nowSeconds - 3600)
+	if expired, _ := rqM.maintenance(nowSeconds, time.Second); !expired {
 		t.Fatal("expected maintenance timeout")
 	}
 	rqR := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
 	rqR.MarkWritten()
-	if expired, _ := rqR.maintenance(jw.runtimeNanos.Load(), time.Hour); expired {
+	if expired, _ := rqR.maintenance(jw.runtimeSeconds.Load(), time.Hour); expired {
 		t.Fatal("a freshly written request must not be idle-expired")
 	}
 	rqC := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
 	rqC.cancel(errors.New("cancelled"))
-	if expired, _ := rqC.maintenance(jw.runtimeNanos.Load(), time.Hour); !expired {
+	if expired, _ := rqC.maintenance(jw.runtimeSeconds.Load(), time.Hour); !expired {
 		t.Fatal("expected maintenance cancellation")
 	}
 	rqOK := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
 	rqOK.MarkWritten()
-	if expired, _ := rqOK.maintenance(jw.runtimeNanos.Load(), time.Hour); expired {
+	if expired, _ := rqOK.maintenance(jw.runtimeSeconds.Load(), time.Hour); expired {
 		t.Fatal("expected maintenance keepalive")
 	}
 
@@ -2074,19 +2074,19 @@ func TestNewRequest_SeedsLastWriteFromLiveElapsed(t *testing.T) {
 	defer jw.Close()
 
 	// Simulate an hour of startup before Serve runs. Serve is deliberately not
-	// started, so runtimeNanos is never advanced by its maintenance loop.
+	// started, so runtimeSeconds is never advanced by its maintenance loop.
 	jw.created = time.Now().Add(-time.Hour)
 
 	rq := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
 
-	// The seed must reflect true elapsed time (~1h), not the stale zero that
-	// runtimeNanos still holds before Serve seeds it.
-	if got := time.Duration(rq.lastWriteNanos.Load()); got < time.Hour-5*time.Second || got > time.Hour+5*time.Second {
-		t.Fatalf("lastWriteNanos = %v, want approximately 1h", got)
+	// The seed must reflect true elapsed time (~3600s), not the stale zero that
+	// runtimeSeconds still holds before Serve seeds it.
+	if got := rq.lastWriteSeconds.Load(); got < 3595 || got > 3605 {
+		t.Fatalf("expected lastWriteSeconds seeded to ~3600, got %d", got)
 	}
 
 	// A brand-new request must not be idle-expired by the first maintenance pass.
-	if expired, _ := rq.maintenance(jw.runtimeNanos.Load(), time.Hour); expired {
+	if expired, _ := rq.maintenance(jw.runtimeSeconds.Load(), time.Hour); expired {
 		t.Fatal("a brand-new pre-Serve request must not be idle-expired")
 	}
 }
@@ -3271,7 +3271,7 @@ func TestServe_MarksRequestRunningSoMaintenanceSkips(t *testing.T) {
 
 	// Make the request look long-idle, then run a maintenance pass directly. A
 	// running request must remain registered while process is using it.
-	tr.lastWriteNanos.Store(jw.runtimeNanos.Load() - time.Hour.Nanoseconds())
+	tr.lastWriteSeconds.Store(jw.runtimeSeconds.Load() - 3600)
 	jw.maintenance(time.Millisecond)
 
 	if got := jw.RequestCount(); got != 1 {

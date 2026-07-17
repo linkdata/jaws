@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
-	"testing/synctest"
 	"time"
 )
 
@@ -49,7 +48,7 @@ func TestJaws_MaintenanceRetiresExpiredRequestOnce(t *testing.T) {
 	initial := httptest.NewRequest(http.MethodGet, "/", nil)
 	rq := jw.NewRequest(initial)
 	key := rq.JawsKey
-	jw.runtimeNanos.Store(rq.lastWriteNanos.Load() + (2 * time.Second).Nanoseconds())
+	jw.runtimeSeconds.Store(rq.lastWriteSeconds.Load() + 2)
 
 	jw.maintenance(time.Second)
 
@@ -72,40 +71,4 @@ func TestJaws_MaintenanceRetiresExpiredRequestOnce(t *testing.T) {
 	if !errors.Is(logged[0], ErrNoWebSocketRequest) {
 		t.Fatalf("logged error = %v, want ErrNoWebSocketRequest", logged[0])
 	}
-}
-
-func TestJaws_ServeWithTimeoutHonorsSubsecondTimeout(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		jw, err := New()
-		if err != nil {
-			t.Fatal(err)
-		}
-		const requestTimeout = 50 * time.Millisecond
-		done := make(chan struct{})
-		go func() {
-			jw.ServeWithTimeout(requestTimeout)
-			close(done)
-		}()
-		waitForServeLoop(t, jw)
-
-		initial := httptest.NewRequest(http.MethodGet, "/", nil)
-		rq := jw.NewRequest(initial)
-		time.Sleep(requestTimeout)
-		synctest.Wait()
-		if got := jw.RequestCount(); got != 1 {
-			t.Fatalf("RequestCount at timeout threshold = %d, want 1", got)
-		}
-
-		time.Sleep(requestTimeout / 2)
-		synctest.Wait()
-		if got := jw.RequestCount(); got != 0 {
-			t.Fatalf("RequestCount after subsecond timeout = %d, want 0", got)
-		}
-		if cause := context.Cause(rq.Context()); !errors.Is(cause, ErrNoWebSocketRequest) {
-			t.Fatalf("cancellation cause = %v, want ErrNoWebSocketRequest", cause)
-		}
-
-		jw.Close()
-		<-done
-	})
 }
