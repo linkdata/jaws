@@ -94,6 +94,10 @@ var (
 
 // JsVar binds a Go value to a named JavaScript variable in the browser.
 //
+// Browser code can access the bound value through jawsVar. A name that does not
+// collide with an existing window property is also exposed on window; an
+// existing window property is left unchanged.
+//
 // It is safe for concurrent use when the locker passed to [NewJsVar] is safe
 // for concurrent use. Concurrent writes are applied one at a time. Any
 // broadcasts they produce preserve the order in which the writes modify the

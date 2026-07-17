@@ -17,6 +17,7 @@ func TestValidateJsVarNameRejectsOnlyReservedPrototypeName(t *testing.T) {
 		{name: "__proto__$"},
 		{name: "$__proto__"},
 		{name: "constructor"},
+		{name: "name"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

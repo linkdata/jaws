@@ -455,6 +455,124 @@ process.stdout.write(jaws.sent[0] || "");
 	}
 }
 
+func TestJawsJS_JsVarWindowNameCollisionUsesSeparateStorage(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+
+let browsingContextName = "frame-name";
+Object.defineProperty(window, "name", {
+	configurable: true,
+	get: function() { return browsingContextName; },
+	set: function(value) { browsingContextName = String(value); }
+});
+
+const elem = {
+	id: "Jid.1",
+	dataset: {
+		jawsname: "name",
+		jawsdata: JSON.stringify({ value: "initial" })
+	},
+	hasAttribute: function(attr) {
+		return attr === "data-jawsname" || attr === "data-jawsdata";
+	}
+};
+document.getElementById = function(id) { return id === elem.id ? elem : null; };
+
+jawsAttach(elem);
+const initial = jawsVar("name.value");
+jawsPerform("Set", elem.id, 'value="server"');
+const server = jawsVar("name.value");
+
+jaws = new FakeSocket();
+const browser = jawsVar("name.value", "browser");
+
+process.stdout.write(JSON.stringify({
+	windowName: window.name,
+	initial: initial,
+	server: server,
+	browser: browser,
+	route: window.jawsNames.name,
+	frame: jaws.sent[0] || ""
+}));
+`)
+
+	var got struct {
+		WindowName string `json:"windowName"`
+		Initial    string `json:"initial"`
+		Server     string `json:"server"`
+		Browser    string `json:"browser"`
+		Route      string `json:"route"`
+		Frame      string `json:"frame"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.WindowName != "frame-name" {
+		t.Fatalf("window.name = %q, want preserved browsing-context name", got.WindowName)
+	}
+	if got.Initial != "initial" || got.Server != "server" || got.Browser != "browser" {
+		t.Fatalf("JsVar values = initial %q, server %q, browser %q", got.Initial, got.Server, got.Browser)
+	}
+	if got.Route != "Jid.1" {
+		t.Fatalf("JsVar route = %q, want Jid.1", got.Route)
+	}
+	msg, ok := wire.Parse([]byte(got.Frame))
+	if !ok || msg.What != what.Set || msg.Jid != 1 || msg.Data != `value="browser"` {
+		t.Fatalf("browser Set frame = %+v, parseable %t", msg, ok)
+	}
+}
+
+func TestJawsJS_NonCollidingJsVarRemainsWindowGlobal(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+const elem = {
+	id: "Jid.1",
+	dataset: {
+		jawsname: "app",
+		jawsdata: JSON.stringify({ value: "initial" })
+	},
+	hasAttribute: function(attr) {
+		return attr === "data-jawsname" || attr === "data-jawsdata";
+	}
+};
+
+jawsAttach(elem);
+const sameRoot = jawsVar("app") === window.app;
+window.app.value = "window";
+const helperRead = jawsVar("app.value");
+jawsVar("app.value", "helper", "Set");
+
+process.stdout.write(JSON.stringify({
+	global: Object.hasOwn(window, "app"),
+	sameRoot: sameRoot,
+	helperRead: helperRead,
+	windowRead: window.app.value,
+	route: window.jawsNames.app
+}));
+`)
+
+	var got struct {
+		Global     bool   `json:"global"`
+		SameRoot   bool   `json:"sameRoot"`
+		HelperRead string `json:"helperRead"`
+		WindowRead string `json:"windowRead"`
+		Route      string `json:"route"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if !got.Global || !got.SameRoot {
+		t.Fatalf("noncolliding JsVar global = %t, same root = %t", got.Global, got.SameRoot)
+	}
+	if got.HelperRead != "window" || got.WindowRead != "helper" {
+		t.Fatalf("shared JsVar values = helper read %q, window read %q", got.HelperRead, got.WindowRead)
+	}
+	if got.Route != "Jid.1" {
+		t.Fatalf("JsVar route = %q, want Jid.1", got.Route)
+	}
+}
+
 func TestJawsJS_PrototypeNameCannotFormJsVarRoute(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 function FakeSocket() { this.readyState = 1; this.sent = []; }
@@ -613,6 +731,17 @@ let lookedUp = false;
 window.app = {
 	refresh: function(value) { called = value; }
 };
+const jsvarElem = {
+	id: "Jid.1",
+	dataset: {
+		jawsname: "app",
+		jawsdata: JSON.stringify({ state: "server" })
+	},
+	hasAttribute: function(attr) {
+		return attr === "data-jawsname" || attr === "data-jawsdata";
+	}
+};
+jawsAttach(jsvarElem);
 document.getElementById = function() {
 	lookedUp = true;
 	return null;
