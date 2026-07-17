@@ -94,9 +94,10 @@ var (
 
 // JsVar binds a Go value to a named JavaScript variable in the browser.
 //
-// Browser code can access the bound value through jawsVar. A name that does not
-// collide with an existing window property is also exposed on window; an
-// existing window property is left unchanged.
+// The browser binding reads and writes the window property named when the JsVar
+// is rendered. Existing application variables are therefore valid bindings.
+// Do not use a browser-owned property such as window.name, or a global owned by
+// unrelated code.
 //
 // It is safe for concurrent use when the locker passed to [NewJsVar] is safe
 // for concurrent use. Concurrent writes are applied one at a time. Any
@@ -375,6 +376,9 @@ func isNilUI(ui jaws.UI) (yes bool) {
 }
 
 // JsVar binds a [JsVar] to a named JavaScript variable.
+//
+// jsvarName identifies a property on the browser window. It should be owned by
+// the application because the binding initializes and updates its value.
 //
 // It returns [ErrIllegalJsVarName] if jsvarName is invalid or reserved.
 //

@@ -175,13 +175,15 @@ client/server protocol code:
   destinations remain element-scoped. Built-in strings and bare `Jid` values are
   not destinations: use `tag.Tag` or a domain tag for broadcasts, and `Element`
   methods for request-local operations.
-* `jawsVar(name, ...)` resolves each registered top-level `JsVar` without
-  overwriting an existing `window` property. A name that is free when first
-  registered remains available directly on `window`; a colliding name is stored
-  separately and must be accessed through `jawsVar`. WebSocket routing uses the
-  top-level symbol name only. Use dotted suffixes as the JSON path (for example,
-  `jawsVar("app.state", value)` sends path `state`). The exact top-level name
-  `__proto__` is reserved; rendering it as a `JsVar` returns
+* `jawsVar(name, ...)` resolves properties from `window`, so `JsVar` names share
+  the page's global namespace. Use an application-owned name, including an
+  existing global that browser code reads or changes. Do not bind a
+  browser-owned property such as `window.name`, or a global owned by unrelated
+  code: `JsVar` initialization and updates write that property. WebSocket
+  routing uses the top-level symbol name only. Register names as top-level
+  identifiers (for example, `app`), and use dotted suffixes as the JSON path
+  (for example, `jawsVar("app.state", value)` sends path `state`). The exact
+  top-level name `__proto__` is reserved; rendering it as a `JsVar` returns
   `ui.ErrIllegalJsVarName`.
 
 ### HTTP request flow and associating the WebSocket
