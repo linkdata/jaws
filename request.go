@@ -106,12 +106,22 @@ func (rq *Request) String() string {
 // pending-eviction logic spares it while a render is in flight.
 //
 // [RequestWriter.Write] calls it on every write. It is lock-free and safe to call
-// concurrently.
+// concurrently. Concurrent calls never move the recorded instant backward.
 func (rq *Request) MarkWritten() {
-	// A single atomic store of the cached runtimeNanos; no clock read. The recorded
-	// instant drives the recency window in oldestEvictablePendingLocked and the idle
-	// expiry in maintenance.
-	rq.lastWriteNanos.Store(rq.Jaws.runtimeNanos.Load())
+	// A cached runtime sample avoids a clock read. The recorded instant drives the
+	// recency window in oldestEvictablePendingLocked and the idle expiry in
+	// maintenance.
+	rq.advanceLastWriteNanos(rq.Jaws.runtimeNanos.Load())
+}
+
+func (rq *Request) advanceLastWriteNanos(now int64) {
+	// A concurrent caller may already have stored a newer runtime sample while this
+	// caller was preempted after sampling it. Never overwrite that newer instant.
+	for previous := rq.lastWriteNanos.Load(); now > previous; previous = rq.lastWriteNanos.Load() {
+		if rq.lastWriteNanos.CompareAndSwap(previous, now) {
+			return
+		}
+	}
 }
 
 // destKey returns the Request's current identity key, read under rq.mu, for use as
@@ -168,7 +178,7 @@ func (rq *Request) claim(r *http.Request) error {
 			// Refresh the write instant so a request claimed long after its initial
 			// render (a throttled or backgrounded tab) is not treated as idle and
 			// retired in the window before ServeHTTP sets running.
-			rq.lastWriteNanos.Store(rq.Jaws.runtimeNanos.Load())
+			rq.advanceLastWriteNanos(rq.Jaws.runtimeNanos.Load())
 			return nil
 		}
 	}
