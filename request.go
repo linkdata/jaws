@@ -240,12 +240,13 @@ func (rq *Request) clearLocked() *Request {
 	rq.remoteIP = netip.Addr{}
 	for _, e := range rq.elems {
 		if e != nil {
-			// Nil the GC-reachable fields and set the deleted guard, which makes any
-			// retained *Element inert (see [Element.Deleted]). The Request back-pointer
-			// and frozen flag are deliberately left as-is: Elements are allocated fresh
-			// per newElementLocked and never pooled, so a stale frozen value can never
-			// be observed by a reused Element. Any future move to pool Elements must
-			// also reset frozen, since it gates the lock-free handler read.
+			// Nil the GC-reachable fields and set the deleted guard, which makes the
+			// render, update and queue paths of any retained *Element no-ops (see
+			// [Element.Deleted]). The Request back-pointer and frozen flag are
+			// deliberately left as-is: Elements are allocated fresh per newElementLocked
+			// and never pooled, so a stale frozen value can never be observed by a reused
+			// Element. Any future move to pool Elements must also reset frozen, since it
+			// gates the lock-free handler read.
 			e.handlers = nil
 			e.ui = nil
 			e.deleted.Store(true)
