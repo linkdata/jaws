@@ -171,6 +171,70 @@ process.stdout.write(JSON.stringify(sent));
 	}
 }
 
+func TestJawstreeJS_FullSetReconcilesShadowAndView(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, `
+function run(key, multiSelectEnabled, cascadeSelectChildren) {
+	var tree = {
+		options: {
+			multiSelectEnabled: multiSelectEnabled,
+			cascadeSelectChildren: cascadeSelectChildren
+		},
+		jawsSelectionVersion: 0,
+		viewSelected: [],
+		setData: function(children) {
+			this.viewSelected = jawstreeSelectedIDs({ children: children });
+		}
+	};
+	var current = { children: [
+		{ id: "children.0", name: "a", children: [] },
+		{ id: "children.1", name: "b", selected: true, children: [] }
+	] };
+	window["jawstree_"+key] = tree;
+	window["jawstreeroot_"+key] = { children: [
+		{ id: "children.0", name: "a", children: [] },
+		{ id: "children.1", name: "b", children: [] }
+	] };
+
+	// A JsVar root Set replaces only the shadow value. It cannot update the
+	// Quercus view owned by the Tree wrapper.
+	window["jawstreeroot_"+key] = current;
+	var afterRootSet = tree.viewSelected.slice();
+	jawstreeSet({ key: key, selectionVersion: 0, data: current });
+	return {
+		afterRootSet: afterRootSet,
+		afterFullSet: tree.viewSelected,
+		shadowSelected: jawstreeSelectedIDs(window["jawstreeroot_"+key])
+	};
+}
+
+process.stdout.write(JSON.stringify([
+	run("multi", true, false),
+	run("cascade", false, true)
+]));
+`)
+
+	var got []struct {
+		AfterRootSet   []string `json:"afterRootSet"`
+		AfterFullSet   []string `json:"afterFullSet"`
+		ShadowSelected []string `json:"shadowSelected"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("results = %d, want multi-select and cascade-select", len(got))
+	}
+	for i, result := range got {
+		if len(result.AfterRootSet) != 0 {
+			t.Fatalf("case %d root-only Set changed Treeview selection to %v", i, result.AfterRootSet)
+		}
+		want := []string{"children.1"}
+		if !reflect.DeepEqual(result.AfterFullSet, want) || !reflect.DeepEqual(result.ShadowSelected, want) {
+			t.Fatalf("case %d full Set left view %v and shadow %v, want %v", i, result.AfterFullSet, result.ShadowSelected, want)
+		}
+	}
+}
+
 func TestJawstreeJS_SetPathSingleSelectDeselect(t *testing.T) {
 	raw := runJawstreeJSSnippet(t, `
 function run(options, selected, arg) {

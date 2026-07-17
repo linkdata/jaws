@@ -1,6 +1,7 @@
 package jawstree
 
 import (
+	"crypto/sha256"
 	"io"
 	"strconv"
 	"strings"
@@ -12,8 +13,9 @@ import (
 )
 
 var (
-	_ jaws.UI           = (*Tree)(nil)
-	_ jaws.InputHandler = (*Tree)(nil)
+	_ jaws.UI             = (*Tree)(nil)
+	_ jaws.InputHandler   = (*Tree)(nil)
+	_ jaws.ConnectUpdater = (*Tree)(nil)
 )
 
 const selectionSyncPrefix = "jawstree-selection-sync:"
@@ -159,6 +161,17 @@ func (tree *Tree) appendSelectionCallData(b []byte) []byte {
 	return b
 }
 
+func (tree *Tree) appendSetCallData(b, data []byte, selectionVersion uint64) []byte {
+	b = append(b, `{"key":`...)
+	b = strconv.AppendQuote(b, tree.key)
+	b = append(b, `,"selectionVersion":`...)
+	b = strconv.AppendUint(b, selectionVersion, 10)
+	b = append(b, `,"data":`...)
+	b = append(b, data...)
+	b = append(b, '}')
+	return b
+}
+
 // JawsRender renders the tree state and schedules browser initialization.
 func (tree *Tree) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	var selectionVersion uint64
@@ -202,6 +215,35 @@ func (tree *Tree) handleSelectionSync(elem *jaws.Element, value string) (handled
 func (tree *Tree) JawsInput(elem *jaws.Element, value string) (err error) {
 	if !tree.handleSelectionSync(elem, value) {
 		err = tree.JsVar.JawsInput(elem, value)
+	}
+	return
+}
+
+// JawsConnectUpdate reconciles multi-select and cascading Trees after connection.
+//
+// Their clients do not use the default single-select selection handshake. When
+// the shared Node data changed after the initial render but before the WebSocket
+// subscription, JawsConnectUpdate queues one authoritative jawstreeSet call for
+// this request. The call updates the browser-side variable and Quercus view as
+// one snapshot. Default single-select Trees continue to reconcile through their
+// versioned handshake, which preserves browser expansion and search state.
+func (tree *Tree) JawsConnectUpdate(elem *jaws.Element, renderedState any) (err error) {
+	owner, ownsElement := elem.UI().(*Tree)
+	renderedDigest, hasRenderedDigest := renderedState.([sha256.Size]byte)
+	if tree.isDefaultSingleSelect() || renderedState == nil || !ownsElement || owner != tree {
+		return
+	}
+
+	var data []byte
+	var selectionVersion uint64
+	tree.RLock()
+	if tree.Ptr != nil {
+		data = tree.Ptr.marshalJSON(nil)
+		selectionVersion = tree.selectionVersion
+	}
+	tree.RUnlock()
+	if data != nil && (!hasRenderedDigest || sha256.Sum256(data) != renderedDigest) {
+		elem.JsCall("jawstreeSet", string(tree.appendSetCallData(nil, data, selectionVersion)))
 	}
 	return
 }
