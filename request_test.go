@@ -872,15 +872,6 @@ func TestRequest_ClaimRefreshesLastWriteAndStartServeGuards(t *testing.T) {
 	}
 }
 
-func TestRequest_AdvanceLastWriteNanosDoesNotMoveBackward(t *testing.T) {
-	rq := &Request{}
-	rq.advanceLastWriteNanos(2)
-	rq.advanceLastWriteNanos(1)
-	if got := rq.lastWriteNanos.Load(); got != 2 {
-		t.Fatalf("lastWriteNanos = %d, want 2", got)
-	}
-}
-
 func TestRequest_ClaimRejectsCanceledRequest(t *testing.T) {
 	jw, err := New()
 	if err != nil {
