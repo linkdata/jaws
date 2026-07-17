@@ -15,6 +15,13 @@ import (
 )
 
 // Element is an instance of a [Request], a [UI] object and a [Jid].
+//
+// An Element pointer supplied to a render, update or event handler is borrowed
+// for that call. A render-scoped widget may retain child Elements it creates
+// between its render and update calls within the same Request lifecycle, but
+// should access them only from those calls. Do not retain an Element in
+// longer-lived application state or pass it to background work: the embedded
+// Request may later be pooled and reused for another connection.
 type Element struct {
 	*Request // (read-only) the Request the Element belongs to
 	// internals
@@ -105,13 +112,13 @@ func (elem *Element) UI() UI {
 
 // Deleted reports whether the [Element] has been removed from its [Request].
 //
-// A deleted Element is inert: [Element.JawsRender], [Element.JawsUpdate] and the
-// queue helpers are all no-ops on it. Widgets that retain *Element references
-// across renders (for example a container helper that pools child elements for
-// reuse) can use this to detect and discard an element that was deleted
-// out-of-band — via a [Jaws.Delete] broadcast on a shared tag or a browser
-// removal — before reusing it, which would otherwise leave the child silently
-// unrendered.
+// [Element.JawsRender], [Element.JawsUpdate] and the queue helpers are no-ops on
+// a deleted Element. A render-scoped widget that retains child Elements it
+// creates between render and update calls within one Request lifecycle can use
+// Deleted to detect and discard children removed out-of-band before reuse.
+// Deleted is not a lifetime check: it does not report whether the embedded
+// Request still represents the owning connection or make that Request safe to
+// use after its lifecycle.
 func (elem *Element) Deleted() bool {
 	return elem.deleted.Load()
 }

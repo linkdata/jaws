@@ -28,6 +28,8 @@ import (
 // returned [Request] pointer so it can be used while constructing the HTML
 // response in order to register the JaWS IDs you use in the response, and
 // use its [Request.JawsKey] when sending the JavaScript portion of the reply.
+// Do not retain the pointer beyond the initial HTTP handling and rendering; see
+// [Request].
 //
 // Automatic timeout handling is performed by [Jaws.ServeWithTimeout]. The default
 // [Jaws.Serve] helper uses a 10-second timeout.
@@ -198,6 +200,9 @@ func (jw *Jaws) nonZeroRandomLocked() key.Key {
 // Returns nil if the key was not found, the request was already claimed by an
 // earlier WebSocket callback, or the IP doesn't match, in which case you
 // should return an HTTP "404 Not Found" status.
+//
+// The returned pointer is borrowed for WebSocket handling. Do not retain it
+// after [Request.ServeHTTP] returns; see [Request].
 func (jw *Jaws) UseRequest(jawsKey key.Key, r *http.Request) (rq *Request) {
 	if jawsKey != 0 {
 		var err error
