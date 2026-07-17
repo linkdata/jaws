@@ -1,11 +1,9 @@
 package jaws
 
 import (
-	"errors"
 	"testing"
 	"time"
 
-	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/lib/what"
 )
 
@@ -69,38 +67,5 @@ func TestJawsJsCallReachesRequestTargets(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatal("Reload barrier did not reach request")
 		}
-	}
-}
-
-func TestJawsJsCallRejectsEmptyHTMLIDTarget(t *testing.T) {
-	jw, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer jw.Close()
-	logger := &captureErrorLogger{}
-	jw.Logger = logger
-
-	call := func() {
-		jw.JsCall("", "app.refresh", `{}`)
-	}
-	if deadlock.Debug {
-		func() {
-			defer func() {
-				if recovered := recover(); recovered == nil {
-					t.Fatal("empty HTML-id Call did not panic under deadlock.Debug")
-				}
-			}()
-			call()
-		}()
-	} else {
-		call()
-	}
-
-	if !errors.Is(logger.err, ErrEmptyCallTarget) {
-		t.Fatalf("empty HTML-id Call error = %v", logger.err)
-	}
-	if got := len(jw.bcastCh); got != 0 {
-		t.Fatalf("empty HTML-id Call queued %d broadcasts, want none", got)
 	}
 }

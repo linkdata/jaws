@@ -26,11 +26,17 @@ type RadioElement struct {
 // copy) observe the same elements, and is only ever touched on the single
 // rendering goroutine, so it needs no lock.
 type radioState struct {
-	rw       RequestWriter
-	nb       *named.Bool
+	rw    RequestWriter
+	nb    *named.Bool
+	group *radioGroupState
+	radio *jaws.Element
+	label *jaws.Element
+}
+
+// radioGroupState holds the request-scoped name shared by every option in a
+// RadioGroup. It is populated from the first lazily-created radio Element's Jid.
+type radioGroupState struct {
 	nameAttr string
-	radio    *jaws.Element
-	label    *jaws.Element
 }
 
 // radioElem returns the radio Element, creating it on first use. Label also
@@ -39,6 +45,9 @@ type radioState struct {
 func (st *radioState) radioElem() *jaws.Element {
 	if st.radio == nil {
 		st.radio = st.rw.Request.NewElement(NewRadio(st.nb))
+		if st.group.nameAttr == "" {
+			st.group.nameAttr = `name="` + st.radio.Jid().String() + `"`
+		}
 	}
 	return st.radio
 }
@@ -50,7 +59,7 @@ func (st *radioState) radioElem() *jaws.Element {
 func (re RadioElement) Radio(params ...any) template.HTML {
 	radio := re.st.radioElem()
 	var sb strings.Builder
-	radio.Jaws.MustLog(radio.JawsRender(&sb, append(params, re.st.nameAttr)))
+	radio.Jaws.MustLog(radio.JawsRender(&sb, append(params, re.st.group.nameAttr)))
 	return template.HTML(sb.String()) // #nosec G203
 }
 
@@ -69,16 +78,19 @@ func (re RadioElement) Label(params ...any) template.HTML {
 	return template.HTML(sb.String()) // #nosec G203
 }
 
-// RadioGroup returns a [RadioElement] for each value in nba. Elements are created
-// lazily as they are rendered; see [RadioElement].
+// RadioGroup returns a [RadioElement] for each value in nba.
+//
+// Elements are created lazily as they are rendered; see [RadioElement]. Every
+// rendered radio in the group shares a name derived from the first created
+// radio Element's request-scoped [jaws.Jid].
 func (rw RequestWriter) RadioGroup(nba *named.BoolArray) (rel []RadioElement) {
-	nameAttr := `name="` + jaws.MakeID() + `"`
+	group := &radioGroupState{}
 	nba.ReadLocked(func(nbl []*named.Bool) {
 		for _, nb := range nbl {
 			rel = append(rel, RadioElement{st: &radioState{
-				rw:       rw,
-				nb:       nb,
-				nameAttr: nameAttr,
+				rw:    rw,
+				nb:    nb,
+				group: group,
 			}})
 		}
 	})

@@ -189,10 +189,10 @@ func (node *Node) JawsPathSet(elem *jaws.Element, jsPath string, value any) {
 		// the error anyway so a future change that lets a non-marshalable value reach
 		// here skips the JsCall rather than broadcasting a broken payload.
 		if payload, err := json.Marshal(struct {
-			Tree string `json:"tree"`
-			ID   string `json:"id"`
-			Set  any    `json:"set"`
-		}{node.Tree.id, nodePath, value}); err == nil {
+			Key string `json:"key"`
+			ID  string `json:"id"`
+			Set any    `json:"set"`
+		}{node.Tree.key, nodePath, value}); err == nil {
 			elem.Jaws.JsCall(node.Tree.JawsGetTag(nil), "jawstreeSetPath", string(payload))
 		}
 	}

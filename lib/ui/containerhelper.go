@@ -106,8 +106,7 @@ func (u *ContainerHelper) UpdateContainer(elem *jaws.Element) {
 
 	// Remove leftover Elements from both the browser DOM and the Request registry.
 	for _, childElem := range toRemove {
-		elem.Remove(childElem.Jid().String())
-		elem.Request.DeleteElement(childElem)
+		elem.Remove(childElem)
 	}
 
 	for _, childElem := range toAppend {

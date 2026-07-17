@@ -9,9 +9,9 @@ import (
 // Message contains the elements of a message to be sent to requests.
 type Message struct {
 	// Dest selects recipients among active Requests: nil targets every active
-	// Request, a request key targets the matching active Request, an HTML id string
-	// targets matching elements in all active Requests, and any other value is
-	// expanded into a tag or tag list.
+	// Request, a nonzero request key targets the matching active Request, and any
+	// other value is expanded into a tag or tag list. Plain strings and Jid values
+	// are illegal destinations.
 	Dest any
 	What what.What // command to perform
 	Data string    // payload: inner HTML content or a tag list

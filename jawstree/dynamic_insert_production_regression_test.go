@@ -2,7 +2,6 @@ package jawstree
 
 import (
 	"encoding/json"
-	"html/template"
 	"image/color"
 	"image/png"
 	"net/url"
@@ -63,14 +62,9 @@ func TestTreeDynamicInitializationWithClientAssets(t *testing.T) {
 	}()
 	<-tr.ReadyCh
 
-	// Render the documented target and an initially empty live Container. The Tree
-	// itself enters the page only through the subsequent Container update.
-	target := ui.NewDiv(template.HTML(`<div id="dynamic"></div>`))
-	targetElem := tr.NewElement(target)
+	// Render an initially empty live Container. The self-contained Tree enters the
+	// page only through the subsequent Container update.
 	var initial strings.Builder
-	if err := targetElem.JawsRender(&initial, nil); err != nil {
-		t.Fatal(err)
-	}
 	contents := &dynamicTreeContainer{}
 	container := ui.NewContainer("div", contents)
 	containerElem := tr.NewElement(container)
@@ -80,7 +74,7 @@ func TestTreeDynamicInitializationWithClientAssets(t *testing.T) {
 
 	root := &Node{Children: []*Node{{Name: "Documents"}}}
 	var mu deadlock.RWMutex
-	tree := New("dynamic", ui.NewJsVar(&mu, root), InitiallyExpanded)
+	tree := New(ui.NewJsVar(&mu, root), InitiallyExpanded)
 	contents.contents = []jaws.UI{tree}
 	tr.Dirty(contents)
 
@@ -100,11 +94,11 @@ func TestTreeDynamicInitializationWithClientAssets(t *testing.T) {
 		t.Fatalf("second dynamic message = %+v, want parent Order", frames[1])
 	}
 	if frames[2].What != what.Call || frames[2].Jid <= containerElem.Jid() ||
-		frames[2].Data != `jawstreeInit={"tree":"dynamic","options":2}` {
+		frames[2].Data != "jawstreeInit="+string(tree.appendInitCallData(nil, frames[2].Jid)) {
 		t.Fatalf("third dynamic message = %+v, want child initializer Call", frames[2])
 	}
 	if strings.Contains(frames[0].Data, "<script") ||
-		!strings.Contains(frames[0].Data, `data-jawsname="jawstreeroot_dynamic"`) ||
+		!strings.Contains(frames[0].Data, `data-jawsname="`+tree.renderParams[0].(string)+`"`) ||
 		!strings.Contains(frames[0].Data, `id="`+frames[2].Jid.String()+`"`) {
 		t.Fatalf("dynamic Tree Append has unexpected HTML: %q", frames[0].Data)
 	}
@@ -135,6 +129,14 @@ func TestTreeDynamicInitializationWithClientAssets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	treeKeyJSON, err := json.Marshal(tree.key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	containerJidJSON, err := json.Marshal(frames[2].Jid.String())
+	if err != nil {
+		t.Fatal(err)
+	}
 	treeviewJS, err := assetsFS.ReadFile("assets/treeview.js")
 	if err != nil {
 		t.Fatal(err)
@@ -162,6 +164,8 @@ func TestTreeDynamicInitializationWithClientAssets(t *testing.T) {
 <style>#result{position:fixed;inset:0;z-index:9999;background:rgb(255,0,0)}</style>
 <script>
 window.dynamicFrame = ` + string(dynamicFrameJSON) + `;
+window.treeKey = ` + string(treeKeyJSON) + `;
+window.treeJid = ` + string(containerJidJSON) + `;
 window.WebSocket = class {
 	constructor() {
 		this.readyState = 1;
@@ -186,11 +190,11 @@ window.WebSocket = class {
 <script>
 window.addEventListener("DOMContentLoaded", function() {
 	setTimeout(function() {
-		const target = document.getElementById("dynamic");
+		const target = document.getElementById(window.treeJid);
 		const text = target && target.querySelector(".treeview-node-text");
 		if (window.connectedAfterAssets &&
-			window.jawstree_dynamic instanceof window.Treeview &&
-			text && text.textContent === "Updated" && target.querySelector("ul")) {
+			window["jawstree_"+window.treeKey] instanceof window.Treeview &&
+			text && text.textContent === "Updated" && target.querySelector("ul") && !target.hidden) {
 			document.getElementById("result").style.background = "rgb(0,255,0)";
 		}
 	}, 0);

@@ -68,16 +68,6 @@ func Test_wsMsg_Append(t *testing.T) {
 			},
 			want: "Click\tJid.1\t\"double\\\"quote\"\n",
 		},
-		{
-			name: "pass-through data",
-			fields: fields{
-				Data: "custom_id\t\"text\"",
-				Jid:  -1,
-				What: what.Click,
-			},
-			want:    "Click\tcustom_id\t\"text\"\n",
-			noparse: true,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -98,15 +88,30 @@ func Test_wsMsg_Append(t *testing.T) {
 	}
 }
 
-func Test_wsMsg_AppendNegativeJidAndCallPayload(t *testing.T) {
-	msg := WsMsg{Jid: jid.Jid(-1), What: what.Update, Data: "raw\tdata"}
-	if got := string(msg.Append(nil)); got != "Update\traw\tdata\n" {
-		t.Fatalf("unexpected ws append result %q", got)
-	}
-
-	msg = WsMsg{Jid: 1, What: what.Call, Data: `fn={"a":1}`}
+func Test_wsMsg_AppendCallPayload(t *testing.T) {
+	msg := WsMsg{Jid: 1, What: what.Call, Data: `fn={"a":1}`}
 	if got := string(msg.Append(nil)); !strings.Contains(got, `fn={"a":1}`) || strings.Contains(got, `"fn={"`) {
 		t.Fatalf("unexpected ws append quoted call payload %q", got)
+	}
+}
+
+func Test_wsMsg_NegativeJidPanics(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		call func(*WsMsg)
+	}{
+		{name: "Append", call: func(msg *WsMsg) { msg.Append(nil) }},
+		{name: "Format", call: func(msg *WsMsg) { msg.Format() }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := WsMsg{Jid: -1, What: what.Update}
+			defer func() {
+				if recovered := recover(); recovered == nil {
+					t.Fatal("negative Jid did not panic")
+				}
+			}()
+			tt.call(&msg)
+		})
 	}
 }
 
@@ -151,6 +156,9 @@ func Test_wsParse_IncompleteFails(t *testing.T) {
 		{"just one tab", []byte("Click\t\n")},
 		{"newline instead of What", []byte("\n\t\t\n")},
 		{"incorrectly quoted data", []byte("Click\t\t\"\n\"\n")},
+		{"zero Jid text", []byte("Click\tJid.0\t\"\"\n")},
+		{"leading-zero Jid", []byte("Click\tJid.01\t\"\"\n")},
+		{"signed Jid", []byte("Click\tJid.+1\t\"\"\n")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

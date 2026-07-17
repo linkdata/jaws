@@ -61,39 +61,51 @@ func TestJawstreeJS_InitUsesPreloadedRoot(t *testing.T) {
 const root = { children: [{ id: "children.0", name: "Documents" }] };
 let got = null;
 const initialized = { ready: true };
-window["jawstreeroot_dynamic"] = root;
-jawstreeNew = function(tree, data, options) {
-	got = { tree: tree, data: data, options: options };
+const container = { hidden: true };
+global.document = {
+	getElementById: function(id) {
+		return id === "Jid.7" ? container : null;
+	}
+};
+window["jawstreeroot_private"] = root;
+jawstreeNew = function(key, jid, data, options) {
+	got = { key: key, jid: jid, data: data, options: options };
 	return initialized;
 };
 
-jawstreeInit({ tree: "dynamic", options: 3 });
+jawstreeInit({ key: "private", jid: "Jid.7", options: 3 });
 process.stdout.write(JSON.stringify({
 	got: got,
 	usesRoot: got.data === root,
-	stored: window["jawstree_dynamic"] === initialized
+	stored: window["jawstree_private"] === initialized,
+	visible: !container.hidden
 }));
 `)
 
 	var got struct {
 		Got struct {
-			Tree    string `json:"tree"`
+			Key     string `json:"key"`
+			Jid     string `json:"jid"`
 			Options int    `json:"options"`
 		} `json:"got"`
 		UsesRoot bool `json:"usesRoot"`
 		Stored   bool `json:"stored"`
+		Visible  bool `json:"visible"`
 	}
 	if err := json.Unmarshal([]byte(raw), &got); err != nil {
 		t.Fatalf("unexpected JSON output %q: %v", raw, err)
 	}
-	if got.Got.Tree != "dynamic" || got.Got.Options != 3 {
-		t.Fatalf("initializer arguments = %+v, want tree=dynamic options=3", got.Got)
+	if got.Got.Key != "private" || got.Got.Jid != "Jid.7" || got.Got.Options != 3 {
+		t.Fatalf("initializer arguments = %+v, want key=private jid=Jid.7 options=3", got.Got)
 	}
 	if !got.UsesRoot {
 		t.Fatal("initializer did not use the root seeded by the hidden JsVar")
 	}
 	if !got.Stored {
 		t.Fatal("initializer did not store the constructed tree on window")
+	}
+	if !got.Visible {
+		t.Fatal("initializer did not unhide the managed Jid container")
 	}
 }
 
@@ -118,27 +130,27 @@ process.stdout.write(JSON.stringify({
 	deselectSelected: run(
 		{ multiSelectEnabled: false, cascadeSelectChildren: false },
 		["children.0"],
-		{ tree: "tree", id: "children.0", set: false }
+		{ key: "tree", id: "children.0", set: false }
 	),
 	deselectUnselected: run(
 		{ multiSelectEnabled: false, cascadeSelectChildren: false },
 		["children.1"],
-		{ tree: "tree", id: "children.0", set: false }
+		{ key: "tree", id: "children.0", set: false }
 	),
 	selectAlreadySelected: run(
 		{ multiSelectEnabled: false, cascadeSelectChildren: false },
 		["children.0"],
-		{ tree: "tree", id: "children.0", set: true }
+		{ key: "tree", id: "children.0", set: true }
 	),
 	multiDeselectUnselected: run(
 		{ multiSelectEnabled: true, cascadeSelectChildren: false },
 		[],
-		{ tree: "tree", id: "children.0", set: false }
+		{ key: "tree", id: "children.0", set: false }
 	),
 	cascadeDeselectSelected: run(
 		{ multiSelectEnabled: false, cascadeSelectChildren: true },
 		["children.0"],
-		{ tree: "tree", id: "children.0", set: false }
+		{ key: "tree", id: "children.0", set: false }
 	)
 }));
 `)
@@ -193,8 +205,8 @@ window["jawstree_tree"] = {
 	}
 };
 
-jawstreeSetPath({ tree: "tree", id: "parent", set: true });
-jawstreeSetPath({ tree: "tree", id: "child", set: true });
+jawstreeSetPath({ key: "tree", id: "parent", set: true });
+jawstreeSetPath({ key: "tree", id: "child", set: true });
 process.stdout.write(JSON.stringify(window["jawstree_tree"].selected));
 `)
 
@@ -205,6 +217,61 @@ process.stdout.write(JSON.stringify(window["jawstree_tree"].selected));
 	want := []string{"parent", "child"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("selected = %#v, want %#v", got, want)
+	}
+}
+
+func TestJawstreeJS_UpdatesAreScopedByKey(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, `
+function makeTree() {
+	return {
+		options: { multiSelectEnabled: true, cascadeSelectChildren: false },
+		sets: [],
+		selects: [],
+		jawsApplyingSet: false,
+		setData: function(data) { this.sets.push(data.length); },
+		getSelectedNodes: function() { return []; },
+		selectNodeById: function(id, set) { this.selects.push({ id: id, set: set }); }
+	};
+}
+
+window["jawstreeroot_one"] = { marker: "old-one" };
+window["jawstreeroot_two"] = { marker: "old-two" };
+window["jawstree_one"] = makeTree();
+window["jawstree_two"] = makeTree();
+
+const next = { marker: "new-one" };
+jawstreeSet({ key: "one", data: next });
+jawstreeSetPath({ key: "two", id: "children.0", set: false });
+
+process.stdout.write(JSON.stringify({
+	oneSets: window["jawstree_one"].sets,
+	oneSelects: window["jawstree_one"].selects,
+	twoSets: window["jawstree_two"].sets,
+	twoSelects: window["jawstree_two"].selects,
+	oneRoot: window["jawstreeroot_one"],
+	twoRoot: window["jawstreeroot_two"]
+}));
+`)
+
+	var got struct {
+		OneSets    []int             `json:"oneSets"`
+		OneSelects []jsSetPathCall   `json:"oneSelects"`
+		TwoSets    []int             `json:"twoSets"`
+		TwoSelects []jsSetPathCall   `json:"twoSelects"`
+		OneRoot    map[string]string `json:"oneRoot"`
+		TwoRoot    map[string]string `json:"twoRoot"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+	if !reflect.DeepEqual(got.OneSets, []int{0}) || len(got.OneSelects) != 0 {
+		t.Fatalf("first tree calls = sets %#v selects %#v", got.OneSets, got.OneSelects)
+	}
+	if len(got.TwoSets) != 0 || !reflect.DeepEqual(got.TwoSelects, []jsSetPathCall{{ID: "children.0", Set: false}}) {
+		t.Fatalf("second tree calls = sets %#v selects %#v", got.TwoSets, got.TwoSelects)
+	}
+	if got.OneRoot["marker"] != "new-one" || got.TwoRoot["marker"] != "old-two" {
+		t.Fatalf("roots crossed keys: one=%#v two=%#v", got.OneRoot, got.TwoRoot)
 	}
 }
 
@@ -290,7 +357,7 @@ function collectDescendantIDs(node, ids) {
 	}]};
 
 	window["jawstreeroot_tree"] = root;
-	window["jawstree_tree"] = jawstreeNew("tree", root, `+strconv.Itoa(int(CascadeSelectChildren))+`);
+	window["jawstree_tree"] = jawstreeNew("tree", "Jid.1", root, `+strconv.Itoa(int(CascadeSelectChildren))+`);
 
 	process.stdout.write(JSON.stringify({
 		selected: window["jawstree_tree"].selected,
@@ -401,8 +468,8 @@ var root = { children: [{
 	}]
 }]};
 
-window["jawstree_tree"] = jawstreeNew("tree", root, `+strconv.Itoa(int(CascadeSelectChildren))+`);
-jawstreeSet({ tree: "tree", data: root });
+window["jawstree_tree"] = jawstreeNew("tree", "Jid.1", root, `+strconv.Itoa(int(CascadeSelectChildren))+`);
+jawstreeSet({ key: "tree", data: root });
 
 process.stdout.write(JSON.stringify({
 	selected: window["jawstree_tree"].selected,

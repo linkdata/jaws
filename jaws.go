@@ -86,7 +86,6 @@ import (
 	"net/netip"
 	"net/url"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -241,7 +240,6 @@ func New() (jw *Jaws, err error) {
 // sends may be discarded after Done closes. Subsequent calls to Close have no
 // effect.
 func (jw *Jaws) Close() {
-	var toLog []error
 	jw.mu.Lock()
 	select {
 	case <-jw.closeCh:
@@ -257,20 +255,15 @@ func (jw *Jaws) Close() {
 		}
 		if rq.running.Load() {
 			rq.mu.Lock()
-			if cause := rq.cancelLocked(nil); cause != nil {
-				toLog = append(toLog, cause)
-			}
+			// Shutdown has no error cause. CancelCauseFunc is idempotent, so it
+			// also safely handles a Request whose context is already done.
+			rq.cancelFn(nil)
 			rq.mu.Unlock()
 		} else {
-			if cause := jw.retireNonRunningRequestLocked(rq, nil); cause != nil {
-				toLog = append(toLog, cause)
-			}
+			jw.retireNonRunningRequestLocked(rq)
 		}
 	}
 	jw.mu.Unlock()
-	for _, cause := range toLog {
-		_ = jw.Log(cause)
-	}
 }
 
 // Done returns a channel closed when [Jaws.Close] begins shutdown.
@@ -389,23 +382,6 @@ func (jw *Jaws) reportMisuse(err error) {
 	if deadlock.Debug {
 		panic(err)
 	}
-}
-
-var nextID atomic.Int64
-
-// NextID returns an int64 unique within the lifetime of the program.
-func NextID() int64 {
-	return nextID.Add(1)
-}
-
-// AppendID appends the result of NextID() in text form to the given slice.
-func AppendID(b []byte) []byte {
-	return strconv.AppendInt(b, NextID(), 32)
-}
-
-// MakeID returns a string in the form "jaws.X" where X is unique within the lifetime of the program.
-func MakeID() string {
-	return string(AppendID([]byte("jaws.")))
 }
 
 // FaviconURL returns the favicon URL discovered by [Jaws.GenerateHeadHTML].

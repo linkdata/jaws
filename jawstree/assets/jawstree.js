@@ -42,17 +42,22 @@ function jawstreeSetData(t, data) {
 }
 
 function jawstreeInit(arg) {
-    window["jawstree_"+arg.tree] = jawstreeNew(
-        arg.tree,
-        window["jawstreeroot_"+arg.tree],
+    var container = document.getElementById(arg.jid);
+    if (container) {
+        container.hidden = false;
+    }
+    window["jawstree_"+arg.key] = jawstreeNew(
+        arg.key,
+        arg.jid,
+        window["jawstreeroot_"+arg.key],
         arg.options
     );
 }
 
 function jawstreeSet(arg) {
-    var t = window["jawstree_"+arg.tree];
+    var t = window["jawstree_"+arg.key];
     var wasApplyingSet = t.jawsApplyingSet;
-    window["jawstreeroot_"+arg.tree] = arg.data;
+    window["jawstreeroot_"+arg.key] = arg.data;
     t.jawsApplyingSet = true;
     try {
         jawstreeSetData(t, arg.data);
@@ -62,7 +67,7 @@ function jawstreeSet(arg) {
 }
 
 function jawstreeSetPath(arg) {
-    var t = window["jawstree_"+arg.tree];
+    var t = window["jawstree_"+arg.key];
     var selectedNodes = t.getSelectedNodes();
     var isSelected = selectedNodes.some(function(element) {
         return element.id == arg.id;
@@ -87,7 +92,7 @@ function jawstreeSetPath(arg) {
     }
 }
 
-function jawstreeNew(treename, rootnode, options) {
+function jawstreeNew(key, containerJid, rootnode, options) {
     /*jslint bitwise: true */
     var multiSelectEnabled = options & (1<<2);
     var cascadeSelectChildren = options & (1<<7);
@@ -96,7 +101,7 @@ function jawstreeNew(treename, rootnode, options) {
     var tree;
     try {
         tree = new Treeview({
-            containerId: treename,
+            containerId: containerJid,
             data: jawstreeViewChildren(rootnode, multiSelectEnabled, cascadeSelectChildren),
             /*jslint bitwise: true */
             searchEnabled: options & (1<<0),
@@ -110,11 +115,11 @@ function jawstreeNew(treename, rootnode, options) {
             checkboxSelectionEnabled: options & (1<<8),
             /*jslint bitwise: false */
             onSelectionChange: function(selectedNodesData) {
-                var tree = window["jawstree_"+treename];
+                var tree = window["jawstree_"+key];
                 if (applyingSet || (tree && tree.jawsApplyingSet)) {
                     return;
                 }
-                jawstreeForEachNode("jawstreeroot_"+treename, window["jawstreeroot_"+treename], function(path, node) {
+                jawstreeForEachNode("jawstreeroot_"+key, window["jawstreeroot_"+key], function(path, node) {
                     var selected = false;
                     selectedNodesData.forEach(function(element) {
                         if (element.id == node.id) {

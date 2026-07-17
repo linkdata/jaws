@@ -3,8 +3,10 @@ package jawstree
 import (
 	"io"
 	"strconv"
+	"sync/atomic"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/lib/jid"
 	"github.com/linkdata/jaws/lib/ui"
 )
 
@@ -22,39 +24,44 @@ var _ jaws.UI = (*Tree)(nil)
 // [Tree.SetSelected]) under the lock is safe, but adding, removing, or reordering Children
 // afterward breaks that mapping and is unsupported on a rendered Tree.
 type Tree struct {
-	id           string // HTML ID of the tree
+	key          string
 	options      Option
 	renderParams [1]any
-	initCallData string
 	*ui.JsVar[Node]
 }
 
-// New returns a tree widget for jsvar, identified by id.
+var nextTreeKey atomic.Uint64
+
+func makeTreeKey() (key string) {
+	for {
+		current := nextTreeKey.Load()
+		if current == ^uint64(0) {
+			panic("jawstree.New: tree key space exhausted")
+		}
+		if nextTreeKey.CompareAndSwap(current, current+1) {
+			key = strconv.FormatUint(current+1, 36)
+			return
+		}
+	}
+}
+
+// New returns a tree widget for jsvar.
 //
-// id must be non-empty and contain only the characters [A-Za-z0-9_$], both jsvar
-// and jsvar.Ptr must be non-nil, and the combined options must be non-negative;
-// New panics otherwise. Call New before serving or rendering the Tree.
+// Both jsvar and jsvar.Ptr must be non-nil, and the combined options must be
+// non-negative; New panics otherwise. Call New before serving or rendering the
+// Tree.
 //
-// The rendered page must contain an element whose HTML id equals id (for example
-// <div id="mytree"></div>): Quercus.js renders the tree into that container. If it
-// is missing, the tree silently fails to appear; the only signal is a browser
-// console error, with nothing reported server-side.
-func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
+// Tree renders its own Quercus.js container. No caller-provided HTML id or
+// container element is required.
+func New(jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	if jsvar == nil {
 		panic("jawstree.New: jsvar must not be nil")
 	}
 	if jsvar.Ptr == nil {
 		panic("jawstree.New: jsvar.Ptr must not be nil")
 	}
-	// id is the key the browser uses to bracket-index the tree's globals
-	// (window["jawstree_"+id] and window["jawstreeroot_"+id]), and is also accepted
-	// by the initializer route. Validate it at construction so an invalid browser
-	// identity fails immediately.
-	if !isSafeTreeName(id) {
-		panic("jawstree.New: id must be non-empty and contain only [A-Za-z0-9_$]")
-	}
 	t = &Tree{
-		id:    id,
+		key:   makeTreeKey(),
 		JsVar: jsvar,
 	}
 	for _, opt := range options {
@@ -66,8 +73,7 @@ func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	if t.options < 0 {
 		panic("jawstree.New: options must be non-negative")
 	}
-	t.renderParams[0] = "jawstreeroot_" + t.id
-	t.initCallData = `{"tree":` + strconv.Quote(t.id) + `,"options":` + strconv.FormatInt(int64(t.options), 10) + `}`
+	t.renderParams[0] = "jawstreeroot_" + t.key
 	// Normalize away any nil children before assigning IDs so a node's slice
 	// index (its ID) always matches its position in the compacted wire array
 	// emitted by marshalJSON; otherwise a nil child desyncs the two and client
@@ -90,6 +96,17 @@ func New(id string, jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	return
 }
 
+func (tree *Tree) appendInitCallData(b []byte, containerJid jid.Jid) []byte {
+	b = append(b, `{"key":`...)
+	b = strconv.AppendQuote(b, tree.key)
+	b = append(b, `,"jid":`...)
+	b = containerJid.AppendQuote(b)
+	b = append(b, `,"options":`...)
+	b = strconv.AppendInt(b, int64(tree.options), 10)
+	b = append(b, '}')
+	return b
+}
+
 // JawsRender renders the tree state and schedules browser initialization.
 func (tree *Tree) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	if len(params) == 0 {
@@ -98,7 +115,7 @@ func (tree *Tree) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err
 		params = append([]any{tree.renderParams[0]}, params...)
 	}
 	if err = tree.JsVar.JawsRender(elem, w, params); err == nil {
-		elem.JsCall("jawstreeInit", tree.initCallData)
+		elem.JsCall("jawstreeInit", string(tree.appendInitCallData(nil, elem.Jid())))
 	}
 	return
 }
@@ -110,8 +127,8 @@ func (tree *Tree) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err
 // write lock.
 func (tree *Tree) JawsUpdate(elem *jaws.Element) {
 	var b []byte
-	b = append(b, `{"tree":`...)
-	b = strconv.AppendQuote(b, tree.id)
+	b = append(b, `{"key":`...)
+	b = strconv.AppendQuote(b, tree.key)
 	b = append(b, `,"data":`...)
 	// marshalJSON walks the shared Node tree, which a concurrent JawsInput on
 	// another Request can mutate under the JsVar write lock. Read it under the

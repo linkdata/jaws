@@ -178,14 +178,16 @@ func (elem *Element) JawsUpdate() {
 // happen promptly. The reliable event-driven path is therefore to mark the element
 // dirty (see [Request.Dirty]), which schedules a [Updater.JawsUpdate] and the wakeup
 // that delivers it.
-func (elem *Element) queue(wht what.What, data string) {
+func (elem *Element) queue(wht what.What, data string) (queued bool) {
 	if !elem.deleted.Load() {
 		elem.Request.queue(wire.WsMsg{
 			Data: data,
 			Jid:  elem.jid,
 			What: wht,
 		})
+		queued = true
 	}
+	return
 }
 
 // SetAttr queues sending a new attribute value
@@ -270,8 +272,8 @@ func (elem *Element) SetValue(value string) {
 //
 // Call this while the [Element] is rendering or updating, when a send pass is
 // imminent; a call queued directly from an event handler is only flushed when the
-// processing loop is next woken (see [Element.queue]). To call JavaScript for every
-// element matching a tag or id, use [Jaws.JsCall].
+// processing loop is next woken (see [Element.queue]). To call JavaScript for
+// every element matching a tag, use [Jaws.JsCall].
 func (elem *Element) JsCall(jsfunc, jsonstr string) {
 	elem.queue(what.Call, jsCallData(jsfunc, jsonstr))
 }
@@ -316,6 +318,22 @@ func (elem *Element) Append(htmlCode template.HTML) {
 	elem.queue(what.Append, string(htmlCode))
 }
 
+// InsertBefore inserts new HTML immediately before child.
+//
+// child must be a live, distinct [Element] belonging to the same [Request] as
+// elem. Violations are reported as [ErrInvalidChildElement], and no browser
+// command is queued. The browser also verifies that child is a direct DOM child
+// of elem before applying the insertion.
+//
+// Call this while elem is rendering or updating, when a send pass is imminent.
+// To insert HTML at the same child index in every element matching a tag, use
+// [Jaws.Insert].
+func (elem *Element) InsertBefore(child *Element, htmlCode template.HTML) {
+	if elem.validChildElement("InsertBefore", child) {
+		elem.queue(what.Insert, child.Jid().String()+"\n"+string(htmlCode))
+	}
+}
+
 // Order reorders the HTML elements.
 //
 // Call this while the [Element] is rendering or updating, when a send pass is
@@ -336,24 +354,49 @@ func (elem *Element) Order(jidList []jid.Jid) {
 	}
 }
 
-// Remove queues a browser-side removal of a child DOM node.
+// Remove removes child from the browser and its [Request] registry.
 //
-// The child is identified by its HTML ID. Remove only sends the browser command;
-// it does not unregister a known child [Element] from the [Request]. If htmlID
-// belongs to an Element tracked by this Request, the caller must also call
-// [Request.DeleteElement] for that child as part of the same update.
-//
-// The browser sends cleanup acknowledgements for managed descendants removed while
-// applying server commands, but that acknowledgement does not delete the target
-// child Element itself.
+// child must be a live, distinct [Element] belonging to the same Request as
+// elem. Violations are reported as [ErrInvalidChildElement], and neither the DOM
+// nor the registry is changed. The caller is responsible for ensuring child is
+// a direct DOM child of elem; the browser verifies that relationship before
+// applying the removal.
 //
 // Call this while the [Element] is rendering or updating, when a send pass is
 // imminent. To change the [Element] in response to a browser event, mark it dirty
 // with [Request.Dirty] instead: a change queued directly from an event handler is
 // flushed only when the processing loop is next woken, which on an otherwise-idle
 // request is not guaranteed to be prompt (see [Element.queue]).
-func (elem *Element) Remove(htmlID string) {
-	elem.queue(what.Remove, htmlID)
+func (elem *Element) Remove(child *Element) {
+	if elem.validChildElement("Remove", child) {
+		if elem.queue(what.Remove, child.Jid().String()) {
+			elem.Request.DeleteElement(child)
+		}
+	}
+}
+
+// validChildElement reports whether child can be used by a child DOM operation.
+func (elem *Element) validChildElement(operation string, child *Element) (ok bool) {
+	if elem.deleted.Load() {
+		return false
+	}
+	var detail string
+	switch {
+	case child == nil:
+		detail = "child is nil"
+	case child == elem:
+		detail = "child is the parent element"
+	case child.Request != elem.Request:
+		detail = "child belongs to another Request"
+	case child.deleted.Load():
+		detail = "child is deleted"
+	case elem.Request.GetElementByJid(child.Jid()) != child:
+		detail = "child is not registered"
+	default:
+		return true
+	}
+	elem.Jaws.reportMisuse(fmt.Errorf("jaws: Element.%s: %w: %s", operation, ErrInvalidChildElement, detail))
+	return false
 }
 
 // ApplyParams parses the parameters passed to UI() when creating a new [Element],

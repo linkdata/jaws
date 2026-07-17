@@ -35,11 +35,17 @@ var ErrRequestOverloaded = errors.New("request overloaded")
 // ErrRequestAlreadyClaimed is returned when [Jaws.UseRequest] is called more than once for a [Request].
 var ErrRequestAlreadyClaimed = errors.New("request already claimed")
 
-// ErrEmptyCallTarget indicates an element-scoped JavaScript call used an empty
-// HTML id target.
+// ErrInvalidChildElement indicates an invalid child [Element].
 //
-// [Jaws.JsCall] and [Jaws.Broadcast] report this error and do not send the call.
-var ErrEmptyCallTarget = errors.New("empty HTML id cannot target Call")
+// Child operations report this error when the child is nil, deleted,
+// unregistered, the receiver itself, or belongs to another [Request].
+var ErrInvalidChildElement = errors.New("invalid child element")
+
+// ErrInvalidChildIndex indicates an invalid child index.
+//
+// [Jaws.Insert] reports this error for a negative index. Use [Jaws.Append] to
+// insert at the end.
+var ErrInvalidChildIndex = errors.New("invalid child index")
 
 // ErrJavascriptDisabled is returned when the noscript probe indicates JavaScript is disabled.
 var ErrJavascriptDisabled = errors.New("javascript is disabled")

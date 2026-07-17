@@ -113,7 +113,7 @@ func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) 
 				// that is likely still rendering or about to connect.
 				return
 			}
-			if cause := jw.retireNonRunningRequestLocked(victim, newErrTooManyPendingRequests(remoteIP, limit)); cause != nil {
+			if cause := jw.retireNonRunningRequestWithCauseLocked(victim, newErrTooManyPendingRequests(remoteIP, limit)); cause != nil {
 				toLog = append(toLog, cause)
 			}
 		}
@@ -252,16 +252,32 @@ func releaseRetiredRequestKey(retired retiredRequestKey) {
 	}
 }
 
-// retireNonRunningRequestLocked cancels and unregisters rq without clearing or
-// pooling it. A nil entry keeps its key reserved until a runtime cleanup runs
-// after the Request becomes unreachable. Caller must hold jw.mu, and rq must not
-// be running.
-func (jw *Jaws) retireNonRunningRequestLocked(rq *Request, err error) (cause error) {
+// retireNonRunningRequestLocked cancels and unregisters rq without an error
+// cause, clearing, or pooling it. A nil entry keeps its key reserved until a
+// runtime cleanup runs after the Request becomes unreachable. Caller must hold
+// jw.mu, and rq must not be running.
+func (jw *Jaws) retireNonRunningRequestLocked(rq *Request) {
+	jw.retireNonRunningRequestCoreLocked(rq, nil, nil)
+}
+
+// retireNonRunningRequestWithCauseLocked cancels and unregisters rq with err
+// without clearing or pooling it. Caller must hold jw.mu, rq must not be running,
+// and err must be non-nil.
+func (jw *Jaws) retireNonRunningRequestWithCauseLocked(rq *Request, err error) (cause error) {
+	jw.retireNonRunningRequestCoreLocked(rq, err, &cause)
+	return
+}
+
+// retireNonRunningRequestCoreLocked implements normal and cause-bearing
+// retirement. A nil causeOut selects normal cancellation; otherwise err must be
+// non-nil and the resulting cancellation cause is stored in causeOut. Caller
+// must hold jw.mu, and rq must not be running.
+func (jw *Jaws) retireNonRunningRequestCoreLocked(rq *Request, err error, causeOut *error) {
 	rq.mu.Lock()
 	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq && !rq.running.Load() {
 		jawsKey := rq.JawsKey
-		if err != nil {
-			cause = rq.cancelLocked(err)
+		if causeOut != nil {
+			*causeOut = rq.cancelLocked(err)
 		} else if rq.ctx.Err() == nil {
 			rq.cancelFn(nil)
 		}
@@ -277,7 +293,6 @@ func (jw *Jaws) retireNonRunningRequestLocked(rq *Request, err error) (cause err
 	}
 	rq.mu.Unlock()
 	runtime.KeepAlive(rq)
-	return
 }
 
 // recycleLockedWithCause cancels and recycles rq.

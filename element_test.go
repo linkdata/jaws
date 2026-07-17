@@ -2,12 +2,14 @@ package jaws
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -164,6 +166,8 @@ func TestElement_Queued(t *testing.T) {
 
 		tss := &testUi{
 			updateFn: func(elem *Element) {
+				child := rq.NewElement(&testUi{})
+				child.Freeze()
 				elem.SetAttr("hidden", "")
 				elem.RemoveAttr("hidden")
 				elem.SetClass("bah")
@@ -171,7 +175,8 @@ func TestElement_Queued(t *testing.T) {
 				elem.SetValue("foo")
 				elem.SetInner("meh")
 				elem.Append("<div></div>")
-				elem.Remove("some-id")
+				elem.InsertBefore(child, "<span>before</span>")
+				elem.Remove(child)
 				elem.Order([]jid.Jid{1, 2})
 				replaceHTML := template.HTML(fmt.Sprintf("<div id=\"%s\"></div>", elem.Jid().String()))
 				elem.Replace(replaceHTML)
@@ -212,7 +217,12 @@ func TestElement_Queued(t *testing.T) {
 						What: what.Append,
 					},
 					{
-						Data: "some-id",
+						Data: child.Jid().String() + "\n<span>before</span>",
+						Jid:  elem.jid,
+						What: what.Insert,
+					},
+					{
+						Data: child.Jid().String(),
 						Jid:  elem.jid,
 						What: what.Remove,
 					},
@@ -252,6 +262,146 @@ func TestElement_Queued(t *testing.T) {
 		synctest.Wait()
 		th.Equal(atomic.LoadInt32(&tss.updateCalled), n)
 	})
+}
+
+func TestElement_ChildOperations(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	rq := jw.NewRequest(nil)
+	defer jw.recycle(rq)
+
+	parent := rq.NewElement(&testUi{})
+	child := rq.NewElement(&testUi{})
+	childTag := tag.Tag("child")
+	child.Tag(childTag)
+	child.Freeze()
+
+	parent.InsertBefore(child, "<span>new</span>")
+	if child.Deleted() {
+		t.Fatal("InsertBefore deleted its reference child")
+	}
+	parent.Remove(child)
+	if !child.Deleted() {
+		t.Fatal("Remove did not mark child deleted")
+	}
+	if got := rq.GetElementByJid(child.Jid()); got != nil {
+		t.Fatalf("removed child remains registered: %v", got)
+	}
+	if got := rq.GetElements(childTag); len(got) != 0 {
+		t.Fatalf("removed child remains in tag registry: %v", got)
+	}
+
+	rq.muQueue.Lock()
+	defer rq.muQueue.Unlock()
+	want := []wire.WsMsg{
+		{Jid: parent.Jid(), What: what.Insert, Data: child.Jid().String() + "\n<span>new</span>"},
+		{Jid: parent.Jid(), What: what.Remove, Data: child.Jid().String()},
+	}
+	if !reflect.DeepEqual(rq.wsQueue, want) {
+		t.Fatalf("child operation queue = %+v, want %+v", rq.wsQueue, want)
+	}
+}
+
+func TestElement_ChildOperationsRejectInvalidElement(t *testing.T) {
+	tests := []struct {
+		name  string
+		child func(parent *Element, other *Request) *Element
+	}{
+		{name: "nil", child: func(*Element, *Request) *Element { return nil }},
+		{name: "self", child: func(parent *Element, _ *Request) *Element { return parent }},
+		{name: "other request", child: func(_ *Element, other *Request) *Element {
+			return other.NewElement(&testUi{})
+		}},
+		{name: "deleted", child: func(parent *Element, _ *Request) *Element {
+			child := parent.Request.NewElement(&testUi{})
+			parent.Request.DeleteElement(child)
+			return child
+		}},
+		{name: "unregistered", child: func(parent *Element, _ *Request) *Element {
+			return &Element{Request: parent.Request, jid: parent.Jid() + 100}
+		}},
+	}
+	operations := []struct {
+		name string
+		call func(*Element, *Element)
+	}{
+		{name: "InsertBefore", call: func(parent, child *Element) {
+			parent.InsertBefore(child, "<span>new</span>")
+		}},
+		{name: "Remove", call: func(parent, child *Element) { parent.Remove(child) }},
+	}
+
+	for _, tt := range tests {
+		for _, operation := range operations {
+			t.Run(tt.name+"/"+operation.name, func(t *testing.T) {
+				jw, err := New()
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer jw.Close()
+				logger := &captureErrorLogger{}
+				jw.Logger = logger
+				rq := jw.NewRequest(nil)
+				defer jw.recycle(rq)
+				other := jw.NewRequest(nil)
+				defer jw.recycle(other)
+				parent := rq.NewElement(&testUi{})
+				child := tt.child(parent, other)
+
+				panicked := false
+				func() {
+					defer func() { panicked = recover() != nil }()
+					operation.call(parent, child)
+				}()
+				if panicked != deadlock.Debug {
+					t.Fatalf("panicked = %t, want %t", panicked, deadlock.Debug)
+				}
+				if !errors.Is(logger.err, ErrInvalidChildElement) {
+					t.Fatalf("logged error = %v, want ErrInvalidChildElement", logger.err)
+				}
+				rq.muQueue.Lock()
+				queued := len(rq.wsQueue)
+				rq.muQueue.Unlock()
+				if queued != 0 {
+					t.Fatalf("invalid child operation queued %d messages", queued)
+				}
+			})
+		}
+	}
+}
+
+func TestElement_ChildOperationsOnDeletedParentAreInert(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	logger := &captureErrorLogger{}
+	jw.Logger = logger
+	rq := jw.NewRequest(nil)
+	defer jw.recycle(rq)
+	parent := rq.NewElement(&testUi{})
+	child := rq.NewElement(&testUi{})
+	rq.DeleteElement(parent)
+
+	parent.InsertBefore(child, "<span>new</span>")
+	parent.Remove(child)
+
+	if child.Deleted() {
+		t.Fatal("deleted parent changed its live child")
+	}
+	if logger.err != nil {
+		t.Fatalf("deleted parent reported an error: %v", logger.err)
+	}
+	rq.muQueue.Lock()
+	queued := len(rq.wsQueue)
+	rq.muQueue.Unlock()
+	if queued != 0 {
+		t.Fatalf("deleted parent queued %d child operations", queued)
+	}
 }
 
 func TestElement_ReplaceRejectsMissingId(t *testing.T) {

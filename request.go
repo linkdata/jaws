@@ -450,7 +450,9 @@ func alertData(level, msg string) string {
 	return html.EscapeString(level) + "\n" + html.EscapeString(msg)
 }
 
-// Alert attempts to show an alert message on the current request webpage if it has an HTML element with the id "jaws-alerts".
+// Alert attempts to show an alert message on the current request webpage if it
+// has an HTML element with the data-jaws-alerts attribute.
+//
 // The level argument should be one of Bootstrap's alert levels: primary, secondary, success, danger, warning, info, light or dark.
 //
 // The level and msg are HTML-escaped before being sent, so it is safe to pass
@@ -530,8 +532,6 @@ func (rq *Request) wantMessage(msg *wire.Message) (yes bool) {
 		rq.mu.RLock()
 		defer rq.mu.RUnlock()
 		return rq.JawsKey == dest
-	case string: // HTML id
-		return true
 	case []any: // more than one tag
 		rq.mu.RLock()
 		defer rq.mu.RUnlock()

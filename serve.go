@@ -154,9 +154,7 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 			if cause != nil {
 				toLog = append(toLog, cause)
 			}
-			if retireCause := jw.retireNonRunningRequestLocked(rq, nil); retireCause != nil {
-				toLog = append(toLog, retireCause)
-			}
+			jw.retireNonRunningRequestLocked(rq)
 		}
 	}
 	for k, sess := range jw.sessions {

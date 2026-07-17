@@ -122,10 +122,8 @@ func (rq *Request) handleIncoming(wsmsg wire.WsMsg, eventCallCh chan eventFnCall
 // only from process.
 func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFnCall) {
 	// Reload, Redirect, Order and Alert are page-global commands: they apply to
-	// the whole document and ignore element/string targeting, so emit the single
-	// Jid:0 frame and return before resolving Dest. Without this early return a
-	// string (HTML id) Dest would also queue a second, contradictory
-	// element-targeted Jid:-1 frame for these commands.
+	// the whole document, so emit the single Jid:0 frame and return before
+	// resolving Dest.
 	switch tagmsg.What {
 	case what.Reload, what.Redirect, what.Order, what.Alert:
 		rq.queue(wire.WsMsg{
@@ -157,33 +155,6 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 	case key.Key:
 		// request-targeted; page-global What values and Call already returned
 		// above, so there are no elements to resolve here
-	case string:
-		// target is a regular HTML ID. With Jid < 0, wire.WsMsg.Append writes Data
-		// verbatim and the browser splits the frame on '\t' (fields) and '\n' (frames),
-		// so an id carrying either byte corrupts the frame (a '\n' splits it in two).
-		// The data half below is JSON-quoted, but the id is concatenated raw, so guard
-		// it: a valid HTML id never contains ASCII whitespace, so reject rather than
-		// escape, mirroring how Element.Replace rejects an id-less payload.
-		// Page/HTML-id-targeted commands (including Delete) only emit a DOM frame and
-		// never mutate the server-side Element/tag registry, unlike element/tag-targeted
-		// Delete which also removes the Element via DeleteElement below.
-		if strings.ContainsAny(v, "\t\n") {
-			rq.Jaws.reportMisuse(fmt.Errorf("jaws: Broadcast: HTML id %q contains a tab or newline", v))
-			return
-		}
-		data := tagmsg.Data
-		if tagmsg.What != what.Set && tagmsg.What != what.Call {
-			// Quote the same JSON-safe way element-targeted messages are quoted
-			// (WsMsg.Append writes Jid<0 data verbatim, so this is the wire
-			// quoting). strconv.Quote would emit \xNN / \UXXXXXXXX escapes that
-			// the browser's JSON.parse rejects, dropping the whole frame.
-			data = string(wire.AppendJSONQuote(nil, data))
-		}
-		rq.queue(wire.WsMsg{
-			Data: v + "\t" + data,
-			What: tagmsg.What,
-			Jid:  -1,
-		})
 	default:
 		todo = rq.GetElements(v)
 	}
@@ -423,11 +394,12 @@ func (rq *Request) deleteElementLocked(elem *Element) {
 	}
 }
 
-// DeleteElement removes elem from the [Request] element registry.
+// DeleteElement removes elem from the [Request] element registry without
+// queueing a browser operation.
 //
-// This is primarily intended for UI implementations that manage dynamic child
-// element sets and need to drop stale elements after issuing a corresponding
-// DOM remove operation.
+// Use [Element.Remove] to remove a managed DOM child and unregister it together.
+// DeleteElement is intended for elements that were never successfully rendered,
+// or whose DOM lifecycle is managed separately.
 func (rq *Request) DeleteElement(elem *Element) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
