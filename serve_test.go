@@ -74,6 +74,15 @@ func TestJaws_MaintenanceRetiresExpiredRequestOnce(t *testing.T) {
 	}
 }
 
+func TestJaws_AdvanceRuntimeNanosDoesNotMoveBackward(t *testing.T) {
+	jw := &Jaws{}
+	jw.advanceRuntimeNanos(2)
+	jw.advanceRuntimeNanos(1)
+	if got := jw.runtimeNanos.Load(); got != 2 {
+		t.Fatalf("runtimeNanos = %d, want 2", got)
+	}
+}
+
 func TestJaws_ServeWithTimeoutHonorsSubsecondTimeout(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		jw, err := New()
