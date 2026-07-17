@@ -1004,6 +1004,64 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
+func TestJawsJS_PerformValuePreservesImplicitTextInputSelection(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+let value = "hello";
+let selectionStart = 1;
+let selectionEnd = 5;
+const input = {
+	id: "Jid.1",
+	tagName: "INPUT",
+	type: "text",
+	getAttribute: function() { return null; }
+};
+Object.defineProperty(input, "value", {
+	get: function() { return value; },
+	set: function(v) {
+		value = v;
+		selectionStart = v.length;
+		selectionEnd = v.length;
+	},
+	enumerable: true,
+	configurable: true,
+});
+Object.defineProperty(input, "selectionStart", {
+	get: function() { return selectionStart; },
+	set: function(v) { selectionStart = v; },
+	enumerable: true,
+	configurable: true,
+});
+Object.defineProperty(input, "selectionEnd", {
+	get: function() { return selectionEnd; },
+	set: function(v) { selectionEnd = v; },
+	enumerable: true,
+	configurable: true,
+});
+
+document.getElementById = function(id) {
+	return id === input.id ? input : null;
+};
+jawsPerform("Value", input.id, JSON.stringify("say hello!"));
+process.stdout.write(JSON.stringify({
+	value: input.value,
+	start: input.selectionStart,
+	end: input.selectionEnd
+}));
+`)
+
+	var got struct {
+		Value string `json:"value"`
+		Start int    `json:"start"`
+		End   int    `json:"end"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.Value != "say hello!" || got.Start != 5 || got.End != 9 {
+		t.Fatalf("implicit text input value/selection = %+v, want selection 5:9", got)
+	}
+}
+
 func TestJawsJS_PerformRemoveAndReplaceMutateDOMAndReportRemovals(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 function FakeSocket() { this.readyState = 1; this.sent = []; }
