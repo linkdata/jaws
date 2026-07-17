@@ -1,33 +1,47 @@
 package jawstree
 
 import (
-	"io"
+	"encoding/base64"
+	"fmt"
+	"slices"
 	"strconv"
+	"sync"
 	"sync/atomic"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/jid"
-	"github.com/linkdata/jaws/lib/ui"
+	"github.com/linkdata/jaws/lib/bind"
 )
 
-var _ jaws.UI = (*Tree)(nil)
+// wsInboundLimit mirrors the jaws inbound WebSocket message limit (jaws' internal
+// webSocketReadLimit, 32 KiB): a single client-to-server frame must not exceed it,
+// or the connection is dropped. [MaxTreeNodes] is derived from it.
+const wsInboundLimit = 32 * 1024
 
-// Tree renders and updates a shared Quercus.js tree bound to a [ui.JsVar].
+// MaxTreeNodes is the largest node count [New] accepts.
 //
-// A Tree is shared UI state that may be rendered by multiple requests. It embeds
-// a [ui.JsVar], which provides the lock and browser communication for the backing
-// [Node] tree. Read or mutate that Node tree through Tree methods, or while
-// holding the Tree lock.
+// It bounds the largest possible selection message, whose size grows with the node
+// count, to stay within the WebSocket size limit. [New] rejects a larger tree with
+// [ErrInvalidTree]; TestSelectionFrameFitsInboundLimit pins the guarantee.
+const MaxTreeNodes = 180000
+
+// Tree is the shared, server-authoritative model behind a Quercus.js tree, and the
+// [jaws.UI] that renders it.
 //
-// The tree is structurally fixed once [New] returns: it assigns each node's ID from its
-// position, which must match the node's wire position. Mutating node fields (e.g. via
-// [Tree.SetSelected]) under the lock is safe, but adding, removing, or reordering Children
-// afterward breaks that mapping and is unsupported on a rendered Tree.
+// A Tree holds the node tree and the master selection state, guarded by the lock
+// passed to [New] (which the application may share with other state). A single Tree
+// is built once and rendered by every request that should show the same collaborative
+// tree; it holds no per-request state, so sharing it is safe.
+//
+// The tree is structurally fixed once [New] returns: it derives each node's identity
+// from its position. Mutating selection (through [Tree.SetSelected] or browser events)
+// is safe under the lock, but adding, removing, or reordering Children afterward is
+// unsupported.
 type Tree struct {
-	key          string
-	options      Option
-	renderParams [1]any
-	*ui.JsVar[Node]
+	bind.RWLocker         // guards root selection state and is the concurrency contract for Node accessors
+	key           string  // browser correlation key, unique per Tree
+	options       Option  // feature flags, serialized to the browser initializer
+	root          *Node   // authoritative node tree; positional-path IDs assigned by New
+	byIndex       []*Node // preorder index -> node; index 0 is root, the compact wire alias
 }
 
 var nextTreeKey atomic.Uint64
@@ -45,132 +59,371 @@ func makeTreeKey() (key string) {
 	}
 }
 
-// New returns a tree widget for jsvar.
+// New returns a shared tree model for root, guarded by l.
 //
-// Both jsvar and jsvar.Ptr must be non-nil, and the combined options must be
-// non-negative; New panics otherwise. Call New before serving or rendering the
-// Tree.
+// It returns [ErrInvalidTree] for a nil root, a cyclic or shared-node graph, a
+// negative or unknown [Option] bit, or more than [MaxTreeNodes] nodes, and
+// [ErrInvalidSelection] when the initial Selected flags violate the selection policy
+// (see [Tree.SetSelected]).
 //
-// Tree renders its own Quercus.js container. No caller-provided HTML id or
-// container element is required.
-func New(jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
-	if jsvar == nil {
-		panic("jawstree.New: jsvar must not be nil")
+// New must run before rendering the Tree or using the name-path selection API. The
+// Tree renders its own container, so no caller-provided HTML id is required.
+func New(l sync.Locker, root *Node, options ...Option) (t *Tree, err error) {
+	if root == nil {
+		return nil, fmt.Errorf("%w: root must not be nil", ErrInvalidTree)
 	}
-	if jsvar.Ptr == nil {
-		panic("jawstree.New: jsvar.Ptr must not be nil")
+	var opts Option
+	for _, opt := range options {
+		opts |= opt
+	}
+	if opts < 0 {
+		return nil, fmt.Errorf("%w: options must be non-negative, got %d", ErrInvalidTree, int(opts))
+	}
+	if opts&^allOptions != 0 {
+		return nil, fmt.Errorf("%w: unknown option bits %d", ErrInvalidTree, int(opts&^allOptions))
 	}
 	t = &Tree{
-		key:   makeTreeKey(),
-		JsVar: jsvar,
+		RWLocker: bind.AsRWLocker(l),
+		key:      makeTreeKey(),
+		options:  opts,
+		root:     root,
 	}
-	for _, opt := range options {
-		t.options |= opt
+	// The root is identified throughout by a nil Parent; index() only sets
+	// descendants' Parent, so enforce the invariant for the root here (a node reused
+	// as a new root could otherwise carry a stale Parent).
+	root.Parent = nil
+	if err = t.index(root, "", make(map[*Node]bool)); err != nil {
+		return nil, err
 	}
-	// options is serialized verbatim into the browser initializer. Panic here so a
-	// bad Option surfaces as a clear construction error rather than a tree that
-	// never renders.
-	if t.options < 0 {
-		panic("jawstree.New: options must be non-negative")
+	if len(t.byIndex) > MaxTreeNodes {
+		return nil, fmt.Errorf("%w: %d nodes exceeds MaxTreeNodes (%d)", ErrInvalidTree, len(t.byIndex), MaxTreeNodes)
 	}
-	t.renderParams[0] = "jawstreeroot_" + t.key
-	// Normalize away any nil children before assigning IDs so a node's slice
-	// index (its ID) always matches its position in the compacted wire array
-	// emitted by marshalJSON; otherwise a nil child desyncs the two and client
-	// path resolution targets the wrong node. See [Node.stripNilChildren].
-	jsvar.Ptr.stripNilChildren()
-	// The root is identified throughout the name-path API by a nil Parent; the Walk
-	// below only sets descendants' Parent, so enforce the invariant for the root here
-	// (a node reused as a new root could otherwise carry a stale Parent).
-	jsvar.Ptr.Parent = nil
-	// Assign each node's JSON-path ID and its owning-Tree and parent back-pointers.
-	// The name-path API (Node.HasNames, Node.GetNames, Tree.GetSelected,
-	// Tree.SetSelected) requires the parent back-pointers.
-	jsvar.Ptr.Walk("", func(jsPath string, node *Node) {
-		node.ID = jsPath
-		node.Tree = t
-		for _, child := range node.Children {
-			child.Parent = node // stripNilChildren guarantees no nil entries here
+	// Validate the initial selection through the same policy the browser and server
+	// mutators use, so construction can never produce a state the policy rejects.
+	want := make(map[*Node]bool)
+	for _, node := range t.byIndex {
+		if node.Selected {
+			want[node] = true
 		}
-	})
-	return
-}
-
-func (tree *Tree) appendInitCallData(b []byte, containerJid jid.Jid) []byte {
-	b = append(b, `{"key":`...)
-	b = strconv.AppendQuote(b, tree.key)
-	b = append(b, `,"jid":`...)
-	b = containerJid.AppendQuote(b)
-	b = append(b, `,"options":`...)
-	b = strconv.AppendInt(b, int64(tree.options), 10)
-	b = append(b, '}')
-	return b
-}
-
-// JawsRender renders the tree state and schedules browser initialization.
-func (tree *Tree) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
-	if len(params) == 0 {
-		params = tree.renderParams[:]
-	} else {
-		params = append([]any{tree.renderParams[0]}, params...)
 	}
-	if err = tree.JsVar.JawsRender(elem, w, params); err == nil {
-		elem.JsCall("jawstreeInit", string(tree.appendInitCallData(nil, elem.Jid())))
+	if _, err = t.applySelection(want); err != nil {
+		return nil, err
 	}
-	return
+	return t, nil
 }
 
-// JawsUpdate sends the latest tree JSON to the browser.
+// index assigns node's positional-path ID, appends it to byIndex, compacts away nil
+// children, sets child parent back-pointers, and rejects a cyclic or shared-node
+// graph. The seen set guards the recursion, so a cycle terminates with an error
+// rather than overflowing the stack. Compacting before descending keeps each node's
+// slice index (its ID) matching its position in the wire array emitted by
+// marshalJSON, which skips nils.
+func (t *Tree) index(node *Node, jsPath string, seen map[*Node]bool) error {
+	if seen[node] {
+		return fmt.Errorf("%w: node %q is reachable more than once (cyclic or shared graph)", ErrInvalidTree, node.Name)
+	}
+	seen[node] = true
+	node.ID = jsPath
+	t.byIndex = append(t.byIndex, node)
+	node.Children = slices.DeleteFunc(node.Children, func(c *Node) bool { return c == nil })
+	if jsPath != "" {
+		jsPath += "."
+	}
+	for i, child := range node.Children {
+		child.Parent = node
+		if err := t.index(child, jsPath+"children."+strconv.Itoa(i), seen); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Dirty marks the Tree changed so every rendered view resynchronizes its client on
+// the next update pass. Call it after mutating selection server-side.
+func (t *Tree) Dirty(jw *jaws.Jaws) {
+	jw.Dirty(t)
+}
+
+// strictSingle reports whether at most one node may be selected: neither
+// multi-select nor cascade is enabled.
+func (t *Tree) strictSingle() bool {
+	return t.options&MultiSelectEnabled == 0 && t.options&CascadeSelectChildren == 0
+}
+
+// applySelection sets the selection to exactly want and returns the changed nodes.
 //
-// It reads the shared Node tree under the Tree read lock, so it is safe to call
-// concurrently with the JaWS event goroutines that mutate the tree under the
-// write lock.
-func (tree *Tree) JawsUpdate(elem *jaws.Element) {
+// It is the single selection policy, shared by [New], [Tree.SetSelected], and
+// browser input. It returns [ErrInvalidSelection] when want holds more than one node
+// in a single-select tree, or any disabled or root node. Callers on a rendered Tree
+// must hold the write lock.
+func (t *Tree) applySelection(want map[*Node]bool) (changed []*Node, err error) {
+	if t.strictSingle() && len(want) > 1 {
+		return nil, fmt.Errorf("%w: single-select allows at most one node, got %d", ErrInvalidSelection, len(want))
+	}
+	for node := range want {
+		if node == t.root {
+			return nil, fmt.Errorf("%w: the root node cannot be selected", ErrInvalidSelection)
+		}
+		if node.Disabled {
+			return nil, fmt.Errorf("%w: node %q is disabled", ErrInvalidSelection, node.ID)
+		}
+	}
+	for _, node := range t.byIndex {
+		if node.Selected != want[node] {
+			node.Selected = want[node]
+			changed = append(changed, node)
+		}
+	}
+	return
+}
+
+// resolveIndex maps a wire index to a node, rejecting the root (index 0) and any
+// out-of-range index with [ErrPathRejected].
+func (t *Tree) resolveIndex(i int) (*Node, error) {
+	if i <= 0 || i >= len(t.byIndex) {
+		return nil, fmt.Errorf("%w: node index %d out of range", ErrPathRejected, i)
+	}
+	return t.byIndex[i], nil
+}
+
+// selectedSet returns the currently selected nodes as a set.
+func (t *Tree) selectedSet() map[*Node]bool {
+	sel := make(map[*Node]bool)
+	for _, node := range t.byIndex {
+		if node.Selected {
+			sel[node] = true
+		}
+	}
+	return sel
+}
+
+// applyClientDelta merges an add/remove index delta into the selection under the
+// write lock, enforcing the policy, and reports whether anything changed.
+//
+// In a single-select tree the last valid add replaces the whole selection (the
+// authoritative "deselect previous"); with no add, a remove that hits the current
+// selection clears it and anything else is a no-op. Otherwise the delta merges, so
+// concurrent multi-select edits from different clients compose rather than clobber.
+func (t *Tree) applyClientDelta(add, remove []int) (changed bool, err error) {
+	var want map[*Node]bool
+	if t.strictSingle() {
+		var target *Node
+		for _, i := range add {
+			var node *Node
+			if node, err = t.resolveIndex(i); err != nil {
+				return
+			}
+			if node.Disabled {
+				return false, fmt.Errorf("%w: node %q is disabled", ErrPathRejected, node.ID)
+			}
+			target = node
+		}
+		want = make(map[*Node]bool)
+		if target != nil {
+			want[target] = true
+		} else {
+			cur := t.selectedSet()
+			cleared := false
+			for _, i := range remove {
+				var node *Node
+				if node, err = t.resolveIndex(i); err != nil {
+					return
+				}
+				if cur[node] {
+					cleared = true
+				}
+			}
+			if !cleared {
+				want = cur // remove of a non-selected node: no-op
+			}
+		}
+	} else {
+		want = t.selectedSet()
+		for _, i := range remove {
+			var node *Node
+			if node, err = t.resolveIndex(i); err != nil {
+				return
+			}
+			delete(want, node)
+		}
+		for _, i := range add {
+			var node *Node
+			if node, err = t.resolveIndex(i); err != nil {
+				return
+			}
+			if node.Disabled {
+				return false, fmt.Errorf("%w: node %q is disabled", ErrPathRejected, node.ID)
+			}
+			want[node] = true
+		}
+	}
+	var chg []*Node
+	if chg, err = t.applySelection(want); err == nil {
+		changed = len(chg) > 0
+	}
+	return
+}
+
+// applyClientAbsolute replaces the selection with exactly the given indices (the
+// bitmap fallback) under the write lock, enforcing the policy.
+func (t *Tree) applyClientAbsolute(indices []int) (changed bool, err error) {
+	want := make(map[*Node]bool, len(indices))
+	for _, i := range indices {
+		var node *Node
+		if node, err = t.resolveIndex(i); err != nil {
+			return
+		}
+		if node.Disabled {
+			return false, fmt.Errorf("%w: node %q is disabled", ErrPathRejected, node.ID)
+		}
+		want[node] = true
+	}
+	if t.strictSingle() && len(want) > 1 {
+		return false, fmt.Errorf("%w: single-select selection has %d nodes", ErrPathRejected, len(want))
+	}
+	var chg []*Node
+	if chg, err = t.applySelection(want); err == nil {
+		changed = len(chg) > 0
+	}
+	return
+}
+
+// GetSelected returns the name-paths of all selected nodes.
+//
+// It reads under the read lock. Selection is reported by name-path, which is lossy
+// for duplicate sibling names; see [Node.GetSelected].
+func (t *Tree) GetSelected() (nameLists [][]string) {
+	t.RLock()
+	defer t.RUnlock()
+	nameLists = t.root.GetSelected()
+	return
+}
+
+// SetSelected sets the selection to the nodes matching the given name-paths.
+//
+// It runs under the write lock and enforces the selection policy, returning
+// [ErrInvalidSelection] when the match violates it (for example matching more than
+// one node in a single-select tree, or a disabled node). Matching is by name-path
+// and lossy for duplicate sibling names; see [Node.GetSelected].
+func (t *Tree) SetSelected(nameLists [][]string) (err error) {
+	t.Lock()
+	defer t.Unlock()
+	want := make(map[*Node]bool)
+	for _, node := range t.byIndex {
+		for _, names := range nameLists {
+			if node.HasNames(names) {
+				want[node] = true
+				break
+			}
+		}
+	}
+	_, err = t.applySelection(want)
+	return
+}
+
+// selectedIndexes returns the wire indices of the selected nodes under the read
+// lock. Index 0 (the root) is never included.
+func (t *Tree) selectedIndexes() (indexes []int) {
+	t.RLock()
+	defer t.RUnlock()
+	for i := 1; i < len(t.byIndex); i++ {
+		if t.byIndex[i].Selected {
+			indexes = append(indexes, i)
+		}
+	}
+	return
+}
+
+// Walk calls fn for the tree root and all descendants under the read lock; the
+// callback must not call methods that acquire the same tree lock.
+func (t *Tree) Walk(fn func(jsPath string, node *Node)) {
+	t.RLock()
+	defer t.RUnlock()
+	t.root.Walk("", fn)
+}
+
+// initPayloadLocked builds the jawstreeInit JSON: the browser correlation key, the
+// container Jid, the option flags, and the full node tree (with current selection).
+// The caller must hold the read lock.
+func (t *Tree) initPayloadLocked(jidStr string) string {
 	var b []byte
 	b = append(b, `{"key":`...)
-	b = strconv.AppendQuote(b, tree.key)
+	b = strconv.AppendQuote(b, t.key)
+	b = append(b, `,"jid":`...)
+	b = strconv.AppendQuote(b, jidStr)
+	b = append(b, `,"options":`...)
+	b = strconv.AppendInt(b, int64(t.options), 10)
 	b = append(b, `,"data":`...)
-	// marshalJSON walks the shared Node tree, which a concurrent JawsInput on
-	// another Request can mutate under the JsVar write lock. Read it under the
-	// JsVar read lock so the two never race; JawsRender is likewise locked.
-	tree.RLock()
-	b = tree.JsVar.Ptr.marshalJSON(b)
-	tree.RUnlock()
-	b = append(b, `}`...)
-	elem.JsCall("jawstreeSet", string(b))
+	b = t.root.marshalJSON(b)
+	b = append(b, '}')
+	return string(b)
 }
 
-// Walk calls fn for the tree root and all descendants.
-//
-// It is called with the tree read lock held, so the callback must not call
-// methods that acquire the same tree lock.
-func (tree *Tree) Walk(fn func(jsPath string, node *Node)) {
-	tree.RLock()
-	defer tree.RUnlock()
-	tree.Ptr.Walk("", fn)
+// selectionPayloadLocked builds the jawstreeSelection JSON carrying the absolute
+// selected-index set, choosing the smaller of a sparse index list ("s") or a
+// one-bit-per-node bitmap ("b"). The caller must hold the read lock.
+func (t *Tree) selectionPayloadLocked() string {
+	var idxs []int
+	for i := 1; i < len(t.byIndex); i++ {
+		if t.byIndex[i].Selected {
+			idxs = append(idxs, i)
+		}
+	}
+	// Each sparse index costs at most a few bytes; the bitmap is fixed at ~N/6 bytes.
+	// Bound the sparse cost generously and pick the smaller wire form.
+	bitmapLen := base64.StdEncoding.EncodedLen((len(t.byIndex) + 7) / 8)
+	if len(idxs)*8 < bitmapLen {
+		return t.sparsePayloadLocked(idxs)
+	}
+	return t.bitmapPayloadLocked()
 }
 
-// GetSelected returns the selected name-paths.
-//
-// It reads under the tree read lock.
-func (tree *Tree) GetSelected() (nameLists [][]string) {
-	tree.RLock()
-	defer tree.RUnlock()
-	nameLists = tree.Ptr.GetSelected()
-	return
+func (t *Tree) sparsePayloadLocked(idxs []int) string {
+	var b []byte
+	b = append(b, `{"key":`...)
+	b = strconv.AppendQuote(b, t.key)
+	b = append(b, `,"s":[`...)
+	for i, idx := range idxs {
+		if i > 0 {
+			b = append(b, ',')
+		}
+		b = strconv.AppendInt(b, int64(idx), 10)
+	}
+	b = append(b, `]}`...)
+	return string(b)
 }
 
-// SetSelected applies the selected name-paths and returns the changed [Node] values.
-//
-// It runs under the tree write lock. The returned [Node] pointers reference the
-// lock-protected shared tree and the
-// write lock is released on return, so on a rendered Tree they must only be read
-// under the tree read lock (RLock) and mutated under the write lock (Lock), per
-// the [Node] concurrency note. Dereferencing them without re-taking the lock
-// races the JaWS event goroutines.
-func (tree *Tree) SetSelected(nameLists [][]string) (changed []*Node) {
-	tree.Lock()
-	defer tree.Unlock()
-	changed = tree.Ptr.SetSelected(nameLists)
+func (t *Tree) bitmapPayloadLocked() string {
+	buf := make([]byte, (len(t.byIndex)+7)/8)
+	for i := 1; i < len(t.byIndex); i++ {
+		if t.byIndex[i].Selected {
+			buf[i/8] |= 1 << (uint(i) % 8)
+		}
+	}
+	var b []byte
+	b = append(b, `{"key":`...)
+	b = strconv.AppendQuote(b, t.key)
+	b = append(b, `,"b":`...)
+	b = strconv.AppendQuote(b, base64.StdEncoding.EncodeToString(buf))
+	b = append(b, '}')
+	return string(b)
+}
+
+// decodeSelectionBitmap decodes a base64 one-bit-per-node bitmap into the set node
+// indices, rejecting a malformed or wrong-length bitmap with [ErrPathRejected]. n is
+// the total node count (len of byIndex).
+func decodeSelectionBitmap(s string, n int) (indices []int, err error) {
+	var buf []byte
+	if buf, err = base64.StdEncoding.DecodeString(s); err != nil {
+		return nil, fmt.Errorf("%w: malformed bitmap: %v", ErrPathRejected, err)
+	}
+	if want := (n + 7) / 8; len(buf) != want {
+		return nil, fmt.Errorf("%w: bitmap length %d, want %d", ErrPathRejected, len(buf), want)
+	}
+	for i := 0; i < n; i++ {
+		if buf[i/8]&(1<<(uint(i)%8)) != 0 {
+			indices = append(indices, i)
+		}
+	}
 	return
 }

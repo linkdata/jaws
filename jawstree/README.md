@@ -63,7 +63,10 @@ func setupJaws(jw *jaws.Jaws, mux *http.ServeMux) (err error) {
 				{Name: "Documents", Children: []*jawstree.Node{{Name: "report.pdf"}}},
 				{Name: "Pictures"},
 			}}
-			tree := jawstree.New(ui.NewJsVar(&mu, root), jawstree.InitiallyExpanded)
+			tree, terr := jawstree.New(&mu, root, jawstree.InitiallyExpanded)
+			if terr != nil {
+				return terr
+			}
 			mux.Handle("GET /", ui.Handler(jw, "index.html", tree))
 		}
 	}
@@ -105,20 +108,23 @@ WebSocket connects.
 
 ## Using the tree widget
 
-A `Tree` is shared UI state. Build it once before serving or rendering it, then
-reuse that `*Tree` for every request that should show the same tree. The embedded
-`ui.JsVar` is the backing store, lock, and browser communication channel for the
-`Node` tree.
+A `Tree` is shared, server-authoritative UI state and the `jaws.UI` that renders
+it. Build it once before serving, then render that same `*Tree` for every request
+that should show the same collaborative tree; it holds no per-request state, so
+sharing it is safe.
 
-`New` fixes the tree structure by assigning node IDs from each node's position.
-After a tree has been rendered, mutate selection state through `Tree.SetSelected`
-or browser selection events, but do not add, remove or reorder `Children`; that
-breaks the ID-to-wire-position mapping used by Quercus.js.
+`New` takes the lock guarding the tree (which may be shared with other application
+state) and the root `*Node`. It returns `ErrInvalidTree` for an invalid graph
+(nil, cyclic, shared node, unknown option bit, or more than `MaxTreeNodes` nodes)
+and `ErrInvalidSelection` when the initial `Selected` flags violate the mode's
+policy. It assigns each node's positional-path ID, a preorder wire index, and the
+parent back-pointers the name-path API needs, so it must run before rendering.
+After a tree is rendered, mutate selection through `Tree.SetSelected` or browser
+events, but do not add, remove or reorder `Children`; that breaks the
+ID-to-wire-position mapping used by Quercus.js.
 
-Build a `Node` tree (by hand, or from a directory with `Root`), wrap its root
-in a `ui.JsVar`, and pass it to `New`. `New` initializes node IDs plus the tree
-and parent back-pointers, so it must run before rendering or using the name-path
-selection API. Browser correlation keys and HTML ids are managed internally:
+Build a `Node` tree (by hand, or from a directory with `Root`) and pass it with a
+lock to `New`. Browser correlation keys and HTML ids are managed internally:
 
 ```go
 var mu sync.RWMutex
@@ -126,7 +132,10 @@ root := &jawstree.Node{Children: []*jawstree.Node{
 	{Name: "Documents", Children: []*jawstree.Node{{Name: "report.pdf"}}},
 	{Name: "Pictures"},
 }}
-tree := jawstree.New(ui.NewJsVar(&mu, root), jawstree.InitiallyExpanded)
+tree, err := jawstree.New(&mu, root, jawstree.InitiallyExpanded)
+if err != nil {
+	// handle an invalid tree or initial selection
+}
 mux.Handle("GET /", ui.Handler(jw, "index.html", tree))
 ```
 
@@ -146,12 +155,12 @@ container or template inserts the Tree through a live DOM update:
 </html>
 ```
 
-Selections made in the browser are applied to the `Node` tree under the
-`ui.JsVar` lock; read them with `Tree.GetSelected` or change them with
-`Tree.SetSelected`. After mutating the tree server-side, push the new state to
-all rendered clients by dirtying the JsVar's bound pointer:
+Selections made in the browser are validated and applied to the `Node` tree under
+the Tree's lock; read them with `Tree.GetSelected` or change them with
+`Tree.SetSelected`. After mutating the tree server-side, push the new state to all
+rendered clients with `Tree.Dirty`:
 
 ```go
-tree.SetSelected([][]string{{"Documents", "report.pdf"}})
-jw.Dirty(root)
+_ = tree.SetSelected([][]string{{"Documents", "report.pdf"}})
+tree.Dirty(jw)
 ```

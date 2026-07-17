@@ -74,7 +74,10 @@ func TestTreeDynamicInitializationWithClientAssets(t *testing.T) {
 
 	root := &Node{Children: []*Node{{Name: "Documents"}}}
 	var mu deadlock.RWMutex
-	tree := New(ui.NewJsVar(&mu, root), InitiallyExpanded)
+	tree, err := New(&mu, root, InitiallyExpanded)
+	if err != nil {
+		t.Fatal(err)
+	}
 	contents.contents = []jaws.UI{tree}
 	tr.Dirty(contents)
 
@@ -93,23 +96,26 @@ func TestTreeDynamicInitializationWithClientAssets(t *testing.T) {
 	if frames[1].What != what.Order || frames[1].Jid != containerElem.Jid() {
 		t.Fatalf("second dynamic message = %+v, want parent Order", frames[1])
 	}
-	if frames[2].What != what.Call || frames[2].Jid <= containerElem.Jid() ||
-		frames[2].Data != "jawstreeInit="+string(tree.appendInitCallData(nil, frames[2].Jid)) {
+	tree.RLock()
+	wantInit := "jawstreeInit=" + tree.initPayloadLocked(frames[2].Jid.String())
+	tree.RUnlock()
+	if frames[2].What != what.Call || frames[2].Jid <= containerElem.Jid() || frames[2].Data != wantInit {
 		t.Fatalf("third dynamic message = %+v, want child initializer Call", frames[2])
 	}
 	if strings.Contains(frames[0].Data, "<script") ||
-		!strings.Contains(frames[0].Data, `data-jawsname="`+tree.renderParams[0].(string)+`"`) ||
 		!strings.Contains(frames[0].Data, `id="`+frames[2].Jid.String()+`"`) {
 		t.Fatalf("dynamic Tree Append has unexpected HTML: %q", frames[0].Data)
 	}
 
-	// Queue an ordinary dirty update immediately after insertion. The production
-	// writer may coalesce it with the Append/Order/initializer messages above, so
-	// the browser regression replays all four in one WebSocket frame.
-	tree.Lock()
-	root.Children[0].Name = "Updated"
-	tree.Unlock()
-	jw.Dirty(root)
+	// Select a node server-side and dirty the tree immediately after insertion. The
+	// production writer may coalesce this jawstreeSelection with the
+	// Append/Order/initializer messages above, so the browser regression replays all
+	// four in one WebSocket frame. Only selection is synced (not names/structure), so
+	// the update carries the selected index rather than a relabel.
+	if err := tree.SetSelected([][]string{{"Documents"}}); err != nil {
+		t.Fatal(err)
+	}
+	tree.Dirty(jw)
 	select {
 	case msg := <-tr.OutCh:
 		frames = append(frames, msg)
@@ -117,8 +123,11 @@ func TestTreeDynamicInitializationWithClientAssets(t *testing.T) {
 		t.Fatalf("timed out waiting for dynamic Tree update; got %+v", frames)
 	}
 	if frames[3].What != what.Call || frames[3].Jid != frames[2].Jid ||
-		!strings.Contains(frames[3].Data, `"name":"Updated"`) {
-		t.Fatalf("fourth dynamic message = %+v, want child jawstreeSet Call", frames[3])
+		!strings.Contains(frames[3].Data, "jawstreeSelection=") {
+		t.Fatalf("fourth dynamic message = %+v, want child jawstreeSelection Call", frames[3])
+	}
+	if got := decodeSelectionPayload(t, strings.TrimPrefix(frames[3].Data, "jawstreeSelection="), len(tree.byIndex)); len(got) != 1 || got[0] != 1 {
+		t.Fatalf("selection frame decoded to %v, want [1]", got)
 	}
 
 	var dynamicFrame []byte
@@ -194,7 +203,7 @@ window.addEventListener("DOMContentLoaded", function() {
 		const text = target && target.querySelector(".treeview-node-text");
 		if (window.connectedAfterAssets &&
 			window["jawstree_"+window.treeKey] instanceof window.Treeview &&
-			text && text.textContent === "Updated" && target.querySelector("ul") && !target.hidden) {
+			text && text.textContent === "Documents" && target.querySelector("li.selected") && target.querySelector("ul") && !target.hidden) {
 			document.getElementById("result").style.background = "rgb(0,255,0)";
 		}
 	}, 0);

@@ -19,11 +19,9 @@ import (
 // read is omitted from its parent, but its readable siblings — and the readable entries
 // of any directory with a deeper failure — are kept.
 //
-// The returned nodes have a nil Tree and filesystem-relative IDs; pass the tree to
-// [New] before rendering or any path operation. New overwrites both fields with the
-// owning Tree pointer and the canonical JSON path IDs. The name-path helpers work on the
-// returned nodes as-is, but rendering or serving the tree reaches [Node.JawsPathSet],
-// which dereferences Tree and panics until New has set it.
+// The returned nodes have no parent back-pointers and are not yet prepared for
+// rendering; pass the tree to [New], which assigns node identities and the parent
+// back-pointers the name-path helpers need.
 func Root(r *os.Root, filterFn func(dirpath string, ent fs.DirEntry) (include bool)) (rootnode *Node, err error) {
 	if r == nil {
 		panic("jawstree.Root: r must not be nil")

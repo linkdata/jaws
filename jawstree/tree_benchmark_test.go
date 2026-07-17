@@ -7,7 +7,6 @@ import (
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstest"
-	"github.com/linkdata/jaws/lib/ui"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
@@ -33,7 +32,10 @@ func BenchmarkTreeJawsRender(b *testing.B) {
 
 	root := &Node{Children: []*Node{{Name: "Documents"}}}
 	var mu deadlock.RWMutex
-	tree := New(ui.NewJsVar(&mu, root), InitiallyExpanded|SearchEnabled)
+	tree, err := New(&mu, root, InitiallyExpanded|SearchEnabled)
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	b.ReportAllocs()
 	b.ResetTimer()
