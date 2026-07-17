@@ -319,7 +319,7 @@ func TestTreeJawsUpdateSendsSelection(t *testing.T) {
 	rq.InCh <- wire.WsMsg{}
 	msg := readCall(t, rq.OutCh, "jawstreeSelection=")
 	tree.RLock()
-	want := "jawstreeSelection=" + tree.selectionPayloadLocked()
+	want := "jawstreeSelection=" + tree.selectionPayloadLocked(elem.Jid().String())
 	tree.RUnlock()
 	if msg.Data != want {
 		t.Fatalf("selection data = %q, want %q", msg.Data, want)

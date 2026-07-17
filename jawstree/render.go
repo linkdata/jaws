@@ -48,7 +48,7 @@ func (t *Tree) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err er
 // preserved.
 func (t *Tree) JawsUpdate(elem *jaws.Element) {
 	t.RLock()
-	payload := t.selectionPayloadLocked()
+	payload := t.selectionPayloadLocked(elem.Jid().String())
 	t.RUnlock()
 	elem.JsCall("jawstreeSelection", payload)
 }
@@ -99,7 +99,7 @@ func (t *Tree) JawsInput(elem *jaws.Element, value string) error {
 		_ = elem.Jaws.Log(err)
 	}
 	t.RLock()
-	payload := t.selectionPayloadLocked()
+	payload := t.selectionPayloadLocked(elem.Jid().String())
 	t.RUnlock()
 	elem.JsCall("jawstreeSelection", payload)
 	// Return nil so a routine client reject is not turned into a browser alert by the

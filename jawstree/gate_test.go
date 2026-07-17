@@ -24,6 +24,8 @@ func TestNew_Validation(t *testing.T) {
 		{"disabled selected", &Node{Children: []*Node{{Name: "a", Selected: true, Disabled: true}}}, nil, ErrInvalidSelection},
 		{"single-select two selected", &Node{Children: []*Node{{Name: "a", Selected: true}, {Name: "b", Selected: true}}}, nil, ErrInvalidSelection},
 		{"multi-select two selected ok", &Node{Children: []*Node{{Name: "a", Selected: true}, {Name: "b", Selected: true}}}, []Option{MultiSelectEnabled}, nil},
+		{"node-selection-disabled with initial selection", &Node{Children: []*Node{{Name: "a", Selected: true}}}, []Option{NodeSelectionDisabled}, ErrInvalidSelection},
+		{"node-selection-disabled empty ok", &Node{Children: []*Node{{Name: "a"}}}, []Option{NodeSelectionDisabled}, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -112,6 +114,21 @@ func TestApplyClientDelta_Gate(t *testing.T) {
 	}
 }
 
+func TestNodeSelectionDisabledRejectsSelection(t *testing.T) {
+	var mu sync.Mutex
+	tree := mustNew(t, &mu, &Node{Children: []*Node{{Name: "a"}}}, NodeSelectionDisabled)
+	// The shared policy rejects selection through SetSelected and browser input alike.
+	if err := tree.SetSelected([][]string{{"a"}}); !errors.Is(err, ErrInvalidSelection) {
+		t.Fatalf("SetSelected err = %v, want ErrInvalidSelection", err)
+	}
+	tree.Lock()
+	_, err := tree.applyClientDelta([]int{1}, nil)
+	tree.Unlock()
+	if !errors.Is(err, ErrInvalidSelection) {
+		t.Fatalf("applyClientDelta err = %v, want ErrInvalidSelection", err)
+	}
+}
+
 func TestApplyClientAbsolute_SingleSelectRejectsMultiple(t *testing.T) {
 	var mu sync.Mutex
 	tree := mustNew(t, &mu, &Node{Children: []*Node{{Name: "a"}, {Name: "b"}}})
@@ -173,7 +190,7 @@ func TestSelectionPayloadRoundTrip(t *testing.T) {
 		tree.Unlock()
 		maybeError(t, err)
 		tree.RLock()
-		payload := tree.selectionPayloadLocked()
+		payload := tree.selectionPayloadLocked("Jid.1")
 		tree.RUnlock()
 		want := sel
 		if want == nil {

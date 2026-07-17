@@ -153,10 +153,13 @@ func (t *Tree) strictSingle() bool {
 // applySelection sets the selection to exactly want and returns the changed nodes.
 //
 // It is the single selection policy, shared by [New], [Tree.SetSelected], and
-// browser input. It returns [ErrInvalidSelection] when want holds more than one node
-// in a single-select tree, or any disabled or root node. Callers on a rendered Tree
-// must hold the write lock.
+// browser input. It returns [ErrInvalidSelection] when want holds any node on a
+// tree with [NodeSelectionDisabled], more than one node in a single-select tree, or
+// any disabled or root node. Callers on a rendered Tree must hold the write lock.
 func (t *Tree) applySelection(want map[*Node]bool) (changed []*Node, err error) {
+	if t.options&NodeSelectionDisabled != 0 && len(want) > 0 {
+		return nil, fmt.Errorf("%w: node selection is disabled", ErrInvalidSelection)
+	}
 	if t.strictSingle() && len(want) > 1 {
 		return nil, fmt.Errorf("%w: single-select allows at most one node, got %d", ErrInvalidSelection, len(want))
 	}
@@ -359,10 +362,12 @@ func (t *Tree) initPayloadLocked(jidStr string) string {
 	return string(b)
 }
 
-// selectionPayloadLocked builds the jawstreeSelection JSON carrying the absolute
-// selected-index set, choosing the smaller of a sparse index list ("s") or a
-// one-bit-per-node bitmap ("b"). The caller must hold the read lock.
-func (t *Tree) selectionPayloadLocked() string {
+// selectionPayloadLocked builds the jawstreeSelection JSON carrying the target
+// element's Jid and the absolute selected-index set, choosing the smaller of a sparse
+// index list ("s") or a one-bit-per-node bitmap ("b"). The Jid lets the adapter
+// address the right widget when one Tree is rendered by several elements on a page.
+// The caller must hold the read lock.
+func (t *Tree) selectionPayloadLocked(jidStr string) string {
 	var idxs []int
 	for i := 1; i < len(t.byIndex); i++ {
 		if t.byIndex[i].Selected {
@@ -373,15 +378,17 @@ func (t *Tree) selectionPayloadLocked() string {
 	// Bound the sparse cost generously and pick the smaller wire form.
 	bitmapLen := base64.StdEncoding.EncodedLen((len(t.byIndex) + 7) / 8)
 	if len(idxs)*8 < bitmapLen {
-		return t.sparsePayloadLocked(idxs)
+		return t.sparsePayloadLocked(jidStr, idxs)
 	}
-	return t.bitmapPayloadLocked()
+	return t.bitmapPayloadLocked(jidStr)
 }
 
-func (t *Tree) sparsePayloadLocked(idxs []int) string {
+func (t *Tree) sparsePayloadLocked(jidStr string, idxs []int) string {
 	var b []byte
 	b = append(b, `{"key":`...)
 	b = strconv.AppendQuote(b, t.key)
+	b = append(b, `,"jid":`...)
+	b = strconv.AppendQuote(b, jidStr)
 	b = append(b, `,"s":[`...)
 	for i, idx := range idxs {
 		if i > 0 {
@@ -393,7 +400,7 @@ func (t *Tree) sparsePayloadLocked(idxs []int) string {
 	return string(b)
 }
 
-func (t *Tree) bitmapPayloadLocked() string {
+func (t *Tree) bitmapPayloadLocked(jidStr string) string {
 	buf := make([]byte, (len(t.byIndex)+7)/8)
 	for i := 1; i < len(t.byIndex); i++ {
 		if t.byIndex[i].Selected {
@@ -403,6 +410,8 @@ func (t *Tree) bitmapPayloadLocked() string {
 	var b []byte
 	b = append(b, `{"key":`...)
 	b = strconv.AppendQuote(b, t.key)
+	b = append(b, `,"jid":`...)
+	b = strconv.AppendQuote(b, jidStr)
 	b = append(b, `,"b":`...)
 	b = strconv.AppendQuote(b, base64.StdEncoding.EncodeToString(buf))
 	b = append(b, '}')
