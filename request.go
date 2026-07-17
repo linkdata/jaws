@@ -48,6 +48,8 @@ type Request struct {
 	remoteIP         netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
 	running          atomic.Bool             // if ServeHTTP() is running
 	claimed          atomic.Bool             // if UseRequest() has been called for it
+	connectStarted   atomic.Bool             // if connection reconciliation no longer accepts render snapshots
+	connectProcessed atomic.Bool             // if the one-shot post-subscription callbacks have started
 	lastWriteSeconds atomic.Int32            // [Jaws.runtimeSeconds] value at the most recent RequestWriter write; lock-free, drives pending-eviction recency (oldestEvictablePendingLocked) and idle expiry (maintenance)
 	mu               deadlock.RWMutex        // protects following
 	lastJid          Jid                     // last element Jid allocated within this Request
@@ -221,6 +223,8 @@ func (rq *Request) clearLocked() *Request {
 	rq.killSessionLocked()
 	rq.running.Store(false)
 	rq.claimed.Store(false)
+	rq.connectStarted.Store(false)
+	rq.connectProcessed.Store(false)
 	// Every field is reset to its zero state except ctx and cancelFn, which keep their
 	// (cancelled) values until getRequestLocked replaces them on reuse.
 	if rq.cancelFn != nil {
@@ -234,13 +238,15 @@ func (rq *Request) clearLocked() *Request {
 		if e != nil {
 			// Nil the GC-reachable fields and set the deleted guard, which makes any
 			// retained *Element inert (see [Element.Deleted]). The Request back-pointer
-			// and frozen flag are deliberately left as-is: Elements are allocated fresh
-			// per newElementLocked and never pooled, so a stale frozen value can never
-			// be observed by a reused Element. Any future move to pool Elements must
-			// also reset frozen, since it gates the lock-free handler read.
-			e.handlers = nil
-			e.ui = nil
+			// and frozen/rendered flags are deliberately left as-is: Elements are
+			// allocated fresh per newElementLocked and never pooled, so stale flag
+			// values can never be observed by a reused Element. Any future move to pool
+			// Elements must also reset both flags, since they publish handlers and
+			// render completion.
 			e.deleted.Store(true)
+			e.handlers = nil
+			e.clearConnectState()
+			e.ui = nil
 		}
 	}
 	clear(rq.elems)

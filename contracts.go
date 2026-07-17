@@ -17,6 +17,27 @@ type Container interface {
 	JawsContains(elem *Element) (contents []UI)
 }
 
+// ConnectUpdater reconciles browser state when a rendered [Element] connects.
+//
+// The request invokes JawsConnectUpdate once after its WebSocket broadcast
+// subscription is active and before it sends messages queued during the initial
+// render. Messages the method queues for elem follow that same Element's initial
+// messages and precede subscribed broadcasts. An error aborts the request before
+// any queued messages are sent.
+//
+// Implementations that read shared state must synchronize that read with
+// concurrent mutations. JawsConnectUpdate runs without the request registry lock
+// held and may safely acquire UI-owned locks, but it must not mutate the request's
+// element registry. It must return promptly and must not wait for request message
+// processing, which starts only after all connection updates return.
+type ConnectUpdater interface {
+	// JawsConnectUpdate queues any updates needed to reconcile elem with shared
+	// state. renderedState is the value recorded by [Element.SetConnectState], or
+	// nil when none was recorded. A returned error becomes the [Request]
+	// cancellation cause.
+	JawsConnectUpdate(elem *Element, renderedState any) (err error)
+}
+
 // InitHandler allows initializing UI getters and setters before their use.
 //
 // You can of course initialize them in the call from the template engine,

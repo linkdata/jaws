@@ -1,11 +1,13 @@
 package jaws
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
 	"io"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/linkdata/jaws/lib/jid"
@@ -29,9 +31,15 @@ type Element struct {
 	// All builds enforce this: appendHandlers drops late mutations (debug builds
 	// panic).
 	handlers []any
-	jid      jid.Jid     // JaWS ID, unique to this Element within its Request
-	deleted  atomic.Bool // true once the Element has been removed from its Request
-	frozen   atomic.Bool // set when handlers are sealed (JawsRender returns or Freeze called); guards handler mutators in all builds
+	// connectState is written only during rendering and consumed by process after
+	// rendered publishes the completed Element. It lets a ConnectUpdater compare
+	// its post-subscription state with the exact state rendered into the page.
+	connectMu    sync.Mutex // guards connectState across connection and deletion
+	connectState any
+	jid          jid.Jid     // JaWS ID, unique to this Element within its Request
+	deleted      atomic.Bool // true once the Element has been removed from its Request
+	frozen       atomic.Bool // set when handlers are sealed (JawsRender returns or Freeze called); guards handler mutators in all builds
+	rendered     atomic.Bool // set after a successful JawsRender; excludes update-only Elements sealed with Freeze
 }
 
 func (elem *Element) String() string {
@@ -64,9 +72,10 @@ func (elem *Element) appendHandlers(h ...any) {
 }
 
 // Freeze marks the [Element]'s handlers as final, as [Element.JawsRender] does on
-// return. After Freeze, the handler-mutating methods (AddHandlers, ApplyParams,
-// ApplyGetter) drop handlers; debug builds panic. Use this for elements registered
-// for updates without being rendered.
+// return. It does not mark the Element as rendered, so [ConnectUpdater] is not
+// invoked for an update-only Element. After Freeze, the handler-mutating methods
+// (AddHandlers, ApplyParams, ApplyGetter) drop handlers; debug builds panic. Use
+// this for elements registered for updates without being rendered.
 func (elem *Element) Freeze() {
 	elem.frozen.Store(true)
 }
@@ -79,6 +88,45 @@ func (elem *Element) Freeze() {
 // are dropped; debug builds panic.
 func (elem *Element) AddHandlers(h ...any) {
 	elem.appendHandlers(h...)
+}
+
+// SetConnectState records state for [ConnectUpdater.JawsConnectUpdate].
+//
+// Call it only while the Element is being rendered, before [Element.JawsRender]
+// returns. The state is retained until the WebSocket broadcast subscription is
+// active, passed once to JawsConnectUpdate, and then released. It may be any
+// non-nil value; mutable state must be copied or otherwise safe to read after
+// rendering. A nil state clears any value recorded by an earlier call. Calls
+// after rendering are programming errors and are dropped. Calls made after the
+// Request's one-shot connection reconciliation has started are harmless no-ops;
+// dynamically rendered Elements are already subscribed to broadcasts.
+func (elem *Element) SetConnectState(state any) {
+	if elem.frozen.Load() {
+		elem.Jaws.reportMisuse(errors.New("jaws: Element connect state mutated after JawsRender returned; state must be set during rendering"))
+		return
+	}
+	if elem.Request.connectStarted.Load() {
+		return
+	}
+	elem.connectMu.Lock()
+	if !elem.deleted.Load() && !elem.Request.connectStarted.Load() {
+		elem.connectState = state
+	}
+	elem.connectMu.Unlock()
+}
+
+func (elem *Element) takeConnectState() (state any) {
+	elem.connectMu.Lock()
+	state = elem.connectState
+	elem.connectState = nil
+	elem.connectMu.Unlock()
+	return
+}
+
+func (elem *Element) clearConnectState() {
+	elem.connectMu.Lock()
+	elem.connectState = nil
+	elem.connectMu.Unlock()
 }
 
 // Tag adds the given tags to the [Element].
@@ -142,17 +190,23 @@ var debugCommentSanitizer = strings.NewReplacer("-->", "==>", "--!>", "==>")
 //
 // Do not call this yourself unless it is from within another JawsRender implementation.
 func (elem *Element) JawsRender(w io.Writer, params []any) (err error) {
+	var succeeded bool
 	if !elem.deleted.Load() {
 		if err = elem.UI().JawsRender(elem, w, params); err == nil {
 			if elem.Jaws.Debug {
 				elem.renderDebug(w)
 			}
+			succeeded = true
 		}
 	}
 	// Render is complete: handlers are now frozen and read lock-free on the
-	// event goroutine. Any later handler mutation is a bug and is dropped
-	// (see appendHandlers).
+	// event goroutine. Publish a successful render after that freeze so the
+	// connection updater cannot observe an Element whose handlers are unfinished.
+	// Any later handler mutation is a bug and is dropped (see appendHandlers).
 	elem.frozen.Store(true)
+	if succeeded {
+		elem.rendered.Store(true)
+	}
 	return
 }
 
@@ -263,6 +317,22 @@ func (elem *Element) SetInner(innerHTML template.HTML) {
 // request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) SetValue(value string) {
 	elem.queue(what.Value, value)
+}
+
+// SetJsVar queues replacement of the root JavaScript variable routed by elem.
+//
+// The initial HTML for elem must have a data-jawsname attribute, as a
+// [github.com/linkdata/jaws/lib/ui.JsVar] does. value is encoded with
+// [encoding/json.Marshal], so nil sets the variable to JSON null. An encoding
+// error is returned without queueing an update. Call this while rendering,
+// updating, or from
+// [ConnectUpdater.JawsConnectUpdate], when a send pass is imminent.
+func (elem *Element) SetJsVar(value any) (err error) {
+	var data []byte
+	if data, err = json.Marshal(value); err == nil {
+		elem.queue(what.Set, "="+string(data))
+	}
+	return
 }
 
 // JsCall queues a browser JavaScript function path call for the [Element].

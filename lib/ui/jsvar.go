@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -87,9 +88,12 @@ type JsVarMaker interface {
 	JawsMakeJsVar(rq *jaws.Request) (value IsJsVar, err error)
 }
 
+type nilJsVarConnectState struct{}
+
 var (
-	_ IsJsVar          = &JsVar[int]{}
-	_ bind.Setter[int] = &JsVar[int]{}
+	_ IsJsVar             = &JsVar[int]{}
+	_ jaws.ConnectUpdater = &JsVar[int]{}
+	_ bind.Setter[int]    = &JsVar[int]{}
 )
 
 // JsVar binds a Go value to a named JavaScript variable in the browser.
@@ -110,12 +114,12 @@ var (
 // element per message. The size of any single client write is bounded by the
 // WebSocket read limit; to also stop a hostile client growing server state without
 // bound across many writes, a non-[PathSetter] value whose serialized size exceeds
-// [MaxClientJsVarBytes] aborts the [jaws.Request] when it is next rendered
-// ([ErrJsVarTooLarge]). The cap does not prevent a client from setting individual
-// exported fields, so when only some fields/paths should be client-writable,
-// implement [PathSetter] on the bound value to allow-list paths and bound lengths.
-// See jawstree's Node for an example that restricts client writes to a single
-// boolean field.
+// [MaxClientJsVarBytes] aborts the [jaws.Request] when it is next rendered or
+// reconciled on WebSocket connection ([ErrJsVarTooLarge]). The cap does not
+// prevent a client from setting individual exported fields, so when only some
+// fields/paths should be client-writable, implement [PathSetter] on the bound
+// value to allow-list paths and bound lengths. See jawstree's Node for an example
+// that restricts client writes to a single boolean field.
 type JsVar[T any] struct {
 	bind.RWLocker
 	Ptr      *T         // bound Go value
@@ -129,7 +133,7 @@ type JsVar[T any] struct {
 // Without it, a hostile browser could grow such a JsVar's server-side state without
 // bound across many writes (each single write is already bounded by the WebSocket
 // read limit). A value larger than the cap aborts the [jaws.Request] with
-// [ErrJsVarTooLarge] when next rendered.
+// [ErrJsVarTooLarge] when next rendered or reconciled on WebSocket connection.
 //
 // Set it once before serving requests; a value <= 0 disables the cap, and values
 // that implement [PathSetter] enforce their own bounds and are exempt. It is a
@@ -167,7 +171,11 @@ func (jsvar *JsVar[T]) exceedsClientJsVarCap(n int) bool {
 	if MaxClientJsVarBytes <= 0 || n <= MaxClientJsVarBytes {
 		return false
 	}
-	_, isPathSetter := any(jsvar.Ptr).(PathSetter)
+	// PathSetter implementation is a property of *T, not of the current Ptr
+	// value. Avoid reading the public Ptr field here: callers may replace it while
+	// holding the JsVar locker, and cap checks run after the render/connect
+	// snapshot releases that locker.
+	_, isPathSetter := any((*T)(nil)).(PathSetter)
 	return !isPathSetter
 }
 
@@ -265,6 +273,51 @@ func (jsvar *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 	return jsvar.JawsSetPath(elem, "", value)
 }
 
+// JawsConnectUpdate reconciles the browser with the bound value when needed.
+//
+// JaWS calls it after a Request subscribes to broadcasts, closing the interval
+// between the initial HTTP render and the WebSocket subscription. renderedState
+// is the fixed-size digest of the JSON snapshot recorded by JawsRender; if it
+// still matches, no duplicate update is sent. A Ptr that becomes nil after
+// rendering is reconciled to JSON null; a Ptr that was already nil needs no
+// update. A nil renderedState means the Element was not part of the initial
+// connection snapshot and also needs no update. The value is marshaled while the
+// JsVar read lock is held, and an oversized non-[PathSetter] value returns
+// [ErrJsVarTooLarge]. When this method is promoted through a JsVar embedded in a
+// composite UI, it queues no root-only update: the outer UI must implement
+// [jaws.ConnectUpdater] itself so its JavaScript consumer and bound value remain
+// synchronized.
+func (jsvar *JsVar[T]) JawsConnectUpdate(elem *jaws.Element, renderedState any) (err error) {
+	owner, ownsElement := elem.UI().(*JsVar[T])
+	if renderedState == nil || !ownsElement || owner != jsvar {
+		return
+	}
+	var encoded []byte
+	var ptrNil bool
+	func() {
+		jsvar.RLock()
+		defer jsvar.RUnlock()
+		if jsvar.Ptr != nil {
+			encoded, err = json.Marshal(jsvar.Ptr)
+		} else {
+			ptrNil = true
+		}
+	}()
+
+	if err == nil {
+		if ptrNil {
+			if _, wasNil := renderedState.(nilJsVarConnectState); !wasNil {
+				err = elem.SetJsVar(nil)
+			}
+		} else if jsvar.exceedsClientJsVarCap(len(encoded)) {
+			err = fmt.Errorf("%w: serialized size %d exceeds MaxClientJsVarBytes (%d)", ErrJsVarTooLarge, len(encoded), MaxClientJsVarBytes)
+		} else if rendered, ok := renderedState.([sha256.Size]byte); !ok || sha256.Sum256(encoded) != rendered {
+			err = elem.SetJsVar(json.RawMessage(encoded))
+		}
+	}
+	return
+}
+
 func (jsvar *JsVar[T]) jawsRender(elem *jaws.Element, w io.Writer, params []any, snapshot func(*T)) (err error) {
 	var getterAttrs []template.HTMLAttr
 	var jsvarName string
@@ -280,9 +333,16 @@ func (jsvar *JsVar[T]) jawsRender(elem *jaws.Element, w io.Writer, params []any,
 		defer jsvar.Unlock()
 		if jsvar.dirtyTag, getterAttrs, err = elem.ApplyGetter(jsvar.Ptr); err == nil {
 			elem.AddHandlers(jsvar)
-			if jsvarName, err = validateJsVarName(params); err == nil && jsvar.Ptr != nil {
-				if data, err = json.Marshal(jsvar.Ptr); err == nil && snapshot != nil {
-					snapshot(jsvar.Ptr)
+			if jsvarName, err = validateJsVarName(params); err == nil {
+				if jsvar.Ptr == nil {
+					elem.SetConnectState(nilJsVarConnectState{})
+				} else {
+					if data, err = json.Marshal(jsvar.Ptr); err == nil {
+						elem.SetConnectState(sha256.Sum256(data))
+						if snapshot != nil {
+							snapshot(jsvar.Ptr)
+						}
+					}
 				}
 			}
 		}

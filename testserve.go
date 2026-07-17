@@ -46,6 +46,12 @@ func (jw *Jaws) TestServe(rq *Request, onPanic func(recovered any)) (inCh chan w
 	case <-time.After(5 * time.Second):
 		panic("jaws: TestServe timed out subscribing; the Jaws processing loop (Serve or ServeWithTimeout) must be running")
 	}
+	// Close the render-snapshot phase before returning any channels. Test
+	// harnesses may render dynamic Elements as soon as TestServe returns; those
+	// Elements are already covered by the installed subscription and must not be
+	// mistaken for initial-page Elements if process has not started yet. process
+	// still runs the one-shot callbacks for snapshots recorded before TestServe.
+	rq.connectStarted.Store(true)
 
 	inCh = make(chan wire.WsMsg)
 	outCh = make(chan wire.WsMsg, cap(bcastCh))

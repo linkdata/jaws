@@ -66,6 +66,32 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 		}
 	}()
 
+	if broadcastMsgCh == nil {
+		return
+	}
+	select {
+	case <-jawsDoneCh:
+		return
+	case <-httpDoneCh:
+		return
+	case <-rq.Context().Done():
+		return
+	default:
+	}
+	if err := rq.queueConnectUpdates(); err != nil {
+		rq.cancel(err)
+		return
+	}
+	select {
+	case <-jawsDoneCh:
+		return
+	case <-httpDoneCh:
+		return
+	case <-rq.Context().Done():
+		return
+	default:
+	}
+
 	for {
 		var tagmsg wire.Message
 		var wsmsg wire.WsMsg
@@ -102,6 +128,56 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 
 		rq.handleBroadcast(tagmsg, eventCallCh)
 	}
+}
+
+// queueConnectUpdates snapshots the rendered element list, then queues each
+// optional post-subscription reconciliation update. It runs before process sends
+// the initial render queue or receives from the broadcast subscription.
+func (rq *Request) queueConnectUpdates() (err error) {
+	if !rq.connectProcessed.CompareAndSwap(false, true) {
+		return
+	}
+	rq.connectStarted.Store(true)
+	defer func() {
+		// Elements may be registered or still rendering while the callbacks run.
+		// Once the phase flag is set, SetConnectState rechecks it under connectMu;
+		// this final pass therefore clears every pre-phase state without racing a
+		// late writer that could repopulate it.
+		rq.mu.RLock()
+		remaining := slices.Clone(rq.elems)
+		rq.mu.RUnlock()
+		for _, elem := range remaining {
+			if elem != nil {
+				elem.clearConnectState()
+			}
+		}
+	}()
+
+	rq.mu.RLock()
+	elems := slices.Clone(rq.elems)
+	httpDoneCh := rq.httpDoneCh
+	rq.mu.RUnlock()
+
+	for _, elem := range elems {
+		select {
+		case <-rq.Jaws.Done():
+			return
+		case <-httpDoneCh:
+			return
+		case <-rq.Context().Done():
+			return
+		default:
+		}
+		if elem != nil && elem.rendered.Load() && !elem.deleted.Load() {
+			renderedState := elem.takeConnectState()
+			if updater, ok := elem.UI().(ConnectUpdater); ok {
+				if err = updater.JawsConnectUpdate(elem, renderedState); err != nil {
+					return
+				}
+			}
+		}
+	}
+	return
 }
 
 // handleIncoming processes a single incoming WebSocket event message, queuing an
@@ -223,6 +299,7 @@ func (rq *Request) handleRemove(containerJid Jid, data string) {
 						victims = map[Jid]struct{}{}
 					}
 					e.deleted.Store(true)
+					e.clearConnectState()
 					victims[e.Jid()] = struct{}{}
 				}
 			}
@@ -390,6 +467,7 @@ func (rq *Request) removeElementsLocked(pred func(*Element) bool) {
 func (rq *Request) deleteElementLocked(elem *Element) {
 	if elem.Request == rq {
 		elem.deleted.Store(true)
+		elem.clearConnectState()
 		rq.removeElementsLocked(func(e *Element) bool { return e == elem })
 	}
 }
