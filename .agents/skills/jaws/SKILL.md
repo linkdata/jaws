@@ -36,8 +36,12 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
 ## Hard framework constraints
 
 - Every JaWS `UI` value must be comparable.
+- Every JaWS `UI` value is request-scoped. Once used by one Request, never use
+  that value with another Request; construct fresh widgets per request. The
+  widgets may still refer to shared, synchronized application state, binders,
+  handlers, and tags.
 - `Container.JawsContains` must return hashable `UI` items, and the returned slice must not be mutated after return.
-- Treat `*ui.Container` / `*ui.Tbody` / `ContainerHelper` widgets as render-scoped; construct fresh per render, do not cache across requests.
+- Treat `*ui.Container` / `*ui.Tbody` / `ContainerHelper` widgets as request-scoped; construct fresh per request, do not cache across requests.
 
 ## Constructing UI values: `ui.New` and `bind.New`
 

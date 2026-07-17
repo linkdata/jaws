@@ -16,8 +16,8 @@ import (
 // It tracks already-rendered child elements and performs append/remove/order
 // updates during [ContainerHelper.UpdateContainer].
 //
-// A ContainerHelper belongs to a widget instance and is intended for render-scoped
-// widget lifetimes (for example widgets created via RequestWriter helper methods).
+// A ContainerHelper belongs to a request-scoped widget instance (for example a
+// widget created via a RequestWriter helper method).
 //
 // Error model:
 // Child render/update failures are treated as application bugs. Initial-render
@@ -42,7 +42,7 @@ type ContainerHelper struct {
 }
 
 // NewContainerHelper returns a ContainerHelper for rendering and updating c.
-// ContainerHelper values are render-scoped and should not be reused across requests.
+// ContainerHelper values are request-scoped and must not be reused across requests.
 func NewContainerHelper(c jaws.Container) ContainerHelper {
 	return ContainerHelper{Container: c}
 }

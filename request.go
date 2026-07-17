@@ -592,6 +592,9 @@ func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 
 // NewElement creates a new [Element] using the given [UI] object.
 //
+// The UI value becomes scoped to rq and must not be used with another
+// [Request]. See [UI] for the ownership contract.
+//
 // Panics if the build tag "debug" is set and the [UI] object doesn't satisfy all requirements.
 func (rq *Request) NewElement(ui UI) *Element {
 	if deadlock.Debug {
