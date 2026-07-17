@@ -73,12 +73,15 @@ but it does not keep the locker passed to `NewJsVar` held.
 
 ## Widget lifetime
 
-UI widget values are render-scoped. Construct them during rendering, typically
-through `RequestWriter` helpers such as `$.Container(...)` and `$.Tbody(...)`.
+Every UI widget value is request-scoped. Construct a fresh widget for each
+request, typically through `RequestWriter` helpers such as `$.Span(...)`,
+`$.Text(...)`, `$.Container(...)`, and `$.JsVar(...)`. Do not cache a widget and
+reuse it across requests, even if that widget currently appears stateless.
 
-Do not cache and reuse `*ui.Container` / `*ui.Tbody` instances across requests.
-Those widgets keep internal render/update bookkeeping and are intended to be
-created fresh for each render.
+The application data referenced by widgets has a separate lifetime. Distinct
+request-scoped widgets may share synchronized backing state, binders, handlers
+and tags. For `JsVar`, use a `JsVarMaker` when a shared handler or template value
+needs to create the binding for the current request.
 
 ## Adding a simple static widget
 

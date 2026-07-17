@@ -13,7 +13,8 @@ type Container interface {
 	//
 	// The returned [UI] values must be comparable, since they are used as map keys
 	// (see [UI] for the comparability requirement), and the slice contents must not
-	// be modified after returning it.
+	// be modified after returning it. A child UI may be returned repeatedly for
+	// the same Request, but must not be shared with a different Request.
 	JawsContains(elem *Element) (contents []UI)
 }
 
@@ -47,6 +48,12 @@ type TemplateLookuper interface {
 }
 
 // UI defines the required methods on JaWS UI objects.
+//
+// A UI value is request-scoped. Once it has been used to create an [Element]
+// for one [Request], it must not be used to create an Element for another
+// Request. Construct a fresh UI value for each Request. The application state,
+// getters, setters, handlers and tags referenced by those UI values may be
+// shared across Requests when synchronized as required.
 //
 // In addition, all UI objects must be comparable so they can be used as map keys.
 // The compile-time type must be comparable; debug builds additionally perform a

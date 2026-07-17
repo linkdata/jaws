@@ -17,7 +17,7 @@ import (
 // Element is an instance of a [Request], a [UI] object and a [Jid].
 //
 // An Element pointer supplied to a render, update or event handler is borrowed
-// for that call. A render-scoped widget may retain child Elements it creates
+// for that call. A request-scoped widget may retain child Elements it creates
 // between its render and update calls within the same Request lifecycle, but
 // should access them only from those calls. Do not retain an Element in
 // longer-lived application state or pass it to background work: the embedded
@@ -113,7 +113,7 @@ func (elem *Element) UI() UI {
 // Deleted reports whether the [Element] has been removed from its [Request].
 //
 // [Element.JawsRender], [Element.JawsUpdate] and the queue helpers are no-ops on
-// a deleted Element. A render-scoped widget that retains child Elements it
+// a deleted Element. A request-scoped widget that retains child Elements it
 // creates between render and update calls within one Request lifecycle can use
 // Deleted to detect and discard children removed out-of-band before reuse.
 // Deleted is not a lifetime check: it does not report whether the embedded

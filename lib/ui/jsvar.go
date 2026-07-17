@@ -83,6 +83,10 @@ type IsJsVar interface {
 }
 
 // JsVarMaker creates a request-scoped JavaScript variable binding.
+//
+// JawsMakeJsVar must return a fresh [IsJsVar] for each request. The returned
+// bindings may share synchronized backing state, but the bindings themselves
+// must not be shared between requests.
 type JsVarMaker interface {
 	JawsMakeJsVar(rq *jaws.Request) (value IsJsVar, err error)
 }
@@ -93,6 +97,12 @@ var (
 )
 
 // JsVar binds a Go value to a named JavaScript variable in the browser.
+//
+// A JsVar is request-scoped and must not be rendered by more than one
+// [jaws.Request]. Construct a fresh JsVar for each request, either directly
+// while rendering or through [JsVarMaker]. Distinct JsVar values may use the
+// same locker and Ptr to expose synchronized application state to multiple
+// requests.
 //
 // JsVar is intended for JSON-marshalable state shared with application
 // JavaScript. The browser binding reads and writes the window property named
@@ -117,7 +127,8 @@ var (
 // It is safe for concurrent use when the locker passed to [NewJsVar] is safe
 // for concurrent use. Concurrent writes are applied one at a time. Any
 // broadcasts they produce preserve the order in which the writes modify the
-// bound value.
+// bound value. This concurrency guarantee does not permit one JsVar to be
+// shared between requests.
 //
 // A JsVar must not be copied after first use.
 //
@@ -387,6 +398,9 @@ func (jsvar *JsVar[T]) JawsInput(elem *jaws.Element, value string) (err error) {
 // NewJsVar creates a JsVar over v protected by l.
 //
 // The locker l must be non-nil and must remain valid for the lifetime of the JsVar.
+// Create a fresh JsVar for each request; l and v may be shared by distinct
+// request-scoped JsVar values. Use [JsVarMaker] when construction depends on the
+// current request or the maker is stored in shared handler data.
 func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 	return &JsVar[T]{RWLocker: bind.AsRWLocker(l), Ptr: v}
 }
@@ -408,7 +422,9 @@ func isNilUI(ui jaws.UI) (yes bool) {
 //
 // It returns [ErrIllegalJsVarName] if jsvarName is invalid or reserved.
 //
-// You can also pass a [JsVarMaker] instead of a [JsVar].
+// A directly supplied [JsVar] must be scoped to rw.Request. You can instead pass
+// a [JsVarMaker], which is useful when the maker is stored in handler or template
+// data shared by multiple requests.
 func (rw RequestWriter) JsVar(jsvarName string, jsvar any, params ...any) (err error) {
 	if _, err = validateJsVarName([]any{jsvarName}); err == nil {
 		if jvm, ok := jsvar.(JsVarMaker); ok {

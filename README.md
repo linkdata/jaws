@@ -125,6 +125,11 @@ HTML code to the web page. Each Element is a unique instance
 of a UI object bound to a specific Request, and will have a
 unique Jid-based HTML id such as `Jid.7`.
 
+UI objects are request-scoped: construct fresh UI values for each Request and
+never reuse one UI value across Requests. The application state, binders,
+handlers and tags referenced by UI values may be shared when synchronized as
+required. The `ui.RequestWriter` helpers construct fresh widgets while rendering.
+
 If an HTML entity is not registered in a Request, JaWS will not
 forward events from it, nor perform DOM manipulations for it.
 
@@ -160,12 +165,23 @@ must read or change and exchange with Go. Unlike most JaWS UI values, a `JsVar`
 is a bidirectional channel: the binding does not by itself make either the Go
 value or the browser value authoritative.
 
-Create the binding in Go, pass it as the handler's dot value, and render it
-under the top-level name used by the browser:
+Create each binding for the Request that renders it. A `JsVarMaker` can be kept
+in shared handler data because each call returns a fresh `JsVar` over the
+possibly shared backing state:
 
 ```go
-clientVar := ui.NewJsVar(&clientMu, &client)
-handler := ui.Handler(jw, "index", clientVar)
+type application struct {
+	clientMu sync.Mutex
+	client   Client
+}
+
+// JawsMakeJsVar creates the binding for one request.
+func (app *application) JawsMakeJsVar(*jaws.Request) (ui.IsJsVar, error) {
+	return ui.NewJsVar(&app.clientMu, &app.client), nil
+}
+
+app := new(application)
+handler := ui.Handler(jw, "index", app)
 ```
 
 ```gotemplate
