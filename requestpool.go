@@ -93,16 +93,7 @@ func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 func (jw *Jaws) refreshRuntimeNanos() {
 	// time.Since on a monotonic base is never negative and keeps the counter immune
 	// to wall-clock and NTP adjustments.
-	jw.advanceRuntimeNanos(time.Since(jw.created).Nanoseconds())
-}
-
-// advanceRuntimeNanos raises the cached runtime to now without moving it backward.
-func (jw *Jaws) advanceRuntimeNanos(now int64) {
-	for previous := jw.runtimeNanos.Load(); now > previous; previous = jw.runtimeNanos.Load() {
-		if jw.runtimeNanos.CompareAndSwap(previous, now) {
-			return
-		}
-	}
+	jw.runtimeNanos.Store(time.Since(jw.created).Nanoseconds())
 }
 
 // limitPendingRequestsLocked evicts pending Requests for remoteIP until the cap is
