@@ -36,6 +36,14 @@ type ConnectFn = func(rq *Request) error
 // Request maintains the state for a JaWS WebSocket connection, and handles processing
 // of events and broadcasts.
 //
+// A Request pointer is borrowed for the HTTP or WebSocket lifecycle that supplied
+// it. Do not retain it in application state or use it from a background goroutine:
+// a Request that enters [Request.ServeHTTP] may be returned to an internal pool
+// when ServeHTTP returns, and the same pointer may later represent another
+// connection. Background work should retain [Request.Context] and, when it must
+// terminate the connection, the cancel function returned while deriving a
+// replacement context through [Request.SetContext].
+//
 // Unlike [Session], whose methods are nil-safe, Request methods are not safe to call on a
 // nil *Request: a Request is always obtained from [Jaws.NewRequest] or [Jaws.UseRequest]
 // and is never legitimately nil. The nil-receiver guard on [Request.JawsKeyString] (and
@@ -232,12 +240,13 @@ func (rq *Request) clearLocked() *Request {
 	rq.remoteIP = netip.Addr{}
 	for _, e := range rq.elems {
 		if e != nil {
-			// Nil the GC-reachable fields and set the deleted guard, which makes any
-			// retained *Element inert (see [Element.Deleted]). The Request back-pointer
-			// and frozen flag are deliberately left as-is: Elements are allocated fresh
-			// per newElementLocked and never pooled, so a stale frozen value can never
-			// be observed by a reused Element. Any future move to pool Elements must
-			// also reset frozen, since it gates the lock-free handler read.
+			// Nil the GC-reachable fields and set the deleted guard, which makes the
+			// render, update and queue paths of any retained *Element no-ops (see
+			// [Element.Deleted]). The Request back-pointer and frozen flag are
+			// deliberately left as-is: Elements are allocated fresh per newElementLocked
+			// and never pooled, so a stale frozen value can never be observed by a reused
+			// Element. Any future move to pool Elements must also reset frozen, since it
+			// gates the lock-free handler read.
 			e.handlers = nil
 			e.ui = nil
 			e.deleted.Store(true)
@@ -323,7 +332,10 @@ func (rq *Request) Set(key string, value any) {
 	rq.Session().Set(key, value)
 }
 
-// Context returns the [Request]'s context, which is by default derived from [Jaws.BaseContext].
+// Context returns the [Request]'s context.
+//
+// The context is derived from [Jaws.BaseContext] by default. Unlike the Request
+// pointer, it may be retained by background work.
 func (rq *Request) Context() (ctx context.Context) {
 	rq.mu.RLock()
 	ctx = rq.ctx
@@ -343,6 +355,9 @@ func (rq *Request) Context() (ctx context.Context) {
 // Request, call code that may do so, or block on work that needs the same
 // Request. SetContext panics if fn is nil. If fn panics, SetContext releases the
 // lock and propagates the panic.
+//
+// Background work that must cancel the Request should create a derived context in
+// fn and retain that context's cancellation function, not the Request pointer.
 //
 // Returning a nil context is a programming error: debug builds panic and production
 // builds report it through [Jaws.MustLog] and retain the current context.
@@ -436,9 +451,12 @@ func (rq *Request) cancel(err error) {
 // It cancels the Request's context with the given cause (logged via [Jaws.Logger]);
 // the WebSocket processing loop and its goroutines observe the cancelled context and
 // shut down asynchronously. Cancel returns immediately and does not wait for teardown.
-// It is safe to call from UI code, for example to terminate a connection that violates
-// a server-side limit. A nil err cancels without a specific cause, and calling Cancel
-// on an already-finished or already-cancelled Request has no effect.
+// It is safe to call synchronously from UI code, for example to terminate a
+// connection that violates a server-side limit. A nil err cancels without a
+// specific cause.
+//
+// Do not retain the Request for asynchronous cancellation; use [Request.SetContext]
+// and retain the derived context's cancellation function instead.
 func (rq *Request) Cancel(err error) {
 	rq.cancel(err)
 }
@@ -460,8 +478,8 @@ func alertData(level, msg string) string {
 //
 // The default JaWS JavaScript only supports Bootstrap dismissible alerts.
 //
-// It does nothing if the Request has already been recycled, since it then has no
-// live target. See [Jaws.Broadcast] for processing-loop requirements.
+// See [Request] for pointer lifetime and [Jaws.Broadcast] for processing-loop
+// requirements.
 func (rq *Request) Alert(level, msg string) {
 	if k := rq.destKey(); k != 0 {
 		rq.Jaws.Broadcast(wire.Message{
@@ -486,8 +504,8 @@ func (rq *Request) AlertError(err error) {
 // schemes such as javascript: and protocol-relative ("//host") URLs are refused
 // and logged rather than sent to the browser.
 //
-// It does nothing if the Request has already been recycled, since it then has no
-// live target. See [Jaws.Broadcast] for processing-loop requirements.
+// See [Request] for pointer lifetime and [Jaws.Broadcast] for processing-loop
+// requirements.
 func (rq *Request) Redirect(url string) {
 	if msg, ok := rq.Jaws.redirectMessage(url); ok {
 		if k := rq.destKey(); k != 0 {
