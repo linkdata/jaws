@@ -54,28 +54,28 @@ type requestBuffers struct {
 // [Request.Log] and [Request.MustLog] let it forward to the logger; both exist only for
 // that diagnostic use, not as a public nil-safe contract.
 type Request struct {
-	Jaws             *Jaws                   // (read-only) the JaWS instance the Request belongs to
-	JawsKey          key.Key                 // (read-only) random key assigned to this Request; routes JaWS URLs and request-targeted broadcasts only while registered
-	remoteIP         netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
-	registered       bool                    // present as a live identity in Jaws.requests; guarded by mu
-	running          atomic.Bool             // if ServeHTTP() is running
-	claimed          atomic.Bool             // if UseRequest() has been called for it
-	lastWriteSeconds atomic.Int32            // [Jaws.runtimeSeconds] value at the most recent RequestWriter write; lock-free, drives pending-eviction recency (oldestEvictablePendingLocked) and idle expiry (maintenance)
-	mu               deadlock.RWMutex        // protects following
-	lastJid          Jid                     // last element Jid allocated within this Request
-	initial          *http.Request           // initial HTTP request passed to Jaws.NewRequest
-	session          *Session                // session, if established
-	todoDirt         []any                   // dirty tags
-	ctx              context.Context         // current context, derived from either Jaws or WS HTTP req; stored in the struct because there is no call chain between Request creation and its use once the WebSocket exists
-	httpDoneCh       <-chan struct{}         // once claimed, set to http.Request.Context().Done()
-	cancelFn         context.CancelCauseFunc // cancel function
-	connectFn        ConnectFn               // a ConnectFn to call before starting message processing for the Request
-	buffers          *requestBuffers         // detached and reused after this Request finishes
-	elems            []*Element              // our Elements
-	tagMap           map[any][]*Element      // maps tags to Elements
-	muQueue          deadlock.Mutex          // protects wsQueue and tailsent
-	wsQueue          []wire.WsMsg            // queued messages to send
-	tailsent         bool
+	Jaws           *Jaws                   // (read-only) the JaWS instance the Request belongs to
+	JawsKey        key.Key                 // (read-only) random key assigned to this Request; routes JaWS URLs and request-targeted broadcasts only while registered
+	remoteIP       netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
+	registered     bool                    // present as a live identity in Jaws.requests; guarded by mu
+	running        atomic.Bool             // if ServeHTTP() is running
+	claimed        atomic.Bool             // if UseRequest() has been called for it
+	lastWriteNanos atomic.Int64            // [Jaws.runtimeNanos] value at the most recent RequestWriter write; lock-free, drives pending-eviction recency (oldestEvictablePendingLocked) and idle expiry (maintenance)
+	mu             deadlock.RWMutex        // protects following
+	lastJid        Jid                     // last element Jid allocated within this Request
+	initial        *http.Request           // initial HTTP request passed to Jaws.NewRequest
+	session        *Session                // session, if established
+	todoDirt       []any                   // dirty tags
+	ctx            context.Context         // current context, derived from either Jaws or WS HTTP req; stored in the struct because there is no call chain between Request creation and its use once the WebSocket exists
+	httpDoneCh     <-chan struct{}         // once claimed, set to http.Request.Context().Done()
+	cancelFn       context.CancelCauseFunc // cancel function
+	connectFn      ConnectFn               // a ConnectFn to call before starting message processing for the Request
+	buffers        *requestBuffers         // detached and reused after this Request finishes
+	elems          []*Element              // our Elements
+	tagMap         map[any][]*Element      // maps tags to Elements
+	muQueue        deadlock.Mutex          // protects wsQueue and tailsent
+	wsQueue        []wire.WsMsg            // queued messages to send
+	tailsent       bool
 }
 
 type eventFnCall struct {
@@ -108,10 +108,10 @@ func (rq *Request) String() string {
 // [RequestWriter.Write] calls it on every write. It is lock-free and safe to call
 // concurrently.
 func (rq *Request) MarkWritten() {
-	// A single atomic store of the cached runtimeSeconds; no clock read. The recorded
-	// second drives the recency window in oldestEvictablePendingLocked and the idle
+	// A single atomic store of the cached runtimeNanos; no clock read. The recorded
+	// instant drives the recency window in oldestEvictablePendingLocked and the idle
 	// expiry in maintenance.
-	rq.lastWriteSeconds.Store(rq.Jaws.runtimeSeconds.Load())
+	rq.lastWriteNanos.Store(rq.Jaws.runtimeNanos.Load())
 }
 
 // destKey returns the Request's current identity key, read under rq.mu, for use as
@@ -165,10 +165,10 @@ func (rq *Request) claim(r *http.Request) error {
 				}
 			}
 			rq.httpDoneCh = httpDoneCh
-			// Refresh the write second so a request claimed long after its initial
+			// Refresh the write instant so a request claimed long after its initial
 			// render (a throttled or backgrounded tab) is not treated as idle and
 			// retired in the window before ServeHTTP sets running.
-			rq.lastWriteSeconds.Store(rq.Jaws.runtimeSeconds.Load())
+			rq.lastWriteNanos.Store(rq.Jaws.runtimeNanos.Load())
 			return nil
 		}
 	}
@@ -406,20 +406,20 @@ func (rq *Request) replaceContext(fn func(oldCtx context.Context) (newCtx contex
 // maintenance reports whether rq has expired and should be retired. For a
 // request that never went live it cancels and reports expiry once it has been
 // idle (no [RequestWriter] write) longer than requestTimeout, or immediately if its
-// context is already done. nowSeconds is the reference instant ([Jaws.runtimeSeconds]).
+// context is already done. nowNanos is the reference instant ([Jaws.runtimeNanos]).
 // Called from the Serve loop's maintenance pass while jw.mu is held.
 //
 // It returns the cancellation cause (or nil) rather than logging it, so the caller
 // can log it after releasing jw.mu — logging runs the user [Jaws.Logger], which
 // must not be invoked under a lock.
-func (rq *Request) maintenance(nowSeconds int32, requestTimeout time.Duration) (expired bool, cause error) {
+func (rq *Request) maintenance(nowNanos int64, requestTimeout time.Duration) (expired bool, cause error) {
 	if !rq.running.Load() {
 		rq.mu.Lock()
 		if rq.ctx.Err() != nil {
 			expired = true
 		} else {
-			elapsedSeconds := nowSeconds - rq.lastWriteSeconds.Load()
-			if elapsedSeconds > 0 && time.Duration(elapsedSeconds)*time.Second > requestTimeout {
+			elapsed := time.Duration(nowNanos - rq.lastWriteNanos.Load())
+			if elapsed > 0 && elapsed > requestTimeout {
 				cause = rq.cancelLocked(newErrNoWebSocketRequest(rq))
 				expired = true
 			}

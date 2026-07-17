@@ -30,6 +30,9 @@ func (jw *Jaws) getWebSocketTimeout() (t time.Duration) {
 }
 
 // ServeWithTimeout begins processing requests with the given timeout.
+//
+// Pending Requests idle longer than requestTimeout are retired by periodic
+// maintenance, which may observe the threshold up to one maintenance tick later.
 // It is intended to run on its own goroutine.
 // It returns when [Jaws.Close] is called.
 func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
@@ -50,9 +53,9 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	jw.webSocketTimeout = requestTimeout
 	jw.maintenanceInterval = maintenanceInterval
 	jw.mu.Unlock()
-	// Seed the seconds counter so it is accurate from the first request, then keep
+	// Seed the runtime counter so it is accurate from the first request, then keep
 	// it fresh on every maintenance tick (see the case below).
-	jw.refreshRuntimeSeconds()
+	jw.refreshRuntimeNanos()
 
 	defer func() {
 		t.Stop()
@@ -101,7 +104,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 				mustBroadcast(wire.Message{What: what.Update})
 			}
 		case <-t.C:
-			jw.refreshRuntimeSeconds()
+			jw.refreshRuntimeNanos()
 			jw.maintenance(requestTimeout)
 		case sub := <-jw.subCh:
 			if sub.msgCh != nil {
@@ -145,12 +148,12 @@ func (jw *Jaws) unsubscribe(msgCh chan wire.Message) {
 func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	var toLog []error
 	jw.mu.Lock()
-	nowSeconds := jw.runtimeSeconds.Load()
+	nowNanos := jw.runtimeNanos.Load()
 	for _, rq := range jw.requests {
 		if rq == nil {
 			continue
 		}
-		if expired, cause := rq.maintenance(nowSeconds, requestTimeout); expired {
+		if expired, cause := rq.maintenance(nowNanos, requestTimeout); expired {
 			if cause != nil {
 				toLog = append(toLog, cause)
 			}

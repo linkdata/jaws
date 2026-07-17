@@ -71,8 +71,8 @@ func TestRequestWriter_MethodsAndWidgetHelpers(t *testing.T) {
 	if got := buf.String(); got != "prefix" {
 		t.Fatalf("unexpected write output %q", got)
 	}
-	// Write records the current second via Request.MarkWritten (covered by the core
-	// package's pending-eviction tests); lastWriteSeconds is unexported here.
+	// Write records the current instant via Request.MarkWritten (covered by the core
+	// package's pending-eviction tests); lastWriteNanos is unexported here.
 
 	if rw.Initial() == nil {
 		t.Fatal("expected initial request")

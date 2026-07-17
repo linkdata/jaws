@@ -53,7 +53,7 @@ func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 		// new Request. Before Serve starts there is no maintenance loop to advance
 		// the counter, so a stale value could otherwise make an old pending Request
 		// look freshly written and briefly overshoot the cap.
-		jw.refreshRuntimeSeconds()
+		jw.refreshRuntimeNanos()
 		closed := false
 		select {
 		case <-jw.closeCh:
@@ -83,19 +83,17 @@ func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 	return
 }
 
-// refreshRuntimeSeconds updates runtimeSeconds to the whole seconds elapsed since
-// the [Jaws] was created.
+// refreshRuntimeNanos updates runtimeNanos to the nanoseconds elapsed since the
+// [Jaws] was created.
 //
 // Request allocation calls it before pending-request eviction and timestamp
 // seeding. The Serve loop also calls it once at start and on every maintenance
 // tick, so per-write [Request.MarkWritten] only does an atomic load rather than
 // reading the clock.
-func (jw *Jaws) refreshRuntimeSeconds() {
-	// time.Since on a monotonic base is never negative and keeps the counter immune to
-	// wall-clock and NTP adjustments. The int32 conversion is intentionally
-	// modulo-style: recency checks compare nearby samples, and their windows are far
-	// smaller than 2^31 seconds.
-	jw.runtimeSeconds.Store(int32(time.Since(jw.created) / time.Second)) // #nosec G115 -- intentional relative-time counter
+func (jw *Jaws) refreshRuntimeNanos() {
+	// time.Since on a monotonic base is never negative and keeps the counter immune
+	// to wall-clock and NTP adjustments.
+	jw.runtimeNanos.Store(time.Since(jw.created).Nanoseconds())
 }
 
 // limitPendingRequestsLocked evicts pending Requests for remoteIP until the cap is
@@ -104,9 +102,9 @@ func (jw *Jaws) refreshRuntimeSeconds() {
 func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) {
 	limit := jw.MaxPendingRequestsPerIP
 	if limit > 0 {
-		nowSeconds := jw.runtimeSeconds.Load()
+		nowNanos := jw.runtimeNanos.Load()
 		for len(jw.pending[remoteIP]) >= limit {
-			victim := jw.oldestEvictablePendingLocked(remoteIP, nowSeconds)
+			victim := jw.oldestEvictablePendingLocked(remoteIP, nowNanos)
 			if victim == nil {
 				// Every pending Request for this IP was written recently. Prefer a
 				// brief, self-correcting overshoot of the cap to invalidating a page
@@ -123,37 +121,30 @@ func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) 
 
 // oldestEvictablePendingLocked returns the oldest pending [Request] for remoteIP
 // eligible for eviction, or nil if every one was written too recently to evict.
-// nowSeconds is the reference instant ([Jaws.runtimeSeconds]), passed in so all
+// nowNanos is the reference instant ([Jaws.runtimeNanos]), passed in so all
 // candidates are judged against the same instant. Caller must hold jw.mu.
-func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr, nowSeconds int32) *Request {
+func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr, nowNanos int64) *Request {
 	// A Request is spared while its initial HTML may still be in flight.
-	// RequestWriter.Write records the current second on every write via
+	// RequestWriter.Write records the current cached instant on every write via
 	// Request.MarkWritten, so a Request is treated as possibly rendering while its
-	// last write is within 2*maintenanceInterval (rounded to whole seconds, with a
-	// one-second floor). The recorded second advances only while the Request keeps
-	// writing, so an actively writing render stays fresh while one idle for the
-	// window becomes evictable.
+	// last write is within 2*maintenanceInterval. The recorded instant advances only
+	// while the Request keeps writing, so an actively writing render stays fresh
+	// while one idle for the window becomes evictable.
 	//
 	// maintenanceInterval is zero until ServeWithTimeout starts; fall back to
 	// DefaultUpdateInterval so an in-flight render is still protected before the
-	// maintenance pass begins running. The exact fallback value need not match the
-	// steady-state maintenanceInterval: the one-second floor below dominates for any
-	// sub-second interval, and a NewRequest before Serve is in any case unusual.
+	// maintenance pass begins running.
 	interval := jw.maintenanceInterval
 	if interval <= 0 {
 		interval = DefaultUpdateInterval
 	}
 	spareWindow := 2 * interval
-	if spareWindow < time.Second {
-		spareWindow = time.Second // floor: the seconds counter advances at most once per second
-	}
 	for _, rq := range jw.pending[remoteIP] {
-		// Compare as durations (elapsed whole seconds vs the window) to avoid a
-		// lossy time.Duration conversion. A write timestamp newer than this scan's
-		// nowSeconds is fresh; that can happen when a render records a write while
-		// the Serve loop's runtimeSeconds snapshot is briefly stale.
-		elapsedSeconds := nowSeconds - rq.lastWriteSeconds.Load()
-		if elapsedSeconds <= 0 || time.Duration(elapsedSeconds)*time.Second <= spareWindow {
+		// A write timestamp newer than this scan's nowNanos is fresh; that can happen
+		// when a render records a write while the Serve loop's runtimeNanos snapshot
+		// is briefly stale.
+		elapsed := time.Duration(nowNanos - rq.lastWriteNanos.Load())
+		if elapsed <= 0 || elapsed <= spareWindow {
 			continue
 		}
 		return rq
@@ -236,7 +227,7 @@ func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP neti
 	defer rq.mu.Unlock()
 	rq.JawsKey = jawsKey
 	rq.registered = registered
-	rq.lastWriteSeconds.Store(jw.runtimeSeconds.Load())
+	rq.lastWriteNanos.Store(jw.runtimeNanos.Load())
 	rq.initial = r
 	rq.remoteIP = remoteIP
 	rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
