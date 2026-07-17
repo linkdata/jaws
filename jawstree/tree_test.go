@@ -306,7 +306,7 @@ func TestTreeRenderEmitsSelfContainedRootAndQueuesInitializer(t *testing.T) {
 		if msg.What != what.Call || msg.Jid != elem.Jid() {
 			t.Fatalf("initializer message = %+v, want element-scoped Call for %s", msg, elem.Jid())
 		}
-		if want := "jawstreeInit=" + string(tree.appendInitCallData(nil, elem.Jid())); msg.Data != want {
+		if want := "jawstreeInit=" + string(tree.appendInitCallData(nil, elem.Jid(), 0)); msg.Data != want {
 			t.Fatalf("initializer data = %q, want %q", msg.Data, want)
 		}
 	case <-time.After(time.Second):
@@ -460,7 +460,10 @@ func TestTreeSelectionMethodsConcurrentWithInput(t *testing.T) {
 	if rq == nil {
 		t.Fatal("nil test request")
 	}
-	defer rq.Close()
+	defer func() {
+		rq.Close()
+		<-rq.DoneCh
+	}()
 
 	root := &Node{Name: "root", Children: []*Node{{Name: "child"}}}
 	var mu deadlock.RWMutex
@@ -555,7 +558,7 @@ func TestTree(t *testing.T) {
 	rq.InCh <- wire.WsMsg{}
 	select {
 	case msg := <-rq.OutCh:
-		if msg.What != what.Call || msg.Jid != elem.Jid() || msg.Data != "jawstreeInit="+string(tree.appendInitCallData(nil, elem.Jid())) {
+		if msg.What != what.Call || msg.Jid != elem.Jid() || msg.Data != "jawstreeInit="+string(tree.appendInitCallData(nil, elem.Jid(), 0)) {
 			t.Fatalf("unexpected initial tree message: %+v", msg)
 		}
 	case <-time.After(2 * time.Second):
@@ -659,6 +662,141 @@ func (fw *failWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+type blockingWriter struct {
+	wrote   chan<- []byte
+	release <-chan struct{}
+}
+
+func (bw blockingWriter) Write(p []byte) (n int, err error) {
+	b := append([]byte(nil), p...)
+	bw.wrote <- b
+	<-bw.release
+	n = len(p)
+	return
+}
+
+func TestTree_JawsRenderSnapshotsSelectionVersionWithInitialData(t *testing.T) {
+	jw, err := jaws.New()
+	maybeError(t, err)
+	defer jw.Close()
+
+	go jw.Serve()
+	rq := jawstest.NewTestRequest(jw, nil)
+	if rq == nil {
+		t.Fatal("nil test request")
+	}
+	defer rq.Close()
+	<-rq.ReadyCh
+
+	root := &Node{Children: []*Node{{Name: "a"}, {Name: "b"}}}
+	var mu sync.RWMutex
+	tree := New(ui.NewJsVar(&mu, root))
+	elem := rq.NewElement(tree)
+
+	tree.Lock()
+	err = root.JawsSetPath(elem, "children.0.selected", true)
+	tree.Unlock()
+	maybeError(t, err)
+
+	wrote := make(chan []byte, 1)
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	renderErr := make(chan error, 1)
+	renderDone := false
+	defer func() {
+		releaseOnce.Do(func() { close(release) })
+		if !renderDone {
+			select {
+			case <-renderErr:
+			case <-time.After(time.Second):
+			}
+		}
+	}()
+	go func() {
+		renderErr <- elem.JawsRender(blockingWriter{wrote: wrote, release: release}, nil)
+	}()
+
+	var rendered []byte
+	select {
+	case rendered = <-wrote:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for the initial tree write")
+	}
+
+	mutationErr := make(chan error, 1)
+	go func() {
+		tree.Lock()
+		err := root.JawsSetPath(elem, "children.1.selected", true)
+		tree.Unlock()
+		mutationErr <- err
+	}()
+	select {
+	case err = <-mutationErr:
+		maybeError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("selection mutation remained blocked after serialization")
+	}
+
+	releaseOnce.Do(func() { close(release) })
+	select {
+	case err = <-renderErr:
+		renderDone = true
+		maybeError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for the initial tree render")
+	}
+
+	_, attr, ok := strings.Cut(string(rendered), `data-jawsdata="`)
+	if !ok {
+		t.Fatalf("rendered tree is missing data-jawsdata: %q", rendered)
+	}
+	attr, _, ok = strings.Cut(attr, `"`)
+	if !ok {
+		t.Fatalf("rendered tree has an unterminated data-jawsdata: %q", rendered)
+	}
+	var initial struct {
+		Children []struct {
+			Selected bool `json:"selected"`
+		} `json:"children"`
+	}
+	if err = json.Unmarshal([]byte(html.UnescapeString(attr)), &initial); err != nil {
+		t.Fatalf("initial tree data is not JSON: %v", err)
+	}
+	if len(initial.Children) != 2 || !initial.Children[0].Selected || initial.Children[1].Selected {
+		t.Fatalf("initial rendered selection = %+v, want only child a", initial.Children)
+	}
+
+	// Wake the already-running Request so it drains the initializer queued after
+	// the blocked write completed.
+	rq.InCh <- wire.WsMsg{}
+	select {
+	case msg := <-rq.OutCh:
+		payload, ok := strings.CutPrefix(msg.Data, "jawstreeInit=")
+		if msg.What != what.Call || msg.Jid != elem.Jid() || !ok {
+			t.Fatalf("initializer message = %+v, want element-scoped jawstreeInit", msg)
+		}
+		var init struct {
+			SelectionVersion uint64 `json:"selectionVersion"`
+		}
+		if err := json.Unmarshal([]byte(payload), &init); err != nil {
+			t.Fatalf("initializer payload is not JSON: %v", err)
+		}
+		if init.SelectionVersion != 1 {
+			t.Fatalf("initializer selectionVersion = %d, want serialized-data version 1", init.SelectionVersion)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for the initial tree initializer")
+	}
+
+	tree.RLock()
+	liveVersion := tree.selectionVersion
+	liveSelection := [2]bool{root.Children[0].Selected, root.Children[1].Selected}
+	tree.RUnlock()
+	if liveVersion != 2 || liveSelection != [2]bool{false, true} {
+		t.Fatalf("live tree = version %d selection %v, want version 2 with only child b", liveVersion, liveSelection)
+	}
+}
+
 // TestTree_JawsRenderWriteError verifies Tree.JawsRender propagates a write error
 // from the hidden JsVar data element.
 func TestTree_JawsRenderWriteError(t *testing.T) {
@@ -712,7 +850,7 @@ func TestTree_JawsPathSetIgnoresNonSelectedPath(t *testing.T) {
 	case <-t.Context().Done():
 		t.Fatal("expected a jawstreeInit message")
 	case msg := <-rq.OutCh:
-		if msg.What != what.Call || msg.Jid != elem.Jid() || msg.Data != "jawstreeInit="+string(tree.appendInitCallData(nil, elem.Jid())) {
+		if msg.What != what.Call || msg.Jid != elem.Jid() || msg.Data != "jawstreeInit="+string(tree.appendInitCallData(nil, elem.Jid(), 0)) {
 			t.Fatalf("unexpected initial tree message: %+v", msg)
 		}
 	}
@@ -783,7 +921,7 @@ func TestTree_DirtySharedTreeSendsOneUpdatePerRequest(t *testing.T) {
 		tc.rq.InCh <- wire.WsMsg{}
 		select {
 		case msg := <-tc.rq.OutCh:
-			want := "jawstreeInit=" + string(tree.appendInitCallData(nil, tc.elem.Jid()))
+			want := "jawstreeInit=" + string(tree.appendInitCallData(nil, tc.elem.Jid(), 0))
 			if msg.What != what.Call || msg.Jid != tc.elem.Jid() || msg.Data != want {
 				t.Fatalf("request initializer = %+v, want Jid %s data %q", msg, tc.elem.Jid(), want)
 			}

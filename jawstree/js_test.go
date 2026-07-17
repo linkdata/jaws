@@ -56,11 +56,25 @@ eval(src);
 	return out.String()
 }
 
-func TestJawstreeJS_InitUsesPreloadedRoot(t *testing.T) {
+func TestJawstreeJS_InitSeedsSelectionVersionAndUsesPreloadedRoot(t *testing.T) {
 	raw := runJawstreeJSSnippet(t, `
-const root = { children: [{ id: "children.0", name: "Documents" }] };
+const root = { children: [
+	{ id: "children.0", name: "Documents", children: [] },
+	{ id: "children.1", name: "Pictures", selected: true, children: [] }
+] };
 let got = null;
-const initialized = { ready: true };
+const initialized = {
+	ready: true,
+	selected: ["children.1"],
+	calls: [],
+	getSelectedNodes: function() {
+		return this.selected.map(function(id) { return { id: id }; });
+	},
+	selectNodeById: function(id, set) {
+		this.calls.push({ id: id, set: set });
+		this.selected = set ? [id] : [];
+	}
+};
 const container = { hidden: true };
 global.document = {
 	getElementById: function(id) {
@@ -73,12 +87,18 @@ jawstreeNew = function(key, jid, data, options) {
 	return initialized;
 };
 
-jawstreeInit({ key: "private", jid: "Jid.7", options: 3 });
+jawstreeInit({ key: "private", jid: "Jid.7", options: 3, selectionVersion: 2 });
+jawstreeSetSelection({ key: "private", selectionVersion: 1, selected: ["children.0"] });
 process.stdout.write(JSON.stringify({
 	got: got,
 	usesRoot: got.data === root,
 	stored: window["jawstree_private"] === initialized,
-	visible: !container.hidden
+	visible: !container.hidden,
+	version: initialized.jawsSelectionVersion,
+	documentsSelected: Boolean(root.children[0].selected),
+	picturesSelected: Boolean(root.children[1].selected),
+	viewSelected: initialized.selected,
+	selectionCalls: initialized.calls
 }));
 `)
 
@@ -88,9 +108,14 @@ process.stdout.write(JSON.stringify({
 			Jid     string `json:"jid"`
 			Options int    `json:"options"`
 		} `json:"got"`
-		UsesRoot bool `json:"usesRoot"`
-		Stored   bool `json:"stored"`
-		Visible  bool `json:"visible"`
+		UsesRoot          bool            `json:"usesRoot"`
+		Stored            bool            `json:"stored"`
+		Visible           bool            `json:"visible"`
+		Version           uint64          `json:"version"`
+		DocumentsSelected bool            `json:"documentsSelected"`
+		PicturesSelected  bool            `json:"picturesSelected"`
+		ViewSelected      []string        `json:"viewSelected"`
+		SelectionCalls    []jsSetPathCall `json:"selectionCalls"`
 	}
 	if err := json.Unmarshal([]byte(raw), &got); err != nil {
 		t.Fatalf("unexpected JSON output %q: %v", raw, err)
@@ -106,6 +131,10 @@ process.stdout.write(JSON.stringify({
 	}
 	if !got.Visible {
 		t.Fatal("initializer did not unhide the managed Jid container")
+	}
+	if got.Version != 2 || got.DocumentsSelected || !got.PicturesSelected ||
+		!reflect.DeepEqual(got.ViewSelected, []string{"children.1"}) || len(got.SelectionCalls) != 0 {
+		t.Fatalf("stale selection changed initialized state: version=%d shadow=[%t %t] view=%v calls=%v", got.Version, got.DocumentsSelected, got.PicturesSelected, got.ViewSelected, got.SelectionCalls)
 	}
 }
 

@@ -70,12 +70,14 @@ function jawstreeInit(arg) {
     if (container) {
         container.hidden = false;
     }
-    window["jawstree_"+arg.key] = jawstreeNew(
+    var t = jawstreeNew(
         arg.key,
         arg.jid,
         window["jawstreeroot_"+arg.key],
         arg.options
     );
+    t.jawsSelectionVersion = arg.selectionVersion || 0;
+    window["jawstree_"+arg.key] = t;
 }
 
 function jawstreeSet(arg) {

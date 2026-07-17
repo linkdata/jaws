@@ -152,6 +152,66 @@ func TestJsVar_RenderSetAndEvent(t *testing.T) {
 	}
 }
 
+func TestJsVar_JawsRenderSnapshot(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	go jw.Serve()
+
+	var mu sync.RWMutex
+	v := jsVarData{Text: "snapshot", Num: 7}
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+
+	var calls int
+	var captured jsVarData
+	var sb strings.Builder
+	err := jsv.JawsRenderSnapshot(elem, &sb, []any{"snapshotVar"}, func(ptr *jsVarData) {
+		calls++
+		captured = *ptr
+		if mu.TryLock() {
+			mu.Unlock()
+			t.Error("snapshot callback ran without the JsVar write lock held")
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || captured != v {
+		t.Fatalf("snapshot callback = %d calls with %#v, want one call with %#v", calls, captured, v)
+	}
+
+	var rendered jsVarData
+	if err := json.Unmarshal([]byte(htmlAttrValue(t, sb.String(), "data-jawsdata")), &rendered); err != nil {
+		t.Fatal(err)
+	}
+	if rendered != captured {
+		t.Fatalf("rendered value = %#v, captured snapshot %#v", rendered, captured)
+	}
+
+	calls = 0
+	err = jsv.JawsRenderSnapshot(rq.NewElement(jsv), &strings.Builder{}, []any{"not valid"}, func(*jsVarData) {
+		calls++
+	})
+	if !errors.Is(err, ErrIllegalJsVarName) || calls != 0 {
+		t.Fatalf("invalid render = error %v and %d snapshot calls, want ErrIllegalJsVarName and no call", err, calls)
+	}
+
+	wantPanic := errors.New("snapshot panic")
+	func() {
+		defer func() {
+			if got := recover(); got != wantPanic {
+				t.Fatalf("snapshot panic = %v, want %v", got, wantPanic)
+			}
+		}()
+		_ = jsv.JawsRenderSnapshot(rq.NewElement(jsv), &strings.Builder{}, []any{"snapshotVar"}, func(*jsVarData) {
+			panic(wantPanic)
+		})
+	}()
+	if !mu.TryLock() {
+		t.Fatal("JsVar write lock remained held after a snapshot callback panic")
+	}
+	mu.Unlock()
+}
+
 // TestJsVar_SetBroadcastsWirePayload pins the wire payload broadcast when a
 // JsVar path is set: subscribed peers receive a what.Set carrying "path=<json
 // value>". This guards the documented "broadcast carries the caller's JSON

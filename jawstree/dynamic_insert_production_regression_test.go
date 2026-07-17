@@ -94,7 +94,7 @@ func TestTreeDynamicInitializationWithClientAssets(t *testing.T) {
 		t.Fatalf("second dynamic message = %+v, want parent Order", frames[1])
 	}
 	if frames[2].What != what.Call || frames[2].Jid <= containerElem.Jid() ||
-		frames[2].Data != "jawstreeInit="+string(tree.appendInitCallData(nil, frames[2].Jid)) {
+		frames[2].Data != "jawstreeInit="+string(tree.appendInitCallData(nil, frames[2].Jid, 0)) {
 		t.Fatalf("third dynamic message = %+v, want child initializer Call", frames[2])
 	}
 	if strings.Contains(frames[0].Data, "<script") ||

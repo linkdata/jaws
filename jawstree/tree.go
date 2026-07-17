@@ -101,13 +101,15 @@ func New(jsvar *ui.JsVar[Node], options ...Option) (t *Tree) {
 	return
 }
 
-func (tree *Tree) appendInitCallData(b []byte, containerJid jid.Jid) []byte {
+func (tree *Tree) appendInitCallData(b []byte, containerJid jid.Jid, selectionVersion uint64) []byte {
 	b = append(b, `{"key":`...)
 	b = strconv.AppendQuote(b, tree.key)
 	b = append(b, `,"jid":`...)
 	b = containerJid.AppendQuote(b)
 	b = append(b, `,"options":`...)
 	b = strconv.AppendInt(b, int64(tree.options), 10)
+	b = append(b, `,"selectionVersion":`...)
+	b = strconv.AppendUint(b, selectionVersion, 10)
 	b = append(b, '}')
 	return b
 }
@@ -136,13 +138,16 @@ func (tree *Tree) appendSelectionCallData(b []byte) []byte {
 
 // JawsRender renders the tree state and schedules browser initialization.
 func (tree *Tree) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
+	var selectionVersion uint64
 	if len(params) == 0 {
 		params = tree.renderParams[:]
 	} else {
 		params = append([]any{tree.renderParams[0]}, params...)
 	}
-	if err = tree.JsVar.JawsRender(elem, w, params); err == nil {
-		elem.JsCall("jawstreeInit", string(tree.appendInitCallData(nil, elem.Jid())))
+	if err = tree.JsVar.JawsRenderSnapshot(elem, w, params, func(_ *Node) {
+		selectionVersion = tree.selectionVersion
+	}); err == nil {
+		elem.JsCall("jawstreeInit", string(tree.appendInitCallData(nil, elem.Jid(), selectionVersion)))
 	}
 	return
 }

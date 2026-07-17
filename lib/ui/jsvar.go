@@ -265,16 +265,7 @@ func (jsvar *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 	return jsvar.JawsSetPath(elem, "", value)
 }
 
-// JawsRender writes the hidden element that seeds and routes the JavaScript variable.
-//
-// params[0] must be a valid JsVar name. Otherwise, JawsRender returns
-// [ErrIllegalJsVarName] without writing markup.
-//
-// The bound value's [tag.TagGetter.JawsGetTag] and [jaws.InitHandler.JawsInit]
-// callbacks run while the JsVar write lock is held, so they must not re-enter this
-// JsVar (for example call JawsGet or JawsSet on it), which would self-deadlock the
-// non-reentrant lock.
-func (jsvar *JsVar[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
+func (jsvar *JsVar[T]) jawsRender(elem *jaws.Element, w io.Writer, params []any, snapshot func(*T)) (err error) {
 	var getterAttrs []template.HTMLAttr
 	var jsvarName string
 	var data []byte
@@ -284,14 +275,18 @@ func (jsvar *JsVar[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any)
 	// another request sharing this JsVar sets it concurrently. Release before
 	// ApplyParams and, crucially, before writing to w: holding the value lock across a
 	// network write would let a slow client stall every goroutine sharing the locker.
-	jsvar.Lock()
-	if jsvar.dirtyTag, getterAttrs, err = elem.ApplyGetter(jsvar.Ptr); err == nil {
-		elem.AddHandlers(jsvar)
-		if jsvarName, err = validateJsVarName(params); err == nil && jsvar.Ptr != nil {
-			data, err = json.Marshal(jsvar.Ptr)
+	func() {
+		jsvar.Lock()
+		defer jsvar.Unlock()
+		if jsvar.dirtyTag, getterAttrs, err = elem.ApplyGetter(jsvar.Ptr); err == nil {
+			elem.AddHandlers(jsvar)
+			if jsvarName, err = validateJsVarName(params); err == nil && jsvar.Ptr != nil {
+				if data, err = json.Marshal(jsvar.Ptr); err == nil && snapshot != nil {
+					snapshot(jsvar.Ptr)
+				}
+			}
 		}
-	}
-	jsvar.Unlock()
+	}()
 
 	// After the fact: if the value has grown past the cap (e.g. via accumulated
 	// client writes), abort the request rather than emit an oversized payload. This
@@ -314,6 +309,37 @@ func (jsvar *JsVar[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any)
 		b = append(b, " hidden></div>"...)
 		_, err = w.Write(b)
 	}
+	return
+}
+
+// JawsRender writes the hidden element that seeds and routes the JavaScript variable.
+//
+// params[0] must be a valid JsVar name. Otherwise, JawsRender returns
+// [ErrIllegalJsVarName] without writing markup.
+//
+// The bound value's [tag.TagGetter.JawsGetTag] and [jaws.InitHandler.JawsInit]
+// callbacks run while the JsVar write lock is held, so they must not re-enter this
+// JsVar (for example call JawsGet or JawsSet on it), which would self-deadlock the
+// non-reentrant lock.
+func (jsvar *JsVar[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
+	err = jsvar.jawsRender(elem, w, params, nil)
+	return
+}
+
+// JawsRenderSnapshot renders the JavaScript variable and captures related state.
+//
+// When Ptr is non-nil and marshaling succeeds, snapshot is called once with Ptr
+// while the JsVar write lock remains held. This lets a composite UI capture
+// additional state from the same locked snapshot as the rendered value. The
+// callback must only read protected state: it must not re-enter the JsVar, mutate
+// Ptr, retain and later access Ptr without the appropriate lock, or block waiting
+// for code that needs the JsVar lock. A callback panic propagates after the lock is
+// released. The callback is not called when validation, getter initialization, or
+// marshaling fails. It runs before the client-size check and output write, so it
+// can run even when JawsRenderSnapshot subsequently returns [ErrJsVarTooLarge] or
+// a writer error. A nil callback behaves like [JsVar.JawsRender].
+func (jsvar *JsVar[T]) JawsRenderSnapshot(elem *jaws.Element, w io.Writer, params []any, snapshot func(*T)) (err error) {
+	err = jsvar.jawsRender(elem, w, params, snapshot)
 	return
 }
 
