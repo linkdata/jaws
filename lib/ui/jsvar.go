@@ -94,6 +94,26 @@ var (
 
 // JsVar binds a Go value to a named JavaScript variable in the browser.
 //
+// JsVar is intended for JSON-marshalable state shared with application
+// JavaScript. The browser binding reads and writes the window property named
+// when the JsVar is rendered. Existing application variables are therefore
+// valid bindings. Do not use a browser-owned property such as window.name, or a
+// global owned by unrelated code.
+//
+// Unlike most JaWS UI values, a JsVar is a bidirectional channel and does not
+// imply that the Go value is always authoritative. Browser and Go updates may
+// each carry a complete value or individual paths. Any desired ownership,
+// conflict, or merge policy is the application's responsibility.
+//
+// When Ptr is non-nil, [JsVar.JawsRender] serializes a snapshot of the bound Go
+// value to initialize the browser variable. A browser call to the JavaScript
+// jawsVar function sends only while its WebSocket is open; an earlier call is
+// not queued for later transmission. [JsVar.JawsSet] and [JsVar.JawsSetPath]
+// broadcast only to matching active requests, so an update is not replayed to a
+// page between its initial render and its broadcast subscription. Applications
+// that require the two sides to converge after either can change the value
+// during that interval must reconcile it explicitly.
+//
 // It is safe for concurrent use when the locker passed to [NewJsVar] is safe
 // for concurrent use. Concurrent writes are applied one at a time. Any
 // broadcasts they produce preserve the order in which the writes modify the
@@ -205,8 +225,8 @@ func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any)
 	//
 	// Note that the broadcast carries the caller's requested value, not the value
 	// actually stored. If a PathSetter coerces or rejects the input (e.g. clamps a
-	// number), the stored server state and the value seen by peers can differ; the
-	// authoritative state is what JawsGet returns. Re-broadcast from Ptr inside a
+	// number), the stored Go value and the value seen by peers can differ; the
+	// stored value is what JawsGet returns. Re-broadcast from Ptr inside a
 	// PathSetter if peers must observe the coerced value.
 	//
 	// dirtyTag is assigned only in JawsRender, so a set before the first render
@@ -245,22 +265,24 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any) (er
 	return
 }
 
-// JawsSetPath sets the value at jsPath and broadcasts the change. It is a
-// programmatic (server-side, trusted) write and is not size-capped at the write
-// boundary; see [MaxClientJsVarBytes] for the browser-write cap.
+// JawsSetPath sets the value at jsPath and broadcasts the change when possible.
+// It is a programmatic (server-side, trusted) write and is not size-capped at
+// the write boundary; see [MaxClientJsVarBytes] for the browser-write cap.
 //
-// A set before the element has been rendered produces no broadcast: the dirty
-// tag does not exist yet and the initial render seeds the value via its
-// data-jawsdata attribute.
+// A nil elem changes the bound value without broadcasting. A set before this
+// JsVar has acquired a dirty tag from rendering also produces no broadcast; its
+// initial render seeds the value via the data-jawsdata attribute.
+//
+// The broadcast reaches matching active requests only. It is not replayed to a
+// page between its initial render and its broadcast subscription; see [JsVar]
+// for the synchronization model.
 func (jsvar *JsVar[T]) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err error) {
 	return jsvar.setPath(elem, jsPath, value)
 }
 
 // JawsSet replaces the root value and broadcasts the change.
 //
-// A set before the element has been rendered produces no broadcast: the dirty
-// tag does not exist yet and the initial render seeds the value via its
-// data-jawsdata attribute.
+// It has the same delivery semantics as [JsVar.JawsSetPath].
 func (jsvar *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 	return jsvar.JawsSetPath(elem, "", value)
 }
@@ -269,6 +291,9 @@ func (jsvar *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 //
 // params[0] must be a valid JsVar name. Otherwise, JawsRender returns
 // [ErrIllegalJsVarName] without writing markup.
+//
+// The serialized value is a render-time snapshot. See [JsVar] for the
+// synchronization semantics between rendering and the WebSocket subscription.
 //
 // The bound value's [tag.TagGetter.JawsGetTag] and [jaws.InitHandler.JawsInit]
 // callbacks run while the JsVar write lock is held, so they must not re-enter this
@@ -327,6 +352,10 @@ func (jsvar *JsVar[T]) JawsGetTag(tag.Context) any {
 }
 
 // JawsUpdate is a no-op because updates are broadcast by path setters.
+//
+// Dirtying a JsVar therefore does not resend its root value. Use [JsVar.JawsSet]
+// or [JsVar.JawsSetPath], together with the application's synchronization
+// policy, to send changes.
 func (jsvar *JsVar[T]) JawsUpdate(elem *jaws.Element) {
 	_ = elem // no-op for JsVar[T]
 }
@@ -371,6 +400,11 @@ func isNilUI(ui jaws.UI) (yes bool) {
 }
 
 // JsVar binds a [JsVar] to a named JavaScript variable.
+//
+// jsvarName identifies a property on the browser window. It should be owned by
+// the application because the binding initializes and updates its value.
+//
+// See [JsVar] for the bidirectional binding and synchronization semantics.
 //
 // It returns [ErrIllegalJsVarName] if jsvarName is invalid or reserved.
 //

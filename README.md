@@ -152,6 +152,58 @@ Click and context-menu events whose target is an `input`, `select`,
 `textarea` or `option` element, or inside one, are left to native input
 handling and do not invoke ancestor click/context handlers.
 
+### JavaScript variables
+
+`ui.JsVar` binds a JSON-marshalable Go value to an application-owned variable
+on the browser's `window`. It is intended for state that application JavaScript
+must read or change and exchange with Go. Unlike most JaWS UI values, a `JsVar`
+is a bidirectional channel: the binding does not by itself make either the Go
+value or the browser value authoritative.
+
+Create the binding in Go, pass it as the handler's dot value, and render it
+under the top-level name used by the browser:
+
+```go
+clientVar := ui.NewJsVar(&clientMu, &client)
+handler := ui.Handler(jw, "index", clientVar)
+```
+
+```gotemplate
+{{$.JsVar "client" .Dot}}
+```
+
+The name may refer to an existing application global. For example, browser
+code can update that object and send either the complete value or one path:
+
+```js
+var client = {X: 0, Y: 0};
+
+onmousemove = function (event) {
+    client.X = event.clientX;
+    client.Y = event.clientY;
+    jawsVar("client"); // send the current complete value
+
+    // Equivalently, set and send one path:
+    // jawsVar("client.X", event.clientX);
+};
+```
+
+When the `JsVar`'s `Ptr` is non-nil, rendering serializes its current Go value
+into the binding element. When the JaWS script attaches that element, the
+snapshot initializes the named browser variable. A browser call to `jawsVar`
+sends only while the WebSocket is open; calls made earlier are not queued for
+later transmission. On the Go side, successful `JawsSet` and `JawsSetPath`
+calls change the bound value. Any broadcast they produce targets matching
+active requests and is not replayed to a page that has rendered but has not yet
+subscribed to broadcasts.
+
+If either side can change the value between rendering and WebSocket setup, the
+application must choose and implement a policy if it requires the two sides to
+converge. Depending on the value, it may send the current browser state once
+the connection is ready, resend the current Go state as part of an
+application-level handshake, or merge selected paths according to application
+rules. `JsVar` deliberately does not choose one of those policies.
+
 ## Technical notes
 
 ### WebSocket wire format notes
@@ -175,12 +227,17 @@ client/server protocol code:
   destinations remain element-scoped. Built-in strings and bare `Jid` values are
   not destinations: use `tag.Tag` or a domain tag for broadcasts, and `Element`
   methods for request-local operations.
-* `jawsVar(name, ...)` resolves properties from `window`, but WebSocket routing
-  uses the top-level symbol name only. Register JaWS `JsVar` names as top-level
-  identifiers (example: `app`), and use dotted suffixes as the JSON path
-  (example: `jawsVar("app.state", value)` sends path `state`). The exact
+* `jawsVar(name, ...)` resolves properties from `window`, so `JsVar` names share
+  the page's global namespace. Use an application-owned name, including an
+  existing global that browser code reads or changes. Do not bind a
+  browser-owned property such as `window.name`, or a global owned by unrelated
+  code: `JsVar` initialization and updates write that property. WebSocket
+  routing uses the top-level symbol name only. Register names as top-level
+  identifiers (for example, `app`), and use dotted suffixes as the JSON path
+  (for example, `jawsVar("app.state", value)` sends path `state`). The exact
   top-level name `__proto__` is reserved; rendering it as a `JsVar` returns
-  `ui.ErrIllegalJsVarName`.
+  `ui.ErrIllegalJsVarName`. See [JavaScript variables](#javascript-variables)
+  for the binding and synchronization model.
 
 ### HTTP request flow and associating the WebSocket
 
