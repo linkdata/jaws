@@ -33,19 +33,8 @@ const webSocketReadLimit = 32 * 1024
 // Returning an error causes the [Request] to abort, and the WebSocket connection to close.
 type ConnectFn = func(rq *Request) error
 
-type requestBuffers struct {
-	todoDirt []any
-	elems    []*Element
-	tagMap   map[any][]*Element
-	wsQueue  []wire.WsMsg
-}
-
 // Request maintains the state for a JaWS WebSocket connection, and handles processing
 // of events and broadcasts.
-//
-// Each Request has a stable identity and is never reused for another connection.
-// After it finishes, its context remains canceled and identity-targeted operations
-// are not retargeted to another Request.
 //
 // Unlike [Session], whose methods are nil-safe, Request methods are not safe to call on a
 // nil *Request: a Request is always obtained from [Jaws.NewRequest] or [Jaws.UseRequest]
@@ -57,7 +46,6 @@ type Request struct {
 	Jaws             *Jaws                   // (read-only) the JaWS instance the Request belongs to
 	JawsKey          key.Key                 // (read-only) random key assigned to this Request; routes JaWS URLs and request-targeted broadcasts only while registered
 	remoteIP         netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
-	registered       bool                    // present as a live identity in Jaws.requests; guarded by mu
 	running          atomic.Bool             // if ServeHTTP() is running
 	claimed          atomic.Bool             // if UseRequest() has been called for it
 	lastWriteSeconds atomic.Int32            // [Jaws.runtimeSeconds] value at the most recent RequestWriter write; lock-free, drives pending-eviction recency (oldestEvictablePendingLocked) and idle expiry (maintenance)
@@ -70,7 +58,6 @@ type Request struct {
 	httpDoneCh       <-chan struct{}         // once claimed, set to http.Request.Context().Done()
 	cancelFn         context.CancelCauseFunc // cancel function
 	connectFn        ConnectFn               // a ConnectFn to call before starting message processing for the Request
-	buffers          *requestBuffers         // detached and reused after this Request finishes
 	elems            []*Element              // our Elements
 	tagMap           map[any][]*Element      // maps tags to Elements
 	muQueue          deadlock.Mutex          // protects wsQueue and tailsent
@@ -116,13 +103,12 @@ func (rq *Request) MarkWritten() {
 
 // destKey returns the Request's current identity key, read under rq.mu, for use as
 // a broadcast destination. Targeting the key value rather than the *Request pointer
-// lets the Serve loop reject messages after the Request is unregistered. A zero
-// return means the Request is no longer a valid target.
+// lets the Serve loop reject a message aimed at a request that was recycled and
+// reused before delivery, since the pooled pointer is reused but its key is not. A
+// zero return means the Request has already been recycled and is not a valid target.
 func (rq *Request) destKey() (k key.Key) {
 	rq.mu.RLock()
-	if rq.registered {
-		k = rq.JawsKey
-	}
+	k = rq.JawsKey
 	rq.mu.RUnlock()
 	return
 }
@@ -167,7 +153,7 @@ func (rq *Request) claim(r *http.Request) error {
 			rq.httpDoneCh = httpDoneCh
 			// Refresh the write second so a request claimed long after its initial
 			// render (a throttled or backgrounded tab) is not treated as idle and
-			// retired in the window before ServeHTTP sets running.
+			// recycled in the window before ServeHTTP sets running.
 			rq.lastWriteSeconds.Store(rq.Jaws.runtimeSeconds.Load())
 			return nil
 		}
@@ -189,7 +175,7 @@ func (rq *Request) killSession() {
 }
 
 // deadSession detaches sess and returns the Request identity that belonged to it.
-// A zero return means rq has finished or belongs to another Session.
+// A zero return means rq was already recycled or rebound to another Session.
 func (rq *Request) deadSession(sess *Session) (k key.Key) {
 	rq.mu.Lock()
 	if rq.session == sess {
@@ -222,32 +208,36 @@ func (rq *Request) ensureAutoSession(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// releaseBuffersLocked detaches reusable storage from a finished Request.
-//
-// It releases queued dirt and messages, marks elements deleted, and detaches the
-// Request from its session. The Request keeps its identity and canceled context,
-// so retained pointers remain permanently associated with this lifecycle. The
-// caller must hold rq.mu and ensure request processing has stopped.
-func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
-	if rq.cancelFn != nil {
-		rq.cancelFn(nil)
-	}
+// clearLocked resets rq so it can be reused from the [Jaws] request pool: it cancels
+// any live context, drops queued dirt and messages, detaches all elements and tags,
+// and kills any attached session. The caller must ensure no other goroutine is using
+// rq (it runs when rq is freshly allocated or being recycled).
+func (rq *Request) clearLocked() *Request {
+	rq.JawsKey = 0
 	rq.lastJid = 0
 	rq.connectFn = nil
+	rq.lastWriteSeconds.Store(0)
 	rq.initial = nil
 	rq.killSessionLocked()
 	rq.running.Store(false)
 	rq.claimed.Store(false)
-	rq.registered = false
+	// Every field is reset to its zero state except ctx and cancelFn, which keep their
+	// (cancelled) values until getRequestLocked replaces them on reuse.
+	if rq.cancelFn != nil {
+		rq.cancelFn(nil)
+	}
 	rq.httpDoneCh = nil
-	clear(rq.todoDirt)
+	clear(rq.todoDirt) // release tag references before pooling; mirrors makeUpdateList
 	rq.todoDirt = rq.todoDirt[:0]
 	rq.remoteIP = netip.Addr{}
 	for _, e := range rq.elems {
 		if e != nil {
 			// Nil the GC-reachable fields and set the deleted guard, which makes any
-			// retained *Element inert (see [Element.Deleted]). Elements are allocated
-			// fresh per newElementLocked and are never pooled.
+			// retained *Element inert (see [Element.Deleted]). The Request back-pointer
+			// and frozen flag are deliberately left as-is: Elements are allocated fresh
+			// per newElementLocked and never pooled, so a stale frozen value can never
+			// be observed by a reused Element. Any future move to pool Elements must
+			// also reset frozen, since it gates the lock-free handler read.
 			e.handlers = nil
 			e.ui = nil
 			e.deleted.Store(true)
@@ -262,24 +252,11 @@ func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
 	// already hold rq.mu.
 	rq.muQueue.Lock()
 	rq.tailsent = false
-	clear(rq.wsQueue)
+	clear(rq.wsQueue) // release queued message payloads before pooling; mirrors todoDirt/elems above
 	rq.wsQueue = rq.wsQueue[:0]
 	rq.muQueue.Unlock()
 	clear(rq.tagMap)
-
-	buffers = rq.buffers
-	if buffers != nil {
-		buffers.todoDirt = rq.todoDirt
-		buffers.elems = rq.elems
-		buffers.tagMap = rq.tagMap
-		buffers.wsQueue = rq.wsQueue
-	}
-	rq.buffers = nil
-	rq.todoDirt = nil
-	rq.elems = nil
-	rq.tagMap = nil
-	rq.wsQueue = nil
-	return
+	return rq
 }
 
 // HeadHTML writes the configured resources and Request key metadata for the page head.
@@ -385,8 +362,8 @@ func (rq *Request) SetContext(fn func(oldCtx context.Context) (newCtx context.Co
 	// that old select wakes. Register outside rq.mu because context.AfterFunc may
 	// synchronously invoke a custom context hook that re-enters the Request.
 	//
-	// Capture only the context and cancel closure so the callback does not retain
-	// the entire Request and its rendered state.
+	// Capture only the context and cancel closure: capturing rq would let a delayed
+	// callback cancel an unrelated Request after pool reuse.
 	context.AfterFunc(newCtx, func() {
 		cancelFn(context.Cause(newCtx))
 	})
@@ -429,14 +406,14 @@ func (rq *Request) maintenance(nowSeconds int32, requestTimeout time.Duration) (
 	return
 }
 
-// cancelLocked cancels the Request's context, wrapping a non-nil cause, when the
-// Request has a non-zero identity key and has not already been canceled.
+// cancelLocked cancels the request's context with a wrapped cause, but only for a
+// live request (non-zero key) whose context has not already been cancelled.
 //
 // It does NOT log. It returns the cancellation cause (already set on the context)
 // so the caller can pass it to [Jaws.Log] AFTER releasing rq.mu and any outer lock;
-// the cause is nil whenever the context was already canceled or err is nil.
-// Logging invokes the user-supplied [Jaws.Logger], which the package locking
-// contract forbids running under a lock. Caller must hold rq.mu.
+// the cause is nil whenever there is nothing to log (no live request to cancel, or
+// a nil err). Logging invokes the user-supplied [Jaws.Logger], which the package
+// locking contract forbids running under a lock. Caller must hold rq.mu.
 func (rq *Request) cancelLocked(err error) (cause error) {
 	if rq.JawsKey != 0 && rq.ctx.Err() == nil {
 		cause = newErrRequestCancelledLocked(rq, err)
@@ -483,7 +460,7 @@ func alertData(level, msg string) string {
 //
 // The default JaWS JavaScript only supports Bootstrap dismissible alerts.
 //
-// It does nothing if the Request has already finished, since it then has no
+// It does nothing if the Request has already been recycled, since it then has no
 // live target. See [Jaws.Broadcast] for processing-loop requirements.
 func (rq *Request) Alert(level, msg string) {
 	if k := rq.destKey(); k != 0 {
@@ -509,7 +486,7 @@ func (rq *Request) AlertError(err error) {
 // schemes such as javascript: and protocol-relative ("//host") URLs are refused
 // and logged rather than sent to the browser.
 //
-// It does nothing if the Request has already finished, since it then has no
+// It does nothing if the Request has already been recycled, since it then has no
 // live target. See [Jaws.Broadcast] for processing-loop requirements.
 func (rq *Request) Redirect(url string) {
 	if msg, ok := rq.Jaws.redirectMessage(url); ok {
@@ -553,11 +530,8 @@ func (rq *Request) wantMessage(msg *wire.Message) (yes bool) {
 	switch dest := msg.Dest.(type) {
 	case key.Key: // the request with this identity key
 		rq.mu.RLock()
-		if rq.registered {
-			yes = rq.JawsKey == dest
-		}
-		rq.mu.RUnlock()
-		return
+		defer rq.mu.RUnlock()
+		return rq.JawsKey == dest
 	case []any: // more than one tag
 		rq.mu.RLock()
 		defer rq.mu.RUnlock()
@@ -650,13 +624,12 @@ func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 // list. The Serve loop's update tick later drains the list (see makeUpdateList)
 // and re-renders the affected elements. Takes rq.mu.
 //
-// It may run after the caller's dirt snapshot was unregistered. In that case the
-// tags are discarded rather than retained on the finished Request.
+// It may run on a Request that was recycled and reused after the caller's dirt
+// snapshot was taken; that is race-free (clearLocked also takes rq.mu) and harmless,
+// as explained on distributeDirt.
 func (rq *Request) appendDirtyTags(tags []any) {
 	rq.mu.Lock()
-	if rq.registered {
-		rq.todoDirt = append(rq.todoDirt, tags...)
-	}
+	rq.todoDirt = append(rq.todoDirt, tags...)
 	rq.mu.Unlock()
 }
 

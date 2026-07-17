@@ -1715,7 +1715,6 @@ func TestJaws_distributeDirt_AscendingOrder(t *testing.T) {
 	defer jw.Close()
 
 	rq := &Request{}
-	rq.registered = true
 	jw.mu.Lock()
 	jw.requests[1] = rq
 	jw.requestCount++
@@ -2475,13 +2474,15 @@ func TestServeHTTP_TailScript_EndpointIsPerRequest(t *testing.T) {
 	is.Equal(w.Code, http.StatusNoContent)
 }
 
-// TestServeHTTP_TailScript_RejectsFinishedKey covers the finished-request behavior
-// of the /jaws/.tail endpoint: completion removes the live map entry, so a fetch
-// for the old key returns 404 while a later Request drains only its own
-// queued content. The concurrent drain-under-lock guarantee (holding jw.mu across
-// drainTailScript) is exercised separately, under the race detector, by
+// TestServeHTTP_TailScript_RejectsRecycledKey covers the recycled-request behavior
+// of the /jaws/.tail endpoint: recycling deletes the key from jw.requests, so a tail
+// fetch for the old key misses the map and returns 404, while the reused pooled
+// object drains only its own freshly queued content (its queue was reset by
+// clearLocked), never the recycled request's. This exercises the map-deletion 404
+// and content isolation; the concurrent drain-under-lock guarantee (holding jw.mu
+// across drainTailScript) is exercised separately, under the race detector, by
 // TestRequest_TailScriptConcurrentWithRecycle.
-func TestServeHTTP_TailScript_RejectsFinishedKey(t *testing.T) {
+func TestServeHTTP_TailScript_RejectsRecycledKey(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()
 	go jw.Serve()
@@ -2492,22 +2493,23 @@ func TestServeHTTP_TailScript_RejectsFinishedKey(t *testing.T) {
 	stale.NewElement(&testUi{}).SetClass("stale")
 	staleKey := stale.JawsKeyString()
 
-	// Finish the request and create a distinct one under a fresh key.
+	// Recycle the request and create a new one under a fresh key. The pool typically
+	// hands back the same struct, so the content check below also guards that a
+	// reused object carries none of the recycled request's queued content; it holds
+	// whether or not the pool reused the struct.
 	jw.recycle(stale)
 	rq := jw.NewRequest(hr)
-	if rq == stale {
-		t.Fatal("later request reused finished Request identity")
-	}
 	rq.NewElement(&testUi{}).SetClass("fresh")
 
-	// The old key has no live map entry, so nothing is drained.
+	// Old key was deleted from jw.requests on recycle, so the lookup misses and
+	// nothing is drained.
 	req := httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+staleKey, nil)
 	req.RemoteAddr = hr.RemoteAddr
 	w := httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusNotFound)
 
-	// The later request's own tail fetch returns only its own content.
+	// The reused request's own tail fetch still returns its own content.
 	req = httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString(), nil)
 	req.RemoteAddr = hr.RemoteAddr
 	w = httptest.NewRecorder()
@@ -2582,17 +2584,17 @@ func TestJaws_cancelIfCurrent_IgnoresStaleRequest(t *testing.T) {
 	stale := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	jawsKey := stale.JawsKey
 
-	// The /jaws/.tail handler can snapshot the Request before writing the response;
-	// finish that snapshot before the write error triggers cancellation.
+	// The /jaws/.tail handler snapshots the Request before writing the response;
+	// recycle the snapshot and create a new request so the pool can hand the
+	// stale pointer to a different connection, as can happen before a write
+	// error triggers a cancel.
 	jw.recycle(stale)
 	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
-	if rq == stale {
-		t.Fatal("later request reused stale Request identity")
-	}
 
 	jw.cancelIfCurrent(jawsKey, stale, errors.New("write failed"))
 
-	// The later Request must stay live.
+	// Whether or not the pool reused the object for rq (it normally does here,
+	// which is exactly the stale-cancel scenario), rq must stay live.
 	is.NoErr(rq.Context().Err())
 }
 
@@ -2693,13 +2695,11 @@ func newUnpooledBenchRequest(jw *Jaws) (rq *Request) {
 		jawsKey := jw.nonZeroRandomLocked()
 		if _, ok := jw.requests[jawsKey]; !ok {
 			rq = &Request{
-				Jaws:    jw,
-				buffers: &requestBuffers{},
-				tagMap:  make(map[any][]*Element),
+				Jaws:   jw,
+				tagMap: make(map[any][]*Element),
 			}
 			rq.mu.Lock()
 			rq.JawsKey = jawsKey
-			rq.registered = true
 			rq.lastWriteSeconds.Store(jw.runtimeSeconds.Load())
 			rq.remoteIP = remoteIP
 			rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
@@ -2716,14 +2716,13 @@ func recycleUnpooledBenchRequest(jw *Jaws, rq *Request) {
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	rq.mu.Lock()
-	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq {
-		_ = rq.cancelLocked(nil)
+	defer rq.mu.Unlock()
+	if rq.JawsKey != 0 {
 		jw.removePendingRequestLocked(rq)
 		delete(jw.requests, rq.JawsKey)
 		jw.requestCount--
-		_ = rq.releaseBuffersLocked()
+		rq.clearLocked()
 	}
-	rq.mu.Unlock()
 }
 
 func populateBenchRequest(rq *Request, tags []any) {
@@ -2732,10 +2731,10 @@ func populateBenchRequest(rq *Request, tags []any) {
 	}
 }
 
-// BenchmarkRequestLifecyclePooling compares the reusable-buffer Request lifecycle
-// with a benchmark-only lifecycle that allocates fresh buffers. It isolates the
-// create, optional render-state population and completion path; it does not
-// measure HTTP or WebSocket serving.
+// BenchmarkRequestLifecyclePooling compares the current pooled Request lifecycle
+// with a benchmark-only fresh-allocation lifecycle. It isolates the create,
+// optional render-state population and recycle path; it does not measure HTTP or
+// WebSocket serving.
 func BenchmarkRequestLifecyclePooling(b *testing.B) {
 	for _, c := range []struct {
 		name  string
@@ -2891,7 +2890,7 @@ func BenchmarkDistributeDirt(b *testing.B) {
 			reqs := make([]*Request, c.reqs)
 			jw.mu.Lock()
 			for i := range reqs {
-				rq := &Request{Jaws: jw, registered: true}
+				rq := &Request{Jaws: jw}
 				reqs[i] = rq
 				jw.requests[key.Key(i+1)] = rq
 			}

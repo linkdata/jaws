@@ -329,10 +329,10 @@ func TestSession_Broadcast(t *testing.T) {
 	jw.recycle(rq2)
 }
 
-// TestSession_ProducersSkipDetached covers finished Request pointers retained by
-// a Session snapshot. Both producers target only Requests that still belong to
-// the Session.
-func TestSession_ProducersSkipDetached(t *testing.T) {
+// TestSession_ProducersSkipRecycled covers stale Request pointers retained by a
+// Session snapshot while the Request is recycled or rebound. Both producers must
+// target only Requests that still belong to the Session.
+func TestSession_ProducersSkipRecycled(t *testing.T) {
 	th := newTestHelper(t)
 	jw, _ := New()
 	defer jw.Close()
@@ -346,15 +346,15 @@ func TestSession_ProducersSkipDetached(t *testing.T) {
 	th.True(live.Session() == sess)
 
 	// Session methods operate on a snapshot after releasing sess.mu. These entries
-	// model finished pointers already detached from the Session; a finished Request
-	// retains its original nonzero identity.
-	detachedZero := &Request{Jaws: jw}
-	detachedKey := &Request{Jaws: jw, JawsKey: key.Key(0x9876)}
+	// model pointers that were recycled after that snapshot: one has been cleared,
+	// and one has already acquired an unrelated nonzero identity.
+	cleared := &Request{Jaws: jw}
+	rebound := &Request{Jaws: jw, JawsKey: key.Key(0x9876)}
 	sess.mu.Lock()
-	sess.requests = append(sess.requests, detachedZero, detachedKey)
+	sess.requests = append(sess.requests, cleared, rebound)
 	sess.mu.Unlock()
 
-	// Session.Broadcast targets only the live request, never detached identities.
+	// Session.Broadcast targets only the live request, never the rebound identity.
 	done := make(chan struct{})
 	go func() {
 		sess.Broadcast(wire.Message{What: what.Alert, Data: "info\nhi"})
@@ -369,11 +369,11 @@ func TestSession_ProducersSkipDetached(t *testing.T) {
 	}
 	select {
 	case extra := <-jw.bcastCh:
-		t.Fatalf("detached request must not broadcast, got %#v", extra)
+		t.Fatalf("recycled request must not broadcast, got %#v", extra)
 	default:
 	}
 
-	// Session.Close reloads only the live request, never detached identities.
+	// Session.Close reloads only the live request, never the rebound identity.
 	closeDone := make(chan struct{})
 	go func() {
 		sess.Close()
@@ -389,17 +389,18 @@ func TestSession_ProducersSkipDetached(t *testing.T) {
 	}
 	select {
 	case extra := <-jw.bcastCh:
-		t.Fatalf("detached request must not broadcast, got %#v", extra)
+		t.Fatalf("recycled request must not broadcast, got %#v", extra)
 	default:
 	}
 
 	jw.recycle(live)
 }
 
-// TestSessionCloseDoesNotReachLaterRequest covers a Request finishing after
-// Session.Close snapshots it and before Close detaches it. A later Request must
-// retain a distinct identity and must not receive the old Session's reload.
-func TestSessionCloseDoesNotReachLaterRequest(t *testing.T) {
+// TestSessionCloseRejectsReusedRequest covers the race between Session.Close's
+// Request snapshot and Request pooling. A pointer removed from the Session may be
+// recycled for another client before Close detaches it; that new identity must not
+// receive the old Session's reload.
+func TestSessionCloseRejectsReusedRequest(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -419,7 +420,7 @@ func TestSessionCloseDoesNotReachLaterRequest(t *testing.T) {
 
 	// Close snapshots [first, stale], clears sess.requests, then blocks trying
 	// to detach first. Observing the cleared Session proves stale is already in
-	// Close's private snapshot before it finishes.
+	// Close's private snapshot before it is recycled.
 	firstLocked := make(chan struct{})
 	releaseFirst := make(chan struct{})
 	firstReleased := make(chan struct{})
@@ -457,14 +458,20 @@ func TestSessionCloseDoesNotReachLaterRequest(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
+	// sync.Pool may discard entries at any time. Keep the production reuse path
+	// deterministic by using stale as the allocation fallback as well.
+	poolNew := jw.reqPool.New
+	jw.reqPool.New = func() any { return stale }
+	defer func() { jw.reqPool.New = poolNew }()
+
 	// Drive the stale Request through the real capability endpoint. The missing
 	// WebSocket upgrade headers make ServeHTTP fail the upgrade and execute its
-	// normal stopServe completion path after Session.Close has snapshotted it.
+	// normal stopServe/recycle path, placing stale in the production Request pool.
 	staleEndpoint := httptest.NewRequest(http.MethodGet, "/jaws/"+stale.JawsKeyString(), nil)
 	staleEndpoint.RemoteAddr = sessionHTTP.RemoteAddr
 	jw.ServeHTTP(httptest.NewRecorder(), staleEndpoint)
-	if stale.Context().Err() == nil {
-		t.Fatal("failed WebSocket upgrade left stale Request live")
+	if stale.JawsKey != 0 {
+		t.Fatalf("failed WebSocket upgrade did not recycle stale Request: key %v", stale.JawsKey)
 	}
 
 	server := httptest.NewServer(jw)
@@ -472,11 +479,11 @@ func TestSessionCloseDoesNotReachLaterRequest(t *testing.T) {
 	unrelatedHTTP := httptest.NewRequest(http.MethodGet, server.URL+"/unrelated", nil)
 	unrelatedHTTP.RemoteAddr = "127.0.0.1:2000"
 	unrelated := jw.NewRequest(unrelatedHTTP)
-	if unrelated == stale {
-		t.Fatal("later client reused stale Request identity")
+	if unrelated != stale {
+		t.Fatal("request pool did not reuse stale pointer")
 	}
 	if unrelated.Session() != nil {
-		t.Fatal("later Request retained old Session")
+		t.Fatal("reused Request retained old Session")
 	}
 	unrelatedKey := unrelated.JawsKey
 	connected := make(chan struct{})
@@ -497,7 +504,7 @@ func TestSessionCloseDoesNotReachLaterRequest(t *testing.T) {
 	select {
 	case <-connected:
 	case <-time.After(time.Second):
-		t.Fatal("unrelated Request did not start its WebSocket")
+		t.Fatal("unrelated reused Request did not start its WebSocket")
 	}
 
 	close(releaseFirst)
@@ -518,7 +525,7 @@ func TestSessionCloseDoesNotReachLaterRequest(t *testing.T) {
 		t.Fatalf("reading marker from unrelated Request: %v", err)
 	}
 	if strings.Contains(string(data), what.Reload.String()+"\t") {
-		t.Fatalf("old Session close reached unrelated later Request: %q", data)
+		t.Fatalf("old Session close reached unrelated reused Request: %q", data)
 	}
 	if !strings.Contains(string(data), marker) {
 		t.Fatalf("WebSocket message = %q, want marker %q", data, marker)
@@ -772,7 +779,7 @@ func TestSession_Cleanup(t *testing.T) {
 	})
 }
 
-// TestSession_UnclaimedRequestRecycleKeepsGraceDeadline verifies that finishing the
+// TestSession_UnclaimedRequestRecycleKeepsGraceDeadline verifies that recycling the
 // bootstrap render Request (unclaimed, because its WebSocket has not connected yet)
 // does not immediately expire the freshly issued session, so a slightly-slow client
 // keeps the session it was just given.
@@ -792,11 +799,11 @@ func TestSession_UnclaimedRequestRecycleKeepsGraceDeadline(t *testing.T) {
 		t.Fatal("expected request bound to session")
 	}
 
-	// Finish the unclaimed bootstrap request (its WebSocket never connected).
+	// Recycle the unclaimed bootstrap request (its WebSocket never connected).
 	jw.recycle(r1)
 
 	if sess.isDead() {
-		t.Fatal("session expired when an unclaimed bootstrap request finished")
+		t.Fatal("session expired when an unclaimed bootstrap request was recycled")
 	}
 	if got := jw.GetSession(hr); got != sess {
 		t.Fatalf("expected session still retrievable within its grace window, got %v", got)
@@ -857,7 +864,7 @@ func TestSession_ClaimedNonLastLeaveKeepsGrace(t *testing.T) {
 		// claimed request leaving non-last, so delRequest must still refresh the grace.
 		rqA.killSession()
 
-		// The second tab's bootstrap then finishes before its WebSocket connects:
+		// The second tab's bootstrap is then recycled before its WebSocket connects:
 		// an unclaimed request leaving last, which leaves the refreshed deadline intact.
 		rqB.killSession()
 

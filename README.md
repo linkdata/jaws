@@ -243,10 +243,11 @@ these invariants before relying on a green build alone:
 
 * Lock order stays `Jaws.mu -> Request.mu -> Session.mu`, with `Request.muQueue`
   and element/widget/value locks remaining leaf locks.
-* Every public Request keeps a stable identity. Completion releases its elements,
-  tags, sessions and queue storage for reuse without reusing the Request pointer.
+* Request pooling clears keys, elements, tags, sessions, queues, cancellation
+  state, and pending/request maps before a pointer can be reused.
 * Dirty dispatch expands tags once, targets only elements registered for those
-  tags, and discards snapshots for Requests that have finished.
+  tags, and does not let one request's queued update reach a recycled request
+  with a different key.
 * Session grace windows remain deliberate for unclaimed, claimed, failed-upgrade,
   and closed-WebSocket requests.
 * WebSocket upgrades keep the single-use key, client-IP binding, and Origin

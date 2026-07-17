@@ -64,12 +64,12 @@ var jsInlineScriptEscaper = strings.NewReplacer(
 // Request (subsequent calls return sent=false so the response is 204).
 func (rq *Request) drainTailScript() (b []byte, sent bool) {
 	// Takes only muQueue and never touches the network. Jaws.ServeHTTP calls it while
-	// holding jw.mu (read), which blocks completion (which needs the jw.mu write lock),
-	// so this Request cannot be unregistered mid-drain: the bytes returned always
-	// belong to the identity the handler looked up. The slow
+	// holding jw.mu (read), which blocks recycling (which needs the jw.mu write lock),
+	// so this Request cannot be recycled and reused under a different key mid-drain: the
+	// bytes returned always belong to the identity the handler looked up. The slow
 	// network write happens afterwards in writeTailResponse with no lock held, so a
-	// stalled client cannot block completion or the Serve loop. The data race on
-	// wsQueue/tailsent is prevented because releaseBuffersLocked also takes muQueue.
+	// stalled client cannot block recycling or the Serve loop. The data race on
+	// wsQueue/tailsent is prevented because clearLocked also takes muQueue to reset them.
 	rq.muQueue.Lock()
 	defer rq.muQueue.Unlock()
 	if !rq.tailsent {
@@ -121,7 +121,7 @@ func (rq *Request) drainTailScript() (b []byte, sent bool) {
 }
 
 // writeTailResponse writes the tail script response built by drainTailScript. It
-// holds no locks, so the network write cannot stall completion or the Serve loop.
+// holds no locks, so the network write cannot stall recycling or the Serve loop.
 //
 // A sent=false drain (the tail was already fetched on an earlier request) responds
 // 204 No Content. A first drain finding nothing queued reports sent=true with empty
@@ -164,17 +164,17 @@ func (jw *Jaws) serveTailScript(w http.ResponseWriter, r *http.Request) (handled
 	if jawsKeyString, ok := strings.CutPrefix(r.URL.Path, "/jaws/.tail/"); ok {
 		if jawsKey, tail := key.Parse(jawsKeyString); tail == "" {
 			remoteIP := jw.clientIP(r)
-			// Hold jw.mu (read) across both the lookup and the drain: completion needs
-			// the jw.mu write lock, so rq cannot be unregistered while we drain its
-			// queue. A stale key either misses the live map entry (404) or
+			// Hold jw.mu (read) across both the lookup and the drain: recycling needs
+			// the jw.mu write lock, so rq cannot be recycled and reused under a different
+			// key while we drain its queue. A stale key either misses the map (404) or
 			// drains its own genuine content. The network write is done after releasing
-			// jw.mu so a slow client cannot stall completion or the Serve loop.
+			// jw.mu so a slow client cannot stall recycling or the Serve loop.
 			jw.mu.RLock()
 			rq := jw.requests[jawsKey]
 			// Bind the tail fetch to the client like the WebSocket claim path
 			// (Request.claim): the one-shot tail is drained only when the fetch comes from
 			// the same client IP the initial request was issued to (loopback-aware, see
-			// equalIP). rq.remoteIP is stable here because completion requires the jw.mu
+			// equalIP). rq.remoteIP is stable here because recycling requires the jw.mu
 			// write lock. A mismatch is treated as not found, so a leaked key cannot drain
 			// (and thereby deny) another client's tail. The WebSocket carries all live
 			// data, so this only closes the cross-IP read of the already-rendered
