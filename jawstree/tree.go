@@ -24,9 +24,10 @@ var _ jaws.UI = (*Tree)(nil)
 // [Tree.SetSelected]) under the lock is safe, but adding, removing, or reordering Children
 // afterward breaks that mapping and is unsupported on a rendered Tree.
 type Tree struct {
-	key          string
-	options      Option
-	renderParams [1]any
+	key              string
+	options          Option
+	renderParams     [1]any
+	selectionVersion uint64 // guarded by the embedded JsVar lock
 	*ui.JsVar[Node]
 }
 
@@ -43,6 +44,10 @@ func makeTreeKey() (key string) {
 			return
 		}
 	}
+}
+
+func (tree *Tree) isDefaultSingleSelect() bool {
+	return tree.options&(MultiSelectEnabled|CascadeSelectChildren) == 0
 }
 
 // New returns a tree widget for jsvar.
@@ -107,6 +112,28 @@ func (tree *Tree) appendInitCallData(b []byte, containerJid jid.Jid) []byte {
 	return b
 }
 
+func (tree *Tree) appendSelectionCallData(b []byte) []byte {
+	b = append(b, `{"key":`...)
+	b = strconv.AppendQuote(b, tree.key)
+	b = append(b, `,"selectionVersion":`...)
+	tree.RLock()
+	b = strconv.AppendUint(b, tree.selectionVersion, 10)
+	b = append(b, `,"selected":[`...)
+	first := true
+	tree.Ptr.Walk("", func(_ string, node *Node) {
+		if node.Selected {
+			if !first {
+				b = append(b, ',')
+			}
+			first = false
+			b = strconv.AppendQuote(b, node.ID)
+		}
+	})
+	tree.RUnlock()
+	b = append(b, `]}`...)
+	return b
+}
+
 // JawsRender renders the tree state and schedules browser initialization.
 func (tree *Tree) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	if len(params) == 0 {
@@ -129,11 +156,14 @@ func (tree *Tree) JawsUpdate(elem *jaws.Element) {
 	var b []byte
 	b = append(b, `{"key":`...)
 	b = strconv.AppendQuote(b, tree.key)
-	b = append(b, `,"data":`...)
 	// marshalJSON walks the shared Node tree, which a concurrent JawsInput on
 	// another Request can mutate under the JsVar write lock. Read it under the
-	// JsVar read lock so the two never race; JawsRender is likewise locked.
+	// JsVar read lock so the selection version and data form one snapshot and the
+	// walk never races; JawsRender is likewise locked.
 	tree.RLock()
+	b = append(b, `,"selectionVersion":`...)
+	b = strconv.AppendUint(b, tree.selectionVersion, 10)
+	b = append(b, `,"data":`...)
 	b = tree.JsVar.Ptr.marshalJSON(b)
 	tree.RUnlock()
 	b = append(b, `}`...)

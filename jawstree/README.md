@@ -155,3 +155,11 @@ all rendered clients by dirtying the JsVar's bound pointer:
 tree.SetSelected([][]string{{"Documents", "report.pdf"}})
 jw.Dirty(root)
 ```
+
+Without `MultiSelectEnabled` or `CascadeSelectChildren`, browser selection
+events enforce at most one selected node in the shared server state, including
+when multiple clients select concurrently. `Tree.SetSelected` remains an exact
+programmatic selection API and may set multiple nodes regardless of browser
+options; dirty the root afterward to publish that programmatic state. Peer
+clients reconcile browser selections in place, preserving their expanded nodes
+and active search state.

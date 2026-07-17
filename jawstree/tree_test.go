@@ -153,6 +153,105 @@ func TestTreeSelectionMethods(t *testing.T) {
 	}
 }
 
+func TestNode_JawsSetPathSelectionModes(t *testing.T) {
+	tests := []struct {
+		name    string
+		options []Option
+		before  [2]bool
+		path    string
+		value   bool
+		want    [2]bool
+		version uint64
+		wantErr error
+	}{
+		{
+			name:    "select clears the previous selection",
+			before:  [2]bool{true, false},
+			path:    "children.1.selected",
+			value:   true,
+			want:    [2]bool{false, true},
+			version: 1,
+		},
+		{
+			name:    "deselect changes only the target",
+			before:  [2]bool{true, false},
+			path:    "children.0.selected",
+			value:   false,
+			want:    [2]bool{false, false},
+			version: 1,
+		},
+		{
+			name:    "sole selection is unchanged",
+			before:  [2]bool{true, false},
+			path:    "children.0.selected",
+			value:   true,
+			want:    [2]bool{true, false},
+			wantErr: jaws.ErrValueUnchanged,
+		},
+		{
+			name:    "select repairs existing multiple selection",
+			before:  [2]bool{true, true},
+			path:    "children.1.selected",
+			value:   true,
+			want:    [2]bool{false, true},
+			version: 1,
+		},
+		{
+			name:    "multi-select preserves other selections",
+			options: []Option{MultiSelectEnabled},
+			before:  [2]bool{true, false},
+			path:    "children.1.selected",
+			value:   true,
+			want:    [2]bool{true, true},
+		},
+		{
+			name:    "cascade preserves descendant selection semantics",
+			options: []Option{CascadeSelectChildren},
+			before:  [2]bool{true, false},
+			path:    "children.1.selected",
+			value:   true,
+			want:    [2]bool{true, true},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := &Node{Children: []*Node{
+				{Name: "a", Selected: tt.before[0]},
+				{Name: "b", Selected: tt.before[1]},
+			}}
+			var mu sync.RWMutex
+			tree := New(ui.NewJsVar(&mu, root), tt.options...)
+
+			err := root.JawsSetPath(nil, tt.path, tt.value)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("JawsSetPath() error = %v, want %v", err, tt.wantErr)
+			}
+			got := [2]bool{root.Children[0].Selected, root.Children[1].Selected}
+			if got != tt.want {
+				t.Fatalf("selected = %v, want %v", got, tt.want)
+			}
+			if tree.selectionVersion != tt.version {
+				t.Fatalf("selectionVersion = %d, want %d", tree.selectionVersion, tt.version)
+			}
+		})
+	}
+}
+
+func TestTree_SetSelectedPreservesProgrammaticMultipleSelection(t *testing.T) {
+	root := &Node{Children: []*Node{{Name: "a"}, {Name: "b"}}}
+	var mu sync.RWMutex
+	tree := New(ui.NewJsVar(&mu, root))
+
+	changed := tree.SetSelected([][]string{{"a"}, {"b"}})
+	if !reflect.DeepEqual(changed, root.Children) {
+		t.Fatalf("SetSelected() changed = %#v, want both children %#v", changed, root.Children)
+	}
+	if !root.Children[0].Selected || !root.Children[1].Selected {
+		t.Fatalf("programmatic selection = [%v %v], want [true true]", root.Children[0].Selected, root.Children[1].Selected)
+	}
+}
+
 func TestTreeRenderEmitsSelfContainedRootAndQueuesInitializer(t *testing.T) {
 	jw, err := jaws.New()
 	maybeError(t, err)
@@ -516,25 +615,27 @@ func TestTree(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("timeout waiting for jawstreeSet message")
 	case msg := <-rq.OutCh:
-		if s := string(rootnode.marshalJSON(nil)); !strings.Contains(msg.Data, s) {
-			t.Log(msg.Data)
-			t.Error("msg data did not contain our JSON")
+		want := `jawstreeSet={"key":` + strconv.Quote(tree.key) + `,"selectionVersion":0,"data":` + string(rootnode.marshalJSON(nil)) + `}`
+		if msg.Data != want {
+			t.Errorf("msg data = %q, want %q", msg.Data, want)
 		}
 		if !strings.Contains(msg.Data, `"selectable":false`) {
 			t.Error("msg data did not contain selectable:false")
 		}
 	}
 
-	// The value is a bool at runtime (JsVar unmarshals the wire value and the
-	// JawsSetPath gate requires a bool), so pass one here rather than a string.
+	// Match the production callback order: mutate under the JsVar lock, then
+	// publish after the lock is released.
+	tree.Lock()
+	err = rootnode.JawsSetPath(elem, changed[0].ID+".selected", false)
+	tree.Unlock()
+	maybeError(t, err)
 	rootnode.JawsPathSet(elem, changed[0].ID+".selected", false)
 	select {
 	case <-t.Context().Done():
-		t.Fatal("expected a jawstreeSetPath broadcast")
+		t.Fatal("expected a jawstreeSetSelection broadcast")
 	case msg := <-rq.OutCh:
-		// The broadcast id is the node's own ID; derive the expectation from it
-		// rather than a literal, which is fragile to the package directory listing.
-		want := `jawstreeSetPath={"key":` + strconv.Quote(tree.key) + `,"id":` + strconv.Quote(changed[0].ID) + `,"set":false}`
+		want := "jawstreeSetSelection=" + string(tree.appendSelectionCallData(nil))
 		if msg.Data != want {
 			t.Errorf("unexpected data: %q, want %q", msg.Data, want)
 		}
@@ -619,15 +720,18 @@ func TestTree_JawsPathSetIgnoresNonSelectedPath(t *testing.T) {
 	child := rootnode.Children[0]
 	// A non-".selected" path must be ignored (no broadcast)...
 	child.JawsPathSet(elem, child.ID+".name", "renamed")
-	// ...so the ".selected" broadcast is the first message on OutCh. The value is
-	// a bool at runtime, so pass one rather than a string.
+	// ...so the authoritative selection broadcast is the first message on OutCh.
+	tree.Lock()
+	err = rootnode.JawsSetPath(elem, child.ID+".selected", true)
+	tree.Unlock()
+	maybeError(t, err)
 	child.JawsPathSet(elem, child.ID+".selected", true)
 
 	select {
 	case <-t.Context().Done():
-		t.Fatal("expected a jawstreeSetPath message")
+		t.Fatal("expected a jawstreeSetSelection message")
 	case msg := <-rq.OutCh:
-		if !strings.Contains(msg.Data, "jawstreeSetPath") || !strings.Contains(msg.Data, `"set":true`) {
+		if msg.Data != "jawstreeSetSelection="+string(tree.appendSelectionCallData(nil)) {
 			t.Fatalf("first message should be the .selected broadcast, got %q (a non-.selected path leaked a broadcast)", msg.Data)
 		}
 	}
@@ -744,6 +848,185 @@ func collectJawstreeSetMessages(t *testing.T, ch <-chan wire.WsMsg) (msgs []wire
 				}
 				idle.Reset(250 * time.Millisecond)
 			}
+		}
+	}
+}
+
+type jawstreeSelectionCall struct {
+	Key              string   `json:"key"`
+	SelectionVersion uint64   `json:"selectionVersion"`
+	Selected         []string `json:"selected"`
+}
+
+func collectJawstreeSelectionCalls(t *testing.T, ch <-chan wire.WsMsg) (calls []jawstreeSelectionCall) {
+	t.Helper()
+	deadline := time.NewTimer(2 * time.Second)
+	defer deadline.Stop()
+	idle := time.NewTimer(time.Hour)
+	if !idle.Stop() {
+		<-idle.C
+	}
+	defer idle.Stop()
+
+	for {
+		var idleC <-chan time.Time
+		if len(calls) > 0 {
+			idleC = idle.C
+		}
+		select {
+		case <-t.Context().Done():
+			t.Fatal("test context expired while waiting for jawstreeSetSelection messages")
+		case <-deadline.C:
+			if len(calls) == 0 {
+				t.Fatal("timed out waiting for jawstreeSetSelection message")
+			}
+			return calls
+		case <-idleC:
+			return calls
+		case msg := <-ch:
+			if strings.HasPrefix(msg.Data, "jawstreeSet=") {
+				t.Fatalf("default selection rebuilt the tree with %q", msg.Data)
+			}
+			if payload, ok := strings.CutPrefix(msg.Data, "jawstreeSetSelection="); ok {
+				var call jawstreeSelectionCall
+				if err := json.Unmarshal([]byte(payload), &call); err != nil {
+					t.Fatalf("invalid jawstreeSetSelection payload %q: %v", payload, err)
+				}
+				calls = append(calls, call)
+				if !idle.Stop() {
+					select {
+					case <-idle.C:
+					default:
+					}
+				}
+				idle.Reset(250 * time.Millisecond)
+			}
+		}
+	}
+}
+
+func TestTree_DefaultSingleSelectionConcurrentClients(t *testing.T) {
+	jw, err := jaws.New()
+	maybeError(t, err)
+	defer jw.Close()
+	go jw.Serve()
+
+	rq1 := jawstest.NewTestRequest(jw, nil)
+	rq2 := jawstest.NewTestRequest(jw, nil)
+	abortSelections := make(chan struct{})
+	defer func() {
+		close(abortSelections)
+		rq1.Close()
+		rq2.Close()
+		<-rq1.DoneCh
+		<-rq2.DoneCh
+	}()
+	<-rq1.ReadyCh
+	<-rq2.ReadyCh
+
+	root := &Node{Children: []*Node{{Name: "a"}, {Name: "b"}}}
+	var mu sync.RWMutex
+	tree := New(ui.NewJsVar(&mu, root))
+
+	// Both event handlers pause before reaching the JsVar. This models two normal
+	// clients selecting from the same initial snapshot, without relying on the
+	// scheduler to keep either client's peer update from arriving first.
+	var arrivalMu sync.Mutex
+	arrivals := 0
+	bothArrived := make(chan struct{})
+	concurrentSelection := jaws.InputFn(func(_ *jaws.Element, value string) error {
+		if strings.HasSuffix(value, ".selected=true") {
+			arrivalMu.Lock()
+			arrivals++
+			if arrivals == 2 {
+				close(bothArrived)
+			}
+			arrivalMu.Unlock()
+			select {
+			case <-bothArrived:
+			case <-abortSelections:
+				return nil
+			}
+		}
+		return jaws.ErrEventUnhandled
+	})
+
+	renderTree := func(rq *jawstest.TestRequest) *jaws.Element {
+		t.Helper()
+		elem := rq.NewElement(tree)
+		var out strings.Builder
+		maybeError(t, elem.JawsRender(&out, []any{concurrentSelection}))
+		rq.InCh <- wire.WsMsg{}
+		select {
+		case msg := <-rq.OutCh:
+			if msg.What != what.Call || msg.Jid != elem.Jid() || !strings.HasPrefix(msg.Data, "jawstreeInit=") {
+				t.Fatalf("initializer = %+v, want a tree initializer for %s", msg, elem.Jid())
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for tree initializer")
+		}
+		return elem
+	}
+	elem1 := renderTree(rq1)
+	elem2 := renderTree(rq2)
+
+	// A click on a separate, normally rendered button is a FIFO barrier behind
+	// each Set event in that Request's event goroutine.
+	selectionDone := make(chan struct{}, 2)
+	newBarrier := func(rq *jawstest.TestRequest) *jaws.Element {
+		t.Helper()
+		clicked := ui.New("done").Clicked(func(_ ui.Object, _ *jaws.Element, _ jaws.Click) error {
+			selectionDone <- struct{}{}
+			return nil
+		})
+		elem := rq.NewElement(ui.NewButton(clicked))
+		maybeError(t, elem.JawsRender(&strings.Builder{}, nil))
+		return elem
+	}
+	barrier1 := newBarrier(rq1)
+	barrier2 := newBarrier(rq2)
+
+	rq1.InCh <- wire.WsMsg{Jid: elem1.Jid(), What: what.Set, Data: "children.0.selected=true"}
+	rq2.InCh <- wire.WsMsg{Jid: elem2.Jid(), What: what.Set, Data: "children.1.selected=true"}
+	select {
+	case <-bothArrived:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for concurrent selections")
+	}
+	rq1.InCh <- wire.WsMsg{Jid: barrier1.Jid(), What: what.Click, Data: "0 0 0"}
+	rq2.InCh <- wire.WsMsg{Jid: barrier2.Jid(), What: what.Click, Data: "0 0 0"}
+	for range 2 {
+		select {
+		case <-selectionDone:
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for selection event barrier")
+		}
+	}
+
+	tree.RLock()
+	selected := [2]bool{root.Children[0].Selected, root.Children[1].Selected}
+	wantVersion := tree.selectionVersion
+	var wantSelected []string
+	for _, node := range root.Children {
+		if node.Selected {
+			wantSelected = append(wantSelected, node.ID)
+		}
+	}
+	tree.RUnlock()
+	if selected != [2]bool{true, false} && selected != [2]bool{false, true} {
+		t.Fatalf("concurrent default selections left server state %v, want exactly one selected node", selected)
+	}
+
+	for i, ch := range []<-chan wire.WsMsg{rq1.OutCh, rq2.OutCh} {
+		calls := collectJawstreeSelectionCalls(t, ch)
+		var newest jawstreeSelectionCall
+		for _, call := range calls {
+			if call.SelectionVersion > newest.SelectionVersion {
+				newest = call
+			}
+		}
+		if newest.Key != tree.key || newest.SelectionVersion != wantVersion || !reflect.DeepEqual(newest.Selected, wantSelected) {
+			t.Errorf("client %d newest targeted selection = %+v, want key %q version %d selected %v", i+1, newest, tree.key, wantVersion, wantSelected)
 		}
 	}
 }

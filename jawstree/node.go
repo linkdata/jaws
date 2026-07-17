@@ -105,6 +105,12 @@ var (
 // field by path. This is the server-side enforcement of the "server holds the truth"
 // contract for [Tree].
 //
+// On a default single-select Tree (neither [MultiSelectEnabled] nor
+// [CascadeSelectChildren]), selecting a node also clears every other selected
+// node. This keeps the server-side state authoritative when clients sharing the
+// Tree select concurrently. Multi-select and cascading Trees retain their
+// client selection semantics.
+//
 // The root's Selected flag is effectively server-only: the standard client cannot
 // produce the path that addresses the root itself, so avoid rendering the root
 // selected, since clients cannot change it back through the protocol.
@@ -127,7 +133,26 @@ func (node *Node) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err
 	// index == len.
 	var target *Node
 	if target, err = node.resolveChildPath(nodePath); err == nil {
-		if target.Selected == selected {
+		if node.Tree != nil && node.Tree.isDefaultSingleSelect() {
+			changed := false
+			if selected {
+				node.Tree.Ptr.Walk("", func(_ string, candidate *Node) {
+					want := candidate == target
+					if candidate.Selected != want {
+						candidate.Selected = want
+						changed = true
+					}
+				})
+			} else if target.Selected {
+				target.Selected = false
+				changed = true
+			}
+			if changed {
+				node.Tree.selectionVersion++
+			} else {
+				err = jaws.ErrValueUnchanged
+			}
+		} else if target.Selected == selected {
 			err = jaws.ErrValueUnchanged
 		} else {
 			target.Selected = selected
@@ -176,14 +201,21 @@ func (node *Node) resolveChildPath(nodePath string) (*Node, error) {
 	return cur, nil
 }
 
-// JawsPathSet runs after a node's selected flag has been set on the server-side
-// tree; it broadcasts a jawstreeSetPath JsCall so the change is reflected in the
-// rendered tree of every client sharing this Tree.
+// JawsPathSet broadcasts a completed selection mutation.
+//
+// It runs after a node's selected flag has been set on the server-side tree. A
+// default single-select Tree broadcasts its versioned authoritative selection;
+// other modes broadcast the changed path. Both calls update every client sharing
+// this Tree without replacing the tree DOM.
 //
 // It requires node.Tree to be set — that is, the node must have been passed to
 // [New] — and panics otherwise, since a bare [Root] node has a nil Tree.
 func (node *Node) JawsPathSet(elem *jaws.Element, jsPath string, value any) {
 	if nodePath, ok := strings.CutSuffix(jsPath, ".selected"); ok {
+		if _, isBool := value.(bool); isBool && node.Tree.isDefaultSingleSelect() {
+			elem.Jaws.JsCall(node.Tree.JawsGetTag(nil), "jawstreeSetSelection", string(node.Tree.appendSelectionCallData(nil)))
+			return
+		}
 		// The marshaled struct holds two strings plus value, which JawsSetPath has
 		// already verified to be a bool, so marshaling cannot fail in practice; guard
 		// the error anyway so a future change that lets a non-marshalable value reach

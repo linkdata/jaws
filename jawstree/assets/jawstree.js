@@ -41,6 +41,30 @@ function jawstreeSetData(t, data) {
     t.setData(jawstreeViewChildren(data, t.options.multiSelectEnabled, t.options.cascadeSelectChildren));
 }
 
+function jawstreeNodeID(path, node) {
+    return typeof node.id == 'string' ? node.id : path;
+}
+
+function jawstreeSelectedIDs(data) {
+    var selected = [];
+    jawstreeForEachNode("", data, function(path, node) {
+        if (node.selected) {
+            selected.push(jawstreeNodeID(path, node));
+        }
+    });
+    return selected;
+}
+
+function jawstreeApplySelection(data, selected) {
+    jawstreeForEachNode("", data, function(path, node) {
+        if (selected.indexOf(jawstreeNodeID(path, node)) != -1) {
+            node.selected = true;
+        } else {
+            delete node.selected;
+        }
+    });
+}
+
 function jawstreeInit(arg) {
     var container = document.getElementById(arg.jid);
     if (container) {
@@ -56,11 +80,58 @@ function jawstreeInit(arg) {
 
 function jawstreeSet(arg) {
     var t = window["jawstree_"+arg.key];
+    var currentVersion = t.jawsSelectionVersion || 0;
+    var nextVersion = arg.selectionVersion || 0;
     var wasApplyingSet = t.jawsApplyingSet;
+    if (nextVersion < currentVersion) {
+        // A full update may have been rendered just before a newer browser
+        // selection was accepted. Keep that newer selection while still applying
+        // the full update's non-selection fields.
+        jawstreeApplySelection(arg.data, jawstreeSelectedIDs(window["jawstreeroot_"+arg.key]));
+    } else {
+        t.jawsSelectionVersion = nextVersion;
+    }
     window["jawstreeroot_"+arg.key] = arg.data;
     t.jawsApplyingSet = true;
     try {
         jawstreeSetData(t, arg.data);
+    } finally {
+        t.jawsApplyingSet = wasApplyingSet;
+    }
+}
+
+function jawstreeSetSelection(arg) {
+    var t = window["jawstree_"+arg.key];
+    var currentVersion = t.jawsSelectionVersion || 0;
+    if (arg.selectionVersion <= currentVersion) {
+        return;
+    }
+
+    var selected = Array.isArray(arg.selected) ? arg.selected : [];
+    var root = window["jawstreeroot_"+arg.key];
+    jawstreeApplySelection(root, selected);
+
+    // Quercus's ordinary single-select operation updates only selection classes
+    // and checkboxes. Unlike setData, it preserves expansion and search state.
+    var selectedID = null;
+    for (var i = 0; i < selected.length; i++) {
+        if (selected[i] !== "") {
+            selectedID = selected[i];
+        }
+    }
+    var selectedNodes = t.getSelectedNodes();
+    var alreadySelected = selectedID !== null && selectedNodes.length == 1 && selectedNodes[0].id == selectedID;
+    var wasApplyingSet = t.jawsApplyingSet;
+    t.jawsSelectionVersion = arg.selectionVersion;
+    t.jawsApplyingSet = true;
+    try {
+        if (selectedID === null) {
+            selectedNodes.forEach(function(node) {
+                t.selectNodeById(node.id, false);
+            });
+        } else if (!alreadySelected) {
+            t.selectNodeById(selectedID, true);
+        }
     } finally {
         t.jawsApplyingSet = wasApplyingSet;
     }

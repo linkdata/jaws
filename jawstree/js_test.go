@@ -220,6 +220,181 @@ process.stdout.write(JSON.stringify(window["jawstree_tree"].selected));
 	}
 }
 
+func TestJawstreeJS_SetSelectionPreservesViewStateAndRejectsStaleUpdates(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, `
+var root = { children: [
+	{ id: "children.0", name: "a", selected: true, children: [] },
+	{ id: "children.1", name: "b", children: [] }
+] };
+var tree = {
+	options: { multiSelectEnabled: false, cascadeSelectChildren: false },
+	jawsApplyingSet: false,
+	jawsSelectionVersion: 0,
+	expanded: ["children.0"],
+	searchQuery: "needle",
+	selected: ["children.0"],
+	setDataCalls: 0,
+	calls: [],
+	getSelectedNodes: function() {
+		return this.selected.map(function(id) { return { id: id }; });
+	},
+	selectNodeById: function(id, set) {
+		this.calls.push({ id: id, set: set, applying: this.jawsApplyingSet });
+		if (set) {
+			this.selected = [id];
+		} else {
+			this.selected = this.selected.filter(function(selectedID) { return selectedID != id; });
+		}
+	},
+	setData: function() { this.setDataCalls++; }
+};
+window["jawstreeroot_tree"] = root;
+window["jawstree_tree"] = tree;
+
+jawstreeSetSelection({ key: "tree", selectionVersion: 2, selected: ["children.1"] });
+var afterNew = {
+	selected: tree.selected.slice(),
+	a: Boolean(root.children[0].selected),
+	b: Boolean(root.children[1].selected)
+};
+jawstreeSetSelection({ key: "tree", selectionVersion: 1, selected: ["children.0"] });
+var afterStale = {
+	selected: tree.selected.slice(),
+	a: Boolean(root.children[0].selected),
+	b: Boolean(root.children[1].selected)
+};
+jawstreeSetSelection({ key: "tree", selectionVersion: 3, selected: [] });
+
+process.stdout.write(JSON.stringify({
+	afterNew: afterNew,
+	afterStale: afterStale,
+	finalSelected: tree.selected,
+	finalA: Boolean(root.children[0].selected),
+	finalB: Boolean(root.children[1].selected),
+	version: tree.jawsSelectionVersion,
+	expanded: tree.expanded,
+	searchQuery: tree.searchQuery,
+	setDataCalls: tree.setDataCalls,
+	calls: tree.calls,
+	applying: tree.jawsApplyingSet
+}));
+`)
+
+	var got struct {
+		AfterNew struct {
+			Selected []string `json:"selected"`
+			A        bool     `json:"a"`
+			B        bool     `json:"b"`
+		} `json:"afterNew"`
+		AfterStale struct {
+			Selected []string `json:"selected"`
+			A        bool     `json:"a"`
+			B        bool     `json:"b"`
+		} `json:"afterStale"`
+		FinalSelected []string `json:"finalSelected"`
+		FinalA        bool     `json:"finalA"`
+		FinalB        bool     `json:"finalB"`
+		Version       uint64   `json:"version"`
+		Expanded      []string `json:"expanded"`
+		SearchQuery   string   `json:"searchQuery"`
+		SetDataCalls  int      `json:"setDataCalls"`
+		Calls         []struct {
+			ID       string `json:"id"`
+			Set      bool   `json:"set"`
+			Applying bool   `json:"applying"`
+		} `json:"calls"`
+		Applying bool `json:"applying"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+	selectedB := []string{"children.1"}
+	if !reflect.DeepEqual(got.AfterNew.Selected, selectedB) || got.AfterNew.A || !got.AfterNew.B {
+		t.Fatalf("new selection = %+v, want only children.1", got.AfterNew)
+	}
+	if !reflect.DeepEqual(got.AfterStale.Selected, selectedB) || got.AfterStale.A || !got.AfterStale.B {
+		t.Fatalf("selection after stale update = %+v, want unchanged children.1", got.AfterStale)
+	}
+	if len(got.FinalSelected) != 0 || got.FinalA || got.FinalB || got.Version != 3 {
+		t.Fatalf("final selection = %v flags [%t %t] version %d, want empty at version 3", got.FinalSelected, got.FinalA, got.FinalB, got.Version)
+	}
+	if !reflect.DeepEqual(got.Expanded, []string{"children.0"}) || got.SearchQuery != "needle" || got.SetDataCalls != 0 {
+		t.Fatalf("view state changed: expanded=%v search=%q setDataCalls=%d", got.Expanded, got.SearchQuery, got.SetDataCalls)
+	}
+	if len(got.Calls) != 2 || got.Calls[0].ID != "children.1" || !got.Calls[0].Set ||
+		got.Calls[1].ID != "children.1" || got.Calls[1].Set || !got.Calls[0].Applying || !got.Calls[1].Applying {
+		t.Fatalf("targeted selection calls = %+v", got.Calls)
+	}
+	if got.Applying {
+		t.Fatal("jawsApplyingSet was not restored")
+	}
+}
+
+func TestJawstreeJS_StaleFullUpdatePreservesNewerSelection(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, `
+function selectedIDs(data) {
+	return data.children.filter(function(node) { return Boolean(node.selected); }).map(function(node) { return node.id; });
+}
+var current = { marker: "current", children: [
+	{ id: "children.0", name: "a", children: [] },
+	{ id: "children.1", name: "b", selected: true, children: [] }
+] };
+var tree = {
+	options: { multiSelectEnabled: false, cascadeSelectChildren: false },
+	jawsApplyingSet: false,
+	jawsSelectionVersion: 2,
+	sets: [],
+	setData: function(data) { this.sets.push({ marker: data[0].marker, selected: selectedIDs({ children: data }) }); }
+};
+window["jawstreeroot_tree"] = current;
+window["jawstree_tree"] = tree;
+
+jawstreeSet({ key: "tree", selectionVersion: 1, data: { marker: "stale", children: [
+	{ id: "children.0", name: "a", selected: true, children: [] },
+	{ id: "children.1", name: "b", children: [] }
+] } });
+var afterStale = window["jawstreeroot_tree"];
+jawstreeSet({ key: "tree", selectionVersion: 2, data: { marker: "current-version", children: [
+	{ id: "children.0", name: "a", selected: true, children: [] },
+	{ id: "children.1", name: "b", children: [] }
+] } });
+var afterCurrent = window["jawstreeroot_tree"];
+
+process.stdout.write(JSON.stringify({
+	afterStaleMarker: afterStale.marker,
+	afterStaleSelected: selectedIDs(afterStale),
+	afterCurrentMarker: afterCurrent.marker,
+	afterCurrentSelected: selectedIDs(afterCurrent),
+	version: tree.jawsSelectionVersion,
+	sets: tree.sets
+}));
+`)
+
+	var got struct {
+		AfterStaleMarker     string   `json:"afterStaleMarker"`
+		AfterStaleSelected   []string `json:"afterStaleSelected"`
+		AfterCurrentMarker   string   `json:"afterCurrentMarker"`
+		AfterCurrentSelected []string `json:"afterCurrentSelected"`
+		Version              uint64   `json:"version"`
+		Sets                 []struct {
+			Marker   string   `json:"marker"`
+			Selected []string `json:"selected"`
+		} `json:"sets"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+	if got.AfterStaleMarker != "stale" || !reflect.DeepEqual(got.AfterStaleSelected, []string{"children.1"}) {
+		t.Fatalf("stale full update = marker %q selected %v, want non-selection data with newer children.1 selection", got.AfterStaleMarker, got.AfterStaleSelected)
+	}
+	if got.AfterCurrentMarker != "current-version" || !reflect.DeepEqual(got.AfterCurrentSelected, []string{"children.0"}) || got.Version != 2 {
+		t.Fatalf("current-version full update = marker %q selected %v version %d", got.AfterCurrentMarker, got.AfterCurrentSelected, got.Version)
+	}
+	if len(got.Sets) != 2 || !reflect.DeepEqual(got.Sets[0].Selected, []string{"children.1"}) || !reflect.DeepEqual(got.Sets[1].Selected, []string{"children.0"}) {
+		t.Fatalf("Treeview setData selections = %+v", got.Sets)
+	}
+}
+
 func TestJawstreeJS_UpdatesAreScopedByKey(t *testing.T) {
 	raw := runJawstreeJSSnippet(t, `
 function makeTree() {
