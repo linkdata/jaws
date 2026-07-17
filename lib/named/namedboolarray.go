@@ -107,21 +107,23 @@ func (nba *BoolArray) Set(name string, state bool) (changed bool) {
 // single-select deselection, and returns every [Bool] whose state changed. The
 // BoolArray must be locked for writing.
 func (nba *BoolArray) setChangedLocked(name string, state bool) (changed []*Bool) {
+	matched := false
 	for _, nb := range nba.data {
 		if nb.Name() == name {
+			matched = true
 			if nb.Set(state) {
 				changed = append(changed, nb)
 			}
 		}
 	}
-	changed = append(changed, nba.deselectOthersLocked(name, state)...)
+	changed = append(changed, nba.deselectOthersLocked(name, state || !matched)...)
 	return
 }
 
 // deselectOthersLocked clears all Bools whose name differs from
-// the given name when the array is in single-select mode and state is true.
-func (nba *BoolArray) deselectOthersLocked(name string, state bool) (changed []*Bool) {
-	if state && !nba.multi {
+// the given name when the array is in single-select mode and deselect is true.
+func (nba *BoolArray) deselectOthersLocked(name string, deselect bool) (changed []*Bool) {
+	if deselect && !nba.multi {
 		for _, nb := range nba.data {
 			if nb.Name() != name {
 				if nb.Set(false) {
