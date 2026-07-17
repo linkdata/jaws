@@ -3,6 +3,7 @@ package jawstree
 import (
 	"io"
 	"strconv"
+	"strings"
 	"sync/atomic"
 
 	"github.com/linkdata/jaws"
@@ -10,7 +11,12 @@ import (
 	"github.com/linkdata/jaws/lib/ui"
 )
 
-var _ jaws.UI = (*Tree)(nil)
+var (
+	_ jaws.UI           = (*Tree)(nil)
+	_ jaws.InputHandler = (*Tree)(nil)
+)
+
+const selectionSyncPrefix = "jawstree-selection-sync:"
 
 // Tree renders and updates a shared Quercus.js tree bound to a [ui.JsVar].
 //
@@ -29,6 +35,18 @@ type Tree struct {
 	renderParams     [1]any
 	selectionVersion uint64 // guarded by the embedded JsVar lock
 	*ui.JsVar[Node]
+}
+
+type selectionSyncHandler struct {
+	tree *Tree
+}
+
+func (h selectionSyncHandler) JawsInput(elem *jaws.Element, value string) (err error) {
+	err = jaws.ErrEventUnhandled
+	if h.tree.handleSelectionSync(elem, value) {
+		err = nil
+	}
+	return
 }
 
 var nextTreeKey atomic.Uint64
@@ -114,11 +132,10 @@ func (tree *Tree) appendInitCallData(b []byte, containerJid jid.Jid, selectionVe
 	return b
 }
 
-func (tree *Tree) appendSelectionCallData(b []byte) []byte {
+func (tree *Tree) appendSelectionCallDataLocked(b []byte) []byte {
 	b = append(b, `{"key":`...)
 	b = strconv.AppendQuote(b, tree.key)
 	b = append(b, `,"selectionVersion":`...)
-	tree.RLock()
 	b = strconv.AppendUint(b, tree.selectionVersion, 10)
 	b = append(b, `,"selected":[`...)
 	first := true
@@ -131,8 +148,14 @@ func (tree *Tree) appendSelectionCallData(b []byte) []byte {
 			b = strconv.AppendQuote(b, node.ID)
 		}
 	})
-	tree.RUnlock()
 	b = append(b, `]}`...)
+	return b
+}
+
+func (tree *Tree) appendSelectionCallData(b []byte) []byte {
+	tree.RLock()
+	b = tree.appendSelectionCallDataLocked(b)
+	tree.RUnlock()
 	return b
 }
 
@@ -147,7 +170,38 @@ func (tree *Tree) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err
 	if err = tree.JsVar.JawsRenderSnapshot(elem, w, params, func(_ *Node) {
 		selectionVersion = tree.selectionVersion
 	}); err == nil {
+		// JsVar renders caller-provided handlers before returning. Append the
+		// protocol handler last so reverse-order event dispatch reaches it before a
+		// general Input handler can consume the private synchronization message.
+		elem.AddHandlers(selectionSyncHandler{tree})
 		elem.JsCall("jawstreeInit", string(tree.appendInitCallData(nil, elem.Jid(), selectionVersion)))
+	}
+	return
+}
+
+func (tree *Tree) handleSelectionSync(elem *jaws.Element, value string) (handled bool) {
+	versionText, isSelectionSync := strings.CutPrefix(value, selectionSyncPrefix)
+	if isSelectionSync && tree.isDefaultSingleSelect() {
+		if renderedVersion, parseErr := strconv.ParseUint(versionText, 10, 64); parseErr == nil && strconv.FormatUint(renderedVersion, 10) == versionText {
+			var data []byte
+			tree.RLock()
+			if tree.selectionVersion > renderedVersion {
+				data = tree.appendSelectionCallDataLocked(nil)
+			}
+			tree.RUnlock()
+			if data != nil {
+				elem.Jaws.JsCall(elem.Request.JawsKey, "jawstreeSetSelection", string(data))
+			}
+			handled = true
+		}
+	}
+	return
+}
+
+// JawsInput handles selection reconciliation and JavaScript variable updates.
+func (tree *Tree) JawsInput(elem *jaws.Element, value string) (err error) {
+	if !tree.handleSelectionSync(elem, value) {
+		err = tree.JsVar.JawsInput(elem, value)
 	}
 	return
 }

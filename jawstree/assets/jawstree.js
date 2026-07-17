@@ -78,6 +78,13 @@ function jawstreeInit(arg) {
     );
     t.jawsSelectionVersion = arg.selectionVersion || 0;
     window["jawstree_"+arg.key] = t;
+
+    /*jslint bitwise: true */
+    var defaultSingleSelect = !(arg.options & (1<<2)) && !(arg.options & (1<<7));
+    /*jslint bitwise: false */
+    if (defaultSingleSelect && jawsCanSend()) {
+        jaws.send("Input\t" + arg.jid + "\t" + JSON.stringify("jawstree-selection-sync:" + t.jawsSelectionVersion) + "\n");
+    }
 }
 
 function jawstreeSet(arg) {

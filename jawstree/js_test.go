@@ -63,6 +63,9 @@ const root = { children: [
 	{ id: "children.1", name: "Pictures", selected: true, children: [] }
 ] };
 let got = null;
+const sent = [];
+global.jawsCanSend = function() { return true; };
+global.jaws = { send: function(frame) { sent.push(frame); } };
 const initialized = {
 	ready: true,
 	selected: ["children.1"],
@@ -98,7 +101,8 @@ process.stdout.write(JSON.stringify({
 	documentsSelected: Boolean(root.children[0].selected),
 	picturesSelected: Boolean(root.children[1].selected),
 	viewSelected: initialized.selected,
-	selectionCalls: initialized.calls
+	selectionCalls: initialized.calls,
+	sent: sent
 }));
 `)
 
@@ -116,6 +120,7 @@ process.stdout.write(JSON.stringify({
 		PicturesSelected  bool            `json:"picturesSelected"`
 		ViewSelected      []string        `json:"viewSelected"`
 		SelectionCalls    []jsSetPathCall `json:"selectionCalls"`
+		Sent              []string        `json:"sent"`
 	}
 	if err := json.Unmarshal([]byte(raw), &got); err != nil {
 		t.Fatalf("unexpected JSON output %q: %v", raw, err)
@@ -135,6 +140,34 @@ process.stdout.write(JSON.stringify({
 	if got.Version != 2 || got.DocumentsSelected || !got.PicturesSelected ||
 		!reflect.DeepEqual(got.ViewSelected, []string{"children.1"}) || len(got.SelectionCalls) != 0 {
 		t.Fatalf("stale selection changed initialized state: version=%d shadow=[%t %t] view=%v calls=%v", got.Version, got.DocumentsSelected, got.PicturesSelected, got.ViewSelected, got.SelectionCalls)
+	}
+	wantSent := []string{"Input\tJid.7\t\"jawstree-selection-sync:2\"\n"}
+	if !reflect.DeepEqual(got.Sent, wantSent) {
+		t.Fatalf("selection synchronization frames = %q, want %q", got.Sent, wantSent)
+	}
+}
+
+func TestJawstreeJS_InitSkipsSelectionSyncForOtherModes(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, `
+const sent = [];
+global.jawsCanSend = function() { return true; };
+global.jaws = { send: function(frame) { sent.push(frame); } };
+global.document = { getElementById: function() { return { hidden: true }; } };
+jawstreeNew = function() { return {}; };
+
+window["jawstreeroot_multi"] = { children: [] };
+jawstreeInit({ key: "multi", jid: "Jid.1", options: 1<<2, selectionVersion: 0 });
+window["jawstreeroot_cascade"] = { children: [] };
+jawstreeInit({ key: "cascade", jid: "Jid.2", options: 1<<7, selectionVersion: 0 });
+process.stdout.write(JSON.stringify(sent));
+`)
+
+	var got []string
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("non-default selection modes sent synchronization frames: %q", got)
 	}
 }
 
