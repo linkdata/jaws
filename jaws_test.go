@@ -2642,8 +2642,6 @@ func (benchUnhandledClickHandler) JawsClick(*Element, Click) error {
 	return ErrEventUnhandled
 }
 
-var benchRequestSink *Request
-
 func BenchmarkJawsClosePendingRequests(b *testing.B) {
 	for _, pending := range []int{0, 1, 100} {
 		b.Run("pending="+strconv.Itoa(pending), func(b *testing.B) {
@@ -2735,12 +2733,18 @@ func populateBenchRequest(rq *Request, tags []any) {
 // with a benchmark-only fresh-allocation lifecycle. It isolates the create,
 // optional render-state population and recycle path; it does not measure HTTP or
 // WebSocket serving.
+//
+// The impl axis selects pooled (jw.reqPool via NewRequest/recycle) versus a fresh
+// &Request each iteration. The mode axis runs the cycle single-goroutine (serial)
+// or under [testing.B.RunParallel], since a [sync.Pool]'s payoff is a GC-pressure
+// and high-churn effect that a single-goroutine run under-measures. Sub-benchmarks
+// use key=value names so "benchstat -col /impl" pivots pooled against unpooled.
 func BenchmarkRequestLifecyclePooling(b *testing.B) {
 	for _, c := range []struct {
 		name  string
 		elems int
 	}{
-		{"empty", 0},
+		{"elems=0", 0},
 		{"elems=100", 100},
 		{"elems=1000", 1000},
 	} {
@@ -2749,45 +2753,67 @@ func BenchmarkRequestLifecyclePooling(b *testing.B) {
 			tags[i] = tag.Tag("bench-" + strconv.Itoa(i))
 		}
 		b.Run(c.name, func(b *testing.B) {
-			b.Run("pooled", func(b *testing.B) {
-				jw, err := New()
-				if err != nil {
-					b.Fatal(err)
-				}
-				b.Cleanup(func() { jw.Close() })
-
-				rq := jw.NewRequest(nil)
-				populateBenchRequest(rq, tags)
-				jw.recycle(rq)
-
-				b.ReportAllocs()
-				b.ResetTimer()
-				for i := 0; i < b.N; i++ {
-					rq = jw.NewRequest(nil)
-					populateBenchRequest(rq, tags)
-					jw.recycle(rq)
-				}
-				benchRequestSink = rq
-			})
-			b.Run("unpooled", func(b *testing.B) {
-				jw, err := New()
-				if err != nil {
-					b.Fatal(err)
-				}
-				b.Cleanup(func() { jw.Close() })
-
-				var rq *Request
-				b.ReportAllocs()
-				b.ResetTimer()
-				for i := 0; i < b.N; i++ {
-					rq = newUnpooledBenchRequest(jw)
-					populateBenchRequest(rq, tags)
-					recycleUnpooledBenchRequest(jw, rq)
-				}
-				benchRequestSink = rq
-			})
+			for _, impl := range []struct {
+				name    string
+				newRq   func(*Jaws) *Request
+				recycle func(*Jaws, *Request)
+			}{
+				{"impl=pooled", func(jw *Jaws) *Request { return jw.NewRequest(nil) }, func(jw *Jaws, rq *Request) { jw.recycle(rq) }},
+				{"impl=unpooled", newUnpooledBenchRequest, recycleUnpooledBenchRequest},
+			} {
+				b.Run(impl.name, func(b *testing.B) {
+					b.Run("mode=serial", func(b *testing.B) {
+						jw := newBenchPoolJaws(b)
+						cycleBenchRequest(jw, impl.newRq, impl.recycle, tags) // warm the pool and backing arrays
+						b.ReportAllocs()
+						b.ResetTimer()
+						for i := 0; i < b.N; i++ {
+							cycleBenchRequest(jw, impl.newRq, impl.recycle, tags)
+						}
+					})
+					b.Run("mode=parallel", func(b *testing.B) {
+						jw := newBenchPoolJaws(b)
+						cycleBenchRequest(jw, impl.newRq, impl.recycle, tags) // warm the pool and backing arrays
+						b.ReportAllocs()
+						b.ResetTimer()
+						b.RunParallel(func(pb *testing.PB) {
+							for pb.Next() {
+								cycleBenchRequest(jw, impl.newRq, impl.recycle, tags)
+							}
+						})
+					})
+				})
+			}
 		})
 	}
+}
+
+// newBenchPoolJaws returns a Jaws for the Request-pool benchmarks with the per-IP
+// pending cap disabled.
+//
+// All NewRequest(nil) calls share the zero client IP, so leaving the cap enabled
+// would let eviction and the pending-slice scan skew the pooled vs unpooled delta;
+// disabling it for both impls keeps the comparison about allocation reuse alone.
+func newBenchPoolJaws(b *testing.B) (jw *Jaws) {
+	b.Helper()
+	var err error
+	if jw, err = New(); err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(func() { jw.Close() })
+	jw.MaxPendingRequestsPerIP = 0
+	return
+}
+
+// cycleBenchRequest runs one create -> populate -> recycle cycle.
+//
+// The trailing [runtime.KeepAlive] keeps the Request live so the allocation is not
+// elided, and avoids a shared-sink write that would race under RunParallel.
+func cycleBenchRequest(jw *Jaws, newRq func(*Jaws) *Request, recycle func(*Jaws, *Request), tags []any) {
+	rq := newRq(jw)
+	populateBenchRequest(rq, tags)
+	recycle(jw, rq)
+	runtime.KeepAlive(rq)
 }
 
 func benchmarkSyncSubscription(b *testing.B, jw *Jaws) {
