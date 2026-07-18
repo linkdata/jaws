@@ -195,6 +195,25 @@ func TestInputFloat_RejectsNonFinite(t *testing.T) {
 	}
 }
 
+// TestInputFloat_NonFiniteRendersEmpty verifies that a server-bound non-finite
+// float64 renders as an empty control rather than value="NaN"/"+Inf", which a
+// browser number/range input cannot represent and which JawsInput would itself
+// reject on echo-back. This keeps the render side symmetric with the parse side.
+func TestInputFloat_NonFiniteRendersEmpty(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	for _, v := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		f := v
+		sf := newTestSetter(f)
+		_, got := renderUI(t, rq, NewNumber(sf))
+		// An empty value renders no value= attribute at all: a blank control,
+		// which is exactly what the browser shows for a non-finite value.
+		mustMatch(t, `^<input id="Jid\.[0-9]+" type="number">$`, got)
+		if strings.Contains(got, "NaN") || strings.Contains(got, "Inf") {
+			t.Fatalf("rendered non-finite literal for %v: %s", v, got)
+		}
+	}
+}
+
 func TestInputFloat_RegisterSendsInitialZeroValue(t *testing.T) {
 	jw, err := jaws.New()
 	if err != nil {
@@ -227,7 +246,8 @@ func TestInputFloat_RegisterSendsInitialZeroValue(t *testing.T) {
 
 // TestInputFloat_NaNBoundValueDoesNotReemit verifies that a server-bound NaN value
 // is sent once on transition but not re-emitted on every subsequent update. NaN != NaN
-// would otherwise defeat the JawsUpdate dedup and re-send SetValue each cycle.
+// would otherwise defeat the JawsUpdate dedup and re-send SetValue each cycle. The
+// transition sends an empty control (not "NaN"), matching the parse-side contract.
 func TestInputFloat_NaNBoundValueDoesNotReemit(t *testing.T) {
 	jw, err := jaws.New()
 	if err != nil {
@@ -265,12 +285,12 @@ func TestInputFloat_NaNBoundValueDoesNotReemit(t *testing.T) {
 		}
 	}
 
-	// A real transition to NaN is sent once.
+	// A real transition to NaN is sent once, as an empty control.
 	sf.Set(math.NaN())
 	number.JawsUpdate(elem)
 	tr.InCh <- wire.WsMsg{} // wake the loop so the queued op flushes to OutCh
-	if v, ok := waitValue(); !ok || v != "NaN" {
-		t.Fatalf("expected one SetValue %q on transition to NaN, got ok=%v v=%q", "NaN", ok, v)
+	if v, ok := waitValue(); !ok || v != "" {
+		t.Fatalf("expected one SetValue %q on transition to NaN, got ok=%v v=%q", "", ok, v)
 	}
 
 	// The value is still NaN: further updates must not re-emit.

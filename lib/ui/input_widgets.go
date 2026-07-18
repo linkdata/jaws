@@ -126,7 +126,18 @@ type InputFloat struct {
 	bind.Setter[float64]
 }
 
+// str formats value for a browser number/range control.
+//
+// Non-finite values (NaN, ±Inf) map to the empty string so the render side
+// matches the parse-side contract: [InputFloat.JawsInput] rejects non-finite
+// browser input with [bind.ErrFloatNotFinite], and an <input type="number">
+// cannot represent them anyway, displaying blank. A server may still bind a
+// non-finite float64 (e.g. a computed 0.0/0.0), which then renders as an empty
+// control rather than an unparseable value="NaN".
 func (u *InputFloat) str(value float64) string {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return ""
+	}
 	return strconv.FormatFloat(value, 'f', -1, 64)
 }
 
