@@ -187,6 +187,10 @@ func (u *InputFloat) JawsInput(elem *jaws.Element, value string) (err error) {
 }
 
 // InputDate is the reusable base for date input widgets.
+//
+// The control is date-only. Rendering shows the calendar date in the bound
+// value's own location, but a browser edit normalizes the bound [time.Time] to
+// midnight UTC of the picked date; see [InputDate.JawsInput].
 type InputDate struct {
 	Input
 	bind.Setter[time.Time]
@@ -218,6 +222,14 @@ func (u *InputDate) JawsUpdate(elem *jaws.Element) {
 }
 
 // JawsInput stores a browser-side date input value.
+//
+// The browser sends a calendar date (YYYY-MM-DD), which [time.Parse] resolves
+// to midnight UTC, so the stored [time.Time] drops any time-of-day and
+// [time.Location] the previously bound value carried. In a non-UTC deployment
+// the stored instant therefore shifts by the zone offset, and because
+// [time.Time] inequality includes the location, re-selecting the same date
+// still reports a change and broadcasts it. Bind a date whose clock and zone are
+// irrelevant, or keep your bound values at midnight UTC to match.
 func (u *InputDate) JawsInput(elem *jaws.Element, value string) (err error) {
 	if value == "" {
 		value = "0001-01-01"
