@@ -176,9 +176,10 @@ func TestNew_RejectsWideDeepTreeByRenderBytes(t *testing.T) {
 // the depth-weighted serialized size exceeds MaxTreeRenderBytes. Counting the whole
 // serialized node, not just the ID, is what rejects it.
 func TestNew_RejectsNameHeavyDeepTreeByRenderBytes(t *testing.T) {
-	// A chain of depth D retains each node's name sum(1..D) = D(D+1)/2 times. Size the
-	// shared name so that weight clears the cap, doubled to overshoot robustly.
-	weight := MaxTreeDepth * (MaxTreeDepth + 1) / 2
+	// The D named nodes sit at depths 1..D and each is retained depth+1 times, so the
+	// shared name is held sum_{d=1..D}(d+1) = D(D+3)/2 times. Size it so that weight clears
+	// the cap, doubled to overshoot robustly.
+	weight := MaxTreeDepth * (MaxTreeDepth + 3) / 2
 	name := strings.Repeat("n", 2*(MaxTreeRenderBytes/weight))
 	root := &Node{Name: "root"}
 	cur := root

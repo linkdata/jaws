@@ -123,9 +123,11 @@ ID, a preorder wire index, and the parent back-pointers the name-path API needs,
 it must run before rendering.
 Once `New` returns, only the selection may change, through `Tree.SetSelected` or
 browser events. Each node's `Name`, `Disabled`, assigned ID, and the topology
-(`Children`) are fixed; changing any of them afterward is unsupported: it breaks the
-ID-to-wire-position mapping used by Quercus.js and, since rendering re-serializes the
-live tree, can defeat the size bounds `New` enforced.
+(`Children`) are fixed; changing any of them afterward is unsupported, with a different
+consequence per field: altering the topology or an ID breaks the ID-to-wire-position
+mapping used by Quercus.js; enlarging a `Name` defeats the size bounds `New` enforced
+(rendering re-serializes the live tree); toggling `Disabled` can desync the selection
+policy.
 
 Build a `Node` tree (by hand, or from a directory with `Root`) and pass it with a
 lock to `New`. Browser correlation keys and HTML ids are managed internally:

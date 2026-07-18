@@ -39,14 +39,15 @@ const MaxTreeDepth = 128
 // name, positional-path ID, and fixed structural bytes).
 //
 // The browser holds each node's whole serialized data — its potentially large
-// [Node.Name] included — in the init payload and in the data-node-data of its own
-// element and each rendered ancestor's. A node at depth d therefore has its data held
-// d+1 times: once in the payload, once on its own element, and once on each of its d-1
-// rendered ancestors. This depth-weighted sum is what the independent [MaxTreeNodes] and
-// [MaxTreeDepth] bounds do not cap: a shallow spine with a wide, deep fan-out, or a deep
-// chain of large names, passes them yet duplicates its data across every level. [New]
-// rejects a tree whose depth-weighted serialized size exceeds this limit with
-// [ErrInvalidTree].
+// [Node.Name] included — in the init payload and in the data-node-data of every element
+// whose subtree contains it. The root is not rendered, so its data is held once (the
+// payload). A non-root node at depth d is held d+1 times: once in the payload, once on
+// its own element, and once on each of its d-1 rendered ancestors. Weighting each node
+// by depth+1 covers both cases. This depth-weighted sum is what the independent
+// [MaxTreeNodes] and [MaxTreeDepth] bounds do not cap: a shallow spine with a wide, deep
+// fan-out, or a deep chain of large names, passes them yet duplicates its data across
+// every level. [New] rejects a tree whose depth-weighted serialized size exceeds this
+// limit with [ErrInvalidTree].
 //
 // The bound is on the retained serialized node data (the per-element data plus the init
 // payload), which is a proxy for, not the exact size of, client memory: the renderer
@@ -73,8 +74,10 @@ const nodeJSONOverhead = 80
 // [MaxTreeDepth], and [MaxTreeRenderBytes] bounds. Only the selection may change
 // afterward, through [Tree.SetSelected] or browser events (safe under the lock); each
 // node's Name, Disabled, assigned ID, and the topology (Children) are fixed. Changing any
-// of them is unsupported: it breaks the identity mapping and, because rendering
-// re-serializes the live tree, can defeat the size bounds New enforced.
+// of them is unsupported, with a different consequence per field: altering the topology
+// or an ID breaks the wire-index-to-node identity mapping; enlarging a Name defeats the
+// size bounds New enforced (rendering re-serializes the live tree); toggling Disabled can
+// desync the selection policy.
 type Tree struct {
 	bind.RWLocker         // guards root selection state and is the concurrency contract for Node accessors
 	key           string  // browser correlation key, unique per Tree
@@ -182,9 +185,10 @@ func (t *Tree) index(node *Node, jsPath string, seen map[*Node]bool, renderBytes
 		return fmt.Errorf("%w: exceeds MaxTreeDepth (%d)", ErrInvalidTree, MaxTreeDepth)
 	}
 	// The browser retains this node's whole wire object (name, ID, structure) in the init
-	// payload and on its own element plus each rendered ancestor's: depth+1 copies. Charge
-	// that, measuring the name only up to the budget that still fits so an over-long name
-	// is rejected without encoding all of it and the product cannot overflow.
+	// payload and, for a non-root node, on its own element plus its d-1 rendered ancestors:
+	// depth+1 copies (the unrendered root is held once, in the payload). Charge that,
+	// measuring the name only up to the budget that still fits so an over-long name is
+	// rejected without encoding all of it and the product cannot overflow.
 	weight := int64(depth) + 1
 	budget := int64(MaxTreeRenderBytes) - *renderBytes
 	nameLen := jsonStringLen(node.Name, budget/weight-int64(len(jsPath))-nodeJSONOverhead)
