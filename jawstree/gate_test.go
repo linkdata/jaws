@@ -58,17 +58,26 @@ func TestNew_RejectsCyclicAndSharedGraphs(t *testing.T) {
 	})
 }
 
-func TestNew_RejectsOverCap(t *testing.T) {
+// TestNew_NodeCapBoundary pins the exact node-count cutoff: a tree of exactly
+// MaxTreeNodes nodes is accepted and one node more is rejected. The tree is a shallow
+// fan (depth 1), so neither the depth nor the render-byte bound can fire and only the
+// node cap governs.
+func TestNew_NodeCapBoundary(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a MaxTreeNodes+1 tree")
 	}
-	children := make([]*Node, MaxTreeNodes+1)
+	// MaxTreeNodes children plus the root is MaxTreeNodes+1 nodes; the first
+	// MaxTreeNodes-1 children plus the root is exactly MaxTreeNodes.
+	children := make([]*Node, MaxTreeNodes)
 	for i := range children {
 		children[i] = &Node{Name: "n"}
 	}
 	var mu sync.Mutex
+	if _, err := New(&mu, &Node{Children: children[:MaxTreeNodes-1]}); err != nil {
+		t.Fatalf("exactly MaxTreeNodes nodes should be accepted, got %v", err)
+	}
 	if _, err := New(&mu, &Node{Children: children}); !errors.Is(err, ErrInvalidTree) {
-		t.Fatalf("err = %v, want ErrInvalidTree", err)
+		t.Fatalf("MaxTreeNodes+1 nodes err = %v, want ErrInvalidTree", err)
 	}
 }
 
@@ -109,12 +118,11 @@ func buildChain(descendants int) *Node {
 }
 
 // TestNew_RejectsTreeDeeperThanMaxTreeDepth pins the depth bound that keeps a tree the
-// browser cannot render from reaching the client: the vendored treeview.js recurses per
-// level and stores each node's whole subtree on its element, so an over-deep tree would
-// overflow the browser stack and retain data growing with the cube of the depth. New
-// accepts a chain exactly at MaxTreeDepth and rejects one a single level deeper with
-// ErrInvalidTree. Both stay far below MaxTreeNodes and MaxTreePathBytes, so only the
-// depth bound can reject the deeper one.
+// browser cannot render from reaching the client: the vendored treeview.js recurses
+// once per level, so an over-deep tree would overflow the browser stack. New accepts a
+// chain exactly at MaxTreeDepth and rejects one a single level deeper with
+// ErrInvalidTree. Such a chain stays far below MaxTreeNodes, and its depth-weighted ID
+// bytes stay under MaxTreeRenderBytes, so only the depth bound can reject the deeper one.
 func TestNew_RejectsTreeDeeperThanMaxTreeDepth(t *testing.T) {
 	var mu sync.Mutex
 	if _, err := New(&mu, buildChain(MaxTreeDepth)); err != nil {
@@ -125,29 +133,28 @@ func TestNew_RejectsTreeDeeperThanMaxTreeDepth(t *testing.T) {
 	}
 }
 
-// TestNew_RejectsDeepTreeByPathBytes pins that New bounds the quadratic positional-ID
-// growth independently of the depth and node-count bounds: a tree within MaxTreeDepth
-// and MaxTreeNodes, but whose cumulative ID bytes exceed MaxTreePathBytes, is rejected
-// with ErrInvalidTree rather than retaining tens of MiB of paths.
+// TestNew_RejectsWideDeepTreeByRenderBytes is the combined depth-plus-width regression:
+// a spine to the deepest allowed level with a wide fan-out of leaves there passes the
+// node, depth, and raw ID-byte checks yet is rejected by ErrInvalidTree, because each
+// leaf's long ID is retained once per ancestor and the depth-weighted total exceeds
+// MaxTreeRenderBytes. This is the shape whose client retention the independent caps miss
+// (a 47,505-leaf version retains ~8.5 billion ID chars in the browser at ~67 MB of
+// server IDs); only MaxTreeRenderBytes catches it.
 //
-// A pure chain would need sqrt(MaxTreePathBytes) levels, far past MaxTreeDepth, so
-// instead it runs a spine to the deepest allowed level and fans many leaves out there:
-// each leaf's ID carries the full ~11*MaxTreeDepth-byte spine prefix, so a leaf count
-// derived from the byte cap drives the running total past it while depth and node count
-// stay within bounds. The leaf count doubles the estimate to overshoot robustly.
-func TestNew_RejectsDeepTreeByPathBytes(t *testing.T) {
-	if testing.Short() {
-		t.Skip("allocates on the order of MaxTreePathBytes")
-	}
+// The leaf count is derived from the cap and is small: each leaf contributes about
+// MaxTreeDepth*(11*MaxTreeDepth) depth-weighted bytes, so a few hundred leaves overshoot
+// 64 MiB. The tree is tiny (node count and depth both far inside their bounds), so those
+// guards demonstrably cannot be what rejects it.
+func TestNew_RejectsWideDeepTreeByRenderBytes(t *testing.T) {
+	// Leaves sit at depth MaxTreeDepth, each with an ID of at least ~11*MaxTreeDepth
+	// bytes; depth-weighted that is ~MaxTreeDepth*11*MaxTreeDepth per leaf. Double the
+	// derived count to overshoot the cap robustly.
+	leaves := 2 * (MaxTreeRenderBytes / (11 * MaxTreeDepth * MaxTreeDepth))
 	root := buildChain(MaxTreeDepth - 1) // deepest spine node sits at depth MaxTreeDepth-1
 	deepest := root
 	for len(deepest.Children) > 0 {
 		deepest = deepest.Children[0]
 	}
-	// Each leaf ID is ~11 bytes per level (about 11*MaxTreeDepth), so roughly
-	// MaxTreePathBytes/(11*MaxTreeDepth) leaves reach the cap; double it to overshoot
-	// robustly even though each ID runs a hair under that per-level estimate.
-	leaves := 2 * (MaxTreePathBytes / (11 * MaxTreeDepth))
 	deepest.Children = make([]*Node, leaves)
 	for i := range deepest.Children {
 		deepest.Children[i] = &Node{Name: "leaf"}

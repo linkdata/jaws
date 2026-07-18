@@ -24,27 +24,28 @@ const wsInboundLimit = 32 * 1024
 // [ErrInvalidTree]; TestSelectionFrameFitsInboundLimit pins the guarantee.
 const MaxTreeNodes = 180000
 
-// MaxTreePathBytes is the largest total size of the positional-path IDs [New]
-// assigns across all nodes.
-//
-// Each node's ID is its full path from the root ("children.0.children.1"), so a deep
-// tree retains ID data that grows with the square of its depth, independent of the
-// [MaxTreeNodes] count. [New] rejects a tree whose cumulative ID bytes exceed this
-// limit with [ErrInvalidTree], bounding the memory held for IDs (and the matching
-// init payload) to a modest ceiling. Any realistically shaped tree stays well within
-// it; only a pathologically deep tree is rejected.
-const MaxTreePathBytes = 64 << 20 // 64 MiB
-
 // MaxTreeDepth is the deepest nesting [New] accepts, measured in edges from the root
 // (the root is depth 0, its children depth 1).
 //
-// The browser renderer (the vendored Quercus.js treeview) recurses once per level and
-// stores each node's whole subtree on its element, so client stack use and retained
-// data grow with the tree depth (the data roughly with its cube). A tree deeper than a
-// browser can render is therefore rejected here with [ErrInvalidTree] so it never
-// reaches the client. The bound is far above any realistic UI nesting yet well below
-// where the renderer's recursion overflows, keeping worst-case client memory small.
+// The browser renderer (the vendored Quercus.js treeview) recurses once per level, so
+// its stack use grows with the tree depth. A tree deeper than a browser can render is
+// rejected here with [ErrInvalidTree] so it never reaches the client. The bound is far
+// above any realistic UI nesting yet well below where the renderer's recursion
+// overflows.
 const MaxTreeDepth = 128
+
+// MaxTreeRenderBytes is the largest total size of the positional-path IDs [New]
+// accepts, weighted by depth: the sum over all nodes of depth times ID length.
+//
+// The browser renderer stores each node's whole subtree on its element, so a node's ID
+// is retained once for every ancestor that contains it — its depth-fold. Worst-case
+// client retention is therefore this depth-weighted sum, which the independent
+// [MaxTreeNodes], [MaxTreeDepth], and raw ID-byte bounds do not cap: a shallow spine
+// with a wide, deep fan-out passes them all yet duplicates its IDs across every
+// ancestor. [New] rejects a tree whose depth-weighted ID bytes exceed this limit with
+// [ErrInvalidTree], bounding worst-case client memory (and, since the weight is at
+// least one, the server-side ID memory and init payload) to a modest ceiling.
+const MaxTreeRenderBytes = 64 << 20 // 64 MiB
 
 // Tree is the shared, server-authoritative model behind a Quercus.js tree, and the
 // [jaws.UI] that renders it.
@@ -85,8 +86,8 @@ func makeTreeKey() (key string) {
 //
 // It returns [ErrInvalidTree] for a nil root, a cyclic or shared-node graph, a
 // negative or unknown [Option] bit, more than [MaxTreeNodes] nodes, nesting deeper than
-// [MaxTreeDepth], or positional-path IDs totalling more than [MaxTreePathBytes], and
-// [ErrInvalidSelection] when the initial Selected flags violate the selection policy
+// [MaxTreeDepth], or depth-weighted positional-path IDs exceeding [MaxTreeRenderBytes],
+// and [ErrInvalidSelection] when the initial Selected flags violate the selection policy
 // (see [Tree.SetSelected]).
 //
 // New must run before rendering the Tree or using the name-path selection API. The
@@ -115,9 +116,9 @@ func New(l sync.Locker, root *Node, options ...Option) (t *Tree, err error) {
 	// descendants' Parent, so enforce the invariant for the root here (a node reused
 	// as a new root could otherwise carry a stale Parent).
 	root.Parent = nil
-	// index enforces MaxTreeNodes, MaxTreeDepth, and MaxTreePathBytes during traversal,
-	// so byIndex never exceeds the node cap and the depth and retained ID bytes stay
-	// bounded.
+	// index enforces MaxTreeNodes, MaxTreeDepth, and MaxTreeRenderBytes during traversal,
+	// so byIndex never exceeds the node cap and the depth and client-retained ID bytes
+	// stay bounded.
 	if err = t.index(root, "", make(map[*Node]bool), new(int), 0); err != nil {
 		return nil, err
 	}
@@ -147,19 +148,21 @@ func New(l sync.Locker, root *Node, options ...Option) (t *Tree, err error) {
 // the recursion depth to MaxTreeNodes, so a pathologically deep (in particular
 // single-child) tree returns [ErrInvalidTree] instead of overflowing the stack.
 //
-// depth is node's distance from the root and pathBytes accumulates the total size of
-// the IDs assigned so far; index rejects the tree once depth exceeds [MaxTreeDepth] or
-// the IDs exceed [MaxTreePathBytes], bounding the client render depth and the quadratic
-// ID growth of a deep tree that would otherwise stay within MaxTreeNodes.
-func (t *Tree) index(node *Node, jsPath string, seen map[*Node]bool, pathBytes *int, depth int) error {
+// depth is node's distance from the root and renderBytes accumulates the depth-weighted
+// ID size (sum of depth times ID length) assigned so far; index rejects the tree once
+// depth exceeds [MaxTreeDepth] or the depth-weighted bytes exceed [MaxTreeRenderBytes],
+// bounding the client render depth and the client-retained ID data (which the browser
+// duplicates once per ancestor) of a tree that would otherwise stay within MaxTreeNodes.
+func (t *Tree) index(node *Node, jsPath string, seen map[*Node]bool, renderBytes *int, depth int) error {
 	if len(t.byIndex) >= MaxTreeNodes {
 		return fmt.Errorf("%w: exceeds MaxTreeNodes (%d)", ErrInvalidTree, MaxTreeNodes)
 	}
 	if depth > MaxTreeDepth {
 		return fmt.Errorf("%w: exceeds MaxTreeDepth (%d)", ErrInvalidTree, MaxTreeDepth)
 	}
-	if *pathBytes += len(jsPath); *pathBytes > MaxTreePathBytes {
-		return fmt.Errorf("%w: positional-path IDs exceed MaxTreePathBytes (%d)", ErrInvalidTree, MaxTreePathBytes)
+	// Weight by depth: the browser stores this node's ID on each of its depth ancestors.
+	if *renderBytes += depth * len(jsPath); *renderBytes > MaxTreeRenderBytes {
+		return fmt.Errorf("%w: depth-weighted positional-path IDs exceed MaxTreeRenderBytes (%d)", ErrInvalidTree, MaxTreeRenderBytes)
 	}
 	if seen[node] {
 		return fmt.Errorf("%w: node %q is reachable more than once (cyclic or shared graph)", ErrInvalidTree, node.Name)
@@ -173,7 +176,7 @@ func (t *Tree) index(node *Node, jsPath string, seen map[*Node]bool, pathBytes *
 	}
 	for i, child := range node.Children {
 		child.Parent = node
-		if err := t.index(child, jsPath+"children."+strconv.Itoa(i), seen, pathBytes, depth+1); err != nil {
+		if err := t.index(child, jsPath+"children."+strconv.Itoa(i), seen, renderBytes, depth+1); err != nil {
 			return err
 		}
 	}
