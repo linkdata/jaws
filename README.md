@@ -188,6 +188,15 @@ handler := ui.Handler(jw, "index", app)
 {{$.JsVar "client" .Dot}}
 ```
 
+Several `JsVar` bindings may share a name. The name is a single `window`
+property, and a browser-initiated write to it is delivered to every live binding
+of that name; a removed binding simply stops receiving writes. This makes
+re-rendering a subtree that contains a nested `JsVar` work, lets multiple requests
+expose the same application-owned global, and lets one browser value fan out to
+several independent Go bindings. When several bindings share the same backing
+value, a browser write applies to it once per binding, so avoid exposing one
+non-idempotent value through multiple simultaneously rendered bindings.
+
 The name may refer to an existing application global. For example, browser
 code can update that object and send either the complete value or one path:
 
@@ -252,8 +261,10 @@ client/server protocol code:
   identifiers (for example, `app`), and use dotted suffixes as the JSON path
   (for example, `jawsVar("app.state", value)` sends path `state`). The exact
   top-level name `__proto__` is reserved; rendering it as a `JsVar` returns
-  `ui.ErrIllegalJsVarName`. See [JavaScript variables](#javascript-variables)
-  for the binding and synchronization model.
+  `ui.ErrIllegalJsVarName`. A name may be shared by several live bindings; a
+  browser write is delivered to every live binding of the name. See
+  [JavaScript variables](#javascript-variables) for the binding and
+  synchronization model.
 
 ### HTTP request flow and associating the WebSocket
 
