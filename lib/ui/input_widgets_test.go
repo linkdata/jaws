@@ -196,20 +196,38 @@ func TestInputFloat_RejectsNonFinite(t *testing.T) {
 }
 
 // TestInputFloat_NonFiniteRendersEmpty verifies that a server-bound non-finite
-// float64 renders as an empty control rather than value="NaN"/"+Inf", which a
-// browser number/range input cannot represent and which JawsInput would itself
-// reject on echo-back. This keeps the render side symmetric with the parse side.
+// float64 renders no unparseable value="NaN"/"+Inf" literal for either widget
+// that shares InputFloat.str. JawsInput rejects non-finite input from the
+// browser, so a rendered literal would be a value the widget refuses on
+// echo-back.
+//
+// For a number this makes render and parse symmetric: an empty value renders no
+// value= attribute at all, i.e. a blank control, exactly what the browser shows.
+// A range cannot be blank: the WHATWG value-sanitization rules coerce a missing,
+// empty, or invalid range value to the control's default midpoint, so the
+// browser still displays a finite position for a non-finite bound value. That
+// divergence is inherent to the range control (documented on NewRange); the most
+// this render-side test can guarantee for range is the absence of a misleading
+// literal, which it does.
 func TestInputFloat_NonFiniteRendersEmpty(t *testing.T) {
 	_, rq := newCoreRequest(t)
-	for _, v := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
-		f := v
-		sf := newTestSetter(f)
-		_, got := renderUI(t, rq, NewNumber(sf))
-		// An empty value renders no value= attribute at all: a blank control,
-		// which is exactly what the browser shows for a non-finite value.
-		mustMatch(t, `^<input id="Jid\.[0-9]+" type="number">$`, got)
-		if strings.Contains(got, "NaN") || strings.Contains(got, "Inf") {
-			t.Fatalf("rendered non-finite literal for %v: %s", v, got)
+	widgets := []struct {
+		htmlType string
+		make     func(bind.Setter[float64]) jaws.UI
+	}{
+		{"number", func(g bind.Setter[float64]) jaws.UI { return NewNumber(g) }},
+		{"range", func(g bind.Setter[float64]) jaws.UI { return NewRange(g) }},
+	}
+	for _, w := range widgets {
+		for _, v := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+			f := v
+			sf := newTestSetter(f)
+			_, got := renderUI(t, rq, w.make(sf))
+			// An empty value renders no value= attribute at all.
+			mustMatch(t, `^<input id="Jid\.[0-9]+" type="`+w.htmlType+`">$`, got)
+			if strings.Contains(got, "NaN") || strings.Contains(got, "Inf") {
+				t.Fatalf("%s rendered non-finite literal for %v: %s", w.htmlType, v, got)
+			}
 		}
 	}
 }
