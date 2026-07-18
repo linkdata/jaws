@@ -29,9 +29,10 @@ var ErrJsVarArgumentType = errors.New("expected jaws.UI or JsVarMaker")
 
 // ErrJsVarTooLarge reports that a client-writable JsVar grew past [MaxClientJsVarBytes].
 //
-// It is returned by [JsVar.JawsRender] when the serialized size of a JsVar that does
-// not implement [PathSetter] exceeds the cap; the [jaws.Request] is aborted. See the
-// [JsVar] SECURITY note.
+// It aborts the [jaws.Request] for a JsVar that does not implement [PathSetter]:
+// [JsVar.JawsInput] returns it on the first browser write whose accounted size
+// exceeds the cap, and [JsVar.JawsRender] returns it when an over-cap value is
+// present at render. See the [JsVar] SECURITY note.
 var ErrJsVarTooLarge = errors.New("jsvar: serialized value exceeds MaxClientJsVarBytes")
 
 // ErrIllegalJsVarPath reports that a JsVar path contained a protocol byte.

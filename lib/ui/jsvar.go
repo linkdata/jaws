@@ -153,18 +153,21 @@ var (
 // has no json tag (a json:"-" tag is never writable) — and append to slices one
 // element per message. The size of any single client write is bounded by the
 // WebSocket read limit; to also stop a hostile client growing server state without
-// bound across many writes, a non-[PathSetter] value whose serialized size exceeds
-// [MaxClientJsVarBytes] aborts the [jaws.Request] when it is next rendered
-// ([ErrJsVarTooLarge]). The cap does not prevent a client from setting individual
-// exported fields, so when only some fields/paths should be client-writable,
-// implement [PathSetter] on the bound value to allow-list paths and bound lengths.
+// bound across many writes, a non-[PathSetter] value is size-accounted after each
+// browser write and the [jaws.Request] is aborted with [ErrJsVarTooLarge] on the
+// first write that pushes the serialized value past [MaxClientJsVarBytes] (an
+// over-cap value present at render is likewise rejected). The cap does not prevent
+// a client from setting individual exported fields, so when only some fields/paths
+// should be client-writable, implement [PathSetter] on the bound value to
+// allow-list paths and bound lengths.
 // See jawstree's Node for an example that restricts client writes to a single
 // boolean field.
 type JsVar[T any] struct {
 	bind.RWLocker
-	Ptr      *T         // bound Go value
-	setMu    sync.Mutex // serializes each mutation with its broadcast
-	dirtyTag any        // current dirty tag, set during render; read via JawsGetTag
+	Ptr       *T         // bound Go value
+	setMu     sync.Mutex // serializes each mutation with its broadcast
+	dirtyTag  any        // current dirty tag, set during render; read via JawsGetTag
+	jsonBytes int        // running serialized-size estimate of Ptr; guarded by the write lock, maintained for client writes
 }
 
 // MaxClientJsVarBytes bounds the JSON-serialized size of a client-writable [JsVar]
@@ -172,8 +175,9 @@ type JsVar[T any] struct {
 //
 // Without it, a hostile browser could grow such a JsVar's server-side state without
 // bound across many writes (each single write is already bounded by the WebSocket
-// read limit). A value larger than the cap aborts the [jaws.Request] with
-// [ErrJsVarTooLarge] when next rendered.
+// read limit). The serialized size is accounted after each browser write and a value
+// larger than the cap aborts the [jaws.Request] with [ErrJsVarTooLarge] on the first
+// over-cap write; an over-cap value present at render is rejected there instead.
 //
 // Set it once before serving requests; a value <= 0 disables the cap, and values
 // that implement [PathSetter] enforce their own bounds and are exempt. It is a
@@ -203,16 +207,55 @@ func (jsvar *JsVar[T]) JawsGet(elem *jaws.Element) (value T) {
 	return
 }
 
+// capApplies reports whether client-write size accounting is active for this
+// JsVar: [MaxClientJsVarBytes] is positive and the bound value does not implement
+// [PathSetter]. A PathSetter enforces its own bounds and is exempt.
+//
+// The result depends only on the package global and the static type of Ptr, so it
+// needs no lock.
+func (jsvar *JsVar[T]) capApplies() bool {
+	if MaxClientJsVarBytes <= 0 {
+		return false
+	}
+	_, isPathSetter := any(jsvar.Ptr).(PathSetter)
+	return !isPathSetter
+}
+
 // exceedsClientJsVarCap reports whether n bytes exceeds the configured
 // [MaxClientJsVarBytes] for this JsVar. Values implementing [PathSetter] enforce
 // their own bounds, so the cap does not apply to them, and a non-positive
 // MaxClientJsVarBytes disables it.
 func (jsvar *JsVar[T]) exceedsClientJsVarCap(n int) bool {
-	if MaxClientJsVarBytes <= 0 || n <= MaxClientJsVarBytes {
-		return false
+	return jsvar.capApplies() && n > MaxClientJsVarBytes
+}
+
+// accountClientWrite folds the growth of the latest client mutation into the
+// running serialized-size estimate and reports the resulting size and whether it
+// now exceeds [MaxClientJsVarBytes].
+//
+// valueBytes is the marshaled length of the value just applied. Because
+// [github.com/linkdata/jq.Set] only grows the bound value by appending a single
+// slice element (never creating intermediate structure), the actual serialized
+// growth of any one write is at most valueBytes plus one JSON separator, so adding
+// that upper bound keeps the estimate at or above the true size. When the estimate
+// crosses the cap the true size is confirmed by a single marshal of Ptr, which
+// also reclaims any over-count so a value legitimately under the cap does not force
+// a marshal on every later write. It returns overCap only for a size confirmed by
+// that marshal, never on the estimate alone.
+//
+// It is called only when [JsVar.capApplies] is true and acquires the write lock.
+func (jsvar *JsVar[T]) accountClientWrite(valueBytes int) (size int, overCap bool) {
+	jsvar.Lock()
+	defer jsvar.Unlock()
+	jsvar.jsonBytes += valueBytes + 1
+	if jsvar.jsonBytes > MaxClientJsVarBytes {
+		if data, err := json.Marshal(jsvar.Ptr); err == nil {
+			jsvar.jsonBytes = len(data)
+			overCap = jsvar.jsonBytes > MaxClientJsVarBytes
+		}
 	}
-	_, isPathSetter := any(jsvar.Ptr).(PathSetter)
-	return !isPathSetter
+	size = jsvar.jsonBytes
+	return
 }
 
 // setPathLocked applies the mutation and must be called with the write lock held.
@@ -236,42 +279,67 @@ func (jsvar *JsVar[T]) setPathAndGetTag(elem *jaws.Element, jsPath string, value
 	return
 }
 
-func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any) (broadcasted bool, err error) {
+func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any, clientWrite bool) (broadcasted bool, err error) {
 	jsvar.setMu.Lock()
 	defer jsvar.setMu.Unlock()
-	dirtyTag, err := jsvar.setPathAndGetTag(elem, jsPath, value)
-	// Marshal and broadcast outside the caller-provided lock: value is the
-	// caller-owned argument (not read from Ptr), and jaws.Broadcast can block on
-	// the broadcast channel under backpressure. The private setMu remains held so
-	// concurrent setters cannot apply a later mutation before this broadcast is
-	// queued. Code sharing the caller-provided locker is therefore not stalled by
-	// transport backpressure.
-	//
-	// Note that the broadcast carries the caller's requested value, not the value
-	// actually stored. If a PathSetter coerces or rejects the input (e.g. clamps a
-	// number), the stored Go value and the value seen by peers can differ; the
-	// stored value is what JawsGet returns. Re-broadcast from Ptr inside a
-	// PathSetter if peers must observe the coerced value.
+	var dirtyTag any
+	if dirtyTag, err = jsvar.setPathAndGetTag(elem, jsPath, value); err != nil {
+		return
+	}
+
+	// Marshal the applied value once, outside the caller-provided lock: value is the
+	// caller-owned argument (not read from Ptr), and jaws.Broadcast can block on the
+	// broadcast channel under backpressure. The private setMu remains held so
+	// concurrent setters cannot apply a later mutation before this write's size
+	// accounting and broadcast complete. Code sharing the caller-provided locker is
+	// therefore not stalled by transport backpressure.
 	//
 	// dirtyTag is assigned only in JawsRender, so a set before the first render
-	// leaves it nil. Skip the broadcast in that case: a what.Set with a nil Dest
-	// would target every element, and there is nothing to update yet because the
-	// initial render carries the value in its data-jawsdata attribute.
-	if err == nil && elem != nil && dirtyTag != nil {
-		var data []byte
-		if data, err = json.Marshal(value); err == nil {
-			elem.Jaws.Broadcast(wire.Message{
-				Dest: dirtyTag,
-				What: what.Set,
-				Data: jsPath + "=" + string(data),
-			})
-			broadcasted = true
+	// leaves it nil. A what.Set with a nil Dest would target every element, and there
+	// is nothing to update yet because the initial render carries the value in its
+	// data-jawsdata attribute, so the broadcast is skipped in that case. A client
+	// write still needs the marshaled length to enforce MaxClientJsVarBytes, so the
+	// value is marshaled whenever either the broadcast or the size accounting needs it.
+	willBroadcast := elem != nil && dirtyTag != nil
+	accountSize := clientWrite && jsvar.capApplies()
+	var data []byte
+	if willBroadcast || accountSize {
+		if data, err = json.Marshal(value); err != nil {
+			return
 		}
+	}
+
+	// Enforce MaxClientJsVarBytes on the accumulated growth from untrusted browser
+	// writes, aborting the request on the first over-cap write rather than relying on
+	// a later render that a normally rendered JsVar never performs. Programmatic writes
+	// (JawsSetPath) are trusted and not capped; see MaxClientJsVarBytes.
+	if accountSize {
+		if size, overCap := jsvar.accountClientWrite(len(data)); overCap {
+			err = ErrJsVarTooLarge
+			if elem != nil {
+				elem.Request.Cancel(fmt.Errorf("jaws: jsvar serialized size %d exceeds MaxClientJsVarBytes (%d)", size, MaxClientJsVarBytes))
+			}
+			return
+		}
+	}
+
+	// The broadcast carries the caller's requested value, not the value actually
+	// stored. If a PathSetter coerces or rejects the input (e.g. clamps a number), the
+	// stored Go value and the value seen by peers can differ; the stored value is what
+	// JawsGet returns. Re-broadcast from Ptr inside a PathSetter if peers must observe
+	// the coerced value.
+	if willBroadcast {
+		elem.Jaws.Broadcast(wire.Message{
+			Dest: dirtyTag,
+			What: what.Set,
+			Data: jsPath + "=" + string(data),
+		})
+		broadcasted = true
 	}
 	return
 }
 
-func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any) (err error) {
+func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any, clientWrite bool) (err error) {
 	// jsPath is written verbatim into a what.Set wire frame (only the value side
 	// is JSON-encoded). The client splits frames on '\n', fields on '\t', and the
 	// JsVar payload at the first '='. Reject any path carrying those protocol
@@ -281,7 +349,7 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any) (er
 		return ErrIllegalJsVarPath
 	}
 	var broadcasted bool
-	if broadcasted, err = jsvar.setPathLock(elem, jsPath, value); err == nil && broadcasted {
+	if broadcasted, err = jsvar.setPathLock(elem, jsPath, value, clientWrite); err == nil && broadcasted {
 		if sp, ok := any(jsvar.Ptr).(SetPather); ok {
 			sp.JawsPathSet(elem, jsPath, value)
 		}
@@ -301,7 +369,7 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any) (er
 // page between its initial render and its broadcast subscription; see [JsVar]
 // for the synchronization model.
 func (jsvar *JsVar[T]) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err error) {
-	return jsvar.setPath(elem, jsPath, value)
+	return jsvar.setPath(elem, jsPath, value, false)
 }
 
 // JawsSet replaces the root value and broadcasts the change.
@@ -343,6 +411,9 @@ func (jsvar *JsVar[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any)
 			data, err = json.Marshal(jsvar.Ptr)
 		}
 	}
+	// Seed the client-write size accounting with the rendered size so subsequent
+	// browser writes measure growth from the value the page actually received.
+	jsvar.jsonBytes = len(data)
 	jsvar.Unlock()
 
 	// After the fact: if the value has grown past the cap (e.g. via accumulated
@@ -395,17 +466,20 @@ func elideErrValueUnchanged(err error) error {
 }
 
 // JawsInput applies a browser-side JavaScript variable update.
+//
+// A single incoming message is already bounded by the connection's WebSocket read
+// limit (SetReadLimit in the request handler). To also bound cumulative growth, a
+// non-[PathSetter] value is size-accounted after each applied write and the request
+// is aborted with [ErrJsVarTooLarge] on the first write that pushes the serialized
+// value past [MaxClientJsVarBytes]. The accounting folds an upper bound on each
+// write's growth into a running total and marshals the whole value only when that
+// total crosses the cap, so an append flood stays O(n) rather than O(n^2).
 func (jsvar *JsVar[T]) JawsInput(elem *jaws.Element, value string) (err error) {
-	// No per-write size check: a single incoming message is already bounded by the
-	// connection's WebSocket read limit (SetReadLimit in the request handler), and
-	// cumulative growth of a non-PathSetter value past MaxClientJsVarBytes is caught
-	// after the fact in JawsRender, which avoids re-marshaling on every write (an
-	// append flood would otherwise be O(n^2)).
 	err = jaws.ErrEventUnhandled
 	if jsPath, jsValue, found := strings.Cut(value, "="); found {
 		var v any
 		if err = json.Unmarshal([]byte(jsValue), &v); err == nil {
-			err = elideErrValueUnchanged(jsvar.setPath(elem, jsPath, v))
+			err = elideErrValueUnchanged(jsvar.setPath(elem, jsPath, v, true))
 		}
 	}
 	return
