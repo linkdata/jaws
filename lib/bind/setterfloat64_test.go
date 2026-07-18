@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -128,8 +129,15 @@ func Test_setterFloat64_sanitizesUntrustedInput(t *testing.T) {
 		if ts.Get() != 7 {
 			t.Errorf("bound value mutated to %v", ts.Get())
 		}
-		if err := s.JawsSet(nil, 1<<62); err != nil { // safely in range
-			t.Fatalf("JawsSet(2^62): %v", err)
+		// A value safely below the top of int's range must be accepted, proving the
+		// 2^63 rejection is not a float64-rounding false positive. int's width is
+		// word-size-dependent, so probe with a value that fits the target int.
+		inRange := float64(1 << 62) // safely inside a 64-bit int
+		if strconv.IntSize == 32 {
+			inRange = 1 << 30 // safely inside a 32-bit int
+		}
+		if err := s.JawsSet(nil, inRange); err != nil {
+			t.Fatalf("JawsSet(%v): %v", inRange, err)
 		}
 	})
 }
@@ -181,6 +189,31 @@ func Test_setterFloat64_coversNumericTypes(t *testing.T) {
 	}
 	if err := fs.JawsSet(nil, -1e40); !errors.Is(err, ErrFloatOutOfRange) {
 		t.Errorf("float32 -1e40: got %v, want ErrFloatOutOfRange", err)
+	}
+}
+
+// Test_setterFloat64_intBoundsTrackWordSize pins that the int and uint guards
+// follow the target word size rather than assuming 64 bits. 2^31 fits a 64-bit
+// int but overflows a 32-bit int, and 2^32 fits a 64-bit uint but overflows a
+// 32-bit uint; on a 32-bit build these must be rejected instead of silently
+// wrapping in the float->int conversion, and on a 64-bit build they stay in range.
+func Test_setterFloat64_intBoundsTrackWordSize(t *testing.T) {
+	intErr := sanitizeFloatForT[int](1 << 31)   // 2^31 = MaxInt32 + 1
+	uintErr := sanitizeFloatForT[uint](1 << 32) // 2^32 = MaxUint32 + 1
+	if strconv.IntSize == 32 {
+		if !errors.Is(intErr, ErrFloatOutOfRange) {
+			t.Errorf("32-bit int 2^31: got %v, want ErrFloatOutOfRange", intErr)
+		}
+		if !errors.Is(uintErr, ErrFloatOutOfRange) {
+			t.Errorf("32-bit uint 2^32: got %v, want ErrFloatOutOfRange", uintErr)
+		}
+		return
+	}
+	if intErr != nil {
+		t.Errorf("64-bit int 2^31: got %v, want nil", intErr)
+	}
+	if uintErr != nil {
+		t.Errorf("64-bit uint 2^32: got %v, want nil", uintErr)
 	}
 }
 
