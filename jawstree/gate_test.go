@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"math"
 	"reflect"
 	"sync"
 	"testing"
@@ -87,7 +86,7 @@ func TestIndexEnforcesCapDuringTraversal(t *testing.T) {
 		children[i] = &Node{Name: "n"}
 	}
 	tr := &Tree{}
-	err := tr.index(&Node{Children: children}, "", make(map[*Node]bool), new(int))
+	err := tr.index(&Node{Children: children}, "", make(map[*Node]bool), new(int), 0)
 	if !errors.Is(err, ErrInvalidTree) {
 		t.Fatalf("err = %v, want ErrInvalidTree", err)
 	}
@@ -96,24 +95,65 @@ func TestIndexEnforcesCapDuringTraversal(t *testing.T) {
 	}
 }
 
-// TestNew_RejectsDeepTreeByPathBytes pins that New bounds the quadratic positional-ID
-// growth: a single-child chain far below MaxTreeNodes, but deep enough that its
-// cumulative ID bytes exceed MaxTreePathBytes, is rejected with ErrInvalidTree rather
-// than retaining hundreds of MiB of paths. The depth is derived from the byte cap so
-// the test tracks the constant: each level adds at least ~11 ID bytes, so a depth-d
-// chain retains on the order of 11*d*d/2 bytes and a depth of sqrt(MaxTreePathBytes)
-// overshoots the cap several times over.
-func TestNew_RejectsDeepTreeByPathBytes(t *testing.T) {
-	depth := int(math.Sqrt(float64(MaxTreePathBytes)))
+// buildChain returns the root of a single-child chain with the given number of
+// descendants, so its deepest node sits at depth == descendants.
+func buildChain(descendants int) *Node {
 	root := &Node{Name: "root"}
 	cur := root
-	for i := 0; i < depth; i++ {
+	for i := 0; i < descendants; i++ {
 		child := &Node{Name: "n"}
 		cur.Children = []*Node{child}
 		cur = child
 	}
-	if depth >= MaxTreeNodes {
-		t.Fatalf("test depth %d is not below MaxTreeNodes %d", depth, MaxTreeNodes)
+	return root
+}
+
+// TestNew_RejectsTreeDeeperThanMaxTreeDepth pins the depth bound that keeps a tree the
+// browser cannot render from reaching the client: the vendored treeview.js recurses per
+// level and stores each node's whole subtree on its element, so an over-deep tree would
+// overflow the browser stack and retain data growing with the cube of the depth. New
+// accepts a chain exactly at MaxTreeDepth and rejects one a single level deeper with
+// ErrInvalidTree. Both stay far below MaxTreeNodes and MaxTreePathBytes, so only the
+// depth bound can reject the deeper one.
+func TestNew_RejectsTreeDeeperThanMaxTreeDepth(t *testing.T) {
+	var mu sync.Mutex
+	if _, err := New(&mu, buildChain(MaxTreeDepth)); err != nil {
+		t.Fatalf("depth %d should be accepted, got %v", MaxTreeDepth, err)
+	}
+	if _, err := New(&mu, buildChain(MaxTreeDepth+1)); !errors.Is(err, ErrInvalidTree) {
+		t.Fatalf("depth %d err = %v, want ErrInvalidTree", MaxTreeDepth+1, err)
+	}
+}
+
+// TestNew_RejectsDeepTreeByPathBytes pins that New bounds the quadratic positional-ID
+// growth independently of the depth and node-count bounds: a tree within MaxTreeDepth
+// and MaxTreeNodes, but whose cumulative ID bytes exceed MaxTreePathBytes, is rejected
+// with ErrInvalidTree rather than retaining tens of MiB of paths.
+//
+// A pure chain would need sqrt(MaxTreePathBytes) levels, far past MaxTreeDepth, so
+// instead it runs a spine to the deepest allowed level and fans many leaves out there:
+// each leaf's ID carries the full ~11*MaxTreeDepth-byte spine prefix, so a leaf count
+// derived from the byte cap drives the running total past it while depth and node count
+// stay within bounds. The leaf count doubles the estimate to overshoot robustly.
+func TestNew_RejectsDeepTreeByPathBytes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("allocates on the order of MaxTreePathBytes")
+	}
+	root := buildChain(MaxTreeDepth - 1) // deepest spine node sits at depth MaxTreeDepth-1
+	deepest := root
+	for len(deepest.Children) > 0 {
+		deepest = deepest.Children[0]
+	}
+	// Each leaf ID is ~11 bytes per level (about 11*MaxTreeDepth), so roughly
+	// MaxTreePathBytes/(11*MaxTreeDepth) leaves reach the cap; double it to overshoot
+	// robustly even though each ID runs a hair under that per-level estimate.
+	leaves := 2 * (MaxTreePathBytes / (11 * MaxTreeDepth))
+	deepest.Children = make([]*Node, leaves)
+	for i := range deepest.Children {
+		deepest.Children[i] = &Node{Name: "leaf"}
+	}
+	if total := MaxTreeDepth + leaves; total >= MaxTreeNodes {
+		t.Fatalf("test tree has %d nodes, not below MaxTreeNodes %d", total, MaxTreeNodes)
 	}
 	var mu sync.Mutex
 	if _, err := New(&mu, root); !errors.Is(err, ErrInvalidTree) {
