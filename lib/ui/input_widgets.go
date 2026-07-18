@@ -126,7 +126,17 @@ type InputFloat struct {
 	bind.Setter[float64]
 }
 
+// emptyValueAttr is the explicit value="" prepended for a non-finite float so
+// the widget still owns the value slot even though its formatted value is empty.
+var emptyValueAttr = htmlio.Attr("value", "")
+
+// str formats value for a number or range control, rendering non-finite values
+// (NaN, ±Inf) as the empty string rather than an unparseable "NaN"/"+Inf"
+// literal.
 func (u *InputFloat) str(value float64) string {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return ""
+	}
 	return strconv.FormatFloat(value, 'f', -1, 64)
 }
 
@@ -136,7 +146,17 @@ func (u *InputFloat) renderFloatInput(elem *jaws.Element, w io.Writer, htmlType 
 		attrs := append(elem.ApplyParams(params), getterAttrs...)
 		v := u.JawsGet(elem)
 		u.Last.Store(v)
-		err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, u.str(v), attrs)
+		// A finite value goes down the direct valueAttr path with no extra
+		// allocation. A non-finite value formats as "", which WriteHTMLInput would
+		// omit, letting a caller-supplied value= from params or a binder's
+		// InitialHTMLAttr take over the control while the bound value stays
+		// non-finite; prepend an explicit value="" so the widget owns the value slot
+		// (the HTML parser keeps the first of duplicate attributes).
+		s := u.str(v)
+		if s == "" {
+			attrs = append([]template.HTMLAttr{emptyValueAttr}, attrs...)
+		}
+		err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, s, attrs)
 	}
 	return
 }
