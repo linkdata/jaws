@@ -92,11 +92,9 @@ func New(l sync.Locker, root *Node, options ...Option) (t *Tree, err error) {
 	// descendants' Parent, so enforce the invariant for the root here (a node reused
 	// as a new root could otherwise carry a stale Parent).
 	root.Parent = nil
+	// index enforces MaxTreeNodes during traversal, so byIndex never exceeds it.
 	if err = t.index(root, "", make(map[*Node]bool)); err != nil {
 		return nil, err
-	}
-	if len(t.byIndex) > MaxTreeNodes {
-		return nil, fmt.Errorf("%w: %d nodes exceeds MaxTreeNodes (%d)", ErrInvalidTree, len(t.byIndex), MaxTreeNodes)
 	}
 	// Validate the initial selection through the same policy the browser and server
 	// mutators use, so construction can never produce a state the policy rejects.
@@ -118,7 +116,15 @@ func New(l sync.Locker, root *Node, options ...Option) (t *Tree, err error) {
 // rather than overflowing the stack. Compacting before descending keeps each node's
 // slice index (its ID) matching its position in the wire array emitted by
 // marshalJSON, which skips nils.
+//
+// The [MaxTreeNodes] cap is enforced before indexing each node, so an oversized
+// tree is rejected mid-traversal rather than after being fully indexed. This bounds
+// the recursion depth to MaxTreeNodes, so a pathologically deep (in particular
+// single-child) tree returns [ErrInvalidTree] instead of overflowing the stack.
 func (t *Tree) index(node *Node, jsPath string, seen map[*Node]bool) error {
+	if len(t.byIndex) >= MaxTreeNodes {
+		return fmt.Errorf("%w: exceeds MaxTreeNodes (%d)", ErrInvalidTree, MaxTreeNodes)
+	}
 	if seen[node] {
 		return fmt.Errorf("%w: node %q is reachable more than once (cyclic or shared graph)", ErrInvalidTree, node.Name)
 	}

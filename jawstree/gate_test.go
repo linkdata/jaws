@@ -72,6 +72,29 @@ func TestNew_RejectsOverCap(t *testing.T) {
 	}
 }
 
+// TestIndexEnforcesCapDuringTraversal pins that index rejects an oversized tree
+// mid-traversal (returning ErrInvalidTree once byIndex reaches MaxTreeNodes) rather
+// than after fully indexing it. Bounding byIndex bounds the recursion depth, so a
+// pathologically deep single-child tree can no longer overflow the stack before the
+// cap is applied; the deep shape shares this guard with the wide one exercised here.
+func TestIndexEnforcesCapDuringTraversal(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a MaxTreeNodes+1 tree")
+	}
+	children := make([]*Node, MaxTreeNodes+1)
+	for i := range children {
+		children[i] = &Node{Name: "n"}
+	}
+	tr := &Tree{}
+	err := tr.index(&Node{Children: children}, "", make(map[*Node]bool))
+	if !errors.Is(err, ErrInvalidTree) {
+		t.Fatalf("err = %v, want ErrInvalidTree", err)
+	}
+	if len(tr.byIndex) > MaxTreeNodes {
+		t.Fatalf("byIndex grew to %d, want <= %d", len(tr.byIndex), MaxTreeNodes)
+	}
+}
+
 func TestApplyClientDelta_Gate(t *testing.T) {
 	var mu sync.Mutex
 	// preorder indices: root=0, a=1, b=2, b.c=3 (disabled)
