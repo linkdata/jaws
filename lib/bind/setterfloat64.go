@@ -33,10 +33,15 @@ type setterFloat64[T numeric] struct {
 // The conversion T(value) truncates toward zero, so the lower bound is compared
 // against math.Trunc(value): a fractional value like -128.5 truncates to the valid
 // int8 -128 and is accepted, mirroring the high end where 127.5 truncates to 127.
-// The upper bound stays an exclusive power of two to avoid the float64 rounding
-// pitfall at the top of the 64-bit ranges (float64(MaxInt64) rounds up to 2^63),
-// where truncation cannot be used; the low bound MinIntN is exactly representable
-// for every width, so comparing the truncated value there is safe.
+//
+// The exclusive upper bound MaxIntN+1 is an exact power of two: the +1 is
+// untyped-constant (arbitrary-precision) arithmetic evaluated before the single
+// float64 conversion, so it avoids the float64(MaxInt64) rounding pitfall (that
+// conversion rounds up to 2^63). MinIntN is exactly representable for every width,
+// so comparing the truncated value against it is safe. The int and uint bounds use
+// math.MinInt, math.MaxInt and math.MaxUint, which track the target word size, so a
+// 32-bit build rejects magnitudes that only fit a 64-bit word instead of letting
+// T(value) wrap.
 //
 // The type switch matches predeclared types by exact type, so callers must
 // instantiate T only with the predeclared numeric types. A named (defined) type
@@ -56,16 +61,20 @@ func sanitizeFloatForT[T numeric](value float64) error {
 		lo, hiExcl = math.MinInt16, math.MaxInt16+1
 	case int32:
 		lo, hiExcl = math.MinInt32, math.MaxInt32+1
-	case int, int64: // int is 64-bit on all supported platforms
-		lo, hiExcl = math.MinInt64, -float64(math.MinInt64) // [-2^63, 2^63)
+	case int: // math.MinInt/math.MaxInt track the target word size
+		lo, hiExcl = math.MinInt, math.MaxInt+1
+	case int64:
+		lo, hiExcl = math.MinInt64, math.MaxInt64+1
 	case uint8:
 		lo, hiExcl = 0, math.MaxUint8+1
 	case uint16:
 		lo, hiExcl = 0, math.MaxUint16+1
 	case uint32:
 		lo, hiExcl = 0, math.MaxUint32+1
-	case uint, uint64: // uint is 64-bit on all supported platforms
-		lo, hiExcl = 0, -2*float64(math.MinInt64) // [0, 2^64)
+	case uint: // math.MaxUint tracks the target word size
+		lo, hiExcl = 0, math.MaxUint+1
+	case uint64:
+		lo, hiExcl = 0, math.MaxUint64+1
 	default:
 		// float32 or float64: reject a finite value that overflows the target type.
 		// A float64 that exceeds the float32 range converts to ±Inf and silently

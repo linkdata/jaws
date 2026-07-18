@@ -77,6 +77,30 @@ jobs:
       - name: Build
         run: go build -v ./...
 
+  build-386:
+    # 32-bit leg: on GOARCH=386 int/uint are 32-bit, so this exercises the
+    # word-size-dependent bounds in lib/bind that the amd64 leg cannot reach.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: stable
+
+      - name: Test lib/bind (386)
+        env:
+          GOARCH: "386"
+          # The race detector is unavailable on 386; disable cgo so the pure-Go
+          # test binary is statically linked and runs under 32-bit emulation.
+          CGO_ENABLED: "0"
+        run: go test ./lib/bind/...
+
   coverage:
     needs: build
     runs-on: ubuntu-latest
