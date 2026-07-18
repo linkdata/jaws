@@ -213,17 +213,24 @@ func TestNew_RenderBytesBoundary(t *testing.T) {
 }
 
 // TestNew_RejectsLargeNameNoOverflow guards the 32-bit overflow path: a node whose
-// depth-weighted serialized size exceeds a signed 32-bit int must still be rejected, not
-// wrap negative and slip under the cap. A ~17 MiB name on the deepest node of a
-// MaxTreeDepth chain makes depth*(node bytes) exceed math.MaxInt32; int64 accounting (and
-// the budget-bounded name measurement) keep it correct and over the cap.
+// weighted serialized size exceeds a signed 32-bit int must still be rejected, not wrap
+// negative and slip under the cap. The old code computed depth*nodeBytes in int, so on a
+// 32-bit build the deepest node (depth MaxTreeDepth == 128) with this ~20 MiB name gave
+// 128 * ~20 MiB > math.MaxInt32 and wrapped negative, wrongly accepting it. int64
+// accounting (and the budget-bounded name measurement) keep it correct and over the cap.
+// Runs under -short so the 386 CI leg exercises it with 32-bit arithmetic.
 func TestNew_RejectsLargeNameNoOverflow(t *testing.T) {
+	// 20 MiB * MaxTreeDepth (128) is ~2.68e9, well over math.MaxInt32 (~2.15e9).
+	name := strings.Repeat("x", 20<<20)
+	if int64(MaxTreeDepth)*int64(len(name)) <= math.MaxInt32 {
+		t.Fatalf("name too small to overflow int32 at depth %d", MaxTreeDepth)
+	}
 	root := buildChain(MaxTreeDepth - 1)
 	deepest := root
 	for len(deepest.Children) > 0 {
 		deepest = deepest.Children[0]
 	}
-	deepest.Children = []*Node{{Name: strings.Repeat("x", math.MaxInt32/(MaxTreeDepth+1)+1)}}
+	deepest.Children = []*Node{{Name: name}}
 	var mu sync.Mutex
 	if _, err := New(&mu, root); !errors.Is(err, ErrInvalidTree) {
 		t.Fatalf("err = %v, want ErrInvalidTree", err)

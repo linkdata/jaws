@@ -22,7 +22,7 @@ import (
 // "selectable":false), so the tags do not all mirror the wire shape.
 type Node struct {
 	Parent   *Node   `json:"-"`                 // parent node, set by New, nil for root
-	Name     string  `json:"name"`              // display name
+	Name     string  `json:"name"`              // display name; do not change after New (see [Tree])
 	ID       string  `json:"id,omitzero"`       // positional JSON path, set by New; also the DOM data-id
 	Selected bool    `json:"selected,omitzero"` // selected state
 	Disabled bool    `json:"disabled,omitzero"` // emitted as "selectable":false (inverted) on the wire

@@ -35,18 +35,21 @@ const MaxTreeNodes = 180000
 const MaxTreeDepth = 128
 
 // MaxTreeRenderBytes is the largest depth-weighted serialized node size [New] accepts:
-// the sum over all nodes of depth times the node's own wire size (its JSON-escaped
+// the sum over all nodes of (depth+1) times the node's own wire size (its JSON-escaped
 // name, positional-path ID, and fixed structural bytes).
 //
 // The browser holds each node's whole serialized data — its potentially large
 // [Node.Name] included — once in the init payload and once on every ancestor element
-// that stores its subtree, so each node is retained depth+1 times. Worst-case client
-// retention is this depth-weighted sum, which the independent [MaxTreeNodes] and
-// [MaxTreeDepth] bounds do not cap: a shallow spine with a wide, deep fan-out, or a deep
-// chain of large names, passes them yet duplicates its data across every ancestor. [New]
-// rejects a tree whose depth-weighted serialized size exceeds this limit with
-// [ErrInvalidTree], bounding worst-case client memory (and, since every node is charged
-// at least once, the server-side node data and init payload) to a modest ceiling.
+// that stores its subtree, so each node's data is retained depth+1 times. This
+// depth-weighted sum is what the independent [MaxTreeNodes] and [MaxTreeDepth] bounds do
+// not cap: a shallow spine with a wide, deep fan-out, or a deep chain of large names,
+// passes them yet duplicates its data across every ancestor. [New] rejects a tree whose
+// depth-weighted serialized size exceeds this limit with [ErrInvalidTree].
+//
+// The bound is on the retained serialized node data (the per-element data plus the init
+// payload), which is a proxy for, not the exact size of, client memory: the renderer
+// also builds DOM from it, and cascade mode copies descendant data, so actual client
+// memory is a bounded multiple of this ceiling.
 const MaxTreeRenderBytes = 64 << 20 // 64 MiB
 
 // nodeJSONOverhead upper-bounds a node's fixed structural wire bytes: the object
@@ -63,10 +66,13 @@ const nodeJSONOverhead = 80
 // is built once and rendered by every request that should show the same collaborative
 // tree; it holds no per-request state, so sharing it is safe.
 //
-// The tree is structurally fixed once [New] returns: it derives each node's identity
-// from its position. Mutating selection (through [Tree.SetSelected] or browser events)
-// is safe under the lock, but adding, removing, or reordering Children afterward is
-// unsupported.
+// The tree is fixed once [New] returns: it derives each node's identity from its
+// position, and it validates the wire-shaping fields ([Node.Name], [Node.Disabled], and
+// the Children structure) against the [MaxTreeNodes], [MaxTreeDepth], and
+// [MaxTreeRenderBytes] bounds. Mutating selection (through [Tree.SetSelected] or browser
+// events) is safe under the lock, but changing a Name or adding, removing, or reordering
+// Children afterward is unsupported: rendering re-serializes the live tree, so such a
+// change can defeat the size bounds New enforced.
 type Tree struct {
 	bind.RWLocker         // guards root selection state and is the concurrency contract for Node accessors
 	key           string  // browser correlation key, unique per Tree
