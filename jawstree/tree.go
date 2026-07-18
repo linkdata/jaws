@@ -24,6 +24,17 @@ const wsInboundLimit = 32 * 1024
 // [ErrInvalidTree]; TestSelectionFrameFitsInboundLimit pins the guarantee.
 const MaxTreeNodes = 180000
 
+// MaxTreePathBytes is the largest total size of the positional-path IDs [New]
+// assigns across all nodes.
+//
+// Each node's ID is its full path from the root ("children.0.children.1"), so a deep
+// tree retains ID data that grows with the square of its depth, independent of the
+// [MaxTreeNodes] count. [New] rejects a tree whose cumulative ID bytes exceed this
+// limit with [ErrInvalidTree], bounding the memory held for IDs (and the matching
+// init payload) to a modest ceiling. Any realistically shaped tree stays well within
+// it; only a pathologically deep tree is rejected.
+const MaxTreePathBytes = 64 << 20 // 64 MiB
+
 // Tree is the shared, server-authoritative model behind a Quercus.js tree, and the
 // [jaws.UI] that renders it.
 //
@@ -62,9 +73,9 @@ func makeTreeKey() (key string) {
 // New returns a shared tree model for root, guarded by l.
 //
 // It returns [ErrInvalidTree] for a nil root, a cyclic or shared-node graph, a
-// negative or unknown [Option] bit, or more than [MaxTreeNodes] nodes, and
-// [ErrInvalidSelection] when the initial Selected flags violate the selection policy
-// (see [Tree.SetSelected]).
+// negative or unknown [Option] bit, more than [MaxTreeNodes] nodes, or positional-path
+// IDs totalling more than [MaxTreePathBytes], and [ErrInvalidSelection] when the
+// initial Selected flags violate the selection policy (see [Tree.SetSelected]).
 //
 // New must run before rendering the Tree or using the name-path selection API. The
 // Tree renders its own container, so no caller-provided HTML id is required.
@@ -92,8 +103,9 @@ func New(l sync.Locker, root *Node, options ...Option) (t *Tree, err error) {
 	// descendants' Parent, so enforce the invariant for the root here (a node reused
 	// as a new root could otherwise carry a stale Parent).
 	root.Parent = nil
-	// index enforces MaxTreeNodes during traversal, so byIndex never exceeds it.
-	if err = t.index(root, "", make(map[*Node]bool)); err != nil {
+	// index enforces MaxTreeNodes and MaxTreePathBytes during traversal, so byIndex
+	// never exceeds the node cap and the retained ID bytes stay bounded.
+	if err = t.index(root, "", make(map[*Node]bool), new(int)); err != nil {
 		return nil, err
 	}
 	// Validate the initial selection through the same policy the browser and server
@@ -121,9 +133,16 @@ func New(l sync.Locker, root *Node, options ...Option) (t *Tree, err error) {
 // tree is rejected mid-traversal rather than after being fully indexed. This bounds
 // the recursion depth to MaxTreeNodes, so a pathologically deep (in particular
 // single-child) tree returns [ErrInvalidTree] instead of overflowing the stack.
-func (t *Tree) index(node *Node, jsPath string, seen map[*Node]bool) error {
+//
+// pathBytes accumulates the total size of the IDs assigned so far; index rejects the
+// tree once it exceeds [MaxTreePathBytes], bounding the quadratic ID growth of a deep
+// tree that would otherwise stay within MaxTreeNodes.
+func (t *Tree) index(node *Node, jsPath string, seen map[*Node]bool, pathBytes *int) error {
 	if len(t.byIndex) >= MaxTreeNodes {
 		return fmt.Errorf("%w: exceeds MaxTreeNodes (%d)", ErrInvalidTree, MaxTreeNodes)
+	}
+	if *pathBytes += len(jsPath); *pathBytes > MaxTreePathBytes {
+		return fmt.Errorf("%w: positional-path IDs exceed MaxTreePathBytes (%d)", ErrInvalidTree, MaxTreePathBytes)
 	}
 	if seen[node] {
 		return fmt.Errorf("%w: node %q is reachable more than once (cyclic or shared graph)", ErrInvalidTree, node.Name)
@@ -137,7 +156,7 @@ func (t *Tree) index(node *Node, jsPath string, seen map[*Node]bool) error {
 	}
 	for i, child := range node.Children {
 		child.Parent = node
-		if err := t.index(child, jsPath+"children."+strconv.Itoa(i), seen); err != nil {
+		if err := t.index(child, jsPath+"children."+strconv.Itoa(i), seen, pathBytes); err != nil {
 			return err
 		}
 	}

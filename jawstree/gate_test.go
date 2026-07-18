@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"math"
 	"reflect"
 	"sync"
 	"testing"
@@ -86,12 +87,37 @@ func TestIndexEnforcesCapDuringTraversal(t *testing.T) {
 		children[i] = &Node{Name: "n"}
 	}
 	tr := &Tree{}
-	err := tr.index(&Node{Children: children}, "", make(map[*Node]bool))
+	err := tr.index(&Node{Children: children}, "", make(map[*Node]bool), new(int))
 	if !errors.Is(err, ErrInvalidTree) {
 		t.Fatalf("err = %v, want ErrInvalidTree", err)
 	}
 	if len(tr.byIndex) > MaxTreeNodes {
 		t.Fatalf("byIndex grew to %d, want <= %d", len(tr.byIndex), MaxTreeNodes)
+	}
+}
+
+// TestNew_RejectsDeepTreeByPathBytes pins that New bounds the quadratic positional-ID
+// growth: a single-child chain far below MaxTreeNodes, but deep enough that its
+// cumulative ID bytes exceed MaxTreePathBytes, is rejected with ErrInvalidTree rather
+// than retaining hundreds of MiB of paths. The depth is derived from the byte cap so
+// the test tracks the constant: each level adds at least ~11 ID bytes, so a depth-d
+// chain retains on the order of 11*d*d/2 bytes and a depth of sqrt(MaxTreePathBytes)
+// overshoots the cap several times over.
+func TestNew_RejectsDeepTreeByPathBytes(t *testing.T) {
+	depth := int(math.Sqrt(float64(MaxTreePathBytes)))
+	root := &Node{Name: "root"}
+	cur := root
+	for i := 0; i < depth; i++ {
+		child := &Node{Name: "n"}
+		cur.Children = []*Node{child}
+		cur = child
+	}
+	if depth >= MaxTreeNodes {
+		t.Fatalf("test depth %d is not below MaxTreeNodes %d", depth, MaxTreeNodes)
+	}
+	var mu sync.Mutex
+	if _, err := New(&mu, root); !errors.Is(err, ErrInvalidTree) {
+		t.Fatalf("err = %v, want ErrInvalidTree", err)
 	}
 }
 
