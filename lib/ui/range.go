@@ -13,9 +13,9 @@ type Range struct{ InputFloat }
 // NewRange returns a range input widget bound to g.
 //
 // A range control cannot display a non-finite value: a bound NaN or ±Inf shows
-// as the control's default position (the midpoint of its min and max) while the
-// bound value stays non-finite. Use [NewNumber] if the bound value may be
-// non-finite.
+// as the browser's constraint-sanitized default value for the control, not a
+// blank field, while the bound value stays non-finite. Use [NewNumber] if the
+// bound value may be non-finite.
 func NewRange(g bind.Setter[float64]) *Range { return &Range{InputFloat{Setter: g}} }
 
 // JawsRender renders ui as an HTML range input.
@@ -24,6 +24,8 @@ func (u *Range) JawsRender(elem *jaws.Element, w io.Writer, params []any) error 
 }
 
 // Range renders an HTML range input.
+//
+// See [NewRange] for how a non-finite bound value renders.
 func (rw RequestWriter) Range(value any, params ...any) error {
 	return rw.NewUI(NewRange(bind.MakeSetterFloat64(value)), params...)
 }

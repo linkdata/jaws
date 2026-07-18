@@ -142,7 +142,15 @@ func (u *InputFloat) renderFloatInput(elem *jaws.Element, w io.Writer, htmlType 
 		attrs := append(elem.ApplyParams(params), getterAttrs...)
 		v := u.JawsGet(elem)
 		u.Last.Store(v)
-		err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, u.str(v), attrs)
+		// Emit the widget's own value attribute first so it owns the control. A
+		// non-finite value formats as "" (see [InputFloat.str]), and passing "" as
+		// the WriteHTMLInput value argument would omit the attribute, letting a
+		// caller-supplied value= from params or a binder's InitialHTMLAttr take over
+		// while the bound value stays non-finite. The HTML parser keeps the first of
+		// duplicate attributes, so a leading value="..." makes the widget's own value
+		// authoritative.
+		attrs = append([]template.HTMLAttr{htmlio.Attr("value", u.str(v))}, attrs...)
+		err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, "", attrs)
 	}
 	return
 }

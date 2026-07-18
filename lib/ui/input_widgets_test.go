@@ -196,10 +196,11 @@ func TestInputFloat_RejectsNonFinite(t *testing.T) {
 }
 
 // TestInputFloat_NonFiniteRendersEmpty verifies that a non-finite bound float64
-// renders no unparseable value="NaN"/"+Inf" literal for either widget sharing
-// InputFloat.str. A number renders a blank control (no value attribute); a range
-// cannot be blank, so the browser shows its default midpoint instead, and this
-// render-side test only guarantees the absence of a misleading literal.
+// renders an explicit empty value= attribute for either widget sharing
+// InputFloat.str, never the unparseable value="NaN"/"+Inf" literal. A number
+// then shows a blank control; a range shows the browser's constraint-sanitized
+// default value. The explicit value="" also lets the widget own the value slot,
+// which TestInputFloat_NonFiniteOwnsValueAttr covers.
 func TestInputFloat_NonFiniteRendersEmpty(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	widgets := []struct {
@@ -214,12 +215,43 @@ func TestInputFloat_NonFiniteRendersEmpty(t *testing.T) {
 			f := v
 			sf := newTestSetter(f)
 			_, got := renderUI(t, rq, w.make(sf))
-			// An empty value renders no value= attribute at all.
-			mustMatch(t, `^<input id="Jid\.[0-9]+" type="`+w.htmlType+`">$`, got)
+			mustMatch(t, `^<input id="Jid\.[0-9]+" type="`+w.htmlType+`" value="">$`, got)
 			if strings.Contains(got, "NaN") || strings.Contains(got, "Inf") {
 				t.Fatalf("%s rendered non-finite literal for %v: %s", w.htmlType, v, got)
 			}
 		}
+	}
+}
+
+// TestInputFloat_NonFiniteOwnsValueAttr verifies that the widget's own value=
+// attribute takes precedence over a caller-supplied value= from params or a
+// binder's InitialHTMLAttr. A non-finite bound value formats as "", which
+// WriteHTMLInput would otherwise omit, letting the caller value= own the control
+// while the bound value stays non-finite. The widget emits a leading value="" so
+// the HTML parser (first duplicate attribute wins) keeps the widget's value.
+func TestInputFloat_NonFiniteOwnsValueAttr(t *testing.T) {
+	for _, htmlType := range []string{"number", "range"} {
+		make := func(g bind.Setter[float64]) jaws.UI { return NewNumber(g) }
+		if htmlType == "range" {
+			make = func(g bind.Setter[float64]) jaws.UI { return NewRange(g) }
+		}
+
+		// Caller value= via a raw string param. The widget's value="" precedes it,
+		// so the HTML parser keeps the widget's value.
+		_, rq := newCoreRequest(t)
+		sf := newTestSetter(math.NaN())
+		_, got := renderUI(t, rq, make(sf), `value="17"`)
+		mustMatch(t, `^<input id="Jid\.[0-9]+" type="`+htmlType+`" value="" value="17">$`, got)
+
+		// Caller value= via a binder InitialHTMLAttr hook, likewise preceded by the
+		// widget's own value="".
+		var mu deadlock.Mutex
+		f := math.NaN()
+		b := bind.New(&mu, &f).InitialHTMLAttr(func(bind.Binder[float64], *jaws.Element) template.HTMLAttr {
+			return `value="17"`
+		})
+		_, got = renderUI(t, rq, make(b))
+		mustMatch(t, `type="`+htmlType+`" value="" value="17"`, got)
 	}
 }
 
