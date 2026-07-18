@@ -229,19 +229,23 @@ func (jsvar *JsVar[T]) exceedsClientJsVarCap(n int) bool {
 	return jsvar.capApplies() && n > MaxClientJsVarBytes
 }
 
-// accountClientWrite folds the growth of the latest client mutation into the
-// running serialized-size estimate and reports the resulting size and whether it
-// now exceeds [MaxClientJsVarBytes].
+// accountClientWrite folds the growth of the latest client write into the running
+// serialized-size estimate and reports the resulting size and whether it now
+// exceeds [MaxClientJsVarBytes].
 //
-// valueBytes is the marshaled length of the value just applied. Because
-// [github.com/linkdata/jq.Set] only grows the bound value by appending a single
-// slice element (never creating intermediate structure), the actual serialized
-// growth of any one write is at most valueBytes plus one JSON separator, so adding
-// that upper bound keeps the estimate at or above the true size. When the estimate
-// crosses the cap the true size is confirmed by a single marshal of Ptr, which
-// also reclaims any over-count so a value legitimately under the cap does not force
-// a marshal on every later write. It returns overCap only for a size confirmed by
-// that marshal, never on the estimate alone.
+// valueBytes is the marshaled length of the value the client sent.
+// [github.com/linkdata/jq.Set] grows the bound value only by appending a single
+// slice element (it never creates intermediate structure), so for an accepted append
+// valueBytes plus one JSON separator is an upper bound on the growth and the estimate
+// stays at or above the true size. A rejected append (wrong type, or a zero value the
+// setter reports unchanged) still enlarges the slice and is accounted too; valueBytes
+// may then differ from the stored element's size, but the fold is strictly positive,
+// so the estimate keeps rising until the boundary marshal below reconciles it.
+//
+// When the estimate crosses the cap the true size is confirmed by a single marshal of
+// Ptr, which also reclaims any over-count so a value legitimately under the cap does
+// not force a marshal on every later write. overCap is reported only for a size
+// confirmed by that marshal, never on the estimate alone.
 //
 // It is called only when [JsVar.capApplies] is true and acquires the write lock.
 func (jsvar *JsVar[T]) accountClientWrite(valueBytes int) (size int, overCap bool) {
@@ -282,37 +286,46 @@ func (jsvar *JsVar[T]) setPathAndGetTag(elem *jaws.Element, jsPath string, value
 func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any, clientWrite bool) (broadcasted bool, err error) {
 	jsvar.setMu.Lock()
 	defer jsvar.setMu.Unlock()
+
 	var dirtyTag any
-	if dirtyTag, err = jsvar.setPathAndGetTag(elem, jsPath, value); err != nil {
-		return
-	}
+	dirtyTag, err = jsvar.setPathAndGetTag(elem, jsPath, value)
+
+	// A client write is size-accounted even when the mutation reports an error.
+	// jq.Set grows a slice (SetLen) before it assigns the appended element, so an
+	// append can enlarge the bound value yet still report ErrValueUnchanged (a
+	// zero-value append the assign treats as no change) or a type-mismatch error (a
+	// wrong-typed append that leaves the new element at its zero value). Gating the
+	// cap on a clean mutation would let either append flood grow server state without
+	// bound. Only the broadcast is withheld when the mutation failed.
+	accountSize := clientWrite && jsvar.capApplies()
+	willBroadcast := err == nil && elem != nil && dirtyTag != nil
 
 	// Marshal the applied value once, outside the caller-provided lock: value is the
 	// caller-owned argument (not read from Ptr), and jaws.Broadcast can block on the
 	// broadcast channel under backpressure. The private setMu remains held so
 	// concurrent setters cannot apply a later mutation before this write's size
 	// accounting and broadcast complete. Code sharing the caller-provided locker is
-	// therefore not stalled by transport backpressure.
-	//
-	// dirtyTag is assigned only in JawsRender, so a set before the first render
-	// leaves it nil. A what.Set with a nil Dest would target every element, and there
-	// is nothing to update yet because the initial render carries the value in its
-	// data-jawsdata attribute, so the broadcast is skipped in that case. A client
-	// write still needs the marshaled length to enforce MaxClientJsVarBytes, so the
-	// value is marshaled whenever either the broadcast or the size accounting needs it.
-	willBroadcast := elem != nil && dirtyTag != nil
-	accountSize := clientWrite && jsvar.capApplies()
+	// therefore not stalled by transport backpressure. The size accounting needs the
+	// marshaled length and the broadcast needs the encoded value, so the value is
+	// marshaled whenever either needs it. value came from json.Unmarshal in JawsInput,
+	// so this marshal does not fail in practice; a failure is reported only when no
+	// mutation error already stands.
 	var data []byte
 	if willBroadcast || accountSize {
-		if data, err = json.Marshal(value); err != nil {
+		var marshalErr error
+		if data, marshalErr = json.Marshal(value); marshalErr != nil {
+			if err == nil {
+				err = marshalErr
+			}
 			return
 		}
 	}
 
 	// Enforce MaxClientJsVarBytes on the accumulated growth from untrusted browser
-	// writes, aborting the request on the first over-cap write rather than relying on
-	// a later render that a normally rendered JsVar never performs. Programmatic writes
-	// (JawsSetPath) are trusted and not capped; see MaxClientJsVarBytes.
+	// writes, aborting the request on the first confirmed over-cap write rather than
+	// relying on a later render that a normally rendered JsVar never performs. An
+	// over-cap abort supersedes any mutation error. Programmatic writes (JawsSetPath)
+	// are trusted and not capped; see MaxClientJsVarBytes.
 	if accountSize {
 		if size, overCap := jsvar.accountClientWrite(len(data)); overCap {
 			err = ErrJsVarTooLarge
@@ -323,6 +336,11 @@ func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any,
 		}
 	}
 
+	// dirtyTag is assigned only in JawsRender, so a set before the first render leaves
+	// it nil. A what.Set with a nil Dest would target every element, and there is
+	// nothing to update yet because the initial render carries the value in its
+	// data-jawsdata attribute, so the broadcast is skipped in that case (willBroadcast).
+	//
 	// The broadcast carries the caller's requested value, not the value actually
 	// stored. If a PathSetter coerces or rejects the input (e.g. clamps a number), the
 	// stored Go value and the value seen by peers can differ; the stored value is what
@@ -469,10 +487,12 @@ func elideErrValueUnchanged(err error) error {
 //
 // A single incoming message is already bounded by the connection's WebSocket read
 // limit (SetReadLimit in the request handler). To also bound cumulative growth, a
-// non-[PathSetter] value is size-accounted after each applied write and the request
-// is aborted with [ErrJsVarTooLarge] on the first write that pushes the serialized
-// value past [MaxClientJsVarBytes]. The accounting folds an upper bound on each
-// write's growth into a running total and marshals the whole value only when that
+// non-[PathSetter] value is size-accounted after each browser write — including a
+// write the bound value rejects, because [github.com/linkdata/jq.Set] grows a slice
+// before assigning the appended element, so even a rejected append enlarges server
+// state. The request is aborted with [ErrJsVarTooLarge] on the first write whose
+// confirmed serialized size passes [MaxClientJsVarBytes]. The accounting folds a
+// per-write bound into a running total and marshals the whole value only when that
 // total crosses the cap, so an append flood stays O(n) rather than O(n^2).
 func (jsvar *JsVar[T]) JawsInput(elem *jaws.Element, value string) (err error) {
 	err = jaws.ErrEventUnhandled

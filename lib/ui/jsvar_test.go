@@ -467,6 +467,99 @@ func TestJsVar_ClientWriteCapAbortsRequest(t *testing.T) {
 	}
 }
 
+// TestJsVar_ClientWriteCapZeroValueAppend covers an append flood of zero values.
+// jq.Set grows the slice before assigning, and appending the element's zero value
+// ("") reports ErrValueUnchanged, which JawsInput elides to nil — yet the slice grew.
+// Size accounting must still run on that "unchanged" write so the cap aborts the
+// request rather than letting a hostile client append empty strings without bound.
+func TestJsVar_ClientWriteCapZeroValueAppend(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	go jw.Serve()
+
+	old := MaxClientJsVarBytes
+	MaxClientJsVarBytes = 32
+	defer func() { MaxClientJsVarBytes = old }()
+
+	var mu sync.Mutex
+	v := jsVarSliceData{}
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+	var sb strings.Builder
+	if err := jsv.JawsRender(elem, &sb, []any{"v"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var writes int
+	var capErr error
+	for i := 0; i < 200 && capErr == nil; i++ {
+		if err := clientSetFrame(t, jsv, elem, fmt.Sprintf("items.%d", i), ""); err != nil {
+			capErr = err
+			break
+		}
+		writes++
+	}
+
+	if !errors.Is(capErr, ErrJsVarTooLarge) {
+		t.Fatalf("expected ErrJsVarTooLarge from a zero-value append flood, got %v after %d writes", capErr, writes)
+	}
+	if rq.Context().Err() == nil {
+		t.Fatal("expected the request to be aborted by the zero-value append flood")
+	}
+	mu.Lock()
+	data, _ := json.Marshal(&v)
+	mu.Unlock()
+	if len(data) > 4*MaxClientJsVarBytes {
+		t.Fatalf("serialized value grew to %d bytes, past cap %d", len(data), MaxClientJsVarBytes)
+	}
+}
+
+// TestJsVar_ClientWriteCapRejectedAppend covers an append flood the setter rejects.
+// jq.Set grows the slice before the assign, and assigning a number into a []string
+// fails with a type mismatch (not ErrValueUnchanged) while leaving the appended zero
+// element in place. The request loop only logs a handler error, so accounting must
+// run on the rejected write too or the slice grows without bound.
+func TestJsVar_ClientWriteCapRejectedAppend(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	go jw.Serve()
+
+	old := MaxClientJsVarBytes
+	MaxClientJsVarBytes = 32
+	defer func() { MaxClientJsVarBytes = old }()
+
+	var mu sync.Mutex
+	v := jsVarSliceData{} // Items []string
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+	var sb strings.Builder
+	if err := jsv.JawsRender(elem, &sb, []any{"v"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Each write returns a type-mismatch error before the cap is reached; stop when
+	// the request is aborted, mirroring the request loop that stops dispatching once
+	// the context is cancelled.
+	var sawTooLarge bool
+	for i := 0; i < 200 && rq.Context().Err() == nil; i++ {
+		// A number into a []string element: jq grows the slice, then the assign fails.
+		if errors.Is(clientSetFrame(t, jsv, elem, fmt.Sprintf("items.%d", i), i), ErrJsVarTooLarge) {
+			sawTooLarge = true
+		}
+	}
+
+	if !sawTooLarge {
+		t.Fatal("expected ErrJsVarTooLarge from a rejected append flood")
+	}
+	if rq.Context().Err() == nil {
+		t.Fatal("expected the request to be aborted by the rejected append flood")
+	}
+	mu.Lock()
+	data, _ := json.Marshal(&v)
+	mu.Unlock()
+	if len(data) > 4*MaxClientJsVarBytes {
+		t.Fatalf("serialized value grew to %d bytes, past cap %d", len(data), MaxClientJsVarBytes)
+	}
+}
+
 // TestJsVar_ClientWriteCapExemptsPathSetter verifies the documented exemption on the
 // client write path: a PathSetter enforces its own bounds, so browser writes that
 // grow it well past MaxClientJsVarBytes neither error nor abort the request.
