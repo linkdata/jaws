@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"math"
 	"reflect"
 	"strings"
 	"sync"
@@ -96,7 +97,7 @@ func TestIndexEnforcesCapDuringTraversal(t *testing.T) {
 		children[i] = &Node{Name: "n"}
 	}
 	tr := &Tree{}
-	err := tr.index(&Node{Children: children}, "", make(map[*Node]bool), new(int), 0)
+	err := tr.index(&Node{Children: children}, "", make(map[*Node]bool), new(int64), 0)
 	if !errors.Is(err, ErrInvalidTree) {
 		t.Fatalf("err = %v, want ErrInvalidTree", err)
 	}
@@ -191,24 +192,61 @@ func TestNew_RejectsNameHeavyDeepTreeByRenderBytes(t *testing.T) {
 	}
 }
 
-// TestNew_RenderBytesBoundary pins the exact MaxTreeRenderBytes cutoff. A single child at
-// depth 1 has depth-weighted serialized size jsonStringBytes(name) + len(id) +
-// nodeJSONOverhead; sizing its plain-ASCII name so the total lands on MaxTreeRenderBytes
-// is accepted, and one byte more is rejected.
+// TestNew_RenderBytesBoundary is the root-heavy boundary test: it pins the exact
+// MaxTreeRenderBytes cutoff and proves the root's own data is charged, not free. A
+// root-only tree is retained once (its init-payload copy), so its weighted size is
+// jsonStringLen(name) + nodeJSONOverhead (its ID is empty). Sizing the plain-ASCII root
+// name so the total lands on MaxTreeRenderBytes is accepted, and one byte more rejected.
 func TestNew_RenderBytesBoundary(t *testing.T) {
 	if testing.Short() {
 		t.Skip("allocates ~MaxTreeRenderBytes")
 	}
-	// The only child's ID is "children.0"; a plain-ASCII name's wire size is len+2.
-	fixed := len("children.0") + nodeJSONOverhead + len(`""`)
+	// A plain-ASCII name's wire size is len+2 (the quotes); the root ID is empty.
+	fixed := nodeJSONOverhead + len(`""`)
 	var mu sync.Mutex
-	atCap := &Node{Children: []*Node{{Name: strings.Repeat("x", MaxTreeRenderBytes-fixed)}}}
-	if _, err := New(&mu, atCap); err != nil {
+	if _, err := New(&mu, &Node{Name: strings.Repeat("x", MaxTreeRenderBytes-fixed)}); err != nil {
 		t.Fatalf("exactly MaxTreeRenderBytes should be accepted, got %v", err)
 	}
-	overCap := &Node{Children: []*Node{{Name: strings.Repeat("x", MaxTreeRenderBytes-fixed+1)}}}
-	if _, err := New(&mu, overCap); !errors.Is(err, ErrInvalidTree) {
+	if _, err := New(&mu, &Node{Name: strings.Repeat("x", MaxTreeRenderBytes-fixed+1)}); !errors.Is(err, ErrInvalidTree) {
 		t.Fatalf("one byte over err = %v, want ErrInvalidTree", err)
+	}
+}
+
+// TestNew_RejectsLargeNameNoOverflow guards the 32-bit overflow path: a node whose
+// depth-weighted serialized size exceeds a signed 32-bit int must still be rejected, not
+// wrap negative and slip under the cap. A ~17 MiB name on the deepest node of a
+// MaxTreeDepth chain makes depth*(node bytes) exceed math.MaxInt32; int64 accounting (and
+// the budget-bounded name measurement) keep it correct and over the cap.
+func TestNew_RejectsLargeNameNoOverflow(t *testing.T) {
+	root := buildChain(MaxTreeDepth - 1)
+	deepest := root
+	for len(deepest.Children) > 0 {
+		deepest = deepest.Children[0]
+	}
+	deepest.Children = []*Node{{Name: strings.Repeat("x", math.MaxInt32/(MaxTreeDepth+1)+1)}}
+	var mu sync.Mutex
+	if _, err := New(&mu, root); !errors.Is(err, ErrInvalidTree) {
+		t.Fatalf("err = %v, want ErrInvalidTree", err)
+	}
+}
+
+// TestJSONStringLen checks the non-allocating escaped-length counter matches
+// encoding/json exactly (so names are weighed at their true wire size) and stops just
+// past the budget instead of scanning the whole input.
+func TestJSONStringLen(t *testing.T) {
+	for _, s := range []string{
+		"", "plain", `q"o\\te`, "\x00\x01\t\n\r", "<b>&", "h\u00e9llo", "\u65e5\U0001f600",
+		"\u2028\u2029", string([]byte{0xff, 0xfe, 0x80}), "a" + string([]byte{0xc3}) + "z",
+	} {
+		enc, _ := json.Marshal(s)
+		if got, want := jsonStringLen(s, math.MaxInt64), int64(len(enc)); got != want {
+			t.Errorf("jsonStringLen(%q) = %d, want %d (json.Marshal length)", s, got, want)
+		}
+	}
+	// Early cutoff: a long input with a small budget stops just past it (never counting
+	// the whole million bytes).
+	if got := jsonStringLen(strings.Repeat("x", 1_000_000), 10); got <= 10 || got >= 20 {
+		t.Fatalf("jsonStringLen early cutoff = %d, want just over 10", got)
 	}
 }
 

@@ -38,15 +38,15 @@ const MaxTreeDepth = 128
 // the sum over all nodes of depth times the node's own wire size (its JSON-escaped
 // name, positional-path ID, and fixed structural bytes).
 //
-// The browser renderer stores each node's whole subtree on its element, so a node's
-// serialized data — including its potentially large [Node.Name] — is retained once for
-// every ancestor that contains it, its depth-fold. Worst-case client retention is this
-// depth-weighted sum, which the independent [MaxTreeNodes] and [MaxTreeDepth] bounds do
-// not cap: a shallow spine with a wide, deep fan-out, or a deep chain of large names,
-// passes them yet duplicates its data across every ancestor. [New] rejects a tree whose
-// depth-weighted serialized size exceeds this limit with [ErrInvalidTree], bounding
-// worst-case client memory (and, since the weight is at least one, the server-side node
-// data and init payload) to a modest ceiling.
+// The browser holds each node's whole serialized data — its potentially large
+// [Node.Name] included — once in the init payload and once on every ancestor element
+// that stores its subtree, so each node is retained depth+1 times. Worst-case client
+// retention is this depth-weighted sum, which the independent [MaxTreeNodes] and
+// [MaxTreeDepth] bounds do not cap: a shallow spine with a wide, deep fan-out, or a deep
+// chain of large names, passes them yet duplicates its data across every ancestor. [New]
+// rejects a tree whose depth-weighted serialized size exceeds this limit with
+// [ErrInvalidTree], bounding worst-case client memory (and, since every node is charged
+// at least once, the server-side node data and init payload) to a modest ceiling.
 const MaxTreeRenderBytes = 64 << 20 // 64 MiB
 
 // nodeJSONOverhead upper-bounds a node's fixed structural wire bytes: the object
@@ -125,9 +125,9 @@ func New(l sync.Locker, root *Node, options ...Option) (t *Tree, err error) {
 	// as a new root could otherwise carry a stale Parent).
 	root.Parent = nil
 	// index enforces MaxTreeNodes, MaxTreeDepth, and MaxTreeRenderBytes during traversal,
-	// so byIndex never exceeds the node cap and the depth and client-retained ID bytes
+	// so byIndex never exceeds the node cap and the depth and client-retained node data
 	// stay bounded.
-	if err = t.index(root, "", make(map[*Node]bool), new(int), 0); err != nil {
+	if err = t.index(root, "", make(map[*Node]bool), new(int64), 0); err != nil {
 		return nil, err
 	}
 	// Validate the initial selection through the same policy the browser and server
@@ -157,22 +157,30 @@ func New(l sync.Locker, root *Node, options ...Option) (t *Tree, err error) {
 // single-child) tree returns [ErrInvalidTree] instead of overflowing the stack.
 //
 // depth is node's distance from the root and renderBytes accumulates the depth-weighted
-// serialized node size (sum of depth times each node's own wire size) assigned so far;
-// index rejects the tree once depth exceeds [MaxTreeDepth] or the depth-weighted bytes
-// exceed [MaxTreeRenderBytes], bounding the client render depth and the client-retained
-// node data (which the browser duplicates once per ancestor, [Node.Name] included) of a
-// tree that would otherwise stay within MaxTreeNodes.
-func (t *Tree) index(node *Node, jsPath string, seen map[*Node]bool, renderBytes *int, depth int) error {
+// serialized node size assigned so far; index rejects the tree once depth exceeds
+// [MaxTreeDepth] or the weighted bytes exceed [MaxTreeRenderBytes], bounding the client
+// render depth and the client-retained node data (which the browser holds once in the
+// init payload and once per ancestor element, [Node.Name] included) of a tree that would
+// otherwise stay within MaxTreeNodes.
+//
+// The count is int64 and the name is measured against the remaining budget, so a huge
+// name neither overflows the weighted product on a 32-bit build nor is encoded in full
+// before rejection.
+func (t *Tree) index(node *Node, jsPath string, seen map[*Node]bool, renderBytes *int64, depth int) error {
 	if len(t.byIndex) >= MaxTreeNodes {
 		return fmt.Errorf("%w: exceeds MaxTreeNodes (%d)", ErrInvalidTree, MaxTreeNodes)
 	}
 	if depth > MaxTreeDepth {
 		return fmt.Errorf("%w: exceeds MaxTreeDepth (%d)", ErrInvalidTree, MaxTreeDepth)
 	}
-	// Weight this node's whole serialized size (name, ID, structure) by depth: the
-	// browser retains it on this node's element and on each of its depth ancestors'.
-	nodeBytes := jsonStringBytes(node.Name) + len(jsPath) + nodeJSONOverhead
-	if *renderBytes += depth * nodeBytes; *renderBytes > MaxTreeRenderBytes {
+	// The browser retains this node's whole wire object (name, ID, structure) once in the
+	// init payload and once on each of its depth ancestor elements: depth+1 copies. Charge
+	// that, measuring the name only up to the budget that still fits so an over-long name
+	// is rejected without encoding all of it and the product cannot overflow.
+	weight := int64(depth) + 1
+	budget := int64(MaxTreeRenderBytes) - *renderBytes
+	nameLen := jsonStringLen(node.Name, budget/weight-int64(len(jsPath))-nodeJSONOverhead)
+	if *renderBytes += weight * (nameLen + int64(len(jsPath)) + nodeJSONOverhead); *renderBytes > MaxTreeRenderBytes {
 		return fmt.Errorf("%w: depth-weighted serialized node data exceeds MaxTreeRenderBytes (%d)", ErrInvalidTree, MaxTreeRenderBytes)
 	}
 	if seen[node] {
