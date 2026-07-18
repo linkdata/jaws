@@ -116,7 +116,7 @@ sharing it is safe.
 `New` takes the lock guarding the tree (which may be shared with other application
 state) and the root `*Node`. It returns `ErrInvalidTree` for an invalid graph
 (nil, cyclic, shared node, unknown option bit, more than `MaxTreeNodes` nodes,
-nesting deeper than `MaxTreeDepth`, or depth-weighted positional-path IDs
+nesting deeper than `MaxTreeDepth`, or depth-weighted serialized node data
 exceeding `MaxTreeRenderBytes`) and `ErrInvalidSelection` when the initial
 `Selected` flags violate the mode's policy. It assigns each node's positional-path
 ID, a preorder wire index, and the parent back-pointers the name-path API needs, so

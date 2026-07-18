@@ -37,6 +37,15 @@ func appendJSONString(b []byte, s string) []byte {
 	return append(b, enc...)
 }
 
+// jsonStringBytes reports how many bytes s occupies as a wire JSON string literal
+// (surrounding quotes plus any escaping), matching [appendJSONString]. New uses it to
+// weigh each node's retained serialized size, so escaped names count at their true
+// wire length rather than their raw byte length.
+func jsonStringBytes(s string) int {
+	enc, _ := json.Marshal(s)
+	return len(enc)
+}
+
 func (node *Node) marshalJSON(b []byte) []byte {
 	b = append(b, `{"name":`...)
 	b = appendJSONString(b, node.Name)

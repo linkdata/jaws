@@ -34,18 +34,26 @@ const MaxTreeNodes = 180000
 // overflows.
 const MaxTreeDepth = 128
 
-// MaxTreeRenderBytes is the largest total size of the positional-path IDs [New]
-// accepts, weighted by depth: the sum over all nodes of depth times ID length.
+// MaxTreeRenderBytes is the largest depth-weighted serialized node size [New] accepts:
+// the sum over all nodes of depth times the node's own wire size (its JSON-escaped
+// name, positional-path ID, and fixed structural bytes).
 //
-// The browser renderer stores each node's whole subtree on its element, so a node's ID
-// is retained once for every ancestor that contains it — its depth-fold. Worst-case
-// client retention is therefore this depth-weighted sum, which the independent
-// [MaxTreeNodes], [MaxTreeDepth], and raw ID-byte bounds do not cap: a shallow spine
-// with a wide, deep fan-out passes them all yet duplicates its IDs across every
-// ancestor. [New] rejects a tree whose depth-weighted ID bytes exceed this limit with
-// [ErrInvalidTree], bounding worst-case client memory (and, since the weight is at
-// least one, the server-side ID memory and init payload) to a modest ceiling.
+// The browser renderer stores each node's whole subtree on its element, so a node's
+// serialized data — including its potentially large [Node.Name] — is retained once for
+// every ancestor that contains it, its depth-fold. Worst-case client retention is this
+// depth-weighted sum, which the independent [MaxTreeNodes] and [MaxTreeDepth] bounds do
+// not cap: a shallow spine with a wide, deep fan-out, or a deep chain of large names,
+// passes them yet duplicates its data across every ancestor. [New] rejects a tree whose
+// depth-weighted serialized size exceeds this limit with [ErrInvalidTree], bounding
+// worst-case client memory (and, since the weight is at least one, the server-side node
+// data and init payload) to a modest ceiling.
 const MaxTreeRenderBytes = 64 << 20 // 64 MiB
+
+// nodeJSONOverhead upper-bounds a node's fixed structural wire bytes: the object
+// braces, the field keys, the quotes around the ID, the optional boolean flag values,
+// the children brackets, and its separator in its parent. Added to the escaped name and
+// ID length to weigh each node's retained serialized size against [MaxTreeRenderBytes].
+const nodeJSONOverhead = 80
 
 // Tree is the shared, server-authoritative model behind a Quercus.js tree, and the
 // [jaws.UI] that renders it.
@@ -86,7 +94,7 @@ func makeTreeKey() (key string) {
 //
 // It returns [ErrInvalidTree] for a nil root, a cyclic or shared-node graph, a
 // negative or unknown [Option] bit, more than [MaxTreeNodes] nodes, nesting deeper than
-// [MaxTreeDepth], or depth-weighted positional-path IDs exceeding [MaxTreeRenderBytes],
+// [MaxTreeDepth], or depth-weighted serialized node data exceeding [MaxTreeRenderBytes],
 // and [ErrInvalidSelection] when the initial Selected flags violate the selection policy
 // (see [Tree.SetSelected]).
 //
@@ -149,10 +157,11 @@ func New(l sync.Locker, root *Node, options ...Option) (t *Tree, err error) {
 // single-child) tree returns [ErrInvalidTree] instead of overflowing the stack.
 //
 // depth is node's distance from the root and renderBytes accumulates the depth-weighted
-// ID size (sum of depth times ID length) assigned so far; index rejects the tree once
-// depth exceeds [MaxTreeDepth] or the depth-weighted bytes exceed [MaxTreeRenderBytes],
-// bounding the client render depth and the client-retained ID data (which the browser
-// duplicates once per ancestor) of a tree that would otherwise stay within MaxTreeNodes.
+// serialized node size (sum of depth times each node's own wire size) assigned so far;
+// index rejects the tree once depth exceeds [MaxTreeDepth] or the depth-weighted bytes
+// exceed [MaxTreeRenderBytes], bounding the client render depth and the client-retained
+// node data (which the browser duplicates once per ancestor, [Node.Name] included) of a
+// tree that would otherwise stay within MaxTreeNodes.
 func (t *Tree) index(node *Node, jsPath string, seen map[*Node]bool, renderBytes *int, depth int) error {
 	if len(t.byIndex) >= MaxTreeNodes {
 		return fmt.Errorf("%w: exceeds MaxTreeNodes (%d)", ErrInvalidTree, MaxTreeNodes)
@@ -160,9 +169,11 @@ func (t *Tree) index(node *Node, jsPath string, seen map[*Node]bool, renderBytes
 	if depth > MaxTreeDepth {
 		return fmt.Errorf("%w: exceeds MaxTreeDepth (%d)", ErrInvalidTree, MaxTreeDepth)
 	}
-	// Weight by depth: the browser stores this node's ID on each of its depth ancestors.
-	if *renderBytes += depth * len(jsPath); *renderBytes > MaxTreeRenderBytes {
-		return fmt.Errorf("%w: depth-weighted positional-path IDs exceed MaxTreeRenderBytes (%d)", ErrInvalidTree, MaxTreeRenderBytes)
+	// Weight this node's whole serialized size (name, ID, structure) by depth: the
+	// browser retains it on this node's element and on each of its depth ancestors'.
+	nodeBytes := jsonStringBytes(node.Name) + len(jsPath) + nodeJSONOverhead
+	if *renderBytes += depth * nodeBytes; *renderBytes > MaxTreeRenderBytes {
+		return fmt.Errorf("%w: depth-weighted serialized node data exceeds MaxTreeRenderBytes (%d)", ErrInvalidTree, MaxTreeRenderBytes)
 	}
 	if seen[node] {
 		return fmt.Errorf("%w: node %q is reachable more than once (cyclic or shared graph)", ErrInvalidTree, node.Name)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -165,6 +166,49 @@ func TestNew_RejectsWideDeepTreeByRenderBytes(t *testing.T) {
 	var mu sync.Mutex
 	if _, err := New(&mu, root); !errors.Is(err, ErrInvalidTree) {
 		t.Fatalf("err = %v, want ErrInvalidTree", err)
+	}
+}
+
+// TestNew_RejectsNameHeavyDeepTreeByRenderBytes is the name-heavy regression: a chain
+// within MaxTreeDepth whose nodes share one large Name. Its depth-weighted ID size stays
+// tiny, but the browser serializes each node (its name included) on every ancestor, so
+// the depth-weighted serialized size exceeds MaxTreeRenderBytes. Counting the whole
+// serialized node, not just the ID, is what rejects it.
+func TestNew_RejectsNameHeavyDeepTreeByRenderBytes(t *testing.T) {
+	// A chain of depth D retains each node's name sum(1..D) = D(D+1)/2 times. Size the
+	// shared name so that weight clears the cap, doubled to overshoot robustly.
+	weight := MaxTreeDepth * (MaxTreeDepth + 1) / 2
+	name := strings.Repeat("n", 2*(MaxTreeRenderBytes/weight))
+	root := &Node{Name: "root"}
+	cur := root
+	for i := 0; i < MaxTreeDepth; i++ {
+		cur.Children = []*Node{{Name: name}}
+		cur = cur.Children[0]
+	}
+	var mu sync.Mutex
+	if _, err := New(&mu, root); !errors.Is(err, ErrInvalidTree) {
+		t.Fatalf("err = %v, want ErrInvalidTree", err)
+	}
+}
+
+// TestNew_RenderBytesBoundary pins the exact MaxTreeRenderBytes cutoff. A single child at
+// depth 1 has depth-weighted serialized size jsonStringBytes(name) + len(id) +
+// nodeJSONOverhead; sizing its plain-ASCII name so the total lands on MaxTreeRenderBytes
+// is accepted, and one byte more is rejected.
+func TestNew_RenderBytesBoundary(t *testing.T) {
+	if testing.Short() {
+		t.Skip("allocates ~MaxTreeRenderBytes")
+	}
+	// The only child's ID is "children.0"; a plain-ASCII name's wire size is len+2.
+	fixed := len("children.0") + nodeJSONOverhead + len(`""`)
+	var mu sync.Mutex
+	atCap := &Node{Children: []*Node{{Name: strings.Repeat("x", MaxTreeRenderBytes-fixed)}}}
+	if _, err := New(&mu, atCap); err != nil {
+		t.Fatalf("exactly MaxTreeRenderBytes should be accepted, got %v", err)
+	}
+	overCap := &Node{Children: []*Node{{Name: strings.Repeat("x", MaxTreeRenderBytes-fixed+1)}}}
+	if _, err := New(&mu, overCap); !errors.Is(err, ErrInvalidTree) {
+		t.Fatalf("one byte over err = %v, want ErrInvalidTree", err)
 	}
 }
 
