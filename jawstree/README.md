@@ -115,13 +115,19 @@ sharing it is safe.
 
 `New` takes the lock guarding the tree (which may be shared with other application
 state) and the root `*Node`. It returns `ErrInvalidTree` for an invalid graph
-(nil, cyclic, shared node, unknown option bit, or more than `MaxTreeNodes` nodes)
-and `ErrInvalidSelection` when the initial `Selected` flags violate the mode's
-policy. It assigns each node's positional-path ID, a preorder wire index, and the
-parent back-pointers the name-path API needs, so it must run before rendering.
-After a tree is rendered, mutate selection through `Tree.SetSelected` or browser
-events, but do not add, remove or reorder `Children`; that breaks the
-ID-to-wire-position mapping used by Quercus.js.
+(nil, cyclic, shared node, unknown option bit, more than `MaxTreeNodes` nodes,
+nesting deeper than `MaxTreeDepth`, or depth-weighted serialized node data
+exceeding `MaxTreeRenderBytes`) and `ErrInvalidSelection` when the initial
+`Selected` flags violate the mode's policy. It assigns each node's positional-path
+ID, a preorder wire index, and the parent back-pointers the name-path API needs, so
+it must run before rendering.
+Once `New` returns, only the selection may change, through `Tree.SetSelected` or
+browser events. Each node's `Name`, `Disabled`, assigned ID, and the topology
+(`Children`) are fixed; changing any of them afterward is unsupported, with a different
+consequence per field: altering the topology or an ID breaks the ID-to-wire-position
+mapping used by Quercus.js; enlarging a `Name` defeats the size bounds `New` enforced
+(rendering re-serializes the live tree); toggling `Disabled` can desync the selection
+policy.
 
 Build a `Node` tree (by hand, or from a directory with `Root`) and pass it with a
 lock to `New`. Browser correlation keys and HTML ids are managed internally:

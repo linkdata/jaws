@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"slices"
 	"strconv"
+	"unicode/utf8"
 )
 
 // Node is one tree node rendered by [Tree].
@@ -21,7 +22,7 @@ import (
 // "selectable":false), so the tags do not all mirror the wire shape.
 type Node struct {
 	Parent   *Node   `json:"-"`                 // parent node, set by New, nil for root
-	Name     string  `json:"name"`              // display name
+	Name     string  `json:"name"`              // display name; do not change after New (see [Tree])
 	ID       string  `json:"id,omitzero"`       // positional JSON path, set by New; also the DOM data-id
 	Selected bool    `json:"selected,omitzero"` // selected state
 	Disabled bool    `json:"disabled,omitzero"` // emitted as "selectable":false (inverted) on the wire
@@ -35,6 +36,44 @@ type Node struct {
 func appendJSONString(b []byte, s string) []byte {
 	enc, _ := json.Marshal(s)
 	return append(b, enc...)
+}
+
+// jsonStringLen reports how many bytes s occupies as a wire JSON string literal
+// (surrounding quotes plus escaping, matching [appendJSONString] and encoding/json),
+// but stops once the running length exceeds limit and returns a value greater than
+// limit. It never allocates, so New can weigh an untrusted [Node.Name] — and reject an
+// over-long or escape-heavy one — without encoding a full copy of it.
+func jsonStringLen(s string, limit int64) int64 {
+	n := int64(2) // the surrounding quotes
+	for i := 0; i < len(s); {
+		if n > limit {
+			return n
+		}
+		if c := s[i]; c < utf8.RuneSelf {
+			switch {
+			case c == '"' || c == '\\' || c == '\b' || c == '\f' || c == '\n' || c == '\r' || c == '\t':
+				n += 2
+			case c < 0x20 || c == '<' || c == '>' || c == '&':
+				n += 6 // control bytes and the HTML-escaped set become \u00xx
+			default:
+				n++
+			}
+			i++
+			continue
+		}
+		switch r, size := utf8.DecodeRuneInString(s[i:]); {
+		case r == utf8.RuneError && size == 1:
+			n += 6 // invalid UTF-8 becomes the \ufffd escape
+			i++
+		case r == '\u2028' || r == '\u2029':
+			n += 6 // the JSON line/paragraph separators are escaped
+			i += size
+		default:
+			n += int64(size)
+			i += size
+		}
+	}
+	return n
 }
 
 func (node *Node) marshalJSON(b []byte) []byte {
