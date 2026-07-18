@@ -201,7 +201,7 @@ global.window = {
 			return other !== fn;
 		});
 	},
-	jawsNames: {},
+	jawsNames: new Map(),
 };
 global.document = {
 	readyState: "loading",
@@ -429,7 +429,7 @@ func TestJawsJS_JsVarNestedPathUsesTopLevelNameRouting(t *testing.T) {
 WebSocket = FakeSocket;
 
 window.app = { state: 0 };
-window.jawsNames["app"] = "Jid.9";
+window.jawsNames.set("app", ["Jid.9"]);
 jaws = new FakeSocket();
 
 jawsVar("app.state", 42);
@@ -455,7 +455,7 @@ process.stdout.write(jaws.sent[0] || "");
 	}
 }
 
-func TestJawsJS_PrototypeNameCannotFormJsVarRoute(t *testing.T) {
+func TestJawsJS_JsVarRoutingTableIsPrototypeSafe(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 function FakeSocket() { this.readyState = 1; this.sent = []; }
 FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
@@ -470,42 +470,228 @@ function jsVarElement(name, id) {
 	};
 }
 
+// jawsNames is a Map, so even "__proto__" is just an ordinary key: it is tracked
+// like any other name and cannot pollute Object.prototype or the table itself.
 jawsAttach(jsVarElement("__proto__", "Jid.9"));
 jawsAttach(jsVarElement("__proto", "Jid.10"));
-jawsVar("__proto__");
-jawsVar("__proto", 42);
 
 process.stdout.write(JSON.stringify({
-	prototypeOwnRoute: Object.hasOwn(window.jawsNames, "__proto__"),
-	prototypeRouteType: typeof window.jawsNames["__proto__"],
-	nearOwnRoute: Object.hasOwn(window.jawsNames, "__proto"),
-	nearRoute: window.jawsNames["__proto"],
-	frames: jaws.sent,
+	protoRoute: window.jawsNames.get("__proto__") || null,
+	nearRoute: window.jawsNames.get("__proto") || null,
+	objectPolluted: ({}).length !== undefined || Object.prototype.hasOwnProperty("Jid.9"),
 }));
 `)
 
 	var got struct {
-		PrototypeOwnRoute  bool     `json:"prototypeOwnRoute"`
-		PrototypeRouteType string   `json:"prototypeRouteType"`
-		NearOwnRoute       bool     `json:"nearOwnRoute"`
-		NearRoute          string   `json:"nearRoute"`
-		Frames             []string `json:"frames"`
+		ProtoRoute     []string `json:"protoRoute"`
+		NearRoute      []string `json:"nearRoute"`
+		ObjectPolluted bool     `json:"objectPolluted"`
 	}
 	if err := json.Unmarshal([]byte(raw), &got); err != nil {
 		t.Fatalf("unexpected JSON output %q: %v", raw, err)
 	}
-	if got.PrototypeOwnRoute || got.PrototypeRouteType == "string" {
-		t.Fatalf("__proto__ unexpectedly formed an own string route: %+v", got)
+	if got.ObjectPolluted {
+		t.Fatal("attaching a __proto__ binding polluted Object.prototype")
 	}
-	if !got.NearOwnRoute || got.NearRoute != "Jid.10" {
-		t.Fatalf("nearby identifier route = own %t, %q; want own Jid.10", got.NearOwnRoute, got.NearRoute)
+	if len(got.ProtoRoute) != 1 || got.ProtoRoute[0] != "Jid.9" {
+		t.Fatalf(`jawsNames.get("__proto__") = %v, want [Jid.9]`, got.ProtoRoute)
 	}
-	if len(got.Frames) != 1 {
-		t.Fatalf("JsVar frames = %q, want only the nearby identifier frame", got.Frames)
+	if len(got.NearRoute) != 1 || got.NearRoute[0] != "Jid.10" {
+		t.Fatalf(`jawsNames.get("__proto") = %v, want [Jid.10]`, got.NearRoute)
 	}
-	msg, ok := wire.Parse([]byte(got.Frames[0]))
-	if !ok || msg.What != what.Set || msg.Jid != 10 || msg.Data != "=42" {
-		t.Fatalf("nearby identifier frame = %+v, parseable %t; want Set Jid.10 =42", msg, ok)
+}
+
+func TestJawsJS_DuplicateJsVarNameFansOutToAllLiveBindings(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+window.app = { state: 0 };
+
+const elems = {};
+document.getElementById = function(id) { return elems[id] || null; };
+
+function jsVarElement(id) {
+	const e = {
+		id: id,
+		dataset: { jawsname: "app" },
+		hasAttribute: function(attr) { return attr === "data-jawsname"; },
+		querySelectorAll: function() { return []; },
+		remove: function() { delete elems[id]; },
+	};
+	elems[id] = e;
+	return e;
+}
+
+jawsAttach(jsVarElement("Jid.9"));
+jawsAttach(jsVarElement("Jid.10"));
+
+// One browser write reaches every live binding of the name.
+jaws.sent = [];
+jawsVar("app.state", 1);
+const bothLive = jaws.sent;
+
+// Deleting one binding leaves the write reaching only the remaining one.
+jawsPerform("Delete", "Jid.10", "\"\"");
+jaws.sent = [];
+jawsVar("app.state", 2);
+const oneLive = jaws.sent;
+
+// Deleting the last binding drops the name entirely.
+jawsPerform("Delete", "Jid.9", "\"\"");
+jaws.sent = [];
+jawsVar("app.state", 3);
+const noneLive = jaws.sent;
+
+process.stdout.write(JSON.stringify({
+	bothLive: bothLive,
+	oneLive: oneLive,
+	noneLive: noneLive,
+	nameStillTracked: window.jawsNames.has("app"),
+}));
+`)
+
+	var got struct {
+		BothLive         []string `json:"bothLive"`
+		OneLive          []string `json:"oneLive"`
+		NoneLive         []string `json:"noneLive"`
+		NameStillTracked bool     `json:"nameStillTracked"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+
+	// While both bindings are live, the write fans out to both (oldest-first).
+	if len(got.BothLive) != 2 {
+		t.Fatalf("write with two live bindings = %q, want a frame for each", got.BothLive)
+	}
+	if msg, ok := wire.Parse([]byte(got.BothLive[0])); !ok || msg.Jid != 9 || msg.Data != "state=1" {
+		t.Fatalf("first fan-out frame = %+v, parseable %t; want Jid.9 state=1", msg, ok)
+	}
+	if msg, ok := wire.Parse([]byte(got.BothLive[1])); !ok || msg.Jid != 10 || msg.Data != "state=1" {
+		t.Fatalf("second fan-out frame = %+v, parseable %t; want Jid.10 state=1", msg, ok)
+	}
+
+	// After removing one, only the survivor receives the write.
+	if len(got.OneLive) != 1 {
+		t.Fatalf("write after deleting one binding = %q, want a single frame", got.OneLive)
+	}
+	if msg, ok := wire.Parse([]byte(got.OneLive[0])); !ok || msg.Jid != 9 || msg.Data != "state=2" {
+		t.Fatalf("surviving-binding frame = %+v, parseable %t; want Jid.9 state=2", msg, ok)
+	}
+
+	// After removing all, nothing is emitted and the name is forgotten.
+	if len(got.NoneLive) != 0 {
+		t.Fatalf("write after deleting all bindings = %q, want no frames", got.NoneLive)
+	}
+	if got.NameStillTracked {
+		t.Fatal("routing table still tracks the name after all bindings were deleted")
+	}
+}
+
+func TestJawsJS_InnerUpdateKeepsTargetJsVarNameRoute(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+window.app = { state: 0 };
+
+// Inner replaces only the target's descendants; the target JsVar element itself
+// stays live, so its name route must survive the update.
+const jsvar = {
+	id: "Jid.9",
+	_inner: "",
+	dataset: { jawsname: "app" },
+	hasAttribute: function(attr) { return attr === "data-jawsname"; },
+	querySelectorAll: function() { return []; },
+	get innerHTML() { return this._inner; },
+	set innerHTML(v) { this._inner = v; },
+};
+document.getElementById = function(id) { return id === "Jid.9" ? jsvar : null; };
+
+jawsAttach(jsvar);
+jawsPerform("Inner", "Jid.9", JSON.stringify("<span>x</span>"));
+jawsVar("app.state", 7);
+
+process.stdout.write(JSON.stringify({
+	nameStillTracked: window.jawsNames.has("app"),
+	frame: jaws.sent[jaws.sent.length - 1] || "",
+}));
+`)
+
+	var got struct {
+		NameStillTracked bool   `json:"nameStillTracked"`
+		Frame            string `json:"frame"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+	if !got.NameStillTracked {
+		t.Fatal("Inner update on a JsVar forgot its still-live name route")
+	}
+	msg, ok := wire.Parse([]byte(got.Frame))
+	if !ok || msg.What != what.Set || msg.Jid != 9 || msg.Data != "state=7" {
+		t.Fatalf("write after Inner routed to %+v, parseable %t; want live target Jid.9 state=7", msg, ok)
+	}
+}
+
+func TestJawsJS_RerenderReplacesNestedJsVarNameRoute(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+window.app = { state: 0 };
+
+function jsVarElement(id) {
+	return {
+		id: id,
+		dataset: { jawsname: "app" },
+		hasAttribute: function(attr) { return attr === "data-jawsname"; },
+	};
+}
+
+// A container holds a nested JsVar. Re-rendering it (Inner) removes the old nested
+// binding and attaches a fresh one with the same name; routing must land on the
+// new binding without a duplicate-name error.
+const children = { before: [jsVarElement("Jid.2")], after: [jsVarElement("Jid.3")] };
+let phase = "before";
+const container = {
+	id: "Jid.1",
+	_inner: "",
+	get innerHTML() { return this._inner; },
+	set innerHTML(v) { this._inner = v; phase = "after"; },
+	querySelectorAll: function(sel) {
+		return sel.indexOf("jawsonchangesubmit") >= 0 ? [] : children[phase];
+	},
+};
+document.getElementById = function(id) { return id === "Jid.1" ? container : null; };
+
+jawsAttach(children.before[0]);
+jawsPerform("Inner", "Jid.1", JSON.stringify("<div>new</div>"));
+jawsVar("app.state", 5);
+
+process.stdout.write(JSON.stringify({
+	route: window.jawsNames.get("app") || null,
+	frame: jaws.sent[jaws.sent.length - 1] || "",
+}));
+`)
+
+	var got struct {
+		Route []string `json:"route"`
+		Frame string   `json:"frame"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+	if len(got.Route) != 1 || got.Route[0] != "Jid.3" {
+		t.Fatalf(`jawsNames.get("app") = %v, want the re-rendered [Jid.3]`, got.Route)
+	}
+	msg, ok := wire.Parse([]byte(got.Frame))
+	if !ok || msg.What != what.Set || msg.Jid != 3 || msg.Data != "state=5" {
+		t.Fatalf("write after re-render routed to %+v, parseable %t; want new binding Jid.3 state=5", msg, ok)
 	}
 }
 
@@ -516,7 +702,7 @@ func TestJawsJS_JsVarNestedPathHandlesShadowedHasOwnProperty(t *testing.T) {
 	WebSocket = FakeSocket;
 
 	window.app = { hasOwnProperty: 1, state: { value: 0 } };
-	window.jawsNames["app"] = "Jid.9";
+	window.jawsNames.set("app", ["Jid.9"]);
 	jaws = new FakeSocket();
 
 	jawsVar("app.state.value", 42);
@@ -769,7 +955,7 @@ window.app = { state: 0 };
 
 const routes = ["application-id", "Jid.0", "Jid.01", "Jid.-1", "Jid.7"];
 routes.forEach(function(id, i) {
-	window.jawsNames.app = id;
+	window.jawsNames.set("app", [id]);
 	jawsVar("app.state", i + 1);
 });
 process.stdout.write(JSON.stringify(jaws.sent));

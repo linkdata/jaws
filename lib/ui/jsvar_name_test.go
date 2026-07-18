@@ -67,3 +67,23 @@ func TestRequestWriterJsVarRejectsReservedPrototypeName(t *testing.T) {
 		t.Fatalf("RequestWriter.JsVar wrote rejected markup %q", output.String())
 	}
 }
+
+func TestJsVarRenderAllowsDuplicateNames(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	var mu sync.Mutex
+
+	// Two bindings sharing a name both render without error; the browser delivers
+	// a write to every live binding of the name.
+	for _, text := range []string{"first", "second"} {
+		v := jsVarData{Text: text}
+		jsvar := NewJsVar(&mu, &v)
+		elem := rq.NewElement(jsvar)
+		var out strings.Builder
+		if err := jsvar.JawsRender(elem, &out, []any{"dup"}); err != nil {
+			t.Fatalf("JawsRender(%q) error = %v", text, err)
+		}
+		if out.Len() == 0 {
+			t.Fatalf("JawsRender(%q) wrote no markup", text)
+		}
+	}
+}

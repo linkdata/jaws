@@ -33,8 +33,9 @@ func validateJsVarName(value []any) (name string, err error) {
 			err = errIllegalJsVarName("illegal syntax")
 			return
 		}
-		// jaws.js stores top-level routes on a plain object. Assigning "__proto__"
-		// changes its prototype rather than creating an own route.
+		// A JsVar name is used as a property key on the browser window: jaws.js
+		// reads and writes window[name]. Assigning window["__proto__"] mutates the
+		// window's prototype instead of setting a normal property, so it is reserved.
 		if name == "__proto__" {
 			err = errIllegalJsVarName("reserved")
 		}
@@ -109,6 +110,18 @@ var (
 // when the JsVar is rendered. Existing application variables are therefore
 // valid bindings. Do not use a browser-owned property such as window.name, or a
 // global owned by unrelated code.
+//
+// Multiple bindings may share a name. The name is a single browser window
+// property, and a browser-initiated write to it is delivered to every live
+// binding of that name; a removed binding stops receiving writes. This lets a
+// subtree re-render replace a binding, lets several requests expose the same
+// application-owned global, and lets one browser value fan out to several
+// independent Go bindings.
+//
+// When bindings sharing a name also share backing state (the same locker and
+// Ptr), a browser write applies to that shared value once per binding. Do not
+// expose one Ptr through several simultaneously rendered bindings when its
+// [PathSetter] is not idempotent (for example one that appends).
 //
 // Unlike most JaWS UI values, a JsVar is a bidirectional channel and does not
 // imply that the Go value is always authoritative. Browser and Go updates may
@@ -303,6 +316,9 @@ func (jsvar *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 // params[0] must be a valid JsVar name. Otherwise, JawsRender returns
 // [ErrIllegalJsVarName] without writing markup.
 //
+// A name may be bound by more than one live binding; see [JsVar] for how a
+// browser write is delivered to every live binding of the name.
+//
 // The serialized value is a render-time snapshot. See [JsVar] for the
 // synchronization semantics between rendering and the WebSocket subscription.
 //
@@ -418,7 +434,8 @@ func isNilUI(ui jaws.UI) (yes bool) {
 // jsvarName identifies a property on the browser window. It should be owned by
 // the application because the binding initializes and updates its value.
 //
-// See [JsVar] for the bidirectional binding and synchronization semantics.
+// See [JsVar] for the bidirectional binding and synchronization semantics,
+// including how a name shared by several live bindings is routed.
 //
 // It returns [ErrIllegalJsVarName] if jsvarName is invalid or reserved.
 //

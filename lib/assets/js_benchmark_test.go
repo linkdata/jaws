@@ -26,7 +26,7 @@ const elem = { id: "Jid.1", removeAttribute: function() {} };
 global.window = {
     location: { protocol: "http:", host: "example.test" },
     addEventListener: function() {},
-    jawsNames: {}
+    jawsNames: new Map()
 };
 global.document = {
     readyState: "loading",
