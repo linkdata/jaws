@@ -195,20 +195,11 @@ func TestInputFloat_RejectsNonFinite(t *testing.T) {
 	}
 }
 
-// TestInputFloat_NonFiniteRendersEmpty verifies that a server-bound non-finite
-// float64 renders no unparseable value="NaN"/"+Inf" literal for either widget
-// that shares InputFloat.str. JawsInput rejects non-finite input from the
-// browser, so a rendered literal would be a value the widget refuses on
-// echo-back.
-//
-// For a number this makes render and parse symmetric: an empty value renders no
-// value= attribute at all, i.e. a blank control, exactly what the browser shows.
-// A range cannot be blank: the WHATWG value-sanitization rules coerce a missing,
-// empty, or invalid range value to the control's default midpoint, so the
-// browser still displays a finite position for a non-finite bound value. That
-// divergence is inherent to the range control (documented on NewRange); the most
-// this render-side test can guarantee for range is the absence of a misleading
-// literal, which it does.
+// TestInputFloat_NonFiniteRendersEmpty verifies that a non-finite bound float64
+// renders no unparseable value="NaN"/"+Inf" literal for either widget sharing
+// InputFloat.str. A number renders a blank control (no value attribute); a range
+// cannot be blank, so the browser shows its default midpoint instead, and this
+// render-side test only guarantees the absence of a misleading literal.
 func TestInputFloat_NonFiniteRendersEmpty(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	widgets := []struct {

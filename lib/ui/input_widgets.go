@@ -126,21 +126,9 @@ type InputFloat struct {
 	bind.Setter[float64]
 }
 
-// str formats value for a browser number/range control.
-//
-// Non-finite values (NaN, ±Inf) map to the empty string, never the unparseable
-// literal "NaN"/"+Inf": [InputFloat.JawsInput] rejects non-finite browser input
-// with [bind.ErrFloatNotFinite], so emitting such a literal would be a value the
-// widget itself refuses on echo-back.
-//
-// For a [Number] this makes render and parse symmetric: the empty string renders
-// a blank control, exactly the in-progress edit state JawsInput reads back. A
-// [Range] cannot represent a non-finite (or even empty) value: per the WHATWG
-// value-sanitization rules a missing, empty, or invalid range value becomes the
-// control's default, the midpoint of its min and max, so the browser displays a
-// finite position while the bound value stays non-finite. That divergence is
-// inherent to the range control and is documented on [NewRange]; mapping to the
-// empty string at least avoids rendering a misleading literal.
+// str formats value for a number or range control, rendering non-finite values
+// (NaN, ±Inf) as the empty string rather than an unparseable "NaN"/"+Inf"
+// literal.
 func (u *InputFloat) str(value float64) string {
 	if math.IsNaN(value) || math.IsInf(value, 0) {
 		return ""

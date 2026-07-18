@@ -12,13 +12,10 @@ type Range struct{ InputFloat }
 
 // NewRange returns a range input widget bound to g.
 //
-// A range control cannot represent a non-finite bound value. Per the WHATWG
-// value-sanitization rules a missing, empty, or invalid range value is coerced
-// to the control's default (the midpoint of its min and max), so a bound NaN or
-// ±Inf displays as that finite position while the server value stays non-finite.
-// The widget renders no unparseable literal for such values, but unlike
-// [NewNumber] the display cannot be blank. Bind a finite value to a range, or use
-// a [NewNumber] when non-finite values are possible.
+// A range control cannot display a non-finite value: a bound NaN or ±Inf shows
+// as the control's default position (the midpoint of its min and max) while the
+// bound value stays non-finite. Use [NewNumber] if the bound value may be
+// non-finite.
 func NewRange(g bind.Setter[float64]) *Range { return &Range{InputFloat{Setter: g}} }
 
 // JawsRender renders ui as an HTML range input.
