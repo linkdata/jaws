@@ -59,10 +59,10 @@ func TestResolveIndexZeroAllocs(t *testing.T) {
 }
 
 // BenchmarkJSONStringLen compares the non-allocating escaped-length counter New uses to
-// weigh a node name against the previous json.Marshal-and-measure approach, across a
-// typical short label, a large label, and a hostile over-budget name. "counter" stays
-// allocation-free and, given a budget, stops early; "marshal" always allocates and
-// encodes the whole string before its length can be measured.
+// weigh a node name against a json.Marshal-and-measure baseline, across a typical short
+// label, a large label, and a hostile over-budget name. "counter" stays allocation-free
+// and, given a budget, stops early; "marshal" always allocates and encodes the whole
+// string before its length can be measured.
 func BenchmarkJSONStringLen(b *testing.B) {
 	cases := []struct {
 		name  string

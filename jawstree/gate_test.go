@@ -86,8 +86,8 @@ func TestNew_NodeCapBoundary(t *testing.T) {
 // TestIndexEnforcesCapDuringTraversal pins that index rejects an oversized tree
 // mid-traversal (returning ErrInvalidTree once byIndex reaches MaxTreeNodes) rather
 // than after fully indexing it. Bounding byIndex bounds the recursion depth, so a
-// pathologically deep single-child tree can no longer overflow the stack before the
-// cap is applied; the deep shape shares this guard with the wide one exercised here.
+// pathologically deep single-child tree cannot overflow the stack before the cap
+// applies; the deep shape shares this guard with the wide one exercised here.
 func TestIndexEnforcesCapDuringTraversal(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a MaxTreeNodes+1 tree")
@@ -214,11 +214,11 @@ func TestNew_RenderBytesBoundary(t *testing.T) {
 
 // TestNew_RejectsLargeNameNoOverflow guards the 32-bit overflow path: a node whose
 // weighted serialized size exceeds a signed 32-bit int must still be rejected, not wrap
-// negative and slip under the cap. The old code computed depth*nodeBytes in int, so on a
-// 32-bit build the deepest node (depth MaxTreeDepth == 128) with this ~20 MiB name gave
-// 128 * ~20 MiB > math.MaxInt32 and wrapped negative, wrongly accepting it. int64
-// accounting (and the budget-bounded name measurement) keep it correct and over the cap.
-// Runs under -short so the 386 CI leg exercises it with 32-bit arithmetic.
+// negative and slip under the cap. On a 32-bit build the deepest node (depth
+// MaxTreeDepth == 128) with this ~20 MiB name makes the naive product depth*nodeBytes
+// (128 * ~20 MiB) exceed math.MaxInt32, so int64 accounting and the budget-bounded name
+// measurement are what keep it correct and over the cap. Runs under -short so the 386 CI
+// leg exercises it with 32-bit arithmetic.
 func TestNew_RejectsLargeNameNoOverflow(t *testing.T) {
 	// 20 MiB * MaxTreeDepth (128) is ~2.68e9, well over math.MaxInt32 (~2.15e9).
 	name := strings.Repeat("x", 20<<20)
