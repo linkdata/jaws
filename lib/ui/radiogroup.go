@@ -54,16 +54,27 @@ func (st *radioState) radioElem() *jaws.Element {
 
 // Radio renders an HTML input element of type radio.
 //
+// The group's generated name= attribute takes precedence over any name= passed
+// in params: it is emitted first and the HTML parser keeps the first of
+// duplicate attributes, preserving the invariant that every radio in the group
+// shares the same request-scoped name.
+//
 // Render errors are reported through [jaws.Jaws.MustLog], which panics when
 // no [jaws.Jaws.Logger] is configured.
 func (re RadioElement) Radio(params ...any) template.HTML {
 	radio := re.st.radioElem()
 	var sb strings.Builder
-	radio.Jaws.MustLog(radio.JawsRender(&sb, append(params, re.st.group.nameAttr)))
+	// A fresh slice with nameAttr first avoids mutating the caller's variadic
+	// backing array and makes the group name win over any caller-supplied name=.
+	radio.Jaws.MustLog(radio.JawsRender(&sb, append([]any{re.st.group.nameAttr}, params...)))
 	return template.HTML(sb.String()) // #nosec G203
 }
 
 // Label renders an HTML label element.
+//
+// The generated for= attribute referencing the radio's id takes precedence over
+// any for= passed in params: it is emitted first and the HTML parser keeps the
+// first of duplicate attributes, so the label always targets its own radio.
 //
 // Render errors are reported through [jaws.Jaws.MustLog], which panics when
 // no [jaws.Jaws.Logger] is configured.
@@ -74,7 +85,9 @@ func (re RadioElement) Label(params ...any) template.HTML {
 	}
 	var sb strings.Builder
 	forAttr := string(radio.Jid().AppendQuote([]byte("for=")))
-	re.st.label.Jaws.MustLog(re.st.label.JawsRender(&sb, append(params, forAttr)))
+	// A fresh slice with forAttr first avoids mutating the caller's variadic
+	// backing array and makes the generated for= win over any caller-supplied for=.
+	re.st.label.Jaws.MustLog(re.st.label.JawsRender(&sb, append([]any{forAttr}, params...)))
 	return template.HTML(sb.String()) // #nosec G203
 }
 

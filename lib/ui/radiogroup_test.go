@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"html/template"
 	"strings"
 	"testing"
 
@@ -17,14 +18,64 @@ func TestRequest_RadioGroup(t *testing.T) {
 	rel := rw.RadioGroup(nba)
 
 	gotHTML := string(rel[0].Radio("radioattr"))
-	if gotHTML != `<input id="Jid.1" type="radio" radioattr name="Jid.1">` {
+	if gotHTML != `<input id="Jid.1" type="radio" name="Jid.1" radioattr>` {
 		t.Errorf("unexpected radio HTML %q", gotHTML)
 	}
 
-	wantHTML := "<label id=\"Jid.2\" labelattr for=\"Jid.1\">one</label>"
+	wantHTML := "<label id=\"Jid.2\" for=\"Jid.1\" labelattr>one</label>"
 	gotHTML = string(rel[0].Label("labelattr"))
 	if gotHTML != wantHTML {
 		t.Errorf("got %q, want %q", gotHTML, wantHTML)
+	}
+}
+
+// TestRequest_RadioGroup_DoesNotMutateCallerParams verifies Radio and Label do
+// not write their generated attribute into the caller's variadic backing array
+// when it has spare capacity (cap > len).
+func TestRequest_RadioGroup_DoesNotMutateCallerParams(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	rw := RequestWriter{Request: rq, Writer: &strings.Builder{}}
+
+	nba := named.NewBoolArray(false)
+	nba.Add("1", "one")
+	rel := rw.RadioGroup(nba)
+
+	// len 1, spare capacity: a buggy append(params, internalAttr) would write the
+	// framework attribute into index 1, past the caller's length.
+	radioParams := make([]any, 1, 4)
+	radioParams[0] = template.HTMLAttr(`class="x"`)
+	_ = rel[0].Radio(radioParams...)
+	if full := radioParams[:cap(radioParams)]; full[1] != nil {
+		t.Fatalf("Radio mutated caller params backing array: %v", full)
+	}
+
+	labelParams := make([]any, 1, 4)
+	labelParams[0] = template.HTMLAttr(`class="y"`)
+	_ = rel[0].Label(labelParams...)
+	if full := labelParams[:cap(labelParams)]; full[1] != nil {
+		t.Fatalf("Label mutated caller params backing array: %v", full)
+	}
+}
+
+// TestRequest_RadioGroup_GeneratedAttrWins verifies the framework-controlled
+// name= / for= attribute takes precedence over a caller-supplied duplicate: it
+// is emitted first, and the HTML parser keeps the first of duplicate attributes.
+func TestRequest_RadioGroup_GeneratedAttrWins(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	rw := RequestWriter{Request: rq, Writer: &strings.Builder{}}
+
+	nba := named.NewBoolArray(false)
+	nba.Add("1", "one")
+	rel := rw.RadioGroup(nba)
+
+	got := string(rel[0].Radio(template.HTMLAttr(`name="caller"`)))
+	if want := `<input id="Jid.1" type="radio" name="Jid.1" name="caller">`; got != want {
+		t.Errorf("Radio: got %q, want %q", got, want)
+	}
+
+	gotLabel := string(rel[0].Label(template.HTMLAttr(`for="caller"`)))
+	if want := `<label id="Jid.2" for="Jid.1" for="caller">one</label>`; gotLabel != want {
+		t.Errorf("Label: got %q, want %q", gotLabel, want)
 	}
 }
 
