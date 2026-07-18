@@ -311,6 +311,39 @@ func TestInputDateWidget(t *testing.T) {
 	date.JawsUpdate(elem)
 }
 
+// TestInputDate_BrowserEditNormalizesToMidnightUTC locks in the documented
+// date-only behavior (issue #124): the control renders/reads a calendar date, so
+// a browser edit resolves through time.Parse to midnight UTC and drops the bound
+// value's time-of-day and location. Re-selecting the same calendar date from a
+// non-UTC value still rewrites the bound value, because time.Time inequality
+// includes the location.
+func TestInputDate_BrowserEditNormalizesToMidnightUTC(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	loc := time.FixedZone("CEST", 2*3600)
+	sd := newTestSetter(time.Date(2026, 7, 18, 15, 30, 0, 0, loc))
+
+	date := NewDate(sd)
+	elem, _ := renderUI(t, rq, date, "dateattr")
+
+	if err := date.JawsInput(elem, "2026-07-18"); err != nil {
+		t.Fatal(err)
+	}
+	got := sd.Get()
+	if want := time.Date(2026, 7, 18, 0, 0, 0, 0, time.UTC); !got.Equal(want) || got.Location() != time.UTC {
+		t.Fatalf("date edit did not normalize to midnight UTC: got %v", got)
+	}
+
+	// A no-op re-selection of the same calendar date from a non-UTC value still
+	// mutates the bound value to midnight UTC.
+	sd.Set(time.Date(2026, 7, 18, 0, 0, 0, 0, loc))
+	if err := date.JawsInput(elem, "2026-07-18"); err != nil {
+		t.Fatal(err)
+	}
+	if sd.Get().Location() != time.UTC {
+		t.Fatal("re-selecting the same date did not rewrite the bound value to UTC")
+	}
+}
+
 // TestInputDate_NoSpuriousUpdateOnEqualDate guards the dedup fix: two time.Time
 // values for the same calendar date but with different *Location pointers compare
 // unequal under ==, yet render to the same ISO8601 string. JawsUpdate must dedup
