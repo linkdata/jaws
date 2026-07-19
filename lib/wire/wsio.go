@@ -18,12 +18,17 @@ const writeBatchLimit = 32 * 1024
 //
 // Closes incomingMsgCh on exit.
 //
+// Canceling ctx or closing doneCh interrupts reads in progress and is not
+// reported through ccf.
+//
 // ccf may be nil, in which case errors are not reported and only the loop exits.
 func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, incomingMsgCh chan<- WsMsg, ws *websocket.Conn) {
 	var typ websocket.MessageType
 	var txt []byte
 	var err error
 	defer close(incomingMsgCh)
+	ctx, cancel := contextWithDone(ctx, doneCh)
+	defer cancel()
 	for err == nil {
 		// Only parse on a successful read; on error ws.Read returns no usable
 		// payload and the loop exits because the for condition fails.
@@ -39,9 +44,7 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 			}
 		}
 	}
-	if ccf != nil {
-		ccf(err)
-	}
+	reportError(ctx, doneCh, ccf, err)
 }
 
 // WriteLoop reads messages from outboundMsgCh, formats them, and writes them
@@ -49,9 +52,14 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 //
 // Closes the WebSocket on exit.
 //
+// Canceling ctx or closing doneCh interrupts writes in progress and is not
+// reported through ccf.
+//
 // ccf may be nil, in which case errors are not reported and only the loop exits.
 func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, outboundMsgCh <-chan WsMsg, ws *websocket.Conn) {
 	defer func() { _ = ws.Close(websocket.StatusNormalClosure, "") }()
+	ctx, cancel := contextWithDone(ctx, doneCh)
+	defer cancel()
 	var err error
 	for err == nil {
 		select {
@@ -69,14 +77,15 @@ func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan s
 			}
 		}
 	}
-	if ccf != nil {
-		ccf(err)
-	}
+	reportError(ctx, doneCh, ccf, err)
 }
 
 // PingLoop sends periodic WebSocket pings and reports ping errors through ccf.
 //
 // Returns immediately when interval is non-positive.
+//
+// Canceling ctx or closing doneCh interrupts pings in progress and is not
+// reported through ccf.
 //
 // ccf may be nil, in which case errors are not reported and only the loop exits.
 func PingLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, interval, timeout time.Duration, ws *websocket.Conn) {
@@ -86,6 +95,8 @@ func PingLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 		// (the ctx.Done and doneCh cases below likewise return without ccf).
 		return
 	}
+	ctx, cancel := contextWithDone(ctx, doneCh)
+	defer cancel()
 	t := time.NewTicker(interval)
 	defer t.Stop()
 
@@ -97,13 +108,34 @@ func PingLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 		case <-doneCh:
 			return
 		case <-t.C:
-			pingctx, cancel := context.WithTimeout(ctx, timeout)
+			pingctx, pingcancel := context.WithTimeout(ctx, timeout)
 			err = ws.Ping(pingctx)
-			cancel()
+			pingcancel()
 		}
 	}
+	reportError(ctx, doneCh, ccf, err)
+}
+
+func contextWithDone(ctx context.Context, doneCh <-chan struct{}) (ioctx context.Context, cancel context.CancelFunc) {
+	ioctx, cancel = context.WithCancel(ctx)
+	go func() {
+		select {
+		case <-doneCh:
+			cancel()
+		case <-ioctx.Done():
+		}
+	}()
+	return
+}
+
+func reportError(ctx context.Context, doneCh <-chan struct{}, ccf context.CancelCauseFunc, err error) {
 	if ccf != nil {
-		ccf(err)
+		select {
+		case <-ctx.Done():
+		case <-doneCh:
+		default:
+			ccf(err)
+		}
 	}
 }
 
