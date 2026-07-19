@@ -2,10 +2,32 @@ package jawstree_test
 
 import (
 	"encoding/json"
+	"sync"
 	"testing"
 
 	"github.com/linkdata/jaws/jawstree"
 )
+
+// TestNode_HasNames covers name-path matching from the root: the root matches only the
+// empty path, a non-root node never matches an empty path, and a matching name-path
+// resolves through the parent chain.
+func TestNode_HasNames(t *testing.T) {
+	root := &jawstree.Node{Name: "root", Children: []*jawstree.Node{{Name: "a"}}}
+	var mu sync.Mutex
+	if _, err := jawstree.New(&mu, root); err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	child := root.Children[0]
+	if !root.HasNames(nil) {
+		t.Error("root.HasNames(nil) = false, want true")
+	}
+	if child.HasNames(nil) {
+		t.Error("child.HasNames(nil) = true, want false")
+	}
+	if !child.HasNames([]string{"a"}) {
+		t.Error(`child.HasNames({"a"}) = false, want true`)
+	}
+}
 
 func TestNode_MarshalJSON(t *testing.T) {
 	rootnode := &jawstree.Node{

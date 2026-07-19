@@ -392,6 +392,107 @@ func TestApplyClientAbsolute_CascadeOnlyRejectsDisconnectedSelection(t *testing.
 	}
 }
 
+func TestApplyClientAbsolute_RejectsInvalidIndexAndDisabled(t *testing.T) {
+	var mu sync.Mutex
+	// preorder indices: root=0, a=1, b=2, b.c=3 (disabled)
+	tree := mustNew(t, &mu, &Node{Children: []*Node{
+		{Name: "a"},
+		{Name: "b", Children: []*Node{{Name: "c", Disabled: true}}},
+	}}, MultiSelectEnabled)
+
+	for _, idx := range []int{0, -1, 99} {
+		tree.Lock()
+		_, err := tree.applyClientAbsolute([]int{idx})
+		tree.Unlock()
+		if !errors.Is(err, ErrPathRejected) {
+			t.Fatalf("index %d: err = %v, want ErrPathRejected", idx, err)
+		}
+	}
+	tree.Lock()
+	_, err := tree.applyClientAbsolute([]int{3}) // the disabled node
+	tree.Unlock()
+	if !errors.Is(err, ErrPathRejected) {
+		t.Fatalf("disabled: err = %v, want ErrPathRejected", err)
+	}
+	if got := tree.selectedIndexes(); len(got) != 0 {
+		t.Fatalf("rejected absolute selection changed state to %v", got)
+	}
+}
+
+func TestApplyClientDelta_SingleSelect(t *testing.T) {
+	// preorder indices: root=0, a=1, b=2, c=3 (disabled)
+	build := func(t *testing.T) *Tree {
+		t.Helper()
+		var mu sync.Mutex
+		return mustNew(t, &mu, &Node{Children: []*Node{
+			{Name: "a"},
+			{Name: "b"},
+			{Name: "c", Disabled: true},
+		}})
+	}
+
+	t.Run("add of a disabled node is rejected", func(t *testing.T) {
+		tree := build(t)
+		tree.Lock()
+		_, err := tree.applyClientDelta([]int{3}, nil)
+		tree.Unlock()
+		if !errors.Is(err, ErrPathRejected) {
+			t.Fatalf("err = %v, want ErrPathRejected", err)
+		}
+	})
+
+	t.Run("removing the selected node clears the selection", func(t *testing.T) {
+		tree := build(t)
+		tree.Lock()
+		_, _ = tree.applyClientDelta([]int{1}, nil)
+		changed, err := tree.applyClientDelta(nil, []int{1})
+		tree.Unlock()
+		maybeError(t, err)
+		if !changed {
+			t.Fatal("removing the selected node reported no change")
+		}
+		if got := tree.selectedIndexes(); len(got) != 0 {
+			t.Fatalf("selection = %v, want empty", got)
+		}
+	})
+
+	t.Run("removing an unselected node is a no-op", func(t *testing.T) {
+		tree := build(t)
+		tree.Lock()
+		_, _ = tree.applyClientDelta([]int{1}, nil)
+		changed, err := tree.applyClientDelta(nil, []int{2})
+		tree.Unlock()
+		maybeError(t, err)
+		if changed {
+			t.Fatal("removing an unselected node reported a change")
+		}
+		if got := tree.selectedIndexes(); !reflect.DeepEqual(got, []int{1}) {
+			t.Fatalf("selection = %v, want [1]", got)
+		}
+	})
+
+	t.Run("removing an invalid index is rejected", func(t *testing.T) {
+		tree := build(t)
+		tree.Lock()
+		_, err := tree.applyClientDelta(nil, []int{99})
+		tree.Unlock()
+		if !errors.Is(err, ErrPathRejected) {
+			t.Fatalf("err = %v, want ErrPathRejected", err)
+		}
+	})
+}
+
+func TestApplyClientDelta_MultiSelectRejectsInvalidRemoveIndex(t *testing.T) {
+	var mu sync.Mutex
+	tree := mustNew(t, &mu, &Node{Children: []*Node{{Name: "a"}, {Name: "b"}}}, MultiSelectEnabled)
+	tree.Lock()
+	_, err := tree.applyClientDelta(nil, []int{99})
+	tree.Unlock()
+	if !errors.Is(err, ErrPathRejected) {
+		t.Fatalf("err = %v, want ErrPathRejected", err)
+	}
+}
+
 func TestDecodeSelectionBitmap(t *testing.T) {
 	// n=5, bits 1 and 3 set -> byte 0x0A -> base64 "Cg==".
 	idx, err := decodeSelectionBitmap("Cg==", 5)

@@ -1,6 +1,7 @@
 package jawstree
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -566,6 +567,94 @@ func TestTreeJawsInputRejectResyncsOriginOnly(t *testing.T) {
 		}
 	case <-time.After(300 * time.Millisecond):
 		// expected: no selection message for the peer
+	}
+}
+
+func TestTreeJawsInputAppliesBitmapSelection(t *testing.T) {
+	jw, err := jaws.New()
+	maybeError(t, err)
+	defer jw.Close()
+	go jw.Serve()
+	rq := jawstest.NewTestRequest(jw, nil)
+	defer rq.Close()
+	<-rq.ReadyCh
+
+	root := &Node{Name: "root", Children: []*Node{{Name: "a"}, {Name: "b"}}}
+	var mu deadlock.RWMutex
+	tree := mustNew(t, &mu, root)
+	elem := rq.NewElement(tree)
+	var sb strings.Builder
+	maybeError(t, elem.JawsRender(&sb, nil))
+	rq.InCh <- wire.WsMsg{}
+	readCall(t, rq.OutCh, "jawstreeInit=")
+
+	// A one-bit-per-node bitmap with only node b set, built with the same encoding the
+	// server uses: (len(byIndex)+7)/8 bytes, bit i for node i, base64.
+	idxB := 2 // preorder index of node b
+	buf := make([]byte, (len(tree.byIndex)+7)/8)
+	buf[idxB/8] |= 1 << (uint(idxB) % 8)
+	payload := `{"b":` + strconv.Quote(base64.StdEncoding.EncodeToString(buf)) + `}`
+	maybeError(t, tree.JawsInput(elem, payload))
+	if !root.Children[1].Selected || root.Children[0].Selected {
+		t.Fatalf("bitmap did not select b only: a=%v b=%v", root.Children[0].Selected, root.Children[1].Selected)
+	}
+	// The change dirties the tree, so this view reconverges via jawstreeSelection.
+	rq.InCh <- wire.WsMsg{}
+	msg := readCall(t, rq.OutCh, "jawstreeSelection=")
+	got := decodeSelectionPayload(t, strings.TrimPrefix(msg.Data, "jawstreeSelection="), len(tree.byIndex))
+	if !reflect.DeepEqual(got, []int{2}) {
+		t.Fatalf("reconverge selection = %v, want [2] (payload %q)", got, msg.Data)
+	}
+}
+
+func TestTreeJawsInputRejectsEmptyAndMalformed(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		payload string
+	}{
+		{"empty payload", `{}`},
+		{"malformed json", `{`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			jw, err := jaws.New()
+			maybeError(t, err)
+			defer jw.Close()
+			go jw.Serve()
+			rq := jawstest.NewTestRequest(jw, nil)
+			defer rq.Close()
+			<-rq.ReadyCh
+
+			root := &Node{Name: "root", Children: []*Node{{Name: "a"}}}
+			var mu deadlock.RWMutex
+			tree := mustNew(t, &mu, root)
+			elem := rq.NewElement(tree)
+			var sb strings.Builder
+			maybeError(t, elem.JawsRender(&sb, nil))
+			rq.InCh <- wire.WsMsg{}
+			readCall(t, rq.OutCh, "jawstreeInit=")
+
+			// JawsInput always returns nil; a rejected or malformed frame mutates nothing
+			// and snaps only this origin back to the authoritative (empty) selection.
+			maybeError(t, tree.JawsInput(elem, tc.payload))
+			if root.Children[0].Selected {
+				t.Fatal("rejected input mutated the tree")
+			}
+			rq.InCh <- wire.WsMsg{}
+			if msg := readCall(t, rq.OutCh, "jawstreeSelection="); !strings.Contains(msg.Data, `"s":[]`) {
+				t.Fatalf("origin resync = %q, want empty selection", msg.Data)
+			}
+		})
+	}
+}
+
+func TestSparsePayloadLocked(t *testing.T) {
+	var mu deadlock.RWMutex
+	tree := mustNew(t, &mu, &Node{Name: "root", Children: []*Node{{Name: "a"}, {Name: "b"}, {Name: "c"}}})
+	tree.RLock()
+	got := tree.sparsePayloadLocked("7", []int{1, 2, 3})
+	tree.RUnlock()
+	if want := `{"jid":"7","s":[1,2,3]}`; got != want {
+		t.Fatalf("sparsePayloadLocked = %q, want %q", got, want)
 	}
 }
 
