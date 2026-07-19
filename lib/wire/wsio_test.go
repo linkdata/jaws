@@ -52,27 +52,32 @@ func TestReadLoop_RespectsContextDone(t *testing.T) {
 }
 
 func TestReadLoop_RespectsDone(t *testing.T) {
-	msg := WsMsg{Jid: jid.Jid(1234), What: what.Input}
-	inCh := make(chan WsMsg)
-	jawsDoneCh := make(chan struct{})
-	client, server := pipe(t)
-	defer func() { _ = client.CloseNow() }()
-	defer func() { _ = server.CloseNow() }()
+	synctest.Test(t, func(t *testing.T) {
+		msg := WsMsg{Jid: jid.Jid(1234), What: what.Input}
+		inCh := make(chan WsMsg)
+		doneCh := make(chan struct{})
+		client, server := pipe(t)
+		ctx, cancel := context.WithCancelCause(t.Context())
+		loopDone := make(chan struct{})
+		defer closeWireBubble(cancel, client, server)()
 
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
-	defer cancel()
+		go func() {
+			ReadLoop(ctx, cancel, doneCh, inCh, server)
+			close(loopDone)
+		}()
 
-	readDoneCh := make(chan struct{})
-	go func() {
-		defer close(readDoneCh)
-		ReadLoop(ctx, nil, jawsDoneCh, inCh, server)
-	}()
-
-	if err := client.Write(ctx, websocket.MessageText, []byte(msg.Format())); err != nil {
-		t.Fatal(err)
-	}
-	close(jawsDoneCh)
-	waitDone(t, readDoneCh, "ReadLoop after done close")
+		if err := client.Write(ctx, websocket.MessageText, []byte(msg.Format())); err != nil {
+			t.Fatal(err)
+		}
+		// ReadLoop is durably blocked sending the decoded message to inCh.
+		synctest.Wait()
+		close(doneCh)
+		synctest.Wait()
+		assertClosedNow(t, loopDone, "ReadLoop")
+		if err := ctx.Err(); err != nil {
+			t.Fatalf("parent context was canceled: %v", err)
+		}
+	})
 }
 
 func TestReadLoop_RespectsDoneWhileReading(t *testing.T) {
