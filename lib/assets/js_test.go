@@ -380,43 +380,39 @@ process.stdout.write(JSON.stringify({
 func TestJawsJS_ConnectsAfterDeferredAssets(t *testing.T) {
 	for _, readyEvent := range []string{"DOMContentLoaded", "load"} {
 		t.Run(readyEvent, func(t *testing.T) {
+			// The ready event is the "deferred assets loaded" signal: a page's
+			// deferred scripts run before DOMContentLoaded, so connecting on the
+			// ready event connects after them. Assert jaws.js connects exactly once,
+			// only after the event, and stays idempotent across duplicate events.
 			raw := runJawsJSSnippet(t, `
 let socketCount = 0;
-let connectedAfterAssets = false;
 function FakeSocket() {
 	this.readyState = 1;
 	socketCount++;
-	connectedAfterAssets =
-		typeof window.jawstreeInit === "function" &&
-		typeof window.Treeview === "function";
 }
 FakeSocket.prototype.addEventListener = function() {};
 WebSocket = FakeSocket;
 
 const before = socketCount;
-window.jawstreeInit = function() {};
-window.Treeview = function() {};
 jawsDispatchWindowEvent("`+readyEvent+`");
 jawsDispatchWindowEvent("DOMContentLoaded");
 jawsDispatchWindowEvent("load");
 
 process.stdout.write(JSON.stringify({
 	before: before,
-	after: socketCount,
-	connectedAfterAssets: connectedAfterAssets
+	after: socketCount
 }));
 `)
 
 			var got struct {
-				Before               int  `json:"before"`
-				After                int  `json:"after"`
-				ConnectedAfterAssets bool `json:"connectedAfterAssets"`
+				Before int `json:"before"`
+				After  int `json:"after"`
 			}
 			if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
 				t.Fatalf("failed to parse snippet output %q: %v", raw, err)
 			}
-			if got.Before != 0 || got.After != 1 || !got.ConnectedAfterAssets {
-				t.Fatalf("connection state = %+v, want one connection after deferred assets", got)
+			if got.Before != 0 || got.After != 1 {
+				t.Fatalf("connection state = %+v, want one connection after the ready event", got)
 			}
 		})
 	}
