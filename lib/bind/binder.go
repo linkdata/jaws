@@ -71,7 +71,9 @@ type InitialHTMLAttrHook[T comparable] func(bind Binder[T], elem *jaws.Element) 
 // no more success hooks are called.
 type SuccessHook func(elem *jaws.Element) (err error)
 
-// Formatter customizes [Binder.Format] output for a value.
+// Formatter customizes [Binder.Format] output.
+//
+// Binder locks are not held when [Formatter.Format] is called.
 type Formatter interface {
 	Format(string) string
 }
@@ -81,6 +83,11 @@ type Formatter interface {
 //
 // Binder methods are safe for concurrent use when the locker passed to [New]
 // is safe for concurrent use.
+//
+// HTML rendering copies the bound value while locked, then releases the lock
+// before invoking [Formatter], [fmt.Formatter], or [fmt.Stringer] callbacks.
+// The copy is shallow. An explicit [GetHTMLHook] is the exception and runs with
+// the lock held as documented.
 type Binder[T comparable] interface {
 	RWLocker
 	Setter[T]
@@ -144,7 +151,7 @@ type Binder[T comparable] interface {
 	Success(fn any) (newbind Binder[T])
 
 	// GetHTML returns a [Binder] that will call fn instead of the default
-	// escaped fmt.Sprint(JawsGetLocked(elem)) HTML rendering.
+	// escaped [fmt.Sprint] HTML rendering.
 	//
 	// The lock will be held at this point, preferring RLock over Lock, if available.
 	// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
@@ -158,9 +165,11 @@ type Binder[T comparable] interface {
 	// and shadows any earlier one.
 	GetHTML(fn GetHTMLHook[T]) (newbind Binder[T])
 
-	// Format returns a [Binder] that implements [HTMLGetter] and
-	// calls html.EscapeString on either fmt.Sprintf(format, JawsGetLocked(elem))
-	// or, if T implements [Formatter], T.Format(format).
+	// Format returns a [Binder] with formatted HTML rendering.
+	//
+	// It copies the bound value while the Binder lock is held, then releases the
+	// lock before calling [Formatter.Format] or [fmt.Sprintf]. The resulting text
+	// is escaped with [html.EscapeString].
 	//
 	// Format and [Binder.GetHTML] are both HTML-rendering overrides resolved
 	// head-first, so when a chain has more than one the most recently added wins
@@ -214,29 +223,28 @@ func (b *binder[T]) JawsGet(elem *jaws.Element) (value T) {
 	return
 }
 
-func (b *binder[T]) jawsGetHTMLLocked(elem *jaws.Element) template.HTML {
+func (b *binder[T]) JawsGetHTML(elem *jaws.Element) (s template.HTML) {
 	for bnd := b; bnd != nil; bnd = bnd.prev {
 		switch hook := bnd.hook.(type) {
 		case GetHTMLHook[T]:
-			return hook(bnd, elem)
+			b.RWLocker.RLock()
+			defer b.RWLocker.RUnlock()
+			s = hook(bnd, elem)
+			return
 		case string:
-			var s string
-			v := b.JawsGetLocked(elem)
-			if fm, ok := any(v).(Formatter); ok {
-				s = fm.Format(hook)
+			value := b.JawsGet(elem)
+			var formatted string
+			if fm, ok := any(value).(Formatter); ok {
+				formatted = fm.Format(hook)
 			} else {
-				s = fmt.Sprintf(hook, v)
+				formatted = fmt.Sprintf(hook, value)
 			}
-			return template.HTML(html.EscapeString(s)) // #nosec G203
+			s = template.HTML(html.EscapeString(formatted)) // #nosec G203
+			return
 		}
 	}
-	return template.HTML(html.EscapeString(fmt.Sprint(b.JawsGetLocked(elem)))) // #nosec G203
-}
-
-func (b *binder[T]) JawsGetHTML(elem *jaws.Element) (s template.HTML) {
-	b.RWLocker.RLock()
-	defer b.RWLocker.RUnlock()
-	s = b.jawsGetHTMLLocked(elem)
+	value := b.JawsGet(elem)
+	s = template.HTML(html.EscapeString(fmt.Sprint(value))) // #nosec G203
 	return
 }
 
