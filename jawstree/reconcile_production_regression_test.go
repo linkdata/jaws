@@ -43,25 +43,25 @@ window.addEventListener("DOMContentLoaded", function () {
 	function ck(c) { if (!c) { ok = false; } }
 
 	// Single-select: switching A -> B must leave only B (not clear everything).
-	jawstreeInit({ key: "s", jid: "treeS", options: 0, data: { children: [
+	jawstreeInit({ jid: "treeS", options: 0, data: { children: [
 		{ id: "children.0", name: "A" }, { id: "children.1", name: "B" }
 	] } });
-	jawstreeSelection({ key: "s", jid: "treeS", s: [1] }); ck(eq(ids("treeS"), ["children.0"]));
-	jawstreeSelection({ key: "s", jid: "treeS", s: [2] }); ck(eq(ids("treeS"), ["children.1"]));
-	jawstreeSelection({ key: "s", jid: "treeS", s: [] });  ck(eq(ids("treeS"), []));
+	jawstreeSelection({ jid: "treeS", s: [1] }); ck(eq(ids("treeS"), ["children.0"]));
+	jawstreeSelection({ jid: "treeS", s: [2] }); ck(eq(ids("treeS"), ["children.1"]));
+	jawstreeSelection({ jid: "treeS", s: [] });  ck(eq(ids("treeS"), []));
 
 	// Multi + cascade: deselecting the parent server-side must keep the children.
-	jawstreeInit({ key: "c", jid: "treeC", options: (1 << 2) | (1 << 7), data: { children: [
+	jawstreeInit({ jid: "treeC", options: (1 << 2) | (1 << 7), data: { children: [
 		{ id: "children.0", name: "P", children: [
 			{ id: "children.0.children.0", name: "c1" },
 			{ id: "children.0.children.1", name: "c2" }
 		] }
 	] } });
-	jawstreeSelection({ key: "c", jid: "treeC", s: [1, 2, 3] });
+	jawstreeSelection({ jid: "treeC", s: [1, 2, 3] });
 	ck(eq(ids("treeC"), ["children.0", "children.0.children.0", "children.0.children.1"]));
-	jawstreeSelection({ key: "c", jid: "treeC", s: [2, 3] });
+	jawstreeSelection({ jid: "treeC", s: [2, 3] });
 	ck(eq(ids("treeC"), ["children.0.children.0", "children.0.children.1"]));
-	jawstreeSelection({ key: "c", jid: "treeC", s: [] });
+	jawstreeSelection({ jid: "treeC", s: [] });
 	ck(eq(ids("treeC"), []));
 
 	if (ok) { document.getElementById("result").style.background = "rgb(0,255,0)"; }

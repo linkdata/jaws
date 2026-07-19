@@ -245,20 +245,16 @@ func TestTreeRenderDistinctIdentities(t *testing.T) {
 	defer jw.Close()
 	rq := jw.NewRequest(nil)
 
-	var mu1, mu2 deadlock.RWMutex
-	tree1 := mustNew(t, &mu1, &Node{Children: []*Node{{Name: "one"}}})
-	tree2 := mustNew(t, &mu2, &Node{Children: []*Node{{Name: "two"}}})
-	elem1 := rq.NewElement(tree1)
-	elem2 := rq.NewElement(tree2)
+	var mu deadlock.RWMutex
+	tree := mustNew(t, &mu, &Node{Children: []*Node{{Name: "one"}}})
+	elem1 := rq.NewElement(tree)
+	elem2 := rq.NewElement(tree)
 	var b1, b2 strings.Builder
 	maybeError(t, elem1.JawsRender(&b1, nil))
 	maybeError(t, elem2.JawsRender(&b2, nil))
 
-	if tree1.key == tree2.key {
-		t.Fatalf("trees share generated key %q", tree1.key)
-	}
 	if elem1.Jid() == elem2.Jid() {
-		t.Fatalf("trees share managed container Jid %s", elem1.Jid())
+		t.Fatalf("Tree renders share managed container Jid %s", elem1.Jid())
 	}
 }
 
@@ -410,9 +406,16 @@ func TestTreeDirtySharedSendsOneSelectionPerRequest(t *testing.T) {
 	if len(msgs1) != 1 || len(msgs2) != 1 {
 		t.Fatalf("selection calls per request = %d,%d, want 1,1", len(msgs1), len(msgs2))
 	}
-	for _, msg := range append(msgs1, msgs2...) {
-		if !strings.Contains(msg.Data, `"key":`+strconv.Quote(tree.key)) {
-			t.Errorf("update missing tree key %q: %q", tree.key, msg.Data)
+	for _, tc := range []struct {
+		name string
+		msg  wire.WsMsg
+		elem *jaws.Element
+	}{
+		{name: "request 1", msg: msgs1[0], elem: elem1},
+		{name: "request 2", msg: msgs2[0], elem: elem2},
+	} {
+		if tc.msg.Jid != tc.elem.Jid() || !strings.Contains(tc.msg.Data, `"jid":`+strconv.Quote(tc.elem.Jid().String())) {
+			t.Errorf("%s update targets Jid %s with data %q, want %s", tc.name, tc.msg.Jid, tc.msg.Data, tc.elem.Jid())
 		}
 	}
 }

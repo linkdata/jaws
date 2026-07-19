@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strconv"
 	"sync"
-	"sync/atomic"
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
@@ -80,25 +79,9 @@ const nodeJSONOverhead = 80
 // desync the selection policy.
 type Tree struct {
 	bind.RWLocker         // guards root selection state and is the concurrency contract for Node accessors
-	key           string  // browser correlation key, unique per Tree
 	options       Option  // feature flags, serialized to the browser initializer
 	root          *Node   // authoritative node tree; positional-path IDs assigned by New
 	byIndex       []*Node // preorder index -> node; index 0 is root, the compact wire alias
-}
-
-var nextTreeKey atomic.Uint64
-
-func makeTreeKey() (key string) {
-	for {
-		current := nextTreeKey.Load()
-		if current == ^uint64(0) {
-			panic("jawstree.New: tree key space exhausted")
-		}
-		if nextTreeKey.CompareAndSwap(current, current+1) {
-			key = strconv.FormatUint(current+1, 36)
-			return
-		}
-	}
 }
 
 // New returns a shared tree model for root, guarded by l.
@@ -127,7 +110,6 @@ func New(l sync.Locker, root *Node, options ...Option) (t *Tree, err error) {
 	}
 	t = &Tree{
 		RWLocker: bind.AsRWLocker(l),
-		key:      makeTreeKey(),
 		options:  opts,
 		root:     root,
 	}
@@ -421,14 +403,12 @@ func (t *Tree) Walk(fn func(jsPath string, node *Node)) {
 	t.root.Walk("", fn)
 }
 
-// initPayloadLocked builds the jawstreeInit JSON: the browser correlation key, the
-// container Jid, the option flags, and the full node tree (with current selection).
+// initPayloadLocked builds the jawstreeInit JSON: the container Jid, the option
+// flags, and the full node tree (with current selection).
 // The caller must hold the read lock.
 func (t *Tree) initPayloadLocked(jidStr string) string {
 	var b []byte
-	b = append(b, `{"key":`...)
-	b = strconv.AppendQuote(b, t.key)
-	b = append(b, `,"jid":`...)
+	b = append(b, `{"jid":`...)
 	b = strconv.AppendQuote(b, jidStr)
 	b = append(b, `,"options":`...)
 	b = strconv.AppendInt(b, int64(t.options), 10)
@@ -461,9 +441,7 @@ func (t *Tree) selectionPayloadLocked(jidStr string) string {
 
 func (t *Tree) sparsePayloadLocked(jidStr string, idxs []int) string {
 	var b []byte
-	b = append(b, `{"key":`...)
-	b = strconv.AppendQuote(b, t.key)
-	b = append(b, `,"jid":`...)
+	b = append(b, `{"jid":`...)
 	b = strconv.AppendQuote(b, jidStr)
 	b = append(b, `,"s":[`...)
 	for i, idx := range idxs {
@@ -484,9 +462,7 @@ func (t *Tree) bitmapPayloadLocked(jidStr string) string {
 		}
 	}
 	var b []byte
-	b = append(b, `{"key":`...)
-	b = strconv.AppendQuote(b, t.key)
-	b = append(b, `,"jid":`...)
+	b = append(b, `{"jid":`...)
 	b = strconv.AppendQuote(b, jidStr)
 	b = append(b, `,"b":`...)
 	b = strconv.AppendQuote(b, base64.StdEncoding.EncodeToString(buf))

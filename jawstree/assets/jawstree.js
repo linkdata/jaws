@@ -3,8 +3,8 @@
 // keeps its selection in sync with the server-authoritative jawstree.Tree.
 //
 // Server -> client uses two verbs, both element-scoped JsCalls:
-//   jawstreeInit({key, jid, options, data})   build the widget once
-//   jawstreeSelection({key, s:[idx...] | b:"<base64 bitmap>"})   absolute selection
+//   jawstreeInit({jid, options, data})   build the widget once
+//   jawstreeSelection({jid, s:[idx...] | b:"<base64 bitmap>"})   absolute selection
 // Client -> server sends one Input frame per interaction carrying either a delta
 // {"d":{"add":[idx...],"remove":[idx...]}} of preorder node indices, or, when that
 // would be large, an absolute bitmap {"b":"<base64>"}.
@@ -254,15 +254,24 @@ function jawstreeOnSelectionChange(t, selectedNodesData) {
     }
 }
 
+// jawstreeGet resolves a widget only while its owning container is in the live DOM.
+// Keeping the instance on that element lets the browser collect the complete
+// Treeview graph when JaWS removes the container.
+function jawstreeGet(jid) {
+    var container = document.getElementById(jid);
+    return container && container.jawsTreeview;
+}
+
 function jawstreeInit(arg) {
     var container = document.getElementById(arg.jid);
-    if (container) {
-        container.hidden = false;
+    if (!container) {
+        return;
     }
+    container.hidden = false;
     var modes = jawstreeDecodeOptions(arg.options);
     var index = jawstreeBuildIndex(arg.data);
     // applying suppresses the onSelectionChange that Quercus fires while applying the
-    // initial selection from arg.data during construction, before window[...] is set.
+    // initial selection from arg.data during construction, before the instance is set.
     var applying = true;
     var t = new Treeview({
         containerId: arg.jid,
@@ -277,27 +286,22 @@ function jawstreeInit(arg) {
         cascadeSelectChildren: modes.cascadeSelectChildren,
         checkboxSelectionEnabled: modes.checkboxSelectionEnabled,
         onSelectionChange: function (selectedNodesData) {
-            // Look up by jid, not key: one Tree may be rendered by several elements on
-            // a page, each its own widget, so the callback must find its own instance.
-            var tt = window["jawstree_" + arg.jid];
+            var tt = jawstreeGet(arg.jid);
             if (applying || !tt || tt.jawsReconciling) {
                 return;
             }
             jawstreeOnSelectionChange(tt, selectedNodesData);
         }
     });
-    t.jawsKey = arg.key;
     t.jawsJid = arg.jid;
     t.jawsModes = modes;
     t.jawsIdByIndex = index.idByIndex;
     t.jawsIndexById = index.indexById;
     t.jawsNodeCount = index.count;
     t.jawsReconciling = false;
-    // Register per element (jid) so several renders of one Tree on a page each get
-    // their own widget. Keep the per-key alias too so single-render code and the
-    // "instanceof Treeview" regression can find the widget by key.
-    window["jawstree_" + arg.jid] = t;
-    window["jawstree_" + arg.key] = t;
+    // One Tree may be rendered by several elements on a page. Each container owns
+    // its widget, so removing the element also releases the only adapter reference.
+    container.jawsTreeview = t;
     // Baseline the outgoing-delta reference to the selection Quercus applied from
     // arg.data, then re-enable the callback for genuine user actions.
     t.lastServerSet = jawstreeSelectedIndexSet(t);
@@ -306,9 +310,7 @@ function jawstreeInit(arg) {
 }
 
 function jawstreeSelection(arg) {
-    // Address the widget by jid so an update reaches the right element when one Tree
-    // is rendered by several elements on a page.
-    var t = window["jawstree_" + arg.jid];
+    var t = jawstreeGet(arg.jid);
     if (!t) {
         return;
     }
