@@ -896,7 +896,7 @@ func TestBind_Hook_Format_timeTimeUsesFormatter(t *testing.T) {
 	}
 }
 
-func TestBind_HTMLFormatting_ReleasesLockBeforeCallbacks(t *testing.T) {
+func TestBind_HTMLFormatting_HoldsLockDuringCallbacks(t *testing.T) {
 	tests := []struct {
 		name      string
 		newGetter func(*sync.Mutex) HTMLGetter
@@ -935,31 +935,10 @@ func TestBind_HTMLFormatting_ReleasesLockBeforeCallbacks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var mu sync.Mutex
 			getter := tt.newGetter(&mu)
-			if got, want := getter.JawsGetHTML(nil), template.HTML("&lt;unlocked&gt;"); got != want {
+			if got, want := getter.JawsGetHTML(nil), template.HTML("&lt;locked&gt;"); got != want {
 				t.Fatalf("want %q got %q", want, got)
 			}
 		})
-	}
-}
-
-func TestBind_Hook_GetHTML_HoldsLock(t *testing.T) {
-	var mu sync.Mutex
-	value := "value"
-	locked := false
-	b := New(&mu, &value).GetHTML(func(bind Binder[string], elem *jaws.Element) template.HTML {
-		if mu.TryLock() {
-			mu.Unlock()
-		} else {
-			locked = true
-		}
-		return template.HTML(bind.JawsGetLocked(elem))
-	})
-
-	if got, want := MakeHTMLGetter(b).JawsGetHTML(nil), template.HTML(value); got != want {
-		t.Fatalf("want %q got %q", want, got)
-	}
-	if !locked {
-		t.Fatal("GetHTML hook called without Binder lock held")
 	}
 }
 
