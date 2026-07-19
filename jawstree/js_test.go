@@ -238,34 +238,45 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
-func TestJawstreeJS_InitReconcilesCascadeOnlySelection(t *testing.T) {
-	raw := runJawstreeJSSnippet(t, jsMock+`
+func TestJawstreeJS_InitReconcilesCascadeSelection(t *testing.T) {
+	tests := []struct {
+		name    string
+		options string
+	}{
+		{"cascade_only", `(1<<7)`},
+		{"multi_cascade", `(1<<2)|(1<<7)`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw := runJawstreeJSSnippet(t, jsMock+`
 var data = { children: [{ id: "children.0", name: "P", selected: true, children: [
-	{ id: "children.0.children.0", name: "c1", selected: true },
-	{ id: "children.0.children.1", name: "c2" }
+	{ id: "children.0.children.0", name: "A" },
+	{ id: "children.0.children.1", name: "B", selected: true }
 ] }] };
-jawstreeInit({ jid: "Jid.1", options: (1<<7), data: data });
+jawstreeInit({ jid: "Jid.1", options: `+tt.options+`, data: data });
 var t = container.jawsTreeview;
 process.stdout.write(JSON.stringify({
 	selected: selectedIds(t), baseline: Array.from(t.lastServerSet).sort(), sends: sends
 }));
 `)
-	var got struct {
-		Selected []string `json:"selected"`
-		Baseline []int    `json:"baseline"`
-		Sends    []string `json:"sends"`
-	}
-	if err := json.Unmarshal([]byte(raw), &got); err != nil {
-		t.Fatalf("unexpected JSON %q: %v", raw, err)
-	}
-	if !reflect.DeepEqual(got.Selected, []string{"children.0", "children.0.children.0"}) {
-		t.Fatalf("initial selection = %v, want parent and c1 only", got.Selected)
-	}
-	if !reflect.DeepEqual(got.Baseline, []int{1, 2}) {
-		t.Fatalf("initial baseline = %v, want [1 2]", got.Baseline)
-	}
-	if len(got.Sends) != 0 {
-		t.Fatalf("initial reconcile produced outbound frames: %v", got.Sends)
+			var got struct {
+				Selected []string `json:"selected"`
+				Baseline []int    `json:"baseline"`
+				Sends    []string `json:"sends"`
+			}
+			if err := json.Unmarshal([]byte(raw), &got); err != nil {
+				t.Fatalf("unexpected JSON %q: %v", raw, err)
+			}
+			if !reflect.DeepEqual(got.Selected, []string{"children.0", "children.0.children.1"}) {
+				t.Fatalf("initial selection = %v, want parent and B only", got.Selected)
+			}
+			if !reflect.DeepEqual(got.Baseline, []int{1, 3}) {
+				t.Fatalf("initial baseline = %v, want [1 3]", got.Baseline)
+			}
+			if len(got.Sends) != 0 {
+				t.Fatalf("initial reconcile produced outbound frames: %v", got.Sends)
+			}
+		})
 	}
 }
 
