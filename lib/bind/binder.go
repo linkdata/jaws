@@ -81,6 +81,9 @@ type Formatter interface {
 //
 // Binder methods are safe for concurrent use when the locker passed to [New]
 // is safe for concurrent use.
+//
+// Binder holds its lock while rendering HTML, including while invoking
+// [Formatter.Format], [fmt.Formatter.Format], and [fmt.Stringer.String].
 type Binder[T comparable] interface {
 	RWLocker
 	Setter[T]
@@ -144,7 +147,7 @@ type Binder[T comparable] interface {
 	Success(fn any) (newbind Binder[T])
 
 	// GetHTML returns a [Binder] that will call fn instead of the default
-	// escaped fmt.Sprint(JawsGetLocked(elem)) HTML rendering.
+	// escaped [fmt.Sprint] HTML rendering.
 	//
 	// The lock will be held at this point, preferring RLock over Lock, if available.
 	// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
@@ -158,13 +161,14 @@ type Binder[T comparable] interface {
 	// and shadows any earlier one.
 	GetHTML(fn GetHTMLHook[T]) (newbind Binder[T])
 
-	// Format returns a [Binder] that implements [HTMLGetter] and
-	// calls html.EscapeString on either fmt.Sprintf(format, JawsGetLocked(elem))
-	// or, if T implements [Formatter], T.Format(format).
+	// Format returns a [Binder] that formats its bound value.
 	//
-	// Format and [Binder.GetHTML] are both HTML-rendering overrides resolved
-	// head-first, so when a chain has more than one the most recently added wins
-	// and shadows any earlier one.
+	// With the Binder lock held, it calls [Formatter.Format] when T implements
+	// [Formatter], or [fmt.Sprintf] otherwise, then escapes the result with
+	// [html.EscapeString].
+	//
+	// When chained with [Binder.GetHTML], the most recently added rendering
+	// override wins.
 	Format(format string) (newbind Binder[T])
 
 	// Clicked returns a [Binder] that will call fn when [jaws.ClickHandler.JawsClick] is invoked.
@@ -234,6 +238,8 @@ func (b *binder[T]) jawsGetHTMLLocked(elem *jaws.Element) template.HTML {
 }
 
 func (b *binder[T]) JawsGetHTML(elem *jaws.Element) (s template.HTML) {
+	// Keep lookup and formatting under one lock. A copy of T may still refer to
+	// mutable state.
 	b.RWLocker.RLock()
 	defer b.RWLocker.RUnlock()
 	s = b.jawsGetHTMLLocked(elem)

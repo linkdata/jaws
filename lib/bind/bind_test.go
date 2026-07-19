@@ -2,6 +2,7 @@ package bind
 
 import (
 	"errors"
+	"fmt"
 	"html/template"
 	"io"
 	"reflect"
@@ -71,6 +72,40 @@ type testBindFormatterValue struct {
 
 func (v testBindFormatterValue) Format(format string) string {
 	return "<" + format + ":" + v.value + ">"
+}
+
+type testBindLockFormatter struct {
+	mu *sync.Mutex
+}
+
+func (v testBindLockFormatter) Format(string) string {
+	return testBindLockState(v.mu)
+}
+
+type testBindLockFmtFormatter struct {
+	mu *sync.Mutex
+}
+
+func (v testBindLockFmtFormatter) Format(state fmt.State, _ rune) {
+	if _, err := io.WriteString(state, testBindLockState(v.mu)); err != nil {
+		panic(err)
+	}
+}
+
+type testBindLockStringer struct {
+	mu *sync.Mutex
+}
+
+func (v testBindLockStringer) String() string {
+	return testBindLockState(v.mu)
+}
+
+func testBindLockState(mu *sync.Mutex) string {
+	if mu.TryLock() {
+		mu.Unlock()
+		return "<unlocked>"
+	}
+	return "<locked>"
 }
 
 func TestBind_Hook_Success_panic(t *testing.T) {
@@ -858,6 +893,52 @@ func TestBind_Hook_Format_timeTimeUsesFormatter(t *testing.T) {
 	}
 	if tags := tag.MustTagExpand(nil, bind); !reflect.DeepEqual(tags, []any{&val}) {
 		t.Fatal(tags)
+	}
+}
+
+func TestBind_HTMLFormatting_HoldsLockDuringCallbacks(t *testing.T) {
+	tests := []struct {
+		name      string
+		newGetter func(*sync.Mutex) HTMLGetter
+	}{
+		{
+			name: "bind Formatter",
+			newGetter: func(mu *sync.Mutex) HTMLGetter {
+				value := testBindLockFormatter{mu: mu}
+				return MakeHTMLGetter(New(mu, &value).Format("ignored"))
+			},
+		},
+		{
+			name: "fmt Formatter",
+			newGetter: func(mu *sync.Mutex) HTMLGetter {
+				value := testBindLockFmtFormatter{mu: mu}
+				return MakeHTMLGetter(New(mu, &value).Format("%v"))
+			},
+		},
+		{
+			name: "formatted fmt Stringer",
+			newGetter: func(mu *sync.Mutex) HTMLGetter {
+				value := testBindLockStringer{mu: mu}
+				return MakeHTMLGetter(New(mu, &value).Format("%s"))
+			},
+		},
+		{
+			name: "default fmt Stringer",
+			newGetter: func(mu *sync.Mutex) HTMLGetter {
+				value := testBindLockStringer{mu: mu}
+				return MakeHTMLGetter(New(mu, &value))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var mu sync.Mutex
+			getter := tt.newGetter(&mu)
+			if got, want := getter.JawsGetHTML(nil), template.HTML("&lt;locked&gt;"); got != want {
+				t.Fatalf("want %q got %q", want, got)
+			}
+		})
 	}
 }
 
