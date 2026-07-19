@@ -77,14 +77,16 @@ window.addEventListener("DOMContentLoaded", function () {
 			] }
 		] } });
 		ck(eq(ids(jid), ["children.0", "children.0.children.1"]));
-		ck(eq(Array.from(document.getElementById(jid).jawsTreeview.lastServerSet).sort(), [1, 3]));
+		ck(eq(Array.from(document.getElementById(jid).jawsTreeview.lastServerSet)
+			.sort(function (a, b) { return a - b; }), [1, 3]));
 	}
 	initPrunedCascade("treeO", (1 << 7));
 	initPrunedCascade("treeM", (1 << 2) | (1 << 7));
 
 	jawstreeSelection({ jid: "treeO", s: [1, 2] });
 	ck(eq(ids("treeO"), ["children.0", "children.0.children.0"]));
-	ck(eq(Array.from(document.getElementById("treeO").jawsTreeview.lastServerSet).sort(), [1, 2]));
+	ck(eq(Array.from(document.getElementById("treeO").jawsTreeview.lastServerSet)
+		.sort(function (a, b) { return a - b; }), [1, 2]));
 
 	if (ok) { document.getElementById("result").style.background = "rgb(0,255,0)"; }
 });

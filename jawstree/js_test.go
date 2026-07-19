@@ -256,7 +256,9 @@ var data = { children: [{ id: "children.0", name: "P", selected: true, children:
 jawstreeInit({ jid: "Jid.1", options: `+tt.options+`, data: data });
 var t = container.jawsTreeview;
 process.stdout.write(JSON.stringify({
-	selected: selectedIds(t), baseline: Array.from(t.lastServerSet).sort(), sends: sends
+	selected: selectedIds(t),
+	baseline: Array.from(t.lastServerSet).sort(function (a, b) { return a - b; }),
+	sends: sends
 }));
 `)
 			var got struct {
