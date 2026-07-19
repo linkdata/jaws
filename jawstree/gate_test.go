@@ -26,6 +26,11 @@ func TestNew_Validation(t *testing.T) {
 		{"disabled selected", &Node{Children: []*Node{{Name: "a", Selected: true, Disabled: true}}}, nil, ErrInvalidSelection},
 		{"single-select two selected", &Node{Children: []*Node{{Name: "a", Selected: true}, {Name: "b", Selected: true}}}, nil, ErrInvalidSelection},
 		{"multi-select two selected ok", &Node{Children: []*Node{{Name: "a", Selected: true}, {Name: "b", Selected: true}}}, []Option{MultiSelectEnabled}, nil},
+		{"cascade-only rooted selection ok", &Node{Children: []*Node{{Name: "a", Selected: true, Children: []*Node{{Name: "a1", Selected: true}, {Name: "a2"}}}}}, []Option{CascadeSelectChildren}, nil},
+		{"cascade-only disabled bridge ok", &Node{Children: []*Node{{Name: "a", Selected: true, Children: []*Node{{Name: "disabled", Disabled: true, Children: []*Node{{Name: "leaf", Selected: true}}}}}}}, []Option{CascadeSelectChildren}, nil},
+		{"cascade-only disjoint selection", &Node{Children: []*Node{{Name: "a", Selected: true}, {Name: "b", Selected: true}}}, []Option{CascadeSelectChildren}, ErrInvalidSelection},
+		{"cascade-only ancestor gap", &Node{Children: []*Node{{Name: "a", Selected: true, Children: []*Node{{Name: "a1", Children: []*Node{{Name: "leaf", Selected: true}}}}}}}, []Option{CascadeSelectChildren}, ErrInvalidSelection},
+		{"multi-cascade disjoint selection ok", &Node{Children: []*Node{{Name: "a", Selected: true}, {Name: "b", Selected: true}}}, []Option{MultiSelectEnabled, CascadeSelectChildren}, nil},
 		{"node-selection-disabled with initial selection", &Node{Children: []*Node{{Name: "a", Selected: true}}}, []Option{NodeSelectionDisabled}, ErrInvalidSelection},
 		{"node-selection-disabled empty ok", &Node{Children: []*Node{{Name: "a"}}}, []Option{NodeSelectionDisabled}, nil},
 	}
@@ -300,6 +305,40 @@ func TestApplyClientDelta_Gate(t *testing.T) {
 	}
 }
 
+func TestApplyClientDelta_CascadeOnlyRejectsUnrepresentableDelta(t *testing.T) {
+	t.Run("disjoint add roots", func(t *testing.T) {
+		var mu sync.Mutex
+		tree := mustNew(t, &mu, &Node{Children: []*Node{{Name: "a"}, {Name: "b"}}}, CascadeSelectChildren)
+		tree.Lock()
+		_, err := tree.applyClientDelta([]int{1, 2}, nil)
+		tree.Unlock()
+		if !errors.Is(err, ErrPathRejected) {
+			t.Fatalf("err = %v, want ErrPathRejected", err)
+		}
+		if got := tree.selectedIndexes(); len(got) != 0 {
+			t.Fatalf("rejected add changed state to %v", got)
+		}
+	})
+
+	t.Run("remove creates ancestor gap", func(t *testing.T) {
+		var mu sync.Mutex
+		tree := mustNew(t, &mu, &Node{Children: []*Node{{
+			Name: "a", Selected: true, Children: []*Node{{
+				Name: "a1", Selected: true, Children: []*Node{{Name: "leaf", Selected: true}},
+			}},
+		}}}, CascadeSelectChildren)
+		tree.Lock()
+		_, err := tree.applyClientDelta(nil, []int{2})
+		tree.Unlock()
+		if !errors.Is(err, ErrInvalidSelection) {
+			t.Fatalf("err = %v, want ErrInvalidSelection", err)
+		}
+		if got := tree.selectedIndexes(); !reflect.DeepEqual(got, []int{1, 2, 3}) {
+			t.Fatalf("rejected remove changed state to %v", got)
+		}
+	})
+}
+
 func TestNodeSelectionDisabledRejectsSelection(t *testing.T) {
 	var mu sync.Mutex
 	tree := mustNew(t, &mu, &Node{Children: []*Node{{Name: "a"}}}, NodeSelectionDisabled)
@@ -323,6 +362,33 @@ func TestApplyClientAbsolute_SingleSelectRejectsMultiple(t *testing.T) {
 	tree.Unlock()
 	if !errors.Is(err, ErrPathRejected) {
 		t.Fatalf("err = %v, want ErrPathRejected", err)
+	}
+}
+
+func TestApplyClientAbsolute_CascadeOnlyRejectsDisconnectedSelection(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		indices []int
+	}{
+		{"disjoint roots", []int{1, 4}},
+		{"selectable ancestor gap", []int{1, 3}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mu sync.Mutex
+			tree := mustNew(t, &mu, &Node{Children: []*Node{
+				{Name: "a", Children: []*Node{{Name: "a1", Children: []*Node{{Name: "leaf"}}}}},
+				{Name: "b"},
+			}}, CascadeSelectChildren)
+			tree.Lock()
+			_, err := tree.applyClientAbsolute(tc.indices)
+			tree.Unlock()
+			if !errors.Is(err, ErrPathRejected) {
+				t.Fatalf("err = %v, want ErrPathRejected", err)
+			}
+			if got := tree.selectedIndexes(); len(got) != 0 {
+				t.Fatalf("rejected selection changed state to %v", got)
+			}
+		})
 	}
 }
 

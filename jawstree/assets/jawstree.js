@@ -5,18 +5,19 @@
 // Server -> client uses two verbs, both element-scoped JsCalls:
 //   jawstreeInit({jid, options, data})   build the widget once
 //   jawstreeSelection({jid, s:[idx...] | b:"<base64 bitmap>"})   absolute selection
-// Client -> server sends one Input frame per interaction carrying either a delta
-// {"d":{"add":[idx...],"remove":[idx...]}} of preorder node indices, or, when that
-// would be large, an absolute bitmap {"b":"<base64>"}.
+// Client -> server sends one Input frame per interaction carrying a delta
+// {"d":{"add":[idx...],"remove":[idx...]}} of preorder node indices, a sparse
+// absolute cascade-only selection {"s":[idx...]}, or, when either list would be
+// large, an absolute bitmap {"b":"<base64>"}.
 //
 // Selection is reconciled with the public selectNodeById only; the widget is never
 // rebuilt for a selection change, so the client's local expansion state survives.
 // Node identity on the wire is the preorder index; the DOM data-id stays the
 // positional path Quercus renders.
 
-// jawstreeDeltaThreshold is the encoded-delta size (bytes) above which the adapter
-// sends an absolute bitmap instead, keeping every frame within the jaws 32 KiB
-// inbound WebSocket limit even for a select-all over a very large tree.
+// jawstreeDeltaThreshold is the encoded delta or sparse-absolute size (bytes) above
+// which the adapter sends a bitmap instead, keeping every frame within the jaws
+// 32 KiB inbound WebSocket limit even for a select-all over a very large tree.
 var jawstreeDeltaThreshold = 24 * 1024;
 
 function jawstreeTopSelectedChildren(children, parentSelected) {
@@ -65,16 +66,21 @@ function jawstreeDecodeOptions(options) {
 }
 
 // jawstreeBuildIndex walks the wire tree in the same preorder the server uses,
-// numbering root as 0 and each descendant in order, and returns the index<->id maps
-// plus the total node count. The root carries no id and is never selectable.
+// numbering root as 0 and each descendant in order, and returns the index<->id maps,
+// authoritative selected-index Set, and total node count. The root carries no id and
+// is never selectable.
 function jawstreeBuildIndex(root) {
     var idByIndex = [];
     var indexById = {};
+    var selected = new Set();
     var next = 0;
     (function walk(node) {
         idByIndex[next] = node.id;
         if (node.id !== undefined) {
             indexById[node.id] = next;
+            if (node.selected) {
+                selected.add(next);
+            }
         }
         next++;
         if (node.children) {
@@ -83,7 +89,7 @@ function jawstreeBuildIndex(root) {
             }
         }
     })(root);
-    return { idByIndex: idByIndex, indexById: indexById, count: next };
+    return { idByIndex: idByIndex, indexById: indexById, selected: selected, count: next };
 }
 
 // jawstreeSelectedIndexSet returns the currently selected nodes of t as a Set of
@@ -171,15 +177,16 @@ function jawstreeSend(jid, data) {
 // t.jawsReconciling is set so the resulting onSelectionChange callbacks do not echo
 // back to the server.
 function jawstreeReconcile(t, desired) {
-    if (jawstreeSetsEqual(jawstreeSelectedIndexSet(t), desired)) {
-        t.lastServerSet = desired;
+    var current = jawstreeSelectedIndexSet(t);
+    if (jawstreeSetsEqual(current, desired)) {
+        t.lastServerSet = current;
         return;
     }
     t.jawsReconciling = true;
     try {
         var bound = 2 * t.jawsNodeCount + 2;
         for (var iter = 0; iter < bound; iter++) {
-            var current = jawstreeSelectedIndexSet(t);
+            current = jawstreeSelectedIndexSet(t);
             var pick = -1;
             var select = false;
             // Prefer selecting a desired-but-missing node; otherwise deselect an
@@ -211,13 +218,17 @@ function jawstreeReconcile(t, desired) {
         }
     } finally {
         t.jawsReconciling = false;
-        t.lastServerSet = desired;
+        current = jawstreeSelectedIndexSet(t);
+        if (jawstreeSetsEqual(current, desired)) {
+            t.lastServerSet = current;
+        }
     }
 }
 
-// jawstreeOnSelectionChange reports a user selection change to the server as the
-// delta versus the last applied server state, falling back to an absolute bitmap
-// when the delta would be large.
+// jawstreeOnSelectionChange reports a user selection change to the server. Ordinary
+// modes use a delta versus the last applied server state; cascade-only additions use
+// the full sparse selection while remove-only changes remain composable deltas.
+// Either form falls back to an absolute bitmap when it is large.
 function jawstreeOnSelectionChange(t, selectedNodesData) {
     var newSet = new Set();
     for (var i = 0; i < selectedNodesData.length; i++) {
@@ -242,7 +253,15 @@ function jawstreeOnSelectionChange(t, selectedNodesData) {
         t.lastServerSet = newSet;
         return;
     }
-    var encoded = JSON.stringify({ d: { add: add, remove: remove } });
+    var encoded;
+    if (t.jawsModes.cascadeSelectChildren && !t.jawsModes.multiSelectEnabled && add.length > 0) {
+        // A single-cascade gesture replaces the selected subtree. Send the complete
+        // state so concurrent changes and overlap with the prior baseline cannot turn
+        // it into a disconnected server selection.
+        encoded = JSON.stringify({ s: Array.from(newSet) });
+    } else {
+        encoded = JSON.stringify({ d: { add: add, remove: remove } });
+    }
     if (encoded.length > jawstreeDeltaThreshold) {
         encoded = JSON.stringify({ b: jawstreeEncodeBitmap(newSet, t.jawsNodeCount) });
     }
@@ -302,9 +321,11 @@ function jawstreeInit(arg) {
     // One Tree may be rendered by several elements on a page. Each container owns
     // its widget, so removing the element also releases the only adapter reference.
     container.jawsTreeview = t;
-    // Baseline the outgoing-delta reference to the selection Quercus applied from
-    // arg.data, then re-enable the callback for genuine user actions.
+    // Baseline the live selection Quercus applied, then reconcile it to the raw
+    // authoritative flags. This is needed for a pruned single-cascade subtree:
+    // Quercus initially selects every descendant of its selected root.
     t.lastServerSet = jawstreeSelectedIndexSet(t);
+    jawstreeReconcile(t, index.selected);
     applying = false;
     return t;
 }

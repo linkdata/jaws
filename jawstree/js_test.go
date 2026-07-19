@@ -59,6 +59,7 @@ function addContainer(id) {
 }
 var container = addContainer("Jid.1");
 addContainer("Jid.2");
+addContainer("Jid.3");
 global.document = { getElementById: function (id) { return containers[id] || null; } };
 
 function Treeview(options) {
@@ -237,10 +238,42 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
+func TestJawstreeJS_InitReconcilesCascadeOnlySelection(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, jsMock+`
+var data = { children: [{ id: "children.0", name: "P", selected: true, children: [
+	{ id: "children.0.children.0", name: "c1", selected: true },
+	{ id: "children.0.children.1", name: "c2" }
+] }] };
+jawstreeInit({ jid: "Jid.1", options: (1<<7), data: data });
+var t = container.jawsTreeview;
+process.stdout.write(JSON.stringify({
+	selected: selectedIds(t), baseline: Array.from(t.lastServerSet).sort(), sends: sends
+}));
+`)
+	var got struct {
+		Selected []string `json:"selected"`
+		Baseline []int    `json:"baseline"`
+		Sends    []string `json:"sends"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON %q: %v", raw, err)
+	}
+	if !reflect.DeepEqual(got.Selected, []string{"children.0", "children.0.children.0"}) {
+		t.Fatalf("initial selection = %v, want parent and c1 only", got.Selected)
+	}
+	if !reflect.DeepEqual(got.Baseline, []int{1, 2}) {
+		t.Fatalf("initial baseline = %v, want [1 2]", got.Baseline)
+	}
+	if len(got.Sends) != 0 {
+		t.Fatalf("initial reconcile produced outbound frames: %v", got.Sends)
+	}
+}
+
 // TestJawstreeJS_SelectionReconcile drives the reconcile against the faithful mock in
 // the two modes whose collateral effects broke the naive one-pass reconcile: a
 // single-select switch must leave only the new node (not clear everything), and a
-// cascade parent-deselect must keep the still-desired children.
+// cascade parent-deselect must keep the still-desired children. It also covers an
+// exact pruned cascade-only update.
 func TestJawstreeJS_SelectionReconcile(t *testing.T) {
 	raw := runJawstreeJSSnippet(t, jsMock+`
 var flat = { children: [{ id: "children.0", name: "A" }, { id: "children.1", name: "B" }] };
@@ -264,9 +297,16 @@ var afterAll = selectedIds(c);
 jawstreeSelection({ jid: "Jid.2", s: [2, 3] }); // parent deselected server-side
 var afterParentDrop = selectedIds(c);
 
+jawstreeInit({ jid: "Jid.3", options: (1<<7), data: tree }); // cascade only
+var o = containers["Jid.3"].jawsTreeview;
+jawstreeSelection({ jid: "Jid.3", s: [1, 2] });
+var afterPruned = selectedIds(o);
+var prunedBaseline = Array.from(o.lastServerSet).sort();
+
 process.stdout.write(JSON.stringify({
 	afterA: afterA, afterSwitch: afterSwitch, afterClear: afterClear,
-	afterAll: afterAll, afterParentDrop: afterParentDrop, sends: sends
+	afterAll: afterAll, afterParentDrop: afterParentDrop,
+	afterPruned: afterPruned, prunedBaseline: prunedBaseline, sends: sends
 }));
 `)
 	var got struct {
@@ -275,6 +315,8 @@ process.stdout.write(JSON.stringify({
 		AfterClear      []string `json:"afterClear"`
 		AfterAll        []string `json:"afterAll"`
 		AfterParentDrop []string `json:"afterParentDrop"`
+		AfterPruned     []string `json:"afterPruned"`
+		PrunedBaseline  []int    `json:"prunedBaseline"`
 		Sends           []string `json:"sends"`
 	}
 	if err := json.Unmarshal([]byte(raw), &got); err != nil {
@@ -295,8 +337,50 @@ process.stdout.write(JSON.stringify({
 	if !reflect.DeepEqual(got.AfterParentDrop, []string{"children.0.children.0", "children.0.children.1"}) {
 		t.Fatalf("cascade parent-drop = %v, want the two children kept (blocker 2)", got.AfterParentDrop)
 	}
+	if !reflect.DeepEqual(got.AfterPruned, []string{"children.0", "children.0.children.0"}) ||
+		!reflect.DeepEqual(got.PrunedBaseline, []int{1, 2}) {
+		t.Fatalf("cascade-only pruned update = %v baseline %v, want parent+c1 and [1 2]", got.AfterPruned, got.PrunedBaseline)
+	}
 	if len(got.Sends) != 0 {
 		t.Fatalf("reconcile produced %d outbound frames, want 0 (echo guard)", len(got.Sends))
+	}
+}
+
+func TestJawstreeJS_UnreachableReconcileDoesNotAdvanceBaseline(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, jsMock+`
+var data = { children: [{ id: "children.0", name: "A" }, { id: "children.1", name: "B" }] };
+jawstreeInit({ jid: "Jid.1", options: (1<<7), data: data });
+var t = container.jawsTreeview;
+jawstreeSelection({ jid: "Jid.1", s: [1] });
+var before = Array.from(t.lastServerSet);
+jawstreeSelection({ jid: "Jid.1", s: [1, 2] });
+process.stdout.write(JSON.stringify({
+	before: before,
+	selected: Array.from(jawstreeSelectedIndexSet(t)).sort(),
+	baseline: Array.from(t.lastServerSet).sort(),
+	sends: sends
+}));
+`)
+	var got struct {
+		Before   []int    `json:"before"`
+		Selected []int    `json:"selected"`
+		Baseline []int    `json:"baseline"`
+		Sends    []string `json:"sends"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON %q: %v", raw, err)
+	}
+	if !reflect.DeepEqual(got.Before, []int{1}) {
+		t.Fatalf("converged baseline = %v, want [1]", got.Before)
+	}
+	if reflect.DeepEqual(got.Selected, []int{1, 2}) {
+		t.Fatalf("unreachable selection unexpectedly converged: %v", got.Selected)
+	}
+	if !reflect.DeepEqual(got.Baseline, []int{1}) {
+		t.Fatalf("baseline after failed reconcile = %v, want prior [1]", got.Baseline)
+	}
+	if len(got.Sends) != 0 {
+		t.Fatalf("reconcile produced outbound frames: %v", got.Sends)
 	}
 }
 
@@ -325,6 +409,56 @@ process.stdout.write(JSON.stringify({ sends: sends, baseline: Array.from(t.lastS
 	}
 	if !reflect.DeepEqual(got.Baseline, []int{1}) {
 		t.Fatalf("baseline advanced to %v on successful send, want [1]", got.Baseline)
+	}
+}
+
+func TestJawstreeJS_CascadeOnlySendsAbsoluteSelection(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, jsMock+`
+var data = { children: [{ id: "children.0", name: "P", children: [
+	{ id: "children.0.children.0", name: "q", selected: true },
+	{ id: "children.0.children.1", name: "r" }
+] }] };
+jawstreeInit({ jid: "Jid.1", options: (1<<7), data: data });
+var t = container.jawsTreeview;
+// Selecting P overlaps the already-selected q subtree. The absolute payload must
+// carry q as well as the nodes newly added by this gesture.
+t.selectNodeById("children.0", true);
+t.selectNodeById("children.0", false);
+process.stdout.write(JSON.stringify({ sends: sends, baseline: Array.from(t.lastServerSet).sort() }));
+`)
+	var got struct {
+		Sends    []string `json:"sends"`
+		Baseline []int    `json:"baseline"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON %q: %v", raw, err)
+	}
+	wantSends := []string{
+		"Input\tJid.1\t{\"s\":[1,2,3]}\n",
+		"Input\tJid.1\t{\"d\":{\"add\":[],\"remove\":[1,2,3]}}\n",
+	}
+	if !reflect.DeepEqual(got.Sends, wantSends) {
+		t.Fatalf("cascade-only frames = %v, want absolute select and delta clear", got.Sends)
+	}
+	if len(got.Baseline) != 0 {
+		t.Fatalf("cascade-only baseline after clear = %v, want empty", got.Baseline)
+	}
+}
+
+func TestJawstreeJS_CascadeOnlyAbsoluteFallsBackToBitmap(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, jsMock+`
+jawstreeDeltaThreshold = 1;
+var data = { children: [{ id: "children.0", name: "a" }] };
+jawstreeInit({ jid: "Jid.1", options: (1<<7), data: data });
+container.jawsTreeview.selectNodeById("children.0", true);
+process.stdout.write(JSON.stringify(sends));
+`)
+	var got []string
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON %q: %v", raw, err)
+	}
+	if !reflect.DeepEqual(got, []string{"Input\tJid.1\t{\"b\":\"Ag==\"}\n"}) {
+		t.Fatalf("cascade-only bitmap frames = %v, want index 1 bitmap", got)
 	}
 }
 

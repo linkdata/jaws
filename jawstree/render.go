@@ -65,6 +65,7 @@ func (t *Tree) JawsInput(elem *jaws.Element, value string) error {
 			Add    []int `json:"add"`
 			Remove []int `json:"remove"`
 		} `json:"d"`
+		S *[]int `json:"s"`
 		B string `json:"b"`
 	}
 	var err error
@@ -74,6 +75,8 @@ func (t *Tree) JawsInput(elem *jaws.Element, value string) error {
 		switch {
 		case msg.D != nil:
 			changed, err = t.applyClientDelta(msg.D.Add, msg.D.Remove)
+		case msg.S != nil:
+			changed, err = t.applyClientAbsolute(*msg.S)
 		case msg.B != "":
 			var indices []int
 			if indices, err = decodeSelectionBitmap(msg.B, len(t.byIndex)); err == nil {

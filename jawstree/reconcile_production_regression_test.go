@@ -10,8 +10,9 @@ import (
 // Quercus widget (treeview.js) under jsdom, not the test mock, covering the
 // collateral-effect cases that broke the earlier one-pass reconcile: a single-select
 // switch keeping only the new node, a cascade parent-deselect keeping the still-desired
-// children, cascade select-all, and empty-desired. The page turns its #result element
-// green only if every assertion against the real DOM passes.
+// children, cascade select-all, empty-desired, and exact cascade-only initialization
+// and updates. The page turns its #result element green only if every assertion
+// against the real DOM passes.
 func TestReconcileWithRealWidget(t *testing.T) {
 	treeviewJS, err := assetsFS.ReadFile("assets/treeview.js")
 	if err != nil {
@@ -31,6 +32,7 @@ func TestReconcileWithRealWidget(t *testing.T) {
 </head><body>
 <div id="treeS"></div>
 <div id="treeC"></div>
+<div id="treeO"></div>
 <div id="result"></div>
 <script>
 window.addEventListener("DOMContentLoaded", function () {
@@ -63,6 +65,20 @@ window.addEventListener("DOMContentLoaded", function () {
 	ck(eq(ids("treeC"), ["children.0.children.0", "children.0.children.1"]));
 	jawstreeSelection({ jid: "treeC", s: [] });
 	ck(eq(ids("treeC"), []));
+
+	// Cascade-only initialization must preserve a pruned rooted selection instead
+	// of leaving every child selected by the widget's initial cascade.
+	jawstreeInit({ jid: "treeO", options: (1 << 7), data: { children: [
+		{ id: "children.0", name: "P", selected: true, children: [
+			{ id: "children.0.children.0", name: "c1", selected: true },
+			{ id: "children.0.children.1", name: "c2" }
+		] }
+	] } });
+	ck(eq(ids("treeO"), ["children.0", "children.0.children.0"]));
+	ck(eq(Array.from(document.getElementById("treeO").jawsTreeview.lastServerSet).sort(), [1, 2]));
+	jawstreeSelection({ jid: "treeO", s: [1, 3] });
+	ck(eq(ids("treeO"), ["children.0", "children.0.children.1"]));
+	ck(eq(Array.from(document.getElementById("treeO").jawsTreeview.lastServerSet).sort(), [1, 3]));
 
 	if (ok) { document.getElementById("result").style.background = "rgb(0,255,0)"; }
 });
