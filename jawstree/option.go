@@ -4,14 +4,14 @@ package jawstree
 type Option int
 
 // The bit positions below are wired one-to-one to the literal bit tests in
-// jawstreeNew (assets/jawstree.js); do not reorder or insert constants
+// jawstreeDecodeOptions (assets/jawstree.js); do not reorder or insert constants
 // mid-block without updating that script.
 const (
 	// SearchEnabled enables tree search controls.
 	SearchEnabled Option = (1 << iota)
 	// InitiallyExpanded renders nodes expanded initially.
 	InitiallyExpanded
-	// MultiSelectEnabled allows multiple selected nodes.
+	// MultiSelectEnabled allows independent selected nodes.
 	MultiSelectEnabled
 	// ShowSelectAllButton shows a select-all control.
 	ShowSelectAllButton
@@ -22,6 +22,10 @@ const (
 	// NodeSelectionDisabled disables node selection.
 	NodeSelectionDisabled
 	// CascadeSelectChildren cascades selection to child nodes.
+	//
+	// Without [MultiSelectEnabled], the selection is empty or one connected rooted
+	// subtree with disabled nodes treated as transparent, and selecting a new node
+	// replaces the previous subtree.
 	CascadeSelectChildren
 	// CheckboxSelectionEnabled renders checkbox selection controls.
 	CheckboxSelectionEnabled

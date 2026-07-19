@@ -208,12 +208,44 @@ func (t *Tree) strictSingle() bool {
 	return t.options&MultiSelectEnabled == 0 && t.options&CascadeSelectChildren == 0
 }
 
+// cascadeOnly reports whether selection cascades without ordinary multi-select.
+func (t *Tree) cascadeOnly() bool {
+	return t.options&MultiSelectEnabled == 0 && t.options&CascadeSelectChildren != 0
+}
+
+// cascadeSelectionValid reports whether want is empty or one connected rooted
+// selection after disabled nodes are treated as transparent.
+//
+// The caller must first reject the root and disabled nodes from want. A selected
+// node begins a component when its nearest selectable parent is the hidden root or
+// is not selected; Quercus can represent the selection exactly when there is at
+// most one such component.
+func (t *Tree) cascadeSelectionValid(want map[*Node]bool) (valid bool) {
+	roots := 0
+	valid = true
+	for node := range want {
+		parent := node.Parent
+		for parent != nil && parent != t.root && parent.Disabled {
+			parent = parent.Parent
+		}
+		if parent == nil || parent == t.root || !want[parent] {
+			roots++
+			if roots > 1 {
+				valid = false
+				return
+			}
+		}
+	}
+	return
+}
+
 // applySelection sets the selection to exactly want and returns the changed nodes.
 //
-// It is the single selection policy, shared by [New], [Tree.SetSelected], and
-// browser input. It returns [ErrInvalidSelection] when want holds any node on a
-// tree with [NodeSelectionDisabled], more than one node in a single-select tree, or
-// any disabled or root node. Callers on a rendered Tree must hold the write lock.
+// It is the selection policy shared by [New], [Tree.SetSelected], and browser input.
+// It returns [ErrInvalidSelection] when want holds any node on a tree with
+// [NodeSelectionDisabled], more than one node in a single-select tree, a
+// disconnected cascade-only selection, or any disabled or root node. Callers on a
+// rendered Tree must hold the write lock.
 func (t *Tree) applySelection(want map[*Node]bool) (changed []*Node, err error) {
 	if t.options&NodeSelectionDisabled != 0 && len(want) > 0 {
 		return nil, fmt.Errorf("%w: node selection is disabled", ErrInvalidSelection)
@@ -229,12 +261,59 @@ func (t *Tree) applySelection(want map[*Node]bool) (changed []*Node, err error) 
 			return nil, fmt.Errorf("%w: node %q is disabled", ErrInvalidSelection, node.ID)
 		}
 	}
+	if t.cascadeOnly() && !t.cascadeSelectionValid(want) {
+		return nil, fmt.Errorf("%w: cascade-only selection must form one rooted subtree", ErrInvalidSelection)
+	}
 	for _, node := range t.byIndex {
 		if node.Selected != want[node] {
 			node.Selected = want[node]
 			changed = append(changed, node)
 		}
 	}
+	return
+}
+
+// cascadeClientSelection reconstructs the selection made by one legacy
+// cascade-only add delta.
+//
+// Quercus clears the previous selection and selects one node plus all selectable
+// descendants. The delta can omit descendants that were already selected in the
+// client's baseline, so the added nodes identify the selected root but are not an
+// absolute selection by themselves. The caller must pass at least one index after
+// resolving every index and rejecting disabled nodes.
+func (t *Tree) cascadeClientSelection(add []int) (want map[*Node]bool, err error) {
+	added := make(map[*Node]bool, len(add))
+	for _, i := range add {
+		added[t.byIndex[i]] = true
+	}
+	var selectedRoot *Node
+	for node := range added {
+		hasAddedAncestor := false
+		for parent := node.Parent; parent != nil && parent != t.root; parent = parent.Parent {
+			if added[parent] {
+				hasAddedAncestor = true
+				break
+			}
+		}
+		if !hasAddedAncestor {
+			if selectedRoot != nil {
+				err = fmt.Errorf("%w: cascade-only add has disjoint roots", ErrPathRejected)
+				return
+			}
+			selectedRoot = node
+		}
+	}
+	want = make(map[*Node]bool)
+	var selectSubtree func(*Node)
+	selectSubtree = func(node *Node) {
+		if !node.Disabled {
+			want[node] = true
+		}
+		for _, child := range node.Children {
+			selectSubtree(child)
+		}
+	}
+	selectSubtree(selectedRoot)
 	return
 }
 
@@ -263,8 +342,10 @@ func (t *Tree) selectedSet() map[*Node]bool {
 //
 // In a single-select tree the last valid add replaces the whole selection (the
 // authoritative "deselect previous"); with no add, a remove that hits the current
-// selection clears it and anything else is a no-op. Otherwise the delta merges, so
-// concurrent multi-select edits from different clients compose rather than clobber.
+// selection clears it and anything else is a no-op. Cascade-only and multi-select
+// deltas merge when the result remains representable. If a cascade-only add would
+// disconnect the selection, its legacy delta identifies and replaces the selected
+// subtree. This lets concurrent remove-only edits compose rather than clobber.
 func (t *Tree) applyClientDelta(add, remove []int) (changed bool, err error) {
 	var want map[*Node]bool
 	if t.strictSingle() {
@@ -317,6 +398,11 @@ func (t *Tree) applyClientDelta(add, remove []int) (changed bool, err error) {
 			}
 			want[node] = true
 		}
+		if t.cascadeOnly() && len(add) > 0 && !t.cascadeSelectionValid(want) {
+			if want, err = t.cascadeClientSelection(add); err != nil {
+				return
+			}
+		}
 	}
 	var chg []*Node
 	if chg, err = t.applySelection(want); err == nil {
@@ -325,8 +411,8 @@ func (t *Tree) applyClientDelta(add, remove []int) (changed bool, err error) {
 	return
 }
 
-// applyClientAbsolute replaces the selection with exactly the given indices (the
-// bitmap fallback) under the write lock, enforcing the policy.
+// applyClientAbsolute replaces the selection with exactly the given sparse or
+// bitmap indices under the write lock, enforcing the policy.
 func (t *Tree) applyClientAbsolute(indices []int) (changed bool, err error) {
 	want := make(map[*Node]bool, len(indices))
 	for _, i := range indices {
@@ -341,6 +427,9 @@ func (t *Tree) applyClientAbsolute(indices []int) (changed bool, err error) {
 	}
 	if t.strictSingle() && len(want) > 1 {
 		return false, fmt.Errorf("%w: single-select selection has %d nodes", ErrPathRejected, len(want))
+	}
+	if t.cascadeOnly() && !t.cascadeSelectionValid(want) {
+		return false, fmt.Errorf("%w: cascade-only selection must form one rooted subtree", ErrPathRejected)
 	}
 	var chg []*Node
 	if chg, err = t.applySelection(want); err == nil {
@@ -364,8 +453,9 @@ func (t *Tree) GetSelected() (nameLists [][]string) {
 //
 // It runs under the write lock and enforces the selection policy, returning
 // [ErrInvalidSelection] when the match violates it (for example matching more than
-// one node in a single-select tree, or a disabled node). Matching is by name-path
-// and lossy for duplicate sibling names; see [Node.GetSelected].
+// one node in a single-select tree, a disconnected selection with
+// [CascadeSelectChildren] but not [MultiSelectEnabled], or a disabled node). Matching
+// is by name-path and lossy for duplicate sibling names; see [Node.GetSelected].
 func (t *Tree) SetSelected(nameLists [][]string) (err error) {
 	t.Lock()
 	defer t.Unlock()

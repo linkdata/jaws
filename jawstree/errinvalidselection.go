@@ -2,8 +2,10 @@ package jawstree
 
 import "errors"
 
-// ErrInvalidSelection is returned by [New] and [Tree.SetSelected] when a requested
-// selection violates the tree's selection policy: more than one selected node when
-// the tree is single-select (neither [MultiSelectEnabled] nor [CascadeSelectChildren]
-// is set), or a selected node that is disabled or the root. Match with [errors.Is].
+// ErrInvalidSelection identifies a selection rejected by a Tree policy.
+//
+// [New] and [Tree.SetSelected] return it for more than one selected node in ordinary
+// single-select mode, a disconnected selection in cascade-only mode, selection on a
+// tree configured with [NodeSelectionDisabled], or a selected node that is disabled
+// or the root. Match with [errors.Is].
 var ErrInvalidSelection = errors.New("jawstree: invalid selection")

@@ -167,6 +167,18 @@ the Tree's lock; read them with `Tree.GetSelected` or change them with
 rendered clients with `Tree.Dirty`:
 
 ```go
-_ = tree.SetSelected([][]string{{"Documents", "report.pdf"}})
-tree.Dirty(jw)
+if err := tree.SetSelected([][]string{{"Documents", "report.pdf"}}); err != nil {
+	// handle the rejected selection
+} else {
+	tree.Dirty(jw)
+}
 ```
+
+The selection policy follows the configured mode. With neither
+`MultiSelectEnabled` nor `CascadeSelectChildren`, at most one node may be selected.
+With cascade but not multi-select, the selection is empty or one connected rooted
+subtree: descendant branches may be pruned, but every selected descendant must have
+its selectable ancestors selected back to the subtree root. Disabled ancestors are
+transparent. `Tree.SetSelected` returns `ErrInvalidSelection` for a selection the
+browser cannot represent, and a new browser cascade replaces the previous subtree.
+`MultiSelectEnabled` permits independent selected nodes.

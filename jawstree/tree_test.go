@@ -139,6 +139,41 @@ func TestTreeSetSelectedNamePath(t *testing.T) {
 	}
 }
 
+func TestTreeSetSelectedCascadeOnly(t *testing.T) {
+	root := &Node{Name: "root", Children: []*Node{
+		{Name: "a", Children: []*Node{
+			{Name: "a1"},
+			{Name: "a2", Children: []*Node{{Name: "leaf"}}},
+		}},
+		{Name: "b"},
+	}}
+	var mu deadlock.RWMutex
+	tree := mustNew(t, &mu, root, CascadeSelectChildren)
+
+	// A rooted selection may prune whole descendant branches.
+	maybeError(t, tree.SetSelected([][]string{{"a"}, {"a", "a1"}}))
+	if got := tree.GetSelected(); !reflect.DeepEqual(got, [][]string{{"a"}, {"a", "a1"}}) {
+		t.Fatalf("rooted selection = %#v, want [[a] [a a1]]", got)
+	}
+
+	for _, tc := range []struct {
+		name string
+		want [][]string
+	}{
+		{"disjoint roots", [][]string{{"a"}, {"b"}}},
+		{"selectable ancestor gap", [][]string{{"a"}, {"a", "a2", "leaf"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tree.SetSelected(tc.want); !errors.Is(err, ErrInvalidSelection) {
+				t.Fatalf("SetSelected(%v) err = %v, want ErrInvalidSelection", tc.want, err)
+			}
+			if got := tree.GetSelected(); !reflect.DeepEqual(got, [][]string{{"a"}, {"a", "a1"}}) {
+				t.Fatalf("rejected selection changed state to %#v", got)
+			}
+		})
+	}
+}
+
 func TestTreeSetSelectedDuplicateSiblingNames(t *testing.T) {
 	build := func() *Node {
 		root := &Node{Name: "root"}
@@ -452,6 +487,37 @@ func TestTreeJawsInputSelectsAndReconverges(t *testing.T) {
 	}
 }
 
+func TestTreeJawsInputAppliesSparseAbsoluteSelection(t *testing.T) {
+	jw, err := jaws.New()
+	maybeError(t, err)
+	defer jw.Close()
+	go jw.Serve()
+	rq := jawstest.NewTestRequest(jw, nil)
+	defer rq.Close()
+	<-rq.ReadyCh
+
+	root := &Node{Name: "root", Children: []*Node{
+		{Name: "a", Children: []*Node{{Name: "a1"}}},
+		{Name: "b"},
+	}}
+	var mu deadlock.RWMutex
+	tree := mustNew(t, &mu, root, CascadeSelectChildren)
+	elem := rq.NewElement(tree)
+	var sb strings.Builder
+	maybeError(t, elem.JawsRender(&sb, nil))
+	rq.InCh <- wire.WsMsg{}
+	readCall(t, rq.OutCh, "jawstreeInit=")
+
+	maybeError(t, tree.JawsInput(elem, `{"s":[1,2]}`))
+	if got := tree.selectedIndexes(); !reflect.DeepEqual(got, []int{1, 2}) {
+		t.Fatalf("sparse absolute selection = %v, want [1 2]", got)
+	}
+	maybeError(t, tree.JawsInput(elem, `{"s":[]}`))
+	if got := tree.selectedIndexes(); len(got) != 0 {
+		t.Fatalf("sparse absolute clear = %v, want empty", got)
+	}
+}
+
 func TestTreeJawsInputRejectResyncsOriginOnly(t *testing.T) {
 	jw, err := jaws.New()
 	maybeError(t, err)
@@ -527,6 +593,116 @@ func TestTreeSingleSelectServerAuthoritative(t *testing.T) {
 	}
 	if got := tree.selectedIndexes(); !reflect.DeepEqual(got, []int{2}) {
 		t.Fatalf("selected indexes = %v, want [2]", got)
+	}
+}
+
+// TestTreeCascadeOnlyServerAuthoritative verifies that a new cascade selection
+// replaces an existing disjoint subtree instead of merging into a state the browser
+// cannot represent. A remove-only delta may still prune the active subtree.
+func TestTreeCascadeOnlyServerAuthoritative(t *testing.T) {
+	root := &Node{Name: "root", Children: []*Node{
+		{Name: "a", Children: []*Node{{Name: "a1"}}},
+		{Name: "b", Children: []*Node{{Name: "b1"}}},
+	}}
+	var mu deadlock.RWMutex
+	tree := mustNew(t, &mu, root, CascadeSelectChildren)
+
+	// Two clients rendered from an empty selection choose disjoint subtrees. Each
+	// delta contains the selected anchor and its cascade-selected descendant.
+	tree.Lock()
+	_, err := tree.applyClientDelta([]int{1, 2}, nil)
+	tree.Unlock()
+	maybeError(t, err)
+	tree.Lock()
+	_, err = tree.applyClientDelta([]int{3, 4}, nil)
+	tree.Unlock()
+	maybeError(t, err)
+	if got := tree.selectedIndexes(); !reflect.DeepEqual(got, []int{3, 4}) {
+		t.Fatalf("selection after disjoint add = %v, want [3 4]", got)
+	}
+
+	// Removing a descendant prunes the active rooted selection without clearing its
+	// anchor.
+	tree.Lock()
+	_, err = tree.applyClientDelta(nil, []int{4})
+	tree.Unlock()
+	maybeError(t, err)
+	if got := tree.selectedIndexes(); !reflect.DeepEqual(got, []int{3}) {
+		t.Fatalf("selection after descendant remove = %v, want [3]", got)
+	}
+
+	// A legacy delta can overlap the prior selection: selecting ancestor a while a1
+	// is already selected reports only a as added. Merging the valid rooted result
+	// keeps the overlapping descendant.
+	maybeError(t, tree.SetSelected([][]string{{"a", "a1"}}))
+	tree.Lock()
+	_, err = tree.applyClientDelta([]int{1}, nil)
+	tree.Unlock()
+	maybeError(t, err)
+	if got := tree.selectedIndexes(); !reflect.DeepEqual(got, []int{1, 2}) {
+		t.Fatalf("selection after overlapping ancestor add = %v, want [1 2]", got)
+	}
+}
+
+func TestTreeCascadeOnlyLegacyDeltaSkipsDisabledDescendants(t *testing.T) {
+	root := &Node{Name: "root", Children: []*Node{{
+		Name: "a", Children: []*Node{{
+			Name: "disabled", Disabled: true, Children: []*Node{{Name: "leaf"}},
+		}},
+	}}}
+	var mu deadlock.RWMutex
+	tree := mustNew(t, &mu, root, CascadeSelectChildren)
+	tree.Lock()
+	_, err := tree.applyClientDelta([]int{1, 3}, nil)
+	tree.Unlock()
+	maybeError(t, err)
+	if got := tree.selectedIndexes(); !reflect.DeepEqual(got, []int{1, 3}) {
+		t.Fatalf("cascade through disabled node = %v, want [1 3]", got)
+	}
+}
+
+func TestTreeCascadeOnlyLegacyDeltaCarriesDroppedSelection(t *testing.T) {
+	root := &Node{Name: "root", Children: []*Node{{
+		Name: "p", Children: []*Node{{Name: "c1"}, {Name: "c2"}},
+	}}}
+	var mu deadlock.RWMutex
+	tree := mustNew(t, &mu, root, CascadeSelectChildren)
+
+	// With the legacy adapter, selecting p while disconnected leaves the baseline
+	// empty. Deselecting c2 after reconnect produces the cumulative add [p,c1]. It is
+	// already a valid pruned subtree and must not be expanded back to include c2.
+	tree.Lock()
+	_, err := tree.applyClientDelta([]int{1, 2}, nil)
+	tree.Unlock()
+	maybeError(t, err)
+	if got := tree.selectedIndexes(); !reflect.DeepEqual(got, []int{1, 2}) {
+		t.Fatalf("cumulative legacy delta = %v, want pruned [1 2]", got)
+	}
+}
+
+func TestTreeCascadeOnlyConcurrentRemovalsCompose(t *testing.T) {
+	root := &Node{Name: "root", Children: []*Node{{
+		Name: "p", Selected: true, Children: []*Node{
+			{Name: "a", Selected: true},
+			{Name: "b", Selected: true},
+		},
+	}}}
+	var mu deadlock.RWMutex
+	tree := mustNew(t, &mu, root, CascadeSelectChildren)
+
+	// Two clients start from [p,a,b] and independently prune a and b. Remove-only
+	// deltas compose against the current authoritative state instead of resurrecting
+	// the first removed branch from a stale absolute snapshot.
+	tree.Lock()
+	_, err := tree.applyClientDelta(nil, []int{2})
+	tree.Unlock()
+	maybeError(t, err)
+	tree.Lock()
+	_, err = tree.applyClientDelta(nil, []int{3})
+	tree.Unlock()
+	maybeError(t, err)
+	if got := tree.selectedIndexes(); !reflect.DeepEqual(got, []int{1}) {
+		t.Fatalf("concurrent prunes = %v, want shared root [1]", got)
 	}
 }
 
