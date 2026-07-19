@@ -439,6 +439,14 @@ func TestReportError_IgnoresDone(t *testing.T) {
 	}, errors.New("websocket closed"))
 }
 
+func TestReportError_IgnoresContextDone(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	reportError(ctx, make(chan struct{}), func(err error) {
+		t.Fatalf("reported canceled-context error: %v", err)
+	}, errors.New("websocket closed"))
+}
+
 func TestPingLoop_NonPositiveIntervalReturns(t *testing.T) {
 	client, server := pipe(t)
 	defer func() { _ = client.CloseNow() }()
