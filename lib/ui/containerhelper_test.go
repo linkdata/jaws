@@ -229,6 +229,45 @@ func TestContainerHelper_ReconcileDiscardsOutOfBandDeletedChild(t *testing.T) {
 	}
 }
 
+func TestContainerHelper_SkipsOutOfBandDeletedLeftover(t *testing.T) {
+	_, rq := newCoreRequest(t) // jaws.New(): nil Logger, so an invalid removal panics
+	span1 := NewSpan(testHTMLGetter("span1"))
+	span2 := NewSpan(testHTMLGetter("span2"))
+	tc := &testContainer{contents: []jaws.UI{span1, span2}}
+	container := NewContainer("div", tc)
+	elem, _ := renderUI(t, rq, container)
+
+	if len(container.contents) != 2 {
+		t.Fatalf("want 2 contents got %d", len(container.contents))
+	}
+	remainingChild := container.contents[0]
+	deletedChild := container.contents[1]
+
+	// Delete span2's Element out-of-band (as a what.Delete broadcast would via
+	// rq.DeleteElement) and drop span2 from what the container wants. That routes the
+	// deleted Element to the leftover path rather than the self-healing reuse path
+	// exercised by TestContainerHelper_ReconcileDiscardsOutOfBandDeletedChild.
+	// UpdateContainer must discard it without trying to remove it a second time.
+	rq.DeleteElement(deletedChild)
+	if !deletedChild.Deleted() {
+		t.Fatal("expected child to be marked deleted")
+	}
+	tc.contents = []jaws.UI{span1}
+
+	container.JawsUpdate(elem)
+
+	if len(container.contents) != 1 {
+		t.Fatalf("want 1 content after update got %d", len(container.contents))
+	}
+	remaining := container.contents[0]
+	if remaining != remainingChild {
+		t.Fatal("remaining child must be reused")
+	}
+	if remaining.Deleted() || rq.GetElementByJid(remaining.Jid()) != remaining {
+		t.Fatal("remaining child must be live and registered")
+	}
+}
+
 func TestContainerHelperRenderErrorPaths(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	renderErr := errors.New("render error")

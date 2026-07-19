@@ -385,10 +385,10 @@ func (rq *Request) removeElementsLocked(pred func(*Element) bool) {
 }
 
 // deleteElementLocked removes elem from the request's element list and from every
-// tag entry, marking it deleted; it is a no-op if elem belongs to another request.
-// Caller must hold rq.mu.
+// tag entry, marking it deleted; it is a no-op if elem is nil or belongs to another
+// request. Caller must hold rq.mu.
 func (rq *Request) deleteElementLocked(elem *Element) {
-	if elem.Request == rq {
+	if elem != nil && elem.Request == rq {
 		elem.deleted.Store(true)
 		rq.removeElementsLocked(func(e *Element) bool { return e == elem })
 	}
@@ -400,6 +400,10 @@ func (rq *Request) deleteElementLocked(elem *Element) {
 // Use [Element.Remove] to remove a managed DOM child and unregister it together.
 // DeleteElement is intended for elements that were never successfully rendered,
 // or whose DOM lifecycle is managed separately.
+//
+// A nil elem is a no-op, matching [Request.Tag], [Request.TagExpanded] and
+// [Request.TagsOf]; passing the nil that [Request.GetElementByJid] returns for an
+// unknown Jid is therefore safe.
 func (rq *Request) DeleteElement(elem *Element) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
