@@ -144,7 +144,7 @@ type Jid = jid.Jid // convenience alias
 // concurrency behavior and may be called concurrently when stated.
 type Jaws struct {
 	CookieName              string          // Name for session cookies; defaults to a name derived from the executable ([assets.DefaultCookieName]), falling back to "jaws"
-	AutoSession             bool            // Create a session during WebSocket upgrade when a Request has none. Defaults to false.
+	AutoSession             bool            // Create a session during a successful WebSocket upgrade when a Request has none. Defaults to false.
 	TrustForwardedHeaders   bool            // Trust X-Forwarded-* headers: governs the session cookie Secure flag (X-Forwarded-Proto) and the client IP used for session/request binding (X-Forwarded-For/X-Real-IP). Defaults to false; only enable behind a single reverse proxy you control that sets these headers.
 	Logger                  Logger          // Optional logger to use
 	Debug                   bool            // Set to true to enable debug info in generated HTML code. Call GenerateHeadHTML after changing it.
