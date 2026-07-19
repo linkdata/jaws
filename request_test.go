@@ -3104,6 +3104,83 @@ func TestWS_AutoSessionRejectDoesNotCreateSession(t *testing.T) {
 	}
 }
 
+func TestWS_AutoSessionFailedHandshakeDoesNotCreateSession(t *testing.T) {
+	// websocket.Dial always sends a well-formed handshake, so these defects
+	// that only websocket.Accept detects must be sent as raw HTTP requests.
+	tests := []struct {
+		name       string
+		hdrs       map[string]string
+		wantStatus int
+	}{
+		{
+			name:       "missing Connection and Upgrade headers",
+			hdrs:       map[string]string{"Sec-WebSocket-Version": "13"},
+			wantStatus: http.StatusUpgradeRequired,
+		},
+		{
+			name: "unsupported Sec-WebSocket-Version",
+			hdrs: map[string]string{
+				"Connection":            "Upgrade",
+				"Upgrade":               "websocket",
+				"Sec-WebSocket-Version": "12",
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// A Request serves only once even on a failed handshake, so each
+			// variant needs its own testServer.
+			ts := newTestServerNoSession(t)
+			defer ts.Close()
+			ts.jw.AutoSession = true
+
+			req, err := http.NewRequestWithContext(ts.ctx, http.MethodGet, ts.Url(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Origin", ts.origin())
+			req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+			for k, v := range tt.hdrs {
+				req.Header.Set(k, v)
+			}
+			resp, err := ts.srv.Client().Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != tt.wantStatus {
+				t.Errorf("status %d, want %d", resp.StatusCode, tt.wantStatus)
+			}
+			if cookies := resp.Cookies(); len(cookies) != 0 {
+				t.Fatalf("expected no cookies, got %v", cookies)
+			}
+			if got := ts.jw.SessionCount(); got != 0 {
+				t.Fatalf("expected no sessions, got %d", got)
+			}
+			if sess := ts.rq.Session(); sess != nil {
+				t.Fatalf("expected request session to remain nil, got %v", sess)
+			}
+		})
+	}
+}
+
+type writeHeaderNowRecorder struct {
+	*httptest.ResponseRecorder
+	calledWriteHeaderNow bool
+}
+
+func (w *writeHeaderNowRecorder) WriteHeaderNow() { w.calledWriteHeaderNow = true }
+
+func TestAutoSessionWriter_ForwardsWriteHeaderNow(t *testing.T) {
+	rec := &writeHeaderNowRecorder{ResponseRecorder: httptest.NewRecorder()}
+	asw := &autoSessionWriter{ResponseWriter: rec}
+	asw.WriteHeaderNow()
+	if !rec.calledWriteHeaderNow {
+		t.Fatal("expected WriteHeaderNow to be forwarded to the wrapped writer")
+	}
+}
+
 func TestWS_ConnectFnFails(t *testing.T) {
 	const nope = "nope"
 	ts := newTestServer(t)

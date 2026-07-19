@@ -793,6 +793,40 @@ func normalizedWebSocketAcceptRequest(r *http.Request) (normalized *http.Request
 	return
 }
 
+// autoSessionWriter defers AutoSession creation to the moment websocket.Accept
+// commits to the handshake by writing [http.StatusSwitchingProtocols], so a
+// rejected handshake (a non-101 error response) never registers a session nor
+// sets a session cookie.
+//
+// Accept writes the 101 through the [http.ResponseWriter] it was given before
+// hijacking the connection, so the Set-Cookie header is in the header map in
+// time. Should the hijack itself fail after the 101, the session already
+// exists and expires through the normal session grace period.
+type autoSessionWriter struct {
+	http.ResponseWriter
+	rq *Request
+	r  *http.Request
+}
+
+// Unwrap exposes the wrapped ResponseWriter so websocket.Accept can locate
+// the [http.Hijacker], matching the [http.ResponseController] convention.
+func (asw *autoSessionWriter) Unwrap() http.ResponseWriter { return asw.ResponseWriter }
+
+// WriteHeaderNow forwards gin's deferred header flush when the wrapped writer
+// supports it; websocket.Accept probes for this method after writing the 101.
+func (asw *autoSessionWriter) WriteHeaderNow() {
+	if whn, ok := asw.ResponseWriter.(interface{ WriteHeaderNow() }); ok {
+		whn.WriteHeaderNow()
+	}
+}
+
+func (asw *autoSessionWriter) WriteHeader(statusCode int) {
+	if statusCode == http.StatusSwitchingProtocols {
+		asw.rq.ensureAutoSession(asw.ResponseWriter, asw.r)
+	}
+	asw.ResponseWriter.WriteHeader(statusCode)
+}
+
 // Log sends an error to the [Jaws.Logger] if set.
 // Has no effect if err is nil or the Logger is nil.
 // Returns err.
@@ -862,17 +896,23 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		var err error
 		acceptRequest := r
+		acceptWriter := w
 		if r.Header.Get("Sec-WebSocket-Key") != "" {
 			if err = rq.validateWebSocketOrigin(r); err != nil {
 				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 				rq.cancel(err)
 				return
 			}
-			rq.ensureAutoSession(w, r)
+			if rq.Jaws.AutoSession && rq.Session() == nil {
+				// Defer AutoSession creation to the handshake commit point so a
+				// handshake websocket.Accept rejects leaves no session or cookie
+				// behind (see autoSessionWriter).
+				acceptWriter = &autoSessionWriter{ResponseWriter: w, rq: rq, r: r}
+			}
 			acceptRequest = normalizedWebSocketAcceptRequest(r)
 		}
 		var ws *websocket.Conn
-		ws, err = websocket.Accept(w, acceptRequest, nil)
+		ws, err = websocket.Accept(acceptWriter, acceptRequest, nil)
 		if err == nil {
 			ws.SetReadLimit(webSocketReadLimit)
 			if err = rq.onConnect(); err == nil {
