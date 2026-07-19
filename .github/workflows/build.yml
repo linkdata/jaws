@@ -54,10 +54,16 @@ jobs:
         with:
           args: ./...
 
+      - name: Install jsdom
+        # The jawstree production regressions load their pages under jsdom; the
+        # runner image ships node and npm, but no npm packages.
+        run: npm install --no-save jsdom
+
       - name: Test
         env:
           # Fail rather than skip the node-driven JS behavior tests; the runner
-          # has node installed, so a missing node here is a CI misconfiguration.
+          # has node and jsdom installed, so either one missing here is a CI
+          # misconfiguration.
           JAWS_REQUIRE_NODE: "1"
         run: go test -race -coverprofile=coverage.out ./...
 

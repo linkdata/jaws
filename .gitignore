@@ -18,3 +18,7 @@ coverage*
 AGENTS.md
 .DS_Store
 /examples/minesweeper/minesweeper
+# npm artifacts from installing jsdom for the jawstree regression tests
+node_modules/
+package.json
+package-lock.json
