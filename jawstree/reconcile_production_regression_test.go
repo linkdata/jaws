@@ -1,21 +1,17 @@
 package jawstree
 
 import (
-	"image/color"
-	"image/png"
-	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 )
 
 // TestReconcileWithRealWidget drives jawstreeReconcile against the actual vendored
-// Quercus widget (treeview.js) in headless Firefox, not the test mock, covering the
+// Quercus widget (treeview.js) under jsdom, not the test mock, covering the
 // collateral-effect cases that broke the earlier one-pass reconcile: a single-select
 // switch keeping only the new node, a cascade parent-deselect keeping the still-desired
-// children, cascade select-all, and empty-desired. The page turns a fixed pixel green
-// only if every assertion against the real DOM passes.
+// children, cascade select-all, and empty-desired. The page turns its #result element
+// green only if every assertion against the real DOM passes.
 func TestReconcileWithRealWidget(t *testing.T) {
 	treeviewJS, err := assetsFS.ReadFile("assets/treeview.js")
 	if err != nil {
@@ -75,37 +71,8 @@ window.addEventListener("DOMContentLoaded", function () {
 
 	dir := t.TempDir()
 	htmlPath := filepath.Join(dir, "reconcile.html")
-	screenshotPath := filepath.Join(dir, "reconcile.png")
-	profilePath := filepath.Join(dir, "firefox-profile")
 	if err := os.WriteFile(htmlPath, []byte(htmlText), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(profilePath, 0o700); err != nil {
-		t.Fatal(err)
-	}
-
-	pageURL := (&url.URL{Scheme: "file", Path: htmlPath}).String()
-	cmd := exec.CommandContext(t.Context(), jawstreeFirefoxPath(t),
-		"--headless", "--new-instance", "--profile", profilePath,
-		"--screenshot", screenshotPath, "--window-size", "64,64", pageURL)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("Firefox failed: %v\n%s", err, output)
-	}
-
-	f, err := os.Open(screenshotPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	img, decodeErr := png.Decode(f)
-	closeErr := f.Close()
-	if decodeErr != nil {
-		t.Fatal(decodeErr)
-	}
-	if closeErr != nil {
-		t.Fatal(closeErr)
-	}
-	pixel := color.RGBAModel.Convert(img.At(32, 32)).(color.RGBA)
-	if pixel.R > 32 || pixel.G < 224 || pixel.B > 32 {
-		t.Fatalf("reconcile against the real widget failed; center pixel = %#v, want green", pixel)
-	}
+	jawstreeRunJsdomPage(t, htmlPath)
 }
