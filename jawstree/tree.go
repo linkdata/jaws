@@ -279,19 +279,12 @@ func (t *Tree) applySelection(want map[*Node]bool) (changed []*Node, err error) 
 // Quercus clears the previous selection and selects one node plus all selectable
 // descendants. The delta can omit descendants that were already selected in the
 // client's baseline, so the added nodes identify the selected root but are not an
-// absolute selection by themselves.
+// absolute selection by themselves. The caller must pass at least one index after
+// resolving every index and rejecting disabled nodes.
 func (t *Tree) cascadeClientSelection(add []int) (want map[*Node]bool, err error) {
 	added := make(map[*Node]bool, len(add))
 	for _, i := range add {
-		var node *Node
-		if node, err = t.resolveIndex(i); err != nil {
-			return
-		}
-		if node.Disabled {
-			err = fmt.Errorf("%w: node %q is disabled", ErrPathRejected, node.ID)
-			return
-		}
-		added[node] = true
+		added[t.byIndex[i]] = true
 	}
 	var selectedRoot *Node
 	for node := range added {
@@ -309,10 +302,6 @@ func (t *Tree) cascadeClientSelection(add []int) (want map[*Node]bool, err error
 			}
 			selectedRoot = node
 		}
-	}
-	if selectedRoot == nil {
-		err = fmt.Errorf("%w: cascade-only add has no root", ErrPathRejected)
-		return
 	}
 	want = make(map[*Node]bool)
 	var selectSubtree func(*Node)
