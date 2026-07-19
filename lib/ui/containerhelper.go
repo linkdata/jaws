@@ -175,11 +175,8 @@ func (u *ContainerHelper) reconcile(elem *jaws.Element, wantContents []jaws.UI) 
 		newOrder = append(newOrder, childElem.Jid())
 	}
 
-	// Everything left in the pool is a leftover no longer wanted. Skip any deleted
-	// out-of-band (the same what.Delete/what.Remove case the reuse loop guards above):
-	// a deleted Element is already unregistered and inert, so passing it to
-	// Element.Remove would trip validChildElement's deleted-child guard and report a
-	// spurious misuse via Jaws.reportMisuse (which panics when no Logger is configured).
+	// A deleted leftover is already unregistered, while Element.Remove requires a
+	// live, registered child.
 	for _, elems := range pool {
 		for _, e := range elems {
 			if !e.Deleted() {

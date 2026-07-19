@@ -229,8 +229,8 @@ func TestContainerHelper_ReconcileDiscardsOutOfBandDeletedChild(t *testing.T) {
 	}
 }
 
-func TestContainerHelper_RemovesOutOfBandDeletedLeftover(t *testing.T) {
-	_, rq := newCoreRequest(t) // jaws.New(): nil Logger, so a spurious reportMisuse panics
+func TestContainerHelper_SkipsOutOfBandDeletedLeftover(t *testing.T) {
+	_, rq := newCoreRequest(t) // jaws.New(): nil Logger, so an invalid removal panics
 	span1 := NewSpan(testHTMLGetter("span1"))
 	span2 := NewSpan(testHTMLGetter("span2"))
 	tc := &testContainer{contents: []jaws.UI{span1, span2}}
@@ -240,14 +240,14 @@ func TestContainerHelper_RemovesOutOfBandDeletedLeftover(t *testing.T) {
 	if len(container.contents) != 2 {
 		t.Fatalf("want 2 contents got %d", len(container.contents))
 	}
+	remainingChild := container.contents[0]
 	deletedChild := container.contents[1]
 
 	// Delete span2's Element out-of-band (as a what.Delete broadcast would via
-	// rq.DeleteElement) AND drop span2 from what the container wants. That routes the
-	// deleted Element to the removal path rather than the self-healing reuse path
-	// exercised by TestContainerHelper_ReconcileDiscardsOutOfBandDeletedChild. Before
-	// the fix, UpdateContainer called elem.Remove on the deleted leftover and
-	// validChildElement reported it via reportMisuse, panicking with the nil Logger.
+	// rq.DeleteElement) and drop span2 from what the container wants. That routes the
+	// deleted Element to the leftover path rather than the self-healing reuse path
+	// exercised by TestContainerHelper_ReconcileDiscardsOutOfBandDeletedChild.
+	// UpdateContainer must discard it without trying to remove it a second time.
 	rq.DeleteElement(deletedChild)
 	if !deletedChild.Deleted() {
 		t.Fatal("expected child to be marked deleted")
@@ -259,7 +259,11 @@ func TestContainerHelper_RemovesOutOfBandDeletedLeftover(t *testing.T) {
 	if len(container.contents) != 1 {
 		t.Fatalf("want 1 content after update got %d", len(container.contents))
 	}
-	if remaining := container.contents[0]; remaining.Deleted() || rq.GetElementByJid(remaining.Jid()) == nil {
+	remaining := container.contents[0]
+	if remaining != remainingChild {
+		t.Fatal("remaining child must be reused")
+	}
+	if remaining.Deleted() || rq.GetElementByJid(remaining.Jid()) != remaining {
 		t.Fatal("remaining child must be live and registered")
 	}
 }
