@@ -10,9 +10,9 @@ import (
 // Quercus widget (treeview.js) under jsdom, not the test mock, covering the
 // collateral-effect cases that broke the earlier one-pass reconcile: a single-select
 // switch keeping only the new node, a cascade parent-deselect keeping the still-desired
-// children, cascade select-all, empty-desired, and exact cascade-only initialization
-// and updates. The page turns its #result element green only if every assertion
-// against the real DOM passes.
+// children, cascade select-all, empty-desired, exact initialization in both cascade
+// modes, and cascade-only updates. The page turns its #result element green only if
+// every assertion against the real DOM passes.
 func TestReconcileWithRealWidget(t *testing.T) {
 	treeviewJS, err := assetsFS.ReadFile("assets/treeview.js")
 	if err != nil {
@@ -33,6 +33,7 @@ func TestReconcileWithRealWidget(t *testing.T) {
 <div id="treeS"></div>
 <div id="treeC"></div>
 <div id="treeO"></div>
+<div id="treeM"></div>
 <div id="result"></div>
 <script>
 window.addEventListener("DOMContentLoaded", function () {
@@ -66,19 +67,26 @@ window.addEventListener("DOMContentLoaded", function () {
 	jawstreeSelection({ jid: "treeC", s: [] });
 	ck(eq(ids("treeC"), []));
 
-	// Cascade-only initialization must preserve a pruned rooted selection instead
-	// of leaving every child selected by the widget's initial cascade.
-	jawstreeInit({ jid: "treeO", options: (1 << 7), data: { children: [
-		{ id: "children.0", name: "P", selected: true, children: [
-			{ id: "children.0.children.0", name: "c1", selected: true },
-			{ id: "children.0.children.1", name: "c2" }
-		] }
-	] } });
+	// Both cascade modes must preserve the same pruned rooted selection instead of
+	// leaving every child selected by the widget's initial cascade.
+	function initPrunedCascade(jid, options) {
+		jawstreeInit({ jid: jid, options: options, data: { children: [
+			{ id: "children.0", name: "P", selected: true, children: [
+				{ id: "children.0.children.0", name: "A" },
+				{ id: "children.0.children.1", name: "B", selected: true }
+			] }
+		] } });
+		ck(eq(ids(jid), ["children.0", "children.0.children.1"]));
+		ck(eq(Array.from(document.getElementById(jid).jawsTreeview.lastServerSet)
+			.sort(function (a, b) { return a - b; }), [1, 3]));
+	}
+	initPrunedCascade("treeO", (1 << 7));
+	initPrunedCascade("treeM", (1 << 2) | (1 << 7));
+
+	jawstreeSelection({ jid: "treeO", s: [1, 2] });
 	ck(eq(ids("treeO"), ["children.0", "children.0.children.0"]));
-	ck(eq(Array.from(document.getElementById("treeO").jawsTreeview.lastServerSet).sort(), [1, 2]));
-	jawstreeSelection({ jid: "treeO", s: [1, 3] });
-	ck(eq(ids("treeO"), ["children.0", "children.0.children.1"]));
-	ck(eq(Array.from(document.getElementById("treeO").jawsTreeview.lastServerSet).sort(), [1, 3]));
+	ck(eq(Array.from(document.getElementById("treeO").jawsTreeview.lastServerSet)
+		.sort(function (a, b) { return a - b; }), [1, 2]));
 
 	if (ok) { document.getElementById("result").style.background = "rgb(0,255,0)"; }
 });

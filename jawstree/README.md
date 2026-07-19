@@ -167,9 +167,7 @@ the Tree's lock; read them with `Tree.GetSelected` or change them with
 rendered clients with `Tree.Dirty`:
 
 ```go
-if err := tree.SetSelected([][]string{{"Documents", "report.pdf"}}); err != nil {
-	// handle the rejected selection
-} else {
+if err := tree.SetSelected([][]string{{"Documents", "report.pdf"}}); err == nil {
 	tree.Dirty(jw)
 }
 ```
