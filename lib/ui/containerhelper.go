@@ -175,8 +175,14 @@ func (u *ContainerHelper) reconcile(elem *jaws.Element, wantContents []jaws.UI) 
 		newOrder = append(newOrder, childElem.Jid())
 	}
 
+	// A deleted leftover is already unregistered, while Element.Remove requires a
+	// live, registered child.
 	for _, elems := range pool {
-		toRemove = append(toRemove, elems...)
+		for _, e := range elems {
+			if !e.Deleted() {
+				toRemove = append(toRemove, e)
+			}
+		}
 	}
 	return
 }
