@@ -51,11 +51,19 @@ eval(src);
 const jsMock = `
 var sends = [];
 global.jaws = { readyState: 1, send: function (s) { sends.push(s); } };
-var container = { hidden: true };
-global.document = { getElementById: function () { return container; } };
+var containers = {};
+function addContainer(id) {
+	var elem = { hidden: true };
+	containers[id] = elem;
+	return elem;
+}
+var container = addContainer("Jid.1");
+addContainer("Jid.2");
+global.document = { getElementById: function (id) { return containers[id] || null; } };
 
 function Treeview(options) {
 	this.options = options;
+	this.treeviewContainer = document.getElementById(options.containerId);
 	this.selected = new Set();
 	this._nodes = {};
 	var self = this;
@@ -184,11 +192,12 @@ var data = { children: [
 	{ id: "children.1", name: "b", selected: true }
 ] };
 jawstreeInit({ key: "k", jid: "Jid.1", options: (1<<2), data: data });
-var t = window["jawstree_k"];
+var t = container.jawsTreeview;
 process.stdout.write(JSON.stringify({
 	visible: !container.hidden,
 	isTreeview: t instanceof Treeview,
-	byJid: window["jawstree_Jid.1"] === t,
+	ownedByElement: document.getElementById("Jid.1").jawsTreeview === t,
+	instanceGlobals: Object.keys(window).filter(function (key) { return key.startsWith("jawstree_"); }).length,
 	selected: selectedIds(t),
 	lastServerSet: Array.from(t.lastServerSet),
 	count: t.jawsNodeCount,
@@ -196,19 +205,23 @@ process.stdout.write(JSON.stringify({
 }));
 `)
 	var got struct {
-		Visible       bool     `json:"visible"`
-		IsTreeview    bool     `json:"isTreeview"`
-		ByJid         bool     `json:"byJid"`
-		Selected      []string `json:"selected"`
-		LastServerSet []int    `json:"lastServerSet"`
-		Count         int      `json:"count"`
-		Sends         []string `json:"sends"`
+		Visible         bool     `json:"visible"`
+		IsTreeview      bool     `json:"isTreeview"`
+		OwnedByElement  bool     `json:"ownedByElement"`
+		InstanceGlobals int      `json:"instanceGlobals"`
+		Selected        []string `json:"selected"`
+		LastServerSet   []int    `json:"lastServerSet"`
+		Count           int      `json:"count"`
+		Sends           []string `json:"sends"`
 	}
 	if err := json.Unmarshal([]byte(raw), &got); err != nil {
 		t.Fatalf("unexpected JSON %q: %v", raw, err)
 	}
-	if !got.Visible || !got.IsTreeview || !got.ByJid {
+	if !got.Visible || !got.IsTreeview || !got.OwnedByElement {
 		t.Fatalf("init did not unhide/build/register: %+v", got)
+	}
+	if got.InstanceGlobals != 0 {
+		t.Fatalf("init retained %d Treeview instance globals, want 0", got.InstanceGlobals)
 	}
 	if !reflect.DeepEqual(got.Selected, []string{"children.1"}) {
 		t.Fatalf("initial selection = %v, want [children.1]", got.Selected)
@@ -232,7 +245,7 @@ func TestJawstreeJS_SelectionReconcile(t *testing.T) {
 	raw := runJawstreeJSSnippet(t, jsMock+`
 var flat = { children: [{ id: "children.0", name: "A" }, { id: "children.1", name: "B" }] };
 jawstreeInit({ key: "s", jid: "Jid.1", options: 0, data: flat }); // single-select
-var s = window["jawstree_Jid.1"];
+var s = containers["Jid.1"].jawsTreeview;
 jawstreeSelection({ key: "s", jid: "Jid.1", s: [1] });
 var afterA = selectedIds(s);
 jawstreeSelection({ key: "s", jid: "Jid.1", s: [2] }); // switch A -> B
@@ -245,7 +258,7 @@ var tree = { children: [{ id: "children.0", name: "P", children: [
 	{ id: "children.0.children.1", name: "c2" }
 ] }] };
 jawstreeInit({ key: "c", jid: "Jid.2", options: (1<<2)|(1<<7), data: tree }); // multi + cascade
-var c = window["jawstree_Jid.2"];
+var c = containers["Jid.2"].jawsTreeview;
 jawstreeSelection({ key: "c", jid: "Jid.2", s: [1, 2, 3] });
 var afterAll = selectedIds(c);
 jawstreeSelection({ key: "c", jid: "Jid.2", s: [2, 3] }); // parent deselected server-side
@@ -291,7 +304,7 @@ func TestJawstreeJS_OnSelectionChangeSendsDelta(t *testing.T) {
 	raw := runJawstreeJSSnippet(t, jsMock+`
 var data = { children: [{ id: "children.0", name: "a" }, { id: "children.1", name: "b" }] };
 jawstreeInit({ key: "k", jid: "Jid.1", options: (1<<2), data: data });
-var t = window["jawstree_Jid.1"];
+var t = containers["Jid.1"].jawsTreeview;
 // A user selecting children.0 (index 1): the widget mutates and fires onSelectionChange.
 t.selectNodeById("children.0", true);
 process.stdout.write(JSON.stringify({ sends: sends, baseline: Array.from(t.lastServerSet) }));
@@ -322,7 +335,7 @@ func TestJawstreeJS_DroppedSendDoesNotAdvanceBaseline(t *testing.T) {
 	raw := runJawstreeJSSnippet(t, jsMock+`
 var data = { children: [{ id: "children.0", name: "a" }, { id: "children.1", name: "b" }] };
 jawstreeInit({ key: "k", jid: "Jid.1", options: (1<<2), data: data });
-var t = window["jawstree_Jid.1"];
+var t = containers["Jid.1"].jawsTreeview;
 global.jawsCanSend = function () { return false; }; // socket not open
 t.selectNodeById("children.0", true); // dropped
 var afterDrop = { sends: sends.length, baseline: Array.from(t.lastServerSet) };
@@ -367,20 +380,20 @@ var data = { children: [{ id: "children.0", name: "a" }] };
 // Same key, distinct jids — two renders of one shared Tree.
 jawstreeInit({ key: "k", jid: "Jid.1", options: (1<<2), data: data });
 jawstreeInit({ key: "k", jid: "Jid.2", options: (1<<2), data: data });
-var one = window["jawstree_Jid.1"], two = window["jawstree_Jid.2"];
+var one = containers["Jid.1"].jawsTreeview, two = containers["Jid.2"].jawsTreeview;
 jawstreeSelection({ key: "k", jid: "Jid.1", s: [1] });
 var afterOne = { one: selectedIds(one), two: selectedIds(two) };
 jawstreeSelection({ key: "k", jid: "Jid.2", s: [1] });
 var afterTwo = { one: selectedIds(one), two: selectedIds(two) };
 process.stdout.write(JSON.stringify({
 	distinct: one !== two,
-	aliasIsTreeview: window["jawstree_k"] instanceof Treeview,
+	instanceGlobals: Object.keys(window).filter(function (key) { return key.startsWith("jawstree_"); }).length,
 	afterOne: afterOne, afterTwo: afterTwo
 }));
 `)
 	var got struct {
 		Distinct        bool `json:"distinct"`
-		AliasIsTreeview bool `json:"aliasIsTreeview"`
+		InstanceGlobals int  `json:"instanceGlobals"`
 		AfterOne        struct {
 			One []string `json:"one"`
 			Two []string `json:"two"`
@@ -393,8 +406,8 @@ process.stdout.write(JSON.stringify({
 	if err := json.Unmarshal([]byte(raw), &got); err != nil {
 		t.Fatalf("unexpected JSON %q: %v", raw, err)
 	}
-	if !got.Distinct || !got.AliasIsTreeview {
-		t.Fatalf("expected two distinct widgets and a Treeview key alias: %+v", got)
+	if !got.Distinct || got.InstanceGlobals != 0 {
+		t.Fatalf("expected two distinct element-owned widgets and no instance globals: %+v", got)
 	}
 	// Updating Jid.1 must not touch Jid.2, and vice-versa.
 	if !reflect.DeepEqual(got.AfterOne.One, []string{"children.0"}) || len(got.AfterOne.Two) != 0 {
@@ -402,5 +415,55 @@ process.stdout.write(JSON.stringify({
 	}
 	if !reflect.DeepEqual(got.AfterTwo.Two, []string{"children.0"}) {
 		t.Fatalf("update to Jid.2 did not apply: %v", got.AfterTwo.Two)
+	}
+}
+
+// TestJawstreeJS_RemovalReleasesInstance covers a shared Tree removed and later
+// reinserted through a live Container. A detached widget must not remain globally
+// addressable, while the replacement widget still receives Jid-scoped updates.
+func TestJawstreeJS_RemovalReleasesInstance(t *testing.T) {
+	raw := runJawstreeJSSnippet(t, jsMock+`
+var data = { children: [{ id: "children.0", name: "a" }] };
+jawstreeInit({ key: "k", jid: "Jid.1", options: (1<<2), data: data });
+var oldContainer = containers["Jid.1"];
+var old = oldContainer.jawsTreeview;
+delete containers["Jid.1"]; // JaWS Remove detached the old element.
+jawstreeSelection({ key: "k", jid: "Jid.1", s: [1] });
+
+jawstreeInit({ key: "k", jid: "Jid.2", options: (1<<2), data: data });
+var replacement = containers["Jid.2"].jawsTreeview;
+jawstreeSelection({ key: "k", jid: "Jid.2", s: [1] });
+
+process.stdout.write(JSON.stringify({
+	oldDetached: document.getElementById("Jid.1") === null,
+	oldOwned: oldContainer.jawsTreeview === old,
+	distinct: old !== replacement,
+	oldSelection: selectedIds(old),
+	replacementSelection: selectedIds(replacement),
+	instanceGlobals: Object.keys(window).filter(function (key) { return key.startsWith("jawstree_"); }).length
+}));
+`)
+	var got struct {
+		OldDetached          bool     `json:"oldDetached"`
+		OldOwned             bool     `json:"oldOwned"`
+		Distinct             bool     `json:"distinct"`
+		OldSelection         []string `json:"oldSelection"`
+		ReplacementSelection []string `json:"replacementSelection"`
+		InstanceGlobals      int      `json:"instanceGlobals"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON %q: %v", raw, err)
+	}
+	if !got.OldDetached || !got.OldOwned || !got.Distinct {
+		t.Fatalf("unexpected remove/reinsert ownership: %+v", got)
+	}
+	if len(got.OldSelection) != 0 {
+		t.Fatalf("detached widget received a stale update: %v", got.OldSelection)
+	}
+	if !reflect.DeepEqual(got.ReplacementSelection, []string{"children.0"}) {
+		t.Fatalf("replacement selection = %v, want [children.0]", got.ReplacementSelection)
+	}
+	if got.InstanceGlobals != 0 {
+		t.Fatalf("remove/reinsert retained %d Treeview instance globals, want 0", got.InstanceGlobals)
 	}
 }
