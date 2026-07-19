@@ -130,7 +130,7 @@ mapping used by Quercus.js; enlarging a `Name` defeats the size bounds `New` enf
 policy.
 
 Build a `Node` tree (by hand, or from a directory with `Root`) and pass it with a
-lock to `New`. Browser correlation keys and HTML ids are managed internally:
+lock to `New`. Browser container IDs are managed internally:
 
 ```go
 var mu sync.RWMutex

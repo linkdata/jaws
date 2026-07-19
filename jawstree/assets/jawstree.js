@@ -3,8 +3,8 @@
 // keeps its selection in sync with the server-authoritative jawstree.Tree.
 //
 // Server -> client uses two verbs, both element-scoped JsCalls:
-//   jawstreeInit({key, jid, options, data})   build the widget once
-//   jawstreeSelection({key, s:[idx...] | b:"<base64 bitmap>"})   absolute selection
+//   jawstreeInit({jid, options, data})   build the widget once
+//   jawstreeSelection({jid, s:[idx...] | b:"<base64 bitmap>"})   absolute selection
 // Client -> server sends one Input frame per interaction carrying either a delta
 // {"d":{"add":[idx...],"remove":[idx...]}} of preorder node indices, or, when that
 // would be large, an absolute bitmap {"b":"<base64>"}.

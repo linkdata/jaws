@@ -394,9 +394,9 @@ func TestSelectionPayloadRoundTrip(t *testing.T) {
 // limit.
 func TestSelectionFrameFitsInboundLimit(t *testing.T) {
 	b64 := base64.StdEncoding.EncodedLen((MaxTreeNodes + 7) / 8)
-	// Generous framing upper bound: "Input\t" + a long Jid + "\t" + the JSON wrapper
-	// (key + base64) + "\n".
-	frame := len("Input\t") + 32 + len("\t") + len(`{"key":"","b":""}`) + 32 + b64 + len("\n")
+	// Framing upper bound: "Input\t" + a 32-byte Jid + "\t" + the JSON wrapper
+	// and base64 bitmap + "\n".
+	frame := len("Input\t") + 32 + len("\t") + len(`{"b":""}`) + b64 + len("\n")
 	if frame >= wsInboundLimit {
 		t.Fatalf("worst-case selection frame %d bytes >= inbound limit %d; lower MaxTreeNodes", frame, wsInboundLimit)
 	}

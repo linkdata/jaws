@@ -191,7 +191,7 @@ var data = { children: [
 	{ id: "children.0", name: "a" },
 	{ id: "children.1", name: "b", selected: true }
 ] };
-jawstreeInit({ key: "k", jid: "Jid.1", options: (1<<2), data: data });
+jawstreeInit({ jid: "Jid.1", options: (1<<2), data: data });
 var t = container.jawsTreeview;
 process.stdout.write(JSON.stringify({
 	visible: !container.hidden,
@@ -244,24 +244,24 @@ process.stdout.write(JSON.stringify({
 func TestJawstreeJS_SelectionReconcile(t *testing.T) {
 	raw := runJawstreeJSSnippet(t, jsMock+`
 var flat = { children: [{ id: "children.0", name: "A" }, { id: "children.1", name: "B" }] };
-jawstreeInit({ key: "s", jid: "Jid.1", options: 0, data: flat }); // single-select
+jawstreeInit({ jid: "Jid.1", options: 0, data: flat }); // single-select
 var s = containers["Jid.1"].jawsTreeview;
-jawstreeSelection({ key: "s", jid: "Jid.1", s: [1] });
+jawstreeSelection({ jid: "Jid.1", s: [1] });
 var afterA = selectedIds(s);
-jawstreeSelection({ key: "s", jid: "Jid.1", s: [2] }); // switch A -> B
+jawstreeSelection({ jid: "Jid.1", s: [2] }); // switch A -> B
 var afterSwitch = selectedIds(s);
-jawstreeSelection({ key: "s", jid: "Jid.1", s: [] });
+jawstreeSelection({ jid: "Jid.1", s: [] });
 var afterClear = selectedIds(s);
 
 var tree = { children: [{ id: "children.0", name: "P", children: [
 	{ id: "children.0.children.0", name: "c1" },
 	{ id: "children.0.children.1", name: "c2" }
 ] }] };
-jawstreeInit({ key: "c", jid: "Jid.2", options: (1<<2)|(1<<7), data: tree }); // multi + cascade
+jawstreeInit({ jid: "Jid.2", options: (1<<2)|(1<<7), data: tree }); // multi + cascade
 var c = containers["Jid.2"].jawsTreeview;
-jawstreeSelection({ key: "c", jid: "Jid.2", s: [1, 2, 3] });
+jawstreeSelection({ jid: "Jid.2", s: [1, 2, 3] });
 var afterAll = selectedIds(c);
-jawstreeSelection({ key: "c", jid: "Jid.2", s: [2, 3] }); // parent deselected server-side
+jawstreeSelection({ jid: "Jid.2", s: [2, 3] }); // parent deselected server-side
 var afterParentDrop = selectedIds(c);
 
 process.stdout.write(JSON.stringify({
@@ -303,7 +303,7 @@ process.stdout.write(JSON.stringify({
 func TestJawstreeJS_OnSelectionChangeSendsDelta(t *testing.T) {
 	raw := runJawstreeJSSnippet(t, jsMock+`
 var data = { children: [{ id: "children.0", name: "a" }, { id: "children.1", name: "b" }] };
-jawstreeInit({ key: "k", jid: "Jid.1", options: (1<<2), data: data });
+jawstreeInit({ jid: "Jid.1", options: (1<<2), data: data });
 var t = containers["Jid.1"].jawsTreeview;
 // A user selecting children.0 (index 1): the widget mutates and fires onSelectionChange.
 t.selectNodeById("children.0", true);
@@ -334,7 +334,7 @@ process.stdout.write(JSON.stringify({ sends: sends, baseline: Array.from(t.lastS
 func TestJawstreeJS_DroppedSendDoesNotAdvanceBaseline(t *testing.T) {
 	raw := runJawstreeJSSnippet(t, jsMock+`
 var data = { children: [{ id: "children.0", name: "a" }, { id: "children.1", name: "b" }] };
-jawstreeInit({ key: "k", jid: "Jid.1", options: (1<<2), data: data });
+jawstreeInit({ jid: "Jid.1", options: (1<<2), data: data });
 var t = containers["Jid.1"].jawsTreeview;
 global.jawsCanSend = function () { return false; }; // socket not open
 t.selectNodeById("children.0", true); // dropped
@@ -377,13 +377,13 @@ process.stdout.write(JSON.stringify({ afterDrop: afterDrop, afterOpen: afterOpen
 func TestJawstreeJS_ScopedByJid(t *testing.T) {
 	raw := runJawstreeJSSnippet(t, jsMock+`
 var data = { children: [{ id: "children.0", name: "a" }] };
-// Same key, distinct jids — two renders of one shared Tree.
-jawstreeInit({ key: "k", jid: "Jid.1", options: (1<<2), data: data });
-jawstreeInit({ key: "k", jid: "Jid.2", options: (1<<2), data: data });
+// Distinct jids — two renders of one shared Tree.
+jawstreeInit({ jid: "Jid.1", options: (1<<2), data: data });
+jawstreeInit({ jid: "Jid.2", options: (1<<2), data: data });
 var one = containers["Jid.1"].jawsTreeview, two = containers["Jid.2"].jawsTreeview;
-jawstreeSelection({ key: "k", jid: "Jid.1", s: [1] });
+jawstreeSelection({ jid: "Jid.1", s: [1] });
 var afterOne = { one: selectedIds(one), two: selectedIds(two) };
-jawstreeSelection({ key: "k", jid: "Jid.2", s: [1] });
+jawstreeSelection({ jid: "Jid.2", s: [1] });
 var afterTwo = { one: selectedIds(one), two: selectedIds(two) };
 process.stdout.write(JSON.stringify({
 	distinct: one !== two,
@@ -424,15 +424,15 @@ process.stdout.write(JSON.stringify({
 func TestJawstreeJS_RemovalReleasesInstance(t *testing.T) {
 	raw := runJawstreeJSSnippet(t, jsMock+`
 var data = { children: [{ id: "children.0", name: "a" }] };
-jawstreeInit({ key: "k", jid: "Jid.1", options: (1<<2), data: data });
+jawstreeInit({ jid: "Jid.1", options: (1<<2), data: data });
 var oldContainer = containers["Jid.1"];
 var old = oldContainer.jawsTreeview;
 delete containers["Jid.1"]; // JaWS Remove detached the old element.
-jawstreeSelection({ key: "k", jid: "Jid.1", s: [1] });
+jawstreeSelection({ jid: "Jid.1", s: [1] });
 
-jawstreeInit({ key: "k", jid: "Jid.2", options: (1<<2), data: data });
+jawstreeInit({ jid: "Jid.2", options: (1<<2), data: data });
 var replacement = containers["Jid.2"].jawsTreeview;
-jawstreeSelection({ key: "k", jid: "Jid.2", s: [1] });
+jawstreeSelection({ jid: "Jid.2", s: [1] });
 
 process.stdout.write(JSON.stringify({
 	oldDetached: document.getElementById("Jid.1") === null,
