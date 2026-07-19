@@ -94,6 +94,17 @@ func TestRequest_MiscBranches(t *testing.T) {
 	}
 }
 
+func TestRequest_DeleteElementNil(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	// GetElementByJid returns nil for an unknown Jid, so forwarding that result to
+	// DeleteElement must be a no-op rather than a nil dereference, matching the rest of
+	// the nil-tolerant *Element-accepting Request methods (Tag, TagExpanded, TagsOf).
+	rq.DeleteElement(rq.GetElementByJid(Jid(999)))
+	rq.DeleteElement(nil)
+}
+
 func TestRequest_Registrations(t *testing.T) {
 	is := newTestHelper(t)
 	rq := newTestRequest(t)
