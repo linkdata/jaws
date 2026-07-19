@@ -62,6 +62,7 @@ func parseClickData(value string) (clk Click, after string, ok bool) {
 	clickPart, after, _ = strings.Cut(value, "\t")
 	var n int
 	var kstate int
+	var name strings.Builder
 	ok = true
 	for field := range strings.FieldsSeq(clickPart) {
 		if ok {
@@ -79,12 +80,27 @@ func parseClickData(value string) (clk Click, after string, ok bool) {
 					clk.setKeyState(kstate)
 				}
 			case 3:
+				// First name token: assign directly so the common single-token click
+				// stays allocation-free.
 				clk.Name = field
 			default:
-				clk.Name += " " + field
+				// Second or later name token: accumulate with a strings.Builder, seeded
+				// once with the first token and joined by single spaces, so the name stays
+				// O(total length) rather than the O(n^2) of naive per-token string
+				// concatenation. The click frame is untrusted browser input sized up to the
+				// WebSocket read limit.
+				if name.Len() == 0 {
+					name.Grow(len(clk.Name) + 1 + len(field))
+					name.WriteString(clk.Name)
+				}
+				name.WriteByte(' ')
+				name.WriteString(field)
 			}
 			n++
 		}
+	}
+	if name.Len() > 0 {
+		clk.Name = name.String()
 	}
 	ok = ok && n >= 3
 	return

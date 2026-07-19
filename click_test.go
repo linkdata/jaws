@@ -53,6 +53,12 @@ func TestParseClickData(t *testing.T) {
 			wantOK: true,
 		},
 		{
+			name:   "name with many tokens collapses whitespace",
+			in:     "1 2 0    a   b     c d",
+			want:   Click{Name: "a b c d", X: 1, Y: 2},
+			wantOK: true,
+		},
+		{
 			name:   "invalid x",
 			in:     "bad 20 0 save",
 			wantOK: false,
@@ -158,6 +164,31 @@ func Fuzz_parseClickData(f *testing.F) {
 			t.Fatalf("roundtrip mismatch: click=%+v/%+v after=%q/%q", clk, clk3, after, after3)
 		}
 	})
+}
+
+func BenchmarkParseClickData(b *testing.B) {
+	// Name accumulation must remain linear in the frame size, and the single-token
+	// click (by far the most common) must stay allocation-free. Cover one, two, and
+	// many name tokens; the long name is bounded in production by the WebSocket read
+	// limit.
+	cases := []struct {
+		name  string
+		value string
+	}{
+		{"OneToken", "10 20 0 save"},
+		{"TwoTokens", "10 20 0 save button"},
+		{"LongName", "0 0 0 " + strings.Repeat("a ", 8000)},
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				if _, _, ok := parseClickData(tc.value); !ok {
+					b.Fatal("expected ok")
+				}
+			}
+		})
+	}
 }
 
 func Fuzz_clickStringRoundTrip(f *testing.F) {
