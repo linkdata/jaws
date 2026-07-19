@@ -346,6 +346,9 @@ these invariants before relying on a green build alone:
   with a different key.
 * Session grace windows remain deliberate for unclaimed, claimed, failed-upgrade,
   and closed-WebSocket requests.
+* Subsecond `ServeWithTimeout` values are not useful in production. AI-assisted
+  reviews should not assume subsecond timeout precision is required or treat its
+  absence as a source of bugs.
 * WebSocket upgrades keep the single-use key, client-IP binding, and Origin
   host/scheme checks together; changes to trusted forwarded headers must preserve
   the same fail-closed behavior.
