@@ -763,6 +763,36 @@ func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) {
 	return
 }
 
+// normalizedWebSocketAcceptRequest returns a request whose Host and Origin omit
+// the Origin scheme's default port.
+//
+// Call it only after validateWebSocketOrigin succeeds. The clone lets
+// coder/websocket perform its own normalized host check without changing the
+// request visible to JaWS.
+func normalizedWebSocketAcceptRequest(r *http.Request) (normalized *http.Request) {
+	normalized = r
+	if u, err := url.Parse(r.Header.Get("Origin")); err == nil {
+		port := ""
+		switch u.Scheme {
+		case "http":
+			port = ":80"
+		case "https":
+			port = ":443"
+		}
+		if port != "" {
+			host := strings.TrimSuffix(r.Host, port)
+			originHost := strings.TrimSuffix(u.Host, port)
+			if host != r.Host || originHost != u.Host {
+				normalized = r.Clone(r.Context())
+				normalized.Host = host
+				u.Host = originHost
+				normalized.Header.Set("Origin", u.String())
+			}
+		}
+	}
+	return
+}
+
 // Log sends an error to the [Jaws.Logger] if set.
 // Has no effect if err is nil or the Logger is nil.
 // Returns err.
@@ -831,6 +861,7 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var err error
+		acceptRequest := r
 		if r.Header.Get("Sec-WebSocket-Key") != "" {
 			if err = rq.validateWebSocketOrigin(r); err != nil {
 				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
@@ -838,9 +869,10 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			rq.ensureAutoSession(w, r)
+			acceptRequest = normalizedWebSocketAcceptRequest(r)
 		}
 		var ws *websocket.Conn
-		ws, err = websocket.Accept(w, r, nil)
+		ws, err = websocket.Accept(w, acceptRequest, nil)
 		if err == nil {
 			ws.SetReadLimit(webSocketReadLimit)
 			if err = rq.onConnect(); err == nil {
