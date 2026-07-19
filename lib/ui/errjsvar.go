@@ -27,12 +27,12 @@ func (errIllegalJsVarName) Is(target error) bool {
 // argument that is neither a JaWS UI nor a [JsVarMaker].
 var ErrJsVarArgumentType = errors.New("expected jaws.UI or JsVarMaker")
 
-// ErrJsVarTooLarge reports that a client-writable JsVar grew past [MaxClientJsVarBytes].
+// ErrJsVarTooLarge reports a failed client-writable JsVar size check.
 //
 // It aborts the [jaws.Request] for a JsVar that does not implement [PathSetter]:
-// [JsVar.JawsInput] returns it on the first browser write whose accounted size
-// exceeds the cap, and [JsVar.JawsRender] returns it when an over-cap value is
-// present at render. See the [JsVar] SECURITY note.
+// [JsVar.JawsInput] returns it when a boundary confirmation finds the serialized
+// size over the cap or cannot marshal the value, and [JsVar.JawsRender] returns it
+// when an over-cap value is present at render. See the [JsVar] SECURITY note.
 var ErrJsVarTooLarge = errors.New("jsvar: serialized value exceeds MaxClientJsVarBytes")
 
 // ErrIllegalJsVarPath reports that a JsVar path contained a protocol byte.

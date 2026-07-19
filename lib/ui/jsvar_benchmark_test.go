@@ -115,7 +115,7 @@ func BenchmarkJsVarPathSetterMutation(b *testing.B) {
 // write would make LargeState scale with the slice length.
 func BenchmarkJsVarClientWrite(b *testing.B) {
 	old := MaxClientJsVarBytes
-	MaxClientJsVarBytes = 1 << 40 // effectively unbounded: accounting runs but never confirms
+	MaxClientJsVarBytes = 1 << 30 // effectively unbounded: accounting runs but never confirms
 	b.Cleanup(func() { MaxClientJsVarBytes = old })
 
 	run := func(b *testing.B, initial int) {
