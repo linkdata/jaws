@@ -2,13 +2,8 @@ package jawstree
 
 import (
 	"encoding/json"
-	"image/color"
-	"image/png"
-	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -28,23 +23,6 @@ type dynamicTreeContainer struct {
 
 func (c *dynamicTreeContainer) JawsContains(*jaws.Element) []jaws.UI {
 	return c.contents
-}
-
-func jawstreeFirefoxPath(t *testing.T) string {
-	t.Helper()
-	for _, name := range []string{"firefox", "firefox-esr"} {
-		if filename, err := exec.LookPath(name); err == nil {
-			return filename
-		}
-	}
-	if runtime.GOOS == "darwin" {
-		const filename = "/Applications/Firefox.app/Contents/MacOS/firefox"
-		if _, err := os.Stat(filename); err == nil {
-			return filename
-		}
-	}
-	t.Skip("Firefox is required for the dynamic Tree production regression")
-	return ""
 }
 
 func TestTreeDynamicInitializationWithClientAssets(t *testing.T) {
@@ -109,7 +87,7 @@ func TestTreeDynamicInitializationWithClientAssets(t *testing.T) {
 
 	// Select a node server-side and dirty the tree immediately after insertion. The
 	// production writer may coalesce this jawstreeSelection with the
-	// Append/Order/initializer messages above, so the browser regression replays all
+	// Append/Order/initializer messages above, so the regression page replays all
 	// four in one WebSocket frame. Only selection is synced (not names/structure), so
 	// the update carries the selected index rather than a relabel.
 	if err := tree.SetSelected([][]string{{"Documents"}}); err != nil {
@@ -212,37 +190,8 @@ window.addEventListener("DOMContentLoaded", function() {
 </body></html>`
 
 	htmlPath := filepath.Join(dir, "dynamic-tree.html")
-	screenshotPath := filepath.Join(dir, "dynamic-tree.png")
-	profilePath := filepath.Join(dir, "firefox-profile")
 	if err := os.WriteFile(htmlPath, []byte(htmlText), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(profilePath, 0o700); err != nil {
-		t.Fatal(err)
-	}
-
-	pageURL := (&url.URL{Scheme: "file", Path: htmlPath}).String()
-	cmd := exec.CommandContext(t.Context(), jawstreeFirefoxPath(t),
-		"--headless", "--new-instance", "--profile", profilePath,
-		"--screenshot", screenshotPath, "--window-size", "64,64", pageURL)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("Firefox failed: %v\n%s", err, output)
-	}
-
-	f, err := os.Open(screenshotPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	img, decodeErr := png.Decode(f)
-	closeErr := f.Close()
-	if decodeErr != nil {
-		t.Fatal(decodeErr)
-	}
-	if closeErr != nil {
-		t.Fatal(closeErr)
-	}
-	pixel := color.RGBAModel.Convert(img.At(32, 32)).(color.RGBA)
-	if pixel.R > 32 || pixel.G < 224 || pixel.B > 32 {
-		t.Fatalf("dynamic Tree did not initialize through shipped assets; center pixel = %#v, want green", pixel)
-	}
+	jawstreeRunJsdomPage(t, htmlPath)
 }
