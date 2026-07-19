@@ -2,11 +2,13 @@ package ui
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
 	"html/template"
+	"math"
 	"strings"
 	"sync"
 	"testing"
@@ -388,6 +390,470 @@ func TestJsVar_RenderSizeCapExemptsPathSetter(t *testing.T) {
 	}
 }
 
+// jsVarSliceData is a non-PathSetter value with a client-growable slice, used to
+// exercise MaxClientJsVarBytes accounting for browser writes.
+type jsVarSliceData struct {
+	Items []string `json:"items"`
+}
+
+// Wrap handler-control errors to ensure an exact-size confirmation failure cannot
+// be mistaken for either an unchanged value or an unhandled event.
+var errJsVarMarshalFailure = fmt.Errorf("jsvar marshal failure: %w", errors.Join(jaws.ErrValueUnchanged, jaws.ErrEventUnhandled))
+
+type jsVarMarshalFailureData struct {
+	Items []string `json:"items"`
+}
+
+func (data jsVarMarshalFailureData) MarshalJSON() ([]byte, error) {
+	if len(data.Items) > 0 {
+		return nil, errJsVarMarshalFailure
+	}
+	type plain jsVarMarshalFailureData
+	return json.Marshal(plain(data))
+}
+
+type jsVarSetMuProbeLogger struct {
+	jsvar   *JsVar[jsVarSliceData]
+	setMuOK chan bool
+}
+
+func (*jsVarSetMuProbeLogger) Info(string, ...any) {}
+func (*jsVarSetMuProbeLogger) Warn(string, ...any) {}
+
+func (logger *jsVarSetMuProbeLogger) Error(string, ...any) {
+	ok := logger.jsvar.setMu.TryLock()
+	if ok {
+		logger.jsvar.setMu.Unlock()
+	}
+	select {
+	case logger.setMuOK <- ok:
+	default:
+	}
+}
+
+// jsVarAppendPathSetter is a PathSetter that appends to a slice on every write. It
+// shows that PathSetter values are exempt from MaxClientJsVarBytes on the client
+// write path, enforcing their own bounds instead.
+type jsVarAppendPathSetter struct {
+	Items []string `json:"items"`
+}
+
+func (d *jsVarAppendPathSetter) JawsSetPath(_ *jaws.Element, _ string, value any) error {
+	d.Items = append(d.Items, fmt.Sprint(value))
+	return nil
+}
+
+// clientSetFrame delivers a browser "set" frame through the incoming input path.
+func clientSetFrame(t *testing.T, jsv IsJsVar, elem *jaws.Element, jsPath string, value any) error {
+	t.Helper()
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return jaws.CallEventHandlers(jsv, elem, what.Set, jsPath+"="+string(data))
+}
+
+// TestJsVar_ClientWriteCapAbortsRequest is the regression test for #129: a normally
+// rendered non-PathSetter JsVar is never rendered again, so the cap must be enforced
+// on each browser write. A client appending one slice element per message is stopped
+// with ErrJsVarTooLarge and the request aborted once the serialized value exceeds
+// MaxClientJsVarBytes, rather than growing server state without bound.
+func TestJsVar_ClientWriteCapAbortsRequest(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	go jw.Serve()
+
+	old := MaxClientJsVarBytes
+	MaxClientJsVarBytes = 32
+	defer func() { MaxClientJsVarBytes = old }()
+
+	var mu sync.Mutex
+	v := jsVarSliceData{}
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+	var sb strings.Builder
+	if err := jsv.JawsRender(elem, &sb, []any{"v"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var writes int
+	var capErr error
+	for i := 0; i < 20 && capErr == nil; i++ {
+		if err := clientSetFrame(t, jsv, elem, fmt.Sprintf("items.%d", i), "0123456789"); err != nil {
+			capErr = err
+			break
+		}
+		writes++
+	}
+
+	if !errors.Is(capErr, ErrJsVarTooLarge) {
+		t.Fatalf("expected ErrJsVarTooLarge from a client write, got %v after %d writes", capErr, writes)
+	}
+	if writes == 0 {
+		t.Fatal("expected at least one client write to succeed before the cap aborted the request")
+	}
+	if rq.Context().Err() == nil {
+		t.Fatal("expected the request to be aborted by the over-cap client write")
+	}
+
+	// Server state stayed bounded rather than growing one valid frame at a time.
+	mu.Lock()
+	data, _ := json.Marshal(&v)
+	mu.Unlock()
+	if len(data) > 4*MaxClientJsVarBytes {
+		t.Fatalf("serialized value grew to %d bytes, past cap %d", len(data), MaxClientJsVarBytes)
+	}
+}
+
+// TestJsVar_ClientWriteEstimateUsesPayloadLength verifies that ordinary client
+// writes only add their raw payload length to the running approximation.
+func TestJsVar_ClientWriteEstimateUsesPayloadLength(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	go jw.Serve()
+
+	old := MaxClientJsVarBytes
+	MaxClientJsVarBytes = 1024
+	defer func() { MaxClientJsVarBytes = old }()
+
+	var mu sync.Mutex
+	v := jsVarSliceData{}
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+	if err := jsv.JawsRender(elem, &strings.Builder{}, []any{"v"}); err != nil {
+		t.Fatal(err)
+	}
+	jsv.RLock()
+	before := jsv.jsonBytes
+	jsv.RUnlock()
+	payload := `items.0="x"`
+	if err := jaws.CallEventHandlers(jsv, elem, what.Set, payload); err != nil {
+		t.Fatal(err)
+	}
+	jsv.RLock()
+	got := jsv.jsonBytes
+	jsv.RUnlock()
+	if want := before + len(payload); got != want {
+		t.Fatalf("approximate size = %d, want %d", got, want)
+	}
+}
+
+// TestJsVar_ClientWriteEstimateDoesNotOverflow verifies that crossing the cap
+// is detected without overflowing the approximate byte count.
+func TestJsVar_ClientWriteEstimateDoesNotOverflow(t *testing.T) {
+	old := MaxClientJsVarBytes
+	MaxClientJsVarBytes = math.MaxInt
+	defer func() { MaxClientJsVarBytes = old }()
+
+	v := jsVarSliceData{}
+	jsv := NewJsVar(new(sync.Mutex), &v)
+	jsv.jsonBytes = math.MaxInt - 1
+	size, overCap, err := jsv.accountClientWrite(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(&v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if size != len(data) || overCap {
+		t.Fatalf("accounted size, over cap = %d, %t; want %d, false", size, overCap, len(data))
+	}
+}
+
+// TestJsVar_ClientWriteCapFailsClosedOnMarshalError verifies that an exact-size
+// confirmation error aborts the request instead of disabling the cap.
+func TestJsVar_ClientWriteCapFailsClosedOnMarshalError(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	go jw.Serve()
+
+	old := MaxClientJsVarBytes
+	MaxClientJsVarBytes = 16
+	defer func() { MaxClientJsVarBytes = old }()
+
+	var mu sync.Mutex
+	v := jsVarMarshalFailureData{}
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+	if err := jsv.JawsRender(elem, &strings.Builder{}, []any{"v"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := clientSetFrame(t, jsv, elem, "items.0", "x"); !errors.Is(err, ErrJsVarTooLarge) {
+		t.Fatalf("client write error = %v, want ErrJsVarTooLarge", err)
+	}
+	if rq.Context().Err() == nil {
+		t.Fatal("marshal failure did not abort the request")
+	}
+	if cause := context.Cause(rq.Context()); !errors.Is(cause, errJsVarMarshalFailure) {
+		t.Fatalf("cancellation cause = %v, want marshal failure", cause)
+	}
+}
+
+// TestJsVar_ClientWriteCapCancelsOutsideSetMu verifies that cancellation and its
+// synchronous logger run after the mutation-ordering lock is released.
+func TestJsVar_ClientWriteCapCancelsOutsideSetMu(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	go jw.Serve()
+
+	old := MaxClientJsVarBytes
+	MaxClientJsVarBytes = 16
+	defer func() { MaxClientJsVarBytes = old }()
+
+	var mu sync.Mutex
+	v := jsVarSliceData{}
+	jsv := NewJsVar(&mu, &v)
+	setMuOK := make(chan bool, 1)
+	jw.Logger = &jsVarSetMuProbeLogger{jsvar: jsv, setMuOK: setMuOK}
+	elem := rq.NewElement(jsv)
+	if err := jsv.JawsRender(elem, &strings.Builder{}, []any{"v"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := clientSetFrame(t, jsv, elem, "items.0", "0123456789"); !errors.Is(err, ErrJsVarTooLarge) {
+		t.Fatalf("client write error = %v, want ErrJsVarTooLarge", err)
+	}
+	select {
+	case ok := <-setMuOK:
+		if !ok {
+			t.Fatal("request cancellation logged while JsVar.setMu was held")
+		}
+	default:
+		t.Fatal("request cancellation was not logged")
+	}
+}
+
+// TestJsVar_ClientWriteCapZeroValueAppend covers an append flood of zero values.
+// jq.Set grows the slice before assigning, and appending the element's zero value
+// ("") reports ErrValueUnchanged, which JawsInput elides to nil — yet the slice grew.
+// Size accounting must still run on that "unchanged" write so the cap aborts the
+// request rather than letting a hostile client append empty strings without bound.
+func TestJsVar_ClientWriteCapZeroValueAppend(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	go jw.Serve()
+
+	old := MaxClientJsVarBytes
+	MaxClientJsVarBytes = 32
+	defer func() { MaxClientJsVarBytes = old }()
+
+	var mu sync.Mutex
+	v := jsVarSliceData{}
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+	var sb strings.Builder
+	if err := jsv.JawsRender(elem, &sb, []any{"v"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var writes int
+	var capErr error
+	for i := 0; i < 200 && capErr == nil; i++ {
+		if err := clientSetFrame(t, jsv, elem, fmt.Sprintf("items.%d", i), ""); err != nil {
+			capErr = err
+			break
+		}
+		writes++
+	}
+
+	if !errors.Is(capErr, ErrJsVarTooLarge) {
+		t.Fatalf("expected ErrJsVarTooLarge from a zero-value append flood, got %v after %d writes", capErr, writes)
+	}
+	if rq.Context().Err() == nil {
+		t.Fatal("expected the request to be aborted by the zero-value append flood")
+	}
+	mu.Lock()
+	data, _ := json.Marshal(&v)
+	mu.Unlock()
+	if len(data) > 4*MaxClientJsVarBytes {
+		t.Fatalf("serialized value grew to %d bytes, past cap %d", len(data), MaxClientJsVarBytes)
+	}
+}
+
+// TestJsVar_ClientWriteCapRejectedAppend covers an append flood the setter rejects.
+// jq.Set grows the slice before the assign, and assigning a number into a []string
+// fails with a type mismatch (not ErrValueUnchanged) while leaving the appended zero
+// element in place. The request loop only logs a handler error, so accounting must
+// run on the rejected write too or the slice grows without bound.
+func TestJsVar_ClientWriteCapRejectedAppend(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	go jw.Serve()
+
+	old := MaxClientJsVarBytes
+	MaxClientJsVarBytes = 32
+	defer func() { MaxClientJsVarBytes = old }()
+
+	var mu sync.Mutex
+	v := jsVarSliceData{} // Items []string
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+	var sb strings.Builder
+	if err := jsv.JawsRender(elem, &sb, []any{"v"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Each write returns a type-mismatch error before the cap is reached; stop when
+	// the request is aborted, mirroring the request loop that stops dispatching once
+	// the context is cancelled.
+	var sawTooLarge bool
+	for i := 0; i < 200 && rq.Context().Err() == nil; i++ {
+		// A number into a []string element: jq grows the slice, then the assign fails.
+		if errors.Is(clientSetFrame(t, jsv, elem, fmt.Sprintf("items.%d", i), i), ErrJsVarTooLarge) {
+			sawTooLarge = true
+		}
+	}
+
+	if !sawTooLarge {
+		t.Fatal("expected ErrJsVarTooLarge from a rejected append flood")
+	}
+	if rq.Context().Err() == nil {
+		t.Fatal("expected the request to be aborted by the rejected append flood")
+	}
+	mu.Lock()
+	data, _ := json.Marshal(&v)
+	mu.Unlock()
+	if len(data) > 4*MaxClientJsVarBytes {
+		t.Fatalf("serialized value grew to %d bytes, past cap %d", len(data), MaxClientJsVarBytes)
+	}
+}
+
+// TestJsVar_ClientWriteCapExemptsPathSetter verifies the documented exemption on the
+// client write path: a PathSetter enforces its own bounds, so browser writes that
+// grow it well past MaxClientJsVarBytes neither error nor abort the request.
+func TestJsVar_ClientWriteCapExemptsPathSetter(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	go jw.Serve()
+
+	old := MaxClientJsVarBytes
+	MaxClientJsVarBytes = 32
+	defer func() { MaxClientJsVarBytes = old }()
+
+	var mu sync.Mutex
+	v := jsVarAppendPathSetter{}
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+	var sb strings.Builder
+	if err := jsv.JawsRender(elem, &sb, []any{"v"}); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 50; i++ {
+		if err := clientSetFrame(t, jsv, elem, fmt.Sprintf("items.%d", i), "0123456789"); err != nil {
+			t.Fatalf("PathSetter client write %d: unexpected error %v", i, err)
+		}
+	}
+	if rq.Context().Err() != nil {
+		t.Fatalf("request must not be aborted for a PathSetter JsVar, got %v", rq.Context().Err())
+	}
+	mu.Lock()
+	got := len(v.Items)
+	mu.Unlock()
+	if got != 50 {
+		t.Fatalf("expected 50 appended items, got %d", got)
+	}
+}
+
+// TestJsVar_ClientWriteCapDisabled verifies that a non-positive MaxClientJsVarBytes
+// disables the accounting entirely: browser writes may grow a non-PathSetter value
+// past the (disabled) cap without aborting the request.
+func TestJsVar_ClientWriteCapDisabled(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	go jw.Serve()
+
+	old := MaxClientJsVarBytes
+	MaxClientJsVarBytes = 0
+	defer func() { MaxClientJsVarBytes = old }()
+
+	var mu sync.Mutex
+	v := jsVarSliceData{}
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+	var sb strings.Builder
+	if err := jsv.JawsRender(elem, &sb, []any{"v"}); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 50; i++ {
+		if err := clientSetFrame(t, jsv, elem, fmt.Sprintf("items.%d", i), "0123456789"); err != nil {
+			t.Fatalf("client write %d with cap disabled: unexpected error %v", i, err)
+		}
+	}
+	if rq.Context().Err() != nil {
+		t.Fatalf("request must not be aborted when the cap is disabled, got %v", rq.Context().Err())
+	}
+}
+
+// TestJsVar_ServerWriteNotCapped verifies that programmatic (server-side) writes are
+// trusted and not size-capped: JawsSetPath may grow a non-PathSetter value past
+// MaxClientJsVarBytes without error or aborting the request. Only browser writes are
+// bounded.
+func TestJsVar_ServerWriteNotCapped(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	go jw.Serve()
+
+	old := MaxClientJsVarBytes
+	MaxClientJsVarBytes = 32
+	defer func() { MaxClientJsVarBytes = old }()
+
+	var mu sync.Mutex
+	v := jsVarSliceData{}
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+	var sb strings.Builder
+	if err := jsv.JawsRender(elem, &sb, []any{"v"}); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 20; i++ {
+		if err := jsv.JawsSetPath(elem, fmt.Sprintf("items.%d", i), "0123456789"); err != nil {
+			t.Fatalf("server write %d: unexpected error %v", i, err)
+		}
+	}
+	if rq.Context().Err() != nil {
+		t.Fatalf("server writes must not abort the request, got %v", rq.Context().Err())
+	}
+	mu.Lock()
+	data, _ := json.Marshal(&v)
+	mu.Unlock()
+	if len(data) <= MaxClientJsVarBytes {
+		t.Fatalf("test precondition: server value %d did not exceed cap %d", len(data), MaxClientJsVarBytes)
+	}
+}
+
+// TestJsVar_ClientWriteCapReclaimsOvercount verifies that a confirming marshal
+// resets the running approximation: many browser writes that only replace an
+// existing element (never growing the value past the cap) must not abort the
+// request even though the accumulated estimate repeatedly crosses the cap.
+func TestJsVar_ClientWriteCapReclaimsOvercount(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	go jw.Serve()
+
+	old := MaxClientJsVarBytes
+	MaxClientJsVarBytes = 64
+	defer func() { MaxClientJsVarBytes = old }()
+
+	var mu sync.Mutex
+	v := jsVarSliceData{}
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+	var sb strings.Builder
+	if err := jsv.JawsRender(elem, &sb, []any{"v"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Append once, then repeatedly overwrite the single element with distinct values
+	// of the same size; the serialized value stays well under the cap throughout.
+	for i := 0; i < 200; i++ {
+		if err := clientSetFrame(t, jsv, elem, "items.0", fmt.Sprintf("val-%05d", i)); err != nil {
+			t.Fatalf("client overwrite %d: unexpected error %v", i, err)
+		}
+	}
+	if rq.Context().Err() != nil {
+		t.Fatalf("bounded overwrites must not abort the request, got %v", rq.Context().Err())
+	}
+	mu.Lock()
+	got := len(v.Items)
+	mu.Unlock()
+	if got != 1 {
+		t.Fatalf("expected the slice to stay length 1, got %d", got)
+	}
+}
+
 func TestJsVar_PathHooksAndRequestWriter(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	go jw.Serve()
@@ -401,7 +867,7 @@ func TestJsVar_PathHooksAndRequestWriter(t *testing.T) {
 	if err := jsv.JawsRender(elem, &sb, []any{"pvar"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := jsv.setPathLock(elem, "value", "b"); err != nil {
+	if _, _, _, err := jsv.setPathLock(elem, "value", "b", false, 0); err != nil {
 		t.Fatal(err)
 	}
 	if v.Value != "b" || v.setCalls == 0 {
