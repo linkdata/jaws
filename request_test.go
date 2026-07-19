@@ -1598,6 +1598,72 @@ func TestRequest_validateWebSocketOrigin_NoInitialFailsClosed(t *testing.T) {
 	}
 }
 
+func TestNormalizedWebSocketAcceptRequest(t *testing.T) {
+	tests := []struct {
+		name       string
+		host       string
+		origin     string
+		wantHost   string
+		wantOrigin string
+		wantClone  bool
+	}{
+		{
+			name:       "HTTP Host default port removed",
+			host:       "example.test:80",
+			origin:     "http://example.test",
+			wantHost:   "example.test",
+			wantOrigin: "http://example.test",
+			wantClone:  true,
+		},
+		{
+			name:       "HTTP Origin default port removed",
+			host:       "example.test",
+			origin:     "http://example.test:80",
+			wantHost:   "example.test",
+			wantOrigin: "http://example.test",
+			wantClone:  true,
+		},
+		{
+			name:       "HTTPS IPv6 default port removed",
+			host:       "[2001:db8::1]:443",
+			origin:     "https://[2001:db8::1]:443",
+			wantHost:   "[2001:db8::1]",
+			wantOrigin: "https://[2001:db8::1]",
+			wantClone:  true,
+		},
+		{
+			name:       "non-default port preserved",
+			host:       "example.test:8080",
+			origin:     "http://example.test:8080",
+			wantHost:   "example.test:8080",
+			wantOrigin: "http://example.test:8080",
+			wantClone:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/jaws/key", nil)
+			r.Host = tt.host
+			r.Header.Set("Origin", tt.origin)
+
+			normalized := normalizedWebSocketAcceptRequest(r)
+			if normalized.Host != tt.wantHost {
+				t.Errorf("Host = %q, want %q", normalized.Host, tt.wantHost)
+			}
+			if origin := normalized.Header.Get("Origin"); origin != tt.wantOrigin {
+				t.Errorf("Origin = %q, want %q", origin, tt.wantOrigin)
+			}
+			if cloned := normalized != r; cloned != tt.wantClone {
+				t.Errorf("cloned = %t, want %t", cloned, tt.wantClone)
+			}
+			if r.Host != tt.host || r.Header.Get("Origin") != tt.origin {
+				t.Errorf("original request mutated: Host = %q, Origin = %q", r.Host, r.Header.Get("Origin"))
+			}
+		})
+	}
+}
+
 func TestRequest_Log(t *testing.T) {
 	wantErr := errors.New("request log test")
 
@@ -2765,6 +2831,61 @@ func TestWS_UnclaimedRequestIsGone(t *testing.T) {
 	}
 }
 
+func TestWS_AcceptsSameOriginDefaultPort(t *testing.T) {
+	tests := []struct {
+		name   string
+		host   string
+		origin string
+		secure bool
+	}{
+		{
+			name:   "Host has explicit port",
+			host:   "example.test:80",
+			origin: "http://example.test",
+		},
+		{
+			name:   "Origin has explicit port",
+			host:   "example.test",
+			origin: "http://example.test:80",
+		},
+		{
+			name:   "HTTPS Host has explicit port",
+			host:   "example.test:443",
+			origin: "https://example.test",
+			secure: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := newTestServer(t)
+			defer ts.Close()
+
+			ts.hr.Host = tt.host
+			if tt.secure {
+				ts.hr.TLS = &tls.ConnectionState{}
+			}
+			hdr := http.Header{}
+			hdr.Set("Origin", tt.origin)
+			conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), &websocket.DialOptions{
+				HTTPHeader: hdr,
+				Host:       tt.host,
+			})
+			if err != nil {
+				status := 0
+				if resp != nil {
+					status = resp.StatusCode
+				}
+				t.Fatalf("same-origin callback rejected: status=%d err=%v", status, err)
+			}
+			defer func() { _ = conn.CloseNow() }()
+			if resp.StatusCode != http.StatusSwitchingProtocols {
+				t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusSwitchingProtocols)
+			}
+		})
+	}
+}
+
 func TestWS_RejectsMissingOrigin(t *testing.T) {
 	ts := newTestServer(t)
 	defer ts.Close()
@@ -2810,6 +2931,32 @@ func TestWS_RejectsCrossOrigin(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("status %d", resp.StatusCode)
+	}
+}
+
+func TestWS_RejectsCallbackHostMismatch(t *testing.T) {
+	ts := newTestServer(t)
+	defer ts.Close()
+
+	ts.hr.Host = "example.test"
+	hdr := http.Header{}
+	hdr.Set("Origin", "http://example.test")
+	conn, resp, err := websocket.Dial(ts.ctx, ts.Url(), &websocket.DialOptions{
+		HTTPHeader: hdr,
+		Host:       "other.test:80",
+	})
+	if conn != nil {
+		_ = conn.Close(websocket.StatusNormalClosure, "")
+		t.Fatal("expected handshake to be rejected")
+	}
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if resp == nil {
+		t.Fatal("expected response")
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 	}
 }
 
