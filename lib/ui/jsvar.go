@@ -161,8 +161,8 @@ var (
 // The cap does not prevent a client from setting individual exported fields, so
 // when only some fields/paths should be client-writable, implement [PathSetter] on
 // the bound value to allow-list paths and bound lengths.
-// See jawstree's Node for an example that restricts client writes to a single
-// boolean field.
+// See the Node type in github.com/linkdata/jawstree for an example that restricts
+// client writes to a single boolean field.
 type JsVar[T any] struct {
 	bind.RWLocker
 	Ptr       *T         // bound Go value

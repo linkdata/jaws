@@ -16,7 +16,7 @@ var ErrServeAlreadyRunning = errors.New("serve loop already running")
 // underlying value already equaled the desired value.
 //
 // Setter-style implementations (the JawsSet / JawsSetPath methods in
-// github.com/linkdata/jaws/lib/ui and github.com/linkdata/jaws/jawstree) return it,
+// github.com/linkdata/jaws/lib/ui and github.com/linkdata/jawstree) return it,
 // and callers test for it with [errors.Is]. It lives in this package so all
 // implementations share one error identity.
 var ErrValueUnchanged = errors.New("value unchanged")

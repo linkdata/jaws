@@ -54,16 +54,10 @@ jobs:
         with:
           args: ./...
 
-      - name: Install jsdom
-        # The jawstree production regressions load their pages under jsdom; the
-        # runner image ships node and npm, but no npm packages.
-        run: npm install --no-save jsdom
-
       - name: Test
         env:
           # Fail rather than skip the node-driven JS behavior tests; the runner
-          # has node and jsdom installed, so either one missing here is a CI
-          # misconfiguration.
+          # has node installed, so a missing node here is a CI misconfiguration.
           JAWS_REQUIRE_NODE: "1"
         run: go test -race -coverprofile=coverage.out ./...
 
@@ -85,7 +79,7 @@ jobs:
 
   build-386:
     # 32-bit leg: on GOARCH=386 int/uint are 32-bit, so this exercises the
-    # word-size-dependent bounds in lib/bind and jawstree that the amd64 leg cannot reach.
+    # word-size-dependent bounds in lib/bind that the amd64 leg cannot reach.
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -99,15 +93,13 @@ jobs:
         with:
           go-version: stable
 
-      - name: Test lib/bind and jawstree (386)
+      - name: Test lib/bind (386)
         env:
           GOARCH: "386"
           # The race detector is unavailable on 386; disable cgo so the pure-Go
           # test binary is statically linked and runs under 32-bit emulation.
           CGO_ENABLED: "0"
-        # -short on jawstree skips the multi-hundred-MiB boundary trees but keeps the
-        # 32-bit render-byte overflow guard (TestNew_RejectsLargeNameNoOverflow).
-        run: go test ./lib/bind/... && go test -short ./jawstree/...
+        run: go test ./lib/bind/...
 
   coverage:
     needs: build
