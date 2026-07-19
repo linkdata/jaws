@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/coder/websocket"
@@ -51,27 +52,57 @@ func TestReadLoop_RespectsContextDone(t *testing.T) {
 }
 
 func TestReadLoop_RespectsDone(t *testing.T) {
-	msg := WsMsg{Jid: jid.Jid(1234), What: what.Input}
-	inCh := make(chan WsMsg)
-	jawsDoneCh := make(chan struct{})
-	client, server := pipe(t)
-	defer func() { _ = client.CloseNow() }()
-	defer func() { _ = server.CloseNow() }()
+	synctest.Test(t, func(t *testing.T) {
+		msg := WsMsg{Jid: jid.Jid(1234), What: what.Input}
+		inCh := make(chan WsMsg)
+		doneCh := make(chan struct{})
+		client, server := pipe(t)
+		ctx, cancel := context.WithCancelCause(t.Context())
+		loopDone := make(chan struct{})
+		defer closeWireBubble(cancel, client, server)()
 
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
-	defer cancel()
+		go func() {
+			ReadLoop(ctx, cancel, doneCh, inCh, server)
+			close(loopDone)
+		}()
 
-	readDoneCh := make(chan struct{})
-	go func() {
-		defer close(readDoneCh)
-		ReadLoop(ctx, nil, jawsDoneCh, inCh, server)
-	}()
+		if err := client.Write(ctx, websocket.MessageText, []byte(msg.Format())); err != nil {
+			t.Fatal(err)
+		}
+		// ReadLoop is durably blocked sending the decoded message to inCh.
+		synctest.Wait()
+		close(doneCh)
+		synctest.Wait()
+		assertClosedNow(t, loopDone, "ReadLoop")
+		if err := ctx.Err(); err != nil {
+			t.Fatalf("parent context was canceled: %v", err)
+		}
+	})
+}
 
-	if err := client.Write(ctx, websocket.MessageText, []byte(msg.Format())); err != nil {
-		t.Fatal(err)
-	}
-	close(jawsDoneCh)
-	waitDone(t, readDoneCh, "ReadLoop after done close")
+func TestReadLoop_RespectsDoneWhileReading(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancelCause(t.Context())
+		doneCh := make(chan struct{})
+		inCh := make(chan WsMsg)
+		client, server := pipe(t)
+		loopDone := make(chan struct{})
+		defer closeWireBubble(cancel, client, server)()
+
+		go func() {
+			ReadLoop(ctx, cancel, doneCh, inCh, server)
+			close(loopDone)
+		}()
+
+		// ReadLoop is durably blocked in ws.Read on the idle peer.
+		synctest.Wait()
+		close(doneCh)
+		synctest.Wait()
+		assertClosedNow(t, loopDone, "ReadLoop")
+		if err := ctx.Err(); err != nil {
+			t.Fatalf("parent context was canceled: %v", err)
+		}
+	})
 }
 
 func TestWriteLoop_SendsThePayload(t *testing.T) {
@@ -300,6 +331,36 @@ func TestWriteLoop_RespectsDone(t *testing.T) {
 	waitDone(t, writeDoneCh, "WriteLoop after done close")
 }
 
+func TestWriteLoop_RespectsDoneWhileWriting(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancelCause(t.Context())
+		doneCh := make(chan struct{})
+		outCh := make(chan WsMsg, 1)
+		outCh <- WsMsg{
+			Jid:  jid.Jid(1234),
+			What: what.Inner,
+			Data: strings.Repeat("x", writeBatchLimit),
+		}
+		client, server := pipe(t)
+		loopDone := make(chan struct{})
+		defer closeWireBubble(cancel, client, server)()
+
+		go func() {
+			WriteLoop(ctx, cancel, doneCh, outCh, server)
+			close(loopDone)
+		}()
+
+		// The large frame is durably blocked because the peer does not read.
+		synctest.Wait()
+		close(doneCh)
+		synctest.Wait()
+		assertClosedNow(t, loopDone, "WriteLoop")
+		if err := ctx.Err(); err != nil {
+			t.Fatalf("parent context was canceled: %v", err)
+		}
+	})
+}
+
 func TestWriteLoop_RespectsOutboundClosed(t *testing.T) {
 	outCh := make(chan WsMsg)
 	jawsDoneCh := make(chan struct{})
@@ -370,6 +431,22 @@ func TestReadLoop_ReportsError(t *testing.T) {
 	}
 }
 
+func TestReportError_IgnoresDone(t *testing.T) {
+	doneCh := make(chan struct{})
+	close(doneCh)
+	reportError(t.Context(), doneCh, func(err error) {
+		t.Fatalf("reported shutdown error: %v", err)
+	}, errors.New("websocket closed"))
+}
+
+func TestReportError_IgnoresContextDone(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	reportError(ctx, make(chan struct{}), func(err error) {
+		t.Fatalf("reported canceled-context error: %v", err)
+	}, errors.New("websocket closed"))
+}
+
 func TestPingLoop_NonPositiveIntervalReturns(t *testing.T) {
 	client, server := pipe(t)
 	defer func() { _ = client.CloseNow() }()
@@ -419,6 +496,38 @@ func TestPingLoop_RespectsDone(t *testing.T) {
 	waitDone(t, pingDoneCh, "PingLoop after done close")
 }
 
+func TestPingLoop_RespectsDoneWhileWaitingForPong(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancelCause(t.Context())
+		doneCh := make(chan struct{})
+		pingSeen := make(chan struct{})
+		client, server := pipeWithDialOptions(t, websocket.DialOptions{
+			OnPingReceived: func(context.Context, []byte) bool {
+				close(pingSeen)
+				return false // Suppress the automatic pong.
+			},
+		})
+		loopDone := make(chan struct{})
+		defer closeWireBubble(cancel, client, server)()
+
+		client.CloseRead(ctx)
+		go func() {
+			PingLoop(ctx, cancel, doneCh, time.Second, time.Hour, server)
+			close(loopDone)
+		}()
+
+		<-pingSeen
+		// PingLoop is waiting for the deliberately omitted pong.
+		synctest.Wait()
+		close(doneCh)
+		synctest.Wait()
+		assertClosedNow(t, loopDone, "PingLoop")
+		if err := ctx.Err(); err != nil {
+			t.Fatalf("parent context was canceled: %v", err)
+		}
+	})
+}
+
 func TestPingLoop_ReportsErrorWhenPeerDoesNotPong(t *testing.T) {
 	jawsDoneCh := make(chan struct{})
 	client, server := pipe(t)
@@ -453,19 +562,41 @@ func waitDone(t *testing.T, doneCh <-chan struct{}, what string) {
 	}
 }
 
+func assertClosedNow(t *testing.T, ch <-chan struct{}, what string) {
+	t.Helper()
+	select {
+	case <-ch:
+	default:
+		t.Fatalf("%s did not return", what)
+	}
+}
+
+func closeWireBubble(cancel context.CancelCauseFunc, conns ...*websocket.Conn) func() {
+	return func() {
+		cancel(nil)
+		for _, conn := range conns {
+			_ = conn.CloseNow()
+		}
+		synctest.Wait()
+	}
+}
+
 // adapted from nhooyr.io/websocket/internal/test/wstest.Pipe
 func pipe(t *testing.T) (clientConn, serverConn *websocket.Conn) {
 	t.Helper()
-	dialOpts := &websocket.DialOptions{
-		HTTPClient: &http.Client{
-			Transport: fakeTransport{
-				h: func(w http.ResponseWriter, r *http.Request) {
-					serverConn, _ = websocket.Accept(w, r, nil)
-				},
+	return pipeWithDialOptions(t, websocket.DialOptions{})
+}
+
+func pipeWithDialOptions(t *testing.T, dialOpts websocket.DialOptions) (clientConn, serverConn *websocket.Conn) {
+	t.Helper()
+	dialOpts.HTTPClient = &http.Client{
+		Transport: fakeTransport{
+			h: func(w http.ResponseWriter, r *http.Request) {
+				serverConn, _ = websocket.Accept(w, r, nil)
 			},
 		},
 	}
-	clientConn, _, _ = websocket.Dial(t.Context(), "ws://localhost", dialOpts)
+	clientConn, _, _ = websocket.Dial(t.Context(), "ws://localhost", &dialOpts)
 	return clientConn, serverConn
 }
 
