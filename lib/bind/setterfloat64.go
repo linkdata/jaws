@@ -174,9 +174,9 @@ func makeSetterFloat64for[T numeric](s *Setter[float64], value any) bool {
 // representable as float64.
 //
 // If conversion changes value but the converted value already matches the
-// underlying setter, the adapter reports a successful set instead of
-// [jaws.ErrValueUnchanged]. This lets consumers reconcile their float64 view with
-// the canonical converted value returned by [Getter.JawsGet].
+// underlying setter's current value, the adapter reports a successful set
+// instead of [jaws.ErrValueUnchanged]. This lets consumers reconcile their
+// float64 view with the canonical converted value returned by [Getter.JawsGet].
 //
 // Only the predeclared numeric types are matched, by their exact type. Named
 // (defined) numeric types such as "type Celsius float64" are NOT matched:

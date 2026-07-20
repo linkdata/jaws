@@ -178,9 +178,9 @@ func TestInputFloatWidgets(t *testing.T) {
 	mustMatch(t, `^<input id="Jid\.[0-9]+" type="range" value="3.4">$`, got)
 }
 
-// TestInputFloat_ReconcilesConvertedValues verifies that number inputs receive
-// the canonical server value when a numeric adapter truncates or rounds an input
-// to the value that was already stored.
+// TestInputFloat_ReconcilesConvertedValues verifies that number and range inputs
+// receive the canonical server value when a numeric adapter truncates or rounds
+// an input to the value that was already stored.
 func TestInputFloat_ReconcilesConvertedValues(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -209,50 +209,60 @@ func TestInputFloat_ReconcilesConvertedValues(t *testing.T) {
 			},
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			jw, err := jaws.New()
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(jw.Close)
-			go jw.Serve()
-
-			tr := jawstest.NewTestRequest(jw, nil)
-			defer func() {
-				tr.Close()
-				<-tr.DoneCh
-			}()
-			<-tr.ReadyCh
-
-			number := NewNumber(tt.makeSetter())
-			elem := tr.NewElement(number)
-			var buf strings.Builder
-			if err = elem.JawsRender(&buf, []any{`step="any"`}); err != nil {
-				t.Fatal(err)
-			}
-			if err = jaws.CallEventHandlers(elem.UI(), elem, what.Input, tt.input); err != nil {
-				t.Fatalf("input %q: %v", tt.input, err)
-			}
-
-			select {
-			case msg := <-tr.OutCh:
-				if msg.What != what.Value || msg.Jid != elem.Jid() || msg.Data != tt.want {
-					t.Fatalf("update = {%v %v %q}, want {%v %v %q}", msg.What, msg.Jid, msg.Data, what.Value, elem.Jid(), tt.want)
+	// Number and Range embed the same InputFloat, so both must reconcile.
+	widgets := []struct {
+		kind string
+		make func(bind.Setter[float64]) jaws.UI
+	}{
+		{"number", func(s bind.Setter[float64]) jaws.UI { return NewNumber(s) }},
+		{"range", func(s bind.Setter[float64]) jaws.UI { return NewRange(s) }},
+	}
+	for _, w := range widgets {
+		for _, tt := range tests {
+			t.Run(w.kind+"/"+tt.name, func(t *testing.T) {
+				jw, err := jaws.New()
+				if err != nil {
+					t.Fatal(err)
 				}
-			case <-time.After(time.Second):
-				t.Fatal("no corrective value update received")
-			}
+				t.Cleanup(jw.Close)
+				go jw.Serve()
 
-			if err = jaws.CallEventHandlers(elem.UI(), elem, what.Input, tt.want); err != nil {
-				t.Fatalf("unchanged input %q: %v", tt.want, err)
-			}
-			select {
-			case msg := <-tr.OutCh:
-				t.Fatalf("unchanged input produced update {%v %v %q}", msg.What, msg.Jid, msg.Data)
-			case <-time.After(300 * time.Millisecond):
-			}
-		})
+				tr := jawstest.NewTestRequest(jw, nil)
+				defer func() {
+					tr.Close()
+					<-tr.DoneCh
+				}()
+				<-tr.ReadyCh
+
+				widget := w.make(tt.makeSetter())
+				elem := tr.NewElement(widget)
+				var buf strings.Builder
+				if err = elem.JawsRender(&buf, []any{`step="any"`}); err != nil {
+					t.Fatal(err)
+				}
+				if err = jaws.CallEventHandlers(elem.UI(), elem, what.Input, tt.input); err != nil {
+					t.Fatalf("input %q: %v", tt.input, err)
+				}
+
+				select {
+				case msg := <-tr.OutCh:
+					if msg.What != what.Value || msg.Jid != elem.Jid() || msg.Data != tt.want {
+						t.Fatalf("update = {%v %v %q}, want {%v %v %q}", msg.What, msg.Jid, msg.Data, what.Value, elem.Jid(), tt.want)
+					}
+				case <-time.After(time.Second):
+					t.Fatal("no corrective value update received")
+				}
+
+				if err = jaws.CallEventHandlers(elem.UI(), elem, what.Input, tt.want); err != nil {
+					t.Fatalf("unchanged input %q: %v", tt.want, err)
+				}
+				select {
+				case msg := <-tr.OutCh:
+					t.Fatalf("unchanged input produced update {%v %v %q}", msg.What, msg.Jid, msg.Data)
+				case <-time.After(300 * time.Millisecond):
+				}
+			})
+		}
 	}
 }
 

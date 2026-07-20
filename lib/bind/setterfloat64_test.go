@@ -112,6 +112,34 @@ func Test_setterFloat64_conversionSignalsCanonicalChange(t *testing.T) {
 			t.Fatalf("JawsSet(canonical value) = %v, want ErrValueUnchanged", err)
 		}
 	})
+
+	t.Run("negative int truncation", func(t *testing.T) {
+		ts := newTestSetter(-1)
+		s := MakeSetterFloat64(ts)
+		if err := s.JawsSet(nil, -1.9); err != nil {
+			t.Fatalf("JawsSet(-1.9): %v", err)
+		}
+		if ts.Get() != -1 {
+			t.Fatalf("stored value = %d, want -1", ts.Get())
+		}
+		if err := s.JawsSet(nil, -1); !errors.Is(err, jaws.ErrValueUnchanged) {
+			t.Fatalf("JawsSet(-1) = %v, want ErrValueUnchanged", err)
+		}
+	})
+
+	t.Run("uint truncation", func(t *testing.T) {
+		ts := newTestSetter(uint(2))
+		s := MakeSetterFloat64(ts)
+		if err := s.JawsSet(nil, 2.9); err != nil {
+			t.Fatalf("JawsSet(2.9): %v", err)
+		}
+		if ts.Get() != 2 {
+			t.Fatalf("stored value = %d, want 2", ts.Get())
+		}
+		if err := s.JawsSet(nil, 2); !errors.Is(err, jaws.ErrValueUnchanged) {
+			t.Fatalf("JawsSet(2) = %v, want ErrValueUnchanged", err)
+		}
+	})
 }
 
 // Test_setterFloat64_sanitizesUntrustedInput covers the float-from-client guard:
