@@ -8,6 +8,10 @@ import (
 )
 
 // Span renders an HTML span element with dynamic inner HTML.
+//
+// One Span value may back multiple live [jaws.Element] values. Its HTML getter
+// is shared by those Elements and must be safe for their render, update and event
+// calls.
 type Span struct{ HTMLInner }
 
 // NewSpan returns a span widget whose inner HTML is rendered from innerHTML.

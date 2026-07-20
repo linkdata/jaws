@@ -16,6 +16,10 @@ import (
 // It tracks already-rendered child elements and performs append/remove/order
 // updates during [ContainerHelper.UpdateContainer].
 //
+// A ContainerHelper retains child-element reconciliation state for one live
+// [jaws.Element]. A widget embedding one must therefore back at most one live
+// Element.
+//
 // A ContainerHelper belongs to a request-scoped widget instance (for example a
 // widget created via a RequestWriter helper method).
 //
@@ -42,7 +46,9 @@ type ContainerHelper struct {
 }
 
 // NewContainerHelper returns a ContainerHelper for rendering and updating c.
-// ContainerHelper values are request-scoped and must not be reused across requests.
+//
+// The returned value is request-scoped and retains state for one live
+// [jaws.Element].
 func NewContainerHelper(c jaws.Container) ContainerHelper {
 	return ContainerHelper{Container: c}
 }

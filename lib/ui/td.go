@@ -8,6 +8,10 @@ import (
 )
 
 // Td renders an HTML table cell with dynamic inner HTML.
+//
+// One Td value may back multiple live [jaws.Element] values. Its HTML getter is
+// shared by those Elements and must be safe for their render, update and event
+// calls.
 type Td struct{ HTMLInner }
 
 // NewTd returns a table cell widget whose inner HTML is rendered from innerHTML.

@@ -593,9 +593,12 @@ func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 // NewElement creates a new [Element] using the given [UI] object.
 //
 // The UI value becomes scoped to rq and must not be used with another
-// [Request]. See [UI] for the ownership contract.
+// [Request]. Unless its concrete type documents support for multiple live
+// Elements, it must not already back a live Element in rq. These ownership and
+// multiplicity requirements are caller obligations; NewElement does not enforce
+// them. See [UI] for the complete contract.
 //
-// Panics if the build tag "debug" is set and the [UI] object doesn't satisfy all requirements.
+// Panics in debug builds when ui does not satisfy [UI]'s comparability requirement.
 func (rq *Request) NewElement(ui UI) *Element {
 	if deadlock.Debug {
 		if err := tag.NewErrNotComparable(ui); err != nil {

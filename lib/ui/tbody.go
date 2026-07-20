@@ -7,6 +7,9 @@ import (
 )
 
 // Tbody renders an HTML tbody containing dynamic child rows.
+//
+// A Tbody value must back at most one live [jaws.Element]. Construct a distinct
+// Tbody for each place the rows are rendered.
 type Tbody struct {
 	ContainerHelper
 }

@@ -8,6 +8,10 @@ import (
 )
 
 // Tr renders an HTML table row with dynamic inner HTML.
+//
+// One Tr value may back multiple live [jaws.Element] values. Its HTML getter is
+// shared by those Elements and must be safe for their render, update and event
+// calls.
 type Tr struct{ HTMLInner }
 
 // NewTr returns a table row widget whose inner HTML is rendered from innerHTML.

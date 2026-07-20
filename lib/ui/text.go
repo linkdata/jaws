@@ -8,6 +8,9 @@ import (
 )
 
 // Text renders an HTML text input bound to a string setter.
+//
+// A Text value must back at most one live [jaws.Element]. Construct distinct
+// Text values over the same setter to render one bound value more than once.
 type Text struct{ InputText }
 
 // NewText returns a text input widget bound to g.

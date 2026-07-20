@@ -10,6 +10,10 @@ import (
 )
 
 // Img renders an HTML img element whose src is read from a string getter.
+//
+// One Img value may back multiple live [jaws.Element] values. Its getter is
+// shared by those Elements and must be safe for their render, update and event
+// calls.
 type Img struct{ bind.Getter[string] }
 
 // NewImg returns an img widget whose src attribute is read from g.

@@ -8,6 +8,10 @@ import (
 )
 
 // An A renders an HTML anchor element with dynamic inner HTML.
+//
+// One A value may back multiple live [jaws.Element] values. Its HTML getter is
+// shared by those Elements and must be safe for their render, update and event
+// calls.
 type A struct{ HTMLInner }
 
 // NewA returns an anchor widget whose inner HTML is rendered from innerHTML.

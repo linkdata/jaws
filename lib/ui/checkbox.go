@@ -8,6 +8,9 @@ import (
 )
 
 // Checkbox renders an HTML checkbox input bound to a bool setter.
+//
+// A Checkbox value must back at most one live [jaws.Element]. Construct distinct
+// Checkbox values over the same setter to render one bound value more than once.
 type Checkbox struct{ InputBool }
 
 // NewCheckbox returns a checkbox input widget bound to g.

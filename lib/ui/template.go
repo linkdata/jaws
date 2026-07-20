@@ -12,6 +12,11 @@ import (
 
 // Template references a Go [html/template] template to be rendered through JaWS.
 //
+// A Template retains no Element-specific state and may back multiple live
+// [jaws.Element] values. Its Dot and any callbacks reached during execution are
+// shared by those Elements and must be safe for their render, update and event
+// calls.
+//
 // The OuterHTMLTag field identifies the generated wrapper element used for
 // partial templates. If OuterHTMLTag is empty, the template is rendered without
 // a generated wrapper. Name identifies the template to execute and Dot contains

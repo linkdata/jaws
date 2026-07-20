@@ -8,6 +8,9 @@ import (
 )
 
 // Number renders an HTML number input bound to a float64 setter.
+//
+// A Number value must back at most one live [jaws.Element]. Construct distinct
+// Number values over the same setter to render one bound value more than once.
 type Number struct{ InputFloat }
 
 // NewNumber returns a number input widget bound to g.

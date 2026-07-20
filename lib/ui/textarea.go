@@ -10,6 +10,9 @@ import (
 )
 
 // Textarea renders an HTML textarea bound to a string setter.
+//
+// A Textarea value must back at most one live [jaws.Element]. Construct distinct
+// Textarea values over the same setter to render one bound value more than once.
 type Textarea struct{ InputText }
 
 // NewTextarea returns a textarea widget bound to g.

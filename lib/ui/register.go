@@ -9,6 +9,10 @@ import (
 
 // Register is an update-only widget that renders no HTML; it exists so its
 // embedded [jaws.Updater] receives dynamic updates.
+//
+// One Register value may back multiple live [jaws.Element] values only when its
+// Updater supports those calls without retaining Element-specific state on a
+// shared value.
 type Register struct{ jaws.Updater }
 
 // NewRegister returns an update-only widget that invokes updater during updates.

@@ -14,6 +14,9 @@ type RequestWriter struct {
 }
 
 // NewUI creates an element for ui and renders it to the underlying writer.
+//
+// The ui value must satisfy the ownership and live-Element multiplicity
+// requirements documented by [jaws.UI].
 func (rw RequestWriter) NewUI(ui jaws.UI, params ...any) (err error) {
 	elem := rw.NewElement(ui)
 	if err = elem.JawsRender(rw, params); err != nil {

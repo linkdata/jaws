@@ -8,6 +8,10 @@ import (
 )
 
 // Label renders an HTML label element with dynamic inner HTML.
+//
+// One Label value may back multiple live [jaws.Element] values. Its HTML getter
+// is shared by those Elements and must be safe for their render, update and event
+// calls.
 type Label struct{ HTMLInner }
 
 // NewLabel returns a label widget whose inner HTML is rendered from innerHTML.

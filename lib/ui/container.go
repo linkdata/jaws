@@ -7,6 +7,9 @@ import (
 )
 
 // Container renders an HTML element around a dynamic child collection.
+//
+// A Container value must back at most one live [jaws.Element]. Construct a
+// distinct Container for each place the collection is rendered.
 type Container struct {
 	OuterHTMLTag string
 	ContainerHelper

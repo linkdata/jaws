@@ -8,6 +8,10 @@ import (
 )
 
 // Button renders an HTML button element with dynamic inner HTML.
+//
+// One Button value may back multiple live [jaws.Element] values. Its HTML getter
+// is shared by those Elements and must be safe for their render, update and event
+// calls.
 type Button struct{ HTMLInner }
 
 // NewButton returns a button widget whose inner HTML is rendered from innerHTML.
