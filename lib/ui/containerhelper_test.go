@@ -850,7 +850,11 @@ func TestContainerTerminatesOnUnusableChild(t *testing.T) {
 			container := NewContainer("div", tc)
 			elem := rq.NewElement(container)
 			var sb strings.Builder
-			_ = elem.JawsRender(&sb, nil)
+			// The render still balances its tags and returns nil; the unusable child is
+			// skipped and the Request is terminated (asserted via the cancellation cause).
+			if err := elem.JawsRender(&sb, nil); err != nil {
+				t.Fatalf("JawsRender err = %v, want nil", err)
+			}
 			if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
 				t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
 			}
@@ -867,5 +871,51 @@ func TestContainerTerminatesOnUnusableChild(t *testing.T) {
 				t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
 			}
 		})
+	}
+}
+
+type reentrantLogger struct{ onError func() }
+
+func (reentrantLogger) Info(string, ...any) {}
+func (reentrantLogger) Warn(string, ...any) {}
+func (l reentrantLogger) Error(string, ...any) {
+	if l.onError != nil {
+		l.onError()
+	}
+}
+
+// TestContainerCancelNotUnderLock pins that terminating the Request for an unusable
+// child does not run while u.mu is held: cancelUnusableChildren runs before reconcile
+// locks. Request.Cancel invokes the user logger synchronously, so a logger that
+// re-enters the container's lock would deadlock the update goroutine if cancellation
+// held u.mu. The timeout turns that regression into a failure instead of a hang.
+func TestContainerCancelNotUnderLock(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("ok"))}}
+	container := NewContainer("div", tc)
+	elem, _ := renderUI(t, rq, container)
+
+	jw.Logger = reentrantLogger{onError: func() {
+		// Re-enter the container's lock. If the cancellation that triggered this log
+		// held u.mu, this second Lock on the same goroutine would deadlock.
+		container.mu.Lock()
+		_ = len(container.contents)
+		container.mu.Unlock()
+	}}
+
+	tc.contents = []jaws.UI{nanChildUI{f: math.NaN()}}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		container.JawsUpdate(elem)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("JawsUpdate deadlocked: Request cancellation ran while holding u.mu")
+	}
+
+	if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
+		t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
 	}
 }

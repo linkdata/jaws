@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"html/template"
 	"io"
 	"slices"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/htmlio"
-	"github.com/linkdata/jaws/lib/tag"
 )
 
 // ContainerHelper is a helper for widgets that render dynamic child collections.
@@ -67,16 +65,18 @@ func (u *ContainerHelper) RenderContainer(elem *jaws.Element, w io.Writer, outer
 		_, err = w.Write(b)
 		if err == nil {
 			var contents []*jaws.Element
-			for _, childUI := range u.Container.JawsContains(elem) {
-				// Skip a child that cannot be used as a pool key so it never enters
-				// u.contents; a later reconcile pool build would otherwise hash it.
-				if cancelUnusableChild(elem, childUI) {
-					continue
-				}
-				childElem := elem.Request.NewElement(childUI)
-				contents = append(contents, childElem)
-				if err = childElem.JawsRender(w, nil); err != nil {
-					break
+			// Validate every child before creating any Element: an unusable child (one
+			// that is not comparable at runtime, or not equal to itself) terminates the
+			// Request, and the rest must not be rendered. Keeping unusable children out of
+			// u.contents also stops a later reconcile pool build from hashing one.
+			children := u.Container.JawsContains(elem)
+			if !cancelUnusableChildren(elem, children) {
+				for _, childUI := range children {
+					childElem := elem.Request.NewElement(childUI)
+					contents = append(contents, childElem)
+					if err = childElem.JawsRender(w, nil); err != nil {
+						break
+					}
 				}
 			}
 			// Always emit the closing tag, even on a child-render error, to balance
@@ -145,27 +145,41 @@ func (u *ContainerHelper) deleteContent(elem *jaws.Element) {
 	u.mu.Unlock()
 }
 
-// cancelUnusableChild reports whether childUI cannot be used as a container pool
-// key — not comparable at runtime, or not equal to itself (a value holding NaN) —
-// and, when so, terminates the Request with a cause wrapping [tag.ErrNotUsableAsTag].
-// Callers skip the child so it never becomes a live [jaws.Element]. This mirrors the
-// guard in [jaws.Request.NewElement] but runs before the value is hashed as a map key.
-func cancelUnusableChild(elem *jaws.Element, childUI jaws.UI) bool {
-	if err := tag.NewErrNotUsableAsTag(childUI); err != nil {
-		elem.Request.Cancel(fmt.Errorf("jaws: container child %T is not usable as a UI value: %w", childUI, err))
-		return true
+// cancelUnusableChildren terminates the Request and reports true if any child cannot
+// be used as a container pool key: not comparable at runtime, or not equal to itself
+// (a value holding NaN). It aborts on the first such child.
+//
+// It must be called without holding u.mu. [jaws.Request.Cancel] runs the user logger
+// synchronously, and the jaws locking contract forbids that under a lock; a logger
+// re-entering the container would otherwise deadlock. Validating the whole slice up
+// front also stops the caller creating or rendering later children once the Request
+// is terminating. The cancellation cause matches [jaws.NewErrUnusableUI].
+func cancelUnusableChildren(elem *jaws.Element, children []jaws.UI) bool {
+	for _, childUI := range children {
+		if err := jaws.NewErrUnusableUI(childUI); err != nil {
+			elem.Request.Cancel(err)
+			return true
+		}
 	}
 	return false
 }
 
 // reconcile matches u.contents to wantContents under u.mu and returns the
 // Elements to append, the leftover Elements to remove, and the old and new Jid
-// orders. Each wanted child is validated with cancelUnusableChild before it is used
-// as a pool key, so a value that is non-reflexive or non-comparable at runtime (a
-// comparable struct holding e.g. a func in an interface field) terminates the Request
-// instead of missing the lookup or panicking. The lock is still released with defer
-// as a further guard against a panic leaving u.mu held, mirroring jaws.setDirty.
+// orders.
+//
+// The wanted children are validated with cancelUnusableChildren before u.mu is
+// locked, since that terminates the Request through the user logger, which the
+// locking contract forbids under a lock. A non-reflexive value (one holding NaN)
+// would miss the pool lookup and a runtime-incomparable one would panic hashing it,
+// so on the first such child the Request is terminated and reconcile returns nothing
+// to append, remove or reorder. The lock is still released with defer as a further
+// guard against a panic leaving u.mu held, mirroring jaws.setDirty.
 func (u *ContainerHelper) reconcile(elem *jaws.Element, wantContents []jaws.UI) (toAppend, toRemove []*jaws.Element, oldOrder, newOrder []jaws.Jid) {
+	if cancelUnusableChildren(elem, wantContents) {
+		return
+	}
+
 	u.mu.Lock()
 	defer u.mu.Unlock()
 
@@ -181,13 +195,6 @@ func (u *ContainerHelper) reconcile(elem *jaws.Element, wantContents []jaws.UI) 
 	newOrder = make([]jaws.Jid, 0, len(wantContents))
 	u.contents = u.contents[:0]
 	for _, childUI := range wantContents {
-		// Validate before childUI is used as a pool key below: a non-reflexive value
-		// (one holding NaN) would silently miss the lookup, and a runtime-incomparable
-		// one would panic hashing it. Skipping it here also keeps it out of u.contents,
-		// so the pool build above never hits an unusable key.
-		if cancelUnusableChild(elem, childUI) {
-			continue
-		}
 		var childElem *jaws.Element
 		// Reuse a pooled Element, discarding any that were deleted out-of-band (a
 		// what.Delete broadcast targeting a tag the child registered, or a browser

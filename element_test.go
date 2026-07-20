@@ -1245,7 +1245,7 @@ func TestNewElementTerminatesOnNonReflexiveUI(t *testing.T) {
 	if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
 		t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
 	}
-	if !strings.Contains(tj.log.String(), "not usable as a UI value") {
+	if !strings.Contains(tj.log.String(), "not usable as a jaws.UI value") {
 		t.Fatalf("expected termination to be logged, got %q", tj.log.String())
 	}
 }

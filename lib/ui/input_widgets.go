@@ -132,6 +132,11 @@ func (u *InputBool) JawsInput(elem *jaws.Element, value string) (err error) {
 // InputFloat is the reusable base for float64 input widgets.
 //
 // A widget embedding InputFloat must back at most one live [jaws.Element].
+//
+// The bound value must be finite. A non-finite value (NaN or ±Inf) has no valid
+// rendering or wire representation, so rendering it, [InputFloat.JawsUpdate], and
+// [InputFloat.JawsInput] cancel the [jaws.Request] with a cause matching
+// [jaws.ErrValueNotFinite] rather than coerce it.
 type InputFloat struct {
 	Input
 	bind.Setter[float64]
@@ -163,6 +168,8 @@ func (u *InputFloat) renderFloatInput(elem *jaws.Element, w io.Writer, htmlType 
 }
 
 // JawsUpdate updates the input value when the bound float64 value changes.
+//
+// A non-finite bound value cancels the [jaws.Request]; see [InputFloat].
 func (u *InputFloat) JawsUpdate(elem *jaws.Element) {
 	v := u.JawsGet(elem)
 	if !finite(v) {
@@ -184,6 +191,10 @@ func (u *InputFloat) JawsUpdate(elem *jaws.Element) {
 }
 
 // JawsInput stores a browser-side float64 input value.
+//
+// A non-finite value — the "NaN"/"Inf" literals or an overflowing magnitude such as
+// "1e999" — cancels the [jaws.Request] (see [InputFloat]) and reports the event
+// handled (nil error).
 func (u *InputFloat) JawsInput(elem *jaws.Element, value string) (err error) {
 	if value == "" {
 		// Empty is a normal in-progress edit state for number/range controls:
