@@ -2226,7 +2226,7 @@ func TestServeHTTP_GetPing(t *testing.T) {
 	req := httptest.NewRequest("", "/jaws/.ping", nil)
 	w := httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
-	is.Equal(w.Header()["Cache-Control"], headerCacheControlNoStore)
+	is.Equal(w.Header().Get("Cache-Control"), headerCacheControlNoStore)
 	is.Equal(len(w.Body.Bytes()), 0)
 	is.Equal(w.Header()["Content-Length"], nil)
 	is.Equal(w.Code, http.StatusNoContent)
@@ -2255,7 +2255,7 @@ func TestServeHTTP_GetPing(t *testing.T) {
 	w = httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusServiceUnavailable)
-	is.Equal(w.Header()["Cache-Control"], headerCacheControlNoStore)
+	is.Equal(w.Header().Get("Cache-Control"), headerCacheControlNoStore)
 }
 
 func TestServeHTTP_DisallowedMethods(t *testing.T) {
@@ -2291,6 +2291,113 @@ func TestServeHTTP_DisallowedMethods(t *testing.T) {
 	}
 }
 
+func TestServeHTTP_ResponseHeaderValuesAreIndependent(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go jw.Serve()
+	defer jw.Close()
+
+	serveTail := func() *httptest.ResponseRecorder {
+		hr := httptest.NewRequest(http.MethodGet, "/", nil)
+		rq := jw.NewRequest(hr)
+		req := httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString(), nil)
+		req.RemoteAddr = hr.RemoteAddr
+		w := httptest.NewRecorder()
+		jw.ServeHTTP(w, req)
+		return w
+	}
+
+	for _, tt := range []struct {
+		name  string
+		key   string
+		want  string
+		serve func() *httptest.ResponseRecorder
+	}{
+		{
+			name: "ping cache control",
+			key:  "Cache-Control",
+			want: headerCacheControlNoStore,
+			serve: func() *httptest.ResponseRecorder {
+				w := httptest.NewRecorder()
+				jw.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/jaws/.ping", nil))
+				return w
+			},
+		},
+		{
+			name: "allowed methods",
+			key:  "Allow",
+			want: headerAllowGetHead,
+			serve: func() *httptest.ResponseRecorder {
+				w := httptest.NewRecorder()
+				jw.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/jaws/.ping", nil))
+				return w
+			},
+		},
+		{
+			name:  "tail cache control",
+			key:   "Cache-Control",
+			want:  headerCacheControlNoStore,
+			serve: serveTail,
+		},
+		{
+			name:  "tail content type",
+			key:   "Content-Type",
+			want:  headerContentTypeJavaScript,
+			serve: serveTail,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			first := tt.serve()
+			values := first.Header()[tt.key]
+			if len(values) != 1 {
+				t.Fatalf("first %s values = %q, want one value", tt.key, values)
+			}
+			values[0] = "mutated"
+
+			second := tt.serve()
+			if got := second.Header().Get(tt.key); got != tt.want {
+				t.Errorf("second %s = %q after mutating first response, want %q", tt.key, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestServeHTTP_ResponseHeaderValuesAreIndependentConcurrently(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	const workers = 32
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for range workers {
+		go func() {
+			defer wg.Done()
+			<-start
+			w := httptest.NewRecorder()
+			jw.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/jaws/.ping", nil))
+			w.Header()["Cache-Control"][0] = "mutated"
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	w := httptest.NewRecorder()
+	jw.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/jaws/.ping", nil))
+	values := w.Header()["Cache-Control"]
+	if len(values) != 1 {
+		t.Fatalf("final Cache-Control values = %q, want one value", values)
+	}
+	if got := values[0]; got != headerCacheControlNoStore {
+		t.Errorf("final Cache-Control = %q after concurrent response mutations, want %q", got, headerCacheControlNoStore)
+	}
+}
+
 func TestServeHTTP_HeadPing(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()
@@ -2303,7 +2410,7 @@ func TestServeHTTP_HeadPing(t *testing.T) {
 	req := httptest.NewRequest(http.MethodHead, "/jaws/.ping", nil)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
-	is.Equal(w.Header()["Cache-Control"], headerCacheControlNoStore)
+	is.Equal(w.Header().Get("Cache-Control"), headerCacheControlNoStore)
 	is.Equal(w.Body.Len(), 0)
 	is.Equal(w.Header()["Content-Length"], nil)
 	is.Equal(w.Code, http.StatusNoContent)
@@ -2313,7 +2420,7 @@ func TestServeHTTP_HeadPing(t *testing.T) {
 	req = httptest.NewRequest(http.MethodHead, "/jaws/.ping", nil)
 	w = httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
-	is.Equal(w.Header()["Cache-Control"], headerCacheControlNoStore)
+	is.Equal(w.Header().Get("Cache-Control"), headerCacheControlNoStore)
 	is.Equal(w.Body.Len(), 0)
 	is.Equal(w.Code, http.StatusServiceUnavailable)
 }
@@ -2444,8 +2551,8 @@ func TestServeHTTP_TailScript(t *testing.T) {
 	jw.ServeHTTP(w, req)
 
 	is.Equal(w.Code, http.StatusOK)
-	is.Equal(w.Header()["Content-Type"], headerContentTypeJavaScript)
-	is.Equal(w.Header()["Cache-Control"], headerCacheControlNoStore)
+	is.Equal(w.Header().Get("Content-Type"), headerContentTypeJavaScript)
+	is.Equal(w.Header().Get("Cache-Control"), headerCacheControlNoStore)
 	is.Equal(strings.Contains(w.Body.String(), `setAttribute("title","\x3c/script>\x3cimg onerror=alert(1) src=x>");`), true)
 	is.Equal(strings.Contains(w.Body.String(), `classList?.add("cls");`), true)
 	is.Equal(strings.Contains(w.Body.String(), "kept"), false)
@@ -2569,8 +2676,8 @@ func TestServeHTTP_TailScript_WriteError(t *testing.T) {
 	jw.ServeHTTP(w, req)
 
 	is.Equal(w.writeCall > 0, true)
-	is.Equal(w.Header()["Content-Type"], headerContentTypeJavaScript)
-	is.Equal(w.Header()["Cache-Control"], headerCacheControlNoStore)
+	is.Equal(w.Header().Get("Content-Type"), headerContentTypeJavaScript)
+	is.Equal(w.Header().Get("Cache-Control"), headerCacheControlNoStore)
 	is.Equal(jw.RequestCount(), 1)
 	is.Equal(rq.Context().Err() != nil, true)
 }

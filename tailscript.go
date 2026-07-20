@@ -23,7 +23,7 @@ import (
 	"github.com/linkdata/jaws/lib/wire"
 )
 
-var headerContentTypeJavaScript = []string{"text/javascript"}
+const headerContentTypeJavaScript = "text/javascript"
 
 // appendJSQuote appends s as a JavaScript string literal safe to embed in an inline
 // <script>.
@@ -128,8 +128,8 @@ func (rq *Request) drainTailScript() (b []byte, sent bool) {
 // bytes and writes an empty 200 body.
 func (*Request) writeTailResponse(w http.ResponseWriter, b []byte, sent bool) (err error) {
 	hdr := w.Header()
-	hdr["Cache-Control"] = headerCacheControlNoStore
-	hdr["Content-Type"] = headerContentTypeJavaScript
+	hdr.Set("Cache-Control", headerCacheControlNoStore)
+	hdr.Set("Content-Type", headerContentTypeJavaScript)
 	if !sent {
 		w.WriteHeader(http.StatusNoContent)
 	} else if len(b) > 0 {
