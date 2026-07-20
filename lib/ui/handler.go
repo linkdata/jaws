@@ -24,6 +24,9 @@ type pageTemplate struct {
 	Template
 }
 
+// The per-request page UI is a *pageTemplate; see [uiHandler.ServeHTTP].
+var _ jaws.UI = (*pageTemplate)(nil)
+
 // JawsUpdate is a no-op because a page-level template is render-only: the
 // embedded [Template.JawsUpdate] would re-render the entire document into itself
 // when OuterHTMLTag is set, so it is deliberately silenced here.
@@ -68,7 +71,13 @@ func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rq := h.NewRequest(r)
 	sr := &statusRecorder{ResponseWriter: w}
 	rw := RequestWriter{Request: rq, Writer: sr}
-	if err := rw.NewUI(h.Template); err != nil {
+	// Render through a fresh per-request pointer so the UI is comparable as a map
+	// key regardless of the page dot: ordinary html/template data such as a slice
+	// or map is not usable as a tag and would fail the runtime comparability check
+	// in Request.NewElement if a bare pageTemplate value (whose Dot is any) were
+	// used. The pointer identity is always comparable and fresh per request.
+	pt := h.Template
+	if err := rw.NewUI(&pt); err != nil {
 		_ = h.Log(err)
 		// A failure before any output (for example a missing template) can still
 		// become a proper error response; once bytes have been written the status
