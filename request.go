@@ -539,7 +539,7 @@ func (rq *Request) tagsOfLocked(elem *Element) (tags []any) {
 
 // tryTagsOf returns a snapshot of elem's tags without waiting for rq.mu.
 func (rq *Request) tryTagsOf(elem *Element) (tags []any, ok bool) {
-	if elem != nil && rq.mu.TryRLock() {
+	if rq.mu.TryRLock() {
 		tags = rq.tagsOfLocked(elem)
 		rq.mu.RUnlock()
 		ok = true
