@@ -268,10 +268,12 @@ func TestInputFloat_ReconcilesConvertedValues(t *testing.T) {
 }
 
 // TestInputFloat_TerminatesOnNonFiniteInput verifies that NaN/Inf from the untrusted
-// browser (which strconv.ParseFloat accepts) terminates the Request and never reaches
-// the bound value. JawsInput reports the event handled (nil).
+// browser terminates the Request and never reaches the bound value. This covers both
+// the literals strconv.ParseFloat accepts ("NaN"/"Inf") and an overflowing magnitude
+// like "1e999", which parses to ±Inf with a range error. JawsInput reports the event
+// handled (nil).
 func TestInputFloat_TerminatesOnNonFiniteInput(t *testing.T) {
-	for _, bad := range []string{"NaN", "Inf", "-Inf", "+Inf"} {
+	for _, bad := range []string{"NaN", "Inf", "-Inf", "+Inf", "1e999", "-1e999"} {
 		t.Run(bad, func(t *testing.T) {
 			_, rq := newCoreRequest(t)
 			sf := newTestSetter(7.5)

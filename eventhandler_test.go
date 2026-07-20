@@ -230,6 +230,7 @@ func TestCallEventHandlerTerminatesOnNonFiniteClick(t *testing.T) {
 		{"click nan x", what.Click, "NaN 2 0 name"},
 		{"click +inf y", what.Click, "1 +Inf 0 name"},
 		{"click -inf x", what.Click, "-Inf 2 0 name"},
+		{"click overflow x", what.Click, "1e999 2 0 name"},
 		{"contextmenu nan y", what.ContextMenu, "1 NaN 0 name"},
 	}
 	for _, tt := range tests {

@@ -11,13 +11,14 @@ import (
 type Container interface {
 	// JawsContains returns the current child [UI] values contained by elem.
 	//
-	// The returned [UI] values must be comparable, since they are used as map keys
-	// (see [UI] for the comparability requirement), and the slice contents must not
-	// be modified after returning it. Returning a child UI again from a later call
-	// lets the container reuse its existing live [Element]. The same UI may occur
-	// more than once in one returned slice only when its type documents support for
-	// backing multiple live Elements. A child UI must not be shared with a different
-	// [Request].
+	// The returned [UI] values must be comparable and equal to themselves, since they
+	// are used as map keys (see [UI] for the requirement); a value that is not, such
+	// as one holding NaN, cancels the [Request] instead of being reconciled. The slice
+	// contents must not be modified after returning it. Returning such a child UI again
+	// from a later call lets the container reuse its existing live [Element]. The same
+	// UI may occur more than once in one returned slice only when its type documents
+	// support for backing multiple live Elements. A child UI must not be shared with a
+	// different [Request].
 	JawsContains(elem *Element) (contents []UI)
 }
 
@@ -67,14 +68,14 @@ type TemplateLookuper interface {
 // Application state referenced by UI values may be shared across Requests when
 // synchronized as required.
 //
-// In addition, all UI objects must be comparable so they can be used as map keys.
-// The compile-time type must be comparable; debug builds additionally perform a
-// runtime value-level check in [Request.NewElement] and panic on a value that is
-// statically comparable but not comparable at runtime (for example a comparable
-// struct holding a func in an interface field). Production builds rely on the
-// static check alone, so such a value is accepted and instead panics when first
-// used as a map key; callers must therefore ensure UI values are genuinely
-// comparable.
+// In addition, all UI objects must be comparable and equal to themselves, so they
+// can be used as map keys. The compile-time type must be comparable;
+// [Request.NewElement] additionally performs a runtime value-level check in every
+// build and cancels the Request when the value is not comparable at runtime (for
+// example a comparable struct holding a func in an interface field) or not equal to
+// itself (a value holding NaN). The cancellation cause wraps
+// [github.com/linkdata/jaws/lib/tag.ErrNotUsableAsTag]. Callers must therefore
+// ensure UI values are genuinely comparable and reflexive.
 type UI interface {
 	Renderer
 	Updater

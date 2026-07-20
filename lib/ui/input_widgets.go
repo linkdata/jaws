@@ -192,21 +192,24 @@ func (u *InputFloat) JawsInput(elem *jaws.Element, value string) (err error) {
 		// when the setter reports unchanged; that would race ordinary typing.
 		value = "0"
 	}
-	var v float64
-	// Parse errors are malformed client frames: jaws.js reads elem.value from
-	// browser number/range controls. Leave Last as the last accepted value.
-	if v, err = strconv.ParseFloat(value, 64); err == nil {
-		// The browser is untrusted and strconv.ParseFloat accepts "NaN"/"Inf". A
-		// non-finite value has no valid bound representation and cannot come from a
-		// well-behaved browser, so terminate the Request rather than store it.
-		if !finite(v) {
-			elem.Cancel(fmt.Errorf("%w: %g", jaws.ErrValueNotFinite, v))
-			return
-		}
-		u.Last.Store(v)
-		err = u.maybeDirty(elem, u.Setter.JawsSet(elem, v))
+	v, err := strconv.ParseFloat(value, 64)
+	// The browser is untrusted and strconv.ParseFloat accepts "NaN"/"Inf" (no error)
+	// and returns ±Inf with a range error for an overflowing magnitude like "1e999".
+	// A non-finite result has no valid bound representation and cannot come from a
+	// well-behaved browser, so terminate the Request rather than store it. Check the
+	// parsed value before the error so overflow is caught, not treated as malformed.
+	if !finite(v) {
+		elem.Cancel(fmt.Errorf("%w: %g", jaws.ErrValueNotFinite, v))
+		return nil
 	}
-	return
+	// A remaining error is a syntax error: a malformed client frame (jaws.js reads
+	// elem.value from browser number/range controls). Leave Last as the last accepted
+	// value.
+	if err != nil {
+		return err
+	}
+	u.Last.Store(v)
+	return u.maybeDirty(elem, u.Setter.JawsSet(elem, v))
 }
 
 // InputDate is the reusable base for date input widgets.

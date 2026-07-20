@@ -809,8 +809,8 @@ func TestSelectWidget_NonSetterContainer(t *testing.T) {
 	}
 }
 
-// nanChildUI is a comparable UI value that is not equal to itself, reproducing the
-// non-reflexive map-key hazard from issue #179.
+// nanChildUI is a comparable UI value that is not equal to itself (a non-reflexive
+// map key), reproducing issue #179.
 type nanChildUI struct{ f float64 }
 
 func (nanChildUI) JawsRender(_ *jaws.Element, w io.Writer, _ []any) error {
@@ -819,33 +819,53 @@ func (nanChildUI) JawsRender(_ *jaws.Element, w io.Writer, _ []any) error {
 }
 func (nanChildUI) JawsUpdate(*jaws.Element) {}
 
-// TestContainerTerminatesOnNonReflexiveChild reproduces issue #179: a container child
-// whose UI value contains NaN is a legal comparable map key but is not equal to
-// itself, so container reconciliation cannot match it and would recreate it every
-// update. NewElement instead terminates the Request. Covered on both the initial
-// render and a later update.
-func TestContainerTerminatesOnNonReflexiveChild(t *testing.T) {
-	t.Run("render", func(t *testing.T) {
-		_, rq := newCoreRequest(t)
-		tc := &testContainer{contents: []jaws.UI{nanChildUI{f: math.NaN()}}}
-		container := NewContainer("div", tc)
-		elem := rq.NewElement(container)
-		var sb strings.Builder
-		_ = elem.JawsRender(&sb, nil)
-		if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
-			t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
-		}
-	})
+// incomparableChildUI is statically comparable (an interface field) but panics when
+// compared or hashed at runtime, since it holds a slice.
+type incomparableChildUI struct{ v any }
 
-	t.Run("update", func(t *testing.T) {
-		_, rq := newCoreRequest(t)
-		tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("ok"))}}
-		container := NewContainer("div", tc)
-		elem, _ := renderUI(t, rq, container)
-		tc.contents = []jaws.UI{nanChildUI{f: math.NaN()}}
-		container.JawsUpdate(elem)
-		if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
-			t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
-		}
-	})
+func (incomparableChildUI) JawsRender(_ *jaws.Element, w io.Writer, _ []any) error {
+	_, err := io.WriteString(w, "child")
+	return err
+}
+func (incomparableChildUI) JawsUpdate(*jaws.Element) {}
+
+// TestContainerTerminatesOnUnusableChild covers issue #179 and its
+// runtime-incomparable sibling: a container child UI that is not equal to itself
+// (holds NaN) or not comparable at runtime (holds an interface-wrapped slice) cannot
+// be a container pool key. The container must terminate the Request rather than churn
+// (NaN) or panic hashing the key (incomparable). The incomparable update case pins
+// that reconcile validates before the pool lookup, which would otherwise panic.
+func TestContainerTerminatesOnUnusableChild(t *testing.T) {
+	bad := []struct {
+		name string
+		make func() jaws.UI
+	}{
+		{"nan", func() jaws.UI { return nanChildUI{f: math.NaN()} }},
+		{"incomparable", func() jaws.UI { return incomparableChildUI{v: []int{1}} }},
+	}
+	for _, b := range bad {
+		t.Run(b.name+" render", func(t *testing.T) {
+			_, rq := newCoreRequest(t)
+			tc := &testContainer{contents: []jaws.UI{b.make()}}
+			container := NewContainer("div", tc)
+			elem := rq.NewElement(container)
+			var sb strings.Builder
+			_ = elem.JawsRender(&sb, nil)
+			if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
+				t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
+			}
+		})
+
+		t.Run(b.name+" update", func(t *testing.T) {
+			_, rq := newCoreRequest(t)
+			tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("ok"))}}
+			container := NewContainer("div", tc)
+			elem, _ := renderUI(t, rq, container)
+			tc.contents = []jaws.UI{b.make()}
+			container.JawsUpdate(elem) // must terminate, not panic
+			if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
+				t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
+			}
+		})
+	}
 }

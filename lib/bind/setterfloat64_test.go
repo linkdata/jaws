@@ -142,18 +142,17 @@ func Test_setterFloat64_conversionSignalsCanonicalChange(t *testing.T) {
 	})
 }
 
-// Test_setterFloat64_sanitizesUntrustedInput covers the setter's range guard:
-// out-of-range values are rejected before the (otherwise wrapping) float->int
-// conversion, and an infinity is incidentally rejected as out of range. The bound
-// value must be left unchanged on rejection. Finiteness itself is enforced by the
-// input widgets, not this setter.
+// Test_setterFloat64_sanitizesUntrustedInput covers the float-from-client guard:
+// non-finite values are rejected for every numeric type and out-of-range values
+// are rejected before the (otherwise wrapping) float->int conversion. The bound
+// value must be left unchanged on rejection.
 func Test_setterFloat64_sanitizesUntrustedInput(t *testing.T) {
-	t.Run("rejects Inf as out of range", func(t *testing.T) {
+	t.Run("rejects NaN and Inf", func(t *testing.T) {
 		ts := newTestSetter(int8(5))
 		s := MakeSetterFloat64(ts)
-		for _, bad := range []float64{math.Inf(1), math.Inf(-1)} {
-			if err := s.JawsSet(nil, bad); !errors.Is(err, ErrFloatOutOfRange) {
-				t.Errorf("JawsSet(%v): expected ErrFloatOutOfRange, got %v", bad, err)
+		for _, bad := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+			if err := s.JawsSet(nil, bad); !errors.Is(err, ErrFloatNotFinite) {
+				t.Errorf("JawsSet(%v): expected ErrFloatNotFinite, got %v", bad, err)
 			}
 		}
 		if ts.Get() != 5 {
@@ -203,13 +202,13 @@ func Test_setterFloat64_sanitizesUntrustedInput(t *testing.T) {
 }
 
 // assertIntTypeGuard exercises sanitizeFloatForT's per-type branch for an integer
-// type T: an infinite value is rejected as out of range, an out-of-range finite
-// value overflows, and an in-range value is accepted.
+// type T: NaN/Inf is rejected, an out-of-range value overflows, and an in-range
+// value is accepted.
 func assertIntTypeGuard[T numeric](t *testing.T, name string, inRange, tooBig float64) {
 	t.Helper()
 	s := MakeSetterFloat64(newTestSetter(T(0)))
-	if err := s.JawsSet(nil, math.Inf(1)); !errors.Is(err, ErrFloatOutOfRange) {
-		t.Errorf("%s: Inf: got %v, want ErrFloatOutOfRange", name, err)
+	if err := s.JawsSet(nil, math.Inf(1)); !errors.Is(err, ErrFloatNotFinite) {
+		t.Errorf("%s: Inf: got %v, want ErrFloatNotFinite", name, err)
 	}
 	if err := s.JawsSet(nil, tooBig); !errors.Is(err, ErrFloatOutOfRange) {
 		t.Errorf("%s: %v: got %v, want ErrFloatOutOfRange", name, tooBig, err)
@@ -220,9 +219,9 @@ func assertIntTypeGuard[T numeric](t *testing.T, name string, inRange, tooBig fl
 }
 
 // Test_setterFloat64_coversNumericTypes exercises every case of the type switch in
-// sanitizeFloatForT: each integer type rejects out-of-range values, and float32
-// rejects both an infinity and a finite value that overflows the float32 range (an
-// in-range value is accepted).
+// sanitizeFloatForT: each integer type rejects out-of-range values, float32 rejects
+// non-finite and finite-but-overflowing values, and float64 takes the
+// finiteness-only default case.
 func Test_setterFloat64_coversNumericTypes(t *testing.T) {
 	assertIntTypeGuard[int8](t, "int8", 1, 128)
 	assertIntTypeGuard[int16](t, "int16", 1, 32768)
@@ -235,11 +234,11 @@ func Test_setterFloat64_coversNumericTypes(t *testing.T) {
 	assertIntTypeGuard[uint64](t, "uint64", 1, 18446744073709551616.0) // 2^64
 	assertIntTypeGuard[uint](t, "uint", 1, 18446744073709551616.0)     // 2^64
 
-	// float32 rejects an infinity and finite values that overflow the float32 range
-	// (they would otherwise convert to ±Inf); an in-range value is accepted.
+	// float32 rejects non-finite values and finite values that overflow the float32
+	// range (they would otherwise convert to ±Inf); an in-range value is accepted.
 	fs := MakeSetterFloat64(newTestSetter(float32(0)))
-	if err := fs.JawsSet(nil, math.Inf(1)); !errors.Is(err, ErrFloatOutOfRange) {
-		t.Errorf("float32 Inf: got %v, want ErrFloatOutOfRange", err)
+	if err := fs.JawsSet(nil, math.Inf(1)); !errors.Is(err, ErrFloatNotFinite) {
+		t.Errorf("float32 Inf: got %v, want ErrFloatNotFinite", err)
 	}
 	if err := fs.JawsSet(nil, 1e30); err != nil {
 		t.Errorf("float32 1e30: got %v, want nil", err)
