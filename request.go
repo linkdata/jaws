@@ -70,7 +70,7 @@ type Request struct {
 	remoteIP         netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
 	running          atomic.Bool             // if ServeHTTP() is running
 	claimed          atomic.Bool             // if UseRequest() has been called for it
-	lastWriteSeconds atomic.Int32            // [Jaws.runtimeSeconds] value at the most recent RequestWriter write; lock-free, drives pending-eviction preference (oldestIdlePendingLocked) and idle expiry (maintenance)
+	lastWriteSeconds atomic.Int32            // [Jaws.runtimeSeconds] value at the most recent RequestWriter write; lock-free, drives pending-eviction preference (pendingEvictionVictimLocked) and idle expiry (maintenance)
 	mu               deadlock.RWMutex        // protects following
 	lastJid          Jid                     // last element Jid allocated within this Request
 	initial          *http.Request           // initial HTTP request passed to Jaws.NewRequest
@@ -119,7 +119,7 @@ func (rq *Request) String() string {
 // recorded second backward.
 func (rq *Request) MarkWritten() {
 	// A cached runtime sample avoids a clock read. The recorded second drives the
-	// recency window in oldestIdlePendingLocked and the idle expiry in
+	// recency window in pendingEvictionVictimLocked and the idle expiry in
 	// maintenance.
 	rq.advanceLastWriteSeconds(rq.Jaws.runtimeSeconds.Load())
 }
