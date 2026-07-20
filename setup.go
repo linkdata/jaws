@@ -48,7 +48,9 @@ func makeAbsPath(prefix string, u *url.URL) *url.URL {
 // [staticserve.StaticServe] extras are local resources. Their generated URLs
 // are slash-rooted so they match their registered handlers, including when
 // prefix is empty. Other relative URL extras remain relative with an empty
-// prefix.
+// prefix. Each [staticserve.StaticServe.Name] is treated as a literal path,
+// not as a pre-escaped URL; percent signs in a name are escaped as literal
+// percent signs.
 //
 // If handleFn is nil, Setup generates head HTML from the configured resources
 // without registering any handlers.
