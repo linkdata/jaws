@@ -537,6 +537,16 @@ type testSelectHandler struct {
 	*testSetter[string]
 }
 
+type countingSelectHandler struct {
+	*testSelectHandler
+	getCount int
+}
+
+func (sh *countingSelectHandler) JawsGet(elem *jaws.Element) string {
+	sh.getCount++
+	return sh.testSetter.JawsGet(elem)
+}
+
 type plainSelectOption struct {
 	value string
 	label string
@@ -576,6 +586,86 @@ func TestSelectWidget(t *testing.T) {
 	}
 }
 
+func TestSelectWidget_AppliesGetterAfterInitialRender(t *testing.T) {
+	tests := []struct {
+		name string
+		sh   named.SelectHandler
+		want string
+	}{
+		{
+			name: "empty BoolArray selection",
+			sh: named.NewBoolArray(false).
+				Add("1", "one").
+				Add("2", "two"),
+		},
+		{
+			name: "custom getter differs from option markup",
+			sh: &testSelectHandler{
+				testContainer: &testContainer{contents: []jaws.UI{
+					plainSelectOption{value: "1", label: "one"},
+					plainSelectOption{value: "2", label: "two"},
+				}},
+				testSetter: newTestSetter("2"),
+			},
+			want: "2",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			jw, err := jaws.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(jw.Close)
+			go jw.Serve()
+
+			tr := jawstest.NewTestRequest(jw, nil)
+			t.Cleanup(func() {
+				tr.Close()
+				<-tr.DoneCh
+			})
+			<-tr.ReadyCh
+
+			rw := RequestWriter{Request: tr.Request, Writer: tr.Recorder}
+			if err := rw.NewUI(NewSelect(tc.sh)); err != nil {
+				t.Fatal(err)
+			}
+			if got := tr.BodyString(); strings.Contains(got, " selected") {
+				t.Fatalf("initial option markup unexpectedly selected an option: %s", got)
+			}
+
+			tr.InCh <- wire.WsMsg{}
+			select {
+			case msg := <-tr.OutCh:
+				if msg.What != what.Value || msg.Data != tc.want {
+					t.Fatalf("initial select update = %+v, want Value %q", msg, tc.want)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("no initial select value update received")
+			}
+		})
+	}
+}
+
+func TestSelectWidget_RenderErrorDoesNotApplyGetter(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	renderErr := errors.New("render error")
+	sh := &countingSelectHandler{testSelectHandler: &testSelectHandler{
+		testContainer: &testContainer{contents: []jaws.UI{testRenderErrorUI{err: renderErr}}},
+		testSetter:    newTestSetter("1"),
+	}}
+	var sb strings.Builder
+	rw := RequestWriter{Request: rq, Writer: &sb}
+
+	if err := rw.NewUI(NewSelect(sh)); !errors.Is(err, renderErr) {
+		t.Fatalf("want %v got %v", renderErr, err)
+	}
+	if sh.getCount != 0 {
+		t.Fatalf("getter called %d times after failed render", sh.getCount)
+	}
+}
+
 func TestSelectWidget_AppendsOptionBeforeSettingNewValue(t *testing.T) {
 	jw, err := jaws.New()
 	if err != nil {
@@ -602,6 +692,15 @@ func TestSelectWidget_AppendsOptionBeforeSettingNewValue(t *testing.T) {
 	var sb strings.Builder
 	if err := elem.JawsRender(&sb, nil); err != nil {
 		t.Fatal(err)
+	}
+	tr.InCh <- wire.WsMsg{}
+	select {
+	case msg := <-tr.OutCh:
+		if msg.What != what.Value || msg.Data != "1" {
+			t.Fatalf("initial select update = %+v, want Value %q", msg, "1")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no initial select value update received")
 	}
 
 	sh.Set("2")
