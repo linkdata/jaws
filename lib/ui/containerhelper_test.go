@@ -128,6 +128,64 @@ collect:
 	}
 }
 
+func TestContainerHelper_AppendsSelectBeforeSettingInitialValue(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+
+	tr := jawstest.NewTestRequest(jw, nil)
+	t.Cleanup(func() {
+		tr.Close()
+		<-tr.DoneCh
+	})
+	<-tr.ReadyCh
+
+	outerHandler := &testContainer{}
+	outer := NewContainer("div", outerHandler)
+	outerElem := tr.NewElement(outer)
+	var sb strings.Builder
+	if err := outerElem.JawsRender(&sb, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	selectHandler := &testSelectHandler{
+		testContainer: &testContainer{contents: []jaws.UI{
+			plainSelectOption{value: "1", label: "one"},
+			plainSelectOption{value: "2", label: "two"},
+		}},
+		testSetter: newTestSetter("2"),
+	}
+	outerHandler.contents = []jaws.UI{NewSelect(selectHandler)}
+	tr.BcastCh <- wire.Message{Dest: outerHandler, What: what.Update}
+
+	sawAppend := false
+	for {
+		select {
+		case msg := <-tr.OutCh:
+			switch msg.What {
+			case what.Append:
+				sawAppend = true
+				if !strings.Contains(msg.Data, "<select") {
+					t.Fatalf("Append data %q does not contain the select", msg.Data)
+				}
+			case what.Value:
+				if !sawAppend {
+					t.Fatalf("select Value %q was sent before its containing Append", msg.Data)
+				}
+				if msg.Data != "2" {
+					t.Fatalf("select Value = %q, want %q", msg.Data, "2")
+				}
+				return
+			}
+		case <-time.After(time.Second):
+			t.Fatal("no appended select value update received")
+		}
+	}
+}
+
 func TestContainerHelperUpdateContainerDuplicates(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	span1 := NewSpan(testHTMLGetter("span1"))

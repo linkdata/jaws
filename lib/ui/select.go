@@ -29,6 +29,10 @@ func NewSelect(sh named.SelectHandler) *Select {
 }
 
 // JawsRender renders ui as an HTML select element and applies its selected value.
+//
+// The value is queued even when the option markup may already represent it:
+// [named.SelectHandler] permits custom option renderers, so Select cannot know
+// whether that markup agrees with the handler's getter.
 func (u *Select) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	if err = u.RenderContainer(elem, w, "select", params); err == nil {
 		u.applyValue(elem)
