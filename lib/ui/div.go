@@ -8,6 +8,10 @@ import (
 )
 
 // Div renders an HTML div element with dynamic inner HTML.
+//
+// One Div value may back multiple live [jaws.Element] values. Its HTML getter is
+// shared by those Elements and must be safe for their render, update and event
+// calls.
 type Div struct{ HTMLInner }
 
 // NewDiv returns a div widget whose inner HTML is rendered from innerHTML.

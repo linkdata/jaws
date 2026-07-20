@@ -13,8 +13,11 @@ type Container interface {
 	//
 	// The returned [UI] values must be comparable, since they are used as map keys
 	// (see [UI] for the comparability requirement), and the slice contents must not
-	// be modified after returning it. A child UI may be returned repeatedly for
-	// the same Request, but must not be shared with a different Request.
+	// be modified after returning it. Returning a child UI again from a later call
+	// lets the container reuse its existing live [Element]. The same UI may occur
+	// more than once in one returned slice only when its type documents support for
+	// backing multiple live Elements. A child UI must not be shared with a different
+	// [Request].
 	JawsContains(elem *Element) (contents []UI)
 }
 
@@ -51,9 +54,18 @@ type TemplateLookuper interface {
 //
 // A UI value is request-scoped. Once it has been used to create an [Element]
 // for one [Request], it must not be used to create an Element for another
-// Request. Construct a fresh UI value for each Request. The application state,
-// getters, setters, handlers and tags referenced by those UI values may be
-// shared across Requests when synchronized as required.
+// Request. Construct a fresh UI value for each Request.
+//
+// Within its owning Request, a UI value must back at most one live Element
+// unless its concrete type documents support for multiple live Elements. Such
+// a type must not retain state on the shared UI value that can differ between
+// those Elements. To render the same application state more than once, construct
+// distinct UI values that share getters, setters, handlers or tags.
+// An Element stops being live when it is deleted or its owning Request lifecycle
+// ends.
+//
+// Application state referenced by UI values may be shared across Requests when
+// synchronized as required.
 //
 // In addition, all UI objects must be comparable so they can be used as map keys.
 // The compile-time type must be comparable; debug builds additionally perform a

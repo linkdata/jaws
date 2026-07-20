@@ -8,6 +8,9 @@ import (
 )
 
 // Range renders an HTML range input bound to a float64 setter.
+//
+// A Range value must back at most one live [jaws.Element]. Construct distinct
+// Range values over the same setter to render one bound value more than once.
 type Range struct{ InputFloat }
 
 // NewRange returns a range input widget bound to g.

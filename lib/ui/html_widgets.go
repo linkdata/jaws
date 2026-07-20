@@ -10,6 +10,10 @@ import (
 )
 
 // HTMLInner is a reusable base for widgets that render as `<tag>inner</tag>`.
+//
+// HTMLInner retains no Element-specific state. A widget embedding it may back
+// multiple live [jaws.Element] values when its HTMLGetter is also safe for those
+// Elements' render, update and event calls.
 type HTMLInner struct {
 	// HTMLGetter returns the trusted inner HTML to render and update.
 	HTMLGetter bind.HTMLGetter

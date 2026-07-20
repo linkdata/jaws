@@ -8,6 +8,9 @@ import (
 )
 
 // Radio renders an HTML radio input bound to a bool setter.
+//
+// A Radio value must back at most one live [jaws.Element]. Construct distinct
+// Radio values over the same setter to render one bound value more than once.
 type Radio struct{ InputBool }
 
 // NewRadio returns a radio input widget bound to g.

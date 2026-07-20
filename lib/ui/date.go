@@ -10,6 +10,9 @@ import (
 
 // Date renders an HTML date input bound to a time value setter.
 //
+// A Date value must back at most one live [jaws.Element]. Construct distinct Date
+// values over the same setter to render one bound value more than once.
+//
 // The control is date-only: a browser edit normalizes the bound [time.Time] to
 // midnight UTC of the picked date, discarding time-of-day and location. See
 // [InputDate.JawsInput].

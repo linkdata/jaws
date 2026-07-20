@@ -8,6 +8,10 @@ import (
 )
 
 // Li renders an HTML list item with dynamic inner HTML.
+//
+// One Li value may back multiple live [jaws.Element] values. Its HTML getter is
+// shared by those Elements and must be safe for their render, update and event
+// calls.
 type Li struct{ HTMLInner }
 
 // NewLi returns a list item widget whose inner HTML is rendered from innerHTML.

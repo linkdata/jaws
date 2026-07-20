@@ -8,6 +8,9 @@ import (
 )
 
 // Option renders an HTML option element backed by a [named.Bool].
+//
+// One Option value may back multiple live [jaws.Element] values. All of those
+// Elements reflect the shared Bool.
 type Option struct{ *named.Bool }
 
 // NewOption returns an option widget backed by nb.

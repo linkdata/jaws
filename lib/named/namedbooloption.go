@@ -32,6 +32,7 @@ func UpdateBoolOption(elem *jaws.Element, nb *Bool) {
 
 // namedBoolOption is an internal UI wrapper used by BoolArray.JawsContains.
 // It intentionally stays unexported; public option widgets live in package ui.
+// It retains no Element-specific state and may back multiple live Elements.
 type namedBoolOption struct {
 	*Bool
 }

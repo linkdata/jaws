@@ -114,7 +114,7 @@ Next steps when building a real application typically include:
 
 1. Adding more templates and wiring them with `AddTemplateLookuper`.
 2. Creating types that implement `JawsRender` and `JawsUpdate` so they
-   can be reused as widgets.
+   can be used as widgets.
 3. Introducing sessions (see below) to keep track of user state.
 
 ### Creating HTML entities
@@ -129,6 +129,11 @@ UI objects are request-scoped: construct fresh UI values for each Request and
 never reuse one UI value across Requests. The application state, binders,
 handlers and tags referenced by UI values may be shared when synchronized as
 required. The `ui.RequestWriter` helpers construct fresh widgets while rendering.
+
+Within a Request, a UI value normally backs one live Element. It may back
+multiple live Elements only when its concrete type documents that support. To
+show the same application state in several places, construct distinct widgets
+that share the synchronized binder, getter, handler or tag.
 
 If an HTML entity is not registered in a Request, JaWS will not
 forward events from it, nor perform DOM manipulations for it.

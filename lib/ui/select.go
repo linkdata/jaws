@@ -10,6 +10,10 @@ import (
 
 // Select renders a single-selection HTML select element.
 //
+// A Select value must back at most one live [jaws.Element]. Construct distinct
+// Select values over the same [named.SelectHandler] to render one selection more
+// than once.
+//
 // The widget stores one selected option name through a [named.SelectHandler].
 // Render params are written as supplied, but a multiple select is not
 // supported by the JaWS select value contract.

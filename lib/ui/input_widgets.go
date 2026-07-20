@@ -15,14 +15,18 @@ import (
 )
 
 // Input stores common state for interactive input widgets.
-// There is one of these per request and input widget.
+//
+// An Input value retains the last browser value and dirty tag for one live
+// [jaws.Element]. A widget embedding Input must therefore back at most one live
+// Element. To render the same bound state more than once, construct distinct
+// widgets that share the setter.
 type Input struct {
 	// tag is the dirty tag, written once during render and read on the event
 	// goroutine (JawsInput). The render-completes-before-events lifecycle makes
 	// the unsynchronized access safe; it is unexported so external code cannot
 	// mutate it.
 	tag  any
-	Last atomic.Value // the last value received from the request
+	Last atomic.Value // last rendered or accepted browser value for the Element
 }
 
 func (u *Input) applyGetterAttrs(elem *jaws.Element, getter any) (attrs []template.HTMLAttr, err error) {
@@ -38,6 +42,8 @@ func (u *Input) maybeDirty(elem *jaws.Element, inErr error) (err error) {
 }
 
 // InputText is the reusable base for string input widgets.
+//
+// A widget embedding InputText must back at most one live [jaws.Element].
 type InputText struct {
 	Input
 	bind.Setter[string]
@@ -72,6 +78,8 @@ func (u *InputText) JawsInput(elem *jaws.Element, value string) (err error) {
 }
 
 // InputBool is the reusable base for boolean input widgets.
+//
+// A widget embedding InputBool must back at most one live [jaws.Element].
 type InputBool struct {
 	Input
 	bind.Setter[bool]
@@ -121,6 +129,8 @@ func (u *InputBool) JawsInput(elem *jaws.Element, value string) (err error) {
 }
 
 // InputFloat is the reusable base for float64 input widgets.
+//
+// A widget embedding InputFloat must back at most one live [jaws.Element].
 type InputFloat struct {
 	Input
 	bind.Setter[float64]
@@ -207,6 +217,8 @@ func (u *InputFloat) JawsInput(elem *jaws.Element, value string) (err error) {
 }
 
 // InputDate is the reusable base for date input widgets.
+//
+// A widget embedding InputDate must back at most one live [jaws.Element].
 //
 // The control is date-only. Rendering shows the calendar date in the bound
 // value's own location, but a browser edit normalizes the bound [time.Time] to

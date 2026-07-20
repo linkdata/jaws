@@ -109,10 +109,27 @@ request, typically through `RequestWriter` helpers such as `$.Span(...)`,
 `$.Text(...)`, `$.Container(...)`, and `$.JsVar(...)`. Do not cache a widget and
 reuse it across requests, even if that widget currently appears stateless.
 
+Within a request, a widget normally backs at most one live `jaws.Element`. A
+widget may back multiple live Elements only when its type documents that
+support; such a widget retains no state that can differ between those Elements.
+The HTML-inner widgets, `Img`, `Option`, and `Template` support this use when
+their shared getters, handlers, and template data are safe for those calls.
+Input widgets, `ContainerHelper`-based widgets, and `JsVar` do not. `Register`
+supports it only when its updater does.
+
 The application data referenced by widgets has a separate lifetime. Distinct
 request-scoped widgets may share synchronized backing state, binders, handlers
 and tags. For `JsVar`, use a `JsVarMaker` when a shared handler or template value
 needs to create the binding for the current request.
+
+For example, render one bound value in two text inputs by constructing two
+widgets over the same binder:
+
+```go
+binder := bind.New(&mu, &value)
+left := ui.NewText(binder)
+right := ui.NewText(binder)
+```
 
 ## Adding a simple static widget
 

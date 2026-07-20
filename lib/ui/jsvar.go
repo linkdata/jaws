@@ -90,9 +90,9 @@ type IsJsVar interface {
 
 // JsVarMaker creates a request-scoped JavaScript variable binding.
 //
-// JawsMakeJsVar must return a fresh [IsJsVar] for each request. The returned
-// bindings may share synchronized backing state, but the bindings themselves
-// must not be shared between requests.
+// JawsMakeJsVar must return a fresh [IsJsVar] for each call. The returned value
+// is scoped to rq and one live [jaws.Element]. Bindings may share synchronized
+// backing state, but the binding values themselves must remain distinct.
 type JsVarMaker interface {
 	JawsMakeJsVar(rq *jaws.Request) (value IsJsVar, err error)
 }
@@ -161,10 +161,11 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // JsVar binds a Go value to a named JavaScript variable in the browser.
 //
 // A JsVar is request-scoped and must not be rendered by more than one
-// [jaws.Request]. Construct a fresh JsVar for each request, either directly
+// [jaws.Request]. Within that request, it must back at most one live
+// [jaws.Element]. Construct a fresh JsVar for each binding, either directly
 // while rendering or through [JsVarMaker]. Distinct JsVar values may use the
 // same locker and Ptr to expose synchronized application state to multiple
-// requests.
+// Elements or requests.
 //
 // JsVar is intended for JSON-marshalable state shared with application
 // JavaScript. The browser binding reads and writes the window property named
@@ -503,9 +504,9 @@ func (jsvar *JsVar[T]) JawsInput(elem *jaws.Element, value string) (err error) {
 // The locker l must be non-nil and must remain valid for the lifetime of the JsVar.
 // The pointer v may be nil; reads then return the zero value, rendering omits the
 // initial data, and writes return [github.com/linkdata/jq.ErrInvalidReceiver].
-// Create a fresh JsVar for each request; l and v may be shared by distinct
-// request-scoped JsVar values. Use [JsVarMaker] when construction depends on the
-// current request or the maker is stored in shared handler data.
+// Create a fresh JsVar for each live [jaws.Element]; l and v may be shared by
+// distinct request-scoped JsVar values. Use [JsVarMaker] when construction
+// depends on the current request or the maker is stored in shared handler data.
 func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 	return &JsVar[T]{RWLocker: bind.AsRWLocker(l), Ptr: v}
 }
