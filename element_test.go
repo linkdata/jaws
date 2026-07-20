@@ -98,6 +98,15 @@ type testNilTagGetter struct{}
 
 func (testNilTagGetter) JawsGetTag(tag.Context) any { return nil }
 
+type testReentrantDebugTag struct {
+	rq *Request
+}
+
+func (tag testReentrantDebugTag) String() string {
+	tag.rq.SetConnectFn(nil)
+	return "reentrant"
+}
+
 func TestElement_helpers(t *testing.T) {
 	is := newTestHelper(t)
 	rq := newTestRequest(t)
@@ -591,12 +600,17 @@ func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
 
 	rq.mu.Lock()
 	var sb strings.Builder
-	elem.renderDebug(&sb)
+	err = elem.renderDebug(&sb)
 	rq.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	elem.Tag(tag.Tag("a"), tag.Tag("b"))
 	sb.Reset()
-	elem.renderDebug(&sb)
+	if err = elem.renderDebug(&sb); err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(sb.String(), ", ") {
 		t.Fatal("expected comma-separated tags in debug output")
 	}
@@ -621,6 +635,61 @@ func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
 	elem.JawsUpdate()
 }
 
+func TestElement_JawsRenderDebugTagCanReenterRequest(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	jw.Debug = true
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+
+	tu := &testUi{renderFn: func(elem *Element, _ io.Writer, _ []any) error {
+		elem.Tag(testReentrantDebugTag{rq: rq})
+		return nil
+	}}
+	elem := rq.NewElement(tu)
+	var output strings.Builder
+	rendered := make(chan error, 1)
+	go func() {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				rendered <- fmt.Errorf("render panic: %v", recovered)
+			}
+		}()
+		rendered <- elem.JawsRender(&output, nil)
+	}()
+
+	select {
+	case err = <-rendered:
+		jw.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(output.String(), "reentrant") {
+			t.Fatalf("debug output = %q, want reentrant tag", output.String())
+		}
+	case <-time.After(time.Second):
+		t.Fatal("debug tag String method deadlocked while re-entering Request")
+	}
+}
+
+func TestElement_JawsRenderReturnsDebugWriteError(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.Debug = true
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	elem := rq.NewElement(&testUi{})
+	wantErr := errors.New("debug write failed")
+
+	err = elem.JawsRender(&errResponseWriter{writeErr: wantErr}, nil)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("JawsRender error = %v, want %v", err, wantErr)
+	}
+}
+
 func TestElement_RenderDebugSanitizesHTML5CommentClose(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -635,7 +704,9 @@ func TestElement_RenderDebugSanitizesHTML5CommentClose(t *testing.T) {
 	elem.Tag(tag.Tag("x--!>y"))
 
 	var sb strings.Builder
-	elem.renderDebug(&sb)
+	if err = elem.renderDebug(&sb); err != nil {
+		t.Fatal(err)
+	}
 	if strings.Contains(sb.String(), "--!>") {
 		t.Fatalf("HTML5 comment close escaped the debug comment: %q", sb.String())
 	}

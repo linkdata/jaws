@@ -537,6 +537,16 @@ func (rq *Request) tagsOfLocked(elem *Element) (tags []any) {
 	return
 }
 
+// tryTagsOf returns a snapshot of elem's tags without waiting for rq.mu.
+func (rq *Request) tryTagsOf(elem *Element) (tags []any, ok bool) {
+	if rq.mu.TryRLock() {
+		tags = rq.tagsOfLocked(elem)
+		rq.mu.RUnlock()
+		ok = true
+	}
+	return
+}
+
 // TagsOf returns the tags currently associated with elem in this Request, or nil
 // if elem is nil. The returned slice is a newly allocated snapshot and may be
 // retained and modified by the caller.

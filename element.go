@@ -123,12 +123,11 @@ func (elem *Element) Deleted() bool {
 	return elem.deleted.Load()
 }
 
-func (elem *Element) renderDebug(w io.Writer) {
+func (elem *Element) renderDebug(w io.Writer) (err error) {
 	var sb strings.Builder
 	_, _ = fmt.Fprintf(&sb, "<!-- id=%q %T tags=[", elem.Jid(), elem.UI())
-	if elem.mu.TryRLock() {
-		defer elem.mu.RUnlock()
-		for i, tagValue := range elem.tagsOfLocked(elem) {
+	if tags, ok := elem.tryTagsOf(elem); ok {
+		for i, tagValue := range tags {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
@@ -138,7 +137,8 @@ func (elem *Element) renderDebug(w io.Writer) {
 		sb.WriteString("n/a")
 	}
 	sb.WriteByte(']')
-	_, _ = w.Write([]byte(debugCommentSanitizer.Replace(sb.String()) + " -->"))
+	_, err = w.Write([]byte(debugCommentSanitizer.Replace(sb.String()) + " -->"))
+	return
 }
 
 // debugCommentSanitizer neutralizes both the standard "-->" and the HTML5
@@ -152,7 +152,7 @@ func (elem *Element) JawsRender(w io.Writer, params []any) (err error) {
 	if !elem.deleted.Load() {
 		if err = elem.UI().JawsRender(elem, w, params); err == nil {
 			if elem.Jaws.Debug {
-				elem.renderDebug(w)
+				err = elem.renderDebug(w)
 			}
 		}
 	}
