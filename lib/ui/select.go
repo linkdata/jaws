@@ -28,9 +28,16 @@ func NewSelect(sh named.SelectHandler) *Select {
 	return &Select{ContainerHelper: NewContainerHelper(sh)}
 }
 
-// JawsRender renders ui as an HTML select element.
-func (u *Select) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
-	return u.RenderContainer(elem, w, "select", params)
+// JawsRender renders ui as an HTML select element and applies its selected value.
+//
+// The value is queued even when the option markup may already represent it:
+// [named.SelectHandler] permits custom option renderers, so Select cannot know
+// whether that markup agrees with the handler's getter.
+func (u *Select) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
+	if err = u.RenderContainer(elem, w, "select", params); err == nil {
+		u.applyValue(elem)
+	}
+	return
 }
 
 // JawsUpdate updates the selected value and child options.
@@ -40,14 +47,16 @@ func (u *Select) JawsRender(elem *jaws.Element, w io.Writer, params []any) error
 // options actually changed.
 func (u *Select) JawsUpdate(elem *jaws.Element) {
 	u.UpdateContainer(elem)
-	// The selected value is only set when the Container is a bind.Setter of string;
-	// the child options are always updated. NewSelect always supplies a
-	// named.SelectHandler (a bind.Setter of string), so this guard (and the one in
-	// JawsInput) only takes effect if Container is later reassigned to a plain
-	// jaws.Container.
+	u.applyValue(elem)
+}
+
+func (u *Select) applyValue(elem *jaws.Element) {
+	// NewSelect always supplies a named.SelectHandler (a bind.Setter of string),
+	// so this guard (and the one in JawsInput) only takes effect if Container is
+	// later reassigned to a plain jaws.Container.
 	if setter, ok := u.ContainerHelper.Container.(bind.Setter[string]); ok {
-		// Set the live value after reconciling options, so a newly selected
-		// option exists in the browser before the select value is assigned.
+		// JawsRender and JawsUpdate call this only after rendering or reconciling
+		// options, so the options exist before the select value is assigned.
 		elem.SetValue(setter.JawsGet(elem))
 	}
 }
