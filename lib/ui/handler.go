@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"html/template"
+	"io"
 	"net/http"
 
 	"github.com/linkdata/jaws"
@@ -27,10 +29,55 @@ type pageTemplate struct {
 // when OuterHTMLTag is set, so it is deliberately silenced here.
 func (pageTemplate) JawsUpdate(*jaws.Element) {}
 
+// JawsRender renders the whole-page template, looking it up and executing it
+// directly.
+//
+// Unlike the embedded [Template], the page dot is ordinary [html/template] data
+// and is never treated as a JaWS tag: there is no tag expansion, no generated
+// wrapper element, and [pageTemplate.JawsUpdate] is a no-op. Because the page
+// element cannot re-render itself, deriving tag identity from the page dot would
+// serve no purpose; nested UI created during execution registers its own tags
+// independently.
+func (pt pageTemplate) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
+	var lookedUp *template.Template
+	if lookedUp, err = pt.lookup(elem); err == nil {
+		err = pt.execute(elem, w, lookedUp)
+	}
+	return
+}
+
+// statusRecorder wraps an [http.ResponseWriter] to record whether any response
+// bytes have been committed, so [uiHandler.ServeHTTP] can still send a 500 for a
+// render failure that occurred before any output was written.
+type statusRecorder struct {
+	http.ResponseWriter
+	wrote bool
+}
+
+func (sr *statusRecorder) Write(p []byte) (int, error) {
+	sr.wrote = true
+	return sr.ResponseWriter.Write(p)
+}
+
+func (sr *statusRecorder) WriteHeader(code int) {
+	sr.wrote = true
+	sr.ResponseWriter.WriteHeader(code)
+}
+
 func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rq := h.NewRequest(r)
-	rw := RequestWriter{Request: rq, Writer: w}
-	_ = h.Log(rw.NewUI(h.Template))
+	sr := &statusRecorder{ResponseWriter: w}
+	rw := RequestWriter{Request: rq, Writer: sr}
+	if err := rw.NewUI(h.Template); err != nil {
+		_ = h.Log(err)
+		// A failure before any output (for example a missing template) can still
+		// become a proper error response; once bytes have been written the status
+		// is already committed and the partial body is left as-is, matching the
+		// best-effort execution semantics documented on Template.
+		if !sr.wrote {
+			http.Error(sr, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
+	}
 }
 
 // Handler returns an http.Handler that renders the named template.
