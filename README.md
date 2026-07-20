@@ -177,7 +177,9 @@ type application struct {
 
 // JawsMakeJsVar creates the binding for one request.
 func (app *application) JawsMakeJsVar(*jaws.Request) (ui.IsJsVar, error) {
-	return ui.NewJsVar(&app.clientMu, &app.client), nil
+	jsv := ui.NewJsVar(&app.clientMu, &app.client)
+	jsv.ClientCheck = ui.JSONSizeCheck[Client](1 << 20) // 1 MiB
+	return jsv, nil
 }
 
 app := new(application)
@@ -196,6 +198,59 @@ expose the same application-owned global, and lets one browser value fan out to
 several independent Go bindings. When several bindings share the same backing
 value, a browser write applies to it once per binding, so avoid exposing one
 non-idempotent value through multiple simultaneously rendered bindings.
+
+For a value that does not implement `ui.PathSetter`, an optional
+`JsVar.ClientCheck` validates each actual browser-initiated change before it
+commits. The check receives the complete tentative value and the
+browser-supplied jq path while the application locker is held. The path is an
+inspection hint, not an authorization key: it is passed through unchanged, jq
+accepts equivalent noncanonical spellings with empty components, and both `""`
+and `"."` address the root. Use `ui.PathSetter` when paths must be allow-listed.
+Returning nil commits the change; returning an error rolls it back without
+broadcasting it. If the error matches `ui.ErrJsVarTooLarge`,
+`JawsInput` returns that sentinel and, during normal framework dispatch,
+cancels the associated request after releasing the application locker; any
+other error is returned without cancellation. A check must only inspect the
+value: it must not mutate it, re-enter the `JsVar`, call a JSON path setter on
+it, acquire the same locker, or retain references into a rejected tentative
+value. It must not return or wrap `jaws.ErrEventUnhandled`, which would request
+handler fallthrough rather than report a rejection.
+
+The check validates tentative Go state, not the decoded browser value used in
+the accepted peer broadcast. jq conversions and ignored map-to-struct entries
+can make those values differ. Use `ui.PathSetter` when peer-visible input also
+needs validation.
+
+`ui.JSONSizeCheck[T](maxBytes)` provides an exact serialized-size policy. It
+marshals the complete tentative value. A value exceeding `maxBytes`, or one
+that cannot be marshaled, makes the check match `ui.ErrJsVarTooLarge`. A
+non-positive limit disables the check. Time and allocation cost depend on the
+whole value and its marshaling behavior; map-key sorting and custom marshalers
+can add further cost. Use it when that cost is appropriate for the value and
+threat model. It bounds `encoding/json` output, not Go heap use or backing-memory
+size. Use it only when JSON faithfully represents all client-growable state;
+custom `MarshalJSON` or `MarshalText` methods, omitted fields, aliases, or
+collection capacity require a domain-specific `ClientCheck`. A nil
+`ClientCheck` accepts every type-correct generic write and imposes no
+accumulated-state size limit.
+
+`ClientCheck` applies only to browser writes handled through the generic JSON
+path setter. Server-initiated `JsVar.JawsSet` and `JsVar.JawsSetPath` calls
+bypass it. A value implementing `ui.PathSetter` also bypasses it and must
+allow-list paths and enforce collection or size limits in its own
+`JawsSetPath`. Because the check belongs to a request-scoped binding, configure
+an equivalent policy on every binding that exposes the same `Ptr` or reachable
+mutable backing state to browser writes, and protect those bindings with the
+same locker. One unchecked binding can otherwise modify the shared state
+without validation.
+
+`ClientCheck` is an acceptance gate, not a state monitor. It does not inspect
+the initial render, server writes, invalid or unchanged generic writes, or
+`PathSetter` writes. An ordinary rejection restores Go state and sends no
+broadcast, but the originating browser has already changed its local value and
+can remain divergent until the application resynchronizes it. A rejection
+matching `ui.ErrJsVarTooLarge` instead cancels the associated request, when
+present, and is terminal for that connection.
 
 The name may refer to an existing application global. For example, browser
 code can update that object and send either the complete value or one path:
@@ -647,8 +702,12 @@ items explicitly:
 * Treat plain `string` values passed to HTML-inner widgets as trusted HTML. Route
   user-controlled text through `bind.Getter[string]`, `bind.StringGetterFunc()`,
   `fmt.Stringer` or template escaping before rendering.
-* Implement `ui.PathSetter` on any `ui.JsVar` value whose browser-writable paths
-  must be allow-listed or size-bounded beyond the default serialized-size cap.
+* Define the browser-write policy for every `ui.JsVar`. Implement
+  `ui.PathSetter` when paths or collection operations must be allow-listed, or
+  set `JsVar.ClientCheck` (for example, `ui.JSONSizeCheck[T](limit)`) to validate
+  generic writes atomically. Configure an equivalent check and shared locker on
+  every binding that exposes the same `Ptr` or reachable mutable backing state;
+  server writes and `PathSetter` values bypass `ClientCheck`.
 * Enable `Jaws.TrustForwardedHeaders` only behind a single trusted reverse proxy
   that overwrites `X-Forwarded-For`, `X-Real-IP` and `X-Forwarded-Proto`.
 * Run the test suite with `-race` before release so the deadlock lock-order
