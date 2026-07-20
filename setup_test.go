@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"path"
 	"strings"
@@ -182,21 +183,132 @@ func TestJaws_SetupDoesNotPrefixProtocolRelativeURL(t *testing.T) {
 func TestJaws_SetupEmptyPrefix(t *testing.T) {
 	ss := staticserve.Must("favicon.png", []byte("Hello"))
 
-	jw, _ := New()
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer jw.Close()
-	mux := &testMux{}
-	_ = jw.Setup(mux.Handle, "", ss)
+	mux := http.NewServeMux()
+	if err = jw.Setup(mux.Handle, "", ss); err != nil {
+		t.Fatal(err)
+	}
 
-	if got := jw.FaviconURL(); got != ss.Name {
-		t.Errorf("unexpected favicon URL: %q", got)
+	headURL := jw.FaviconURL()
+	if want := "/" + ss.Name; headURL != want {
+		t.Fatalf("favicon URL = %q, want %q", headURL, want)
 	}
-	if len(mux.m) != 1 {
-		t.Fatalf("expected 1 handler, got %d", len(mux.m))
+	if !strings.Contains(jw.headPrefix, `href="`+headURL+`"`) {
+		t.Fatalf("head HTML %q does not contain favicon URL %q", jw.headPrefix, headURL)
 	}
-	for pattern := range mux.m {
-		if want := "GET /" + ss.Name; pattern != want {
-			t.Errorf("expected pattern %q, got %q", want, pattern)
+
+	pageURL, err := url.Parse("http://example.test/account/view")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref, err := url.Parse(headURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved := pageURL.ResolveReference(ref)
+	if resolved.Path != headURL {
+		t.Fatalf("favicon URL %q resolves from nested page to %q", headURL, resolved.Path)
+	}
+
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, resolved.String(), nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET %q = %d, want %d", resolved.Path, rr.Code, http.StatusOK)
+	}
+	if got := rr.Body.String(); got != "Hello" {
+		t.Fatalf("GET %q body = %q, want %q", resolved.Path, got, "Hello")
+	}
+}
+
+func TestJaws_SetupStaticServeEscapesName(t *testing.T) {
+	ss := staticserve.Must(`favicon:scheme {asset}#query?percent%\file.png`, []byte("Hello"))
+
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	mux := http.NewServeMux()
+	if err = jw.Setup(mux.Handle, "", ss); err != nil {
+		t.Fatal(err)
+	}
+
+	headURL := jw.FaviconURL()
+	if !strings.HasPrefix(headURL, "/favicon:scheme") {
+		t.Fatalf("favicon URL is not slash-rooted: %q", headURL)
+	}
+	for _, escaped := range []string{"%20", "%7Basset%7D", "%23", "%3F", "%25", "%5C"} {
+		if !strings.Contains(headURL, escaped) {
+			t.Errorf("favicon URL %q does not contain %q", headURL, escaped)
 		}
+	}
+
+	u, err := url.Parse(headURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.RawQuery != "" || u.Fragment != "" {
+		t.Fatalf("favicon URL parsed with query %q and fragment %q", u.RawQuery, u.Fragment)
+	}
+
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, headURL, nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET %q = %d, want %d", headURL, rr.Code, http.StatusOK)
+	}
+
+	wildcardURL := strings.Replace(headURL, "%7Basset%7D", "other", 1)
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, wildcardURL, nil))
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("GET wildcard candidate %q = %d, want %d", wildcardURL, rr.Code, http.StatusNotFound)
+	}
+}
+
+func TestJaws_SetupEmptyPrefixKeepsGenericRelativeURLs(t *testing.T) {
+	urlExtra, err := url.Parse("url.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	setupURL, err := url.Parse("setup.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name  string
+		extra any
+		want  string
+	}{
+		{name: "string", extra: "string.css", want: "string.css"},
+		{name: "URL", extra: urlExtra, want: "url.css"},
+		{name: "SetupFunc", extra: SetupFunc(func(_ *Jaws, _ HandleFunc, _ string) (urls []*url.URL, err error) {
+			urls = append(urls, setupURL)
+			return
+		}), want: "setup.css"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer jw.Close()
+			if err = jw.Setup(nil, "", tc.extra); err != nil {
+				t.Fatal(err)
+			}
+
+			if !strings.Contains(jw.headPrefix, `href="`+tc.want+`"`) {
+				t.Fatalf("head HTML %q does not contain relative URL %q", jw.headPrefix, tc.want)
+			}
+			if strings.Contains(jw.headPrefix, `href="/`+tc.want+`"`) {
+				t.Fatalf("head HTML %q slash-rooted relative URL %q", jw.headPrefix, tc.want)
+			}
+		})
 	}
 }
 

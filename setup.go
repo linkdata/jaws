@@ -23,11 +23,8 @@ type SetupFunc = func(jw *Jaws, handleFn HandleFunc, prefix string) (urls []*url
 
 // makeAbsPath returns a copy of u with prefix prepended to relative paths.
 //
-// When a non-empty prefix is applied the result is made absolute (a leading slash is
-// ensured), so the head URL matches the always-absolute handler pattern that
-// [staticserve.NormalizeGET] registers for a [staticserve.StaticServe] extra. A
-// relative prefix would otherwise leave the URL relative, which a browser resolves
-// against the current page and so fails to load on any non-root page.
+// When a non-empty prefix is applied, the joined path is slash-rooted. An empty
+// prefix preserves a relative URL.
 func makeAbsPath(prefix string, u *url.URL) *url.URL {
 	if u != nil {
 		copied := *u
@@ -48,6 +45,11 @@ func makeAbsPath(prefix string, u *url.URL) *url.URL {
 // It calls [Jaws.GenerateHeadHTML] with the final list of URLs, with any
 // relative URL paths prefixed with prefix.
 //
+// [staticserve.StaticServe] extras are local resources. Their generated URLs
+// are slash-rooted so they match their registered handlers, including when
+// prefix is empty. Other relative URL extras remain relative with an empty
+// prefix.
+//
 // If handleFn is nil, Setup generates head HTML from the configured resources
 // without registering any handlers.
 func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err error) {
@@ -59,14 +61,14 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 
 	handleStaticServe := func(ss *staticserve.StaticServe) {
 		if ss != nil {
-			u, urlErr := url.Parse(ss.Name)
-			err = errors.Join(err, urlErr)
-			if u != nil {
-				u = makeAbsPath(prefix, u)
-				urls = append(urls, u)
-				if handleFn != nil {
-					setupHandleFn(staticserve.NormalizeGET(u.String()), ss)
-				}
+			assetPath := ss.Name
+			if !path.IsAbs(assetPath) {
+				assetPath = path.Join(prefix, assetPath)
+			}
+			u := &url.URL{Path: path.Join("/", assetPath)}
+			urls = append(urls, u)
+			if handleFn != nil {
+				setupHandleFn(staticserve.NormalizeGET(u.String()), ss)
 			}
 		}
 	}
