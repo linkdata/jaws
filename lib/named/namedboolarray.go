@@ -48,6 +48,13 @@ func (nba *BoolArray) ReadLocked(fn func(nbl []*Bool)) {
 // WriteLocked calls fn with the [BoolArray] locked for writing and replaces
 // the internal []*Bool slice with the return value.
 //
+// Omitting a [Bool] from the returned slice does not detach it from nba:
+// [Bool.Array] continues to return nba, and [Bool.JawsSet] continues to apply
+// nba's single-select and dirtying behavior. Structural removal is supported
+// only after every live UI element backed by the Bool has been removed and no
+// event for it can remain in flight. Do not call Bool.JawsSet while the Bool is
+// absent; reinsert it into the same array before using it as an event setter.
+//
 // As with [BoolArray.ReadLocked], fn must not call other [BoolArray] methods or
 // [Bool.JawsSet] (they re-acquire the same non-reentrant nba mutex and deadlock);
 // operate only on the provided slice and the *[Bool] methods that take just the

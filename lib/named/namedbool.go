@@ -26,7 +26,7 @@ type Bool struct {
 // user input it must be pre-escaped, e.g. template.HTML(template.HTMLEscapeString(s)).
 //
 // If nba is non-nil, changing the value through [Bool.JawsSet] may dirty the
-// containing [BoolArray] and deselect sibling values in single-select mode.
+// associated [BoolArray] and deselect sibling values in single-select mode.
 func NewBool(nba *BoolArray, name string, html template.HTML, checked bool) *Bool {
 	return &Bool{
 		nba:     nba,
@@ -36,7 +36,12 @@ func NewBool(nba *BoolArray, name string, html template.HTML, checked bool) *Boo
 	}
 }
 
-// Array returns the [BoolArray] that owns nb, or nil.
+// Array returns the [BoolArray] associated with nb, or nil.
+//
+// The association is fixed when nb is created and does not report current
+// membership. In particular, removing nb through [BoolArray.WriteLocked] does
+// not change this result. See [BoolArray.WriteLocked] for the restrictions on
+// using a removed Bool.
 func (nb *Bool) Array() *BoolArray {
 	return nb.nba
 }
@@ -65,6 +70,10 @@ func (nb *Bool) JawsGet(elem *jaws.Element) (yes bool) {
 }
 
 // JawsSet sets the checked state and dirties the affected element tags.
+//
+// If [Bool.Array] is non-nil, the associated array is used without checking
+// whether nb is currently one of its members. See [BoolArray.WriteLocked] for
+// the restrictions on using a removed Bool.
 //
 // It returns [jaws.ErrValueUnchanged] if checked already matched the current
 // state.
