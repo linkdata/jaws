@@ -100,7 +100,15 @@ func (s setterFloat64[T]) JawsGet(elem *jaws.Element) float64 {
 
 func (s setterFloat64[T]) JawsSet(elem *jaws.Element, value float64) (err error) {
 	if err = sanitizeFloatForT[T](value); err == nil {
-		err = s.Setter.JawsSet(elem, T(value))
+		converted := T(value)
+		err = s.Setter.JawsSet(elem, converted)
+		// ErrValueUnchanged is accurate for the underlying T setter, but not for
+		// this float64 view when conversion changed the requested value. Report a
+		// successful change so input widgets dirty themselves and reconcile the
+		// browser with the canonical value returned by JawsGet.
+		if err != nil && errors.Is(err, jaws.ErrValueUnchanged) && float64(converted) != value {
+			err = nil
+		}
 	}
 	return
 }
@@ -164,6 +172,11 @@ func makeSetterFloat64for[T numeric](s *Setter[float64], value any) bool {
 // types and float32), which is bridged to float64 by ordinary Go conversion. That
 // bridge can lose precision: int64/uint64 magnitudes beyond 2^53 are not exactly
 // representable as float64.
+//
+// If conversion changes value but the converted value already matches the
+// underlying setter's current value, the adapter reports a successful set
+// instead of [jaws.ErrValueUnchanged]. This lets consumers reconcile their
+// float64 view with the canonical converted value returned by [Getter.JawsGet].
 //
 // Only the predeclared numeric types are matched, by their exact type. Named
 // (defined) numeric types such as "type Celsius float64" are NOT matched:

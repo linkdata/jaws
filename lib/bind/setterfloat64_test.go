@@ -83,6 +83,65 @@ func Test_makeSetterFloat64_int(t *testing.T) {
 	}
 }
 
+func Test_setterFloat64_conversionSignalsCanonicalChange(t *testing.T) {
+	t.Run("int truncation", func(t *testing.T) {
+		ts := newTestSetter(1)
+		s := MakeSetterFloat64(ts)
+		if err := s.JawsSet(nil, 1.9); err != nil {
+			t.Fatalf("JawsSet(1.9): %v", err)
+		}
+		if ts.Get() != 1 {
+			t.Fatalf("stored value = %d, want 1", ts.Get())
+		}
+		if err := s.JawsSet(nil, 1); !errors.Is(err, jaws.ErrValueUnchanged) {
+			t.Fatalf("JawsSet(1) = %v, want ErrValueUnchanged", err)
+		}
+	})
+
+	t.Run("float32 rounding", func(t *testing.T) {
+		value := float32(0.1)
+		ts := newTestSetter(value)
+		s := MakeSetterFloat64(ts)
+		if err := s.JawsSet(nil, 0.1); err != nil {
+			t.Fatalf("JawsSet(0.1): %v", err)
+		}
+		if ts.Get() != value {
+			t.Fatalf("stored value = %v, want %v", ts.Get(), value)
+		}
+		if err := s.JawsSet(nil, float64(value)); !errors.Is(err, jaws.ErrValueUnchanged) {
+			t.Fatalf("JawsSet(canonical value) = %v, want ErrValueUnchanged", err)
+		}
+	})
+
+	t.Run("negative int truncation", func(t *testing.T) {
+		ts := newTestSetter(-1)
+		s := MakeSetterFloat64(ts)
+		if err := s.JawsSet(nil, -1.9); err != nil {
+			t.Fatalf("JawsSet(-1.9): %v", err)
+		}
+		if ts.Get() != -1 {
+			t.Fatalf("stored value = %d, want -1", ts.Get())
+		}
+		if err := s.JawsSet(nil, -1); !errors.Is(err, jaws.ErrValueUnchanged) {
+			t.Fatalf("JawsSet(-1) = %v, want ErrValueUnchanged", err)
+		}
+	})
+
+	t.Run("uint truncation", func(t *testing.T) {
+		ts := newTestSetter(uint(2))
+		s := MakeSetterFloat64(ts)
+		if err := s.JawsSet(nil, 2.9); err != nil {
+			t.Fatalf("JawsSet(2.9): %v", err)
+		}
+		if ts.Get() != 2 {
+			t.Fatalf("stored value = %d, want 2", ts.Get())
+		}
+		if err := s.JawsSet(nil, 2); !errors.Is(err, jaws.ErrValueUnchanged) {
+			t.Fatalf("JawsSet(2) = %v, want ErrValueUnchanged", err)
+		}
+	})
+}
+
 // Test_setterFloat64_sanitizesUntrustedInput covers the float-from-client guard:
 // non-finite values are rejected for every numeric type and out-of-range values
 // are rejected before the (otherwise wrapping) float->int conversion. The bound
