@@ -425,7 +425,7 @@ type secureHeadersMiddleware struct {
 
 func (m secureHeadersMiddleware) ServeHTTP(hw http.ResponseWriter, hr *http.Request) {
 	secureheaders.SetHeaders(m.Header, hw, secureheaders.RequestIsSecure(hr, false))
-	hw.Header()["Content-Security-Policy"] = []string{m.ContentSecurityPolicy()}
+	hw.Header().Set("Content-Security-Policy", m.ContentSecurityPolicy())
 	m.Handler.ServeHTTP(hw, hr)
 }
 
