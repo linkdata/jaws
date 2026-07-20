@@ -906,6 +906,47 @@ func (rq *Request) stopServe() {
 	rq.Jaws.recycle(rq)
 }
 
+// runWebSocket subscribes rq, runs its connect callback, and processes the
+// accepted WebSocket when the callback succeeds.
+func (rq *Request) runWebSocket(ws *websocket.Conn, pingInterval, wsTimeout time.Duration) (err error) {
+	// Subscribe before onConnect so broadcasts from the callback are buffered for
+	// this Request. Browser input and outbound writes do not start until the
+	// callback succeeds.
+	rq.mu.RLock()
+	numElems := len(rq.elems)
+	rq.mu.RUnlock()
+	// Size the broadcast buffer with headroom that scales with the page's element
+	// count. mustBroadcast (see Jaws.Serve) sends here non-blocking and, for any
+	// non-Update message, kills the subscription and cancels this request if the
+	// send would block.
+	pendingSubscription := rq.Jaws.subscribe(rq, 4+numElems*4)
+	defer func() {
+		// onConnect is user code and may return an error or panic. Release its
+		// subscription unless process took responsibility for doing so.
+		if pendingSubscription != nil {
+			rq.Jaws.unsubscribe(pendingSubscription)
+		}
+	}()
+
+	if err = rq.onConnect(); err == nil {
+		incomingMsgCh := make(chan wire.WsMsg)
+		// Snapshot ctx and cancelFn after onConnect so a context installed by the
+		// callback governs all WebSocket loops.
+		rq.mu.RLock()
+		ctx := rq.ctx
+		cancelFn := rq.cancelFn
+		rq.mu.RUnlock()
+		outboundMsgCh := make(chan wire.WsMsg, cap(pendingSubscription))
+		go wire.ReadLoop(ctx, cancelFn, rq.Jaws.Done(), incomingMsgCh, ws)  // closes incomingMsgCh
+		go wire.WriteLoop(ctx, cancelFn, rq.Jaws.Done(), outboundMsgCh, ws) // calls ws.Close()
+		go wire.PingLoop(ctx, cancelFn, rq.Jaws.Done(), pingInterval, wsTimeout, ws)
+		broadcastMsgCh := pendingSubscription
+		pendingSubscription = nil
+		rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh) // unsubscribes broadcastMsgCh, closes outboundMsgCh
+	}
+	return
+}
+
 // ServeHTTP implements [http.Handler].
 //
 // Requires [Jaws.UseRequest] to have been successfully called for the [Request].
@@ -942,45 +983,7 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ws, err = websocket.Accept(acceptWriter, acceptRequest, nil)
 		if err == nil {
 			ws.SetReadLimit(webSocketReadLimit)
-			// Subscribe before onConnect so broadcasts from the callback are
-			// buffered for this Request. Browser input and outbound writes do not
-			// start until the callback succeeds.
-			rq.mu.RLock()
-			numElems := len(rq.elems)
-			rq.mu.RUnlock()
-			// Size the broadcast buffer with headroom that scales with the page's
-			// element count. mustBroadcast (see Jaws.Serve) sends here
-			// non-blocking and, for any non-Update message, kills the subscription
-			// and cancels this request if the send would block.
-			broadcastMsgCh := rq.Jaws.subscribe(rq, 4+numElems*4)
-			ownsSubscription := broadcastMsgCh != nil
-			// onConnect is user code and may panic. Release the subscription before
-			// stopServe recycles rq unless ownership has passed to process, whose
-			// cleanup performs the unsubscribe itself.
-			defer func() {
-				if ownsSubscription {
-					rq.Jaws.unsubscribe(broadcastMsgCh)
-				}
-			}()
-			if err = rq.onConnect(); err == nil {
-				incomingMsgCh := make(chan wire.WsMsg)
-				// Snapshot ctx and cancelFn after onConnect so a context installed by
-				// the callback governs all WebSocket loops.
-				rq.mu.RLock()
-				ctx := rq.ctx
-				cancelFn := rq.cancelFn
-				rq.mu.RUnlock()
-				outboundMsgCh := make(chan wire.WsMsg, cap(broadcastMsgCh))
-				go wire.ReadLoop(ctx, cancelFn, rq.Jaws.Done(), incomingMsgCh, ws)  // closes incomingMsgCh
-				go wire.WriteLoop(ctx, cancelFn, rq.Jaws.Done(), outboundMsgCh, ws) // calls ws.Close()
-				go wire.PingLoop(ctx, cancelFn, rq.Jaws.Done(), pingInterval, wsTimeout, ws)
-				ownsSubscription = false
-				rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh) // unsubscribes broadcastMsgCh, closes outboundMsgCh
-			} else {
-				if ownsSubscription {
-					rq.Jaws.unsubscribe(broadcastMsgCh)
-					ownsSubscription = false
-				}
+			if err = rq.runWebSocket(ws, pingInterval, wsTimeout); err != nil {
 				reason := err.Error()
 				defer func() { _ = ws.Close(websocket.StatusNormalClosure, reason) }()
 				var msg wire.WsMsg
