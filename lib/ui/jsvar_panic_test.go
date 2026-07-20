@@ -63,7 +63,7 @@ func awaitJsVarOperation[T any](t *testing.T, operation string, ch <-chan T) (va
 	select {
 	case value = <-ch:
 	case <-timer.C:
-		t.Fatalf("%s remained blocked after the PathSetter panic", operation)
+		t.Fatalf("%s remained blocked", operation)
 	}
 	return
 }

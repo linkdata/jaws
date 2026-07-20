@@ -52,11 +52,42 @@ their content through `bind.MakeHTMLGetter`. Plain strings are treated as truste
 HTML and are not escaped; use a `bind.Getter[string]`, `bind.StringGetterFunc`,
 or `fmt.Stringer` for string content that should be escaped.
 
-`JsVar` values are client-writable. If a browser must only write selected fields
-or bounded collections, make the bound value implement `PathSetter` and validate
-allowed paths there. The generic path setter is convenient for trusted demos, but
-it can write exported JSON fields and append to slices until the serialized
-`MaxClientJsVarBytes` cap is hit on render.
+`JsVar` values are client-writable. The generic path setter can write exported
+JSON fields and append to slices, and it has no default accumulated-state size
+limit. Set the binding's optional `ClientCheck` to validate each actual generic
+browser change before it commits. The check receives the complete tentative
+value and browser-supplied jq path. The path is passed through unchanged and
+may be noncanonical, so use it as an inspection hint rather than an
+authorization key; use `PathSetter` to allow-list paths. A rejected check rolls
+the tentative change back without broadcasting it. Ordinary check errors do
+not cancel an associated request. Checks must not return or wrap
+`jaws.ErrEventUnhandled`, which has event-handler fallthrough semantics.
+The check validates tentative Go state, not the decoded browser value carried
+by an accepted peer broadcast; jq conversions or ignored map-to-struct entries
+can make them differ.
+
+`JSONSizeCheck[T](maxBytes)` is a ready-made exact size policy. It marshals the
+complete tentative value for every actual generic browser change, so its work is
+determined by the whole value and its marshaling behavior; map-key sorting and
+custom marshalers can add further cost. A non-positive limit disables it. An
+over-limit tentative value, or one that cannot be marshaled, returns
+`ErrJsVarTooLarge` and cancels the associated request, when present, after
+rollback. `ClientCheck` is not called for server-initiated writes or values
+implementing `PathSetter`. Use `PathSetter` to allow-list paths or collection
+operations and enforce its bounds there.
+Configure an equivalent `ClientCheck` and the same locker on every
+request-scoped binding that exposes the same `Ptr` or reachable mutable backing
+state to browser writes. `JSONSizeCheck` bounds `encoding/json` output, not Go
+heap or backing-memory size; custom `MarshalJSON` or `MarshalText` methods,
+omitted fields, aliases, or collection capacity require a domain-specific
+check.
+
+`ClientCheck` is an acceptance gate, not a monitor: initial render, server
+writes, invalid or unchanged generic writes, and `PathSetter` writes bypass it.
+An ordinary rejection rolls Go state back without a broadcast, so the
+originating browser can remain divergent until the application resynchronizes
+it. An `ErrJsVarTooLarge` rejection terminates the associated request
+connection, when present.
 
 Concurrent writes to one `JsVar` are applied one at a time, and any broadcasts
 they produce preserve that order. Transport backpressure can delay later writes,

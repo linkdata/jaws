@@ -245,7 +245,7 @@ Also tested case-variant bypass attempts (`inner`, `INNER`, `redirect`, `alert`)
 
 The `Set` message type allows clients to modify server-side JsVar state (this is the mechanism behind mouse-position sharing).
 
-**Source code** (`lib/ui/jsvar.go`, `JsVar.JawsInput`): Client sends `Set\tJid\tpath=jsonvalue` → server unmarshals the value and applies it by path (`jq.Set()` for a non-`PathSetter` bound value) → broadcasts change.
+**Source code** (`lib/ui/jsvar.go`, `JsVar.JawsInput`): Client sends `Set\tJid\tpath=jsonvalue` → server unmarshals the value and applies it by path (`PathSetter.JawsSetPath` for a `PathSetter`, `jq.SetChecked` when a generic binding has a `ClientCheck`, or `jq.Set` when it does not) → broadcasts an accepted change.
 
 Tested attack payloads:
 
@@ -258,9 +258,59 @@ Tested attack payloads:
 | `X="<script>alert(1)</script>"` | Accepted as string value; rendered in JS variable, not DOM |
 | `X={"__proto__":{"polluted":true}}` | Rejected (type mismatch) |
 
-Go's type system prevents prototype pollution — `jq.Set()` validates paths against actual struct fields and enforces type compatibility.
+Go's type system prevents prototype pollution — `jq.Set` and `jq.SetChecked` validate paths against actual struct fields and enforce type compatibility.
 
-**Trust boundary (application responsibility):** the generic `jq.Set()` path will set *any* `json`-tagged field of the bound value and will append to a slice one element per `Set` message. The per-write size is bounded by the 32 KiB WebSocket read limit, and accumulated state is bounded by `ui.MaxClientJsVarBytes` (default 1 MiB) for non-`PathSetter` values — exceeding it aborts the `Request` with `ErrJsVarTooLarge` on the next render. There is (see I6) no per-message rate limit. A `Set` message is therefore only as constrained as the bound type. When binding a value where only some fields should be client-writable, or which contains a mutable/unbounded collection, the bound type must implement `ui.PathSetter` (`JawsSetPath`) to allow-list paths and bound lengths; the framework then routes client writes through it instead of `jq.Set()`. The `Node` type in the separate `github.com/linkdata/jawstree` module is an example: it implements `JawsSetPath` to reject every path except the per-node `.selected` boolean, so a browser cannot rename nodes, mutate ids, or grow the `children` slice.
+**Trust boundary (application responsibility):** the generic JSON path will set
+*any* exported field matched by its `json` tag, or by its Go name when the tag
+has no explicit name, and will append to a slice one element per `Set` message
+(`json:"-"` fields remain unwritable). The 32 KiB WebSocket read limit bounds one
+message, not the accumulated server state, and there is (see I6) no per-message
+rate limit. With
+a nil `JsVar.ClientCheck`, a type-correct generic write has no additional
+state-size policy.
+
+Applications can set `JsVar.ClientCheck` to inspect the complete tentative
+value and the browser-supplied jq path before a generic browser write commits.
+The path is passed through unchanged, jq accepts equivalent noncanonical
+spellings with empty components, and both `""` and `"."` address the root. Treat
+it as an inspection hint, not an authorization key; use `ui.PathSetter` to
+allow-list paths. A returned error rolls the write back without broadcasting
+it. If the error matches `ui.ErrJsVarTooLarge`,
+`JawsInput` returns that sentinel and, during normal framework dispatch,
+cancels the associated request after releasing application locks; other check
+errors do not cancel the request. The check validates tentative Go state, not
+the decoded browser value used in an accepted peer broadcast. jq conversions
+and ignored map-to-struct entries can make those values differ; use
+`ui.PathSetter` when peer-visible input also needs validation.
+`ui.JSONSizeCheck[T](maxBytes)` supplies an exact serialized-size check. A value
+above the limit or one that cannot be marshaled makes the check match the size
+sentinel. A non-positive limit disables the check. The helper marshals the
+complete tentative value for every actual generic browser change, making each
+check depend on the whole value and its marshaling behavior; map-key sorting and
+custom marshalers can add further cost. This cost is opt-in so applications can
+choose it according to their data and threat model. The helper bounds
+`encoding/json` output, not Go heap use or backing-memory size. It is suitable
+only when JSON faithfully represents all client-growable state; custom
+`MarshalJSON` or `MarshalText` methods, omitted fields, aliases, or collection
+capacity require a domain-specific `ClientCheck`.
+
+`ClientCheck` is per binding and is bypassed by server-initiated writes and by
+values implementing `ui.PathSetter`. Every request-scoped binding that exposes
+the same `Ptr` or reachable mutable backing state to browser writes must
+therefore use an equivalent policy and the same locker. When only selected
+fields or collection operations should be client-writable,
+implement `ui.PathSetter` (`JawsSetPath`) to allow-list paths and enforce bounds
+there. The `Node` type in the separate `github.com/linkdata/jawstree` module is
+an example: it rejects every path except the per-node `.selected` boolean, so a
+browser cannot rename nodes, mutate ids, or grow the `children` slice.
+
+`ClientCheck` is an acceptance gate, not continuous monitoring. Initial render,
+server writes, invalid or unchanged generic writes, and `PathSetter` writes do
+not invoke it. An ordinary rejection restores Go state and produces no
+broadcast, but the browser that sent the write has already changed its local
+value and can remain divergent until the application resynchronizes it. A
+rejection matching `ui.ErrJsVarTooLarge` cancels the associated request, when
+present, and terminates its connection.
 
 ---
 

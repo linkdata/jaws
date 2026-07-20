@@ -2,9 +2,9 @@ package ui
 
 import (
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"sync"
 	"testing"
 
@@ -106,19 +106,13 @@ func BenchmarkJsVarPathSetterMutation(b *testing.B) {
 	})
 }
 
-// BenchmarkJsVarClientWrite guards against reintroducing per-write full-value
-// marshaling (the O(n^2) append-flood hazard) in the client input path. It
-// overwrites a single element so the total serialized size stays fixed while the
-// backing slice is either tiny or large. With the running size accounting the
-// per-write cost is independent of the slice length, so SmallState and LargeState
-// report nearly the same ns/op; a regression that marshals the whole value on every
-// write would make LargeState scale with the slice length.
+// BenchmarkJsVarClientWrite measures both the default unchecked path and the
+// explicitly enabled full-value JSON size check. Each case alternates equal-length
+// values in one element while the backing slice is tiny or large. The unchecked
+// path should be insensitive to slice length; the checked path measures the
+// intentionally size-dependent full-value encoding cost.
 func BenchmarkJsVarClientWrite(b *testing.B) {
-	old := MaxClientJsVarBytes
-	MaxClientJsVarBytes = 1 << 30 // effectively unbounded: accounting runs but never confirms
-	b.Cleanup(func() { MaxClientJsVarBytes = old })
-
-	run := func(b *testing.B, initial int) {
+	run := func(b *testing.B, initial int, checked bool) {
 		jw, err := jaws.New()
 		if err != nil {
 			b.Fatal(err)
@@ -135,6 +129,9 @@ func BenchmarkJsVarClientWrite(b *testing.B) {
 			state.Items[i] = "0123456789"
 		}
 		jsvar := NewJsVar(&mu, &state)
+		if checked {
+			jsvar.ClientCheck = JSONSizeCheck[benchmarkJsVarSlice](math.MaxInt)
+		}
 		elem := rq.NewElement(jsvar)
 		if err = jsvar.JawsRender(elem, io.Discard, []any{"bench"}); err != nil {
 			b.Fatal(err)
@@ -142,16 +139,22 @@ func BenchmarkJsVarClientWrite(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			// Overwrite the first element with a distinct value; the total size stays
-			// fixed, so per-write cost should not depend on the slice length.
-			if err = jsvar.JawsInput(elem, "items.0="+strconv.Quote(strconv.Itoa(i))); err != nil {
+			value := `"abcdefghij"`
+			if i&1 != 0 {
+				value = `"0123456789"`
+			}
+			if err = jsvar.JawsInput(elem, "items.0="+value); err != nil {
 				b.Fatal(err)
 			}
 		}
 	}
 
-	b.Run("SmallState", func(b *testing.B) { run(b, 1) })
-	b.Run("LargeState", func(b *testing.B) { run(b, 10000) })
+	b.Run("SmallState", func(b *testing.B) { run(b, 1, false) })
+	b.Run("LargeState", func(b *testing.B) { run(b, 10000, false) })
+	b.Run("JSONSizeCheck", func(b *testing.B) {
+		b.Run("SmallState", func(b *testing.B) { run(b, 1, true) })
+		b.Run("LargeState", func(b *testing.B) { run(b, 10000, true) })
+	})
 }
 
 func BenchmarkValidateJsVarName(b *testing.B) {

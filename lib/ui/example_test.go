@@ -51,6 +51,19 @@ func ExampleJsVar_pathSetter() {
 	// true
 }
 
+func ExampleJSONSizeCheck() {
+	type clientState struct {
+		Items []string `json:"items"`
+	}
+
+	var mu sync.Mutex
+	state := clientState{}
+	jsv := ui.NewJsVar(&mu, &state)
+	jsv.ClientCheck = ui.JSONSizeCheck[clientState](1 << 20)
+
+	_ = jsv // render this request-scoped binding normally
+}
+
 func ExampleTemplate_failureBehavior() {
 	tmpl := template.Must(template.New("partial").Parse(`before {{.Dot}} {{call .Missing}} after`))
 	jw, err := jaws.New()
