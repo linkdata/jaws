@@ -9,12 +9,8 @@ import (
 	"github.com/linkdata/jaws/lib/tag"
 )
 
-var (
-	// ErrFloatNotFinite reports that a float value is NaN or infinite.
-	ErrFloatNotFinite = errors.New("float value is not finite")
-	// ErrFloatOutOfRange reports that a finite float does not fit the target type.
-	ErrFloatOutOfRange = errors.New("float value out of range for target type")
-)
+// ErrFloatOutOfRange reports that a finite float does not fit the target type.
+var ErrFloatOutOfRange = errors.New("float value out of range for target type")
 
 type numeric interface {
 	~float32 | ~float64 |
@@ -26,9 +22,15 @@ type setterFloat64[T numeric] struct {
 	Setter[T]
 }
 
-// sanitizeFloatForT validates value before it is converted to T. It rejects
-// non-finite values for every numeric T, and for integer T also rejects values
-// whose truncation toward zero falls outside the type's representable range.
+// sanitizeFloatForT validates value before it is converted to T. For integer T it
+// rejects values whose truncation toward zero falls outside the type's
+// representable range; for float32 it rejects a float64 that overflows to infinity
+// on conversion.
+//
+// value is expected to be finite. The number and range input widgets terminate the
+// Request on a non-finite value before it reaches the setter, so finiteness is not
+// re-validated here: an infinity is incidentally rejected as out of range, but a NaN
+// passed directly would slip through and convert to an implementation-defined value.
 //
 // The conversion T(value) truncates toward zero, so the lower bound is compared
 // against math.Trunc(value): a fractional value like -128.5 truncates to the valid
@@ -48,11 +50,6 @@ type setterFloat64[T numeric] struct {
 // such as "type Celsius float64" falls through to the float default branch and is
 // range-checked as if it were its predeclared underlying type.
 func sanitizeFloatForT[T numeric](value float64) error {
-	// Non-finite values, typically from the untrusted browser, corrupt the bound value;
-	// NaN in particular defeats the equality-based update dedup (NaN != NaN). Reject them.
-	if math.IsNaN(value) || math.IsInf(value, 0) {
-		return ErrFloatNotFinite
-	}
 	var lo, hiExcl float64
 	switch any(T(0)).(type) {
 	case int8:

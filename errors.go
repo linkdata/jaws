@@ -32,6 +32,17 @@ var ErrValueUnchanged = errors.New("value unchanged")
 // with [errors.Is]; the wrapped text identifies which channel overflowed.
 var ErrRequestOverloaded = errors.New("request overloaded")
 
+// ErrValueNotFinite indicates a [Request] was torn down because a NaN or infinite
+// float64 reached the UI.
+//
+// A non-finite value has no valid rendering or wire representation and, in the case
+// of NaN, is not even equal to itself, so it cannot be coerced safely. Rather than
+// silently blanking or dropping it, the Request that produced it is cancelled. The
+// cancellation cause reachable via [context.Cause] on [Request.Context] wraps this
+// sentinel, so it can be matched with [errors.Is]; the wrapped text identifies the
+// offending value.
+var ErrValueNotFinite = errors.New("float value is not finite")
+
 // ErrRequestAlreadyClaimed is returned when [Jaws.UseRequest] is called more than once for a [Request].
 var ErrRequestAlreadyClaimed = errors.New("request already claimed")
 

@@ -113,8 +113,13 @@ func runFormatFloat(value float64) string {
 func runAtof(value string) (n float64, ok bool) {
 	var err error
 	n, err = strconv.ParseFloat(value, 64)
-	ok = err == nil && !math.IsInf(n, 0) && !math.IsNaN(n)
+	ok = err == nil
 	return
+}
+
+// finite reports whether f is neither NaN nor infinite.
+func finite(f float64) bool {
+	return !math.IsNaN(f) && !math.IsInf(f, 0)
 }
 
 func runAtoi(value string) (n int, ok bool) {

@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"html/template"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,6 +18,7 @@ import (
 	"github.com/linkdata/jaws/lib/htmlio"
 	"github.com/linkdata/jaws/lib/jid"
 	"github.com/linkdata/jaws/lib/named"
+	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
@@ -804,4 +807,45 @@ func TestSelectWidget_NonSetterContainer(t *testing.T) {
 	if err := selectUI.JawsInput(elem, "x"); err != nil {
 		t.Fatalf("JawsInput on non-Setter container: want nil, got %v", err)
 	}
+}
+
+// nanChildUI is a comparable UI value that is not equal to itself, reproducing the
+// non-reflexive map-key hazard from issue #179.
+type nanChildUI struct{ f float64 }
+
+func (nanChildUI) JawsRender(_ *jaws.Element, w io.Writer, _ []any) error {
+	_, err := io.WriteString(w, "child")
+	return err
+}
+func (nanChildUI) JawsUpdate(*jaws.Element) {}
+
+// TestContainerTerminatesOnNonReflexiveChild reproduces issue #179: a container child
+// whose UI value contains NaN is a legal comparable map key but is not equal to
+// itself, so container reconciliation cannot match it and would recreate it every
+// update. NewElement instead terminates the Request. Covered on both the initial
+// render and a later update.
+func TestContainerTerminatesOnNonReflexiveChild(t *testing.T) {
+	t.Run("render", func(t *testing.T) {
+		_, rq := newCoreRequest(t)
+		tc := &testContainer{contents: []jaws.UI{nanChildUI{f: math.NaN()}}}
+		container := NewContainer("div", tc)
+		elem := rq.NewElement(container)
+		var sb strings.Builder
+		_ = elem.JawsRender(&sb, nil)
+		if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
+			t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
+		}
+	})
+
+	t.Run("update", func(t *testing.T) {
+		_, rq := newCoreRequest(t)
+		tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("ok"))}}
+		container := NewContainer("div", tc)
+		elem, _ := renderUI(t, rq, container)
+		tc.contents = []jaws.UI{nanChildUI{f: math.NaN()}}
+		container.JawsUpdate(elem)
+		if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
+			t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
+		}
+	})
 }

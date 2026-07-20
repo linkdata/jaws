@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"html"
 	"io"
 	"net/http"
@@ -623,12 +624,14 @@ func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 // multiplicity requirements are caller obligations; NewElement does not enforce
 // them. See [UI] for the complete contract.
 //
-// Panics in debug builds when ui does not satisfy [UI]'s comparability requirement.
+// If ui is unusable as a map key — not comparable at runtime, or not equal to
+// itself, as a value holding [math.NaN] is — the Request is terminated with a cause
+// wrapping [tag.ErrNotUsableAsTag]. Such a value cannot be matched reliably during
+// element reconciliation, so it is a fatal contract violation rather than something
+// to coerce. The Element is still created and returned so callers need not nil-check.
 func (rq *Request) NewElement(ui UI) *Element {
-	if deadlock.Debug {
-		if err := tag.NewErrNotComparable(ui); err != nil {
-			panic(err)
-		}
+	if err := tag.NewErrNotUsableAsTag(ui); err != nil {
+		rq.Cancel(fmt.Errorf("jaws: %T is not usable as a UI value: %w", ui, err))
 	}
 	rq.mu.Lock()
 	defer rq.mu.Unlock()

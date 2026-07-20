@@ -2,11 +2,13 @@ package jaws
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -736,15 +738,6 @@ func TestElement_ApplyGetterDebugBranches(t *testing.T) {
 	if _, _, err := elem.ApplyGetter(agErr); err != tag.ErrNotComparable {
 		t.Fatalf("expected init err, got %v", err)
 	}
-
-	if deadlock.Debug {
-		defer func() {
-			if recover() == nil {
-				t.Fatal("expected panic for non-comparable UI in debug mode")
-			}
-		}()
-		rq.NewElement(testUnhashableUI{m: map[string]int{"x": 1}})
-	}
 }
 
 type testClickHandler struct{}
@@ -1228,5 +1221,31 @@ func TestElement_JawsInit(t *testing.T) {
 	}
 	if err != tag.ErrNotComparable {
 		t.Error(err)
+	}
+}
+
+type nonReflexiveUI struct{ f float64 }
+
+func (nonReflexiveUI) JawsRender(*Element, io.Writer, []any) error { return nil }
+func (nonReflexiveUI) JawsUpdate(*Element)                         {}
+
+// TestNewElementTerminatesOnNonReflexiveUI verifies that a UI value that is not equal
+// to itself (a comparable struct holding NaN) terminates the Request and logs the
+// cause, rather than being silently accepted and later corrupting map-key lookups.
+func TestNewElementTerminatesOnNonReflexiveUI(t *testing.T) {
+	tj := newTestJaws()
+	t.Cleanup(tj.Close)
+	rq := newWrappedTestRequest(tj.Jaws, nil)
+	if rq == nil {
+		t.Fatal("nil request")
+	}
+
+	rq.NewElement(nonReflexiveUI{f: math.NaN()})
+
+	if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
+		t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
+	}
+	if !strings.Contains(tj.log.String(), "not usable as a UI value") {
+		t.Fatalf("expected termination to be logged, got %q", tj.log.String())
 	}
 }
