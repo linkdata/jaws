@@ -29,8 +29,22 @@ import (
 // own contract and cannot change silently if the library default does.
 const webSocketReadLimit = 32 * 1024
 
-// ConnectFn can be used to interact with a [Request] before message processing starts.
-// Returning an error causes the [Request] to abort, and the WebSocket connection to close.
+// ConnectFn initializes or validates a [Request] after its WebSocket is accepted.
+//
+// The function runs synchronously after the Request subscribes to broadcasts but
+// before it starts processing browser messages. It may inspect or modify
+// server-side Request, [Session], and application state. After changing state
+// that rendered Elements depend on, use [Request.Dirty] to schedule their updates
+// for when message processing starts.
+//
+// Broadcasts for the Request are buffered while the function runs and are
+// processed after it returns nil. The buffer is bounded, so the function should
+// return promptly; normal [ErrRequestOverloaded] handling applies if it fills.
+//
+// Returning an error aborts the Request, discards its buffered broadcasts, and
+// closes the WebSocket connection. Broadcasts already delivered to other active
+// Requests are unaffected. The Request pointer is borrowed for the callback; the
+// lifetime rules documented on [Request] apply.
 type ConnectFn = func(rq *Request) error
 
 // Request maintains the state for a JaWS WebSocket connection, and handles processing
@@ -295,7 +309,6 @@ func (rq *Request) HeadHTML(w io.Writer) (err error) {
 }
 
 // GetConnectFn returns the currently set [ConnectFn].
-// That function will be called before starting the WebSocket tunnel if not nil.
 func (rq *Request) GetConnectFn() (fn ConnectFn) {
 	rq.mu.RLock()
 	fn = rq.connectFn
@@ -303,8 +316,9 @@ func (rq *Request) GetConnectFn() (fn ConnectFn) {
 	return
 }
 
-// SetConnectFn sets the [ConnectFn].
-// That function will be called before starting the WebSocket tunnel if not nil.
+// SetConnectFn sets the function called after the WebSocket is accepted.
+//
+// See [ConnectFn] for the callback lifecycle and permitted operations.
 func (rq *Request) SetConnectFn(fn ConnectFn) {
 	rq.mu.Lock()
 	rq.connectFn = fn
@@ -928,29 +942,45 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ws, err = websocket.Accept(acceptWriter, acceptRequest, nil)
 		if err == nil {
 			ws.SetReadLimit(webSocketReadLimit)
+			// Subscribe before onConnect so broadcasts from the callback are
+			// buffered for this Request. Browser input and outbound writes do not
+			// start until the callback succeeds.
+			rq.mu.RLock()
+			numElems := len(rq.elems)
+			rq.mu.RUnlock()
+			// Size the broadcast buffer with headroom that scales with the page's
+			// element count. mustBroadcast (see Jaws.Serve) sends here
+			// non-blocking and, for any non-Update message, kills the subscription
+			// and cancels this request if the send would block.
+			broadcastMsgCh := rq.Jaws.subscribe(rq, 4+numElems*4)
+			ownsSubscription := broadcastMsgCh != nil
+			// onConnect is user code and may panic. Release the subscription before
+			// stopServe recycles rq unless ownership has passed to process, whose
+			// cleanup performs the unsubscribe itself.
+			defer func() {
+				if ownsSubscription {
+					rq.Jaws.unsubscribe(broadcastMsgCh)
+				}
+			}()
 			if err = rq.onConnect(); err == nil {
 				incomingMsgCh := make(chan wire.WsMsg)
-				// Snapshot ctx, cancelFn and the element count together under the
-				// lock; every other access to rq.elems is also guarded by rq.mu.
+				// Snapshot ctx and cancelFn after onConnect so a context installed by
+				// the callback governs all WebSocket loops.
 				rq.mu.RLock()
 				ctx := rq.ctx
 				cancelFn := rq.cancelFn
-				numElems := len(rq.elems)
 				rq.mu.RUnlock()
-				// Size the broadcast buffer with headroom that scales with the
-				// page's element count. mustBroadcast (see Jaws.Serve) sends here
-				// non-blocking and, for any non-Update message, kills the
-				// subscription and cancels this request if the send would block.
-				// A larger page can be the target of more concurrent broadcasts
-				// between drains, so the buffer grows per element (4) over a small
-				// fixed base (4) to avoid spuriously cancelling a slow request.
-				broadcastMsgCh := rq.Jaws.subscribe(rq, 4+numElems*4)
 				outboundMsgCh := make(chan wire.WsMsg, cap(broadcastMsgCh))
 				go wire.ReadLoop(ctx, cancelFn, rq.Jaws.Done(), incomingMsgCh, ws)  // closes incomingMsgCh
 				go wire.WriteLoop(ctx, cancelFn, rq.Jaws.Done(), outboundMsgCh, ws) // calls ws.Close()
 				go wire.PingLoop(ctx, cancelFn, rq.Jaws.Done(), pingInterval, wsTimeout, ws)
+				ownsSubscription = false
 				rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh) // unsubscribes broadcastMsgCh, closes outboundMsgCh
 			} else {
+				if ownsSubscription {
+					rq.Jaws.unsubscribe(broadcastMsgCh)
+					ownsSubscription = false
+				}
 				reason := err.Error()
 				defer func() { _ = ws.Close(websocket.StatusNormalClosure, reason) }()
 				var msg wire.WsMsg

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"log"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -3221,6 +3222,144 @@ func TestWS_ConnectFnFails(t *testing.T) {
 	}
 	if !strings.Contains(string(b), nope) {
 		t.Error(string(b))
+	}
+}
+
+func TestWS_ConnectFnBroadcastDelivered(t *testing.T) {
+	ts := newTestServer(t)
+	defer ts.Close()
+	ts.rq.SetConnectFn(func(rq *Request) error {
+		rq.Redirect("/from-connect-fn")
+		return nil
+	})
+
+	conn, resp, err := ts.Dial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.CloseNow() }()
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusSwitchingProtocols)
+	}
+
+	messageType, data, err := conn.Read(ts.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if messageType != websocket.MessageText {
+		t.Fatalf("message type = %v, want %v", messageType, websocket.MessageText)
+	}
+	msg, ok := wire.Parse(data)
+	if !ok {
+		t.Fatalf("invalid wire message %q", data)
+	}
+	if msg.What != what.Redirect || msg.Jid != 0 || msg.Data != "/from-connect-fn" {
+		t.Fatalf("message = %+v, want request Redirect to /from-connect-fn", msg)
+	}
+}
+
+func TestWS_ConnectFnSubscriptionCleanup(t *testing.T) {
+	errRejected := errors.New("connect rejected")
+	tests := []struct {
+		name      string
+		connectFn ConnectFn
+		wantAlert string
+	}{
+		{
+			name: "error",
+			connectFn: func(*Request) error {
+				return errRejected
+			},
+			wantAlert: errRejected.Error(),
+		},
+		{
+			name: "panic",
+			connectFn: func(*Request) error {
+				panic("connect panic")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer jw.Close()
+
+			ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
+			defer cancel()
+			initial := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
+			rq := jw.NewRequest(initial)
+			if got := jw.UseRequest(rq.JawsKey, initial); got != rq {
+				t.Fatalf("UseRequest() = %v, want %v", got, rq)
+			}
+			rq.SetConnectFn(tt.connectFn)
+
+			type subscriptionPair struct {
+				subscribed   chan wire.Message
+				unsubscribed chan wire.Message
+			}
+			cleanupCh := make(chan subscriptionPair, 1)
+			go func() {
+				select {
+				case sub := <-jw.subCh:
+					select {
+					case msgCh := <-jw.unsubCh:
+						close(sub.msgCh)
+						cleanupCh <- subscriptionPair{subscribed: sub.msgCh, unsubscribed: msgCh}
+					case <-jw.Done():
+					}
+				case <-jw.Done():
+				}
+			}()
+
+			srv := httptest.NewUnstartedServer(rq)
+			srv.Config.ErrorLog = log.New(io.Discard, "", 0)
+			srv.Start()
+			defer srv.Close()
+			u, err := url.Parse(srv.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			initial.Host = u.Host
+			initial.URL.Scheme = u.Scheme
+			initial.URL.Host = u.Host
+
+			hdr := http.Header{}
+			hdr.Set("Origin", srv.URL)
+			conn, resp, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), &websocket.DialOptions{HTTPHeader: hdr})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = conn.CloseNow() }()
+			if resp.StatusCode != http.StatusSwitchingProtocols {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusSwitchingProtocols)
+			}
+
+			if tt.wantAlert != "" {
+				_, data, err := conn.Read(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(string(data), tt.wantAlert) {
+					t.Fatalf("error frame %q does not contain %q", data, tt.wantAlert)
+				}
+			}
+
+			select {
+			case cleanup := <-cleanupCh:
+				if cleanup.subscribed == nil {
+					t.Fatal("subscribed channel is nil")
+				}
+				if cleanup.unsubscribed != cleanup.subscribed {
+					t.Fatalf("unsubscribed channel %p, want %p", cleanup.unsubscribed, cleanup.subscribed)
+				}
+			case <-ctx.Done():
+				t.Fatal("ConnectFn subscription was not released")
+			}
+		})
 	}
 }
 
