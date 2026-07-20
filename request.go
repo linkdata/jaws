@@ -42,9 +42,9 @@ const webSocketReadLimit = 32 * 1024
 // return promptly; normal [ErrRequestOverloaded] handling applies if it fills.
 //
 // Returning an error aborts the Request, discards its buffered broadcasts, and
-// closes the WebSocket connection. Broadcasts already delivered to other active
-// Requests are unaffected. The Request pointer is borrowed for the callback; the
-// lifetime rules documented on [Request] apply.
+// closes the WebSocket connection without sending a failure message. Broadcasts
+// already delivered to other active Requests are unaffected. The Request pointer
+// is borrowed for the callback; the lifetime rules documented on [Request] apply.
 type ConnectFn = func(rq *Request) error
 
 // Request maintains the state for a JaWS WebSocket connection, and handles processing
@@ -984,13 +984,12 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			ws.SetReadLimit(webSocketReadLimit)
 			if err = rq.runWebSocket(ws, pingInterval, wsTimeout); err != nil {
-				reason := err.Error()
-				defer func() { _ = ws.Close(websocket.StatusNormalClosure, reason) }()
-				var msg wire.WsMsg
-				msg.FillAlert(rq.Jaws.Log(err))
-				// Best-effort alert on a connection we're about to close; the
-				// underlying error was already logged above via rq.Jaws.Log.
-				_ = ws.Write(r.Context(), websocket.MessageText, msg.Append(nil))
+				// A ConnectFn failure is terminal. Cancel before touching the socket so
+				// a non-reading peer cannot retain the Request, then close without a
+				// handshake because no WebSocket processing loops were started.
+				rq.cancel(err)
+				_ = ws.CloseNow()
+				return
 			}
 		}
 		rq.cancel(err)
