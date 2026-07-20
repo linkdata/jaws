@@ -70,7 +70,7 @@ type Request struct {
 	remoteIP         netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
 	running          atomic.Bool             // if ServeHTTP() is running
 	claimed          atomic.Bool             // if UseRequest() has been called for it
-	lastWriteSeconds atomic.Int32            // [Jaws.runtimeSeconds] value at the most recent RequestWriter write; lock-free, drives pending-eviction recency (oldestEvictablePendingLocked) and idle expiry (maintenance)
+	lastWriteSeconds atomic.Int32            // [Jaws.runtimeSeconds] value at the most recent RequestWriter write; lock-free, drives pending-eviction preference (pendingEvictionVictimLocked) and idle expiry (maintenance)
 	mu               deadlock.RWMutex        // protects following
 	lastJid          Jid                     // last element Jid allocated within this Request
 	initial          *http.Request           // initial HTTP request passed to Jaws.NewRequest
@@ -111,14 +111,15 @@ func (rq *Request) String() string {
 	return "Request<" + rq.JawsKeyString() + ">"
 }
 
-// MarkWritten records that the Request's initial HTML is being written, so the
-// pending-eviction logic spares it while a render is in flight.
+// MarkWritten records an initial HTML write.
 //
-// [RequestWriter.Write] calls it on every write. It is lock-free and safe to call
-// concurrently. Concurrent calls never move the recorded second backward.
+// The pending-eviction logic uses the timestamp to prefer an idle Request while
+// a render is in flight. [RequestWriter.Write] calls MarkWritten on every write.
+// It is lock-free and safe to call concurrently. Concurrent calls never move the
+// recorded second backward.
 func (rq *Request) MarkWritten() {
 	// A cached runtime sample avoids a clock read. The recorded second drives the
-	// recency window in oldestEvictablePendingLocked and the idle expiry in
+	// recency window in pendingEvictionVictimLocked and the idle expiry in
 	// maintenance.
 	rq.advanceLastWriteSeconds(rq.Jaws.runtimeSeconds.Load())
 }

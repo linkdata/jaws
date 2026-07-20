@@ -554,10 +554,10 @@ func TestJaws_RetiredPendingRequestRemainsOwnedByInitialHTTPHandler(t *testing.T
 
 			first := <-started
 			firstKey := first.rq.JawsKey
-			setPendingLimitLastWrite(t, first.rq, 3600)
 			if tc.maintenance {
 				// This is the callback the production Serve loop runs on every
 				// maintenance tick; the old timestamp only avoids a wall-clock wait.
+				setPendingLimitLastWrite(t, first.rq, 3600)
 				jw.maintenance(time.Second)
 			}
 			res, err := server.Client().Get(server.URL + "/next")
@@ -848,7 +848,7 @@ func TestJaws_MaxPendingRequestsPerIPSparesStalledLiveRender(t *testing.T) {
 	}
 }
 
-func TestJaws_MaxPendingRequestsPerIPSparesFutureWriteTimestamp(t *testing.T) {
+func TestJaws_MaxPendingRequestsPerIPEnforcesCapWithFutureWriteTimestamp(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -866,23 +866,23 @@ func TestJaws_MaxPendingRequestsPerIPSparesFutureWriteTimestamp(t *testing.T) {
 	newRq := jw.NewRequest(newReq)
 	newKey := newRq.JawsKey
 
-	if got := jw.Pending(); got != 2 {
-		t.Fatalf("Pending() = %d, want 2 (cap overshoots while render timestamp is newer than scan timestamp)", got)
+	if got := jw.Pending(); got != 1 {
+		t.Fatalf("Pending() = %d, want 1", got)
 	}
-	if claimed := jw.UseRequest(renderingKey, renderingReq); claimed != renderingRq {
-		t.Fatalf("future-written render claim = %v, want it to survive eviction", claimed)
+	if claimed := jw.UseRequest(renderingKey, renderingReq); claimed != nil {
+		t.Fatalf("future-written render remained claimable as %v", claimed)
+	}
+	if cause := context.Cause(renderingRq.Context()); !errors.Is(cause, ErrTooManyPendingRequests) {
+		t.Fatalf("future-written render cause = %v, want ErrTooManyPendingRequests", cause)
 	}
 	if claimed := jw.UseRequest(newKey, newReq); claimed != newRq {
 		t.Fatalf("new request claim = %v, want %v", claimed, newRq)
 	}
 }
 
-// TestJaws_MaxPendingRequestsPerIPOvershootsWhenAllRendering verifies that when
-// every pending request for an IP is mid-render, the cap is not enforced by
-// retiring one of them: oldestEvictablePendingLocked finds no idle victim, so the
-// cap allows a brief, self-correcting overshoot rather than invalidating a page
-// before its WebSocket can connect.
-func TestJaws_MaxPendingRequestsPerIPOvershootsWhenAllRendering(t *testing.T) {
+// TestJaws_MaxPendingRequestsPerIPEnforcesCapWhenAllRendering verifies that a
+// pending Request is retired even when every candidate was written recently.
+func TestJaws_MaxPendingRequestsPerIPEnforcesCapWhenAllRendering(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -890,21 +890,134 @@ func TestJaws_MaxPendingRequestsPerIPOvershootsWhenAllRendering(t *testing.T) {
 	defer jw.Close()
 	jw.MaxPendingRequestsPerIP = 1
 
-	rq1 := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
+	req1 := newPendingLimitRequest("192.0.2.1:1000")
+	rq1 := jw.NewRequest(req1)
 	rq1Key := rq1.JawsKey
 	rq1.MarkWritten()
 
-	// A second same-IP request trips the cap, but the only pending request is
-	// rendering, so nothing is evicted and the cap overshoots to 2.
-	rq2 := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1001"))
-	if rq2 == nil {
-		t.Fatal("expected the new request to be created despite the cap")
+	req2 := newPendingLimitRequest("192.0.2.1:1001")
+	rq2 := jw.NewRequest(req2)
+	if got := jw.Pending(); got != 1 {
+		t.Fatalf("Pending() = %d, want 1", got)
 	}
+	if claimed := jw.UseRequest(rq1Key, req1); claimed != nil {
+		t.Fatalf("oldest rendering request remained claimable as %v", claimed)
+	}
+	if cause := context.Cause(rq1.Context()); !errors.Is(cause, ErrTooManyPendingRequests) {
+		t.Fatalf("oldest rendering request cause = %v, want ErrTooManyPendingRequests", cause)
+	}
+	if claimed := jw.UseRequest(rq2.JawsKey, req2); claimed != rq2 {
+		t.Fatalf("new request claim = %v, want %v", claimed, rq2)
+	}
+}
+
+// TestJaws_MaxPendingRequestsPerIPEvictsLeastRecentlyWrittenWhenAllFresh
+// verifies that when every pending Request was written recently, the eviction
+// victim is the least recently written one, not the oldest-created one.
+func TestJaws_MaxPendingRequestsPerIPEvictsLeastRecentlyWrittenWhenAllFresh(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.MaxPendingRequestsPerIP = 2
+
+	req1 := newPendingLimitRequest("192.0.2.1:1000")
+	rq1 := jw.NewRequest(req1)
+	rq1Key := rq1.JawsKey
+	req2 := newPendingLimitRequest("192.0.2.1:1001")
+	rq2 := jw.NewRequest(req2)
+	rq2Key := rq2.JawsKey
+	// The older rq1 wrote more recently than rq2 (a future timestamp keeps it
+	// fresh regardless of test scheduling), so rq2 is the eviction victim even
+	// though rq1 was created first.
+	setPendingLimitLastWrite(t, rq1, -3600)
+
+	req3 := newPendingLimitRequest("192.0.2.1:1002")
+	rq3 := jw.NewRequest(req3)
 	if got := jw.Pending(); got != 2 {
-		t.Fatalf("Pending() = %d, want 2 (cap overshoots while all pending render)", got)
+		t.Fatalf("Pending() = %d, want 2", got)
 	}
-	if rq1.JawsKey == 0 || rq1.JawsKey != rq1Key {
-		t.Fatal("the rendering request must not be retired by the cap")
+	if claimed := jw.UseRequest(rq2Key, req2); claimed != nil {
+		t.Fatalf("least recently written request remained claimable as %v", claimed)
+	}
+	if cause := context.Cause(rq2.Context()); !errors.Is(cause, ErrTooManyPendingRequests) {
+		t.Fatalf("least recently written request cause = %v, want ErrTooManyPendingRequests", cause)
+	}
+	if claimed := jw.UseRequest(rq1Key, req1); claimed != rq1 {
+		t.Fatalf("oldest-created request claim = %v, want %v", claimed, rq1)
+	}
+	if claimed := jw.UseRequest(rq3.JawsKey, req3); claimed != rq3 {
+		t.Fatalf("new request claim = %v, want %v", claimed, rq3)
+	}
+}
+
+// TestJaws_MaxPendingRequestsPerIPToleratesUnretirableVictim forces the
+// invariant break the eviction loop guards against: a pending Request that is
+// running cannot be retired, so the cap must overshoot instead of reselecting
+// the same victim forever while holding the Jaws mutex.
+func TestJaws_MaxPendingRequestsPerIPToleratesUnretirableVictim(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.MaxPendingRequestsPerIP = 1
+
+	req1 := newPendingLimitRequest("192.0.2.1:1000")
+	rq1 := jw.NewRequest(req1)
+	rq1.running.Store(true)
+	defer rq1.running.Store(false)
+
+	rq2 := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1001"))
+	if got := jw.Pending(); got != 2 {
+		t.Fatalf("Pending() = %d, want 2 (overshoot when the victim cannot be retired)", got)
+	}
+	if cause := context.Cause(rq1.Context()); cause != nil {
+		t.Fatalf("unretirable victim was canceled with cause %v", cause)
+	}
+	if claimed := jw.UseRequest(rq2.JawsKey, newPendingLimitRequest("192.0.2.1:1001")); claimed != rq2 {
+		t.Fatalf("new request claim = %v, want %v", claimed, rq2)
+	}
+}
+
+func TestJaws_MaxPendingRequestsPerIPConcurrentCreation(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	const (
+		limit = 8
+		total = 64
+	)
+	jw.MaxPendingRequestsPerIP = limit
+
+	start := make(chan struct{})
+	requests := make([]*Request, total)
+	var wg sync.WaitGroup
+	for i := range total {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			requests[i] = jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	if got := jw.Pending(); got != limit {
+		t.Fatalf("Pending() = %d, want %d", got, limit)
+	}
+	live := 0
+	for _, rq := range requests {
+		if claimed := jw.UseRequest(rq.JawsKey, newPendingLimitRequest("192.0.2.1:1000")); claimed != nil {
+			live++
+		}
+	}
+	if live != limit {
+		t.Fatalf("claimable requests = %d, want %d", live, limit)
 	}
 }
 
@@ -1035,8 +1148,7 @@ func TestJaws_MaxPendingRequestsPerIPEvictionCause(t *testing.T) {
 	jw.MaxPendingRequestsPerIP = 1
 
 	oldReq := newPendingLimitRequest("192.0.2.1:1000")
-	oldRq := jw.NewRequest(oldReq)
-	setPendingLimitLastWrite(t, oldRq, 3600)
+	jw.NewRequest(oldReq)
 	jw.NewRequest(newPendingLimitRequest("192.0.2.1:1001"))
 
 	if logger.err == nil {

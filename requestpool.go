@@ -34,6 +34,11 @@ import (
 // Automatic timeout handling is performed by [Jaws.ServeWithTimeout]. The default
 // [Jaws.Serve] helper uses a 10-second timeout.
 //
+// When [Jaws.MaxPendingRequestsPerIP] is positive and already reached,
+// NewRequest retires the oldest idle pending Request from the same IP. If every
+// pending Request was created or written recently, it retires the least recently
+// written one so the configured maximum is never exceeded.
+//
 // A Request created after [Jaws.Close] has an already-canceled context and cannot
 // be claimed by [Jaws.UseRequest].
 //
@@ -51,10 +56,10 @@ func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 	func() {
 		jw.mu.Lock()
 		defer jw.mu.Unlock()
-		// Refresh before enforcing the pending cap as well as before seeding the
-		// new Request. Before Serve starts there is no maintenance loop to advance
-		// the counter, so a stale value could otherwise make an old pending Request
-		// look freshly written and briefly overshoot the cap.
+		// Refresh before selecting a pending eviction victim as well as before
+		// seeding the new Request. Before Serve starts there is no maintenance loop
+		// to advance the counter, so a stale value could otherwise make an idle
+		// pending Request look freshly written and lose eviction preference.
 		jw.refreshRuntimeSeconds()
 		closed := false
 		select {
@@ -108,33 +113,38 @@ func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) 
 	if limit > 0 {
 		nowSeconds := jw.runtimeSeconds.Load()
 		for len(jw.pending[remoteIP]) >= limit {
-			victim := jw.oldestEvictablePendingLocked(remoteIP, nowSeconds)
-			if victim == nil {
-				// Every pending Request for this IP was written recently. Prefer a
-				// brief, self-correcting overshoot of the cap to invalidating a page
-				// that is likely still rendering or about to connect.
-				return
-			}
+			before := len(jw.pending[remoteIP])
+			victim := jw.pendingEvictionVictimLocked(remoteIP, nowSeconds)
 			if cause := jw.retireNonRunningRequestWithCauseLocked(victim, newErrTooManyPendingRequests(remoteIP, limit)); cause != nil {
 				toLog = append(toLog, cause)
+			}
+			if len(jw.pending[remoteIP]) >= before {
+				// Retirement declines a running Request or one that lost registry
+				// identity. Neither can be pending, but if that invariant ever broke
+				// the loop would reselect the same victim forever while holding jw.mu,
+				// so accept an overshoot instead.
+				break
 			}
 		}
 	}
 	return
 }
 
-// oldestEvictablePendingLocked returns the oldest pending [Request] for remoteIP
-// eligible for eviction, or nil if every one was written too recently to evict.
-// nowSeconds is the reference instant ([Jaws.runtimeSeconds]), passed in so all
-// candidates are judged against the same instant. Caller must hold jw.mu.
-func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr, nowSeconds int32) *Request {
-	// A Request is spared while its initial HTML may still be in flight.
+// pendingEvictionVictimLocked returns the pending [Request] for remoteIP to
+// retire when the pending cap is reached: the oldest one that was not written
+// recently, or the least recently written one when every pending Request is
+// fresh. nowSeconds is the reference instant ([Jaws.runtimeSeconds]), passed in
+// so all candidates are judged against the same instant. Caller must hold jw.mu,
+// and jw.pending[remoteIP] must be non-empty.
+func (jw *Jaws) pendingEvictionVictimLocked(remoteIP netip.Addr, nowSeconds int32) (victim *Request) {
+	// A recently written Request is skipped while an idle eviction victim exists.
 	// RequestWriter.Write records the current second on every write via
 	// Request.MarkWritten, so a Request is treated as possibly rendering while its
 	// last write is within 2*maintenanceInterval (rounded to whole seconds, with a
 	// one-second floor). The recorded second advances only while the Request keeps
 	// writing, so an actively writing render stays fresh while one idle for the
-	// window becomes evictable.
+	// window is preferred. If all pending Requests are fresh, the least recently
+	// written one is retired to enforce the configured maximum.
 	//
 	// maintenanceInterval is zero until ServeWithTimeout starts; fall back to
 	// DefaultUpdateInterval so an in-flight render is still protected before the
@@ -149,18 +159,23 @@ func (jw *Jaws) oldestEvictablePendingLocked(remoteIP netip.Addr, nowSeconds int
 	if spareWindow < time.Second {
 		spareWindow = time.Second // floor: the seconds counter advances at most once per second
 	}
+	var victimElapsed int32
 	for _, rq := range jw.pending[remoteIP] {
 		// Compare as durations (elapsed whole seconds vs the window) to avoid a
 		// lossy time.Duration conversion. A write timestamp newer than this scan's
 		// nowSeconds is fresh; that can happen when a render records a write while
 		// the Serve loop's runtimeSeconds snapshot is briefly stale.
 		elapsedSeconds := nowSeconds - rq.lastWriteSeconds.Load()
-		if elapsedSeconds <= 0 || time.Duration(elapsedSeconds)*time.Second <= spareWindow {
-			continue
+		if elapsedSeconds > 0 && time.Duration(elapsedSeconds)*time.Second > spareWindow {
+			// The oldest idle pending Request; pending is in creation order.
+			return rq
 		}
-		return rq
+		if victim == nil || elapsedSeconds > victimElapsed {
+			// Least recently written so far; ties keep the oldest-created one.
+			victim, victimElapsed = rq, elapsedSeconds
+		}
 	}
-	return nil
+	return
 }
 
 func (jw *Jaws) removePendingRequestLocked(rq *Request) {
