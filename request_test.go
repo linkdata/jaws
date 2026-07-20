@@ -2056,7 +2056,9 @@ func TestRequest_renderDebugLocked(t *testing.T) {
 	e.Tag(tag.Tag("zomg"))
 
 	var sb strings.Builder
-	e.renderDebug(&sb)
+	if err := e.renderDebug(&sb); err != nil {
+		t.Fatal(err)
+	}
 
 	txt := sb.String()
 	is.Equal(strings.Contains(txt, "zomg"), true)
@@ -2065,7 +2067,9 @@ func TestRequest_renderDebugLocked(t *testing.T) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	sb.Reset()
-	e.renderDebug(&sb)
+	if err := e.renderDebug(&sb); err != nil {
+		t.Fatal(err)
+	}
 
 	txt = sb.String()
 	is.Equal(strings.Contains(txt, "zomg"), false)
