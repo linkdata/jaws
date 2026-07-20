@@ -479,9 +479,9 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 	return
 }
 
-var (
-	headerAllowGetHead        = []string{http.MethodGet + ", " + http.MethodHead}
-	headerCacheControlNoStore = []string{"no-store"}
+const (
+	headerAllowGetHead        = http.MethodGet + ", " + http.MethodHead
+	headerCacheControlNoStore = "no-store"
 )
 
 // methodAllowedGetHead reports whether r may proceed to a GET/HEAD endpoint. When
@@ -492,7 +492,7 @@ func methodAllowedGetHead(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method == http.MethodGet || r.Method == http.MethodHead {
 		return true
 	}
-	w.Header()["Allow"] = headerAllowGetHead
+	w.Header().Set("Allow", headerAllowGetHead)
 	w.WriteHeader(http.StatusMethodNotAllowed)
 	return false
 }
@@ -521,7 +521,7 @@ func (jw *Jaws) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			case "/jaws/.ping":
 				if methodAllowedGetHead(w, r) {
-					w.Header()["Cache-Control"] = headerCacheControlNoStore
+					w.Header().Set("Cache-Control", headerCacheControlNoStore)
 					select {
 					case <-jw.Done():
 						w.WriteHeader(http.StatusServiceUnavailable)
