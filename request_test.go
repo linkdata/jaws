@@ -3197,7 +3197,7 @@ func TestAutoSessionWriter_ForwardsWriteHeaderNow(t *testing.T) {
 	}
 }
 
-func TestWS_ConnectFnFails(t *testing.T) {
+func TestWS_ConnectFnFailsWithoutMessage(t *testing.T) {
 	const nope = "nope"
 	ts := newTestServer(t)
 	defer ts.Close()
@@ -3213,16 +3213,72 @@ func TestWS_ConnectFnFails(t *testing.T) {
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		t.Error(resp.StatusCode)
 	}
-	mt, b, err := conn.Read(ts.ctx)
+	readCtx, cancelRead := context.WithTimeout(t.Context(), testTimeout)
+	defer cancelRead()
+	if _, _, err = conn.Read(readCtx); err == nil {
+		t.Fatal("ConnectFn failure sent a WebSocket message")
+	}
+	if readCtx.Err() != nil {
+		t.Fatal("WebSocket remained open after ConnectFn failure")
+	}
+}
+
+func TestWS_ConnectFnFailureDoesNotBlockOnNonReadingPeer(t *testing.T) {
+	const requestTimeout = 100 * time.Millisecond
+	jw, err := New()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-	if mt != websocket.MessageText {
-		t.Error(mt)
+	defer jw.Close()
+	go jw.ServeWithTimeout(requestTimeout)
+	waitForServeLoop(t, jw)
+
+	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
+	defer cancel()
+	initial := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
+	rq := jw.NewRequest(initial)
+	if got := jw.UseRequest(rq.JawsKey, initial); got != rq {
+		t.Fatalf("UseRequest() = %v, want %v", got, rq)
 	}
-	if !strings.Contains(string(b), nope) {
-		t.Error(string(b))
+	rqCtx := rq.Context()
+	connectErr := errors.New(strings.Repeat("connect rejected ", 1<<19))
+	rq.SetConnectFn(func(*Request) error {
+		return connectErr
+	})
+
+	srv := httptest.NewServer(rq)
+	defer srv.Close()
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
 	}
+	initial.Host = u.Host
+	initial.URL.Scheme = u.Scheme
+	initial.URL.Host = u.Host
+
+	hdr := http.Header{}
+	hdr.Set("Origin", srv.URL)
+	conn, resp, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), &websocket.DialOptions{HTTPHeader: hdr})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.CloseNow() }()
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusSwitchingProtocols)
+	}
+
+	// Deliberately do not read from conn. Before the failure path closed the
+	// socket directly, formatting and writing this large error blocked before
+	// cancellation once the peer's receive buffers filled.
+	select {
+	case <-rqCtx.Done():
+	case <-time.After(requestTimeout * 5):
+		t.Fatal("ConnectFn failure did not cancel a Request with a non-reading peer")
+	}
+	if !errors.Is(context.Cause(rqCtx), connectErr) {
+		t.Fatal("Request cancellation did not retain the ConnectFn failure")
+	}
+	waitForRequestCount(t, jw, 0, requestTimeout*5)
 }
 
 func TestWS_ConnectFnBroadcastDelivered(t *testing.T) {
@@ -3263,14 +3319,12 @@ func TestWS_ConnectFnSubscriptionCleanup(t *testing.T) {
 	tests := []struct {
 		name      string
 		connectFn ConnectFn
-		wantAlert string
 	}{
 		{
 			name: "error",
 			connectFn: func(*Request) error {
 				return errRejected
 			},
-			wantAlert: errRejected.Error(),
 		},
 		{
 			name: "panic",
@@ -3336,16 +3390,6 @@ func TestWS_ConnectFnSubscriptionCleanup(t *testing.T) {
 			defer func() { _ = conn.CloseNow() }()
 			if resp.StatusCode != http.StatusSwitchingProtocols {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusSwitchingProtocols)
-			}
-
-			if tt.wantAlert != "" {
-				_, data, err := conn.Read(ctx)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !strings.Contains(string(data), tt.wantAlert) {
-					t.Fatalf("error frame %q does not contain %q", data, tt.wantAlert)
-				}
 			}
 
 			select {
