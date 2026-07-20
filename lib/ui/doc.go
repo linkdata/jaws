@@ -24,7 +24,8 @@
 // calls. Input widgets, [ContainerHelper]-based widgets and [JsVar] require a
 // distinct widget value for each live Element. [Register] supports multiple live
 // Elements only when its Updater does. Distinct widgets may still share
-// synchronized application state.
+// synchronized application state. This is the canonical package-wide
+// classification; each concrete type's documentation states its conditions.
 //
 // HTML-inner widgets route content through [bind.MakeHTMLGetter]. Plain strings
 // are treated as trusted HTML, while [bind.Getter][string], [bind.Binder][string]

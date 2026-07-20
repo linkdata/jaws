@@ -46,11 +46,9 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
 - `Container.JawsContains` must return hashable `UI` items, and the returned
   slice must not be mutated after return. A UI value may occur more than once in
   one returned slice only when its type supports multiple live Elements.
-- HTML-inner widgets, `ui.Img`, `ui.Option`, and `ui.Template` support multiple
-  live Elements when their shared getters, handlers, and template data are safe
-  for those calls. Input widgets, `*ui.Container`, `*ui.Tbody`, `*ui.Select`,
-  `ContainerHelper`, and `ui.JsVar` require a distinct widget per live Element.
-  `ui.Register` supports multiple live Elements only when its updater does.
+- Treat the package documentation shown by
+  `go doc github.com/linkdata/jaws/lib/ui` as the canonical standard-widget
+  multiplicity summary, and consult each concrete type's docs for its conditions.
 
 ## Constructing UI values: `ui.New` and `bind.New`
 

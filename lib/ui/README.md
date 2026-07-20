@@ -112,10 +112,8 @@ reuse it across requests, even if that widget currently appears stateless.
 Within a request, a widget normally backs at most one live `jaws.Element`. A
 widget may back multiple live Elements only when its type documents that
 support; such a widget retains no state that can differ between those Elements.
-The HTML-inner widgets, `Img`, `Option`, and `Template` support this use when
-their shared getters, handlers, and template data are safe for those calls.
-Input widgets, `ContainerHelper`-based widgets, and `JsVar` do not. `Register`
-supports it only when its updater does.
+The [package documentation](doc.go) is the canonical standard-widget
+classification; each concrete type's Go documentation states its conditions.
 
 The application data referenced by widgets has a separate lifetime. Distinct
 request-scoped widgets may share synchronized backing state, binders, handlers
@@ -130,6 +128,10 @@ binder := bind.New(&mu, &value)
 left := ui.NewText(binder)
 right := ui.NewText(binder)
 ```
+
+Direct construction is not required: calling `rw.Text(binder)` twice constructs
+the two distinct widgets automatically. In a template, render
+`{{$.Text .Binder}}` twice for the same result.
 
 ## Adding a simple static widget
 
