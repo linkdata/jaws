@@ -63,6 +63,73 @@ func TestSession_Object(t *testing.T) {
 	sess.Reload()
 }
 
+type reentrantSessionResponseWriter struct {
+	*httptest.ResponseRecorder
+	jw           *Jaws
+	sessionCount int
+}
+
+func (w *reentrantSessionResponseWriter) Header() http.Header {
+	w.sessionCount = w.jw.SessionCount()
+	return w.ResponseRecorder.Header()
+}
+
+func TestSession_NewSessionCallsResponseWriterOutsideLock(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	rw := &reentrantSessionResponseWriter{
+		ResponseRecorder: httptest.NewRecorder(),
+		jw:               jw,
+	}
+	type result struct {
+		sess       *Session
+		panicValue any
+	}
+	done := make(chan result, 1)
+	go func() {
+		var got result
+		defer func() {
+			got.panicValue = recover()
+			done <- got
+		}()
+		got.sess = jw.NewSession(rw, hr)
+	}()
+
+	var got result
+	select {
+	case got = <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("NewSession deadlocked while ResponseWriter.Header re-entered Jaws")
+	}
+	t.Cleanup(jw.Close)
+	if got.panicValue != nil {
+		t.Fatalf("NewSession panicked while ResponseWriter.Header re-entered Jaws: %v", got.panicValue)
+	}
+	if got.sess == nil {
+		t.Fatal("expected session")
+	}
+	if rw.sessionCount != 1 {
+		t.Fatalf("SessionCount during Header = %d, want 1", rw.sessionCount)
+	}
+	if count := jw.SessionCount(); count != 1 {
+		t.Fatalf("SessionCount after NewSession = %d, want 1", count)
+	}
+	if sess := jw.GetSession(hr); sess != got.sess {
+		t.Fatalf("GetSession after NewSession = %v, want %v", sess, got.sess)
+	}
+	cookies := rw.Result().Cookies()
+	if len(cookies) != 1 {
+		t.Fatalf("response cookies = %d, want 1", len(cookies))
+	}
+	wantCookie := got.sess.Cookie()
+	if cookie := cookies[0]; cookie.Name != wantCookie.Name || cookie.Value != wantCookie.Value {
+		t.Fatalf("response cookie = %s=%s, want %s=%s", cookie.Name, cookie.Value, wantCookie.Name, wantCookie.Value)
+	}
+}
+
 func TestSession_CookieSecureMatchesRequest(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
