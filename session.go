@@ -377,7 +377,8 @@ func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Sessio
 		}
 	}()
 
-	// ResponseWriter implementations may call back into Jaws from Header.
+	// http.SetCookie calls the caller-provided ResponseWriter.Header, which may
+	// re-enter Jaws, so emit the cookie only after releasing jw.mu.
 	if w != nil {
 		http.SetCookie(w, &cookie)
 	}
