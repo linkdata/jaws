@@ -363,19 +363,26 @@ func (jw *Jaws) NewSession(w http.ResponseWriter, r *http.Request) (sess *Sessio
 
 func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
 	secure := secureheaders.RequestIsSecure(r, jw.TrustForwardedHeaders)
-	jw.mu.Lock()
-	defer jw.mu.Unlock()
-	for sess == nil {
-		sessionID := jw.nonZeroRandomLocked()
-		if _, ok := jw.sessions[sessionID]; !ok {
-			sess = newSession(jw, sessionID, jw.clientIP(r), secure)
-			jw.sessions[sessionID] = sess
-			if w != nil {
-				http.SetCookie(w, &sess.cookie)
+	var cookie http.Cookie
+	func() {
+		jw.mu.Lock()
+		defer jw.mu.Unlock()
+		for sess == nil {
+			sessionID := jw.nonZeroRandomLocked()
+			if _, ok := jw.sessions[sessionID]; !ok {
+				sess = newSession(jw, sessionID, jw.clientIP(r), secure)
+				jw.sessions[sessionID] = sess
+				cookie = sess.cookie
 			}
-			r.AddCookie(&sess.cookie)
 		}
+	}()
+
+	// http.SetCookie calls the caller-provided ResponseWriter.Header, which may
+	// re-enter Jaws, so emit the cookie only after releasing jw.mu.
+	if w != nil {
+		http.SetCookie(w, &cookie)
 	}
+	r.AddCookie(&cookie)
 	return
 }
 
