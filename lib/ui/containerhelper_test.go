@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -840,6 +841,7 @@ func TestContainerTerminatesOnUnusableChild(t *testing.T) {
 		name string
 		make func() jaws.UI
 	}{
+		{"nil", func() jaws.UI { return nil }},
 		{"nan", func() jaws.UI { return nanChildUI{f: math.NaN()} }},
 		{"incomparable", func() jaws.UI { return incomparableChildUI{v: []int{1}} }},
 	}
@@ -895,12 +897,14 @@ func TestContainerCancelNotUnderLock(t *testing.T) {
 	container := NewContainer("div", tc)
 	elem, _ := renderUI(t, rq, container)
 
+	var reentered atomic.Bool
 	jw.Logger = reentrantLogger{onError: func() {
 		// Re-enter the container's lock. If the cancellation that triggered this log
 		// held u.mu, this second Lock on the same goroutine would deadlock.
 		container.mu.Lock()
 		_ = len(container.contents)
 		container.mu.Unlock()
+		reentered.Store(true)
 	}}
 
 	tc.contents = []jaws.UI{nanChildUI{f: math.NaN()}}
@@ -915,6 +919,11 @@ func TestContainerCancelNotUnderLock(t *testing.T) {
 		t.Fatal("JawsUpdate deadlocked: Request cancellation ran while holding u.mu")
 	}
 
+	// Without this the deadlock check is vacuous: if the logger never ran, no re-entry
+	// was attempted and the test would pass even with cancellation under the lock.
+	if !reentered.Load() {
+		t.Fatal("logger callback did not run; the deadlock check would be vacuous")
+	}
 	if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
 		t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
 	}

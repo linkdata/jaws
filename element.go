@@ -148,9 +148,12 @@ var debugCommentSanitizer = strings.NewReplacer("-->", "==>", "--!>", "==>")
 // JawsRender calls [Renderer.JawsRender] for this [Element].
 //
 // Do not call this yourself unless it is from within another JawsRender implementation.
+//
+// A nil [UI] renders as a no-op; this can only arise from [Request.NewElement] having
+// been given a nil ui.
 func (elem *Element) JawsRender(w io.Writer, params []any) (err error) {
-	if !elem.deleted.Load() {
-		if err = elem.UI().JawsRender(elem, w, params); err == nil {
+	if ui := elem.UI(); ui != nil && !elem.deleted.Load() {
+		if err = ui.JawsRender(elem, w, params); err == nil {
 			if elem.Jaws.Debug {
 				err = elem.renderDebug(w)
 			}
@@ -166,9 +169,11 @@ func (elem *Element) JawsRender(w io.Writer, params []any) (err error) {
 // JawsUpdate calls [Updater.JawsUpdate] for this [Element].
 //
 // Do not call this yourself unless it is from within another JawsUpdate implementation.
+//
+// A nil [UI] is a no-op (see [Element.JawsRender]).
 func (elem *Element) JawsUpdate() {
-	if !elem.deleted.Load() {
-		elem.UI().JawsUpdate(elem)
+	if ui := elem.UI(); ui != nil && !elem.deleted.Load() {
+		ui.JawsUpdate(elem)
 	}
 }
 

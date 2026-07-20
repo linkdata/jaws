@@ -146,22 +146,44 @@ func (u *ContainerHelper) deleteContent(elem *jaws.Element) {
 }
 
 // cancelUnusableChildren terminates the Request and reports true if any child cannot
-// be used as a container pool key: not comparable at runtime, or not equal to itself
-// (a value holding NaN). It aborts on the first such child.
+// be used as a container pool key: nil, not comparable at runtime, or not equal to
+// itself (a value holding NaN). It aborts on the first such child.
 //
 // It must be called without holding u.mu. [jaws.Request.Cancel] runs the user logger
 // synchronously, and the jaws locking contract forbids that under a lock; a logger
 // re-entering the container would otherwise deadlock. Validating the whole slice up
 // front also stops the caller creating or rendering later children once the Request
-// is terminating. The cancellation cause matches [jaws.NewErrUnusableUI].
+// is terminating. The cancellation cause matches tag.ErrNotUsableAsTag with
+// errors.Is (see [jaws.NewErrUnusableUI]).
 func cancelUnusableChildren(elem *jaws.Element, children []jaws.UI) bool {
-	for _, childUI := range children {
-		if err := jaws.NewErrUnusableUI(childUI); err != nil {
-			elem.Request.Cancel(err)
-			return true
-		}
+	if bad, ok := firstUnusableChild(children); ok {
+		elem.Request.Cancel(jaws.NewErrUnusableUI(bad))
+		return true
 	}
 	return false
+}
+
+// firstUnusableChild returns the first child that is nil, not equal to itself, or not
+// comparable at runtime, and whether one was found.
+//
+// A single deferred recover guards the whole scan, so a usable child costs only one
+// self-comparison rather than a per-child deferred check: comparing a
+// runtime-incomparable value panics, which the recover attributes to the child being
+// examined (bad). This keeps the common all-usable case cheap on the container update
+// hot path.
+func firstUnusableChild(children []jaws.UI) (bad jaws.UI, found bool) {
+	defer func() {
+		if recover() != nil {
+			found = true // comparing bad panicked: not comparable at runtime
+		}
+	}()
+	for _, childUI := range children {
+		bad = childUI
+		if childUI == nil || childUI != childUI {
+			return childUI, true
+		}
+	}
+	return nil, false
 }
 
 // reconcile matches u.contents to wantContents under u.mu and returns the

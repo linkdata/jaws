@@ -69,13 +69,14 @@ type TemplateLookuper interface {
 // synchronized as required.
 //
 // In addition, all UI objects must be comparable and equal to themselves, so they
-// can be used as map keys. The compile-time type must be comparable;
-// [Request.NewElement] additionally performs a runtime value-level check in every
-// build and cancels the Request when the value is not comparable at runtime (for
-// example a comparable struct holding a func in an interface field) or not equal to
-// itself (a value holding NaN). The cancellation cause wraps
-// [github.com/linkdata/jaws/lib/tag.ErrNotUsableAsTag]. Callers must therefore
-// ensure UI values are genuinely comparable and reflexive.
+// can be used as map keys. The compile-time type must be comparable; the container
+// widgets additionally check each child value at runtime and cancel the Request, in
+// every build, when it is not comparable at runtime (for example a comparable struct
+// holding a func in an interface field) or not equal to itself (a value holding NaN),
+// with a cause matching [github.com/linkdata/jaws/lib/tag.ErrNotUsableAsTag] under
+// errors.Is. That is the only place a raw UI value is used as a map key; outside a
+// container [Request.NewElement] asserts runtime comparability in debug builds.
+// Callers must ensure UI values are genuinely comparable and reflexive.
 type UI interface {
 	Renderer
 	Updater

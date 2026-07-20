@@ -2444,18 +2444,23 @@ func nextOutboundMsg(t *testing.T, rq *testRequest) wire.WsMsg {
 	}
 }
 
-func TestRequest_NewElement_TerminatesOnNonComparableUI(t *testing.T) {
+func TestRequest_NewElement_DebugComparableCheck(t *testing.T) {
+	if !deadlock.Debug {
+		t.Skip("debug checks not enabled")
+	}
+
 	rq := newTestRequest(t)
 	defer rq.Close()
 
-	// A UI value that is not comparable at runtime cannot be used as a map key; like a
-	// non-reflexive value it terminates the Request rather than being accepted and
-	// panicking later at first map use.
+	// NewElement asserts runtime comparability in debug builds. The all-build guard
+	// against unusable UI values lives in the container widgets (see the ui package),
+	// since that is the only place a raw UI value is used as a map key.
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for non-comparable UI when comparable check is enabled")
+		}
+	}()
 	rq.NewElement(testUnhashableUI{m: map[string]int{"x": 1}})
-
-	if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
-		t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
-	}
 }
 
 func TestRequest_getElementByJidLocked_DebugUnsortedPanics(t *testing.T) {
