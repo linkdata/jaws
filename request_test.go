@@ -397,8 +397,8 @@ func TestRequest_writeTailScript_IsolatesEachFixup(t *testing.T) {
 // TestRequest_TailScriptConcurrentWithRecycle exercises a /jaws/.tail fetch
 // racing recycle of the same still-pending request. The handler holds jw.mu (read)
 // across the drainTailScript call and recycle needs the jw.mu write lock, so the
-// drain and recycle are serialized: the fetch can never drain a recycled+reused
-// request. clearLocked also takes muQueue to reset wsQueue/tailsent, the lock
+// drain and recycle are serialized: the fetch can never drain a finished request.
+// releaseBuffersLocked also takes muQueue to reset wsQueue/tailsent, the lock
 // drainTailScript holds, so that reset cannot race the drain either. Run with -race.
 func TestRequest_TailScriptConcurrentWithRecycle(t *testing.T) {
 	jw, _ := New()
@@ -896,9 +896,9 @@ func TestRequest_EventFnQueueOverflowCancelsRequest(t *testing.T) {
 
 // TestRequest_ClaimRefreshesLastWriteAndStartServeGuards verifies that claim()
 // refreshes lastWrite so a request claimed long after its initial render is not
-// treated as idle and recycled before ServeHTTP sets running, and that startServe()
-// refuses a request that was recycled (clearLocked resets claimed) rather than
-// driving a dead, pooled *Request.
+// treated as idle and retired before ServeHTTP sets running, and that startServe()
+// refuses a request that has finished (recycle unregisters it and resets claimed)
+// rather than driving a finished, unregistered *Request.
 func TestRequest_ClaimRefreshesLastWriteAndStartServeGuards(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -1125,10 +1125,11 @@ func TestBroadcast_ZeroKeyDestDropped(t *testing.T) {
 	defer tj.Close()
 	rq := tj.newRequest(nil)
 
-	// A zero key (captured from an already-recycled request) targets no live
-	// request: Broadcast drops it before it reaches the Serve loop rather than
-	// treating it as a tag. A real follow-up still arrives, proving only the
-	// zero-key message was dropped, and no bad-destination misuse is logged.
+	// A zero key targets no live request: a real Request's key is always non-zero,
+	// and a finished Request keeps its non-zero key but is unregistered. Broadcast
+	// drops a zero-key message before it reaches the Serve loop rather than treating
+	// it as a tag. A real follow-up still arrives, proving only the zero-key message
+	// was dropped, and no bad-destination misuse is logged.
 	rq.Jaws.Broadcast(wire.Message{Dest: key.Key(0), What: what.Alert, Data: alertData("info", "dropped")})
 	rq.Alert("info", "kept")
 

@@ -71,13 +71,16 @@ type requestBuffers struct {
 //
 // A Request pointer is borrowed for the HTTP or WebSocket lifecycle that supplied
 // it. Do not retain it in application state or use it from a background goroutine:
-// when that lifecycle ends the Request finishes — its context is canceled, it is
-// unregistered from the [Jaws] instance, and its reusable buffers are released. Its
-// methods still run on a retained pointer, but the Request no longer receives
-// broadcasts or updates and its collections are empty, so the calls have no useful
-// effect. Background work should instead retain [Request.Context] and, when it must
-// terminate the connection, the cancel function returned while deriving a
-// replacement context through [Request.SetContext].
+// once that lifecycle ends the Request finishes — its context is canceled and it is
+// unregistered from the [Jaws] instance — and its identity is never reused for
+// another connection. Its methods still run on a retained pointer, but the Request
+// receives no further broadcasts or updates, so the calls have no effect on any live
+// connection. (Completion after WebSocket serving additionally releases the reusable
+// buffers to the pool; retirement of an unclaimed Request preserves them so an
+// initial HTTP handler that still holds the pointer can finish rendering.) Background
+// work should instead retain [Request.Context] and, when it must terminate the
+// connection, the cancel function returned while deriving a replacement context
+// through [Request.SetContext].
 //
 // Unlike [Session], whose methods are nil-safe, Request methods are not safe to call on a
 // nil *Request: a Request is always obtained from [Jaws.NewRequest] or [Jaws.UseRequest]
@@ -275,8 +278,12 @@ func (rq *Request) ensureAutoSession(w http.ResponseWriter, r *http.Request) {
 // Elements, Jid counter and render-input fields untouched. The Request keeps its
 // identity key and canceled context, so a pointer retained by the initial renderer
 // or by background work stays permanently bound to this finished lifecycle and is
-// never reused for another connection. The caller must hold rq.mu and ensure no
-// other goroutine is still processing rq.
+// never reused for another connection.
+//
+// The caller must hold rq.mu. The WebSocket processing loop must have exited, but an
+// initial HTTP renderer may still be running concurrently (an early callback can
+// claim and tear down a Request mid-render); that is precisely why this leaves
+// render-visible Element and Jid state untouched and transfers wsQueue under muQueue.
 func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
 	// Cancel first so a retained context observes cancellation, then detach the
 	// Request from its session and unregister its identity.

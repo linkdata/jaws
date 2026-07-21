@@ -2693,13 +2693,13 @@ func TestServeHTTP_TailScript_EndpointIsPerRequest(t *testing.T) {
 	is.Equal(w.Code, http.StatusNoContent)
 }
 
-// TestServeHTTP_TailScript_RejectsRecycledKey covers the recycled-request behavior
-// of the /jaws/.tail endpoint: recycling deletes the key from jw.requests, so a tail
-// fetch for the old key misses the map and returns 404, while the reused pooled
-// object drains only its own freshly queued content (its queue was reset by
-// clearLocked), never the recycled request's. This exercises the map-deletion 404
-// and content isolation; the concurrent drain-under-lock guarantee (holding jw.mu
-// across drainTailScript) is exercised separately, under the race detector, by
+// TestServeHTTP_TailScript_RejectsRecycledKey covers the finished-request behavior
+// of the /jaws/.tail endpoint: completion reserves the key with a nil tombstone in
+// jw.requests, so a tail fetch for the old key finds no live Request and returns
+// 404, while a later, distinct request drains only its own freshly queued content,
+// never the finished request's. This exercises the tombstone 404 and content
+// isolation; the concurrent drain-under-lock guarantee (holding jw.mu across
+// drainTailScript) is exercised separately, under the race detector, by
 // TestRequest_TailScriptConcurrentWithRecycle.
 func TestServeHTTP_TailScript_RejectsRecycledKey(t *testing.T) {
 	is := newTestHelper(t)
@@ -2712,23 +2712,22 @@ func TestServeHTTP_TailScript_RejectsRecycledKey(t *testing.T) {
 	stale.NewElement(&testUi{}).SetClass("stale")
 	staleKey := stale.JawsKeyString()
 
-	// Recycle the request and create a new one under a fresh key. The pool typically
-	// hands back the same struct, so the content check below also guards that a
-	// reused object carries none of the recycled request's queued content; it holds
-	// whether or not the pool reused the struct.
+	// Finish the request and create a new one under a fresh key. Identities are never
+	// reused, so rq is a distinct Request; the content check below guards that it
+	// carries none of the finished request's queued content.
 	jw.recycle(stale)
 	rq := jw.NewRequest(hr)
 	rq.NewElement(&testUi{}).SetClass("fresh")
 
-	// Old key was deleted from jw.requests on recycle, so the lookup misses and
-	// nothing is drained.
+	// The old key was tombstoned on completion, so the lookup finds no live Request
+	// and nothing is drained.
 	req := httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+staleKey, nil)
 	req.RemoteAddr = hr.RemoteAddr
 	w := httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusNotFound)
 
-	// The reused request's own tail fetch still returns its own content.
+	// The new request's own tail fetch still returns its own content.
 	req = httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString(), nil)
 	req.RemoteAddr = hr.RemoteAddr
 	w = httptest.NewRecorder()
@@ -2803,17 +2802,17 @@ func TestJaws_cancelIfCurrent_IgnoresStaleRequest(t *testing.T) {
 	stale := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	jawsKey := stale.JawsKey
 
-	// The /jaws/.tail handler snapshots the Request before writing the response;
-	// recycle the snapshot and create a new request so the pool can hand the
-	// stale pointer to a different connection, as can happen before a write
-	// error triggers a cancel.
+	// The /jaws/.tail handler snapshots the Request before writing the response; the
+	// snapshotted Request can finish before a write error triggers a cancel. Finish it
+	// and create another request: cancelIfCurrent must cancel nothing, because the
+	// finished Request is no longer the registered entry for its key.
 	jw.recycle(stale)
 	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 
 	jw.cancelIfCurrent(jawsKey, stale, errors.New("write failed"))
 
-	// Whether or not the pool reused the object for rq (it normally does here,
-	// which is exactly the stale-cancel scenario), rq must stay live.
+	// rq is a distinct Request (identities are never reused); a stale cancel aimed at
+	// the finished snapshot must not touch it.
 	is.NoErr(rq.Context().Err())
 }
 
