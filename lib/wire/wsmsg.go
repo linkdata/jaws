@@ -142,7 +142,16 @@ func Parse(txt []byte) (WsMsg, bool) {
 				// txt[0:nl1] ... txt[nl1+1 : nl2] ... txt[nl2+1:len(txt)-1] ... \n
 				if wht := what.Parse(string(txt[0:nl1])); wht.IsValid() {
 					if id := jid.ParseString(string(txt[nl1+1 : nl2])); id.IsValid() {
-						data := string(txt[nl2+1 : len(txt)-1])
+						raw := txt[nl2+1 : len(txt)-1]
+						if wht == what.Set || wht == what.Call {
+							// Set and Call data is taken verbatim and is best-effort:
+							// the field ends at the first tab, so drop any tab-separated
+							// suffix an untrusted frame appended past that boundary.
+							if i := bytes.IndexByte(raw, '\t'); i >= 0 {
+								raw = raw[:i]
+							}
+						}
+						data := string(raw)
 						if txt[nl2+1] == '"' && wht != what.Set && wht != what.Call {
 							// The browser encodes this data with JSON.stringify.
 							// strconv.Unquote decodes the common case cheaply and

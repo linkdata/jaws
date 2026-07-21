@@ -145,6 +145,33 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 	}
 }
 
+// Test_wsParse_SetCallTruncateAtTab covers the parser contract that inbound Set
+// and Call data ends at the first tab: a tab-separated suffix an untrusted frame
+// appended past the documented boundary must be dropped, leaving only the
+// recoverable prefix. Frames without such a suffix must round-trip unchanged.
+func Test_wsParse_SetCallTruncateAtTab(t *testing.T) {
+	tests := []struct {
+		name string
+		txt  string
+		want WsMsg
+	}{
+		{"set suffix dropped", "Set\tJid.1\tpath=1\textra\n", WsMsg{Jid: jid.Jid(1), What: what.Set, Data: "path=1"}},
+		{"call suffix dropped", "Call\tJid.1\tfn=1\textra\n", WsMsg{Jid: jid.Jid(1), What: what.Call, Data: "fn=1"}},
+		{"set multiple tabs keep prefix", "Set\tJid.2\ta\tb\tc\n", WsMsg{Jid: jid.Jid(2), What: what.Set, Data: "a"}},
+		{"set empty before tab", "Set\tJid.3\t\textra\n", WsMsg{Jid: jid.Jid(3), What: what.Set, Data: ""}},
+		{"set no tab unchanged", "Set\tJid.4\tpath=1\n", WsMsg{Jid: jid.Jid(4), What: what.Set, Data: "path=1"}},
+		{"call no tab unchanged", "Call\tJid.5\tfn=1\n", WsMsg{Jid: jid.Jid(5), What: what.Call, Data: "fn=1"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := Parse([]byte(tt.txt))
+			if !ok || tt.want != got {
+				t.Errorf("Parse(%q): got %+v, %v want %+v", tt.txt, got, ok, tt.want)
+			}
+		})
+	}
+}
+
 func Test_wsParse_IncompleteFails(t *testing.T) {
 	tests := []struct {
 		name string
