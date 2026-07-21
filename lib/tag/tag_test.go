@@ -77,12 +77,168 @@ func (tt testDeepTagGetter) JawsGetTag(Context) any {
 	return tt.next
 }
 
-func TestTagString_StringerAndPointer(t *testing.T) {
-	if got := TagString(testStringTag{}); !strings.Contains(got, "testStringTag(str)") {
-		t.Fatalf("TagString(testStringTag{}) = %q, want value stringer representation", got)
+func TestTagStringDebug_StringerAndPointer(t *testing.T) {
+	if got := TagStringDebug(testStringTag{}); !strings.Contains(got, "testStringTag(str)") {
+		t.Fatalf("TagStringDebug(testStringTag{}) = %q, want value stringer representation", got)
 	}
-	if got := TagString(&testStringTag{}); !strings.Contains(got, "*tag.testStringTag(") {
-		t.Fatalf("TagString(&testStringTag{}) = %q, want pointer representation", got)
+	if got := TagStringDebug(&testStringTag{}); !strings.Contains(got, "*tag.testStringTag(") {
+		t.Fatalf("TagStringDebug(&testStringTag{}) = %q, want pointer representation", got)
+	}
+	if got := TagStringDebug(Tag("plain")); !strings.Contains(got, `"plain"`) {
+		t.Fatalf("TagStringDebug(Tag(\"plain\")) = %q, want quoted value", got)
+	}
+}
+
+func TestTagStringRelease_TypeAndAddress(t *testing.T) {
+	// Release rendering shows the type — plus a pointer's address when it can be
+	// read safely — but never the value or a method result, so it cannot descend.
+	if got, want := TagStringRelease(testStringTag{}), "tag.testStringTag"; got != want {
+		t.Fatalf("TagStringRelease(testStringTag{}) = %q, want %q", got, want)
+	}
+	if got := TagStringRelease(&testStringTag{}); !strings.HasPrefix(got, "*tag.testStringTag(0x") {
+		t.Fatalf("TagStringRelease(&testStringTag{}) = %q, want type and address", got)
+	}
+	if got, want := TagStringRelease(Tag("plain")), "tag.Tag"; got != want {
+		t.Fatalf("TagStringRelease(Tag(\"plain\")) = %q, want %q", got, want)
+	}
+	if got, want := TagStringRelease(nil), "<nil>"; got != want {
+		t.Fatalf("TagStringRelease(nil) = %q, want %q", got, want)
+	}
+}
+
+func TestPointerAddr_RecoversPanic(t *testing.T) {
+	// reflect.Value.Pointer panics on a non-pointer kind (and on some cgo /
+	// not-in-heap pointers); pointerAddr must recover and report failure so release
+	// rendering degrades to type-only instead of crashing.
+	if _, ok := pointerAddr(reflect.ValueOf(42)); ok {
+		t.Error("pointerAddr(non-pointer) reported ok, want a recovered failure")
+	}
+	x := 0
+	if addr, ok := pointerAddr(reflect.ValueOf(&x)); !ok || addr == 0 {
+		t.Errorf("pointerAddr(&x) = (%#x, %v), want a non-zero address and ok", addr, ok)
+	}
+}
+
+func TestTagStringRelease_SafeOnCyclic(t *testing.T) {
+	// The release renderer must stay bounded on values that overflow fmt. This runs
+	// in every build (including -race) because it never descends into the value.
+	cyclic := []any{nil}
+	cyclic[0] = cyclic
+	if got, want := TagStringRelease(cyclic), "[]interface {}"; got != want {
+		t.Errorf("TagStringRelease(cyclic slice) = %q, want %q", got, want)
+	}
+	if got, want := TagsStringRelease(cyclic), "[[]interface {}]"; got != want {
+		t.Errorf("TagsStringRelease(cyclic slice) = %q, want %q", got, want)
+	}
+	m := map[int]any{}
+	m[0] = m
+	if got, want := TagStringRelease(m), "map[int]interface {}"; got != want {
+		t.Errorf("TagStringRelease(cyclic map) = %q, want %q", got, want)
+	}
+}
+
+// panicOnRender's formatting methods all panic if called.
+//
+// Invoking one directly crashes; invoking one via fmt yields a recovered
+// "%!v(PANIC=...)" marker. A renderer that produces neither — just the plain
+// type — therefore never called them.
+type panicOnRender struct{}
+
+func (panicOnRender) String() string         { panic("String called") }
+func (panicOnRender) GoString() string       { panic("GoString called") }
+func (panicOnRender) Format(fmt.State, rune) { panic("Format called") }
+
+func TestTagStringRelease_NeverInvokesMethods(t *testing.T) {
+	// The release path reads only the type and address, so a tag whose String,
+	// GoString or Format methods panic (or would recurse) still renders safely.
+	for _, v := range []any{panicOnRender{}, &panicOnRender{}} {
+		got := TagStringRelease(v)
+		if strings.Contains(got, "PANIC") || strings.Contains(got, "called") {
+			t.Errorf("TagStringRelease(%T) = %q, want no method invocation", v, got)
+		}
+		if !strings.Contains(got, "panicOnRender") {
+			t.Errorf("TagStringRelease(%T) = %q, want the type name", v, got)
+		}
+	}
+	if got := TagsStringRelease([]any{panicOnRender{}}); !strings.Contains(got, "panicOnRender") || strings.Contains(got, "PANIC") {
+		t.Errorf("TagsStringRelease = %q, want type name and no panic", got)
+	}
+}
+
+func TestTagStringRelease_BoundsHugeTypeName(t *testing.T) {
+	// A valid comparable tag can still have a pathologically long type name (here
+	// via deeply nested arrays). Release rendering must truncate it so the output
+	// stays bounded rather than proportional to the type name.
+	typ := reflect.TypeOf(byte(0))
+	for range 5000 {
+		typ = reflect.ArrayOf(1, typ)
+	}
+	v := reflect.New(typ).Elem().Interface()
+	got := TagStringRelease(v)
+	if len(got) > maxTagString+len(truncMarker) {
+		t.Errorf("TagStringRelease(huge type) = %d bytes, want <= %d", len(got), maxTagString+len(truncMarker))
+	}
+	if !strings.HasSuffix(got, truncMarker) {
+		t.Errorf("truncated render should end with %q, got …%q", truncMarker, got[max(0, len(got)-8):])
+	}
+}
+
+func TestClipTagString(t *testing.T) {
+	if got := clipTagString("short"); got != "short" {
+		t.Errorf("clipTagString(short) = %q, want it unchanged", got)
+	}
+	// Place a two-byte rune straddling the cap so truncation must back up to the
+	// rune boundary rather than split it.
+	s := strings.Repeat("a", maxTagString-1) + "é" + "tail"
+	got := clipTagString(s)
+	if len(got) > maxTagString+len(truncMarker) {
+		t.Errorf("clipTagString len = %d, want <= %d", len(got), maxTagString+len(truncMarker))
+	}
+	if !strings.HasSuffix(got, truncMarker) {
+		t.Errorf("clipTagString should end with %q, got …%q", truncMarker, got[len(got)-4:])
+	}
+	if strings.ToValidUTF8(got, "�") != got {
+		t.Error("clipTagString split a multi-byte rune (invalid UTF-8)")
+	}
+}
+
+func TestTagsStringRelease_BoundsHugeList(t *testing.T) {
+	// An enormous tag list must render to a bounded string, not one proportional to
+	// the slice length.
+	tags := make([]any, 100_000)
+	for i := range tags {
+		tags[i] = Tag("x")
+	}
+	if got := TagsStringRelease(tags); len(got) > maxTagString+64 {
+		t.Errorf("TagsStringRelease(100k tags) = %d bytes, want bounded near %d", len(got), maxTagString)
+	}
+}
+
+func TestTagsStringDebug_RendersElements(t *testing.T) {
+	// Debug rendering of a slice quotes each element via TagStringDebug.
+	if got, want := TagsStringDebug([]any{Tag("a"), Tag("b")}), `["a" "b"]`; got != want {
+		t.Errorf("TagsStringDebug = %q, want %q", got, want)
+	}
+}
+
+func TestTagString_ForwardsByBuild(t *testing.T) {
+	// TagString/TagsString forward to the release or debug variant per build. Verify
+	// the routing with a safe value (a cyclic one would crash the debug forwarder).
+	v := Tag("x")
+	want := TagStringRelease(v)
+	if DebugRender {
+		want = TagStringDebug(v)
+	}
+	if got := TagString(v); got != want {
+		t.Errorf("TagString(%v) = %q, want %q (DebugRender=%v)", v, got, want, DebugRender)
+	}
+	tags := []any{Tag("a"), Tag("b")}
+	twant := TagsStringRelease(tags)
+	if DebugRender {
+		twant = TagsStringDebug(tags)
+	}
+	if got := TagsString(tags); got != twant {
+		t.Errorf("TagsString = %q, want %q", got, twant)
 	}
 }
 
@@ -476,13 +632,6 @@ func (ctx *mustLogContext) Log(err error) error {
 
 func (ctx *mustLogContext) MustLog(err error) {
 	ctx.err = err
-}
-
-func TestTagString_DefaultFormatting(t *testing.T) {
-	got := TagString(Tag("plain"))
-	if !strings.Contains(got, `"plain"`) {
-		t.Fatalf("TagString(Tag(\"plain\")) = %q, want quoted fallback formatting", got)
-	}
 }
 
 func TestTagExpand_TagGetterRecurses(t *testing.T) {

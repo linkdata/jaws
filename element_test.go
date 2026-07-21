@@ -162,7 +162,9 @@ func TestElement_Tag(t *testing.T) {
 	e.Tag(tag.Tag("zomg"))
 	is.True(e.HasTag(tag.Tag("zomg")))
 	s := e.String()
-	if !strings.Contains(s, "zomg") {
+	// Element.String renders tags with tag.TagsString, whose per-tag form depends
+	// on the build (the value in debug/-race, only the type otherwise).
+	if !strings.Contains(s, tag.TagString(tag.Tag("zomg"))) {
 		t.Error(s)
 	}
 }
@@ -636,6 +638,12 @@ func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
 }
 
 func TestElement_JawsRenderDebugTagCanReenterRequest(t *testing.T) {
+	// The re-entrancy this guards against only happens when renderDebug invokes the
+	// tag's String method, which the default build never does; it applies in the
+	// debug and -race builds where TagString renders values in full.
+	if !tag.DebugRender {
+		t.Skip("tag String is only invoked in debug/-race builds")
+	}
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)

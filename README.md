@@ -739,24 +739,29 @@ items explicitly:
   server writes and `PathSetter` values bypass `ClientCheck`.
 * Enable `Jaws.TrustForwardedHeaders` only behind a single trusted reverse proxy
   that overwrites `X-Forwarded-For`, `X-Real-IP` and `X-Forwarded-Proto`.
-* Run the test suite with `-race` before release so the deadlock lock-order
-  detector and JaWS debug-gated checks are exercised. If the race detector is
-  unavailable, use `-tags "debug deadlock"`.
+* Run the test suite both with and without `-race` before release: `-race`
+  exercises the deadlock lock-order detector and JaWS debug-gated checks, while a
+  plain `go test` exercises the crash-safe release tag renderer that `-race` and
+  `-tags debug` replace. If the race detector is unavailable, use
+  `-tags "debug deadlock"` in place of `-race`.
 
 ### Testing
 
-Always run the test suite with the `-race` flag:
+Run the test suite both with and without the `-race` flag:
 
     go test -race ./...
+    go test ./...
 
 Race detection sets `deadlock.Debug = true` and `deadlock.Enabled = true` (see
 [Dependencies](#dependencies)), which exercises the deadlock lock-order detector
-and JaWS debug-gated checks such as the late-handler panic. The tag
-comparability checks in [`lib/tag`](./lib/tag) run in normal code paths too.
-Plain `go test` does not exercise the debug-only branches or the deadlock
-detector. CI builds with `-race`. If the race detector is unavailable, use
-`go test -tags "debug deadlock" ./...`; the `debug` tag alone sets
-`deadlock.Debug`, but does not enable the deadlock detector.
+and JaWS debug-gated checks such as the late-handler panic. A `-race` build (like
+`-tags debug`) also selects the full-detail tag renderer in
+[`lib/tag`](./lib/tag), so the plain `go test` build is what exercises the
+crash-safe release renderer used in production. The tag comparability checks in
+`lib/tag` run in every build. CI runs both legs. If the race detector is
+unavailable, run `go test -tags "debug deadlock" ./...` (the `debug` tag alone
+sets `deadlock.Debug` but does not enable the deadlock detector) alongside a
+plain `go test ./...`.
 
 ### Dependencies
 
