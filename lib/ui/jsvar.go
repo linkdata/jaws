@@ -418,25 +418,14 @@ func (jsvar *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 // JsVar (for example call JawsGet or JawsSet on it), which would self-deadlock the
 // non-reentrant lock.
 func (jsvar *JsVar[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
+	// The render-time snapshot is taken under the write lock; see renderSnapshot.
+	// Everything below runs without the lock: ApplyParams and, crucially, writing to
+	// w must not hold the value lock, because a slow client stalling a network write
+	// would otherwise block every goroutine sharing the locker.
 	var getterAttrs []template.HTMLAttr
 	var jsvarName string
 	var data []byte
-
-	// Hold the write lock only while deriving the dirty tag (ApplyGetter) and
-	// marshaling Ptr, so the marshaled value stays consistent with that tag even if
-	// another request sharing this JsVar sets it concurrently. Release before
-	// ApplyParams and, crucially, before writing to w: holding the value lock across a
-	// network write would let a slow client stall every goroutine sharing the locker.
-	jsvar.Lock()
-	if jsvar.dirtyTag, getterAttrs, err = elem.ApplyGetter(jsvar.Ptr); err == nil {
-		elem.AddHandlers(jsvar)
-		if jsvarName, err = validateJsVarName(params); err == nil && jsvar.Ptr != nil {
-			data, err = json.Marshal(jsvar.Ptr)
-		}
-	}
-	jsvar.Unlock()
-
-	if err == nil {
+	if getterAttrs, jsvarName, data, err = jsvar.renderSnapshot(elem, params); err == nil {
 		attrs := append(elem.ApplyParams(params[1:]), getterAttrs...)
 		var b []byte
 		b = append(b, "\n<div id="...)
@@ -448,6 +437,35 @@ func (jsvar *JsVar[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any)
 		b = htmlio.AppendAttrs(b, attrs)
 		b = append(b, " hidden></div>"...)
 		_, err = w.Write(b)
+	}
+	return
+}
+
+// renderSnapshot runs the render-time critical section under the write lock.
+//
+// It resolves the dirty tag and any initial HTML attrs from the bound value,
+// registers this JsVar as elem's handler, validates the JsVar name, and marshals a
+// snapshot of Ptr. The lock spans [Element.ApplyGetter] and the marshal so the
+// serialized value stays consistent with the dirty tag even if another request
+// sharing this JsVar sets it concurrently. The deferred unlock ensures a panic from
+// a bound-value callback or from marshaling cannot leak the lock.
+//
+// A nil Ptr has no bound value to inspect, so the getter and init callbacks are
+// skipped and the initial data is omitted. Passing the typed-nil Ptr to ApplyGetter
+// instead would call a value-receiver [tag.TagGetter] or [jaws.InitHandler] through
+// the nil pointer and panic.
+func (jsvar *JsVar[T]) renderSnapshot(elem *jaws.Element, params []any) (getterAttrs []template.HTMLAttr, jsvarName string, data []byte, err error) {
+	jsvar.Lock()
+	defer jsvar.Unlock()
+	var getter any
+	if jsvar.Ptr != nil {
+		getter = jsvar.Ptr
+	}
+	if jsvar.dirtyTag, getterAttrs, err = elem.ApplyGetter(getter); err == nil {
+		elem.AddHandlers(jsvar)
+		if jsvarName, err = validateJsVarName(params); err == nil && jsvar.Ptr != nil {
+			data, err = json.Marshal(jsvar.Ptr)
+		}
 	}
 	return
 }

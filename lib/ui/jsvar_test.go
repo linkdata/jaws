@@ -14,6 +14,7 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstest"
+	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 )
 
@@ -512,4 +513,80 @@ func TestJsVar_RenderIncludesZeroValueData(t *testing.T) {
 	if got := sb.String(); !strings.Contains(got, `data-jawsdata="`) {
 		t.Fatalf("expected data-jawsdata for zero value, got %q", got)
 	}
+}
+
+// jsVarTagState has a value-receiver JawsGetTag, so *jsVarTagState also satisfies
+// tag.TagGetter and calling JawsGetTag through a nil *jsVarTagState panics.
+type jsVarTagState struct {
+	Value string `json:"value"`
+}
+
+func (jsVarTagState) JawsGetTag(tag.Context) any {
+	return tag.Tag("state")
+}
+
+// TestJsVar_RenderNilPointerWithTagGetterDoesNotLeakLock reproduces issue #196:
+// rendering a JsVar bound to a nil pointer whose type implements tag.TagGetter via
+// a value receiver must not invoke the getter through the typed-nil pointer, so it
+// neither panics nor leaves the write lock held.
+func TestJsVar_RenderNilPointerWithTagGetterDoesNotLeakLock(t *testing.T) {
+	_, rq := newCoreRequest(t)
+
+	var mu sync.Mutex
+	var ptr *jsVarTagState
+	jsv := NewJsVar(&mu, ptr)
+	elem := rq.NewElement(jsv)
+
+	var sb bytes.Buffer
+	var panicValue any
+	func() {
+		defer func() { panicValue = recover() }()
+		if err := jsv.JawsRender(elem, &sb, []any{"state"}); err != nil {
+			t.Errorf("render returned error: %v", err)
+		}
+	}()
+	if panicValue != nil {
+		t.Errorf("render panicked: %v", panicValue)
+	}
+	if !mu.TryLock() {
+		t.Fatal("render left the JsVar locker held")
+	}
+	mu.Unlock()
+	// A nil Ptr omits the initial data and adds no bound-value tag.
+	if got := sb.String(); strings.Contains(got, "data-jawsdata=") {
+		t.Errorf("expected no data-jawsdata for nil pointer, got %q", got)
+	}
+}
+
+type jsVarPanicMarshal struct{}
+
+// MarshalJSON always panics, standing in for a bound value whose supported
+// marshaling callback fails while the render write lock is held.
+func (jsVarPanicMarshal) MarshalJSON() ([]byte, error) {
+	panic("marshal boom")
+}
+
+// TestJsVar_RenderMarshalPanicDoesNotLeakLock verifies the render critical section
+// releases the write lock even when marshaling the bound value panics.
+func TestJsVar_RenderMarshalPanicDoesNotLeakLock(t *testing.T) {
+	_, rq := newCoreRequest(t)
+
+	var mu sync.Mutex
+	v := jsVarPanicMarshal{}
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+
+	var sb bytes.Buffer
+	var panicValue any
+	func() {
+		defer func() { panicValue = recover() }()
+		_ = jsv.JawsRender(elem, &sb, []any{"boom"})
+	}()
+	if panicValue == nil {
+		t.Fatal("expected marshal panic to propagate")
+	}
+	if !mu.TryLock() {
+		t.Fatal("render left the JsVar locker held after a marshal panic")
+	}
+	mu.Unlock()
 }
