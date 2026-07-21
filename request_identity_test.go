@@ -1,17 +1,22 @@
 package jaws
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/linkdata/jaws/lib/key"
 	"github.com/linkdata/jaws/lib/tag"
 )
 
@@ -136,10 +141,11 @@ func TestRequestFinishDoesNotPanicOnContinuedRender(t *testing.T) {
 	}
 }
 
-// TestRequestFinishConcurrentWithRenderIsRaceFree drives element and tag
-// registration concurrently with completion across many Requests. Both paths take
-// rq.mu, so this must be race-free under -race, and the nil-map guard must keep a
-// post-completion registration from panicking.
+// TestRequestFinishConcurrentWithRenderIsRaceFree drives a live initial render
+// (NewElement, Tag and JawsRender, which reads Element.ui and handlers lock-free)
+// concurrently with completion across many Requests. Completion must not mutate the
+// render-visible Element fields or the Jid counter, so this is race-free under -race,
+// and the nil-map guard keeps a post-completion Tag from panicking.
 func TestRequestFinishConcurrentWithRenderIsRaceFree(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -155,7 +161,9 @@ func TestRequestFinishConcurrentWithRenderIsRaceFree(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for range 8 {
-				rq.Tag(rq.NewElement(&testUi{}), tag.Tag("t"))
+				elem := rq.NewElement(&testUi{})
+				rq.Tag(elem, tag.Tag("t"))
+				_ = elem.JawsRender(io.Discard, nil)
 			}
 		}()
 		go func() {
@@ -164,4 +172,100 @@ func TestRequestFinishConcurrentWithRenderIsRaceFree(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// TestEarlyCallbackDuringRenderIsRefusedWithoutConsumingKey exercises the render
+// gate: while the initial request's context is still live (render in progress), a
+// /jaws/<key> callback is refused with 404 and does NOT consume the single-use key,
+// so the real WebSocket can still claim it once rendering completes.
+func TestEarlyCallbackDuringRenderIsRefusedWithoutConsumingKey(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	initial := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
+	initial.RemoteAddr = "192.0.2.1:1000"
+	rq := jw.NewRequest(initial)
+	jawsKey := rq.JawsKeyString()
+
+	cb := httptest.NewRequest(http.MethodGet, "/jaws/"+jawsKey, nil)
+	cb.RemoteAddr = initial.RemoteAddr
+	rec := httptest.NewRecorder()
+	jw.ServeHTTP(rec, cb)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("early callback during render: status = %d, want 404", rec.Code)
+	}
+	if rq.claimed.Load() {
+		t.Fatal("early callback consumed the key (claimed) while the render was in progress")
+	}
+	if rq.JawsKeyString() != jawsKey {
+		t.Fatal("early callback changed the Request key during render")
+	}
+
+	// Render completes: the handler returns, so net/http cancels the initial context.
+	cancel()
+	ws := httptest.NewRequest(http.MethodGet, "/jaws/"+jawsKey, nil)
+	ws.RemoteAddr = initial.RemoteAddr
+	if got := jw.UseRequest(rq.JawsKey, ws); got != rq {
+		t.Fatal("WebSocket could not claim the Request after the render completed")
+	}
+}
+
+// TestUseRequestNilInitialIsClaimable covers the render gate for a Request created
+// without an initial HTTP request: there is no render to wait for, so it is
+// immediately claimable.
+func TestUseRequestNilInitialIsClaimable(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	rq := jw.NewRequest(nil)
+	defer jw.recycle(rq)
+	if got := jw.UseRequest(rq.JawsKey, nil); got != rq {
+		t.Fatalf("UseRequest(nil initial) = %v, want %v", got, rq)
+	}
+}
+
+// TestRequestRecycledKeyNotReusedWhileReachable proves the recycle path reserves the
+// key with a tombstone: with the key generator forced to offer K, K, then K2, a
+// Request minted K and then recycled must not have K reassigned to the next Request
+// while the finished one is still reachable; the next Request gets K2 instead.
+func TestRequestRecycledKeyNotReusedWhileReachable(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	const k = key.Key(0x1111111111111111)
+	const k2 = key.Key(0x2222222222222222)
+	var kb, k2b [8]byte
+	binary.LittleEndian.PutUint64(kb[:], uint64(k))
+	binary.LittleEndian.PutUint64(k2b[:], uint64(k2))
+	stream := append(append(append([]byte{}, kb[:]...), kb[:]...), bytes.Repeat(k2b[:], 4)...)
+	jw.mu.Lock()
+	jw.kg = bufio.NewReader(bytes.NewReader(stream))
+	jw.mu.Unlock()
+
+	rq1 := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	if rq1.JawsKey != k {
+		t.Fatalf("rq1 key = %v, want forced %v", rq1.JawsKey, k)
+	}
+	jw.recycle(rq1)
+
+	rq2 := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	defer jw.recycle(rq2)
+	if rq2.JawsKey == k {
+		t.Fatal("recycled key K was reassigned while the finished Request is still reachable")
+	}
+	if rq2.JawsKey != k2 {
+		t.Fatalf("rq2 key = %v, want %v (K skipped via tombstone)", rq2.JawsKey, k2)
+	}
+	runtime.KeepAlive(rq1) // keep rq1 reachable so its tombstone is not GC-cleaned mid-test
 }

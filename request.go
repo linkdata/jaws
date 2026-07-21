@@ -72,11 +72,11 @@ type requestBuffers struct {
 //
 // A Request pointer is borrowed for the HTTP or WebSocket lifecycle that supplied
 // it. Do not retain it in application state or use it from a background goroutine:
-// a Request that enters [Request.ServeHTTP] may be returned to an internal pool
-// when ServeHTTP returns, and the same pointer may later represent another
-// connection. Background work should retain [Request.Context] and, when it must
-// terminate the connection, the cancel function returned while deriving a
-// replacement context through [Request.SetContext].
+// when that lifecycle ends the Request finishes — its context is canceled and its
+// reusable buffers are released — so a retained pointer becomes inert (it keeps its
+// identity but is unregistered and empty). Background work should instead retain
+// [Request.Context] and, when it must terminate the connection, the cancel function
+// returned while deriving a replacement context through [Request.SetContext].
 //
 // Unlike [Session], whose methods are nil-safe, Request methods are not safe to call on a
 // nil *Request: a Request is always obtained from [Jaws.NewRequest] or [Jaws.UseRequest]
@@ -169,6 +169,25 @@ func (rq *Request) destKey() (k key.Key) {
 	}
 	rq.mu.RUnlock()
 	return
+}
+
+// initialRenderMayBeActiveLocked reports whether the initial HTTP render might
+// still own the Request, meaning it is not yet claimable by its WebSocket.
+//
+// It is true only while the initial request carries a cancelable context that has
+// not been canceled; net/http cancels that context when the rendering handler
+// returns (or the client connection closes), so consulting it at claim time is a
+// deterministic, synchronous "render complete" signal with no watcher goroutine to
+// race. A nil initial request, or one whose context cannot be canceled
+// ([context.Background], as httptest requests use), is treated as having no active
+// render so the Request is immediately claimable. Caller must hold jw.mu; rq.initial
+// is assigned once under jw.mu in getRequestLocked and is not reassigned.
+func (rq *Request) initialRenderMayBeActiveLocked() bool {
+	if rq.initial == nil {
+		return false
+	}
+	ctx := rq.initial.Context()
+	return ctx.Done() != nil && ctx.Err() == nil
 }
 
 // claim binds this request to the HTTP request making the WebSocket call. It
@@ -276,63 +295,54 @@ func (rq *Request) ensureAutoSession(w http.ResponseWriter, r *http.Request) {
 // lifecycle and is never reused for another connection. The caller must hold rq.mu
 // and ensure no other goroutine is still processing rq.
 func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
-	// Cancel first; a retained context observes cancellation regardless of what
-	// happens to the detached buffers below.
+	// Cancel first so a retained context observes cancellation, then detach the
+	// Request from its session and unregister its identity.
+	//
+	// Deliberately do NOT reset lastJid or clear Element.ui/handlers/deleted here.
+	// The Request is never reused, so a stale *Element is unreachable through the
+	// unregistered Request and needs no inerting; and mutating those fields would
+	// race an initial renderer that may still be inside JawsRender (which reads
+	// Element.ui and handlers lock-free) or duplicate an already-streamed Jid if the
+	// renderer keeps allocating. The render-input fields (initial, connectFn,
+	// remoteIP) are likewise preserved; they are collected with the Request.
 	if rq.cancelFn != nil {
 		rq.cancelFn(nil)
 	}
-	rq.lastJid = 0
-	rq.connectFn = nil
-	rq.initial = nil
 	rq.killSessionLocked()
 	rq.running.Store(false)
 	rq.claimed.Store(false)
 	rq.registered = false
-	rq.httpDoneCh = nil
-	clear(rq.todoDirt) // release tag references before pooling; mirrors makeUpdateList
-	rq.todoDirt = rq.todoDirt[:0]
-	rq.remoteIP = netip.Addr{}
-	for _, e := range rq.elems {
-		if e != nil {
-			// Nil the GC-reachable fields and set the deleted guard, which makes the
-			// render, update and queue paths of any retained *Element no-ops (see
-			// [Element.Deleted]). Elements are allocated fresh per newElementLocked and
-			// are never pooled.
-			e.handlers = nil
-			e.ui = nil
-			e.deleted.Store(true)
-		}
-	}
-	clear(rq.elems)
-	rq.elems = rq.elems[:0]
-	// wsQueue and tailsent are guarded by muQueue, not rq.mu. A /jaws/.tail/<key>
-	// fetch (drainTailScript) on a still-pending request runs on a separate HTTP
-	// goroutine holding only muQueue, so take muQueue here to serialize the reset
-	// with it; the documented rq.mu -> muQueue lock order is preserved since we
-	// already hold rq.mu.
-	rq.muQueue.Lock()
-	rq.tailsent = false
-	clear(rq.wsQueue) // release queued message payloads before pooling; mirrors todoDirt/elems above
-	rq.wsQueue = rq.wsQueue[:0]
-	rq.muQueue.Unlock()
-	clear(rq.tagMap)
 
-	// Hand the emptied storage back for reuse and detach it from this Request, so a
-	// pointer retained past the Request's lifetime cannot mutate storage that now
-	// belongs to another Request. Writes guard on the detached (nil) state; see
-	// TagExpanded and appendDirtyTags.
+	// Detach the reusable collections and hand them to the pool. Clearing the entries
+	// first drops the *Element and payload references so the pooled backing storage
+	// pins nothing. todoDirt, elems and tagMap are guarded by rq.mu (held here).
 	buffers = rq.buffers
+	clear(rq.todoDirt) // release tag references before pooling; mirrors makeUpdateList
+	clear(rq.elems)    // release *Element references so the pooled array pins nothing
+	clear(rq.tagMap)
 	if buffers != nil {
-		buffers.todoDirt = rq.todoDirt
-		buffers.elems = rq.elems
+		buffers.todoDirt = rq.todoDirt[:0]
+		buffers.elems = rq.elems[:0]
 		buffers.tagMap = rq.tagMap
-		buffers.wsQueue = rq.wsQueue
 	}
 	rq.buffers = nil
 	rq.todoDirt = nil
 	rq.elems = nil
 	rq.tagMap = nil
+
+	// wsQueue and tailsent are guarded by muQueue, not rq.mu. Hold muQueue across the
+	// clear, transfer AND detach: a concurrent Request.queue (initial renderer) or
+	// drainTailScript fetch takes only muQueue, so releasing it before rq.wsQueue is
+	// detached would let a late append land in the slice already handed to the pool,
+	// surfacing that message in the next Request that borrows the buffer.
+	rq.muQueue.Lock()
+	rq.tailsent = false
+	clear(rq.wsQueue) // release queued message payloads before pooling
+	if buffers != nil {
+		buffers.wsQueue = rq.wsQueue[:0]
+	}
 	rq.wsQueue = nil
+	rq.muQueue.Unlock()
 	return
 }
 

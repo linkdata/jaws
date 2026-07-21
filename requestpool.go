@@ -216,8 +216,15 @@ func (jw *Jaws) nonZeroRandomLocked() key.Key {
 // WebSocket messages.
 //
 // Returns nil if the key was not found, the request was already claimed by an
-// earlier WebSocket callback, or the IP doesn't match, in which case you
-// should return an HTTP "404 Not Found" status.
+// earlier WebSocket callback, the initial HTTP render is still in progress, or the
+// IP doesn't match, in which case you should return an HTTP "404 Not Found" status.
+//
+// A Request is not claimable until its initial render completes: while the initial
+// request's context is still live (the rendering handler has not returned), this
+// returns nil WITHOUT consuming the single-use key. An early or malformed
+// /jaws/<key> callback that arrives mid-render therefore gets a 404 and cannot claim
+// (and so cannot tear down) the Request while the renderer still owns it, while the
+// real WebSocket, which connects only after the page has loaded, claims it normally.
 //
 // The returned pointer is borrowed for WebSocket handling. Do not retain it
 // after [Request.ServeHTTP] returns; see [Request].
@@ -225,7 +232,7 @@ func (jw *Jaws) UseRequest(jawsKey key.Key, r *http.Request) (rq *Request) {
 	if jawsKey != 0 {
 		var err error
 		jw.mu.Lock()
-		if waitingRq, ok := jw.requests[jawsKey]; ok && waitingRq != nil {
+		if waitingRq, ok := jw.requests[jawsKey]; ok && waitingRq != nil && !waitingRq.initialRenderMayBeActiveLocked() {
 			if err = waitingRq.claim(r); err == nil {
 				rq = waitingRq
 				jw.removePendingRequestLocked(rq)
@@ -348,11 +355,18 @@ func (jw *Jaws) recycleLockedWithCause(rq *Request, err error) (cause error) {
 	var buffers *requestBuffers
 	rq.mu.Lock()
 	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq {
+		jawsKey := rq.JawsKey
 		cause = rq.cancelLocked(err)
 		jw.removePendingRequestLocked(rq)
-		delete(jw.requests, rq.JawsKey)
+		// Reserve the key with a nil tombstone and free it only once the finished
+		// Request is unreachable (releaseRetiredRequestKey via runtime cleanup),
+		// rather than deleting it immediately. The Request keeps its identity key, so
+		// a page still emitting it must not be able to reach a different Request that
+		// happened to be minted the same key. This mirrors the retirement path.
+		jw.requests[jawsKey] = nil
 		jw.requestCount--
 		buffers = rq.releaseBuffersLocked()
+		runtime.AddCleanup(rq, releaseRetiredRequestKey, retiredRequestKey{jw: weak.Make(jw), jawsKey: jawsKey})
 	}
 	rq.mu.Unlock()
 	// Return the buffers after releasing rq.mu; requestBufferPool.Put takes no lock,

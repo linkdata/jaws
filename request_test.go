@@ -2289,13 +2289,34 @@ func TestRequestRecycle_StaleElementIsInert(t *testing.T) {
 
 	rq := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
 	elem := rq.NewElement(testDivWidget{inner: "x"})
+	rq.Tag(elem, tag.Tag("stale"))
+	jawsKey := rq.JawsKey
 
 	jw.recycle(rq)
-	if elem.ui != nil {
-		t.Fatal("expected recycled element to have nil ui")
+
+	// The Request is never reused, so recycle deliberately does NOT clear the stale
+	// Element's fields (that would race an initial renderer still inside JawsRender).
+	// Inertness instead comes from the Request being unregistered and its buffers
+	// detached, and the key is reserved with a nil tombstone rather than deleted or
+	// reassigned to a different Request.
+	rq.mu.RLock()
+	registered := rq.registered
+	tagCount := len(rq.tagMap)
+	rq.mu.RUnlock()
+	if registered {
+		t.Fatal("recycled Request is still registered")
 	}
-	if got := len(rq.tagMap); got != 0 {
-		t.Fatalf("expected no tags in recycled request, got %d", got)
+	if tagCount != 0 {
+		t.Fatalf("recycled Request retained %d tags, want 0 (buffers detached)", tagCount)
+	}
+	jw.mu.RLock()
+	entry, ok := jw.requests[jawsKey]
+	jw.mu.RUnlock()
+	if !ok || entry != nil {
+		t.Fatalf("recycled key entry = (%v, present=%v), want reserved tombstone (nil, true)", entry, ok)
+	}
+	if elem.Request != rq {
+		t.Fatal("stale Element lost its Request back-pointer")
 	}
 }
 
@@ -2700,13 +2721,17 @@ func newTestServerWithSession(t *testing.T, withSession bool, logger Logger) (ts
 	jw.Logger = logger
 	ctx, cancel := context.WithTimeout(t.Context(), time.Hour)
 	rr := httptest.NewRecorder()
-	hr := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
+	// The initial render request uses a background (non-cancelable) context so the
+	// Request is immediately claimable: the synthetic render is already complete.
+	// The controllable context is carried by the WebSocket claim below, so ts.cancel
+	// ends the request through its httpDoneCh, mirroring a real WebSocket HTTP request.
+	hr := httptest.NewRequest(http.MethodGet, "/", nil)
 	var sess *Session
 	if withSession {
 		sess = jw.NewSession(rr, hr)
 	}
 	rq := jw.NewRequest(hr)
-	if rq != jw.UseRequest(rq.JawsKey, hr) {
+	if rq != jw.UseRequest(rq.JawsKey, hr.WithContext(ctx)) {
 		panic("UseRequest failed")
 	}
 	go jw.Serve()
@@ -3233,9 +3258,11 @@ func TestWS_ConnectFnFailureDoesNotBlockOnNonReadingPeer(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	defer cancel()
-	initial := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
+	// The initial render request is claimable immediately (background context); the
+	// controllable context is carried by the WebSocket claim so it becomes httpDoneCh.
+	initial := httptest.NewRequest(http.MethodGet, "/", nil)
 	rq := jw.NewRequest(initial)
-	if got := jw.UseRequest(rq.JawsKey, initial); got != rq {
+	if got := jw.UseRequest(rq.JawsKey, initial.WithContext(ctx)); got != rq {
 		t.Fatalf("UseRequest() = %v, want %v", got, rq)
 	}
 	rqCtx := rq.Context()
@@ -3342,9 +3369,11 @@ func TestWS_ConnectFnSubscriptionCleanup(t *testing.T) {
 
 			ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 			defer cancel()
-			initial := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
+			// The initial render request is claimable immediately (background context);
+			// the controllable context rides the WebSocket claim as httpDoneCh.
+			initial := httptest.NewRequest(http.MethodGet, "/", nil)
 			rq := jw.NewRequest(initial)
-			if got := jw.UseRequest(rq.JawsKey, initial); got != rq {
+			if got := jw.UseRequest(rq.JawsKey, initial.WithContext(ctx)); got != rq {
 				t.Fatalf("UseRequest() = %v, want %v", got, rq)
 			}
 			rq.SetConnectFn(tt.connectFn)

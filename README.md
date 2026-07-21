@@ -348,16 +348,22 @@ updates.
 
 ### Request lifecycle invariants
 
-While the `Jaws` instance is open, `NewRequest` creates a pending request owned
-by it. `UseRequest` is the only operation that claims that pending request for a
-WebSocket, and it also removes the request from the pending set. A claimed
-Request is removed after its WebSocket processing exits. Maintenance or the
-per-IP limit can instead retire an unclaimed Request: its context is canceled,
-its key becomes unclaimable, and it is excluded from `Pending` and
-`RequestCount`. Retiring an unclaimed Request does not change its identity or
-Elements while an initial HTTP handler still holds them. Its key cannot be
-assigned to another Request while the retired Request remains reachable; no
-deadline is guaranteed for later reuse.
+Every `NewRequest` returns a distinct `*Request` identity that is never reused
+for another connection; only its internal buffers are pooled. While the `Jaws`
+instance is open, `NewRequest` creates a pending request owned by it. `UseRequest`
+is the only operation that claims that pending request for a WebSocket, and it
+also removes the request from the pending set. A Request is not claimable until
+its initial render completes (its initial HTTP request context is canceled when
+the rendering handler returns), so an early `/jaws/<key>` callback that arrives
+mid-render gets a 404 without consuming the key. A claimed Request finishes after
+its WebSocket processing exits: its context is canceled, its buffers are released,
+and its key is reserved until the Request is collected rather than reassigned.
+Maintenance or the per-IP limit can instead retire an unclaimed Request: its
+context is canceled, its key becomes unclaimable, and it is excluded from
+`Pending` and `RequestCount`. Retiring an unclaimed Request does not change its
+identity or Elements while an initial HTTP handler still holds them. In every
+case a finished key cannot be assigned to another Request while the old one
+remains reachable; no deadline is guaranteed for later reuse.
 
 `*Request` values are borrowed lifecycle objects. Do not store them in
 application state or pass them to background goroutines; copy the required
@@ -367,9 +373,10 @@ An `*Element` belongs to its owning Request and embeds a pointer to it.
 Render-scoped widgets may retain child Elements they create between render and
 update calls within that Request lifecycle, as container helpers do, but should
 access them only from those calls. Do not let an Element escape the Request
-lifecycle or pass it to background work: when a Request that entered
-`ServeHTTP` returns, it may be placed in an internal pool, and the Element's
-embedded Request pointer may later represent an unrelated connection.
+lifecycle or pass it to background work: when the owning Request finishes it is
+unregistered and detached from its Elements, so a retained Element becomes inert.
+Request identities are never reused, so a stale Element can never come to
+represent an unrelated connection.
 
 Dirtying is two-stage: `Request.Dirty` and `Jaws.Dirty` expand tags and record
 them on the `Jaws` instance, then the serving loop distributes those tags to
