@@ -18,6 +18,20 @@ type ifaceSliceUI struct{ v any }
 func (ifaceSliceUI) JawsRender(*Element, io.Writer, []any) error { return nil }
 func (ifaceSliceUI) JawsUpdate(*Element)                         {}
 
+// typedNilUI has pointer-receiver methods that tolerate a nil receiver, so a typed nil
+// (*typedNilUI)(nil) is a usable UI value that renders without dereferencing.
+type typedNilUI struct{ s string }
+
+func (u *typedNilUI) JawsRender(_ *Element, w io.Writer, _ []any) error {
+	s := "typednil"
+	if u != nil {
+		s = u.s
+	}
+	_, err := io.WriteString(w, s)
+	return err
+}
+func (*typedNilUI) JawsUpdate(*Element) {}
+
 func TestNewErrUnusableUI(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -30,6 +44,9 @@ func TestNewErrUnusableUI(t *testing.T) {
 		{"interface holding slice (runtime-incomparable)", ifaceSliceUI{v: []int{1}}, true},
 		{"valid pointer", &testUi{}, false},
 		{"valid struct", nonReflexiveUI{f: 1.5}, false},
+		// A typed nil is comparable and equal to itself, so it is usable; only a nil
+		// interface is rejected.
+		{"typed nil pointer", (*typedNilUI)(nil), false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -76,4 +93,30 @@ func TestNewElementNilUIRendersNoop(t *testing.T) {
 		t.Fatalf("nil-UI render wrote %q, want empty", sb.String())
 	}
 	elem.JawsUpdate() // must not panic
+}
+
+// TestNewElementTypedNilUIDispatchesToRenderer documents that a typed nil UI (a
+// non-nil interface holding a nil pointer) is usable — comparable and equal to itself
+// — and dispatches to its Renderer rather than being treated as unusable. Tolerating
+// the nil receiver is the concrete type's responsibility; typedNilUI does so.
+func TestNewElementTypedNilUIDispatchesToRenderer(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	var ui UI = (*typedNilUI)(nil)
+	if err := NewErrUnusableUI(ui); err != nil {
+		t.Fatalf("NewErrUnusableUI(typed nil) = %v, want nil (usable)", err)
+	}
+
+	elem := rq.NewElement(ui)
+	if cause := context.Cause(rq.Context()); cause != nil {
+		t.Fatalf("NewElement(typed nil) cancelled the Request: %v", cause)
+	}
+	var sb strings.Builder
+	if err := elem.JawsRender(&sb, nil); err != nil {
+		t.Fatalf("JawsRender err = %v", err)
+	}
+	if sb.String() != "typednil" {
+		t.Fatalf("render = %q, want %q", sb.String(), "typednil")
+	}
 }

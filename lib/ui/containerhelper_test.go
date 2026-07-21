@@ -503,6 +503,22 @@ func benchChildren(start, count int) []jaws.UI {
 	return contents
 }
 
+// BenchmarkContainerValidateChildren isolates the pre-lock validation scan that runs
+// on every container render and update. It is the path affected by scoping the
+// unusable-UI guard to the container: a usable child must cost only one
+// self-comparison (a single deferred recover guards the whole slice) and no
+// allocation. The broad Update benchmarks are dominated by rendering and allocation,
+// so this focused benchmark is the meaningful guard for the scan's cost.
+func BenchmarkContainerValidateChildren(b *testing.B) {
+	b.ReportAllocs()
+	children := benchChildren(0, 1000)
+	for range b.N {
+		if _, ok := firstUnusableChild(children); ok {
+			b.Fatal("unexpected unusable child")
+		}
+	}
+}
+
 func BenchmarkContainerHelperUpdateAppendHeavy(b *testing.B) {
 	b.ReportAllocs()
 	const size = 1000
@@ -829,6 +845,34 @@ func (incomparableChildUI) JawsRender(_ *jaws.Element, w io.Writer, _ []any) err
 	return err
 }
 func (incomparableChildUI) JawsUpdate(*jaws.Element) {}
+
+// typedNilChildUI has pointer-receiver methods that tolerate a nil receiver, so a
+// typed nil (*typedNilChildUI)(nil) is a usable, reflexive child.
+type typedNilChildUI struct{}
+
+func (*typedNilChildUI) JawsRender(_ *jaws.Element, w io.Writer, _ []any) error {
+	_, err := io.WriteString(w, "child")
+	return err
+}
+func (*typedNilChildUI) JawsUpdate(*jaws.Element) {}
+
+// TestContainerAcceptsTypedNilChild documents that a typed nil child (a non-nil
+// interface holding a nil pointer) is usable — comparable and equal to itself — so the
+// container reconciles it normally rather than terminating the Request. Only a nil
+// interface child is rejected.
+func TestContainerAcceptsTypedNilChild(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	tc := &testContainer{contents: []jaws.UI{(*typedNilChildUI)(nil)}}
+	container := NewContainer("div", tc)
+	elem, _ := renderUI(t, rq, container)
+	if cause := context.Cause(rq.Context()); cause != nil {
+		t.Fatalf("render cancelled the Request: %v", cause)
+	}
+	container.JawsUpdate(elem)
+	if cause := context.Cause(rq.Context()); cause != nil {
+		t.Fatalf("update cancelled the Request: %v", cause)
+	}
+}
 
 // TestContainerTerminatesOnUnusableChild covers issue #179 and its
 // runtime-incomparable sibling: a container child UI that is not equal to itself

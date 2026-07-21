@@ -12,13 +12,14 @@ type Container interface {
 	// JawsContains returns the current child [UI] values contained by elem.
 	//
 	// The returned [UI] values must be comparable and equal to themselves, since they
-	// are used as map keys (see [UI] for the requirement); a value that is not, such
-	// as one holding NaN, cancels the [Request] instead of being reconciled. The slice
-	// contents must not be modified after returning it. Returning such a child UI again
-	// from a later call lets the container reuse its existing live [Element]. The same
-	// UI may occur more than once in one returned slice only when its type documents
-	// support for backing multiple live Elements. A child UI must not be shared with a
-	// different [Request].
+	// are used as map keys (see [UI] for the requirement); a child that is a nil
+	// interface, not comparable at runtime, or not equal to itself (such as one holding
+	// NaN) cancels the [Request] instead of being reconciled. A typed nil is usable.
+	// The slice contents must not be modified after returning it. Returning a usable
+	// child UI again from a later call lets the container reuse its existing live
+	// [Element]. The same UI may occur more than once in one returned slice only when
+	// its type documents support for backing multiple live Elements. A child UI must
+	// not be shared with a different [Request].
 	JawsContains(elem *Element) (contents []UI)
 }
 
@@ -71,12 +72,15 @@ type TemplateLookuper interface {
 // In addition, all UI objects must be comparable and equal to themselves, so they
 // can be used as map keys. The compile-time type must be comparable; the container
 // widgets additionally check each child value at runtime and cancel the Request, in
-// every build, when it is not comparable at runtime (for example a comparable struct
-// holding a func in an interface field) or not equal to itself (a value holding NaN),
-// with a cause matching [github.com/linkdata/jaws/lib/tag.ErrNotUsableAsTag] under
-// errors.Is. That is the only place a raw UI value is used as a map key; outside a
-// container [Request.NewElement] asserts runtime comparability in debug builds.
-// Callers must ensure UI values are genuinely comparable and reflexive.
+// every build, when it is a nil interface, not comparable at runtime (for example a
+// comparable struct holding a func in an interface field), or not equal to itself (a
+// value holding NaN), with a cause matching
+// [github.com/linkdata/jaws/lib/tag.ErrNotUsableAsTag] under errors.Is. That is the
+// only place a raw UI value is used as a map key; outside a container
+// [Request.NewElement] asserts runtime comparability in debug builds. A typed nil (a
+// non-nil interface holding a nil pointer) is usable, and tolerating a nil receiver
+// is the concrete type's responsibility. Callers must ensure UI values are genuinely
+// comparable and reflexive.
 type UI interface {
 	Renderer
 	Updater

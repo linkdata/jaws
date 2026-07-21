@@ -6,8 +6,9 @@ import (
 	"github.com/linkdata/jaws/lib/tag"
 )
 
-// errUnusableUI reports that a value cannot be used as a [UI] value because it is
-// nil, not comparable at runtime, or not equal to itself as a value holding NaN is.
+// errUnusableUI reports that a value cannot be used as a [UI] value because it is a
+// nil interface, not comparable at runtime, or not equal to itself as a value holding
+// NaN is.
 //
 // It matches [tag.ErrNotUsableAsTag] and [tag.ErrNotComparable] with errors.Is, but
 // carries UI-specific text: the tag package's advice to implement JawsGetTag cannot
@@ -33,11 +34,17 @@ func (errUnusableUI) Is(target error) bool {
 // NewErrUnusableUI returns a non-nil error when ui cannot be used as a [UI] value,
 // and nil when it can.
 //
-// A UI value is unusable when it is nil, not comparable at runtime, or not equal to
-// itself as a value holding NaN is, because it is used as a map key: a nil or
-// non-comparable value would panic and a NaN-bearing one would fail to match. The
-// returned error matches [tag.ErrNotUsableAsTag] with errors.Is. The container widgets
-// use it to terminate a Request handed such a child.
+// A UI value is unusable when it is a nil interface, not comparable at runtime, or not
+// equal to itself as a value holding NaN is. Containers use it both as a map key and
+// to render children: a non-comparable value panics when hashed and a NaN-bearing one
+// never matches itself, while a nil interface is a legal map key but has no methods to
+// render. A typed nil — a non-nil interface holding a nil pointer whose type
+// implements [UI] — is comparable and equal to itself, so it is reported usable;
+// whether its [Renderer] tolerates a nil receiver is the concrete type's
+// responsibility.
+//
+// The returned error matches [tag.ErrNotUsableAsTag] with errors.Is. The container
+// widgets use it to terminate a Request handed such a child.
 func NewErrUnusableUI(ui UI) error {
 	if ui == nil || tag.NewErrNotUsableAsTag(ui) != nil {
 		return errUnusableUI{t: reflect.TypeOf(ui)}

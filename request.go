@@ -627,8 +627,8 @@ func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 // [NewErrUnusableUI]) — because the container widgets key their children by it. Those
 // widgets validate their children and terminate the Request on an unusable one before
 // it reaches a map, so NewElement does not re-validate on this hot path: debug builds
-// panic on a runtime-incomparable ui as a development assertion, and a nil ui yields
-// an Element that renders and updates as a no-op (see [Element.JawsRender]).
+// panic on a runtime-incomparable ui as a development assertion, and a nil interface
+// ui yields an Element that renders and updates as a no-op (see [Element.JawsRender]).
 func (rq *Request) NewElement(ui UI) *Element {
 	if deadlock.Debug {
 		if err := tag.NewErrNotComparable(ui); err != nil {

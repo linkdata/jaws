@@ -35,12 +35,14 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
 
 ## Hard framework constraints
 
-- Every JaWS `UI` value must be comparable at runtime **and equal to itself**, since
-  it is used as a map key. A value that is only statically comparable (an interface
-  field holding a slice/map/func) or that holds a `NaN` (so `v != v`) is rejected: the
-  container widgets — the only place a raw `UI` value is used as a map key — cancel the
-  `Request` in all builds (cause matches `tag.ErrNotUsableAsTag`), and
-  `Request.NewElement` asserts runtime comparability in debug builds.
+- Every JaWS `UI` value must be a non-nil interface, comparable at runtime, **and
+  equal to itself**, since it is used as a map key. A value that is a nil interface,
+  only statically comparable (an interface field holding a slice/map/func), or that
+  holds a `NaN` (so `v != v`) is rejected: the container widgets — the only place a raw
+  `UI` value is used as a map key — cancel the `Request` in all builds (cause matches
+  `tag.ErrNotUsableAsTag`), and `Request.NewElement` asserts runtime comparability in
+  debug builds. A typed nil (e.g. `(*Widget)(nil)`) is accepted as usable; its methods
+  must tolerate a nil receiver.
 - Every JaWS `UI` value is request-scoped. Once used by one Request, never use
   that value with another Request; construct fresh widgets per request. The
   widgets may still refer to shared, synchronized application state, binders,
