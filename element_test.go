@@ -736,15 +736,6 @@ func TestElement_ApplyGetterDebugBranches(t *testing.T) {
 	if _, _, err := elem.ApplyGetter(agErr); err != tag.ErrNotComparable {
 		t.Fatalf("expected init err, got %v", err)
 	}
-
-	if deadlock.Debug {
-		defer func() {
-			if recover() == nil {
-				t.Fatal("expected panic for non-comparable UI in debug mode")
-			}
-		}()
-		rq.NewElement(testUnhashableUI{m: map[string]int{"x": 1}})
-	}
 }
 
 type testClickHandler struct{}
@@ -1230,3 +1221,10 @@ func TestElement_JawsInit(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+// nonReflexiveUI is a comparable UI value that is not equal to itself when it holds
+// NaN; it backs TestNewErrUnusableUI.
+type nonReflexiveUI struct{ f float64 }
+
+func (nonReflexiveUI) JawsRender(*Element, io.Writer, []any) error { return nil }
+func (nonReflexiveUI) JawsUpdate(*Element)                         {}

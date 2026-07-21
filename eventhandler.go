@@ -2,6 +2,7 @@ package jaws
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 
 	"github.com/linkdata/jaws/lib/what"
@@ -36,6 +37,15 @@ func callEventHandler(obj any, elem *Element, wht what.What, value string) (err 
 		var clk Click
 		var ok bool
 		if clk, _, ok = parseClickData(value); ok {
+			if !finite(clk.X) || !finite(clk.Y) {
+				// A non-finite coordinate cannot come from a well-behaved browser;
+				// terminate the Request rather than dispatch a garbage click. Report the
+				// event handled (nil) so the dispatch loop stops without also alerting a
+				// connection that is being torn down.
+				elem.Request.Cancel(fmt.Errorf("%w: click %v,%v", ErrValueNotFinite, clk.X, clk.Y))
+				err = nil
+				return
+			}
 			if wht == what.Click {
 				if h, ok := obj.(ClickHandler); ok {
 					err = h.JawsClick(elem, clk)

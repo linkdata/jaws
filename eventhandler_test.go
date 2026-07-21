@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -218,6 +219,43 @@ func TestRequest_CallAllEventHandlersRequiresFrozenElement(t *testing.T) {
 			t.Fatalf("click calls after Freeze = %d, want 1", rec.clickCalls)
 		}
 	})
+}
+
+func TestCallEventHandlerTerminatesOnNonFiniteClick(t *testing.T) {
+	tests := []struct {
+		name  string
+		wht   what.What
+		click string
+	}{
+		{"click nan x", what.Click, "NaN 2 0 name"},
+		{"click +inf y", what.Click, "1 +Inf 0 name"},
+		{"click -inf x", what.Click, "-Inf 2 0 name"},
+		{"click overflow x", what.Click, "1e999 2 0 name"},
+		{"contextmenu nan y", what.ContextMenu, "1 NaN 0 name"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rq := newTestRequest(t)
+			defer rq.Close()
+			rec := &clickInputSetRecorder{}
+			elem := rq.NewElement(testDivWidget{inner: "x"})
+			elem.AddHandlers(clickOnlyComboHandler{rec: rec})
+			elem.Freeze()
+
+			value := tt.click + "\t" + elem.Jid().String() + "\t"
+			// The dispatch reports the event handled (nil) after terminating, so the
+			// dying connection is not also sent an alert.
+			if err := rq.callAllEventHandlers(0, tt.wht, value); err != nil {
+				t.Fatalf("callAllEventHandlers err = %v, want nil", err)
+			}
+			if cause := context.Cause(rq.Context()); !errors.Is(cause, ErrValueNotFinite) {
+				t.Fatalf("cause = %v, want wrapping ErrValueNotFinite", cause)
+			}
+			if rec.clickCalls != 0 {
+				t.Fatalf("click handler fired %d times, want 0", rec.clickCalls)
+			}
+		})
+	}
 }
 
 func Test_CallEventHandlers_ClickDispatchCombinations(t *testing.T) {

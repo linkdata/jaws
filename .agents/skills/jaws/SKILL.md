@@ -35,7 +35,14 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
 
 ## Hard framework constraints
 
-- Every JaWS `UI` value must be comparable.
+- Every JaWS `UI` value must be a non-nil interface, comparable at runtime, **and
+  equal to itself**, since it is used as a map key. A value that is a nil interface,
+  only statically comparable (an interface field holding a slice/map/func), or that
+  holds a `NaN` (so `v != v`) is rejected: the container widgets — the only place a raw
+  `UI` value is used as a map key — cancel the `Request` in all builds (cause matches
+  `tag.ErrNotUsableAsTag`), and `Request.NewElement` asserts runtime comparability in
+  debug builds. A typed nil (e.g. `(*Widget)(nil)`) is accepted as usable; its methods
+  must tolerate a nil receiver.
 - Every JaWS `UI` value is request-scoped. Once used by one Request, never use
   that value with another Request; construct fresh widgets per request. The
   widgets may still refer to shared, synchronized application state, binders,
@@ -43,9 +50,10 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
 - Within its Request, a `UI` value normally backs one live `Element`. Reuse one
   value for multiple live Elements only when its concrete type documents that
   support and retains no state that can differ between those Elements.
-- `Container.JawsContains` must return hashable `UI` items, and the returned
-  slice must not be mutated after return. A UI value may occur more than once in
-  one returned slice only when its type supports multiple live Elements.
+- `Container.JawsContains` must return `UI` items that are comparable and equal to
+  themselves (see above); returning one that is not cancels the `Request`. The
+  returned slice must not be mutated after return. A UI value may occur more than
+  once in one returned slice only when its type supports multiple live Elements.
 - Treat the package documentation shown by
   `go doc github.com/linkdata/jaws/lib/ui` as the canonical standard-widget
   multiplicity summary, and consult each concrete type's docs for its conditions.

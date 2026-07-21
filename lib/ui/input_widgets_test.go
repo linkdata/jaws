@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"html/template"
 	"math"
@@ -266,31 +267,35 @@ func TestInputFloat_ReconcilesConvertedValues(t *testing.T) {
 	}
 }
 
-// TestInputFloat_RejectsNonFinite verifies that NaN/Inf from the untrusted browser
-// (which strconv.ParseFloat accepts) is rejected and never reaches the bound value.
-func TestInputFloat_RejectsNonFinite(t *testing.T) {
-	_, rq := newCoreRequest(t)
-	sf := newTestSetter(7.5)
-	number := NewNumber(sf)
-	elem, _ := renderUI(t, rq, number)
-	for _, bad := range []string{"NaN", "Inf", "-Inf", "+Inf"} {
-		if err := number.JawsInput(elem, bad); !errors.Is(err, bind.ErrFloatNotFinite) {
-			t.Fatalf("JawsInput(%q): expected ErrFloatNotFinite, got %v", bad, err)
-		}
-		if sf.Get() != 7.5 {
-			t.Fatalf("JawsInput(%q) mutated bound value to %v", bad, sf.Get())
-		}
+// TestInputFloat_TerminatesOnNonFiniteInput verifies that NaN/Inf from the untrusted
+// browser terminates the Request and never reaches the bound value. This covers both
+// the literals strconv.ParseFloat accepts ("NaN"/"Inf") and an overflowing magnitude
+// like "1e999", which parses to ±Inf with a range error. JawsInput reports the event
+// handled (nil).
+func TestInputFloat_TerminatesOnNonFiniteInput(t *testing.T) {
+	for _, bad := range []string{"NaN", "Inf", "-Inf", "+Inf", "1e999", "-1e999"} {
+		t.Run(bad, func(t *testing.T) {
+			_, rq := newCoreRequest(t)
+			sf := newTestSetter(7.5)
+			number := NewNumber(sf)
+			elem, _ := renderUI(t, rq, number)
+			if err := number.JawsInput(elem, bad); err != nil {
+				t.Fatalf("JawsInput(%q) err = %v, want nil", bad, err)
+			}
+			if cause := context.Cause(rq.Context()); !errors.Is(cause, jaws.ErrValueNotFinite) {
+				t.Fatalf("JawsInput(%q): cause = %v, want wrapping ErrValueNotFinite", bad, cause)
+			}
+			if sf.Get() != 7.5 {
+				t.Fatalf("JawsInput(%q) mutated bound value to %v", bad, sf.Get())
+			}
+		})
 	}
 }
 
-// TestInputFloat_NonFiniteRendersEmpty verifies that a non-finite bound float64
-// renders an explicit empty value= attribute for either widget sharing
-// InputFloat.str, never the unparseable value="NaN"/"+Inf" literal. A number
-// then shows a blank control; a range shows the browser's constraint-sanitized
-// default value. The explicit value="" also lets the widget own the value slot,
-// which TestInputFloat_NonFiniteOwnsValueAttr covers.
-func TestInputFloat_NonFiniteRendersEmpty(t *testing.T) {
-	_, rq := newCoreRequest(t)
+// TestInputFloat_TerminatesOnNonFiniteRender verifies that rendering a widget whose
+// bound float64 is non-finite terminates the Request instead of emitting an
+// unparseable "NaN"/"+Inf" literal or a coerced empty control.
+func TestInputFloat_TerminatesOnNonFiniteRender(t *testing.T) {
 	widgets := []struct {
 		htmlType string
 		make     func(bind.Setter[float64]) jaws.UI
@@ -300,46 +305,16 @@ func TestInputFloat_NonFiniteRendersEmpty(t *testing.T) {
 	}
 	for _, w := range widgets {
 		for _, v := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
-			f := v
-			sf := newTestSetter(f)
+			_, rq := newCoreRequest(t)
+			sf := newTestSetter(v)
 			_, got := renderUI(t, rq, w.make(sf))
-			mustMatch(t, `^<input id="Jid\.[0-9]+" type="`+w.htmlType+`" value="">$`, got)
 			if strings.Contains(got, "NaN") || strings.Contains(got, "Inf") {
 				t.Fatalf("%s rendered non-finite literal for %v: %s", w.htmlType, v, got)
 			}
+			if cause := context.Cause(rq.Context()); !errors.Is(cause, jaws.ErrValueNotFinite) {
+				t.Fatalf("%s %v: cause = %v, want wrapping ErrValueNotFinite", w.htmlType, v, cause)
+			}
 		}
-	}
-}
-
-// TestInputFloat_NonFiniteOwnsValueAttr verifies that the widget's own value=
-// attribute takes precedence over a caller-supplied value= from params or a
-// binder's InitialHTMLAttr. A non-finite bound value formats as "", which
-// WriteHTMLInput would otherwise omit, letting the caller value= own the control
-// while the bound value stays non-finite. The widget emits a leading value="" so
-// the HTML parser (first duplicate attribute wins) keeps the widget's value.
-func TestInputFloat_NonFiniteOwnsValueAttr(t *testing.T) {
-	for _, htmlType := range []string{"number", "range"} {
-		make := func(g bind.Setter[float64]) jaws.UI { return NewNumber(g) }
-		if htmlType == "range" {
-			make = func(g bind.Setter[float64]) jaws.UI { return NewRange(g) }
-		}
-
-		// Caller value= via a raw string param. The widget's value="" precedes it,
-		// so the HTML parser keeps the widget's value.
-		_, rq := newCoreRequest(t)
-		sf := newTestSetter(math.NaN())
-		_, got := renderUI(t, rq, make(sf), `value="17"`)
-		mustMatch(t, `^<input id="Jid\.[0-9]+" type="`+htmlType+`" value="" value="17">$`, got)
-
-		// Caller value= via a binder InitialHTMLAttr hook, likewise preceded by the
-		// widget's own value="".
-		var mu deadlock.Mutex
-		f := math.NaN()
-		b := bind.New(&mu, &f).InitialHTMLAttr(func(bind.Binder[float64], *jaws.Element) template.HTMLAttr {
-			return `value="17"`
-		})
-		_, got = renderUI(t, rq, make(b))
-		mustMatch(t, `type="`+htmlType+`" value="" value="17"`, got)
 	}
 }
 
@@ -373,61 +348,19 @@ func TestInputFloat_RegisterSendsInitialZeroValue(t *testing.T) {
 	}
 }
 
-// TestInputFloat_NaNBoundValueDoesNotReemit verifies that a server-bound NaN value
-// is sent once on transition but not re-emitted on every subsequent update. NaN != NaN
-// would otherwise defeat the JawsUpdate dedup and re-send SetValue each cycle. The
-// transition sends an empty control (not "NaN"), matching the parse-side contract.
-func TestInputFloat_NaNBoundValueDoesNotReemit(t *testing.T) {
-	jw, err := jaws.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(jw.Close)
-	go jw.Serve()
-
-	tr := jawstest.NewTestRequest(jw, nil)
-	if tr == nil {
-		t.Fatal("expected test request")
-	}
-	defer tr.Close()
-	<-tr.ReadyCh
-
+// TestInputFloat_TerminatesOnNonFiniteUpdate verifies that a server-bound value going
+// non-finite terminates the Request on the next update rather than being coerced or
+// re-emitted.
+func TestInputFloat_TerminatesOnNonFiniteUpdate(t *testing.T) {
+	_, rq := newCoreRequest(t)
 	sf := newTestSetter(1.5)
 	number := NewNumber(sf)
-	elem := tr.NewElement(number)
-	var sb strings.Builder
-	if err := elem.JawsRender(&sb, nil); err != nil {
-		t.Fatal(err)
-	}
+	elem, _ := renderUI(t, rq, number)
 
-	waitValue := func() (string, bool) {
-		deadline := time.After(300 * time.Millisecond)
-		for {
-			select {
-			case msg := <-tr.OutCh:
-				if msg.What == what.Value {
-					return msg.Data, true
-				}
-			case <-deadline:
-				return "", false
-			}
-		}
-	}
-
-	// A real transition to NaN is sent once, as an empty control.
 	sf.Set(math.NaN())
 	number.JawsUpdate(elem)
-	tr.InCh <- wire.WsMsg{} // wake the loop so the queued op flushes to OutCh
-	if v, ok := waitValue(); !ok || v != "" {
-		t.Fatalf("expected one SetValue %q on transition to NaN, got ok=%v v=%q", "", ok, v)
-	}
-
-	// The value is still NaN: further updates must not re-emit.
-	number.JawsUpdate(elem)
-	number.JawsUpdate(elem)
-	tr.InCh <- wire.WsMsg{} // wake the loop
-	if v, ok := waitValue(); ok {
-		t.Fatalf("NaN bound value re-emitted SetValue %q", v)
+	if cause := context.Cause(rq.Context()); !errors.Is(cause, jaws.ErrValueNotFinite) {
+		t.Fatalf("cause = %v, want wrapping ErrValueNotFinite", cause)
 	}
 }
 

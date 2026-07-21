@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"html/template"
 	"io"
 	"math"
@@ -131,65 +132,69 @@ func (u *InputBool) JawsInput(elem *jaws.Element, value string) (err error) {
 // InputFloat is the reusable base for float64 input widgets.
 //
 // A widget embedding InputFloat must back at most one live [jaws.Element].
+//
+// The bound value must be finite. A non-finite value (NaN or ±Inf) has no valid
+// rendering or wire representation, so rendering it, [InputFloat.JawsUpdate], and
+// [InputFloat.JawsInput] cancel the [jaws.Request] with a cause matching
+// [jaws.ErrValueNotFinite] rather than coerce it.
 type InputFloat struct {
 	Input
 	bind.Setter[float64]
 }
 
-// emptyValueAttr is the explicit value="" prepended for a non-finite float so
-// the widget still owns the value slot even though its formatted value is empty.
-var emptyValueAttr = htmlio.Attr("value", "")
+// finite reports whether f is neither NaN nor infinite.
+func finite(f float64) bool {
+	return !math.IsNaN(f) && !math.IsInf(f, 0)
+}
 
-// str formats value for a number or range control, rendering non-finite values
-// (NaN, ±Inf) as the empty string rather than an unparseable "NaN"/"+Inf"
-// literal.
+// str formats value for a number or range control.
 func (u *InputFloat) str(value float64) string {
-	if math.IsNaN(value) || math.IsInf(value, 0) {
-		return ""
-	}
 	return strconv.FormatFloat(value, 'f', -1, 64)
 }
 
 func (u *InputFloat) renderFloatInput(elem *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
 	var getterAttrs []template.HTMLAttr
 	if getterAttrs, err = u.applyGetterAttrs(elem, u.Setter); err == nil {
-		attrs := append(elem.ApplyParams(params), getterAttrs...)
 		v := u.JawsGet(elem)
-		u.Last.Store(v)
-		// A finite value goes down the direct valueAttr path with no extra
-		// allocation. A non-finite value formats as "", which WriteHTMLInput would
-		// omit, letting a caller-supplied value= from params or a binder's
-		// InitialHTMLAttr take over the control while the bound value stays
-		// non-finite; prepend an explicit value="" so the widget owns the value slot
-		// (the HTML parser keeps the first of duplicate attributes).
-		s := u.str(v)
-		if s == "" {
-			attrs = append([]template.HTMLAttr{emptyValueAttr}, attrs...)
+		if !finite(v) {
+			elem.Cancel(fmt.Errorf("%w: %g", jaws.ErrValueNotFinite, v))
+			return
 		}
-		err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, s, attrs)
+		u.Last.Store(v)
+		attrs := append(elem.ApplyParams(params), getterAttrs...)
+		err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, u.str(v), attrs)
 	}
 	return
 }
 
 // JawsUpdate updates the input value when the bound float64 value changes.
+//
+// A non-finite bound value cancels the [jaws.Request]; see [InputFloat].
 func (u *InputFloat) JawsUpdate(elem *jaws.Element) {
 	v := u.JawsGet(elem)
+	if !finite(v) {
+		elem.Cancel(fmt.Errorf("%w: %g", jaws.ErrValueNotFinite, v))
+		return
+	}
 	// An empty Last (no value stored yet, e.g. an update-only Register that never ran
 	// renderFloatInput) makes the float64 assertion fail with ok==false; send the
 	// initial value unconditionally in that case, matching how the other input
 	// widgets' nil != value comparison sends on their first update.
 	prev, ok := u.Last.Swap(v).(float64)
 	// Compare raw float64 values, not rendered strings: this can skip rare cosmetic
-	// changes such as -0 -> 0, but avoids formatting on the common unchanged path.
-	// NaN != NaN, so a plain compare would re-send a NaN bound value on every update
-	// cycle (JawsInput rejects NaN from the browser, but the server can bind one);
-	// treat NaN -> NaN as unchanged. A real transition into or out of NaN still sends.
-	if !ok || (prev != v && !(math.IsNaN(prev) && math.IsNaN(v))) {
+	// changes such as -0 -> 0, but avoids formatting on the common unchanged path. A
+	// non-finite value can no longer be stored (it terminates the Request above), so
+	// prev is always finite and a plain compare is safe.
+	if !ok || prev != v {
 		elem.SetValue(u.str(v))
 	}
 }
 
 // JawsInput stores a browser-side float64 input value.
+//
+// A non-finite value — the "NaN"/"Inf" literals or an overflowing magnitude such as
+// "1e999" — cancels the [jaws.Request] (see [InputFloat]) and reports the event
+// handled (nil error).
 func (u *InputFloat) JawsInput(elem *jaws.Element, value string) (err error) {
 	if value == "" {
 		// Empty is a normal in-progress edit state for number/range controls:
@@ -198,22 +203,24 @@ func (u *InputFloat) JawsInput(elem *jaws.Element, value string) (err error) {
 		// when the setter reports unchanged; that would race ordinary typing.
 		value = "0"
 	}
-	var v float64
-	// Parse errors are malformed client frames: jaws.js reads elem.value from
-	// browser number/range controls. Leave Last as the last accepted value.
-	if v, err = strconv.ParseFloat(value, 64); err == nil {
-		// The browser is untrusted and strconv.ParseFloat accepts "NaN"/"Inf".
-		// Reject non-finite input here (mirroring click.go's runAtof) so it never
-		// reaches the bound value or u.Last. NaN is especially harmful: it defeats
-		// the Last.Swap(v) != v dedup in JawsUpdate (NaN != NaN), which would
-		// re-emit a SetValue on every update cycle.
-		if math.IsNaN(v) || math.IsInf(v, 0) {
-			return bind.ErrFloatNotFinite
-		}
-		u.Last.Store(v)
-		err = u.maybeDirty(elem, u.Setter.JawsSet(elem, v))
+	v, err := strconv.ParseFloat(value, 64)
+	// The browser is untrusted and strconv.ParseFloat accepts "NaN"/"Inf" (no error)
+	// and returns ±Inf with a range error for an overflowing magnitude like "1e999".
+	// A non-finite result has no valid bound representation and cannot come from a
+	// well-behaved browser, so terminate the Request rather than store it. Check the
+	// parsed value before the error so overflow is caught, not treated as malformed.
+	if !finite(v) {
+		elem.Cancel(fmt.Errorf("%w: %g", jaws.ErrValueNotFinite, v))
+		return nil
 	}
-	return
+	// A remaining error is a syntax error: a malformed client frame (jaws.js reads
+	// elem.value from browser number/range controls). Leave Last as the last accepted
+	// value.
+	if err != nil {
+		return err
+	}
+	u.Last.Store(v)
+	return u.maybeDirty(elem, u.Setter.JawsSet(elem, v))
 }
 
 // InputDate is the reusable base for date input widgets.

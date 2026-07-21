@@ -2452,6 +2452,9 @@ func TestRequest_NewElement_DebugComparableCheck(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 
+	// NewElement asserts runtime comparability in debug builds. The all-build guard
+	// against unusable UI values lives in the container widgets (see the ui package),
+	// since that is the only place a raw UI value is used as a map key.
 	defer func() {
 		if recover() == nil {
 			t.Fatal("expected panic for non-comparable UI when comparable check is enabled")

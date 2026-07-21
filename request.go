@@ -623,7 +623,12 @@ func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 // multiplicity requirements are caller obligations; NewElement does not enforce
 // them. See [UI] for the complete contract.
 //
-// Panics in debug builds when ui does not satisfy [UI]'s comparability requirement.
+// ui must be usable as a map key — comparable at runtime and equal to itself (see
+// [NewErrUnusableUI]) — because the container widgets key their children by it. Those
+// widgets validate their children and terminate the Request on an unusable one before
+// it reaches a map, so NewElement does not re-validate on this hot path: debug builds
+// panic on a runtime-incomparable ui as a development assertion, and a nil interface
+// ui yields an Element that renders and updates as a no-op (see [Element.JawsRender]).
 func (rq *Request) NewElement(ui UI) *Element {
 	if deadlock.Debug {
 		if err := tag.NewErrNotComparable(ui); err != nil {

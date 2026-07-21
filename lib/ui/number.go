@@ -15,8 +15,10 @@ type Number struct{ InputFloat }
 
 // NewNumber returns a number input widget bound to g.
 //
-// A non-finite bound value (NaN or ±Inf) renders as a blank control rather than
-// an unparseable value. Contrast [NewRange], whose control cannot be blank.
+// The bound value must be finite. A non-finite value (NaN or ±Inf) has no valid
+// rendering or wire representation, so rendering, updating, or receiving one from
+// the browser cancels the [jaws.Request] with a cause wrapping
+// [jaws.ErrValueNotFinite].
 func NewNumber(g bind.Setter[float64]) *Number { return &Number{InputFloat{Setter: g}} }
 
 // JawsRender renders ui as an HTML number input.
@@ -26,7 +28,7 @@ func (u *Number) JawsRender(elem *jaws.Element, w io.Writer, params []any) error
 
 // Number renders an HTML number input.
 //
-// See [NewNumber] for how a non-finite bound value renders.
+// See [NewNumber] for how a non-finite bound value is handled.
 func (rw RequestWriter) Number(value any, params ...any) error {
 	return rw.NewUI(NewNumber(bind.MakeSetterFloat64(value)), params...)
 }

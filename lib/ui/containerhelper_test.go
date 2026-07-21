@@ -1,13 +1,16 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"html/template"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,6 +19,7 @@ import (
 	"github.com/linkdata/jaws/lib/htmlio"
 	"github.com/linkdata/jaws/lib/jid"
 	"github.com/linkdata/jaws/lib/named"
+	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
@@ -499,6 +503,23 @@ func benchChildren(start, count int) []jaws.UI {
 	return contents
 }
 
+// BenchmarkContainerValidateChildren isolates the pre-lock validation scan that runs
+// on every container render and update. It is the path affected by scoping the
+// unusable-UI guard to the container: a usable child must cost only one
+// self-comparison (a single deferred recover guards the whole slice) and no
+// allocation. The broad Update benchmarks are dominated by rendering and allocation,
+// so this focused benchmark is the meaningful guard for the scan's cost.
+func BenchmarkContainerValidateChildren(b *testing.B) {
+	b.ReportAllocs()
+	children := benchChildren(0, 1000)
+	b.ResetTimer() // exclude the one-time fixture allocation so -benchtime=1x is honest
+	for range b.N {
+		if _, ok := firstUnusableChild(children); ok {
+			b.Fatal("unexpected unusable child")
+		}
+	}
+}
+
 func BenchmarkContainerHelperUpdateAppendHeavy(b *testing.B) {
 	b.ReportAllocs()
 	const size = 1000
@@ -803,5 +824,243 @@ func TestSelectWidget_NonSetterContainer(t *testing.T) {
 
 	if err := selectUI.JawsInput(elem, "x"); err != nil {
 		t.Fatalf("JawsInput on non-Setter container: want nil, got %v", err)
+	}
+}
+
+// nanChildUI is a comparable UI value that is not equal to itself (a non-reflexive
+// map key), reproducing issue #179.
+type nanChildUI struct{ f float64 }
+
+func (nanChildUI) JawsRender(_ *jaws.Element, w io.Writer, _ []any) error {
+	_, err := io.WriteString(w, "child")
+	return err
+}
+func (nanChildUI) JawsUpdate(*jaws.Element) {}
+
+// incomparableChildUI is statically comparable (an interface field) but panics when
+// compared or hashed at runtime, since it holds a slice.
+type incomparableChildUI struct{ v any }
+
+func (incomparableChildUI) JawsRender(_ *jaws.Element, w io.Writer, _ []any) error {
+	_, err := io.WriteString(w, "child")
+	return err
+}
+func (incomparableChildUI) JawsUpdate(*jaws.Element) {}
+
+// typedNilChildUI has pointer-receiver methods that tolerate a nil receiver, so a
+// typed nil (*typedNilChildUI)(nil) is a usable, reflexive child.
+type typedNilChildUI struct{}
+
+func (*typedNilChildUI) JawsRender(_ *jaws.Element, w io.Writer, _ []any) error {
+	_, err := io.WriteString(w, "child")
+	return err
+}
+func (*typedNilChildUI) JawsUpdate(*jaws.Element) {}
+
+// TestContainerAcceptsTypedNilChild documents that a typed nil child (a non-nil
+// interface holding a nil pointer) is usable — comparable and equal to itself — so the
+// container renders it and, because it is a stable reflexive map key, reuses the same
+// Element across updates rather than churning (contrast a NaN-bearing child). Only a
+// nil interface child is rejected.
+func TestContainerAcceptsTypedNilChild(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	tc := &testContainer{contents: []jaws.UI{(*typedNilChildUI)(nil)}}
+	container := NewContainer("div", tc)
+	elem, got := renderUI(t, rq, container)
+	if cause := context.Cause(rq.Context()); cause != nil {
+		t.Fatalf("render cancelled the Request: %v", cause)
+	}
+	if !strings.Contains(got, "child") {
+		t.Fatalf("render = %q, want it to contain the child output", got)
+	}
+	if len(container.contents) != 1 {
+		t.Fatalf("want 1 child Element, got %d", len(container.contents))
+	}
+	childElem := container.contents[0]
+	childJid := childElem.Jid()
+
+	container.JawsUpdate(elem)
+	if cause := context.Cause(rq.Context()); cause != nil {
+		t.Fatalf("update cancelled the Request: %v", cause)
+	}
+	if len(container.contents) != 1 {
+		t.Fatalf("want 1 child Element after update, got %d", len(container.contents))
+	}
+	if container.contents[0] != childElem {
+		t.Fatal("typed nil child was recreated on update instead of reused")
+	}
+	if got := container.contents[0].Jid(); got != childJid {
+		t.Fatalf("child Jid changed on update: %v -> %v", childJid, got)
+	}
+}
+
+// TestContainerValidatesWholeSliceBeforeRender pins that the pre-lock scan validates
+// the entire children slice before any child is created, rendered, or committed: a
+// usable child preceding an unusable one produces no Element, no output, and no
+// committed content when the Request is terminated.
+func TestContainerValidatesWholeSliceBeforeRender(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("VALIDMARKER")), nanChildUI{f: math.NaN()}}}
+	container := NewContainer("div", tc)
+	elem := rq.NewElement(container)
+	var sb strings.Builder
+	if err := elem.JawsRender(&sb, nil); err != nil {
+		t.Fatalf("JawsRender err = %v, want nil", err)
+	}
+	if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
+		t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
+	}
+	if strings.Contains(sb.String(), "VALIDMARKER") {
+		t.Fatalf("valid prefix child was rendered before the slice was validated: %q", sb.String())
+	}
+	if len(container.contents) != 0 {
+		t.Fatalf("no children should be committed, got %d", len(container.contents))
+	}
+	// No child Element was ever created: NewElement is never reached. Jids are
+	// monotonic (a created-then-deleted Element still advances the counter, and would
+	// not be found by a registry lookup), so a probe created now must take the Jid
+	// right after the container's; a higher Jid would mean a child was created.
+	probe := rq.NewElement(NewSpan(testHTMLGetter("probe")))
+	if probe.Jid() != elem.Jid()+1 {
+		t.Fatalf("a child Element was created despite prevalidation abort: probe Jid %v, want %v", probe.Jid(), elem.Jid()+1)
+	}
+}
+
+// TestContainerUpdateValidatesWholeSliceBeforeReconcile is the update-path counterpart:
+// when a wanted slice has a usable child before an unusable one, the whole slice is
+// validated before reconcile touches u.contents or the pool. It exercises reconcile
+// directly and asserts its four operation sets are empty (so UpdateContainer queues no
+// Remove/Append/Order), that u.contents is untouched, and — via a monotonic-Jid probe
+// — that no new Element was created.
+func TestContainerUpdateValidatesWholeSliceBeforeReconcile(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("OLD"))}}
+	container := NewContainer("div", tc)
+	elem, _ := renderUI(t, rq, container)
+	if len(container.contents) != 1 {
+		t.Fatalf("want 1 child before update, got %d", len(container.contents))
+	}
+	childElem := container.contents[0]
+
+	// Observe reconcile's outputs directly: a usable child before an unusable one must
+	// yield no operations at all, which is what leaves UpdateContainer nothing to queue.
+	toAppend, toRemove, oldOrder, newOrder := container.reconcile(elem,
+		[]jaws.UI{NewSpan(testHTMLGetter("NEWVALID")), nanChildUI{f: math.NaN()}})
+	if len(toAppend)+len(toRemove)+len(oldOrder)+len(newOrder) != 0 {
+		t.Fatalf("reconcile produced operations on abort: append=%d remove=%d oldOrder=%d newOrder=%d",
+			len(toAppend), len(toRemove), len(oldOrder), len(newOrder))
+	}
+	if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
+		t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
+	}
+	// No partial reconciliation: the existing content slice is untouched.
+	if len(container.contents) != 1 || container.contents[0] != childElem {
+		t.Fatalf("contents changed on aborted update: partial reconciliation occurred")
+	}
+	// No new Element was created (Jids are monotonic, so a created-then-deleted child
+	// would still have advanced the counter): a probe takes the Jid right after the
+	// existing child's.
+	probe := rq.NewElement(NewSpan(testHTMLGetter("probe")))
+	if probe.Jid() != childElem.Jid()+1 {
+		t.Fatalf("a child Element was created on aborted update: probe Jid %v, want %v", probe.Jid(), childElem.Jid()+1)
+	}
+}
+
+// TestContainerTerminatesOnUnusableChild covers issue #179 and its
+// runtime-incomparable sibling: a container child UI that is not equal to itself
+// (holds NaN) or not comparable at runtime (holds an interface-wrapped slice) cannot
+// be a container pool key. The container must terminate the Request rather than churn
+// (NaN) or panic hashing the key (incomparable). The incomparable update case pins
+// that reconcile validates before the pool lookup, which would otherwise panic.
+func TestContainerTerminatesOnUnusableChild(t *testing.T) {
+	bad := []struct {
+		name string
+		make func() jaws.UI
+	}{
+		{"nil", func() jaws.UI { return nil }},
+		{"nan", func() jaws.UI { return nanChildUI{f: math.NaN()} }},
+		{"incomparable", func() jaws.UI { return incomparableChildUI{v: []int{1}} }},
+	}
+	for _, b := range bad {
+		t.Run(b.name+" render", func(t *testing.T) {
+			_, rq := newCoreRequest(t)
+			tc := &testContainer{contents: []jaws.UI{b.make()}}
+			container := NewContainer("div", tc)
+			elem := rq.NewElement(container)
+			var sb strings.Builder
+			// The render still balances its tags and returns nil; the unusable child is
+			// skipped and the Request is terminated (asserted via the cancellation cause).
+			if err := elem.JawsRender(&sb, nil); err != nil {
+				t.Fatalf("JawsRender err = %v, want nil", err)
+			}
+			if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
+				t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
+			}
+		})
+
+		t.Run(b.name+" update", func(t *testing.T) {
+			_, rq := newCoreRequest(t)
+			tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("ok"))}}
+			container := NewContainer("div", tc)
+			elem, _ := renderUI(t, rq, container)
+			tc.contents = []jaws.UI{b.make()}
+			container.JawsUpdate(elem) // must terminate, not panic
+			if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
+				t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
+			}
+		})
+	}
+}
+
+type reentrantLogger struct{ onError func() }
+
+func (reentrantLogger) Info(string, ...any) {}
+func (reentrantLogger) Warn(string, ...any) {}
+func (l reentrantLogger) Error(string, ...any) {
+	if l.onError != nil {
+		l.onError()
+	}
+}
+
+// TestContainerCancelNotUnderLock pins that terminating the Request for an unusable
+// child does not run while u.mu is held: cancelUnusableChildren runs before reconcile
+// locks. Request.Cancel invokes the user logger synchronously, so a logger that
+// re-enters the container's lock would deadlock the update goroutine if cancellation
+// held u.mu. The timeout turns that regression into a failure instead of a hang.
+func TestContainerCancelNotUnderLock(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("ok"))}}
+	container := NewContainer("div", tc)
+	elem, _ := renderUI(t, rq, container)
+
+	var reentered atomic.Bool
+	jw.Logger = reentrantLogger{onError: func() {
+		// Re-enter the container's lock. If the cancellation that triggered this log
+		// held u.mu, this second Lock on the same goroutine would deadlock.
+		container.mu.Lock()
+		_ = len(container.contents)
+		container.mu.Unlock()
+		reentered.Store(true)
+	}}
+
+	tc.contents = []jaws.UI{nanChildUI{f: math.NaN()}}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		container.JawsUpdate(elem)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("JawsUpdate deadlocked: Request cancellation ran while holding u.mu")
+	}
+
+	// Without this the deadlock check is vacuous: if the logger never ran, no re-entry
+	// was attempted and the test would pass even with cancellation under the lock.
+	if !reentered.Load() {
+		t.Fatal("logger callback did not run; the deadlock check would be vacuous")
+	}
+	if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
+		t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
 	}
 }

@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -113,8 +114,16 @@ func runFormatFloat(value float64) string {
 func runAtof(value string) (n float64, ok bool) {
 	var err error
 	n, err = strconv.ParseFloat(value, 64)
-	ok = err == nil && !math.IsInf(n, 0) && !math.IsNaN(n)
+	// A range error (e.g. "1e999") still yields a usable ±Inf; only a syntax error is
+	// a malformed frame. Accept the value either way so the event dispatch's finiteness
+	// check can terminate the Request on a non-finite coordinate.
+	ok = err == nil || errors.Is(err, strconv.ErrRange)
 	return
+}
+
+// finite reports whether f is neither NaN nor infinite.
+func finite(f float64) bool {
+	return !math.IsNaN(f) && !math.IsInf(f, 0)
 }
 
 func runAtoi(value string) (n int, ok bool) {

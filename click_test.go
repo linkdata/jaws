@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"math"
 	"strings"
 	"testing"
 )
@@ -64,28 +65,8 @@ func TestParseClickData(t *testing.T) {
 			wantOK: false,
 		},
 		{
-			name:   "nan x",
-			in:     "NaN 20 0 save",
-			wantOK: false,
-		},
-		{
-			name:   "infinite x",
-			in:     "+Inf 20 0 save",
-			wantOK: false,
-		},
-		{
 			name:   "invalid y",
 			in:     "10 bad 0 save",
-			wantOK: false,
-		},
-		{
-			name:   "nan y",
-			in:     "10 NaN 0 save",
-			wantOK: false,
-		},
-		{
-			name:   "infinite y",
-			in:     "10 -Inf 0 save",
 			wantOK: false,
 		},
 		{
@@ -123,6 +104,53 @@ func TestParseClickData(t *testing.T) {
 	}
 }
 
+func TestParseClickDataAcceptsNonFinite(t *testing.T) {
+	// runAtof no longer rejects non-finite coordinates; the event dispatch terminates
+	// the Request instead (see TestCallEventHandlerTerminatesOnNonFiniteClick).
+	tests := []struct {
+		name  string
+		in    string
+		check func(Click) bool
+	}{
+		{"nan x", "NaN 20 0 save", func(c Click) bool { return math.IsNaN(c.X) && c.Y == 20 }},
+		{"infinite x", "+Inf 20 0 save", func(c Click) bool { return math.IsInf(c.X, 1) && c.Y == 20 }},
+		{"nan y", "10 NaN 0 save", func(c Click) bool { return c.X == 10 && math.IsNaN(c.Y) }},
+		{"infinite y", "10 -Inf 0 save", func(c Click) bool { return c.X == 10 && math.IsInf(c.Y, -1) }},
+		{"overflow x", "1e999 20 0 save", func(c Click) bool { return math.IsInf(c.X, 1) && c.Y == 20 }},
+		{"overflow y", "10 -1e999 0 save", func(c Click) bool { return c.X == 10 && math.IsInf(c.Y, -1) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clk, _, ok := parseClickData(tt.in)
+			if !ok {
+				t.Fatalf("ok = false, want true")
+			}
+			if !tt.check(clk) {
+				t.Fatalf("unexpected click %+v", clk)
+			}
+		})
+	}
+}
+
+func TestFinite(t *testing.T) {
+	tests := []struct {
+		f    float64
+		want bool
+	}{
+		{0, true},
+		{-1.5, true},
+		{math.MaxFloat64, true},
+		{math.NaN(), false},
+		{math.Inf(1), false},
+		{math.Inf(-1), false},
+	}
+	for _, tt := range tests {
+		if got := finite(tt.f); got != tt.want {
+			t.Errorf("finite(%v) = %v, want %v", tt.f, got, tt.want)
+		}
+	}
+}
+
 func TestClickString(t *testing.T) {
 	got := (Click{Name: "x", X: 1.25, Y: 2.5, Shift: true, Control: true, Alt: true}).String()
 	want := "1.25 2.5 7 x"
@@ -140,6 +168,12 @@ func Fuzz_parseClickData(f *testing.F) {
 	f.Fuzz(func(t *testing.T, in string) {
 		clk, after, ok := parseClickData(in)
 		if !ok {
+			return
+		}
+		// parseClickData accepts non-finite coordinates (the event dispatch terminates
+		// the Request on them); Click.String round-trips only finite values, since
+		// NaN != NaN defeats the equality check below.
+		if !finite(clk.X) || !finite(clk.Y) {
 			return
 		}
 

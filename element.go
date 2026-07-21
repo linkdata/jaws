@@ -148,9 +148,13 @@ var debugCommentSanitizer = strings.NewReplacer("-->", "==>", "--!>", "==>")
 // JawsRender calls [Renderer.JawsRender] for this [Element].
 //
 // Do not call this yourself unless it is from within another JawsRender implementation.
+//
+// A nil [UI] interface renders as a no-op; this arises only from [Request.NewElement]
+// given a nil interface. A typed nil (a non-nil interface holding a nil pointer) still
+// dispatches to its [Renderer], which is responsible for tolerating a nil receiver.
 func (elem *Element) JawsRender(w io.Writer, params []any) (err error) {
-	if !elem.deleted.Load() {
-		if err = elem.UI().JawsRender(elem, w, params); err == nil {
+	if ui := elem.UI(); ui != nil && !elem.deleted.Load() {
+		if err = ui.JawsRender(elem, w, params); err == nil {
 			if elem.Jaws.Debug {
 				err = elem.renderDebug(w)
 			}
@@ -166,9 +170,12 @@ func (elem *Element) JawsRender(w io.Writer, params []any) (err error) {
 // JawsUpdate calls [Updater.JawsUpdate] for this [Element].
 //
 // Do not call this yourself unless it is from within another JawsUpdate implementation.
+//
+// A nil [UI] interface is a no-op; a typed nil dispatches to its [Updater] (see
+// [Element.JawsRender]).
 func (elem *Element) JawsUpdate() {
-	if !elem.deleted.Load() {
-		elem.UI().JawsUpdate(elem)
+	if ui := elem.UI(); ui != nil && !elem.deleted.Load() {
+		ui.JawsUpdate(elem)
 	}
 }
 
