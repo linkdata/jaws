@@ -171,9 +171,11 @@ func (rq *Request) advanceLastWriteSeconds(now int32) {
 
 // destKey returns the Request's identity key while it is still registered, read
 // under rq.mu, for use as a broadcast destination. A zero return means the Request
-// has finished (unregistered) and is no longer a valid target; its stable key is
-// never reassigned to another Request, so a stale destination simply matches
-// nothing rather than reaching an unrelated connection.
+// has finished (unregistered) and is no longer a valid target. Its key is reserved
+// (not reassigned to another Request) for as long as the finished Request remains
+// reachable, so a stale destination matches nothing rather than reaching an
+// unrelated connection; the key becomes eligible for random reuse only after the
+// Request is collected, by which point no such stale destination can remain.
 func (rq *Request) destKey() (k key.Key) {
 	rq.mu.RLock()
 	if rq.registered {

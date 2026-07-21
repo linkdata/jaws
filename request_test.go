@@ -164,7 +164,8 @@ func TestRequest_wantMessage_RejectsFinishedRequest(t *testing.T) {
 	is.Equal(rq.wantMessage(&wire.Message{Dest: staleKey}), false)
 
 	// A later client gets a distinct Request with a distinct key. It matches only its
-	// own key, and the finished Request's key is never reassigned to it.
+	// own key, and the finished Request's key is not reassigned to it (rq is still
+	// reachable here, so its key stays reserved).
 	replacement := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/next", nil))
 	defer jw.recycle(replacement)
 	is.True(replacement != rq)

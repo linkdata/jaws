@@ -24,11 +24,11 @@ import (
 
 // TestEarlyCallbackPreservesInitialRenderIdentity is the reproduction from issue
 // #195: an early /jaws/<key> callback that fails the WebSocket upgrade tears the
-// Request down — clearing its collections — but must not destroy the identity the
+// Request down — clearing its collections — but must not change the identity the
 // initial HTTP handler is still rendering with. Because Requests keep a stable
 // identity and are never reused, completion unregisters the Request and releases its
-// buffers but never zeroes the key or hands the pointer to another connection, so the
-// initial renderer's pointer keeps a valid key.
+// buffers but never zeroes or reassigns the key, so the initial renderer's pointer
+// keeps its stable, nonzero key (the Request is just unregistered).
 func TestEarlyCallbackPreservesInitialRenderIdentity(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -40,18 +40,22 @@ func TestEarlyCallbackPreservesInitialRenderIdentity(t *testing.T) {
 	initial := httptest.NewRequest(http.MethodGet, "/", nil)
 	initial.RemoteAddr = "192.0.2.1:1000"
 	rq := jw.NewRequest(initial)
+	wantKey := rq.JawsKeyString()
+	if wantKey == "" {
+		t.Fatal("NewRequest returned an empty key")
+	}
 
 	var page bytes.Buffer
 	if err := rq.HeadHTML(&page); err != nil {
 		t.Fatal(err)
 	}
 
-	callback := httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString(), nil)
+	callback := httptest.NewRequest(http.MethodGet, "/jaws/"+wantKey, nil)
 	callback.RemoteAddr = initial.RemoteAddr
 	jw.ServeHTTP(httptest.NewRecorder(), callback)
 
-	if rq.JawsKeyString() == "" {
-		t.Fatal("early callback cleared the initial render's Request key")
+	if got := rq.JawsKeyString(); got != wantKey {
+		t.Fatalf("early callback changed the initial render's Request key: got %q, want stable %q", got, wantKey)
 	}
 }
 

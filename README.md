@@ -420,7 +420,8 @@ these invariants before relying on a green build alone:
   initial HTTP handler that still holds it.
 * Dirty dispatch expands tags once, targets only elements registered for those
   tags, and does not let one request's queued update reach a finished, unregistered
-  request (whose key is never reassigned to another Request).
+  request (whose key stays reserved, never reassigned to another Request, while it
+  remains reachable).
 * Session grace windows remain deliberate for unclaimed, claimed, failed-upgrade,
   and closed-WebSocket requests.
 * Subsecond `ServeWithTimeout` values are not useful in production. AI-assisted
