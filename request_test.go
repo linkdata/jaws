@@ -146,9 +146,11 @@ func TestRequest_wantMessage_KeyDest(t *testing.T) {
 
 // TestRequest_wantMessage_RejectsFinishedRequest is the core broadcast regression:
 // wantMessage gates the identity-key match on rq.registered, so a finished Request
-// stops matching its own key. Because a Request identity is never reused for another
-// connection, a message aimed at a finished Request's key reaches no one, and a
-// later Request matches only its own distinct key.
+// stops matching its own key. The *Request pointer is never reused, and while the
+// finished Request stays reachable its key value is held reserved by a tombstone, so
+// a message aimed at that key reaches no one and a later Request matches only its own
+// distinct key. (Once the finished Request is collected the tombstone is removed and
+// the key value may eventually be reissued to a new Request.)
 func TestRequest_wantMessage_RejectsFinishedRequest(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()

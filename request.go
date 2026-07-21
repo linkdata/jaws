@@ -171,11 +171,14 @@ func (rq *Request) advanceLastWriteSeconds(now int32) {
 
 // destKey returns the Request's identity key while it is still registered, read
 // under rq.mu, for use as a broadcast destination. A zero return means the Request
-// has finished (unregistered) and is no longer a valid target. Its key is reserved
-// (not reassigned to another Request) for as long as the finished Request remains
-// reachable, so a stale destination matches nothing rather than reaching an
-// unrelated connection; the key becomes eligible for random reuse only after the
-// Request is collected, by which point no such stale destination can remain.
+// has finished (unregistered), so destKey never hands out a finished Request's key.
+// A key value captured elsewhere (a copied key.Key, a queued wire.Message.Dest, or a
+// browser /jaws/<key> URL) that outlives the Request matches nothing only while the
+// finished Request stays reachable, since its key is held reserved by a tombstone.
+// After the Request is collected the tombstone is removed and the CSPRNG may
+// eventually reissue that key value to a new Request, which such a stale value could
+// then match. The *Request pointer itself is never reused, so pointer-derived
+// operations never reach a different connection.
 func (rq *Request) destKey() (k key.Key) {
 	rq.mu.RLock()
 	if rq.registered {
