@@ -176,13 +176,19 @@ func (rq *Request) casState(old, want reqState) bool {
 // finishLocked detaches a live Request from its Session and transitions it to
 // reqFinished. It captures whether the Request had been claimed before the
 // transition so [Session.delRequest] can still grant the claimed-WebSocket grace
-// window. Caller must hold rq.mu (and, for the map bookkeeping, jw.mu); the Request
-// must be in a live state (debug builds panic otherwise, catching a double-finish or
-// a terminal-state resurrection).
+// window.
+//
+// Caller must hold both rq.mu and jw.mu. Both are required to keep the read-then-store
+// atomic against the other lifecycle transitions: [Request.claim] runs its
+// reqPending->reqClaimed CAS under rq.mu, while [Request.startServe] runs its
+// reqClaimed->reqRunning CAS under jw.mu (not rq.mu). Holding only one lock would let
+// the other transition interleave between the load and the store below. The Request
+// must be in a live state (debug builds panic otherwise, catching a double-finish or a
+// terminal-state resurrection).
 func (rq *Request) finishLocked() {
 	// Capture the claimed status before the transition so delRequest can grant the
-	// grace window; rq.mu is held, so the state cannot change between here and the
-	// store below.
+	// grace window. Holding both rq.mu and jw.mu (see the doc comment) keeps the state
+	// stable between this load and the store below.
 	prev := rq.loadState()
 	if deadlock.Debug && !prev.registered() {
 		panic("jaws: finishLocked called on a terminal (non-live) Request state")
@@ -360,13 +366,15 @@ func (rq *Request) ensureAutoSession(w http.ResponseWriter, r *http.Request) {
 // releaseBuffersLocked detaches the reusable storage from a finished Request and
 // returns it for the caller to return to [Jaws.requestBufferPool].
 //
-// It cancels any live context, detaches and clears the reusable collections (the
-// element list, tag map, dirt list and message queue), kills any attached session
-// and clears the registered flag. It does NOT mutate the individual Element objects'
-// fields or the Jid counter. The Request keeps its identity key and canceled context,
-// so a pointer retained by the initial renderer or by background work stays
-// permanently bound to this finished lifecycle and is never reused for another
-// connection.
+// It detaches and clears the reusable collections (the element list, tag map, dirt
+// list and message queue) only. It does NOT cancel the context, detach the session,
+// or change the lifecycle state: the caller (recycleLockedWithCause) has already
+// cancelled the context and called [Request.finishLocked], which detaches the session
+// and transitions the Request to reqFinished. It also does not mutate the individual
+// Element objects' fields or the Jid counter. The Request keeps its identity key and
+// canceled context, so a pointer retained by the initial renderer or by background
+// work stays permanently bound to this finished lifecycle and is never reused for
+// another connection.
 //
 // The caller must hold rq.mu. The WebSocket processing loop must have exited, but an
 // initial HTTP renderer may still be running concurrently (an early callback can

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -157,6 +158,10 @@ func TestFinishLockedTerminalStatePanicsInDebug(t *testing.T) {
 			t.Error("finishLocked on a terminal state did not panic")
 		}
 	}()
+	// finishLocked requires both jw.mu and rq.mu (jw.mu is acquired first, matching the
+	// production lock order in recycleLockedWithCause/retireNonRunningRequestCoreLocked).
+	jw.mu.Lock()
+	defer jw.mu.Unlock()
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	rq.finishLocked()
@@ -233,11 +238,15 @@ func TestServe_DuplicatePanicsWithoutDisturbingFirst(t *testing.T) {
 	<-doneCh
 }
 
-// TestServe_CloseRaceIsSafe races Jaws.Close against TestServe. TestServe either
-// serves cleanly (Close lost) or panics on the failed transition (Close won); either
-// is fine, and a finished Request is never resurrected into running. Run with -race.
+// TestServe_CloseRaceIsSafe races Jaws.Close against TestServe. Exactly one outcome
+// is legal: TestServe won and served cleanly, or Close won and TestServe refused via
+// one of its "jaws: TestServe" setup-failure panics (the subscription timed out
+// against the stopped Serve loop, or the checked reqClaimed->reqRunning transition
+// failed). Any other panic — a terminal->running resurrection, a nil dereference, a
+// double-finish assertion — is a bug. Whichever side wins, the Request must end
+// reqFinished and must never be resurrected from a terminal state. Run with -race.
 func TestServe_CloseRaceIsSafe(t *testing.T) {
-	for range 50 {
+	for i := range 50 {
 		jw, err := New()
 		if err != nil {
 			t.Fatal(err)
@@ -250,7 +259,13 @@ func TestServe_CloseRaceIsSafe(t *testing.T) {
 			t.Fatal("claim failed")
 		}
 
-		var wg sync.WaitGroup
+		// Only the TestServe goroutine touches gotPanic and served; the WaitGroup's
+		// Done->Wait edge publishes both to the assertions below without a data race.
+		var (
+			wg       sync.WaitGroup
+			gotPanic any
+			served   bool
+		)
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
@@ -258,12 +273,25 @@ func TestServe_CloseRaceIsSafe(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			defer func() { _ = recover() }() // TestServe panics if Close won the race
+			defer func() { gotPanic = recover() }()
 			inCh, _, _, readyCh, doneCh := jw.TestServe(rq, func(any) {})
 			<-readyCh
 			close(inCh)
 			<-doneCh
+			served = true
 		}()
 		wg.Wait()
+
+		if gotPanic != nil {
+			if msg, ok := gotPanic.(string); !ok || !strings.HasPrefix(msg, "jaws: TestServe") {
+				t.Fatalf("iteration %d: unexpected panic %#v", i, gotPanic)
+			}
+			if served {
+				t.Fatalf("iteration %d: TestServe both served and panicked", i)
+			}
+		}
+		if got := rq.loadState(); got != reqFinished {
+			t.Fatalf("iteration %d: final state = %v, want finished", i, got)
+		}
 	}
 }
