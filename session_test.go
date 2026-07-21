@@ -903,7 +903,7 @@ func TestSession_ClaimedNonLastLeaveKeepsGrace(t *testing.T) {
 		if rqA.Session() != sess {
 			t.Fatal("expected rqA bound to session")
 		}
-		rqA.claimed.Store(true)
+		rqA.storeState(reqClaimed)
 
 		// Let the 1-minute creation grace window elapse. The session stays alive only
 		// because rqA is attached (len(requests) > 0), not because of its deadline.
@@ -925,11 +925,11 @@ func TestSession_ClaimedNonLastLeaveKeepsGrace(t *testing.T) {
 
 		// The live tab's WebSocket ends first, while rqB is still attached: this is a
 		// claimed request leaving non-last, so delRequest must still refresh the grace.
-		rqA.killSession()
+		rqA.killSession(rqA.loadState().claimed())
 
 		// The second tab's bootstrap is then recycled before its WebSocket connects:
 		// an unclaimed request leaving last, which leaves the refreshed deadline intact.
-		rqB.killSession()
+		rqB.killSession(rqB.loadState().claimed())
 
 		// A session that had a live WebSocket connection moments ago keeps its grace
 		// window so the client can reconnect.

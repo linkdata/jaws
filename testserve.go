@@ -10,9 +10,14 @@ import (
 // including the out-of-package harness in github.com/linkdata/jaws/jawstest.
 //
 // It subscribes rq to broadcasts, waits for the running Serve loop to process
-// the subscription, then runs rq.process in a new goroutine using freshly created
-// inbound/outbound channels, recycling rq when the loop stops. It panics if the
-// Jaws processing loop ([Jaws.Serve] or [Jaws.ServeWithTimeout]) is not running.
+// the subscription, transitions rq to running with the same checked transition
+// [Request.ServeHTTP] uses, then runs rq.process in a new goroutine using freshly
+// created inbound/outbound channels, recycling rq when the loop stops.
+//
+// rq must already be claimed via [Jaws.UseRequest]. TestServe panics — like its other
+// setup-failure panics — if the Jaws processing loop ([Jaws.Serve] or
+// [Jaws.ServeWithTimeout]) is not running, or if rq is not servable (unclaimed,
+// already being served, retired, or the instance is closed).
 //
 // TestServe is exported solely to let test harnesses outside package jaws drive a
 // request loop without access to unexported internals. It is not intended for
@@ -47,6 +52,18 @@ func (jw *Jaws) TestServe(rq *Request, onPanic func(recovered any)) (inCh chan w
 		panic("jaws: TestServe timed out subscribing; the Jaws processing loop (Serve or ServeWithTimeout) must be running")
 	}
 
+	// Transition to running with the same checked transition Request.ServeHTTP uses,
+	// synchronously and before creating the per-run channels. casState(reqClaimed,
+	// reqRunning) requires the Request to be claimed (via UseRequest) and not already
+	// running, retired, or closed, so a concurrent Jaws.Close/retirement or a second
+	// TestServe/ServeHTTP cannot resurrect it into reqRunning. On failure, release the
+	// subscription and panic (like TestServe's other setup-failure panics) rather than
+	// return a half-started harness or recycle a Request another owner is serving.
+	if !rq.startServe() {
+		jw.unsubscribe(bcastCh)
+		panic("jaws: TestServe: request is not servable; claim it via UseRequest first, and serve it only once and before Close")
+	}
+
 	inCh = make(chan wire.WsMsg)
 	outCh = make(chan wire.WsMsg, cap(bcastCh))
 	readyCh = make(chan struct{})
@@ -61,16 +78,6 @@ func (jw *Jaws) TestServe(rq *Request, onPanic func(recovered any)) (inCh chan w
 			onPanic(recover())
 			close(doneCh)
 		}()
-		// Mark the request running before driving rq.process, mirroring how
-		// ServeHTTP gates process with startServe. The maintenance pass retires
-		// only not-running requests, so leaving the request not-running while
-		// process iterates its elements would let an idle or context-cancelled
-		// request be canceled and unregistered mid-loop. Take jw.mu so the
-		// transition is serialized with the maintenance pass, which reads running
-		// under jw.mu; the final recycle resets running via releaseBuffersLocked.
-		jw.mu.Lock()
-		rq.running.Store(true)
-		jw.mu.Unlock()
 		close(readyCh)
 		rq.process(bcastCh, inCh, outCh)
 		jw.recycle(rq)

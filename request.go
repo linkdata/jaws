@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -102,9 +103,7 @@ type Request struct {
 	Jaws             *Jaws                   // (read-only) the JaWS instance the Request belongs to
 	JawsKey          key.Key                 // (read-only) random key assigned to this Request; routes JaWS URLs and request-targeted broadcasts only while registered
 	remoteIP         netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
-	registered       bool                    // present as a live identity in Jaws.requests; guarded by mu
-	running          atomic.Bool             // if ServeHTTP() is running
-	claimed          atomic.Bool             // if UseRequest() has been called for it
+	state            atomic.Int32            // reqState lifecycle (reqUnclaimable/reqPending/reqClaimed/reqRunning/reqFinished); see loadState/casState
 	lastWriteSeconds atomic.Int32            // [Jaws.runtimeSeconds] value at the most recent RequestWriter write; lock-free, drives pending-eviction preference (pendingEvictionVictimLocked) and idle expiry (maintenance)
 	mu               deadlock.RWMutex        // protects following
 	lastJid          Jid                     // last element Jid allocated within this Request
@@ -127,6 +126,69 @@ type eventFnCall struct {
 	jid  Jid
 	wht  what.What
 	data string
+}
+
+// reqState is the lifecycle state of a [Request], stored in Request.state as an
+// atomic int32. It consolidates what were separate registered/claimed/running flags
+// so the transitions are explicit and race-safe. The live states are reqPending,
+// reqClaimed and reqRunning; reqUnclaimable and reqFinished are terminal.
+type reqState int32
+
+const (
+	reqUnclaimable reqState = iota // created after Jaws.Close: canceled, never registered
+	reqPending                     // registered; initial render and the wait-for-WebSocket window
+	reqClaimed                     // UseRequest claimed it; ServeHTTP not yet running
+	reqRunning                     // ServeHTTP WebSocket loop running
+	reqFinished                    // completed or retired; unregistered
+)
+
+func (s reqState) String() string {
+	switch s {
+	case reqUnclaimable:
+		return "unclaimable"
+	case reqPending:
+		return "pending"
+	case reqClaimed:
+		return "claimed"
+	case reqRunning:
+		return "running"
+	case reqFinished:
+		return "finished"
+	default:
+		return "reqState(" + strconv.Itoa(int(s)) + ")"
+	}
+}
+
+// registered reports whether the Request is a live entry in Jaws.requests and a
+// valid identity-targeted broadcast destination.
+func (s reqState) registered() bool { return s == reqPending || s == reqClaimed || s == reqRunning }
+
+// claimed reports whether UseRequest has claimed the Request (it has reached at least
+// reqClaimed and is not a terminal state).
+func (s reqState) claimed() bool { return s == reqClaimed || s == reqRunning }
+
+func (rq *Request) loadState() reqState   { return reqState(rq.state.Load()) }
+func (rq *Request) storeState(s reqState) { rq.state.Store(int32(s)) }
+func (rq *Request) casState(old, want reqState) bool {
+	return rq.state.CompareAndSwap(int32(old), int32(want))
+}
+
+// finishLocked detaches a live Request from its Session and transitions it to
+// reqFinished. It captures whether the Request had been claimed before the
+// transition so [Session.delRequest] can still grant the claimed-WebSocket grace
+// window. Caller must hold rq.mu (and, for the map bookkeeping, jw.mu); the Request
+// must be in a live state (debug builds panic otherwise, catching a double-finish or
+// a terminal-state resurrection).
+func (rq *Request) finishLocked() {
+	// Capture the claimed status before the transition so delRequest can grant the
+	// grace window; rq.mu is held, so the state cannot change between here and the
+	// store below.
+	prev := rq.loadState()
+	if deadlock.Debug && !prev.registered() {
+		panic("jaws: finishLocked called on a terminal (non-live) Request state")
+	}
+	rq.killSessionLocked(prev.claimed())
+	rq.storeState(reqFinished)
 }
 
 // JawsKeyString returns the request key in the text form used by JaWS URLs.
@@ -188,7 +250,7 @@ func (rq *Request) advanceLastWriteSeconds(now int32) {
 // itself outlive the Request.)
 func (rq *Request) destKey() (k key.Key) {
 	rq.mu.RLock()
-	if rq.registered {
+	if rq.loadState().registered() {
 		k = rq.JawsKey
 	}
 	rq.mu.RUnlock()
@@ -202,7 +264,7 @@ func (rq *Request) destKey() (k key.Key) {
 // cleanup). Returns [ErrWebSocketIPMismatch] if the client IP does not match,
 // or [ErrRequestAlreadyClaimed] if it was already claimed.
 func (rq *Request) claim(r *http.Request) error {
-	if !rq.claimed.Load() {
+	if !rq.loadState().claimed() {
 		var actualIP netip.Addr
 		var httpDoneCh <-chan struct{}
 		if r != nil { // can be nil in tests
@@ -217,7 +279,7 @@ func (rq *Request) claim(r *http.Request) error {
 		if rq.ctx.Err() != nil {
 			return context.Cause(rq.ctx)
 		}
-		if rq.claimed.CompareAndSwap(false, true) {
+		if rq.casState(reqPending, reqClaimed) {
 			// Layer a fresh cancelable context over the current one (which may
 			// have been customized via SetContext) so the claim has its own
 			// cancel handle. The previous cancelFn must still be invoked on
@@ -243,16 +305,20 @@ func (rq *Request) claim(r *http.Request) error {
 	return ErrRequestAlreadyClaimed
 }
 
-func (rq *Request) killSessionLocked() {
+// killSessionLocked detaches the Request from its Session, if any. wasClaimed tells
+// [Session.delRequest] whether to grant the claimed-WebSocket grace window; the
+// caller must capture it from the lifecycle state before the finish transition, since
+// the state is not consulted here. Caller must hold rq.mu.
+func (rq *Request) killSessionLocked(wasClaimed bool) {
 	if rq.session != nil {
-		rq.session.delRequest(rq)
+		rq.session.delRequest(rq, wasClaimed)
 		rq.session = nil
 	}
 }
 
-func (rq *Request) killSession() {
+func (rq *Request) killSession(wasClaimed bool) {
 	rq.mu.Lock()
-	rq.killSessionLocked()
+	rq.killSessionLocked(wasClaimed)
 	rq.mu.Unlock()
 }
 
@@ -312,8 +378,10 @@ func (rq *Request) ensureAutoSession(w http.ResponseWriter, r *http.Request) {
 // under rq.mu so Jids stay monotonic and unique, and wsQueue is transferred under
 // muQueue — so there is no data race, no reused identity, and no duplicated Jid.
 func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
-	// Cancel first so a retained context observes cancellation, then detach the
-	// Request from its session and unregister its identity.
+	// Pure buffer mechanics: the caller (recycleLockedWithCause) has already cancelled
+	// the context, called finishLocked (which detached the session and transitioned to
+	// reqFinished), and removed the map entry. This only detaches the reusable
+	// collections for the pool.
 	//
 	// Deliberately do NOT reset lastJid or clear Element.ui/handlers/deleted here.
 	// The Request is never reused, so a stale *Element is unreachable through the
@@ -322,13 +390,6 @@ func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
 	// Element.ui and handlers lock-free) or duplicate an already-streamed Jid if the
 	// renderer keeps allocating. The render-input fields (initial, connectFn,
 	// remoteIP) are likewise preserved; they are collected with the Request.
-	if rq.cancelFn != nil {
-		rq.cancelFn(nil)
-	}
-	rq.killSessionLocked()
-	rq.running.Store(false)
-	rq.claimed.Store(false)
-	rq.registered = false
 
 	// Detach the reusable collections and hand them to the pool. Clear only the live
 	// length: every production path that shrinks a buffer already zeroes the vacated
@@ -505,7 +566,7 @@ func (rq *Request) replaceContext(fn func(oldCtx context.Context) (newCtx contex
 // can log it after releasing jw.mu — logging runs the user [Jaws.Logger], which
 // must not be invoked under a lock.
 func (rq *Request) maintenance(nowSeconds int32, requestTimeout time.Duration) (expired bool, cause error) {
-	if !rq.running.Load() {
+	if rq.loadState() != reqRunning {
 		rq.mu.Lock()
 		if rq.ctx.Err() != nil {
 			expired = true
@@ -659,7 +720,7 @@ func (rq *Request) wantMessage(msg *wire.Message) (yes bool) {
 	switch dest := msg.Dest.(type) {
 	case key.Key: // the request with this identity key
 		rq.mu.RLock()
-		if rq.registered {
+		if rq.loadState().registered() {
 			yes = rq.JawsKey == dest
 		}
 		rq.mu.RUnlock()
@@ -772,7 +833,7 @@ func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 // the tags are discarded rather than accumulating on a dead identity.
 func (rq *Request) appendDirtyTags(tags []any) {
 	rq.mu.Lock()
-	if rq.registered {
+	if rq.loadState().registered() {
 		rq.todoDirt = append(rq.todoDirt, tags...)
 	}
 	rq.mu.Unlock()
@@ -990,7 +1051,9 @@ func (rq *Request) startServe() (ok bool) {
 	registered := rq.Jaws.requests[rq.JawsKey] == rq
 	contextLive := rq.ctx != nil && rq.ctx.Err() == nil
 	rq.mu.RUnlock()
-	return registered && contextLive && rq.claimed.Load() && rq.running.CompareAndSwap(false, true)
+	// casState(reqClaimed, reqRunning) atomically requires the Request to be claimed
+	// (not already running, retired, or unclaimed) and transitions it to running.
+	return registered && contextLive && rq.casState(reqClaimed, reqRunning)
 }
 
 func (rq *Request) stopServe() {

@@ -261,7 +261,11 @@ func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP neti
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	rq.JawsKey = jawsKey
-	rq.registered = registered
+	if registered {
+		rq.storeState(reqPending)
+	} else {
+		rq.storeState(reqUnclaimable) // created after Jaws.Close: canceled, not claimable
+	}
 	rq.lastWriteSeconds.Store(jw.runtimeSeconds.Load())
 	rq.initial = r
 	rq.remoteIP = remoteIP
@@ -313,7 +317,7 @@ func (jw *Jaws) retireNonRunningRequestWithCauseLocked(rq *Request, err error) (
 // must hold jw.mu, and rq must not be running.
 func (jw *Jaws) retireNonRunningRequestCoreLocked(rq *Request, err error, causeOut *error) {
 	rq.mu.Lock()
-	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq && !rq.running.Load() {
+	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq && rq.loadState() != reqRunning {
 		jawsKey := rq.JawsKey
 		if causeOut != nil {
 			*causeOut = rq.cancelLocked(err)
@@ -323,12 +327,11 @@ func (jw *Jaws) retireNonRunningRequestCoreLocked(rq *Request, err error, causeO
 		jw.removePendingRequestLocked(rq)
 		jw.requests[jawsKey] = nil
 		jw.requestCount--
-		// Preserve the claimed state until session removal observes it. A claimed
-		// WebSocket that never reached ServeHTTP still earns the session grace
-		// period granted by Session.delRequest.
-		rq.killSessionLocked()
-		rq.registered = false
-		rq.claimed.Store(false)
+		// finishLocked captures whether the Request had been claimed before it detaches
+		// the session, so a claimed WebSocket that never reached ServeHTTP still earns
+		// the session grace period granted by Session.delRequest, then transitions the
+		// state to reqFinished.
+		rq.finishLocked()
 		runtime.AddCleanup(rq, releaseRetiredRequestKey, retiredRequestKey{jw: weak.Make(jw), jawsKey: jawsKey})
 	}
 	rq.mu.Unlock()
@@ -358,6 +361,7 @@ func (jw *Jaws) recycleLockedWithCause(rq *Request, err error) (cause error) {
 		// happened to be minted the same key. This mirrors the retirement path.
 		jw.requests[jawsKey] = nil
 		jw.requestCount--
+		rq.finishLocked() // detach session (grace if claimed) + transition to reqFinished
 		buffers = rq.releaseBuffersLocked()
 		runtime.AddCleanup(rq, releaseRetiredRequestKey, retiredRequestKey{jw: weak.Make(jw), jawsKey: jawsKey})
 	}

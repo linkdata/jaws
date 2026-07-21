@@ -167,9 +167,9 @@ func (jw *Jaws) distributeDirt() int {
 	//     buffers until they connect or finish (bounded by the request timeout),
 	//     so a value mutated in the render-to-connect window is reflected on the first
 	//     update pass.
-	//   - A Request can finish between snapshot and append. appendDirtyTags checks
-	//     rq.registered under rq.mu (which releaseBuffersLocked also holds while
-	//     clearing it), so a finished Request discards the stale tags instead of
+	//   - A Request can finish between snapshot and append. appendDirtyTags checks the
+	//     lifecycle state under rq.mu (which finishLocked also holds when it transitions
+	//     to reqFinished), so a finished Request discards the stale tags instead of
 	//     re-materializing storage on a dead identity.
 	for _, rq := range reqs {
 		rq.appendDirtyTags(dirt)

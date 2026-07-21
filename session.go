@@ -66,7 +66,11 @@ func (sess *Session) addRequest(rq *Request) {
 	sess.mu.Unlock()
 }
 
-func (sess *Session) delRequest(rq *Request) {
+// delRequest removes rq from the Session. wasClaimed is captured by the caller from
+// rq's lifecycle state before it finishes (see Request.killSessionLocked), rather than
+// read here, so the grace-window decision does not depend on the order in which the
+// finish transition and the session detach happen.
+func (sess *Session) delRequest(rq *Request, wasClaimed bool) {
 	sess.mu.Lock()
 	defer sess.mu.Unlock()
 	for i := range sess.requests {
@@ -80,7 +84,7 @@ func (sess *Session) delRequest(rq *Request) {
 			break
 		}
 	}
-	if rq.claimed.Load() {
+	if wasClaimed {
 		// A claimed request's WebSocket has ended; grant a fresh grace window so
 		// other tabs or a reconnect can re-attach before the session expires. This
 		// must fire even when other requests remain attached, otherwise an aged

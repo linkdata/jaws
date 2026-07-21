@@ -39,7 +39,9 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 
 	defer func() {
 		rq.Jaws.unsubscribe(broadcastMsgCh)
-		rq.killSession()
+		// process runs only for a running (hence claimed) Request, so its WebSocket
+		// earns the session grace window.
+		rq.killSession(rq.loadState().claimed())
 		cancelFn(nil)
 		close(eventCallCh)
 		for {
