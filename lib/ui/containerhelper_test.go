@@ -512,6 +512,7 @@ func benchChildren(start, count int) []jaws.UI {
 func BenchmarkContainerValidateChildren(b *testing.B) {
 	b.ReportAllocs()
 	children := benchChildren(0, 1000)
+	b.ResetTimer() // exclude the one-time fixture allocation so -benchtime=1x is honest
 	for range b.N {
 		if _, ok := firstUnusableChild(children); ok {
 			b.Fatal("unexpected unusable child")
@@ -858,19 +859,62 @@ func (*typedNilChildUI) JawsUpdate(*jaws.Element) {}
 
 // TestContainerAcceptsTypedNilChild documents that a typed nil child (a non-nil
 // interface holding a nil pointer) is usable — comparable and equal to itself — so the
-// container reconciles it normally rather than terminating the Request. Only a nil
-// interface child is rejected.
+// container renders it and, because it is a stable reflexive map key, reuses the same
+// Element across updates rather than churning (contrast a NaN-bearing child). Only a
+// nil interface child is rejected.
 func TestContainerAcceptsTypedNilChild(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	tc := &testContainer{contents: []jaws.UI{(*typedNilChildUI)(nil)}}
 	container := NewContainer("div", tc)
-	elem, _ := renderUI(t, rq, container)
+	elem, got := renderUI(t, rq, container)
 	if cause := context.Cause(rq.Context()); cause != nil {
 		t.Fatalf("render cancelled the Request: %v", cause)
 	}
+	if !strings.Contains(got, "child") {
+		t.Fatalf("render = %q, want it to contain the child output", got)
+	}
+	if len(container.contents) != 1 {
+		t.Fatalf("want 1 child Element, got %d", len(container.contents))
+	}
+	childElem := container.contents[0]
+	childJid := childElem.Jid()
+
 	container.JawsUpdate(elem)
 	if cause := context.Cause(rq.Context()); cause != nil {
 		t.Fatalf("update cancelled the Request: %v", cause)
+	}
+	if len(container.contents) != 1 {
+		t.Fatalf("want 1 child Element after update, got %d", len(container.contents))
+	}
+	if container.contents[0] != childElem {
+		t.Fatal("typed nil child was recreated on update instead of reused")
+	}
+	if got := container.contents[0].Jid(); got != childJid {
+		t.Fatalf("child Jid changed on update: %v -> %v", childJid, got)
+	}
+}
+
+// TestContainerValidatesWholeSliceBeforeRender pins that the pre-lock scan validates
+// the entire children slice before any child is created or rendered: a usable child
+// preceding an unusable one is neither rendered nor committed when the Request is
+// terminated.
+func TestContainerValidatesWholeSliceBeforeRender(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("VALIDMARKER")), nanChildUI{f: math.NaN()}}}
+	container := NewContainer("div", tc)
+	elem := rq.NewElement(container)
+	var sb strings.Builder
+	if err := elem.JawsRender(&sb, nil); err != nil {
+		t.Fatalf("JawsRender err = %v, want nil", err)
+	}
+	if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
+		t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
+	}
+	if strings.Contains(sb.String(), "VALIDMARKER") {
+		t.Fatalf("valid prefix child was rendered before the slice was validated: %q", sb.String())
+	}
+	if len(container.contents) != 0 {
+		t.Fatalf("no children should be committed, got %d", len(container.contents))
 	}
 }
 

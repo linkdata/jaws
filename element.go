@@ -171,7 +171,8 @@ func (elem *Element) JawsRender(w io.Writer, params []any) (err error) {
 //
 // Do not call this yourself unless it is from within another JawsUpdate implementation.
 //
-// A nil [UI] is a no-op (see [Element.JawsRender]).
+// A nil [UI] interface is a no-op; a typed nil dispatches to its [Updater] (see
+// [Element.JawsRender]).
 func (elem *Element) JawsUpdate() {
 	if ui := elem.UI(); ui != nil && !elem.deleted.Load() {
 		ui.JawsUpdate(elem)

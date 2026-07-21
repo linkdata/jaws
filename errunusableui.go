@@ -43,8 +43,10 @@ func (errUnusableUI) Is(target error) bool {
 // whether its [Renderer] tolerates a nil receiver is the concrete type's
 // responsibility.
 //
-// The returned error matches [tag.ErrNotUsableAsTag] with errors.Is. The container
-// widgets use it to terminate a Request handed such a child.
+// The returned error matches both [tag.ErrNotUsableAsTag] and [tag.ErrNotComparable]
+// under errors.Is. The container widgets use it to terminate a Request handed such a
+// child; a nil interface passed directly to [Request.NewElement] is instead tolerated
+// as a no-op Element, so this reports it unusable only for the container's benefit.
 func NewErrUnusableUI(ui UI) error {
 	if ui == nil || tag.NewErrNotUsableAsTag(ui) != nil {
 		return errUnusableUI{t: reflect.TypeOf(ui)}
