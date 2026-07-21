@@ -373,8 +373,9 @@ An `*Element` belongs to its owning Request and embeds a pointer to it.
 Render-scoped widgets may retain child Elements they create between render and
 update calls within that Request lifecycle, as container helpers do, but should
 access them only from those calls. Do not let an Element escape the Request
-lifecycle or pass it to background work: when the owning Request finishes it is
-unregistered and detached from its Elements, so a retained Element becomes inert.
+lifecycle or pass it to background work: once the owning Request finishes it is
+unregistered, so the Element receives no further broadcasts or updates, though its
+fields are left intact and its methods still operate on the finished Request.
 Request identities are never reused, so a stale Element can never come to
 represent an unrelated connection.
 
@@ -406,11 +407,14 @@ these invariants before relying on a green build alone:
 
 * Lock order stays `Jaws.mu -> Request.mu -> Session.mu`, with `Request.muQueue`
   and element/widget/value locks remaining leaf locks.
-* Request pooling clears keys, elements, tags, sessions, queues, cancellation
-  state, and pending/request maps before a pointer can be reused.
+* Request identities are never reused; only the internal buffers are pooled.
+  Completion releases queued dirt, elements, tags, and messages (clearing through
+  capacity), detaches the session, unregisters the identity, and reserves the key
+  with a tombstone until the Request is collected. It must not mutate render-visible
+  Element state, which a still-running initial renderer may read lock-free.
 * Dirty dispatch expands tags once, targets only elements registered for those
-  tags, and does not let one request's queued update reach a recycled request
-  with a different key.
+  tags, and does not let one request's queued update reach a finished, unregistered
+  request (whose key is never reassigned to another Request).
 * Session grace windows remain deliberate for unclaimed, claimed, failed-upgrade,
   and closed-WebSocket requests.
 * Subsecond `ServeWithTimeout` values are not useful in production. AI-assisted

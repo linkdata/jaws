@@ -216,15 +216,8 @@ func (jw *Jaws) nonZeroRandomLocked() key.Key {
 // WebSocket messages.
 //
 // Returns nil if the key was not found, the request was already claimed by an
-// earlier WebSocket callback, the initial HTTP render is still in progress, or the
-// IP doesn't match, in which case you should return an HTTP "404 Not Found" status.
-//
-// A Request is not claimable until its initial render completes: while the initial
-// request's context is still live (the rendering handler has not returned), this
-// returns nil WITHOUT consuming the single-use key. An early or malformed
-// /jaws/<key> callback that arrives mid-render therefore gets a 404 and cannot claim
-// (and so cannot tear down) the Request while the renderer still owns it, while the
-// real WebSocket, which connects only after the page has loaded, claims it normally.
+// earlier WebSocket callback, or the IP doesn't match, in which case you
+// should return an HTTP "404 Not Found" status.
 //
 // The returned pointer is borrowed for WebSocket handling. Do not retain it
 // after [Request.ServeHTTP] returns; see [Request].
@@ -232,7 +225,7 @@ func (jw *Jaws) UseRequest(jawsKey key.Key, r *http.Request) (rq *Request) {
 	if jawsKey != 0 {
 		var err error
 		jw.mu.Lock()
-		if waitingRq, ok := jw.requests[jawsKey]; ok && waitingRq != nil && !waitingRq.initialRenderMayBeActiveLocked() {
+		if waitingRq, ok := jw.requests[jawsKey]; ok && waitingRq != nil {
 			if err = waitingRq.claim(r); err == nil {
 				rq = waitingRq
 				jw.removePendingRequestLocked(rq)

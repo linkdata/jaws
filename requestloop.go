@@ -340,6 +340,11 @@ func (rq *Request) getSendMsgs() (toSend []wire.WsMsg) {
 				toSend = append(toSend, rq.wsQueue[i])
 			}
 		}
+		// Zero the drained entries before reslicing so their Data payloads (full
+		// Inner/Replace/Append HTML) are released promptly rather than lingering in the
+		// backing array's unused capacity for the rest of the request (and into the
+		// pooled buffer after teardown).
+		clear(rq.wsQueue)
 		rq.wsQueue = rq.wsQueue[:0]
 	}
 

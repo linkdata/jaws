@@ -2721,17 +2721,13 @@ func newTestServerWithSession(t *testing.T, withSession bool, logger Logger) (ts
 	jw.Logger = logger
 	ctx, cancel := context.WithTimeout(t.Context(), time.Hour)
 	rr := httptest.NewRecorder()
-	// The initial render request uses a background (non-cancelable) context so the
-	// Request is immediately claimable: the synthetic render is already complete.
-	// The controllable context is carried by the WebSocket claim below, so ts.cancel
-	// ends the request through its httpDoneCh, mirroring a real WebSocket HTTP request.
-	hr := httptest.NewRequest(http.MethodGet, "/", nil)
+	hr := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
 	var sess *Session
 	if withSession {
 		sess = jw.NewSession(rr, hr)
 	}
 	rq := jw.NewRequest(hr)
-	if rq != jw.UseRequest(rq.JawsKey, hr.WithContext(ctx)) {
+	if rq != jw.UseRequest(rq.JawsKey, hr) {
 		panic("UseRequest failed")
 	}
 	go jw.Serve()
@@ -3258,11 +3254,9 @@ func TestWS_ConnectFnFailureDoesNotBlockOnNonReadingPeer(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	defer cancel()
-	// The initial render request is claimable immediately (background context); the
-	// controllable context is carried by the WebSocket claim so it becomes httpDoneCh.
-	initial := httptest.NewRequest(http.MethodGet, "/", nil)
+	initial := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
 	rq := jw.NewRequest(initial)
-	if got := jw.UseRequest(rq.JawsKey, initial.WithContext(ctx)); got != rq {
+	if got := jw.UseRequest(rq.JawsKey, initial); got != rq {
 		t.Fatalf("UseRequest() = %v, want %v", got, rq)
 	}
 	rqCtx := rq.Context()
@@ -3369,11 +3363,9 @@ func TestWS_ConnectFnSubscriptionCleanup(t *testing.T) {
 
 			ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 			defer cancel()
-			// The initial render request is claimable immediately (background context);
-			// the controllable context rides the WebSocket claim as httpDoneCh.
-			initial := httptest.NewRequest(http.MethodGet, "/", nil)
+			initial := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
 			rq := jw.NewRequest(initial)
-			if got := jw.UseRequest(rq.JawsKey, initial.WithContext(ctx)); got != rq {
+			if got := jw.UseRequest(rq.JawsKey, initial); got != rq {
 				t.Fatalf("UseRequest() = %v, want %v", got, rq)
 			}
 			rq.SetConnectFn(tt.connectFn)
@@ -3694,6 +3686,12 @@ func TestReleaseBuffersLockedZeroesWsQueue(t *testing.T) {
 		wire.WsMsg{Data: "payload-a", Jid: 1, What: what.Inner},
 		wire.WsMsg{Data: "payload-b", Jid: 2, What: what.Inner},
 	)
+	// Simulate a drain that resliced the queue to zero length while leaving the
+	// payloads in the backing array's unused capacity (the getSendMsgs pattern before
+	// its own clear). releaseBuffersLocked must clear through capacity, not just
+	// length, so the pooled buffer retains no HTML payloads.
+	backing := rq.wsQueue[:cap(rq.wsQueue)]
+	rq.wsQueue = rq.wsQueue[:0]
 
 	buffers := rq.releaseBuffersLocked()
 
@@ -3703,7 +3701,7 @@ func TestReleaseBuffersLockedZeroesWsQueue(t *testing.T) {
 	if len(buffers.wsQueue) != 0 {
 		t.Fatalf("wsQueue len = %d, want 0", len(buffers.wsQueue))
 	}
-	for i, m := range buffers.wsQueue[:cap(buffers.wsQueue)] {
+	for i, m := range backing {
 		if m != (wire.WsMsg{}) {
 			t.Errorf("wsQueue backing slot %d retained data after releaseBuffersLocked: %+v", i, m)
 		}

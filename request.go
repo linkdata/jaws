@@ -171,25 +171,6 @@ func (rq *Request) destKey() (k key.Key) {
 	return
 }
 
-// initialRenderMayBeActiveLocked reports whether the initial HTTP render might
-// still own the Request, meaning it is not yet claimable by its WebSocket.
-//
-// It is true only while the initial request carries a cancelable context that has
-// not been canceled; net/http cancels that context when the rendering handler
-// returns (or the client connection closes), so consulting it at claim time is a
-// deterministic, synchronous "render complete" signal with no watcher goroutine to
-// race. A nil initial request, or one whose context cannot be canceled
-// ([context.Background], as httptest requests use), is treated as having no active
-// render so the Request is immediately claimable. Caller must hold jw.mu; rq.initial
-// is assigned once under jw.mu in getRequestLocked and is not reassigned.
-func (rq *Request) initialRenderMayBeActiveLocked() bool {
-	if rq.initial == nil {
-		return false
-	}
-	ctx := rq.initial.Context()
-	return ctx.Done() != nil && ctx.Err() == nil
-}
-
 // claim binds this request to the HTTP request making the WebSocket call. It
 // verifies the client IP matches, then atomically marks the request claimed and
 // layers a fresh cancelable context over the current one (preserving any context
@@ -313,12 +294,14 @@ func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
 	rq.claimed.Store(false)
 	rq.registered = false
 
-	// Detach the reusable collections and hand them to the pool. Clearing the entries
-	// first drops the *Element and payload references so the pooled backing storage
-	// pins nothing. todoDirt, elems and tagMap are guarded by rq.mu (held here).
+	// Detach the reusable collections and hand them to the pool. Clear through
+	// capacity, not just length: a drain may have resliced a buffer to len 0 while
+	// leaving payloads in the unused capacity (see getSendMsgs), and those references
+	// must not be pinned in the pooled backing storage. todoDirt, elems and tagMap are
+	// guarded by rq.mu (held here).
 	buffers = rq.buffers
-	clear(rq.todoDirt) // release tag references before pooling; mirrors makeUpdateList
-	clear(rq.elems)    // release *Element references so the pooled array pins nothing
+	clear(rq.todoDirt[:cap(rq.todoDirt)]) // release tag references before pooling
+	clear(rq.elems[:cap(rq.elems)])       // release *Element references so the pooled array pins nothing
 	clear(rq.tagMap)
 	if buffers != nil {
 		buffers.todoDirt = rq.todoDirt[:0]
@@ -337,7 +320,7 @@ func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
 	// surfacing that message in the next Request that borrows the buffer.
 	rq.muQueue.Lock()
 	rq.tailsent = false
-	clear(rq.wsQueue) // release queued message payloads before pooling
+	clear(rq.wsQueue[:cap(rq.wsQueue)]) // release queued message payloads (incl. drained tail) before pooling
 	if buffers != nil {
 		buffers.wsQueue = rq.wsQueue[:0]
 	}

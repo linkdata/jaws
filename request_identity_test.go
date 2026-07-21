@@ -174,61 +174,34 @@ func TestRequestFinishConcurrentWithRenderIsRaceFree(t *testing.T) {
 	wg.Wait()
 }
 
-// TestEarlyCallbackDuringRenderIsRefusedWithoutConsumingKey exercises the render
-// gate: while the initial request's context is still live (render in progress), a
-// /jaws/<key> callback is refused with 404 and does NOT consume the single-use key,
-// so the real WebSocket can still claim it once rendering completes.
-func TestEarlyCallbackDuringRenderIsRefusedWithoutConsumingKey(t *testing.T) {
+// TestNoscriptDuringLiveRenderRecordsJavascriptDisabled guards against re-adding a
+// render-timing gate that would 404 the <noscript> probe while a streamed page is
+// still rendering (its initial request context still live). The probe must reach the
+// Request, return 204, and record ErrJavascriptDisabled.
+func TestNoscriptDuringLiveRenderRecordsJavascriptDisabled(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer jw.Close()
+	go jw.Serve()
+	waitForServeLoop(t, jw)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	initial := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
-	initial.RemoteAddr = "192.0.2.1:1000"
 	rq := jw.NewRequest(initial)
-	jawsKey := rq.JawsKeyString()
 
-	cb := httptest.NewRequest(http.MethodGet, "/jaws/"+jawsKey, nil)
-	cb.RemoteAddr = initial.RemoteAddr
-	rec := httptest.NewRecorder()
-	jw.ServeHTTP(rec, cb)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("early callback during render: status = %d, want 404", rec.Code)
-	}
-	if rq.claimed.Load() {
-		t.Fatal("early callback consumed the key (claimed) while the render was in progress")
-	}
-	if rq.JawsKeyString() != jawsKey {
-		t.Fatal("early callback changed the Request key during render")
-	}
+	w := httptest.NewRecorder()
+	probe := httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString()+"/noscript", nil)
+	probe.RemoteAddr = initial.RemoteAddr
+	jw.ServeHTTP(w, probe)
 
-	// Render completes: the handler returns, so net/http cancels the initial context.
-	cancel()
-	ws := httptest.NewRequest(http.MethodGet, "/jaws/"+jawsKey, nil)
-	ws.RemoteAddr = initial.RemoteAddr
-	if got := jw.UseRequest(rq.JawsKey, ws); got != rq {
-		t.Fatal("WebSocket could not claim the Request after the render completed")
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("/noscript during live render: status = %d, want %d", w.Code, http.StatusNoContent)
 	}
-}
-
-// TestUseRequestNilInitialIsClaimable covers the render gate for a Request created
-// without an initial HTTP request: there is no render to wait for, so it is
-// immediately claimable.
-func TestUseRequestNilInitialIsClaimable(t *testing.T) {
-	jw, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer jw.Close()
-
-	rq := jw.NewRequest(nil)
-	defer jw.recycle(rq)
-	if got := jw.UseRequest(rq.JawsKey, nil); got != rq {
-		t.Fatalf("UseRequest(nil initial) = %v, want %v", got, rq)
+	if cause := context.Cause(rq.Context()); !errors.Is(cause, ErrJavascriptDisabled) {
+		t.Fatalf("cancellation cause = %v, want ErrJavascriptDisabled", cause)
 	}
 }
 
