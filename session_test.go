@@ -412,10 +412,11 @@ func TestSession_ProducersSkipRecycled(t *testing.T) {
 	live := jw.NewRequest(hr)
 	th.True(live.Session() == sess)
 
-	// Session methods operate on a snapshot taken after releasing sess.mu. This entry
-	// models a Request captured in that snapshot that then finished: identities are
-	// never reused, so it keeps its own (nonzero) key, but completion detached it from
-	// the Session (session == nil), so both producers must skip it.
+	// Session methods snapshot sess.requests under sess.mu, then process the snapshot
+	// after releasing it. This entry models a Request captured in that snapshot that
+	// then finished: identities are never reused, so it keeps its own (nonzero) key,
+	// but completion detached it from the Session (session == nil), so both producers
+	// must skip it.
 	finished := &Request{Jaws: jw, JawsKey: key.Key(0x9876)}
 	sess.mu.Lock()
 	sess.requests = append(sess.requests, finished)

@@ -22,13 +22,14 @@ import (
 	"github.com/linkdata/jaws/lib/wire"
 )
 
-// TestEarlyCallbackDoesNotRecycleInitialRender is the reproduction from issue #195:
-// an early /jaws/<key> callback that fails the WebSocket upgrade must not clear the
-// Request the initial HTTP handler is still rendering with. Because Requests keep a
-// stable identity and are never reused, the callback's stopServe completion only
-// unregisters and releases buffers; it never zeroes the key or hands the pointer to
-// another connection, so the initial renderer keeps a valid key.
-func TestEarlyCallbackDoesNotRecycleInitialRender(t *testing.T) {
+// TestEarlyCallbackPreservesInitialRenderIdentity is the reproduction from issue
+// #195: an early /jaws/<key> callback that fails the WebSocket upgrade tears the
+// Request down — clearing its collections — but must not destroy the identity the
+// initial HTTP handler is still rendering with. Because Requests keep a stable
+// identity and are never reused, completion unregisters the Request and releases its
+// buffers but never zeroes the key or hands the pointer to another connection, so the
+// initial renderer's pointer keeps a valid key.
+func TestEarlyCallbackPreservesInitialRenderIdentity(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +51,7 @@ func TestEarlyCallbackDoesNotRecycleInitialRender(t *testing.T) {
 	jw.ServeHTTP(httptest.NewRecorder(), callback)
 
 	if rq.JawsKeyString() == "" {
-		t.Fatal("Request was cleared while the initial render still owned it")
+		t.Fatal("early callback cleared the initial render's Request key")
 	}
 }
 

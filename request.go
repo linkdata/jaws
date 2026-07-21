@@ -245,7 +245,8 @@ func (rq *Request) killSession() {
 }
 
 // deadSession detaches sess and returns the Request identity that belonged to it.
-// A zero return means rq was already recycled or rebound to another Session.
+// A zero return means rq no longer belongs to sess: it has finished, or has been
+// detached from this Session.
 func (rq *Request) deadSession(sess *Session) (k key.Key) {
 	rq.mu.Lock()
 	if rq.session == sess {
@@ -292,10 +293,12 @@ func (rq *Request) ensureAutoSession(w http.ResponseWriter, r *http.Request) {
 // The caller must hold rq.mu. The WebSocket processing loop must have exited, but an
 // initial HTTP renderer may still be running concurrently (an early callback can
 // claim and tear down a Request mid-render). This is race-safe rather than fully
-// non-destructive: clearing the collections can degrade that render (later
-// GetElements and getElementByJid find nothing), but the Element fields and Jid
-// counter it reads lock-free are left intact and wsQueue is transferred under
-// muQueue, so there is no data race, no reused identity, and no duplicated Jid.
+// non-destructive: clearing the collections forgets the elements and tags rendered
+// so far (a subsequent GetElements finds nothing; a later NewElement repopulates
+// rq.elems and is again findable by Jid). What safety needs is preserved — the
+// lock-free Element fields (ui, handlers) are left intact, lastJid is advanced only
+// under rq.mu so Jids stay monotonic and unique, and wsQueue is transferred under
+// muQueue — so there is no data race, no reused identity, and no duplicated Jid.
 func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
 	// Cancel first so a retained context observes cancellation, then detach the
 	// Request from its session and unregister its identity.

@@ -355,11 +355,12 @@ is the only operation that claims that pending request for a WebSocket, and it
 also removes the request from the pending set. A claimed Request finishes after
 its WebSocket processing exits: its context is canceled, its buffers are released
 to the pool, and its key is reserved until the Request is collected rather than
-reassigned. Completion does not mutate render-visible Element state, so if an
+reassigned. Completion leaves the lock-free Element fields and the id counter intact, so if an
 early `/jaws/<key>` callback claims and tears down a Request whose initial render
-is still in flight, that render may degrade — its element and tag collections are
-cleared, so later lookups find nothing — but it stays race-safe: no data race, no
-reused identity, and no duplicated element id. Maintenance or the per-IP limit can
+is still in flight, that render may degrade — the elements and tags rendered so far
+are forgotten (a later lookup finds nothing, though newly created elements are
+tracked again) — but it stays race-safe: no data race, no reused identity, and no
+duplicated element id. Maintenance or the per-IP limit can
 instead retire a
 non-running Request: its context is canceled, its key becomes unclaimable, and it is
 excluded from `Pending` and `RequestCount`. Retirement preserves the Request's
