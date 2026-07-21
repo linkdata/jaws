@@ -428,9 +428,9 @@ func TestRequest_TailScriptConcurrentWithRecycle(t *testing.T) {
 }
 
 // TestRequest_wantMessageConcurrentWithRecycle stresses the broadcast identity
-// check: wantMessage reads rq.JawsKey under rq.mu while recycle zeroes it under the
-// same lock. The read and write must be serialized so there is no data race on the
-// key. Run with -race.
+// check: wantMessage reads rq.registered and rq.JawsKey under rq.mu while completion
+// clears registered under the same lock. The read and write must be serialized so
+// there is no data race. Run with -race.
 func TestRequest_wantMessageConcurrentWithRecycle(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
@@ -1150,10 +1150,11 @@ func TestBroadcast_ZeroKeyDestDropped(t *testing.T) {
 }
 
 // TestRequest_ProducersSkipRecycled covers the destKey()==0 branch in Request.Alert
-// and Request.Redirect. Once a Request is recycled it carries the zero key, so both
-// take the skip branch and never call Broadcast. A zero-key broadcast would be
-// dropped by Jaws.Broadcast anyway (see TestBroadcast_ZeroKeyDestDropped); the guard
-// avoids the round-trip, and exercising it is the only coverage of the branch.
+// and Request.Redirect. Once a Request is finished it is unregistered, so destKey()
+// returns zero (the key itself is preserved) and both take the skip branch and never
+// call Broadcast. A zero-key broadcast would be dropped by Jaws.Broadcast anyway
+// (see TestBroadcast_ZeroKeyDestDropped); the guard avoids the round-trip, and
+// exercising it is the only coverage of the branch.
 func TestRequest_ProducersSkipRecycled(t *testing.T) {
 	th := newTestHelper(t)
 	jw, _ := New()

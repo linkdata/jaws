@@ -358,8 +358,8 @@ to the pool, and its key is reserved until the Request is collected rather than
 reassigned. Completion does not mutate render-visible Element state, so if an
 early `/jaws/<key>` callback claims and tears down a Request whose initial render
 is still in flight, the render is not corrupted (it continues on a now finished,
-unregistered Request). Maintenance or the per-IP limit can instead retire an
-unclaimed Request: its context is canceled, its key becomes unclaimable, and it is
+unregistered Request). Maintenance or the per-IP limit can instead retire a
+non-running Request: its context is canceled, its key becomes unclaimable, and it is
 excluded from `Pending` and `RequestCount`. Retirement preserves the Request's
 identity, Elements and buffers so an initial HTTP handler still holding it can keep
 rendering. In every case a finished key cannot be assigned to another Request while

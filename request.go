@@ -50,10 +50,12 @@ type ConnectFn = func(rq *Request) error
 // requestBuffers holds the reusable per-Request storage: the pending-dirt list,
 // the element list, the tag-to-elements map and the outbound message queue.
 //
-// A [Request] borrows one from [Jaws.requestBufferPool] for its lifetime and
-// returns it when it finishes (see [Request.releaseBuffersLocked]). Pooling the
-// buffers rather than the whole Request keeps allocation low while giving every
-// Request a distinct, never-reused identity.
+// A [Request] borrows one from [Jaws.requestBufferPool] for its lifetime and returns
+// it on completion after WebSocket serving (see [Request.releaseBuffersLocked]); a
+// Request retired while non-running keeps its buffers instead, so an initial HTTP
+// handler that may still be rendering can keep using them. Pooling the buffers rather
+// than the whole Request keeps allocation low while giving every Request a distinct,
+// never-reused identity.
 type requestBuffers struct {
 	todoDirt []any
 	elems    []*Element
@@ -69,17 +71,23 @@ type requestBuffers struct {
 // are never retargeted to a different Request. A pointer retained past its
 // documented lifetime therefore can never alias an unrelated connection.
 //
-// A Request pointer is borrowed for the HTTP or WebSocket lifecycle that supplied
-// it. Do not retain it in application state or use it from a background goroutine:
-// once that lifecycle ends the Request finishes — its context is canceled and it is
-// unregistered from the [Jaws] instance — and its identity is never reused for
-// another connection. Its methods still run on a retained pointer, but the Request
-// receives no further broadcasts or updates, so the calls have no effect on any live
-// connection. (Completion after WebSocket serving additionally releases the reusable
-// buffers to the pool; retirement of an unclaimed Request preserves them so an
-// initial HTTP handler that still holds the pointer can finish rendering.) Background
-// work should instead retain [Request.Context] and, when it must terminate the
-// connection, the cancel function returned while deriving a replacement context
+// A Request pointer is borrowed for the lifecycle that supplied it — the initial
+// HTTP render (from [Jaws.NewRequest]) or the WebSocket handling (from
+// [Jaws.UseRequest]). Do not retain it in application state or use it from a
+// background goroutine; using it past that borrowed lifecycle is unsupported. The
+// end of the initial HTTP render does not by itself finish the Request: it normally
+// stays pending until [Jaws.UseRequest] claims it for the WebSocket. The Request
+// finishes when its WebSocket handling ends, or when a non-running Request is
+// retired; it is then unregistered, and its identity is never reused for another
+// connection.
+//
+// Because the identity is never reused, a retained pointer can never come to
+// represent a different connection, so identity-targeted operations (updates and
+// broadcasts aimed at this Request) reach nothing once it has finished. This is not
+// a general no-op guarantee: instance-wide calls such as [Request.Dirty] delegate to
+// [Jaws]-wide dirtying and can still update matching Elements on other live Requests.
+// Background work should instead retain [Request.Context] and, when it must terminate
+// the connection, the cancel function returned while deriving a replacement context
 // through [Request.SetContext].
 //
 // Unlike [Session], whose methods are nil-safe, Request methods are not safe to call on a
@@ -105,7 +113,7 @@ type Request struct {
 	httpDoneCh       <-chan struct{}         // once claimed, set to http.Request.Context().Done()
 	cancelFn         context.CancelCauseFunc // cancel function
 	connectFn        ConnectFn               // a ConnectFn to call before starting message processing for the Request
-	buffers          *requestBuffers         // reusable storage borrowed from Jaws.requestBufferPool; detached and returned when the Request finishes
+	buffers          *requestBuffers         // reusable storage borrowed from Jaws.requestBufferPool; returned to the pool on completion, kept on retirement
 	elems            []*Element              // our Elements
 	tagMap           map[any][]*Element      // maps tags to Elements
 	muQueue          deadlock.Mutex          // protects wsQueue and tailsent
@@ -741,8 +749,8 @@ func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 // and re-renders the affected elements. Takes rq.mu.
 //
 // It may run after the caller's dirt snapshot was taken but before rq finished
-// (see distributeDirt). A finished Request has released its buffers, so the tags
-// are discarded rather than re-materializing storage on a dead identity.
+// (see distributeDirt). A finished Request is unregistered (registered is false), so
+// the tags are discarded rather than accumulating on a dead identity.
 func (rq *Request) appendDirtyTags(tags []any) {
 	rq.mu.Lock()
 	if rq.registered {
