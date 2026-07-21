@@ -463,11 +463,12 @@ func TestSession_ProducersSkipRecycled(t *testing.T) {
 	jw.recycle(live)
 }
 
-// TestSessionCloseRejectsReusedRequest covers the race between Session.Close's
-// Request snapshot and Request pooling. A pointer removed from the Session may be
-// recycled for another client before Close detaches it; that new identity must not
-// receive the old Session's reload.
-func TestSessionCloseRejectsReusedRequest(t *testing.T) {
+// TestSessionCloseDoesNotReachLaterRequest covers the window between Session.Close
+// snapshotting a Request and detaching it: the Request may finish after Close's
+// snapshot but before Close detaches it. Because Request identities are never
+// reused, a later client gets a distinct Request that must not receive the old
+// Session's reload.
+func TestSessionCloseDoesNotReachLaterRequest(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -525,20 +526,14 @@ func TestSessionCloseRejectsReusedRequest(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	// sync.Pool may discard entries at any time. Keep the production reuse path
-	// deterministic by using stale as the allocation fallback as well.
-	poolNew := jw.reqPool.New
-	jw.reqPool.New = func() any { return stale }
-	defer func() { jw.reqPool.New = poolNew }()
-
 	// Drive the stale Request through the real capability endpoint. The missing
 	// WebSocket upgrade headers make ServeHTTP fail the upgrade and execute its
-	// normal stopServe/recycle path, placing stale in the production Request pool.
+	// normal stopServe completion path after Session.Close has snapshotted it.
 	staleEndpoint := httptest.NewRequest(http.MethodGet, "/jaws/"+stale.JawsKeyString(), nil)
 	staleEndpoint.RemoteAddr = sessionHTTP.RemoteAddr
 	jw.ServeHTTP(httptest.NewRecorder(), staleEndpoint)
-	if stale.JawsKey != 0 {
-		t.Fatalf("failed WebSocket upgrade did not recycle stale Request: key %v", stale.JawsKey)
+	if stale.Context().Err() == nil {
+		t.Fatal("failed WebSocket upgrade left stale Request live")
 	}
 
 	server := httptest.NewServer(jw)
@@ -546,11 +541,11 @@ func TestSessionCloseRejectsReusedRequest(t *testing.T) {
 	unrelatedHTTP := httptest.NewRequest(http.MethodGet, server.URL+"/unrelated", nil)
 	unrelatedHTTP.RemoteAddr = "127.0.0.1:2000"
 	unrelated := jw.NewRequest(unrelatedHTTP)
-	if unrelated != stale {
-		t.Fatal("request pool did not reuse stale pointer")
+	if unrelated == stale {
+		t.Fatal("later client reused stale Request identity")
 	}
 	if unrelated.Session() != nil {
-		t.Fatal("reused Request retained old Session")
+		t.Fatal("later Request retained old Session")
 	}
 	unrelatedKey := unrelated.JawsKey
 	connected := make(chan struct{})
@@ -571,7 +566,7 @@ func TestSessionCloseRejectsReusedRequest(t *testing.T) {
 	select {
 	case <-connected:
 	case <-time.After(time.Second):
-		t.Fatal("unrelated reused Request did not start its WebSocket")
+		t.Fatal("unrelated Request did not start its WebSocket")
 	}
 
 	close(releaseFirst)
@@ -592,7 +587,7 @@ func TestSessionCloseRejectsReusedRequest(t *testing.T) {
 		t.Fatalf("reading marker from unrelated Request: %v", err)
 	}
 	if strings.Contains(string(data), what.Reload.String()+"\t") {
-		t.Fatalf("old Session close reached unrelated reused Request: %q", data)
+		t.Fatalf("old Session close reached later Request: %q", data)
 	}
 	if !strings.Contains(string(data), marker) {
 		t.Fatalf("WebSocket message = %q, want marker %q", data, marker)

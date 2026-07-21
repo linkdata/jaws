@@ -1826,7 +1826,7 @@ func TestJaws_distributeDirt_AscendingOrder(t *testing.T) {
 	}
 	defer jw.Close()
 
-	rq := &Request{}
+	rq := &Request{registered: true}
 	jw.mu.Lock()
 	jw.requests[1] = rq
 	jw.requestCount++
@@ -2917,6 +2917,7 @@ func newUnpooledBenchRequest(jw *Jaws) (rq *Request) {
 			}
 			rq.mu.Lock()
 			rq.JawsKey = jawsKey
+			rq.registered = true
 			rq.lastWriteSeconds.Store(jw.runtimeSeconds.Load())
 			rq.remoteIP = remoteIP
 			rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
@@ -2934,11 +2935,18 @@ func recycleUnpooledBenchRequest(jw *Jaws, rq *Request) {
 	defer jw.mu.Unlock()
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	if rq.JawsKey != 0 {
+	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq {
+		// Model a fully-unpooled design: cancel and unregister, then drop the
+		// Request (and its buffers) for the garbage collector. Nothing is returned
+		// to a pool, so this is the allocation-heavy reference the pooled impl is
+		// compared against.
+		if rq.cancelFn != nil {
+			rq.cancelFn(nil)
+		}
 		jw.removePendingRequestLocked(rq)
 		delete(jw.requests, rq.JawsKey)
 		jw.requestCount--
-		rq.clearLocked()
+		rq.registered = false
 	}
 }
 
@@ -2948,16 +2956,20 @@ func populateBenchRequest(rq *Request, tags []any) {
 	}
 }
 
-// BenchmarkRequestLifecyclePooling compares the current pooled Request lifecycle
-// with a benchmark-only fresh-allocation lifecycle. It isolates the create,
-// optional render-state population and recycle path; it does not measure HTTP or
-// WebSocket serving.
+// BenchmarkRequestLifecyclePooling compares the production Request lifecycle with a
+// benchmark-only fully-unpooled lifecycle. It isolates the create, optional
+// render-state population and recycle path; it does not measure HTTP or WebSocket
+// serving.
 //
-// The impl axis selects pooled (jw.reqPool via NewRequest/recycle) versus a fresh
-// &Request each iteration. The mode axis runs the cycle single-goroutine (serial)
-// or under [testing.B.RunParallel], since a [sync.Pool]'s payoff is a GC-pressure
-// and high-churn effect that a single-goroutine run under-measures. Sub-benchmarks
-// use key=value names so "benchstat -col /impl" pivots pooled against unpooled.
+// The impl axis selects pooled (jw.NewRequest/recycle, which allocates a fresh
+// Request but reuses its buffers from jw.requestBufferPool) versus unpooled (a
+// fresh &Request with freshly allocated buffers each iteration, nothing reused).
+// The mode axis runs the cycle single-goroutine (serial) or under
+// [testing.B.RunParallel], since a [sync.Pool]'s payoff is a GC-pressure and
+// high-churn effect that a single-goroutine run under-measures. Sub-benchmarks use
+// key=value names so "benchstat -col /impl" pivots pooled against unpooled, and
+// running it on this branch versus main pivots the buffer-pool design against the
+// former whole-Request pool.
 func BenchmarkRequestLifecyclePooling(b *testing.B) {
 	for _, c := range []struct {
 		name  string

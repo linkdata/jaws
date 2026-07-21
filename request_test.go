@@ -144,12 +144,12 @@ func TestRequest_wantMessage_KeyDest(t *testing.T) {
 	}
 }
 
-// TestRequest_wantMessage_RejectsRecycledKey is the core broadcast regression:
-// matching on the identity key rather than the *Request pointer lets the loop
-// reject a message aimed at a request that was recycled and reused under a new key,
-// even when it is the very same pooled object. A dest==*Request match could not
-// tell the reused object from the original; a key match can.
-func TestRequest_wantMessage_RejectsRecycledKey(t *testing.T) {
+// TestRequest_wantMessage_RejectsFinishedRequest is the core broadcast regression:
+// wantMessage gates the identity-key match on rq.registered, so a finished Request
+// stops matching its own key. Because a Request identity is never reused for another
+// connection, a message aimed at a finished Request's key reaches no one, and a
+// later Request matches only its own distinct key.
+func TestRequest_wantMessage_RejectsFinishedRequest(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()
 	go jw.Serve()
@@ -159,22 +159,17 @@ func TestRequest_wantMessage_RejectsRecycledKey(t *testing.T) {
 	staleKey := rq.JawsKey
 	is.True(rq.wantMessage(&wire.Message{Dest: staleKey}))
 
-	// Recycle zeroes the key, so the same object no longer matches the old key.
+	// Finishing unregisters rq; it keeps its key but no longer matches it.
 	jw.recycle(rq)
 	is.Equal(rq.wantMessage(&wire.Message{Dest: staleKey}), false)
 
-	// Reuse the same object under a fresh key, as the pool handing it back to a new
-	// connection would. Re-key directly under rq.mu (the lock destKey/wantMessage
-	// use) so the aliasing is deterministic rather than dependent on the pool
-	// returning this struct. A message still aimed at the old key must be rejected
-	// even though rq is the same object it once identified; one aimed at the new
-	// key is accepted.
-	newKey := staleKey + 1
-	rq.mu.Lock()
-	rq.JawsKey = newKey
-	rq.mu.Unlock()
-	is.Equal(rq.wantMessage(&wire.Message{Dest: staleKey}), false)
-	is.True(rq.wantMessage(&wire.Message{Dest: newKey}))
+	// A later client gets a distinct Request with a distinct key. It matches only its
+	// own key, and the finished Request's key is never reassigned to it.
+	replacement := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/next", nil))
+	defer jw.recycle(replacement)
+	is.True(replacement != rq)
+	is.True(replacement.wantMessage(&wire.Message{Dest: replacement.JawsKey}))
+	is.Equal(replacement.wantMessage(&wire.Message{Dest: staleKey}), false)
 }
 
 func TestRequest_HeadHTML(t *testing.T) {
@@ -655,7 +650,7 @@ func (ctx *deferredAfterContext) fire() {
 	}
 }
 
-func TestRequest_SetContextDelayedCallbackDoesNotCancelReusedRequest(t *testing.T) {
+func TestRequest_SetContextDelayedCallbackDoesNotCancelNextRequest(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -682,13 +677,14 @@ func TestRequest_SetContextDelayedCallbackDoesNotCancelReusedRequest(t *testing.
 	deferred.cancel()
 	jw.recycle(first)
 
-	poolNew := jw.reqPool.New
-	jw.reqPool.New = func() any { return first }
-	defer func() { jw.reqPool.New = poolNew }()
+	// Requests keep a stable identity and are never reused, so NewRequest returns a
+	// distinct Request. A delayed SetContext callback still bound to first must not
+	// reach this next Request's context.
 	second := jw.NewRequest(nil)
-	if second != first {
-		t.Fatal("request pool did not reuse the Request")
+	if second == first {
+		t.Fatal("NewRequest reused a finished Request identity")
 	}
+	defer jw.recycle(second)
 	secondCtx := second.Context()
 	callbackArmed.Store(true)
 	deferred.fire()
@@ -699,10 +695,9 @@ func TestRequest_SetContextDelayedCallbackDoesNotCancelReusedRequest(t *testing.
 	}
 	select {
 	case <-secondCtx.Done():
-		t.Fatal("delayed SetContext callback canceled the reused Request")
+		t.Fatal("delayed SetContext callback canceled the next Request")
 	default:
 	}
-	jw.recycle(second)
 }
 
 func TestRequest_OutboundRespectsContextDone(t *testing.T) {
@@ -3658,27 +3653,30 @@ func waitForRequestCounts(t *testing.T, jw *Jaws, wantTotal, wantActive int, tim
 	}
 }
 
-// TestClearLockedZeroesWsQueue verifies clearLocked releases the queued wire
-// message payloads before the Request is pooled, mirroring its clear() of todoDirt
-// and elems. A bare [:0] reslice would leave the WsMsg values (including Data,
-// which holds full Inner/Replace/Append HTML payloads) live in the backing array
-// for the pooled Request's idle lifetime.
-func TestClearLockedZeroesWsQueue(t *testing.T) {
-	rq := &Request{tagMap: map[any][]*Element{}}
+// TestReleaseBuffersLockedZeroesWsQueue verifies releaseBuffersLocked releases the
+// queued wire message payloads before the storage is returned to the buffer pool,
+// mirroring its clear() of todoDirt and elems. A bare [:0] reslice would leave the
+// WsMsg values (including Data, which holds full Inner/Replace/Append HTML payloads)
+// live in the pooled backing array for its idle lifetime.
+func TestReleaseBuffersLockedZeroesWsQueue(t *testing.T) {
+	rq := &Request{tagMap: map[any][]*Element{}, buffers: &requestBuffers{}}
 	rq.wsQueue = append(
 		rq.wsQueue,
 		wire.WsMsg{Data: "payload-a", Jid: 1, What: what.Inner},
 		wire.WsMsg{Data: "payload-b", Jid: 2, What: what.Inner},
 	)
 
-	rq.clearLocked()
+	buffers := rq.releaseBuffersLocked()
 
-	if len(rq.wsQueue) != 0 {
-		t.Fatalf("wsQueue len = %d, want 0", len(rq.wsQueue))
+	if buffers == nil {
+		t.Fatal("releaseBuffersLocked returned nil buffers")
 	}
-	for i, m := range rq.wsQueue[:cap(rq.wsQueue)] {
+	if len(buffers.wsQueue) != 0 {
+		t.Fatalf("wsQueue len = %d, want 0", len(buffers.wsQueue))
+	}
+	for i, m := range buffers.wsQueue[:cap(buffers.wsQueue)] {
 		if m != (wire.WsMsg{}) {
-			t.Errorf("wsQueue backing slot %d retained data after clearLocked: %+v", i, m)
+			t.Errorf("wsQueue backing slot %d retained data after releaseBuffersLocked: %+v", i, m)
 		}
 	}
 }
@@ -3718,11 +3716,13 @@ func TestDelRequestNilsVacatedSlot(t *testing.T) {
 }
 
 // TestRequest_JawsKeyReadsAreLockedDuringRecycle verifies that the request-key
-// readers used while the application renders the initial HTML page
-// (JawsKeyString, String, HeadHTML and TailHTML) read rq.JawsKey under rq.mu, so
-// they do not race the rq.mu-guarded writes to rq.JawsKey that clearLocked and
-// getRequestLocked perform when a Request completes and its pooled storage is
-// reused. Run with -race.
+// readers used while the application renders the initial HTML page (JawsKeyString,
+// String, HeadHTML and TailHTML) read rq.JawsKey under rq.mu, so they do not race
+// the rq.mu-guarded writers active during the same window: getRequestLocked assigns
+// rq.JawsKey under rq.mu, and claim and releaseBuffersLocked mutate rq.mu-guarded
+// fields when a Request is claimed or finishes. The writer goroutine drives a
+// concurrent rq.mu-guarded key write to prove the readers hold the lock. Run with
+// -race.
 func TestRequest_JawsKeyReadsAreLockedDuringRecycle(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -3736,8 +3736,7 @@ func TestRequest_JawsKeyReadsAreLockedDuringRecycle(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	// Writer: mimic clearLocked / getRequestLocked, which assign rq.JawsKey while
-	// holding rq.mu.
+	// Writer: mimic getRequestLocked, which assigns rq.JawsKey while holding rq.mu.
 	go func() {
 		defer wg.Done()
 		for i := range iterations {

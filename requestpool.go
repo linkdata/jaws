@@ -1,9 +1,11 @@
 package jaws
 
-// This file manages the server-side Request pool: NewRequest creates a pending
-// Request, UseRequest claims it when the WebSocket connects, the per-IP pending
-// limit retires the oldest unclaimed Request, the random helpers mint identity
-// keys, and recycle/cancelIfCurrent tear completed Requests down.
+// This file manages server-side Request lifecycles: NewRequest creates a pending
+// Request with a fresh, never-reused identity and reusable buffers, UseRequest
+// claims it when the WebSocket connects, the per-IP pending limit retires the
+// oldest unclaimed Request, the random helpers mint identity keys, and
+// recycle/cancelIfCurrent finish completed Requests, returning only their buffers
+// to the pool.
 
 import (
 	"context"
@@ -42,10 +44,11 @@ import (
 // A Request created after [Jaws.Close] has an already-canceled context and cannot
 // be claimed by [Jaws.UseRequest].
 //
-// When timeout maintenance or the per-IP pending limit retires an unclaimed
-// Request, its key becomes unclaimable. The key also remains unavailable for
-// assignment to another Request while the retired Request is reachable; no
-// deadline is guaranteed for later reuse.
+// Every call returns a distinct Request identity that is never reused for another
+// connection. When timeout maintenance or the per-IP pending limit retires an
+// unclaimed Request, its key remains unavailable for assignment to another Request
+// while the retired Request is reachable; no deadline is guaranteed for later key
+// reuse.
 //
 // NewRequest panics if the system CSPRNG ([crypto/rand]) fails while generating
 // the request key, which does not happen on supported platforms.
@@ -234,20 +237,36 @@ func (jw *Jaws) UseRequest(jawsKey key.Key, r *http.Request) (rq *Request) {
 	return
 }
 
-// getRequestLocked allocates a Request from the pool for jawsKey. remoteIP is the
-// already-resolved client IP for r (see NewRequest, the sole caller), passed in to
-// avoid recomputing jw.clientIP(r). attachSession is false after Jaws.Close, when
-// the canceled Request is returned without registration. Caller must hold jw.mu.
-func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP netip.Addr, attachSession bool) (rq *Request) {
-	rq = jw.reqPool.Get().(*Request)
+// getRequestLocked allocates a fresh Request identity for jawsKey, borrowing
+// reusable storage from jw.requestBufferPool. remoteIP is the already-resolved
+// client IP for r (see NewRequest, the sole caller), passed in to avoid recomputing
+// jw.clientIP(r). registered is false after Jaws.Close, when the canceled Request
+// is returned without being registered in jw.requests. Caller must hold jw.mu.
+func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP netip.Addr, registered bool) (rq *Request) {
+	buffers := jw.requestBufferPool.Get().(*requestBuffers)
+	rq = &Request{
+		Jaws:     jw,
+		buffers:  buffers,
+		todoDirt: buffers.todoDirt,
+		elems:    buffers.elems,
+		tagMap:   buffers.tagMap,
+		wsQueue:  buffers.wsQueue,
+	}
+	// Detach the storage from the pooled holder; releaseBuffersLocked reattaches it
+	// on completion. The holder must not alias a live Request's fields.
+	buffers.todoDirt = nil
+	buffers.elems = nil
+	buffers.tagMap = nil
+	buffers.wsQueue = nil
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	rq.JawsKey = jawsKey
+	rq.registered = registered
 	rq.lastWriteSeconds.Store(jw.runtimeSeconds.Load())
 	rq.initial = r
 	rq.remoteIP = remoteIP
 	rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
-	if attachSession && r != nil {
+	if registered && r != nil {
 		if sess := jw.getSessionLocked(getCookieSessionsIDs(r.Header, jw.CookieName), rq.remoteIP); sess != nil {
 			sess.addRequest(rq)
 			rq.session = sess
@@ -308,6 +327,7 @@ func (jw *Jaws) retireNonRunningRequestCoreLocked(rq *Request, err error, causeO
 		// WebSocket that never reached ServeHTTP still earns the session grace
 		// period granted by Session.delRequest.
 		rq.killSessionLocked()
+		rq.registered = false
 		rq.claimed.Store(false)
 		runtime.AddCleanup(rq, releaseRetiredRequestKey, retiredRequestKey{jw: weak.Make(jw), jawsKey: jawsKey})
 	}
@@ -315,22 +335,31 @@ func (jw *Jaws) retireNonRunningRequestCoreLocked(rq *Request, err error, causeO
 	runtime.KeepAlive(rq)
 }
 
-// recycleLockedWithCause cancels and recycles rq.
+// recycleLockedWithCause finishes rq and returns its reusable buffers to
+// jw.requestBufferPool. The Request itself is never pooled or reused; it keeps its
+// identity and canceled context and is reclaimed by the garbage collector once no
+// borrower retains it.
 //
 // It uses err as the cancellation cause when non-nil.
 // It returns the cancellation cause (or nil) instead of logging it, so the caller
 // can log it after releasing jw.mu (see the package locking contract). Caller must
 // hold jw.mu.
 func (jw *Jaws) recycleLockedWithCause(rq *Request, err error) (cause error) {
+	var buffers *requestBuffers
 	rq.mu.Lock()
-	defer rq.mu.Unlock()
 	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq {
 		cause = rq.cancelLocked(err)
 		jw.removePendingRequestLocked(rq)
 		delete(jw.requests, rq.JawsKey)
 		jw.requestCount--
-		rq.clearLocked()
-		jw.reqPool.Put(rq)
+		buffers = rq.releaseBuffersLocked()
+	}
+	rq.mu.Unlock()
+	// Return the buffers after releasing rq.mu; requestBufferPool.Put takes no lock,
+	// but keeping the pool interaction outside the Request lock mirrors the recycle
+	// path's other post-unlock work and avoids holding rq.mu longer than needed.
+	if buffers != nil {
+		jw.requestBufferPool.Put(buffers)
 	}
 	return
 }
@@ -347,11 +376,11 @@ func (jw *Jaws) recycle(rq *Request) {
 
 // cancelIfCurrent cancels rq only if it is still the [Request] registered for
 // jawsKey. A caller that looks up a Request and later cancels it without holding
-// jw.mu in between (the /jaws/.tail write-error path in [Jaws.ServeHTTP]) holds
-// a pointer that may have been recycled and reused for a different connection,
-// and cancelling such a stale pointer would kill the unrelated new request.
-// Holding jw.mu across the cancel keeps the identity check valid, since
-// recycling requires the jw.mu write lock.
+// jw.mu in between (the /jaws/.tail write-error path in [Jaws.ServeHTTP]) holds a
+// pointer whose Request may have finished and been unregistered. Cancelling a
+// finished Request is harmless (its identity is never reused), but the identity
+// check avoids logging a spurious cancellation; holding jw.mu across the cancel
+// keeps that check valid, since finishing requires the jw.mu write lock.
 func (jw *Jaws) cancelIfCurrent(jawsKey key.Key, rq *Request, err error) {
 	var cause error
 	jw.mu.RLock()

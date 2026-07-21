@@ -67,7 +67,7 @@ func (jw *Jaws) TestServe(rq *Request, onPanic func(recovered any)) (inCh chan w
 		// process iterates its elements would let an idle or context-cancelled
 		// request be canceled and unregistered mid-loop. Take jw.mu so the
 		// transition is serialized with the maintenance pass, which reads running
-		// under jw.mu; the final recycle resets running via clearLocked.
+		// under jw.mu; the final recycle resets running via releaseBuffersLocked.
 		jw.mu.Lock()
 		rq.running.Store(true)
 		jw.mu.Unlock()
