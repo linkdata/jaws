@@ -177,8 +177,13 @@ func (rq *Request) advanceLastWriteSeconds(now int32) {
 // finished Request stays reachable, since its key is held reserved by a tombstone.
 // After the Request is collected the tombstone is removed and the CSPRNG may
 // eventually reissue that key value to a new Request, which such a stale value could
-// then match. The *Request pointer itself is never reused, so pointer-derived
-// operations never reach a different connection.
+// then match. Two narrower guarantees always hold: the *Request pointer is never
+// reused, so it never aliases another connection, and destKey returns zero once the
+// Request has finished, so it cannot hand back the finished Request's destination.
+// (This is not a blanket "pointer-derived operations are safe" claim: [Request.Dirty]
+// dirties matching Elements on other live Requests by design, and an Alert or
+// Redirect message queued before completion carries a key.Key destination that can
+// itself outlive the Request.)
 func (rq *Request) destKey() (k key.Key) {
 	rq.mu.RLock()
 	if rq.registered {
