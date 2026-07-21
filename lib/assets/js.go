@@ -58,14 +58,18 @@ func PreloadHTML(urls ...*url.URL) (htmlCode, faviconURL string) {
 			cssurls = append(cssurls, urlstr)
 			continue
 		default:
-			if strings.HasPrefix(mimetype, "image") {
+			// Match MIME families on the "type/" prefix (case-insensitively) so
+			// unrelated types such as "imagery/*" or "fontastic/*" are not mistaken
+			// for "image/*" or "font/*".
+			lowmime := strings.ToLower(mimetype)
+			if strings.HasPrefix(lowmime, "image/") {
 				asattr = "image"
 				if strings.HasPrefix(strings.ToLower(path.Base(u.Path)), "favicon") {
 					favicontype = mimetype
 					faviconURL = urlstr
 					continue
 				}
-			} else if strings.HasPrefix(mimetype, "font") {
+			} else if strings.HasPrefix(lowmime, "font/") {
 				asattr = "font"
 			}
 		}
