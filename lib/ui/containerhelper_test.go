@@ -895,9 +895,9 @@ func TestContainerAcceptsTypedNilChild(t *testing.T) {
 }
 
 // TestContainerValidatesWholeSliceBeforeRender pins that the pre-lock scan validates
-// the entire children slice before any child is created or rendered: a usable child
-// preceding an unusable one is neither rendered nor committed when the Request is
-// terminated.
+// the entire children slice before any child is created, rendered, or committed: a
+// usable child preceding an unusable one produces no Element, no output, and no
+// committed content when the Request is terminated.
 func TestContainerValidatesWholeSliceBeforeRender(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("VALIDMARKER")), nanChildUI{f: math.NaN()}}}
@@ -915,6 +915,44 @@ func TestContainerValidatesWholeSliceBeforeRender(t *testing.T) {
 	}
 	if len(container.contents) != 0 {
 		t.Fatalf("no children should be committed, got %d", len(container.contents))
+	}
+	// No child Element was created: NewElement is never reached, so the Jid that the
+	// valid prefix child would have taken (the one after the container's) is unused.
+	if child := rq.GetElementByJid(elem.Jid() + 1); child != nil {
+		t.Fatalf("a child Element (Jid %v) was created despite prevalidation abort", child.Jid())
+	}
+}
+
+// TestContainerUpdateValidatesWholeSliceBeforeReconcile is the update-path counterpart:
+// when a wanted slice has a usable child before an unusable one, the whole slice is
+// validated before reconcile touches u.contents or the pool, so there is no partial
+// reconciliation — the existing child is not removed, the new valid child is not
+// created, and consequently no Remove/Append/Order op is queued.
+func TestContainerUpdateValidatesWholeSliceBeforeReconcile(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("OLD"))}}
+	container := NewContainer("div", tc)
+	elem, _ := renderUI(t, rq, container)
+	if len(container.contents) != 1 {
+		t.Fatalf("want 1 child before update, got %d", len(container.contents))
+	}
+	childElem := container.contents[0]
+	nextJid := childElem.Jid() + 1 // the Jid a newly-created child would take
+
+	tc.contents = []jaws.UI{NewSpan(testHTMLGetter("NEWVALID")), nanChildUI{f: math.NaN()}}
+	container.JawsUpdate(elem)
+
+	if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
+		t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
+	}
+	if len(container.contents) != 1 || container.contents[0] != childElem {
+		t.Fatalf("contents changed on aborted update: partial reconciliation occurred")
+	}
+	if rq.GetElementByJid(childElem.Jid()) == nil {
+		t.Fatal("existing child was removed on aborted update")
+	}
+	if e := rq.GetElementByJid(nextJid); e != nil {
+		t.Fatalf("a new child Element (Jid %v) was created on aborted update", e.Jid())
 	}
 }
 
