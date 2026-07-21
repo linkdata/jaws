@@ -103,7 +103,9 @@ func Test_PreloadHTML(t *testing.T) {
 	// regardless of the platform's MIME table.
 	fontMime, _, _ := strings.Cut(mime.TypeByExtension(".woff2"), ";")
 	var wantFontLink string
-	if strings.HasPrefix(fontMime, "font") {
+	// Classify the family exactly as PreloadHTML does (case-insensitive "font/"
+	// prefix) so the expectation matches the code on any platform MIME table.
+	if strings.HasPrefix(strings.ToLower(fontMime), "font/") {
 		wantFontLink = `<link rel="preload" href="someExtraFont.woff2" as="font" type="` + fontMime + `">`
 	} else {
 		// No font/* MIME on this platform: still a preload link, but no as/type.
