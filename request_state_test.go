@@ -259,12 +259,17 @@ func TestServe_CloseRaceIsSafe(t *testing.T) {
 			t.Fatal("claim failed")
 		}
 
-		// Only the TestServe goroutine touches gotPanic and served; the WaitGroup's
-		// Done->Wait edge publishes both to the assertions below without a data race.
+		// gotPanic is the synchronous setup panic (Close won before serving started);
+		// asyncPanic is anything TestServe's process/recycle goroutine recovers, handed
+		// back via onPanic before doneCh closes. Both are written only by the TestServe
+		// goroutine (asyncPanic under the onPanic->close(doneCh)->{<-doneCh} edge), and
+		// the WaitGroup's Done->Wait edge publishes them to the assertions below, so the
+		// reads are race-free.
 		var (
-			wg       sync.WaitGroup
-			gotPanic any
-			served   bool
+			wg         sync.WaitGroup
+			gotPanic   any
+			asyncPanic any
+			served     bool
 		)
 		wg.Add(2)
 		go func() {
@@ -274,7 +279,7 @@ func TestServe_CloseRaceIsSafe(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			defer func() { gotPanic = recover() }()
-			inCh, _, _, readyCh, doneCh := jw.TestServe(rq, func(any) {})
+			inCh, _, _, readyCh, doneCh := jw.TestServe(rq, func(recovered any) { asyncPanic = recovered })
 			<-readyCh
 			close(inCh)
 			<-doneCh
@@ -282,6 +287,13 @@ func TestServe_CloseRaceIsSafe(t *testing.T) {
 		}()
 		wg.Wait()
 
+		// A panic escaping the process/recycle goroutine is delivered here via onPanic
+		// instead of being discarded: a terminal->running resurrection reaching recycle
+		// would trip finishLocked's assertion, which the final reqFinished check below
+		// cannot see (recycle still ends the request finished).
+		if asyncPanic != nil {
+			t.Fatalf("iteration %d: TestServe process/recycle goroutine panicked: %#v", i, asyncPanic)
+		}
 		if gotPanic != nil {
 			if msg, ok := gotPanic.(string); !ok || !strings.HasPrefix(msg, "jaws: TestServe") {
 				t.Fatalf("iteration %d: unexpected panic %#v", i, gotPanic)
