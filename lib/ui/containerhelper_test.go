@@ -916,18 +916,22 @@ func TestContainerValidatesWholeSliceBeforeRender(t *testing.T) {
 	if len(container.contents) != 0 {
 		t.Fatalf("no children should be committed, got %d", len(container.contents))
 	}
-	// No child Element was created: NewElement is never reached, so the Jid that the
-	// valid prefix child would have taken (the one after the container's) is unused.
-	if child := rq.GetElementByJid(elem.Jid() + 1); child != nil {
-		t.Fatalf("a child Element (Jid %v) was created despite prevalidation abort", child.Jid())
+	// No child Element was ever created: NewElement is never reached. Jids are
+	// monotonic (a created-then-deleted Element still advances the counter, and would
+	// not be found by a registry lookup), so a probe created now must take the Jid
+	// right after the container's; a higher Jid would mean a child was created.
+	probe := rq.NewElement(NewSpan(testHTMLGetter("probe")))
+	if probe.Jid() != elem.Jid()+1 {
+		t.Fatalf("a child Element was created despite prevalidation abort: probe Jid %v, want %v", probe.Jid(), elem.Jid()+1)
 	}
 }
 
 // TestContainerUpdateValidatesWholeSliceBeforeReconcile is the update-path counterpart:
 // when a wanted slice has a usable child before an unusable one, the whole slice is
-// validated before reconcile touches u.contents or the pool, so there is no partial
-// reconciliation — the existing child is not removed, the new valid child is not
-// created, and consequently no Remove/Append/Order op is queued.
+// validated before reconcile touches u.contents or the pool. It exercises reconcile
+// directly and asserts its four operation sets are empty (so UpdateContainer queues no
+// Remove/Append/Order), that u.contents is untouched, and — via a monotonic-Jid probe
+// — that no new Element was created.
 func TestContainerUpdateValidatesWholeSliceBeforeReconcile(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("OLD"))}}
@@ -937,22 +941,28 @@ func TestContainerUpdateValidatesWholeSliceBeforeReconcile(t *testing.T) {
 		t.Fatalf("want 1 child before update, got %d", len(container.contents))
 	}
 	childElem := container.contents[0]
-	nextJid := childElem.Jid() + 1 // the Jid a newly-created child would take
 
-	tc.contents = []jaws.UI{NewSpan(testHTMLGetter("NEWVALID")), nanChildUI{f: math.NaN()}}
-	container.JawsUpdate(elem)
-
+	// Observe reconcile's outputs directly: a usable child before an unusable one must
+	// yield no operations at all, which is what leaves UpdateContainer nothing to queue.
+	toAppend, toRemove, oldOrder, newOrder := container.reconcile(elem,
+		[]jaws.UI{NewSpan(testHTMLGetter("NEWVALID")), nanChildUI{f: math.NaN()}})
+	if len(toAppend)+len(toRemove)+len(oldOrder)+len(newOrder) != 0 {
+		t.Fatalf("reconcile produced operations on abort: append=%d remove=%d oldOrder=%d newOrder=%d",
+			len(toAppend), len(toRemove), len(oldOrder), len(newOrder))
+	}
 	if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
 		t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
 	}
+	// No partial reconciliation: the existing content slice is untouched.
 	if len(container.contents) != 1 || container.contents[0] != childElem {
 		t.Fatalf("contents changed on aborted update: partial reconciliation occurred")
 	}
-	if rq.GetElementByJid(childElem.Jid()) == nil {
-		t.Fatal("existing child was removed on aborted update")
-	}
-	if e := rq.GetElementByJid(nextJid); e != nil {
-		t.Fatalf("a new child Element (Jid %v) was created on aborted update", e.Jid())
+	// No new Element was created (Jids are monotonic, so a created-then-deleted child
+	// would still have advanced the counter): a probe takes the Jid right after the
+	// existing child's.
+	probe := rq.NewElement(NewSpan(testHTMLGetter("probe")))
+	if probe.Jid() != childElem.Jid()+1 {
+		t.Fatalf("a child Element was created on aborted update: probe Jid %v, want %v", probe.Jid(), childElem.Jid()+1)
 	}
 }
 
