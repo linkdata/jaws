@@ -3047,6 +3047,33 @@ func cycleBenchRequest(jw *Jaws, newRq func(*Jaws) *Request, recycle func(*Jaws,
 	runtime.KeepAlive(rq)
 }
 
+// BenchmarkRequestRecycleAfterHighWater measures recycling empty Requests that reuse
+// a pooled buffer previously grown to a high-water element count. Because every
+// buffer-shrink path zeroes vacated entries, completion clears only the live length,
+// so empty recycling must stay flat across the high-water axis rather than rescanning
+// the retained capacity on every cycle.
+func BenchmarkRequestRecycleAfterHighWater(b *testing.B) {
+	for _, hw := range []int{0, 1000, 100000} {
+		b.Run("highwater="+strconv.Itoa(hw), func(b *testing.B) {
+			jw := newBenchPoolJaws(b)
+			// Grow a buffer to the high-water mark, then return it to the pool so the
+			// empty cycles below borrow (and must not rescan) its retained capacity.
+			big := jw.NewRequest(nil)
+			for i := 0; i < hw; i++ {
+				big.NewElement(benchUI{n: i})
+			}
+			jw.recycle(big)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				rq := jw.NewRequest(nil)
+				jw.recycle(rq)
+				runtime.KeepAlive(rq)
+			}
+		})
+	}
+}
+
 func benchmarkSyncSubscription(b *testing.B, jw *Jaws) {
 	b.Helper()
 	for i := 0; i <= cap(jw.subCh); i++ {

@@ -18,6 +18,8 @@ import (
 	"github.com/coder/websocket"
 	"github.com/linkdata/jaws/lib/key"
 	"github.com/linkdata/jaws/lib/tag"
+	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jaws/lib/wire"
 )
 
 // TestEarlyCallbackDoesNotRecycleInitialRender is the reproduction from issue #195:
@@ -172,6 +174,56 @@ func TestRequestFinishConcurrentWithRenderIsRaceFree(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// TestFinishDoesNotResetJidCounter verifies teardown leaves the Jid counter intact,
+// so a renderer that keeps allocating Elements after a racy teardown cannot reuse an
+// already-streamed Jid. Restoring lastJid = 0 in teardown would fail this.
+func TestFinishDoesNotResetJidCounter(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq.NewElement(&testUi{})
+	last := rq.NewElement(&testUi{}).Jid()
+
+	jw.recycle(rq)
+
+	if got := rq.NewElement(&testUi{}).Jid(); got <= last {
+		t.Fatalf("Jid after teardown = %v, want > %v (counter must not reset)", got, last)
+	}
+}
+
+// TestRecycleQueueRaceDoesNotLeak stresses a queue concurrent with recycle. The
+// wsQueue transfer in releaseBuffersLocked must stay under muQueue, so a late queue
+// cannot race the transfer or land its message in a buffer already returned to the
+// pool. Moving the transfer outside muQueue would trip the race detector here. Run
+// with -race.
+func TestRecycleQueueRaceDoesNotLeak(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	const n = 300
+	for range n {
+		rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			rq.queue(wire.WsMsg{Jid: 1, What: what.Inner, Data: "late"})
+		}()
+		go func() {
+			defer wg.Done()
+			jw.recycle(rq)
+		}()
+		wg.Wait()
+	}
 }
 
 // TestNoscriptDuringLiveRenderRecordsJavascriptDisabled guards against re-adding a

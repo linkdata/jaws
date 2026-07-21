@@ -3686,12 +3686,7 @@ func TestReleaseBuffersLockedZeroesWsQueue(t *testing.T) {
 		wire.WsMsg{Data: "payload-a", Jid: 1, What: what.Inner},
 		wire.WsMsg{Data: "payload-b", Jid: 2, What: what.Inner},
 	)
-	// Simulate a drain that resliced the queue to zero length while leaving the
-	// payloads in the backing array's unused capacity (the getSendMsgs pattern before
-	// its own clear). releaseBuffersLocked must clear through capacity, not just
-	// length, so the pooled buffer retains no HTML payloads.
 	backing := rq.wsQueue[:cap(rq.wsQueue)]
-	rq.wsQueue = rq.wsQueue[:0]
 
 	buffers := rq.releaseBuffersLocked()
 
@@ -3701,9 +3696,40 @@ func TestReleaseBuffersLockedZeroesWsQueue(t *testing.T) {
 	if len(buffers.wsQueue) != 0 {
 		t.Fatalf("wsQueue len = %d, want 0", len(buffers.wsQueue))
 	}
+	// The live queued entries must be zeroed before the buffer returns to the pool so
+	// no HTML payload is pinned. (Vacated capacity is already zeroed by the drain
+	// paths, so releaseBuffersLocked clears only the live length; see
+	// TestGetSendMsgsZeroesDrainedQueue.)
 	for i, m := range backing {
 		if m != (wire.WsMsg{}) {
 			t.Errorf("wsQueue backing slot %d retained data after releaseBuffersLocked: %+v", i, m)
+		}
+	}
+}
+
+// TestGetSendMsgsZeroesDrainedQueue verifies the outbound drain zeroes the entries it
+// removes before reslicing to zero length, so their HTML payloads are not left in the
+// backing array's unused capacity (and later carried into the pooled buffer).
+func TestGetSendMsgsZeroesDrainedQueue(t *testing.T) {
+	rq := &Request{tagMap: map[any][]*Element{}}
+	rq.wsQueue = append(
+		rq.wsQueue,
+		wire.WsMsg{Jid: 0, What: what.Reload, Data: "payload-a"},
+		wire.WsMsg{Jid: 0, What: what.Alert, Data: "payload-b"},
+	)
+	backing := rq.wsQueue[:cap(rq.wsQueue)]
+
+	toSend := rq.getSendMsgs()
+
+	if len(toSend) != 2 {
+		t.Fatalf("getSendMsgs returned %d messages, want 2", len(toSend))
+	}
+	if len(rq.wsQueue) != 0 {
+		t.Fatalf("wsQueue len after drain = %d, want 0", len(rq.wsQueue))
+	}
+	for i, m := range backing {
+		if m != (wire.WsMsg{}) {
+			t.Errorf("drained slot %d retained data after getSendMsgs: %+v", i, m)
 		}
 	}
 }

@@ -67,16 +67,17 @@ type requestBuffers struct {
 // Each Request has a stable identity that is never reused for another connection:
 // once it finishes, its context stays canceled and identity-targeted operations
 // are never retargeted to a different Request. A pointer retained past its
-// documented lifetime therefore stays inert rather than aliasing an unrelated
-// connection.
+// documented lifetime therefore can never alias an unrelated connection.
 //
 // A Request pointer is borrowed for the HTTP or WebSocket lifecycle that supplied
 // it. Do not retain it in application state or use it from a background goroutine:
-// when that lifecycle ends the Request finishes — its context is canceled and its
-// reusable buffers are released — so a retained pointer becomes inert (it keeps its
-// identity but is unregistered and empty). Background work should instead retain
-// [Request.Context] and, when it must terminate the connection, the cancel function
-// returned while deriving a replacement context through [Request.SetContext].
+// when that lifecycle ends the Request finishes — its context is canceled, it is
+// unregistered from the [Jaws] instance, and its reusable buffers are released. Its
+// methods still run on a retained pointer, but the Request no longer receives
+// broadcasts or updates and its collections are empty, so the calls have no useful
+// effect. Background work should instead retain [Request.Context] and, when it must
+// terminate the connection, the cancel function returned while deriving a
+// replacement context through [Request.SetContext].
 //
 // Unlike [Session], whose methods are nil-safe, Request methods are not safe to call on a
 // nil *Request: a Request is always obtained from [Jaws.NewRequest] or [Jaws.UseRequest]
@@ -269,12 +270,13 @@ func (rq *Request) ensureAutoSession(w http.ResponseWriter, r *http.Request) {
 // releaseBuffersLocked detaches the reusable storage from a finished Request and
 // returns it for the caller to return to [Jaws.requestBufferPool].
 //
-// It cancels any live context, drops queued dirt and messages, marks every element
-// inert, kills any attached session and clears the registered flag. The Request
-// keeps its identity key and canceled context, so a pointer retained by the
-// initial renderer or by background work stays permanently bound to this finished
-// lifecycle and is never reused for another connection. The caller must hold rq.mu
-// and ensure no other goroutine is still processing rq.
+// It cancels any live context, detaches the reusable collections, kills any attached
+// session and clears the registered flag. It deliberately leaves the Request's
+// Elements, Jid counter and render-input fields untouched. The Request keeps its
+// identity key and canceled context, so a pointer retained by the initial renderer
+// or by background work stays permanently bound to this finished lifecycle and is
+// never reused for another connection. The caller must hold rq.mu and ensure no
+// other goroutine is still processing rq.
 func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
 	// Cancel first so a retained context observes cancellation, then detach the
 	// Request from its session and unregister its identity.
@@ -294,14 +296,16 @@ func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
 	rq.claimed.Store(false)
 	rq.registered = false
 
-	// Detach the reusable collections and hand them to the pool. Clear through
-	// capacity, not just length: a drain may have resliced a buffer to len 0 while
-	// leaving payloads in the unused capacity (see getSendMsgs), and those references
-	// must not be pinned in the pooled backing storage. todoDirt, elems and tagMap are
-	// guarded by rq.mu (held here).
+	// Detach the reusable collections and hand them to the pool. Clear only the live
+	// length: every production path that shrinks a buffer already zeroes the vacated
+	// entries (getSendMsgs and drainTailScript for wsQueue, makeUpdateList for
+	// todoDirt, slices.DeleteFunc for elems), so the unused capacity holds no live
+	// references. Clearing through capacity instead would rescan a pooled buffer's
+	// high-water mark on every recycle — including later empty requests — under
+	// rq.mu/muQueue.
 	buffers = rq.buffers
-	clear(rq.todoDirt[:cap(rq.todoDirt)]) // release tag references before pooling
-	clear(rq.elems[:cap(rq.elems)])       // release *Element references so the pooled array pins nothing
+	clear(rq.todoDirt) // release tag references before pooling
+	clear(rq.elems)    // release *Element references so the pooled array pins nothing
 	clear(rq.tagMap)
 	if buffers != nil {
 		buffers.todoDirt = rq.todoDirt[:0]
@@ -320,7 +324,7 @@ func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
 	// surfacing that message in the next Request that borrows the buffer.
 	rq.muQueue.Lock()
 	rq.tailsent = false
-	clear(rq.wsQueue[:cap(rq.wsQueue)]) // release queued message payloads (incl. drained tail) before pooling
+	clear(rq.wsQueue) // release queued message payloads before pooling
 	if buffers != nil {
 		buffers.wsQueue = rq.wsQueue[:0]
 	}
