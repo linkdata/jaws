@@ -250,7 +250,7 @@ func (jw *Jaws) Close() {
 		if rq == nil {
 			continue
 		}
-		if rq.running.Load() {
+		if rq.loadState() == reqRunning {
 			rq.mu.Lock()
 			// Shutdown has no error cause. CancelCauseFunc is idempotent, so it
 			// also safely handles a Request whose context is already done.
@@ -322,7 +322,7 @@ func (jw *Jaws) RequestCounts() (total, active int) {
 	total = jw.requestCount
 	for _, rq := range jw.requests {
 		if rq != nil {
-			if rq.running.Load() {
+			if rq.loadState() == reqRunning {
 				active++
 			}
 		}

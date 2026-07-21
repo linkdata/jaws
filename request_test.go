@@ -145,12 +145,13 @@ func TestRequest_wantMessage_KeyDest(t *testing.T) {
 }
 
 // TestRequest_wantMessage_RejectsFinishedRequest is the core broadcast regression:
-// wantMessage gates the identity-key match on rq.registered, so a finished Request
-// stops matching its own key. The *Request pointer is never reused, and while the
-// finished Request stays reachable its key value is held reserved by a tombstone, so
-// a message aimed at that key reaches no one and a later Request matches only its own
-// distinct key. (Once the finished Request is collected the tombstone is removed and
-// the key value may eventually be reissued to a new Request.)
+// wantMessage gates the identity-key match on the registered() lifecycle state, so
+// a finished Request stops matching its own key. The *Request pointer is never
+// reused, and while the finished Request stays reachable its key value is held
+// reserved by a tombstone, so a message aimed at that key reaches no one and a later
+// Request matches only its own distinct key. (Once the finished Request is collected
+// the tombstone is removed and the key value may eventually be reissued to a new
+// Request.)
 func TestRequest_wantMessage_RejectsFinishedRequest(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()
@@ -431,9 +432,9 @@ func TestRequest_TailScriptConcurrentWithRecycle(t *testing.T) {
 }
 
 // TestRequest_wantMessageConcurrentWithRecycle stresses the broadcast identity
-// check: wantMessage reads rq.registered and rq.JawsKey under rq.mu while completion
-// clears registered under the same lock. The read and write must be serialized so
-// there is no data race. Run with -race.
+// check: wantMessage reads the lifecycle state and rq.JawsKey under rq.mu while
+// completion transitions the state to reqFinished under the same lock. The read and
+// write must be serialized so there is no data race. Run with -race.
 func TestRequest_wantMessageConcurrentWithRecycle(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
@@ -973,7 +974,7 @@ func TestRequest_ClaimRejectsCanceledRequest(t *testing.T) {
 	if !errors.Is(err, wantCause) {
 		t.Fatalf("claim error = %v, want cause %v", err, wantCause)
 	}
-	if rq.claimed.Load() {
+	if rq.loadState().claimed() {
 		t.Fatal("canceled request was marked claimed")
 	}
 	if rq.httpDoneCh != nil {
@@ -2305,7 +2306,7 @@ func TestRequestRecycle_StaleElementIsInert(t *testing.T) {
 	// detached, and the key is reserved with a nil tombstone rather than deleted or
 	// reassigned to a different Request.
 	rq.mu.RLock()
-	registered := rq.registered
+	registered := rq.loadState().registered()
 	tagCount := len(rq.tagMap)
 	rq.mu.RUnlock()
 	if registered {
@@ -3747,7 +3748,7 @@ func TestDelRequestNilsVacatedSlot(t *testing.T) {
 		rq1, rq2 := &Request{}, &Request{}
 		sess.requests = []*Request{rq1, rq2}
 
-		sess.delRequest(rq1)
+		sess.delRequest(rq1, false)
 
 		if len(sess.requests) != 1 || sess.requests[0] != rq2 {
 			t.Fatalf("requests = %v, want [rq2]", sess.requests)
@@ -3762,7 +3763,7 @@ func TestDelRequestNilsVacatedSlot(t *testing.T) {
 		rq1 := &Request{}
 		sess.requests = []*Request{rq1}
 
-		sess.delRequest(rq1)
+		sess.delRequest(rq1, false)
 
 		if len(sess.requests) != 0 {
 			t.Fatalf("requests len = %d, want 0", len(sess.requests))
@@ -3843,7 +3844,7 @@ func TestServe_MarksRequestRunningSoMaintenanceSkips(t *testing.T) {
 	}()
 
 	<-tr.ReadyCh
-	if !tr.running.Load() {
+	if tr.loadState() != reqRunning {
 		t.Fatal("TestServe must mark the request running so maintenance cannot retire it mid-process")
 	}
 

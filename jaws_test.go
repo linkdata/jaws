@@ -242,10 +242,10 @@ func TestJaws_CloseCancelsMixedRequestsWithoutLogging(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("active Request did not become ready")
 	}
-	if pending.running.Load() {
+	if pending.loadState() == reqRunning {
 		t.Fatal("pending Request unexpectedly marked running")
 	}
-	if !active.running.Load() {
+	if active.loadState() != reqRunning {
 		t.Fatal("active Request not marked running")
 	}
 
@@ -966,8 +966,8 @@ func TestJaws_MaxPendingRequestsPerIPToleratesUnretirableVictim(t *testing.T) {
 
 	req1 := newPendingLimitRequest("192.0.2.1:1000")
 	rq1 := jw.NewRequest(req1)
-	rq1.running.Store(true)
-	defer rq1.running.Store(false)
+	rq1.storeState(reqRunning)
+	defer rq1.storeState(reqPending)
 
 	rq2 := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1001"))
 	if got := jw.Pending(); got != 2 {
@@ -1826,7 +1826,8 @@ func TestJaws_distributeDirt_AscendingOrder(t *testing.T) {
 	}
 	defer jw.Close()
 
-	rq := &Request{registered: true}
+	rq := &Request{}
+	rq.storeState(reqPending)
 	jw.mu.Lock()
 	jw.requests[1] = rq
 	jw.requestCount++
@@ -2916,7 +2917,7 @@ func newUnpooledBenchRequest(jw *Jaws) (rq *Request) {
 			}
 			rq.mu.Lock()
 			rq.JawsKey = jawsKey
-			rq.registered = true
+			rq.storeState(reqPending)
 			rq.lastWriteSeconds.Store(jw.runtimeSeconds.Load())
 			rq.remoteIP = remoteIP
 			rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
@@ -2945,7 +2946,7 @@ func recycleUnpooledBenchRequest(jw *Jaws, rq *Request) {
 		jw.removePendingRequestLocked(rq)
 		delete(jw.requests, rq.JawsKey)
 		jw.requestCount--
-		rq.registered = false
+		rq.storeState(reqFinished)
 	}
 }
 
@@ -3070,6 +3071,29 @@ func BenchmarkRequestRecycleAfterHighWater(b *testing.B) {
 				runtime.KeepAlive(rq)
 			}
 		})
+	}
+}
+
+// BenchmarkRequestClaimStartFinish measures the full lifecycle transition path —
+// NewRequest (pending) -> UseRequest (claimed) -> startServe (running) -> recycle
+// (finished) — which the create/recycle and high-water benchmarks do not exercise.
+// It isolates the claim/start CAS work so the lifecycle-state consolidation can be
+// compared before vs after; it does not run the WebSocket process loop.
+func BenchmarkRequestClaimStartFinish(b *testing.B) {
+	jw := newBenchPoolJaws(b)
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rq := jw.NewRequest(r)
+		if jw.UseRequest(rq.JawsKey, r) != rq {
+			b.Fatal("claim failed")
+		}
+		if !rq.startServe() {
+			b.Fatal("startServe failed")
+		}
+		jw.recycle(rq)
+		runtime.KeepAlive(rq)
 	}
 }
 
