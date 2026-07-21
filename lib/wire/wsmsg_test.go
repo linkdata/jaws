@@ -412,6 +412,7 @@ func Test_wsMsg_FillAlert(t *testing.T) {
 		err  error
 		want string
 	}{
+		{"nil error", nil, "Alert\t\t\"danger\\n\"\n"},
 		{"event unhandled", errors.New("event unhandled"), "Alert\t\t\"danger\\nevent unhandled\"\n"},
 		{"escape error text", fooError, "Alert\t\t\"danger\\n&lt;&#34;\"\n"},
 	}
