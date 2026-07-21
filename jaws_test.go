@@ -3073,6 +3073,29 @@ func BenchmarkRequestRecycleAfterHighWater(b *testing.B) {
 	}
 }
 
+// BenchmarkRequestClaimStartFinish measures the full lifecycle transition path —
+// NewRequest (pending) -> UseRequest (claimed) -> startServe (running) -> recycle
+// (finished) — which the create/recycle and high-water benchmarks do not exercise.
+// It isolates the claim/start CAS work so the lifecycle-state consolidation can be
+// compared before vs after; it does not run the WebSocket process loop.
+func BenchmarkRequestClaimStartFinish(b *testing.B) {
+	jw := newBenchPoolJaws(b)
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rq := jw.NewRequest(r)
+		if jw.UseRequest(rq.JawsKey, r) != rq {
+			b.Fatal("claim failed")
+		}
+		if !rq.startServe() {
+			b.Fatal("startServe failed")
+		}
+		jw.recycle(rq)
+		runtime.KeepAlive(rq)
+	}
+}
+
 func benchmarkSyncSubscription(b *testing.B, jw *Jaws) {
 	b.Helper()
 	for i := 0; i <= cap(jw.subCh); i++ {
