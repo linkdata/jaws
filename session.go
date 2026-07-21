@@ -75,7 +75,7 @@ func (sess *Session) delRequest(rq *Request) {
 			if l > 1 {
 				sess.requests[i] = sess.requests[l-1]
 			}
-			sess.requests[l-1] = nil // release the freed tail slot so it doesn't pin a recycled *Request
+			sess.requests[l-1] = nil // release the freed tail slot so it doesn't pin a finished *Request
 			sess.requests = sess.requests[:l-1]
 			break
 		}
@@ -88,7 +88,7 @@ func (sess *Session) delRequest(rq *Request) {
 		// would be reaped with its stale deadline despite recent live activity.
 		sess.deadline = time.Now().Add(time.Minute)
 	}
-	// For an unclaimed request (its bootstrap render was recycled before the
+	// For an unclaimed request (its bootstrap render finished before the
 	// WebSocket connected) leave the existing deadline intact: the creation-time
 	// grace window (see newSession), or the window left by a claimed request that
 	// departed earlier, governs the session's lifetime until a WebSocket attaches.

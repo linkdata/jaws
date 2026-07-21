@@ -26,9 +26,9 @@ import (
 func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-chan wire.WsMsg, outboundMsgCh chan<- wire.WsMsg) {
 	jawsDoneCh := rq.Jaws.Done()
 	// Snapshot cancelFn under rq.mu, the same way ServeHTTP does: its only writers
-	// (claim, getRequestLocked, clearLocked) run strictly before or after process,
-	// so the captured value is stable for the loop's lifetime and the cleanup defer
-	// avoids a lock-free field read.
+	// (claim, getRequestLocked, releaseBuffersLocked) run strictly before or after
+	// process, so the captured value is stable for the loop's lifetime and the
+	// cleanup defer avoids a lock-free field read.
 	rq.mu.RLock()
 	httpDoneCh := rq.httpDoneCh
 	cancelFn := rq.cancelFn
@@ -340,6 +340,11 @@ func (rq *Request) getSendMsgs() (toSend []wire.WsMsg) {
 				toSend = append(toSend, rq.wsQueue[i])
 			}
 		}
+		// Zero the drained entries before reslicing so their Data payloads (full
+		// Inner/Replace/Append HTML) are released promptly rather than lingering in the
+		// backing array's unused capacity for the rest of the request (and into the
+		// pooled buffer after teardown).
+		clear(rq.wsQueue)
 		rq.wsQueue = rq.wsQueue[:0]
 	}
 

@@ -20,8 +20,11 @@ import (
 // for that call. A request-scoped widget may retain child Elements it creates
 // between its render and update calls within the same Request lifecycle, but
 // should access them only from those calls. Do not retain an Element in
-// longer-lived application state or pass it to background work: the embedded
-// Request may later be pooled and reused for another connection.
+// longer-lived application state or pass it to background work: once the embedded
+// Request finishes it is unregistered, so the Element receives no further broadcasts
+// or updates, though its fields are left intact and its methods still operate on the
+// now finished Request. Request identities are never reused, so a retained Element
+// can never come to represent an unrelated connection.
 type Element struct {
 	*Request // (read-only) the Request the Element belongs to
 	// internals

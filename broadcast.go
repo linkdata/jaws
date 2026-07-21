@@ -39,9 +39,10 @@ func (jw *Jaws) Broadcast(msg wire.Message) {
 	case nil: // send to all active requests
 	case key.Key: // send to the active request with this identity key
 		if dest == 0 {
-			// A recycled producer captured a zeroed key; no live request can match
-			// (keys are always non-zero), so drop it rather than fall through to
-			// tag expansion.
+			// No live Request can have a zero key (a finished Request keeps its
+			// non-zero key but is unregistered, and destKey returns zero for it), so a
+			// zero destination matches nothing; drop it rather than fall through to tag
+			// expansion.
 			return
 		}
 	default:
@@ -163,15 +164,13 @@ func (jw *Jaws) distributeDirt() int {
 
 	// Appending outside jw.mu is deliberately safe:
 	//   - The snapshot includes pending (not-yet-running) Requests; their todoDirt
-	//     buffers until they connect or are recycled (bounded by the request timeout),
+	//     buffers until they connect or finish (bounded by the request timeout),
 	//     so a value mutated in the render-to-connect window is reflected on the first
 	//     update pass.
-	//   - A Request can be recycled between snapshot and append. appendDirtyTags and
-	//     clearLocked both take rq.mu, so there is no data race, and stale tags in a
-	//     reborn Request resolve to nothing in Request.makeUpdateList against its
-	//     freshly emptied tagMap (at worst a redundant re-render). Applying dirt is
-	//     idempotent, so unlike destKey/cancelIfCurrent this path needs no
-	//     key-identity guard.
+	//   - A Request can finish between snapshot and append. appendDirtyTags checks
+	//     rq.registered under rq.mu (which releaseBuffersLocked also holds while
+	//     clearing it), so a finished Request discards the stale tags instead of
+	//     re-materializing storage on a dead identity.
 	for _, rq := range reqs {
 		rq.appendDirtyTags(dirt)
 	}

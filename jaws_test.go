@@ -1826,7 +1826,7 @@ func TestJaws_distributeDirt_AscendingOrder(t *testing.T) {
 	}
 	defer jw.Close()
 
-	rq := &Request{}
+	rq := &Request{registered: true}
 	jw.mu.Lock()
 	jw.requests[1] = rq
 	jw.requestCount++
@@ -2693,13 +2693,13 @@ func TestServeHTTP_TailScript_EndpointIsPerRequest(t *testing.T) {
 	is.Equal(w.Code, http.StatusNoContent)
 }
 
-// TestServeHTTP_TailScript_RejectsRecycledKey covers the recycled-request behavior
-// of the /jaws/.tail endpoint: recycling deletes the key from jw.requests, so a tail
-// fetch for the old key misses the map and returns 404, while the reused pooled
-// object drains only its own freshly queued content (its queue was reset by
-// clearLocked), never the recycled request's. This exercises the map-deletion 404
-// and content isolation; the concurrent drain-under-lock guarantee (holding jw.mu
-// across drainTailScript) is exercised separately, under the race detector, by
+// TestServeHTTP_TailScript_RejectsRecycledKey covers the finished-request behavior
+// of the /jaws/.tail endpoint: completion reserves the key with a nil tombstone in
+// jw.requests, so a tail fetch for the old key finds no live Request and returns
+// 404, while a later, distinct request drains only its own freshly queued content,
+// never the finished request's. This exercises the tombstone 404 and content
+// isolation; the concurrent drain-under-lock guarantee (holding jw.mu across
+// drainTailScript) is exercised separately, under the race detector, by
 // TestRequest_TailScriptConcurrentWithRecycle.
 func TestServeHTTP_TailScript_RejectsRecycledKey(t *testing.T) {
 	is := newTestHelper(t)
@@ -2712,23 +2712,22 @@ func TestServeHTTP_TailScript_RejectsRecycledKey(t *testing.T) {
 	stale.NewElement(&testUi{}).SetClass("stale")
 	staleKey := stale.JawsKeyString()
 
-	// Recycle the request and create a new one under a fresh key. The pool typically
-	// hands back the same struct, so the content check below also guards that a
-	// reused object carries none of the recycled request's queued content; it holds
-	// whether or not the pool reused the struct.
+	// Finish the request and create a new one under a fresh key. Identities are never
+	// reused, so rq is a distinct Request; the content check below guards that it
+	// carries none of the finished request's queued content.
 	jw.recycle(stale)
 	rq := jw.NewRequest(hr)
 	rq.NewElement(&testUi{}).SetClass("fresh")
 
-	// Old key was deleted from jw.requests on recycle, so the lookup misses and
-	// nothing is drained.
+	// The old key was tombstoned on completion, so the lookup finds no live Request
+	// and nothing is drained.
 	req := httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+staleKey, nil)
 	req.RemoteAddr = hr.RemoteAddr
 	w := httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusNotFound)
 
-	// The reused request's own tail fetch still returns its own content.
+	// The new request's own tail fetch still returns its own content.
 	req = httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString(), nil)
 	req.RemoteAddr = hr.RemoteAddr
 	w = httptest.NewRecorder()
@@ -2803,17 +2802,17 @@ func TestJaws_cancelIfCurrent_IgnoresStaleRequest(t *testing.T) {
 	stale := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	jawsKey := stale.JawsKey
 
-	// The /jaws/.tail handler snapshots the Request before writing the response;
-	// recycle the snapshot and create a new request so the pool can hand the
-	// stale pointer to a different connection, as can happen before a write
-	// error triggers a cancel.
+	// The /jaws/.tail handler snapshots the Request before writing the response; the
+	// snapshotted Request can finish before a write error triggers a cancel. Finish it
+	// and create another request: cancelIfCurrent must cancel nothing, because the
+	// finished Request is no longer the registered entry for its key.
 	jw.recycle(stale)
 	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 
 	jw.cancelIfCurrent(jawsKey, stale, errors.New("write failed"))
 
-	// Whether or not the pool reused the object for rq (it normally does here,
-	// which is exactly the stale-cancel scenario), rq must stay live.
+	// rq is a distinct Request (identities are never reused); a stale cancel aimed at
+	// the finished snapshot must not touch it.
 	is.NoErr(rq.Context().Err())
 }
 
@@ -2917,6 +2916,7 @@ func newUnpooledBenchRequest(jw *Jaws) (rq *Request) {
 			}
 			rq.mu.Lock()
 			rq.JawsKey = jawsKey
+			rq.registered = true
 			rq.lastWriteSeconds.Store(jw.runtimeSeconds.Load())
 			rq.remoteIP = remoteIP
 			rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
@@ -2934,11 +2934,18 @@ func recycleUnpooledBenchRequest(jw *Jaws, rq *Request) {
 	defer jw.mu.Unlock()
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	if rq.JawsKey != 0 {
+	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq {
+		// Model a fully-unpooled design: cancel and unregister, then drop the
+		// Request (and its buffers) for the garbage collector. Nothing is returned
+		// to a pool, so this is the allocation-heavy reference the pooled impl is
+		// compared against.
+		if rq.cancelFn != nil {
+			rq.cancelFn(nil)
+		}
 		jw.removePendingRequestLocked(rq)
 		delete(jw.requests, rq.JawsKey)
 		jw.requestCount--
-		rq.clearLocked()
+		rq.registered = false
 	}
 }
 
@@ -2948,16 +2955,20 @@ func populateBenchRequest(rq *Request, tags []any) {
 	}
 }
 
-// BenchmarkRequestLifecyclePooling compares the current pooled Request lifecycle
-// with a benchmark-only fresh-allocation lifecycle. It isolates the create,
-// optional render-state population and recycle path; it does not measure HTTP or
-// WebSocket serving.
+// BenchmarkRequestLifecyclePooling compares the production Request lifecycle with a
+// benchmark-only fully-unpooled lifecycle. It isolates the create, optional
+// render-state population and recycle path; it does not measure HTTP or WebSocket
+// serving.
 //
-// The impl axis selects pooled (jw.reqPool via NewRequest/recycle) versus a fresh
-// &Request each iteration. The mode axis runs the cycle single-goroutine (serial)
-// or under [testing.B.RunParallel], since a [sync.Pool]'s payoff is a GC-pressure
-// and high-churn effect that a single-goroutine run under-measures. Sub-benchmarks
-// use key=value names so "benchstat -col /impl" pivots pooled against unpooled.
+// The impl axis selects pooled (jw.NewRequest/recycle, which allocates a fresh
+// Request but reuses its buffers from jw.requestBufferPool) versus unpooled (a
+// fresh &Request with freshly allocated buffers each iteration, nothing reused).
+// The mode axis runs the cycle single-goroutine (serial) or under
+// [testing.B.RunParallel], since a [sync.Pool]'s payoff is a GC-pressure and
+// high-churn effect that a single-goroutine run under-measures. Sub-benchmarks use
+// key=value names so "benchstat -col /impl" pivots pooled against unpooled, and
+// running it on this branch versus main pivots the buffer-pool design against the
+// former whole-Request pool.
 func BenchmarkRequestLifecyclePooling(b *testing.B) {
 	for _, c := range []struct {
 		name  string
@@ -3033,6 +3044,33 @@ func cycleBenchRequest(jw *Jaws, newRq func(*Jaws) *Request, recycle func(*Jaws,
 	populateBenchRequest(rq, tags)
 	recycle(jw, rq)
 	runtime.KeepAlive(rq)
+}
+
+// BenchmarkRequestRecycleAfterHighWater measures recycling empty Requests that reuse
+// a pooled buffer previously grown to a high-water element count. Because every
+// buffer-shrink path zeroes vacated entries, completion clears only the live length,
+// so empty recycling must stay flat across the high-water axis rather than rescanning
+// the retained capacity on every cycle.
+func BenchmarkRequestRecycleAfterHighWater(b *testing.B) {
+	for _, hw := range []int{0, 1000, 100000} {
+		b.Run("highwater="+strconv.Itoa(hw), func(b *testing.B) {
+			jw := newBenchPoolJaws(b)
+			// Grow a buffer to the high-water mark, then return it to the pool so the
+			// empty cycles below borrow (and must not rescan) its retained capacity.
+			big := jw.NewRequest(nil)
+			for i := 0; i < hw; i++ {
+				big.NewElement(benchUI{n: i})
+			}
+			jw.recycle(big)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				rq := jw.NewRequest(nil)
+				jw.recycle(rq)
+				runtime.KeepAlive(rq)
+			}
+		})
+	}
 }
 
 func benchmarkSyncSubscription(b *testing.B, jw *Jaws) {

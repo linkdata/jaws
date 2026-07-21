@@ -348,16 +348,28 @@ updates.
 
 ### Request lifecycle invariants
 
-While the `Jaws` instance is open, `NewRequest` creates a pending request owned
-by it. `UseRequest` is the only operation that claims that pending request for a
-WebSocket, and it also removes the request from the pending set. A claimed
-Request is removed after its WebSocket processing exits. Maintenance or the
-per-IP limit can instead retire an unclaimed Request: its context is canceled,
-its key becomes unclaimable, and it is excluded from `Pending` and
-`RequestCount`. Retiring an unclaimed Request does not change its identity or
-Elements while an initial HTTP handler still holds them. Its key cannot be
-assigned to another Request while the retired Request remains reachable; no
-deadline is guaranteed for later reuse.
+Every `NewRequest` returns a distinct `*Request` identity that is never reused
+for another connection; only its internal buffers are pooled. While the `Jaws`
+instance is open, `NewRequest` creates a pending request owned by it. `UseRequest`
+is the only operation that claims that pending request for a WebSocket, and it
+also removes the request from the pending set. A claimed Request finishes after
+its WebSocket processing exits: its context is canceled, its buffers are released
+to the pool, and its key is reserved until the Request is collected rather than
+reassigned. Completion leaves the lock-free Element fields and the id counter intact, so if an
+early `/jaws/<key>` callback claims and tears down a Request whose initial render
+is still in flight, that render may degrade — the elements and tags rendered so far
+are forgotten (a later lookup finds nothing, though newly created elements are
+tracked again) — but it stays race-safe: no data race, no reused identity, and no
+duplicated element id. Maintenance or the per-IP limit can
+instead retire a
+non-running Request: its context is canceled, its key becomes unclaimable, and it is
+excluded from `Pending` and `RequestCount`. Retirement preserves the Request's
+identity, Elements and buffers so an initial HTTP handler still holding it can keep
+rendering. For registered Requests, a finished key is not assigned to another Request
+while the old one remains reachable; no deadline is guaranteed for later reuse. (A
+Request created by `NewRequest` after `Jaws.Close` is never registered and installs no
+tombstone, so two such post-close calls could receive the same key — harmless, since
+neither is claimable.)
 
 `*Request` values are borrowed lifecycle objects. Do not store them in
 application state or pass them to background goroutines; copy the required
@@ -367,9 +379,11 @@ An `*Element` belongs to its owning Request and embeds a pointer to it.
 Render-scoped widgets may retain child Elements they create between render and
 update calls within that Request lifecycle, as container helpers do, but should
 access them only from those calls. Do not let an Element escape the Request
-lifecycle or pass it to background work: when a Request that entered
-`ServeHTTP` returns, it may be placed in an internal pool, and the Element's
-embedded Request pointer may later represent an unrelated connection.
+lifecycle or pass it to background work: once the owning Request finishes it is
+unregistered, so the Element receives no further broadcasts or updates, though its
+fields are left intact and its methods still operate on the finished Request.
+Request identities are never reused, so a stale Element can never come to
+represent an unrelated connection.
 
 Dirtying is two-stage: `Request.Dirty` and `Jaws.Dirty` expand tags and record
 them on the `Jaws` instance, then the serving loop distributes those tags to
@@ -399,11 +413,18 @@ these invariants before relying on a green build alone:
 
 * Lock order stays `Jaws.mu -> Request.mu -> Session.mu`, with `Request.muQueue`
   and element/widget/value locks remaining leaf locks.
-* Request pooling clears keys, elements, tags, sessions, queues, cancellation
-  state, and pending/request maps before a pointer can be reused.
+* Request identities are never reused; only the internal buffers are pooled.
+  Completion (after WebSocket serving) releases queued dirt, elements, tags, and
+  messages, detaches the session, unregisters the identity, and reserves the key
+  with a tombstone until the Request is collected. It clears only live length,
+  relying on the shrink paths to zero vacated entries, and must not mutate
+  render-visible Element state a still-running initial renderer may read lock-free.
+  Non-running retirement instead preserves the Request's Elements and buffers for an
+  initial HTTP handler that still holds it.
 * Dirty dispatch expands tags once, targets only elements registered for those
-  tags, and does not let one request's queued update reach a recycled request
-  with a different key.
+  tags, and does not let one request's queued update reach a finished, unregistered
+  request (whose key stays reserved, never reassigned to another Request, while it
+  remains reachable).
 * Session grace windows remain deliberate for unclaimed, claimed, failed-upgrade,
   and closed-WebSocket requests.
 * Subsecond `ServeWithTimeout` values are not useful in production. AI-assisted
