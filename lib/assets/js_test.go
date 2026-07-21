@@ -165,6 +165,70 @@ func Test_PreloadHTML_MultipleFaviconsLastWins(t *testing.T) {
 	}
 }
 
+// Test_PreloadHTML_MIMEFamilyMatching pins that MIME families are matched on the
+// "type/" prefix case-insensitively. False prefixes such as "imagery/*" and
+// "fontastic/*" must not be mistaken for "image/*" or "font/*", while differently
+// cased valid families such as "IMAGE/*" and "FONT/*" must still be recognized.
+func Test_PreloadHTML_MIMEFamilyMatching(t *testing.T) {
+	// Distinct ".jaws*" extensions keep these process-global registrations from
+	// colliding with real MIME mappings or with other tests in this package.
+	reg := map[string]string{
+		".jawsimagery":   "imagery/not-an-image",
+		".jawsfontastic": "fontastic/not-a-font",
+		".jawsupperimg":  "IMAGE/x-icon",
+		".jawsupperfont": "FONT/woff2",
+	}
+	for ext, typ := range reg {
+		if err := mime.AddExtensionType(ext, typ); err != nil {
+			t.Fatalf("AddExtensionType(%q, %q): %v", ext, typ, err)
+		}
+	}
+
+	mustParseURL := func(urlstr string) *url.URL {
+		u, err := url.Parse(urlstr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u
+	}
+
+	txt, fav := PreloadHTML(
+		mustParseURL("favicon.jawsimagery"),  // imagery/* is not image/*
+		mustParseURL("brand.jawsfontastic"),  // fontastic/* is not font/*
+		mustParseURL("favicon.jawsupperimg"), // IMAGE/* is image/* (case-insensitive)
+		mustParseURL("brand.jawsupperfont"),  // FONT/* is font/* (case-insensitive)
+	)
+
+	// imagery/* is not an image: it never becomes a favicon and falls through to a
+	// bare preload link carrying only its (non-image) type, with no as="image".
+	wantImagery := `<link rel="preload" href="favicon.jawsimagery" type="imagery/not-an-image">`
+	if !strings.Contains(txt, wantImagery) {
+		t.Errorf("imagery/* preload = missing %q in %q", wantImagery, txt)
+	}
+
+	// fontastic/* is not a font: no as="font" is attached.
+	wantFontastic := `<link rel="preload" href="brand.jawsfontastic" type="fontastic/not-a-font">`
+	if !strings.Contains(txt, wantFontastic) {
+		t.Errorf("fontastic/* preload = missing %q in %q", wantFontastic, txt)
+	}
+
+	// IMAGE/* qualifies as an image, so the favicon-named resource wins the favicon
+	// slot and is emitted as the rel="icon" link.
+	if fav != "favicon.jawsupperimg" {
+		t.Errorf("favicon = %q, want %q", fav, "favicon.jawsupperimg")
+	}
+	wantFaviconLink := `<link rel="icon" type="IMAGE/x-icon" href="favicon.jawsupperimg">`
+	if !strings.Contains(txt, wantFaviconLink) {
+		t.Errorf("case-insensitive favicon = missing %q in %q", wantFaviconLink, txt)
+	}
+
+	// FONT/* qualifies as a font, so it receives as="font".
+	wantUpperFont := `<link rel="preload" href="brand.jawsupperfont" as="font" type="FONT/woff2">`
+	if !strings.Contains(txt, wantUpperFont) {
+		t.Errorf("case-insensitive font preload = missing %q in %q", wantUpperFont, txt)
+	}
+}
+
 func runJawsJSSnippet(t *testing.T, snippet string) string {
 	t.Helper()
 
