@@ -185,8 +185,14 @@ func jsonUnquoteString(s string) (out string, ok bool) {
 }
 
 // FillAlert replaces m with an escaped danger alert for err.
+//
+// A nil err yields a danger alert with an empty message rather than panicking.
 func (m *WsMsg) FillAlert(err error) {
+	var s string
+	if err != nil {
+		s = err.Error()
+	}
 	m.Jid = 0
 	m.What = what.Alert
-	m.Data = "danger\n" + html.EscapeString(err.Error())
+	m.Data = "danger\n" + html.EscapeString(s)
 }
