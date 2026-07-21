@@ -281,17 +281,21 @@ func (rq *Request) ensureAutoSession(w http.ResponseWriter, r *http.Request) {
 // releaseBuffersLocked detaches the reusable storage from a finished Request and
 // returns it for the caller to return to [Jaws.requestBufferPool].
 //
-// It cancels any live context, detaches the reusable collections, kills any attached
-// session and clears the registered flag. It deliberately leaves the Request's
-// Elements, Jid counter and render-input fields untouched. The Request keeps its
-// identity key and canceled context, so a pointer retained by the initial renderer
-// or by background work stays permanently bound to this finished lifecycle and is
-// never reused for another connection.
+// It cancels any live context, detaches and clears the reusable collections (the
+// element list, tag map, dirt list and message queue), kills any attached session
+// and clears the registered flag. It does NOT mutate the individual Element objects'
+// fields or the Jid counter. The Request keeps its identity key and canceled context,
+// so a pointer retained by the initial renderer or by background work stays
+// permanently bound to this finished lifecycle and is never reused for another
+// connection.
 //
 // The caller must hold rq.mu. The WebSocket processing loop must have exited, but an
 // initial HTTP renderer may still be running concurrently (an early callback can
-// claim and tear down a Request mid-render); that is precisely why this leaves
-// render-visible Element and Jid state untouched and transfers wsQueue under muQueue.
+// claim and tear down a Request mid-render). This is race-safe rather than fully
+// non-destructive: clearing the collections can degrade that render (later
+// GetElements and getElementByJid find nothing), but the Element fields and Jid
+// counter it reads lock-free are left intact and wsQueue is transferred under
+// muQueue, so there is no data race, no reused identity, and no duplicated Jid.
 func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
 	// Cancel first so a retained context observes cancellation, then detach the
 	// Request from its session and unregister its identity.

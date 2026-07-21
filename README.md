@@ -357,8 +357,10 @@ its WebSocket processing exits: its context is canceled, its buffers are release
 to the pool, and its key is reserved until the Request is collected rather than
 reassigned. Completion does not mutate render-visible Element state, so if an
 early `/jaws/<key>` callback claims and tears down a Request whose initial render
-is still in flight, the render is not corrupted (it continues on a now finished,
-unregistered Request). Maintenance or the per-IP limit can instead retire a
+is still in flight, that render may degrade — its element and tag collections are
+cleared, so later lookups find nothing — but it stays race-safe: no data race, no
+reused identity, and no duplicated element id. Maintenance or the per-IP limit can
+instead retire a
 non-running Request: its context is canceled, its key becomes unclaimable, and it is
 excluded from `Pending` and `RequestCount`. Retirement preserves the Request's
 identity, Elements and buffers so an initial HTTP handler still holding it can keep

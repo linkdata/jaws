@@ -396,9 +396,9 @@ func TestSession_Broadcast(t *testing.T) {
 	jw.recycle(rq2)
 }
 
-// TestSession_ProducersSkipRecycled covers stale Request pointers retained by a
-// Session snapshot while the Request is recycled or rebound. Both producers must
-// target only Requests that still belong to the Session.
+// TestSession_ProducersSkipRecycled covers a stale Request pointer retained by a
+// Session snapshot after the Request finished and detached from the Session. Both
+// producers must target only Requests that still belong to the Session.
 func TestSession_ProducersSkipRecycled(t *testing.T) {
 	th := newTestHelper(t)
 	jw, _ := New()
@@ -412,16 +412,16 @@ func TestSession_ProducersSkipRecycled(t *testing.T) {
 	live := jw.NewRequest(hr)
 	th.True(live.Session() == sess)
 
-	// Session methods operate on a snapshot after releasing sess.mu. These entries
-	// model pointers that were recycled after that snapshot: one has been cleared,
-	// and one has already acquired an unrelated nonzero identity.
-	cleared := &Request{Jaws: jw}
-	rebound := &Request{Jaws: jw, JawsKey: key.Key(0x9876)}
+	// Session methods operate on a snapshot taken after releasing sess.mu. This entry
+	// models a Request captured in that snapshot that then finished: identities are
+	// never reused, so it keeps its own (nonzero) key, but completion detached it from
+	// the Session (session == nil), so both producers must skip it.
+	finished := &Request{Jaws: jw, JawsKey: key.Key(0x9876)}
 	sess.mu.Lock()
-	sess.requests = append(sess.requests, cleared, rebound)
+	sess.requests = append(sess.requests, finished)
 	sess.mu.Unlock()
 
-	// Session.Broadcast targets only the live request, never the rebound identity.
+	// Session.Broadcast targets only the live request, never the finished one.
 	done := make(chan struct{})
 	go func() {
 		sess.Broadcast(wire.Message{What: what.Alert, Data: "info\nhi"})
@@ -440,7 +440,7 @@ func TestSession_ProducersSkipRecycled(t *testing.T) {
 	default:
 	}
 
-	// Session.Close reloads only the live request, never the rebound identity.
+	// Session.Close reloads only the live request, never the finished one.
 	closeDone := make(chan struct{})
 	go func() {
 		sess.Close()

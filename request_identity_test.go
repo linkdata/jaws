@@ -108,10 +108,11 @@ func TestRequestLateCancelDoesNotReachNextConnection(t *testing.T) {
 }
 
 // TestRequestFinishDoesNotPanicOnContinuedRender exercises the racy #195 window
-// where the initial renderer keeps registering after the Request finished. Element
-// and tag registration on a finished Request (whose buffers were released, leaving a
-// nil tagMap) must be an inert no-op rather than a nil-map panic, and must not leak
-// into a later, distinct Request.
+// where the initial renderer keeps registering after the Request finished. This must
+// not panic and must not leak into a later, distinct Request. Registration is not a
+// full no-op: NewElement still creates an Element and advances the Jid, while Tag
+// reaches the nil-map guard in TagExpanded (the buffers were released) and is dropped
+// — neither panics, and none of it is visible to another Request.
 func TestRequestFinishDoesNotPanicOnContinuedRender(t *testing.T) {
 	jw, err := New()
 	if err != nil {
