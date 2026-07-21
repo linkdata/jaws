@@ -66,10 +66,10 @@ type requestBuffers struct {
 // Request maintains the state for a JaWS WebSocket connection, and handles processing
 // of events and broadcasts.
 //
-// Each Request has a stable identity that is never reused for another connection:
-// once it finishes, its context stays canceled and identity-targeted operations
-// are never retargeted to a different Request. A pointer retained past its
-// documented lifetime therefore can never alias an unrelated connection.
+// Each Request has a stable identity — the *Request pointer — that is never reused
+// for another connection: once it finishes, its context stays canceled and the
+// pointer is never handed out again, so a pointer retained past its documented
+// lifetime can never alias an unrelated connection.
 //
 // A Request pointer is borrowed for the lifecycle that supplied it — the initial
 // HTTP render (from [Jaws.NewRequest]) or the WebSocket handling (from
@@ -81,12 +81,14 @@ type requestBuffers struct {
 // retired; it is then unregistered, and its identity is never reused for another
 // connection.
 //
-// Because the identity is never reused, a retained pointer can never come to
-// represent a different connection, so identity-targeted operations (updates and
-// broadcasts aimed at this Request) reach nothing once it has finished. This is not
-// a general no-op guarantee: instance-wide calls such as [Request.Dirty] delegate to
-// [Jaws]-wide dirtying and can still update matching Elements on other live Requests.
-// Background work should instead retain [Request.Context] and, when it must terminate
+// Because the pointer is never reused it can never come to represent a different
+// connection, and a broadcast destination resolved from the Request after it has
+// finished (as [Request.Alert] and [Request.Redirect] do) is empty, so such a call
+// reaches nothing. This is not a general no-op guarantee: [Request.Dirty] delegates
+// to [Jaws]-wide dirtying and can still update matching Elements on other live
+// Requests, and an Alert or Redirect queued before completion carries a key value
+// that can outlive the Request and, after that key is later reused, match a different
+// Request. Background work should instead retain [Request.Context] and, when it must terminate
 // the connection, the cancel function returned while deriving a replacement context
 // through [Request.SetContext].
 //

@@ -365,8 +365,11 @@ instead retire a
 non-running Request: its context is canceled, its key becomes unclaimable, and it is
 excluded from `Pending` and `RequestCount`. Retirement preserves the Request's
 identity, Elements and buffers so an initial HTTP handler still holding it can keep
-rendering. In every case a finished key cannot be assigned to another Request while
-the old one remains reachable; no deadline is guaranteed for later reuse.
+rendering. For registered Requests, a finished key is not assigned to another Request
+while the old one remains reachable; no deadline is guaranteed for later reuse. (A
+Request created by `NewRequest` after `Jaws.Close` is never registered and installs no
+tombstone, so two such post-close calls could receive the same key — harmless, since
+neither is claimable.)
 
 `*Request` values are borrowed lifecycle objects. Do not store them in
 application state or pass them to background goroutines; copy the required
