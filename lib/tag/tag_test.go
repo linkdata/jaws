@@ -60,6 +60,20 @@ func (tt *testMutualSliceTagger) JawsGetTag(Context) any {
 	return []any{tt.next}
 }
 
+// testCapTagger is a named slice type whose tag depends on its capacity: a view
+// with spare capacity yields Tag("outer") plus a capacity-trimmed view of
+// itself, which (having no spare capacity) yields Tag("inner"). The two views
+// share a first-element pointer and length but differ in capacity, so they must
+// be treated as distinct active nodes.
+type testCapTagger []int
+
+func (c testCapTagger) JawsGetTag(Context) any {
+	if cap(c) > len(c) {
+		return []any{Tag("outer"), c[:len(c):len(c)]}
+	}
+	return Tag("inner")
+}
+
 type testTagExpandNestedTagGetter struct {
 	Setter testNestedTagGetter
 	Vals   []int
@@ -395,6 +409,23 @@ func TestTagExpand_AliasedSliceViews(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("TagExpand() = %#v, want %#v", got, want)
 	}
+}
+
+// TestTagExpand_CapacityDependentSliceGetter guards against conflating two
+// aliased slice-typed TagGetters that share a first-element pointer and length
+// but differ in capacity. Identifying active nodes by pointer and length alone
+// would treat the capacity-trimmed inner view as a cycle back to the outer view
+// and, because a non-comparable slice getter cannot itself be a tag key, fail
+// with ErrNotUsableAsTag instead of invoking the inner getter.
+func TestTagExpand_CapacityDependentSliceGetter(t *testing.T) {
+	backing := make(testCapTagger, 2)
+	outer := backing[:1] // len 1, cap 2: yields Tag("outer") and a cap-1 inner view
+
+	got, err := TagExpand(nil, outer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertTagSetEqual(t, got, []any{Tag("outer"), Tag("inner")})
 }
 
 func TestTagExpand_TooManyTagsPanic(t *testing.T) {
@@ -751,7 +782,12 @@ func TestSameActiveNode_AliasedSliceViews(t *testing.T) {
 	if sameActiveNode(short, backing) {
 		t.Fatal("expected aliased slice views of different lengths not to match")
 	}
-	// Identical start pointer and length: the same node, so a genuine
+	// Same start pointer and length, different capacities: also distinct nodes,
+	// since a named slice getter can observe capacity and produce different tags.
+	if sameActiveNode(backing[:2], backing[:2:2]) {
+		t.Fatal("expected aliased slice views of different capacities not to match")
+	}
+	// Identical start pointer, length and capacity: the same node, so a genuine
 	// self-referential slice is still detected as a cycle.
 	if !sameActiveNode(backing, backing) {
 		t.Fatal("expected a slice to match itself")

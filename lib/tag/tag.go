@@ -85,11 +85,13 @@ func sameActiveNode(a, b any) bool {
 		return false
 	case reflect.Slice:
 		// Value.Pointer for a slice is the address of its first element, so two
-		// distinct views into the same backing array share it. Compare length too
-		// so aliased views of different lengths (e.g. s[:2] and s[:3]) are distinct
-		// nodes; a genuine self-referential slice re-enters with an identical
-		// pointer and length and is still detected as a cycle.
-		return va.Pointer() == vb.Pointer() && va.Len() == vb.Len()
+		// distinct views into the same backing array share it. A slice header is
+		// fully identified by its pointer, length and capacity, so compare all
+		// three: views differing in length or capacity are distinct nodes (a named
+		// slice TagGetter can observe its capacity via cap and yield different
+		// tags), while a genuine self-referential slice re-enters with an identical
+		// header and is still detected as a cycle.
+		return va.Pointer() == vb.Pointer() && va.Len() == vb.Len() && va.Cap() == vb.Cap()
 	case reflect.Pointer, reflect.Map, reflect.Chan, reflect.UnsafePointer:
 		return va.Pointer() == vb.Pointer()
 	default:
