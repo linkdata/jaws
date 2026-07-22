@@ -473,23 +473,29 @@ func TestElement_AttrHelpersRejectReservedId(t *testing.T) {
 			defer jw.Close()
 			logger := &captureErrorLogger{}
 			jw.Logger = logger
-			rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+			// A plain NewRequest has no running process loop, so nothing drains
+			// wsQueue underneath the assertion (unlike newTestRequest).
+			rq := jw.NewRequest(nil)
+			defer jw.recycle(rq)
 			e := rq.NewElement(&testUi{})
 
+			// Wrap only the call so that in a debug build the fail-fast panic is
+			// recovered here and the identity/queue assertions below still run.
+			call := func() { tt.call(e) }
 			if deadlock.Debug {
-				// Debug builds fail fast with a panic (after logging the misuse).
-				defer func() {
-					if recover() == nil {
-						t.Fatal("reserved attribute did not panic in a debug build")
-					}
+				func() {
+					defer func() {
+						if recover() == nil {
+							t.Fatal("reserved attribute did not panic in a debug build")
+						}
+					}()
+					call()
 				}()
-			}
-			tt.call(e)
-			if deadlock.Debug {
-				t.Fatal("reserved attribute should have panicked in debug build")
+			} else {
+				call()
 			}
 
-			// Production builds (with a Logger) report it and send nothing.
+			// Both builds report the misuse (after logging) and send nothing.
 			if !errors.Is(logger.err, ErrReservedAttribute) {
 				t.Fatalf("error = %v, want ErrReservedAttribute", logger.err)
 			}
@@ -505,8 +511,15 @@ func TestElement_AttrHelpersRejectReservedId(t *testing.T) {
 }
 
 func TestElement_AttrHelpersAllowNormalAttr(t *testing.T) {
-	rq := newTestRequest(t)
-	defer rq.Close()
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	// A plain NewRequest has no running process loop, so nothing drains wsQueue
+	// underneath the assertion (unlike newTestRequest).
+	rq := jw.NewRequest(nil)
+	defer jw.recycle(rq)
 	e := rq.NewElement(&testUi{})
 	e.SetAttr("hidden", "yes")
 	e.RemoveAttr("hidden")
