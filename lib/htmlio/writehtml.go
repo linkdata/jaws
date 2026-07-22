@@ -176,11 +176,16 @@ func WriteHTMLInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs 
 // example Attr("value", v)) when a value="..." is needed.
 //
 // For textarea and pre elements, the HTML source includes one LF immediately
-// after the start tag. The parser consumes that prefix, so it adds no DOM content
-// while preserving a leading LF or CR from innerHTML. Because browser input-stream
-// preprocessing rewrites a raw carriage return to LF before parsing, each CR in
-// innerHTML is emitted as the numeric character reference &#13; so carriage
-// returns survive parsing unchanged.
+// after the start tag. The parser strips that one LF, so a leading LF in
+// innerHTML is preserved instead of being consumed.
+//
+// Carriage returns in innerHTML are written verbatim, not encoded. A textarea
+// reports its value with every CR and CRLF normalized to LF (the HTML standard's
+// textarea value normalization), so carriage returns in textarea content cannot
+// round-trip through the value the browser sends back. Encoding them would also
+// be unsafe for pre, whose trusted markup may include script, comment, or other
+// contexts where character references are not decoded. Use [AppendAttrValue] for
+// logical values that must retain carriage returns.
 //
 // The htmlTag parameter is trusted and written verbatim with no escaping or
 // validation; it MUST NOT be derived from untrusted data. The typeAttr parameter
@@ -191,17 +196,14 @@ func WriteHTMLInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs 
 func WriteHTMLInner(w io.Writer, jid jid.Jid, htmlTag, typeAttr string, innerHTML template.HTML, attrs ...template.HTMLAttr) (err error) {
 	b := appendHTMLTag(nil, jid, htmlTag, typeAttr, "", attrs)
 	if needClosingTag(htmlTag) {
+		// The HTML parser strips one LF right after a textarea/pre start tag.
+		// Provide that parser-consumed prefix so a leading LF in innerHTML is
+		// preserved instead of being consumed. Carriage returns are written
+		// verbatim; the doc comment explains why they are not encoded here.
 		if isNewlineSensitive(htmlTag) {
-			// The HTML parser strips one LF right after a textarea/pre start
-			// tag. Always provide that parser-consumed prefix so innerHTML is
-			// preserved regardless of whether its first character is LF, CR, or
-			// ordinary text. Encode each CR as &#13; because browser input-stream
-			// preprocessing would otherwise rewrite a raw CR to LF before parsing.
 			b = append(b, '\n')
-			b = appendEscapeCR(b, string(innerHTML))
-		} else {
-			b = append(b, innerHTML...)
 		}
+		b = append(b, innerHTML...)
 		b = append(b, "</"...)
 		b = append(b, htmlTag...)
 		b = append(b, '>')

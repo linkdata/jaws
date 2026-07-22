@@ -145,22 +145,21 @@ func Test_WriteHTMLInner_NewlineSensitivePrefix(t *testing.T) {
 			want:  "<textarea id=\"Jid.1\">\n\nhello</textarea>",
 		},
 		{
-			name:  "textarea leading CR is encoded as a character reference",
+			// A carriage return is written verbatim: the textarea value API
+			// normalizes it to LF (see TestWriteHTMLInner_TextareaValueNormalization),
+			// so encoding it would not round-trip anyway.
+			name:  "textarea carriage returns are written verbatim",
 			tag:   "textarea",
-			inner: "\rhello",
-			want:  "<textarea id=\"Jid.1\">\n&#13;hello</textarea>",
+			inner: "\ra\r\nb",
+			want:  "<textarea id=\"Jid.1\">\n\ra\r\nb</textarea>",
 		},
 		{
-			name:  "textarea interior and CRLF carriage returns are encoded",
-			tag:   "textarea",
-			inner: "a\rb\r\nc",
-			want:  "<textarea id=\"Jid.1\">\na&#13;b&#13;\nc</textarea>",
-		},
-		{
-			name:  "pre leading CR is encoded as a character reference",
+			// pre content is trusted markup written verbatim; encoding CR would
+			// corrupt nested script/comment contexts that do not decode &#13;.
+			name:  "pre carriage returns are written verbatim",
 			tag:   "pre",
-			inner: "\rhello",
-			want:  "<pre id=\"Jid.1\">\n&#13;hello</pre>",
+			inner: "<script>//x\rdoThing()</script>",
+			want:  "<pre id=\"Jid.1\">\n<script>//x\rdoThing()</script></pre>",
 		},
 		{
 			name:  "uppercase TEXTAREA is newline-sensitive",
@@ -192,8 +191,8 @@ func Test_WriteHTMLInner_NewlineSensitivePrefix(t *testing.T) {
 			want:  "<div id=\"Jid.1\">\nx</div>",
 		},
 		{
-			// Only textarea/pre content is CR-encoded; a non-newline-sensitive
-			// element carries the trusted innerHTML markup through verbatim.
+			// WriteHTMLInner never rewrites innerHTML; the trusted markup,
+			// including any carriage return, is carried through verbatim.
 			name:  "div carriage return is left verbatim",
 			tag:   "div",
 			inner: "a\rb",
@@ -415,10 +414,11 @@ func normalizeCR(s string) string {
 }
 
 // TestAppendAttrValue_DOMRoundTrip verifies that a logical attribute value with
-// carriage returns survives a browser parse unchanged. It models the two browser
-// steps that would otherwise corrupt a raw CR: input-stream preprocessing
-// (CR/CRLF to LF) followed by tokenizer character-reference decoding, the latter
-// using the standard library html.UnescapeString.
+// carriage returns survives a browser parse unchanged, as getAttribute reports
+// it. It models the two browser steps that would otherwise corrupt a raw CR:
+// input-stream preprocessing (CR/CRLF to LF) followed by tokenizer
+// character-reference decoding, the latter using the standard library
+// html.UnescapeString.
 func TestAppendAttrValue_DOMRoundTrip(t *testing.T) {
 	values := []string{"", "plain", "a\rb", "a\r\nb", "\rlead", "trail\r", "x\ry\rz", `"&<>'` + "\r"}
 	for _, value := range values {
@@ -442,25 +442,27 @@ func innerContent(t *testing.T, source, tag string) string {
 	return source[start+1 : end]
 }
 
-// TestWriteHTMLInner_DOMRoundTrip verifies that carriage returns in textarea/pre
-// content survive a browser parse. It mirrors the ui.Textarea pipeline (the
-// value is HTML-escaped before WriteHTMLInner) and models the browser: input-
-// stream preprocessing (CR/CRLF to LF), character-reference decoding, then the
-// single leading LF the parser strips after a textarea/pre start tag.
-func TestWriteHTMLInner_DOMRoundTrip(t *testing.T) {
+// TestWriteHTMLInner_TextareaValueNormalization documents that a textarea cannot
+// round-trip carriage returns: the value the browser reports (and jaws.js sends
+// back) collapses every CR and CRLF to LF. It mirrors the ui.Textarea pipeline
+// (the value is HTML-escaped before WriteHTMLInner) and models
+// HTMLTextAreaElement.value: input-stream preprocessing, character-reference
+// decoding, dropping the single leading LF the parser strips after the start
+// tag to obtain the raw value, then the textarea value normalization the HTML
+// standard applies (CR and CRLF become LF).
+func TestWriteHTMLInner_TextareaValueNormalization(t *testing.T) {
 	values := []string{"", "plain", "\rhello", "\nhello", "a\rb", "a\r\nb\rc", "\r\r", "<kept>&amp;"}
-	for _, tag := range []string{"textarea", "pre"} {
-		for _, value := range values {
-			inner := template.HTML(template.HTMLEscapeString(value)) // #nosec G203
-			var sb strings.Builder
-			if err := htmlio.WriteHTMLInner(&sb, jid.Jid(1), tag, "", inner); err != nil {
-				t.Fatal(err)
-			}
-			content := innerContent(t, sb.String(), tag)
-			decoded := html.UnescapeString(normalizeCR(content))
-			if got := strings.TrimPrefix(decoded, "\n"); got != value {
-				t.Errorf("%s value %q round-tripped to %q via source %q", tag, value, got, sb.String())
-			}
+	for _, value := range values {
+		inner := template.HTML(template.HTMLEscapeString(value)) // #nosec G203
+		var sb strings.Builder
+		if err := htmlio.WriteHTMLInner(&sb, jid.Jid(1), "textarea", "", inner); err != nil {
+			t.Fatal(err)
+		}
+		content := innerContent(t, sb.String(), "textarea")
+		rawValue := strings.TrimPrefix(html.UnescapeString(normalizeCR(content)), "\n")
+		apiValue := normalizeCR(rawValue) // textarea value normalization: CR/CRLF -> LF
+		if want := normalizeCR(value); apiValue != want {
+			t.Errorf("textarea value %q reported as %q, want %q (source %q)", value, apiValue, want, sb.String())
 		}
 	}
 }
