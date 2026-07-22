@@ -453,6 +453,92 @@ func TestElement_ReplaceRejectsMissingId(t *testing.T) {
 	}
 }
 
+func TestElement_AttrHelpersRejectReservedId(t *testing.T) {
+	tests := []struct {
+		name string
+		call func(e *Element)
+	}{
+		{"SetAttr id", func(e *Element) { e.SetAttr("id", "changed") }},
+		{"SetAttr ID", func(e *Element) { e.SetAttr("ID", "changed") }},
+		{"SetAttr Id", func(e *Element) { e.SetAttr("Id", "changed") }},
+		{"RemoveAttr id", func(e *Element) { e.RemoveAttr("id") }},
+		{"RemoveAttr iD", func(e *Element) { e.RemoveAttr("iD") }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer jw.Close()
+			logger := &captureErrorLogger{}
+			jw.Logger = logger
+			// A plain NewRequest has no running process loop, so nothing drains
+			// wsQueue underneath the assertion (unlike newTestRequest).
+			rq := jw.NewRequest(nil)
+			defer jw.recycle(rq)
+			e := rq.NewElement(&testUi{})
+
+			// Wrap only the call so that in a debug build the fail-fast panic is
+			// recovered here and the identity/queue assertions below still run.
+			call := func() { tt.call(e) }
+			if deadlock.Debug {
+				func() {
+					defer func() {
+						if recover() == nil {
+							t.Fatal("reserved attribute did not panic in a debug build")
+						}
+					}()
+					call()
+				}()
+			} else {
+				call()
+			}
+
+			// Both builds report the misuse (after logging) and send nothing.
+			if !errors.Is(logger.err, ErrReservedAttribute) {
+				t.Fatalf("error = %v, want ErrReservedAttribute", logger.err)
+			}
+			rq.muQueue.Lock()
+			defer rq.muQueue.Unlock()
+			for _, msg := range rq.wsQueue {
+				if msg.What == what.SAttr || msg.What == what.RAttr {
+					t.Fatalf("reserved attribute was enqueued: %+v", msg)
+				}
+			}
+		})
+	}
+}
+
+func TestElement_AttrHelpersAllowNormalAttr(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	// A plain NewRequest has no running process loop, so nothing drains wsQueue
+	// underneath the assertion (unlike newTestRequest).
+	rq := jw.NewRequest(nil)
+	defer jw.recycle(rq)
+	e := rq.NewElement(&testUi{})
+	e.SetAttr("hidden", "yes")
+	e.RemoveAttr("hidden")
+	rq.muQueue.Lock()
+	defer rq.muQueue.Unlock()
+	var sattr, rattr int
+	for _, msg := range rq.wsQueue {
+		switch msg.What {
+		case what.SAttr:
+			sattr++
+		case what.RAttr:
+			rattr++
+		}
+	}
+	if sattr != 1 || rattr != 1 {
+		t.Fatalf("want 1 SAttr and 1 RAttr queued, got %d and %d", sattr, rattr)
+	}
+}
+
 func TestElement_ReplaceMessageTargetsElementHTML(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()

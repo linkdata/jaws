@@ -214,11 +214,22 @@ func (elem *Element) queue(wht what.What, data string) (queued bool) {
 	return
 }
 
+// isReservedAttr reports whether attr names a framework-owned attribute that must
+// not be set or removed through the public helpers. The match is ASCII
+// case-insensitive because browsers lower-case HTML attribute names in setAttribute.
+func isReservedAttr(attr string) bool {
+	return strings.EqualFold(attr, "id")
+}
+
 // SetAttr queues sending a new attribute value
 // to the browser for the [Element].
 //
 // The value parameter must be the unescaped logical attribute value. It is sent
 // to the browser DOM and used as the value argument to setAttribute().
+//
+// The framework-owned "id" attribute is rejected (ASCII case-insensitively):
+// attempting to set it is reported as [ErrReservedAttribute] via reportMisuse and
+// nothing is sent, since it carries the [Element]'s JaWS identity.
 //
 // Call this while the [Element] is rendering or updating, when a send pass is
 // imminent. To change the [Element] in response to a browser event, mark it dirty
@@ -226,11 +237,19 @@ func (elem *Element) queue(wht what.What, data string) (queued bool) {
 // flushed only when the processing loop is next woken, which on an otherwise-idle
 // request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) SetAttr(attr, value string) {
+	if isReservedAttr(attr) {
+		elem.Jaws.reportMisuse(fmt.Errorf("jaws: Element.SetAttr: %q: %w", attr, ErrReservedAttribute))
+		return
+	}
 	elem.queue(what.SAttr, attr+"\n"+value)
 }
 
 // RemoveAttr queues sending a request to remove an attribute
 // to the browser for the [Element].
+//
+// The framework-owned "id" attribute is rejected (ASCII case-insensitively):
+// attempting to remove it is reported as [ErrReservedAttribute] via reportMisuse and
+// nothing is sent, since it carries the [Element]'s JaWS identity.
 //
 // Call this while the [Element] is rendering or updating, when a send pass is
 // imminent. To change the [Element] in response to a browser event, mark it dirty
@@ -238,6 +257,10 @@ func (elem *Element) SetAttr(attr, value string) {
 // flushed only when the processing loop is next woken, which on an otherwise-idle
 // request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) RemoveAttr(attr string) {
+	if isReservedAttr(attr) {
+		elem.Jaws.reportMisuse(fmt.Errorf("jaws: Element.RemoveAttr: %q: %w", attr, ErrReservedAttribute))
+		return
+	}
 	elem.queue(what.RAttr, attr)
 }
 

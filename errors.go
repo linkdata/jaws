@@ -58,6 +58,16 @@ var ErrInvalidChildElement = errors.New("invalid child element")
 // insert at the end.
 var ErrInvalidChildIndex = errors.New("invalid child index")
 
+// ErrReservedAttribute indicates an attempt to set or remove a framework-owned
+// attribute through a public attribute helper.
+//
+// The "id" attribute carries an [Element]'s JaWS identity: every wire command
+// resolves its target node with document.getElementById, so changing or removing
+// it would strand the server-side [Element] with an unreachable DOM node. The
+// [Element.SetAttr], [Element.RemoveAttr], [Jaws.SetAttr] and [Jaws.RemoveAttr]
+// helpers report this via reportMisuse and send nothing.
+var ErrReservedAttribute = errors.New("reserved attribute")
+
 // ErrJavascriptDisabled is returned when the noscript probe indicates JavaScript is disabled.
 var ErrJavascriptDisabled = errors.New("javascript is disabled")
 

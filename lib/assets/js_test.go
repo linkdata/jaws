@@ -2566,3 +2566,116 @@ process.stdout.write(JSON.stringify({ warnings: warnings, replaceCalls: replaceC
 		t.Fatalf("replace calls = %d, want 0", got.ReplaceCalls)
 	}
 }
+
+func TestJawsJS_AttrGuardsRejectReservedId(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+// Keep the Inner order in the frame test focused on "did it run at all".
+jawsRemoving = function() {};
+jawsAttachChildren = function(node) { return node; };
+
+const elem1 = {
+	id: "Jid.1",
+	attrs: { id: "Jid.1" },
+	getAttribute: function(a) { return Object.prototype.hasOwnProperty.call(this.attrs, a) ? this.attrs[a] : null; },
+	setAttribute: function(a, v) { this.attrs[a] = v; },
+	removeAttribute: function(a) { delete this.attrs[a]; },
+	innerHTML: "",
+	querySelectorAll: function() { return []; },
+};
+const elem2 = {
+	id: "Jid.2",
+	innerHTML: "old",
+	querySelectorAll: function() { return []; },
+};
+const elems = { "Jid.1": elem1, "Jid.2": elem2 };
+document.getElementById = function(id) { return elems[id] || null; };
+
+const errors = [];
+console.error = function(msg) { errors.push(String(msg)); };
+
+// SAttr rejects "id" ASCII case-insensitively without touching setAttribute.
+const sattrThrows = {};
+["id", "ID", "Id", "iD"].forEach(function(name) {
+	try {
+		jawsSetAttr(elem1, name + "\nhacked");
+		sattrThrows[name] = false;
+	} catch (err) {
+		sattrThrows[name] = true;
+	}
+});
+// A normal attribute is still applied.
+jawsSetAttr(elem1, "title\nhello");
+const normalAttr = elem1.getAttribute("title");
+
+// RAttr rejects "id" ASCII case-insensitively without touching removeAttribute.
+const rattrThrows = {};
+["id", "ID", "Id", "iD"].forEach(function(name) {
+	try {
+		jawsPerform("RAttr", "Jid.1", JSON.stringify(name));
+		rattrThrows[name] = false;
+	} catch (err) {
+		rattrThrows[name] = true;
+	}
+});
+const idAfterRemove = elem1.getAttribute("id");
+
+// A frame whose first order tries to change "id" throws, but jawsMessage isolates
+// it so later orders in the same frame still apply.
+const frame = [
+	"SAttr\tJid.1\t" + JSON.stringify("id\nhacked"),
+	"Inner\tJid.2\t" + JSON.stringify("<b>ok</b>")
+].join("\n");
+jawsMessage({ data: frame });
+
+process.stdout.write(JSON.stringify({
+	sattrThrows: sattrThrows,
+	rattrThrows: rattrThrows,
+	normalAttr: normalAttr,
+	idAfterRemove: idAfterRemove,
+	idAfterFrame: elem1.getAttribute("id"),
+	laterOrderInner: elem2.innerHTML,
+	frameErrors: errors.length
+}));
+`)
+
+	var got struct {
+		SattrThrows     map[string]bool `json:"sattrThrows"`
+		RattrThrows     map[string]bool `json:"rattrThrows"`
+		NormalAttr      string          `json:"normalAttr"`
+		IDAfterRemove   string          `json:"idAfterRemove"`
+		IDAfterFrame    string          `json:"idAfterFrame"`
+		LaterOrderInner string          `json:"laterOrderInner"`
+		FrameErrors     int             `json:"frameErrors"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	for _, name := range []string{"id", "ID", "Id", "iD"} {
+		if !got.SattrThrows[name] {
+			t.Errorf("jawsSetAttr(%q) did not reject the reserved attribute", name)
+		}
+		if !got.RattrThrows[name] {
+			t.Errorf("RAttr %q did not reject the reserved attribute", name)
+		}
+	}
+	if got.NormalAttr != "hello" {
+		t.Errorf("normal attribute = %q, want %q", got.NormalAttr, "hello")
+	}
+	if got.IDAfterRemove != "Jid.1" {
+		t.Errorf("id after rejected RemoveAttr = %q, want it untouched", got.IDAfterRemove)
+	}
+	if got.IDAfterFrame != "Jid.1" {
+		t.Errorf("id after rejected SAttr in frame = %q, want it untouched", got.IDAfterFrame)
+	}
+	if got.LaterOrderInner != "<b>ok</b>" {
+		t.Errorf("later order in frame = %q, want it applied despite the earlier throw", got.LaterOrderInner)
+	}
+	if got.FrameErrors == 0 {
+		t.Error("rejected SAttr in frame was not surfaced via console.error")
+	}
+}
