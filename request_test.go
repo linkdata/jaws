@@ -2063,7 +2063,9 @@ func TestRequest_renderDebugLocked(t *testing.T) {
 	}
 
 	txt := sb.String()
-	is.Equal(strings.Contains(txt, "zomg"), true)
+	// renderDebug renders each tag with tag.TagString, whose form depends on the
+	// build, so match on that rather than the raw tag value.
+	is.Equal(strings.Contains(txt, tag.TagString(tag.Tag("zomg"))), true)
 	is.Equal(strings.Contains(txt, "n/a"), false)
 
 	rq.mu.Lock()

@@ -133,8 +133,10 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 
 	td := &templateDot{}
 	tpl := NewTemplate("div", "uitempl", td)
-	if got := tpl.String(); !strings.Contains(got, `{"div", "uitempl", *ui.templateDot(`) {
-		t.Fatalf("unexpected template string %q", got)
+	// Dot is rendered with tag.TagString, whose exact form varies by build, so build
+	// the expectation the same way rather than hardcoding it.
+	if got, want := tpl.String(), `{"div", "uitempl", `+tag.TagString(td); !strings.Contains(got, want) {
+		t.Fatalf("template string %q does not contain %q", got, want)
 	}
 	elem := rq.NewElement(tpl)
 	tpl.JawsUpdate(elem)

@@ -72,8 +72,12 @@
 // active: the debug tag sets deadlock.Debug, while the deadlock tag enables the
 // detector. Those JaWS debug branches are compile-time dead in normal builds, so
 // a plain "go test" neither exercises them nor reports their statement coverage.
-// Runtime tag-comparability checks in [github.com/linkdata/jaws/lib/tag] run in
-// every build. CI builds with -race.
+//
+// Also run a plain "go test" (no -race), because -race and -tags debug select the
+// full-detail tag renderer in [github.com/linkdata/jaws/lib/tag]; only a build
+// with neither exercises the crash-safe release renderer used in production. CI
+// runs both legs. Runtime tag-comparability checks in that package run in every
+// build.
 package jaws
 
 import (

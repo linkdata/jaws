@@ -44,6 +44,13 @@ type Element struct {
 	frozen   atomic.Bool // set when handlers are sealed (JawsRender returns or Freeze called); guards handler mutators in all builds
 }
 
+// String returns a debug representation of elem: its UI type, Jid, and tags.
+//
+// The tags render through [tag.TagsString], so in the default build they show
+// their types (and a pointer's address when readable; see [tag.TagStringRelease]),
+// while debug and -race builds render them in full — more informative, but able
+// to crash on a self-referential or oversized tag. String tolerates an Element
+// whose Request is not yet set, but not a nil *Element.
 func (elem *Element) String() string {
 	// Guard elem.Request like Request.String()/JawsKeyString guard a nil
 	// receiver, so String() stays safe on a not-fully-constructed Element.
@@ -51,7 +58,7 @@ func (elem *Element) String() string {
 	if elem.Request != nil {
 		tags = elem.Request.TagsOf(elem)
 	}
-	return fmt.Sprintf("Element{%T, id=%q, Tags: %v}", elem.UI(), elem.Jid(), tags)
+	return fmt.Sprintf("Element{%T, id=%q, Tags: %s}", elem.UI(), elem.Jid(), tag.TagsString(tags))
 }
 
 // appendHandlers is the single internal chokepoint for mutating elem.handlers.

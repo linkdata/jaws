@@ -61,6 +61,14 @@ jobs:
           JAWS_REQUIRE_NODE: "1"
         run: go test -race -coverprofile=coverage.out ./...
 
+      - name: Test (production build)
+        env:
+          JAWS_REQUIRE_NODE: "1"
+        # -race selects the debug tag renderer via the "race" build tag, so this
+        # non-race leg is what exercises the crash-safe release renderer and the
+        # default TagString forwarding used in production.
+        run: go test ./...
+
       - name: Calculate code coverage
         id: coverage
         run: |

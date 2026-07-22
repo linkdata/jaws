@@ -1,7 +1,6 @@
 package tag
 
 import (
-	"fmt"
 	"html/template"
 	"reflect"
 	"runtime"
@@ -13,19 +12,6 @@ import (
 
 // Tag is a simple comparable tag value.
 type Tag string
-
-// TagString returns a debug string for tag.
-func TagString(tag any) string {
-	if rv := reflect.ValueOf(tag); rv.IsValid() {
-		if rv.Kind() == reflect.Pointer {
-			return fmt.Sprintf("%T(%p)", tag, tag)
-		}
-		if stringer, ok := tag.(fmt.Stringer); ok {
-			return fmt.Sprintf("%T(%s)", tag, stringer.String())
-		}
-	}
-	return fmt.Sprintf("%#v", tag)
-}
 
 // Expansion limits guarding against runaway recursion or pathological input.
 const (

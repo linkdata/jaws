@@ -3,6 +3,7 @@ package wire
 import (
 	"fmt"
 
+	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 )
 
@@ -18,10 +19,15 @@ type Message struct {
 }
 
 // String returns the Message in a form suitable for debug output.
+//
+// Dest is rendered with [tag.TagString], so in the default build it shows only
+// its type (and, for a pointer, its address when it can be read safely) and a
+// malformed Dest cannot crash the caller; build with -tags debug or -race for
+// full-value rendering, which is more informative but not crash-safe.
 func (msg *Message) String() string {
 	return fmt.Sprintf(
-		"{%v, %v, %q}",
-		msg.Dest,
+		"{%s, %v, %q}",
+		tag.TagString(msg.Dest),
 		msg.What,
 		msg.Data,
 	)
