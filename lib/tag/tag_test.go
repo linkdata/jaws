@@ -375,6 +375,28 @@ func TestTagExpand_SelfReferentialSliceStopsRecursing(t *testing.T) {
 	}
 }
 
+// TestTagExpand_AliasedSliceViews reproduces #203: two slices sharing a backing
+// array at the same start but with different lengths must not be conflated as a
+// cycle. Expanding the shorter view whose element references the longer backing
+// slice must still visit every tag reachable through the longer slice.
+func TestTagExpand_AliasedSliceViews(t *testing.T) {
+	all := make([]any, 3)
+	outer := all[:2]
+
+	all[0] = Tag("first")
+	all[1] = all
+	all[2] = Tag("last")
+
+	got, err := TagExpand(nil, outer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []any{Tag("first"), Tag("last")}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("TagExpand() = %#v, want %#v", got, want)
+	}
+}
+
 func TestTagExpand_TooManyTagsPanic(t *testing.T) {
 	tags := make([]any, 101)
 	for i := range tags {
@@ -719,6 +741,20 @@ func TestSameActiveNode_NilAndDefaultCases(t *testing.T) {
 	b := testNonComparableActiveNode{Values: []int{1}}
 	if sameActiveNode(a, b) {
 		t.Fatal("expected non-comparable structs to compare by identity, not contents")
+	}
+}
+
+func TestSameActiveNode_AliasedSliceViews(t *testing.T) {
+	backing := []any{Tag("a"), Tag("b"), Tag("c")}
+	short := backing[:2]
+	// Same start pointer, different lengths: distinct traversal nodes (#203).
+	if sameActiveNode(short, backing) {
+		t.Fatal("expected aliased slice views of different lengths not to match")
+	}
+	// Identical start pointer and length: the same node, so a genuine
+	// self-referential slice is still detected as a cycle.
+	if !sameActiveNode(backing, backing) {
+		t.Fatal("expected a slice to match itself")
 	}
 }
 
