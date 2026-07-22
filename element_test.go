@@ -453,6 +453,79 @@ func TestElement_ReplaceRejectsMissingId(t *testing.T) {
 	}
 }
 
+func TestElement_AttrHelpersRejectReservedId(t *testing.T) {
+	tests := []struct {
+		name string
+		call func(e *Element)
+	}{
+		{"SetAttr id", func(e *Element) { e.SetAttr("id", "changed") }},
+		{"SetAttr ID", func(e *Element) { e.SetAttr("ID", "changed") }},
+		{"SetAttr Id", func(e *Element) { e.SetAttr("Id", "changed") }},
+		{"RemoveAttr id", func(e *Element) { e.RemoveAttr("id") }},
+		{"RemoveAttr iD", func(e *Element) { e.RemoveAttr("iD") }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer jw.Close()
+			logger := &captureErrorLogger{}
+			jw.Logger = logger
+			rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+			e := rq.NewElement(&testUi{})
+
+			if deadlock.Debug {
+				// Debug builds fail fast with a panic (after logging the misuse).
+				defer func() {
+					if recover() == nil {
+						t.Fatal("reserved attribute did not panic in a debug build")
+					}
+				}()
+			}
+			tt.call(e)
+			if deadlock.Debug {
+				t.Fatal("reserved attribute should have panicked in debug build")
+			}
+
+			// Production builds (with a Logger) report it and send nothing.
+			if !errors.Is(logger.err, ErrReservedAttribute) {
+				t.Fatalf("error = %v, want ErrReservedAttribute", logger.err)
+			}
+			rq.muQueue.Lock()
+			defer rq.muQueue.Unlock()
+			for _, msg := range rq.wsQueue {
+				if msg.What == what.SAttr || msg.What == what.RAttr {
+					t.Fatalf("reserved attribute was enqueued: %+v", msg)
+				}
+			}
+		})
+	}
+}
+
+func TestElement_AttrHelpersAllowNormalAttr(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+	e := rq.NewElement(&testUi{})
+	e.SetAttr("hidden", "yes")
+	e.RemoveAttr("hidden")
+	rq.muQueue.Lock()
+	defer rq.muQueue.Unlock()
+	var sattr, rattr int
+	for _, msg := range rq.wsQueue {
+		switch msg.What {
+		case what.SAttr:
+			sattr++
+		case what.RAttr:
+			rattr++
+		}
+	}
+	if sattr != 1 || rattr != 1 {
+		t.Fatalf("want 1 SAttr and 1 RAttr queued, got %d and %d", sattr, rattr)
+	}
+}
+
 func TestElement_ReplaceMessageTargetsElementHTML(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()

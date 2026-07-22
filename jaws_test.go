@@ -1515,6 +1515,51 @@ func TestJaws_InsertRejectsNegativeIndex(t *testing.T) {
 	}
 }
 
+func TestJaws_AttrHelpersRejectReservedId(t *testing.T) {
+	tests := []struct {
+		name string
+		call func(jw *Jaws)
+	}{
+		{"SetAttr id", func(jw *Jaws) { jw.SetAttr(tag.Tag("t"), "id", "changed") }},
+		{"SetAttr ID", func(jw *Jaws) { jw.SetAttr(tag.Tag("t"), "ID", "changed") }},
+		{"RemoveAttr id", func(jw *Jaws) { jw.RemoveAttr(tag.Tag("t"), "id") }},
+		{"RemoveAttr Id", func(jw *Jaws) { jw.RemoveAttr(tag.Tag("t"), "Id") }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer jw.Close()
+			logger := &captureErrorLogger{}
+			jw.Logger = logger
+
+			call := func() { tt.call(jw) }
+			if deadlock.Debug {
+				func() {
+					defer func() {
+						if recover() == nil {
+							t.Fatal("reserved attribute did not panic in a debug build")
+						}
+					}()
+					call()
+				}()
+			} else {
+				call()
+			}
+			if !errors.Is(logger.err, ErrReservedAttribute) {
+				t.Fatalf("error = %v, want ErrReservedAttribute", logger.err)
+			}
+			select {
+			case msg := <-jw.bcastCh:
+				t.Fatalf("reserved attribute queued broadcast %#v", msg)
+			default:
+			}
+		})
+	}
+}
+
 func TestBroadcast_NoneDestination(t *testing.T) {
 	jw, err := New()
 	if err != nil {

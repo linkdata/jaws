@@ -273,13 +273,29 @@ func (jw *Jaws) SetInner(target any, innerHTML template.HTML) {
 //
 // The value parameter must be the unescaped logical attribute value. It is sent
 // to the browser DOM and used as the value argument to setAttribute().
+//
+// The framework-owned "id" attribute is rejected (ASCII case-insensitively):
+// attempting to set it is reported as [ErrReservedAttribute] via reportMisuse and
+// nothing is sent, since it carries an [Element]'s JaWS identity.
 func (jw *Jaws) SetAttr(target any, attr, value string) {
+	if isReservedAttr(attr) {
+		jw.reportMisuse(fmt.Errorf("jaws: SetAttr: %q: %w", attr, ErrReservedAttribute))
+		return
+	}
 	jw.broadcastTo(target, what.SAttr, attr+"\n"+value)
 }
 
 // RemoveAttr sends a request to remove the given attribute from
 // all HTML elements matching target.
+//
+// The framework-owned "id" attribute is rejected (ASCII case-insensitively):
+// attempting to remove it is reported as [ErrReservedAttribute] via reportMisuse and
+// nothing is sent, since it carries an [Element]'s JaWS identity.
 func (jw *Jaws) RemoveAttr(target any, attr string) {
+	if isReservedAttr(attr) {
+		jw.reportMisuse(fmt.Errorf("jaws: RemoveAttr: %q: %w", attr, ErrReservedAttribute))
+		return
+	}
 	jw.broadcastTo(target, what.RAttr, attr)
 }
 
