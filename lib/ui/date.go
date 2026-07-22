@@ -21,7 +21,7 @@ type Date struct{ InputDate }
 // NewDate returns a date input widget bound to g.
 //
 // The widget is date-only; see [InputDate.JawsInput] for how a browser edit
-// normalizes the bound [time.Time] to midnight UTC.
+// normalizes the bound [time.Time] to midnight UTC and which years round-trip.
 func NewDate(g bind.Setter[time.Time]) *Date { return &Date{InputDate{Setter: g}} }
 
 // JawsRender renders ui as an HTML date input.

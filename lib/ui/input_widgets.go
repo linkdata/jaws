@@ -229,7 +229,8 @@ func (u *InputFloat) JawsInput(elem *jaws.Element, value string) (err error) {
 //
 // The control is date-only. Rendering shows the calendar date in the bound
 // value's own location, but a browser edit normalizes the bound [time.Time] to
-// midnight UTC of the picked date; see [InputDate.JawsInput].
+// midnight UTC of the picked date, and only years 1 through 9999 round-trip; see
+// [InputDate.JawsInput].
 type InputDate struct {
 	Input
 	bind.Setter[time.Time]
@@ -269,6 +270,13 @@ func (u *InputDate) JawsUpdate(elem *jaws.Element) {
 // [time.Time] inequality includes the location, re-selecting the same date
 // still reports a change and broadcasts it. Bind a date whose clock and zone are
 // irrelevant, or keep your bound values at midnight UTC to match.
+//
+// Only years 1 through 9999 round-trip. Those render as four digits, which is
+// what the fixed-width "2006-01-02" layout parses back. A bound year of 10000 or
+// more renders with five or more digits, because [time.Time.Format] widens the
+// year field, but [time.Parse] then rejects the extra digit; that edit returns a
+// parse error and leaves the last accepted value in place instead of updating the
+// bound value. Keep bound years within 1..9999.
 func (u *InputDate) JawsInput(elem *jaws.Element, value string) (err error) {
 	if value == "" {
 		value = "0001-01-01"
