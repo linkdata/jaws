@@ -275,7 +275,11 @@ func (jw *Jaws) Done() <-chan struct{} {
 // AddTemplateLookuper adds a [TemplateLookuper].
 //
 // The lookuper must be comparable so it can be removed with
-// [Jaws.RemoveTemplateLookuper].
+// [Jaws.RemoveTemplateLookuper], and it must compare equal to itself. A value
+// that is runtime-comparable yet not reflexively equal — a struct carrying a
+// floating-point NaN, for example — is never matched: each add appends a new
+// entry instead of deduplicating, and [Jaws.RemoveTemplateLookuper] reports
+// success without removing it.
 func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) (err error) {
 	if tl != nil {
 		if err = tag.NewErrNotComparable(tl); err == nil {
@@ -290,6 +294,10 @@ func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) (err error) {
 }
 
 // RemoveTemplateLookuper removes the given [TemplateLookuper].
+//
+// The lookuper is matched by equality, so a value that does not compare equal to
+// itself — one carrying a floating-point NaN, for example — is never found and
+// this returns nil without removing it; see [Jaws.AddTemplateLookuper].
 func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) (err error) {
 	if tl != nil {
 		if err = tag.NewErrNotComparable(tl); err == nil {

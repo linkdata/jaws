@@ -9,6 +9,7 @@ import (
 	"errors"
 	"html/template"
 	"io"
+	"math"
 	"mime"
 	"net/http"
 	"net/http/httptest"
@@ -53,6 +54,14 @@ func (tl mutatingTemplateLookuper) Lookup(string) *template.Template {
 type testTemplateLookuper struct{}
 
 func (testTemplateLookuper) Lookup(string) *template.Template {
+	return nil
+}
+
+// nanLookuper is Go-comparable (every field is comparable) yet never equal to
+// itself, because comparing its NaN field always yields false.
+type nanLookuper struct{ discriminator float64 }
+
+func (nanLookuper) Lookup(string) *template.Template {
 	return nil
 }
 
@@ -2004,6 +2013,41 @@ func TestJaws_GenerateHeadHTMLConcurrentWithHeadHTML(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	close(stop)
 	wg.Wait()
+}
+
+// TestTemplateLookuperNonReflexiveNotRemovable documents the reflexive-equality
+// requirement (issue #205): a lookuper that is runtime-comparable but not equal
+// to itself (a struct carrying a NaN) satisfies AddTemplateLookuper's
+// comparability check yet can never be matched, so adds are not deduplicated and
+// RemoveTemplateLookuper reports success without removing it.
+func TestTemplateLookuperNonReflexiveNotRemovable(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	lookuper := nanLookuper{discriminator: math.NaN()}
+
+	// Adding the same NaN-bearing value twice is not deduplicated: slices.Contains
+	// never matches it, so each add appends a new entry.
+	if err = jw.AddTemplateLookuper(lookuper); err != nil {
+		t.Fatal(err)
+	}
+	if err = jw.AddTemplateLookuper(lookuper); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(jw.tmplookers); got != 2 {
+		t.Fatalf("tmplookers = %d, want 2 (a NaN-bearing value is never deduplicated)", got)
+	}
+
+	// Removal reports success but the equality predicate matches nothing.
+	if err = jw.RemoveTemplateLookuper(lookuper); err != nil {
+		t.Fatalf("RemoveTemplateLookuper = %v, want nil", err)
+	}
+	if got := len(jw.tmplookers); got != 2 {
+		t.Fatalf("tmplookers = %d after remove, want 2 (a NaN-bearing value cannot be matched)", got)
+	}
 }
 
 func TestCoverage_IDAndLookupHelpers(t *testing.T) {

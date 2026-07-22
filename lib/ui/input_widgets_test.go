@@ -179,6 +179,16 @@ func TestInputFloatWidgets(t *testing.T) {
 	mustMatch(t, `^<input id="Jid\.[0-9]+" type="range" value="3.4">$`, got)
 }
 
+// TestRangeRendersExplicitBounds guards the documented workaround for the browser
+// range defaults: min, max and step passed as params render verbatim after the
+// value, letting a caller widen a domain the default 0..100 would otherwise clamp.
+func TestRangeRendersExplicitBounds(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	sf := newTestSetter(150.0)
+	_, got := renderUI(t, rq, NewRange(sf), `min="0"`, `max="200"`, `step="0.5"`)
+	mustMatch(t, `^<input id="Jid\.[0-9]+" type="range" value="150" min="0" max="200" step="0.5">$`, got)
+}
+
 // TestInputFloat_ReconcilesConvertedValues verifies that number and range inputs
 // receive the canonical server value when a numeric adapter truncates or rounds
 // an input to the value that was already stored.
@@ -474,6 +484,50 @@ func TestInputDate_NoSpuriousUpdateOnEqualDate(t *testing.T) {
 		if msg.What != what.Value || msg.Data != "2099-12-31" {
 			t.Fatalf("first update = {%v %q}, want a single {Value \"2099-12-31\"} (a spurious same-date update leaked)", msg.What, msg.Data)
 		}
+	}
+}
+
+// TestInputDate_YearRangeRoundTrip locks in the documented year range (issue
+// #204): the fixed-width "2006-01-02" layout round-trips only four-digit years.
+// Years 1 and 9999 render as four digits and parse back through JawsInput, while
+// year 10000 still renders (Format widens the year field to five digits) but a
+// browser edit of that value fails to parse and leaves the bound value unchanged.
+func TestInputDate_YearRangeRoundTrip(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	sd := newTestSetter(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
+
+	// Rendering emits the calendar date verbatim, five-plus digits included.
+	for _, iso := range []string{"0001-01-01", "9999-01-01", "10000-01-01"} {
+		d, err := time.Parse(assets.ISO8601, iso)
+		if err != nil {
+			// time.Parse rejects five-digit years, so build year 10000 directly.
+			d = time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC)
+		}
+		sd.Set(d)
+		_, got := renderUI(t, rq, NewDate(sd), "dateattr")
+		mustMatch(t, `^<input id="Jid\.[0-9]+" type="date" value="`+iso+`" dateattr>$`, got)
+	}
+
+	// Four-digit years round-trip: JawsInput accepts them and updates the bind.
+	sd.Set(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
+	date := NewDate(sd)
+	elem, _ := renderUI(t, rq, date, "dateattr")
+	for _, iso := range []string{"0001-01-01", "9999-01-02"} {
+		if err := date.JawsInput(elem, iso); err != nil {
+			t.Fatalf("year %q did not round-trip: %v", iso, err)
+		}
+		if got := sd.Get().Format(assets.ISO8601); got != iso {
+			t.Fatalf("bound value = %q, want %q", got, iso)
+		}
+	}
+
+	// A five-digit year fails to parse and leaves the last accepted value in place.
+	before := sd.Get()
+	if err := date.JawsInput(elem, "10000-01-01"); err == nil {
+		t.Fatal("expected parse error for five-digit year")
+	}
+	if got := sd.Get(); !got.Equal(before) {
+		t.Fatalf("bound value changed on rejected input: got %v, want %v", got, before)
 	}
 }
 
