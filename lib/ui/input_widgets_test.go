@@ -179,6 +179,16 @@ func TestInputFloatWidgets(t *testing.T) {
 	mustMatch(t, `^<input id="Jid\.[0-9]+" type="range" value="3.4">$`, got)
 }
 
+// TestRangeRendersExplicitBounds guards the documented workaround for the browser
+// range defaults: min, max and step passed as params render verbatim after the
+// value, letting a caller widen a domain the default 0..100 would otherwise clamp.
+func TestRangeRendersExplicitBounds(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	sf := newTestSetter(150.0)
+	_, got := renderUI(t, rq, NewRange(sf), `min="0"`, `max="200"`, `step="0.5"`)
+	mustMatch(t, `^<input id="Jid\.[0-9]+" type="range" value="150" min="0" max="200" step="0.5">$`, got)
+}
+
 // TestInputFloat_ReconcilesConvertedValues verifies that number and range inputs
 // receive the canonical server value when a numeric adapter truncates or rounds
 // an input to the value that was already stored.
