@@ -335,13 +335,6 @@ func (jw *Jaws) Insert(target any, childIndex int, html template.HTML) {
 	jw.broadcastTo(target, what.Insert, strconv.Itoa(childIndex)+"\n"+string(html))
 }
 
-// Replace replaces HTML on all HTML elements matching target.
-//
-// html is trusted HTML, matching [Jaws.SetInner] and [Jaws.Append].
-func (jw *Jaws) Replace(target any, html template.HTML) {
-	jw.broadcastTo(target, what.Replace, string(html))
-}
-
 // Delete removes the HTML element(s) matching target.
 func (jw *Jaws) Delete(target any) {
 	jw.broadcastTo(target, what.Delete, "")

@@ -1366,10 +1366,6 @@ func TestCoverage_GenerateHeadAndConvenienceBroadcasts(t *testing.T) {
 	if msg := nextBroadcast(t, jw); msg.What != what.Insert || msg.Data != "0\n<i>a</i>" {
 		t.Fatalf("unexpected insert msg %#v", msg)
 	}
-	jw.Replace(target, "<i>b</i>")
-	if msg := nextBroadcast(t, jw); msg.What != what.Replace || msg.Data != "<i>b</i>" {
-		t.Fatalf("unexpected replace msg %#v", msg)
-	}
 	jw.Delete(target)
 	if msg := nextBroadcast(t, jw); msg.What != what.Delete {
 		t.Fatalf("unexpected delete msg %#v", msg)
