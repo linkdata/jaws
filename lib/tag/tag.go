@@ -83,12 +83,16 @@ func sameActiveNode(a, b any) bool {
 		// Value.Pointer identifies shared function code, not closure identity, so it
 		// cannot detect cycles. maxTagDepth still bounds recursive function getters.
 		return false
-	case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Chan, reflect.UnsafePointer:
-		// For slices, Pointer() is the address of the first element, so two
-		// distinct slices aliasing the same backing array at the same start
-		// compare equal here. That can only over-detect a cycle and truncate
-		// expansion early, which maxTagCount/maxTagDepth already bound; real tag
-		// data does not take that shape.
+	case reflect.Slice:
+		// Value.Pointer for a slice is the address of its first element, so two
+		// distinct views into the same backing array share it. A slice header is
+		// fully identified by its pointer, length and capacity, so compare all
+		// three: views differing in length or capacity are distinct nodes (a named
+		// slice TagGetter can observe its capacity via cap and yield different
+		// tags), while a genuine self-referential slice re-enters with an identical
+		// header and is still detected as a cycle.
+		return va.Pointer() == vb.Pointer() && va.Len() == vb.Len() && va.Cap() == vb.Cap()
+	case reflect.Pointer, reflect.Map, reflect.Chan, reflect.UnsafePointer:
 		return va.Pointer() == vb.Pointer()
 	default:
 		return false
