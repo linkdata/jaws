@@ -28,8 +28,8 @@ import (
 // A [wire.Message.What] of [what.Replace] or [what.Remove] is rejected (as
 // [ErrReplaceNotBroadcastable] or [ErrRemoveNotBroadcastable]) via reportMisuse and
 // nothing is sent: each mutates a specific element's node in a way the broadcast path
-// cannot keep in sync with the server-side registry, stranding the matched [Element]s
-// with no reachable DOM node. Use [Element.Replace], or [Jaws.Delete] / [Element.Remove],
+// cannot keep in sync with the server-side registry, stranding the matched [Element]
+// values with no reachable DOM node. Use [Element.Replace], or [Jaws.Delete] / [Element.Remove],
 // for the identity-preserving forms.
 //
 // A nil [wire.Message.Dest] targets every active Request; a [key.Key] Dest targets
