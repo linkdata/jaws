@@ -1,6 +1,7 @@
 package htmlio_test
 
 import (
+	"html"
 	"html/template"
 	"io"
 	"strings"
@@ -144,10 +145,22 @@ func Test_WriteHTMLInner_NewlineSensitivePrefix(t *testing.T) {
 			want:  "<textarea id=\"Jid.1\">\n\nhello</textarea>",
 		},
 		{
-			name:  "textarea leading CR is prefixed with LF",
+			name:  "textarea leading CR is encoded as a character reference",
 			tag:   "textarea",
 			inner: "\rhello",
-			want:  "<textarea id=\"Jid.1\">\n\rhello</textarea>",
+			want:  "<textarea id=\"Jid.1\">\n&#13;hello</textarea>",
+		},
+		{
+			name:  "textarea interior and CRLF carriage returns are encoded",
+			tag:   "textarea",
+			inner: "a\rb\r\nc",
+			want:  "<textarea id=\"Jid.1\">\na&#13;b&#13;\nc</textarea>",
+		},
+		{
+			name:  "pre leading CR is encoded as a character reference",
+			tag:   "pre",
+			inner: "\rhello",
+			want:  "<pre id=\"Jid.1\">\n&#13;hello</pre>",
 		},
 		{
 			name:  "uppercase TEXTAREA is newline-sensitive",
@@ -177,6 +190,14 @@ func Test_WriteHTMLInner_NewlineSensitivePrefix(t *testing.T) {
 			tag:   "div",
 			inner: "\nx",
 			want:  "<div id=\"Jid.1\">\nx</div>",
+		},
+		{
+			// Only textarea/pre content is CR-encoded; a non-newline-sensitive
+			// element carries the trusted innerHTML markup through verbatim.
+			name:  "div carriage return is left verbatim",
+			tag:   "div",
+			inner: "a\rb",
+			want:  "<div id=\"Jid.1\">a\rb</div>",
 		},
 	}
 	for _, tt := range tests {
@@ -326,11 +347,35 @@ func TestWriteHTMLTag(t *testing.T) {
 }
 
 func TestAppendAttrValue(t *testing.T) {
-	value := `"&<>'`
-	got := string(htmlio.AppendAttrValue(nil, value))
-	want := `"&#34;&amp;&lt;&gt;&#39;"`
-	if got != want {
-		t.Fatalf("AppendAttrValue() = %q, want %q", got, want)
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{
+			name:  "html metacharacters",
+			value: `"&<>'`,
+			want:  `"&#34;&amp;&lt;&gt;&#39;"`,
+		},
+		{
+			// html.EscapeString leaves CR raw, but browser preprocessing would
+			// rewrite it to LF; it must be a numeric character reference instead.
+			name:  "carriage return is encoded",
+			value: "a\rb",
+			want:  `"a&#13;b"`,
+		},
+		{
+			name:  "CRLF encodes only the CR",
+			value: "a\r\nb",
+			want:  "\"a&#13;\nb\"",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := string(htmlio.AppendAttrValue(nil, tt.value)); got != tt.want {
+				t.Fatalf("AppendAttrValue(%q) = %q, want %q", tt.value, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -358,5 +403,64 @@ func TestWriteHTML_WriterErrorPropagates(t *testing.T) {
 	}
 	if err := htmlio.WriteHTMLInner(errWriter{}, jid.Jid(1), "span", "", "x"); err != io.ErrShortWrite {
 		t.Errorf("WriteHTMLInner error = %v, want %v", err, io.ErrShortWrite)
+	}
+}
+
+// normalizeCR models the browser HTML input-stream preprocessing step that
+// rewrites every CRLF pair and every standalone CR to a single LF before
+// tokenization. This is why a raw carriage return never survives HTML parsing.
+func normalizeCR(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	return strings.ReplaceAll(s, "\r", "\n")
+}
+
+// TestAppendAttrValue_DOMRoundTrip verifies that a logical attribute value with
+// carriage returns survives a browser parse unchanged. It models the two browser
+// steps that would otherwise corrupt a raw CR: input-stream preprocessing
+// (CR/CRLF to LF) followed by tokenizer character-reference decoding, the latter
+// using the standard library html.UnescapeString.
+func TestAppendAttrValue_DOMRoundTrip(t *testing.T) {
+	values := []string{"", "plain", "a\rb", "a\r\nb", "\rlead", "trail\r", "x\ry\rz", `"&<>'` + "\r"}
+	for _, value := range values {
+		src := string(htmlio.AppendAttrValue(nil, value))
+		inner := src[1 : len(src)-1] // strip the bounding double quotes
+		if got := html.UnescapeString(normalizeCR(inner)); got != value {
+			t.Errorf("attribute value %q round-tripped to %q via source %q", value, got, src)
+		}
+	}
+}
+
+// innerContent returns the HTML source between an element's start tag and its
+// matching end tag.
+func innerContent(t *testing.T, source, tag string) string {
+	t.Helper()
+	start := strings.IndexByte(source, '>')
+	end := strings.LastIndex(source, "</"+tag+">")
+	if start < 0 || end < start {
+		t.Fatalf("cannot locate <%s> content in %q", tag, source)
+	}
+	return source[start+1 : end]
+}
+
+// TestWriteHTMLInner_DOMRoundTrip verifies that carriage returns in textarea/pre
+// content survive a browser parse. It mirrors the ui.Textarea pipeline (the
+// value is HTML-escaped before WriteHTMLInner) and models the browser: input-
+// stream preprocessing (CR/CRLF to LF), character-reference decoding, then the
+// single leading LF the parser strips after a textarea/pre start tag.
+func TestWriteHTMLInner_DOMRoundTrip(t *testing.T) {
+	values := []string{"", "plain", "\rhello", "\nhello", "a\rb", "a\r\nb\rc", "\r\r", "<kept>&amp;"}
+	for _, tag := range []string{"textarea", "pre"} {
+		for _, value := range values {
+			inner := template.HTML(template.HTMLEscapeString(value)) // #nosec G203
+			var sb strings.Builder
+			if err := htmlio.WriteHTMLInner(&sb, jid.Jid(1), tag, "", inner); err != nil {
+				t.Fatal(err)
+			}
+			content := innerContent(t, sb.String(), tag)
+			decoded := html.UnescapeString(normalizeCR(content))
+			if got := strings.TrimPrefix(decoded, "\n"); got != value {
+				t.Errorf("%s value %q round-tripped to %q via source %q", tag, value, got, sb.String())
+			}
+		}
 	}
 }

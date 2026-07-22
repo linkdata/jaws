@@ -46,6 +46,25 @@ func isNewlineSensitive(tag string) bool {
 	return false
 }
 
+// appendEscapeCR appends s to b, replacing every carriage return with the
+// numeric character reference &#13;.
+//
+// Browser input-stream preprocessing rewrites a raw CR (and a CRLF pair) to a
+// single LF before tokenization, so a raw carriage return never reaches the DOM.
+// The reference is decoded back to CR after preprocessing, so encoding it lets
+// logical values that contain carriage returns round-trip through HTML parsing.
+func appendEscapeCR(b []byte, s string) []byte {
+	for {
+		i := strings.IndexByte(s, '\r')
+		if i < 0 {
+			return append(b, s...)
+		}
+		b = append(b, s[:i]...)
+		b = append(b, "&#13;"...)
+		s = s[i+1:]
+	}
+}
+
 // AppendAttrs appends each non-empty attribute fragment in attrs to b, each
 // prefixed with a single space so the result can be concatenated directly after a
 // tag name.
@@ -68,9 +87,13 @@ func AppendAttrs(b []byte, attrs []template.HTMLAttr) []byte {
 // The value parameter must be the unescaped logical attribute value. It is
 // escaped for HTML source output by this function. Use [Attr] or [AppendAttr]
 // to build a complete name=value fragment.
+//
+// Carriage returns are emitted as the numeric character reference &#13;, because
+// browser input-stream preprocessing would otherwise rewrite a raw CR to LF
+// before parsing and change the value the DOM reports.
 func AppendAttrValue(b []byte, value string) []byte {
 	b = append(b, '"')
-	b = append(b, html.EscapeString(value)...)
+	b = appendEscapeCR(b, html.EscapeString(value))
 	b = append(b, '"')
 	return b
 }
@@ -154,7 +177,10 @@ func WriteHTMLInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs 
 //
 // For textarea and pre elements, the HTML source includes one LF immediately
 // after the start tag. The parser consumes that prefix, so it adds no DOM content
-// while preserving a leading LF or CR from innerHTML.
+// while preserving a leading LF or CR from innerHTML. Because browser input-stream
+// preprocessing rewrites a raw carriage return to LF before parsing, each CR in
+// innerHTML is emitted as the numeric character reference &#13; so carriage
+// returns survive parsing unchanged.
 //
 // The htmlTag parameter is trusted and written verbatim with no escaping or
 // validation; it MUST NOT be derived from untrusted data. The typeAttr parameter
@@ -165,13 +191,17 @@ func WriteHTMLInput(w io.Writer, jid jid.Jid, typeAttr, valueAttr string, attrs 
 func WriteHTMLInner(w io.Writer, jid jid.Jid, htmlTag, typeAttr string, innerHTML template.HTML, attrs ...template.HTMLAttr) (err error) {
 	b := appendHTMLTag(nil, jid, htmlTag, typeAttr, "", attrs)
 	if needClosingTag(htmlTag) {
-		// The HTML parser strips one LF right after a textarea/pre start tag.
-		// Always provide that parser-consumed prefix so innerHTML is preserved
-		// regardless of whether its first character is LF, CR, or ordinary text.
 		if isNewlineSensitive(htmlTag) {
+			// The HTML parser strips one LF right after a textarea/pre start
+			// tag. Always provide that parser-consumed prefix so innerHTML is
+			// preserved regardless of whether its first character is LF, CR, or
+			// ordinary text. Encode each CR as &#13; because browser input-stream
+			// preprocessing would otherwise rewrite a raw CR to LF before parsing.
 			b = append(b, '\n')
+			b = appendEscapeCR(b, string(innerHTML))
+		} else {
+			b = append(b, innerHTML...)
 		}
-		b = append(b, innerHTML...)
 		b = append(b, "</"...)
 		b = append(b, htmlTag...)
 		b = append(b, '>')
