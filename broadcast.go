@@ -25,6 +25,13 @@ import (
 //
 // All convenience helpers on [Jaws] that call Broadcast inherit this requirement.
 //
+// A [wire.Message.What] of [what.Replace] or [what.Remove] is rejected (as
+// [ErrReplaceNotBroadcastable] or [ErrRemoveNotBroadcastable]) via reportMisuse and
+// nothing is sent: each mutates a specific element's node in a way the broadcast path
+// cannot keep in sync with the server-side registry, stranding the matched [Element]s
+// with no reachable DOM node. Use [Element.Replace], or [Jaws.Delete] / [Element.Remove],
+// for the identity-preserving forms.
+//
 // A nil [wire.Message.Dest] targets every active Request; a [key.Key] Dest targets
 // the active Request with that identity key, and a zero key is dropped. Any other
 // Dest is expanded into tags. Plain strings and [Jid] values are illegal tag
@@ -35,6 +42,14 @@ import (
 // set; with a Logger the error is logged and the message is sent to the
 // destinations that did expand.
 func (jw *Jaws) Broadcast(msg wire.Message) {
+	switch msg.What {
+	case what.Replace:
+		jw.reportMisuse(fmt.Errorf("jaws: Broadcast: %w; use Element.Replace", ErrReplaceNotBroadcastable))
+		return
+	case what.Remove:
+		jw.reportMisuse(fmt.Errorf("jaws: Broadcast: %w; use Jaws.Delete or Element.Remove", ErrRemoveNotBroadcastable))
+		return
+	}
 	switch dest := msg.Dest.(type) {
 	case nil: // send to all active requests
 	case key.Key: // send to the active request with this identity key

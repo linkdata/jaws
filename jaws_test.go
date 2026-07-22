@@ -1556,6 +1556,61 @@ func TestJaws_AttrHelpersRejectReservedId(t *testing.T) {
 	}
 }
 
+func TestBroadcast_RejectsElementMutatingCommands(t *testing.T) {
+	// Replace and Remove mutate a specific element's node in a way the broadcast path
+	// cannot keep in sync with the server-side registry: a raw broadcast forwards the
+	// command verbatim to every matching element, stranding the server-side Element
+	// with no reachable DOM node (the #199 identity desync). Both must be rejected
+	// before reaching bcastCh, regardless of Data.
+	tests := []struct {
+		name    string
+		what    what.What
+		wantErr error
+	}{
+		{"Replace", what.Replace, ErrReplaceNotBroadcastable},
+		{"Remove", what.Remove, ErrRemoveNotBroadcastable},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer jw.Close()
+			logger := &captureErrorLogger{}
+			jw.Logger = logger
+
+			call := func() {
+				jw.Broadcast(wire.Message{
+					Dest: tag.Tag("t"),
+					What: tt.what,
+					Data: "whatever",
+				})
+			}
+			if deadlock.Debug {
+				func() {
+					defer func() {
+						if recover() == nil {
+							t.Fatalf("broadcast of %v did not panic in a debug build", tt.what)
+						}
+					}()
+					call()
+				}()
+			} else {
+				call()
+			}
+			if !errors.Is(logger.err, tt.wantErr) {
+				t.Fatalf("error = %v, want %v", logger.err, tt.wantErr)
+			}
+			select {
+			case msg := <-jw.bcastCh:
+				t.Fatalf("%v queued broadcast %#v", tt.what, msg)
+			default:
+			}
+		})
+	}
+}
+
 func TestBroadcast_NoneDestination(t *testing.T) {
 	jw, err := New()
 	if err != nil {
