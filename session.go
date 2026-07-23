@@ -178,11 +178,14 @@ func (sess *Session) Cookie() (cookie *http.Cookie) {
 // Close invalidates and expires the [Session].
 // Future [Request] values won't be able to associate with it, and [Session.Cookie] will return a deletion cookie.
 //
-// Existing [Request] values already associated with the [Session] will ask the browser to reload the pages.
+// Existing [Request] values already associated with the [Session] will ask the
+// browser to reload the pages. This holds even for a [Request] whose WebSocket
+// has not connected yet: the reload is queued on the [Request] and delivered when
+// it connects.
 // Key/value pairs in the [Session] are left unmodified; use [Session.Clear] to remove all of them.
 //
 // It must not be called before the JaWS processing loop ([Jaws.Serve] or
-// [Jaws.ServeWithTimeout]) is running, because reload broadcasts may block.
+// [Jaws.ServeWithTimeout]) is running, because the wake-up broadcasts may block.
 //
 // Returns a cookie to be sent to the client browser that will delete the browser cookie.
 // It is safe to call on a nil [Session], in which case it returns nil; for any
@@ -199,7 +202,12 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 		*cookie = sess.cookie
 		sess.mu.Unlock()
 
-		msg := wire.Message{What: what.Reload}
+		// deadSession queues the reload directly onto each Request, covering those
+		// whose WebSocket has not subscribed yet. This key-targeted Update is only a
+		// wake-up: it makes an already-running process loop iterate and flush the
+		// queued reload. handleBroadcast resolves a key destination to no elements,
+		// so the Update itself performs no browser operation.
+		msg := wire.Message{What: what.Update}
 		for _, rq := range requests {
 			if k := rq.deadSession(sess); k != 0 {
 				msg.Dest = k

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/linkdata/jaws/lib/key"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
@@ -82,8 +83,13 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 				select {
 				case msgCh <- msg:
 				default:
-					// the exception is Update messages, more will follow eventually
-					if msg.What != what.Update {
+					// A nil or tag destination Update is the periodic dirty-render
+					// tick: it is safe to drop because more will follow eventually. A
+					// key-targeted Update is a request wake-up (see Session.Close) and
+					// must not be dropped, so fail-fast an overloaded Request just like
+					// any other message.
+					_, wakeup := msg.Dest.(key.Key)
+					if msg.What != what.Update || wakeup {
 						killSub(msgCh)
 						rq.cancel(fmt.Errorf("%w: %v: broadcast channel full sending %s", ErrRequestOverloaded, rq, msg.String()))
 					}
