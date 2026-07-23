@@ -83,9 +83,13 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 				case msgCh <- msg:
 				default:
 					// Only the internal periodic dirty-render tick, a nil-destination
-					// Update (see the updateTicker case above), is safe to drop: a later
-					// tick re-sends anything still dirty. Every addressed message is
-					// one-shot and must not be silently lost — including a tag-targeted
+					// Update (see the updateTicker case above), is safe to drop.
+					// distributeDirt has already moved the dirty tags into each Request's
+					// todoDirt and cleared the global set, so the tick carries no payload;
+					// it only wakes Request.process. A full channel already holds a
+					// message that will wake it, and its next pass drains todoDirt before
+					// waiting again, so nothing is lost. Every addressed message is
+					// one-shot and must not be silently dropped — including a tag-targeted
 					// Update and the key-targeted Update wake-up from Session.Close — so
 					// an overloaded Request is failed-fast instead.
 					if msg.What != what.Update || msg.Dest != nil {
