@@ -82,8 +82,19 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 				select {
 				case msgCh <- msg:
 				default:
-					// the exception is Update messages, more will follow eventually
-					if msg.What != what.Update {
+					// Only the internal periodic dirty-render tick, a nil-destination
+					// Update (see the updateTicker case below), is safe to drop.
+					// distributeDirt has already moved the dirty tags into each Request's
+					// todoDirt and cleared the global set, so the tick carries no payload;
+					// it only nudges the Request. The pending dirt is still rendered
+					// without it: a Request already in its process loop is woken by the
+					// message that filled the channel and drains todoDirt on the next pass,
+					// and one still starting up (subscribed before onConnect) drains
+					// todoDirt on its first pass without needing a wake. Every addressed
+					// message is one-shot and must not be silently dropped — including a
+					// tag-targeted Update and the key-targeted Update wake-up from
+					// Session.Close — so an overloaded Request is failed-fast instead.
+					if msg.What != what.Update || msg.Dest != nil {
 						killSub(msgCh)
 						rq.cancel(fmt.Errorf("%w: %v: broadcast channel full sending %s", ErrRequestOverloaded, rq, msg.String()))
 					}

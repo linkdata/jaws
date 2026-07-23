@@ -328,14 +328,23 @@ func (rq *Request) killSession(wasClaimed bool) {
 	rq.mu.Unlock()
 }
 
-// deadSession detaches sess and returns the Request identity that belonged to it.
+// deadSession atomically detaches sess and arms one page reload, returning the
+// Request identity that belonged to it.
+//
 // A zero return means rq no longer belongs to sess: it has finished, or has been
 // detached from this Session.
+//
+// The reload is queued onto wsQueue rather than broadcast, so a Request whose
+// WebSocket has not subscribed yet still reloads on connect: process drains
+// wsQueue before its first select. Holding rq.mu here excludes both a concurrent
+// recycle and the process loop's getSendMsgs, so the queue append is safe.
+// Session.Close wakes an already-running process with a key-targeted Update.
 func (rq *Request) deadSession(sess *Session) (k key.Key) {
 	rq.mu.Lock()
 	if rq.session == sess {
 		rq.session = nil
 		k = rq.JawsKey
+		rq.queue(wire.WsMsg{What: what.Reload})
 	}
 	rq.mu.Unlock()
 	return
@@ -1079,9 +1088,9 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, pingInterval, wsTimeout time
 	numElems := len(rq.elems)
 	rq.mu.RUnlock()
 	// Size the broadcast buffer with headroom that scales with the page's element
-	// count. mustBroadcast (see Jaws.Serve) sends here non-blocking and, for any
-	// non-Update message, kills the subscription and cancels this request if the
-	// send would block.
+	// count. mustBroadcast (see Jaws.Serve) sends here non-blocking and, if the send
+	// would block, kills the subscription and cancels this request for every message
+	// except the coalescible nil-destination Update tick, which it drops instead.
 	pendingSubscription := rq.Jaws.subscribe(rq, 4+numElems*4)
 	defer func() {
 		// onConnect is user code and may return an error or panic. Release its
