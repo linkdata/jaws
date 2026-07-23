@@ -1088,9 +1088,9 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, pingInterval, wsTimeout time
 	numElems := len(rq.elems)
 	rq.mu.RUnlock()
 	// Size the broadcast buffer with headroom that scales with the page's element
-	// count. mustBroadcast (see Jaws.Serve) sends here non-blocking and, for any
-	// non-Update message, kills the subscription and cancels this request if the
-	// send would block.
+	// count. mustBroadcast (see Jaws.Serve) sends here non-blocking and, if the send
+	// would block, kills the subscription and cancels this request for every message
+	// except the coalescible nil-destination Update tick, which it drops instead.
 	pendingSubscription := rq.Jaws.subscribe(rq, 4+numElems*4)
 	defer func() {
 		// onConnect is user code and may return an error or panic. Release its

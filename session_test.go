@@ -15,6 +15,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/linkdata/jaws/lib/key"
+	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
@@ -459,6 +460,10 @@ func TestSession_ProducersSkipRecycled(t *testing.T) {
 		th.Equal(live.wsQueue[0].What, what.Reload)
 	}
 	live.muQueue.Unlock()
+	// The recycled request was skipped entirely: no reload was armed on it.
+	finished.muQueue.Lock()
+	th.Equal(len(finished.wsQueue), 0)
+	finished.muQueue.Unlock()
 	select {
 	case <-closeDone:
 	case <-time.After(time.Second):
@@ -713,15 +718,90 @@ func TestSessionCloseReloadsAssociatedPendingRequest(t *testing.T) {
 		}
 		acc.Write(data)
 	}
-	if n := strings.Count(acc.String(), "Reload\t\t\"\"\n"); n != 1 {
+	if n := strings.Count(acc.String(), what.Reload.String()+"\t"); n != 1 {
 		t.Fatalf("got %d Reload commands, want exactly 1: %q", n, acc.String())
 	}
 }
 
-// TestServeKeyTargetedUpdateFailFast verifies the overload semantics the
-// Session.Close wake-up relies on: an ordinary (nil or tag destination) Update is
-// the coalescible dirty-render tick and stays droppable, while a key-targeted
-// Update is a request wake-up that must fail-fast an overloaded Request.
+// TestSessionCloseReloadsConnectedRequestExactlyOnce closes a Session whose
+// Request is already connected and asserts that exactly one Reload is delivered.
+// It reads through a post-close marker rather than a single frame, so a delayed
+// duplicate reload would be caught.
+func TestSessionCloseReloadsConnectedRequestExactlyOnce(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	go jw.Serve()
+	waitForServeLoop(t, jw)
+
+	server := httptest.NewServer(jw)
+	defer server.Close()
+
+	sessionHTTP := httptest.NewRequest(http.MethodGet, server.URL+"/", nil)
+	sessionHTTP.RemoteAddr = "127.0.0.1:1"
+	sess := jw.NewSession(httptest.NewRecorder(), sessionHTTP)
+	rq := jw.NewRequest(sessionHTTP)
+	if rq.Session() != sess {
+		t.Fatal("Request was not associated with the session")
+	}
+
+	connected := make(chan struct{})
+	rq.SetConnectFn(func(*Request) error {
+		close(connected)
+		return nil
+	})
+
+	hdr := http.Header{}
+	hdr.Set("Origin", server.URL)
+	dialCtx, cancelDial := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancelDial()
+	conn, resp, err := websocket.Dial(dialCtx,
+		"ws"+strings.TrimPrefix(server.URL, "http")+"/jaws/"+rq.JawsKeyString(),
+		&websocket.DialOptions{HTTPHeader: hdr})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.CloseNow() }()
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("WebSocket status = %d, want %d", resp.StatusCode, http.StatusSwitchingProtocols)
+	}
+	select {
+	case <-connected:
+	case <-time.After(time.Second):
+		t.Fatal("Request did not start its WebSocket")
+	}
+
+	// The Request is now connected and subscribed; close the session and then send
+	// a marker to bound the read.
+	sess.Close()
+	const marker = "post-close marker"
+	jw.Broadcast(wire.Message{Dest: rq.JawsKey, What: what.Alert, Data: marker})
+
+	readCtx, cancelRead := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancelRead()
+	var acc strings.Builder
+	for !strings.Contains(acc.String(), marker) {
+		mt, data, err := conn.Read(readCtx)
+		if err != nil {
+			t.Fatalf("reading from Request: %v (got %q)", err, acc.String())
+		}
+		if mt != websocket.MessageText {
+			t.Fatalf("WebSocket message type = %v, want text", mt)
+		}
+		acc.Write(data)
+	}
+	if n := strings.Count(acc.String(), what.Reload.String()+"\t"); n != 1 {
+		t.Fatalf("got %d Reload commands, want exactly 1: %q", n, acc.String())
+	}
+}
+
+// TestServeKeyTargetedUpdateFailFast verifies the overload classification the
+// Session.Close wake-up relies on: only the internal nil-destination Update tick
+// is droppable, while every addressed Update — tag-targeted or key-targeted — is
+// one-shot and must fail-fast an overloaded Request.
 func TestServeKeyTargetedUpdateFailFast(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -754,10 +834,25 @@ func TestServeKeyTargetedUpdateFailFast(t *testing.T) {
 			}
 		}
 	}
+	awaitCancel := func(name string, rq *Request) {
+		t.Helper()
+		deadline := time.Now().Add(time.Second)
+		for rq.Context().Err() == nil {
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: Request was not cancelled", name)
+			}
+			time.Sleep(time.Millisecond)
+		}
+		if cause := context.Cause(rq.Context()); !errors.Is(cause, ErrRequestOverloaded) {
+			t.Fatalf("%s: cause = %v, want it to wrap ErrRequestOverloaded", name, cause)
+		}
+	}
 
-	// Ordinary nil-destination Update overload: the Request must survive.
+	// A nil-destination Update is the coalescible dirty-render tick: overflowing it
+	// must neither cancel the Request nor kill its subscription.
 	dropRq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
-	if jw.subscribe(dropRq, 1) == nil { // never drained
+	dropCh := jw.subscribe(dropRq, 1) // not drained during the overflow below
+	if dropCh == nil {
 		t.Fatal("drop subscription failed")
 	}
 	waitForServeLoop(t, jw)
@@ -766,10 +861,48 @@ func TestServeKeyTargetedUpdateFailFast(t *testing.T) {
 	}
 	awaitControl("after ordinary updates")
 	if cause := context.Cause(dropRq.Context()); cause != nil {
-		t.Fatalf("ordinary Update overload cancelled the Request: %v", cause)
+		t.Fatalf("nil-destination Update overload cancelled the Request: %v", cause)
+	}
+	// Prove the subscription survived (was not killed): drain the buffered tick,
+	// then a targeted message must still be delivered on the same channel.
+	for drained := false; !drained; {
+		select {
+		case _, ok := <-dropCh:
+			if !ok {
+				t.Fatal("nil-destination Update overload killed the subscription")
+			}
+		default:
+			drained = true
+		}
+	}
+	const dropMarker = "drop survives"
+	jw.Broadcast(wire.Message{Dest: dropRq.JawsKey, What: what.Alert, Data: dropMarker})
+	select {
+	case msg, ok := <-dropCh:
+		if !ok {
+			t.Fatal("nil-destination Update overload killed the subscription")
+		}
+		if msg.What != what.Alert || msg.Data != dropMarker {
+			t.Fatalf("drop subscription got %#v, want Alert %q", msg, dropMarker)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("targeted message did not reach the surviving subscription")
 	}
 
-	// Key-targeted Update overload: the Request must be cancelled fail-fast.
+	// A tag-targeted Update is one-shot (no periodic re-send), so overflow must
+	// fail-fast.
+	tagRq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	tagRq.NewElement(&testUi{}).Tag(tag.Tag("overload-tag"))
+	if jw.subscribe(tagRq, 1) == nil { // never drained
+		t.Fatal("tag subscription failed")
+	}
+	waitForServeLoop(t, jw)
+	for i := 0; i < 4; i++ {
+		jw.Broadcast(wire.Message{Dest: tag.Tag("overload-tag"), What: what.Update})
+	}
+	awaitCancel("tag-targeted Update", tagRq)
+
+	// A key-targeted Update is the Session.Close wake-up: overflow must fail-fast.
 	wakeRq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	if jw.subscribe(wakeRq, 1) == nil { // never drained
 		t.Fatal("wake subscription failed")
@@ -778,16 +911,7 @@ func TestServeKeyTargetedUpdateFailFast(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		jw.Broadcast(wire.Message{Dest: wakeRq.JawsKey, What: what.Update})
 	}
-	deadline := time.Now().Add(time.Second)
-	for wakeRq.Context().Err() == nil {
-		if time.Now().After(deadline) {
-			t.Fatal("key-targeted Update overload did not cancel the Request")
-		}
-		time.Sleep(time.Millisecond)
-	}
-	if cause := context.Cause(wakeRq.Context()); !errors.Is(cause, ErrRequestOverloaded) {
-		t.Fatalf("cause = %v, want it to wrap ErrRequestOverloaded", cause)
-	}
+	awaitCancel("key-targeted Update", wakeRq)
 }
 
 func BenchmarkSessionBroadcast(b *testing.B) {
