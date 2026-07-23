@@ -27,9 +27,12 @@ var ErrValueUnchanged = errors.New("value unchanged")
 // A Request is overloaded when its buffered broadcast channel or its internal
 // event-call channel fills before it can drain them. Rather than silently dropping
 // messages, which could leave the browser and backend in inconsistent and
-// nonreproducible states, the Request is cancelled. The cancellation cause reachable
-// via [context.Cause] on [Request.Context] wraps this sentinel, so it can be matched
-// with [errors.Is]; the wrapped text identifies which channel overflowed.
+// nonreproducible states, the Request is cancelled. The one exception is the
+// internal periodic dirty-render tick (a nil-destination Update broadcast), which
+// is coalescible and dropped on overflow because a later tick re-sends anything
+// still dirty. The cancellation cause reachable via [context.Cause] on
+// [Request.Context] wraps this sentinel, so it can be matched with [errors.Is];
+// the wrapped text identifies which channel overflowed.
 var ErrRequestOverloaded = errors.New("request overloaded")
 
 // ErrValueNotFinite indicates a [Request] was torn down because a NaN or infinite
