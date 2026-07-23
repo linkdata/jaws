@@ -2540,25 +2540,6 @@ func TestRequest_IncomingRemoveDoesNotDeleteMessageJidListedInData(t *testing.T)
 	})
 }
 
-func TestRequest_ReplaceMessageTargetsElementHTML(t *testing.T) {
-	rq := newTestRequest(t)
-	defer rq.Close()
-
-	tagValue := &testUi{}
-	jid := rq.Register(tagValue)
-	html := template.HTML(`<div id="` + jid.String() + `">replaced</div>`)
-
-	rq.Jaws.Replace(tagValue, html)
-	msg := nextOutboundMsg(t, rq)
-
-	if msg.What != what.Replace {
-		t.Fatalf("unexpected message type %v", msg.What)
-	}
-	if msg.Data != string(html) {
-		t.Fatalf("replace payload mismatch: got %q want %q", msg.Data, html)
-	}
-}
-
 func TestRequest_JsCallProducesJawsJSFrameSafeWireData(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()

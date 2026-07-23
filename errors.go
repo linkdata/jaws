@@ -74,6 +74,29 @@ var ErrInvalidChildIndex = errors.New("invalid child index")
 // helpers report this via reportMisuse and send nothing.
 var ErrReservedAttribute = errors.New("reserved attribute")
 
+// ErrReplaceNotBroadcastable indicates an attempt to broadcast a [what.Replace] command.
+//
+// Replace swaps the whole target node for new HTML, which must carry the
+// [Element]'s own "id" so the server-side [Element] keeps a reachable DOM node
+// (see [Element.Replace], which validates exactly that). A broadcast delivers one
+// payload to every element matching [wire.Message.Dest], so no single payload can
+// preserve each element's distinct id and the matched Elements would be stranded
+// with no matching DOM node. [Jaws.Broadcast] reports this via reportMisuse and
+// sends nothing; use [Element.Replace] for the per-element form.
+var ErrReplaceNotBroadcastable = errors.New("what.Replace cannot be broadcast")
+
+// ErrRemoveNotBroadcastable indicates an attempt to broadcast a [what.Remove] command.
+//
+// Remove deletes the child node named by Data from the matched element and requires
+// the child's server-side [Element] to be unregistered too (see [Element.Remove],
+// which calls [Request.DeleteElement]; the client acknowledges only the removal of
+// the child's descendants, never the child itself). A broadcast forwards the command
+// verbatim without that registry cleanup, and its Data names one request's child, so
+// matched child Elements would be stranded with no reachable DOM node. [Jaws.Broadcast]
+// reports this via reportMisuse and sends nothing; use [Jaws.Delete] to remove matched
+// elements, or [Element.Remove] for the per-element child form.
+var ErrRemoveNotBroadcastable = errors.New("what.Remove cannot be broadcast")
+
 // ErrJavascriptDisabled is returned when the noscript probe indicates JavaScript is disabled.
 var ErrJavascriptDisabled = errors.New("javascript is disabled")
 

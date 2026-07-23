@@ -1375,10 +1375,6 @@ func TestCoverage_GenerateHeadAndConvenienceBroadcasts(t *testing.T) {
 	if msg := nextBroadcast(t, jw); msg.What != what.Insert || msg.Data != "0\n<i>a</i>" {
 		t.Fatalf("unexpected insert msg %#v", msg)
 	}
-	jw.Replace(target, "<i>b</i>")
-	if msg := nextBroadcast(t, jw); msg.What != what.Replace || msg.Data != "<i>b</i>" {
-		t.Fatalf("unexpected replace msg %#v", msg)
-	}
 	jw.Delete(target)
 	if msg := nextBroadcast(t, jw); msg.What != what.Delete {
 		t.Fatalf("unexpected delete msg %#v", msg)
@@ -1563,6 +1559,61 @@ func TestJaws_AttrHelpersRejectReservedId(t *testing.T) {
 			select {
 			case msg := <-jw.bcastCh:
 				t.Fatalf("reserved attribute queued broadcast %#v", msg)
+			default:
+			}
+		})
+	}
+}
+
+func TestBroadcast_RejectsElementMutatingCommands(t *testing.T) {
+	// Replace and Remove mutate a specific element's node in a way the broadcast path
+	// cannot keep in sync with the server-side registry: a raw broadcast forwards the
+	// command verbatim to every matching element, stranding the server-side Element
+	// with no reachable DOM node (the #199 identity desync). Both must be rejected
+	// before reaching bcastCh, regardless of Data.
+	tests := []struct {
+		name    string
+		what    what.What
+		wantErr error
+	}{
+		{"Replace", what.Replace, ErrReplaceNotBroadcastable},
+		{"Remove", what.Remove, ErrRemoveNotBroadcastable},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer jw.Close()
+			logger := &captureErrorLogger{}
+			jw.Logger = logger
+
+			call := func() {
+				jw.Broadcast(wire.Message{
+					Dest: tag.Tag("t"),
+					What: tt.what,
+					Data: "whatever",
+				})
+			}
+			if deadlock.Debug {
+				func() {
+					defer func() {
+						if recover() == nil {
+							t.Fatalf("broadcast of %v did not panic in a debug build", tt.what)
+						}
+					}()
+					call()
+				}()
+			} else {
+				call()
+			}
+			if !errors.Is(logger.err, tt.wantErr) {
+				t.Fatalf("error = %v, want %v", logger.err, tt.wantErr)
+			}
+			select {
+			case msg := <-jw.bcastCh:
+				t.Fatalf("%v queued broadcast %#v", tt.what, msg)
 			default:
 			}
 		})
