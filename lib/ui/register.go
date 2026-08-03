@@ -13,9 +13,17 @@ import (
 // One Register value may back multiple live [jaws.Element] values only when its
 // Updater supports those calls without retaining Element-specific state on a
 // shared value.
+//
+// The Element is never rendered, so an updater that needs state claimed during a render
+// cannot work here: a wrapped [Template] reports [ErrElementStateUnclaimed] instead of
+// updating. An unwrapped Template is fine, since its updates are a documented no-op —
+// though only [RequestWriter.Register] also delivers its event handlers, because Register
+// embeds [jaws.Updater] and so promotes no handler methods of its own.
 type Register struct{ jaws.Updater }
 
 // NewRegister returns an update-only widget that invokes updater during updates.
+//
+// See [Register] for why a wrapped [Template] cannot be used as the updater.
 func NewRegister(updater jaws.Updater) Register { return Register{Updater: updater} }
 
 // JawsRender renders no HTML for update-only registration.
@@ -41,6 +49,13 @@ func (u Register) JawsRender(elem *jaws.Element, w io.Writer, params []any) erro
 // a managed child outright. Only an Element no removal ever reports, such as one whose
 // returned [jid.Jid] never becomes an element id, necessarily stays registered until the
 // [jaws.Request] ends.
+//
+// Because the Element is never rendered, an updater needing state claimed at render time
+// cannot be used: a wrapped [Template] reports [ErrElementStateUnclaimed] through
+// [jaws.Request.MustLog] rather than updating. An unwrapped Template works — its updates
+// are a documented no-op — and this helper is the only Register form that also delivers a
+// Template's click, input and context-menu handlers, since it adds the concrete updater to
+// the Element's handler list.
 //
 // Register does not call [jaws.Renderer.JawsRender]. The updater must therefore
 // be ready for JawsUpdate and event handling without render-time initialization.

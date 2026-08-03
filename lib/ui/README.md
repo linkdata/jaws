@@ -46,6 +46,22 @@ the template whose body called it, not to the wrapper their markup lands in. Cal
 from the template that renders the group; see `RequestWriter.RadioGroup` for what
 happens when the two differ.
 
+The ownership set lives in the element's widget state slot (`jaws.SetElementState`),
+not on the `ui.Template` value, which is what keeps `NewTemplate` returning a plain
+comparable value. That matters for containers: a `JawsContains` implementation may
+rebuild equal child values on every call and the container will still reuse their
+elements, because that equality *is* the reuse key. It also means the `Dot` must be
+comparable at runtime and equal to itself — a slice, map or func Dot makes the whole
+widget unusable as a child key, and implementing `tag.TagGetter` does not change that,
+since it addresses tag resolution rather than widget comparability. Render through a
+`*ui.Template` when the Dot cannot be comparable, accepting that reuse then keys on
+pointer identity.
+
+A template claims that slot while rendering, so at most one template may render a given
+element, and a wrapped template updates only an element some template rendered. A wrapped
+template is therefore not usable as a `$.Register` updater — Register never renders its
+element — while an unwrapped one is, since its updates are a documented no-op.
+
 You can also use explicit constructors through:
 
 ```go

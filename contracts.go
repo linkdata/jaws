@@ -44,6 +44,12 @@ type Renderer interface {
 	// JawsRender is called once per [Element] when rendering the initial webpage.
 	// Do not call this yourself unless it is from within another JawsRender implementation.
 	// The engine does not invoke this once the [Element] is deleted (see [Element.Deleted]).
+	//
+	// When delegating, note that a renderer may claim the Element's widget state slot
+	// (see [SetElementState]) and that only one of them can: a delegate whose own
+	// renderer claims the slot — [github.com/linkdata/jaws/lib/ui.Template] does —
+	// fails with [ErrElementStateClaimed] if the delegating renderer, or an earlier
+	// delegate, already claimed it.
 	JawsRender(elem *Element, w io.Writer, params []any) error
 }
 
@@ -61,8 +67,10 @@ type TemplateLookuper interface {
 // Within its owning Request, a UI value must back at most one live Element
 // unless its concrete type documents support for multiple live Elements. Such
 // a type must not retain state on the shared UI value that can differ between
-// those Elements. To render the same application state more than once, construct
-// distinct UI values that share getters, setters, handlers or tags.
+// those Elements — [SetElementState] gives it somewhere else to keep such state,
+// keyed to the Element rather than to the widget, but opting in remains the concrete
+// type's decision to document. To render the same application state more than once,
+// construct distinct UI values that share getters, setters, handlers or tags.
 // An Element stops being live when it is deleted or its owning Request lifecycle
 // ends.
 //

@@ -46,12 +46,16 @@ func (*pageTemplate) JawsUpdate(*jaws.Element) {}
 // serve no purpose; nested UI created during execution registers its own tags
 // independently.
 func (pt *pageTemplate) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
-	var lookedUp *template.Template
-	if lookedUp, err = pt.lookup(elem); err == nil {
-		if err = pt.execute(elem, w, lookedUp); err != nil {
-			// The page Element is unregistered by RequestWriter.NewUI; the nested UI
-			// this failed execution created is ours to drop.
-			deleteOwnedElements(elem.Request, pt.takeOwnedElements())
+	// Claim the state slot here rather than relying on Template.render, which this
+	// bypasses: without a claim the page's nested UI would be tracked by nothing at all.
+	// This is the only renderer of the page Element, so the claim always succeeds.
+	st := &templateState{}
+	if err = jaws.SetElementState(elem, st); err == nil {
+		var lookedUp *template.Template
+		if lookedUp, err = pt.lookup(elem); err == nil {
+			// A failed execution needs no cleanup here: RequestWriter.NewUI unregisters
+			// the page Element and, through the state slot, everything it owns.
+			err = pt.execute(elem, w, lookedUp, st)
 		}
 	}
 	return

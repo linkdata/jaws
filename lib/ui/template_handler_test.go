@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"html/template"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -138,7 +139,12 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 	if got, want := tpl.String(), `{"div", "uitempl", `+tag.TagString(td); !strings.Contains(got, want) {
 		t.Fatalf("template string %q does not contain %q", got, want)
 	}
+	// Render before updating: a wrapped Template claims its state slot while rendering and
+	// reports ErrElementStateUnclaimed for an Element it never rendered.
 	elem := rq.NewElement(tpl)
+	if err := elem.JawsRender(io.Discard, nil); err != nil {
+		t.Fatal(err)
+	}
 	tpl.JawsUpdate(elem)
 	if td.updated != 0 {
 		t.Fatalf("expected dot updater not called, got %d", td.updated)
@@ -396,23 +402,49 @@ func TestTemplate_UpdateWithoutWrapperNoop(t *testing.T) {
 	}
 }
 
+// TestTemplate_UpdateLogsExecuteError needs a template whose initial render succeeds and
+// whose later update fails: a wrapped Template updates only an Element it rendered, so a
+// template that always fails could never establish the state slot to begin with.
 func TestTemplate_UpdateLogsExecuteError(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	logger := new(templateLogger)
 	jw.Logger = logger
 	_ = jw.AddTemplateLookuper(template.Must(template.New("badupdate").Parse(
-		`{{$.Dot.MissingField}}`,
+		`{{$.Dot.Check}}`,
 	)))
 
-	tpl := NewTemplate("div", "badupdate", &templateUpdateDot{})
+	dot := &ownedDot{}
+	tpl := NewTemplate("div", "badupdate", dot)
 	elem := rq.NewElement(tpl)
+	if err := elem.JawsRender(io.Discard, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	dot.setFail(errOwnedDotCheck)
 	tpl.JawsUpdate(elem)
 
 	if len(logger.errors) != 1 {
 		t.Fatalf("logged errors = %d, want 1", len(logger.errors))
 	}
-	if !strings.Contains(logger.errors[0].Error(), "MissingField") {
-		t.Fatalf("logged error = %v, want MissingField error", logger.errors[0])
+	if !errors.Is(logger.errors[0], errOwnedDotCheck) {
+		t.Fatalf("logged error = %v, want %v", logger.errors[0], errOwnedDotCheck)
+	}
+}
+
+func TestTemplate_UpdateLogsUnclaimedState(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	logger := new(templateLogger)
+	jw.Logger = logger
+	_ = jw.AddTemplateLookuper(template.Must(template.New("unclaimed").Parse(`ok`)))
+
+	// A wrapped Template has nothing to reconcile against on an Element it never
+	// rendered, so it executes nothing and reports it. This is a defensive diagnostic,
+	// not a supported lifecycle.
+	tpl := NewTemplate("div", "unclaimed", tag.Tag("dot"))
+	tpl.JawsUpdate(rq.NewElement(tpl))
+
+	if len(logger.errors) != 1 || !errors.Is(logger.errors[0], ErrElementStateUnclaimed) {
+		t.Fatalf("logged errors = %v, want one %v", logger.errors, ErrElementStateUnclaimed)
 	}
 }
 

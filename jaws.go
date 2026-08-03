@@ -18,7 +18,11 @@
 //	Jaws.mu  ->  Request.mu  ->  Session.mu
 //
 // Request.muQueue and per-[Element] state are leaf locks taken below all of the
-// above. Blocking work (channel sends, user callbacks) is always performed after
+// above. The [Element] widget state slot is guarded by Request.mu rather than being a
+// leaf: [ElementState] and [SetElementState] take Request.mu themselves, so a caller
+// must hold neither it nor the stored value's own lock. That stored lock is a leaf
+// below Request.mu and is released before any core lock is acquired, so nothing nests.
+// Blocking work (channel sends, user callbacks) is always performed after
 // snapshotting the needed state and releasing the relevant lock; see
 // [Session.Broadcast] and [Session.Close] for the canonical pattern. The
 // [Request.SetContext] transform is the deliberate exception: it runs while

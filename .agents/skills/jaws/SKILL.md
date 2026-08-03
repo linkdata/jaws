@@ -104,8 +104,13 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
 
 - `ui.Template` expands `Dot` into tags via `tag.TagExpand` (package `github.com/linkdata/jaws/lib/tag`, imported as `tag`); the root dot is part of identity/tag behavior.
 - `ui.Template` is for partial templates only; full document/page templates should be rendered through `ui.Handler`.
-- Prefer comparable root dots (pointers or small comparable structs).
-- If root dot is non-comparable, implement `JawsGetTag(tag.Context) any` and return a comparable tag.
+- The root dot **must** be comparable at runtime and equal to itself: `ui.NewTemplate`
+  returns a value, so the dot is part of the widget the container widgets use as a map key.
+  A slice, map, func or NaN-bearing dot makes the widget unusable as a container child.
+- Implementing `JawsGetTag(tag.Context) any` does **not** fix a non-comparable dot — it
+  resolves the *tag*, not the widget's comparability. Wrap such a dot in a pointer, or render
+  through a `*ui.Template` and hand the container the same pointer each time, since reuse then
+  keys on pointer identity. `ui.Handler` is the arbitrary-dot exception.
 - Do not use plain `string`, numeric, `bool`, `template.HTML`, or `template.HTMLAttr` as tags; `tag.TagExpand` rejects them.
 - If you need string-like semantic tags, use `tag.Tag("...")` or a comparable typed struct/pointer.
 
@@ -157,12 +162,21 @@ For clickable content rendering:
 - Keep HTML structure in templates; avoid manual HTML string assembly in Go.
 - `ui.Template.JawsUpdate` re-renders the template data into the generated wrapper.
 - `ui.NewTemplate` returns a `*ui.Template`, which tracks the Elements its execution
-  creates and therefore backs one live Element; construct a fresh one per render
-  (`$.Template` already does). A successful update unregisters every Element the
-  previous execution created through the writer it was given — the widget helpers,
-  `$.Register`, `$.RadioGroup` and nested `$.Template` alike — since `SetInner` replaces
-  the DOM holding them. Ownership is recorded at creation, so an Element that never
-  rendered is reclaimed as well.
+  creates, but keeps that set in the rendering Element's state slot rather than on itself, so
+  `ui.NewTemplate` returns a plain **value** that may back multiple live Elements. A
+  successful update unregisters every Element the previous execution created through the
+  writer it was given — the widget helpers, `$.Register`, `$.RadioGroup` and nested
+  `$.Template` alike — since `SetInner` replaces the DOM holding them. Ownership is recorded
+  at creation, so an Element that never rendered is reclaimed as well.
+- Because the value is stateless, a container's `JawsContains` may rebuild equal children on
+  every call and their Elements are still reused — that equality *is* the reuse key.
+- The state slot is claimed while rendering, which constrains composition:
+  - at most one Template may render a given Element;
+  - a **wrapped** Template updates only an Element some Template rendered, so it is not
+    usable as a `$.Register` updater;
+  - an **unwrapped** Template is usable there — its updates are a documented no-op — but only
+    `$.Register` (the `RequestWriter` helper) also delivers its click/input/context-menu
+    handlers; a bare `ui.Register`/`ui.NewRegister` value promotes no handler methods.
 - Call `$.RadioGroup` from the template that renders the group: its Elements belong to
   the template whose body called it, not to the wrapper their markup lands in.
 - HTML getter paths must not mutate domain state, but they may call element update methods (`SetClass`, `RemoveClass`, `SetAttr`, `RemoveAttr`, etc.) on the passed-in `*Element` to co-ordinate wrapper class/attribute changes with the inner-HTML refresh. No custom `JawsUpdate` is needed for that case — the queued wrapper updates flush alongside the `SetInner` from `HTMLInner.JawsUpdate`.
