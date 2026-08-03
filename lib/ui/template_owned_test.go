@@ -11,6 +11,7 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstest"
+	"github.com/linkdata/jaws/lib/named"
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
@@ -25,6 +26,8 @@ const ownedTestTemplates = `
 {{define "owned-failafter"}}{{$.RequestWriter.Template "" "owned-leaf" $.Dot}}{{$.Dot.Check}}{{end}}
 {{define "owned-many"}}{{range $.Dot.Names}}{{$.RequestWriter.Template "" "owned-leaf" $.Dot}}{{end}}{{end}}
 {{define "owned-container"}}{{$.RequestWriter.Container "div" $.Dot.Container}}{{end}}
+{{define "owned-register"}}<div id="{{$.RequestWriter.Register $.Dot}}"></div>{{end}}
+{{define "owned-radiogroup"}}{{range $.RequestWriter.RadioGroup $.Dot.Radios}}{{.Radio}}{{.Label}}{{end}}{{end}}
 `
 
 var errOwnedDotCheck = errors.New("owned dot check failed")
@@ -36,6 +39,7 @@ type ownedDot struct {
 	fail      error
 	container *testContainer
 	names     []string
+	radios    *named.BoolArray
 }
 
 func (d *ownedDot) Check() (string, error) {
@@ -53,6 +57,12 @@ func (d *ownedDot) setFail(err error) {
 func (d *ownedDot) Container() jaws.Container { return d.container }
 
 func (d *ownedDot) Names() []string { return d.names }
+
+func (d *ownedDot) Radios() *named.BoolArray { return d.radios }
+
+// JawsUpdate makes ownedDot usable as the $.Register updater. Register tags its
+// Element with the updater, so the dot still tags the whole subtree.
+func (d *ownedDot) JawsUpdate(*jaws.Element) {}
 
 func newOwnedLookuper(t *testing.T) *template.Template {
 	t.Helper()
@@ -446,6 +456,46 @@ func TestPageTemplate_RenderFailureDeletesOwnedElements(t *testing.T) {
 	}
 	if got := countRegistered(t, rq); got != 0 {
 		t.Fatalf("registered elements after failed page render = %d, want 0", got)
+	}
+}
+
+// TestTemplate_UpdateDoesNotTrackRegisterOrRadioGroup pins the documented
+// exclusion: Register and RadioGroup create their Elements through
+// Request.NewElement rather than RequestWriter.NewUI, so a Template does not own
+// them and each update adds another. Should either helper start reporting through
+// the element-rendered hook, the counts below become constant — update this test
+// along with the Template, Register, RadioGroup and README docs stating the
+// exclusion.
+func TestTemplate_UpdateDoesNotTrackRegisterOrRadioGroup(t *testing.T) {
+	radios := named.NewBoolArray(false)
+	radios.Add("1", "one")
+
+	for _, tt := range []struct {
+		name     string
+		template string
+		dot      *ownedDot
+		perRound int // Elements the helper adds per execution
+	}{
+		{"register", "owned-register", &ownedDot{}, 1},
+		{"radiogroup", "owned-radiogroup", &ownedDot{radios: radios}, 2}, // input and label
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, rq := newOwnedRequest(t)
+			tmpl := NewTemplate("div", tt.template, tt.dot)
+			elem := renderOwned(t, rq, tmpl)
+
+			want := 1 + tt.perRound // the wrapper, plus the first execution's
+			if got := countRegistered(t, rq); got != want {
+				t.Fatalf("registered elements after render = %d, want %d", got, want)
+			}
+			for round := 1; round <= 3; round++ {
+				tmpl.JawsUpdate(elem)
+				want += tt.perRound
+				if got := countRegistered(t, rq); got != want {
+					t.Fatalf("registered elements after %d update(s) = %d, want %d", round, got, want)
+				}
+			}
+		})
 	}
 }
 

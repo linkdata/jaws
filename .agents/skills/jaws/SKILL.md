@@ -41,8 +41,12 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
   holds a `NaN` (so `v != v`) is rejected: the container widgets — the only place a raw
   `UI` value is used as a map key — cancel the `Request` in all builds (cause matches
   `tag.ErrNotUsableAsTag`), and `Request.NewElement` asserts runtime comparability in
-  debug builds. A typed nil (e.g. `(*Widget)(nil)`) is accepted as usable; its methods
-  must tolerate a nil receiver.
+  debug builds. A typed nil (e.g. `(*Widget)(nil)`) is comparable and equal to itself,
+  so it counts as usable and JaWS dispatches render/update/event calls to it; only a
+  nil `UI` interface is a no-op. Surviving such a call is up to the concrete type, not
+  a requirement: a widget that dereferences its fields panics, and none of the
+  standard `lib/ui` widgets document nil-receiver tolerance. Do not pass a nil pointer
+  of a type that does not; use its zero value (e.g. `&ui.Template{}`) instead.
 - Every JaWS `UI` value is request-scoped. Once used by one Request, never use
   that value with another Request; construct fresh widgets per request. The
   widgets may still refer to shared, synchronized application state, binders,
@@ -152,6 +156,13 @@ For clickable content rendering:
 
 - Keep HTML structure in templates; avoid manual HTML string assembly in Go.
 - `ui.Template.JawsUpdate` re-renders the template data into the generated wrapper.
+- `ui.NewTemplate` returns a `*ui.Template`, which tracks the Elements its execution
+  creates and therefore backs one live Element; construct a fresh one per render
+  (`$.Template` already does). A successful update unregisters the Elements the
+  previous execution created through the `RequestWriter` widget helpers, since
+  `SetInner` replaces the DOM holding them. Elements created by `$.Register` and
+  `$.RadioGroup` are not tracked and stay registered for the Request's lifetime, so
+  prefer the widget helpers inside a template that updates.
 - HTML getter paths must not mutate domain state, but they may call element update methods (`SetClass`, `RemoveClass`, `SetAttr`, `RemoveAttr`, etc.) on the passed-in `*Element` to co-ordinate wrapper class/attribute changes with the inner-HTML refresh. No custom `JawsUpdate` is needed for that case — the queued wrapper updates flush alongside the `SetInner` from `HTMLInner.JawsUpdate`.
 - Use a custom `JawsUpdate` only when the widget's update logic diverges from "render the getter again" — e.g. to compare against a stored last-value and skip the update (as the input widgets do).
 - `Element.SetAttr/RemoveAttr/SetClass/RemoveClass/SetInner/SetValue/Append/Order/Remove/Replace` are update-time operations; call them only from render/update processing.

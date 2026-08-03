@@ -33,6 +33,13 @@ func (u Register) JawsRender(elem *jaws.Element, w io.Writer, params []any) erro
 // The updater's [jaws.Updater.JawsUpdate] method will be called immediately to
 // ensure the initial rendering is correct.
 //
+// Register creates its Element through [jaws.Request.NewElement] rather than
+// [RequestWriter.NewUI], so a surrounding [Template] does not own it: an Element
+// registered from inside a template body outlives the template content it belongs to,
+// and every re-render of that template adds another. The browser still reports the
+// removal of one whose returned [jid.Jid] reached the DOM as an id. Use a widget
+// helper, or register outside the updating template, when that matters.
+//
 // Register does not call [jaws.Renderer.JawsRender]. The updater must therefore
 // be ready for JawsUpdate and event handling without render-time initialization.
 // In particular, the standard input widgets and [Select] initialize their dirty

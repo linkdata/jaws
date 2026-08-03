@@ -26,17 +26,26 @@ such as `{{$.Span ...}}` register elements as the template runs, and custom
 template actions may queue updates or mutate application state. If execution
 later returns an error, JaWS returns or logs that error and preserves whatever
 already happened; it does not roll back partial output, queued messages, or
-application side effects. The elements the failed execution registered are
+application side effects. The tracked elements the failed execution registered are
 unregistered, since nothing will update them.
 
-A template owns the elements its nested UI helpers register, so a successful
-update unregisters the ones the previous render left behind along with the DOM
-that `SetInner` replaces. On updates that `SetInner` is queued only after a
-complete successful render, so a failed update leaves the browser DOM unchanged —
-and with it the previous render's elements — while earlier server-side side
-effects from that attempted render may remain. Treat template execution errors as
-application bugs: validate data before rendering and keep template actions
-infallible once they start emitting output or nested UI.
+A template owns the elements created through `rw.NewUI(...)`, which every
+`RequestWriter` widget helper — `{{$.Span ...}}`, `{{$.Button ...}}`, a nested
+`{{$.Template ...}}`, and so on — goes through. A successful update unregisters
+the ones the previous render left behind, along with the DOM that `SetInner`
+replaces. On updates that `SetInner` is queued only after a complete successful
+render, so a failed update leaves the browser DOM unchanged — and with it the
+previous render's elements — while earlier server-side side effects from that
+attempted render may remain. Treat template execution errors as application bugs:
+validate data before rendering and keep template actions infallible once they
+start emitting output or nested UI.
+
+`{{$.Register ...}}` and `{{$.RadioGroup ...}}` are the exceptions: they create
+elements through `Request.NewElement` directly rather than `rw.NewUI`, so a
+template does not own them. One created inside a template stays registered for the
+request's lifetime and re-rendering the template adds another, though the browser
+still reports the removal of any whose generated JaWS id reached the DOM. Prefer
+the widget helpers inside a template that updates.
 
 You can also use explicit constructors through:
 

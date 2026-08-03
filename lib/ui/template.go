@@ -28,15 +28,22 @@ import (
 // helper. The referenced template must be a partial template, not a full HTML
 // document.
 //
-// Nested JaWS UI rendered by the template belongs to the Template that rendered
-// it: when [Template.JawsUpdate] replaces the wrapper's content, the Elements from
-// the previous execution are unregistered along with the DOM that held them, and a
-// nested widget's own Elements go with it.
+// The Elements a template creates through [RequestWriter.NewUI], which every
+// RequestWriter widget helper (including a nested [RequestWriter.Template]) goes
+// through, belong to the Template that rendered them: when [Template.JawsUpdate]
+// replaces the wrapper's content, those Elements are unregistered along with the DOM
+// that held them, and a nested widget's own Elements go with it.
+//
+// [RequestWriter.Register] and [RequestWriter.RadioGroup] create their Elements
+// through [jaws.Request.NewElement] instead, so they are not tracked: an Element
+// either helper creates inside a template stays registered for the [jaws.Request]
+// lifetime, and re-rendering the template adds another. Their generated JaWS ids do
+// let the browser report the removal of any that reached the DOM.
 //
 // Template execution is best-effort rather than transactional. Template actions
 // and nested JaWS helpers run as the template executes, so an execution error
 // after partial output can leave already-written HTML, queued messages, domain
-// mutations or other side effects in place. The nested Elements created by the
+// mutations or other side effects in place. The tracked Elements created by the
 // failed execution are unregistered. Treat such errors as application bugs:
 // validate data before rendering and keep template actions infallible once they
 // start emitting output or nested UI.
@@ -198,10 +205,11 @@ func (tmpl *Template) JawsRender(elem *jaws.Element, w io.Writer, params []any) 
 // elements. The wrapper's SetInner is queued only after execution succeeds (see the
 // best-effort error behavior on [Template]).
 //
-// A successful update unregisters the Elements from the previous execution, along
-// with any they own: SetInner replaces the DOM that held them. If execution fails
-// nothing is queued, so the Elements it created are unregistered instead and the
-// previous ones stay live to match the unchanged DOM.
+// A successful update unregisters the tracked Elements from the previous execution,
+// along with any they own: SetInner replaces the DOM that held them. If execution
+// fails nothing is queued, so the tracked Elements it created are unregistered
+// instead and the previous ones stay live to match the unchanged DOM. See [Template]
+// for which Elements are tracked.
 //
 // Lookup or execution errors are reported through [jaws.Request.MustLog], which may
 // panic when no [jaws.Jaws.Logger] is configured.
