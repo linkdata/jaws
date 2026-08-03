@@ -160,8 +160,9 @@ var debugCommentSanitizer = strings.NewReplacer("-->", "==>", "--!>", "==>")
 // Do not call this yourself unless it is from within another JawsRender implementation.
 //
 // A nil [UI] interface renders as a no-op; this arises only from [Request.NewElement]
-// given a nil interface. A typed nil (a non-nil interface holding a nil pointer) still
-// dispatches to its [Renderer], which is responsible for tolerating a nil receiver.
+// given a nil interface. A typed nil (a non-nil interface holding a nil pointer) is
+// still dispatched to its [Renderer], so the call panics unless that concrete type
+// documents nil-receiver tolerance; see [UI].
 func (elem *Element) JawsRender(w io.Writer, params []any) (err error) {
 	if ui := elem.UI(); ui != nil && !elem.deleted.Load() {
 		if err = ui.JawsRender(elem, w, params); err == nil {

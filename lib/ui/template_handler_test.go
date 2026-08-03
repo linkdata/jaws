@@ -417,7 +417,7 @@ func TestTemplate_UpdateLogsExecuteError(t *testing.T) {
 }
 
 func TestPageTemplate_UpdateNoop(t *testing.T) {
-	pageTemplate{}.JawsUpdate(nil)
+	(&pageTemplate{}).JawsUpdate(nil)
 }
 
 func TestTemplate_RenderReturnsTagExpandError(t *testing.T) {

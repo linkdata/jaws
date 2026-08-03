@@ -417,6 +417,37 @@ func (rq *Request) DeleteElement(elem *Element) {
 	rq.deleteElementLocked(elem)
 }
 
+// DeleteElements removes all of elems from the [Request] element registry in a
+// single pass, without queueing browser operations.
+//
+// It is the batched form of [Request.DeleteElement], for unregistering a whole
+// subtree at once: one pass over the registry regardless of how many elements are
+// dropped, rather than one pass per element. Nil elements and elements belonging to
+// another Request are skipped, and repeated elements are tolerated.
+func (rq *Request) DeleteElements(elems []*Element) {
+	if len(elems) == 0 {
+		return
+	}
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	if len(elems) == 1 {
+		// Avoid allocating a victims map for the common single-element case.
+		rq.deleteElementLocked(elems[0])
+		return
+	}
+	victims := make(map[*Element]struct{}, len(elems))
+	for _, elem := range elems {
+		if elem != nil && elem.Request == rq {
+			elem.deleted.Store(true)
+			victims[elem] = struct{}{}
+		}
+	}
+	if len(victims) == 0 {
+		return
+	}
+	rq.removeElementsLocked(func(e *Element) bool { _, ok := victims[e]; return ok })
+}
+
 // makeUpdateList drains the pending-dirt tag list, resolves it to the distinct
 // elements needing an update, clears the list, and returns those elements sorted
 // by Jid. It takes rq.mu. The Serve loop calls JawsUpdate on each returned element.

@@ -17,15 +17,22 @@
 // application state, binders, handlers or tags when that shared state is
 // synchronized as required.
 //
+// Most constructors return a pointer ([Option] and [Register] are the value-typed
+// exceptions), and the widgets dereference their fields without checking the
+// receiver. JaWS core accepts a typed nil and dispatches to it like any other
+// [jaws.UI] value (see [jaws.UI]), so rendering or updating one panics here: no
+// widget in this package documents nil-receiver tolerance. The zero value of a
+// widget, such as &[Template]{}, is the supported empty form.
+//
 // Within one request, a widget normally backs at most one live [jaws.Element].
-// The HTML-inner widgets, [Img], [Option] and [Template] document support for
-// backing multiple live Elements because they retain no Element-specific state;
-// their shared getters, handlers and template data must also be safe for those
-// calls. Input widgets, [ContainerHelper]-based widgets and [JsVar] require a
-// distinct widget value for each live Element. [Register] supports multiple live
-// Elements only when its Updater does. Distinct widgets may still share
-// synchronized application state. This is the canonical package-wide
-// classification; each concrete type's documentation states its conditions.
+// The HTML-inner widgets, [Img] and [Option] document support for backing
+// multiple live Elements because they retain no Element-specific state; their
+// shared getters and handlers must also be safe for those calls. Input widgets,
+// [ContainerHelper]-based widgets, [JsVar] and [Template] require a distinct
+// widget value for each live Element. [Register] supports multiple live Elements
+// only when its Updater does. Distinct widgets may still share synchronized
+// application state. This is the canonical package-wide classification; each
+// concrete type's documentation states its conditions.
 //
 // HTML-inner widgets route content through [bind.MakeHTMLGetter]. Plain strings
 // are treated as trusted HTML, while [bind.Getter][string], [bind.Binder][string]

@@ -16,7 +16,11 @@ import (
 // with Handler.
 type uiHandler struct {
 	*jaws.Jaws
-	Template pageTemplate
+	// name and dot are the page template's parameters rather than a prepared
+	// pageTemplate: a pageTemplate tracks the Elements of one render, so ServeHTTP
+	// constructs a fresh one per request instead of copying a shared value.
+	name string
+	dot  any
 }
 
 // pageTemplate wraps a [Template] used as a whole-page document template.
@@ -30,7 +34,7 @@ var _ jaws.UI = (*pageTemplate)(nil)
 // JawsUpdate is a no-op because a page-level template is render-only: the
 // embedded [Template.JawsUpdate] would re-render the entire document into itself
 // when OuterHTMLTag is set, so it is deliberately silenced here.
-func (pageTemplate) JawsUpdate(*jaws.Element) {}
+func (*pageTemplate) JawsUpdate(*jaws.Element) {}
 
 // JawsRender renders the whole-page template, looking it up and executing it
 // directly.
@@ -41,10 +45,14 @@ func (pageTemplate) JawsUpdate(*jaws.Element) {}
 // element cannot re-render itself, deriving tag identity from the page dot would
 // serve no purpose; nested UI created during execution registers its own tags
 // independently.
-func (pt pageTemplate) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
+func (pt *pageTemplate) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	var lookedUp *template.Template
 	if lookedUp, err = pt.lookup(elem); err == nil {
-		err = pt.execute(elem, w, lookedUp)
+		if err = pt.execute(elem, w, lookedUp); err != nil {
+			// The page Element is unregistered by RequestWriter.NewUI; the nested UI
+			// this failed execution created is ours to drop.
+			deleteOwnedElements(elem.Request, pt.takeOwnedElements())
+		}
 	}
 	return
 }
@@ -71,13 +79,14 @@ func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rq := h.NewRequest(r)
 	sr := &statusRecorder{ResponseWriter: w}
 	rw := RequestWriter{Request: rq, Writer: sr}
-	// Render through a fresh per-request pointer so the UI is comparable as a map
-	// key regardless of the page dot: ordinary html/template data such as a slice
-	// or map is not usable as a tag and would fail the runtime comparability check
-	// in Request.NewElement if a bare pageTemplate value (whose Dot is any) were
-	// used. The pointer identity is always comparable and fresh per request.
-	pt := h.Template
-	if err := rw.NewUI(&pt); err != nil {
+	// Build a fresh per-request pointer so the UI is comparable as a map key
+	// regardless of the page dot: ordinary html/template data such as a slice or map
+	// is not usable as a tag and would fail the runtime comparability check in
+	// Request.NewElement if a bare pageTemplate value (whose Dot is any) were used.
+	// The pointer identity is always comparable and fresh per request, and each
+	// request gets its own Element-tracking state.
+	pt := &pageTemplate{Template: Template{Name: h.name, Dot: h.dot}}
+	if err := rw.NewUI(pt); err != nil {
 		_ = h.Log(err)
 		// A failure before any output (for example a missing template) can still
 		// become a proper error response; once bytes have been written the status
@@ -96,5 +105,5 @@ func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // lookupers and rendered with a [With] value as the template data, exposing
 // dot through its Dot field.
 func Handler(jw *jaws.Jaws, name string, dot any) http.Handler {
-	return uiHandler{Jaws: jw, Template: pageTemplate{Template: Template{Name: name, Dot: dot}}}
+	return uiHandler{Jaws: jw, name: name, dot: dot}
 }

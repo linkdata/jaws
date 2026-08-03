@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/tag"
@@ -12,10 +13,11 @@ import (
 
 // Template references a Go [html/template] template to be rendered through JaWS.
 //
-// A Template retains no Element-specific state and may back multiple live
-// [jaws.Element] values. Its Dot and any callbacks reached during execution are
-// shared by those Elements and must be safe for their render, update and event
-// calls.
+// A Template tracks the [jaws.Element] values created while its template executes,
+// so it must back at most one live Element. Construct a distinct Template for each
+// place the template is rendered; [RequestWriter.Template] does so for every call.
+// Its Dot and any callbacks reached during execution are shared with anything else
+// referencing them and must be safe for those calls.
 //
 // The OuterHTMLTag field identifies the generated wrapper element used for
 // partial templates. If OuterHTMLTag is empty, the template is rendered without
@@ -26,31 +28,86 @@ import (
 // helper. The referenced template must be a partial template, not a full HTML
 // document.
 //
+// The Elements a template creates through [RequestWriter.NewUI] — the path taken by
+// every RequestWriter widget helper except [RequestWriter.Register] and
+// [RequestWriter.RadioGroup], including a nested [RequestWriter.Template] — belong to
+// the Template that rendered them: when [Template.JawsUpdate] replaces the wrapper's
+// content, those Elements are unregistered along with the DOM that held them, and a
+// nested widget's own Elements go with it.
+//
+// Those two helpers create their Elements through [jaws.Request.NewElement] instead,
+// so a Template neither tracks nor unregisters them. Their cleanup is left to the
+// browser, which reports the JaWS ids it removed from the DOM as the wrapper's new
+// content is applied, and the [jaws.Request] unregisters those Elements. An Element
+// whose id never reaches the DOM has nothing to report it and stays registered until
+// the Request ends: one from an execution that failed before its markup was
+// delivered, or from a Register call whose returned Jid the template discards.
+//
 // Template execution is best-effort rather than transactional. Template actions
 // and nested JaWS helpers run as the template executes, so an execution error
-// after partial output can leave already-written HTML, registered nested
-// elements, queued messages, domain mutations or other side effects in place.
-// Treat such errors as application bugs: validate data before rendering and keep
-// template actions infallible once they start emitting output or nested UI.
+// after partial output can leave already-written HTML, queued messages, domain
+// mutations or other side effects in place. The tracked Elements created by the
+// failed execution are unregistered. Treat such errors as application bugs:
+// validate data before rendering and keep template actions infallible once they
+// start emitting output or nested UI.
 type Template struct {
 	OuterHTMLTag string // Optional wrapper tag for partial templates, for example "div" or "tr"; empty renders unwrapped.
 	Name         string // Template name to be looked up using Jaws.LookupTemplate.
 	Dot          any    // Dot value to place in With.
+	// mu serializes the owned operations, which run on the rendering goroutine and
+	// on the request loop goroutine during updates (mirrors ContainerHelper).
+	mu sync.Mutex
+	// owned are the Elements created while the template executed, in creation
+	// order. It tracks one live Element's nested UI.
+	owned []*jaws.Element
 }
 
 var (
-	_ jaws.UI                 = Template{} // statically ensure interface is defined
-	_ jaws.ClickHandler       = Template{} // statically ensure interface is defined
-	_ jaws.ContextMenuHandler = Template{} // statically ensure interface is defined
-	_ jaws.InputHandler       = Template{} // statically ensure interface is defined
+	_ jaws.UI                 = (*Template)(nil) // statically ensure interface is defined
+	_ jaws.ClickHandler       = (*Template)(nil) // statically ensure interface is defined
+	_ jaws.ContextMenuHandler = (*Template)(nil) // statically ensure interface is defined
+	_ jaws.InputHandler       = (*Template)(nil) // statically ensure interface is defined
 )
 
+// The methods below dereference tmpl without a nil check, like the other
+// pointer-based widgets in this package (*Span, *Container, *JsVar): jaws.UI accepts
+// a typed nil and dispatches to it, but leaves surviving a nil receiver to the
+// concrete type, and this package documents that none of its widgets do (see doc.go).
+// A zero &Template{} is the supported empty value and reports ErrMissingTemplate.
+
 // String returns a debug representation of t.
-func (tmpl Template) String() string {
+func (tmpl *Template) String() string {
 	return fmt.Sprintf("{%q, %q, %s}", tmpl.OuterHTMLTag, tmpl.Name, tag.TagString(tmpl.Dot))
 }
 
-func (tmpl Template) lookup(elem *jaws.Element) (lookedUp *template.Template, err error) {
+// ownElement records child as created while tmpl's template executed. It is the
+// [RequestWriter] element-rendered hook installed by execute.
+func (tmpl *Template) ownElement(child *jaws.Element) (err error) {
+	tmpl.mu.Lock()
+	tmpl.owned = append(tmpl.owned, child)
+	tmpl.mu.Unlock()
+	return
+}
+
+// takeOwnedElements returns the Elements created by the most recent execution and
+// clears the tracking state, transferring responsibility for unregistering them to
+// the caller. It implements elementOwner.
+func (tmpl *Template) takeOwnedElements() (owned []*jaws.Element) {
+	tmpl.mu.Lock()
+	owned, tmpl.owned = tmpl.owned, nil
+	tmpl.mu.Unlock()
+	return
+}
+
+// restoreOwnedElements makes owned the tracked set again, for an update whose
+// output was discarded and whose previous Elements still match the browser DOM.
+func (tmpl *Template) restoreOwnedElements(owned []*jaws.Element) {
+	tmpl.mu.Lock()
+	tmpl.owned = owned
+	tmpl.mu.Unlock()
+}
+
+func (tmpl *Template) lookup(elem *jaws.Element) (lookedUp *template.Template, err error) {
 	err = errMissingTemplate(tmpl.Name)
 	if lookedUp = elem.Request.Jaws.LookupTemplate(tmpl.Name); lookedUp != nil {
 		err = nil
@@ -58,7 +115,7 @@ func (tmpl Template) lookup(elem *jaws.Element) (lookedUp *template.Template, er
 	return
 }
 
-func (tmpl Template) auth(elem *jaws.Element) (auth jaws.Auth) {
+func (tmpl *Template) auth(elem *jaws.Element) (auth jaws.Auth) {
 	if f := elem.Request.Jaws.MakeAuth; f != nil {
 		auth = f(elem.Request)
 	} else {
@@ -69,10 +126,18 @@ func (tmpl Template) auth(elem *jaws.Element) (auth jaws.Auth) {
 	return
 }
 
-func (tmpl Template) execute(elem *jaws.Element, w io.Writer, lookedUp *template.Template) (err error) {
+func (tmpl *Template) execute(elem *jaws.Element, w io.Writer, lookedUp *template.Template) (err error) {
+	// The hook makes tmpl own the Elements the template creates through this writer.
+	// A nested RequestWriter.Template builds its own writer in its own execute, so
+	// each level owns only its direct children and deeper ones are reached through
+	// them; see appendOwnedElements.
+	//
+	// Tracking assumes html/template's synchronous execution on this goroutine. A
+	// template action that renders from another goroutine is already unsupported: it
+	// races on the shared io.Writer, and on the render as a whole.
 	err = lookedUp.Execute(w, With{
 		Element:       elem,
-		RequestWriter: RequestWriter{Request: elem.Request, Writer: w},
+		RequestWriter: RequestWriter{Request: elem.Request, Writer: w, elementRendered: tmpl.ownElement},
 		Dot:           tmpl.Dot,
 		Auth:          tmpl.auth(elem),
 	})
@@ -92,7 +157,7 @@ func writeTemplateWrapperStart(elem *jaws.Element, w io.Writer, outerHTMLTag str
 	return
 }
 
-func (tmpl Template) render(elem *jaws.Element, w io.Writer, params []any) (err error) {
+func (tmpl *Template) render(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	doWrap := tmpl.OuterHTMLTag != ""
 	var expandedTags []any
 	if expandedTags, err = tag.TagExpand(elem.Request, tmpl.Dot); err == nil {
@@ -116,6 +181,12 @@ func (tmpl Template) render(elem *jaws.Element, w io.Writer, params []any) (err 
 						err = werr
 					}
 				}
+				if err != nil {
+					// The Element itself is unregistered by whoever created it
+					// (RequestWriter.NewUI, or a container). Its nested UI is ours to
+					// drop, since it will never be updated.
+					deleteOwnedElements(elem.Request, tmpl.takeOwnedElements())
+				}
 			}
 		}
 	}
@@ -125,7 +196,7 @@ func (tmpl Template) render(elem *jaws.Element, w io.Writer, params []any) (err 
 // JawsRender renders t through the request's configured template lookupers,
 // streaming output directly to w. Template execution has the best-effort error
 // behavior described on [Template].
-func (tmpl Template) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
+func (tmpl *Template) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	err = tmpl.render(elem, w, params)
 	return
 }
@@ -137,15 +208,28 @@ func (tmpl Template) JawsRender(elem *jaws.Element, w io.Writer, params []any) (
 // elements. The wrapper's SetInner is queued only after execution succeeds (see the
 // best-effort error behavior on [Template]).
 //
+// A successful update unregisters the tracked Elements from the previous execution,
+// along with any they own: SetInner replaces the DOM that held them. If execution
+// fails nothing is queued, so the tracked Elements it created are unregistered
+// instead and the previous ones stay live to match the unchanged DOM. See [Template]
+// for which Elements are tracked.
+//
 // Lookup or execution errors are reported through [jaws.Request.MustLog], which may
 // panic when no [jaws.Jaws.Logger] is configured.
-func (tmpl Template) JawsUpdate(elem *jaws.Element) {
+func (tmpl *Template) JawsUpdate(elem *jaws.Element) {
 	if tmpl.OuterHTMLTag != "" {
 		lookedUp, err := tmpl.lookup(elem)
 		if err == nil {
+			// Detach before executing so the new Elements accumulate on their own; a
+			// lookup failure returns above with the set untouched.
+			previous := tmpl.takeOwnedElements()
 			var sb strings.Builder
 			if err = tmpl.execute(elem, &sb, lookedUp); err == nil {
 				elem.SetInner(template.HTML(sb.String())) // #nosec G203
+				deleteOwnedElements(elem.Request, previous)
+			} else {
+				deleteOwnedElements(elem.Request, tmpl.takeOwnedElements())
+				tmpl.restoreOwnedElements(previous)
 			}
 		}
 		elem.Request.MustLog(err)
@@ -153,7 +237,7 @@ func (tmpl Template) JawsUpdate(elem *jaws.Element) {
 }
 
 // JawsClick delegates click events to t.Dot when it implements [jaws.ClickHandler].
-func (tmpl Template) JawsClick(elem *jaws.Element, click jaws.Click) (err error) {
+func (tmpl *Template) JawsClick(elem *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
 	if h, ok := tmpl.Dot.(jaws.ClickHandler); ok {
 		err = h.JawsClick(elem, click)
@@ -163,7 +247,7 @@ func (tmpl Template) JawsClick(elem *jaws.Element, click jaws.Click) (err error)
 
 // JawsContextMenu delegates context-menu events to t.Dot when it implements
 // [jaws.ContextMenuHandler].
-func (tmpl Template) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err error) {
+func (tmpl *Template) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
 	if h, ok := tmpl.Dot.(jaws.ContextMenuHandler); ok {
 		err = h.JawsContextMenu(elem, click)
@@ -172,7 +256,7 @@ func (tmpl Template) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err 
 }
 
 // JawsInput delegates input events to t.Dot when it implements [jaws.InputHandler].
-func (tmpl Template) JawsInput(elem *jaws.Element, value string) (err error) {
+func (tmpl *Template) JawsInput(elem *jaws.Element, value string) (err error) {
 	err = jaws.ErrEventUnhandled
 	if h, ok := tmpl.Dot.(jaws.InputHandler); ok {
 		err = h.JawsInput(elem, value)
@@ -188,8 +272,11 @@ func (tmpl Template) JawsInput(elem *jaws.Element, value string) (err error) {
 // wrapper to update) if empty. The name is resolved at render or update time via
 // [jaws.Jaws.LookupTemplate]. See [Template] for the field semantics, event
 // delegation and best-effort error behavior.
-func NewTemplate(outerHTMLTag, name string, dot any) Template {
-	return Template{OuterHTMLTag: outerHTMLTag, Name: name, Dot: dot}
+//
+// The returned Template is request-scoped and tracks the Elements one live
+// [jaws.Element] renders; call NewTemplate again for each place it is rendered.
+func NewTemplate(outerHTMLTag, name string, dot any) *Template {
+	return &Template{OuterHTMLTag: outerHTMLTag, Name: name, Dot: dot}
 }
 
 // Template renders the named partial template with dot exposed as [With.Dot],

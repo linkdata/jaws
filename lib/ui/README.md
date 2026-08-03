@@ -25,13 +25,30 @@ Template execution is best-effort rather than transactional. Nested UI helpers
 such as `{{$.Span ...}}` register elements as the template runs, and custom
 template actions may queue updates or mutate application state. If execution
 later returns an error, JaWS returns or logs that error and preserves whatever
-already happened; it does not roll back partial output, nested elements, queued
-messages, or application side effects. On updates, the wrapper's `SetInner` is
-queued only after a complete successful render, so a failed update leaves the
-browser DOM unchanged while earlier server-side side effects from that attempted
-render may remain. Treat template execution errors as application bugs: validate
-data before rendering and keep template actions infallible once they start
-emitting output or nested UI.
+already happened; it does not roll back partial output, queued messages, or
+application side effects. The tracked elements the failed execution registered are
+unregistered, since nothing will update them.
+
+A template owns the elements created through `rw.NewUI(...)`, the path taken by
+every `RequestWriter` widget helper except the two below — `{{$.Span ...}}`,
+`{{$.Button ...}}`, a nested `{{$.Template ...}}`, and so on. A successful update
+unregisters the ones the previous render left behind, along with the DOM that
+`SetInner` replaces. On updates that `SetInner` is queued only after a complete
+successful render, so a failed update leaves the browser DOM unchanged — and with
+it the previous render's elements — while earlier server-side side effects from
+that attempted render may remain. Treat template execution errors as application
+bugs: validate data before rendering and keep template actions infallible once they
+start emitting output or nested UI.
+
+`{{$.Register ...}}` and `{{$.RadioGroup ...}}` are the exceptions: they create
+elements through `Request.NewElement` directly rather than `rw.NewUI`, so the
+template neither owns nor unregisters them. Their cleanup falls to the browser,
+which reports the JaWS ids it removed from the DOM as the wrapper's new content is
+applied, and the request unregisters those elements. An element whose id never
+reaches the DOM has nothing to report it and stays registered until the request
+ends — one from an execution that failed before its markup was delivered, or a
+`$.Register` whose returned Jid the template discards. Prefer the `rw.NewUI`-backed
+helpers inside a template that updates.
 
 You can also use explicit constructors through:
 

@@ -106,6 +106,61 @@ func TestRequest_DeleteElementNil(t *testing.T) {
 	rq.DeleteElement(nil)
 }
 
+func TestRequest_DeleteElements(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+	other := newTestRequest(t)
+	defer other.Close()
+
+	shared := tag.Tag("shared")
+	newTagged := func(rq *testRequest) *Element {
+		elem := rq.NewElement(&testUi{})
+		elem.Tag(shared)
+		return elem
+	}
+
+	// Empty and all-unusable input must not disturb the registry, and must not panic
+	// on the nil element.
+	rq.DeleteElements(nil)
+	rq.DeleteElements([]*Element{})
+	foreign := newTagged(other)
+	rq.DeleteElements([]*Element{nil, foreign})
+	if foreign.Deleted() {
+		t.Error("DeleteElements deleted an element belonging to another Request")
+	}
+
+	// Single element: the fast path still unregisters and marks it deleted.
+	single := newTagged(rq)
+	rq.DeleteElements([]*Element{single})
+	if !single.Deleted() || rq.GetElementByJid(single.Jid()) != nil {
+		t.Error("DeleteElements did not unregister a single element")
+	}
+
+	// Several elements at once, with a repeat and a foreign element mixed in. The
+	// shared tag entry must be dropped once its last element is gone.
+	keep := newTagged(rq)
+	a, b, c := newTagged(rq), newTagged(rq), newTagged(rq)
+	rq.DeleteElements([]*Element{a, b, c, b, nil, foreign})
+	for i, elem := range []*Element{a, b, c} {
+		if !elem.Deleted() {
+			t.Errorf("element %d not marked deleted", i)
+		}
+		if rq.GetElementByJid(elem.Jid()) != nil {
+			t.Errorf("element %d still registered", i)
+		}
+	}
+	if foreign.Deleted() {
+		t.Error("DeleteElements deleted a foreign element in a batch")
+	}
+	if got := rq.GetElements(shared); len(got) != 1 || got[0] != keep {
+		t.Errorf("tag entry after batch = %v, want only the kept element", got)
+	}
+	rq.DeleteElements([]*Element{keep})
+	if got := rq.GetElements(shared); len(got) != 0 {
+		t.Errorf("tag entry not dropped once empty: %v", got)
+	}
+}
+
 func TestRequest_Registrations(t *testing.T) {
 	is := newTestHelper(t)
 	rq := newTestRequest(t)
