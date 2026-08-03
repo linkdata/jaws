@@ -60,10 +60,10 @@ var (
 )
 
 // The methods below dereference tmpl without a nil check, like the other
-// pointer-based widgets in this package (*Span, *Container, *JsVar). Core accepts a
-// typed nil UI and dispatches to it, but tolerating a nil receiver is each widget
-// type's own choice, and this one does not: a zero &Template{} is the supported
-// empty value and reports ErrMissingTemplate.
+// pointer-based widgets in this package (*Span, *Container, *JsVar): jaws.UI accepts
+// a typed nil and dispatches to it, but leaves surviving a nil receiver to the
+// concrete type, and this package documents that none of its widgets do (see doc.go).
+// A zero &Template{} is the supported empty value and reports ErrMissingTemplate.
 
 // String returns a debug representation of t.
 func (tmpl *Template) String() string {

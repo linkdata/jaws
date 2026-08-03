@@ -39,9 +39,10 @@ func (errUnusableUI) Is(target error) bool {
 // to render children: a non-comparable value panics when hashed and a NaN-bearing one
 // never matches itself, while a nil interface is a legal map key but has no methods to
 // render. A typed nil — a non-nil interface holding a nil pointer whose type
-// implements [UI] — is comparable and equal to itself, so it is reported usable;
-// whether its [Renderer] tolerates a nil receiver is the concrete type's
-// responsibility.
+// implements [UI] — is comparable and equal to itself, so it is reported usable.
+// Usable here means only that it can key a container and be dispatched to: whether
+// its [Renderer] survives a nil receiver depends on the concrete type, and most do
+// not (see [UI]).
 //
 // The returned error matches both [tag.ErrNotUsableAsTag] and [tag.ErrNotComparable]
 // under errors.Is. The container widgets use it to terminate a Request handed such a

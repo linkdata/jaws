@@ -77,10 +77,19 @@ type TemplateLookuper interface {
 // value holding NaN), with a cause matching
 // [github.com/linkdata/jaws/lib/tag.ErrNotUsableAsTag] under errors.Is. That is the
 // only place a raw UI value is used as a map key; outside a container
-// [Request.NewElement] asserts runtime comparability in debug builds. A typed nil (a
-// non-nil interface holding a nil pointer) is usable, and tolerating a nil receiver
-// is the concrete type's responsibility. Callers must ensure UI values are genuinely
-// comparable and reflexive.
+// [Request.NewElement] asserts runtime comparability in debug builds. Callers must
+// ensure UI values are genuinely comparable and reflexive.
+//
+// A typed nil (a non-nil interface holding a nil pointer) meets those key
+// requirements, being comparable and equal to itself, so JaWS accepts one and
+// dispatches render, update and event calls to it like any other value; only a nil
+// UI interface is treated as a no-op. Surviving those calls with a nil receiver is a
+// property of the concrete type rather than a requirement of this contract: a type
+// may document that it tolerates one, and a type that does not will panic when
+// dereferencing its fields. Passing a nil pointer of such a type is therefore a
+// caller error, not a framework-handled case. The widgets in
+// [github.com/linkdata/jaws/lib/ui] are pointer types that dereference their fields,
+// and none of them document nil-receiver tolerance.
 type UI interface {
 	Renderer
 	Updater

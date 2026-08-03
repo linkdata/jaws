@@ -17,6 +17,13 @@
 // application state, binders, handlers or tags when that shared state is
 // synchronized as required.
 //
+// Most constructors return a pointer ([Option] and [Register] are the value-typed
+// exceptions), and the widgets dereference their fields without checking the
+// receiver. JaWS core accepts a typed nil and dispatches to it like any other
+// [jaws.UI] value (see [jaws.UI]), so rendering or updating one panics here: no
+// widget in this package documents nil-receiver tolerance. The zero value of a
+// widget, such as &[Template]{}, is the supported empty form.
+//
 // Within one request, a widget normally backs at most one live [jaws.Element].
 // The HTML-inner widgets, [Img] and [Option] document support for backing
 // multiple live Elements because they retain no Element-specific state; their
