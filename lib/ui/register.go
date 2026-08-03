@@ -34,9 +34,13 @@ func (u Register) JawsRender(elem *jaws.Element, w io.Writer, params []any) erro
 // ensure the initial rendering is correct.
 //
 // A surrounding [Template] owns the Element and unregisters it when the template next
-// replaces its content, so repeated updates do not accumulate registrations. Rendered
-// outside a template — through a [RequestWriter] a caller built itself — the Element
-// stays registered until the [jaws.Request] ends.
+// replaces its content, so repeated updates do not accumulate registrations. With no
+// template owner — rendered through a [RequestWriter] a caller built itself — cleanup
+// falls to the ordinary DOM-removal handling: the browser reports the JaWS ids it
+// removes when an ancestor's content is replaced, and [jaws.Element.Remove] unregisters
+// a managed child outright. Only an Element no removal ever reports, such as one whose
+// returned [jid.Jid] never becomes an element id, necessarily stays registered until the
+// [jaws.Request] ends.
 //
 // Register does not call [jaws.Renderer.JawsRender]. The updater must therefore
 // be ready for JawsUpdate and event handling without render-time initialization.

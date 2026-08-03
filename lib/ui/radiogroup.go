@@ -17,8 +17,8 @@ import (
 // for="..." referencing the radio's id, so a Label without its Radio points at an
 // input that is absent from the document. The radio Element it created is still
 // unregistered by the [Template] that owns it (see [RequestWriter.RadioGroup]) when
-// that template next replaces its content, or stays registered until the
-// [jaws.Request] ends if the group was rendered outside a template.
+// that template next replaces its content. With no template owner it has no DOM node
+// for a removal to report either, so it stays registered until the [jaws.Request] ends.
 type RadioElement struct {
 	st *radioState
 }
