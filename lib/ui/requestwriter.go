@@ -11,15 +11,23 @@ import (
 type RequestWriter struct {
 	*jaws.Request
 	io.Writer
-	// elementRendered, when non-nil, is called by NewUI with each Element it
-	// successfully rendered, letting the widget that owns this writer track the
-	// Elements created through it. A returned error fails the NewUI call.
+	// elementCreated, when non-nil, is called with every Element created through
+	// this writer, letting the widget that owns the writer track them. It is called
+	// as soon as the Element exists, before it renders and whether or not it ever
+	// does, so an implementation must not assume rendered state.
 	//
 	// It is deliberately unexported: RequestWriter is embedded in [With], so an
 	// exported func field would be callable from any template as
-	// {{call $.ElementRendered $.Element}}, letting a template make an Element own
+	// {{call $.ElementCreated $.Element}}, letting a template make an Element own
 	// itself and have its own wrapper unregistered on the next update.
-	elementRendered func(elem *jaws.Element) (err error)
+	elementCreated func(elem *jaws.Element)
+}
+
+// trackElement reports a newly created Element to the writer's owner, if any.
+func (rw RequestWriter) trackElement(elem *jaws.Element) {
+	if rw.elementCreated != nil {
+		rw.elementCreated(elem)
+	}
 }
 
 // NewUI creates an element for ui and renders it to the underlying writer.
@@ -28,12 +36,12 @@ type RequestWriter struct {
 // requirements documented by [jaws.UI].
 func (rw RequestWriter) NewUI(ui jaws.UI, params ...any) (err error) {
 	elem := rw.NewElement(ui)
-	if err = elem.JawsRender(rw, params); err == nil {
-		if rw.elementRendered != nil {
-			err = rw.elementRendered(elem)
-		}
-	}
-	if err != nil {
+	// Report the Element before rendering it, so the owner's set is complete even for
+	// one that fails. That set may then hold an Element already unregistered below,
+	// which costs nothing: Request.DeleteElements skips elements it finds
+	// unregistered, and every rollback path deletes the whole set at once.
+	rw.trackElement(elem)
+	if err = elem.JawsRender(rw, params); err != nil {
 		// Unregister anything the failed Element already owns along with it, so no
 		// widget can strand a subtree by not rolling back itself.
 		deleteOwnedElements(rw.Request, []*jaws.Element{elem})

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -28,6 +29,12 @@ const ownedTestTemplates = `
 {{define "owned-container"}}{{$.RequestWriter.Container "div" $.Dot.Container}}{{end}}
 {{define "owned-register"}}<div id="{{$.RequestWriter.Register $.Dot}}"></div>{{end}}
 {{define "owned-radiogroup"}}{{range $.RequestWriter.RadioGroup $.Dot.Radios}}{{.Radio}}{{.Label}}{{end}}{{end}}
+{{define "owned-register-discarded"}}registered as text: {{$.RequestWriter.Register $.Dot}}{{end}}
+{{define "owned-labelonly"}}{{range $.RequestWriter.RadioGroup $.Dot.Radios}}{{.Label}}{{end}}{{end}}
+{{define "owned-register-failafter"}}<div id="{{$.RequestWriter.Register $.Dot}}"></div>{{$.Dot.Check}}{{end}}
+{{define "owned-radiogroup-failafter"}}{{range $.RequestWriter.RadioGroup $.Dot.Radios}}{{.Radio}}{{.Label}}{{end}}{{$.Dot.Check}}{{end}}
+{{define "owned-radio-outer"}}{{$.RequestWriter.Template "div" "owned-radio-inner" ($.Dot.Box $.RequestWriter)}}{{end}}
+{{define "owned-radio-inner"}}{{range $.Dot.Elements}}{{.Radio}}{{.Label}}{{end}}{{end}}
 `
 
 var errOwnedDotCheck = errors.New("owned dot check failed")
@@ -40,6 +47,7 @@ type ownedDot struct {
 	container *testContainer
 	names     []string
 	radios    *named.BoolArray
+	box       *ownedRadioBox
 }
 
 func (d *ownedDot) Check() (string, error) {
@@ -59,6 +67,33 @@ func (d *ownedDot) Container() jaws.Container { return d.container }
 func (d *ownedDot) Names() []string { return d.names }
 
 func (d *ownedDot) Radios() *named.BoolArray { return d.radios }
+
+// Box builds the radio group with the passed-in writer — the outer template's — and
+// returns the box carrying the RadioElement values to the nested template, whose dot it
+// becomes. It is a pointer so it is usable as a tag.
+func (d *ownedDot) Box(rw RequestWriter) *ownedRadioBox {
+	d.box.rel = rw.RadioGroup(d.radios)
+	return d.box
+}
+
+// ownedRadioBox carries RadioElement values across a template boundary, so a test can
+// render them in a nested template while the outer template owns their Elements.
+type ownedRadioBox struct {
+	rel   []RadioElement
+	show  bool
+	execs int // executions of the nested template that read Elements
+}
+
+// Elements returns the group to render, or nothing once show is cleared. It counts
+// calls so a test can tell an update that ran and rendered nothing from one that never
+// executed.
+func (b *ownedRadioBox) Elements() []RadioElement {
+	b.execs++
+	if !b.show {
+		return nil
+	}
+	return b.rel
+}
 
 // JawsUpdate makes ownedDot usable as the $.Register updater. Register tags its
 // Element with the updater, so the dot still tags the whole subtree.
@@ -324,30 +359,35 @@ func TestTemplate_RenderClosingWriteFailureDeletesOwnedElements(t *testing.T) {
 	}
 }
 
-// TestRequestWriter_NewUIElementRenderedFailureDeletesOwnedElements checks that a
-// failing element-rendered hook unregisters the Element and everything it owns.
-func TestRequestWriter_NewUIElementRenderedFailureDeletesOwnedElements(t *testing.T) {
+// TestRequestWriter_NewUIReportsElementBeforeRendering checks that NewUI reports the
+// Element it created even when the render then fails, and unregisters it regardless.
+// Reporting at creation is what lets an owner reclaim an Element that never rendered.
+func TestRequestWriter_NewUIReportsElementBeforeRendering(t *testing.T) {
 	_, rq := newOwnedRequest(t)
 
-	hookErr := errors.New("hook refused the element")
-	var seen int
+	var seen []*jaws.Element
 	var sb strings.Builder
 	rw := RequestWriter{
 		Request: rq,
 		Writer:  &sb,
-		elementRendered: func(elem *jaws.Element) error {
-			seen++
-			return hookErr
+		elementCreated: func(elem *jaws.Element) {
+			seen = append(seen, elem)
 		},
 	}
-	if err := rw.Template("div", "owned-parent", &ownedDot{}); !errors.Is(err, hookErr) {
-		t.Fatalf("NewUI error = %v, want %v", err, hookErr)
+	// The template renders nested UI and then fails, so this writer creates one
+	// Element (the wrapper) and the nested writer inside it creates its own.
+	dot := &ownedDot{fail: errOwnedDotCheck}
+	if err := rw.Template("div", "owned-failafter", dot); !errors.Is(err, errOwnedDotCheck) {
+		t.Fatalf("render error = %v, want %v", err, errOwnedDotCheck)
 	}
-	if seen != 1 {
-		t.Fatalf("hook calls = %d, want 1 (only Elements created through this writer)", seen)
+	if len(seen) != 1 {
+		t.Fatalf("hook calls = %d, want 1 (only Elements created directly through this writer)", len(seen))
+	}
+	if !seen[0].Deleted() {
+		t.Error("the reported Element was not unregistered after its render failed")
 	}
 	if got := countRegistered(t, rq); got != 0 {
-		t.Fatalf("registered elements after hook failure = %d, want 0", got)
+		t.Fatalf("registered elements after failed render = %d, want 0", got)
 	}
 }
 
@@ -459,49 +499,168 @@ func TestPageTemplate_RenderFailureDeletesOwnedElements(t *testing.T) {
 	}
 }
 
-// TestTemplate_UpdateDoesNotTrackRegisterOrRadioGroup pins the documented
-// exclusion: Register and RadioGroup create their Elements through
-// Request.NewElement rather than RequestWriter.NewUI, so a Template does not own
-// them and each update registers another set.
+// TestTemplate_UpdateTracksRegisterAndRadioGroup covers the two helpers that create
+// their Elements through Request.NewElement rather than RequestWriter.NewUI: they
+// report them to the writer's owner, so the counts stay flat across updates with no
+// client attached to acknowledge DOM removals.
 //
-// The growth measured here is what the server does on its own. In a live session the
-// browser reports the ids it removes as the wrapper's new content is applied and the
-// Request unregisters those Elements; there is no client here to send that
-// acknowledgement, which is also the state of an Element whose id never reaches the
-// DOM. Should either helper start reporting through the element-rendered hook, these
-// counts become constant — update this test along with the Template, Register,
-// RadioGroup, README and skill docs stating the exclusion.
-func TestTemplate_UpdateDoesNotTrackRegisterOrRadioGroup(t *testing.T) {
-	radios := named.NewBoolArray(false)
-	radios.Add("1", "one")
+// The label-only case is why ownership is recorded at creation: RadioElement.Label
+// creates the radio Element for its for= attribute without ever rendering it, so an
+// after-render notification would miss it and it would accumulate.
+func TestTemplate_UpdateTracksRegisterAndRadioGroup(t *testing.T) {
+	newRadios := func() *named.BoolArray {
+		nba := named.NewBoolArray(false)
+		nba.Add("1", "one")
+		return nba
+	}
 
 	for _, tt := range []struct {
 		name     string
 		template string
 		dot      *ownedDot
-		perRound int // Elements the helper adds per execution
+		perRound int // Elements the helper creates per execution
 	}{
 		{"register", "owned-register", &ownedDot{}, 1},
-		{"radiogroup", "owned-radiogroup", &ownedDot{radios: radios}, 2}, // input and label
+		{"register discarded jid", "owned-register-discarded", &ownedDot{}, 1},
+		{"radiogroup", "owned-radiogroup", &ownedDot{radios: newRadios()}, 2},           // input and label
+		{"radiogroup label only", "owned-labelonly", &ownedDot{radios: newRadios()}, 2}, // unrendered radio, label
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			_, rq := newOwnedRequest(t)
 			tmpl := NewTemplate("div", tt.template, tt.dot)
 			elem := renderOwned(t, rq, tmpl)
 
-			want := 1 + tt.perRound // the wrapper, plus the first execution's
+			want := 1 + tt.perRound // the wrapper, plus this execution's
 			if got := countRegistered(t, rq); got != want {
 				t.Fatalf("registered elements after render = %d, want %d", got, want)
 			}
 			for round := 1; round <= 3; round++ {
 				tmpl.JawsUpdate(elem)
-				want += tt.perRound
 				if got := countRegistered(t, rq); got != want {
 					t.Fatalf("registered elements after %d update(s) = %d, want %d", round, got, want)
 				}
 			}
 		})
 	}
+}
+
+// TestTemplate_UpdateFailureKeepsRegisterAndRadioGroupGeneration covers the remaining
+// leak mode: execution failing after either helper has already created its Elements.
+// The failed execution's output is discarded, so its Elements must go and the previous
+// generation must stay live to match the unchanged DOM.
+func TestTemplate_UpdateFailureKeepsRegisterAndRadioGroupGeneration(t *testing.T) {
+	newRadios := func() *named.BoolArray {
+		nba := named.NewBoolArray(false)
+		nba.Add("1", "one")
+		return nba
+	}
+
+	for _, tt := range []struct {
+		name     string
+		template string
+		dot      *ownedDot
+		perRound int
+	}{
+		{"register", "owned-register-failafter", &ownedDot{}, 1},
+		{"radiogroup", "owned-radiogroup-failafter", &ownedDot{radios: newRadios()}, 2},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			jw, rq := newOwnedRequest(t)
+			logger := new(templateLogger)
+			jw.Logger = logger
+
+			tmpl := NewTemplate("div", tt.template, tt.dot)
+			elem := renderOwned(t, rq, tmpl)
+			want := 1 + tt.perRound
+			if got := countRegistered(t, rq); got != want {
+				t.Fatalf("registered elements after render = %d, want %d", got, want)
+			}
+			first := registeredJids(t, rq)
+
+			tt.dot.setFail(errOwnedDotCheck)
+			tmpl.JawsUpdate(elem)
+			if len(logger.errors) != 1 || !errors.Is(logger.errors[0], errOwnedDotCheck) {
+				t.Fatalf("logged errors = %v, want one %v", logger.errors, errOwnedDotCheck)
+			}
+			if got := registeredJids(t, rq); !slices.Equal(got, first) {
+				t.Fatalf("registered jids after failed update = %v, want the previous generation %v", got, first)
+			}
+
+			// The previous generation must still be owned, so the next success reclaims
+			// it rather than leaking it.
+			tt.dot.setFail(nil)
+			tmpl.JawsUpdate(elem)
+			if got := countRegistered(t, rq); got != want {
+				t.Fatalf("registered elements after recovery = %d, want %d", got, want)
+			}
+			if got := registeredJids(t, rq); slices.Equal(got, first) {
+				t.Fatal("the recovering update did not replace the previous generation")
+			}
+		})
+	}
+}
+
+// TestRadioGroup_OwnedByTheTemplateThatCalledIt pins where ownership is attributed
+// when a group's markup lands in a different wrapper than the RadioGroup call: the
+// outer template calls $.RadioGroup and passes the RadioElement values to a nested
+// wrapped template through its dot.
+//
+// Updating the outer template alone would not distinguish the two candidates, since
+// the cleanup walk recurses into the nested Template's own owned set either way. The
+// discriminating step is updating the nested Element on its own: with the radios no
+// longer rendered and no client to acknowledge the DOM removal, they must still be
+// registered, which is what fails if the nested template owned them.
+func TestRadioGroup_OwnedByTheTemplateThatCalledIt(t *testing.T) {
+	_, rq := newOwnedRequest(t)
+
+	radios := named.NewBoolArray(false)
+	radios.Add("1", "one")
+	box := &ownedRadioBox{show: true}
+	dot := &ownedDot{radios: radios, box: box}
+	outer := NewTemplate("div", "owned-radio-outer", dot)
+	outerElem := renderOwned(t, rq, outer)
+
+	// outer wrapper, nested wrapper, radio, label
+	const want = 4
+	if got := countRegistered(t, rq); got != want {
+		t.Fatalf("registered elements after render = %d, want %d", got, want)
+	}
+	inner := rq.GetElements(box)
+	if len(inner) != 1 {
+		t.Fatalf("nested wrapper elements = %d, want 1", len(inner))
+	}
+
+	// The nested template updates on its own and stops rendering the group. Counting
+	// its executions keeps the assertion below from passing vacuously: the radios must
+	// survive an update that ran and dropped them, not one that never happened.
+	box.show = false
+	execsBefore := box.execs
+	inner[0].JawsUpdate()
+	if box.execs != execsBefore+1 {
+		t.Fatalf("nested template executions = %d, want %d: the nested update did not run",
+			box.execs, execsBefore+1)
+	}
+	if got := countRegistered(t, rq); got != want {
+		t.Fatalf("registered elements after the nested update = %d, want %d: the radio and label "+
+			"belong to the template that called RadioGroup, so the nested update must not reclaim them", got, want)
+	}
+
+	// The owner reclaims them, along with the nested wrapper it also owns.
+	outer.JawsUpdate(outerElem)
+	if got := countRegistered(t, rq); got != 2 {
+		t.Fatalf("registered elements after the outer update = %d, want 2 (both wrappers, no group)", got)
+	}
+}
+
+// registeredJids returns the Jids still registered in rq, in ascending order.
+func registeredJids(t *testing.T, rq *jaws.Request) (jids []jaws.Jid) {
+	t.Helper()
+	for jid := jaws.Jid(1); jid <= maxProbedJid; jid++ {
+		if rq.GetElementByJid(jid) != nil {
+			jids = append(jids, jid)
+		}
+	}
+	return
 }
 
 // TestTemplate_UpdateReclaimsManyTaggedDescendants exercises the batched

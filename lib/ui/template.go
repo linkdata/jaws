@@ -28,20 +28,19 @@ import (
 // helper. The referenced template must be a partial template, not a full HTML
 // document.
 //
-// The Elements a template creates through [RequestWriter.NewUI] — the path taken by
-// every RequestWriter widget helper except [RequestWriter.Register] and
-// [RequestWriter.RadioGroup], including a nested [RequestWriter.Template] — belong to
-// the Template that rendered them: when [Template.JawsUpdate] replaces the wrapper's
-// content, those Elements are unregistered along with the DOM that held them, and a
-// nested widget's own Elements go with it.
+// Every Element a template creates through the [RequestWriter] it is given belongs to
+// the Template that rendered it — the widget helpers, [RequestWriter.Register],
+// [RequestWriter.RadioGroup] and a nested [RequestWriter.Template] alike. When
+// [Template.JawsUpdate] replaces the wrapper's content, those Elements are
+// unregistered along with the DOM that held them, and a nested widget's own Elements
+// go with it.
 //
-// Those two helpers create their Elements through [jaws.Request.NewElement] instead,
-// so a Template neither tracks nor unregisters them. Their cleanup is left to the
-// browser, which reports the JaWS ids it removed from the DOM as the wrapper's new
-// content is applied, and the [jaws.Request] unregisters those Elements. An Element
-// whose id never reaches the DOM has nothing to report it and stays registered until
-// the Request ends: one from an execution that failed before its markup was
-// delivered, or from a Register call whose returned Jid the template discards.
+// Ownership is recorded when an Element is created rather than after it renders, so
+// one that never reaches the browser is reclaimed too: an Element whose render failed,
+// or a radio Element left unrendered by a [RadioElement.Label] without its
+// [RadioElement.Radio]. See [RequestWriter.RadioGroup] for the one attribution
+// condition, which applies when a group's markup ends up in a different wrapper than
+// the RadioGroup call.
 //
 // Template execution is best-effort rather than transactional. Template actions
 // and nested JaWS helpers run as the template executes, so an execution error
@@ -81,12 +80,12 @@ func (tmpl *Template) String() string {
 }
 
 // ownElement records child as created while tmpl's template executed. It is the
-// [RequestWriter] element-rendered hook installed by execute.
-func (tmpl *Template) ownElement(child *jaws.Element) (err error) {
+// [RequestWriter] element-created hook installed by execute, so it is called as soon
+// as the Element exists and makes no assumption about whether it rendered.
+func (tmpl *Template) ownElement(child *jaws.Element) {
 	tmpl.mu.Lock()
 	tmpl.owned = append(tmpl.owned, child)
 	tmpl.mu.Unlock()
-	return
 }
 
 // takeOwnedElements returns the Elements created by the most recent execution and
@@ -137,7 +136,7 @@ func (tmpl *Template) execute(elem *jaws.Element, w io.Writer, lookedUp *templat
 	// races on the shared io.Writer, and on the render as a whole.
 	err = lookedUp.Execute(w, With{
 		Element:       elem,
-		RequestWriter: RequestWriter{Request: elem.Request, Writer: w, elementRendered: tmpl.ownElement},
+		RequestWriter: RequestWriter{Request: elem.Request, Writer: w, elementCreated: tmpl.ownElement},
 		Dot:           tmpl.Dot,
 		Auth:          tmpl.auth(elem),
 	})

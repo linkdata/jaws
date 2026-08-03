@@ -15,8 +15,10 @@ import (
 // renders register no elements on the [jaws.Request]. Call each of Radio and
 // Label at most once. Render Label only when Radio is also rendered: Label emits a
 // for="..." referencing the radio's id, so a Label without its Radio points at an
-// input that is absent from the document (and leaves an unrendered radio Element
-// registered on the Request for the request's lifetime).
+// input that is absent from the document. The radio Element it created is still
+// unregistered by the [Template] that owns it (see [RequestWriter.RadioGroup]) when
+// that template next replaces its content. With no template owner it has no DOM node
+// for a removal to report either, so it stays registered until the [jaws.Request] ends.
 type RadioElement struct {
 	st *radioState
 }
@@ -44,7 +46,14 @@ type radioGroupState struct {
 // ordered before the label's regardless of which is rendered first.
 func (st *radioState) radioElem() *jaws.Element {
 	if st.radio == nil {
+		// Create and report the Element rather than going through
+		// RequestWriter.NewUI: Radio and Label return their HTML for the template to
+		// place instead of writing it to the writer, and the Element has to exist
+		// before that render because its Jid supplies the group's name= and the
+		// label's for=. Reporting it here, at creation, also means a radio that is
+		// never rendered (a Label without its Radio) is still owned and reclaimed.
 		st.radio = st.rw.Request.NewElement(NewRadio(st.nb))
+		st.rw.trackElement(st.radio)
 		if st.group.nameAttr == "" {
 			st.group.nameAttr = `name="` + st.radio.Jid().String() + `"`
 		}
@@ -81,7 +90,9 @@ func (re RadioElement) Radio(params ...any) template.HTML {
 func (re RadioElement) Label(params ...any) template.HTML {
 	radio := re.st.radioElem()
 	if re.st.label == nil {
+		// Created and reported like the radio Element; see radioElem.
 		re.st.label = re.st.rw.Request.NewElement(NewLabel(re.st.nb))
+		re.st.rw.trackElement(re.st.label)
 	}
 	var sb strings.Builder
 	forAttr := string(radio.Jid().AppendQuote([]byte("for=")))
@@ -97,13 +108,16 @@ func (re RadioElement) Label(params ...any) template.HTML {
 // rendered radio in the group shares a name derived from the first created
 // radio Element's request-scoped [jaws.Jid].
 //
-// The radio and label Elements are created through [jaws.Request.NewElement] rather
-// than [RequestWriter.NewUI], so a surrounding [Template] neither owns nor unregisters
-// them when the template re-renders. Cleanup falls to the browser, which reports the
-// JaWS ids it removed from the DOM as the surrounding wrapper's new content is applied;
-// a rendered radio or label carries its own id, so it is reported. One that never
-// reached the DOM stays registered until the [jaws.Request] ends, including the
-// unrendered radio Element a [RadioElement.Label] without its Radio leaves behind.
+// The radio and label Elements belong to the [Template] whose body called RadioGroup,
+// which unregisters them when it next replaces its content. Ownership follows that call
+// site rather than the wrapper the markup lands in, so passing [RadioElement] values
+// into a nested wrapped template through its dot leaves them owned by the outer
+// template: an update of the inner wrapper alone replaces their DOM without their owner
+// reclaiming them, leaving that to the browser's removal acknowledgement for the ids
+// that reached the DOM and to the outer template's next update for any that did not.
+// Re-rendering them in the inner template is not an alternative, since [RadioElement]
+// allows Radio and Label at most one render each. Call RadioGroup from the template
+// that renders the group to avoid the condition entirely.
 func (rw RequestWriter) RadioGroup(nba *named.BoolArray) (rel []RadioElement) {
 	group := &radioGroupState{}
 	nba.ReadLocked(func(nbl []*named.Bool) {

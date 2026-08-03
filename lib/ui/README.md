@@ -29,26 +29,22 @@ already happened; it does not roll back partial output, queued messages, or
 application side effects. The tracked elements the failed execution registered are
 unregistered, since nothing will update them.
 
-A template owns the elements created through `rw.NewUI(...)`, the path taken by
-every `RequestWriter` widget helper except the two below — `{{$.Span ...}}`,
-`{{$.Button ...}}`, a nested `{{$.Template ...}}`, and so on. A successful update
-unregisters the ones the previous render left behind, along with the DOM that
-`SetInner` replaces. On updates that `SetInner` is queued only after a complete
-successful render, so a failed update leaves the browser DOM unchanged — and with
-it the previous render's elements — while earlier server-side side effects from
-that attempted render may remain. Treat template execution errors as application
-bugs: validate data before rendering and keep template actions infallible once they
-start emitting output or nested UI.
+A template owns every element created through the `RequestWriter` it is given —
+`{{$.Span ...}}`, `{{$.Button ...}}`, `{{$.Register ...}}`, `{{$.RadioGroup ...}}`,
+a nested `{{$.Template ...}}`, and so on. A successful update unregisters the ones
+the previous render left behind, along with the DOM that `SetInner` replaces.
+Ownership is recorded when an element is created rather than after it renders, so
+an element that never reached the browser is reclaimed too. On updates that
+`SetInner` is queued only after a complete successful render, so a failed update
+leaves the browser DOM unchanged — and with it the previous render's elements —
+while earlier server-side side effects from that attempted render may remain. Treat
+template execution errors as application bugs: validate data before rendering and
+keep template actions infallible once they start emitting output or nested UI.
 
-`{{$.Register ...}}` and `{{$.RadioGroup ...}}` are the exceptions: they create
-elements through `Request.NewElement` directly rather than `rw.NewUI`, so the
-template neither owns nor unregisters them. Their cleanup falls to the browser,
-which reports the JaWS ids it removed from the DOM as the wrapper's new content is
-applied, and the request unregisters those elements. An element whose id never
-reaches the DOM has nothing to report it and stays registered until the request
-ends — one from an execution that failed before its markup was delivered, or a
-`$.Register` whose returned Jid the template discards. Prefer the `rw.NewUI`-backed
-helpers inside a template that updates.
+`$.RadioGroup` has one attribution condition: its radio and label elements belong to
+the template whose body called it, not to the wrapper their markup lands in. Call it
+from the template that renders the group; see `RequestWriter.RadioGroup` for what
+happens when the two differ.
 
 You can also use explicit constructors through:
 

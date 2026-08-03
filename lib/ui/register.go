@@ -33,13 +33,14 @@ func (u Register) JawsRender(elem *jaws.Element, w io.Writer, params []any) erro
 // The updater's [jaws.Updater.JawsUpdate] method will be called immediately to
 // ensure the initial rendering is correct.
 //
-// Register creates its Element through [jaws.Request.NewElement] rather than
-// [RequestWriter.NewUI], so a surrounding [Template] neither owns nor unregisters it
-// when the template re-renders. Cleanup falls to the browser, which reports the JaWS
-// ids it removed from the DOM as the surrounding wrapper's new content is applied. Use
-// the returned [jid.Jid] as an element id for that to work: an Element whose id never
-// reaches the DOM stays registered until the [jaws.Request] ends, and every re-render
-// of the template adds another.
+// A surrounding [Template] owns the Element and unregisters it when the template next
+// replaces its content, so repeated updates do not accumulate registrations. With no
+// template owner — rendered through a [RequestWriter] a caller built itself — cleanup
+// falls to the ordinary DOM-removal handling: the browser reports the JaWS ids it
+// removes when an ancestor's content is replaced, and [jaws.Element.Remove] unregisters
+// a managed child outright. Only an Element no removal ever reports, such as one whose
+// returned [jid.Jid] never becomes an element id, necessarily stays registered until the
+// [jaws.Request] ends.
 //
 // Register does not call [jaws.Renderer.JawsRender]. The updater must therefore
 // be ready for JawsUpdate and event handling without render-time initialization.
@@ -51,7 +52,13 @@ func (u Register) JawsRender(elem *jaws.Element, w io.Writer, params []any) erro
 //
 //	<div id="{{$.Register .MyUpdater}}">...</div>
 func (rw RequestWriter) Register(updater jaws.Updater, params ...any) jid.Jid {
+	// Create and report the Element rather than going through RequestWriter.NewUI, so
+	// a surrounding Template owns it without anything being rendered: NewUI calls
+	// JawsRender, which appends a debug comment when Jaws.Debug is set, and the
+	// documented usage puts the returned Jid inside an attribute
+	// (<div id="{{$.Register .X}}">), where that comment would corrupt the markup.
 	elem := rw.NewElement(Register{Updater: updater})
+	rw.trackElement(elem)
 	elem.Tag(updater)
 	// The wrapping Register element's UI is not the updater, so events reach the
 	// updater only through the element's handler list, not the elem.UI() fallback.
