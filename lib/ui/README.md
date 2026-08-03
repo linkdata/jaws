@@ -25,13 +25,18 @@ Template execution is best-effort rather than transactional. Nested UI helpers
 such as `{{$.Span ...}}` register elements as the template runs, and custom
 template actions may queue updates or mutate application state. If execution
 later returns an error, JaWS returns or logs that error and preserves whatever
-already happened; it does not roll back partial output, nested elements, queued
-messages, or application side effects. On updates, the wrapper's `SetInner` is
-queued only after a complete successful render, so a failed update leaves the
-browser DOM unchanged while earlier server-side side effects from that attempted
-render may remain. Treat template execution errors as application bugs: validate
-data before rendering and keep template actions infallible once they start
-emitting output or nested UI.
+already happened; it does not roll back partial output, queued messages, or
+application side effects. The elements the failed execution registered are
+unregistered, since nothing will update them.
+
+A template owns the elements its nested UI helpers register, so a successful
+update unregisters the ones the previous render left behind along with the DOM
+that `SetInner` replaces. On updates that `SetInner` is queued only after a
+complete successful render, so a failed update leaves the browser DOM unchanged —
+and with it the previous render's elements — while earlier server-side side
+effects from that attempted render may remain. Treat template execution errors as
+application bugs: validate data before rendering and keep template actions
+infallible once they start emitting output or nested UI.
 
 You can also use explicit constructors through:
 

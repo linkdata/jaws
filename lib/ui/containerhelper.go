@@ -100,9 +100,7 @@ func (u *ContainerHelper) RenderContainer(elem *jaws.Element, w io.Writer, outer
 				u.contents = contents
 				u.mu.Unlock()
 			} else {
-				for _, childElem := range contents {
-					elem.Request.DeleteElement(childElem)
-				}
+				deleteOwnedElements(elem.Request, contents)
 			}
 		}
 	}
@@ -117,15 +115,25 @@ func (u *ContainerHelper) UpdateContainer(elem *jaws.Element) {
 	wantContents := u.Container.JawsContains(elem)
 	toAppend, toRemove, oldOrder, newOrder := u.reconcile(elem, wantContents)
 
-	// Remove leftover Elements from both the browser DOM and the Request registry.
+	// Remove leftover Elements from both the browser DOM and the Request registry,
+	// then unregister what they owned in one pass. Element.Remove can reject the
+	// operation (leaving the DOM untouched), so a child's descendants are collected
+	// only once its removal actually happened.
+	var owned []*jaws.Element
 	for _, childElem := range toRemove {
 		elem.Remove(childElem)
+		if childElem.Deleted() {
+			owned = appendOwnedBy(owned, childElem)
+		}
 	}
+	elem.Request.DeleteElements(owned)
 
 	for _, childElem := range toAppend {
 		var sb strings.Builder
 		if err := childElem.JawsRender(&sb, nil); err != nil {
-			elem.Request.DeleteElement(childElem)
+			// Unregister the child and its nested UI before MustLog, which panics when
+			// no logger is configured; deferring it would strand the subtree.
+			deleteOwnedElements(elem.Request, []*jaws.Element{childElem})
 			u.deleteContent(childElem)
 			newOrder = slices.DeleteFunc(newOrder, func(id jaws.Jid) bool { return id == childElem.Jid() })
 			elem.Jaws.MustLog(err)
@@ -137,6 +145,17 @@ func (u *ContainerHelper) UpdateContainer(elem *jaws.Element) {
 	if !slices.Equal(oldOrder, newOrder) {
 		elem.Order(newOrder)
 	}
+}
+
+// takeOwnedElements returns the child Elements and clears the reconciliation state,
+// transferring responsibility for unregistering them to the caller. It implements
+// elementOwner, so a container whose own Element leaves the DOM as part of a larger
+// subtree takes its children with it.
+func (u *ContainerHelper) takeOwnedElements() (owned []*jaws.Element) {
+	u.mu.Lock()
+	owned, u.contents = u.contents, nil
+	u.mu.Unlock()
+	return
 }
 
 func (u *ContainerHelper) deleteContent(elem *jaws.Element) {

@@ -11,6 +11,15 @@ import (
 type RequestWriter struct {
 	*jaws.Request
 	io.Writer
+	// elementRendered, when non-nil, is called by NewUI with each Element it
+	// successfully rendered, letting the widget that owns this writer track the
+	// Elements created through it. A returned error fails the NewUI call.
+	//
+	// It is deliberately unexported: RequestWriter is embedded in [With], so an
+	// exported func field would be callable from any template as
+	// {{call $.ElementRendered $.Element}}, letting a template make an Element own
+	// itself and have its own wrapper unregistered on the next update.
+	elementRendered func(elem *jaws.Element) (err error)
 }
 
 // NewUI creates an element for ui and renders it to the underlying writer.
@@ -19,8 +28,15 @@ type RequestWriter struct {
 // requirements documented by [jaws.UI].
 func (rw RequestWriter) NewUI(ui jaws.UI, params ...any) (err error) {
 	elem := rw.NewElement(ui)
-	if err = elem.JawsRender(rw, params); err != nil {
-		rw.DeleteElement(elem)
+	if err = elem.JawsRender(rw, params); err == nil {
+		if rw.elementRendered != nil {
+			err = rw.elementRendered(elem)
+		}
+	}
+	if err != nil {
+		// Unregister anything the failed Element already owns along with it, so no
+		// widget can strand a subtree by not rolling back itself.
+		deleteOwnedElements(rw.Request, []*jaws.Element{elem})
 	}
 	return
 }
