@@ -7,9 +7,8 @@ import (
 	"testing"
 )
 
-// This file holds the cross-version element-creation benchmark and nothing else, so it can
-// be copied onto the base commit unchanged: it measures what every Element pays for the
-// widget state slot, whether or not that Element ever uses one.
+// This file isolates the element-creation benchmark, which measures what every Element
+// pays for the widget state slot whether or not that Element ever uses one.
 
 // benchCreateUI is a stateless widget that never touches the state slot, so the measurement
 // is the per-Element cost rather than any Template bookkeeping. It documents support for
@@ -31,7 +30,7 @@ func (benchCreateUI) JawsUpdate(elem *Element) {}
 // calibration would pick an enormous b.N, and the excluded setup would run for minutes.
 // Amortising both calls over the batch keeps that honest, and deleting the batch keeps the
 // Request registry bounded instead of growing across iterations. The reported figure is per
-// batch, so read it only as a base-versus-new comparison.
+// batch and is intended for comparisons between benchmark runs.
 func BenchmarkElementCreateBatch(b *testing.B) {
 	b.ReportAllocs()
 	const batch = 64

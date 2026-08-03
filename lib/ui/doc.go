@@ -19,10 +19,11 @@
 //
 // Most constructors return a pointer ([Option], [Register] and [Template] are the
 // value-typed exceptions), and the pointer widgets dereference their fields without
-// checking the receiver. JaWS core accepts a typed nil and dispatches to it like any
-// other [jaws.UI] value (see [jaws.UI]), so rendering or updating one panics here: no
-// widget in this package documents nil-receiver tolerance. The zero value of a widget is
-// the supported empty form.
+// checking the receiver. Always use Template as a value, as [NewTemplate] returns it;
+// taking its address is unsupported. JaWS core accepts a typed nil and dispatches to it
+// like any other [jaws.UI] value (see [jaws.UI]), so rendering or updating one panics
+// here: no widget in this package documents nil-receiver tolerance. The zero value of a
+// widget is the supported empty form.
 //
 // Within one request, a widget normally backs at most one live [jaws.Element].
 // The HTML-inner widgets, [Img], [Option] and [Template] document support for backing
@@ -36,7 +37,8 @@
 //
 // A widget needing state keyed to one Element rather than to itself claims the Element's
 // state slot with [jaws.SetElementState] while rendering, as [Template] does. That is what
-// lets such a widget stay a comparable value the container widgets can reuse as a map key.
+// keeps Element-specific state off the widget value, allowing containers to reuse rebuilt
+// equal Template values.
 //
 // HTML-inner widgets route content through [bind.MakeHTMLGetter]. Plain strings
 // are treated as trusted HTML, while [bind.Getter][string], [bind.Binder][string]

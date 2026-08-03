@@ -30,9 +30,8 @@ func (d *benchOwnedDot) Names() []string { return d.names }
 // Jaws and Request, so an implementation that leaks Elements cannot accumulate them
 // across benchmark iterations and skew the result.
 //
-// The update is returned as a closure rather than the template and Element, so this
-// file also compiles against a revision where NewTemplate returns a value: only type
-// inference sees the difference.
+// The update is returned as a closure so benchmark callers do not depend on the
+// Template's concrete representation.
 func benchOwnedFixture(b *testing.B, nested int) (jw *jaws.Jaws, update func()) {
 	b.Helper()
 	var err error

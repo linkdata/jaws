@@ -19,13 +19,16 @@ import (
 // Template. Its Dot and any callbacks reached during execution are shared by those
 // Elements and must be safe for their render, update and event calls.
 //
-// A Template value is used as a map key by the container widgets, so its fields must be
-// comparable at runtime and equal to themselves — a Dot holding a slice, map, func or
-// NaN makes the widget unusable as a child. Rendering through a *Template avoids that,
-// since an interface holding a pointer is always comparable, but then container reuse
-// keys on pointer identity and needs the same pointer back on every
-// [jaws.Container.JawsContains] call. [Handler] is the arbitrary-Dot exception and
-// renders a fresh pointer per request for exactly this reason.
+// Template is a value widget and must be passed to JaWS as a value, normally the value
+// returned by [NewTemplate]. Do not take its address: although Go gives *Template the
+// value receiver's method set, a container would then key reuse on pointer identity
+// instead of Template value equality.
+//
+// Like every [jaws.UI] value passed to [jaws.Request.NewElement], a Template must be
+// comparable at runtime and equal to itself because the container widgets use UI values
+// as map keys. A Dot holding a slice, map, func or NaN makes the Template unusable.
+// [Handler] is the arbitrary-Dot exception; its private whole-page renderer is distinct
+// from a Template widget and does not use the page dot as a tag.
 //
 // The state slot is claimed while rendering, so at most one Template may render a given
 // Element and [Template.JawsUpdate] does nothing on an Element no Template rendered. The
@@ -320,7 +323,8 @@ func (tmpl Template) JawsInput(elem *jaws.Element, value string) (err error) {
 // The returned Template holds no per-Element state, so equal Templates are
 // interchangeable and a container that rebuilds its children on every
 // [jaws.Container.JawsContains] call still reuses their Elements. dot must be comparable
-// at runtime and equal to itself; see [Template].
+// at runtime and equal to itself. Use the returned Template as a value; taking its
+// address is unsupported. See [Template].
 func NewTemplate(outerHTMLTag, name string, dot any) Template {
 	return Template{OuterHTMLTag: outerHTMLTag, Name: name, Dot: dot}
 }

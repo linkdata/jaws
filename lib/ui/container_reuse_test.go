@@ -83,14 +83,9 @@ func newReuseRequest(t *testing.T) *jawstest.TestRequest {
 	return tr
 }
 
-// TestContainer_RebuiltTemplateChildrenAreReused is the guard for the regression #221
-// introduced: ui.Template held per-Element state, so it had to be a pointer, and
-// reconcile's pool — keyed on the child UI value — stopped matching children a container
-// rebuilds on every JawsContains call. Every update then removed and re-appended the whole
-// collection, with fresh Jids and full DOM churn.
-//
-// Reuse means the child Jids are unchanged and an unchanged collection queues no DOM
-// mutation at all.
+// TestContainer_RebuiltTemplateChildrenAreReused checks value-based reuse for a container
+// that constructs equal Template children on every JawsContains call. Reuse means the child
+// Jids stay unchanged and an unchanged collection queues no DOM mutation.
 func TestContainer_RebuiltTemplateChildrenAreReused(t *testing.T) {
 	tr := newReuseRequest(t)
 
@@ -128,9 +123,8 @@ func TestContainer_RebuiltTemplateChildrenAreReused(t *testing.T) {
 	}
 }
 
-// TestContainer_StableChildrenAreReused covers the shape that already reused before this
-// change — children handed back as the same values each call — so the guard above cannot
-// pass through some accident that also breaks this one.
+// TestContainer_StableChildrenAreReused checks identity-based reuse for children returned as
+// the same values on every JawsContains call.
 func TestContainer_StableChildrenAreReused(t *testing.T) {
 	tr := newReuseRequest(t)
 
@@ -156,9 +150,8 @@ func TestContainer_StableChildrenAreReused(t *testing.T) {
 	assertNoDOMMutation(t, tr, 1)
 }
 
-// TestContainer_NonComparableTemplateDotCancels pins the hazard a by-value widget carries
-// and that this change deliberately does not spread further: the widget is a pool key, so a
-// Dot that cannot be hashed terminates the Request instead of corrupting the pool.
+// TestContainer_NonComparableTemplateDotCancels checks the container key constraint for a
+// Template value: a Dot that cannot be hashed terminates the Request before pool use.
 func TestContainer_NonComparableTemplateDotCancels(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	_ = jw.AddTemplateLookuper(template.Must(template.New("row").Parse(`<span>row</span>`)))

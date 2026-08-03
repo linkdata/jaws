@@ -48,14 +48,14 @@ happens when the two differ.
 
 The ownership set lives in the element's widget state slot (`jaws.SetElementState`),
 not on the `ui.Template` value, which is what keeps `NewTemplate` returning a plain
-comparable value. That matters for containers: a `JawsContains` implementation may
+value. That matters for containers: a `JawsContains` implementation may
 rebuild equal child values on every call and the container will still reuse their
-elements, because that equality *is* the reuse key. It also means the `Dot` must be
-comparable at runtime and equal to itself — a slice, map or func Dot makes the whole
-widget unusable as a child key, and implementing `tag.TagGetter` does not change that,
-since it addresses tag resolution rather than widget comparability. Render through a
-`*ui.Template` when the Dot cannot be comparable, accepting that reuse then keys on
-pointer identity.
+elements, because that equality *is* the reuse key. Always use `ui.Template` as a
+value, as `NewTemplate` returns it; taking its address is unsupported because it changes
+container reuse to pointer identity. Under the general `jaws.UI` contract, the resulting
+Template must be comparable at runtime and equal to itself — a slice, map or func `Dot`
+makes the whole widget unusable, and implementing `tag.TagGetter` does not change that,
+since it addresses tag resolution rather than widget comparability.
 
 A template claims that slot while rendering, so at most one template may render a given
 element, and a wrapped template updates only an element some template rendered. A wrapped

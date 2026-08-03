@@ -46,7 +46,7 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
   nil `UI` interface is a no-op. Surviving such a call is up to the concrete type, not
   a requirement: a widget that dereferences its fields panics, and none of the
   standard `lib/ui` widgets document nil-receiver tolerance. Do not pass a nil pointer
-  of a type that does not; use its zero value (e.g. `&ui.Template{}`) instead.
+  of a type that does not; use its zero value (e.g. `ui.Template{}`) instead.
 - Every JaWS `UI` value is request-scoped. Once used by one Request, never use
   that value with another Request; construct fresh widgets per request. The
   widgets may still refer to shared, synchronized application state, binders,
@@ -108,9 +108,9 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
   returns a value, so the dot is part of the widget the container widgets use as a map key.
   A slice, map, func or NaN-bearing dot makes the widget unusable as a container child.
 - Implementing `JawsGetTag(tag.Context) any` does **not** fix a non-comparable dot — it
-  resolves the *tag*, not the widget's comparability. Wrap such a dot in a pointer, or render
-  through a `*ui.Template` and hand the container the same pointer each time, since reuse then
-  keys on pointer identity. `ui.Handler` is the arbitrary-dot exception.
+  resolves the *tag*, not the widget's comparability. A non-comparable dot is unsupported.
+  Always use the Template itself as a value; taking its address is unsupported because it
+  changes container reuse to pointer identity. `ui.Handler` is the arbitrary-dot exception.
 - Do not use plain `string`, numeric, `bool`, `template.HTML`, or `template.HTMLAttr` as tags; `tag.TagExpand` rejects them.
 - If you need string-like semantic tags, use `tag.Tag("...")` or a comparable typed struct/pointer.
 
@@ -161,9 +161,9 @@ For clickable content rendering:
 
 - Keep HTML structure in templates; avoid manual HTML string assembly in Go.
 - `ui.Template.JawsUpdate` re-renders the template data into the generated wrapper.
-- `ui.NewTemplate` returns a `*ui.Template`, which tracks the Elements its execution
-  creates, but keeps that set in the rendering Element's state slot rather than on itself, so
-  `ui.NewTemplate` returns a plain **value** that may back multiple live Elements. A
+- `ui.NewTemplate` returns a plain `ui.Template` **value** that may back multiple live
+  Elements because it keeps the Elements its execution creates in each rendering Element's
+  state slot rather than on itself. Do not take its address. A
   successful update unregisters every Element the previous execution created through the
   writer it was given — the widget helpers, `$.Register`, `$.RadioGroup` and nested
   `$.Template` alike — since `SetInner` replaces the DOM holding them. Ownership is recorded

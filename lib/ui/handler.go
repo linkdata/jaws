@@ -17,8 +17,8 @@ import (
 type uiHandler struct {
 	*jaws.Jaws
 	// name and dot are the page template's parameters rather than a prepared
-	// pageTemplate: a pageTemplate tracks the Elements of one render, so ServeHTTP
-	// constructs a fresh one per request instead of copying a shared value.
+	// pageTemplate, so ServeHTTP can construct a fresh request-scoped page UI while
+	// accepting arbitrary page data.
 	name string
 	dot  any
 }
@@ -87,8 +87,8 @@ func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// regardless of the page dot: ordinary html/template data such as a slice or map
 	// is not usable as a tag and would fail the runtime comparability check in
 	// Request.NewElement if a bare pageTemplate value (whose Dot is any) were used.
-	// The pointer identity is always comparable and fresh per request, and each
-	// request gets its own Element-tracking state.
+	// The pointer identity is always comparable and fresh per request. Element tracking
+	// lives in the page Element's state slot claimed by pageTemplate.JawsRender.
 	pt := &pageTemplate{Template: Template{Name: h.name, Dot: h.dot}}
 	if err := rw.NewUI(pt); err != nil {
 		_ = h.Log(err)

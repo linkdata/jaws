@@ -10,10 +10,8 @@ import (
 	"github.com/linkdata/jaws"
 )
 
-// This file holds the cross-version container benchmarks and nothing else, so it can be
-// copied onto the base commit unchanged. It must not reference anything the base revision
-// lacks: NewTemplate's result is only ever handed straight to a container, so it compiles
-// whether that result is a value or a pointer.
+// This file isolates benchmarks for the container's two child-reuse paths: equal rebuilt
+// values and stable values returned unchanged.
 
 const benchReuseTemplate = `{{define "bench-row"}}<span>row</span>{{end}}`
 
@@ -86,9 +84,8 @@ func BenchmarkContainerOfTemplatesUpdate(b *testing.B) {
 	}
 }
 
-// BenchmarkContainerOfStableChildrenUpdate is the same measurement for children that were
-// already reusable before this change, so the comparison covers a shape that must not
-// regress rather than only the one being repaired.
+// BenchmarkContainerOfStableChildrenUpdate measures updates whose child values are returned
+// unchanged, guarding the identity-based reuse path alongside equal rebuilt values.
 func BenchmarkContainerOfStableChildrenUpdate(b *testing.B) {
 	b.ReportAllocs()
 	const rows = 200

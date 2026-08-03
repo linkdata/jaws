@@ -91,10 +91,10 @@ func (u *delegatingUI) JawsRender(elem *jaws.Element, w io.Writer, params []any)
 
 func (u *delegatingUI) JawsUpdate(elem *jaws.Element) { u.tmpl.JawsUpdate(elem) }
 
-// TestTemplate_DelegatedRenderKeepsTheDelegatorsChild is the case that decided this design:
-// the Template's rollback is scoped to the Elements it created, so a child the delegating
-// renderer made itself is untouched. The delegate creates a nested Element before failing,
-// so the assertion is about a non-empty generation.
+// TestTemplate_DelegatedRenderKeepsTheDelegatorsChild checks that Template rollback is scoped
+// to the Elements it created, leaving a child the delegating renderer made itself untouched.
+// The delegate creates a nested Element before failing, so the assertion covers a non-empty
+// generation.
 func TestTemplate_DelegatedRenderKeepsTheDelegatorsChild(t *testing.T) {
 	for _, tt := range []struct {
 		name   string

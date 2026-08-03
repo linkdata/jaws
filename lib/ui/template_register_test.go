@@ -37,9 +37,9 @@ func newRegisterRequest(t *testing.T, logger *templateLogger) (*jaws.Jaws, *jaws
 	return jw, rq
 }
 
-// TestRegister_WrappedTemplateUpdaterReportsUnclaimed covers the compatibility narrowing:
-// Register never renders its Element, so a wrapped Template has no claim to update against.
-// The outcome differs by call path, which is what the matrix below pins.
+// TestRegister_WrappedTemplateUpdaterReportsUnclaimed checks every reporting path for a
+// wrapped Template updater. Register never renders its Element, so the Template has no state
+// claim to update against.
 func TestRegister_WrappedTemplateUpdaterReportsUnclaimed(t *testing.T) {
 	wrapped := NewTemplate("div", "reg-plain", tag.Tag("dot"))
 
@@ -139,7 +139,10 @@ func TestRegister_WrappedTemplateUpdaterOnTheRequestLoop(t *testing.T) {
 			go jw.Serve()
 
 			tr := jawstest.NewTestRequest(jw, nil)
-			t.Cleanup(tr.Close)
+			t.Cleanup(func() {
+				tr.Close()
+				<-tr.DoneCh
+			})
 			<-tr.ReadyCh
 
 			dirty := tag.Tag("registered")
@@ -155,20 +158,29 @@ func TestRegister_WrappedTemplateUpdaterOnTheRequestLoop(t *testing.T) {
 			tr.BcastCh <- wire.Message{Dest: dirty, What: what.Update}
 
 			if tt.wantAlive {
-				// Wake the loop and confirm it still serves afterwards.
-				tr.InCh <- wire.WsMsg{}
+				// BcastCh preserves send order. Receiving this Alert proves the loop
+				// processed the preceding failing update and kept serving afterwards.
+				const probe = "still alive"
+				tr.BcastCh <- wire.Message{What: what.Alert, Data: probe}
 				select {
+				case msg, ok := <-tr.OutCh:
+					if !ok {
+						t.Fatal("the request loop stopped although a logger was configured")
+					}
+					if msg.Jid != 0 || msg.What != what.Alert || msg.Data != probe {
+						t.Fatalf("liveness probe = %+v, want Alert %q", msg, probe)
+					}
 				case <-tr.DoneCh:
 					t.Fatal("the request loop stopped although a logger was configured")
-				case <-time.After(300 * time.Millisecond):
+				case <-time.After(2 * time.Second):
+					t.Fatal("timeout waiting for the request-loop liveness probe")
 				}
-				if len(logger.errors) == 0 {
-					t.Fatal("expected the diagnostic to be logged")
-				}
-				for _, err := range logger.errors {
-					if !errors.Is(err, ErrElementStateUnclaimed) {
-						t.Fatalf("logged %v, want %v", err, ErrElementStateUnclaimed)
-					}
+
+				// Join the request-loop goroutine before inspecting its logger writes.
+				tr.Close()
+				<-tr.DoneCh
+				if len(logger.errors) != 1 || !errors.Is(logger.errors[0], ErrElementStateUnclaimed) {
+					t.Fatalf("logged errors = %v, want one %v", logger.errors, ErrElementStateUnclaimed)
 				}
 				return
 			}
