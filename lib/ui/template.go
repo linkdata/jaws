@@ -28,17 +28,20 @@ import (
 // helper. The referenced template must be a partial template, not a full HTML
 // document.
 //
-// The Elements a template creates through [RequestWriter.NewUI], which every
-// RequestWriter widget helper (including a nested [RequestWriter.Template]) goes
-// through, belong to the Template that rendered them: when [Template.JawsUpdate]
-// replaces the wrapper's content, those Elements are unregistered along with the DOM
-// that held them, and a nested widget's own Elements go with it.
+// The Elements a template creates through [RequestWriter.NewUI] — the path taken by
+// every RequestWriter widget helper except [RequestWriter.Register] and
+// [RequestWriter.RadioGroup], including a nested [RequestWriter.Template] — belong to
+// the Template that rendered them: when [Template.JawsUpdate] replaces the wrapper's
+// content, those Elements are unregistered along with the DOM that held them, and a
+// nested widget's own Elements go with it.
 //
-// [RequestWriter.Register] and [RequestWriter.RadioGroup] create their Elements
-// through [jaws.Request.NewElement] instead, so they are not tracked: an Element
-// either helper creates inside a template stays registered for the [jaws.Request]
-// lifetime, and re-rendering the template adds another. Their generated JaWS ids do
-// let the browser report the removal of any that reached the DOM.
+// Those two helpers create their Elements through [jaws.Request.NewElement] instead,
+// so a Template neither tracks nor unregisters them. Their cleanup is left to the
+// browser, which reports the JaWS ids it removed from the DOM as the wrapper's new
+// content is applied, and the [jaws.Request] unregisters those Elements. An Element
+// whose id never reaches the DOM has nothing to report it and stays registered until
+// the Request ends: one from an execution that failed before its markup was
+// delivered, or from a Register call whose returned Jid the template discards.
 //
 // Template execution is best-effort rather than transactional. Template actions
 // and nested JaWS helpers run as the template executes, so an execution error

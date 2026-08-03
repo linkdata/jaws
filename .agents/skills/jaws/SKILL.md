@@ -159,10 +159,15 @@ For clickable content rendering:
 - `ui.NewTemplate` returns a `*ui.Template`, which tracks the Elements its execution
   creates and therefore backs one live Element; construct a fresh one per render
   (`$.Template` already does). A successful update unregisters the Elements the
-  previous execution created through the `RequestWriter` widget helpers, since
-  `SetInner` replaces the DOM holding them. Elements created by `$.Register` and
-  `$.RadioGroup` are not tracked and stay registered for the Request's lifetime, so
-  prefer the widget helpers inside a template that updates.
+  previous execution created through `rw.NewUI` — the path every `RequestWriter`
+  widget helper except `$.Register` and `$.RadioGroup` takes — since `SetInner`
+  replaces the DOM holding them.
+- Those two helpers create Elements with `Request.NewElement`, so no template owns
+  them and their cleanup falls to the browser, which reports the ids it removed from
+  the DOM as the wrapper's new content is applied. An Element whose id never reaches
+  the DOM stays registered until the request ends (a discarded `$.Register` Jid, or an
+  execution that failed before delivering its markup), so prefer the `rw.NewUI`-backed
+  helpers inside a template that updates.
 - HTML getter paths must not mutate domain state, but they may call element update methods (`SetClass`, `RemoveClass`, `SetAttr`, `RemoveAttr`, etc.) on the passed-in `*Element` to co-ordinate wrapper class/attribute changes with the inner-HTML refresh. No custom `JawsUpdate` is needed for that case — the queued wrapper updates flush alongside the `SetInner` from `HTMLInner.JawsUpdate`.
 - Use a custom `JawsUpdate` only when the widget's update logic diverges from "render the getter again" — e.g. to compare against a stored last-value and skip the update (as the input widgets do).
 - `Element.SetAttr/RemoveAttr/SetClass/RemoveClass/SetInner/SetValue/Append/Order/Remove/Replace` are update-time operations; call them only from render/update processing.

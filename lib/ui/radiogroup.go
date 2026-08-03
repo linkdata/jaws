@@ -98,10 +98,12 @@ func (re RadioElement) Label(params ...any) template.HTML {
 // radio Element's request-scoped [jaws.Jid].
 //
 // The radio and label Elements are created through [jaws.Request.NewElement] rather
-// than [RequestWriter.NewUI], so a surrounding [Template] does not own them: a group
-// rendered from inside a template body outlives the template content it belongs to,
-// and every re-render of that template adds another set. The browser still reports
-// the removal of the input and label elements it had in the DOM.
+// than [RequestWriter.NewUI], so a surrounding [Template] neither owns nor unregisters
+// them when the template re-renders. Cleanup falls to the browser, which reports the
+// JaWS ids it removed from the DOM as the surrounding wrapper's new content is applied;
+// a rendered radio or label carries its own id, so it is reported. One that never
+// reached the DOM stays registered until the [jaws.Request] ends, including the
+// unrendered radio Element a [RadioElement.Label] without its Radio leaves behind.
 func (rw RequestWriter) RadioGroup(nba *named.BoolArray) (rel []RadioElement) {
 	group := &radioGroupState{}
 	nba.ReadLocked(func(nbl []*named.Bool) {

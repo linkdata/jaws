@@ -462,10 +462,15 @@ func TestPageTemplate_RenderFailureDeletesOwnedElements(t *testing.T) {
 // TestTemplate_UpdateDoesNotTrackRegisterOrRadioGroup pins the documented
 // exclusion: Register and RadioGroup create their Elements through
 // Request.NewElement rather than RequestWriter.NewUI, so a Template does not own
-// them and each update adds another. Should either helper start reporting through
-// the element-rendered hook, the counts below become constant — update this test
-// along with the Template, Register, RadioGroup and README docs stating the
-// exclusion.
+// them and each update registers another set.
+//
+// The growth measured here is what the server does on its own. In a live session the
+// browser reports the ids it removes as the wrapper's new content is applied and the
+// Request unregisters those Elements; there is no client here to send that
+// acknowledgement, which is also the state of an Element whose id never reaches the
+// DOM. Should either helper start reporting through the element-rendered hook, these
+// counts become constant — update this test along with the Template, Register,
+// RadioGroup, README and skill docs stating the exclusion.
 func TestTemplate_UpdateDoesNotTrackRegisterOrRadioGroup(t *testing.T) {
 	radios := named.NewBoolArray(false)
 	radios.Add("1", "one")

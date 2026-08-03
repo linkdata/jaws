@@ -34,11 +34,12 @@ func (u Register) JawsRender(elem *jaws.Element, w io.Writer, params []any) erro
 // ensure the initial rendering is correct.
 //
 // Register creates its Element through [jaws.Request.NewElement] rather than
-// [RequestWriter.NewUI], so a surrounding [Template] does not own it: an Element
-// registered from inside a template body outlives the template content it belongs to,
-// and every re-render of that template adds another. The browser still reports the
-// removal of one whose returned [jid.Jid] reached the DOM as an id. Use a widget
-// helper, or register outside the updating template, when that matters.
+// [RequestWriter.NewUI], so a surrounding [Template] neither owns nor unregisters it
+// when the template re-renders. Cleanup falls to the browser, which reports the JaWS
+// ids it removed from the DOM as the surrounding wrapper's new content is applied. Use
+// the returned [jid.Jid] as an element id for that to work: an Element whose id never
+// reaches the DOM stays registered until the [jaws.Request] ends, and every re-render
+// of the template adds another.
 //
 // Register does not call [jaws.Renderer.JawsRender]. The updater must therefore
 // be ready for JawsUpdate and event handling without render-time initialization.
