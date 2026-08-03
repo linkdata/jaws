@@ -57,10 +57,18 @@ Template must be comparable at runtime and equal to itself — a slice, map or f
 makes the whole widget unusable, and implementing `tag.TagGetter` does not change that,
 since it addresses tag resolution rather than widget comparability.
 
+Comparability alone is not enough: rendering expands `Dot` through `tag.TagExpand`, which
+rejects `string`, `bool`, the sized and unsized integer and float types, `template.HTML`,
+`template.HTMLAttr`, `jid.Jid` and `key.Key`. A plain `string` `Dot` is comparable and
+equal to itself yet still fails at render, so wrap such values in `tag.Tag("...")` or a
+comparable struct.
+
 A template claims that slot while rendering, so at most one template may render a given
 element, and a wrapped template updates only an element some template rendered. A wrapped
 template is therefore not usable as a `$.Register` updater — Register never renders its
-element — while an unwrapped one is, since its updates are a documented no-op.
+element — while an unwrapped one is, since its updates are a documented no-op. On an
+element no template claimed, a wrapped template's update reports `ErrElementStateUnclaimed`
+through `jaws.Request.MustLog`, which **panics** when no `Jaws.Logger` is configured.
 
 You can also use explicit constructors through:
 

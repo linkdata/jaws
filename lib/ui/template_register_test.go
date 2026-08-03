@@ -27,10 +27,9 @@ func (d *registerDot) Updater() jaws.Updater { return d.updater }
 
 func newRegisterRequest(t *testing.T, logger *templateLogger) (*jaws.Jaws, *jaws.Request) {
 	t.Helper()
-	jw, rq := newCoreRequest(t)
-	// Logger has to be in place before the Request is created; changing it afterwards is
-	// unsupported.
-	jw.Logger = logger
+	// The Logger has to be in place before the Request is created; changing it afterwards
+	// is unsupported, so it goes in through the configure hook.
+	jw, rq := newConfiguredCoreRequest(t, withLogger(logger))
 	if err := jw.AddTemplateLookuper(template.Must(template.New("reg").Parse(templateRegisterTemplates))); err != nil {
 		t.Fatal(err)
 	}
@@ -58,8 +57,10 @@ func TestRegister_WrappedTemplateUpdaterReportsUnclaimed(t *testing.T) {
 	})
 
 	t.Run("direct call panics without a logger", func(t *testing.T) {
-		_, rq := newCoreRequest(t)
-		_ = rq.Jaws.AddTemplateLookuper(template.Must(template.New("reg-plain").Parse(`plain`)))
+		jw, rq := newCoreRequest(t)
+		if err := jw.AddTemplateLookuper(template.Must(template.New("reg-plain").Parse(`plain`))); err != nil {
+			t.Fatal(err)
+		}
 		var sb strings.Builder
 		rw := RequestWriter{Request: rq, Writer: &sb}
 
@@ -75,19 +76,22 @@ func TestRegister_WrappedTemplateUpdaterReportsUnclaimed(t *testing.T) {
 	})
 
 	t.Run("template action becomes a render error without a logger", func(t *testing.T) {
-		_, rq := newCoreRequest(t)
-		_ = rq.Jaws.AddTemplateLookuper(template.Must(template.New("reg").Parse(templateRegisterTemplates)))
+		jw, rq := newCoreRequest(t)
+		if err := jw.AddTemplateLookuper(template.Must(template.New("reg").Parse(templateRegisterTemplates))); err != nil {
+			t.Fatal(err)
+		}
 		var sb strings.Builder
 		rw := RequestWriter{Request: rq, Writer: &sb}
 
 		// html/template recovers a panic raised by a called method and returns it as an
-		// execution error, so this surfaces as a render error rather than escaping.
+		// execution error, so this surfaces as a render error rather than escaping. The
+		// wrapping preserves the sentinel, so match on that rather than on the text.
 		err := rw.Template("div", "reg-page", &registerDot{updater: wrapped})
 		if err == nil {
 			t.Fatal("expected a render error from the recovered panic")
 		}
-		if !strings.Contains(err.Error(), "did not render") {
-			t.Fatalf("render error = %v, want it to mention the unclaimed state", err)
+		if !errors.Is(err, ErrElementStateUnclaimed) {
+			t.Fatalf("render error = %v, want it to wrap %v", err, ErrElementStateUnclaimed)
 		}
 	})
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"html/template"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -44,21 +45,42 @@ func childJids(t *testing.T, u *ContainerHelper) (jids []jaws.Jid) {
 	return
 }
 
-// assertNoDOMMutation wakes the harness loop so any queued operations flush, then fails on
-// an Append, Remove or Order — the traffic a container produces when it cannot reuse a
-// child and has to replace the collection instead.
+// assertNoDOMMutation drains everything the container queued and fails on an Append, Remove
+// or Order — the traffic it produces when it cannot reuse a child and has to replace the
+// collection instead.
+//
+// The drain is bounded by a probe rather than by a timeout, so a slow machine cannot turn
+// "the mutation has not arrived yet" into a pass. Two steps are needed, and for different
+// reasons. The update ran on this goroutine, so its messages are already sitting in the
+// queue; the unbuffered InCh send is consumed by the request loop, whose `continue` runs
+// sendQueue before it can select anything else, forcing that batch out first. Only then is
+// the Alert broadcast queued — otherwise getSendMsgs, which sorts by Jid, would place a
+// Jid-0 Alert ahead of the element-addressed operations in a single flush and the barrier
+// would prove nothing.
 func assertNoDOMMutation(t *testing.T, tr *jawstest.TestRequest, round int) {
 	t.Helper()
 	tr.InCh <- wire.WsMsg{}
+
+	probe := "drained " + strconv.Itoa(round)
+	tr.BcastCh <- wire.Message{What: what.Alert, Data: probe}
 	for {
 		select {
-		case msg := <-tr.OutCh:
+		case msg, ok := <-tr.OutCh:
+			if !ok {
+				t.Fatalf("round %d: the request loop stopped before the probe arrived", round)
+			}
 			switch msg.What {
 			case what.Append, what.Remove, what.Order:
 				t.Fatalf("round %d: unchanged collection queued %v for %v", round, msg.What, msg.Jid)
+			case what.Alert:
+				if msg.Data == probe {
+					return
+				}
 			}
-		case <-time.After(300 * time.Millisecond):
-			return
+		case <-tr.DoneCh:
+			t.Fatalf("round %d: the request loop stopped before the probe arrived", round)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("round %d: timed out waiting for the drain probe", round)
 		}
 	}
 }
@@ -154,14 +176,20 @@ func TestContainer_StableChildrenAreReused(t *testing.T) {
 // Template value: a Dot that cannot be hashed terminates the Request before pool use.
 func TestContainer_NonComparableTemplateDotCancels(t *testing.T) {
 	jw, rq := newCoreRequest(t)
-	_ = jw.AddTemplateLookuper(template.Must(template.New("row").Parse(`<span>row</span>`)))
+	if err := jw.AddTemplateLookuper(template.Must(template.New("row").Parse(`<span>row</span>`))); err != nil {
+		t.Fatal(err)
+	}
 
 	// A map Dot satisfies the compile-time comparability of the any field but not the
 	// runtime check.
 	tc := &testContainer{contents: []jaws.UI{NewTemplate("div", "row", map[string]int{"a": 1})}}
 	elem := rq.NewElement(NewContainer("div", tc))
 	var sb strings.Builder
-	_ = elem.JawsRender(&sb, nil)
+	// The render itself reports nothing: RenderContainer skips the children and still
+	// closes its wrapper, so terminating the Request is the whole signal.
+	if err := elem.JawsRender(&sb, nil); err != nil {
+		t.Fatalf("render = %v, want nil: the unusable child cancels the Request instead", err)
+	}
 
 	if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
 		t.Fatalf("cancellation cause = %v, want wrapping %v", cause, tag.ErrNotUsableAsTag)

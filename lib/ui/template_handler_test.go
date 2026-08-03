@@ -406,12 +406,13 @@ func TestTemplate_UpdateWithoutWrapperNoop(t *testing.T) {
 // whose later update fails: a wrapped Template updates only an Element it rendered, so a
 // template that always fails could never establish the state slot to begin with.
 func TestTemplate_UpdateLogsExecuteError(t *testing.T) {
-	jw, rq := newCoreRequest(t)
 	logger := new(templateLogger)
-	jw.Logger = logger
-	_ = jw.AddTemplateLookuper(template.Must(template.New("badupdate").Parse(
+	jw, rq := newConfiguredCoreRequest(t, withLogger(logger))
+	if err := jw.AddTemplateLookuper(template.Must(template.New("badupdate").Parse(
 		`{{$.Dot.Check}}`,
-	)))
+	))); err != nil {
+		t.Fatal(err)
+	}
 
 	dot := &ownedDot{}
 	tpl := NewTemplate("div", "badupdate", dot)
@@ -432,10 +433,11 @@ func TestTemplate_UpdateLogsExecuteError(t *testing.T) {
 }
 
 func TestTemplate_UpdateLogsUnclaimedState(t *testing.T) {
-	jw, rq := newCoreRequest(t)
 	logger := new(templateLogger)
-	jw.Logger = logger
-	_ = jw.AddTemplateLookuper(template.Must(template.New("unclaimed").Parse(`ok`)))
+	jw, rq := newConfiguredCoreRequest(t, withLogger(logger))
+	if err := jw.AddTemplateLookuper(template.Must(template.New("unclaimed").Parse(`ok`))); err != nil {
+		t.Fatal(err)
+	}
 
 	// A wrapped Template has nothing to reconcile against on an Element it never
 	// rendered, so it executes nothing and reports it. This is a defensive diagnostic,

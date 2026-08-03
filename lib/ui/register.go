@@ -16,7 +16,8 @@ import (
 //
 // The Element is never rendered, so an updater that needs state claimed during a render
 // cannot work here: a wrapped [Template] reports [ErrElementStateUnclaimed] instead of
-// updating. An unwrapped Template is fine, since its updates are a documented no-op —
+// updating, through [jaws.Request.MustLog], which panics when no [jaws.Jaws.Logger] is
+// configured. An unwrapped Template is fine, since its updates are a documented no-op —
 // though only [RequestWriter.Register] also delivers its event handlers, because Register
 // embeds [jaws.Updater] and so promotes no handler methods of its own.
 type Register struct{ jaws.Updater }

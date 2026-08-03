@@ -14,9 +14,15 @@ var ErrElementStateNil = errors.New("jaws: element state must not be nil")
 //
 // The state belongs to the [Element], not to the widget value that claimed it, so any
 // widget of the claiming type recognizes it. Loading never claims: a widget that finds
-// no state did not render this Element.
+// no state did not claim this Element. Most widgets never claim one, so a nil return
+// says nothing about whether the Element was rendered.
 //
-// elem must not be nil.
+// Safe for concurrent use; it takes the [Request] lock. Only the slot itself is
+// synchronized: whatever the stored value contains is guarded by that value's own
+// synchronization, not by this call.
+//
+// elem must belong to a [Request]: ElementState dereferences elem.Request, so a nil
+// elem, or one not obtained from [Request.NewElement], panics.
 func ElementState(elem *Element) (state any) {
 	rq := elem.Request
 	rq.mu.RLock()
@@ -36,10 +42,17 @@ func ElementState(elem *Element) (state any) {
 //
 // A nil state returns [ErrElementStateNil] and stores nothing, since a nil interface is
 // how an unclaimed slot is represented; that check comes first, so a nil state is
-// rejected whatever the slot holds. A typed nil is a non-nil interface and does claim the
-// slot.
+// rejected whatever the slot holds, and before elem is examined at all. A typed nil is a
+// non-nil interface and does claim the slot.
 //
-// elem must not be nil.
+// Safe for concurrent use: concurrent claims on one Element are serialized by the
+// [Request] lock and exactly one wins, the rest reporting [ErrElementStateClaimed]. Only
+// the claim is synchronized; mutating the stored value afterwards is guarded by that
+// value's own synchronization, not by this call.
+//
+// elem must belong to a [Request]: SetElementState dereferences elem.Request, so a nil
+// elem, or one not obtained from [Request.NewElement], panics — except when state is nil,
+// which is rejected before elem is touched.
 func SetElementState(elem *Element, state any) error {
 	// The two functions are package-level rather than methods on Element because
 	// ui.With embeds both *Element and ui.RequestWriter, so any method returning a value

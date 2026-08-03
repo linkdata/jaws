@@ -111,7 +111,13 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
   resolves the *tag*, not the widget's comparability. A non-comparable dot is unsupported.
   Always use the Template itself as a value; taking its address is unsupported because it
   changes container reuse to pointer identity. `ui.Handler` is the arbitrary-dot exception.
-- Do not use plain `string`, numeric, `bool`, `template.HTML`, or `template.HTMLAttr` as tags; `tag.TagExpand` rejects them.
+- `tag.TagExpand` rejects exactly these as tags: `string`, `bool`, `int`/`int8`/`int16`/`int32`/`int64`,
+  `uint`/`uint8`/`uint16`/`uint32`/`uint64`, `float32`/`float64`, `template.HTML`, `template.HTMLAttr`,
+  `jid.Jid` and `key.Key`. It is a switch on exact types, so `uintptr`, the complex types and your own
+  named types (`type RowID string`) are not rejected by it — they still have to be comparable and equal
+  to themselves, and one implementing `tag.TagGetter` is expanded instead.
+- This applies to a Template's `Dot` too, since rendering expands it: a comparable, reflexive `string`
+  dot still fails at render with `illegal tag type string`.
 - If you need string-like semantic tags, use `tag.Tag("...")` or a comparable typed struct/pointer.
 
 ## `$.Template(...)` signature and parameter semantics
