@@ -17,8 +17,8 @@ type productionTagRenderUI struct {
 
 func (ui *productionTagRenderUI) JawsRender(elem *Element, _ io.Writer, _ []any) error {
 	ui.elem = elem
-	// ApplyGetter no longer returns an error: an unusable tag reaches Jaws.Logger
-	// through Jaws.MustTagExpand instead, which is what these tests assert.
+	// An unusable tag reaches Jaws.Logger through Jaws.MustTagExpand, which is what
+	// these tests assert.
 	elem.ApplyGetter(ui.getter)
 	return nil
 }

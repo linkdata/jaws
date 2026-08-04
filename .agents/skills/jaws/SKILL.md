@@ -117,10 +117,11 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
   call it directly. Callers needing flattened, validated keys pass the object to
   `tag.TagExpand`. It takes no context argument: a tag value expands the same way regardless
   of which request or goroutine expands it.
-- `Element.ApplyGetter` calls `JawsGetTag` exactly once per invocation, and standard
-  getter-backed widgets invoke `ApplyGetter` once during initial render. This is not a global
-  call-count guarantee: `tag.TagExpand`, dirtying, broadcasts, and application code may call it
-  again.
+- `Element.ApplyGetter` invokes `JawsGetTag` to obtain a tag candidate, then expands that
+  candidate for registration. This expansion may invoke `JawsGetTag` again when the candidate
+  is itself a `tag.TagGetter` or contains one. Standard getter-backed widgets invoke
+  `ApplyGetter` once during initial render, but there is no `JawsGetTag` call-count guarantee:
+  `tag.TagExpand`, dirtying, broadcasts, and application code may make further calls.
 - Except for an explicitly documented initialization phase that returns nil, a `tag.TagGetter`
   must be idempotent in tag identity. After its first non-nil result, every call must return a
   value that `tag.TagExpand` expands to the same set of keys. Previously returned containers

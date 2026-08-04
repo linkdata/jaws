@@ -55,8 +55,8 @@ func TestHTMLWidgets_StringGetterInnerHTMLIsEscaped(t *testing.T) {
 	mustMatch(t, `^<div id="Jid\.[0-9]+">&lt;b&gt;x&lt;/b&gt;</div>$`, got)
 }
 
-// TestHTMLInner_RenderInnerWriteError covers renderInner's only remaining error
-// return. ApplyGetter no longer reports one, so the writer is the sole failure source.
+// TestHTMLInner_RenderInnerWriteError covers renderInner's error return, whose sole
+// failure source is the writer because ApplyGetter has no error result.
 func TestHTMLInner_RenderInnerWriteError(t *testing.T) {
 	_, rq := newCoreRequest(t)
 

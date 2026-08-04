@@ -680,9 +680,9 @@ func TestTagExpand_TagGetterMutualCycleExpandsToCycleMembers(t *testing.T) {
 	assertTagSetEqual(t, got, []any{a, b})
 }
 
-// The logging and panic behavior that tag.MustTagExpand used to provide now lives on
-// Jaws.MustTagExpand, covered by tagexpand_test.go in the root package. It cannot be
-// tested here: importing jaws would make tag depend on its own consumer.
+// TagExpand returns expansion errors directly. Jaws.MustTagExpand's logging and panic
+// behavior is covered by tagexpand_test.go in the root package; importing jaws here
+// would make tag depend on its own consumer.
 func TestTagExpand_IllegalTagTypeIsReturnedNotLogged(t *testing.T) {
 	got, err := TagExpand("plain-string")
 	if got != nil {

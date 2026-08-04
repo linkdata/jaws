@@ -475,11 +475,13 @@ func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
 
 // ApplyGetter examines getter and resolves its tag candidate.
 //
-// If getter implements [tag.TagGetter], ApplyGetter calls JawsGetTag exactly once and
-// the candidate is its returned value; otherwise the candidate is getter itself.
-// Eligible candidates — TagGetter values, supported tag slices and runtime-comparable
-// values — are passed to [Element.Tag]. Other non-comparable candidates are not
-// automatically tagged, matching [ParseParams].
+// If getter implements [tag.TagGetter], the candidate is the value returned by
+// [tag.TagGetter.JawsGetTag]; otherwise the candidate is getter itself. Eligible
+// candidates — TagGetter values, supported tag slices and runtime-comparable
+// values — are passed to [Element.Tag] for normal expansion and validation.
+// That expansion may invoke JawsGetTag again when the candidate is itself a
+// TagGetter or contains one. Other non-comparable candidates are not automatically
+// tagged, matching [ParseParams].
 //
 // If getter is an [InputHandler], [ClickHandler], [ContextMenuHandler] or
 // [InitialHTMLAttrHandler], relevant values are added to the [Element].

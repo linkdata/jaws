@@ -6,10 +6,12 @@ package tag
 // code may call it directly. Callers needing flattened, validated keys should pass the
 // object to [TagExpand] rather than interpret the raw return value.
 //
-// [github.com/linkdata/jaws.Element.ApplyGetter] calls JawsGetTag exactly once per
-// invocation, and the standard getter-backed widgets invoke ApplyGetter once during an
-// Element's initial render. This is not a global call-count guarantee: [TagExpand],
-// dirtying, broadcasts, and application code may call it again.
+// [github.com/linkdata/jaws.Element.ApplyGetter] invokes JawsGetTag to obtain a tag
+// candidate, then expands that candidate for registration. This expansion may invoke
+// JawsGetTag again when the candidate is itself a TagGetter or contains one. Standard
+// getter-backed widgets invoke ApplyGetter once during an Element's initial render.
+// [TagExpand], dirtying, broadcasts, and application code may make further calls;
+// there is no call-count guarantee.
 //
 // Except for an explicitly documented initialization phase that returns nil, a
 // TagGetter must be idempotent in tag identity. After its first non-nil result, every

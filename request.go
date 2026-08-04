@@ -872,13 +872,15 @@ func (rq *Request) appendDirtyTags(tags []any) {
 // It is a no-op for a nil, deleted, or foreign [Element], and after the [Request] has
 // released its tag map.
 func (rq *Request) TagExpanded(elem *Element, expandedTags []any) {
-	if elem != nil && !elem.deleted.Load() && elem.Request == rq {
+	if elem != nil && elem.Request == rq {
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
+		// Deletion marks the Element and removes its tags while holding rq.mu.
+		// Check here so it cannot finish between the check and registration.
 		// A nil tagMap means rq finished and released its buffers, so a still-running
 		// initial renderer that keeps tagging after a racy teardown degrades to
 		// untracked elements instead of panicking on a nil-map write.
-		if rq.tagMap != nil {
+		if !elem.deleted.Load() && rq.tagMap != nil {
 			for _, tagValue := range expandedTags {
 				if !rq.hasTagLocked(elem, tagValue) {
 					rq.tagMap[tagValue] = append(rq.tagMap[tagValue], elem)
