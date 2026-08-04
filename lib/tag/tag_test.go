@@ -1,31 +1,28 @@
 package tag
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"html/template"
-	"net/http"
 	"reflect"
 	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
 
-	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws/lib/jid"
 	"github.com/linkdata/jaws/lib/key"
 )
 
 type testSelfTagger struct{}
 
-func (tt *testSelfTagger) JawsGetTag(Context) any {
+func (tt *testSelfTagger) JawsGetTag() any {
 	return tt
 }
 
 type testBadTagGetter []int
 
-func (tt testBadTagGetter) JawsGetTag(Context) any {
+func (tt testBadTagGetter) JawsGetTag() any {
 	return tt
 }
 
@@ -35,19 +32,19 @@ func (testStringTag) String() string { return "str" }
 
 type testNestedTagGetter struct{}
 
-func (testNestedTagGetter) JawsGetTag(Context) any {
+func (testNestedTagGetter) JawsGetTag() any {
 	return Tag("nested")
 }
 
 type testSelfSliceTagger struct{}
 
-func (tt *testSelfSliceTagger) JawsGetTag(Context) any {
+func (tt *testSelfSliceTagger) JawsGetTag() any {
 	return []any{tt}
 }
 
 type testSelfSliceExtraTagger struct{}
 
-func (tt *testSelfSliceExtraTagger) JawsGetTag(Context) any {
+func (tt *testSelfSliceExtraTagger) JawsGetTag() any {
 	return []any{tt, Tag("extra")}
 }
 
@@ -56,7 +53,7 @@ type testMutualSliceTagger struct {
 	name string
 }
 
-func (tt *testMutualSliceTagger) JawsGetTag(Context) any {
+func (tt *testMutualSliceTagger) JawsGetTag() any {
 	return []any{tt.next}
 }
 
@@ -67,7 +64,7 @@ func (tt *testMutualSliceTagger) JawsGetTag(Context) any {
 // be treated as distinct active nodes.
 type testCapTagger []int
 
-func (c testCapTagger) JawsGetTag(Context) any {
+func (c testCapTagger) JawsGetTag() any {
 	if cap(c) > len(c) {
 		return []any{Tag("outer"), c[:len(c):len(c)]}
 	}
@@ -87,7 +84,7 @@ type testDeepTagGetter struct {
 	next any
 }
 
-func (tt testDeepTagGetter) JawsGetTag(Context) any {
+func (tt testDeepTagGetter) JawsGetTag() any {
 	return tt.next
 }
 
@@ -324,16 +321,16 @@ func TestTagExpand(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assertTagSetEqual(t, MustTagExpand(nil, tt.tag), tt.want)
+			got, err := TagExpand(tt.tag)
+			if err != nil {
+				t.Fatalf("TagExpand(%#v) error = %v", tt.tag, err)
+			}
+			assertTagSetEqual(t, got, tt.want)
 		})
 	}
 }
 
-func TestTagExpand_IllegalTypesPanic(t *testing.T) {
-	if !deadlock.Debug {
-		t.Log("skipped, not debugging")
-		return
-	}
+func TestTagExpand_IllegalTypes(t *testing.T) {
 	tags := []any{
 		string("string"),
 		template.HTML("template.HTML"),
@@ -358,21 +355,16 @@ func TestTagExpand_IllegalTypesPanic(t *testing.T) {
 	}
 	for _, tag := range tags {
 		t.Run(fmt.Sprintf("%T", tag), func(t *testing.T) {
-			defer func() {
-				x := recover()
-				e, ok := x.(error)
-				if !ok {
-					t.FailNow()
-				}
-				if !(errors.Is(e, ErrIllegalTagType) || errors.Is(e, ErrNotComparable)) {
-					t.FailNow()
-				}
-				if !strings.Contains(e.Error(), fmt.Sprintf("%T", tag)) {
-					t.FailNow()
-				}
-			}()
-			MustTagExpand(nil, tag)
-			t.FailNow()
+			_, err := TagExpand(tag)
+			if err == nil {
+				t.Fatalf("TagExpand(%T) accepted an illegal tag type", tag)
+			}
+			if !(errors.Is(err, ErrIllegalTagType) || errors.Is(err, ErrNotComparable)) {
+				t.Fatalf("TagExpand(%T) error = %v, want ErrIllegalTagType or ErrNotComparable", tag, err)
+			}
+			if !strings.Contains(err.Error(), fmt.Sprintf("%T", tag)) {
+				t.Fatalf("TagExpand(%T) error %q does not name the offending type", tag, err)
+			}
 		})
 	}
 }
@@ -380,7 +372,7 @@ func TestTagExpand_IllegalTypesPanic(t *testing.T) {
 func TestTagExpand_SelfReferentialSliceStopsRecursing(t *testing.T) {
 	tags := []any{nil}
 	tags[0] = tags
-	got, err := TagExpand(nil, tags)
+	got, err := TagExpand(tags)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +393,7 @@ func TestTagExpand_AliasedSliceViews(t *testing.T) {
 	all[1] = all
 	all[2] = Tag("last")
 
-	got, err := TagExpand(nil, outer)
+	got, err := TagExpand(outer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -421,37 +413,29 @@ func TestTagExpand_CapacityDependentSliceGetter(t *testing.T) {
 	backing := make(testCapTagger, 2)
 	outer := backing[:1] // len 1, cap 2: yields Tag("outer") and a cap-1 inner view
 
-	got, err := TagExpand(nil, outer)
+	got, err := TagExpand(outer)
 	if err != nil {
 		t.Fatal(err)
 	}
 	assertTagSetEqual(t, got, []any{Tag("outer"), Tag("inner")})
 }
 
-func TestTagExpand_TooManyTagsPanic(t *testing.T) {
+func TestTagExpand_TooManyTags(t *testing.T) {
 	tags := make([]any, 101)
 	for i := range tags {
 		tags[i] = Tag(fmt.Sprintf("t%d", i))
 	}
-	defer func() {
-		x := recover()
-		e, ok := x.(error)
-		if !ok {
-			t.Fatal("expected error, got", x)
-		}
-		if !errors.Is(e, ErrTooManyTags) {
-			t.Errorf("recovered error = %v, want %v", e, ErrTooManyTags)
-		}
-		if e.Error() != "too many tags" {
-			t.Errorf("ErrTooManyTags.Error() = %q", e.Error())
-		}
-	}()
-	MustTagExpand(nil, tags)
-	t.FailNow()
+	_, err := TagExpand(tags)
+	if !errors.Is(err, ErrTooManyTags) {
+		t.Fatalf("TagExpand error = %v, want %v", err, ErrTooManyTags)
+	}
+	if err.Error() != "too many tags" {
+		t.Errorf("ErrTooManyTags.Error() = %q", err.Error())
+	}
 }
 
 func TestTagExpand_TagGetterNonComparable(t *testing.T) {
-	_, err := TagExpand(nil, testBadTagGetter{1})
+	_, err := TagExpand(testBadTagGetter{1})
 	if !errors.Is(err, ErrNotUsableAsTag) {
 		t.Fatalf("expected ErrNotUsableAsTag, got %v", err)
 	}
@@ -469,7 +453,7 @@ func TestTagExpand_TagGetterNonComparable(t *testing.T) {
 // map key. Tag expansion must reject even a single such tag with
 // ErrNotUsableAsTag rather than deferring that panic to jw.dirty or rq.tagMap.
 func TestTagExpand_RuntimeNonComparable(t *testing.T) {
-	if _, err := TagExpand(nil, testRuntimeNonComparable{v: func() {}}); !errors.Is(err, ErrNotUsableAsTag) {
+	if _, err := TagExpand(testRuntimeNonComparable{v: func() {}}); !errors.Is(err, ErrNotUsableAsTag) {
 		t.Fatalf("expected ErrNotUsableAsTag, got %v", err)
 	}
 }
@@ -482,7 +466,7 @@ func TestTagExpand_RuntimeNonComparable(t *testing.T) {
 func TestTagExpand_MultiRuntimeNonComparable(t *testing.T) {
 	a := testRuntimeNonComparable{v: func() {}}
 	b := testRuntimeNonComparable{v: func() {}}
-	result, err := TagExpand(nil, []any{a, b})
+	result, err := TagExpand([]any{a, b})
 	if !errors.Is(err, ErrNotUsableAsTag) {
 		t.Fatalf("expected ErrNotUsableAsTag, got %v", err)
 	}
@@ -496,7 +480,7 @@ func TestTagExpand_MultiRuntimeNonComparable(t *testing.T) {
 // ErrNotUsableAsTag and not leak the partial result accumulated before the
 // rejection.
 func TestTagExpand_ValidThenRuntimeNonComparable(t *testing.T) {
-	result, err := TagExpand(nil, []any{Tag("a"), testRuntimeNonComparable{v: func() {}}})
+	result, err := TagExpand([]any{Tag("a"), testRuntimeNonComparable{v: func() {}}})
 	if !errors.Is(err, ErrNotUsableAsTag) {
 		t.Fatalf("expected ErrNotUsableAsTag, got %v", err)
 	}
@@ -509,7 +493,7 @@ func TestTagExpand_ValidThenRuntimeNonComparable(t *testing.T) {
 // comparable ([1]any) but whose element holds a non-comparable value (a func).
 // Comparing it panics, so expansion must reject it with ErrNotUsableAsTag.
 func TestTagExpand_RuntimeNonComparableArray(t *testing.T) {
-	if _, err := TagExpand(nil, [1]any{func() {}}); !errors.Is(err, ErrNotUsableAsTag) {
+	if _, err := TagExpand([1]any{func() {}}); !errors.Is(err, ErrNotUsableAsTag) {
 		t.Fatalf("expected ErrNotUsableAsTag, got %v", err)
 	}
 }
@@ -530,12 +514,12 @@ func TestTagExpand_RepanicsOtherPanics(t *testing.T) {
 			t.Fatalf("unexpected panic value %v", r)
 		}
 	}()
-	_, _ = TagExpand(nil, testPanicTagGetter{})
+	_, _ = TagExpand(testPanicTagGetter{})
 }
 
 type testPanicTagGetter struct{}
 
-func (testPanicTagGetter) JawsGetTag(Context) any { panic("boom") }
+func (testPanicTagGetter) JawsGetTag() any { panic("boom") }
 
 // uncomparablePanic returns a real "comparing uncomparable type" runtime panic
 // value by comparing two non-comparable interface values.
@@ -582,7 +566,7 @@ func TestTagExpand_NotUsableAsTag_WithNestedTagGetterHint(t *testing.T) {
 		Setter: testNestedTagGetter{},
 		Vals:   []int{1},
 	}
-	_, err := TagExpand(nil, tag)
+	_, err := TagExpand(tag)
 	if !errors.Is(err, ErrNotUsableAsTag) {
 		t.Fatalf("expected ErrNotUsableAsTag, got %v", err)
 	}
@@ -592,13 +576,13 @@ func TestTagExpand_NotUsableAsTag_WithNestedTagGetterHint(t *testing.T) {
 	if !strings.Contains(err.Error(), "found nested TagGetter at Setter") {
 		t.Fatalf("expected nested TagGetter search result in error text, got %q", err.Error())
 	}
-	if !strings.Contains(err.Error(), "implement JawsGetTag(tag.Context)") {
+	if !strings.Contains(err.Error(), "implement JawsGetTag()") {
 		t.Fatalf("expected remediation hint in error text, got %q", err.Error())
 	}
 }
 
 func TestTagExpand_NotUsableAsTag_NoNestedTagGetterHint(t *testing.T) {
-	_, err := TagExpand(nil, map[int]int{1: 1})
+	_, err := TagExpand(map[int]int{1: 1})
 	if !errors.Is(err, ErrNotUsableAsTag) {
 		t.Fatalf("expected ErrNotUsableAsTag, got %v", err)
 	}
@@ -614,7 +598,7 @@ func TestTagExpand_NotUsableAsTag_NoNestedTagGetterHint(t *testing.T) {
 }
 
 func TestTagExpand_IllegalTagTypeError(t *testing.T) {
-	_, err := TagExpand(nil, "plain-string")
+	_, err := TagExpand("plain-string")
 	if !errors.Is(err, ErrIllegalTagType) {
 		t.Fatalf("expected ErrIllegalTagType, got %v", err)
 	}
@@ -651,7 +635,7 @@ func TestTagExpand_IllegalTypesAsErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := TagExpand(nil, tt.tag)
+			_, err := TagExpand(tt.tag)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("TagExpand(%T): got %v want %v", tt.tag, err, tt.wantErr)
 			}
@@ -659,36 +643,8 @@ func TestTagExpand_IllegalTypesAsErrors(t *testing.T) {
 	}
 }
 
-type mustLogContext struct {
-	ctx context.Context
-	err error
-}
-
-func (ctx *mustLogContext) Initial() *http.Request {
-	return nil
-}
-
-func (ctx *mustLogContext) Get(string) any {
-	return nil
-}
-
-func (ctx *mustLogContext) Set(key string, value any) {}
-
-func (ctx *mustLogContext) Context() context.Context {
-	return ctx.ctx
-}
-
-func (ctx *mustLogContext) Log(err error) error {
-	ctx.err = err
-	return err
-}
-
-func (ctx *mustLogContext) MustLog(err error) {
-	ctx.err = err
-}
-
 func TestTagExpand_TagGetterRecurses(t *testing.T) {
-	got, err := TagExpand(nil, testNestedTagGetter{})
+	got, err := TagExpand(testNestedTagGetter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -697,7 +653,7 @@ func TestTagExpand_TagGetterRecurses(t *testing.T) {
 
 func TestTagExpand_TagGetterSelfInSlice(t *testing.T) {
 	self := &testSelfSliceTagger{}
-	got, err := TagExpand(nil, self)
+	got, err := TagExpand(self)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -706,7 +662,7 @@ func TestTagExpand_TagGetterSelfInSlice(t *testing.T) {
 
 func TestTagExpand_TagGetterSelfAndExtraInSlice(t *testing.T) {
 	self := &testSelfSliceExtraTagger{}
-	got, err := TagExpand(nil, self)
+	got, err := TagExpand(self)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -717,21 +673,23 @@ func TestTagExpand_TagGetterMutualCycleExpandsToCycleMembers(t *testing.T) {
 	a := &testMutualSliceTagger{name: "a"}
 	b := &testMutualSliceTagger{name: "b", next: a}
 	a.next = b
-	got, err := TagExpand(nil, a)
+	got, err := TagExpand(a)
 	if err != nil {
 		t.Fatal(err)
 	}
 	assertTagSetEqual(t, got, []any{a, b})
 }
 
-func TestMustTagExpand_UsesContextMustLog(t *testing.T) {
-	ctx := &mustLogContext{ctx: t.Context()}
-	got := MustTagExpand(ctx, "plain-string")
+// The logging and panic behavior that tag.MustTagExpand used to provide now lives on
+// Jaws.MustTagExpand, covered by tagexpand_test.go in the root package. It cannot be
+// tested here: importing jaws would make tag depend on its own consumer.
+func TestTagExpand_IllegalTagTypeIsReturnedNotLogged(t *testing.T) {
+	got, err := TagExpand("plain-string")
 	if got != nil {
-		t.Fatalf("MustTagExpand returned %#v, want nil", got)
+		t.Fatalf("TagExpand returned %#v, want nil", got)
 	}
-	if !errors.Is(ctx.err, ErrIllegalTagType) {
-		t.Fatalf("expected ErrIllegalTagType, got %v", ctx.err)
+	if !errors.Is(err, ErrIllegalTagType) {
+		t.Fatalf("expected ErrIllegalTagType, got %v", err)
 	}
 }
 
@@ -799,7 +757,7 @@ func TestTagExpand_TooDeepAndTooManySliceTags(t *testing.T) {
 	for range 11 {
 		nested = testDeepTagGetter{next: nested}
 	}
-	if _, err := TagExpand(nil, nested); !errors.Is(err, ErrTooManyTags) {
+	if _, err := TagExpand(nested); !errors.Is(err, ErrTooManyTags) {
 		t.Fatalf("TagExpand(deep) = %v, want %v", err, ErrTooManyTags)
 	}
 
@@ -807,7 +765,7 @@ func TestTagExpand_TooDeepAndTooManySliceTags(t *testing.T) {
 	for i := range tags {
 		tags[i] = Tag(fmt.Sprintf("t%d", i))
 	}
-	if _, err := TagExpand(nil, tags); !errors.Is(err, ErrTooManyTags) {
+	if _, err := TagExpand(tags); !errors.Is(err, ErrTooManyTags) {
 		t.Fatalf("TagExpand([]Tag) = %v, want %v", err, ErrTooManyTags)
 	}
 }
@@ -821,7 +779,7 @@ func TestTagExpand_PartialResultOnCountLimit(t *testing.T) {
 	for i := range tags {
 		tags[i] = Tag(fmt.Sprintf("t%d", i))
 	}
-	result, err := TagExpand(nil, tags)
+	result, err := TagExpand(tags)
 	if !errors.Is(err, ErrTooManyTags) {
 		t.Fatalf("TagExpand([]Tag) error = %v, want %v", err, ErrTooManyTags)
 	}

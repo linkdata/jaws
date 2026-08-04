@@ -78,7 +78,7 @@ func Test_makeSetterFloat64_int(t *testing.T) {
 		t.Error(x)
 	}
 	tg := gotS.(tag.TagGetter)
-	if x := tg.JawsGetTag(nil); x != tsint {
+	if x := tg.JawsGetTag(); x != tsint {
 		t.Error(x)
 	}
 }
@@ -337,7 +337,7 @@ func Test_makeSetterFloat64ReadOnly_int(t *testing.T) {
 		t.Error(x)
 	}
 	tg := gotS.(tag.TagGetter)
-	if x := tg.JawsGetTag(nil); x != tgint {
+	if x := tg.JawsGetTag(); x != tgint {
 		t.Error(x)
 	}
 }
@@ -353,7 +353,7 @@ func Test_makeSetterFloat64Static_int(t *testing.T) {
 		t.Error(x)
 	}
 	tg := gotS.(tag.TagGetter)
-	if x := tg.JawsGetTag(nil); x != nil {
+	if x := tg.JawsGetTag(); x != nil {
 		t.Error(x)
 	}
 }

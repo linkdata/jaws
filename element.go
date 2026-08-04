@@ -475,34 +475,32 @@ func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
 
 // ApplyGetter examines getter and resolves its tag candidate.
 //
-// If getter implements [tag.TagGetter], the candidate is its returned value;
-// otherwise the candidate is getter itself. TagGetter values, supported tag
-// slices and runtime-comparable candidates are passed to [Element.Tag] for normal
-// validation. Other non-comparable candidates are not automatically tagged,
-// matching [ParseParams].
+// If getter implements [tag.TagGetter], ApplyGetter calls JawsGetTag exactly once and
+// the candidate is its returned value; otherwise the candidate is getter itself.
+// Eligible candidates — TagGetter values, supported tag slices and runtime-comparable
+// values — are passed to [Element.Tag]. Other non-comparable candidates are not
+// automatically tagged, matching [ParseParams].
 //
 // If getter is an [InputHandler], [ClickHandler], [ContextMenuHandler] or
 // [InitialHTMLAttrHandler], relevant values are added to the [Element].
 //
-// Finally, if getter is an [InitHandler], its JawsInit
-// function is called.
-//
-// Returns the tag that was added (nil if none was added, whether because getter
-// was nil or its candidate was not usable as a tag), any initial HTML attrs
-// provided by InitialHTMLAttrHandler, and any error returned from JawsInit() if it
-// was called.
+// The returned value is the candidate that was passed for tagging, not confirmation
+// that every expanded key was registered; it is nil if getter was nil or its candidate
+// was not usable as a tag. Callers may retain it for later dirtying; what makes that
+// safe is [tag.TagGetter]'s idempotent tag identity. attrs holds any initial HTML
+// attributes provided by InitialHTMLAttrHandler.
 //
 // If the [Element] is already frozen and getter is an event handler, the handler
 // is not added: in production with a [Jaws.Logger] configured this is logged and
-// tag and init processing still occur, while debug builds and servers without a
-// Logger panic via reportMisuse, aborting before tag and init processing. A
-// non-event-handler getter never calls reportMisuse, so its tag and init
-// processing always occur.
-func (elem *Element) ApplyGetter(getter any) (tagValue any, attrs []template.HTMLAttr, err error) {
+// initial-attribute and tag processing still occur, while debug builds and servers
+// without a Logger panic via reportMisuse, aborting before them. A non-event-handler
+// getter never calls reportMisuse, so its initial-attribute and tag processing always
+// occur.
+func (elem *Element) ApplyGetter(getter any) (tagValue any, attrs []template.HTMLAttr) {
 	if getter != nil {
 		tagValue = getter
 		if tagger, ok := getter.(tag.TagGetter); ok {
-			tagValue = tagger.JawsGetTag(elem.Request)
+			tagValue = tagger.JawsGetTag()
 		}
 		if _, ok := getter.(InputHandler); ok {
 			elem.appendHandlers(getter)
@@ -520,9 +518,6 @@ func (elem *Element) ApplyGetter(getter any) (tagValue any, attrs []template.HTM
 			elem.Tag(tagValue)
 		} else {
 			tagValue = nil
-		}
-		if initer, ok := getter.(InitHandler); ok {
-			err = initer.JawsInit(elem)
 		}
 	}
 	return

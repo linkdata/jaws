@@ -3,7 +3,6 @@ package bind
 import (
 	"github.com/linkdata/deadlock"
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/tag"
 )
 
 // testSetter is a minimal getter/setter fixture for the bind tests. It only
@@ -49,6 +48,6 @@ func (ts *testSetter[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 
 type selfTagger struct{}
 
-func (st *selfTagger) JawsGetTag(tag.Context) any {
+func (st *selfTagger) JawsGetTag() any {
 	return st
 }

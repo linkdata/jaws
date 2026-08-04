@@ -57,51 +57,50 @@ func NewContainerHelper(c jaws.Container) ContainerHelper {
 // [jaws.Container.JawsContains].
 func (u *ContainerHelper) RenderContainer(elem *jaws.Element, w io.Writer, outerHTMLTag string, params []any) (err error) {
 	var getterAttrs []template.HTMLAttr
-	if u.tag, getterAttrs, err = elem.ApplyGetter(u.Container); err == nil {
-		attrs := append(elem.ApplyParams(params), getterAttrs...)
-		b := elem.Jid().AppendStartTagAttr(nil, outerHTMLTag)
-		b = htmlio.AppendAttrs(b, attrs)
-		b = append(b, '>')
-		_, err = w.Write(b)
-		if err == nil {
-			var contents []*jaws.Element
-			// Validate every child before creating any Element: an unusable child (one
-			// that is not comparable at runtime, or not equal to itself) terminates the
-			// Request, and the rest must not be rendered. Keeping unusable children out of
-			// u.contents also stops a later reconcile pool build from hashing one.
-			children := u.Container.JawsContains(elem)
-			if !cancelUnusableChildren(elem, children) {
-				for _, childUI := range children {
-					childElem := elem.Request.NewElement(childUI)
-					contents = append(contents, childElem)
-					if err = childElem.JawsRender(w, nil); err != nil {
-						break
-					}
+	u.tag, getterAttrs = elem.ApplyGetter(u.Container)
+	attrs := append(elem.ApplyParams(params), getterAttrs...)
+	b := elem.Jid().AppendStartTagAttr(nil, outerHTMLTag)
+	b = htmlio.AppendAttrs(b, attrs)
+	b = append(b, '>')
+	_, err = w.Write(b)
+	if err == nil {
+		var contents []*jaws.Element
+		// Validate every child before creating any Element: an unusable child (one
+		// that is not comparable at runtime, or not equal to itself) terminates the
+		// Request, and the rest must not be rendered. Keeping unusable children out of
+		// u.contents also stops a later reconcile pool build from hashing one.
+		children := u.Container.JawsContains(elem)
+		if !cancelUnusableChildren(elem, children) {
+			for _, childUI := range children {
+				childElem := elem.Request.NewElement(childUI)
+				contents = append(contents, childElem)
+				if err = childElem.JawsRender(w, nil); err != nil {
+					break
 				}
 			}
-			// Always emit the closing tag, even on a child-render error, to balance
-			// the start tag already written above; leaving it unclosed would be
-			// worse for any partial output. The original err is preserved (err2 is
-			// only adopted when err is nil).
-			b = b[:0]
-			b = append(b, "</"...)
-			b = append(b, outerHTMLTag...)
-			b = append(b, '>')
-			if _, err2 := w.Write(b); err == nil {
-				err = err2
-			}
-			// Commit the rendered children only on full success. Any failure — a
-			// child render or the closing-tag write above — deletes the child
-			// Elements created during this render; otherwise they leak in the
-			// Request registry, since RequestWriter.NewUI deletes only the parent
-			// Element on a failed render.
-			if err == nil {
-				u.mu.Lock()
-				u.contents = contents
-				u.mu.Unlock()
-			} else {
-				deleteOwnedElements(elem.Request, contents)
-			}
+		}
+		// Always emit the closing tag, even on a child-render error, to balance
+		// the start tag already written above; leaving it unclosed would be
+		// worse for any partial output. The original err is preserved (err2 is
+		// only adopted when err is nil).
+		b = b[:0]
+		b = append(b, "</"...)
+		b = append(b, outerHTMLTag...)
+		b = append(b, '>')
+		if _, err2 := w.Write(b); err == nil {
+			err = err2
+		}
+		// Commit the rendered children only on full success. Any failure — a
+		// child render or the closing-tag write above — deletes the child
+		// Elements created during this render; otherwise they leak in the
+		// Request registry, since RequestWriter.NewUI deletes only the parent
+		// Element on a failed render.
+		if err == nil {
+			u.mu.Lock()
+			u.contents = contents
+			u.mu.Unlock()
+		} else {
+			deleteOwnedElements(elem.Request, contents)
 		}
 	}
 	return

@@ -191,10 +191,7 @@ func NewArticle(inner any) *Article {
 }
 
 func (w *Article) JawsRender(e *jaws.Element, wr io.Writer, params []any) error {
-  _, getterAttrs, err := e.ApplyGetter(w.HTMLGetter)
-  if err != nil {
-    return err
-  }
+  _, getterAttrs := e.ApplyGetter(w.HTMLGetter)
   attrs := append(e.ApplyParams(params), getterAttrs...)
   return htmlio.WriteHTMLInner(wr, e.Jid(), "article", "", w.HTMLGetter.JawsGetHTML(e), attrs...)
 }

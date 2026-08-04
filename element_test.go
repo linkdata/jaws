@@ -28,23 +28,12 @@ type testUi struct {
 	updateCalled int32
 	getCalled    int32
 	setCalled    int32
-	initCalled   int32
-	initError    error
 	s            string
 	renderFn     func(elem *Element, w io.Writer, params []any) error
 	updateFn     func(elem *Element)
 }
 
-// JawsInit implements InitHandler.
-func (tss *testUi) JawsInit(elem *Element) (err error) {
-	atomic.AddInt32(&tss.initCalled, 1)
-	return tss.initError
-}
-
-var (
-	_ UI          = (*testUi)(nil)
-	_ InitHandler = (*testUi)(nil)
-)
+var _ UI = (*testUi)(nil)
 
 func (tss *testUi) JawsGet(elem *Element) string {
 	atomic.AddInt32(&tss.getCalled, 1)
@@ -73,11 +62,9 @@ func (tss *testUi) JawsUpdate(elem *Element) {
 	}
 }
 
-type testApplyGetterAll struct {
-	initErr error
-}
+type testApplyGetterAll struct{}
 
-func (a testApplyGetterAll) JawsGetTag(tag.Context) any { return tag.Tag("tg") }
+func (a testApplyGetterAll) JawsGetTag() any { return tag.Tag("tg") }
 func (a testApplyGetterAll) JawsClick(elem *Element, click Click) error {
 	return ErrEventUnhandled
 }
@@ -90,13 +77,9 @@ func (a testApplyGetterAll) JawsSet(elem *Element, value string) error {
 	return ErrEventUnhandled
 }
 
-func (a testApplyGetterAll) JawsInit(elem *Element) error {
-	return a.initErr
-}
-
 type testNilTagGetter struct{}
 
-func (testNilTagGetter) JawsGetTag(tag.Context) any { return nil }
+func (testNilTagGetter) JawsGetTag() any { return nil }
 
 type testReentrantDebugTag struct {
 	rq *Request
@@ -620,7 +603,7 @@ func TestElement_HandlersFrozenAfterRender(t *testing.T) {
 	}
 	assertHandlerMutationFrozen(t, e, func() { e.AddHandlers(testClickHandler{}) })
 	assertHandlerMutationFrozen(t, e, func() { e.ApplyParams([]any{testEventHandler{}}) })
-	assertHandlerMutationFrozen(t, e, func() { _, _, _ = e.ApplyGetter(testClickHandler{}) })
+	assertHandlerMutationFrozen(t, e, func() { _, _ = e.ApplyGetter(testClickHandler{}) })
 }
 
 func TestElement_FreezeSealsHandlers(t *testing.T) {
@@ -661,9 +644,7 @@ func TestElement_UnrenderedAcceptsHandlers(t *testing.T) {
 	click := &testClickCounter{wantName: "name"}
 	e.AddHandlers(testEventHandler{})
 	e.ApplyParams([]any{testContextMenuHandler{}})
-	if _, _, err := e.ApplyGetter(click); err != nil {
-		t.Fatal(err)
-	}
+	e.ApplyGetter(click)
 	if got := len(e.handlers); got != 3 {
 		t.Fatalf("expected 3 handlers, got %d", got)
 	}
@@ -811,24 +792,17 @@ func TestElement_ApplyGetterDebugBranches(t *testing.T) {
 	defer rq.Close()
 	elem := rq.NewElement(&testUi{})
 
-	if gotTag, attrs, err := elem.ApplyGetter(nil); gotTag != nil || err != nil || len(attrs) != 0 {
-		t.Fatalf("unexpected %v %v %#v", gotTag, err, attrs)
+	if gotTag, attrs := elem.ApplyGetter(nil); gotTag != nil || len(attrs) != 0 {
+		t.Fatalf("unexpected %v %#v", gotTag, attrs)
 	}
 
 	ag := testApplyGetterAll{}
-	gotTags, attrs, err := elem.ApplyGetter(ag)
-	if err != nil {
-		t.Fatalf("unexpected error %v", err)
-	}
+	gotTags, attrs := elem.ApplyGetter(ag)
 	if len(attrs) != 0 {
 		t.Fatalf("expected no attrs, got %#v", attrs)
 	}
 	if !elem.HasTag(tag.Tag("tg")) {
 		t.Fatalf("missing Tag('tg') in %#v", gotTags)
-	}
-	agErr := testApplyGetterAll{initErr: tag.ErrNotComparable}
-	if _, _, err := elem.ApplyGetter(agErr); err != tag.ErrNotComparable {
-		t.Fatalf("expected init err, got %v", err)
 	}
 }
 
@@ -955,15 +929,12 @@ func TestElement_ApplyGetter(t *testing.T) {
 	e := rq.NewElement(tss)
 
 	var tch testClickHandler
-	gotTag, attrs, err := e.ApplyGetter(tch)
+	gotTag, attrs := e.ApplyGetter(tch)
 	if gotTag != tch {
 		t.Errorf("tag was %#v", gotTag)
 	}
 	if len(attrs) != 0 {
 		t.Fatalf("expected no attrs, got %#v", attrs)
-	}
-	if err != nil {
-		t.Error(err)
 	}
 	is.Equal(len(e.handlers), 1)
 	if !e.HasTag(tch) {
@@ -977,9 +948,7 @@ func TestElement_ApplyGetter_NonComparableHandler(t *testing.T) {
 
 	e := rq.NewElement(&testUi{s: "foo"})
 	tch := testNonComparableClickHandler{names: []string{"name"}}
-	if _, _, err := e.ApplyGetter(tch); err != nil {
-		t.Fatalf("ApplyGetter returned error: %v", err)
-	}
+	e.ApplyGetter(tch)
 	if len(e.handlers) != 1 {
 		t.Fatalf("expected 1 handler, got %d", len(e.handlers))
 	}
@@ -1004,10 +973,7 @@ func TestElement_ApplyGetter_NonComparableHandler_NilLogger(t *testing.T) {
 	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	e := rq.NewElement(&testUi{s: "x"})
 	tch := testNonComparableClickHandler{names: []string{"name"}}
-	gotTag, _, err := e.ApplyGetter(tch)
-	if err != nil {
-		t.Fatalf("ApplyGetter returned error: %v", err)
-	}
+	gotTag, _ := e.ApplyGetter(tch)
 	if gotTag != nil {
 		t.Fatalf("expected declined non-comparable candidate to return a nil tag, got %#v", gotTag)
 	}
@@ -1034,9 +1000,7 @@ func TestElement_ApplyGetter_NonComparableHandler_NoLog(t *testing.T) {
 	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	e := rq.NewElement(&testUi{s: "x"})
 	tch := testNonComparableClickHandler{names: []string{"name"}}
-	if _, _, err := e.ApplyGetter(tch); err != nil {
-		t.Fatalf("ApplyGetter returned error: %v", err)
-	}
+	e.ApplyGetter(tch)
 	if strings.Contains(buf.String(), "not usable as tag") {
 		t.Fatalf("expected no not-usable-as-tag log, got %q", buf.String())
 	}
@@ -1047,15 +1011,12 @@ func TestElement_ApplyGetter_NilTagGetter(t *testing.T) {
 	defer rq.Close()
 
 	e := rq.NewElement(&testUi{s: "foo"})
-	gotTag, attrs, err := e.ApplyGetter(testNilTagGetter{})
+	gotTag, attrs := e.ApplyGetter(testNilTagGetter{})
 	if gotTag != nil {
 		t.Fatalf("expected nil tag, got %#v", gotTag)
 	}
 	if len(attrs) != 0 {
 		t.Fatalf("expected no attrs, got %#v", attrs)
-	}
-	if err != nil {
-		t.Fatalf("ApplyGetter returned error: %v", err)
 	}
 	if got := rq.TagsOf(e); len(got) != 0 {
 		t.Fatalf("expected nil tag getter to not tag element, got %v", got)
@@ -1192,10 +1153,7 @@ func TestElement_ApplyGetter_InitialHTMLAttrAndClickHandler(t *testing.T) {
 		called: &called,
 		attr:   `data-attr="ok"`,
 	}
-	_, attrs, err := e.ApplyGetter(h)
-	if err != nil {
-		t.Fatal(err)
-	}
+	_, attrs := e.ApplyGetter(h)
 	if len(attrs) != 1 || attrs[0] != `data-attr="ok"` {
 		t.Fatalf("unexpected attrs from ApplyGetter: %#v", attrs)
 	}
@@ -1223,9 +1181,7 @@ func TestElement_ApplyGetter_InputHandlerAutoTag(t *testing.T) {
 
 	e := rq.NewElement(testDivWidget{inner: "x"})
 	h := testEventHandler{}
-	if _, _, err := e.ApplyGetter(h); err != nil {
-		t.Fatalf("ApplyGetter returned error: %v", err)
-	}
+	e.ApplyGetter(h)
 	if len(e.handlers) != 1 {
 		t.Fatalf("expected 1 handler, got %d", len(e.handlers))
 	}
@@ -1243,9 +1199,7 @@ func TestElement_ApplyGetter_ContextMenuHandlerAutoTag(t *testing.T) {
 
 	e := rq.NewElement(testDivWidget{inner: "x"})
 	h := testContextMenuHandler{}
-	if _, _, err := e.ApplyGetter(h); err != nil {
-		t.Fatalf("ApplyGetter returned error: %v", err)
-	}
+	e.ApplyGetter(h)
 	if len(e.handlers) != 1 {
 		t.Fatalf("expected 1 handler, got %d", len(e.handlers))
 	}
@@ -1263,9 +1217,7 @@ func TestElement_ApplyGetter_InputHandlerNonComparableNoAutoTag(t *testing.T) {
 
 	e := rq.NewElement(testDivWidget{inner: "x"})
 	h := testNonComparableEventHandler{names: []string{"name"}}
-	if _, _, err := e.ApplyGetter(h); err != nil {
-		t.Fatalf("ApplyGetter returned error: %v", err)
-	}
+	e.ApplyGetter(h)
 	if len(e.handlers) != 1 {
 		t.Fatalf("expected 1 handler, got %d", len(e.handlers))
 	}
@@ -1283,9 +1235,7 @@ func TestElement_ApplyGetter_ContextMenuHandlerNonComparableNoAutoTag(t *testing
 
 	e := rq.NewElement(testDivWidget{inner: "x"})
 	h := testNonComparableContextMenuHandler{names: []string{"name"}}
-	if _, _, err := e.ApplyGetter(h); err != nil {
-		t.Fatalf("ApplyGetter returned error: %v", err)
-	}
+	e.ApplyGetter(h)
 	if len(e.handlers) != 1 {
 		t.Fatalf("expected 1 handler, got %d", len(e.handlers))
 	}
@@ -1294,25 +1244,6 @@ func TestElement_ApplyGetter_ContextMenuHandlerNonComparableNoAutoTag(t *testing
 	}
 	if err := CallEventHandlers(e.UI(), e, what.ContextMenu, "1 2 0 name"); err != nil {
 		t.Fatalf("expected context menu handler to run, got %v", err)
-	}
-}
-
-func TestElement_JawsInit(t *testing.T) {
-	is := newTestHelper(t)
-	rq := newTestRequest(t)
-	defer rq.Close()
-
-	tss := &testUi{s: "foo"}
-	tss.initError = tag.ErrNotComparable
-	e := rq.NewElement(tss)
-
-	gotTag, _, err := e.ApplyGetter(tss)
-	is.Equal(atomic.LoadInt32(&tss.initCalled), int32(1))
-	if gotTag != tss {
-		t.Errorf("tag was %#v", gotTag)
-	}
-	if err != tag.ErrNotComparable {
-		t.Error(err)
 	}
 }
 

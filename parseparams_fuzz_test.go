@@ -91,22 +91,20 @@ type fuzzParseParamsTagGetter struct {
 	ID byte
 }
 
-func (h fuzzParseParamsTagGetter) JawsGetTag(tag.Context) any {
+func (h fuzzParseParamsTagGetter) JawsGetTag() any {
 	return tag.Tag(fmt.Sprintf("taggetter:%d", h.ID))
 }
 
 type fuzzParseParamsNonComparableTagGetter []byte
 
-func (h fuzzParseParamsNonComparableTagGetter) JawsGetTag(tag.Context) any {
+func (h fuzzParseParamsNonComparableTagGetter) JawsGetTag() any {
 	return tag.Tag(fmt.Sprintf("non-comparable-tagger:%x", []byte(h)))
 }
 
-type fuzzParseParamsInitOnly struct {
+// fuzzParseParamsPlainStruct is a comparable param that is neither an event handler
+// nor an attribute, so ParseParams must return it as a tag and nothing else.
+type fuzzParseParamsPlainStruct struct {
 	ID byte
-}
-
-func (h fuzzParseParamsInitOnly) JawsInit(*Element) error {
-	return nil
 }
 
 type fuzzParseParamsInitialAttrOnly struct {
@@ -227,9 +225,9 @@ func fuzzParseParamsBuild(recipe []byte, text string) (params []any, want fuzzPa
 		case 17:
 			params = append(params, []int{int(b), i})
 		case 18:
-			v := fuzzParseParamsInitOnly{ID: b}
+			v := fuzzParseParamsPlainStruct{ID: b}
 			params = append(params, v)
-			want.tags = append(want.tags, fuzzParseParamsLabel("initOnly", v.ID))
+			want.tags = append(want.tags, fuzzParseParamsLabel("plainStruct", v.ID))
 		case 19:
 			v := fuzzParseParamsInitialAttrOnly{ID: b}
 			params = append(params, v)
@@ -305,8 +303,8 @@ func fuzzParseParamsClassifyTags(t *testing.T, tags []any) (labels []string) {
 			labels = append(labels, fuzzParseParamsLabel("tagGetter", v.ID))
 		case fuzzParseParamsNonComparableTagGetter:
 			labels = append(labels, fuzzParseParamsDataLabel("nonComparableTagGetter", []byte(v)))
-		case fuzzParseParamsInitOnly:
-			labels = append(labels, fuzzParseParamsLabel("initOnly", v.ID))
+		case fuzzParseParamsPlainStruct:
+			labels = append(labels, fuzzParseParamsLabel("plainStruct", v.ID))
 		case fuzzParseParamsInitialAttrOnly:
 			labels = append(labels, fuzzParseParamsLabel("initialAttrOnly", v.ID))
 		case *fuzzParseParamsPointerInputHandler:

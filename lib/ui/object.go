@@ -122,11 +122,11 @@ func (obj *object) JawsInitialHTMLAttr(elem *jaws.Element) (attr template.HTMLAt
 	return
 }
 
-func (obj *object) JawsGetTag(ctx tag.Context) any {
+func (obj *object) JawsGetTag() any {
 	var tags []any
 	for obj != nil {
 		if h, ok := obj.handler.(tag.TagGetter); ok {
-			if t := h.JawsGetTag(ctx); t != nil {
+			if t := h.JawsGetTag(); t != nil {
 				tags = append(tags, t)
 			}
 		}

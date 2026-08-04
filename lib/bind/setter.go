@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/tag"
 )
 
 // Setter exposes and updates a value for a [jaws.Element].
@@ -22,7 +21,7 @@ func (setterReadOnly[T]) JawsSet(elem *jaws.Element, value T) error {
 	return ErrValueNotSettable
 }
 
-func (s setterReadOnly[T]) JawsGetTag(tag.Context) any {
+func (s setterReadOnly[T]) JawsGetTag() any {
 	return s.Getter
 }
 
@@ -38,7 +37,7 @@ func (s setterStatic[T]) JawsGet(elem *jaws.Element) T {
 	return s.v
 }
 
-func (s setterStatic[T]) JawsGetTag(tag.Context) any {
+func (s setterStatic[T]) JawsGetTag() any {
 	return nil
 }
 

@@ -6,7 +6,6 @@ import (
 	"math"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/tag"
 )
 
 var (
@@ -113,7 +112,7 @@ func (s setterFloat64[T]) JawsSet(elem *jaws.Element, value float64) (err error)
 	return
 }
 
-func (s setterFloat64[T]) JawsGetTag(tag.Context) any {
+func (s setterFloat64[T]) JawsGetTag() any {
 	return s.Setter
 }
 
@@ -130,7 +129,7 @@ func (setterFloat64ReadOnly[T]) JawsSet(elem *jaws.Element, value float64) error
 	return ErrValueNotSettable
 }
 
-func (s setterFloat64ReadOnly[T]) JawsGetTag(tag.Context) any {
+func (s setterFloat64ReadOnly[T]) JawsGetTag() any {
 	return s.Getter
 }
 
@@ -146,7 +145,7 @@ func (s setterFloat64Static[T]) JawsGet(elem *jaws.Element) float64 {
 	return s.v
 }
 
-func (s setterFloat64Static[T]) JawsGetTag(tag.Context) any {
+func (s setterFloat64Static[T]) JawsGetTag() any {
 	return nil
 }
 

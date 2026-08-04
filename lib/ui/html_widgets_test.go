@@ -9,7 +9,6 @@ import (
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/named"
-	"github.com/linkdata/jaws/lib/tag"
 )
 
 func TestHTMLWidgets_ConstructorsAndRender(t *testing.T) {
@@ -56,25 +55,17 @@ func TestHTMLWidgets_StringGetterInnerHTMLIsEscaped(t *testing.T) {
 	mustMatch(t, `^<div id="Jid\.[0-9]+">&lt;b&gt;x&lt;/b&gt;</div>$`, got)
 }
 
-func TestHTMLInner_RenderInnerApplyGetterError(t *testing.T) {
+// TestHTMLInner_RenderInnerWriteError covers renderInner's only remaining error
+// return. ApplyGetter no longer reports one, so the writer is the sole failure source.
+func TestHTMLInner_RenderInnerWriteError(t *testing.T) {
 	_, rq := newCoreRequest(t)
 
-	wantErr := errors.New("init fail")
-	g := &initFailGetter{err: wantErr}
-	elem := rq.NewElement(NewA(g))
-	var sb strings.Builder
-	if err := elem.JawsRender(&sb, nil); !errors.Is(err, wantErr) {
+	wantErr := errors.New("write fail")
+	elem := rq.NewElement(NewA(testHTMLGetter("x")))
+	if err := elem.JawsRender(&failNthWrite{n: 1, err: wantErr}, nil); !errors.Is(err, wantErr) {
 		t.Fatalf("want %v got %v", wantErr, err)
 	}
 }
-
-type initFailGetter struct {
-	err error
-}
-
-func (g *initFailGetter) JawsGetHTML(elem *jaws.Element) template.HTML { return "x" }
-func (g *initFailGetter) JawsGetTag(tag.Context) any                   { return g }
-func (g *initFailGetter) JawsInit(elem *jaws.Element) error            { return g.err }
 
 func TestImg_RenderAndUpdate(t *testing.T) {
 	_, rq := newCoreRequest(t)

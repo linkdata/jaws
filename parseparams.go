@@ -24,9 +24,9 @@ func usableAsTag(t any) (ok bool) {
 //
 // Unlike [Element.ApplyGetter], which is given the primary getter, ParseParams
 // only recognizes [InputFn], [InputHandler], [ClickHandler] and
-// [ContextMenuHandler]. A param implementing [InitHandler] or
-// [InitialHTMLAttrHandler] is treated only as a tag here; its JawsInit /
-// JawsInitialHTMLAttr are intentionally invoked only for the primary getter.
+// [ContextMenuHandler]. A param implementing [InitialHTMLAttrHandler] is treated
+// only as a tag here; its JawsInitialHTMLAttr is intentionally invoked only for the
+// primary getter.
 //
 // A param recognized as an event handler is appended to handlers, and if it is
 // also usable as a tag (comparable, per usableAsTag) it is additionally appended

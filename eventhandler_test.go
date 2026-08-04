@@ -37,16 +37,14 @@ func (t *testJawsEvent) JawsInput(elem *Element, value string) (err error) {
 	return
 }
 
-func (t *testJawsEvent) JawsGetTag(tag.Context) (tagValue any) {
+func (t *testJawsEvent) JawsGetTag() (tagValue any) {
 	return t.tagValue
 }
 
 func (t *testJawsEvent) JawsRender(elem *Element, w io.Writer, params []any) (err error) {
-	var tagValue any
-	if tagValue, _, err = elem.ApplyGetter(t); err == nil {
-		_, _ = fmt.Fprint(w, params)
-		t.msgCh <- fmt.Sprintf("JawsRender(%d)%#v", elem.jid, tagValue)
-	}
+	tagValue, _ := elem.ApplyGetter(t)
+	_, _ = fmt.Fprint(w, params)
+	t.msgCh <- fmt.Sprintf("JawsRender(%d)%#v", elem.jid, tagValue)
 	return
 }
 
@@ -716,9 +714,7 @@ func Test_CallEventHandlers_ClickOnlyHandlerViaApplyGetter(t *testing.T) {
 
 	elem := rq.NewElement(testDivWidget{inner: "x"})
 	clickCounter := &testClickCounter{wantName: "name"}
-	if _, _, err := elem.ApplyGetter(clickCounter); err != nil {
-		t.Fatalf("ApplyGetter returned error: %v", err)
-	}
+	elem.ApplyGetter(clickCounter)
 
 	err := CallEventHandlers(elem.UI(), elem, what.Click, "1 2 5 name")
 	if err != nil {
@@ -766,9 +762,7 @@ func Test_CallEventHandlers_ContextMenuOnlyHandlerViaApplyGetter(t *testing.T) {
 
 	elem := rq.NewElement(testDivWidget{inner: "x"})
 	counter := &testContextMenuCounter{wantName: "name"}
-	if _, _, err := elem.ApplyGetter(counter); err != nil {
-		t.Fatalf("ApplyGetter returned error: %v", err)
-	}
+	elem.ApplyGetter(counter)
 
 	err := CallEventHandlers(elem.UI(), elem, what.ContextMenu, "10 20 5 name")
 	if err != nil {

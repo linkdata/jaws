@@ -1753,6 +1753,37 @@ func TestRequest_Log(t *testing.T) {
 	}
 }
 
+// TestRequest_MustLog covers the nil-receiver forwarding that exists purely for
+// diagnostics, plus the two Logger states. Tag expansion no longer routes through here
+// (it goes through Jaws.MustTagExpand), so this is the direct coverage for it.
+func TestRequest_MustLog(t *testing.T) {
+	wantErr := errors.New("request mustlog test")
+
+	var log bytes.Buffer
+	rq := &Request{
+		Jaws: &Jaws{
+			Logger: slog.New(slog.NewTextHandler(&log, nil)),
+		},
+	}
+	rq.MustLog(wantErr)
+	if s := log.String(); !strings.Contains(s, wantErr.Error()) {
+		t.Fatalf("Request.MustLog() did not write error to logger: %q", s)
+	}
+
+	// A nil error is a no-op even without a Logger.
+	(*Request)(nil).MustLog(nil)
+
+	// Without a Logger it panics, including through a nil *Request.
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("Request.MustLog with no Logger must panic")
+			}
+		}()
+		(&Request{Jaws: &Jaws{}}).MustLog(wantErr)
+	}()
+}
+
 func TestRequest_Dirty(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		th := newTestHelper(t)

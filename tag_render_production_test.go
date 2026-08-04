@@ -15,27 +15,29 @@ type productionTagRenderUI struct {
 	elem   *Element
 }
 
-func (ui *productionTagRenderUI) JawsRender(elem *Element, _ io.Writer, _ []any) (err error) {
+func (ui *productionTagRenderUI) JawsRender(elem *Element, _ io.Writer, _ []any) error {
 	ui.elem = elem
-	_, _, err = elem.ApplyGetter(ui.getter)
-	return
+	// ApplyGetter no longer returns an error: an unusable tag reaches Jaws.Logger
+	// through Jaws.MustTagExpand instead, which is what these tests assert.
+	elem.ApplyGetter(ui.getter)
+	return nil
 }
 
 func (*productionTagRenderUI) JawsUpdate(*Element) {}
 
 type productionNamedFloatTag float64
 
-type productionFunctionTagGetter func(tag.Context) any
+type productionFunctionTagGetter func() any
 
-func (fn productionFunctionTagGetter) JawsGetTag(ctx tag.Context) any {
-	return fn(ctx)
+func (fn productionFunctionTagGetter) JawsGetTag() any {
+	return fn()
 }
 
 type productionTagGetterWrapper struct {
 	value any
 }
 
-func (wrapper productionTagGetterWrapper) JawsGetTag(tag.Context) any {
+func (wrapper productionTagGetterWrapper) JawsGetTag() any {
 	return wrapper.value
 }
 
@@ -63,7 +65,7 @@ func TestUIRenderResolvesDistinctFunctionTagGetters(t *testing.T) {
 	getters := make([]productionFunctionTagGetter, len(next))
 	for i := range next {
 		i := i
-		getters[i] = func(tag.Context) any { return next[i] }
+		getters[i] = func() any { return next[i] }
 	}
 	leafGetter := getters[0]
 	rootGetter := getters[1]

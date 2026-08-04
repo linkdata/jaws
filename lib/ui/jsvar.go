@@ -14,7 +14,6 @@ import (
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/htmlio"
-	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 	"github.com/linkdata/jq"
@@ -413,10 +412,10 @@ func (jsvar *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 // The serialized value is a render-time snapshot. See [JsVar] for the
 // synchronization semantics between rendering and the WebSocket subscription.
 //
-// The bound value's [tag.TagGetter.JawsGetTag] and [jaws.InitHandler.JawsInit]
-// callbacks run while the JsVar write lock is held, so they must not re-enter this
-// JsVar (for example call JawsGet or JawsSet on it), which would self-deadlock the
-// non-reentrant lock.
+// The bound value's [github.com/linkdata/jaws/lib/tag.TagGetter] JawsGetTag callback
+// runs while the JsVar write lock is held, so it must not re-enter this JsVar (for
+// example call JawsGet or JawsSet on it), which would self-deadlock the non-reentrant
+// lock.
 func (jsvar *JsVar[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	// The render-time snapshot is taken under the write lock; see renderSnapshot.
 	// Everything below runs without the lock: ApplyParams and, crucially, writing to
@@ -445,15 +444,15 @@ func (jsvar *JsVar[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any)
 //
 // It resolves the dirty tag and any initial HTML attrs from the bound value,
 // registers this JsVar as elem's handler, validates the JsVar name, and marshals a
-// snapshot of Ptr. The lock spans [Element.ApplyGetter] and the marshal so the
+// snapshot of Ptr. The lock spans [jaws.Element.ApplyGetter] and the marshal so the
 // serialized value stays consistent with the dirty tag even if another request
 // sharing this JsVar sets it concurrently. The deferred unlock ensures a panic from
 // a bound-value callback or from marshaling cannot leak the lock.
 //
-// A nil Ptr has no bound value to inspect, so the getter and init callbacks are
-// skipped and the initial data is omitted. Passing the typed-nil Ptr to ApplyGetter
-// instead would call a value-receiver [tag.TagGetter] or [jaws.InitHandler] through
-// the nil pointer and panic.
+// A nil Ptr has no bound value to inspect, so the getter callback is skipped and the
+// initial data is omitted. Passing the typed-nil Ptr to ApplyGetter instead would call
+// a value-receiver [github.com/linkdata/jaws/lib/tag.TagGetter] through the nil
+// pointer and panic.
 func (jsvar *JsVar[T]) renderSnapshot(elem *jaws.Element, params []any) (getterAttrs []template.HTMLAttr, jsvarName string, data []byte, err error) {
 	jsvar.Lock()
 	defer jsvar.Unlock()
@@ -461,19 +460,22 @@ func (jsvar *JsVar[T]) renderSnapshot(elem *jaws.Element, params []any) (getterA
 	if jsvar.Ptr != nil {
 		getter = jsvar.Ptr
 	}
-	if jsvar.dirtyTag, getterAttrs, err = elem.ApplyGetter(getter); err == nil {
-		elem.AddHandlers(jsvar)
-		if jsvarName, err = validateJsVarName(params); err == nil && jsvar.Ptr != nil {
-			data, err = json.Marshal(jsvar.Ptr)
-		}
+	jsvar.dirtyTag, getterAttrs = elem.ApplyGetter(getter)
+	elem.AddHandlers(jsvar)
+	if jsvarName, err = validateJsVarName(params); err == nil && jsvar.Ptr != nil {
+		data, err = json.Marshal(jsvar.Ptr)
 	}
 	return
 }
 
-// JawsGetTag returns the current dirty tag.
+// JawsGetTag returns the dirty tag, or nil before the first render initializes it.
 //
-// It is safe for concurrent use. The tag.Context argument is ignored and may be nil.
-func (jsvar *JsVar[T]) JawsGetTag(tag.Context) any {
+// That nil is not a dirty target. After initialization JawsGetTag obeys the normal
+// idempotent tag identity contract; see
+// [github.com/linkdata/jaws/lib/tag.TagGetter].
+//
+// It is safe for concurrent use.
+func (jsvar *JsVar[T]) JawsGetTag() any {
 	jsvar.RLock()
 	defer jsvar.RUnlock()
 	return jsvar.dirtyTag

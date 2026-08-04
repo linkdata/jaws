@@ -7,7 +7,7 @@ import (
 
 type testFindTagGetter struct{}
 
-func (testFindTagGetter) JawsGetTag(Context) any {
+func (testFindTagGetter) JawsGetTag() any {
 	return Tag("tg")
 }
 

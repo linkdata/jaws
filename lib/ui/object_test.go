@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/tag"
 )
 
 type testObjectStringer struct {
@@ -22,7 +21,7 @@ type testObjectTagGetter struct {
 	v any
 }
 
-func (g testObjectTagGetter) JawsGetTag(tag.Context) any {
+func (g testObjectTagGetter) JawsGetTag() any {
 	return g.v
 }
 
@@ -35,7 +34,7 @@ func TestObject_NewForwardsHTMLAndTag(t *testing.T) {
 	if got, want := string(obj.JawsGetHTML(elem)), "&lt;b&gt;x&lt;/b&gt;"; got != want {
 		t.Fatalf("want %q got %q", want, got)
 	}
-	if got, want := obj.JawsGetTag(rq), any(inner); got != want {
+	if got, want := obj.JawsGetTag(), any(inner); got != want {
 		t.Fatalf("want tag %#v got %#v", want, got)
 	}
 }
@@ -198,7 +197,7 @@ func TestObject_GetTag_MultipleTagsReturnsSlice(t *testing.T) {
 		},
 	}
 
-	got := obj.JawsGetTag(nil)
+	got := obj.JawsGetTag()
 	tags, ok := got.([]any)
 	if !ok {
 		t.Fatalf("want []any got %T (%#v)", got, got)

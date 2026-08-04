@@ -103,7 +103,7 @@ func TestJsVar_RenderSetAndEvent(t *testing.T) {
 		t.Fatalf("data-jawsdata = %#v, want %#v", gotData, v)
 	}
 
-	if jsv.JawsGetTag(rq) == nil {
+	if jsv.JawsGetTag() == nil {
 		t.Fatal("expected non-nil tag after render")
 	}
 	if gotV := jsv.JawsGet(nil); gotV.Text != v.Text || gotV.Num != 1 {
@@ -521,7 +521,7 @@ type jsVarTagState struct {
 	Value string `json:"value"`
 }
 
-func (jsVarTagState) JawsGetTag(tag.Context) any {
+func (jsVarTagState) JawsGetTag() any {
 	return tag.Tag("state")
 }
 
