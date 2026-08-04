@@ -30,9 +30,8 @@ func (d *benchOwnedDot) Names() []string { return d.names }
 // Jaws and Request, so an implementation that leaks Elements cannot accumulate them
 // across benchmark iterations and skew the result.
 //
-// The update is returned as a closure rather than the template and Element, so this
-// file also compiles against a revision where NewTemplate returns a value: only type
-// inference sees the difference.
+// The update is returned as a closure so benchmark callers do not depend on the
+// Template's concrete representation.
 func benchOwnedFixture(b *testing.B, nested int) (jw *jaws.Jaws, update func()) {
 	b.Helper()
 	var err error
@@ -65,12 +64,23 @@ func benchOwnedFixture(b *testing.B, nested int) (jw *jaws.Jaws, update func()) 
 }
 
 // BenchmarkTemplateUpdateOwnedCleanup measures one update of a wrapped template with
-// many nested Elements: it renders a fresh generation and unregisters the replaced
-// one. It guards the batched unregister against regressing to a per-element
-// registry pass.
+// nested Elements: it renders a fresh generation and unregisters the replaced one. It
+// guards the batched unregister against regressing to a per-element registry pass.
+//
+// The 1000-child case dominates its own measurement, so the small cases are where any
+// fixed per-update cost — such as loading the widget state slot — is visible at all. They
+// rebuild the fixture per iteration with the timer stopped, which makes time-based
+// calibration wildly pessimistic: run this with an explicit -benchtime=Nx.
 func BenchmarkTemplateUpdateOwnedCleanup(b *testing.B) {
+	for _, nested := range []int{0, 8, 1000} {
+		b.Run("children="+strconv.Itoa(nested), func(b *testing.B) {
+			benchmarkTemplateUpdateOwnedCleanup(b, nested)
+		})
+	}
+}
+
+func benchmarkTemplateUpdateOwnedCleanup(b *testing.B, nested int) {
 	b.ReportAllocs()
-	const nested = 1000
 	for range b.N {
 		b.StopTimer()
 		jw, update := benchOwnedFixture(b, nested)

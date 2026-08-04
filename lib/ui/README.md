@@ -46,6 +46,37 @@ the template whose body called it, not to the wrapper their markup lands in. Cal
 from the template that renders the group; see `RequestWriter.RadioGroup` for what
 happens when the two differ.
 
+The ownership set lives in the element's widget state slot (`jaws.SetElementState`),
+not on the `ui.Template` value, which is what keeps `NewTemplate` returning a plain
+value. That matters for containers: a `JawsContains` implementation may
+rebuild equal child values on every call and the container will still reuse their
+elements, because that equality *is* the reuse key. Always use `ui.Template` as a
+value, as `NewTemplate` returns it; taking its address is unsupported because it changes
+container reuse to pointer identity. Under the general `jaws.UI` contract, the resulting
+Template must be comparable at runtime and equal to itself — a slice, map or func `Dot`
+makes the whole widget unusable, and implementing `tag.TagGetter` does not change that,
+since it addresses tag resolution rather than widget comparability.
+
+Comparability alone is not enough. A nil-interface `Dot` is valid and contributes no tag.
+A typed nil is a non-nil interface and follows its dynamic type's comparability and
+expansion rules. Rendering expands a non-nil-interface `Dot` through `tag.TagExpand`,
+which rejects the exact dynamic types `string`, `bool`, `int`/`int8`/`int16`/`int32`/`int64`,
+`uint`/`uint8`/`uint16`/`uint32`/`uint64`, `float32`/`float64`, `template.HTML`,
+`template.HTMLAttr`, `jid.Jid` and `key.Key`. Aliases of a rejected type have that same
+dynamic type and are rejected. `uintptr` and the complex types are not on the rejection
+list. Other defined types are not rejected merely because their underlying predeclared
+type is on it; they must still be comparable and equal to themselves. Wrap a rejected
+scalar in `tag.Tag("...")` or a comparable struct when it should be a tag.
+
+A template claims that slot while rendering, so at most one template may render a given
+element. A composite UI must use template values equal under `==` for rendering and
+updating that element; using unequal values is unsupported. A wrapped template is
+therefore not usable as a `$.Register` updater — `$.Register` never invokes its updater's
+render method — while an unwrapped one is, since its updates are a documented no-op. On
+an element no template claimed, a wrapped template's update reports
+`ErrElementStateUnclaimed` through `jaws.Request.MustLog`, which **panics** when no
+`Jaws.Logger` is configured.
+
 You can also use explicit constructors through:
 
 ```go

@@ -17,8 +17,8 @@ import (
 type uiHandler struct {
 	*jaws.Jaws
 	// name and dot are the page template's parameters rather than a prepared
-	// pageTemplate: a pageTemplate tracks the Elements of one render, so ServeHTTP
-	// constructs a fresh one per request instead of copying a shared value.
+	// pageTemplate, so ServeHTTP can construct a fresh request-scoped page UI while
+	// accepting arbitrary page data.
 	name string
 	dot  any
 }
@@ -46,12 +46,16 @@ func (*pageTemplate) JawsUpdate(*jaws.Element) {}
 // serve no purpose; nested UI created during execution registers its own tags
 // independently.
 func (pt *pageTemplate) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
-	var lookedUp *template.Template
-	if lookedUp, err = pt.lookup(elem); err == nil {
-		if err = pt.execute(elem, w, lookedUp); err != nil {
-			// The page Element is unregistered by RequestWriter.NewUI; the nested UI
-			// this failed execution created is ours to drop.
-			deleteOwnedElements(elem.Request, pt.takeOwnedElements())
+	// Claim the state slot here rather than relying on Template.render, which this
+	// bypasses: without a claim the page's nested UI would be tracked by nothing at all.
+	// This is the only renderer of the page Element, so the claim always succeeds.
+	st := &templateState{}
+	if err = jaws.SetElementState(elem, st); err == nil {
+		var lookedUp *template.Template
+		if lookedUp, err = pt.lookup(elem); err == nil {
+			// A failed execution needs no cleanup here: RequestWriter.NewUI unregisters
+			// the page Element and, through the state slot, everything it owns.
+			err = pt.execute(elem, w, lookedUp, st)
 		}
 	}
 	return
@@ -83,8 +87,8 @@ func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// regardless of the page dot: ordinary html/template data such as a slice or map
 	// is not usable as a tag and would fail the runtime comparability check in
 	// Request.NewElement if a bare pageTemplate value (whose Dot is any) were used.
-	// The pointer identity is always comparable and fresh per request, and each
-	// request gets its own Element-tracking state.
+	// The pointer identity is always comparable and fresh per request. Element tracking
+	// lives in the page Element's state slot claimed by pageTemplate.JawsRender.
 	pt := &pageTemplate{Template: Template{Name: h.name, Dot: h.dot}}
 	if err := rw.NewUI(pt); err != nil {
 		_ = h.Log(err)

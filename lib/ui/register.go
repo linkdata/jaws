@@ -13,9 +13,19 @@ import (
 // One Register value may back multiple live [jaws.Element] values only when its
 // Updater supports those calls without retaining Element-specific state on a
 // shared value.
+//
+// Register does not call the embedded updater's [jaws.Renderer.JawsRender], so an updater
+// that needs state claimed during its render cannot work here: a wrapped [Template]
+// reports [ErrElementStateUnclaimed] instead of updating, through [jaws.Request.MustLog],
+// which panics when no [jaws.Jaws.Logger] is configured. An unwrapped Template is fine,
+// since its updates are a documented no-op — though only [RequestWriter.Register] also
+// delivers its event handlers, because Register embeds [jaws.Updater] and so promotes no
+// handler methods of its own.
 type Register struct{ jaws.Updater }
 
 // NewRegister returns an update-only widget that invokes updater during updates.
+//
+// See [Register] for why a wrapped [Template] cannot be used as the updater.
 func NewRegister(updater jaws.Updater) Register { return Register{Updater: updater} }
 
 // JawsRender renders no HTML for update-only registration.
@@ -42,11 +52,16 @@ func (u Register) JawsRender(elem *jaws.Element, w io.Writer, params []any) erro
 // returned [jid.Jid] never becomes an element id, necessarily stays registered until the
 // [jaws.Request] ends.
 //
-// Register does not call [jaws.Renderer.JawsRender]. The updater must therefore
-// be ready for JawsUpdate and event handling without render-time initialization.
-// In particular, the standard input widgets and [Select] initialize their dirty
-// targets while rendering; register them with [RequestWriter.NewUI] or their
-// RequestWriter helper when they need to handle input events.
+// RequestWriter.Register does not call the updater's [jaws.Renderer.JawsRender]. The
+// updater must therefore be ready for JawsUpdate and event handling without render-time
+// initialization. A wrapped [Template] reports [ErrElementStateUnclaimed] through
+// [jaws.Request.MustLog] rather than updating. An unwrapped Template works — its updates
+// are a documented no-op — and this helper is the only Register form that also delivers
+// a Template's click, input and context-menu handlers, since it adds the concrete updater
+// to the Element's handler list. In particular, the standard input widgets and [Select]
+// initialize their dirty targets while rendering; register them with
+// [RequestWriter.NewUI] or their RequestWriter helper when they need to handle input
+// events.
 //
 // Returns a [jid.Jid], suitable for including as an HTML id attribute:
 //

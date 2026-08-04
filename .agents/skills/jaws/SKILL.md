@@ -46,7 +46,7 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
   nil `UI` interface is a no-op. Surviving such a call is up to the concrete type, not
   a requirement: a widget that dereferences its fields panics, and none of the
   standard `lib/ui` widgets document nil-receiver tolerance. Do not pass a nil pointer
-  of a type that does not; use its zero value (e.g. `&ui.Template{}`) instead.
+  of a type that does not; use its zero value (e.g. `ui.Template{}`) instead.
 - Every JaWS `UI` value is request-scoped. Once used by one Request, never use
   that value with another Request; construct fresh widgets per request. The
   widgets may still refer to shared, synchronized application state, binders,
@@ -104,9 +104,24 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
 
 - `ui.Template` expands `Dot` into tags via `tag.TagExpand` (package `github.com/linkdata/jaws/lib/tag`, imported as `tag`); the root dot is part of identity/tag behavior.
 - `ui.Template` is for partial templates only; full document/page templates should be rendered through `ui.Handler`.
-- Prefer comparable root dots (pointers or small comparable structs).
-- If root dot is non-comparable, implement `JawsGetTag(tag.Context) any` and return a comparable tag.
-- Do not use plain `string`, numeric, `bool`, `template.HTML`, or `template.HTMLAttr` as tags; `tag.TagExpand` rejects them.
+- A nil-interface Template `Dot` is valid and contributes no tag; a typed nil follows its
+  dynamic type's comparability and expansion behavior.
+- The root dot **must** be comparable at runtime and equal to itself: `ui.NewTemplate`
+  returns a value, so the dot is part of the widget the container widgets use as a map key.
+  A slice, map, func or NaN-bearing dot makes the widget unusable as a container child.
+- Implementing `JawsGetTag(tag.Context) any` does **not** fix a non-comparable dot — it
+  resolves the *tag*, not the widget's comparability. A non-comparable dot is unsupported.
+  Always use the Template itself as a value; taking its address is unsupported because it
+  changes container reuse to pointer identity. `ui.Handler` is the arbitrary-dot exception.
+- `tag.TagExpand` rejects exactly these as tags: `string`, `bool`, `int`/`int8`/`int16`/`int32`/`int64`,
+  `uint`/`uint8`/`uint16`/`uint32`/`uint64`, `float32`/`float64`, `template.HTML`, `template.HTMLAttr`,
+  `jid.Jid` and `key.Key`. It is a switch on exact types, so aliases of a rejected type are rejected,
+  while `uintptr` and the complex types are not on the rejection list. Other defined types
+  (`type RowID string`) are not rejected merely because their underlying predeclared type is on it —
+  they still have to be comparable and equal to themselves, and one implementing `tag.TagGetter` is
+  expanded instead.
+- This applies to a Template's `Dot` too, since rendering expands it: a comparable, reflexive `string`
+  dot still fails at render with `illegal tag type string`.
 - If you need string-like semantic tags, use `tag.Tag("...")` or a comparable typed struct/pointer.
 
 ## `$.Template(...)` signature and parameter semantics
@@ -156,13 +171,24 @@ For clickable content rendering:
 
 - Keep HTML structure in templates; avoid manual HTML string assembly in Go.
 - `ui.Template.JawsUpdate` re-renders the template data into the generated wrapper.
-- `ui.NewTemplate` returns a `*ui.Template`, which tracks the Elements its execution
-  creates and therefore backs one live Element; construct a fresh one per render
-  (`$.Template` already does). A successful update unregisters every Element the
-  previous execution created through the writer it was given — the widget helpers,
-  `$.Register`, `$.RadioGroup` and nested `$.Template` alike — since `SetInner` replaces
-  the DOM holding them. Ownership is recorded at creation, so an Element that never
-  rendered is reclaimed as well.
+- `ui.NewTemplate` returns a plain `ui.Template` **value** that may back multiple live
+  Elements because it keeps the Elements its execution creates in each rendering Element's
+  state slot rather than on itself. Do not take its address. A
+  successful update unregisters every Element the previous execution created through the
+  writer it was given — the widget helpers, `$.Register`, `$.RadioGroup` and nested
+  `$.Template` alike — since `SetInner` replaces the DOM holding them. Ownership is recorded
+  at creation, so an Element that never rendered is reclaimed as well.
+- Because the value is stateless, a container's `JawsContains` may rebuild equal children on
+  every call and their Elements are still reused — that equality *is* the reuse key.
+- The state slot is claimed while rendering, which constrains composition:
+  - at most one Template may render a given Element;
+  - a composite UI must use Template values equal under `==` for rendering and updating
+    an Element; using unequal values is unsupported;
+  - a **wrapped** Template updates only an Element rendered by an equal Template value, so
+    it is not usable as a `$.Register` updater;
+  - an **unwrapped** Template is usable there — its updates are a documented no-op — but only
+    `$.Register` (the `RequestWriter` helper) also delivers its click/input/context-menu
+    handlers; a bare `ui.Register`/`ui.NewRegister` value promotes no handler methods.
 - Call `$.RadioGroup` from the template that renders the group: its Elements belong to
   the template whose body called it, not to the wrapper their markup lands in.
 - HTML getter paths must not mutate domain state, but they may call element update methods (`SetClass`, `RemoveClass`, `SetAttr`, `RemoveAttr`, etc.) on the passed-in `*Element` to co-ordinate wrapper class/attribute changes with the inner-HTML refresh. No custom `JawsUpdate` is needed for that case — the queued wrapper updates flush alongside the `SetInner` from `HTMLInner.JawsUpdate`.

@@ -31,9 +31,18 @@ func appendOwnedElements(dst []*jaws.Element, elems []*jaws.Element) []*jaws.Ele
 // appendOwnedBy appends the Elements owned by elem, recursively, to dst. It does not
 // append elem itself, so a caller that unregisters elem separately (through
 // [jaws.Element.Remove], say) can still collect its descendants.
+//
+// Ownership lives in two places: on the UI value for the container widgets, and in the
+// Element's widget state slot for [Template]. The slot is matched to *templateState
+// specifically rather than to elementOwner, because the slot legitimately holds any
+// value a renderer put there — a typed nil satisfying elementOwner through a promoted
+// method would panic here on a nil receiver.
 func appendOwnedBy(dst []*jaws.Element, elem *jaws.Element) []*jaws.Element {
 	if owner, ok := elem.UI().(elementOwner); ok {
 		dst = appendOwnedElements(dst, owner.takeOwnedElements())
+	}
+	if st := templateStateOf(elem); st != nil {
+		dst = appendOwnedElements(dst, st.takeOwnedElements())
 	}
 	return dst
 }

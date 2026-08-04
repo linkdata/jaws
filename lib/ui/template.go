@@ -13,11 +13,43 @@ import (
 
 // Template references a Go [html/template] template to be rendered through JaWS.
 //
-// A Template tracks the [jaws.Element] values created while its template executes,
-// so it must back at most one live Element. Construct a distinct Template for each
-// place the template is rendered; [RequestWriter.Template] does so for every call.
-// Its Dot and any callbacks reached during execution are shared with anything else
-// referencing them and must be safe for those calls.
+// A Template retains no Element-specific state and may back multiple live
+// [jaws.Element] values: the Elements created while it executes are tracked in the
+// rendering Element's widget state slot (see [jaws.SetElementState]), not on the
+// Template. Its Dot and any callbacks reached during execution are shared by those
+// Elements and must be safe for their render, update and event calls.
+//
+// Template is a value widget and must be passed to JaWS as a value, normally the value
+// returned by [NewTemplate]. Do not take its address: although Go gives *Template the
+// value receiver's method set, a container would then key reuse on pointer identity
+// instead of Template value equality.
+//
+// Like every [jaws.UI] value passed to [jaws.Request.NewElement], a Template must be
+// comparable at runtime and equal to itself because the container widgets use UI values
+// as map keys. A Dot holding a slice, map, func or NaN makes the Template unusable.
+// Comparability is necessary but not sufficient. A nil-interface Dot is valid and
+// contributes no tag. A typed nil is a non-nil interface and follows its dynamic type's
+// comparability and expansion rules. Rendering expands a non-nil-interface Dot through
+// [github.com/linkdata/jaws/lib/tag.TagExpand], which rejects the exact dynamic types
+// string, bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64,
+// float32, float64, [html/template.HTML], [html/template.HTMLAttr],
+// [github.com/linkdata/jaws/lib/jid.Jid] and [github.com/linkdata/jaws/lib/key.Key].
+// Aliases of a rejected type have that same dynamic type and are rejected. uintptr and
+// the complex types are not on the rejection list. Other defined types are not rejected
+// merely because their underlying predeclared type is on it; they must still be comparable
+// and equal to themselves. [Handler] is the arbitrary-Dot exception; its private
+// whole-page renderer is distinct from a Template widget and does not use the page dot as
+// a tag.
+//
+// The state slot is claimed while rendering, so at most one Template may render a given
+// Element. On an Element no Template claimed, an unwrapped [Template.JawsUpdate] is a
+// no-op while a wrapped one executes nothing and reports [ErrElementStateUnclaimed]
+// through [jaws.Request.MustLog], which panics when no [jaws.Jaws.Logger] is configured.
+// A composite UI that delegates rendering and updating to a Template must use Template
+// values equal under == for both calls; using unequal values is unsupported. A claim
+// survives a render error the delegating renderer handles, so a later update through an
+// equal Template value can still run when the delegator preserves the wrapped Template's
+// DOM target.
 //
 // The OuterHTMLTag field identifies the generated wrapper element used for
 // partial templates. If OuterHTMLTag is empty, the template is rendered without
@@ -53,60 +85,64 @@ type Template struct {
 	OuterHTMLTag string // Optional wrapper tag for partial templates, for example "div" or "tr"; empty renders unwrapped.
 	Name         string // Template name to be looked up using Jaws.LookupTemplate.
 	Dot          any    // Dot value to place in With.
-	// mu serializes the owned operations, which run on the rendering goroutine and
-	// on the request loop goroutine during updates (mirrors ContainerHelper).
-	mu sync.Mutex
-	// owned are the Elements created while the template executed, in creation
-	// order. It tracks one live Element's nested UI.
-	owned []*jaws.Element
 }
 
 var (
-	_ jaws.UI                 = (*Template)(nil) // statically ensure interface is defined
-	_ jaws.ClickHandler       = (*Template)(nil) // statically ensure interface is defined
-	_ jaws.ContextMenuHandler = (*Template)(nil) // statically ensure interface is defined
-	_ jaws.InputHandler       = (*Template)(nil) // statically ensure interface is defined
+	_ jaws.UI                 = Template{} // statically ensure interface is defined
+	_ jaws.ClickHandler       = Template{} // statically ensure interface is defined
+	_ jaws.ContextMenuHandler = Template{} // statically ensure interface is defined
+	_ jaws.InputHandler       = Template{} // statically ensure interface is defined
 )
 
-// The methods below dereference tmpl without a nil check, like the other
-// pointer-based widgets in this package (*Span, *Container, *JsVar): jaws.UI accepts
-// a typed nil and dispatches to it, but leaves surviving a nil receiver to the
-// concrete type, and this package documents that none of its widgets do (see doc.go).
-// A zero &Template{} is the supported empty value and reports ErrMissingTemplate.
-
-// String returns a debug representation of t.
-func (tmpl *Template) String() string {
-	return fmt.Sprintf("{%q, %q, %s}", tmpl.OuterHTMLTag, tmpl.Name, tag.TagString(tmpl.Dot))
+// templateState is the per-Element state a Template claims while rendering, held in the
+// Element's widget state slot so the Template itself stays a stateless comparable value.
+type templateState struct {
+	// mu serializes the owned operations, which run on the rendering goroutine and
+	// on the request loop goroutine during updates (mirrors ContainerHelper).
+	mu sync.Mutex
+	// owned are the Elements created while the template executed, in creation order.
+	owned []*jaws.Element
 }
 
-// ownElement records child as created while tmpl's template executed. It is the
+// templateStateOf returns the state claimed for elem, or nil if no Template rendered it.
+func templateStateOf(elem *jaws.Element) (st *templateState) {
+	st, _ = jaws.ElementState(elem).(*templateState)
+	return
+}
+
+// ownElement records child as created while the template executed. It is the
 // [RequestWriter] element-created hook installed by execute, so it is called as soon
 // as the Element exists and makes no assumption about whether it rendered.
-func (tmpl *Template) ownElement(child *jaws.Element) {
-	tmpl.mu.Lock()
-	tmpl.owned = append(tmpl.owned, child)
-	tmpl.mu.Unlock()
+func (st *templateState) ownElement(child *jaws.Element) {
+	st.mu.Lock()
+	st.owned = append(st.owned, child)
+	st.mu.Unlock()
 }
 
 // takeOwnedElements returns the Elements created by the most recent execution and
 // clears the tracking state, transferring responsibility for unregistering them to
 // the caller. It implements elementOwner.
-func (tmpl *Template) takeOwnedElements() (owned []*jaws.Element) {
-	tmpl.mu.Lock()
-	owned, tmpl.owned = tmpl.owned, nil
-	tmpl.mu.Unlock()
+func (st *templateState) takeOwnedElements() (owned []*jaws.Element) {
+	st.mu.Lock()
+	owned, st.owned = st.owned, nil
+	st.mu.Unlock()
 	return
 }
 
 // restoreOwnedElements makes owned the tracked set again, for an update whose
 // output was discarded and whose previous Elements still match the browser DOM.
-func (tmpl *Template) restoreOwnedElements(owned []*jaws.Element) {
-	tmpl.mu.Lock()
-	tmpl.owned = owned
-	tmpl.mu.Unlock()
+func (st *templateState) restoreOwnedElements(owned []*jaws.Element) {
+	st.mu.Lock()
+	st.owned = owned
+	st.mu.Unlock()
 }
 
-func (tmpl *Template) lookup(elem *jaws.Element) (lookedUp *template.Template, err error) {
+// String returns a debug representation of t.
+func (tmpl Template) String() string {
+	return fmt.Sprintf("{%q, %q, %s}", tmpl.OuterHTMLTag, tmpl.Name, tag.TagString(tmpl.Dot))
+}
+
+func (tmpl Template) lookup(elem *jaws.Element) (lookedUp *template.Template, err error) {
 	err = errMissingTemplate(tmpl.Name)
 	if lookedUp = elem.Request.Jaws.LookupTemplate(tmpl.Name); lookedUp != nil {
 		err = nil
@@ -114,7 +150,7 @@ func (tmpl *Template) lookup(elem *jaws.Element) (lookedUp *template.Template, e
 	return
 }
 
-func (tmpl *Template) auth(elem *jaws.Element) (auth jaws.Auth) {
+func (tmpl Template) auth(elem *jaws.Element) (auth jaws.Auth) {
 	if f := elem.Request.Jaws.MakeAuth; f != nil {
 		auth = f(elem.Request)
 	} else {
@@ -125,8 +161,13 @@ func (tmpl *Template) auth(elem *jaws.Element) (auth jaws.Auth) {
 	return
 }
 
-func (tmpl *Template) execute(elem *jaws.Element, w io.Writer, lookedUp *template.Template) (err error) {
-	// The hook makes tmpl own the Elements the template creates through this writer.
+// execute runs the template with st owning the Elements it creates.
+//
+// st is a parameter rather than something execute loads, so every entry point has to
+// establish the state deliberately — pageTemplate renders without going through render,
+// and would otherwise silently track nothing.
+func (tmpl Template) execute(elem *jaws.Element, w io.Writer, lookedUp *template.Template, st *templateState) (err error) {
+	// The hook makes st own the Elements the template creates through this writer.
 	// A nested RequestWriter.Template builds its own writer in its own execute, so
 	// each level owns only its direct children and deeper ones are reached through
 	// them; see appendOwnedElements.
@@ -136,7 +177,7 @@ func (tmpl *Template) execute(elem *jaws.Element, w io.Writer, lookedUp *templat
 	// races on the shared io.Writer, and on the render as a whole.
 	err = lookedUp.Execute(w, With{
 		Element:       elem,
-		RequestWriter: RequestWriter{Request: elem.Request, Writer: w, elementCreated: tmpl.ownElement},
+		RequestWriter: RequestWriter{Request: elem.Request, Writer: w, elementCreated: st.ownElement},
 		Dot:           tmpl.Dot,
 		Auth:          tmpl.auth(elem),
 	})
@@ -156,7 +197,14 @@ func writeTemplateWrapperStart(elem *jaws.Element, w io.Writer, outerHTMLTag str
 	return
 }
 
-func (tmpl *Template) render(elem *jaws.Element, w io.Writer, params []any) (err error) {
+func (tmpl Template) render(elem *jaws.Element, w io.Writer, params []any) (err error) {
+	// Claim the state slot before anything observable happens: tag registration, handler
+	// registration and every write come after, so a contended Element fails having
+	// changed nothing rather than having half-registered itself.
+	st := &templateState{}
+	if err = jaws.SetElementState(elem, st); err != nil {
+		return
+	}
 	doWrap := tmpl.OuterHTMLTag != ""
 	var expandedTags []any
 	if expandedTags, err = tag.TagExpand(elem.Request, tmpl.Dot); err == nil {
@@ -170,7 +218,7 @@ func (tmpl *Template) render(elem *jaws.Element, w io.Writer, params []any) (err
 				err = writeTemplateWrapperStart(elem, w, tmpl.OuterHTMLTag, attrs)
 			}
 			if err == nil {
-				err = tmpl.execute(elem, w, lookedUp)
+				err = tmpl.execute(elem, w, lookedUp, st)
 				if doWrap {
 					// Always emit the closing tag, even when execute failed, to balance
 					// the start tag already written above (mirrors
@@ -183,8 +231,9 @@ func (tmpl *Template) render(elem *jaws.Element, w io.Writer, params []any) (err
 				if err != nil {
 					// The Element itself is unregistered by whoever created it
 					// (RequestWriter.NewUI, or a container). Its nested UI is ours to
-					// drop, since it will never be updated.
-					deleteOwnedElements(elem.Request, tmpl.takeOwnedElements())
+					// drop, since it will never be updated. The claim itself stays, so a
+					// caller that handles this error can still update the Element.
+					deleteOwnedElements(elem.Request, st.takeOwnedElements())
 				}
 			}
 		}
@@ -195,12 +244,16 @@ func (tmpl *Template) render(elem *jaws.Element, w io.Writer, params []any) (err
 // JawsRender renders t through the request's configured template lookupers,
 // streaming output directly to w. Template execution has the best-effort error
 // behavior described on [Template].
-func (tmpl *Template) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
+//
+// It claims the [jaws.Element]'s widget state slot before doing anything else, so
+// rendering a second Template into one Element fails with
+// [jaws.ErrElementStateClaimed] having changed nothing.
+func (tmpl Template) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	err = tmpl.render(elem, w, params)
 	return
 }
 
-// JawsUpdate re-renders t into the template wrapper.
+// JawsUpdate re-renders the Template into its wrapper.
 //
 // Unwrapped templates have no generated DOM element to update, so updates are
 // ignored; nested JaWS UI rendered by the template can still update through its own
@@ -213,22 +266,34 @@ func (tmpl *Template) JawsRender(elem *jaws.Element, w io.Writer, params []any) 
 // instead and the previous ones stay live to match the unchanged DOM. See [Template]
 // for which Elements are tracked.
 //
-// Lookup or execution errors are reported through [jaws.Request.MustLog], which may
-// panic when no [jaws.Jaws.Logger] is configured.
-func (tmpl *Template) JawsUpdate(elem *jaws.Element) {
+// A wrapped Template updates only an Element rendered by a Template value equal under ==
+// (see [jaws.SetElementState]); using an unequal value for the update is unsupported. With
+// no claim there is nothing to reconcile against, so it executes nothing and reports
+// [ErrElementStateUnclaimed]. That makes a wrapped Template unusable as a
+// [RequestWriter.Register] updater, since RequestWriter.Register never invokes the
+// updater's [Template.JawsRender]. Lookup happens first, so a missing template reports
+// [ErrMissingTemplate] and the missing-claim diagnostic is reached only after a
+// successful lookup.
+//
+// Lookup, missing-state or execution errors are reported through
+// [jaws.Request.MustLog], which may panic when no [jaws.Jaws.Logger] is configured.
+func (tmpl Template) JawsUpdate(elem *jaws.Element) {
 	if tmpl.OuterHTMLTag != "" {
 		lookedUp, err := tmpl.lookup(elem)
 		if err == nil {
-			// Detach before executing so the new Elements accumulate on their own; a
-			// lookup failure returns above with the set untouched.
-			previous := tmpl.takeOwnedElements()
-			var sb strings.Builder
-			if err = tmpl.execute(elem, &sb, lookedUp); err == nil {
-				elem.SetInner(template.HTML(sb.String())) // #nosec G203
-				deleteOwnedElements(elem.Request, previous)
+			if st := templateStateOf(elem); st == nil {
+				err = errElementStateUnclaimed(tmpl.Name)
 			} else {
-				deleteOwnedElements(elem.Request, tmpl.takeOwnedElements())
-				tmpl.restoreOwnedElements(previous)
+				// Detach before executing so the new Elements accumulate on their own.
+				previous := st.takeOwnedElements()
+				var sb strings.Builder
+				if err = tmpl.execute(elem, &sb, lookedUp, st); err == nil {
+					elem.SetInner(template.HTML(sb.String())) // #nosec G203
+					deleteOwnedElements(elem.Request, previous)
+				} else {
+					deleteOwnedElements(elem.Request, st.takeOwnedElements())
+					st.restoreOwnedElements(previous)
+				}
 			}
 		}
 		elem.Request.MustLog(err)
@@ -236,7 +301,7 @@ func (tmpl *Template) JawsUpdate(elem *jaws.Element) {
 }
 
 // JawsClick delegates click events to t.Dot when it implements [jaws.ClickHandler].
-func (tmpl *Template) JawsClick(elem *jaws.Element, click jaws.Click) (err error) {
+func (tmpl Template) JawsClick(elem *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
 	if h, ok := tmpl.Dot.(jaws.ClickHandler); ok {
 		err = h.JawsClick(elem, click)
@@ -246,7 +311,7 @@ func (tmpl *Template) JawsClick(elem *jaws.Element, click jaws.Click) (err error
 
 // JawsContextMenu delegates context-menu events to t.Dot when it implements
 // [jaws.ContextMenuHandler].
-func (tmpl *Template) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err error) {
+func (tmpl Template) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
 	if h, ok := tmpl.Dot.(jaws.ContextMenuHandler); ok {
 		err = h.JawsContextMenu(elem, click)
@@ -255,7 +320,7 @@ func (tmpl *Template) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err
 }
 
 // JawsInput delegates input events to t.Dot when it implements [jaws.InputHandler].
-func (tmpl *Template) JawsInput(elem *jaws.Element, value string) (err error) {
+func (tmpl Template) JawsInput(elem *jaws.Element, value string) (err error) {
 	err = jaws.ErrEventUnhandled
 	if h, ok := tmpl.Dot.(jaws.InputHandler); ok {
 		err = h.JawsInput(elem, value)
@@ -272,10 +337,16 @@ func (tmpl *Template) JawsInput(elem *jaws.Element, value string) (err error) {
 // [jaws.Jaws.LookupTemplate]. See [Template] for the field semantics, event
 // delegation and best-effort error behavior.
 //
-// The returned Template is request-scoped and tracks the Elements one live
-// [jaws.Element] renders; call NewTemplate again for each place it is rendered.
-func NewTemplate(outerHTMLTag, name string, dot any) *Template {
-	return &Template{OuterHTMLTag: outerHTMLTag, Name: name, Dot: dot}
+// The returned Template holds no per-Element state, so equal Templates are
+// interchangeable and a container that rebuilds its children on every
+// [jaws.Container.JawsContains] call still reuses their Elements. dot may be a nil
+// interface, which contributes no tag. Otherwise it must be comparable at runtime, equal
+// to itself and usable as a tag because rendering expands it through
+// [github.com/linkdata/jaws/lib/tag.TagExpand]. See [Template] for the exact rejected
+// dynamic types; the rules distinguish aliases from new defined types. Use the returned
+// Template as a value; taking its address is unsupported.
+func NewTemplate(outerHTMLTag, name string, dot any) Template {
+	return Template{OuterHTMLTag: outerHTMLTag, Name: name, Dot: dot}
 }
 
 // Template renders the named partial template with dot exposed as [With.Dot],

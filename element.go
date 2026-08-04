@@ -39,9 +39,13 @@ type Element struct {
 	// All builds enforce this: appendHandlers drops late mutations (debug builds
 	// panic).
 	handlers []any
-	jid      jid.Jid     // JaWS ID, unique to this Element within its Request
-	deleted  atomic.Bool // true once the Element has been removed from its Request
-	frozen   atomic.Bool // set when handlers are sealed (JawsRender returns or Freeze called); guards handler mutators in all builds
+	// data is the widget state slot, claimed by the widget rendering this Element and
+	// reached through [ElementState] and [SetElementState]. It is guarded by
+	// Request.mu; the stored value's own synchronization guards its contents.
+	data    any
+	jid     jid.Jid     // JaWS ID, unique to this Element within its Request
+	deleted atomic.Bool // true once the Element has been removed from its Request
+	frozen  atomic.Bool // set when handlers are sealed (JawsRender returns or Freeze called); guards handler mutators in all builds
 }
 
 // String returns a debug representation of elem: its UI type, Jid, and tags.

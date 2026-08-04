@@ -22,16 +22,34 @@ func mustMatch(t *testing.T, pattern, got string) {
 
 func newCoreRequest(t *testing.T) (*jaws.Jaws, *jaws.Request) {
 	t.Helper()
+	return newConfiguredCoreRequest(t, nil)
+}
+
+// newConfiguredCoreRequest runs configure against the fresh [jaws.Jaws] before the
+// [jaws.Request] exists, which the Jaws documentation requires of every exported
+// configuration field: they are ordinary fields, so setting one after Requests are
+// created is an unsynchronized write. Tests that need a Logger use this rather than
+// assigning jw.Logger to a Jaws that already has a Request.
+func newConfiguredCoreRequest(t *testing.T, configure func(*jaws.Jaws)) (*jaws.Jaws, *jaws.Request) {
+	t.Helper()
 	jw, err := jaws.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(jw.Close)
+	if configure != nil {
+		configure(jw)
+	}
 	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	if rq == nil {
 		t.Fatal("nil request")
 	}
 	return jw, rq
+}
+
+// withLogger returns a configure func for [newConfiguredCoreRequest] that installs logger.
+func withLogger(logger *templateLogger) func(*jaws.Jaws) {
+	return func(jw *jaws.Jaws) { jw.Logger = logger }
 }
 
 func newCoreSessionBoundRequest(t *testing.T) (*jaws.Jaws, *jaws.Request) {
