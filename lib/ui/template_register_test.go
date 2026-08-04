@@ -37,8 +37,8 @@ func newRegisterRequest(t *testing.T, logger *templateLogger) (*jaws.Jaws, *jaws
 }
 
 // TestRegister_WrappedTemplateUpdaterReportsUnclaimed checks every reporting path for a
-// wrapped Template updater. Register never renders its Element, so the Template has no state
-// claim to update against.
+// wrapped Template updater. RequestWriter.Register never calls the Template's renderer,
+// so the Template has no state claim to update against.
 func TestRegister_WrappedTemplateUpdaterReportsUnclaimed(t *testing.T) {
 	wrapped := NewTemplate("div", "reg-plain", tag.Tag("dot"))
 

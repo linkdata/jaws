@@ -12,17 +12,18 @@ var ErrElementStateNil = errors.New("jaws: element state must not be nil")
 
 // ElementState returns the widget state stored for elem, or nil if none was claimed.
 //
-// The state belongs to the [Element], not to the widget value that claimed it, so any
-// widget of the claiming type recognizes it. Loading never claims: a widget that finds
-// no state did not claim this Element. Most widgets never claim one, so a nil return
-// says nothing about whether the Element was rendered.
+// The state belongs to the [Element], not to the widget value that claimed it.
+// ElementState therefore does not identify its caller, but that storage detail does not
+// permit a different UI widget to update the Element; see [Updater]. Loading never
+// claims: a widget that finds no state did not claim this Element. Most widgets never
+// claim one, so a nil return says nothing about whether the Element was rendered.
 //
 // Safe for concurrent use; it takes the [Request] lock. Only the slot itself is
 // synchronized: whatever the stored value contains is guarded by that value's own
 // synchronization, not by this call.
 //
-// elem must belong to a [Request]: ElementState dereferences elem.Request, so a nil
-// elem, or one not obtained from [Request.NewElement], panics.
+// elem must be a non-nil Element obtained from [Request.NewElement]. ElementState does
+// not verify that provenance. It panics if elem or elem.Request is nil.
 func ElementState(elem *Element) (state any) {
 	rq := elem.Request
 	rq.mu.RLock()
@@ -50,9 +51,9 @@ func ElementState(elem *Element) (state any) {
 // the claim is synchronized; mutating the stored value afterwards is guarded by that
 // value's own synchronization, not by this call.
 //
-// elem must belong to a [Request]: SetElementState dereferences elem.Request, so a nil
-// elem, or one not obtained from [Request.NewElement], panics — except when state is nil,
-// which is rejected before elem is touched.
+// When state is non-nil, elem must be a non-nil Element obtained from
+// [Request.NewElement]. SetElementState does not verify that provenance. It panics if
+// elem or elem.Request is nil; a nil state is rejected before elem is examined.
 func SetElementState(elem *Element, state any) error {
 	// The two functions are package-level rather than methods on Element because
 	// ui.With embeds both *Element and ui.RequestWriter, so any method returning a value

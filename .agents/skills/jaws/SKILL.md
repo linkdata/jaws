@@ -104,6 +104,8 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
 
 - `ui.Template` expands `Dot` into tags via `tag.TagExpand` (package `github.com/linkdata/jaws/lib/tag`, imported as `tag`); the root dot is part of identity/tag behavior.
 - `ui.Template` is for partial templates only; full document/page templates should be rendered through `ui.Handler`.
+- A nil-interface Template `Dot` is valid and contributes no tag; a typed nil follows its
+  dynamic type's comparability and expansion behavior.
 - The root dot **must** be comparable at runtime and equal to itself: `ui.NewTemplate`
   returns a value, so the dot is part of the widget the container widgets use as a map key.
   A slice, map, func or NaN-bearing dot makes the widget unusable as a container child.
@@ -113,9 +115,11 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
   changes container reuse to pointer identity. `ui.Handler` is the arbitrary-dot exception.
 - `tag.TagExpand` rejects exactly these as tags: `string`, `bool`, `int`/`int8`/`int16`/`int32`/`int64`,
   `uint`/`uint8`/`uint16`/`uint32`/`uint64`, `float32`/`float64`, `template.HTML`, `template.HTMLAttr`,
-  `jid.Jid` and `key.Key`. It is a switch on exact types, so `uintptr`, the complex types and your own
-  named types (`type RowID string`) are not rejected by it — they still have to be comparable and equal
-  to themselves, and one implementing `tag.TagGetter` is expanded instead.
+  `jid.Jid` and `key.Key`. It is a switch on exact types, so aliases of a rejected type are rejected,
+  while `uintptr` and the complex types are not on the rejection list. Other defined types
+  (`type RowID string`) are not rejected merely because their underlying predeclared type is on it —
+  they still have to be comparable and equal to themselves, and one implementing `tag.TagGetter` is
+  expanded instead.
 - This applies to a Template's `Dot` too, since rendering expands it: a comparable, reflexive `string`
   dot still fails at render with `illegal tag type string`.
 - If you need string-like semantic tags, use `tag.Tag("...")` or a comparable typed struct/pointer.
@@ -178,8 +182,10 @@ For clickable content rendering:
   every call and their Elements are still reused — that equality *is* the reuse key.
 - The state slot is claimed while rendering, which constrains composition:
   - at most one Template may render a given Element;
-  - a **wrapped** Template updates only an Element some Template rendered, so it is not
-    usable as a `$.Register` updater;
+  - a composite UI must use Template values equal under `==` for rendering and updating
+    an Element; using unequal values is unsupported;
+  - a **wrapped** Template updates only an Element rendered by an equal Template value, so
+    it is not usable as a `$.Register` updater;
   - an **unwrapped** Template is usable there — its updates are a documented no-op — but only
     `$.Register` (the `RequestWriter` helper) also delivers its click/input/context-menu
     handlers; a bare `ui.Register`/`ui.NewRegister` value promotes no handler methods.

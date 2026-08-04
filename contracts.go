@@ -108,6 +108,9 @@ type Updater interface {
 	// JawsUpdate is called for an [Element] that has been marked dirty to update its HTML.
 	// Do not call this yourself unless it is from within another JawsUpdate implementation.
 	// The engine does not invoke this once the [Element] is deleted (see [Element.Deleted]).
+	// A UI implementation that delegates rendering and updating must delegate both calls
+	// to the same UI widget. Rendering elem through one widget and updating it through
+	// another is unsupported.
 	JawsUpdate(elem *Element)
 }
 

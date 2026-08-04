@@ -57,18 +57,25 @@ Template must be comparable at runtime and equal to itself — a slice, map or f
 makes the whole widget unusable, and implementing `tag.TagGetter` does not change that,
 since it addresses tag resolution rather than widget comparability.
 
-Comparability alone is not enough: rendering expands `Dot` through `tag.TagExpand`, which
-rejects `string`, `bool`, the sized and unsized integer and float types, `template.HTML`,
-`template.HTMLAttr`, `jid.Jid` and `key.Key`. A plain `string` `Dot` is comparable and
-equal to itself yet still fails at render, so wrap such values in `tag.Tag("...")` or a
-comparable struct.
+Comparability alone is not enough. A nil-interface `Dot` is valid and contributes no tag.
+A typed nil is a non-nil interface and follows its dynamic type's comparability and
+expansion rules. Rendering expands a non-nil-interface `Dot` through `tag.TagExpand`,
+which rejects the exact dynamic types `string`, `bool`, `int`/`int8`/`int16`/`int32`/`int64`,
+`uint`/`uint8`/`uint16`/`uint32`/`uint64`, `float32`/`float64`, `template.HTML`,
+`template.HTMLAttr`, `jid.Jid` and `key.Key`. Aliases of a rejected type have that same
+dynamic type and are rejected. `uintptr` and the complex types are not on the rejection
+list. Other defined types are not rejected merely because their underlying predeclared
+type is on it; they must still be comparable and equal to themselves. Wrap a rejected
+scalar in `tag.Tag("...")` or a comparable struct when it should be a tag.
 
 A template claims that slot while rendering, so at most one template may render a given
-element, and a wrapped template updates only an element some template rendered. A wrapped
-template is therefore not usable as a `$.Register` updater — Register never renders its
-element — while an unwrapped one is, since its updates are a documented no-op. On an
-element no template claimed, a wrapped template's update reports `ErrElementStateUnclaimed`
-through `jaws.Request.MustLog`, which **panics** when no `Jaws.Logger` is configured.
+element. A composite UI must use template values equal under `==` for rendering and
+updating that element; using unequal values is unsupported. A wrapped template is
+therefore not usable as a `$.Register` updater — `$.Register` never invokes its updater's
+render method — while an unwrapped one is, since its updates are a documented no-op. On
+an element no template claimed, a wrapped template's update reports
+`ErrElementStateUnclaimed` through `jaws.Request.MustLog`, which **panics** when no
+`Jaws.Logger` is configured.
 
 You can also use explicit constructors through:
 

@@ -27,12 +27,17 @@ import (
 // Like every [jaws.UI] value passed to [jaws.Request.NewElement], a Template must be
 // comparable at runtime and equal to itself because the container widgets use UI values
 // as map keys. A Dot holding a slice, map, func or NaN makes the Template unusable.
-// Comparability is necessary but not sufficient: rendering expands Dot through
-// [github.com/linkdata/jaws/lib/tag.TagExpand], which rejects the types listed there —
-// among them string, bool, the sized and unsized integer and float types,
-// [html/template.HTML], [html/template.HTMLAttr], [github.com/linkdata/jaws/lib/jid.Jid]
-// and [github.com/linkdata/jaws/lib/key.Key]. A plain string Dot is comparable and equal
-// to itself, yet fails at render. [Handler] is the arbitrary-Dot exception; its private
+// Comparability is necessary but not sufficient. A nil-interface Dot is valid and
+// contributes no tag. A typed nil is a non-nil interface and follows its dynamic type's
+// comparability and expansion rules. Rendering expands a non-nil-interface Dot through
+// [github.com/linkdata/jaws/lib/tag.TagExpand], which rejects the exact dynamic types
+// string, bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64,
+// float32, float64, [html/template.HTML], [html/template.HTMLAttr],
+// [github.com/linkdata/jaws/lib/jid.Jid] and [github.com/linkdata/jaws/lib/key.Key].
+// Aliases of a rejected type have that same dynamic type and are rejected. uintptr and
+// the complex types are not on the rejection list. Other defined types are not rejected
+// merely because their underlying predeclared type is on it; they must still be comparable
+// and equal to themselves. [Handler] is the arbitrary-Dot exception; its private
 // whole-page renderer is distinct from a Template widget and does not use the page dot as
 // a tag.
 //
@@ -40,10 +45,11 @@ import (
 // Element. On an Element no Template claimed, an unwrapped [Template.JawsUpdate] is a
 // no-op while a wrapped one executes nothing and reports [ErrElementStateUnclaimed]
 // through [jaws.Request.MustLog], which panics when no [jaws.Jaws.Logger] is configured.
-// The claim belongs to the Element rather than to the Template value that installed it,
-// so a composite renderer may legitimately delegate JawsRender to one Template and
-// JawsUpdate to another; and a claim survives a render error the delegating renderer
-// handles, so a later update still runs.
+// A composite UI that delegates rendering and updating to a Template must use Template
+// values equal under == for both calls; using unequal values is unsupported. A claim
+// survives a render error the delegating renderer handles, so a later update through an
+// equal Template value can still run when the delegator preserves the wrapped Template's
+// DOM target.
 //
 // The OuterHTMLTag field identifies the generated wrapper element used for
 // partial templates. If OuterHTMLTag is empty, the template is rendered without
@@ -247,7 +253,7 @@ func (tmpl Template) JawsRender(elem *jaws.Element, w io.Writer, params []any) (
 	return
 }
 
-// JawsUpdate re-renders t into the template wrapper.
+// JawsUpdate re-renders the Template into its wrapper.
 //
 // Unwrapped templates have no generated DOM element to update, so updates are
 // ignored; nested JaWS UI rendered by the template can still update through its own
@@ -260,12 +266,14 @@ func (tmpl Template) JawsRender(elem *jaws.Element, w io.Writer, params []any) (
 // instead and the previous ones stay live to match the unchanged DOM. See [Template]
 // for which Elements are tracked.
 //
-// A wrapped Template updates only an Element some Template claimed while rendering it
-// (see [jaws.SetElementState]); with no claim there is nothing to reconcile against, so
-// it executes nothing and reports [ErrElementStateUnclaimed]. That makes a wrapped
-// Template unusable as a [RequestWriter.Register] updater, since Register never renders
-// its Element. Lookup happens first, so a missing template reports [ErrMissingTemplate]
-// and the missing-claim diagnostic is reached only after a successful lookup.
+// A wrapped Template updates only an Element rendered by a Template value equal under ==
+// (see [jaws.SetElementState]); using an unequal value for the update is unsupported. With
+// no claim there is nothing to reconcile against, so it executes nothing and reports
+// [ErrElementStateUnclaimed]. That makes a wrapped Template unusable as a
+// [RequestWriter.Register] updater, since RequestWriter.Register never invokes the
+// updater's [Template.JawsRender]. Lookup happens first, so a missing template reports
+// [ErrMissingTemplate] and the missing-claim diagnostic is reached only after a
+// successful lookup.
 //
 // Lookup, missing-state or execution errors are reported through
 // [jaws.Request.MustLog], which may panic when no [jaws.Jaws.Logger] is configured.
@@ -331,11 +339,12 @@ func (tmpl Template) JawsInput(elem *jaws.Element, value string) (err error) {
 //
 // The returned Template holds no per-Element state, so equal Templates are
 // interchangeable and a container that rebuilds its children on every
-// [jaws.Container.JawsContains] call still reuses their Elements. dot must be comparable
-// at runtime, equal to itself, and usable as a tag: rendering expands it through
-// [github.com/linkdata/jaws/lib/tag.TagExpand], so a plain string, bool, integer or float
-// dot is rejected at render even though it satisfies comparability. See [Template] for
-// the full list. Use the returned Template as a value; taking its address is unsupported.
+// [jaws.Container.JawsContains] call still reuses their Elements. dot may be a nil
+// interface, which contributes no tag. Otherwise it must be comparable at runtime, equal
+// to itself and usable as a tag because rendering expands it through
+// [github.com/linkdata/jaws/lib/tag.TagExpand]. See [Template] for the exact rejected
+// dynamic types; the rules distinguish aliases from new defined types. Use the returned
+// Template as a value; taking its address is unsupported.
 func NewTemplate(outerHTMLTag, name string, dot any) Template {
 	return Template{OuterHTMLTag: outerHTMLTag, Name: name, Dot: dot}
 }
