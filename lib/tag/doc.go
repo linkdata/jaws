@@ -1,13 +1,80 @@
-// Package tag expands JaWS tag values into comparable keys that identify
-// elements during dirtying, broadcasts and event routing.
+// Package tag expands JaWS tag values into keys used to associate elements with
+// application dependencies.
 //
-// [TagExpand] rejects expanded key values that cannot be matched reliably as
-// tags, including values whose static type is comparable but whose runtime
-// contents are not, and otherwise admissible values containing NaN that do not
-// equal themselves.
+// Tags associate [github.com/linkdata/jaws.Element] values with the application
+// state and logical signals on which their output or tag-addressed behavior
+// depends. After changing state, applications pass the corresponding keys to
+// [github.com/linkdata/jaws.Request.Dirty] to schedule updates of matching Elements
+// across live Requests, or use them as destinations for
+// [github.com/linkdata/jaws.Jaws.Broadcast] and its helpers. A tag does not observe
+// application state or cause an update by itself.
 //
-// [TagGetter] defines the contract an object implements to report its own tags,
-// including the idempotent tag identity every implementation owes while its tags are
-// registered on a live element. Expansion takes no request context: a tag value
-// expands the same way regardless of which request or goroutine expands it.
+// # Choosing tags
+//
+// Prefer stable identities derived from the authoritative application data being
+// rendered. Use a pointer to that data when a widget depends on the object as a
+// whole. Use a distinct comparable wrapper type when independently changing aspects
+// of one object need separate keys. When no data object provides an identity, use a
+// named empty struct for a shared signal.
+//
+// For example, a widget displaying a user's name can listen both to the user and
+// specifically to the name:
+//
+//	type UserData struct {
+//		Name string
+//	}
+//	type userNameTag struct{ User *UserData }
+//	type clockTag struct{}
+//
+//	nameElem.Tag(user, userNameTag{User: user})
+//	clockElem.Tag(clockTag{})
+//
+//	rq.Dirty(userNameTag{User: user}) // the name changed
+//	rq.Dirty(user)                    // the user was deleted or changed as a whole
+//	rq.Dirty(clockTag{})               // the displayed time changed
+//
+// Name a tag for the dependency it identifies, not the event that dirties it;
+// prefer userNameTag to userDataNameChange.
+//
+// # Expansion and TagGetter
+//
+// [TagExpand] recursively flattens tag keys, []Tag and []any collections, and
+// [TagGetter] values into unique, usable keys. Keys must be comparable at runtime
+// and equal to themselves; see [TagExpand] for the accepted inputs and error behavior.
+//
+// [TagGetter] defines expansion only; implementing it does not by itself register an
+// Element. [TagGetter.JawsGetTag] may return nil during an explicitly documented
+// initialization phase. After its first non-nil result, later calls must expand to
+// the same set of keys. Expansion receives no rendering or Request context, may occur
+// before a widget renders, and has no call-count guarantee. Nil expands to no keys.
+// Passing a nil-phase value through the normal expanding registration, dirtying or
+// broadcast APIs has no later effect when initialization completes. See [TagGetter]
+// for returned-container and concurrency requirements.
+//
+// [github.com/linkdata/jaws.Request.Tag] and the normal targeting APIs apply the same
+// expansion. A shared group key returned by [TagGetter.JawsGetTag] therefore also
+// broadens Dirty(value) to that group. Register group dependencies separately when
+// item-level dirtying must remain narrow.
+//
+// # Registration and use
+//
+// [github.com/linkdata/jaws.Request.Tag] and
+// [github.com/linkdata/jaws.Element.Tag] expand and register tags. Registration is
+// additive: tags may be added during rendering or updating and remain until the
+// Element is removed or its Request ends. Prefer registering known dependencies
+// during initial rendering. Add one during an update only when it is discovered
+// later and remains valid for the Element's lifetime.
+//
+// Adding a tag does not schedule an update or change an operation whose targets were
+// already selected. Register a required dependency before calling Dirty or Broadcast;
+// do not rely on a later registration observing an earlier operation.
+//
+// JaWS does not remove individual tag associations. Design each registered key to
+// remain a valid dependency for the Element's lifetime. Removing or unregistering the
+// Element removes all of its associations.
+//
+// [github.com/linkdata/jaws.Request.TagsOf] returns an Element's registered keys.
+// [github.com/linkdata/jaws.Request.HasTag] is an advanced test for one
+// already-expanded key; it does not expand or validate its argument, and invalid
+// values may panic. [github.com/linkdata/jaws.Request.GetElements] expands its input.
 package tag
