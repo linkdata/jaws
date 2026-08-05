@@ -43,13 +43,13 @@
 // and equal to themselves; see [TagExpand] for the accepted inputs and error behavior.
 //
 // [TagGetter] defines expansion only; implementing it does not by itself register an
-// Element. [TagGetter.JawsGetTag] may return nil during an explicitly documented
-// initialization phase. After its first non-nil result, later calls must expand to
-// the same set of keys. Expansion receives no rendering or Request context, may occur
-// before a widget renders, and has no call-count guarantee. Nil expands to no keys.
-// Passing a nil-phase value through the normal expanding registration, dirtying or
-// broadcast APIs has no later effect when initialization completes. See [TagGetter]
-// for returned-container and concurrency requirements.
+// Element. [TagGetter.JawsGetTag] may return a nil interface during an explicitly
+// documented initialization phase. After its first non-nil result, later calls must
+// expand to the same set of keys. Expansion receives no rendering or Request context,
+// may occur before a widget renders, and has no call-count guarantee. A nil interface
+// expands to no keys. Passing a nil-phase value through the normal expanding
+// registration, dirtying or broadcast APIs has no later effect when initialization
+// completes. See [TagGetter] for returned-container and concurrency requirements.
 //
 // [github.com/linkdata/jaws.Request.Tag] and the normal targeting APIs apply the same
 // expansion. A shared group key returned by [TagGetter.JawsGetTag] therefore also
@@ -60,10 +60,10 @@
 //
 // [github.com/linkdata/jaws.Request.Tag] and
 // [github.com/linkdata/jaws.Element.Tag] expand and register tags. Registration is
-// additive: tags may be added during rendering or updating and remain until the
-// Element is removed or its Request ends. Prefer registering known dependencies
-// during initial rendering. Add one during an update only when it is discovered
-// later and remains valid for the Element's lifetime.
+// additive: tags may be added during rendering or updating and remain active until
+// the Element is removed or its Request ends. Prefer registering known dependencies
+// during initial rendering. Add one during an update only when it is discovered later
+// and remains valid for the Element's lifetime.
 //
 // Adding a tag does not schedule an update or change an operation whose targets were
 // already selected. Register a required dependency before calling Dirty or Broadcast;

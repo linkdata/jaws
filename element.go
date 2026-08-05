@@ -102,7 +102,10 @@ func (elem *Element) AddHandlers(h ...any) {
 	elem.appendHandlers(h...)
 }
 
-// Tag adds the given tags to the [Element].
+// Tag associates elem with tags.
+//
+// It is shorthand for [Request.Tag]. A deleted Element ignores the call without
+// expanding tags.
 func (elem *Element) Tag(tags ...any) {
 	if !elem.deleted.Load() {
 		elem.Request.Tag(elem, tags...)
@@ -460,10 +463,10 @@ func (elem *Element) validChildElement(operation string, child *Element) (ok boo
 //
 // Returns the list of HTML attributes found, if any.
 //
-// Handlers found in params are added only while the [Element] is mutable; after
-// it is frozen ([Element.JawsRender] returning or [Element.Freeze]) they are
-// dropped (debug builds panic), though tags and HTML attributes are still
-// processed.
+// On a live frozen Element, event-handler params are logged and dropped in production
+// with a configured [Jaws.Logger], while tags and attributes are still processed.
+// Debug builds and servers without a Logger panic first. Params without event handlers
+// continue processing normally.
 func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
 	tags, handlers, rawAttrs := ParseParams(params)
 	if !elem.deleted.Load() {
@@ -490,11 +493,12 @@ func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
 // If getter is an [InputHandler], [ClickHandler], [ContextMenuHandler] or
 // [InitialHTMLAttrHandler], relevant values are added to the [Element].
 //
-// The returned value is the candidate that was passed for tagging, not confirmation
-// that every expanded key was registered; it is nil if getter was nil or its candidate
-// was not usable as a tag. Callers may retain it for later dirtying; what makes that
-// safe is [tag.TagGetter]'s idempotent tag identity. attrs holds any initial HTML
-// attributes provided by InitialHTMLAttrHandler.
+// The returned value is the candidate considered for tagging, not confirmation that
+// any expanded key was registered. It is nil if getter or its candidate is a nil
+// interface, or if the candidate is ineligible for tag expansion. A non-nil candidate
+// accepted by [tag.TagExpand] may be retained for later dirtying; TagGetter-derived
+// candidates rely on [tag.TagGetter]'s stable tag identity. attrs holds any initial
+// HTML attributes provided by InitialHTMLAttrHandler.
 //
 // If the [Element] is already frozen and getter is an event handler, the handler
 // is not added: in production with a [Jaws.Logger] configured this is logged and

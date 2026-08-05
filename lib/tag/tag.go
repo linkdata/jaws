@@ -189,15 +189,16 @@ func expand(depth int, tagValue any, result []any, active []any) ([]any, error) 
 
 // TagExpand expands tagValue into a flat list of unique, usable tag keys.
 //
-// tagValue may be nil, a [Tag], a slice of tags, a [TagGetter] or another value that
-// is comparable at runtime and equals itself. The predeclared string, bool, signed
-// integer, unsigned integer other than uintptr, and floating-point types are
-// rejected with [ErrIllegalTagType], as are [template.HTML], [template.HTMLAttr],
-// [jid.Jid] and [key.Key]. This catches common accidental tags. An expanded key
-// value that is not comparable at runtime or does not equal itself is rejected with
-// [ErrNotUsableAsTag] (which also matches [ErrNotComparable] via [errors.Is]).
-// Expansion that exceeds the nesting-depth or total-count limits is rejected with
-// [ErrTooManyTags].
+// tagValue may be nil, a [Tag], []Tag, []any, a [TagGetter] or another value that is
+// comparable at runtime and equals itself. A nil interface contributes no keys. A
+// typed nil is a non-nil interface and follows the normal rules for its dynamic type,
+// including JawsGetTag dispatch when it implements [TagGetter]. The predeclared string,
+// bool, signed integer, unsigned integer other than uintptr, and floating-point types
+// are rejected with [ErrIllegalTagType], as are [template.HTML], [template.HTMLAttr],
+// [jid.Jid] and [key.Key]. This catches common accidental tags. An expanded key value
+// that is not comparable at runtime or does not equal itself is rejected with
+// [ErrNotUsableAsTag] (which also matches [ErrNotComparable] via [errors.Is]). Expansion
+// that exceeds the nesting-depth or total-count limits is rejected with [ErrTooManyTags].
 //
 // On error, result contains the tags expanded before the failure. If an expanded
 // value is not usable as a tag key, result is nil and err matches
@@ -205,9 +206,9 @@ func expand(depth int, tagValue any, result []any, active []any) ([]any, error) 
 //
 // A single call may invoke a [TagGetter] more than once when the same value is
 // reached at several points in the graph, and the same value may be expanded again by
-// any later call. The [TagGetter] values emitted when a cycle is closed become keys
-// themselves. Implementations must therefore satisfy [TagGetter]'s idempotent tag
-// identity requirement.
+// any later call. When a cycle is closed, its participating [TagGetter] values are
+// treated as candidate keys and must themselves be usable as tags. Implementations
+// must therefore satisfy [TagGetter]'s idempotent tag identity requirement.
 //
 // Expansion reads tagValue and any values returned by [TagGetter.JawsGetTag] by
 // reference and never writes to them, so those values must not be mutated

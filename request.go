@@ -715,9 +715,10 @@ func (rq *Request) tryTagsOf(elem *Element) (tags []any, ok bool) {
 	return
 }
 
-// TagsOf returns the tags currently associated with elem in this Request, or nil
-// if elem is nil. The returned slice is a newly allocated snapshot and may be
-// retained and modified by the caller.
+// TagsOf returns a snapshot of the exact keys registered for elem in rq.
+//
+// It returns nil if elem is nil or has no registered keys. The returned slice is
+// caller-owned and has unspecified order.
 func (rq *Request) TagsOf(elem *Element) (tags []any) {
 	if elem != nil {
 		rq.mu.RLock()
@@ -877,6 +878,7 @@ func (rq *Request) appendDirtyTags(tags []any) {
 // [tag.TagExpand] can emit, either from a successful expansion or from a partial
 // result whose error the caller handled. Other values may panic or create
 // registrations that the canonical tag APIs cannot retrieve.
+// Like [Request.Tag], registration is additive and does not schedule an update.
 //
 // It is a no-op for a nil, deleted, or foreign [Element], and after the [Request] has
 // released its tag map.
@@ -899,23 +901,37 @@ func (rq *Request) TagExpanded(elem *Element, expandedTags []any) {
 	}
 }
 
-// Tag adds the given tags to the given [Element].
+// Tag expands and registers tagItems with elem.
+//
+// Registration is additive and does not schedule an update. Calling Tag during
+// rendering or updating is supported, but known dependencies should normally be
+// registered during initial rendering. Associations registered while rq is live
+// remain active until elem is removed or rq ends; individual associations cannot be
+// removed. See package [github.com/linkdata/jaws/lib/tag] for tag selection and
+// lifetime guidance.
 //
 // tagItems are expanded through [Jaws.MustTagExpand], so an expansion error is logged
 // and the partial result still registered when a [Jaws.Logger] is configured, and
 // panics before anything is registered when one is not. Use [Request.TagExpanded] to
 // register keys you expanded yourself.
+//
+// Tag ignores a nil or foreign elem and an empty tagItems list without expansion. It
+// still expands tagItems for a deleted elem, but registers nothing.
 func (rq *Request) Tag(elem *Element, tagItems ...any) {
 	if elem != nil && len(tagItems) > 0 && elem.Request == rq {
 		rq.TagExpanded(elem, rq.Jaws.MustTagExpand(tagItems))
 	}
 }
 
-// GetElements returns a list of the UI elements in the [Request] that have the given tags.
+// GetElements returns the Elements in rq registered under at least one key expanded
+// from tagValue.
 //
 // tagValue is expanded through [Jaws.MustTagExpand], so an expansion error is logged
 // and the partial result still used for the lookup when a [Jaws.Logger] is configured,
 // and panics before the lookup when one is not.
+//
+// Each Element appears at most once. The returned slice is a caller-owned snapshot in
+// unspecified order.
 func (rq *Request) GetElements(tagValue any) (elems []*Element) {
 	expanded := rq.Jaws.MustTagExpand(tagValue)
 	rq.mu.RLock()
