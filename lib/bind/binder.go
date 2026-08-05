@@ -301,7 +301,7 @@ func (b *binder[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 	return
 }
 
-func (b *binder[T]) JawsGetTag(tag.Context) any {
+func (b *binder[T]) JawsGetTag() any {
 	return b.ptr
 }
 

@@ -221,7 +221,7 @@ func writeTestTemplateWrapperStart(elem *Element, w io.Writer, outerHTMLTag stri
 func (t testTemplateUI) JawsRender(elem *Element, w io.Writer, params []any) (err error) {
 	doWrap := t.OuterHTMLTag != ""
 	var expandedTags []any
-	if expandedTags, err = tag.TagExpand(elem.Request, t.Dot); err == nil {
+	if expandedTags, err = tag.TagExpand(t.Dot); err == nil {
 		elem.Request.TagExpanded(elem, expandedTags)
 		tags, handlers, attrs := ParseParams(params)
 		elem.Tag(tags...)
@@ -315,12 +315,11 @@ func newTestTextInputWidget(s testStringSetter) *testTextInputWidget {
 
 func (u *testTextInputWidget) JawsRender(elem *Element, w io.Writer, params []any) (err error) {
 	var getterAttrs []template.HTMLAttr
-	if u.tagValue, getterAttrs, err = elem.ApplyGetter(u.setter); err == nil {
-		attrs := append(elem.ApplyParams(params), getterAttrs...)
-		v := u.setter.JawsGet(elem)
-		u.last = v
-		err = htmlio.WriteHTMLInput(w, elem.Jid(), "text", v, attrs)
-	}
+	u.tagValue, getterAttrs = elem.ApplyGetter(u.setter)
+	attrs := append(elem.ApplyParams(params), getterAttrs...)
+	v := u.setter.JawsGet(elem)
+	u.last = v
+	err = htmlio.WriteHTMLInput(w, elem.Jid(), "text", v, attrs)
 	return
 }
 

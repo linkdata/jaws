@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"html/template"
 	"io"
 
 	"github.com/linkdata/jaws"
@@ -20,11 +19,9 @@ type HTMLInner struct {
 }
 
 func (u *HTMLInner) renderInner(elem *jaws.Element, w io.Writer, htmlTag, htmlType string, params []any) (err error) {
-	var getterAttrs []template.HTMLAttr
-	if _, getterAttrs, err = elem.ApplyGetter(u.HTMLGetter); err == nil {
-		attrs := append(elem.ApplyParams(params), getterAttrs...)
-		err = htmlio.WriteHTMLInner(w, elem.Jid(), htmlTag, htmlType, u.HTMLGetter.JawsGetHTML(elem), attrs...)
-	}
+	_, getterAttrs := elem.ApplyGetter(u.HTMLGetter)
+	attrs := append(elem.ApplyParams(params), getterAttrs...)
+	err = htmlio.WriteHTMLInner(w, elem.Jid(), htmlTag, htmlType, u.HTMLGetter.JawsGetHTML(elem), attrs...)
 	return
 }
 

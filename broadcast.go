@@ -37,10 +37,10 @@ import (
 // Dest is expanded into tags. Plain strings and [Jid] values are illegal tag
 // types; use [tag.Tag], a domain tag, or an [Element] method instead.
 //
-// A [wire.Message.Dest] that cannot be expanded into tags (an illegal tag type)
-// is reported through [Jaws.MustLog], which panics when no [Jaws.Logger] is
-// set; with a Logger the error is logged and the message is sent to the
-// destinations that did expand.
+// That expansion runs through [Jaws.MustTagExpand], which reports a failure such as an
+// illegal tag type through [Jaws.MustLog]: that panics when no [Jaws.Logger] is set,
+// while with a Logger the error is logged and the message is sent to the destinations
+// that did expand.
 func (jw *Jaws) Broadcast(msg wire.Message) {
 	switch msg.What {
 	case what.Replace:
@@ -61,9 +61,7 @@ func (jw *Jaws) Broadcast(msg wire.Message) {
 			return
 		}
 	default:
-		expanded, err := tag.TagExpand(nil, msg.Dest)
-		jw.MustLog(err)
-		expanded = jw.dropNonComparableTags(expanded)
+		expanded := jw.dropNonComparableTags(jw.MustTagExpand(msg.Dest))
 		switch len(expanded) {
 		case 0:
 			// no tags, so no requests will match
@@ -99,10 +97,8 @@ func (jw *Jaws) dropNonComparableTags(tags []any) []any {
 // setDirty marks all Elements that have one or more of the given tags as dirty.
 func (jw *Jaws) setDirty(tags []any) {
 	jw.mu.Lock()
-	// Release the lock with defer so it is freed even if a map insert panics: a tag
-	// that passed the static comparability check in ensureUsableTag can still be
-	// non-comparable at runtime (a comparable struct holding e.g. a func in an
-	// interface field) and panic when used as a map key here.
+	// Public paths validate keys through TagExpand; the deferred unlock is
+	// defense-in-depth if an internal caller violates that invariant.
 	defer jw.mu.Unlock()
 	for _, tagValue := range tags {
 		jw.dirtOrder++
@@ -112,23 +108,12 @@ func (jw *Jaws) setDirty(tags []any) {
 
 // Dirty marks all [Element] values that have one or more of the given tags as dirty.
 //
-// If any tag implements [tag.TagGetter] it is called with a nil [Request]; prefer
-// [Request.Dirty], which avoids this. A tag that is not hashable panics the calling
-// goroutine, but the panic is contained there and the [Jaws.Serve] loop is
-// unaffected. [Request.Dirty] behaves the same here.
+// The tags are expanded through [Jaws.MustTagExpand]: with a [Jaws.Logger] configured
+// an expansion error is logged and the partial result is still applied, while without
+// one the call panics before anything is marked dirty. [Request.Dirty] is equivalent;
+// both mark matching Elements on every live [Request].
 func (jw *Jaws) Dirty(dirtyTags ...any) {
-	// A non-hashable tag panics here in the caller's goroutine rather than being
-	// logged-and-dropped the way Broadcast handles a bad wire.Message.Dest: Broadcast
-	// hashes the destination in the Serve goroutine, where a panic would crash the
-	// process, whereas this hashing happens in setDirty under the caller's goroutine
-	// with the lock released on panic via defer, so Serve is unaffected.
-	//
-	// Use TagExpand+MustLog rather than MustTagExpand: with a nil Context the latter
-	// panics on an illegal tag even in production, unlike Request.Dirty and Broadcast.
-	// Log and continue with the partial result.
-	expanded, err := tag.TagExpand(nil, dirtyTags)
-	jw.MustLog(err)
-	jw.setDirty(expanded)
+	jw.setDirty(jw.MustTagExpand(dirtyTags))
 }
 
 // dirtPair pairs a dirty tag with its insertion-order rank, used by sortedDirtTags

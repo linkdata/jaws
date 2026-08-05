@@ -44,7 +44,7 @@ func TestClickable_ForwardsClickAndGetterBehavior(t *testing.T) {
 	if !ok {
 		t.Fatalf("%T does not implement tag.TagGetter", handler)
 	}
-	if got, want := tagGetter.JawsGetTag(rq), any(inner); got != want {
+	if got, want := tagGetter.JawsGetTag(), any(inner); got != want {
 		t.Fatalf("want tag %#v got %#v", want, got)
 	}
 
@@ -65,7 +65,7 @@ func TestClickable_TagIsNilWhenInnerHTMLHasNoTag(t *testing.T) {
 	if !ok {
 		t.Fatalf("%T does not implement tag.TagGetter", handler)
 	}
-	if gotTag := tagGetter.JawsGetTag(nil); gotTag != nil {
+	if gotTag := tagGetter.JawsGetTag(); gotTag != nil {
 		t.Fatalf("expected nil tag, got %#v", gotTag)
 	}
 }

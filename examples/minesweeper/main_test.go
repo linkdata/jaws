@@ -356,7 +356,7 @@ func TestGameStatusAndStatsHelpers(t *testing.T) {
 	if got := statusGetter.JawsGet(nil); got != statusTests[0].want {
 		t.Fatalf("StatusSpan getter = %q, want %q", got, statusTests[0].want)
 	}
-	statusTags, err := jawstag.TagExpand(nil, statusTagger.JawsGetTag(nil))
+	statusTags, err := jawstag.TagExpand(statusTagger.JawsGetTag())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,7 +380,7 @@ func TestGameStatusAndStatsHelpers(t *testing.T) {
 	if got := statsGetter.JawsGet(nil); got != wantStats {
 		t.Fatalf("StatsSpan getter = %q, want %q", got, wantStats)
 	}
-	statsTags, err := jawstag.TagExpand(nil, statsTagger.JawsGetTag(nil))
+	statsTags, err := jawstag.TagExpand(statsTagger.JawsGetTag())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -576,7 +576,7 @@ func TestSingleCellDirtyStaysScopedToOneCell(t *testing.T) {
 	g := newGame(3, 3, 1)
 	cell := g.cells[0][0]
 
-	flagTags, err := jawstag.TagExpand(nil, g.toggleFlag(cell))
+	flagTags, err := jawstag.TagExpand(g.toggleFlag(cell))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -589,7 +589,7 @@ func TestSingleCellDirtyStaysScopedToOneCell(t *testing.T) {
 	// reports changed scalars and appends &g.cells.
 	g2 := newGame(3, 3, 1)
 	_ = g2.clickCell(g2.cells[0][0])
-	resetTags, err := jawstag.TagExpand(nil, g2.reset())
+	resetTags, err := jawstag.TagExpand(g2.reset())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -104,6 +105,38 @@ func TestRequest_DeleteElementNil(t *testing.T) {
 	// the nil-tolerant *Element-accepting Request methods (Tag, TagExpanded, TagsOf).
 	rq.DeleteElement(rq.GetElementByJid(Jid(999)))
 	rq.DeleteElement(nil)
+}
+
+func TestRequest_TagExpandedDoesNotRetagConcurrentDeletion(t *testing.T) {
+	rq := &Request{tagMap: make(map[any][]*Element)}
+	elem := rq.NewElement(&testUi{})
+	tagValue := tag.Tag("deleted")
+	done := make(chan struct{})
+
+	// A mutex wait is not durably blocked for testing/synctest, so use the
+	// RWMutex's writer preference to observe that TagExpanded is waiting for its
+	// write lock. Since this bare Request has no other goroutines, TryRLock
+	// failing proves TagExpanded passed its pre-lock checks and queued as a writer.
+	rq.mu.RLock()
+	go func() {
+		rq.TagExpanded(elem, []any{tagValue})
+		close(done)
+	}()
+	for rq.mu.TryRLock() {
+		rq.mu.RUnlock()
+		runtime.Gosched()
+	}
+
+	// Deletion stores this flag while holding rq.mu. Store it directly here to
+	// model that state transition between TagExpanded's check and registration;
+	// the empty tag map means deletion's other cleanup has no bearing on the test.
+	elem.deleted.Store(true)
+	rq.mu.RUnlock()
+	<-done
+
+	if tags := rq.TagsOf(elem); len(tags) != 0 {
+		t.Fatalf("deleted Element retained tags: %v", tags)
+	}
 }
 
 func TestRequest_DeleteElements(t *testing.T) {
@@ -1751,6 +1784,37 @@ func TestRequest_Log(t *testing.T) {
 	if s := log.String(); !strings.Contains(s, wantErr.Error()) {
 		t.Fatalf("Request.Log() did not write error to logger: %q", s)
 	}
+}
+
+// TestRequest_MustLog covers the nil-receiver forwarding that exists purely for
+// diagnostics, plus the two Logger states. Tag expansion logs through
+// Jaws.MustTagExpand, so Request.MustLog needs direct coverage here.
+func TestRequest_MustLog(t *testing.T) {
+	wantErr := errors.New("request mustlog test")
+
+	var log bytes.Buffer
+	rq := &Request{
+		Jaws: &Jaws{
+			Logger: slog.New(slog.NewTextHandler(&log, nil)),
+		},
+	}
+	rq.MustLog(wantErr)
+	if s := log.String(); !strings.Contains(s, wantErr.Error()) {
+		t.Fatalf("Request.MustLog() did not write error to logger: %q", s)
+	}
+
+	// A nil error is a no-op even without a Logger.
+	(*Request)(nil).MustLog(nil)
+
+	// Without a Logger it panics, including through a nil *Request.
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("Request.MustLog with no Logger must panic")
+			}
+		}()
+		(&Request{Jaws: &Jaws{}}).MustLog(wantErr)
+	}()
 }
 
 func TestRequest_Dirty(t *testing.T) {

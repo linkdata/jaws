@@ -134,15 +134,15 @@ func hasNonNilTag(tags []any) bool {
 	return false
 }
 
-func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any, error) {
+func expand(depth int, tagValue any, result []any, active []any) ([]any, error) {
 	if depth > maxTagDepth || len(result) > maxTagCount {
 		return result, ErrTooManyTags
 	}
-	switch data := tag.(type) {
+	switch data := tagValue.(type) {
 	case nil:
 		return result, nil
 	case Tag:
-		return appendUniqueTag(result, tag)
+		return appendUniqueTag(result, tagValue)
 	case []Tag:
 		if result == nil && len(data) > 0 {
 			result = make([]any, 0, len(data))
@@ -158,7 +158,7 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 		if idx := findActiveIndex(active, data); idx >= 0 {
 			return addActiveTags(result, active[idx:])
 		}
-		return expand(depth+1, ctx, data.JawsGetTag(ctx), result, append(active, data))
+		return expand(depth+1, data.JawsGetTag(), result, append(active, data))
 	case []any:
 		if !hasNonNilTag(data) {
 			return result, nil
@@ -172,7 +172,7 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 		active = append(active, data)
 		var err error
 		for _, v := range data {
-			if result, err = expand(depth+1, ctx, v, result, active); err != nil {
+			if result, err = expand(depth+1, v, result, active); err != nil {
 				return result, err
 			}
 		}
@@ -181,16 +181,16 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 		int, int8, int16, int32, int64,
 		uint, uint8, uint16, uint32, uint64, key.Key,
 		float32, float64, bool:
-		return result, errIllegalTagType{tag: tag}
+		return result, errIllegalTagType{tag: tagValue}
 	default:
 		return addTag(result, data)
 	}
 }
 
-// TagExpand expands tag into a flat list of unique, usable tag keys.
+// TagExpand expands tagValue into a flat list of unique, usable tag keys.
 //
-// tag may be nil, a [Tag], a slice of tags, a [TagGetter] or another value that is
-// comparable at runtime and equals itself. The predeclared string, bool, signed
+// tagValue may be nil, a [Tag], a slice of tags, a [TagGetter] or another value that
+// is comparable at runtime and equals itself. The predeclared string, bool, signed
 // integer, unsigned integer other than uintptr, and floating-point types are
 // rejected with [ErrIllegalTagType], as are [template.HTML], [template.HTMLAttr],
 // [jid.Jid] and [key.Key]. This catches common accidental tags. An expanded key
@@ -203,10 +203,20 @@ func expand(depth int, ctx Context, tag any, result []any, active []any) ([]any,
 // value is not usable as a tag key, result is nil and err matches
 // [ErrNotUsableAsTag].
 //
-// Expansion reads tag and any values returned by [TagGetter.JawsGetTag] by
-// reference, so tag and those values must not be mutated concurrently with the
-// call.
-func TagExpand(ctx Context, tag any) (result []any, err error) {
+// A single call may invoke a [TagGetter] more than once when the same value is
+// reached at several points in the graph, and the same value may be expanded again by
+// any later call. The [TagGetter] values emitted when a cycle is closed become keys
+// themselves. Implementations must therefore satisfy [TagGetter]'s idempotent tag
+// identity requirement.
+//
+// Expansion reads tagValue and any values returned by [TagGetter.JawsGetTag] by
+// reference and never writes to them, so those values must not be mutated
+// concurrently with the call.
+//
+// Errors are returned rather than logged. Use
+// [github.com/linkdata/jaws.Jaws.MustTagExpand] to report them through a configured
+// logger instead.
+func TagExpand(tagValue any) (result []any, err error) {
 	// ensureUsableTag rejects tags that are not comparable at runtime, so the
 	// existing == tag dedup in appendUniqueTag does not panic on them. recover
 	// stays as a defense-in-depth net: should a non-comparable value ever reach
@@ -215,11 +225,11 @@ func TagExpand(ctx Context, tag any) (result []any, err error) {
 	// anything else.
 	defer func() {
 		if r := recover(); r != nil {
-			result, err = recoverComparabilityPanic(r, tag)
+			result, err = recoverComparabilityPanic(r, tagValue)
 		}
 	}()
 	var activeArr [12]any
-	return expand(0, ctx, tag, nil, activeArr[:0])
+	return expand(0, tagValue, nil, activeArr[:0])
 }
 
 // recoverComparabilityPanic maps a panic recovered from tag expansion to a
@@ -234,21 +244,4 @@ func recoverComparabilityPanic(r any, tag any) (result []any, err error) {
 		return nil, err
 	}
 	panic(r)
-}
-
-// MustTagExpand calls [TagExpand] and either logs or panics if expansion fails.
-//
-// On a non-nil ctx, expansion errors are passed to [Context.MustLog] (which logs
-// them, or panics if no Logger is set); MustTagExpand then returns the partial
-// result from [TagExpand]. A nil ctx always panics on error.
-func MustTagExpand(ctx Context, tag any) []any {
-	result, err := TagExpand(ctx, tag)
-	if err != nil {
-		if ctx != nil {
-			ctx.MustLog(err)
-		} else {
-			panic(err)
-		}
-	}
-	return result
 }

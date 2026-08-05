@@ -3,7 +3,6 @@ package ui
 import (
 	"bytes"
 	"errors"
-	"html/template"
 	"io"
 	"log/slog"
 	"strings"
@@ -51,14 +50,6 @@ func (u *registerClickUpdater) JawsClick(elem *jaws.Element, click jaws.Click) e
 	u.clicks++
 	return nil
 }
-
-type requestWriterFailGetter struct {
-	err error
-}
-
-func (g requestWriterFailGetter) JawsGetHTML(elem *jaws.Element) template.HTML { return "x" }
-func (g requestWriterFailGetter) JawsGetTag(tag.Context) any                   { return g }
-func (g requestWriterFailGetter) JawsInit(elem *jaws.Element) error            { return g.err }
 
 func TestRequestWriter_MethodsAndWidgetHelpers(t *testing.T) {
 	jw, rq := newCoreSessionBoundRequest(t)
@@ -169,7 +160,7 @@ func TestRequestWriterUI_RenderErrorDoesNotLeakElement(t *testing.T) {
 	rw := RequestWriter{Request: rq, Writer: &buf}
 
 	renderErr := errors.New("render failed")
-	if err := rw.NewUI(NewA(requestWriterFailGetter{err: renderErr})); !errors.Is(err, renderErr) {
+	if err := rw.NewUI(testRenderErrorUI{err: renderErr}); !errors.Is(err, renderErr) {
 		t.Fatalf("want %v got %v", renderErr, err)
 	}
 

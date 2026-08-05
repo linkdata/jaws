@@ -30,8 +30,8 @@ type Input struct {
 	Last atomic.Value // last rendered or accepted browser value for the Element
 }
 
-func (u *Input) applyGetterAttrs(elem *jaws.Element, getter any) (attrs []template.HTMLAttr, err error) {
-	u.tag, attrs, err = elem.ApplyGetter(getter)
+func (u *Input) applyGetterAttrs(elem *jaws.Element, getter any) (attrs []template.HTMLAttr) {
+	u.tag, attrs = elem.ApplyGetter(getter)
 	return
 }
 
@@ -51,13 +51,11 @@ type InputText struct {
 }
 
 func (u *InputText) renderStringInput(elem *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
-	var getterAttrs []template.HTMLAttr
-	if getterAttrs, err = u.applyGetterAttrs(elem, u.Setter); err == nil {
-		attrs := append(elem.ApplyParams(params), getterAttrs...)
-		v := u.JawsGet(elem)
-		u.Last.Store(v)
-		err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, v, attrs)
-	}
+	getterAttrs := u.applyGetterAttrs(elem, u.Setter)
+	attrs := append(elem.ApplyParams(params), getterAttrs...)
+	v := u.JawsGet(elem)
+	u.Last.Store(v)
+	err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, v, attrs)
 	return
 }
 
@@ -87,16 +85,14 @@ type InputBool struct {
 }
 
 func (u *InputBool) renderBoolInput(elem *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
-	var getterAttrs []template.HTMLAttr
-	if getterAttrs, err = u.applyGetterAttrs(elem, u.Setter); err == nil {
-		attrs := append(elem.ApplyParams(params), getterAttrs...)
-		v := u.JawsGet(elem)
-		u.Last.Store(v)
-		if v {
-			attrs = append(attrs, "checked")
-		}
-		err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, "", attrs)
+	getterAttrs := u.applyGetterAttrs(elem, u.Setter)
+	attrs := append(elem.ApplyParams(params), getterAttrs...)
+	v := u.JawsGet(elem)
+	u.Last.Store(v)
+	if v {
+		attrs = append(attrs, "checked")
 	}
+	err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, "", attrs)
 	return
 }
 
@@ -153,17 +149,15 @@ func (u *InputFloat) str(value float64) string {
 }
 
 func (u *InputFloat) renderFloatInput(elem *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
-	var getterAttrs []template.HTMLAttr
-	if getterAttrs, err = u.applyGetterAttrs(elem, u.Setter); err == nil {
-		v := u.JawsGet(elem)
-		if !finite(v) {
-			elem.Cancel(fmt.Errorf("%w: %g", jaws.ErrValueNotFinite, v))
-			return
-		}
-		u.Last.Store(v)
-		attrs := append(elem.ApplyParams(params), getterAttrs...)
-		err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, u.str(v), attrs)
+	getterAttrs := u.applyGetterAttrs(elem, u.Setter)
+	v := u.JawsGet(elem)
+	if !finite(v) {
+		elem.Cancel(fmt.Errorf("%w: %g", jaws.ErrValueNotFinite, v))
+		return
 	}
+	u.Last.Store(v)
+	attrs := append(elem.ApplyParams(params), getterAttrs...)
+	err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, u.str(v), attrs)
 	return
 }
 
@@ -241,16 +235,14 @@ func (u *InputDate) str(v time.Time) string {
 }
 
 func (u *InputDate) renderDateInput(elem *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
-	var getterAttrs []template.HTMLAttr
-	if getterAttrs, err = u.applyGetterAttrs(elem, u.Setter); err == nil {
-		attrs := append(elem.ApplyParams(params), getterAttrs...)
-		v := u.JawsGet(elem)
-		// Dedup on the rendered ISO8601 string, not the raw time.Time: comparing
-		// time.Time with == also compares the monotonic reading and *Location, so
-		// equal calendar dates can compare unequal. The string is what we send.
-		u.Last.Store(u.str(v))
-		err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, u.str(v), attrs)
-	}
+	getterAttrs := u.applyGetterAttrs(elem, u.Setter)
+	attrs := append(elem.ApplyParams(params), getterAttrs...)
+	v := u.JawsGet(elem)
+	// Dedup on the rendered ISO8601 string, not the raw time.Time: comparing
+	// time.Time with == also compares the monotonic reading and *Location, so
+	// equal calendar dates can compare unequal. The string is what we send.
+	u.Last.Store(u.str(v))
+	err = htmlio.WriteHTMLInput(w, elem.Jid(), htmlType, u.str(v), attrs)
 	return
 }
 

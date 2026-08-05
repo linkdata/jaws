@@ -109,10 +109,33 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
 - The root dot **must** be comparable at runtime and equal to itself: `ui.NewTemplate`
   returns a value, so the dot is part of the widget the container widgets use as a map key.
   A slice, map, func or NaN-bearing dot makes the widget unusable as a container child.
-- Implementing `JawsGetTag(tag.Context) any` does **not** fix a non-comparable dot — it
+- Implementing `JawsGetTag() any` does **not** fix a non-comparable dot — it
   resolves the *tag*, not the widget's comparability. A non-comparable dot is unsupported.
   Always use the Template itself as a value; taking its address is unsupported because it
   changes container reuse to pointer identity. `ui.Handler` is the arbitrary-dot exception.
+- `JawsGetTag` is the canonical public accessor for an object's tags, and application code may
+  call it directly. Callers needing flattened, validated keys pass the object to
+  `tag.TagExpand`. It takes no context argument: a tag value expands the same way regardless
+  of which request or goroutine expands it.
+- `Element.ApplyGetter` invokes `JawsGetTag` to obtain a tag candidate, then expands that
+  candidate for registration. This expansion may invoke `JawsGetTag` again when the candidate
+  is itself a `tag.TagGetter` or contains one. Standard getter-backed widgets invoke
+  `ApplyGetter` once during initial render, but there is no `JawsGetTag` call-count guarantee:
+  `tag.TagExpand`, dirtying, broadcasts, and application code may make further calls.
+- Except for an explicitly documented initialization phase that returns nil, a `tag.TagGetter`
+  must be idempotent in tag identity. After its first non-nil result, every call must return a
+  value that `tag.TagExpand` expands to the same set of keys. Previously returned containers
+  must continue expanding to the key set they produced when returned and must be treated as
+  read-only. Fresh containers and equivalent representations are allowed. Non-idempotent
+  `tag.TagGetter` implementations are unsupported.
+- JaWS does not serialize `JawsGetTag` calls. A getter used concurrently must synchronize its
+  state and safely publish any returned containers.
+- `ui.JsVar` is the one in-tree initialization case: `JawsGetTag` returns nil before its first
+  render initializes the dirty tag, and that nil is not a dirty target. A getter in its nil phase
+  is therefore not usable as a tag: passing a not-yet-rendered `JsVar` as a tag to another widget
+  expands to no keys, so that widget registers under nothing and a later dirty of the JsVar never
+  reaches it. Render the JsVar first, or tag the other widget with an independent value. `ui.Object`
+  propagates the phase of any chained getter that has one.
 - `tag.TagExpand` rejects exactly these as tags: `string`, `bool`, `int`/`int8`/`int16`/`int32`/`int64`,
   `uint`/`uint8`/`uint16`/`uint32`/`uint64`, `float32`/`float64`, `template.HTML`, `template.HTMLAttr`,
   `jid.Jid` and `key.Key`. It is a switch on exact types, so aliases of a rejected type are rejected,
@@ -198,12 +221,14 @@ For clickable content rendering:
 
 ## Dirtying rules
 
-- Prefer `Request.Dirty(...)` when in request context.
-- Avoid `Jaws.Dirty(...)` unless necessary; its tag expansion runs with nil request context.
+- `Request.Dirty` and `Jaws.Dirty` are equivalent: both expand through `Jaws.MustTagExpand` and
+  dirty every matching element across all live Requests. `Request.Dirty` is *not* scoped to its
+  own Request.
 - Dirty only precise tags whose output depends on the changed state.
 - Avoid broad model-level dirty tags when finer-grained element-level tags are practical.
 - For broad refreshes, attach a shared dependency tag to all relevant elements and dirty that shared tag instead of enumerating many element tags.
-- `Request.Dirty` runs the tag list through `tag.TagExpand`, which has a hard cap of 100 expanded entries and returns `tag.ErrTooManyTags` above that. When a mutation might touch more items than that, prefer the shared group tag over enumerating individual item tags.
+- `Request.Dirty` runs the tag list through `Jaws.MustTagExpand`, which has a hard cap of 100 expanded entries. Above that, expansion fails with `tag.ErrTooManyTags`: with a `Jaws.Logger` configured the error is logged and the partial expansion is still applied, and without one the call panics before anything is dirtied. When a mutation might touch more items than that, prefer the shared group tag over enumerating individual item tags.
+- `Request.TagsOf(elem)` reports every tag actually registered on an element, including tags added separately from the UI object — use it when a dirty target seems not to reach an element.
 - Redundant-update filtering is asymmetric: input widgets (`InputText`, `InputBool`, `InputFloat`, `InputDate`) compare the new getter output against a stored `Last` value and skip `SetValue` when unchanged, but `HTMLInner`-backed widgets (spans, divs, buttons) do not — `JawsUpdate` unconditionally calls `SetInner`. For HTML-inner widgets, ensure dirty scope matches fields that actually changed, otherwise unrelated status/label spans will re-render (and lose selection, transitions, etc.) on every event. Usually the mutation code already knows what it changed and can dirty accordingly; fall back to snapshot-and-diff only when outcomes are hard to predict up front (e.g. flood-fill or win-condition checks) and the snapshot is cheap.
 
 ## HTML safety rules

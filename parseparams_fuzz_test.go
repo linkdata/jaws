@@ -91,24 +91,19 @@ type fuzzParseParamsTagGetter struct {
 	ID byte
 }
 
-func (h fuzzParseParamsTagGetter) JawsGetTag(tag.Context) any {
+func (h fuzzParseParamsTagGetter) JawsGetTag() any {
 	return tag.Tag(fmt.Sprintf("taggetter:%d", h.ID))
 }
 
 type fuzzParseParamsNonComparableTagGetter []byte
 
-func (h fuzzParseParamsNonComparableTagGetter) JawsGetTag(tag.Context) any {
+func (h fuzzParseParamsNonComparableTagGetter) JawsGetTag() any {
 	return tag.Tag(fmt.Sprintf("non-comparable-tagger:%x", []byte(h)))
 }
 
-type fuzzParseParamsInitOnly struct {
-	ID byte
-}
-
-func (h fuzzParseParamsInitOnly) JawsInit(*Element) error {
-	return nil
-}
-
+// fuzzParseParamsInitialAttrOnly covers a param implementing an interface ParseParams
+// does not recognize: JawsInitialHTMLAttr is only invoked for the primary getter, so
+// ParseParams must classify this as a tag and nothing else.
 type fuzzParseParamsInitialAttrOnly struct {
 	ID byte
 }
@@ -120,8 +115,8 @@ func (h fuzzParseParamsInitialAttrOnly) JawsInitialHTMLAttr(*Element) template.H
 func FuzzParseParams(f *testing.F) {
 	f.Add([]byte{}, "")
 	f.Add([]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, "a")
-	f.Add([]byte{11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}, `data-x="1"`)
-	f.Add([]byte{21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0}, "\x00\n\t")
+	f.Add([]byte{11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, `data-x="1"`)
+	f.Add([]byte{20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0}, "\x00\n\t")
 
 	f.Fuzz(func(t *testing.T, recipe []byte, text string) {
 		if len(recipe) > 128 {
@@ -153,7 +148,7 @@ func fuzzParseParamsBuild(recipe []byte, text string) (params []any, want fuzzPa
 	for i, b := range recipe {
 		token := fuzzParseParamsToken(i, b, text)
 		data := fuzzParseParamsData(i, b, text)
-		switch b % 22 {
+		switch b % 21 {
 		case 0:
 			params = append(params, nil)
 			want.tags = append(want.tags, "nil")
@@ -227,19 +222,15 @@ func fuzzParseParamsBuild(recipe []byte, text string) (params []any, want fuzzPa
 		case 17:
 			params = append(params, []int{int(b), i})
 		case 18:
-			v := fuzzParseParamsInitOnly{ID: b}
-			params = append(params, v)
-			want.tags = append(want.tags, fuzzParseParamsLabel("initOnly", v.ID))
-		case 19:
 			v := fuzzParseParamsInitialAttrOnly{ID: b}
 			params = append(params, v)
 			want.tags = append(want.tags, fuzzParseParamsLabel("initialAttrOnly", v.ID))
-		case 20:
+		case 19:
 			var h *fuzzParseParamsPointerInputHandler
 			params = append(params, h)
 			want.handlers = append(want.handlers, "nilPointerInput")
 			want.tags = append(want.tags, "nilPointerInput")
-		case 21:
+		case 20:
 			h := fuzzParseParamsDualHandler{ID: b}
 			params = append(params, h)
 			want.handlers = append(want.handlers, fuzzParseParamsLabel("dual", h.ID))
@@ -305,8 +296,6 @@ func fuzzParseParamsClassifyTags(t *testing.T, tags []any) (labels []string) {
 			labels = append(labels, fuzzParseParamsLabel("tagGetter", v.ID))
 		case fuzzParseParamsNonComparableTagGetter:
 			labels = append(labels, fuzzParseParamsDataLabel("nonComparableTagGetter", []byte(v)))
-		case fuzzParseParamsInitOnly:
-			labels = append(labels, fuzzParseParamsLabel("initOnly", v.ID))
 		case fuzzParseParamsInitialAttrOnly:
 			labels = append(labels, fuzzParseParamsLabel("initialAttrOnly", v.ID))
 		case *fuzzParseParamsPointerInputHandler:

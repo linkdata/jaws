@@ -30,7 +30,7 @@ func TestTagExpandRejectsNonReflexiveTags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := TagExpand(nil, tt.tag)
+			result, err := TagExpand(tt.tag)
 			if !errors.Is(err, ErrNotUsableAsTag) {
 				t.Fatalf("TagExpand() error = %v, want %v", err, ErrNotUsableAsTag)
 			}
@@ -75,7 +75,7 @@ func TestNonReflexiveKindsAcceptFiniteTags(t *testing.T) {
 	}
 
 	for _, tag := range tests {
-		result, err := TagExpand(nil, tag)
+		result, err := TagExpand(tag)
 		if err != nil {
 			t.Fatalf("TagExpand(%#v) error = %v", tag, err)
 		}

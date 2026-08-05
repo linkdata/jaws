@@ -107,7 +107,7 @@ func Test_MakeHTMLGetter(t *testing.T) {
 			if txt := got.JawsGetHTML(nil); txt != tt.out {
 				t.Errorf("MakeHTMLGetter(%s).JawsGetHTML() = %v, want %v", tt.name, txt, tt.out)
 			}
-			if gotTag := got.(tag.TagGetter).JawsGetTag(nil); gotTag != tt.wantTag {
+			if gotTag := got.(tag.TagGetter).JawsGetTag(); gotTag != tt.wantTag {
 				t.Errorf("MakeHTMLGetter(%s).JawsGetTag() = %v, want %v", tt.name, gotTag, tt.wantTag)
 			}
 		})

@@ -32,7 +32,7 @@ func TestMakeGetter_GetterPassThroughAndTag(t *testing.T) {
 	if got := g.JawsGet(nil); got != "x" {
 		t.Fatalf("unexpected getter value %q", got)
 	}
-	if gotTag := g.(tag.TagGetter).JawsGetTag(nil); gotTag != nil {
+	if gotTag := g.(tag.TagGetter).JawsGetTag(); gotTag != nil {
 		t.Fatalf("expected nil tag, got %#v", gotTag)
 	}
 

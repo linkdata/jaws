@@ -4,7 +4,7 @@ import "testing"
 
 type benchSelfTagger struct{}
 
-func (t *benchSelfTagger) JawsGetTag(Context) any {
+func (t *benchSelfTagger) JawsGetTag() any {
 	return t
 }
 
@@ -12,7 +12,7 @@ type benchChainTagger struct {
 	next any
 }
 
-func (t *benchChainTagger) JawsGetTag(Context) any {
+func (t *benchChainTagger) JawsGetTag() any {
 	return t.next
 }
 
@@ -20,21 +20,21 @@ type benchSliceTagger struct {
 	tags []any
 }
 
-func (t *benchSliceTagger) JawsGetTag(Context) any {
+func (t *benchSliceTagger) JawsGetTag() any {
 	return t.tags
 }
 
-type benchFunctionTagger func(Context) any
+type benchFunctionTagger func() any
 
-func (fn benchFunctionTagger) JawsGetTag(ctx Context) any {
-	return fn(ctx)
+func (fn benchFunctionTagger) JawsGetTag() any {
+	return fn()
 }
 
-func benchFunctionLeaf(Context) any {
+func benchFunctionLeaf() any {
 	return Tag("leaf")
 }
 
-func benchFunctionRoot(Context) any {
+func benchFunctionRoot() any {
 	return benchFunctionTagger(benchFunctionLeaf)
 }
 
@@ -51,7 +51,7 @@ func benchmarkTagExpandCase(b *testing.B, tag any) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		got, err := TagExpand(nil, tag)
+		got, err := TagExpand(tag)
 		if err != nil {
 			b.Fatal(err)
 		}

@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"html/template"
 	"io"
 
 	"github.com/linkdata/jaws"
@@ -21,13 +20,11 @@ func NewImg(g bind.Getter[string]) *Img { return &Img{Getter: g} }
 
 // JawsRender renders ui as an HTML img element.
 func (u *Img) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
-	var getterAttrs []template.HTMLAttr
-	if _, getterAttrs, err = elem.ApplyGetter(u.Getter); err == nil {
-		srcAttr := htmlio.Attr("src", u.JawsGet(elem))
-		attrs := append(elem.ApplyParams(params), getterAttrs...)
-		attrs = append(attrs, srcAttr)
-		err = htmlio.WriteHTMLInner(w, elem.Jid(), "img", "", "", attrs...)
-	}
+	_, getterAttrs := elem.ApplyGetter(u.Getter)
+	srcAttr := htmlio.Attr("src", u.JawsGet(elem))
+	attrs := append(elem.ApplyParams(params), getterAttrs...)
+	attrs = append(attrs, srcAttr)
+	err = htmlio.WriteHTMLInner(w, elem.Jid(), "img", "", "", attrs...)
 	return
 }
 

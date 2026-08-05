@@ -11,13 +11,13 @@ type exampleItem struct {
 	Name string
 }
 
-func (item *exampleItem) JawsGetTag(tag.Context) any {
+func (item *exampleItem) JawsGetTag() any {
 	return item
 }
 
 func ExampleTagExpand_tagGetter() {
 	item := &exampleItem{Name: "row"}
-	tags, err := tag.TagExpand(nil, []any{item, tag.Tag("list")})
+	tags, err := tag.TagExpand([]any{item, tag.Tag("list")})
 	if err != nil {
 		panic(err)
 	}
@@ -26,8 +26,30 @@ func ExampleTagExpand_tagGetter() {
 	// Output: 2 true true
 }
 
+// ExampleTagGetter shows the two supported ways to read an object's tags:
+// JawsGetTag directly, which returns the raw value, and TagExpand, which flattens and
+// validates it into keys. Both are stable for as long as the getter is idempotent.
+func ExampleTagGetter() {
+	group := &exampleItem{Name: "group"}
+	item := &exampleItem{Name: "row"}
+
+	// JawsGetTag is the canonical public accessor and may be called directly.
+	fmt.Println(item.JawsGetTag() == item)
+
+	// TagExpand is how to obtain flattened, validated keys.
+	keys, err := tag.TagExpand([]any{item, group})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(len(keys), keys[0] == item, keys[1] == group)
+
+	// Output:
+	// true
+	// 2 true true
+}
+
 func ExampleTagExpand_errorsIs() {
-	_, err := tag.TagExpand(nil, []int{1})
+	_, err := tag.TagExpand([]int{1})
 	fmt.Println(errors.Is(err, tag.ErrNotUsableAsTag))
 	fmt.Println(errors.Is(err, tag.ErrNotComparable))
 

@@ -38,7 +38,7 @@ import (
 
 type testBroadcastTagGetter struct{}
 
-func (testBroadcastTagGetter) JawsGetTag(tag.Context) any {
+func (testBroadcastTagGetter) JawsGetTag() any {
 	return tag.Tag("expanded")
 }
 

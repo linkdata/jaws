@@ -6,10 +6,10 @@ import (
 	"testing"
 )
 
-type testFunctionTagGetter func(Context) any
+type testFunctionTagGetter func() any
 
-func (fn testFunctionTagGetter) JawsGetTag(ctx Context) any {
-	return fn(ctx)
+func (fn testFunctionTagGetter) JawsGetTag() any {
+	return fn()
 }
 
 func TestTagExpandDoesNotConflateDistinctFunctionTagGetters(t *testing.T) {
@@ -18,7 +18,7 @@ func TestTagExpandDoesNotConflateDistinctFunctionTagGetters(t *testing.T) {
 	getters := make([]testFunctionTagGetter, len(next))
 	for i := range next {
 		i := i
-		getters[i] = func(Context) any { return next[i] }
+		getters[i] = func() any { return next[i] }
 	}
 	leafGetter := getters[0]
 	rootGetter := getters[1]
@@ -28,7 +28,7 @@ func TestTagExpandDoesNotConflateDistinctFunctionTagGetters(t *testing.T) {
 		t.Skipf("compiler emitted distinct code pointers %#x and %#x", rootPtr, leafPtr)
 	}
 
-	got, err := TagExpand(nil, rootGetter)
+	got, err := TagExpand(rootGetter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,9 +37,9 @@ func TestTagExpandDoesNotConflateDistinctFunctionTagGetters(t *testing.T) {
 
 func TestTagExpandRecursiveFunctionTagGetterHitsDepthLimit(t *testing.T) {
 	var recursive testFunctionTagGetter
-	recursive = func(Context) any { return recursive }
+	recursive = func() any { return recursive }
 
-	result, err := TagExpand(nil, recursive)
+	result, err := TagExpand(recursive)
 	if !errors.Is(err, ErrTooManyTags) {
 		t.Fatalf("TagExpand() error = %v, want %v", err, ErrTooManyTags)
 	}
@@ -49,7 +49,7 @@ func TestTagExpandRecursiveFunctionTagGetterHitsDepthLimit(t *testing.T) {
 }
 
 func TestSameActiveNodeDoesNotIdentifyFunctions(t *testing.T) {
-	fn := testFunctionTagGetter(func(Context) any { return Tag("leaf") })
+	fn := testFunctionTagGetter(func() any { return Tag("leaf") })
 	if sameActiveNode(fn, fn) {
 		t.Fatal("function code pointers do not identify function values")
 	}

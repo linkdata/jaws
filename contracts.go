@@ -23,15 +23,6 @@ type Container interface {
 	JawsContains(elem *Element) (contents []UI)
 }
 
-// InitHandler allows initializing UI getters and setters before their use.
-//
-// You can of course initialize them in the call from the template engine,
-// but at that point you don't have access to the [Element], [Request.Context]
-// or [Request.Session].
-type InitHandler interface {
-	JawsInit(elem *Element) (err error)
-}
-
 // Logger is satisfied by a [*log/slog.Logger] via its Info, Warn and Error methods.
 type Logger interface {
 	Info(msg string, args ...any)

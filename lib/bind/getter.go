@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/tag"
 )
 
 // ErrValueNotSettable is returned by read-only adapters when [Setter.JawsSet]
@@ -29,7 +28,7 @@ func (s getterStatic[T]) JawsGet(elem *jaws.Element) T {
 	return s.v
 }
 
-func (s getterStatic[T]) JawsGetTag(tag.Context) any {
+func (s getterStatic[T]) JawsGetTag() any {
 	return nil
 }
 

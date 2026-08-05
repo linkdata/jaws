@@ -103,7 +103,7 @@ func TestJsVar_RenderSetAndEvent(t *testing.T) {
 		t.Fatalf("data-jawsdata = %#v, want %#v", gotData, v)
 	}
 
-	if jsv.JawsGetTag(rq) == nil {
+	if jsv.JawsGetTag() == nil {
 		t.Fatal("expected non-nil tag after render")
 	}
 	if gotV := jsv.JawsGet(nil); gotV.Text != v.Text || gotV.Num != 1 {
@@ -143,7 +143,6 @@ func TestJsVar_RenderSetAndEvent(t *testing.T) {
 	if err := jaws.CallEventHandlers(jsv, elem, what.Click, `1 2 0 x`); !errors.Is(err, jaws.ErrEventUnhandled) {
 		t.Fatalf("expected ErrEventUnhandled, got %v", err)
 	}
-
 }
 
 // TestJsVar_SetBroadcastsWirePayload pins the wire payload broadcast when a
@@ -521,7 +520,7 @@ type jsVarTagState struct {
 	Value string `json:"value"`
 }
 
-func (jsVarTagState) JawsGetTag(tag.Context) any {
+func (jsVarTagState) JawsGetTag() any {
 	return tag.Tag("state")
 }
 

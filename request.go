@@ -728,8 +728,13 @@ func (rq *Request) TagsOf(elem *Element) (tags []any) {
 }
 
 // Dirty marks all [Element] values that have one or more of the given tags as dirty.
+//
+// Dirtying is [Jaws]-wide rather than scoped to rq: matching Elements on every live
+// [Request] are marked. The tags are expanded through [Jaws.MustTagExpand], so an
+// expansion error is logged and the partial result still applied when a [Jaws.Logger]
+// is configured, and panics before anything is marked dirty when one is not.
 func (rq *Request) Dirty(dirtyTags ...any) {
-	rq.Jaws.setDirty(tag.MustTagExpand(rq, dirtyTags))
+	rq.Jaws.setDirty(rq.Jaws.MustTagExpand(dirtyTags))
 }
 
 // wantMessage returns true if the Request want the message.
@@ -834,6 +839,11 @@ func (rq *Request) hasTagLocked(elem *Element, tagValue any) bool {
 }
 
 // HasTag reports whether elem has tagValue in rq.
+//
+// tagValue is looked up as a single registered key and is not expanded, so passing a
+// [tag.TagGetter] or a tag slice reports false even when its expanded keys are
+// registered. Use [Request.GetElements], which expands, or [Request.TagsOf] to see the
+// registered keys themselves.
 func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 	rq.mu.RLock()
 	yes = rq.hasTagLocked(elem, tagValue)
@@ -858,14 +868,24 @@ func (rq *Request) appendDirtyTags(tags []any) {
 
 // TagExpanded adds already-expanded tags to the given [Element].
 //
-// It is a no-op once rq has finished and released its buffers (rq.tagMap is nil),
-// so a still-running initial renderer that keeps tagging after a racy teardown
-// degrades to untracked elements instead of panicking on a nil-map write.
+// TagExpanded is an advanced API that adds keys without expanding or validating them.
+// Callers should normally use [Request.Tag]. expandedTags must contain only keys that
+// [tag.TagExpand] can emit, either from a successful expansion or from a partial
+// result whose error the caller handled. Other values may panic or create
+// registrations that the canonical tag APIs cannot retrieve.
+//
+// It is a no-op for a nil, deleted, or foreign [Element], and after the [Request] has
+// released its tag map.
 func (rq *Request) TagExpanded(elem *Element, expandedTags []any) {
-	if elem != nil && !elem.deleted.Load() && elem.Request == rq {
+	if elem != nil && elem.Request == rq {
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
-		if rq.tagMap != nil {
+		// Deletion marks the Element and removes its tags while holding rq.mu.
+		// Check here so it cannot finish between the check and registration.
+		// A nil tagMap means rq finished and released its buffers, so a still-running
+		// initial renderer that keeps tagging after a racy teardown degrades to
+		// untracked elements instead of panicking on a nil-map write.
+		if !elem.deleted.Load() && rq.tagMap != nil {
 			for _, tagValue := range expandedTags {
 				if !rq.hasTagLocked(elem, tagValue) {
 					rq.tagMap[tagValue] = append(rq.tagMap[tagValue], elem)
@@ -876,15 +896,24 @@ func (rq *Request) TagExpanded(elem *Element, expandedTags []any) {
 }
 
 // Tag adds the given tags to the given [Element].
+//
+// tagItems are expanded through [Jaws.MustTagExpand], so an expansion error is logged
+// and the partial result still registered when a [Jaws.Logger] is configured, and
+// panics before anything is registered when one is not. Use [Request.TagExpanded] to
+// register keys you expanded yourself.
 func (rq *Request) Tag(elem *Element, tagItems ...any) {
 	if elem != nil && len(tagItems) > 0 && elem.Request == rq {
-		rq.TagExpanded(elem, tag.MustTagExpand(elem.Request, tagItems))
+		rq.TagExpanded(elem, rq.Jaws.MustTagExpand(tagItems))
 	}
 }
 
 // GetElements returns a list of the UI elements in the [Request] that have the given tags.
+//
+// tagValue is expanded through [Jaws.MustTagExpand], so an expansion error is logged
+// and the partial result still used for the lookup when a [Jaws.Logger] is configured,
+// and panics before the lookup when one is not.
 func (rq *Request) GetElements(tagValue any) (elems []*Element) {
-	expanded := tag.MustTagExpand(rq, tagValue)
+	expanded := rq.Jaws.MustTagExpand(tagValue)
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
 	if len(expanded) == 1 {

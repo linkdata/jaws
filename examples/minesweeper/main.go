@@ -14,7 +14,6 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
-	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/ui"
 )
 
@@ -138,12 +137,13 @@ func (c *Cell) syncPresentation(elem *jaws.Element, view cellView) {
 // JawsGetTag returns the cell's per-cell dirty identity.
 //
 // It deliberately returns ONLY the cell, not the shared board tag. Because *Cell
-// is a [tag.TagGetter], returning the board tag here would make Request.Dirty(c)
-// tag-expand to include it, so dirtying one cell would re-render every cell. The
-// shared board tag is registered separately via [Cell.BoardTag] (passed to the
-// cell's Button), so the element listens to both while a single-cell dirty stays
-// scoped to just that cell. Board-wide refreshes dirty &g.cells directly.
-func (c *Cell) JawsGetTag(_ tag.Context) any {
+// is a [github.com/linkdata/jaws/lib/tag.TagGetter], returning the board tag here
+// would make Request.Dirty(c) tag-expand to include it, so dirtying one cell would
+// re-render every cell. The shared board tag is registered separately via
+// [Cell.BoardTag] (passed to the cell's Button), so the element listens to both while
+// a single-cell dirty stays scoped to just that cell. Board-wide refreshes dirty
+// &g.cells directly.
+func (c *Cell) JawsGetTag() any {
 	return c
 }
 
@@ -508,8 +508,8 @@ func run(listenAndServe func(addr string, handler http.Handler) error) error {
 						// One board is shared by every visitor: this is a single, collaborative
 						// game that all connected browsers see and play simultaneously. That is a
 						// deliberate choice for this demo. For per-user state instead, create the
-						// game inside the handler (or in a JawsInit) keyed off the request/session,
-						// e.g. via jw.Session, rather than binding one board for the whole server.
+						// game inside the handler keyed off the request/session, e.g. via
+						// jw.Session, rather than binding one board for the whole server.
 						board := newGame(10, 10, 15)
 
 						mux := http.NewServeMux()

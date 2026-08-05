@@ -26,7 +26,7 @@ func Test_makeSetter(t *testing.T) {
 	if s := setter1.JawsGet(nil); s != testStringGetterText {
 		t.Error(s)
 	}
-	if gotTag := setter1.(tag.TagGetter).JawsGetTag(nil); gotTag != tsg {
+	if gotTag := setter1.(tag.TagGetter).JawsGetTag(); gotTag != tsg {
 		t.Error(gotTag)
 	}
 
@@ -37,7 +37,7 @@ func Test_makeSetter(t *testing.T) {
 	if s := setter2.JawsGet(nil); s != "quux" {
 		t.Error(s)
 	}
-	if gotTag := setter2.(tag.TagGetter).JawsGetTag(nil); gotTag != nil {
+	if gotTag := setter2.(tag.TagGetter).JawsGetTag(); gotTag != nil {
 		t.Error(gotTag)
 	}
 }

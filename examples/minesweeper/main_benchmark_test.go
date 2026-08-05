@@ -55,7 +55,7 @@ func BenchmarkSingleCellDirtyFanout(b *testing.B) {
 		// resolve each to its registered elements (Request.GetElements is the same
 		// tagMap lookup makeUpdateList performs). The sum is the number of element
 		// re-renders the toggle would drive.
-		expanded, err := jawstag.TagExpand(nil, g.toggleFlag(cell))
+		expanded, err := jawstag.TagExpand(g.toggleFlag(cell))
 		if err != nil {
 			b.Fatal(err)
 		}

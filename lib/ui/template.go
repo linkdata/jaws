@@ -207,7 +207,7 @@ func (tmpl Template) render(elem *jaws.Element, w io.Writer, params []any) (err 
 	}
 	doWrap := tmpl.OuterHTMLTag != ""
 	var expandedTags []any
-	if expandedTags, err = tag.TagExpand(elem.Request, tmpl.Dot); err == nil {
+	if expandedTags, err = tag.TagExpand(tmpl.Dot); err == nil {
 		elem.Request.TagExpanded(elem, expandedTags)
 		tags, handlers, attrs := jaws.ParseParams(params)
 		elem.Tag(tags...)
