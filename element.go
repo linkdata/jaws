@@ -458,15 +458,15 @@ func (elem *Element) validChildElement(operation string, child *Element) (ok boo
 	return false
 }
 
-// ApplyParams parses the parameters passed to UI() when creating a new [Element],
-// adding UI tags, adding any additional event handlers found.
+// ApplyParams applies UI-helper parameters to elem.
 //
-// Returns the list of HTML attributes found, if any.
+// For a live Element, it registers tags and event handlers and returns any HTML
+// attributes found by [ParseParams]. A deleted Element applies nothing and returns nil.
 //
-// On a live frozen Element, event-handler params are logged and dropped in production
-// with a configured [Jaws.Logger], while tags and attributes are still processed.
-// Debug builds and servers without a Logger panic first. Params without event handlers
-// continue processing normally.
+// On a live, frozen Element, handler params are logged and dropped in production when
+// [Jaws.Logger] is configured, after which tags and attributes are processed. Debug
+// builds and servers without a Logger panic first. Params without handlers continue
+// normally.
 func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
 	tags, handlers, rawAttrs := ParseParams(params)
 	if !elem.deleted.Load() {
@@ -480,32 +480,32 @@ func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
 	return
 }
 
-// ApplyGetter examines getter and resolves its tag candidate.
+// ApplyGetter applies the tag and handler interfaces exposed by getter to elem.
 //
 // If getter implements [tag.TagGetter], the candidate is the value returned by
 // [tag.TagGetter.JawsGetTag]; otherwise the candidate is getter itself. Eligible
 // candidates — TagGetter values, supported tag slices and runtime-comparable
 // values — are passed to [Element.Tag] for normal expansion and validation.
 // That expansion may invoke JawsGetTag again when the candidate is itself a
-// TagGetter or contains one. Other non-comparable candidates are not automatically
-// tagged, matching [ParseParams].
+// TagGetter or a []any containing one. Other non-comparable candidates are not
+// automatically tagged.
 //
-// If getter is an [InputHandler], [ClickHandler], [ContextMenuHandler] or
-// [InitialHTMLAttrHandler], relevant values are added to the [Element].
+// If getter implements [InputHandler], [ClickHandler], or [ContextMenuHandler], it is
+// added as an event handler. attrs contains any non-empty attribute returned by
+// [InitialHTMLAttrHandler].
 //
-// The returned value is the candidate considered for tagging, not confirmation that
-// any expanded key was registered. It is nil if getter or its candidate is a nil
-// interface, or if the candidate is ineligible for tag expansion. A non-nil candidate
-// accepted by [tag.TagExpand] may be retained for later dirtying; TagGetter-derived
-// candidates rely on [tag.TagGetter]'s stable tag identity. attrs holds any initial
-// HTML attributes provided by InitialHTMLAttrHandler.
+// The returned tagValue does not confirm registration. It is nil if getter or its
+// candidate is a nil interface, or if the candidate is ineligible for expansion. A
+// successfully expandable tagValue may be retained for later dirtying only while it
+// expands to the same keys. Retained slices must not be mutated concurrently with
+// expansion; candidates derived from a [tag.TagGetter] rely on its stable-identity
+// contract.
 //
 // If the [Element] is already frozen and getter is an event handler, the handler
 // is not added: in production with a [Jaws.Logger] configured this is logged and
 // initial-attribute and tag processing still occur, while debug builds and servers
-// without a Logger panic via reportMisuse, aborting before them. A non-event-handler
-// getter never calls reportMisuse, so its initial-attribute and tag processing always
-// occur.
+// without a Logger panic before that processing. For a non-event-handler getter,
+// initial-attribute and tag processing still occur after freezing.
 func (elem *Element) ApplyGetter(getter any) (tagValue any, attrs []template.HTMLAttr) {
 	if getter != nil {
 		tagValue = getter

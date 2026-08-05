@@ -181,6 +181,8 @@ func expand(depth int, tagValue any, result []any, active []any) ([]any, error) 
 		int, int8, int16, int32, int64,
 		uint, uint8, uint16, uint32, uint64, key.Key,
 		float32, float64, bool:
+		// Reject these exact types to catch common accidental tags while still
+		// allowing named domain types with the same underlying representation.
 		return result, errIllegalTagType{tag: tagValue}
 	default:
 		return addTag(result, data)
@@ -189,30 +191,30 @@ func expand(depth int, tagValue any, result []any, active []any) ([]any, error) 
 
 // TagExpand expands tagValue into a flat list of unique, usable tag keys.
 //
-// tagValue may be nil, a [Tag], []Tag, []any, a [TagGetter] or another value that is
+// tagValue may be nil, a [Tag], []Tag, []any, a [TagGetter], or another value that is
 // comparable at runtime and equals itself. A nil interface contributes no keys. A
 // typed nil is a non-nil interface and follows the normal rules for its dynamic type,
-// including JawsGetTag dispatch when it implements [TagGetter]. The predeclared string,
-// bool, signed integer, unsigned integer other than uintptr, and floating-point types
-// are rejected with [ErrIllegalTagType], as are [template.HTML], [template.HTMLAttr],
-// [jid.Jid] and [key.Key]. This catches common accidental tags. An expanded key value
-// that is not comparable at runtime or does not equal itself is rejected with
-// [ErrNotUsableAsTag] (which also matches [ErrNotComparable] via [errors.Is]). Expansion
-// that exceeds the nesting-depth or total-count limits is rejected with [ErrTooManyTags].
+// including dispatch to [TagGetter.JawsGetTag] when it implements [TagGetter].
+//
+// The predeclared string, bool, signed integer, unsigned integer other than uintptr,
+// and floating-point types are rejected with [ErrIllegalTagType], as are
+// [template.HTML], [template.HTMLAttr], [jid.Jid] and [key.Key]. An unusable expanded
+// key is rejected with [ErrNotUsableAsTag], which also matches [ErrNotComparable]
+// under errors.Is. Expansion that exceeds the nesting-depth or total-count limits is
+// rejected with [ErrTooManyTags].
 //
 // On error, result contains the tags expanded before the failure. If an expanded
 // value is not usable as a tag key, result is nil and err matches
 // [ErrNotUsableAsTag].
 //
-// A single call may invoke a [TagGetter] more than once when the same value is
-// reached at several points in the graph, and the same value may be expanded again by
-// any later call. When a cycle is closed, its participating [TagGetter] values are
-// treated as candidate keys and must themselves be usable as tags. Implementations
-// must therefore satisfy [TagGetter]'s idempotent tag identity requirement.
+// A single call may invoke a [TagGetter] more than once, and later calls may expand
+// the same value again. When expansion encounters a cyclic TagGetter graph, it uses
+// the participating TagGetter values themselves as keys; they must therefore be
+// usable as tags. Implementations must satisfy [TagGetter]'s stable-identity contract.
 //
-// Expansion reads tagValue and any values returned by [TagGetter.JawsGetTag] by
-// reference and never writes to them, so those values must not be mutated
-// concurrently with the call.
+// TagExpand does not copy input slices or slices returned by
+// [TagGetter.JawsGetTag] before traversing them. They must not be mutated concurrently
+// with expansion.
 //
 // Errors are returned rather than logged. Use
 // [github.com/linkdata/jaws.Jaws.MustTagExpand] to report them through a configured

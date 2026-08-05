@@ -12,9 +12,9 @@
 //
 // # Tags
 //
-// Tags associate [Element] values with application data and logical signals, and
-// address those Elements for dirtying, broadcasts and lookup. See
-// [github.com/linkdata/jaws/lib/tag] for tag selection, expansion, registration
+// Tags associate [Element] values with application data or logical signals for
+// targeted dirtying, broadcasts, and lookup. See
+// [github.com/linkdata/jaws/lib/tag] for tag selection, expansion, registration,
 // and lifetime.
 //
 // # Locking

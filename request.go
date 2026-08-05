@@ -871,17 +871,16 @@ func (rq *Request) appendDirtyTags(tags []any) {
 	rq.mu.Unlock()
 }
 
-// TagExpanded adds already-expanded tags to the given [Element].
+// TagExpanded registers already-expanded keys with elem.
 //
-// TagExpanded is an advanced API that adds keys without expanding or validating them.
-// Callers should normally use [Request.Tag]. expandedTags must contain only keys that
-// [tag.TagExpand] can emit, either from a successful expansion or from a partial
-// result whose error the caller handled. Other values may panic or create
-// registrations that the canonical tag APIs cannot retrieve.
-// Like [Request.Tag], registration is additive and does not schedule an update.
+// TagExpanded is an advanced, additive API that neither expands nor validates keys and
+// does not schedule an update. Callers should normally use [Request.Tag]. expandedTags
+// must contain only keys that [tag.TagExpand] can emit, either from a successful
+// expansion or from a partial result whose error the caller handled. Passing other
+// values may panic or create registrations unreachable through the expanding lookup,
+// dirtying, and broadcast APIs.
 //
-// It is a no-op for a nil, deleted, or foreign [Element], and after the [Request] has
-// released its tag map.
+// It is a no-op for a nil, deleted, or foreign [Element].
 func (rq *Request) TagExpanded(elem *Element, expandedTags []any) {
 	if elem != nil && elem.Request == rq {
 		rq.mu.Lock()
@@ -905,33 +904,31 @@ func (rq *Request) TagExpanded(elem *Element, expandedTags []any) {
 //
 // Registration is additive and does not schedule an update. Calling Tag during
 // rendering or updating is supported, but known dependencies should normally be
-// registered during initial rendering. Associations registered while rq is live
-// remain active until elem is removed or rq ends; individual associations cannot be
-// removed. See package [github.com/linkdata/jaws/lib/tag] for tag selection and
-// lifetime guidance.
+// registered during initial rendering. Associations remain active until elem is
+// removed or rq ends; individual associations cannot be removed. See package
+// [github.com/linkdata/jaws/lib/tag] for tag selection and lifetime guidance.
 //
-// tagItems are expanded through [Jaws.MustTagExpand], so an expansion error is logged
-// and the partial result still registered when a [Jaws.Logger] is configured, and
-// panics before anything is registered when one is not. Use [Request.TagExpanded] to
-// register keys you expanded yourself.
+// Tag expands tagItems through [Jaws.MustTagExpand]. With a [Jaws.Logger] configured,
+// it logs an expansion error and registers the partial result. Without a Logger, an
+// expansion error causes Tag to panic before registering anything. Use
+// [Request.TagExpanded] to register keys you expanded yourself.
 //
-// Tag ignores a nil or foreign elem and an empty tagItems list without expansion. It
-// still expands tagItems for a deleted elem, but registers nothing.
+// Tag does not expand tagItems when elem is nil or foreign, or when tagItems is empty.
+// For a deleted elem, it still expands non-empty tagItems but registers nothing.
 func (rq *Request) Tag(elem *Element, tagItems ...any) {
 	if elem != nil && len(tagItems) > 0 && elem.Request == rq {
 		rq.TagExpanded(elem, rq.Jaws.MustTagExpand(tagItems))
 	}
 }
 
-// GetElements returns the Elements in rq registered under at least one key expanded
-// from tagValue.
+// GetElements returns the Elements in rq associated with tagValue.
 //
-// tagValue is expanded through [Jaws.MustTagExpand], so an expansion error is logged
-// and the partial result still used for the lookup when a [Jaws.Logger] is configured,
-// and panics before the lookup when one is not.
+// GetElements expands tagValue through [Jaws.MustTagExpand]. With a [Jaws.Logger]
+// configured, it logs an expansion error and uses the partial result. Without a Logger,
+// an expansion error causes GetElements to panic before the lookup.
 //
-// Each Element appears at most once. The returned slice is a caller-owned snapshot in
-// unspecified order.
+// Each Element registered under at least one resulting key is returned once. The
+// returned slice is a caller-owned snapshot in unspecified order.
 func (rq *Request) GetElements(tagValue any) (elems []*Element) {
 	expanded := rq.Jaws.MustTagExpand(tagValue)
 	rq.mu.RLock()

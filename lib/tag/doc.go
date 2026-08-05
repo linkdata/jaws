@@ -13,9 +13,9 @@
 //
 // Prefer stable identities derived from the authoritative application data being
 // rendered. Use a pointer to that data when a widget depends on the object as a
-// whole. Use a distinct comparable wrapper type when independently changing aspects
-// of one object need separate keys. When no data object provides an identity, use a
-// named empty struct for a shared signal.
+// whole. Use distinct comparable wrapper types for independently changing parts of
+// one object. When no data object provides an identity, use a named empty struct for
+// a shared signal.
 //
 // For example, a widget displaying a user's name can listen both to the user and
 // specifically to the name:
@@ -42,19 +42,18 @@
 // [TagGetter] values into unique, usable keys. Keys must be comparable at runtime
 // and equal to themselves; see [TagExpand] for the accepted inputs and error behavior.
 //
-// [TagGetter] defines expansion only; implementing it does not by itself register an
-// Element. [TagGetter.JawsGetTag] may return a nil interface during an explicitly
-// documented initialization phase. After its first non-nil result, later calls must
-// expand to the same set of keys. Expansion receives no rendering or Request context,
-// may occur before a widget renders, and has no call-count guarantee. A nil interface
-// expands to no keys. Passing a nil-phase value through the normal expanding
-// registration, dirtying or broadcast APIs has no later effect when initialization
-// completes. See [TagGetter] for returned-container and concurrency requirements.
+// [TagGetter] controls how a value expands; implementing it does not register an
+// Element. [TagGetter.JawsGetTag] may return a nil interface during a documented
+// initialization phase. A nil result expands to no keys, and later initialization
+// does not affect earlier registration, dirtying, or broadcasts. After the first
+// non-nil result, every call must expand to the same key set. Expansion receives no
+// Request or rendering context, has no call-count guarantee, and may occur before
+// rendering. See [TagGetter] for requirements on returned values and concurrency.
 //
-// [github.com/linkdata/jaws.Request.Tag] and the normal targeting APIs apply the same
-// expansion. A shared group key returned by [TagGetter.JawsGetTag] therefore also
-// broadens Dirty(value) to that group. Register group dependencies separately when
-// item-level dirtying must remain narrow.
+// [github.com/linkdata/jaws.Request.Tag] and the normal targeting APIs expand inputs
+// in the same way. Returning a shared group key from [TagGetter.JawsGetTag] therefore
+// causes dirtying that value to target the group too. Register group dependencies
+// separately when item-level dirtying must remain narrow.
 //
 // # Registration and use
 //
@@ -70,8 +69,8 @@
 // do not rely on a later registration observing an earlier operation.
 //
 // JaWS does not remove individual tag associations. Design each registered key to
-// remain a valid dependency for the Element's lifetime. Removing or unregistering the
-// Element removes all of its associations.
+// remain a valid dependency for the Element's lifetime. Removing the Element removes
+// all of its associations.
 //
 // [github.com/linkdata/jaws.Request.TagsOf] returns an Element's registered keys.
 // [github.com/linkdata/jaws.Request.HasTag] is an advanced test for one
