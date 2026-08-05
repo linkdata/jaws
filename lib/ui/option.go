@@ -9,6 +9,9 @@ import (
 
 // Option renders an HTML option element backed by a [named.Bool].
 //
+// The value attribute is always [named.Bool.Name] and takes precedence over a
+// value attribute passed as a render param.
+//
 // One Option value may back multiple live [jaws.Element] values. All of those
 // Elements reflect the shared Bool.
 type Option struct{ *named.Bool }

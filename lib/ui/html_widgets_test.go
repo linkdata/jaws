@@ -97,12 +97,24 @@ func TestOption_RenderAndUpdate(t *testing.T) {
 	nb := named.NewBool(nba, `escape"&copy=<me>'`, "<unescaped>", true)
 	ui := NewOption(nb)
 	elem, got := renderUI(t, rq, ui, "hidden")
-	mustMatch(t, `^<option id="Jid\.[0-9]+" hidden value="escape&#34;&amp;copy=&lt;me&gt;&#39;" selected><unescaped></option>$`, got)
+	mustMatch(t, `^<option id="Jid\.[0-9]+" value="escape&#34;&amp;copy=&lt;me&gt;&#39;" hidden selected><unescaped></option>$`, got)
 
 	nb.Set(false)
 	ui.JawsUpdate(elem)
 	nb.Set(true)
 	ui.JawsUpdate(elem)
+}
+
+func TestOption_RenderBoolNameTakesPrecedenceOverCallerValue(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	nb := named.NewBool(nil, "canonical", "label", false)
+
+	_, got := renderUI(t, rq, NewOption(nb), template.HTMLAttr(`value="caller"`))
+	canonical := strings.Index(got, `value="canonical"`)
+	caller := strings.Index(got, `value="caller"`)
+	if canonical < 0 || (caller >= 0 && caller < canonical) {
+		t.Fatalf("Bool.Name value does not take precedence: %s", got)
+	}
 }
 
 func TestRegister_Render(t *testing.T) {
