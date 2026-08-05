@@ -18,7 +18,7 @@ var (
 type numeric interface {
 	~float32 | ~float64 |
 		~int | ~int8 | ~int16 | ~int32 | ~int64 |
-		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr
 }
 
 type setterFloat64[T numeric] struct {
@@ -37,10 +37,10 @@ type setterFloat64[T numeric] struct {
 // untyped-constant (arbitrary-precision) arithmetic evaluated before the single
 // float64 conversion, so it avoids the float64(MaxInt64) rounding pitfall (that
 // conversion rounds up to 2^63). MinIntN is exactly representable for every width,
-// so comparing the truncated value against it is safe. The int and uint bounds use
-// math.MinInt, math.MaxInt and math.MaxUint, which track the target word size, so a
-// 32-bit build rejects magnitudes that only fit a 64-bit word instead of letting
-// T(value) wrap.
+// so comparing the truncated value against it is safe. The int, uint, and uintptr
+// bounds use math.MinInt, math.MaxInt, and math.MaxUint, which track the target word
+// size, so a 32-bit build rejects magnitudes that only fit a 64-bit word instead of
+// letting T(value) wrap.
 //
 // The type switch matches predeclared types by exact type, so callers must
 // instantiate T only with the predeclared numeric types. A named (defined) type
@@ -70,7 +70,7 @@ func sanitizeFloatForT[T numeric](value float64) error {
 		lo, hiExcl = 0, math.MaxUint16+1
 	case uint32:
 		lo, hiExcl = 0, math.MaxUint32+1
-	case uint: // math.MaxUint tracks the target word size
+	case uint, uintptr: // math.MaxUint tracks both target types' word size
 		lo, hiExcl = 0, math.MaxUint+1
 	case uint64:
 		lo, hiExcl = 0, math.MaxUint64+1
@@ -169,7 +169,7 @@ func makeSetterFloat64for[T numeric](s *Setter[float64], value any) bool {
 // v may be a float64 setter/getter/static value, or a setter/getter/static value
 // of another supported numeric type (the predeclared signed and unsigned integer
 // types and float32), which is bridged to float64 by ordinary Go conversion. That
-// bridge can lose precision: int64/uint64 magnitudes beyond 2^53 are not exactly
+// bridge can lose precision: not every integer magnitude beyond 2^53 is exactly
 // representable as float64.
 //
 // If conversion changes value but the converted value already matches the
@@ -199,6 +199,7 @@ func MakeSetterFloat64(value any) (s Setter[float64]) {
 		ok = ok || makeSetterFloat64for[uint64](&s, v)
 		ok = ok || makeSetterFloat64for[int](&s, v)
 		ok = ok || makeSetterFloat64for[uint](&s, v)
+		ok = ok || makeSetterFloat64for[uintptr](&s, v)
 		ok = ok || makeSetterFloat64for[int32](&s, v)
 		ok = ok || makeSetterFloat64for[uint32](&s, v)
 		ok = ok || makeSetterFloat64for[int8](&s, v)
