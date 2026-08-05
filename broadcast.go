@@ -37,10 +37,10 @@ import (
 // Dest is expanded into tags. Plain strings and [Jid] values are illegal tag
 // types; use [tag.Tag], a domain tag, or an [Element] method instead.
 //
-// A [wire.Message.Dest] that cannot be expanded into tags (an illegal tag type) is
-// expanded through [Jaws.MustTagExpand], which reports the error through
-// [Jaws.MustLog]: that panics when no [Jaws.Logger] is set, while with a Logger the
-// error is logged and the message is sent to the destinations that did expand.
+// That expansion runs through [Jaws.MustTagExpand], which reports a failure such as an
+// illegal tag type through [Jaws.MustLog]: that panics when no [Jaws.Logger] is set,
+// while with a Logger the error is logged and the message is sent to the destinations
+// that did expand.
 func (jw *Jaws) Broadcast(msg wire.Message) {
 	switch msg.What {
 	case what.Replace:

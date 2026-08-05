@@ -143,7 +143,6 @@ func TestJsVar_RenderSetAndEvent(t *testing.T) {
 	if err := jaws.CallEventHandlers(jsv, elem, what.Click, `1 2 0 x`); !errors.Is(err, jaws.ErrEventUnhandled) {
 		t.Fatalf("expected ErrEventUnhandled, got %v", err)
 	}
-
 }
 
 // TestJsVar_SetBroadcastsWirePayload pins the wire payload broadcast when a

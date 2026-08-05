@@ -474,6 +474,11 @@ func (jsvar *JsVar[T]) renderSnapshot(elem *jaws.Element, params []any) (getterA
 // idempotent tag identity contract; see
 // [github.com/linkdata/jaws/lib/tag.TagGetter].
 //
+// A JsVar is therefore only usable as a tag once it has rendered. Passing one as a tag
+// to another widget beforehand expands to no keys at all, so that widget registers
+// under nothing and a later dirty of this JsVar never reaches it. Render the JsVar
+// first, or tag the other widget with a value that does not depend on this one.
+//
 // It is safe for concurrent use.
 func (jsvar *JsVar[T]) JawsGetTag() any {
 	jsvar.RLock()

@@ -122,6 +122,12 @@ func (obj *object) JawsInitialHTMLAttr(elem *jaws.Element) (attr template.HTMLAt
 	return
 }
 
+// JawsGetTag collects the non-nil tags of every link in the chain.
+//
+// The returned container is freshly built per call, which [tag.TagGetter] permits: only
+// the expanded key set has to stay the same. A chained getter that has its own
+// documented nil initialization phase (see [JsVar.JawsGetTag]) propagates that phase
+// here, so this object is likewise only usable as a tag once that link has initialized.
 func (obj *object) JawsGetTag() any {
 	var tags []any
 	for obj != nil {

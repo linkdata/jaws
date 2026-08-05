@@ -110,6 +110,9 @@ func (elem *Element) Tag(tags ...any) {
 }
 
 // HasTag returns true if this Element has the given tag.
+//
+// It reports false for a deleted Element. tagValue is not expanded; see
+// [Request.HasTag].
 func (elem *Element) HasTag(tagValue any) bool {
 	return !elem.deleted.Load() && elem.Request.HasTag(elem, tagValue)
 }

@@ -839,6 +839,11 @@ func (rq *Request) hasTagLocked(elem *Element, tagValue any) bool {
 }
 
 // HasTag reports whether elem has tagValue in rq.
+//
+// tagValue is looked up as a single registered key and is not expanded, so passing a
+// [tag.TagGetter] or a tag slice reports false even when its expanded keys are
+// registered. Use [Request.GetElements], which expands, or [Request.TagsOf] to see the
+// registered keys themselves.
 func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 	rq.mu.RLock()
 	yes = rq.hasTagLocked(elem, tagValue)
