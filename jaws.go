@@ -10,6 +10,13 @@
 // methods live in [github.com/linkdata/jaws/lib/ui], and value binding lives in
 // [github.com/linkdata/jaws/lib/bind].
 //
+// # Tags
+//
+// Tags associate [Element] values with application data or logical signals for
+// targeted dirtying, broadcasts, and lookup. See
+// [github.com/linkdata/jaws/lib/tag] for tag selection, expansion, registration,
+// and lifetime.
+//
 // # Locking
 //
 // The package uses a single, acyclic lock hierarchy. When more than one of these
