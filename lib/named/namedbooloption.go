@@ -2,18 +2,24 @@ package named
 
 import (
 	"io"
+	"slices"
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/htmlio"
 )
 
 // RenderBoolOption renders nb as an HTML <option> element into w.
+//
+// The option value is always [Bool.Name] and takes precedence over any value
+// attribute in params.
 func RenderBoolOption(elem *jaws.Element, w io.Writer, nb *Bool, params []any) error {
 	// Single source of <option> markup, shared by BoolArray's options and by ui.Option,
 	// so attribute/escaping behavior cannot drift between them.
 	elem.Tag(nb)
+	// HTML parsing keeps the first duplicate attribute, so emit the canonical
+	// value before caller attributes.
 	attrs := elem.ApplyParams(params)
-	attrs = append(attrs, htmlio.Attr("value", nb.Name()))
+	attrs = slices.Insert(attrs, 0, htmlio.Attr("value", nb.Name()))
 	if nb.Checked() {
 		attrs = append(attrs, "selected")
 	}
