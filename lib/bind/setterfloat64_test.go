@@ -22,6 +22,7 @@ func (tg testGetter[T]) JawsGet(elem *jaws.Element) T {
 
 func Test_makeSetterFloat64types(t *testing.T) {
 	tsint := newTestSetter(int(0))
+	tsuintptr := newTestSetter(uintptr(0))
 	tests := []struct {
 		name  string
 		v     any
@@ -57,6 +58,21 @@ func Test_makeSetterFloat64types(t *testing.T) {
 			v:     int(0),
 			wantS: setterFloat64Static[int]{0},
 		},
+		{
+			name:  "Setter[uintptr]",
+			v:     tsuintptr,
+			wantS: setterFloat64[uintptr]{tsuintptr},
+		},
+		{
+			name:  "Getter[uintptr]",
+			v:     testGetter[uintptr]{},
+			wantS: setterFloat64ReadOnly[uintptr]{testGetter[uintptr]{}},
+		},
+		{
+			name:  "uintptr",
+			v:     uintptr(0),
+			wantS: setterFloat64Static[uintptr]{0},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -80,6 +96,40 @@ func Test_makeSetterFloat64_int(t *testing.T) {
 	tg := gotS.(tag.TagGetter)
 	if x := tg.JawsGetTag(); x != tsint {
 		t.Error(x)
+	}
+}
+
+func TestMakeSetterFloat64AcceptsUintptr(t *testing.T) {
+	ts := newTestSetter(uintptr(42))
+	tests := []struct {
+		name     string
+		value    any
+		settable bool
+	}{
+		{name: "static", value: uintptr(42)},
+		{name: "getter", value: testGetter[uintptr]{v: 42}},
+		{name: "setter", value: ts, settable: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := MakeSetterFloat64(tt.value)
+			if got := s.JawsGet(nil); got != 42 {
+				t.Fatalf("JawsGet() = %v, want 42", got)
+			}
+			err := s.JawsSet(nil, 43)
+			if tt.settable {
+				if err != nil {
+					t.Fatalf("JawsSet(43): %v", err)
+				}
+				if got := ts.Get(); got != 43 {
+					t.Fatalf("stored value = %v, want 43", got)
+				}
+				return
+			}
+			if !errors.Is(err, ErrValueNotSettable) {
+				t.Fatalf("JawsSet(43) = %v, want ErrValueNotSettable", err)
+			}
+		})
 	}
 }
 
@@ -230,9 +280,10 @@ func Test_setterFloat64_coversNumericTypes(t *testing.T) {
 	assertIntTypeGuard[int](t, "int", 1, 9223372036854775808.0)     // 2^63
 	assertIntTypeGuard[uint8](t, "uint8", 1, 256)
 	assertIntTypeGuard[uint16](t, "uint16", 1, 65536)
-	assertIntTypeGuard[uint32](t, "uint32", 1, 4294967296)             // 2^32
-	assertIntTypeGuard[uint64](t, "uint64", 1, 18446744073709551616.0) // 2^64
-	assertIntTypeGuard[uint](t, "uint", 1, 18446744073709551616.0)     // 2^64
+	assertIntTypeGuard[uint32](t, "uint32", 1, 4294967296)               // 2^32
+	assertIntTypeGuard[uint64](t, "uint64", 1, 18446744073709551616.0)   // 2^64
+	assertIntTypeGuard[uint](t, "uint", 1, 18446744073709551616.0)       // 2^64
+	assertIntTypeGuard[uintptr](t, "uintptr", 1, 18446744073709551616.0) // 2^64
 
 	// float32 rejects non-finite values and finite values that overflow the float32
 	// range (they would otherwise convert to ±Inf); an in-range value is accepted.
@@ -251,20 +302,25 @@ func Test_setterFloat64_coversNumericTypes(t *testing.T) {
 	}
 }
 
-// Test_setterFloat64_intBoundsTrackWordSize pins that the int and uint guards
-// follow the target word size rather than assuming 64 bits. 2^31 fits a 64-bit
-// int but overflows a 32-bit int, and 2^32 fits a 64-bit uint but overflows a
-// 32-bit uint; on a 32-bit build these must be rejected instead of silently
-// wrapping in the float->int conversion, and on a 64-bit build they stay in range.
+// Test_setterFloat64_intBoundsTrackWordSize pins that the int, uint, and uintptr
+// guards follow the target word size rather than assuming 64 bits. 2^31 fits a
+// 64-bit int but overflows a 32-bit int, and 2^32 fits 64-bit uint and uintptr
+// but overflows their 32-bit forms; on a 32-bit build these must be rejected
+// instead of silently wrapping in the float->int conversion, and on a 64-bit
+// build they stay in range.
 func Test_setterFloat64_intBoundsTrackWordSize(t *testing.T) {
-	intErr := sanitizeFloatForT[int](1 << 31)   // 2^31 = MaxInt32 + 1
-	uintErr := sanitizeFloatForT[uint](1 << 32) // 2^32 = MaxUint32 + 1
+	intErr := sanitizeFloatForT[int](1 << 31)         // 2^31 = MaxInt32 + 1
+	uintErr := sanitizeFloatForT[uint](1 << 32)       // 2^32 = MaxUint32 + 1
+	uintptrErr := sanitizeFloatForT[uintptr](1 << 32) // 2^32 = MaxUint32 + 1
 	if strconv.IntSize == 32 {
 		if !errors.Is(intErr, ErrFloatOutOfRange) {
 			t.Errorf("32-bit int 2^31: got %v, want ErrFloatOutOfRange", intErr)
 		}
 		if !errors.Is(uintErr, ErrFloatOutOfRange) {
 			t.Errorf("32-bit uint 2^32: got %v, want ErrFloatOutOfRange", uintErr)
+		}
+		if !errors.Is(uintptrErr, ErrFloatOutOfRange) {
+			t.Errorf("32-bit uintptr 2^32: got %v, want ErrFloatOutOfRange", uintptrErr)
 		}
 		return
 	}
@@ -273,6 +329,9 @@ func Test_setterFloat64_intBoundsTrackWordSize(t *testing.T) {
 	}
 	if uintErr != nil {
 		t.Errorf("64-bit uint 2^32: got %v, want nil", uintErr)
+	}
+	if uintptrErr != nil {
+		t.Errorf("64-bit uintptr 2^32: got %v, want nil", uintptrErr)
 	}
 }
 
