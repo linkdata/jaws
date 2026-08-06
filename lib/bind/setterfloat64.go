@@ -26,27 +26,10 @@ type setterFloat64[T numeric] struct {
 	Setter[T]
 }
 
-func float64MayAliasInteger[T numeric](value float64) bool {
-	// Keep the read-before-write check out of adapters that cannot hide integer
-	// bits. This preserves wrapped Getter and Setter call behavior everywhere
-	// outside the precision-loss case handled by the check.
-	const exactIntegerLimit = 1 << 53
-	if value > -exactIntegerLimit && value < exactIntegerLimit {
-		return false
-	}
-	switch any(T(0)).(type) {
-	case int64, uint64:
-		return true
-	case int, uint, uintptr:
-		return strconv.IntSize == 64
-	default:
-		return false
-	}
-}
-
-// sanitizeFloatForT validates value before it is converted to T. It rejects
-// non-finite values for every numeric T, and for integer T also rejects values
-// whose truncation toward zero falls outside the type's representable range.
+// sanitizeFloatForT validates value before it is converted to T and reports
+// whether it may be the canonical float64 view of more than one T integer. It
+// rejects non-finite values for every numeric T, and for integer T also rejects
+// values whose truncation toward zero falls outside the representable range.
 //
 // The conversion T(value) truncates toward zero, so the lower bound is compared
 // against math.Trunc(value): a fractional value like -128.5 truncates to the valid
@@ -65,13 +48,15 @@ func float64MayAliasInteger[T numeric](value float64) bool {
 // instantiate T only with the predeclared numeric types. A named (defined) type
 // such as "type Celsius float64" falls through to the float default branch and is
 // range-checked as if it were its predeclared underlying type.
-func sanitizeFloatForT[T numeric](value float64) error {
+func sanitizeFloatForT[T numeric](value float64) (mayAlias bool, err error) {
 	// Non-finite values, typically from the untrusted browser, corrupt the bound value;
 	// NaN in particular defeats the equality-based update dedup (NaN != NaN). Reject them.
 	if math.IsNaN(value) || math.IsInf(value, 0) {
-		return ErrFloatNotFinite
+		err = ErrFloatNotFinite
+		return
 	}
 	var lo, hiExcl float64
+	var wideInteger bool
 	switch any(T(0)).(type) {
 	case int8:
 		lo, hiExcl = math.MinInt8, math.MaxInt8+1
@@ -81,8 +66,10 @@ func sanitizeFloatForT[T numeric](value float64) error {
 		lo, hiExcl = math.MinInt32, math.MaxInt32+1
 	case int: // math.MinInt/math.MaxInt track the target word size
 		lo, hiExcl = math.MinInt, math.MaxInt+1
+		wideInteger = strconv.IntSize == 64
 	case int64:
 		lo, hiExcl = math.MinInt64, math.MaxInt64+1
+		wideInteger = true
 	case uint8:
 		lo, hiExcl = 0, math.MaxUint8+1
 	case uint16:
@@ -91,24 +78,30 @@ func sanitizeFloatForT[T numeric](value float64) error {
 		lo, hiExcl = 0, math.MaxUint32+1
 	case uint, uintptr: // math.MaxUint tracks both target types' word size
 		lo, hiExcl = 0, math.MaxUint+1
+		wideInteger = strconv.IntSize == 64
 	case uint64:
 		lo, hiExcl = 0, math.MaxUint64+1
+		wideInteger = true
 	default:
 		// float32 or float64: reject a finite value that overflows the target type.
 		// A float64 that exceeds the float32 range converts to ±Inf and silently
 		// corrupts the bound value (reachable from browser input via NewNumber and
 		// NewRange); float64 never overflows here, so this is a no-op for it.
 		if math.IsInf(float64(T(value)), 0) {
-			return ErrFloatOutOfRange
+			err = ErrFloatOutOfRange
 		}
-		return nil
+		return
 	}
 	// The float-to-int conversion of an out-of-range value is implementation-defined and
 	// silently wraps, so reject it rather than perform it.
 	if math.Trunc(value) < lo || value >= hiExcl {
-		return ErrFloatOutOfRange
+		err = ErrFloatOutOfRange
 	}
-	return nil
+	const exactIntegerLimit = 1 << 53
+	mayAlias = wideInteger &&
+		(value <= -exactIntegerLimit || value >= exactIntegerLimit) &&
+		(err == nil || value == hiExcl)
+	return
 }
 
 func (s setterFloat64[T]) JawsGet(elem *jaws.Element) float64 {
@@ -117,8 +110,9 @@ func (s setterFloat64[T]) JawsGet(elem *jaws.Element) float64 {
 }
 
 func (s setterFloat64[T]) JawsSet(elem *jaws.Element, value float64) (err error) {
-	err = sanitizeFloatForT[T](value)
-	if (err == nil || errors.Is(err, ErrFloatOutOfRange)) && float64MayAliasInteger[T](value) {
+	var mayAlias bool
+	mayAlias, err = sanitizeFloatForT[T](value)
+	if mayAlias {
 		current := s.Setter.JawsGet(elem)
 		if float64(current) == value && (err != nil || current != T(value)) {
 			err = jaws.ErrValueUnchanged

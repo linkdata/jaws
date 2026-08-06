@@ -377,6 +377,11 @@ func assertIntTypeGuard[T numeric](t *testing.T, name string, inRange, tooBig fl
 	}
 }
 
+func sanitizeFloatForTErr[T numeric](value float64) (err error) {
+	_, err = sanitizeFloatForT[T](value)
+	return
+}
+
 // Test_setterFloat64_coversNumericTypes exercises every case of the type switch in
 // sanitizeFloatForT: each integer type rejects out-of-range values, float32 rejects
 // non-finite and finite-but-overflowing values, and float64 takes the
@@ -418,9 +423,9 @@ func Test_setterFloat64_coversNumericTypes(t *testing.T) {
 // instead of silently wrapping in the float->int conversion, and on a 64-bit
 // build they stay in range.
 func Test_setterFloat64_intBoundsTrackWordSize(t *testing.T) {
-	intErr := sanitizeFloatForT[int](1 << 31)         // 2^31 = MaxInt32 + 1
-	uintErr := sanitizeFloatForT[uint](1 << 32)       // 2^32 = MaxUint32 + 1
-	uintptrErr := sanitizeFloatForT[uintptr](1 << 32) // 2^32 = MaxUint32 + 1
+	intErr := sanitizeFloatForTErr[int](1 << 31)         // 2^31 = MaxInt32 + 1
+	uintErr := sanitizeFloatForTErr[uint](1 << 32)       // 2^32 = MaxUint32 + 1
+	uintptrErr := sanitizeFloatForTErr[uintptr](1 << 32) // 2^32 = MaxUint32 + 1
 	if strconv.IntSize == 32 {
 		if !errors.Is(intErr, ErrFloatOutOfRange) {
 			t.Errorf("32-bit int 2^31: got %v, want ErrFloatOutOfRange", intErr)
@@ -459,20 +464,20 @@ func Test_setterFloat64_truncationBoundarySymmetry(t *testing.T) {
 			t.Errorf("%s: low boundary rejected (truncates to a valid value): %v", name, errLo)
 		}
 	}
-	assertSym(t, "int8", sanitizeFloatForT[int8](math.MaxInt8+0.5), sanitizeFloatForT[int8](math.MinInt8-0.5))
-	assertSym(t, "int16", sanitizeFloatForT[int16](math.MaxInt16+0.5), sanitizeFloatForT[int16](math.MinInt16-0.5))
-	assertSym(t, "int32", sanitizeFloatForT[int32](math.MaxInt32+0.5), sanitizeFloatForT[int32](math.MinInt32-0.5))
+	assertSym(t, "int8", sanitizeFloatForTErr[int8](math.MaxInt8+0.5), sanitizeFloatForTErr[int8](math.MinInt8-0.5))
+	assertSym(t, "int16", sanitizeFloatForTErr[int16](math.MaxInt16+0.5), sanitizeFloatForTErr[int16](math.MinInt16-0.5))
+	assertSym(t, "int32", sanitizeFloatForTErr[int32](math.MaxInt32+0.5), sanitizeFloatForTErr[int32](math.MinInt32-0.5))
 
 	// A whole value one below MinIntN truncates out of range and must be rejected.
-	if err := sanitizeFloatForT[int8](math.MinInt8 - 1); !errors.Is(err, ErrFloatOutOfRange) {
+	if err := sanitizeFloatForTErr[int8](math.MinInt8 - 1); !errors.Is(err, ErrFloatOutOfRange) {
 		t.Errorf("int8 %v: got %v, want ErrFloatOutOfRange", math.MinInt8-1, err)
 	}
 	// MinInt64 is exactly representable and in range; it must remain acceptable, while
 	// the next float64 below it (2048 lower) is out of range.
-	if err := sanitizeFloatForT[int64](math.MinInt64); err != nil {
+	if err := sanitizeFloatForTErr[int64](math.MinInt64); err != nil {
 		t.Errorf("int64 MinInt64: got %v, want nil", err)
 	}
-	if err := sanitizeFloatForT[int64](math.Nextafter(math.MinInt64, math.Inf(-1))); !errors.Is(err, ErrFloatOutOfRange) {
+	if err := sanitizeFloatForTErr[int64](math.Nextafter(math.MinInt64, math.Inf(-1))); !errors.Is(err, ErrFloatOutOfRange) {
 		t.Errorf("int64 below MinInt64: got %v, want ErrFloatOutOfRange", err)
 	}
 
