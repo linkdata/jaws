@@ -77,6 +77,55 @@ an element no template claimed, a wrapped template's update reports
 `ErrElementStateUnclaimed` through `jaws.Request.MustLog`, which **panics** when no
 `Jaws.Logger` is configured.
 
+## Container-family value widgets
+
+`NewContainer`, `NewTbody`, and `NewSelect` return immutable values. Their
+definitions contain only the outer tag, where applicable, and a child provider or
+Select handler. Mutable reconciliation state — the dirty tag, lock, and live child
+Elements — belongs to a private `containerState` claimed on each Element.
+
+`Tbody` composes this behavior directly by embedding a `Container` configured for its
+tag. Replacing that embedded Container after construction changes the widget definition
+and is misuse. Select keeps its typed handler private and builds the equivalent
+`Container` definition internally for render and update. Its overrides keep the
+selected-value operation inside the render phase and suppress it after update
+contention.
+
+That split makes definition equality the reuse key. A `JawsContains` implementation
+may rebuild an equal Container, Tbody, or Select on every call; a containing widget
+reuses the existing Element and its Jid without sharing its reconciliation state
+with another live Element. One equal value may back several live Elements within
+one request when its application provider is safe for all of those calls. Widget
+values remain request-scoped and must be constructed afresh for another request.
+
+The provider or handler is part of the value's identity. Its dynamic value must be
+comparable at runtime and equal to itself. Keep application objects containing
+slices, maps, or functions behind stable pointers, and rebuild with the same
+pointer:
+
+```go
+rows := &RowCollection{/* synchronized application state */}
+first := ui.NewContainer("div", rows)
+second := ui.NewContainer("div", rows) // equal to first
+```
+
+Mutate synchronized application state behind `rows`, not the widget definition,
+and do not allocate a new pointer merely to rebuild the widget. Use Container,
+Tbody, and Select as values; taking their addresses is unsupported because pointer
+identity prevents independently rebuilt definitions from comparing equal.
+
+The zero Container and Tbody, and values constructed with a nil-interface child
+provider, panic when rendering or updating calls the missing provider. A zero
+Select behaves the same for render and update, while its `JawsInput` is a no-op.
+A typed-nil provider is called normally and must tolerate its nil receiver itself.
+
+Rendering claims `containerState` before registering tags or handlers, invoking
+application callbacks, or writing output. Update-only use through `Register`
+claims missing state lazily. Such a state has no render-time dirty tag, so a
+registered Select still calls its input handler but cannot dirty through that tag.
+Removing a container Element recursively unregisters the children recorded in its
+state, including when a `Register` wrapper is the Element's visible UI value.
+
 You can also use explicit constructors through:
 
 ```go
@@ -143,8 +192,8 @@ but it does not keep the locker passed to `NewJsVar` held.
   - For tags like `<div>...</div>`, `<span>...</span>`, `<td>...</td>`.
 - `Input`, `InputText`, `InputBool`, `InputFloat`, `InputDate`
   - For interactive inputs with typed parse/update behavior.
-- `ContainerHelper`
-  - For widgets that render and maintain dynamic child lists.
+- `Container`, `Tbody`, `Select`
+  - Immutable value widgets for rendering and maintaining dynamic child lists.
 
 ## Widget lifetime
 
@@ -155,8 +204,9 @@ reuse it across requests, even if that widget currently appears stateless.
 
 Within a request, a widget normally backs at most one live `jaws.Element`. A
 widget may back multiple live Elements only when its type documents that
-support; such a widget retains no state that can differ between those Elements.
-The [package documentation](doc.go) is the canonical standard-widget
+support. Stateless HTML widgets and Template support this directly; Container,
+Tbody, and Select keep mutable state on each Element instead of on the shared
+value. The [package documentation](doc.go) is the canonical standard-widget
 classification; each concrete type's Go documentation states its conditions.
 
 The application data referenced by widgets has a separate lifetime. Distinct
@@ -217,27 +267,47 @@ Each base handles:
 
 ## Adding a container widget
 
-Use `ContainerHelper`:
+Embed a Container value when the new widget only supplies a distinct Go type and
+HTML tag:
 
 ```go
-type UList struct{ ui.ContainerHelper }
+type UList struct{ ui.Container }
 
-func NewUList(c jaws.Container) *UList {
-  return &UList{ContainerHelper: ui.NewContainerHelper(c)}
-}
-
-func (w *UList) JawsRender(e *jaws.Element, wr io.Writer, params []any) error {
-  return w.RenderContainer(e, wr, "ul", params)
-}
-
-func (w *UList) JawsUpdate(e *jaws.Element) {
-  w.UpdateContainer(e)
+func NewUList(c jaws.Container) UList {
+  return UList{Container: ui.NewContainer("ul", c)}
 }
 ```
 
+Embedding promotes Container's render and update methods. A widget that needs to
+add behavior can keep the Container in a named field and delegate both methods to
+that same value:
+
+```go
+type UList struct {
+  container ui.Container
+}
+
+func NewUList(c jaws.Container) UList {
+  return UList{container: ui.NewContainer("ul", c)}
+}
+
+func (w UList) JawsRender(e *jaws.Element, wr io.Writer, params []any) error {
+  return w.container.JawsRender(e, wr, params)
+}
+
+func (w UList) JawsUpdate(e *jaws.Element) {
+  w.container.JawsUpdate(e)
+}
+```
+
+The outer widget must itself be comparable and equal to itself. It must also
+respect the one-state-slot rule: do not claim Element state in the outer widget
+when the delegated Container claims it.
+
 ## Container error behavior
 
-`ContainerHelper` treats child render/update failures as application bugs.
+Container, Tbody, and Select treat child render/update failures as application
+bugs.
 
 - During initial render, child render failures are returned as errors.
 - During updates, append render failures are reported through `MustLog` (and

@@ -368,11 +368,10 @@ func TestTemplate_SecondClaimOnOneElementFails(t *testing.T) {
 	}
 }
 
-// TestTemplate_UpdateToleratesTypedNilElementState checks the cleanup walk against a state
-// slot holding a typed nil that satisfies elementOwner through a promoted method. Matching
-// the slot to *templateState rather than to elementOwner is what keeps this from
-// dereferencing a nil receiver.
-func TestTemplate_UpdateToleratesTypedNilElementState(t *testing.T) {
+// TestTemplate_UpdateToleratesTypedNilContainerState checks the cleanup walk against a
+// slot holding a typed-nil container state. The exact state-type switch must check nil
+// before calling its ownership method.
+func TestTemplate_UpdateToleratesTypedNilContainerState(t *testing.T) {
 	_, rq := newStateRequest(t)
 
 	// The nested child is a Span rather than a nested Template, whose Element would have
@@ -388,7 +387,7 @@ func TestTemplate_UpdateToleratesTypedNilElementState(t *testing.T) {
 	if child == nil {
 		t.Fatal("expected the nested span Element")
 	}
-	if err := jaws.SetElementState(child, (*Container)(nil)); err != nil {
+	if err := jaws.SetElementState(child, (*containerState)(nil)); err != nil {
 		t.Fatal(err)
 	}
 

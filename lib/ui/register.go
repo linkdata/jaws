@@ -14,13 +14,17 @@ import (
 // Updater supports those calls without retaining Element-specific state on a
 // shared value.
 //
-// Register does not call the embedded updater's [jaws.Renderer.JawsRender], so an updater
-// that needs state claimed during its render cannot work here: a wrapped [Template]
-// reports [ErrElementStateUnclaimed] instead of updating, through [jaws.Request.MustLog],
-// which panics when no [jaws.Jaws.Logger] is configured. An unwrapped Template is fine,
-// since its updates are a documented no-op — though only [RequestWriter.Register] also
-// delivers its event handlers, because Register embeds [jaws.Updater] and so promotes no
-// handler methods of its own.
+// Register does not call the embedded updater's [jaws.Renderer.JawsRender]. An updater
+// that requires render-only initialization therefore cannot work here: a wrapped
+// [Template] reports [ErrElementStateUnclaimed] instead of updating, through
+// [jaws.Request.MustLog], which panics when no [jaws.Jaws.Logger] is configured. An
+// unwrapped Template is fine, since its updates are a documented no-op.
+//
+// [Container], [Tbody] and [Select] explicitly support update-only use. Their first
+// update lazily claims per-Element container state rather than relying on render-time
+// initialization. For Select that state has no render-time dirty tag. Only
+// [RequestWriter.Register] delivers an updater's event handlers, because Register embeds
+// [jaws.Updater] and promotes no handler methods of its own.
 type Register struct{ jaws.Updater }
 
 // NewRegister returns an update-only widget that invokes updater during updates.
@@ -58,10 +62,16 @@ func (u Register) JawsRender(elem *jaws.Element, w io.Writer, params []any) erro
 // [jaws.Request.MustLog] rather than updating. An unwrapped Template works — its updates
 // are a documented no-op — and this helper is the only Register form that also delivers
 // a Template's click, input and context-menu handlers, since it adds the concrete updater
-// to the Element's handler list. In particular, the standard input widgets and [Select]
-// initialize their dirty targets while rendering; register them with
-// [RequestWriter.NewUI] or their RequestWriter helper when they need to handle input
-// events.
+// to the Element's handler list.
+//
+// [Container], [Tbody] and [Select] lazily claim their per-Element container state on the
+// immediate update, so their reconciliation works through this update-only path. No
+// render-time getter ran, so the state has a nil dirty tag. A registered Select receives
+// input through this helper and still calls its handler, but applies the result with that
+// nil tag; use [RequestWriter.NewUI] or [RequestWriter.Select] when input must dirty the
+// handler's render-time dependency. The typed input widgets require their ordinary render
+// initialization and should likewise be registered through their NewUI or RequestWriter
+// helpers when they need to handle input events.
 //
 // Returns a [jid.Jid], suitable for including as an HTML id attribute:
 //

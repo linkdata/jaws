@@ -46,15 +46,20 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
   nil `UI` interface is a no-op. Surviving such a call is up to the concrete type, not
   a requirement: a widget that dereferences its fields panics, and none of the
   standard `lib/ui` widgets document nil-receiver tolerance. Do not pass a nil pointer
-  of a type that does not; use its zero value (e.g. `ui.Template{}`) instead.
+  of a type that does not; use its zero value where that type documents one (for example
+  `ui.Template{}`). The container-family zero values intentionally have nil providers:
+  `Container`, `Tbody` and `Select` panic during render/update, while zero
+  `Select.JawsInput` is a no-op.
 - Every JaWS `UI` value is request-scoped. Once used by one Request, never use
   that value with another Request; construct fresh widgets per request. The
   widgets may still refer to shared, synchronized application state, binders,
   handlers, and tags.
 - Within its Request, a `UI` value normally backs one live `Element`. Reuse one
   value for multiple live Elements only when its concrete type documents that
-  support and retains no state that can differ between those Elements.
-- `Container.JawsContains` must return `UI` items that are comparable and equal to
+  support and either retains no Element-specific state or keeps it separately on
+  each Element. `ui.Container`, `ui.Tbody`, `ui.Select` and `ui.Template` use the
+  per-Element state-slot form.
+- `jaws.Container.JawsContains` must return `UI` items that are comparable and equal to
   themselves (see above); returning one that is not cancels the `Request`. The
   returned slice must not be mutated after return. A UI value may occur more than
   once in one returned slice only when its type supports multiple live Elements.
@@ -99,6 +104,36 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
 - `ui.NewDiv`, `ui.NewSpan`, `ui.NewButton`, `ui.NewA`, `ui.NewLabel`, `ui.NewTd`, `ui.NewTr`, and `ui.NewLi` accept `innerHTML any` and call `bind.MakeHTMLGetter` internally.
 - The matching `RequestWriter` helpers (`$.Div`, `$.Span`, etc.) have the same content conversion rules because they call the constructors.
 - Plain strings are trusted raw HTML at both levels. Use `bind.Getter[string]`, `bind.StringGetterFunc`, `fmt.Stringer`, or explicit escaping for untrusted text.
+
+## Container-family constructors and identity
+
+- `ui.NewContainer(outerHTMLTag, children)`, `ui.NewTbody(children)` and
+  `ui.NewSelect(handler)` return immutable **values**, not pointers. Container keeps a
+  `jaws.Container` definition, and Tbody embeds one configured for `tbody`. Select keeps
+  its `named.SelectHandler` private and uses an equivalent Container definition
+  internally, overriding render/update only for selected-value behavior. Replacing
+  Tbody's embedded Container after construction changes the definition and is misuse.
+- The provider or handler is part of widget equality. Its dynamic value must be
+  comparable at runtime and equal to itself. A slice, map, function, interface holding
+  one of those, or a NaN-bearing value makes the whole widget unusable as a container
+  child even though its Go struct is statically comparable.
+- Keep slice/map/function-bearing application objects behind stable pointers and pass
+  the application-object pointer to the constructor. Rebuild with that **same pointer**
+  to obtain an equal widget and Element reuse. Mutate only synchronized application
+  state behind the pointer; never mutate the widget definition or allocate a fresh
+  pointer merely to rebuild it.
+- Always use Container, Tbody and Select as values. Taking their addresses is
+  unsupported because it changes identity to the wrapper pointer and prevents
+  independently rebuilt definitions from comparing equal.
+- Equal values may back multiple live Elements within one Request: each Element keeps
+  independent reconciliation state. They remain request-scoped; construct fresh widget
+  values for another Request even when those values refer to shared synchronized
+  application state.
+- A nil-interface child provider is a valid part of the Go value but is not renderable:
+  zero Container/Tbody and `NewContainer`/`NewTbody` with nil providers panic when
+  render/update calls `JawsContains`. Zero Select and `NewSelect(nil)` likewise panic in
+  render/update, while `Select.JawsInput` treats the nil handler as a no-op. A typed-nil
+  provider is dispatched normally and must tolerate its nil receiver itself.
 
 ## Template-dot and tag rules
 
@@ -194,6 +229,28 @@ For clickable content rendering:
 
 - Keep HTML structure in templates; avoid manual HTML string assembly in Go.
 - `ui.Template.JawsUpdate` re-renders the template data into the generated wrapper.
+- `ui.Container`, `ui.Tbody` and `ui.Select` claim a private `containerState` on each
+  Element before registering tags or handlers, invoking application code, or writing
+  output. Contention returns `jaws.ErrElementStateClaimed` with no render side effects.
+  The state holds the render-time dirty tag, reconciliation mutex and owned child
+  Elements; the immutable widget value retains only its definition.
+- Container-family updates normally load that state. Update-only use through
+  `$.Register` lazily claims a missing state before invoking the provider. A foreign
+  state, typed-nil state or lost concurrent claim is reported through `MustLog`, and no
+  children are reconciled; Select also sends no value. The lazy state has no render-time
+  dirty tag. `$.Register` delivers Select input to its handler, but the result is applied
+  with a nil dirty tag; use ordinary `$.Select` rendering when input must dirty that
+  dependency.
+- Container ownership also lives in `containerState`, not in `elem.UI()`. Cleanup
+  detaches children under the state mutex and recurses after unlocking, so it also finds
+  children when the Element's visible UI is a `Register` wrapper. Failed render and
+  append paths unregister every child and nested owner they created.
+- Container reconciliation calls `JawsContains` and validates every child before taking
+  the state mutex. `Request.NewElement` is the one operation allowed while that mutex is
+  held; rendering, removal, cancellation, recursive cleanup and logging happen after it
+  is released.
+- Select renders or reconciles its options before queueing its selected value. It sends
+  the value after every successful update, but not after state contention.
 - `ui.NewTemplate` returns a plain `ui.Template` **value** that may back multiple live
   Elements because it keeps the Elements its execution creates in each rendering Element's
   state slot rather than on itself. Do not take its address. A
@@ -203,8 +260,9 @@ For clickable content rendering:
   at creation, so an Element that never rendered is reclaimed as well.
 - Because the value is stateless, a container's `JawsContains` may rebuild equal children on
   every call and their Elements are still reused — that equality *is* the reuse key.
-- The state slot is claimed while rendering, which constrains composition:
-  - at most one Template may render a given Element;
+- The state slot has one claimant, which constrains composition:
+  - at most one state-owning Template or container-family renderer may render a given
+    Element;
   - a composite UI must use Template values equal under `==` for rendering and updating
     an Element; using unequal values is unsupported;
   - a **wrapped** Template updates only an Element rendered by an equal Template value, so
@@ -261,6 +319,9 @@ Guideline:
 - Use real JaWS requests/elements for render/click/update tests.
 - Add regression tests for click dispatch when moving handlers between params and dot `JawsClick`.
 - For container regressions, verify identity reuse, append/remove/order behavior, and stale-element cleanup.
+- For container-family state changes, verify equal values keep independent Elements,
+  contention precedes callbacks/output, update-only registration claims lazily, and
+  nested ownership cleanup keeps the Request registry flat.
 - Add pure domain tests for state transitions (win/loss, reset, bounds checks) independent of JaWS transport.
 - If rerendering fails, inspect tag comparability and dirty-target coverage before broadening dirty scope.
 
@@ -270,6 +331,10 @@ Guideline:
 - Fake binders or fake tags created only to satisfy an API shape.
 - Hidden mutations in getter paths.
 - Broad `Dirty(...)` calls used to mask incorrect dependency targeting.
+- Pointer-wrapping a Container, Tbody, Select or Template value, which replaces
+  definition equality with pointer identity.
+- Passing a runtime-incomparable application object directly to a container-family
+  constructor instead of retaining it behind a stable pointer.
 - Returning a shared/group tag from an item's `JawsGetTag` (bundling it into the item's own dirty identity), which makes a single-item `Dirty` fan out to the whole group.
 - Passing explicit template click handlers when dot-owned `JawsClick` already covers behavior.
 - Adding custom browser JavaScript for state that can be expressed through JaWS events and server updates.

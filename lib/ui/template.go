@@ -98,7 +98,7 @@ var (
 // Element's widget state slot so the Template itself stays a stateless comparable value.
 type templateState struct {
 	// mu serializes the owned operations, which run on the rendering goroutine and
-	// on the request loop goroutine during updates (mirrors ContainerHelper).
+	// on the request loop goroutine during updates (mirrors containerState).
 	mu sync.Mutex
 	// owned are the Elements created while the template executed, in creation order.
 	owned []*jaws.Element
@@ -121,7 +121,7 @@ func (st *templateState) ownElement(child *jaws.Element) {
 
 // takeOwnedElements returns the Elements created by the most recent execution and
 // clears the tracking state, transferring responsibility for unregistering them to
-// the caller. It implements elementOwner.
+// the caller.
 func (st *templateState) takeOwnedElements() (owned []*jaws.Element) {
 	st.mu.Lock()
 	owned, st.owned = st.owned, nil
@@ -222,7 +222,7 @@ func (tmpl Template) render(elem *jaws.Element, w io.Writer, params []any) (err 
 				if doWrap {
 					// Always emit the closing tag, even when execute failed, to balance
 					// the start tag already written above (mirrors
-					// ContainerHelper.RenderContainer). The original execute error is
+					// Container.render). The original execute error is
 					// preserved; the close-write error is adopted only when err is nil.
 					if _, werr := io.WriteString(w, "</"+tmpl.OuterHTMLTag+">"); err == nil {
 						err = werr

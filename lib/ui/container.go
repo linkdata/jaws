@@ -8,33 +8,51 @@ import (
 
 // Container renders an HTML element around a dynamic child collection.
 //
-// A Container value must back at most one live [jaws.Element]. Construct a
-// distinct Container for each place the collection is rendered.
+// Container is an immutable definition whose mutable reconciliation state is
+// kept separately on each [jaws.Element]. Equal Container values can therefore
+// back multiple live Elements within one [jaws.Request], provided the child
+// provider is safe for every call.
+//
+// The dynamic value of the child provider must be comparable at runtime and
+// equal to itself. Rebuilding a Container with the same outer tag and the same
+// stable provider pointer produces an equal value, allowing a containing widget
+// to reuse the existing Element. When a provider contains a slice, map, function
+// or other runtime-incomparable value, pass a stable pointer to it instead.
+// Application state behind that pointer may change with appropriate
+// synchronization, but the Container definition itself must not change.
+//
+// Use Container as a value. Taking its address is unsupported because pointer
+// identity prevents independently rebuilt definitions from comparing equal.
+//
+// The zero value, and a Container constructed with a nil-interface child
+// provider, panic when rendering or updating tries to obtain children. A typed
+// nil provider is called normally and must tolerate its nil receiver itself.
 type Container struct {
-	OuterHTMLTag string
-	ContainerHelper
+	outerHTMLTag string
+	children     jaws.Container
 }
 
-// NewContainer returns a container widget that renders c inside outerHTMLTag.
-// The returned widget tracks child elements and updates them using ContainerHelper.
-func NewContainer(outerHTMLTag string, c jaws.Container) *Container {
-	return &Container{
-		OuterHTMLTag:    outerHTMLTag,
-		ContainerHelper: NewContainerHelper(c),
-	}
+var _ jaws.UI = Container{}
+
+// NewContainer returns a container widget that renders children inside outerHTMLTag.
+//
+// The returned definition is immutable. Reuse the same stable child-provider
+// pointer when rebuilding an equal Container value.
+func NewContainer(outerHTMLTag string, children jaws.Container) Container {
+	return Container{outerHTMLTag: outerHTMLTag, children: children}
 }
 
 // JawsRender renders ui as its configured container element.
-func (u *Container) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
-	return u.RenderContainer(elem, w, u.OuterHTMLTag, params)
+func (u Container) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
+	return u.render(elem, w, params, nil)
 }
 
 // JawsUpdate updates the child collection.
-func (u *Container) JawsUpdate(elem *jaws.Element) {
-	u.UpdateContainer(elem)
+func (u Container) JawsUpdate(elem *jaws.Element) {
+	u.update(elem)
 }
 
-// Container renders c inside outerHTMLTag.
-func (rw RequestWriter) Container(outerHTMLTag string, c jaws.Container, params ...any) error {
-	return rw.NewUI(NewContainer(outerHTMLTag, c), params...)
+// Container renders children inside outerHTMLTag.
+func (rw RequestWriter) Container(outerHTMLTag string, children jaws.Container, params ...any) error {
+	return rw.NewUI(NewContainer(outerHTMLTag, children), params...)
 }

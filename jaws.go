@@ -28,14 +28,22 @@
 // below all of the above. The [Element] widget state slot is not one of them: the slot
 // itself is guarded by Request.mu, which [ElementState] and [SetElementState] take
 // themselves, so a caller must hold neither Request.mu nor the stored value's own lock.
-// Whatever lock that stored value keeps is a leaf, and it is released before any core
-// lock is acquired, so nothing nests.
+// Whatever lock that stored value keeps is normally a leaf released before any core lock
+// is acquired. The containerState reconciliation exception is documented below.
 // Blocking work (channel sends, user callbacks) is always performed after
 // snapshotting the needed state and releasing the relevant lock; see
 // [Session.Broadcast] and [Session.Close] for the canonical pattern. The
 // [Request.SetContext] transform is the deliberate exception: it runs while
 // holding Request.mu so the read-modify-write is atomic, and therefore must not
 // call back into the same Request or block.
+//
+// An Element has one widget state slot. Renderers that use it claim it before
+// registering tags or handlers, invoking application callbacks, or writing output, so
+// rendering-phase contention returns [ErrElementStateClaimed] without partial render
+// side effects. A delegating renderer must choose one state-owning delegate. The
+// container-family widgets in [github.com/linkdata/jaws/lib/ui] may instead claim an
+// empty slot lazily on their first update for update-only registration; a foreign state,
+// typed-nil state, or lost concurrent claim is reported without reconciliation.
 //
 // UI value and widget types in the subpackages carry their own leaf locks that
 // guard the bound value: the binders in [github.com/linkdata/jaws/lib/bind], the
@@ -55,15 +63,18 @@
 // acquisition would invert the core lock order. Code holding any of the three core
 // locks must therefore never invoke a UI value method.
 //
-// A deliberate reverse edge lives in [github.com/linkdata/jaws/lib/ui]:
-// ContainerHelper.reconcile holds its own widget mutex while calling
-// [Request.NewElement], which takes Request.mu — again leaf-before-core. It is safe
-// for the same reason: no code path holding any of the three core locks ever
-// invokes a widget's render or update method (the Serve loop calls JawsRender and
+// A deliberate, exact reverse edge lives in [github.com/linkdata/jaws/lib/ui]:
+// containerState reconciliation may hold containerState.mu while calling
+// [Request.NewElement], which takes Request.mu — state-mutex-before-core. Child-provider
+// callbacks and validation run before that state lock; rendering, removal, recursive
+// ownership cleanup, cancellation and logging run after it is released. Ownership
+// cleanup detaches the child set under containerState.mu and recurses only after
+// unlocking. The reverse edge is safe because no code path holding any of the three core
+// locks invokes a widget's render or update method (the Serve loop calls JawsRender and
 // JawsUpdate only after releasing Request.mu). Code holding Jaws.mu, Request.mu or
-// Session.mu must therefore never call a container's render/update entry points.
-// Note the widget mutex is a plain sync.Mutex, so deadlock.Debug cannot observe
-// this inversion; the invariant is maintained by convention.
+// Session.mu must therefore never call a container's render/update entry points. The
+// state mutex is a plain sync.Mutex, so deadlock.Debug cannot observe this inversion; the
+// invariant is maintained by convention.
 //
 // [Element] handlers are an intentional exception to the locking rules: they are
 // populated only while an Element is rendered and are then read without a lock on

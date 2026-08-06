@@ -82,6 +82,24 @@ func renderUI(t *testing.T, rq *jaws.Request, ui jaws.UI, params ...any) (*jaws.
 	return elem, sb.String()
 }
 
+func requireContainerState(t *testing.T, elem *jaws.Element) *containerState {
+	t.Helper()
+	st, ok := jaws.ElementState(elem).(*containerState)
+	if !ok || st == nil {
+		t.Fatalf("element %v state = %T, want *containerState", elem.Jid(), jaws.ElementState(elem))
+	}
+	return st
+}
+
+func containerElements(t *testing.T, elem *jaws.Element) (contents []*jaws.Element) {
+	t.Helper()
+	st := requireContainerState(t, elem)
+	st.mu.Lock()
+	contents = append(contents, st.contents...)
+	st.mu.Unlock()
+	return
+}
+
 type testHTMLGetter string
 
 func (g testHTMLGetter) JawsGetHTML(elem *jaws.Element) template.HTML {

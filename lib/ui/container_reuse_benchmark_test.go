@@ -107,3 +107,101 @@ func BenchmarkContainerOfStableChildrenUpdate(b *testing.B) {
 		jw.Close()
 	}
 }
+
+// BenchmarkContainerInitialRender measures the state-allocation path separately from
+// the larger child-reuse benchmarks.
+func BenchmarkContainerInitialRender(b *testing.B) {
+	b.ReportAllocs()
+	for range b.N {
+		b.StopTimer()
+		jw, rq := benchReuseRequest(b)
+		bc := &benchStableContainer{contents: benchChildren(0, 4)}
+		container := NewContainer("div", bc)
+		elem := rq.NewElement(container)
+		b.StartTimer()
+		if err := elem.JawsRender(io.Discard, nil); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+		jw.Close()
+	}
+}
+
+// BenchmarkContainerUnchangedUpdate measures a small reconciliation that reuses every
+// child and emits no browser mutation.
+func BenchmarkContainerUnchangedUpdate(b *testing.B) {
+	b.ReportAllocs()
+	for range b.N {
+		b.StopTimer()
+		jw, rq := benchReuseRequest(b)
+		bc := &benchStableContainer{contents: benchChildren(0, 4)}
+		container := NewContainer("div", bc)
+		elem := rq.NewElement(container)
+		if err := elem.JawsRender(io.Discard, nil); err != nil {
+			b.Fatal(err)
+		}
+		b.StartTimer()
+		container.JawsUpdate(elem)
+		b.StopTimer()
+		jw.Close()
+	}
+}
+
+// BenchmarkContainerAppendUpdate measures a small reconciliation that appends one
+// child.
+func BenchmarkContainerAppendUpdate(b *testing.B) {
+	b.ReportAllocs()
+	for range b.N {
+		b.StopTimer()
+		jw, rq := benchReuseRequest(b)
+		bc := &benchStableContainer{contents: benchChildren(0, 3)}
+		container := NewContainer("div", bc)
+		elem := rq.NewElement(container)
+		if err := elem.JawsRender(io.Discard, nil); err != nil {
+			b.Fatal(err)
+		}
+		bc.contents = benchChildren(0, 4)
+		b.StartTimer()
+		container.JawsUpdate(elem)
+		b.StopTimer()
+		jw.Close()
+	}
+}
+
+// BenchmarkContainerRemoveUpdate measures a small reconciliation that removes one
+// child.
+func BenchmarkContainerRemoveUpdate(b *testing.B) {
+	b.ReportAllocs()
+	for range b.N {
+		b.StopTimer()
+		jw, rq := benchReuseRequest(b)
+		bc := &benchStableContainer{contents: benchChildren(0, 4)}
+		container := NewContainer("div", bc)
+		elem := rq.NewElement(container)
+		if err := elem.JawsRender(io.Discard, nil); err != nil {
+			b.Fatal(err)
+		}
+		bc.contents = benchChildren(0, 3)
+		b.StartTimer()
+		container.JawsUpdate(elem)
+		b.StopTimer()
+		jw.Close()
+	}
+}
+
+// BenchmarkContainerRegisterFirstUpdate measures the lazy state-claim path used by an
+// update-only Register Element.
+func BenchmarkContainerRegisterFirstUpdate(b *testing.B) {
+	b.ReportAllocs()
+	for range b.N {
+		b.StopTimer()
+		jw, rq := benchReuseRequest(b)
+		bc := &benchStableContainer{contents: benchChildren(0, 4)}
+		container := NewContainer("div", bc)
+		elem := rq.NewElement(NewRegister(container))
+		b.StartTimer()
+		elem.JawsUpdate()
+		b.StopTimer()
+		jw.Close()
+	}
+}
