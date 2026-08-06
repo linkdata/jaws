@@ -3,12 +3,10 @@ package ui
 import "github.com/linkdata/jaws"
 
 // appendOwnedElements appends elems and, recursively, the Elements they own to dst.
-//
-// Taking each state's set as the walk proceeds detaches the subtree and makes the
-// recursion self-limiting, so an unexpected ownership cycle terminates instead of
-// recursing forever. It must not be called with a widget-state lock held: it locks
-// each visited state in turn.
 func appendOwnedElements(dst []*jaws.Element, elems []*jaws.Element) []*jaws.Element {
+	// Taking each state's set detaches the subtree, so an unexpected ownership
+	// cycle terminates. Call without a widget-state lock held: this walk locks each
+	// visited state in turn.
 	for _, elem := range elems {
 		dst = append(dst, elem)
 		dst = appendOwnedBy(dst, elem)
@@ -19,12 +17,9 @@ func appendOwnedElements(dst []*jaws.Element, elems []*jaws.Element) []*jaws.Ele
 // appendOwnedBy appends the Elements owned by elem, recursively, to dst. It does not
 // append elem itself, so a caller that unregisters elem separately (through
 // [jaws.Element.Remove], say) can still collect its descendants.
-//
-// Ownership is stored in the Element state slot. Match the two private state types
-// exactly and check typed nils before calling their methods: the slot may legitimately
-// contain any value a renderer claimed. Each take detaches the direct children under
-// that state's mutex, and recursion starts only after the mutex is released.
 func appendOwnedBy(dst []*jaws.Element, elem *jaws.Element) []*jaws.Element {
+	// Match exact state types and check typed nils: any renderer may claim the slot.
+	// Each take detaches direct children before recursion starts.
 	var owned []*jaws.Element
 	switch st := jaws.ElementState(elem).(type) {
 	case *containerState:

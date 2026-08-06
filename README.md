@@ -412,7 +412,9 @@ When changing core request, session, broadcast, or WebSocket code, re-check
 these invariants before relying on a green build alone:
 
 * Lock order stays `Jaws.mu -> Request.mu -> Session.mu`, with `Request.muQueue`
-  and element/widget/value locks remaining leaf locks.
+  and most element/widget/value locks remaining leaves. Container reconciliation's
+  state-before-Request edge stays confined to matching and Element creation; core-lock
+  holders never invoke container render or update methods.
 * Request identities are never reused; only the internal buffers are pooled.
   Completion (after WebSocket serving) releases queued dirt, elements, tags, and
   messages, detaches the session, unregisters the identity, and reserves the key

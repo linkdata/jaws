@@ -12,7 +12,6 @@ import (
 )
 
 // containerState is the mutable reconciliation state for one container-family Element.
-// The widget value holds only the comparable definition shared across Elements.
 type containerState struct {
 	mu sync.Mutex
 	// rendering is true from the successful state claim until JawsRender finishes.
@@ -66,12 +65,12 @@ func claimContainerState(elem *jaws.Element) (st *containerState, err error) {
 	return
 }
 
-// stateForContainerUpdate returns the state claimed for elem, lazily claiming an
-// empty state when the slot is unclaimed. Update-only Register is the intended path,
-// but the state slot does not encode how the Element was created. An occupied foreign
-// slot, a typed nil state, an in-progress render, or a lost concurrent claim is
-// contention.
+// stateForContainerUpdate returns usable container state for elem, claiming an empty
+// state when the slot is unclaimed.
 func stateForContainerUpdate(elem *jaws.Element) (st *containerState, err error) {
+	// Update-only Register is the intended lazy-claim path, but the state slot does
+	// not encode how the Element was created. Treat an occupied foreign slot, typed
+	// nil, in-progress render, or lost concurrent claim as contention.
 	switch state := jaws.ElementState(elem).(type) {
 	case nil:
 		st, err = claimContainerState(elem)
@@ -243,13 +242,11 @@ func (u Container) update(elem *jaws.Element) (updated bool) {
 // cancelUnusableChildren terminates the Request and reports true if any child cannot
 // be used as a container pool key: nil, not comparable at runtime, or not equal to
 // itself (a value holding NaN). It aborts on the first such child.
-//
-// It must be called without holding a containerState mutex. [jaws.Request.Cancel]
-// runs the user logger synchronously, and the jaws locking contract forbids that under
-// a lock. Validating the whole slice up front also stops the caller creating or
-// rendering later children once the Request is terminating. The cancellation cause
-// matches tag.ErrNotUsableAsTag with errors.Is (see [jaws.NewErrUnusableUI]).
 func cancelUnusableChildren(elem *jaws.Element, children []jaws.UI) bool {
+	// Call without holding a containerState mutex: Request.Cancel runs the user
+	// logger synchronously. Validating the whole slice up front also prevents later
+	// children from being created once the Request is terminating. The cause matches
+	// tag.ErrNotUsableAsTag through jaws.NewErrUnusableUI.
 	if bad, ok := firstUnusableChild(children); ok {
 		elem.Request.Cancel(jaws.NewErrUnusableUI(bad))
 		return true
@@ -259,13 +256,9 @@ func cancelUnusableChildren(elem *jaws.Element, children []jaws.UI) bool {
 
 // firstUnusableChild returns the first child that is nil, not equal to itself, or not
 // comparable at runtime, and whether one was found.
-//
-// A single deferred recover guards the whole scan, so a usable child costs only one
-// self-comparison rather than a per-child deferred check: comparing a
-// runtime-incomparable value panics, which the recover attributes to the child being
-// examined (bad). This keeps the common all-usable case cheap on the container update
-// hot path.
 func firstUnusableChild(children []jaws.UI) (bad jaws.UI, found bool) {
+	// One deferred recover guards the scan, avoiding a defer per child. A comparison
+	// panic is attributed to the child currently held in bad.
 	defer func() {
 		if recover() != nil {
 			found = true // comparing bad panicked: not comparable at runtime
@@ -283,17 +276,14 @@ func firstUnusableChild(children []jaws.UI) (bad jaws.UI, found bool) {
 // reconcile matches st.contents to wantContents under st.mu and returns the Elements
 // to append, the live leftovers to remove, already-deleted old Elements whose owned
 // descendants need cleanup, and the old and new Jid orders.
-//
-// The wanted children are validated before st.mu is locked, since cancellation runs
-// the user logger. The lock is still released with defer as a guard against a panic.
-// Reconciliation's call to [jaws.Request.NewElement] is the sole deliberate
-// state-mutex-to-Request-lock edge; application callbacks and all other Request work
-// stay outside st.mu.
 func (st *containerState) reconcile(elem *jaws.Element, wantContents []jaws.UI) (toAppend, toRemove, alreadyDeleted []*jaws.Element, oldOrder, newOrder []jaws.Jid) {
+	// Validate before locking because cancellation runs the user logger.
 	if cancelUnusableChildren(elem, wantContents) {
 		return
 	}
 
+	// NewElement is the sole deliberate state-mutex-to-Request-lock edge.
+	// Application callbacks and all other Request work stay outside st.mu.
 	st.mu.Lock()
 	defer st.mu.Unlock()
 

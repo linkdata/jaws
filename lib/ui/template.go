@@ -94,13 +94,13 @@ var (
 	_ jaws.InputHandler       = Template{} // statically ensure interface is defined
 )
 
-// templateState is the per-Element state a Template claims while rendering, held in the
-// Element's widget state slot so the Template itself stays a stateless comparable value.
+// templateState is the per-Element state a Template claims while rendering.
 type templateState struct {
 	// mu serializes the owned operations, which run on the rendering goroutine and
 	// on the request loop goroutine during updates (mirrors containerState).
 	mu sync.Mutex
 	// owned are the Elements created while the template executed, in creation order.
+	// Keeping ownership here leaves Template as a stateless comparable value.
 	owned []*jaws.Element
 }
 
@@ -110,10 +110,10 @@ func templateStateOf(elem *jaws.Element) (st *templateState) {
 	return
 }
 
-// ownElement records child as created while the template executed. It is the
-// [RequestWriter] element-created hook installed by execute, so it is called as soon
-// as the Element exists and makes no assumption about whether it rendered.
+// ownElement records child as created while the template executed.
 func (st *templateState) ownElement(child *jaws.Element) {
+	// execute installs this as RequestWriter's creation hook. Record the Element
+	// immediately without assuming that it rendered.
 	st.mu.Lock()
 	st.owned = append(st.owned, child)
 	st.mu.Unlock()

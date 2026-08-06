@@ -79,30 +79,10 @@ an element no template claimed, a wrapped template's update reports
 
 ## Container-family value widgets
 
-`NewContainer`, `NewTbody`, and `NewSelect` return immutable values. Their
-definitions contain only the outer tag, where applicable, and a child provider or
-Select handler. Mutable reconciliation state — the dirty tag, lock, and live child
-Elements — belongs to a private `containerState` claimed on each Element.
-
-`Tbody` composes this behavior directly by embedding a `Container` configured for its
-tag. Replacing that embedded Container after construction changes the widget definition
-and is misuse. Select keeps its typed handler private and builds the equivalent
-`Container` definition internally for render and update. Its overrides keep the
-selected-value operation inside the render phase and suppress it after update
-contention.
-
-That split makes definition equality the reuse key. A `JawsContains` implementation
-may rebuild an equal Container, Tbody, or Select on every call; a containing widget
-reuses the existing Element and its Jid without sharing its reconciliation state
-with another live Element. One equal value may back several live Elements within
-one request when its application provider is safe for all of those calls. Widget
-values remain request-scoped and must be constructed afresh for another request.
-
-Reconciliation is parent-local and updates direct children only. Reordering equal
-children preserves their Elements and complete nested subtrees. Each nested Container,
-Tbody, or Select whose own children changed must receive its own dirty/update pass;
-updating an outer parent is not recursive. Moving a child between different parents is
-reparenting, so the old parent removes its Element and the new parent renders a new one.
+`NewContainer`, `NewTbody`, and `NewSelect` return definition values. Treat them as
+immutable after use and do not take their addresses; pointers change definition
+equality to pointer identity. `Tbody` embeds a `Container` configured for `tbody`;
+replacing it is unsupported.
 
 The provider or handler is part of the value's identity. Its dynamic value must be
 comparable at runtime and equal to itself. Keep application objects containing
@@ -115,22 +95,26 @@ first := ui.NewContainer("div", rows)
 second := ui.NewContainer("div", rows) // equal to first
 ```
 
-Mutate synchronized application state behind `rows`, not the widget definition,
-and do not allocate a new pointer merely to rebuild the widget. Use Container,
-Tbody, and Select as values; taking their addresses is unsupported because pointer
-identity prevents independently rebuilt definitions from comparing equal.
+Rebuilding an equal definition lets the same parent retain its live Element. Equal
+values may back several live Elements within one request when their providers or
+handlers are safe for all calls and each child UI value reused across those Elements
+supports multiple live Elements.
+
+Reconciliation updates direct children only. Reordering retained equal children
+preserves their Elements and nested subtrees; changed nested containers need their own
+update. Child Element identity is parent-scoped, so moving a child definition between
+parents does not preserve its Element.
 
 The zero Container and Tbody, and values constructed with a nil-interface child
 provider, panic when rendering or updating calls the missing provider. A zero
 Select behaves the same for render and update, while its `JawsInput` is a no-op.
 A typed-nil provider is called normally and must tolerate its nil receiver itself.
 
-Rendering claims `containerState` before registering tags or handlers, invoking
-application callbacks, or writing output. Update-only use through `Register`
-claims missing state lazily. Such a state has no render-time dirty tag, so a
-registered Select still calls its input handler but cannot dirty through that tag.
-Removing a container Element recursively unregisters the children recorded in its
-state, including when a `Register` wrapper is the Element's visible UI value.
+Container, Tbody, and Select support update-only use through `Register`. A Select
+registered this way retains no handler-derived tag for its own post-set dirtying.
+Any handler-initiated dirtying still occurs, and separately registered tags remain
+registered. Use ordinary Select rendering when Select should register and use a usable
+tag exposed by its handler.
 
 You can also use explicit constructors through:
 
@@ -199,7 +183,7 @@ but it does not keep the locker passed to `NewJsVar` held.
 - `Input`, `InputText`, `InputBool`, `InputFloat`, `InputDate`
   - For interactive inputs with typed parse/update behavior.
 - `Container`, `Tbody`, `Select`
-  - Immutable value widgets for rendering and maintaining dynamic child lists.
+  - Definition value widgets for rendering and maintaining dynamic child lists.
 
 ## Widget lifetime
 
@@ -312,8 +296,7 @@ when the delegated Container claims it.
 
 ## Container error behavior
 
-Container, Tbody, and Select treat child render/update failures as application
-bugs.
+Container, Tbody, and Select treat child render failures as application bugs.
 
 - During initial render, child render failures are returned as errors.
 - During updates, append render failures are reported through `MustLog` (and

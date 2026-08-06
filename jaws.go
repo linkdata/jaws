@@ -1,9 +1,6 @@
-// Package jaws provides a mechanism to create dynamic
-// webpages using JavaScript and WebSockets.
+// Package jaws creates dynamic server-driven webpages over WebSockets.
 //
-// It integrates well with Go's [html/template] package,
-// but can be used without it. It can be used with any
-// router that supports the standard [http.Handler] interface.
+// It integrates with [html/template] and any router that supports [http.Handler].
 //
 // This package holds the core engine and the [UI] interfaces. The standard
 // widgets (Span, Button, Select, Text, and so on) and the RequestWriter helper
@@ -16,92 +13,24 @@
 // targeted dirtying, broadcasts, and lookup. See
 // [github.com/linkdata/jaws/lib/tag] for tag selection, expansion, registration,
 // and lifetime.
-//
-// # Locking
-//
-// The package uses a single, acyclic lock hierarchy. When more than one of these
-// locks is held at once they must be acquired in this order, outermost first:
-//
-//	Jaws.mu  ->  Request.mu  ->  Session.mu
-//
-// Request.muQueue and any lock a widget keeps for one [Element] are leaf locks taken
-// below all of the above. The [Element] widget state slot is not one of them: the slot
-// itself is guarded by Request.mu, which [ElementState] and [SetElementState] take
-// themselves, so a caller must hold neither Request.mu nor the stored value's own lock.
-// Whatever lock that stored value keeps is normally a leaf released before any core lock
-// is acquired. The containerState reconciliation exception is documented below.
-// Blocking work (channel sends, user callbacks) is always performed after
-// snapshotting the needed state and releasing the relevant lock; see
-// [Session.Broadcast] and [Session.Close] for the canonical pattern. The
-// [Request.SetContext] transform is the deliberate exception: it runs while
-// holding Request.mu so the read-modify-write is atomic, and therefore must not
-// call back into the same Request or block.
-//
-// An Element has one widget state slot. Renderers that use it claim it before
-// registering tags or handlers, invoking application callbacks, or writing output, so
-// rendering-phase contention returns [ErrElementStateClaimed] without partial render
-// side effects. A delegating renderer must choose one state-owning delegate. The
-// container-family widgets in [github.com/linkdata/jaws/lib/ui] may instead claim an
-// empty slot lazily on their first update for update-only registration; a foreign state,
-// typed-nil state, or lost concurrent claim is reported without reconciliation.
-//
-// UI value and widget types in the subpackages carry their own leaf locks that
-// guard the bound value: the binders in [github.com/linkdata/jaws/lib/bind], the
-// JsVar in [github.com/linkdata/jaws/lib/ui] and the named values in
-// [github.com/linkdata/jaws/lib/named]. These are leaves with respect to each
-// other, acquired containing-before-contained (for example a named BoolArray's
-// mutex is taken before a member Bool's). They sit strictly below the three core
-// locks: every value type mutates the bound value under its value lock, releases
-// it, and only then marks the [Element] dirty or broadcasts the change (which
-// ultimately takes the outermost Jaws.mu), so a value lock is never held while a
-// core lock is acquired. lib/bind, lib/ui and lib/named all follow this
-// mutate-release-then-dirty pattern, and new value types must too. The safety of
-// this rests on an invariant the deadlock detector cannot enforce (value locks are
-// leaves distinct from Jaws.mu): no code path holding Jaws.mu, Request.mu or
-// Session.mu ever calls into a UI value's Get/Set/Dirty methods, which are the only
-// callers that take a value lock — were it otherwise, the later dirty step's Jaws.mu
-// acquisition would invert the core lock order. Code holding any of the three core
-// locks must therefore never invoke a UI value method.
-//
-// A deliberate, exact reverse edge lives in [github.com/linkdata/jaws/lib/ui]:
-// containerState reconciliation may hold containerState.mu while calling
-// [Request.NewElement], which takes Request.mu — state-mutex-before-core. Child-provider
-// callbacks and validation run before that state lock; rendering, removal, recursive
-// ownership cleanup, cancellation and logging run after it is released. Ownership
-// cleanup detaches the child set under containerState.mu and recurses only after
-// unlocking. The reverse edge is safe because no code path holding any of the three core
-// locks invokes a widget's render or update method (the Serve loop calls JawsRender and
-// JawsUpdate only after releasing Request.mu). Code holding Jaws.mu, Request.mu or
-// Session.mu must therefore never call a container's render/update entry points. The
-// state mutex is a plain sync.Mutex, so deadlock.Debug cannot observe this inversion; the
-// invariant is maintained by convention.
-//
-// [Element] handlers are an intentional exception to the locking rules: they are
-// populated only while an Element is rendered and are then read without a lock on
-// the event goroutine. [Element.JawsRender] and [Element.Freeze] publish the final
-// handler slice through the Element's atomic frozen flag; request event dispatch
-// reads handlers only after observing that flag. This also covers child Elements
-// rendered after a WebSocket connects: a preemptive event for a still-rendering
-// Element is ignored. Handlers must not be added after JawsRender returns or Freeze
-// is called. All builds enforce this through an internal chokepoint that drops late
-// additions; debug builds panic instead.
-//
-// # Testing
-//
-// Always run the tests with the -race flag. Race builds set deadlock.Debug and
-// deadlock.Enabled, exercising the deadlock lock-order detector described above
-// and JaWS debug-gated runtime checks such as the late-handler panic. If the race
-// detector is unavailable, use -tags "debug deadlock" so both categories stay
-// active: the debug tag sets deadlock.Debug, while the deadlock tag enables the
-// detector. Those JaWS debug branches are compile-time dead in normal builds, so
-// a plain "go test" neither exercises them nor reports their statement coverage.
-//
-// Also run a plain "go test" (no -race), because -race and -tags debug select the
-// full-detail tag renderer in [github.com/linkdata/jaws/lib/tag]; only a build
-// with neither exercises the crash-safe release renderer used in production. CI
-// runs both legs. Runtime tag-comparability checks in that package run in every
-// build.
 package jaws
+
+// Maintainer locking notes:
+//
+// Core locks are acquired Jaws.mu -> Request.mu -> Session.mu. Request.muQueue and
+// most per-Element widget locks are leaves. The Element state slot itself is guarded by
+// Request.mu through ElementState and SetElementState. Blocking work and application
+// callbacks run after releasing locks; Request.SetContext is the exception because its
+// transform must run atomically under Request.mu and therefore must not block or call
+// back into the same Request.
+//
+// Bound-value locks in lib/bind, lib/ui, and lib/named are released before dirtying or
+// broadcasting. Code holding a core lock must not invoke UI value methods. Container
+// reconciliation has one deliberate reverse edge: containerState.mu may be held while
+// Request.NewElement takes Request.mu. Provider callbacks and validation precede that
+// edge; rendering, removal, recursive cleanup, cancellation, and logging follow it.
+// Core-lock holders must therefore never invoke container render or update methods.
+// containerState.mu is a sync.Mutex, so the deadlock detector cannot enforce this rule.
 
 import (
 	"bufio"

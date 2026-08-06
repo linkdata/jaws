@@ -47,9 +47,7 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
   a requirement: a widget that dereferences its fields panics, and none of the
   standard `lib/ui` widgets document nil-receiver tolerance. Do not pass a nil pointer
   of a type that does not; use its zero value where that type documents one (for example
-  `ui.Template{}`). The container-family zero values intentionally have nil providers:
-  `Container`, `Tbody` and `Select` panic during render/update, while zero
-  `Select.JawsInput` is a no-op.
+  `ui.Template{}`).
 - Every JaWS `UI` value is request-scoped. Once used by one Request, never use
   that value with another Request; construct fresh widgets per request. The
   widgets may still refer to shared, synchronized application state, binders,
@@ -108,11 +106,10 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
 ## Container-family constructors and identity
 
 - `ui.NewContainer(outerHTMLTag, children)`, `ui.NewTbody(children)` and
-  `ui.NewSelect(handler)` return immutable **values**, not pointers. Container keeps a
-  `jaws.Container` definition, and Tbody embeds one configured for `tbody`. Select keeps
-  its `named.SelectHandler` private and uses an equivalent Container definition
-  internally, overriding render/update only for selected-value behavior. Replacing
-  Tbody's embedded Container after construction changes the definition and is misuse.
+  `ui.NewSelect(handler)` return definition **values**, not pointers. Treat them as
+  immutable after use and do not take their addresses; pointers replace definition
+  equality with pointer identity. Tbody embeds a Container configured for `tbody`;
+  replacing it is unsupported.
 - The provider or handler is part of widget equality. Its dynamic value must be
   comparable at runtime and equal to itself. A slice, map, function, interface holding
   one of those, or a NaN-bearing value makes the whole widget unusable as a container
@@ -122,11 +119,9 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
   to obtain an equal widget and Element reuse. Mutate only synchronized application
   state behind the pointer; never mutate the widget definition or allocate a fresh
   pointer merely to rebuild it.
-- Always use Container, Tbody and Select as values. Taking their addresses is
-  unsupported because it changes identity to the wrapper pointer and prevents
-  independently rebuilt definitions from comparing equal.
-- Equal values may back multiple live Elements within one Request: each Element keeps
-  independent reconciliation state. They remain request-scoped; construct fresh widget
+- Equal values may back multiple live Elements within one Request when their providers
+  or handlers are safe for all calls and each child UI value reused across those Elements
+  supports multiple live Elements. They remain request-scoped; construct fresh widget
   values for another Request even when those values refer to shared synchronized
   application state.
 - A nil-interface child provider is a valid part of the Go value but is not renderable:
@@ -233,30 +228,32 @@ For clickable content rendering:
   Element before registering tags or handlers, invoking application code, or writing
   output. Contention returns `jaws.ErrElementStateClaimed` with no render side effects.
   The state holds the render-time dirty tag, reconciliation mutex and owned child
-  Elements; the immutable widget value retains only its definition.
+  Elements; the widget value retains only its definition.
 - Container-family updates normally load that state. Update-only use through
   `$.Register` lazily claims a missing state before invoking the provider. A foreign
   state, typed-nil state or lost concurrent claim is reported through `MustLog`, and no
   children are reconciled; Select also sends no value. The lazy state has no render-time
-  dirty tag. `$.Register` delivers Select input to its handler, but the result is applied
-  with a nil dirty tag; use ordinary `$.Select` rendering when input must dirty that
-  dependency.
+  dirty tag. `$.Register` delivers Select input to its handler but does not call
+  `Element.ApplyGetter` for that handler, so Select retains no handler-derived tag for
+  its own post-set dirtying. Any handler-initiated dirtying still occurs, and separately
+  registered tags remain registered. Use ordinary `$.Select` rendering when Select
+  should register and use a usable tag exposed by its handler.
 - Container ownership also lives in `containerState`, not in `elem.UI()`. Cleanup
   detaches children under the state mutex and recurses after unlocking, so it also finds
   children when the Element's visible UI is a `Register` wrapper. Failed render and
   append paths unregister every child and nested owner they created.
-- Container reconciliation calls `JawsContains` and validates every child before taking
-  the state mutex. `Request.NewElement` is the one operation allowed while that mutex is
-  held; rendering, removal, cancellation, recursive cleanup and logging happen after it
-  is released.
-- Select renders or reconciles its options before queueing its selected value. It sends
-  the value after every successful update, but not after state contention.
+- Provider callbacks and child validation run without the state mutex. Reconciliation
+  holds it only while matching children and calling `Request.NewElement`; rendering,
+  removal, cancellation, recursive cleanup and logging happen after it is released.
+- On a successful render, Select queues its selected value after rendering its options.
+  After a non-contended reconciliation returns, it queues the value; state contention
+  suppresses both operations.
 - Container reconciliation is parent-local and updates direct children only. Reordering
-  equal direct children preserves their Elements and complete nested subtrees. Each
-  nested Container, Tbody or Select whose own children changed needs its own dirty/update
-  pass; updating an outer parent is not recursive. Moving a child between distinct
-  parents is reparenting and correctly removes the old Element and renders a new one
-  under the new parent.
+  retained equal direct children preserves their Elements and complete nested subtrees.
+  Each nested Container, Tbody or Select whose own children changed needs its own
+  dirty/update pass; updating an outer parent is not recursive. Child Element identity
+  is scoped to its parent, so moving a child definition between parents does not preserve
+  its Element.
 - `ui.NewTemplate` returns a plain `ui.Template` **value** that may back multiple live
   Elements because it keeps the Elements its execution creates in each rendering Element's
   state slot rather than on itself. Do not take its address. A
@@ -273,9 +270,9 @@ For clickable content rendering:
     an Element; using unequal values is unsupported;
   - a **wrapped** Template updates only an Element rendered by an equal Template value, so
     it is not usable as a `$.Register` updater;
-  - an **unwrapped** Template is usable there — its updates are a documented no-op — but only
-    `$.Register` (the `RequestWriter` helper) also delivers its click/input/context-menu
-    handlers; a bare `ui.Register`/`ui.NewRegister` value promotes no handler methods.
+  - an **unwrapped** Template is usable there — its updates are a documented no-op — and
+    `$.Register` automatically attaches its click/input/context-menu handlers; a bare
+    `ui.Register`/`ui.NewRegister` value promotes no handler methods.
 - Call `$.RadioGroup` from the template that renders the group: its Elements belong to
   the template whose body called it, not to the wrapper their markup lands in.
 - HTML getter paths must not mutate domain state, but they may call element update methods (`SetClass`, `RemoveClass`, `SetAttr`, `RemoveAttr`, etc.) on the passed-in `*Element` to co-ordinate wrapper class/attribute changes with the inner-HTML refresh. No custom `JawsUpdate` is needed for that case — the queued wrapper updates flush alongside the `SetInner` from `HTMLInner.JawsUpdate`.

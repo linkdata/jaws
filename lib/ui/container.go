@@ -8,32 +8,23 @@ import (
 
 // Container renders an HTML element around a dynamic child collection.
 //
-// Container is an immutable definition whose mutable reconciliation state is
-// kept separately on each [jaws.Element]. Equal Container values can therefore
-// back multiple live Elements within one [jaws.Request], provided the child
-// provider is safe for every call.
+// Its outer tag and child provider define its identity. The provider's dynamic
+// value must be comparable and equal to itself. Rebuilding an equal Container
+// lets a parent retain its live Element. Keep application state containing a
+// slice, map, or function behind a stable pointer and synchronize access to it.
 //
-// The dynamic value of the child provider must be comparable at runtime and
-// equal to itself. Rebuilding a Container with the same outer tag and the same
-// stable provider pointer produces an equal value, allowing a containing widget
-// to reuse the existing Element. When a provider contains a slice, map, function
-// or other runtime-incomparable value, pass a stable pointer to it instead.
-// Application state behind that pointer may change with appropriate
-// synchronization, but the Container definition itself must not change.
+// Reconciliation affects direct children only. Reordering retained equal children
+// preserves their Elements and nested subtrees. Nested containers whose children
+// change need their own update. Child Element identity is scoped to its parent;
+// moving a child definition between parents does not preserve its Element.
 //
-// Reconciliation is parent-local and updates direct children only. Reordering equal
-// direct children preserves their Elements and complete nested subtrees. Each nested
-// Container, [Tbody], or [Select] whose children changed must receive its own dirty or
-// update pass; updating an outer Element is not recursive. Moving a child definition
-// between different parents is reparenting: the old Element is removed and a new one
-// is rendered under the new parent.
+// Equal Container values may back multiple live Elements in one [jaws.Request]
+// when the provider is safe for all calls and each child UI value reused across
+// those Elements supports multiple live Elements. Use Container as a value;
+// taking its address changes identity and is unsupported.
 //
-// Use Container as a value. Taking its address is unsupported because pointer
-// identity prevents independently rebuilt definitions from comparing equal.
-//
-// The zero value, and a Container constructed with a nil-interface child
-// provider, panic when rendering or updating tries to obtain children. A typed
-// nil provider is called normally and must tolerate its nil receiver itself.
+// A nil-interface provider panics when rendering or updating requests children.
+// A typed-nil provider is called normally and must tolerate its nil receiver.
 type Container struct {
 	outerHTMLTag string
 	children     jaws.Container
@@ -41,30 +32,24 @@ type Container struct {
 
 var _ jaws.UI = Container{}
 
-// NewContainer returns a container widget that renders children inside outerHTMLTag.
-//
-// The returned definition is immutable. Reuse the same stable child-provider
-// pointer when rebuilding an equal Container value.
+// NewContainer returns a Container that renders children inside outerHTMLTag.
 func NewContainer(outerHTMLTag string, children jaws.Container) Container {
 	return Container{outerHTMLTag: outerHTMLTag, children: children}
 }
 
 // JawsRender renders u as its configured container element.
 //
-// It claims elem's widget state slot before applying getters or params, calling
-// the child provider, or writing output. An occupied slot returns
-// [jaws.ErrElementStateClaimed] without performing those side effects.
+// If elem's widget state is occupied, JawsRender returns
+// [jaws.ErrElementStateClaimed] without rendering.
 func (u Container) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
 	return u.render(elem, w, params, nil)
 }
 
-// JawsUpdate updates u's child collection.
+// JawsUpdate reconciles u's direct children.
 //
-// It claims an unoccupied widget state slot lazily for update-only use. A foreign
-// or typed-nil state, an in-progress render, or a lost concurrent claim reports
-// [jaws.ErrElementStateClaimed] through [jaws.Request.MustLog] without calling the
-// child provider or queuing browser work. [jaws.Request.MustLog] panics when no
-// [jaws.Jaws.Logger] is configured.
+// JawsUpdate supports update-only use through [Register]. If elem's widget state
+// cannot be used, it reports [jaws.ErrElementStateClaimed] through
+// [jaws.Request.MustLog] without calling the provider or queuing browser work.
 func (u Container) JawsUpdate(elem *jaws.Element) {
 	u.update(elem)
 }
