@@ -21,6 +21,13 @@ import (
 // Application state behind that pointer may change with appropriate
 // synchronization, but the Container definition itself must not change.
 //
+// Reconciliation is parent-local and updates direct children only. Reordering equal
+// direct children preserves their Elements and complete nested subtrees. Each nested
+// Container, [Tbody], or [Select] whose children changed must receive its own dirty or
+// update pass; updating an outer Element is not recursive. Moving a child definition
+// between different parents is reparenting: the old Element is removed and a new one
+// is rendered under the new parent.
+//
 // Use Container as a value. Taking its address is unsupported because pointer
 // identity prevents independently rebuilt definitions from comparing equal.
 //

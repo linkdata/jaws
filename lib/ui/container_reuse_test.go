@@ -83,7 +83,7 @@ func assertNoDOMMutation(t *testing.T, tr *jawstest.TestRequest, round int) {
 	}
 }
 
-func newReuseRequest(t *testing.T) *jawstest.TestRequest {
+func newReuseRequest(t testing.TB) *jawstest.TestRequest {
 	t.Helper()
 	jw, err := jaws.New()
 	if err != nil {

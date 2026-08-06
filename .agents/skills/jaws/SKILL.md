@@ -251,6 +251,12 @@ For clickable content rendering:
   is released.
 - Select renders or reconciles its options before queueing its selected value. It sends
   the value after every successful update, but not after state contention.
+- Container reconciliation is parent-local and updates direct children only. Reordering
+  equal direct children preserves their Elements and complete nested subtrees. Each
+  nested Container, Tbody or Select whose own children changed needs its own dirty/update
+  pass; updating an outer parent is not recursive. Moving a child between distinct
+  parents is reparenting and correctly removes the old Element and renders a new one
+  under the new parent.
 - `ui.NewTemplate` returns a plain `ui.Template` **value** that may back multiple live
   Elements because it keeps the Elements its execution creates in each rendering Element's
   state slot rather than on itself. Do not take its address. A

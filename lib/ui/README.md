@@ -98,6 +98,12 @@ with another live Element. One equal value may back several live Elements within
 one request when its application provider is safe for all of those calls. Widget
 values remain request-scoped and must be constructed afresh for another request.
 
+Reconciliation is parent-local and updates direct children only. Reordering equal
+children preserves their Elements and complete nested subtrees. Each nested Container,
+Tbody, or Select whose own children changed must receive its own dirty/update pass;
+updating an outer parent is not recursive. Moving a child between different parents is
+reparenting, so the old parent removes its Element and the new parent renders a new one.
+
 The provider or handler is part of the value's identity. Its dynamic value must be
 comparable at runtime and equal to itself. Keep application objects containing
 slices, maps, or functions behind stable pointers, and rebuild with the same
