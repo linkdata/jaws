@@ -234,6 +234,7 @@ func TestJawsBoot_SetupPrefixVariants(t *testing.T) {
 }
 
 func TestJawsBoot_SetupLiteralBracePrefixes(t *testing.T) {
+	assets := expectedStaticAssets(t, testAssetsFS, "assets/static", "")
 	for _, tc := range []struct {
 		name          string
 		prefix        string
@@ -273,15 +274,21 @@ func TestJawsBoot_SetupLiteralBracePrefixes(t *testing.T) {
 			if len(urls) == 0 {
 				t.Fatal("Setup returned no URLs")
 			}
-
+			if got, want := len(urls), len(assets); got != want {
+				t.Errorf("Setup returned %d asset URLs, want %d", got, want)
+			}
+			returnedURLs := make(map[string]bool, len(urls))
 			for _, u := range urls {
-				assetURL := u.String()
-				if !strings.Contains(assetURL, "%7B") || !strings.Contains(assetURL, "%7D") {
-					t.Errorf("asset URL %q does not contain an escaped brace pair", assetURL)
+				returnedURLs[u.String()] = true
+			}
+
+			for _, exp := range assets {
+				assetPath := staticserve.EnsurePrefixSlash(path.Join(tc.prefix, exp.ss.Name))
+				assetURL := (&url.URL{Path: assetPath}).String()
+				if !returnedURLs[assetURL] {
+					t.Errorf("Setup(%q) did not return expected asset URL %q", tc.prefix, assetURL)
 				}
-				if strings.Contains(assetURL, "%257B") || strings.Contains(assetURL, "%257D") {
-					t.Errorf("asset URL %q contains double-escaped braces", assetURL)
-				}
+				delete(returnedURLs, assetURL)
 				r := httptest.NewRequest(http.MethodGet, assetURL, nil)
 				rr := httptest.NewRecorder()
 				mux.ServeHTTP(rr, r)
@@ -294,7 +301,7 @@ func TestJawsBoot_SetupLiteralBracePrefixes(t *testing.T) {
 				}
 
 				if tc.outsidePrefix != "" {
-					outsideURI := path.Join(tc.outsidePrefix, path.Base(u.Path))
+					outsideURI := path.Join(tc.outsidePrefix, exp.ss.Name)
 					outsideRequest := httptest.NewRequest(http.MethodGet, outsideURI, nil)
 					outsideRecorder := httptest.NewRecorder()
 					mux.ServeHTTP(outsideRecorder, outsideRequest)
@@ -303,6 +310,9 @@ func TestJawsBoot_SetupLiteralBracePrefixes(t *testing.T) {
 							outsideURI, outsideRecorder.Code, fallbackStatus)
 					}
 				}
+			}
+			for unexpectedURL := range returnedURLs {
+				t.Errorf("Setup(%q) returned unexpected asset URL %q", tc.prefix, unexpectedURL)
 			}
 
 			for _, name := range []string{"bootstrap.bundle.min.js.map", "bootstrap.min.css.map"} {
