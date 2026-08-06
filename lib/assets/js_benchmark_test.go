@@ -51,6 +51,8 @@ for (let i = 0; i < count; i++) {
 }
 `
 
+	// Keep b.N here so Node executes the calibrated message count in one process;
+	// starting a process per B.Loop iteration would measure process startup instead.
 	cmd := exec.CommandContext(b.Context(), node, "-e", script, jsPath, strconv.Itoa(b.N))
 	b.SetBytes(int64(len(frame)))
 	b.ResetTimer()

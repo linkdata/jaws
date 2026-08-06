@@ -38,8 +38,7 @@ func BenchmarkHTTPPageRenderingByComplexity(b *testing.B) {
 
 			handler := bc.handler(b, jw)
 			b.ReportAllocs()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				req := benchmarkPageRequest()
 				rr := httptest.NewRecorder()
 
@@ -52,7 +51,6 @@ func BenchmarkHTTPPageRenderingByComplexity(b *testing.B) {
 				benchmarkCleanupNoscript(b, jw, req.RemoteAddr, rr.Body.String())
 				b.StartTimer()
 			}
-			b.StopTimer()
 
 			if got := jw.RequestCount(); got != 0 {
 				b.Fatalf("request count after benchmark = %d, want 0", got)

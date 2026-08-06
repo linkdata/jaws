@@ -20,7 +20,7 @@ func BenchmarkAppend(b *testing.B) {
 		What: what.Alert,
 	}
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		appendBenchSink = m.Append(nil)
 	}
 }
@@ -44,8 +44,7 @@ func BenchmarkParse(b *testing.B) {
 	for _, f := range frames {
 		b.Run(f.name, func(b *testing.B) {
 			b.ReportAllocs()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				parseBenchSink, _ = Parse(f.frame)
 			}
 		})
