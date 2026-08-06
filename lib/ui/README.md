@@ -247,7 +247,9 @@ Each base handles:
 
 - tracking last rendered value
 - receiving `what.Input`
-- applying dirty tags on successful set
+- retaining and dirtying the setter-derived tag after any set result other than
+  `jaws.ErrValueUnchanged`; see
+  [`Input`](https://pkg.go.dev/github.com/linkdata/jaws/lib/ui#Input)
 - update-driven `SetValue` pushes
 
 ## Adding a container widget

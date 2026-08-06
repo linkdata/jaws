@@ -14,6 +14,8 @@ import (
 type Radio struct{ InputBool }
 
 // NewRadio returns a radio input widget bound to g.
+//
+// For writable use, g must provide the setter-derived dirty target described by [Input].
 func NewRadio(g bind.Setter[bool]) *Radio { return &Radio{InputBool{Setter: g}} }
 
 // JawsRender renders ui as an HTML radio input.

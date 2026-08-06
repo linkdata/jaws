@@ -17,10 +17,20 @@ import (
 
 // Input stores common state for interactive input widgets.
 //
-// An Input value retains the last browser value and dirty tag for one live
+// An Input value retains the last browser value and dirty target for one live
 // [jaws.Element]. A widget embedding Input must therefore back at most one live
 // Element. To render the same bound state more than once, construct distinct
 // widgets that share the setter.
+//
+// For post-set reconciliation, a writable setter must expose at least one stable,
+// usable tag through [jaws.Element.ApplyGetter]. [bind.New] exposes its backing
+// pointer.
+//
+// After [bind.Setter.JawsSet] returns a result that does not match
+// [jaws.ErrValueUnchanged], Input dirties the setter-derived tag so the server
+// value can reconcile rejected or normalized browser input. Tags supplied as
+// render parameters register the Element but do not replace that dirty target.
+// Without a valid setter-derived target, automatic reconciliation does not occur.
 type Input struct {
 	// tag is the dirty tag, written once during render and read on the event
 	// goroutine (JawsInput). The render-completes-before-events lifecycle makes

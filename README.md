@@ -601,6 +601,55 @@ Since all data access need to be protected with locks, you will usually use `bin
 that combines a (RW)Locker and a pointer to a value of type `T`. It also allows you to add chained setters,
 getters and on-success handlers.
 
+Writable setters used with `ui.NewText`, `ui.NewPassword`, `ui.NewTextarea`,
+`ui.NewCheckbox`, `ui.NewRadio`, `ui.NewNumber`, `ui.NewRange`, and `ui.NewDate`
+need a stable dirty target derived from the setter. After each `JawsSet` result
+that does not match `jaws.ErrValueUnchanged`, the widget dirties that target so
+the server value can reconcile rejected or normalized browser input.
+`bind.New(&mu, &value)` exposes the backing pointer. A custom setter can instead
+be pointer-valued or implement `JawsGetTag` and return a target that expands to
+at least one stable, usable key; `JawsGetTag` takes precedence over the setter's
+identity. Tags passed as render parameters register the Element but do not
+replace its setter-derived dirty target.
+
+This validator rejects forbidden username characters while accepting ordinary
+incremental edits. Its slice makes the setter value non-comparable, so
+`JawsGetTag` exposes the backing pointer:
+
+```go
+type validatedText struct {
+	bind.Setter[string]
+	dirtyTag  *string
+	forbidden []rune // immutable
+}
+
+func (s validatedText) JawsSet(elem *jaws.Element, value string) (err error) {
+	for _, r := range value {
+		if slices.Contains(s.forbidden, r) {
+			err = errors.New("value contains a forbidden character")
+			return
+		}
+	}
+	err = s.Setter.JawsSet(elem, value)
+	return
+}
+
+func (s validatedText) JawsGetTag() any { return s.dirtyTag }
+
+func newUsernameInput(mu *sync.RWMutex, value *string) *ui.Text {
+	return ui.NewText(validatedText{
+		Setter:    bind.New(mu, value),
+		dirtyTag:  value,
+		forbidden: []rune{' ', '/', '\\'},
+	})
+}
+```
+
+Without a valid setter-derived target, rejected or normalized browser values are
+not automatically reconciled. See
+[`ui.Input`](https://pkg.go.dev/github.com/linkdata/jaws/lib/ui#Input) for the
+complete contract.
+
 ### Session handling
 
 JaWS has non-persistent session handling integrated. Sessions won't 
