@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"io"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,13 +18,21 @@ import (
 )
 
 const templateStateTemplates = `
-{{define "state-parent"}}{{$.RequestWriter.Template "" "state-leaf" $.Dot}}{{end}}
+{{define "state-parent"}}{{$.RequestWriter.Template "div" "state-leaf" $.Dot}}{{end}}
 {{define "state-leaf"}}leaf{{end}}
-{{define "state-failafter"}}{{$.RequestWriter.Template "" "state-leaf" $.Dot}}{{$.Dot.Check}}{{end}}
+{{define "state-failafter"}}{{$.RequestWriter.Template "div" "state-leaf" $.Dot}}{{$.Dot.Check}}{{end}}
 {{define "state-plain"}}plain{{end}}
 {{define "state-b"}}b{{end}}
 {{define "state-span"}}{{$.RequestWriter.Span "x"}}{{end}}
 `
+
+// clickCountingDot counts clicks delivered through a Template's event delegation.
+type clickCountingDot struct{ clicks atomic.Int32 }
+
+func (d *clickCountingDot) JawsClick(*jaws.Element, jaws.Click) error {
+	d.clicks.Add(1)
+	return nil
+}
 
 func newStateRequest(t *testing.T) (*jaws.Jaws, *jaws.Request) {
 	t.Helper()
@@ -397,12 +406,12 @@ func TestTemplate_UpdateToleratesTypedNilContainerState(t *testing.T) {
 	}
 }
 
-// TestTemplate_UnwrappedUpdateStaysSilent pins the path the missing-claim diagnostic does
-// not apply to: an unwrapped Template returns before the state slot is consulted.
-func TestTemplate_UnwrappedUpdateStaysSilent(t *testing.T) {
+// TestTemplate_ZeroValueUpdateStaysSilent preserves the zero value's update behavior: it
+// has no wrapper target, so it returns before consulting the state slot.
+func TestTemplate_ZeroValueUpdateStaysSilent(t *testing.T) {
 	_, rq := newStateRequest(t)
 
 	// No logger is configured, so MustLog would panic if this reported anything.
-	tmpl := NewTemplate("", "state-plain", tag.Tag("dot"))
+	var tmpl Template
 	tmpl.JawsUpdate(rq.NewElement(tmpl))
 }

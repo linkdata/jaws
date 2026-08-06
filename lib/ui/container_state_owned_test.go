@@ -10,7 +10,7 @@ import (
 
 const containerStateOwnedTemplates = `
 {{define "state-register-container"}}<div id="{{$.RequestWriter.Register $.Dot.Updater}}"></div>{{end}}
-{{define "state-owned-container-child"}}{{$.RequestWriter.Template "" "owned-leaf" $.Dot}}{{$.RequestWriter.Container "div" $.Dot.Container}}{{end}}
+{{define "state-owned-container-child"}}{{$.RequestWriter.Template "div" "owned-leaf" $.Dot}}{{$.RequestWriter.Container "div" $.Dot.Container}}{{end}}
 `
 
 type registerContainerDot struct {

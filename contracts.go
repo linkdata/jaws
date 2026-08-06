@@ -17,9 +17,10 @@ type Container interface {
 	// NaN) cancels the [Request] instead of being reconciled. A typed nil is usable.
 	// The slice contents must not be modified after returning it. Returning a usable
 	// child UI again from a later call lets the container reuse its existing live
-	// [Element]. The same UI may occur more than once in one returned slice only when
-	// its type documents support for backing multiple live Elements. A child UI must
-	// not be shared with a different [Request].
+	// [Element]. Each child must render one direct DOM node carrying its Element's JaWS
+	// ID, because reconciliation removes and orders that node. The same UI may occur more
+	// than once in one returned slice only when its type documents support for backing
+	// multiple live Elements. A child UI must not be shared with a different [Request].
 	JawsContains(elem *Element) (contents []UI)
 }
 

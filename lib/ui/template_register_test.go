@@ -4,7 +4,6 @@ import (
 	"errors"
 	"html/template"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -36,11 +35,11 @@ func newRegisterRequest(t *testing.T, logger *templateLogger) (*jaws.Jaws, *jaws
 	return jw, rq
 }
 
-// TestRegister_WrappedTemplateUpdaterReportsUnclaimed checks every reporting path for a
-// wrapped Template updater. RequestWriter.Register never calls the Template's renderer,
+// TestRegister_TemplateUpdaterReportsUnclaimed checks every reporting path for a
+// Template updater. RequestWriter.Register never calls the Template's renderer,
 // so the Template has no state claim to update against.
-func TestRegister_WrappedTemplateUpdaterReportsUnclaimed(t *testing.T) {
-	wrapped := NewTemplate("div", "reg-plain", tag.Tag("dot"))
+func TestRegister_TemplateUpdaterReportsUnclaimed(t *testing.T) {
+	tmpl := NewTemplate("div", "reg-plain", tag.Tag("dot"))
 
 	t.Run("direct call logs", func(t *testing.T) {
 		logger := new(templateLogger)
@@ -48,7 +47,7 @@ func TestRegister_WrappedTemplateUpdaterReportsUnclaimed(t *testing.T) {
 		var sb strings.Builder
 		rw := RequestWriter{Request: rq, Writer: &sb}
 
-		if jid := rw.Register(wrapped); !jid.IsValid() {
+		if jid := rw.Register(tmpl); !jid.IsValid() {
 			t.Fatal("expected a valid Jid even though the update failed")
 		}
 		if len(logger.errors) != 1 || !errors.Is(logger.errors[0], ErrElementStateUnclaimed) {
@@ -67,7 +66,7 @@ func TestRegister_WrappedTemplateUpdaterReportsUnclaimed(t *testing.T) {
 		// Register runs the update immediately, so MustLog's panic escapes to the caller.
 		recovered := func() (recovered any) {
 			defer func() { recovered = recover() }()
-			rw.Register(wrapped)
+			rw.Register(tmpl)
 			return
 		}()
 		if err, ok := recovered.(error); !ok || !errors.Is(err, ErrElementStateUnclaimed) {
@@ -86,7 +85,7 @@ func TestRegister_WrappedTemplateUpdaterReportsUnclaimed(t *testing.T) {
 		// html/template recovers a panic raised by a called method and returns it as an
 		// execution error, so this surfaces as a render error rather than escaping. The
 		// wrapping preserves the sentinel, so match on that rather than on the text.
-		err := rw.Template("div", "reg-page", &registerDot{updater: wrapped})
+		err := rw.Template("div", "reg-page", &registerDot{updater: tmpl})
 		if err == nil {
 			t.Fatal("expected a render error from the recovered panic")
 		}
@@ -101,7 +100,7 @@ func TestRegister_WrappedTemplateUpdaterReportsUnclaimed(t *testing.T) {
 		var sb strings.Builder
 		rw := RequestWriter{Request: rq, Writer: &sb}
 
-		if err := rw.Template("div", "reg-page", &registerDot{updater: wrapped}); err != nil {
+		if err := rw.Template("div", "reg-page", &registerDot{updater: tmpl}); err != nil {
 			t.Fatalf("render = %v, want nil: the diagnostic is logged, not fatal", err)
 		}
 		if !strings.Contains(sb.String(), "</div>") {
@@ -113,10 +112,10 @@ func TestRegister_WrappedTemplateUpdaterReportsUnclaimed(t *testing.T) {
 	})
 }
 
-// TestRegister_WrappedTemplateUpdaterOnTheRequestLoop reaches the diagnostic from the
+// TestRegister_TemplateUpdaterOnTheRequestLoop reaches the diagnostic from the
 // request loop, which RequestWriter.Register cannot do because it updates immediately: a
 // NewRegister child is rendered with a tag, then that tag is dirtied.
-func TestRegister_WrappedTemplateUpdaterOnTheRequestLoop(t *testing.T) {
+func TestRegister_TemplateUpdaterOnTheRequestLoop(t *testing.T) {
 	for _, tt := range []struct {
 		name      string
 		withLog   bool
@@ -150,12 +149,12 @@ func TestRegister_WrappedTemplateUpdaterOnTheRequestLoop(t *testing.T) {
 			<-tr.ReadyCh
 
 			dirty := tag.Tag("registered")
-			wrapped := NewTemplate("div", "reg-plain", tag.Tag("dot"))
+			tmpl := NewTemplate("div", "reg-plain", tag.Tag("dot"))
 			// Build the Register Element by hand: RequestWriter.Register would run the
 			// failing update immediately, and Register.JawsRender documents that it ignores
 			// params, so NewUI would not apply the tag. This leaves the first failing update
 			// to the request loop.
-			regElem := tr.NewElement(NewRegister(wrapped))
+			regElem := tr.NewElement(NewRegister(tmpl))
 			regElem.Tag(dirty)
 			regElem.Freeze()
 
@@ -195,64 +194,4 @@ func TestRegister_WrappedTemplateUpdaterOnTheRequestLoop(t *testing.T) {
 			}
 		})
 	}
-}
-
-// TestRegister_UnwrappedTemplateUpdaterStaysUsable covers the other half of the narrowing:
-// an unwrapped Template remains a valid Register updater because its updates are a
-// documented no-op — but only RequestWriter.Register also delivers its event handlers,
-// since Register embeds jaws.Updater and therefore promotes no handler methods.
-func TestRegister_UnwrappedTemplateUpdaterStaysUsable(t *testing.T) {
-	dot := &clickCountingDot{}
-	unwrapped := NewTemplate("", "reg-plain", dot)
-
-	// The UI value itself delegates nothing: Register embeds jaws.Updater, whose method set
-	// is JawsUpdate alone, so a Template's handler methods are never promoted onto it.
-	if _, ok := any(NewRegister(unwrapped)).(jaws.ClickHandler); ok {
-		t.Fatal("Register promoted a ClickHandler; it embeds only jaws.Updater")
-	}
-
-	jw, err := jaws.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(jw.Close)
-	logger := new(templateLogger)
-	jw.Logger = logger
-	if err = jw.AddTemplateLookuper(template.Must(template.New("reg-plain").Parse(`plain`))); err != nil {
-		t.Fatal(err)
-	}
-	go jw.Serve()
-	tr := jawstest.NewTestRequest(jw, nil)
-	t.Cleanup(func() {
-		tr.Close()
-		<-tr.DoneCh
-	})
-	<-tr.ReadyCh
-
-	var sb strings.Builder
-	rw := RequestWriter{Request: tr.Request, Writer: &sb}
-	jid := rw.Register(unwrapped)
-	if len(logger.errors) != 0 {
-		t.Fatalf("logged errors = %v, want none for an unwrapped Template", logger.errors)
-	}
-
-	// RequestWriter.Register added the concrete updater to the Element's handler list, so a
-	// browser event reaches the Template and through it the Dot.
-	// Click data is "X Y kstate name"; a bare name does not parse.
-	tr.InCh <- wire.WsMsg{Jid: jid, What: what.Click, Data: "1 2 0 btn"}
-	deadline := time.Now().Add(2 * time.Second)
-	for dot.clicks.Load() == 0 && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
-	}
-	if got := dot.clicks.Load(); got != 1 {
-		t.Fatalf("clicks delivered through the handler list = %d, want 1", got)
-	}
-}
-
-// clickCountingDot counts clicks delivered through a Template's event delegation.
-type clickCountingDot struct{ clicks atomic.Int32 }
-
-func (d *clickCountingDot) JawsClick(*jaws.Element, jaws.Click) error {
-	d.clicks.Add(1)
-	return nil
 }

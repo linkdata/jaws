@@ -46,8 +46,7 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
   nil `UI` interface is a no-op. Surviving such a call is up to the concrete type, not
   a requirement: a widget that dereferences its fields panics, and none of the
   standard `lib/ui` widgets document nil-receiver tolerance. Do not pass a nil pointer
-  of a type that does not; use its zero value where that type documents one (for example
-  `ui.Template{}`).
+  of a type that does not; use a zero value only where that type documents one.
 - Every JaWS `UI` value is request-scoped. Once used by one Request, never use
   that value with another Request; construct fresh widgets per request. The
   widgets may still refer to shared, synchronized application state, binders,
@@ -60,7 +59,10 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
 - `jaws.Container.JawsContains` must return `UI` items that are comparable and equal to
   themselves (see above); returning one that is not cancels the `Request`. The
   returned slice must not be mutated after return. A UI value may occur more than
-  once in one returned slice only when its type supports multiple live Elements.
+  once in one returned slice only when its type supports multiple live Elements. Each
+  child must render one addressable direct DOM node carrying its Element's JaWS ID so
+  removal and ordering can target it; `ui.NewTemplate` provides that node through its
+  generated wrapper.
 - Treat the package documentation shown by
   `go doc github.com/linkdata/jaws/lib/ui` as the canonical standard-widget
   multiplicity summary, and consult each concrete type's docs for its conditions.
@@ -124,6 +126,9 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
   supports multiple live Elements. They remain request-scoped; construct fresh widget
   values for another Request even when those values refer to shared synchronized
   application state.
+- Each reconciled child must render one addressable direct DOM node carrying its Element's
+  JaWS ID. Removal and ordering target that node; construct Template children with
+  `ui.NewTemplate`, which always provides a generated wrapper.
 - A nil-interface child provider is a valid part of the Go value but is not renderable:
   zero Container/Tbody and `NewContainer`/`NewTbody` with nil providers panic when
   render/update calls `JawsContains`. Zero Select and `NewSelect(nil)` likewise panic in
@@ -134,6 +139,9 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
 
 - `ui.Template` expands `Dot` into tags via `tag.TagExpand` (package `github.com/linkdata/jaws/lib/tag`, imported as `tag`); the root dot is part of identity/tag behavior.
 - `ui.Template` is for partial templates only; full document/page templates should be rendered through `ui.Handler`.
+- An empty wrapper passed to `ui.NewTemplate` or `$.Template` defaults to `div`. Choose a
+  semantic wrapper for constrained DOM contexts; use native `{{template "name" pipeline}}`
+  inclusion for an unwrapped structural fragment owned by a surrounding Template.
 - A nil-interface Template `Dot` is valid and contributes no tag; a typed nil follows its
   dynamic type's comparability and expansion behavior.
 - The root dot **must** be comparable at runtime and equal to itself: `ui.NewTemplate`
@@ -184,11 +192,18 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
 ```gotemplate
 {{$.Template "div" "partialName" .Dot "class=\"panel\""}}
 {{$.Template "tr" "rowPartial" . "class=\"selected\""}}
-{{$.Template "" "barePartial" .Dot}}
 ```
 
 The outer tag should match the DOM context where the generated JaWS wrapper will
-be inserted. An empty outer tag renders the template without a generated wrapper.
+be inserted. An empty outer tag selects the default `div` wrapper. Use a semantic
+wrapper such as `tr`, `td`, `li`, or `option` where the DOM context requires it.
+
+For a static structural fragment that needs no JaWS-managed wrapper, use Go's native
+template inclusion so the surrounding Template owns the DOM:
+
+```gotemplate
+{{template "barePartial" .Dot}}
+```
 
 JaWS parses template params as:
 - HTML attrs: `string`, `[]string`, `template.HTMLAttr`, `[]template.HTMLAttr`
@@ -198,9 +213,10 @@ JaWS parses template params as:
 Implications:
 - Non-comparable handlers are not auto-tagged unless they implement `tag.TagGetter`.
 - Pass explicit tags when dirty targeting depends on them.
-- HTML attributes passed to `$.Template(...)` are applied to the generated template wrapper, if one exists.
+- HTML attributes passed to `$.Template(...)` are applied to the generated template wrapper.
 - Template bodies used with `$.Template(...)` must be partials, not full documents.
-- Unwrapped templates have no wrapper-owned DOM element for direct template updates; use nested JaWS UI for dynamic regions.
+- Managed Template values always need one addressable wrapper for updates and container
+  removal or ordering.
 - For dynamic button text, avoid passing plain static strings if the value must change after render; use getter-based values so updates reflect new state.
 
 ## Event handling model
@@ -268,11 +284,9 @@ For clickable content rendering:
     Element;
   - a composite UI must use Template values equal under `==` for rendering and updating
     an Element; using unequal values is unsupported;
-  - a **wrapped** Template updates only an Element rendered by an equal Template value, so
-    it is not usable as a `$.Register` updater;
-  - an **unwrapped** Template is usable there — its updates are a documented no-op — and
-    `$.Register` automatically attaches its click/input/context-menu handlers; a bare
-    `ui.Register`/`ui.NewRegister` value promotes no handler methods.
+  - a Template updates only an Element rendered by an equal Template value, so it is not
+    usable as a `$.Register` updater; `$.Register` never invokes its renderer and therefore
+    cannot establish the wrapper state an update needs.
 - Call `$.RadioGroup` from the template that renders the group: its Elements belong to
   the template whose body called it, not to the wrapper their markup lands in.
 - HTML getter paths must not mutate domain state, but they may call element update methods (`SetClass`, `RemoveClass`, `SetAttr`, `RemoveAttr`, etc.) on the passed-in `*Element` to co-ordinate wrapper class/attribute changes with the inner-HTML refresh. No custom `JawsUpdate` is needed for that case — the queued wrapper updates flush alongside the `SetInner` from `HTMLInner.JawsUpdate`.

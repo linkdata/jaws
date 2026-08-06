@@ -4,11 +4,11 @@ import (
 	"strconv"
 )
 
-// ErrElementStateUnclaimed reports that a wrapped [Template] tried to update a
-// [jaws.Element] for which no Template claimed the state slot during rendering.
+// ErrElementStateUnclaimed reports that a [Template] with a generated wrapper tried to
+// update a [jaws.Element] for which no Template claimed the state slot during rendering.
 //
 // With no claim there is no previous generation to reconcile against, so the update
-// executes nothing. The usual cause is using a wrapped Template as a
+// executes nothing. The usual cause is using a Template returned by [NewTemplate] as a
 // [RequestWriter.Register] updater; RequestWriter.Register does not call
 // [Template.JawsRender], so it cannot claim the Element while rendering.
 //

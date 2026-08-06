@@ -17,6 +17,9 @@ import (
 // preserves their Elements and nested subtrees. Nested containers whose children
 // change need their own update. Child Element identity is scoped to its parent;
 // moving a child definition between parents does not preserve its Element.
+// Each child must render one addressable direct DOM node carrying its Element's JaWS
+// ID, because removal and ordering target that node. Construct Template children with
+// [NewTemplate], which always supplies a wrapper.
 //
 // Equal Container values may back multiple live Elements in one [jaws.Request]
 // when the provider is safe for all calls and each child UI value reused across

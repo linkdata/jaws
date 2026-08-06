@@ -42,9 +42,9 @@ import (
 // a tag.
 //
 // The state slot is claimed while rendering, so at most one Template may render a given
-// Element. On an Element no Template claimed, an unwrapped [Template.JawsUpdate] is a
-// no-op while a wrapped one executes nothing and reports [ErrElementStateUnclaimed]
-// through [jaws.Request.MustLog], which panics when no [jaws.Jaws.Logger] is configured.
+// Element. On an Element no Template claimed, an update by a Template constructed with
+// [NewTemplate] executes nothing and reports [ErrElementStateUnclaimed] through
+// [jaws.Request.MustLog], which panics when no [jaws.Jaws.Logger] is configured.
 // A composite UI that delegates rendering and updating to a Template must use Template
 // values equal under == for both calls; using unequal values is unsupported. A claim
 // survives a render error the delegating renderer handles, so a later update through an
@@ -52,13 +52,14 @@ import (
 // DOM target.
 //
 // The OuterHTMLTag field identifies the generated wrapper element used for
-// partial templates. If OuterHTMLTag is empty, the template is rendered without
-// a generated wrapper. Name identifies the template to execute and Dot contains
-// the data exposed to the template through the [With] structure constructed
-// during rendering. Wrapped templates receive the JaWS ID and any HTML
-// attributes supplied at render time through the [RequestWriter.Template]
-// helper. The referenced template must be a partial template, not a full HTML
-// document.
+// partial templates. Construct Templates with [NewTemplate], which defaults an empty
+// wrapper argument to "div". Reusable Template values require one addressable direct DOM
+// node, so direct struct literals must set OuterHTMLTag to a suitable element such as
+// "tr", "li" or "option" for their DOM context. Name identifies the template to execute
+// and Dot contains the data exposed to the template through the [With] structure
+// constructed during rendering. The wrapper receives the JaWS ID and any HTML attributes
+// supplied at render time through the [RequestWriter.Template] helper. The referenced
+// template must be a partial template, not a full HTML document.
 //
 // Every Element a template creates through the [RequestWriter] it is given belongs to
 // the Template that rendered it — the widget helpers, [RequestWriter.Register],
@@ -82,7 +83,7 @@ import (
 // validate data before rendering and keep template actions infallible once they
 // start emitting output or nested UI.
 type Template struct {
-	OuterHTMLTag string // Optional wrapper tag for partial templates, for example "div" or "tr"; empty renders unwrapped.
+	OuterHTMLTag string // Wrapper tag; an empty direct field renders unwrapped, while NewTemplate defaults empty to "div".
 	Name         string // Template name to be looked up using Jaws.LookupTemplate.
 	Dot          any    // Dot value to place in With.
 }
@@ -255,10 +256,10 @@ func (tmpl Template) JawsRender(elem *jaws.Element, w io.Writer, params []any) (
 
 // JawsUpdate re-renders the Template into its wrapper.
 //
-// Unwrapped templates have no generated DOM element to update, so updates are
-// ignored; nested JaWS UI rendered by the template can still update through its own
-// elements. The wrapper's SetInner is queued only after execution succeeds (see the
-// best-effort error behavior on [Template]).
+// The wrapper's SetInner is queued only after execution succeeds (see the best-effort
+// error behavior on [Template]). A directly constructed Template with an empty
+// OuterHTMLTag has no DOM target, so its update does nothing; such a value is not suitable
+// as a reusable Container child. [NewTemplate] always supplies a wrapper.
 //
 // A successful update unregisters the tracked Elements from the previous execution,
 // along with any they own: SetInner replaces the DOM that held them. If execution
@@ -266,14 +267,14 @@ func (tmpl Template) JawsRender(elem *jaws.Element, w io.Writer, params []any) (
 // instead and the previous ones stay live to match the unchanged DOM. See [Template]
 // for which Elements are tracked.
 //
-// A wrapped Template updates only an Element rendered by a Template value equal under ==
-// (see [jaws.SetElementState]); using an unequal value for the update is unsupported. With
-// no claim there is nothing to reconcile against, so it executes nothing and reports
-// [ErrElementStateUnclaimed]. That makes a wrapped Template unusable as a
-// [RequestWriter.Register] updater, since RequestWriter.Register never invokes the
-// updater's [Template.JawsRender]. Lookup happens first, so a missing template reports
-// [ErrMissingTemplate] and the missing-claim diagnostic is reached only after a
-// successful lookup.
+// A Template with a generated wrapper updates only an Element rendered by a Template
+// value equal under == (see [jaws.SetElementState]); using an unequal value for the update
+// is unsupported. With no claim there is nothing to reconcile against, so it executes
+// nothing and reports [ErrElementStateUnclaimed]. That makes a Template returned by
+// [NewTemplate] unusable as a [RequestWriter.Register] updater, since
+// RequestWriter.Register never invokes the updater's [Template.JawsRender]. Lookup happens
+// first, so a missing template reports [ErrMissingTemplate] and the missing-claim
+// diagnostic is reached only after a successful lookup.
 //
 // Lookup, missing-state or execution errors are reported through
 // [jaws.Request.MustLog], which may panic when no [jaws.Jaws.Logger] is configured.
@@ -332,10 +333,12 @@ func (tmpl Template) JawsInput(elem *jaws.Element, value string) (err error) {
 // exposed as [With.Dot].
 //
 // outerHTMLTag names the generated wrapper element that owns the JaWS ID and
-// render-time HTML attributes, or renders unwrapped (and [Template.JawsUpdate] has no
-// wrapper to update) if empty. The name is resolved at render or update time via
-// [jaws.Jaws.LookupTemplate]. See [Template] for the field semantics, event
-// delegation and best-effort error behavior.
+// render-time HTML attributes. If outerHTMLTag is empty, "div" is used. Choose a tag
+// suitable for the DOM context, such as "tr", "td", "li" or "option". For an unwrapped
+// structural fragment, use html/template's native {{template "name" pipeline}} action
+// inside the Template that owns the surrounding DOM. The name is resolved at render or
+// update time via [jaws.Jaws.LookupTemplate]. See [Template] for the field semantics,
+// event delegation and best-effort error behavior.
 //
 // The returned Template holds no per-Element state, so equal Templates are
 // interchangeable and a container that rebuilds its children on every
@@ -346,12 +349,20 @@ func (tmpl Template) JawsInput(elem *jaws.Element, value string) (err error) {
 // dynamic types; the rules distinguish aliases from new defined types. Use the returned
 // Template as a value; taking its address is unsupported.
 func NewTemplate(outerHTMLTag, name string, dot any) Template {
+	if outerHTMLTag == "" {
+		outerHTMLTag = "div"
+	}
+	return newTemplate(outerHTMLTag, name, dot)
+}
+
+func newTemplate(outerHTMLTag, name string, dot any) Template {
 	return Template{OuterHTMLTag: outerHTMLTag, Name: name, Dot: dot}
 }
 
 // Template renders the named partial template with dot exposed as [With.Dot],
-// wrapping the output in a generated outerHTMLTag element (unwrapped if empty) that
-// owns the JaWS ID and any HTML attrs in params. See [NewTemplate] and [Template].
+// wrapping the output in a generated outerHTMLTag element that owns the JaWS ID and any
+// HTML attrs in params. If outerHTMLTag is empty, "div" is used. See [NewTemplate] and
+// [Template].
 func (rw RequestWriter) Template(outerHTMLTag, name string, dot any, params ...any) error {
 	return rw.NewUI(NewTemplate(outerHTMLTag, name, dot), params...)
 }

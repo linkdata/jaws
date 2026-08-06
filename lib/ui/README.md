@@ -15,11 +15,22 @@ This package is the home of JaWS widget implementations.
 `rw.Text(...)`, and `rw.Select(...)` for concise template use.
 `rw.Template(tag, ...)` renders partial templates inside a generated JaWS
 wrapper using the provided HTML tag, so template bodies should let that wrapper
-own JaWS identity and wrapper-level attributes. Passing an empty tag renders the
-template without a generated wrapper. Attribute params passed to
-`rw.Template(...)` are applied to the generated wrapper when one exists.
+own JaWS identity and wrapper-level attributes. Passing an empty tag selects the
+default `div` wrapper. Attribute params passed to `rw.Template(...)` are applied
+to that generated wrapper.
 Template bodies used with `rw.Template(...)` must be partials; full page
 templates should be rendered through `ui.Handler`.
+
+Use Go's native template action when a static structural fragment must be included
+without another JaWS-managed wrapper:
+
+```gotemplate
+{{template "partial" .}}
+```
+
+JaWS-managed partials need one addressable direct DOM node for updates and
+container reconciliation. Choose the semantic wrapper required by the DOM context,
+such as `tr`, `td`, `li`, or `option`, instead of relying on the `div` default there.
 
 Template execution is best-effort rather than transactional. Nested UI helpers
 such as `{{$.Span ...}}` register elements as the template runs, and custom
@@ -70,12 +81,11 @@ scalar in `tag.Tag("...")` or a comparable struct when it should be a tag.
 
 A template claims that slot while rendering, so at most one template may render a given
 element. A composite UI must use template values equal under `==` for rendering and
-updating that element; using unequal values is unsupported. A wrapped template is
-therefore not usable as a `$.Register` updater — `$.Register` never invokes its updater's
-render method — while an unwrapped one is, since its updates are a documented no-op. On
-an element no template claimed, a wrapped template's update reports
-`ErrElementStateUnclaimed` through `jaws.Request.MustLog`, which **panics** when no
-`Jaws.Logger` is configured.
+updating that element; using unequal values is unsupported. A Template is not usable as a
+`$.Register` updater — `$.Register` never invokes its updater's render method, so no
+wrapper state exists to reconcile. On an element no template claimed, a Template returned
+by `NewTemplate` reports `ErrElementStateUnclaimed` through `jaws.Request.MustLog`, which
+**panics** when no `Jaws.Logger` is configured.
 
 ## Container-family value widgets
 
@@ -99,6 +109,10 @@ Rebuilding an equal definition lets the same parent retain its live Element. Equ
 values may back several live Elements within one request when their providers or
 handlers are safe for all calls and each child UI value reused across those Elements
 supports multiple live Elements.
+
+Each child must render one addressable direct DOM node carrying its Element's JaWS ID,
+because removal and ordering target that node. Construct Template children with
+`NewTemplate`, which always supplies a wrapper.
 
 Reconciliation updates direct children only. Reordering retained equal children
 preserves their Elements and nested subtrees; changed nested containers need their own

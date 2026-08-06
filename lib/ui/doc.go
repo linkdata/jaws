@@ -26,6 +26,10 @@
 // [Register] does so only when its updater does; input widgets and [JsVar] require
 // distinct widget values.
 //
+// Container children must render one addressable direct DOM node carrying their
+// Element's JaWS ID so reconciliation can remove and order them. [NewTemplate]
+// supplies that node through its generated wrapper.
+//
 // HTML-inner widgets route content through [bind.MakeHTMLGetter]. Plain strings
 // are treated as trusted HTML, while [bind.Getter][string], [bind.Binder][string]
 // and [fmt.Stringer] values are escaped. Raw [template.HTMLAttr] params are also

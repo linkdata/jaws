@@ -16,7 +16,7 @@ import (
 //
 // Register does not call the updater's [jaws.Renderer.JawsRender]. The updater
 // must support [jaws.Updater.JawsUpdate] without render-time initialization. A
-// wrapped [Template] does not; [Container], [Tbody], and [Select] do.
+// [Template] returned by [NewTemplate] does not; [Container], [Tbody], and [Select] do.
 //
 // Register does not forward event-handler methods. [RequestWriter.Register]
 // automatically attaches handler methods implemented by its updater.
