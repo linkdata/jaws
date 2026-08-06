@@ -49,12 +49,22 @@ func NewContainer(outerHTMLTag string, children jaws.Container) Container {
 	return Container{outerHTMLTag: outerHTMLTag, children: children}
 }
 
-// JawsRender renders ui as its configured container element.
+// JawsRender renders u as its configured container element.
+//
+// It claims elem's widget state slot before applying getters or params, calling
+// the child provider, or writing output. An occupied slot returns
+// [jaws.ErrElementStateClaimed] without performing those side effects.
 func (u Container) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
 	return u.render(elem, w, params, nil)
 }
 
-// JawsUpdate updates the child collection.
+// JawsUpdate updates u's child collection.
+//
+// It claims an unoccupied widget state slot lazily for update-only use. A foreign
+// or typed-nil state, an in-progress render, or a lost concurrent claim reports
+// [jaws.ErrElementStateClaimed] through [jaws.Request.MustLog] without calling the
+// child provider or queuing browser work. [jaws.Request.MustLog] panics when no
+// [jaws.Jaws.Logger] is configured.
 func (u Container) JawsUpdate(elem *jaws.Element) {
 	u.update(elem)
 }

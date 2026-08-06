@@ -56,6 +56,16 @@ func (st *containerState) deleteContents(elems []*jaws.Element) {
 	st.mu.Unlock()
 }
 
+// claimContainerState claims elem's state slot with a fresh containerState.
+// It returns a nil state when another claimant already occupies the slot.
+func claimContainerState(elem *jaws.Element) (st *containerState, err error) {
+	st = &containerState{}
+	if err = jaws.SetElementState(elem, st); err != nil {
+		st = nil
+	}
+	return
+}
+
 // stateForContainerUpdate returns the state claimed for elem, lazily claiming an
 // empty state when the slot is unclaimed. Update-only Register is the intended path,
 // but the state slot does not encode how the Element was created. An occupied foreign
@@ -64,10 +74,7 @@ func (st *containerState) deleteContents(elems []*jaws.Element) {
 func stateForContainerUpdate(elem *jaws.Element) (st *containerState, err error) {
 	switch state := jaws.ElementState(elem).(type) {
 	case nil:
-		st = &containerState{}
-		if err = jaws.SetElementState(elem, st); err != nil {
-			st = nil
-		}
+		st, err = claimContainerState(elem)
 	case *containerState:
 		if state == nil {
 			err = jaws.ErrElementStateClaimed
@@ -300,6 +307,7 @@ func (st *containerState) reconcile(elem *jaws.Element, wantContents []jaws.UI) 
 
 	// Build the new contents, reusing pooled Elements where possible.
 	newOrder = make([]jaws.Jid, 0, len(wantContents))
+	oldLen := len(st.contents)
 	st.contents = st.contents[:0]
 	for _, childUI := range wantContents {
 		var childElem *jaws.Element
@@ -320,6 +328,11 @@ func (st *containerState) reconcile(elem *jaws.Element, wantContents []jaws.UI) 
 		}
 		st.contents = append(st.contents, childElem)
 		newOrder = append(newOrder, childElem.Jid())
+	}
+	// Do not retain removed Elements, or the subtrees reachable through their
+	// state, in the vacated tail of the contents backing array.
+	if len(st.contents) < oldLen {
+		clear(st.contents[len(st.contents):oldLen])
 	}
 
 	for _, elems := range pool {

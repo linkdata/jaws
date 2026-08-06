@@ -315,6 +315,17 @@ func valueTestWaitForProbe(t *testing.T, probe <-chan struct{}) {
 	}
 }
 
+func valueTestRequirePanic(t *testing.T, fn func() error) {
+	t.Helper()
+	var callErr error
+	defer func() {
+		if recover() == nil {
+			t.Fatalf("call returned %v, want panic", callErr)
+		}
+	}()
+	callErr = fn()
+}
+
 func TestContainerValueConstructorsAndMethodSets(t *testing.T) {
 	provider := &valueTestProvider{}
 	container := NewContainer("div", provider)
@@ -592,6 +603,28 @@ func TestContainerUpdateRejectsClaimedStateBeforeProviderCallback(t *testing.T) 
 	}
 }
 
+func TestClaimContainerStateLosesOccupiedSlot(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	elem := rq.NewElement(valueTestChild(1))
+	winner := new(containerState)
+	if err := jaws.SetElementState(elem, winner); err != nil {
+		t.Fatal(err)
+	}
+
+	// The preclaim models another updater winning after this updater observed an
+	// unclaimed slot but before its claim attempt acquired the Request lock.
+	state, err := claimContainerState(elem)
+	if !errors.Is(err, jaws.ErrElementStateClaimed) {
+		t.Fatalf("claim = %v, want %v", err, jaws.ErrElementStateClaimed)
+	}
+	if state != nil {
+		t.Fatalf("losing claim returned state %p, want nil", state)
+	}
+	if got := jaws.ElementState(elem); got != winner {
+		t.Fatalf("losing claim replaced winner with %T", got)
+	}
+}
+
 func TestContainerUpdateLazilyClaimsState(t *testing.T) {
 	for _, tt := range valueTestWidgetCases() {
 		t.Run(tt.name, func(t *testing.T) {
@@ -750,15 +783,55 @@ func TestSelectInputWithoutUsableStateDoesNotClaim(t *testing.T) {
 	}
 }
 
-func TestZeroSelectInputIsNoOp(t *testing.T) {
-	_, rq := newCoreRequest(t)
-	var selectUI Select
-	elem := rq.NewElement(selectUI)
-	if err := selectUI.JawsInput(elem, "ignored"); err != nil {
-		t.Fatal(err)
+func TestContainerFamilyNilProviderPanics(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		build func() jaws.UI
+	}{
+		{"Container zero", func() jaws.UI { return Container{} }},
+		{"Container nil provider", func() jaws.UI { return NewContainer("div", nil) }},
+		{"Tbody zero", func() jaws.UI { return Tbody{} }},
+		{"Tbody nil provider", func() jaws.UI { return NewTbody(nil) }},
+		{"Select zero", func() jaws.UI { return Select{} }},
+		{"Select nil handler", func() jaws.UI { return NewSelect(nil) }},
+	} {
+		for _, operation := range []struct {
+			name string
+			call func(*jaws.Element) error
+		}{
+			{"render", func(elem *jaws.Element) error { return elem.JawsRender(io.Discard, nil) }},
+			{"update", func(elem *jaws.Element) error { elem.JawsUpdate(); return nil }},
+		} {
+			t.Run(tt.name+" "+operation.name, func(t *testing.T) {
+				_, rq := newCoreRequest(t)
+				elem := rq.NewElement(tt.build())
+				valueTestRequirePanic(t, func() error { return operation.call(elem) })
+			})
+		}
 	}
-	if state := jaws.ElementState(elem); state != nil {
-		t.Fatalf("zero Select input claimed state %T", state)
+}
+
+// TestSelectNilHandlerInputIsNoOp pins the input-side asymmetry: the same nil
+// handler that panics on render and update is ignored by JawsInput.
+func TestSelectNilHandlerInputIsNoOp(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		build func() Select
+	}{
+		{"zero", func() Select { return Select{} }},
+		{"nil handler", func() Select { return NewSelect(nil) }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, rq := newCoreRequest(t)
+			selectUI := tt.build()
+			elem := rq.NewElement(selectUI)
+			if err := selectUI.JawsInput(elem, "ignored"); err != nil {
+				t.Fatal(err)
+			}
+			if state := jaws.ElementState(elem); state != nil {
+				t.Fatalf("nil-handler Select input claimed state %T", state)
+			}
+		})
 	}
 }
 
