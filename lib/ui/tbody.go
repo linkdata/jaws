@@ -1,35 +1,26 @@
 package ui
 
-import (
-	"io"
-
-	"github.com/linkdata/jaws"
-)
+import "github.com/linkdata/jaws"
 
 // Tbody renders an HTML tbody containing dynamic child rows.
 //
-// A Tbody value must back at most one live [jaws.Element]. Construct a distinct
-// Tbody for each place the rows are rendered.
+// [NewTbody] configures its embedded [Container] for tbody. Replacing that
+// Container is unsupported. Tbody otherwise follows Container's identity,
+// reconciliation, multiplicity, and nil-provider contracts. Treat it as
+// immutable after use and use it as a value; taking its address changes identity
+// and is unsupported.
 type Tbody struct {
-	ContainerHelper
+	Container
 }
 
-// NewTbody returns a tbody widget that renders and updates c as table rows.
-func NewTbody(c jaws.Container) *Tbody {
-	return &Tbody{ContainerHelper: NewContainerHelper(c)}
+var _ jaws.UI = Tbody{}
+
+// NewTbody returns a Tbody that renders children as table rows.
+func NewTbody(children jaws.Container) Tbody {
+	return Tbody{Container: NewContainer("tbody", children)}
 }
 
-// JawsRender renders ui as an HTML tbody element.
-func (u *Tbody) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
-	return u.RenderContainer(elem, w, "tbody", params)
-}
-
-// JawsUpdate updates the child rows.
-func (u *Tbody) JawsUpdate(elem *jaws.Element) {
-	u.UpdateContainer(elem)
-}
-
-// Tbody renders an HTML tbody element.
-func (rw RequestWriter) Tbody(c jaws.Container, params ...any) error {
-	return rw.NewUI(NewTbody(c), params...)
+// Tbody renders children in an HTML tbody element.
+func (rw RequestWriter) Tbody(children jaws.Container, params ...any) error {
+	return rw.NewUI(NewTbody(children), params...)
 }

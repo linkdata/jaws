@@ -34,12 +34,10 @@ func (c *rebuildingContainer) JawsContains(elem *jaws.Element) (contents []jaws.
 	return
 }
 
-// childJids returns the container's child Jids in order.
-func childJids(t *testing.T, u *ContainerHelper) (jids []jaws.Jid) {
+// childJids returns the container Element's child Jids in order.
+func childJids(t *testing.T, elem *jaws.Element) (jids []jaws.Jid) {
 	t.Helper()
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	for _, childElem := range u.contents {
+	for _, childElem := range containerElements(t, elem) {
 		jids = append(jids, childElem.Jid())
 	}
 	return
@@ -85,7 +83,7 @@ func assertNoDOMMutation(t *testing.T, tr *jawstest.TestRequest, round int) {
 	}
 }
 
-func newReuseRequest(t *testing.T) *jawstest.TestRequest {
+func newReuseRequest(t testing.TB) *jawstest.TestRequest {
 	t.Helper()
 	jw, err := jaws.New()
 	if err != nil {
@@ -124,14 +122,14 @@ func TestContainer_RebuiltTemplateChildrenAreReused(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	before := childJids(t, &container.ContainerHelper)
+	before := childJids(t, elem)
 	if len(before) != len(tc.rows) {
 		t.Fatalf("child elements after render = %d, want %d", len(before), len(tc.rows))
 	}
 
 	for round := 1; round <= 3; round++ {
-		container.JawsUpdate(elem)
-		after := childJids(t, &container.ContainerHelper)
+		elem.JawsUpdate()
+		after := childJids(t, elem)
 		if len(after) != len(before) {
 			t.Fatalf("round %d: child elements = %d, want %d", round, len(after), len(before))
 		}
@@ -158,9 +156,9 @@ func TestContainer_StableChildrenAreReused(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	before := childJids(t, &container.ContainerHelper)
-	container.JawsUpdate(elem)
-	after := childJids(t, &container.ContainerHelper)
+	before := childJids(t, elem)
+	elem.JawsUpdate()
+	after := childJids(t, elem)
 	if len(after) != len(before) {
 		t.Fatalf("child elements = %d, want %d", len(after), len(before))
 	}
@@ -185,7 +183,7 @@ func TestContainer_NonComparableTemplateDotCancels(t *testing.T) {
 	tc := &testContainer{contents: []jaws.UI{NewTemplate("div", "row", map[string]int{"a": 1})}}
 	elem := rq.NewElement(NewContainer("div", tc))
 	var sb strings.Builder
-	// The render itself reports nothing: RenderContainer skips the children and still
+	// The render itself reports nothing: the container skips the children and still
 	// closes its wrapper, so terminating the Request is the whole signal.
 	if err := elem.JawsRender(&sb, nil); err != nil {
 		t.Fatalf("render = %v, want nil: the unusable child cancels the Request instead", err)

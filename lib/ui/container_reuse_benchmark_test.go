@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jaws/lib/wire"
 )
 
 // This file isolates benchmarks for the container's two child-reuse paths: equal rebuilt
@@ -105,5 +107,245 @@ func BenchmarkContainerOfStableChildrenUpdate(b *testing.B) {
 		container.JawsUpdate(elem)
 		b.StopTimer()
 		jw.Close()
+	}
+}
+
+// BenchmarkContainerInitialRender measures the state-allocation path separately from
+// the larger child-reuse benchmarks.
+func BenchmarkContainerInitialRender(b *testing.B) {
+	b.StopTimer()
+	tr := newReuseRequest(b)
+	bc := &benchStableContainer{contents: benchChildren(0, 4)}
+	container := NewContainer("div", bc)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for completed := 0; completed < b.N; {
+		batchSize := min(benchmarkContainerBatchSize, b.N-completed)
+		elems := make([]*jaws.Element, batchSize)
+		for i := range elems {
+			elems[i] = tr.NewElement(container)
+		}
+
+		b.StartTimer()
+		var renderErr error
+		for _, elem := range elems {
+			if err := elem.JawsRender(io.Discard, nil); renderErr == nil {
+				renderErr = err
+			}
+		}
+		b.StopTimer()
+		if renderErr != nil {
+			b.Fatal(renderErr)
+		}
+		for _, elem := range elems {
+			benchmarkRequireContainerElementCount(b, elem, 4)
+		}
+		deleteOwnedElements(tr.Request, elems)
+		benchmarkRequireDeletedContainerElements(b, tr.Request, elems)
+		completed += batchSize
+	}
+}
+
+// BenchmarkContainerUnchangedUpdate measures a small reconciliation that reuses every
+// child and emits no browser mutation.
+func BenchmarkContainerUnchangedUpdate(b *testing.B) {
+	b.StopTimer()
+	tr := newReuseRequest(b)
+	bc := &benchStableContainer{contents: benchChildren(0, 4)}
+	container := NewContainer("div", bc)
+	elem := tr.NewElement(container)
+	if err := elem.JawsRender(io.Discard, nil); err != nil {
+		b.Fatal(err)
+	}
+	before := benchmarkContainerElements(b, elem, 4)
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.StartTimer()
+	for range b.N {
+		container.JawsUpdate(elem)
+	}
+	b.StopTimer()
+	after := benchmarkContainerElements(b, elem, 4)
+	for i := range before {
+		if after[i] != before[i] {
+			b.Fatalf("child %d = %v, want retained Element %v", i, after[i].Jid(), before[i].Jid())
+		}
+	}
+	benchmarkRequireContainerWire(b,
+		nestedReorderDrainWire(b, tr, "container unchanged benchmark"), elem.Jid())
+}
+
+// BenchmarkContainerAppendRemoveUpdate measures alternating small reconciliations
+// that append and remove one child. Alternating three and four children makes every
+// measured update structural while retaining one request-scoped fixture.
+func BenchmarkContainerAppendRemoveUpdate(b *testing.B) {
+	b.StopTimer()
+	tr := newReuseRequest(b)
+	three := benchChildren(0, 3)
+	four := benchChildren(0, 4)
+	bc := &benchStableContainer{contents: three}
+	container := NewContainer("div", bc)
+	elem := tr.NewElement(container)
+	if err := elem.JawsRender(io.Discard, nil); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	expanded := false
+	for completed := 0; completed < b.N; {
+		batchSize := min(benchmarkContainerBatchSize, b.N-completed)
+		startedExpanded := expanded
+		b.StartTimer()
+		for range batchSize {
+			if expanded {
+				bc.contents = three
+			} else {
+				bc.contents = four
+			}
+			container.JawsUpdate(elem)
+			expanded = !expanded
+		}
+		b.StopTimer()
+		wantCount := 3
+		if expanded {
+			wantCount = 4
+		}
+		benchmarkRequireContainerElementCount(b, elem, wantCount)
+		benchmarkRequireContainerResizeWire(b,
+			nestedReorderDrainWire(b, tr, "container append/remove benchmark"),
+			elem.Jid(), batchSize, startedExpanded)
+		completed += batchSize
+	}
+}
+
+// BenchmarkContainerRegisterFirstUpdate measures the lazy state-claim path used by an
+// update-only Register Element.
+func BenchmarkContainerRegisterFirstUpdate(b *testing.B) {
+	b.StopTimer()
+	tr := newReuseRequest(b)
+	bc := &benchStableContainer{contents: benchChildren(0, 4)}
+	container := NewContainer("div", bc)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for completed := 0; completed < b.N; {
+		batchSize := min(benchmarkContainerBatchSize, b.N-completed)
+		elems := make([]*jaws.Element, batchSize)
+		for i := range elems {
+			elems[i] = tr.NewElement(NewRegister(container))
+		}
+
+		b.StartTimer()
+		for _, elem := range elems {
+			elem.JawsUpdate()
+		}
+		b.StopTimer()
+		for _, elem := range elems {
+			benchmarkRequireContainerElementCount(b, elem, 4)
+		}
+		benchmarkRequireContainerBatchWire(b,
+			nestedReorderDrainWire(b, tr, "container register benchmark"), elems,
+			what.Append, what.Append, what.Append, what.Append, what.Order)
+		deleteOwnedElements(tr.Request, elems)
+		benchmarkRequireDeletedContainerElements(b, tr.Request, elems)
+		completed += batchSize
+	}
+}
+
+// Batching amortizes timer transitions and untimed validation while bounding
+// simultaneously live Elements and queued wire operations.
+const benchmarkContainerBatchSize = 256
+
+func benchmarkContainerElements(b *testing.B, elem *jaws.Element, want int) (contents []*jaws.Element) {
+	b.Helper()
+	state, ok := jaws.ElementState(elem).(*containerState)
+	if !ok || state == nil {
+		b.Fatalf("Element %v state = %T, want *containerState", elem.Jid(), jaws.ElementState(elem))
+	}
+	state.mu.Lock()
+	contents = append(contents, state.contents...)
+	state.mu.Unlock()
+	if len(contents) != want {
+		b.Fatalf("Element %v has %d children, want %d", elem.Jid(), len(contents), want)
+	}
+	for _, child := range contents {
+		if got := elem.Request.GetElementByJid(child.Jid()); got != child {
+			b.Fatalf("request Element %v = %p, want retained %p", child.Jid(), got, child)
+		}
+	}
+	return
+}
+
+func benchmarkRequireContainerElementCount(b *testing.B, elem *jaws.Element, want int) {
+	b.Helper()
+	state, ok := jaws.ElementState(elem).(*containerState)
+	if !ok || state == nil {
+		b.Fatalf("Element %v state = %T, want *containerState", elem.Jid(), jaws.ElementState(elem))
+	}
+	state.mu.Lock()
+	got := len(state.contents)
+	state.mu.Unlock()
+	if got != want {
+		b.Fatalf("Element %v has %d children, want %d", elem.Jid(), got, want)
+	}
+}
+
+func benchmarkRequireDeletedContainerElements(b *testing.B, rq *jaws.Request, elems []*jaws.Element) {
+	b.Helper()
+	for _, elem := range elems {
+		if got := rq.GetElementByJid(elem.Jid()); got != nil {
+			b.Fatalf("cleaned Element %v remains registered", elem.Jid())
+		}
+	}
+}
+
+func benchmarkRequireContainerWire(b *testing.B, got []wire.WsMsg, jid jaws.Jid, want ...what.What) {
+	b.Helper()
+	if len(got) != len(want) {
+		b.Fatalf("wire operations = %d, want %d: %+v", len(got), len(want), got)
+	}
+	for i, message := range got {
+		if message.Jid != jid || message.What != want[i] {
+			b.Fatalf("wire operation %d = %v %v, want %v %v", i, message.Jid, message.What, jid, want[i])
+		}
+	}
+}
+
+func benchmarkRequireContainerBatchWire(b *testing.B, got []wire.WsMsg, elems []*jaws.Element, want ...what.What) {
+	b.Helper()
+	wantCount := len(elems) * len(want)
+	if len(got) != wantCount {
+		b.Fatalf("wire operations = %d, want %d", len(got), wantCount)
+	}
+	messageIndex := 0
+	for _, elem := range elems {
+		for _, wantWhat := range want {
+			message := got[messageIndex]
+			if message.Jid != elem.Jid() || message.What != wantWhat {
+				b.Fatalf("wire operation %d = %v %v, want %v %v", messageIndex, message.Jid, message.What, elem.Jid(), wantWhat)
+			}
+			messageIndex++
+		}
+	}
+}
+
+func benchmarkRequireContainerResizeWire(b *testing.B, got []wire.WsMsg, jid jaws.Jid, updates int, expanded bool) {
+	b.Helper()
+	if want := updates * 2; len(got) != want {
+		b.Fatalf("wire operations = %d, want %d", len(got), want)
+	}
+	for updateIndex := range updates {
+		wantWhat := what.Append
+		if expanded {
+			wantWhat = what.Remove
+		}
+		operation := got[updateIndex*2]
+		order := got[updateIndex*2+1]
+		if operation.Jid != jid || operation.What != wantWhat {
+			b.Fatalf("wire operation %d = %v %v, want %v %v", updateIndex*2, operation.Jid, operation.What, jid, wantWhat)
+		}
+		if order.Jid != jid || order.What != what.Order {
+			b.Fatalf("wire operation %d = %v %v, want %v %v", updateIndex*2+1, order.Jid, order.What, jid, what.Order)
+		}
+		expanded = !expanded
 	}
 }

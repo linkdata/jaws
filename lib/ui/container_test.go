@@ -33,12 +33,15 @@ func TestContainerAndTbodyRender(t *testing.T) {
 	mustMatch(t, `^<div id="Jid\.[0-9]+" hidden><span id="Jid\.[0-9]+">foo</span><span id="Jid\.[0-9]+">bar</span></div>$`, got)
 
 	tbody := NewTbody(tc)
+	if want := NewContainer("tbody", tc); tbody.Container != want {
+		t.Fatalf("Tbody Container = %#v, want %#v", tbody.Container, want)
+	}
 	elem, got := renderUI(t, rq, tbody)
 	mustMatch(t, `^<tbody id="Jid\.[0-9]+"><span id="Jid\.[0-9]+">foo</span><span id="Jid\.[0-9]+">bar</span></tbody>$`, got)
 	tbody.JawsUpdate(elem)
 }
 
-func TestContainerHelperUpdateContainer(t *testing.T) {
+func TestContainerUpdate(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	span1 := NewSpan(testHTMLGetter("span1"))
 	span2 := NewSpan(testHTMLGetter("span2"))
@@ -48,38 +51,38 @@ func TestContainerHelperUpdateContainer(t *testing.T) {
 	container := NewContainer("div", tc)
 	elem, _ := renderUI(t, rq, container)
 
-	if len(container.contents) != 1 {
-		t.Fatalf("want 1 content got %d", len(container.contents))
+	if contents := containerElements(t, elem); len(contents) != 1 {
+		t.Fatalf("want 1 content got %d", len(contents))
 	}
 
 	// append + reorder path
 	tc.contents = []jaws.UI{span1, span2, span3}
-	container.JawsUpdate(elem)
-	if len(container.contents) != 3 {
-		t.Fatalf("want 3 contents got %d", len(container.contents))
+	elem.JawsUpdate()
+	if contents := containerElements(t, elem); len(contents) != 3 {
+		t.Fatalf("want 3 contents got %d", len(contents))
 	}
 
 	// remove path
-	removedJid := container.contents[0].Jid()
+	removedJid := containerElements(t, elem)[0].Jid()
 	tc.contents = []jaws.UI{span2, span3}
-	container.JawsUpdate(elem)
+	elem.JawsUpdate()
 	if got := rq.GetElementByJid(removedJid); got != nil {
 		t.Fatal("expected removed element to be deleted from request")
 	}
 
 	// reorder + replace path
 	tc.contents = []jaws.UI{span3, span1}
-	container.JawsUpdate(elem)
-	if len(container.contents) != 2 {
-		t.Fatalf("want 2 contents got %d", len(container.contents))
+	elem.JawsUpdate()
+	if contents := containerElements(t, elem); len(contents) != 2 {
+		t.Fatalf("want 2 contents got %d", len(contents))
 	}
 }
 
-// TestContainerHelper_UpdateEmitsWireOps pins the browser-visible wire output of
-// UpdateContainer: appending a child must emit an Append carrying that child's
+// TestContainer_UpdateEmitsWireOps pins the browser-visible wire output of an
+// update: appending a child must emit an Append carrying that child's
 // rendered HTML and an Order reflecting the new sequence. Asserting the ops (not
 // just the in-memory contents slice) catches regressions that line coverage misses.
-func TestContainerHelper_UpdateEmitsWireOps(t *testing.T) {
+func TestContainer_UpdateEmitsWireOps(t *testing.T) {
 	jw, err := jaws.New()
 	if err != nil {
 		t.Fatal(err)
@@ -105,7 +108,7 @@ func TestContainerHelper_UpdateEmitsWireOps(t *testing.T) {
 	}
 
 	tc.contents = []jaws.UI{span1, span2}
-	container.JawsUpdate(elem)
+	elem.JawsUpdate()
 	// Wake the harness loop so the queued ops flush to OutCh.
 	tr.InCh <- wire.WsMsg{}
 
@@ -132,7 +135,7 @@ collect:
 	}
 }
 
-func TestContainerHelper_AppendsSelectBeforeSettingInitialValue(t *testing.T) {
+func TestContainer_AppendsSelectBeforeSettingInitialValue(t *testing.T) {
 	jw, err := jaws.New()
 	if err != nil {
 		t.Fatal(err)
@@ -190,7 +193,7 @@ func TestContainerHelper_AppendsSelectBeforeSettingInitialValue(t *testing.T) {
 	}
 }
 
-func TestContainerHelperUpdateContainerDuplicates(t *testing.T) {
+func TestContainerUpdateDuplicates(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	span1 := NewSpan(testHTMLGetter("span1"))
 	span2 := NewSpan(testHTMLGetter("span2"))
@@ -200,24 +203,26 @@ func TestContainerHelperUpdateContainerDuplicates(t *testing.T) {
 	container := NewContainer("div", tc)
 	elem, _ := renderUI(t, rq, container)
 
-	if len(container.contents) != 3 {
-		t.Fatalf("want 3 contents got %d", len(container.contents))
+	contents := containerElements(t, elem)
+	if len(contents) != 3 {
+		t.Fatalf("want 3 contents got %d", len(contents))
 	}
 	// the two span1 Elements must have distinct Jids
-	jid0 := container.contents[0].Jid()
-	jid2 := container.contents[2].Jid()
+	jid0 := contents[0].Jid()
+	jid2 := contents[2].Jid()
 	if jid0 == jid2 {
 		t.Fatal("duplicate UI must produce distinct Jids")
 	}
 
 	// remove one duplicate, keep the other
 	tc.contents = []jaws.UI{span2, span1}
-	container.JawsUpdate(elem)
-	if len(container.contents) != 2 {
-		t.Fatalf("want 2 contents got %d", len(container.contents))
+	elem.JawsUpdate()
+	contents = containerElements(t, elem)
+	if len(contents) != 2 {
+		t.Fatalf("want 2 contents got %d", len(contents))
 	}
 	// one of the two span1 Jids should have been removed
-	kept := container.contents[1].Jid()
+	kept := contents[1].Jid()
 	if kept != jid0 && kept != jid2 {
 		t.Fatalf("expected kept Jid to be one of the original span1 Jids")
 	}
@@ -233,13 +238,14 @@ func TestContainerHelperUpdateContainerDuplicates(t *testing.T) {
 
 	// add more duplicates
 	tc.contents = []jaws.UI{span1, span2, span1, span2}
-	container.JawsUpdate(elem)
-	if len(container.contents) != 4 {
-		t.Fatalf("want 4 contents got %d", len(container.contents))
+	elem.JawsUpdate()
+	contents = containerElements(t, elem)
+	if len(contents) != 4 {
+		t.Fatalf("want 4 contents got %d", len(contents))
 	}
 	// all four must have distinct Jids
 	jids := make(map[jid.Jid]struct{}, 4)
-	for i, c := range container.contents {
+	for i, c := range contents {
 		if _, ok := jids[c.Jid()]; ok {
 			t.Fatalf("contents[%d] has duplicate Jid %v", i, c.Jid())
 		}
@@ -247,12 +253,12 @@ func TestContainerHelperUpdateContainerDuplicates(t *testing.T) {
 	}
 }
 
-// TestContainerHelper_ReconcileDiscardsOutOfBandDeletedChild verifies that a child
+// TestContainer_ReconcileDiscardsOutOfBandDeletedChild verifies that a child
 // Element deleted out-of-band (e.g. by a what.Delete broadcast on a shared tag, or a
 // browser what.Remove) is not reused from the reconcile pool. A deleted Element is
 // inert, so reusing it would leave the still-wanted child permanently unrendered and
 // put a phantom Jid in the Order; reconcile must create a fresh Element instead.
-func TestContainerHelper_ReconcileDiscardsOutOfBandDeletedChild(t *testing.T) {
+func TestContainer_ReconcileDiscardsOutOfBandDeletedChild(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	span1 := NewSpan(testHTMLGetter("span1"))
 	span2 := NewSpan(testHTMLGetter("span2"))
@@ -260,10 +266,11 @@ func TestContainerHelper_ReconcileDiscardsOutOfBandDeletedChild(t *testing.T) {
 	container := NewContainer("div", tc)
 	elem, _ := renderUI(t, rq, container)
 
-	if len(container.contents) != 2 {
-		t.Fatalf("want 2 contents got %d", len(container.contents))
+	contents := containerElements(t, elem)
+	if len(contents) != 2 {
+		t.Fatalf("want 2 contents got %d", len(contents))
 	}
-	deletedChild := container.contents[1]
+	deletedChild := contents[1]
 	deletedJid := deletedChild.Jid()
 
 	// Delete span2's Element out-of-band while the container still wants it.
@@ -274,12 +281,13 @@ func TestContainerHelper_ReconcileDiscardsOutOfBandDeletedChild(t *testing.T) {
 
 	// tc.contents is unchanged (still wants span1 and span2), so reconcile must not
 	// reuse the deleted Element for span2.
-	container.JawsUpdate(elem)
+	elem.JawsUpdate()
 
-	if len(container.contents) != 2 {
-		t.Fatalf("want 2 contents after update got %d", len(container.contents))
+	contents = containerElements(t, elem)
+	if len(contents) != 2 {
+		t.Fatalf("want 2 contents after update got %d", len(contents))
 	}
-	fresh := container.contents[1]
+	fresh := contents[1]
 	if fresh == deletedChild || fresh.Jid() == deletedJid {
 		t.Fatal("reconcile reused the deleted Element instead of creating a fresh one")
 	}
@@ -291,7 +299,7 @@ func TestContainerHelper_ReconcileDiscardsOutOfBandDeletedChild(t *testing.T) {
 	}
 }
 
-func TestContainerHelper_SkipsOutOfBandDeletedLeftover(t *testing.T) {
+func TestContainer_SkipsOutOfBandDeletedLeftover(t *testing.T) {
 	_, rq := newCoreRequest(t) // jaws.New(): nil Logger, so an invalid removal panics
 	span1 := NewSpan(testHTMLGetter("span1"))
 	span2 := NewSpan(testHTMLGetter("span2"))
@@ -299,29 +307,31 @@ func TestContainerHelper_SkipsOutOfBandDeletedLeftover(t *testing.T) {
 	container := NewContainer("div", tc)
 	elem, _ := renderUI(t, rq, container)
 
-	if len(container.contents) != 2 {
-		t.Fatalf("want 2 contents got %d", len(container.contents))
+	contents := containerElements(t, elem)
+	if len(contents) != 2 {
+		t.Fatalf("want 2 contents got %d", len(contents))
 	}
-	remainingChild := container.contents[0]
-	deletedChild := container.contents[1]
+	remainingChild := contents[0]
+	deletedChild := contents[1]
 
 	// Delete span2's Element out-of-band (as a what.Delete broadcast would via
 	// rq.DeleteElement) and drop span2 from what the container wants. That routes the
 	// deleted Element to the leftover path rather than the self-healing reuse path
-	// exercised by TestContainerHelper_ReconcileDiscardsOutOfBandDeletedChild.
-	// UpdateContainer must discard it without trying to remove it a second time.
+	// exercised by TestContainer_ReconcileDiscardsOutOfBandDeletedChild.
+	// Reconciliation must discard it without trying to remove it a second time.
 	rq.DeleteElement(deletedChild)
 	if !deletedChild.Deleted() {
 		t.Fatal("expected child to be marked deleted")
 	}
 	tc.contents = []jaws.UI{span1}
 
-	container.JawsUpdate(elem)
+	elem.JawsUpdate()
 
-	if len(container.contents) != 1 {
-		t.Fatalf("want 1 content after update got %d", len(container.contents))
+	contents = containerElements(t, elem)
+	if len(contents) != 1 {
+		t.Fatalf("want 1 content after update got %d", len(contents))
 	}
-	remaining := container.contents[0]
+	remaining := contents[0]
 	if remaining != remainingChild {
 		t.Fatal("remaining child must be reused")
 	}
@@ -330,7 +340,7 @@ func TestContainerHelper_SkipsOutOfBandDeletedLeftover(t *testing.T) {
 	}
 }
 
-func TestContainerHelperRenderErrorPaths(t *testing.T) {
+func TestContainerRenderErrorPaths(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	renderErr := errors.New("render error")
 	errChild := testRenderErrorUI{err: renderErr}
@@ -343,8 +353,8 @@ func TestContainerHelperRenderErrorPaths(t *testing.T) {
 	if !errors.Is(err, renderErr) {
 		t.Fatalf("want %v got %v", renderErr, err)
 	}
-	if len(container.contents) != 0 {
-		t.Fatalf("want 0 successful child got %d", len(container.contents))
+	if contents := containerElements(t, elem); len(contents) != 0 {
+		t.Fatalf("want 0 successful child got %d", len(contents))
 	}
 
 	// panic path from must() during append
@@ -357,10 +367,10 @@ func TestContainerHelperRenderErrorPaths(t *testing.T) {
 			t.Fatal("expected panic from must")
 		}
 	}()
-	container2.JawsUpdate(elem2)
+	elem2.JawsUpdate()
 }
 
-func TestContainerHelperUpdateRenderErrorDoesNotAppendFailedChild(t *testing.T) {
+func TestContainerUpdateRenderErrorDoesNotAppendFailedChild(t *testing.T) {
 	jw, err := jaws.New()
 	if err != nil {
 		t.Fatal(err)
@@ -387,7 +397,7 @@ func TestContainerHelperUpdateRenderErrorDoesNotAppendFailedChild(t *testing.T) 
 	renderErr := errors.New("append render failed")
 	failingChild := &testRenderErrorCaptureUI{err: renderErr}
 	tc.contents = []jaws.UI{failingChild}
-	container.JawsUpdate(elem)
+	elem.JawsUpdate()
 
 	if !failingChild.jid.IsValid() {
 		t.Fatal("expected failing child jid to be captured")
@@ -520,7 +530,7 @@ func BenchmarkContainerValidateChildren(b *testing.B) {
 	}
 }
 
-func BenchmarkContainerHelperUpdateAppendHeavy(b *testing.B) {
+func BenchmarkContainerUpdateAppendHeavy(b *testing.B) {
 	b.ReportAllocs()
 	const size = 1000
 	for range b.N {
@@ -534,13 +544,13 @@ func BenchmarkContainerHelperUpdateAppendHeavy(b *testing.B) {
 		}
 		bc.contents = benchChildren(0, size)
 		b.StartTimer()
-		container.JawsUpdate(elem)
+		elem.JawsUpdate()
 		b.StopTimer()
 		jw.Close()
 	}
 }
 
-func BenchmarkContainerHelperUpdateMixed(b *testing.B) {
+func BenchmarkContainerUpdateMixed(b *testing.B) {
 	b.ReportAllocs()
 	const size = 1000
 	for range b.N {
@@ -561,13 +571,13 @@ func BenchmarkContainerHelperUpdateMixed(b *testing.B) {
 		}
 		bc.contents = next
 		b.StartTimer()
-		container.JawsUpdate(elem)
+		elem.JawsUpdate()
 		b.StopTimer()
 		jw.Close()
 	}
 }
 
-func TestContainerHelperRenderErrorDoesNotLeakFailedChildElement(t *testing.T) {
+func TestContainerRenderErrorDoesNotLeakFailedChildElement(t *testing.T) {
 	_, rq := newCoreRequest(t)
 
 	renderErr := errors.New("render error")
@@ -809,24 +819,6 @@ func TestSelectWidget_AppendsOptionBeforeSettingNewValue(t *testing.T) {
 	}
 }
 
-// TestSelectWidget_NonSetterContainer exercises Select's defensive guard. NewSelect
-// always supplies a named.SelectHandler (a bind.Setter[string]), so the false branch
-// in JawsUpdate/JawsInput is reachable only by reassigning the embedded Container
-// field to a plain jaws.Container. JawsUpdate must then update only the child options
-// (no value set, no panic) and JawsInput must be a no-op returning nil.
-func TestSelectWidget_NonSetterContainer(t *testing.T) {
-	_, rq := newCoreRequest(t)
-	c := &testContainer{contents: []jaws.UI{NewOption(named.NewBool(nil, "1", "one", true))}}
-	selectUI := &Select{ContainerHelper: NewContainerHelper(c)}
-	elem, _ := renderUI(t, rq, selectUI)
-
-	selectUI.JawsUpdate(elem)
-
-	if err := selectUI.JawsInput(elem, "x"); err != nil {
-		t.Fatalf("JawsInput on non-Setter container: want nil, got %v", err)
-	}
-}
-
 // nanChildUI is a comparable UI value that is not equal to itself (a non-reflexive
 // map key), reproducing issue #179.
 type nanChildUI struct{ f float64 }
@@ -873,23 +865,25 @@ func TestContainerAcceptsTypedNilChild(t *testing.T) {
 	if !strings.Contains(got, "child") {
 		t.Fatalf("render = %q, want it to contain the child output", got)
 	}
-	if len(container.contents) != 1 {
-		t.Fatalf("want 1 child Element, got %d", len(container.contents))
+	contents := containerElements(t, elem)
+	if len(contents) != 1 {
+		t.Fatalf("want 1 child Element, got %d", len(contents))
 	}
-	childElem := container.contents[0]
+	childElem := contents[0]
 	childJid := childElem.Jid()
 
-	container.JawsUpdate(elem)
+	elem.JawsUpdate()
 	if cause := context.Cause(rq.Context()); cause != nil {
 		t.Fatalf("update cancelled the Request: %v", cause)
 	}
-	if len(container.contents) != 1 {
-		t.Fatalf("want 1 child Element after update, got %d", len(container.contents))
+	contents = containerElements(t, elem)
+	if len(contents) != 1 {
+		t.Fatalf("want 1 child Element after update, got %d", len(contents))
 	}
-	if container.contents[0] != childElem {
+	if contents[0] != childElem {
 		t.Fatal("typed nil child was recreated on update instead of reused")
 	}
-	if got := container.contents[0].Jid(); got != childJid {
+	if got := contents[0].Jid(); got != childJid {
 		t.Fatalf("child Jid changed on update: %v -> %v", childJid, got)
 	}
 }
@@ -913,8 +907,8 @@ func TestContainerValidatesWholeSliceBeforeRender(t *testing.T) {
 	if strings.Contains(sb.String(), "VALIDMARKER") {
 		t.Fatalf("valid prefix child was rendered before the slice was validated: %q", sb.String())
 	}
-	if len(container.contents) != 0 {
-		t.Fatalf("no children should be committed, got %d", len(container.contents))
+	if contents := containerElements(t, elem); len(contents) != 0 {
+		t.Fatalf("no children should be committed, got %d", len(contents))
 	}
 	// No child Element was ever created: NewElement is never reached. Jids are
 	// monotonic (a created-then-deleted Element still advances the counter, and would
@@ -928,33 +922,35 @@ func TestContainerValidatesWholeSliceBeforeRender(t *testing.T) {
 
 // TestContainerUpdateValidatesWholeSliceBeforeReconcile is the update-path counterpart:
 // when a wanted slice has a usable child before an unusable one, the whole slice is
-// validated before reconcile touches u.contents or the pool. It exercises reconcile
-// directly and asserts its four operation sets are empty (so UpdateContainer queues no
-// Remove/Append/Order), that u.contents is untouched, and — via a monotonic-Jid probe
+// validated before reconcile touches the state contents or the pool. It exercises
+// reconcile directly and asserts its five operation sets are empty (so Container.update
+// queues no Remove/Append/Order), that the contents are untouched, and — via a monotonic-Jid probe
 // — that no new Element was created.
 func TestContainerUpdateValidatesWholeSliceBeforeReconcile(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("OLD"))}}
 	container := NewContainer("div", tc)
 	elem, _ := renderUI(t, rq, container)
-	if len(container.contents) != 1 {
-		t.Fatalf("want 1 child before update, got %d", len(container.contents))
+	contents := containerElements(t, elem)
+	if len(contents) != 1 {
+		t.Fatalf("want 1 child before update, got %d", len(contents))
 	}
-	childElem := container.contents[0]
+	childElem := contents[0]
 
 	// Observe reconcile's outputs directly: a usable child before an unusable one must
-	// yield no operations at all, which is what leaves UpdateContainer nothing to queue.
-	toAppend, toRemove, oldOrder, newOrder := container.reconcile(elem,
+	// yield no operations at all, which is what leaves Container.update nothing to queue.
+	toAppend, toRemove, alreadyDeleted, oldOrder, newOrder := requireContainerState(t, elem).reconcile(elem,
 		[]jaws.UI{NewSpan(testHTMLGetter("NEWVALID")), nanChildUI{f: math.NaN()}})
-	if len(toAppend)+len(toRemove)+len(oldOrder)+len(newOrder) != 0 {
-		t.Fatalf("reconcile produced operations on abort: append=%d remove=%d oldOrder=%d newOrder=%d",
-			len(toAppend), len(toRemove), len(oldOrder), len(newOrder))
+	if len(toAppend)+len(toRemove)+len(alreadyDeleted)+len(oldOrder)+len(newOrder) != 0 {
+		t.Fatalf("reconcile produced operations on abort: append=%d remove=%d deleted=%d oldOrder=%d newOrder=%d",
+			len(toAppend), len(toRemove), len(alreadyDeleted), len(oldOrder), len(newOrder))
 	}
 	if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
 		t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
 	}
 	// No partial reconciliation: the existing content slice is untouched.
-	if len(container.contents) != 1 || container.contents[0] != childElem {
+	contents = containerElements(t, elem)
+	if len(contents) != 1 || contents[0] != childElem {
 		t.Fatalf("contents changed on aborted update: partial reconciliation occurred")
 	}
 	// No new Element was created (Jids are monotonic, so a created-then-deleted child
@@ -1004,7 +1000,7 @@ func TestContainerTerminatesOnUnusableChild(t *testing.T) {
 			container := NewContainer("div", tc)
 			elem, _ := renderUI(t, rq, container)
 			tc.contents = []jaws.UI{b.make()}
-			container.JawsUpdate(elem) // must terminate, not panic
+			elem.JawsUpdate() // must terminate, not panic
 			if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
 				t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)
 			}
@@ -1023,31 +1019,33 @@ func (l reentrantLogger) Error(string, ...any) {
 }
 
 // TestContainerCancelNotUnderLock pins that terminating the Request for an unusable
-// child does not run while u.mu is held: cancelUnusableChildren runs before reconcile
+// child does not run while the state mutex is held: cancelUnusableChildren runs before reconcile
 // locks. Request.Cancel invokes the user logger synchronously, so a logger that
-// re-enters the container's lock would deadlock the update goroutine if cancellation
-// held u.mu. The timeout turns that regression into a failure instead of a hang.
+// re-enters the state lock would deadlock the update goroutine if cancellation held it.
+// The timeout turns that regression into a failure instead of a hang.
 func TestContainerCancelNotUnderLock(t *testing.T) {
-	jw, rq := newCoreRequest(t)
+	var st *containerState
+	var reentered atomic.Bool
+	_, rq := newConfiguredCoreRequest(t, func(jw *jaws.Jaws) {
+		jw.Logger = reentrantLogger{onError: func() {
+			// Re-enter the state lock. If the cancellation that triggered this log
+			// held it, this second Lock on the same goroutine would deadlock.
+			st.mu.Lock()
+			_ = len(st.contents)
+			st.mu.Unlock()
+			reentered.Store(true)
+		}}
+	})
 	tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("ok"))}}
 	container := NewContainer("div", tc)
 	elem, _ := renderUI(t, rq, container)
-
-	var reentered atomic.Bool
-	jw.Logger = reentrantLogger{onError: func() {
-		// Re-enter the container's lock. If the cancellation that triggered this log
-		// held u.mu, this second Lock on the same goroutine would deadlock.
-		container.mu.Lock()
-		_ = len(container.contents)
-		container.mu.Unlock()
-		reentered.Store(true)
-	}}
+	st = requireContainerState(t, elem)
 
 	tc.contents = []jaws.UI{nanChildUI{f: math.NaN()}}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		container.JawsUpdate(elem)
+		elem.JawsUpdate()
 	}()
 	select {
 	case <-done:

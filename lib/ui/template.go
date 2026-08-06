@@ -94,13 +94,13 @@ var (
 	_ jaws.InputHandler       = Template{} // statically ensure interface is defined
 )
 
-// templateState is the per-Element state a Template claims while rendering, held in the
-// Element's widget state slot so the Template itself stays a stateless comparable value.
+// templateState is the per-Element state a Template claims while rendering.
 type templateState struct {
 	// mu serializes the owned operations, which run on the rendering goroutine and
-	// on the request loop goroutine during updates (mirrors ContainerHelper).
+	// on the request loop goroutine during updates (mirrors containerState).
 	mu sync.Mutex
 	// owned are the Elements created while the template executed, in creation order.
+	// Keeping ownership here leaves Template as a stateless comparable value.
 	owned []*jaws.Element
 }
 
@@ -110,10 +110,10 @@ func templateStateOf(elem *jaws.Element) (st *templateState) {
 	return
 }
 
-// ownElement records child as created while the template executed. It is the
-// [RequestWriter] element-created hook installed by execute, so it is called as soon
-// as the Element exists and makes no assumption about whether it rendered.
+// ownElement records child as created while the template executed.
 func (st *templateState) ownElement(child *jaws.Element) {
+	// execute installs this as RequestWriter's creation hook. Record the Element
+	// immediately without assuming that it rendered.
 	st.mu.Lock()
 	st.owned = append(st.owned, child)
 	st.mu.Unlock()
@@ -121,7 +121,7 @@ func (st *templateState) ownElement(child *jaws.Element) {
 
 // takeOwnedElements returns the Elements created by the most recent execution and
 // clears the tracking state, transferring responsibility for unregistering them to
-// the caller. It implements elementOwner.
+// the caller.
 func (st *templateState) takeOwnedElements() (owned []*jaws.Element) {
 	st.mu.Lock()
 	owned, st.owned = st.owned, nil
@@ -222,7 +222,7 @@ func (tmpl Template) render(elem *jaws.Element, w io.Writer, params []any) (err 
 				if doWrap {
 					// Always emit the closing tag, even when execute failed, to balance
 					// the start tag already written above (mirrors
-					// ContainerHelper.RenderContainer). The original execute error is
+					// Container.render). The original execute error is
 					// preserved; the close-write error is adopted only when err is nil.
 					if _, werr := io.WriteString(w, "</"+tmpl.OuterHTMLTag+">"); err == nil {
 						err = werr

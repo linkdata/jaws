@@ -2,25 +2,11 @@ package ui
 
 import "github.com/linkdata/jaws"
 
-// elementOwner is implemented by widgets in this package that create and track
-// [jaws.Element] values of their own, so a subtree that has left the browser DOM can
-// be unregistered recursively.
-//
-// Ownership is one level deep per widget: a nested widget tracks the Elements it
-// creates itself, and the walk below reaches them through it.
-type elementOwner interface {
-	// takeOwnedElements returns the tracked Elements and clears the tracking state,
-	// so the caller becomes responsible for unregistering them.
-	takeOwnedElements() []*jaws.Element
-}
-
 // appendOwnedElements appends elems and, recursively, the Elements they own to dst.
-//
-// Taking each owner's set as the walk proceeds detaches the subtree and makes the
-// recursion self-limiting, so an unexpected ownership cycle terminates instead of
-// recursing forever. It must not be called with a widget lock held: it locks each
-// visited owner in turn.
 func appendOwnedElements(dst []*jaws.Element, elems []*jaws.Element) []*jaws.Element {
+	// Taking each state's set detaches the subtree, so an unexpected ownership
+	// cycle terminates. Call without a widget-state lock held: this walk locks each
+	// visited state in turn.
 	for _, elem := range elems {
 		dst = append(dst, elem)
 		dst = appendOwnedBy(dst, elem)
@@ -31,20 +17,21 @@ func appendOwnedElements(dst []*jaws.Element, elems []*jaws.Element) []*jaws.Ele
 // appendOwnedBy appends the Elements owned by elem, recursively, to dst. It does not
 // append elem itself, so a caller that unregisters elem separately (through
 // [jaws.Element.Remove], say) can still collect its descendants.
-//
-// Ownership lives in two places: on the UI value for the container widgets, and in the
-// Element's widget state slot for [Template]. The slot is matched to *templateState
-// specifically rather than to elementOwner, because the slot legitimately holds any
-// value a renderer put there — a typed nil satisfying elementOwner through a promoted
-// method would panic here on a nil receiver.
 func appendOwnedBy(dst []*jaws.Element, elem *jaws.Element) []*jaws.Element {
-	if owner, ok := elem.UI().(elementOwner); ok {
-		dst = appendOwnedElements(dst, owner.takeOwnedElements())
+	// Match exact state types and check typed nils: any renderer may claim the slot.
+	// Each take detaches direct children before recursion starts.
+	var owned []*jaws.Element
+	switch st := jaws.ElementState(elem).(type) {
+	case *containerState:
+		if st != nil {
+			owned = st.takeOwnedElements()
+		}
+	case *templateState:
+		if st != nil {
+			owned = st.takeOwnedElements()
+		}
 	}
-	if st := templateStateOf(elem); st != nil {
-		dst = appendOwnedElements(dst, st.takeOwnedElements())
-	}
-	return dst
+	return appendOwnedElements(dst, owned)
 }
 
 // deleteOwnedElements unregisters elems and, recursively, the Elements they own,

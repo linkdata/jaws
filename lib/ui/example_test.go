@@ -98,9 +98,11 @@ func (c exampleContainer) JawsContains(elem *jaws.Element) (contents []jaws.UI) 
 	return
 }
 
-func ExampleContainerHelper_renderScoped() {
-	first := ui.NewContainer("div", exampleContainer{"one"})
-	second := ui.NewContainer("div", exampleContainer{"two"})
+func ExampleContainer_renderScoped() {
+	firstRows := exampleContainer{"one"}
+	secondRows := exampleContainer{"two"}
+	first := ui.NewContainer("div", &firstRows)
+	second := ui.NewContainer("div", &secondRows)
 	fmt.Println(first == second)
 
 	var b bytes.Buffer

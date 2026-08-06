@@ -1,44 +1,30 @@
 // Package ui contains the standard JaWS widget implementations.
 //
-// The package is intentionally organized around extension-oriented building
-// blocks so new widgets can be authored here without reading JaWS core code:
+// Its main building blocks are:
 //
 //   - [HTMLInner]: base renderer for tags with inner HTML content.
 //   - [Input], [InputText], [InputBool], [InputFloat], [InputDate]:
 //     typed input helpers that handle event/update flow.
-//   - [ContainerHelper]: helper for widgets that render dynamic child UI lists.
+//   - [Container], [Tbody], [Select]: value widgets for dynamic child UI lists.
 //
-// Naming follows short widget names (`Span`, `NewSpan`).
+// Every widget implementing [jaws.UI] is request-scoped. Construct fresh widgets
+// for each request. Widgets from different requests may refer to the same
+// synchronized application state, binders, handlers, or tags.
 //
-// Every widget that implements [jaws.UI] is request-scoped.
-// Construct a fresh widget for each request, normally by calling a
-// [RequestWriter] helper while rendering, and never cache a widget for use by
-// multiple requests. Widgets for different requests may refer to the same
-// application state, binders, handlers or tags when that shared state is
-// synchronized as required.
+// [Container], [Tbody], [Select], [Option], [Register], and [Template]
+// constructors return values; other constructors generally return pointers. Use
+// Container, Tbody, Select, and Template as values because taking their addresses
+// changes definition equality to pointer identity.
 //
-// Most constructors return a pointer ([Option], [Register] and [Template] are the
-// value-typed exceptions), and the pointer widgets dereference their fields without
-// checking the receiver. Always use Template as a value, as [NewTemplate] returns it;
-// taking its address is unsupported. JaWS core accepts a typed nil and dispatches to it
-// like any other [jaws.UI] value (see [jaws.UI]), so rendering or updating one panics
-// here: no widget in this package documents nil-receiver tolerance. The zero value of a
-// widget is the supported empty form.
+// See [jaws.UI] and each concrete widget for comparability, typed-nil, and
+// zero-value behavior. No pointer widget in this package documents nil-receiver
+// tolerance.
 //
-// Within one request, a widget normally backs at most one live [jaws.Element].
-// The HTML-inner widgets, [Img], [Option] and [Template] document support for backing
-// multiple live Elements because they retain no Element-specific state; their
-// shared getters, handlers and template data must also be safe for those calls. Input
-// widgets, [ContainerHelper]-based widgets and [JsVar] require a distinct widget value
-// for each live Element. [Register] supports multiple live Elements only when its Updater
-// does. Distinct widgets may still share synchronized application state. This is the
-// canonical package-wide classification; each concrete type's documentation states its
-// conditions.
-//
-// A widget needing state keyed to one Element rather than to itself claims the Element's
-// state slot with [jaws.SetElementState] while rendering, as [Template] does. That is what
-// keeps Element-specific state off the widget value, allowing containers to reuse rebuilt
-// equal Template values.
+// Within one request, a widget normally backs one live [jaws.Element]. The
+// HTML-inner widgets, [Img], [Option], [Template], [Container], [Tbody], and
+// [Select] support multiple live Elements under their documented conditions.
+// [Register] does so only when its updater does; input widgets and [JsVar] require
+// distinct widget values.
 //
 // HTML-inner widgets route content through [bind.MakeHTMLGetter]. Plain strings
 // are treated as trusted HTML, while [bind.Getter][string], [bind.Binder][string]

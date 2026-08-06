@@ -77,6 +77,45 @@ an element no template claimed, a wrapped template's update reports
 `ErrElementStateUnclaimed` through `jaws.Request.MustLog`, which **panics** when no
 `Jaws.Logger` is configured.
 
+## Container-family value widgets
+
+`NewContainer`, `NewTbody`, and `NewSelect` return definition values. Treat them as
+immutable after use and do not take their addresses; pointers change definition
+equality to pointer identity. `Tbody` embeds a `Container` configured for `tbody`;
+replacing it is unsupported.
+
+The provider or handler is part of the value's identity. Its dynamic value must be
+comparable at runtime and equal to itself. Keep application objects containing
+slices, maps, or functions behind stable pointers, and rebuild with the same
+pointer:
+
+```go
+rows := &RowCollection{/* synchronized application state */}
+first := ui.NewContainer("div", rows)
+second := ui.NewContainer("div", rows) // equal to first
+```
+
+Rebuilding an equal definition lets the same parent retain its live Element. Equal
+values may back several live Elements within one request when their providers or
+handlers are safe for all calls and each child UI value reused across those Elements
+supports multiple live Elements.
+
+Reconciliation updates direct children only. Reordering retained equal children
+preserves their Elements and nested subtrees; changed nested containers need their own
+update. Child Element identity is parent-scoped, so moving a child definition between
+parents does not preserve its Element.
+
+The zero Container and Tbody, and values constructed with a nil-interface child
+provider, panic when rendering or updating calls the missing provider. A zero
+Select behaves the same for render and update, while its `JawsInput` is a no-op.
+A typed-nil provider is called normally and must tolerate its nil receiver itself.
+
+Container, Tbody, and Select support update-only use through `Register`. A Select
+registered this way retains no handler-derived tag for its own post-set dirtying.
+Any handler-initiated dirtying still occurs, and separately registered tags remain
+registered. Use ordinary Select rendering when Select should register and use a usable
+tag exposed by its handler.
+
 You can also use explicit constructors through:
 
 ```go
@@ -143,8 +182,8 @@ but it does not keep the locker passed to `NewJsVar` held.
   - For tags like `<div>...</div>`, `<span>...</span>`, `<td>...</td>`.
 - `Input`, `InputText`, `InputBool`, `InputFloat`, `InputDate`
   - For interactive inputs with typed parse/update behavior.
-- `ContainerHelper`
-  - For widgets that render and maintain dynamic child lists.
+- `Container`, `Tbody`, `Select`
+  - Definition value widgets for rendering and maintaining dynamic child lists.
 
 ## Widget lifetime
 
@@ -155,8 +194,9 @@ reuse it across requests, even if that widget currently appears stateless.
 
 Within a request, a widget normally backs at most one live `jaws.Element`. A
 widget may back multiple live Elements only when its type documents that
-support; such a widget retains no state that can differ between those Elements.
-The [package documentation](doc.go) is the canonical standard-widget
+support. Stateless HTML widgets and Template support this directly; Container,
+Tbody, and Select keep mutable state on each Element instead of on the shared
+value. The [package documentation](doc.go) is the canonical standard-widget
 classification; each concrete type's Go documentation states its conditions.
 
 The application data referenced by widgets has a separate lifetime. Distinct
@@ -217,27 +257,46 @@ Each base handles:
 
 ## Adding a container widget
 
-Use `ContainerHelper`:
+Embed a Container value when the new widget only supplies a distinct Go type and
+HTML tag:
 
 ```go
-type UList struct{ ui.ContainerHelper }
+type UList struct{ ui.Container }
 
-func NewUList(c jaws.Container) *UList {
-  return &UList{ContainerHelper: ui.NewContainerHelper(c)}
-}
-
-func (w *UList) JawsRender(e *jaws.Element, wr io.Writer, params []any) error {
-  return w.RenderContainer(e, wr, "ul", params)
-}
-
-func (w *UList) JawsUpdate(e *jaws.Element) {
-  w.UpdateContainer(e)
+func NewUList(c jaws.Container) UList {
+  return UList{Container: ui.NewContainer("ul", c)}
 }
 ```
 
+Embedding promotes Container's render and update methods. A widget that needs to
+add behavior can keep the Container in a named field and delegate both methods to
+that same value:
+
+```go
+type UList struct {
+  container ui.Container
+}
+
+func NewUList(c jaws.Container) UList {
+  return UList{container: ui.NewContainer("ul", c)}
+}
+
+func (w UList) JawsRender(e *jaws.Element, wr io.Writer, params []any) error {
+  return w.container.JawsRender(e, wr, params)
+}
+
+func (w UList) JawsUpdate(e *jaws.Element) {
+  w.container.JawsUpdate(e)
+}
+```
+
+The outer widget must itself be comparable and equal to itself. It must also
+respect the one-state-slot rule: do not claim Element state in the outer widget
+when the delegated Container claims it.
+
 ## Container error behavior
 
-`ContainerHelper` treats child render/update failures as application bugs.
+Container, Tbody, and Select treat child render failures as application bugs.
 
 - During initial render, child render failures are returned as errors.
 - During updates, append render failures are reported through `MustLog` (and
