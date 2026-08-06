@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 
 	"github.com/linkdata/jaws"
 )
@@ -23,6 +24,24 @@ type numeric interface {
 
 type setterFloat64[T numeric] struct {
 	Setter[T]
+}
+
+func float64MayAliasInteger[T numeric](value float64) bool {
+	// Keep the read-before-write check out of adapters that cannot hide integer
+	// bits. This preserves wrapped Getter and Setter call behavior everywhere
+	// outside the precision-loss case handled by the check.
+	const exactIntegerLimit = 1 << 53
+	if value > -exactIntegerLimit && value < exactIntegerLimit {
+		return false
+	}
+	switch any(T(0)).(type) {
+	case int64, uint64:
+		return true
+	case int, uint, uintptr:
+		return strconv.IntSize == 64
+	default:
+		return false
+	}
 }
 
 // sanitizeFloatForT validates value before it is converted to T. It rejects
@@ -98,7 +117,15 @@ func (s setterFloat64[T]) JawsGet(elem *jaws.Element) float64 {
 }
 
 func (s setterFloat64[T]) JawsSet(elem *jaws.Element, value float64) (err error) {
-	if err = sanitizeFloatForT[T](value); err == nil {
+	err = sanitizeFloatForT[T](value)
+	if (err == nil || errors.Is(err, ErrFloatOutOfRange)) && float64MayAliasInteger[T](value) {
+		current := s.Setter.JawsGet(elem)
+		if float64(current) == value && (err != nil || current != T(value)) {
+			err = jaws.ErrValueUnchanged
+			return
+		}
+	}
+	if err == nil {
 		converted := T(value)
 		err = s.Setter.JawsSet(elem, converted)
 		// ErrValueUnchanged is accurate for the underlying T setter, but not for
@@ -171,6 +198,12 @@ func makeSetterFloat64for[T numeric](s *Setter[float64], value any) bool {
 // types and float32), which is bridged to float64 by ordinary Go conversion. That
 // bridge can lose precision: not every integer magnitude beyond 2^53 is exactly
 // representable as float64.
+//
+// When an integer loses precision in that conversion, writing the canonical
+// float64 returned by [Getter.JawsGet] back through [Setter.JawsSet] preserves
+// the underlying integer and returns [jaws.ErrValueUnchanged]. This also applies
+// when a maximum integer's canonical float64 is the target type's exclusive
+// upper bound.
 //
 // If conversion changes value but the converted value already matches the
 // underlying setter's current value, the adapter reports a successful set

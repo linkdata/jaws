@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/linkdata/jaws"
@@ -190,6 +191,114 @@ func Test_setterFloat64_conversionSignalsCanonicalChange(t *testing.T) {
 			t.Fatalf("JawsSet(2) = %v, want ErrValueUnchanged", err)
 		}
 	})
+}
+
+type setterFloat64RoundTrip[T numeric] struct {
+	name      string
+	original  T
+	canonical float64
+}
+
+func assertSetterFloat64CanonicalRoundTrips[T numeric](t *testing.T, tests []setterFloat64RoundTrip[T]) {
+	t.Helper()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var mu sync.Mutex
+			value := tt.original
+			bind := New(&mu, &value)
+			setter := MakeSetterFloat64(bind)
+			if got := setter.JawsGet(nil); got != tt.canonical {
+				t.Fatalf("JawsGet() = %v, want %v", got, tt.canonical)
+			}
+			if err := setter.JawsSet(nil, tt.canonical); !errors.Is(err, jaws.ErrValueUnchanged) {
+				t.Fatalf("JawsSet(JawsGet()) = %v, want ErrValueUnchanged", err)
+			}
+			if got := bind.JawsGet(nil); got != tt.original {
+				t.Fatalf("stored value = %v, want unchanged %v", got, tt.original)
+			}
+		})
+	}
+}
+
+func TestMakeSetterFloat64CanonicalIntegerRoundTrip(t *testing.T) {
+	const exactLimit = 1 << 53
+
+	t.Run("int64", func(t *testing.T) {
+		assertSetterFloat64CanonicalRoundTrips(t, []setterFloat64RoundTrip[int64]{
+			{name: "exact limit", original: exactLimit, canonical: exactLimit},
+			{name: "rounds down", original: exactLimit + 1, canonical: exactLimit},
+			{name: "rounds up", original: exactLimit + 3, canonical: exactLimit + 4},
+			{name: "negative rounds up", original: -exactLimit - 1, canonical: -exactLimit},
+			{name: "minimum", original: math.MinInt64, canonical: math.MinInt64},
+			{name: "maximum", original: math.MaxInt64, canonical: math.MaxInt64 + 1},
+		})
+	})
+
+	t.Run("uint64", func(t *testing.T) {
+		assertSetterFloat64CanonicalRoundTrips(t, []setterFloat64RoundTrip[uint64]{
+			{name: "exact limit", original: exactLimit, canonical: exactLimit},
+			{name: "rounds down", original: exactLimit + 1, canonical: exactLimit},
+			{name: "rounds up", original: exactLimit + 3, canonical: exactLimit + 4},
+			{name: "maximum", original: math.MaxUint64, canonical: math.MaxUint64 + 1},
+		})
+	})
+
+	if strconv.IntSize == 64 {
+		largeSigned := int64(exactLimit + 1)
+		largeUnsigned := uint64(exactLimit + 1)
+		maxSigned := int64(math.MaxInt64)
+		maxUnsigned := uint64(math.MaxUint64)
+		t.Run("int", func(t *testing.T) {
+			assertSetterFloat64CanonicalRoundTrips(t, []setterFloat64RoundTrip[int]{
+				{name: "rounds down", original: int(largeSigned), canonical: exactLimit},
+				{name: "maximum", original: int(maxSigned), canonical: math.MaxInt64 + 1},
+			})
+		})
+		t.Run("uint", func(t *testing.T) {
+			assertSetterFloat64CanonicalRoundTrips(t, []setterFloat64RoundTrip[uint]{
+				{name: "rounds down", original: uint(largeUnsigned), canonical: exactLimit},
+				{name: "maximum", original: uint(maxUnsigned), canonical: math.MaxUint64 + 1},
+			})
+		})
+		t.Run("uintptr", func(t *testing.T) {
+			assertSetterFloat64CanonicalRoundTrips(t, []setterFloat64RoundTrip[uintptr]{
+				{name: "rounds down", original: uintptr(largeUnsigned), canonical: exactLimit},
+				{name: "maximum", original: uintptr(maxUnsigned), canonical: math.MaxUint64 + 1},
+			})
+		})
+	}
+}
+
+func TestMakeSetterFloat64SetsNeighboringLargeInteger(t *testing.T) {
+	var mu sync.Mutex
+	value := int64(1<<53 + 1)
+	bind := New(&mu, &value)
+	setter := MakeSetterFloat64(bind)
+	want := int64(1<<53 + 2)
+	if err := setter.JawsSet(nil, float64(want)); err != nil {
+		t.Fatalf("JawsSet(%v): %v", want, err)
+	}
+	if got := bind.JawsGet(nil); got != want {
+		t.Fatalf("stored value = %v, want %v", got, want)
+	}
+}
+
+func TestMakeSetterFloat64DelegatesExactLargeInteger(t *testing.T) {
+	var mu sync.Mutex
+	value := int64(1 << 53)
+	wantErr := errors.New("set rejected")
+	var calls int
+	bind := New(&mu, &value).SetLocked(func(Binder[int64], *jaws.Element, int64) error {
+		calls++
+		return wantErr
+	})
+	setter := MakeSetterFloat64(bind)
+	if err := setter.JawsSet(nil, float64(value)); !errors.Is(err, wantErr) {
+		t.Fatalf("JawsSet(%v) = %v, want %v", value, err, wantErr)
+	}
+	if calls != 1 {
+		t.Fatalf("wrapped JawsSet called %d times, want 1", calls)
+	}
 }
 
 // Test_setterFloat64_sanitizesUntrustedInput covers the float-from-client guard:
