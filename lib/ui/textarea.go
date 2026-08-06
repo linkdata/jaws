@@ -16,6 +16,8 @@ import (
 type Textarea struct{ InputText }
 
 // NewTextarea returns a textarea widget bound to g.
+//
+// g must meet the post-set dirty-tag requirement documented by [Input].
 func NewTextarea(g bind.Setter[string]) *Textarea { return &Textarea{InputText{Setter: g}} }
 
 // JawsRender renders ui as an HTML textarea.

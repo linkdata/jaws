@@ -21,6 +21,24 @@ import (
 // [jaws.Element]. A widget embedding Input must therefore back at most one live
 // Element. To render the same bound state more than once, construct distinct
 // widgets that share the setter.
+//
+// During rendering, Input retains the dirty target [jaws.Element.ApplyGetter]
+// derives from the bound setter. After [bind.Setter.JawsSet] returns a result that
+// does not match [jaws.ErrValueUnchanged], Input dirties that target so an update
+// can read the server value back and reconcile the browser. A writable setter must
+// therefore produce a target that expands to at least one stable usable key. If
+// the setter implements [github.com/linkdata/jaws/lib/tag.TagGetter], its
+// JawsGetTag result is used; otherwise the setter's dynamic value must be
+// comparable at runtime and equal to itself, typically a pointer. The selected
+// target must expand successfully through
+// [github.com/linkdata/jaws/lib/tag.TagExpand]. [bind.New] provides the backing
+// pointer as its target.
+//
+// If rendering registers no setter-derived keys, browser input events still reach
+// JawsSet, but a rejected or normalized value is not automatically reconciled and
+// can remain visible while server state differs. A tag supplied separately in
+// render params registers the Element for that tag, but Input does not retain it
+// as its post-set dirty target.
 type Input struct {
 	// tag is the dirty tag, written once during render and read on the event
 	// goroutine (JawsInput). The render-completes-before-events lifecycle makes

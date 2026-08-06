@@ -601,6 +601,71 @@ Since all data access need to be protected with locks, you will usually use `bin
 that combines a (RW)Locker and a pointer to a value of type `T`. It also allows you to add chained setters,
 getters and on-success handlers.
 
+Writable setters used with `ui.NewText`, `ui.NewPassword`, `ui.NewTextarea`,
+`ui.NewCheckbox`, `ui.NewRadio`, `ui.NewNumber`, `ui.NewRange`, and `ui.NewDate`
+must also provide a stable dirty target. During rendering, the widget retains the
+target derived from the setter. After each set result that does not match
+`jaws.ErrValueUnchanged`, it dirties that target so the authoritative server
+value can reconcile rejected or normalized browser input. `bind.New(&mu, &value)`
+is the usual choice because it exposes the backing pointer. A custom setter can
+instead be passed as a stable pointer value or implement `JawsGetTag` and return a
+target that successfully expands to at least one stable usable key. When a setter
+implements `JawsGetTag`, that result takes precedence over the setter's own
+identity.
+
+For example, this validating setter contains a slice and is not comparable as a
+value, so `JawsGetTag` exposes its backing value pointer:
+
+```go
+var errValueNotAllowed = errors.New("value not allowed")
+
+type validatedText struct {
+	mu      *sync.RWMutex
+	value   *string
+	allowed []string // immutable
+}
+
+func (s validatedText) JawsGet(*jaws.Element) (value string) {
+	s.mu.RLock()
+	value = *s.value
+	s.mu.RUnlock()
+	return
+}
+
+func (s validatedText) JawsSet(_ *jaws.Element, value string) (err error) {
+	if !slices.Contains(s.allowed, value) {
+		err = errValueNotAllowed
+		return
+	}
+	s.mu.Lock()
+	if *s.value == value {
+		err = jaws.ErrValueUnchanged
+	} else {
+		*s.value = value
+	}
+	s.mu.Unlock()
+	return
+}
+
+func (s validatedText) JawsGetTag() any { return s.value }
+
+func newStatusInput(mu *sync.RWMutex, value *string) *ui.Text {
+	return ui.NewText(validatedText{
+		mu:      mu,
+		value:   value,
+		allowed: []string{"draft", "published"},
+	})
+}
+```
+
+Without a setter-derived dirty target, input events still reach `JawsSet`, but a
+rejected value can remain visible in the browser and a normalized accepted value
+is not reflected automatically. An explicit tag passed as a widget rendering
+parameter does not substitute for the setter-derived target: it registers the
+Element for external dirtying, but the input does not retain it for post-set
+dirtying. See [`ui.Input`](https://pkg.go.dev/github.com/linkdata/jaws/lib/ui#Input)
+for the complete contract.
+
 ### Session handling
 
 JaWS has non-persistent session handling integrated. Sessions won't 

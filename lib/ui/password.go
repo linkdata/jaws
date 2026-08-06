@@ -14,6 +14,8 @@ import (
 type Password struct{ InputText }
 
 // NewPassword returns a password input widget bound to g.
+//
+// g must meet the post-set dirty-tag requirement documented by [Input].
 func NewPassword(g bind.Setter[string]) *Password { return &Password{InputText{Setter: g}} }
 
 // JawsRender renders ui as an HTML password input.

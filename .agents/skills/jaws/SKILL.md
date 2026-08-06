@@ -92,6 +92,16 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
   - `.Clicked(fn)` / `.ContextMenu(fn)` — attach click/context handlers to the same bound variable.
   - `.InitialHTMLAttr(fn)` — attach attribute hooks.
 - Use `bind.New` for input widgets and for content whose natural key is the backing variable. Multiple widgets bound to the same pointer share a tag automatically, so `Request.Dirty(&field)` refreshes all of them.
+- Writable setters used with `ui.NewText`, `ui.NewPassword`, `ui.NewTextarea`,
+  `ui.NewCheckbox`, `ui.NewRadio`, `ui.NewNumber`, `ui.NewRange`, and `ui.NewDate`
+  must give `Element.ApplyGetter` a dirty target that successfully expands to at
+  least one stable usable key. Prefer `bind.New`; otherwise use a pointer-valued
+  custom setter or implement `JawsGetTag`. A `JawsGetTag` result takes precedence
+  over the setter's own identity.
+- Input widgets retain only that setter-derived target for post-set dirtying. An
+  explicit render-param tag registers the Element but does not substitute for it;
+  without the setter-derived target, rejected or normalized browser values are not
+  automatically reconciled.
 
 ### When to use which
 

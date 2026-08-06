@@ -14,6 +14,8 @@ import (
 type Checkbox struct{ InputBool }
 
 // NewCheckbox returns a checkbox input widget bound to g.
+//
+// g must meet the post-set dirty-tag requirement documented by [Input].
 func NewCheckbox(g bind.Setter[bool]) *Checkbox { return &Checkbox{InputBool{Setter: g}} }
 
 // JawsRender renders ui as an HTML checkbox input.

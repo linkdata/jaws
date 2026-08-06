@@ -14,6 +14,8 @@ import (
 type Text struct{ InputText }
 
 // NewText returns a text input widget bound to g.
+//
+// g must meet the post-set dirty-tag requirement documented by [Input].
 func NewText(g bind.Setter[string]) *Text { return &Text{InputText{Setter: g}} }
 
 // JawsRender renders ui as an HTML text input.
