@@ -517,6 +517,220 @@ process.stdout.write(jaws.sent[0] || "");
 	}
 }
 
+func TestJawsJS_JsVarRejectsProtoPathComponents(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+let directCalls = 0;
+let nestedCalls = 0;
+let getterReads = 0;
+const forbiddenDirect = function() { directCalls++; };
+window.app = {};
+Object.defineProperty(window.app, "__proto__", {
+	value: forbiddenDirect,
+	writable: true,
+	configurable: true,
+});
+window.calls = {
+	safe: function(value) { window.safeArgument = value; },
+};
+Object.defineProperty(window.calls, "__proto__", {
+	value: { run: function() { nestedCalls++; } },
+	writable: true,
+	configurable: true,
+});
+window.getterTarget = {};
+Object.defineProperty(window.getterTarget, "state", {
+	get: function() {
+		getterReads++;
+		return {};
+	},
+});
+window.jawsNames.set("app", ["Jid.9"]);
+
+const windowPrototype = Object.getPrototypeOf(window);
+const appPrototype = Object.getPrototypeOf(window.app);
+const forbiddenNested = window.calls.__proto__;
+function rejectsProto(run) {
+	try {
+		run();
+	} catch (err) {
+		return String(err) === "jaws: reserved path component: __proto__";
+	}
+	return false;
+}
+
+const rejected = [
+	function() { return jawsVar("__proto__", { polluted: true }); },
+	function() { return jawsVar(".app..__proto__.", { polluted: true }); },
+	function() { return jawsVar("app.__proto__"); },
+	function() { return jawsVar("app.__proto__", {}, "Set"); },
+	function() { return jawsVar("app.__proto__", {}, "Call"); },
+	function() { return jawsVar("calls..__proto__..run", {}, "Call"); },
+	function() { return jawsVar("getterTarget.state.__proto__", {}, "Call"); },
+].map(rejectsProto);
+const rejectedSendCount = jaws.sent.length;
+
+const opaque = JSON.parse('{"__proto__":{"safe":true}}');
+jawsVar("app.__proto", 1);
+jawsVar("app.__Proto__", 2, "Set");
+jawsVar("app.__proto___", 3, "Set");
+jawsVar("app.payload", opaque);
+jawsVar("calls.safe", opaque, "Call");
+
+process.stdout.write(JSON.stringify({
+	rejected: rejected,
+	rejectedSendCount: rejectedSendCount,
+	directCalls: directCalls,
+	nestedCalls: nestedCalls,
+	getterReads: getterReads,
+	windowPrototypeUnchanged: Object.getPrototypeOf(window) === windowPrototype,
+	appPrototypeUnchanged: Object.getPrototypeOf(window.app) === appPrototype,
+	directMemberUnchanged: window.app.__proto__ === forbiddenDirect,
+	nestedMemberUnchanged: window.calls.__proto__ === forbiddenNested,
+	objectPrototypePolluted: Object.hasOwn(Object.prototype, "polluted"),
+	nearNamesWork: window.app.__proto === 1 && window.app.__Proto__ === 2 && window.app.__proto___ === 3,
+	safeFrameCount: jaws.sent.length - rejectedSendCount,
+	payloadOwnProto: Object.hasOwn(window.app.payload, "__proto__"),
+	payloadPrototypeUnchanged: Object.getPrototypeOf(window.app.payload) === Object.prototype,
+	argumentOwnProto: Object.hasOwn(window.safeArgument, "__proto__"),
+}));
+`)
+
+	var got struct {
+		Rejected                  []bool `json:"rejected"`
+		RejectedSendCount         int    `json:"rejectedSendCount"`
+		DirectCalls               int    `json:"directCalls"`
+		NestedCalls               int    `json:"nestedCalls"`
+		GetterReads               int    `json:"getterReads"`
+		WindowPrototypeUnchanged  bool   `json:"windowPrototypeUnchanged"`
+		AppPrototypeUnchanged     bool   `json:"appPrototypeUnchanged"`
+		DirectMemberUnchanged     bool   `json:"directMemberUnchanged"`
+		NestedMemberUnchanged     bool   `json:"nestedMemberUnchanged"`
+		ObjectPrototypePolluted   bool   `json:"objectPrototypePolluted"`
+		NearNamesWork             bool   `json:"nearNamesWork"`
+		SafeFrameCount            int    `json:"safeFrameCount"`
+		PayloadOwnProto           bool   `json:"payloadOwnProto"`
+		PayloadPrototypeUnchanged bool   `json:"payloadPrototypeUnchanged"`
+		ArgumentOwnProto          bool   `json:"argumentOwnProto"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+	for i, rejected := range got.Rejected {
+		if !rejected {
+			t.Errorf("reserved-path case %d was not rejected", i)
+		}
+	}
+	if len(got.Rejected) != 7 {
+		t.Fatalf("ran %d reserved-path cases, want 7", len(got.Rejected))
+	}
+	if got.RejectedSendCount != 0 {
+		t.Errorf("rejected operations sent %d frames", got.RejectedSendCount)
+	}
+	if got.DirectCalls != 0 || got.NestedCalls != 0 || got.GetterReads != 0 {
+		t.Errorf("rejected paths performed work: direct calls %d, nested calls %d, getter reads %d", got.DirectCalls, got.NestedCalls, got.GetterReads)
+	}
+	if !got.WindowPrototypeUnchanged || !got.AppPrototypeUnchanged || !got.DirectMemberUnchanged || !got.NestedMemberUnchanged || got.ObjectPrototypePolluted {
+		t.Errorf("rejected paths changed an object or prototype: %+v", got)
+	}
+	if !got.NearNamesWork {
+		t.Error("nearby, case-distinct path components should remain usable")
+	}
+	if got.SafeFrameCount != 2 {
+		t.Errorf("safe browser writes sent %d frames, want 2", got.SafeFrameCount)
+	}
+	if !got.PayloadOwnProto || !got.PayloadPrototypeUnchanged || !got.ArgumentOwnProto {
+		t.Errorf("__proto__ data member was not preserved as ordinary JSON data: %+v", got)
+	}
+}
+
+func TestJawsJS_ProtoPathRejectionDoesNotAbandonBatch(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+const elements = {
+	"Jid.9": { dataset: { jawsname: "state" } },
+	"Jid.10": { dataset: {} },
+};
+document.getElementById = function(id) { return elements[id] || null; };
+
+window.state = { safe: 0, payload: null };
+let forbiddenCalls = 0;
+let safeCalls = 0;
+let safeArgument;
+window.calls = {
+	safe: function(value) {
+		safeCalls++;
+		safeArgument = value;
+	},
+};
+Object.defineProperty(window.calls, "__proto__", {
+	value: { run: function() { forbiddenCalls++; } },
+	writable: true,
+	configurable: true,
+});
+const statePrototype = Object.getPrototypeOf(window.state);
+const forbiddenMember = window.calls.__proto__;
+let errors = 0;
+console.error = function() { errors++; };
+
+jawsMessage({ data: [
+	'Set\tJid.9\t__proto__={"polluted":true}',
+	'Call\t\tcalls..__proto__..run={}',
+	'Call\tJid.10\tcalls.__proto__.run={}',
+	'Set\tJid.9\tsafe=7',
+	'Set\tJid.9\tpayload={"__proto__":{"safe":true}}',
+	'Call\t\tcalls.safe={"__proto__":{"safe":true}}',
+].join("\n") + "\n" });
+
+process.stdout.write(JSON.stringify({
+	errors: errors,
+	forbiddenCalls: forbiddenCalls,
+	safeCalls: safeCalls,
+	safeValue: window.state.safe,
+	stateOwnProto: Object.hasOwn(window.state, "__proto__"),
+	statePrototypeUnchanged: Object.getPrototypeOf(window.state) === statePrototype,
+	forbiddenMemberUnchanged: window.calls.__proto__ === forbiddenMember,
+	objectPrototypePolluted: Object.hasOwn(Object.prototype, "polluted"),
+	payloadOwnProto: Object.hasOwn(window.state.payload, "__proto__"),
+	argumentOwnProto: Object.hasOwn(safeArgument, "__proto__"),
+}));
+`)
+
+	var got struct {
+		Errors                   int  `json:"errors"`
+		ForbiddenCalls           int  `json:"forbiddenCalls"`
+		SafeCalls                int  `json:"safeCalls"`
+		SafeValue                int  `json:"safeValue"`
+		StateOwnProto            bool `json:"stateOwnProto"`
+		StatePrototypeUnchanged  bool `json:"statePrototypeUnchanged"`
+		ForbiddenMemberUnchanged bool `json:"forbiddenMemberUnchanged"`
+		ObjectPrototypePolluted  bool `json:"objectPrototypePolluted"`
+		PayloadOwnProto          bool `json:"payloadOwnProto"`
+		ArgumentOwnProto         bool `json:"argumentOwnProto"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+	if got.Errors != 3 {
+		t.Errorf("logged %d rejected orders, want 3", got.Errors)
+	}
+	if got.ForbiddenCalls != 0 || got.SafeCalls != 1 {
+		t.Errorf("function calls = forbidden %d, safe %d; want 0 and 1", got.ForbiddenCalls, got.SafeCalls)
+	}
+	if got.SafeValue != 7 {
+		t.Errorf("later Set value = %d, want 7", got.SafeValue)
+	}
+	if got.StateOwnProto || !got.StatePrototypeUnchanged || !got.ForbiddenMemberUnchanged || got.ObjectPrototypePolluted {
+		t.Errorf("rejected batch orders changed an object or prototype: %+v", got)
+	}
+	if !got.PayloadOwnProto || !got.ArgumentOwnProto {
+		t.Errorf("later JSON values lost their own __proto__ member: %+v", got)
+	}
+}
+
 func TestJawsJS_JsVarRoutingTableIsPrototypeSafe(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 function FakeSocket() { this.readyState = 1; this.sent = []; }

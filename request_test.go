@@ -2723,22 +2723,32 @@ func TestRequest_JsCallFunctionPathDoesNotBreakWireFraming(t *testing.T) {
 	tests := []struct {
 		name   string
 		jsfunc string
+		want   string
 	}{
 		{
 			name:   "tab in function path",
 			jsfunc: "fn\tpart",
+			want:   `fnpart={"a":1}`,
 		},
 		{
 			name:   "newline in function path",
 			jsfunc: "fn\npart",
+			want:   `fnpart={"a":1}`,
 		},
 		{
 			name:   "carriage return in function path",
 			jsfunc: "fn\rpart",
+			want:   `fnpart={"a":1}`,
 		},
 		{
 			name:   "equals in function path",
 			jsfunc: "fn=part",
+			want:   `fnpart={"a":1}`,
+		},
+		{
+			name:   "reserved component after normalization",
+			jsfunc: "app.__pro to__.run",
+			want:   `app.__proto__.run={"a":1}`,
 		},
 	}
 
@@ -2757,8 +2767,8 @@ func TestRequest_JsCallFunctionPathDoesNotBreakWireFraming(t *testing.T) {
 			if strings.Contains(wire, "\r") {
 				t.Fatalf("wire message contains embedded carriage return: %q", wire)
 			}
-			if msg.Data != `fnpart={"a":1}` {
-				t.Fatalf("Call payload = %q, want %q", msg.Data, `fnpart={"a":1}`)
+			if msg.Data != tt.want {
+				t.Fatalf("Call payload = %q, want %q", msg.Data, tt.want)
 			}
 		})
 	}
