@@ -172,6 +172,10 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // valid bindings. Do not use a browser-owned property such as window.name, or a
 // global owned by unrelated code.
 //
+// The variable name and browser-side jawsVar paths must be
+// application-controlled. The browser rejects exact "__proto__" path
+// components; put user data in values, not names or paths.
+//
 // Multiple bindings may share a name. The name is a single browser window
 // property, and a browser-initiated write to it is delivered to every live
 // binding of that name; a removed binding stops receiving writes. This lets a
@@ -206,10 +210,9 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // shared between requests.
 //
 // Rendering and write broadcasts invoke JSON marshalers while the locker passed
-// to [NewJsVar] is held. This protects values retained by either the generic jq
-// setter or a [PathSetter] from concurrent users of the same backing state.
-// Custom marshaling callbacks reached in either case, including MarshalJSON and
-// MarshalText, must not acquire that locker or re-enter the JsVar.
+// to [NewJsVar] is held. Custom marshaling callbacks reached in either case,
+// including MarshalJSON and MarshalText, must not acquire that locker or re-enter
+// the JsVar.
 //
 // A JsVar must not be copied after first use.
 //
@@ -347,7 +350,8 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any, cli
 	// is JSON-encoded). The client splits frames on '\n', fields on '\t', and the
 	// JsVar payload at the first '='. Reject any path carrying those protocol
 	// bytes before applying or broadcasting it: they either corrupt the frame or
-	// make peers parse the value as invalid JSON.
+	// make peers parse the value as invalid JSON. Return the fixed sentinel without
+	// the raw path so those bytes cannot reach logs through the error.
 	if strings.ContainsAny(jsPath, "\t\n\r=") {
 		return ErrIllegalJsVarPath
 	}
@@ -386,10 +390,9 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any, cli
 // for the synchronization model.
 //
 // When a write produces a broadcast, value is marshaled while the application
-// locker is held because either the generic jq setter or a [PathSetter] may
-// retain aliases into value. Custom marshaling callbacks reachable from value,
-// including MarshalJSON and MarshalText, must not acquire that locker or re-enter
-// the JsVar.
+// locker is held. Custom marshaling callbacks reachable from value, including
+// MarshalJSON and MarshalText, must not acquire that locker or re-enter the
+// JsVar.
 func (jsvar *JsVar[T]) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err error) {
 	return jsvar.setPath(elem, jsPath, value, false)
 }

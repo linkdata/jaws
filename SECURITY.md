@@ -247,18 +247,21 @@ The `Set` message type allows clients to modify server-side JsVar state (this is
 
 **Source code** (`lib/ui/jsvar.go`, `JsVar.JawsInput`): Client sends `Set\tJid\tpath=jsonvalue` → server unmarshals the value and applies it by path (`PathSetter.JawsSetPath` for a `PathSetter`, `jq.SetChecked` when a generic binding has a `ClientCheck`, or `jq.Set` when it does not) → broadcasts an accepted change.
 
-Tested attack payloads:
+Tested attack payloads against the audit fixture:
 
 | Payload | Result |
 |---------|--------|
-| `__proto__.polluted=true` | Rejected (invalid Go struct path) |
+| `__proto__.polluted=true` | Rejected by the fixture schema |
 | `constructor.prototype.polluted=true` | Rejected |
 | `../../../etc/passwd="read"` | Rejected |
 | `X=999; alert(1)` | Rejected (invalid JSON) |
 | `X="<script>alert(1)</script>"` | Accepted as string value; rendered in JS variable, not DOM |
 | `X={"__proto__":{"polluted":true}}` | Rejected (type mismatch) |
 
-Go's type system prevents prototype pollution — `jq.Set` and `jq.SetChecked` validate paths against actual struct fields and enforce type compatibility.
+`jawsVar` rejects exact `__proto__` path components before browser property
+access. It does not scan values for that name; own `"__proto__"` members remain
+data. The selected Go setter (`jq.Set`, `jq.SetChecked`, or an application
+`PathSetter`) independently controls accepted server-side paths.
 
 **Trust boundary (application responsibility):** the generic JSON path will set
 *any* exported field matched by its `json` tag, or by its Go name when the tag
@@ -420,7 +423,7 @@ this by blocking inline script execution.
 | Clickjacking | Header inspection | Protected (DENY + CSP) |
 | Directory traversal | Gobuster, manual probing | No hidden paths |
 | Information disclosure | Nikto, manual inspection | No leakage |
-| Prototype pollution via JsVar | Manual WebSocket testing | Not vulnerable (Go type safety) |
+| `__proto__` JsVar/Call paths | Shipped-runtime regression | Rejected before browser property access |
 | Command injection via WebSocket | Manual testing of all commands | Whitelist enforced |
 | Protocol fuzzing | Malformed/oversized messages | Handled gracefully |
 

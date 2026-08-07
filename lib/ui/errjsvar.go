@@ -36,14 +36,9 @@ var ErrJsVarArgumentType = errors.New("expected jaws.UI or JsVarMaker")
 // the request cancellation cause retains the detailed check error.
 var ErrJsVarTooLarge = errors.New("jsvar: JSON size check failed")
 
-// ErrIllegalJsVarPath reports that a JsVar path contained a protocol byte.
+// ErrIllegalJsVarPath reports that a JsVar path contains a protocol byte.
 //
-// A JsVar path is written verbatim into a what.Set frame (only the value side is
-// JSON-encoded), and the client splits frames on '\n', fields on '\t', and the
-// JsVar payload at the first '='. A path carrying those bytes could corrupt the
-// frame, inject fabricated orders, or make peer browsers parse the value as
-// invalid JSON, so [JsVar.JawsSetPath] rejects it before applying or
-// broadcasting. [JsVar.JawsInput] applies the same check to the parsed path for
-// incoming browser writes. The raw path is deliberately not echoed in the message
-// to avoid log injection.
+// [JsVar.JawsSetPath] returns it for a path containing a tab, newline, carriage
+// return, or equals sign, without applying or broadcasting the change.
+// [JsVar.JawsInput] applies the same check to incoming browser writes.
 var ErrIllegalJsVarPath = errors.New("jsvar: path contains illegal protocol byte (tab, newline, carriage return or equals)")

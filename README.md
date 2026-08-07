@@ -257,6 +257,9 @@ can remain divergent until the application resynchronizes it. A rejection
 matching `ui.ErrJsVarTooLarge` instead cancels the associated request, when
 present, and is terminal for that connection.
 
+`jawsVar` and `JsCall` paths are application-controlled. The browser rejects
+exact `__proto__` components; put user data in JSON values, not paths.
+
 The name may refer to an existing application global. For example, browser
 code can update that object and send either the complete value or one path:
 
