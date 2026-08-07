@@ -207,9 +207,8 @@ func newErrTooManyPendingRequests(remoteIP netip.Addr, limit int) error {
 	return errTooManyPendingRequests{Addr: remoteIP, Limit: limit}
 }
 
-// ErrNoWebSocketRequest is returned when the WebSocket callback was not received
-// within the timeout period. The most common reason is that the client is not
-// using JavaScript.
+// ErrNoWebSocketRequest is reported when [Jaws.ServeWithTimeout] retires a
+// Request before [Request.ServeHTTP] begins WebSocket processing.
 var ErrNoWebSocketRequest errNoWebSocketRequest
 
 type errNoWebSocketRequest struct {

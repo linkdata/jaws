@@ -371,6 +371,21 @@ Request created by `NewRequest` after `Jaws.Close` is never registered and insta
 tombstone, so two such post-close calls could receive the same key — harmless, since
 neither is claimable.)
 
+`ServeWithTimeout(requestTimeout)` requires an exact multiple of `time.Second`
+from `time.Second` through 2,147,483,646 seconds. Other values have unspecified
+behavior.
+
+Before `Request.ServeHTTP` begins WebSocket processing, timeout-based Request
+retirement is periodic and approximate, not a hard deadline. `NewRequest`, a
+successful `UseRequest`, and `ui.RequestWriter.Write` mark activity using
+whole-second samples from the epoch established by `jaws.New()`. Retirement is
+checked only during maintenance passes, so it is not timed precisely from those
+events.
+
+When `Jaws.WebSocketPingInterval` is positive, the same duration is passed
+directly as each keepalive ping's timeout on an active WebSocket. Ping timing does
+not use those activity samples or the maintenance schedule.
+
 `*Request` values are borrowed lifecycle objects. Do not store them in
 application state or pass them to background goroutines; copy the required
 application data and retain the Request context instead.
@@ -429,9 +444,6 @@ these invariants before relying on a green build alone:
   remains reachable).
 * Session grace windows remain deliberate for unclaimed, claimed, failed-upgrade,
   and closed-WebSocket requests.
-* Subsecond `ServeWithTimeout` values are not useful in production. AI-assisted
-  reviews should not assume subsecond timeout precision is required or treat its
-  absence as a source of bugs.
 * WebSocket upgrades keep the single-use key, client-IP binding, and Origin
   host/scheme checks together; changes to trusted forwarded headers must preserve
   the same fail-closed behavior.

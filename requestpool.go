@@ -33,8 +33,8 @@ import (
 // Do not retain the pointer beyond the initial HTTP handling and rendering; see
 // [Request].
 //
-// Automatic timeout handling is performed by [Jaws.ServeWithTimeout]. The default
-// [Jaws.Serve] helper uses a 10-second timeout.
+// [Jaws.ServeWithTimeout] periodically retires idle Requests before WebSocket
+// processing starts; [Jaws.Serve] uses [DefaultWebSocketTimeout].
 //
 // When [Jaws.MaxPendingRequestsPerIP] is positive and already reached,
 // NewRequest retires the oldest idle pending Request from the same IP. If every
@@ -214,6 +214,9 @@ func (jw *Jaws) nonZeroRandomLocked() key.Key {
 // Call it when receiving the WebSocket connection on "/jaws/:key" to get the
 // associated [Request], and then call its [Request.ServeHTTP] method to process the
 // WebSocket messages.
+//
+// A successful claim marks activity used by [Jaws.ServeWithTimeout] while the
+// Request waits for [Request.ServeHTTP].
 //
 // Returns nil if the key was not found, the request was already claimed by an
 // earlier WebSocket callback, or the IP doesn't match, in which case you

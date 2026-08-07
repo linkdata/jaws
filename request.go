@@ -215,12 +215,15 @@ func (rq *Request) String() string {
 	return "Request<" + rq.JawsKeyString() + ">"
 }
 
-// MarkWritten records an initial HTML write.
+// MarkWritten records initial-render activity for the Request.
 //
-// The pending-eviction logic uses the timestamp to prefer an idle Request while
-// a render is in flight. [RequestWriter.Write] calls MarkWritten on every write.
-// It is lock-free and safe to call concurrently. Concurrent calls never move the
-// recorded second backward.
+// The ui package's RequestWriter calls MarkWritten before each write. Call it
+// before each initial HTML write made through another writer. Recorded activity
+// affects timeout retirement before [Request.ServeHTTP] begins and which Request
+// is retired when [Jaws.MaxPendingRequestsPerIP] is reached.
+//
+// MarkWritten is safe to call concurrently. Calls never move recorded activity
+// backward.
 func (rq *Request) MarkWritten() {
 	// A cached runtime sample avoids a clock read. The recorded second drives the
 	// recency window in pendingEvictionVictimLocked and the idle expiry in

@@ -49,7 +49,7 @@ func (rw RequestWriter) NewUI(ui jaws.UI, params ...any) (err error) {
 	return
 }
 
-// Write records the write instant (see [jaws.Request.MarkWritten]), then writes p
+// Write marks render activity through [jaws.Request.MarkWritten] before writing p
 // to the underlying writer.
 func (rw RequestWriter) Write(p []byte) (n int, err error) {
 	rw.MarkWritten()

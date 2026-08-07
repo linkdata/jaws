@@ -64,7 +64,7 @@ const (
 	// DefaultWebSocketPingInterval is the default WebSocket keepalive ping interval.
 	DefaultWebSocketPingInterval = time.Minute
 
-	// DefaultWebSocketTimeout is the default time allowed for WebSocket connect and ping responses.
+	// DefaultWebSocketTimeout is the timeout [Jaws.Serve] passes to [Jaws.ServeWithTimeout].
 	DefaultWebSocketTimeout = time.Second * 10
 
 	// DefaultMaxPendingRequestsPerIP is the default maximum number of unclaimed
