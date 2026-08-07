@@ -29,7 +29,24 @@ func (jw *Jaws) getWebSocketTimeout() (t time.Duration) {
 	return
 }
 
-// ServeWithTimeout begins processing requests with the given timeout.
+// ServeWithTimeout begins processing requests.
+//
+// requestTimeout must be positive and an exact multiple of [time.Second]. The
+// minimum supported value is [time.Second]. Values outside this domain have
+// unspecified behavior.
+//
+// For pending Requests and claimed Requests whose WebSocket processing has not
+// started, requestTimeout controls approximate periodic lifecycle cleanup, not
+// a hard wall-clock deadline. Activity is represented by whole-second samples
+// relative to the epoch captured when the [Jaws] instance is created by [New],
+// and timeout-based retirement occurs only during maintenance passes. The
+// effective retirement time is not measured precisely from a Request's creation
+// or latest recorded write.
+//
+// When [Jaws.WebSocketPingInterval] is positive, requestTimeout is also passed
+// directly as each keepalive ping's timeout on an active WebSocket. Ping timing
+// does not use those whole-second activity samples or the maintenance schedule.
+//
 // It is intended to run on its own goroutine.
 // It returns when [Jaws.Close] is called.
 func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
@@ -128,7 +145,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	}
 }
 
-// Serve calls ServeWithTimeout(DefaultWebSocketTimeout).
+// Serve calls [Jaws.ServeWithTimeout] with [DefaultWebSocketTimeout].
 // It is intended to run on its own goroutine.
 // It returns when [Jaws.Close] is called.
 func (jw *Jaws) Serve() {

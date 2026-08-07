@@ -33,8 +33,9 @@ import (
 // Do not retain the pointer beyond the initial HTTP handling and rendering; see
 // [Request].
 //
-// Automatic timeout handling is performed by [Jaws.ServeWithTimeout]. The default
-// [Jaws.Serve] helper uses a 10-second timeout.
+// [Jaws.ServeWithTimeout] periodically retires pending Requests that remain idle
+// past its approximate timeout. [Jaws.Serve] uses [DefaultWebSocketTimeout]; see
+// [Jaws.ServeWithTimeout] for the supported duration and full timing semantics.
 //
 // When [Jaws.MaxPendingRequestsPerIP] is positive and already reached,
 // NewRequest retires the oldest idle pending Request from the same IP. If every

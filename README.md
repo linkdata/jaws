@@ -371,6 +371,21 @@ Request created by `NewRequest` after `Jaws.Close` is never registered and insta
 tombstone, so two such post-close calls could receive the same key — harmless, since
 neither is claimable.)
 
+`ServeWithTimeout(requestTimeout)` supports positive `requestTimeout` values that
+are exact multiples of `time.Second`; the minimum is `time.Second`. Behavior is
+unspecified for other values.
+
+For pending Requests and claimed Requests whose WebSocket processing has not
+started, this setting controls approximate periodic lifecycle cleanup, not a
+hard wall-clock deadline. Activity is stored as whole-second samples relative to
+the epoch captured by `jaws.New()`, and timeout-based retirement occurs only
+during maintenance passes. The effective retirement time is therefore not
+measured precisely from a Request's creation or latest `ui.RequestWriter` write.
+
+When `Jaws.WebSocketPingInterval` is positive, the same duration is passed
+directly as each keepalive ping's timeout on an active WebSocket. Ping timing does
+not use those whole-second activity samples or the maintenance schedule.
+
 `*Request` values are borrowed lifecycle objects. Do not store them in
 application state or pass them to background goroutines; copy the required
 application data and retain the Request context instead.
@@ -429,9 +444,6 @@ these invariants before relying on a green build alone:
   remains reachable).
 * Session grace windows remain deliberate for unclaimed, claimed, failed-upgrade,
   and closed-WebSocket requests.
-* Subsecond `ServeWithTimeout` values are not useful in production. AI-assisted
-  reviews should not assume subsecond timeout precision is required or treat its
-  absence as a source of bugs.
 * WebSocket upgrades keep the single-use key, client-IP binding, and Origin
   host/scheme checks together; changes to trusted forwarded headers must preserve
   the same fail-closed behavior.
@@ -449,6 +461,10 @@ that disappeared without a close handshake.
 Set `Jaws.WebSocketPingInterval` to control this. The default is
 `jaws.DefaultWebSocketPingInterval` (1 minute). Set it to `0` or a
 negative value to disable keepalive pings.
+
+Each ping uses the `requestTimeout` passed to `ServeWithTimeout` directly; see
+[Request lifecycle invariants](#request-lifecycle-invariants) for how this differs
+from retirement before WebSocket processing starts.
 
 ### Safe to call before `Serve()`
 
