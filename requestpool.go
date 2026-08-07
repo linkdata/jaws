@@ -50,8 +50,8 @@ import (
 // while the retired Request is reachable; no deadline is guaranteed for later key
 // reuse.
 //
-// NewRequest panics if the system CSPRNG ([crypto/rand]) fails while generating
-// the request key, which does not happen on supported platforms.
+// It panics if the [crypto/rand.Reader] captured by [New] returns an error while
+// generating the request key. Go's default reader does not return errors.
 func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 	remoteIP := jw.clientIP(r)
 
