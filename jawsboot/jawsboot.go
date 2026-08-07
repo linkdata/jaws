@@ -20,9 +20,11 @@ var assetsFS embed.FS
 //
 // It is intended to be passed to [jaws.Jaws.Setup]. Returned URLs should be
 // included in the page head through [jaws.Jaws.GenerateHeadHTML]. The prefix may
-// be absolute ("/static"), relative ("static") or empty; the returned URL path
-// and the path component of the registered handler pattern are kept identical in
-// all cases. [http.ServeMux] pattern syntax in prefix is treated as literal URL path data.
+// be absolute ("/static"), relative ("static") or empty. It is cleaned relative
+// to the URL root before asset names are joined. The returned URL path and the
+// path component of the registered handler pattern are kept identical in all
+// cases. [http.ServeMux] pattern syntax in prefix is treated as literal URL path
+// data.
 //
 // Setup also registers [http.NotFoundHandler] (404) routes under prefix for the
 // bundled bootstrap *.map sourcemap paths, quietly answering devtools probes for
@@ -35,6 +37,7 @@ var assetsFS embed.FS
 // paths over content-hashed embedded asset names, so err only ever reflects a
 // failure to walk the embedded filesystem.
 func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.URL, err error) {
+	rootedPrefix := path.Join("/", prefix)
 	var files []*staticserve.StaticServe
 	if err = staticserve.WalkDir(assetsFS, "assets/static", func(filename string, ss *staticserve.StaticServe) (err error) {
 		files = append(files, ss)
@@ -47,7 +50,7 @@ func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.
 			// a clean, slash-rooted path over a content-hashed embedded asset name,
 			// so it is always a valid URL path; construct the URL directly rather
 			// than via the fallible url.Parse.
-			abspath := staticserve.EnsurePrefixSlash(path.Join(prefix, ss.Name))
+			abspath := path.Join(rootedPrefix, ss.Name)
 			u := &url.URL{Path: abspath}
 			urls = append(urls, u)
 			// Register the serialized path so ServeMux treats braces and other
@@ -57,7 +60,7 @@ func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.
 		// Quietly 404 the predictable devtools source-map probes for the bundled
 		// assets; they are served only at their exact content-hashed paths.
 		for _, name := range []string{"bootstrap.bundle.min.js.map", "bootstrap.min.css.map"} {
-			u := &url.URL{Path: staticserve.EnsurePrefixSlash(path.Join(prefix, name))}
+			u := &url.URL{Path: path.Join(rootedPrefix, name)}
 			handleFn(staticserve.NormalizeGET(u.String()), http.NotFoundHandler())
 		}
 	}
