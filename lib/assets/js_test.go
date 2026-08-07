@@ -28,9 +28,10 @@ func Test_PreloadHTML(t *testing.T) {
 	const extraStyle = "someExtraStyle.css"
 	const extraImage = "favicon.png"
 	const extraLogo = "logo.png"
-	const extraBinary = "data"
+	const extraUnknown = "data"
 	const extraFont = "someExtraFont.woff2"
 	const extraFontWithQuery = "someExtraFontQuery.woff2?x=1&copy=2"
+	fontMime, _, _ := strings.Cut(mime.TypeByExtension(".woff2"), ";")
 
 	serveJS, err := staticserve.New("/jaws/.jaws.js", []byte(JavascriptText))
 	if err != nil {
@@ -66,7 +67,7 @@ func Test_PreloadHTML(t *testing.T) {
 		mustParseURL(extraStyle),
 		mustParseURL(extraImage),
 		mustParseURL(extraLogo),
-		mustParseURL(extraBinary),
+		mustParseURL(extraUnknown),
 		mustParseURL(extraFont),
 		mustParseURL(extraFontWithQuery),
 	)
@@ -97,20 +98,26 @@ func Test_PreloadHTML(t *testing.T) {
 	if strings.Count(txt, "<script") != strings.Count(txt, "</script>") {
 		t.Fatalf("script tags are unbalanced: %q", txt)
 	}
+	for line := range strings.SplitSeq(txt, "\n") {
+		if strings.Contains(line, `rel="preload"`) && !strings.Contains(line, ` as="`) {
+			t.Errorf("preload link has no request destination: %q", line)
+		}
+	}
 
 	// Assert the full as/type structure, not just substring presence. Compute the
 	// expected MIME types the same way PreloadHTML does so the test stays correct
 	// regardless of the platform's MIME table.
-	fontMime, _, _ := strings.Cut(mime.TypeByExtension(".woff2"), ";")
-	var wantFontLink string
+	fontAs := "fetch"
 	// Classify the family exactly as PreloadHTML does (case-insensitive "font/"
 	// prefix) so the expectation matches the code on any platform MIME table.
 	if strings.HasPrefix(strings.ToLower(fontMime), "font/") {
-		wantFontLink = `<link rel="preload" href="someExtraFont.woff2" as="font" type="` + fontMime + `">`
-	} else {
-		// No font/* MIME on this platform: still a preload link, but no as/type.
-		wantFontLink = `<link rel="preload" href="someExtraFont.woff2">`
+		fontAs = "font"
 	}
+	wantFontLink := `<link rel="preload" href="someExtraFont.woff2" as="` + fontAs + `"`
+	if fontMime != "" {
+		wantFontLink += ` type="` + fontMime + `"`
+	}
+	wantFontLink += ` crossorigin="anonymous">`
 	if !strings.Contains(txt, wantFontLink) {
 		t.Fatalf("missing structured font preload %q in %q", wantFontLink, txt)
 	}
@@ -128,15 +135,43 @@ func Test_PreloadHTML(t *testing.T) {
 		t.Fatalf("missing structured image preload %q in %q", wantLogoLink, txt)
 	}
 
-	// An extensionless / unknown-MIME resource yields the bare preload form with
-	// neither as= nor type=.
-	wantBinaryLink := `<link rel="preload" href="data">`
-	if !strings.Contains(txt, wantBinaryLink) {
-		t.Fatalf("missing bare preload link %q in %q", wantBinaryLink, txt)
+	// An extensionless / unknown-MIME resource uses fetch without a type.
+	wantUnknownLink := `<link rel="preload" href="data" as="fetch" crossorigin="anonymous">`
+	if !strings.Contains(txt, wantUnknownLink) {
+		t.Fatalf("missing fetch preload %q in %q", wantUnknownLink, txt)
 	}
 
 	if fav != extraImage {
 		t.Fatalf("favicon = %q, want %q", fav, extraImage)
+	}
+}
+
+func Test_PreloadHTML_FetchAndFontPreloadMetadata(t *testing.T) {
+	const (
+		wasmExt = ".jawspreloadwasm"
+		fontExt = ".jawspreloadfont"
+	)
+	for ext, typ := range map[string]string{
+		wasmExt: "application/wasm",
+		fontExt: "font/jaws-test",
+	} {
+		if err := mime.AddExtensionType(ext, typ); err != nil {
+			t.Fatalf("AddExtensionType(%q, %q): %v", ext, typ, err)
+		}
+	}
+
+	htmlCode, faviconURL := PreloadHTML(
+		&url.URL{Path: "module" + wasmExt, RawQuery: "x=1&copy=2"},
+		&url.URL{Path: "face" + fontExt, RawQuery: "x=1&copy=2"},
+	)
+	want := `<link rel="preload" href="module.jawspreloadwasm?x=1&amp;copy=2" as="fetch" type="application/wasm" crossorigin="anonymous">
+<link rel="preload" href="face.jawspreloadfont?x=1&amp;copy=2" as="font" type="font/jaws-test" crossorigin="anonymous">
+`
+	if htmlCode != want {
+		t.Fatalf("PreloadHTML() = %q, want %q", htmlCode, want)
+	}
+	if faviconURL != "" {
+		t.Fatalf("faviconURL = %q, want empty", faviconURL)
 	}
 }
 
@@ -201,15 +236,15 @@ func Test_PreloadHTML_MIMEFamilyMatching(t *testing.T) {
 		mustParseURL("brand.jawsupperfont"),  // FONT/* is font/* (case-insensitive)
 	)
 
-	// imagery/* is not an image: it never becomes a favicon and falls through to a
-	// bare preload link carrying only its (non-image) type, with no as="image".
-	wantImagery := `<link rel="preload" href="favicon.jawsimagery" type="imagery/not-an-image">`
+	// imagery/* is not an image: it never becomes a favicon and uses the generic
+	// fetch destination rather than as="image".
+	wantImagery := `<link rel="preload" href="favicon.jawsimagery" as="fetch" type="imagery/not-an-image" crossorigin="anonymous">`
 	if !strings.Contains(txt, wantImagery) {
 		t.Errorf("imagery/* preload = missing %q in %q", wantImagery, txt)
 	}
 
-	// fontastic/* is not a font: no as="font" is attached.
-	wantFontastic := `<link rel="preload" href="brand.jawsfontastic" type="fontastic/not-a-font">`
+	// fontastic/* is not a font: it uses fetch rather than as="font".
+	wantFontastic := `<link rel="preload" href="brand.jawsfontastic" as="fetch" type="fontastic/not-a-font" crossorigin="anonymous">`
 	if !strings.Contains(txt, wantFontastic) {
 		t.Errorf("fontastic/* preload = missing %q in %q", wantFontastic, txt)
 	}
@@ -224,8 +259,8 @@ func Test_PreloadHTML_MIMEFamilyMatching(t *testing.T) {
 		t.Errorf("case-insensitive favicon = missing %q in %q", wantFaviconLink, txt)
 	}
 
-	// FONT/* qualifies as a font, so it receives as="font".
-	wantUpperFont := `<link rel="preload" href="brand.jawsupperfont" as="font" type="FONT/woff2">`
+	// FONT/* qualifies as a font, so it receives as="font" and anonymous CORS.
+	wantUpperFont := `<link rel="preload" href="brand.jawsupperfont" as="font" type="FONT/woff2" crossorigin="anonymous">`
 	if !strings.Contains(txt, wantUpperFont) {
 		t.Errorf("case-insensitive font preload = missing %q in %q", wantUpperFont, txt)
 	}
