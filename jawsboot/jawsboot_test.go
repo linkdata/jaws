@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -226,6 +227,117 @@ func TestJawsBoot_SetupPrefixVariants(t *testing.T) {
 				mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, mapURI, nil))
 				if rr.Code != http.StatusNotFound {
 					t.Errorf("GET %q (prefix %q) = %d, want 404 (sourcemap probe must be 404)", mapURI, prefix, rr.Code)
+				}
+			}
+		})
+	}
+}
+
+func TestJawsBoot_SetupLiteralBracePrefixes(t *testing.T) {
+	assets := expectedStaticAssets(t, testAssetsFS, "assets/static", "")
+	for _, tc := range []struct {
+		name          string
+		prefix        string
+		outsidePrefix string
+	}{
+		{name: "absolute partial segment", prefix: "/static{assets}"},
+		{name: "relative partial segment", prefix: "static{assets}"},
+		{name: "complete wildcard segment", prefix: "/{assets}", outsidePrefix: "/outside"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			const fallbackStatus = http.StatusTeapot
+			mux := http.NewServeMux()
+			mux.HandleFunc("GET /", func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(fallbackStatus)
+			})
+			jw, err := jaws.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(jw.Close)
+
+			var (
+				urls       []*url.URL
+				setupErr   error
+				panicValue any
+			)
+			func() {
+				defer func() { panicValue = recover() }()
+				urls, setupErr = jawsboot.Setup(jw, mux.Handle, tc.prefix)
+			}()
+			if panicValue != nil {
+				t.Fatalf("Setup(%q) panicked: %v", tc.prefix, panicValue)
+			}
+			if setupErr != nil {
+				t.Fatal(setupErr)
+			}
+			if len(urls) == 0 {
+				t.Fatal("Setup returned no URLs")
+			}
+			if got, want := len(urls), len(assets); got != want {
+				t.Errorf("Setup returned %d asset URLs, want %d", got, want)
+			}
+			returnedURLs := make(map[string]bool, len(urls))
+			for _, u := range urls {
+				returnedURLs[u.String()] = true
+			}
+
+			for _, exp := range assets {
+				assetPath := staticserve.EnsurePrefixSlash(path.Join(tc.prefix, exp.ss.Name))
+				assetURL := (&url.URL{Path: assetPath}).String()
+				if !returnedURLs[assetURL] {
+					t.Errorf("Setup(%q) did not return expected asset URL %q", tc.prefix, assetURL)
+				}
+				delete(returnedURLs, assetURL)
+				r := httptest.NewRequest(http.MethodGet, assetURL, nil)
+				rr := httptest.NewRecorder()
+				mux.ServeHTTP(rr, r)
+				if rr.Code != http.StatusOK {
+					t.Errorf("GET %q = %d, want 200", assetURL, rr.Code)
+				}
+				if _, pattern := mux.Handler(r); pattern != staticserve.NormalizeGET(assetURL) {
+					t.Errorf("GET %q matched pattern %q, want literal pattern %q",
+						assetURL, pattern, staticserve.NormalizeGET(assetURL))
+				}
+
+				if tc.outsidePrefix != "" {
+					outsideURI := path.Join(tc.outsidePrefix, exp.ss.Name)
+					outsideRequest := httptest.NewRequest(http.MethodGet, outsideURI, nil)
+					outsideRecorder := httptest.NewRecorder()
+					mux.ServeHTTP(outsideRecorder, outsideRequest)
+					if outsideRecorder.Code != fallbackStatus {
+						t.Errorf("GET %q = %d, want fallback status %d",
+							outsideURI, outsideRecorder.Code, fallbackStatus)
+					}
+				}
+			}
+			for unexpectedURL := range returnedURLs {
+				t.Errorf("Setup(%q) returned unexpected asset URL %q", tc.prefix, unexpectedURL)
+			}
+
+			for _, name := range []string{"bootstrap.bundle.min.js.map", "bootstrap.min.css.map"} {
+				mapPath := staticserve.EnsurePrefixSlash(path.Join(tc.prefix, name))
+				mapURL := (&url.URL{Path: mapPath}).String()
+				r := httptest.NewRequest(http.MethodGet, mapURL, nil)
+				if _, pattern := mux.Handler(r); pattern != staticserve.NormalizeGET(mapURL) {
+					t.Errorf("GET %q matched pattern %q, want literal 404 pattern %q",
+						mapURL, pattern, staticserve.NormalizeGET(mapURL))
+				}
+				rr := httptest.NewRecorder()
+				mux.ServeHTTP(rr, r)
+				if rr.Code != http.StatusNotFound {
+					t.Errorf("GET %q = %d, want 404", mapURL, rr.Code)
+				}
+
+				if tc.outsidePrefix != "" {
+					outsideURI := path.Join(tc.outsidePrefix, name)
+					outsideRequest := httptest.NewRequest(http.MethodGet, outsideURI, nil)
+					outsideRecorder := httptest.NewRecorder()
+					mux.ServeHTTP(outsideRecorder, outsideRequest)
+					if outsideRecorder.Code != fallbackStatus {
+						t.Errorf("GET %q = %d, want fallback status %d",
+							outsideURI, outsideRecorder.Code, fallbackStatus)
+					}
 				}
 			}
 		})

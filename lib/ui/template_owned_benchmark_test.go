@@ -81,6 +81,7 @@ func BenchmarkTemplateUpdateOwnedCleanup(b *testing.B) {
 
 func benchmarkTemplateUpdateOwnedCleanup(b *testing.B, nested int) {
 	b.ReportAllocs()
+	// Keep b.N because fixture cleanup leaves the timer stopped between iterations.
 	for range b.N {
 		b.StopTimer()
 		jw, update := benchOwnedFixture(b, nested)

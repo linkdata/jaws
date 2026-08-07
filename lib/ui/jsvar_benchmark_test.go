@@ -53,10 +53,12 @@ func BenchmarkJsVarSetPathBroadcast(b *testing.B) {
 
 	b.Run("Serial", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
-			if err := jsvar.JawsSetPath(elem, "value", i); err != nil {
+		value := 0
+		for b.Loop() {
+			if err := jsvar.JawsSetPath(elem, "value", value); err != nil {
 				b.Fatal(err)
 			}
+			value++
 		}
 	})
 	b.Run("Parallel", func(b *testing.B) {
@@ -88,10 +90,12 @@ func BenchmarkJsVarPathSetterMutation(b *testing.B) {
 
 	b.Run("Serial", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
-			if err := jsvar.JawsSetPath(elem, "value", i); err != nil {
+		value := 0
+		for b.Loop() {
+			if err := jsvar.JawsSetPath(elem, "value", value); err != nil {
 				b.Fatal(err)
 			}
+			value++
 		}
 	})
 	b.Run("Parallel", func(b *testing.B) {
@@ -137,15 +141,16 @@ func BenchmarkJsVarClientWrite(b *testing.B) {
 			b.Fatal(err)
 		}
 		b.ReportAllocs()
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		alternate := false
+		for b.Loop() {
 			value := `"abcdefghij"`
-			if i&1 != 0 {
+			if alternate {
 				value = `"0123456789"`
 			}
 			if err = jsvar.JawsInput(elem, "items.0="+value); err != nil {
 				b.Fatal(err)
 			}
+			alternate = !alternate
 		}
 	}
 
@@ -160,7 +165,7 @@ func BenchmarkJsVarClientWrite(b *testing.B) {
 func BenchmarkValidateJsVarName(b *testing.B) {
 	params := []any{"state"}
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		name, err := validateJsVarName(params)
 		if err != nil || name != "state" {
 			b.Fatalf("validateJsVarName() = %q, %v", name, err)

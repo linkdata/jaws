@@ -65,6 +65,7 @@ func benchReuseRequest(b *testing.B) (*jaws.Jaws, *jaws.Request) {
 func BenchmarkContainerOfTemplatesUpdate(b *testing.B) {
 	b.ReportAllocs()
 	const rows = 200
+	// Keep b.N because fixture cleanup leaves the timer stopped between iterations.
 	for range b.N {
 		b.StopTimer()
 		jw, rq := benchReuseRequest(b)
@@ -91,6 +92,7 @@ func BenchmarkContainerOfTemplatesUpdate(b *testing.B) {
 func BenchmarkContainerOfStableChildrenUpdate(b *testing.B) {
 	b.ReportAllocs()
 	const rows = 200
+	// Keep b.N because fixture cleanup leaves the timer stopped between iterations.
 	for range b.N {
 		b.StopTimer()
 		jw, rq := benchReuseRequest(b)
@@ -119,6 +121,7 @@ func BenchmarkContainerInitialRender(b *testing.B) {
 	container := NewContainer("div", bc)
 	b.ReportAllocs()
 	b.ResetTimer()
+	// Keep b.N to bound batches by the calibrated number of operations.
 	for completed := 0; completed < b.N; {
 		batchSize := min(benchmarkContainerBatchSize, b.N-completed)
 		elems := make([]*jaws.Element, batchSize)
@@ -149,7 +152,6 @@ func BenchmarkContainerInitialRender(b *testing.B) {
 // BenchmarkContainerUnchangedUpdate measures a small reconciliation that reuses every
 // child and emits no browser mutation.
 func BenchmarkContainerUnchangedUpdate(b *testing.B) {
-	b.StopTimer()
 	tr := newReuseRequest(b)
 	bc := &benchStableContainer{contents: benchChildren(0, 4)}
 	container := NewContainer("div", bc)
@@ -159,12 +161,9 @@ func BenchmarkContainerUnchangedUpdate(b *testing.B) {
 	}
 	before := benchmarkContainerElements(b, elem, 4)
 	b.ReportAllocs()
-	b.ResetTimer()
-	b.StartTimer()
-	for range b.N {
+	for b.Loop() {
 		container.JawsUpdate(elem)
 	}
-	b.StopTimer()
 	after := benchmarkContainerElements(b, elem, 4)
 	for i := range before {
 		if after[i] != before[i] {
@@ -192,6 +191,7 @@ func BenchmarkContainerAppendRemoveUpdate(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	expanded := false
+	// Keep b.N to bound batches by the calibrated number of operations.
 	for completed := 0; completed < b.N; {
 		batchSize := min(benchmarkContainerBatchSize, b.N-completed)
 		startedExpanded := expanded
@@ -227,6 +227,7 @@ func BenchmarkContainerRegisterFirstUpdate(b *testing.B) {
 	container := NewContainer("div", bc)
 	b.ReportAllocs()
 	b.ResetTimer()
+	// Keep b.N to bound batches by the calibrated number of operations.
 	for completed := 0; completed < b.N; {
 		batchSize := min(benchmarkContainerBatchSize, b.N-completed)
 		elems := make([]*jaws.Element, batchSize)

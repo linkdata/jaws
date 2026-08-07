@@ -3137,8 +3137,7 @@ func BenchmarkRequestLifecyclePooling(b *testing.B) {
 						jw := newBenchPoolJaws(b)
 						cycleBenchRequest(jw, impl.newRq, impl.recycle, tags) // warm the pool and backing arrays
 						b.ReportAllocs()
-						b.ResetTimer()
-						for i := 0; i < b.N; i++ {
+						for b.Loop() {
 							cycleBenchRequest(jw, impl.newRq, impl.recycle, tags)
 						}
 					})
@@ -3204,8 +3203,7 @@ func BenchmarkRequestRecycleAfterHighWater(b *testing.B) {
 			}
 			jw.recycle(big)
 			b.ReportAllocs()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				rq := jw.NewRequest(nil)
 				jw.recycle(rq)
 				runtime.KeepAlive(rq)
@@ -3223,8 +3221,7 @@ func BenchmarkRequestClaimStartFinish(b *testing.B) {
 	jw := newBenchPoolJaws(b)
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		rq := jw.NewRequest(r)
 		if jw.UseRequest(rq.JawsKey, r) != rq {
 			b.Fatal("claim failed")
@@ -3292,8 +3289,7 @@ func BenchmarkSubscriptionChannels(b *testing.B) {
 			rq := jw.NewRequest(nil)
 			defer jw.recycle(rq)
 			b.ReportAllocs()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				msgCh := jw.subscribe(rq, 1)
 				if msgCh == nil {
 					b.Fatal("subscribe returned nil")
@@ -3353,8 +3349,7 @@ func BenchmarkDistributeDirt(b *testing.B) {
 			}
 
 			b.ReportAllocs()
-			b.ResetTimer()
-			for n := 0; n < b.N; n++ {
+			for b.Loop() {
 				b.StopTimer()
 				jw.setDirty(tags)
 				for _, rq := range reqs {
@@ -3387,14 +3382,14 @@ func BenchmarkRequestWantMessage(b *testing.B) {
 	b.Run("single-tag", func(b *testing.B) {
 		msg := wire.Message{Dest: hit, What: what.Update}
 		b.ReportAllocs()
-		for n := 0; n < b.N; n++ {
+		for b.Loop() {
 			_ = rq.wantMessage(&msg)
 		}
 	})
 	b.Run("multi-tag", func(b *testing.B) {
 		msg := wire.Message{Dest: []any{tag.Tag("nope"), hit}, What: what.Update}
 		b.ReportAllocs()
-		for n := 0; n < b.N; n++ {
+		for b.Loop() {
 			_ = rq.wantMessage(&msg)
 		}
 	})
@@ -3409,7 +3404,7 @@ func BenchmarkGetSendMsgs(b *testing.B) {
 		b.Run("idle/elems="+strconv.Itoa(n), func(b *testing.B) {
 			rq := newBenchRequest(b, n)
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_ = rq.getSendMsgs()
 			}
 		})
@@ -3427,13 +3422,13 @@ func BenchmarkGetElementByJid(b *testing.B) {
 		miss := Jid(n + 1)
 		b.Run("last/elems="+strconv.Itoa(n), func(b *testing.B) {
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_ = rq.getElementByJidLocked(last)
 			}
 		})
 		b.Run("miss/elems="+strconv.Itoa(n), func(b *testing.B) {
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_ = rq.getElementByJidLocked(miss)
 			}
 		})
@@ -3460,8 +3455,7 @@ func BenchmarkRequestHandleBroadcastCall(b *testing.B) {
 			}
 			msg := wire.Message{Dest: tc.dest, What: what.Call, Data: `app.refresh={"source":"server"}`}
 			b.ReportAllocs()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				rq.handleBroadcast(msg, nil)
 				rq.muQueue.Lock()
 				rq.wsQueue = rq.wsQueue[:0]
@@ -3515,8 +3509,7 @@ func BenchmarkRequestEventDispatch(b *testing.B) {
 
 			var err error
 			b.ReportAllocs()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				err = rq.callAllEventHandlers(elem.Jid(), what.Input, "value")
 			}
 			if err != nil {
@@ -3545,8 +3538,7 @@ func BenchmarkRequestEventDispatch(b *testing.B) {
 
 		var err error
 		b.ReportAllocs()
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			err = rq.callAllEventHandlers(0, what.Click, clickValue)
 		}
 		if err != nil {
@@ -3566,7 +3558,7 @@ func BenchmarkAppendJSQuote(b *testing.B) {
 		b.Run(c.name, func(b *testing.B) {
 			buf := make([]byte, 0, 256)
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				buf = appendJSQuote(buf[:0], c.s)
 			}
 			_ = buf
@@ -3598,8 +3590,7 @@ func BenchmarkSendQueue(b *testing.B) {
 			}
 			ch := make(chan wire.WsMsg, k)
 			b.ReportAllocs()
-			b.ResetTimer()
-			for n := 0; n < b.N; n++ {
+			for b.Loop() {
 				rq.muQueue.Lock()
 				rq.wsQueue = append(rq.wsQueue[:0], msgs...)
 				rq.muQueue.Unlock()
@@ -3627,7 +3618,7 @@ func BenchmarkDistributeDirtSort(b *testing.B) {
 		}
 		b.Run("tags="+strconv.Itoa(n), func(b *testing.B) {
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				benchDirtSink = sortedDirtTags(m)
 			}
 		})

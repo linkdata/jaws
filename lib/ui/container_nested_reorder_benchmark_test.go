@@ -36,6 +36,8 @@ func BenchmarkNestedContainersUpdate(b *testing.B) {
 
 			b.ReportAllocs()
 			b.ResetTimer()
+			// Keep b.N because validation crosses iterations with the timer stopped;
+			// B.Loop requires its condition to run while the timer is enabled.
 			for i := range b.N {
 				if benchmark.reorder {
 					tree.reverse()
