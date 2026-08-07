@@ -2,6 +2,7 @@ package ui
 
 import (
 	"io"
+	"slices"
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
@@ -9,6 +10,9 @@ import (
 )
 
 // Img renders an HTML img element whose src is read from a string getter.
+//
+// The getter-derived src takes precedence over any src attribute passed as a
+// render param or returned by the getter's [jaws.InitialHTMLAttrHandler].
 //
 // One Img value may back multiple live [jaws.Element] values. Its getter is
 // shared by those Elements and must be safe for their render, update and event
@@ -23,7 +27,9 @@ func (u *Img) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err err
 	_, getterAttrs := elem.ApplyGetter(u.Getter)
 	srcAttr := htmlio.Attr("src", u.JawsGet(elem))
 	attrs := append(elem.ApplyParams(params), getterAttrs...)
-	attrs = append(attrs, srcAttr)
+	// HTML parsing keeps the first duplicate attribute, so emit the canonical
+	// src before caller and getter attributes.
+	attrs = slices.Insert(attrs, 0, srcAttr)
 	err = htmlio.WriteHTMLInner(w, elem.Jid(), "img", "", "", attrs...)
 	return
 }
