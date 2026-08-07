@@ -364,15 +364,30 @@ func (rq *Request) sessionDestKey(sess *Session) (k key.Key) {
 }
 
 func (rq *Request) ensureAutoSession(w http.ResponseWriter, r *http.Request) {
-	if rq.Jaws.AutoSession && rq.Session() == nil {
-		sess := rq.Jaws.newSession(w, r)
-		rq.mu.Lock()
-		if rq.session == nil {
-			rq.session = sess
-			sess.addRequest(rq)
+	if rq.Jaws.AutoSession {
+		if sess := rq.newAutoSession(r); sess != nil {
+			sess.addCookie(w, r)
 		}
-		rq.mu.Unlock()
 	}
+}
+
+// newAutoSession creates and associates an AutoSession before making it visible
+// through Jaws session lookups.
+func (rq *Request) newAutoSession(r *http.Request) (sess *Session) {
+	jw := rq.Jaws
+	secure := secureheaders.RequestIsSecure(r, jw.TrustForwardedHeaders)
+	remoteIP := jw.clientIP(r)
+	jw.mu.Lock()
+	defer jw.mu.Unlock()
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	if rq.session == nil {
+		sess = jw.newSessionLocked(remoteIP, secure)
+		sess.addRequest(rq)
+		rq.session = sess
+		jw.sessions[sess.sessionID] = sess
+	}
+	return
 }
 
 // releaseBuffersLocked detaches the reusable storage from a finished Request and
@@ -1045,9 +1060,9 @@ func normalizedWebSocketAcceptRequest(r *http.Request) (normalized *http.Request
 // sets a session cookie.
 //
 // Accept writes the 101 through the [http.ResponseWriter] it was given before
-// hijacking the connection, so the Set-Cookie header is in the header map in
-// time. Should the hijack itself fail after the 101, the session already
-// exists and expires through the normal session grace period.
+// hijacking the connection, so a live session cookie can enter the header map
+// in time. A session that survives this commit but whose hijack fails expires
+// through the normal session grace period.
 type autoSessionWriter struct {
 	http.ResponseWriter
 	rq *Request

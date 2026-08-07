@@ -3189,6 +3189,125 @@ func TestWS_AutoSessionCreatesSession(t *testing.T) {
 	}
 }
 
+type autoSessionCloseResponseWriter struct {
+	http.ResponseWriter
+	jw     *Jaws
+	closed chan<- *Session
+	once   sync.Once
+	t      *testing.T
+}
+
+func (w *autoSessionCloseResponseWriter) Header() http.Header {
+	if sessions := w.jw.Sessions(); len(sessions) > 0 {
+		w.once.Do(func() {
+			done := make(chan struct{})
+			go func(sess *Session) {
+				sess.Close()
+				w.closed <- sess
+				close(done)
+			}(sessions[0])
+			select {
+			case <-done:
+			case <-time.After(testTimeout):
+				w.t.Error("Session.Close blocked while ResponseWriter.Header re-entered Jaws")
+			}
+		})
+	}
+	return w.ResponseWriter.Header()
+}
+
+func (w *autoSessionCloseResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+func TestWS_AutoSessionCloseAtPublication(t *testing.T) {
+	ts := newTestServerNoSession(t)
+	defer ts.Close()
+	ts.jw.AutoSession = true
+
+	closedCh := make(chan *Session, 1)
+	ts.srv.Close()
+	ts.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ts.ServeHTTP(&autoSessionCloseResponseWriter{
+			ResponseWriter: w,
+			jw:             ts.jw,
+			closed:         closedCh,
+			t:              t,
+		}, r)
+	}))
+	ts.setInitialRequestOrigin()
+
+	connectSessionCh := make(chan *Session, 1)
+	ts.rq.SetConnectFn(func(rq *Request) error {
+		connectSessionCh <- rq.Session()
+		return nil
+	})
+
+	dialCtx, cancelDial := context.WithTimeout(t.Context(), testTimeout*2)
+	defer cancelDial()
+	hdr := http.Header{}
+	hdr.Set("Origin", ts.origin())
+	conn, resp, err := websocket.Dial(dialCtx, ts.Url(), &websocket.DialOptions{HTTPHeader: hdr})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.CloseNow() }()
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("WebSocket status = %d, want %d", resp.StatusCode, http.StatusSwitchingProtocols)
+	}
+
+	var closedSession *Session
+	select {
+	case closedSession = <-closedCh:
+	case <-time.After(testTimeout):
+		t.Fatal("ResponseWriter.Header did not close the published AutoSession")
+	}
+
+	var connectSession *Session
+	select {
+	case connectSession = <-connectSessionCh:
+	case <-time.After(testTimeout):
+		t.Fatal("timeout waiting for WebSocket connect")
+	}
+
+	const marker = "post-connect marker"
+	ts.jw.Broadcast(wire.Message{Dest: ts.rq.JawsKey, What: what.Alert, Data: marker})
+	readCtx, cancelRead := context.WithTimeout(t.Context(), testTimeout)
+	defer cancelRead()
+	var messages strings.Builder
+	for !strings.Contains(messages.String(), marker) {
+		messageType, data, err := conn.Read(readCtx)
+		if err != nil {
+			t.Fatalf("reading WebSocket messages: %v (got %q)", err, messages.String())
+		}
+		if messageType != websocket.MessageText {
+			t.Fatalf("WebSocket message type = %v, want text", messageType)
+		}
+		messages.Write(data)
+	}
+
+	if connectSession != nil {
+		t.Errorf("ConnectFn Session() = %v, want nil after Session.Close", connectSession)
+	}
+	if got := ts.rq.Session(); got != nil {
+		t.Errorf("Request Session() = %v, want nil after Session.Close", got)
+	}
+	if requests := closedSession.Requests(); len(requests) != 0 {
+		t.Errorf("closed Session Requests() = %v, want none", requests)
+	}
+	if got := ts.jw.SessionCount(); got != 0 {
+		t.Errorf("SessionCount() = %d, want 0", got)
+	}
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == ts.jw.CookieName && cookie.MaxAge >= 0 {
+			t.Errorf("response contains live session cookie: %v", cookie)
+		}
+	}
+	if got := strings.Count(messages.String(), what.Reload.String()+"\t"); got != 1 {
+		t.Errorf("got %d Reload commands, want exactly 1: %q", got, messages.String())
+	}
+}
+
 func TestWS_AutoSessionKeepsExistingSession(t *testing.T) {
 	ts := newTestServer(t)
 	defer ts.Close()

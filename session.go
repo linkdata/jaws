@@ -175,6 +175,33 @@ func (sess *Session) Cookie() (cookie *http.Cookie) {
 	return
 }
 
+// addCookie adds sess's cookie to w and r while sess is current and live.
+func (sess *Session) addCookie(w http.ResponseWriter, r *http.Request) {
+	var h http.Header
+	if w != nil {
+		// ResponseWriter.Header is caller code and may re-enter Jaws, including
+		// by closing sess, so call it before taking either core lock below.
+		h = w.Header()
+	}
+	jw := sess.jw
+	jw.mu.RLock()
+	defer jw.mu.RUnlock()
+	sess.mu.RLock()
+	defer sess.mu.RUnlock()
+	if jw.sessions[sess.sessionID] == sess && !sess.isDeadLocked() {
+		cookie := sess.cookie
+		if h != nil {
+			if v := cookie.String(); v != "" {
+				// Header.Add and Request.AddCookie mutate concrete header maps
+				// without invoking caller code. Keep both under these read locks so
+				// cookie publication precedes a losing Session.Close.
+				h.Add("Set-Cookie", v)
+			}
+		}
+		r.AddCookie(&cookie)
+	}
+}
+
 // Close invalidates and expires the [Session].
 // Future [Request] values won't be able to associate with it, and [Session.Cookie] will return a deletion cookie.
 //
@@ -277,7 +304,10 @@ func (jw *Jaws) SessionCount() (n int) {
 	return
 }
 
-// Sessions returns a list of all active sessions, which may be nil.
+// Sessions returns a snapshot of all registered sessions, which may be nil.
+//
+// Auto-created [Session] values are registered only after their initiating
+// [Request] is associated.
 func (jw *Jaws) Sessions() (sessions []*Session) {
 	jw.mu.RLock()
 	if n := len(jw.sessions); n > 0 {
@@ -362,9 +392,13 @@ func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 // match used everywhere else; see [Jaws.GetSession] and [Jaws.TrustForwardedHeaders]
 // for the reverse-proxy caveat.
 //
-// As a side effect, the session cookie is also added to r itself, so the new
-// [Session] is visible to [Jaws.GetSession] and [Jaws.NewRequest] for the
-// remainder of the same HTTP request.
+// If the new [Session] remains current and live during cookie publication, its
+// cookie is written to w when w is non-nil and added to r itself. This makes the
+// [Session] visible to [Jaws.GetSession] and [Jaws.NewRequest] for the remainder
+// of the same HTTP request. If a concurrent [Session.Close] wins first, neither
+// w nor r receives its live cookie.
+//
+// It returns nil and has no effect if r is nil; w may be nil.
 //
 // It panics if the system CSPRNG ([crypto/rand]) fails while generating the session
 // ID, which does not happen on supported platforms.
@@ -389,26 +423,26 @@ func (jw *Jaws) NewSession(w http.ResponseWriter, r *http.Request) (sess *Sessio
 
 func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
 	secure := secureheaders.RequestIsSecure(r, jw.TrustForwardedHeaders)
-	var cookie http.Cookie
 	func() {
 		jw.mu.Lock()
 		defer jw.mu.Unlock()
-		for sess == nil {
-			sessionID := jw.nonZeroRandomLocked()
-			if _, ok := jw.sessions[sessionID]; !ok {
-				sess = newSession(jw, sessionID, jw.clientIP(r), secure)
-				jw.sessions[sessionID] = sess
-				cookie = sess.cookie
-			}
-		}
+		sess = jw.newSessionLocked(jw.clientIP(r), secure)
+		jw.sessions[sess.sessionID] = sess
 	}()
+	sess.addCookie(w, r)
+	return
+}
 
-	// http.SetCookie calls the caller-provided ResponseWriter.Header, which may
-	// re-enter Jaws, so emit the cookie only after releasing jw.mu.
-	if w != nil {
-		http.SetCookie(w, &cookie)
+// newSessionLocked allocates a Session whose ID is absent from jw.sessions.
+//
+// The caller must hold jw.mu and publish the Session before releasing it.
+func (jw *Jaws) newSessionLocked(remoteIP netip.Addr, secure bool) (sess *Session) {
+	for sess == nil {
+		sessionID := jw.nonZeroRandomLocked()
+		if _, ok := jw.sessions[sessionID]; !ok {
+			sess = newSession(jw, sessionID, remoteIP, secure)
+		}
 	}
-	r.AddCookie(&cookie)
 	return
 }
 
@@ -430,10 +464,13 @@ func (sess sessioner) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sess.h.ServeHTTP(w, r)
 }
 
-// SessionMiddleware returns an [http.Handler] that ensures a JaWS [Session]
-// exists before invoking h, creating one if the request has none.
+// SessionMiddleware returns a session-creating [http.Handler].
 //
-// It is the session-ensuring middleware, distinct from the session accessors:
+// Before invoking h, it creates a JaWS [Session] when the request has none. If
+// a concurrent [Session.Close] wins the new Session's cookie publication, h
+// runs without that Session or its live cookie.
+//
+// It is distinct from the session accessors:
 // [Jaws.GetSession] and [Request.Session] look up an existing [Session], while
 // this wraps a handler. It composes with [Jaws.SecureHeadersMiddleware].
 func (jw *Jaws) SessionMiddleware(h http.Handler) http.Handler {

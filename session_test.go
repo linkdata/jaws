@@ -132,6 +132,113 @@ func TestSession_NewSessionCallsResponseWriterOutsideLock(t *testing.T) {
 	}
 }
 
+func TestSession_NewSessionWithoutResponseWriter(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+
+	hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	sess := jw.NewSession(nil, hr)
+	if sess == nil {
+		t.Fatal("NewSession returned nil")
+	}
+	if got := jw.GetSession(hr); got != sess {
+		t.Fatalf("GetSession() = %v, want %v", got, sess)
+	}
+	cookies := hr.Cookies()
+	if len(cookies) != 1 || cookies[0].Name != jw.CookieName || cookies[0].Value != sess.CookieValue() {
+		t.Fatalf("request cookies = %v, want the new Session cookie", cookies)
+	}
+}
+
+type closingSessionResponseWriter struct {
+	*httptest.ResponseRecorder
+	jw            *Jaws
+	closedSession *Session
+}
+
+func (w *closingSessionResponseWriter) Header() http.Header {
+	if sessions := w.jw.Sessions(); len(sessions) > 0 {
+		w.closedSession = sessions[0]
+		w.closedSession.Close()
+	}
+	return w.ResponseRecorder.Header()
+}
+
+func TestSessionMiddleware_CloseDuringResponseHeader(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go jw.Serve()
+	waitForServeLoop(t, jw)
+
+	rw := &closingSessionResponseWriter{
+		ResponseRecorder: httptest.NewRecorder(),
+		jw:               jw,
+	}
+	hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	type result struct {
+		rq             *Request
+		requestCookies []*http.Cookie
+		handlerCalled  bool
+		panicValue     any
+	}
+	done := make(chan result, 1)
+	go func() {
+		var got result
+		defer func() {
+			got.panicValue = recover()
+			done <- got
+		}()
+		h := jw.SessionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			got.handlerCalled = true
+			got.requestCookies = r.Cookies()
+			got.rq = jw.NewRequest(r)
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		h.ServeHTTP(rw, hr)
+	}()
+
+	var got result
+	select {
+	case got = <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("SessionMiddleware deadlocked while ResponseWriter.Header closed the Session")
+	}
+	t.Cleanup(jw.Close)
+	if got.panicValue != nil {
+		t.Fatalf("SessionMiddleware panicked while ResponseWriter.Header closed the Session: %v", got.panicValue)
+	}
+	if !got.handlerCalled {
+		t.Fatal("SessionMiddleware did not invoke the wrapped handler")
+	}
+	if rw.closedSession == nil {
+		t.Fatal("ResponseWriter.Header did not observe a published Session")
+	}
+	if sess := got.rq.Session(); sess != nil {
+		t.Errorf("new Request Session() = %v, want nil", sess)
+	}
+	if requests := rw.closedSession.Requests(); len(requests) != 0 {
+		t.Errorf("closed Session Requests() = %v, want none", requests)
+	}
+	if count := jw.SessionCount(); count != 0 {
+		t.Errorf("SessionCount() = %d, want 0", count)
+	}
+	for _, cookie := range got.requestCookies {
+		if cookie.Name == jw.CookieName {
+			t.Errorf("wrapped handler request contains closed session cookie: %v", cookie)
+		}
+	}
+	for _, cookie := range rw.Result().Cookies() {
+		if cookie.Name == jw.CookieName && cookie.MaxAge >= 0 {
+			t.Errorf("response contains live session cookie: %v", cookie)
+		}
+	}
+}
+
 func TestSession_NewSessionReplacesDuplicateCookieSessions(t *testing.T) {
 	jw, err := New()
 	if err != nil {
