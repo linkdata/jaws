@@ -20,11 +20,11 @@ var assetsFS embed.FS
 //
 // It is intended to be passed to [jaws.Jaws.Setup]. Returned URLs should be
 // included in the page head through [jaws.Jaws.GenerateHeadHTML]. The prefix may
-// be absolute ("/static"), relative ("static") or empty. It is cleaned relative
-// to the URL root before asset names are joined. The returned URL path and the
-// path component of the registered handler pattern are kept identical in all
-// cases. [http.ServeMux] pattern syntax in prefix is treated as literal URL path
-// data.
+// be absolute ("/static"), relative ("static") or empty. The prefix is rooted
+// and cleaned before asset names are joined, so "../static" becomes "/static".
+// The returned URL path and the path component of the registered handler pattern
+// are kept identical in all cases. [http.ServeMux] pattern syntax in prefix is
+// treated as literal URL path data.
 //
 // Setup also registers [http.NotFoundHandler] (404) routes under prefix for the
 // bundled bootstrap *.map sourcemap paths, quietly answering devtools probes for
