@@ -290,15 +290,20 @@ func (jw *Jaws) Sessions() (sessions []*Session) {
 	return
 }
 
-func (jw *Jaws) getSessionLocked(sessionIDs []key.Key, remoteIP netip.Addr) *Session {
+func (jw *Jaws) getSessionByIDLocked(sessionID key.Key, remoteIP netip.Addr) (sess *Session) {
+	if found, ok := jw.sessions[sessionID]; ok && equalIP(remoteIP, found.remoteIP) && !found.isDead() {
+		sess = found
+	}
+	return
+}
+
+func (jw *Jaws) getSessionLocked(sessionIDs []key.Key, remoteIP netip.Addr) (sess *Session) {
 	for _, sessionID := range sessionIDs {
-		if sess, ok := jw.sessions[sessionID]; ok && equalIP(remoteIP, sess.remoteIP) {
-			if !sess.isDead() {
-				return sess
-			}
+		if sess = jw.getSessionByIDLocked(sessionID, remoteIP); sess != nil {
+			break
 		}
 	}
-	return nil
+	return
 }
 
 func getCookieSessionsIDs(h http.Header, wanted string) (cookies []key.Key) {
@@ -346,9 +351,10 @@ func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 
 // NewSession creates a new [Session].
 //
-// Any pre-existing [Session] will be cleared and closed.
-// This may call [Session.Close] on an existing session and therefore requires
-// the JaWS processing loop ([Jaws.Serve] or [Jaws.ServeWithTimeout]) to be running.
+// All live pre-existing [Session] values referenced by matching cookies and
+// bound to the request's client IP are cleared and closed. Each is closed with
+// [Session.Close], so the JaWS processing loop ([Jaws.Serve] or
+// [Jaws.ServeWithTimeout]) must be running.
 //
 // Subsequent [Request] values created with [Jaws.NewRequest] that have the
 // cookie set and originate from the same IP will be able to access the [Session].
@@ -364,9 +370,17 @@ func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 // ID, which does not happen on supported platforms.
 func (jw *Jaws) NewSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
 	if r != nil {
-		if oldSess := jw.GetSession(r); oldSess != nil {
-			oldSess.Clear()
-			oldSess.Close()
+		if sessionIDs := getCookieSessionsIDs(r.Header, jw.CookieName); len(sessionIDs) > 0 {
+			remoteIP := jw.clientIP(r)
+			for _, sessionID := range sessionIDs {
+				jw.mu.RLock()
+				oldSess := jw.getSessionByIDLocked(sessionID, remoteIP)
+				jw.mu.RUnlock()
+				if oldSess != nil {
+					oldSess.Clear()
+					oldSess.Close()
+				}
+			}
 		}
 		sess = jw.newSession(w, r)
 	}
