@@ -37,11 +37,9 @@ type Renderer interface {
 	// Do not call this yourself unless it is from within another JawsRender implementation.
 	// The engine does not invoke this once the [Element] is deleted (see [Element.Deleted]).
 	//
-	// When delegating, note that a renderer may claim the Element's widget state slot
-	// (see [SetElementState]) and that only one of them can: a delegate whose own
-	// renderer claims the slot — [github.com/linkdata/jaws/lib/ui.Template] does —
-	// fails with [ErrElementStateClaimed] if the delegating renderer, or an earlier
-	// delegate, already claimed it.
+	// A delegating renderer and its delegates may claim the Element's widget state
+	// slot only once. A later claim fails with [ErrElementStateClaimed]; see
+	// [SetElementState].
 	JawsRender(elem *Element, w io.Writer, params []any) error
 }
 

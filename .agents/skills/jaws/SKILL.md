@@ -126,9 +126,6 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
   supports multiple live Elements. They remain request-scoped; construct fresh widget
   values for another Request even when those values refer to shared synchronized
   application state.
-- Each reconciled child must render one addressable direct DOM node carrying its Element's
-  JaWS ID. Removal and ordering target that node; construct Template children with
-  `ui.NewTemplate`, which always provides a generated wrapper.
 - A nil-interface child provider is a valid part of the Go value but is not renderable:
   zero Container/Tbody and `NewContainer`/`NewTbody` with nil providers panic when
   render/update calls `JawsContains`. Zero Select and `NewSelect(nil)` likewise panic in
@@ -139,9 +136,6 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
 
 - `ui.Template` expands `Dot` into tags via `tag.TagExpand` (package `github.com/linkdata/jaws/lib/tag`, imported as `tag`); the root dot is part of identity/tag behavior.
 - `ui.Template` is for partial templates only; full document/page templates should be rendered through `ui.Handler`.
-- An empty wrapper passed to `ui.NewTemplate` or `$.Template` defaults to `div`. Choose a
-  semantic wrapper for constrained DOM contexts; use native `{{template "name" pipeline}}`
-  inclusion for an unwrapped structural fragment owned by a surrounding Template.
 - A nil-interface Template `Dot` is valid and contributes no tag; a typed nil follows its
   dynamic type's comparability and expansion behavior.
 - The root dot **must** be comparable at runtime and equal to itself: `ui.NewTemplate`
@@ -215,9 +209,33 @@ Implications:
 - Pass explicit tags when dirty targeting depends on them.
 - HTML attributes passed to `$.Template(...)` are applied to the generated template wrapper.
 - Template bodies used with `$.Template(...)` must be partials, not full documents.
-- Managed Template values always need one addressable wrapper for updates and container
-  removal or ordering.
 - For dynamic button text, avoid passing plain static strings if the value must change after render; use getter-based values so updates reflect new state.
+
+## Registering template-authored elements
+
+- `$.Register(updater, params...)` binds a render-independent `jaws.Updater` to a DOM
+  element whose markup is written by the surrounding template. The returned Jid must be
+  used as that element's HTML `id`:
+
+  ```gotemplate
+  <section id="{{$.Register .Dot.Panel}}">...</section>
+  ```
+
+- Register never calls `JawsRender`; use it only for a custom updater designed to work
+  without render-time initialization. It uses the updater as a tag, attaches its event
+  handlers, applies tag and handler params, and invokes `JawsUpdate` once. HTML attribute
+  params are ignored; write attributes on the template-authored element.
+- The updater must be a non-nil interface whose dynamic value is comparable at runtime,
+  equal to itself, and usable as a tag. A typed nil is invoked normally and must tolerate
+  its nil receiver. Reuse one updater for live Elements only when it supports that use
+  without retaining Element-specific state on the shared value; it must be safe for
+  concurrent use when shared across Requests.
+- Prefer ordinary widget rendering. The container family supports update-only
+  registration with the limitations below; typed inputs omit render-derived metadata,
+  while `ui.JsVar` and Templates with a non-empty `OuterHTMLTag` require rendering.
+- Always emit the returned Jid as the element's `id`. A surrounding Template owns the
+  registered Element; otherwise it remains until explicit deletion, reported DOM
+  removal, or Request shutdown.
 
 ## Event handling model
 
@@ -256,8 +274,8 @@ For clickable content rendering:
   should register and use a usable tag exposed by its handler.
 - Container ownership also lives in `containerState`, not in `elem.UI()`. Cleanup
   detaches children under the state mutex and recurses after unlocking, so it also finds
-  children when the Element's visible UI is a `Register` wrapper. Failed render and
-  append paths unregister every child and nested owner they created.
+  children when the Element's visible UI is the private registration wrapper. Failed
+  render and append paths unregister every child and nested owner they created.
 - Provider callbacks and child validation run without the state mutex. Reconciliation
   holds it only while matching children and calling `Request.NewElement`; rendering,
   removal, cancellation, recursive cleanup and logging happen after it is released.
@@ -284,9 +302,10 @@ For clickable content rendering:
     Element;
   - a composite UI must use Template values equal under `==` for rendering and updating
     an Element; using unequal values is unsupported;
-  - a Template updates only an Element rendered by an equal Template value, so it is not
-    usable as a `$.Register` updater; `$.Register` never invokes its renderer and therefore
-    cannot establish the wrapper state an update needs.
+  - a Template with a non-empty `OuterHTMLTag`, including any returned by
+    `ui.NewTemplate`, updates only an Element rendered by an equal Template value, so it
+    is not usable as a `$.Register` updater; `$.Register` never invokes its renderer and
+    therefore cannot establish the wrapper state an update needs.
 - Call `$.RadioGroup` from the template that renders the group: its Elements belong to
   the template whose body called it, not to the wrapper their markup lands in.
 - HTML getter paths must not mutate domain state, but they may call element update methods (`SetClass`, `RemoveClass`, `SetAttr`, `RemoveAttr`, etc.) on the passed-in `*Element` to co-ordinate wrapper class/attribute changes with the inner-HTML refresh. No custom `JawsUpdate` is needed for that case — the queued wrapper updates flush alongside the `SetInner` from `HTMLInner.JawsUpdate`.
@@ -352,6 +371,8 @@ Guideline:
   definition equality with pointer identity.
 - Passing a runtime-incomparable application object directly to a container-family
   constructor instead of retaining it behind a stable pointer.
+- Using `$.Register` for a widget that can render its own element, or failing to place
+  its returned Jid on the template-authored DOM node the updater controls.
 - Returning a shared/group tag from an item's `JawsGetTag` (bundling it into the item's own dirty identity), which makes a single-item `Dirty` fan out to the whole group.
 - Passing explicit template click handlers when dot-owned `JawsClick` already covers behavior.
 - Adding custom browser JavaScript for state that can be expressed through JaWS events and server updates.

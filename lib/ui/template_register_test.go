@@ -114,7 +114,7 @@ func TestRegister_TemplateUpdaterReportsUnclaimed(t *testing.T) {
 
 // TestRegister_TemplateUpdaterOnTheRequestLoop reaches the diagnostic from the
 // request loop, which RequestWriter.Register cannot do because it updates immediately: a
-// NewRegister child is rendered with a tag, then that tag is dirtied.
+// registerUI child is rendered with a tag, then that tag is dirtied.
 func TestRegister_TemplateUpdaterOnTheRequestLoop(t *testing.T) {
 	for _, tt := range []struct {
 		name      string
@@ -150,11 +150,11 @@ func TestRegister_TemplateUpdaterOnTheRequestLoop(t *testing.T) {
 
 			dirty := tag.Tag("registered")
 			tmpl := NewTemplate("div", "reg-plain", tag.Tag("dot"))
-			// Build the Register Element by hand: RequestWriter.Register would run the
-			// failing update immediately, and Register.JawsRender documents that it ignores
-			// params, so NewUI would not apply the tag. This leaves the first failing update
-			// to the request loop.
-			regElem := tr.NewElement(NewRegister(tmpl))
+			// Build the registered Element by hand: RequestWriter.Register would run the
+			// failing update immediately, and registerUI.JawsRender ignores params, so
+			// NewUI would not apply the tag. This leaves the first failing update to the
+			// request loop.
+			regElem := tr.NewElement(registerUI{Updater: tmpl})
 			regElem.Tag(dirty)
 			regElem.Freeze()
 

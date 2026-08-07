@@ -52,8 +52,8 @@ func containerStateOwnedTemplateChildren(t *testing.T, elem *jaws.Element) (chil
 }
 
 // TestTemplateRegisterContainerReclaimsChildren covers the ownership path whose
-// Element stores a Register UI wrapper rather than the Container updater. Recursive
-// cleanup must find the Container's children through the Element state slot.
+// Element stores a private registration wrapper rather than the Container updater.
+// Recursive cleanup must find the Container's children through the Element state slot.
 func TestTemplateRegisterContainerReclaimsChildren(t *testing.T) {
 	jw, rq := newOwnedRequest(t)
 	addContainerStateOwnedTemplates(t, jw)
@@ -63,7 +63,7 @@ func TestTemplateRegisterContainerReclaimsChildren(t *testing.T) {
 	tmpl := NewTemplate("div", "state-register-container", dot)
 	wrapper := renderOwned(t, rq, tmpl)
 
-	const wantRegistered = 3 // Template wrapper, Register Element, Container child.
+	const wantRegistered = 3 // Template wrapper, registered Element, Container child.
 	if got := countRegistered(t, rq); got != wantRegistered {
 		t.Fatalf("registered elements after render = %d, want %d", got, wantRegistered)
 	}
@@ -71,19 +71,19 @@ func TestTemplateRegisterContainerReclaimsChildren(t *testing.T) {
 	for round := 1; round <= 3; round++ {
 		generation := containerStateOwnedTemplateChildren(t, wrapper)
 		if len(generation) != 1 {
-			t.Fatalf("round %d: Template owns %d Elements, want the Register Element", round, len(generation))
+			t.Fatalf("round %d: Template owns %d Elements, want the registered Element", round, len(generation))
 		}
 		registerElem := generation[0]
 		children := containerStateOwnedChildren(t, registerElem)
 		if len(children) != 1 {
-			t.Fatalf("round %d: Register Container owns %d children, want 1", round, len(children))
+			t.Fatalf("round %d: registered Container owns %d children, want 1", round, len(children))
 		}
 		childElem := children[0]
 
 		tmpl.JawsUpdate(wrapper)
 
 		if !registerElem.Deleted() || rq.GetElementByJid(registerElem.Jid()) != nil {
-			t.Fatalf("round %d: previous Register Element %v is still registered", round, registerElem.Jid())
+			t.Fatalf("round %d: previous registered Element %v is still registered", round, registerElem.Jid())
 		}
 		if !childElem.Deleted() || rq.GetElementByJid(childElem.Jid()) != nil {
 			t.Fatalf("round %d: previous Container child %v is still registered", round, childElem.Jid())

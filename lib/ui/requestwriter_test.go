@@ -203,6 +203,15 @@ func TestRequestWriter_RegisterFreezesElement(t *testing.T) {
 	elem.AddHandlers(struct{}{}) // production logs and drops, must not panic
 }
 
+func TestRegisterUI_RenderDoesNothing(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	registered := registerUI{Updater: NewSpan(testHTMLGetter("x"))}
+	_, got := renderUI(t, rq, registered)
+	if got != "" {
+		t.Fatalf("registerUI render output = %q, want empty", got)
+	}
+}
+
 func TestRequestWriter_RegisterUsesUpdaterEventHandler(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	var buf bytes.Buffer
