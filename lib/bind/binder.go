@@ -76,8 +76,13 @@ type Formatter interface {
 	Format(string) string
 }
 
-// Binder binds a comparable Go value to JaWS getter, setter, tag and event
-// interfaces.
+// Binder binds a Go value to JaWS getter, setter, tag and event interfaces.
+//
+// T must be strictly comparable. The predeclared type any, all other interface
+// types, and structs or arrays containing interface-typed components are
+// unsupported, regardless of their current values. The default
+// [Binder.JawsSetLocked] comparison may panic for those types despite the
+// broader comparable constraint.
 //
 // Binder methods are safe for concurrent use when the locker passed to [New]
 // is safe for concurrent use.
@@ -104,8 +109,12 @@ type Binder[T comparable] interface {
 	//
 	// Callers must already hold the write lock; the method does not lock or
 	// unlock and must not be called (nor [Setter.JawsSet] called) from within a
-	// hook. It applies this chain's [SetHook]s and returns
-	// [jaws.ErrValueUnchanged] when the stored value already equals value.
+	// hook. It applies this chain's [SetHook]s.
+	//
+	// The default implementation returned by [New] compares value with the stored
+	// value using !=, stores it when different, and returns
+	// [jaws.ErrValueUnchanged] when equal. T must be strictly comparable as
+	// documented by [Binder]; otherwise the comparison may panic.
 	JawsSetLocked(elem *jaws.Element, value T) (err error)
 
 	// JawsInitialHTMLAttrLocked returns the initial HTML attribute while the

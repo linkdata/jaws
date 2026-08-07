@@ -83,6 +83,7 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
 ### `bind.New[T comparable](l sync.Locker, p *T) Binder[T]`
 
 - Signature: `func New[T comparable](l sync.Locker, p *T) Binder[T]`. If `l` also satisfies `RWLocker` (has `RLock`/`RUnlock`), the binder takes the read lock for reads; otherwise it upgrades to the write lock.
+- `T` must be strictly comparable. The predeclared type `any`, all other interface types, and structs or arrays containing interface-typed components are unsupported regardless of their current values. The default setter comparison may panic for those types despite the broader `comparable` constraint.
 - The binder's tag is always `p` (the pointer itself). Chaining never changes tag identity — `bind.New(&mu, &field).Clicked(...).Success(...)` still reports `&field` as its tag, so dirty targeting via `&field` keeps working through refactors.
 - Default `JawsSetLocked` assigns `*p = v` only when the value changed and returns `jaws.ErrValueUnchanged` when it did not. This is what lets the input-widget family skip redundant updates.
 - Chain builders return a new `Binder[T]`:
