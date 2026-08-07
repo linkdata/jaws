@@ -15,6 +15,8 @@ type Number struct{ InputFloat }
 
 // NewNumber returns a number input widget bound to g.
 //
+// For writable use, g must provide the setter-derived dirty target described by [Input].
+//
 // The bound value must be finite. A non-finite value (NaN or ±Inf) has no valid
 // rendering or wire representation, so rendering, updating, or receiving one from
 // the browser cancels the [jaws.Request] with a cause wrapping

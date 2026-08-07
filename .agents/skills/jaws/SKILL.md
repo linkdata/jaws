@@ -92,6 +92,14 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
   - `.Clicked(fn)` / `.ContextMenu(fn)` — attach click/context handlers to the same bound variable.
   - `.InitialHTMLAttr(fn)` — attach attribute hooks.
 - Use `bind.New` for input widgets and for content whose natural key is the backing variable. Multiple widgets bound to the same pointer share a tag automatically, so `Request.Dirty(&field)` refreshes all of them.
+- Writable setters used by `ui.Input`-based widgets require a stable target
+  accepted by `Element.ApplyGetter` for post-set reconciliation. `bind.New`
+  supplies its backing pointer; otherwise use a pointer-valued setter or
+  `JawsGetTag` returning at least one stable, usable key. A `JawsGetTag` result
+  takes precedence over the setter's identity.
+- Render-param tags register the Element but do not replace that setter-derived
+  target. Without a valid target, rejected or normalized browser values are not
+  automatically reconciled.
 
 ### When to use which
 
