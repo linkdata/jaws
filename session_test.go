@@ -132,6 +132,194 @@ func TestSession_NewSessionCallsResponseWriterOutsideLock(t *testing.T) {
 	}
 }
 
+func TestSession_NewSessionReplacesDuplicateCookieSessions(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go jw.Serve()
+	t.Cleanup(jw.Close)
+
+	makeRequest := func(remoteAddr string) *http.Request {
+		r := httptest.NewRequest(http.MethodGet, "http://example.test/login", nil)
+		r.RemoteAddr = remoteAddr
+		return r
+	}
+	newSession := func(remoteAddr string) (sess *Session, cookie *http.Cookie) {
+		t.Helper()
+		sess = jw.NewSession(httptest.NewRecorder(), makeRequest(remoteAddr))
+		if sess == nil {
+			t.Fatal("NewSession returned nil")
+		}
+		cookie = sess.Cookie()
+		return
+	}
+	// attach binds a new Request to the session named by cookie, modelling a
+	// browser tab already using it.
+	attach := func(remoteAddr string, cookie *http.Cookie, want *Session) (rq *Request) {
+		t.Helper()
+		r := makeRequest(remoteAddr)
+		r.AddCookie(cookie)
+		if rq = jw.NewRequest(r); rq.Session() != want {
+			t.Fatalf("attached request session = %p, want %p", rq.Session(), want)
+		}
+		return
+	}
+
+	const (
+		sameIP  = "203.0.113.10:1234"
+		otherIP = "198.51.100.20:5678"
+	)
+	first, firstCookie := newSession(sameIP)
+	second, secondCookie := newSession(sameIP)
+	other, otherCookie := newSession(otherIP)
+	unknown, unknownCookie := newSession(sameIP)
+	unknown.Close()
+	first.Set("stale", "first")
+	second.Set("stale", "second")
+	other.Set("keep", "other")
+
+	// A tab on each duplicate session. Rotation must detach and reload both, not
+	// just the one named by the first matching cookie.
+	firstRequest := attach(sameIP, firstCookie, first)
+	secondRequest := attach(sameIP, secondCookie, second)
+
+	r := makeRequest(sameIP)
+	// Invalid, unknown, and other-IP cookies stay ignored while every
+	// distinct live same-IP session is closed, regardless of duplicates or ordering.
+	r.AddCookie(&http.Cookie{Name: jw.CookieName, Value: first.CookieValue() + "/junk"})
+	r.AddCookie(unknownCookie)
+	r.AddCookie(otherCookie)
+	r.AddCookie(firstCookie)
+	r.AddCookie(firstCookie) // repeated ID
+	r.AddCookie(secondCookie)
+	rr := httptest.NewRecorder()
+	fresh := jw.NewSession(rr, r)
+	if fresh == nil {
+		t.Fatal("NewSession returned nil")
+	}
+
+	if got := jw.GetSession(r); got != fresh {
+		t.Fatalf("GetSession() = %p, want fresh session %p", got, fresh)
+	}
+	if got := jw.NewRequest(r).Session(); got != fresh {
+		t.Fatalf("NewRequest().Session() = %p, want fresh session %p", got, fresh)
+	}
+	for _, old := range []struct {
+		name string
+		sess *Session
+		rq   *Request
+	}{
+		{name: "first", sess: first, rq: firstRequest},
+		{name: "second", sess: second, rq: secondRequest},
+	} {
+		if got := old.sess.Get("stale"); got != nil {
+			t.Errorf("%s old session retained stale data %v", old.name, got)
+		}
+		if cookie := old.sess.Cookie(); cookie == nil || cookie.MaxAge != -1 {
+			t.Errorf("%s old session cookie = %#v, want deletion cookie", old.name, cookie)
+		}
+		// Close detaches the attached Request and arms a reload on it, so the tab
+		// that was using the replaced session reloads instead of keeping it.
+		if got := old.rq.Session(); got != nil {
+			t.Errorf("%s attached request still bound to session %p", old.name, got)
+		}
+		old.rq.muQueue.Lock()
+		queued := slices.Clone(old.rq.wsQueue)
+		old.rq.muQueue.Unlock()
+		if len(queued) != 1 || queued[0].What != what.Reload {
+			t.Errorf("%s attached request queue = %v, want one Reload", old.name, queued)
+		}
+	}
+	if got := other.Get("keep"); got != "other" {
+		t.Fatalf("other-IP session data = %v, want unchanged", got)
+	}
+	if cookie := other.Cookie(); cookie == nil || cookie.MaxAge < 0 {
+		t.Fatalf("other-IP session cookie = %#v, want live cookie", cookie)
+	}
+	otherRequest := makeRequest(otherIP)
+	otherRequest.AddCookie(otherCookie)
+	if got := jw.GetSession(otherRequest); got != other {
+		t.Fatalf("other-IP GetSession() = %p, want %p", got, other)
+	}
+	mapped := map[*Session]bool{}
+	for _, sess := range jw.Sessions() {
+		mapped[sess] = true
+	}
+	for _, closed := range []struct {
+		name string
+		sess *Session
+	}{
+		{name: "first", sess: first},
+		{name: "second", sess: second},
+		{name: "unknown", sess: unknown},
+	} {
+		if mapped[closed.sess] {
+			t.Errorf("%s session still mapped after being closed", closed.name)
+		}
+	}
+	if !mapped[fresh] || !mapped[other] {
+		t.Fatalf("mapped fresh = %v, other-IP = %v, want both retained", mapped[fresh], mapped[other])
+	}
+	if len(mapped) != 2 {
+		t.Fatalf("mapped sessions = %d, want only the fresh and other-IP sessions", len(mapped))
+	}
+	responseCookies := rr.Result().Cookies()
+	if len(responseCookies) != 1 {
+		t.Fatalf("response cookies = %d, want one replacement cookie", len(responseCookies))
+	}
+	if got := responseCookies[0]; got.Name != jw.CookieName || got.Value != fresh.CookieValue() {
+		t.Fatalf("replacement cookie = %s=%s, want %s=%s", got.Name, got.Value, jw.CookieName, fresh.CookieValue())
+	}
+}
+
+func TestSession_NewSessionIgnoresDeadMappedSession(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+
+	makeRequest := func() *http.Request {
+		r := httptest.NewRequest(http.MethodGet, "http://example.test/login", nil)
+		r.RemoteAddr = "203.0.113.10:1234"
+		return r
+	}
+	expired := jw.NewSession(httptest.NewRecorder(), makeRequest())
+	if expired == nil {
+		t.Fatal("NewSession returned nil")
+	}
+	expiredCookie := expired.Cookie()
+	expired.Set("keep", "expired")
+	expired.mu.Lock()
+	expired.deadline = time.Now().Add(-time.Second)
+	expired.mu.Unlock()
+	if !expired.isDead() {
+		t.Fatal("expected expired session to be dead")
+	}
+	if !slices.Contains(jw.Sessions(), expired) {
+		t.Fatal("expected dead session to remain mapped before rotation")
+	}
+
+	// Do not start the processing loop: without maintenance the cookie is
+	// guaranteed to name a dead-but-still-mapped session when NewSession reads it.
+	r := makeRequest()
+	r.AddCookie(expiredCookie)
+	fresh := jw.NewSession(httptest.NewRecorder(), r)
+	if fresh == nil {
+		t.Fatal("NewSession returned nil")
+	}
+	if got := expired.Get("keep"); got != "expired" {
+		t.Fatalf("dead session data = %v, want unchanged", got)
+	}
+	if !slices.Contains(jw.Sessions(), expired) {
+		t.Fatal("dead session was removed during rotation")
+	}
+	if got := jw.GetSession(r); got != fresh {
+		t.Fatalf("GetSession() = %p, want fresh session %p", got, fresh)
+	}
+}
+
 func TestSession_CookieSecureMatchesRequest(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
