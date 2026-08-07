@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"net"
@@ -153,37 +154,124 @@ func TestSession_NewSessionWithoutResponseWriter(t *testing.T) {
 	}
 }
 
-func TestSession_AddCookieRejectsExpiredRegisteredSession(t *testing.T) {
+func TestSession_NewSessionWithoutRequest(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(jw.Close)
 
-	creationRequest := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
-	sess := jw.NewSession(nil, creationRequest)
-	if sess == nil {
-		t.Fatal("NewSession returned nil")
+	rw := &reentrantSessionResponseWriter{
+		ResponseRecorder: httptest.NewRecorder(),
+		jw:               jw,
+		sessionCount:     -1,
 	}
-	sess.mu.Lock()
-	sess.deadline = time.Now().Add(-time.Second)
-	sess.mu.Unlock()
-	if sessions := jw.Sessions(); len(sessions) != 1 || sessions[0] != sess {
-		t.Fatalf("Sessions() = %v, want the expired registered Session", sessions)
+	if sess := jw.NewSession(rw, nil); sess != nil {
+		t.Fatalf("NewSession() = %v, want nil", sess)
 	}
+	if got := jw.SessionCount(); got != 0 {
+		t.Errorf("SessionCount() = %d, want 0", got)
+	}
+	if rw.sessionCount != -1 {
+		t.Errorf("ResponseWriter.Header called for a nil request; SessionCount() = %d", rw.sessionCount)
+	}
+	if header := rw.Result().Header; len(header) != 0 {
+		t.Errorf("response headers = %v, want none", header)
+	}
+}
 
-	rw := httptest.NewRecorder()
-	hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
-	sess.addCookie(rw, hr)
-	for _, cookie := range hr.Cookies() {
-		if cookie.Name == jw.CookieName {
-			t.Errorf("request contains expired session cookie: %v", cookie)
-		}
+func TestSession_NewSessionUnlocksAfterInjectedRandomReaderPanic(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, cookie := range rw.Result().Cookies() {
-		if cookie.Name == jw.CookieName {
-			t.Errorf("response contains expired session cookie: %v", cookie)
-		}
+	jw.kg = bufio.NewReader(errReader{})
+
+	var panicValue any
+	func() {
+		defer func() {
+			panicValue = recover()
+		}()
+		jw.NewSession(nil, httptest.NewRequest(http.MethodGet, "http://example.test/", nil))
+	}()
+	if panicValue == nil {
+		jw.Close()
+		t.Fatal("NewSession did not panic when the injected random reader failed")
+	}
+	if !jw.mu.TryLock() {
+		// Release the leaked lock so cleanup itself does not deadlock on a regression.
+		jw.mu.Unlock()
+		jw.Close()
+		t.Fatal("NewSession left Jaws locked after the injected random reader panic")
+	}
+	jw.mu.Unlock()
+	jw.Close()
+}
+
+func TestSession_AddCookieRejectsUnavailableSession(t *testing.T) {
+	tests := []struct {
+		name            string
+		makeUnavailable func(*Jaws, *Session)
+		wantRegistered  bool
+		wantDead        bool
+	}{
+		{
+			name: "expired registered",
+			makeUnavailable: func(_ *Jaws, sess *Session) {
+				sess.mu.Lock()
+				sess.deadline = time.Now().Add(-time.Second)
+				sess.mu.Unlock()
+			},
+			wantRegistered: true,
+			wantDead:       true,
+		},
+		{
+			name: "live unregistered",
+			makeUnavailable: func(jw *Jaws, sess *Session) {
+				sess.mu.Lock()
+				sess.deadline = time.Now().Add(24 * time.Hour)
+				sess.mu.Unlock()
+				jw.deleteSession(sess.sessionID)
+			},
+			wantRegistered: false,
+			wantDead:       false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(jw.Close)
+
+			creationRequest := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+			sess := jw.NewSession(nil, creationRequest)
+			if sess == nil {
+				t.Fatal("NewSession returned nil")
+			}
+			tt.makeUnavailable(jw, sess)
+			if registered := slices.Contains(jw.Sessions(), sess); registered != tt.wantRegistered {
+				t.Fatalf("registered = %t, want %t", registered, tt.wantRegistered)
+			}
+			if dead := sess.isDead(); dead != tt.wantDead {
+				t.Fatalf("dead = %t, want %t", dead, tt.wantDead)
+			}
+
+			rw := httptest.NewRecorder()
+			hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+			sess.addCookie(rw, hr)
+			for _, cookie := range hr.Cookies() {
+				if cookie.Name == jw.CookieName {
+					t.Errorf("request contains unavailable session cookie: %v", cookie)
+				}
+			}
+			for _, cookie := range rw.Result().Cookies() {
+				if cookie.Name == jw.CookieName {
+					t.Errorf("response contains unavailable session cookie: %v", cookie)
+				}
+			}
+		})
 	}
 }
 

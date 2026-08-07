@@ -49,6 +49,9 @@ import (
 // unclaimed Request, its key remains unavailable for assignment to another Request
 // while the retired Request is reachable; no deadline is guaranteed for later key
 // reuse.
+//
+// It panics if the [crypto/rand.Reader] captured by [New] returns an error while
+// generating the request key. Go's default reader does not return errors.
 func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 	remoteIP := jw.clientIP(r)
 

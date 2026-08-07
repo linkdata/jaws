@@ -188,7 +188,8 @@ func (sess *Session) addCookie(w http.ResponseWriter, r *http.Request) {
 	defer jw.mu.RUnlock()
 	sess.mu.RLock()
 	defer sess.mu.RUnlock()
-	// Map identity settles Close races; liveness also covers deadline expiry while Header blocks above.
+	// Close unregisters before marking dead, while an unattached Session can
+	// expire during Header; require both registry identity and liveness.
 	if jw.sessions[sess.sessionID] == sess && !sess.isDeadLocked() {
 		cookie := sess.cookie
 		if h != nil {
@@ -400,6 +401,9 @@ func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 // w nor r receives its live cookie.
 //
 // It returns nil and has no effect if r is nil; w may be nil.
+//
+// It panics if the [crypto/rand.Reader] captured by [New] returns an error while
+// generating the session ID. Go's default reader does not return errors.
 func (jw *Jaws) NewSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
 	if r != nil {
 		if sessionIDs := getCookieSessionsIDs(r.Header, jw.CookieName); len(sessionIDs) > 0 {
@@ -422,10 +426,12 @@ func (jw *Jaws) NewSession(w http.ResponseWriter, r *http.Request) (sess *Sessio
 func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
 	secure := secureheaders.RequestIsSecure(r, jw.TrustForwardedHeaders)
 	remoteIP := jw.clientIP(r)
-	jw.mu.Lock()
-	sess = jw.newSessionLocked(remoteIP, secure)
-	jw.sessions[sess.sessionID] = sess
-	jw.mu.Unlock()
+	func() {
+		jw.mu.Lock()
+		defer jw.mu.Unlock()
+		sess = jw.newSessionLocked(remoteIP, secure)
+		jw.sessions[sess.sessionID] = sess
+	}()
 	sess.addCookie(w, r)
 	return
 }
