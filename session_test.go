@@ -154,6 +154,17 @@ func TestSession_NewSessionReplacesDuplicateCookieSessions(t *testing.T) {
 		cookie = sess.Cookie()
 		return
 	}
+	// attach binds a new Request to the session named by cookie, modelling a
+	// browser tab already using it.
+	attach := func(remoteAddr string, cookie *http.Cookie, want *Session) (rq *Request) {
+		t.Helper()
+		r := makeRequest(remoteAddr)
+		r.AddCookie(cookie)
+		if rq = jw.NewRequest(r); rq.Session() != want {
+			t.Fatalf("attached request session = %p, want %p", rq.Session(), want)
+		}
+		return
+	}
 
 	const (
 		sameIP  = "203.0.113.10:1234"
@@ -164,15 +175,33 @@ func TestSession_NewSessionReplacesDuplicateCookieSessions(t *testing.T) {
 	other, otherCookie := newSession(otherIP)
 	unknown, unknownCookie := newSession(sameIP)
 	unknown.Close()
+	expired, expiredCookie := newSession(sameIP)
 	first.Set("stale", "first")
 	second.Set("stale", "second")
 	other.Set("keep", "other")
+	expired.Set("keep", "expired")
+
+	// A tab on each duplicate session. Rotation must detach and reload both, not
+	// just the one named by the first matching cookie.
+	firstRequest := attach(sameIP, firstCookie, first)
+	secondRequest := attach(sameIP, secondCookie, second)
+
+	// Expire the last session without running maintenance cleanup, so its cookie
+	// names a session that is dead but still mapped. It has no attached Request,
+	// so the elapsed deadline alone makes it dead.
+	expired.mu.Lock()
+	expired.deadline = time.Now().Add(-time.Second)
+	expired.mu.Unlock()
+	if !expired.isDead() {
+		t.Fatal("expected expired session to be dead")
+	}
 
 	r := makeRequest(sameIP)
-	// Invalid, unknown, and other-IP cookies stay ignored while every distinct
-	// live same-IP session is closed, regardless of duplicates or ordering.
+	// Invalid, unknown, dead, and other-IP cookies stay ignored while every
+	// distinct live same-IP session is closed, regardless of duplicates or ordering.
 	r.AddCookie(&http.Cookie{Name: jw.CookieName, Value: first.CookieValue() + "/junk"})
 	r.AddCookie(unknownCookie)
+	r.AddCookie(expiredCookie)
 	r.AddCookie(otherCookie)
 	r.AddCookie(firstCookie)
 	r.AddCookie(firstCookie) // repeated ID
@@ -192,9 +221,10 @@ func TestSession_NewSessionReplacesDuplicateCookieSessions(t *testing.T) {
 	for _, old := range []struct {
 		name string
 		sess *Session
+		rq   *Request
 	}{
-		{name: "first", sess: first},
-		{name: "second", sess: second},
+		{name: "first", sess: first, rq: firstRequest},
+		{name: "second", sess: second, rq: secondRequest},
 	} {
 		if got := old.sess.Get("stale"); got != nil {
 			t.Errorf("%s old session retained stale data %v", old.name, got)
@@ -202,6 +232,28 @@ func TestSession_NewSessionReplacesDuplicateCookieSessions(t *testing.T) {
 		if cookie := old.sess.Cookie(); cookie == nil || cookie.MaxAge != -1 {
 			t.Errorf("%s old session cookie = %#v, want deletion cookie", old.name, cookie)
 		}
+		// Close detaches the attached Request and arms a reload on it, so the tab
+		// that was using the replaced session reloads instead of keeping it.
+		if got := old.rq.Session(); got != nil {
+			t.Errorf("%s attached request still bound to session %p", old.name, got)
+		}
+		old.rq.muQueue.Lock()
+		queued := slices.Clone(old.rq.wsQueue)
+		old.rq.muQueue.Unlock()
+		if len(queued) != 1 || queued[0].What != what.Reload {
+			t.Errorf("%s attached request queue = %v, want one Reload", old.name, queued)
+		}
+	}
+	// The dead-but-mapped session is skipped rather than rotated: NewSession
+	// neither cleared it nor handed it out. Whether maintenance has already reaped
+	// it from jw.sessions does not matter, since reaping never clears session data.
+	if got := expired.Get("keep"); got != "expired" {
+		t.Fatalf("dead session data = %v, want unchanged", got)
+	}
+	expiredRequest := makeRequest(sameIP)
+	expiredRequest.AddCookie(expiredCookie)
+	if got := jw.GetSession(expiredRequest); got != nil {
+		t.Fatalf("dead-session GetSession() = %p, want nil", got)
 	}
 	if got := other.Get("keep"); got != "other" {
 		t.Fatalf("other-IP session data = %v, want unchanged", got)
@@ -214,8 +266,30 @@ func TestSession_NewSessionReplacesDuplicateCookieSessions(t *testing.T) {
 	if got := jw.GetSession(otherRequest); got != other {
 		t.Fatalf("other-IP GetSession() = %p, want %p", got, other)
 	}
-	if got := jw.SessionCount(); got != 2 {
-		t.Fatalf("SessionCount() = %d, want fresh and other-IP sessions", got)
+	mapped := map[*Session]bool{}
+	for _, sess := range jw.Sessions() {
+		mapped[sess] = true
+	}
+	for _, closed := range []struct {
+		name string
+		sess *Session
+	}{
+		{name: "first", sess: first},
+		{name: "second", sess: second},
+		{name: "unknown", sess: unknown},
+	} {
+		if mapped[closed.sess] {
+			t.Errorf("%s session still mapped after being closed", closed.name)
+		}
+	}
+	if !mapped[fresh] || !mapped[other] {
+		t.Fatalf("mapped fresh = %v, other-IP = %v, want both retained", mapped[fresh], mapped[other])
+	}
+	// Drop the dead session before counting: a maintenance tick may or may not
+	// have reaped it by now, but nothing else may remain.
+	delete(mapped, expired)
+	if len(mapped) != 2 {
+		t.Fatalf("mapped sessions = %d, want only the fresh and other-IP sessions", len(mapped))
 	}
 	responseCookies := rr.Result().Cookies()
 	if len(responseCookies) != 1 {
