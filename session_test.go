@@ -175,33 +175,20 @@ func TestSession_NewSessionReplacesDuplicateCookieSessions(t *testing.T) {
 	other, otherCookie := newSession(otherIP)
 	unknown, unknownCookie := newSession(sameIP)
 	unknown.Close()
-	expired, expiredCookie := newSession(sameIP)
 	first.Set("stale", "first")
 	second.Set("stale", "second")
 	other.Set("keep", "other")
-	expired.Set("keep", "expired")
 
 	// A tab on each duplicate session. Rotation must detach and reload both, not
 	// just the one named by the first matching cookie.
 	firstRequest := attach(sameIP, firstCookie, first)
 	secondRequest := attach(sameIP, secondCookie, second)
 
-	// Expire the last session without running maintenance cleanup, so its cookie
-	// names a session that is dead but still mapped. It has no attached Request,
-	// so the elapsed deadline alone makes it dead.
-	expired.mu.Lock()
-	expired.deadline = time.Now().Add(-time.Second)
-	expired.mu.Unlock()
-	if !expired.isDead() {
-		t.Fatal("expected expired session to be dead")
-	}
-
 	r := makeRequest(sameIP)
-	// Invalid, unknown, dead, and other-IP cookies stay ignored while every
+	// Invalid, unknown, and other-IP cookies stay ignored while every
 	// distinct live same-IP session is closed, regardless of duplicates or ordering.
 	r.AddCookie(&http.Cookie{Name: jw.CookieName, Value: first.CookieValue() + "/junk"})
 	r.AddCookie(unknownCookie)
-	r.AddCookie(expiredCookie)
 	r.AddCookie(otherCookie)
 	r.AddCookie(firstCookie)
 	r.AddCookie(firstCookie) // repeated ID
@@ -244,17 +231,6 @@ func TestSession_NewSessionReplacesDuplicateCookieSessions(t *testing.T) {
 			t.Errorf("%s attached request queue = %v, want one Reload", old.name, queued)
 		}
 	}
-	// The dead-but-mapped session is skipped rather than rotated: NewSession
-	// neither cleared it nor handed it out. Whether maintenance has already reaped
-	// it from jw.sessions does not matter, since reaping never clears session data.
-	if got := expired.Get("keep"); got != "expired" {
-		t.Fatalf("dead session data = %v, want unchanged", got)
-	}
-	expiredRequest := makeRequest(sameIP)
-	expiredRequest.AddCookie(expiredCookie)
-	if got := jw.GetSession(expiredRequest); got != nil {
-		t.Fatalf("dead-session GetSession() = %p, want nil", got)
-	}
 	if got := other.Get("keep"); got != "other" {
 		t.Fatalf("other-IP session data = %v, want unchanged", got)
 	}
@@ -285,9 +261,6 @@ func TestSession_NewSessionReplacesDuplicateCookieSessions(t *testing.T) {
 	if !mapped[fresh] || !mapped[other] {
 		t.Fatalf("mapped fresh = %v, other-IP = %v, want both retained", mapped[fresh], mapped[other])
 	}
-	// Drop the dead session before counting: a maintenance tick may or may not
-	// have reaped it by now, but nothing else may remain.
-	delete(mapped, expired)
 	if len(mapped) != 2 {
 		t.Fatalf("mapped sessions = %d, want only the fresh and other-IP sessions", len(mapped))
 	}
@@ -297,6 +270,53 @@ func TestSession_NewSessionReplacesDuplicateCookieSessions(t *testing.T) {
 	}
 	if got := responseCookies[0]; got.Name != jw.CookieName || got.Value != fresh.CookieValue() {
 		t.Fatalf("replacement cookie = %s=%s, want %s=%s", got.Name, got.Value, jw.CookieName, fresh.CookieValue())
+	}
+}
+
+func TestSession_NewSessionIgnoresDeadMappedSession(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+
+	makeRequest := func() *http.Request {
+		r := httptest.NewRequest(http.MethodGet, "http://example.test/login", nil)
+		r.RemoteAddr = "203.0.113.10:1234"
+		return r
+	}
+	expired := jw.NewSession(httptest.NewRecorder(), makeRequest())
+	if expired == nil {
+		t.Fatal("NewSession returned nil")
+	}
+	expiredCookie := expired.Cookie()
+	expired.Set("keep", "expired")
+	expired.mu.Lock()
+	expired.deadline = time.Now().Add(-time.Second)
+	expired.mu.Unlock()
+	if !expired.isDead() {
+		t.Fatal("expected expired session to be dead")
+	}
+	if !slices.Contains(jw.Sessions(), expired) {
+		t.Fatal("expected dead session to remain mapped before rotation")
+	}
+
+	// Do not start the processing loop: without maintenance the cookie is
+	// guaranteed to name a dead-but-still-mapped session when NewSession reads it.
+	r := makeRequest()
+	r.AddCookie(expiredCookie)
+	fresh := jw.NewSession(httptest.NewRecorder(), r)
+	if fresh == nil {
+		t.Fatal("NewSession returned nil")
+	}
+	if got := expired.Get("keep"); got != "expired" {
+		t.Fatalf("dead session data = %v, want unchanged", got)
+	}
+	if !slices.Contains(jw.Sessions(), expired) {
+		t.Fatal("dead session was removed during rotation")
+	}
+	if got := jw.GetSession(r); got != fresh {
+		t.Fatalf("GetSession() = %p, want fresh session %p", got, fresh)
 	}
 }
 
