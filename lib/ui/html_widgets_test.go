@@ -4,6 +4,7 @@ import (
 	"errors"
 	"html/template"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/linkdata/jaws"
@@ -72,9 +73,30 @@ func TestImg_RenderAndUpdate(t *testing.T) {
 	src := newTestSetter("image.png")
 	ui := NewImg(src)
 	elem, got := renderUI(t, rq, ui, "hidden")
-	mustMatch(t, `^<img id="Jid\.[0-9]+" hidden src="image\.png">$`, got)
+	mustMatch(t, `^<img id="Jid\.[0-9]+" src="image\.png" hidden>$`, got)
 	src.Set("image2.jpg")
 	ui.JawsUpdate(elem)
+}
+
+func TestImg_RenderGetterSrcTakesPrecedence(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	var mu sync.Mutex
+	src := "getter.png"
+	getter := bind.New(&mu, &src).InitialHTMLAttr(func(bind.Binder[string], *jaws.Element) (attr template.HTMLAttr) {
+		attr = `src="hook.png" data-getter="yes"`
+		return
+	})
+
+	_, got := renderUI(t, rq, NewImg(getter), template.HTMLAttr(`src="caller.png" data-caller="yes"`))
+	canonical := strings.Index(got, `src="getter.png"`)
+	caller := strings.Index(got, `src="caller.png"`)
+	hook := strings.Index(got, `src="hook.png"`)
+	if canonical < 0 || caller < 0 || hook < 0 || caller < canonical || hook < canonical {
+		t.Fatalf("getter src does not take precedence: %s", got)
+	}
+	if !strings.Contains(got, `data-caller="yes"`) || !strings.Contains(got, `data-getter="yes"`) {
+		t.Fatalf("rendered image missing non-src attributes: %s", got)
+	}
 }
 
 func TestImg_RenderEscapesSrcAttr(t *testing.T) {
