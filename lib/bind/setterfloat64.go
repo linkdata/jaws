@@ -3,6 +3,7 @@ package bind
 import (
 	"errors"
 	"fmt"
+	"html/template"
 	"math"
 	"strconv"
 
@@ -22,8 +23,48 @@ type numeric interface {
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr
 }
 
+// setterFloat64 adapts a numeric [Setter] to a Setter[float64], sanitizing every
+// write through sanitizeFloatForT.
+//
+// Embedding Setter[T] promotes only JawsGet and JawsSet, so the adapter forwards
+// the optional event and attribute interfaces explicitly. Without that, wrapping
+// would hide them from [jaws.Element.ApplyGetter], silently dropping the Clicked,
+// ContextMenu and InitialHTMLAttr hooks a [Binder] exposes. Each forward reports
+// "not handled" when the wrapped Setter does not implement the interface, which is
+// what ApplyGetter and the event dispatch already expect for a plain setter.
 type setterFloat64[T numeric] struct {
 	Setter[T]
+}
+
+func (s setterFloat64[T]) JawsClick(elem *jaws.Element, click jaws.Click) (err error) {
+	err = jaws.ErrEventUnhandled
+	if h, ok := s.Setter.(jaws.ClickHandler); ok {
+		err = h.JawsClick(elem, click)
+	}
+	return
+}
+
+func (s setterFloat64[T]) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err error) {
+	err = jaws.ErrEventUnhandled
+	if h, ok := s.Setter.(jaws.ContextMenuHandler); ok {
+		err = h.JawsContextMenu(elem, click)
+	}
+	return
+}
+
+func (s setterFloat64[T]) JawsInput(elem *jaws.Element, value string) (err error) {
+	err = jaws.ErrEventUnhandled
+	if h, ok := s.Setter.(jaws.InputHandler); ok {
+		err = h.JawsInput(elem, value)
+	}
+	return
+}
+
+func (s setterFloat64[T]) JawsInitialHTMLAttr(elem *jaws.Element) (attr template.HTMLAttr) {
+	if h, ok := s.Setter.(jaws.InitialHTMLAttrHandler); ok {
+		attr = h.JawsInitialHTMLAttr(elem)
+	}
+	return
 }
 
 // sanitizeFloatForT validates value before it is converted to T and reports
@@ -193,6 +234,13 @@ func makeSetterFloat64for[T numeric](s *Setter[float64], value any) bool {
 // bridge can lose precision: not every integer magnitude beyond 2^53 is exactly
 // representable as float64.
 //
+// Writes are sanitized whatever the bound type. [Setter.JawsSet] returns
+// [ErrFloatNotFinite] for a NaN or infinite value and [ErrFloatOutOfRange] for a
+// finite value that does not fit the bound type, leaving the bound value
+// unchanged in both cases. The float64 case is sanitized too, so an untrusted
+// value cannot store a NaN that would defeat the equality comparison every
+// change-detecting setter relies on.
+//
 // When an integer loses precision in that conversion, writing the canonical
 // float64 returned by [Getter.JawsGet] back through [Setter.JawsSet] preserves
 // the underlying integer and returns [jaws.ErrValueUnchanged]. This also applies
@@ -216,7 +264,13 @@ func makeSetterFloat64for[T numeric](s *Setter[float64], value any) bool {
 func MakeSetterFloat64(value any) (s Setter[float64]) {
 	switch v := value.(type) {
 	case Setter[float64]:
-		return v
+		// Wrap rather than pass through: setterFloat64 is where the non-finite guard
+		// lives, and a float64 setter is the one settable case that needs no
+		// conversion, so passing it through unchanged would be the only binding that
+		// accepts NaN. The wrapper costs nothing else here: sanitizeFloatForT[float64]
+		// takes the finiteness-only default branch and reports mayAlias false, and
+		// T(value) is the identity, so no conversion or extra JawsGet is introduced.
+		return setterFloat64[float64]{Setter: v}
 	case Getter[float64]:
 		return setterReadOnly[float64]{v}
 	case float64:

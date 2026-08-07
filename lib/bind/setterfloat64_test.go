@@ -2,6 +2,7 @@ package bind
 
 import (
 	"errors"
+	"html/template"
 	"math"
 	"reflect"
 	"strconv"
@@ -22,6 +23,7 @@ func (tg testGetter[T]) JawsGet(elem *jaws.Element) T {
 }
 
 func Test_makeSetterFloat64types(t *testing.T) {
+	tsfloat64 := newTestSetter(float64(0))
 	tsint := newTestSetter(int(0))
 	tsuintptr := newTestSetter(uintptr(0))
 	tests := []struct {
@@ -31,8 +33,8 @@ func Test_makeSetterFloat64types(t *testing.T) {
 	}{
 		{
 			name:  "Setter[float64]",
-			v:     setterFloat64[float64]{},
-			wantS: setterFloat64[float64]{},
+			v:     tsfloat64,
+			wantS: setterFloat64[float64]{tsfloat64},
 		},
 		{
 			name:  "Getter[float64]",
@@ -568,4 +570,181 @@ func Test_makeSetterFloat64_panicNamedNumeric(t *testing.T) {
 
 	assertPanics("value", Celsius(20))
 	assertPanics("setter", newTestSetter[Celsius](20))
+}
+
+// Test_setterFloat64_rejectsNonFiniteForEveryNumericType pins that
+// [MakeSetterFloat64] applies the non-finite guard uniformly, whatever the bound
+// numeric type. float64 is the case worth pinning: it is the only settable type
+// that reaches JawsSet without a conversion step, so a missing guard there would
+// store a NaN that permanently defeats the equality-based update dedup in
+// binder.JawsSetLocked (NaN != NaN) and, for the float widgets in lib/ui, would
+// terminate every Request that later renders it.
+func Test_setterFloat64_rejectsNonFiniteForEveryNumericType(t *testing.T) {
+	nonFinite := []float64{math.NaN(), math.Inf(1), math.Inf(-1)}
+
+	assertRejects := func(t *testing.T, name string, s Setter[float64], unchanged func() bool) {
+		t.Helper()
+		for _, bad := range nonFinite {
+			if err := s.JawsSet(nil, bad); !errors.Is(err, ErrFloatNotFinite) {
+				t.Errorf("%s: JawsSet(%v) = %v, want ErrFloatNotFinite", name, bad, err)
+			}
+			if !unchanged() {
+				t.Fatalf("%s: JawsSet(%v) mutated the bound value", name, bad)
+			}
+		}
+	}
+
+	t.Run("float64", func(t *testing.T) {
+		var mu sync.Mutex
+		value := 1.5
+		assertRejects(t, "float64", MakeSetterFloat64(New(&mu, &value)), func() bool {
+			return value == 1.5
+		})
+	})
+
+	t.Run("float32", func(t *testing.T) {
+		var mu sync.Mutex
+		value := float32(1.5)
+		assertRejects(t, "float32", MakeSetterFloat64(New(&mu, &value)), func() bool {
+			return value == 1.5
+		})
+	})
+
+	t.Run("int", func(t *testing.T) {
+		var mu sync.Mutex
+		value := 3
+		assertRejects(t, "int", MakeSetterFloat64(New(&mu, &value)), func() bool {
+			return value == 3
+		})
+	})
+}
+
+// Test_setterFloat64_float64PassThroughBehavior pins the behavior the non-finite
+// guard must not disturb for a plain float64 binding: finite values are stored,
+// an unchanged value still reports jaws.ErrValueUnchanged, and the setter still
+// resolves to the same tag key as the underlying Binder.
+func Test_setterFloat64_float64PassThroughBehavior(t *testing.T) {
+	var mu sync.Mutex
+	value := 0.0
+	bind := New(&mu, &value)
+	s := MakeSetterFloat64(bind)
+
+	if err := s.JawsSet(nil, 2.5); err != nil {
+		t.Fatalf("JawsSet(2.5): %v", err)
+	}
+	if value != 2.5 {
+		t.Fatalf("stored value = %v, want 2.5", value)
+	}
+	if got := s.JawsGet(nil); got != 2.5 {
+		t.Fatalf("JawsGet() = %v, want 2.5", got)
+	}
+	if err := s.JawsSet(nil, 2.5); !errors.Is(err, jaws.ErrValueUnchanged) {
+		t.Fatalf("JawsSet(2.5) again = %v, want ErrValueUnchanged", err)
+	}
+
+	tags, err := tag.TagExpand(s)
+	if err != nil {
+		t.Fatalf("TagExpand: %v", err)
+	}
+	if len(tags) != 1 || tags[0] != any(&value) {
+		t.Fatalf("TagExpand() = %#v, want [%p]", tags, &value)
+	}
+}
+
+// inputSetterFloat64 is a Setter[float64] that also handles raw browser input, so
+// the tests can exercise setterFloat64's InputHandler forwarding. bind.Binder
+// covers the click, context-menu and initial-attribute interfaces but not this one.
+type inputSetterFloat64 struct {
+	*testSetter[float64]
+	got string
+}
+
+func (is *inputSetterFloat64) JawsInput(elem *jaws.Element, value string) error {
+	is.got = value
+	return nil
+}
+
+// Test_setterFloat64_forwardsOptionalInterfaces pins that adapting a numeric
+// Setter stays transparent to jaws.Element.ApplyGetter. The adapter embeds
+// Setter[T], which promotes only JawsGet and JawsSet, so the optional event and
+// attribute interfaces must be forwarded explicitly or a Binder's Clicked,
+// ContextMenu and InitialHTMLAttr hooks would silently stop firing once the value
+// is bound to a float widget.
+func Test_setterFloat64_forwardsOptionalInterfaces(t *testing.T) {
+	t.Run("delegates to the wrapped setter", func(t *testing.T) {
+		var mu sync.Mutex
+		value := 1.5
+		var clicked, contextMenu int
+		b := New(&mu, &value).
+			Clicked(func(Binder[float64], *jaws.Element, jaws.Click) error {
+				clicked++
+				return nil
+			}).
+			ContextMenu(func(Binder[float64], *jaws.Element, jaws.Click) error {
+				contextMenu++
+				return nil
+			}).
+			InitialHTMLAttr(func(Binder[float64], *jaws.Element) template.HTMLAttr {
+				return `data-x="1"`
+			})
+		s := MakeSetterFloat64(b)
+
+		ch, ok := s.(jaws.ClickHandler)
+		if !ok {
+			t.Fatal("adapter does not implement jaws.ClickHandler")
+		}
+		if err := ch.JawsClick(nil, jaws.Click{}); err != nil || clicked != 1 {
+			t.Errorf("JawsClick() = %v, clicked = %d, want nil and 1", err, clicked)
+		}
+
+		cm, ok := s.(jaws.ContextMenuHandler)
+		if !ok {
+			t.Fatal("adapter does not implement jaws.ContextMenuHandler")
+		}
+		if err := cm.JawsContextMenu(nil, jaws.Click{}); err != nil || contextMenu != 1 {
+			t.Errorf("JawsContextMenu() = %v, contextMenu = %d, want nil and 1", err, contextMenu)
+		}
+
+		ah, ok := s.(jaws.InitialHTMLAttrHandler)
+		if !ok {
+			t.Fatal("adapter does not implement jaws.InitialHTMLAttrHandler")
+		}
+		if got := ah.JawsInitialHTMLAttr(nil); got != `data-x="1"` {
+			t.Errorf("JawsInitialHTMLAttr() = %q, want %q", got, `data-x="1"`)
+		}
+	})
+
+	t.Run("forwards input to a wrapped InputHandler", func(t *testing.T) {
+		is := &inputSetterFloat64{testSetter: newTestSetter(1.5)}
+		s := MakeSetterFloat64(is)
+		ih, ok := s.(jaws.InputHandler)
+		if !ok {
+			t.Fatal("adapter does not implement jaws.InputHandler")
+		}
+		if err := ih.JawsInput(nil, "2.5"); err != nil {
+			t.Fatalf("JawsInput(): %v", err)
+		}
+		if is.got != "2.5" {
+			t.Errorf("wrapped JawsInput got %q, want %q", is.got, "2.5")
+		}
+	})
+
+	t.Run("reports unhandled for a plain setter", func(t *testing.T) {
+		// A Setter that implements none of the optional interfaces must leave the
+		// event unhandled so dispatch falls through to the widget, and must
+		// contribute no initial attribute.
+		s := MakeSetterFloat64(newTestSetter(1.5))
+		if err := s.(jaws.ClickHandler).JawsClick(nil, jaws.Click{}); !errors.Is(err, jaws.ErrEventUnhandled) {
+			t.Errorf("JawsClick() = %v, want ErrEventUnhandled", err)
+		}
+		if err := s.(jaws.ContextMenuHandler).JawsContextMenu(nil, jaws.Click{}); !errors.Is(err, jaws.ErrEventUnhandled) {
+			t.Errorf("JawsContextMenu() = %v, want ErrEventUnhandled", err)
+		}
+		if err := s.(jaws.InputHandler).JawsInput(nil, "1"); !errors.Is(err, jaws.ErrEventUnhandled) {
+			t.Errorf("JawsInput() = %v, want ErrEventUnhandled", err)
+		}
+		if got := s.(jaws.InitialHTMLAttrHandler).JawsInitialHTMLAttr(nil); got != "" {
+			t.Errorf("JawsInitialHTMLAttr() = %q, want empty", got)
+		}
+	})
 }

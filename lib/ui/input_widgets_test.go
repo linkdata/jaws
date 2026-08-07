@@ -631,3 +631,72 @@ func TestInputTextWidget_InitialHTMLAttrFromBinder(t *testing.T) {
 	_, got := renderUI(t, rq, NewText(b))
 	mustMatch(t, `^<input id="Jid\.[0-9]+" type="text" value="foo" data-binder="yes">$`, got)
 }
+
+// TestInputFloat_BinderAdapterStaysTransparent guards every binding that reaches a
+// float widget through bind.MakeSetterFloat64, which wraps the Binder in an adapter
+// so non-finite browser values are rejected. The adapter must not shadow what
+// jaws.Element.ApplyGetter looks for: the Binder's Clicked and InitialHTMLAttr hooks
+// and its pointer-derived dirty tag all have to survive the wrapping. An integer
+// binding is covered as well as float64, because it takes the converting path.
+func TestInputFloat_BinderAdapterStaysTransparent(t *testing.T) {
+	t.Run("float64", func(t *testing.T) {
+		_, rq := newCoreRequest(t)
+		var mu deadlock.Mutex
+		value := 1.5
+		var clicked int
+		b := bind.New(&mu, &value).
+			Clicked(func(bind.Binder[float64], *jaws.Element, jaws.Click) error {
+				clicked++
+				return nil
+			}).
+			InitialHTMLAttr(func(bind.Binder[float64], *jaws.Element) template.HTMLAttr {
+				return `data-unit="cm"`
+			})
+		number := NewNumber(bind.MakeSetterFloat64(b))
+
+		elem, got := renderUI(t, rq, number)
+		mustMatch(t, `^<input id="Jid\.[0-9]+" type="number" value="1.5" data-unit="cm">$`, got)
+
+		// The dirty target must still be the bound pointer, so a browser edit
+		// reconciles through the same tag the application dirties.
+		if !elem.HasTag(&value) {
+			t.Fatalf("element not registered under the bound pointer; tags: %v", rq.TagsOf(elem))
+		}
+		if err := jaws.CallEventHandlers(elem.UI(), elem, what.Click, "0 0 0 x"); err != nil {
+			t.Fatalf("click: %v", err)
+		}
+		if clicked != 1 {
+			t.Fatalf("Clicked hook fired %d times, want 1", clicked)
+		}
+
+		if err := number.JawsInput(elem, "2.5"); err != nil {
+			t.Fatalf("JawsInput(2.5): %v", err)
+		}
+		if value != 2.5 {
+			t.Fatalf("stored value = %v, want 2.5", value)
+		}
+
+		// A non-finite value is refused, leaving the bound value intact rather than
+		// storing a NaN that would break change detection.
+		if err := bind.MakeSetterFloat64(b).JawsSet(elem, math.NaN()); !errors.Is(err, bind.ErrFloatNotFinite) {
+			t.Fatalf("JawsSet(NaN) = %v, want bind.ErrFloatNotFinite", err)
+		}
+		if value != 2.5 {
+			t.Fatalf("stored value = %v after NaN, want 2.5", value)
+		}
+	})
+
+	t.Run("int", func(t *testing.T) {
+		_, rq := newCoreRequest(t)
+		var mu deadlock.Mutex
+		value := 3
+		b := bind.New(&mu, &value).InitialHTMLAttr(
+			func(bind.Binder[int], *jaws.Element) template.HTMLAttr { return `data-unit="px"` })
+
+		elem, got := renderUI(t, rq, NewNumber(bind.MakeSetterFloat64(b)))
+		mustMatch(t, `^<input id="Jid\.[0-9]+" type="number" value="3" data-unit="px">$`, got)
+		if !elem.HasTag(&value) {
+			t.Fatalf("element not registered under the bound pointer; tags: %v", rq.TagsOf(elem))
+		}
+	})
+}
