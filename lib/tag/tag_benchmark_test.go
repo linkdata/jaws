@@ -49,8 +49,7 @@ var tagExpandBenchSink []any
 func benchmarkTagExpandCase(b *testing.B, tag any) {
 	b.Helper()
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		got, err := TagExpand(tag)
 		if err != nil {
 			b.Fatal(err)

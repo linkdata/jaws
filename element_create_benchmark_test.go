@@ -27,14 +27,14 @@ func (benchCreateUI) JawsUpdate(elem *Element) {}
 //
 // Batching is deliberate: b.StopTimer and b.StartTimer each call runtime.ReadMemStats, so
 // toggling around a single sub-microsecond creation would leave the timed section tiny,
-// calibration would pick an enormous b.N, and the excluded setup would run for minutes.
+// calibration would pick an enormous iteration count, and the excluded setup would run
+// for minutes.
 // Amortising both calls over the batch keeps that honest, and deleting the batch keeps the
 // Request registry bounded instead of growing across iterations. The reported figure is per
 // batch of 64 Elements.
 //
-// The Jaws and Request are built before b.ResetTimer, and the final b.StopTimer excludes the
-// deferred Close: both would otherwise be divided into every reported figure, time and
-// allocations alike, making the result depend on b.N rather than on the Element.
+// [testing.B.Loop] excludes construction and the deferred Close from the measurement,
+// while the explicit timer calls exclude per-batch deletion.
 func BenchmarkElementCreateBatch(b *testing.B) {
 	b.ReportAllocs()
 	const batch = 64
@@ -51,8 +51,7 @@ func BenchmarkElementCreateBatch(b *testing.B) {
 	var ui benchCreateUI
 	elems := make([]*Element, 0, batch)
 
-	b.ResetTimer()
-	for range b.N {
+	for b.Loop() {
 		elems = elems[:0]
 		for range batch {
 			elem := rq.NewElement(ui)
@@ -65,5 +64,4 @@ func BenchmarkElementCreateBatch(b *testing.B) {
 		rq.DeleteElements(elems)
 		b.StartTimer()
 	}
-	b.StopTimer()
 }

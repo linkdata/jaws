@@ -49,8 +49,7 @@ func BenchmarkSingleCellDirtyFanout(b *testing.B) {
 
 	cell := g.cells[0][0]
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		// Mirror the framework's dirty dispatch: expand the toggle's tags and
 		// resolve each to its registered elements (Request.GetElements is the same
 		// tagMap lookup makeUpdateList performs). The sum is the number of element

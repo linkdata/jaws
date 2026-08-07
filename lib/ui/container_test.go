@@ -522,8 +522,7 @@ func benchChildren(start, count int) []jaws.UI {
 func BenchmarkContainerValidateChildren(b *testing.B) {
 	b.ReportAllocs()
 	children := benchChildren(0, 1000)
-	b.ResetTimer() // exclude the one-time fixture allocation so -benchtime=1x is honest
-	for range b.N {
+	for b.Loop() {
 		if _, ok := firstUnusableChild(children); ok {
 			b.Fatal("unexpected unusable child")
 		}
@@ -533,6 +532,7 @@ func BenchmarkContainerValidateChildren(b *testing.B) {
 func BenchmarkContainerUpdateAppendHeavy(b *testing.B) {
 	b.ReportAllocs()
 	const size = 1000
+	// Keep b.N because fixture cleanup leaves the timer stopped between iterations.
 	for range b.N {
 		b.StopTimer()
 		jw, rq := benchRequest(b)
@@ -553,6 +553,7 @@ func BenchmarkContainerUpdateAppendHeavy(b *testing.B) {
 func BenchmarkContainerUpdateMixed(b *testing.B) {
 	b.ReportAllocs()
 	const size = 1000
+	// Keep b.N because fixture cleanup leaves the timer stopped between iterations.
 	for range b.N {
 		b.StopTimer()
 		jw, rq := benchRequest(b)
