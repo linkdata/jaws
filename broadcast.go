@@ -383,10 +383,12 @@ func jsCallData(jsfunc, jsonstr string) string {
 // target selects which requests or elements receive the Call message. In each
 // receiving browser, jsfunc is resolved as a path from window and called with
 // JSON.parse(jsonstr); the matched element is not passed as this or as an
-// argument. A nil target calls each active Request once. A nonzero [key.Key]
-// target calls the matching active Request once without requiring a matching DOM
-// element; a zero key is ignored. Other targets follow [Jaws.Broadcast]'s tag
-// rules.
+// argument. jsfunc must be an application-controlled dot path. The browser
+// rejects an exact "__proto__" component; put user data in jsonstr, not jsfunc.
+//
+// A nil target calls each active Request once. A nonzero [key.Key] target calls
+// the matching active Request once without requiring a matching DOM element; a
+// zero key is ignored. Other targets follow [Jaws.Broadcast]'s tag rules.
 func (jw *Jaws) JsCall(target any, jsfunc, jsonstr string) {
 	jw.broadcastTo(target, what.Call, jsCallData(jsfunc, jsonstr))
 }

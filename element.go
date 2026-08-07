@@ -328,11 +328,13 @@ func (elem *Element) SetValue(value string) {
 //
 // In the receiving browser, jsfunc is resolved as a path from window and called
 // with JSON.parse(jsonstr); the Element is not passed as this or as an argument.
+// jsfunc must be an application-controlled dot path. The browser rejects an
+// exact "__proto__" component; put user data in jsonstr, not jsfunc.
 //
 // Call this while the [Element] is rendering or updating, when a send pass is
 // imminent; a call queued directly from an event handler is only flushed when the
-// processing loop is next woken (see [Element.queue]). To call JavaScript for
-// every element matching a tag, use [Jaws.JsCall].
+// processing loop is next woken. To call JavaScript for every element matching a
+// tag, use [Jaws.JsCall].
 func (elem *Element) JsCall(jsfunc, jsonstr string) {
 	elem.queue(what.Call, jsCallData(jsfunc, jsonstr))
 }

@@ -251,17 +251,17 @@ Tested attack payloads against the audit fixture:
 
 | Payload | Result |
 |---------|--------|
-| `__proto__.polluted=true` | Rejected by the fixture schema; the browser also rejects the `__proto__` path component |
+| `__proto__.polluted=true` | Rejected by the fixture schema |
 | `constructor.prototype.polluted=true` | Rejected |
 | `../../../etc/passwd="read"` | Rejected |
 | `X=999; alert(1)` | Rejected (invalid JSON) |
 | `X="<script>alert(1)</script>"` | Accepted as string value; rendered in JS variable, not DOM |
 | `X={"__proto__":{"polluted":true}}` | Rejected (type mismatch) |
 
-The browser rejects an exact `__proto__` path component before property access.
-JSON values are not scanned; an own `"__proto__"` member in a value remains
-ordinary data. `jq.Set`, `jq.SetChecked`, and application `PathSetter`
-implementations separately determine which paths the bound Go value accepts.
+`jawsVar` rejects exact `__proto__` path components before browser property
+access. It does not scan values for that name; own `"__proto__"` members remain
+data. The selected Go setter (`jq.Set`, `jq.SetChecked`, or an application
+`PathSetter`) independently controls accepted server-side paths.
 
 **Trust boundary (application responsibility):** the generic JSON path will set
 *any* exported field matched by its `json` tag, or by its Go name when the tag
@@ -423,7 +423,7 @@ this by blocking inline script execution.
 | Clickjacking | Header inspection | Protected (DENY + CSP) |
 | Directory traversal | Gobuster, manual probing | No hidden paths |
 | Information disclosure | Nikto, manual inspection | No leakage |
-| Prototype pollution via JsVar | Manual WebSocket testing | Exact `__proto__` path components rejected in browser |
+| `__proto__` JsVar/Call paths | Shipped-runtime regression | Rejected before browser property access |
 | Command injection via WebSocket | Manual testing of all commands | Whitelist enforced |
 | Protocol fuzzing | Malformed/oversized messages | Handled gracefully |
 
