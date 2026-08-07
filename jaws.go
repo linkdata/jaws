@@ -390,18 +390,18 @@ func (m secureHeadersMiddleware) ServeHTTP(hw http.ResponseWriter, hr *http.Requ
 	m.Handler.ServeHTTP(hw, hr)
 }
 
-// GenerateHeadHTML regenerates the HTML code that goes in the HEAD section,
-// ensuring that the provided URL resources in extra are loaded, along with the
-// JaWS JavaScript.
+// GenerateHeadHTML regenerates the HTML code that goes in the HEAD section.
 //
-// If one of the resources is named "favicon", its URL will be stored and can
-// be retrieved using [Jaws.FaviconURL].
+// It emits the provided URL resources in extra according to
+// [assets.PreloadHTML], along with the JaWS JavaScript and stylesheet. If an
+// extra resource's base name begins with "favicon" and its MIME type is image/*,
+// its URL is stored and can be retrieved using [Jaws.FaviconURL].
 //
 // If one or more URLs in extra fail to parse, GenerateHeadHTML still installs
 // the regenerated head HTML and Content-Security-Policy with the failing
 // resources omitted, and returns the joined parse errors.
 //
-// You only need to call this if you add your own images, scripts and stylesheets.
+// Call GenerateHeadHTML after changing [Jaws.Debug] or the extra resources.
 func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 	var jawsurl *url.URL
 	if jawsurl, err = url.Parse(jw.serveJS.Name); err == nil {
