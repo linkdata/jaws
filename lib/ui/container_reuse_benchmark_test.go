@@ -219,7 +219,7 @@ func BenchmarkContainerAppendRemoveUpdate(b *testing.B) {
 }
 
 // BenchmarkContainerRegisterFirstUpdate measures the lazy state-claim path used by an
-// update-only Register Element.
+// update-only registered Element.
 func BenchmarkContainerRegisterFirstUpdate(b *testing.B) {
 	b.StopTimer()
 	tr := newReuseRequest(b)
@@ -232,7 +232,7 @@ func BenchmarkContainerRegisterFirstUpdate(b *testing.B) {
 		batchSize := min(benchmarkContainerBatchSize, b.N-completed)
 		elems := make([]*jaws.Element, batchSize)
 		for i := range elems {
-			elems[i] = tr.NewElement(NewRegister(container))
+			elems[i] = tr.NewElement(registerUI{Updater: container})
 		}
 
 		b.StartTimer()

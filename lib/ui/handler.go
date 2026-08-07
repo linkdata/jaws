@@ -89,7 +89,9 @@ func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Request.NewElement if a bare pageTemplate value (whose Dot is any) were used.
 	// The pointer identity is always comparable and fresh per request. Element tracking
 	// lives in the page Element's state slot claimed by pageTemplate.JawsRender.
-	pt := &pageTemplate{Template: Template{Name: h.name, Dot: h.dot}}
+	// The private constructor bypasses NewTemplate's "div" default. pageTemplate
+	// executes the document directly and deliberately emits no generated wrapper.
+	pt := &pageTemplate{Template: newTemplate("", h.name, h.dot)}
 	if err := rw.NewUI(pt); err != nil {
 		_ = h.Log(err)
 		// A failure before any output (for example a missing template) can still
@@ -107,7 +109,9 @@ func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // The returned handler can be registered directly with a router. Each request
 // results in the template being looked up through the configured template
 // lookupers and rendered with a [With] value as the template data, exposing
-// dot through its Dot field.
+// dot through its Dot field. Handler renders without a generated wrapper and does
+// not use dot as a tag, so dot may be arbitrary template data. The handler reuses
+// dot across requests; dot and its callbacks must support concurrent execution.
 func Handler(jw *jaws.Jaws, name string, dot any) http.Handler {
 	return uiHandler{Jaws: jw, name: name, dot: dot}
 }

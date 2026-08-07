@@ -117,15 +117,6 @@ func TestOption_RenderBoolNameTakesPrecedenceOverCallerValue(t *testing.T) {
 	}
 }
 
-func TestRegister_Render(t *testing.T) {
-	_, rq := newCoreRequest(t)
-	ui := NewRegister(NewSpan(testHTMLGetter("x")))
-	_, got := renderUI(t, rq, ui)
-	if got != "" {
-		t.Fatalf("expected empty output got %q", got)
-	}
-}
-
 func TestHTMLInner_RenderInitialHTMLAttrFromObject(t *testing.T) {
 	_, rq := newCoreRequest(t)
 

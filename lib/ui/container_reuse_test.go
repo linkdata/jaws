@@ -143,6 +143,72 @@ func TestContainer_RebuiltTemplateChildrenAreReused(t *testing.T) {
 	}
 }
 
+// TestContainer_DefaultWrappedTemplateChildrenCanReorderAndRemove verifies that the
+// wrapper NewTemplate supplies for an empty tag gives reconciliation a direct DOM node
+// for each child. Reordering retained children must queue only Order, while removing one
+// must target its existing Jid rather than replace the remaining children.
+func TestContainer_DefaultWrappedTemplateChildrenCanReorderAndRemove(t *testing.T) {
+	tr := newReuseRequest(t)
+
+	first := &reuseRow{id: 1}
+	second := &reuseRow{id: 2}
+	third := &reuseRow{id: 3}
+	tc := &rebuildingContainer{
+		rows: []*reuseRow{first, second, third},
+		build: func(row *reuseRow) jaws.UI {
+			return NewTemplate("", "row", row)
+		},
+	}
+	elem := tr.NewElement(NewContainer("section", tc))
+	var output strings.Builder
+	if err := elem.JawsRender(&output, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(output.String(), `<div id="Jid.`); got != len(tc.rows) {
+		t.Fatalf("generated div wrappers = %d, want %d: %q", got, len(tc.rows), output.String())
+	}
+	if messages := nestedReorderDrainWire(t, tr, "default wrapper initial render"); len(messages) != 0 {
+		t.Fatalf("initial render queued wire messages: %+v", messages)
+	}
+
+	childJid := func(row *reuseRow) jaws.Jid {
+		t.Helper()
+		elems := tr.GetElements(row)
+		if len(elems) != 1 {
+			t.Fatalf("row %d elements = %d, want 1", row.id, len(elems))
+		}
+		return elems[0].Jid()
+	}
+	firstJid := childJid(first)
+	secondJid := childJid(second)
+	thirdJid := childJid(third)
+
+	tc.rows = []*reuseRow{third, first}
+	elem.JawsUpdate()
+	messages := nestedReorderDrainWire(t, tr, "default wrapper reorder and remove")
+	if len(messages) != 2 {
+		t.Fatalf("wire messages = %d, want 2: %+v", len(messages), messages)
+	}
+	if got := messages[0]; got.Jid != elem.Jid() || got.What != what.Remove || got.Data != secondJid.String() {
+		t.Errorf("remove message = {%v %v %q}, want {%v %v %q}",
+			got.Jid, got.What, got.Data, elem.Jid(), what.Remove, secondJid.String())
+	}
+	wantOrder := thirdJid.String() + " " + firstJid.String()
+	if got := messages[1]; got.Jid != elem.Jid() || got.What != what.Order || got.Data != wantOrder {
+		t.Errorf("order message = {%v %v %q}, want {%v %v %q}",
+			got.Jid, got.What, got.Data, elem.Jid(), what.Order, wantOrder)
+	}
+	if got := tr.GetElementByJid(secondJid); got != nil {
+		t.Errorf("removed row Element = %v, want nil", got)
+	}
+	if got := childJid(third); got != thirdJid {
+		t.Errorf("third row Jid = %v, want retained %v", got, thirdJid)
+	}
+	if got := childJid(first); got != firstJid {
+		t.Errorf("first row Jid = %v, want retained %v", got, firstJid)
+	}
+}
+
 // TestContainer_StableChildrenAreReused checks identity-based reuse for children returned as
 // the same values on every JawsContains call.
 func TestContainer_StableChildrenAreReused(t *testing.T) {

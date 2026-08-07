@@ -12,11 +12,11 @@ import (
 	"github.com/linkdata/jaws/lib/tag"
 )
 
-// benchOwnedTemplates renders a wrapped template containing many unwrapped nested
-// templates, the shape that makes a template update replace a whole generation of
-// Elements at once.
+// benchOwnedTemplates renders a wrapped template containing many nested templates,
+// the shape that makes a template update replace a whole generation of Elements at
+// once.
 const benchOwnedTemplates = `
-{{define "bench-parent"}}{{range $.Dot.Names}}{{$.RequestWriter.Template "" "bench-leaf" $.Dot}}{{end}}{{end}}
+{{define "bench-parent"}}{{range $.Dot.Names}}{{$.RequestWriter.Template "div" "bench-leaf" $.Dot}}{{end}}{{end}}
 {{define "bench-leaf"}}leaf{{end}}
 `
 

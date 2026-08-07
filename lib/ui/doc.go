@@ -11,10 +11,10 @@
 // for each request. Widgets from different requests may refer to the same
 // synchronized application state, binders, handlers, or tags.
 //
-// [Container], [Tbody], [Select], [Option], [Register], and [Template]
-// constructors return values; other constructors generally return pointers. Use
-// Container, Tbody, Select, and Template as values because taking their addresses
-// changes definition equality to pointer identity.
+// [Container], [Tbody], [Select], [Option], and [Template] constructors return
+// values; other constructors generally return pointers. Use Container, Tbody,
+// Select, and Template as values because taking their addresses changes definition
+// equality to pointer identity.
 //
 // See [jaws.UI] and each concrete widget for comparability, typed-nil, and
 // zero-value behavior. No pointer widget in this package documents nil-receiver
@@ -23,8 +23,15 @@
 // Within one request, a widget normally backs one live [jaws.Element]. The
 // HTML-inner widgets, [Img], [Option], [Template], [Container], [Tbody], and
 // [Select] support multiple live Elements under their documented conditions.
-// [Register] does so only when its updater does; input widgets and [JsVar] require
-// distinct widget values.
+// Input widgets and [JsVar] require distinct widget values.
+//
+// [RequestWriter.Register] binds a render-independent updater to a DOM element
+// authored by the surrounding template. It is an escape hatch for custom markup,
+// not a replacement for rendering a widget normally.
+//
+// Container children must render one addressable direct DOM node carrying their
+// Element's JaWS ID so reconciliation can remove and order them. [NewTemplate]
+// supplies that node through its generated wrapper.
 //
 // HTML-inner widgets route content through [bind.MakeHTMLGetter]. Plain strings
 // are treated as trusted HTML, while [bind.Getter][string], [bind.Binder][string]

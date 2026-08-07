@@ -178,8 +178,10 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 
 func TestTemplate_RenderWithTableRowWrapper(t *testing.T) {
 	jw, rq := newCoreRequest(t)
+	// The native template action includes the structural td fragment without another
+	// JaWS wrapper; the managed row Template supplies the one addressable tr.
 	_ = jw.AddTemplateLookuper(template.Must(template.New("row").Parse(
-		`<td>{{.Dot}}</td>`,
+		`{{template "cell" .}}{{define "cell"}}<td>{{.Dot}}</td>{{end}}`,
 	)))
 
 	var sb bytes.Buffer
@@ -195,23 +197,45 @@ func TestTemplate_RenderWithTableRowWrapper(t *testing.T) {
 	}
 }
 
-func TestTemplate_RenderWithoutWrapper(t *testing.T) {
+func TestTemplate_RenderWithDefaultWrapper(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	_ = jw.AddTemplateLookuper(template.Must(template.New("bare").Parse(
-		`<td>{{.Dot}}</td>`,
+		`<span>{{.Dot}}</span>`,
 	)))
 
 	var sb bytes.Buffer
 	rw := RequestWriter{Request: rq, Writer: &sb}
-	if err := rw.Template("", "bare", tag.Tag("cell"), `class="ignored"`); err != nil {
+	dot := tag.Tag("cell")
+	if err := rw.Template("", "bare", dot, `class="defaulted"`); err != nil {
 		t.Fatal(err)
 	}
-	got := sb.String()
-	if got != `<td>cell</td>` {
-		t.Fatalf("unexpected unwrapped template output: %q", got)
+	elems := rq.GetElements(dot)
+	if len(elems) != 1 {
+		t.Fatalf("elements tagged with %q = %d, want 1", dot, len(elems))
 	}
-	if strings.Contains(got, "Jid.") {
-		t.Fatalf("unwrapped template should not contain generated wrapper markers: %q", got)
+	want := `<div id="` + elems[0].Jid().String() + `" class="defaulted"><span>cell</span></div>`
+	if got := sb.String(); got != want {
+		t.Fatalf("default-wrapped template output = %q, want %q", got, want)
+	}
+}
+
+// TestTemplate_DirectEmptyWrapperRendersUnwrapped preserves the raw path used by
+// private construction and the zero value. Public callers using NewTemplate or
+// RequestWriter.Template get the default wrapper covered above.
+func TestTemplate_DirectEmptyWrapperRendersUnwrapped(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	_ = jw.AddTemplateLookuper(template.Must(template.New("bare").Parse(
+		`<span>{{.Dot}}</span>`,
+	)))
+
+	var sb bytes.Buffer
+	rw := RequestWriter{Request: rq, Writer: &sb}
+	tmpl := newTemplate("", "bare", tag.Tag("cell"))
+	if err := rw.NewUI(tmpl, `class="ignored"`); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := sb.String(), `<span>cell</span>`; got != want {
+		t.Fatalf("direct empty-wrapper output = %q, want %q", got, want)
 	}
 }
 
@@ -388,17 +412,10 @@ func TestTemplate_UpdateLogsMissingTemplate(t *testing.T) {
 	}
 }
 
-func TestTemplate_UpdateWithoutWrapperNoop(t *testing.T) {
-	jw, rq := newCoreRequest(t)
-	logger := new(templateLogger)
-	jw.Logger = logger
-
-	tpl := NewTemplate("", "missingtemplate", tag.Tag("dot"))
-	elem := rq.NewElement(tpl)
-	tpl.JawsUpdate(elem)
-
-	if len(logger.errors) != 0 {
-		t.Fatalf("logged errors = %d, want 0", len(logger.errors))
+func TestNewTemplate_EmptyWrapperDefaultsToDiv(t *testing.T) {
+	tpl := NewTemplate("", "partial", tag.Tag("dot"))
+	if tpl.OuterHTMLTag != "div" {
+		t.Fatalf("OuterHTMLTag = %q, want %q", tpl.OuterHTMLTag, "div")
 	}
 }
 

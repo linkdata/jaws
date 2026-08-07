@@ -21,11 +21,11 @@ import (
 // The templates used by the ownership tests. Every nested helper passes $.Dot along,
 // so one dot tags the whole subtree and GetElements(dot) counts it.
 const ownedTestTemplates = `
-{{define "owned-parent"}}{{$.RequestWriter.Template "" "owned-leaf" $.Dot}}{{end}}
+{{define "owned-parent"}}{{$.RequestWriter.Template "div" "owned-leaf" $.Dot}}{{end}}
 {{define "owned-leaf"}}leaf{{end}}
-{{define "owned-deep"}}{{$.RequestWriter.Template "" "owned-parent" $.Dot}}{{end}}
-{{define "owned-failafter"}}{{$.RequestWriter.Template "" "owned-leaf" $.Dot}}{{$.Dot.Check}}{{end}}
-{{define "owned-many"}}{{range $.Dot.Names}}{{$.RequestWriter.Template "" "owned-leaf" $.Dot}}{{end}}{{end}}
+{{define "owned-deep"}}{{$.RequestWriter.Template "div" "owned-parent" $.Dot}}{{end}}
+{{define "owned-failafter"}}{{$.RequestWriter.Template "div" "owned-leaf" $.Dot}}{{$.Dot.Check}}{{end}}
+{{define "owned-many"}}{{range $.Dot.Names}}{{$.RequestWriter.Template "div" "owned-leaf" $.Dot}}{{end}}{{end}}
 {{define "owned-container"}}{{$.RequestWriter.Container "div" $.Dot.Container}}{{end}}
 {{define "owned-register"}}<div id="{{$.RequestWriter.Register $.Dot}}"></div>{{end}}
 {{define "owned-radiogroup"}}{{range $.RequestWriter.RadioGroup $.Dot.Radios}}{{.Radio}}{{.Label}}{{end}}{{end}}
@@ -120,8 +120,8 @@ func newOwnedRequest(t *testing.T) (*jaws.Jaws, *jaws.Request) {
 const maxProbedJid = jaws.Jid(500)
 
 // countRegistered returns how many Elements are still registered in rq, probing the
-// Jid space directly so Elements carrying no tag of their own (unwrapped nested
-// templates, container children) are counted too.
+// Jid space directly so Elements carrying no unique tag of their own (for example,
+// container children) are counted too.
 func countRegistered(t *testing.T, rq *jaws.Request) (count int) {
 	t.Helper()
 	for jid := jaws.Jid(1); jid <= maxProbedJid; jid++ {
@@ -143,10 +143,9 @@ func renderOwned(t *testing.T, rq *jaws.Request, ui jaws.UI) *jaws.Element {
 	return elem
 }
 
-// TestTemplate_NestedUnwrappedDoesNotLeakOnUpdate is the reported issue (#216): a
-// wrapped template invoking an unwrapped nested one must not register an extra
-// Element on every update.
-func TestTemplate_NestedUnwrappedDoesNotLeakOnUpdate(t *testing.T) {
+// TestTemplate_NestedTemplateDoesNotLeakOnUpdate verifies that a template invoking a
+// nested one does not register an extra Element on every update.
+func TestTemplate_NestedTemplateDoesNotLeakOnUpdate(t *testing.T) {
 	jw, err := jaws.New()
 	if err != nil {
 		t.Fatal(err)
@@ -392,7 +391,7 @@ func TestRequestWriter_NewUIReportsElementBeforeRendering(t *testing.T) {
 }
 
 // TestTemplate_UpdateReclaimsWholeSubtree covers the recursive walk: the wrapper
-// owns a nested unwrapped template that owns another one.
+// owns a nested template that owns another one.
 func TestTemplate_UpdateReclaimsWholeSubtree(t *testing.T) {
 	_, rq := newOwnedRequest(t)
 

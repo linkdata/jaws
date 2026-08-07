@@ -17,6 +17,8 @@ import (
 // preserves their Elements and nested subtrees. Nested containers whose children
 // change need their own update. Child Element identity is scoped to its parent;
 // moving a child definition between parents does not preserve its Element.
+// Each child must render one direct DOM node carrying its Element's JaWS ID. Use
+// [NewTemplate] for Template children so removal and ordering can target a wrapper.
 //
 // Equal Container values may back multiple live Elements in one [jaws.Request]
 // when the provider is safe for all calls and each child UI value reused across
@@ -47,8 +49,8 @@ func (u Container) JawsRender(elem *jaws.Element, w io.Writer, params []any) err
 
 // JawsUpdate reconciles u's direct children.
 //
-// JawsUpdate supports update-only use through [Register]. If elem's widget state
-// cannot be used, it reports [jaws.ErrElementStateClaimed] through
+// JawsUpdate supports update-only use through [RequestWriter.Register]. If elem's
+// widget state cannot be used, it reports [jaws.ErrElementStateClaimed] through
 // [jaws.Request.MustLog] without calling the provider or queuing browser work.
 func (u Container) JawsUpdate(elem *jaws.Element) {
 	u.update(elem)

@@ -15,67 +15,60 @@ This package is the home of JaWS widget implementations.
 `rw.Text(...)`, and `rw.Select(...)` for concise template use.
 `rw.Template(tag, ...)` renders partial templates inside a generated JaWS
 wrapper using the provided HTML tag, so template bodies should let that wrapper
-own JaWS identity and wrapper-level attributes. Passing an empty tag renders the
-template without a generated wrapper. Attribute params passed to
-`rw.Template(...)` are applied to the generated wrapper when one exists.
+own JaWS identity and wrapper-level attributes. Passing an empty tag selects the
+default `div` wrapper. Attribute params passed to `rw.Template(...)` are applied
+to that generated wrapper.
 Template bodies used with `rw.Template(...)` must be partials; full page
 templates should be rendered through `ui.Handler`.
 
-Template execution is best-effort rather than transactional. Nested UI helpers
-such as `{{$.Span ...}}` register elements as the template runs, and custom
-template actions may queue updates or mutate application state. If execution
-later returns an error, JaWS returns or logs that error and preserves whatever
-already happened; it does not roll back partial output, queued messages, or
-application side effects. The tracked elements the failed execution registered are
-unregistered, since nothing will update them.
+`rw.Register(...)` is the escape hatch for attaching a render-independent updater
+to an element whose markup is written directly in the surrounding template. Its
+returned JaWS ID must become that element's `id`:
 
-A template owns every element created through the `RequestWriter` it is given —
-`{{$.Span ...}}`, `{{$.Button ...}}`, `{{$.Register ...}}`, `{{$.RadioGroup ...}}`,
-a nested `{{$.Template ...}}`, and so on. A successful update unregisters the ones
-the previous render left behind, along with the DOM that `SetInner` replaces.
-Ownership is recorded when an element is created rather than after it renders, so
-an element that never reached the browser is reclaimed too. On updates that
-`SetInner` is queued only after a complete successful render, so a failed update
-leaves the browser DOM unchanged — and with it the previous render's elements —
-while earlier server-side side effects from that attempted render may remain. Treat
-template execution errors as application bugs: validate data before rendering and
-keep template actions infallible once they start emitting output or nested UI.
+```gotemplate
+<section id="{{$.Register .Dot.Panel}}" class="panel">
+  template-authored content
+</section>
+```
 
-`$.RadioGroup` has one attribution condition: its radio and label elements belong to
-the template whose body called it, not to the wrapper their markup lands in. Call it
-from the template that renders the group; see `RequestWriter.RadioGroup` for what
-happens when the two differ.
+`Register` never calls `JawsRender`; use it for a custom updater designed to work
+without render-time initialization. It tags the element with the updater, attaches
+its event handlers, and calls `JawsUpdate` once for initial state. Write HTML
+attributes in the template because attribute params are ignored. Prefer a normal
+widget helper whenever the widget can render its own element; see
+`RequestWriter.Register` for the standard-widget limitations.
 
-The ownership set lives in the element's widget state slot (`jaws.SetElementState`),
-not on the `ui.Template` value, which is what keeps `NewTemplate` returning a plain
-value. That matters for containers: a `JawsContains` implementation may
-rebuild equal child values on every call and the container will still reuse their
-elements, because that equality *is* the reuse key. Always use `ui.Template` as a
-value, as `NewTemplate` returns it; taking its address is unsupported because it changes
-container reuse to pointer identity. Under the general `jaws.UI` contract, the resulting
-Template must be comparable at runtime and equal to itself — a slice, map or func `Dot`
-makes the whole widget unusable, and implementing `tag.TagGetter` does not change that,
-since it addresses tag resolution rather than widget comparability.
+Use Go's native template action when a static structural fragment must be included
+without another JaWS-managed wrapper:
 
-Comparability alone is not enough. A nil-interface `Dot` is valid and contributes no tag.
-A typed nil is a non-nil interface and follows its dynamic type's comparability and
-expansion rules. Rendering expands a non-nil-interface `Dot` through `tag.TagExpand`,
-which rejects the exact dynamic types `string`, `bool`, `int`/`int8`/`int16`/`int32`/`int64`,
-`uint`/`uint8`/`uint16`/`uint32`/`uint64`, `float32`/`float64`, `template.HTML`,
-`template.HTMLAttr`, `jid.Jid` and `key.Key`. Aliases of a rejected type have that same
-dynamic type and are rejected. `uintptr` and the complex types are not on the rejection
-list. Other defined types are not rejected merely because their underlying predeclared
-type is on it; they must still be comparable and equal to themselves. Wrap a rejected
-scalar in `tag.Tag("...")` or a comparable struct when it should be a tag.
+```gotemplate
+{{template "partial" .Dot}}
+```
 
-A template claims that slot while rendering, so at most one template may render a given
-element. A composite UI must use template values equal under `==` for rendering and
-updating that element; using unequal values is unsupported. A wrapped template is
-therefore not usable as a `$.Register` updater — `$.Register` never invokes its updater's
-render method — while an unwrapped one is, since its updates are a documented no-op. On
-an element no template claimed, a wrapped template's update reports
-`ErrElementStateUnclaimed` through `jaws.Request.MustLog`, which **panics** when no
-`Jaws.Logger` is configured.
+`rw.Template` supplies an addressable wrapper for updates and container
+reconciliation. Choose the semantic element required by the DOM context, such as
+`tr`, `td`, `li`, or `option`, instead of relying on the `div` default there.
+
+Template execution is not transactional. An error may leave partial output, queued
+messages, or application side effects in place. Elements created by the failed
+attempt are unregistered; a failed update retains the previous browser DOM and its
+Elements.
+
+A Template owns every Element created through its `RequestWriter`. A successful
+update unregisters the previous generation when it replaces the wrapper content.
+
+Call `$.RadioGroup` from the Template that renders the group; ownership follows the
+call site rather than the wrapper receiving its markup.
+
+Use the `ui.Template` value returned by `NewTemplate` directly; taking its address
+changes container identity to pointer identity. A container may retain Elements for
+equal values rebuilt by `JawsContains`. A Template must be comparable and equal to
+itself, and its `Dot` must be nil or usable as a tag under `tag.TagExpand`. Use
+`tag.Tag("...")` for string tags.
+
+A Template with a non-empty `OuterHTMLTag` can update only an Element rendered by
+an equal Template value. It is not usable as a `$.Register` updater because
+registration does not call its renderer.
 
 ## Container-family value widgets
 
@@ -100,6 +93,10 @@ values may back several live Elements within one request when their providers or
 handlers are safe for all calls and each child UI value reused across those Elements
 supports multiple live Elements.
 
+Each child must render one addressable direct DOM node carrying its Element's JaWS ID,
+because removal and ordering target that node. Construct Template children with
+`NewTemplate`, which always supplies a wrapper.
+
 Reconciliation updates direct children only. Reordering retained equal children
 preserves their Elements and nested subtrees; changed nested containers need their own
 update. Child Element identity is parent-scoped, so moving a child definition between
@@ -110,11 +107,9 @@ provider, panic when rendering or updating calls the missing provider. A zero
 Select behaves the same for render and update, while its `JawsInput` is a no-op.
 A typed-nil provider is called normally and must tolerate its nil receiver itself.
 
-Container, Tbody, and Select support update-only use through `Register`. A Select
-registered this way retains no handler-derived tag for its own post-set dirtying.
-Any handler-initiated dirtying still occurs, and separately registered tags remain
-registered. Use ordinary Select rendering when Select should register and use a usable
-tag exposed by its handler.
+Container, Tbody, and Select support update-only use through
+`RequestWriter.Register`, although ordinary rendering provides their full
+initialization. A registered Select has no getter-derived tag for post-input dirtying.
 
 You can also use explicit constructors through:
 

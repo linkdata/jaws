@@ -7,55 +7,42 @@ import (
 	"github.com/linkdata/jaws/lib/jid"
 )
 
-// Register is an update-only widget that renders no HTML; it exists so its
-// embedded [jaws.Updater] receives dynamic updates.
-//
-// One Register value may back multiple live [jaws.Element] values only when its
-// Updater supports those calls without retaining Element-specific state on a
-// shared value.
-//
-// Register does not call the updater's [jaws.Renderer.JawsRender]. The updater
-// must support [jaws.Updater.JawsUpdate] without render-time initialization. A
-// wrapped [Template] does not; [Container], [Tbody], and [Select] do.
-//
-// Register does not forward event-handler methods. [RequestWriter.Register]
-// automatically attaches handler methods implemented by its updater.
-type Register struct{ jaws.Updater }
+// registerUI adapts a render-independent updater to [jaws.UI]. The surrounding
+// template renders the Element's DOM node and places its JaWS ID on that node.
+type registerUI struct{ jaws.Updater }
 
-// NewRegister returns an update-only widget that invokes updater during updates.
-func NewRegister(updater jaws.Updater) Register { return Register{Updater: updater} }
-
-// JawsRender renders no HTML for update-only registration.
-//
-// It ignores params; to attach extra tags or event handlers, use
-// [RequestWriter.Register], which applies them before the element is frozen.
-func (u Register) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
+func (registerUI) JawsRender(*jaws.Element, io.Writer, []any) error {
 	return nil
 }
 
-// Register creates an update-only Element and returns its [jid.Jid].
+// Register binds updater to a template-authored HTML element.
 //
-// The updater is also a tag for dynamic updates. Additional tags may be provided
-// in params.
-// If updater also implements an event handler interface, it receives matching
-// events after handlers provided in params have had a chance to handle them.
-// The updater's [jaws.Updater.JawsUpdate] method will be called immediately to
-// ensure the initial rendering is correct.
+// The returned [jid.Jid] must be the element's id. Register never calls
+// [jaws.Renderer.JawsRender], so updater must work without render-time
+// initialization. Prefer [RequestWriter.NewUI] or a widget helper when the widget
+// can render its own element.
 //
-// A surrounding [Template] owns the Element and unregisters it when its content
-// is replaced. Otherwise ordinary DOM-removal handling unregisters it; an Element
-// whose Jid never reaches the DOM remains until explicitly removed or its
-// [jaws.Request] ends.
+// Register tags the Element with updater, applies tag and event-handler params,
+// attaches event-handler methods implemented by updater, and invokes
+// [jaws.Updater.JawsUpdate] once for the initial browser state. Updater handlers
+// are tried only after applicable param handlers return [jaws.ErrEventUnhandled].
+// HTML attribute params have no effect; write attributes in the template.
 //
-// Register does not call the updater's [jaws.Renderer.JawsRender]; see [Register]
-// for updater constraints. It automatically attaches event-handler methods
-// implemented by updater.
+// The updater must be non-nil, comparable at runtime, equal to itself, and usable
+// as a tag. A typed nil is invoked normally and must tolerate its nil receiver.
+// The same updater may back multiple live Elements only when it supports that use
+// without retaining Element-specific state on the shared value. If shared across
+// requests, it must be safe for concurrent use.
 //
-// A Select registered this way retains no handler-derived tag for its own post-set
-// dirtying. Any handler-initiated dirtying still occurs, and separately registered
-// tags remain registered. Use [RequestWriter.Select] when Select should register and
-// use a usable tag exposed by its handler. Typed input widgets require their ordinary
-// NewUI or RequestWriter rendering path.
+// A surrounding [Template] owns and cleans up the registered Element. Outside a
+// Template, it remains registered until explicitly deleted, DOM removal is
+// reported, or its [jaws.Request] ends; always emit the returned Jid.
+//
+// [Container], [Tbody], and [Select] support registration, though ordinary
+// rendering is preferable. A registered Select omits its handler-derived tag for
+// post-input dirtying. Typed input widgets omit getter-derived attributes,
+// handlers, and their getter-derived dirty tag. [JsVar] and a [Template] with a
+// non-empty OuterHTMLTag require ordinary rendering.
 //
 // The returned Jid is suitable for including as an HTML id attribute:
 //
@@ -66,10 +53,10 @@ func (rw RequestWriter) Register(updater jaws.Updater, params ...any) jid.Jid {
 	// JawsRender, which appends a debug comment when Jaws.Debug is set, and the
 	// documented usage puts the returned Jid inside an attribute
 	// (<div id="{{$.Register .X}}">), where that comment would corrupt the markup.
-	elem := rw.NewElement(Register{Updater: updater})
+	elem := rw.NewElement(registerUI{Updater: updater})
 	rw.trackElement(elem)
 	elem.Tag(updater)
-	// The wrapping Register element's UI is not the updater, so events reach the
+	// The registerUI Element's UI is not the updater, so events reach the
 	// updater only through the element's handler list, not the elem.UI() fallback.
 	switch updater.(type) {
 	case jaws.InputHandler, jaws.ClickHandler, jaws.ContextMenuHandler:

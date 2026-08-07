@@ -170,7 +170,7 @@ func (u *InputFloat) JawsUpdate(elem *jaws.Element) {
 		elem.Cancel(fmt.Errorf("%w: %g", jaws.ErrValueNotFinite, v))
 		return
 	}
-	// An empty Last (no value stored yet, e.g. an update-only Register that never ran
+	// An empty Last (no value stored yet, e.g. update-only registration that never ran
 	// renderFloatInput) makes the float64 assertion fail with ok==false; send the
 	// initial value unconditionally in that case, matching how the other input
 	// widgets' nil != value comparison sends on their first update.

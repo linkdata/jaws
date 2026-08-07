@@ -89,6 +89,14 @@ func ExampleTemplate_failureBehavior() {
 	// true
 }
 
+func ExampleNewTemplate_defaultWrapper() {
+	tmpl := ui.NewTemplate("", "partial", tag.Tag("dot"))
+	fmt.Println(tmpl.OuterHTMLTag)
+
+	// Output:
+	// div
+}
+
 type exampleContainer []string
 
 func (c exampleContainer) JawsContains(elem *jaws.Element) (contents []jaws.UI) {
