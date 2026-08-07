@@ -21,6 +21,32 @@ import (
 //go:embed assets
 var testAssetsFS embed.FS
 
+var setupPrefixCases = [...]struct {
+	name     string
+	prefix   string
+	wantRoot string
+}{
+	{name: "absolute", prefix: "/static", wantRoot: "/static"},
+	{name: "relative", prefix: "static", wantRoot: "/static"},
+	{name: "parent-relative", prefix: "../static", wantRoot: "/static"},
+	{name: "empty", prefix: "", wantRoot: "/"},
+}
+
+func expectedJawsBootURL(wantRoot, name string) string {
+	return (&url.URL{Path: path.Join(wantRoot, name)}).String()
+}
+
+func runSetupWithoutPanic(t *testing.T, prefix string, setup func()) {
+	t.Helper()
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			t.Helper()
+			t.Fatalf("Setup(%q) panicked: %v", prefix, recovered)
+		}
+	}()
+	setup()
+}
+
 // Asset files are already tracked by git. Keep these tests focused on serving,
 // headers and integration behavior; do not add stored-hash provenance tests for
 // files whose contents and history are in the repository.
@@ -186,20 +212,24 @@ func TestJawsBoot_SetupNilHandleFuncGeneratesHead(t *testing.T) {
 }
 
 // TestJawsBoot_SetupPrefixVariants verifies that for any prefix form (absolute,
-// relative or empty) every asset URL emitted into the head HTML resolves to a
-// registered handler.
+// relative, parent-relative or empty) every asset URL emitted into the head HTML
+// resolves to a registered handler.
 func TestJawsBoot_SetupPrefixVariants(t *testing.T) {
 	assets := expectedStaticAssets(t, testAssetsFS, "assets/static", "")
-	for _, prefix := range []string{"/static", "static", ""} {
-		t.Run("prefix="+strconv.Quote(prefix), func(t *testing.T) {
+	for _, tc := range setupPrefixCases {
+		t.Run(tc.name+"="+strconv.Quote(tc.prefix), func(t *testing.T) {
 			mux := http.NewServeMux()
 			jw, err := jaws.New()
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer jw.Close()
-			if err := jw.Setup(mux.Handle, prefix, jawsboot.Setup); err != nil {
-				t.Fatal(err)
+			var setupErr error
+			runSetupWithoutPanic(t, tc.prefix, func() {
+				setupErr = jw.Setup(mux.Handle, tc.prefix, jawsboot.Setup)
+			})
+			if setupErr != nil {
+				t.Fatal(setupErr)
 			}
 
 			rq := jw.NewRequest(nil)
@@ -210,23 +240,23 @@ func TestJawsBoot_SetupPrefixVariants(t *testing.T) {
 			head := sb.String()
 
 			for _, exp := range assets {
-				wantURI := staticserve.EnsurePrefixSlash(path.Join(prefix, exp.ss.Name))
+				wantURI := expectedJawsBootURL(tc.wantRoot, exp.ss.Name)
 				if !strings.Contains(head, `"`+wantURI+`"`) {
 					t.Errorf("head html missing %q", wantURI)
 				}
 				rr := httptest.NewRecorder()
 				mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, wantURI, nil))
 				if rr.Code != http.StatusOK {
-					t.Errorf("GET %q (prefix %q) = %d, want 200 (head URL must match a registered handler)", wantURI, prefix, rr.Code)
+					t.Errorf("GET %q (prefix %q) = %d, want 200 (head URL must match a registered handler)", wantURI, tc.prefix, rr.Code)
 				}
 			}
 
 			for _, name := range []string{"bootstrap.bundle.min.js.map", "bootstrap.min.css.map"} {
-				mapURI := staticserve.EnsurePrefixSlash(path.Join(prefix, name))
+				mapURI := expectedJawsBootURL(tc.wantRoot, name)
 				rr := httptest.NewRecorder()
 				mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, mapURI, nil))
 				if rr.Code != http.StatusNotFound {
-					t.Errorf("GET %q (prefix %q) = %d, want 404 (sourcemap probe must be 404)", mapURI, prefix, rr.Code)
+					t.Errorf("GET %q (prefix %q) = %d, want 404 (sourcemap probe must be 404)", mapURI, tc.prefix, rr.Code)
 				}
 			}
 		})
@@ -238,11 +268,12 @@ func TestJawsBoot_SetupLiteralBracePrefixes(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		prefix        string
+		wantRoot      string
 		outsidePrefix string
 	}{
-		{name: "absolute partial segment", prefix: "/static{assets}"},
-		{name: "relative partial segment", prefix: "static{assets}"},
-		{name: "complete wildcard segment", prefix: "/{assets}", outsidePrefix: "/outside"},
+		{name: "absolute partial segment", prefix: "/static{assets}", wantRoot: "/static{assets}"},
+		{name: "relative partial segment", prefix: "static{assets}", wantRoot: "/static{assets}"},
+		{name: "complete wildcard segment", prefix: "/{assets}", wantRoot: "/{assets}", outsidePrefix: "/outside"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			const fallbackStatus = http.StatusTeapot
@@ -257,17 +288,12 @@ func TestJawsBoot_SetupLiteralBracePrefixes(t *testing.T) {
 			t.Cleanup(jw.Close)
 
 			var (
-				urls       []*url.URL
-				setupErr   error
-				panicValue any
+				urls     []*url.URL
+				setupErr error
 			)
-			func() {
-				defer func() { panicValue = recover() }()
+			runSetupWithoutPanic(t, tc.prefix, func() {
 				urls, setupErr = jawsboot.Setup(jw, mux.Handle, tc.prefix)
-			}()
-			if panicValue != nil {
-				t.Fatalf("Setup(%q) panicked: %v", tc.prefix, panicValue)
-			}
+			})
 			if setupErr != nil {
 				t.Fatal(setupErr)
 			}
@@ -283,8 +309,7 @@ func TestJawsBoot_SetupLiteralBracePrefixes(t *testing.T) {
 			}
 
 			for _, exp := range assets {
-				assetPath := staticserve.EnsurePrefixSlash(path.Join(tc.prefix, exp.ss.Name))
-				assetURL := (&url.URL{Path: assetPath}).String()
+				assetURL := expectedJawsBootURL(tc.wantRoot, exp.ss.Name)
 				if !returnedURLs[assetURL] {
 					t.Errorf("Setup(%q) did not return expected asset URL %q", tc.prefix, assetURL)
 				}
@@ -316,8 +341,7 @@ func TestJawsBoot_SetupLiteralBracePrefixes(t *testing.T) {
 			}
 
 			for _, name := range []string{"bootstrap.bundle.min.js.map", "bootstrap.min.css.map"} {
-				mapPath := staticserve.EnsurePrefixSlash(path.Join(tc.prefix, name))
-				mapURL := (&url.URL{Path: mapPath}).String()
+				mapURL := expectedJawsBootURL(tc.wantRoot, name)
 				r := httptest.NewRequest(http.MethodGet, mapURL, nil)
 				if _, pattern := mux.Handler(r); pattern != staticserve.NormalizeGET(mapURL) {
 					t.Errorf("GET %q matched pattern %q, want literal 404 pattern %q",
@@ -347,34 +371,66 @@ func TestJawsBoot_SetupLiteralBracePrefixes(t *testing.T) {
 // TestJawsBoot_SetupReturnedURLs pins jawsboot.Setup's exported (urls, err) contract
 // directly, independently of jaws.Setup's wrapping: every returned URL is absolute
 // and resolves to a handler registered via the supplied HandleFunc, for absolute,
-// relative and empty prefixes.
+// relative, parent-relative and empty prefixes.
 func TestJawsBoot_SetupReturnedURLs(t *testing.T) {
-	for _, prefix := range []string{"/static", "static", ""} {
-		t.Run("prefix="+strconv.Quote(prefix), func(t *testing.T) {
+	for _, tc := range setupPrefixCases {
+		t.Run(tc.name+"="+strconv.Quote(tc.prefix), func(t *testing.T) {
 			jw, err := jaws.New()
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer jw.Close()
 
+			mux := http.NewServeMux()
 			registered := map[string]bool{}
-			handleFn := func(pattern string, _ http.Handler) {
+			handleFn := func(pattern string, handler http.Handler) {
 				registered[pattern] = true
+				mux.Handle(pattern, handler)
 			}
 
-			urls, err := jawsboot.Setup(jw, handleFn, prefix)
-			if err != nil {
-				t.Fatal(err)
+			var (
+				urls     []*url.URL
+				setupErr error
+			)
+			runSetupWithoutPanic(t, tc.prefix, func() {
+				urls, setupErr = jawsboot.Setup(jw, handleFn, tc.prefix)
+			})
+			if setupErr != nil {
+				t.Fatal(setupErr)
 			}
 			if len(urls) == 0 {
 				t.Fatal("Setup returned no URLs")
 			}
+			wantPathPrefix := strings.TrimSuffix(tc.wantRoot, "/") + "/"
 			for _, u := range urls {
-				if !strings.HasPrefix(u.String(), "/") {
+				if !path.IsAbs(u.Path) {
 					t.Errorf("returned URL %q is not absolute", u.String())
+				}
+				if u.Path != path.Clean(u.Path) {
+					t.Errorf("returned URL path %q is not clean", u.Path)
+				}
+				if !strings.HasPrefix(u.Path, wantPathPrefix) {
+					t.Errorf("returned URL path %q is outside expected root %q", u.Path, tc.wantRoot)
 				}
 				if !registered[staticserve.NormalizeGET(u.String())] {
 					t.Errorf("returned URL %q has no matching registered handler", u.String())
+				}
+				rr := httptest.NewRecorder()
+				mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, u.String(), nil))
+				if rr.Code != http.StatusOK {
+					t.Errorf("GET returned URL %q = %d, want 200", u.String(), rr.Code)
+				}
+			}
+
+			for _, name := range []string{"bootstrap.bundle.min.js.map", "bootstrap.min.css.map"} {
+				mapURI := expectedJawsBootURL(tc.wantRoot, name)
+				if !registered[staticserve.NormalizeGET(mapURI)] {
+					t.Errorf("source-map path %q has no matching registered handler", mapURI)
+				}
+				rr := httptest.NewRecorder()
+				mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, mapURI, nil))
+				if rr.Code != http.StatusNotFound {
+					t.Errorf("GET source-map path %q = %d, want 404", mapURI, rr.Code)
 				}
 			}
 		})
