@@ -188,6 +188,7 @@ func (sess *Session) addCookie(w http.ResponseWriter, r *http.Request) {
 	defer jw.mu.RUnlock()
 	sess.mu.RLock()
 	defer sess.mu.RUnlock()
+	// Map identity settles Close races; liveness also covers deadline expiry while Header blocks above.
 	if jw.sessions[sess.sessionID] == sess && !sess.isDeadLocked() {
 		cookie := sess.cookie
 		if h != nil {
@@ -296,7 +297,7 @@ func (sess *Session) Broadcast(msg wire.Message) {
 	}
 }
 
-// SessionCount returns the number of active sessions.
+// SessionCount returns the number of registered sessions.
 func (jw *Jaws) SessionCount() (n int) {
 	jw.mu.RLock()
 	n = len(jw.sessions)
@@ -399,9 +400,6 @@ func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 // w nor r receives its live cookie.
 //
 // It returns nil and has no effect if r is nil; w may be nil.
-//
-// It panics if the system CSPRNG ([crypto/rand]) fails while generating the session
-// ID, which does not happen on supported platforms.
 func (jw *Jaws) NewSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
 	if r != nil {
 		if sessionIDs := getCookieSessionsIDs(r.Header, jw.CookieName); len(sessionIDs) > 0 {
@@ -423,12 +421,11 @@ func (jw *Jaws) NewSession(w http.ResponseWriter, r *http.Request) (sess *Sessio
 
 func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
 	secure := secureheaders.RequestIsSecure(r, jw.TrustForwardedHeaders)
-	func() {
-		jw.mu.Lock()
-		defer jw.mu.Unlock()
-		sess = jw.newSessionLocked(jw.clientIP(r), secure)
-		jw.sessions[sess.sessionID] = sess
-	}()
+	remoteIP := jw.clientIP(r)
+	jw.mu.Lock()
+	sess = jw.newSessionLocked(remoteIP, secure)
+	jw.sessions[sess.sessionID] = sess
+	jw.mu.Unlock()
 	sess.addCookie(w, r)
 	return
 }

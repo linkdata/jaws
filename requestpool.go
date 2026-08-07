@@ -49,9 +49,6 @@ import (
 // unclaimed Request, its key remains unavailable for assignment to another Request
 // while the retired Request is reachable; no deadline is guaranteed for later key
 // reuse.
-//
-// NewRequest panics if the system CSPRNG ([crypto/rand]) fails while generating
-// the request key, which does not happen on supported platforms.
 func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 	remoteIP := jw.clientIP(r)
 

@@ -153,6 +153,40 @@ func TestSession_NewSessionWithoutResponseWriter(t *testing.T) {
 	}
 }
 
+func TestSession_AddCookieRejectsExpiredRegisteredSession(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+
+	creationRequest := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	sess := jw.NewSession(nil, creationRequest)
+	if sess == nil {
+		t.Fatal("NewSession returned nil")
+	}
+	sess.mu.Lock()
+	sess.deadline = time.Now().Add(-time.Second)
+	sess.mu.Unlock()
+	if sessions := jw.Sessions(); len(sessions) != 1 || sessions[0] != sess {
+		t.Fatalf("Sessions() = %v, want the expired registered Session", sessions)
+	}
+
+	rw := httptest.NewRecorder()
+	hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	sess.addCookie(rw, hr)
+	for _, cookie := range hr.Cookies() {
+		if cookie.Name == jw.CookieName {
+			t.Errorf("request contains expired session cookie: %v", cookie)
+		}
+	}
+	for _, cookie := range rw.Result().Cookies() {
+		if cookie.Name == jw.CookieName {
+			t.Errorf("response contains expired session cookie: %v", cookie)
+		}
+	}
+}
+
 type closingSessionResponseWriter struct {
 	*httptest.ResponseRecorder
 	jw            *Jaws

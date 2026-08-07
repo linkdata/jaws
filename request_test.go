@@ -3263,12 +3263,7 @@ func TestWS_AutoSessionCloseAtPublication(t *testing.T) {
 		t.Fatal("ResponseWriter.Header did not close the published AutoSession")
 	}
 
-	var connectSession *Session
-	select {
-	case connectSession = <-connectSessionCh:
-	case <-time.After(testTimeout):
-		t.Fatal("timeout waiting for WebSocket connect")
-	}
+	connectSession := waitForConnectSession(t, connectSessionCh)
 
 	const marker = "post-connect marker"
 	ts.jw.Broadcast(wire.Message{Dest: ts.rq.JawsKey, What: what.Alert, Data: marker})
