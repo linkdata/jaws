@@ -389,8 +389,9 @@ func (ops numericOps) parse(text string) (value any, ok bool, err error) {
 			return value, true, nil
 		}
 	}
-	// Browser parse rejection is deliberately not exposed as a Go error. The
-	// caller decides whether to restore Number or report malformed Range input.
+	// Browser parse rejection is deliberately not exposed as a Go error. Numeric
+	// widgets restore the canonical source value without turning validation into
+	// a handler error.
 	return nil, false, nil
 }
 

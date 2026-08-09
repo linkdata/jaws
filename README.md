@@ -642,7 +642,9 @@ to the template helpers use these getter-only forms.
 Number sends a settled edit on `change`, with pending edits flushed before another
 JaWS-managed input, click, or context-menu event. Range sends live `input` events
 while its thumb moves. Number rewrites accepted and rejected edits to the source's
-canonical formatting, including when an accepted value is already stored.
+canonical formatting, including when an accepted value is already stored. An
+ordinarily rendered Range silently rejects browser values not representable by its
+source type and restores the canonical source value.
 
 Named numeric bindings work directly in templates:
 

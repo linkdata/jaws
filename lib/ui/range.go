@@ -91,24 +91,22 @@ func (u *Range) JawsUpdate(elem *jaws.Element) {
 
 // JawsInput stores a browser-side range value.
 //
-// Fractional integer input and values outside the source type's range are not
-// passed to the setter. A rejected value returns an error and dirties an ordinary
-// rendered Range so its canonical source value is restored. Getter-only Ranges
-// ignore browser input.
+// Fractional integer input and values outside the source type's range are rejected
+// without calling the setter or returning an error. For an ordinarily rendered
+// Range, rejection dirties the source tag so the canonical source value is
+// restored. Getter-only Ranges ignore browser input.
 func (u *Range) JawsInput(elem *jaws.Element, text string) (err error) {
 	if !u.binding.writable() {
 		return
 	}
-	value, ok, err := u.binding.parse(text)
-	if err != nil {
+	value, ok, parseErr := u.binding.parse(text)
+	if parseErr != nil {
+		elem.Cancel(parseErr)
 		return
 	}
 	if !ok {
 		u.lastValid.Store(false)
 		elem.Dirty(u.tag)
-		// Callers only need to distinguish acceptance from rejection here, so a
-		// dedicated public error identity would add API without useful branching.
-		err = fmt.Errorf("range input %q is not representable by its source type", text)
 		return
 	}
 	u.Last.Store(value)
@@ -123,7 +121,7 @@ func (u *Range) JawsInput(elem *jaws.Element, text string) (err error) {
 // editable. Supply min, max, and step attributes in params when the browser
 // defaults do not cover the source's domain. For example:
 //
-//	rw.Range(binder, `min="0"`, `max="200"`, `step="0.5"`)
+//	rw.Range(floatBinder, `min="0"`, `max="200"`, `step="0.5"`)
 func (rw RequestWriter) Range(value any, params ...any) error {
 	if _, custom := value.(*NumericBinding); custom {
 		panic(fmt.Errorf("expected numeric value or numeric bind.Getter, not %T", value))

@@ -152,6 +152,10 @@ type numberRangeLogger struct {
 	errors []error
 }
 
+type numberRangeProbeUpdater struct{}
+
+func (*numberRangeProbeUpdater) JawsUpdate(*jaws.Element) {}
+
 func (*numberRangeLogger) Info(string, ...any) {}
 func (*numberRangeLogger) Warn(string, ...any) {}
 func (logger *numberRangeLogger) Error(_ string, args ...any) {
@@ -352,13 +356,57 @@ func TestNumberRangeIntegerRejectionAndCanonicalization(t *testing.T) {
 	rng := NewRange(rangeSource)
 	rangeElem, _ := renderUI(t, rq, rng)
 	for _, text := range []string{"7.5", "128"} {
-		if err := rng.JawsInput(rangeElem, text); err == nil {
-			t.Fatalf("Range.JawsInput(%q) returned nil", text)
+		if err := rng.JawsInput(rangeElem, text); err != nil {
+			t.Fatalf("Range.JawsInput(%q): %v", text, err)
 		}
 	}
 	if value, calls := rangeSource.snapshot(); value != 7 || calls != 0 {
 		t.Fatalf("Range source after rejected input = (%v, %d calls), want (7, 0 calls)", value, calls)
 	}
+}
+
+func TestRangeInputErrorClassification(t *testing.T) {
+	t.Run("parse contract error cancels request", func(t *testing.T) {
+		_, rq := newCoreRequest(t)
+		source := newNumberRangeSource(7)
+		rng := NewRange(source)
+		elem, _ := renderUI(t, rq, rng)
+		parseErr := errors.New("parse contract error")
+		rng.binding.parseValue = func(string) (any, bool, error) {
+			return nil, false, parseErr
+		}
+
+		if err := rng.JawsInput(elem, "8"); err != nil {
+			t.Fatalf("JawsInput error = %v, want nil", err)
+		}
+		if cause := context.Cause(rq.Context()); !errors.Is(cause, parseErr) {
+			t.Fatalf("request cancellation cause = %v, want parse error", cause)
+		}
+		if value, calls := source.snapshot(); value != 7 || calls != 0 {
+			t.Fatalf("Range source = (%v, %d calls), want (7, 0 calls)", value, calls)
+		}
+	})
+
+	t.Run("setter error propagates", func(t *testing.T) {
+		_, rq := newCoreRequest(t)
+		source := newNumberRangeSource(7)
+		rng := NewRange(source)
+		elem, _ := renderUI(t, rq, rng)
+		setErr := errors.New("setter error")
+		rng.binding.setValue = func(*jaws.Element, any) error {
+			return setErr
+		}
+
+		if err := rng.JawsInput(elem, "8"); !errors.Is(err, setErr) {
+			t.Fatalf("JawsInput error = %v, want setter error", err)
+		}
+		if cause := context.Cause(rq.Context()); cause != nil {
+			t.Fatalf("request cancellation cause = %v, want nil", cause)
+		}
+		if value, calls := source.snapshot(); value != 7 || calls != 0 {
+			t.Fatalf("Range source = (%v, %d calls), want (7, 0 calls)", value, calls)
+		}
+	})
 }
 
 func TestRangeBroadcastsExactValueAcrossRequests(t *testing.T) {
@@ -401,7 +449,9 @@ func TestRangeBroadcastsExactValueAcrossRequests(t *testing.T) {
 }
 
 func TestRangeRejectedInputRestoresCanonicalValue(t *testing.T) {
-	tr := newNumberRangeLiveRequest(t, nil)
+	const probe = "range-rejection-event-barrier"
+	logger := new(numberRangeLogger)
+	tr := newNumberRangeLiveRequest(t, logger)
 	source := newNumberRangeSource(int8(7))
 	rng := NewRange(source)
 	elem := tr.NewElement(rng)
@@ -409,12 +459,47 @@ func TestRangeRejectedInputRestoresCanonicalValue(t *testing.T) {
 	if err := elem.JawsRender(&rendered, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := rng.JawsInput(elem, "7.5"); err == nil {
-		t.Fatal("fractional Range input returned nil")
+
+	probeErr := errors.New(probe)
+	var probeAlert wire.WsMsg
+	probeAlert.FillAlert(probeErr)
+	rw := RequestWriter{Request: tr.Request, Writer: tr.Recorder}
+	probeID := rw.Register(new(numberRangeProbeUpdater), jaws.InputFn(func(*jaws.Element, string) error {
+		return probeErr
+	}))
+	// The single event caller handles these in order. Its sentinel Alert is therefore
+	// enqueued after any Alerts mistakenly produced by the rejected Range inputs.
+	for _, text := range []string{"7.5", "8.5", "9.5"} {
+		tr.InCh <- wire.WsMsg{Jid: elem.Jid(), What: what.Input, Data: text}
 	}
-	awaitNumberRangeValue(t, tr, elem, "7")
-	if value, calls := source.snapshot(); value != 7 || calls != 0 {
-		t.Fatalf("Range source = (%v, %d calls), want (7, 0 calls)", value, calls)
+	tr.InCh <- wire.WsMsg{Jid: probeID, What: what.Input}
+	sawCanonical := false
+	sawBarrier := false
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case msg := <-tr.OutCh:
+			switch msg.What {
+			case what.Value:
+				if msg.Jid == elem.Jid() && msg.Data == "7" {
+					sawCanonical = true
+				}
+			case what.Alert:
+				if msg.Data != probeAlert.Data {
+					t.Fatalf("rejected Range input produced Alert %q", msg.Data)
+				}
+				sawBarrier = true
+			}
+			if sawCanonical && sawBarrier {
+				if value, calls := source.snapshot(); value != 7 || calls != 0 {
+					t.Fatalf("Range source = (%v, %d calls), want (7, 0 calls)", value, calls)
+				}
+				return
+			}
+		case <-timer.C:
+			t.Fatal("timed out draining rejected Range output")
+		}
 	}
 }
 
@@ -448,6 +533,24 @@ func TestNumberCodecFormatErrorsAtWidgetBoundary(t *testing.T) {
 		}
 		if cause := context.Cause(rq.Context()); cause != nil {
 			t.Fatalf("render cancellation cause = %v, want nil", cause)
+		}
+	})
+
+	t.Run("input cancels request", func(t *testing.T) {
+		_, rq := newCoreRequest(t)
+		codec := new(numberRangeSwitchCodec)
+		source := newNumberRangeSource(3)
+		number := NewNumberWith(source, codec)
+		elem, _ := renderUI(t, rq, number)
+		codec.invalid.Store(true)
+		if err := number.JawsInput(elem, "4"); err != nil {
+			t.Fatalf("input error = %v, want nil", err)
+		}
+		if cause := context.Cause(rq.Context()); !errors.Is(cause, ErrNumberFormat) {
+			t.Fatalf("input cancellation cause = %v, want ErrNumberFormat", cause)
+		}
+		if value, calls := source.snapshot(); value != 3 || calls != 0 {
+			t.Fatalf("Number source = (%v, %d calls), want (3, 0 calls)", value, calls)
 		}
 	})
 

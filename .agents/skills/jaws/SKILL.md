@@ -99,8 +99,9 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
   `JawsGetTag` returning at least one stable, usable key. A `JawsGetTag` result
   takes precedence over the setter's identity.
 - Render-param tags register the Element but do not replace that setter-derived
-  target. Without a valid target, rejected or normalized browser values are not
-  automatically reconciled.
+  target. Editable Number and Range sources fail rendering without a valid target.
+  Other Input-based widgets render, but cannot automatically reconcile rejected or
+  normalized browser values without one.
 
 ### When to use which
 
@@ -241,7 +242,8 @@ Implications:
   concurrent use when shared across Requests.
 - Prefer ordinary widget rendering. The container family supports update-only
   registration with the limitations below; typed inputs omit render-derived metadata,
-  while `ui.JsVar` and Templates with a non-empty `OuterHTMLTag` require rendering.
+  while `ui.Number`, `ui.JsVar`, and Templates with a non-empty `OuterHTMLTag` require
+  rendering.
 - Always emit the returned Jid as the element's `id`. A surrounding Template owns the
   registered Element; otherwise it remains until explicit deletion, reported DOM
   removal, or Request shutdown.

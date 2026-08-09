@@ -15,9 +15,9 @@ import (
 
 // Input stores common state for interactive input widgets.
 //
-// An Input value retains the last browser value and dirty target for one live
-// [jaws.Element]. A widget embedding Input must therefore back at most one live
-// Element. To render the same bound state more than once, construct distinct
+// An Input value provides a widget-owned update cache and dirty target for one
+// live [jaws.Element]. A widget embedding Input must therefore back at most one
+// live Element. To render the same bound state more than once, construct distinct
 // widgets that share the setter.
 //
 // For post-set reconciliation, a writable setter must expose at least one stable,
@@ -34,8 +34,10 @@ type Input struct {
 	// goroutine (JawsInput). The render-completes-before-events lifecycle makes
 	// the unsynchronized access safe; it is unexported so external code cannot
 	// mutate it.
-	tag  any
-	Last atomic.Value // last rendered or accepted browser value for the Element
+	tag any
+	// Last holds widget-specific state used to filter redundant browser updates.
+	// Widget implementations own this cache; callers must not modify it.
+	Last atomic.Value
 }
 
 func (u *Input) applyGetterAttrs(elem *jaws.Element, getter any) (attrs []template.HTMLAttr) {

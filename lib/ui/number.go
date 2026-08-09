@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"sync/atomic"
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
@@ -26,7 +25,6 @@ import (
 type Number struct {
 	Input
 	binding *numericBinding
-	last    atomic.Pointer[numberState]
 }
 
 type numberState struct {
@@ -52,10 +50,10 @@ func NewNumber[T Numeric](source bind.Getter[T]) *Number {
 // The source capability and tag rules are the same as for [NewNumber]. Browser
 // text must use the HTML valid-floating-point grammar before it is passed to
 // [NumberCodec.ParseNumber]. The codec must be concurrency-safe and provide a
-// deterministic round trip for every source value. Invalid formatted output is
-// reported with [ErrNumberFormat] during rendering and cancels the Request during
-// an update. T must be strictly comparable, and its bound and parsed values must
-// equal themselves.
+// deterministic round trip for every source value. A codec or value contract
+// violation is reported with [ErrNumberFormat] during rendering and cancels the
+// Request during input or update. T must be strictly comparable, and its bound and
+// parsed values must equal themselves.
 func NewNumberWith[T comparable](source bind.Getter[T], codec NumberCodec[T]) *Number {
 	return newNumber(newCustomNumericBinding(source, codec))
 }
@@ -87,7 +85,7 @@ func (u *Number) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err 
 		attrs = append(attrs, template.HTMLAttr("readonly"))
 	}
 	if err = htmlio.WriteHTMLInput(w, elem.Jid(), "number", text, attrs); err == nil {
-		u.last.Store(&numberState{text: text, valid: true})
+		u.Last.Store(&numberState{text: text, valid: true})
 	}
 	return
 }
@@ -95,7 +93,7 @@ func (u *Number) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err 
 // JawsUpdate sends the canonical source value when it differs from the browser
 // baseline.
 func (u *Number) JawsUpdate(elem *jaws.Element) {
-	if u.last.Load() == nil {
+	if u.Last.Load() == nil {
 		elem.Request.MustLog(errors.New("ui.Number.JawsUpdate called before successful rendering"))
 		return
 	}
@@ -104,7 +102,7 @@ func (u *Number) JawsUpdate(elem *jaws.Element) {
 		elem.Cancel(err)
 		return
 	}
-	prev := u.last.Swap(&numberState{text: text, valid: true})
+	prev := u.Last.Swap(&numberState{text: text, valid: true}).(*numberState)
 	if !prev.valid || prev.text != text {
 		elem.SetValue(text)
 	}
@@ -122,7 +120,7 @@ func (u *Number) JawsInput(elem *jaws.Element, text string) (err error) {
 		return
 	}
 	value, ok, parseErr := u.binding.parse(text)
-	u.last.Store(&numberState{})
+	u.Last.Store(&numberState{})
 	if parseErr != nil {
 		elem.Cancel(parseErr)
 		return

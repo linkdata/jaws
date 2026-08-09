@@ -159,8 +159,10 @@ field. JaWS also flushes a changed focused Number before another managed input,
 click, or context-menu event. Range sends live `input` events while its thumb
 moves. Number rejects malformed or unrepresentable browser text without calling
 the setter and restores the getter's canonical text. It also rewrites accepted
-text through its formatter, including when the source value is unchanged. Range
-likewise never truncates fractional input for an integer source.
+text through its formatter, including when the source value is unchanged. An
+ordinarily rendered Range rejects browser values not representable by its source
+type without calling the setter or reporting an alert, then restores the getter's
+canonical value.
 
 Named numeric sources work directly with both Go and template helpers:
 
