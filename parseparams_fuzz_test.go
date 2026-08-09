@@ -102,8 +102,8 @@ func (h fuzzParseParamsNonComparableTagGetter) JawsGetTag() any {
 }
 
 // fuzzParseParamsInitialAttrOnly covers a param implementing an interface ParseParams
-// does not recognize: JawsInitialHTMLAttr is only invoked for the primary getter, so
-// ParseParams must classify this as a tag and nothing else.
+// does not recognize: JawsInitialHTMLAttr is invoked separately for the primary getter,
+// so ParseParams must classify this as a tag and nothing else.
 type fuzzParseParamsInitialAttrOnly struct {
 	ID byte
 }

@@ -275,13 +275,18 @@ func NewArticle(inner any) *Article {
 }
 
 func (w *Article) JawsRender(e *jaws.Element, wr io.Writer, params []any) error {
-  _, getterAttrs := e.ApplyGetter(w.HTMLGetter)
+  e.ApplyGetter(w.HTMLGetter)
+  getterAttrs := e.ApplyInitialHTMLAttr(w.HTMLGetter)
   attrs := append(e.ApplyParams(params), getterAttrs...)
   return htmlio.WriteHTMLInner(wr, e.Jid(), "article", "", w.HTMLGetter.JawsGetHTML(e), attrs...)
 }
 
 // JawsUpdate is inherited from the embedded ui.HTMLInner.
 ```
+
+`ApplyGetter` registers the getter's tag and event handlers;
+`ApplyInitialHTMLAttr` runs the getter's `JawsInitialHTMLAttr` callback and must
+be called without holding any lock that callback may acquire.
 
 ## Adding an interactive input widget
 

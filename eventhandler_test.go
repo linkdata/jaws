@@ -42,7 +42,7 @@ func (t *testJawsEvent) JawsGetTag() (tagValue any) {
 }
 
 func (t *testJawsEvent) JawsRender(elem *Element, w io.Writer, params []any) (err error) {
-	tagValue, _ := elem.ApplyGetter(t)
+	tagValue := elem.ApplyGetter(t)
 	_, _ = fmt.Fprint(w, params)
 	t.msgCh <- fmt.Sprintf("JawsRender(%d)%#v", elem.jid, tagValue)
 	return

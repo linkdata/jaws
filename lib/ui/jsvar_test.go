@@ -14,6 +14,7 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstest"
+	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 )
@@ -25,6 +26,77 @@ type jsVarData struct {
 
 type jsVarNilData struct {
 	Value string `json:"value"`
+}
+
+type jsVarRenderLock struct {
+	sync.RWMutex
+	unlocks int
+}
+
+func (mu *jsVarRenderLock) Unlock() {
+	mu.unlocks++
+	mu.RWMutex.Unlock()
+}
+
+type jsVarInitialAttrState struct {
+	mu                   *jsVarRenderLock
+	tagCalls             int
+	marshalCalls         int
+	initialAttrCalls     int
+	tagUnderLock         bool
+	marshalUnderLock     bool
+	initialAttrUnderLock bool
+	tagUnlocks           int
+	marshalUnlocks       int
+	initialAttrUnlocks   int
+	clickCalls           int
+}
+
+type jsVarReentrantInitialAttrState struct {
+	locker bind.RWLocker
+	attr   template.HTMLAttr
+}
+
+func (state *jsVarReentrantInitialAttrState) JawsInitialHTMLAttr(*jaws.Element) template.HTMLAttr {
+	state.locker.RLock()
+	defer state.locker.RUnlock()
+	return state.attr
+}
+
+func (state *jsVarInitialAttrState) observeLock() (underWriteLock bool, unlocks int) {
+	if state.mu.TryRLock() {
+		unlocks = state.mu.unlocks
+		state.mu.RUnlock()
+		return
+	}
+	underWriteLock = true
+	unlocks = state.mu.unlocks
+	return
+}
+
+func (state *jsVarInitialAttrState) JawsGetTag() any {
+	state.tagCalls++
+	state.tagUnderLock, state.tagUnlocks = state.observeLock()
+	return tag.Tag("jsvar-initial-attr")
+}
+
+func (state *jsVarInitialAttrState) MarshalJSON() ([]byte, error) {
+	state.marshalCalls++
+	state.marshalUnderLock, state.marshalUnlocks = state.observeLock()
+	return []byte(`{"value":"ready"}`), nil
+}
+
+func (state *jsVarInitialAttrState) JawsInitialHTMLAttr(*jaws.Element) template.HTMLAttr {
+	state.initialAttrCalls++
+	var underWriteLock bool
+	underWriteLock, state.initialAttrUnlocks = state.observeLock()
+	state.initialAttrUnderLock = state.initialAttrUnderLock || underWriteLock
+	return `data-ready="true"`
+}
+
+func (state *jsVarInitialAttrState) JawsClick(*jaws.Element, jaws.Click) error {
+	state.clickCalls++
+	return nil
 }
 
 type jsVarPathHooks struct {
@@ -143,6 +215,96 @@ func TestJsVar_RenderSetAndEvent(t *testing.T) {
 	if err := jaws.CallEventHandlers(jsv, elem, what.Click, `1 2 0 x`); !errors.Is(err, jaws.ErrEventUnhandled) {
 		t.Fatalf("expected ErrEventUnhandled, got %v", err)
 	}
+}
+
+func TestJsVar_RenderInitialHTMLAttrRunsOutsideBindingLock(t *testing.T) {
+	_, rq := newCoreRequest(t)
+
+	var mu jsVarRenderLock
+	state := jsVarInitialAttrState{mu: &mu}
+	jsv := NewJsVar(&mu, &state)
+	elem := rq.NewElement(jsv)
+
+	var sb strings.Builder
+	if err := jsv.JawsRender(elem, &sb, []any{"state"}); err != nil {
+		t.Fatal(err)
+	}
+	if state.tagCalls != 1 {
+		t.Errorf("JawsGetTag called %d times, want 1", state.tagCalls)
+	}
+	if !state.tagUnderLock {
+		t.Error("JawsGetTag ran without the binding lock")
+	}
+	if state.marshalCalls != 1 {
+		t.Errorf("MarshalJSON called %d times, want 1", state.marshalCalls)
+	}
+	if !state.marshalUnderLock {
+		t.Error("MarshalJSON ran without the binding lock")
+	}
+	if state.tagUnlocks != state.marshalUnlocks {
+		t.Errorf("binding unlocked between JawsGetTag and MarshalJSON: %d != %d", state.tagUnlocks, state.marshalUnlocks)
+	}
+	if state.initialAttrCalls != 1 {
+		t.Errorf("JawsInitialHTMLAttr called %d times, want 1", state.initialAttrCalls)
+	}
+	if state.initialAttrUnderLock {
+		t.Error("JawsInitialHTMLAttr ran with the binding lock held")
+	}
+	if state.initialAttrUnlocks <= state.marshalUnlocks {
+		t.Errorf("JawsInitialHTMLAttr did not run after the snapshot unlocked: %d <= %d", state.initialAttrUnlocks, state.marshalUnlocks)
+	}
+	if got := sb.String(); strings.Count(got, `data-ready="true"`) != 1 {
+		t.Errorf("rendered initial attr count = %d, want 1 in %q", strings.Count(got, `data-ready="true"`), got)
+	}
+	if err := jaws.CallEventHandlers(elem.UI(), elem, what.Click, "1 2 0 state"); err != nil {
+		t.Fatalf("dispatching the bound click handler: %v", err)
+	}
+	if state.clickCalls != 1 {
+		t.Errorf("bound click handler called %d times, want 1", state.clickCalls)
+	}
+}
+
+func testJsVarRenderInitialAttrReentry(t *testing.T, bindingLocker sync.Locker, lockerName string, wantAttr template.HTMLAttr) {
+	t.Helper()
+
+	_, rq := newCoreRequest(t)
+	state := jsVarReentrantInitialAttrState{
+		locker: bind.AsRWLocker(bindingLocker),
+		attr:   wantAttr,
+	}
+	jsvar := NewJsVar(bindingLocker, &state)
+	elem := rq.NewElement(jsvar)
+	var sb strings.Builder
+	done := make(chan error, 1)
+	go func() {
+		done <- jsvar.JawsRender(elem, &sb, []any{"state"})
+	}()
+
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-timer.C:
+		t.Fatalf("JsVar.JawsRender deadlocked while JawsInitialHTMLAttr re-entered the %s binding locker", lockerName)
+	case <-t.Context().Done():
+		t.Fatalf("render context ended while JawsInitialHTMLAttr re-entered the %s binding locker: %v", lockerName, t.Context().Err())
+	}
+	if got := sb.String(); !strings.Contains(got, string(wantAttr)) {
+		t.Fatalf("rendered HTML %q does not contain %q", got, wantAttr)
+	}
+}
+
+func TestJsVar_RenderInitialHTMLAttrCanReenterBindingLocker(t *testing.T) {
+	t.Run("RWMutex", func(t *testing.T) {
+		testJsVarRenderInitialAttrReentry(t, new(sync.RWMutex), "sync.RWMutex", `data-lock="rwmutex"`)
+	})
+
+	t.Run("MutexAdapter", func(t *testing.T) {
+		testJsVarRenderInitialAttrReentry(t, new(sync.Mutex), "sync.Mutex", `data-lock="mutex"`)
+	})
 }
 
 // TestJsVar_SetBroadcastsWirePayload pins the wire payload broadcast when a
@@ -555,6 +717,35 @@ func TestJsVar_RenderNilPointerWithTagGetterDoesNotLeakLock(t *testing.T) {
 	if got := sb.String(); strings.Contains(got, "data-jawsdata=") {
 		t.Errorf("expected no data-jawsdata for nil pointer, got %q", got)
 	}
+}
+
+type jsVarPanicTag struct{}
+
+func (*jsVarPanicTag) JawsGetTag() any {
+	panic("tag boom")
+}
+
+func TestJsVar_RenderTagGetterPanicDoesNotLeakLock(t *testing.T) {
+	_, rq := newCoreRequest(t)
+
+	var mu sync.Mutex
+	v := jsVarPanicTag{}
+	jsv := NewJsVar(&mu, &v)
+	elem := rq.NewElement(jsv)
+
+	var sb bytes.Buffer
+	var panicValue any
+	func() {
+		defer func() { panicValue = recover() }()
+		_ = jsv.JawsRender(elem, &sb, []any{"boom"})
+	}()
+	if panicValue == nil {
+		t.Fatal("expected tag getter panic to propagate")
+	}
+	if !mu.TryLock() {
+		t.Fatal("render left the JsVar locker held after a tag getter panic")
+	}
+	mu.Unlock()
 }
 
 type jsVarPanicMarshal struct{}

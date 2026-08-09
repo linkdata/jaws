@@ -24,7 +24,8 @@ func NewImg(g bind.Getter[string]) *Img { return &Img{Getter: g} }
 
 // JawsRender renders ui as an HTML img element.
 func (u *Img) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
-	_, getterAttrs := elem.ApplyGetter(u.Getter)
+	elem.ApplyGetter(u.Getter)
+	getterAttrs := elem.ApplyInitialHTMLAttr(u.Getter)
 	srcAttr := htmlio.Attr("src", u.JawsGet(elem))
 	attrs := append(elem.ApplyParams(params), getterAttrs...)
 	// HTML parsing keeps the first duplicate attribute, so emit the canonical

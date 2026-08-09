@@ -41,7 +41,8 @@ type Input struct {
 }
 
 func (u *Input) applyGetterAttrs(elem *jaws.Element, getter any) (attrs []template.HTMLAttr) {
-	u.tag, attrs = elem.ApplyGetter(getter)
+	u.tag = elem.ApplyGetter(getter)
+	attrs = elem.ApplyInitialHTMLAttr(getter)
 	return
 }
 

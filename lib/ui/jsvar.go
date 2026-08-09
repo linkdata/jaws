@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html/template"
 	"io"
 	"reflect"
 	"regexp"
@@ -415,19 +414,22 @@ func (jsvar *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 // The serialized value is a render-time snapshot. See [JsVar] for the
 // synchronization semantics between rendering and the WebSocket subscription.
 //
-// The bound value's [github.com/linkdata/jaws/lib/tag.TagGetter] JawsGetTag callback
-// runs while the JsVar write lock is held, so it must not re-enter this JsVar (for
-// example call JawsGet or JawsSet on it), which would self-deadlock the non-reentrant
-// lock.
+// The bound value's [github.com/linkdata/jaws/lib/tag.TagGetter] JawsGetTag runs with
+// the JsVar write lock held and must not acquire that lock or re-enter the JsVar.
+//
+// [jaws.InitialHTMLAttrHandler.JawsInitialHTMLAttr] runs without the JsVar lock and
+// may acquire the locker passed to [NewJsVar].
 func (jsvar *JsVar[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	// The render-time snapshot is taken under the write lock; see renderSnapshot.
-	// Everything below runs without the lock: ApplyParams and, crucially, writing to
-	// w must not hold the value lock, because a slow client stalling a network write
-	// would otherwise block every goroutine sharing the locker.
-	var getterAttrs []template.HTMLAttr
-	var jsvarName string
-	var data []byte
-	if getterAttrs, jsvarName, data, err = jsvar.renderSnapshot(elem, params); err == nil {
+	// After renderSnapshot returns, ApplyInitialHTMLAttr, AddHandlers, ApplyParams
+	// and, crucially, writing to w run without the lock. ApplyInitialHTMLAttr must
+	// stay out here because the bound value's JawsInitialHTMLAttr may acquire the
+	// same non-reentrant locker; writing to w must stay out because a slow client
+	// stalling a network write would block every goroutine sharing the locker.
+	getter, jsvarName, data, err := jsvar.renderSnapshot(elem, params)
+	getterAttrs := elem.ApplyInitialHTMLAttr(getter)
+	elem.AddHandlers(jsvar)
+	if err == nil {
 		attrs := append(elem.ApplyParams(params[1:]), getterAttrs...)
 		var b []byte
 		b = append(b, "\n<div id="...)
@@ -445,26 +447,23 @@ func (jsvar *JsVar[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any)
 
 // renderSnapshot runs the render-time critical section under the write lock.
 //
-// It resolves the dirty tag and any initial HTML attrs from the bound value,
-// registers this JsVar as elem's handler, validates the JsVar name, and marshals a
-// snapshot of Ptr. The lock spans [jaws.Element.ApplyGetter] and the marshal so the
-// serialized value stays consistent with the dirty tag even if another request
-// sharing this JsVar sets it concurrently. The deferred unlock ensures a panic from
-// a bound-value callback or from marshaling cannot leak the lock.
+// It resolves the dirty tag, validates the JsVar name, and marshals a snapshot of
+// Ptr. The lock spans tag registration and the marshal so the serialized value stays
+// consistent with the dirty tag even if another request sharing this JsVar sets it
+// concurrently. The deferred unlock ensures a panic from a tag callback or from
+// marshaling cannot leak the lock.
 //
-// A nil Ptr has no bound value to inspect, so the getter callback is skipped and the
-// initial data is omitted. Passing the typed-nil Ptr to ApplyGetter instead would call
-// a value-receiver [github.com/linkdata/jaws/lib/tag.TagGetter] through the nil
+// A nil Ptr has no bound value to inspect, so bound-value callbacks are skipped and
+// the initial data is omitted. Passing the typed-nil Ptr to ApplyGetter instead would
+// call a value-receiver [github.com/linkdata/jaws/lib/tag.TagGetter] through the nil
 // pointer and panic.
-func (jsvar *JsVar[T]) renderSnapshot(elem *jaws.Element, params []any) (getterAttrs []template.HTMLAttr, jsvarName string, data []byte, err error) {
+func (jsvar *JsVar[T]) renderSnapshot(elem *jaws.Element, params []any) (getter any, jsvarName string, data []byte, err error) {
 	jsvar.Lock()
 	defer jsvar.Unlock()
-	var getter any
 	if jsvar.Ptr != nil {
 		getter = jsvar.Ptr
 	}
-	jsvar.dirtyTag, getterAttrs = elem.ApplyGetter(getter)
-	elem.AddHandlers(jsvar)
+	jsvar.dirtyTag = elem.ApplyGetter(getter)
 	if jsvarName, err = validateJsVarName(params); err == nil && jsvar.Ptr != nil {
 		data, err = json.Marshal(jsvar.Ptr)
 	}

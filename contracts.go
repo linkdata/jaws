@@ -131,10 +131,13 @@ type ContextMenuHandler interface {
 	JawsContextMenu(elem *Element, click Click) (err error)
 }
 
-// InitialHTMLAttrHandler can add attributes during initial [Element] rendering.
+// InitialHTMLAttrHandler provides attributes for initial [Element] rendering.
 type InitialHTMLAttrHandler interface {
-	// JawsInitialHTMLAttr is called when an [Element] is initially rendered,
-	// and may return an initial HTML attribute string to write out.
+	// JawsInitialHTMLAttr returns attributes for elem's initial render, or an empty string.
+	//
+	// Callers must not hold a lock protecting the handler or its source. The method
+	// must synchronize shared state. Its result need not share a state snapshot with
+	// other values read during rendering.
 	JawsInitialHTMLAttr(elem *Element) (s template.HTMLAttr)
 }
 

@@ -19,7 +19,8 @@ type HTMLInner struct {
 }
 
 func (u *HTMLInner) renderInner(elem *jaws.Element, w io.Writer, htmlTag, htmlType string, params []any) (err error) {
-	_, getterAttrs := elem.ApplyGetter(u.HTMLGetter)
+	elem.ApplyGetter(u.HTMLGetter)
+	getterAttrs := elem.ApplyInitialHTMLAttr(u.HTMLGetter)
 	attrs := append(elem.ApplyParams(params), getterAttrs...)
 	err = htmlio.WriteHTMLInner(w, elem.Jid(), htmlTag, htmlType, u.HTMLGetter.JawsGetHTML(elem), attrs...)
 	return

@@ -314,8 +314,8 @@ func newTestTextInputWidget(s testStringSetter) *testTextInputWidget {
 }
 
 func (u *testTextInputWidget) JawsRender(elem *Element, w io.Writer, params []any) (err error) {
-	var getterAttrs []template.HTMLAttr
-	u.tagValue, getterAttrs = elem.ApplyGetter(u.setter)
+	u.tagValue = elem.ApplyGetter(u.setter)
+	getterAttrs := elem.ApplyInitialHTMLAttr(u.setter)
 	attrs := append(elem.ApplyParams(params), getterAttrs...)
 	v := u.setter.JawsGet(elem)
 	u.last = v

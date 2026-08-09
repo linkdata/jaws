@@ -25,12 +25,15 @@ package jaws
 // back into the same Request.
 //
 // Bound-value locks in lib/bind, lib/ui, and lib/named are released before dirtying or
-// broadcasting. Code holding a core lock must not invoke UI value methods. Container
-// reconciliation has one deliberate reverse edge: containerState.mu may be held while
-// Request.NewElement takes Request.mu. Provider callbacks and validation precede that
-// edge; rendering, removal, recursive cleanup, cancellation, and logging follow it.
-// Core-lock holders must therefore never invoke container render or update methods.
-// containerState.mu is a sync.Mutex, so the deadlock detector cannot enforce this rule.
+// broadcasting. InitialHTMLAttrHandler callbacks run without caller-held widget or
+// bound-value locks; bind.Binder acquires its own lock before calling its narrower
+// InitialHTMLAttrHook. Code holding a core lock must not invoke UI value methods.
+// Container reconciliation has one deliberate reverse edge: containerState.mu may be
+// held while Request.NewElement takes Request.mu. Provider callbacks and validation
+// precede that edge; rendering, removal, recursive cleanup, cancellation, and logging
+// follow it. Core-lock holders must therefore never invoke container render or update
+// methods. containerState.mu is a sync.Mutex, so the deadlock detector cannot enforce
+// this rule.
 
 import (
 	"bufio"

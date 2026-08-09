@@ -483,7 +483,7 @@ func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
 	return
 }
 
-// ApplyGetter applies the tag and handler interfaces exposed by getter to elem.
+// ApplyGetter applies getter's tag and event-handler interfaces to elem.
 //
 // If getter implements [tag.TagGetter], the candidate is the value returned by
 // [tag.TagGetter.JawsGetTag]; otherwise the candidate is getter itself. Eligible
@@ -494,8 +494,8 @@ func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
 // automatically tagged.
 //
 // If getter implements [InputHandler], [ClickHandler], or [ContextMenuHandler], it is
-// added as an event handler. attrs contains any non-empty attribute returned by
-// [InitialHTMLAttrHandler].
+// added as an event handler. ApplyGetter does not invoke [InitialHTMLAttrHandler];
+// call [Element.ApplyInitialHTMLAttr] separately.
 //
 // The returned tagValue does not confirm registration. It is nil if getter or its
 // candidate is a nil interface, or if the candidate is ineligible for expansion. A
@@ -506,10 +506,10 @@ func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
 //
 // If the [Element] is already frozen and getter is an event handler, the handler
 // is not added: in production with a [Jaws.Logger] configured this is logged and
-// initial-attribute and tag processing still occur, while debug builds and servers
-// without a Logger panic before that processing. For a non-event-handler getter,
-// initial-attribute and tag processing still occur after freezing.
-func (elem *Element) ApplyGetter(getter any) (tagValue any, attrs []template.HTMLAttr) {
+// tag processing still occurs, while debug builds and servers without a Logger panic
+// before that processing. For a non-event-handler getter, tag processing still occurs
+// after freezing.
+func (elem *Element) ApplyGetter(getter any) (tagValue any) {
 	if getter != nil {
 		tagValue = getter
 		if tagger, ok := getter.(tag.TagGetter); ok {
@@ -522,15 +522,26 @@ func (elem *Element) ApplyGetter(getter any) (tagValue any, attrs []template.HTM
 		} else if _, ok := getter.(ContextMenuHandler); ok {
 			elem.appendHandlers(getter)
 		}
-		if ah, ok := getter.(InitialHTMLAttrHandler); ok {
-			if attr := ah.JawsInitialHTMLAttr(elem); attr != "" {
-				attrs = append(attrs, attr)
-			}
-		}
 		if usableAsTag(tagValue) {
 			elem.Tag(tagValue)
 		} else {
 			tagValue = nil
+		}
+	}
+	return
+}
+
+// ApplyInitialHTMLAttr returns getter's initial HTML attributes.
+//
+// It returns nil unless getter implements [InitialHTMLAttrHandler] and returns a
+// non-empty value; otherwise that value is the sole slice element. It does not apply
+// tags or event handlers.
+//
+// Callers must not hold a lock protecting getter or its source.
+func (elem *Element) ApplyInitialHTMLAttr(getter any) (attrs []template.HTMLAttr) {
+	if ah, ok := getter.(InitialHTMLAttrHandler); ok {
+		if attr := ah.JawsInitialHTMLAttr(elem); attr != "" {
+			attrs = append(attrs, attr)
 		}
 	}
 	return
