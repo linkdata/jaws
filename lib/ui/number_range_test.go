@@ -296,6 +296,21 @@ func TestRequestWriterNumericRejectsUnsupportedValues(t *testing.T) {
 	}
 }
 
+func TestRequestWriterRangeRendersExplicitBounds(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	var rendered strings.Builder
+	rw := RequestWriter{Request: rq, Writer: &rendered}
+	if err := rw.Range(newNumberRangeSource(150.0), `min="0"`, `max="200"`, `step="0.5"`); err != nil {
+		t.Fatal(err)
+	}
+	got := rendered.String()
+	for _, want := range []string{` min="0"`, ` max="200"`, ` step="0.5"`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Range markup %q does not contain %q", got, want)
+		}
+	}
+}
+
 func TestNumberRangeSourceCapabilities(t *testing.T) {
 	t.Run("editable Number marker", func(t *testing.T) {
 		_, rq := newCoreRequest(t)

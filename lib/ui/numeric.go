@@ -99,14 +99,14 @@ func makeNumericBinding(source any) (nb numericBinding, ok bool) {
 	if !rv.IsValid() {
 		return numericBinding{}, false
 	}
-	if getter, valueType, yes := reflectedNumericGetter(rv); yes {
-		nb.ops, _ = newNumericOps(valueType)
+	if getter, ops, yes := reflectedNumericGetter(rv); yes {
+		nb.ops = ops
 		nb.source = source
 		nb.getValue = func(elem *jaws.Element) any {
 			out := getter.Call([]reflect.Value{reflect.ValueOf(elem)})
 			return out[0].Interface()
 		}
-		if setter, yes := reflectedNumericSetter(rv, valueType); yes {
+		if setter, yes := reflectedNumericSetter(rv, ops.typ); yes {
 			nb.setValue = func(elem *jaws.Element, value any) (err error) {
 				out := setter.Call([]reflect.Value{reflect.ValueOf(elem), reflect.ValueOf(value)})
 				if !out[0].IsNil() {
@@ -132,18 +132,17 @@ var (
 	errorType          = reflect.TypeFor[error]()
 )
 
-func reflectedNumericGetter(source reflect.Value) (getter reflect.Value, valueType reflect.Type, ok bool) {
+func reflectedNumericGetter(source reflect.Value) (getter reflect.Value, ops numericOps, ok bool) {
 	getter = source.MethodByName("JawsGet")
 	if !getter.IsValid() {
-		return reflect.Value{}, nil, false
+		return reflect.Value{}, numericOps{}, false
 	}
 	typ := getter.Type()
 	if typ.NumIn() != 1 || typ.In(0) != elementPointerType || typ.NumOut() != 1 {
-		return reflect.Value{}, nil, false
+		return reflect.Value{}, numericOps{}, false
 	}
-	valueType = typ.Out(0)
-	if _, ok = newNumericOps(valueType); !ok {
-		return reflect.Value{}, nil, false
+	if ops, ok = newNumericOps(typ.Out(0)); !ok {
+		return reflect.Value{}, numericOps{}, false
 	}
 	return
 }
