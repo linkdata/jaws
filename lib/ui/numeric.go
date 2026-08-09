@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -32,6 +33,47 @@ func (nb numericBinding) writable() bool {
 
 func (nb numericBinding) getText(elem *jaws.Element) (text string, err error) {
 	text, err = nb.ops.format(nb.getValue(elem))
+	return
+}
+
+func updateNumericInput(input *Input, binding numericBinding, elem *jaws.Element, name string) {
+	if input.Last.Load() == nil {
+		elem.Request.MustLog(fmt.Errorf("ui.%s.JawsUpdate called before successful rendering", name))
+		return
+	}
+	text, err := binding.getText(elem)
+	if err != nil {
+		elem.Cancel(err)
+		return
+	}
+	if prev := input.Last.Swap(text).(string); prev != text {
+		elem.SetValue(text)
+	}
+}
+
+func handleNumericInput(input *Input, binding numericBinding, elem *jaws.Element, text string) (err error) {
+	if !binding.writable() {
+		return
+	}
+	value, accepted := binding.ops.parse(text)
+	if !accepted {
+		// A formatter can never produce empty text, so empty forces the next
+		// update to restore the canonical value.
+		input.Last.Store("")
+		// Exact dirtying serializes the correction with source-driven updates,
+		// leaving a newer source value final.
+		elem.Dirty(elem)
+		return
+	}
+	input.Last.Store(text)
+	err = binding.setValue(elem, value)
+	if errors.Is(err, jaws.ErrValueUnchanged) {
+		// The accepted text may still differ from the source's formatting.
+		elem.Dirty(elem)
+		err = nil
+		return
+	}
+	err = input.maybeDirty(elem, err)
 	return
 }
 
@@ -78,7 +120,7 @@ func makeNumericBinding(source any) (nb numericBinding, ok bool) {
 	if ops, yes := newNumericOps(rv.Type()); yes {
 		nb.ops = ops
 		nb.getValue = func(*jaws.Element) any {
-			return rv.Interface()
+			return source
 		}
 		return nb, true
 	}

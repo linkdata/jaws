@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -40,11 +39,7 @@ type Range struct {
 // The browser may clamp or round the displayed value; a browser-adjusted value
 // reaches the setter only on a later input event and only when representable by T.
 func NewRange[T Numeric](source bind.Getter[T]) *Range {
-	return newRange(newNumericBinding(source))
-}
-
-func newRange(binding numericBinding) *Range {
-	return &Range{binding: binding}
+	return &Range{binding: newNumericBinding(source)}
 }
 
 // JawsRender renders the Range as an HTML range input.
@@ -72,18 +67,7 @@ func (u *Range) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err e
 
 // JawsUpdate reconciles the range with its canonical source value.
 func (u *Range) JawsUpdate(elem *jaws.Element) {
-	if u.Last.Load() == nil {
-		elem.Request.MustLog(errors.New("ui.Range.JawsUpdate called before successful rendering"))
-		return
-	}
-	text, err := u.binding.getText(elem)
-	if err != nil {
-		elem.Cancel(err)
-		return
-	}
-	if prev := u.Last.Swap(text).(string); prev != text {
-		elem.SetValue(text)
-	}
+	updateNumericInput(&u.Input, u.binding, elem, "Range")
 }
 
 // JawsInput accepts or rejects a browser-side range value.
@@ -93,29 +77,8 @@ func (u *Range) JawsUpdate(elem *jaws.Element) {
 // Accepted and rejected text is reconciled with the binding's formatter. Rejection
 // and [jaws.ErrValueUnchanged] update only the originating Element. Getter-only
 // Ranges ignore browser input.
-func (u *Range) JawsInput(elem *jaws.Element, text string) (err error) {
-	if !u.binding.writable() {
-		return
-	}
-	value, accepted := u.binding.ops.parse(text)
-	if !accepted {
-		// A formatter can never produce empty text, so empty is the invalidated
-		// baseline that forces the next update to send the canonical value.
-		u.Last.Store("")
-		// Reconcile in JawsUpdate so the Request serializes this correction with
-		// source-driven updates and leaves a newer source value final.
-		elem.Dirty(elem)
-		return
-	}
-	u.Last.Store(text)
-	err = u.binding.setValue(elem, value)
-	if errors.Is(err, jaws.ErrValueUnchanged) {
-		elem.Dirty(elem)
-		err = nil
-		return
-	}
-	err = u.maybeDirty(elem, err)
-	return
+func (u *Range) JawsInput(elem *jaws.Element, text string) error {
+	return handleNumericInput(&u.Input, u.binding, elem, text)
 }
 
 // Range renders an HTML range input for value.
@@ -131,5 +94,5 @@ func (rw RequestWriter) Range(value any, params ...any) error {
 	if !ok {
 		panic(fmt.Errorf("expected numeric value or numeric bind.Getter, not %T", value))
 	}
-	return rw.NewUI(newRange(binding), params...)
+	return rw.NewUI(&Range{binding: binding}, params...)
 }

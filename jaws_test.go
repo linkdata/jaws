@@ -1459,7 +1459,6 @@ func TestJaws_DirtyExactElementAndTag(t *testing.T) {
 
 	// Request.Dirty has the same Jaws-wide exact-target semantics: the receiver
 	// does not replace the target Element's owning Request.
-	jw.Dirty(exact)
 	second.Dirty(exact)
 	if got := jw.distributeDirt(); got != 1 {
 		t.Fatalf("distributed exact selectors = %d, want 1", got)

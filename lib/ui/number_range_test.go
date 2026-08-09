@@ -513,16 +513,17 @@ func TestRangeBroadcastsCanonicalValueAcrossRequests(t *testing.T) {
 	}
 }
 
-func TestNumericCorrectionTargetsOnlyOrigin(t *testing.T) {
+func TestNumericReconciliationTargetsOnlyOrigin(t *testing.T) {
 	tests := []struct {
 		name         string
 		text         string
+		wantValue    string
 		wantSetCalls int
 		widget       func(*numberRangeSource[int8]) numberRangeUI
 	}{
-		{name: "Range invalid", text: "7.5", widget: func(source *numberRangeSource[int8]) numberRangeUI { return NewRange(source) }},
-		{name: "Range unchanged", text: "07", wantSetCalls: 1, widget: func(source *numberRangeSource[int8]) numberRangeUI { return NewRange(source) }},
-		{name: "Number invalid", text: "7.5", widget: func(source *numberRangeSource[int8]) numberRangeUI { return NewNumber(source) }},
+		{name: "Range invalid", text: "7.5", wantValue: "7", widget: func(source *numberRangeSource[int8]) numberRangeUI { return NewRange(source) }},
+		{name: "Range unchanged", text: "07", wantValue: "7", wantSetCalls: 1, widget: func(source *numberRangeSource[int8]) numberRangeUI { return NewRange(source) }},
+		{name: "Number invalid", text: "7.5", wantValue: "7", widget: func(source *numberRangeSource[int8]) numberRangeUI { return NewNumber(source) }},
 		{name: "Number unchanged", text: "7", wantSetCalls: 1, widget: func(source *numberRangeSource[int8]) numberRangeUI { return NewNumber(source) }},
 	}
 	for _, tt := range tests {
@@ -582,11 +583,16 @@ func TestNumericCorrectionTargetsOnlyOrigin(t *testing.T) {
 
 				select {
 				case msg := <-first.OutCh:
-					if msg.Jid != originElem.Jid() || msg.What != what.Value || msg.Data != "7" {
-						t.Fatalf("numeric correction = %#v, want Value %q for %v", msg, "7", originElem.Jid())
+					if tt.wantValue == "" {
+						t.Fatalf("canonical numeric input produced output %#v", msg)
+					}
+					if msg.Jid != originElem.Jid() || msg.What != what.Value || msg.Data != tt.wantValue {
+						t.Fatalf("numeric correction = %#v, want Value %q for %v", msg, tt.wantValue, originElem.Jid())
 					}
 				default:
-					t.Fatal("numeric input did not produce a correction")
+					if tt.wantValue != "" {
+						t.Fatal("numeric input did not produce a correction")
+					}
 				}
 				for _, item := range []struct {
 					name    string
@@ -625,11 +631,10 @@ func TestNumericCorrectionTargetsOnlyOrigin(t *testing.T) {
 
 func TestNumericRejectedCorrectionConvergesToNewerSource(t *testing.T) {
 	tests := []struct {
-		name           string
-		widget         func(*numberRangeGatedSource) jaws.UI
-		wantPeerValues []string
+		name   string
+		widget func(*numberRangeGatedSource) jaws.UI
 	}{
-		{name: "Number", widget: func(source *numberRangeGatedSource) jaws.UI { return NewNumber(source) }, wantPeerValues: []string{"8"}},
+		{name: "Number", widget: func(source *numberRangeGatedSource) jaws.UI { return NewNumber(source) }},
 		{name: "Range", widget: func(source *numberRangeGatedSource) jaws.UI { return NewRange(source) }},
 	}
 	for _, tt := range tests {
@@ -716,8 +721,8 @@ func TestNumericRejectedCorrectionConvergesToNewerSource(t *testing.T) {
 						break drainPeer
 					}
 				}
-				if !reflect.DeepEqual(peerValues, tt.wantPeerValues) {
-					t.Fatalf("peer Value updates = %q, want %q", peerValues, tt.wantPeerValues)
+				if len(peerValues) != 0 {
+					t.Fatalf("peer Value updates = %q, want none", peerValues)
 				}
 				if value, calls := int8(source.value.Load()), source.setCalls.Load(); value != 8 || calls != 1 {
 					t.Fatalf("source = (%v, %d calls), want (8, 1 call)", value, calls)

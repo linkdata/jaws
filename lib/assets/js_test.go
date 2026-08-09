@@ -416,7 +416,7 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
-func TestJawsJS_NumberUsesSettledChangeBeforeAutoSubmit(t *testing.T) {
+func TestJawsJS_NumberUsesChangeBeforeAutoSubmit(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 function FakeSocket() { this.readyState = 1; this.sent = []; }
 FakeSocket.prototype.send = function(msg) {
@@ -441,20 +441,20 @@ const number = {
 	getAttribute: function(name) { return name === "type" ? "number" : null; },
 	addEventListener: function(name, fn) { (listeners[name] ||= []).push(fn); }
 };
-const textListeners = {};
-const text = {
+const rangeListeners = {};
+const range = {
 	id: "Jid.2",
 	tagName: "INPUT",
-	type: "text",
-	value: "",
-	hasAttribute: function(name) { return name === "data-jawsnumber"; },
-	getAttribute: function(name) { return name === "type" ? "text" : null; },
-	addEventListener: function(name, fn) { (textListeners[name] ||= []).push(fn); }
+	type: "range",
+	value: "1",
+	hasAttribute: function() { return false; },
+	getAttribute: function(name) { return name === "type" ? "range" : null; },
+	addEventListener: function(name, fn) { (rangeListeners[name] ||= []).push(fn); }
 };
 const top = {
 	querySelectorAll: function(selector) {
 		if (selector === '[id^="' + jawsIdPrefix + '"]') {
-			return [number, text];
+			return [number, range];
 		}
 		if (selector === '[data-jawsonchangesubmit]') {
 			return [number];
@@ -471,38 +471,28 @@ function dispatchChange() {
 	(listeners.change || []).forEach(function(fn) { fn.call(number, ev); });
 }
 
-dispatchChange();
-const initialFrameCount = jaws.sent.length;
-number.value = "1.5";
-number.form.submit();
-const programmaticSubmitFrameCount = jaws.sent.length;
-log.length = 0;
 number.value = "9007199254740993";
-dispatchChange();
-const changedLog = log.slice();
 dispatchChange();
 
 process.stdout.write(JSON.stringify({
 	numberInputListeners: (listeners.input || []).length,
 	numberChangeListeners: (listeners.change || []).length,
-	textInputListeners: (textListeners.input || []).length,
-	initialFrameCount: initialFrameCount,
-	programmaticSubmitFrameCount: programmaticSubmitFrameCount,
+	rangeInputListeners: (rangeListeners.input || []).length,
+	rangeChangeListeners: (rangeListeners.change || []).length,
 	frames: jaws.sent,
-	changedLog: changedLog,
+	log: log,
 	stopped: stopped
 }));
 `)
 
 	var got struct {
-		NumberInputListeners         int      `json:"numberInputListeners"`
-		NumberChangeListeners        int      `json:"numberChangeListeners"`
-		TextInputListeners           int      `json:"textInputListeners"`
-		InitialFrameCount            int      `json:"initialFrameCount"`
-		ProgrammaticSubmitFrameCount int      `json:"programmaticSubmitFrameCount"`
-		Frames                       []string `json:"frames"`
-		ChangedLog                   []string `json:"changedLog"`
-		Stopped                      bool     `json:"stopped"`
+		NumberInputListeners  int      `json:"numberInputListeners"`
+		NumberChangeListeners int      `json:"numberChangeListeners"`
+		RangeInputListeners   int      `json:"rangeInputListeners"`
+		RangeChangeListeners  int      `json:"rangeChangeListeners"`
+		Frames                []string `json:"frames"`
+		Log                   []string `json:"log"`
+		Stopped               bool     `json:"stopped"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
 		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
@@ -510,23 +500,17 @@ process.stdout.write(JSON.stringify({
 	if got.NumberInputListeners != 0 || got.NumberChangeListeners != 2 {
 		t.Fatalf("Number listeners = input:%d change:%d, want input:0 change:2", got.NumberInputListeners, got.NumberChangeListeners)
 	}
-	if got.TextInputListeners != 1 {
-		t.Fatalf("marked text input listeners = %d, want 1", got.TextInputListeners)
+	if got.RangeInputListeners != 1 || got.RangeChangeListeners != 0 {
+		t.Fatalf("Range listeners = input:%d change:%d, want input:1 change:0", got.RangeInputListeners, got.RangeChangeListeners)
 	}
-	if got.InitialFrameCount != 0 {
-		t.Fatalf("unchanged initial Number emitted %d frames", got.InitialFrameCount)
+	if !reflect.DeepEqual(got.Log, []string{"send", "submit"}) {
+		t.Fatalf("Number change order = %v, want send before submit", got.Log)
 	}
-	if got.ProgrammaticSubmitFrameCount != 0 {
-		t.Fatalf("programmatic form submission flushed %d Number frames", got.ProgrammaticSubmitFrameCount)
-	}
-	if !reflect.DeepEqual(got.ChangedLog, []string{"send", "submit"}) {
-		t.Fatalf("changed Number order = %v, want send before submit", got.ChangedLog)
-	}
-	if got.Stopped {
-		t.Fatal("Number change handler stopped propagation")
+	if !got.Stopped {
+		t.Fatal("Number change handler did not stop propagation")
 	}
 	if len(got.Frames) != 1 {
-		t.Fatalf("Number frames = %q, want one deduplicated frame", got.Frames)
+		t.Fatalf("Number frames = %q, want one frame", got.Frames)
 	}
 	msg, ok := wire.Parse([]byte(got.Frames[0]))
 	if !ok || msg.What != what.Input || msg.Jid != 1 || msg.Data != "9007199254740993" {
@@ -1588,146 +1572,6 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
-func TestJawsJS_NumberFlushesBeforeManagedEvents(t *testing.T) {
-	raw := runJawsJSSnippet(t, `
-function FakeSocket() { this.readyState = 1; this.sent = []; }
-FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
-WebSocket = FakeSocket;
-
-function makeNumber(id) {
-	const listeners = {};
-	const elem = {
-		id: id || "Jid.1",
-		tagName: "INPUT",
-		type: "number",
-		value: "1",
-		parentElement: null,
-		hasAttribute: function(name) { return name === "data-jawsnumber"; },
-		getAttribute: function(name) { return name === "type" ? "number" : null; },
-		addEventListener: function(name, fn) { (listeners[name] ||= []).push(fn); }
-	};
-	jawsAttach(elem);
-	elem.dispatchChange = function() {
-		const ev = new Event();
-		ev.currentTarget = elem;
-		(listeners.change || []).forEach(function(fn) { fn.call(elem, ev); });
-	};
-	return elem;
-}
-
-function makeClickEvent() {
-	const target = {
-		id: "Jid.9",
-		tagName: "DIV",
-		textContent: "",
-		parentElement: null,
-		getAttribute: function(name) { return name === "name" ? "action" : null; }
-	};
-	const ev = new Event();
-	ev.target = target;
-	ev.clientX = 3;
-	ev.clientY = 4;
-	ev.shiftKey = false;
-	ev.ctrlKey = false;
-	ev.altKey = false;
-	ev.stopPropagation = function() {};
-	ev.preventDefault = function() {};
-	return ev;
-}
-
-function run(kind, changed) {
-	jaws = new FakeSocket();
-	const number = makeNumber();
-	if (changed) {
-		number.value = "2";
-	}
-	document.activeElement = number;
-	if (kind === "input") {
-		const input = {
-			id: "Jid.2",
-			tagName: "INPUT",
-			value: "typed",
-			getAttribute: function(name) { return name === "type" ? "text" : null; }
-		};
-		const ev = new Event();
-		ev.currentTarget = input;
-		ev.stopPropagation = function() {};
-		jawsInputHandler(ev);
-	} else if (kind === "number") {
-		const other = makeNumber("Jid.2");
-		other.value = "3";
-		other.dispatchChange();
-	} else if (kind === "click") {
-		jawsClickHandler(makeClickEvent());
-	} else {
-		jawsContextMenuHandler(makeClickEvent());
-	}
-	const beforeChange = jaws.sent.length;
-	number.dispatchChange();
-	return { frames: jaws.sent, beforeChange: beforeChange, afterChange: jaws.sent.length };
-}
-
-process.stdout.write(JSON.stringify({
-	input: run("input", true),
-	number: run("number", true),
-	click: run("click", true),
-	context: run("context", true),
-	unchanged: run("click", false)
-}));
-`)
-
-	type result struct {
-		Frames       []string `json:"frames"`
-		BeforeChange int      `json:"beforeChange"`
-		AfterChange  int      `json:"afterChange"`
-	}
-	var got struct {
-		Input     result `json:"input"`
-		Number    result `json:"number"`
-		Click     result `json:"click"`
-		Context   result `json:"context"`
-		Unchanged result `json:"unchanged"`
-	}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
-		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
-	}
-
-	tests := []struct {
-		name string
-		got  result
-		want what.What
-		jid  int
-	}{
-		{name: "input", got: got.Input, want: what.Input, jid: 2},
-		{name: "number", got: got.Number, want: what.Input, jid: 2},
-		{name: "click", got: got.Click, want: what.Click},
-		{name: "context", got: got.Context, want: what.ContextMenu},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.got.BeforeChange != 2 || tt.got.AfterChange != 2 || len(tt.got.Frames) != 2 {
-				t.Fatalf("frame counts = before:%d after:%d frames:%q, want two with later change deduplicated", tt.got.BeforeChange, tt.got.AfterChange, tt.got.Frames)
-			}
-			first, ok := wire.Parse([]byte(tt.got.Frames[0]))
-			if !ok || first.What != what.Input || first.Jid != 1 || first.Data != "2" {
-				t.Fatalf("first frame = %+v, parseable %t, want focused Number input", first, ok)
-			}
-			second, ok := wire.Parse([]byte(tt.got.Frames[1]))
-			if !ok || second.What != tt.want || int(second.Jid) != tt.jid {
-				t.Fatalf("second frame = %+v, parseable %t, want %v for Jid %d", second, ok, tt.want, tt.jid)
-			}
-		})
-	}
-
-	if got.Unchanged.BeforeChange != 1 || got.Unchanged.AfterChange != 1 || len(got.Unchanged.Frames) != 1 {
-		t.Fatalf("unchanged focused Number frames = %+v, want only the Click frame", got.Unchanged)
-	}
-	msg, ok := wire.Parse([]byte(got.Unchanged.Frames[0]))
-	if !ok || msg.What != what.Click {
-		t.Fatalf("unchanged focused Number frame = %+v, parseable %t, want Click", msg, ok)
-	}
-}
-
 func TestJawsJS_SetValuePreservesTextSelection(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 const input = {
@@ -1814,87 +1658,6 @@ process.stdout.write(JSON.stringify({
 	}
 	if got.Value != "say hello!" || got.Start != 5 || got.End != 9 {
 		t.Fatalf("implicit text input value/selection = %+v, want selection 5:9", got)
-	}
-}
-
-func TestJawsJS_NumberValueUpdateResetsSettledBaseline(t *testing.T) {
-	raw := runJawsJSSnippet(t, `
-function FakeSocket() { this.readyState = 1; this.sent = []; }
-FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
-WebSocket = FakeSocket;
-jaws = new FakeSocket();
-
-const nodes = {};
-function makeNumber(id, initial, normalize) {
-	const listeners = {};
-	let value = initial;
-	const elem = {
-		id: id,
-		tagName: "INPUT",
-		type: "number",
-		parentElement: null,
-		hasAttribute: function(name) { return name === "data-jawsnumber"; },
-		getAttribute: function(name) { return name === "type" ? "number" : null; },
-		addEventListener: function(name, fn) { (listeners[name] ||= []).push(fn); }
-	};
-	Object.defineProperty(elem, "value", {
-		get: function() { return value; },
-		set: function(v) { value = normalize ? String(Number(v)) : v; },
-		enumerable: true,
-		configurable: true
-	});
-	elem.dispatchChange = function() {
-		const ev = new Event();
-		ev.currentTarget = elem;
-		(listeners.change || []).forEach(function(fn) { fn.call(elem, ev); });
-	};
-	nodes[id] = elem;
-	jawsAttach(elem);
-	return elem;
-}
-document.getElementById = function(id) { return nodes[id] || null; };
-
-const canonicalized = makeNumber("Jid.1", "1", false);
-canonicalized.value = "01";
-canonicalized.dispatchChange();
-jawsPerform("Value", canonicalized.id, JSON.stringify("1"));
-canonicalized.dispatchChange();
-
-const discarded = makeNumber("Jid.2", "5", false);
-discarded.value = "7";
-jawsPerform("Value", discarded.id, JSON.stringify("5"));
-discarded.dispatchChange();
-
-const normalized = makeNumber("Jid.3", "3", true);
-jawsPerform("Value", normalized.id, JSON.stringify("03"));
-normalized.dispatchChange();
-
-process.stdout.write(JSON.stringify({
-	frames: jaws.sent,
-	canonicalizedValue: canonicalized.value,
-	discardedValue: discarded.value,
-	normalizedValue: normalized.value
-}));
-`)
-
-	var got struct {
-		Frames             []string `json:"frames"`
-		CanonicalizedValue string   `json:"canonicalizedValue"`
-		DiscardedValue     string   `json:"discardedValue"`
-		NormalizedValue    string   `json:"normalizedValue"`
-	}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
-		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
-	}
-	if got.CanonicalizedValue != "1" || got.DiscardedValue != "5" || got.NormalizedValue != "3" {
-		t.Fatalf("post-Value Number values = canonicalized:%q discarded:%q normalized:%q", got.CanonicalizedValue, got.DiscardedValue, got.NormalizedValue)
-	}
-	if len(got.Frames) != 1 {
-		t.Fatalf("Number frames after server Value updates = %q, want only the settled pre-update edit", got.Frames)
-	}
-	msg, ok := wire.Parse([]byte(got.Frames[0]))
-	if !ok || msg.What != what.Input || msg.Jid != 1 || msg.Data != "01" {
-		t.Fatalf("unexpected Number frame: %+v, parseable %t", msg, ok)
 	}
 }
 

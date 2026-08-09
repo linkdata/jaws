@@ -646,13 +646,12 @@ Static numeric values passed to the template helpers use these getter-only forms
 Number and Range require ordinary rendering and are not supported by
 `RequestWriter.Register`.
 
-Number sends a settled edit on `change`, with pending edits flushed before another
-JaWS-managed input, click, or context-menu event. Range sends live `input` events
-while its thumb moves. When an event reaches the widget's own input handler, Number
-rewrites accepted and rejected edits to the source's canonical formatting, including
-when an accepted value is already stored. Range also reconciles accepted text through
-its formatter. Both silently reject browser text that is invalid for the source type
-and restore the canonical source value only on the originating control.
+Number sends edits on the browser's `change` event. Pending edits remain
+browser-local until then. Range sends live `input` events while its thumb moves.
+When an event reaches the widget's own input handler, Number and Range reconcile
+accepted and rejected edits with the source's canonical formatting. Both silently
+reject browser text that is invalid for the source type and restore the canonical
+source value only on the originating control.
 
 Named numeric sources work directly in templates:
 

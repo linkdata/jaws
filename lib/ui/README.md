@@ -154,15 +154,12 @@ A getter-only Number has the native `readonly` attribute. A getter-only Range is
 values passed to `RequestWriter.Number` and `RequestWriter.Range` use these
 getter-only paths.
 
-Number sends edits when the browser fires `change`, after the user settles the
-field. JaWS also flushes a changed focused Number before another managed input,
-click, or context-menu event. Range sends live `input` events while its thumb
-moves. When an event reaches the widget's own input handler, Number rejects malformed
-or unrepresentable browser text without calling the setter and restores the getter's
-canonical text on the originating control. It also rewrites accepted text through
-its formatter, including when the source value is unchanged. Range likewise
-reconciles accepted text, silently rejects text that is invalid for the source type,
-and restores only the originating control.
+Number sends edits when the browser fires `change`. Pending edits remain
+browser-local until then. Range sends live `input` events while its thumb moves.
+Both silently reject malformed or unrepresentable browser text without calling the
+setter and restore the getter's canonical text only on the originating control.
+Accepted text is reconciled through the formatter when needed, including when the
+source value is unchanged.
 
 Named numeric sources work directly with both Go and template helpers:
 

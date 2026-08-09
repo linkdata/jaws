@@ -384,7 +384,7 @@ func (rq *Request) sendQueue(outboundMsgCh chan<- wire.WsMsg) {
 func (rq *Request) removeElementsLocked(pred func(*Element) bool) {
 	rq.todoDirt = slices.DeleteFunc(rq.todoDirt, func(tagValue any) bool {
 		elem, ok := tagValue.(*Element)
-		return ok && elem != nil && pred(elem)
+		return ok && pred(elem)
 	})
 	rq.elems = slices.DeleteFunc(rq.elems, pred)
 	for k := range rq.tagMap {

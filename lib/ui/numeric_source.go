@@ -8,12 +8,8 @@ import (
 )
 
 func validateEditableNumericSource(source any) (err error) {
-	tagValue := source
-	if tagger, ok := source.(tag.TagGetter); ok {
-		tagValue = tagger.JawsGetTag()
-	}
 	var tags []any
-	if tags, err = tag.TagExpand(tagValue); err != nil {
+	if tags, err = tag.TagExpand(source); err != nil {
 		// Keep the specific expansion error available while also providing one
 		// stable identity for every unusable editable numeric source.
 		if !errors.Is(err, tag.ErrNotUsableAsTag) {
