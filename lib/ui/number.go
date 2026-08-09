@@ -25,9 +25,8 @@ import (
 // and ancestor renders may replace an edit that has not settled.
 type Number struct {
 	Input
-	binding  *numericBinding
-	rendered atomic.Pointer[jaws.Element]
-	last     atomic.Pointer[numberState]
+	binding *numericBinding
+	last    atomic.Pointer[numberState]
 }
 
 type numberState struct {
@@ -89,7 +88,6 @@ func (u *Number) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err 
 	}
 	if err = htmlio.WriteHTMLInput(w, elem.Jid(), "number", text, attrs); err == nil {
 		u.last.Store(&numberState{text: text, valid: true})
-		u.rendered.Store(elem)
 	}
 	return
 }
@@ -97,7 +95,7 @@ func (u *Number) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err 
 // JawsUpdate sends the canonical source value when it differs from the browser
 // baseline.
 func (u *Number) JawsUpdate(elem *jaws.Element) {
-	if u.rendered.Load() != elem {
+	if u.last.Load() == nil {
 		elem.Request.MustLog(errors.New("ui.Number.JawsUpdate called before successful rendering"))
 		return
 	}

@@ -20,7 +20,6 @@ import (
 type Range struct {
 	Input
 	binding   *numericBinding
-	element   atomic.Pointer[jaws.Element]
 	lastValid atomic.Bool
 }
 
@@ -72,7 +71,6 @@ func (u *Range) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err e
 	if err = htmlio.WriteHTMLInput(w, elem.Jid(), "range", text, attrs); err == nil {
 		u.Last.Store(value)
 		u.lastValid.Store(true)
-		u.element.Store(elem)
 	}
 	return
 }
@@ -84,10 +82,9 @@ func (u *Range) JawsUpdate(elem *jaws.Element) {
 		elem.Cancel(err)
 		return
 	}
-	sameElement := u.element.Swap(elem) == elem
 	prev := u.Last.Swap(value)
 	wasValid := u.lastValid.Swap(true)
-	if !sameElement || !wasValid || prev == nil || !u.binding.equal(prev, value) {
+	if !wasValid || prev == nil || !u.binding.equal(prev, value) {
 		elem.SetValue(text)
 	}
 }

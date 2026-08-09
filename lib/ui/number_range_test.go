@@ -418,6 +418,23 @@ func TestRangeRejectedInputRestoresCanonicalValue(t *testing.T) {
 	}
 }
 
+func TestRangeRegisterSendsInitialValue(t *testing.T) {
+	tr := newNumberRangeLiveRequest(t, nil)
+	rng := NewRange(newNumberRangeSource(numberRangeNamedInt(0)))
+	rw := RequestWriter{Request: tr.Request, Writer: tr.Recorder}
+	id := rw.Register(rng)
+
+	tr.InCh <- wire.WsMsg{}
+	select {
+	case msg := <-tr.OutCh:
+		if msg.What != what.Value || msg.Jid != id || msg.Data != "0" {
+			t.Fatalf("initial Range update = {%v %v %q}, want {%v %v %q}", msg.What, msg.Jid, msg.Data, what.Value, id, "0")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for initial registered Range value")
+	}
+}
+
 func TestNumberCodecFormatErrorsAtWidgetBoundary(t *testing.T) {
 	t.Run("render returns error", func(t *testing.T) {
 		_, rq := newCoreRequest(t)
@@ -596,25 +613,6 @@ func TestNumberUpdateBeforeRenderLogsAndQueuesNothing(t *testing.T) {
 	case msg := <-tr.OutCh:
 		t.Fatalf("update before render queued outbound message %#v", msg)
 	case <-timer.C:
-	}
-}
-
-func TestNumberRenderStateBelongsToItsElement(t *testing.T) {
-	logger := new(numberRangeLogger)
-	_, rq := newConfiguredCoreRequest(t, func(jw *jaws.Jaws) { jw.Logger = logger })
-	number := NewNumber(newNumberRangeSource(3))
-	first := rq.NewElement(number)
-	var rendered strings.Builder
-	if err := first.JawsRender(&rendered, nil); err != nil {
-		t.Fatal(err)
-	}
-	rq.DeleteElement(first)
-
-	second := rq.NewElement(number)
-	number.JawsUpdate(second)
-	logged := logger.snapshot()
-	if len(logged) != 1 || !strings.Contains(logged[0].Error(), "before successful rendering") {
-		t.Fatalf("second Element logged errors = %v", logged)
 	}
 }
 
