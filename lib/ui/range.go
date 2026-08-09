@@ -44,12 +44,13 @@ func NewRange[T Numeric](source bind.Getter[T]) *Range {
 
 // JawsRender renders the Range as an HTML range input.
 func (u *Range) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
+	source := u.binding.sourceValue()
 	if u.binding.writable() {
-		if err = validateEditableNumericSource(u.binding.source); err != nil {
+		if err = validateEditableNumericSource(source); err != nil {
 			return
 		}
 	}
-	getterAttrs := u.applyGetterAttrs(elem, u.binding.source)
+	getterAttrs := u.applyGetterAttrs(elem, source)
 	text, err := u.binding.getText(elem)
 	if err != nil {
 		elem.Cancel(err)
