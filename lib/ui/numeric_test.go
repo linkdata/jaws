@@ -208,6 +208,8 @@ func (source *numericTestSource[T]) JawsSet(_ *jaws.Element, value T) error {
 }
 
 func TestTypedNumericBindingStoresLastBeforeSet(t *testing.T) {
+	// Observing Last at setter entry pins the ordering needed when a setter hook
+	// dirties the Element and lets JawsUpdate run before JawsSet returns.
 	input := &Input{}
 	source := &numericTestSource[numericNamedInt]{input: input}
 	binding := newNumericBinding[numericNamedInt](source)
@@ -217,6 +219,40 @@ func TestTypedNumericBindingStoresLastBeforeSet(t *testing.T) {
 	}
 	if source.seenLast != "-123" {
 		t.Fatalf("Last observed by typed setter = %v, want -123", source.seenLast)
+	}
+}
+
+type numericRejectedBinding struct {
+	err error
+}
+
+func (binding numericRejectedBinding) sourceValue() any {
+	return nil
+}
+
+func (binding numericRejectedBinding) writable() bool {
+	return true
+}
+
+func (binding numericRejectedBinding) getText(*jaws.Element) (string, error) {
+	return "", nil
+}
+
+func (binding numericRejectedBinding) acceptText(*Input, *jaws.Element, string) (bool, error) {
+	return false, binding.err
+}
+
+func TestHandleNumericInputRejectsWithoutError(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	elem := rq.NewElement(nil)
+	input := &Input{}
+	input.Last.Store("previous")
+	err := handleNumericInput(input, numericRejectedBinding{err: errors.New("ignored")}, elem, "bad")
+	if err != nil {
+		t.Fatalf("handleNumericInput rejected error = %v, want nil", err)
+	}
+	if last := input.Last.Load(); last != "" {
+		t.Fatalf("Last after rejected input = %v, want empty string", last)
 	}
 }
 

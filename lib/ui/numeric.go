@@ -20,13 +20,24 @@ type Numeric interface {
 		~float32 | ~float64
 }
 
+// numericBinding lets Number and Range share logic across two source paths.
+// NewNumber and NewRange retain T, so numericTyped can call typed getters and
+// setters directly. RequestWriter receives any for template use, and a finite
+// type switch cannot cover arbitrary named numeric types, so numericReflected
+// discovers their methods at runtime. Both paths share the parsing and
+// formatting helpers below.
 type numericBinding interface {
 	sourceValue() any
 	writable() bool
 	getText(*jaws.Element) (string, error)
+	// acceptText is called only when writable reports true. It stores accepted
+	// text in Input.Last before invoking the setter because a setter hook may
+	// dirty the Element and allow JawsUpdate to read Last concurrently. Its
+	// error is meaningful only when accepted is true.
 	acceptText(*Input, *jaws.Element, string) (bool, error)
 }
 
+// numericTyped preserves the compile-time numeric type used by constructors.
 type numericTyped[T Numeric] struct {
 	source bind.Getter[T]
 	setter bind.Setter[T]
@@ -73,8 +84,9 @@ func handleNumericInput(input *Input, binding numericBinding, elem *jaws.Element
 	if !binding.writable() {
 		return
 	}
-	accepted, err := binding.acceptText(input, elem, text)
+	accepted, setErr := binding.acceptText(input, elem, text)
 	if !accepted {
+		// Rejected browser text is validation, not a handler error.
 		// A formatter can never produce empty text, so empty forces the next
 		// update to restore the canonical value.
 		input.Last.Store("")
@@ -83,6 +95,7 @@ func handleNumericInput(input *Input, binding numericBinding, elem *jaws.Element
 		elem.Dirty(elem)
 		return
 	}
+	err = setErr
 	if errors.Is(err, jaws.ErrValueUnchanged) {
 		// The accepted text may still differ from the source's formatting.
 		elem.Dirty(elem)
@@ -101,6 +114,7 @@ func newNumericBinding[T Numeric](source bind.Getter[T]) numericBinding {
 	return nb
 }
 
+// numericClass selects the parser and formatter family for a numeric type.
 type numericClass uint8
 
 const (
@@ -182,6 +196,7 @@ func makeNumericBinding(source any) (binding numericBinding, ok bool) {
 	return
 }
 
+// numericReflected adapts a numeric source known only at runtime.
 type numericReflected struct {
 	source any
 	value  reflect.Value
