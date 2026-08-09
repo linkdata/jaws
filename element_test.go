@@ -603,7 +603,7 @@ func TestElement_HandlersFrozenAfterRender(t *testing.T) {
 	}
 	assertHandlerMutationFrozen(t, e, func() { e.AddHandlers(testClickHandler{}) })
 	assertHandlerMutationFrozen(t, e, func() { e.ApplyParams([]any{testEventHandler{}}) })
-	assertHandlerMutationFrozen(t, e, func() { _, _ = e.ApplyGetter(testClickHandler{}) })
+	assertHandlerMutationFrozen(t, e, func() { e.ApplyGetter(testClickHandler{}) })
 }
 
 func TestElement_FreezeSealsHandlers(t *testing.T) {
@@ -792,15 +792,12 @@ func TestElement_ApplyGetterDebugBranches(t *testing.T) {
 	defer rq.Close()
 	elem := rq.NewElement(&testUi{})
 
-	if gotTag, attrs := elem.ApplyGetter(nil); gotTag != nil || len(attrs) != 0 {
-		t.Fatalf("unexpected %v %#v", gotTag, attrs)
+	if gotTag := elem.ApplyGetter(nil); gotTag != nil {
+		t.Fatalf("unexpected tag %v", gotTag)
 	}
 
 	ag := testApplyGetterAll{}
-	gotTags, attrs := elem.ApplyGetter(ag)
-	if len(attrs) != 0 {
-		t.Fatalf("expected no attrs, got %#v", attrs)
-	}
+	gotTags := elem.ApplyGetter(ag)
 	if !elem.HasTag(tag.Tag("tg")) {
 		t.Fatalf("missing Tag('tg') in %#v", gotTags)
 	}
@@ -861,10 +858,14 @@ func (testNonComparableContextMenuHandler) JawsContextMenu(elem *Element, click 
 var _ ContextMenuHandler = testNonComparableContextMenuHandler{}
 
 type testInitialHTMLAttrHandler struct {
-	attr template.HTMLAttr
+	attr  template.HTMLAttr
+	calls *int
 }
 
 func (h testInitialHTMLAttrHandler) JawsInitialHTMLAttr(elem *Element) (s template.HTMLAttr) {
+	if h.calls != nil {
+		(*h.calls)++
+	}
 	s = h.attr
 	return
 }
@@ -892,18 +893,22 @@ func (s *testStringSetterWithInitialHTMLAttr) JawsInitialHTMLAttr(elem *Element)
 }
 
 type testClickAndInitialHTMLAttr struct {
-	called *bool
-	attr   template.HTMLAttr
+	clickCalled *bool
+	attrCalls   *int
+	attr        template.HTMLAttr
 }
 
 func (h testClickAndInitialHTMLAttr) JawsClick(elem *Element, click Click) error {
-	if h.called != nil {
-		*h.called = true
+	if h.clickCalled != nil {
+		*h.clickCalled = true
 	}
 	return nil
 }
 
 func (h testClickAndInitialHTMLAttr) JawsInitialHTMLAttr(elem *Element) (attr template.HTMLAttr) {
+	if h.attrCalls != nil {
+		(*h.attrCalls)++
+	}
 	attr = h.attr
 	return
 }
@@ -929,12 +934,9 @@ func TestElement_ApplyGetter(t *testing.T) {
 	e := rq.NewElement(tss)
 
 	var tch testClickHandler
-	gotTag, attrs := e.ApplyGetter(tch)
+	gotTag := e.ApplyGetter(tch)
 	if gotTag != tch {
 		t.Errorf("tag was %#v", gotTag)
-	}
-	if len(attrs) != 0 {
-		t.Fatalf("expected no attrs, got %#v", attrs)
 	}
 	is.Equal(len(e.handlers), 1)
 	if !e.HasTag(tch) {
@@ -973,7 +975,7 @@ func TestElement_ApplyGetter_NonComparableHandler_NilLogger(t *testing.T) {
 	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	e := rq.NewElement(&testUi{s: "x"})
 	tch := testNonComparableClickHandler{names: []string{"name"}}
-	gotTag, _ := e.ApplyGetter(tch)
+	gotTag := e.ApplyGetter(tch)
 	if gotTag != nil {
 		t.Fatalf("expected declined non-comparable candidate to return a nil tag, got %#v", gotTag)
 	}
@@ -1011,12 +1013,9 @@ func TestElement_ApplyGetter_NilTagGetter(t *testing.T) {
 	defer rq.Close()
 
 	e := rq.NewElement(&testUi{s: "foo"})
-	gotTag, attrs := e.ApplyGetter(testNilTagGetter{})
+	gotTag := e.ApplyGetter(testNilTagGetter{})
 	if gotTag != nil {
 		t.Fatalf("expected nil tag, got %#v", gotTag)
-	}
-	if len(attrs) != 0 {
-		t.Fatalf("expected no attrs, got %#v", attrs)
 	}
 	if got := rq.TagsOf(e); len(got) != 0 {
 		t.Fatalf("expected nil tag getter to not tag element, got %v", got)
@@ -1076,9 +1075,10 @@ func TestElement_ApplyParams_InitialHTMLAttrHandler(t *testing.T) {
 	defer rq.Close()
 
 	e := rq.NewElement(testDivWidget{inner: "x"})
+	attrCalls := 0
 	attrs := e.ApplyParams([]any{
 		"hidden",
-		testInitialHTMLAttrHandler{attr: `data-attr="ok"`},
+		testInitialHTMLAttrHandler{attr: `data-attr="ok"`, calls: &attrCalls},
 	})
 	if len(attrs) != 1 {
 		t.Fatalf("expected 1 attr, got %d", len(attrs))
@@ -1089,6 +1089,9 @@ func TestElement_ApplyParams_InitialHTMLAttrHandler(t *testing.T) {
 	if strings.Contains(string(attrs[0]), "data-attr") {
 		t.Fatalf("unexpected initial HTML attr in ApplyParams output: %q", attrs[0])
 	}
+	if attrCalls != 0 {
+		t.Fatalf("JawsInitialHTMLAttr called %d times, want 0", attrCalls)
+	}
 }
 
 func TestElement_ApplyParams_IgnoreInitialHTMLAttrOnCombinedParamHandler(t *testing.T) {
@@ -1096,10 +1099,12 @@ func TestElement_ApplyParams_IgnoreInitialHTMLAttrOnCombinedParamHandler(t *test
 	defer rq.Close()
 
 	e := rq.NewElement(testDivWidget{inner: "x"})
-	called := false
+	clickCalled := false
+	attrCalls := 0
 	h := testClickAndInitialHTMLAttr{
-		called: &called,
-		attr:   `data-attr="ignored"`,
+		clickCalled: &clickCalled,
+		attrCalls:   &attrCalls,
+		attr:        `data-attr="ignored"`,
 	}
 
 	attrs := e.ApplyParams([]any{h})
@@ -1112,12 +1117,43 @@ func TestElement_ApplyParams_IgnoreInitialHTMLAttrOnCombinedParamHandler(t *test
 	if err := CallEventHandlers(e.UI(), e, what.Click, "1 2 0 x"); err != nil {
 		t.Fatalf("expected click handler to run, got %v", err)
 	}
-	if !called {
+	if !clickCalled {
 		t.Fatal("expected click handler to be called")
+	}
+	if attrCalls != 0 {
+		t.Fatalf("JawsInitialHTMLAttr called %d times, want 0", attrCalls)
 	}
 }
 
-func TestElement_ApplyGetter_InitialHTMLAttrHandler(t *testing.T) {
+func TestElement_ApplyInitialHTMLAttr(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	e := rq.NewElement(testDivWidget{inner: "x"})
+	if attrs := e.ApplyInitialHTMLAttr(nil); len(attrs) != 0 {
+		t.Fatalf("unexpected attrs for nil getter: %#v", attrs)
+	}
+
+	attrCalls := 0
+	h := testInitialHTMLAttrHandler{calls: &attrCalls}
+	if attrs := e.ApplyInitialHTMLAttr(h); len(attrs) != 0 {
+		t.Fatalf("unexpected empty attr result: %#v", attrs)
+	}
+	if attrCalls != 1 {
+		t.Fatalf("JawsInitialHTMLAttr called %d times, want 1", attrCalls)
+	}
+
+	h.attr = `data-attr="ok"`
+	attrs := e.ApplyInitialHTMLAttr(h)
+	if len(attrs) != 1 || attrs[0] != h.attr {
+		t.Fatalf("unexpected attrs: %#v", attrs)
+	}
+	if attrCalls != 2 {
+		t.Fatalf("JawsInitialHTMLAttr called %d times, want 2", attrCalls)
+	}
+}
+
+func TestElement_ApplyInitialHTMLAttr_RendersGetterAttribute(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 
@@ -1143,35 +1179,65 @@ func TestElement_ApplyGetter_InitialHTMLAttrHandler(t *testing.T) {
 	}
 }
 
-func TestElement_ApplyGetter_InitialHTMLAttrAndClickHandler(t *testing.T) {
+func TestElement_ApplyGetter_DoesNotApplyInitialHTMLAttr(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 
 	e := rq.NewElement(testDivWidget{inner: "x"})
-	called := false
+	clickCalled := false
+	attrCalls := 0
 	h := testClickAndInitialHTMLAttr{
-		called: &called,
-		attr:   `data-attr="ok"`,
+		clickCalled: &clickCalled,
+		attrCalls:   &attrCalls,
+		attr:        `data-attr="ok"`,
 	}
-	_, attrs := e.ApplyGetter(h)
-	if len(attrs) != 1 || attrs[0] != `data-attr="ok"` {
-		t.Fatalf("unexpected attrs from ApplyGetter: %#v", attrs)
+	if gotTag := e.ApplyGetter(h); gotTag != h {
+		t.Fatalf("tag = %#v, want %#v", gotTag, h)
 	}
-	if len(e.handlers) != 1 {
-		t.Fatalf("expected 1 handler before ApplyParams, got %d", len(e.handlers))
-	}
-	paramsAttrs := e.ApplyParams(nil)
-	if len(paramsAttrs) != 0 {
-		t.Fatalf("unexpected attrs from ApplyParams: %#v", paramsAttrs)
+	if attrCalls != 0 {
+		t.Fatalf("JawsInitialHTMLAttr called %d times, want 0", attrCalls)
 	}
 	if len(e.handlers) != 1 {
-		t.Fatalf("expected click handler to remain after ApplyParams, got %d handlers", len(e.handlers))
+		t.Fatalf("expected 1 handler, got %d", len(e.handlers))
+	}
+	if !e.HasTag(h) {
+		t.Fatal("expected combined handler to be tagged")
 	}
 	if err := CallEventHandlers(e.UI(), e, what.Click, "1 2 0 x"); err != nil {
 		t.Fatalf("expected click handler to run, got %v", err)
 	}
-	if !called {
+	if !clickCalled {
 		t.Fatal("expected click handler to be called")
+	}
+}
+
+func TestElement_ApplyInitialHTMLAttr_CombinedHandlerOnlyAppliesAttr(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	e := rq.NewElement(testDivWidget{inner: "x"})
+	clickCalled := false
+	attrCalls := 0
+	h := testClickAndInitialHTMLAttr{
+		clickCalled: &clickCalled,
+		attrCalls:   &attrCalls,
+		attr:        `data-attr="ok"`,
+	}
+	attrs := e.ApplyInitialHTMLAttr(h)
+	if len(attrs) != 1 || attrs[0] != h.attr {
+		t.Fatalf("unexpected attrs: %#v", attrs)
+	}
+	if attrCalls != 1 {
+		t.Fatalf("JawsInitialHTMLAttr called %d times, want 1", attrCalls)
+	}
+	if clickCalled {
+		t.Fatal("click handler was called")
+	}
+	if len(e.handlers) != 0 {
+		t.Fatalf("expected no handlers, got %d", len(e.handlers))
+	}
+	if got := rq.TagsOf(e); len(got) != 0 {
+		t.Fatalf("expected no tags, got %v", got)
 	}
 }
 

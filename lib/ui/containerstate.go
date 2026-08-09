@@ -130,7 +130,8 @@ func (u Container) render(elem *jaws.Element, w io.Writer, params []any, complet
 	}()
 
 	var getterAttrs []template.HTMLAttr
-	dirtyTag, getterAttrs = elem.ApplyGetter(u.children)
+	dirtyTag = elem.ApplyGetter(u.children)
+	getterAttrs = elem.ApplyInitialHTMLAttr(u.children)
 	attrs := append(elem.ApplyParams(params), getterAttrs...)
 	b := elem.Jid().AppendStartTagAttr(nil, u.outerHTMLTag)
 	b = htmlio.AppendAttrs(b, attrs)

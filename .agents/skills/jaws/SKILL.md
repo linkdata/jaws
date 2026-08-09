@@ -268,6 +268,11 @@ For clickable content rendering:
 ## Rendering and update rules
 
 - Keep HTML structure in templates; avoid manual HTML string assembly in Go.
+- `Element.ApplyGetter` applies a primary getter's tag and event-handler interfaces;
+  it does not invoke `InitialHTMLAttrHandler`. Collect initial attributes separately
+  with `Element.ApplyInitialHTMLAttr`, without holding widget or bound-value locks that
+  the callback may acquire. The handler owns its synchronization. A `bind.Binder`
+  acquires its own lock before invoking its `InitialHTMLAttrHook`.
 - `ui.Template.JawsUpdate` re-renders the template data into the generated wrapper.
 - `ui.Container`, `ui.Tbody` and `ui.Select` claim a private `containerState` on each
   Element before registering tags or handlers, invoking application code, or writing
