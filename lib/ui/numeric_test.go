@@ -10,21 +10,65 @@ import (
 	"github.com/linkdata/jaws"
 )
 
+func testNumericOpsFormat[T Numeric](ops numericOps, value T) (string, error) {
+	return ops.formatValue(reflect.ValueOf(value))
+}
+
+func testNumericOpsParse[T Numeric](ops numericOps, text string) (value T, ok bool) {
+	if parsed, yes := ops.parseValue(text); yes {
+		return parsed.Interface().(T), true
+	}
+	return
+}
+
 func testNumericParse[T Numeric](t *testing.T, text string, want T, wantOK bool) {
 	t.Helper()
-	ops, ok := newNumericOps(reflect.TypeFor[T]())
+	typ := reflect.TypeFor[T]()
+	bits := typ.Bits()
+	typed, typedOK := parseNumeric[T](text, bits)
+	if typedOK != wantOK {
+		t.Fatalf("parseNumeric[%v](%q) ok = %v, want %v", typ, text, typedOK, wantOK)
+	}
+	if typedOK && typed != want {
+		t.Fatalf("parseNumeric[%v](%q) = %v, want %v", typ, text, typed, want)
+	}
+
+	ops, ok := newNumericOps(typ)
 	if !ok {
 		t.Fatalf("newNumericOps(%T) rejected numeric type", want)
 	}
-	value, gotOK := ops.parse(text)
+	value, gotOK := testNumericOpsParse[T](ops, text)
 	if gotOK != wantOK {
-		t.Fatalf("parse(%q) ok = %v, want %v", text, gotOK, wantOK)
+		t.Fatalf("numericOps(%v).parse(%q) ok = %v, want %v", typ, text, gotOK, wantOK)
 	}
-	if gotOK {
-		if got := value.(T); got != want {
-			t.Fatalf("parse(%q) = %v, want %v", text, got, want)
+	if gotOK && value != want {
+		t.Fatalf("numericOps(%v).parse(%q) = %v, want %v", typ, text, value, want)
+	}
+}
+
+func testNumericFormat[T Numeric](t *testing.T, name string, value T, wantText string, wantErr error) {
+	t.Helper()
+	t.Run(name, func(t *testing.T) {
+		typ := reflect.TypeFor[T]()
+		ops, ok := newNumericOps(typ)
+		if !ok {
+			t.Fatalf("newNumericOps(%v) rejected numeric type", typ)
 		}
-	}
+		typedText, typedErr := formatNumeric(value, typ.Bits())
+		reflectedText, reflectedErr := testNumericOpsFormat(ops, value)
+		for _, result := range []struct {
+			name string
+			text string
+			err  error
+		}{
+			{"typed", typedText, typedErr},
+			{"reflected", reflectedText, reflectedErr},
+		} {
+			if result.text != wantText || !errors.Is(result.err, wantErr) {
+				t.Errorf("%s format = (%q, %v), want (%q, %v)", result.name, result.text, result.err, wantText, wantErr)
+			}
+		}
+	})
 }
 
 func TestNumericParseIntegerSyntax(t *testing.T) {
@@ -90,71 +134,65 @@ func TestNumericParseIntegerBoundaries(t *testing.T) {
 		testNumericParse(t, "9223372036854775807", maxInt, true)
 		testNumericParse(t, "9223372036854775808", int(0), false)
 		testNumericParse(t, "18446744073709551615", maxUint, true)
+		testNumericParse(t, "18446744073709551616", uint(0), false)
 		testNumericParse(t, "18446744073709551615", maxUintptr, true)
+		testNumericParse(t, "18446744073709551616", uintptr(0), false)
 	} else {
 		testNumericParse(t, "-2147483648", minInt, true)
 		testNumericParse(t, "2147483647", maxInt, true)
 		testNumericParse(t, "2147483648", int(0), false)
 		testNumericParse(t, "4294967295", maxUint, true)
+		testNumericParse(t, "4294967296", uint(0), false)
 		testNumericParse(t, "4294967295", maxUintptr, true)
+		testNumericParse(t, "4294967296", uintptr(0), false)
 	}
 }
 
 type (
-	numericNamedInt   int16
-	numericNamedUint  uint64
-	numericNamedFloat float32
+	numericNamedInt       int16
+	numericNamedUint      uint64
+	numericNamedSmallUint uint16
+	numericNamedFloat     float32
 )
 
 func TestNumericNamedTypes(t *testing.T) {
 	testNumericParse(t, "-32768", numericNamedInt(-32768), true)
+	testNumericParse(t, "-32769", numericNamedInt(0), false)
 	testNumericParse(t, "18446744073709551615", numericNamedUint(math.MaxUint64), true)
+	testNumericParse(t, "65536", numericNamedSmallUint(0), false)
 	testNumericParse(t, "0.1", numericNamedFloat(0.1), true)
+	testNumericParse(t, "3.4028236e38", numericNamedFloat(0), false)
 }
 
-func TestNumericFloatParsingAndFormatting(t *testing.T) {
-	ops32, _ := newNumericOps(reflect.TypeFor[float32]())
-	text, err := ops32.format(float32(0.1))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if text != "0.1" {
-		t.Fatalf("float32(0.1) formatted as %q", text)
-	}
-	value, ok := ops32.parse("1e-46")
-	if !ok || value.(float32) != 0 {
-		t.Fatalf("float32 underflow = (%v, %v), want (0, true)", value, ok)
-	}
-	if _, ok = ops32.parse("3.4028236e38"); ok {
-		t.Fatal("float32 overflow was accepted")
-	}
-	if _, ok = ops32.parse("NaN"); ok {
-		t.Fatal("NaN was accepted")
-	}
-	if _, ok = ops32.parse("not a number"); ok {
-		t.Fatal("malformed float was accepted")
-	}
-	if _, err = ops32.format(float32(math.Inf(1))); !errors.Is(err, jaws.ErrValueNotFinite) {
-		t.Fatalf("format(+Inf) error = %v, want ErrValueNotFinite", err)
-	}
-	if _, err = ops32.format(float32(math.NaN())); !errors.Is(err, jaws.ErrValueNotFinite) {
-		t.Fatalf("format(NaN) error = %v, want ErrValueNotFinite", err)
-	}
+func TestNumericFormatting(t *testing.T) {
+	testNumericFormat(t, "signed", numericNamedInt(-12345), "-12345", nil)
+	testNumericFormat(t, "unsigned", numericNamedUint(math.MaxUint64), "18446744073709551615", nil)
+	testNumericFormat(t, "float32", numericNamedFloat(0.1), "0.1", nil)
+	testNumericFormat(t, "float64", float64(1.25), "1.25", nil)
+	testNumericFormat(t, "negative zero", math.Copysign(0, -1), "-0", nil)
+	testNumericFormat(t, "infinity", math.Inf(1), "", jaws.ErrValueNotFinite)
+	testNumericFormat(t, "NaN", float32(math.NaN()), "", jaws.ErrValueNotFinite)
+}
+
+func TestNumericFloatParsing(t *testing.T) {
+	testNumericParse(t, "1e-46", float32(0), true)
+	testNumericParse(t, "3.4028236e38", float32(0), false)
+	testNumericParse(t, "NaN", float32(0), false)
+	testNumericParse(t, "not a number", float32(0), false)
+	testNumericParse(t, "1.0000000596046448", math.Float32frombits(0x3f800001), true)
 
 	ops64, _ := newNumericOps(reflect.TypeFor[float64]())
-	negativeZero := math.Copysign(0, -1)
-	text, err = ops64.format(negativeZero)
-	if err != nil {
-		t.Fatal(err)
-	}
-	value, ok = ops64.parse(text)
-	if !ok || !math.Signbit(value.(float64)) {
-		t.Fatalf("negative zero round trip = (%v, %v)", value, ok)
+	typed, typedOK := parseNumeric[float64]("-0", 64)
+	reflected, reflectedOK := testNumericOpsParse[float64](ops64, "-0")
+	if !typedOK || !math.Signbit(typed) || !reflectedOK || !math.Signbit(reflected) {
+		t.Fatalf("negative zero parse = typed(%v, %v), reflected(%v, %v)", typed, typedOK, reflected, reflectedOK)
 	}
 }
 
 type numericTestSource[T comparable] struct {
-	value T
+	value    T
+	input    *Input
+	seenLast any
 }
 
 func (source *numericTestSource[T]) JawsGet(*jaws.Element) T {
@@ -162,8 +200,24 @@ func (source *numericTestSource[T]) JawsGet(*jaws.Element) T {
 }
 
 func (source *numericTestSource[T]) JawsSet(_ *jaws.Element, value T) error {
+	if source.input != nil {
+		source.seenLast = source.input.Last.Load()
+	}
 	source.value = value
 	return nil
+}
+
+func TestTypedNumericBindingStoresLastBeforeSet(t *testing.T) {
+	input := &Input{}
+	source := &numericTestSource[numericNamedInt]{input: input}
+	binding := newNumericBinding[numericNamedInt](source)
+	accepted, err := binding.acceptText(input, nil, "-123")
+	if !accepted || err != nil || source.value != -123 {
+		t.Fatalf("typed accept = (%v, %v), value = %v", accepted, err, source.value)
+	}
+	if source.seenLast != "-123" {
+		t.Fatalf("Last observed by typed setter = %v, want -123", source.seenLast)
+	}
 }
 
 type numericBadGetterArity struct{}
@@ -189,37 +243,41 @@ func (numericBadSetter) JawsSet(*jaws.Element, int) bool {
 }
 
 type numericErrorSetter struct {
-	err error
+	err      error
+	input    *Input
+	seenLast any
 }
 
-func (numericErrorSetter) JawsGet(*jaws.Element) int {
+func (*numericErrorSetter) JawsGet(*jaws.Element) int {
 	return 1
 }
 
-func (source numericErrorSetter) JawsSet(*jaws.Element, int) error {
+func (source *numericErrorSetter) JawsSet(*jaws.Element, int) error {
+	source.seenLast = source.input.Last.Load()
 	return source.err
 }
 
 func TestMakeNumericBinding(t *testing.T) {
 	source := &numericTestSource[numericNamedUint]{value: 7}
 	nb, ok := makeNumericBinding(source)
-	if !ok || !nb.writable() || nb.source != source {
+	if !ok || !nb.writable() || nb.sourceValue() != source {
 		t.Fatalf("reflected binding = (%v, %v)", nb, ok)
 	}
 	text, err := nb.getText(nil)
 	if err != nil || text != "7" {
 		t.Fatalf("reflected get = (%q, %v), want (7, nil)", text, err)
 	}
-	value, accepted := nb.ops.parse("18446744073709551615")
-	if !accepted {
-		t.Fatal("reflected binding rejected uint64 maximum")
+	input := &Input{}
+	accepted, err := nb.acceptText(input, nil, "18446744073709551615")
+	if !accepted || err != nil || source.value != numericNamedUint(math.MaxUint64) {
+		t.Fatalf("reflected accept = (%v, %v), value = %v", accepted, err, source.value)
 	}
-	if err = nb.setValue(nil, value); err != nil || source.value != numericNamedUint(math.MaxUint64) {
-		t.Fatalf("reflected set = %v, value = %v", err, source.value)
+	if last := input.Last.Load(); last != "18446744073709551615" {
+		t.Fatalf("reflected accept stored Last = %v", last)
 	}
 
 	static, ok := makeNumericBinding(numericNamedInt(-12))
-	if !ok || static.writable() || static.source != nil {
+	if !ok || static.writable() || static.sourceValue() != nil {
 		t.Fatalf("static binding = (%v, %v)", static, ok)
 	}
 	if text, err = static.getText(nil); err != nil || text != "-12" {
@@ -237,7 +295,7 @@ func TestMakeNumericBinding(t *testing.T) {
 	}
 	for _, tt := range invalidSources {
 		t.Run(tt.name, func(t *testing.T) {
-			if binding, accepted := makeNumericBinding(tt.source); accepted || binding.getValue != nil {
+			if binding, accepted := makeNumericBinding(tt.source); accepted || binding != nil {
 				t.Fatalf("makeNumericBinding(%T) = (%v, %v), want zero binding and false", tt.source, binding, accepted)
 			}
 		})
@@ -249,11 +307,17 @@ func TestMakeNumericBinding(t *testing.T) {
 	}
 
 	setErr := errors.New("numeric setter error")
-	errorSetter, ok := makeNumericBinding(numericErrorSetter{err: setErr})
+	errorInput := &Input{}
+	errorSource := &numericErrorSetter{err: setErr, input: errorInput}
+	errorSetter, ok := makeNumericBinding(errorSource)
 	if !ok || !errorSetter.writable() {
 		t.Fatalf("error setter binding = (%v, %v), want writable binding", errorSetter, ok)
 	}
-	if err = errorSetter.setValue(nil, 2); !errors.Is(err, setErr) {
-		t.Fatalf("reflected setter error = %v, want %v", err, setErr)
+	accepted, err = errorSetter.acceptText(errorInput, nil, "2")
+	if !accepted || !errors.Is(err, setErr) {
+		t.Fatalf("reflected accept = (%v, %v), want (true, %v)", accepted, err, setErr)
+	}
+	if errorSource.seenLast != "2" {
+		t.Fatalf("Last observed by setter = %v, want 2", errorSource.seenLast)
 	}
 }

@@ -40,12 +40,13 @@ func NewNumber[T Numeric](source bind.Getter[T]) *Number {
 
 // JawsRender renders the Number as an HTML number input.
 func (u *Number) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
+	source := u.binding.sourceValue()
 	if u.binding.writable() {
-		if err = validateEditableNumericSource(u.binding.source); err != nil {
+		if err = validateEditableNumericSource(source); err != nil {
 			return
 		}
 	}
-	getterAttrs := u.applyGetterAttrs(elem, u.binding.source)
+	getterAttrs := u.applyGetterAttrs(elem, source)
 	text, err := u.binding.getText(elem)
 	if err != nil {
 		elem.Cancel(err)
