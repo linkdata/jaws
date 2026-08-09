@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html/template"
 	"io"
 	"reflect"
 	"regexp"
@@ -422,15 +421,13 @@ func (jsvar *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 // may acquire the locker passed to [NewJsVar].
 func (jsvar *JsVar[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	// The render-time snapshot is taken under the write lock; see renderSnapshot.
-	// Everything below runs without the lock: ApplyParams and, crucially, writing to
-	// w must not hold the value lock, because a slow client stalling a network write
-	// would otherwise block every goroutine sharing the locker.
-	var getter any
-	var getterAttrs []template.HTMLAttr
-	var jsvarName string
-	var data []byte
-	getter, jsvarName, data, err = jsvar.renderSnapshot(elem, params)
-	getterAttrs = elem.ApplyInitialHTMLAttr(getter)
+	// After renderSnapshot returns, ApplyInitialHTMLAttr, AddHandlers, ApplyParams
+	// and, crucially, writing to w run without the lock. ApplyInitialHTMLAttr must
+	// stay out here because the bound value's JawsInitialHTMLAttr may acquire the
+	// same non-reentrant locker; writing to w must stay out because a slow client
+	// stalling a network write would block every goroutine sharing the locker.
+	getter, jsvarName, data, err := jsvar.renderSnapshot(elem, params)
+	getterAttrs := elem.ApplyInitialHTMLAttr(getter)
 	elem.AddHandlers(jsvar)
 	if err == nil {
 		attrs := append(elem.ApplyParams(params[1:]), getterAttrs...)

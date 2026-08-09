@@ -1137,7 +1137,7 @@ func TestElement_ApplyInitialHTMLAttr(t *testing.T) {
 	attrCalls := 0
 	h := testInitialHTMLAttrHandler{calls: &attrCalls}
 	if attrs := e.ApplyInitialHTMLAttr(h); len(attrs) != 0 {
-		t.Fatalf("unexpected empty attr result: %#v", attrs)
+		t.Fatalf("empty attr must yield no attrs, got %#v", attrs)
 	}
 	if attrCalls != 1 {
 		t.Fatalf("JawsInitialHTMLAttr called %d times, want 1", attrCalls)

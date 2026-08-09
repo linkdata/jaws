@@ -284,6 +284,10 @@ func (w *Article) JawsRender(e *jaws.Element, wr io.Writer, params []any) error 
 // JawsUpdate is inherited from the embedded ui.HTMLInner.
 ```
 
+`ApplyGetter` registers the getter's tag and event handlers;
+`ApplyInitialHTMLAttr` runs the getter's `JawsInitialHTMLAttr` callback and must
+be called without holding any lock that callback may acquire.
+
 ## Adding an interactive input widget
 
 Use one of the typed input bases:

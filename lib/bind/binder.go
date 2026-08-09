@@ -87,8 +87,9 @@ type Formatter interface {
 // Binder methods are safe for concurrent use when the locker passed to [New]
 // is safe for concurrent use.
 //
-// Binder holds its lock while invoking [Formatter.Format], [fmt.Formatter.Format],
-// [fmt.Stringer.String], and [InitialHTMLAttrHook].
+// Binder holds its lock while rendering HTML, including while invoking [GetHTMLHook],
+// [Formatter.Format], [fmt.Formatter.Format] and [fmt.Stringer.String], and while
+// invoking [InitialHTMLAttrHook].
 type Binder[T comparable] interface {
 	RWLocker
 	Setter[T]

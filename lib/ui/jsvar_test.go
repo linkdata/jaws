@@ -14,6 +14,7 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstest"
+	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 )
@@ -49,6 +50,17 @@ type jsVarInitialAttrState struct {
 	marshalUnlocks       int
 	initialAttrUnlocks   int
 	clickCalls           int
+}
+
+type jsVarReentrantInitialAttrState struct {
+	locker bind.RWLocker
+	attr   template.HTMLAttr
+}
+
+func (state *jsVarReentrantInitialAttrState) JawsInitialHTMLAttr(*jaws.Element) template.HTMLAttr {
+	state.locker.RLock()
+	defer state.locker.RUnlock()
+	return state.attr
 }
 
 func (state *jsVarInitialAttrState) observeLock() (underWriteLock bool, unlocks int) {
@@ -250,6 +262,49 @@ func TestJsVar_RenderInitialHTMLAttrRunsOutsideBindingLock(t *testing.T) {
 	if state.clickCalls != 1 {
 		t.Errorf("bound click handler called %d times, want 1", state.clickCalls)
 	}
+}
+
+func testJsVarRenderInitialAttrReentry(t *testing.T, bindingLocker sync.Locker, lockerName string, wantAttr template.HTMLAttr) {
+	t.Helper()
+
+	_, rq := newCoreRequest(t)
+	state := jsVarReentrantInitialAttrState{
+		locker: bind.AsRWLocker(bindingLocker),
+		attr:   wantAttr,
+	}
+	jsvar := NewJsVar(bindingLocker, &state)
+	elem := rq.NewElement(jsvar)
+	var sb strings.Builder
+	done := make(chan error, 1)
+	go func() {
+		done <- jsvar.JawsRender(elem, &sb, []any{"state"})
+	}()
+
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-timer.C:
+		t.Fatalf("JsVar.JawsRender deadlocked while JawsInitialHTMLAttr re-entered the %s binding locker", lockerName)
+	case <-t.Context().Done():
+		t.Fatalf("render context ended while JawsInitialHTMLAttr re-entered the %s binding locker: %v", lockerName, t.Context().Err())
+	}
+	if got := sb.String(); !strings.Contains(got, string(wantAttr)) {
+		t.Fatalf("rendered HTML %q does not contain %q", got, wantAttr)
+	}
+}
+
+func TestJsVar_RenderInitialHTMLAttrCanReenterBindingLocker(t *testing.T) {
+	t.Run("RWMutex", func(t *testing.T) {
+		testJsVarRenderInitialAttrReentry(t, new(sync.RWMutex), "sync.RWMutex", `data-lock="rwmutex"`)
+	})
+
+	t.Run("MutexAdapter", func(t *testing.T) {
+		testJsVarRenderInitialAttrReentry(t, new(sync.Mutex), "sync.Mutex", `data-lock="mutex"`)
+	})
 }
 
 // TestJsVar_SetBroadcastsWirePayload pins the wire payload broadcast when a
