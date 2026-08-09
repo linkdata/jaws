@@ -73,7 +73,14 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
 
 ### `ui.New(innerHTML any) Object`
 
-- `innerHTML` is routed through `bind.MakeHTMLGetter`, so the same type rules apply: `string` is raw HTML, `template.HTML` is trusted as-is, `Getter[string]` / `Binder[string]` / `fmt.Stringer` are escaped.
+- `innerHTML` is routed through `bind.MakeHTMLGetter`, whose first matching
+  conversion applies: `HTMLGetter` is unchanged; `template.HTML` is trusted;
+  `Binder[string]`, `Getter[string]`, and `fmt.Stringer` adapters are escaped;
+  `string` is trusted; other values are formatted and escaped.
+- The adapters created for `Getter[string]` and `fmt.Stringer` inputs expose the
+  wrapped value as an implicit tag. It must be a usable direct tag or implement
+  `tag.TagGetter` and return values accepted by `tag.TagExpand`; return `nil` from
+  `JawsGetTag` when the value should be untagged.
 - Returns a chainable `Object`. Each builder — `.Clicked(fn)`, `.ContextMenu(fn)`, `.InitialHTMLAttr(fn)` — wraps the previous object so the chain is a linked list, newest first.
 - Event dispatch walks the chain newest-first and stops at the first link that does not return `jaws.ErrEventUnhandled`. Return `ErrEventUnhandled` from a link to fall through to the next.
 - `JawsInitialHTMLAttr` concatenates attribute strings from every link that defines one.
@@ -347,10 +354,12 @@ For clickable content rendering:
 
 ## HTML safety rules
 
-`bind.MakeHTMLGetter` behavior is type-dependent:
-- `string` is used as raw HTML and is not escaped.
-- `template.HTML` is trusted as-is.
-- `Getter[string]`, `Binder[string]`, `fmt.Stringer`, and formatter-based paths are escaped.
+`bind.MakeHTMLGetter` uses the first matching conversion:
+- `HTMLGetter` is returned unchanged.
+- `template.HTML` is not escaped.
+- `Binder[string]`, `Getter[string]`, and `fmt.Stringer` adapters are escaped.
+- `string` is not escaped.
+- Other values use escaped `fmt.Sprint` output.
 
 Guideline:
 - Never pass untrusted input as plain `string` to HTML-producing helpers.

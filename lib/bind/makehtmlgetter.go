@@ -46,25 +46,20 @@ func (g htmlGetterString) JawsGetTag() any {
 
 // MakeHTMLGetter returns an [HTMLGetter] for value.
 //
-// Depending on the type of value, we return:
+// The first matching conversion is used:
 //
-//   - [HTMLGetter] is used as-is.
-//   - Binder[string] and Getter[string] values are escaped using [html.EscapeString].
-//   - [fmt.Stringer] values are escaped using [html.EscapeString].
-//   - Static [template.HTML] and string values are used as-is with no HTML escaping.
-//   - Everything else is rendered using [fmt.Sprint] and escaped using [html.EscapeString].
+//   - [HTMLGetter] is returned unchanged.
+//   - [template.HTML] is used unchanged.
+//   - Binder[string] and Getter[string] use escaped [Getter.JawsGet] output.
+//   - [fmt.Stringer] uses escaped [fmt.Stringer.String] output.
+//   - string is used unchanged.
+//   - Other values use escaped [fmt.Sprint] output.
 //
-// The Binder[string] and Getter[string] cases escape the raw [Getter.JawsGet]
-// value and so bypass any Format or GetHTML hook in the chain. The package's own
-// [Binder] (a *binder) implements [HTMLGetter] and is matched by the first case
-// above, which does honor those hooks; the Binder[string] case is reached only by
-// a hand-rolled Binder[string] that does not implement [HTMLGetter].
+// Getter[string] and [fmt.Stringer] adapters expose the wrapped value as an
+// implicit tag. The value must be accepted by [tag.TagExpand], directly or
+// through [tag.TagGetter]; JawsGetTag may return nil to leave it untagged.
 //
-// WARNING: Plain string values are NOT HTML-escaped. This is intentional so that
-// HTML markup can be passed conveniently from Go templates (e.g. `{{$.Span "<i>text</i>"}}`).
-// Never pass untrusted user input as a plain string; use [template.HTML] to signal
-// that the content is trusted, or wrap user input in a [Getter] or [fmt.Stringer]
-// so it will be escaped automatically.
+// Plain strings are not escaped; do not pass untrusted text as a plain string.
 func MakeHTMLGetter(value any) HTMLGetter {
 	switch v := value.(type) {
 	case HTMLGetter:
