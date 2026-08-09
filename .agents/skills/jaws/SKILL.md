@@ -94,13 +94,14 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
   - `.InitialHTMLAttr(fn)` — attach attribute hooks.
 - Use `bind.New` for input widgets and for content whose natural key is the backing variable. Multiple widgets bound to the same pointer share a tag automatically, so `Request.Dirty(&field)` refreshes all of them.
 - Writable setters used by `ui.Input`-based widgets require a stable target
-  accepted by `Element.ApplyGetter` for post-set reconciliation. `bind.New`
-  supplies its backing pointer; otherwise use a pointer-valued setter or
-  `JawsGetTag` returning at least one stable, usable key. A `JawsGetTag` result
-  takes precedence over the setter's identity.
+  accepted by `Element.ApplyGetter` for post-set reconciliation. `bind.New` supplies
+  its backing value pointer; otherwise use a pointer-valued setter or `JawsGetTag`
+  returning at least one stable, usable key. A `JawsGetTag` result takes precedence
+  over the setter's identity.
 - Render-param tags register the Element but do not replace that setter-derived
-  target. Without a valid target, rejected or normalized browser values are not
-  automatically reconciled.
+  target. Editable Number and Range sources fail rendering without a valid target.
+  Other Input-based widgets render, but cannot automatically reconcile rejected or
+  normalized browser values without one.
 
 ### When to use which
 
@@ -241,7 +242,8 @@ Implications:
   concurrent use when shared across Requests.
 - Prefer ordinary widget rendering. The container family supports update-only
   registration with the limitations below; typed inputs omit render-derived metadata,
-  while `ui.JsVar` and Templates with a non-empty `OuterHTMLTag` require rendering.
+  while `ui.Number`, `ui.Range`, `ui.JsVar`, and Templates with a non-empty
+  `OuterHTMLTag` require rendering.
 - Always emit the returned Jid as the element's `id`. A surrounding Template owns the
   registered Element; otherwise it remains until explicit deletion, reported DOM
   removal, or Request shutdown.
@@ -320,19 +322,23 @@ For clickable content rendering:
 - HTML getter paths must not mutate domain state, but they may call element update methods (`SetClass`, `RemoveClass`, `SetAttr`, `RemoveAttr`, etc.) on the passed-in `*Element` to co-ordinate wrapper class/attribute changes with the inner-HTML refresh. No custom `JawsUpdate` is needed for that case — the queued wrapper updates flush alongside the `SetInner` from `HTMLInner.JawsUpdate`.
 - Use a custom `JawsUpdate` only when the widget's update logic diverges from "render the getter again" — e.g. to compare against a stored last-value and skip the update (as the input widgets do).
 - `Element.SetAttr/RemoveAttr/SetClass/RemoveClass/SetInner/SetValue/Append/Order/Remove/Replace` are update-time operations; call them only from render/update processing.
+- Pass the Element itself to `Dirty` when an event must reconcile only that browser-local control. Dirty dependency tags when application state changes so every dependent Element is refreshed.
 - Remember that widgets such as `ui.Button` update inner HTML from the original getter object; if that getter captured a stale static value, dirtying will not refresh the UI.
 
 ## Dirtying rules
 
-- `Request.Dirty` and `Jaws.Dirty` are equivalent: both expand through `Jaws.MustTagExpand` and
-  dirty every matching element across all live Requests. `Request.Dirty` is *not* scoped to its
-  own Request.
+- `Request.Dirty` and `Jaws.Dirty` are equivalent. Both expand through `Jaws.MustTagExpand`.
+  An expanded non-nil `*Element` is treated as an exact target on its owning Request;
+  other keys dirty every matching Element across all live Requests. `Request.Dirty` is
+  not scoped to its own Request for ordinary tags.
+- Both selector kinds use the normal batched dirty pass and require the JaWS serving
+  loop to be running.
 - Dirty only precise tags whose output depends on the changed state.
 - Avoid broad model-level dirty tags when finer-grained element-level tags are practical.
 - For broad refreshes, attach a shared dependency tag to all relevant elements and dirty that shared tag instead of enumerating many element tags.
 - `Request.Dirty` runs the tag list through `Jaws.MustTagExpand`, which has a hard cap of 100 expanded entries. Above that, expansion fails with `tag.ErrTooManyTags`: with a `Jaws.Logger` configured the error is logged and the partial expansion is still applied, and without one the call panics before anything is dirtied. When a mutation might touch more items than that, prefer the shared group tag over enumerating individual item tags.
 - `Request.TagsOf(elem)` reports every tag actually registered on an element, including tags added separately from the UI object — use it when a dirty target seems not to reach an element.
-- Redundant-update filtering is asymmetric: input widgets (`InputText`, `InputBool`, `InputFloat`, `InputDate`) compare the new getter output against a stored `Last` value and skip `SetValue` when unchanged, but `HTMLInner`-backed widgets (spans, divs, buttons) do not — `JawsUpdate` unconditionally calls `SetInner`. For HTML-inner widgets, ensure dirty scope matches fields that actually changed, otherwise unrelated status/label spans will re-render (and lose selection, transitions, etc.) on every event. Usually the mutation code already knows what it changed and can dirty accordingly; fall back to snapshot-and-diff only when outcomes are hard to predict up front (e.g. flood-fill or win-condition checks) and the snapshot is cheap.
+- Redundant-update filtering is asymmetric: input widgets (`InputText`, `InputBool`, `InputDate`, `Number`, `Range`) cache their browser or bound state and normally skip `SetValue` when the getter output is unchanged, but `HTMLInner`-backed widgets (spans, divs, buttons) do not — `JawsUpdate` unconditionally calls `SetInner`. The Number and Range handlers invalidate their text baseline when rejected input must be restored and reconcile accepted text with canonical formatting when needed. For HTML-inner widgets, ensure dirty scope matches fields that actually changed, otherwise unrelated status/label spans will re-render (and lose selection, transitions, etc.) on every event. Usually the mutation code already knows what it changed and can dirty accordingly; fall back to snapshot-and-diff only when outcomes are hard to predict up front (e.g. flood-fill or win-condition checks) and the snapshot is cheap.
 
 ## HTML safety rules
 
@@ -356,7 +362,7 @@ Guideline:
 
 ## Runtime/lifecycle cautions
 
-- Start JaWS processing loop (`Serve`/`ServeWithTimeout`) before relying on broadcast-driven APIs.
+- Start the JaWS processing loop (`Serve`/`ServeWithTimeout`) before relying on broadcasts or dirty updates.
 - `Broadcast`-driven helpers (including session reload/close flows) may block before the serve loop is running.
 
 ## Testing checklist
@@ -375,7 +381,7 @@ Guideline:
 - Repo-specific abstractions that hide JaWS contracts instead of modeling them.
 - Fake binders or fake tags created only to satisfy an API shape.
 - Hidden mutations in getter paths.
-- Broad `Dirty(...)` calls used to mask incorrect dependency targeting.
+- Broad `Dirty(...)` calls can mask incorrect dependency targeting.
 - Pointer-wrapping a Container, Tbody, Select or Template value, which replaces
   definition equality with pointer identity.
 - Passing a runtime-incomparable application object directly to a container-family

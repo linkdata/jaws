@@ -42,6 +42,14 @@ func (testBroadcastTagGetter) JawsGetTag() any {
 	return tag.Tag("expanded")
 }
 
+type testDirtyTagGetter struct {
+	tags any
+}
+
+func (getter testDirtyTagGetter) JawsGetTag() any {
+	return getter.tags
+}
+
 type mutatingTemplateLookuper struct {
 	jw *Jaws
 }
@@ -1417,6 +1425,86 @@ func TestJaws_DirtyIllegalTagLogsNotPanics(t *testing.T) {
 	jw.Dirty(42)
 	if logger.err == nil || !errors.Is(logger.err, tag.ErrIllegalTagType) {
 		t.Fatalf("expected illegal tag to be logged, got %v", logger.err)
+	}
+}
+
+func TestJaws_DirtyExactElementAndTag(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	first := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/first", nil))
+	second := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/second", nil))
+	exact := first.NewElement(&testUi{})
+	sharedSecond := second.NewElement(&testUi{})
+	shared := tag.Tag("shared")
+	first.Tag(exact, shared)
+	second.Tag(sharedSecond, shared)
+
+	// Dirty recognizes an exact Element through recursive tag expansion and
+	// coalesces it with the ordinary tag that selects the same Element.
+	jw.Dirty(testDirtyTagGetter{tags: []any{[]any{exact}, shared}})
+
+	if got := jw.distributeDirt(); got != 2 {
+		t.Fatalf("distributed dirty selectors = %d, want 2", got)
+	}
+	if got := first.makeUpdateList(); !reflect.DeepEqual(got, []*Element{exact}) {
+		t.Fatalf("first update list = %#v, want exact Element once", got)
+	}
+	if got := second.makeUpdateList(); !reflect.DeepEqual(got, []*Element{sharedSecond}) {
+		t.Fatalf("second update list = %#v, want shared Element", got)
+	}
+
+	// Request.Dirty has the same Jaws-wide exact-target semantics: the receiver
+	// does not replace the target Element's owning Request.
+	second.Dirty(exact)
+	if got := jw.distributeDirt(); got != 1 {
+		t.Fatalf("distributed exact selectors = %d, want 1", got)
+	}
+	if got := first.makeUpdateList(); !reflect.DeepEqual(got, []*Element{exact}) {
+		t.Fatalf("cross-Request exact update list = %#v, want exact Element", got)
+	}
+	if got := second.makeUpdateList(); len(got) != 0 {
+		t.Fatalf("receiver Request update list = %#v, want empty", got)
+	}
+}
+
+func TestJaws_DirtyIgnoresIneligibleElementTargets(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	other, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	deleted := rq.NewElement(&testUi{})
+	jw.Dirty(deleted)
+	jw.distributeDirt()
+	rq.mu.RLock()
+	queued := len(rq.todoDirt)
+	rq.mu.RUnlock()
+	if queued != 1 {
+		t.Fatalf("exact Element queued %d updates before deletion, want 1", queued)
+	}
+	rq.DeleteElement(deleted)
+	otherRq := other.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	foreign := otherRq.NewElement(&testUi{})
+	var nilElement *Element
+
+	jw.Dirty(nilElement, &Element{}, deleted, foreign)
+	jw.distributeDirt()
+	rq.mu.RLock()
+	queued = len(rq.todoDirt)
+	rq.mu.RUnlock()
+	if queued != 0 {
+		t.Fatalf("ignored Element targets queued %d updates, want 0", queued)
 	}
 }
 

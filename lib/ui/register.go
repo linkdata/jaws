@@ -41,8 +41,8 @@ func (registerUI) JawsRender(*jaws.Element, io.Writer, []any) error {
 // [Container], [Tbody], and [Select] support registration, though ordinary
 // rendering is preferable. A registered Select omits its handler-derived tag for
 // post-input dirtying. Typed input widgets omit getter-derived attributes,
-// handlers, and their getter-derived dirty tag. [JsVar] and a [Template] with a
-// non-empty OuterHTMLTag require ordinary rendering.
+// handlers, and their getter-derived dirty tag. [Number], [Range], [JsVar], and a
+// [Template] with a non-empty OuterHTMLTag require ordinary rendering.
 //
 // The returned Jid is suitable for including as an HTML id attribute:
 //

@@ -87,6 +87,8 @@ const indexhtml = `
 </html>
 `
 
+type Percent uint8
+
 func main() {
 	jw, err := jaws.New() // create a default JaWS instance
 	if err != nil {
@@ -103,9 +105,9 @@ func main() {
 	http.DefaultServeMux.Handle("GET /jaws/", jw) // ensure the JaWS routes are handled
 
 	var mu sync.Mutex
-	var f float64
+	percent := Percent(50)
 
-	http.DefaultServeMux.Handle("GET /", ui.Handler(jw, "index", bind.New(&mu, &f)))
+	http.DefaultServeMux.Handle("GET /", ui.Handler(jw, "index", bind.New(&mu, &percent)))
 	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 }
 ```
@@ -138,8 +140,10 @@ that share the synchronized binder, getter, handler or tag.
 If an HTML entity is not registered in a Request, JaWS will not
 forward events from it, nor perform DOM manipulations for it.
 
-Dynamic updates of HTML entities is done using the different methods on
-the Element object when the JawsUpdate() method is called.
+Dynamic updates of HTML entities are queued with the methods on `Element` when
+`JawsUpdate` is called. To reconcile browser-local state after an event, pass the
+Element itself to `Dirty`; this schedules only that Element on its owning Request.
+Dirty a shared application tag instead when every dependent Element must update.
 
 ### JavaScript events
 
@@ -155,7 +159,8 @@ handle the event or want to pass it to the next handler.
   (`val` as `x<SP>y<SP>keystate<SP>name`)
 * `oncontextmenu` invokes `JawsContextMenu` for non-input-origin events
   (`val` as `x<SP>y<SP>keystate<SP>name`)
-* `oninput` invokes `JawsInput`
+* `oninput` invokes `JawsInput`; editable `ui.Number` listens for `change`
+  instead and sends the same Input event
 * `what.Set` events invoke `JawsInput` (`val` as `path=json`)
 
 Click and context-menu events whose target is an `input`, `select`,
@@ -403,11 +408,12 @@ fields are left intact and its methods still operate on the finished Request.
 Request identities are never reused, so a stale Element can never come to
 represent an unrelated connection.
 
-Dirtying is two-stage: `Request.Dirty` and `Jaws.Dirty` expand tags and record
-them on the `Jaws` instance, then the serving loop distributes those tags to
-matching active requests and schedules `JawsUpdate` calls. Broadcast helpers
-share that same serving loop, so start `Serve` or `ServeWithTimeout` before
-calling APIs that broadcast, reload, close sessions, or rely on dirty updates.
+Dirtying is two-stage: `Request.Dirty` and `Jaws.Dirty` expand and record their
+selectors on the `Jaws` instance, then the serving loop distributes ordinary tags
+across live Requests and each exact `*Element` only to its owner before scheduling
+`JawsUpdate` calls. Broadcast helpers share the serving loop, so start `Serve` or
+`ServeWithTimeout` before calling APIs that broadcast, reload, close sessions, or
+rely on dirty updates.
 
 Cancellation flows from the request context, the initial HTTP/WebSocket request,
 and `Jaws.Close`. Update paths that cannot return errors report them through
@@ -441,10 +447,10 @@ these invariants before relying on a green build alone:
   render-visible Element state a still-running initial renderer may read lock-free.
   Non-running retirement instead preserves the Request's Elements and buffers for an
   initial HTTP handler that still holds it.
-* Dirty dispatch expands tags once, targets only elements registered for those
-  tags, and does not let one request's queued update reach a finished, unregistered
-  request (whose key stays reserved, never reassigned to another Request, while it
-  remains reachable).
+* Dirty dispatch expands its inputs once. Ordinary keys target registered elements;
+  an expanded `*Element` targets that exact Element on its owning Request. Neither
+  path lets a queued update reach a finished, unregistered request (whose key stays
+  reserved, never reassigned to another Request, while it remains reachable).
 * Session grace windows remain deliberate for unclaimed, claimed, failed-upgrade,
   and closed-WebSocket requests.
 * WebSocket upgrades keep the single-use key, client-IP binding, and Origin
@@ -608,24 +614,59 @@ their work deterministic and report unrecoverable failures through
 
 ### Data binding
 
-HTML input elements (e.g. `ui.RequestWriter.Range()`) require bi-directional data flow between the server and the browser.
-The first argument to these is usually a `bind.Setter[T]` where `T` is one of `string`, `float64`, `bool` or `time.Time`. It can
-also be a `bind.Getter[T]`, in which case the HTML element should be made read-only.
+HTML input elements bind browser state to Go values. Text inputs use `string`,
+checkable inputs use `bool`, and date inputs use `time.Time`. `ui.Number` and
+`ui.Range` accept a `bind.Getter[T]` for every `ui.Numeric` type and become
+editable when the source also implements `bind.Setter[T]`. Numeric types include
+signed and unsigned integers, `uintptr`, `float32`, `float64`, and named types
+with one of those underlying types.
 
-Since all data access need to be protected with locks, you will usually use `bind.New()` to create a `bind.Binder[T]`
-that combines a (RW)Locker and a pointer to a value of type `T`. It also allows you to add chained setters,
-getters and on-success handlers.
+Since all data access needs to be protected with locks, you will usually use
+`bind.New()` to create a `bind.Binder[T]` that combines a (RW)Locker and a
+pointer to a value of type `T`. It also allows you to add chained setters,
+getters, and on-success handlers.
 
-Writable setters used with `ui.NewText`, `ui.NewPassword`, `ui.NewTextarea`,
+Writable sources used with `ui.NewText`, `ui.NewPassword`, `ui.NewTextarea`,
 `ui.NewCheckbox`, `ui.NewRadio`, `ui.NewNumber`, `ui.NewRange`, and `ui.NewDate`
-need a stable dirty target derived from the setter. After each `JawsSet` result
-that does not match `jaws.ErrValueUnchanged`, the widget dirties that target so
-the server value can reconcile rejected or normalized browser input.
+need a stable dirty target derived from the source so dirty-driven updates can
+reconcile browser state. Editable Number and Range sources must expand to at
+least one stable, usable tag when rendered.
 `bind.New(&mu, &value)` exposes the backing pointer. A custom setter can instead
 be pointer-valued or implement `JawsGetTag` and return a target that expands to
 at least one stable, usable key; `JawsGetTag` takes precedence over the setter's
 identity. Tags passed as render parameters register the Element but do not
 replace its setter-derived dirty target.
+
+Number and Range retain the bound Go type through parsing, formatting, and setter
+calls. Integer inputs use base-10 integer syntax and enforce the bound type's
+width. Floating-point inputs enforce their bound type's width; `float32` values
+parse and format at 32-bit precision.
+A getter-only Number renders `readonly`; a getter-only Range renders `disabled`.
+Static numeric values passed to the template helpers use these getter-only forms.
+Number and Range require ordinary rendering and are not supported by
+`RequestWriter.Register`.
+
+Number sends edits on the browser's `change` event. Pending edits remain
+browser-local until then. Range sends live `input` events while its thumb moves.
+When an event reaches the widget's own input handler, Number and Range reconcile
+accepted and rejected edits with the source's canonical formatting. Both silently
+reject browser text that is invalid for the source type and restore the canonical
+source value only on the originating control.
+
+Named numeric sources work directly in templates:
+
+```go
+type Percent uint8
+
+type Edit struct {
+	Percent bind.Binder[Percent]
+}
+```
+
+```gotemplate
+{{$.Number .Dot.Percent `step="1"`}}
+{{$.Range .Dot.Percent `min="0"` `max="100"` `step="1"`}}
+```
 
 This validator rejects forbidden username characters while accepting ordinary
 incremental edits. Its slice makes the setter value non-comparable, so
@@ -660,9 +701,10 @@ func newUsernameInput(mu *sync.RWMutex, value *string) *ui.Text {
 }
 ```
 
-Without a valid setter-derived target, rejected or normalized browser values are
-not automatically reconciled. See
-[`ui.Input`](https://pkg.go.dev/github.com/linkdata/jaws/lib/ui#Input) for the
+The reusable nonnumeric input bases cannot automatically reconcile rejected or
+normalized browser values without a valid setter-derived target. Number and
+Range instead reject an editable source without a usable tag during rendering.
+See [`ui.Input`](https://pkg.go.dev/github.com/linkdata/jaws/lib/ui#Input) for the
 complete contract.
 
 ### Session handling

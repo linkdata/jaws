@@ -3,8 +3,9 @@
 // Its main building blocks are:
 //
 //   - [HTMLInner]: base renderer for tags with inner HTML content.
-//   - [Input], [InputText], [InputBool], [InputFloat], [InputDate]:
+//   - [Input], [InputText], [InputBool], [InputDate]:
 //     typed input helpers that handle event/update flow.
+//   - [Number], [Range]: type-preserving numeric input widgets.
 //   - [Container], [Tbody], [Select]: value widgets for dynamic child UI lists.
 //
 // Every widget implementing [jaws.UI] is request-scoped. Construct fresh widgets

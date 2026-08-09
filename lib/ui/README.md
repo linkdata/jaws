@@ -122,13 +122,62 @@ Examples:
 ```go
 rw.NewUI(ui.NewDiv("content"))
 rw.NewUI(ui.NewCheckbox(myBoolSetter), "disabled")
-rw.NewUI(ui.NewRange(myFloatSetter))
+rw.NewUI(ui.NewRange(myIntSetter), `min="0"`, `max="100"`)
 ```
 
 HTML-inner widgets such as `NewDiv`, `NewSpan`, and `RequestWriter.Div` pass
 their content through `bind.MakeHTMLGetter`. Plain strings are treated as trusted
 HTML and are not escaped; use a `bind.Getter[string]`, `bind.StringGetterFunc`,
 or `fmt.Stringer` for string content that should be escaped.
+
+## Numeric inputs
+
+`NewNumber` and `NewRange` accept a `bind.Getter[T]` for any `Numeric` type:
+signed and unsigned integers, `uintptr`, `float32`, `float64`, and named types
+with one of those underlying types. The source is editable when its dynamic type
+also implements `bind.Setter[T]`.
+
+The Go binding remains `T` throughout parsing, formatting, and setter calls.
+Integers use base-10 integer syntax and enforce their actual bit width. Floats
+parse and format at their own bit size; `float32` uses 32-bit precision. Non-finite
+values have no valid numeric input representation.
+
+An editable source must expose at least one stable, usable source tag when it is
+rendered. Pointer-valued sources are usable directly; a source can instead implement
+`JawsGetTag`. `bind.New(&mu, &value)` supplies the backing value pointer as its tag.
+A changing getter-only source also needs a tag for dirty-driven server updates.
+Number and Range require ordinary rendering and are not update-only
+`RequestWriter.Register` widgets.
+
+A getter-only Number has the native `readonly` attribute. A getter-only Range is
+`disabled` and is therefore omitted from native form submission. Static numeric
+values passed to `RequestWriter.Number` and `RequestWriter.Range` use these
+getter-only paths.
+
+Number sends edits when the browser fires `change`. Pending edits remain
+browser-local until then. Range sends live `input` events while its thumb moves.
+Both silently reject malformed or unrepresentable browser text without calling the
+setter and restore the getter's canonical text only on the originating control.
+Accepted text is reconciled through the formatter when needed, including when the
+source value is unchanged.
+
+Named numeric sources work directly with both Go and template helpers:
+
+```go
+type Percent uint8
+
+var mu sync.RWMutex
+percent := Percent(50)
+binder := bind.New(&mu, &percent)
+
+number := ui.NewNumber(binder)
+slider := ui.NewRange(binder)
+```
+
+```gotemplate
+{{$.Number .Dot.Percent `step="1"`}}
+{{$.Range .Dot.Percent `min="0"` `max="100"` `step="1"`}}
+```
 
 `JsVar` values are client-writable. The generic path setter can write exported
 JSON fields and append to slices, and it has no default accumulated-state size
@@ -175,7 +224,7 @@ but it does not keep the locker passed to `NewJsVar` held.
 
 - `HTMLInner`
   - For tags like `<div>...</div>`, `<span>...</span>`, `<td>...</td>`.
-- `Input`, `InputText`, `InputBool`, `InputFloat`, `InputDate`
+- `Input`, `InputText`, `InputBool`, `InputDate`
   - For interactive inputs with typed parse/update behavior.
 - `Container`, `Tbody`, `Select`
   - Definition value widgets for rendering and maintaining dynamic child lists.
@@ -240,8 +289,11 @@ Use one of the typed input bases:
 
 - `InputText` for string-based inputs
 - `InputBool` for boolean inputs
-- `InputFloat` for numeric inputs
 - `InputDate` for `time.Time` inputs
+
+Number and Range own their type-preserving numeric parsing, formatting, and event
+state; they are complete widgets rather than reusable input bases. The `Numeric`
+constraint defines their supported Go types.
 
 Each base handles:
 

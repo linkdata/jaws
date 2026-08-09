@@ -47,6 +47,11 @@ func (s setterStatic[T]) JawsGetTag() any {
 // static value of type T. Getter and static adapters are read-only and return
 // [ErrValueNotSettable] from [Setter.JawsSet]. MakeSetter panics for any other
 // type.
+//
+// The adapters still satisfy Setter, so [github.com/linkdata/jaws/lib/ui.Number]
+// and [github.com/linkdata/jaws/lib/ui.Range] apply their editable-source rules.
+// Pass an existing Getter directly, or use [MakeGetter] for a static value, to
+// render a read-only numeric control.
 func MakeSetter[T comparable](value any) Setter[T] {
 	switch v := value.(type) {
 	case Setter[T]:

@@ -51,9 +51,11 @@
 // rendering. See [TagGetter] for requirements on returned values and concurrency.
 //
 // [github.com/linkdata/jaws.Request.Tag] and the normal targeting APIs expand inputs
-// in the same way. Returning a shared group key from [TagGetter.JawsGetTag] therefore
-// causes dirtying that value to target the group too. Register group dependencies
-// separately when item-level dirtying must remain narrow.
+// in the same way. Dirtying interprets an expanded non-nil pointer to
+// [github.com/linkdata/jaws.Element] as an exact Element target; use other values for
+// dependency tags. Returning a shared group key from [TagGetter.JawsGetTag] causes
+// dirtying that value to target the group too. Register group dependencies separately
+// when item-level dirtying must remain narrow.
 //
 // # Registration and use
 //

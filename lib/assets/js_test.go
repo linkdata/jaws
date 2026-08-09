@@ -416,6 +416,108 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
+func TestJawsJS_NumberUsesChangeBeforeAutoSubmit(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) {
+	this.sent.push(msg);
+	log.push("send");
+};
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+const log = [];
+let stopped = false;
+const listeners = {};
+const number = {
+	id: "Jid.1",
+	tagName: "INPUT",
+	type: "number",
+	value: "1",
+	form: { submit: function() { log.push("submit"); } },
+	hasAttribute: function(name) {
+		return name === "data-jawsnumber" || name === "data-jawsonchangesubmit";
+	},
+	getAttribute: function(name) { return name === "type" ? "number" : null; },
+	addEventListener: function(name, fn) { (listeners[name] ||= []).push(fn); }
+};
+const rangeListeners = {};
+const range = {
+	id: "Jid.2",
+	tagName: "INPUT",
+	type: "range",
+	value: "1",
+	hasAttribute: function() { return false; },
+	getAttribute: function(name) { return name === "type" ? "range" : null; },
+	addEventListener: function(name, fn) { (rangeListeners[name] ||= []).push(fn); }
+};
+const top = {
+	querySelectorAll: function(selector) {
+		if (selector === '[id^="' + jawsIdPrefix + '"]') {
+			return [number, range];
+		}
+		if (selector === '[data-jawsonchangesubmit]') {
+			return [number];
+		}
+		return [];
+	}
+};
+
+jawsAttachChildren(top);
+function dispatchChange() {
+	const ev = new Event();
+	ev.currentTarget = number;
+	ev.stopPropagation = function() { stopped = true; };
+	(listeners.change || []).forEach(function(fn) { fn.call(number, ev); });
+}
+
+number.value = "9007199254740993";
+dispatchChange();
+
+process.stdout.write(JSON.stringify({
+	numberInputListeners: (listeners.input || []).length,
+	numberChangeListeners: (listeners.change || []).length,
+	rangeInputListeners: (rangeListeners.input || []).length,
+	rangeChangeListeners: (rangeListeners.change || []).length,
+	frames: jaws.sent,
+	log: log,
+	stopped: stopped
+}));
+`)
+
+	var got struct {
+		NumberInputListeners  int      `json:"numberInputListeners"`
+		NumberChangeListeners int      `json:"numberChangeListeners"`
+		RangeInputListeners   int      `json:"rangeInputListeners"`
+		RangeChangeListeners  int      `json:"rangeChangeListeners"`
+		Frames                []string `json:"frames"`
+		Log                   []string `json:"log"`
+		Stopped               bool     `json:"stopped"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.NumberInputListeners != 0 || got.NumberChangeListeners != 2 {
+		t.Fatalf("Number listeners = input:%d change:%d, want input:0 change:2", got.NumberInputListeners, got.NumberChangeListeners)
+	}
+	if got.RangeInputListeners != 1 || got.RangeChangeListeners != 0 {
+		t.Fatalf("Range listeners = input:%d change:%d, want input:1 change:0", got.RangeInputListeners, got.RangeChangeListeners)
+	}
+	if !reflect.DeepEqual(got.Log, []string{"send", "submit"}) {
+		t.Fatalf("Number change order = %v, want send before submit", got.Log)
+	}
+	if !got.Stopped {
+		t.Fatal("Number change handler did not stop propagation")
+	}
+	if len(got.Frames) != 1 {
+		t.Fatalf("Number frames = %q, want one frame", got.Frames)
+	}
+	msg, ok := wire.Parse([]byte(got.Frames[0]))
+	if !ok || msg.What != what.Input || msg.Jid != 1 || msg.Data != "9007199254740993" {
+		t.Fatalf("unexpected Number frame: %+v, parseable %t", msg, ok)
+	}
+}
+
 func TestJawsJS_ClickAndInputRoutesRejectNoncanonicalJids(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 function FakeSocket() { this.readyState = 1; this.sent = []; }

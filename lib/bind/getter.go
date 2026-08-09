@@ -20,10 +20,6 @@ type getterStatic[T comparable] struct {
 	v T
 }
 
-func (getterStatic[T]) JawsSet(elem *jaws.Element, value T) error {
-	return ErrValueNotSettable
-}
-
 func (s getterStatic[T]) JawsGet(elem *jaws.Element) T {
 	return s.v
 }
@@ -39,8 +35,8 @@ func makeStaticGetter[T comparable](value T) Getter[T] {
 // MakeGetter returns value as a [Getter].
 //
 // value may be a [Getter] of the same type or a static value of type T. It panics
-// for any other type. A static value becomes a read-only adapter that also
-// satisfies [Setter] and returns [ErrValueNotSettable] from [Setter.JawsSet].
+// for any other type. An existing Getter is returned unchanged. A static value
+// becomes an untagged Getter that does not satisfy [Setter].
 func MakeGetter[T comparable](value any) Getter[T] {
 	switch v := value.(type) {
 	case Getter[T]:
