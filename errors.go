@@ -39,7 +39,7 @@ var ErrValueUnchanged = errors.New("value unchanged")
 var ErrRequestOverloaded = errors.New("request overloaded")
 
 // ErrValueNotFinite indicates a [Request] was torn down because a NaN or infinite
-// float64 reached the UI.
+// float32 or float64 reached the UI.
 //
 // A non-finite value has no valid rendering or wire representation and, in the case
 // of NaN, is not even equal to itself, so it cannot be coerced safely. Rather than

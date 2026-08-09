@@ -87,6 +87,8 @@ const indexhtml = `
 </html>
 `
 
+type Percent uint8
+
 func main() {
 	jw, err := jaws.New() // create a default JaWS instance
 	if err != nil {
@@ -103,9 +105,9 @@ func main() {
 	http.DefaultServeMux.Handle("GET /jaws/", jw) // ensure the JaWS routes are handled
 
 	var mu sync.Mutex
-	var f float64
+	percent := Percent(50)
 
-	http.DefaultServeMux.Handle("GET /", ui.Handler(jw, "index", bind.New(&mu, &f)))
+	http.DefaultServeMux.Handle("GET /", ui.Handler(jw, "index", bind.New(&mu, &percent)))
 	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 }
 ```
@@ -608,24 +610,60 @@ their work deterministic and report unrecoverable failures through
 
 ### Data binding
 
-HTML input elements (e.g. `ui.RequestWriter.Range()`) require bi-directional data flow between the server and the browser.
-The first argument to these is usually a `bind.Setter[T]` where `T` is one of `string`, `float64`, `bool` or `time.Time`. It can
-also be a `bind.Getter[T]`, in which case the HTML element should be made read-only.
+HTML input elements bind browser state to Go values. Text inputs use `string`,
+checkable inputs use `bool`, and date inputs use `time.Time`. `ui.Number` and
+`ui.Range` accept a `bind.Getter[T]` for every `ui.Numeric` type and become
+editable when the source also implements `bind.Setter[T]`. Numeric types include
+signed and unsigned integers, `uintptr`, `float32`, `float64`, and named types
+with one of those underlying types.
 
-Since all data access need to be protected with locks, you will usually use `bind.New()` to create a `bind.Binder[T]`
-that combines a (RW)Locker and a pointer to a value of type `T`. It also allows you to add chained setters,
-getters and on-success handlers.
+Since all data access needs to be protected with locks, you will usually use
+`bind.New()` to create a `bind.Binder[T]` that combines a (RW)Locker and a
+pointer to a value of type `T`. It also allows you to add chained setters,
+getters, and on-success handlers.
 
-Writable setters used with `ui.NewText`, `ui.NewPassword`, `ui.NewTextarea`,
+Writable sources used with `ui.NewText`, `ui.NewPassword`, `ui.NewTextarea`,
 `ui.NewCheckbox`, `ui.NewRadio`, `ui.NewNumber`, `ui.NewRange`, and `ui.NewDate`
-need a stable dirty target derived from the setter. After each `JawsSet` result
-that does not match `jaws.ErrValueUnchanged`, the widget dirties that target so
-the server value can reconcile rejected or normalized browser input.
+need a stable dirty target derived from the source so dirty-driven updates can
+reconcile browser state. Editable Number and Range sources must expand to at
+least one stable, usable tag when rendered.
 `bind.New(&mu, &value)` exposes the backing pointer. A custom setter can instead
 be pointer-valued or implement `JawsGetTag` and return a target that expands to
 at least one stable, usable key; `JawsGetTag` takes precedence over the setter's
 identity. Tags passed as render parameters register the Element but do not
 replace its setter-derived dirty target.
+
+Number and Range preserve the exact bound type. Integer inputs accept decimal and
+exponent forms only when they denote an exact in-range integer, and `float32`
+values parse and format at 32-bit precision. A getter-only Number renders
+`readonly`; a getter-only Range renders `disabled`. Static numeric values passed
+to the template helpers use these getter-only forms.
+
+Number sends a settled edit on `change`, with pending edits flushed before another
+JaWS-managed input, click, or context-menu event. Range sends live `input` events
+while its thumb moves. Number rewrites accepted and rejected edits to the source's
+canonical formatting, including when an accepted value is already stored.
+
+Named numeric bindings work directly in templates:
+
+```go
+type Percent uint8
+
+type Edit struct {
+	Percent bind.Binder[Percent]
+}
+```
+
+```gotemplate
+{{$.Number .Dot.Percent `step="1"`}}
+{{$.Range .Dot.Percent `min="0"` `max="100"` `step="1"`}}
+```
+
+For a Number whose domain is not a built-in numeric type, implement
+`ui.NumberCodec[T]` and use `ui.NewNumberWith` in Go. Templates receive the same
+typed source and codec through `ui.NewNumericBinding`; `FormatNumber` must produce
+a valid HTML number that `ParseNumber` maps back to the same value. See
+[`lib/ui/README.md`](lib/ui/README.md#numeric-inputs) for an example.
 
 This validator rejects forbidden username characters while accepting ordinary
 incremental edits. Its slice makes the setter value non-comparable, so
@@ -660,9 +698,10 @@ func newUsernameInput(mu *sync.RWMutex, value *string) *ui.Text {
 }
 ```
 
-Without a valid setter-derived target, rejected or normalized browser values are
-not automatically reconciled. See
-[`ui.Input`](https://pkg.go.dev/github.com/linkdata/jaws/lib/ui#Input) for the
+The reusable nonnumeric input bases cannot automatically reconcile rejected or
+normalized browser values without a valid setter-derived target. Number and
+Range instead reject an editable source without a usable tag during rendering.
+See [`ui.Input`](https://pkg.go.dev/github.com/linkdata/jaws/lib/ui#Input) for the
 complete contract.
 
 ### Session handling

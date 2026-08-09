@@ -1,7 +1,6 @@
 package bind
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
@@ -21,9 +20,9 @@ func Test_makeGetter_panic(t *testing.T) {
 }
 
 func Test_makeGetter(t *testing.T) {
-	setter := MakeGetter[string]("foo")
-	if err := setter.(Setter[string]).JawsSet(nil, "bar"); !errors.Is(err, ErrValueNotSettable) {
-		t.Error(err)
+	getter := MakeGetter[string]("foo")
+	if _, ok := getter.(Setter[string]); ok {
+		t.Fatal("static getter unexpectedly satisfies Setter")
 	}
 }
 
@@ -39,5 +38,11 @@ func TestMakeGetter_GetterPassThroughAndTag(t *testing.T) {
 	g2 := MakeGetter[string](Getter[string](getterStatic[string]{v: "y"}))
 	if got := g2.JawsGet(nil); got != "y" {
 		t.Fatalf("unexpected passthrough getter value %q", got)
+	}
+
+	existing := setterStatic[string]{v: "z"}
+	g3 := MakeGetter[string](existing)
+	if _, ok := g3.(Setter[string]); !ok {
+		t.Fatal("existing Setter passed as Getter did not retain its dynamic capabilities")
 	}
 }
