@@ -2,6 +2,7 @@ package named
 
 import (
 	"html/template"
+	"slices"
 	"strings"
 
 	"github.com/linkdata/deadlock"
@@ -32,8 +33,11 @@ func NewBoolArray(multi bool) *BoolArray {
 
 // ReadLocked calls fn with the [BoolArray] locked for reading.
 //
+// The provided slice is read-only, valid only for the duration of fn, and must
+// not be retained. The *[Bool] values remain usable as described below.
+//
 // fn must not call other [BoolArray] methods or [Bool.JawsSet]: those re-acquire
-// the same non-reentrant nba mutex and deadlock. It may operate on the provided
+// the same non-reentrant nba mutex and deadlock. It may inspect the provided
 // slice and call the *[Bool] methods that take only the Bool's own mutex — the
 // reads [Bool.Name], [Bool.HTML], [Bool.JawsGet], [Bool.Checked], [Bool.String]
 // (and similar) and the write [Bool.Set]. [Bool.Set] mutates the Bool under the
@@ -47,6 +51,11 @@ func (nba *BoolArray) ReadLocked(fn func(nbl []*Bool)) {
 
 // WriteLocked calls fn with the [BoolArray] locked for writing and replaces
 // the internal []*Bool slice with the return value.
+//
+// The returned slice and its backing array become internal storage after fn
+// returns and must not be retained or accessed outside [BoolArray.ReadLocked]
+// and [BoolArray.WriteLocked] callbacks. Nil entries are discarded without
+// changing the relative order of non-nil entries.
 //
 // Omitting a [Bool] from the returned slice does not detach it from nba:
 // [Bool.Array] continues to return nba, and [Bool.JawsSet] continues to apply
@@ -63,7 +72,9 @@ func (nba *BoolArray) ReadLocked(fn func(nbl []*Bool)) {
 func (nba *BoolArray) WriteLocked(fn func(nbl []*Bool) []*Bool) {
 	nba.mu.Lock()
 	defer nba.mu.Unlock()
-	nba.data = fn(nba.data)
+	nba.data = slices.DeleteFunc(fn(nba.data), func(nb *Bool) bool {
+		return nb == nil
+	})
 }
 
 // JawsContains returns the option widgets for a select backed by nba.
