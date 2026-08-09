@@ -281,6 +281,44 @@ func awaitNumberRangeValue(t *testing.T, tr *jawstest.TestRequest, elem *jaws.El
 	}
 }
 
+func assertNumericValidationPanic(t *testing.T, call func()) {
+	t.Helper()
+	var recovered any
+	func() {
+		defer func() { recovered = recover() }()
+		call()
+	}()
+	err, ok := recovered.(error)
+	if !ok || !strings.Contains(err.Error(), "expected numeric value or numeric bind.Getter") {
+		t.Fatalf("panic = %v, want numeric source validation error", recovered)
+	}
+}
+
+func TestRequestWriterNumericRejectsUnsupportedValues(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	var rendered strings.Builder
+	rw := RequestWriter{Request: rq, Writer: &rendered}
+	codec := numberRangeCustomCodec{}
+	custom := NewNumericBinding(newNumberRangeSource(numberRangeCustomValue{Units: 1}), codec)
+	tests := []struct {
+		name string
+		call func()
+	}{
+		{name: "Number nil", call: func() { _ = rw.Number(nil) }},
+		{name: "Number unsupported", call: func() { _ = rw.Number("1") }},
+		{name: "Number nil binding", call: func() { _ = rw.Number((*NumericBinding)(nil)) }},
+		{name: "Number zero binding", call: func() { _ = rw.Number(new(NumericBinding)) }},
+		{name: "Range nil", call: func() { _ = rw.Range(nil) }},
+		{name: "Range unsupported", call: func() { _ = rw.Range("1") }},
+		{name: "Range custom binding", call: func() { _ = rw.Range(custom) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertNumericValidationPanic(t, tt.call)
+		})
+	}
+}
+
 func TestNumberRangeSourceCapabilities(t *testing.T) {
 	t.Run("editable Number marker", func(t *testing.T) {
 		_, rq := newCoreRequest(t)

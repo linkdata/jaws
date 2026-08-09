@@ -25,7 +25,7 @@ import (
 // and ancestor renders may replace an edit that has not settled.
 type Number struct {
 	Input
-	binding *numericBinding
+	binding *NumericBinding
 }
 
 // NewNumber returns a number input widget bound to source.
@@ -52,7 +52,7 @@ func NewNumberWith[T comparable](source bind.Getter[T], codec NumberCodec[T]) *N
 	return newNumber(newCustomNumericBinding(source, codec))
 }
 
-func newNumber(binding *numericBinding) *Number {
+func newNumber(binding *NumericBinding) *Number {
 	return &Number{binding: binding}
 }
 
@@ -64,7 +64,7 @@ func (u *Number) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err 
 		}
 	}
 	getterAttrs := u.applyGetterAttrs(elem, u.binding.source())
-	_, text, err := u.binding.get(elem)
+	text, err := u.binding.get(elem)
 	if err != nil {
 		if errors.Is(err, jaws.ErrValueNotFinite) {
 			elem.Cancel(err)
@@ -90,7 +90,7 @@ func (u *Number) JawsUpdate(elem *jaws.Element) {
 		elem.Request.MustLog(errors.New("ui.Number.JawsUpdate called before successful rendering"))
 		return
 	}
-	_, text, err := u.binding.get(elem)
+	text, err := u.binding.get(elem)
 	if err != nil {
 		elem.Cancel(err)
 		return
@@ -125,7 +125,7 @@ func (u *Number) JawsInput(elem *jaws.Element, text string) (err error) {
 		elem.Dirty(elem)
 		return
 	}
-	err = u.binding.set(elem, value)
+	err = u.binding.setValue(elem, value)
 	if errors.Is(err, jaws.ErrValueUnchanged) {
 		elem.Dirty(elem)
 		err = nil

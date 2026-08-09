@@ -38,20 +38,6 @@ type NumberCodec[T comparable] interface {
 // Construct a NumericBinding with [NewNumericBinding]. Passing its zero value to
 // [RequestWriter.Number] panics.
 type NumericBinding struct {
-	binding *numericBinding
-}
-
-// NewNumericBinding returns a template Number binding over source using codec.
-//
-// Source capability, tag, and codec requirements are the same as for
-// [NewNumberWith].
-func NewNumericBinding[T comparable](source bind.Getter[T], codec NumberCodec[T]) *NumericBinding {
-	return &NumericBinding{binding: newCustomNumericBinding(source, codec)}
-}
-
-// numericBinding erases a source's concrete type while retaining exact typed
-// getter, setter, parser, and formatter operations.
-type numericBinding struct {
 	sourceValue any
 	getValue    func(*jaws.Element) any
 	setValue    func(*jaws.Element, any) error
@@ -60,42 +46,40 @@ type numericBinding struct {
 	configErr   error
 }
 
-func (nb *numericBinding) source() any {
+// NewNumericBinding returns a template Number binding over source using codec.
+//
+// Source capability, tag, and codec requirements are the same as for
+// [NewNumberWith].
+func NewNumericBinding[T comparable](source bind.Getter[T], codec NumberCodec[T]) *NumericBinding {
+	return newCustomNumericBinding(source, codec)
+}
+
+func (nb *NumericBinding) source() any {
 	return nb.sourceValue
 }
 
-func (nb *numericBinding) writable() bool {
+func (nb *NumericBinding) writable() bool {
 	return nb.setValue != nil
 }
 
-func (nb *numericBinding) get(elem *jaws.Element) (value any, text string, err error) {
+func (nb *NumericBinding) get(elem *jaws.Element) (text string, err error) {
 	if err = nb.configErr; err == nil {
-		value = nb.getValue(elem)
-		text, err = nb.formatValue(value)
+		text, err = nb.formatValue(nb.getValue(elem))
 	}
 	return
 }
 
-func (nb *numericBinding) parse(text string) (value any, ok bool, err error) {
+func (nb *NumericBinding) parse(text string) (value any, ok bool, err error) {
 	if err = nb.configErr; err == nil {
 		value, ok, err = nb.parseValue(text)
 	}
 	return
 }
 
-func (nb *numericBinding) set(elem *jaws.Element, value any) (err error) {
-	if nb.setValue == nil {
-		err = bind.ErrValueNotSettable
-	} else {
-		err = nb.setValue(elem, value)
-	}
-	return
-}
-
-func newBuiltinNumericBinding[T Numeric](source bind.Getter[T]) *numericBinding {
+func newBuiltinNumericBinding[T Numeric](source bind.Getter[T]) *NumericBinding {
 	typ := reflect.TypeFor[T]()
 	ops, _ := newNumericOps(typ)
-	nb := &numericBinding{
+	nb := &NumericBinding{
 		sourceValue: source,
 		getValue: func(elem *jaws.Element) any {
 			return source.JawsGet(elem)
@@ -111,9 +95,9 @@ func newBuiltinNumericBinding[T Numeric](source bind.Getter[T]) *numericBinding 
 	return nb
 }
 
-func newCustomNumericBinding[T comparable](source bind.Getter[T], codec NumberCodec[T]) *numericBinding {
+func newCustomNumericBinding[T comparable](source bind.Getter[T], codec NumberCodec[T]) *NumericBinding {
 	typ := reflect.TypeFor[T]()
-	nb := &numericBinding{
+	nb := &NumericBinding{
 		sourceValue: source,
 		getValue: func(elem *jaws.Element) any {
 			return source.JawsGet(elem)
@@ -182,10 +166,10 @@ func newCustomNumericBinding[T comparable](source bind.Getter[T], codec NumberCo
 // makeNumericBinding converts template Number and Range sources to the shared
 // type-erased representation. It accepts NumericBinding, reflected numeric
 // Getter/Setter implementations, and static built-in or named numeric values.
-func makeNumericBinding(source any) (nb *numericBinding, ok bool) {
+func makeNumericBinding(source any) (nb *NumericBinding, ok bool) {
 	if custom, yes := source.(*NumericBinding); yes {
-		if custom != nil && custom.binding != nil {
-			return custom.binding, true
+		if custom != nil && custom.getValue != nil {
+			return custom, true
 		}
 		return nil, false
 	}
@@ -195,7 +179,7 @@ func makeNumericBinding(source any) (nb *numericBinding, ok bool) {
 	}
 	if getter, valueType, yes := reflectedNumericGetter(rv); yes {
 		ops, _ := newNumericOps(valueType)
-		nb = &numericBinding{
+		nb = &NumericBinding{
 			sourceValue: source,
 			getValue: func(elem *jaws.Element) any {
 				out := getter.Call([]reflect.Value{reflect.ValueOf(elem)})
@@ -216,7 +200,7 @@ func makeNumericBinding(source any) (nb *numericBinding, ok bool) {
 		return nb, true
 	}
 	if ops, yes := newNumericOps(rv.Type()); yes {
-		nb = &numericBinding{
+		nb = &NumericBinding{
 			getValue: func(*jaws.Element) any {
 				return rv.Interface()
 			},
@@ -314,10 +298,6 @@ func newNumericOps(typ reflect.Type) (ops numericOps, ok bool) {
 
 func (ops numericOps) format(value any) (text string, err error) {
 	rv := reflect.ValueOf(value)
-	if !rv.IsValid() || rv.Type() != ops.typ {
-		err = newErrNumberFormat("numeric value has the wrong type")
-		return
-	}
 	switch ops.kind {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		text = strconv.FormatInt(rv.Int(), 10)

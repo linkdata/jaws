@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/bind"
 )
 
 func TestScanHTMLNumber(t *testing.T) {
@@ -29,6 +28,7 @@ func TestScanHTMLNumber(t *testing.T) {
 		{"1e-3", true},
 		{"-1.25e+3", true},
 		{"", false},
+		{"-", false},
 		{"+1", false},
 		{" 1", false},
 		{"1 ", false},
@@ -239,15 +239,15 @@ func TestCustomNumericBindingValidation(t *testing.T) {
 		},
 	}
 	nb := newCustomNumericBinding[int](source, codec)
-	value, text, err := nb.get(nil)
-	if err != nil || value != 7 || text != "7" {
-		t.Fatalf("get = (%v, %q, %v), want (7, 7, nil)", value, text, err)
+	text, err := nb.get(nil)
+	if err != nil || text != "7" {
+		t.Fatalf("get = (%q, %v), want (7, nil)", text, err)
 	}
 	parsed, ok, err := nb.parse("8")
 	if err != nil || !ok || parsed != 8 {
 		t.Fatalf("parse = (%v, %v, %v), want (8, true, nil)", parsed, ok, err)
 	}
-	if err = nb.set(nil, parsed); err != nil || source.value != 8 {
+	if err = nb.setValue(nil, parsed); err != nil || source.value != 8 {
 		t.Fatalf("set = %v, value = %d", err, source.value)
 	}
 	parseCallsBeforeInvalid := parseCalls
@@ -274,14 +274,14 @@ func TestCustomNumericBindingValidation(t *testing.T) {
 		format: func(int) string { return "+7" },
 		parse:  codec.parse,
 	}
-	if _, _, err = newCustomNumericBinding[int](source, badFormat).get(nil); !errors.Is(err, ErrNumberFormat) {
+	if _, err = newCustomNumericBinding[int](source, badFormat).get(nil); !errors.Is(err, ErrNumberFormat) {
 		t.Fatalf("invalid format error = %v, want ErrNumberFormat", err)
 	}
 	badRoundTrip := numericTestCodec[int]{
 		format: strconv.Itoa,
 		parse:  func(string) (int, bool) { return 9, true },
 	}
-	if _, _, err = newCustomNumericBinding[int](source, badRoundTrip).get(nil); !errors.Is(err, ErrNumberFormat) {
+	if _, err = newCustomNumericBinding[int](source, badRoundTrip).get(nil); !errors.Is(err, ErrNumberFormat) {
 		t.Fatalf("round-trip error = %v, want ErrNumberFormat", err)
 	}
 }
@@ -294,13 +294,28 @@ type numericNanValue struct {
 	Value float64
 }
 
+type numericArrayValue [1]int
+
 func TestCustomNumericBindingComparability(t *testing.T) {
+	arraySource := &numericTestSource[numericArrayValue]{value: numericArrayValue{1}}
+	arrayCodec := numericTestCodec[numericArrayValue]{
+		format: func(value numericArrayValue) string { return strconv.Itoa(value[0]) },
+		parse: func(text string) (value numericArrayValue, ok bool) {
+			var err error
+			value[0], err = strconv.Atoi(text)
+			return value, err == nil
+		},
+	}
+	if text, err := newCustomNumericBinding(arraySource, arrayCodec).get(nil); err != nil || text != "1" {
+		t.Fatalf("array binding get = (%q, %v), want (1, nil)", text, err)
+	}
+
 	looseSource := &numericTestSource[numericLooseValue]{value: numericLooseValue{Value: 1}}
 	looseCodec := numericTestCodec[numericLooseValue]{
 		format: func(numericLooseValue) string { return "1" },
 		parse:  func(string) (numericLooseValue, bool) { return numericLooseValue{Value: 1}, true },
 	}
-	if _, _, err := newCustomNumericBinding(looseSource, looseCodec).get(nil); !errors.Is(err, ErrNumberFormat) {
+	if _, err := newCustomNumericBinding(looseSource, looseCodec).get(nil); !errors.Is(err, ErrNumberFormat) {
 		t.Fatalf("non-strict type error = %v, want ErrNumberFormat", err)
 	}
 
@@ -309,14 +324,51 @@ func TestCustomNumericBindingComparability(t *testing.T) {
 		format: func(numericNanValue) string { return "0" },
 		parse:  func(string) (numericNanValue, bool) { return numericNanValue{Value: math.NaN()}, true },
 	}
-	if _, _, err := newCustomNumericBinding(nanSource, nanCodec).get(nil); !errors.Is(err, ErrNumberFormat) {
+	if _, err := newCustomNumericBinding(nanSource, nanCodec).get(nil); !errors.Is(err, ErrNumberFormat) {
 		t.Fatalf("non-reflexive bound error = %v, want ErrNumberFormat", err)
 	}
 
 	reflexiveSource := &numericTestSource[numericNanValue]{value: numericNanValue{Value: 0}}
+	if _, err := newCustomNumericBinding(reflexiveSource, nanCodec).get(nil); !errors.Is(err, ErrNumberFormat) {
+		t.Fatalf("non-reflexive round-trip error = %v, want ErrNumberFormat", err)
+	}
 	if _, ok, err := newCustomNumericBinding(reflexiveSource, nanCodec).parse("1"); ok || !errors.Is(err, ErrNumberFormat) {
 		t.Fatalf("non-reflexive parsed result = (_, %v, %v), want (_, false, ErrNumberFormat)", ok, err)
 	}
+}
+
+type numericBadGetterArity struct{}
+
+func (numericBadGetterArity) JawsGet() int {
+	return 1
+}
+
+type numericStringGetter struct{}
+
+func (numericStringGetter) JawsGet(*jaws.Element) string {
+	return "1"
+}
+
+type numericBadSetter struct{}
+
+func (numericBadSetter) JawsGet(*jaws.Element) int {
+	return 1
+}
+
+func (numericBadSetter) JawsSet(*jaws.Element, int) bool {
+	return false
+}
+
+type numericErrorSetter struct {
+	err error
+}
+
+func (numericErrorSetter) JawsGet(*jaws.Element) int {
+	return 1
+}
+
+func (source numericErrorSetter) JawsSet(*jaws.Element, int) error {
+	return source.err
 }
 
 func TestMakeNumericBinding(t *testing.T) {
@@ -325,15 +377,15 @@ func TestMakeNumericBinding(t *testing.T) {
 	if !ok || !nb.writable() || nb.source() != source {
 		t.Fatalf("reflected binding = (%v, %v)", nb, ok)
 	}
-	value, text, err := nb.get(nil)
-	if err != nil || value != numericNamedUint(7) || text != "7" {
-		t.Fatalf("reflected get = (%v, %q, %v)", value, text, err)
+	text, err := nb.get(nil)
+	if err != nil || text != "7" {
+		t.Fatalf("reflected get = (%q, %v), want (7, nil)", text, err)
 	}
 	parsed, ok, err := nb.parse("18446744073709551615")
 	if err != nil || !ok || parsed != numericNamedUint(math.MaxUint64) {
 		t.Fatalf("reflected parse = (%v, %v, %v)", parsed, ok, err)
 	}
-	if err = nb.set(nil, parsed); err != nil || source.value != numericNamedUint(math.MaxUint64) {
+	if err = nb.setValue(nil, parsed); err != nil || source.value != numericNamedUint(math.MaxUint64) {
 		t.Fatalf("reflected set = %v, value = %v", err, source.value)
 	}
 
@@ -341,11 +393,8 @@ func TestMakeNumericBinding(t *testing.T) {
 	if !ok || static.writable() || static.source() != nil {
 		t.Fatalf("static binding = (%v, %v)", static, ok)
 	}
-	if _, text, err = static.get(nil); err != nil || text != "-12" {
+	if text, err = static.get(nil); err != nil || text != "-12" {
 		t.Fatalf("static get text = %q, error = %v", text, err)
-	}
-	if err = static.set(nil, numericNamedInt(3)); !errors.Is(err, bind.ErrValueNotSettable) {
-		t.Fatalf("static set error = %v", err)
 	}
 
 	codec := numericTestCodec[int]{
@@ -355,12 +404,61 @@ func TestMakeNumericBinding(t *testing.T) {
 			return value, err == nil
 		},
 	}
-	custom, ok := makeNumericBinding(NewNumericBinding(&numericTestSource[int]{value: 2}, codec))
-	if !ok || custom == nil {
-		t.Fatal("custom NumericBinding was not unwrapped")
+	customInput := NewNumericBinding(&numericTestSource[int]{value: 2}, codec)
+	custom, ok := makeNumericBinding(customInput)
+	if !ok {
+		t.Fatal("custom NumericBinding was rejected")
 	}
-	if _, ok = makeNumericBinding("not numeric"); ok {
-		t.Fatal("string source was accepted")
+	if text, err = custom.get(nil); err != nil || text != "2" {
+		t.Fatalf("custom binding get = (%q, %v), want (2, nil)", text, err)
+	}
+	invalidSources := []struct {
+		name   string
+		source any
+	}{
+		{name: "nil", source: nil},
+		{name: "nil binding", source: (*NumericBinding)(nil)},
+		{name: "zero binding", source: new(NumericBinding)},
+		{name: "string", source: "not numeric"},
+		{name: "bad getter arity", source: numericBadGetterArity{}},
+		{name: "string getter", source: numericStringGetter{}},
+	}
+	for _, tt := range invalidSources {
+		t.Run(tt.name, func(t *testing.T) {
+			if binding, accepted := makeNumericBinding(tt.source); accepted || binding != nil {
+				t.Fatalf("makeNumericBinding(%T) = (%v, %v), want (nil, false)", tt.source, binding, accepted)
+			}
+		})
+	}
+
+	badSetter, ok := makeNumericBinding(numericBadSetter{})
+	if !ok || badSetter.writable() {
+		t.Fatalf("malformed setter binding = (%v, %v), want read-only binding", badSetter, ok)
+	}
+
+	setErr := errors.New("numeric setter error")
+	errorSetter, ok := makeNumericBinding(numericErrorSetter{err: setErr})
+	if !ok || !errorSetter.writable() {
+		t.Fatalf("error setter binding = (%v, %v), want writable binding", errorSetter, ok)
+	}
+	if err = errorSetter.setValue(nil, 2); !errors.Is(err, setErr) {
+		t.Fatalf("reflected setter error = %v, want %v", err, setErr)
+	}
+}
+
+func TestCustomNumericBindingCodecErrors(t *testing.T) {
+	source := &numericTestSource[int]{value: 7}
+	var nilCodec NumberCodec[int]
+	if _, err := newCustomNumericBinding(source, nilCodec).get(nil); !errors.Is(err, ErrNumberFormat) {
+		t.Fatalf("nil codec error = %v, want ErrNumberFormat", err)
+	}
+
+	rejectFormatted := numericTestCodec[int]{
+		format: strconv.Itoa,
+		parse:  func(string) (int, bool) { return 0, false },
+	}
+	if _, err := newCustomNumericBinding(source, rejectFormatted).get(nil); !errors.Is(err, ErrNumberFormat) {
+		t.Fatalf("rejected formatted output error = %v, want ErrNumberFormat", err)
 	}
 }
 

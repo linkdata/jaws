@@ -20,7 +20,7 @@ import (
 // Editable Ranges send live browser input while their thumb moves.
 type Range struct {
 	Input
-	binding *numericBinding
+	binding *NumericBinding
 }
 
 // NewRange returns a range input widget bound to source.
@@ -42,7 +42,7 @@ func NewRange[T Numeric](source bind.Getter[T]) *Range {
 	return newRange(newBuiltinNumericBinding(source))
 }
 
-func newRange(binding *numericBinding) *Range {
+func newRange(binding *NumericBinding) *Range {
 	return &Range{binding: binding}
 }
 
@@ -54,13 +54,10 @@ func (u *Range) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err e
 		}
 	}
 	getterAttrs := u.applyGetterAttrs(elem, u.binding.source())
-	_, text, err := u.binding.get(elem)
+	text, err := u.binding.get(elem)
 	if err != nil {
-		if errors.Is(err, jaws.ErrValueNotFinite) {
-			elem.Cancel(err)
-			return nil
-		}
-		return err
+		elem.Cancel(err)
+		return nil
 	}
 	attrs := append(elem.ApplyParams(params), getterAttrs...)
 	if !u.binding.writable() {
@@ -78,7 +75,7 @@ func (u *Range) JawsUpdate(elem *jaws.Element) {
 		elem.Request.MustLog(errors.New("ui.Range.JawsUpdate called before successful rendering"))
 		return
 	}
-	_, text, err := u.binding.get(elem)
+	text, err := u.binding.get(elem)
 	if err != nil {
 		elem.Cancel(err)
 		return
@@ -114,7 +111,7 @@ func (u *Range) JawsInput(elem *jaws.Element, text string) (err error) {
 		return
 	}
 	u.Last.Store(text)
-	err = u.binding.set(elem, value)
+	err = u.binding.setValue(elem, value)
 	if errors.Is(err, jaws.ErrValueUnchanged) {
 		elem.Dirty(elem)
 		err = nil
