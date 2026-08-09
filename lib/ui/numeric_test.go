@@ -27,7 +27,7 @@ func testNumericParse[T Numeric](t *testing.T, text string, want T, wantOK bool)
 	}
 }
 
-func TestNumericParseExactIntegers(t *testing.T) {
+func TestNumericParseIntegerSyntax(t *testing.T) {
 	tests := []struct {
 		text string
 		want int64
@@ -35,26 +35,22 @@ func TestNumericParseExactIntegers(t *testing.T) {
 	}{
 		{"1", 1, true},
 		{"01", 1, true},
-		{"1.0", 1, true},
-		{"1e3", 1000, true},
-		{"100e-2", 1, true},
-		{"1.2300e2", 123, true},
-		{".00100e3", 1, true},
-		{".00000000000000000000001e23", 1, true},
-		{"-0e999999999999999999999999", 0, true},
+		{"-0", 0, true},
+		{"+1", 1, true},
+		{"1.0", 0, false},
+		{"1e3", 0, false},
+		{"100e-2", 0, false},
+		{"1.2300e2", 0, false},
+		{".00100e3", 0, false},
 		{"1.2", 0, false},
 		{"10e-2", 0, false},
-		{"1e-100", 0, false},
-		{"1e-999999999999999999999999", 0, false},
-		{"1e999999999999999999999999", 0, false},
-		{".006e999999999999999999999", 0, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.text, func(t *testing.T) {
 			testNumericParse(t, tt.text, tt.want, tt.ok)
 		})
 	}
-	testNumericParse(t, "-0", uint64(0), true)
+	testNumericParse(t, "-0", uint64(0), false)
 	testNumericParse(t, "-1", uint64(0), false)
 }
 
@@ -84,7 +80,6 @@ func TestNumericParseIntegerBoundaries(t *testing.T) {
 	testNumericParse(t, "4294967296", uint32(0), false)
 	testNumericParse(t, "18446744073709551615", uint64(math.MaxUint64), true)
 	testNumericParse(t, "18446744073709551616", uint64(0), false)
-	testNumericParse(t, "184467440737095516150e-1", uint64(math.MaxUint64), true)
 
 	maxUint := ^uint(0)
 	maxInt := int(maxUint >> 1)
@@ -135,6 +130,9 @@ func TestNumericFloatParsingAndFormatting(t *testing.T) {
 	}
 	if _, ok = ops32.parse("NaN"); ok {
 		t.Fatal("NaN was accepted")
+	}
+	if _, ok = ops32.parse("not a number"); ok {
+		t.Fatal("malformed float was accepted")
 	}
 	if _, err = ops32.format(float32(math.Inf(1))); !errors.Is(err, jaws.ErrValueNotFinite) {
 		t.Fatalf("format(+Inf) error = %v, want ErrValueNotFinite", err)

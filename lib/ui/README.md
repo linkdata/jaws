@@ -138,10 +138,9 @@ with one of those underlying types. The source is editable when its dynamic type
 also implements `bind.Setter[T]`.
 
 The Go binding remains `T` throughout parsing, formatting, and setter calls.
-Integers parse at their actual bit width; decimal and exponent notation is accepted
-only when it denotes an exact in-range integer. Floats parse and format at their own
-bit size; `float32` uses 32-bit precision. Non-finite values have no valid HTML
-number representation.
+Integers use base-10 integer syntax and enforce their actual bit width. Floats
+parse and format at their own bit size; `float32` uses 32-bit precision. Non-finite
+values have no valid numeric input representation.
 
 An editable source must expose at least one stable, usable source tag when it is
 rendered. Pointer-valued sources are usable directly; a source can instead implement

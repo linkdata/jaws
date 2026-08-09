@@ -158,30 +158,25 @@ func (ops numericOps) format(value any) (text string, err error) {
 }
 
 func (ops numericOps) parse(text string) (value any, ok bool) {
-	if !validHTMLNumber(text) {
-		return
-	}
 	rv := reflect.New(ops.typ).Elem()
 	switch ops.kind {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		if integerText, exact := htmlIntegerText(text, true); exact {
-			if n, err := strconv.ParseInt(integerText, 10, ops.bits); err == nil {
-				rv.SetInt(n)
-				value = rv.Interface()
-				ok = true
-				return
-			}
+		if n, err := strconv.ParseInt(text, 10, ops.bits); err == nil {
+			rv.SetInt(n)
+			value = rv.Interface()
+			ok = true
+			return
 		}
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		if integerText, exact := htmlIntegerText(text, false); exact {
-			if n, err := strconv.ParseUint(integerText, 10, ops.bits); err == nil {
-				rv.SetUint(n)
-				value = rv.Interface()
-				ok = true
-				return
-			}
+		if n, err := strconv.ParseUint(text, 10, ops.bits); err == nil {
+			rv.SetUint(n)
+			value = rv.Interface()
+			ok = true
+			return
 		}
 	case reflect.Float32, reflect.Float64:
+		// Browsers sanitize number and range values before jaws.js reads them.
+		// Forged finite Go spellings add no values and accepted input is canonicalized.
 		if n, err := strconv.ParseFloat(text, ops.bits); err == nil && !math.IsNaN(n) && !math.IsInf(n, 0) {
 			rv.SetFloat(n)
 			value = rv.Interface()
@@ -189,8 +184,7 @@ func (ops numericOps) parse(text string) (value any, ok bool) {
 			return
 		}
 	}
-	// Browser parse rejection is deliberately not exposed as a Go error. Numeric
-	// widgets restore the canonical source value without turning validation into
-	// a handler error.
+	// Numeric widgets restore rejected input without turning validation into a
+	// handler error.
 	return nil, false
 }

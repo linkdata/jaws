@@ -447,7 +447,7 @@ const text = {
 	tagName: "INPUT",
 	type: "text",
 	value: "",
-	hasAttribute: function() { return false; },
+	hasAttribute: function(name) { return name === "data-jawsnumber"; },
 	getAttribute: function(name) { return name === "type" ? "text" : null; },
 	addEventListener: function(name, fn) { (textListeners[name] ||= []).push(fn); }
 };
@@ -477,7 +477,7 @@ number.value = "1.5";
 number.form.submit();
 const programmaticSubmitFrameCount = jaws.sent.length;
 log.length = 0;
-number.value = "2";
+number.value = "9007199254740993";
 dispatchChange();
 const changedLog = log.slice();
 dispatchChange();
@@ -511,7 +511,7 @@ process.stdout.write(JSON.stringify({
 		t.Fatalf("Number listeners = input:%d change:%d, want input:0 change:2", got.NumberInputListeners, got.NumberChangeListeners)
 	}
 	if got.TextInputListeners != 1 {
-		t.Fatalf("unmarked text input listeners = %d, want 1", got.TextInputListeners)
+		t.Fatalf("marked text input listeners = %d, want 1", got.TextInputListeners)
 	}
 	if got.InitialFrameCount != 0 {
 		t.Fatalf("unchanged initial Number emitted %d frames", got.InitialFrameCount)
@@ -529,7 +529,7 @@ process.stdout.write(JSON.stringify({
 		t.Fatalf("Number frames = %q, want one deduplicated frame", got.Frames)
 	}
 	msg, ok := wire.Parse([]byte(got.Frames[0]))
-	if !ok || msg.What != what.Input || msg.Jid != 1 || msg.Data != "2" {
+	if !ok || msg.What != what.Input || msg.Jid != 1 || msg.Data != "9007199254740993" {
 		t.Fatalf("unexpected Number frame: %+v, parseable %t", msg, ok)
 	}
 }

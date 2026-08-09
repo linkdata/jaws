@@ -26,10 +26,11 @@ type Range struct {
 // NewRange returns a range input widget bound to source.
 //
 // Predeclared and named integer and floating-point types are parsed and formatted
-// at their own width. If source's dynamic type also implements [bind.Setter], the
-// input is editable; rendering fails unless source exposes the stable, usable tag
-// described by [Input]. A getter-only source renders disabled; when tagged, it
-// continues to receive dirty-driven server updates.
+// at their own width. Integer sources use base-10 integer syntax. If source's
+// dynamic type also implements [bind.Setter], the input is editable; rendering
+// fails unless source exposes the stable, usable tag described by [Input]. A
+// getter-only source renders disabled; when tagged, it continues to receive
+// dirty-driven server updates.
 //
 // A non-finite bound floating-point value cancels the [jaws.Request] with a cause
 // matching [jaws.ErrValueNotFinite].
@@ -87,8 +88,8 @@ func (u *Range) JawsUpdate(elem *jaws.Element) {
 
 // JawsInput accepts or rejects a browser-side range value.
 //
-// Empty, malformed, non-finite, fractional integer, and values outside the source
-// type's range are rejected without calling the setter or returning an error.
+// Text that is malformed or cannot be represented by the source type is rejected
+// without calling the setter or returning an error.
 // Accepted and rejected text is reconciled with the binding's formatter. Rejection
 // and [jaws.ErrValueUnchanged] update only the originating Element. Getter-only
 // Ranges ignore browser input.

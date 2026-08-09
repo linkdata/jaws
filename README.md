@@ -638,8 +638,9 @@ identity. Tags passed as render parameters register the Element but do not
 replace its setter-derived dirty target.
 
 Number and Range retain the bound Go type through parsing, formatting, and setter
-calls. Integer inputs accept decimal and exponent forms only when they denote an
-exact in-range integer, and `float32` values parse and format at 32-bit precision.
+calls. Integer inputs use base-10 integer syntax and enforce the bound type's
+width. Floating-point inputs enforce their bound type's width; `float32` values
+parse and format at 32-bit precision.
 A getter-only Number renders `readonly`; a getter-only Range renders `disabled`.
 Static numeric values passed to the template helpers use these getter-only forms.
 Number and Range require ordinary rendering and are not supported by

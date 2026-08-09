@@ -372,7 +372,7 @@ func TestNumberRangePreserveNamedAndFloat32Types(t *testing.T) {
 	if !strings.Contains(got, `value="-12"`) {
 		t.Fatalf("named integer Number markup = %q", got)
 	}
-	if err := number.JawsInput(numberElem, "1.2e2"); err != nil {
+	if err := number.JawsInput(numberElem, "120"); err != nil {
 		t.Fatal(err)
 	}
 	if value, calls := integerSource.snapshot(); value != numberRangeNamedInt(120) || calls != 1 {
@@ -404,38 +404,37 @@ func TestNumberRangeIntegerRejectionAndCanonicalization(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		text      string
-		wantCalls int
+		name string
+		text string
 	}{
-		{name: "unchanged alternate spelling", text: "7.0", wantCalls: 1},
-		{name: "fractional", text: "7.5", wantCalls: 1},
-		{name: "overflow", text: "128", wantCalls: 1},
-		{name: "empty", text: "", wantCalls: 1},
-		{name: "malformed", text: "bad", wantCalls: 1},
-		{name: "non-finite literal", text: "NaN", wantCalls: 1},
-		{name: "non-finite overflow", text: "1e999", wantCalls: 1},
+		{name: "decimal point", text: "7.0"},
+		{name: "exponent", text: "7e0"},
+		{name: "fractional", text: "7.5"},
+		{name: "overflow", text: "128"},
+		{name: "empty", text: ""},
+		{name: "malformed", text: "bad"},
+		{name: "non-finite literal", text: "NaN"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr.InCh <- wire.WsMsg{Jid: elem.Jid(), What: what.Input, Data: tt.text}
 			awaitNumberRangeValue(t, tr, elem, "7")
-			if value, calls := source.snapshot(); value != 7 || calls != tt.wantCalls {
-				t.Fatalf("Number source after %q = (%v, %d calls), want (7, %d calls)", tt.text, value, calls, tt.wantCalls)
+			if value, calls := source.snapshot(); value != 7 || calls != 0 {
+				t.Fatalf("Number source after %q = (%v, %d calls), want (7, 0 calls)", tt.text, value, calls)
 			}
 		})
 	}
-	tr.InCh <- wire.WsMsg{Jid: elem.Jid(), What: what.Input, Data: "8.0"}
+	tr.InCh <- wire.WsMsg{Jid: elem.Jid(), What: what.Input, Data: "08"}
 	awaitNumberRangeValue(t, tr, elem, "8")
-	if value, calls := source.snapshot(); value != 8 || calls != 2 {
-		t.Fatalf("Number source after accepted canonicalization = (%v, %d calls), want (8, 2 calls)", value, calls)
+	if value, calls := source.snapshot(); value != 8 || calls != 1 {
+		t.Fatalf("Number source after accepted canonicalization = (%v, %d calls), want (8, 1 call)", value, calls)
 	}
 
 	_, rq := newCoreRequest(t)
 	rangeSource := newNumberRangeSource(int8(7))
 	rng := NewRange(rangeSource)
 	rangeElem, _ := renderUI(t, rq, rng)
-	for _, text := range []string{"7.5", "128"} {
+	for _, text := range []string{"7.0", "7e0", "7.5", "128"} {
 		if err := rng.JawsInput(rangeElem, text); err != nil {
 			t.Fatalf("Range.JawsInput(%q): %v", text, err)
 		}
@@ -445,21 +444,32 @@ func TestNumberRangeIntegerRejectionAndCanonicalization(t *testing.T) {
 	}
 }
 
-func TestRangeInputSetterError(t *testing.T) {
-	_, rq := newCoreRequest(t)
-	setErr := errors.New("setter error")
-	source := &numberRangeErrorSource{err: setErr}
-	rng := NewRange(source)
-	elem, _ := renderUI(t, rq, rng)
+func TestNumberRangeInputSetterError(t *testing.T) {
+	tests := []struct {
+		name   string
+		widget func(*numberRangeErrorSource) numberRangeUI
+	}{
+		{name: "Number", widget: func(source *numberRangeErrorSource) numberRangeUI { return NewNumber(source) }},
+		{name: "Range", widget: func(source *numberRangeErrorSource) numberRangeUI { return NewRange(source) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, rq := newCoreRequest(t)
+			setErr := errors.New("setter error")
+			source := &numberRangeErrorSource{err: setErr}
+			widget := tt.widget(source)
+			elem, _ := renderUI(t, rq, widget)
 
-	if err := rng.JawsInput(elem, "8"); !errors.Is(err, setErr) {
-		t.Fatalf("JawsInput error = %v, want setter error", err)
-	}
-	if cause := context.Cause(rq.Context()); cause != nil {
-		t.Fatalf("request cancellation cause = %v, want nil", cause)
-	}
-	if source.setCalls != 1 {
-		t.Fatalf("Range setter called %d times, want 1", source.setCalls)
+			if err := widget.JawsInput(elem, "8"); !errors.Is(err, setErr) {
+				t.Fatalf("JawsInput error = %v, want setter error", err)
+			}
+			if cause := context.Cause(rq.Context()); cause != nil {
+				t.Fatalf("request cancellation cause = %v, want nil", cause)
+			}
+			if source.setCalls != 1 {
+				t.Fatalf("setter called %d times, want 1", source.setCalls)
+			}
+		})
 	}
 }
 
@@ -493,7 +503,7 @@ func TestRangeBroadcastsCanonicalValueAcrossRequests(t *testing.T) {
 		}
 	}
 
-	if err = firstRange.JawsInput(firstElem, "2.0"); err != nil {
+	if err = firstRange.JawsInput(firstElem, "02"); err != nil {
 		t.Fatal(err)
 	}
 	awaitNumberRangeValue(t, first, firstElem, "2")
@@ -511,9 +521,9 @@ func TestNumericCorrectionTargetsOnlyOrigin(t *testing.T) {
 		widget       func(*numberRangeSource[int8]) numberRangeUI
 	}{
 		{name: "Range invalid", text: "7.5", widget: func(source *numberRangeSource[int8]) numberRangeUI { return NewRange(source) }},
-		{name: "Range unchanged", text: "7.0", wantSetCalls: 1, widget: func(source *numberRangeSource[int8]) numberRangeUI { return NewRange(source) }},
+		{name: "Range unchanged", text: "07", wantSetCalls: 1, widget: func(source *numberRangeSource[int8]) numberRangeUI { return NewRange(source) }},
 		{name: "Number invalid", text: "7.5", widget: func(source *numberRangeSource[int8]) numberRangeUI { return NewNumber(source) }},
-		{name: "Number unchanged", text: "7.0", wantSetCalls: 1, widget: func(source *numberRangeSource[int8]) numberRangeUI { return NewNumber(source) }},
+		{name: "Number unchanged", text: "7", wantSetCalls: 1, widget: func(source *numberRangeSource[int8]) numberRangeUI { return NewNumber(source) }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -30,9 +30,10 @@ type Number struct {
 // NewNumber returns a number input widget bound to source.
 //
 // Predeclared and named integer and floating-point types are parsed and formatted
-// at their own width. If source's dynamic type also implements [bind.Setter], the
-// input is editable; rendering fails unless source exposes the stable, usable tag
-// described by [Input]. A getter-only source renders read-only.
+// at their own width. Integer sources use base-10 integer syntax. If source's
+// dynamic type also implements [bind.Setter], the input is editable; rendering
+// fails unless source exposes the stable, usable tag described by [Input]. A
+// getter-only source renders read-only.
 //
 // A non-finite bound floating-point value cancels the [jaws.Request] with a cause
 // matching [jaws.ErrValueNotFinite].
