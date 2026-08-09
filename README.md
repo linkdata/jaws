@@ -140,8 +140,10 @@ that share the synchronized binder, getter, handler or tag.
 If an HTML entity is not registered in a Request, JaWS will not
 forward events from it, nor perform DOM manipulations for it.
 
-Dynamic updates of HTML entities is done using the different methods on
-the Element object when the JawsUpdate() method is called.
+Dynamic updates of HTML entities are queued with the methods on `Element` when
+`JawsUpdate` is called. To reconcile browser-local state after an event, pass the
+Element itself to `Dirty`; this schedules only that Element on its owning Request.
+Dirty a shared application tag instead when every dependent Element must update.
 
 ### JavaScript events
 
@@ -157,7 +159,8 @@ handle the event or want to pass it to the next handler.
   (`val` as `x<SP>y<SP>keystate<SP>name`)
 * `oncontextmenu` invokes `JawsContextMenu` for non-input-origin events
   (`val` as `x<SP>y<SP>keystate<SP>name`)
-* `oninput` invokes `JawsInput`
+* `oninput` invokes `JawsInput`; editable `ui.Number` listens for `change`
+  instead and sends the same Input event
 * `what.Set` events invoke `JawsInput` (`val` as `path=json`)
 
 Click and context-menu events whose target is an `input`, `select`,
@@ -405,11 +408,12 @@ fields are left intact and its methods still operate on the finished Request.
 Request identities are never reused, so a stale Element can never come to
 represent an unrelated connection.
 
-Dirtying is two-stage: `Request.Dirty` and `Jaws.Dirty` expand tags and record
-them on the `Jaws` instance, then the serving loop distributes those tags to
-matching active requests and schedules `JawsUpdate` calls. Broadcast helpers
-share that same serving loop, so start `Serve` or `ServeWithTimeout` before
-calling APIs that broadcast, reload, close sessions, or rely on dirty updates.
+Dirtying is two-stage: `Request.Dirty` and `Jaws.Dirty` expand and record their
+selectors on the `Jaws` instance, then the serving loop distributes ordinary tags
+across live Requests and each exact `*Element` only to its owner before scheduling
+`JawsUpdate` calls. Broadcast helpers share the serving loop, so start `Serve` or
+`ServeWithTimeout` before calling APIs that broadcast, reload, close sessions, or
+rely on dirty updates.
 
 Cancellation flows from the request context, the initial HTTP/WebSocket request,
 and `Jaws.Close`. Update paths that cannot return errors report them through
@@ -443,10 +447,10 @@ these invariants before relying on a green build alone:
   render-visible Element state a still-running initial renderer may read lock-free.
   Non-running retirement instead preserves the Request's Elements and buffers for an
   initial HTTP handler that still holds it.
-* Dirty dispatch expands tags once, targets only elements registered for those
-  tags, and does not let one request's queued update reach a finished, unregistered
-  request (whose key stays reserved, never reassigned to another Request, while it
-  remains reachable).
+* Dirty dispatch expands its inputs once. Ordinary keys target registered elements;
+  an expanded `*Element` targets that exact Element on its owning Request. Neither
+  path lets a queued update reach a finished, unregistered request (whose key stays
+  reserved, never reassigned to another Request, while it remains reachable).
 * Session grace windows remain deliberate for unclaimed, claimed, failed-upgrade,
   and closed-WebSocket requests.
 * WebSocket upgrades keep the single-use key, client-IP binding, and Origin
@@ -633,18 +637,21 @@ at least one stable, usable key; `JawsGetTag` takes precedence over the setter's
 identity. Tags passed as render parameters register the Element but do not
 replace its setter-derived dirty target.
 
-Number and Range preserve the exact bound type. Integer inputs accept decimal and
-exponent forms only when they denote an exact in-range integer, and `float32`
-values parse and format at 32-bit precision. A getter-only Number renders
-`readonly`; a getter-only Range renders `disabled`. Static numeric values passed
-to the template helpers use these getter-only forms.
+Number and Range retain the bound Go type through parsing, formatting, and setter
+calls. Integer inputs accept decimal and exponent forms only when they denote an
+exact in-range integer, and `float32` values parse and format at 32-bit precision.
+A getter-only Number renders `readonly`; a getter-only Range renders `disabled`.
+Static numeric values passed to the template helpers use these getter-only forms.
+Number and Range require ordinary rendering and are not supported by
+`RequestWriter.Register`.
 
 Number sends a settled edit on `change`, with pending edits flushed before another
 JaWS-managed input, click, or context-menu event. Range sends live `input` events
 while its thumb moves. Number rewrites accepted and rejected edits to the source's
-canonical formatting, including when an accepted value is already stored. An
-ordinarily rendered Range silently rejects browser values not representable by its
-source type and restores the canonical source value.
+canonical formatting, including when an accepted value is already stored. Range
+also reconciles accepted text through its formatter. It silently rejects browser
+text that is invalid for the source type and restores the canonical source value
+only on the originating control.
 
 Named numeric bindings work directly in templates:
 

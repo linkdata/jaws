@@ -94,7 +94,7 @@ func (jw *Jaws) dropNonComparableTags(tags []any) []any {
 	return tags
 }
 
-// setDirty marks all Elements that have one or more of the given tags as dirty.
+// setDirty records already-expanded selectors for the next dirty pass.
 func (jw *Jaws) setDirty(tags []any) {
 	jw.mu.Lock()
 	// Public paths validate keys through TagExpand; the deferred unlock is
@@ -106,12 +106,18 @@ func (jw *Jaws) setDirty(tags []any) {
 	}
 }
 
-// Dirty marks all [Element] values that have one or more of the given tags as dirty.
+// Dirty schedules updates selected by tags or exact Element pointers.
 //
-// The tags are expanded through [Jaws.MustTagExpand]: with a [Jaws.Logger] configured
-// an expansion error is logged and the partial result is still applied, while without
-// one the call panics before anything is marked dirty. [Request.Dirty] is equivalent;
-// both mark matching Elements on every live [Request].
+// The inputs are expanded through [Jaws.MustTagExpand]: with a [Jaws.Logger]
+// configured an expansion error is logged and the partial result is still applied,
+// while without one the call panics before anything is marked dirty. An expanded
+// non-nil pointer to an [Element] is reserved as an exact target: only that Element
+// is scheduled on its owning Request. Nil, unowned, cross-Jaws, and deleted Elements,
+// and Elements on finished Requests, are ignored. Other keys mark matching Elements
+// on every live [Request]. Updates run on the normal batched dirty pass; [Jaws.Serve]
+// or [Jaws.ServeWithTimeout] must be running for them to be delivered.
+//
+// [Request.Dirty] is equivalent.
 func (jw *Jaws) Dirty(dirtyTags ...any) {
 	jw.setDirty(jw.MustTagExpand(dirtyTags))
 }
@@ -140,9 +146,9 @@ func sortedDirtTags(dirty map[any]int) []any {
 	return dirt
 }
 
-// distributeDirt drains the accumulated dirty tags and appends them to every live
-// Request's pending-dirt list for the next update pass, returning the number of
-// dirty tags distributed.
+// distributeDirt drains the accumulated dirty selectors and offers them to every
+// live Request for the next update pass, returning the number drained. Each Request
+// keeps exact Element targets only when it owns them.
 func (jw *Jaws) distributeDirt() int {
 	var reqs []*Request
 	var dirt []any
@@ -169,7 +175,7 @@ func (jw *Jaws) distributeDirt() int {
 	//     update pass.
 	//   - A Request can finish between snapshot and append. appendDirtyTags checks the
 	//     lifecycle state under rq.mu (which finishLocked also holds when it transitions
-	//     to reqFinished), so a finished Request discards the stale tags instead of
+	//     to reqFinished), so a finished Request discards stale work instead of
 	//     re-materializing storage on a dead identity.
 	for _, rq := range reqs {
 		rq.appendDirtyTags(dirt)

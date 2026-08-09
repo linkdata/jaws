@@ -1901,6 +1901,43 @@ func TestRequest_IncomingRemove(t *testing.T) {
 	})
 }
 
+func TestRequest_DirtyElementUpdatesOwningRequest(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rq := newTestRequest(t)
+		defer closeRequestInBubble(rq)
+
+		ui := &testUi{}
+		id := rq.Register(ui)
+		elem := rq.GetElementByJid(id)
+		atomic.StoreInt32(&ui.updateCalled, 0)
+		ui.updateFn = func(elem *Element) {
+			elem.SetValue("corrected")
+		}
+
+		rq.Dirty(elem)
+		// Exact targets use the ordinary batched dirty pass (1ms in tests).
+		time.Sleep(2 * time.Millisecond)
+		synctest.Wait()
+
+		if calls := atomic.LoadInt32(&ui.updateCalled); calls != 1 {
+			t.Fatalf("targeted JawsUpdate calls = %d, want 1", calls)
+		}
+		select {
+		case msg := <-rq.OutCh:
+			if msg.Jid != id || msg.What != what.Value || msg.Data != "corrected" {
+				t.Fatalf("targeted update = %#v, want Value %q for %v", msg, "corrected", id)
+			}
+		default:
+			t.Fatal("targeted update was not flushed")
+		}
+		select {
+		case msg := <-rq.OutCh:
+			t.Fatalf("unexpected additional targeted update %#v", msg)
+		default:
+		}
+	})
+}
+
 func TestRequest_IncomingClick(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest(t)
@@ -2444,6 +2481,14 @@ func TestRequestRecycle_StaleElementIsInert(t *testing.T) {
 	}
 	if elem.Request != rq {
 		t.Fatal("stale Element lost its Request back-pointer")
+	}
+	elem.Dirty(elem)
+	jw.distributeDirt()
+	rq.mu.RLock()
+	queuedUpdates := len(rq.todoDirt)
+	rq.mu.RUnlock()
+	if queuedUpdates != 0 {
+		t.Fatalf("stale Element queued %d updates after recycle, want 0", queuedUpdates)
 	}
 }
 

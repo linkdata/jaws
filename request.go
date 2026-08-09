@@ -85,11 +85,11 @@ type requestBuffers struct {
 // Because the pointer is never reused it can never come to represent a different
 // connection, and a broadcast destination resolved from the Request after it has
 // finished (as [Request.Alert] and [Request.Redirect] do) is empty, so such a call
-// reaches nothing. This is not a general no-op guarantee: [Request.Dirty] delegates
-// to [Jaws]-wide dirtying and can still update matching Elements on other live
-// Requests, and an Alert or Redirect queued before completion carries a key value
-// that can outlive the Request and, after that key is later reused, match a different
-// Request. Background work should instead retain [Request.Context] and, when it must terminate
+// reaches nothing. This is not a general no-op guarantee: [Request.Dirty] can still
+// update matching or explicitly targeted Elements on other live Requests, and an
+// Alert or Redirect queued before completion carries a key value that can outlive
+// the Request and, after that key is later reused, match a different Request.
+// Background work should instead retain [Request.Context] and, when it must terminate
 // the connection, the cancel function returned while deriving a replacement context
 // through [Request.SetContext].
 //
@@ -109,7 +109,7 @@ type Request struct {
 	lastJid          Jid                     // last element Jid allocated within this Request
 	initial          *http.Request           // initial HTTP request passed to Jaws.NewRequest
 	session          *Session                // session, if established
-	todoDirt         []any                   // dirty tags
+	todoDirt         []any                   // pending dirty tags and exact Element targets
 	ctx              context.Context         // current context, derived from either Jaws or WS HTTP req; stored in the struct because there is no call chain between Request creation and its use once the WebSocket exists
 	httpDoneCh       <-chan struct{}         // once claimed, set to http.Request.Context().Done()
 	cancelFn         context.CancelCauseFunc // cancel function
@@ -254,9 +254,9 @@ func (rq *Request) advanceLastWriteSeconds(now int32) {
 // reused, so it never aliases another connection, and destKey returns zero once the
 // Request has finished, so it cannot hand back the finished Request's destination.
 // (This is not a blanket "pointer-derived operations are safe" claim: [Request.Dirty]
-// dirties matching Elements on other live Requests by design, and an Alert or
-// Redirect message queued before completion carries a key.Key destination that can
-// itself outlive the Request.)
+// can target Elements on other live Requests by ordinary tag or exact pointer, and
+// an Alert or Redirect message queued before completion carries a key.Key destination
+// that can itself outlive the Request.)
 func (rq *Request) destKey() (k key.Key) {
 	rq.mu.RLock()
 	if rq.loadState().registered() {
@@ -434,7 +434,7 @@ func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
 	// high-water mark on every recycle — including later empty requests — under
 	// rq.mu/muQueue.
 	buffers = rq.buffers
-	clear(rq.todoDirt) // release tag references before pooling
+	clear(rq.todoDirt) // release tag and targeted Element references before pooling
 	clear(rq.elems)    // release *Element references so the pooled array pins nothing
 	clear(rq.tagMap)
 	if buffers != nil {
@@ -746,12 +746,17 @@ func (rq *Request) TagsOf(elem *Element) (tags []any) {
 	return
 }
 
-// Dirty marks all [Element] values that have one or more of the given tags as dirty.
+// Dirty schedules updates selected by tags or exact Element pointers.
 //
-// Dirtying is [Jaws]-wide rather than scoped to rq: matching Elements on every live
-// [Request] are marked. The tags are expanded through [Jaws.MustTagExpand], so an
-// expansion error is logged and the partial result still applied when a [Jaws.Logger]
-// is configured, and panics before anything is marked dirty when one is not.
+// A non-nil pointer to an [Element] in the expanded tags is reserved as an exact
+// target on its owning Request. Nil, unowned, cross-Jaws, and deleted Elements, and
+// Elements on finished Requests, are ignored. Other keys are [Jaws]-wide rather
+// than scoped to rq: matching Elements on every live Request are marked. Tags are
+// expanded through [Jaws.MustTagExpand], so an expansion error is logged and the
+// partial result still applied when a [Jaws.Logger] is configured, and panics before
+// anything is marked dirty when one is not. Updates run on the normal batched dirty
+// pass; [Jaws.Serve] or [Jaws.ServeWithTimeout] must be running for them to be
+// delivered.
 func (rq *Request) Dirty(dirtyTags ...any) {
 	rq.Jaws.setDirty(rq.Jaws.MustTagExpand(dirtyTags))
 }
@@ -874,9 +879,10 @@ func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 	return
 }
 
-// appendDirtyTags queues already-expanded tags onto this request's pending-dirt
-// list. The Serve loop's update tick later drains the list (see makeUpdateList)
-// and re-renders the affected elements. Takes rq.mu.
+// appendDirtyTags queues already-expanded selectors onto this request's pending-dirt
+// list. Exact Element targets are kept only by their owning Request. The Serve loop's
+// update tick later drains the list (see makeUpdateList) and re-renders the affected
+// elements. Takes rq.mu.
 //
 // It may run after the caller's dirt snapshot was taken but before rq finished
 // (see distributeDirt). A finished Request is unregistered (registered is false), so
@@ -884,7 +890,14 @@ func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 func (rq *Request) appendDirtyTags(tags []any) {
 	rq.mu.Lock()
 	if rq.loadState().registered() {
-		rq.todoDirt = append(rq.todoDirt, tags...)
+		for _, tagValue := range tags {
+			if elem, exact := tagValue.(*Element); exact {
+				if elem == nil || elem.Request != rq || elem.deleted.Load() {
+					continue
+				}
+			}
+			rq.todoDirt = append(rq.todoDirt, tagValue)
+		}
 	}
 	rq.mu.Unlock()
 }

@@ -27,11 +27,6 @@ type Number struct {
 	binding *numericBinding
 }
 
-type numberState struct {
-	text  string
-	valid bool
-}
-
 // NewNumber returns a number input widget bound to source.
 //
 // Predeclared and named integer and floating-point types are parsed and formatted
@@ -85,7 +80,7 @@ func (u *Number) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err 
 		attrs = append(attrs, template.HTMLAttr("readonly"))
 	}
 	if err = htmlio.WriteHTMLInput(w, elem.Jid(), "number", text, attrs); err == nil {
-		u.Last.Store(&numberState{text: text, valid: true})
+		u.Last.Store(text)
 	}
 	return
 }
@@ -102,8 +97,7 @@ func (u *Number) JawsUpdate(elem *jaws.Element) {
 		elem.Cancel(err)
 		return
 	}
-	prev := u.Last.Swap(&numberState{text: text, valid: true}).(*numberState)
-	if !prev.valid || prev.text != text {
+	if prev := u.Last.Swap(text).(string); prev != text {
 		elem.SetValue(text)
 	}
 }
@@ -111,27 +105,31 @@ func (u *Number) JawsUpdate(elem *jaws.Element) {
 // JawsInput settles a browser-side number edit.
 //
 // Empty, malformed, non-finite, and unrepresentable browser values are rejected
-// without calling the setter or returning an error. The source is dirtied so the
-// canonical value is restored. Accepted text is also rewritten through the
-// binding's formatter, including when the setter returns
+// without calling the setter or returning an error. The canonical value is
+// restored by updating only the originating Element. Accepted text is also
+// rewritten through the binding's formatter, including when the setter returns
 // [jaws.ErrValueUnchanged]. Getter-only Numbers ignore browser input.
 func (u *Number) JawsInput(elem *jaws.Element, text string) (err error) {
 	if !u.binding.writable() {
 		return
 	}
 	value, ok, parseErr := u.binding.parse(text)
-	u.Last.Store(&numberState{})
+	// A formatter can never produce empty text, so empty is the invalidated
+	// baseline that forces the next update to send the canonical value.
+	u.Last.Store("")
 	if parseErr != nil {
 		elem.Cancel(parseErr)
 		return
 	}
 	if !ok {
-		elem.Dirty(u.tag)
+		// Reconcile in JawsUpdate so the Request serializes this correction with
+		// source-driven updates and leaves a newer source value final.
+		elem.Dirty(elem)
 		return
 	}
 	err = u.binding.set(elem, value)
 	if errors.Is(err, jaws.ErrValueUnchanged) {
-		elem.Dirty(u.tag)
+		elem.Dirty(elem)
 		err = nil
 		return
 	}

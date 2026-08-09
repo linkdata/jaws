@@ -22,7 +22,7 @@ import (
 //
 // For post-set reconciliation, a writable setter must expose at least one stable,
 // usable tag through [jaws.Element.ApplyGetter]. [bind.New] exposes its backing
-// pointer.
+// value pointer.
 //
 // After [bind.Setter.JawsSet] returns a result that does not match
 // [jaws.ErrValueUnchanged], Input dirties the setter-derived tag so the server

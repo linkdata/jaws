@@ -98,8 +98,9 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 				default:
 					// Only the internal periodic dirty-render tick, a nil-destination
 					// Update (see the updateTicker case below), is safe to drop.
-					// distributeDirt has already moved the dirty tags into each Request's
-					// todoDirt and cleared the global set, so the tick carries no payload;
+					// distributeDirt has already moved the dirty selectors into Requests'
+					// pending-dirt lists and cleared the global set, so the
+					// tick carries no payload;
 					// it only nudges the Request. The pending dirt is still rendered
 					// without it: a Request already in its process loop is woken by the
 					// message that filled the channel and drains todoDirt on the next pass,

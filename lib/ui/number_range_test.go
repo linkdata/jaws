@@ -5,11 +5,13 @@ import (
 	"errors"
 	"html/template"
 	"math"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/linkdata/jaws"
@@ -67,6 +69,52 @@ func (source *numberRangeSource[T]) store(value T) {
 	source.mu.Lock()
 	source.value = value
 	source.mu.Unlock()
+}
+
+type numberRangeGatedSource struct {
+	value      atomic.Int32
+	setCalls   atomic.Int32
+	gateElem   atomic.Pointer[jaws.Element]
+	gate       atomic.Bool
+	getEntered chan struct{}
+	getRelease chan struct{}
+	setDone    chan struct{}
+}
+
+func newNumberRangeGatedSource(value int8) *numberRangeGatedSource {
+	source := &numberRangeGatedSource{
+		getEntered: make(chan struct{}),
+		getRelease: make(chan struct{}),
+		setDone:    make(chan struct{}, 1),
+	}
+	source.value.Store(int32(value))
+	return source
+}
+
+func (source *numberRangeGatedSource) JawsGet(elem *jaws.Element) int8 {
+	value := int8(source.value.Load())
+	if elem == source.gateElem.Load() && source.gate.CompareAndSwap(true, false) {
+		close(source.getEntered)
+		<-source.getRelease
+	}
+	return value
+}
+
+func (source *numberRangeGatedSource) JawsSet(_ *jaws.Element, value int8) error {
+	source.setCalls.Add(1)
+	if int8(source.value.Load()) == value {
+		return jaws.ErrValueUnchanged
+	}
+	source.value.Store(int32(value))
+	select {
+	case source.setDone <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
+func (source *numberRangeGatedSource) JawsGetTag() any {
+	return source
 }
 
 type numberRangeGetter[T comparable] struct {
@@ -152,9 +200,20 @@ type numberRangeLogger struct {
 	errors []error
 }
 
-type numberRangeProbeUpdater struct{}
+type numberRangeUI interface {
+	jaws.UI
+	jaws.InputHandler
+}
 
-func (*numberRangeProbeUpdater) JawsUpdate(*jaws.Element) {}
+type numberRangeCountingUI struct {
+	numberRangeUI
+	updateCalls atomic.Int32
+}
+
+func (ui *numberRangeCountingUI) JawsUpdate(elem *jaws.Element) {
+	ui.updateCalls.Add(1)
+	ui.numberRangeUI.JawsUpdate(elem)
+}
 
 func (*numberRangeLogger) Info(string, ...any) {}
 func (*numberRangeLogger) Warn(string, ...any) {}
@@ -207,6 +266,9 @@ func awaitNumberRangeValue(t *testing.T, tr *jawstest.TestRequest, elem *jaws.El
 	for {
 		select {
 		case msg := <-tr.OutCh:
+			if msg.What == what.Alert {
+				t.Fatalf("unexpected alert while waiting for Value %q: %q", want, msg.Data)
+			}
 			if msg.Jid == elem.Jid() && msg.What == what.Value {
 				if msg.Data != want {
 					t.Fatalf("Value update = %q, want %q", msg.Data, want)
@@ -341,14 +403,17 @@ func TestNumberRangeIntegerRejectionAndCanonicalization(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := number.JawsInput(elem, tt.text); err != nil {
-				t.Fatalf("Number.JawsInput(%q): %v", tt.text, err)
-			}
+			tr.InCh <- wire.WsMsg{Jid: elem.Jid(), What: what.Input, Data: tt.text}
+			awaitNumberRangeValue(t, tr, elem, "7")
 			if value, calls := source.snapshot(); value != 7 || calls != tt.wantCalls {
 				t.Fatalf("Number source after %q = (%v, %d calls), want (7, %d calls)", tt.text, value, calls, tt.wantCalls)
 			}
-			awaitNumberRangeValue(t, tr, elem, "7")
 		})
+	}
+	tr.InCh <- wire.WsMsg{Jid: elem.Jid(), What: what.Input, Data: "8.0"}
+	awaitNumberRangeValue(t, tr, elem, "8")
+	if value, calls := source.snapshot(); value != 8 || calls != 2 {
+		t.Fatalf("Number source after accepted canonicalization = (%v, %d calls), want (8, 2 calls)", value, calls)
 	}
 
 	_, rq := newCoreRequest(t)
@@ -409,7 +474,7 @@ func TestRangeInputErrorClassification(t *testing.T) {
 	})
 }
 
-func TestRangeBroadcastsExactValueAcrossRequests(t *testing.T) {
+func TestRangeBroadcastsCanonicalValueAcrossRequests(t *testing.T) {
 	jw, err := jaws.New()
 	if err != nil {
 		t.Fatal(err)
@@ -439,84 +504,227 @@ func TestRangeBroadcastsExactValueAcrossRequests(t *testing.T) {
 		}
 	}
 
-	if err = firstRange.JawsInput(firstElem, "2"); err != nil {
+	if err = firstRange.JawsInput(firstElem, "2.0"); err != nil {
 		t.Fatal(err)
 	}
+	awaitNumberRangeValue(t, first, firstElem, "2")
 	awaitNumberRangeValue(t, second, secondElem, "2")
 	if value, calls := source.snapshot(); value != 2 || calls != 1 {
 		t.Fatalf("shared Range source = (%v, %d calls), want (2, 1 call)", value, calls)
 	}
 }
 
-func TestRangeRejectedInputRestoresCanonicalValue(t *testing.T) {
-	const probe = "range-rejection-event-barrier"
-	logger := new(numberRangeLogger)
-	tr := newNumberRangeLiveRequest(t, logger)
-	source := newNumberRangeSource(int8(7))
-	rng := NewRange(source)
-	elem := tr.NewElement(rng)
-	var rendered strings.Builder
-	if err := elem.JawsRender(&rendered, nil); err != nil {
-		t.Fatal(err)
+func TestNumericCorrectionTargetsOnlyOrigin(t *testing.T) {
+	tests := []struct {
+		name         string
+		text         string
+		wantSetCalls int
+		widget       func(*numberRangeSource[int8]) numberRangeUI
+	}{
+		{name: "Range invalid", text: "7.5", widget: func(source *numberRangeSource[int8]) numberRangeUI { return NewRange(source) }},
+		{name: "Range unchanged", text: "7.0", wantSetCalls: 1, widget: func(source *numberRangeSource[int8]) numberRangeUI { return NewRange(source) }},
+		{name: "Number invalid", text: "7.5", widget: func(source *numberRangeSource[int8]) numberRangeUI { return NewNumber(source) }},
+		{name: "Number unchanged", text: "7.0", wantSetCalls: 1, widget: func(source *numberRangeSource[int8]) numberRangeUI { return NewNumber(source) }},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				jw, err := jaws.New()
+				if err != nil {
+					t.Fatal(err)
+				}
+				go jw.Serve()
+				first := jawstest.NewTestRequest(jw, nil)
+				second := jawstest.NewTestRequest(jw, nil)
+				<-first.ReadyCh
+				<-second.ReadyCh
+				defer func() {
+					first.Close()
+					second.Close()
+					jw.Close()
+					synctest.Wait()
+				}()
 
-	probeErr := errors.New(probe)
-	var probeAlert wire.WsMsg
-	probeAlert.FillAlert(probeErr)
-	rw := RequestWriter{Request: tr.Request, Writer: tr.Recorder}
-	probeID := rw.Register(new(numberRangeProbeUpdater), jaws.InputFn(func(*jaws.Element, string) error {
-		return probeErr
-	}))
-	// The single event caller handles these in order. Its sentinel Alert is therefore
-	// enqueued after any Alerts mistakenly produced by the rejected Range inputs.
-	for _, text := range []string{"7.5", "8.5", "9.5"} {
-		tr.InCh <- wire.WsMsg{Jid: elem.Jid(), What: what.Input, Data: text}
-	}
-	tr.InCh <- wire.WsMsg{Jid: probeID, What: what.Input}
-	sawCanonical := false
-	sawBarrier := false
-	timer := time.NewTimer(time.Second)
-	defer timer.Stop()
-	for {
-		select {
-		case msg := <-tr.OutCh:
-			switch msg.What {
-			case what.Value:
-				if msg.Jid == elem.Jid() && msg.Data == "7" {
-					sawCanonical = true
+				source := newNumberRangeSource(int8(7))
+				origin := &numberRangeCountingUI{numberRangeUI: tt.widget(source)}
+				firstPeer := &numberRangeCountingUI{numberRangeUI: tt.widget(source)}
+				secondPeer := &numberRangeCountingUI{numberRangeUI: tt.widget(source)}
+
+				originElem := first.NewElement(origin)
+				var rendered strings.Builder
+				if err = originElem.JawsRender(&rendered, nil); err != nil {
+					t.Fatal(err)
 				}
-			case what.Alert:
-				if msg.Data != probeAlert.Data {
-					t.Fatalf("rejected Range input produced Alert %q", msg.Data)
+				for _, item := range []struct {
+					request *jawstest.TestRequest
+					ui      *numberRangeCountingUI
+				}{
+					{request: first, ui: firstPeer},
+					{request: second, ui: secondPeer},
+				} {
+					elem := item.request.NewElement(item.ui)
+					rendered.Reset()
+					if err = elem.JawsRender(&rendered, nil); err != nil {
+						t.Fatal(err)
+					}
 				}
-				sawBarrier = true
-			}
-			if sawCanonical && sawBarrier {
-				if value, calls := source.snapshot(); value != 7 || calls != 0 {
-					t.Fatalf("Range source = (%v, %d calls), want (7, 0 calls)", value, calls)
+				if got := first.GetElements(source); len(got) != 2 {
+					t.Fatalf("origin request source Elements = %d, want 2", len(got))
 				}
-				return
-			}
-		case <-timer.C:
-			t.Fatal("timed out draining rejected Range output")
-		}
+				if got := second.GetElements(source); len(got) != 1 {
+					t.Fatalf("peer request source Elements = %d, want 1", len(got))
+				}
+
+				first.InCh <- wire.WsMsg{Jid: originElem.Jid(), What: what.Input, Data: tt.text}
+				synctest.Wait()
+				// Numeric correction uses the ordinary batched dirty pass.
+				time.Sleep(jaws.DefaultUpdateInterval + time.Millisecond)
+				synctest.Wait()
+
+				select {
+				case msg := <-first.OutCh:
+					if msg.Jid != originElem.Jid() || msg.What != what.Value || msg.Data != "7" {
+						t.Fatalf("numeric correction = %#v, want Value %q for %v", msg, "7", originElem.Jid())
+					}
+				default:
+					t.Fatal("numeric input did not produce a correction")
+				}
+				for _, item := range []struct {
+					name    string
+					request *jawstest.TestRequest
+				}{
+					{name: "origin request", request: first},
+					{name: "peer request", request: second},
+				} {
+					select {
+					case msg := <-item.request.OutCh:
+						t.Fatalf("unexpected output on %s: %#v", item.name, msg)
+					default:
+					}
+				}
+				if value, calls := source.snapshot(); value != 7 || calls != tt.wantSetCalls {
+					t.Fatalf("numeric source = (%v, %d calls), want (7, %d calls)", value, calls, tt.wantSetCalls)
+				}
+
+				for _, item := range []struct {
+					name  string
+					ui    *numberRangeCountingUI
+					calls int32
+				}{
+					{name: "origin", ui: origin, calls: 1},
+					{name: "same-request peer", ui: firstPeer},
+					{name: "other-request peer", ui: secondPeer},
+				} {
+					if calls := item.ui.updateCalls.Load(); calls != item.calls {
+						t.Fatalf("%s JawsUpdate calls = %d, want %d", item.name, calls, item.calls)
+					}
+				}
+			})
+		})
 	}
 }
 
-func TestRangeRegisterSendsInitialValue(t *testing.T) {
-	tr := newNumberRangeLiveRequest(t, nil)
-	rng := NewRange(newNumberRangeSource(numberRangeNamedInt(0)))
-	rw := RequestWriter{Request: tr.Request, Writer: tr.Recorder}
-	id := rw.Register(rng)
+func TestNumericRejectedCorrectionConvergesToNewerSource(t *testing.T) {
+	tests := []struct {
+		name           string
+		widget         func(*numberRangeGatedSource) jaws.UI
+		wantPeerValues []string
+	}{
+		{name: "Number", widget: func(source *numberRangeGatedSource) jaws.UI { return NewNumber(source) }, wantPeerValues: []string{"8"}},
+		{name: "Range", widget: func(source *numberRangeGatedSource) jaws.UI { return NewRange(source) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				jw, err := jaws.New()
+				if err != nil {
+					t.Fatal(err)
+				}
+				go jw.Serve()
+				originRequest := jawstest.NewTestRequest(jw, nil)
+				peerRequest := jawstest.NewTestRequest(jw, nil)
+				<-originRequest.ReadyCh
+				<-peerRequest.ReadyCh
+				defer func() {
+					originRequest.Close()
+					peerRequest.Close()
+					jw.Close()
+					synctest.Wait()
+				}()
 
-	tr.InCh <- wire.WsMsg{}
-	select {
-	case msg := <-tr.OutCh:
-		if msg.What != what.Value || msg.Jid != id || msg.Data != "0" {
-			t.Fatalf("initial Range update = {%v %v %q}, want {%v %v %q}", msg.What, msg.Jid, msg.Data, what.Value, id, "0")
-		}
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for initial registered Range value")
+				source := newNumberRangeGatedSource(7)
+				releaseGetter := sync.OnceFunc(func() { close(source.getRelease) })
+				defer releaseGetter()
+				originElem := originRequest.NewElement(tt.widget(source))
+				peerElem := peerRequest.NewElement(tt.widget(source))
+				var rendered strings.Builder
+				if err = originElem.JawsRender(&rendered, nil); err != nil {
+					t.Fatal(err)
+				}
+				rendered.Reset()
+				if err = peerElem.JawsRender(&rendered, nil); err != nil {
+					t.Fatal(err)
+				}
+				source.gateElem.Store(originElem)
+				source.gate.Store(true)
+
+				originRequest.InCh <- wire.WsMsg{Jid: originElem.Jid(), What: what.Input, Data: "7.5"}
+				select {
+				case <-source.getEntered:
+				case <-time.After(time.Second):
+					t.Fatal("timed out waiting for gated canonical read")
+				}
+				peerRequest.InCh <- wire.WsMsg{Jid: peerElem.Jid(), What: what.Input, Data: "8"}
+				select {
+				case <-source.setDone:
+				case <-time.After(time.Second):
+					t.Fatal("timed out waiting for peer setter")
+				}
+				// Let the accepted peer event finish dirtying the shared source before
+				// advancing the JaWS update tick.
+				synctest.Wait()
+				time.Sleep(jaws.DefaultUpdateInterval + time.Millisecond)
+				synctest.Wait()
+				releaseGetter()
+				synctest.Wait()
+
+				var values []string
+			drainOrigin:
+				for {
+					select {
+					case msg := <-originRequest.OutCh:
+						if msg.Jid != originElem.Jid() || msg.What != what.Value {
+							t.Fatalf("unexpected origin output %#v", msg)
+						}
+						values = append(values, msg.Data)
+					default:
+						break drainOrigin
+					}
+				}
+				if !reflect.DeepEqual(values, []string{"7", "8"}) {
+					t.Fatalf("origin Value updates = %q, want [7 8]", values)
+				}
+				var peerValues []string
+			drainPeer:
+				for {
+					select {
+					case msg := <-peerRequest.OutCh:
+						if msg.Jid != peerElem.Jid() || msg.What != what.Value {
+							t.Fatalf("unexpected peer output %#v", msg)
+						}
+						peerValues = append(peerValues, msg.Data)
+					default:
+						break drainPeer
+					}
+				}
+				if !reflect.DeepEqual(peerValues, tt.wantPeerValues) {
+					t.Fatalf("peer Value updates = %q, want %q", peerValues, tt.wantPeerValues)
+				}
+				if value, calls := int8(source.value.Load()), source.setCalls.Load(); value != 8 || calls != 1 {
+					t.Fatalf("source = (%v, %d calls), want (8, 1 call)", value, calls)
+				}
+			})
+		})
 	}
 }
 
@@ -697,25 +905,48 @@ func TestNumberRangePreserveSourceHandlerAndInitialAttribute(t *testing.T) {
 	}
 }
 
-func TestNumberUpdateBeforeRenderLogsAndQueuesNothing(t *testing.T) {
-	logger := new(numberRangeLogger)
-	tr := newNumberRangeLiveRequest(t, logger)
-	number := NewNumber(newNumberRangeSource(3))
-	elem := tr.NewElement(number)
-
-	number.JawsUpdate(elem)
-	logged := logger.snapshot()
-	if len(logged) != 1 || !strings.Contains(logged[0].Error(), "before successful rendering") {
-		t.Fatalf("logged errors = %v", logged)
+func TestNumericRegisterLogsAndQueuesNothing(t *testing.T) {
+	tests := []struct {
+		name   string
+		widget func() numberRangeUI
+	}{
+		{name: "Number", widget: func() numberRangeUI { return NewNumber(newNumberRangeSource(3)) }},
+		{name: "Range", widget: func() numberRangeUI { return NewRange(newNumberRangeSource(3)) }},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				jw, err := jaws.New()
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger := new(numberRangeLogger)
+				jw.Logger = logger
+				go jw.Serve()
+				tr := jawstest.NewTestRequest(jw, nil)
+				<-tr.ReadyCh
+				defer func() {
+					tr.Close()
+					jw.Close()
+					synctest.Wait()
+				}()
 
-	tr.InCh <- wire.WsMsg{}
-	timer := time.NewTimer(100 * time.Millisecond)
-	defer timer.Stop()
-	select {
-	case msg := <-tr.OutCh:
-		t.Fatalf("update before render queued outbound message %#v", msg)
-	case <-timer.C:
+				widget := tt.widget()
+				(RequestWriter{Request: tr.Request, Writer: tr.Recorder}).Register(widget)
+				logged := logger.snapshot()
+				if len(logged) != 1 || !strings.Contains(logged[0].Error(), "before successful rendering") {
+					t.Fatalf("logged errors = %v", logged)
+				}
+
+				tr.InCh <- wire.WsMsg{}
+				synctest.Wait()
+				select {
+				case msg := <-tr.OutCh:
+					t.Fatalf("update before render queued outbound message %#v", msg)
+				default:
+				}
+			})
+		})
 	}
 }
 

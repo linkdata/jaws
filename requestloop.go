@@ -75,9 +75,9 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 
 		rq.sendQueue(outboundMsgCh)
 
-		// Empty the dirty tags list and call JawsUpdate()
-		// for identified elements. This queues up wsMsg's
-		// in elem.wsQueue.
+		// Drain pending dirty tags and exact Element targets, then call
+		// JawsUpdate for the selected Elements. Updates queue browser messages
+		// on the Request.
 		for _, elem := range rq.makeUpdateList() {
 			elem.JawsUpdate()
 		}
@@ -375,13 +375,17 @@ func (rq *Request) sendQueue(outboundMsgCh chan<- wire.WsMsg) {
 	}
 }
 
-// removeElementsLocked drops every element matching pred from the request's element
-// list and from every tag entry, deleting tag entries that become empty.
+// removeElementsLocked drops every element matching pred from the request's pending
+// exact targets, element list, and tag entries, deleting tag entries that become empty.
 //
 // slices.DeleteFunc zeros the freed tail slots, so the dropped *Element pointers do
 // not linger in the backing arrays. Caller must hold rq.mu and is responsible for
 // marking the matched elements deleted.
 func (rq *Request) removeElementsLocked(pred func(*Element) bool) {
+	rq.todoDirt = slices.DeleteFunc(rq.todoDirt, func(tagValue any) bool {
+		elem, ok := tagValue.(*Element)
+		return ok && elem != nil && pred(elem)
+	})
 	rq.elems = slices.DeleteFunc(rq.elems, pred)
 	for k := range rq.tagMap {
 		rq.tagMap[k] = slices.DeleteFunc(rq.tagMap[k], pred)
@@ -448,13 +452,22 @@ func (rq *Request) DeleteElements(elems []*Element) {
 	rq.removeElementsLocked(func(e *Element) bool { _, ok := victims[e]; return ok })
 }
 
-// makeUpdateList drains the pending-dirt tag list, resolves it to the distinct
-// elements needing an update, clears the list, and returns those elements sorted
-// by Jid. It takes rq.mu. The Serve loop calls JawsUpdate on each returned element.
+// makeUpdateList drains exact Element targets and pending-dirt tags, resolves them
+// to distinct Elements, and returns them sorted by Jid. It takes rq.mu. The Request
+// processing loop calls JawsUpdate on each returned Element.
 func (rq *Request) makeUpdateList() (todo []*Element) {
 	rq.mu.Lock()
 	seen := map[*Element]struct{}{}
 	for _, tagValue := range rq.todoDirt {
+		if elem, exact := tagValue.(*Element); exact {
+			// appendDirtyTags establishes ownership and liveness. Deletion removes
+			// queued targets under rq.mu; JawsUpdate handles deletion after this drain.
+			if _, ok := seen[elem]; !ok {
+				seen[elem] = struct{}{}
+				todo = append(todo, elem)
+			}
+			continue
+		}
 		for _, elem := range rq.tagMap[tagValue] {
 			if _, ok := seen[elem]; !ok {
 				seen[elem] = struct{}{}

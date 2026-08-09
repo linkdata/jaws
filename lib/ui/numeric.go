@@ -47,14 +47,13 @@ func NewNumericBinding[T comparable](source bind.Getter[T], codec NumberCodec[T]
 }
 
 // numericBinding erases a source's concrete type while retaining exact typed
-// getter, setter, parser, formatter, and comparison operations.
+// getter, setter, parser, and formatter operations.
 type numericBinding struct {
 	sourceValue any
 	getValue    func(*jaws.Element) any
 	setValue    func(*jaws.Element, any) error
 	parseValue  func(string) (any, bool, error)
 	formatValue func(any) (string, error)
-	equalValue  func(any, any) bool
 	configErr   error
 }
 
@@ -90,10 +89,6 @@ func (nb *numericBinding) set(elem *jaws.Element, value any) (err error) {
 	return
 }
 
-func (nb *numericBinding) equal(a, b any) bool {
-	return nb.equalValue(a, b)
-}
-
 func newBuiltinNumericBinding[T Numeric](source bind.Getter[T]) *numericBinding {
 	typ := reflect.TypeFor[T]()
 	ops, _ := newNumericOps(typ)
@@ -104,9 +99,6 @@ func newBuiltinNumericBinding[T Numeric](source bind.Getter[T]) *numericBinding 
 		},
 		parseValue:  ops.parse,
 		formatValue: ops.format,
-		equalValue: func(a, b any) bool {
-			return a.(T) == b.(T)
-		},
 	}
 	if setter, ok := any(source).(bind.Setter[T]); ok {
 		nb.setValue = func(elem *jaws.Element, value any) error {
@@ -130,13 +122,7 @@ func newCustomNumericBinding[T comparable](source bind.Getter[T], codec NumberCo
 	if isNilValue(codec) {
 		nb.configErr = newErrNumberFormat("nil codec")
 	}
-	nb.equalValue = func(a, b any) bool {
-		return a.(T) == b.(T)
-	}
 	nb.formatValue = func(value any) (text string, err error) {
-		if err = nb.configErr; err != nil {
-			return
-		}
 		v := value.(T)
 		if v != v {
 			err = newErrNumberFormat("bound value is not reflexive")
@@ -163,9 +149,6 @@ func newCustomNumericBinding[T comparable](source bind.Getter[T], codec NumberCo
 		return
 	}
 	nb.parseValue = func(text string) (value any, ok bool, err error) {
-		if err = nb.configErr; err != nil {
-			return
-		}
 		if _, valid := scanHTMLNumber(text); !valid {
 			return
 		}
@@ -217,9 +200,6 @@ func makeNumericBinding(source any) (nb *numericBinding, ok bool) {
 			},
 			parseValue:  ops.parse,
 			formatValue: ops.format,
-			equalValue: func(a, b any) bool {
-				return a == b
-			},
 		}
 		if setter, yes := reflectedNumericSetter(rv, valueType); yes {
 			nb.setValue = func(elem *jaws.Element, value any) (err error) {
@@ -239,9 +219,6 @@ func makeNumericBinding(source any) (nb *numericBinding, ok bool) {
 			},
 			parseValue:  ops.parse,
 			formatValue: ops.format,
-			equalValue: func(a, b any) bool {
-				return a == b
-			},
 		}
 		return nb, true
 	}

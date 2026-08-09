@@ -416,7 +416,7 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
-func TestJawsJS_NumberUsesSettledChangeBeforeSubmit(t *testing.T) {
+func TestJawsJS_NumberUsesSettledChangeBeforeAutoSubmit(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 function FakeSocket() { this.readyState = 1; this.sent = []; }
 FakeSocket.prototype.send = function(msg) {
@@ -475,7 +475,7 @@ dispatchChange();
 const initialFrameCount = jaws.sent.length;
 number.value = "1.5";
 number.form.submit();
-const nativeSubmitFrameCount = jaws.sent.length;
+const programmaticSubmitFrameCount = jaws.sent.length;
 log.length = 0;
 number.value = "2";
 dispatchChange();
@@ -487,7 +487,7 @@ process.stdout.write(JSON.stringify({
 	numberChangeListeners: (listeners.change || []).length,
 	textInputListeners: (textListeners.input || []).length,
 	initialFrameCount: initialFrameCount,
-	nativeSubmitFrameCount: nativeSubmitFrameCount,
+	programmaticSubmitFrameCount: programmaticSubmitFrameCount,
 	frames: jaws.sent,
 	changedLog: changedLog,
 	stopped: stopped
@@ -495,14 +495,14 @@ process.stdout.write(JSON.stringify({
 `)
 
 	var got struct {
-		NumberInputListeners   int      `json:"numberInputListeners"`
-		NumberChangeListeners  int      `json:"numberChangeListeners"`
-		TextInputListeners     int      `json:"textInputListeners"`
-		InitialFrameCount      int      `json:"initialFrameCount"`
-		NativeSubmitFrameCount int      `json:"nativeSubmitFrameCount"`
-		Frames                 []string `json:"frames"`
-		ChangedLog             []string `json:"changedLog"`
-		Stopped                bool     `json:"stopped"`
+		NumberInputListeners         int      `json:"numberInputListeners"`
+		NumberChangeListeners        int      `json:"numberChangeListeners"`
+		TextInputListeners           int      `json:"textInputListeners"`
+		InitialFrameCount            int      `json:"initialFrameCount"`
+		ProgrammaticSubmitFrameCount int      `json:"programmaticSubmitFrameCount"`
+		Frames                       []string `json:"frames"`
+		ChangedLog                   []string `json:"changedLog"`
+		Stopped                      bool     `json:"stopped"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
 		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
@@ -516,8 +516,8 @@ process.stdout.write(JSON.stringify({
 	if got.InitialFrameCount != 0 {
 		t.Fatalf("unchanged initial Number emitted %d frames", got.InitialFrameCount)
 	}
-	if got.NativeSubmitFrameCount != 0 {
-		t.Fatalf("native form submission flushed %d Number frames", got.NativeSubmitFrameCount)
+	if got.ProgrammaticSubmitFrameCount != 0 {
+		t.Fatalf("programmatic form submission flushed %d Number frames", got.ProgrammaticSubmitFrameCount)
 	}
 	if !reflect.DeepEqual(got.ChangedLog, []string{"send", "submit"}) {
 		t.Fatalf("changed Number order = %v, want send before submit", got.ChangedLog)

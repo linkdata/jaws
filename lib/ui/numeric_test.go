@@ -250,9 +250,6 @@ func TestCustomNumericBindingValidation(t *testing.T) {
 	if err = nb.set(nil, parsed); err != nil || source.value != 8 {
 		t.Fatalf("set = %v, value = %d", err, source.value)
 	}
-	if !nb.equal(8, 8) || nb.equal(8, 9) {
-		t.Fatal("custom equality mismatch")
-	}
 	parseCallsBeforeInvalid := parseCalls
 	if _, ok, err = nb.parse("8 "); err != nil || ok {
 		t.Fatalf("invalid HTML parse = (_, %v, %v), want (_, false, nil)", ok, err)

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"sync/atomic"
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
@@ -16,11 +15,12 @@ import (
 //
 // A Range value must back at most one live [jaws.Element]. Construct distinct
 // Range values over the same source to render one bound value more than once.
-// Editable Ranges send live browser input while their thumb moves.
+// Range requires ordinary rendering and is not supported by
+// [RequestWriter.Register]. Editable Ranges send live browser input while their
+// thumb moves.
 type Range struct {
 	Input
-	binding   *numericBinding
-	lastValid atomic.Bool
+	binding *numericBinding
 }
 
 // NewRange returns a range input widget bound to source.
@@ -37,9 +37,9 @@ type Range struct {
 // The widget emits no min, max, or step attribute of its own, so the browser
 // applies the HTML range defaults min="0", max="100", step="1". A bound value
 // outside that domain, or off the step grid, is clamped and rounded by the
-// browser. A representable adjusted value is echoed through the setter on the
-// next input event; an adjustment not representable by T is rejected. Supply
-// explicit attributes when the defaults do not cover the source's domain.
+// browser. An adjusted value that parses as a finite T is echoed through the setter
+// on the next input event; other text is rejected. Supply explicit attributes when
+// the defaults do not cover the source's domain.
 func NewRange[T Numeric](source bind.Getter[T]) *Range {
 	return newRange(newBuiltinNumericBinding(source))
 }
@@ -56,7 +56,7 @@ func (u *Range) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err e
 		}
 	}
 	getterAttrs := u.applyGetterAttrs(elem, u.binding.source())
-	value, text, err := u.binding.get(elem)
+	_, text, err := u.binding.get(elem)
 	if err != nil {
 		if errors.Is(err, jaws.ErrValueNotFinite) {
 			elem.Cancel(err)
@@ -69,32 +69,34 @@ func (u *Range) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err e
 		attrs = append(attrs, template.HTMLAttr("disabled"))
 	}
 	if err = htmlio.WriteHTMLInput(w, elem.Jid(), "range", text, attrs); err == nil {
-		u.Last.Store(value)
-		u.lastValid.Store(true)
+		u.Last.Store(text)
 	}
 	return
 }
 
-// JawsUpdate updates the range when its exact source value changes.
+// JawsUpdate reconciles the range with its canonical source value.
 func (u *Range) JawsUpdate(elem *jaws.Element) {
-	value, text, err := u.binding.get(elem)
+	if u.Last.Load() == nil {
+		elem.Request.MustLog(errors.New("ui.Range.JawsUpdate called before successful rendering"))
+		return
+	}
+	_, text, err := u.binding.get(elem)
 	if err != nil {
 		elem.Cancel(err)
 		return
 	}
-	prev := u.Last.Swap(value)
-	wasValid := u.lastValid.Swap(true)
-	if !wasValid || prev == nil || !u.binding.equal(prev, value) {
+	if prev := u.Last.Swap(text).(string); prev != text {
 		elem.SetValue(text)
 	}
 }
 
 // JawsInput stores a browser-side range value.
 //
-// Fractional integer input and values outside the source type's range are rejected
-// without calling the setter or returning an error. For an ordinarily rendered
-// Range, rejection dirties the source tag so the canonical source value is
-// restored. Getter-only Ranges ignore browser input.
+// Empty, malformed, non-finite, fractional integer, and values outside the source
+// type's range are rejected without calling the setter or returning an error.
+// Accepted and rejected text is reconciled with the binding's formatter. Rejection
+// and [jaws.ErrValueUnchanged] update only the originating Element. Getter-only
+// Ranges ignore browser input.
 func (u *Range) JawsInput(elem *jaws.Element, text string) (err error) {
 	if !u.binding.writable() {
 		return
@@ -105,13 +107,22 @@ func (u *Range) JawsInput(elem *jaws.Element, text string) (err error) {
 		return
 	}
 	if !ok {
-		u.lastValid.Store(false)
-		elem.Dirty(u.tag)
+		// A formatter can never produce empty text, so empty is the invalidated
+		// baseline that forces the next update to send the canonical value.
+		u.Last.Store("")
+		// Reconcile in JawsUpdate so the Request serializes this correction with
+		// source-driven updates and leaves a newer source value final.
+		elem.Dirty(elem)
 		return
 	}
-	u.Last.Store(value)
-	u.lastValid.Store(true)
-	err = u.maybeDirty(elem, u.binding.set(elem, value))
+	u.Last.Store(text)
+	err = u.binding.set(elem, value)
+	if errors.Is(err, jaws.ErrValueUnchanged) {
+		elem.Dirty(elem)
+		err = nil
+		return
+	}
+	err = u.maybeDirty(elem, err)
 	return
 }
 

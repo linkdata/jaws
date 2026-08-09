@@ -137,17 +137,18 @@ signed and unsigned integers, `uintptr`, `float32`, `float64`, and named types
 with one of those underlying types. The source is editable when its dynamic type
 also implements `bind.Setter[T]`.
 
-The widgets preserve `T` end to end. Integers parse at their actual bit width;
-decimal and exponent notation is accepted only when it denotes an exact in-range
-integer. Floats parse and format at their own bit size; `float32` uses 32-bit
-precision. Non-finite values have no valid HTML number representation.
+The Go binding remains `T` throughout parsing, formatting, and setter calls.
+Integers parse at their actual bit width; decimal and exponent notation is accepted
+only when it denotes an exact in-range integer. Floats parse and format at their own
+bit size; `float32` uses 32-bit precision. Non-finite values have no valid HTML
+number representation.
 
 An editable source must expose at least one stable, usable source tag when it is
-rendered. A pointer-valued source is usable directly; a source can instead
-implement `JawsGetTag`. `bind.New(&mu, &value)` supplies the backing pointer as its
-tag. A changing getter-only source also needs a tag for dirty-driven server
-updates. Number requires ordinary rendering and is not an update-only
-`RequestWriter.Register` widget.
+rendered. Pointer-valued sources are usable directly; a source can instead implement
+`JawsGetTag`. `bind.New(&mu, &value)` supplies the backing value pointer as its tag.
+A changing getter-only source also needs a tag for dirty-driven server updates.
+Number and Range require ordinary rendering and are not update-only
+`RequestWriter.Register` widgets.
 
 A getter-only Number has the native `readonly` attribute. A getter-only Range is
 `disabled` and is therefore omitted from native form submission. Static numeric
@@ -158,11 +159,11 @@ Number sends edits when the browser fires `change`, after the user settles the
 field. JaWS also flushes a changed focused Number before another managed input,
 click, or context-menu event. Range sends live `input` events while its thumb
 moves. Number rejects malformed or unrepresentable browser text without calling
-the setter and restores the getter's canonical text. It also rewrites accepted
-text through its formatter, including when the source value is unchanged. An
-ordinarily rendered Range rejects browser values not representable by its source
-type without calling the setter or reporting an alert, then restores the getter's
-canonical value.
+the setter and restores the getter's canonical text on the originating control. It
+also rewrites accepted text through its formatter, including when the source value
+is unchanged. Range also reconciles accepted text through its formatter. It rejects
+text that is invalid for the source type without calling the setter or reporting an
+alert, then restores the getter's canonical value only on the originating control.
 
 Named numeric sources work directly with both Go and template helpers:
 
