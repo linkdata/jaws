@@ -36,6 +36,15 @@ func (nb numericBinding) getText(elem *jaws.Element) (text string, err error) {
 	return
 }
 
+func (nb numericBinding) acceptText(input *Input, elem *jaws.Element, text string) (accepted bool, err error) {
+	var value any
+	if value, accepted = nb.ops.parse(text); accepted {
+		input.Last.Store(text)
+		err = nb.setValue(elem, value)
+	}
+	return
+}
+
 func updateNumericInput(input *Input, binding numericBinding, elem *jaws.Element, name string) {
 	if input.Last.Load() == nil {
 		elem.Request.MustLog(fmt.Errorf("ui.%s.JawsUpdate called before successful rendering", name))
@@ -55,7 +64,7 @@ func handleNumericInput(input *Input, binding numericBinding, elem *jaws.Element
 	if !binding.writable() {
 		return
 	}
-	value, accepted := binding.ops.parse(text)
+	accepted, err := binding.acceptText(input, elem, text)
 	if !accepted {
 		// A formatter can never produce empty text, so empty forces the next
 		// update to restore the canonical value.
@@ -65,8 +74,6 @@ func handleNumericInput(input *Input, binding numericBinding, elem *jaws.Element
 		elem.Dirty(elem)
 		return
 	}
-	input.Last.Store(text)
-	err = binding.setValue(elem, value)
 	if errors.Is(err, jaws.ErrValueUnchanged) {
 		// The accepted text may still differ from the source's formatting.
 		elem.Dirty(elem)
