@@ -10,7 +10,9 @@ import (
 	"github.com/linkdata/jaws/lib/bind"
 )
 
-// Numeric is a built-in or named real numeric type supported by Number and Range.
+// Numeric is an integer or floating-point type supported by [Number] and [Range].
+//
+// Named types with one of these underlying types are included.
 type Numeric interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 |
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr |
@@ -19,21 +21,22 @@ type Numeric interface {
 
 // NumberCodec converts application values to and from HTML number text.
 //
-// T must be strictly comparable, and bound and parsed values must equal
-// themselves. FormatNumber must be total and deterministic. Its result must be a
-// valid HTML floating-point number that ParseNumber maps back to the original
-// value. ParseNumber returns false for text it does not accept and is called for
-// browser input only after JaWS validates that grammar. A codec may be shared by
-// concurrent requests and must be safe for concurrent use.
+// T must be strictly comparable, and every bound or successfully parsed value must
+// equal itself. FormatNumber must deterministically return valid HTML number text
+// that ParseNumber maps back to the same value. For browser input, JaWS validates
+// the syntax before calling ParseNumber; returning false silently rejects that edit.
+// Codecs must be safe for concurrent use.
 type NumberCodec[T comparable] interface {
+	// FormatNumber returns the HTML number text for value.
 	FormatNumber(value T) string
+	// ParseNumber parses HTML number text and reports whether it was accepted.
 	ParseNumber(text string) (value T, ok bool)
 }
 
-// NumericBinding supplies a custom Number codec to the Number template helper.
+// NumericBinding supplies a custom [NumberCodec] to [RequestWriter.Number].
 //
-// Construct NumericBinding values with NewNumericBinding. Its zero value is not
-// usable.
+// Construct a NumericBinding with [NewNumericBinding]. Passing its zero value to
+// [RequestWriter.Number] panics.
 type NumericBinding struct {
 	binding *numericBinding
 }

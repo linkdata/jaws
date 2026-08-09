@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// ErrNumberFormat indicates that a Number binding violated its codec or value contract.
+// ErrNumberFormat identifies a violation of a [NumberCodec] or bound-value requirement.
 var ErrNumberFormat = errors.New("invalid number format")
 
 func newErrNumberFormat(detail string) error {

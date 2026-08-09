@@ -12,10 +12,6 @@ import (
 var ErrValueNotSettable = errors.New("value not settable")
 
 // Getter exposes a value for a [jaws.Element].
-//
-// A changing Getter needs a stable, usable source tag, either through its own
-// identity or [github.com/linkdata/jaws/lib/tag.TagGetter], for dirty-driven updates
-// to reach UI elements that use it. A static Getter does not need a tag.
 type Getter[T comparable] interface {
 	JawsGet(elem *jaws.Element) (value T)
 }

@@ -15,9 +15,9 @@ import (
 //
 // A Range value must back at most one live [jaws.Element]. Construct distinct
 // Range values over the same source to render one bound value more than once.
-// Range requires ordinary rendering and is not supported by
-// [RequestWriter.Register]. Editable Ranges send live browser input while their
-// thumb moves.
+// Construct a Range with [NewRange]; using its zero value as a widget panics. Range
+// requires ordinary rendering and is not supported by [RequestWriter.Register].
+// Editable Ranges send live browser input while their thumb moves.
 type Range struct {
 	Input
 	binding *numericBinding
@@ -27,19 +27,17 @@ type Range struct {
 //
 // Predeclared and named integer and floating-point types are parsed and formatted
 // at their own width. If source's dynamic type also implements [bind.Setter], the
-// input is editable and source must expose the stable usable tag described by
-// [Input]. A getter-only source renders disabled; when tagged, it continues to
-// receive dirty-driven server updates.
+// input is editable; rendering fails unless source exposes the stable, usable tag
+// described by [Input]. A getter-only source renders disabled; when tagged, it
+// continues to receive dirty-driven server updates.
 //
 // A non-finite bound floating-point value cancels the [jaws.Request] with a cause
 // matching [jaws.ErrValueNotFinite].
 //
-// The widget emits no min, max, or step attribute of its own, so the browser
-// applies the HTML range defaults min="0", max="100", step="1". A bound value
-// outside that domain, or off the step grid, is clamped and rounded by the
-// browser. An adjusted value that parses as a finite T is echoed through the setter
-// on the next input event; other text is rejected. Supply explicit attributes when
-// the defaults do not cover the source's domain.
+// Range emits no min, max, or step attributes, so the browser defaults apply.
+// Supply them as render parameters when those defaults do not fit the source domain.
+// The browser may clamp or round the displayed value; a browser-adjusted value
+// reaches the setter only on a later input event and only when representable by T.
 func NewRange[T Numeric](source bind.Getter[T]) *Range {
 	return newRange(newBuiltinNumericBinding(source))
 }
@@ -48,7 +46,7 @@ func newRange(binding *numericBinding) *Range {
 	return &Range{binding: binding}
 }
 
-// JawsRender renders ui as an HTML range input.
+// JawsRender renders the Range as an HTML range input.
 func (u *Range) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	if u.binding.writable() {
 		if err = validateEditableNumericSource(u.binding.source()); err != nil {
@@ -90,7 +88,7 @@ func (u *Range) JawsUpdate(elem *jaws.Element) {
 	}
 }
 
-// JawsInput stores a browser-side range value.
+// JawsInput accepts or rejects a browser-side range value.
 //
 // Empty, malformed, non-finite, fractional integer, and values outside the source
 // type's range are rejected without calling the setter or returning an error.
@@ -128,9 +126,11 @@ func (u *Range) JawsInput(elem *jaws.Element, text string) (err error) {
 
 // Range renders an HTML range input for value.
 //
-// Numeric static values and Getter sources render disabled. Setter sources are
-// editable. Supply min, max, and step attributes in params when the browser
-// defaults do not cover the source's domain. For example:
+// Numeric values and getter-only [bind.Getter] sources render disabled;
+// [bind.Setter] sources render editable. It panics for any other value, including a
+// [NumericBinding], which is supported only by [RequestWriter.Number]. Supply min,
+// max, and step attributes in params when the browser defaults do not cover the
+// source's domain. For example:
 //
 //	rw.Range(floatBinder, `min="0"`, `max="200"`, `step="0.5"`)
 func (rw RequestWriter) Range(value any, params ...any) error {

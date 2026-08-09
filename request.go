@@ -64,41 +64,20 @@ type requestBuffers struct {
 	wsQueue  []wire.WsMsg
 }
 
-// Request maintains the state for a JaWS WebSocket connection, and handles processing
-// of events and broadcasts.
+// Request maintains the event, update, and broadcast state for one JaWS connection.
 //
-// Each Request has a stable identity — the *Request pointer — that is never reused
-// for another connection: once it finishes, its context stays canceled and the
-// pointer is never handed out again, so a pointer retained past its documented
-// lifetime can never alias an unrelated connection.
+// A Request pointer is borrowed for the lifecycle that supplied it: the initial HTTP
+// render from [Jaws.NewRequest] or WebSocket handling from [Jaws.UseRequest]. Do not
+// retain it in application state or use it from a background goroutine; retain
+// [Request.Context] instead. Use [Request.SetContext] to install a context whose
+// cancellation can end the connection.
 //
-// A Request pointer is borrowed for the lifecycle that supplied it — the initial
-// HTTP render (from [Jaws.NewRequest]) or the WebSocket handling (from
-// [Jaws.UseRequest]). Do not retain it in application state or use it from a
-// background goroutine; using it past that borrowed lifecycle is unsupported. The
-// end of the initial HTTP render does not by itself finish the Request: it normally
-// stays pending until [Jaws.UseRequest] claims it for the WebSocket. The Request
-// finishes when its WebSocket handling ends, or when a non-running Request is
-// retired; it is then unregistered, and its identity is never reused for another
-// connection.
+// Ending the initial HTTP render normally leaves the Request pending until
+// [Jaws.UseRequest] claims it. The Request finishes when WebSocket handling ends or a
+// non-running Request is retired. It then remains cancelled and unregistered. Its
+// pointer identity is never reused for another connection.
 //
-// Because the pointer is never reused it can never come to represent a different
-// connection, and a broadcast destination resolved from the Request after it has
-// finished (as [Request.Alert] and [Request.Redirect] do) is empty, so such a call
-// reaches nothing. This is not a general no-op guarantee: [Request.Dirty] can still
-// update matching or explicitly targeted Elements on other live Requests, and an
-// Alert or Redirect queued before completion carries a key value that can outlive
-// the Request and, after that key is later reused, match a different Request.
-// Background work should instead retain [Request.Context] and, when it must terminate
-// the connection, the cancel function returned while deriving a replacement context
-// through [Request.SetContext].
-//
-// Unlike [Session], whose methods are nil-safe, Request methods are not safe to call on a
-// nil *Request: a Request is always obtained from [Jaws.NewRequest] or [Jaws.UseRequest]
-// and is never legitimately nil. The nil-receiver guard on [Request.JawsKeyString] (and
-// thus [Request.String]) lets a nil Request render into error text, while those on
-// [Request.Log] and [Request.MustLog] let it forward to the logger; both exist only for
-// that diagnostic use, not as a public nil-safe contract.
+// Request methods require a non-nil receiver unless the method documents otherwise.
 type Request struct {
 	Jaws             *Jaws                   // (read-only) the JaWS instance the Request belongs to
 	JawsKey          key.Key                 // (read-only) random key assigned to this Request; routes JaWS URLs and request-targeted broadcasts only while registered
@@ -746,17 +725,10 @@ func (rq *Request) TagsOf(elem *Element) (tags []any) {
 	return
 }
 
-// Dirty schedules updates selected by tags or exact Element pointers.
+// Dirty schedules updates through [Jaws.Dirty].
 //
-// A non-nil pointer to an [Element] in the expanded tags is reserved as an exact
-// target on its owning Request. Nil, unowned, cross-Jaws, and deleted Elements, and
-// Elements on finished Requests, are ignored. Other keys are [Jaws]-wide rather
-// than scoped to rq: matching Elements on every live Request are marked. Tags are
-// expanded through [Jaws.MustTagExpand], so an expansion error is logged and the
-// partial result still applied when a [Jaws.Logger] is configured, and panics before
-// anything is marked dirty when one is not. Updates run on the normal batched dirty
-// pass; [Jaws.Serve] or [Jaws.ServeWithTimeout] must be running for them to be
-// delivered.
+// The receiver does not scope tag matching to rq. See [Jaws.Dirty] for expansion,
+// exact Element targeting, lifecycle, and batching behavior.
 func (rq *Request) Dirty(dirtyTags ...any) {
 	rq.Jaws.setDirty(rq.Jaws.MustTagExpand(dirtyTags))
 }

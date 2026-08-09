@@ -158,18 +158,19 @@ getter-only paths.
 Number sends edits when the browser fires `change`, after the user settles the
 field. JaWS also flushes a changed focused Number before another managed input,
 click, or context-menu event. Range sends live `input` events while its thumb
-moves. Number rejects malformed or unrepresentable browser text without calling
-the setter and restores the getter's canonical text on the originating control. It
-also rewrites accepted text through its formatter, including when the source value
-is unchanged. Range also reconciles accepted text through its formatter. It rejects
-text that is invalid for the source type without calling the setter or reporting an
-alert, then restores the getter's canonical value only on the originating control.
+moves. When an event reaches the widget's own input handler, Number rejects malformed
+or unrepresentable browser text without calling the setter and restores the getter's
+canonical text on the originating control. It also rewrites accepted text through
+its formatter, including when the source value is unchanged. Range likewise
+reconciles accepted text, silently rejects text that is invalid for the source type,
+and restores only the originating control.
 
 Named numeric sources work directly with both Go and template helpers:
 
 ```go
 type Percent uint8
 
+var mu sync.RWMutex
 percent := Percent(50)
 binder := bind.New(&mu, &percent)
 
@@ -200,6 +201,9 @@ func (temperatureCodec) ParseNumber(s string) (Temperature, bool) {
 	return Temperature{MilliCelsius: v}, err == nil
 }
 
+var temperatureMu sync.RWMutex
+temperature := Temperature{MilliCelsius: 20_000}
+temperatureSource := bind.New(&temperatureMu, &temperature)
 number := ui.NewNumberWith(temperatureSource, temperatureCodec{})
 
 type Edit struct {

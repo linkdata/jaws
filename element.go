@@ -316,11 +316,11 @@ func (elem *Element) SetInner(innerHTML template.HTML) {
 // to the browser for the [Element].
 //
 // Call this while the [Element] is rendering or updating, when a send pass is
-// imminent. To correct only this Element after a browser event, call
-// elem.Dirty(elem); this runs JawsUpdate on the Request loop during the normal dirty
-// pass and orders the correction with other updates. Dirty a source tag instead when
-// shared application state changed. A value queued directly from an event handler
-// is not guaranteed to flush promptly or in source-update order.
+// imminent. To reconcile only this Element after a browser event, call
+// elem.Dirty(elem); this schedules JawsUpdate on the Request loop and serializes the
+// correction with other updates. Dirty a source tag instead when shared application
+// state changed. Calling SetValue directly from an event handler may not flush
+// promptly and bypasses that update ordering.
 func (elem *Element) SetValue(value string) {
 	elem.queue(what.Value, value)
 }

@@ -328,7 +328,7 @@ For clickable content rendering:
 ## Dirtying rules
 
 - `Request.Dirty` and `Jaws.Dirty` are equivalent. Both expand through `Jaws.MustTagExpand`.
-  An expanded non-nil `*Element` is reserved as an exact target on its owning Request;
+  An expanded non-nil `*Element` is treated as an exact target on its owning Request;
   other keys dirty every matching Element across all live Requests. `Request.Dirty` is
   not scoped to its own Request for ordinary tags.
 - Both selector kinds use the normal batched dirty pass and require the JaWS serving
@@ -338,7 +338,7 @@ For clickable content rendering:
 - For broad refreshes, attach a shared dependency tag to all relevant elements and dirty that shared tag instead of enumerating many element tags.
 - `Request.Dirty` runs the tag list through `Jaws.MustTagExpand`, which has a hard cap of 100 expanded entries. Above that, expansion fails with `tag.ErrTooManyTags`: with a `Jaws.Logger` configured the error is logged and the partial expansion is still applied, and without one the call panics before anything is dirtied. When a mutation might touch more items than that, prefer the shared group tag over enumerating individual item tags.
 - `Request.TagsOf(elem)` reports every tag actually registered on an element, including tags added separately from the UI object — use it when a dirty target seems not to reach an element.
-- Redundant-update filtering is asymmetric: input widgets (`InputText`, `InputBool`, `InputDate`, `Number`, `Range`) cache their browser or bound state and normally skip `SetValue` when the getter output is unchanged, but `HTMLInner`-backed widgets (spans, divs, buttons) do not — `JawsUpdate` unconditionally calls `SetInner`. Number and Range invalidate their text baseline when rejected input must be restored; Number also canonicalizes every settled browser input. For HTML-inner widgets, ensure dirty scope matches fields that actually changed, otherwise unrelated status/label spans will re-render (and lose selection, transitions, etc.) on every event. Usually the mutation code already knows what it changed and can dirty accordingly; fall back to snapshot-and-diff only when outcomes are hard to predict up front (e.g. flood-fill or win-condition checks) and the snapshot is cheap.
+- Redundant-update filtering is asymmetric: input widgets (`InputText`, `InputBool`, `InputDate`, `Number`, `Range`) cache their browser or bound state and normally skip `SetValue` when the getter output is unchanged, but `HTMLInner`-backed widgets (spans, divs, buttons) do not — `JawsUpdate` unconditionally calls `SetInner`. The Number and Range fallback handlers invalidate their text baseline when rejected input must be restored; Number also canonicalizes every settled browser input it handles. For HTML-inner widgets, ensure dirty scope matches fields that actually changed, otherwise unrelated status/label spans will re-render (and lose selection, transitions, etc.) on every event. Usually the mutation code already knows what it changed and can dirty accordingly; fall back to snapshot-and-diff only when outcomes are hard to predict up front (e.g. flood-fill or win-condition checks) and the snapshot is cheap.
 
 ## HTML safety rules
 

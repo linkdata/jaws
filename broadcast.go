@@ -106,16 +106,15 @@ func (jw *Jaws) setDirty(tags []any) {
 	}
 }
 
-// Dirty schedules updates selected by tags or exact Element pointers.
+// Dirty schedules updates for tags and exact Elements.
 //
 // The inputs are expanded through [Jaws.MustTagExpand]: with a [Jaws.Logger]
 // configured an expansion error is logged and the partial result is still applied,
 // while without one the call panics before anything is marked dirty. An expanded
-// non-nil pointer to an [Element] is reserved as an exact target: only that Element
-// is scheduled on its owning Request. Nil, unowned, cross-Jaws, and deleted Elements,
-// and Elements on finished Requests, are ignored. Other keys mark matching Elements
-// on every live [Request]. Updates run on the normal batched dirty pass; [Jaws.Serve]
-// or [Jaws.ServeWithTimeout] must be running for them to be delivered.
+// non-nil pointer to a live [Element] belonging to this Jaws selects only that
+// Element; other Element pointers are ignored. Other keys select matching Elements
+// on every live [Request]. Updates run on the normal batched dirty pass, so
+// [Jaws.Serve] or [Jaws.ServeWithTimeout] must be running for delivery.
 //
 // [Request.Dirty] is equivalent.
 func (jw *Jaws) Dirty(dirtyTags ...any) {

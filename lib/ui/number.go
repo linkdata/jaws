@@ -15,7 +15,8 @@ import (
 //
 // A Number value must back at most one live [jaws.Element]. Construct distinct
 // Number values over the same source to render one bound value more than once.
-// Number requires ordinary rendering and is not supported by
+// Construct a Number with [NewNumber] or [NewNumberWith]; using its zero value as a
+// widget panics. Number requires ordinary rendering and is not supported by
 // [RequestWriter.Register].
 //
 // Editable Numbers send settled edits on the browser's change event. A pending
@@ -31,8 +32,8 @@ type Number struct {
 //
 // Predeclared and named integer and floating-point types are parsed and formatted
 // at their own width. If source's dynamic type also implements [bind.Setter], the
-// input is editable and source must expose the stable usable tag described by
-// [Input]. A getter-only source renders read-only.
+// input is editable; rendering fails unless source exposes the stable, usable tag
+// described by [Input]. A getter-only source renders read-only.
 //
 // A non-finite bound floating-point value cancels the [jaws.Request] with a cause
 // matching [jaws.ErrValueNotFinite].
@@ -43,12 +44,10 @@ func NewNumber[T Numeric](source bind.Getter[T]) *Number {
 // NewNumberWith returns a number input widget using codec.
 //
 // The source capability and tag rules are the same as for [NewNumber]. Browser
-// text must use the HTML valid-floating-point grammar before it is passed to
-// [NumberCodec.ParseNumber]. The codec must be concurrency-safe and provide a
-// deterministic round trip for every source value. A codec or value contract
-// violation is reported with [ErrNumberFormat] during rendering and cancels the
-// Request during input or update. T must be strictly comparable, and its bound and
-// parsed values must equal themselves.
+// text is validated before [NumberCodec.ParseNumber] is called; see [NumberCodec]
+// for the codec and value requirements. A contract violation makes rendering return
+// an error matching [ErrNumberFormat]; during input or update it cancels the
+// [jaws.Request] with a matching cause.
 func NewNumberWith[T comparable](source bind.Getter[T], codec NumberCodec[T]) *Number {
 	return newNumber(newCustomNumericBinding(source, codec))
 }
@@ -57,7 +56,7 @@ func newNumber(binding *numericBinding) *Number {
 	return &Number{binding: binding}
 }
 
-// JawsRender renders ui as an HTML number input.
+// JawsRender renders the Number as an HTML number input.
 func (u *Number) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	if u.binding.writable() {
 		if err = validateEditableNumericSource(u.binding.source()); err != nil {
@@ -85,8 +84,7 @@ func (u *Number) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err 
 	return
 }
 
-// JawsUpdate sends the canonical source value when it differs from the browser
-// baseline.
+// JawsUpdate reconciles the input with its canonical source value.
 func (u *Number) JawsUpdate(elem *jaws.Element) {
 	if u.Last.Load() == nil {
 		elem.Request.MustLog(errors.New("ui.Number.JawsUpdate called before successful rendering"))
@@ -139,8 +137,10 @@ func (u *Number) JawsInput(elem *jaws.Element, text string) (err error) {
 
 // Number renders an HTML number input for value.
 //
-// Numeric static values and Getter sources render read-only. Setter sources are
-// editable. Pass a [NumericBinding] to use a custom [NumberCodec] from a template.
+// Numeric values and getter-only [bind.Getter] sources render read-only;
+// [bind.Setter] sources render editable. A [NumericBinding] returned by
+// [NewNumericBinding] supplies a custom [NumberCodec]. It panics for any other
+// value or an unusable NumericBinding.
 func (rw RequestWriter) Number(value any, params ...any) error {
 	binding, ok := makeNumericBinding(value)
 	if !ok {
