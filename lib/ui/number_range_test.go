@@ -6,7 +6,6 @@ import (
 	"html/template"
 	"math"
 	"reflect"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -125,6 +124,24 @@ func (getter *numberRangeGetter[T]) JawsGet(*jaws.Element) T {
 	return getter.value
 }
 
+type numberRangeErrorSource struct {
+	err      error
+	setCalls int
+}
+
+func (*numberRangeErrorSource) JawsGet(*jaws.Element) int {
+	return 7
+}
+
+func (source *numberRangeErrorSource) JawsSet(*jaws.Element, int) error {
+	source.setCalls++
+	return source.err
+}
+
+func (source *numberRangeErrorSource) JawsGetTag() any {
+	return source
+}
+
 type numberRangeGetterView[T comparable] struct {
 	source *numberRangeSource[T]
 }
@@ -159,41 +176,6 @@ type (
 	numberRangeNamedInt     int16
 	numberRangeNamedFloat32 float32
 )
-
-type numberRangeCustomValue struct {
-	Units int
-}
-
-type numberRangeCustomCodec struct{}
-
-func (numberRangeCustomCodec) FormatNumber(value numberRangeCustomValue) string {
-	return strconv.Itoa(value.Units)
-}
-
-func (numberRangeCustomCodec) ParseNumber(text string) (value numberRangeCustomValue, ok bool) {
-	var err error
-	value.Units, err = strconv.Atoi(text)
-	ok = err == nil
-	return
-}
-
-type numberRangeSwitchCodec struct {
-	invalid atomic.Bool
-}
-
-func (codec *numberRangeSwitchCodec) FormatNumber(value int) string {
-	if codec.invalid.Load() {
-		return "+" + strconv.Itoa(value)
-	}
-	return strconv.Itoa(value)
-}
-
-func (*numberRangeSwitchCodec) ParseNumber(text string) (value int, ok bool) {
-	var err error
-	value, err = strconv.Atoi(text)
-	ok = err == nil
-	return
-}
 
 type numberRangeLogger struct {
 	mu     sync.Mutex
@@ -298,19 +280,14 @@ func TestRequestWriterNumericRejectsUnsupportedValues(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	var rendered strings.Builder
 	rw := RequestWriter{Request: rq, Writer: &rendered}
-	codec := numberRangeCustomCodec{}
-	custom := NewNumericBinding(newNumberRangeSource(numberRangeCustomValue{Units: 1}), codec)
 	tests := []struct {
 		name string
 		call func()
 	}{
 		{name: "Number nil", call: func() { _ = rw.Number(nil) }},
 		{name: "Number unsupported", call: func() { _ = rw.Number("1") }},
-		{name: "Number nil binding", call: func() { _ = rw.Number((*NumericBinding)(nil)) }},
-		{name: "Number zero binding", call: func() { _ = rw.Number(new(NumericBinding)) }},
 		{name: "Range nil", call: func() { _ = rw.Range(nil) }},
 		{name: "Range unsupported", call: func() { _ = rw.Range("1") }},
-		{name: "Range custom binding", call: func() { _ = rw.Range(custom) }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -468,48 +445,22 @@ func TestNumberRangeIntegerRejectionAndCanonicalization(t *testing.T) {
 	}
 }
 
-func TestRangeInputErrorClassification(t *testing.T) {
-	t.Run("parse contract error cancels request", func(t *testing.T) {
-		_, rq := newCoreRequest(t)
-		source := newNumberRangeSource(7)
-		rng := NewRange(source)
-		elem, _ := renderUI(t, rq, rng)
-		parseErr := errors.New("parse contract error")
-		rng.binding.parseValue = func(string) (any, bool, error) {
-			return nil, false, parseErr
-		}
+func TestRangeInputSetterError(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	setErr := errors.New("setter error")
+	source := &numberRangeErrorSource{err: setErr}
+	rng := NewRange(source)
+	elem, _ := renderUI(t, rq, rng)
 
-		if err := rng.JawsInput(elem, "8"); err != nil {
-			t.Fatalf("JawsInput error = %v, want nil", err)
-		}
-		if cause := context.Cause(rq.Context()); !errors.Is(cause, parseErr) {
-			t.Fatalf("request cancellation cause = %v, want parse error", cause)
-		}
-		if value, calls := source.snapshot(); value != 7 || calls != 0 {
-			t.Fatalf("Range source = (%v, %d calls), want (7, 0 calls)", value, calls)
-		}
-	})
-
-	t.Run("setter error propagates", func(t *testing.T) {
-		_, rq := newCoreRequest(t)
-		source := newNumberRangeSource(7)
-		rng := NewRange(source)
-		elem, _ := renderUI(t, rq, rng)
-		setErr := errors.New("setter error")
-		rng.binding.setValue = func(*jaws.Element, any) error {
-			return setErr
-		}
-
-		if err := rng.JawsInput(elem, "8"); !errors.Is(err, setErr) {
-			t.Fatalf("JawsInput error = %v, want setter error", err)
-		}
-		if cause := context.Cause(rq.Context()); cause != nil {
-			t.Fatalf("request cancellation cause = %v, want nil", cause)
-		}
-		if value, calls := source.snapshot(); value != 7 || calls != 0 {
-			t.Fatalf("Range source = (%v, %d calls), want (7, 0 calls)", value, calls)
-		}
-	})
+	if err := rng.JawsInput(elem, "8"); !errors.Is(err, setErr) {
+		t.Fatalf("JawsInput error = %v, want setter error", err)
+	}
+	if cause := context.Cause(rq.Context()); cause != nil {
+		t.Fatalf("request cancellation cause = %v, want nil", cause)
+	}
+	if source.setCalls != 1 {
+		t.Fatalf("Range setter called %d times, want 1", source.setCalls)
+	}
 }
 
 func TestRangeBroadcastsCanonicalValueAcrossRequests(t *testing.T) {
@@ -766,53 +717,6 @@ func TestNumericRejectedCorrectionConvergesToNewerSource(t *testing.T) {
 	}
 }
 
-func TestNumberCodecFormatErrorsAtWidgetBoundary(t *testing.T) {
-	t.Run("render returns error", func(t *testing.T) {
-		_, rq := newCoreRequest(t)
-		codec := new(numberRangeSwitchCodec)
-		codec.invalid.Store(true)
-		number := NewNumberWith(newNumberRangeSource(3), codec)
-		elem := rq.NewElement(number)
-		var rendered strings.Builder
-		if err := elem.JawsRender(&rendered, nil); !errors.Is(err, ErrNumberFormat) {
-			t.Fatalf("render error = %v, want ErrNumberFormat", err)
-		}
-		if cause := context.Cause(rq.Context()); cause != nil {
-			t.Fatalf("render cancellation cause = %v, want nil", cause)
-		}
-	})
-
-	t.Run("input cancels request", func(t *testing.T) {
-		_, rq := newCoreRequest(t)
-		codec := new(numberRangeSwitchCodec)
-		source := newNumberRangeSource(3)
-		number := NewNumberWith(source, codec)
-		elem, _ := renderUI(t, rq, number)
-		codec.invalid.Store(true)
-		if err := number.JawsInput(elem, "4"); err != nil {
-			t.Fatalf("input error = %v, want nil", err)
-		}
-		if cause := context.Cause(rq.Context()); !errors.Is(cause, ErrNumberFormat) {
-			t.Fatalf("input cancellation cause = %v, want ErrNumberFormat", cause)
-		}
-		if value, calls := source.snapshot(); value != 3 || calls != 0 {
-			t.Fatalf("Number source = (%v, %d calls), want (3, 0 calls)", value, calls)
-		}
-	})
-
-	t.Run("update cancels request", func(t *testing.T) {
-		_, rq := newCoreRequest(t)
-		codec := new(numberRangeSwitchCodec)
-		number := NewNumberWith(newNumberRangeSource(3), codec)
-		elem, _ := renderUI(t, rq, number)
-		codec.invalid.Store(true)
-		number.JawsUpdate(elem)
-		if cause := context.Cause(rq.Context()); !errors.Is(cause, ErrNumberFormat) {
-			t.Fatalf("update cancellation cause = %v, want ErrNumberFormat", cause)
-		}
-	})
-}
-
 func TestNumberRangeCancelOnBoundNonFiniteValues(t *testing.T) {
 	t.Run("Number render", func(t *testing.T) {
 		_, rq := newCoreRequest(t)
@@ -988,23 +892,19 @@ func TestNumericRegisterLogsAndQueuesNothing(t *testing.T) {
 	}
 }
 
-func TestRequestWriterNumericReflectionAndCustomTemplateBinding(t *testing.T) {
+func TestRequestWriterNumericReflection(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	static := numberRangeNamedInt(-5)
 	getter := &numberRangeGetter[numberRangeNamedInt]{value: 6}
 	setter := newNumberRangeSource(numberRangeNamedInt(7))
-	customSource := newNumberRangeSource(numberRangeCustomValue{Units: 8})
-	custom := NewNumericBinding(customSource, numberRangeCustomCodec{})
 	data := struct {
 		Static numberRangeNamedInt
 		Getter *numberRangeGetter[numberRangeNamedInt]
 		Setter *numberRangeSource[numberRangeNamedInt]
-		Custom *NumericBinding
 	}{
 		Static: static,
 		Getter: getter,
 		Setter: setter,
-		Custom: custom,
 	}
 
 	var rendered strings.Builder
@@ -1012,36 +912,24 @@ func TestRequestWriterNumericReflectionAndCustomTemplateBinding(t *testing.T) {
 	page := template.Must(template.New("numeric").Parse(
 		`{{$.Number .Dot.Static}}{{$.Range .Dot.Static}}` +
 			`{{$.Number .Dot.Getter}}{{$.Number .Dot.Setter}}` +
-			`{{$.Range .Dot.Setter}}{{$.Number .Dot.Custom}}`,
+			`{{$.Range .Dot.Setter}}`,
 	))
 	if err := page.Execute(&rendered, With{RequestWriter: rw, Dot: data}); err != nil {
 		t.Fatal(err)
 	}
 	got := rendered.String()
-	if strings.Count(got, `<input `) != 6 ||
+	if strings.Count(got, `<input `) != 5 ||
 		strings.Count(got, " readonly") != 2 ||
 		strings.Count(got, " disabled") != 1 ||
-		strings.Count(got, " data-jawsnumber") != 2 {
+		strings.Count(got, " data-jawsnumber") != 1 {
 		t.Fatalf("numeric template markup = %q", got)
 	}
-	for _, value := range []string{"-5", "6", "7", "8"} {
+	for _, value := range []string{"-5", "6", "7"} {
 		if !strings.Contains(got, `value="`+value+`"`) {
 			t.Fatalf("numeric template markup omitted value %q: %q", value, got)
 		}
 	}
-
-	elems := rq.GetElements(customSource)
-	if len(elems) != 1 {
-		t.Fatalf("custom source registered %d Elements, want 1", len(elems))
-	}
-	number, ok := elems[0].UI().(*Number)
-	if !ok {
-		t.Fatalf("custom source UI = %T, want *Number", elems[0].UI())
-	}
-	if err := number.JawsInput(elems[0], "12"); err != nil {
-		t.Fatal(err)
-	}
-	if value, calls := customSource.snapshot(); value != (numberRangeCustomValue{Units: 12}) || calls != 1 {
-		t.Fatalf("custom source = (%v, %d calls), want ({12}, 1 call)", value, calls)
+	if elems := rq.GetElements(setter); len(elems) != 2 {
+		t.Fatalf("template setter registered %d Elements, want 2", len(elems))
 	}
 }

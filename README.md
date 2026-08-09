@@ -653,7 +653,7 @@ when an accepted value is already stored. Range also reconciles accepted text th
 its formatter. Both silently reject browser text that is invalid for the source type
 and restore the canonical source value only on the originating control.
 
-Named numeric bindings work directly in templates:
+Named numeric sources work directly in templates:
 
 ```go
 type Percent uint8
@@ -667,12 +667,6 @@ type Edit struct {
 {{$.Number .Dot.Percent `step="1"`}}
 {{$.Range .Dot.Percent `min="0"` `max="100"` `step="1"`}}
 ```
-
-For a Number whose domain is not a built-in numeric type, implement
-`ui.NumberCodec[T]` and use `ui.NewNumberWith` in Go. Templates receive the same
-typed source and codec through `ui.NewNumericBinding`; `FormatNumber` must produce
-a valid HTML number that `ParseNumber` maps back to the same value. See
-[`lib/ui/README.md`](lib/ui/README.md#numeric-inputs) for an example.
 
 This validator rejects forbidden username characters while accepting ordinary
 incremental edits. Its slice makes the setter value non-comparable, so

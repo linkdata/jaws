@@ -20,7 +20,7 @@ import (
 // Editable Ranges send live browser input while their thumb moves.
 type Range struct {
 	Input
-	binding *NumericBinding
+	binding numericBinding
 }
 
 // NewRange returns a range input widget bound to source.
@@ -39,22 +39,22 @@ type Range struct {
 // The browser may clamp or round the displayed value; a browser-adjusted value
 // reaches the setter only on a later input event and only when representable by T.
 func NewRange[T Numeric](source bind.Getter[T]) *Range {
-	return newRange(newBuiltinNumericBinding(source))
+	return newRange(newNumericBinding(source))
 }
 
-func newRange(binding *NumericBinding) *Range {
+func newRange(binding numericBinding) *Range {
 	return &Range{binding: binding}
 }
 
 // JawsRender renders the Range as an HTML range input.
 func (u *Range) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	if u.binding.writable() {
-		if err = validateEditableNumericSource(u.binding.source()); err != nil {
+		if err = validateEditableNumericSource(u.binding.source); err != nil {
 			return
 		}
 	}
-	getterAttrs := u.applyGetterAttrs(elem, u.binding.source())
-	text, err := u.binding.get(elem)
+	getterAttrs := u.applyGetterAttrs(elem, u.binding.source)
+	text, err := u.binding.getText(elem)
 	if err != nil {
 		elem.Cancel(err)
 		return nil
@@ -75,7 +75,7 @@ func (u *Range) JawsUpdate(elem *jaws.Element) {
 		elem.Request.MustLog(errors.New("ui.Range.JawsUpdate called before successful rendering"))
 		return
 	}
-	text, err := u.binding.get(elem)
+	text, err := u.binding.getText(elem)
 	if err != nil {
 		elem.Cancel(err)
 		return
@@ -96,12 +96,8 @@ func (u *Range) JawsInput(elem *jaws.Element, text string) (err error) {
 	if !u.binding.writable() {
 		return
 	}
-	value, ok, parseErr := u.binding.parse(text)
-	if parseErr != nil {
-		elem.Cancel(parseErr)
-		return
-	}
-	if !ok {
+	value, accepted := u.binding.ops.parse(text)
+	if !accepted {
 		// A formatter can never produce empty text, so empty is the invalidated
 		// baseline that forces the next update to send the canonical value.
 		u.Last.Store("")
@@ -124,16 +120,12 @@ func (u *Range) JawsInput(elem *jaws.Element, text string) (err error) {
 // Range renders an HTML range input for value.
 //
 // Numeric values and getter-only [bind.Getter] sources render disabled;
-// [bind.Setter] sources render editable. It panics for any other value, including a
-// [NumericBinding], which is supported only by [RequestWriter.Number]. Supply min,
+// [bind.Setter] sources render editable. It panics for any other value. Supply min,
 // max, and step attributes in params when the browser defaults do not cover the
 // source's domain. For example:
 //
 //	rw.Range(floatBinder, `min="0"`, `max="200"`, `step="0.5"`)
 func (rw RequestWriter) Range(value any, params ...any) error {
-	if _, custom := value.(*NumericBinding); custom {
-		panic(fmt.Errorf("expected numeric value or numeric bind.Getter, not %T", value))
-	}
 	binding, ok := makeNumericBinding(value)
 	if !ok {
 		panic(fmt.Errorf("expected numeric value or numeric bind.Getter, not %T", value))

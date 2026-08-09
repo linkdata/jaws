@@ -183,47 +183,6 @@ slider := ui.NewRange(binder)
 {{$.Range .Dot.Percent `min="0"` `max="100"` `step="1"`}}
 ```
 
-Number also supports application types through `NumberCodec[T]`:
-
-```go
-type Temperature struct {
-	MilliCelsius int64
-}
-
-type temperatureCodec struct{}
-
-func (temperatureCodec) FormatNumber(v Temperature) string {
-	return strconv.FormatInt(v.MilliCelsius, 10)
-}
-
-func (temperatureCodec) ParseNumber(s string) (Temperature, bool) {
-	v, err := strconv.ParseInt(s, 10, 64)
-	return Temperature{MilliCelsius: v}, err == nil
-}
-
-var temperatureMu sync.RWMutex
-temperature := Temperature{MilliCelsius: 20_000}
-temperatureSource := bind.New(&temperatureMu, &temperature)
-number := ui.NewNumberWith(temperatureSource, temperatureCodec{})
-
-type Edit struct {
-	Temperature *ui.NumericBinding
-}
-
-edit := Edit{
-	Temperature: ui.NewNumericBinding(temperatureSource, temperatureCodec{}),
-}
-```
-
-```gotemplate
-{{$.Number .Dot.Temperature `step="1"`}}
-```
-
-Codec formatting must be deterministic and produce a valid HTML number that
-parses back to the same strictly comparable, reflexive value. A codec may be
-shared by concurrent requests and must be safe for concurrent use. Custom codecs
-apply to Number, not Range.
-
 `JsVar` values are client-writable. The generic path setter can write exported
 JSON fields and append to slices, and it has no default accumulated-state size
 limit. Set the binding's optional `ClientCheck` to validate each actual generic
@@ -337,8 +296,8 @@ Use one of the typed input bases:
 - `InputDate` for `time.Time` inputs
 
 Number and Range own their type-preserving numeric parsing, formatting, and event
-state; they are complete widgets rather than reusable input bases. Use `Numeric`
-and `NumberCodec` when adding numeric behavior.
+state; they are complete widgets rather than reusable input bases. The `Numeric`
+constraint defines their supported Go types.
 
 Each base handles:
 
