@@ -2059,28 +2059,81 @@ func TestRequest_IncomingRemovePreservesAcceptedEventOrder(t *testing.T) {
 	}
 }
 
-func TestRequest_EventRouteOrder(t *testing.T) {
+func TestRequest_EventRouteOrderAndDeduplication(t *testing.T) {
 	for _, wht := range []what.What{what.Click, what.ContextMenu} {
-		t.Run(wht.String(), func(t *testing.T) {
-			rq := newTestRequest(t)
-			defer rq.Close()
-			var calls []string
-			first := requestRouteOrderHandler{name: "first", calls: &calls, err: ErrEventUnhandled}
-			second := requestRouteOrderHandler{name: "second", calls: &calls}
-			if err := rq.UI(testDivWidget{inner: "first"}, first); err != nil {
-				t.Fatal(err)
-			}
-			if err := rq.UI(testDivWidget{inner: "second"}, second); err != nil {
-				t.Fatal(err)
-			}
-			data := "1 2 0 name\tJid.1\tJid.2"
-			if err := rq.callAllEventHandlers(0, wht, data); err != nil {
-				t.Fatal(err)
-			}
-			if want := []string{"first", "second"}; !reflect.DeepEqual(calls, want) {
-				t.Fatalf("handler order = %v, want %v", calls, want)
-			}
-		})
+		for _, uniqueCount := range []int{2, 33, 34} {
+			t.Run(wht.String()+"/unique="+strconv.Itoa(uniqueCount), func(t *testing.T) {
+				rq := newTestRequest(t)
+				defer rq.Close()
+				var calls []string
+				var route strings.Builder
+				route.WriteString("1 2 0 name")
+				want := make([]string, 0, uniqueCount)
+				var first Jid
+				for i := range uniqueCount {
+					name := strconv.Itoa(i)
+					if err := rq.UI(testDivWidget{inner: "target"}, requestRouteOrderHandler{
+						name: name, calls: &calls, err: ErrEventUnhandled,
+					}); err != nil {
+						t.Fatal(err)
+					}
+					elem := rq.GetElementByJid(Jid(i + 1))
+					if i == 0 {
+						first = elem.Jid()
+					}
+					route.WriteByte('\t')
+					route.WriteString(elem.Jid().String())
+					want = append(want, name)
+				}
+				route.WriteByte('\t')
+				// Repeating the first target verifies first-occurrence deduplication.
+				route.WriteString(first.String())
+				if err := rq.callAllEventHandlers(0, wht, route.String()); err != nil {
+					t.Fatal(err)
+				}
+				if !reflect.DeepEqual(calls, want) {
+					t.Fatalf("handler order = %v, want %v", calls, want)
+				}
+			})
+		}
+	}
+}
+
+func TestRequest_AcceptedEventSurvivesDeleteElement(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	setter := newTestSetter("old")
+	targetTag := tag.Tag(t.Name())
+	if err := rq.UI(newTestTextInputWidget(setter), targetTag); err != nil {
+		t.Fatal(err)
+	}
+	targets := rq.GetElements(targetTag)
+	if len(targets) != 1 {
+		t.Fatalf("target elements = %d, want 1", len(targets))
+	}
+	target := targets[0]
+	eventCallCh := make(chan eventFnCall, 1)
+	rq.handleIncoming(wire.WsMsg{Jid: target.Jid(), What: what.Input, Data: "new"}, eventCallCh)
+
+	rq.DeleteElement(target)
+	if !target.Deleted() || rq.GetElementByJid(target.Jid()) != nil {
+		t.Fatal("DeleteElement did not unregister target")
+	}
+	var call eventFnCall
+	select {
+	case call = <-eventCallCh:
+	default:
+		t.Fatal("accepted event was not queued")
+	}
+	if err := call.invoke(); err != nil {
+		t.Fatal(err)
+	}
+	if got := setter.SetCount(); got != 1 {
+		t.Fatalf("setter calls = %d, want 1", got)
+	}
+	if got := setter.Get(); got != "new" {
+		t.Fatalf("bound value = %q, want %q", got, "new")
 	}
 }
 
@@ -2387,6 +2440,59 @@ func TestRequest_queueEventOverloadCancels(t *testing.T) {
 	}
 	if !strings.Contains(cause.Error(), "Targets=2") {
 		t.Fatalf("cause = %v, want target count", cause)
+	}
+	if !strings.Contains(cause.Error(), "FirstTarget="+first.Jid().String()) {
+		t.Fatalf("cause = %v, want first target Jid", cause)
+	}
+}
+
+func TestRequest_handleIncomingSkipsEventsWithoutTargets(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		msg  func(*Request) wire.WsMsg
+	}{
+		{
+			name: "unknown direct target",
+			msg: func(*Request) wire.WsMsg {
+				return wire.WsMsg{Jid: 1, What: what.Input, Data: "value"}
+			},
+		},
+		{
+			name: "unknown bubbled target",
+			msg: func(*Request) wire.WsMsg {
+				return wire.WsMsg{What: what.Click, Data: "1 2 0 name\tJid.1"}
+			},
+		},
+		{
+			name: "deleted direct target",
+			msg: func(rq *Request) wire.WsMsg {
+				elem := rq.NewElement(&testUi{})
+				elem.Freeze()
+				rq.DeleteElement(elem)
+				return wire.WsMsg{Jid: elem.Jid(), What: what.Input, Data: "value"}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer jw.Close()
+			rq := jw.NewRequest(nil)
+			defer jw.recycle(rq)
+
+			full := make(chan eventFnCall, 1)
+			full <- eventFnCall{wht: what.Hook, data: "sentinel"}
+			rq.handleIncoming(tc.msg(rq), full)
+
+			if cause := context.Cause(rq.Context()); cause != nil {
+				t.Fatalf("Request canceled by targetless event: %v", cause)
+			}
+			if got := <-full; got.data != "sentinel" {
+				t.Fatalf("FIFO entry = %#v, want sentinel", got)
+			}
+		})
 	}
 }
 

@@ -3114,6 +3114,25 @@ func (h benchIncomingEventHandler) JawsContextMenu(*Element, Click) error {
 	return h.complete()
 }
 
+func benchRepeatedClickMsg(b *testing.B, repeated *Element, count int, tail ...*Element) wire.WsMsg {
+	b.Helper()
+	var value strings.Builder
+	value.WriteString("1 2 5 name")
+	for range count {
+		value.WriteByte('\t')
+		value.WriteString(repeated.Jid().String())
+	}
+	for _, elem := range tail {
+		value.WriteByte('\t')
+		value.WriteString(elem.Jid().String())
+	}
+	msg := wire.WsMsg{What: what.Click, Data: value.String()}
+	if size := len(msg.Append(nil)); size > webSocketReadLimit {
+		b.Fatalf("repeated click message = %d bytes, limit %d", size, webSocketReadLimit)
+	}
+	return msg
+}
+
 func BenchmarkJawsClosePendingRequests(b *testing.B) {
 	for _, pending := range []int{0, 1, 100} {
 		b.Run("pending="+strconv.Itoa(pending), func(b *testing.B) {
@@ -3612,7 +3631,8 @@ func BenchmarkJawsBroadcastCallTag(b *testing.B) {
 // BenchmarkRequestIncomingEventDispatch measures accepting and executing an
 // event through handleIncoming and the real eventCaller goroutine. Each
 // iteration waits for its handler, so the event FIFO cannot accumulate work.
-// Direct cases use 1,000 Elements; bubbled cases resolve eight candidates.
+// Direct cases use 1,000 Elements. The ordinary bubbled cases resolve eight
+// candidates; the repeated-route case exercises deduplication.
 func BenchmarkRequestIncomingEventDispatch(b *testing.B) {
 	const (
 		elemCount      = 1000
@@ -3675,12 +3695,45 @@ func BenchmarkRequestIncomingEventDispatch(b *testing.B) {
 			}
 		})
 	}
+
+	const repeatedCount = 4000
+	b.Run("bubbled/repeated=4000/elems=1000", func(b *testing.B) {
+		rq := newBenchRequest(b, elemCount)
+		rq.mu.Lock()
+		rq.ctx = b.Context()
+		rq.mu.Unlock()
+		handled := make(chan struct{}, 1)
+		repeated := rq.GetElementByJid(1)
+		repeated.AddHandlers(benchUnhandledClickHandler{})
+		repeated.Freeze()
+		completion := rq.GetElementByJid(2)
+		completion.AddHandlers(benchIncomingEventHandler{handled: handled})
+		completion.Freeze()
+		msg := benchRepeatedClickMsg(b, repeated, repeatedCount, completion)
+
+		eventCallCh := make(chan eventFnCall, 1)
+		outboundMsgCh := make(chan wire.WsMsg, 1)
+		eventDoneCh := make(chan struct{})
+		go rq.eventCaller(eventCallCh, outboundMsgCh, eventDoneCh)
+		b.Cleanup(func() {
+			close(eventCallCh)
+			<-eventDoneCh
+		})
+
+		b.ReportAllocs()
+		b.ResetTimer()
+		for b.Loop() {
+			rq.handleIncoming(msg, eventCallCh)
+			<-handled
+		}
+	})
 }
 
 // BenchmarkRequestIncomingEventQueue measures the process-goroutine work needed
 // to accept an event and place its resolved call on the event FIFO. Handler
-// execution is excluded; [BenchmarkRequestEventDispatch] covers the combined
-// resolution and invocation path.
+// execution is excluded. BenchmarkRequestIncomingEventDispatch covers the
+// complete handleIncoming-to-handler path through the FIFO;
+// BenchmarkRequestEventDispatch isolates resolution and invocation.
 func BenchmarkRequestIncomingEventQueue(b *testing.B) {
 	for _, n := range []int{1, 1000} {
 		b.Run("direct/elems="+strconv.Itoa(n), func(b *testing.B) {
@@ -3702,7 +3755,7 @@ func BenchmarkRequestIncomingEventQueue(b *testing.B) {
 	}
 
 	const elemCount = 1000
-	for _, candidateCount := range []int{1, 8, 16} {
+	for _, candidateCount := range []int{1, 8, 16, 32, 33, 34} {
 		b.Run("bubbled/candidates="+strconv.Itoa(candidateCount)+"/elems=1000", func(b *testing.B) {
 			rq := newBenchRequest(b, elemCount)
 			var value strings.Builder
@@ -3727,19 +3780,13 @@ func BenchmarkRequestIncomingEventQueue(b *testing.B) {
 		})
 	}
 
-	const repeatedCount = 3600
-	b.Run("bubbled/repeated=3600/elems=1000", func(b *testing.B) {
+	const repeatedCount = 4000
+	b.Run("bubbled/repeated=4000/elems=1000", func(b *testing.B) {
 		rq := newBenchRequest(b, elemCount)
-		elem := rq.GetElementByJid(elemCount)
+		elem := rq.GetElementByJid(1)
 		elem.AddHandlers(benchUnhandledClickHandler{})
 		elem.Freeze()
-		var value strings.Builder
-		value.WriteString("1 2 5 name")
-		for range repeatedCount {
-			value.WriteByte('\t')
-			value.WriteString(elem.Jid().String())
-		}
-		msg := wire.WsMsg{What: what.Click, Data: value.String()}
+		msg := benchRepeatedClickMsg(b, elem, repeatedCount)
 		eventCallCh := make(chan eventFnCall, 1)
 
 		b.ReportAllocs()
@@ -3752,8 +3799,9 @@ func BenchmarkRequestIncomingEventQueue(b *testing.B) {
 	})
 }
 
-// BenchmarkRequestEventCallChannelAllocation measures the backing storage for
-// eventCallCh at the capacities used by a Request with zero or 1,000 Elements.
+// BenchmarkRequestEventCallChannelAllocation measures the fixed allocation for
+// an empty eventCallCh at the capacities used by a Request with zero or 1,000
+// Elements.
 func BenchmarkRequestEventCallChannelAllocation(b *testing.B) {
 	for _, elemCount := range []int{0, 1000} {
 		capacity := 4 + elemCount*4
@@ -3767,9 +3815,9 @@ func BenchmarkRequestEventCallChannelAllocation(b *testing.B) {
 	}
 }
 
-// BenchmarkRequestEventDispatch measures the request-level event path that
-// resolves Jids and reads a frozen Element's handlers. The bubbled case exercises
-// the per-candidate eligibility checks before every handler returns unhandled.
+// BenchmarkRequestEventDispatch measures synchronous target resolution and
+// handler invocation. The bubbled cases exercise eligibility and deduplication
+// before every handler returns unhandled.
 func BenchmarkRequestEventDispatch(b *testing.B) {
 	for _, n := range []int{1, 1000} {
 		b.Run("direct/elems="+strconv.Itoa(n), func(b *testing.B) {
@@ -3789,47 +3837,40 @@ func BenchmarkRequestEventDispatch(b *testing.B) {
 		})
 	}
 
-	const (
-		elemCount      = 1000
-		candidateCount = 8
-	)
-	b.Run("bubbled/candidates=8/elems=1000", func(b *testing.B) {
-		rq := newBenchRequest(b, elemCount)
-		var value strings.Builder
-		value.WriteString("1 2 5 name")
-		for id := elemCount - candidateCount + 1; id <= elemCount; id++ {
-			elem := rq.GetElementByJid(Jid(id))
-			elem.AddHandlers(benchUnhandledClickHandler{})
-			elem.Freeze()
+	const elemCount = 1000
+	for _, candidateCount := range []int{8, 16, 32, 34} {
+		b.Run("bubbled/candidates="+strconv.Itoa(candidateCount)+"/elems=1000", func(b *testing.B) {
+			rq := newBenchRequest(b, elemCount)
+			var value strings.Builder
+			value.WriteString("1 2 5 name")
+			for id := elemCount - candidateCount + 1; id <= elemCount; id++ {
+				elem := rq.GetElementByJid(Jid(id))
+				elem.AddHandlers(benchUnhandledClickHandler{})
+				elem.Freeze()
+				value.WriteByte('\t')
+				value.WriteString(elem.Jid().String())
+			}
 			value.WriteByte('\t')
-			value.WriteString(elem.Jid().String())
-		}
-		value.WriteByte('\t')
-		clickValue := value.String()
+			clickValue := value.String()
 
-		var err error
-		b.ReportAllocs()
-		for b.Loop() {
-			err = rq.callAllEventHandlers(0, what.Click, clickValue)
-		}
-		if err != nil {
-			b.Fatal(err)
-		}
-	})
+			var err error
+			b.ReportAllocs()
+			for b.Loop() {
+				err = rq.callAllEventHandlers(0, what.Click, clickValue)
+			}
+			if err != nil {
+				b.Fatal(err)
+			}
+		})
+	}
 
-	const repeatedCount = 3600
-	b.Run("bubbled/repeated=3600/elems=1000", func(b *testing.B) {
+	const repeatedCount = 4000
+	b.Run("bubbled/repeated=4000/elems=1000", func(b *testing.B) {
 		rq := newBenchRequest(b, elemCount)
-		elem := rq.GetElementByJid(elemCount)
+		elem := rq.GetElementByJid(1)
 		elem.AddHandlers(benchUnhandledClickHandler{})
 		elem.Freeze()
-		var value strings.Builder
-		value.WriteString("1 2 5 name")
-		for range repeatedCount {
-			value.WriteByte('\t')
-			value.WriteString(elem.Jid().String())
-		}
-		data := value.String()
+		data := benchRepeatedClickMsg(b, elem, repeatedCount).Data
 
 		var err error
 		b.ReportAllocs()

@@ -22,6 +22,8 @@ import (
 	"github.com/linkdata/jaws/lib/wire"
 )
 
+const minEventRouteCloneSavingsBytes = 1024
+
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
 func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-chan wire.WsMsg, outboundMsgCh chan<- wire.WsMsg) {
 	jawsDoneCh := rq.Jaws.Done()
@@ -112,7 +114,16 @@ func (rq *Request) handleIncoming(wsmsg wire.WsMsg, eventCallCh chan eventFnCall
 	if wsmsg.Jid.IsValid() {
 		switch wsmsg.What {
 		case what.Input, what.Click, what.ContextMenu, what.Set:
-			rq.queueEvent(eventCallCh, rq.resolveEventFnCall(wsmsg.Jid, wsmsg.What, wsmsg.Data))
+			call := rq.resolveEventFnCall(wsmsg.Jid, wsmsg.What, wsmsg.Data)
+			if wsmsg.Jid == 0 && call.elem != nil {
+				routeBytes := len(wsmsg.Data) - len(call.data)
+				if routeBytes >= minEventRouteCloneSavingsBytes && routeBytes >= len(call.data) {
+					// The click payload is a prefix of wsmsg.Data. Detach it when the
+					// queued call would otherwise retain a much larger client route.
+					call.data = strings.Clone(call.data)
+				}
+			}
+			rq.queueEvent(eventCallCh, call)
 		case what.Remove:
 			rq.handleRemove(wsmsg.Jid, wsmsg.Data)
 		}
@@ -247,36 +258,66 @@ func (rq *Request) queue(msg wire.WsMsg) {
 
 // resolveEventFnCall resolves a single incoming event to its eligible target
 // Elements. A zero id with a Click or ContextMenu carries a tab-separated list of
-// bubbled element jids, which are resolved in order; any other id resolves to a
-// single element. Only live, frozen Elements are selected, so the atomic frozen
-// load publishes the completed handler slice before its later lock-free read.
+// bubbled element jids, whose live targets are resolved once each in
+// first-occurrence order; any other id resolves to a single element. Only live,
+// frozen Elements are selected, so the atomic frozen load publishes the completed
+// handler slice before its later lock-free read.
 //
-// Resolution happens before the call enters the event FIFO. This preserves wire
-// order when a later Remove message unregisters an accepted event's target, while
-// events accepted after removal still resolve to no targets. rq.mu is held only
-// for the element lookups.
+// Resolution happens before the call enters the event FIFO, fixing target
+// eligibility at acceptance. Later removal from any source does not cancel an
+// accepted event, while an Element removed first cannot be selected. rq.mu
+// protects target lookup; handlers run later without it.
 func (rq *Request) resolveEventFnCall(id Jid, wht what.What, value string) (call eventFnCall) {
 	call.wht = wht
 	call.data = value
 	rq.mu.RLock()
 	if id == 0 {
 		if wht == what.Click || wht == what.ContextMenu {
+			const linearDedupLimit = 32
 			var after string
 			var found bool
+			var seenMap map[*Element]struct{}
 			call.data, after, found = strings.Cut(value, "\t")
-			// Bound speculative allocation from the client-controlled route.
-			remainingCap := min(strings.Count(after, "\t"), 8)
 			for found {
 				var jidStr string
 				jidStr, after, found = strings.Cut(after, "\t")
 				if id = jid.ParseString(jidStr); id > 0 {
 					if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() && e.frozen.Load() {
-						if call.elem == nil {
-							call.elem = e
-						} else {
-							if call.more == nil {
-								call.more = make([]*Element, 0, remainingCap)
+						duplicate := e == call.elem
+						if !duplicate {
+							if seenMap == nil {
+								duplicate = slices.Contains(call.more, e)
+							} else {
+								_, duplicate = seenMap[e]
 							}
+						}
+						if duplicate {
+							continue
+						}
+						if seenMap == nil && call.elem != nil && 1+len(call.more) == linearDedupLimit && after != "" {
+							// Avoid separate deduplication storage for ordinary routes,
+							// then switch before a client-controlled deep route becomes quadratic.
+							seenMap = make(map[*Element]struct{}, linearDedupLimit+1)
+							seenMap[call.elem] = struct{}{}
+							for _, seenElem := range call.more {
+								seenMap[seenElem] = struct{}{}
+							}
+						}
+						if seenMap != nil {
+							seenMap[e] = struct{}{}
+						}
+						switch {
+						case call.elem == nil:
+							call.elem = e
+						case call.more == nil:
+							remainingCap := 1
+							if after != "" {
+								remainingCap += 1 + strings.Count(after, "\t")
+							}
+							// Bound speculative allocation from the client-controlled route.
+							call.more = make([]*Element, 0, min(remainingCap, 8))
+							call.more = append(call.more, e)
+						default:
 							call.more = append(call.more, e)
 						}
 					}
@@ -323,16 +364,16 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, value string) (er
 // fallen too far behind to stay consistent (an event would be lost), so it is
 // cancelled rather than dropping the event, mirroring the broadcast back-pressure
 // path in [Jaws.ServeWithTimeout]. cancel takes rq.mu, which the process loop does
-// not hold when calling this.
+// not hold when calling this. Calls without a resolved target are ignored.
 func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
+	if call.elem == nil {
+		return
+	}
 	select {
 	case eventCallCh <- call:
 	default:
-		targets := len(call.more)
-		if call.elem != nil {
-			targets++
-		}
-		rq.cancel(fmt.Errorf("%w: %v: eventCallCh full sending Targets=%d What=%v Data=%q", ErrRequestOverloaded, rq, targets, call.wht, call.data))
+		targets := 1 + len(call.more)
+		rq.cancel(fmt.Errorf("%w: %v: eventCallCh full sending FirstTarget=%v Targets=%d What=%v Data=%q", ErrRequestOverloaded, rq, call.elem.Jid(), targets, call.wht, call.data))
 	}
 }
 
