@@ -256,7 +256,6 @@ func (rq *Request) queue(msg wire.WsMsg) {
 // events accepted after removal still resolve to no targets. rq.mu is held only
 // for the element lookups.
 func (rq *Request) resolveEventFnCall(id Jid, wht what.What, value string) (call eventFnCall) {
-	call.jid = id
 	call.wht = wht
 	call.data = value
 	rq.mu.RLock()
@@ -329,7 +328,11 @@ func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
 	select {
 	case eventCallCh <- call:
 	default:
-		rq.cancel(fmt.Errorf("%w: %v: eventCallCh full sending Jid=%v What=%v Data=%q", ErrRequestOverloaded, rq, call.jid, call.wht, call.data))
+		targets := len(call.more)
+		if call.elem != nil {
+			targets++
+		}
+		rq.cancel(fmt.Errorf("%w: %v: eventCallCh full sending Targets=%d What=%v Data=%q", ErrRequestOverloaded, rq, targets, call.wht, call.data))
 	}
 }
 

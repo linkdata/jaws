@@ -2373,8 +2373,10 @@ func TestRequest_queueEventOverloadCancels(t *testing.T) {
 	rq := jw.NewRequest(nil)
 	defer jw.recycle(rq)
 
+	first := rq.NewElement(&testUi{})
+	second := rq.NewElement(&testUi{})
 	full := make(chan eventFnCall) // unbuffered, no receiver: send fails at once
-	rq.queueEvent(full, eventFnCall{jid: 1, wht: what.Input, data: "x"})
+	rq.queueEvent(full, eventFnCall{elem: first, more: []*Element{second}, wht: what.Input, data: "x"})
 
 	cause := context.Cause(rq.Context())
 	if !errors.Is(cause, ErrRequestOverloaded) {
@@ -2382,6 +2384,9 @@ func TestRequest_queueEventOverloadCancels(t *testing.T) {
 	}
 	if !errors.Is(cause, ErrRequestCancelled) {
 		t.Fatalf("cause = %v, want it to wrap ErrRequestCancelled", cause)
+	}
+	if !strings.Contains(cause.Error(), "Targets=2") {
+		t.Fatalf("cause = %v, want target count", cause)
 	}
 }
 
