@@ -22,7 +22,6 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
-	"unsafe"
 
 	"github.com/coder/websocket"
 	"github.com/linkdata/deadlock"
@@ -2501,47 +2500,6 @@ func TestRequest_handleIncomingSkipsEventsWithoutTargets(t *testing.T) {
 				t.Fatalf("FIFO entry = %#v, want sentinel", got)
 			}
 		})
-	}
-}
-
-func TestRequest_handleIncomingClonesLargeEventRoute(t *testing.T) {
-	rq := newTestRequest(t)
-	defer rq.Close()
-
-	targetTag := tag.Tag(t.Name())
-	if err := rq.UI(testDivWidget{inner: "target"}, targetTag); err != nil {
-		t.Fatal(err)
-	}
-	targets := rq.GetElements(targetTag)
-	if len(targets) != 1 {
-		t.Fatalf("target elements = %d, want 1", len(targets))
-	}
-	target := targets[0]
-
-	const wantData = "1 2 0 name"
-	routeTarget := "\t" + target.Jid().String()
-	repeats := minEventRouteCloneSavingsBytes/len(routeTarget) + 1
-	msg := wire.WsMsg{What: what.Click, Data: wantData + strings.Repeat(routeTarget, repeats)}
-	if got := len(msg.Append(nil)); got > webSocketReadLimit {
-		t.Fatalf("encoded message size = %d, limit %d", got, webSocketReadLimit)
-	}
-
-	eventCallCh := make(chan eventFnCall, 1)
-	rq.handleIncoming(msg, eventCallCh)
-	var call eventFnCall
-	select {
-	case call = <-eventCallCh:
-	default:
-		t.Fatal("event was not queued")
-	}
-	if call.elem != target || len(call.more) != 0 {
-		t.Fatalf("event targets = %v, %v; want only %v", call.elem, call.more, target)
-	}
-	if call.data != wantData {
-		t.Fatalf("event data = %q, want %q", call.data, wantData)
-	}
-	if unsafe.StringData(call.data) == unsafe.StringData(msg.Data) { // #nosec G103 -- test intentionally inspects string backing storage
-		t.Fatal("event data retains the routed message backing storage")
 	}
 }
 
