@@ -61,15 +61,19 @@ func (pt *pageTemplate) JawsRender(elem *jaws.Element, w io.Writer, params []any
 	return
 }
 
-// statusRecorder wraps an [http.ResponseWriter] to record whether any response
-// bytes have been committed, so [uiHandler.ServeHTTP] can still send a 500 for a
-// render failure that occurred before any output was written.
+// statusRecorder wraps an [http.ResponseWriter] to apply the page handler's
+// default HTML content type and record whether any response bytes have been
+// committed, so [uiHandler.ServeHTTP] can still send a 500 for a render failure
+// that occurred before any output was written.
 type statusRecorder struct {
 	http.ResponseWriter
 	wrote bool
 }
 
 func (sr *statusRecorder) Write(p []byte) (int, error) {
+	if sr.Header().Get("Content-Type") == "" {
+		sr.Header().Set("Content-Type", "text/html; charset=utf-8")
+	}
 	sr.wrote = true
 	return sr.ResponseWriter.Write(p)
 }
@@ -109,9 +113,13 @@ func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // The returned handler can be registered directly with a router. Each request
 // results in the template being looked up through the configured template
 // lookupers and rendered with a [With] value as the template data, exposing
-// dot through its Dot field. Handler renders without a generated wrapper and does
-// not use dot as a tag, so dot may be arbitrary template data. The handler reuses
-// dot across requests; dot and its callbacks must support concurrent execution.
+// dot through its Dot field. Unless the response already has a Content-Type,
+// Handler sets it to "text/html; charset=utf-8" when rendering writes its first
+// bytes. A render failure before any output retains [http.Error]'s text response.
+//
+// Handler renders without a generated wrapper and does not use dot as a tag, so
+// dot may be arbitrary template data. The handler reuses dot across requests;
+// dot and its callbacks must support concurrent execution.
 func Handler(jw *jaws.Jaws, name string, dot any) http.Handler {
 	return uiHandler{Jaws: jw, name: name, dot: dot}
 }
