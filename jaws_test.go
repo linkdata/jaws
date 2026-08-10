@@ -3728,6 +3728,21 @@ func BenchmarkRequestIncomingEventQueue(b *testing.B) {
 	}
 }
 
+// BenchmarkRequestEventCallChannelAllocation measures the backing storage for
+// eventCallCh at the capacities used by a Request with zero or 1,000 Elements.
+func BenchmarkRequestEventCallChannelAllocation(b *testing.B) {
+	for _, elemCount := range []int{0, 1000} {
+		capacity := 4 + elemCount*4
+		b.Run("elems="+strconv.Itoa(elemCount)+"/capacity="+strconv.Itoa(capacity), func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				eventCallCh := make(chan eventFnCall, capacity)
+				runtime.KeepAlive(eventCallCh)
+			}
+		})
+	}
+}
+
 // BenchmarkRequestEventDispatch measures the request-level event path that
 // resolves Jids and reads a frozen Element's handlers. The bubbled case exercises
 // the per-candidate eligibility checks before every handler returns unhandled.
