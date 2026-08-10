@@ -3089,6 +3089,31 @@ func (benchUnhandledClickHandler) JawsClick(*Element, Click) error {
 	return ErrEventUnhandled
 }
 
+func (benchUnhandledClickHandler) JawsContextMenu(*Element, Click) error {
+	return ErrEventUnhandled
+}
+
+type benchIncomingEventHandler struct {
+	handled chan<- struct{}
+}
+
+func (h benchIncomingEventHandler) complete() error {
+	h.handled <- struct{}{}
+	return nil
+}
+
+func (h benchIncomingEventHandler) JawsInput(*Element, string) error {
+	return h.complete()
+}
+
+func (h benchIncomingEventHandler) JawsClick(*Element, Click) error {
+	return h.complete()
+}
+
+func (h benchIncomingEventHandler) JawsContextMenu(*Element, Click) error {
+	return h.complete()
+}
+
 func BenchmarkJawsClosePendingRequests(b *testing.B) {
 	for _, pending := range []int{0, 1, 100} {
 		b.Run("pending="+strconv.Itoa(pending), func(b *testing.B) {
@@ -3581,6 +3606,125 @@ func BenchmarkJawsBroadcastCallTag(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		jw.Broadcast(msg)
+	}
+}
+
+// BenchmarkRequestIncomingEventDispatch measures accepting and executing an
+// event through handleIncoming and the real eventCaller goroutine. Each
+// iteration waits for its handler, so the event FIFO cannot accumulate work.
+// Direct cases use 1,000 Elements; bubbled cases resolve eight candidates.
+func BenchmarkRequestIncomingEventDispatch(b *testing.B) {
+	const (
+		elemCount      = 1000
+		candidateCount = 8
+	)
+	for _, tc := range []struct {
+		name    string
+		wht     what.What
+		bubbled bool
+	}{
+		{name: "direct/Input", wht: what.Input},
+		{name: "direct/Set", wht: what.Set},
+		{name: "bubbled/Click", wht: what.Click, bubbled: true},
+		{name: "bubbled/ContextMenu", wht: what.ContextMenu, bubbled: true},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			rq := newBenchRequest(b, elemCount)
+			rq.mu.Lock()
+			rq.ctx = b.Context()
+			rq.mu.Unlock()
+			handled := make(chan struct{}, 1)
+			handler := benchIncomingEventHandler{handled: handled}
+			var msg wire.WsMsg
+			if tc.bubbled {
+				var value strings.Builder
+				value.WriteString("1 2 5 name")
+				for id := elemCount - candidateCount + 1; id <= elemCount; id++ {
+					elem := rq.GetElementByJid(Jid(id))
+					if id == elemCount {
+						elem.AddHandlers(handler)
+					} else {
+						elem.AddHandlers(benchUnhandledClickHandler{})
+					}
+					elem.Freeze()
+					value.WriteByte('\t')
+					value.WriteString(elem.Jid().String())
+				}
+				msg = wire.WsMsg{What: tc.wht, Data: value.String()}
+			} else {
+				elem := rq.GetElementByJid(elemCount)
+				elem.AddHandlers(handler)
+				elem.Freeze()
+				msg = wire.WsMsg{Jid: elem.Jid(), What: tc.wht, Data: "value"}
+			}
+
+			eventCallCh := make(chan eventFnCall, 1)
+			outboundMsgCh := make(chan wire.WsMsg, 1)
+			eventDoneCh := make(chan struct{})
+			go rq.eventCaller(eventCallCh, outboundMsgCh, eventDoneCh)
+			b.Cleanup(func() {
+				close(eventCallCh)
+				<-eventDoneCh
+			})
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				rq.handleIncoming(msg, eventCallCh)
+				<-handled
+			}
+		})
+	}
+}
+
+// BenchmarkRequestIncomingEventQueue measures the process-goroutine work needed
+// to accept an event and place its resolved call on the event FIFO. Handler
+// execution is excluded; [BenchmarkRequestEventDispatch] covers the combined
+// resolution and invocation path.
+func BenchmarkRequestIncomingEventQueue(b *testing.B) {
+	for _, n := range []int{1, 1000} {
+		b.Run("direct/elems="+strconv.Itoa(n), func(b *testing.B) {
+			rq := newBenchRequest(b, n)
+			elem := rq.GetElementByJid(Jid(n))
+			elem.AddHandlers(benchInputHandler{})
+			elem.Freeze()
+			msg := wire.WsMsg{Jid: elem.Jid(), What: what.Input, Data: "value"}
+			eventCallCh := make(chan eventFnCall, 1)
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				rq.handleIncoming(msg, eventCallCh)
+				call := <-eventCallCh
+				runtime.KeepAlive(call)
+			}
+		})
+	}
+
+	const elemCount = 1000
+	for _, candidateCount := range []int{1, 8, 16} {
+		b.Run("bubbled/candidates="+strconv.Itoa(candidateCount)+"/elems=1000", func(b *testing.B) {
+			rq := newBenchRequest(b, elemCount)
+			var value strings.Builder
+			value.WriteString("1 2 5 name")
+			for id := elemCount - candidateCount + 1; id <= elemCount; id++ {
+				elem := rq.GetElementByJid(Jid(id))
+				elem.AddHandlers(benchUnhandledClickHandler{})
+				elem.Freeze()
+				value.WriteByte('\t')
+				value.WriteString(elem.Jid().String())
+			}
+			msg := wire.WsMsg{What: what.Click, Data: value.String()}
+			eventCallCh := make(chan eventFnCall, 1)
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				rq.handleIncoming(msg, eventCallCh)
+				call := <-eventCallCh
+				runtime.KeepAlive(call)
+			}
+		})
 	}
 }
 
