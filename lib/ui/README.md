@@ -174,6 +174,15 @@ slider := ui.NewRange(binder)
 {{$.Range .Dot.Percent `min="0"` `max="100"` `step="1"`}}
 ```
 
+## JavaScript variables
+
+Browser JSON numbers use JavaScript `Number` values. Integers outside
+`-9007199254740991` through `9007199254740991` may be rounded, and a browser
+write may commit the rounded value to Go. Represent exact wide integers as
+built-in strings, converting JavaScript `BigInt` values back to strings before
+calling `jawsVar`. A Go `json:",string"` tag is not generic round-trip support;
+use a built-in string field or implement `PathSetter`.
+
 `JsVar` values are client-writable. The generic path setter can write exported
 JSON fields and append to slices, and it has no default accumulated-state size
 limit. Set the binding's optional `ClientCheck` to validate each actual generic

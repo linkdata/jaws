@@ -175,6 +175,30 @@ must read or change and exchange with Go. Unlike most JaWS UI values, a `JsVar`
 is a bidirectional channel: the binding does not by itself make either the Go
 value or the browser value authoritative.
 
+Browser JSON numbers use JavaScript `Number` values. Signed and unsigned
+integers outside `-9007199254740991` through `9007199254740991` may be rounded,
+and a later browser write may commit the rounded value to Go. Represent exact
+wide integers as decimal fields of Go's built-in `string` type and convert them
+explicitly, for example with `strconv.FormatInt` or `strconv.FormatUint`:
+
+```go
+type Client struct {
+	Counter string `json:"counter"`
+}
+```
+
+Convert JavaScript `BigInt` values back to strings before calling `jawsVar`:
+
+```js
+const next = BigInt(client.counter) + 1n;
+client.counter = next.toString();
+jawsVar("client.counter", client.counter);
+```
+
+A Go `json:",string"` tag is not generic round-trip support: browser input is an
+untyped string that cannot be assigned to an integer field. Use a built-in
+`string` field or implement `ui.PathSetter` to parse and validate it.
+
 Create each binding for the Request that renders it. A `JsVarMaker` can be kept
 in shared handler data because each call returns a fresh `JsVar` over the
 possibly shared backing state:

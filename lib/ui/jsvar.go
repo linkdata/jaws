@@ -171,6 +171,16 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // valid bindings. Do not use a browser-owned property such as window.name, or a
 // global owned by unrelated code.
 //
+// Browser JSON numbers use JavaScript Number values. Signed and unsigned
+// integers outside -9007199254740991 through 9007199254740991 may be rounded in
+// a snapshot or broadcast; a later browser write may store the rounded value in
+// Go.
+//
+// Represent exact wide integers as built-in string fields and convert them
+// explicitly. Browser code must convert BigInt values back to strings before
+// calling jawsVar. A json:",string" tag is not generic round-trip support; use a
+// built-in string field or a [PathSetter].
+//
 // The variable name and browser-side jawsVar paths must be
 // application-controlled. The browser rejects exact "__proto__" path
 // components; put user data in values, not names or paths.
@@ -391,6 +401,10 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any, cli
 // The broadcast reaches matching active requests only. It is not replayed to a
 // page between its initial render and its broadcast subscription; see [JsVar]
 // for the synchronization model.
+//
+// The browser receives the JSON encoding of value, not a re-encoding of the
+// destination field after assignment. Applications using an encoded
+// representation such as decimal strings must pass that representation in value.
 //
 // When a write produces a broadcast, value is marshaled while the application
 // locker is held. Custom marshaling callbacks reachable from value, including
