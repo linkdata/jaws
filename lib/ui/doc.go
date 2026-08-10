@@ -26,15 +26,13 @@
 // [Select] support multiple live Elements under their documented conditions.
 // Input widgets and [JsVar] require distinct widget values.
 //
-// Managed controls report browser input while the WebSocket is open. Events
-// before the initial connection opens are not queued. Native form reset is not
-// a bound input operation because browsers change controls without emitting the
-// per-control events JaWS transports. Use server-driven reset actions, and gate
-// initial interaction when those early events matter.
+// Managed controls report input only while the WebSocket is open; earlier events
+// are not queued. Native form reset does not update bindings. Gate initial
+// interaction when necessary and implement resets through JaWS.
 //
 // Each browser-to-server WebSocket message must fit the 32 KiB inbound limit
 // documented by [jaws.Request.ServeHTTP]. Standard widgets do not chunk large
-// values or removal acknowledgements.
+// values or removal reports.
 //
 // [RequestWriter.Register] is an advanced escape hatch primarily for binding a
 // render-independent updater to otherwise static HTML authored by the surrounding

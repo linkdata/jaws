@@ -282,56 +282,41 @@ The handler candidate is asked via `JawsClick` / `JawsContextMenu` / `JawsInput`
 ## Browser interaction and inbound message limits
 
 - The bundled client forwards input, click, and context-menu events only while
-  its WebSocket is open. Events during the initial connection are not queued or
-  replayed. When early interaction matters, initially render controls disabled
-  or inside an `inert` region, then use `Request.SetConnectFn` to change
-  request-local readiness and dirty a request-specific readiness tag used by
-  the Template, or the exact Element whose custom updater removes the gate.
+  its WebSocket is open and does not replay earlier events. When early
+  interaction matters, disable native controls or make the interactive region
+  inert, then use `Request.SetConnectFn` to update request-local readiness and
+  dirty the request-specific readiness tag used by the Template, or the exact
+  Element whose custom updater removes the gate.
 - Native form reset is unsupported for managed inputs and Select. A reset button
   or `form.reset()` changes browser state without the per-control events JaWS
-  transports. Use a JaWS-handled `type="button"` to reset Go state and dirty its
-  tags.
+  transports. Use a JaWS-handled button with `type="button"` to reset Go state and
+  dirty the affected tags.
 - A `ui.Radio` is one independent boolean binding. Radios in the same native
   HTML group do not become a server-side group because the browser does not send
   input events for peers it unchecks. Use `RequestWriter.RadioGroup` with a
-  single-select `named.BoolArray` whose `named.Bool.Name` values are distinct
-  (its zero value or `named.NewBoolArray(false)`), or coordinated setters that
-  clear peers as one synchronized state change and then dirty every changed
-  binding.
-- Every browser-to-server WebSocket message is limited to 32 KiB, including
-  protocol fields, Jids, and values after UTF-8 encoding and JSON escaping. The
-  client does not chunk `Input`, `Set`, `Click`, `ContextMenu`, or `Remove`; an
-  oversized message closes the connection. Use conservative text limits, HTTP
-  uploads for large values, small `jawsVar` writes, and independently updated
-  smaller wrappers for large dynamic trees.
+  single-select `named.BoolArray` whose `named.Bool.Name` values are distinct, or
+  coordinated setters that clear peers as one synchronized state change and
+  then dirty every changed binding.
+- Every browser-to-server WebSocket message is limited to 32 KiB. The client
+  does not chunk `Input`, `Set`, `Click`, `ContextMenu`, or `Remove`; an
+  oversized message closes the connection. Keep text values,
+  click/context-menu names, and `jawsVar` writes conservatively sized; use HTTP
+  uploads for large values and smaller independently updated wrappers for large
+  trees.
   `JsVar.ClientCheck` runs after receipt and cannot enforce the transport limit.
 
 ## JsVar JSON representation limits
 
-- `ui.JsVar` uses Go `encoding/json` and browser `JSON.parse` / `JSON.stringify`.
-  JSON numbers become JavaScript `Number` values rather than retaining Go numeric
-  types or integer widths. Root and nested integers outside `-9007199254740991`
-  through `9007199254740991` are not reliably preserved; a browser write can
-  commit a rounded value to Go. JaWS does not reject or transform wider integers.
-- If exactness matters, use a field of Go's built-in `string` type in the
-  JsVar-bound model. Convert it to `BigInt` for browser calculations and back to a
-  string before `jawsVar`; `JSON.stringify` does not encode `BigInt` values
-  directly.
-- A Go `json:",string"` tag makes Go-to-browser encoding use a JSON string but is
-  not a complete bidirectional workaround: the generic browser setter cannot
-  assign that untyped string to an integer field. Keep the bound field as a
-  built-in `string`, implement `ui.PathSetter` to parse and validate the encoded
-  form, or keep the exact integer outside the browser-writable binding. Pass the
-  same string representation to browser-facing `JawsSetPath` calls because they
-  broadcast the caller-supplied value.
-- JSON-marshalable values can be sent to the browser, but the generic browser
-  setter does not unmarshal back into the concrete destination type. It decodes
-  an untyped JSON value and assigns it through `jq`. Values that need
-  destination-aware decoding need a browser-facing DTO made from directly
-  assignable JSON shapes or a root `ui.PathSetter` that parses and validates the
-  decoded generic value. Custom JSON/text unmarshalers are not invoked;
-  confirmed type mismatches include `time.Time`, base64 `[]byte`, and maps with
-  non-string Go keys.
+- Browser JSON numbers use JavaScript `Number` values. Integers outside
+  `-9007199254740991` through `9007199254740991` may round, and a browser write
+  may commit the rounded value to Go.
+- Represent exact wide integers as built-in strings. Convert `BigInt` values back
+  to strings before `jawsVar`; a Go `json:",string"` tag is not generic
+  round-trip support. Use a built-in string field or implement `ui.PathSetter`.
+- Generic browser writes decode into `any` and do not invoke destination custom
+  unmarshaling. Use a browser-facing DTO compatible with the generic setter or
+  implement `ui.PathSetter` for types such as `time.Time`, `[]byte`, and maps
+  with non-string keys.
 
 ## Clickable template pattern
 

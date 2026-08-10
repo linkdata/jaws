@@ -12,13 +12,11 @@ import (
 // A Radio value must back at most one live [jaws.Element]. Construct distinct
 // Radio values over the same setter to render one bound value more than once.
 //
-// Each Radio binds one independent boolean. When separately bound Radio widgets
-// belong to the same native HTML group, selecting one unchecks its peers without
-// sending input events for those peers, so their Go values are not changed. Use
-// [RequestWriter.RadioGroup] with a single-select [named.BoolArray] whose
-// [named.Bool.Name] values are distinct, or custom setters that clear peers as
-// one synchronized state change and then dirty every changed binding, when Go
-// state must be mutually exclusive.
+// Each Radio binds an independent boolean. An HTML radio group does not group
+// its Go bindings: the browser reports the newly checked radio, not peers it
+// unchecks. Use [RequestWriter.RadioGroup] with a single-select [named.BoolArray]
+// and distinct [named.Bool.Name] values, or coordinated setters that clear peers
+// together and dirty every changed binding.
 type Radio struct{ InputBool }
 
 // NewRadio returns a radio input widget bound to g.
