@@ -110,11 +110,16 @@ var ErrWebsocketOriginWrongHost = errors.New("websocket Origin host mismatch")
 // check fails closed rather than accepting an unverified Origin.
 var ErrWebsocketOriginNoInitial = errors.New("websocket Origin cannot be validated: no initial request")
 
-// ErrRequestCancelled indicates a [Request] was cancelled.
+// ErrRequestCancelled identifies a non-nil cause supplied when JaWS cancels a [Request].
 //
-// The concrete error reachable via [context.Cause] on [Request.Context] wraps the
-// underlying cancellation cause, so it can be matched with [errors.Is] and its cause
-// retrieved with Unwrap. The exported sentinel itself carries no cause.
+// The error returned by [context.Cause] on [Request.Context] matches this
+// sentinel through [errors.Is] and unwraps to the supplied cause. The sentinel
+// itself carries no cause.
+//
+// Cancellation originating from [Jaws.BaseContext] or a context installed by
+// [Request.SetContext] retains that context's cause; JaWS does not wrap it with
+// this sentinel. A JaWS cancellation without a supplied cause is
+// [context.Canceled].
 var ErrRequestCancelled errRequestCancelled
 
 type errRequestCancelled struct {

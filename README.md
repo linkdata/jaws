@@ -841,6 +841,28 @@ go func() {
 }()
 ```
 
+`Jaws.BaseContext` and a context installed by `Request.SetContext` own their
+cancellation causes. In the example, if `cancel` wins, both
+`context.Cause(workCtx)` and `context.Cause(rq.Context())` expose that cause
+unchanged; JaWS does not add a `jaws.ErrRequestCancelled` wrapper. When
+background failures need stable classification, cancel with an
+application-defined sentinel and use `errors.Is(context.Cause(workCtx),
+sentinel)`. `ErrRequestCancelled` identifies a non-nil cause supplied when JaWS
+cancels a Request.
+
+A custom `Jaws.BaseContext` or context returned from `Request.SetContext` may
+implement the optional `AfterFunc(func()) func() bool` method recognized by
+`context.AfterFunc`. Its registration and stop hooks must return promptly and
+must not synchronously call the same Jaws or Request, or wait for work that does.
+Standard-library contexts need no special handling. An interface-only wrapper
+can hide optional methods on a custom context:
+
+```go
+type contextOnly struct {
+	context.Context
+}
+```
+
 ### Security of the WebSocket callback
 
 While the `Jaws` instance is open, each Request gets a non-zero random 64-bit key

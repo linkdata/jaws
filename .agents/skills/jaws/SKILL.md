@@ -263,6 +263,20 @@ On incoming events, JaWS dispatches in this order:
 
 The handler candidate is asked via `JawsClick` / `JawsContextMenu` / `JawsInput`, matched to the event kind; there is no generic `JawsEvent` method. Return `jaws.ErrEventUnhandled` to fall through to the next candidate.
 
+## Request context limits
+
+- `Jaws.BaseContext` and a context installed by `Request.SetContext` own their
+  cancellation causes. If their independent cancellation or deadline wins,
+  the Request context exposes that cause directly; JaWS does not add a
+  `jaws.ErrRequestCancelled` wrapper. Use an application sentinel when
+  caller-owned failure classification matters.
+- A custom BaseContext or SetContext result may implement the optional
+  `AfterFunc(func()) func() bool` method recognized by `context.AfterFunc`. Its
+  registration and stop hooks must return promptly and must not synchronously
+  call the same Jaws or Request, or wait for work that does. Standard-library
+  contexts need no special handling; an interface-only
+  `struct{ context.Context }` wrapper can hide optional methods.
+
 ## Browser interaction and inbound message limits
 
 - The bundled client forwards input, click, and context-menu events only while

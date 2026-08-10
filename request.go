@@ -516,6 +516,10 @@ func (rq *Request) Set(key string, value any) {
 //
 // The context is derived from [Jaws.BaseContext] by default. Unlike the Request
 // pointer, it may be retained by background work.
+//
+// Cancellation originating from [Jaws.BaseContext] or a context installed by
+// [Request.SetContext] retains that context's cause; JaWS does not wrap it with
+// [ErrRequestCancelled].
 func (rq *Request) Context() (ctx context.Context) {
 	rq.mu.RLock()
 	ctx = rq.ctx
@@ -531,10 +535,18 @@ func (rq *Request) Context() (ctx context.Context) {
 // [Request.ServeHTTP] loop promptly, even while it is idle; no WebSocket event or
 // broadcast is required.
 //
+// If the returned context is canceled first, its cause remains unchanged; see
+// [Request.Context].
+//
 // fn runs while the Request lock is held. It must not call methods on the same
 // Request, call code that may do so, or block on work that needs the same
 // Request. SetContext panics if fn is nil. If fn panics, SetContext releases the
 // lock and propagates the panic.
+//
+// If a custom context implements the optional method recognized by
+// [context.AfterFunc], that method and its returned stop function must return
+// promptly and must not synchronously call this Request or its [Jaws], or wait
+// for work that does. Standard-library contexts need no special handling.
 //
 // Background work that must cancel the Request should create a derived context in
 // fn and retain that context's cancellation function, not the Request pointer.
@@ -636,6 +648,10 @@ func (rq *Request) cancel(err error) {
 // It is safe to call synchronously from UI code, for example to terminate a
 // connection that violates a server-side limit. A nil err cancels without a
 // specific cause.
+//
+// If a non-nil err wins the cancellation race, [context.Cause] on
+// [Request.Context] matches [ErrRequestCancelled] and unwraps to err. See
+// [Request.Context] for caller-owned parent-context causes.
 //
 // Do not retain the Request for asynchronous cancellation; use [Request.SetContext]
 // and retain the derived context's cancellation function instead.
