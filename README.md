@@ -450,6 +450,12 @@ fields are left intact and its methods still operate on the finished Request.
 Request identities are never reused, so a stale Element can never come to
 represent an unrelated connection.
 
+Event targets are fixed when each event is accepted. A live target remains
+eligible if it is later removed, whether removal is reported by the browser or
+initiated by the server; an Element removed before acceptance is excluded. A
+handler may therefore receive a deleted Element, whose render, update, and queue
+helpers are no-ops for the rest of the Request.
+
 Dirtying is two-stage: `Request.Dirty` and `Jaws.Dirty` expand and record their
 selectors on the `Jaws` instance, then the serving loop distributes ordinary tags
 across live Requests and each exact `*Element` only to its owner before scheduling

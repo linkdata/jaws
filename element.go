@@ -137,6 +137,10 @@ func (elem *Element) UI() UI {
 // a deleted Element. A request-scoped widget that retains child Elements it
 // creates between render and update calls within one Request lifecycle can use
 // Deleted to detect and discard children removed out-of-band before reuse.
+//
+// An event accepted while the Element is live may still invoke its handler after
+// the Element is later removed from the Request.
+//
 // Deleted is not a lifetime check: it does not report whether the embedded
 // Request still represents the owning connection or make that Request safe to
 // use after its lifecycle.

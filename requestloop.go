@@ -3,9 +3,9 @@ package jaws
 // This file implements the per-request runtime: the message-processing loop that
 // runs on a Request's own goroutines while its WebSocket is connected.
 //
-// [Request.process] is the select loop. Inbound client messages are dispatched by
-// callAllEventHandlers and executed on the event goroutine via eventCaller;
-// broadcasts and tag messages are applied by handleBroadcast and handleRemove;
+// [Request.process] is the select loop. Inbound client events are resolved by
+// resolveEventFnCall and executed on the event goroutine via eventCaller;
+// broadcasts and removal reports are applied by handleBroadcast and handleRemove;
 // dirty elements are rendered into the outbound queue by getSendMsgs, sendQueue
 // and makeUpdateList. onConnect runs the user ConnectFn once the socket is up.
 
@@ -112,7 +112,7 @@ func (rq *Request) handleIncoming(wsmsg wire.WsMsg, eventCallCh chan eventFnCall
 	if wsmsg.Jid.IsValid() {
 		switch wsmsg.What {
 		case what.Input, what.Click, what.ContextMenu, what.Set:
-			rq.queueEvent(eventCallCh, eventFnCall{jid: wsmsg.Jid, wht: wsmsg.What, data: wsmsg.Data})
+			rq.queueEvent(eventCallCh, rq.resolveEventFnCall(wsmsg.Jid, wsmsg.What, wsmsg.Data))
 		case what.Remove:
 			rq.handleRemove(wsmsg.Jid, wsmsg.Data)
 		}
@@ -175,7 +175,7 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 			// they won't be sent out on the WebSocket, but will queue up a
 			// call to the event function (if any).
 			// primary usecase is tests.
-			rq.queueEvent(eventCallCh, eventFnCall{jid: elem.Jid(), wht: tagmsg.What, data: tagmsg.Data})
+			rq.queueEvent(eventCallCh, rq.resolveEventFnCall(elem.Jid(), tagmsg.What, tagmsg.Data))
 		case what.Hook:
 			// Hook messages synchronously invoke the element's event handler; see
 			// [what.Hook]. They exist for testing: the JaWS client never sends Hook,
@@ -245,41 +245,93 @@ func (rq *Request) queue(msg wire.WsMsg) {
 	rq.muQueue.Unlock()
 }
 
-// callAllEventHandlers dispatches a single incoming event to the target
-// element(s) and returns the first result that is not ErrEventUnhandled. A zero
-// id with a Click or ContextMenu carries a tab-separated list of bubbled element
-// jids, which are resolved and tried in order; any other id resolves to a single
-// element. Only frozen Elements are selected, so the atomic frozen load publishes
-// the completed handler slice before it is read without a lock. ErrEventUnhandled
-// is normalized to nil. rq.mu is held only for the element lookups; the handlers
-// themselves run unlocked.
-func (rq *Request) callAllEventHandlers(id Jid, wht what.What, value string) (err error) {
-	var elems []*Element
+// resolveEventFnCall resolves a single incoming event to its eligible target
+// Elements. A zero id with a Click or ContextMenu carries a tab-separated list of
+// bubbled element jids, whose live targets are resolved once each in
+// first-occurrence order; any other id resolves to a single element. Only live,
+// frozen Elements are selected, so the atomic frozen load publishes the completed
+// handler slice before its later lock-free read.
+//
+// Resolution happens before the call enters the event FIFO, fixing target
+// eligibility at acceptance. Later removal from any source does not cancel an
+// accepted event, while an Element removed first cannot be selected. rq.mu
+// protects target lookup; handlers run later without it.
+func (rq *Request) resolveEventFnCall(id Jid, wht what.What, value string) (call eventFnCall) {
+	call.wht = wht
+	call.data = value
 	rq.mu.RLock()
 	if id == 0 {
 		if wht == what.Click || wht == what.ContextMenu {
+			const linearDedupLimit = 32
 			var after string
 			var found bool
-			value, after, found = strings.Cut(value, "\t")
+			var seenMap map[*Element]struct{}
+			call.data, after, found = strings.Cut(value, "\t")
 			for found {
 				var jidStr string
 				jidStr, after, found = strings.Cut(after, "\t")
 				if id = jid.ParseString(jidStr); id > 0 {
 					if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() && e.frozen.Load() {
-						elems = append(elems, e)
+						duplicate := e == call.elem
+						if !duplicate {
+							if seenMap == nil {
+								duplicate = slices.Contains(call.more, e)
+							} else {
+								_, duplicate = seenMap[e]
+							}
+						}
+						if duplicate {
+							continue
+						}
+						if seenMap == nil && call.elem != nil && 1+len(call.more) == linearDedupLimit && after != "" {
+							// Avoid separate deduplication storage for ordinary routes,
+							// then switch before a client-controlled deep route becomes quadratic.
+							seenMap = make(map[*Element]struct{}, linearDedupLimit+1)
+							seenMap[call.elem] = struct{}{}
+							for _, seenElem := range call.more {
+								seenMap[seenElem] = struct{}{}
+							}
+						}
+						if seenMap != nil {
+							seenMap[e] = struct{}{}
+						}
+						switch {
+						case call.elem == nil:
+							call.elem = e
+						case call.more == nil:
+							remainingCap := 1
+							if after != "" {
+								remainingCap += 1 + strings.Count(after, "\t")
+							}
+							// Bound speculative allocation from the client-controlled route.
+							call.more = make([]*Element, 0, min(remainingCap, 8))
+							call.more = append(call.more, e)
+						default:
+							call.more = append(call.more, e)
+						}
 					}
 				}
 			}
 		}
 	} else {
 		if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() && e.frozen.Load() {
-			elems = append(elems, e)
+			call.elem = e
 		}
 	}
 	rq.mu.RUnlock()
+	return
+}
 
-	for _, e := range elems {
-		if err = CallEventHandlers(e.UI(), e, wht, value); !errors.Is(err, ErrEventUnhandled) {
+// invoke calls the resolved Elements in order and returns the first result that
+// is not ErrEventUnhandled. ErrEventUnhandled is normalized to nil.
+func (call eventFnCall) invoke() (err error) {
+	if call.elem != nil {
+		if err = CallEventHandlers(call.elem.UI(), call.elem, call.wht, call.data); !errors.Is(err, ErrEventUnhandled) {
+			return
+		}
+	}
+	for _, e := range call.more {
+		if err = CallEventHandlers(e.UI(), e, call.wht, call.data); !errors.Is(err, ErrEventUnhandled) {
 			return
 		}
 	}
@@ -289,18 +341,28 @@ func (rq *Request) callAllEventHandlers(id Jid, wht what.What, value string) (er
 	return
 }
 
+// callAllEventHandlers resolves and dispatches a single event synchronously.
+func (rq *Request) callAllEventHandlers(id Jid, wht what.What, value string) (err error) {
+	err = rq.resolveEventFnCall(id, wht, value).invoke()
+	return
+}
+
 // queueEvent hands a resolved event-function call to the eventCaller goroutine.
 //
 // eventCallCh is buffered to the outbound capacity; if it is full the request has
 // fallen too far behind to stay consistent (an event would be lost), so it is
 // cancelled rather than dropping the event, mirroring the broadcast back-pressure
 // path in [Jaws.ServeWithTimeout]. cancel takes rq.mu, which the process loop does
-// not hold when calling this.
+// not hold when calling this. Calls without a resolved target are ignored.
 func (rq *Request) queueEvent(eventCallCh chan eventFnCall, call eventFnCall) {
+	if call.elem == nil {
+		return
+	}
 	select {
 	case eventCallCh <- call:
 	default:
-		rq.cancel(fmt.Errorf("%w: %v: eventCallCh full sending %v", ErrRequestOverloaded, rq, call))
+		targets := 1 + len(call.more)
+		rq.cancel(fmt.Errorf("%w: %v: eventCallCh full sending FirstTarget=%v Targets=%d What=%v Data=%q", ErrRequestOverloaded, rq, call.elem.Jid(), targets, call.wht, call.data))
 	}
 }
 
@@ -496,7 +558,7 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 			continue
 		default:
 		}
-		if err := rq.Jaws.Log(rq.callAllEventHandlers(call.jid, call.wht, call.data)); err != nil {
+		if err := rq.Jaws.Log(call.invoke()); err != nil {
 			var m wire.WsMsg
 			m.FillAlert(err)
 			// This error alert is best-effort: unlike queueEvent, which cancels the
