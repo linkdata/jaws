@@ -517,6 +517,12 @@ func (rq *Request) Set(key string, value any) {
 //
 // The context is derived from [Jaws.BaseContext] by default. Unlike the Request
 // pointer, it may be retained by background work.
+//
+// If [Jaws.BaseContext] or a context installed by [Request.SetContext] is
+// canceled or reaches its deadline first, [context.Cause] reports that context's
+// cause directly; JaWS does not add an [ErrRequestCancelled] wrapper. Use
+// [context.Context.Done] or [context.Context.Err] to detect termination, and an
+// application-defined cause when caller-owned cancellation needs classification.
 func (rq *Request) Context() (ctx context.Context) {
 	rq.mu.RLock()
 	ctx = rq.ctx
@@ -532,10 +538,24 @@ func (rq *Request) Context() (ctx context.Context) {
 // [Request.ServeHTTP] loop promptly, even while it is idle; no WebSocket event or
 // broadcast is required.
 //
+// The returned context owns cancellation initiated through its cancellation
+// function or deadline. If that cancellation finishes it first, [context.Cause]
+// on [Request.Context] retains the context's immutable cause; JaWS does not add
+// an [ErrRequestCancelled] wrapper.
+//
 // fn runs while the Request lock is held. It must not call methods on the same
 // Request, call code that may do so, or block on work that needs the same
 // Request. SetContext panics if fn is nil. If fn panics, SetContext releases the
 // lock and propagates the panic.
+//
+// A custom returned context may implement the optional
+// `AfterFunc(func()) func() bool` method recognized by [context.AfterFunc]. During
+// later Request derivation or cancellation, JaWS may invoke that registration
+// method or its returned stop function while internal locks are held. Both hooks
+// must return promptly and must not call methods on the same Request or its
+// [Jaws], directly or through work they wait for. Contexts returned directly by
+// the standard context constructors expose no application hook and need no
+// special handling.
 //
 // Background work that must cancel the Request should create a derived context in
 // fn and retain that context's cancellation function, not the Request pointer.
@@ -637,6 +657,10 @@ func (rq *Request) cancel(err error) {
 // It is safe to call synchronously from UI code, for example to terminate a
 // connection that violates a server-side limit. A nil err cancels without a
 // specific cause.
+//
+// If a non-nil err wins the cancellation race, [context.Cause] on
+// [Request.Context] matches [ErrRequestCancelled] and unwraps to err. See
+// [Request.Context] for caller-owned parent-context causes.
 //
 // Do not retain the Request for asynchronous cancellation; use [Request.SetContext]
 // and retain the derived context's cancellation function instead.

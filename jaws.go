@@ -101,6 +101,15 @@ type Jid = jid.Jid // convenience alias
 // [Jaws.ServeWithTimeout]; mutating one after serving has begun is an
 // unsynchronized write and is not supported. Methods document their own
 // concurrency behavior and may be called concurrently when stated.
+//
+// A custom BaseContext or a custom context installed through
+// [Request.SetContext] may implement the optional
+// `AfterFunc(func()) func() bool` method recognized by [context.AfterFunc]. JaWS
+// may invoke that registration method or its returned stop function while
+// internal Jaws or Request locks are held. Both hooks must return promptly and
+// must not call methods on the same Jaws or Request, directly or through work
+// they wait for. Contexts returned directly by the standard context constructors
+// expose no application hook and need no special handling.
 type Jaws struct {
 	CookieName              string          // Name for session cookies; defaults to a name derived from the executable ([assets.DefaultCookieName]), falling back to "jaws"
 	AutoSession             bool            // Create and associate a session during a successful WebSocket upgrade when a Request has none. Defaults to false.
@@ -108,7 +117,7 @@ type Jaws struct {
 	Logger                  Logger          // Optional logger to use
 	Debug                   bool            // Set to true to enable debug info in generated HTML code. Call GenerateHeadHTML after changing it.
 	MakeAuth                MakeAuthFn      // Function to create ui.With.Auth for Templates. If nil, templates get the fail-open DefaultAuth (IsAdmin()==true for everyone); set it to enforce authorization. See DefaultAuth.
-	BaseContext             context.Context // Non-nil base context for Requests, set to context.Background() in New()
+	BaseContext             context.Context // Non-nil parent context for Requests; New uses context.Background(). See Request.Context.
 	WebSocketPingInterval   time.Duration   // Interval between keepalive pings on active WebSocket connections. Defaults to DefaultWebSocketPingInterval. Set <=0 to disable keepalive pings.
 	MaxPendingRequestsPerIP int             // Maximum number of unclaimed Requests per client IP. Defaults to DefaultMaxPendingRequestsPerIP. Set <=0 to disable the cap.
 	webSocketTimeout        time.Duration   // timeout duration passed to ServeWith
