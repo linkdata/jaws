@@ -14,8 +14,7 @@ import (
 //
 // A Range value must back at most one live [jaws.Element]. Construct distinct
 // Range values over the same source to render one bound value more than once.
-// Construct a Range with [NewRange]; using its zero value as a widget panics. Range
-// requires ordinary rendering and is not supported by [RequestWriter.Register].
+// Construct a Range with [NewRange]; using its zero value as a widget panics.
 // Editable Ranges send live browser input while their thumb moves.
 type Range struct {
 	Input

@@ -15,18 +15,27 @@ func (registerUI) JawsRender(*jaws.Element, io.Writer, []any) error {
 	return nil
 }
 
-// Register binds updater to a template-authored HTML element.
+// Register binds an updater to otherwise static template-authored HTML.
+//
+// Register is an advanced escape hatch primarily for updating HTML whose markup
+// is written by the surrounding template. The registered HTML is intended to
+// contain no JaWS widgets. Render widgets through [RequestWriter.NewUI] or their
+// corresponding RequestWriter helpers instead.
+//
+// Register makes no compatibility guarantees for passing a standard widget as
+// updater or placing JaWS widgets inside the registered HTML. Their behavior in
+// either position is unspecified.
 //
 // The returned [jid.Jid] must be the element's id. Register never calls
 // [jaws.Renderer.JawsRender], so updater must work without render-time
-// initialization. Prefer [RequestWriter.NewUI] or a widget helper when the widget
-// can render its own element.
+// initialization.
 //
 // Register tags the Element with updater, applies tag and event-handler params,
 // attaches event-handler methods implemented by updater, and invokes
 // [jaws.Updater.JawsUpdate] once for the initial browser state. Updater handlers
-// are tried only after applicable param handlers return [jaws.ErrEventUnhandled].
-// HTML attribute params have no effect; write attributes in the template.
+// are tried only after applicable param handlers return
+// [jaws.ErrEventUnhandled]. HTML attribute params have no effect; write
+// attributes in the template.
 //
 // The updater must be non-nil, comparable at runtime, equal to itself, and usable
 // as a tag. A typed nil is invoked normally and must tolerate its nil receiver.
@@ -37,12 +46,6 @@ func (registerUI) JawsRender(*jaws.Element, io.Writer, []any) error {
 // A surrounding [Template] owns and cleans up the registered Element. Outside a
 // Template, it remains registered until explicitly deleted, DOM removal is
 // reported, or its [jaws.Request] ends; always emit the returned Jid.
-//
-// [Container], [Tbody], and [Select] support registration, though ordinary
-// rendering is preferable. A registered Select omits its handler-derived tag for
-// post-input dirtying. Typed input widgets omit getter-derived attributes,
-// handlers, and their getter-derived dirty tag. [Number], [Range], [JsVar], and a
-// [Template] with a non-empty OuterHTMLTag require ordinary rendering.
 //
 // The returned Jid is suitable for including as an HTML id attribute:
 //

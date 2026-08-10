@@ -612,6 +612,12 @@ request processing loop, so custom `JawsUpdate` implementations should keep
 their work deterministic and report unrecoverable failures through
 `Element.Request.MustLog()` or `Element.Jaws.MustLog()`.
 
+`ui.RequestWriter.Register` is an advanced escape hatch primarily for attaching a
+custom, render-independent updater to otherwise static template-authored HTML.
+The registered HTML is intended to contain no JaWS widgets. Render standard
+widgets through their normal helpers; `Register` makes no compatibility guarantees
+for using them as its updater or inside its HTML.
+
 ### Data binding
 
 HTML input elements bind browser state to Go values. Text inputs use `string`,
@@ -643,8 +649,6 @@ width. Floating-point inputs enforce their bound type's width; `float32` values
 parse and format at 32-bit precision.
 A getter-only Number renders `readonly`; a getter-only Range renders `disabled`.
 Static numeric values passed to the template helpers use these getter-only forms.
-Number and Range require ordinary rendering and are not supported by
-`RequestWriter.Register`.
 
 Number sends edits on the browser's `change` event. Pending edits remain
 browser-local until then. Range sends live `input` events while its thumb moves.
