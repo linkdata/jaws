@@ -1840,6 +1840,62 @@ func TestJaws_GenerateHeadHTML_StoresCSPBuiltBySecureHeaders(t *testing.T) {
 	}
 }
 
+func TestJaws_GenerateHeadHTML_AllowsExternalFetchPreload(t *testing.T) {
+	const ext = ".jawscspfetch"
+	if err := mime.AddExtensionType(ext, "application/wasm"); err != nil {
+		t.Fatal(err)
+	}
+
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	const origin = "https://CDN.Example.test:8443"
+	extras := []string{
+		origin + "/module" + ext,
+		origin + "/worker" + ext + "?v=2",
+		"/local" + ext,
+	}
+	if err = jw.GenerateHeadHTML(extras...); err != nil {
+		t.Fatal(err)
+	}
+
+	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	var head strings.Builder
+	if err = rq.HeadHTML(&head); err != nil {
+		t.Fatal(err)
+	}
+	for _, resource := range extras {
+		want := `href="` + strings.ReplaceAll(resource, "&", "&amp;") + `" as="fetch" type="application/wasm" crossorigin="anonymous"`
+		if !strings.Contains(head.String(), want) {
+			t.Fatalf("head HTML missing fetch preload %q:\n%s", want, head.String())
+		}
+	}
+
+	const source = "https://cdn.example.test:8443"
+	csp := jw.ContentSecurityPolicy()
+	if !strings.Contains(csp, "connect-src 'self' "+source) {
+		t.Fatalf("CSP does not allow external fetch preload origin %q:\n%s", source, csp)
+	}
+	if got := strings.Count(csp, source); got != 1 {
+		t.Fatalf("fetch preload origin occurs %d times in CSP, want 1:\n%s", got, csp)
+	}
+	if strings.Contains(csp, "/module") || strings.Contains(csp, "/worker") {
+		t.Fatalf("CSP source includes a resource path:\n%s", csp)
+	}
+
+	rr := httptest.NewRecorder()
+	jw.SecureHeadersMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(
+		rr,
+		httptest.NewRequest(http.MethodGet, "https://example.test/", nil),
+	)
+	if got := rr.Result().Header.Get("Content-Security-Policy"); got != csp {
+		t.Fatalf("middleware CSP = %q, want %q", got, csp)
+	}
+}
+
 // TestJaws_GenerateHeadHTML_DeduplicatesBuiltinResources verifies that re-listing the
 // built-in JaWS JS and CSS resources as extras is a no-op: both are already prepended,
 // so the regenerated head HTML and CSP must be identical to the built-ins-only output

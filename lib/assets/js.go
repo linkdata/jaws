@@ -24,6 +24,50 @@ var JavascriptText string
 //go:embed jaws.css
 var JawsCSS string
 
+type resourceDestination uint8
+
+const (
+	resourceDestinationNone resourceDestination = iota
+	resourceDestinationScript
+	resourceDestinationStyle
+	resourceDestinationImage
+	resourceDestinationFont
+	resourceDestinationFetch
+)
+
+func resourceMetadata(u *url.URL) (destination resourceDestination, mimetype string) {
+	if u != nil {
+		ext := strings.ToLower(path.Ext(u.Path))
+		mimetype = mime.TypeByExtension(ext)
+		mimetype, _, _ = strings.Cut(mimetype, ";")
+		switch ext {
+		case ".js":
+			destination = resourceDestinationScript
+		case ".css":
+			destination = resourceDestinationStyle
+		default:
+			switch lowmime := strings.ToLower(mimetype); {
+			case strings.HasPrefix(lowmime, "image/"):
+				destination = resourceDestinationImage
+			case strings.HasPrefix(lowmime, "font/"):
+				destination = resourceDestinationFont
+			default:
+				destination = resourceDestinationFetch
+			}
+		}
+	}
+	return
+}
+
+// IsFetchPreload reports whether [PreloadHTML] emits u with the fetch destination.
+//
+// A nil URL returns false.
+func IsFetchPreload(u *url.URL) (yes bool) {
+	destination, _ := resourceMetadata(u)
+	yes = destination == resourceDestinationFetch
+	return
+}
+
 // PreloadHTML returns HTML code to load the given resources efficiently.
 //
 // JavaScript and CSS files are emitted as script and stylesheet tags. Image and
@@ -43,42 +87,33 @@ func PreloadHTML(urls ...*url.URL) (htmlCode, faviconURL string) {
 	var favicontype string
 	var buf []byte
 	for _, u := range urls {
-		if u == nil {
+		destination, mimetype := resourceMetadata(u)
+		if destination == resourceDestinationNone {
 			continue
 		}
 		var asattr string
 		var crossorigin bool
-		ext := strings.ToLower(path.Ext(u.Path))
-		mimetype := mime.TypeByExtension(ext)
-		mimetype, _, _ = strings.Cut(mimetype, ";")
 		urlstr := u.String()
-		switch ext {
-		case ".js":
+		switch destination {
+		case resourceDestinationScript:
 			jsurls = append(jsurls, urlstr)
 			continue
-		case ".css":
+		case resourceDestinationStyle:
 			cssurls = append(cssurls, urlstr)
 			continue
-		default:
-			// Match MIME families on the "type/" prefix (case-insensitively) so
-			// unrelated types such as "imagery/*" or "fontastic/*" are not mistaken
-			// for "image/*" or "font/*".
-			lowmime := strings.ToLower(mimetype)
-			// The URL and MIME type provide no more specific consumer destination
-			// for other resources, so fetch is the actionable generic fallback.
+		case resourceDestinationFetch:
 			asattr = "fetch"
 			crossorigin = true
-			if strings.HasPrefix(lowmime, "image/") {
-				asattr = "image"
-				crossorigin = false
-				if strings.HasPrefix(strings.ToLower(path.Base(u.Path)), "favicon") {
-					favicontype = mimetype
-					faviconURL = urlstr
-					continue
-				}
-			} else if strings.HasPrefix(lowmime, "font/") {
-				asattr = "font"
+		case resourceDestinationImage:
+			asattr = "image"
+			if strings.HasPrefix(strings.ToLower(path.Base(u.Path)), "favicon") {
+				favicontype = mimetype
+				faviconURL = urlstr
+				continue
 			}
+		case resourceDestinationFont:
+			asattr = "font"
+			crossorigin = true
 		}
 		buf = append(buf, `<link rel="preload"`...)
 		buf = htmlio.AppendAttr(buf, "href", urlstr)

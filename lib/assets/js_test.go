@@ -146,6 +146,44 @@ func Test_PreloadHTML(t *testing.T) {
 	}
 }
 
+func TestIsFetchPreload(t *testing.T) {
+	const (
+		imageExt = ".jawsfetchimage"
+		fontExt  = ".jawsfetchfont"
+		wasmExt  = ".jawsfetchwasm"
+	)
+	for ext, typ := range map[string]string{
+		imageExt: "image/jaws-test",
+		fontExt:  "font/jaws-test",
+		wasmExt:  "application/wasm",
+	} {
+		if err := mime.AddExtensionType(ext, typ); err != nil {
+			t.Fatalf("AddExtensionType(%q, %q): %v", ext, typ, err)
+		}
+	}
+
+	for _, tc := range []struct {
+		name string
+		u    *url.URL
+		want bool
+	}{
+		{name: "nil"},
+		{name: "JavaScript", u: &url.URL{Path: "app.JS"}},
+		{name: "stylesheet", u: &url.URL{Path: "app.CSS"}},
+		{name: "image", u: &url.URL{Path: "image" + imageExt}},
+		{name: "font", u: &url.URL{Path: "font" + fontExt}},
+		{name: "WebAssembly", u: &url.URL{Path: "module" + wasmExt}, want: true},
+		{name: "module JavaScript", u: &url.URL{Path: "app.mjs"}, want: true},
+		{name: "extensionless", u: &url.URL{Path: "data"}, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsFetchPreload(tc.u); got != tc.want {
+				t.Fatalf("IsFetchPreload(%v) = %t, want %t", tc.u, got, tc.want)
+			}
+		})
+	}
+}
+
 func Test_PreloadHTML_FetchAndFontPreloadMetadata(t *testing.T) {
 	const (
 		wasmExt = ".jawspreloadwasm"

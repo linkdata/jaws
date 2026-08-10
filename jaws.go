@@ -438,7 +438,7 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 				headPrefix += `<meta name="jawsDebug" content="true">`
 			}
 			headPrefix += `<meta name="jawsKey" content="`
-			cspHeader := secureheaders.BuildContentSecurityPolicy(urls)
+			cspHeader := buildContentSecurityPolicy(urls)
 			jw.mu.Lock()
 			jw.headPrefix = headPrefix
 			jw.faviconURL = faviconURL
