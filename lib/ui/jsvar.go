@@ -171,26 +171,15 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // valid bindings. Do not use a browser-owned property such as window.name, or a
 // global owned by unrelated code.
 //
-// Values cross the browser boundary through [json.Marshal], [json.Unmarshal],
-// and the browser's JSON.parse and JSON.stringify. JSON numbers therefore become
-// JavaScript Number values rather than retaining a Go numeric type or integer
-// width. Every integer in the inclusive range -9007199254740991 through
-// 9007199254740991 is represented exactly. Outside that safe range, not every
-// integer is representable. A root or nested signed or unsigned integer may be
-// rounded in the initial browser snapshot or a server broadcast, and a later
-// browser write can commit the rounded value to Go. JsVar does not reject or
-// transform such values.
+// Browser JSON numbers use JavaScript Number values. Signed and unsigned
+// integers outside -9007199254740991 through 9007199254740991 may be rounded in
+// a snapshot or broadcast; a later browser write may store the rounded value in
+// Go.
 //
-// When exact wide integers matter, use an application-level JSON representation
-// such as a decimal field of Go's built-in string type in T. Browser code may
-// convert the string to a BigInt for calculations, but must convert it back to a
-// string before calling jawsVar because JSON.stringify does not encode BigInt
-// values directly. A json:",string" tag makes Go-to-browser encoding use a JSON
-// string, but is not by itself sufficient for generic browser writes: JsVar
-// decodes browser input into an untyped value before assignment, so the resulting
-// string is not assignable to an integer field. Keep the bound field as a built-in
-// string or implement [PathSetter] to parse and validate the encoded value. Pass
-// the same string representation to browser-facing [JsVar.JawsSetPath] calls.
+// Represent exact wide integers as built-in string fields and convert them
+// explicitly. Browser code must convert BigInt values back to strings before
+// calling jawsVar. A json:",string" tag is not generic round-trip support; use a
+// built-in string field or a [PathSetter].
 //
 // The variable name and browser-side jawsVar paths must be
 // application-controlled. The browser rejects exact "__proto__" path
@@ -563,7 +552,6 @@ func (jsvar *JsVar[T]) JawsInput(elem *jaws.Element, value string) (err error) {
 // Create a fresh JsVar for each live [jaws.Element]; l and v may be shared by
 // distinct request-scoped JsVar values. Use [JsVarMaker] when construction
 // depends on the current request or the maker is stored in shared handler data.
-// See [JsVar] for the browser's JSON number precision limits.
 func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 	return &JsVar[T]{RWLocker: bind.AsRWLocker(l), Ptr: v}
 }
