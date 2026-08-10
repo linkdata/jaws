@@ -1915,6 +1915,25 @@ func (h *requestEventOrderHandler) JawsContextMenu(*Element, Click) error {
 	return nil
 }
 
+type requestRouteOrderHandler struct {
+	name  string
+	calls *[]string
+	err   error
+}
+
+func (h requestRouteOrderHandler) call() error {
+	*h.calls = append(*h.calls, h.name)
+	return h.err
+}
+
+func (h requestRouteOrderHandler) JawsClick(*Element, Click) error {
+	return h.call()
+}
+
+func (h requestRouteOrderHandler) JawsContextMenu(*Element, Click) error {
+	return h.call()
+}
+
 type requestClickHandlerFunc func(*Element, Click) error
 
 func (fn requestClickHandlerFunc) JawsClick(elem *Element, click Click) error {
@@ -2037,6 +2056,31 @@ func TestRequest_IncomingRemovePreservesAcceptedEventOrder(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestRequest_EventRouteOrder(t *testing.T) {
+	for _, wht := range []what.What{what.Click, what.ContextMenu} {
+		t.Run(wht.String(), func(t *testing.T) {
+			rq := newTestRequest(t)
+			defer rq.Close()
+			var calls []string
+			first := requestRouteOrderHandler{name: "first", calls: &calls, err: ErrEventUnhandled}
+			second := requestRouteOrderHandler{name: "second", calls: &calls}
+			if err := rq.UI(testDivWidget{inner: "first"}, first); err != nil {
+				t.Fatal(err)
+			}
+			if err := rq.UI(testDivWidget{inner: "second"}, second); err != nil {
+				t.Fatal(err)
+			}
+			data := "1 2 0 name\tJid.1\tJid.2"
+			if err := rq.callAllEventHandlers(0, wht, data); err != nil {
+				t.Fatal(err)
+			}
+			if want := []string{"first", "second"}; !reflect.DeepEqual(calls, want) {
+				t.Fatalf("handler order = %v, want %v", calls, want)
+			}
+		})
 	}
 }
 
