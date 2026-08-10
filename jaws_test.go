@@ -1834,7 +1834,11 @@ func TestJaws_GenerateHeadHTML_StoresCSPBuiltBySecureHeaders(t *testing.T) {
 		urls = append(urls, mustParseURL(t, extra))
 	}
 
-	wantCSP := secureheaders.BuildContentSecurityPolicy(urls)
+	resources := make([]secureheaders.Resource, 0, len(urls))
+	for _, u := range urls {
+		resources = append(resources, secureheaders.Resource{URL: u})
+	}
+	wantCSP := secureheaders.BuildContentSecurityPolicy(resources...)
 	if got := jw.ContentSecurityPolicy(); got != wantCSP {
 		t.Fatalf("unexpected CSP:\nwant: %q\ngot:  %q", wantCSP, got)
 	}
@@ -1874,16 +1878,27 @@ func TestJaws_GenerateHeadHTML_AllowsExternalFetchPreload(t *testing.T) {
 		}
 	}
 
-	const source = "https://cdn.example.test:8443"
+	resources := []secureheaders.Resource{
+		{URL: mustParseURL(t, jw.serveCSS.Name)},
+		{URL: mustParseURL(t, jw.serveJS.Name)},
+	}
+	for _, extra := range extras {
+		u := mustParseURL(t, extra)
+		resources = append(resources, secureheaders.Resource{URL: u})
+		resources = append(resources, secureheaders.Resource{
+			URL:         u,
+			Destination: secureheaders.ResourceDestinationConnect,
+		})
+	}
+	wantCSP := secureheaders.BuildContentSecurityPolicy(resources...)
 	csp := jw.ContentSecurityPolicy()
+	if csp != wantCSP {
+		t.Fatalf("unexpected CSP:\nwant: %q\ngot:  %q", wantCSP, csp)
+	}
+
+	const source = "https://cdn.example.test:8443"
 	if !strings.Contains(csp, "connect-src 'self' "+source) {
 		t.Fatalf("CSP does not allow external fetch preload origin %q:\n%s", source, csp)
-	}
-	if got := strings.Count(csp, source); got != 1 {
-		t.Fatalf("fetch preload origin occurs %d times in CSP, want 1:\n%s", got, csp)
-	}
-	if strings.Contains(csp, "/module") || strings.Contains(csp, "/worker") {
-		t.Fatalf("CSP source includes a resource path:\n%s", csp)
 	}
 
 	rr := httptest.NewRecorder()

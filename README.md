@@ -543,7 +543,7 @@ Broadcasting APIs are not safe before the processing loop starts. In particular,
 
 Use `(*Jaws).SecureHeadersMiddleware(next)` to wrap page handlers with a
 security-header baseline and a `Content-Security-Policy` that matches the
-resources currently configured for JaWS.
+supported resources currently configured for JaWS.
 
 The baseline headers come from
 [`github.com/linkdata/secureheaders`](https://github.com/linkdata/secureheaders).

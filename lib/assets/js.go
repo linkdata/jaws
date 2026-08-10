@@ -59,7 +59,7 @@ func resourceMetadata(u *url.URL) (destination resourceDestination, mimetype str
 	return
 }
 
-// IsFetchPreload reports whether [PreloadHTML] emits u with the fetch destination.
+// IsFetchPreload reports whether [PreloadHTML] emits a fetch preload for u.
 //
 // A nil URL returns false.
 func IsFetchPreload(u *url.URL) (yes bool) {
@@ -70,11 +70,11 @@ func IsFetchPreload(u *url.URL) (yes bool) {
 
 // PreloadHTML returns HTML code to load the given resources efficiently.
 //
-// JavaScript and CSS files are emitted as script and stylesheet tags. Image and
-// font resources are emitted as preloads for their respective destinations;
-// other resources use the fetch destination. Font and fetch preloads use
-// anonymous CORS. Favicon image URLs are returned separately. A recognized MIME
-// type is included in the preload's type attribute.
+// Files with .js and .css extensions are emitted as script and stylesheet tags.
+// Image and font resources are emitted as preloads for their respective
+// destinations; other resources use the fetch destination. Font and fetch
+// preloads use anonymous CORS. Favicon image URLs are returned separately. A
+// recognized MIME type is included in the preload's type attribute.
 //
 // Nil URL arguments are skipped. A resource is returned as faviconURL only when
 // its base name begins with "favicon" and its MIME type (resolved from the file

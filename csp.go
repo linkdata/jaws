@@ -2,57 +2,24 @@ package jaws
 
 import (
 	"net/url"
-	"slices"
-	"strings"
 
 	"github.com/linkdata/jaws/lib/assets"
 	"github.com/linkdata/secureheaders"
 )
 
 func buildContentSecurityPolicy(resourceURLs []*url.URL) (value string) {
-	value = secureheaders.BuildContentSecurityPolicy(resourceURLs)
-	var sources []string
+	resources := make([]secureheaders.Resource, 0, len(resourceURLs)*2)
 	for _, u := range resourceURLs {
+		// Automatic inference may permit a URL in another directive; the fetch
+		// preload itself also requires connect-src.
+		resources = append(resources, secureheaders.Resource{URL: u})
 		if assets.IsFetchPreload(u) {
-			if source := fetchPreloadSource(u); source != "" {
-				sources = append(sources, source)
-			}
+			resources = append(resources, secureheaders.Resource{
+				URL:         u,
+				Destination: secureheaders.ResourceDestinationConnect,
+			})
 		}
 	}
-	if len(sources) > 0 {
-		value = addConnectSources(value, sources)
-	}
+	value = secureheaders.BuildContentSecurityPolicy(resources...)
 	return
-}
-
-func fetchPreloadSource(u *url.URL) (source string) {
-	if u != nil && u.Host != "" {
-		scheme := strings.ToLower(u.Scheme)
-		switch scheme {
-		case "":
-			source = strings.ToLower(u.Host)
-		case "http", "https":
-			source = scheme + "://" + strings.ToLower(u.Host)
-		}
-	}
-	return
-}
-
-func addConnectSources(value string, sources []string) string {
-	const prefix = "connect-src "
-	directives := strings.Split(value, "; ")
-	for i, directive := range directives {
-		if fields, ok := strings.CutPrefix(directive, prefix); ok {
-			values := strings.Fields(fields)
-			values = append(values, sources...)
-			slices.Sort(values)
-			values = slices.Compact(values)
-			directives[i] = prefix + strings.Join(values, " ")
-			value = strings.Join(directives, "; ")
-			return value
-		}
-	}
-	// A missing connect-src means the dependency's policy shape changed. Keep
-	// its complete policy instead of replacing the security baseline here.
-	return value
 }
