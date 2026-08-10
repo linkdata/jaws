@@ -25,6 +25,9 @@ import (
 // and must tolerate its nil receiver.
 //
 // Select supports one selected option; a multiple select is unsupported.
+// A completed native form reset changes browser state without an input/change
+// event, so it does not update the Go binding. Reset the authoritative selection
+// from a JaWS-handled button with type="button", then dirty its tag.
 type Select struct {
 	handler named.SelectHandler
 }
@@ -35,6 +38,8 @@ var (
 )
 
 // NewSelect returns a single-selection Select backed by handler.
+//
+// See [Select] for native reset semantics.
 func NewSelect(handler named.SelectHandler) Select {
 	return Select{handler: handler}
 }
@@ -83,6 +88,7 @@ func (u Select) JawsInput(elem *jaws.Element, value string) (err error) {
 //
 // HTML attribute params are applied to the select element, but the multiple
 // attribute is unsupported because Select stores one selected option name.
+// See [Select] for native reset semantics.
 func (rw RequestWriter) Select(handler named.SelectHandler, params ...any) error {
 	return rw.NewUI(NewSelect(handler), params...)
 }

@@ -152,6 +152,9 @@ are first offered to any extra objects added to the Element, in
 reverse registration order (last added first). If none handle the event, the Element's UI type is
 invoked. If none handle the event, it is ignored.
 
+The bundled client sends input, set, click, and context-menu messages only while
+its WebSocket is open and does not queue them for later delivery.
+
 Event handlers should return `ErrEventUnhandled` if they didn't
 handle the event or want to pass it to the next handler.
 
@@ -338,6 +341,14 @@ client/server protocol code:
 
 * The browser is not trusted. Incoming frames are validated (`What`, `Jid`,
   framing, quoting) and invalid frames are ignored/dropped.
+* Each inbound WebSocket message is limited to 32 KiB. The bundled client does
+  not chunk `Input`, `Set`, `Click`, `ContextMenu`, or `Remove`; an oversized
+  message closes the connection. The limit covers the complete protocol payload
+  after UTF-8 encoding, so there is no fixed maximum application-value length.
+  Keep text values, click/context-menu names, and `jawsVar` writes conservatively
+  sized; use HTTP uploads for large values and independently updated wrappers
+  for large dynamic trees. `JsVar.ClientCheck` and `JSONSizeCheck` run after
+  receipt and cannot enforce this transport limit.
 * `what.Remove` means remove child element(s). For browser-originated `Remove`
   messages, the WebSocket `Jid` identifies the parent/container in the DOM and
   `Data` carries removed managed child IDs. The server only removes child IDs
@@ -657,6 +668,26 @@ checkable inputs use `bool`, and date inputs use `time.Time`. `ui.Number` and
 editable when the source also implements `bind.Setter[T]`. Numeric types include
 signed and unsigned integers, `uintptr`, `float32`, `float64`, and named types
 with one of those underlying types.
+
+When interaction before the initial WebSocket opens must be prevented, render
+native controls disabled or make the interactive region inert. A request
+`ConnectFn` can update request-local readiness and dirty the request-specific
+readiness tag used by the Template, or the exact Element whose custom updater
+removes the gate.
+
+Managed inputs and selects do not support native HTML form reset. A
+`<button type="reset">` or `form.reset()` changes browser values without the
+per-control input/change events JaWS transports, so it does not update Go state.
+Use a JaWS-handled button with `type="button"` that resets the authoritative Go
+values and dirties their tags.
+
+Each `ui.Radio` binds one independent boolean. Radios in the same native HTML
+group, as determined by their name and form/tree scope, do not become a
+server-side group. The browser unchecks peers without sending their input
+events, so separately bound values can diverge. Use
+`RequestWriter.RadioGroup` with a single-select `named.BoolArray` whose
+`named.Bool.Name` values are distinct, or custom setters that clear peers as one
+synchronized state change and then dirty every changed binding.
 
 Since all data access needs to be protected with locks, you will usually use
 `bind.New()` to create a `bind.Binder[T]` that combines a (RW)Locker and a

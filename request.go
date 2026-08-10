@@ -42,6 +42,12 @@ const webSocketReadLimit = 32 * 1024
 // processed after it returns nil. The buffer is bounded, so the function should
 // return promptly; normal [ErrRequestOverloaded] handling applies if it fills.
 //
+// Events before the WebSocket opens are not replayed. To prevent early
+// interaction, initially disable native controls or make the interactive region
+// inert, then have ConnectFn update request-local readiness and dirty the
+// request-specific readiness tag used by the Template, or the exact Element
+// whose custom updater removes the gate.
+//
 // Returning an error aborts the Request, discards its buffered broadcasts, and
 // closes the WebSocket connection without sending a failure message. Broadcasts
 // already delivered to other active Requests are unaffected. The Request pointer
@@ -1173,6 +1179,11 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, pingInterval, wsTimeout time
 // Requires [Jaws.UseRequest] to have been successfully called for the [Request].
 // The JaWS processing loop ([Jaws.Serve] or [Jaws.ServeWithTimeout]) must also
 // be running so the request can subscribe to broadcasts and unsubscribe on exit.
+//
+// Each inbound WebSocket message is limited to 32 KiB. The bundled client does
+// not chunk Input, Set, Click, ContextMenu, or Remove messages; oversized
+// messages close the connection. The limit covers the entire protocol payload
+// after UTF-8 encoding, so no fixed application-value length is guaranteed.
 func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if rq.startServe() {
 		defer rq.stopServe()

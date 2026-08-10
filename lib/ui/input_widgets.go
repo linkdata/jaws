@@ -29,6 +29,10 @@ import (
 // value can reconcile rejected or normalized browser input. Tags supplied as
 // render parameters register the Element but do not replace that dirty target.
 // Without a valid setter-derived target, automatic reconciliation does not occur.
+//
+// A completed native form reset changes browser state without an input/change
+// event, so it does not update the Go binding. Reset authoritative Go values
+// from a JaWS-handled button with type="button", then dirty their tags.
 type Input struct {
 	// tag is the dirty tag, written once during render and read on the event
 	// goroutine (JawsInput). The render-completes-before-events lifecycle makes

@@ -192,6 +192,11 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // Use a browser-facing DTO compatible with the generic setter, or implement
 // [PathSetter] to parse and validate the decoded value.
 //
+// While the WebSocket is open, jawsVar sends one complete message per matching
+// live binding, subject to [jaws.Request.ServeHTTP]'s inbound limit.
+// [JsVar.ClientCheck] runs only after receipt and cannot enforce that limit. Use
+// a separate upload endpoint for large data.
+//
 // The variable name and browser-side jawsVar paths must be
 // application-controlled. The browser rejects exact "__proto__" path
 // components; put user data in values, not names or paths.

@@ -11,11 +11,18 @@ import (
 //
 // A Radio value must back at most one live [jaws.Element]. Construct distinct
 // Radio values over the same setter to render one bound value more than once.
+//
+// Each Radio binds an independent boolean. An HTML radio group does not group
+// its Go bindings: the browser reports the newly checked radio, not peers it
+// unchecks. Use [RequestWriter.RadioGroup] with a single-select [named.BoolArray]
+// and distinct [named.Bool.Name] values, or coordinated setters that clear peers
+// together and dirty every changed binding.
 type Radio struct{ InputBool }
 
 // NewRadio returns a radio input widget bound to g.
 //
 // For writable use, g must provide the setter-derived dirty target described by [Input].
+// See [Radio] for grouping semantics.
 func NewRadio(g bind.Setter[bool]) *Radio { return &Radio{InputBool{Setter: g}} }
 
 // JawsRender renders ui as an HTML radio input.
@@ -24,6 +31,8 @@ func (u *Radio) JawsRender(elem *jaws.Element, w io.Writer, params []any) error 
 }
 
 // Radio renders an HTML radio input.
+//
+// See [Radio] for grouping semantics.
 func (rw RequestWriter) Radio(value any, params ...any) error {
 	return rw.NewUI(NewRadio(bind.MakeSetter[bool](value)), params...)
 }

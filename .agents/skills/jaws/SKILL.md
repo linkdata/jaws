@@ -263,6 +263,32 @@ On incoming events, JaWS dispatches in this order:
 
 The handler candidate is asked via `JawsClick` / `JawsContextMenu` / `JawsInput`, matched to the event kind; there is no generic `JawsEvent` method. Return `jaws.ErrEventUnhandled` to fall through to the next candidate.
 
+## Browser interaction and inbound message limits
+
+- The bundled client forwards input, click, and context-menu events only while
+  its WebSocket is open and does not replay earlier events. When early
+  interaction matters, disable native controls or make the interactive region
+  inert, then use `Request.SetConnectFn` to update request-local readiness and
+  dirty the request-specific readiness tag used by the Template, or the exact
+  Element whose custom updater removes the gate.
+- Native form reset is unsupported for managed inputs and Select. A reset button
+  or `form.reset()` changes browser state without the per-control events JaWS
+  transports. Use a JaWS-handled button with `type="button"` to reset Go state and
+  dirty the affected tags.
+- A `ui.Radio` is one independent boolean binding. Radios in the same native
+  HTML group do not become a server-side group because the browser does not send
+  input events for peers it unchecks. Use `RequestWriter.RadioGroup` with a
+  single-select `named.BoolArray` whose `named.Bool.Name` values are distinct, or
+  coordinated setters that clear peers as one synchronized state change and
+  then dirty every changed binding.
+- Every browser-to-server WebSocket message is limited to 32 KiB. The client
+  does not chunk `Input`, `Set`, `Click`, `ContextMenu`, or `Remove`; an
+  oversized message closes the connection. Keep text values,
+  click/context-menu names, and `jawsVar` writes conservatively sized; use HTTP
+  uploads for large values and smaller independently updated wrappers for large
+  trees.
+  `JsVar.ClientCheck` runs after receipt and cannot enforce the transport limit.
+
 ## JsVar JSON representation limits
 
 - Browser JSON numbers use JavaScript `Number` values. Integers outside

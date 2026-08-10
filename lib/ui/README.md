@@ -127,6 +127,34 @@ their content through `bind.MakeHTMLGetter`. Plain strings are treated as truste
 HTML and are not escaped; use a `bind.Getter[string]`, `bind.StringGetterFunc`,
 or `fmt.Stringer` for string content that should be escaped.
 
+## Browser input boundaries
+
+The bundled client forwards managed input, click, and context-menu events only
+while its WebSocket is open and does not replay earlier events. When early
+interaction matters, disable native controls or make the interactive region
+inert, then use a request `ConnectFn` to update request-local readiness and dirty
+the request-specific readiness tag used by the Template, or the exact Element
+whose custom updater removes the gate.
+
+Native form reset is not a bound input operation. `<button type="reset">` and
+`form.reset()` change browser controls without the per-control input/change
+events JaWS observes. Use a JaWS-handled button with `type="button"` to reset
+authoritative Go values and dirty their tags.
+
+Separately constructed `Radio` widgets remain independent boolean bindings even
+when they belong to the same native HTML group. Native radio grouping unchecks
+peers without reporting those peers to JaWS. Use `RequestWriter.RadioGroup` with
+a single-select `named.BoolArray` whose `named.Bool.Name` values are distinct,
+or custom setters that clear peers as one synchronized state change and then
+dirty every changed binding.
+
+Every browser-to-server message must fit the 32 KiB limit. The
+bundled client does not chunk input values, `jawsVar` writes, click data, or
+removal reports; an oversized message closes the connection. Keep text values
+and click/context-menu names conservatively sized, use HTTP uploads for large
+values, and split large dynamic trees into independently updated wrappers.
+`JsVar.ClientCheck` runs only after receipt and cannot enforce this boundary.
+
 ## Numeric inputs
 
 `NewNumber` and `NewRange` accept a `bind.Getter[T]` for any `Numeric` type:

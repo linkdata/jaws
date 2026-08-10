@@ -108,16 +108,13 @@ func (re RadioElement) Label(params ...any) template.HTML {
 // rendered radio in the group shares a name derived from the first created
 // radio Element's request-scoped [jaws.Jid].
 //
-// The radio and label Elements belong to the [Template] whose body called RadioGroup,
-// which unregisters them when it next replaces its content. Ownership follows that call
-// site rather than the wrapper the markup lands in, so passing [RadioElement] values
-// into a nested wrapped template through its dot leaves them owned by the outer
-// template: an update of the inner wrapper alone replaces their DOM without their owner
-// reclaiming them, leaving that to the browser's removal acknowledgement for the ids
-// that reached the DOM and to the outer template's next update for any that did not.
-// Re-rendering them in the inner template is not an alternative, since [RadioElement]
-// allows Radio and Label at most one render each. Call RadioGroup from the template
-// that renders the group to avoid the condition entirely.
+// Use a single-select [named.BoolArray] with distinct [named.Bool.Name] values.
+// Multi-select arrays and duplicate names are incompatible with native radio
+// semantics. Separately bound [Radio] widgets are not grouped server-side by
+// their HTML name.
+//
+// Call RadioGroup from the [Template] that renders the returned [RadioElement]
+// values; do not pass them into a nested wrapped Template for rendering.
 func (rw RequestWriter) RadioGroup(nba *named.BoolArray) (rel []RadioElement) {
 	group := &radioGroupState{}
 	nba.ReadLocked(func(nbl []*named.Bool) {
