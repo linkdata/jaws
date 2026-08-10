@@ -50,12 +50,12 @@ func (nba *BoolArray) ReadLocked(fn func(nbl []*Bool)) {
 }
 
 // WriteLocked calls fn with the [BoolArray] locked for writing and replaces
-// the internal []*Bool slice with the return value.
+// the array contents with the returned values.
 //
-// The returned slice and its backing array become internal storage after fn
-// returns and must not be retained or accessed outside [BoolArray.ReadLocked]
-// and [BoolArray.WriteLocked] callbacks. Nil entries are discarded without
-// changing the relative order of non-nil entries.
+// Ownership of the returned slice and its backing array transfers to the
+// BoolArray when fn returns; callers must not retain or access that storage
+// afterward. Nil entries are discarded without changing the relative order of
+// non-nil entries.
 //
 // Omitting a [Bool] from the returned slice does not detach it from nba:
 // [Bool.Array] continues to return nba, and [Bool.JawsSet] continues to apply
@@ -72,9 +72,14 @@ func (nba *BoolArray) ReadLocked(fn func(nbl []*Bool)) {
 func (nba *BoolArray) WriteLocked(fn func(nbl []*Bool) []*Bool) {
 	nba.mu.Lock()
 	defer nba.mu.Unlock()
-	nba.data = slices.DeleteFunc(fn(nba.data), func(nb *Bool) bool {
+	old := nba.data
+	data := slices.DeleteFunc(fn(old), func(nb *Bool) bool {
 		return nb == nil
 	})
+	// data may share old's backing array, so detach it before clearing old.
+	data = slices.Clone(data)
+	clear(old[:cap(old)])
+	nba.data = data
 }
 
 // JawsContains returns the option widgets for a select backed by nba.
