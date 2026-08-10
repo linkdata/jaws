@@ -320,8 +320,9 @@ global.XMLHttpRequest = function(){};
 global.Event = function(){};
 global.Node = function(){};
 global.WebSocket = function(){};
-global.jawsDispatchWindowEvent = function(name) {
-	(windowListeners[name] || []).slice().forEach(function(fn) { fn({ type: name }); });
+global.jawsDispatchWindowEvent = function(name, event) {
+	if (!event) event = { type: name };
+	(windowListeners[name] || []).slice().forEach(function(fn) { fn(event); });
 };
 
 eval(src);
@@ -2471,6 +2472,162 @@ process.stdout.write(JSON.stringify({ jawsDebug: jawsDebug }));
 	}
 	if !got.JawsDebug {
 		t.Fatal("jawsDebug = false, want true when meta[name=\"jawsDebug\"] is present")
+	}
+}
+
+func TestJawsJS_CanceledBeforeUnloadDefersTeardownToPagehide(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+let reconnects = 0;
+jawsReconnect = function() { reconnects++; };
+let reloads = 0;
+window.location.reload = function() { reloads++; };
+
+let appBeforeUnloadCalls = 0;
+window.addEventListener("beforeunload", function(event) {
+	appBeforeUnloadCalls++;
+	event.preventDefault();
+	event.returnValue = "stay";
+});
+
+function FakeSocket() {
+	this.readyState = 1;
+	this.closeCount = 0;
+	this.listeners = {};
+}
+FakeSocket.prototype.addEventListener = function(name, fn) {
+	(this.listeners[name] ||= []).push(fn);
+};
+FakeSocket.prototype.removeEventListener = function(name, fn) {
+	this.listeners[name] = (this.listeners[name] || []).filter(function(other) {
+		return other !== fn;
+	});
+};
+FakeSocket.prototype.listenerCount = function(name) {
+	return (this.listeners[name] || []).length;
+};
+FakeSocket.prototype.dispatch = function(name) {
+	(this.listeners[name] || []).slice().forEach(function(fn) {
+		fn({ type: name, currentTarget: this });
+	}, this);
+};
+FakeSocket.prototype.close = function() {
+	this.closeCount++;
+	this.dispatch("close");
+};
+WebSocket = FakeSocket;
+
+jawsConnect();
+const socket = jaws;
+const registered = {
+	beforeunload: (windowListeners.beforeunload || []).includes(jawsUnloading),
+	pagehide: (windowListeners.pagehide || []).includes(jawsUnloading),
+	pageshow: (windowListeners.pageshow || []).includes(jawsPageshow)
+};
+
+jawsDispatchWindowEvent("pageshow", { type: "pageshow", persisted: false });
+const reloadsAfterFreshShow = reloads;
+
+const beforeEvent = {
+	type: "beforeunload",
+	defaultPrevented: false,
+	returnValue: "",
+	preventDefault: function() { this.defaultPrevented = true; }
+};
+jawsDispatchWindowEvent("beforeunload", beforeEvent);
+const canceled = {
+	appCalls: appBeforeUnloadCalls,
+	defaultPrevented: beforeEvent.defaultPrevented,
+	sameSocket: jaws === socket,
+	canSend: jawsCanSend(),
+	closeCount: socket.closeCount,
+	closeListeners: socket.listenerCount("close"),
+	errorListeners: socket.listenerCount("error"),
+	reconnects: reconnects
+};
+
+// A later committed navigation reaches pagehide.
+jawsDispatchWindowEvent("pagehide", { type: "pagehide", persisted: false });
+const hiddenAfterNavigation = {
+	jawsIsNull: jaws === null,
+	closeCount: socket.closeCount,
+	closeListeners: socket.listenerCount("close"),
+	errorListeners: socket.listenerCount("error"),
+	reconnects: reconnects
+};
+
+// Re-arm the transport to exercise a back/forward-cache pagehide independently.
+const cachedSocket = new FakeSocket();
+cachedSocket.addEventListener("close", jawsFailed);
+cachedSocket.addEventListener("error", jawsFailed);
+jaws = cachedSocket;
+jawsDispatchWindowEvent("pagehide", { type: "pagehide", persisted: true });
+const hiddenForCache = {
+	jawsIsNull: jaws === null,
+	closeCount: cachedSocket.closeCount,
+	closeListeners: cachedSocket.listenerCount("close"),
+	errorListeners: cachedSocket.listenerCount("error"),
+	reconnects: reconnects
+};
+
+jawsDispatchWindowEvent("pageshow", { type: "pageshow", persisted: true });
+
+process.stdout.write(JSON.stringify({
+	registered: registered,
+	canceled: canceled,
+	hidden: [hiddenAfterNavigation, hiddenForCache],
+	reloadsAfterFreshShow: reloadsAfterFreshShow,
+	reloads: reloads
+}));
+`)
+
+	var got struct {
+		Registered struct {
+			BeforeUnload bool `json:"beforeunload"`
+			Pagehide     bool `json:"pagehide"`
+			Pageshow     bool `json:"pageshow"`
+		} `json:"registered"`
+		Canceled struct {
+			AppCalls         int  `json:"appCalls"`
+			DefaultPrevented bool `json:"defaultPrevented"`
+			SameSocket       bool `json:"sameSocket"`
+			CanSend          bool `json:"canSend"`
+			CloseCount       int  `json:"closeCount"`
+			CloseListeners   int  `json:"closeListeners"`
+			ErrorListeners   int  `json:"errorListeners"`
+			Reconnects       int  `json:"reconnects"`
+		} `json:"canceled"`
+		Hidden []struct {
+			JawsIsNull     bool `json:"jawsIsNull"`
+			CloseCount     int  `json:"closeCount"`
+			CloseListeners int  `json:"closeListeners"`
+			ErrorListeners int  `json:"errorListeners"`
+			Reconnects     int  `json:"reconnects"`
+		} `json:"hidden"`
+		ReloadsAfterFreshShow int `json:"reloadsAfterFreshShow"`
+		Reloads               int `json:"reloads"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.Registered.BeforeUnload || !got.Registered.Pagehide || !got.Registered.Pageshow {
+		t.Fatalf("lifecycle listeners = %+v, want pagehide and pageshow only", got.Registered)
+	}
+	if got.Canceled.AppCalls != 1 || !got.Canceled.DefaultPrevented || !got.Canceled.SameSocket || !got.Canceled.CanSend {
+		t.Fatalf("canceled navigation state = %+v, want the original live socket", got.Canceled)
+	}
+	if got.Canceled.CloseCount != 0 || got.Canceled.CloseListeners != 1 || got.Canceled.ErrorListeners != 1 || got.Canceled.Reconnects != 0 {
+		t.Fatalf("canceled navigation transport = %+v, want untouched failure handling", got.Canceled)
+	}
+	if len(got.Hidden) != 2 {
+		t.Fatalf("pagehide results = %d, want 2", len(got.Hidden))
+	}
+	for i, hidden := range got.Hidden {
+		if !hidden.JawsIsNull || hidden.CloseCount != 1 || hidden.CloseListeners != 0 || hidden.ErrorListeners != 0 || hidden.Reconnects != 0 {
+			t.Fatalf("pagehide result %d = %+v, want one intentional close without reconnect", i, hidden)
+		}
+	}
+	if got.ReloadsAfterFreshShow != 0 || got.Reloads != 1 {
+		t.Fatalf("pageshow reloads = %d before persisted, %d total; want 0 and 1", got.ReloadsAfterFreshShow, got.Reloads)
 	}
 }
 
