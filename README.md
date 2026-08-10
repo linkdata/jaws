@@ -335,12 +335,12 @@ rules. `JsVar` deliberately does not choose one of those policies.
 
 ### WebSocket wire format notes
 
-JaWS WebSocket messages are line-based and field-delimited:
-`What<TAB>Jid<TAB>Data<LF>`. Keep these invariants in mind when changing
-client/server protocol code:
+JaWS WebSocket protocol records are line-based and field-delimited:
+`What<TAB>Jid<TAB>Data<LF>`. A text message may carry multiple records. Keep
+these invariants in mind when changing client/server protocol code:
 
-* The browser is not trusted. Incoming frames are validated (`What`, `Jid`,
-  framing, quoting) and invalid frames are ignored/dropped.
+* The browser is not trusted. Incoming records are validated (`What`, `Jid`,
+  delimiters, quoting), and malformed records are skipped independently.
 * Each inbound WebSocket message is limited to 32 KiB. The bundled client does
   not chunk `Input`, `Set`, `Click`, `ContextMenu`, or `Remove`; an oversized
   message closes the connection. The limit covers the complete protocol payload

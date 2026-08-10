@@ -11,7 +11,7 @@ var (
 	appendBenchSink []byte
 )
 
-// BenchmarkAppend guards the outbound frame-encoding hot path; it must stay
+// BenchmarkAppend guards the outbound record-encoding hot path; it must stay
 // allocation-light.
 func BenchmarkAppend(b *testing.B) {
 	m := WsMsg{
@@ -25,7 +25,7 @@ func BenchmarkAppend(b *testing.B) {
 	}
 }
 
-// BenchmarkParse guards the inbound parse hot path (run on every WebSocket frame)
+// BenchmarkParse guards the inbound parse hot path (run on every protocol record)
 // across the common command shapes, including the lone-surrogate case that decodes
 // via the JSON fallback rather than being dropped. The common quoted and unquoted
 // paths must stay allocation-light; only the rare surrogate case pays the
