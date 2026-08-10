@@ -183,6 +183,12 @@ built-in strings, converting JavaScript `BigInt` values back to strings before
 calling `jawsVar`. A Go `json:",string"` tag is not generic round-trip support;
 use a built-in string field or implement `PathSetter`.
 
+JSON-marshalable values can be sent to the browser, but generic browser writes
+decode into `any` and do not invoke destination custom unmarshaling. Types such
+as `time.Time`, `[]byte`, and maps with non-string keys therefore need a
+browser-facing DTO compatible with the generic setter or a `PathSetter` that
+parses and validates the decoded value.
+
 `JsVar` values are client-writable. The generic path setter can write exported
 JSON fields and append to slices, and it has no default accumulated-state size
 limit. Set the binding's optional `ClientCheck` to validate each actual generic

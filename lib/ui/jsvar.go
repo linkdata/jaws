@@ -48,6 +48,10 @@ func validateJsVarName(value []any) (name string, err error) {
 type PathSetter interface {
 	// JawsSetPath should set the JSON object member identified by jsPath to the given value.
 	//
+	// Browser writes pass [json.Unmarshal]'s generic any representation without
+	// the raw JSON bytes. Programmatic [JsVar.JawsSetPath] calls pass the
+	// caller-supplied value unchanged.
+	//
 	// If the member is already the given value, it should return [jaws.ErrValueUnchanged].
 	//
 	// When a [JsVar]'s bound value (Ptr) implements PathSetter, the JsVar
@@ -180,6 +184,13 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // explicitly. Browser code must convert BigInt values back to strings before
 // calling jawsVar. A json:",string" tag is not generic round-trip support; use a
 // built-in string field or a [PathSetter].
+//
+// JSON-marshalable describes server-to-browser values. Generic browser writes
+// decode into any and assign by path; they do not unmarshal directly into T or
+// invoke destination custom unmarshaling. Consequently, time.Time, []byte, and
+// maps with non-string keys are not round-trip writable by the generic setter.
+// Use a browser-facing DTO compatible with the generic setter, or implement
+// [PathSetter] to parse and validate the decoded value.
 //
 // The variable name and browser-side jawsVar paths must be
 // application-controlled. The browser rejects exact "__proto__" path
@@ -516,6 +527,8 @@ func (jsvar *JsVar[T]) JawsUpdate(elem *jaws.Element) {
 }
 
 // JawsInput applies a browser-side JavaScript variable update.
+//
+// See [JsVar] for generic write representation limits.
 //
 // For a generic path write, a non-nil [JsVar.ClientCheck] validates the complete
 // tentative state before it is committed. The check runs while the JsVar write

@@ -199,6 +199,13 @@ A Go `json:",string"` tag is not generic round-trip support: browser input is an
 untyped string that cannot be assigned to an integer field. Use a built-in
 `string` field or implement `ui.PathSetter` to parse and validate it.
 
+JSON-marshalable describes values JaWS can send to the browser. Generic browser
+writes decode into an untyped Go value and do not invoke destination custom
+unmarshaling. Consequently, `time.Time`, base64-encoded `[]byte`, and maps with
+non-string Go keys are not round-trip writable by the generic setter. Use a
+browser-facing DTO compatible with the generic setter, or implement
+`ui.PathSetter` to parse and validate the decoded value.
+
 Create each binding for the Request that renders it. A `JsVarMaker` can be kept
 in shared handler data because each call returns a fresh `JsVar` over the
 possibly shared backing state:

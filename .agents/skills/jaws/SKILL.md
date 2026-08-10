@@ -263,7 +263,7 @@ On incoming events, JaWS dispatches in this order:
 
 The handler candidate is asked via `JawsClick` / `JawsContextMenu` / `JawsInput`, matched to the event kind; there is no generic `JawsEvent` method. Return `jaws.ErrEventUnhandled` to fall through to the next candidate.
 
-## JsVar JSON number limits
+## JsVar JSON representation limits
 
 - Browser JSON numbers use JavaScript `Number` values. Integers outside
   `-9007199254740991` through `9007199254740991` may round, and a browser write
@@ -271,6 +271,10 @@ The handler candidate is asked via `JawsClick` / `JawsContextMenu` / `JawsInput`
 - Represent exact wide integers as built-in strings. Convert `BigInt` values back
   to strings before `jawsVar`; a Go `json:",string"` tag is not generic
   round-trip support. Use a built-in string field or implement `ui.PathSetter`.
+- Generic browser writes decode into `any` and do not invoke destination custom
+  unmarshaling. Use a browser-facing DTO compatible with the generic setter or
+  implement `ui.PathSetter` for types such as `time.Time`, `[]byte`, and maps
+  with non-string keys.
 
 ## Clickable template pattern
 
