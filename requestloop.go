@@ -22,8 +22,6 @@ import (
 	"github.com/linkdata/jaws/lib/wire"
 )
 
-const minEventRouteCloneSavingsBytes = 1024
-
 // process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
 func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-chan wire.WsMsg, outboundMsgCh chan<- wire.WsMsg) {
 	jawsDoneCh := rq.Jaws.Done()
@@ -114,16 +112,7 @@ func (rq *Request) handleIncoming(wsmsg wire.WsMsg, eventCallCh chan eventFnCall
 	if wsmsg.Jid.IsValid() {
 		switch wsmsg.What {
 		case what.Input, what.Click, what.ContextMenu, what.Set:
-			call := rq.resolveEventFnCall(wsmsg.Jid, wsmsg.What, wsmsg.Data)
-			if wsmsg.Jid == 0 && call.elem != nil {
-				routeBytes := len(wsmsg.Data) - len(call.data)
-				if routeBytes >= minEventRouteCloneSavingsBytes && routeBytes >= len(call.data) {
-					// The click payload is a prefix of wsmsg.Data. Detach it when the
-					// queued call would otherwise retain a much larger client route.
-					call.data = strings.Clone(call.data)
-				}
-			}
-			rq.queueEvent(eventCallCh, call)
+			rq.queueEvent(eventCallCh, rq.resolveEventFnCall(wsmsg.Jid, wsmsg.What, wsmsg.Data))
 		case what.Remove:
 			rq.handleRemove(wsmsg.Jid, wsmsg.Data)
 		}
