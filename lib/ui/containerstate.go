@@ -15,8 +15,7 @@ import (
 type containerState struct {
 	mu sync.Mutex
 	// rendering is true from the successful state claim until JawsRender finishes.
-	// It keeps an update from treating a published but incomplete state as the lazy
-	// state of an update-only registered Element.
+	// It keeps an update from using a published but incomplete state.
 	rendering bool
 	dirtyTag  any
 	contents  []*jaws.Element
@@ -68,9 +67,8 @@ func claimContainerState(elem *jaws.Element) (st *containerState, err error) {
 // stateForContainerUpdate returns usable container state for elem, claiming an empty
 // state when the slot is unclaimed.
 func stateForContainerUpdate(elem *jaws.Element) (st *containerState, err error) {
-	// Update-only registration is the intended lazy-claim path, but the state slot does
-	// not encode how the Element was created. Treat an occupied foreign slot, typed
-	// nil, in-progress render, or lost concurrent claim as contention.
+	// A missing state uses the lazy-claim path. Treat an occupied foreign slot,
+	// typed nil, in-progress render, or lost concurrent claim as contention.
 	switch state := jaws.ElementState(elem).(type) {
 	case nil:
 		st, err = claimContainerState(elem)

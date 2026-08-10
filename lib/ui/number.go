@@ -15,7 +15,6 @@ import (
 // A Number value must back at most one live [jaws.Element]. Construct distinct
 // Number values over the same source to render one bound value more than once.
 // Construct a Number with [NewNumber]; using its zero value as a widget panics.
-// Number requires ordinary rendering and is not supported by [RequestWriter.Register].
 //
 // Editable Numbers send edits on the browser's change event. Pending edits remain
 // browser-local until then and may be replaced by server or ancestor renders.

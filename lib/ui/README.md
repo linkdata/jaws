@@ -21,9 +21,10 @@ to that generated wrapper.
 Template bodies used with `rw.Template(...)` must be partials; full page
 templates should be rendered through `ui.Handler`.
 
-`rw.Register(...)` is the escape hatch for attaching a render-independent updater
-to an element whose markup is written directly in the surrounding template. Its
-returned JaWS ID must become that element's `id`:
+`rw.Register(...)` is an advanced escape hatch primarily for attaching a
+render-independent updater to otherwise static HTML written directly in the
+surrounding template. The registered HTML is intended to contain no JaWS widgets.
+Its returned JaWS ID must become that element's `id`:
 
 ```gotemplate
 <section id="{{$.Register .Dot.Panel}}" class="panel">
@@ -33,12 +34,11 @@ returned JaWS ID must become that element's `id`:
 
 `Register` never calls `JawsRender`; use it for a custom updater designed to work
 without render-time initialization. It tags the element with the updater, attaches
-supported click and context-menu handlers, and calls `JawsUpdate` once for initial
-state. Write HTML attributes in the template because attribute params are ignored.
-Template-authored `input`, `textarea`, and `contenteditable` elements, and the
-typed input widgets are not supported; render them with their normal widget
-helpers. `Select` is the input-handling exception described below. See
-`RequestWriter.Register` for the complete standard-widget limitations.
+its event handlers, and calls `JawsUpdate` once for initial state. Write HTML
+attributes in the template because attribute params are ignored. Render standard
+widgets normally. `Register` makes no compatibility guarantees for using a
+standard widget as its updater or placing JaWS widgets inside its HTML; behavior
+in either position is unspecified.
 
 Use Go's native template action when a static structural fragment must be included
 without another JaWS-managed wrapper:
@@ -69,8 +69,7 @@ itself, and its `Dot` must be nil or usable as a tag under `tag.TagExpand`. Use
 `tag.Tag("...")` for string tags.
 
 A Template with a non-empty `OuterHTMLTag` can update only an Element rendered by
-an equal Template value. It is not usable as a `$.Register` updater because
-registration does not call its renderer.
+an equal Template value.
 
 ## Container-family value widgets
 
@@ -109,10 +108,6 @@ provider, panic when rendering or updating calls the missing provider. A zero
 Select behaves the same for render and update, while its `JawsInput` is a no-op.
 A typed-nil provider is called normally and must tolerate its nil receiver itself.
 
-Container, Tbody, and Select support update-only use through
-`RequestWriter.Register`, although ordinary rendering provides their full
-initialization. A registered Select has no getter-derived tag for post-input dirtying.
-
 You can also use explicit constructors through:
 
 ```go
@@ -148,8 +143,6 @@ An editable source must expose at least one stable, usable source tag when it is
 rendered. Pointer-valued sources are usable directly; a source can instead implement
 `JawsGetTag`. `bind.New(&mu, &value)` supplies the backing value pointer as its tag.
 A changing getter-only source also needs a tag for dirty-driven server updates.
-Number and Range require ordinary rendering and are not update-only
-`RequestWriter.Register` widgets.
 
 A getter-only Number has the native `readonly` attribute. A getter-only Range is
 `disabled` and is therefore omitted from native form submission. Static numeric

@@ -230,29 +230,27 @@ Implications:
 
 ## Registering template-authored elements
 
-- `$.Register(updater, params...)` binds a render-independent `jaws.Updater` to a DOM
-  element whose markup is written by the surrounding template. The returned Jid must be
-  used as that element's HTML `id`:
+- `$.Register(updater, params...)` is an advanced escape hatch primarily for
+  binding a render-independent `jaws.Updater` to otherwise static HTML written by
+  the surrounding template. The registered HTML should contain no JaWS widgets.
+  The returned Jid must be used as that element's HTML `id`:
 
   ```gotemplate
   <section id="{{$.Register .Dot.Panel}}">...</section>
   ```
 
 - Register never calls `JawsRender`; use it only for a custom updater designed to work
-  without render-time initialization. It uses the updater as a tag, attaches supported
-  click and context-menu handlers, applies tag and supported handler params, and invokes
-  `JawsUpdate` once. HTML attribute params are ignored; write attributes on the
-  template-authored element.
+  without render-time initialization. It uses the updater as a tag, attaches its event
+  handlers, applies tag and handler params, and invokes `JawsUpdate` once. HTML attribute
+  params are ignored; write attributes on the template-authored element.
 - The updater must be a non-nil interface whose dynamic value is comparable at runtime,
   equal to itself, and usable as a tag. A typed nil is invoked normally and must tolerate
   its nil receiver. Reuse one updater for live Elements only when it supports that use
   without retaining Element-specific state on the shared value; it must be safe for
   concurrent use when shared across Requests.
-- Prefer ordinary widget rendering. The container family supports update-only
-  registration with the limitations below, and `ui.Select` is its input-handling
-  exception. Template-authored `input`, `textarea`, and `contenteditable` elements,
-  the typed input widgets, `ui.Number`, `ui.Range`, `ui.JsVar`, and Templates with
-  a non-empty `OuterHTMLTag` require rendering.
+- Render standard widgets through their ordinary helpers. Register makes no
+  compatibility guarantees for passing a standard widget as its updater or placing
+  JaWS widgets inside its HTML; do not rely on combinations that happen to work.
 - Always emit the returned Jid as the element's `id`. A surrounding Template owns the
   registered Element; otherwise it remains until explicit deletion, reported DOM
   removal, or Request shutdown.
@@ -288,15 +286,6 @@ For clickable content rendering:
   output. Contention returns `jaws.ErrElementStateClaimed` with no render side effects.
   The state holds the render-time dirty tag, reconciliation mutex and owned child
   Elements; the widget value retains only its definition.
-- Container-family updates normally load that state. Update-only use through
-  `$.Register` lazily claims a missing state before invoking the provider. A foreign
-  state, typed-nil state or lost concurrent claim is reported through `MustLog`, and no
-  children are reconciled; Select also sends no value. The lazy state has no render-time
-  dirty tag. `$.Register` delivers Select input to its handler but does not call
-  `Element.ApplyGetter` for that handler, so Select retains no handler-derived tag for
-  its own post-set dirtying. Any handler-initiated dirtying still occurs, and separately
-  registered tags remain registered. Use ordinary `$.Select` rendering when Select
-  should register and use a usable tag exposed by its handler.
 - Container ownership also lives in `containerState`, not in `elem.UI()`. Cleanup
   detaches children under the state mutex and recurses after unlocking, so it also finds
   children when the Element's visible UI is the private registration wrapper. Failed
@@ -328,9 +317,7 @@ For clickable content rendering:
   - a composite UI must use Template values equal under `==` for rendering and updating
     an Element; using unequal values is unsupported;
   - a Template with a non-empty `OuterHTMLTag`, including any returned by
-    `ui.NewTemplate`, updates only an Element rendered by an equal Template value, so it
-    is not usable as a `$.Register` updater; `$.Register` never invokes its renderer and
-    therefore cannot establish the wrapper state an update needs.
+    `ui.NewTemplate`, updates only an Element rendered by an equal Template value.
 - Call `$.RadioGroup` from the template that renders the group: its Elements belong to
   the template whose body called it, not to the wrapper their markup lands in.
 - HTML getter paths must not mutate domain state, but they may call element update methods (`SetClass`, `RemoveClass`, `SetAttr`, `RemoveAttr`, etc.) on the passed-in `*Element` to co-ordinate wrapper class/attribute changes with the inner-HTML refresh. No custom `JawsUpdate` is needed for that case — the queued wrapper updates flush alongside the `SetInner` from `HTMLInner.JawsUpdate`.
@@ -387,8 +374,8 @@ Guideline:
 - Add regression tests for click dispatch when moving handlers between params and dot `JawsClick`.
 - For container regressions, verify identity reuse, append/remove/order behavior, and stale-element cleanup.
 - For container-family state changes, verify equal values keep independent Elements,
-  contention precedes callbacks/output, update-only registration claims lazily, and
-  nested ownership cleanup keeps the Request registry flat.
+  contention precedes callbacks/output, and nested ownership cleanup keeps the Request
+  registry flat.
 - Add pure domain tests for state transitions (win/loss, reset, bounds checks) independent of JaWS transport.
 - If rerendering fails, inspect tag comparability and dirty-target coverage before broadening dirty scope.
 
