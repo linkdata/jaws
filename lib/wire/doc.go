@@ -2,16 +2,16 @@
 //
 // The package has two message types. [Message] is the in-process dispatch
 // record: a command plus payload routed to a destination ([Message.Dest]).
-// [WsMsg] is the serialized frame produced by [WsMsg.Append] and recovered by
-// [Parse] — the bytes that actually travel over the WebSocket.
+// [WsMsg] represents a protocol record; [WsMsg.Append] serializes it, and
+// [Parse] recovers it. A WebSocket text message may carry multiple records.
 //
-// Each frame is encoded as What<TAB>Jid<TAB>Data<LF>. Data for most commands is
+// Each record is encoded as What<TAB>Jid<TAB>Data<LF>. Data for most commands is
 // written by [WsMsg.Append] as a JSON-compatible quoted string so the browser can
 // decode it with JSON.parse. [Parse] decodes quoted inbound data with
 // strconv.Unquote for the common case, falls back to JSON string decoding for
 // browser-valid strings that strconv rejects, and sanitizes the result as valid
 // UTF-8. [AppendJSONQuote] stays inside the overlap between those string grammars
-// so server-generated frames round-trip through either decoder.
+// so server-generated records round-trip through either decoder.
 //
 // The Set and Call commands carry path/function payloads directly, so callers
 // must keep those payloads free of raw tabs and newlines. The path/function side

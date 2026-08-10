@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -103,6 +104,164 @@ func TestReadLoop_RespectsDoneWhileReading(t *testing.T) {
 			t.Fatalf("parent context was canceled: %v", err)
 		}
 	})
+}
+
+func TestReadWriteLoop_RoundTrip(t *testing.T) {
+	tests := []struct {
+		name string
+		want []WsMsg
+	}{
+		{
+			name: "single record",
+			want: []WsMsg{{Jid: 1, What: what.Input, Data: "value"}},
+		},
+		{
+			name: "batched records",
+			want: []WsMsg{
+				{Jid: 1, What: what.Input, Data: "line one\nline two"},
+				{Jid: 2, What: what.Set, Data: `state={"value":1}`},
+				{Jid: 3, What: what.Call, Data: `notify=["done"]`},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			outCh := make(chan WsMsg, len(tt.want))
+			for _, msg := range tt.want {
+				outCh <- msg
+			}
+			close(outCh)
+
+			inCh := make(chan WsMsg, len(tt.want))
+			doneCh := make(chan struct{})
+			client, server := pipe(t)
+			defer func() { _ = client.CloseNow() }()
+			defer func() { _ = server.CloseNow() }()
+
+			ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+			defer cancel()
+
+			readDoneCh := make(chan struct{})
+			go func() {
+				defer close(readDoneCh)
+				ReadLoop(ctx, nil, doneCh, inCh, server)
+			}()
+			writeDoneCh := make(chan struct{})
+			go func() {
+				defer close(writeDoneCh)
+				WriteLoop(ctx, nil, doneCh, outCh, client)
+			}()
+
+			var got []WsMsg
+			for msg := range inCh {
+				got = append(got, msg)
+			}
+			waitDone(t, readDoneCh, "ReadLoop after peer close")
+			waitDone(t, writeDoneCh, "WriteLoop after outbound close")
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("round trip = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReadLoop_SkipsMalformedRecords(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		want := []WsMsg{
+			{Jid: 1, What: what.Input, Data: "first"},
+			{Jid: 2, What: what.Set, Data: "state=second"},
+		}
+		payload := want[0].Append(nil)
+		payload = append(payload, "malformed\n\n"...)
+		payload = want[1].Append(payload)
+		payload = append(payload, "Input\tJid.3\t\"unterminated\""...)
+
+		ctx, cancel := context.WithCancelCause(t.Context())
+		doneCh := make(chan struct{})
+		inCh := make(chan WsMsg, len(want))
+		client, server := pipe(t)
+		loopDone := make(chan struct{})
+		defer closeWireBubble(cancel, client, server)()
+
+		go func() {
+			ReadLoop(ctx, cancel, doneCh, inCh, server)
+			close(loopDone)
+		}()
+		if err := client.Write(ctx, websocket.MessageText, payload); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		if got := len(inCh); got != len(want) {
+			t.Fatalf("queued messages = %d, want %d", got, len(want))
+		}
+
+		close(doneCh)
+		synctest.Wait()
+		assertClosedNow(t, loopDone, "ReadLoop")
+		var got []WsMsg
+		for msg := range inCh {
+			got = append(got, msg)
+		}
+		if !slices.Equal(got, want) {
+			t.Fatalf("messages = %+v, want %+v", got, want)
+		}
+		if err := ctx.Err(); err != nil {
+			t.Fatalf("parent context was canceled: %v", err)
+		}
+	})
+}
+
+func TestReadLoop_BatchedDeliveryIsInterruptible(t *testing.T) {
+	for _, stop := range []string{"context", "done"} {
+		t.Run(stop, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				const count = 128
+				msg := WsMsg{Jid: 1, What: what.Input, Data: "value"}
+				payload := make([]byte, 0, count*len(msg.Format()))
+				for range count {
+					payload = msg.Append(payload)
+				}
+
+				ctx, cancel := context.WithCancelCause(t.Context())
+				doneCh := make(chan struct{})
+				inCh := make(chan WsMsg, 1)
+				client, server := pipe(t)
+				loopDone := make(chan struct{})
+				defer closeWireBubble(cancel, client, server)()
+
+				go func() {
+					ReadLoop(ctx, cancel, doneCh, inCh, server)
+					close(loopDone)
+				}()
+				if err := client.Write(ctx, websocket.MessageText, payload); err != nil {
+					t.Fatal(err)
+				}
+				// The first record is buffered and ReadLoop is blocked delivering the
+				// second record from the same WebSocket message.
+				synctest.Wait()
+				if stop == "context" {
+					cancel(nil)
+				} else {
+					close(doneCh)
+				}
+				synctest.Wait()
+				assertClosedNow(t, loopDone, "ReadLoop")
+
+				var got []WsMsg
+				for msg := range inCh {
+					got = append(got, msg)
+				}
+				if want := []WsMsg{msg}; !slices.Equal(got, want) {
+					t.Fatalf("messages = %+v, want %+v", got, want)
+				}
+				if stop == "done" {
+					if err := ctx.Err(); err != nil {
+						t.Fatalf("parent context was canceled: %v", err)
+					}
+				}
+			})
+		})
+	}
 }
 
 func TestWriteLoop_SendsThePayload(t *testing.T) {
@@ -283,10 +442,14 @@ func TestWriteLoop_SplitsAtBatchLimit(t *testing.T) {
 	if want := strings.Repeat(frame, count); string(total) != want {
 		t.Fatalf("reassembled %d bytes across %d frames, want %d bytes", len(total), len(frames), len(want))
 	}
-	// Every frame except the last coalesces up to the batch limit before flushing.
-	for i, f := range frames[:len(frames)-1] {
-		if len(f) < writeBatchLimit {
+	// Every frame is smaller than the soft limit plus one record, and every frame
+	// except the last coalesces up to the limit before flushing.
+	for i, f := range frames {
+		if i < len(frames)-1 && len(f) < writeBatchLimit {
 			t.Fatalf("frame %d is %d bytes, want >= writeBatchLimit (%d)", i, len(f), writeBatchLimit)
+		}
+		if len(f) >= writeBatchLimit+len(frame) {
+			t.Fatalf("frame %d is %d bytes, want < %d", i, len(f), writeBatchLimit+len(frame))
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -10,11 +11,14 @@ import (
 )
 
 // writeBatchLimit is the maximum number of bytes WriteLoop coalesces into a
-// single outbound WebSocket text frame before flushing.
+// single outbound WebSocket text message before flushing.
 const writeBatchLimit = 32 * 1024
 
-// ReadLoop reads WebSocket text messages, parses them, and sends parsed
-// messages on incomingMsgCh.
+// ReadLoop reads WebSocket text messages and sends each valid protocol record
+// on incomingMsgCh.
+//
+// Records are LF-terminated and delivered in order. A text message may contain
+// multiple records; malformed records are skipped independently.
 //
 // Closes incomingMsgCh on exit.
 //
@@ -33,13 +37,15 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 		// Only parse on a successful read; on error ws.Read returns no usable
 		// payload and the loop exits because the for condition fails.
 		if typ, txt, err = ws.Read(ctx); err == nil && typ == websocket.MessageText {
-			if msg, ok := Parse(txt); ok {
-				select {
-				case <-ctx.Done():
-					return
-				case <-doneCh:
-					return
-				case incomingMsgCh <- msg:
+			for record := range bytes.Lines(txt) {
+				if msg, ok := Parse(record); ok {
+					select {
+					case <-ctx.Done():
+						return
+					case <-doneCh:
+						return
+					case incomingMsgCh <- msg:
+					}
 				}
 			}
 		}
@@ -47,8 +53,10 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 	reportError(ctx, doneCh, ccf, err)
 }
 
-// WriteLoop reads messages from outboundMsgCh, formats them, and writes them
-// to the WebSocket.
+// WriteLoop formats messages read from outboundMsgCh and writes them to the
+// WebSocket.
+//
+// Consecutive queued records may be coalesced into one text message.
 //
 // Closes the WebSocket on exit.
 //

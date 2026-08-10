@@ -22,8 +22,9 @@ const hexDigits = "0123456789abcdef"
 // escapes; " and \ are escaped, and everything else
 // (including '<', '>', '&' and astral runes) is written as literal UTF-8 to keep
 // payloads compact. Invalid UTF-8 is replaced with U+FFFD so the result is always
-// valid JSON and a valid WebSocket text frame. The output remains decodable by
-// strconv.Unquote, so the server-side Append->Parse round trip is preserved.
+// valid JSON and valid UTF-8 for a WebSocket text message. The output remains
+// decodable by strconv.Unquote, so the server-side Append->Parse round trip is
+// preserved.
 func appendJSONQuote(b []byte, s string) []byte {
 	// PROVISIONAL: this hand-rolled quoter exists only because the stable standard
 	// library has no zero-allocation "append a non-HTML-escaped JSON string to a
@@ -58,16 +59,16 @@ func appendJSONQuote(b []byte, s string) []byte {
 	return append(b, '"')
 }
 
-// AppendJSONQuote appends s to b as a double-quoted JSON string literal that the
-// browser's JSON.parse accepts. Use it instead of strconv.AppendQuote when the
-// quoted data is written into a WebSocket frame: strconv emits Go-only escapes
-// (\xNN, \UXXXXXXXX) for control bytes, DEL and invalid UTF-8 that JSON.parse
-// rejects.
+// AppendJSONQuote appends s to b as a JSON string literal accepted by JSON.parse.
+//
+// Use it instead of [strconv.AppendQuote] when quoted data is written into a
+// protocol record: strconv emits Go-only escapes (\xNN, \UXXXXXXXX) for control
+// bytes, DEL, and invalid UTF-8 that JSON.parse rejects.
 func AppendJSONQuote(b []byte, s string) []byte {
 	return appendJSONQuote(b, s)
 }
 
-// WsMsg is a message sent to or from a WebSocket.
+// WsMsg is a protocol record sent to or from a WebSocket.
 type WsMsg struct {
 	Data string    // data to send
 	Jid  jid.Jid   // non-negative Jid to send
@@ -76,12 +77,12 @@ type WsMsg struct {
 
 // Append appends m in wire format to b and returns the extended buffer.
 //
-// The frame is What<TAB>Jid<TAB>Data<LF>, where the Jid field is empty if Jid
+// The record is What<TAB>Jid<TAB>Data<LF>, where the Jid field is empty if Jid
 // is zero. The Data field is written verbatim for [what.Set] and [what.Call] and
 // JSON-quoted for every other command. Append panics if Jid is negative.
 //
 // Verbatim Data must contain no tab or newline bytes, which would corrupt the
-// frame; ensuring that is the caller's responsibility.
+// record; ensuring that is the caller's responsibility.
 func (m *WsMsg) Append(b []byte) []byte {
 	if m.Jid < 0 {
 		panic("wire.WsMsg.Append: negative Jid")
@@ -109,7 +110,7 @@ func (m *WsMsg) Format() string {
 	return string(m.Append(nil))
 }
 
-// Parse parses an incoming text buffer into a message.
+// Parse parses one LF-terminated protocol record.
 //
 // The wire format mirrors [WsMsg.Append]. For commands other than [what.Set] and
 // [what.Call], if the Data field begins with a double quote it is decoded as a JSON
@@ -125,12 +126,12 @@ func (m *WsMsg) Format() string {
 // inside an inbound Set or Call payload truncates the field.
 func Parse(txt []byte) (WsMsg, bool) {
 	// Parse reports success with ok rather than an error: the only failure is "txt is
-	// not a valid frame", with no sub-cause any caller branches on, and the sole caller
-	// (ReadLoop) drops an unparseable frame without inspecting why — so a single
+	// not a valid record", with no sub-cause any caller branches on, and the sole caller
+	// (ReadLoop) drops an unparseable record without inspecting why — so a single
 	// always-equal error would carry nothing the bool does not.
 	//
 	// The len(txt) > 2 floor keeps the trailing-newline check and the two tab scans
-	// below from indexing out of range; a structurally minimal frame is What\t\t\n, and
+	// below from indexing out of range; a structurally minimal record is What\t\t\n, and
 	// any shorter or otherwise malformed input is rejected by the tab-field checks.
 	//
 	// Parse requires the two-tab What\tJid\tData form emitted by Append.
@@ -146,7 +147,7 @@ func Parse(txt []byte) (WsMsg, bool) {
 						if wht == what.Set || wht == what.Call {
 							// Set and Call data is taken verbatim and is best-effort:
 							// the field ends at the first tab, so drop any tab-separated
-							// suffix an untrusted frame appended past that boundary.
+							// suffix an untrusted record appended past that boundary.
 							if i := bytes.IndexByte(raw, '\t'); i >= 0 {
 								raw = raw[:i]
 							}
