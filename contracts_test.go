@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
@@ -126,6 +127,54 @@ func TestJaws_DefaultAuthReturnsSharedInstance(t *testing.T) {
 	}
 	if jw.DefaultAuth() != a {
 		t.Fatal("DefaultAuth must return the same shared instance")
+	}
+}
+
+type reentrantDefaultAuthLogger struct {
+	jw        *Jaws
+	warnCalls int
+	reentered bool
+}
+
+func (*reentrantDefaultAuthLogger) Info(string, ...any)  {}
+func (*reentrantDefaultAuthLogger) Error(string, ...any) {}
+
+func (logger *reentrantDefaultAuthLogger) Warn(string, ...any) {
+	logger.warnCalls++
+	logger.reentered = logger.jw.DefaultAuth().IsAdmin()
+}
+
+func TestDefaultAuth_IsAdminLoggerCanReenter(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	logger := &reentrantDefaultAuthLogger{jw: jw}
+	jw.Logger = logger
+
+	done := make(chan bool, 1)
+	go func() {
+		done <- jw.DefaultAuth().IsAdmin()
+	}()
+
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	select {
+	case isAdmin := <-done:
+		if !isAdmin {
+			t.Error("DefaultAuth.IsAdmin returned false")
+		}
+	case <-timer.C:
+		t.Fatal("DefaultAuth.IsAdmin deadlocked when Logger.Warn re-entered it")
+	case <-t.Context().Done():
+		t.Fatalf("test context ended while Logger.Warn re-entered DefaultAuth.IsAdmin: %v", t.Context().Err())
+	}
+	if logger.warnCalls != 1 {
+		t.Errorf("Logger.Warn calls = %d, want 1", logger.warnCalls)
+	}
+	if !logger.reentered {
+		t.Error("Logger.Warn re-entry returned false")
 	}
 }
 
