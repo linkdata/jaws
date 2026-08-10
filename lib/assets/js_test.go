@@ -1791,35 +1791,41 @@ process.stdout.write(JSON.stringify({ selectors: selectors, appended: appended }
 	}
 }
 
-func TestJawsJS_LostUsesDataAttributeHook(t *testing.T) {
-	raw := runJawsJSSnippet(t, `
-const selectors = [];
-let existing = null;
-let created = "";
-let prepended = 0;
+const lostIndicatorStubs = `
+const lostIndicatorSelectors = [];
+let lostIndicatorElem = null;
+let lostIndicatorCreated = "";
+let lostIndicatorPrepended = 0;
 document.querySelector = function(selector) {
-	selectors.push(selector);
-	return selector === "[data-jaws-lost]" ? existing : null;
+	lostIndicatorSelectors.push(selector);
+	return selector === "[data-jaws-lost]" ? lostIndicatorElem : null;
 };
 document.body = {
 	scrollTop: 10,
-	prepend: function() { prepended++; }
+	prepend: function(elem) {
+		lostIndicatorPrepended++;
+		lostIndicatorElem = elem;
+	}
 };
 document.documentElement = { scrollTop: 10 };
 jawsElement = function(html) {
-	created = html;
-	return {};
+	lostIndicatorCreated = html;
+	return { innerHTML: html };
 };
+`
+
+func TestJawsJS_LostUsesDataAttributeHook(t *testing.T) {
+	raw := runJawsJSSnippet(t, lostIndicatorStubs+`
 setTimeout = function() {};
 
 jawsLost();
-existing = { innerHTML: "old" };
+lostIndicatorElem = { innerHTML: "old" };
 jawsLost();
 process.stdout.write(JSON.stringify({
-	selectors: selectors,
-	created: created,
-	prepended: prepended,
-	existingHTML: existing.innerHTML
+	selectors: lostIndicatorSelectors,
+	created: lostIndicatorCreated,
+	prepended: lostIndicatorPrepended,
+	existingHTML: lostIndicatorElem.innerHTML
 }));
 `)
 
@@ -1844,7 +1850,7 @@ process.stdout.write(JSON.stringify({
 }
 
 func TestJawsJS_ReconnectXHRResultsAreHandledOnce(t *testing.T) {
-	raw := runJawsJSSnippet(t, `
+	raw := runJawsJSSnippet(t, lostIndicatorStubs+`
 function FakeSocket() {}
 WebSocket = FakeSocket;
 jaws = new FakeSocket();
@@ -1852,16 +1858,6 @@ jaws = new FakeSocket();
 let reloaded = 0;
 window.location.reload = function() { reloaded++; };
 let lost = 0;
-let lostElem = null;
-document.querySelector = function(selector) {
-	return selector === "[data-jaws-lost]" ? lostElem : null;
-};
-document.body = {
-	scrollTop: 10,
-	prepend: function(elem) { lostElem = elem; }
-};
-document.documentElement = { scrollTop: 10 };
-jawsElement = function(html) { return { innerHTML: html }; };
 const originalJawsLost = jawsLost;
 jawsLost = function() {
 	lost++;
@@ -1869,7 +1865,11 @@ jawsLost = function() {
 };
 
 let timers = 0;
-setTimeout = function() { timers++; };
+const scheduled = [];
+setTimeout = function(fn, ms) {
+	timers++;
+	scheduled.push({ fn: fn, ms: ms });
+};
 const requests = [];
 let sends = 0;
 function FakeXHR() {
@@ -1913,24 +1913,36 @@ for (let i = 1; i < 5; i++) jawsReconnect();
 const pending = { timers: timers, lost: lost, reloaded: reloaded };
 
 requests[0].finish("timeout", 0);
+const results = [{ timers: timers, lost: lost, reloaded: reloaded }];
 requests[1].finish("error", 0);
+results.push({ timers: timers, lost: lost, reloaded: reloaded });
 requests[2].finish("abort", 0);
+results.push({ timers: timers, lost: lost, reloaded: reloaded });
 requests[3].finish("load", 503);
+results.push({ timers: timers, lost: lost, reloaded: reloaded });
 requests[4].finish("load", 204);
-const firstPass = { timers: timers, lost: lost, reloaded: reloaded };
+results.push({ timers: timers, lost: lost, reloaded: reloaded });
 
 // One-shot completion prevents stale terminal events from changing the result.
-requests.forEach(function(req) { req.finish("timeout", 0); });
+requests.slice(0, 5).forEach(function(req) { req.finish("timeout", 0); });
+
+scheduled[0].fn();
 
 process.stdout.write(JSON.stringify({
 	jawsIsDate: jaws instanceof Date,
-	requests: requests.length,
 	sends: sends,
 	pending: pending,
-	timeouts: requests.map(function(req) { return req.timeoutAtSend; }),
-	firstPass: firstPass,
+	attempts: requests.map(function(req) {
+		return {
+			method: req.method,
+			url: req.url,
+			async: req.async,
+			timeoutAtSend: req.timeoutAtSend
+		};
+	}),
+	results: results,
 	final: { timers: timers, lost: lost, reloaded: reloaded },
-	lostHTML: lostElem && lostElem.innerHTML
+	lostHTML: lostIndicatorElem && lostIndicatorElem.innerHTML
 }));
 `)
 
@@ -1939,13 +1951,18 @@ process.stdout.write(JSON.stringify({
 		Lost     int `json:"lost"`
 		Reloaded int `json:"reloaded"`
 	}
+	type attempt struct {
+		Method        string  `json:"method"`
+		URL           string  `json:"url"`
+		Async         bool    `json:"async"`
+		TimeoutAtSend float64 `json:"timeoutAtSend"`
+	}
 	var got struct {
 		JawsIsDate bool      `json:"jawsIsDate"`
-		Requests   int       `json:"requests"`
 		Sends      int       `json:"sends"`
 		Pending    counts    `json:"pending"`
-		Timeouts   []float64 `json:"timeouts"`
-		FirstPass  counts    `json:"firstPass"`
+		Attempts   []attempt `json:"attempts"`
+		Results    []counts  `json:"results"`
 		Final      counts    `json:"final"`
 		LostHTML   string    `json:"lostHTML"`
 	}
@@ -1955,23 +1972,32 @@ process.stdout.write(JSON.stringify({
 	if !got.JawsIsDate {
 		t.Fatal("failed socket did not enter reconnect state")
 	}
-	if got.Requests != 5 || got.Sends != 5 {
-		t.Fatalf("reconnect attempts = %d requests, %d sends; want 5 each", got.Requests, got.Sends)
+	if len(got.Attempts) != 6 || got.Sends != 6 {
+		t.Fatalf("reconnect attempts = %d requests, %d sends; want 6 each", len(got.Attempts), got.Sends)
 	}
 	if got.Pending != (counts{}) {
 		t.Fatalf("pending reconnect changed state: %+v", got.Pending)
 	}
-	if len(got.Timeouts) != 5 {
-		t.Fatalf("reconnect timeouts = %v, want five attempts", got.Timeouts)
-	}
-	for i, timeout := range got.Timeouts {
-		if timeout <= 0 || timeout != got.Timeouts[0] {
-			t.Fatalf("reconnect timeout[%d] = %v, want the same positive timeout", i, timeout)
+	for i, attempt := range got.Attempts {
+		if attempt.Method != "GET" || attempt.URL != "http://example.test/jaws/.ping" || !attempt.Async {
+			t.Fatalf("reconnect attempt[%d] = %+v, want async GET to /jaws/.ping", i, attempt)
+		}
+		if attempt.TimeoutAtSend != 10*1000 {
+			t.Fatalf("reconnect timeout[%d] = %v, want 10000", i, attempt.TimeoutAtSend)
 		}
 	}
-	want := counts{Timers: 4, Lost: 4, Reloaded: 1}
-	if got.FirstPass != want || got.Final != want {
-		t.Fatalf("reconnect results = first %+v, final %+v; want %+v", got.FirstPass, got.Final, want)
+	wants := []counts{
+		{Timers: 1, Lost: 1},
+		{Timers: 2, Lost: 2},
+		{Timers: 3, Lost: 3},
+		{Timers: 4, Lost: 4},
+		{Timers: 4, Lost: 4, Reloaded: 1},
+	}
+	if !reflect.DeepEqual(got.Results, wants) {
+		t.Fatalf("reconnect results = %+v, want %+v", got.Results, wants)
+	}
+	if want := wants[len(wants)-1]; got.Final != want {
+		t.Fatalf("reconnect final result = %+v, want %+v", got.Final, want)
 	}
 	if !strings.Contains(got.LostHTML, "Server connection lost") {
 		t.Fatalf("lost indicator = %q", got.LostHTML)
