@@ -176,32 +176,18 @@ slider := ui.NewRange(binder)
 
 ## JavaScript variables
 
-`JsVar` values cross the browser boundary through `encoding/json`, `JSON.parse`,
-and `JSON.stringify`. JSON numbers become JavaScript `Number` values rather than
-retaining a Go numeric type or integer width. Root and nested integers outside
-the inclusive safe range `-9007199254740991` through `9007199254740991` are not
-reliably preserved; a browser write can commit a rounded value to Go. `JsVar`
-does not reject or transform them. When exact wide integers matter, represent
-them with fields of Go's built-in `string` type and convert to and from JavaScript
-`BigInt` in application code. Convert a `BigInt` back to a string before calling
-`jawsVar`; `JSON.stringify` does not encode it directly. A Go `json:",string"`
-tag makes Go-to-browser encoding use a JSON string, but JsVar's generic browser
-write still produces an untyped string that is not assignable to an integer
-field. Keep the bound field as a built-in `string`, implement `PathSetter` to
-parse the encoded form, or keep the exact value outside the browser-writable
-binding. Pass the string representation to browser-facing `JawsSetPath` calls;
-they broadcast the caller-supplied value.
+Browser JSON numbers use JavaScript `Number` values. Integers outside
+`-9007199254740991` through `9007199254740991` may be rounded, and a browser
+write may commit the rounded value to Go. Represent exact wide integers as
+built-in strings, converting JavaScript `BigInt` values back to strings before
+calling `jawsVar`. A Go `json:",string"` tag is not generic round-trip support;
+use a built-in string field or implement `PathSetter`.
 
 JSON-marshalable values can be sent to the browser, but generic browser writes
-do not perform destination-aware `encoding/json` decoding into the bound Go
-type. JaWS decodes a write into an untyped JSON value and assigns it by path.
-Custom JSON or text unmarshalers are not invoked; generic assignment may reject
-the representation or apply its own rules without the custom validation or
-transformation. Confirmed type mismatches include `time.Time`, base64 `[]byte`,
-and maps with non-string Go keys. Use directly assignable browser-facing fields
-or implement `PathSetter` on the bound root to parse and validate the decoded
-generic value. Use the same representation for server-side `JawsSetPath`
-broadcasts.
+decode into `any` and do not invoke destination custom unmarshaling. Types such
+as `time.Time`, `[]byte`, and maps with non-string keys therefore need a
+browser-facing DTO compatible with the generic setter or a `PathSetter` that
+parses and validates the decoded value.
 
 `JsVar` values are client-writable. The generic path setter can write exported
 JSON fields and append to slices, and it has no default accumulated-state size
