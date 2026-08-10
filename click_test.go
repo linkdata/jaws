@@ -152,10 +152,38 @@ func TestFinite(t *testing.T) {
 }
 
 func TestClickString(t *testing.T) {
-	got := (Click{Name: "x", X: 1.25, Y: 2.5, Shift: true, Control: true, Alt: true}).String()
-	want := "1.25 2.5 7 x"
-	if got != want {
-		t.Fatalf("String() = %q, want %q", got, want)
+	for _, tt := range []struct {
+		name string
+		clk  Click
+		want string
+	}{
+		{
+			name: "canonical",
+			clk:  Click{Name: "x", X: 1.25, Y: 2.5, Shift: true, Control: true, Alt: true},
+			want: "1.25 2.5 7 x",
+		},
+		{
+			name: "name whitespace",
+			clk:  Click{Name: " \tsave\n all\r ", X: 1.25, Y: 2.5},
+			want: "1.25 2.5 0 save all",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			encoded := tt.clk.String()
+			if got := encoded; got != tt.want {
+				t.Fatalf("String() = %q, want %q", got, tt.want)
+			}
+			got, after, ok := parseClickData(encoded)
+			if !ok {
+				t.Fatalf("parseClickData(String()) failed for %q", encoded)
+			}
+			if after != "" {
+				t.Fatalf("trailing data = %q, want none", after)
+			}
+			if want := strings.Join(strings.Fields(tt.clk.Name), " "); got.Name != want {
+				t.Fatalf("parsed name = %q, want %q", got.Name, want)
+			}
+		})
 	}
 }
 
@@ -228,11 +256,8 @@ func BenchmarkParseClickData(b *testing.B) {
 func Fuzz_clickStringRoundTrip(f *testing.F) {
 	f.Add("name", int32(1), int32(2), true, false, true)
 	f.Add("button", int32(-1), int32(999), false, false, false)
+	f.Add("save\tall", int32(0), int32(0), false, false, false)
 	f.Fuzz(func(t *testing.T, name string, x int32, y int32, shift, control, alt bool) {
-		// parseClickData rebuilds Name by joining strings.FieldsSeq tokens with single
-		// spaces, so it trims and collapses whitespace. Normalize the seed the same way
-		// so the round trip is exact (see Click.Name); String is not lossless otherwise.
-		name = strings.Join(strings.Fields(name), " ")
 		clk := Click{
 			Name:    name,
 			X:       float64(x),
@@ -248,8 +273,10 @@ func Fuzz_clickStringRoundTrip(f *testing.F) {
 		if after != "" {
 			t.Fatalf("expected no trailing data, got %q", after)
 		}
-		if got != clk {
-			t.Fatalf("roundtrip mismatch: want=%+v got=%+v", clk, got)
+		want := clk
+		want.Name = strings.Join(strings.Fields(name), " ")
+		if got != want {
+			t.Fatalf("roundtrip mismatch: want=%+v got=%+v", want, got)
 		}
 	})
 }
