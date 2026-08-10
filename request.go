@@ -108,10 +108,11 @@ type Request struct {
 }
 
 type eventFnCall struct {
-	jid   Jid
-	elems []*Element
-	wht   what.What
-	data  string
+	jid  Jid
+	elem *Element
+	more []*Element
+	wht  what.What
+	data string
 }
 
 // reqState is the lifecycle state of a [Request], stored in Request.state as an

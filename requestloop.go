@@ -265,19 +265,28 @@ func (rq *Request) resolveEventFnCall(id Jid, wht what.What, value string) (call
 			var after string
 			var found bool
 			call.data, after, found = strings.Cut(value, "\t")
+			// Bound speculative allocation from the client-controlled route.
+			remainingCap := min(strings.Count(after, "\t"), 8)
 			for found {
 				var jidStr string
 				jidStr, after, found = strings.Cut(after, "\t")
 				if id = jid.ParseString(jidStr); id > 0 {
 					if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() && e.frozen.Load() {
-						call.elems = append(call.elems, e)
+						if call.elem == nil {
+							call.elem = e
+						} else {
+							if call.more == nil {
+								call.more = make([]*Element, 0, remainingCap)
+							}
+							call.more = append(call.more, e)
+						}
 					}
 				}
 			}
 		}
 	} else {
 		if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() && e.frozen.Load() {
-			call.elems = append(call.elems, e)
+			call.elem = e
 		}
 	}
 	rq.mu.RUnlock()
@@ -287,7 +296,12 @@ func (rq *Request) resolveEventFnCall(id Jid, wht what.What, value string) (call
 // invoke calls the resolved Elements in order and returns the first result that
 // is not ErrEventUnhandled. ErrEventUnhandled is normalized to nil.
 func (call eventFnCall) invoke() (err error) {
-	for _, e := range call.elems {
+	if call.elem != nil {
+		if err = CallEventHandlers(call.elem.UI(), call.elem, call.wht, call.data); !errors.Is(err, ErrEventUnhandled) {
+			return
+		}
+	}
+	for _, e := range call.more {
 		if err = CallEventHandlers(e.UI(), e, call.wht, call.data); !errors.Is(err, ErrEventUnhandled) {
 			return
 		}
