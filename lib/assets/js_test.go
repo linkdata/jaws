@@ -1843,7 +1843,7 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
-func TestJawsJS_FailedSocketPingsAndReloadsOnReconnect(t *testing.T) {
+func TestJawsJS_ReconnectXHRResultsAreHandledOnce(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 function FakeSocket() {}
 WebSocket = FakeSocket;
@@ -1851,45 +1851,130 @@ jaws = new FakeSocket();
 
 let reloaded = 0;
 window.location.reload = function() { reloaded++; };
+let lost = 0;
+let lostElem = null;
+document.querySelector = function(selector) {
+	return selector === "[data-jaws-lost]" ? lostElem : null;
+};
+document.body = {
+	scrollTop: 10,
+	prepend: function(elem) { lostElem = elem; }
+};
+document.documentElement = { scrollTop: 10 };
+jawsElement = function(html) { return { innerHTML: html }; };
+const originalJawsLost = jawsLost;
+jawsLost = function() {
+	lost++;
+	originalJawsLost();
+};
 
+let timers = 0;
+setTimeout = function() { timers++; };
+const requests = [];
+let sends = 0;
 function FakeXHR() {
 	this.readyState = 0;
 	this.status = 0;
-	this.cb = null;
+	this.timeout = 0;
+	this.timeoutAtSend = 0;
+	this.listeners = {};
+	requests.push(this);
 }
 FakeXHR.prototype.open = function(method, url, async) {
 	this.method = method;
 	this.url = url;
 	this.async = async;
 };
-FakeXHR.prototype.addEventListener = function(name, cb) {
-	if (name === "readystatechange") {
-		this.cb = cb;
-	}
+FakeXHR.prototype.addEventListener = function(name, cb, options) {
+	this.listeners[name] = { cb: cb, once: Boolean(options && options.once) };
 };
 FakeXHR.prototype.send = function() {
+	sends++;
+	this.timeoutAtSend = this.timeout;
+	// Stay pending until the test simulates a browser terminal event.
+};
+FakeXHR.prototype.dispatch = function(name) {
+	const listener = this.listeners[name];
+	if (!listener) return;
+	if (listener.once) delete this.listeners[name];
+	listener.cb({ type: name, currentTarget: this });
+};
+FakeXHR.prototype.finish = function(name, status) {
 	this.readyState = 4;
-	this.status = 204;
-	this.cb({ currentTarget: this });
+	this.status = status;
+	this.dispatch("readystatechange");
+	this.dispatch(name);
+	this.dispatch("loadend");
 };
 XMLHttpRequest = FakeXHR;
 
 jawsFailed();
+for (let i = 1; i < 5; i++) jawsReconnect();
+const pending = { timers: timers, lost: lost, reloaded: reloaded };
+
+requests[0].finish("timeout", 0);
+requests[1].finish("error", 0);
+requests[2].finish("abort", 0);
+requests[3].finish("load", 503);
+requests[4].finish("load", 204);
+const firstPass = { timers: timers, lost: lost, reloaded: reloaded };
+
+// One-shot completion prevents stale terminal events from changing the result.
+requests.forEach(function(req) { req.finish("timeout", 0); });
+
 process.stdout.write(JSON.stringify({
 	jawsIsDate: jaws instanceof Date,
-	reloaded: reloaded
+	requests: requests.length,
+	sends: sends,
+	pending: pending,
+	timeouts: requests.map(function(req) { return req.timeoutAtSend; }),
+	firstPass: firstPass,
+	final: { timers: timers, lost: lost, reloaded: reloaded },
+	lostHTML: lostElem && lostElem.innerHTML
 }));
 `)
 
+	type counts struct {
+		Timers   int `json:"timers"`
+		Lost     int `json:"lost"`
+		Reloaded int `json:"reloaded"`
+	}
 	var got struct {
-		JawsIsDate bool `json:"jawsIsDate"`
-		Reloaded   int  `json:"reloaded"`
+		JawsIsDate bool      `json:"jawsIsDate"`
+		Requests   int       `json:"requests"`
+		Sends      int       `json:"sends"`
+		Pending    counts    `json:"pending"`
+		Timeouts   []float64 `json:"timeouts"`
+		FirstPass  counts    `json:"firstPass"`
+		Final      counts    `json:"final"`
+		LostHTML   string    `json:"lostHTML"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
 		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
 	}
-	if !got.JawsIsDate || got.Reloaded != 1 {
-		t.Fatalf("unexpected reconnect behavior: %+v", got)
+	if !got.JawsIsDate {
+		t.Fatal("failed socket did not enter reconnect state")
+	}
+	if got.Requests != 5 || got.Sends != 5 {
+		t.Fatalf("reconnect attempts = %d requests, %d sends; want 5 each", got.Requests, got.Sends)
+	}
+	if got.Pending != (counts{}) {
+		t.Fatalf("pending reconnect changed state: %+v", got.Pending)
+	}
+	if len(got.Timeouts) != 5 {
+		t.Fatalf("reconnect timeouts = %v, want five attempts", got.Timeouts)
+	}
+	for i, timeout := range got.Timeouts {
+		if timeout <= 0 || timeout != got.Timeouts[0] {
+			t.Fatalf("reconnect timeout[%d] = %v, want the same positive timeout", i, timeout)
+		}
+	}
+	want := counts{Timers: 4, Lost: 4, Reloaded: 1}
+	if got.FirstPass != want || got.Final != want {
+		t.Fatalf("reconnect results = first %+v, final %+v; want %+v", got.FirstPass, got.Final, want)
+	}
+	if !strings.Contains(got.LostHTML, "Server connection lost") {
+		t.Fatalf("lost indicator = %q", got.LostHTML)
 	}
 }
 
