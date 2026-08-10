@@ -17,6 +17,7 @@ import (
 	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jq"
 )
 
 type jsVarData struct {
@@ -55,6 +56,56 @@ type jsVarInitialAttrState struct {
 type jsVarReentrantInitialAttrState struct {
 	locker bind.RWLocker
 	attr   template.HTMLAttr
+}
+
+type jsVarTryLocker interface {
+	sync.Locker
+	TryLock() bool
+}
+
+type jsVarReentrantGetPathLogger struct {
+	locker        jsVarTryLocker
+	lockAvailable bool
+	reentered     bool
+	calls         int
+	err           error
+}
+
+func (*jsVarReentrantGetPathLogger) Info(string, ...any) {}
+func (*jsVarReentrantGetPathLogger) Warn(string, ...any) {}
+
+func (logger *jsVarReentrantGetPathLogger) Error(_ string, args ...any) {
+	logger.calls++
+	for i := 0; i+1 < len(args); i += 2 {
+		if args[i] == "err" {
+			logger.err, _ = args[i+1].(error)
+		}
+	}
+	logger.lockAvailable = logger.locker.TryLock()
+	if !logger.lockAvailable {
+		return
+	}
+	logger.locker.Unlock()
+	logger.locker.Lock()
+	logger.reentered = true
+	logger.locker.Unlock()
+}
+
+type jsVarGetPathPanicLogger struct {
+	locker        jsVarTryLocker
+	lockAvailable bool
+	panicValue    any
+}
+
+func (*jsVarGetPathPanicLogger) Info(string, ...any) {}
+func (*jsVarGetPathPanicLogger) Warn(string, ...any) {}
+
+func (logger *jsVarGetPathPanicLogger) Error(string, ...any) {
+	logger.lockAvailable = logger.locker.TryLock()
+	if logger.lockAvailable {
+		logger.locker.Unlock()
+	}
+	panic(logger.panicValue)
 }
 
 func (state *jsVarReentrantInitialAttrState) JawsInitialHTMLAttr(*jaws.Element) template.HTMLAttr {
@@ -305,6 +356,75 @@ func TestJsVar_RenderInitialHTMLAttrCanReenterBindingLocker(t *testing.T) {
 	t.Run("MutexAdapter", func(t *testing.T) {
 		testJsVarRenderInitialAttrReentry(t, new(sync.Mutex), "sync.Mutex", `data-lock="mutex"`)
 	})
+}
+
+func testJsVarGetPathLoggerReentry(t *testing.T, bindingLocker jsVarTryLocker) {
+	t.Helper()
+
+	logger := &jsVarReentrantGetPathLogger{locker: bindingLocker}
+	_, rq := newConfiguredCoreRequest(t, func(jw *jaws.Jaws) {
+		jw.Logger = logger
+	})
+	state := jsVarData{Text: "value"}
+	jsvar := NewJsVar(bindingLocker, &state)
+	elem := rq.NewElement(jsvar)
+	if got := jsvar.JawsGetPath(elem, "text"); got != state.Text {
+		t.Fatalf("successful JawsGetPath = %#v, want %q", got, state.Text)
+	}
+	if logger.calls != 0 {
+		t.Fatalf("successful JawsGetPath logged %d errors, want 0", logger.calls)
+	}
+
+	if value := jsvar.JawsGetPath(elem, "["); value != nil {
+		t.Errorf("failed JawsGetPath = %#v, want nil", value)
+	}
+	if logger.calls != 1 || !errors.Is(logger.err, jq.ErrPathNotFound) {
+		t.Errorf("Logger.Error calls = %d with error %v, want one ErrPathNotFound", logger.calls, logger.err)
+	}
+	if !logger.lockAvailable {
+		t.Error("Logger.Error ran with the binding lock held")
+	}
+	if !logger.reentered {
+		t.Error("Logger.Error did not re-enter the binding locker")
+	}
+}
+
+func TestJsVar_GetPathLoggerCanAcquireBindingLocker(t *testing.T) {
+	t.Run("RWMutex", func(t *testing.T) {
+		testJsVarGetPathLoggerReentry(t, new(sync.RWMutex))
+	})
+
+	t.Run("MutexAdapter", func(t *testing.T) {
+		testJsVarGetPathLoggerReentry(t, new(sync.Mutex))
+	})
+}
+
+func TestJsVar_GetPathLoggerPanicDoesNotLeakBindingLock(t *testing.T) {
+	mu := new(sync.Mutex)
+	panicValue := new(int)
+	logger := &jsVarGetPathPanicLogger{locker: mu, panicValue: panicValue}
+	_, rq := newConfiguredCoreRequest(t, func(jw *jaws.Jaws) {
+		jw.Logger = logger
+	})
+	state := jsVarData{Text: "value"}
+	jsvar := NewJsVar(mu, &state)
+	elem := rq.NewElement(jsvar)
+
+	var recovered any
+	func() {
+		defer func() { recovered = recover() }()
+		jsvar.JawsGetPath(elem, "[")
+	}()
+	if recovered != panicValue {
+		t.Fatalf("Logger.Error panic = %v, want %v", recovered, panicValue)
+	}
+	if !logger.lockAvailable {
+		t.Error("Logger.Error panicked with the binding lock held")
+	}
+	if !mu.TryLock() {
+		t.Fatal("Logger.Error panic left the binding lock held")
+	}
+	mu.Unlock()
 }
 
 // TestJsVar_SetBroadcastsWirePayload pins the wire payload broadcast when a

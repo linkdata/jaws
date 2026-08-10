@@ -192,11 +192,15 @@ func (da *DefaultAuth) IsAdmin() bool {
 	// Warn loudly about the fail-open authorization default. When MakeAuth is nil
 	// templates receive DefaultAuth, IsAdmin() returns true for everyone, so
 	// any {{if .Auth.IsAdmin}}-gated UI is shown to all visitors.
+	var logger Logger
 	da.once.Do(func() {
-		if da.logger != nil {
-			da.logger.Warn("jaws: no MakeAuth; DefaultAuth.IsAdmin returns true")
-		}
+		logger = da.logger
 	})
+	// sync.Once is not reentrant. Invoke the application logger only after Do
+	// releases its internal mutex so the logger may call IsAdmin itself.
+	if logger != nil {
+		logger.Warn("jaws: no MakeAuth; DefaultAuth.IsAdmin returns true")
+	}
 	return true
 }
 
