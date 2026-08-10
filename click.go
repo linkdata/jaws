@@ -12,7 +12,7 @@ import (
 type Click struct {
 	// Name is the event target name. Parsing off the wire normalizes it: leading
 	// and trailing whitespace is trimmed and internal whitespace runs collapse to a
-	// single space, so it does not round-trip losslessly through [Click.String].
+	// single space. [Click.String] applies the same normalization when formatting.
 	Name    string
 	X       float64 // X is the browser clientX coordinate in CSS pixels.
 	Y       float64 // Y is the browser clientY coordinate in CSS pixels.
@@ -51,11 +51,11 @@ func (clk *Click) setKeyState(state int) {
 
 // String formats clk for the JaWS wire protocol.
 //
-// It is not a lossless inverse of parsing: a [Click.Name] with leading, trailing
-// or repeated internal whitespace is normalized when parsed back (see the Name
-// field). The production wire direction is browser-to-server (parse only).
+// It normalizes leading, trailing and repeated internal whitespace in
+// [Click.Name] to the wire representation described by the Name field.
 func (clk Click) String() string {
-	return fmt.Sprintf("%s %s %d %s", runFormatFloat(clk.X), runFormatFloat(clk.Y), clk.keyState(), clk.Name)
+	name := strings.Join(strings.Fields(clk.Name), " ")
+	return fmt.Sprintf("%s %s %d %s", runFormatFloat(clk.X), runFormatFloat(clk.Y), clk.keyState(), name)
 }
 
 func parseClickData(value string) (clk Click, after string, ok bool) {
