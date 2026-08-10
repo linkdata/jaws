@@ -32,6 +32,12 @@ import (
 // update unregisters Elements from the previous execution. Elements created by a
 // failed execution are also unregistered.
 //
+// Before replacing a wrapper's contents, the browser acknowledges all managed
+// descendants it is removing in one WebSocket message. That acknowledgement
+// must fit the 32 KiB inbound limit documented by [jaws.Request.ServeHTTP].
+// Partition very large dynamic trees among nested wrappers, and update those
+// wrappers instead of replacing their common ancestor.
+//
 // Execution is not transactional. An error may leave partial output, queued
 // messages, or application side effects in place.
 type Template struct {

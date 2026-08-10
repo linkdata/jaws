@@ -25,6 +25,10 @@ import (
 // and must tolerate its nil receiver.
 //
 // Select supports one selected option; a multiple select is unsupported.
+// Native HTML form reset is also unsupported: it changes the browser selection
+// without sending the input event that updates the handler. Implement reset as
+// a JaWS-handled action that changes the authoritative selection and dirties its
+// tag.
 type Select struct {
 	handler named.SelectHandler
 }

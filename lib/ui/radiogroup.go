@@ -108,6 +108,13 @@ func (re RadioElement) Label(params ...any) template.HTML {
 // rendered radio in the group shares a name derived from the first created
 // radio Element's request-scoped [jaws.Jid].
 //
+// Use RadioGroup with a single-select [named.BoolArray] whose [named.Bool.Name]
+// values are distinct (its zero value or [named.NewBoolArray](false)) when Go
+// state must follow native single-selection behavior. A multi-select BoolArray
+// or duplicate Bool names are incompatible with native radio semantics.
+// Separately bound [Radio] widgets do not derive server-side grouping from their
+// native HTML group.
+//
 // The radio and label Elements belong to the [Template] whose body called RadioGroup,
 // which unregisters them when it next replaces its content. Ownership follows that call
 // site rather than the wrapper the markup lands in, so passing [RadioElement] values

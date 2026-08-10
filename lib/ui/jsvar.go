@@ -215,6 +215,13 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // bytes. Server broadcasts must use the same browser-facing representation; see
 // [JsVar.JawsSetPath].
 //
+// For each matching live binding, jawsVar sends the complete browser write in
+// one WebSocket message. It must fit the 32 KiB inbound limit documented by
+// [jaws.Request.ServeHTTP], including its path, Element ID, protocol fields, and
+// value after UTF-8 encoding and JSON escaping.
+// [JsVar.ClientCheck] runs only after receipt and cannot enforce this transport
+// limit. Use a separate upload endpoint for large data.
+//
 // The variable name and browser-side jawsVar paths must be
 // application-controlled. The browser rejects exact "__proto__" path
 // components; put user data in values, not names or paths.

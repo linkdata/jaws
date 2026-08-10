@@ -263,6 +263,33 @@ On incoming events, JaWS dispatches in this order:
 
 The handler candidate is asked via `JawsClick` / `JawsContextMenu` / `JawsInput`, matched to the event kind; there is no generic `JawsEvent` method. Return `jaws.ErrEventUnhandled` to fall through to the next candidate.
 
+## Browser interaction and inbound message limits
+
+- The bundled client forwards input, click, and context-menu events only while
+  its WebSocket is open. Events during the initial connection are not queued or
+  replayed. When early interaction matters, initially render controls disabled
+  or inside an `inert` region, then use `Request.SetConnectFn` to change
+  request-local readiness and dirty a request-specific readiness tag used by
+  the Template, or the exact Element whose custom updater removes the gate.
+- Native form reset is unsupported for managed inputs and Select. A reset button
+  or `form.reset()` changes browser state without the per-control events JaWS
+  transports. Use a JaWS-handled `type="button"` to reset Go state and dirty its
+  tags.
+- A `ui.Radio` is one independent boolean binding. Radios in the same native
+  HTML group do not become a server-side group because the browser does not send
+  input events for peers it unchecks. Use `RequestWriter.RadioGroup` with a
+  single-select `named.BoolArray` whose `named.Bool.Name` values are distinct
+  (its zero value or `named.NewBoolArray(false)`), or coordinated setters that
+  clear peers as one synchronized state change and then dirty every changed
+  binding.
+- Every browser-to-server WebSocket message is limited to 32 KiB, including
+  protocol fields, Jids, and values after UTF-8 encoding and JSON escaping. The
+  client does not chunk `Input`, `Set`, `Click`, `ContextMenu`, or `Remove`; an
+  oversized message closes the connection. Use conservative text limits, HTTP
+  uploads for large values, small `jawsVar` writes, and independently updated
+  smaller wrappers for large dynamic trees.
+  `JsVar.ClientCheck` runs after receipt and cannot enforce the transport limit.
+
 ## JsVar JSON representation limits
 
 - `ui.JsVar` uses Go `encoding/json` and browser `JSON.parse` / `JSON.stringify`.

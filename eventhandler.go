@@ -10,7 +10,14 @@ import (
 
 // InputHandler handles input events sent from the browser.
 type InputHandler interface {
-	// JawsInput is called when an [Element] receives a browser input event.
+	// JawsInput is called when JaWS dispatches an input-like message for an
+	// [Element]. See [InputFn] for the message kinds.
+	//
+	// The bundled client forwards events only while its WebSocket is open. Events
+	// raised before the initial connection opens or after it stops are not queued
+	// or replayed. Native browser state changes that emit no watched input or
+	// change event likewise produce no call; standard widgets document relevant
+	// cases.
 	JawsInput(elem *Element, value string) (err error)
 }
 
