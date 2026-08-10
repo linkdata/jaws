@@ -26,9 +26,11 @@
 // [Select] support multiple live Elements under their documented conditions.
 // Input widgets and [JsVar] require distinct widget values.
 //
-// [RequestWriter.Register] binds a render-independent updater to a DOM element
-// authored by the surrounding template. It is an escape hatch for custom markup,
-// not a replacement for rendering a widget normally.
+// [RequestWriter.Register] is an advanced escape hatch primarily for binding a
+// render-independent updater to otherwise static HTML authored by the surrounding
+// template. The registered HTML is intended to contain no JaWS widgets. Render
+// standard widgets normally; Register makes no compatibility guarantees for using
+// them as its updater or inside its HTML.
 //
 // Container children must render one addressable direct DOM node carrying their
 // Element's JaWS ID so reconciliation can remove and order them. [NewTemplate]

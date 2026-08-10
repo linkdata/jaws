@@ -145,6 +145,9 @@ func TestHandler_ExecuteErrorAfterOutputKeepsPartialBody(t *testing.T) {
 	if got := rr.Body.String(); got != "prefix" {
 		t.Fatalf("body = %q, want %q", got, "prefix")
 	}
+	if got, want := rr.Header().Get("Content-Type"), "text/html; charset=utf-8"; got != want {
+		t.Fatalf("Content-Type = %q, want %q", got, want)
+	}
 	if len(logger.errors) != 1 || !errors.Is(logger.errors[0], renderErr) {
 		t.Fatalf("logged errors = %#v, want one %v", logger.errors, renderErr)
 	}
