@@ -3726,6 +3726,30 @@ func BenchmarkRequestIncomingEventQueue(b *testing.B) {
 			}
 		})
 	}
+
+	const repeatedCount = 3600
+	b.Run("bubbled/repeated=3600/elems=1000", func(b *testing.B) {
+		rq := newBenchRequest(b, elemCount)
+		elem := rq.GetElementByJid(elemCount)
+		elem.AddHandlers(benchUnhandledClickHandler{})
+		elem.Freeze()
+		var value strings.Builder
+		value.WriteString("1 2 5 name")
+		for range repeatedCount {
+			value.WriteByte('\t')
+			value.WriteString(elem.Jid().String())
+		}
+		msg := wire.WsMsg{What: what.Click, Data: value.String()}
+		eventCallCh := make(chan eventFnCall, 1)
+
+		b.ReportAllocs()
+		b.ResetTimer()
+		for b.Loop() {
+			rq.handleIncoming(msg, eventCallCh)
+			call := <-eventCallCh
+			runtime.KeepAlive(call)
+		}
+	})
 }
 
 // BenchmarkRequestEventCallChannelAllocation measures the backing storage for
@@ -3787,6 +3811,31 @@ func BenchmarkRequestEventDispatch(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			err = rq.callAllEventHandlers(0, what.Click, clickValue)
+		}
+		if err != nil {
+			b.Fatal(err)
+		}
+	})
+
+	const repeatedCount = 3600
+	b.Run("bubbled/repeated=3600/elems=1000", func(b *testing.B) {
+		rq := newBenchRequest(b, elemCount)
+		elem := rq.GetElementByJid(elemCount)
+		elem.AddHandlers(benchUnhandledClickHandler{})
+		elem.Freeze()
+		var value strings.Builder
+		value.WriteString("1 2 5 name")
+		for range repeatedCount {
+			value.WriteByte('\t')
+			value.WriteString(elem.Jid().String())
+		}
+		data := value.String()
+
+		var err error
+		b.ReportAllocs()
+		b.ResetTimer()
+		for b.Loop() {
+			err = rq.callAllEventHandlers(0, what.Click, data)
 		}
 		if err != nil {
 			b.Fatal(err)
