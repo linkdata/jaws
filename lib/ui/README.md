@@ -192,6 +192,17 @@ parse the encoded form, or keep the exact value outside the browser-writable
 binding. Pass the string representation to browser-facing `JawsSetPath` calls;
 they broadcast the caller-supplied value.
 
+JSON-marshalable values can be sent to the browser, but generic browser writes
+do not perform destination-aware `encoding/json` decoding into the bound Go
+type. JaWS decodes a write into an untyped JSON value and assigns it by path.
+Custom JSON or text unmarshalers are not invoked; generic assignment may reject
+the representation or apply its own rules without the custom validation or
+transformation. Confirmed type mismatches include `time.Time`, base64 `[]byte`,
+and maps with non-string Go keys. Use directly assignable browser-facing fields
+or implement `PathSetter` on the bound root to parse and validate the decoded
+generic value. Use the same representation for server-side `JawsSetPath`
+broadcasts.
+
 `JsVar` values are client-writable. The generic path setter can write exported
 JSON fields and append to slices, and it has no default accumulated-state size
 limit. Set the binding's optional `ClientCheck` to validate each actual generic

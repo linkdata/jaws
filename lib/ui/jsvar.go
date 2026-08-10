@@ -48,6 +48,12 @@ func validateJsVarName(value []any) (name string, err error) {
 type PathSetter interface {
 	// JawsSetPath should set the JSON object member identified by jsPath to the given value.
 	//
+	// For a browser-originated write, value is the result of decoding the JSON
+	// payload into any: an object is map[string]any, an array is []any, and scalar
+	// values use the standard encoding/json generic types. The original JSON bytes
+	// are not available. A programmatic [JsVar.JawsSetPath] call passes its
+	// caller-supplied value unchanged.
+	//
 	// If the member is already the given value, it should return [jaws.ErrValueUnchanged].
 	//
 	// When a [JsVar]'s bound value (Ptr) implements PathSetter, the JsVar
@@ -191,6 +197,23 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // string is not assignable to an integer field. Keep the bound field as a built-in
 // string or implement [PathSetter] to parse and validate the encoded value. Pass
 // the same string representation to browser-facing [JsVar.JawsSetPath] calls.
+//
+// JSON-marshalable describes the server-to-browser representation, not every
+// value the generic browser setter can write back. A generic write is decoded
+// into an untyped JSON value before [github.com/linkdata/jq.Set] assigns it by
+// path; it is not unmarshaled directly into T. Destination-aware [json.Unmarshal]
+// behavior therefore does not run, including custom json.Unmarshaler and
+// encoding.TextUnmarshaler methods. The jq assignment may reject such a
+// representation or apply its own conversion rules without the destination's
+// custom validation or transformation. Confirmed type mismatches include an
+// RFC3339 JSON string for time.Time, a base64 JSON string for []byte, and JSON
+// object keys for a Go map with non-string keys.
+//
+// Use browser-facing state composed of directly assignable JSON-shaped values,
+// or implement [PathSetter] on the bound root to parse and validate the decoded
+// generic value. PathSetter receives that decoded value, not the original JSON
+// bytes. Server broadcasts must use the same browser-facing representation; see
+// [JsVar.JawsSetPath].
 //
 // The variable name and browser-side jawsVar paths must be
 // application-controlled. The browser rejects exact "__proto__" path
@@ -528,6 +551,11 @@ func (jsvar *JsVar[T]) JawsUpdate(elem *jaws.Element) {
 
 // JawsInput applies a browser-side JavaScript variable update.
 //
+// Browser JSON is first decoded into an untyped Go value and then assigned by
+// path. This generic path does not apply destination-aware [json.Unmarshal]
+// semantics; see [JsVar] for supported representations and [PathSetter] for
+// custom decoding.
+//
 // For a generic path write, a non-nil [JsVar.ClientCheck] validates the complete
 // tentative state before it is committed. The check runs while the JsVar write
 // lock is held. It must only inspect value: it must not mutate it, re-enter this
@@ -563,7 +591,7 @@ func (jsvar *JsVar[T]) JawsInput(elem *jaws.Element, value string) (err error) {
 // Create a fresh JsVar for each live [jaws.Element]; l and v may be shared by
 // distinct request-scoped JsVar values. Use [JsVarMaker] when construction
 // depends on the current request or the maker is stored in shared handler data.
-// See [JsVar] for the browser's JSON number precision limits.
+// See [JsVar] for browser JSON representation and write-back limits.
 func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
 	return &JsVar[T]{RWLocker: bind.AsRWLocker(l), Ptr: v}
 }

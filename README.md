@@ -215,6 +215,22 @@ Pass the string representation to browser-facing `JawsSetPath` calls as well;
 they broadcast the caller-supplied value rather than re-encoding the destination
 field.
 
+`JSON`-marshalable describes values that JaWS can send to the browser. Generic
+browser writes are narrower: JaWS first decodes each write into an untyped Go
+JSON value and then assigns it by path, rather than unmarshaling directly into
+the destination Go type. Destination-aware `encoding/json` behavior therefore
+does not run. Custom `json.Unmarshaler` / `encoding.TextUnmarshaler` methods are
+not invoked; generic assignment may reject the representation or apply its own
+conversions without that custom validation or transformation. Confirmed type
+mismatches include the JSON representations of `time.Time`, base64-encoded
+`[]byte`, and maps with non-string Go keys.
+
+For those values, expose a browser-facing model made from directly assignable
+JSON-shaped fields, or implement `ui.PathSetter` on the bound root. A
+`PathSetter` receives the already-decoded generic value and is responsible for
+parsing and validation; it does not receive the original JSON bytes. Keep
+server-side `JawsSetPath` broadcasts in the same browser-facing representation.
+
 Create each binding for the Request that renders it. A `JsVarMaker` can be kept
 in shared handler data because each call returns a fresh `JsVar` over the
 possibly shared backing state:

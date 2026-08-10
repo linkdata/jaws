@@ -263,7 +263,7 @@ On incoming events, JaWS dispatches in this order:
 
 The handler candidate is asked via `JawsClick` / `JawsContextMenu` / `JawsInput`, matched to the event kind; there is no generic `JawsEvent` method. Return `jaws.ErrEventUnhandled` to fall through to the next candidate.
 
-## JsVar JSON number limits
+## JsVar JSON representation limits
 
 - `ui.JsVar` uses Go `encoding/json` and browser `JSON.parse` / `JSON.stringify`.
   JSON numbers become JavaScript `Number` values rather than retaining Go numeric
@@ -281,6 +281,14 @@ The handler candidate is asked via `JawsClick` / `JawsContextMenu` / `JawsInput`
   form, or keep the exact integer outside the browser-writable binding. Pass the
   same string representation to browser-facing `JawsSetPath` calls because they
   broadcast the caller-supplied value.
+- JSON-marshalable values can be sent to the browser, but the generic browser
+  setter does not unmarshal back into the concrete destination type. It decodes
+  an untyped JSON value and assigns it through `jq`. Values that need
+  destination-aware decoding need a browser-facing DTO made from directly
+  assignable JSON shapes or a root `ui.PathSetter` that parses and validates the
+  decoded generic value. Custom JSON/text unmarshalers are not invoked;
+  confirmed type mismatches include `time.Time`, base64 `[]byte`, and maps with
+  non-string Go keys.
 
 ## Clickable template pattern
 
