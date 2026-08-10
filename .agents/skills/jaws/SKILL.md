@@ -239,18 +239,20 @@ Implications:
   ```
 
 - Register never calls `JawsRender`; use it only for a custom updater designed to work
-  without render-time initialization. It uses the updater as a tag, attaches its event
-  handlers, applies tag and handler params, and invokes `JawsUpdate` once. HTML attribute
-  params are ignored; write attributes on the template-authored element.
+  without render-time initialization. It uses the updater as a tag, attaches supported
+  click and context-menu handlers, applies tag and supported handler params, and invokes
+  `JawsUpdate` once. HTML attribute params are ignored; write attributes on the
+  template-authored element.
 - The updater must be a non-nil interface whose dynamic value is comparable at runtime,
   equal to itself, and usable as a tag. A typed nil is invoked normally and must tolerate
   its nil receiver. Reuse one updater for live Elements only when it supports that use
   without retaining Element-specific state on the shared value; it must be safe for
   concurrent use when shared across Requests.
 - Prefer ordinary widget rendering. The container family supports update-only
-  registration with the limitations below; typed inputs omit render-derived metadata,
-  while `ui.Number`, `ui.Range`, `ui.JsVar`, and Templates with a non-empty
-  `OuterHTMLTag` require rendering.
+  registration with the limitations below, and `ui.Select` is its input-handling
+  exception. Template-authored `input`, `textarea`, and `contenteditable` elements,
+  the typed input widgets, `ui.Number`, `ui.Range`, `ui.JsVar`, and Templates with
+  a non-empty `OuterHTMLTag` require rendering.
 - Always emit the returned Jid as the element's `id`. A surrounding Template owns the
   registered Element; otherwise it remains until explicit deletion, reported DOM
   removal, or Request shutdown.

@@ -637,6 +637,12 @@ at least one stable, usable key; `JawsGetTag` takes precedence over the setter's
 identity. Tags passed as render parameters register the Element but do not
 replace its setter-derived dirty target.
 
+Template-authored `input`, `textarea`, and `contenteditable` elements, and the
+standard typed input widgets are not supported through `RequestWriter.Register`;
+render them with their normal widget helpers. `ui.Select` supports a limited
+update-only registration mode, though ordinary rendering provides its complete
+initialization and dirty-target behavior.
+
 Number and Range retain the bound Go type through parsing, formatting, and setter
 calls. Integer inputs use base-10 integer syntax and enforce the bound type's
 width. Floating-point inputs enforce their bound type's width; `float32` values

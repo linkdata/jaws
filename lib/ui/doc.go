@@ -28,7 +28,10 @@
 //
 // [RequestWriter.Register] binds a render-independent updater to a DOM element
 // authored by the surrounding template. It is an escape hatch for custom markup,
-// not a replacement for rendering a widget normally.
+// not a replacement for rendering a widget normally. Template-authored input and
+// textarea elements, contenteditable elements, and the typed input widgets are not
+// supported through Register; [Select] is the documented update-only
+// input-handling exception.
 //
 // Container children must render one addressable direct DOM node carrying their
 // Element's JaWS ID so reconciliation can remove and order them. [NewTemplate]

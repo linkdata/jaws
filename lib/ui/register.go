@@ -22,11 +22,13 @@ func (registerUI) JawsRender(*jaws.Element, io.Writer, []any) error {
 // initialization. Prefer [RequestWriter.NewUI] or a widget helper when the widget
 // can render its own element.
 //
-// Register tags the Element with updater, applies tag and event-handler params,
-// attaches event-handler methods implemented by updater, and invokes
-// [jaws.Updater.JawsUpdate] once for the initial browser state. Updater handlers
-// are tried only after applicable param handlers return [jaws.ErrEventUnhandled].
-// HTML attribute params have no effect; write attributes in the template.
+// Register tags the Element with updater, applies tag and supported event-handler
+// params, attaches click and context-menu methods implemented by updater, and
+// invokes [jaws.Updater.JawsUpdate] once for the initial browser state. A
+// registered [Select] also receives browser input through its input handler.
+// Updater handlers are tried only after applicable param handlers return
+// [jaws.ErrEventUnhandled]. HTML attribute params have no effect; write
+// attributes in the template.
 //
 // The updater must be non-nil, comparable at runtime, equal to itself, and usable
 // as a tag. A typed nil is invoked normally and must tolerate its nil receiver.
@@ -40,9 +42,10 @@ func (registerUI) JawsRender(*jaws.Element, io.Writer, []any) error {
 //
 // [Container], [Tbody], and [Select] support registration, though ordinary
 // rendering is preferable. A registered Select omits its handler-derived tag for
-// post-input dirtying. Typed input widgets omit getter-derived attributes,
-// handlers, and their getter-derived dirty tag. [Number], [Range], [JsVar], and a
-// [Template] with a non-empty OuterHTMLTag require ordinary rendering.
+// post-input dirtying. Template-authored input and textarea elements,
+// contenteditable elements, the typed input widgets, [Number], [Range], [JsVar],
+// and a [Template] with a non-empty OuterHTMLTag require ordinary rendering and
+// are not supported through Register.
 //
 // The returned Jid is suitable for including as an HTML id attribute:
 //
@@ -58,6 +61,8 @@ func (rw RequestWriter) Register(updater jaws.Updater, params ...any) jid.Jid {
 	elem.Tag(updater)
 	// The registerUI Element's UI is not the updater, so events reach the
 	// updater only through the element's handler list, not the elem.UI() fallback.
+	// InputHandler is retained for the documented registered Select path; the
+	// standard input widgets require ordinary rendering.
 	switch updater.(type) {
 	case jaws.InputHandler, jaws.ClickHandler, jaws.ContextMenuHandler:
 		elem.AddHandlers(updater)

@@ -33,10 +33,12 @@ returned JaWS ID must become that element's `id`:
 
 `Register` never calls `JawsRender`; use it for a custom updater designed to work
 without render-time initialization. It tags the element with the updater, attaches
-its event handlers, and calls `JawsUpdate` once for initial state. Write HTML
-attributes in the template because attribute params are ignored. Prefer a normal
-widget helper whenever the widget can render its own element; see
-`RequestWriter.Register` for the standard-widget limitations.
+supported click and context-menu handlers, and calls `JawsUpdate` once for initial
+state. Write HTML attributes in the template because attribute params are ignored.
+Template-authored `input`, `textarea`, and `contenteditable` elements, and the
+typed input widgets are not supported; render them with their normal widget
+helpers. `Select` is the input-handling exception described below. See
+`RequestWriter.Register` for the complete standard-widget limitations.
 
 Use Go's native template action when a static structural fragment must be included
 without another JaWS-managed wrapper:
