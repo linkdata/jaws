@@ -186,8 +186,8 @@ func (*DefaultAuth) Email() string { return "" }
 
 // IsAdmin returns true for every caller.
 //
-// If a logger was supplied at construction, it logs a one-time warning that
-// [Jaws.MakeAuth] is unset and authorization is fail-open.
+// If configured with a logger, it logs one warning that [Jaws.MakeAuth] is unset
+// and authorization is fail-open.
 func (da *DefaultAuth) IsAdmin() bool {
 	// Warn loudly about the fail-open authorization default. When MakeAuth is nil
 	// templates receive DefaultAuth, IsAdmin() returns true for everyone, so
@@ -196,8 +196,7 @@ func (da *DefaultAuth) IsAdmin() bool {
 	da.once.Do(func() {
 		logger = da.logger
 	})
-	// sync.Once is not reentrant. Invoke the application logger only after Do
-	// releases its internal mutex so the logger may call IsAdmin itself.
+	// Logger.Warn may re-enter IsAdmin, so invoke it after once.Do returns.
 	if logger != nil {
 		logger.Warn("jaws: no MakeAuth; DefaultAuth.IsAdmin returns true")
 	}
@@ -207,9 +206,8 @@ func (da *DefaultAuth) IsAdmin() bool {
 // DefaultAuth returns the shared fail-open [DefaultAuth] used for templates when
 // [Jaws.MakeAuth] is nil.
 //
-// It is created on first use and reused, so the [sync.Once] warning in
-// [DefaultAuth.IsAdmin] fires at most once per [Jaws] rather than once per
-// template render. The value of [Jaws.Logger] in effect at first use is captured.
+// The returned value logs at most one warning through the [Jaws.Logger] in
+// effect when DefaultAuth is first called.
 func (jw *Jaws) DefaultAuth() *DefaultAuth {
 	jw.defaultAuthOnce.Do(func() {
 		jw.defaultAuthVal = &DefaultAuth{logger: jw.Logger}

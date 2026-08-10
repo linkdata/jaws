@@ -252,12 +252,10 @@ type JsVar[T any] struct {
 	dirtyTag    any           // current dirty tag, set during render; read via JawsGetTag
 }
 
-// JawsGetPath returns the value at jsPath.
-//
-// Lookup errors are logged on elem when possible after releasing the locker
-// passed to [NewJsVar].
+// JawsGetPath returns the value at jsPath, logging lookup errors on elem when possible.
 func (jsvar *JsVar[T]) JawsGetPath(elem *jaws.Element, jsPath string) (value any) {
 	value, err := jsvar.getPath(jsPath)
+	// The application logger may acquire the binding lock, so invoke it after getPath returns.
 	if elem != nil {
 		_ = elem.Jaws.Log(err)
 	}
