@@ -1901,6 +1901,145 @@ func TestRequest_IncomingRemove(t *testing.T) {
 	})
 }
 
+type requestEventOrderHandler struct {
+	calls atomic.Int32
+}
+
+func (h *requestEventOrderHandler) JawsClick(*Element, Click) error {
+	h.calls.Add(1)
+	return nil
+}
+
+func (h *requestEventOrderHandler) JawsContextMenu(*Element, Click) error {
+	h.calls.Add(1)
+	return nil
+}
+
+type requestClickHandlerFunc func(*Element, Click) error
+
+func (fn requestClickHandlerFunc) JawsClick(elem *Element, click Click) error {
+	return fn(elem, click)
+}
+
+func TestRequest_IncomingRemovePreservesAcceptedEventOrder(t *testing.T) {
+	for _, wht := range []what.What{what.Input, what.Set, what.Click, what.ContextMenu} {
+		for _, removeFirst := range []bool{false, true} {
+			name := wht.String() + " before Remove"
+			wantCalls := int32(1)
+			if removeFirst {
+				name = "Remove before " + wht.String()
+				wantCalls = 0
+			}
+			t.Run(name, func(t *testing.T) {
+				th := newTestHelper(t)
+				rq := newTestRequest(t)
+				defer rq.Close()
+				render := func(name string, ui UI, params ...any) *Element {
+					t.Helper()
+					tagValue := tag.Tag(name)
+					params = append([]any{tagValue}, params...)
+					if err := rq.UI(ui, params...); err != nil {
+						t.Fatal(err)
+					}
+					elems := rq.GetElements(tagValue)
+					if len(elems) != 1 {
+						t.Fatalf("rendered %q elements = %d, want 1", name, len(elems))
+					}
+					return elems[0]
+				}
+
+				started := make(chan struct{})
+				release := make(chan struct{})
+				var releaseOnce sync.Once
+				releaseBlocker := func() { releaseOnce.Do(func() { close(release) }) }
+				defer releaseBlocker()
+
+				blocker := render("blocker", &testDivWidget{inner: "blocker"}, requestClickHandlerFunc(func(*Element, Click) error {
+					close(started)
+					<-release
+					return nil
+				}))
+				container := render("container", &testDivWidget{inner: "container"})
+				var calls func() int32
+				var value func() string
+				var target *Element
+				if wht == what.Input || wht == what.Set {
+					setter := newTestSetter("old")
+					target = render("target", newTestTextInputWidget(setter))
+					calls = func() int32 { return int32(setter.SetCount()) }
+					value = setter.Get
+				} else {
+					handler := &requestEventOrderHandler{}
+					target = render("target", &testDivWidget{inner: "target"}, handler)
+					calls = handler.calls.Load
+				}
+				drained := make(chan struct{})
+				barrier := render("barrier", &testDivWidget{inner: "barrier"}, requestClickHandlerFunc(func(*Element, Click) error {
+					close(drained)
+					return nil
+				}))
+
+				send := func(msg wire.WsMsg) {
+					t.Helper()
+					select {
+					case rq.InCh <- msg:
+					case <-th.C:
+						th.Timeout()
+					}
+				}
+
+				send(wire.WsMsg{What: what.Click, Data: "0 0 0 blocker\t" + blocker.Jid().String()})
+				select {
+				case <-started:
+				case <-th.C:
+					th.Timeout()
+				}
+
+				event := wire.WsMsg{Jid: target.Jid(), What: wht, Data: "new"}
+				if wht == what.Click || wht == what.ContextMenu {
+					event.Jid = 0
+					event.Data = "1 2 0 name\t" + target.Jid().String() + "\t" + container.Jid().String()
+				}
+				remove := wire.WsMsg{Jid: container.Jid(), What: what.Remove, Data: target.Jid().String()}
+				if !removeFirst {
+					send(event)
+				}
+				send(remove)
+				if removeFirst {
+					send(event)
+				}
+				send(wire.WsMsg{What: what.Click, Data: "0 0 0 barrier\t" + barrier.Jid().String()})
+
+				if !target.Deleted() {
+					t.Fatal("Remove was not processed while the event caller was blocked")
+				}
+				releaseBlocker()
+				select {
+				case <-drained:
+				case <-th.C:
+					th.Timeout()
+				}
+
+				if got := calls(); got != wantCalls {
+					t.Fatalf("handler calls = %d, want %d", got, wantCalls)
+				}
+				if value != nil {
+					want := "new"
+					if removeFirst {
+						want = "old"
+					}
+					if got := value(); got != want {
+						t.Fatalf("bound value = %q, want %q", got, want)
+					}
+				}
+				if got := rq.GetElementByJid(target.Jid()); got != nil {
+					t.Fatalf("removed target remains registered: %+v", got)
+				}
+			})
+		}
+	}
+}
+
 func TestRequest_DirtyElementUpdatesOwningRequest(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rq := newTestRequest(t)
