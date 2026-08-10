@@ -101,29 +101,26 @@ type Jid = jid.Jid // convenience alias
 // [Jaws.ServeWithTimeout]; mutating one after serving has begun is an
 // unsynchronized write and is not supported. Methods document their own
 // concurrency behavior and may be called concurrently when stated.
-//
-// A custom BaseContext or a custom context installed through
-// [Request.SetContext] may implement the optional
-// `AfterFunc(func()) func() bool` method recognized by [context.AfterFunc]. JaWS
-// may invoke that registration method or its returned stop function while
-// internal Jaws or Request locks are held. Both hooks must return promptly and
-// must not call methods on the same Jaws or Request, directly or through work
-// they wait for. Contexts returned directly by the standard context constructors
-// expose no application hook and need no special handling.
 type Jaws struct {
-	CookieName              string          // Name for session cookies; defaults to a name derived from the executable ([assets.DefaultCookieName]), falling back to "jaws"
-	AutoSession             bool            // Create and associate a session during a successful WebSocket upgrade when a Request has none. Defaults to false.
-	TrustForwardedHeaders   bool            // Trust X-Forwarded-* headers: governs the session cookie Secure flag (X-Forwarded-Proto) and the client IP used for session/request binding (X-Forwarded-For/X-Real-IP). Defaults to false; only enable behind a single reverse proxy you control that sets these headers.
-	Logger                  Logger          // Optional logger to use
-	Debug                   bool            // Set to true to enable debug info in generated HTML code. Call GenerateHeadHTML after changing it.
-	MakeAuth                MakeAuthFn      // Function to create ui.With.Auth for Templates. If nil, templates get the fail-open DefaultAuth (IsAdmin()==true for everyone); set it to enforce authorization. See DefaultAuth.
-	BaseContext             context.Context // Non-nil parent context for Requests; New uses context.Background(). See Request.Context.
-	WebSocketPingInterval   time.Duration   // Interval between keepalive pings on active WebSocket connections. Defaults to DefaultWebSocketPingInterval. Set <=0 to disable keepalive pings.
-	MaxPendingRequestsPerIP int             // Maximum number of unclaimed Requests per client IP. Defaults to DefaultMaxPendingRequestsPerIP. Set <=0 to disable the cap.
-	webSocketTimeout        time.Duration   // timeout duration passed to ServeWith
-	maintenanceInterval     time.Duration   // Serve maintenance tick interval; set by ServeWithTimeout and read under mu, zero until Serve starts
-	created                 time.Time       // monotonic base captured in New(); read-only after construction, basis for runtimeSeconds
-	runtimeSeconds          atomic.Int32    // whole seconds since created; refreshed during request allocation and by the Serve loop, read lock-free by MarkWritten and the eviction/idle checks
+	CookieName            string     // Name for session cookies; defaults to a name derived from the executable ([assets.DefaultCookieName]), falling back to "jaws"
+	AutoSession           bool       // Create and associate a session during a successful WebSocket upgrade when a Request has none. Defaults to false.
+	TrustForwardedHeaders bool       // Trust X-Forwarded-* headers: governs the session cookie Secure flag (X-Forwarded-Proto) and the client IP used for session/request binding (X-Forwarded-For/X-Real-IP). Defaults to false; only enable behind a single reverse proxy you control that sets these headers.
+	Logger                Logger     // Optional logger to use
+	Debug                 bool       // Set to true to enable debug info in generated HTML code. Call GenerateHeadHTML after changing it.
+	MakeAuth              MakeAuthFn // Function to create ui.With.Auth for Templates. If nil, templates get the fail-open DefaultAuth (IsAdmin()==true for everyone); set it to enforce authorization. See DefaultAuth.
+	// BaseContext is the non-nil parent context for Requests.
+	//
+	// New uses [context.Background]. If a custom context implements the optional
+	// method recognized by [context.AfterFunc], that method and its returned stop
+	// function must return promptly and must not synchronously call this Jaws or
+	// one of its Requests, or wait for work that does. See [Request.SetContext].
+	BaseContext             context.Context
+	WebSocketPingInterval   time.Duration // Interval between keepalive pings on active WebSocket connections. Defaults to DefaultWebSocketPingInterval. Set <=0 to disable keepalive pings.
+	MaxPendingRequestsPerIP int           // Maximum number of unclaimed Requests per client IP. Defaults to DefaultMaxPendingRequestsPerIP. Set <=0 to disable the cap.
+	webSocketTimeout        time.Duration // timeout duration passed to ServeWith
+	maintenanceInterval     time.Duration // Serve maintenance tick interval; set by ServeWithTimeout and read under mu, zero until Serve starts
+	created                 time.Time     // monotonic base captured in New(); read-only after construction, basis for runtimeSeconds
+	runtimeSeconds          atomic.Int32  // whole seconds since created; refreshed during request allocation and by the Serve loop, read lock-free by MarkWritten and the eviction/idle checks
 	bcastCh                 chan wire.Message
 	subCh                   chan subscription
 	unsubCh                 chan chan wire.Message

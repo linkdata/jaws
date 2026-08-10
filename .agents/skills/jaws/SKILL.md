@@ -268,16 +268,14 @@ The handler candidate is asked via `JawsClick` / `JawsContextMenu` / `JawsInput`
 - `Jaws.BaseContext` and a context installed by `Request.SetContext` own their
   cancellation causes. If their independent cancellation or deadline wins,
   the Request context exposes that cause directly; JaWS does not add a
-  `jaws.ErrRequestCancelled` wrapper. Detect termination through `Done` or
-  `Err`, and use an application sentinel when caller-owned failure
-  classification matters.
+  `jaws.ErrRequestCancelled` wrapper. Use an application sentinel when
+  caller-owned failure classification matters.
 - A custom BaseContext or SetContext result may implement the optional
-  `AfterFunc(func()) func() bool` method recognized by `context.AfterFunc`. JaWS
-  may invoke that registration method or its returned stop function under core
-  locks. Both hooks must return promptly and must not synchronously re-enter the
-  same Jaws or Request, or wait for work that does. Standard-library contexts
-  need no workaround; an interface-only `struct{ context.Context }` wrapper can
-  hide optional methods on a custom context.
+  `AfterFunc(func()) func() bool` method recognized by `context.AfterFunc`. Its
+  registration and stop hooks must return promptly and must not synchronously
+  call the same Jaws or Request, or wait for work that does. Standard-library
+  contexts need no special handling; an interface-only
+  `struct{ context.Context }` wrapper can hide optional methods.
 
 ## Browser interaction and inbound message limits
 

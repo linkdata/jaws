@@ -842,23 +842,20 @@ go func() {
 ```
 
 `Jaws.BaseContext` and a context installed by `Request.SetContext` own their
-cancellation causes. In the example, if `cancel` wins,
-`context.Cause(workCtx)` is the context's immutable cause; JaWS does not add a
-`jaws.ErrRequestCancelled` wrapper. Use `Done` or `Err` to detect termination.
-When background failures need stable classification, cancel with an
-application-defined sentinel and use
-`errors.Is(context.Cause(workCtx), sentinel)`. `ErrRequestCancelled` identifies
-non-nil causes wrapped by `Request.Cancel` or JaWS request-aware cancellation
-paths.
+cancellation causes. In the example, if `cancel` wins, both
+`context.Cause(workCtx)` and `context.Cause(rq.Context())` expose that cause
+unchanged; JaWS does not add a `jaws.ErrRequestCancelled` wrapper. When
+background failures need stable classification, cancel with an
+application-defined sentinel and use `errors.Is(context.Cause(workCtx),
+sentinel)`. `ErrRequestCancelled` identifies a non-nil cause supplied when JaWS
+cancels a Request.
 
 A custom `Jaws.BaseContext` or context returned from `Request.SetContext` may
 implement the optional `AfterFunc(func()) func() bool` method recognized by
-`context.AfterFunc`. JaWS can invoke that registration method or its returned
-stop function while internal locks are held. Both hooks must return promptly
-and must not call methods on the same Jaws or Request, directly or through work
-they wait for. Ordinary contexts returned by the standard `context` constructors
-need no special handling. Wrap a custom context in an interface-only wrapper to
-hide optional methods when necessary:
+`context.AfterFunc`. Its registration and stop hooks must return promptly and
+must not synchronously call the same Jaws or Request, or wait for work that does.
+Standard-library contexts need no special handling. An interface-only wrapper
+can hide optional methods on a custom context:
 
 ```go
 type contextOnly struct {
