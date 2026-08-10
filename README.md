@@ -175,6 +175,46 @@ must read or change and exchange with Go. Unlike most JaWS UI values, a `JsVar`
 is a bidirectional channel: the binding does not by itself make either the Go
 value or the browser value authoritative.
 
+Values cross this boundary through Go's `encoding/json` and the browser's
+`JSON.parse` and `JSON.stringify`. JSON numbers become JavaScript `Number`
+values rather than retaining a Go numeric type or integer width. Every integer
+in the inclusive range `-9007199254740991` through `9007199254740991` is
+represented exactly. Outside that safe range, not every integer is
+representable. A root or nested signed or unsigned integer may be rounded in the
+initial browser snapshot or a server update, and a later browser write can
+commit the rounded value to Go. `JsVar` does not reject or transform such values.
+
+If an integer must remain exact, give it an application-level JSON
+representation such as a decimal field of Go's built-in `string` type in the
+`JsVar`-bound state. JavaScript can convert that string to `BigInt` for
+calculations, but must convert it back to a string before calling `jawsVar`
+because `JSON.stringify` does not encode `BigInt` values directly:
+
+```go
+type Client struct {
+	Counter string `json:"counter"`
+}
+
+client.Counter = strconv.FormatInt(counter, 10)
+```
+
+```js
+const next = BigInt(client.counter) + 1n;
+client.counter = next.toString();
+jawsVar("client.counter", client.counter);
+```
+
+Use a built-in `string` field in the bound state when relying on the generic path
+setter. A Go `json:",string"` tag makes Go-to-browser encoding use a JSON string,
+but is not bidirectional for `JsVar`'s generic path setter: `JsVar` decodes
+browser input into an untyped value, so the resulting string is not assignable
+to an integer field. When the domain model must retain an integer field, combine
+a string representation with an application `ui.PathSetter` that parses and
+validates it, or keep the exact integer outside the browser-writable binding.
+Pass the string representation to browser-facing `JawsSetPath` calls as well;
+they broadcast the caller-supplied value rather than re-encoding the destination
+field.
+
 Create each binding for the Request that renders it. A `JsVarMaker` can be kept
 in shared handler data because each call returns a fresh `JsVar` over the
 possibly shared backing state:

@@ -174,6 +174,24 @@ slider := ui.NewRange(binder)
 {{$.Range .Dot.Percent `min="0"` `max="100"` `step="1"`}}
 ```
 
+## JavaScript variables
+
+`JsVar` values cross the browser boundary through `encoding/json`, `JSON.parse`,
+and `JSON.stringify`. JSON numbers become JavaScript `Number` values rather than
+retaining a Go numeric type or integer width. Root and nested integers outside
+the inclusive safe range `-9007199254740991` through `9007199254740991` are not
+reliably preserved; a browser write can commit a rounded value to Go. `JsVar`
+does not reject or transform them. When exact wide integers matter, represent
+them with fields of Go's built-in `string` type and convert to and from JavaScript
+`BigInt` in application code. Convert a `BigInt` back to a string before calling
+`jawsVar`; `JSON.stringify` does not encode it directly. A Go `json:",string"`
+tag makes Go-to-browser encoding use a JSON string, but JsVar's generic browser
+write still produces an untyped string that is not assignable to an integer
+field. Keep the bound field as a built-in `string`, implement `PathSetter` to
+parse the encoded form, or keep the exact value outside the browser-writable
+binding. Pass the string representation to browser-facing `JawsSetPath` calls;
+they broadcast the caller-supplied value.
+
 `JsVar` values are client-writable. The generic path setter can write exported
 JSON fields and append to slices, and it has no default accumulated-state size
 limit. Set the binding's optional `ClientCheck` to validate each actual generic

@@ -263,6 +263,25 @@ On incoming events, JaWS dispatches in this order:
 
 The handler candidate is asked via `JawsClick` / `JawsContextMenu` / `JawsInput`, matched to the event kind; there is no generic `JawsEvent` method. Return `jaws.ErrEventUnhandled` to fall through to the next candidate.
 
+## JsVar JSON number limits
+
+- `ui.JsVar` uses Go `encoding/json` and browser `JSON.parse` / `JSON.stringify`.
+  JSON numbers become JavaScript `Number` values rather than retaining Go numeric
+  types or integer widths. Root and nested integers outside `-9007199254740991`
+  through `9007199254740991` are not reliably preserved; a browser write can
+  commit a rounded value to Go. JaWS does not reject or transform wider integers.
+- If exactness matters, use a field of Go's built-in `string` type in the
+  JsVar-bound model. Convert it to `BigInt` for browser calculations and back to a
+  string before `jawsVar`; `JSON.stringify` does not encode `BigInt` values
+  directly.
+- A Go `json:",string"` tag makes Go-to-browser encoding use a JSON string but is
+  not a complete bidirectional workaround: the generic browser setter cannot
+  assign that untyped string to an integer field. Keep the bound field as a
+  built-in `string`, implement `ui.PathSetter` to parse and validate the encoded
+  form, or keep the exact integer outside the browser-writable binding. Pass the
+  same string representation to browser-facing `JawsSetPath` calls because they
+  broadcast the caller-supplied value.
+
 ## Clickable template pattern
 
 For clickable content rendering:
