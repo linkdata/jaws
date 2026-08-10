@@ -22,6 +22,7 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
+	"unsafe"
 
 	"github.com/coder/websocket"
 	"github.com/linkdata/deadlock"
@@ -2061,16 +2062,25 @@ func TestRequest_IncomingRemovePreservesAcceptedEventOrder(t *testing.T) {
 
 func TestRequest_EventRouteOrderAndDeduplication(t *testing.T) {
 	for _, wht := range []what.What{what.Click, what.ContextMenu} {
-		for _, uniqueCount := range []int{2, 33, 34} {
-			t.Run(wht.String()+"/unique="+strconv.Itoa(uniqueCount), func(t *testing.T) {
+		for _, tc := range []struct {
+			name           string
+			uniqueCount    int
+			duplicateIndex int
+		}{
+			{name: "inline", uniqueCount: 2, duplicateIndex: 0},
+			{name: "linear", uniqueCount: 2, duplicateIndex: 1},
+			{name: "map-seeded", uniqueCount: 33, duplicateIndex: 1},
+			{name: "map-inserted", uniqueCount: 34, duplicateIndex: 33},
+		} {
+			t.Run(wht.String()+"/"+tc.name, func(t *testing.T) {
 				rq := newTestRequest(t)
 				defer rq.Close()
 				var calls []string
 				var route strings.Builder
 				route.WriteString("1 2 0 name")
-				want := make([]string, 0, uniqueCount)
-				var first Jid
-				for i := range uniqueCount {
+				want := make([]string, 0, tc.uniqueCount)
+				targets := make([]Jid, 0, tc.uniqueCount)
+				for i := range tc.uniqueCount {
 					name := strconv.Itoa(i)
 					if err := rq.UI(testDivWidget{inner: "target"}, requestRouteOrderHandler{
 						name: name, calls: &calls, err: ErrEventUnhandled,
@@ -2078,16 +2088,14 @@ func TestRequest_EventRouteOrderAndDeduplication(t *testing.T) {
 						t.Fatal(err)
 					}
 					elem := rq.GetElementByJid(Jid(i + 1))
-					if i == 0 {
-						first = elem.Jid()
-					}
+					targets = append(targets, elem.Jid())
 					route.WriteByte('\t')
 					route.WriteString(elem.Jid().String())
 					want = append(want, name)
 				}
 				route.WriteByte('\t')
-				// Repeating the first target verifies first-occurrence deduplication.
-				route.WriteString(first.String())
+				// Repeating a selected target verifies first-occurrence deduplication.
+				route.WriteString(targets[tc.duplicateIndex].String())
 				if err := rq.callAllEventHandlers(0, wht, route.String()); err != nil {
 					t.Fatal(err)
 				}
@@ -2493,6 +2501,47 @@ func TestRequest_handleIncomingSkipsEventsWithoutTargets(t *testing.T) {
 				t.Fatalf("FIFO entry = %#v, want sentinel", got)
 			}
 		})
+	}
+}
+
+func TestRequest_handleIncomingClonesLargeEventRoute(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	targetTag := tag.Tag(t.Name())
+	if err := rq.UI(testDivWidget{inner: "target"}, targetTag); err != nil {
+		t.Fatal(err)
+	}
+	targets := rq.GetElements(targetTag)
+	if len(targets) != 1 {
+		t.Fatalf("target elements = %d, want 1", len(targets))
+	}
+	target := targets[0]
+
+	const wantData = "1 2 0 name"
+	routeTarget := "\t" + target.Jid().String()
+	repeats := minEventRouteCloneSavingsBytes/len(routeTarget) + 1
+	msg := wire.WsMsg{What: what.Click, Data: wantData + strings.Repeat(routeTarget, repeats)}
+	if got := len(msg.Append(nil)); got > webSocketReadLimit {
+		t.Fatalf("encoded message size = %d, limit %d", got, webSocketReadLimit)
+	}
+
+	eventCallCh := make(chan eventFnCall, 1)
+	rq.handleIncoming(msg, eventCallCh)
+	var call eventFnCall
+	select {
+	case call = <-eventCallCh:
+	default:
+		t.Fatal("event was not queued")
+	}
+	if call.elem != target || len(call.more) != 0 {
+		t.Fatalf("event targets = %v, %v; want only %v", call.elem, call.more, target)
+	}
+	if call.data != wantData {
+		t.Fatalf("event data = %q, want %q", call.data, wantData)
+	}
+	if unsafe.StringData(call.data) == unsafe.StringData(msg.Data) { // #nosec G103 -- test intentionally inspects string backing storage
+		t.Fatal("event data retains the routed message backing storage")
 	}
 }
 
