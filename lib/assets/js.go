@@ -2,11 +2,11 @@ package assets
 
 import (
 	_ "embed" // enable go:embed directives
-	"mime"
 	"net/url"
 	"path"
 	"strings"
 
+	"github.com/linkdata/jaws/internal/headresource"
 	"github.com/linkdata/jaws/lib/htmlio"
 )
 
@@ -23,50 +23,6 @@ var JavascriptText string
 //
 //go:embed jaws.css
 var JawsCSS string
-
-type resourceDestination uint8
-
-const (
-	resourceDestinationNone resourceDestination = iota
-	resourceDestinationScript
-	resourceDestinationStyle
-	resourceDestinationImage
-	resourceDestinationFont
-	resourceDestinationFetch
-)
-
-func resourceMetadata(u *url.URL) (destination resourceDestination, mimetype string) {
-	if u != nil {
-		ext := strings.ToLower(path.Ext(u.Path))
-		mimetype = mime.TypeByExtension(ext)
-		mimetype, _, _ = strings.Cut(mimetype, ";")
-		switch ext {
-		case ".js":
-			destination = resourceDestinationScript
-		case ".css":
-			destination = resourceDestinationStyle
-		default:
-			switch lowmime := strings.ToLower(mimetype); {
-			case strings.HasPrefix(lowmime, "image/"):
-				destination = resourceDestinationImage
-			case strings.HasPrefix(lowmime, "font/"):
-				destination = resourceDestinationFont
-			default:
-				destination = resourceDestinationFetch
-			}
-		}
-	}
-	return
-}
-
-// IsFetchPreload reports whether [PreloadHTML] emits a fetch preload for u.
-//
-// A nil URL returns false.
-func IsFetchPreload(u *url.URL) (yes bool) {
-	destination, _ := resourceMetadata(u)
-	yes = destination == resourceDestinationFetch
-	return
-}
 
 // PreloadHTML returns HTML code to load the given resources efficiently.
 //
@@ -87,31 +43,31 @@ func PreloadHTML(urls ...*url.URL) (htmlCode, faviconURL string) {
 	var favicontype string
 	var buf []byte
 	for _, u := range urls {
-		destination, mimetype := resourceMetadata(u)
-		if destination == resourceDestinationNone {
+		destination, mimetype := headresource.Classify(u)
+		if destination == headresource.DestinationNone {
 			continue
 		}
 		var asattr string
 		var crossorigin bool
 		urlstr := u.String()
 		switch destination {
-		case resourceDestinationScript:
+		case headresource.DestinationScript:
 			jsurls = append(jsurls, urlstr)
 			continue
-		case resourceDestinationStyle:
+		case headresource.DestinationStyle:
 			cssurls = append(cssurls, urlstr)
 			continue
-		case resourceDestinationFetch:
+		case headresource.DestinationFetch:
 			asattr = "fetch"
 			crossorigin = true
-		case resourceDestinationImage:
+		case headresource.DestinationImage:
 			asattr = "image"
 			if strings.HasPrefix(strings.ToLower(path.Base(u.Path)), "favicon") {
 				favicontype = mimetype
 				faviconURL = urlstr
 				continue
 			}
-		case resourceDestinationFont:
+		case headresource.DestinationFont:
 			asattr = "font"
 			crossorigin = true
 		}
