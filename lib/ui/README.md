@@ -130,31 +130,29 @@ or `fmt.Stringer` for string content that should be escaped.
 ## Browser input boundaries
 
 The bundled client forwards managed input, click, and context-menu events only
-while its WebSocket is open. Events raised during the initial connection are not
-queued or replayed, even though native controls can already be edited. When that
-interval matters, initially render controls disabled or inside an `inert` region,
-then use a request `ConnectFn` to change request-local readiness and dirty the
-request-specific readiness tag used by the Template, or the exact Element whose
-custom updater removes the gate.
+while its WebSocket is open and does not replay earlier events. When early
+interaction matters, disable native controls or make the interactive region
+inert, then use a request `ConnectFn` to update request-local readiness and dirty
+the request-specific readiness tag used by the Template, or the exact Element
+whose custom updater removes the gate.
 
 Native form reset is not a bound input operation. `<button type="reset">` and
 `form.reset()` change browser controls without the per-control input/change
-events JaWS observes. Use a JaWS-handled `type="button"` to reset authoritative
-Go values and dirty their tags.
+events JaWS observes. Use a JaWS-handled button with `type="button"` to reset
+authoritative Go values and dirty their tags.
 
 Separately constructed `Radio` widgets remain independent boolean bindings even
 when they belong to the same native HTML group. Native radio grouping unchecks
 peers without reporting those peers to JaWS. Use `RequestWriter.RadioGroup` with
-a single-select `named.BoolArray` whose `named.Bool.Name` values are distinct
-(its zero value or `named.NewBoolArray(false)`), or custom setters that clear
-peers as one synchronized state change and then dirty every changed binding.
+a single-select `named.BoolArray` whose `named.Bool.Name` values are distinct,
+or custom setters that clear peers as one synchronized state change and then
+dirty every changed binding.
 
 Every browser-to-server message must fit the 32 KiB limit. The
 bundled client does not chunk input values, `jawsVar` writes, click data, or
-removal acknowledgements. The limit includes protocol fields, Jids, and values
-after UTF-8 encoding and JSON escaping; an oversized message closes the
-connection. Use conservative text limits, HTTP uploads for large values, and
-independently updated smaller wrappers for large dynamic trees.
+removal reports; an oversized message closes the connection. Keep text values
+and click/context-menu names conservatively sized, use HTTP uploads for large
+values, and split large dynamic trees into independently updated wrappers.
 `JsVar.ClientCheck` runs only after receipt and cannot enforce this boundary.
 
 ## Numeric inputs

@@ -113,9 +113,8 @@ type ClickHandler interface {
 	// select, textarea or option element, or inside one, are left to native
 	// input handling and do not invoke JawsClick on an ancestor.
 	//
-	// The bundled client forwards events only while its WebSocket is open.
-	// Events raised before the initial connection opens or after it stops are not
-	// queued or replayed.
+	// Events that occur while the bundled client's WebSocket is not open are not
+	// forwarded or replayed.
 	//
 	// [Click.Name] is the first name HTML attribute or 'button' textContent
 	// found while walking from the event target up through its ancestors. If none
@@ -133,9 +132,8 @@ type ContextMenuHandler interface {
 	// textarea or option element, or inside one, are left to native browser
 	// handling and do not invoke JawsContextMenu on an ancestor.
 	//
-	// The bundled client forwards events only while its WebSocket is open.
-	// Events raised before the initial connection opens or after it stops are not
-	// queued or replayed.
+	// Events that occur while the bundled client's WebSocket is not open are not
+	// forwarded or replayed.
 	JawsContextMenu(elem *Element, click Click) (err error)
 }
 

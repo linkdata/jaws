@@ -14,10 +14,10 @@ import (
 // A Textarea value must back at most one live [jaws.Element]. Construct distinct
 // Textarea values over the same setter to render one bound value more than once.
 //
-// Each browser edit sends the complete value in one WebSocket message. The
-// value plus protocol and JSON overhead must fit the 32 KiB inbound limit
-// documented by [jaws.Request.ServeHTTP]. Use a conservative maxlength or a
-// separate upload endpoint for potentially large text.
+// While the WebSocket is open, each input event sends the complete value in one
+// message. The value plus protocol and JSON overhead must fit the 32 KiB inbound
+// limit documented by [jaws.Request.ServeHTTP]. Use a conservative maxlength or
+// a separate upload endpoint for potentially large text.
 type Textarea struct{ InputText }
 
 // NewTextarea returns a textarea widget bound to g.
