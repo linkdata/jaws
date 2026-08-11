@@ -478,6 +478,19 @@ If you change fields that affect generated page metadata, such as `Debug` or
 the resource list passed to `GenerateHeadHTML()`, call `GenerateHeadHTML()`
 before rendering new pages so `Request.HeadHTML()` sees the updated data.
 
+`GenerateHeadHTML()` writes markup for common `.js` and `.css` URLs, including a
+trailing `@version` when the final extension is otherwise unrecognized, and for
+image and font resources. Every successfully parsed URL is passed to
+secureheaders automatic CSP inference. A configured `Jaws.Logger` warns once
+for each extra URL that is omitted from the final markup or is absolute or
+scheme-relative and cannot contribute an explicit policy source. Warning URLs redact
+passwords and omit queries and fragments. Applications may load omitted
+resources manually. When automatic inference does not match the request
+destination, use the explicit policy setup under
+[Secure Response Headers](#secure-response-headers). Resource URLs must come
+from trusted application configuration because matched scripts are executable
+and CSP permissions apply to origins.
+
 ### Maintainer checklist
 
 When changing core request, session, broadcast, or WebSocket code, re-check
@@ -542,8 +555,8 @@ Broadcasting APIs are not safe before the processing loop starts. In particular,
 ### Secure Response Headers
 
 Use `(*Jaws).SecureHeadersMiddleware(next)` to wrap page handlers with a
-security-header baseline and a `Content-Security-Policy` that matches the
-resources currently configured for JaWS.
+security-header baseline and a `Content-Security-Policy` generated from the
+resource URLs currently configured for JaWS.
 
 The baseline headers come from
 [`github.com/linkdata/secureheaders`](https://github.com/linkdata/secureheaders).
@@ -555,6 +568,23 @@ forwarded HTTPS headers.
 ```go
 page := ui.Handler(jw, "index", bind.New(&mu, &f))
 http.DefaultServeMux.Handle("GET /", jw.SecureHeadersMiddleware(page))
+```
+
+When a resource needs an explicit destination, use `secureheaders.Middleware`
+instead of the JaWS convenience middleware. The custom policy must include
+every external resource the page loads, including resources configured through
+`GenerateHeadHTML()`; a zero `Destination` keeps automatic inference. Leave a
+context-mismatched resource out of `GenerateHeadHTML()` and load it manually.
+Given a parsed, automatically loaded `scriptURL` and a manually fetched
+`fetchURL`:
+
+```go
+headers := secureheaders.DefaultHeaders()
+headers.Set("Content-Security-Policy", secureheaders.BuildContentSecurityPolicy(
+	secureheaders.Resource{URL: scriptURL},
+	secureheaders.Resource{URL: fetchURL, Destination: secureheaders.ResourceDestinationConnect},
+))
+http.DefaultServeMux.Handle("GET /", secureheaders.Middleware{Handler: page, Header: headers})
 ```
 
 ### Routing

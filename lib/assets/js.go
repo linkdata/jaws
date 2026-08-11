@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/linkdata/jaws/lib/htmlio"
+	"github.com/linkdata/secureheaders"
 )
 
 // JavascriptText is the source code for the client-side JaWS JavaScript library.
@@ -24,20 +25,24 @@ var JavascriptText string
 //go:embed jaws.css
 var JawsCSS string
 
-// PreloadHTML returns HTML code to load the given resources efficiently.
+// PreloadHTML returns head markup for common resource URLs.
 //
-// JavaScript and CSS files are emitted as script and stylesheet tags. Image and
-// font resources are emitted as preloads for their respective destinations;
-// other resources use the fetch destination. Font and fetch preloads use
-// anonymous CORS. Favicon image URLs are returned separately. A recognized MIME
-// type is included in the preload's type attribute.
+// A .js extension matched by [secureheaders.InferResource] emits a deferred
+// classic script, and a matched .css extension emits a stylesheet. These forms
+// may include a trailing @version when the final extension is otherwise
+// unrecognized. Non-favicon resources inferred exclusively as images or fonts
+// emit preloads. Module scripts, MIME-only scripts and stylesheets, generic
+// fetch resources, and all other URLs are omitted. Font preloads use anonymous
+// CORS. Image and font preloads include a compatible MIME type from the final
+// extension when available. Resource URLs must come from trusted application
+// configuration because matched scripts are executable.
 //
 // Nil URL arguments are skipped. A resource is returned as faviconURL only when
-// its base name begins with "favicon" and its MIME type (resolved from the file
-// extension) is image/*. A .js or .css resource is always emitted as a script or
-// stylesheet and is never treated as a favicon, regardless of its base name. If
+// its base name begins with "favicon" and it is classified as an image. A script
+// or stylesheet is never treated as a favicon, regardless of its base name. If
 // more than one resource qualifies as a favicon, the last one wins and earlier
-// favicon URLs are discarded rather than emitted as preload links.
+// favicon URLs are discarded. The winner is emitted as an icon and returned as
+// faviconURL.
 func PreloadHTML(urls ...*url.URL) (htmlCode, faviconURL string) {
 	var jsurls, cssurls []string
 	var favicontype string
@@ -46,49 +51,45 @@ func PreloadHTML(urls ...*url.URL) (htmlCode, faviconURL string) {
 		if u == nil {
 			continue
 		}
-		var asattr string
-		var crossorigin bool
-		ext := strings.ToLower(path.Ext(u.Path))
-		mimetype := mime.TypeByExtension(ext)
-		mimetype, _, _ = strings.Cut(mimetype, ";")
+		destinations, matchedExtension := secureheaders.InferResource(u)
 		urlstr := u.String()
-		switch ext {
+		switch matchedExtension {
 		case ".js":
-			jsurls = append(jsurls, urlstr)
-			continue
-		case ".css":
-			cssurls = append(cssurls, urlstr)
-			continue
-		default:
-			// Match MIME families on the "type/" prefix (case-insensitively) so
-			// unrelated types such as "imagery/*" or "fontastic/*" are not mistaken
-			// for "image/*" or "font/*".
-			lowmime := strings.ToLower(mimetype)
-			// The URL and MIME type provide no more specific consumer destination
-			// for other resources, so fetch is the actionable generic fallback.
-			asattr = "fetch"
-			crossorigin = true
-			if strings.HasPrefix(lowmime, "image/") {
-				asattr = "image"
-				crossorigin = false
-				if strings.HasPrefix(strings.ToLower(path.Base(u.Path)), "favicon") {
-					favicontype = mimetype
-					faviconURL = urlstr
-					continue
-				}
-			} else if strings.HasPrefix(lowmime, "font/") {
-				asattr = "font"
+			if destinations&secureheaders.ResourceDestinationScript != 0 {
+				jsurls = append(jsurls, urlstr)
+				continue
 			}
+		case ".css":
+			if destinations&secureheaders.ResourceDestinationStyle != 0 {
+				cssurls = append(cssurls, urlstr)
+				continue
+			}
+		}
+		var asattr string
+		switch destinations {
+		case secureheaders.ResourceDestinationImage:
+			asattr = "image"
+		case secureheaders.ResourceDestinationFont:
+			asattr = "font"
+		default:
+			continue
+		}
+		mimetype, _, mimeErr := mime.ParseMediaType(mime.TypeByExtension(path.Ext(u.Path)))
+		if mimeErr != nil || !strings.HasPrefix(mimetype, asattr+"/") {
+			mimetype = ""
+		}
+		if destinations == secureheaders.ResourceDestinationImage && strings.HasPrefix(strings.ToLower(path.Base(u.Path)), "favicon") {
+			favicontype = mimetype
+			faviconURL = urlstr
+			continue
 		}
 		buf = append(buf, `<link rel="preload"`...)
 		buf = htmlio.AppendAttr(buf, "href", urlstr)
-		if asattr != "" {
-			buf = htmlio.AppendAttr(buf, "as", asattr)
-		}
+		buf = htmlio.AppendAttr(buf, "as", asattr)
 		if mimetype != "" {
 			buf = htmlio.AppendAttr(buf, "type", mimetype)
 		}
-		if crossorigin {
+		if destinations == secureheaders.ResourceDestinationFont {
 			buf = htmlio.AppendAttr(buf, "crossorigin", "anonymous")
 		}
 		buf = append(buf, ">\n"...)
@@ -100,7 +101,9 @@ func PreloadHTML(urls ...*url.URL) (htmlCode, faviconURL string) {
 	}
 	if faviconURL != "" {
 		buf = append(buf, `<link rel="icon"`...)
-		buf = htmlio.AppendAttr(buf, "type", favicontype)
+		if favicontype != "" {
+			buf = htmlio.AppendAttr(buf, "type", favicontype)
+		}
 		buf = htmlio.AppendAttr(buf, "href", faviconURL)
 		buf = append(buf, ">\n"...)
 	}

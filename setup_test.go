@@ -143,17 +143,19 @@ func TestJaws_SetupDoesNotPrefixExternalOriginURL(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer jw.Close()
+	logger := new(headWarningLogger)
+	jw.Logger = logger
 
 	const rawURL = "https://cdn.example.test"
 	if err = jw.Setup(nil, "/static", rawURL); err != nil {
 		t.Fatal(err)
 	}
 
-	if got := jw.headPrefix; strings.Contains(got, rawURL+"/static") {
-		t.Fatalf("Setup prefixed external origin URL: %q", got)
+	if got := jw.ContentSecurityPolicy(); !strings.Contains(got, "connect-src 'self' "+rawURL) {
+		t.Fatalf("Setup CSP = %q, want unmodified external origin %q", got, rawURL)
 	}
-	if got := jw.headPrefix; !strings.Contains(got, `href="`+rawURL+`"`) {
-		t.Fatalf("Setup head HTML = %q, want unmodified external URL %q", got, rawURL)
+	if len(logger.urls) != 1 || logger.urls[0] != rawURL {
+		t.Fatalf("warning URLs = %q, want [%q]", logger.urls, rawURL)
 	}
 }
 
@@ -167,15 +169,12 @@ func TestJaws_SetupDoesNotPrefixProtocolRelativeURL(t *testing.T) {
 	}
 	defer jw.Close()
 
-	const rawURL = "//cdn.example.test"
+	const rawURL = "//cdn.example.test/app.js"
 	if err = jw.Setup(nil, "/static", rawURL); err != nil {
 		t.Fatal(err)
 	}
 
-	if got := jw.headPrefix; strings.Contains(got, rawURL+"/static") {
-		t.Fatalf("Setup prefixed protocol-relative URL: %q", got)
-	}
-	if got := jw.headPrefix; !strings.Contains(got, `href="`+rawURL+`"`) {
+	if got := jw.headPrefix; !strings.Contains(got, `src="`+rawURL+`"`) {
 		t.Fatalf("Setup head HTML = %q, want unmodified protocol-relative URL %q", got, rawURL)
 	}
 }
