@@ -1703,6 +1703,9 @@ child.parentElement = parent;
 
 const replaceParent = makeNode("parent");
 const oldNode = makeNode("Jid.4");
+const oldDescendant = makeNode("Jid.6");
+oldNode.children.push(oldDescendant);
+oldDescendant.parentElement = oldNode;
 replaceParent.children.push(oldNode);
 oldNode.parentElement = replaceParent;
 
@@ -1717,6 +1720,7 @@ process.stdout.write(JSON.stringify({
 	parentChildren: parent.children.map(function(child) { return child.id; }),
 	replacedChildren: replaceParent.children.map(function(child) { return child.id; }),
 	removeFrame: jaws.sent[0] || "",
+	replaceRemoveFrame: jaws.sent[1] || "",
 	childStillRegistered: Boolean(nodes["Jid.2"]),
 	oldStillRegistered: Boolean(nodes["Jid.4"])
 }));
@@ -1726,6 +1730,7 @@ process.stdout.write(JSON.stringify({
 		ParentChildren       []string `json:"parentChildren"`
 		ReplacedChildren     []string `json:"replacedChildren"`
 		RemoveFrame          string   `json:"removeFrame"`
+		ReplaceRemoveFrame   string   `json:"replaceRemoveFrame"`
 		ChildStillRegistered bool     `json:"childStillRegistered"`
 		OldStillRegistered   bool     `json:"oldStillRegistered"`
 	}
@@ -1747,6 +1752,13 @@ process.stdout.write(JSON.stringify({
 	}
 	if msg.What != what.Remove || msg.Jid != 2 || msg.Data != "Jid.3" {
 		t.Fatalf("unexpected removal frame: %+v", msg)
+	}
+	msg, ok = wire.Parse([]byte(got.ReplaceRemoveFrame))
+	if !ok {
+		t.Fatalf("Replace removal frame must be parseable by wire.Parse, got %q", got.ReplaceRemoveFrame)
+	}
+	if msg.What != what.Remove || msg.Jid != 4 || msg.Data != "Jid.6" {
+		t.Fatalf("unexpected Replace removal frame: %+v", msg)
 	}
 }
 
@@ -3034,86 +3046,30 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
-func TestJawsJS_ReplaceComparesAndUpdatesWhenDebugDisabled(t *testing.T) {
-	raw := runJawsJSSnippet(t, `
-jawsDebug = false;
-const warnings = [];
-console.warn = function(msg) { warnings.push(msg); };
-let outerReads = 0;
-let replaceCalls = 0;
-let outerValue = "<div id=\"Jid.1\"><i>old</i></div>";
-const elem = {
-	id: "Jid.1",
-	querySelectorAll: function() { return []; },
-	replaceWith: function() { replaceCalls++; }
-};
-Object.defineProperty(elem, "outerHTML", {
-	get: function() {
-		outerReads++;
-		return outerValue;
-	},
-	enumerable: true,
-	configurable: true,
-});
-document.getElementById = function(id) { return id === "Jid.1" ? elem : null; };
-document.createElement = function(tag) {
-	if (tag !== "template") throw new Error("unexpected tag " + tag);
-	const template = {
-		content: {
-			querySelectorAll: function() { return []; }
-		}
-	};
-	Object.defineProperty(template, "innerHTML", {
-		get: function() { return this._inner || ""; },
-		set: function(v) { this._inner = v; },
-		enumerable: true,
-		configurable: true,
-	});
-	return template;
-};
-
-jawsPerform("Replace", "Jid.1", JSON.stringify("<div id=\"Jid.1\"></div>"));
-process.stdout.write(JSON.stringify({ outerReads: outerReads, replaceCalls: replaceCalls, warningCount: warnings.length }));
-`)
-
-	var got struct {
-		OuterReads   int `json:"outerReads"`
-		ReplaceCalls int `json:"replaceCalls"`
-		WarningCount int `json:"warningCount"`
-	}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
-		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
-	}
-	if got.OuterReads != 1 {
-		t.Fatalf("outerHTML reads = %d, want 1", got.OuterReads)
-	}
-	if got.ReplaceCalls != 1 {
-		t.Fatalf("replace calls = %d, want 1", got.ReplaceCalls)
-	}
-	if got.WarningCount != 0 {
-		t.Fatalf("warnings = %d, want 0", got.WarningCount)
-	}
-}
-
 func TestJawsJS_InnerWarnsWhenDebugEnabledAndHTMLUnchanged(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 jawsDebug = true;
 const warnings = [];
 console.warn = function(msg) { warnings.push(msg); };
+let writes = 0;
 const elem = {
 	id: "Jid.1",
 	querySelectorAll: function() { return []; },
-	innerHTML: "<b>x</b>"
 };
+Object.defineProperty(elem, "innerHTML", {
+	get: function() { return "<b>x</b>"; },
+	set: function() { writes++; },
+});
 document.getElementById = function(id) { return id === "Jid.1" ? elem : null; };
 
 jawsPerform("Inner", "Jid.1", JSON.stringify("<b>x</b>"));
-process.stdout.write(JSON.stringify({ warnings: warnings, innerHTML: elem.innerHTML }));
+process.stdout.write(JSON.stringify({ warnings: warnings, innerHTML: elem.innerHTML, writes: writes }));
 `)
 
 	var got struct {
 		Warnings  []string `json:"warnings"`
 		InnerHTML string   `json:"innerHTML"`
+		Writes    int      `json:"writes"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
 		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
@@ -3127,56 +3083,153 @@ process.stdout.write(JSON.stringify({ warnings: warnings, innerHTML: elem.innerH
 	if got.InnerHTML != "<b>x</b>" {
 		t.Fatalf("innerHTML = %q, want unchanged", got.InnerHTML)
 	}
+	if got.Writes != 0 {
+		t.Fatalf("innerHTML writes = %d, want 0", got.Writes)
+	}
 }
 
-func TestJawsJS_ReplaceWarnsWhenDebugEnabledAndHTMLUnchanged(t *testing.T) {
+func TestJawsJS_ReplaceRecreatesNodeWhenHTMLUnchanged(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 jawsDebug = true;
-let replaceCalls = 0;
 const warnings = [];
 console.warn = function(msg) { warnings.push(msg); };
-const elem = {
-	id: "Jid.1",
-	querySelectorAll: function() { return []; },
-	outerHTML: "<div id=\"Jid.1\"></div>",
-	replaceWith: function() { replaceCalls++; }
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+const replacement = '<div id="Jid.1"><input id="Jid.2" type="text" value="server"></div>';
+const beforeInput = {
+	id: "Jid.2",
+	tagName: "INPUT",
+	type: "text",
+	value: "client edit",
+	defaultValue: "server",
+	dataset: {},
+	hasAttribute: function() { return false; },
 };
-document.getElementById = function(id) { return id === "Jid.1" ? elem : null; };
+const before = {
+	id: "Jid.1",
+	tagName: "DIV",
+	dataset: {},
+	outerHTML: replacement,
+	hasAttribute: function() { return false; },
+	querySelectorAll: function(selector) {
+		if (selector === '[id^="' + jawsIdPrefix + '"]') return [beforeInput];
+		return [];
+	},
+	replaceWith: function(fragment) {
+		current = fragment.root;
+		currentInput = fragment.input;
+	},
+};
+let current = before;
+let currentInput = beforeInput;
+document.getElementById = function(id) {
+	if (id === "Jid.1") return current;
+	if (id === "Jid.2") return currentInput;
+	return null;
+};
 document.createElement = function(tag) {
 	if (tag !== "template") throw new Error("unexpected tag " + tag);
+	const afterInput = {
+		id: "Jid.2",
+		tagName: "INPUT",
+		type: "text",
+		value: "server",
+		defaultValue: "server",
+		dataset: {},
+		listeners: [],
+		hasAttribute: function() { return false; },
+		addEventListener: function(name) { this.listeners.push(name); },
+		querySelectorAll: function() { return []; },
+	};
+	const after = {
+		id: "Jid.1",
+		tagName: "DIV",
+		dataset: {},
+		listeners: [],
+		hasAttribute: function() { return false; },
+		addEventListener: function(name) { this.listeners.push(name); },
+		querySelectorAll: function(selector) {
+			if (selector === '[id^="' + jawsIdPrefix + '"]') return [afterInput];
+			return [];
+		},
+	};
+	const fragment = {
+		root: after,
+		input: afterInput,
+		querySelectorAll: function(selector) {
+			if (selector === '[id^="' + jawsIdPrefix + '"]') return [after, afterInput];
+			return [];
+		},
+	};
 	const template = {
-		content: {
-			querySelectorAll: function() { return []; }
-		}
+		content: fragment,
 	};
 	Object.defineProperty(template, "innerHTML", {
-		get: function() { return this._inner || ""; },
-		set: function(v) { this._inner = v; },
+		set: function(v) {
+			if (v !== replacement) throw new Error("unexpected replacement " + v);
+		},
 		enumerable: true,
 		configurable: true,
 	});
 	return template;
 };
 
-jawsPerform("Replace", "Jid.1", JSON.stringify("<div id=\"Jid.1\"></div>"));
-process.stdout.write(JSON.stringify({ warnings: warnings, replaceCalls: replaceCalls }));
+jawsPerform("Replace", "Jid.1", JSON.stringify(replacement));
+const after = document.getElementById("Jid.1");
+const afterInput = document.getElementById("Jid.2");
+process.stdout.write(JSON.stringify({
+	warnings: warnings,
+	sameNode: before === after,
+	id: after.id,
+	sameInput: beforeInput === afterInput,
+	inputID: afterInput.id,
+	value: afterInput.value,
+	defaultValue: afterInput.defaultValue,
+	listeners: afterInput.listeners,
+	frames: jaws.sent,
+}));
 `)
 
 	var got struct {
 		Warnings     []string `json:"warnings"`
-		ReplaceCalls int      `json:"replaceCalls"`
+		SameNode     bool     `json:"sameNode"`
+		ID           string   `json:"id"`
+		SameInput    bool     `json:"sameInput"`
+		InputID      string   `json:"inputID"`
+		Value        string   `json:"value"`
+		DefaultValue string   `json:"defaultValue"`
+		Listeners    []string `json:"listeners"`
+		Frames       []string `json:"frames"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
 		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
 	}
-	if len(got.Warnings) != 1 {
-		t.Fatalf("warnings = %d, want 1", len(got.Warnings))
+	if len(got.Warnings) != 0 {
+		t.Fatalf("warnings = %q, want none", got.Warnings)
 	}
-	if !strings.Contains(got.Warnings[0], "marked dirty but it generated the same HTML") {
-		t.Fatalf("unexpected warning text %q", got.Warnings[0])
+	if got.SameNode {
+		t.Fatal("Replace kept the existing DOM node")
 	}
-	if got.ReplaceCalls != 0 {
-		t.Fatalf("replace calls = %d, want 0", got.ReplaceCalls)
+	if got.ID != "Jid.1" {
+		t.Fatalf("replacement id = %q, want %q", got.ID, "Jid.1")
+	}
+	if got.SameInput {
+		t.Fatal("Replace kept the existing managed input")
+	}
+	if got.InputID != "Jid.2" {
+		t.Fatalf("replacement input id = %q, want %q", got.InputID, "Jid.2")
+	}
+	if got.Value != "server" || got.DefaultValue != "server" {
+		t.Fatalf("replacement values = (%q, %q), want server defaults", got.Value, got.DefaultValue)
+	}
+	if !reflect.DeepEqual(got.Listeners, []string{"input"}) {
+		t.Fatalf("replacement listeners = %q, want [input]", got.Listeners)
+	}
+	if len(got.Frames) != 0 {
+		t.Fatalf("Replace reported retained descendants as removed: %q", got.Frames)
 	}
 }
 

@@ -346,6 +346,9 @@ func (elem *Element) JsCall(jsfunc, jsonstr string) {
 
 // Replace replaces the [Element]'s entire HTML DOM node with new HTML code.
 //
+// A valid call always creates a new DOM node, even when htmlCode matches the
+// current serialized HTML.
+//
 // The trusted HTML should preserve the element identity by putting the element's
 // own JaWS id on the replacement root element, normally as id="Jid.N". Replace is
 // not an HTML validator: it performs only a lightweight textual guard for that
