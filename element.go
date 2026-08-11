@@ -314,7 +314,7 @@ func (elem *Element) RemoveClass(cls string) {
 // imminent. To change the [Element] in response to a browser event, mark it dirty
 // with [Request.Dirty] instead: a change queued directly from an event handler is
 // flushed only when the processing loop is next woken, which on an otherwise-idle
-// request is not guaranteed to be prompt (see [Element.queue]).
+// request is not guaranteed to be prompt.
 func (elem *Element) SetInner(innerHTML template.HTML) {
 	elem.queue(what.Inner, string(innerHTML))
 }
@@ -357,7 +357,7 @@ func (elem *Element) JsCall(jsfunc, jsonstr string) {
 //
 // A replacement node bearing an existing JaWS ID keeps that server-side
 // [Element] registration and UI state; omitted descendant IDs are unregistered.
-// Retained nodes are not rerendered separately, so their markup must match that
+// Retained Elements are not rerendered separately, so their markup must match that
 // state and each reused ID must identify the same logical Element.
 //
 // The trusted HTML should preserve the element identity by putting the element's
@@ -371,7 +371,7 @@ func (elem *Element) JsCall(jsfunc, jsonstr string) {
 // imminent. To change the [Element] in response to a browser event, mark it dirty
 // with [Request.Dirty] instead: a change queued directly from an event handler is
 // flushed only when the processing loop is next woken, which on an otherwise-idle
-// request is not guaranteed to be prompt (see [Element.queue]).
+// request is not guaranteed to be prompt.
 func (elem *Element) Replace(htmlCode template.HTML) {
 	if !elem.deleted.Load() {
 		var b []byte
