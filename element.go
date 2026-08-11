@@ -304,14 +304,17 @@ func (elem *Element) RemoveClass(cls string) {
 	elem.queue(what.RClass, cls)
 }
 
-// SetInner queues sending new inner HTML content
-// to the browser for the [Element].
+// SetInner queues new inner HTML content for the [Element].
+//
+// When innerHTML exactly matches the browser's current serialized inner HTML,
+// JaWS leaves the existing descendants and their live state unchanged. Use
+// [Element.Replace] when matching markup must still create new nodes.
 //
 // Call this while the [Element] is rendering or updating, when a send pass is
 // imminent. To change the [Element] in response to a browser event, mark it dirty
 // with [Request.Dirty] instead: a change queued directly from an event handler is
 // flushed only when the processing loop is next woken, which on an otherwise-idle
-// request is not guaranteed to be prompt (see [Element.queue]).
+// request is not guaranteed to be prompt.
 func (elem *Element) SetInner(innerHTML template.HTML) {
 	elem.queue(what.Inner, string(innerHTML))
 }
@@ -346,8 +349,19 @@ func (elem *Element) JsCall(jsfunc, jsonstr string) {
 
 // Replace replaces the [Element]'s entire HTML DOM node with new HTML code.
 //
+// A valid call recreates the target subtree even when htmlCode matches its
+// current serialization. Browser-only state on replaced nodes, including focus,
+// selection, scroll position, live form-control properties, programmatic
+// listeners, expando properties, and custom-element instances, is not preserved.
+// JaWS reattaches its own managed browser behavior.
+//
+// A replacement node bearing an existing JaWS ID keeps that server-side
+// [Element] registration and UI state; omitted descendant IDs are unregistered.
+// Retained Elements are not rerendered separately, so their markup must match that
+// state and each reused ID must identify the same logical Element.
+//
 // The trusted HTML should preserve the element identity by putting the element's
-// own JaWS id on the replacement root element, normally as id="Jid.N". Replace is
+// own JaWS ID on the replacement root element, normally as id="Jid.N". Replace is
 // not an HTML validator: it performs only a lightweight textual guard for that
 // expected id attribute. If the guard does not find it, the call is a programming
 // error: debug builds panic and production builds report it via [Jaws.MustLog]
@@ -357,7 +371,7 @@ func (elem *Element) JsCall(jsfunc, jsonstr string) {
 // imminent. To change the [Element] in response to a browser event, mark it dirty
 // with [Request.Dirty] instead: a change queued directly from an event handler is
 // flushed only when the processing loop is next woken, which on an otherwise-idle
-// request is not guaranteed to be prompt (see [Element.queue]).
+// request is not guaranteed to be prompt.
 func (elem *Element) Replace(htmlCode template.HTML) {
 	if !elem.deleted.Load() {
 		var b []byte

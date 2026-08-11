@@ -267,8 +267,11 @@ func (jw *Jaws) broadcastTo(target any, w what.What, data string) {
 	})
 }
 
-// SetInner sends a request to replace the inner HTML of
-// all HTML elements matching target.
+// SetInner replaces the inner HTML of all elements matching target.
+//
+// When the HTML exactly matches an element's current serialized inner HTML,
+// JaWS leaves its existing descendants and their live state unchanged. Use
+// [Element.Replace] when matching markup must still create new nodes.
 func (jw *Jaws) SetInner(target any, innerHTML template.HTML) {
 	jw.broadcastTo(target, what.Inner, string(innerHTML))
 }
