@@ -478,6 +478,16 @@ If you change fields that affect generated page metadata, such as `Debug` or
 the resource list passed to `GenerateHeadHTML()`, call `GenerateHeadHTML()`
 before rendering new pages so `Request.HeadHTML()` sees the updated data.
 
+`GenerateHeadHTML()` writes markup for common `.js` and `.css` URLs, including a
+trailing `@version` when the final extension is otherwise unrecognized, and for
+image and font resources. Every successfully parsed URL is passed to
+secureheaders automatic CSP inference. URLs without automatic markup may still
+affect the policy; applications may provide appropriate loading code or head
+markup. When automatic policy inference does not match that use, applications
+must serve a matching explicit-destination policy built with
+`secureheaders.BuildContentSecurityPolicy`. A configured `Jaws.Logger` receives
+a warning for each such extra resource; URL passwords are redacted.
+
 ### Maintainer checklist
 
 When changing core request, session, broadcast, or WebSocket code, re-check
@@ -542,8 +552,8 @@ Broadcasting APIs are not safe before the processing loop starts. In particular,
 ### Secure Response Headers
 
 Use `(*Jaws).SecureHeadersMiddleware(next)` to wrap page handlers with a
-security-header baseline and a `Content-Security-Policy` that matches the
-supported resources currently configured for JaWS.
+security-header baseline and a `Content-Security-Policy` generated from the
+resource URLs currently configured for JaWS.
 
 The baseline headers come from
 [`github.com/linkdata/secureheaders`](https://github.com/linkdata/secureheaders).

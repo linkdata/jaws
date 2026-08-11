@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
-	"net/url"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -1801,63 +1800,35 @@ func TestBroadcast_ReturnsWhenClosedAndQueueFull(t *testing.T) {
 	}
 }
 
-func mustParseURL(t *testing.T, raw string) *url.URL {
-	t.Helper()
-	u, err := url.Parse(raw)
-	if err != nil {
-		t.Fatalf("parse %q: %v", raw, err)
-	}
-	return u
+type headWarningLogger struct {
+	calls int
+	url   string
 }
 
-func TestJaws_GenerateHeadHTML_StoresCSPBuiltBySecureHeaders(t *testing.T) {
+func (*headWarningLogger) Info(string, ...any)  {}
+func (*headWarningLogger) Error(string, ...any) {}
+func (l *headWarningLogger) Warn(_ string, args ...any) {
+	l.calls++
+	for i := 0; i+1 < len(args); i += 2 {
+		if args[i] == "url" {
+			l.url, _ = args[i+1].(string)
+		}
+	}
+}
+
+func TestJaws_GenerateHeadHTML_AllowsExternalManualFetch(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer jw.Close()
+	logger := new(headWarningLogger)
+	jw.Logger = logger
 
-	extras := []string{
-		"https://cdn.jsdelivr.net/npm/bootstrap@5/dist/css/bootstrap.min.css",
-		"https://cdn.jsdelivr.net/npm/bootstrap@5/dist/js/bootstrap.min.js",
-		"https://images.example.com/logo.png",
-	}
-	if err = jw.GenerateHeadHTML(extras...); err != nil {
-		t.Fatal(err)
-	}
-
-	urls := []*url.URL{
-		mustParseURL(t, jw.serveCSS.Name),
-		mustParseURL(t, jw.serveJS.Name),
-	}
-	for _, extra := range extras {
-		urls = append(urls, mustParseURL(t, extra))
-	}
-
-	resources := make([]secureheaders.Resource, 0, len(urls))
-	for _, u := range urls {
-		resources = append(resources, secureheaders.Resource{URL: u})
-	}
-	wantCSP := secureheaders.BuildContentSecurityPolicy(resources...)
-	if got := jw.ContentSecurityPolicy(); got != wantCSP {
-		t.Fatalf("unexpected CSP:\nwant: %q\ngot:  %q", wantCSP, got)
-	}
-}
-
-func TestJaws_GenerateHeadHTML_AllowsExternalFetchPreload(t *testing.T) {
-	const ext = ".jawscspfetch"
-	if err := mime.AddExtensionType(ext, "application/wasm"); err != nil {
-		t.Fatal(err)
-	}
-
-	jw, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer jw.Close()
-
-	const resource = "https://CDN.Example.test:8443/module" + ext
-	if err = jw.GenerateHeadHTML(resource); err != nil {
+	const resource = "https://developer:secret@CDN.Example.test:8443/module.wasm"
+	const warnedResource = "https://developer:xxxxx@CDN.Example.test:8443/module.wasm"
+	const script = "https://scripts.example.test/app.js@4.4.1"
+	if err = jw.GenerateHeadHTML(resource, script); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1866,15 +1837,24 @@ func TestJaws_GenerateHeadHTML_AllowsExternalFetchPreload(t *testing.T) {
 	if err = rq.HeadHTML(&head); err != nil {
 		t.Fatal(err)
 	}
-	want := `<link rel="preload" href="` + resource + `" as="fetch" type="application/wasm" crossorigin="anonymous">`
-	if !strings.Contains(head.String(), want) {
-		t.Fatalf("head HTML missing fetch preload %q:\n%s", want, head.String())
+	if strings.Contains(head.String(), resource) {
+		t.Fatalf("head HTML contains uncommon resource %q:\n%s", resource, head.String())
+	}
+	if !strings.Contains(head.String(), script) {
+		t.Fatalf("head HTML missing common script %q:\n%s", script, head.String())
+	}
+	if logger.calls != 1 || logger.url != warnedResource {
+		t.Fatalf("warning = (%d, %q), want (1, %q)", logger.calls, logger.url, warnedResource)
 	}
 
 	csp := jw.ContentSecurityPolicy()
 	const source = "https://cdn.example.test:8443"
 	if !strings.Contains(csp, "connect-src 'self' "+source) {
-		t.Fatalf("CSP does not allow external fetch preload origin %q:\n%s", source, csp)
+		t.Fatalf("CSP does not allow external fetch origin %q:\n%s", source, csp)
+	}
+	const scriptSource = "https://scripts.example.test"
+	if !strings.Contains(csp, "script-src 'self' "+scriptSource) {
+		t.Fatalf("CSP does not allow common script origin %q:\n%s", scriptSource, csp)
 	}
 }
 

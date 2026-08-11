@@ -144,15 +144,12 @@ func TestJaws_SetupDoesNotPrefixExternalOriginURL(t *testing.T) {
 	}
 	defer jw.Close()
 
-	const rawURL = "https://cdn.example.test"
+	const rawURL = "https://cdn.example.test/app.js"
 	if err = jw.Setup(nil, "/static", rawURL); err != nil {
 		t.Fatal(err)
 	}
 
-	if got := jw.headPrefix; strings.Contains(got, rawURL+"/static") {
-		t.Fatalf("Setup prefixed external origin URL: %q", got)
-	}
-	if got := jw.headPrefix; !strings.Contains(got, `href="`+rawURL+`"`) {
+	if got := jw.headPrefix; !strings.Contains(got, `src="`+rawURL+`"`) {
 		t.Fatalf("Setup head HTML = %q, want unmodified external URL %q", got, rawURL)
 	}
 }
@@ -167,15 +164,12 @@ func TestJaws_SetupDoesNotPrefixProtocolRelativeURL(t *testing.T) {
 	}
 	defer jw.Close()
 
-	const rawURL = "//cdn.example.test"
+	const rawURL = "//cdn.example.test/app.js"
 	if err = jw.Setup(nil, "/static", rawURL); err != nil {
 		t.Fatal(err)
 	}
 
-	if got := jw.headPrefix; strings.Contains(got, rawURL+"/static") {
-		t.Fatalf("Setup prefixed protocol-relative URL: %q", got)
-	}
-	if got := jw.headPrefix; !strings.Contains(got, `href="`+rawURL+`"`) {
+	if got := jw.headPrefix; !strings.Contains(got, `src="`+rawURL+`"`) {
 		t.Fatalf("Setup head HTML = %q, want unmodified protocol-relative URL %q", got, rawURL)
 	}
 }
