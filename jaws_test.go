@@ -14,8 +14,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"net/url"
 	"reflect"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1801,17 +1803,17 @@ func TestBroadcast_ReturnsWhenClosedAndQueueFull(t *testing.T) {
 }
 
 type headWarningLogger struct {
-	calls int
-	url   string
+	urls []string
 }
 
 func (*headWarningLogger) Info(string, ...any)  {}
 func (*headWarningLogger) Error(string, ...any) {}
 func (l *headWarningLogger) Warn(_ string, args ...any) {
-	l.calls++
 	for i := 0; i+1 < len(args); i += 2 {
 		if args[i] == "url" {
-			l.url, _ = args[i+1].(string)
+			if u, ok := args[i+1].(string); ok {
+				l.urls = append(l.urls, u)
+			}
 		}
 	}
 }
@@ -1825,10 +1827,11 @@ func TestJaws_GenerateHeadHTML_AllowsExternalManualFetch(t *testing.T) {
 	logger := new(headWarningLogger)
 	jw.Logger = logger
 
-	const resource = "https://developer:secret@CDN.Example.test:8443/module.wasm"
+	const resource = "https://developer:secret@CDN.Example.test:8443/module.wasm?X-Amz-Signature=query-secret#fragment-secret"
 	const warnedResource = "https://developer:xxxxx@CDN.Example.test:8443/module.wasm"
 	const script = "https://scripts.example.test/app.js@4.4.1"
-	if err = jw.GenerateHeadHTML(resource, script); err != nil {
+	const stylesheet = "https://styles.example.test/app.css"
+	if err = jw.GenerateHeadHTML(resource, script, stylesheet); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1837,17 +1840,28 @@ func TestJaws_GenerateHeadHTML_AllowsExternalManualFetch(t *testing.T) {
 	if err = rq.HeadHTML(&head); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(head.String(), resource) {
+	if strings.Contains(head.String(), "module.wasm") {
 		t.Fatalf("head HTML contains uncommon resource %q:\n%s", resource, head.String())
 	}
 	if !strings.Contains(head.String(), script) {
 		t.Fatalf("head HTML missing common script %q:\n%s", script, head.String())
 	}
-	if logger.calls != 1 || logger.url != warnedResource {
-		t.Fatalf("warning = (%d, %q), want (1, %q)", logger.calls, logger.url, warnedResource)
+	if !slices.Equal(logger.urls, []string{warnedResource}) {
+		t.Fatalf("warning URLs = %q, want [%q]", logger.urls, warnedResource)
 	}
 
 	csp := jw.ContentSecurityPolicy()
+	var urls []*url.URL
+	for _, rawURL := range []string{jw.serveCSS.Name, jw.serveJS.Name, resource, script, stylesheet} {
+		u, parseErr := url.Parse(rawURL)
+		if parseErr != nil {
+			t.Fatal(parseErr)
+		}
+		urls = append(urls, u)
+	}
+	if want := secureheaders.BuildContentSecurityPolicyForURLs(urls...); csp != want {
+		t.Fatalf("stored CSP:\nwant: %q\ngot:  %q", want, csp)
+	}
 	const source = "https://cdn.example.test:8443"
 	if !strings.Contains(csp, "connect-src 'self' "+source) {
 		t.Fatalf("CSP does not allow external fetch origin %q:\n%s", source, csp)
@@ -1855,6 +1869,54 @@ func TestJaws_GenerateHeadHTML_AllowsExternalManualFetch(t *testing.T) {
 	const scriptSource = "https://scripts.example.test"
 	if !strings.Contains(csp, "script-src 'self' "+scriptSource) {
 		t.Fatalf("CSP does not allow common script origin %q:\n%s", scriptSource, csp)
+	}
+}
+
+func TestJaws_GenerateHeadHTML_WarnsWhenCSPCannotRepresentOrigin(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	logger := new(headWarningLogger)
+	jw.Logger = logger
+
+	const invalidSource = "https://bad_host.example.test/app.js"
+	const hostlessAbsolute = "file:///tmp/app.js"
+	const relativeScript = "/local.js"
+	if err = jw.GenerateHeadHTML(invalidSource, hostlessAbsolute, relativeScript); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(jw.headPrefix, invalidSource) || !strings.Contains(jw.headPrefix, hostlessAbsolute) || !strings.Contains(jw.headPrefix, relativeScript) {
+		t.Fatalf("head HTML missing scripts:\n%s", jw.headPrefix)
+	}
+	if csp := jw.ContentSecurityPolicy(); strings.Contains(csp, "bad_host.example.test") {
+		t.Fatalf("CSP contains unsupported source:\n%s", csp)
+	}
+	if want := []string{invalidSource, hostlessAbsolute}; !slices.Equal(logger.urls, want) {
+		t.Fatalf("warning URLs = %q, want %q", logger.urls, want)
+	}
+}
+
+func TestJaws_GenerateHeadHTML_WarnsWhenFaviconIsDiscarded(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	logger := new(headWarningLogger)
+	jw.Logger = logger
+
+	const first = "https://icons.example.test/favicon.png"
+	const second = "https://icons.example.test/favicon-dark.png"
+	if err = jw.GenerateHeadHTML(first, second); err != nil {
+		t.Fatal(err)
+	}
+	if got := jw.FaviconURL(); got != second {
+		t.Fatalf("favicon URL = %q, want %q", got, second)
+	}
+	if !slices.Equal(logger.urls, []string{first}) {
+		t.Fatalf("warning URLs = %q, want [%q]", logger.urls, first)
 	}
 }
 

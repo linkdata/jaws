@@ -371,14 +371,19 @@ func (jw *Jaws) ContentSecurityPolicy() (s string) {
 	return
 }
 
-// SecureHeadersMiddleware wraps next with security headers that match the
-// current JaWS configuration.
+// SecureHeadersMiddleware wraps next with the JaWS security headers.
 //
 // It clones secureheaders.DefaultHeaders(), replacing the
 // Content-Security-Policy value with [Jaws.ContentSecurityPolicy] for each
 // request. The generated policy applies
 // [secureheaders.ResourceDestinationAuto] to resource URLs configured by
 // [Jaws.GenerateHeadHTML].
+//
+// Applications needing explicit destinations can instead use
+// [secureheaders.Middleware] with [secureheaders.DefaultHeaders], setting its
+// Content-Security-Policy with [secureheaders.BuildContentSecurityPolicy]. The
+// replacement policy must include every external resource the page loads,
+// including resources configured by [Jaws.GenerateHeadHTML].
 //
 // The returned middleware does not trust forwarded HTTPS headers. Note that the
 // session cookie Secure flag is governed separately by [Jaws.TrustForwardedHeaders]
@@ -411,13 +416,15 @@ func (m secureHeadersMiddleware) ServeHTTP(hw http.ResponseWriter, hr *http.Requ
 // is available from [Jaws.ContentSecurityPolicy]. The favicon selected by
 // [assets.PreloadHTML] is available from [Jaws.FaviconURL].
 //
-// A URL omitted from the generated markup may still affect the policy. A
-// configured [Jaws.Logger] warns when an extra URL produces no automatic markup;
-// applications may provide appropriate loading code or head markup. When
-// automatic policy inference does not match that use, applications must serve a
-// matching explicit-destination policy built with
-// [secureheaders.BuildContentSecurityPolicy]. URL passwords are redacted in
-// warnings.
+// A configured [Jaws.Logger] warns once for each extra URL that is omitted from
+// the final markup or is absolute or scheme-relative and cannot contribute an
+// explicit policy source. Warning URLs redact passwords and omit queries and
+// fragments. Applications may load omitted resources manually. See
+// [Jaws.SecureHeadersMiddleware] when automatic inference does not match the
+// resource's request destination.
+//
+// Resource URLs must come from trusted application configuration because
+// matched scripts are executable and CSP permissions apply to origins.
 //
 // If one or more URLs in extra fail to parse, GenerateHeadHTML still installs
 // the regenerated head HTML and Content-Security-Policy with the failing
@@ -439,17 +446,27 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 					// separate resource even when it uses the same path as a built-in.
 					if u.String() != jawsurl.String() && u.String() != cssurl.String() {
 						urls = append(urls, u)
-						if jw.Logger != nil {
-							if markup, favicon := assets.PreloadHTML(u); markup == "" && favicon == "" {
-								jw.Logger.Warn("jaws: resource omitted from generated head HTML", "url", u.Redacted())
-							}
-						}
 					}
 				} else {
 					err = errors.Join(err, e)
 				}
 			}
 			headPrefix, faviconURL := assets.PreloadHTML(urls...)
+			if jw.Logger != nil {
+				for _, u := range urls[2:] {
+					if (u.IsAbs() || u.Host != "") && secureheaders.ContentSecurityPolicySource(u) == "" {
+						jw.Logger.Warn(
+							"jaws: resource omitted from generated Content-Security-Policy",
+							"url", resourceWarningURL(u),
+						)
+						continue
+					}
+					markup, individualFavicon := assets.PreloadHTML(u)
+					if markup == "" || (individualFavicon != "" && individualFavicon != faviconURL) {
+						jw.Logger.Warn("jaws: resource omitted from generated head HTML", "url", resourceWarningURL(u))
+					}
+				}
+			}
 			if jw.Debug {
 				headPrefix += `<meta name="jawsDebug" content="true">`
 			}
@@ -463,6 +480,15 @@ func (jw *Jaws) GenerateHeadHTML(extra ...string) (err error) {
 		}
 	}
 	return
+}
+
+func resourceWarningURL(u *url.URL) string {
+	v := *u
+	v.RawQuery = ""
+	v.ForceQuery = false
+	v.Fragment = ""
+	v.RawFragment = ""
+	return v.Redacted()
 }
 
 const (

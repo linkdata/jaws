@@ -481,12 +481,15 @@ before rendering new pages so `Request.HeadHTML()` sees the updated data.
 `GenerateHeadHTML()` writes markup for common `.js` and `.css` URLs, including a
 trailing `@version` when the final extension is otherwise unrecognized, and for
 image and font resources. Every successfully parsed URL is passed to
-secureheaders automatic CSP inference. URLs without automatic markup may still
-affect the policy; applications may provide appropriate loading code or head
-markup. When automatic policy inference does not match that use, applications
-must serve a matching explicit-destination policy built with
-`secureheaders.BuildContentSecurityPolicy`. A configured `Jaws.Logger` receives
-a warning for each such extra resource; URL passwords are redacted.
+secureheaders automatic CSP inference. A configured `Jaws.Logger` warns once
+for each extra URL that is omitted from the final markup or is absolute or
+scheme-relative and cannot contribute an explicit policy source. Warning URLs redact
+passwords and omit queries and fragments. Applications may load omitted
+resources manually. When automatic inference does not match the request
+destination, use the explicit policy setup under
+[Secure Response Headers](#secure-response-headers). Resource URLs must come
+from trusted application configuration because matched scripts are executable
+and CSP permissions apply to origins.
 
 ### Maintainer checklist
 
@@ -565,6 +568,23 @@ forwarded HTTPS headers.
 ```go
 page := ui.Handler(jw, "index", bind.New(&mu, &f))
 http.DefaultServeMux.Handle("GET /", jw.SecureHeadersMiddleware(page))
+```
+
+When a resource needs an explicit destination, use `secureheaders.Middleware`
+instead of the JaWS convenience middleware. The custom policy must include
+every external resource the page loads, including resources configured through
+`GenerateHeadHTML()`; a zero `Destination` keeps automatic inference. Leave a
+context-mismatched resource out of `GenerateHeadHTML()` and load it manually.
+Given a parsed, automatically loaded `scriptURL` and a manually fetched
+`fetchURL`:
+
+```go
+headers := secureheaders.DefaultHeaders()
+headers.Set("Content-Security-Policy", secureheaders.BuildContentSecurityPolicy(
+	secureheaders.Resource{URL: scriptURL},
+	secureheaders.Resource{URL: fetchURL, Destination: secureheaders.ResourceDestinationConnect},
+))
+http.DefaultServeMux.Handle("GET /", secureheaders.Middleware{Handler: page, Header: headers})
 ```
 
 ### Routing

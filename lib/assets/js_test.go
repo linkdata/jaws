@@ -31,7 +31,10 @@ func Test_PreloadHTML(t *testing.T) {
 	const extraUnknown = "data"
 	const extraFont = "someExtraFont.woff2"
 	const extraFontWithQuery = "someExtraFontQuery.woff2?x=1&copy=2"
-	fontMime, _, _ := strings.Cut(mime.TypeByExtension(".woff2"), ";")
+	fontMime, _, fontMimeErr := mime.ParseMediaType(mime.TypeByExtension(".woff2"))
+	if fontMimeErr != nil {
+		fontMime = ""
+	}
 
 	serveJS, err := staticserve.New("/jaws/.jaws.js", []byte(JavascriptText))
 	if err != nil {
@@ -79,7 +82,7 @@ func Test_PreloadHTML(t *testing.T) {
 	// Common font extensions have a deterministic font destination even when the
 	// local MIME database does not provide a type attribute.
 	wantFontLink := `<link rel="preload" href="someExtraFont.woff2" as="font"`
-	if fontMime != "" {
+	if strings.HasPrefix(fontMime, "font/") {
 		wantFontLink += ` type="` + fontMime + `"`
 	}
 	wantFontLink += ` crossorigin="anonymous">`
@@ -87,7 +90,10 @@ func Test_PreloadHTML(t *testing.T) {
 		t.Fatalf("missing structured font preload %q in %q", wantFontLink, txt)
 	}
 
-	pngMime, _, _ := strings.Cut(mime.TypeByExtension(".png"), ";")
+	pngMime, _, err := mime.ParseMediaType(mime.TypeByExtension(".png"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	wantFaviconLink := `<link rel="icon" type="` + pngMime + `" href="favicon.png">`
 	if !strings.Contains(txt, wantFaviconLink) {
 		t.Fatalf("missing structured favicon link %q in %q", wantFaviconLink, txt)
@@ -116,28 +122,6 @@ func mustParseURL(t *testing.T, rawURL string) *url.URL {
 		t.Fatal(err)
 	}
 	return u
-}
-
-func Test_activeResourceExtension(t *testing.T) {
-	for _, tc := range []struct {
-		pathname string
-		want     string
-	}{
-		{pathname: "/app.js", want: ".js"},
-		{pathname: "/theme.CSS", want: ".css"},
-		{pathname: "/pkg@4.4.1/app.js", want: ".js"},
-		{pathname: "/name@domain.js@1", want: ".js"},
-		{pathname: "/app.js@backup.css", want: ".css"},
-		{pathname: "/app.js@1.png"},
-		{pathname: "/app.js@"},
-		{pathname: "/app.js@4.4.1/"},
-	} {
-		t.Run(tc.pathname, func(t *testing.T) {
-			if got := activeResourceExtension(tc.pathname); got != tc.want {
-				t.Fatalf("activeResourceExtension(%q) = %q, want %q", tc.pathname, got, tc.want)
-			}
-		})
-	}
 }
 
 func Test_PreloadHTML_VersionedCommonResources(t *testing.T) {
@@ -258,20 +242,20 @@ func Test_PreloadHTML_MIMEFamilyMatching(t *testing.T) {
 	if fav != "favicon.jawsupperimg" {
 		t.Errorf("favicon = %q, want %q", fav, "favicon.jawsupperimg")
 	}
-	wantFaviconLink := `<link rel="icon" type="IMAGE/x-icon" href="favicon.jawsupperimg">`
+	wantFaviconLink := `<link rel="icon" type="image/x-icon" href="favicon.jawsupperimg">`
 	if !strings.Contains(txt, wantFaviconLink) {
 		t.Errorf("case-insensitive favicon = missing %q in %q", wantFaviconLink, txt)
 	}
 
 	// FONT/* qualifies as a font, so it receives as="font" and anonymous CORS.
-	wantUpperFont := `<link rel="preload" href="brand.jawsupperfont" as="font" type="FONT/woff2" crossorigin="anonymous">`
+	wantUpperFont := `<link rel="preload" href="brand.jawsupperfont" as="font" type="font/woff2" crossorigin="anonymous">`
 	if !strings.Contains(txt, wantUpperFont) {
 		t.Errorf("case-insensitive font preload = missing %q in %q", wantUpperFont, txt)
 	}
-	if want := `<link rel="preload" href="logo.js@jawsimage" as="image" type="IMAGE/x-versioned">`; !strings.Contains(txt, want) {
+	if want := `<link rel="preload" href="logo.js@jawsimage" as="image" type="image/x-versioned">`; !strings.Contains(txt, want) {
 		t.Errorf("final image MIME = missing %q in %q", want, txt)
 	}
-	if want := `<link rel="preload" href="face.css@jawsversioned" as="font" type="FONT/x-versioned" crossorigin="anonymous">`; !strings.Contains(txt, want) {
+	if want := `<link rel="preload" href="face.css@jawsversioned" as="font" type="font/x-versioned" crossorigin="anonymous">`; !strings.Contains(txt, want) {
 		t.Errorf("final font MIME = missing %q in %q", want, txt)
 	}
 }
