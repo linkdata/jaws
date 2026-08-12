@@ -1929,6 +1929,7 @@ process.stdout.write(JSON.stringify({
 
 func TestJawsJS_ReconnectXHRResultsAreHandledOnce(t *testing.T) {
 	raw := runJawsJSSnippet(t, lostIndicatorStubs+`
+global.performance = { now: function() { return 60000; } };
 function FakeSocket() {}
 WebSocket = FakeSocket;
 jaws = new FakeSocket();
@@ -2079,6 +2080,65 @@ process.stdout.write(JSON.stringify({
 	}
 	if !strings.Contains(got.LostHTML, "Server connection lost") {
 		t.Fatalf("lost indicator = %q", got.LostHTML)
+	}
+}
+
+func TestJawsJS_ReconnectReloadUsesNavigationAge(t *testing.T) {
+	raw := runJawsJSSnippet(t, lostIndicatorStubs+`
+let navigationAge = 59999;
+global.performance = { now: function() { return navigationAge; } };
+let reloads = 0;
+window.location.reload = function() { reloads++; };
+const delays = [];
+setTimeout = function(fn, ms) {
+	delays.push(ms);
+};
+
+const results = [];
+function record(name) {
+	results.push({
+		name: name,
+		reloads: reloads,
+		delays: delays.slice(),
+		prepended: lostIndicatorPrepended
+	});
+}
+
+// A page just under the minimum age backs off.
+jawsHandleReconnect({ currentTarget: { status: 204 } });
+record("before minimum age");
+
+// The exact age boundary permits a reload.
+navigationAge = 60000;
+jawsHandleReconnect({ currentTarget: { status: 204 } });
+record("at minimum age");
+
+// Simulate the fresh navigation, including its new document.
+navigationAge = 0;
+lostIndicatorElem = null;
+jawsHandleReconnect({ currentTarget: { status: 204 } });
+record("fresh navigation");
+
+process.stdout.write(JSON.stringify(results));
+`)
+
+	type result struct {
+		Name      string `json:"name"`
+		Reloads   int    `json:"reloads"`
+		Delays    []int  `json:"delays"`
+		Prepended int    `json:"prepended"`
+	}
+	var got []result
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	want := []result{
+		{Name: "before minimum age", Delays: []int{1000}, Prepended: 1},
+		{Name: "at minimum age", Reloads: 1, Delays: []int{1000}, Prepended: 1},
+		{Name: "fresh navigation", Reloads: 1, Delays: []int{1000, 1000}, Prepended: 2},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("reconnect reload timing = %+v, want %+v", got, want)
 	}
 }
 
