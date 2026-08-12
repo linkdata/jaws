@@ -99,7 +99,8 @@ var ErrJavascriptDisabled = errors.New("javascript is disabled")
 // ErrWebsocketOriginMissing is returned when a WebSocket request has no Origin header.
 var ErrWebsocketOriginMissing = errors.New("websocket request missing Origin header")
 
-// ErrWebsocketOriginWrongScheme is returned when a WebSocket Origin is not HTTP or HTTPS.
+// ErrWebsocketOriginWrongScheme is returned when a WebSocket Origin scheme is
+// unsupported or does not match the initial request's security.
 var ErrWebsocketOriginWrongScheme = errors.New("websocket Origin not http or https")
 
 // ErrWebsocketOriginWrongHost is returned when a WebSocket Origin host does not match the initial request host.

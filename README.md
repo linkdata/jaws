@@ -976,8 +976,15 @@ items explicitly:
   generic writes atomically. Configure an equivalent check and shared locker on
   every binding that exposes the same `Ptr` or reachable mutable backing state;
   server writes and `PathSetter` values bypass `ClientCheck`.
-* Enable `Jaws.TrustForwardedHeaders` only behind a single trusted reverse proxy
-  that overwrites `X-Forwarded-For`, `X-Real-IP` and `X-Forwarded-Proto`.
+* Behind a TLS-terminating proxy that forwards plain HTTP, enable
+  `Jaws.TrustForwardedHeaders`. Configure the proxy to remove client-supplied
+  forwarding headers and set `X-Forwarded-Proto` plus `X-Forwarded-For` or
+  `X-Real-IP` itself; JaWS also recognizes the scheme headers `X-Forwarded-Ssl`,
+  `Front-End-Https` and `Forwarded`, so the proxy must sanitize those too. The
+  forwarded scheme is used for WebSocket Origin validation; without it,
+  WebSocket upgrades from HTTPS pages are rejected with
+  `ErrWebsocketOriginWrongScheme`. Trust these headers only behind a single
+  reverse proxy you control.
 * Run the test suite both with and without `-race` before release: `-race`
   exercises the deadlock lock-order detector and JaWS debug-gated checks, while a
   plain `go test` exercises the crash-safe release tag renderer that `-race` and

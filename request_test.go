@@ -1581,10 +1581,12 @@ func TestRequest_ConnectFn(t *testing.T) {
 
 func TestRequest_validateWebSocketOrigin_MatchesInitialRequestOrigin(t *testing.T) {
 	tests := []struct {
-		name       string
-		initialURL string
-		origin     string
-		wantErr    error
+		name                  string
+		initialURL            string
+		forwardedProto        string
+		trustForwardedHeaders bool
+		origin                string
+		wantErr               error
 	}{
 		{
 			name:       "same origin http accepted",
@@ -1623,6 +1625,30 @@ func TestRequest_validateWebSocketOrigin_MatchesInitialRequestOrigin(t *testing.
 			wantErr:    ErrWebsocketOriginWrongScheme,
 		},
 		{
+			// A TLS-terminating proxy delivers a plain HTTP request. Its
+			// forwarded scheme is ignored until the caller opts in to trusting it.
+			name:           "untrusted forwarded HTTPS scheme rejected",
+			initialURL:     "http://example.test/page",
+			forwardedProto: "https",
+			origin:         "https://example.test",
+			wantErr:        ErrWebsocketOriginWrongScheme,
+		},
+		{
+			name:                  "trusted forwarded HTTPS scheme accepted",
+			initialURL:            "http://example.test/page",
+			forwardedProto:        "https",
+			trustForwardedHeaders: true,
+			origin:                "https://example.test",
+			wantErr:               nil,
+		},
+		{
+			name:                  "trusted proxy without forwarded HTTPS scheme rejected",
+			initialURL:            "http://example.test/page",
+			trustForwardedHeaders: true,
+			origin:                "https://example.test",
+			wantErr:               ErrWebsocketOriginWrongScheme,
+		},
+		{
 			name:       "missing origin rejected",
 			initialURL: "http://example.test/page",
 			origin:     "",
@@ -1652,6 +1678,7 @@ func TestRequest_validateWebSocketOrigin_MatchesInitialRequestOrigin(t *testing.
 				t.Fatal(err)
 			}
 			defer jw.Close()
+			jw.TrustForwardedHeaders = tt.trustForwardedHeaders
 
 			initialURL, err := url.Parse(tt.initialURL)
 			if err != nil {
@@ -1664,6 +1691,9 @@ func TestRequest_validateWebSocketOrigin_MatchesInitialRequestOrigin(t *testing.
 			// Server requests don't populate URL.Scheme/URL.Host, only Host.
 			initial := httptest.NewRequest(http.MethodGet, path, nil)
 			initial.Host = initialURL.Host
+			if tt.forwardedProto != "" {
+				initial.Header.Set("X-Forwarded-Proto", tt.forwardedProto)
+			}
 			if strings.EqualFold(initialURL.Scheme, "https") {
 				initial.TLS = &tls.ConnectionState{}
 			}
