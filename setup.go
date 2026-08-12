@@ -42,6 +42,8 @@ func makeAbsPath(prefix string, u *url.URL) *url.URL {
 // []*staticserve.StaticServe URL resources, or a setup function matching
 // [SetupFunc] such as jawsboot.Setup.
 //
+// A nil [SetupFunc] extra is ignored.
+//
 // It calls [Jaws.GenerateHeadHTML] with the final list of URLs, with any
 // relative URL paths prefixed with prefix.
 //
@@ -90,10 +92,12 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 		case *staticserve.StaticServe:
 			handleStaticServe(extra)
 		case SetupFunc:
-			setupURLs, setupErr := extra(jw, setupHandleFn, prefix)
-			err = errors.Join(err, setupErr)
-			for _, u := range setupURLs {
-				urls = append(urls, makeAbsPath(prefix, u))
+			if extra != nil {
+				setupURLs, setupErr := extra(jw, setupHandleFn, prefix)
+				err = errors.Join(err, setupErr)
+				for _, u := range setupURLs {
+					urls = append(urls, makeAbsPath(prefix, u))
+				}
 			}
 		default:
 			err = errors.Join(err, fmt.Errorf("jaws.Setup: expected a string, *url.URL, *staticserve.StaticServe, []*staticserve.StaticServe or jaws.SetupFunc, not %T", extra))
