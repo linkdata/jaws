@@ -221,7 +221,7 @@ func (sess *Session) addCookie(w http.ResponseWriter, r *http.Request) {
 // non-nil [Session] it returns a non-nil deletion cookie.
 func (sess *Session) Close() (cookie *http.Cookie) {
 	if sess != nil {
-		sess.jw.deleteSession(sess.sessionID)
+		sess.jw.deleteSessionIfCurrent(sess)
 
 		sess.mu.Lock()
 		sess.cookie.MaxAge = -1 // #nosec G124 -- marks the already initialized session cookie for deletion.
@@ -440,6 +440,12 @@ func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Sessio
 //
 // The caller must hold jw.mu and publish the Session before releasing it.
 func (jw *Jaws) newSessionLocked(remoteIP netip.Addr, secure bool) (sess *Session) {
+	// Retired IDs deliberately remain eligible for reuse. A natural 64-bit random
+	// collision can therefore make a stale cookie name a later Session. Preventing
+	// every reuse would require unbounded tombstones; if this probability/space
+	// tradeoff changes, widen or add a generation to the cookie token instead.
+	// Replacing crypto/rand.Reader to force a repeat is dependency fault injection,
+	// not a supported-use reproduction of the default random source's behavior.
 	for sess == nil {
 		sessionID := jw.nonZeroRandomLocked()
 		if _, ok := jw.sessions[sessionID]; !ok {
@@ -449,9 +455,14 @@ func (jw *Jaws) newSessionLocked(remoteIP netip.Addr, secure bool) (sess *Sessio
 	return
 }
 
-func (jw *Jaws) deleteSession(sessionID key.Key) {
+// deleteSessionIfCurrent unregisters sess only while it still owns its ID.
+// Session pointers can outlive registration, so a stale Close must not remove a
+// later Session that received the same numeric ID.
+func (jw *Jaws) deleteSessionIfCurrent(sess *Session) {
 	jw.mu.Lock()
-	delete(jw.sessions, sessionID)
+	if jw.sessions[sess.sessionID] == sess {
+		delete(jw.sessions, sess.sessionID)
+	}
 	jw.mu.Unlock()
 }
 
