@@ -104,9 +104,19 @@ type Jid = jid.Jid // convenience alias
 // unsynchronized write and is not supported. Methods document their own
 // concurrency behavior and may be called concurrently when stated.
 type Jaws struct {
-	CookieName            string     // Name for session cookies; defaults to a name derived from the executable ([assets.DefaultCookieName]), falling back to "jaws"
-	AutoSession           bool       // Create and associate a session during a successful WebSocket upgrade when a Request has none. Defaults to false.
-	TrustForwardedHeaders bool       // Trust X-Forwarded-* headers: governs the session cookie Secure flag (X-Forwarded-Proto) and the client IP used for session/request binding (X-Forwarded-For/X-Real-IP). Defaults to false; only enable behind a single reverse proxy you control that sets these headers.
+	CookieName  string // Name for session cookies; defaults to a name derived from the executable ([assets.DefaultCookieName]), falling back to "jaws"
+	AutoSession bool   // Create and associate a session during a successful WebSocket upgrade when a Request has none. Defaults to false.
+	// TrustForwardedHeaders enables trusted proxy header processing.
+	//
+	// It governs the session cookie Secure flag and WebSocket Origin scheme
+	// validation through the forwarding headers recognized by
+	// [secureheaders.RequestIsSecure], and the client IP used for session and
+	// request binding through X-Forwarded-For and X-Real-IP. Behind a proxy that
+	// terminates TLS and forwards plain HTTP, enable it and have the proxy sanitize
+	// forwarding headers and set the scheme and client IP itself, or HTTPS-page
+	// WebSocket upgrades are rejected. Defaults to false; enable only behind a
+	// single reverse proxy you control.
+	TrustForwardedHeaders bool
 	Logger                Logger     // Optional logger; [Jaws.Log] dispatches Error calls asynchronously and serially
 	Debug                 bool       // Set to true to enable debug info in generated HTML code. Call GenerateHeadHTML after changing it.
 	MakeAuth              MakeAuthFn // Function to create ui.With.Auth for Templates. If nil, templates get the fail-open DefaultAuth (IsAdmin()==true for everyone); set it to enforce authorization. See DefaultAuth.
