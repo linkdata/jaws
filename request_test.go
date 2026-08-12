@@ -4033,6 +4033,117 @@ func TestWS_ConnectFnFailureRefreshesClaimedSessionGrace(t *testing.T) {
 	}
 }
 
+func TestWS_PeerCloseWrapsRequestCancellation(t *testing.T) {
+	logger := &eventErrorLogger{}
+	ts := newTestServerWithLogger(t, logger)
+	defer ts.Close()
+	rqCtx := ts.rq.Context()
+
+	conn, resp, err := ts.Dial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusSwitchingProtocols)
+	}
+	select {
+	case <-ts.connectedCh:
+	case <-time.After(testTimeout):
+		t.Fatal("timeout waiting for websocket connect")
+	}
+	loggedBeforeClose := len(logger.loggedErrors())
+
+	if err = conn.Close(websocket.StatusNormalClosure, "done"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-rqCtx.Done():
+	case <-time.After(testTimeout):
+		t.Fatal("timeout waiting for Request cancellation")
+	}
+	cause := context.Cause(rqCtx)
+	if !errors.Is(cause, ErrRequestCancelled) {
+		t.Fatalf("cause = %v, want ErrRequestCancelled", cause)
+	}
+	var closeErr websocket.CloseError
+	if !errors.As(cause, &closeErr) {
+		t.Fatalf("cause = %v, want websocket.CloseError", cause)
+	}
+	if closeErr.Code != websocket.StatusNormalClosure || closeErr.Reason != "done" {
+		t.Fatalf("close error = %#v, want code %v and reason %q", closeErr, websocket.StatusNormalClosure, "done")
+	}
+
+	waitForRequestCount(t, ts.jw, 0, testTimeout)
+	deadline := time.Now().Add(testTimeout)
+	for len(logger.loggedErrors()) == loggedBeforeClose && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	logged := logger.loggedErrors()[loggedBeforeClose:]
+	if len(logged) != 1 {
+		t.Fatalf("logged errors = %v, want one cancellation", logged)
+	}
+	if !errors.Is(logged[0], ErrRequestCancelled) {
+		t.Fatalf("logged error = %v, want ErrRequestCancelled", logged[0])
+	}
+	closeErr = websocket.CloseError{}
+	if !errors.As(logged[0], &closeErr) {
+		t.Fatalf("logged error = %v, want websocket.CloseError", logged[0])
+	}
+	if closeErr.Code != websocket.StatusNormalClosure || closeErr.Reason != "done" {
+		t.Fatalf("logged close error = %#v, want code %v and reason %q", closeErr, websocket.StatusNormalClosure, "done")
+	}
+}
+
+func TestWS_JawsCloseDoesNotReportTransportError(t *testing.T) {
+	logger := &eventErrorLogger{}
+	ts := newTestServerWithLogger(t, logger)
+	defer ts.Close()
+	rqCtx := ts.rq.Context()
+
+	conn, resp, err := ts.Dial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.CloseNow() }()
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusSwitchingProtocols)
+	}
+	select {
+	case <-ts.connectedCh:
+	case <-time.After(testTimeout):
+		t.Fatal("timeout waiting for websocket connect")
+	}
+	loggedBeforeClose := len(logger.loggedErrors())
+
+	ts.jw.Close()
+	select {
+	case <-rqCtx.Done():
+	case <-time.After(testTimeout):
+		t.Fatal("timeout waiting for Request cancellation")
+	}
+	cause := context.Cause(rqCtx)
+	if !errors.Is(cause, context.Canceled) {
+		t.Fatalf("cause = %v, want context.Canceled", cause)
+	}
+	if errors.Is(cause, ErrRequestCancelled) {
+		t.Fatalf("cause = %v, unexpectedly matches ErrRequestCancelled", cause)
+	}
+
+	readCtx, cancelRead := context.WithTimeout(t.Context(), testTimeout)
+	defer cancelRead()
+	if _, _, err = conn.Read(readCtx); err == nil {
+		t.Fatal("WebSocket remained open after Jaws.Close")
+	}
+	if readCtx.Err() != nil {
+		t.Fatalf("WebSocket closed only when the client read timed out: %v", err)
+	}
+	waitForRequestCount(t, ts.jw, 0, testTimeout)
+	logged := logger.loggedErrors()
+	if len(logged) != loggedBeforeClose {
+		t.Fatalf("Jaws.Close logged transport errors: %v", logged[loggedBeforeClose:])
+	}
+}
+
 func TestWS_NormalExchange(t *testing.T) {
 	th := newTestHelper(t)
 	logger := &eventErrorLogger{}
@@ -4159,7 +4270,8 @@ func TestWS_PingDisabledKeepsIdleConnection(t *testing.T) {
 // installs and cancels a child context; the client must then observe the server
 // close without sending any unrelated wake-up message.
 func TestWS_SetContextCancellationClosesIdleConnection(t *testing.T) {
-	ts := newTestServerNoSession(t)
+	logger := &eventErrorLogger{}
+	ts := newTestServerWithSession(t, false, logger)
 	defer ts.Close()
 	ts.jw.WebSocketPingInterval = 0
 
@@ -4197,6 +4309,7 @@ func TestWS_SetContextCancellationClosesIdleConnection(t *testing.T) {
 	case <-time.After(testTimeout):
 		t.Fatal("request loop did not select on the old context")
 	}
+	loggedBeforeCancel := len(logger.loggedErrors())
 
 	ts.rq.SetContext(func(old context.Context) context.Context {
 		ctx, cancel := context.WithCancel(old)
@@ -4218,6 +4331,17 @@ func TestWS_SetContextCancellationClosesIdleConnection(t *testing.T) {
 		t.Fatalf("idle WebSocket closed only when the client read timed out: %v", err)
 	}
 	waitForRequestCount(t, ts.jw, 0, testTimeout)
+	cause := context.Cause(ts.rq.Context())
+	if !errors.Is(cause, context.Canceled) {
+		t.Fatalf("cause = %v, want context.Canceled", cause)
+	}
+	if errors.Is(cause, ErrRequestCancelled) {
+		t.Fatalf("cause = %v, unexpectedly matches ErrRequestCancelled", cause)
+	}
+	logged := logger.loggedErrors()
+	if len(logged) != loggedBeforeCancel {
+		t.Fatalf("SetContext cancellation logged transport errors: %v", logged[loggedBeforeCancel:])
+	}
 }
 
 // waitForRequestCount polls a Jaws served over a real WebSocket connection, so
