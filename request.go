@@ -595,9 +595,7 @@ func (rq *Request) replaceContext(fn func(oldCtx context.Context) (newCtx contex
 // context is already done. nowSeconds is the reference instant ([Jaws.runtimeSeconds]).
 // Called from the Serve loop's maintenance pass while jw.mu is held.
 //
-// It returns the cancellation cause (or nil) rather than logging it, so the caller
-// can log it after releasing jw.mu — logging runs the user [Jaws.Logger], which
-// must not be invoked under a lock.
+// It returns the cancellation cause (or nil) for the caller to queue.
 func (rq *Request) maintenance(nowSeconds int32, requestTimeout time.Duration) (expired bool, cause error) {
 	if rq.loadState() != reqRunning {
 		rq.mu.Lock()
@@ -619,11 +617,8 @@ func (rq *Request) maintenance(nowSeconds int32, requestTimeout time.Duration) (
 // the Request has a non-zero identity key and its context has not already been
 // cancelled.
 //
-// It does NOT log. It returns the cancellation cause (already set on the context)
-// so the caller can pass it to [Jaws.Log] AFTER releasing rq.mu and any outer lock;
-// the cause is nil whenever there is nothing to log (the context was already
-// cancelled, or a nil err). Logging invokes the user-supplied [Jaws.Logger], which
-// the package locking contract forbids running under a lock. Caller must hold rq.mu.
+// It does NOT log. It returns the cancellation cause (already set on the context),
+// or nil when there is nothing to log. Caller must hold rq.mu.
 func (rq *Request) cancelLocked(err error) (cause error) {
 	if rq.JawsKey != 0 && rq.ctx.Err() == nil {
 		cause = newErrRequestCancelledLocked(rq, err)
@@ -632,20 +627,20 @@ func (rq *Request) cancelLocked(err error) (cause error) {
 	return
 }
 
-// cancel locks rq.mu, cancels the context, then logs the cancellation cause after
-// releasing the lock ([Jaws.Log] is a no-op on a nil cause).
+// cancel locks rq.mu, cancels the context, and queues the cancellation cause
+// ([Jaws.Log] is a no-op on a nil cause).
 func (rq *Request) cancel(err error) {
 	rq.mu.Lock()
-	cause := rq.cancelLocked(err)
+	_ = rq.Jaws.Log(rq.cancelLocked(err))
 	rq.mu.Unlock()
-	_ = rq.Jaws.Log(cause)
 }
 
 // Cancel aborts the Request.
 //
-// It cancels the Request's context with the given cause (logged via [Jaws.Logger]);
+// It cancels the Request's context with the given cause (queued via [Jaws.Log]);
 // the WebSocket processing loop and its goroutines observe the cancelled context and
-// shut down asynchronously. Cancel returns immediately and does not wait for teardown.
+// shut down asynchronously. Cancel returns immediately and does not wait for teardown
+// or logging.
 // It is safe to call synchronously from UI code, for example to terminate a
 // connection that violates a server-side limit. A nil err cancels without a
 // specific cause.
@@ -689,8 +684,8 @@ func (rq *Request) Alert(level, msg string) {
 	}
 }
 
-// AlertError logs err via [Jaws.Log] and, if it is non-nil, also shows it to the
-// current request as a danger-level [Request.Alert].
+// AlertError queues err via [Jaws.Log] and, if it is non-nil, also shows it to
+// the current request as a danger-level [Request.Alert].
 func (rq *Request) AlertError(err error) {
 	if rq.Jaws.Log(err) != nil {
 		rq.Alert("danger", err.Error())
@@ -935,8 +930,8 @@ func (rq *Request) TagExpanded(elem *Element, expandedTags []any) {
 // [github.com/linkdata/jaws/lib/tag] for tag selection and lifetime guidance.
 //
 // Tag expands tagItems through [Jaws.MustTagExpand]. With a [Jaws.Logger] configured,
-// it logs an expansion error and registers the partial result. Without a Logger, an
-// expansion error causes Tag to panic before registering anything. Use
+// it queues an expansion error and registers the partial result. Without a Logger,
+// an expansion error causes Tag to panic before registering anything. Use
 // [Request.TagExpanded] to register keys you expanded yourself.
 //
 // Tag does not expand tagItems when elem is nil or foreign, or when tagItems is empty.
@@ -950,8 +945,8 @@ func (rq *Request) Tag(elem *Element, tagItems ...any) {
 // GetElements returns the Elements in rq associated with tagValue.
 //
 // GetElements expands tagValue through [Jaws.MustTagExpand]. With a [Jaws.Logger]
-// configured, it logs an expansion error and uses the partial result. Without a Logger,
-// an expansion error causes GetElements to panic before the lookup.
+// configured, it queues an expansion error and uses the partial result. Without a
+// Logger, an expansion error causes GetElements to panic before the lookup.
 //
 // Each Element registered under at least one resulting key is returned once. The
 // returned slice is a caller-owned snapshot in unspecified order.
@@ -1096,9 +1091,10 @@ func (asw *autoSessionWriter) WriteHeader(statusCode int) {
 	asw.ResponseWriter.WriteHeader(statusCode)
 }
 
-// Log sends an error to the [Jaws.Logger] if set.
-// Has no effect if err is nil or the Logger is nil.
-// Returns err.
+// Log queues an error for the [Jaws.Logger] and returns err.
+//
+// A nil Request behaves like a nil [Jaws]: err is returned without logging. See
+// [Jaws.Log] for delivery and shutdown behavior.
 func (rq *Request) Log(err error) error {
 	var jw *Jaws
 	if rq != nil {
@@ -1107,9 +1103,10 @@ func (rq *Request) Log(err error) error {
 	return jw.Log(err)
 }
 
-// MustLog sends an error to the [Jaws.Logger] if set, or
-// panics with the given error if the Logger is nil.
-// Has no effect if err is nil.
+// MustLog reports an error or panics when no [Jaws.Logger] is configured.
+//
+// On a nil Request, a non-nil err is treated as having no configured Logger and
+// panics; a nil err has no effect. See [Jaws.MustLog] for delivery behavior.
 //
 // Some update-time paths cannot return errors to their caller and report them
 // through MustLog. Set [Jaws.Logger] when those errors should be logged instead

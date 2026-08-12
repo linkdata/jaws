@@ -281,7 +281,6 @@ type JsVar[T any] struct {
 // JawsGetPath returns the value at jsPath, logging lookup errors on elem when possible.
 func (jsvar *JsVar[T]) JawsGetPath(elem *jaws.Element, jsPath string) (value any) {
 	value, err := jsvar.getPath(jsPath)
-	// The application logger may acquire the binding lock, so invoke it after getPath returns.
 	if elem != nil {
 		_ = elem.Jaws.Log(err)
 	}

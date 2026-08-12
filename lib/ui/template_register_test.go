@@ -43,15 +43,16 @@ func TestRegister_TemplateUpdaterReportsUnclaimed(t *testing.T) {
 
 	t.Run("direct call logs", func(t *testing.T) {
 		logger := new(templateLogger)
-		_, rq := newRegisterRequest(t, logger)
+		jw, rq := newRegisterRequest(t, logger)
 		var sb strings.Builder
 		rw := RequestWriter{Request: rq, Writer: &sb}
 
 		if jid := rw.Register(tmpl); !jid.IsValid() {
 			t.Fatal("expected a valid Jid even though the update failed")
 		}
-		if len(logger.errors) != 1 || !errors.Is(logger.errors[0], ErrElementStateUnclaimed) {
-			t.Fatalf("logged errors = %v, want one %v", logger.errors, ErrElementStateUnclaimed)
+		logged := logger.sync(t, jw)
+		if len(logged) != 1 || !errors.Is(logged[0], ErrElementStateUnclaimed) {
+			t.Fatalf("logged errors = %v, want one %v", logged, ErrElementStateUnclaimed)
 		}
 	})
 
@@ -96,7 +97,7 @@ func TestRegister_TemplateUpdaterReportsUnclaimed(t *testing.T) {
 
 	t.Run("template action logs and keeps rendering", func(t *testing.T) {
 		logger := new(templateLogger)
-		_, rq := newRegisterRequest(t, logger)
+		jw, rq := newRegisterRequest(t, logger)
 		var sb strings.Builder
 		rw := RequestWriter{Request: rq, Writer: &sb}
 
@@ -106,8 +107,9 @@ func TestRegister_TemplateUpdaterReportsUnclaimed(t *testing.T) {
 		if !strings.Contains(sb.String(), "</div>") {
 			t.Fatalf("rendering did not continue past the diagnostic: %q", sb.String())
 		}
-		if len(logger.errors) != 1 || !errors.Is(logger.errors[0], ErrElementStateUnclaimed) {
-			t.Fatalf("logged errors = %v, want one %v", logger.errors, ErrElementStateUnclaimed)
+		logged := logger.sync(t, jw)
+		if len(logged) != 1 || !errors.Is(logged[0], ErrElementStateUnclaimed) {
+			t.Fatalf("logged errors = %v, want one %v", logged, ErrElementStateUnclaimed)
 		}
 	})
 }
@@ -179,11 +181,12 @@ func TestRegister_TemplateUpdaterOnTheRequestLoop(t *testing.T) {
 					t.Fatal("timeout waiting for the request-loop liveness probe")
 				}
 
-				// Join the request-loop goroutine before inspecting its logger writes.
+				// Join the request-loop goroutine, then drain the asynchronous logger.
 				tr.Close()
 				<-tr.DoneCh
-				if len(logger.errors) != 1 || !errors.Is(logger.errors[0], ErrElementStateUnclaimed) {
-					t.Fatalf("logged errors = %v, want one %v", logger.errors, ErrElementStateUnclaimed)
+				logged := logger.sync(t, jw)
+				if len(logged) != 1 || !errors.Is(logged[0], ErrElementStateUnclaimed) {
+					t.Fatalf("logged errors = %v, want one %v", logged, ErrElementStateUnclaimed)
 				}
 				return
 			}

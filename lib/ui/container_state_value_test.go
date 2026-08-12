@@ -176,28 +176,17 @@ func (w *valueTestWriteCounter) Write(p []byte) (int, error) {
 }
 
 type valueTestLogger struct {
-	mu     sync.Mutex
-	errors []error
+	log testErrorLog
 }
 
 func (*valueTestLogger) Info(string, ...any) {}
 func (*valueTestLogger) Warn(string, ...any) {}
 func (l *valueTestLogger) Error(_ string, args ...any) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	for i := 0; i+1 < len(args); i += 2 {
-		if args[i] == "err" {
-			if err, ok := args[i+1].(error); ok {
-				l.errors = append(l.errors, err)
-			}
-		}
-	}
+	l.log.record(args)
 }
 
-func (l *valueTestLogger) snapshot() []error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return append([]error(nil), l.errors...)
+func (l *valueTestLogger) sync(t *testing.T, jw *jaws.Jaws) []error {
+	return l.log.sync(t, jw)
 }
 
 type valueTestBlockingWriter struct {
@@ -522,7 +511,7 @@ func TestContainerUpdateRejectsRenderInProgress(t *testing.T) {
 
 			elem.JawsUpdate()
 
-			logged := logger.snapshot()
+			logged := logger.sync(t, tr.Jaws)
 			if len(logged) != 1 || !errors.Is(logged[0], jaws.ErrElementStateClaimed) {
 				t.Fatalf("logged errors = %v, want one %v", logged, jaws.ErrElementStateClaimed)
 			}
@@ -578,7 +567,7 @@ func TestContainerUpdateRejectsClaimedStateBeforeProviderCallback(t *testing.T) 
 			for _, widgetCase := range valueTestWidgetCases() {
 				t.Run(widgetCase.name, func(t *testing.T) {
 					logger := new(valueTestLogger)
-					_, rq := newConfiguredCoreRequest(t, func(jw *jaws.Jaws) { jw.Logger = logger })
+					jw, rq := newConfiguredCoreRequest(t, func(jw *jaws.Jaws) { jw.Logger = logger })
 					provider := &valueTestProvider{
 						children: []jaws.UI{valueTestChild(1)},
 						selected: "one",
@@ -593,7 +582,7 @@ func TestContainerUpdateRejectsClaimedStateBeforeProviderCallback(t *testing.T) 
 					if got := provider.callbackCount(); got != 0 {
 						t.Fatalf("provider callbacks = %d, want 0", got)
 					}
-					logged := logger.snapshot()
+					logged := logger.sync(t, jw)
 					if len(logged) != 1 || !errors.Is(logged[0], jaws.ErrElementStateClaimed) {
 						t.Fatalf("logged errors = %v, want one %v", logged, jaws.ErrElementStateClaimed)
 					}

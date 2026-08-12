@@ -244,8 +244,9 @@ func TestTemplate_UpdateExecuteFailureKeepsPreviousGeneration(t *testing.T) {
 	dot.setFail(errOwnedDotCheck)
 	tmpl.JawsUpdate(elem)
 
-	if len(logger.errors) != 1 || !errors.Is(logger.errors[0], errOwnedDotCheck) {
-		t.Fatalf("logged errors = %v, want one %v", logger.errors, errOwnedDotCheck)
+	logged := logger.sync(t, jw)
+	if len(logged) != 1 || !errors.Is(logged[0], errOwnedDotCheck) {
+		t.Fatalf("logged errors = %v, want one %v", logged, errOwnedDotCheck)
 	}
 	if got := tr1Nested(t, rq, dot, elem); got != first {
 		t.Fatal("failed update did not keep the previous nested Element")
@@ -286,8 +287,9 @@ func TestTemplate_UpdateLookupFailureKeepsPreviousGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 	tmpl.JawsUpdate(elem)
-	if len(logger.errors) != 1 || !errors.Is(logger.errors[0], ErrMissingTemplate) {
-		t.Fatalf("logged errors = %v, want one %v", logger.errors, ErrMissingTemplate)
+	logged := logger.sync(t, jw)
+	if len(logged) != 1 || !errors.Is(logged[0], ErrMissingTemplate) {
+		t.Fatalf("logged errors = %v, want one %v", logged, ErrMissingTemplate)
 	}
 	if got := tr1Nested(t, rq, dot, elem); got != first || first.Deleted() {
 		t.Fatal("lookup failure disturbed the previous nested Element")
@@ -578,8 +580,9 @@ func TestTemplate_UpdateFailureKeepsRegisterAndRadioGroupGeneration(t *testing.T
 
 			tt.dot.setFail(errOwnedDotCheck)
 			tmpl.JawsUpdate(elem)
-			if len(logger.errors) != 1 || !errors.Is(logger.errors[0], errOwnedDotCheck) {
-				t.Fatalf("logged errors = %v, want one %v", logger.errors, errOwnedDotCheck)
+			logged := logger.sync(t, jw)
+			if len(logged) != 1 || !errors.Is(logged[0], errOwnedDotCheck) {
+				t.Fatalf("logged errors = %v, want one %v", logged, errOwnedDotCheck)
 			}
 			if got := registeredJids(t, rq); !slices.Equal(got, first) {
 				t.Fatalf("registered jids after failed update = %v, want the previous generation %v", got, first)

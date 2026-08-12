@@ -54,8 +54,9 @@ func TestUIRenderRejectsUnreachableTag(t *testing.T) {
 	if ui.elem == nil {
 		t.Fatal("UI renderer was not called")
 	}
-	if !errors.Is(logger.err, tag.ErrNotUsableAsTag) {
-		t.Fatalf("UI rendering error = %v, want %v", logger.err, tag.ErrNotUsableAsTag)
+	loggedErr := logger.next(t)
+	if !errors.Is(loggedErr, tag.ErrNotUsableAsTag) {
+		t.Fatalf("UI rendering error = %v, want %v", loggedErr, tag.ErrNotUsableAsTag)
 	}
 }
 
@@ -83,8 +84,9 @@ func TestUIRenderResolvesDistinctFunctionTagGetters(t *testing.T) {
 	if err := tr.UI(ui); err != nil {
 		t.Fatal(err)
 	}
-	if logger.err != nil {
-		t.Fatalf("UI rendering error = %v", logger.err)
+	awaitTestLoggerQueue(t, tr.Jaws)
+	if logged := logger.snapshot(); len(logged) != 0 {
+		t.Fatalf("UI rendering errors = %v", logged)
 	}
 	if ui.elem == nil || !ui.elem.HasTag(want) {
 		t.Fatal("UI rendering did not register the function TagGetter's leaf tag")

@@ -207,7 +207,7 @@ func TestTemplate_DelegatedRenderKeepsTheDelegatorsChild(t *testing.T) {
 // a later update still runs.
 func TestTemplate_DelegatedRenderClaimSurvivesHandledError(t *testing.T) {
 	logger := new(templateLogger)
-	_, rq := newConfiguredStateRequest(t, withLogger(logger))
+	jw, rq := newConfiguredStateRequest(t, withLogger(logger))
 
 	dot := &ownedDot{fail: errOwnedDotCheck}
 	ui := &delegatingUI{tmpl: NewTemplate("div", "state-failafter", dot), handle: true}
@@ -221,8 +221,9 @@ func TestTemplate_DelegatedRenderClaimSurvivesHandledError(t *testing.T) {
 	dot.setFail(nil)
 	elem := rq.GetElementByJid(jaws.Jid(1))
 	ui.JawsUpdate(elem)
-	if len(logger.errors) != 0 {
-		t.Fatalf("logged errors = %v, want none: the claim should have survived", logger.errors)
+	logged := logger.sync(t, jw)
+	if len(logged) != 0 {
+		t.Fatalf("logged errors = %v, want none: the claim should have survived", logged)
 	}
 }
 

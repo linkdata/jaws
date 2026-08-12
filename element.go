@@ -484,10 +484,10 @@ func (elem *Element) validChildElement(operation string, child *Element) (ok boo
 // For a live Element, it registers tags and event handlers and returns any HTML
 // attributes found by [ParseParams]. A deleted Element applies nothing and returns nil.
 //
-// On a live, frozen Element, handler params are logged and dropped in production when
-// [Jaws.Logger] is configured, after which tags and attributes are processed. Debug
-// builds and servers without a Logger panic first. Params without handlers continue
-// normally.
+// On a live, frozen Element, handler params are queued for logging and dropped
+// in production when [Jaws.Logger] is configured, after which tags and attributes
+// are processed. Debug builds and servers without a Logger panic first. Params
+// without handlers continue normally.
 func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
 	tags, handlers, rawAttrs := ParseParams(params)
 	if !elem.deleted.Load() {
@@ -523,10 +523,10 @@ func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
 // contract.
 //
 // If the [Element] is already frozen and getter is an event handler, the handler
-// is not added: in production with a [Jaws.Logger] configured this is logged and
-// tag processing still occurs, while debug builds and servers without a Logger panic
-// before that processing. For a non-event-handler getter, tag processing still occurs
-// after freezing.
+// is not added: in production with a [Jaws.Logger] configured this is queued for
+// logging and tag processing still occurs, while debug builds and servers without a
+// Logger panic before that processing. For a non-event-handler getter, tag processing
+// still occurs after freezing.
 func (elem *Element) ApplyGetter(getter any) (tagValue any) {
 	if getter != nil {
 		tagValue = getter

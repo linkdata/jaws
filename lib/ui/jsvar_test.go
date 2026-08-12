@@ -63,48 +63,55 @@ type jsVarTryLocker interface {
 	TryLock() bool
 }
 
-type jsVarReentrantGetPathLogger struct {
-	locker        jsVarTryLocker
+type jsVarGetPathLogResult struct {
+	err           error
 	lockAvailable bool
 	reentered     bool
-	calls         int
-	err           error
+}
+
+type jsVarReentrantGetPathLogger struct {
+	locker  jsVarTryLocker
+	results chan jsVarGetPathLogResult
 }
 
 func (*jsVarReentrantGetPathLogger) Info(string, ...any) {}
 func (*jsVarReentrantGetPathLogger) Warn(string, ...any) {}
 
 func (logger *jsVarReentrantGetPathLogger) Error(_ string, args ...any) {
-	logger.calls++
-	for i := 0; i+1 < len(args); i += 2 {
-		if args[i] == "err" {
-			logger.err, _ = args[i+1].(error)
-		}
+	err := testLoggedError(args)
+	if testCompleteLoggerBarrier(err) {
+		return
 	}
-	logger.lockAvailable = logger.locker.TryLock()
-	if !logger.lockAvailable {
+	result := jsVarGetPathLogResult{err: err, lockAvailable: logger.locker.TryLock()}
+	if !result.lockAvailable {
+		logger.results <- result
 		return
 	}
 	logger.locker.Unlock()
 	logger.locker.Lock()
-	logger.reentered = true
+	result.reentered = true
 	logger.locker.Unlock()
+	logger.results <- result
 }
 
 type jsVarGetPathPanicLogger struct {
-	locker        jsVarTryLocker
-	lockAvailable bool
-	panicValue    any
+	locker     jsVarTryLocker
+	panicValue any
+	result     chan bool
 }
 
 func (*jsVarGetPathPanicLogger) Info(string, ...any) {}
 func (*jsVarGetPathPanicLogger) Warn(string, ...any) {}
 
-func (logger *jsVarGetPathPanicLogger) Error(string, ...any) {
-	logger.lockAvailable = logger.locker.TryLock()
-	if logger.lockAvailable {
+func (logger *jsVarGetPathPanicLogger) Error(_ string, args ...any) {
+	if testCompleteLoggerBarrier(testLoggedError(args)) {
+		return
+	}
+	lockAvailable := logger.locker.TryLock()
+	if lockAvailable {
 		logger.locker.Unlock()
 	}
+	logger.result <- lockAvailable
 	panic(logger.panicValue)
 }
 
@@ -361,8 +368,11 @@ func TestJsVar_RenderInitialHTMLAttrCanReenterBindingLocker(t *testing.T) {
 func testJsVarGetPathLoggerReentry(t *testing.T, bindingLocker jsVarTryLocker) {
 	t.Helper()
 
-	logger := &jsVarReentrantGetPathLogger{locker: bindingLocker}
-	_, rq := newConfiguredCoreRequest(t, func(jw *jaws.Jaws) {
+	logger := &jsVarReentrantGetPathLogger{
+		locker:  bindingLocker,
+		results: make(chan jsVarGetPathLogResult, 1),
+	}
+	jw, rq := newConfiguredCoreRequest(t, func(jw *jaws.Jaws) {
 		jw.Logger = logger
 	})
 	state := jsVarData{Text: "value"}
@@ -371,21 +381,36 @@ func testJsVarGetPathLoggerReentry(t *testing.T, bindingLocker jsVarTryLocker) {
 	if got := jsvar.JawsGetPath(elem, "text"); got != state.Text {
 		t.Fatalf("successful JawsGetPath = %#v, want %q", got, state.Text)
 	}
-	if logger.calls != 0 {
-		t.Fatalf("successful JawsGetPath logged %d errors, want 0", logger.calls)
+	testSyncLogger(t, jw)
+	select {
+	case result := <-logger.results:
+		t.Fatalf("successful JawsGetPath logged %v, want nothing", result.err)
+	default:
 	}
 
 	if value := jsvar.JawsGetPath(elem, "["); value != nil {
 		t.Errorf("failed JawsGetPath = %#v, want nil", value)
 	}
-	if logger.calls != 1 || !errors.Is(logger.err, jq.ErrPathNotFound) {
-		t.Errorf("Logger.Error calls = %d with error %v, want one ErrPathNotFound", logger.calls, logger.err)
+	var result jsVarGetPathLogResult
+	select {
+	case result = <-logger.results:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for Logger.Error")
 	}
-	if !logger.lockAvailable {
+	if !errors.Is(result.err, jq.ErrPathNotFound) {
+		t.Errorf("Logger.Error error = %v, want ErrPathNotFound", result.err)
+	}
+	if !result.lockAvailable {
 		t.Error("Logger.Error ran with the binding lock held")
 	}
-	if !logger.reentered {
+	if !result.reentered {
 		t.Error("Logger.Error did not re-enter the binding locker")
+	}
+	testSyncLogger(t, jw)
+	select {
+	case extra := <-logger.results:
+		t.Errorf("unexpected extra Logger.Error result: %+v", extra)
+	default:
 	}
 }
 
@@ -399,28 +424,35 @@ func TestJsVar_GetPathLoggerCanAcquireBindingLocker(t *testing.T) {
 	})
 }
 
-func TestJsVar_GetPathLoggerPanicDoesNotLeakBindingLock(t *testing.T) {
+func TestJsVar_GetPathLoggerPanicIsRecoveredOutsideBindingLock(t *testing.T) {
 	mu := new(sync.Mutex)
 	panicValue := new(int)
-	logger := &jsVarGetPathPanicLogger{locker: mu, panicValue: panicValue}
-	_, rq := newConfiguredCoreRequest(t, func(jw *jaws.Jaws) {
+	logger := &jsVarGetPathPanicLogger{
+		locker:     mu,
+		panicValue: panicValue,
+		result:     make(chan bool, 1),
+	}
+	jw, rq := newConfiguredCoreRequest(t, func(jw *jaws.Jaws) {
 		jw.Logger = logger
 	})
 	state := jsVarData{Text: "value"}
 	jsvar := NewJsVar(mu, &state)
 	elem := rq.NewElement(jsvar)
 
-	var recovered any
-	func() {
-		defer func() { recovered = recover() }()
-		jsvar.JawsGetPath(elem, "[")
-	}()
-	if recovered != panicValue {
-		t.Fatalf("Logger.Error panic = %v, want %v", recovered, panicValue)
+	if value := jsvar.JawsGetPath(elem, "["); value != nil {
+		t.Errorf("failed JawsGetPath = %#v, want nil", value)
 	}
-	if !logger.lockAvailable {
+	var lockAvailable bool
+	select {
+	case lockAvailable = <-logger.result:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for panicking Logger.Error")
+	}
+	if !lockAvailable {
 		t.Error("Logger.Error panicked with the binding lock held")
 	}
+	// The dispatcher recovers application logger panics and continues draining.
+	testSyncLogger(t, jw)
 	if !mu.TryLock() {
 		t.Fatal("Logger.Error panic left the binding lock held")
 	}

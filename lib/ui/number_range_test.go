@@ -178,8 +178,7 @@ type (
 )
 
 type numberRangeLogger struct {
-	mu     sync.Mutex
-	errors []error
+	log testErrorLog
 }
 
 type numberRangeUI interface {
@@ -200,21 +199,11 @@ func (ui *numberRangeCountingUI) JawsUpdate(elem *jaws.Element) {
 func (*numberRangeLogger) Info(string, ...any) {}
 func (*numberRangeLogger) Warn(string, ...any) {}
 func (logger *numberRangeLogger) Error(_ string, args ...any) {
-	logger.mu.Lock()
-	defer logger.mu.Unlock()
-	for i := 0; i+1 < len(args); i += 2 {
-		if args[i] == "err" {
-			if err, ok := args[i+1].(error); ok {
-				logger.errors = append(logger.errors, err)
-			}
-		}
-	}
+	logger.log.record(args)
 }
 
-func (logger *numberRangeLogger) snapshot() []error {
-	logger.mu.Lock()
-	defer logger.mu.Unlock()
-	return append([]error(nil), logger.errors...)
+func (logger *numberRangeLogger) sync(t *testing.T, jw *jaws.Jaws) []error {
+	return logger.log.sync(t, jw)
 }
 
 func newNumberRangeLiveRequest(t *testing.T, logger jaws.Logger) *jawstest.TestRequest {
@@ -900,7 +889,7 @@ func TestNumericRegisterLogsAndQueuesNothing(t *testing.T) {
 
 				widget := tt.widget()
 				(RequestWriter{Request: tr.Request, Writer: tr.Recorder}).Register(widget)
-				logged := logger.snapshot()
+				logged := logger.sync(t, jw)
 				if len(logged) != 1 || !strings.Contains(logged[0].Error(), "before successful rendering") {
 					t.Fatalf("logged errors = %v", logged)
 				}

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/linkdata/jaws"
@@ -44,30 +43,31 @@ func (makeHTMLGetterTaggedNaNGetter) JawsGet(*jaws.Element) string { return "<ge
 func (makeHTMLGetterTaggedNaNGetter) JawsGetTag() any { return tag.Tag("getter") }
 
 type makeHTMLGetterLogger struct {
-	mu    sync.Mutex
-	calls int
-	errs  []error
+	logged chan error
 }
 
 func (*makeHTMLGetterLogger) Info(string, ...any) {}
 func (*makeHTMLGetterLogger) Warn(string, ...any) {}
 
 func (l *makeHTMLGetterLogger) Error(_ string, args ...any) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.calls++
 	for i := 0; i+1 < len(args); i += 2 {
 		key, ok := args[i].(string)
 		if err, isError := args[i+1].(error); ok && key == "err" && isError {
-			l.errs = append(l.errs, err)
+			l.logged <- err
+			return
 		}
 	}
+	l.logged <- nil
 }
 
-func (l *makeHTMLGetterLogger) snapshot() (calls int, errs []error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.calls, append([]error(nil), l.errs...)
+func (l *makeHTMLGetterLogger) wait(t *testing.T) (err error) {
+	t.Helper()
+	select {
+	case err = <-l.logged:
+	case <-t.Context().Done():
+		t.Fatal("timed out waiting for Logger.Error")
+	}
+	return
 }
 
 func newMakeHTMLGetterRequest(t *testing.T, logger jaws.Logger) *jaws.Request {
@@ -138,16 +138,15 @@ func TestMakeHTMLGetterNonReflexiveWrappedTagIsReported(t *testing.T) {
 		{name: "Getter", value: makeHTMLGetterNaNGetter(math.NaN()), inner: "&lt;getter&gt;"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			logger := &makeHTMLGetterLogger{}
+			logger := &makeHTMLGetterLogger{logged: make(chan error, 1)}
 			rq := newMakeHTMLGetterRequest(t, logger)
 			elem, rendered := renderMakeHTMLGetterSpan(t, rq, tt.value)
 			requireMakeHTMLGetterSpan(t, elem, rendered, tt.inner)
 			if tags := rq.TagsOf(elem); len(tags) != 0 {
 				t.Fatalf("registered tags = %#v, want none", tags)
 			}
-			calls, errs := logger.snapshot()
-			if calls != 1 || len(errs) != 1 || !errors.Is(errs[0], tag.ErrNotUsableAsTag) {
-				t.Fatalf("logger.Error calls = %d with errors %v, want one ErrNotUsableAsTag", calls, errs)
+			if logged := logger.wait(t); !errors.Is(logged, tag.ErrNotUsableAsTag) {
+				t.Fatalf("logged error = %v, want ErrNotUsableAsTag", logged)
 			}
 		})
 	}

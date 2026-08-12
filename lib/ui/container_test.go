@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1019,22 +1018,20 @@ func (l reentrantLogger) Error(string, ...any) {
 	}
 }
 
-// TestContainerCancelNotUnderLock pins that terminating the Request for an unusable
-// child does not run while the state mutex is held: cancelUnusableChildren runs before reconcile
-// locks. Request.Cancel invokes the user logger synchronously, so a logger that
-// re-enters the state lock would deadlock the update goroutine if cancellation held it.
-// The timeout turns that regression into a failure instead of a hang.
-func TestContainerCancelNotUnderLock(t *testing.T) {
+// TestContainerCancelLoggerCanReenterState checks that the asynchronous cancellation
+// logger can inspect container state and that the callback is not lost.
+func TestContainerCancelLoggerCanReenterState(t *testing.T) {
 	var st *containerState
-	var reentered atomic.Bool
+	reentered := make(chan struct{}, 1)
 	_, rq := newConfiguredCoreRequest(t, func(jw *jaws.Jaws) {
 		jw.Logger = reentrantLogger{onError: func() {
-			// Re-enter the state lock. If the cancellation that triggered this log
-			// held it, this second Lock on the same goroutine would deadlock.
 			st.mu.Lock()
 			_ = len(st.contents)
 			st.mu.Unlock()
-			reentered.Store(true)
+			select {
+			case reentered <- struct{}{}:
+			default:
+			}
 		}}
 	})
 	tc := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("ok"))}}
@@ -1054,10 +1051,11 @@ func TestContainerCancelNotUnderLock(t *testing.T) {
 		t.Fatal("JawsUpdate deadlocked: Request cancellation ran while holding u.mu")
 	}
 
-	// Without this the deadlock check is vacuous: if the logger never ran, no re-entry
-	// was attempted and the test would pass even with cancellation under the lock.
-	if !reentered.Load() {
-		t.Fatal("logger callback did not run; the deadlock check would be vacuous")
+	// Waiting for the callback makes the deadlock check non-vacuous.
+	select {
+	case <-reentered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("logger callback deadlocked while re-entering container state")
 	}
 	if cause := context.Cause(rq.Context()); !errors.Is(cause, tag.ErrNotUsableAsTag) {
 		t.Fatalf("cause = %v, want wrapping tag.ErrNotUsableAsTag", cause)

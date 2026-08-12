@@ -353,8 +353,9 @@ func TestElement_ChildOperationsRejectInvalidElement(t *testing.T) {
 				if panicked != deadlock.Debug {
 					t.Fatalf("panicked = %t, want %t", panicked, deadlock.Debug)
 				}
-				if !errors.Is(logger.err, ErrInvalidChildElement) {
-					t.Fatalf("logged error = %v, want ErrInvalidChildElement", logger.err)
+				loggedErr := logger.next(t)
+				if !errors.Is(loggedErr, ErrInvalidChildElement) {
+					t.Fatalf("logged error = %v, want ErrInvalidChildElement", loggedErr)
 				}
 				rq.muQueue.Lock()
 				queued := len(rq.wsQueue)
@@ -383,12 +384,13 @@ func TestElement_ChildOperationsOnDeletedParentAreInert(t *testing.T) {
 
 	parent.InsertBefore(child, "<span>new</span>")
 	parent.Remove(child)
+	awaitTestLoggerQueue(t, jw)
 
 	if child.Deleted() {
 		t.Fatal("deleted parent changed its live child")
 	}
-	if logger.err != nil {
-		t.Fatalf("deleted parent reported an error: %v", logger.err)
+	if logged := logger.snapshot(); len(logged) != 0 {
+		t.Fatalf("deleted parent reported errors: %v", logged)
 	}
 	rq.muQueue.Lock()
 	queued := len(rq.wsQueue)
@@ -410,7 +412,7 @@ func TestElement_ReplaceRejectsMissingId(t *testing.T) {
 	e := rq.NewElement(&testUi{s: "foo"})
 
 	if deadlock.Debug {
-		// Debug builds fail fast with a panic (after logging the misuse).
+		// Debug builds fail fast with a panic after queueing the misuse.
 		defer func() {
 			if recover() == nil {
 				t.Fatal("expected panic in debug build")
@@ -423,8 +425,9 @@ func TestElement_ReplaceRejectsMissingId(t *testing.T) {
 	}
 
 	// Production builds (with a Logger) report it via MustLog and skip the replace.
-	if logger.err == nil || !strings.Contains(logger.err.Error(), "expected HTML") {
-		t.Fatalf("expected misuse logged containing %q, got %v", "expected HTML", logger.err)
+	loggedErr := logger.next(t)
+	if !strings.Contains(loggedErr.Error(), "expected HTML") {
+		t.Fatalf("expected misuse logged containing %q, got %v", "expected HTML", loggedErr)
 	}
 	// The malformed replacement must not have been enqueued.
 	rq.muQueue.Lock()
@@ -478,9 +481,10 @@ func TestElement_AttrHelpersRejectReservedId(t *testing.T) {
 				call()
 			}
 
-			// Both builds report the misuse (after logging) and send nothing.
-			if !errors.Is(logger.err, ErrReservedAttribute) {
-				t.Fatalf("error = %v, want ErrReservedAttribute", logger.err)
+			// Both builds queue the misuse for logging and send nothing.
+			loggedErr := logger.next(t)
+			if !errors.Is(loggedErr, ErrReservedAttribute) {
+				t.Fatalf("error = %v, want ErrReservedAttribute", loggedErr)
 			}
 			rq.muQueue.Lock()
 			defer rq.muQueue.Unlock()
@@ -1003,6 +1007,7 @@ func TestElement_ApplyGetter_NonComparableHandler_NoLog(t *testing.T) {
 	e := rq.NewElement(&testUi{s: "x"})
 	tch := testNonComparableClickHandler{names: []string{"name"}}
 	e.ApplyGetter(tch)
+	awaitTestLoggerQueue(t, jw)
 	if strings.Contains(buf.String(), "not usable as tag") {
 		t.Fatalf("expected no not-usable-as-tag log, got %q", buf.String())
 	}

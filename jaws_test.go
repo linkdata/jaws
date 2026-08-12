@@ -75,18 +75,76 @@ func (nanLookuper) Lookup(string) *template.Template {
 }
 
 type captureErrorLogger struct {
-	err error
+	mu      sync.Mutex
+	errs    []error
+	changed chan struct{}
 }
 
 func (l *captureErrorLogger) Info(string, ...any) {}
 func (l *captureErrorLogger) Warn(string, ...any) {}
 func (l *captureErrorLogger) Error(_ string, args ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	for i := 0; i+1 < len(args); i += 2 {
 		if args[i] == "err" {
 			if err, ok := args[i+1].(error); ok {
-				l.err = err
+				l.errs = append(l.errs, err)
+				if l.changed != nil {
+					close(l.changed)
+					l.changed = nil
+				}
 			}
 		}
+	}
+}
+
+func (l *captureErrorLogger) next(t *testing.T) (err error) {
+	t.Helper()
+	for {
+		l.mu.Lock()
+		if len(l.errs) > 0 {
+			err = l.errs[0]
+			l.errs = l.errs[1:]
+			l.mu.Unlock()
+			return
+		}
+		if l.changed == nil {
+			l.changed = make(chan struct{})
+		}
+		changed := l.changed
+		l.mu.Unlock()
+
+		select {
+		case <-changed:
+		case <-time.After(testTimeout):
+			t.Fatal("timed out waiting for logger callback")
+		}
+	}
+}
+
+func (l *captureErrorLogger) snapshot() (errs []error) {
+	l.mu.Lock()
+	errs = append(errs, l.errs...)
+	l.mu.Unlock()
+	return
+}
+
+type testLoggerBarrier chan struct{}
+
+func (testLoggerBarrier) Info(string, ...any) {}
+func (testLoggerBarrier) Warn(string, ...any) {}
+func (done testLoggerBarrier) Error(string, ...any) {
+	close(done)
+}
+
+func awaitTestLoggerQueue(t *testing.T, jw *Jaws) {
+	t.Helper()
+	done := make(testLoggerBarrier)
+	jw.loggerQueue.enqueue(done, errors.New("test logger barrier"))
+	select {
+	case <-done:
+	case <-time.After(testTimeout):
+		t.Fatal("timed out draining logger queue")
 	}
 }
 
@@ -444,8 +502,7 @@ func TestJaws_MaxPendingRequestsPerIPUsesLiveElapsedBeforeServe(t *testing.T) {
 }
 
 // reentrantLogger re-enters the Jaws instance while logging (via RequestCount,
-// which takes jw.mu.RLock), and records the logged error. If the framework ever
-// invokes the logger while holding jw.mu, this deadlocks.
+// which takes jw.mu.RLock) and records the logged error.
 type reentrantLogger struct {
 	jw     *Jaws
 	logged chan error
@@ -467,11 +524,9 @@ func (l reentrantLogger) Error(_ string, args ...any) {
 	}
 }
 
-// TestJaws_MaintenanceLogsCancelOutsideLock verifies the maintenance pass logs a
-// request-cancellation cause AFTER releasing jw.mu, so a user Logger that re-enters
-// the Jaws instance does not deadlock the Serve loop. Before the fix the logger ran
-// while jw.mu was held for writing, which would deadlock on any re-entrant lock.
-func TestJaws_MaintenanceLogsCancelOutsideLock(t *testing.T) {
+// TestJaws_MaintenanceLoggerCanReenter verifies the maintenance pass lets a
+// user Logger re-enter the Jaws instance without deadlocking the Serve loop.
+func TestJaws_MaintenanceLoggerCanReenter(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -492,15 +547,15 @@ func TestJaws_MaintenanceLogsCancelOutsideLock(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
-		t.Fatal("maintenance deadlocked: user Logger re-entered Jaws while jw.mu was held")
+		t.Fatal("maintenance did not return")
 	}
 	select {
 	case e := <-logged:
 		if !errors.Is(e, ErrNoWebSocketRequest) {
 			t.Fatalf("logged cause = %v, want ErrNoWebSocketRequest", e)
 		}
-	default:
-		t.Fatal("expected the cancellation cause to be logged")
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for the cancellation cause to be logged")
 	}
 }
 
@@ -1169,18 +1224,16 @@ func TestJaws_MaxPendingRequestsPerIPEvictionCause(t *testing.T) {
 	jw.NewRequest(oldReq)
 	jw.NewRequest(newPendingLimitRequest("192.0.2.1:1001"))
 
-	if logger.err == nil {
-		t.Fatal("expected eviction error to be logged")
+	loggedErr := logger.next(t)
+	if !errors.Is(loggedErr, ErrRequestCancelled) {
+		t.Fatalf("logged error = %v, want ErrRequestCancelled", loggedErr)
 	}
-	if !errors.Is(logger.err, ErrRequestCancelled) {
-		t.Fatalf("logged error = %v, want ErrRequestCancelled", logger.err)
-	}
-	if !errors.Is(logger.err, ErrTooManyPendingRequests) {
-		t.Fatalf("logged error = %v, want ErrTooManyPendingRequests", logger.err)
+	if !errors.Is(loggedErr, ErrTooManyPendingRequests) {
+		t.Fatalf("logged error = %v, want ErrTooManyPendingRequests", loggedErr)
 	}
 	var limitErr errTooManyPendingRequests
-	if !errors.As(logger.err, &limitErr) {
-		t.Fatalf("logged error = %T, want errTooManyPendingRequests", logger.err)
+	if !errors.As(loggedErr, &limitErr) {
+		t.Fatalf("logged error = %T, want errTooManyPendingRequests", loggedErr)
 	}
 	if limitErr.Limit != 1 || limitErr.Addr.Compare(parseIP(oldReq.RemoteAddr)) != 0 {
 		t.Fatalf("eviction detail = %#v, want limit 1 and IP %v", limitErr, parseIP(oldReq.RemoteAddr))
@@ -1194,7 +1247,7 @@ func TestJaws_MaxPendingRequestsPerIPEvictionCause(t *testing.T) {
 // slice of two same-typed runtime-non-comparable values is rejected and logged
 // rather than panicking the caller. Such values pass tag expansion's static
 // comparability check but panic on ==; TagExpand's recover converts that to
-// ErrNotUsableAsTag, which Broadcast logs before returning with no tags to send.
+// ErrNotUsableAsTag, which Broadcast queues before returning with no tags to send.
 func TestJaws_BroadcastMultiRuntimeNonComparable(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -1208,8 +1261,9 @@ func TestJaws_BroadcastMultiRuntimeNonComparable(t *testing.T) {
 	dest := []any{box{v: func() {}}, box{v: func() {}}}
 	jw.Broadcast(wire.Message{Dest: dest}) // must not panic
 
-	if !errors.Is(logger.err, tag.ErrNotUsableAsTag) {
-		t.Fatalf("logged error = %v, want ErrNotUsableAsTag", logger.err)
+	loggedErr := logger.next(t)
+	if !errors.Is(loggedErr, tag.ErrNotUsableAsTag) {
+		t.Fatalf("logged error = %v, want ErrNotUsableAsTag", loggedErr)
 	}
 }
 
@@ -1230,8 +1284,8 @@ func TestJaws_dropNonComparableTags(t *testing.T) {
 		t.Fatalf("comparable tags dropped: got %v, want %v", got, in)
 	}
 
-	// A runtime-non-comparable tag is reported via reportMisuse, which logs and then
-	// panics under deadlock.Debug; in production it logs and returns nil.
+	// A runtime-non-comparable tag is reported via reportMisuse, which queues it and
+	// then panics under deadlock.Debug; in production it queues it and returns nil.
 	bad := []any{[]int{1}}
 	if deadlock.Debug {
 		func() {
@@ -1408,8 +1462,9 @@ func TestJaws_Redirect_unsafeRefused(t *testing.T) {
 	jw.Logger = logger
 	// A script-bearing scheme must be refused and logged, never broadcast.
 	jw.Redirect("javascript:alert(1)")
-	if logger.err == nil || !strings.Contains(logger.err.Error(), "refusing unsafe redirect") {
-		t.Fatalf("expected unsafe redirect to be logged and skipped, got %v", logger.err)
+	loggedErr := logger.next(t)
+	if !strings.Contains(loggedErr.Error(), "refusing unsafe redirect") {
+		t.Fatalf("expected unsafe redirect to be logged and skipped, got %v", loggedErr)
 	}
 }
 
@@ -1424,8 +1479,9 @@ func TestJaws_DirtyIllegalTagLogsNotPanics(t *testing.T) {
 	// An illegal tag (a bare int) must be logged and skipped, like Request.Dirty
 	// and the broadcast helpers, rather than panicking in production.
 	jw.Dirty(42)
-	if logger.err == nil || !errors.Is(logger.err, tag.ErrIllegalTagType) {
-		t.Fatalf("expected illegal tag to be logged, got %v", logger.err)
+	loggedErr := logger.next(t)
+	if !errors.Is(loggedErr, tag.ErrIllegalTagType) {
+		t.Fatalf("expected illegal tag to be logged, got %v", loggedErr)
 	}
 }
 
@@ -1559,10 +1615,10 @@ func TestBroadcast_RejectsStringAndJidDestinations(t *testing.T) {
 	jw.Logger = logger
 
 	for _, dest := range []any{"", "html-id", "Jid.1", jid.Jid(1)} {
-		logger.err = nil
 		jw.Broadcast(wire.Message{Dest: dest, What: what.Delete})
-		if !errors.Is(logger.err, tag.ErrIllegalTagType) {
-			t.Errorf("destination %T(%v): error = %v, want ErrIllegalTagType", dest, dest, logger.err)
+		loggedErr := logger.next(t)
+		if !errors.Is(loggedErr, tag.ErrIllegalTagType) {
+			t.Errorf("destination %T(%v): error = %v, want ErrIllegalTagType", dest, dest, loggedErr)
 		}
 		select {
 		case msg := <-jw.bcastCh:
@@ -1599,8 +1655,9 @@ func TestJaws_InsertRejectsNegativeIndex(t *testing.T) {
 	} else {
 		call()
 	}
-	if !errors.Is(logger.err, ErrInvalidChildIndex) {
-		t.Fatalf("Insert error = %v, want ErrInvalidChildIndex", logger.err)
+	loggedErr := logger.next(t)
+	if !errors.Is(loggedErr, ErrInvalidChildIndex) {
+		t.Fatalf("Insert error = %v, want ErrInvalidChildIndex", loggedErr)
 	}
 	select {
 	case msg := <-jw.bcastCh:
@@ -1642,8 +1699,9 @@ func TestJaws_AttrHelpersRejectReservedId(t *testing.T) {
 			} else {
 				call()
 			}
-			if !errors.Is(logger.err, ErrReservedAttribute) {
-				t.Fatalf("error = %v, want ErrReservedAttribute", logger.err)
+			loggedErr := logger.next(t)
+			if !errors.Is(loggedErr, ErrReservedAttribute) {
+				t.Fatalf("error = %v, want ErrReservedAttribute", loggedErr)
 			}
 			select {
 			case msg := <-jw.bcastCh:
@@ -1697,8 +1755,9 @@ func TestBroadcast_RejectsElementMutatingCommands(t *testing.T) {
 			} else {
 				call()
 			}
-			if !errors.Is(logger.err, tt.wantErr) {
-				t.Fatalf("error = %v, want %v", logger.err, tt.wantErr)
+			loggedErr := logger.next(t)
+			if !errors.Is(loggedErr, tt.wantErr) {
+				t.Fatalf("error = %v, want %v", loggedErr, tt.wantErr)
 			}
 			select {
 			case msg := <-jw.bcastCh:
@@ -1761,11 +1820,12 @@ func TestBroadcast_RejectsUnhashableTagDest(t *testing.T) {
 		t.Fatalf("unhashable Dest was queued for the Serve loop: %T(%#v)", msg.Dest, msg.Dest)
 	default:
 	}
-	if !errors.Is(logger.err, tag.ErrNotUsableAsTag) {
-		t.Errorf("logged error = %v, want ErrNotUsableAsTag", logger.err)
+	loggedErr := logger.next(t)
+	if !errors.Is(loggedErr, tag.ErrNotUsableAsTag) {
+		t.Errorf("logged error = %v, want ErrNotUsableAsTag", loggedErr)
 	}
-	if !errors.Is(logger.err, tag.ErrNotComparable) {
-		t.Errorf("logged error = %v, want ErrNotComparable", logger.err)
+	if !errors.Is(loggedErr, tag.ErrNotComparable) {
+		t.Errorf("logged error = %v, want ErrNotComparable", loggedErr)
 	}
 }
 
@@ -2474,8 +2534,9 @@ func TestJaws_ServeWithTimeoutRejectsDuplicateLoop(t *testing.T) {
 		t.Fatal("duplicate ServeWithTimeout did not return promptly")
 	}
 
-	if !errors.Is(logger.err, ErrServeAlreadyRunning) {
-		t.Fatalf("logged error = %v, want ErrServeAlreadyRunning", logger.err)
+	loggedErr := logger.next(t)
+	if !errors.Is(loggedErr, ErrServeAlreadyRunning) {
+		t.Fatalf("logged error = %v, want ErrServeAlreadyRunning", loggedErr)
 	}
 	if got := jw.getWebSocketTimeout(); got != firstTimeout {
 		t.Fatalf("webSocketTimeout = %v, want %v", got, firstTimeout)

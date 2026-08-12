@@ -53,19 +53,17 @@ func (templateAuth) Email() string        { return "test@example.com" }
 func (templateAuth) IsAdmin() bool        { return true }
 
 type templateLogger struct {
-	errors []error
+	log testErrorLog
 }
 
 func (l *templateLogger) Info(string, ...any) {}
 func (l *templateLogger) Warn(string, ...any) {}
 func (l *templateLogger) Error(_ string, args ...any) {
-	for i := 0; i+1 < len(args); i += 2 {
-		if args[i] == "err" {
-			if err, ok := args[i+1].(error); ok {
-				l.errors = append(l.errors, err)
-			}
-		}
-	}
+	l.log.record(args)
+}
+
+func (l *templateLogger) sync(t *testing.T, jw *jaws.Jaws) []error {
+	return l.log.sync(t, jw)
 }
 
 // warnCountLogger counts Warn calls whose message contains substr.
@@ -285,8 +283,9 @@ func TestHandler_RenderErrorDoesNotLeakElement(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	h.ServeHTTP(rr, req)
 
-	if len(logger.errors) != 1 || !errors.Is(logger.errors[0], renderErr) {
-		t.Fatalf("logged errors = %#v, want %v", logger.errors, renderErr)
+	logged := logger.sync(t, jw)
+	if len(logged) != 1 || !errors.Is(logged[0], renderErr) {
+		t.Fatalf("logged errors = %#v, want %v", logged, renderErr)
 	}
 	if captured == nil {
 		t.Fatal("handler template did not expose its request")
@@ -404,11 +403,12 @@ func TestTemplate_UpdateLogsMissingTemplate(t *testing.T) {
 	elem := rq.NewElement(tpl)
 	tpl.JawsUpdate(elem)
 
-	if len(logger.errors) != 1 {
-		t.Fatalf("logged errors = %d, want 1", len(logger.errors))
+	logged := logger.sync(t, jw)
+	if len(logged) != 1 {
+		t.Fatalf("logged errors = %d, want 1", len(logged))
 	}
-	if !errors.Is(logger.errors[0], ErrMissingTemplate) {
-		t.Fatalf("logged error = %v, want %v", logger.errors[0], ErrMissingTemplate)
+	if !errors.Is(logged[0], ErrMissingTemplate) {
+		t.Fatalf("logged error = %v, want %v", logged[0], ErrMissingTemplate)
 	}
 }
 
@@ -441,11 +441,12 @@ func TestTemplate_UpdateLogsExecuteError(t *testing.T) {
 	dot.setFail(errOwnedDotCheck)
 	tpl.JawsUpdate(elem)
 
-	if len(logger.errors) != 1 {
-		t.Fatalf("logged errors = %d, want 1", len(logger.errors))
+	logged := logger.sync(t, jw)
+	if len(logged) != 1 {
+		t.Fatalf("logged errors = %d, want 1", len(logged))
 	}
-	if !errors.Is(logger.errors[0], errOwnedDotCheck) {
-		t.Fatalf("logged error = %v, want %v", logger.errors[0], errOwnedDotCheck)
+	if !errors.Is(logged[0], errOwnedDotCheck) {
+		t.Fatalf("logged error = %v, want %v", logged[0], errOwnedDotCheck)
 	}
 }
 
@@ -462,8 +463,9 @@ func TestTemplate_UpdateLogsUnclaimedState(t *testing.T) {
 	tpl := NewTemplate("div", "unclaimed", tag.Tag("dot"))
 	tpl.JawsUpdate(rq.NewElement(tpl))
 
-	if len(logger.errors) != 1 || !errors.Is(logger.errors[0], ErrElementStateUnclaimed) {
-		t.Fatalf("logged errors = %v, want one %v", logger.errors, ErrElementStateUnclaimed)
+	logged := logger.sync(t, jw)
+	if len(logged) != 1 || !errors.Is(logged[0], ErrElementStateUnclaimed) {
+		t.Fatalf("logged errors = %v, want one %v", logged, ErrElementStateUnclaimed)
 	}
 }
 

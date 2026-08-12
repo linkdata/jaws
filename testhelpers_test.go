@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -36,7 +37,26 @@ func maybePanic(err error) {
 type testJaws struct {
 	*Jaws
 	testtmpl *template.Template
-	log      bytes.Buffer
+	log      lockedBuffer
+}
+
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (n int, err error) {
+	b.mu.Lock()
+	n, err = b.buf.Write(p)
+	b.mu.Unlock()
+	return
+}
+
+func (b *lockedBuffer) String() (s string) {
+	b.mu.Lock()
+	s = b.buf.String()
+	b.mu.Unlock()
+	return
 }
 
 func newTestJaws() (tj *testJaws) {
