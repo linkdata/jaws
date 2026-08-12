@@ -9,6 +9,7 @@ import (
 
 	"github.com/linkdata/jaws/lib/htmlio"
 	"github.com/linkdata/jaws/lib/jid"
+	xhtml "golang.org/x/net/html"
 )
 
 func Test_WriteHTMLInner(t *testing.T) {
@@ -214,9 +215,10 @@ func Test_WriteHTMLInner_NewlineSensitivePrefix(t *testing.T) {
 
 // FuzzAppendAttrValue guards the escaping invariant: for arbitrary input, the
 // bytes between the bounding double quotes must contain no raw '"' or '<' that
-// could break out of the attribute value or open a new tag.
+// could break out of the attribute value or open a new tag, nor any raw NUL
+// that an HTML parser would silently replace.
 func FuzzAppendAttrValue(f *testing.F) {
-	for _, seed := range []string{"", `"`, "<", `"&<>'`, "plain", "<script>"} {
+	for _, seed := range []string{"", `"`, "<", `"&<>'`, "plain", "<script>", "a\x00b"} {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, value string) {
@@ -226,6 +228,9 @@ func FuzzAppendAttrValue(f *testing.F) {
 		}
 		if inner := got[1 : len(got)-1]; strings.ContainsAny(inner, "\"<") {
 			t.Fatalf("AppendAttrValue(%q) inner value %q contains raw '\"' or '<'", value, inner)
+		}
+		if strings.IndexByte(got, 0) >= 0 {
+			t.Fatalf("AppendAttrValue(%q) = %q, contains raw NUL", value, got)
 		}
 	})
 }
@@ -305,9 +310,9 @@ func Test_WriteHTMLInput(t *testing.T) {
 }
 
 func TestAppendAttr(t *testing.T) {
-	value := `"&<>'\` + "\n"
+	value := `"&<>'\` + "\n\x00"
 	got := string(htmlio.AppendAttr(nil, "data-x", value))
-	want := " data-x=\"&#34;&amp;&lt;&gt;&#39;\\\n\""
+	want := " data-x=\"&#34;&amp;&lt;&gt;&#39;\\\n\uFFFD\""
 	if got != want {
 		t.Fatalf("AppendAttr() = %q, want %q", got, want)
 	}
@@ -317,10 +322,10 @@ func TestAppendAttr(t *testing.T) {
 }
 
 func TestAttr(t *testing.T) {
-	value := `"&<>'\` + "\n"
+	value := `"&<>'\` + "\n\x00"
 	var attr template.HTMLAttr = htmlio.Attr("data-x", value)
 	got := string(attr)
-	want := "data-x=\"&#34;&amp;&lt;&gt;&#39;\\\n\""
+	want := "data-x=\"&#34;&amp;&lt;&gt;&#39;\\\n\uFFFD\""
 	if got != want {
 		t.Fatalf("Attr() = %q, want %q", got, want)
 	}
@@ -357,7 +362,17 @@ func TestAppendAttrValue(t *testing.T) {
 			want:  `"&#34;&amp;&lt;&gt;&#39;"`,
 		},
 		{
-			// html.EscapeString leaves CR raw, but browser preprocessing would
+			name:  "plus remains verbatim",
+			value: "+",
+			want:  `"+"`,
+		},
+		{
+			name:  "invalid UTF-8 remains verbatim",
+			value: string([]byte{'a', 0xff, 'b'}),
+			want:  string([]byte{'"', 'a', 0xff, 'b', '"'}),
+		},
+		{
+			// HTML escaping leaves CR raw, but browser preprocessing would
 			// rewrite it to LF; it must be a numeric character reference instead.
 			name:  "carriage return is encoded",
 			value: "a\rb",
@@ -367,6 +382,36 @@ func TestAppendAttrValue(t *testing.T) {
 			name:  "CRLF encodes only the CR",
 			value: "a\r\nb",
 			want:  "\"a&#13;\nb\"",
+		},
+		{
+			name:  "NUL is canonicalized",
+			value: "a\x00b",
+			want:  "\"a\uFFFDb\"",
+		},
+		{
+			name:  "NUL and CR are both canonicalized",
+			value: "\x00\r\x00",
+			want:  "\"\uFFFD&#13;\uFFFD\"",
+		},
+		{
+			name:  "each NUL is canonicalized",
+			value: "\x00\x00",
+			want:  "\"\uFFFD\uFFFD\"",
+		},
+		{
+			name:  "existing replacement character is preserved",
+			value: "a\uFFFDb",
+			want:  "\"a\uFFFDb\"",
+		},
+		{
+			name:  "zero-valued character reference text remains text",
+			value: "&#0;",
+			want:  "\"&amp;#0;\"",
+		},
+		{
+			name:  "NUL composes with metacharacters and CR",
+			value: "\x00\"&<>'\r",
+			want:  "\"\uFFFD&#34;&amp;&lt;&gt;&#39;&#13;\"",
 		},
 	}
 	for _, tt := range tests {
@@ -413,19 +458,52 @@ func normalizeCR(s string) string {
 	return strings.ReplaceAll(s, "\r", "\n")
 }
 
-// TestAppendAttrValue_DOMRoundTrip verifies that a logical attribute value with
-// carriage returns survives a browser parse unchanged, as getAttribute reports
-// it. It models the two browser steps that would otherwise corrupt a raw CR:
-// input-stream preprocessing (CR/CRLF to LF) followed by tokenizer
-// character-reference decoding, the latter using the standard library
-// html.UnescapeString.
-func TestAppendAttrValue_DOMRoundTrip(t *testing.T) {
-	values := []string{"", "plain", "a\rb", "a\r\nb", "\rlead", "trail\r", "x\ry\rz", `"&<>'` + "\r"}
+func parsedAttr(t *testing.T, source, name string) string {
+	t.Helper()
+	doc, err := xhtml.Parse(strings.NewReader(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var findAttr func(*xhtml.Node) (string, bool)
+	findAttr = func(node *xhtml.Node) (string, bool) {
+		if node.Type == xhtml.ElementNode {
+			for _, attr := range node.Attr {
+				if attr.Key == name {
+					return attr.Val, true
+				}
+			}
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			if value, ok := findAttr(child); ok {
+				return value, true
+			}
+		}
+		return "", false
+	}
+	if value, ok := findAttr(doc); ok {
+		return value
+	}
+	t.Fatalf("attribute %q not found in parsed source %q", name, source)
+	return ""
+}
+
+// TestAttr_DOMValue verifies the DOM attribute value exposed by an HTML
+// parser. Carriage returns round-trip, while U+0000 is deliberately
+// canonicalized to the U+FFFD value required by HTML parsing.
+func TestAttr_DOMValue(t *testing.T) {
+	values := []string{
+		"", "plain", "a\rb", "a\r\nb", "\rlead", "trail\r", "x\ry\rz",
+		`"&<>'` + "\r", "a\x00b", "\x00\r\x00", "\x00\x00", "a\uFFFDb",
+		"&#0;", "\x00\"&<>'\r",
+	}
 	for _, value := range values {
-		src := string(htmlio.AppendAttrValue(nil, value))
-		inner := src[1 : len(src)-1] // strip the bounding double quotes
-		if got := html.UnescapeString(normalizeCR(inner)); got != value {
-			t.Errorf("attribute value %q round-tripped to %q via source %q", value, got, src)
+		src := string(htmlio.Attr("data-x", value))
+		if strings.IndexByte(src, 0) >= 0 {
+			t.Fatalf("Attr(%q) = %q, contains raw NUL", value, src)
+		}
+		got := parsedAttr(t, "<div "+src+"></div>", "data-x")
+		if want := strings.ReplaceAll(value, "\x00", "\uFFFD"); got != want {
+			t.Errorf("attribute value %q parsed as %q, want %q (source %q)", value, got, want, src)
 		}
 	}
 }
