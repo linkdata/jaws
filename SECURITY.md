@@ -366,7 +366,7 @@ The framework uses Go's `template.HTML` type to distinguish trusted HTML from un
 - **Input widgets** (Text, Textarea, Checkbox, Range, etc.) use `SetValue()` → sends `Value` command → client updates live form state (`value`, `checked`, or `selected`, depending on the element), not HTML
 - **Display widgets** (Span, Div, Label, etc.) use `SetInner()` → sends `Inner` command → client sets `elem.innerHTML`
 - `SetInner()` accepts `template.HTML`, meaning the developer has explicitly marked the content as trusted
-- Initial HTML rendering escapes generated attribute values with HTML entities and canonicalizes U+0000 to U+FFFD (`htmlio.AppendAttrValue`)
+- Initial HTML rendering escapes generated attribute values with HTML entities (`htmlio.AppendAttrValue`)
 
 **Convenience path — plain strings are trusted too.** The HTML-inner widget
 constructors and `RequestWriter` helpers (`NewSpan`/`Span`, `NewDiv`/`Div`, `A`,
