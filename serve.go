@@ -46,9 +46,9 @@ func (jw *Jaws) getWebSocketTimeout() (t time.Duration) {
 //
 // It is intended to run on its own goroutine and returns when [Jaws.Close] is
 // called. Errors reported through [Jaws.Log] are queued without waiting for
-// Logger.Error. During shutdown, ServeWithTimeout waits for every log entry
-// accepted before [Jaws.Close] to finish. A blocked Logger.Error callback
-// therefore delays its return.
+// Logger.Error. On a normal return after shutdown, ServeWithTimeout waits for
+// every log entry accepted before [Jaws.Close] to finish. A blocked Logger.Error
+// callback therefore delays that return.
 func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	if !jw.serving.CompareAndSwap(false, true) {
 		jw.reportMisuse(ErrServeAlreadyRunning)
@@ -71,18 +71,19 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	// it fresh on every maintenance tick (see the case below).
 	jw.refreshRuntimeSeconds()
 
+	normalShutdown := false
 	defer func() {
 		t.Stop()
 		for ch, rq := range subs {
 			rq.cancel(nil)
 			close(ch)
 		}
-		if jw.loggerQueue != nil {
-			select {
-			case <-jw.Done():
-				<-jw.loggerQueue.doneCh
-			default:
-			}
+		// Only the Done case below is a normal shutdown. A panic can race Close;
+		// waiting here while it unwinds could hide that panic behind a blocked
+		// Logger.Error callback. The flag preserves panic and Goexit semantics
+		// without recover and re-panic.
+		if normalShutdown && jw.loggerQueue != nil {
+			<-jw.loggerQueue.doneCh
 		}
 	}()
 
@@ -131,6 +132,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	for {
 		select {
 		case <-jw.Done():
+			normalShutdown = true
 			return
 		case <-jw.updateTicker.C:
 			if jw.distributeDirt() > 0 {
@@ -155,8 +157,8 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 
 // Serve calls [Jaws.ServeWithTimeout] with [DefaultWebSocketTimeout].
 //
-// It is intended to run on its own goroutine. After [Jaws.Close], Serve waits
-// for every accepted log entry to finish delivery before returning.
+// It is intended to run on its own goroutine. On a normal return after
+// [Jaws.Close], Serve waits for every accepted log entry to finish delivery.
 func (jw *Jaws) Serve() {
 	jw.ServeWithTimeout(DefaultWebSocketTimeout)
 }

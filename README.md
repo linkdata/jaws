@@ -470,8 +470,9 @@ and `Jaws.Close`. Update paths that cannot return errors report them through
 asynchronous delivery, so those callbacks do not block JaWS processing. Panics
 from those callbacks are contained by the dispatcher. `Close` stops accepting
 new log entries and lets those already accepted drain without waiting for them;
-`Serve` and `ServeWithTimeout` wait for the drain before returning. A
-blocked `Logger.Error` callback delays later entries and that final drain.
+`Serve` and `ServeWithTimeout` wait for the drain before returning normally after
+shutdown. A blocked `Logger.Error` callback delays later entries and that final
+drain.
 
 ### Configuration lifecycle
 

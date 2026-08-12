@@ -73,9 +73,20 @@ func newServeReentrantLogger(jw *Jaws) *serveReentrantLogger {
 
 const panickingServeTagValue = "panicking Serve tag String method"
 
-type panickingServeTag struct{}
+type panickingServeTag struct {
+	started chan<- struct{}
+	release <-chan struct{}
+}
 
-func (panickingServeTag) String() string { panic(panickingServeTagValue) }
+func (tag panickingServeTag) String() string {
+	if tag.started != nil {
+		tag.started <- struct{}{}
+	}
+	if tag.release != nil {
+		<-tag.release
+	}
+	panic(panickingServeTagValue)
+}
 
 func TestJaws_ServePanicDoesNotWaitForOpenLoggerQueue(t *testing.T) {
 	if !deadlock.Debug {
@@ -110,6 +121,105 @@ func TestJaws_ServePanicDoesNotWaitForOpenLoggerQueue(t *testing.T) {
 	case <-time.After(testTimeout):
 		t.Fatal("Serve panic cleanup waited for the still-open logger queue")
 	}
+}
+
+func TestJaws_ServePanicDoesNotWaitForClosingLoggerQueue(t *testing.T) {
+	if !deadlock.Debug {
+		t.Skip("full tag rendering is enabled in debug and race builds")
+	}
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		logger := &blockingQueueLogger{
+			started: make(chan error, 1),
+			release: make(chan struct{}),
+		}
+		jw.Logger = logger
+		stringRelease := make(chan struct{})
+		var releaseLoggerOnce, releaseStringOnce sync.Once
+		releaseLogger := func() { releaseLoggerOnce.Do(func() { close(logger.release) }) }
+		releaseString := func() { releaseStringOnce.Do(func() { close(stringRelease) }) }
+		defer func() {
+			jw.Close()
+			releaseString()
+			releaseLogger()
+			synctest.Wait()
+		}()
+
+		servePanic := make(chan any, 1)
+		go func() {
+			defer func() { servePanic <- recover() }()
+			jw.Serve()
+		}()
+		waitForServeLoop(t, jw)
+
+		blockedErr := errors.New("blocks logger queue shutdown")
+		_ = jw.Log(blockedErr)
+		synctest.Wait()
+		if got := <-logger.started; got != blockedErr {
+			t.Fatalf("Logger.Error error = %v, want %v", got, blockedErr)
+		}
+
+		stringStarted := make(chan struct{}, 1)
+		tagValue := panickingServeTag{started: stringStarted, release: stringRelease}
+		rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		elem := rq.NewElement(&testUi{})
+		rq.Tag(elem, tagValue)
+		msgCh := make(chan wire.Message)
+		jw.subCh <- subscription{msgCh: msgCh, rq: rq}
+		waitForServeLoop(t, jw)
+		jw.Broadcast(wire.Message{Dest: tagValue, What: what.Alert})
+		synctest.Wait()
+		select {
+		case <-stringStarted:
+		default:
+			t.Fatal("Serve did not begin rendering the panicking tag")
+		}
+
+		closeDone := make(chan struct{})
+		go func() {
+			jw.Close()
+			close(closeDone)
+		}()
+		synctest.Wait()
+		select {
+		case <-closeDone:
+		default:
+			t.Fatal("Close did not return while Logger.Error was blocked")
+		}
+		releaseString()
+		synctest.Wait()
+
+		var recovered any
+		panicObserved := false
+		select {
+		case recovered = <-servePanic:
+			panicObserved = true
+		default:
+			t.Error("Serve panic cleanup waited for the closing logger queue")
+		}
+		select {
+		case <-jw.loggerQueue.doneCh:
+			t.Error("logging dispatcher stopped while Logger.Error was blocked")
+		default:
+		}
+
+		releaseLogger()
+		synctest.Wait()
+		if !panicObserved {
+			recovered = <-servePanic
+		}
+		if recovered != panickingServeTagValue {
+			t.Fatalf("Serve panic = %v, want %q", recovered, panickingServeTagValue)
+		}
+		select {
+		case <-jw.loggerQueue.doneCh:
+		default:
+			t.Error("logging dispatcher did not stop after Logger.Error returned")
+		}
+	})
 }
 
 func TestJaws_ServeMaintenanceLoggerCanBroadcastRepeatedly(t *testing.T) {

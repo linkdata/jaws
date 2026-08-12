@@ -205,8 +205,8 @@ func New() (jw *Jaws, err error) {
 // already-canceled contexts that [Jaws.UseRequest] cannot claim. Broadcasts and
 // sends may be discarded after Done closes. Close stops accepting errors from
 // [Jaws.Log] and lets those already accepted drain without waiting for their
-// callbacks; later Log calls are discarded. [Jaws.Serve] and
-// [Jaws.ServeWithTimeout] wait for the drain before returning. Subsequent calls
+// callbacks; later Log calls are discarded. On normal return after shutdown,
+// [Jaws.Serve] and [Jaws.ServeWithTimeout] wait for the drain. Subsequent calls
 // to Close have no effect.
 func (jw *Jaws) Close() {
 	jw.mu.Lock()
