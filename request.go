@@ -1174,16 +1174,18 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, pingInterval, wsTimeout time
 
 	if err = rq.onConnect(); err == nil {
 		incomingMsgCh := make(chan wire.WsMsg)
-		// Snapshot ctx and cancelFn after onConnect so a context installed by the
-		// callback governs all WebSocket loops.
+		// Snapshot ctx after onConnect so a context installed by the callback
+		// governs all WebSocket loops.
 		rq.mu.RLock()
 		ctx := rq.ctx
-		cancelFn := rq.cancelFn
 		rq.mu.RUnlock()
+		// The request-aware path wraps and logs the first WebSocket failure to win
+		// cancellation; the canceled context suppresses errors from the other loops.
+		cancelRequest := rq.cancel
 		outboundMsgCh := make(chan wire.WsMsg, cap(pendingSubscription))
-		go wire.ReadLoop(ctx, cancelFn, rq.Jaws.Done(), incomingMsgCh, ws)  // closes incomingMsgCh
-		go wire.WriteLoop(ctx, cancelFn, rq.Jaws.Done(), outboundMsgCh, ws) // calls ws.Close()
-		go wire.PingLoop(ctx, cancelFn, rq.Jaws.Done(), pingInterval, wsTimeout, ws)
+		go wire.ReadLoop(ctx, cancelRequest, rq.Jaws.Done(), incomingMsgCh, ws)  // closes incomingMsgCh
+		go wire.WriteLoop(ctx, cancelRequest, rq.Jaws.Done(), outboundMsgCh, ws) // calls ws.Close()
+		go wire.PingLoop(ctx, cancelRequest, rq.Jaws.Done(), pingInterval, wsTimeout, ws)
 		broadcastMsgCh := pendingSubscription
 		pendingSubscription = nil
 		rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh) // unsubscribes broadcastMsgCh, closes outboundMsgCh
