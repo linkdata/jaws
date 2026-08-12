@@ -20,8 +20,9 @@ func TestJaws_MustTagExpand(t *testing.T) {
 	if got := jw.MustTagExpand([]any{tag.Tag("a"), tag.Tag("b")}); !reflect.DeepEqual(got, []any{tag.Tag("a"), tag.Tag("b")}) {
 		t.Fatalf("MustTagExpand = %#v, want both tags", got)
 	}
-	if logger.err != nil {
-		t.Fatalf("successful expansion logged %v, want nothing", logger.err)
+	awaitTestLoggerQueue(t, jw)
+	if logged := logger.snapshot(); len(logged) != 0 {
+		t.Fatalf("successful expansion logged %v, want nothing", logged)
 	}
 }
 
@@ -40,8 +41,9 @@ func TestJaws_MustTagExpandLogsAndReturnsPartial(t *testing.T) {
 	// "bad" is a plain string, an illegal tag type, so expansion fails after
 	// tag.Tag("ok") has already been collected.
 	got := jw.MustTagExpand([]any{tag.Tag("ok"), "bad"})
-	if !errors.Is(logger.err, tag.ErrIllegalTagType) {
-		t.Fatalf("logged error = %v, want %v", logger.err, tag.ErrIllegalTagType)
+	loggedErr := logger.next(t)
+	if !errors.Is(loggedErr, tag.ErrIllegalTagType) {
+		t.Fatalf("logged error = %v, want %v", loggedErr, tag.ErrIllegalTagType)
 	}
 	if !reflect.DeepEqual(got, []any{tag.Tag("ok")}) {
 		t.Fatalf("MustTagExpand = %#v, want the partial result [tag.Tag(\"ok\")]", got)

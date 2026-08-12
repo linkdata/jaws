@@ -55,7 +55,6 @@ import (
 func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 	remoteIP := jw.clientIP(r)
 
-	var toLog []error
 	func() {
 		jw.mu.Lock()
 		defer jw.mu.Unlock()
@@ -69,7 +68,7 @@ func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 		case <-jw.closeCh:
 			closed = true
 		default:
-			toLog = jw.limitPendingRequestsLocked(remoteIP)
+			jw.limitPendingRequestsLocked(remoteIP)
 		}
 		for rq == nil {
 			jawsKey := jw.nonZeroRandomLocked()
@@ -85,11 +84,6 @@ func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
 			}
 		}
 	}()
-	// Log eviction causes after releasing jw.mu: Jaws.Log calls the user-supplied
-	// Logger, which must never run under a core lock.
-	for _, cause := range toLog {
-		_ = jw.Log(cause)
-	}
 	return
 }
 
@@ -109,9 +103,8 @@ func (jw *Jaws) refreshRuntimeSeconds() {
 }
 
 // limitPendingRequestsLocked evicts pending Requests for remoteIP until the cap is
-// satisfied, returning the eviction causes for the caller to log after releasing
-// jw.mu (see the package locking contract). Caller must hold jw.mu.
-func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) {
+// satisfied. Caller must hold jw.mu.
+func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) {
 	limit := jw.MaxPendingRequestsPerIP
 	if limit > 0 {
 		nowSeconds := jw.runtimeSeconds.Load()
@@ -119,7 +112,7 @@ func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) 
 			before := len(jw.pending[remoteIP])
 			victim := jw.pendingEvictionVictimLocked(remoteIP, nowSeconds)
 			if cause := jw.retireNonRunningRequestWithCauseLocked(victim, newErrTooManyPendingRequests(remoteIP, limit)); cause != nil {
-				toLog = append(toLog, cause)
+				_ = jw.Log(cause)
 			}
 			if len(jw.pending[remoteIP]) >= before {
 				// Retirement declines a running Request or one that lost registry
@@ -130,7 +123,6 @@ func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) (toLog []error) 
 			}
 		}
 	}
-	return
 }
 
 // pendingEvictionVictimLocked returns the pending [Request] for remoteIP to
@@ -347,8 +339,7 @@ func (jw *Jaws) retireNonRunningRequestCoreLocked(rq *Request, err error, causeO
 // borrower retains it.
 //
 // It uses err as the cancellation cause when non-nil.
-// It returns the cancellation cause (or nil) instead of logging it, so the caller
-// can log it after releasing jw.mu (see the package locking contract). Caller must
+// It returns the cancellation cause (or nil) for its caller to queue. Caller must
 // hold jw.mu.
 func (jw *Jaws) recycleLockedWithCause(rq *Request, err error) (cause error) {
 	var buffers *requestBuffers
@@ -396,15 +387,11 @@ func (jw *Jaws) recycle(rq *Request) {
 // check avoids logging a spurious cancellation; holding jw.mu across the cancel
 // keeps that check valid, since finishing requires the jw.mu write lock.
 func (jw *Jaws) cancelIfCurrent(jawsKey key.Key, rq *Request, err error) {
-	var cause error
 	jw.mu.RLock()
 	if jw.requests[jawsKey] == rq {
 		rq.mu.Lock()
-		cause = rq.cancelLocked(err)
+		_ = jw.Log(rq.cancelLocked(err))
 		rq.mu.Unlock()
 	}
 	jw.mu.RUnlock()
-	// Log after releasing both locks: Jaws.Log calls the user-supplied Logger,
-	// which must never run under a core lock (this path holds jw.mu read).
-	_ = jw.Log(cause)
 }

@@ -8,9 +8,74 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/linkdata/jaws"
 )
+
+type testLoggerBarrier struct {
+	done chan struct{}
+}
+
+func (*testLoggerBarrier) Error() string { return "test logger barrier" }
+
+func testLoggedError(args []any) (err error) {
+	for i := 0; i+1 < len(args); i += 2 {
+		if args[i] == "err" {
+			err, _ = args[i+1].(error)
+			return
+		}
+	}
+	return
+}
+
+func testCompleteLoggerBarrier(err error) bool {
+	if barrier, ok := err.(*testLoggerBarrier); ok {
+		close(barrier.done)
+		return true
+	}
+	return false
+}
+
+func testSyncLogger(t *testing.T, jw *jaws.Jaws) {
+	t.Helper()
+	barrier := &testLoggerBarrier{done: make(chan struct{})}
+	_ = jw.Log(barrier)
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-barrier.done:
+	case <-timer.C:
+		t.Fatal("timed out waiting for asynchronous logger")
+	}
+}
+
+type testErrorLog struct {
+	mu     sync.Mutex
+	errors []error
+}
+
+func (l *testErrorLog) record(args []any) {
+	err := testLoggedError(args)
+	if err == nil || testCompleteLoggerBarrier(err) {
+		return
+	}
+	l.mu.Lock()
+	l.errors = append(l.errors, err)
+	l.mu.Unlock()
+}
+
+func (l *testErrorLog) snapshot() []error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]error(nil), l.errors...)
+}
+
+func (l *testErrorLog) sync(t *testing.T, jw *jaws.Jaws) []error {
+	t.Helper()
+	testSyncLogger(t, jw)
+	return l.snapshot()
+}
 
 func mustMatch(t *testing.T, pattern, got string) {
 	t.Helper()

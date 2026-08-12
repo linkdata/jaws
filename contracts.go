@@ -24,7 +24,16 @@ type Container interface {
 	JawsContains(elem *Element) (contents []UI)
 }
 
-// Logger is satisfied by a [*log/slog.Logger] via its Info, Warn and Error methods.
+// Logger receives JaWS diagnostics.
+//
+// [Jaws.Log] invokes Error asynchronously in FIFO order, without JaWS core locks,
+// and recovers panics from those calls. Error may re-enter the same Jaws instance
+// subject to its normal lifecycle rules. Other Logger calls may be synchronous
+// and concurrent, so implementations must be safe for concurrent use. Logger is
+// satisfied by a [*log/slog.Logger] via its Info, Warn and Error methods.
+//
+// Error should return promptly: one blocked callback delays later Error calls
+// for that Jaws instance and its serving loop's final shutdown drain.
 type Logger interface {
 	Info(msg string, args ...any)
 	Warn(msg string, args ...any)

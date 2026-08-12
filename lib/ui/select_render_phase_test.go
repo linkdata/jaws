@@ -57,33 +57,22 @@ func (h *selectRenderPhaseHandler) release() {
 }
 
 type selectRenderPhaseLogger struct {
-	mu   sync.Mutex
-	errs []error
+	log testErrorLog
 }
 
 func (*selectRenderPhaseLogger) Info(string, ...any) {}
 func (*selectRenderPhaseLogger) Warn(string, ...any) {}
 func (l *selectRenderPhaseLogger) Error(_ string, args ...any) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	for i := 0; i+1 < len(args); i += 2 {
-		if args[i] == "err" {
-			if err, ok := args[i+1].(error); ok {
-				l.errs = append(l.errs, err)
-			}
-		}
-	}
+	l.log.record(args)
 }
 
-func (l *selectRenderPhaseLogger) snapshot() []error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return append([]error(nil), l.errs...)
+func (l *selectRenderPhaseLogger) sync(t *testing.T, jw *jaws.Jaws) []error {
+	return l.log.sync(t, jw)
 }
 
 func TestSelectRenderPhaseIncludesInitialValue(t *testing.T) {
 	logger := new(selectRenderPhaseLogger)
-	_, rq := newConfiguredCoreRequest(t, func(jw *jaws.Jaws) { jw.Logger = logger })
+	jw, rq := newConfiguredCoreRequest(t, func(jw *jaws.Jaws) { jw.Logger = logger })
 	handler := newSelectRenderPhaseHandler()
 	defer handler.release()
 
@@ -146,7 +135,7 @@ func TestSelectRenderPhaseIncludesInitialValue(t *testing.T) {
 	if got := handler.getCalls.Load(); got != 1 {
 		t.Fatalf("JawsGet calls during contention = %d, want 1 blocked initial-render call", got)
 	}
-	logged := logger.snapshot()
+	logged := logger.sync(t, jw)
 	if len(logged) != 1 || !errors.Is(logged[0], jaws.ErrElementStateClaimed) {
 		t.Fatalf("logged errors = %v, want one %v", logged, jaws.ErrElementStateClaimed)
 	}

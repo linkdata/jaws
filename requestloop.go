@@ -564,9 +564,9 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 			// This error alert is best-effort: unlike queueEvent, which cancels the
 			// Request with ErrRequestOverloaded when its channel fills (dropping a
 			// queued event could desync browser and backend state), a dropped alert
-			// loses no state — the underlying error is already logged above — so a
-			// full outbound channel here is logged and the alert is discarded rather
-			// than tearing down the Request.
+			// loses no state — the underlying error is already queued above — so a
+			// full outbound channel here is queued for logging and the alert is
+			// discarded rather than tearing down the Request.
 			select {
 			case outboundMsgCh <- m:
 			default:

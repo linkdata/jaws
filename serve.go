@@ -45,7 +45,10 @@ func (jw *Jaws) getWebSocketTimeout() (t time.Duration) {
 // those activity samples or the maintenance schedule.
 //
 // It is intended to run on its own goroutine and returns when [Jaws.Close] is
-// called.
+// called. Errors reported through [Jaws.Log] are queued without waiting for
+// Logger.Error. On a normal return after shutdown, ServeWithTimeout waits for
+// every log entry accepted before [Jaws.Close] to finish. A blocked Logger.Error
+// callback therefore delays that return.
 func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	if !jw.serving.CompareAndSwap(false, true) {
 		jw.reportMisuse(ErrServeAlreadyRunning)
@@ -68,11 +71,19 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	// it fresh on every maintenance tick (see the case below).
 	jw.refreshRuntimeSeconds()
 
+	normalShutdown := false
 	defer func() {
 		t.Stop()
 		for ch, rq := range subs {
 			rq.cancel(nil)
 			close(ch)
+		}
+		// Only the Done case below is a normal shutdown. A panic can race Close;
+		// waiting here while it unwinds could hide that panic behind a blocked
+		// Logger.Error callback. The flag preserves panic and Goexit semantics
+		// without recover and re-panic.
+		if normalShutdown && jw.loggerQueue != nil {
+			<-jw.loggerQueue.doneCh
 		}
 	}()
 
@@ -121,6 +132,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	for {
 		select {
 		case <-jw.Done():
+			normalShutdown = true
 			return
 		case <-jw.updateTicker.C:
 			if jw.distributeDirt() > 0 {
@@ -144,8 +156,9 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 }
 
 // Serve calls [Jaws.ServeWithTimeout] with [DefaultWebSocketTimeout].
-// It is intended to run on its own goroutine and returns when [Jaws.Close] is
-// called.
+//
+// It is intended to run on its own goroutine. On a normal return after
+// [Jaws.Close], Serve waits for every accepted log entry to finish delivery.
 func (jw *Jaws) Serve() {
 	jw.ServeWithTimeout(DefaultWebSocketTimeout)
 }
@@ -169,7 +182,6 @@ func (jw *Jaws) unsubscribe(msgCh chan wire.Message) {
 }
 
 func (jw *Jaws) maintenance(requestTimeout time.Duration) {
-	var toLog []error
 	jw.mu.Lock()
 	nowSeconds := jw.runtimeSeconds.Load()
 	for _, rq := range jw.requests {
@@ -177,9 +189,7 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 			continue
 		}
 		if expired, cause := rq.maintenance(nowSeconds, requestTimeout); expired {
-			if cause != nil {
-				toLog = append(toLog, cause)
-			}
+			_ = jw.Log(cause)
 			jw.retireNonRunningRequestLocked(rq)
 		}
 	}
@@ -189,9 +199,4 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 		}
 	}
 	jw.mu.Unlock()
-	// Log cancellation causes after releasing jw.mu: Jaws.Log calls the
-	// user-supplied Logger, which must never run under a core lock.
-	for _, cause := range toLog {
-		_ = jw.Log(cause)
-	}
 }

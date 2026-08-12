@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"reflect"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1079,8 +1080,8 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest(t)
 	defer rq.Close()
-	var log bytes.Buffer
-	rq.Jaws.Logger = slog.New(slog.NewTextHandler(&log, nil))
+	logger := &captureErrorLogger{}
+	rq.Jaws.Logger = logger
 
 	waitms := 1000
 	if deadlock.Debug {
@@ -1155,12 +1156,16 @@ func TestRequest_IgnoresIncomingMsgsDuringShutdown(t *testing.T) {
 		th.True(atomic.LoadInt32(&callCount) > 1)
 	case <-th.C:
 		t.Logf("timeout callcount %v, spewState %v", atomic.LoadInt32(&callCount), atomic.LoadInt32(&spewState))
-		t.Log(log.String())
+		t.Log(logger.snapshot())
 		th.Timeout()
 	}
 
 	// log data should contain message that we were unable to deliver error
-	th.True(strings.Contains(log.String(), "outboundMsgCh full sending event"))
+	awaitTestLoggerQueue(t, rq.Jaws)
+	logged := logger.snapshot()
+	th.True(slices.ContainsFunc(logged, func(err error) bool {
+		return strings.Contains(err.Error(), "outboundMsgCh full sending event")
+	}))
 }
 
 func TestRequest_Alert(t *testing.T) {
@@ -1238,6 +1243,7 @@ func TestBroadcast_ZeroKeyDestDropped(t *testing.T) {
 		t.Errorf("unexpected second delivery: %q", s)
 	default:
 	}
+	awaitTestLoggerQueue(t, tj.Jaws)
 	th.Equal(strings.Contains(tj.log.String(), "jaws: Broadcast"), false)
 }
 
@@ -1335,8 +1341,9 @@ func TestRequest_Redirect_unsafeRefused(t *testing.T) {
 	jw.Logger = logger
 	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	rq.Redirect("javascript:alert(1)")
-	if logger.err == nil || !strings.Contains(logger.err.Error(), "refusing unsafe redirect") {
-		t.Fatalf("expected unsafe redirect to be logged and skipped, got %v", logger.err)
+	loggedErr := logger.next(t)
+	if !strings.Contains(loggedErr.Error(), "refusing unsafe redirect") {
+		t.Fatalf("expected unsafe redirect to be logged and skipped, got %v", loggedErr)
 	}
 }
 
@@ -1772,17 +1779,19 @@ func TestRequest_Log(t *testing.T) {
 		t.Fatalf("(*Request)(nil).Log() = %v, want %v", got, wantErr)
 	}
 
-	var log bytes.Buffer
-	rq := &Request{
-		Jaws: &Jaws{
-			Logger: slog.New(slog.NewTextHandler(&log, nil)),
-		},
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
 	}
+	defer jw.Close()
+	logger := &captureErrorLogger{}
+	jw.Logger = logger
+	rq := &Request{Jaws: jw}
 	if got := rq.Log(wantErr); !errors.Is(got, wantErr) {
 		t.Fatalf("Request.Log() = %v, want %v", got, wantErr)
 	}
-	if s := log.String(); !strings.Contains(s, wantErr.Error()) {
-		t.Fatalf("Request.Log() did not write error to logger: %q", s)
+	if loggedErr := logger.next(t); !errors.Is(loggedErr, wantErr) {
+		t.Fatalf("Request.Log() logged %v, want %v", loggedErr, wantErr)
 	}
 }
 
@@ -1792,15 +1801,17 @@ func TestRequest_Log(t *testing.T) {
 func TestRequest_MustLog(t *testing.T) {
 	wantErr := errors.New("request mustlog test")
 
-	var log bytes.Buffer
-	rq := &Request{
-		Jaws: &Jaws{
-			Logger: slog.New(slog.NewTextHandler(&log, nil)),
-		},
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
 	}
+	defer jw.Close()
+	logger := &captureErrorLogger{}
+	jw.Logger = logger
+	rq := &Request{Jaws: jw}
 	rq.MustLog(wantErr)
-	if s := log.String(); !strings.Contains(s, wantErr.Error()) {
-		t.Fatalf("Request.MustLog() did not write error to logger: %q", s)
+	if loggedErr := logger.next(t); !errors.Is(loggedErr, wantErr) {
+		t.Fatalf("Request.MustLog() logged %v, want %v", loggedErr, wantErr)
 	}
 
 	// A nil error is a no-op even without a Logger.
@@ -1860,8 +1871,8 @@ func TestRequest_UpdatePanicLogs(t *testing.T) {
 	th := newTestHelper(t)
 	rq := newTestRequest(t)
 	defer rq.Close()
-	var log bytes.Buffer
-	rq.Jaws.Logger = slog.New(slog.NewTextHandler(&log, nil))
+	logger := &captureErrorLogger{}
+	rq.Jaws.Logger = logger
 
 	tss := &testUi{
 		updateFn: func(elem *Element) {
@@ -1875,8 +1886,9 @@ func TestRequest_UpdatePanicLogs(t *testing.T) {
 		th.Timeout()
 	case <-rq.DoneCh:
 	}
-	if s := log.String(); !strings.Contains(s, "wildpanic") {
-		t.Error(s)
+	loggedErr := logger.next(t)
+	if !strings.Contains(loggedErr.Error(), "wildpanic") {
+		t.Error(loggedErr)
 	}
 }
 
@@ -4051,6 +4063,7 @@ func TestWS_PeerCloseWrapsRequestCancellation(t *testing.T) {
 	case <-time.After(testTimeout):
 		t.Fatal("timeout waiting for websocket connect")
 	}
+	awaitTestLoggerQueue(t, ts.jw)
 	loggedBeforeClose := len(logger.loggedErrors())
 
 	if err = conn.Close(websocket.StatusNormalClosure, "done"); err != nil {
@@ -4074,10 +4087,7 @@ func TestWS_PeerCloseWrapsRequestCancellation(t *testing.T) {
 	}
 
 	waitForRequestCount(t, ts.jw, 0, testTimeout)
-	deadline := time.Now().Add(testTimeout)
-	for len(logger.loggedErrors()) == loggedBeforeClose && time.Now().Before(deadline) {
-		time.Sleep(5 * time.Millisecond)
-	}
+	awaitTestLoggerQueue(t, ts.jw)
 	logged := logger.loggedErrors()[loggedBeforeClose:]
 	if len(logged) != 1 {
 		t.Fatalf("logged errors = %v, want one cancellation", logged)
@@ -4113,6 +4123,7 @@ func TestWS_JawsCloseDoesNotReportTransportError(t *testing.T) {
 	case <-time.After(testTimeout):
 		t.Fatal("timeout waiting for websocket connect")
 	}
+	awaitTestLoggerQueue(t, ts.jw)
 	loggedBeforeClose := len(logger.loggedErrors())
 
 	ts.jw.Close()
@@ -4138,6 +4149,7 @@ func TestWS_JawsCloseDoesNotReportTransportError(t *testing.T) {
 		t.Fatalf("WebSocket closed only when the client read timed out: %v", err)
 	}
 	waitForRequestCount(t, ts.jw, 0, testTimeout)
+	<-ts.jw.loggerQueue.doneCh
 	logged := logger.loggedErrors()
 	if len(logged) != loggedBeforeClose {
 		t.Fatalf("Jaws.Close logged transport errors: %v", logged[loggedBeforeClose:])
@@ -4167,6 +4179,7 @@ func TestWS_NormalExchange(t *testing.T) {
 		t.Error(resp.StatusCode)
 	}
 	defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
+	awaitTestLoggerQueue(t, ts.jw)
 	loggedBeforeEvent := len(logger.loggedErrors())
 
 	msg := wire.WsMsg{Jid: jidForTag(ts.rq, fooItem), What: what.Input}
@@ -4196,6 +4209,7 @@ func TestWS_NormalExchange(t *testing.T) {
 		t.Error(b)
 	}
 
+	awaitTestLoggerQueue(t, ts.jw)
 	logged := logger.loggedErrors()
 	if len(logged) != loggedBeforeEvent+1 {
 		t.Fatalf("new logged errors = %v, want only the handler error", logged[loggedBeforeEvent:])
@@ -4309,6 +4323,7 @@ func TestWS_SetContextCancellationClosesIdleConnection(t *testing.T) {
 	case <-time.After(testTimeout):
 		t.Fatal("request loop did not select on the old context")
 	}
+	awaitTestLoggerQueue(t, ts.jw)
 	loggedBeforeCancel := len(logger.loggedErrors())
 
 	ts.rq.SetContext(func(old context.Context) context.Context {
@@ -4338,6 +4353,7 @@ func TestWS_SetContextCancellationClosesIdleConnection(t *testing.T) {
 	if errors.Is(cause, ErrRequestCancelled) {
 		t.Fatalf("cause = %v, unexpectedly matches ErrRequestCancelled", cause)
 	}
+	awaitTestLoggerQueue(t, ts.jw)
 	logged := logger.loggedErrors()
 	if len(logged) != loggedBeforeCancel {
 		t.Fatalf("SetContext cancellation logged transport errors: %v", logged[loggedBeforeCancel:])

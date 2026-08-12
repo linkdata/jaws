@@ -39,7 +39,7 @@ import (
 //
 // That expansion runs through [Jaws.MustTagExpand], which reports a failure such as an
 // illegal tag type through [Jaws.MustLog]: that panics when no [Jaws.Logger] is set,
-// while with a Logger the error is logged and the message is sent to the destinations
+// while with a Logger the error is queued and the message is sent to the destinations
 // that did expand.
 func (jw *Jaws) Broadcast(msg wire.Message) {
 	switch msg.What {
@@ -109,7 +109,7 @@ func (jw *Jaws) setDirty(tags []any) {
 // Dirty schedules updates for tags and exact Elements.
 //
 // The inputs are expanded through [Jaws.MustTagExpand]: with a [Jaws.Logger]
-// configured an expansion error is logged and the partial result is still applied,
+// configured an expansion error is queued and the partial result is still applied,
 // while without one the call panics before anything is marked dirty. An expanded
 // non-nil pointer to a live [Element] belonging to this Jaws selects only that
 // Element; other Element pointers are ignored. Other keys select matching Elements
@@ -218,7 +218,7 @@ func isSafeRedirect(rawurl string) (safe string, ok bool) {
 
 // redirectMessage validates url for the browser's location.assign and returns
 // the wire.Message to broadcast (Data set to the normalized value); the caller
-// sets msg.Dest. If url is unsafe it logs the refusal and returns ok=false. It
+// sets msg.Dest. If url is unsafe it queues the refusal and returns ok=false. It
 // is the single point where the redirect policy and rejection message live, so
 // Jaws.Redirect and Request.Redirect cannot drift.
 func (jw *Jaws) redirectMessage(url string) (msg wire.Message, ok bool) {

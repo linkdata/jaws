@@ -175,8 +175,6 @@ func (u Container) render(elem *jaws.Element, w io.Writer, params []any, complet
 func (u Container) update(elem *jaws.Element) (updated bool) {
 	st, err := stateForContainerUpdate(elem)
 	if err != nil {
-		// State helpers release both the Request lock and state mutex before returning;
-		// logging invokes application code and must stay outside them.
 		elem.Request.MustLog(err)
 		return
 	}
@@ -241,10 +239,8 @@ func (u Container) update(elem *jaws.Element) (updated bool) {
 // be used as a container pool key: nil, not comparable at runtime, or not equal to
 // itself (a value holding NaN). It aborts on the first such child.
 func cancelUnusableChildren(elem *jaws.Element, children []jaws.UI) bool {
-	// Call without holding a containerState mutex: Request.Cancel runs the user
-	// logger synchronously. Validating the whole slice up front also prevents later
-	// children from being created once the Request is terminating. The cause matches
-	// tag.ErrNotUsableAsTag through jaws.NewErrUnusableUI.
+	// Validate the whole slice before taking a containerState mutex or creating any
+	// children. The cause matches tag.ErrNotUsableAsTag through jaws.NewErrUnusableUI.
 	if bad, ok := firstUnusableChild(children); ok {
 		elem.Request.Cancel(jaws.NewErrUnusableUI(bad))
 		return true
@@ -275,7 +271,7 @@ func firstUnusableChild(children []jaws.UI) (bad jaws.UI, found bool) {
 // to append, the live leftovers to remove, already-deleted old Elements whose owned
 // descendants need cleanup, and the old and new Jid orders.
 func (st *containerState) reconcile(elem *jaws.Element, wantContents []jaws.UI) (toAppend, toRemove, alreadyDeleted []*jaws.Element, oldOrder, newOrder []jaws.Jid) {
-	// Validate before locking because cancellation runs the user logger.
+	// Validate before locking so cancellation cannot interrupt a partial reconciliation.
 	if cancelUnusableChildren(elem, wantContents) {
 		return
 	}

@@ -114,8 +114,9 @@ func TestHandler_MissingTemplateReturns500(t *testing.T) {
 	if rr.Body.Len() == 0 {
 		t.Fatal("expected a non-empty error body")
 	}
-	if len(logger.errors) != 1 || !errors.Is(logger.errors[0], ErrMissingTemplate) {
-		t.Fatalf("logged errors = %#v, want one %v", logger.errors, ErrMissingTemplate)
+	logged := logger.sync(t, jw)
+	if len(logged) != 1 || !errors.Is(logged[0], ErrMissingTemplate) {
+		t.Fatalf("logged errors = %#v, want one %v", logged, ErrMissingTemplate)
 	}
 }
 
@@ -148,8 +149,9 @@ func TestHandler_ExecuteErrorAfterOutputKeepsPartialBody(t *testing.T) {
 	if got, want := rr.Header().Get("Content-Type"), "text/html; charset=utf-8"; got != want {
 		t.Fatalf("Content-Type = %q, want %q", got, want)
 	}
-	if len(logger.errors) != 1 || !errors.Is(logger.errors[0], renderErr) {
-		t.Fatalf("logged errors = %#v, want one %v", logger.errors, renderErr)
+	logged := logger.sync(t, jw)
+	if len(logged) != 1 || !errors.Is(logged[0], renderErr) {
+		t.Fatalf("logged errors = %#v, want one %v", logged, renderErr)
 	}
 }
 

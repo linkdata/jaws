@@ -19,10 +19,12 @@ package jaws
 //
 // Core locks are acquired Jaws.mu -> Request.mu -> Session.mu. Request.muQueue and
 // most per-Element widget locks are leaves. The Element state slot itself is guarded by
-// Request.mu through ElementState and SetElementState. Blocking work and application
-// callbacks run after releasing locks; Request.SetContext is the exception because its
-// transform must run atomically under Request.mu and therefore must not block or call
-// back into the same Request.
+// Request.mu through ElementState and SetElementState. Blocking work and synchronous
+// application callbacks run after releasing locks. Logging may be queued while core
+// locks are held: the queue mutex is a leaf, producers never wait for delivery, and
+// the worker releases it before invoking Logger.Error. Request.SetContext is the
+// exception because its transform must run atomically under Request.mu and therefore
+// must not block or call back into the same Request.
 //
 // Bound-value locks in lib/bind, lib/ui, and lib/named are released before dirtying or
 // broadcasting. InitialHTMLAttrHandler callbacks run without caller-held widget or
@@ -105,7 +107,7 @@ type Jaws struct {
 	CookieName            string     // Name for session cookies; defaults to a name derived from the executable ([assets.DefaultCookieName]), falling back to "jaws"
 	AutoSession           bool       // Create and associate a session during a successful WebSocket upgrade when a Request has none. Defaults to false.
 	TrustForwardedHeaders bool       // Trust X-Forwarded-* headers: governs the session cookie Secure flag (X-Forwarded-Proto) and the client IP used for session/request binding (X-Forwarded-For/X-Real-IP). Defaults to false; only enable behind a single reverse proxy you control that sets these headers.
-	Logger                Logger     // Optional logger to use
+	Logger                Logger     // Optional logger; [Jaws.Log] dispatches Error calls asynchronously and serially
 	Debug                 bool       // Set to true to enable debug info in generated HTML code. Call GenerateHeadHTML after changing it.
 	MakeAuth              MakeAuthFn // Function to create ui.With.Auth for Templates. If nil, templates get the fail-open DefaultAuth (IsAdmin()==true for everyone); set it to enforce authorization. See DefaultAuth.
 	// BaseContext is the non-nil parent context for Requests.
@@ -126,6 +128,7 @@ type Jaws struct {
 	unsubCh                 chan chan wire.Message
 	updateTicker            *time.Ticker
 	serving                 atomic.Bool
+	loggerQueue             *loggerQueue
 	defaultAuthOnce         sync.Once    // guards lazy creation of defaultAuthVal
 	defaultAuthVal          *DefaultAuth // shared fail-open Auth; see [Jaws.DefaultAuth]
 	requestBufferPool       sync.Pool    // reusable *requestBuffers; Requests themselves are never pooled or reused
@@ -179,6 +182,7 @@ func New() (jw *Jaws, err error) {
 			}
 			if err = tmp.GenerateHeadHTML(); err == nil {
 				jw = tmp
+				jw.loggerQueue = newLoggerQueue()
 				jw.requestBufferPool.New = func() any {
 					return &requestBuffers{tagMap: make(map[any][]*Element)}
 				}
@@ -199,8 +203,11 @@ func New() (jw *Jaws, err error) {
 //
 // Calls to [Jaws.NewRequest] after shutdown begins return Requests with
 // already-canceled contexts that [Jaws.UseRequest] cannot claim. Broadcasts and
-// sends may be discarded after Done closes. Subsequent calls to Close have no
-// effect.
+// sends may be discarded after Done closes. Close stops accepting errors from
+// [Jaws.Log] and lets those already accepted drain without waiting for their
+// callbacks; later Log calls are discarded. On normal return after shutdown,
+// [Jaws.Serve] and [Jaws.ServeWithTimeout] wait for the drain. Subsequent calls
+// to Close have no effect.
 func (jw *Jaws) Close() {
 	jw.mu.Lock()
 	select {
@@ -208,6 +215,7 @@ func (jw *Jaws) Close() {
 		jw.mu.Unlock()
 		return
 	default:
+		jw.loggerQueue.close()
 		close(jw.closeCh)
 	}
 	jw.updateTicker.Stop()
@@ -313,19 +321,29 @@ func (jw *Jaws) RequestCount() (n int) {
 	return
 }
 
-// Log sends an error to the [Jaws.Logger] if set.
-// Has no effect if err is nil or the Logger is nil.
-// Returns err.
+// Log queues an error for the [Jaws.Logger] and returns err.
+//
+// Delivery is asynchronous and FIFO-serialized for each Jaws instance. Logger.Error
+// runs without JaWS core locks and may re-enter the same Jaws subject to the normal
+// lifecycle rules. A panic from Logger.Error is recovered by the logging dispatcher.
+//
+// Log is safe for concurrent use, including with [Jaws.Close]. It has no effect
+// if jw is nil, err is nil, the Logger is nil, or shutdown has begun. It always
+// returns err. The queue applies no capacity backpressure, so errors accumulate
+// in memory when Logger.Error does not keep pace. Log retains err for delivery;
+// callers must not mutate state exposed by err concurrently after passing it.
 func (jw *Jaws) Log(err error) error {
 	if err != nil && jw != nil && jw.Logger != nil {
-		jw.Logger.Error("jaws", "err", err)
+		jw.loggerQueue.enqueue(jw.Logger, err)
 	}
 	return err
 }
 
-// MustLog sends an error to the [Jaws.Logger] if set, or
-// panics with the given error if the Logger is nil.
-// Has no effect if err is nil.
+// MustLog reports an error or panics when no [Jaws.Logger] is configured.
+//
+// A non-nil err is passed to [Jaws.Log] when jw and the Logger are non-nil.
+// Otherwise MustLog panics synchronously with err. MustLog has no effect if err
+// is nil, including on a nil receiver.
 //
 // Some update-time paths cannot return errors to their caller and report them
 // through MustLog. Set [Jaws.Logger] when those errors should be logged instead
@@ -333,7 +351,7 @@ func (jw *Jaws) Log(err error) error {
 func (jw *Jaws) MustLog(err error) {
 	if err != nil {
 		if jw != nil && jw.Logger != nil {
-			jw.Logger.Error("jaws", "err", err)
+			_ = jw.Log(err)
 		} else {
 			panic(err)
 		}
@@ -342,9 +360,9 @@ func (jw *Jaws) MustLog(err error) {
 
 // reportMisuse reports a violated API contract (a programming error).
 //
-// It reports err through [Jaws.MustLog] (which logs it, or panics if no Logger is
-// set) and, in debug builds, additionally panics to fail fast. So in production
-// with a Logger configured the mistake is logged and the caller continues without
+// It reports err through [Jaws.MustLog] (which queues it, or panics if no Logger
+// is set) and, in debug builds, additionally panics to fail fast. So in production
+// with a Logger configured the mistake is queued and the caller continues without
 // applying the offending operation, while debug builds and unconfigured servers
 // still stop on it.
 func (jw *Jaws) reportMisuse(err error) {

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstest"
@@ -418,8 +419,8 @@ func TestJsVarJSONSizeCheckRejectsAndCancelsOutsideLocks(t *testing.T) {
 		if !locks[0] || !locks[1] {
 			t.Fatalf("cancellation ran with locks held: setMu=%t backing=%t", !locks[0], !locks[1])
 		}
-	default:
-		t.Fatal("request cancellation was not logged")
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for request cancellation log")
 	}
 }
 
