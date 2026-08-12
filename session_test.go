@@ -231,7 +231,7 @@ func TestSession_AddCookieRejectsUnavailableSession(t *testing.T) {
 				sess.mu.Lock()
 				sess.deadline = time.Now().Add(24 * time.Hour)
 				sess.mu.Unlock()
-				jw.deleteSession(sess.sessionID)
+				jw.deleteSessionIfCurrent(sess)
 			},
 			wantRegistered: false,
 			wantDead:       false,
@@ -1758,6 +1758,47 @@ func TestSession_CloseDetachesRequestSession(t *testing.T) {
 	}
 
 	jw.recycle(rq)
+}
+
+func TestSession_CloseDoesNotDeleteSameIDReplacement(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+	waitForServeLoop(t, jw)
+
+	const sessionID = key.Key(0x1122334455667788)
+	remoteIP := netip.MustParseAddr("192.0.2.1")
+	stale := newSession(jw, sessionID, remoteIP, false)
+	jw.mu.Lock()
+	jw.sessions[sessionID] = stale
+	jw.mu.Unlock()
+	jw.deleteSessionIfCurrent(stale)
+
+	replacement := newSession(jw, sessionID, remoteIP, false)
+	jw.mu.Lock()
+	jw.sessions[sessionID] = replacement
+	jw.mu.Unlock()
+
+	if cookie := stale.Close(); cookie == nil || cookie.MaxAge != -1 {
+		t.Fatalf("stale Close cookie = %#v, want deletion cookie", cookie)
+	}
+	if got := jw.SessionCount(); got != 1 {
+		t.Fatalf("SessionCount() = %d, want replacement retained", got)
+	}
+	request := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	request.RemoteAddr = remoteIP.String() + ":1234"
+	request.AddCookie(replacement.Cookie())
+	if got := jw.GetSession(request); got != replacement {
+		t.Fatalf("GetSession() = %p, want replacement %p", got, replacement)
+	}
+
+	replacement.Close()
+	if got := jw.SessionCount(); got != 0 {
+		t.Fatalf("SessionCount() after current Close = %d, want 0", got)
+	}
 }
 
 func TestSession_ReplacesOld(t *testing.T) {
