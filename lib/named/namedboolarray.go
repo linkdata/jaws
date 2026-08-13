@@ -88,6 +88,9 @@ func (nba *BoolArray) JawsContains(elem *jaws.Element) (contents []jaws.UI) {
 // Add adds a [Bool] with the given name and trusted HTML text.
 // Returns itself.
 //
+// To preserve its identity as a browser form value, name must be valid UTF-8
+// and must not contain U+0000 (NUL).
+//
 // The html argument is rendered as trusted HTML and is not escaped; pre-escape it
 // (e.g. template.HTML(template.HTMLEscapeString(s))) when it is derived from
 // untrusted user input. See [NewBool].
