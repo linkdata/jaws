@@ -25,6 +25,8 @@ import (
 
 // TestRequest is a request harness intended for tests.
 //
+// Values must be created with [NewTestRequest]; the zero value is not usable.
+//
 // The embedded [jaws.Request] provides the usual request methods (NewElement,
 // JawsKeyString, and so on). The channels expose the loop's wiring: send incoming
 // WebSocket messages on InCh, read outbound messages from OutCh, and inject

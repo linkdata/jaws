@@ -13,4 +13,7 @@
 // widgets. They panic when called with a value whose dynamic type does not match
 // the requested adapter type, so use them at trusted construction points rather
 // than on unvalidated external input.
+//
+// Nil values follow the module-wide convention documented by
+// [github.com/linkdata/jaws].
 package bind

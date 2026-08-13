@@ -18,8 +18,10 @@
 // equality to pointer identity.
 //
 // See [jaws.UI] and each concrete widget for comparability, typed-nil, and
-// zero-value behavior. No pointer widget in this package documents nil-receiver
-// tolerance.
+// zero-value behavior.
+//
+// Nil values follow the module-wide convention documented by
+// [github.com/linkdata/jaws].
 //
 // Within one request, a widget normally backs one live [jaws.Element]. The
 // HTML-inner widgets, [Img], [Option], [Template], [Container], [Tbody], and

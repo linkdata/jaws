@@ -35,18 +35,20 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
 
 ## Hard framework constraints
 
-- Every JaWS `UI` value must be a non-nil interface, comparable at runtime, **and
-  equal to itself**, since it is used as a map key. A value that is a nil interface,
-  only statically comparable (an interface field holding a slice/map/func), or that
-  holds a `NaN` (so `v != v`) is rejected: the container widgets — the only place a raw
-  `UI` value is used as a map key — cancel the `Request` in all builds (cause matches
-  `tag.ErrNotUsableAsTag`), and `Request.NewElement` asserts runtime comparability in
-  debug builds. A typed nil (e.g. `(*Widget)(nil)`) is comparable and equal to itself,
-  so it counts as usable and JaWS dispatches render/update/event calls to it; only a
-  nil `UI` interface is a no-op. Surviving such a call is up to the concrete type, not
-  a requirement: a widget that dereferences its fields panics, and none of the
-  standard `lib/ui` widgets document nil-receiver tolerance. Do not pass a nil pointer
-  of a type that does not; use a zero value only where that type documents one.
+- Follow the module-wide nil-value convention in package `jaws`: required
+  operational collaborators and pointer receivers are non-nil unless an API
+  documents a meaning for nil. Do not treat unsupported nil use as a framework
+  defect or repeat ordinary non-nil boilerplate on individual symbols.
+- Every non-nil JaWS `UI` value must be comparable at runtime **and equal to
+  itself**. A value that is only statically comparable (an interface field holding a
+  slice/map/func), or that holds a `NaN` (so `v != v`), is rejected: the container
+  widgets — the only place a raw `UI` value is used as a map key — cancel the
+  `Request` in all builds (cause matches `tag.ErrNotUsableAsTag`), and
+  `Request.NewElement` asserts runtime comparability in debug builds. Container
+  children must also be non-nil. `Request.NewElement` tolerates a nil `UI` interface
+  as a render/update no-op. A typed nil (e.g. `(*Widget)(nil)`) is comparable and equal
+  to itself, so JaWS dispatches render/update/event calls to it; whether those calls
+  tolerate its nil receiver follows the concrete type's contract.
 - Every JaWS `UI` value is request-scoped. Once used by one Request, never use
   that value with another Request; construct fresh widgets per request. The
   widgets may still refer to shared, synchronized application state, binders,
@@ -143,11 +145,9 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
   supports multiple live Elements. They remain request-scoped; construct fresh widget
   values for another Request even when those values refer to shared synchronized
   application state.
-- A nil-interface child provider is a valid part of the Go value but is not renderable:
-  zero Container/Tbody and `NewContainer`/`NewTbody` with nil providers panic when
-  render/update calls `JawsContains`. Zero Select and `NewSelect(nil)` likewise panic in
-  render/update, while `Select.JawsInput` treats the nil handler as a no-op. A typed-nil
-  provider is dispatched normally and must tolerate its nil receiver itself.
+- `Select.JawsInput` treats a nil-interface handler as a no-op. Typed-nil providers
+  and handlers are dispatched normally; nil-receiver behavior follows the concrete
+  type.
 
 ## Template-dot and tag rules
 
@@ -241,8 +241,8 @@ Implications:
   without render-time initialization. It uses the updater as a tag, attaches its event
   handlers, applies tag and handler params, and invokes `JawsUpdate` once. HTML attribute
   params are ignored; write attributes on the template-authored element.
-- The updater must be a non-nil interface whose dynamic value is comparable at runtime,
-  equal to itself, and usable as a tag. A typed nil is invoked normally and must tolerate
+- The updater's dynamic value must be comparable at runtime, equal to itself, and
+  usable as a tag. A typed nil is invoked normally and must tolerate
   its nil receiver. Reuse one updater for live Elements only when it supports that use
   without retaining Element-specific state on the shared value; it must be safe for
   concurrent use when shared across Requests.

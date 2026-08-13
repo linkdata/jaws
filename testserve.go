@@ -24,11 +24,11 @@ import (
 // production use; it does not import any testing-only packages, so it does not
 // pull net/http/httptest into the production build.
 //
-// onPanic must be non-nil; it is called with the recovered value (nil if the loop
-// exited normally) when the loop goroutine stops, before doneCh is closed, so a
-// harness can publish captured panic state before any <-doneCh waiter observes
-// it. A harness that does not expect panics should re-panic when the value is
-// non-nil so unexpected loop panics still surface.
+// onPanic is called with the recovered value (nil if the loop exited normally)
+// when the loop goroutine stops, before doneCh is closed, so a harness can publish
+// captured panic state before any <-doneCh waiter observes it. A harness that does
+// not expect panics should re-panic when the value is non-nil so unexpected loop
+// panics still surface.
 func (jw *Jaws) TestServe(rq *Request, onPanic func(recovered any)) (inCh chan wire.WsMsg, outCh chan wire.WsMsg, bcastCh chan wire.Message, readyCh, doneCh chan struct{}) {
 	bcastCh = make(chan wire.Message, 64)
 	// Subscribe and then rendezvous with the Serve loop so the subscription is

@@ -80,7 +80,7 @@ func create(debug bool, fsys fs.FS, fpath, relpath string) (tl jaws.TemplateLook
 // and retains the last successful templates. It does not retry until another
 // interval elapses.
 //
-// The zero value returns nil. A nil receiver panics.
+// The zero value returns nil.
 func (tr *TemplateReloader) Lookup(name string) *template.Template {
 	tr.mu.RLock()
 	curr := tr.curr

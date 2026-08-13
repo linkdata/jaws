@@ -25,7 +25,6 @@ import (
 // those Elements supports multiple live Elements. Use Container as a value;
 // taking its address changes identity and is unsupported.
 //
-// A nil-interface provider panics when rendering or updating requests children.
 // A typed-nil provider is called normally and must tolerate its nil receiver.
 type Container struct {
 	outerHTMLTag string

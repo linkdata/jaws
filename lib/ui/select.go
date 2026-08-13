@@ -20,9 +20,7 @@ import (
 // reused across those Elements supports multiple live Elements. Use Select as a
 // value; taking its address changes identity and is unsupported.
 //
-// A nil-interface handler makes [Select.JawsInput] a no-op and panics when
-// rendering or updating requests options. A typed-nil handler is called normally
-// and must tolerate its nil receiver.
+// A typed-nil handler is called normally and must tolerate its nil receiver.
 //
 // Select supports one selected option; a multiple select is unsupported.
 // A completed native form reset changes browser state without an input/change

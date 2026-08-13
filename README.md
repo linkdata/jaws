@@ -863,10 +863,11 @@ The reason is that there is no unbroken call chain from the time the Request
 object is created when the initial HTTP request comes in and when it is
 requested during the JavaScript WebSocket HTTP request.
 
-`Request.SetContext` must return a non-nil context derived from the current
-context passed to it. If the returned context is canceled or its deadline
-expires, a running Request's WebSocket loop wakes promptly even while idle; no
-browser event or broadcast is needed.
+`Request.SetContext` transforms the Request's current context. Return a context
+derived from the value passed to the callback so cancellation and deadlines
+continue to propagate. If the returned context is canceled or its deadline expires,
+a running Request's WebSocket loop wakes promptly even while idle; no browser event
+or broadcast is needed.
 
 Background work that must cancel the Request should retain its own derived
 context and cancellation function, not the Request pointer:
