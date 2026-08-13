@@ -75,8 +75,7 @@ func (nb *Bool) JawsGet(elem *jaws.Element) (yes bool) {
 // whether nb is currently one of its members. See [BoolArray.WriteLocked] for
 // the restrictions on using a removed Bool.
 //
-// It returns [jaws.ErrValueUnchanged] if checked already matched the current
-// state.
+// It returns [jaws.ErrValueUnchanged] if no checked state changes.
 func (nb *Bool) JawsSet(elem *jaws.Element, checked bool) (err error) {
 	nba := nb.nba
 	// Lock ordering invariant: when both locks are needed, the owning BoolArray's

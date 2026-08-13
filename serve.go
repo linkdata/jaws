@@ -34,6 +34,11 @@ func (jw *Jaws) getWebSocketTimeout() (t time.Duration) {
 // requestTimeout must be an exact multiple of [time.Second] from [time.Second]
 // through 2,147,483,646 seconds. Other values have unspecified behavior.
 //
+// An overlapping [Jaws.Serve] or [Jaws.ServeWithTimeout] call reports
+// [ErrServeAlreadyRunning] through [Jaws.MustLog]. It panics without a Logger
+// and in debug or race builds; otherwise it returns without starting another
+// processing loop.
+//
 // Before [Request.ServeHTTP] begins WebSocket processing, timeout-based Request
 // retirement is periodic and approximate, not a hard deadline. [Jaws.NewRequest],
 // a successful [Jaws.UseRequest], and [Request.MarkWritten] mark activity using
@@ -157,8 +162,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 
 // Serve calls [Jaws.ServeWithTimeout] with [DefaultWebSocketTimeout].
 //
-// It is intended to run on its own goroutine. On a normal return after
-// [Jaws.Close], Serve waits for every accepted log entry to finish delivery.
+// See [Jaws.ServeWithTimeout] for lifecycle and panic behavior.
 func (jw *Jaws) Serve() {
 	jw.ServeWithTimeout(DefaultWebSocketTimeout)
 }

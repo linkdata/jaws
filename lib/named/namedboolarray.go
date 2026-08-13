@@ -49,26 +49,19 @@ func (nba *BoolArray) ReadLocked(fn func(nbl []*Bool)) {
 	fn(nba.data)
 }
 
-// WriteLocked calls fn with the [BoolArray] locked for writing and replaces
-// the array contents with the returned values.
+// WriteLocked calls fn with the [BoolArray] locked for writing and replaces its
+// contents with the values fn returns.
 //
-// Ownership of the returned slice and its backing array transfers to the
-// BoolArray when fn returns; callers must not retain or access that storage
-// afterward. Nil entries are discarded without changing the relative order of
-// non-nil entries.
+// Nil entries are removed from fn's result in place, preserving order, before
+// it is copied. The backing array passed to fn is cleared before return, so
+// retained aliases contain nil values.
 //
-// Omitting a [Bool] from the returned slice does not detach it from nba:
-// [Bool.Array] continues to return nba, and [Bool.JawsSet] continues to apply
-// nba's single-select and dirtying behavior. Structural removal is supported
-// only after every live UI element backed by the Bool has been removed and no
-// event for it can remain in flight. Do not call Bool.JawsSet while the Bool is
-// absent; reinsert it into the same array before using it as an event setter.
+// Omitting a [Bool] does not change [Bool.Array]. Removal is supported only
+// after its live UI elements are removed and no event can remain in flight.
+// Reinsert it before calling [Bool.JawsSet].
 //
-// As with [BoolArray.ReadLocked], fn must not call other [BoolArray] methods or
-// [Bool.JawsSet] (they re-acquire the same non-reentrant nba mutex and deadlock);
-// operate only on the provided slice and the *[Bool] methods that take just the
-// Bool's own mutex (see [BoolArray.ReadLocked]). The exclusive lock held here
-// serializes [Bool.Set] across concurrent WriteLocked calls.
+// fn must not call methods on nba or [Bool.JawsSet] on an associated [Bool];
+// doing so deadlocks. It may call other Bool methods, including [Bool.Set].
 func (nba *BoolArray) WriteLocked(fn func(nbl []*Bool) []*Bool) {
 	nba.mu.Lock()
 	defer nba.mu.Unlock()

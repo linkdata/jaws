@@ -179,12 +179,10 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
   `tag.TagGetter` implementations are unsupported.
 - JaWS does not serialize `JawsGetTag` calls. A getter used concurrently must synchronize its
   state and safely publish any returned containers.
-- `ui.JsVar` is the one in-tree initialization case: `JawsGetTag` returns nil before its first
-  render initializes the dirty tag, and that nil is not a dirty target. A getter in its nil phase
-  is therefore not usable as a tag: passing a not-yet-rendered `JsVar` as a tag to another widget
-  expands to no keys, so that widget registers under nothing and a later dirty of the JsVar never
-  reaches it. Render the JsVar first, or tag the other widget with an independent value. `ui.Object`
-  propagates the phase of any chained getter that has one.
+- `ui.JsVar.JawsGetTag` returns nil until `JawsRender` resolves a usable dirty tag; a failed
+  render may resolve it. While it is nil, using the JsVar as a tag registers no keys, and later
+  resolution is not retroactive. Render it first or use an independent tag. `ui.Object` propagates
+  the phase of any chained getter that has one.
 - `tag.TagExpand` rejects exactly these as tags: `string`, `bool`, `int`/`int8`/`int16`/`int32`/`int64`,
   `uint`/`uint8`/`uint16`/`uint32`/`uint64`, `float32`/`float64`, `template.HTML`, `template.HTMLAttr`,
   `jid.Jid` and `key.Key`. It is a switch on exact types, so aliases of a rejected type are rejected,

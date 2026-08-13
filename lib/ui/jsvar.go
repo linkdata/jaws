@@ -352,8 +352,8 @@ func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any,
 	var data []byte
 	var changed bool
 	dirtyTag, data, changed, checkRejected, pathSetter, err = jsvar.setPathAndMarshal(elem, jsPath, value, clientWrite)
-	// dirtyTag is assigned only in JawsRender, so a set before the first render leaves
-	// it nil. A what.Set with a nil Dest would target every element, and there is
+	// dirtyTag is assigned only by JawsRender, so a set before JawsRender leaves it
+	// nil. A what.Set with a nil Dest would target every element, and there is
 	// nothing to update yet because the initial render carries the value in its
 	// data-jawsdata attribute, so the broadcast is skipped in that case.
 	//
@@ -421,6 +421,10 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any, cli
 // destination field after assignment. Applications using an encoded
 // representation such as decimal strings must pass that representation in value.
 //
+// If marshaling a broadcast value fails, JawsSetPath returns the error after
+// applying the write. It does not roll back the value, queue a broadcast, or call
+// [SetPather.JawsPathSet].
+//
 // When a write produces a broadcast, value is marshaled while the application
 // locker is held. Custom marshaling callbacks reachable from value, including
 // MarshalJSON and MarshalText, must not acquire that locker or re-enter the
@@ -438,8 +442,9 @@ func (jsvar *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
 
 // JawsRender writes the hidden element that seeds and routes the JavaScript variable.
 //
-// params[0] must be a valid JsVar name. Otherwise, JawsRender returns
-// [ErrIllegalJsVarName] without writing markup.
+// params[0] must be a valid JsVar name. An invalid name returns
+// [ErrIllegalJsVarName] without writing markup, but still applies any bound-value
+// tag and handlers, invokes its initial-attribute hook, and adds the JsVar handler.
 //
 // A name may be bound by more than one live binding; see [JsVar] for how a
 // browser write is delivered to every live binding of the name.
@@ -503,16 +508,12 @@ func (jsvar *JsVar[T]) renderSnapshot(elem *jaws.Element, params []any) (getter 
 	return
 }
 
-// JawsGetTag returns the dirty tag, or nil before the first render initializes it.
+// JawsGetTag returns the dirty tag resolved by [JsVar.JawsRender], or nil.
 //
-// That nil is not a dirty target. After initialization JawsGetTag obeys the normal
-// idempotent tag identity contract; see
-// [github.com/linkdata/jaws/lib/tag.TagGetter].
-//
-// A JsVar is therefore only usable as a tag once it has rendered. Passing one as a tag
-// to another widget beforehand expands to no keys at all, so that widget registers
-// under nothing and a later dirty of this JsVar never reaches it. Render the JsVar
-// first, or tag the other widget with a value that does not depend on this one.
+// A failed JawsRender may still resolve the tag. Once non-nil, it follows the
+// stable-identity contract of [github.com/linkdata/jaws/lib/tag.TagGetter]. Using
+// the JsVar as a tag while nil registers no keys; later resolution is not
+// retroactive.
 //
 // It is safe for concurrent use.
 func (jsvar *JsVar[T]) JawsGetTag() any {
