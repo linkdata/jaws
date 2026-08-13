@@ -1181,6 +1181,8 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, pingInterval, wsTimeout time
 		go wire.PingLoop(ctx, cancelRequest, rq.Jaws.Done(), pingInterval, wsTimeout, ws)
 		broadcastMsgCh := pendingSubscription
 		pendingSubscription = nil
+		// Production deliberately discards the recovered value so a loop panic stays
+		// contained to the failed Request while its connection is torn down.
 		rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh) // unsubscribes broadcastMsgCh, closes outboundMsgCh
 	}
 	return

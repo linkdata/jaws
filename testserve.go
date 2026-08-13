@@ -28,7 +28,8 @@ import (
 // when the loop goroutine stops, before doneCh is closed, so a harness can publish
 // captured panic state before any <-doneCh waiter observes it. A harness that does
 // not expect panics should re-panic when the value is non-nil so unexpected loop
-// panics still surface.
+// panics still surface. doneCh is closed even if onPanic panics or calls
+// runtime.Goexit.
 func (jw *Jaws) TestServe(rq *Request, onPanic func(recovered any)) (inCh chan wire.WsMsg, outCh chan wire.WsMsg, bcastCh chan wire.Message, readyCh, doneCh chan struct{}) {
 	bcastCh = make(chan wire.Message, 64)
 	// Subscribe and then rendezvous with the Serve loop so the subscription is
@@ -70,14 +71,10 @@ func (jw *Jaws) TestServe(rq *Request, onPanic func(recovered any)) (inCh chan w
 	doneCh = make(chan struct{})
 
 	go func() {
-		// onPanic runs before doneCh closes so a harness can publish its captured
-		// panic state before any <-doneCh waiter observes it. onPanic may re-panic
-		// to propagate an unexpected panic; that skips the close, which is moot
-		// since the goroutine is then crashing the test anyway.
-		defer func() {
-			onPanic(recover())
-			close(doneCh)
-		}()
+		// Registered first so it runs last: onPanic is invoked before doneCh closes,
+		// while the close still runs if onPanic panics or calls runtime.Goexit.
+		defer close(doneCh)
+		defer func() { onPanic(recover()) }()
 		close(readyCh)
 		panicValue := rq.process(bcastCh, inCh, outCh)
 		// Recycle before re-panicking: the outer defer reports the loop panic, so

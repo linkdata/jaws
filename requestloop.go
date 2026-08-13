@@ -24,9 +24,9 @@ import (
 
 // process runs the main message-processing loop.
 //
-// It unsubscribes broadcastMsgCh and closes outboundMsgCh before returning. If
-// the loop panics, process completes that cleanup, logs it non-fatally and returns
-// the original recovered value.
+// It unsubscribes broadcastMsgCh and closes outboundMsgCh before returning. A
+// loop panic is contained, a diagnostic is passed to [Jaws.Log], and the
+// recovered value is returned unchanged for the caller to handle.
 func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-chan wire.WsMsg, outboundMsgCh chan<- wire.WsMsg) (panicValue any) {
 	jawsDoneCh := rq.Jaws.Done()
 	// Snapshot cancelFn under rq.mu, the same way ServeHTTP does: its only writers

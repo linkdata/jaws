@@ -1,12 +1,10 @@
 package jawstest_test
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"os/exec"
-	"strings"
 	"testing"
 	"time"
 
@@ -17,12 +15,10 @@ import (
 	"github.com/linkdata/jaws/lib/wire"
 )
 
-const jawstestUpdaterPanic = "jawstest updater panic sentinel"
-
-type jawstestPanickingUpdater struct{}
+type jawstestPanickingUpdater struct{ value any }
 
 func (jawstestPanickingUpdater) JawsRender(*jaws.Element, io.Writer, []any) error { return nil }
-func (jawstestPanickingUpdater) JawsUpdate(*jaws.Element)                         { panic(jawstestUpdaterPanic) }
+func (u jawstestPanickingUpdater) JawsUpdate(*jaws.Element)                       { panic(u.value) }
 
 // TestNewTestRequest_BcastChToOutCh drives a broadcast through the harness's
 // exposed channels end to end: a page-global Alert injected on BcastCh must
@@ -120,47 +116,45 @@ func TestNewTestRequest_WithExplicitRequest(t *testing.T) {
 	<-tr.ReadyCh
 }
 
-func TestNewTestRequest_ReportsUpdaterPanic(t *testing.T) {
-	const helperEnv = "JAWS_TEST_UPDATER_PANIC_HELPER"
-	if os.Getenv(helperEnv) == "1" {
-		jw, err := jaws.New()
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(jw.Close)
-		go jw.Serve()
-
-		tr := jawstest.NewTestRequest(jw, nil)
-		select {
-		case <-tr.ReadyCh:
-		case <-time.After(2 * time.Second):
-			t.Fatal("timeout waiting for the request loop to start")
-		}
-		const updateTag = tag.Tag("jawstest-panic-update")
-		elem := tr.NewElement(jawstestPanickingUpdater{})
-		elem.Tag(updateTag)
-		elem.Freeze()
-		tr.BcastCh <- wire.Message{Dest: updateTag, What: what.Update}
-		select {
-		case <-tr.DoneCh:
-			t.Fatal("request loop returned normally after JawsUpdate panic")
-		case <-time.After(2 * time.Second):
-			t.Fatal("timeout waiting for JawsUpdate panic")
-		}
-		return
+func TestNewTestRequestWithPanic_ReportsUpdaterPanic(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
 	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
 
-	// NewTestRequest re-panics on its request-loop goroutine, so a subprocess is
-	// required to observe the panic without terminating this test process.
-	// #nosec G204 -- os.Args[0] is the current test binary and all arguments are fixed.
-	cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestNewTestRequest_ReportsUpdaterPanic$", "-test.count=1", "-test.timeout=5s")
-	cmd.Env = append(os.Environ(), helperEnv+"=1", "GOTRACEBACK=none")
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatal("jawstest request loop returned normally after JawsUpdate panic")
+	wantPanic := errors.New("jawstest updater panic sentinel")
+	panicCh := make(chan any, 1)
+	tr := jawstest.NewTestRequestWithPanic(jw, nil, func(recovered any) {
+		panicCh <- recovered
+	})
+	defer tr.Close()
+	select {
+	case <-tr.ReadyCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for the request loop to start")
 	}
-	if !strings.Contains(string(output), "panic: "+jawstestUpdaterPanic) {
-		t.Fatalf("subprocess did not report the updater panic:\n%s", output)
+	const updateTag = tag.Tag("jawstest-panic-update")
+	elem := tr.NewElement(jawstestPanickingUpdater{value: wantPanic})
+	elem.Tag(updateTag)
+	elem.Freeze()
+	tr.BcastCh <- wire.Message{Dest: updateTag, What: what.Update}
+	select {
+	case <-tr.DoneCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for JawsUpdate panic")
+	}
+	select {
+	case recovered := <-panicCh:
+		if recovered != wantPanic {
+			t.Fatalf("onPanic recovered %#v, want original value %#v", recovered, wantPanic)
+		}
+	default:
+		t.Fatal("onPanic was not called")
+	}
+	if got := jw.RequestCount(); got != 0 {
+		t.Fatalf("RequestCount() = %d, want 0 after recycling the test request", got)
 	}
 }
 
