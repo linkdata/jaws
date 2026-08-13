@@ -1909,12 +1909,16 @@ func TestRequest_UpdatePanicLogs(t *testing.T) {
 			panic("wildpanic")
 		},
 	}
+	rq.ExpectPanic = true
 	th.NoErr(rq.UI(tss))
 	rq.Dirty(tss)
 	select {
 	case <-th.C:
 		th.Timeout()
 	case <-rq.DoneCh:
+	}
+	if !rq.Panicked || rq.PanicVal != "wildpanic" {
+		t.Fatalf("request-loop panic = %#v, want %q", rq.PanicVal, "wildpanic")
 	}
 	loggedErr := logger.next(t)
 	if !strings.Contains(loggedErr.Error(), "wildpanic") {

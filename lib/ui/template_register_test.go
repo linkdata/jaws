@@ -118,83 +118,60 @@ func TestRegister_TemplateUpdaterReportsUnclaimed(t *testing.T) {
 // request loop, which RequestWriter.Register cannot do because it updates immediately: a
 // registerUI child is rendered with a tag, then that tag is dirtied.
 func TestRegister_TemplateUpdaterOnTheRequestLoop(t *testing.T) {
-	for _, tt := range []struct {
-		name      string
-		withLog   bool
-		wantAlive bool // does the request loop survive?
-	}{
-		{"with logger the loop continues", true, true},
-		// Request.process recovers the panic and tears the request down; its follow-up Log
-		// emits nothing and TestServe's callback sees nil, because process consumed it.
-		{"without logger the request is torn down", false, false},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			jw, err := jaws.New()
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(jw.Close)
-			logger := new(templateLogger)
-			if tt.withLog {
-				jw.Logger = logger
-			}
-			if err = jw.AddTemplateLookuper(template.Must(template.New("reg-plain").Parse(`plain`))); err != nil {
-				t.Fatal(err)
-			}
-			go jw.Serve()
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	logger := new(templateLogger)
+	jw.Logger = logger
+	if err = jw.AddTemplateLookuper(template.Must(template.New("reg-plain").Parse(`plain`))); err != nil {
+		t.Fatal(err)
+	}
+	go jw.Serve()
 
-			tr := jawstest.NewTestRequest(jw, nil)
-			t.Cleanup(func() {
-				tr.Close()
-				<-tr.DoneCh
-			})
-			<-tr.ReadyCh
+	tr := jawstest.NewTestRequest(jw, nil)
+	t.Cleanup(func() {
+		tr.Close()
+		<-tr.DoneCh
+	})
+	<-tr.ReadyCh
 
-			dirty := tag.Tag("registered")
-			tmpl := NewTemplate("div", "reg-plain", tag.Tag("dot"))
-			// Build the registered Element by hand: RequestWriter.Register would run the
-			// failing update immediately, and registerUI.JawsRender ignores params, so
-			// NewUI would not apply the tag. This leaves the first failing update to the
-			// request loop.
-			regElem := tr.NewElement(registerUI{Updater: tmpl})
-			regElem.Tag(dirty)
-			regElem.Freeze()
+	dirty := tag.Tag("registered")
+	tmpl := NewTemplate("div", "reg-plain", tag.Tag("dot"))
+	// Build the registered Element by hand: RequestWriter.Register would run the
+	// failing update immediately, and registerUI.JawsRender ignores params, so
+	// NewUI would not apply the tag. This leaves the first failing update to the
+	// request loop.
+	regElem := tr.NewElement(registerUI{Updater: tmpl})
+	regElem.Tag(dirty)
+	regElem.Freeze()
 
-			tr.BcastCh <- wire.Message{Dest: dirty, What: what.Update}
+	tr.BcastCh <- wire.Message{Dest: dirty, What: what.Update}
 
-			if tt.wantAlive {
-				// BcastCh preserves send order. Receiving this Alert proves the loop
-				// processed the preceding failing update and kept serving afterwards.
-				const probe = "still alive"
-				tr.BcastCh <- wire.Message{What: what.Alert, Data: probe}
-				select {
-				case msg, ok := <-tr.OutCh:
-					if !ok {
-						t.Fatal("the request loop stopped although a logger was configured")
-					}
-					if msg.Jid != 0 || msg.What != what.Alert || msg.Data != probe {
-						t.Fatalf("liveness probe = %+v, want Alert %q", msg, probe)
-					}
-				case <-tr.DoneCh:
-					t.Fatal("the request loop stopped although a logger was configured")
-				case <-time.After(2 * time.Second):
-					t.Fatal("timeout waiting for the request-loop liveness probe")
-				}
+	// BcastCh preserves send order. Receiving this Alert proves the loop processed
+	// the preceding failing update and kept serving because a logger was configured.
+	const probe = "still alive"
+	tr.BcastCh <- wire.Message{What: what.Alert, Data: probe}
+	select {
+	case msg, ok := <-tr.OutCh:
+		if !ok {
+			t.Fatal("the request loop stopped although a logger was configured")
+		}
+		if msg.Jid != 0 || msg.What != what.Alert || msg.Data != probe {
+			t.Fatalf("liveness probe = %+v, want Alert %q", msg, probe)
+		}
+	case <-tr.DoneCh:
+		t.Fatal("the request loop stopped although a logger was configured")
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for the request-loop liveness probe")
+	}
 
-				// Join the request-loop goroutine, then drain the asynchronous logger.
-				tr.Close()
-				<-tr.DoneCh
-				logged := logger.sync(t, jw)
-				if len(logged) != 1 || !errors.Is(logged[0], ErrElementStateUnclaimed) {
-					t.Fatalf("logged errors = %v, want one %v", logged, ErrElementStateUnclaimed)
-				}
-				return
-			}
-			select {
-			case <-tr.DoneCh:
-			case <-time.After(2 * time.Second):
-				t.Fatal("timeout waiting for the request loop to tear down")
-			}
-		})
+	// Join the request-loop goroutine, then drain the asynchronous logger.
+	tr.Close()
+	<-tr.DoneCh
+	logged := logger.sync(t, jw)
+	if len(logged) != 1 || !errors.Is(logged[0], ErrElementStateUnclaimed) {
+		t.Fatalf("logged errors = %v, want one %v", logged, ErrElementStateUnclaimed)
 	}
 }

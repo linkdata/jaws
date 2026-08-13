@@ -79,8 +79,13 @@ func (jw *Jaws) TestServe(rq *Request, onPanic func(recovered any)) (inCh chan w
 			close(doneCh)
 		}()
 		close(readyCh)
-		rq.process(bcastCh, inCh, outCh)
+		panicValue := rq.process(bcastCh, inCh, outCh)
+		// Recycle before re-panicking: the outer defer reports the loop panic, so
+		// propagating it first would skip the Request's lifecycle cleanup.
 		jw.recycle(rq)
+		if panicValue != nil {
+			panic(panicValue)
+		}
 	}()
 	return
 }
