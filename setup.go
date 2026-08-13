@@ -39,8 +39,11 @@ func makeAbsPath(prefix string, u *url.URL) *url.URL {
 // Setup configures [Jaws] with extra functionality and resources.
 //
 // The list of extras can be strings, [*url.URL], [*staticserve.StaticServe] or
-// []*staticserve.StaticServe URL resources, or a setup function matching
-// [SetupFunc] such as jawsboot.Setup.
+// []*staticserve.StaticServe URL resources, or a [SetupFunc] such as
+// jawsboot.Setup.
+//
+// A value of a defined function type must be converted to [SetupFunc] before it
+// is passed as an extra.
 //
 // A nil [SetupFunc] extra is ignored.
 //

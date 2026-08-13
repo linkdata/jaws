@@ -167,17 +167,20 @@ func TestObject_InitialHTMLAttr_DefaultEmpty(t *testing.T) {
 }
 
 func TestObject_InitialHTMLAttr(t *testing.T) {
+	type initialHTMLAttrHook func(Object, *jaws.Element) template.HTMLAttr
+
 	order := []int{}
 	elem := &jaws.Element{}
+	first := initialHTMLAttrHook(func(got Object, gotElem *jaws.Element) (s template.HTMLAttr) {
+		order = append(order, 1)
+		if gotElem != elem {
+			t.Fatalf("unexpected elem %#v", gotElem)
+		}
+		return `data-first="1"`
+	})
 
 	obj := New("x").
-		InitialHTMLAttr(func(got Object, gotElem *jaws.Element) (s template.HTMLAttr) {
-			order = append(order, 1)
-			if gotElem != elem {
-				t.Fatalf("unexpected elem %#v", gotElem)
-			}
-			return `data-first="1"`
-		}).
+		InitialHTMLAttr(first).
 		InitialHTMLAttr(func(Object, *jaws.Element) (s template.HTMLAttr) {
 			order = append(order, 2)
 			s = `data-second="2"`

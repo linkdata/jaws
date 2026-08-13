@@ -106,6 +106,9 @@ var (
 
 // JsVarCheck validates a tentative browser update to a [JsVar].
 //
+// JsVarCheck is a type alias so a value of a defined function type with this
+// signature can be assigned to [JsVar.ClientCheck] without explicit conversion.
+//
 // The value contains the complete tentative state, and jsPath is the
 // browser-supplied jq path used for the update. The path is passed through
 // unchanged: jq accepts equivalent noncanonical spellings, including empty
@@ -127,7 +130,7 @@ var (
 // rejected tentative value. Any custom marshaling callback it invokes, including
 // MarshalJSON or MarshalText, has the same restrictions. The check must not
 // return or wrap [jaws.ErrEventUnhandled], which has handler-dispatch semantics.
-type JsVarCheck[T any] func(value *T, jsPath string) error
+type JsVarCheck[T any] = func(value *T, jsPath string) error
 
 // JSONSizeCheck returns a check that limits the JSON encoding of value.
 //

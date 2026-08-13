@@ -19,7 +19,11 @@ type ObjectClickedHook func(obj Object, elem *jaws.Element, click jaws.Click) (e
 type ObjectContextMenuHook func(obj Object, elem *jaws.Element, click jaws.Click) (err error)
 
 // ObjectInitialHTMLAttrHook is a function to call when a [jaws.Element] is initially rendered.
-type ObjectInitialHTMLAttrHook func(obj Object, elem *jaws.Element) (s template.HTMLAttr)
+//
+// ObjectInitialHTMLAttrHook is a type alias so a value of a defined function type
+// with this signature can be passed to [Object.InitialHTMLAttr] without explicit
+// conversion.
+type ObjectInitialHTMLAttrHook = func(obj Object, elem *jaws.Element) (s template.HTMLAttr)
 
 // Object is a chainable UI object that combines HTML rendering, tags and
 // optional event handlers.
@@ -45,7 +49,8 @@ type Object interface {
 var _ Object = &object{}
 
 type object struct {
-	prev    *object
+	prev *object
+	// The defined hook types distinguish click from context-menu callbacks.
 	handler any
 }
 

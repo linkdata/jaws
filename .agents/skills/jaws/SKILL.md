@@ -98,7 +98,7 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
 - Chain builders return a new `Binder[T]`:
   - `.SetLocked(fn)` / `.GetLocked(fn)` — override read/write semantics.
   - `.GetHTML(fn)` — supply a custom `JawsGetHTML` for HTML-rendering widgets (`Span`, `Div`, `A`, `Label`).
-  - `.Success(fn)` — run after a successful set. Accepted signatures: `func()`, `func() error`, `func(*Element)`, `func(*Element) error`. Non-nil errors propagate; a handler can still return `ErrValueUnchanged` to signal no change.
+  - `.Success(fn)` — run after a successful set. Accepted dynamic types: `func()`, `func() error`, `func(*Element)`, `func(*Element) error`; `SuccessHook` aliases the last form. Convert a defined function type before passing it. Non-nil errors propagate; a handler can still return `ErrValueUnchanged` to signal no change.
   - `.Clicked(fn)` / `.ContextMenu(fn)` — attach click/context handlers to the same bound variable.
   - `.InitialHTMLAttr(fn)` — attach attribute hooks.
 - Use `bind.New` for input widgets and for content whose natural key is the backing variable. Multiple widgets bound to the same pointer share a tag automatically, so `Request.Dirty(&field)` refreshes all of them.
@@ -216,7 +216,7 @@ template inclusion so the surrounding Template owns the DOM:
 
 JaWS parses template params as:
 - HTML attrs: `string`, `[]string`, `template.HTMLAttr`, `[]template.HTMLAttr`
-- Handlers: `InputFn` (the func alias `func(e *Element, val string) error`), plus anything satisfying `InputHandler`, `ClickHandler`, or `ContextMenuHandler`
+- Handlers: values whose dynamic type is exactly `InputFn` (the func alias `func(e *Element, val string) error`), plus anything satisfying `InputHandler`, `ClickHandler`, or `ContextMenuHandler`. Convert a defined function type to `InputFn` before passing it through params.
 - Tags: everything else (plus comparable handlers are auto-tagged)
 
 Implications:

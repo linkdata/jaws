@@ -62,14 +62,17 @@ type ContextMenuHook[T comparable] func(bind Binder[T], elem *jaws.Element, clic
 // Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
 type InitialHTMLAttrHook[T comparable] func(bind Binder[T], elem *jaws.Element) (s template.HTMLAttr)
 
-// SuccessHook is a function to call when [Setter.JawsSet] returns with no error.
+// SuccessHook is called by [Setter.JawsSet] after [Binder.JawsSetLocked] succeeds.
 //
 // The [Binder] locks are not held when the function is called.
 //
 // Success hooks in a [Binder] chain are called in reverse registration order.
 // If one of them returns an error, that error is returned from [Setter.JawsSet] and
 // no more success hooks are called.
-type SuccessHook func(elem *jaws.Element) (err error)
+//
+// SuccessHook is a type alias so its values have the dynamic function type
+// accepted by [Binder.Success] through its any parameter.
+type SuccessHook = func(elem *jaws.Element) (err error)
 
 // Formatter customizes [Binder.Format] output for a value.
 type Formatter interface {
@@ -144,15 +147,21 @@ type Binder[T comparable] interface {
 	// and you probably want to call its [Binder.JawsGetLocked] first.
 	GetLocked(fn GetHook[T]) (newbind Binder[T])
 
-	// Success returns a [Binder] that will call fn after the value has been set
-	// with no errors. No locks are held when the function is called.
+	// Success returns a [Binder] that calls fn after a successful set.
+	//
+	// No locks are held when the function is called.
 	// If the function returns an error, that will be returned from [Setter.JawsSet].
 	//
-	// The function must have one of the following signatures:
+	// The dynamic type of fn must be one of the following function types:
 	//  * func()
 	//  * func() error
 	//  * func(*jaws.Element)
 	//  * func(*jaws.Element) error
+	//
+	// [SuccessHook] is an alias for the last function type.
+	// A value of a defined function type must be converted to the corresponding
+	// function type before it is passed. Success panics if fn has any other
+	// dynamic type.
 	Success(fn any) (newbind Binder[T])
 
 	// GetHTML returns a [Binder] that will call fn instead of the default
@@ -203,7 +212,8 @@ type Binder[T comparable] interface {
 type binder[T comparable] struct {
 	prev *binder[T]
 	RWLocker
-	ptr  *T
+	ptr *T
+	// The defined hook types distinguish roles whose signatures can coincide.
 	hook any
 }
 
@@ -409,5 +419,5 @@ func wrapSuccessHook(fn any) (hook SuccessHook) {
 	case func(*jaws.Element) error:
 		return fn
 	}
-	panic("Binder[T].Success(): function has wrong signature")
+	panic(fmt.Sprintf("bind.Binder.Success: unsupported callback type %T", fn))
 }
