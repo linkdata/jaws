@@ -222,6 +222,13 @@ func expand(depth int, tagValue any, result []any, active []any) ([]any, error) 
 // [github.com/linkdata/jaws.Jaws.MustTagExpand] to report them through a configured
 // logger instead.
 func TagExpand(tagValue any) (result []any, err error) {
+	// Tag values are application-authored dependency descriptions, normally shallow
+	// trees with a small number of leaves. The depth and unique-tag limits guard
+	// accidental recursion and fan-out; they are not a work budget for adversarial
+	// graphs. In particular, a compact DAG can repeat the same shared subtree along
+	// exponentially many paths while producing one unique tag. Do not complicate the
+	// expansion semantics or TagGetter call behavior to optimize such constructed
+	// inputs unless the public contract first grows an explicit hostile-input model.
 	// ensureUsableTag rejects tags that are not comparable at runtime, so the
 	// existing == tag dedup in appendUniqueTag does not panic on them. recover
 	// stays as a defense-in-depth net: should a non-comparable value ever reach
