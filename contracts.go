@@ -94,9 +94,7 @@ type TemplateLookuper interface {
 // property of the concrete type rather than a requirement of this contract: a type
 // may document that it tolerates one, and a type that does not will panic when
 // dereferencing its fields. Passing a nil pointer of such a type is therefore a
-// caller error, not a framework-handled case. The pointer-valued widgets in
-// [github.com/linkdata/jaws/lib/ui] dereference their fields, and no widget there
-// documents nil-receiver tolerance.
+// caller error, not a framework-handled case.
 type UI interface {
 	Renderer
 	Updater

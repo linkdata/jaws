@@ -82,8 +82,6 @@ type requestBuffers struct {
 // [Jaws.UseRequest] claims it. The Request finishes when WebSocket handling ends or a
 // non-running Request is retired. It then remains cancelled and unregistered. Its
 // pointer identity is never reused for another connection.
-//
-// Request methods require a non-nil receiver unless the method documents otherwise.
 type Request struct {
 	Jaws             *Jaws                   // (read-only) the JaWS instance the Request belongs to
 	JawsKey          key.Key                 // (read-only) random key assigned to this Request; routes JaWS URLs and request-targeted broadcasts only while registered
@@ -184,6 +182,8 @@ func (rq *Request) finishLocked() {
 }
 
 // JawsKeyString returns the request key in the text form used by JaWS URLs.
+//
+// It tolerates a nil receiver for diagnostics only.
 func (rq *Request) JawsKeyString() string {
 	jawsKey := key.Key(0)
 	if rq != nil {
@@ -464,7 +464,7 @@ func (rq *Request) HeadHTML(w io.Writer) (err error) {
 	return
 }
 
-// GetConnectFn returns the currently set [ConnectFn].
+// GetConnectFn returns the currently set [ConnectFn], or nil if none is set.
 func (rq *Request) GetConnectFn() (fn ConnectFn) {
 	rq.mu.RLock()
 	fn = rq.connectFn
@@ -473,6 +473,8 @@ func (rq *Request) GetConnectFn() (fn ConnectFn) {
 }
 
 // SetConnectFn sets the function called after the WebSocket is accepted.
+//
+// A nil fn clears the callback.
 //
 // See [ConnectFn] for the callback lifecycle and permitted operations.
 func (rq *Request) SetConnectFn(fn ConnectFn) {
@@ -541,8 +543,7 @@ func (rq *Request) Context() (ctx context.Context) {
 //
 // fn runs while the Request lock is held. It must not call methods on the same
 // Request, call code that may do so, or block on work that needs the same
-// Request. SetContext panics if fn is nil. If fn panics, SetContext releases the
-// lock and propagates the panic.
+// Request. If fn panics, SetContext releases the lock and propagates the panic.
 //
 // If a custom context implements the optional method recognized by
 // [context.AfterFunc], that method and its returned stop function must return

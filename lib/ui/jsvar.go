@@ -564,7 +564,7 @@ func (jsvar *JsVar[T]) JawsInput(elem *jaws.Element, value string) (err error) {
 
 // NewJsVar creates a JsVar over v protected by l.
 //
-// The locker l must be non-nil and must remain valid for the lifetime of the JsVar.
+// The locker l must remain valid for the lifetime of the JsVar.
 // The pointer v may be nil; reads then return the zero value, rendering omits the
 // initial data, and writes return [github.com/linkdata/jq.ErrInvalidReceiver].
 // Create a fresh JsVar for each live [jaws.Element]; l and v may be shared by

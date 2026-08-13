@@ -6,7 +6,7 @@ import "github.com/linkdata/jaws"
 //
 // [NewTbody] configures its embedded [Container] for tbody. Replacing that
 // Container is unsupported. Tbody otherwise follows Container's identity,
-// reconciliation, multiplicity, and nil-provider contracts. Treat it as
+// reconciliation, multiplicity, and typed-nil-provider behavior. Treat it as
 // immutable after use and use it as a value; taking its address changes identity
 // and is unsupported.
 type Tbody struct {

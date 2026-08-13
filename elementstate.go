@@ -22,8 +22,8 @@ var ErrElementStateNil = errors.New("jaws: element state must not be nil")
 // synchronized: whatever the stored value contains is guarded by that value's own
 // synchronization, not by this call.
 //
-// elem must be a non-nil Element obtained from [Request.NewElement]. ElementState does
-// not verify that provenance. It panics if elem or elem.Request is nil.
+// elem must be obtained from [Request.NewElement]. ElementState does not verify
+// that provenance.
 func ElementState(elem *Element) (state any) {
 	rq := elem.Request
 	rq.mu.RLock()
@@ -51,9 +51,8 @@ func ElementState(elem *Element) (state any) {
 // the claim is synchronized; mutating the stored value afterwards is guarded by that
 // value's own synchronization, not by this call.
 //
-// When state is non-nil, elem must be a non-nil Element obtained from
-// [Request.NewElement]. SetElementState does not verify that provenance. It panics if
-// elem or elem.Request is nil; a nil state is rejected before elem is examined.
+// When state is non-nil, elem must be obtained from [Request.NewElement].
+// SetElementState does not verify that provenance.
 func SetElementState(elem *Element, state any) error {
 	// The two functions are package-level rather than methods on Element because
 	// ui.With embeds both *Element and ui.RequestWriter, so any method returning a value

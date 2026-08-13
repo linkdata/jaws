@@ -30,9 +30,6 @@ var assetsFS embed.FS
 // bundled bootstrap *.map sourcemap paths, quietly answering devtools probes for
 // "bootstrap.bundle.min.js.map" and "bootstrap.min.css.map".
 //
-// handleFn must not be nil when calling Setup directly; it is invoked once per
-// asset. Reaching it through [jaws.Jaws.Setup] is always safe, since that
-// substitutes a no-op handler when its own handleFn is nil (see [jaws.SetupFunc]).
 // The returned URLs are always valid: they are built from clean, slash-rooted
 // paths over content-hashed embedded asset names, so err only ever reflects a
 // failure to walk the embedded filesystem.

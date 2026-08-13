@@ -37,7 +37,7 @@ func (registerUI) JawsRender(*jaws.Element, io.Writer, []any) error {
 // [jaws.ErrEventUnhandled]. HTML attribute params have no effect; write
 // attributes in the template.
 //
-// The updater must be non-nil, comparable at runtime, equal to itself, and usable
+// The updater must be comparable at runtime, equal to itself, and usable
 // as a tag. A typed nil is invoked normally and must tolerate its nil receiver.
 // The same updater may back multiple live Elements only when it supports that use
 // without retaining Element-specific state on the shared value. If shared across

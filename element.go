@@ -54,7 +54,7 @@ type Element struct {
 // their types (and a pointer's address when readable; see [tag.TagStringRelease]),
 // while debug and -race builds render them in full — more informative, but able
 // to crash on a self-referential or oversized tag. String tolerates an Element
-// whose Request is not yet set, but not a nil *Element.
+// whose Request is not yet set.
 func (elem *Element) String() string {
 	// Guard elem.Request like Request.String()/JawsKeyString guard a nil
 	// receiver, so String() stays safe on a not-fully-constructed Element.

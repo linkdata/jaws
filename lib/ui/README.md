@@ -103,10 +103,8 @@ preserves their Elements and nested subtrees; changed nested containers need the
 update. Child Element identity is parent-scoped, so moving a child definition between
 parents does not preserve its Element.
 
-The zero Container and Tbody, and values constructed with a nil-interface child
-provider, panic when rendering or updating calls the missing provider. A zero
-Select behaves the same for render and update, while its `JawsInput` is a no-op.
-A typed-nil provider is called normally and must tolerate its nil receiver itself.
+`Select.JawsInput` treats a nil-interface handler as a no-op. Typed-nil providers
+and handlers are called normally; nil-receiver behavior follows the concrete type.
 
 You can also use explicit constructors through:
 

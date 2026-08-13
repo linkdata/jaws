@@ -27,6 +27,8 @@ func usableAsTag(t any) (ok bool) {
 // [InitialHTMLAttrHandler.JawsInitialHTMLAttr]; implementing that interface does
 // not affect parameter classification.
 //
+// A nil [InputFn] is ignored.
+//
 // A recognized event handler that is also usable as a tag is returned in both tags
 // and handlers.
 func ParseParams(params []any) (tags []any, handlers []any, attrs []string) {

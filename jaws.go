@@ -1,18 +1,3 @@
-// Package jaws creates dynamic server-driven webpages over WebSockets.
-//
-// It integrates with [html/template] and any router that supports [http.Handler].
-//
-// This package holds the core engine and the [UI] interfaces. The standard
-// widgets (Span, Button, Select, Text, and so on) and the RequestWriter helper
-// methods live in [github.com/linkdata/jaws/lib/ui], and value binding lives in
-// [github.com/linkdata/jaws/lib/bind].
-//
-// # Tags
-//
-// Tags associate [Element] values with application data or logical signals for
-// targeted dirtying, broadcasts, and lookup. See
-// [github.com/linkdata/jaws/lib/tag] for tag selection, expansion, registration,
-// and lifetime.
 package jaws
 
 // Maintainer locking notes:
@@ -120,7 +105,7 @@ type Jaws struct {
 	Logger                Logger     // Optional logger; [Jaws.Log] dispatches Error calls asynchronously and serially
 	Debug                 bool       // Set to true to enable debug info in generated HTML code. Call GenerateHeadHTML after changing it.
 	MakeAuth              MakeAuthFn // Function to create ui.With.Auth for Templates. If nil, templates get the fail-open DefaultAuth (IsAdmin()==true for everyone); set it to enforce authorization. See DefaultAuth.
-	// BaseContext is the non-nil parent context for Requests.
+	// BaseContext is the parent context for Requests.
 	//
 	// New uses [context.Background]. If a custom context implements the optional
 	// method recognized by [context.AfterFunc], that method and its returned stop
@@ -412,7 +397,6 @@ func (jw *Jaws) ContentSecurityPolicy() (s string) {
 // The returned middleware does not trust forwarded HTTPS headers. Note that the
 // session cookie Secure flag is governed separately by [Jaws.TrustForwardedHeaders]
 // (also false by default), so the two stay consistent unless you opt in.
-// The next handler must be non-nil.
 func (jw *Jaws) SecureHeadersMiddleware(next http.Handler) http.Handler {
 	hdrs := secureheaders.DefaultHeaders()
 	delete(hdrs, "Content-Security-Policy")
