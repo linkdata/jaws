@@ -21,6 +21,9 @@ type Bool struct {
 
 // NewBool returns a [Bool] with the given name, HTML and checked state.
 //
+// To preserve its identity as a browser form value, name must be valid UTF-8
+// and must not contain U+0000 (NUL).
+//
 // The html argument is rendered as trusted HTML (it is the label shown in select
 // lists and checkboxes) and is not escaped. When it is derived from untrusted
 // user input it must be pre-escaped, e.g. template.HTML(template.HTMLEscapeString(s)).
