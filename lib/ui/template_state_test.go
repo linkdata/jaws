@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstest"
@@ -262,70 +262,67 @@ func (u *contendingUI) JawsUpdate(elem *jaws.Element) { u.first.JawsUpdate(elem)
 // handler through the same params path, and its second click doubles as the barrier
 // proving the rejected Element's click was already processed.
 func TestTemplate_SecondClaimRegistersNoHandler(t *testing.T) {
-	jw, err := jaws.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(jw.Close)
-	if err = jw.AddTemplateLookuper(template.Must(template.New("state").Parse(templateStateTemplates))); err != nil {
-		t.Fatal(err)
-	}
-	go jw.Serve()
-	tr := jawstest.NewTestRequest(jw, nil)
-	t.Cleanup(func() {
-		tr.Close()
-		<-tr.DoneCh
-	})
-	<-tr.ReadyCh
-
-	var sb strings.Builder
-	control := &clickCountingDot{}
-	controlElem := tr.NewElement(NewTemplate("div", "state-plain", tag.Tag("control")))
-	if err = controlElem.JawsRender(&sb, []any{control}); err != nil {
-		t.Fatal(err)
-	}
-
-	// contendingUI hands params to the second Template only, so this handler is offered
-	// exclusively to the Template whose claim is rejected.
-	rejected := &clickCountingDot{}
-	ui := &contendingUI{
-		first:  NewTemplate("div", "state-plain", tag.Tag("first")),
-		second: NewTemplate("div", "state-b", tag.Tag("second")),
-		handle: true,
-	}
-	elem := tr.NewElement(ui)
-	if err = elem.JawsRender(&sb, []any{rejected}); err != nil {
-		t.Fatal(err)
-	}
-	if !errors.Is(ui.secondErr, jaws.ErrElementStateClaimed) {
-		t.Fatalf("second render = %v, want %v", ui.secondErr, jaws.ErrElementStateClaimed)
-	}
-
-	// Click data is "X Y kstate name"; a bare name does not parse.
-	click := func(j jid.Jid) { tr.InCh <- wire.WsMsg{Jid: j, What: what.Click, Data: "1 2 0 btn"} }
-	awaitClicks := func(want int32) {
-		t.Helper()
-		for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-			if control.clicks.Load() >= want {
-				return
-			}
-			time.Sleep(time.Millisecond)
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := jaws.New()
+		if err != nil {
+			t.Fatal(err)
 		}
-		t.Fatalf("control clicks = %d, want %d", control.clicks.Load(), want)
-	}
+		if err = jw.AddTemplateLookuper(template.Must(template.New("state").Parse(templateStateTemplates))); err != nil {
+			t.Fatal(err)
+		}
+		go jw.Serve()
+		tr := jawstest.NewTestRequest(jw, nil)
+		defer func() {
+			tr.Close()
+			jw.Close()
+			synctest.Wait()
+		}()
+		<-tr.ReadyCh
 
-	click(controlElem.Jid())
-	awaitClicks(1) // the params handler path works at all
+		var sb strings.Builder
+		control := &clickCountingDot{}
+		controlElem := tr.NewElement(NewTemplate("div", "state-plain", tag.Tag("control")))
+		if err = controlElem.JawsRender(&sb, []any{control}); err != nil {
+			t.Fatal(err)
+		}
 
-	click(elem.Jid())
-	// InCh is unbuffered and the loop consumes it in order, so once this second control
-	// click has been handled the preceding one must already have been.
-	click(controlElem.Jid())
-	awaitClicks(2)
+		// contendingUI hands params to the second Template only, so this handler is offered
+		// exclusively to the Template whose claim is rejected.
+		rejected := &clickCountingDot{}
+		ui := &contendingUI{
+			first:  NewTemplate("div", "state-plain", tag.Tag("first")),
+			second: NewTemplate("div", "state-b", tag.Tag("second")),
+			handle: true,
+		}
+		elem := tr.NewElement(ui)
+		if err = elem.JawsRender(&sb, []any{rejected}); err != nil {
+			t.Fatal(err)
+		}
+		if !errors.Is(ui.secondErr, jaws.ErrElementStateClaimed) {
+			t.Fatalf("second render = %v, want %v", ui.secondErr, jaws.ErrElementStateClaimed)
+		}
 
-	if got := rejected.clicks.Load(); got != 0 {
-		t.Fatalf("clicks delivered to the rejected Template's handler = %d, want 0", got)
-	}
+		// Click data is "X Y kstate name"; a bare name does not parse.
+		click := func(j jid.Jid) { tr.InCh <- wire.WsMsg{Jid: j, What: what.Click, Data: "1 2 0 btn"} }
+
+		click(controlElem.Jid())
+		synctest.Wait()
+		if got := control.clicks.Load(); got != 1 {
+			t.Fatalf("control clicks = %d, want 1", got)
+		}
+
+		click(elem.Jid())
+		// InCh is unbuffered and the loop consumes it in order, so once this second control
+		// click has been handled the preceding one must already have been.
+		click(controlElem.Jid())
+		synctest.Wait()
+		if got := control.clicks.Load(); got != 2 {
+			t.Fatalf("control clicks = %d, want 2", got)
+		}
+		if got := rejected.clicks.Load(); got != 0 {
+			t.Fatalf("clicks delivered to the rejected Template's handler = %d, want 0", got)
+		}
+	})
 }
 
 // TestTemplate_SecondClaimOnOneElementFails covers the contention path through the
