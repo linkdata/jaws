@@ -19,10 +19,16 @@ type InputHandler interface {
 	JawsInput(elem *Element, value string) (err error)
 }
 
-// InputFn is the signature of an input handling function. JaWS calls it for an
-// input or set message received from JavaScript over the WebSocket connection,
-// and for a hook message, which tests use to invoke the handler synchronously
-// (see [what.Hook]).
+// InputFn is the signature of an input handling function.
+//
+// JaWS calls it for an input or set message received from JavaScript over the
+// WebSocket connection, and for a hook message, which tests use to invoke the
+// handler synchronously (see [what.Hook]).
+//
+// When a function value is used directly as an input handler through an
+// any-valued API such as [ParseParams], [Element.AddHandlers] or
+// [CallEventHandlers], its dynamic type must be exactly InputFn. Convert a value
+// of a defined function type to InputFn first, or implement [InputHandler].
 type InputFn = func(elem *Element, value string) (err error)
 
 func callInputHandler(obj any, elem *Element, value string) (err error) {
@@ -77,6 +83,8 @@ func callEventHandlers(ui any, elem *Element, wht what.What, value string) (err 
 // CallEventHandlers calls the event handlers for the given [Element].
 //
 // Recovers from panics in user-provided handlers, returning them as errors.
+// Input callback functions used directly by signature are recognized according
+// to the dynamic-type rules documented by [InputFn].
 //
 // Request event dispatch calls this only after the Element is frozen, publishing
 // the completed handler slice before its lock-free read. A direct caller must not

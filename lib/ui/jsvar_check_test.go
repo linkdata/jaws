@@ -147,6 +147,8 @@ func TestJSONSizeCheck(t *testing.T) {
 }
 
 func TestJsVarClientCheckContract(t *testing.T) {
+	type clientCheck func(*jsVarCheckedState, string) error
+
 	jw, err := jaws.New()
 	if err != nil {
 		t.Fatal(err)
@@ -167,7 +169,7 @@ func TestJsVarClientCheckContract(t *testing.T) {
 	errRejected := fmt.Errorf("blocked: %w", jaws.ErrValueUnchanged)
 	checkCalls := 0
 	checkHeldLock := true
-	jsvar.ClientCheck = func(value *jsVarCheckedState, jsPath string) error {
+	jsvar.ClientCheck = clientCheck(func(value *jsVarCheckedState, jsPath string) error {
 		checkCalls++
 		if value != &state {
 			t.Errorf("check value = %p, want %p", value, &state)
@@ -183,7 +185,7 @@ func TestJsVarClientCheckContract(t *testing.T) {
 			return errRejected
 		}
 		return nil
-	}
+	})
 
 	rw := RequestWriter{Request: tr.Request, Writer: io.Discard}
 	if err = rw.JsVar("checked", jsvar); err != nil {

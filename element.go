@@ -98,6 +98,9 @@ func (elem *Element) Freeze() {
 // be processed for it; see the package "Locking" documentation. Handlers added
 // after [Element.JawsRender] has returned (or [Element.Freeze] has been called)
 // are dropped; debug builds panic.
+//
+// Input callback functions used directly by signature are recognized according
+// to the dynamic-type rules documented by [InputFn].
 func (elem *Element) AddHandlers(h ...any) {
 	elem.appendHandlers(h...)
 }

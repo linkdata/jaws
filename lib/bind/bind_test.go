@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"io"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -108,15 +109,68 @@ func testBindLockState(mu *sync.Mutex) string {
 }
 
 func TestBind_Hook_Success_panic(t *testing.T) {
-	defer func() {
-		if x := recover(); x == nil {
-			t.Fail()
-		}
-	}()
-	var mu deadlock.Mutex
-	var val string
-	New(&mu, &val).Success(func(n int) {})
-	t.Fail()
+	type definedSuccessHook func(*jaws.Element) error
+	tests := []struct {
+		name string
+		fn   any
+	}{
+		{"defined type with matching signature", definedSuccessHook(func(*jaws.Element) error { return nil })},
+		{"unsupported signature", func(int) {}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var recovered any
+			func() {
+				defer func() { recovered = recover() }()
+				var mu deadlock.Mutex
+				var val string
+				New(&mu, &val).Success(tt.fn)
+			}()
+			if recovered == nil {
+				t.Fatal("Success did not panic")
+			}
+			message, ok := recovered.(string)
+			if !ok {
+				t.Fatalf("panic = %v (%T), want string", recovered, recovered)
+			}
+			if want := fmt.Sprintf("%T", tt.fn); !strings.Contains(message, want) {
+				t.Errorf("panic = %q, want callback type %q", message, want)
+			}
+			if !strings.Contains(message, "unsupported callback type") {
+				t.Errorf("panic = %q, want unsupported callback type", message)
+			}
+			if strings.Contains(message, "[T]") {
+				t.Errorf("panic = %q, contains unsubstituted [T]", message)
+			}
+		})
+	}
+}
+
+func TestBind_Hook_SuccessHook(t *testing.T) {
+	var mu sync.Mutex
+	var value, calls int
+	var gotElem *jaws.Element
+	elem := new(jaws.Element)
+	errHook := errors.New("hook error")
+	hook := SuccessHook(func(elem *jaws.Element) error {
+		calls++
+		gotElem = elem
+		return errHook
+	})
+	binder := New(&mu, &value).Success(hook)
+
+	if err := binder.JawsSet(elem, 1); !errors.Is(err, errHook) {
+		t.Errorf("JawsSet error = %v, want %v", err, errHook)
+	}
+	if calls != 1 {
+		t.Errorf("calls = %d, want 1", calls)
+	}
+	if gotElem != elem {
+		t.Errorf("element = %p, want %p", gotElem, elem)
+	}
+	if value != 1 {
+		t.Errorf("value = %d, want 1", value)
+	}
 }
 
 func TestBind_Hook_Success_breaksonerr(t *testing.T) {
