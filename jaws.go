@@ -126,8 +126,13 @@ type Jaws struct {
 	// method recognized by [context.AfterFunc], that method and its returned stop
 	// function must return promptly and must not synchronously call this Jaws or
 	// one of its Requests, or wait for work that does. See [Request.SetContext].
-	BaseContext             context.Context
-	WebSocketPingInterval   time.Duration // Interval between keepalive pings on active WebSocket connections. Defaults to DefaultWebSocketPingInterval. Set <=0 to disable keepalive pings.
+	BaseContext context.Context
+	// WebSocketPingInterval controls keepalive pings on active WebSocket connections.
+	//
+	// It defaults to [DefaultWebSocketPingInterval]. A non-positive value disables
+	// pings; the application must then detect and cancel each unresponsive
+	// [Request] to bound queued updates.
+	WebSocketPingInterval   time.Duration
 	MaxPendingRequestsPerIP int           // Maximum number of unclaimed Requests per client IP. Defaults to DefaultMaxPendingRequestsPerIP. Set <=0 to disable the cap.
 	webSocketTimeout        time.Duration // timeout duration passed to ServeWith
 	maintenanceInterval     time.Duration // Serve maintenance tick interval; set by ServeWithTimeout and read under mu, zero until Serve starts
@@ -349,15 +354,11 @@ func (jw *Jaws) Log(err error) error {
 	return err
 }
 
-// MustLog reports an error or panics when no [Jaws.Logger] is configured.
+// MustLog passes a non-nil err to [Jaws.Log], or panics if no [Jaws.Logger] is
+// configured.
 //
-// A non-nil err is passed to [Jaws.Log] when jw and the Logger are non-nil.
-// Otherwise MustLog panics synchronously with err. MustLog has no effect if err
-// is nil, including on a nil receiver.
-//
-// Some update-time paths cannot return errors to their caller and report them
-// through MustLog. Set [Jaws.Logger] when those errors should be logged instead
-// of treated as fatal programming errors.
+// A nil err has no effect, including on a nil receiver. With a configured
+// Logger, errors submitted after shutdown begins are discarded by Log.
 func (jw *Jaws) MustLog(err error) {
 	if err != nil {
 		if jw != nil && jw.Logger != nil {
@@ -368,13 +369,8 @@ func (jw *Jaws) MustLog(err error) {
 	}
 }
 
-// reportMisuse reports a violated API contract (a programming error).
-//
-// It reports err through [Jaws.MustLog] (which queues it, or panics if no Logger
-// is set) and, in debug builds, additionally panics to fail fast. So in production
-// with a Logger configured the mistake is queued and the caller continues without
-// applying the offending operation, while debug builds and unconfigured servers
-// still stop on it.
+// reportMisuse passes an API contract violation to MustLog and panics in debug
+// or race builds.
 func (jw *Jaws) reportMisuse(err error) {
 	jw.MustLog(err)
 	if deadlock.Debug {

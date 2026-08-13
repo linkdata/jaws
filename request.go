@@ -1103,14 +1103,9 @@ func (rq *Request) Log(err error) error {
 	return jw.Log(err)
 }
 
-// MustLog reports an error or panics when no [Jaws.Logger] is configured.
+// MustLog passes err to [Jaws.MustLog].
 //
-// On a nil Request, a non-nil err is treated as having no configured Logger and
-// panics; a nil err has no effect. See [Jaws.MustLog] for delivery behavior.
-//
-// Some update-time paths cannot return errors to their caller and report them
-// through MustLog. Set [Jaws.Logger] when those errors should be logged instead
-// of treated as fatal programming errors.
+// A nil Request behaves like a nil [Jaws].
 func (rq *Request) MustLog(err error) {
 	var jw *Jaws
 	if rq != nil {

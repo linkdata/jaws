@@ -9,7 +9,8 @@ import (
 	"github.com/linkdata/jaws/lib/key"
 )
 
-// ErrServeAlreadyRunning indicates the JaWS processing loop is already running.
+// ErrServeAlreadyRunning reports an overlapping [Jaws.Serve] or
+// [Jaws.ServeWithTimeout] call.
 var ErrServeAlreadyRunning = errors.New("serve loop already running")
 
 // ErrValueUnchanged reports a successful no-op set: there was no error, but the

@@ -14,8 +14,8 @@ import (
 // [TemplateReloader.Lookup].
 const reloadInterval = time.Second
 
-// TemplateReloader reloads and reparses templates if more than one second
-// has passed since the last reload.
+// TemplateReloader reparses templates from disk at most once per second and is
+// safe for concurrent use.
 type TemplateReloader struct {
 	// path is the glob templates are reparsed from. It is set once by create and
 	// read under mu during a reload; [TemplateReloader.Path] exposes it read-only.
@@ -73,22 +73,14 @@ func create(debug bool, fsys fs.FS, fpath, relpath string) (tl jaws.TemplateLook
 	return
 }
 
-// Lookup returns the named template, reparsing the templates from disk first
-// when more than one second has passed since the last reload.
+// Lookup returns the named template, reparsing from disk when the reload
+// interval has elapsed.
 //
-// If a reload fails to parse (for example while a template file is being
-// edited), the last successfully parsed templates are retained and used, so a
-// transient parse error does not take down a running server. Lookup never
-// panics on a reload error.
+// If reparsing fails, Lookup records the error for [TemplateReloader.LastError]
+// and retains the last successful templates. It does not retry until another
+// interval elapses.
 //
-// A failed reload still advances the reload timestamp, so the next reparse is
-// deferred until the interval elapses again; the last-good templates keep being
-// served meanwhile, and a fix made within that window is not picked up until the
-// window reopens.
-//
-// On the zero value (&TemplateReloader{}), which has never parsed any templates,
-// Lookup returns nil, keeping the zero value as safe to call as [TemplateReloader.LastError]
-// and [TemplateReloader.Path].
+// The zero value returns nil. A nil receiver panics.
 func (tr *TemplateReloader) Lookup(name string) *template.Template {
 	tr.mu.RLock()
 	curr := tr.curr
