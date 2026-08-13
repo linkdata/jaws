@@ -62,7 +62,7 @@ func (pt *pageTemplate) JawsRender(elem *jaws.Element, w io.Writer, params []any
 }
 
 // statusRecorder wraps an [http.ResponseWriter] to apply the page handler's
-// default HTML content type and record whether any response bytes have been
+// default HTML content type and record whether a final response has been
 // committed, so [uiHandler.ServeHTTP] can still send a 500 for a render failure
 // that occurred before any output was written.
 type statusRecorder struct {
@@ -71,6 +71,9 @@ type statusRecorder struct {
 }
 
 func (sr *statusRecorder) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
 	if sr.Header().Get("Content-Type") == "" {
 		sr.Header().Set("Content-Type", "text/html; charset=utf-8")
 	}
@@ -79,7 +82,9 @@ func (sr *statusRecorder) Write(p []byte) (int, error) {
 }
 
 func (sr *statusRecorder) WriteHeader(code int) {
-	sr.wrote = true
+	if code == http.StatusSwitchingProtocols || code >= 200 {
+		sr.wrote = true
+	}
 	sr.ResponseWriter.WriteHeader(code)
 }
 
