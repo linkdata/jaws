@@ -10,9 +10,9 @@ import (
 	"github.com/linkdata/jaws"
 )
 
-// reloadInterval is the minimum time between disk reparses in
-// [TemplateReloader.Lookup].
-const reloadInterval = time.Second
+// defaultReloadInterval is the reload interval used by [New]. It is also the
+// fallback for non-positive internal interval values.
+const defaultReloadInterval = time.Second
 
 // TemplateReloader reparses templates from disk at most once per second and is
 // safe for concurrent use.
@@ -21,11 +21,15 @@ type TemplateReloader struct {
 	// read under mu during a reload; [TemplateReloader.Path] exposes it read-only.
 	// Keeping it unexported prevents callers from mutating it, which would race
 	// with [TemplateReloader.Lookup].
-	path    string
-	mu      deadlock.RWMutex
-	when    time.Time
-	curr    *template.Template
-	lastErr error
+	path string
+	// interval is set during construction and immutable thereafter. A
+	// non-positive value selects defaultReloadInterval, including for the zero
+	// value.
+	interval time.Duration
+	mu       deadlock.RWMutex
+	when     time.Time
+	curr     *template.Template
+	lastErr  error
 }
 
 // New returns a [jaws.TemplateLookuper] for the templates matched by fpath.
@@ -46,10 +50,10 @@ type TemplateReloader struct {
 // relpath must point at the on-disk root that mirrors the embedded fsys layout
 // so that path.Join(relpath, fpath) matches the same templates on disk.
 func New(fsys fs.FS, fpath, relpath string) (jaws.TemplateLookuper, error) {
-	return create(deadlock.Debug, fsys, fpath, relpath)
+	return create(deadlock.Debug, fsys, fpath, relpath, defaultReloadInterval)
 }
 
-func create(debug bool, fsys fs.FS, fpath, relpath string) (tl jaws.TemplateLookuper, err error) {
+func create(debug bool, fsys fs.FS, fpath, relpath string, interval time.Duration) (tl jaws.TemplateLookuper, err error) {
 	if !debug {
 		// Assign through a concrete local and only set the interface on success.
 		// Returning template.New("").ParseFS(...) directly would, on a parse
@@ -65,9 +69,10 @@ func create(debug bool, fsys fs.FS, fpath, relpath string) (tl jaws.TemplateLook
 	fpath = path.Join(relpath, fpath)
 	if tmpl, err = template.New("").ParseGlob(fpath); err == nil {
 		tl = &TemplateReloader{
-			path: fpath,
-			when: time.Now(),
-			curr: tmpl,
+			path:     fpath,
+			interval: interval,
+			when:     time.Now(),
+			curr:     tmpl,
 		}
 	}
 	return
@@ -84,13 +89,17 @@ func create(debug bool, fsys fs.FS, fpath, relpath string) (tl jaws.TemplateLook
 func (tr *TemplateReloader) Lookup(name string) *template.Template {
 	tr.mu.RLock()
 	curr := tr.curr
+	interval := tr.interval
+	if interval <= 0 {
+		interval = defaultReloadInterval
+	}
 	d := time.Since(tr.when)
 	tr.mu.RUnlock()
-	if d > reloadInterval {
+	if d > interval {
 		tr.mu.Lock()
 		// Re-check under the write lock so concurrent callers that all
 		// observed a stale time do not each reparse from disk.
-		if time.Since(tr.when) > reloadInterval {
+		if time.Since(tr.when) > interval {
 			reloaded, err := template.New("").ParseGlob(tr.path)
 			tr.lastErr = err
 			if err == nil {
