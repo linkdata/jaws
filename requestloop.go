@@ -22,8 +22,12 @@ import (
 	"github.com/linkdata/jaws/lib/wire"
 )
 
-// process is the main message processing loop. Will unsubscribe broadcastMsgCh and close outboundMsgCh on exit.
-func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-chan wire.WsMsg, outboundMsgCh chan<- wire.WsMsg) {
+// process runs the main message-processing loop.
+//
+// It unsubscribes broadcastMsgCh and closes outboundMsgCh before returning. A
+// loop panic is contained, a diagnostic is passed to [Jaws.Log], and the
+// recovered value is returned unchanged for the caller to handle.
+func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-chan wire.WsMsg, outboundMsgCh chan<- wire.WsMsg) (panicValue any) {
 	jawsDoneCh := rq.Jaws.Done()
 	// Snapshot cancelFn under rq.mu, the same way ServeHTTP does: its only writers
 	// (claim, getRequestLocked, releaseBuffersLocked) run strictly before or after
@@ -38,6 +42,7 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 	go rq.eventCaller(eventCallCh, outboundMsgCh, eventDoneCh)
 
 	defer func() {
+		panicValue = recover()
 		rq.Jaws.unsubscribe(broadcastMsgCh)
 		// process runs only for a running (hence claimed) Request, so its WebSocket
 		// earns the session grace window.
@@ -52,15 +57,15 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 				}
 			case <-eventDoneCh:
 				close(outboundMsgCh)
-				if x := recover(); x != nil {
+				if panicValue != nil {
 					var err error
 					var ok bool
-					if err, ok = x.(error); !ok {
-						err = fmt.Errorf("jaws: %v panic: %v", rq, x)
+					if err, ok = panicValue.(error); !ok {
+						err = fmt.Errorf("jaws: %v panic: %v", rq, panicValue)
 					}
 					// Log non-fatally rather than MustLog: this runs in the cleanup
-					// defer with no surrounding recover, and the panic is already
-					// contained, so the request is torn down regardless.
+					// defer with no surrounding recover, and the request is torn down
+					// regardless.
 					_ = rq.Jaws.Log(err)
 				}
 				return

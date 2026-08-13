@@ -124,8 +124,6 @@ func TestRegister_TemplateUpdaterOnTheRequestLoop(t *testing.T) {
 		wantAlive bool // does the request loop survive?
 	}{
 		{"with logger the loop continues", true, true},
-		// Request.process recovers the panic and tears the request down; its follow-up Log
-		// emits nothing and TestServe's callback sees nil, because process consumed it.
 		{"without logger the request is torn down", false, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -143,7 +141,10 @@ func TestRegister_TemplateUpdaterOnTheRequestLoop(t *testing.T) {
 			}
 			go jw.Serve()
 
-			tr := jawstest.NewTestRequest(jw, nil)
+			panicCh := make(chan any, 1)
+			tr := jawstest.NewTestRequestWithPanic(jw, nil, func(recovered any) {
+				panicCh <- recovered
+			})
 			t.Cleanup(func() {
 				tr.Close()
 				<-tr.DoneCh
@@ -184,16 +185,34 @@ func TestRegister_TemplateUpdaterOnTheRequestLoop(t *testing.T) {
 				// Join the request-loop goroutine, then drain the asynchronous logger.
 				tr.Close()
 				<-tr.DoneCh
+				select {
+				case recovered := <-panicCh:
+					if recovered != nil {
+						t.Fatalf("onPanic recovered = %v, want nil", recovered)
+					}
+				default:
+					t.Fatal("onPanic was not called")
+				}
 				logged := logger.sync(t, jw)
 				if len(logged) != 1 || !errors.Is(logged[0], ErrElementStateUnclaimed) {
 					t.Fatalf("logged errors = %v, want one %v", logged, ErrElementStateUnclaimed)
 				}
 				return
 			}
+
 			select {
 			case <-tr.DoneCh:
 			case <-time.After(2 * time.Second):
 				t.Fatal("timeout waiting for the request loop to tear down")
+			}
+			select {
+			case recovered := <-panicCh:
+				err, ok := recovered.(error)
+				if !ok || !errors.Is(err, ErrElementStateUnclaimed) {
+					t.Fatalf("onPanic recovered = %v, want an error wrapping %v", recovered, ErrElementStateUnclaimed)
+				}
+			default:
+				t.Fatal("onPanic was not called")
 			}
 		})
 	}

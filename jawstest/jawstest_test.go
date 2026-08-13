@@ -1,6 +1,8 @@
 package jawstest_test
 
 import (
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -8,9 +10,15 @@ import (
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstest"
+	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
+
+type jawstestPanickingUpdater struct{ value any }
+
+func (jawstestPanickingUpdater) JawsRender(*jaws.Element, io.Writer, []any) error { return nil }
+func (u jawstestPanickingUpdater) JawsUpdate(*jaws.Element)                       { panic(u.value) }
 
 // TestNewTestRequest_BcastChToOutCh drives a broadcast through the harness's
 // exposed channels end to end: a page-global Alert injected on BcastCh must
@@ -106,6 +114,48 @@ func TestNewTestRequest_WithExplicitRequest(t *testing.T) {
 	}
 	defer tr.Close()
 	<-tr.ReadyCh
+}
+
+func TestNewTestRequestWithPanic_ReportsUpdaterPanic(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+
+	wantPanic := errors.New("jawstest updater panic sentinel")
+	panicCh := make(chan any, 1)
+	tr := jawstest.NewTestRequestWithPanic(jw, nil, func(recovered any) {
+		panicCh <- recovered
+	})
+	defer tr.Close()
+	select {
+	case <-tr.ReadyCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for the request loop to start")
+	}
+	const updateTag = tag.Tag("jawstest-panic-update")
+	elem := tr.NewElement(jawstestPanickingUpdater{value: wantPanic})
+	elem.Tag(updateTag)
+	elem.Freeze()
+	tr.BcastCh <- wire.Message{Dest: updateTag, What: what.Update}
+	select {
+	case <-tr.DoneCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for JawsUpdate panic")
+	}
+	select {
+	case recovered := <-panicCh:
+		if recovered != wantPanic {
+			t.Fatalf("onPanic recovered %#v, want original value %#v", recovered, wantPanic)
+		}
+	default:
+		t.Fatal("onPanic was not called")
+	}
+	if got := jw.RequestCount(); got != 0 {
+		t.Fatalf("RequestCount() = %d, want 0 after recycling the test request", got)
+	}
 }
 
 // TestClose_SecondCallIsSafe pins that [jawstest.TestRequest.Close] is idempotent:

@@ -25,7 +25,8 @@ import (
 
 // TestRequest is a request harness intended for tests.
 //
-// Values must be created with [NewTestRequest]; the zero value is not usable.
+// Values must be created with [NewTestRequest] or [NewTestRequestWithPanic]; the
+// zero value is not usable.
 //
 // The embedded [jaws.Request] provides the usual request methods (NewElement,
 // JawsKeyString, and so on). The channels expose the loop's wiring: send incoming
@@ -70,10 +71,24 @@ func repanic(recovered any) {
 //
 // Passing nil for r uses a GET / request with no body.
 //
+// Unexpected request-loop panics are re-raised on the loop goroutine. Use
+// [NewTestRequestWithPanic] to capture an expected panic.
+//
 // It panics if the request cannot be created or claimed. It requires the Jaws
 // processing loop ([jaws.Jaws.Serve] or [jaws.Jaws.ServeWithTimeout]) to be running;
 // if it is not, the underlying [jaws.Jaws.TestServe] panics.
 func NewTestRequest(jw *jaws.Jaws, r *http.Request) *TestRequest {
+	return NewTestRequestWithPanic(jw, r, repanic)
+}
+
+// NewTestRequestWithPanic creates and serves a [TestRequest] with explicit loop-panic handling.
+//
+// onPanic is called on the request-loop goroutine when it stops, with the
+// recovered value or nil after a normal exit. DoneCh closes after onPanic
+// returns or unwinds.
+//
+// It otherwise behaves like [NewTestRequest].
+func NewTestRequestWithPanic(jw *jaws.Jaws, r *http.Request, onPanic func(recovered any)) *TestRequest {
 	if r == nil {
 		r = httptest.NewRequest(http.MethodGet, "/", nil)
 	}
@@ -91,9 +106,7 @@ func NewTestRequest(jw *jaws.Jaws, r *http.Request) *TestRequest {
 		Request:  rq,
 		Recorder: rr,
 	}
-	// This harness does not expect loop panics, so re-raise any so they surface
-	// instead of being silently swallowed.
-	tr.InCh, tr.OutCh, tr.BcastCh, tr.ReadyCh, tr.DoneCh = jw.TestServe(rq, repanic)
+	tr.InCh, tr.OutCh, tr.BcastCh, tr.ReadyCh, tr.DoneCh = jw.TestServe(rq, onPanic)
 	return tr
 }
 
