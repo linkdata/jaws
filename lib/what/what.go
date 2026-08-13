@@ -2,7 +2,7 @@ package what
 
 // What identifies a JaWS wire protocol command or event.
 //
-//go:generate go run golang.org/x/tools/cmd/stringer@latest -type=What
+//go:generate go run golang.org/x/tools/cmd/stringer@v0.49.0 -type=What
 type What uint8
 
 const (
