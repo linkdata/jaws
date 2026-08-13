@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/lib/tag"
 )
 
 type testObjectStringer struct {
@@ -36,6 +37,22 @@ func TestObject_NewForwardsHTMLAndTag(t *testing.T) {
 	}
 	if got, want := obj.JawsGetTag(), any(inner); got != want {
 		t.Fatalf("want tag %#v got %#v", want, got)
+	}
+}
+
+func TestObject_GetTag_SurvivesChaining(t *testing.T) {
+	inner := testObjectStringer{s: "x"}
+	obj := New(inner).
+		Clicked(func(Object, *jaws.Element, jaws.Click) error { return nil }).
+		ContextMenu(func(Object, *jaws.Element, jaws.Click) error { return nil }).
+		InitialHTMLAttr(func(Object, *jaws.Element) template.HTMLAttr { return "" })
+
+	got, err := tag.TagExpand(obj)
+	if err != nil {
+		t.Fatalf("TagExpand() error = %v", err)
+	}
+	if len(got) != 1 || got[0] != inner {
+		t.Fatalf("TagExpand() = %#v, want [%#v]", got, inner)
 	}
 }
 
@@ -158,8 +175,6 @@ func TestObject_EventUnhandledCanBeWrapped(t *testing.T) {
 		})
 	if err := obj.JawsClick(nil, jaws.Click{Name: "click"}); !errors.Is(err, jaws.ErrEventUnhandled) {
 		t.Fatalf("want ErrEventUnhandled chain got %v", err)
-	} else if err != older {
-		t.Fatalf("want oldest wrapped unhandled got %v", err)
 	}
 	if len(clicked) != 2 || clicked[0] != 2 || clicked[1] != 1 {
 		t.Fatalf("unexpected wrapped click fallthrough order %v", clicked)
@@ -177,8 +192,6 @@ func TestObject_EventUnhandledCanBeWrapped(t *testing.T) {
 		})
 	if err := obj.JawsContextMenu(nil, jaws.Click{Name: "menu"}); !errors.Is(err, jaws.ErrEventUnhandled) {
 		t.Fatalf("want ErrEventUnhandled chain got %v", err)
-	} else if err != older {
-		t.Fatalf("want oldest wrapped unhandled got %v", err)
 	}
 	if len(contextMenu) != 2 || contextMenu[0] != 2 || contextMenu[1] != 1 {
 		t.Fatalf("unexpected wrapped context-menu fallthrough order %v", contextMenu)

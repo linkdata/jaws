@@ -37,15 +37,19 @@ type ObjectInitialHTMLAttrHook = func(obj Object, elem *jaws.Element) (s templat
 // Object is a chainable UI object.
 //
 // Each call to [Object.Clicked], [Object.ContextMenu], or
-// [Object.InitialHTMLAttr] returns a new chain node wrapping its receiver. Click
-// and context-menu hooks run from newest to oldest. Dispatch continues while the
-// result matches [jaws.ErrEventUnhandled] according to [errors.Is], including
-// when wrapped, and stops at the first other result. Each hook receives the node
-// containing it as its Object argument; that node includes the hook and all
-// older links, but no newer links.
+// [Object.InitialHTMLAttr] returns a new chain node wrapping its receiver. Calls
+// to [jaws.ClickHandler.JawsClick] and
+// [jaws.ContextMenuHandler.JawsContextMenu] run the corresponding hooks from
+// newest to oldest. Dispatch continues while the result matches
+// [jaws.ErrEventUnhandled] according to [errors.Is], including when wrapped,
+// and stops at the first other result. If no hook handles the event, the invoked
+// method returns an error matching [jaws.ErrEventUnhandled]. Each hook receives
+// the node containing it as its Object argument; that node includes the hook and
+// all older links, but no newer links.
 //
-// Initial-attribute hooks all run from newest to oldest. Their non-empty results
-// are joined in that order with one space inserted between results.
+// [jaws.InitialHTMLAttrHandler.JawsInitialHTMLAttr] runs all initial-attribute
+// hooks from newest to oldest. Their non-empty results are joined in that order
+// with one space inserted between results.
 //
 // The effective expanded tag set combines the non-nil tag contributions of every
 // link, and adding a link preserves older links' contributions. The resulting
