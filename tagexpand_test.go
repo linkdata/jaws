@@ -8,6 +8,13 @@ import (
 	"github.com/linkdata/jaws/lib/tag"
 )
 
+type getterWithMetadata struct {
+	metadata any
+	next     any
+}
+
+func (g getterWithMetadata) JawsGetTag() any { return g.next }
+
 func TestJaws_MustTagExpand(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -23,6 +30,29 @@ func TestJaws_MustTagExpand(t *testing.T) {
 	awaitTestLoggerQueue(t, jw)
 	if logged := logger.snapshot(); len(logged) != 0 {
 		t.Fatalf("successful expansion logged %v, want nothing", logged)
+	}
+}
+
+func TestJaws_MustTagExpandAcyclicRuntimeNonComparableGetter(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	leaf := getterWithMetadata{
+		metadata: []string{"leaf"},
+		next:     tag.Tag("expected"),
+	}
+	root := getterWithMetadata{
+		metadata: []string{"root"},
+		next:     leaf,
+	}
+
+	got := jw.MustTagExpand(root)
+	want := []any{tag.Tag("expected")}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("MustTagExpand() = %#v, want %#v", got, want)
 	}
 }
 
