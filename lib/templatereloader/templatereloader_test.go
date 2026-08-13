@@ -2,38 +2,77 @@ package templatereloader
 
 import (
 	"embed"
+	"html/template"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
 //go:embed assets
 var assetsFS embed.FS
 
+const testReloadInterval = 10 * time.Millisecond
+
+func createTestReloader(t *testing.T, fpath, relpath string, interval time.Duration) *TemplateReloader {
+	t.Helper()
+	tl, err := create(true, assetsFS, fpath, relpath, interval)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr, ok := tl.(*TemplateReloader)
+	if !ok {
+		t.Fatalf("expected *TemplateReloader, got %T", tl)
+	}
+	return tr
+}
+
+func createFileReloader(t *testing.T, interval time.Duration, content string) (*TemplateReloader, string) {
+	t.Helper()
+	dir := t.TempDir()
+	tmplPath := filepath.Join(dir, "test.html")
+	writeTemplateFile(t, tmplPath, content)
+	return createTestReloader(t, "*.html", dir, interval), tmplPath
+}
+
+func writeTemplateFile(t *testing.T, tmplPath, content string) {
+	t.Helper()
+	if err := os.WriteFile(tmplPath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func renderTemplate(t *testing.T, tr *TemplateReloader) string {
+	t.Helper()
+	tmpl := tr.Lookup("test.html")
+	if tmpl == nil {
+		t.Fatal("expected template from lookup")
+	}
+	var sb strings.Builder
+	if err := tmpl.Execute(&sb, nil); err != nil {
+		t.Fatal(err)
+	}
+	return sb.String()
+}
+
 func TestNew(t *testing.T) {
 	tl, err := New(assetsFS, "assets/*.html", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	tr, ok := tl.(*TemplateReloader)
-	if ok {
-		tr.when = tr.when.Add(-time.Second * 2)
-
-		tmpl := tl.Lookup("test.html")
-		if tmpl == nil {
-			t.Fail()
-		}
-	} else {
-		t.Skip("not running with debug tag")
+	if tmpl := tl.Lookup("test.html"); tmpl == nil {
+		t.Fatal("expected template from lookup")
+	}
+	if tr, ok := tl.(*TemplateReloader); ok && tr.interval != defaultReloadInterval {
+		t.Fatalf("New reload interval = %v, want %v", tr.interval, defaultReloadInterval)
 	}
 }
 
 func Test_create_no_debug(t *testing.T) {
-	tl, err := create(false, assetsFS, "assets/*.html", "")
+	tl, err := create(false, assetsFS, "assets/*.html", "", defaultReloadInterval)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,157 +83,115 @@ func Test_create_no_debug(t *testing.T) {
 }
 
 func Test_create_debug_and_lookup(t *testing.T) {
-	tl, err := create(true, assetsFS, "assets/*.html", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	tr, ok := tl.(*TemplateReloader)
-	if !ok {
-		t.Fatalf("expected *TemplateReloader, got %T", tl)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		tr := createTestReloader(t, "assets/*.html", "", testReloadInterval)
 
-	if tmpl := tr.Lookup("test.html"); tmpl == nil {
-		t.Fatal("expected template from first lookup")
-	}
+		first := tr.Lookup("test.html")
+		if first == nil {
+			t.Fatal("expected template from first lookup")
+		}
+		if tmpl := tr.Lookup("test.html"); tmpl != first {
+			t.Fatal("lookup reloaded before the configured interval elapsed")
+		}
 
-	tr.when = tr.when.Add(-2 * time.Second)
-	if tmpl := tr.Lookup("test.html"); tmpl == nil {
-		t.Fatal("expected template from reload lookup")
-	}
+		time.Sleep(testReloadInterval + time.Nanosecond)
+		if tmpl := tr.Lookup("test.html"); tmpl == nil {
+			t.Fatal("expected template from reload lookup")
+		} else if tmpl == first {
+			t.Fatal("lookup did not reload after the configured interval elapsed")
+		}
+	})
 }
 
 func Test_Lookup_reload_error_retains_last_good(t *testing.T) {
-	tl, err := create(true, assetsFS, "assets/*.html", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	tr, ok := tl.(*TemplateReloader)
-	if !ok {
-		t.Fatalf("expected *TemplateReloader, got %T", tl)
-	}
-	if tmpl := tr.Lookup("test.html"); tmpl == nil {
-		t.Fatal("expected template from first lookup")
-	}
+	synctest.Test(t, func(t *testing.T) {
+		tr, tmplPath := createFileReloader(t, testReloadInterval, "v1")
+		if got := renderTemplate(t, tr); got != "v1" {
+			t.Fatalf("initial render = %q, want %q", got, "v1")
+		}
 
-	// Point at a glob that matches no files so the next reload fails to parse,
-	// then force a reload. Lookup must not panic and must keep serving the
-	// last successfully parsed template.
-	tr.path = "assets/this-matches-nothing-*.html"
-	tr.when = tr.when.Add(-2 * time.Second)
-	if tmpl := tr.Lookup("test.html"); tmpl == nil {
-		t.Fatal("expected last-good template to be retained after a reload parse error")
-	}
-	if err := tr.LastError(); err == nil {
-		t.Fatal("expected LastError after reload parse error")
-	}
+		writeTemplateFile(t, tmplPath, "{{")
+		time.Sleep(testReloadInterval + time.Nanosecond)
+		if got := renderTemplate(t, tr); got != "v1" {
+			t.Fatalf("render after failed reload = %q, want last-good %q", got, "v1")
+		}
+		if err := tr.LastError(); err == nil {
+			t.Fatal("expected LastError after reload parse error")
+		}
 
-	tr.path = "assets/*.html"
-	tr.when = tr.when.Add(-2 * time.Second)
-	if tmpl := tr.Lookup("test.html"); tmpl == nil {
-		t.Fatal("expected template after successful reload")
-	}
-	if err := tr.LastError(); err != nil {
-		t.Fatalf("LastError after successful reload = %v, want nil", err)
-	}
+		writeTemplateFile(t, tmplPath, "v2")
+		time.Sleep(testReloadInterval + time.Nanosecond)
+		if got := renderTemplate(t, tr); got != "v2" {
+			t.Fatalf("render after successful reload = %q, want %q", got, "v2")
+		}
+		if err := tr.LastError(); err != nil {
+			t.Fatalf("LastError after successful reload = %v, want nil", err)
+		}
+	})
 }
 
 // Test_Lookup_failed_reload_backoff verifies the documented backoff: after a
-// failed reload advances tr.when, a fix made within the interval window is not
-// picked up until the window reopens.
+// failed reload starts a new interval window, a fix made within that window is
+// not picked up until the window reopens.
 func Test_Lookup_failed_reload_backoff(t *testing.T) {
-	tl, err := create(true, assetsFS, "assets/*.html", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	tr, ok := tl.(*TemplateReloader)
-	if !ok {
-		t.Fatalf("expected *TemplateReloader, got %T", tl)
-	}
-	if tmpl := tr.Lookup("test.html"); tmpl == nil {
-		t.Fatal("expected template from first lookup")
-	}
+	synctest.Test(t, func(t *testing.T) {
+		tr, tmplPath := createFileReloader(t, testReloadInterval, "v1")
 
-	// Point at a glob matching nothing and force a reload so it fails, which
-	// advances tr.when to now.
-	tr.path = "assets/this-matches-nothing-*.html"
-	tr.when = tr.when.Add(-2 * time.Second)
-	if tmpl := tr.Lookup("test.html"); tmpl == nil {
-		t.Fatal("expected last-good template after failed reload")
-	}
-	if err := tr.LastError(); err == nil {
-		t.Fatal("expected LastError after failed reload")
-	}
+		writeTemplateFile(t, tmplPath, "{{")
+		time.Sleep(testReloadInterval + time.Nanosecond)
+		if got := renderTemplate(t, tr); got != "v1" {
+			t.Fatalf("render after failed reload = %q, want last-good %q", got, "v1")
+		}
+		if err := tr.LastError(); err == nil {
+			t.Fatal("expected LastError after failed reload")
+		}
 
-	// "Fix" the path but do not reopen the window. The next Lookup must not
-	// reparse, so LastError stays set from the failed reload.
-	tr.path = "assets/*.html"
-	if tmpl := tr.Lookup("test.html"); tmpl == nil {
-		t.Fatal("expected last-good template within the backoff window")
-	}
-	if err := tr.LastError(); err == nil {
-		t.Fatal("reload should be deferred within the backoff window; LastError must remain set")
-	}
+		// Repairing the file within the backoff window must not trigger another
+		// reparse or clear the previous error.
+		writeTemplateFile(t, tmplPath, "v2")
+		if got := renderTemplate(t, tr); got != "v1" {
+			t.Fatalf("render within backoff window = %q, want last-good %q", got, "v1")
+		}
+		if err := tr.LastError(); err == nil {
+			t.Fatal("reload within backoff window cleared LastError")
+		}
 
-	// Reopen the window: now the fix is picked up and LastError clears.
-	tr.when = tr.when.Add(-2 * time.Second)
-	if tmpl := tr.Lookup("test.html"); tmpl == nil {
-		t.Fatal("expected template after the window reopened")
-	}
-	if err := tr.LastError(); err != nil {
-		t.Fatalf("LastError after successful reload = %v, want nil", err)
-	}
+		time.Sleep(testReloadInterval + time.Nanosecond)
+		if got := renderTemplate(t, tr); got != "v2" {
+			t.Fatalf("render after backoff window = %q, want %q", got, "v2")
+		}
+		if err := tr.LastError(); err != nil {
+			t.Fatalf("LastError after successful reload = %v, want nil", err)
+		}
+	})
 }
 
 // TestTemplateReloader_ReloadPicksUpEditedContent verifies the package's headline
 // behavior: after a template file is edited on disk and the reload window passes,
 // Lookup serves the new content. It parses from a real temp dir (the embedded
 // assets/test.html never changes, so it cannot exercise this), renders, rewrites
-// the file with different content, forces the reload window, and asserts the
-// rendered output changed — which fails if Lookup kept serving the stale tr.curr.
+// the file with different content, advances past the reload window, and asserts
+// the rendered output changed.
 func TestTemplateReloader_ReloadPicksUpEditedContent(t *testing.T) {
-	dir := t.TempDir()
-	tmplPath := filepath.Join(dir, "test.html")
-	if err := os.WriteFile(tmplPath, []byte("v1"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	tl, err := create(true, assetsFS, "*.html", dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tr, ok := tl.(*TemplateReloader)
-	if !ok {
-		t.Fatalf("expected *TemplateReloader, got %T", tl)
-	}
-
-	render := func() string {
-		t.Helper()
-		tmpl := tr.Lookup("test.html")
-		if tmpl == nil {
-			t.Fatal("expected template from lookup")
+	synctest.Test(t, func(t *testing.T) {
+		tr, tmplPath := createFileReloader(t, testReloadInterval, "v1")
+		if got := renderTemplate(t, tr); got != "v1" {
+			t.Fatalf("initial render = %q, want %q", got, "v1")
 		}
-		var sb strings.Builder
-		if err := tmpl.Execute(&sb, nil); err != nil {
-			t.Fatal(err)
+
+		writeTemplateFile(t, tmplPath, "v2-edited")
+		if got := renderTemplate(t, tr); got != "v1" {
+			t.Fatalf("render before reload interval = %q, want %q", got, "v1")
 		}
-		return sb.String()
-	}
 
-	if got := render(); got != "v1" {
-		t.Fatalf("initial render = %q, want %q", got, "v1")
-	}
-
-	if err := os.WriteFile(tmplPath, []byte("v2-edited"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	// Force the reload window so the next Lookup reparses from disk.
-	tr.when = tr.when.Add(-2 * reloadInterval)
-	if got := render(); got != "v2-edited" {
-		t.Fatalf("post-edit render = %q, want %q", got, "v2-edited")
-	}
-	if err := tr.LastError(); err != nil {
-		t.Fatalf("LastError after successful reload = %v, want nil", err)
-	}
+		time.Sleep(testReloadInterval + time.Nanosecond)
+		if got := renderTemplate(t, tr); got != "v2-edited" {
+			t.Fatalf("post-edit render = %q, want %q", got, "v2-edited")
+		}
+		if err := tr.LastError(); err != nil {
+			t.Fatalf("LastError after successful reload = %v, want nil", err)
+		}
+	})
 }
 
 func TestTemplateReloader_LastErrorNilReceiver(t *testing.T) {
@@ -209,20 +206,47 @@ func TestTemplateReloader_LastErrorNilReceiver(t *testing.T) {
 // than dereferencing a nil *template.Template and panicking.
 func TestTemplateReloader_ZeroValueLookupReturnsNil(t *testing.T) {
 	tr := &TemplateReloader{}
-	// The first call enters the reload path (tr.when is the zero time), fails to
-	// parse the empty glob, and must return nil from the curr == nil guard.
+	// The first call attempts to reload the empty glob and must return nil rather
+	// than dereferencing a nil template.
 	if tmpl := tr.Lookup("test.html"); tmpl != nil {
 		t.Fatalf("zero-value Lookup = %v, want nil", tmpl)
 	}
-	// The first call advanced tr.when, so the second skips the reload and exercises
-	// the curr == nil guard on the no-reload path; it must also return nil.
+	// Repeated use must preserve the documented nil result.
 	if tmpl := tr.Lookup("test.html"); tmpl != nil {
 		t.Fatalf("second zero-value Lookup = %v, want nil", tmpl)
 	}
 }
 
+func TestTemplateReloader_NonPositiveIntervalUsesDefault(t *testing.T) {
+	tests := []struct {
+		name     string
+		interval time.Duration
+	}{
+		{name: "zero", interval: 0},
+		{name: "negative", interval: -time.Second},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				tr, tmplPath := createFileReloader(t, tt.interval, "v1")
+				writeTemplateFile(t, tmplPath, "v2")
+
+				time.Sleep(defaultReloadInterval - time.Nanosecond)
+				if got := renderTemplate(t, tr); got != "v1" {
+					t.Fatalf("render before default interval = %q, want %q", got, "v1")
+				}
+
+				time.Sleep(2 * time.Nanosecond)
+				if got := renderTemplate(t, tr); got != "v2" {
+					t.Fatalf("render after default interval = %q, want %q", got, "v2")
+				}
+			})
+		})
+	}
+}
+
 func TestTemplateReloader_Path(t *testing.T) {
-	tl, err := create(true, assetsFS, "assets/*.html", "")
+	tl, err := create(true, assetsFS, "assets/*.html", "", defaultReloadInterval)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,28 +264,38 @@ func TestTemplateReloader_Path(t *testing.T) {
 	}
 }
 
-// TestTemplateReloader_ConcurrentLookup runs many Lookups concurrently after
-// forcing a reload window, exercising the double-checked locking under
-// contention. Run with -race to validate the locking.
+// TestTemplateReloader_ConcurrentLookup runs many Lookups concurrently after a
+// reload window, exercising the double-checked locking under contention. Run
+// with -race to validate the locking.
 func TestTemplateReloader_ConcurrentLookup(t *testing.T) {
-	tl, err := create(true, assetsFS, "assets/*.html", "")
-	if err != nil {
-		t.Fatal(err)
+	// Real goroutines are used deliberately: a synctest bubble serializes them
+	// and would hide the lock contention this test exercises.
+	const interval = 100 * time.Millisecond
+	tr := createTestReloader(t, "assets/*.html", "", interval)
+	before := tr.Lookup("test.html")
+	if before == nil {
+		t.Fatal("expected template before concurrent reload")
 	}
-	tr := tl.(*TemplateReloader)
 
-	// Force the reload window so all goroutines hit the reparse path together;
-	// the re-check under the write lock must let only one of them reparse.
+	// Hold the write lock while the interval elapses and callers queue for their
+	// optimistic reads. Once released, every reader observes the stale timestamp
+	// before any can acquire the write lock. The re-check under that lock must let
+	// only one caller reparse.
 	tr.mu.Lock()
-	tr.when = tr.when.Add(-2 * time.Second)
-	tr.mu.Unlock()
-
+	time.Sleep(interval + time.Millisecond)
 	const goroutines = 16
-	var wg sync.WaitGroup
+	first := make([]*template.Template, goroutines)
+	var ready, firstDone, wg sync.WaitGroup
+	ready.Add(goroutines)
+	firstDone.Add(goroutines)
 	wg.Add(goroutines)
-	for range goroutines {
+	for i := range goroutines {
 		go func() {
 			defer wg.Done()
+			ready.Done()
+			first[i] = tr.Lookup("test.html")
+			firstDone.Done()
+			firstDone.Wait()
 			for range 50 {
 				if tmpl := tr.Lookup("test.html"); tmpl == nil {
 					t.Error("expected template from concurrent lookup")
@@ -269,14 +303,28 @@ func TestTemplateReloader_ConcurrentLookup(t *testing.T) {
 			}
 		}()
 	}
+	ready.Wait()
+	time.Sleep(20 * time.Millisecond)
+	tr.mu.Unlock()
 	wg.Wait()
+	if first[0] == nil {
+		t.Fatal("expected template from first concurrent lookup")
+	}
+	for i, tmpl := range first[1:] {
+		if tmpl != first[0] {
+			t.Fatalf("concurrent lookup %d returned a different parsed template set", i+1)
+		}
+	}
+	if first[0] == before {
+		t.Fatal("concurrent lookup did not reload the parsed template set")
+	}
 	if err := tr.LastError(); err != nil {
 		t.Fatalf("unexpected reload error: %v", err)
 	}
 }
 
 func Test_create_debug_parse_error(t *testing.T) {
-	tl, err := create(true, assetsFS, "assets/missing-*.html", "")
+	tl, err := create(true, assetsFS, "assets/missing-*.html", "", defaultReloadInterval)
 	if err == nil {
 		t.Fatal("expected parse error")
 	}
@@ -286,7 +334,7 @@ func Test_create_debug_parse_error(t *testing.T) {
 }
 
 func Test_create_no_debug_parse_error(t *testing.T) {
-	tl, err := create(false, assetsFS, "assets/missing-*.html", "")
+	tl, err := create(false, assetsFS, "assets/missing-*.html", "", defaultReloadInterval)
 	if err == nil {
 		t.Fatal("expected parse error")
 	}
