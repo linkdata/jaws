@@ -73,11 +73,13 @@ func sameActiveNode(a, b any) bool {
 	if ta != reflect.TypeOf(b) {
 		return false
 	}
-	if ta.Comparable() {
-		return a == b
-	}
 	va := reflect.ValueOf(a)
 	vb := reflect.ValueOf(b)
+	// Value.Comparable also checks the dynamic values held by interface fields;
+	// Type.Comparable alone does not make interface equality safe.
+	if va.Comparable() && vb.Comparable() {
+		return a == b
+	}
 	switch va.Kind() {
 	case reflect.Func:
 		// Value.Pointer identifies shared function code, not closure identity, so it

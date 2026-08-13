@@ -1,6 +1,7 @@
 package tag
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -17,6 +18,33 @@ func (g *freshSliceTagger) JawsGetTag() any {
 		out = append(out, k)
 	}
 	return out
+}
+
+type getterWithMetadata struct {
+	metadata any
+	next     any
+}
+
+func (g getterWithMetadata) JawsGetTag() any { return g.next }
+
+func TestTagGetter_AcyclicRuntimeNonComparableWrappersExpand(t *testing.T) {
+	leaf := getterWithMetadata{
+		metadata: []string{"leaf"},
+		next:     Tag("expected"),
+	}
+	root := getterWithMetadata{
+		metadata: []string{"root"},
+		next:     leaf,
+	}
+
+	got, err := TagExpand(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []any{Tag("expected")}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("TagExpand() = %#v, want %#v", got, want)
+	}
 }
 
 func TestTagGetter_FreshContainersExpandToTheSameKeySet(t *testing.T) {
