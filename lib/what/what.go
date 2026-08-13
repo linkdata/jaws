@@ -25,13 +25,15 @@ const (
 	Order
 	// Call calls a JavaScript function.
 	Call
-	// Set sets a JavaScript variable as path=json.
-	Set
 
 	separator
 
-	// Element manipulation
+	// Commands associated with an Element
 
+	// Set updates a JavaScript variable bound to the target element.
+	//
+	// Data uses the form path=json.
+	Set
 	// Inner sets the element's inner HTML.
 	Inner
 	// Delete deletes the element.

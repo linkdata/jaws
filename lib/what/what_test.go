@@ -58,9 +58,10 @@ func TestIsCommandAndValid(t *testing.T) {
 		{"Reload", Reload, true, true},
 		{"Redirect", Redirect, true, true},
 		{"Alert", Alert, true, true},
-		{"Set", Set, true, true},               // last command, just below separator
+		{"Call", Call, true, true},             // last command, just below separator
 		{"separator", separator, false, false}, // internal boundary marker, not a command or event
-		{"Inner", Inner, true, false},          // first element value, just above separator
+		{"Set", Set, true, false},              // first element value, just above separator
+		{"Inner", Inner, true, false},
 		{"Hook", Hook, true, false},            // last defined value, must stay valid
 		{"above Hook", Hook + 1, false, false}, // first undefined value above Hook
 		{"max uint8", What(255), false, false}, // top of the uint8 range, undefined

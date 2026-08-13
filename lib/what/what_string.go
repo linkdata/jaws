@@ -15,8 +15,8 @@ func _() {
 	_ = x[Alert-4]
 	_ = x[Order-5]
 	_ = x[Call-6]
-	_ = x[Set-7]
-	_ = x[separator-8]
+	_ = x[separator-7]
+	_ = x[Set-8]
 	_ = x[Inner-9]
 	_ = x[Delete-10]
 	_ = x[Replace-11]
@@ -34,9 +34,9 @@ func _() {
 	_ = x[Hook-23]
 }
 
-const _What_name = "InvalidUpdateReloadRedirectAlertOrderCallSetseparatorInnerDeleteReplaceRemoveInsertAppendSAttrRAttrSClassRClassValueInputClickContextMenuHook"
+const _What_name = "InvalidUpdateReloadRedirectAlertOrderCallseparatorSetInnerDeleteReplaceRemoveInsertAppendSAttrRAttrSClassRClassValueInputClickContextMenuHook"
 
-var _What_index = [...]uint8{0, 7, 13, 19, 27, 32, 37, 41, 44, 53, 58, 64, 71, 77, 83, 89, 94, 99, 105, 111, 116, 121, 126, 137, 141}
+var _What_index = [...]uint8{0, 7, 13, 19, 27, 32, 37, 41, 50, 53, 58, 64, 71, 77, 83, 89, 94, 99, 105, 111, 116, 121, 126, 137, 141}
 
 func (i What) String() string {
 	idx := int(i) - 0

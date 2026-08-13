@@ -1242,6 +1242,68 @@ process.stdout.write(JSON.stringify({ called: called, lookedUp: lookedUp, thrown
 	}
 }
 
+func TestJawsJS_IsCommandRoutesElementBoundSet(t *testing.T) {
+	set := wire.WsMsg{What: what.Set, Data: "state=2"}
+	if !set.What.IsCommand() {
+		set.Jid = 1
+	}
+	call := wire.WsMsg{What: what.Call, Data: "app.notify=3"}
+	if !call.What.IsCommand() {
+		call.Jid = 1
+	}
+	frame, err := json.Marshal(set.Format() + call.Format())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	raw := runJawsJSSnippet(t, `
+let notified = 0;
+let errors = [];
+let lookups = [];
+window.app = {
+	state: 0,
+	notify: function(value) { notified = value; }
+};
+const elem = { id: "Jid.1", dataset: { jawsname: "app" } };
+document.getElementById = function(id) {
+	lookups.push(id);
+	return id === elem.id ? elem : null;
+};
+console.error = function(message) { errors.push(String(message)); };
+
+jawsMessage({ data: `+string(frame)+` });
+
+process.stdout.write(JSON.stringify({
+	state: window.app.state,
+	notified: notified,
+	errors: errors,
+	lookups: lookups,
+}));
+`)
+
+	var got struct {
+		State    int      `json:"state"`
+		Notified int      `json:"notified"`
+		Errors   []string `json:"errors"`
+		Lookups  []string `json:"lookups"`
+	}
+	if err = json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+	if got.State != 2 {
+		t.Errorf("Set value = %d, want 2", got.State)
+	}
+	if got.Notified != 3 {
+		t.Errorf("Call argument = %d, want 3", got.Notified)
+	}
+	if len(got.Errors) != 0 {
+		t.Errorf("client errors = %q, want none", got.Errors)
+	}
+	if want := []string{"Jid.1"}; !reflect.DeepEqual(got.Lookups, want) {
+		t.Errorf("element lookups = %q, want %q", got.Lookups, want)
+	}
+}
+
 func TestJawsJS_ElementScopedCallStillRequiresElement(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 let calls = 0;
