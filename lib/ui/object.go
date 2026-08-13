@@ -9,24 +9,53 @@ import (
 	"github.com/linkdata/jaws/lib/tag"
 )
 
-// ObjectClickedHook is a function to call when a click event is received.
+// ObjectClickedHook handles a click event for an [Object].
 //
-// It is named distinctly from the generic [bind.ClickedHook] to avoid confusion:
-// this one operates on an [Object], not a [bind.Binder].
+// obj is the chain node containing the hook. See [Object] for composition
+// semantics.
+//
+// Unlike [bind.ClickedHook], ObjectClickedHook receives an [Object] rather than
+// a [bind.Binder].
 type ObjectClickedHook func(obj Object, elem *jaws.Element, click jaws.Click) (err error)
 
-// ObjectContextMenuHook is a function to call when a context menu event is received.
+// ObjectContextMenuHook handles a context menu event for an [Object].
+//
+// obj is the chain node containing the hook. See [Object] for composition
+// semantics.
 type ObjectContextMenuHook func(obj Object, elem *jaws.Element, click jaws.Click) (err error)
 
-// ObjectInitialHTMLAttrHook is a function to call when a [jaws.Element] is initially rendered.
+// ObjectInitialHTMLAttrHook provides attributes when an [Object] is initially rendered.
+//
+// obj is the chain node containing the hook. See [Object] for composition
+// semantics.
 //
 // ObjectInitialHTMLAttrHook is a type alias so a value of a defined function type
 // with this signature can be passed to [Object.InitialHTMLAttr] without explicit
 // conversion.
 type ObjectInitialHTMLAttrHook = func(obj Object, elem *jaws.Element) (s template.HTMLAttr)
 
-// Object is a chainable UI object that combines HTML rendering, tags and
-// optional event handlers.
+// Object is a chainable UI object.
+//
+// Each call to [Object.Clicked], [Object.ContextMenu], or
+// [Object.InitialHTMLAttr] returns a new chain node wrapping its receiver. Calls
+// to [jaws.ClickHandler.JawsClick] and
+// [jaws.ContextMenuHandler.JawsContextMenu] run the corresponding hooks from
+// newest to oldest. Dispatch continues while the result matches
+// [jaws.ErrEventUnhandled] according to [errors.Is], including when wrapped,
+// and stops at the first other result. If no hook handles the event, the invoked
+// method returns an error matching [jaws.ErrEventUnhandled]. Each hook receives
+// the node containing it as its Object argument; that node includes the hook and
+// all older links, but no newer links.
+//
+// [jaws.InitialHTMLAttrHandler.JawsInitialHTMLAttr] runs all initial-attribute
+// hooks from newest to oldest. Their non-empty results are joined in that order
+// with one space inserted between results.
+//
+// The effective expanded tag set combines the non-nil tag contributions of every
+// link, and adding a link preserves older links' contributions. The resulting
+// Object remains subject to [tag.TagGetter]'s initialization, stability, and
+// concurrency requirements. Use [tag.TagExpand] to obtain flattened, validated
+// keys.
 type Object interface {
 	bind.HTMLGetter
 	tag.TagGetter
@@ -34,15 +63,15 @@ type Object interface {
 	jaws.ContextMenuHandler
 	jaws.InitialHTMLAttrHandler
 
-	// Clicked returns an [Object] that will call fn when [jaws.ClickHandler.JawsClick] is invoked.
+	// Clicked adds fn as the newest click hook and returns the resulting [Object].
 	Clicked(fn ObjectClickedHook) (newobj Object)
 
-	// ContextMenu returns an [Object] that will call fn when
-	// [jaws.ContextMenuHandler.JawsContextMenu] is invoked.
+	// ContextMenu adds fn as the newest context-menu hook and returns the
+	// resulting [Object].
 	ContextMenu(fn ObjectContextMenuHook) (newobj Object)
 
-	// InitialHTMLAttr returns an [Object] that will call fn when
-	// [jaws.InitialHTMLAttrHandler.JawsInitialHTMLAttr] is invoked.
+	// InitialHTMLAttr adds fn as the newest initial-attribute hook and returns the
+	// resulting [Object].
 	InitialHTMLAttr(fn ObjectInitialHTMLAttrHook) (newobj Object)
 }
 
@@ -127,12 +156,7 @@ func (obj *object) JawsInitialHTMLAttr(elem *jaws.Element) (attr template.HTMLAt
 	return
 }
 
-// JawsGetTag collects the non-nil tags of every link in the chain.
-//
-// The returned container is freshly built per call, which [tag.TagGetter] permits: only
-// the expanded key set has to stay the same. A chained getter that has its own
-// documented nil initialization phase (see [JsVar.JawsGetTag]) propagates that phase
-// here, so this object is likewise only usable as a tag once that link has initialized.
+// JawsGetTag returns the chain's non-nil tag contributions.
 func (obj *object) JawsGetTag() any {
 	var tags []any
 	for obj != nil {
