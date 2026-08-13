@@ -1895,14 +1895,15 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
-func TestJawsJS_AlertUsesDataAttributeHook(t *testing.T) {
+func TestJawsJS_AlertAppendsDismissibleElementDirectly(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 global.bootstrap = {};
 const selectors = [];
 const appended = [];
 const alertsElem = {
-	append: function(elem) { appended.push(elem.innerHTML); }
+	append: function(elem) { appended.push(elem); }
 };
+let wrapper;
 document.querySelector = function(selector) {
 	selectors.push(selector);
 	return selector === "[data-jaws-alerts]" ? alertsElem : null;
@@ -1910,15 +1911,29 @@ document.querySelector = function(selector) {
 document.getElementById = function(id) {
 	throw new Error("unexpected id lookup: " + id);
 };
-document.createElement = function() { return { innerHTML: "" }; };
+document.createElement = function() {
+	wrapper = {};
+	Object.defineProperty(wrapper, "innerHTML", {
+		set: function(html) { this.firstElementChild = { outerHTML: html }; }
+	});
+	return wrapper;
+};
 
 jawsAlert("success\nSaved");
-process.stdout.write(JSON.stringify({ selectors: selectors, appended: appended }));
+// Bootstrap dismissal removes the alert itself, so it must be the container child.
+process.stdout.write(JSON.stringify({
+	selectors: selectors,
+	appended: appended.length,
+	appendedWrapper: appended[0] === wrapper,
+	alertHTML: appended[0] && appended[0].outerHTML
+}));
 `)
 
 	var got struct {
-		Selectors []string `json:"selectors"`
-		Appended  []string `json:"appended"`
+		Selectors       []string `json:"selectors"`
+		Appended        int      `json:"appended"`
+		AppendedWrapper bool     `json:"appendedWrapper"`
+		AlertHTML       string   `json:"alertHTML"`
 	}
 	if err := json.Unmarshal([]byte(raw), &got); err != nil {
 		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
@@ -1926,8 +1941,11 @@ process.stdout.write(JSON.stringify({ selectors: selectors, appended: appended }
 	if !reflect.DeepEqual(got.Selectors, []string{"[data-jaws-alerts]"}) {
 		t.Fatalf("alert selectors = %v", got.Selectors)
 	}
-	if len(got.Appended) != 1 || !strings.Contains(got.Appended[0], "Saved") {
-		t.Fatalf("appended alerts = %v", got.Appended)
+	if got.Appended != 1 || got.AppendedWrapper {
+		t.Fatalf("appended %d elements, wrapper appended = %t", got.Appended, got.AppendedWrapper)
+	}
+	if !strings.Contains(got.AlertHTML, "Saved") || !strings.Contains(got.AlertHTML, `data-bs-dismiss="alert"`) {
+		t.Fatalf("alert HTML = %q", got.AlertHTML)
 	}
 }
 
