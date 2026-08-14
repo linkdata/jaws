@@ -662,6 +662,8 @@ func TestWriteLoop_RespectsDoneWhileWriting(t *testing.T) {
 
 func TestWriteLoop_ReportsUnresponsivePeer(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
+		const writeTimeout = time.Second
+
 		ctx, cancel := context.WithCancelCause(t.Context())
 		doneCh := make(chan struct{})
 		outCh := make(chan WsMsg, 1)
@@ -675,18 +677,87 @@ func TestWriteLoop_ReportsUnresponsivePeer(t *testing.T) {
 		defer closeWireBubble(cancel, client, server)()
 
 		go func() {
-			WriteLoop(ctx, cancel, doneCh, outCh, time.Second, server)
+			WriteLoop(ctx, cancel, doneCh, outCh, writeTimeout, server)
 			close(loopDone)
 		}()
 
 		// The peer does not read, so the WebSocket write remains blocked until its
 		// operation timeout closes the connection.
-		time.Sleep(time.Second)
+		synctest.Wait()
+		time.Sleep(writeTimeout - time.Nanosecond)
+		synctest.Wait()
+		select {
+		case <-loopDone:
+			t.Fatal("WriteLoop returned before writeTimeout")
+		default:
+		}
+		if err := context.Cause(ctx); err != nil {
+			t.Fatalf("context cause before writeTimeout = %v, want nil", err)
+		}
+		time.Sleep(time.Nanosecond)
 		synctest.Wait()
 		assertClosedNow(t, loopDone, "WriteLoop")
 		if err := context.Cause(ctx); !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("context cause = %T(%v), want deadline exceeded", err, err)
 		}
+	})
+}
+
+func TestWriteLoop_RenewsTimeoutForEachMessage(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const writeTimeout = time.Second
+
+		ctx, cancel := context.WithCancelCause(t.Context())
+		doneCh := make(chan struct{})
+		outCh := make(chan WsMsg)
+		client, server := pipe(t)
+		loopDone := make(chan struct{})
+		defer closeWireBubble(cancel, client, server)()
+
+		go func() {
+			WriteLoop(ctx, cancel, doneCh, outCh, writeTimeout, server)
+			close(loopDone)
+		}()
+
+		outCh <- WsMsg{Jid: jid.Jid(1234), What: what.Inner, Data: "first"}
+		if _, _, err := client.Read(ctx); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+
+		// Block a second write across the first write's former deadline. A fresh
+		// operation deadline leaves the loop running until this write is read.
+		time.Sleep(3 * writeTimeout / 4)
+		second := WsMsg{
+			Jid:  jid.Jid(1234),
+			What: what.Inner,
+			Data: strings.Repeat("x", writeBatchLimit/2),
+		}
+		outCh <- second
+		synctest.Wait()
+		time.Sleep(writeTimeout / 2)
+		synctest.Wait()
+		select {
+		case <-loopDone:
+			t.Fatal("WriteLoop reused the first write deadline")
+		default:
+		}
+		if err := context.Cause(ctx); err != nil {
+			t.Fatalf("context cause = %v, want nil", err)
+		}
+
+		if _, _, err := client.Read(ctx); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		if err := context.Cause(ctx); err != nil {
+			t.Fatalf("context cause = %v, want nil", err)
+		}
+
+		close(outCh)
+		_ = client.CloseNow()
+		synctest.Wait()
+		assertClosedNow(t, loopDone, "WriteLoop")
 	})
 }
 
