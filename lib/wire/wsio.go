@@ -55,35 +55,6 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 		idleTimerCh = nil
 	}
 	var activityDuringPing bool
-	handleRead := func(result wsReadResult) (ok bool) {
-		// A nil timer channel denotes the one in-flight ping. Capture that state
-		// before stopIdleTimer also clears the channel during ordinary delivery.
-		pinging := idleTimerCh == nil
-		stopIdleTimer()
-		if result.err != nil {
-			reportError(ctx, doneCh, ccf, result.err)
-			return
-		}
-		if pinging {
-			activityDuringPing = true
-		}
-		if result.typ == websocket.MessageText {
-			for record := range bytes.Lines(result.txt) {
-				if msg, parsed := Parse(record); parsed {
-					select {
-					case <-ctx.Done():
-						return
-					case incomingMsgCh <- msg:
-					}
-				}
-			}
-		}
-		if !pinging {
-			armIdleTimer()
-		}
-		ok = true
-		return
-	}
 
 	defer func() {
 		cancel()
@@ -97,8 +68,30 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 		case <-ctx.Done():
 			return
 		case result := <-readResultCh:
-			if !handleRead(result) {
+			// A nil timer channel denotes the one in-flight ping. Capture that state
+			// before stopIdleTimer also clears the channel during ordinary delivery.
+			pinging := idleTimerCh == nil
+			stopIdleTimer()
+			if result.err != nil {
+				reportError(ctx, doneCh, ccf, result.err)
 				return
+			}
+			if pinging {
+				activityDuringPing = true
+			}
+			if result.typ == websocket.MessageText {
+				for record := range bytes.Lines(result.txt) {
+					if msg, parsed := Parse(record); parsed {
+						select {
+						case <-ctx.Done():
+							return
+						case incomingMsgCh <- msg:
+						}
+					}
+				}
+			}
+			if !pinging {
+				armIdleTimer()
 			}
 		case <-idleTimerCh:
 			idleTimerCh = nil
