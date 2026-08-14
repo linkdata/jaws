@@ -12,6 +12,13 @@ Apply these rules whenever work involves any of the following:
 - Go templates rendered through `ui.Template` / `$.Template`
 - Event handling, dirtying, tag identity, or dynamic container updates
 
+## Version-matched source guidance
+
+When the matching JaWS source is available, read its root `AI.md` and the
+`AI.md` beside each package you change. Do not substitute guidance from another
+version. This installed skill remains self-contained when source guides are not
+available.
+
 ## Primary objective
 
 Keep browser behavior thin and deterministic while preserving server-side truth, stable identity, and predictable rerenders.
@@ -65,9 +72,10 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
   child must render one addressable direct DOM node carrying its Element's JaWS ID so
   removal and ordering can target it; `ui.NewTemplate` provides that node through its
   generated wrapper.
-- Treat the package documentation shown by
-  `go doc github.com/linkdata/jaws/lib/ui` as the canonical standard-widget
-  multiplicity summary, and consult each concrete type's docs for its conditions.
+- Treat the same-version `lib/ui/AI.md` as the canonical standard-widget
+  multiplicity summary when the source guide is available; otherwise use the
+  package documentation shown by `go doc github.com/linkdata/jaws/lib/ui`.
+  Consult each concrete type's docs for its conditions.
 
 ## Constructing UI values: `ui.New` and `bind.New`
 

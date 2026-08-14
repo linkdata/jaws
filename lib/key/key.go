@@ -1,4 +1,4 @@
-// Package key implements JaWS key encoding.
+// Package key encodes and parses JaWS request and session keys.
 package key
 
 import (

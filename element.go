@@ -95,9 +95,8 @@ func (elem *Element) Freeze() {
 // AddHandlers adds the given handlers to the [Element].
 //
 // It must be called while the [Element] is being rendered, before any event can
-// be processed for it; see the package "Locking" documentation. Handlers added
-// after [Element.JawsRender] has returned (or [Element.Freeze] has been called)
-// are dropped; debug builds panic.
+// be processed for it. Handlers added after [Element.JawsRender] has returned
+// (or [Element.Freeze] has been called) are dropped; debug builds panic.
 //
 // Input callback functions used directly by signature are recognized according
 // to the dynamic-type rules documented by [InputFn].
