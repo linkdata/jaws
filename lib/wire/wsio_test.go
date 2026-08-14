@@ -660,50 +660,7 @@ func TestWriteLoop_RespectsDoneWhileWriting(t *testing.T) {
 	})
 }
 
-func TestWriteLoop_ReportsUnresponsivePeer(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		const writeTimeout = time.Second
-
-		ctx, cancel := context.WithCancelCause(t.Context())
-		doneCh := make(chan struct{})
-		outCh := make(chan WsMsg, 1)
-		outCh <- WsMsg{
-			Jid:  jid.Jid(1234),
-			What: what.Inner,
-			Data: strings.Repeat("x", writeBatchLimit),
-		}
-		client, server := pipe(t)
-		loopDone := make(chan struct{})
-		defer closeWireBubble(cancel, client, server)()
-
-		go func() {
-			WriteLoop(ctx, cancel, doneCh, outCh, writeTimeout, server)
-			close(loopDone)
-		}()
-
-		// The peer does not read, so the WebSocket write remains blocked until its
-		// operation timeout closes the connection.
-		synctest.Wait()
-		time.Sleep(writeTimeout - time.Nanosecond)
-		synctest.Wait()
-		select {
-		case <-loopDone:
-			t.Fatal("WriteLoop returned before writeTimeout")
-		default:
-		}
-		if err := context.Cause(ctx); err != nil {
-			t.Fatalf("context cause before writeTimeout = %v, want nil", err)
-		}
-		time.Sleep(time.Nanosecond)
-		synctest.Wait()
-		assertClosedNow(t, loopDone, "WriteLoop")
-		if err := context.Cause(ctx); !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("context cause = %T(%v), want deadline exceeded", err, err)
-		}
-	})
-}
-
-func TestWriteLoop_RenewsTimeoutForEachMessage(t *testing.T) {
+func TestWriteLoop_TimeoutIsPerWrite(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const writeTimeout = time.Second
 
@@ -726,38 +683,30 @@ func TestWriteLoop_RenewsTimeoutForEachMessage(t *testing.T) {
 		synctest.Wait()
 
 		// Block a second write across the first write's former deadline. A fresh
-		// operation deadline leaves the loop running until this write is read.
+		// operation deadline leaves the loop running for a full writeTimeout.
 		time.Sleep(3 * writeTimeout / 4)
-		second := WsMsg{
+		outCh <- WsMsg{
 			Jid:  jid.Jid(1234),
 			What: what.Inner,
-			Data: strings.Repeat("x", writeBatchLimit/2),
+			Data: strings.Repeat("x", writeBatchLimit),
 		}
-		outCh <- second
 		synctest.Wait()
-		time.Sleep(writeTimeout / 2)
+		time.Sleep(writeTimeout - time.Nanosecond)
 		synctest.Wait()
 		select {
 		case <-loopDone:
-			t.Fatal("WriteLoop reused the first write deadline")
+			t.Fatal("WriteLoop returned before the second write's writeTimeout")
 		default:
 		}
 		if err := context.Cause(ctx); err != nil {
-			t.Fatalf("context cause = %v, want nil", err)
+			t.Fatalf("context cause before writeTimeout = %v, want nil", err)
 		}
-
-		if _, _, err := client.Read(ctx); err != nil {
-			t.Fatal(err)
-		}
-		synctest.Wait()
-		if err := context.Cause(ctx); err != nil {
-			t.Fatalf("context cause = %v, want nil", err)
-		}
-
-		close(outCh)
-		_ = client.CloseNow()
+		time.Sleep(time.Nanosecond)
 		synctest.Wait()
 		assertClosedNow(t, loopDone, "WriteLoop")
+		if err := context.Cause(ctx); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("context cause = %T(%v), want deadline exceeded", err, err)
+		}
 	})
 }
 

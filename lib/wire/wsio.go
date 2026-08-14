@@ -51,16 +51,12 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 		idleTimer.Reset(idleInterval)
 		idleTimerCh = idleTimer.C
 	}
-	stopIdleTimer := func() {
-		idleTimer.Stop()
-		idleTimerCh = nil
-	}
 	var activityDuringPing bool
 
 	defer func() {
 		cancel()
 		workers.Wait()
-		stopIdleTimer()
+		idleTimer.Stop()
 		close(incomingMsgCh)
 	}()
 
@@ -69,16 +65,14 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 		case <-ctx.Done():
 			return
 		case result := <-readResultCh:
-			// A nil timer channel denotes the one in-flight ping. Capture that state
-			// before stopIdleTimer also clears the channel during ordinary delivery.
-			pinging := idleTimerCh == nil
-			stopIdleTimer()
+			// A nil timer channel denotes the one in-flight ping while this select is
+			// active. Keep it nil so parsing and delivery do not count as read-idle;
+			// Reset afterward discards any expiry that occurs meanwhile.
+			activityDuringPing = idleTimerCh == nil
+			idleTimerCh = nil
 			if result.err != nil {
 				reportError(ctx, doneCh, ccf, result.err)
 				return
-			}
-			if pinging {
-				activityDuringPing = true
 			}
 			if result.typ == websocket.MessageText {
 				for record := range bytes.Lines(result.txt) {
@@ -91,7 +85,7 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 					}
 				}
 			}
-			if !pinging {
+			if !activityDuringPing {
 				armIdleTimer()
 			}
 		case <-idleTimerCh:
@@ -157,8 +151,6 @@ func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan s
 		select {
 		case <-ctx.Done():
 			return
-		case <-doneCh:
-			return
 		case msg, ok := <-outboundMsgCh:
 			if !ok {
 				return
@@ -188,6 +180,7 @@ func contextWithDone(ctx context.Context, doneCh <-chan struct{}) (ioctx context
 
 func reportError(ctx context.Context, doneCh <-chan struct{}, ccf context.CancelCauseFunc, err error) {
 	if ccf != nil {
+		// Check doneCh directly because contextWithDone propagates it asynchronously.
 		select {
 		case <-ctx.Done():
 		case <-doneCh:

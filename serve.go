@@ -45,13 +45,9 @@ func (jw *Jaws) getWebSocketTimeout() (t time.Duration) {
 // whole-second samples from the epoch established by [New]. Retirement is checked
 // only during maintenance passes, so it is not timed precisely from those events.
 //
-// A WebSocket read that remains pending for [Jaws.WebSocketPingInterval] triggers
-// a keepalive ping. requestTimeout bounds each ping and each outbound WebSocket
-// write. Data or a successful ping starts a new interval; time spent delivering
-// an already-read message for processing does not count as read-idle time. This
-// timing does not use the initial-render activity samples or maintenance schedule.
-// [Jaws.WebSocketPingInterval] must be greater than zero; non-positive values
-// are invalid and do not disable probing.
+// requestTimeout also bounds each WebSocket keepalive ping and outbound write.
+// These operation deadlines are independent of maintenance timing; see
+// [Jaws.WebSocketPingInterval] for probe scheduling.
 //
 // It is intended to run on its own goroutine and returns when [Jaws.Close] is
 // called. Errors reported through [Jaws.Log] are queued without waiting for

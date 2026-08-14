@@ -432,11 +432,9 @@ whole-second samples from the epoch established by `jaws.New()`. Retirement is
 checked only during maintenance passes, so it is not timed precisely from those
 events.
 
-A WebSocket read that remains pending for `Jaws.WebSocketPingInterval` triggers
-a keepalive ping. `requestTimeout` bounds each ping and each outbound WebSocket
-write. Data or a successful ping starts a new interval; time spent delivering an
-already-read message for processing does not count as read-idle time. This timing
-does not use the initial-render activity samples or the maintenance schedule.
+On an active WebSocket, `requestTimeout` bounds each keepalive ping and outbound
+write. See [WebSocket keepalive ping](#websocket-keepalive-ping) for probe
+scheduling.
 
 `*Request` values are borrowed lifecycle objects. Do not store them in
 application state or pass them to background goroutines; copy the required
