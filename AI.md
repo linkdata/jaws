@@ -280,9 +280,10 @@ Register `Jaws.ServeHTTP` for the `/jaws/` prefix. It owns these routes:
 
 * `/jaws/.jaws.<hash>.css` -- built-in stylesheet; cache indefinitely.
 * `/jaws/.jaws.<hash>.js` -- built-in client; cache indefinitely.
-* `/jaws/[0-9a-v]+` and `/jaws/[0-9a-v]+/noscript` -- single-use Request
-  callback. The key is lowercase base 32. A missing Request is a 404. See the
-  [`key` guide](./lib/key/AI.md) for its canonical syntax.
+* `/jaws/<key>` and `/jaws/<key>/noscript` -- single-use Request callback. The
+  key must parse to a nonzero value through `key.Parse`; parsing is
+  case-insensitive, while generated URLs use canonical lowercase base 32. A
+  missing Request is a 404. See the [`key` guide](./lib/key/AI.md).
 * `/jaws/.tail/<key>` -- deferred initial-update script emitted by `TailHTML`;
   do not cache.
 * `/jaws/.ping` -- readiness probe used before WebSocket reconnect attempts.
@@ -408,7 +409,8 @@ Before exposing an application outside local development:
   apply equivalent protection and the same lock to every binding that exposes
   shared mutable state. See the [`ui` guide](./lib/ui/AI.md).
 * Keep browser-to-server messages below the transport limit and use HTTP uploads
-  for large data; see the [`wire` guide](./lib/wire/AI.md).
+  for large data. An oversized inbound message closes the Request connection
+  rather than rejecting only one value; see the [`wire` guide](./lib/wire/AI.md).
 * Use `SecureHeadersMiddleware` or an equivalent explicit security-header
   policy.
 * Configure trusted forwarding only behind a proxy that sanitizes every
@@ -428,17 +430,28 @@ staticcheck ./...
 golangci-lint run
 gosec ./...
 go build ./...
-go test -race ./...
-go test ./...
+JAWS_REQUIRE_NODE=1 go test -race ./...
+JAWS_REQUIRE_NODE=1 go test ./...
 ```
 
 Generation should leave the intended tracked files unchanged unless the change
 deliberately updates generated assets. The race leg enables deadlock detection
 and debug-gated checks. It also selects the detailed tag renderer; the plain
 test leg exercises the crash-safe release renderer used in production. See the
-[`tag` guide](./lib/tag/AI.md) for the build-mode details. If the race detector
-is unavailable, run `go test -tags "debug deadlock" ./...` plus plain
-`go test ./...`.
+[`tag` guide](./lib/tag/AI.md) for the build-mode details.
+
+`JAWS_REQUIRE_NODE=1` turns a missing Node runtime into a failure instead of
+silently skipping the browser-client behavior tests. On a Linux host capable of
+executing 386 binaries, also run the 32-bit numeric leg used by CI:
+
+```bash
+GOARCH=386 CGO_ENABLED=0 go test ./lib/bind/... ./lib/ui/...
+```
+
+That leg exercises word-size-dependent `int` and `uint` bounds. On other hosts,
+require the `build-386` CI job to pass. If the race detector is unavailable, run
+`JAWS_REQUIRE_NODE=1 go test -tags "debug deadlock" ./...` plus
+`JAWS_REQUIRE_NODE=1 go test ./...`.
 
 For performance work, commit a benchmark that exercises the changed path, use
 `b.RunParallel` for contention changes or `b.ReportAllocs` for per-operation

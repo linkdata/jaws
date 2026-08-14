@@ -82,4 +82,6 @@ numeric control is read-only.
 Run `go test -race ./lib/bind` and `go test ./lib/bind` from the module root.
 Preserve tests for concurrency, lock ownership, hook ordering and fallthrough,
 strict-comparability failures, adapter panics, escaped/trusted HTML precedence,
-stable pointer tags, formatter locking, and top-level tag-slice snapshots.
+stable pointer tags, formatter locking, and top-level tag-slice snapshots. Changes
+to `int` or `uint` numeric behavior also require the 32-bit leg in the
+[repository verification matrix](../../AI.md#repository-verification-matrix).

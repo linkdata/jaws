@@ -75,9 +75,11 @@ the page security policy.
 
 ## Verification
 
-Run `go test -race ./lib/assets` and `go test ./lib/assets` from the module root.
-JavaScript behavior tests run against a faithful browser-like runtime and cover
-event routing, connection gating, DOM mutation, reconnection, `JsVar` fanout,
-prototype safety, and batch isolation. Keep `BenchmarkJawsJSMessageDispatch`
-when changing the command dispatcher. Resource tests should assert generated
-markup and classification, not hashes of embedded repository files.
+Run `JAWS_REQUIRE_NODE=1 go test -race ./lib/assets` and
+`JAWS_REQUIRE_NODE=1 go test ./lib/assets` from the module root. Requiring Node
+prevents the browser-client behavior suite from silently skipping. Those tests
+cover event routing, connection gating, DOM mutation, reconnection, `JsVar`
+fanout, prototype safety, and batch isolation. Keep
+`BenchmarkJawsJSMessageDispatch` when changing the command dispatcher. Resource
+tests should assert generated markup and classification, not hashes of embedded
+repository files.

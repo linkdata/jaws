@@ -1,4 +1,9 @@
 // Package key encodes and parses JaWS request and session keys.
+//
+// This package is a textual codec only. Successful parsing does not prove that a
+// request or session is live or authorized, nor does it enforce request
+// single-use or client binding; package [github.com/linkdata/jaws] owns those
+// checks.
 package key
 
 import (

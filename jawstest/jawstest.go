@@ -1,5 +1,13 @@
 // Package jawstest provides a harness for driving a [jaws.Request]'s WebSocket
 // message-processing loop in tests.
+//
+// The harness uses the real JaWS request-processing loop and exposes its channels
+// directly. Start [jaws.Jaws.Serve] or [jaws.Jaws.ServeWithTimeout] before
+// constructing a [TestRequest], wait for [TestRequest.ReadyCh] before driving it,
+// and drain [TestRequest.OutCh] while output can be produced. [TestRequest.Close]
+// closes only the inbound channel; callers should then wait for
+// [TestRequest.DoneCh] and must not close [TestRequest.OutCh] or
+// [TestRequest.BcastCh].
 package jawstest
 
 import (

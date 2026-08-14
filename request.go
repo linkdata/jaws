@@ -928,8 +928,10 @@ func (rq *Request) TagExpanded(elem *Element, expandedTags []any) {
 // Registration is additive and does not schedule an update. Calling Tag during
 // rendering or updating is supported, but known dependencies should normally be
 // registered during initial rendering. Associations remain active until elem is
-// removed or rq ends; individual associations cannot be removed. See package
-// [github.com/linkdata/jaws/lib/tag] for tag selection and lifetime guidance.
+// removed or rq ends; individual associations cannot be removed.
+//
+// See package [github.com/linkdata/jaws/lib/tag] for choosing stable dependency
+// identities and for the registration and targeting model.
 //
 // Tag expands tagItems through [Jaws.MustTagExpand]. With a [Jaws.Logger] configured,
 // it queues an expansion error and registers the partial result. Without a Logger,

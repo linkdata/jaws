@@ -35,10 +35,13 @@ on LF, keeps order, validates each independently, and skips malformed records
 without discarding valid siblings.
 
 For commands other than `Set` and `Call`, `WsMsg.Append` writes Data as a JSON
-string accepted by browser `JSON.parse`. `Parse` first uses `strconv.Unquote`,
-falls back to JSON decoding for browser-valid strings such as lone UTF-16
-surrogates, and sanitizes the result as valid UTF-8. `AppendJSONQuote` stays in
-the overlap of both grammars and deliberately avoids Go-only escapes.
+string accepted by browser `JSON.parse`. For incoming non-Set/Call Data that
+begins with `"`, `Parse` first uses `strconv.Unquote` and falls back to JSON
+decoding for browser-valid strings such as lone UTF-16 surrogates. The record is
+rejected only if both decoders fail. Unquoted Data and every Set/Call payload are
+taken verbatim. Every accepted result is sanitized as valid UTF-8.
+`AppendJSONQuote` stays in the overlap of both string grammars and deliberately
+avoids Go-only escapes.
 
 `Set` and `Call` carry Data verbatim as `path=json`. The complete verbatim Data,
 including JSON, must contain no raw tab or LF byte because those delimit fields
@@ -53,8 +56,9 @@ positive values use the canonical [jid](../jid/AI.md) form.
 ## Transport loops
 
 - Every inbound WebSocket text message is limited to 32 KiB by the root Request
-  handler. The client does not chunk inputs, JsVar writes, click data, or removal
-  reports. Validation above this layer cannot enforce the transport limit.
+  handler. An oversized message fails the read and closes the Request connection.
+  The client does not chunk inputs, JsVar writes, click data, or removal reports.
+  Validation above this layer cannot enforce the transport limit.
 - `ReadLoop` runs the socket reader concurrently with keepalive pings, pauses
   read-idle accounting while delivering an already-read message, and restarts
   the idle interval after incoming data or a successful ping.

@@ -102,13 +102,15 @@ destinations and tag destinations. See [wire](../wire/AI.md).
 
 Race and debug builds select the full-detail tag renderer. Plain builds select
 the crash-safe release renderer used in production. The comparability checks in
-this package run in every build. Always test both modes from the module root:
+this package run in every build. Run both package modes from the module root:
 
 ```sh
-go test -race ./...
-go test ./...
+go test -race ./lib/tag
+go test ./lib/tag
 ```
 
-When the race detector is unavailable, use `-tags "debug deadlock"` plus the
-plain test leg. Benchmarks that change tag expansion or rendering must exercise
-the affected operation and retain allocation reporting.
+Then run the full [repository verification
+matrix](../../AI.md#repository-verification-matrix). When the race detector is
+unavailable, use `-tags "debug deadlock"` plus the plain test leg. Benchmarks that
+change tag expansion or rendering must exercise the affected operation and
+retain allocation reporting.

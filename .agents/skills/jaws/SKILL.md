@@ -73,9 +73,11 @@ JaWS is an immediate-mode, server-driven UI framework, not an MVC framework.
   removal and ordering can target it; `ui.NewTemplate` provides that node through its
   generated wrapper.
 - Treat the same-version `lib/ui/AI.md` as the canonical standard-widget
-  multiplicity summary when the source guide is available; otherwise use the
-  package documentation shown by `go doc github.com/linkdata/jaws/lib/ui`.
-  Consult each concrete type's docs for its conditions.
+  multiplicity summary when source guidance is available. Otherwise use
+  `go doc github.com/linkdata/jaws/lib/ui` for the package-wide default and
+  standard-widget summary, then inspect each concrete widget (for example,
+  `go doc github.com/linkdata/jaws/lib/ui Container`) for its documented
+  multiplicity and conditions.
 
 ## Constructing UI values: `ui.New` and `bind.New`
 

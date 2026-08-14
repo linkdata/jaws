@@ -159,9 +159,11 @@ that clears peers and dirties every changed binding.
 
 Every browser-to-server WebSocket message must fit the 32 KiB inbound limit.
 The client does not chunk input, JsVar, click, context-menu, or removal payloads.
-Use HTTP uploads for large values and smaller independently updated wrappers for
-large trees. `JsVar.ClientCheck` runs after receipt and cannot enforce this
-transport boundary. See [wire](../wire/AI.md).
+An oversized message fails the WebSocket read and closes the Request connection;
+it is not merely rejected for one control. Use HTTP uploads for large values and
+smaller independently updated wrappers for large trees. `JsVar.ClientCheck` runs
+after receipt and cannot enforce this transport boundary. See
+[wire](../wire/AI.md).
 
 ## Input dirty targets
 
@@ -282,7 +284,8 @@ Several bindings may share a name. A browser write fans out to every live
 binding of that name; a removed binding stops receiving it. If several bindings
 share one non-idempotent backing value, that write is applied once per binding.
 
-The exact top-level name `__proto__` is reserved. Names share the page global
+The server rejects the exact top-level name `__proto__`; the browser rejects that
+exact component anywhere in a dotted `jawsVar` path. Names share the page global
 namespace, so use an application-owned top-level symbol and dotted suffixes for
 paths. Do not bind unrelated or browser-owned globals.
 
@@ -448,6 +451,9 @@ Widget tests should use real Requests and Elements. Cover:
 - append, remove, order, nested subtree retention, and contention-before-callback;
 - JsVar paths, validation, rollback, shared names, ordering, precision, and size;
 - both race/debug and plain production builds.
+
+Changes to `int` or `uint` numeric bounds also require the 32-bit leg in the
+[repository verification matrix](../../AI.md#repository-verification-matrix).
 
 Performance changes require committed benchmarks aimed at the actual cost. Use
 parallel benchmarks for contention and `ReportAllocs` for per-operation paths.

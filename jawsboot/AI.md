@@ -36,8 +36,9 @@ through to an application wildcard route.
 1. Obtain the new minified bundle JavaScript and minified CSS artifacts from
    the official Bootstrap distribution and replace their gzip-compressed files
    without renaming them.
-2. Update the version and provenance in `README.md`, this guide, and the
-   `assetsFS` source comment in `jawsboot.go` in the same change.
+2. Update the version and provenance in `README.md`, the public version in
+   `doc.go`, this guide, and the `assetsFS` source comment in `jawsboot.go` in
+   the same change.
 3. Confirm decompression yields the intended upstream filenames/content and
    that both plain and gzip HTTP responses remain valid.
 4. Review the sourcemap names registered by `Setup`; update the exact 404 list
