@@ -432,9 +432,11 @@ whole-second samples from the epoch established by `jaws.New()`. Retirement is
 checked only during maintenance passes, so it is not timed precisely from those
 events.
 
-When `Jaws.WebSocketPingInterval` is positive, the same duration is passed
-directly as each keepalive ping's timeout on an active WebSocket. Ping timing does
-not use those activity samples or the maintenance schedule.
+A WebSocket read that remains pending for `Jaws.WebSocketPingInterval` triggers
+a keepalive ping. `requestTimeout` is passed directly as the ping timeout.
+Data or a successful ping starts a new interval; time spent delivering an
+already-read message for processing does not count as read-idle time. This timing
+does not use the initial-render activity samples or the maintenance schedule.
 
 `*Request` values are borrowed lifecycle objects. Do not store them in
 application state or pass them to background goroutines; copy the required
@@ -532,13 +534,13 @@ reported through `MustLog()`, which panics when no logger is configured.
 
 ### WebSocket keepalive ping
 
-JaWS can periodically ping active WebSocket connections to detect peers
-that disappeared without a close handshake.
+JaWS can ping read-idle WebSocket connections to detect peers that disappeared
+without a close handshake. Incoming data and successful pings defer the next
+probe, and JaWS does not probe while delivering an already-read message for
+processing.
 
 Set `Jaws.WebSocketPingInterval` to control this. The default is
-`jaws.DefaultWebSocketPingInterval` (1 minute). A non-positive value disables
-pings; the application must then detect and cancel unresponsive Requests to
-bound queued updates.
+`jaws.DefaultWebSocketPingInterval` (1 minute), and the value must be positive.
 
 ### Safe to call before `Serve()`
 

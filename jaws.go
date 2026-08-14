@@ -51,7 +51,7 @@ const (
 	// DefaultUpdateInterval is the default browser update interval.
 	DefaultUpdateInterval = time.Millisecond * 100
 
-	// DefaultWebSocketPingInterval is the default WebSocket keepalive ping interval.
+	// DefaultWebSocketPingInterval is the default WebSocket read-idle interval.
 	DefaultWebSocketPingInterval = time.Minute
 
 	// DefaultWebSocketTimeout is the timeout [Jaws.Serve] passes to [Jaws.ServeWithTimeout].
@@ -117,11 +117,13 @@ type Jaws struct {
 	// function must return promptly and must not synchronously call this Jaws or
 	// one of its Requests, or wait for work that does. See [Request.SetContext].
 	BaseContext context.Context
-	// WebSocketPingInterval controls keepalive pings on active WebSocket connections.
+	// WebSocketPingInterval controls read-idle keepalive pings.
 	//
-	// It defaults to [DefaultWebSocketPingInterval]. A non-positive value disables
-	// pings; the application must then detect and cancel each unresponsive
-	// [Request] to bound queued updates.
+	// When a WebSocket read remains pending for this interval, JaWS pings the peer.
+	// A data message or successful ping restarts the interval. Time spent delivering
+	// an already-read message for processing does not count as read-idle time.
+	//
+	// It must be positive and defaults to [DefaultWebSocketPingInterval].
 	WebSocketPingInterval   time.Duration
 	MaxPendingRequestsPerIP int           // Maximum number of unclaimed Requests per client IP. Defaults to DefaultMaxPendingRequestsPerIP. Set <=0 to disable the cap.
 	webSocketTimeout        time.Duration // timeout duration passed to ServeWith

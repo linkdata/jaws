@@ -4320,10 +4320,37 @@ func TestWS_PingDisconnectsUnresponsiveClient(t *testing.T) {
 	waitForRequestCount(t, ts.jw, 0, testTimeout)
 }
 
-func TestWS_PingDisabledKeepsIdleConnection(t *testing.T) {
+func TestWS_SlowLocalUpdateDoesNotDisconnectResponsiveClient(t *testing.T) {
+	const (
+		idleInterval = 40 * time.Millisecond
+		pingTimeout  = 20 * time.Millisecond
+		stallTime    = 4 * (idleInterval + pingTimeout)
+	)
+
 	ts := newTestServer(t)
 	defer ts.Close()
-	ts.jw.WebSocketPingInterval = 0
+	ts.jw.WebSocketPingInterval = idleInterval
+	ts.jw.webSocketTimeout = pingTimeout
+
+	updateStarted := make(chan struct{})
+	releaseUpdateCh := make(chan struct{})
+	releaseUpdate := sync.OnceFunc(func() { close(releaseUpdateCh) })
+	defer releaseUpdate()
+
+	item := &testUi{}
+	item.updateFn = func(*Element) {
+		// Register performs the first update synchronously. Block only the dirty
+		// update run by the Request processing loop.
+		if atomic.LoadInt32(&item.updateCalled) == 2 {
+			close(updateStarted)
+			<-releaseUpdateCh
+		}
+	}
+	inputHandled := make(chan string, 1)
+	id := testRequestWriter{rq: ts.rq, Writer: io.Discard}.Register(item, func(_ *Element, value string) error {
+		inputHandled <- value
+		return nil
+	})
 
 	conn, resp, err := ts.Dial()
 	if err != nil {
@@ -4332,6 +4359,26 @@ func TestWS_PingDisabledKeepsIdleConnection(t *testing.T) {
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		t.Error(resp.StatusCode)
 	}
+	// Browsers handle Ping and Pong control frames below the JavaScript API.
+	// Keep a real client Reader active so this peer drains both application and
+	// control frames while the server-side Request loop is stalled.
+	clientReadCtx, cancelClientRead := context.WithCancel(ts.ctx)
+	clientReadErrCh := make(chan error, 1)
+	clientReadDoneCh := make(chan struct{})
+	go func() {
+		defer close(clientReadDoneCh)
+		for {
+			if _, _, readErr := conn.Read(clientReadCtx); readErr != nil {
+				clientReadErrCh <- readErr
+				return
+			}
+		}
+	}()
+	defer func() {
+		cancelClientRead()
+		_ = conn.CloseNow()
+		<-clientReadDoneCh
+	}()
 
 	select {
 	case <-ts.connectedCh:
@@ -4339,20 +4386,49 @@ func TestWS_PingDisabledKeepsIdleConnection(t *testing.T) {
 		t.Fatal("timeout waiting for websocket connect")
 	}
 
-	// This test drives a real WebSocket connection (real network I/O), so it runs
-	// on the real clock and cannot use a synctest bubble. Give the connection a
-	// moment to settle, then confirm the request counts are stable.
-	time.Sleep(150 * time.Millisecond)
-	total, active := ts.jw.RequestCounts()
-	if total != 1 || active != 1 {
-		t.Fatalf("RequestCounts() = %d, %d, want 1, 1", total, active)
-	}
-	if got := ts.jw.RequestCount(); got != total {
-		t.Fatalf("RequestCount() = %d, want %d", got, total)
+	ts.rq.Dirty(item)
+	select {
+	case <-updateStarted:
+	case <-time.After(testTimeout):
+		t.Fatal("timeout waiting for dirty update to start")
 	}
 
-	_ = conn.CloseNow()
-	waitForRequestCounts(t, ts.jw, 0, 0, testTimeout)
+	writeCtx, writeCancel := context.WithTimeout(ts.ctx, testTimeout)
+	inputMsg := wire.WsMsg{Jid: id, What: what.Input, Data: "value"}
+	err = conn.Write(writeCtx, websocket.MessageText, inputMsg.Append(nil))
+	writeCancel()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// updateStarted proves the Request loop cannot receive the input. Keep the
+	// real loopback connection in that state across several complete probe windows:
+	// once ReadLoop receives the frame, it must wait for the local update to finish,
+	// but that local wait is not evidence that the client stopped responding.
+	requestCtx := ts.rq.Context()
+	stallTimer := time.NewTimer(stallTime)
+	select {
+	case <-requestCtx.Done():
+		stallTimer.Stop()
+		t.Fatalf("responsive client disconnected during local update: %v", context.Cause(requestCtx))
+	case readErr := <-clientReadErrCh:
+		stallTimer.Stop()
+		t.Fatalf("responsive client reader stopped during local update: %v", readErr)
+	case <-stallTimer.C:
+	}
+
+	releaseUpdate()
+	select {
+	case value := <-inputHandled:
+		if value != "value" {
+			t.Fatalf("input value = %q, want %q", value, "value")
+		}
+	case <-time.After(testTimeout):
+		t.Fatal("timeout waiting for input after update completed")
+	}
+	if err := requestCtx.Err(); err != nil {
+		t.Fatalf("request canceled after processing input: %v", context.Cause(requestCtx))
+	}
 }
 
 // TestWS_SetContextCancellationClosesIdleConnection proves production
@@ -4364,7 +4440,7 @@ func TestWS_SetContextCancellationClosesIdleConnection(t *testing.T) {
 	logger := &eventErrorLogger{}
 	ts := newTestServerWithSession(t, false, logger)
 	defer ts.Close()
-	ts.jw.WebSocketPingInterval = 0
+	ts.jw.WebSocketPingInterval = time.Hour
 
 	observed := &observedDoneContext{
 		Context:  ts.rq.Context(),
@@ -4448,22 +4524,6 @@ func waitForRequestCount(t *testing.T, jw *Jaws, want int, timeout time.Duration
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("RequestCount() = %d, want %d", jw.RequestCount(), want)
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-}
-
-func waitForRequestCounts(t *testing.T, jw *Jaws, wantTotal, wantActive int, timeout time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for {
-		total, active := jw.RequestCounts()
-		if total == wantTotal && active == wantActive {
-			return
-		}
-		if time.Now().After(deadline) {
-			total, active = jw.RequestCounts()
-			t.Fatalf("RequestCounts() = %d, %d, want %d, %d", total, active, wantTotal, wantActive)
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
