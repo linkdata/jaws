@@ -433,8 +433,8 @@ checked only during maintenance passes, so it is not timed precisely from those
 events.
 
 A WebSocket read that remains pending for `Jaws.WebSocketPingInterval` triggers
-a keepalive ping. `requestTimeout` is passed directly as the ping timeout.
-Data or a successful ping starts a new interval; time spent delivering an
+a keepalive ping. `requestTimeout` bounds each ping and each outbound WebSocket
+write. Data or a successful ping starts a new interval; time spent delivering an
 already-read message for processing does not count as read-idle time. This timing
 does not use the initial-render activity samples or the maintenance schedule.
 
@@ -537,7 +537,8 @@ reported through `MustLog()`, which panics when no logger is configured.
 JaWS can ping read-idle WebSocket connections to detect peers that disappeared
 without a close handshake. Incoming data and successful pings defer the next
 probe, and JaWS does not probe while delivering an already-read message for
-processing.
+processing. An outbound WebSocket write that remains blocked for the configured
+request timeout also ends the Request.
 
 Set `Jaws.WebSocketPingInterval` to control this. The default is
 `jaws.DefaultWebSocketPingInterval` (1 minute), and the value must be positive.

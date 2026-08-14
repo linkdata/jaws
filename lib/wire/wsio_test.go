@@ -150,7 +150,7 @@ func TestReadWriteLoop_RoundTrip(t *testing.T) {
 			writeDoneCh := make(chan struct{})
 			go func() {
 				defer close(writeDoneCh)
-				WriteLoop(ctx, nil, doneCh, outCh, client)
+				WriteLoop(ctx, nil, doneCh, outCh, time.Hour, client)
 			}()
 
 			var got []WsMsg
@@ -306,8 +306,8 @@ func TestReadLoop_DoesNotPingWhileDelivering(t *testing.T) {
 		synctest.Wait()
 		time.Sleep(3 * time.Second)
 		synctest.Wait()
-		if got := pingCount.Load(); got < 2 {
-			t.Fatalf("successful idle pings = %d, want at least 2", got)
+		if got := pingCount.Load(); got != 3 {
+			t.Fatalf("successful idle pings = %d, want 3", got)
 		}
 		if err := ctx.Err(); err != nil {
 			t.Fatalf("parent context was canceled: %v", err)
@@ -413,7 +413,7 @@ func TestWriteLoop_SendsThePayload(t *testing.T) {
 	writeDoneCh := make(chan struct{})
 	go func() {
 		defer close(writeDoneCh)
-		WriteLoop(ctx, nil, jawsDoneCh, outCh, server)
+		WriteLoop(ctx, nil, jawsDoneCh, outCh, time.Hour, server)
 	}()
 
 	var mt websocket.MessageType
@@ -468,7 +468,7 @@ func TestWriteLoop_ConcatenatesMessages(t *testing.T) {
 	writeDoneCh := make(chan struct{})
 	go func() {
 		defer close(writeDoneCh)
-		WriteLoop(ctx, nil, jawsDoneCh, outCh, server)
+		WriteLoop(ctx, nil, jawsDoneCh, outCh, time.Hour, server)
 	}()
 
 	mt, b, err := client.Read(ctx)
@@ -503,7 +503,7 @@ func TestWriteLoop_ConcatenatesMessagesClosedChannel(t *testing.T) {
 	writeDoneCh := make(chan struct{})
 	go func() {
 		defer close(writeDoneCh)
-		WriteLoop(ctx, nil, jawsDoneCh, outCh, server)
+		WriteLoop(ctx, nil, jawsDoneCh, outCh, time.Hour, server)
 	}()
 
 	mt, b, err := client.Read(ctx)
@@ -551,7 +551,7 @@ func TestWriteLoop_SplitsAtBatchLimit(t *testing.T) {
 	writeDoneCh := make(chan struct{})
 	go func() {
 		defer close(writeDoneCh)
-		WriteLoop(ctx, nil, jawsDoneCh, outCh, server)
+		WriteLoop(ctx, nil, jawsDoneCh, outCh, time.Hour, server)
 	}()
 
 	var frames [][]byte
@@ -602,7 +602,7 @@ func TestWriteLoop_RespectsContext(t *testing.T) {
 	writeDoneCh := make(chan struct{})
 	go func() {
 		defer close(writeDoneCh)
-		WriteLoop(ctx, nil, jawsDoneCh, outCh, server)
+		WriteLoop(ctx, nil, jawsDoneCh, outCh, time.Hour, server)
 	}()
 
 	cancel()
@@ -623,7 +623,7 @@ func TestWriteLoop_RespectsDone(t *testing.T) {
 	writeDoneCh := make(chan struct{})
 	go func() {
 		defer close(writeDoneCh)
-		WriteLoop(ctx, nil, jawsDoneCh, outCh, server)
+		WriteLoop(ctx, nil, jawsDoneCh, outCh, time.Hour, server)
 	}()
 
 	close(jawsDoneCh)
@@ -645,7 +645,7 @@ func TestWriteLoop_RespectsDoneWhileWriting(t *testing.T) {
 		defer closeWireBubble(cancel, client, server)()
 
 		go func() {
-			WriteLoop(ctx, cancel, doneCh, outCh, server)
+			WriteLoop(ctx, cancel, doneCh, outCh, time.Hour, server)
 			close(loopDone)
 		}()
 
@@ -656,6 +656,36 @@ func TestWriteLoop_RespectsDoneWhileWriting(t *testing.T) {
 		assertClosedNow(t, loopDone, "WriteLoop")
 		if err := ctx.Err(); err != nil {
 			t.Fatalf("parent context was canceled: %v", err)
+		}
+	})
+}
+
+func TestWriteLoop_ReportsUnresponsivePeer(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancelCause(t.Context())
+		doneCh := make(chan struct{})
+		outCh := make(chan WsMsg, 1)
+		outCh <- WsMsg{
+			Jid:  jid.Jid(1234),
+			What: what.Inner,
+			Data: strings.Repeat("x", writeBatchLimit),
+		}
+		client, server := pipe(t)
+		loopDone := make(chan struct{})
+		defer closeWireBubble(cancel, client, server)()
+
+		go func() {
+			WriteLoop(ctx, cancel, doneCh, outCh, time.Second, server)
+			close(loopDone)
+		}()
+
+		// The peer does not read, so the WebSocket write remains blocked until its
+		// operation timeout closes the connection.
+		time.Sleep(time.Second)
+		synctest.Wait()
+		assertClosedNow(t, loopDone, "WriteLoop")
+		if err := context.Cause(ctx); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("context cause = %T(%v), want deadline exceeded", err, err)
 		}
 	})
 }
@@ -674,7 +704,7 @@ func TestWriteLoop_RespectsOutboundClosed(t *testing.T) {
 	writeDoneCh := make(chan struct{})
 	go func() {
 		defer close(writeDoneCh)
-		WriteLoop(ctx, nil, jawsDoneCh, outCh, server)
+		WriteLoop(ctx, nil, jawsDoneCh, outCh, time.Hour, server)
 	}()
 
 	close(outCh)
@@ -694,7 +724,7 @@ func TestWriteLoop_ReportsError(t *testing.T) {
 	writeDoneCh := make(chan struct{})
 	go func() {
 		defer close(writeDoneCh)
-		WriteLoop(ctx, cancel, jawsDoneCh, outCh, server)
+		WriteLoop(ctx, cancel, jawsDoneCh, outCh, time.Hour, server)
 	}()
 
 	outCh <- WsMsg{Jid: jid.Jid(1234)}

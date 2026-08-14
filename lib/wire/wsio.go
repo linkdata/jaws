@@ -24,7 +24,7 @@ const writeBatchLimit = 32 * 1024
 // A WebSocket read that remains pending for idleInterval triggers a ping bounded
 // by pingTimeout. A successful pong starts another idle interval for the pending
 // read. Time spent parsing or delivering an already-read message is not idle
-// time. Data received during a pending ping supersedes a failed ping.
+// time. Data processed while a ping is pending supersedes a failed ping.
 // idleInterval and pingTimeout must be positive.
 //
 // Closes incomingMsgCh on exit.
@@ -56,6 +56,8 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 	}
 	var activityDuringPing bool
 	handleRead := func(result wsReadResult) (ok bool) {
+		// A nil timer channel denotes the one in-flight ping. Capture that state
+		// before stopIdleTimer also clears the channel during ordinary delivery.
 		pinging := idleTimerCh == nil
 		stopIdleTimer()
 		if result.err != nil {
@@ -100,7 +102,6 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 			}
 		case <-idleTimerCh:
 			idleTimerCh = nil
-			activityDuringPing = false
 			// Ping waits for its pong, so it must not delay data that arrives while
 			// the probe is in flight.
 			workers.Go(func() {
@@ -111,17 +112,8 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 			})
 		case err := <-pingResultCh:
 			if err != nil && !activityDuringPing {
-				// Activity already waiting at the deadline supersedes the probe even
-				// when its pong could not be consumed first.
-				select {
-				case result := <-readResultCh:
-					if !handleRead(result) {
-						return
-					}
-				default:
-					reportError(ctx, doneCh, ccf, err)
-					return
-				}
+				reportError(ctx, doneCh, ccf, err)
+				return
 			}
 			activityDuringPing = false
 			armIdleTimer()
@@ -154,13 +146,15 @@ func readWebSocket(ctx context.Context, resultCh chan<- wsReadResult, ws *websoc
 //
 // Consecutive queued records may be coalesced into one text message.
 //
+// Each write is bounded by writeTimeout, which must be positive.
+//
 // Closes the WebSocket on exit.
 //
 // Canceling ctx or closing doneCh interrupts writes in progress and is not
 // reported through ccf.
 //
 // ccf may be nil, in which case errors are not reported and only the loop exits.
-func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, outboundMsgCh <-chan WsMsg, ws *websocket.Conn) {
+func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, outboundMsgCh <-chan WsMsg, writeTimeout time.Duration, ws *websocket.Conn) {
 	defer func() { _ = ws.Close(websocket.StatusNormalClosure, "") }()
 	ctx, cancel := contextWithDone(ctx, doneCh)
 	defer cancel()
@@ -175,10 +169,12 @@ func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan s
 			if !ok {
 				return
 			}
+			writectx, writecancel := context.WithTimeout(ctx, writeTimeout)
 			var wc io.WriteCloser
-			if wc, err = ws.Writer(ctx, websocket.MessageText); err == nil {
+			if wc, err = ws.Writer(writectx, websocket.MessageText); err == nil {
 				err = writeData(wc, msg, outboundMsgCh)
 			}
+			writecancel()
 		}
 	}
 	reportError(ctx, doneCh, ccf, err)

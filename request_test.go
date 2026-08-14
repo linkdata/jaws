@@ -4320,6 +4320,70 @@ func TestWS_PingDisconnectsUnresponsiveClient(t *testing.T) {
 	waitForRequestCount(t, ts.jw, 0, testTimeout)
 }
 
+func TestWS_WriteTimeoutDisconnectsNonReadingClient(t *testing.T) {
+	const writeTimeout = 50 * time.Millisecond
+
+	ts := newTestServer(t)
+	defer ts.Close()
+	ts.jw.WebSocketPingInterval = time.Hour
+	ts.jw.webSocketTimeout = writeTimeout
+
+	updateStarted := make(chan struct{})
+	releaseUpdateCh := make(chan struct{})
+	releaseUpdate := sync.OnceFunc(func() { close(releaseUpdateCh) })
+	defer releaseUpdate()
+
+	item := &testUi{}
+	item.updateFn = func(elem *Element) {
+		if atomic.LoadInt32(&item.updateCalled) == 2 {
+			close(updateStarted)
+			<-releaseUpdateCh
+			innerHTML := template.HTML(strings.Repeat("x", 256*1024))
+			for range 64 {
+				elem.SetInner(innerHTML)
+			}
+		}
+	}
+	id := testRequestWriter{rq: ts.rq, Writer: io.Discard}.Register(item, func(*Element, string) error { return nil })
+
+	conn, resp, err := ts.Dial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.CloseNow() }()
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Error(resp.StatusCode)
+	}
+	// This peer never calls Read, so it consumes neither application nor control
+	// frames after the handshake.
+	select {
+	case <-ts.connectedCh:
+	case <-time.After(testTimeout):
+		t.Fatal("timeout waiting for websocket connect")
+	}
+
+	ts.rq.Dirty(item)
+	select {
+	case <-updateStarted:
+	case <-time.After(testTimeout):
+		t.Fatal("timeout waiting for dirty update to start")
+	}
+
+	writeCtx, writeCancel := context.WithTimeout(ts.ctx, testTimeout)
+	inputMsg := wire.WsMsg{Jid: id, What: what.Input, Data: "value"}
+	err = conn.Write(writeCtx, websocket.MessageText, inputMsg.Append(nil))
+	writeCancel()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Releasing the update queues more output than the connection and bounded
+	// outbound channel can absorb. The peer can still send the input above, but
+	// its blocked receive direction must tear down the Request within writeTimeout.
+	releaseUpdate()
+	waitForRequestCount(t, ts.jw, 0, testTimeout)
+}
+
 func TestWS_SlowLocalUpdateDoesNotDisconnectResponsiveClient(t *testing.T) {
 	const (
 		idleInterval = 40 * time.Millisecond
@@ -4391,6 +4455,9 @@ func TestWS_SlowLocalUpdateDoesNotDisconnectResponsiveClient(t *testing.T) {
 	case <-updateStarted:
 	case <-time.After(testTimeout):
 		t.Fatal("timeout waiting for dirty update to start")
+	}
+	if total, active := ts.jw.RequestCounts(); total != 1 || active != 1 {
+		t.Fatalf("RequestCounts() = %d, %d, want 1, 1", total, active)
 	}
 
 	writeCtx, writeCancel := context.WithTimeout(ts.ctx, testTimeout)
