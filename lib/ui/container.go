@@ -35,6 +35,9 @@ var _ jaws.UI = Container{}
 
 // NewContainer returns a Container that renders children inside outerHTMLTag.
 func NewContainer(outerHTMLTag string, children jaws.Container) Container {
+	if outerHTMLTag == "" {
+		outerHTMLTag = "div"
+	}
 	return Container{outerHTMLTag: outerHTMLTag, children: children}
 }
 
