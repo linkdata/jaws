@@ -1146,7 +1146,7 @@ func (rq *Request) stopServe() {
 
 // runWebSocket subscribes rq, runs its connect callback, and processes the
 // accepted WebSocket when the callback succeeds.
-func (rq *Request) runWebSocket(ws *websocket.Conn, pingInterval, wsTimeout time.Duration) (err error) {
+func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time.Duration) (err error) {
 	// Subscribe before onConnect so broadcasts from the callback are buffered for
 	// this Request. Browser input and outbound writes do not start until the
 	// callback succeeds.
@@ -1177,9 +1177,8 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, pingInterval, wsTimeout time
 		// cancellation; the canceled context suppresses errors from the other loops.
 		cancelRequest := rq.cancel
 		outboundMsgCh := make(chan wire.WsMsg, cap(pendingSubscription))
-		go wire.ReadLoop(ctx, cancelRequest, rq.Jaws.Done(), incomingMsgCh, ws)  // closes incomingMsgCh
-		go wire.WriteLoop(ctx, cancelRequest, rq.Jaws.Done(), outboundMsgCh, ws) // calls ws.Close()
-		go wire.PingLoop(ctx, cancelRequest, rq.Jaws.Done(), pingInterval, wsTimeout, ws)
+		go wire.ReadLoop(ctx, cancelRequest, rq.Jaws.Done(), incomingMsgCh, idleInterval, wsTimeout, ws) // closes incomingMsgCh
+		go wire.WriteLoop(ctx, cancelRequest, rq.Jaws.Done(), outboundMsgCh, wsTimeout, ws)              // calls ws.Close()
 		broadcastMsgCh := pendingSubscription
 		pendingSubscription = nil
 		// Production deliberately discards the recovered value so a loop panic stays
@@ -1202,7 +1201,7 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, pingInterval, wsTimeout time
 func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if rq.startServe() {
 		defer rq.stopServe()
-		pingInterval := rq.Jaws.WebSocketPingInterval
+		idleInterval := rq.Jaws.WebSocketPingInterval
 		wsTimeout := rq.Jaws.getWebSocketTimeout()
 		if strings.HasSuffix(r.URL.Path, "/noscript") {
 			w.WriteHeader(http.StatusNoContent)
@@ -1230,7 +1229,7 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ws, err = websocket.Accept(acceptWriter, acceptRequest, nil)
 		if err == nil {
 			ws.SetReadLimit(webSocketReadLimit)
-			if err = rq.runWebSocket(ws, pingInterval, wsTimeout); err != nil {
+			if err = rq.runWebSocket(ws, idleInterval, wsTimeout); err != nil {
 				// A ConnectFn failure is terminal. Cancel before touching the socket so
 				// a non-reading peer cannot retain the Request, then close without a
 				// handshake because no WebSocket processing loops were started.

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -20,37 +21,111 @@ const writeBatchLimit = 32 * 1024
 // Records are LF-terminated and delivered in order. A text message may contain
 // multiple records; malformed records are skipped independently.
 //
+// A WebSocket read that remains pending for idleInterval triggers a ping bounded
+// by pingTimeout. Incoming data or a successful ping restarts the idle interval.
+// Time spent parsing or delivering an already-read message does not count toward
+// it. If a message is processed while a ping is pending, that ping's failure is
+// ignored. idleInterval and pingTimeout must be positive.
+//
 // Closes incomingMsgCh on exit.
 //
-// Canceling ctx or closing doneCh interrupts reads in progress and is not
-// reported through ccf.
+// Canceling ctx or closing doneCh interrupts reads and pings in progress and is
+// not reported through ccf.
 //
 // ccf may be nil, in which case errors are not reported and only the loop exits.
-func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, incomingMsgCh chan<- WsMsg, ws *websocket.Conn) {
-	var typ websocket.MessageType
-	var txt []byte
-	var err error
-	defer close(incomingMsgCh)
+func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, incomingMsgCh chan<- WsMsg, idleInterval, pingTimeout time.Duration, ws *websocket.Conn) {
 	ctx, cancel := contextWithDone(ctx, doneCh)
-	defer cancel()
-	for err == nil {
-		// Only parse on a successful read; on error ws.Read returns no usable
-		// payload and the loop exits because the for condition fails.
-		if typ, txt, err = ws.Read(ctx); err == nil && typ == websocket.MessageText {
-			for record := range bytes.Lines(txt) {
-				if msg, ok := Parse(record); ok {
-					select {
-					case <-ctx.Done():
-						return
-					case <-doneCh:
-						return
-					case incomingMsgCh <- msg:
+	readResultCh := make(chan wsReadResult)
+	pingResultCh := make(chan error, 1)
+	var workers sync.WaitGroup
+	// coder/websocket requires a Reader to run concurrently with Ping. Keeping
+	// socket reads in one worker lets local delivery pause the idle timer while a
+	// pending read still handles control frames. The unbuffered channel bounds
+	// read-ahead during delivery to one complete WebSocket message.
+	workers.Go(func() { readWebSocket(ctx, readResultCh, ws) })
+
+	idleTimer := time.NewTimer(idleInterval)
+	idleTimerCh := idleTimer.C
+	armIdleTimer := func() {
+		idleTimer.Reset(idleInterval)
+		idleTimerCh = idleTimer.C
+	}
+	var activityDuringPing bool
+
+	defer func() {
+		cancel()
+		workers.Wait()
+		idleTimer.Stop()
+		close(incomingMsgCh)
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case result := <-readResultCh:
+			// A nil timer channel denotes the one in-flight ping while this select is
+			// active. Keep it nil so parsing and delivery do not count as read-idle;
+			// Reset afterward discards any expiry that occurs meanwhile.
+			activityDuringPing = idleTimerCh == nil
+			idleTimerCh = nil
+			if result.err != nil {
+				reportError(ctx, doneCh, ccf, result.err)
+				return
+			}
+			if result.typ == websocket.MessageText {
+				for record := range bytes.Lines(result.txt) {
+					if msg, parsed := Parse(record); parsed {
+						select {
+						case <-ctx.Done():
+							return
+						case incomingMsgCh <- msg:
+						}
 					}
 				}
 			}
+			if !activityDuringPing {
+				armIdleTimer()
+			}
+		case <-idleTimerCh:
+			idleTimerCh = nil
+			// Ping waits for its pong, so it must not delay data that arrives while
+			// the probe is in flight.
+			workers.Go(func() {
+				pingctx, pingcancel := context.WithTimeout(ctx, pingTimeout)
+				err := ws.Ping(pingctx)
+				pingcancel()
+				pingResultCh <- err
+			})
+		case err := <-pingResultCh:
+			if err != nil && !activityDuringPing {
+				reportError(ctx, doneCh, ccf, err)
+				return
+			}
+			activityDuringPing = false
+			armIdleTimer()
 		}
 	}
-	reportError(ctx, doneCh, ccf, err)
+}
+
+type wsReadResult struct {
+	typ websocket.MessageType
+	txt []byte
+	err error
+}
+
+func readWebSocket(ctx context.Context, resultCh chan<- wsReadResult, ws *websocket.Conn) {
+	for {
+		typ, txt, err := ws.Read(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case resultCh <- wsReadResult{typ: typ, txt: txt, err: err}:
+		}
+		if err != nil {
+			return
+		}
+	}
 }
 
 // WriteLoop formats messages read from outboundMsgCh and writes them to the
@@ -58,13 +133,16 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 //
 // Consecutive queued records may be coalesced into one text message.
 //
+// Each WebSocket write has its own writeTimeout deadline; writeTimeout must be
+// positive.
+//
 // Closes the WebSocket on exit.
 //
 // Canceling ctx or closing doneCh interrupts writes in progress and is not
 // reported through ccf.
 //
 // ccf may be nil, in which case errors are not reported and only the loop exits.
-func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, outboundMsgCh <-chan WsMsg, ws *websocket.Conn) {
+func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, outboundMsgCh <-chan WsMsg, writeTimeout time.Duration, ws *websocket.Conn) {
 	defer func() { _ = ws.Close(websocket.StatusNormalClosure, "") }()
 	ctx, cancel := contextWithDone(ctx, doneCh)
 	defer cancel()
@@ -73,52 +151,16 @@ func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan s
 		select {
 		case <-ctx.Done():
 			return
-		case <-doneCh:
-			return
 		case msg, ok := <-outboundMsgCh:
 			if !ok {
 				return
 			}
+			writectx, writecancel := context.WithTimeout(ctx, writeTimeout)
 			var wc io.WriteCloser
-			if wc, err = ws.Writer(ctx, websocket.MessageText); err == nil {
+			if wc, err = ws.Writer(writectx, websocket.MessageText); err == nil {
 				err = writeData(wc, msg, outboundMsgCh)
 			}
-		}
-	}
-	reportError(ctx, doneCh, ccf, err)
-}
-
-// PingLoop sends periodic WebSocket pings and reports ping errors through ccf.
-//
-// Returns immediately when interval is non-positive.
-//
-// Canceling ctx or closing doneCh interrupts pings in progress and is not
-// reported through ccf.
-//
-// ccf may be nil, in which case errors are not reported and only the loop exits.
-func PingLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, interval, timeout time.Duration, ws *websocket.Conn) {
-	if interval <= 0 {
-		// A non-positive interval disables pinging: return without calling ccf, since
-		// there is no ping error to report and cancelling the connection would be wrong
-		// (the ctx.Done and doneCh cases below likewise return without ccf).
-		return
-	}
-	ctx, cancel := contextWithDone(ctx, doneCh)
-	defer cancel()
-	t := time.NewTicker(interval)
-	defer t.Stop()
-
-	var err error
-	for err == nil {
-		select {
-		case <-ctx.Done():
-			return
-		case <-doneCh:
-			return
-		case <-t.C:
-			pingctx, pingcancel := context.WithTimeout(ctx, timeout)
-			err = ws.Ping(pingctx)
-			pingcancel()
+			writecancel()
 		}
 	}
 	reportError(ctx, doneCh, ccf, err)
@@ -138,6 +180,7 @@ func contextWithDone(ctx context.Context, doneCh <-chan struct{}) (ioctx context
 
 func reportError(ctx context.Context, doneCh <-chan struct{}, ccf context.CancelCauseFunc, err error) {
 	if ccf != nil {
+		// Check doneCh directly because contextWithDone propagates it asynchronously.
 		select {
 		case <-ctx.Done():
 		case <-doneCh:

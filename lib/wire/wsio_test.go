@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -32,7 +33,7 @@ func TestReadLoop_RespectsContextDone(t *testing.T) {
 	readDoneCh := make(chan struct{})
 	go func() {
 		defer close(readDoneCh)
-		ReadLoop(ctx, nil, jawsDoneCh, inCh, server)
+		ReadLoop(ctx, nil, jawsDoneCh, inCh, time.Hour, time.Hour, server)
 	}()
 
 	writeCtx, writeCancel := context.WithTimeout(t.Context(), 3*time.Second)
@@ -63,7 +64,7 @@ func TestReadLoop_RespectsDone(t *testing.T) {
 		defer closeWireBubble(cancel, client, server)()
 
 		go func() {
-			ReadLoop(ctx, cancel, doneCh, inCh, server)
+			ReadLoop(ctx, cancel, doneCh, inCh, time.Hour, time.Hour, server)
 			close(loopDone)
 		}()
 
@@ -91,7 +92,7 @@ func TestReadLoop_RespectsDoneWhileReading(t *testing.T) {
 		defer closeWireBubble(cancel, client, server)()
 
 		go func() {
-			ReadLoop(ctx, cancel, doneCh, inCh, server)
+			ReadLoop(ctx, cancel, doneCh, inCh, time.Hour, time.Hour, server)
 			close(loopDone)
 		}()
 
@@ -144,12 +145,12 @@ func TestReadWriteLoop_RoundTrip(t *testing.T) {
 			readDoneCh := make(chan struct{})
 			go func() {
 				defer close(readDoneCh)
-				ReadLoop(ctx, nil, doneCh, inCh, server)
+				ReadLoop(ctx, nil, doneCh, inCh, time.Hour, time.Hour, server)
 			}()
 			writeDoneCh := make(chan struct{})
 			go func() {
 				defer close(writeDoneCh)
-				WriteLoop(ctx, nil, doneCh, outCh, client)
+				WriteLoop(ctx, nil, doneCh, outCh, time.Hour, client)
 			}()
 
 			var got []WsMsg
@@ -184,7 +185,7 @@ func TestReadLoop_SkipsMalformedRecords(t *testing.T) {
 		defer closeWireBubble(cancel, client, server)()
 
 		go func() {
-			ReadLoop(ctx, cancel, doneCh, inCh, server)
+			ReadLoop(ctx, cancel, doneCh, inCh, time.Hour, time.Hour, server)
 			close(loopDone)
 		}()
 		if err := client.Write(ctx, websocket.MessageText, payload); err != nil {
@@ -230,7 +231,7 @@ func TestReadLoop_BatchedDeliveryIsInterruptible(t *testing.T) {
 				defer closeWireBubble(cancel, client, server)()
 
 				go func() {
-					ReadLoop(ctx, cancel, doneCh, inCh, server)
+					ReadLoop(ctx, cancel, doneCh, inCh, time.Hour, time.Hour, server)
 					close(loopDone)
 				}()
 				if err := client.Write(ctx, websocket.MessageText, payload); err != nil {
@@ -264,6 +265,179 @@ func TestReadLoop_BatchedDeliveryIsInterruptible(t *testing.T) {
 	}
 }
 
+func TestReadLoop_DoesNotPingWhileDelivering(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const (
+			idleInterval = time.Second
+			pingTimeout  = 10 * time.Second
+		)
+
+		ctx, cancel := context.WithCancelCause(t.Context())
+		doneCh := make(chan struct{})
+		inCh := make(chan WsMsg)
+		var pingCount atomic.Int32
+		client, server := pipeWithDialOptions(t, websocket.DialOptions{
+			OnPingReceived: func(context.Context, []byte) bool {
+				pingCount.Add(1)
+				return true
+			},
+		})
+		loopDone := make(chan struct{})
+		defer closeWireBubble(cancel, client, server)()
+
+		client.CloseRead(ctx)
+		go func() {
+			ReadLoop(ctx, cancel, doneCh, inCh, idleInterval, pingTimeout, server)
+			close(loopDone)
+		}()
+
+		want := WsMsg{Jid: 1, What: what.Input, Data: "value"}
+		if err := client.Write(ctx, websocket.MessageText, want.Append(nil)); err != nil {
+			t.Fatal(err)
+		}
+		// The complete message is waiting for the application. This local delivery
+		// delay is not peer inactivity, so advancing across several idle intervals
+		// must not send a probe.
+		synctest.Wait()
+		time.Sleep(3 * idleInterval)
+		synctest.Wait()
+		if got := pingCount.Load(); got != 0 {
+			t.Fatalf("pings while delivering = %d, want 0", got)
+		}
+
+		if got := <-inCh; got != want {
+			t.Fatalf("message = %+v, want %+v", got, want)
+		}
+		synctest.Wait()
+		time.Sleep(5 * idleInterval / 2)
+		synctest.Wait()
+		if got := pingCount.Load(); got != 2 {
+			t.Fatalf("successful idle pings = %d, want 2", got)
+		}
+		if err := ctx.Err(); err != nil {
+			t.Fatalf("parent context was canceled: %v", err)
+		}
+
+		close(doneCh)
+		synctest.Wait()
+		assertClosedNow(t, loopDone, "ReadLoop")
+	})
+}
+
+func TestReadLoop_ReadActivitySupersedesPingFailure(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancelCause(t.Context())
+		doneCh := make(chan struct{})
+		inCh := make(chan WsMsg, 1)
+		firstPingCh := make(chan struct{})
+		var pingCount atomic.Int32
+		client, server := pipeWithDialOptions(t, websocket.DialOptions{
+			OnPingReceived: func(context.Context, []byte) bool {
+				if pingCount.Add(1) == 1 {
+					close(firstPingCh)
+					return false
+				}
+				return true
+			},
+		})
+		loopDone := make(chan struct{})
+		defer closeWireBubble(cancel, client, server)()
+
+		client.CloseRead(ctx)
+		go func() {
+			ReadLoop(ctx, cancel, doneCh, inCh, time.Second, 10*time.Second, server)
+			close(loopDone)
+		}()
+
+		<-firstPingCh
+		want := WsMsg{Jid: 1, What: what.Input, Data: "active"}
+		sentAt := time.Now()
+		if err := client.Write(ctx, websocket.MessageText, want.Append(nil)); err != nil {
+			t.Fatal(err)
+		}
+		if got := <-inCh; got != want {
+			t.Fatalf("message = %+v, want %+v", got, want)
+		}
+		if delay := time.Since(sentAt); delay != 0 {
+			t.Fatalf("delivery during ping was delayed by %v", delay)
+		}
+		// The first ping deliberately receives no pong. The completed data read
+		// supersedes that probe, so its stale error must not cancel the connection.
+		synctest.Wait()
+		time.Sleep(10 * time.Second)
+		synctest.Wait()
+		if err := ctx.Err(); err != nil {
+			t.Fatalf("read activity did not supersede ping failure: %v", context.Cause(ctx))
+		}
+
+		close(doneCh)
+		synctest.Wait()
+		assertClosedNow(t, loopDone, "ReadLoop")
+	})
+}
+
+func TestReadLoop_ReportsUnresponsivePeer(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const (
+			idleInterval = time.Second
+			pingTimeout  = 4 * time.Second
+		)
+
+		ctx, cancel := context.WithCancelCause(t.Context())
+		doneCh := make(chan struct{})
+		inCh := make(chan WsMsg)
+		pingSeen := make(chan struct{})
+		client, server := pipeWithDialOptions(t, websocket.DialOptions{
+			OnPingReceived: func(context.Context, []byte) bool {
+				close(pingSeen)
+				return false // Read the ping but deliberately suppress the required pong.
+			},
+		})
+		loopDone := make(chan struct{})
+		defer closeWireBubble(cancel, client, server)()
+
+		client.CloseRead(ctx)
+		go func() {
+			ReadLoop(ctx, cancel, doneCh, inCh, idleInterval, pingTimeout, server)
+			close(loopDone)
+		}()
+
+		synctest.Wait()
+		time.Sleep(idleInterval - time.Nanosecond)
+		synctest.Wait()
+		select {
+		case <-pingSeen:
+			t.Fatal("ping sent before idleInterval")
+		default:
+		}
+		time.Sleep(time.Nanosecond)
+		synctest.Wait()
+		select {
+		case <-pingSeen:
+		default:
+			t.Fatal("ping not sent at idleInterval")
+		}
+
+		// The peer consumes the ping but violates the protocol by withholding its pong.
+		time.Sleep(pingTimeout - time.Nanosecond)
+		synctest.Wait()
+		select {
+		case <-loopDone:
+			t.Fatal("ReadLoop returned before pingTimeout")
+		default:
+		}
+		if err := context.Cause(ctx); err != nil {
+			t.Fatalf("context cause before pingTimeout = %v, want nil", err)
+		}
+		time.Sleep(time.Nanosecond)
+		synctest.Wait()
+		assertClosedNow(t, loopDone, "ReadLoop")
+		if err := context.Cause(ctx); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("context cause = %T(%v), want deadline exceeded", err, err)
+		}
+	})
+}
+
 func TestWriteLoop_SendsThePayload(t *testing.T) {
 	outCh := make(chan WsMsg)
 	jawsDoneCh := make(chan struct{})
@@ -277,7 +451,7 @@ func TestWriteLoop_SendsThePayload(t *testing.T) {
 	writeDoneCh := make(chan struct{})
 	go func() {
 		defer close(writeDoneCh)
-		WriteLoop(ctx, nil, jawsDoneCh, outCh, server)
+		WriteLoop(ctx, nil, jawsDoneCh, outCh, time.Hour, server)
 	}()
 
 	var mt websocket.MessageType
@@ -332,7 +506,7 @@ func TestWriteLoop_ConcatenatesMessages(t *testing.T) {
 	writeDoneCh := make(chan struct{})
 	go func() {
 		defer close(writeDoneCh)
-		WriteLoop(ctx, nil, jawsDoneCh, outCh, server)
+		WriteLoop(ctx, nil, jawsDoneCh, outCh, time.Hour, server)
 	}()
 
 	mt, b, err := client.Read(ctx)
@@ -367,7 +541,7 @@ func TestWriteLoop_ConcatenatesMessagesClosedChannel(t *testing.T) {
 	writeDoneCh := make(chan struct{})
 	go func() {
 		defer close(writeDoneCh)
-		WriteLoop(ctx, nil, jawsDoneCh, outCh, server)
+		WriteLoop(ctx, nil, jawsDoneCh, outCh, time.Hour, server)
 	}()
 
 	mt, b, err := client.Read(ctx)
@@ -415,7 +589,7 @@ func TestWriteLoop_SplitsAtBatchLimit(t *testing.T) {
 	writeDoneCh := make(chan struct{})
 	go func() {
 		defer close(writeDoneCh)
-		WriteLoop(ctx, nil, jawsDoneCh, outCh, server)
+		WriteLoop(ctx, nil, jawsDoneCh, outCh, time.Hour, server)
 	}()
 
 	var frames [][]byte
@@ -466,7 +640,7 @@ func TestWriteLoop_RespectsContext(t *testing.T) {
 	writeDoneCh := make(chan struct{})
 	go func() {
 		defer close(writeDoneCh)
-		WriteLoop(ctx, nil, jawsDoneCh, outCh, server)
+		WriteLoop(ctx, nil, jawsDoneCh, outCh, time.Hour, server)
 	}()
 
 	cancel()
@@ -487,7 +661,7 @@ func TestWriteLoop_RespectsDone(t *testing.T) {
 	writeDoneCh := make(chan struct{})
 	go func() {
 		defer close(writeDoneCh)
-		WriteLoop(ctx, nil, jawsDoneCh, outCh, server)
+		WriteLoop(ctx, nil, jawsDoneCh, outCh, time.Hour, server)
 	}()
 
 	close(jawsDoneCh)
@@ -509,7 +683,7 @@ func TestWriteLoop_RespectsDoneWhileWriting(t *testing.T) {
 		defer closeWireBubble(cancel, client, server)()
 
 		go func() {
-			WriteLoop(ctx, cancel, doneCh, outCh, server)
+			WriteLoop(ctx, cancel, doneCh, outCh, time.Hour, server)
 			close(loopDone)
 		}()
 
@@ -520,6 +694,56 @@ func TestWriteLoop_RespectsDoneWhileWriting(t *testing.T) {
 		assertClosedNow(t, loopDone, "WriteLoop")
 		if err := ctx.Err(); err != nil {
 			t.Fatalf("parent context was canceled: %v", err)
+		}
+	})
+}
+
+func TestWriteLoop_TimeoutIsPerWrite(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const writeTimeout = time.Second
+
+		ctx, cancel := context.WithCancelCause(t.Context())
+		doneCh := make(chan struct{})
+		outCh := make(chan WsMsg)
+		client, server := pipe(t)
+		loopDone := make(chan struct{})
+		defer closeWireBubble(cancel, client, server)()
+
+		go func() {
+			WriteLoop(ctx, cancel, doneCh, outCh, writeTimeout, server)
+			close(loopDone)
+		}()
+
+		outCh <- WsMsg{Jid: jid.Jid(1234), What: what.Inner, Data: "first"}
+		if _, _, err := client.Read(ctx); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+
+		// Block a second write across the first write's former deadline. A fresh
+		// operation deadline leaves the loop running for a full writeTimeout.
+		time.Sleep(3 * writeTimeout / 4)
+		outCh <- WsMsg{
+			Jid:  jid.Jid(1234),
+			What: what.Inner,
+			Data: strings.Repeat("x", writeBatchLimit),
+		}
+		synctest.Wait()
+		time.Sleep(writeTimeout - time.Nanosecond)
+		synctest.Wait()
+		select {
+		case <-loopDone:
+			t.Fatal("WriteLoop returned before the second write's writeTimeout")
+		default:
+		}
+		if err := context.Cause(ctx); err != nil {
+			t.Fatalf("context cause before writeTimeout = %v, want nil", err)
+		}
+		time.Sleep(time.Nanosecond)
+		synctest.Wait()
+		assertClosedNow(t, loopDone, "WriteLoop")
+		if err := context.Cause(ctx); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("context cause = %T(%v), want deadline exceeded", err, err)
 		}
 	})
 }
@@ -538,7 +762,7 @@ func TestWriteLoop_RespectsOutboundClosed(t *testing.T) {
 	writeDoneCh := make(chan struct{})
 	go func() {
 		defer close(writeDoneCh)
-		WriteLoop(ctx, nil, jawsDoneCh, outCh, server)
+		WriteLoop(ctx, nil, jawsDoneCh, outCh, time.Hour, server)
 	}()
 
 	close(outCh)
@@ -558,7 +782,7 @@ func TestWriteLoop_ReportsError(t *testing.T) {
 	writeDoneCh := make(chan struct{})
 	go func() {
 		defer close(writeDoneCh)
-		WriteLoop(ctx, cancel, jawsDoneCh, outCh, server)
+		WriteLoop(ctx, cancel, jawsDoneCh, outCh, time.Hour, server)
 	}()
 
 	outCh <- WsMsg{Jid: jid.Jid(1234)}
@@ -583,7 +807,7 @@ func TestReadLoop_ReportsError(t *testing.T) {
 	readDoneCh := make(chan struct{})
 	go func() {
 		defer close(readDoneCh)
-		ReadLoop(ctx, cancel, jawsDoneCh, inCh, server)
+		ReadLoop(ctx, cancel, jawsDoneCh, inCh, time.Hour, time.Hour, server)
 	}()
 
 	waitDone(t, readDoneCh, "ReadLoop after read error")
@@ -610,59 +834,11 @@ func TestReportError_IgnoresContextDone(t *testing.T) {
 	}, errors.New("websocket closed"))
 }
 
-func TestPingLoop_NonPositiveIntervalReturns(t *testing.T) {
-	client, server := pipe(t)
-	defer func() { _ = client.CloseNow() }()
-	defer func() { _ = server.CloseNow() }()
-
-	// A non-positive interval must return immediately without starting a ticker or
-	// invoking ccf; calling PingLoop directly (not in a goroutine) proves it does
-	// not block, and a non-nil ccf would panic if it were called.
-	PingLoop(t.Context(), nil, make(chan struct{}), 0, time.Millisecond, server)
-}
-
-func TestPingLoop_RespectsContextDone(t *testing.T) {
-	jawsDoneCh := make(chan struct{})
-	client, server := pipe(t)
-	defer func() { _ = client.CloseNow() }()
-	defer func() { _ = server.CloseNow() }()
-
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	pingDoneCh := make(chan struct{})
-	go func() {
-		defer close(pingDoneCh)
-		PingLoop(ctx, nil, jawsDoneCh, time.Millisecond*10, time.Millisecond*10, server)
-	}()
-
-	cancel()
-	waitDone(t, pingDoneCh, "PingLoop after context cancel")
-}
-
-func TestPingLoop_RespectsDone(t *testing.T) {
-	jawsDoneCh := make(chan struct{})
-	client, server := pipe(t)
-	defer func() { _ = client.CloseNow() }()
-	defer func() { _ = server.CloseNow() }()
-
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
-	defer cancel()
-
-	pingDoneCh := make(chan struct{})
-	go func() {
-		defer close(pingDoneCh)
-		PingLoop(ctx, nil, jawsDoneCh, time.Millisecond, time.Millisecond, server)
-	}()
-
-	close(jawsDoneCh)
-	waitDone(t, pingDoneCh, "PingLoop after done close")
-}
-
-func TestPingLoop_RespectsDoneWhileWaitingForPong(t *testing.T) {
+func TestReadLoop_RespectsDoneWhileWaitingForPong(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx, cancel := context.WithCancelCause(t.Context())
 		doneCh := make(chan struct{})
+		inCh := make(chan WsMsg)
 		pingSeen := make(chan struct{})
 		client, server := pipeWithDialOptions(t, websocket.DialOptions{
 			OnPingReceived: func(context.Context, []byte) bool {
@@ -675,45 +851,21 @@ func TestPingLoop_RespectsDoneWhileWaitingForPong(t *testing.T) {
 
 		client.CloseRead(ctx)
 		go func() {
-			PingLoop(ctx, cancel, doneCh, time.Second, time.Hour, server)
+			ReadLoop(ctx, cancel, doneCh, inCh, time.Second, time.Hour, server)
 			close(loopDone)
 		}()
 
 		<-pingSeen
-		// PingLoop is waiting for the deliberately omitted pong.
+		// The idle watchdog is waiting for the deliberately omitted pong while its
+		// socket reader remains in the concurrent read required by Ping.
 		synctest.Wait()
 		close(doneCh)
 		synctest.Wait()
-		assertClosedNow(t, loopDone, "PingLoop")
+		assertClosedNow(t, loopDone, "ReadLoop")
 		if err := ctx.Err(); err != nil {
 			t.Fatalf("parent context was canceled: %v", err)
 		}
 	})
-}
-
-func TestPingLoop_ReportsErrorWhenPeerDoesNotPong(t *testing.T) {
-	jawsDoneCh := make(chan struct{})
-	client, server := pipe(t)
-	defer func() { _ = client.CloseNow() }()
-	defer func() { _ = server.CloseNow() }()
-
-	ctx, cancel := context.WithCancelCause(t.Context())
-
-	pingDoneCh := make(chan struct{})
-	go func() {
-		defer close(pingDoneCh)
-		PingLoop(ctx, cancel, jawsDoneCh, 20*time.Millisecond, 20*time.Millisecond, server)
-	}()
-
-	waitDone(t, pingDoneCh, "PingLoop after ping timeout")
-
-	err := context.Cause(ctx)
-	if err == nil {
-		t.Fatal("expected context cause from ping failure")
-	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("%T(%v)", err, err)
-	}
 }
 
 func waitDone(t *testing.T, doneCh <-chan struct{}, what string) {
