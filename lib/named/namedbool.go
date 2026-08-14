@@ -10,6 +10,10 @@ import (
 
 // Bool stores a named boolean value with an HTML representation.
 //
+// A Bool must have a non-empty, valid UTF-8 name without U+0000 (NUL). Its zero
+// value is therefore not ready for use; construct values with [NewBool] or
+// [BoolArray.Add].
+//
 // Bool values are safe for concurrent use.
 type Bool struct {
 	nba     *BoolArray       // (read-only) BoolArray that this is part of (may be nil)
@@ -21,8 +25,7 @@ type Bool struct {
 
 // NewBool returns a [Bool] with the given name, HTML and checked state.
 //
-// To preserve its identity as a browser form value, name must be valid UTF-8
-// and must not contain U+0000 (NUL).
+// name must be a non-empty, valid UTF-8 string without U+0000 (NUL).
 //
 // The html argument is rendered as trusted HTML (it is the label shown in select
 // lists and checkboxes) and is not escaped. When it is derived from untrusted

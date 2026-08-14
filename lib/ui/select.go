@@ -9,7 +9,11 @@ import (
 
 // Select renders a single-selection HTML select element.
 //
-// Its handler supplies the options and reads and writes one selected option name.
+// Its handler supplies the options and represents the selection as a string.
+// Option values must be non-empty. A string that matches no option value
+// represents no selection. [named.BoolArray] is the standard handler and
+// requires non-empty [named.Bool.Name] values.
+//
 // The handler's dynamic value defines Select's identity and must be comparable
 // and equal to itself. Rebuilding with an equal handler lets a parent retain its
 // live Element. Keep application state containing a slice, map, or function
@@ -37,7 +41,7 @@ var (
 
 // NewSelect returns a single-selection Select backed by handler.
 //
-// See [Select] for native reset semantics.
+// See [Select] for handler requirements and native reset semantics.
 func NewSelect(handler named.SelectHandler) Select {
 	return Select{handler: handler}
 }
@@ -70,7 +74,7 @@ func (u Select) container() Container {
 	return NewContainer("select", u.handler)
 }
 
-// JawsInput stores one browser-side selected option name.
+// JawsInput stores one browser-side selected option value.
 //
 // A nil-interface handler is a no-op; a typed-nil handler is called normally.
 // If no render-derived dirty tag is available, Select performs no additional
@@ -85,8 +89,8 @@ func (u Select) JawsInput(elem *jaws.Element, value string) (err error) {
 // Select renders a single-selection HTML select element.
 //
 // HTML attribute params are applied to the select element, but the multiple
-// attribute is unsupported because Select stores one selected option name.
-// See [Select] for native reset semantics.
+// attribute is unsupported because Select stores one selected option value.
+// See [Select] for handler requirements and native reset semantics.
 func (rw RequestWriter) Select(handler named.SelectHandler, params ...any) error {
 	return rw.NewUI(NewSelect(handler), params...)
 }
