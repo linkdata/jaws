@@ -85,11 +85,9 @@ func (nba *BoolArray) JawsContains(elem *jaws.Element) (contents []jaws.UI) {
 	return
 }
 
-// Add adds a [Bool] with the given name and trusted HTML text.
-// Returns itself.
+// Add adds a [Bool] with the given name and trusted HTML text and returns nba.
 //
-// To preserve its identity as a browser form value, name must be valid UTF-8
-// and must not contain U+0000 (NUL).
+// name must be a non-empty, valid UTF-8 string without U+0000 (NUL).
 //
 // The html argument is rendered as trusted HTML and is not escaped; pre-escape it
 // (e.g. template.HTML(template.HTMLEscapeString(s))) when it is derived from
@@ -154,13 +152,10 @@ func (nba *BoolArray) deselectOthersLocked(name string, deselect bool) (changed 
 	return
 }
 
-// Get returns the name of the first [Bool] in the group that
-// has its checked value set to true. Returns an empty string
-// if none are true.
+// Get returns the name of the first checked [Bool].
 //
-// In case you can have more than one selected or you need to
-// distinguish between a blank name and the fact that none are
-// set to true, use [BoolArray.ReadLocked] to inspect the data directly.
+// It returns an empty string if none are checked. Use [BoolArray.ReadLocked]
+// to inspect all checked values when multiple values may be checked.
 func (nba *BoolArray) Get() (name string) {
 	nba.mu.RLock()
 	for _, nb := range nba.data {
