@@ -11,8 +11,8 @@ import (
 	"github.com/coder/websocket"
 )
 
-// writeBatchLimit is the maximum number of bytes WriteLoop coalesces into a
-// single outbound WebSocket text message before flushing.
+// writeBatchLimit is the threshold at which WriteLoop stops appending whole
+// records and flushes an outbound WebSocket text message.
 const writeBatchLimit = 32 * 1024
 
 // ReadLoop reads WebSocket text messages and sends each valid protocol record

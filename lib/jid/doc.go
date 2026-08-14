@@ -1,3 +1,3 @@
-// Package jid provides JaWS element identifiers and helpers for writing them
-// into HTML.
+// Package jid provides request-scoped JaWS element identifiers and HTML-writing
+// helpers.
 package jid

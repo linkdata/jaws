@@ -1,15 +1,13 @@
-// Package jawstest provides an importable harness for driving a [jaws.Request]'s
-// WebSocket message-processing loop in tests.
+// Package jawstest provides a harness for driving a [jaws.Request]'s WebSocket
+// message-processing loop in tests.
 //
-// It lives in its own package, rather than in package jaws, so that
-// net/http/httptest stays out of the production build of consumers that import
-// github.com/linkdata/jaws. It reaches the request loop through the exported
-// [jaws.Jaws.TestServe] hook.
-//
-// Harness channels are intentionally low-level. Tests that drive output must
-// drain [TestRequest.OutCh], and after [TestRequest.Close] should wait for
-// [TestRequest.DoneCh] before returning. Close closes the inbound channel and is
-// safe to call more than once.
+// The harness uses the real JaWS request-processing loop and exposes its channels
+// directly. Start [jaws.Jaws.Serve] or [jaws.Jaws.ServeWithTimeout] before
+// constructing a [TestRequest], wait for [TestRequest.ReadyCh] before driving it,
+// and drain [TestRequest.OutCh] while output can be produced. [TestRequest.Close]
+// closes only the inbound channel; callers should then wait for
+// [TestRequest.DoneCh] and must not close [TestRequest.OutCh] or
+// [TestRequest.BcastCh].
 package jawstest
 
 import (

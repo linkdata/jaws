@@ -1,19 +1,14 @@
-// Package bind adapts Go values to JaWS getter, setter, HTML and tag
+// Package bind adapts Go values to JaWS getter, setter, HTML, tag, and event
 // interfaces.
 //
-// [New] is the centerpiece: it binds a pointer guarded by a [sync.Locker] to
-// the JaWS getter, setter and event interfaces and returns a [Binder] whose
-// behavior can be extended with chained hooks ([Binder.SetLocked],
-// [Binder.GetLocked], [Binder.GetHTML], [Binder.Success], [Binder.Clicked] and
-// the others), each returning a new, concurrency-safe [Binder] that wraps the
-// previous one.
+// [New] creates the usual binding from a locker-protected pointer. The pointer
+// remains the binding's tag through every [Binder] builder, and each builder
+// returns a new chain rather than mutating the earlier value. Widgets bound to
+// the same pointer therefore share one dirty identity.
 //
-// The remaining constructors accept either existing bind interfaces or
-// static values and return small adapters that can be used by package ui
-// widgets. They panic when called with a value whose dynamic type does not match
-// the requested adapter type, so use them at trusted construction points rather
-// than on unvalidated external input.
-//
-// Nil values follow the module-wide convention documented by
-// [github.com/linkdata/jaws].
+// [MakeHTMLGetter] defines the package's HTML conversion boundary. Existing
+// [HTMLGetter] values are used unchanged; plain strings and [html/template.HTML]
+// are trusted. Its adapters for string-valued [Getter] and [Binder] values and
+// [fmt.Stringer] output escape their strings. Escape untrusted text before it
+// reaches a trusted form.
 package bind

@@ -10,8 +10,8 @@ import (
 	"github.com/linkdata/staticserve"
 )
 
-// assetsFS holds Bootstrap v5.3.8 from https://getbootstrap.com/ (see the package
-// doc); keep this version note in sync with doc.go when updating the files.
+// assetsFS holds Bootstrap v5.3.8 from https://getbootstrap.com/. Follow the
+// version-update checklist in AI.md when updating the files.
 //
 //go:embed assets/static
 var assetsFS embed.FS

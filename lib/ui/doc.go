@@ -1,54 +1,40 @@
-// Package ui contains the standard JaWS widget implementations.
+// Package ui contains the standard JaWS widgets and template helpers.
 //
-// Its main building blocks are:
+// Its main building blocks are [HTMLInner] for dynamic inner HTML; [Input],
+// [InputText], [InputBool], and [InputDate] for typed controls; [Number] and
+// [Range] for numeric controls; [Container], [Tbody], and [Select] for dynamic
+// children; and [Template], [Handler], and [RequestWriter] for template integration.
 //
-//   - [HTMLInner]: base renderer for tags with inner HTML content.
-//   - [Input], [InputText], [InputBool], [InputDate]:
-//     typed input helpers that handle event/update flow.
-//   - [Number], [Range]: type-preserving numeric input widgets.
-//   - [Container], [Tbody], [Select]: value widgets for dynamic child UI lists.
+// Every non-nil value used as a [github.com/linkdata/jaws.UI] must be comparable
+// at runtime and equal to itself, and is scoped to one Request. Construct fresh
+// widgets for each Request; they may share synchronized application state,
+// binders, handlers, and tags.
 //
-// Every widget implementing [jaws.UI] is request-scoped. Construct fresh widgets
-// for each request. Widgets from different requests may refer to the same
-// synchronized application state, binders, handlers, or tags.
+// Within one Request, a widget normally backs one live
+// [github.com/linkdata/jaws.Element]. Widgets based on [HTMLInner], plus [Img],
+// [Option], [Template], [Container], [Tbody], and [Select], support multiple live
+// Elements under their concrete contracts. Input widgets and [JsVar] require
+// distinct widget values.
 //
-// [Container], [Tbody], [Select], [Option], and [Template] constructors return
-// values; other constructors generally return pointers. Use Container, Tbody,
-// Select, and Template as values because taking their addresses changes definition
-// equality to pointer identity.
+// [NewContainer], [NewTbody], [NewSelect], and [NewTemplate] return definition
+// values. Use them as values; taking their addresses replaces definition equality
+// with pointer identity and is unsupported.
 //
-// See [jaws.UI] and each concrete widget for comparability, typed-nil, and
-// zero-value behavior.
+// HTML-inner widgets route content through
+// [github.com/linkdata/jaws/lib/bind.MakeHTMLGetter]. Existing
+// [github.com/linkdata/jaws/lib/bind.HTMLGetter] values are used unchanged, and
+// plain strings and [html/template.HTML] are trusted HTML. Adapters for string-valued
+// [github.com/linkdata/jaws/lib/bind.Getter] and
+// [github.com/linkdata/jaws/lib/bind.Binder] values and [fmt.Stringer] output are
+// escaped. Raw [html/template.HTMLAttr] parameters are also trusted. Escape
+// untrusted text before it reaches a trusted form.
 //
-// Nil values follow the module-wide convention documented by
-// [github.com/linkdata/jaws].
+// Browser input, click, and context-menu events are forwarded only while the
+// WebSocket is open and are not replayed. Native form reset does not update Go
+// bindings, and independently bound [Radio] values do not become one server-side
+// group by sharing an HTML name; see [RequestWriter.RadioGroup].
 //
-// Within one request, a widget normally backs one live [jaws.Element]. The
-// HTML-inner widgets, [Img], [Option], [Template], [Container], [Tbody], and
-// [Select] support multiple live Elements under their documented conditions.
-// Input widgets and [JsVar] require distinct widget values.
-//
-// Managed controls report input only while the WebSocket is open; earlier events
-// are not queued. Native form reset does not update bindings. Gate initial
-// interaction when necessary and implement resets through JaWS.
-//
-// Each browser-to-server WebSocket message must fit the 32 KiB inbound limit
-// documented by [jaws.Request.ServeHTTP]. Standard widgets do not chunk large
-// values or removal reports.
-//
-// [RequestWriter.Register] is an advanced escape hatch primarily for binding a
-// render-independent updater to otherwise static HTML authored by the surrounding
-// template. The registered HTML is intended to contain no JaWS widgets. Render
-// standard widgets normally; Register makes no compatibility guarantees for using
-// them as its updater or inside its HTML.
-//
-// Container children must render one addressable direct DOM node carrying their
-// Element's JaWS ID so reconciliation can remove and order them. [NewTemplate]
-// supplies that node through its generated wrapper.
-//
-// HTML-inner widgets route content through [bind.MakeHTMLGetter]. Plain strings
-// are treated as trusted HTML, while [bind.Getter][string], [bind.Binder][string]
-// and [fmt.Stringer] values are escaped. Raw [template.HTMLAttr] params are also
-// trusted and written as attributes as-is. Use getter/stringer forms or
-// html/template escaping for untrusted user text.
+// Each browser-to-server WebSocket message is limited to 32 KiB by
+// [github.com/linkdata/jaws.Request.ServeHTTP]. Standard widgets do not chunk
+// payloads, and an oversized message closes the Request connection.
 package ui

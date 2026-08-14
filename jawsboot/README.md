@@ -12,7 +12,7 @@ https://getbootstrap.com/) and stored gzip-compressed under `assets/static`:
 | `assets/static/bootstrap.bundle.min.js.gz` | `bootstrap.bundle.min.js` |
 | `assets/static/bootstrap.min.css.gz` | `bootstrap.min.css` |
 
-When bumping Bootstrap, update this section and `doc.go` in the same change.
+Maintainers should follow the [Bootstrap version update checklist](./AI.md#bootstrap-version-update-checklist).
 
 Example usage that loads your templates, favicon and Bootstrap. Also uses a `templatereloader`
 so that when running with `-tags debug` or `-race` templates are reloaded from disk as needed.

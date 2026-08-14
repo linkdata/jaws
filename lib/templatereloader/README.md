@@ -1,8 +1,8 @@
 # templatereloader
 
-A templatereloader is a `jaws.TemplateLookuper` that will reload templates from
-disk as needed if running with `-tags debug` or `-race`. If not, it simply calls
-`template.New("").ParseFS(fsys, fpath)` and returns the parsed `*template.Template`
-directly, adding no per-lookup indirection.
+A templatereloader loads templates from an embedded file system in normal
+builds and supports live disk reloading in debug and race builds.
 
-For example usage, see `jawsboot/README.md`
+See the [package documentation](https://pkg.go.dev/github.com/linkdata/jaws/lib/templatereloader)
+for its public API, [AI.md](./AI.md) for version-specific implementation
+guidance, and the [jawsboot example](../../jawsboot/README.md) for integration.

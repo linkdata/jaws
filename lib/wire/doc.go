@@ -1,21 +1,18 @@
 // Package wire formats and parses the line-based JaWS WebSocket protocol.
 //
-// The package has two message types. [Message] is the in-process dispatch
-// record: a command plus payload routed to a destination ([Message.Dest]).
-// [WsMsg] represents a protocol record; [WsMsg.Append] serializes it, and
-// [Parse] recovers it. A WebSocket text message may carry multiple records.
+// The package has two message layers. [Message] is an in-process dispatch record
+// routed through [Message.Dest]. [WsMsg] is one browser protocol record;
+// [WsMsg.Append] serializes it and [Parse] recovers it.
 //
-// Each record is encoded as What<TAB>Jid<TAB>Data<LF>. Data for most commands is
-// written by [WsMsg.Append] as a JSON-compatible quoted string so the browser can
-// decode it with JSON.parse. [Parse] decodes quoted inbound data with
-// strconv.Unquote for the common case, falls back to JSON string decoding for
-// browser-valid strings that strconv rejects, and sanitizes the result as valid
-// UTF-8. [AppendJSONQuote] stays inside the overlap between those string grammars
-// so server-generated records round-trip through either decoder.
+// Each record is What<TAB>Jid<TAB>Data<LF>. One WebSocket text message may contain
+// several records; [ReadLoop] preserves valid-record order and skips malformed
+// records independently.
 //
-// The Set and Call commands carry path/function payloads directly, so callers
-// must keep those payloads free of raw tabs and newlines. The path/function side
-// also uses '=' as its separator from the JSON value; jaws.JsCall normalizes its
-// function path and compacts or escapes JSON before the payload enters the wire
-// layer.
+// [WsMsg.Append] JSON-quotes Data for commands other than
+// [github.com/linkdata/jaws/lib/what.Set] and
+// [github.com/linkdata/jaws/lib/what.Call]. [Parse] decodes quote-prefixed Data and
+// sanitizes every accepted result as valid UTF-8; unquoted Data is accepted
+// verbatim. Set and Call always carry verbatim path=json Data, which must contain
+// no raw tab or LF delimiters. See [github.com/linkdata/jaws/lib/what] for command
+// semantics and [github.com/linkdata/jaws/lib/tag] for destination keys.
 package wire

@@ -1,8 +1,10 @@
-// Package assets contains the embedded client assets and helpers used by JaWS
-// setup code.
+// Package assets provides the embedded JaWS client assets and page-resource
+// helpers.
 //
-// The embedded JavaScript applies server-sent DOM updates and intentionally
-// trusts the server to distinguish trusted HTML from escaped user text.
-// Applications should route untrusted text through escaping helpers before it
-// reaches [html/template.HTML] or raw string HTML paths.
+// The embedded client forwards browser events and applies server-sent DOM
+// commands; authoritative application state remains on the server. It inserts
+// server-sent HTML without escaping, so applications must escape untrusted text
+// before converting it to [html/template.HTML] or passing it as a plain string
+// to an HTML-producing widget; see
+// [github.com/linkdata/jaws/lib/bind.MakeHTMLGetter].
 package assets
