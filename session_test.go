@@ -180,6 +180,35 @@ func TestSession_NewSessionWithoutRequest(t *testing.T) {
 	}
 }
 
+func TestSession_NewSessionAfterJawsClose(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	jw.Close()
+
+	rw := httptest.NewRecorder()
+	hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	if sess := jw.NewSession(rw, hr); sess != nil {
+		t.Fatalf("NewSession() after Close = %v, want nil", sess)
+	}
+	if cookies := rw.Result().Cookies(); len(cookies) != 0 {
+		t.Errorf("response cookies after Close = %v, want none", cookies)
+	}
+	if cookies := hr.Cookies(); len(cookies) != 0 {
+		t.Errorf("request cookies after Close = %v, want none", cookies)
+	}
+	if got := jw.SessionCount(); got != 0 {
+		t.Errorf("SessionCount() after Close = %d, want 0", got)
+	}
+	if sessions := jw.Sessions(); len(sessions) != 0 {
+		t.Errorf("Sessions() after Close = %v, want none", sessions)
+	}
+	if got := jw.GetSession(hr); got != nil {
+		t.Errorf("GetSession() after Close = %v, want nil", got)
+	}
+}
+
 func TestSession_NewSessionUnlocksAfterInjectedRandomReaderPanic(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -1749,6 +1778,13 @@ func TestSession_CloseDetachesRequestSession(t *testing.T) {
 	cookie := sess.Close()
 	if cookie == nil || cookie.MaxAge != -1 {
 		t.Fatalf("expected delete cookie, got %#v", cookie)
+	}
+	if got := sess.Get("foo"); got != "bar" {
+		t.Fatalf("Session.Get() after Session.Close = %v, want %q", got, "bar")
+	}
+	sess.Set("after", "close")
+	if got := sess.Get("after"); got != "close" {
+		t.Fatalf("Session.Set() after Session.Close stored %v, want %q", got, "close")
 	}
 	if got := rq.Session(); got != nil {
 		t.Fatalf("expected closed session to detach from request, got %v", got)

@@ -116,15 +116,18 @@ func (sess *Session) Get(key string) (value any) {
 	return
 }
 
-// Set sets a value to be associated with the key.
-// If value is nil, the key is removed from the session.
+// Set associates value with key.
+//
+// A nil value removes key.
 func (sess *Session) Set(key string, value any) {
 	if sess != nil {
 		sess.mu.Lock()
-		if value == nil {
-			delete(sess.data, key)
-		} else {
-			sess.data[key] = value
+		if sess.data != nil {
+			if value == nil {
+				delete(sess.data, key)
+			} else {
+				sess.data[key] = value
+			}
 		}
 		sess.mu.Unlock()
 	}
@@ -198,6 +201,7 @@ func (sess *Session) addCookie(w http.ResponseWriter, r *http.Request) {
 }
 
 // Close invalidates and expires the [Session].
+//
 // Future [Request] values won't be able to associate with it, and [Session.Cookie] will return a deletion cookie.
 //
 // Existing [Request] values already associated with the [Session] will ask the
@@ -387,7 +391,8 @@ func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 // of the same HTTP request. If a concurrent [Session.Close] wins first, neither
 // w nor r receives its live cookie.
 //
-// It returns nil and has no effect if r is nil; w may be nil.
+// It returns nil and has no effect if r is nil or shutdown has begun; w may be
+// nil.
 //
 // It panics if the [crypto/rand.Reader] captured by [New] returns an error while
 // generating the session ID. Go's default reader does not return errors.
@@ -417,16 +422,27 @@ func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Sessio
 		jw.mu.Lock()
 		defer jw.mu.Unlock()
 		sess = jw.newSessionLocked(remoteIP, secure)
-		jw.sessions[sess.sessionID] = sess
+		if sess != nil {
+			jw.sessions[sess.sessionID] = sess
+		}
 	}()
-	sess.addCookie(w, r)
+	if sess != nil {
+		sess.addCookie(w, r)
+	}
 	return
 }
 
-// newSessionLocked allocates a Session whose ID is absent from jw.sessions.
+// newSessionLocked allocates a Session whose ID is absent from jw.sessions, or
+// returns nil after shutdown begins.
 //
-// The caller must hold jw.mu and publish the Session before releasing it.
+// The caller must hold jw.mu and publish any returned Session before releasing
+// it.
 func (jw *Jaws) newSessionLocked(remoteIP netip.Addr, secure bool) (sess *Session) {
+	select {
+	case <-jw.closeCh:
+		return
+	default:
+	}
 	// Retired IDs deliberately remain eligible for reuse. A natural 64-bit random
 	// collision can therefore make a stale cookie name a later Session. Preventing
 	// every reuse would require unbounded tombstones; if this probability/space
@@ -440,6 +456,19 @@ func (jw *Jaws) newSessionLocked(remoteIP netip.Addr, secure bool) (sess *Sessio
 		}
 	}
 	return
+}
+
+// closeSessionsLocked invalidates and releases every registered Session.
+// The caller must hold jw.mu after detaching all current Requests.
+func (jw *Jaws) closeSessionsLocked() {
+	for _, sess := range jw.sessions {
+		sess.mu.Lock()
+		sess.cookie.MaxAge = -1 // #nosec G124 -- marks the already initialized session cookie for deletion.
+		sess.requests = nil
+		sess.data = nil
+		sess.mu.Unlock()
+	}
+	jw.sessions = nil
 }
 
 // deleteSessionIfCurrent unregisters sess only while it still owns its ID.
