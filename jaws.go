@@ -120,11 +120,11 @@ type Jaws struct {
 	// WebSocketPingInterval controls read-idle keepalive pings.
 	//
 	// When a WebSocket read remains pending for this interval, JaWS pings the peer.
-	// A data message or successful ping restarts the interval. Time spent delivering
-	// an already-read message for processing does not count as read-idle time.
+	// Incoming data or a successful ping restarts the interval. Time spent parsing
+	// or delivering already-read data does not count toward it.
 	//
-	// It must be greater than zero; non-positive values are invalid and do not
-	// disable probing. It defaults to [DefaultWebSocketPingInterval].
+	// It defaults to [DefaultWebSocketPingInterval] and must be positive;
+	// non-positive values do not disable probing.
 	WebSocketPingInterval   time.Duration
 	MaxPendingRequestsPerIP int           // Maximum number of unclaimed Requests per client IP. Defaults to DefaultMaxPendingRequestsPerIP. Set <=0 to disable the cap.
 	webSocketTimeout        time.Duration // timeout duration passed to ServeWith

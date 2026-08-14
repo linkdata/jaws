@@ -22,11 +22,10 @@ const writeBatchLimit = 32 * 1024
 // multiple records; malformed records are skipped independently.
 //
 // A WebSocket read that remains pending for idleInterval triggers a ping bounded
-// by pingTimeout. A successful pong starts another idle interval for the pending
-// read. Time spent parsing or delivering an already-read message is not idle
-// time. Data processed while a ping is pending supersedes a failed ping.
-// idleInterval and pingTimeout must be greater than zero; non-positive values
-// are invalid.
+// by pingTimeout. Incoming data or a successful ping restarts the idle interval.
+// Time spent parsing or delivering an already-read message does not count toward
+// it. If a message is processed while a ping is pending, that ping's failure is
+// ignored. idleInterval and pingTimeout must be positive.
 //
 // Closes incomingMsgCh on exit.
 //
@@ -134,7 +133,8 @@ func readWebSocket(ctx context.Context, resultCh chan<- wsReadResult, ws *websoc
 //
 // Consecutive queued records may be coalesced into one text message.
 //
-// Each write is bounded by writeTimeout, which must be positive.
+// Each WebSocket write has its own writeTimeout deadline; writeTimeout must be
+// positive.
 //
 // Closes the WebSocket on exit.
 //

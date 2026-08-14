@@ -532,15 +532,14 @@ reported through `MustLog()`, which panics when no logger is configured.
 
 ### WebSocket keepalive ping
 
-JaWS can ping read-idle WebSocket connections to detect peers that disappeared
-without a close handshake. Incoming data and successful pings defer the next
-probe, and JaWS does not probe while delivering an already-read message for
-processing. An outbound WebSocket write that remains blocked for the configured
-request timeout also ends the Request.
+JaWS pings read-idle WebSocket connections to detect peers that disappear
+without a close handshake. Incoming data and successful pings restart the idle
+interval. Time spent parsing or delivering already-read data does not count
+toward it.
 
-Set `Jaws.WebSocketPingInterval` to control this. The default is
-`jaws.DefaultWebSocketPingInterval` (1 minute). The value must be greater than
-zero; non-positive values are invalid and do not disable probing.
+`Jaws.WebSocketPingInterval` defaults to
+`jaws.DefaultWebSocketPingInterval` (1 minute) and must be positive;
+non-positive values do not disable probing.
 
 ### Safe to call before `Serve()`
 

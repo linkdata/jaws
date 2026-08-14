@@ -4379,7 +4379,7 @@ func TestWS_WriteTimeoutDisconnectsNonReadingClient(t *testing.T) {
 
 	// Releasing the update queues more output than the connection and bounded
 	// outbound channel can absorb. The peer can still send the input above, but
-	// its blocked receive direction must tear down the Request within writeTimeout.
+	// once an outbound write blocks, its timeout must tear down the Request.
 	releaseUpdate()
 	waitForRequestCount(t, ts.jw, 0, testTimeout)
 }
