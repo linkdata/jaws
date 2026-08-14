@@ -25,7 +25,8 @@ const writeBatchLimit = 32 * 1024
 // by pingTimeout. A successful pong starts another idle interval for the pending
 // read. Time spent parsing or delivering an already-read message is not idle
 // time. Data processed while a ping is pending supersedes a failed ping.
-// idleInterval and pingTimeout must be positive.
+// idleInterval and pingTimeout must be greater than zero; non-positive values
+// are invalid.
 //
 // Closes incomingMsgCh on exit.
 //

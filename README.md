@@ -541,7 +541,8 @@ processing. An outbound WebSocket write that remains blocked for the configured
 request timeout also ends the Request.
 
 Set `Jaws.WebSocketPingInterval` to control this. The default is
-`jaws.DefaultWebSocketPingInterval` (1 minute), and the value must be positive.
+`jaws.DefaultWebSocketPingInterval` (1 minute). The value must be greater than
+zero; non-positive values are invalid and do not disable probing.
 
 ### Safe to call before `Serve()`
 

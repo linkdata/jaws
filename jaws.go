@@ -123,7 +123,8 @@ type Jaws struct {
 	// A data message or successful ping restarts the interval. Time spent delivering
 	// an already-read message for processing does not count as read-idle time.
 	//
-	// It must be positive and defaults to [DefaultWebSocketPingInterval].
+	// It must be greater than zero; non-positive values are invalid and do not
+	// disable probing. It defaults to [DefaultWebSocketPingInterval].
 	WebSocketPingInterval   time.Duration
 	MaxPendingRequestsPerIP int           // Maximum number of unclaimed Requests per client IP. Defaults to DefaultMaxPendingRequestsPerIP. Set <=0 to disable the cap.
 	webSocketTimeout        time.Duration // timeout duration passed to ServeWith
