@@ -3581,6 +3581,49 @@ func TestWS_AutoSessionCreatesSession(t *testing.T) {
 	}
 }
 
+func TestWS_AutoSessionDoesNotCreateAfterJawsClose(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	jw.AutoSession = true
+	request := httptest.NewRequest(http.MethodGet, "http://example.test/jaws/", nil)
+	rq := jw.NewRequest(request)
+	if got := jw.UseRequest(rq.JawsKey, request); got != rq {
+		t.Fatalf("UseRequest() = %p, want %p", got, rq)
+	}
+	if !rq.startServe() {
+		t.Fatal("startServe returned false")
+	}
+	stopped := false
+	defer func() {
+		if !stopped {
+			rq.stopServe()
+		}
+	}()
+
+	jw.Close()
+	recorder := httptest.NewRecorder()
+	writer := &autoSessionWriter{ResponseWriter: recorder, rq: rq, r: request}
+	writer.WriteHeader(http.StatusSwitchingProtocols)
+
+	if recorder.Code != http.StatusSwitchingProtocols {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusSwitchingProtocols)
+	}
+	if cookies := recorder.Result().Cookies(); len(cookies) != 0 {
+		t.Errorf("response cookies after Close = %v, want none", cookies)
+	}
+	if got := rq.Session(); got != nil {
+		t.Errorf("Request.Session() after Close = %v, want nil", got)
+	}
+	if got := jw.SessionCount(); got != 0 {
+		t.Errorf("SessionCount() after Close = %d, want 0", got)
+	}
+
+	rq.stopServe()
+	stopped = true
+}
+
 type autoSessionCloseResponseWriter struct {
 	http.ResponseWriter
 	jw     *Jaws

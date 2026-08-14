@@ -206,6 +206,10 @@ func New() (jw *Jaws, err error) {
 // unclaimable but retain their identity while callers hold them. Active WebSocket
 // handlers observe cancellation and finish asynchronously.
 //
+// Registered [Session] values are invalidated and detached from their Requests,
+// and their key/value data is permanently cleared; new Sessions cannot be
+// created after shutdown begins.
+//
 // Calls to [Jaws.NewRequest] after shutdown begins return Requests with
 // already-canceled contexts that [Jaws.UseRequest] cannot claim. Broadcasts and
 // sends may be discarded after Done closes. Close stops accepting errors from
@@ -230,6 +234,7 @@ func (jw *Jaws) Close() {
 		}
 		if rq.loadState() == reqRunning {
 			rq.mu.Lock()
+			rq.killSessionLocked(true)
 			// Shutdown has no error cause. CancelCauseFunc is idempotent, so it
 			// also safely handles a Request whose context is already done.
 			rq.cancelFn(nil)
@@ -238,6 +243,7 @@ func (jw *Jaws) Close() {
 			jw.retireNonRunningRequestLocked(rq)
 		}
 	}
+	jw.closeSessionsLocked()
 	jw.mu.Unlock()
 }
 

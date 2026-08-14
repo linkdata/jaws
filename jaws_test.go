@@ -177,6 +177,156 @@ func TestNew_DefaultWebSocketPingInterval(t *testing.T) {
 	}
 }
 
+func TestJaws_CloseClearsSessions(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+
+	type sessionFixture struct {
+		request *http.Request
+		session *Session
+		jawsReq *Request
+		value   string
+	}
+	fixtures := make([]sessionFixture, 2)
+	for i := range fixtures {
+		r := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+		r.RemoteAddr = "192.0.2." + strconv.Itoa(i+1) + ":1234"
+		sess := jw.NewSession(nil, r)
+		if sess == nil {
+			t.Fatal("NewSession returned nil")
+		}
+		value := "value-" + strconv.Itoa(i)
+		sess.Set("key", value)
+		rq := jw.NewRequest(r)
+		if got := rq.Session(); got != sess {
+			t.Fatalf("Request.Session() = %p, want %p", got, sess)
+		}
+		if got := rq.Get("key"); got != value {
+			t.Fatalf("Request.Get() = %v, want %q", got, value)
+		}
+		fixtures[i] = sessionFixture{request: r, session: sess, jawsReq: rq, value: value}
+	}
+
+	if got := jw.SessionCount(); got != len(fixtures) {
+		t.Fatalf("SessionCount() = %d, want %d", got, len(fixtures))
+	}
+	registered := make(map[*Session]bool)
+	for _, sess := range jw.Sessions() {
+		registered[sess] = true
+	}
+	for _, fixture := range fixtures {
+		if !registered[fixture.session] {
+			t.Fatalf("Sessions() does not contain %p", fixture.session)
+		}
+		if got := jw.GetSession(fixture.request); got != fixture.session {
+			t.Fatalf("GetSession() = %p, want %p", got, fixture.session)
+		}
+	}
+
+	jw.Close()
+
+	if got := jw.SessionCount(); got != 0 {
+		t.Fatalf("SessionCount() after Close = %d, want 0", got)
+	}
+	if sessions := jw.Sessions(); len(sessions) != 0 {
+		t.Fatalf("Sessions() after Close = %v, want none", sessions)
+	}
+	jw.mu.RLock()
+	sessionsReleased := jw.sessions == nil
+	jw.mu.RUnlock()
+	if !sessionsReleased {
+		t.Fatal("Close retained the session registry allocation")
+	}
+	for _, fixture := range fixtures {
+		if got := jw.GetSession(fixture.request); got != nil {
+			t.Errorf("GetSession() after Close = %v, want nil", got)
+		}
+		if got := fixture.session.Get("key"); got != nil {
+			t.Errorf("Session.Get() after Close = %v, want nil", got)
+		}
+		fixture.session.Set("after", fixture.value)
+		if got := fixture.session.Get("after"); got != nil {
+			t.Errorf("Session.Set() stored %v after Close", got)
+		}
+		if cookie := fixture.session.Cookie(); cookie == nil || cookie.MaxAge >= 0 {
+			t.Errorf("Session.Cookie() after Close = %#v, want deletion cookie", cookie)
+		}
+		if requests := fixture.session.Requests(); len(requests) != 0 {
+			t.Errorf("Session.Requests() after Close = %v, want none", requests)
+		}
+		if got := fixture.jawsReq.Session(); got != nil {
+			t.Errorf("Request.Session() after Close = %v, want nil", got)
+		}
+		if got := fixture.jawsReq.Get("key"); got != nil {
+			t.Errorf("Request.Get() after Close = %v, want nil", got)
+		}
+	}
+}
+
+func TestJaws_CloseClearsRunningSession(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	serveDone := make(chan struct{})
+	go func() {
+		jw.Serve()
+		close(serveDone)
+	}()
+
+	hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	sess := jw.NewSession(nil, hr)
+	if sess == nil {
+		t.Fatal("NewSession returned nil")
+	}
+	sess.Set("key", "value")
+	active := NewTestRequest(jw, hr)
+	if active == nil {
+		t.Fatal("NewTestRequest returned nil")
+	}
+	select {
+	case <-active.ReadyCh:
+	case <-time.After(testTimeout):
+		t.Fatal("Request did not become ready")
+	}
+	if got := active.Session(); got != sess {
+		t.Fatalf("Request.Session() = %p, want %p", got, sess)
+	}
+	if requests := sess.Requests(); len(requests) != 1 || requests[0] != active.Request {
+		t.Fatalf("Session.Requests() = %v, want the active Request", requests)
+	}
+
+	jw.Close()
+
+	if got := active.Session(); got != nil {
+		t.Errorf("Request.Session() after Close = %v, want nil", got)
+	}
+	if got := sess.Get("key"); got != nil {
+		t.Errorf("Session.Get() after Close = %v, want nil", got)
+	}
+	if requests := sess.Requests(); len(requests) != 0 {
+		t.Errorf("Session.Requests() after Close = %v, want none", requests)
+	}
+	if cookie := sess.Cookie(); cookie == nil || cookie.MaxAge >= 0 {
+		t.Errorf("Session.Cookie() after Close = %#v, want deletion cookie", cookie)
+	}
+	select {
+	case <-active.DoneCh:
+	case <-time.After(testTimeout):
+		t.Fatal("Request did not finish after Close")
+	}
+	select {
+	case <-serveDone:
+	case <-time.After(testTimeout):
+		t.Fatal("Serve did not finish after Close")
+	}
+	active.Close()
+}
+
 // TestJaws_CloseCancelsPendingHTTPWork drives a normal HTTP handler that starts
 // request-scoped work before the WebSocket connects. Close must synchronously
 // cancel that pending Request so the handler's work can stop.

@@ -368,10 +368,11 @@ func (rq *Request) newAutoSession(r *http.Request) (sess *Session) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	if rq.session == nil {
-		sess = jw.newSessionLocked(remoteIP, secure)
-		sess.addRequest(rq)
-		rq.session = sess
-		jw.sessions[sess.sessionID] = sess
+		if sess = jw.newSessionLocked(remoteIP, secure); sess != nil {
+			sess.addRequest(rq)
+			rq.session = sess
+			jw.sessions[sess.sessionID] = sess
+		}
 	}
 	return
 }

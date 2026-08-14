@@ -843,6 +843,9 @@ Session key-value pairs can be accessed using `Request.Set()` and
 do this if there is no session; `Get()` will return nil, and `Set()`
 will be a no-op.
 
+`Jaws.Close` invalidates every registered session, permanently clears its
+key-value data, and prevents new sessions from being created.
+
 Sessions are bound to the client IP JaWS sees. Attempting to access an
 existing session from a different non-loopback IP will fail. Loopback
 addresses are treated as the same client so a reverse proxy connecting to the
