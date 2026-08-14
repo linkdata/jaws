@@ -89,8 +89,13 @@ type Jid = jid.Jid // convenience alias
 // unsynchronized write and is not supported. Methods document their own
 // concurrency behavior and may be called concurrently when stated.
 type Jaws struct {
-	CookieName  string // Name for session cookies; defaults to a name derived from the executable ([assets.DefaultCookieName]), falling back to "jaws"
-	AutoSession bool   // Create and associate a session during a successful WebSocket upgrade when a Request has none. Defaults to false.
+	// CookieName is the name used for session cookies.
+	//
+	// It defaults to [assets.DefaultCookieName], which is derived from the
+	// executable and falls back to "jaws". CookieName must be a valid, non-empty
+	// HTTP cookie name; see [http.Cookie.Valid].
+	CookieName  string
+	AutoSession bool // Create and associate a session during a successful WebSocket upgrade when a Request has none. Defaults to false.
 	// TrustForwardedHeaders enables trusted proxy header processing.
 	//
 	// It governs the session cookie Secure flag and WebSocket Origin scheme

@@ -850,9 +850,10 @@ backend over loopback does not break binding; in deployments where every
 request reaches JaWS from loopback, IP binding is effectively disabled unless
 `Jaws.TrustForwardedHeaders` is enabled behind a single trusted reverse proxy.
 
-No data is stored in the client browser except the randomly generated 
-session cookie. You can set the cookie name in `Jaws.CookieName`, the
-default is derived from the executable name and falls back to `jaws`.
+No data is stored in the client browser except the randomly generated
+session cookie. Set its name with `Jaws.CookieName`, which must be a valid,
+non-empty HTTP cookie name. The default is derived from the executable name
+and falls back to `jaws`.
 
 ### A note on the Context
 
