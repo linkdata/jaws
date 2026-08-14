@@ -267,6 +267,11 @@ func TestReadLoop_BatchedDeliveryIsInterruptible(t *testing.T) {
 
 func TestReadLoop_DoesNotPingWhileDelivering(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
+		const (
+			idleInterval = time.Second
+			pingTimeout  = 10 * time.Second
+		)
+
 		ctx, cancel := context.WithCancelCause(t.Context())
 		doneCh := make(chan struct{})
 		inCh := make(chan WsMsg)
@@ -282,7 +287,7 @@ func TestReadLoop_DoesNotPingWhileDelivering(t *testing.T) {
 
 		client.CloseRead(ctx)
 		go func() {
-			ReadLoop(ctx, cancel, doneCh, inCh, time.Second, time.Second, server)
+			ReadLoop(ctx, cancel, doneCh, inCh, idleInterval, pingTimeout, server)
 			close(loopDone)
 		}()
 
@@ -291,10 +296,10 @@ func TestReadLoop_DoesNotPingWhileDelivering(t *testing.T) {
 			t.Fatal(err)
 		}
 		// The complete message is waiting for the application. This local delivery
-		// delay is not peer inactivity, so advancing well beyond both ping durations
+		// delay is not peer inactivity, so advancing across several idle intervals
 		// must not send a probe.
 		synctest.Wait()
-		time.Sleep(3 * time.Second)
+		time.Sleep(3 * idleInterval)
 		synctest.Wait()
 		if got := pingCount.Load(); got != 0 {
 			t.Fatalf("pings while delivering = %d, want 0", got)
@@ -304,10 +309,10 @@ func TestReadLoop_DoesNotPingWhileDelivering(t *testing.T) {
 			t.Fatalf("message = %+v, want %+v", got, want)
 		}
 		synctest.Wait()
-		time.Sleep(3 * time.Second)
+		time.Sleep(5 * idleInterval / 2)
 		synctest.Wait()
-		if got := pingCount.Load(); got != 3 {
-			t.Fatalf("successful idle pings = %d, want 3", got)
+		if got := pingCount.Load(); got != 2 {
+			t.Fatalf("successful idle pings = %d, want 2", got)
 		}
 		if err := ctx.Err(); err != nil {
 			t.Fatalf("parent context was canceled: %v", err)
@@ -373,11 +378,18 @@ func TestReadLoop_ReadActivitySupersedesPingFailure(t *testing.T) {
 
 func TestReadLoop_ReportsUnresponsivePeer(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
+		const (
+			idleInterval = time.Second
+			pingTimeout  = 4 * time.Second
+		)
+
 		ctx, cancel := context.WithCancelCause(t.Context())
 		doneCh := make(chan struct{})
 		inCh := make(chan WsMsg)
+		pingSeen := make(chan struct{})
 		client, server := pipeWithDialOptions(t, websocket.DialOptions{
 			OnPingReceived: func(context.Context, []byte) bool {
+				close(pingSeen)
 				return false // Read the ping but deliberately suppress the required pong.
 			},
 		})
@@ -386,12 +398,38 @@ func TestReadLoop_ReportsUnresponsivePeer(t *testing.T) {
 
 		client.CloseRead(ctx)
 		go func() {
-			ReadLoop(ctx, cancel, doneCh, inCh, time.Second, time.Second, server)
+			ReadLoop(ctx, cancel, doneCh, inCh, idleInterval, pingTimeout, server)
 			close(loopDone)
 		}()
 
+		synctest.Wait()
+		time.Sleep(idleInterval - time.Nanosecond)
+		synctest.Wait()
+		select {
+		case <-pingSeen:
+			t.Fatal("ping sent before idleInterval")
+		default:
+		}
+		time.Sleep(time.Nanosecond)
+		synctest.Wait()
+		select {
+		case <-pingSeen:
+		default:
+			t.Fatal("ping not sent at idleInterval")
+		}
+
 		// The peer consumes the ping but violates the protocol by withholding its pong.
-		time.Sleep(2 * time.Second)
+		time.Sleep(pingTimeout - time.Nanosecond)
+		synctest.Wait()
+		select {
+		case <-loopDone:
+			t.Fatal("ReadLoop returned before pingTimeout")
+		default:
+		}
+		if err := context.Cause(ctx); err != nil {
+			t.Fatalf("context cause before pingTimeout = %v, want nil", err)
+		}
+		time.Sleep(time.Nanosecond)
 		synctest.Wait()
 		assertClosedNow(t, loopDone, "ReadLoop")
 		if err := context.Cause(ctx); !errors.Is(err, context.DeadlineExceeded) {
