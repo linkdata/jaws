@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"slices"
 	"strings"
 	"sync"
@@ -35,9 +36,13 @@ const ownedTestTemplates = `
 {{define "owned-radiogroup-failafter"}}{{range $.RequestWriter.RadioGroup $.Dot.Radios}}{{.Radio}}{{.Label}}{{end}}{{$.Dot.Check}}{{end}}
 {{define "owned-radio-outer"}}{{$.RequestWriter.Template "div" "owned-radio-inner" ($.Dot.Box $.RequestWriter)}}{{end}}
 {{define "owned-radio-inner"}}{{range $.Dot.Elements}}{{.Radio}}{{.Label}}{{end}}{{end}}
+{{define "owned-new-element"}}{{$.Dot.RawChild $.RequestWriter}}{{end}}
+{{define "owned-new-element-failafter"}}{{$.Dot.RawChild $.RequestWriter}}{{$.Dot.Check}}{{end}}
 `
 
 var errOwnedDotCheck = errors.New("owned dot check failed")
+
+const ownedRawChildTag = tag.Tag("owned-raw-child")
 
 // ownedDot is the template data for the ownership tests. A pointer is usable as a
 // tag, and Check fails template execution after nested UI has already rendered.
@@ -67,6 +72,12 @@ func (d *ownedDot) Container() jaws.Container { return d.container }
 func (d *ownedDot) Names() []string { return d.names }
 
 func (d *ownedDot) Radios() *named.BoolArray { return d.radios }
+
+// RawChild manually creates and renders a child through rw.
+func (d *ownedDot) RawChild(rw RequestWriter) (string, error) {
+	elem := rw.NewElement(NewSpan(testHTMLGetter("raw child")))
+	return "", elem.JawsRender(rw, []any{ownedRawChildTag})
+}
 
 // Box builds the radio group with the passed-in writer — the outer template's — and
 // returns the box carrying the RadioElement values to the nested template, whose dot it
@@ -392,6 +403,108 @@ func TestRequestWriter_NewUIReportsElementBeforeRendering(t *testing.T) {
 	}
 }
 
+func TestRequestWriter_TracksEachElementOnce(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		create func(RequestWriter) error
+	}{
+		{"NewElement", func(rw RequestWriter) error {
+			rw.NewElement(NewSpan(testHTMLGetter("new element")))
+			return nil
+		}},
+		{"Register", func(rw RequestWriter) error {
+			rw.Register(new(testRWUpdater))
+			return nil
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, rq := newCoreRequest(t)
+			var seen []*jaws.Element
+			rw := RequestWriter{
+				Request: rq,
+				Writer:  io.Discard,
+				elementCreated: func(elem *jaws.Element) {
+					seen = append(seen, elem)
+				},
+			}
+			if err := tt.create(rw); err != nil {
+				t.Fatal(err)
+			}
+			if len(seen) != 1 {
+				t.Fatalf("elementCreated calls = %d, want 1", len(seen))
+			}
+			if got := rq.GetElementByJid(seen[0].Jid()); got != seen[0] {
+				t.Fatalf("registered Element = %p, want %p", got, seen[0])
+			}
+		})
+	}
+}
+
+func TestTemplate_UpdateReplacesRequestWriterNewElement(t *testing.T) {
+	_, rq := newOwnedRequest(t)
+
+	dot := &ownedDot{}
+	tmpl := NewTemplate("div", "owned-new-element", dot)
+	elem := renderOwned(t, rq, tmpl)
+	first := rq.GetElements(ownedRawChildTag)
+	if len(first) != 1 {
+		t.Fatalf("raw children after render = %d, want 1", len(first))
+	}
+
+	tmpl.JawsUpdate(elem)
+	second := rq.GetElements(ownedRawChildTag)
+	if len(second) != 1 {
+		t.Fatalf("raw children after update = %d, want 1", len(second))
+	}
+	if first[0] == second[0] {
+		t.Fatal("update retained the previous raw child")
+	}
+	if !first[0].Deleted() || rq.GetElementByJid(first[0].Jid()) != nil {
+		t.Fatal("previous raw child remains registered")
+	}
+	if got := countRegistered(t, rq); got != 2 {
+		t.Fatalf("registered elements after update = %d, want 2", got)
+	}
+}
+
+func TestTemplate_UpdateFailureKeepsRequestWriterNewElement(t *testing.T) {
+	jw, rq := newOwnedRequest(t)
+	logger := new(templateLogger)
+	jw.Logger = logger
+
+	dot := &ownedDot{}
+	tmpl := NewTemplate("div", "owned-new-element-failafter", dot)
+	elem := renderOwned(t, rq, tmpl)
+	first := rq.GetElements(ownedRawChildTag)
+	if len(first) != 1 {
+		t.Fatalf("raw children after render = %d, want 1", len(first))
+	}
+	firstJids := registeredJids(t, rq)
+
+	dot.setFail(errOwnedDotCheck)
+	tmpl.JawsUpdate(elem)
+	logged := logger.sync(t, jw)
+	if len(logged) != 1 || !errors.Is(logged[0], errOwnedDotCheck) {
+		t.Fatalf("logged errors = %v, want one %v", logged, errOwnedDotCheck)
+	}
+	if got := registeredJids(t, rq); !slices.Equal(got, firstJids) {
+		t.Fatalf("registered jids after failed update = %v, want %v", got, firstJids)
+	}
+	if got := rq.GetElements(ownedRawChildTag); len(got) != 1 || got[0] != first[0] {
+		t.Fatalf("raw children after failed update = %v, want previous child %v", got, first[0])
+	}
+
+	dot.setFail(nil)
+	tmpl.JawsUpdate(elem)
+	second := rq.GetElements(ownedRawChildTag)
+	if len(second) != 1 || second[0] == first[0] {
+		t.Fatalf("raw children after recovery = %v, want one replacement", second)
+	}
+	if !first[0].Deleted() || rq.GetElementByJid(first[0].Jid()) != nil {
+		t.Fatal("previous raw child remains registered after recovery")
+	}
+}
+
 // TestTemplate_UpdateReclaimsWholeSubtree covers the recursive walk: the wrapper
 // owns a nested template that owns another one.
 func TestTemplate_UpdateReclaimsWholeSubtree(t *testing.T) {
@@ -501,9 +614,9 @@ func TestPageTemplate_RenderFailureDeletesOwnedElements(t *testing.T) {
 }
 
 // TestTemplate_UpdateTracksRegisterAndRadioGroup covers the two helpers that create
-// their Elements through Request.NewElement rather than RequestWriter.NewUI: they
-// report them to the writer's owner, so the counts stay flat across updates with no
-// client attached to acknowledge DOM removals.
+// Elements without going through RequestWriter.NewUI. Both report them to the
+// writer's owner, so the counts stay flat across updates with no client attached to
+// acknowledge DOM removals.
 //
 // The label-only case is why ownership is recorded at creation: RadioElement.Label
 // creates the radio Element for its for= attribute without ever rendering it, so an
