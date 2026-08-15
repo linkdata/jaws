@@ -52,6 +52,11 @@ type PathSetter interface {
 	// the raw JSON bytes. Programmatic [JsVar.JawsSetPath] calls pass the
 	// caller-supplied value unchanged.
 	//
+	// A [JsVar] returns [ErrIllegalJsVarPath] before calling a PathSetter when
+	// jsPath contains a protocol byte. Otherwise it passes jsPath unchanged and
+	// does not apply generic jq validation. Successful broadcasts preserve jsPath
+	// and the requested value.
+	//
 	// If the member is already the given value, it should return [jaws.ErrValueUnchanged].
 	//
 	// When a [JsVar]'s bound value (Ptr) implements PathSetter, the JsVar
@@ -109,11 +114,11 @@ var (
 // JsVarCheck is a type alias so a value of a defined function type with this
 // signature can be assigned to [JsVar.ClientCheck] without explicit conversion.
 //
-// The value contains the complete tentative state, and jsPath is the
-// browser-supplied jq path used for the update. The path is passed through
-// unchanged: jq accepts equivalent noncanonical spellings, including empty
-// components, and both "" and "." address the root. Use jsPath as an inspection
-// hint, not as an authorization key; implement [PathSetter] to allow-list paths.
+// The value contains the complete tentative state, and jsPath is the original
+// browser-supplied jq path. The generic setter ignores empty components, so use
+// jsPath only as an inspection hint; implement [PathSetter] to allow-list paths.
+// See [JsVar] for generic path rules.
+//
 // A nil error accepts the update. A non-nil error rejects it atomically and is
 // returned unchanged, except that an error matching [ErrJsVarTooLarge] is
 // returned as that sentinel after cancelling the associated request, when one
@@ -194,6 +199,13 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // maps with non-string keys are not round-trip writable by the generic setter.
 // Use a browser-facing DTO compatible with the generic setter, or implement
 // [PathSetter] to parse and validate the decoded value.
+//
+// Generic array and slice path components must be canonical JavaScript array
+// indices representable as int: "0" or ASCII decimal digits without a leading
+// zero, at most 4294967294. A component that violates these rules produces an
+// error matching [github.com/linkdata/jq.ErrPathNotFound] when traversal reaches
+// an array or slice. String-keyed map entries and JSON field names are matched
+// exactly. Empty components are ignored, and both "" and "." address the root.
 //
 // While the WebSocket is open, jawsVar sends one complete message per matching
 // live binding, subject to [jaws.Request.ServeHTTP]'s inbound limit.
@@ -363,8 +375,8 @@ func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any,
 	// The broadcast carries the caller's requested value, not the value actually
 	// stored. If a PathSetter transforms the input (e.g. clamps a number), the
 	// stored Go value and the value seen by peers can differ; the stored value is what
-	// JawsGet returns. Reject noncanonical input or arrange reconciliation after the
-	// PathSetter callback if peers must observe the transformed value.
+	// JawsGet returns. If peers must observe a transformed stored value, the
+	// application must reject the input or reconcile after the callback.
 	if err == nil && changed && elem != nil && dirtyTag != nil {
 		elem.Jaws.Broadcast(wire.Message{
 			Dest: dirtyTag,
@@ -411,6 +423,8 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any, cli
 // JawsSetPath sets the value at jsPath and broadcasts the change when possible.
 // It is a programmatic server-side write, so it does not invoke
 // [JsVar.ClientCheck].
+//
+// See [JsVar] for generic path rules.
 //
 // A nil elem changes the bound value without broadcasting. A set before this
 // JsVar has acquired a dirty tag from rendering also produces no broadcast; its

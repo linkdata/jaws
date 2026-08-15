@@ -274,17 +274,22 @@ state-size policy.
 
 Applications can set `JsVar.ClientCheck` to inspect the complete tentative
 value and the browser-supplied jq path before a generic browser write commits.
-The path is passed through unchanged, jq accepts equivalent noncanonical
-spellings with empty components, and both `""` and `"."` address the root. Treat
-it as an inspection hint, not an authorization key; use `ui.PathSetter` to
-allow-list paths. A returned error rolls the write back without broadcasting
-it. If the error matches `ui.ErrJsVarTooLarge`,
-`JawsInput` returns that sentinel and, during normal framework dispatch,
-cancels the associated request after releasing application locks; other check
-errors do not cancel the request. The check validates tentative Go state, not
-the decoded browser value used in an accepted peer broadcast. jq conversions
-and ignored map-to-struct entries can make those values differ; use
-`ui.PathSetter` when peer-visible input also needs validation.
+The path is passed through unchanged. Empty components are ignored, so
+`.value.` aliases `value`, and both `""` and `"."` address the root. Generic
+array and slice writes require canonical JavaScript array-index names
+representable as Go `int`; string-keyed map entries and JSON field names are
+exact. Invalid array or slice paths are rejected before `ClientCheck` runs.
+Treat the raw path as an inspection hint, not an authorization key; use
+`ui.PathSetter` to allow-list paths. A returned error
+rolls the write back without broadcasting it. If the error matches
+`ui.ErrJsVarTooLarge`, `JawsInput` returns that sentinel and, during normal
+framework dispatch, cancels the associated request after releasing application
+locks; other check errors do not cancel the request. The check validates
+tentative Go state, not the decoded browser value used in an accepted peer
+broadcast. jq conversions and ignored map-to-struct entries can make those
+values differ; use `ui.PathSetter` when peer-visible input also needs
+validation.
+
 `ui.JSONSizeCheck[T](maxBytes)` supplies an exact serialized-size check. A value
 above the limit or one that cannot be marshaled makes the check match the size
 sentinel. A non-positive limit disables the check. The helper marshals the

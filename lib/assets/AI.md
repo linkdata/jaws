@@ -44,11 +44,13 @@ Keep reconnect constants and behavior covered by the JavaScript runtime tests.
 ## Browser helpers
 
 `jawsVar` reads or writes an application-owned global and sends a `Set` frame
-for every live binding registered under its top-level name. Dotted components
-after the top-level name form the JSON path. Exact `__proto__` path components
-are rejected, and the routing table remains a `Map` so names cannot mutate an
-object prototype. Full `JsVar` authority, validation, and synchronization rules
-belong to `lib/ui/AI.md`.
+for every live binding registered under its top-level name. Non-empty dotted
+components are verbatim JavaScript property names: on an array, `"1"` addresses
+an element, while `"01"` creates a side property omitted by JSON serialization
+and rejected by generic Go array and slice bindings. Exact `__proto__` path
+components are rejected, and the routing table remains a `Map` so names cannot
+mutate an object prototype. Full `JsVar` authority, validation, and
+synchronization rules belong to `lib/ui/AI.md`.
 
 Value updates avoid writes when possible and preserve text selection when a
 textual value changes by insertion or removal. Managed native form reset is not
