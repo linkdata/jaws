@@ -317,9 +317,11 @@ as `time.Time`, `[]byte`, and maps with non-string keys.
 The generic setter can update exported JSON fields and grow slices and has no
 default accumulated-state limit. `ClientCheck` validates the complete tentative
 value before an actual generic write commits. It receives the browser-supplied
-jq path unchanged; equivalent noncanonical paths exist, so treat it as an
-inspection hint rather than an authorization key. Use `PathSetter` to allow-list
-paths and operations.
+jq path unchanged. Empty components are ignored, so `.value.` aliases `value`;
+treat the raw path as an inspection hint, not an authorization key. Array and
+slice components must be canonical JavaScript array-index names representable
+as Go `int`; string-keyed map entries and JSON field names are exact. Use
+`PathSetter` to allow-list paths and operations.
 
 A check runs while the application locker is held. It must inspect only: do not
 mutate or retain tentative state, re-enter the JsVar, call a path setter, acquire

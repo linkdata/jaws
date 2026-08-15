@@ -31,6 +31,18 @@ type jsVarSliceData struct {
 	Items []string `json:"items"`
 }
 
+type jsVarArrayIndexState struct {
+	Items        []int             `json:"items"`
+	ByName       map[string]string `json:"byName"`
+	pathSetCalls int
+	lastPath     string
+}
+
+func (state *jsVarArrayIndexState) JawsPathSet(_ *jaws.Element, jsPath string, _ any) {
+	state.pathSetCalls++
+	state.lastPath = jsPath
+}
+
 type jsVarConcurrentData struct {
 	Left  string `json:"left"`
 	Right string `json:"right"`
@@ -68,10 +80,12 @@ func (*jsVarSizeErrorPathSetter) JawsSetPath(*jaws.Element, string, any) error {
 }
 
 type jsVarErrorPathSetter struct {
-	err error
+	err      error
+	lastPath string
 }
 
-func (data *jsVarErrorPathSetter) JawsSetPath(*jaws.Element, string, any) error {
+func (data *jsVarErrorPathSetter) JawsSetPath(_ *jaws.Element, jsPath string, _ any) error {
+	data.lastPath = jsPath
 	return data.err
 }
 
@@ -257,6 +271,103 @@ func TestJsVarClientCheckContract(t *testing.T) {
 	}
 }
 
+func TestJsVarGenericPathsUseJavaScriptArrayIndices(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+
+	tr := jawstest.NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("nil test request")
+	}
+	cleanupJsVarTestRequest(t, tr)
+	<-tr.ReadyCh
+
+	state := jsVarArrayIndexState{
+		Items:  []int{1, 2},
+		ByName: map[string]string{"01": "old"},
+	}
+	var mu sync.Mutex
+	jsvar := NewJsVar(&mu, &state)
+	checkPaths := make([]string, 0, 2)
+	jsvar.ClientCheck = func(_ *jsVarArrayIndexState, jsPath string) error {
+		checkPaths = append(checkPaths, jsPath)
+		return nil
+	}
+
+	rw := RequestWriter{Request: tr.Request, Writer: io.Discard}
+	if err = rw.JsVar("indices", jsvar); err != nil {
+		t.Fatal(err)
+	}
+	elements := tr.GetElements(&state)
+	if len(elements) != 1 {
+		t.Fatalf("rendered elements = %d, want 1", len(elements))
+	}
+	elem := elements[0]
+
+	requireNoBroadcast := func(stage string) {
+		t.Helper()
+		select {
+		case msg := <-tr.OutCh:
+			t.Fatalf("%s broadcast %#v", stage, msg)
+		default:
+		}
+	}
+	requireUnchanged := func(stage string) {
+		t.Helper()
+		if state.Items[1] != 2 || state.ByName["01"] != "old" {
+			t.Fatalf("%s changed state to %#v", stage, state)
+		}
+		if len(checkPaths) != 0 || state.pathSetCalls != 0 {
+			t.Fatalf("%s made %d checks and %d callbacks", stage, len(checkPaths), state.pathSetCalls)
+		}
+	}
+
+	if got := jsvar.JawsGetPath(nil, "items.01"); got != nil {
+		t.Fatalf("noncanonical array Get = %#v, want nil", got)
+	}
+	if got := jsvar.JawsGetPath(nil, "byName.01"); got != "old" {
+		t.Fatalf("exact map-key Get = %#v, want old", got)
+	}
+
+	if err = jsvar.JawsSetPath(elem, "items.01", 9); !errors.Is(err, jq.ErrPathNotFound) {
+		t.Fatalf("programmatic noncanonical array write error = %v, want ErrPathNotFound", err)
+	}
+	requireUnchanged("programmatic noncanonical array write")
+	requireNoBroadcast("programmatic noncanonical array write")
+
+	if err = clientSetFrame(t, jsvar, elem, "items.01", 9); !errors.Is(err, jq.ErrPathNotFound) {
+		t.Fatalf("browser noncanonical array write error = %v, want ErrPathNotFound", err)
+	}
+	requireUnchanged("browser noncanonical array write")
+	requireNoBroadcast("browser noncanonical array write")
+
+	if err = clientSetFrame(t, jsvar, elem, "items.1", 9); err != nil {
+		t.Fatal(err)
+	}
+	if state.Items[1] != 9 || len(checkPaths) != 1 || checkPaths[0] != "items.1" || state.pathSetCalls != 1 || state.lastPath != "items.1" {
+		t.Fatalf("canonical array write left state %#v, check paths %q", state, checkPaths)
+	}
+	msg := awaitJsVarOperation(t, "canonical array-index broadcast", tr.OutCh)
+	if msg.What != what.Set || msg.Data != "items.1=9" {
+		t.Fatalf("canonical array-index broadcast = %#v, want items.1=9 Set", msg)
+	}
+
+	if err = clientSetFrame(t, jsvar, elem, "byName.01", "new"); err != nil {
+		t.Fatal(err)
+	}
+	if state.ByName["01"] != "new" || len(checkPaths) != 2 || checkPaths[1] != "byName.01" || state.pathSetCalls != 2 || state.lastPath != "byName.01" {
+		t.Fatalf("exact map-key write left state %#v, check paths %q", state, checkPaths)
+	}
+	msg = awaitJsVarOperation(t, "exact map-key broadcast", tr.OutCh)
+	if msg.What != what.Set || msg.Data != `byName.01="new"` {
+		t.Fatalf(`exact map-key broadcast = %#v, want byName.01="new" Set`, msg)
+	}
+}
+
 func TestJsVarClientCheckRejectRestoresZeroValueAppendAliases(t *testing.T) {
 	backing := []string{"sentinel"}
 	state := jsVarSliceData{Items: backing[:0]}
@@ -306,7 +417,7 @@ func TestJsVarClientCheckRootPath(t *testing.T) {
 	}
 }
 
-func TestJsVarClientCheckReceivesNoncanonicalPathUnchanged(t *testing.T) {
+func TestJsVarClientCheckReceivesEmptyComponentsUnchanged(t *testing.T) {
 	state := jsVarCheckedState{Value: "old"}
 	jsvar := NewJsVar(new(sync.Mutex), &state)
 	gotPath := "not called"
@@ -636,6 +747,23 @@ func TestJsVarClientCheckBypasses(t *testing.T) {
 		}
 		if rq.Context().Err() != nil {
 			t.Fatalf("PathSetter write cancelled request: %v", rq.Context().Err())
+		}
+	})
+
+	t.Run("PathSetter owns path syntax", func(t *testing.T) {
+		errRejected := errors.New("custom path rejection")
+		state := jsVarErrorPathSetter{err: errRejected}
+		jsvar := NewJsVar(new(sync.Mutex), &state)
+		calls := 0
+		jsvar.ClientCheck = func(*jsVarErrorPathSetter, string) error {
+			calls++
+			return nil
+		}
+		if err := jsvar.JawsInput(nil, `items.01="x"`); err != errRejected {
+			t.Fatalf("PathSetter error = %v, want exact %v", err, errRejected)
+		}
+		if calls != 0 || state.lastPath != "items.01" {
+			t.Fatalf("PathSetter path=%q calls=%d, want items.01 and no ClientCheck", state.lastPath, calls)
 		}
 	})
 

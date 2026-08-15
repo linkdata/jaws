@@ -649,6 +649,56 @@ process.stdout.write(jaws.sent[0] || "");
 	}
 }
 
+func TestJawsJS_JsVarArrayPathsUseExactPropertyNames(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+
+window.app = { items: [10, 20] };
+window.jawsNames.set("app", ["Jid.9"]);
+jaws = new FakeSocket();
+
+jawsVar("app.items.1", 21);
+jawsVar("app.items.01", 99);
+
+process.stdout.write(JSON.stringify({
+	canonical: window.app.items[1],
+	sideProperty: window.app.items["01"],
+	hasSideProperty: Object.hasOwn(window.app.items, "01"),
+	serialized: JSON.stringify(window.app.items),
+	frames: jaws.sent,
+}));
+`)
+
+	var got struct {
+		Canonical       int      `json:"canonical"`
+		SideProperty    int      `json:"sideProperty"`
+		HasSideProperty bool     `json:"hasSideProperty"`
+		Serialized      string   `json:"serialized"`
+		Frames          []string `json:"frames"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+	}
+	if got.Canonical != 21 || got.SideProperty != 99 || !got.HasSideProperty {
+		t.Fatalf("array property state = %+v, want canonical index 21 and exact side property 99", got)
+	}
+	if got.Serialized != "[10,21]" {
+		t.Fatalf("serialized array = %q, want side property omitted", got.Serialized)
+	}
+	wantData := []string{"items.1=21", "items.01=99"}
+	if len(got.Frames) != len(wantData) {
+		t.Fatalf("frames = %q, want %d", got.Frames, len(wantData))
+	}
+	for i, rawFrame := range got.Frames {
+		msg, ok := wire.Parse([]byte(rawFrame))
+		if !ok || msg.What != what.Set || msg.Jid != 9 || msg.Data != wantData[i] {
+			t.Fatalf("frame %d = %+v, parseable %t; want Jid.9 Set %q", i, msg, ok, wantData[i])
+		}
+	}
+}
+
 func TestJawsJS_JsVarRejectsProtoPathComponents(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 function FakeSocket() { this.readyState = 1; this.sent = []; }
