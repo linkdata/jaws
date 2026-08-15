@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"html/template"
 	"io"
 	"strconv"
@@ -178,9 +179,10 @@ func (u *InputDate) JawsUpdate(elem *jaws.Element) {
 
 // JawsInput stores a browser-side date input value.
 //
-// The browser sends a calendar date (YYYY-MM-DD), which [time.Parse] resolves
-// to midnight UTC, so the stored [time.Time] drops any time-of-day and
-// [time.Location] the previously bound value carried. In a non-UTC deployment
+// An empty value maps to the zero [time.Time], which renders as "0001-01-01".
+// Non-empty values are calendar dates (YYYY-MM-DD). [time.Parse]
+// resolves them to midnight UTC, so the stored [time.Time] drops any time-of-day
+// and [time.Location] the previously bound value carried. In a non-UTC deployment
 // the stored instant therefore shifts by the zone offset, and because
 // [time.Time] inequality includes the location, re-selecting the same date
 // still reports a change and broadcasts it. Bind a date whose clock and zone are
@@ -193,6 +195,7 @@ func (u *InputDate) JawsUpdate(elem *jaws.Element) {
 // parse error and leaves the last accepted value in place instead of updating the
 // bound value. Keep bound years within 1..9999.
 func (u *InputDate) JawsInput(elem *jaws.Element, value string) (err error) {
+	input := value
 	if value == "" {
 		value = "0001-01-01"
 	}
@@ -200,8 +203,14 @@ func (u *InputDate) JawsInput(elem *jaws.Element, value string) (err error) {
 	// Parse errors are malformed client frames: jaws.js reads elem.value from
 	// browser date controls. Leave Last as the last accepted value.
 	if v, err = time.Parse(assets.ISO8601, value); err == nil {
-		u.Last.Store(u.str(v))
-		err = u.maybeDirty(elem, u.Setter.JawsSet(elem, v))
+		u.Last.Store(input)
+		err = u.Setter.JawsSet(elem, v)
+		if input == "" && u.tag != nil && errors.Is(err, jaws.ErrValueUnchanged) {
+			elem.Dirty(elem)
+			err = nil
+			return
+		}
+		err = u.maybeDirty(elem, err)
 	}
 	return
 }

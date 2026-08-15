@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/linkdata/deadlock"
@@ -174,6 +175,74 @@ func TestInputDateWidget(t *testing.T) {
 	d1, _ := time.Parse(assets.ISO8601, "2022-03-04")
 	sd.Set(d1)
 	date.JawsUpdate(elem)
+}
+
+func TestInputDate_ClearReconcilesCanonicalZero(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := jaws.New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		go jw.Serve()
+		tr := jawstest.NewTestRequest(jw, nil)
+		<-tr.ReadyCh
+		defer func() {
+			tr.Close()
+			jw.Close()
+			synctest.Wait()
+		}()
+
+		source := newTestSetter(time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC))
+		originElem, _ := renderUI(t, tr.Request, NewDate(source))
+		peerElem, _ := renderUI(t, tr.Request, NewDate(source))
+
+		waitForUpdate := func() {
+			synctest.Wait()
+			time.Sleep(jaws.DefaultUpdateInterval + time.Millisecond)
+			synctest.Wait()
+		}
+		readCorrection := func() (msg wire.WsMsg) {
+			t.Helper()
+			select {
+			case msg = <-tr.OutCh:
+				if msg.What != what.Value || msg.Data != "0001-01-01" {
+					t.Fatalf("date correction = %#v, want Value %q", msg, "0001-01-01")
+				}
+			default:
+				t.Fatal("missing date correction")
+			}
+			return
+		}
+
+		tr.InCh <- wire.WsMsg{Jid: originElem.Jid(), What: what.Input, Data: ""}
+		waitForUpdate()
+		if got := source.Get(); !got.IsZero() {
+			t.Fatalf("cleared date = %v, want zero time", got)
+		}
+		corrections := map[jaws.Jid]bool{
+			readCorrection().Jid: true,
+			readCorrection().Jid: true,
+		}
+		if len(corrections) != 2 || !corrections[originElem.Jid()] || !corrections[peerElem.Jid()] {
+			t.Fatalf("corrected elements = %v, want origin and peer", corrections)
+		}
+		select {
+		case msg := <-tr.OutCh:
+			t.Fatalf("unexpected additional date output: %#v", msg)
+		default:
+		}
+
+		tr.InCh <- wire.WsMsg{Jid: originElem.Jid(), What: what.Input, Data: ""}
+		waitForUpdate()
+		if msg := readCorrection(); msg.Jid != originElem.Jid() {
+			t.Fatalf("unchanged correction Jid = %v, want %v", msg.Jid, originElem.Jid())
+		}
+		select {
+		case msg := <-tr.OutCh:
+			t.Fatalf("unexpected additional date output: %#v", msg)
+		default:
+		}
+	})
 }
 
 // TestInputDate_BrowserEditNormalizesToMidnightUTC locks in the documented
