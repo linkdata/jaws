@@ -30,17 +30,23 @@ func (rw RequestWriter) trackElement(elem *jaws.Element) {
 	}
 }
 
+// NewElement creates a new [jaws.Element] for ui.
+//
+// It has the same ownership and multiplicity requirements as
+// [jaws.Request.NewElement]. An Element created through the RequestWriter passed
+// to a [Template] execution belongs to that Template.
+func (rw RequestWriter) NewElement(ui jaws.UI) *jaws.Element {
+	elem := rw.Request.NewElement(ui)
+	rw.trackElement(elem)
+	return elem
+}
+
 // NewUI creates an element for ui and renders it to the underlying writer.
 //
 // The ui value must satisfy the ownership and live-Element multiplicity
 // requirements documented by [jaws.UI].
 func (rw RequestWriter) NewUI(ui jaws.UI, params ...any) (err error) {
 	elem := rw.NewElement(ui)
-	// Report the Element before rendering it, so the owner's set is complete even for
-	// one that fails. That set may then hold an Element already unregistered below,
-	// which costs nothing: Request.DeleteElements skips elements it finds
-	// unregistered, and every rollback path deletes the whole set at once.
-	rw.trackElement(elem)
 	if err = elem.JawsRender(rw, params); err != nil {
 		// Unregister anything the failed Element already owns along with it, so no
 		// widget can strand a subtree by not rolling back itself.

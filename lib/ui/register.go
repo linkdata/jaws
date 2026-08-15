@@ -57,7 +57,6 @@ func (rw RequestWriter) Register(updater jaws.Updater, params ...any) jid.Jid {
 	// documented usage puts the returned Jid inside an attribute
 	// (<div id="{{$.Register .X}}">), where that comment would corrupt the markup.
 	elem := rw.NewElement(registerUI{Updater: updater})
-	rw.trackElement(elem)
 	elem.Tag(updater)
 	// The registerUI Element's UI is not the updater, so events reach the
 	// updater only through the element's handler list, not the elem.UI() fallback.
