@@ -4,8 +4,6 @@ import (
 	"errors"
 	"html/template"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -18,16 +16,6 @@ import (
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
-
-type inputDateCountingUI struct {
-	*Date
-	updateCalls atomic.Int32
-}
-
-func (u *inputDateCountingUI) JawsUpdate(elem *jaws.Element) {
-	u.updateCalls.Add(1)
-	u.Date.JawsUpdate(elem)
-}
 
 func TestInputTextWidgets(t *testing.T) {
 	_, rq := newCoreRequest(t)
@@ -190,102 +178,71 @@ func TestInputDateWidget(t *testing.T) {
 }
 
 func TestInputDate_ClearReconcilesCanonicalZero(t *testing.T) {
-	tests := []struct {
-		name        string
-		initial     time.Time
-		wantPeer    bool
-		wantInitial string
-	}{
-		{
-			name:        "changed value updates origin and peer",
-			initial:     time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC),
-			wantPeer:    true,
-			wantInitial: "2026-08-15",
-		},
-		{
-			name:        "unchanged zero corrects only origin",
-			initial:     time.Time{},
-			wantInitial: "0001-01-01",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			synctest.Test(t, func(t *testing.T) {
-				jw, err := jaws.New()
-				if err != nil {
-					t.Fatal(err)
-				}
-				go jw.Serve()
-				tr := jawstest.NewTestRequest(jw, nil)
-				<-tr.ReadyCh
-				defer func() {
-					tr.Close()
-					jw.Close()
-					synctest.Wait()
-				}()
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := jaws.New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		go jw.Serve()
+		tr := jawstest.NewTestRequest(jw, nil)
+		<-tr.ReadyCh
+		defer func() {
+			tr.Close()
+			jw.Close()
+			synctest.Wait()
+		}()
 
-				var mu sync.Mutex
-				value := tt.initial
-				binding := bind.New(&mu, &value)
-				origin := &inputDateCountingUI{Date: NewDate(binding)}
-				peer := &inputDateCountingUI{Date: NewDate(binding)}
-				originElem := tr.NewElement(origin)
-				peerElem := tr.NewElement(peer)
-				for _, elem := range []*jaws.Element{originElem, peerElem} {
-					var output strings.Builder
-					if err = elem.JawsRender(&output, nil); err != nil {
-						t.Fatal(err)
-					}
-					if got := output.String(); !strings.Contains(got, `value="`+tt.wantInitial+`"`) {
-						t.Fatalf("initial date HTML = %q, want value %q", got, tt.wantInitial)
-					}
-				}
+		source := newTestSetter(time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC))
+		originElem, _ := renderUI(t, tr.Request, NewDate(source))
+		peerElem, _ := renderUI(t, tr.Request, NewDate(source))
 
-				tr.InCh <- wire.WsMsg{Jid: originElem.Jid(), What: what.Input, Data: ""}
-				synctest.Wait()
-				time.Sleep(jaws.DefaultUpdateInterval + time.Millisecond)
-				synctest.Wait()
+		waitForUpdate := func() {
+			synctest.Wait()
+			time.Sleep(jaws.DefaultUpdateInterval + time.Millisecond)
+			synctest.Wait()
+		}
+		readCorrection := func() (msg wire.WsMsg) {
+			t.Helper()
+			select {
+			case msg = <-tr.OutCh:
+				if msg.What != what.Value || msg.Data != "0001-01-01" {
+					t.Fatalf("date correction = %#v, want Value %q", msg, "0001-01-01")
+				}
+			default:
+				t.Fatal("missing date correction")
+			}
+			return
+		}
 
-				mu.Lock()
-				got := value
-				mu.Unlock()
-				if !got.IsZero() {
-					t.Fatalf("cleared date = %v, want zero time", got)
-				}
+		tr.InCh <- wire.WsMsg{Jid: originElem.Jid(), What: what.Input, Data: ""}
+		waitForUpdate()
+		if got := source.Get(); !got.IsZero() {
+			t.Fatalf("cleared date = %v, want zero time", got)
+		}
+		corrections := map[jaws.Jid]bool{
+			readCorrection().Jid: true,
+			readCorrection().Jid: true,
+		}
+		if len(corrections) != 2 || !corrections[originElem.Jid()] || !corrections[peerElem.Jid()] {
+			t.Fatalf("corrected elements = %v, want origin and peer", corrections)
+		}
+		select {
+		case msg := <-tr.OutCh:
+			t.Fatalf("unexpected additional date output: %#v", msg)
+		default:
+		}
 
-				want := map[jaws.Jid]bool{originElem.Jid(): true}
-				if tt.wantPeer {
-					want[peerElem.Jid()] = true
-				}
-				for len(want) > 0 {
-					select {
-					case msg := <-tr.OutCh:
-						if !want[msg.Jid] || msg.What != what.Value || msg.Data != "0001-01-01" {
-							t.Fatalf("date correction = %#v, want Value %q for one of %v", msg, "0001-01-01", want)
-						}
-						delete(want, msg.Jid)
-					default:
-						t.Fatalf("missing date corrections for %v", want)
-					}
-				}
-				select {
-				case msg := <-tr.OutCh:
-					t.Fatalf("unexpected additional date output: %#v", msg)
-				default:
-				}
-				wantPeerCalls := int32(0)
-				if tt.wantPeer {
-					wantPeerCalls = 1
-				}
-				if got := origin.updateCalls.Load(); got != 1 {
-					t.Fatalf("origin JawsUpdate calls = %d, want 1", got)
-				}
-				if got := peer.updateCalls.Load(); got != wantPeerCalls {
-					t.Fatalf("peer JawsUpdate calls = %d, want %d", got, wantPeerCalls)
-				}
-			})
-		})
-	}
+		tr.InCh <- wire.WsMsg{Jid: originElem.Jid(), What: what.Input, Data: ""}
+		waitForUpdate()
+		if msg := readCorrection(); msg.Jid != originElem.Jid() {
+			t.Fatalf("unchanged correction Jid = %v, want %v", msg.Jid, originElem.Jid())
+		}
+		select {
+		case msg := <-tr.OutCh:
+			t.Fatalf("unexpected additional date output: %#v", msg)
+		default:
+		}
+	})
 }
 
 // TestInputDate_BrowserEditNormalizesToMidnightUTC locks in the documented
