@@ -542,7 +542,7 @@ func (elem *Element) ApplyGetter(getter any) (tagValue any) {
 		} else if _, ok := getter.(ContextMenuHandler); ok {
 			elem.appendHandlers(getter)
 		}
-		if usableAsTag(tagValue) {
+		if eligibleAsTag(tagValue, tag.NewErrNotComparable) {
 			elem.Tag(tagValue)
 		} else {
 			tagValue = nil

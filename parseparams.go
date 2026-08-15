@@ -6,8 +6,8 @@ import (
 	"github.com/linkdata/jaws/lib/tag"
 )
 
-// usableAsTag returns true if it is safe to use as a tag, false otherwise.
-func usableAsTag(t any) (ok bool) {
+// eligibleAsTag reports whether t requires expansion to validate or passes validate.
+func eligibleAsTag(t any, validate func(any) error) (ok bool) {
 	if _, ok = t.(tag.TagGetter); ok {
 		return true
 	}
@@ -15,7 +15,7 @@ func usableAsTag(t any) (ok bool) {
 	case []any, []tag.Tag:
 		return true
 	default:
-		return tag.NewErrNotComparable(t) == nil
+		return validate(t) == nil
 	}
 }
 
@@ -57,7 +57,7 @@ func ParseParams(params []any) (tags []any, handlers []any, attrs []string) {
 			} else if _, ok := data.(ContextMenuHandler); ok {
 				handlers = append(handlers, data)
 			}
-			if usableAsTag(data) {
+			if eligibleAsTag(data, tag.NewErrNotUsableAsTag) {
 				tags = append(tags, data)
 			}
 		}
