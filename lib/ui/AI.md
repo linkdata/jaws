@@ -320,8 +320,11 @@ value before an actual generic write commits. It receives the browser-supplied
 jq path unchanged. Empty components are ignored, so `.value.` aliases `value`;
 treat the raw path as an inspection hint, not an authorization key. Array and
 slice components must be canonical JavaScript array-index names representable
-as Go `int`; string-keyed map entries and JSON field names are exact. Use
-`PathSetter` to allow-list paths and operations.
+as Go `int`, and string-keyed map entries are exact. Struct path components
+exactly match names selected by `encoding/json`'s default field-selection rules,
+including JSON tag names and unambiguous promoted fields. Generic writes do not
+allocate nil pointers; a path or map-to-struct key that would traverse one fails
+with `jq.ErrPathNotFound`. Use `PathSetter` to allow-list paths and operations.
 
 A check runs while the application locker is held. It must inspect only: do not
 mutate or retain tentative state, re-enter the JsVar, call a path setter, acquire

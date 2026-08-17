@@ -264,11 +264,12 @@ data. The selected Go setter (`jq.Set`, `jq.SetChecked`, or an application
 `PathSetter`) independently controls accepted server-side paths.
 
 **Trust boundary (application responsibility):** the generic JSON path will set
-*any* exported field matched by its `json` tag, or by its Go name when the tag
-has no explicit name, and will append to a slice one element per `Set` message
-(`json:"-"` fields remain unwritable). The 32 KiB WebSocket read limit bounds one
-message, not the accumulated server state, and there is (see I6) no per-message
-rate limit. With
+*any* exported field selected by `encoding/json`'s default field rules, including
+unambiguous promoted fields. Names come from an explicit `json` tag or the Go
+field name when the tag has no explicit name; `json:"-"` fields remain
+unwritable. The setter will also append to a slice one element per `Set` message.
+The 32 KiB WebSocket read limit bounds one message, not the accumulated server
+state, and there is (see I6) no per-message rate limit. With
 a nil `JsVar.ClientCheck`, a type-correct generic write has no additional
 state-size policy.
 
@@ -277,8 +278,12 @@ value and the browser-supplied jq path before a generic browser write commits.
 The path is passed through unchanged. Empty components are ignored, so
 `.value.` aliases `value`, and both `""` and `"."` address the root. Generic
 array and slice writes require canonical JavaScript array-index names
-representable as Go `int`; string-keyed map entries and JSON field names are
-exact. Invalid array or slice paths are rejected before `ClientCheck` runs.
+representable as Go `int`, and string-keyed map entries are exact. Struct path
+components exactly match names selected by `encoding/json`'s default
+field-selection rules, including JSON tag names and unambiguous promoted fields.
+Generic writes do not allocate nil pointers; a path or map-to-struct key that
+would traverse one fails with `jq.ErrPathNotFound`. Invalid array or slice paths
+are rejected before `ClientCheck` runs.
 Treat the raw path as an inspection hint, not an authorization key; use
 `ui.PathSetter` to allow-list paths. A returned error
 rolls the write back without broadcasting it. If the error matches

@@ -204,8 +204,13 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // indices representable as int: "0" or ASCII decimal digits without a leading
 // zero, at most 4294967294. A component that violates these rules produces an
 // error matching [github.com/linkdata/jq.ErrPathNotFound] when traversal reaches
-// an array or slice. String-keyed map entries and JSON field names are matched
-// exactly. Empty components are ignored, and both "" and "." address the root.
+// an array or slice. String-keyed map entries are matched exactly. Struct path
+// components exactly match names selected by the default field-selection rules
+// of [encoding/json], including JSON tag names and unambiguous promoted fields.
+// Generic writes do not allocate nil pointers; a path or map-to-struct key that
+// would traverse one produces an error matching
+// [github.com/linkdata/jq.ErrPathNotFound]. Empty components are ignored, and
+// both "" and "." address the root.
 //
 // While the WebSocket is open, jawsVar sends one complete message per matching
 // live binding, subject to [jaws.Request.ServeHTTP]'s inbound limit.
@@ -258,11 +263,9 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 //
 // SECURITY: a JsVar is client-writable. Incoming browser "set" messages are
 // applied by path to the bound value. If the bound value implements [PathSetter],
-// its JawsSetPath validates and applies the change. Otherwise the generic path
-// setter ([github.com/linkdata/jq.Set]) can set any exported field — matched by its
-// json tag, or by the Go field name when its json tag has no explicit name (a
-// json:"-" tag is never writable) — and append to slices one element per
-// message.
+// its JawsSetPath validates and applies the change. Otherwise
+// [github.com/linkdata/jq.Set] can write any exported field addressable by the
+// generic path rules above and append one element per message to a slice.
 //
 // There is no default cumulative size bound. Set [JsVar.ClientCheck] before first
 // use to validate each tentative generic browser update. [JSONSizeCheck] provides

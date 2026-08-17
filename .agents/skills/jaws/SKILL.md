@@ -316,8 +316,12 @@ The handler candidate is asked via `JawsClick` / `JawsContextMenu` / `JawsInput`
 - Generic jq paths require JavaScript array-index names at Go arrays and slices:
   `"0"` or a nonzero decimal without a leading zero, at most `4294967294` and
   representable as Go `int`. Other components produce an error matching
-  `jq.ErrPathNotFound` at an array or slice. String-keyed map entries and JSON
-  field names are exact; empty components are ignored.
+  `jq.ErrPathNotFound` at an array or slice. String-keyed map entries are exact.
+  Struct path components exactly match names selected by `encoding/json`'s
+  default field-selection rules, including JSON tag names and unambiguous
+  promoted fields. Generic writes do not allocate nil pointers; a path or
+  map-to-struct key that would traverse one fails with `jq.ErrPathNotFound`.
+  Empty components are ignored.
 - Browser JSON numbers use JavaScript `Number` values. Integers outside
   `-9007199254740991` through `9007199254740991` may round, and a browser write
   may commit the rounded value to Go.

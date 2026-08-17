@@ -43,6 +43,18 @@ func (state *jsVarArrayIndexState) JawsPathSet(_ *jaws.Element, jsPath string, _
 	state.lastPath = jsPath
 }
 
+type jsVarPromotedFields struct {
+	Value int `json:"value"`
+}
+
+type jsVarPromotedState struct {
+	jsVarPromotedFields
+}
+
+type jsVarNilPromotedState struct {
+	*jsVarPromotedFields
+}
+
 type jsVarConcurrentData struct {
 	Left  string `json:"left"`
 	Right string `json:"right"`
@@ -365,6 +377,113 @@ func TestJsVarGenericPathsUseJavaScriptArrayIndices(t *testing.T) {
 	msg = awaitJsVarOperation(t, "exact map-key broadcast", tr.OutCh)
 	if msg.What != what.Set || msg.Data != `byName.01="new"` {
 		t.Fatalf(`exact map-key broadcast = %#v, want byName.01="new" Set`, msg)
+	}
+}
+
+func TestJsVarPromotedJSONFieldPaths(t *testing.T) {
+	state := jsVarPromotedState{jsVarPromotedFields{Value: 1}}
+	data, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(data), `{"value":1}`; got != want {
+		t.Fatalf("json.Marshal = %s, want %s", got, want)
+	}
+
+	jsvar := NewJsVar(new(sync.Mutex), &state)
+	var checkPaths []string
+	var checkedValues []int
+	jsvar.ClientCheck = func(value *jsVarPromotedState, jsPath string) error {
+		checkPaths = append(checkPaths, jsPath)
+		checkedValues = append(checkedValues, value.Value)
+		return nil
+	}
+	if got := jsvar.JawsGetPath(nil, "value"); got != 1 {
+		t.Fatalf("JawsGetPath = %#v, want 1", got)
+	}
+	if err = jsvar.JawsSetPath(nil, "value", 2); err != nil {
+		t.Fatal(err)
+	}
+	if state.Value != 2 {
+		t.Fatalf("programmatic path write left Value = %d, want 2", state.Value)
+	}
+	if len(checkPaths) != 0 {
+		t.Fatalf("programmatic operations made %d ClientCheck calls, want 0", len(checkPaths))
+	}
+
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+
+	tr := jawstest.NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("nil test request")
+	}
+	cleanupJsVarTestRequest(t, tr)
+	<-tr.ReadyCh
+
+	rw := RequestWriter{Request: tr.Request, Writer: io.Discard}
+	if err = rw.JsVar("promoted", jsvar); err != nil {
+		t.Fatal(err)
+	}
+	elements := tr.GetElements(&state)
+	if len(elements) != 1 {
+		t.Fatalf("rendered elements = %d, want 1", len(elements))
+	}
+	elem := elements[0]
+
+	if err = clientSetFrame(t, jsvar, elem, "value", 3); err != nil {
+		t.Fatal(err)
+	}
+	if state.Value != 3 {
+		t.Fatalf("browser path write left Value = %d, want 3", state.Value)
+	}
+	msg := awaitJsVarOperation(t, "promoted path broadcast", tr.OutCh)
+	if msg.What != what.Set || msg.Data != "value=3" {
+		t.Fatalf("promoted path broadcast = %#v, want value=3 Set", msg)
+	}
+
+	if err = clientSetFrame(t, jsvar, elem, "", map[string]any{"value": 4}); err != nil {
+		t.Fatal(err)
+	}
+	if state.Value != 4 {
+		t.Fatalf("browser whole-object write left Value = %d, want 4", state.Value)
+	}
+	msg = awaitJsVarOperation(t, "promoted whole-object broadcast", tr.OutCh)
+	if msg.What != what.Set || msg.Data != `={"value":4}` {
+		t.Fatalf(`promoted whole-object broadcast = %#v, want ={"value":4} Set`, msg)
+	}
+	if len(checkPaths) != 2 || checkPaths[0] != "value" || checkPaths[1] != "" {
+		t.Fatalf("ClientCheck paths = %q, want [value, root]", checkPaths)
+	}
+	if len(checkedValues) != 2 || checkedValues[0] != 3 || checkedValues[1] != 4 {
+		t.Fatalf("ClientCheck values = %v, want [3 4]", checkedValues)
+	}
+}
+
+func TestJsVarPromotedJSONFieldNilPointer(t *testing.T) {
+	state := jsVarNilPromotedState{}
+	jsvar := NewJsVar(new(sync.Mutex), &state)
+	checkCalls := 0
+	jsvar.ClientCheck = func(*jsVarNilPromotedState, string) error {
+		checkCalls++
+		return nil
+	}
+
+	if got := jsvar.JawsGetPath(nil, "value"); got != nil {
+		t.Fatalf("JawsGetPath = %#v, want nil", got)
+	}
+	if err := jsvar.JawsSetPath(nil, "value", 1); !errors.Is(err, jq.ErrPathNotFound) {
+		t.Fatalf("JawsSetPath error = %v, want ErrPathNotFound", err)
+	}
+	if err := jsvar.JawsInput(nil, `={"value":1}`); !errors.Is(err, jq.ErrPathNotFound) {
+		t.Fatalf("browser whole-object write error = %v, want ErrPathNotFound", err)
+	}
+	if state.jsVarPromotedFields != nil || checkCalls != 0 {
+		t.Fatalf("failed writes left state %#v and made %d checks", state, checkCalls)
 	}
 }
 

@@ -2,8 +2,8 @@ github.com/coder/websocket v1.8.15 h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNU
 github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
 github.com/linkdata/deadlock v0.5.5 h1:d6O+rzEqasSfamGDA8u7bjtaq7hOX8Ha4Zn36Wxrkvo=
 github.com/linkdata/deadlock v0.5.5/go.mod h1:tXb28stzAD3trzEEK0UJWC+rZKuobCoPktPYzebb1u0=
-github.com/linkdata/jq v0.3.0 h1:GKDcydShVH63mLUvZJwoEvSFO9HS7M2iYxp7HOEsEfw=
-github.com/linkdata/jq v0.3.0/go.mod h1:b76MMuWybyXrVEKSHJkv+r5IEattnghPf1bNRJ5PNlE=
+github.com/linkdata/jq v0.4.0 h1:8YkqVsiAmbOJQ8benmEx22zs21L91sQWTjQryQiMurY=
+github.com/linkdata/jq v0.4.0/go.mod h1:b76MMuWybyXrVEKSHJkv+r5IEattnghPf1bNRJ5PNlE=
 github.com/linkdata/secureheaders v1.5.0 h1:4kI290hrVUYqluxF8pQfRYpbZuorSd9+8GlMgrLcrK4=
 github.com/linkdata/secureheaders v1.5.0/go.mod h1:50TiKmPaWki8gIZXmBxrLUinyJst12YuN3EbsXZMO+4=
 github.com/linkdata/staticserve v1.1.8 h1:qpm0dAaAsik1YrETSiMoS7ciBL9qPVNUFcfdio/ol84=
