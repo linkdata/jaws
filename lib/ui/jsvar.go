@@ -298,6 +298,9 @@ type JsVar[T any] struct {
 // A path containing only empty components returns the same logical root value
 // as [JsVar.JawsGet]. Lookup errors are logged on elem when possible.
 func (jsvar *JsVar[T]) JawsGetPath(elem *jaws.Element, jsPath string) (value any) {
+	if strings.Trim(jsPath, ".") == "" {
+		return jsvar.JawsGet(elem)
+	}
 	value, err := jsvar.getPath(jsPath)
 	if elem != nil {
 		_ = elem.Jaws.Log(err)
@@ -308,15 +311,6 @@ func (jsvar *JsVar[T]) JawsGetPath(elem *jaws.Element, jsPath string) (value any
 func (jsvar *JsVar[T]) getPath(jsPath string) (value any, err error) {
 	jsvar.RLock()
 	defer jsvar.RUnlock()
-	if strings.Trim(jsPath, ".") == "" {
-		if jsvar.Ptr == nil {
-			var zero T
-			value = zero
-		} else {
-			value = *jsvar.Ptr
-		}
-		return
-	}
 	return jq.Get(jsvar.Ptr, jsPath)
 }
 
