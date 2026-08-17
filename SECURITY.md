@@ -263,27 +263,41 @@ access. It does not scan values for that name; own `"__proto__"` members remain
 data. The selected Go setter (`jq.Set`, `jq.SetChecked`, or an application
 `PathSetter`) independently controls accepted server-side paths.
 
-**Trust boundary (application responsibility):** the generic JSON path will set
-*any* exported field selected by `encoding/json`'s default field rules, including
-unambiguous promoted fields. Names come from an explicit `json` tag or the Go
-field name when the tag has no explicit name; `json:"-"` fields remain
-unwritable. The setter will also append to a slice one element per `Set` message.
-The 32 KiB WebSocket read limit bounds one message, not the accumulated server
-state, and there is (see I6) no per-message rate limit. With
-a nil `JsVar.ClientCheck`, a type-correct generic write has no additional
-state-size policy.
+**Trust boundary (application responsibility):** the generic JSON path can set
+every exported field selected by `encoding/json`'s default field rules and can
+append one slice element per `Set` message. Struct path components and
+map-to-struct keys use a valid nonempty JSON tag name verbatim for non-promoting
+fields; an absent, empty, or invalid name falls back to the Go field name. An
+exact `json:"-"` tag excludes an otherwise selected exported field, while
+`json:"-,"` names that field `-`. Ambiguous fields are absent from the path
+namespace.
+
+An anonymous struct without a valid explicit JSON name contributes its promoted
+fields directly without a Go-type-name component: use `value`, not
+`Inner.value`, or tag the anonymous field to create a nested path. Promotion
+reaches exported fields through unexported embedded structs. An explicitly
+named unexported anonymous struct is not itself a readable or writable endpoint
+or writable map-to-struct key, but longer paths can reach its exported fields.
+Reads and generic writes that traverse a nil pointer fail with
+`jq.ErrPathNotFound`; writes do not allocate it, and `JsVar.JawsGetPath` returns
+nil, which cannot be distinguished from a successfully resolved nil value.
+
+The 32 KiB WebSocket read limit bounds one message, not accumulated server state,
+and there is (see I6) no per-message rate limit. With a nil
+`JsVar.ClientCheck`, a type-correct generic write has no additional state-size
+policy.
 
 Applications can set `JsVar.ClientCheck` to inspect the complete tentative
 value and the browser-supplied jq path before a generic browser write commits.
 The path is passed through unchanged. Empty components are ignored, so
 `.value.` aliases `value`, and both `""` and `"."` address the root. Generic
 array and slice writes require canonical JavaScript array-index names
-representable as Go `int`, and string-keyed map entries are exact. Struct path
-components exactly match names selected by `encoding/json`'s default
-field-selection rules, including JSON tag names and unambiguous promoted fields.
-Generic writes do not allocate nil pointers; a path or map-to-struct key that
-would traverse one fails with `jq.ErrPathNotFound`. Invalid array or slice paths
-are rejected before `ClientCheck` runs.
+representable as Go `int`, and string-keyed map entries are exact. Struct paths
+and map-to-struct keys follow the selection rules above. Invalid writes do not
+reach `ClientCheck`; ignored map-to-struct keys do not by themselves cause a
+check. A check using `jq.Get` cannot inspect an explicitly named unexported
+anonymous struct at its own endpoint after a tentative write beneath it; inspect
+a longer exported-field path or the Go value directly.
 Treat the raw path as an inspection hint, not an authorization key; use
 `ui.PathSetter` to allow-list paths. A returned error
 rolls the write back without broadcasting it. If the error matches

@@ -316,12 +316,24 @@ The handler candidate is asked via `JawsClick` / `JawsContextMenu` / `JawsInput`
 - Generic jq paths require JavaScript array-index names at Go arrays and slices:
   `"0"` or a nonzero decimal without a leading zero, at most `4294967294` and
   representable as Go `int`. Other components produce an error matching
-  `jq.ErrPathNotFound` at an array or slice. String-keyed map entries are exact.
-  Struct path components exactly match names selected by `encoding/json`'s
-  default field-selection rules, including JSON tag names and unambiguous
-  promoted fields. Generic writes do not allocate nil pointers; a path or
-  map-to-struct key that would traverse one fails with `jq.ErrPathNotFound`.
-  Empty components are ignored.
+  `jq.ErrPathNotFound` at an array or slice. String-keyed map entries are exact;
+  empty components are ignored.
+- Struct path components and map-to-struct keys follow `encoding/json`'s default
+  field-selection rules. An exact `json:"-"` tag excludes an otherwise selected
+  exported field. For a non-promoting field, a valid nonempty tag name is used
+  verbatim, while an absent, empty, or invalid name falls back to the Go field
+  name; `json:"-,"` names the field `-`. Ambiguous fields are absent.
+- An anonymous struct without a valid explicit JSON name contributes promoted
+  fields directly without a Go-type-name component: use `value`, not
+  `Inner.value`, or add an explicit tag for a nested path. Promotion reaches
+  exported fields through unexported embedded structs. An explicitly named
+  unexported anonymous struct is not itself a readable or writable endpoint or
+  writable map-to-struct key, but longer paths can reach its exported fields. A
+  `ClientCheck` using `jq.Get` must inspect a longer path or the tentative Go
+  value.
+- Reads and generic writes that traverse a nil pointer fail with
+  `jq.ErrPathNotFound`; generic writes do not allocate it. `JsVar.JawsGetPath`
+  returns nil on lookup failure, indistinguishable from a resolved nil value.
 - Browser JSON numbers use JavaScript `Number` values. Integers outside
   `-9007199254740991` through `9007199254740991` may round, and a browser write
   may commit the rounded value to Go.

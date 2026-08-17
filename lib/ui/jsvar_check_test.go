@@ -15,6 +15,7 @@ import (
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/jawstest"
 	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jaws/lib/wire"
 	"github.com/linkdata/jq"
 )
 
@@ -41,18 +42,6 @@ type jsVarArrayIndexState struct {
 func (state *jsVarArrayIndexState) JawsPathSet(_ *jaws.Element, jsPath string, _ any) {
 	state.pathSetCalls++
 	state.lastPath = jsPath
-}
-
-type jsVarPromotedFields struct {
-	Value int `json:"value"`
-}
-
-type jsVarPromotedState struct {
-	jsVarPromotedFields
-}
-
-type jsVarNilPromotedState struct {
-	*jsVarPromotedFields
 }
 
 type jsVarConcurrentData struct {
@@ -134,12 +123,29 @@ func clientSetFrame(t *testing.T, jsvar IsJsVar, elem *jaws.Element, jsPath stri
 	return jaws.CallEventHandlers(jsvar, elem, what.Set, jsPath+"="+string(data))
 }
 
-func cleanupJsVarTestRequest(t *testing.T, tr *jawstest.TestRequest) {
+func newJsVarTestJaws(t *testing.T) (jw *jaws.Jaws) {
 	t.Helper()
+	var err error
+	if jw, err = jaws.New(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+	return
+}
+
+func newJsVarTestRequest(t *testing.T, jw *jaws.Jaws) (tr *jawstest.TestRequest) {
+	t.Helper()
+	tr = jawstest.NewTestRequest(jw, nil)
+	if tr == nil {
+		t.Fatal("nil test request")
+	}
 	t.Cleanup(func() {
 		tr.Close()
 		<-tr.DoneCh
 	})
+	<-tr.ReadyCh
+	return
 }
 
 func TestJSONSizeCheck(t *testing.T) {
@@ -175,19 +181,8 @@ func TestJSONSizeCheck(t *testing.T) {
 func TestJsVarClientCheckContract(t *testing.T) {
 	type clientCheck func(*jsVarCheckedState, string) error
 
-	jw, err := jaws.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(jw.Close)
-	go jw.Serve()
-
-	tr := jawstest.NewTestRequest(jw, nil)
-	if tr == nil {
-		t.Fatal("nil test request")
-	}
-	cleanupJsVarTestRequest(t, tr)
-	<-tr.ReadyCh
+	tr := newJsVarTestRequest(t, newJsVarTestJaws(t))
+	var err error
 
 	var mu sync.Mutex
 	state := jsVarCheckedState{Value: "initial"}
@@ -284,19 +279,8 @@ func TestJsVarClientCheckContract(t *testing.T) {
 }
 
 func TestJsVarGenericPathsUseJavaScriptArrayIndices(t *testing.T) {
-	jw, err := jaws.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(jw.Close)
-	go jw.Serve()
-
-	tr := jawstest.NewTestRequest(jw, nil)
-	if tr == nil {
-		t.Fatal("nil test request")
-	}
-	cleanupJsVarTestRequest(t, tr)
-	<-tr.ReadyCh
+	tr := newJsVarTestRequest(t, newJsVarTestJaws(t))
+	var err error
 
 	state := jsVarArrayIndexState{
 		Items:  []int{1, 2},
@@ -381,19 +365,18 @@ func TestJsVarGenericPathsUseJavaScriptArrayIndices(t *testing.T) {
 }
 
 func TestJsVarPromotedJSONFieldPaths(t *testing.T) {
-	state := jsVarPromotedState{jsVarPromotedFields{Value: 1}}
-	data, err := json.Marshal(state)
-	if err != nil {
-		t.Fatal(err)
+	type Inner struct {
+		Value int `json:"value"`
 	}
-	if got, want := string(data), `{"value":1}`; got != want {
-		t.Fatalf("json.Marshal = %s, want %s", got, want)
+	type stateType struct {
+		Inner
 	}
+	state := stateType{Inner{Value: 1}}
 
 	jsvar := NewJsVar(new(sync.Mutex), &state)
 	var checkPaths []string
 	var checkedValues []int
-	jsvar.ClientCheck = func(value *jsVarPromotedState, jsPath string) error {
+	jsvar.ClientCheck = func(value *stateType, jsPath string) error {
 		checkPaths = append(checkPaths, jsPath)
 		checkedValues = append(checkedValues, value.Value)
 		return nil
@@ -401,6 +384,13 @@ func TestJsVarPromotedJSONFieldPaths(t *testing.T) {
 	if got := jsvar.JawsGetPath(nil, "value"); got != 1 {
 		t.Fatalf("JawsGetPath = %#v, want 1", got)
 	}
+	if got := jsvar.JawsGetPath(nil, "Inner.value"); got != nil {
+		t.Fatalf("JawsGetPath through Go type name = %#v, want nil", got)
+	}
+	if err := jsvar.JawsSetPath(nil, "Inner.value", 2); !errors.Is(err, jq.ErrPathNotFound) {
+		t.Fatalf("JawsSetPath through Go type name error = %v, want ErrPathNotFound", err)
+	}
+	var err error
 	if err = jsvar.JawsSetPath(nil, "value", 2); err != nil {
 		t.Fatal(err)
 	}
@@ -411,19 +401,7 @@ func TestJsVarPromotedJSONFieldPaths(t *testing.T) {
 		t.Fatalf("programmatic operations made %d ClientCheck calls, want 0", len(checkPaths))
 	}
 
-	jw, err := jaws.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(jw.Close)
-	go jw.Serve()
-
-	tr := jawstest.NewTestRequest(jw, nil)
-	if tr == nil {
-		t.Fatal("nil test request")
-	}
-	cleanupJsVarTestRequest(t, tr)
-	<-tr.ReadyCh
+	tr := newJsVarTestRequest(t, newJsVarTestJaws(t))
 
 	rw := RequestWriter{Request: tr.Request, Writer: io.Discard}
 	if err = rw.JsVar("promoted", jsvar); err != nil {
@@ -464,11 +442,176 @@ func TestJsVarPromotedJSONFieldPaths(t *testing.T) {
 	}
 }
 
+func TestJsVarPromotedJSONFieldPointer(t *testing.T) {
+	type embedded struct {
+		Value int `json:"value"`
+	}
+	type stateType struct {
+		*embedded
+	}
+
+	pointee := &embedded{Value: 1}
+	state := stateType{embedded: pointee}
+	jsvar := NewJsVar(new(sync.Mutex), &state)
+	errRejected := errors.New("rejected")
+	accept := false
+	checkCalls := 0
+	jsvar.ClientCheck = func(value *stateType, jsPath string) error {
+		checkCalls++
+		if value.embedded != pointee || value.Value != 2 || jsPath != "" {
+			t.Errorf("ClientCheck saw pointer/value/path = %p/%d/%q, want %p/2/root", value.embedded, value.Value, jsPath, pointee)
+		}
+		if !accept {
+			return errRejected
+		}
+		return nil
+	}
+
+	if err := jsvar.JawsInput(nil, `={"value":2}`); err != errRejected {
+		t.Fatalf("rejected pointer write error = %v, want exact rejection", err)
+	}
+	if state.embedded != pointee || state.Value != 1 {
+		t.Fatalf("rollback left pointer/value = %p/%d, want %p/1", state.embedded, state.Value, pointee)
+	}
+
+	accept = true
+	if err := jsvar.JawsInput(nil, `={"value":2}`); err != nil {
+		t.Fatal(err)
+	}
+	if state.embedded != pointee || state.Value != 2 || checkCalls != 2 {
+		t.Fatalf("accepted write left pointer/value/checks = %p/%d/%d, want %p/2/2", state.embedded, state.Value, checkCalls, pointee)
+	}
+}
+
+func TestJsVarPromotedJSONFieldSelection(t *testing.T) {
+	t.Run("ignored and untagged", func(t *testing.T) {
+		type fields struct {
+			Fallback int
+			Hidden   int `json:"-"`
+		}
+		type stateType struct {
+			fields
+		}
+		state := stateType{fields{Fallback: 1, Hidden: 3}}
+		jsvar := NewJsVar(new(sync.Mutex), &state)
+		checkCalls := 0
+		jsvar.ClientCheck = func(value *stateType, jsPath string) error {
+			checkCalls++
+			if value.Fallback != 6 || value.Hidden != 3 || jsPath != "" {
+				t.Errorf("ClientCheck saw state/path = %#v/%q", value, jsPath)
+			}
+			return nil
+		}
+
+		if got := jsvar.JawsGetPath(nil, "Fallback"); got != 1 {
+			t.Fatalf("untagged fallback Get = %#v, want 1", got)
+		}
+		if got := jsvar.JawsGetPath(nil, "Hidden"); got != nil {
+			t.Fatalf("ignored promoted Get = %#v, want nil", got)
+		}
+		if err := jsvar.JawsSetPath(nil, "Fallback", 4); err != nil {
+			t.Fatal(err)
+		}
+		if err := jsvar.JawsSetPath(nil, "Hidden", 8); !errors.Is(err, jq.ErrPathNotFound) {
+			t.Fatalf("ignored promoted Set error = %v, want ErrPathNotFound", err)
+		}
+		if err := jsvar.JawsInput(nil, `={"Fallback":6,"Hidden":8}`); err != nil {
+			t.Fatal(err)
+		}
+		if state.Fallback != 6 || state.Hidden != 3 || checkCalls != 1 {
+			t.Fatalf("root write left state/checks = %#v/%d", state, checkCalls)
+		}
+	})
+
+	t.Run("ambiguous", func(t *testing.T) {
+		type left struct {
+			Value int
+		}
+		type right struct {
+			Value int
+		}
+		type stateType struct {
+			left
+			right
+		}
+		state := stateType{left: left{Value: 1}, right: right{Value: 2}}
+		jsvar := NewJsVar(new(sync.Mutex), &state)
+		checkCalls := 0
+		jsvar.ClientCheck = func(*stateType, string) error {
+			checkCalls++
+			return nil
+		}
+
+		if got := jsvar.JawsGetPath(nil, "Value"); got != nil {
+			t.Fatalf("ambiguous Get = %#v, want nil", got)
+		}
+		if err := jsvar.JawsSetPath(nil, "Value", 3); !errors.Is(err, jq.ErrPathNotFound) {
+			t.Fatalf("ambiguous programmatic Set error = %v, want ErrPathNotFound", err)
+		}
+		if err := jsvar.JawsInput(nil, `Value=3`); !errors.Is(err, jq.ErrPathNotFound) {
+			t.Fatalf("ambiguous browser Set error = %v, want ErrPathNotFound", err)
+		}
+		if err := jsvar.JawsInput(nil, `={"Value":3}`); err != nil {
+			t.Fatal(err)
+		}
+		if state.left.Value != 1 || state.right.Value != 2 || checkCalls != 0 {
+			t.Fatalf("ambiguous writes left state/checks = %#v/%d", state, checkCalls)
+		}
+	})
+
+	t.Run("tagged unexported endpoint", func(t *testing.T) {
+		type inner struct {
+			Value int `json:"value"`
+		}
+		type stateType struct {
+			inner `json:"inner"`
+		}
+		state := stateType{inner: inner{Value: 1}}
+		jsvar := NewJsVar(new(sync.Mutex), &state)
+		checkCalls := 0
+		jsvar.ClientCheck = func(value *stateType, _ string) error {
+			checkCalls++
+			if _, err := jq.Get(value, "inner"); !errors.Is(err, jq.ErrPathNotFound) {
+				t.Errorf("ClientCheck endpoint Get error = %v, want ErrPathNotFound", err)
+			}
+			if got, err := jq.Get(value, "inner.value"); err != nil || got != 2 {
+				t.Errorf("ClientCheck descendant Get = %#v, %v; want 2, nil", got, err)
+			}
+			return nil
+		}
+
+		if got := jsvar.JawsGetPath(nil, "inner"); got != nil {
+			t.Fatalf("tagged unexported endpoint Get = %#v, want nil", got)
+		}
+		if got := jsvar.JawsGetPath(nil, "inner.value"); got != 1 {
+			t.Fatalf("tagged unexported descendant Get = %#v, want 1", got)
+		}
+		if err := jsvar.JawsSetPath(nil, "inner", inner{Value: 2}); !errors.Is(err, jq.ErrPathNotFound) {
+			t.Fatalf("tagged unexported endpoint Set error = %v, want ErrPathNotFound", err)
+		}
+		if err := jsvar.JawsInput(nil, `inner.value=2`); err != nil {
+			t.Fatal(err)
+		}
+		if err := jsvar.JawsInput(nil, `={"inner":{"value":3}}`); !errors.Is(err, jq.ErrPathNotFound) {
+			t.Fatalf("tagged unexported map key error = %v, want ErrPathNotFound", err)
+		}
+		if state.Value != 2 || checkCalls != 1 {
+			t.Fatalf("tagged unexported writes left state/checks = %#v/%d", state, checkCalls)
+		}
+	})
+}
+
 func TestJsVarPromotedJSONFieldNilPointer(t *testing.T) {
-	state := jsVarNilPromotedState{}
+	type embedded struct {
+		Value int `json:"value"`
+	}
+	type stateType struct {
+		*embedded
+	}
+	state := stateType{}
 	jsvar := NewJsVar(new(sync.Mutex), &state)
 	checkCalls := 0
-	jsvar.ClientCheck = func(*jsVarNilPromotedState, string) error {
+	jsvar.ClientCheck = func(*stateType, string) error {
 		checkCalls++
 		return nil
 	}
@@ -482,8 +625,75 @@ func TestJsVarPromotedJSONFieldNilPointer(t *testing.T) {
 	if err := jsvar.JawsInput(nil, `={"value":1}`); !errors.Is(err, jq.ErrPathNotFound) {
 		t.Fatalf("browser whole-object write error = %v, want ErrPathNotFound", err)
 	}
-	if state.jsVarPromotedFields != nil || checkCalls != 0 {
+	if state.embedded != nil || checkCalls != 0 {
 		t.Fatalf("failed writes left state %#v and made %d checks", state, checkCalls)
+	}
+}
+
+func TestJsVarNilPromotedFieldDoesNotSuppressSharedNameSibling(t *testing.T) {
+	type embedded struct {
+		Value int `json:"value"`
+	}
+	type stateType struct {
+		*embedded
+	}
+
+	nilState := stateType{}
+	liveState := stateType{embedded: &embedded{Value: 1}}
+	nilJsVar := NewJsVar(new(sync.Mutex), &nilState)
+	liveJsVar := NewJsVar(new(sync.Mutex), &liveState)
+	nilChecks := 0
+	liveChecks := 0
+	nilJsVar.ClientCheck = func(*stateType, string) error {
+		nilChecks++
+		return nil
+	}
+	liveJsVar.ClientCheck = func(*stateType, string) error {
+		liveChecks++
+		return nil
+	}
+
+	tr := newJsVarTestRequest(t, newJsVarTestJaws(t))
+	rw := RequestWriter{Request: tr.Request, Writer: io.Discard}
+	if err := rw.JsVar("shared", nilJsVar); err != nil {
+		t.Fatal(err)
+	}
+	if err := rw.JsVar("shared", liveJsVar); err != nil {
+		t.Fatal(err)
+	}
+	nilElements := tr.GetElements(&nilState)
+	liveElements := tr.GetElements(&liveState)
+	if len(nilElements) != 1 || len(liveElements) != 1 {
+		t.Fatalf("rendered elements = %d, %d; want 1, 1", len(nilElements), len(liveElements))
+	}
+
+	// jawsVar sends one frame per live binding in attachment order. The request
+	// loop handles each frame independently, so the first error cannot suppress
+	// the second binding.
+	tr.InCh <- wire.WsMsg{Jid: nilElements[0].Jid(), What: what.Set, Data: "value=2"}
+	tr.InCh <- wire.WsMsg{Jid: liveElements[0].Jid(), What: what.Set, Data: "value=2"}
+
+	gotAlert := false
+	gotSet := false
+	for range 2 {
+		msg := awaitJsVarOperation(t, "shared-name promoted write", tr.OutCh)
+		switch msg.What {
+		case what.Alert:
+			gotAlert = true
+		case what.Set:
+			if msg.Jid != liveElements[0].Jid() || msg.Data != "value=2" {
+				t.Fatalf("sibling broadcast = %#v, want live sibling value=2 Set", msg)
+			}
+			gotSet = true
+		default:
+			t.Fatalf("shared-name write produced unexpected message %#v", msg)
+		}
+	}
+	if !gotAlert || !gotSet {
+		t.Fatalf("shared-name messages: alert=%t set=%t, want both", gotAlert, gotSet)
+	}
+	if nilState.embedded != nil || liveState.Value != 2 || nilChecks != 0 || liveChecks != 1 {
+		t.Fatalf("shared-name states/checks = %#v, %#v, %d, %d", nilState, liveState, nilChecks, liveChecks)
 	}
 }
 
@@ -681,22 +891,10 @@ func TestJsVarJSONSizeCheckMarshalFailureRollsBackAndCancels(t *testing.T) {
 }
 
 func TestJsVarJSONSizeCheckSharedBackingState(t *testing.T) {
-	jw, err := jaws.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(jw.Close)
-	go jw.Serve()
-
-	tr1 := jawstest.NewTestRequest(jw, nil)
-	tr2 := jawstest.NewTestRequest(jw, nil)
-	if tr1 == nil || tr2 == nil {
-		t.Fatal("nil test request")
-	}
-	cleanupJsVarTestRequest(t, tr1)
-	cleanupJsVarTestRequest(t, tr2)
-	<-tr1.ReadyCh
-	<-tr2.ReadyCh
+	jw := newJsVarTestJaws(t)
+	tr1 := newJsVarTestRequest(t, jw)
+	tr2 := newJsVarTestRequest(t, jw)
+	var err error
 
 	var mu sync.Mutex
 	state := jsVarSliceData{}

@@ -320,18 +320,32 @@ value before an actual generic write commits. It receives the browser-supplied
 jq path unchanged. Empty components are ignored, so `.value.` aliases `value`;
 treat the raw path as an inspection hint, not an authorization key. Array and
 slice components must be canonical JavaScript array-index names representable
-as Go `int`, and string-keyed map entries are exact. Struct path components
-exactly match names selected by `encoding/json`'s default field-selection rules,
-including JSON tag names and unambiguous promoted fields. Generic writes do not
-allocate nil pointers; a path or map-to-struct key that would traverse one fails
-with `jq.ErrPathNotFound`. Use `PathSetter` to allow-list paths and operations.
+as Go `int`, and string-keyed map entries are exact. Struct path components and
+map-to-struct keys follow `encoding/json`'s default field-selection rules. An
+exact `json:"-"` tag excludes an otherwise selected exported field. For a
+non-promoting field, a valid nonempty tag name is used verbatim, while an absent,
+empty, or invalid name falls back to the Go field name; `json:"-,"` therefore
+names the field `-`. Ambiguous fields are absent from the path namespace.
+
+An anonymous struct without a valid explicit JSON name contributes its promoted
+fields directly without a Go-type-name component: use `value`, not
+`Inner.value`, or tag the anonymous field to create a nested path. Promotion
+reaches exported fields through unexported embedded structs. An explicitly
+named unexported anonymous struct is not itself a readable or writable endpoint
+or writable map-to-struct key, but longer paths can reach its exported fields.
+Reads and generic writes that traverse a nil pointer fail with
+`jq.ErrPathNotFound`, and generic writes do not allocate it. `JawsGetPath`
+returns nil on lookup failure, so nil does not distinguish failure from a
+resolved nil value. Use `PathSetter` to allow-list paths and operations.
 
 A check runs while the application locker is held. It must inspect only: do not
 mutate or retain tentative state, re-enter the JsVar, call a path setter, acquire
 the same locker, or return/wrap `jaws.ErrEventUnhandled`. A nil result commits;
 an error rolls back without a broadcast. The browser already changed locally,
 so an ordinary rejection can leave it divergent until application
-resynchronization.
+resynchronization. A check using `jq.Get` cannot inspect an explicitly named
+unexported anonymous struct at its own endpoint after a tentative write beneath
+it; inspect a longer exported-field path or the Go value directly.
 
 The check sees tentative Go state, not necessarily the decoded value later used
 for a peer broadcast. jq conversions and ignored map-to-struct fields can make

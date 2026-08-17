@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/linkdata/deadlock v0.5.5
-	github.com/linkdata/jq v0.4.0
+	github.com/linkdata/jq v0.5.0
 	github.com/linkdata/secureheaders v1.5.0
 	github.com/linkdata/staticserve v1.1.8
 	golang.org/x/net v0.58.0

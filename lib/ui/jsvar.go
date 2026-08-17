@@ -205,12 +205,25 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // zero, at most 4294967294. A component that violates these rules produces an
 // error matching [github.com/linkdata/jq.ErrPathNotFound] when traversal reaches
 // an array or slice. String-keyed map entries are matched exactly. Struct path
-// components exactly match names selected by the default field-selection rules
-// of [encoding/json], including JSON tag names and unambiguous promoted fields.
-// Generic writes do not allocate nil pointers; a path or map-to-struct key that
-// would traverse one produces an error matching
-// [github.com/linkdata/jq.ErrPathNotFound]. Empty components are ignored, and
-// both "" and "." address the root.
+// components and map-to-struct keys follow the default field-selection rules of
+// [encoding/json]. An exact json:"-" tag excludes an otherwise selected exported
+// field. For a non-promoting field, a valid nonempty JSON tag name is used
+// verbatim, while an absent, empty, or invalid name falls back to the Go field
+// name; json:"-," therefore names the field "-". Ambiguous fields are absent
+// from the path namespace.
+//
+// An anonymous struct without a valid explicit JSON name contributes its
+// promoted fields directly and does not add its Go type name as a component:
+// use "value", not "Inner.value", or give the anonymous field an explicit tag
+// to create a nested path. Promotion reaches exported fields through unexported
+// embedded structs. An explicitly named unexported anonymous struct is not
+// itself a readable or writable endpoint or writable map-to-struct key, but
+// longer paths can reach its exported fields.
+//
+// Reads and generic writes that traverse a nil pointer produce an error matching
+// [github.com/linkdata/jq.ErrPathNotFound], and generic writes do not allocate
+// the pointer. Empty components are ignored, and both "" and "." address the
+// root.
 //
 // While the WebSocket is open, jawsVar sends one complete message per matching
 // live binding, subject to [jaws.Request.ServeHTTP]'s inbound limit.
@@ -276,6 +289,9 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // A ClientCheck does not run for rendering, programmatic writes, invalid or
 // unchanged writes, or values implementing PathSetter. It is an acceptance gate,
 // not a monitor that proves the current value always satisfies an invariant.
+// A check that uses [github.com/linkdata/jq.Get] cannot inspect an explicitly
+// named unexported anonymous struct at its own endpoint; it must inspect a
+// longer exported-field path or the tentative Go value directly.
 //
 // A size check does not prevent a client from setting individual exported fields.
 // When only some fields or paths should be client-writable, implement [PathSetter]
@@ -299,7 +315,9 @@ type JsVar[T any] struct {
 // JawsGetPath returns the value at jsPath.
 //
 // A path containing only empty components returns the same logical root value
-// as [JsVar.JawsGet]. Lookup errors are logged on elem when possible.
+// as [JsVar.JawsGet]. Lookup errors return nil and are logged on elem when
+// possible. A nil result therefore does not distinguish a lookup failure from a
+// successfully resolved nil value.
 func (jsvar *JsVar[T]) JawsGetPath(elem *jaws.Element, jsPath string) (value any) {
 	if strings.Trim(jsPath, ".") == "" {
 		return jsvar.JawsGet(elem)
