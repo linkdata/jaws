@@ -275,6 +275,44 @@ func TestJsVar_RenderSetAndEvent(t *testing.T) {
 	}
 }
 
+func TestJsVar_GetPathRootReturnsLogicalValue(t *testing.T) {
+	value := jsVarNilData{Value: "bound"}
+	tests := []struct {
+		name string
+		ptr  *jsVarNilData
+	}{
+		{name: "Bound", ptr: &value},
+		{name: "Nil"},
+	}
+	paths := []string{"", ".", "..", "..."}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jsvar := NewJsVar(new(sync.Mutex), tt.ptr)
+			want := jsvar.JawsGet(nil)
+			for _, jsPath := range paths {
+				t.Run(fmt.Sprintf("path_%q", jsPath), func(t *testing.T) {
+					gotValue := jsvar.JawsGetPath(nil, jsPath)
+					got, ok := gotValue.(jsVarNilData)
+					if !ok {
+						t.Fatalf("JawsGetPath(%q) returned %T, want jsVarNilData", jsPath, gotValue)
+					}
+					if got != want {
+						t.Fatalf("JawsGetPath(%q) = %#v, want JawsGet result %#v", jsPath, got, want)
+					}
+				})
+			}
+			if tt.ptr != nil {
+				if got := jsvar.JawsGetPath(nil, "..value.."); got != want.Value {
+					t.Fatalf("nested JawsGetPath = %#v, want %q", got, want.Value)
+				}
+			} else if got := jsvar.JawsGetPath(nil, "value"); got != nil {
+				t.Fatalf("nested JawsGetPath with nil Ptr = %#v, want nil", got)
+			}
+		})
+	}
+}
+
 func TestJsVar_RenderInitialHTMLAttrRunsOutsideBindingLock(t *testing.T) {
 	_, rq := newCoreRequest(t)
 
@@ -380,6 +418,9 @@ func testJsVarGetPathLoggerReentry(t *testing.T, bindingLocker jsVarTryLocker) {
 	elem := rq.NewElement(jsvar)
 	if got := jsvar.JawsGetPath(elem, "text"); got != state.Text {
 		t.Fatalf("successful JawsGetPath = %#v, want %q", got, state.Text)
+	}
+	if got := jsvar.JawsGetPath(elem, "."); got != state {
+		t.Fatalf("successful root JawsGetPath = %#v, want %#v", got, state)
 	}
 	testSyncLogger(t, jw)
 	select {

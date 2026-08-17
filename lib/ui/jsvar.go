@@ -293,8 +293,14 @@ type JsVar[T any] struct {
 	dirtyTag    any           // current dirty tag, set during render; read via JawsGetTag
 }
 
-// JawsGetPath returns the value at jsPath, logging lookup errors on elem when possible.
+// JawsGetPath returns the value at jsPath.
+//
+// A path containing only empty components returns the same logical root value
+// as [JsVar.JawsGet]. Lookup errors are logged on elem when possible.
 func (jsvar *JsVar[T]) JawsGetPath(elem *jaws.Element, jsPath string) (value any) {
+	if strings.Trim(jsPath, ".") == "" {
+		return jsvar.JawsGet(elem)
+	}
 	value, err := jsvar.getPath(jsPath)
 	if elem != nil {
 		_ = elem.Jaws.Log(err)
