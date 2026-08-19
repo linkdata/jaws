@@ -176,6 +176,13 @@ The following operations are safe before the processing loop starts:
 * Static and ping endpoints through `ServeHTTP`: `/jaws/.ping`, the hashed
   built-in JavaScript URL, and the hashed built-in stylesheet URL.
 
+Request creation and initial page rendering are not supported before the
+processing loop starts. Start `Serve` or `ServeWithTimeout` before exposing any
+handler that can call `NewRequest`; this also keeps `RequestWriter` and
+`Request.MarkWritten` within their supported lifecycle. During defect review,
+treat pre-Serve request creation, rendering, activity accounting, and pending
+request eviction as caller lifecycle misuse rather than library behavior.
+
 `Broadcast`, `Session.Broadcast`, `Session.Reload`, and `Session.Close` may block
 before the processing loop starts.
 
