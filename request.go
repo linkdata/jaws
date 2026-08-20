@@ -1175,10 +1175,11 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 		rq.mu.RLock()
 		ctx := rq.ctx
 		rq.mu.RUnlock()
-		// Transport failures only report that the peer is no longer reachable;
-		// retain the socket error only when application debugging is enabled.
+		// Transport failures ordinarily only report that the peer is no longer
+		// reachable. A read-limit violation is actionable application feedback, so
+		// retain it even when transport debugging is disabled.
 		disconnect := func(err error) {
-			if !rq.Jaws.Debug {
+			if !rq.Jaws.Debug && !errors.Is(err, websocket.ErrMessageTooBig) {
 				err = nil
 			}
 			rq.cancel(err)
@@ -1204,10 +1205,12 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 // Each inbound WebSocket message is limited to 32 KiB. The bundled client does
 // not chunk Input, Set, Click, ContextMenu, or Remove messages; oversized
 // messages close the connection. The limit covers the entire protocol payload
-// after UTF-8 encoding, so no fixed application-value length is guaranteed.
+// after UTF-8 encoding, so no fixed application-value length is guaranteed. An
+// oversized message becomes the Request cancellation cause and is passed to
+// [Jaws.Log].
 //
-// WebSocket transport failures cancel the Request without a specific cause and
-// are not reported through [Jaws.Logger]. When [Jaws.Debug] is true, their
+// Other WebSocket transport failures cancel the Request without a specific cause
+// and are not reported through [Jaws.Logger]. When [Jaws.Debug] is true, their
 // underlying error is retained as the cancellation cause and passed to
 // [Jaws.Log] instead.
 func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {

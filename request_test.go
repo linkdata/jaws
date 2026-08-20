@@ -4138,6 +4138,7 @@ func TestWS_PeerDisconnectLogging(t *testing.T) {
 		{name: "no status", code: websocket.StatusNoStatusRcvd},
 		{name: "EOF"},
 		{name: "policy violation", code: websocket.StatusPolicyViolation},
+		{name: "message too big close", code: websocket.StatusMessageTooBig},
 	}
 
 	for _, debug := range []bool{false, true} {
@@ -4209,6 +4210,58 @@ func TestWS_PeerDisconnectLogging(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+func TestWS_OversizedInboundMessageIsLogged(t *testing.T) {
+	logger := &eventErrorLogger{}
+	ts := newTestServerWithLogger(t, logger)
+	defer ts.Close()
+	rqCtx := ts.rq.Context()
+
+	conn, _, err := ts.Dial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.CloseNow() }()
+	select {
+	case <-ts.connectedCh:
+	case <-time.After(testTimeout):
+		t.Fatal("timeout waiting for websocket connect")
+	}
+	awaitTestLoggerQueue(t, ts.jw)
+	loggedBeforeWrite := len(logger.loggedErrors())
+
+	writeCtx, cancelWrite := context.WithTimeout(t.Context(), testTimeout)
+	err = conn.Write(writeCtx, websocket.MessageText, bytes.Repeat([]byte("x"), webSocketReadLimit+1))
+	cancelWrite()
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-rqCtx.Done():
+	case <-time.After(testTimeout):
+		t.Fatal("timeout waiting for Request cancellation")
+	}
+	cause := context.Cause(rqCtx)
+	if !errors.Is(cause, ErrRequestCancelled) {
+		t.Fatalf("cause = %v, want ErrRequestCancelled", cause)
+	}
+	if !errors.Is(cause, websocket.ErrMessageTooBig) {
+		t.Fatalf("cause = %v, want ErrMessageTooBig", cause)
+	}
+
+	waitForRequestCount(t, ts.jw, 0, testTimeout)
+	awaitTestLoggerQueue(t, ts.jw)
+	logged := logger.loggedErrors()[loggedBeforeWrite:]
+	if len(logged) != 1 {
+		t.Fatalf("logged errors = %v, want one", logged)
+	}
+	if !errors.Is(logged[0], ErrRequestCancelled) {
+		t.Fatalf("logged error = %v, want ErrRequestCancelled", logged[0])
+	}
+	if !errors.Is(logged[0], websocket.ErrMessageTooBig) {
+		t.Fatalf("logged error = %v, want ErrMessageTooBig", logged[0])
 	}
 }
 
