@@ -1175,12 +1175,17 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 		rq.mu.RLock()
 		ctx := rq.ctx
 		rq.mu.RUnlock()
-		// The request-aware path wraps and logs the first WebSocket failure to win
-		// cancellation; the canceled context suppresses errors from the other loops.
-		cancelRequest := rq.cancel
+		// Transport failures only report that the peer is no longer reachable;
+		// retain the socket error only when application debugging is enabled.
+		disconnect := func(err error) {
+			if !rq.Jaws.Debug {
+				err = nil
+			}
+			rq.cancel(err)
+		}
 		outboundMsgCh := make(chan wire.WsMsg, cap(pendingSubscription))
-		go wire.ReadLoop(ctx, cancelRequest, rq.Jaws.Done(), incomingMsgCh, idleInterval, wsTimeout, ws) // closes incomingMsgCh
-		go wire.WriteLoop(ctx, cancelRequest, rq.Jaws.Done(), outboundMsgCh, wsTimeout, ws)              // calls ws.Close()
+		go wire.ReadLoop(ctx, disconnect, rq.Jaws.Done(), incomingMsgCh, idleInterval, wsTimeout, ws) // closes incomingMsgCh
+		go wire.WriteLoop(ctx, disconnect, rq.Jaws.Done(), outboundMsgCh, wsTimeout, ws)              // calls ws.Close()
 		broadcastMsgCh := pendingSubscription
 		pendingSubscription = nil
 		// Production deliberately discards the recovered value so a loop panic stays
@@ -1200,6 +1205,11 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 // not chunk Input, Set, Click, ContextMenu, or Remove messages; oversized
 // messages close the connection. The limit covers the entire protocol payload
 // after UTF-8 encoding, so no fixed application-value length is guaranteed.
+//
+// WebSocket transport failures cancel the Request without a specific cause and
+// are not reported through [Jaws.Logger]. When [Jaws.Debug] is true, their
+// underlying error is retained as the cancellation cause and passed to
+// [Jaws.Log] instead.
 func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if rq.startServe() {
 		defer rq.stopServe()

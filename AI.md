@@ -275,6 +275,10 @@ not appropriate.
 Configure `Jaws.Logger` for long-running applications. Initial render failures
 return to the caller, but update-time paths cannot return errors to browser event
 handlers and report them through `MustLog`, which panics without a logger.
+WebSocket transport failures ordinarily end the Request as an ordinary
+cancellation and are not sent to the logger. When `Jaws.Debug` is enabled, the
+underlying transport error becomes the Request cancellation cause and is passed
+to `Jaws.Log`.
 `Jaws.Log` and configured `MustLog` calls enqueue `Logger.Error` callbacks for
 serial asynchronous delivery. Callback panics are contained. `Close` stops
 accepting new log entries and lets accepted entries drain without waiting;
