@@ -26,8 +26,10 @@ import (
 
 // webSocketReadLimit bounds the size of a single inbound WebSocket message. It
 // matches the current coder/websocket default (32 KiB); larger messages fail the
-// read and close the connection. We set it explicitly so the cap is part of jaws'
-// own contract and cannot change silently if the library default does.
+// read and close the connection. The resulting read-limit error is retained in
+// the Request cancellation cause, which is passed to [Jaws.Log]. We set the limit
+// explicitly so the cap is part of jaws' own contract and cannot change silently
+// if the library default does.
 const webSocketReadLimit = 32 * 1024
 
 // ConnectFn initializes or validates a [Request] after its WebSocket is accepted.
@@ -1205,14 +1207,14 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 // Each inbound WebSocket message is limited to 32 KiB. The bundled client does
 // not chunk Input, Set, Click, ContextMenu, or Remove messages; oversized
 // messages close the connection. The limit covers the entire protocol payload
-// after UTF-8 encoding, so no fixed application-value length is guaranteed. An
-// oversized message becomes the Request cancellation cause and is passed to
-// [Jaws.Log].
+// after UTF-8 encoding, so no fixed application-value length is guaranteed. The
+// resulting read-limit error is retained in the Request cancellation cause,
+// which is passed to [Jaws.Log].
 //
 // Other WebSocket transport failures cancel the Request without a specific cause
 // and are not reported through [Jaws.Logger]. When [Jaws.Debug] is true, their
-// underlying error is retained as the cancellation cause and passed to
-// [Jaws.Log] instead.
+// underlying error is retained in the Request cancellation cause, which is
+// passed to [Jaws.Log] instead.
 func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if rq.startServe() {
 		defer rq.stopServe()

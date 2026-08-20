@@ -275,11 +275,12 @@ not appropriate.
 Configure `Jaws.Logger` for long-running applications. Initial render failures
 return to the caller, but update-time paths cannot return errors to browser event
 handlers and report them through `MustLog`, which panics without a logger.
-An oversized inbound WebSocket message becomes the Request cancellation cause
-and is passed to `Jaws.Log`. Other WebSocket transport failures ordinarily end
-the Request as an ordinary cancellation and are not sent to the logger. When
-`Jaws.Debug` is enabled, their underlying transport error becomes the Request
-cancellation cause and is passed to `Jaws.Log`.
+An oversized inbound WebSocket message fails with a read-limit error retained in
+the Request cancellation cause, which is passed to `Jaws.Log`. Other WebSocket
+transport failures ordinarily end the Request as an ordinary cancellation and
+are not sent to the logger. When `Jaws.Debug` is enabled, their underlying
+transport error is retained in the Request cancellation cause, which is passed
+to `Jaws.Log`.
 `Jaws.Log` and configured `MustLog` calls enqueue `Logger.Error` callbacks for
 serial asynchronous delivery. Callback panics are contained. `Close` stops
 accepting new log entries and lets accepted entries drain without waiting;
@@ -421,9 +422,9 @@ Before exposing an application outside local development:
   apply equivalent protection and the same lock to every binding that exposes
   shared mutable state. See the [`ui` guide](./lib/ui/AI.md).
 * Keep browser-to-server messages below the transport limit and use HTTP uploads
-  for large data. An oversized inbound message is reported through `Jaws.Log`
-  and closes the Request connection rather than rejecting only one value; see
-  the [`wire` guide](./lib/wire/AI.md).
+  for large data. An oversized inbound message closes the Request connection
+  rather than rejecting only one value, and its read-limit error is reported
+  through `Jaws.Log`; see the [`wire` guide](./lib/wire/AI.md).
 * Use `SecureHeadersMiddleware` or an equivalent explicit security-header
   policy.
 * Configure trusted forwarding only behind a proxy that sanitizes every
