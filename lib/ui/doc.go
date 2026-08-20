@@ -36,5 +36,7 @@
 //
 // Each browser-to-server WebSocket message is limited to 32 KiB by
 // [github.com/linkdata/jaws.Request.ServeHTTP]. Standard widgets do not chunk
-// payloads, and an oversized message closes the Request connection.
+// payloads. An oversized message closes the connection, and its read-limit error
+// is retained in the Request cancellation cause, which is passed to
+// [github.com/linkdata/jaws.Jaws.Log].
 package ui

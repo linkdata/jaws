@@ -236,7 +236,7 @@ Also tested case-variant bypass attempts (`inner`, `INNER`, `redirect`, `alert`)
 | Null bytes in messages | Silently dropped |
 | Unknown command types (Foo, Eval) | Silently dropped |
 | Invalid UTF-8 sequences | Stripped via `strings.ToValidUTF8()` (`lib/wire/wsmsg.go`, `Parse`) |
-| Oversized payload (>32 KiB) | Rejected: inbound messages are capped at 32 KiB (`webSocketReadLimit`, set via `ws.SetReadLimit` in `request.go`); a larger message fails the read and closes the connection |
+| Oversized payload (>32 KiB) | Rejected: inbound messages are capped at 32 KiB (`webSocketReadLimit`, set via `ws.SetReadLimit` in `request.go`); a larger message fails the read and closes the connection, and its read-limit error is reported through the configured logger |
 | Message flood (1000 msgs in 0.03s) | Connection survived |
 | 20 simultaneous connections | All accepted |
 | Rapid connect/disconnect (20 cycles) | Handled gracefully |

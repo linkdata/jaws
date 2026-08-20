@@ -305,10 +305,11 @@ The handler candidate is asked via `JawsClick` / `JawsContextMenu` / `JawsInput`
   then dirty every changed binding.
 - Every browser-to-server WebSocket message is limited to 32 KiB. The client
   does not chunk `Input`, `Set`, `Click`, `ContextMenu`, or `Remove`; an
-  oversized message closes the connection. Keep text values,
-  click/context-menu names, and `jawsVar` writes conservatively sized; use HTTP
-  uploads for large values and smaller independently updated wrappers for large
-  trees.
+  oversized message fails the read and closes the connection. The resulting
+  read-limit error is retained in the Request cancellation cause, which is
+  passed to `Jaws.Log`. Keep text values, click/context-menu names, and
+  `jawsVar` writes conservatively sized; use HTTP uploads for large values and
+  smaller independently updated wrappers for large trees.
   `JsVar.ClientCheck` runs after receipt and cannot enforce the transport limit.
 
 ## JsVar JSON representation limits

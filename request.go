@@ -26,8 +26,10 @@ import (
 
 // webSocketReadLimit bounds the size of a single inbound WebSocket message. It
 // matches the current coder/websocket default (32 KiB); larger messages fail the
-// read and close the connection. We set it explicitly so the cap is part of jaws'
-// own contract and cannot change silently if the library default does.
+// read and close the connection. The resulting read-limit error is retained in
+// the Request cancellation cause, which is passed to [Jaws.Log]. We set the limit
+// explicitly so the cap is part of jaws' own contract and cannot change silently
+// if the library default does.
 const webSocketReadLimit = 32 * 1024
 
 // ConnectFn initializes or validates a [Request] after its WebSocket is accepted.
@@ -1175,12 +1177,18 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 		rq.mu.RLock()
 		ctx := rq.ctx
 		rq.mu.RUnlock()
-		// The request-aware path wraps and logs the first WebSocket failure to win
-		// cancellation; the canceled context suppresses errors from the other loops.
-		cancelRequest := rq.cancel
+		// Transport failures ordinarily only report that the peer is no longer
+		// reachable. A read-limit violation is actionable application feedback, so
+		// retain it even when transport debugging is disabled.
+		disconnect := func(err error) {
+			if !rq.Jaws.Debug && !errors.Is(err, websocket.ErrMessageTooBig) {
+				err = nil
+			}
+			rq.cancel(err)
+		}
 		outboundMsgCh := make(chan wire.WsMsg, cap(pendingSubscription))
-		go wire.ReadLoop(ctx, cancelRequest, rq.Jaws.Done(), incomingMsgCh, idleInterval, wsTimeout, ws) // closes incomingMsgCh
-		go wire.WriteLoop(ctx, cancelRequest, rq.Jaws.Done(), outboundMsgCh, wsTimeout, ws)              // calls ws.Close()
+		go wire.ReadLoop(ctx, disconnect, rq.Jaws.Done(), incomingMsgCh, idleInterval, wsTimeout, ws) // closes incomingMsgCh
+		go wire.WriteLoop(ctx, disconnect, rq.Jaws.Done(), outboundMsgCh, wsTimeout, ws)              // calls ws.Close()
 		broadcastMsgCh := pendingSubscription
 		pendingSubscription = nil
 		// Production deliberately discards the recovered value so a loop panic stays
@@ -1199,7 +1207,14 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 // Each inbound WebSocket message is limited to 32 KiB. The bundled client does
 // not chunk Input, Set, Click, ContextMenu, or Remove messages; oversized
 // messages close the connection. The limit covers the entire protocol payload
-// after UTF-8 encoding, so no fixed application-value length is guaranteed.
+// after UTF-8 encoding, so no fixed application-value length is guaranteed. The
+// resulting read-limit error is retained in the Request cancellation cause,
+// which is passed to [Jaws.Log].
+//
+// Other WebSocket transport failures cancel the Request without a specific cause
+// and are not reported through [Jaws.Logger]. When [Jaws.Debug] is true, their
+// underlying error is retained in the Request cancellation cause, which is
+// passed to [Jaws.Log] instead.
 func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if rq.startServe() {
 		defer rq.stopServe()

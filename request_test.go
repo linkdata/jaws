@@ -3212,23 +3212,29 @@ func (ctx *observedDoneContext) Done() <-chan struct{} {
 
 func newTestServer(t *testing.T) (ts *testServer) {
 	t.Helper()
-	return newTestServerWithSession(t, true, nil)
+	return newTestServerWithSession(t, true, nil, false)
 }
 
 func newTestServerWithLogger(t *testing.T, logger Logger) (ts *testServer) {
 	t.Helper()
-	return newTestServerWithSession(t, true, logger)
+	return newTestServerWithSession(t, true, logger, false)
 }
 
 func newTestServerNoSession(t *testing.T) (ts *testServer) {
 	t.Helper()
-	return newTestServerWithSession(t, false, nil)
+	return newTestServerWithSession(t, false, nil, false)
 }
 
-func newTestServerWithSession(t *testing.T, withSession bool, logger Logger) (ts *testServer) {
+func newTestServerWithSession(t *testing.T, withSession bool, logger Logger, debug bool) (ts *testServer) {
 	t.Helper()
 	jw, _ := New()
 	jw.Logger = logger
+	jw.Debug = debug
+	if debug {
+		if err := jw.GenerateHeadHTML(); err != nil {
+			t.Fatal(err)
+		}
+	}
 	ctx, cancel := context.WithTimeout(t.Context(), time.Hour)
 	rr := httptest.NewRecorder()
 	hr := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
@@ -4122,28 +4128,114 @@ func TestWS_ConnectFnFailureRefreshesClaimedSessionGrace(t *testing.T) {
 	}
 }
 
-func TestWS_PeerCloseWrapsRequestCancellation(t *testing.T) {
+func TestWS_PeerDisconnectLogging(t *testing.T) {
+	tests := []struct {
+		name string
+		code websocket.StatusCode
+	}{
+		{name: "normal closure", code: websocket.StatusNormalClosure},
+		{name: "going away", code: websocket.StatusGoingAway},
+		{name: "no status", code: websocket.StatusNoStatusRcvd},
+		{name: "EOF"},
+		{name: "policy violation", code: websocket.StatusPolicyViolation},
+		{name: "message too big close", code: websocket.StatusMessageTooBig},
+	}
+
+	for _, debug := range []bool{false, true} {
+		t.Run("debug="+strconv.FormatBool(debug), func(t *testing.T) {
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					logger := &eventErrorLogger{}
+					ts := newTestServerWithSession(t, true, logger, debug)
+					defer ts.Close()
+					rqCtx := ts.rq.Context()
+
+					conn, _, err := ts.Dial()
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer func() { _ = conn.CloseNow() }()
+					select {
+					case <-ts.connectedCh:
+					case <-time.After(testTimeout):
+						t.Fatal("timeout waiting for websocket connect")
+					}
+					awaitTestLoggerQueue(t, ts.jw)
+					loggedBeforeClose := len(logger.loggedErrors())
+
+					if tt.code == 0 {
+						err = conn.CloseNow()
+					} else {
+						err = conn.Close(tt.code, "")
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					select {
+					case <-rqCtx.Done():
+					case <-time.After(testTimeout):
+						t.Fatal("timeout waiting for Request cancellation")
+					}
+					cause := context.Cause(rqCtx)
+					assertTransportError := func(err error) {
+						t.Helper()
+						if !errors.Is(err, ErrRequestCancelled) {
+							t.Fatalf("error = %v, want ErrRequestCancelled", err)
+						}
+						if tt.code == 0 {
+							if !errors.Is(err, io.EOF) {
+								t.Fatalf("error = %v, want EOF", err)
+							}
+						} else if code := websocket.CloseStatus(err); code != tt.code {
+							t.Fatalf("close status = %v, want %v", code, tt.code)
+						}
+					}
+					if debug {
+						assertTransportError(cause)
+					} else if !errors.Is(cause, context.Canceled) || errors.Is(cause, ErrRequestCancelled) {
+						t.Fatalf("cause = %v, want plain context cancellation", cause)
+					}
+
+					waitForRequestCount(t, ts.jw, 0, testTimeout)
+					awaitTestLoggerQueue(t, ts.jw)
+					logged := logger.loggedErrors()[loggedBeforeClose:]
+					if debug {
+						if len(logged) != 1 {
+							t.Fatalf("logged errors = %v, want one", logged)
+						}
+						assertTransportError(logged[0])
+					} else if len(logged) != 0 {
+						t.Fatalf("logged errors = %v, want none", logged)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestWS_OversizedInboundMessageIsLogged(t *testing.T) {
 	logger := &eventErrorLogger{}
 	ts := newTestServerWithLogger(t, logger)
 	defer ts.Close()
 	rqCtx := ts.rq.Context()
 
-	conn, resp, err := ts.Dial()
+	conn, _, err := ts.Dial()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != http.StatusSwitchingProtocols {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusSwitchingProtocols)
-	}
+	defer func() { _ = conn.CloseNow() }()
 	select {
 	case <-ts.connectedCh:
 	case <-time.After(testTimeout):
 		t.Fatal("timeout waiting for websocket connect")
 	}
 	awaitTestLoggerQueue(t, ts.jw)
-	loggedBeforeClose := len(logger.loggedErrors())
+	loggedBeforeWrite := len(logger.loggedErrors())
 
-	if err = conn.Close(websocket.StatusNormalClosure, "done"); err != nil {
+	writeCtx, cancelWrite := context.WithTimeout(t.Context(), testTimeout)
+	err = conn.Write(writeCtx, websocket.MessageText, bytes.Repeat([]byte("x"), webSocketReadLimit+1))
+	cancelWrite()
+	if err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -4155,29 +4247,21 @@ func TestWS_PeerCloseWrapsRequestCancellation(t *testing.T) {
 	if !errors.Is(cause, ErrRequestCancelled) {
 		t.Fatalf("cause = %v, want ErrRequestCancelled", cause)
 	}
-	var closeErr websocket.CloseError
-	if !errors.As(cause, &closeErr) {
-		t.Fatalf("cause = %v, want websocket.CloseError", cause)
-	}
-	if closeErr.Code != websocket.StatusNormalClosure || closeErr.Reason != "done" {
-		t.Fatalf("close error = %#v, want code %v and reason %q", closeErr, websocket.StatusNormalClosure, "done")
+	if !errors.Is(cause, websocket.ErrMessageTooBig) {
+		t.Fatalf("cause = %v, want ErrMessageTooBig", cause)
 	}
 
 	waitForRequestCount(t, ts.jw, 0, testTimeout)
 	awaitTestLoggerQueue(t, ts.jw)
-	logged := logger.loggedErrors()[loggedBeforeClose:]
+	logged := logger.loggedErrors()[loggedBeforeWrite:]
 	if len(logged) != 1 {
-		t.Fatalf("logged errors = %v, want one cancellation", logged)
+		t.Fatalf("logged errors = %v, want one", logged)
 	}
 	if !errors.Is(logged[0], ErrRequestCancelled) {
 		t.Fatalf("logged error = %v, want ErrRequestCancelled", logged[0])
 	}
-	closeErr = websocket.CloseError{}
-	if !errors.As(logged[0], &closeErr) {
-		t.Fatalf("logged error = %v, want websocket.CloseError", logged[0])
-	}
-	if closeErr.Code != websocket.StatusNormalClosure || closeErr.Reason != "done" {
-		t.Fatalf("logged close error = %#v, want code %v and reason %q", closeErr, websocket.StatusNormalClosure, "done")
+	if !errors.Is(logged[0], websocket.ErrMessageTooBig) {
+		t.Fatalf("logged error = %v, want ErrMessageTooBig", logged[0])
 	}
 }
 
@@ -4505,7 +4589,7 @@ func TestWS_SlowLocalUpdateDoesNotDisconnectResponsiveClient(t *testing.T) {
 // close without sending any unrelated wake-up message.
 func TestWS_SetContextCancellationClosesIdleConnection(t *testing.T) {
 	logger := &eventErrorLogger{}
-	ts := newTestServerWithSession(t, false, logger)
+	ts := newTestServerWithSession(t, false, logger, false)
 	defer ts.Close()
 	ts.jw.WebSocketPingInterval = time.Hour
 

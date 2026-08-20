@@ -57,8 +57,10 @@ positive values use the canonical [jid](../jid/AI.md) form.
 
 - Every inbound WebSocket text message is limited to 32 KiB by the root Request
   handler. An oversized message fails the read and closes the Request connection.
-  The client does not chunk inputs, JsVar writes, click data, or removal reports.
-  Validation above this layer cannot enforce the transport limit.
+  The resulting read-limit error is retained in the Request cancellation cause,
+  which is passed to `Jaws.Log`. The client does not chunk inputs, JsVar writes,
+  click data, or removal reports. Validation above this layer cannot enforce the
+  transport limit.
 - `ReadLoop` runs the socket reader concurrently with keepalive pings, pauses
   read-idle accounting while delivering an already-read message, and restarts
   the idle interval after incoming data or a successful ping.

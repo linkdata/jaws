@@ -159,11 +159,12 @@ that clears peers and dirties every changed binding.
 
 Every browser-to-server WebSocket message must fit the 32 KiB inbound limit.
 The client does not chunk input, JsVar, click, context-menu, or removal payloads.
-An oversized message fails the WebSocket read and closes the Request connection;
-it is not merely rejected for one control. Use HTTP uploads for large values and
-smaller independently updated wrappers for large trees. `JsVar.ClientCheck` runs
-after receipt and cannot enforce this transport boundary. See
-[wire](../wire/AI.md).
+An oversized message fails the WebSocket read and closes the Request connection.
+The resulting read-limit error is retained in the Request cancellation cause,
+which is passed to `Jaws.Log`; the message is not merely rejected for one
+control. Use HTTP uploads for large values and smaller independently updated
+wrappers for large trees. `JsVar.ClientCheck` runs after receipt and cannot
+enforce this transport boundary. See [wire](../wire/AI.md).
 
 ## Input dirty targets
 
