@@ -75,13 +75,13 @@ func ExampleTemplate_failureBehavior() {
 	if err = jw.AddTemplateLookuper(tmpl); err != nil {
 		panic(err)
 	}
-	out := httptest.NewRecorder()
-	rq := jw.NewRequest(out, nil)
+	rq := jw.NewRequest(httptest.NewRecorder(), nil)
 	elem := rq.NewElement(ui.NewTemplate("div", "partial", tag.Tag("dot")))
 
-	err = elem.JawsRender(out, nil)
-	fmt.Println(strings.Contains(out.Body.String(), `id="Jid.1"`))
-	fmt.Println(strings.Contains(out.Body.String(), "before dot"))
+	var out bytes.Buffer
+	err = elem.JawsRender(&out, nil)
+	fmt.Println(strings.Contains(out.String(), `id="Jid.1"`))
+	fmt.Println(strings.Contains(out.String(), "before dot"))
 	fmt.Println(err != nil)
 
 	// Output:

@@ -117,13 +117,14 @@ func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //
 // For each request, Handler looks up name and renders it with [With.Dot] set to
 // dot. Unless the response already has a Content-Type, Handler sets it to
-// "text/html; charset=utf-8" on the first write. Before rendering, it replaces
-// Cache-Control with "no-store". A render failure before any output uses
-// [http.Error]'s text response.
+// "text/html; charset=utf-8" on the first write. Before rendering, Handler calls
+// [jaws.Jaws.NewRequest], which replaces any existing Cache-Control value with
+// "no-store". A render failure before any output uses [http.Error]'s text
+// response.
 //
-// Handler renders without a generated wrapper. Dot may be arbitrary template
-// data. Handler reuses dot across requests; dot and its callbacks must support
-// concurrent execution.
+// Handler renders without a generated wrapper and does not use dot as a tag.
+// Dot may be arbitrary template data. Handler reuses dot across requests; dot
+// and its callbacks must support concurrent execution.
 func Handler(jw *jaws.Jaws, name string, dot any) http.Handler {
 	return uiHandler{Jaws: jw, name: name, dot: dot}
 }

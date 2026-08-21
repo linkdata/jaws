@@ -27,7 +27,8 @@ import (
 // claimed or retired.
 //
 // NewRequest replaces w's Cache-Control header with "no-store". Call it with
-// the response writer before writing its headers or body.
+// the response writer before writing its headers or body. Calling it after the
+// response is committed does not change the sent headers.
 //
 // Use the returned [Request] while rendering the initial response to register
 // JaWS IDs and write [Request.HeadHTML]. Do not retain it after initial request
@@ -55,6 +56,8 @@ import (
 // It panics if the [crypto/rand.Reader] captured by [New] returns an error while
 // generating the request key. Go's default reader does not return errors.
 func (jw *Jaws) NewRequest(w http.ResponseWriter, r *http.Request) *Request {
+	// Page metadata carries a one-use Request key. Replaying it from an HTTP
+	// cache reuses the consumed key and prevents another WebSocket connection.
 	w.Header().Set("Cache-Control", headerCacheControlNoStore)
 	return jw.newRequest(r)
 }
