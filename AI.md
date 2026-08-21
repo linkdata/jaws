@@ -115,6 +115,13 @@ The normal page flow has two related HTTP requests:
    key, claims the pending Request through `UseRequest`, upgrades the connection,
    and begins event and DOM-update processing.
 
+Page responses containing `HeadHTML` or equivalent Request-key metadata must
+include the `no-store` Cache-Control directive. An HTTP-cached copy would repeat
+the consumed one-use capability and cannot establish another WebSocket
+connection. `ui.Handler` sets `Cache-Control: no-store` automatically; custom
+page handlers must set it explicitly. A bfcache restoration is handled
+separately by the bundled client's `pageshow` reload.
+
 Applications that emit equivalent resources and metadata need not call
 `HeadHTML` or `TailHTML`. Custom routers may parse the trailing key with
 `key.Parse`, call `UseRequest`, return 404 when it is absent, and then call the
